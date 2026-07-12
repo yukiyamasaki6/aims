@@ -1,11 +1,11 @@
 <!--
-PR Title: <type>(scope): title (#issue)
-e.g. feat(auth): add login page (#123)
+PR Title: <type>(scope): title
+e.g. feat(auth): add login page
 -->
 
 ## Related Issues
 
-<!-- e.g. Closes #123 / Related to #123 -->
+<!-- e.g. #10, Closes #11 -->
 
 ## Description
 
