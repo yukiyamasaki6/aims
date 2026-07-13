@@ -21,19 +21,11 @@ You can use both **English** and **Japanese** for issue titles and descriptions.
 
 ### Branching model
 
-#### 🛠️ Regular Development (Feature / Bugfix)
-
 1. Branch out from `main`.
 2. **Format:** `<type>/<description>` (e.g., `feat/score-buttons`, `fix/input-validation`).
-3. Open a Pull Request toward `main`.
-4. Merge using **Squash and merge** (local commit messages are completely flexible).
-
-#### 🚨 Emergency Bug Fixes (Hotfix)
-
-1. Branch out directly from the latest production deployment branch: **`release/vX.X.X`**.
-2. **Format:** `fix/<description>` (e.g., `fix/critical-crash`).
-3. Open a Pull Request toward `release/vX.X.X` for an immediate patch release (e.g., `v0.1.1`).
-4. Merge or cherry-pick the exact same changes into `main` to synchronize development tracking.
+3. Thoroughly test your changes in your local environment (e.g., using local emulators) before pushing.
+4. Open a Pull Request toward `main`.
+5. Merge using **Squash and merge** (local commit messages are completely flexible).
 
 ### PR format
 
