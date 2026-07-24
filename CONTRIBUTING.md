@@ -10,27 +10,35 @@ Coming soon...
 
 ### Setup
 
-1. Clone the repository
+1. Clone the repository:
     ```bash
     git clone https://github.com/yukiyamasaki6/aims.git
     ```
-2. Navigate to the project directory
+2. Navigate to the project directory:
     ```bash
     cd aims
     ```
-3. Install dependencies
+3. Install dependencies:
     ```bash
     pnpm install
     ```
 
 ### Development & Testing
 
-1. Create a new branch
+1. Create a new branch:
     ```bash
     git checkout -b my-feature-branch
     ```
-2. Verify and test your changes locally (e.g., using local emulators).
-3. Push your branch to GitHub
+2. Make your changes in the codebase.
+3. Verify the changes on the local development server:
+    ```bash
+    pnpm dev
+    ```
+4. Run code checks and formatting:
+    ```bash
+    pnpm check:write
+    ```
+5. Push your branch to GitHub:
     ```bash
     git push origin my-feature-branch
     ```
