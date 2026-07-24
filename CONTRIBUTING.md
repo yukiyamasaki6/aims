@@ -6,47 +6,62 @@ Thank you for your interest in contributing to this project! We welcome contribu
 
 Coming soon...
 
-## Contributing guidelines
+## Development workflow
 
-### Creating issues
+### Setup
+
+1. Clone the repository
+    ```bash
+    git clone https://github.com/yukiyamasaki6/aims.git
+    ```
+2. Navigate to the project directory
+    ```bash
+    cd aims
+    ```
+3. Install dependencies
+    ```bash
+    pnpm install
+    ```
+
+### Development & Testing
+
+1. Create a new branch
+    ```bash
+    git checkout -b my-feature-branch
+    ```
+2. Verify and test your changes locally (e.g., using local emulators).
+3. Push your branch to GitHub
+    ```bash
+    git push origin my-feature-branch
+    ```
+
+### Submitting Pull Requests
+
+1. Open a Pull Request toward `main`.
+2. Ensure that your PR title follows the Conventional Commits specification.
+    Format: `<type>(<scope>): <description>`
+
+    Example: `feat(score-ui): Implement score input components`
+
+    Types:
+     - `feat`: New features
+     - `fix`: Bug fixes
+     - `refactor`: Code changes without adding features or fixing bugs
+     - `docs`: Documentation changes
+     - `test`: Adding or updating tests
+     - `ci`: CI configuration or script changes
+     - `chore`: Build task, dependency, or config updates
+3. Fill out the PR description using the provided template.
+4. Merge using **Squash and merge** (local commit messages are completely flexible).
+
+## Creating issues
 
 We utilize a structured hierarchy to manage development tasks efficiently.
 You can use both **English** and **Japanese** for issue titles and descriptions.
 
-- **Epic (Parent Issue)**
-  - Use the `📦 Create Epic` template.
-  - Write the `🎯 Objective` and `📋 Acceptance Criteria`.
-- **Sub-issue (Child Issue)**
-  - No template required. Create directly from the parent issue page using the "Create sub-issue" button.
+### Epic (Parent Issue)
+1. Use the `📦 Create Epic` template.
+2. Write the `🎯 Objective` and `📋 Acceptance Criteria`.
 
-### Branching model
-
-1. Branch out from `main`.
-2. **Format:** `<type>/<description>` (e.g., `feat/score-buttons`, `fix/input-validation`).
-3. Thoroughly test your changes in your local environment (e.g., using local emulators) before pushing.
-4. Open a Pull Request toward `main`.
-5. Merge using **Squash and merge** (local commit messages are completely flexible).
-
-### PR format
-
-The PR title must strictly follow the Conventional Commits specification. A GitHub Action automatically validates the title before merging.
-You can use both **English** and **Japanese** for the PR title and description.
-
-- **Format:** `<type>(<scope>): <description>`
-- **Example:** `feat(score-ui): Implement score input components`
-
-#### Allowed Types
-
-- `feat`: A new feature
-- `fix`: A bug fix
-- `docs`: Documentation only changes
-- `style`: Changes that do not affect the meaning of the code (white-space, formatting, etc.)
-- `refactor`: A code change that neither fixes a bug nor adds a feature
-- `chore`: Updating build tasks, package manager configs, etc.
-
-#### PR Body
-
-Please fill out the description and verification steps using the default Pull Request template provided by the repository.
-
-> **💡 Note on CI Failures**
-> If the title check fails, do not amend or re-push from your local machine. Simply click the "Edit" button at the top right of the PR page on GitHub and correct the title directly.
+### Sub-issue (Child Issue)
+No template required. Create directly from the parent issue page using the "Create sub-issue" button.

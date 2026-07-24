@@ -22,9 +22,10 @@ jobs:
           types: |
             feat
             fix
-            style
             refactor
             docs
+            test
+            ci
             chore
           # Allow optional scope
           requireScope: false
