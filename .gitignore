@@ -2,12 +2,18 @@
 node_modules/
 .pnpm-store/
 
+# Testing
+coverage/
+
 # Next.js build output
 .next/
 out/
+build/
+dist/
 
 # TypeScript cache
 *.tsbuildinfo
+next-env.d.ts
 
 # Biome cache
 .biome/
@@ -17,9 +23,7 @@ supabase/.temp/
 supabase/.branches/
 
 # Environment variables
-.env
-.env.*
-!.env.example
+.env*
 
 # Vercel
 .vercel
@@ -28,7 +32,6 @@ supabase/.branches/
 logs
 *.log
 npm-debug.log*
-yarn-debug.log*
 pnpm-debug.log*
 
 # Operating System files
