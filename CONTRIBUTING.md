@@ -8,6 +8,12 @@ Coming soon...
 
 ## Development workflow
 
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) (Version specified in `.node-version`)
+- [pnpm](https://pnpm.io/)
+- [Docker](https://www.docker.com/) (Required for running local Supabase)
+
 ### Setup
 
 1. Clone the repository:
@@ -21,6 +27,27 @@ Coming soon...
 3. Install dependencies:
     ```bash
     pnpm install
+    ```
+4. Copy the environment variables template:
+    ```bash
+    cp apps/web/.env.example apps/web/.env.local
+    ```
+
+### Managing Local Supabase
+
+1. Ensure the Docker engine is running.
+2. Start the local Supabase environment:
+    ```bash
+    pnpm db:start
+    ```
+    *(Note: This provides local Postgres, Auth, and Supabase Studio at `http://127.0.0.1:54323`)*
+3. When database schemas or migrations are updated, regenerate TypeScript types:
+    ```bash
+    pnpm db:types
+    ```
+4. Stop the local Supabase instance when you are done:
+    ```bash
+    pnpm db:stop
     ```
 
 ### Development & Testing
