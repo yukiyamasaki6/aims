@@ -24,6 +24,7 @@ supabase/.branches/
 
 # Environment variables
 .env*
+!.env*.example
 
 # Vercel
 .vercel

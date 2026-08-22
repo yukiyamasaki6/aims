@@ -35,6 +35,10 @@ By analyzing score trends and shot distributions, we pinpoint specific challenge
 > **3. データ分析を通じた成長支援**  
 > 記録したスコアから得点推移や的中分布を分析し、課題を明確にすることで、個人とチーム全体の継続的な成長を支援する。
 
+## Contribution
+
+Please read the [contribution guidelines](CONTRIBUTING.md) before contributing to this project.
+
 ## Tech Stack
 
 - **Framework**: Next.js (TypeScript)
