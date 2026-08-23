@@ -25,7 +25,14 @@
 - If a `pnpm <script>` fails with `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`, the environment's Node.js is older than `.node-version` requires. Fall back to the underlying CLI directly (`npx supabase ...`, `npx next ...`, `npx biome ...`) instead of the pnpm wrapper.
 - `supabase gen types ... > file` can prepend a stray `Connecting to db ...` log line to the output file — check the first line of generated types before committing.
 
-## 4. Issue → PR Workflow
+## 4. Test-Driven Implementation Workflow
+- **Confirm intent before coding:** Restate what the user actually wants in your own words (or ask via AskUserQuestion if ambiguous) before writing any code or tests — don't infer intent solely from an issue title.
+- **Write the test first:** Once intent is confirmed, write the test(s) that encode the expected behavior before implementing it. The test should assert the outcome the user wants, not the mechanics of whatever implementation you're about to write.
+- **Implement to satisfy the test, then iterate:** Run the test, adjust the implementation, re-run — repeat until it passes.
+- **When a test won't pass, don't force it green:** Stop and reconsider whether the test misencodes the intent or the implementation approach is wrong. Fix whichever side is actually incorrect — never loosen an assertion just to make it pass.
+- **Keep dialoguing until both are right:** Continue revising the test and the implementation together (not just the implementation) until they both correctly reflect the confirmed intent, not merely until the first green run.
+
+## 5. Issue → PR Workflow
 - **Environment & PATH:** If `gh` is not found, verify its location with `where.exe gh` or prepend `$env:Path += ";C:\Program Files\GitHub CLI"` in PowerShell sessions.
 - **Clean Staging:** Before branching or committing, inspect `git status` thoroughly. Stage and commit **only** files relevant to the specific issue; never bundle unrelated pending changes.
 - **Check Existing Files:** Check `git status` or `git log -- <path>` before creating files, to avoid recreating or overwriting already merged work.
