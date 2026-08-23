@@ -6,9 +6,7 @@ select plan(3);
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 
 insert into auth.users (id) values ('11111111-1111-1111-1111-111111111111');
-insert into public.users (id, name) values ('11111111-1111-1111-1111-111111111111', 'Archer A');
 insert into auth.users (id) values ('99999999-9999-9999-9999-999999999999');
-insert into public.users (id, name) values ('99999999-9999-9999-9999-999999999999', 'Archer B');
 
 insert into public.rounds (id, name, round_date)
 values ('44444444-4444-4444-4444-444444444444', 'Private Round', current_date);
