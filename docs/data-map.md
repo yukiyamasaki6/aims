@@ -6,8 +6,7 @@
 | :--- | :--- | :--- |
 | 初回サインイン | `users` | Supabase Auth (`auth.users`) と1:1で`public.users`を作成 |
 | `/rounds/new` でラウンド作成 | `rounds`, `round_users`, `distances` | `rounds`を作成 → 作成者を`round_users`に`editor`として登録 → 距離構成ごとに`distances`を作成 |
-| `/rounds/[id]/record` で矢を入力 | `shots` | エンド・矢番号ごとに`shots`（`distance_id`, `end_number`, `arrow_number`, `user_id`, `score_str`, `score_int`）をupsert |
-| `/rounds/[id]` でサマリー表示 | `rounds`, `distances`, `shots` | `rounds`を起点に`distances` → `shots`を結合取得し、合計・X数などをクライアント側の純粋関数で算出 |
+| `/rounds/[id]` で矢を入力・閲覧 | `rounds`, `distances`, `shots` | `rounds`を起点に`distances` → `shots`を結合取得し、合計・X数などをクライアント側の純粋関数で算出。エンド・矢番号ごとに`shots`（`distance_id`, `end_number`, `arrow_number`, `user_id`, `score_str`, `score_int`）をupsert |
 | `/rounds` で一覧表示 | `round_users`, `rounds`, `distances`, `shots` | 自分が属する`round_users`経由で`rounds`を絞り込み、各ラウンドの合計点等を集計して表示 |
 
 ## 補足

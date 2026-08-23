@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page).toHaveURL(/\/rounds/);
 });
 
-test("ラウンドを作成すると距離構成が保存されスコア入力画面に遷移する", async ({
+test("ラウンドを作成すると距離構成が保存されラウンド画面に遷移する", async ({
   page,
 }) => {
   await page.goto("/rounds/new");
@@ -42,5 +42,5 @@ test("ラウンドを作成すると距離構成が保存されスコア入力�
 
   await page.getByRole("button", { name: "ラウンドを作成" }).click();
 
-  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+\/record/);
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
 });
