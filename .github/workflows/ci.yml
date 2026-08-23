@@ -28,8 +28,38 @@ jobs:
             chore
           requireScope: false
 
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      migrations: ${{ steps.filter.outputs.migrations }}
+      supabase: ${{ steps.filter.outputs.supabase }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            web:
+              - 'apps/web/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'biome.json'
+              - '.node-version'
+            migrations:
+              - 'supabase/migrations/**'
+            supabase:
+              - 'supabase/**'
+
   lint:
     name: Lint and Type Check
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -55,6 +85,8 @@ jobs:
 
   lint-sql:
     name: Lint SQL
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -77,6 +109,8 @@ jobs:
 
   unit-test:
     name: Unit Test
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -99,6 +133,8 @@ jobs:
 
   e2e-test:
     name: E2E Test
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.supabase == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -169,6 +205,8 @@ jobs:
 
   sync-preview-db:
     name: Sync Preview Database
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true'
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
