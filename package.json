@@ -8,11 +8,12 @@
     "check": "biome check .",
     "check:write": "biome check --write .",
     "typecheck": "pnpm --filter web typecheck",
+    "test": "pnpm --filter web test",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > apps/web/src/types/supabase.ts && biome check --write apps/web/src/types/supabase.ts",
-    "validate": "pnpm check && pnpm typecheck"
+    "validate": "pnpm check && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.5",
