@@ -22,3 +22,11 @@
 - `apps/web` runs a version of Next.js that may differ from your training data — check the bundled docs at `apps/web/node_modules/next/dist/docs/` before writing App Router code, and heed deprecation notices.
 - If a `pnpm <script>` fails with `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`, the environment's Node.js is older than `.node-version` requires. Fall back to the underlying CLI directly (`npx supabase ...`, `npx next ...`, `npx biome ...`) instead of the pnpm wrapper.
 - `supabase gen types ... > file` can prepend a stray `Connecting to db ...` log line to the output file — check the first line of generated types before committing.
+
+## 4. Issue → PR Workflow
+- `gh` is not installed by default in this environment. Install it (`winget install --id GitHub.cli`) and authenticate with `gh auth login --web` — this prints a one-time code and URL; the user must complete the approval in their own browser, it cannot be done headlessly.
+- In this environment `gh` is not on `PATH` for new shells — prefix PowerShell commands with `$env:Path += ";C:\Program Files\GitHub CLI"` (or the actual install path) each time, or check `where.exe gh` first.
+- Before branching/committing for an issue, run `git status` and read every entry — a session can inherit unrelated uncommitted work (from an earlier turn, or from the user editing files directly). Stage and commit **only** the files that actually belong to the issue at hand; leave unrelated pending changes untouched rather than bundling them in "for convenience."
+- A file you're about to create may already be tracked with matching content (e.g. from work merged earlier in the same session). Check `git status`/`git log -- <path>` before assuming it's new — don't recreate or re-describe work that's already committed.
+- Only write "verified/confirmed X" in a PR description if X was actually run in that turn. If you claim a check passed, go run it before (or immediately after) opening the PR, and correct the PR body if it turns out to be wrong.
+- After the user says a PR is approved, confirm it's actually merged (`gh pr view <n> --json state,mergedAt`) before touching branches, then: `git checkout main`, `git pull`, `git branch -d <branch>`. Do this every time a PR lands — don't leave merged local branches lying around.
