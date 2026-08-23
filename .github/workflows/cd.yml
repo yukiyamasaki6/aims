@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - "supabase/migrations/**"
+      - "supabase/config.toml"
+      - "supabase/templates/**"
 
 jobs:
   deploy-prod-db:
@@ -13,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROD_SITE_URL: ${{ vars.PROD_SITE_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -30,3 +33,6 @@ jobs:
 
       - name: Push migrations to Production DB
         run: supabase db push
+
+      - name: Push Auth config to Production Project
+        run: supabase config push --yes

@@ -259,6 +259,15 @@ content_path = "./supabase/templates/otp.html"
 # subject = "Your password has been changed"
 # content_path = "./supabase/templates/password_changed_notification.html"
 
+# 本番プロジェクト向けの上書き設定。`supabase config push` 実行時、リンク先の project_id が
+# 一致する場合のみ auth.site_url / additional_redirect_urls がこの値で上書きされる。
+[remotes.production]
+project_id = "lsqbiaosjkcwntewjhzv"
+
+[remotes.production.auth]
+site_url = "env(PROD_SITE_URL)"
+additional_redirect_urls = ["env(PROD_SITE_URL)/**"]
+
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.
 enable_signup = false
