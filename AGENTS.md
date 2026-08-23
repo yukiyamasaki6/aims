@@ -7,7 +7,7 @@
 ## 2. Mandatory Rules & Quality Gates
 - **Validation before completion:**
   - `pnpm validate` (lint + typecheck + SQL lint + unit tests) must pass with zero errors before you consider a change done.
-  - When the change touches application code or E2E tests, also run `pnpm validate:all` (adds E2E tests; requires local Supabase running via `pnpm db:start`).
+  - When the change touches application code, migrations, or E2E tests, also run `pnpm validate:all` (adds pgTAP DB tests and E2E tests; requires local Supabase running via `pnpm db:start`).
   - Run `pnpm check:write` to fix formatting/lint issues automatically rather than hand-formatting.
 - **Strict typing:** avoid `any`; `pnpm typecheck` must compile clean.
 - **Database & secrets safety:**
@@ -16,6 +16,7 @@
   - After adding or changing a table: run `pnpm db:types` and commit the regenerated `apps/web/src/types/supabase.ts`, and update [docs/erd.md](docs/erd.md).
   - A new table needs **both** an RLS policy **and** an explicit `grant select, insert, update, delete on <table> to anon, authenticated;` (or relevant roles). This project's local config does not auto-expose new tables (`auto_expose_new_tables` is unset in `supabase/config.toml`), so a policy alone leaves PostgREST returning "permission denied."
   - New/changed migrations are linted via `pnpm lint:sql` (Squawk, included in `pnpm validate`). Fix reported issues directly (e.g. add `if not exists`, wrap in `begin`/`commit` with `lock_timeout`/`statement_timeout`) rather than excluding rules.
+  - Tables, RLS policies, and triggers are verified with pgTAP (`supabase/tests/`, run via `pnpm test:db`). Write the pgTAP test before the migration that should satisfy it, per the [Test-Driven Implementation Workflow](#4-test-driven-implementation-workflow).
 - **Frontend practices:**
   - Use Tailwind CSS and reuse `shadcn/ui` components from `apps/web/src/components/ui/` instead of one-off components.
   - Default to React Server Components; add `"use client"` only when state, browser APIs, or lifecycle hooks require it.

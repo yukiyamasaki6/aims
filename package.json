@@ -12,6 +12,7 @@
     "lint:sql": "squawk supabase/migrations/*.sql",
 
     "test": "pnpm --filter web test",
+    "test:db": "supabase test db --local",
     "test:e2e": "pnpm --filter web test:e2e",
 
     "db:start": "supabase start",
@@ -20,7 +21,7 @@
     "db:types": "supabase gen types typescript --local > apps/web/src/types/supabase.ts && biome check --write apps/web/src/types/supabase.ts",
 
     "validate": "pnpm check && pnpm typecheck && pnpm lint:sql && pnpm test",
-    "validate:all": "pnpm validate && pnpm test:e2e"
+    "validate:all": "pnpm validate && pnpm test:db && pnpm test:e2e"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.5",
