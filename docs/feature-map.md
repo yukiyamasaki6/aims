@@ -14,18 +14,15 @@ apps/web/src/app
 │  │     ├─ RoundNameInput         ラウンド名（自由記述。例: 第2回紅白戦）
 │  │     └─ DistancePresetSelect    距離構成プリセット（70m 72射 等）
 │  └─ [id]/
-│     ├─ page.tsx (Server)      サマリー
-│     │  ├─ ScoreSummary            合計 / X数 / 平均
-│     │  └─ EndScoreTable           エンド別得点表
-│     └─ record/
-│        └─ page.tsx (Client)   スコア入力（コア体験）
-│           ├─ CurrentEndHeader     現在の距離・エンド・累計
-│           ├─ ScoreSheet           入力済みエンドの小計一覧
-│           └─ ScoreKeypad          X, 10〜1, M の入力パネル
+│     └─ page.tsx (Client)      スコア入力・閲覧（コア体験）
+│        ├─ CurrentEndHeader       現在の距離・エンド・累計、X/10カウント
+│        ├─ ScoreSheet             入力済みエンドの小計一覧（全距離分）
+│        └─ ScoreKeypad            X, 10〜1, M の入力パネル（未入力がある間のみ表示）
 └─ components/ui/                shadcn/uiベースの共通コンポーネント
 ```
 
 ## 設計方針
 
-- スコア入力画面（`record/page.tsx`）は連続入力の速度が最重要のため、確定後にページ遷移を挟まず`ScoreKeypad`からの入力を即座に`shots`へ反映する。
-- 一覧・サマリー画面はServer Componentでデータ取得のみを行い、インタラクションを持たせない。
+- スコア入力画面（`[id]/page.tsx`）は連続入力の速度が最重要のため、確定後にページ遷移を挟まず`ScoreKeypad`からの入力を即座に`shots`へ反映する。
+- 独立したサマリー専用画面は設けない。スコア入力画面がそのまま閲覧・サマリーを兼ね、全エンド入力完了後も同じ画面で内訳を確認できる。一覧画面のカードが日付・ラウンド名・合計点を表示することでサマリーの代わりとする。
+- 一覧画面はServer Componentでデータ取得のみを行い、インタラクションを持たせない。

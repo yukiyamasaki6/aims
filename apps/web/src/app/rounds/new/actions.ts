@@ -30,5 +30,5 @@ export async function createRound(input: {
     return { error: error?.message ?? "ラウンドの作成に失敗しました。" };
   }
 
-  redirect(`/rounds/${roundId}/record`);
+  redirect(`/rounds/${roundId}`);
 }
