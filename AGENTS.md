@@ -6,7 +6,7 @@
 
 ## 2. Mandatory Rules & Quality Gates
 - **Validation before completion:**
-  - `pnpm validate` (lint + typecheck + SQL migration lint + unit tests) must pass with zero errors before you consider a change done.
+  - `pnpm validate` (lint + typecheck + SQL lint + unit tests) must pass with zero errors before you consider a change done.
   - When the change touches application code or E2E tests, also run `pnpm validate:all` (adds E2E tests; requires local Supabase running via `pnpm db:start`).
   - Run `pnpm check:write` to fix formatting/lint issues automatically rather than hand-formatting.
 - **Strict typing:** avoid `any`; `pnpm typecheck` must compile clean.

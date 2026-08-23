@@ -86,7 +86,7 @@ gh auth login
     ```bash
     pnpm dev
     ```
-4. Run lint, type checks, SQL migration lint, and unit tests to ensure code quality:
+4. Run lint, type checks, SQL lint, and unit tests to ensure code quality:
     ```bash
     pnpm validate
     ```
