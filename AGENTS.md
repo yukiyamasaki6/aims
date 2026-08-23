@@ -40,5 +40,5 @@
 - **Check Existing Files:** Check `git status` and `git log -- <path>` before creating files to avoid overwriting or duplicating merged work.
 - **Explicit Approval:** Never run `git commit` or `gh pr create` autonomously. Prepare changes, display the diff, and execute only upon explicit user command.
 - **Honest Verification:** State "verified/confirmed X" in PR descriptions only if X was explicitly executed in the current session.
-- **Concise Writing:** State only what changed and why (intent). Omit trial-and-error logs, debugging narratives, and step-by-step diff walkthroughs. Keep it brief.
+- **Concise & Formatted Writing:** State only what changed and why (intent); omit debugging narratives, trial logs, and diff walkthroughs. Inspect and follow `.github/pull_request_template.md` strictly before drafting PRs.
 - **Post-Merge Cleanup:** After confirming a PR is merged (`gh pr view <n> --json state,mergedAt`), run: `git checkout main`, `git pull`, `git branch -d <branch>`.
