@@ -1,4 +1,9 @@
-create table memos (
+begin;
+
+set lock_timeout = '1s';
+set statement_timeout = '5s';
+
+create table if not exists memos (
   id uuid primary key default gen_random_uuid(),
   content text not null,
   created_at timestamptz not null default now()
@@ -15,3 +20,5 @@ create policy "Allow anon full access to memos"
   with check (true);
 
 grant select, insert, update, delete on memos to anon;
+
+commit;
