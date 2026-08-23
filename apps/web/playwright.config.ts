@@ -12,8 +12,19 @@ export default defineConfig({
   },
   projects: [
     {
+      name: "setup",
+      testMatch: /.*\.setup\.ts/,
+    },
+    {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        // 認証が必要な画面のテストは、setupプロジェクトが保存した認証済み状態を
+        // 読み込んで最初から認証済みで始まる。未認証状態を検証したいテストは
+        // test.use({ storageState: { cookies: [], origins: [] } }) で無効化する。
+        storageState: "playwright/.auth/user.json",
+      },
+      dependencies: ["setup"],
     },
   ],
   webServer: {

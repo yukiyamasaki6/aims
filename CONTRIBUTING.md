@@ -86,6 +86,16 @@ gh auth login
     ```bash
     pnpm dev
     ```
+    Use the following depending on what you're checking:
+
+    | Target | How to check |
+    | :--- | :--- |
+    | DB schema (tables / RLS / triggers) | `pnpm db:reset` then pgTAP tests (`pnpm test:db`) |
+    | UI component logic / rendering in isolation | Vitest + Testing Library (`pnpm test`) |
+    | A user flow spanning multiple screens | Playwright E2E (`pnpm test:e2e`). For flows requiring sign-in, reuse the Mailpit-based helper in `apps/web/tests/e2e/helpers/mailpit.ts` and the `auth.setup.ts` pattern (saved session, no need to sign in per test) |
+    | Manual visual check | Open `http://localhost:3000` in a browser while `pnpm dev` is running |
+    | Inspecting DB contents directly | Supabase Studio (`http://localhost:54323`) |
+    | Debugging an email-related screen | Mailpit (`http://localhost:54324`) |
 4. Run lint, type checks, SQL lint, and unit tests to ensure code quality:
     ```bash
     pnpm validate
