@@ -34,21 +34,182 @@ export type Database = {
   };
   public: {
     Tables: {
-      memos: {
+      distances: {
         Row: {
-          content: string;
+          arrows_per_end: number;
           created_at: string;
+          distance: number;
+          distance_number: number;
           id: string;
+          round_id: string;
+          total_ends: number;
+          updated_at: string;
         };
         Insert: {
-          content: string;
+          arrows_per_end: number;
           created_at?: string;
+          distance: number;
+          distance_number: number;
           id?: string;
+          round_id: string;
+          total_ends: number;
+          updated_at?: string;
         };
         Update: {
-          content?: string;
+          arrows_per_end?: number;
+          created_at?: string;
+          distance?: number;
+          distance_number?: number;
+          id?: string;
+          round_id?: string;
+          total_ends?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "distances_round_id_fkey";
+            columns: ["round_id"];
+            isOneToOne: false;
+            referencedRelation: "rounds";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      round_users: {
+        Row: {
+          created_at: string;
+          id: string;
+          role: string;
+          round_id: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
           created_at?: string;
           id?: string;
+          role: string;
+          round_id: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          role?: string;
+          round_id?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "round_users_round_id_fkey";
+            columns: ["round_id"];
+            isOneToOne: false;
+            referencedRelation: "rounds";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "round_users_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      rounds: {
+        Row: {
+          created_at: string;
+          id: string;
+          name: string;
+          round_date: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          name: string;
+          round_date: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          name?: string;
+          round_date?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      shots: {
+        Row: {
+          arrow_number: number;
+          created_at: string;
+          distance_id: string;
+          end_number: number;
+          id: string;
+          score_int: number;
+          score_str: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          arrow_number: number;
+          created_at?: string;
+          distance_id: string;
+          end_number: number;
+          id?: string;
+          score_int: number;
+          score_str: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          arrow_number?: number;
+          created_at?: string;
+          distance_id?: string;
+          end_number?: number;
+          id?: string;
+          score_int?: number;
+          score_str?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "shots_distance_id_fkey";
+            columns: ["distance_id"];
+            isOneToOne: false;
+            referencedRelation: "distances";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "shots_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      users: {
+        Row: {
+          created_at: string;
+          id: string;
+          name: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          id: string;
+          name?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          name?: string | null;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -57,7 +218,8 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
+      is_round_member: { Args: { target_round_id: string }; Returns: boolean };
     };
     Enums: {
       [_ in never]: never;
