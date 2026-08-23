@@ -218,6 +218,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      create_round: {
+        Args: { p_distances: Json; p_name: string; p_round_date: string };
+        Returns: string;
+      };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
     };

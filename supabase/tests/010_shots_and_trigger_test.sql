@@ -1,6 +1,6 @@
 begin;
 
-select plan(4);
+select plan(3);
 
 -- Fixture: user A creates a round with one distance.
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
@@ -33,14 +33,6 @@ select throws_ok(
   '23505',
   null,
   '同一(distance_id, user_id, end_number, arrow_number)の重複挿入は一意制約で拒否される'
-);
-
-select results_eq(
-  $$select role from public.round_users
-    where round_id = '22222222-2222-2222-2222-222222222222'
-      and user_id = '11111111-1111-1111-1111-111111111111'$$,
-  $$values ('editor'::text)$$,
-  'ラウンド作成者がround_usersにeditorとして自動登録される'
 );
 
 select * from finish();
