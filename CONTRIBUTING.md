@@ -82,15 +82,24 @@ gh auth login
     git checkout -b feat/my-feature-branch
     ```
 2. Make your changes in the codebase.
-3. Verify the changes on the local development server:
-    ```bash
-    pnpm dev
-    ```
+3. Verify your changes using the appropriate check:
+
+    | Target | Command (URL) | What it verifies |
+    | :--- | :--- | :--- |
+    | Isolated UI component logic | `pnpm test` | Runs Vitest to verify unit logic and rendering in isolation |
+    | DB schema, RLS, and triggers | `pnpm test:db` | Resets local DB and runs pgTAP tests to verify schemas and security rules |
+    | Multi-screen user flows | `pnpm test:e2e` | Runs Playwright to verify end-to-end flows (uses Mailpit for email-based steps) |
+    | Manual visual inspection | `pnpm dev` (`http://localhost:3000`) | Starts local dev server to check the UI directly in the browser |
+    | Database records inspection | `pnpm dev` (`http://localhost:54323`) | Inspects Supabase tables and auth records via Supabase Studio |
+    | Outgoing email inspection | `pnpm dev` (`http://localhost:54324`) | Inspects confirmation/reset emails via Mailpit |
 4. Run lint, type checks, SQL lint, and unit tests to ensure code quality:
     ```bash
     pnpm validate
     ```
-    If lint/formatting errors occur, fix them automatically with `pnpm check:write`.
+    If lint/formatting errors occur, fix them automatically:
+    ```bash
+    pnpm check:write
+    ```
 5. Push your branch to GitHub:
     ```bash
     git push origin feat/my-feature-branch

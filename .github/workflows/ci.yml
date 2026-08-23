@@ -208,8 +208,6 @@ jobs:
 
   sync-preview-db:
     name: Sync Preview Database
-    needs: changes
-    if: needs.changes.outputs.migrations == 'true'
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -225,5 +223,5 @@ jobs:
       - name: Link to Preview Project
         run: supabase link --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
 
-      - name: Push migrations to Preview DB
-        run: supabase db push
+      - name: Reset Preview DB
+        run: supabase db reset --linked --yes
