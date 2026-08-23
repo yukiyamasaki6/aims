@@ -86,11 +86,11 @@ gh auth login
     ```bash
     pnpm dev
     ```
-4. Run lint and type checks to ensure code quality:
+4. Run lint, type checks, SQL migration lint, and unit tests to ensure code quality:
     ```bash
     pnpm validate
     ```
-    If lint/formatting errors occur, fix them automatically with `pnpm check:write`
+    If lint/formatting errors occur, fix them automatically with `pnpm check:write`.
 5. Push your branch to GitHub:
     ```bash
     git push origin feat/my-feature-branch

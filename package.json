@@ -5,19 +5,26 @@
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "start": "pnpm --filter web start",
+
     "check": "biome check .",
     "check:write": "biome check --write .",
     "typecheck": "pnpm --filter web typecheck",
+    "lint:sql": "squawk supabase/migrations/*.sql",
+
     "test": "pnpm --filter web test",
     "test:e2e": "pnpm --filter web test:e2e",
+
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > apps/web/src/types/supabase.ts && biome check --write apps/web/src/types/supabase.ts",
-    "validate": "pnpm check && pnpm typecheck && pnpm test && pnpm test:e2e"
+
+    "validate": "pnpm check && pnpm typecheck && pnpm lint:sql && pnpm test",
+    "validate:all": "pnpm validate && pnpm test:e2e"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.5",
+    "squawk-cli": "^2.62.0",
     "supabase": "^2.115.0"
   }
 }
