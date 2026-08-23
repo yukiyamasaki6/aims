@@ -26,6 +26,7 @@ jobs:
             test
             ci
             chore
+            revert
           requireScope: false
 
   changes:
