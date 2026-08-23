@@ -29,7 +29,7 @@ jobs:
           requireScope: false
 
   lint:
-    name: Biome Check
+    name: Lint and Type Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -49,6 +49,9 @@ jobs:
 
       - name: Run Biome Check
         run: pnpm check
+
+      - name: Run Type Check
+        run: pnpm typecheck
 
   sync-preview-db:
     name: Sync Preview Database
