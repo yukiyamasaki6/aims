@@ -36,6 +36,7 @@ jobs:
       web: ${{ steps.filter.outputs.web }}
       migrations: ${{ steps.filter.outputs.migrations }}
       supabase: ${{ steps.filter.outputs.supabase }}
+      workflows: ${{ steps.filter.outputs.workflows }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -56,11 +57,13 @@ jobs:
               - 'supabase/migrations/**'
             supabase:
               - 'supabase/**'
+            workflows:
+              - '.github/workflows/**'
 
   lint:
     name: Lint and Type Check
     needs: changes
-    if: needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -87,7 +90,7 @@ jobs:
   lint-sql:
     name: Lint SQL
     needs: changes
-    if: needs.changes.outputs.migrations == 'true'
+    if: needs.changes.outputs.migrations == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -111,7 +114,7 @@ jobs:
   unit-test:
     name: Unit Test
     needs: changes
-    if: needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -135,7 +138,7 @@ jobs:
   e2e-test:
     name: DB Test (pgTAP) and E2E Test
     needs: changes
-    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.supabase == 'true'
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.supabase == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
