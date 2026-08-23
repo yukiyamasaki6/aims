@@ -262,7 +262,7 @@ content_path = "./supabase/templates/otp.html"
 # 本番プロジェクト向けの上書き設定。`supabase config push` 実行時、リンク先の project_id が
 # 一致する場合のみ auth.site_url / additional_redirect_urls がこの値で上書きされる。
 [remotes.production]
-project_id = "env(SUPABASE_PROD_PROJECT_ID)"
+project_id = "lsqbiaosjkcwntewjhzv"
 
 [remotes.production.auth]
 site_url = "env(PROD_SITE_URL)"
