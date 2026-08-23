@@ -224,4 +224,4 @@ jobs:
         run: supabase link --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
 
       - name: Reset Preview DB
-        run: supabase db reset --linked
+        run: supabase db reset --linked --yes
