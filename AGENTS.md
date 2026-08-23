@@ -33,6 +33,7 @@
 - **Keep dialoguing until both are right:** Continue revising the test and the implementation together (not just the implementation) until they both correctly reflect the confirmed intent, not merely until the first green run.
 
 ## 5. Issue → PR Workflow
+- **Issue Hierarchy:** Always decompose a milestone into Epics by feature unit (each Epic is one coherent feature area, e.g. "実装する画面" or "実装するデータ基盤"). Always decompose an Epic into sub-issues by PR unit — each sub-issue must correspond to exactly one PR. Don't split work that would naturally land in a single PR into multiple sub-issues (e.g. a schema change and an unrelated-but-necessarily-bundled cleanup in the same migration belong in one sub-issue), and don't bundle work that requires genuinely separate PRs (e.g. local tooling introduction vs. its CI integration) into one sub-issue.
 - **Environment & PATH:** If `gh` is not found, verify its location with `where.exe gh` or prepend `$env:Path += ";C:\Program Files\GitHub CLI"` in PowerShell sessions.
 - **Clean Staging:** Before branching or committing, inspect `git status` thoroughly. Stage and commit **only** files relevant to the specific issue; never bundle unrelated pending changes.
 - **Check Existing Files:** Check `git status` or `git log -- <path>` before creating files, to avoid recreating or overwriting already merged work.
