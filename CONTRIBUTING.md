@@ -121,6 +121,7 @@ gh auth login
      - `test`: Adding or updating tests
      - `ci`: CI configuration or script changes
      - `chore`: Build task, dependency, or config updates
+     - `revert`: Reverts a previous commit
 3. Fill out the PR description using the [provided template](.github/pull_request_template.md).
 4. Merge using **Squash and merge** (local commit messages are completely flexible).
 
