@@ -6,7 +6,6 @@ select plan(4);
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 
 insert into auth.users (id) values ('11111111-1111-1111-1111-111111111111');
-insert into public.users (id, name) values ('11111111-1111-1111-1111-111111111111', 'Archer A');
 
 insert into public.rounds (id, name, round_date)
 values ('22222222-2222-2222-2222-222222222222', 'Test Round', current_date);
