@@ -30,6 +30,11 @@
       "tailwindDirectives": true
     }
   },
+  "html": {
+    "parser": {
+      "interpolation": true
+    }
+  },
   "assist": {
     "enabled": true,
     "actions": {
