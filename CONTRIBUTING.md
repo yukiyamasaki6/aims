@@ -50,6 +50,14 @@ aims/
     cp apps/web/.env.example apps/web/.env.local
     ```
 
+### Using an AI Coding Agent (Optional)
+
+To let AI agents read issues and create PRs via CLI, install and authenticate the [GitHub CLI (`gh`)](https://cli.github.com/):
+
+```bash
+gh auth login
+```
+
 ### Managing Local Supabase
 
 1. Ensure the Docker engine is running.
