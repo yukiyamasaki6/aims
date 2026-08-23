@@ -107,6 +107,14 @@ aims/
 3. Fill out the PR description using the [provided template](.github/pull_request_template.md).
 4. Merge using **Squash and merge** (local commit messages are completely flexible).
 
+### Using an AI Coding Agent
+
+If you want an AI coding agent (e.g. Claude Code) to read issues and open PRs on your behalf, it needs the [GitHub CLI](https://cli.github.com/) installed and authenticated first. This is a one-time, human-only setup step (the browser approval can't be done by the agent):
+```bash
+winget install --id GitHub.cli
+gh auth login --web
+```
+
 ## Creating issues
 
 We utilize a structured hierarchy to manage development tasks efficiently.
