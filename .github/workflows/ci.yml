@@ -149,7 +149,7 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.115.0
 
       - name: Start local Supabase
         run: supabase start
@@ -179,7 +179,7 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.115.0
 
       - name: Link to Preview Project
         run: supabase link --project-ref ${{ secrets.SUPABASE_PREVIEW_PROJECT_ID }}
