@@ -22,3 +22,11 @@
 - `apps/web` runs a version of Next.js that may differ from your training data — check the bundled docs at `apps/web/node_modules/next/dist/docs/` before writing App Router code, and heed deprecation notices.
 - If a `pnpm <script>` fails with `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`, the environment's Node.js is older than `.node-version` requires. Fall back to the underlying CLI directly (`npx supabase ...`, `npx next ...`, `npx biome ...`) instead of the pnpm wrapper.
 - `supabase gen types ... > file` can prepend a stray `Connecting to db ...` log line to the output file — check the first line of generated types before committing.
+
+## 4. Issue → PR Workflow
+- **Environment & PATH:** If `gh` is not found, verify its location with `where.exe gh` or prepend `$env:Path += ";C:\Program Files\GitHub CLI"` in PowerShell sessions.
+- **Clean Staging:** Before branching or committing, inspect `git status` thoroughly. Stage and commit **only** files relevant to the specific issue; never bundle unrelated pending changes.
+- **Check Existing Files:** Check `git status` or `git log -- <path>` before creating files, to avoid recreating or overwriting already merged work.
+- **Explicit Approval:** Never run `git commit` on your own initiative — prepare the change, show the diff, and commit only once the user explicitly asks for it in that turn. The same applies to `gh pr create`: even after committing, open the PR only when asked.
+- **Honest Verification:** Only state "verified/confirmed X" in a PR description if X was explicitly executed in the current session. Run all verification checks before submitting the PR.
+- **Post-Merge Cleanup:** Once a PR is confirmed merged (`gh pr view <n> --json state,mergedAt`), switch back to main and clean up: `git checkout main`, `git pull`, `git branch -d <branch>`.
