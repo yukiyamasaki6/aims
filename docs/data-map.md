@@ -11,5 +11,5 @@
 
 ## 補足
 
-- `shots.user_id`は個人の矢を誰が射たかを表すフィールドのため、将来1つのラウンドを複数人で共有するチームスコアリングにもそのまま対応できる（MVPでは常に本人のみ）。
-- `round_users`はチーム招待UIが無いMVPでも、RLS上ラウンドへのアクセス可否判定に必須のため、ラウンド作成時に作成者を自動登録する。ただし[`security.md`](security.md)の認可マトリクス上、`round_users`へのINSERTは自己参照条件（既に`editor`であること）のため、作成者自身の最初の1行はクライアントから直接INSERTできない。[`security.md`](security.md)「初期データの自動登録」の通り、`SECURITY DEFINER`のDBトリガーがRLSを回避して自動登録する。
+- `shots.user_id`は個人の矢を誰が射たかを表すフィールドのため、将来1つのラウンドを複数人で共有するチームスコアリングにもそのまま対応できる（v0.2.0では常に本人のみ。チーム機能の導入時期は[docs/roadmap.md](./roadmap.md)参照）。
+- `round_users`はチーム招待UIが無いv0.2.0でも、RLS上ラウンドへのアクセス可否判定に必須のため、ラウンド作成時に作成者を自動登録する。ただし[`security.md`](security.md)の認可マトリクス上、`round_users`へのINSERTは自己参照条件（既に`editor`であること）のため、作成者自身の最初の1行はクライアントから直接INSERTできない。[`security.md`](security.md)の通り、`create_round` RPC（`SECURITY DEFINER`）がRLSを回避して自動登録する。

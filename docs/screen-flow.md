@@ -1,6 +1,6 @@
 # Screen Flow (画面遷移図)
 
-MVPスコープ（個人のスコア記録のコア体験）における画面遷移。チーム招待・認証プロバイダ設定・弓具詳細入力などの周辺機能はスコープ外とし、[`erd.md`](erd.md)で確定済みの5テーブル構成（`users` / `rounds` / `round_users` / `distances` / `shots`）を前提とする。
+v0.2.0（PoC）スコープ（個人のスコア記録のコア体験）における画面遷移。チーム招待・認証プロバイダ設定・弓具詳細入力などの周辺機能はスコープ外とし（導入時期は[docs/roadmap.md](./roadmap.md)参照）、[`erd.md`](erd.md)で確定済みの5テーブル構成（`users` / `rounds` / `round_users` / `distances` / `shots`）を前提とする。
 
 ```mermaid
 flowchart TD
