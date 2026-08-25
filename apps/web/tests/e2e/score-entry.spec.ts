@@ -54,6 +54,20 @@ test("エンドごとに矢を入力すると合計点が更新され、マス�
   await expect(page.getByTestId("score-button-X")).toBeHidden();
 });
 
+test("距離が1つのときも距離・小計・X数/10数の見出しが表示される", async ({
+  page,
+}) => {
+  const summary = page.getByTestId("distance-summary-1");
+  await expect(summary).toContainText("18m");
+  await expect(summary).toContainText("小計0");
+  await expect(summary).toContainText("X: 0 / 10: 0");
+
+  await page.getByTestId("score-button-X").click();
+
+  await expect(summary).toContainText("小計10");
+  await expect(summary).toContainText("X: 1 / 10: 0");
+});
+
 test("距離が複数あるとき、距離ごとの合計・X数・10数も表示される", async ({
   page,
 }) => {
@@ -88,12 +102,75 @@ test("距離が複数あるとき、距離ごとの合計・X数・10数も表�
   await expect(secondSummary).toContainText("X: 0 / 10: 0");
 });
 
-test("テンキーパネルを格納・展開できる", async ({ page }) => {
+test("入力済み・未入力にかかわらずマス目をタップして選び直し、上書きを続けられる", async ({
+  page,
+}) => {
+  // beforeEachの1エンド2射では前エンドへ戻る検証ができないため、2エンド×2射のラウンドを別途作成する。
+  await page.goto("/rounds/new");
+  await page.getByLabel("ラウンド名").fill("修正テスト");
+  await page.getByLabel("実施日").fill("2026-08-24");
+  const row = page.getByTestId("distance-row").first();
+  await row.getByLabel("距離(m)").fill("18");
+  await row.getByLabel("総エンド数").fill("2");
+  await row.getByLabel("エンドあたりの本数").fill("2");
+  await page.getByRole("button", { name: "ラウンドを作成" }).click();
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+
+  // エンド1を2射入力する。
+  await page.getByTestId("score-button-X").click();
+  await page.getByTestId("score-button-5").click();
+  await expect(page.getByTestId("round-summary")).toContainText("合計15");
+
+  // 入力済みのエンド1・1射目をタップして選び直し、9に上書き修正する。
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("score-button-9").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("9");
+  await expect(page.getByTestId("round-summary")).toContainText("合計14");
+
+  // 上書き後は次のマス（エンド1・2射目）へ進み、そこに入力済みでもテンキーは閉じず上書きを続けられる。
+  await expect(page.getByTestId("score-button-X")).toBeVisible();
+  await page.getByTestId("score-button-7").click();
+  await expect(page.getByTestId("shot-cell-1-1-2")).toHaveText("7");
+  await expect(page.getByTestId("round-summary")).toContainText("合計16");
+
+  // さらに次のマス（エンド2・1射目、未入力）にもそのまま入力を続けられる。
+  await page.getByTestId("score-button-M").click();
+  await expect(page.getByTestId("shot-cell-1-2-1")).toHaveText("M");
+});
+
+test("マス目以外をクリックするとテンキーが格納される", async ({ page }) => {
+  await expect(page.getByTestId("score-button-X")).toBeVisible();
+
+  await page.getByTestId("round-summary").click();
+
+  await expect(page.getByTestId("score-button-X")).toBeHidden();
+});
+
+test("クリアボタンで選択中のマスの点数がその場で消え、一つ前へ選択が戻る", async ({
+  page,
+}) => {
+  await page.getByTestId("score-button-X").click();
+  await expect(page.getByTestId("round-summary")).toContainText("合計10");
+
+  // 入力済みの1射目を選び直してからクリアすると、選択中のマスの点数がその場で消える。
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("score-button-clear").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("");
+  await expect(page.getByTestId("round-summary")).toContainText("合計0");
+
+  await page.getByTestId("score-button-8").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("8");
+});
+
+test("下矢印でテンキーを格納でき、マスをタップすると再表示される", async ({
+  page,
+}) => {
   await expect(page.getByTestId("score-button-X")).toBeVisible();
 
   await page.getByTestId("keypad-toggle").click();
+  await expect(page.getByTestId("keypad-toggle")).toBeHidden();
   await expect(page.getByTestId("score-button-X")).toBeHidden();
 
-  await page.getByTestId("keypad-toggle").click();
+  await page.getByTestId("shot-cell-1-1-1").click();
   await expect(page.getByTestId("score-button-X")).toBeVisible();
 });

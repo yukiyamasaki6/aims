@@ -35,3 +35,30 @@ export async function recordShot(input: {
     return { error: error.message };
   }
 }
+
+export async function clearShot(input: {
+  distanceId: string;
+  endNumber: number;
+  arrowNumber: number;
+}): Promise<{ error: string } | undefined> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "サインインが必要です。" };
+  }
+
+  const { error } = await supabase.from("shots").delete().match({
+    distance_id: input.distanceId,
+    end_number: input.endNumber,
+    arrow_number: input.arrowNumber,
+    user_id: user.id,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+}
