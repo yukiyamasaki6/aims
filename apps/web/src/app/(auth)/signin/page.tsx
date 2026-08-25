@@ -50,6 +50,11 @@ export default function SignInPage() {
       </form>
       {error && <p className="text-destructive text-sm">{error}</p>}
       <p className="text-muted-foreground text-sm">
+        <Link href="/reset-password" className="underline">
+          パスワードをお忘れですか
+        </Link>
+      </p>
+      <p className="text-muted-foreground text-sm">
         アカウントをお持ちでない方は{" "}
         <Link href="/signup" className="underline">
           サインアップ
