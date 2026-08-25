@@ -117,6 +117,7 @@ gh auth login
      - `feat`: New features
      - `fix`: Bug fixes
      - `refactor`: Code changes without adding features or fixing bugs
+     - `design`: Visual/UI-only changes (styling, layout, component appearance) without adding features or fixing bugs
      - `docs`: Documentation changes
      - `test`: Adding or updating tests
      - `ci`: CI configuration or script changes

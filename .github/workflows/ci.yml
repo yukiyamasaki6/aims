@@ -22,6 +22,7 @@ jobs:
             feat
             fix
             refactor
+            design
             docs
             test
             ci
