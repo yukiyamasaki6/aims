@@ -33,7 +33,8 @@ test("作成したラウンドが一覧に合計点付きで表示され、ク�
   const roundId = new URL(roundUrl).pathname.split("/").pop();
 
   await page.getByTestId("score-button-7").click();
-  await expect(page.getByText("全エンド入力完了")).toBeVisible();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("7");
+  await expect(page.getByTestId("keypad-toggle")).toBeHidden();
 
   await page.goto("/rounds");
   const roundLink = page.getByRole("link", { name: /一覧テスト/ });
