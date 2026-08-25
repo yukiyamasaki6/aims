@@ -31,7 +31,7 @@ export default function SignInPage() {
 
   return (
     <AuthCard title="サインイン">
-      <form onSubmit={handleSubmit} className="flex w-full flex-col gap-2">
+      <form onSubmit={handleSubmit} className="flex w-full flex-col gap-3">
         <Input
           type="email"
           required
@@ -48,7 +48,7 @@ export default function SignInPage() {
         />
         <Button type="submit">サインイン</Button>
       </form>
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      {error && <p className="text-destructive text-sm">{error}</p>}
       <p className="text-muted-foreground text-sm">
         アカウントをお持ちでない方は{" "}
         <Link href="/signup" className="underline">
