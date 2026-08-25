@@ -77,7 +77,7 @@ export default function SignUpPage() {
       >
         <form
           onSubmit={handleSetPassword}
-          className="flex w-full flex-col gap-2"
+          className="flex w-full flex-col gap-3"
         >
           <Input
             type="password"
@@ -89,7 +89,7 @@ export default function SignUpPage() {
           />
           <Button type="submit">登録してサインイン</Button>
         </form>
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        {error && <p className="text-destructive text-sm">{error}</p>}
         <SignInLink />
       </AuthCard>
     );
@@ -103,7 +103,7 @@ export default function SignUpPage() {
       >
         <form
           onSubmit={handleVerifyCode}
-          className="flex w-full flex-col gap-2"
+          className="flex w-full flex-col gap-3"
         >
           <Input
             type="text"
@@ -116,7 +116,7 @@ export default function SignUpPage() {
           />
           <Button type="submit">確認</Button>
         </form>
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        {error && <p className="text-destructive text-sm">{error}</p>}
         <SignInLink />
       </AuthCard>
     );
@@ -124,7 +124,7 @@ export default function SignUpPage() {
 
   return (
     <AuthCard title="サインアップ">
-      <form onSubmit={handleSendCode} className="flex w-full flex-col gap-2">
+      <form onSubmit={handleSendCode} className="flex w-full flex-col gap-3">
         <Input
           type="email"
           required
@@ -134,7 +134,7 @@ export default function SignUpPage() {
         />
         <Button type="submit">確認コードを送信</Button>
       </form>
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      {error && <p className="text-destructive text-sm">{error}</p>}
       <SignInLink />
     </AuthCard>
   );
