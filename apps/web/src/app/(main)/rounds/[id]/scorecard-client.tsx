@@ -120,122 +120,126 @@ export function ScorecardClient({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-8 pb-40">
-      <div
-        data-testid="round-summary"
-        className="flex items-baseline justify-center gap-2 rounded-xl border bg-card p-4 text-card-foreground shadow-sm"
-      >
-        <span className="font-heading text-2xl font-semibold">合計{total}</span>
-        <span className="text-muted-foreground text-sm">
-          X: {xCount} / 10: {tenCount}
-        </span>
-      </div>
+    <main className="flex min-h-full flex-col">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-8">
+        <div
+          data-testid="round-summary"
+          className="flex items-baseline justify-center gap-2 rounded-xl border bg-card p-4 text-card-foreground shadow-sm"
+        >
+          <span className="font-heading text-2xl font-semibold">
+            合計{total}
+          </span>
+          <span className="text-muted-foreground text-sm">
+            X: {xCount} / 10: {tenCount}
+          </span>
+        </div>
 
-      <div className="flex flex-col gap-4">
-        {distances.map((d) => {
-          const distanceShots = shots.filter((s) => s.distance_id === d.id);
-          const distanceTotal = distanceShots.reduce(
-            (sum, s) => sum + s.score_int,
-            0,
-          );
-          const distanceXCount = distanceShots.filter(
-            (s) => s.score_str === "X",
-          ).length;
-          const distanceTenCount = distanceShots.filter(
-            (s) => s.score_str === "10",
-          ).length;
+        <div className="flex flex-col gap-4">
+          {distances.map((d) => {
+            const distanceShots = shots.filter((s) => s.distance_id === d.id);
+            const distanceTotal = distanceShots.reduce(
+              (sum, s) => sum + s.score_int,
+              0,
+            );
+            const distanceXCount = distanceShots.filter(
+              (s) => s.score_str === "X",
+            ).length;
+            const distanceTenCount = distanceShots.filter(
+              (s) => s.score_str === "10",
+            ).length;
 
-          return (
-            <div
-              key={d.id}
-              className="overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm"
-            >
-              {distances.length > 1 && (
-                <div
-                  data-testid={`distance-summary-${d.distance_number}`}
-                  className="flex items-baseline justify-between gap-2 border-b px-3 py-2 text-muted-foreground text-xs"
-                >
-                  <span>{d.distance}m</span>
-                  <span className="flex items-baseline gap-1.5">
-                    <span className="text-foreground text-sm font-semibold">
-                      小計{distanceTotal}
+            return (
+              <div
+                key={d.id}
+                className="overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm"
+              >
+                {distances.length > 1 && (
+                  <div
+                    data-testid={`distance-summary-${d.distance_number}`}
+                    className="flex items-baseline justify-between gap-2 border-b px-3 py-2 text-muted-foreground text-xs"
+                  >
+                    <span>{d.distance}m</span>
+                    <span className="flex items-baseline gap-1.5">
+                      <span className="text-foreground text-sm font-semibold">
+                        小計{distanceTotal}
+                      </span>
+                      <span>
+                        X: {distanceXCount} / 10: {distanceTenCount}
+                      </span>
                     </span>
-                    <span>
-                      X: {distanceXCount} / 10: {distanceTenCount}
-                    </span>
-                  </span>
-                </div>
-              )}
-              <div className="divide-y">
-                {Array.from({ length: d.total_ends }, (_, i) => i + 1).map(
-                  (end) => {
-                    const endShots = shots.filter(
-                      (s) => s.distance_id === d.id && s.end_number === end,
-                    );
-                    const subtotal = endShots.reduce(
-                      (sum, s) => sum + s.score_int,
-                      0,
-                    );
-                    const hasAnyShot = endShots.length > 0;
-
-                    return (
-                      <div key={end} className="flex items-stretch">
-                        <div className="flex w-8 shrink-0 items-center justify-center border-r text-muted-foreground text-xs">
-                          {end}
-                        </div>
-                        <div
-                          className="grid flex-1 divide-x"
-                          style={{
-                            gridTemplateColumns: `repeat(${d.arrows_per_end}, minmax(0, 1fr))`,
-                          }}
-                        >
-                          {Array.from(
-                            { length: d.arrows_per_end },
-                            (_, i) => i + 1,
-                          ).map((arrow) => {
-                            const shot = endShots.find(
-                              (s) => s.arrow_number === arrow,
-                            );
-                            const isActive =
-                              position?.distance.id === d.id &&
-                              position.end === end &&
-                              position.arrow === arrow;
-
-                            return (
-                              <div
-                                key={arrow}
-                                data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
-                                className={cn(
-                                  "flex min-h-10 items-center justify-center py-2 text-base font-medium",
-                                  isActive &&
-                                    "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
-                                )}
-                              >
-                                {shot?.score_str ?? ""}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div
-                          data-testid={`end-subtotal-${d.distance_number}-${end}`}
-                          className="flex min-h-10 w-14 shrink-0 items-center justify-center border-l text-muted-foreground text-base"
-                        >
-                          {hasAnyShot ? `${subtotal}` : ""}
-                        </div>
-                      </div>
-                    );
-                  },
+                  </div>
                 )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                <div className="divide-y">
+                  {Array.from({ length: d.total_ends }, (_, i) => i + 1).map(
+                    (end) => {
+                      const endShots = shots.filter(
+                        (s) => s.distance_id === d.id && s.end_number === end,
+                      );
+                      const subtotal = endShots.reduce(
+                        (sum, s) => sum + s.score_int,
+                        0,
+                      );
+                      const hasAnyShot = endShots.length > 0;
 
-      {error && <p className="text-destructive text-sm">{error}</p>}
+                      return (
+                        <div key={end} className="flex items-stretch">
+                          <div className="flex w-8 shrink-0 items-center justify-center border-r text-muted-foreground text-xs">
+                            {end}
+                          </div>
+                          <div
+                            className="grid flex-1 divide-x"
+                            style={{
+                              gridTemplateColumns: `repeat(${d.arrows_per_end}, minmax(0, 1fr))`,
+                            }}
+                          >
+                            {Array.from(
+                              { length: d.arrows_per_end },
+                              (_, i) => i + 1,
+                            ).map((arrow) => {
+                              const shot = endShots.find(
+                                (s) => s.arrow_number === arrow,
+                              );
+                              const isActive =
+                                position?.distance.id === d.id &&
+                                position.end === end &&
+                                position.arrow === arrow;
+
+                              return (
+                                <div
+                                  key={arrow}
+                                  data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
+                                  className={cn(
+                                    "flex min-h-10 items-center justify-center py-2 text-base font-medium",
+                                    isActive &&
+                                      "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
+                                  )}
+                                >
+                                  {shot?.score_str ?? ""}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div
+                            data-testid={`end-subtotal-${d.distance_number}-${end}`}
+                            className="flex min-h-10 w-14 shrink-0 items-center justify-center border-l text-muted-foreground text-base"
+                          >
+                            {hasAnyShot ? `${subtotal}` : ""}
+                          </div>
+                        </div>
+                      );
+                    },
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {error && <p className="text-destructive text-sm">{error}</p>}
+      </div>
 
       {position && (
-        <div className="fixed inset-x-0 bottom-0 border-t bg-card shadow-lg">
+        <div className="sticky bottom-0 border-t bg-card shadow-lg">
           <div className="mx-auto max-w-xl">
             <button
               type="button"
