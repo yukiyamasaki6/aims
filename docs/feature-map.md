@@ -3,7 +3,7 @@
 ```
 apps/web/src/app
 ├─ layout.tsx (Server)          ルートレイアウト
-├─ page.tsx                     ルート（認証状態で/roundsまたは/signinへリダイレクト。未実装・現状は静的ランディング）
+├─ page.tsx (Server)            ルート。認証済みなら/roundsへ、未認証なら/signinへリダイレクトする
 ├─ (auth)/
 │  ├─ layout.tsx (Server)       認証用レイアウト（LeftPanelなし）
 │  ├─ signin/

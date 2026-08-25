@@ -21,9 +21,8 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
   await expect(page).toHaveURL(/\/rounds/);
 
   await page.getByRole("button", { name: "サインアウト" }).click();
-  await expect(page).toHaveURL("http://localhost:3000/");
+  await expect(page).toHaveURL(/\/signin/);
 
-  await page.goto("/signin");
   await page.getByRole("link", { name: "パスワードをお忘れですか" }).click();
   await expect(page).toHaveURL(/\/reset-password/);
 
