@@ -32,19 +32,68 @@ test.beforeEach(async ({ page }) => {
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
 });
 
-test("エンドごとに矢を入力すると合計点が更新され、完了後も同じ画面で内訳を確認できる", async ({
+test("エンドごとに矢を入力すると合計点が更新され、マス目に反映される", async ({
   page,
 }) => {
-  await expect(page.getByText("18m 1エンド目 / 1エンド")).toBeVisible();
-  await expect(page.getByText("合計 0点")).toBeVisible();
+  await expect(page.getByTestId("round-summary")).toContainText("合計0");
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("");
+  await expect(page.getByTestId("shot-cell-1-1-2")).toHaveText("");
 
   await page.getByTestId("score-button-X").click();
-  await expect(page.getByText("合計 10点")).toBeVisible();
+  await expect(page.getByTestId("round-summary")).toContainText("合計10");
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("X");
 
   await page.getByTestId("score-button-5").click();
 
-  await expect(page.getByText("合計 15点")).toBeVisible();
-  await expect(page.getByText("全エンド入力完了")).toBeVisible();
-  await expect(page.getByText("X: 1 / 10: 0")).toBeVisible();
-  await expect(page.getByText("X 5（15点）")).toBeVisible();
+  await expect(page.getByTestId("round-summary")).toContainText("合計15");
+  await expect(page.getByTestId("round-summary")).toContainText("X: 1 / 10: 0");
+  await expect(page.getByTestId("shot-cell-1-1-2")).toHaveText("5");
+  await expect(page.getByTestId("end-subtotal-1-1")).toHaveText("15");
+
+  // 全エンド入力完了後はテンキーが表示されない
+  await expect(page.getByTestId("score-button-X")).toBeHidden();
+});
+
+test("距離が複数あるとき、距離ごとの合計・X数・10数も表示される", async ({
+  page,
+}) => {
+  // 2距離（18m, 30m）・各1エンド1射のラウンドを別途作成する。
+  await page.goto("/rounds/new");
+  await page.getByLabel("ラウンド名").fill("複数距離テスト");
+  await page.getByLabel("実施日").fill("2026-08-24");
+  const firstRow = page.getByTestId("distance-row").first();
+  await firstRow.getByLabel("距離(m)").fill("18");
+  await firstRow.getByLabel("総エンド数").fill("1");
+  await firstRow.getByLabel("エンドあたりの本数").fill("1");
+  await page.getByRole("button", { name: "距離を追加" }).click();
+  const secondRow = page.getByTestId("distance-row").nth(1);
+  await secondRow.getByLabel("距離(m)").fill("30");
+  await secondRow.getByLabel("総エンド数").fill("1");
+  await secondRow.getByLabel("エンドあたりの本数").fill("1");
+  await page.getByRole("button", { name: "ラウンドを作成" }).click();
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+
+  await page.getByTestId("score-button-X").click();
+
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("X");
+
+  const firstSummary = page.getByTestId("distance-summary-1");
+  await expect(firstSummary).toContainText("18m");
+  await expect(firstSummary).toContainText("小計10");
+  await expect(firstSummary).toContainText("X: 1 / 10: 0");
+
+  const secondSummary = page.getByTestId("distance-summary-2");
+  await expect(secondSummary).toContainText("30m");
+  await expect(secondSummary).toContainText("小計0");
+  await expect(secondSummary).toContainText("X: 0 / 10: 0");
+});
+
+test("テンキーパネルを格納・展開できる", async ({ page }) => {
+  await expect(page.getByTestId("score-button-X")).toBeVisible();
+
+  await page.getByTestId("keypad-toggle").click();
+  await expect(page.getByTestId("score-button-X")).toBeHidden();
+
+  await page.getByTestId("keypad-toggle").click();
+  await expect(page.getByTestId("score-button-X")).toBeVisible();
 });
