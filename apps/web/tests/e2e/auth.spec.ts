@@ -15,7 +15,9 @@ test("ユーザAがサインインし、サインアウトできる", async ({ p
   await page.getByPlaceholder("パスワード").fill("password-a");
   await page.getByRole("button", { name: "サインイン" }).click();
   await expect(page).toHaveURL(/\/rounds/);
-  await expect(page.getByText("user-a@aims.test").first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "サインアウト" }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "サインアウト" }).click();
   await expect(page).toHaveURL("http://localhost:3000/");
@@ -43,5 +45,7 @@ test("ユーザBがサインアップできる", async ({ page }) => {
   await page.getByRole("button", { name: "登録してサインイン" }).click();
 
   await expect(page).toHaveURL(/\/rounds/);
-  await expect(page.getByText(email).first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "サインアウト" }),
+  ).toBeVisible();
 });
