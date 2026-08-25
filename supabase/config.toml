@@ -253,6 +253,11 @@ otp_expiry = 3600
 subject = "サインイン確認コード"
 content_path = "./supabase/templates/otp.html"
 
+# パスワード再設定もリンクではなく確認コード(OTP)で行うため、コードを表示するテンプレートに差し替える。
+[auth.email.template.recovery]
+subject = "パスワード再設定確認コード"
+content_path = "./supabase/templates/reset-password-otp.html"
+
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
 # enabled = true

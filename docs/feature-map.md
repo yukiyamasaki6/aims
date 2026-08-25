@@ -11,7 +11,7 @@ apps/web/src/app
 │  ├─ signup/
 │  │  └─ page.tsx (Client)      サインアップ画面。email/code/passwordの3ステップをクライアント側stateで管理し、単一URLのまま画面を出し分ける（別URLは持たない）
 │  └─ reset-password/
-│     └─ page.tsx (Client)      パスワード再設定画面。`signup/page.tsx`と同じ3ステップ構成で実装予定（未実装）
+│     └─ page.tsx (Client)      パスワード再設定画面。email/code/passwordの3ステップをクライアント側stateで管理し、単一URLのまま画面を出し分ける（`signup/page.tsx`と同じパターン）
 ├─ (main)/
 │  ├─ layout.tsx (Server)       ヘッダーに結合ボタン(ハンバーガー+コンテキスト名。左上・常時表示)を配置
 │  │  └─ LeftPanel (Client)        結合ボタンから開閉（PC常時展開・モバイルはドロワー）。上から: 自分 → 所属チーム一覧(行右端にメニューボタン。タップで`[teamId]`(チーム管理画面)へ) → 区切り線 → 「チーム参加・作成」ボタン(`/teams`へ) → 区切り線 → 設定・規約・要望へのリンク → サインアウトボタン
