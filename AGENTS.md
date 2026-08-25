@@ -9,6 +9,7 @@
   - Pass `pnpm validate` (lint, typecheck, SQL lint, unit tests) with zero errors before considering any task done.
   - Run `pnpm validate:all` (adds pgTAP DB tests and Playwright E2E; requires `pnpm db:start`) when changes touch application code, migrations, or E2E tests.
   - Run `pnpm check:write` to resolve formatting and lint issues automatically.
+  - Keep the feedback loop with the user fast: run a given test/suite once, not repeatedly for reassurance, and skip validation steps that the change cannot affect (e.g., skip E2E for a docs-only change or a pure file move with zero content diff).
 - **Strict typing:** Never use `any`; ensure `pnpm typecheck` compiles cleanly.
 - **Database & secrets safety:**
   - NEVER output, hardcode, or request `service_role` keys or production secrets. Use only local `anon`/publishable keys in code and `.env.example`.
