@@ -1,7 +1,11 @@
-export default function Home() {
-  return (
-    <main className="mx-auto flex h-screen max-w-xl flex-col items-center justify-center gap-2 overflow-y-auto p-8 text-center">
-      <h1 className="text-2xl font-bold">AIMS</h1>
-    </main>
-  );
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  redirect(user ? "/rounds" : "/signin");
 }
