@@ -138,12 +138,18 @@ test("入力済み・未入力にかかわらずマス目をタップして選�
   await expect(page.getByTestId("shot-cell-1-2-1")).toHaveText("M");
 });
 
-test("マス目以外をクリックするとテンキーが格納される", async ({ page }) => {
+test("マス目以外をクリックするとテンキーが格納され、選択中マスの強調表示も消える", async ({
+  page,
+}) => {
   await expect(page.getByTestId("score-button-X")).toBeVisible();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveClass(/ring-primary/);
 
   await page.getByTestId("round-summary").click();
 
   await expect(page.getByTestId("score-button-X")).toBeHidden();
+  await expect(page.getByTestId("shot-cell-1-1-1")).not.toHaveClass(
+    /ring-primary/,
+  );
 });
 
 test("クリアボタンで選択中のマスの点数がその場で消え、一つ前へ選択が戻る", async ({

@@ -116,6 +116,9 @@ export function ScorecardClient({
 
   const closeKeypad = useCallback(() => {
     setKeypadOpen(false);
+    // positionを残したままだと選択中マスのリング表示（isActive）が消えず、
+    // 見た目上フォーカスが外れていないように見えるためクリアする。
+    setPosition(null);
     (document.activeElement as HTMLElement | null)?.blur();
   }, []);
 
