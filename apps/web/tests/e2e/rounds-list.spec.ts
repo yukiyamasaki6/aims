@@ -45,3 +45,23 @@ test("作成したラウンドが一覧に合計点付きで表示され、ク�
   await roundLink.click();
   await expect(page).toHaveURL(`/rounds/${roundId}`);
 });
+
+test("新規作成ボタンをタップすると/rounds/newへ遷移する", async ({ page }) => {
+  const email = `rounds-fab-test-${Date.now()}@aims.test`;
+  const password = "password-fab";
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "確認コードを送信" }).click();
+
+  const code = await getOtpCodeFromMailpit(email);
+  await page.getByPlaceholder("123456").fill(code);
+  await page.getByRole("button", { name: "確認" }).click();
+
+  await page.getByPlaceholder("パスワード（6文字以上）").fill(password);
+  await page.getByRole("button", { name: "登録してサインイン" }).click();
+  await expect(page).toHaveURL(/\/rounds/);
+
+  await page.getByTestId("new-round-fab").click();
+  await expect(page).toHaveURL(/\/rounds\/new/);
+});

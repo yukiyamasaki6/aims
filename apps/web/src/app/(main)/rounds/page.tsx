@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
@@ -45,6 +46,15 @@ export default async function RoundsPage() {
           })}
         </ul>
       )}
+
+      <Link
+        href="/rounds/new"
+        data-testid="new-round-fab"
+        aria-label="ラウンドを新規作成"
+        className="fixed right-6 bottom-6 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-colors hover:bg-primary/80"
+      >
+        <Plus className="size-6" />
+      </Link>
     </main>
   );
 }
