@@ -1,6 +1,6 @@
 # Data Map (データ配置図)
 
-[`screen-flow.md`](screen-flow.md)の各画面/操作と、[`erd.md`](erd.md)で確定済みの5テーブルとの対応。アクセス制御は[`security.md`](security.md)のAuthorization Matrixに従う。
+[`screen-flow.md`](screen-flow.md)の各画面/操作と、[`erd.md`](erd.md)で確定済みのテーブルとの対応。アクセス制御は[`security.md`](security.md)のAuthorization Matrixに従う。
 
 | 画面 / 操作 | 対象テーブル | 処理内容 |
 | :--- | :--- | :--- |
@@ -12,4 +12,4 @@
 ## 補足
 
 - `shots.user_id`は個人の矢を誰が射たかを表すフィールドのため、将来1つのラウンドを複数人で共有するチームスコアリングにもそのまま対応できる（v0.2.0では常に本人のみ。チーム機能の導入時期は[docs/roadmap.md](./roadmap.md)参照）。
-- `round_users`はチーム招待UIが無いv0.2.0でも、RLS上ラウンドへのアクセス可否判定に必須のため、ラウンド作成時に作成者を自動登録する。ただし[`security.md`](security.md)の認可マトリクス上、`round_users`へのINSERTは自己参照条件（既に`editor`であること）のため、作成者自身の最初の1行はクライアントから直接INSERTできない。[`security.md`](security.md)の通り、`create_round` RPC（`SECURITY DEFINER`）がRLSを回避して自動登録する。
+- `round_users`はチーム招待UIが無いv0.2.0でも、RLS上ラウンドへのアクセス可否判定に必須のため、ラウンド作成時に作成者を自動登録する（登録の仕組みは[`security.md`](security.md)参照）。
