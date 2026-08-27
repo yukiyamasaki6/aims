@@ -14,10 +14,10 @@
 | `round_users` | `round_users`に自分が存在する      | `round_users.role` = 'editor' | `round_users.role` = 'editor' | `round_users.role` = 'editor' |
 | `distances`   | `round_users`に自分が存在する      | `round_users.role` = 'editor' | `round_users.role` = 'editor' | `round_users.role` = 'editor' |
 | `shots`       | `round_users`に自分が存在する      | `round_users.role` = 'editor' | `round_users.role` = 'editor' | `round_users.role` = 'editor' |
-| `target_faces`, `target_face_spots`, `target_face_rings` | 認証済みユーザー全員（グローバル・個人問わず全て閲覧可） | `owner_user_id` = 自分（グローバル行はマイグレーションでのみ作成し、クライアントからのnull登録は許可しない） | `owner_user_id` = 自分 | `owner_user_id` = 自分 |
-| `round_presets`, `round_preset_distances` | 認証済みユーザー全員（グローバル・個人問わず全て閲覧可） | `owner_user_id` = 自分（グローバル行はマイグレーションでのみ作成） | `owner_user_id` = 自分 | `owner_user_id` = 自分 |
+| `target_faces`, `target_face_spots`, `target_face_rings` | 認証済みユーザー全員（グローバル・個人問わず全て閲覧可） | `owner_id` = 自分（グローバル行はマイグレーションでのみ作成し、クライアントからのnull登録は許可しない） | `owner_id` = 自分 | `owner_id` = 自分 |
+| `round_presets`, `round_preset_distances` | 認証済みユーザー全員（グローバル・個人問わず全て閲覧可） | `owner_id` = 自分（グローバル行はマイグレーションでのみ作成） | `owner_id` = 自分 | `owner_id` = 自分 |
 
-子テーブル（`target_face_spots`/`target_face_rings`、`round_preset_distances`）は親テーブルの`owner_user_id`判定に従う（親を辿ってRLSを評価する。`distances`/`shots`が`round_users`を辿るのと同じパターン）。
+子テーブル（`target_face_spots`/`target_face_rings`、`round_preset_distances`）は親テーブルの`owner_id`判定に従う（親を辿ってRLSを評価する。`distances`/`shots`が`round_users`を辿るのと同じパターン）。
 
 ## 初期データの自動登録
 
