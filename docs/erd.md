@@ -22,11 +22,11 @@ erDiagram
     rounds ||--o{ distances : "1対多"
     distances ||--o{ shots : "1対多"
     users ||--o{ shots : "1対多"
-    users ||--o{ target_faces : "1対多（owner。nullはグローバル）"
+    users ||--o{ target_faces : "1対多（owner）"
     target_faces ||--o{ target_face_spots : "1対多"
     target_face_spots ||--o{ target_face_rings : "1対多"
     target_faces ||--o{ distances : "1対多（参照）"
-    users ||--o{ round_presets : "1対多（owner。nullはグローバル）"
+    users ||--o{ round_presets : "1対多（owner）"
     round_presets ||--o{ round_preset_distances : "1対多"
     target_faces ||--o{ round_preset_distances : "1対多（参照）"
 
@@ -70,8 +70,8 @@ erDiagram
         integer end_number UK "エンド番号"
         integer arrow_number UK "矢番号"
         uuid user_id FK, UK
-        string score_str "1〜10, M, X（score_intと矛盾しないようCHECK制約で保証）"
-        integer score_int "0〜10（score_strと矛盾しないようCHECK制約で保証）"
+        string score_str "1〜10, M, X"
+        integer score_int "0〜10"
         timestamp created_at
         timestamp updated_at
     }
@@ -96,9 +96,9 @@ erDiagram
         numeric radius "cm単位"
         string color "塗り色（HEX）"
         string line_color "境界線の色（HEX）。null=なし"
-        integer z_index "target_face全体で共通の重なり順（大きいほど手前。スポット同士が重なる場合の描画順にも使う）"
-        string score_str "得点の表示文字列。score_intが同じでもX/10のように区別する"
-        integer score_int
+        integer z_index "target_face全体で共通の重なり順"
+        string score_str "X, 10, 9 等"
+        integer score_int "0〜10"
         timestamp created_at
         timestamp updated_at
     }
@@ -124,9 +124,4 @@ erDiagram
     }
 ```
 
-- `shots`は`(distance_id, user_id, end_number, arrow_number)`に一意制約を持ち、この4列をキーにupsertする。
-- ラウンド作成は`create_round(name, round_date, distances)` RPC（`SECURITY DEFINER`）経由でのみ行う。`round_users`への登録・`rounds`・`distances`の作成をこの関数内で順に行い、原子性を保つ。`rounds`への直接INSERTは許可しない（詳細は[docs/security.md](./security.md)参照）。`p_distances`に`target_face_id`、`rounds`に`format`/`bow_type`を追加する形でこの関数を拡張する。
-- 的・ラウンド構成管理（[docs/roadmap.md](./roadmap.md)のv1.0.0参照）の設計方針は以下の通り。
-  - **的（`target_faces`〜`target_face_rings`）**: 画像ではなく幾何情報（スポットの中心座標、点数帯の半径・色・重なり順・得点）で的を管理する。これにより (1) 点数帯の色をスコア入力キーパッドの配色に流用できる（[Issue #132](https://github.com/yukiyamasaki6/aims/issues/132)）、(2) 将来的に的をクリックして記録する体験や着弾位置に基づく分析（[docs/roadmap.md](./roadmap.md)の着弾位置プロット、v1.6.0）にも同じデータを再利用できる、というねらいがある。「スポット」は物理的に離れた複数的（3つ目等）だけでなく、同一の的内で中心がずれたリング（実験的な的）も区別なく表現できる。
-  - **ラウンド（`rounds.format`/`rounds.bow_type`、`distances.target_face_id`）**: ラウンドは種別（`format`: outdoor/indoor/field）・弓種（`bow_type`: recurve/compound/barebow）・距離の組み合わせ（`distances`の並び）・的の種類（距離ごとの`target_face_id`）の4軸で構成される。種別・弓種は1ラウンド内で変化しないため`rounds`に、的は距離ごとに変わりうるため`distances`に持つ。
-  - **プリセット（`round_presets`/`round_preset_distances`）**: 種別・弓種・距離の組み合わせ・的をまとめたテンプレート。グローバルプリセット（70W, SH, WA1440等の公式ラウンド名、マイグレーションでシード）と個人プリセット（`owner_id`を自分にして保存）を同一テーブルで扱う。
+`create_round` RPCやRLSの詳細は[docs/security.md](./security.md)を参照。
