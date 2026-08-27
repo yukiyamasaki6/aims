@@ -85,7 +85,7 @@ erDiagram
     target_face_spots {
         uuid id PK
         uuid target_face_id FK
-        numeric center_x "cm単位。的内の基準原点からの相対座標"
+        numeric center_x "cm単位"
         numeric center_y "cm単位"
         timestamp created_at
         timestamp updated_at
@@ -124,4 +124,4 @@ erDiagram
     }
 ```
 
-`create_round` RPCやRLSの詳細は[docs/security.md](./security.md)を参照。
+`target_faces`のシード候補一覧は[docs/target-faces.md](./target-faces.md)、`create_round` RPCやRLSの詳細は[docs/security.md](./security.md)を参照。
