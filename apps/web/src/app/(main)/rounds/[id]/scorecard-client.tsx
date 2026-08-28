@@ -42,6 +42,68 @@ const SCORE_BUTTONS: { label: string; scoreStr: string; scoreInt: number }[] = [
   { label: "M", scoreStr: "M", scoreInt: 0 },
 ];
 
+// WAルールブックの的の配色（金/赤/青/黒/白）。bg/fgはテンキーボタン用の原色、
+// paleBg/paleFgはマス目の点数表示用に薄くしたトーン。target_face_ringsのシード
+// データと同じHEX値を基準に、paleBg/paleFgは同系統の色相で明度のみ調整している。
+// M（ミス）は的の外＝グラウンドを表す緑で、他バンドと同じトーンで揃える。
+const SCORE_BANDS: {
+  min: number;
+  bg: string;
+  fg: string;
+  paleBg: string;
+  paleFg: string;
+}[] = [
+  {
+    min: 9,
+    bg: "#FFE552",
+    fg: "#231F20",
+    paleBg: "#FFF6D8",
+    paleFg: "#8A6D00",
+  },
+  {
+    min: 7,
+    bg: "#F65058",
+    fg: "#FFFFFF",
+    paleBg: "#FDE3E4",
+    paleFg: "#C81E27",
+  },
+  {
+    min: 5,
+    bg: "#00B4E4",
+    fg: "#FFFFFF",
+    paleBg: "#DFF4FB",
+    paleFg: "#006C8C",
+  },
+  {
+    min: 3,
+    bg: "#231F20",
+    fg: "#FFFFFF",
+    paleBg: "#E7E7E7",
+    paleFg: "#231F20",
+  },
+  {
+    min: 1,
+    bg: "#FFFFFF",
+    fg: "#231F20",
+    paleBg: "#F5F5F5",
+    paleFg: "#231F20",
+  },
+  {
+    min: 0,
+    bg: "#4CD964",
+    fg: "#231F20",
+    paleBg: "#E1F8E6",
+    paleFg: "#1B7A32",
+  },
+];
+
+function scoreColor(scoreInt: number) {
+  // min: 0のバンドが必ず該当するため、SCORE_BANDSは非空を保つ限り常にマッチする。
+  return SCORE_BANDS.find(
+    (band) => scoreInt >= band.min,
+  ) as (typeof SCORE_BANDS)[number];
+}
+
 type Position = { distance: Distance; end: number; arrow: number };
 
 function findCurrentPosition(
@@ -362,6 +424,9 @@ export function ScorecardClient({
                                 position?.distance.id === d.id &&
                                 position.end === end &&
                                 position.arrow === arrow;
+                              const color = shot
+                                ? scoreColor(shot.score_int)
+                                : null;
 
                               return (
                                 <button
@@ -374,6 +439,14 @@ export function ScorecardClient({
                                     isActive &&
                                       "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
                                   )}
+                                  style={
+                                    color
+                                      ? {
+                                          backgroundColor: color.paleBg,
+                                          color: color.paleFg,
+                                        }
+                                      : undefined
+                                  }
                                 >
                                   {shot?.score_str ?? ""}
                                 </button>
@@ -440,19 +513,32 @@ export function ScorecardClient({
                     </Button>
                   </div>
                   <div className="grid grid-cols-4 gap-2">
-                    {SCORE_BUTTONS.map((b) => (
-                      <Button
-                        key={b.label}
-                        type="button"
-                        variant="outline"
-                        size="lg"
-                        disabled={submitting}
-                        data-testid={`score-button-${b.label}`}
-                        onClick={() => handleScore(b.scoreStr, b.scoreInt)}
-                      >
-                        {b.label}
-                      </Button>
-                    ))}
+                    {SCORE_BUTTONS.map((b) => {
+                      const color = scoreColor(b.scoreInt);
+                      return (
+                        <Button
+                          key={b.label}
+                          type="button"
+                          variant="outline"
+                          size="lg"
+                          disabled={submitting}
+                          data-testid={`score-button-${b.label}`}
+                          onClick={() => handleScore(b.scoreStr, b.scoreInt)}
+                          // 背景色をstyleで直接指定するとhover:bg-muted等のクラスは
+                          // 上書きされて効かなくなる。brightnessフィルターは黒（#231F20）
+                          // のような暗い色では変化が知覚できないため、明暗どちらの背景
+                          // でも均一に視認できるグレー半透明のオーバーレイをinset
+                          // box-shadowで重ねてホバー/押下の視覚フィードバックとする。
+                          className="transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.25)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.35)]"
+                          style={{
+                            backgroundColor: color.bg,
+                            color: color.fg,
+                          }}
+                        >
+                          {b.label}
+                        </Button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
