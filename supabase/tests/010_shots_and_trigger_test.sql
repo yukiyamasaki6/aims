@@ -7,11 +7,11 @@ select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111
 
 insert into auth.users (id) values ('11111111-1111-1111-1111-111111111111');
 
-insert into public.rounds (id, name, round_date)
-values ('22222222-2222-2222-2222-222222222222', 'Test Round', current_date);
+insert into public.rounds (id, name, round_date, format, bow_type)
+values ('22222222-2222-2222-2222-222222222222', 'Test Round', current_date, 'outdoor', 'recurve');
 
-insert into public.distances (id, round_id, distance_number, distance, total_ends, arrows_per_end)
-values ('33333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222', 1, 70, 6, 6);
+insert into public.distances (id, round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+values ('33333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
 select lives_ok(
   $$insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)

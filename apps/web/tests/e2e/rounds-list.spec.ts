@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { getOtpCodeFromMailpit } from "./helpers/mailpit";
+import { createRoundViaApi } from "./helpers/rounds";
 
 test("作成したラウンドが一覧に合計点付きで表示され、クリックすると詳細画面に遷移する", async ({
   page,
@@ -19,18 +20,12 @@ test("作成したラウンドが一覧に合計点付きで表示され、ク�
   await page.getByRole("button", { name: "登録してサインイン" }).click();
   await expect(page).toHaveURL(/\/rounds/);
 
-  await page.goto("/rounds/new");
-  await page.getByLabel("ラウンド名").fill("一覧テスト");
-  await page.getByLabel("実施日").fill("2026-08-24");
-  const row = page.getByTestId("distance-row").first();
-  await row.getByLabel("距離(m)").fill("18");
-  await row.getByLabel("総エンド数").fill("1");
-  await row.getByLabel("エンドあたりの本数").fill("1");
-  await page.getByRole("button", { name: "ラウンドを作成" }).click();
-  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-
-  const roundUrl = page.url();
-  const roundId = new URL(roundUrl).pathname.split("/").pop();
+  const roundId = await createRoundViaApi(page, {
+    name: "一覧テスト",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
 
   await page.getByTestId("score-button-7").click();
   await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("7");

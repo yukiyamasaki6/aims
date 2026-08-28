@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { getOtpCodeFromMailpit } from "./helpers/mailpit";
+import { createRoundViaApi } from "./helpers/rounds";
 
 // user-a@aims.testを使うとauth.spec.tsのサインアウトテスト（global scopeで
 // 全セッションを無効化する）と並列実行時に競合するため、専用ユーザーを都度作成する。
@@ -21,15 +22,12 @@ test.beforeEach(async ({ page }) => {
   await expect(page).toHaveURL(/\/rounds/);
 
   // 1距離・1エンド・2射という最小構成のラウンドを作成し、ラウンド画面に遷移する。
-  await page.goto("/rounds/new");
-  await page.getByLabel("ラウンド名").fill("スコア入力テスト");
-  await page.getByLabel("実施日").fill("2026-08-24");
-  const row = page.getByTestId("distance-row").first();
-  await row.getByLabel("距離(m)").fill("18");
-  await row.getByLabel("総エンド数").fill("1");
-  await row.getByLabel("エンドあたりの本数").fill("2");
-  await page.getByRole("button", { name: "ラウンドを作成" }).click();
-  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+  const roundId = await createRoundViaApi(page, {
+    name: "スコア入力テスト",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
 });
 
 test("エンドごとに矢を入力すると合計点が更新され、マス目に反映される", async ({
@@ -72,20 +70,15 @@ test("距離が複数あるとき、距離ごとの合計・X数・10数も表�
   page,
 }) => {
   // 2距離（18m, 30m）・各1エンド1射のラウンドを別途作成する。
-  await page.goto("/rounds/new");
-  await page.getByLabel("ラウンド名").fill("複数距離テスト");
-  await page.getByLabel("実施日").fill("2026-08-24");
-  const firstRow = page.getByTestId("distance-row").first();
-  await firstRow.getByLabel("距離(m)").fill("18");
-  await firstRow.getByLabel("総エンド数").fill("1");
-  await firstRow.getByLabel("エンドあたりの本数").fill("1");
-  await page.getByRole("button", { name: "距離を追加" }).click();
-  const secondRow = page.getByTestId("distance-row").nth(1);
-  await secondRow.getByLabel("距離(m)").fill("30");
-  await secondRow.getByLabel("総エンド数").fill("1");
-  await secondRow.getByLabel("エンドあたりの本数").fill("1");
-  await page.getByRole("button", { name: "ラウンドを作成" }).click();
-  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+  const roundId = await createRoundViaApi(page, {
+    name: "複数距離テスト",
+    roundDate: "2026-08-24",
+    distances: [
+      { distance: 18, totalEnds: 1, arrowsPerEnd: 1 },
+      { distance: 30, totalEnds: 1, arrowsPerEnd: 1 },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
 
   await page.getByTestId("score-button-X").click();
 
@@ -106,15 +99,12 @@ test("入力済み・未入力にかかわらずマス目をタップして選�
   page,
 }) => {
   // beforeEachの1エンド2射では前エンドへ戻る検証ができないため、2エンド×2射のラウンドを別途作成する。
-  await page.goto("/rounds/new");
-  await page.getByLabel("ラウンド名").fill("修正テスト");
-  await page.getByLabel("実施日").fill("2026-08-24");
-  const row = page.getByTestId("distance-row").first();
-  await row.getByLabel("距離(m)").fill("18");
-  await row.getByLabel("総エンド数").fill("2");
-  await row.getByLabel("エンドあたりの本数").fill("2");
-  await page.getByRole("button", { name: "ラウンドを作成" }).click();
-  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+  const roundId = await createRoundViaApi(page, {
+    name: "修正テスト",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 2 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
 
   // エンド1を2射入力する。
   await page.getByTestId("score-button-X").click();
