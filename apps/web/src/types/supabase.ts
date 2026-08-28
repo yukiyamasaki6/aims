@@ -75,6 +75,95 @@ export type Database = {
           },
         ];
       };
+      round_preset_distances: {
+        Row: {
+          arrows_per_end: number;
+          created_at: string;
+          distance: number;
+          distance_number: number;
+          id: string;
+          preset_id: string;
+          target_face_id: string;
+          total_ends: number;
+          updated_at: string;
+        };
+        Insert: {
+          arrows_per_end: number;
+          created_at?: string;
+          distance: number;
+          distance_number: number;
+          id?: string;
+          preset_id: string;
+          target_face_id: string;
+          total_ends: number;
+          updated_at?: string;
+        };
+        Update: {
+          arrows_per_end?: number;
+          created_at?: string;
+          distance?: number;
+          distance_number?: number;
+          id?: string;
+          preset_id?: string;
+          target_face_id?: string;
+          total_ends?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "round_preset_distances_preset_id_fkey";
+            columns: ["preset_id"];
+            isOneToOne: false;
+            referencedRelation: "round_presets";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "round_preset_distances_target_face_id_fkey";
+            columns: ["target_face_id"];
+            isOneToOne: false;
+            referencedRelation: "target_faces";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      round_presets: {
+        Row: {
+          bow_type: string;
+          created_at: string;
+          format: string;
+          id: string;
+          name: string;
+          owner_id: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          bow_type: string;
+          created_at?: string;
+          format: string;
+          id?: string;
+          name: string;
+          owner_id?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          bow_type?: string;
+          created_at?: string;
+          format?: string;
+          id?: string;
+          name?: string;
+          owner_id?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "round_presets_owner_id_fkey";
+            columns: ["owner_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       round_users: {
         Row: {
           created_at: string;
