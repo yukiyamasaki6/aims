@@ -241,3 +241,56 @@ test("下矢印でテンキーを格納でき、マスをタップすると再�
   await page.getByTestId("shot-cell-1-1-1").click();
   await expect(page.getByTestId("score-button-X")).toBeVisible();
 });
+
+test("一つ戻るボタンで直前の入力が取り消され、一つ進むボタンでやり直せる", async ({
+  page,
+}) => {
+  await expect(page.getByTestId("score-button-undo")).toBeDisabled();
+  await expect(page.getByTestId("score-button-redo")).toBeDisabled();
+
+  await page.getByTestId("score-button-X").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("X");
+  await expect(page.getByTestId("round-summary")).toContainText("合計10");
+
+  await page.getByTestId("score-button-undo").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("");
+  await expect(page.getByTestId("round-summary")).toContainText("合計0");
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveClass(/ring-primary/);
+
+  await page.getByTestId("score-button-redo").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("X");
+  await expect(page.getByTestId("round-summary")).toContainText("合計10");
+});
+
+test("上書き修正のundoは、空欄ではなく上書き前の値に戻る", async ({ page }) => {
+  await page.getByTestId("score-button-9").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("9");
+
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("score-button-5").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("5");
+
+  await page.getByTestId("score-button-undo").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("9");
+});
+
+test("クリアもundoで復元できる", async ({ page }) => {
+  await page.getByTestId("score-button-X").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("X");
+
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("score-button-clear").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("");
+
+  await page.getByTestId("score-button-undo").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("X");
+});
+
+test("新たな入力を行うとredo履歴が無効になる", async ({ page }) => {
+  await page.getByTestId("score-button-X").click();
+  await page.getByTestId("score-button-undo").click();
+  await expect(page.getByTestId("score-button-redo")).toBeEnabled();
+
+  await page.getByTestId("score-button-9").click();
+  await expect(page.getByTestId("score-button-redo")).toBeDisabled();
+});
