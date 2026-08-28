@@ -124,4 +124,4 @@ erDiagram
     }
 ```
 
-`target_faces`のシード候補一覧は[docs/target-faces.md](./target-faces.md)、`create_round` RPCやRLSの詳細は[docs/security.md](./security.md)を参照。
+`target_faces`のシード候補一覧は[docs/target-faces.md](./target-faces.md)、`round_presets`のシード一覧は[docs/round-presets.md](./round-presets.md)、`create_round` RPCやRLSの詳細は[docs/security.md](./security.md)を参照。
