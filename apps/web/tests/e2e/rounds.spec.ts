@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { getOtpCodeFromMailpit } from "./helpers/mailpit";
+import { createRoundViaApi } from "./helpers/rounds";
 
 // user-a@aims.testを使うとauth.spec.tsのサインアウトテスト（デフォルトでglobal scope、
 // そのユーザーの全セッションを無効化する）と並列実行時に競合するため、専用ユーザーを都度作成する。
@@ -94,4 +95,27 @@ test("個人のプリセットが無い場合はプレースホルダーが表�
   await expect(page.getByText("個人プリセット")).toBeVisible();
   await expect(page.getByTestId("personal-preset-placeholder")).toBeVisible();
   await expect(page.getByText("公式プリセット")).toBeVisible();
+});
+
+test("/rounds/newから一覧へ戻るリンクで/roundsへ遷移する", async ({ page }) => {
+  await page.goto("/rounds/new");
+
+  await page.getByRole("link", { name: "一覧へ戻る" }).click();
+
+  await expect(page).toHaveURL(/\/rounds$/);
+});
+
+test("/rounds/[id]から一覧へ戻るリンクで/roundsへ遷移する", async ({
+  page,
+}) => {
+  const roundId = await createRoundViaApi(page, {
+    name: "戻るリンクテスト",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await page.getByRole("link", { name: "一覧へ戻る" }).click();
+
+  await expect(page).toHaveURL(/\/rounds$/);
 });

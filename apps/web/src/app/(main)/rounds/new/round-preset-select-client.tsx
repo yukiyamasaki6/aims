@@ -1,5 +1,7 @@
 "use client";
 
+import { ChevronLeft } from "lucide-react";
+import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { useState } from "react";
 import {
@@ -135,6 +137,13 @@ export function RoundPresetSelect({
   return (
     <main className="flex h-full flex-col overflow-hidden">
       <div className="mx-auto w-full max-w-xl px-8 pt-8">
+        <Link
+          href="/rounds"
+          className="mb-2 inline-flex items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
+        >
+          <ChevronLeft className="size-4" />
+          一覧へ戻る
+        </Link>
         <h1 className="font-heading text-2xl leading-snug font-medium">
           ラウンドを作成
         </h1>
