@@ -22,7 +22,9 @@ export default async function RoundPage({
 
   const { data: distances } = await supabase
     .from("distances")
-    .select("id, distance_number, distance, total_ends, arrows_per_end")
+    .select(
+      "id, distance_number, distance, total_ends, arrows_per_end, target_face_id",
+    )
     .eq("round_id", id)
     .order("distance_number");
 
@@ -36,6 +38,18 @@ export default async function RoundPage({
           .in("distance_id", distanceIds)
       : { data: [] };
 
+  const { data: targetFaces } = await supabase
+    .from("target_faces")
+    .select(
+      "id, name, size, target_face_spots(center_x, center_y, target_face_rings(radius, color, line_color, z_index))",
+    )
+    // 種類（アウトドア/インドア/フィールド）→サイズの順で並べる。
+    // format昇順だとfield/indoor/outdoorのアルファベット順になってしまうため、
+    // 降順にすることで意図した並びのoutdoor→indoor→fieldになる。
+    .order("format", { ascending: false })
+    .order("size", { ascending: false })
+    .order("name");
+
   return (
     <ScorecardClient
       roundId={round.id}
@@ -47,6 +61,7 @@ export default async function RoundPage({
       }}
       distances={distances ?? []}
       initialShots={shots ?? []}
+      targetFaces={targetFaces ?? []}
     />
   );
 }

@@ -1,11 +1,17 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, Redo, Undo } from "lucide-react";
+import { ChevronDown, ChevronLeft, Plus, Redo, Undo } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { TargetFaceTile } from "@/components/target-face-icon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { clearShot, recordShot } from "./actions";
+import { addDistance, clearShot, recordShot } from "./actions";
+import {
+  type DistanceConfig,
+  DistanceEditFields,
+  type TargetFaceOption,
+} from "./distance-config-row";
 import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
 
 type Distance = {
@@ -14,6 +20,7 @@ type Distance = {
   distance: number;
   total_ends: number;
   arrows_per_end: number;
+  target_face_id: string;
 };
 
 type Shot = {
@@ -170,19 +177,27 @@ function stepPosition(
 export function ScorecardClient({
   roundId,
   initialRoundConfig,
-  distances,
+  distances: initialDistances,
   initialShots,
+  targetFaces,
 }: {
   roundId: string;
   initialRoundConfig: RoundConfig;
   distances: Distance[];
   initialShots: Shot[];
+  targetFaces: TargetFaceOption[];
 }) {
+  const [distances, setDistances] = useState<Distance[]>(initialDistances);
   const [shots, setShots] = useState<Shot[]>(initialShots);
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [addingDistance, setAddingDistance] = useState(false);
+  const [distanceError, setDistanceError] = useState<string | null>(null);
   const [keypadOpen, setKeypadOpen] = useState(true);
   // keypadOpenの変化をそのままアンマウントすると格納アニメーションが再生できないため、
   // トランジション終了後に実際にアンマウントするまでの間だけmountedをtrueに保つ。
@@ -275,6 +290,88 @@ export function ScorecardClient({
   const total = shots.reduce((sum, s) => sum + s.score_int, 0);
   const xCount = shots.filter((s) => s.score_str === "X").length;
   const tenCount = shots.filter((s) => s.score_str === "10").length;
+
+  const distanceIdsWithShots = new Set(shots.map((s) => s.distance_id));
+
+  function targetFaceOf(targetFaceId: string) {
+    return targetFaces.find((f) => f.id === targetFaceId);
+  }
+
+  function toggleDistanceEditing(distanceId: string) {
+    setEditingDistanceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(distanceId)) {
+        next.delete(distanceId);
+      } else {
+        next.add(distanceId);
+      }
+      return next;
+    });
+  }
+
+  async function handleAddDistance() {
+    if (addingDistance) return;
+    setAddingDistance(true);
+    setDistanceError(null);
+
+    const result = await addDistance({ roundId });
+    if ("error" in result) {
+      setDistanceError(result.error);
+      setAddingDistance(false);
+      return;
+    }
+
+    setDistances((prev) => [
+      ...prev,
+      {
+        id: result.distance.id,
+        distance_number: result.distance.distanceNumber,
+        distance: result.distance.distance,
+        total_ends: result.distance.totalEnds,
+        arrows_per_end: result.distance.arrowsPerEnd,
+        target_face_id: result.distance.targetFaceId,
+      },
+    ]);
+    // 追加した距離はすぐ編集できるよう、編集パネルを展開しておく。
+    setEditingDistanceIds((prev) => new Set(prev).add(result.distance.id));
+    setAddingDistance(false);
+  }
+
+  function handleDistanceSaved(updated: DistanceConfig) {
+    setDistances((prev) =>
+      prev.map((d) =>
+        d.id === updated.id
+          ? {
+              ...d,
+              distance: updated.distance,
+              total_ends: updated.totalEnds,
+              arrows_per_end: updated.arrowsPerEnd,
+              target_face_id: updated.targetFaceId,
+            }
+          : d,
+      ),
+    );
+    toggleDistanceEditing(updated.id);
+    // 構成（総エンド数・エンドあたりの本数）が変わった可能性があるため、
+    // 選択中マスの参照が古いままにならないようフォーカスを一旦クリアする。
+    setPosition(null);
+  }
+
+  function handleDistanceDeleted(distanceId: string) {
+    setDistances((prev) => prev.filter((d) => d.id !== distanceId));
+    setShots((prev) => prev.filter((s) => s.distance_id !== distanceId));
+    // 距離構成が変わるとundo/redo履歴が指すマスの前提が崩れるため破棄する。
+    setUndoStack([]);
+    setRedoStack([]);
+    setEditingDistanceIds((prev) => {
+      const next = new Set(prev);
+      next.delete(distanceId);
+      return next;
+    });
+    if (position?.distance.id === distanceId) {
+      setPosition(null);
+    }
+  }
 
   function findShot(
     distanceId: string,
@@ -495,25 +592,70 @@ export function ScorecardClient({
             const distanceTenCount = distanceShots.filter(
               (s) => s.score_str === "10",
             ).length;
+            const face = targetFaceOf(d.target_face_id);
 
             return (
               <div
                 key={d.id}
                 className="overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm"
               >
-                <div
-                  data-testid={`distance-summary-${d.distance_number}`}
-                  className="flex items-baseline justify-between gap-2 border-b px-3 py-2 text-muted-foreground text-xs"
-                >
-                  <span>{d.distance}m</span>
-                  <span className="flex items-baseline gap-1.5">
+                <div data-testid={`distance-summary-${d.distance_number}`}>
+                  <button
+                    type="button"
+                    data-testid={`distance-config-toggle-${d.distance_number}`}
+                    aria-expanded={editingDistanceIds.has(d.id)}
+                    onClick={() => toggleDistanceEditing(d.id)}
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-muted-foreground text-xs"
+                  >
+                    <span className="flex items-center gap-2">
+                      {d.distance}m
+                      {face ? (
+                        <TargetFaceTile
+                          spots={face.target_face_spots}
+                          sizeCm={face.size}
+                          pixelSize={32}
+                        />
+                      ) : (
+                        "的未設定"
+                      )}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="flex flex-col items-end leading-tight">
+                        <span>{d.arrows_per_end}本</span>
+                        <span>{d.total_ends}エンド</span>
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          "size-4 shrink-0 transition-transform",
+                          editingDistanceIds.has(d.id) && "rotate-180",
+                        )}
+                      />
+                    </span>
+                  </button>
+                  {editingDistanceIds.has(d.id) && (
+                    <DistanceEditFields
+                      distance={{
+                        id: d.id,
+                        distanceNumber: d.distance_number,
+                        distance: d.distance,
+                        totalEnds: d.total_ends,
+                        arrowsPerEnd: d.arrows_per_end,
+                        targetFaceId: d.target_face_id,
+                      }}
+                      hasShots={distanceIdsWithShots.has(d.id)}
+                      targetFaces={targetFaces}
+                      onSaved={handleDistanceSaved}
+                      onDeleted={() => handleDistanceDeleted(d.id)}
+                    />
+                  )}
+                  <div className="flex items-baseline justify-between gap-2 border-t border-b px-3 py-2 text-muted-foreground text-xs">
                     <span className="text-foreground text-sm font-semibold">
                       小計{distanceTotal}
                     </span>
                     <span>
                       X: {distanceXCount} / 10: {distanceTenCount}
                     </span>
-                  </span>
+                  </div>
                 </div>
                 <div className="divide-y">
                   {Array.from({ length: d.total_ends }, (_, i) => i + 1).map(
@@ -592,6 +734,20 @@ export function ScorecardClient({
               </div>
             );
           })}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={addingDistance}
+            data-testid="add-distance-button"
+            onClick={handleAddDistance}
+            className="border-dashed"
+          >
+            <Plus />
+            距離を追加
+          </Button>
+          {distanceError && (
+            <p className="text-destructive text-sm">{distanceError}</p>
+          )}
         </div>
 
         {error && <p className="text-destructive text-sm">{error}</p>}

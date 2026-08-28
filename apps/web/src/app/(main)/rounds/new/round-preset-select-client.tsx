@@ -18,6 +18,7 @@ type PresetDistance = {
   total_ends: number;
   arrows_per_end: number;
   target_faces: {
+    size: number;
     target_face_spots: { target_face_rings: TargetFaceRing[] }[];
   } | null;
 };
@@ -66,10 +67,7 @@ function PresetRow({
           {distances.map((d) => {
             const rings =
               d.target_faces?.target_face_spots[0]?.target_face_rings ?? [];
-            const size =
-              rings.length > 0
-                ? Math.max(...rings.map((r) => r.radius)) * 2
-                : null;
+            const size = d.target_faces?.size ?? null;
 
             return (
               <div
