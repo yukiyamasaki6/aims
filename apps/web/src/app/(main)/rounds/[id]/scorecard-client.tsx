@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronLeft } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -275,6 +276,13 @@ export function ScorecardClient({
   return (
     <main className="flex min-h-full flex-col">
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-8">
+        <Link
+          href="/rounds"
+          className="inline-flex w-fit items-center gap-1 self-start text-muted-foreground text-sm hover:text-foreground"
+        >
+          <ChevronLeft className="size-4" />
+          一覧へ戻る
+        </Link>
         <div
           data-testid="round-summary"
           className="flex items-baseline justify-center gap-2 rounded-xl border bg-card p-4 text-card-foreground shadow-sm"
