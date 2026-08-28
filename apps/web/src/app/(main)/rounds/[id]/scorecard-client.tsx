@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronLeft } from "lucide-react";
+import { ChevronDown, ChevronLeft, Redo, Undo } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,16 @@ type Shot = {
   arrow_number: number;
   score_str: string;
   score_int: number;
+};
+
+// 1回の入力操作（記録・上書き・クリア）による、あるマスの状態遷移。
+// undo時はprevShotへ、redo時はnextShotへそのマスを戻す。
+type HistoryEntry = {
+  distanceId: string;
+  endNumber: number;
+  arrowNumber: number;
+  prevShot: Shot | null;
+  nextShot: Shot | null;
 };
 
 // テンキー（クリア行+スコア行+トグルボタン）の実測高さ。中身は固定内容なので
@@ -164,6 +174,8 @@ export function ScorecardClient({
   initialShots: Shot[];
 }) {
   const [shots, setShots] = useState<Shot[]>(initialShots);
+  const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
+  const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keypadOpen, setKeypadOpen] = useState(true);
@@ -254,43 +266,87 @@ export function ScorecardClient({
   const xCount = shots.filter((s) => s.score_str === "X").length;
   const tenCount = shots.filter((s) => s.score_str === "10").length;
 
+  function findShot(
+    distanceId: string,
+    endNumber: number,
+    arrowNumber: number,
+  ): Shot | null {
+    return (
+      shots.find(
+        (s) =>
+          s.distance_id === distanceId &&
+          s.end_number === endNumber &&
+          s.arrow_number === arrowNumber,
+      ) ?? null
+    );
+  }
+
+  // 指定マスの状態をshotへ反映する（サーバーへの反映＋ローカルstateの更新）。
+  // undo/redoはこの適用処理を、記録時とは逆方向・同方向にそれぞれ1回呼ぶだけで実現する。
+  async function applyShot(
+    distanceId: string,
+    endNumber: number,
+    arrowNumber: number,
+    shot: Shot | null,
+  ): Promise<string | undefined> {
+    const result = shot
+      ? await recordShot({
+          distanceId,
+          endNumber,
+          arrowNumber,
+          scoreStr: shot.score_str,
+          scoreInt: shot.score_int,
+        })
+      : await clearShot({ distanceId, endNumber, arrowNumber });
+
+    if (result?.error) return result.error;
+
+    setShots((prev) => {
+      const filtered = prev.filter(
+        (s) =>
+          !(
+            s.distance_id === distanceId &&
+            s.end_number === endNumber &&
+            s.arrow_number === arrowNumber
+          ),
+      );
+      return shot ? [...filtered, shot] : filtered;
+    });
+  }
+
   async function handleScore(scoreStr: string, scoreInt: number) {
     if (!position || submitting) return;
     setSubmitting(true);
     setError(null);
 
     const { distance, end, arrow } = position;
-    const result = await recordShot({
-      distanceId: distance.id,
-      endNumber: end,
-      arrowNumber: arrow,
-      scoreStr,
-      scoreInt,
-    });
+    const prevShot = findShot(distance.id, end, arrow);
+    const nextShot: Shot = {
+      distance_id: distance.id,
+      end_number: end,
+      arrow_number: arrow,
+      score_str: scoreStr,
+      score_int: scoreInt,
+    };
 
-    if (result?.error) {
-      setError(result.error);
+    const errorMessage = await applyShot(distance.id, end, arrow, nextShot);
+    if (errorMessage) {
+      setError(errorMessage);
       setSubmitting(false);
       return;
     }
 
-    setShots((prev) => [
-      ...prev.filter(
-        (s) =>
-          !(
-            s.distance_id === distance.id &&
-            s.end_number === end &&
-            s.arrow_number === arrow
-          ),
-      ),
+    setUndoStack((prev) => [
+      ...prev,
       {
-        distance_id: distance.id,
-        end_number: end,
-        arrow_number: arrow,
-        score_str: scoreStr,
-        score_int: scoreInt,
+        distanceId: distance.id,
+        endNumber: end,
+        arrowNumber: arrow,
+        prevShot,
+        nextShot,
       },
     ]);
+    setRedoStack([]);
     setPosition(stepPosition(distances, position, 1));
     setSubmitting(false);
   }
@@ -300,29 +356,87 @@ export function ScorecardClient({
     setSubmitting(true);
     setError(null);
 
-    const result = await clearShot({
-      distanceId: position.distance.id,
-      endNumber: position.end,
-      arrowNumber: position.arrow,
-    });
+    const { distance, end, arrow } = position;
+    const prevShot = findShot(distance.id, end, arrow);
 
-    if (result?.error) {
-      setError(result.error);
+    const errorMessage = await applyShot(distance.id, end, arrow, null);
+    if (errorMessage) {
+      setError(errorMessage);
       setSubmitting(false);
       return;
     }
 
-    setShots((prev) =>
-      prev.filter(
-        (s) =>
-          !(
-            s.distance_id === position.distance.id &&
-            s.end_number === position.end &&
-            s.arrow_number === position.arrow
-          ),
-      ),
-    );
+    if (prevShot) {
+      setUndoStack((prev) => [
+        ...prev,
+        {
+          distanceId: distance.id,
+          endNumber: end,
+          arrowNumber: arrow,
+          prevShot,
+          nextShot: null,
+        },
+      ]);
+      setRedoStack([]);
+    }
     setPosition(stepPosition(distances, position, -1) ?? position);
+    setSubmitting(false);
+  }
+
+  // 取り消した/やり直したマスへフォーカスを移動し、何が変わったか見えるようにする。
+  function focusHistoryEntry(entry: HistoryEntry) {
+    const distance = distances.find((d) => d.id === entry.distanceId);
+    if (!distance) return;
+    setKeypadMounted(true);
+    setPosition({ distance, end: entry.endNumber, arrow: entry.arrowNumber });
+    setKeypadOpen(true);
+  }
+
+  async function handleUndo() {
+    const entry = undoStack.at(-1);
+    if (!entry || submitting) return;
+    setSubmitting(true);
+    setError(null);
+
+    const errorMessage = await applyShot(
+      entry.distanceId,
+      entry.endNumber,
+      entry.arrowNumber,
+      entry.prevShot,
+    );
+    if (errorMessage) {
+      setError(errorMessage);
+      setSubmitting(false);
+      return;
+    }
+
+    setUndoStack((prev) => prev.slice(0, -1));
+    setRedoStack((prev) => [...prev, entry]);
+    focusHistoryEntry(entry);
+    setSubmitting(false);
+  }
+
+  async function handleRedo() {
+    const entry = redoStack.at(-1);
+    if (!entry || submitting) return;
+    setSubmitting(true);
+    setError(null);
+
+    const errorMessage = await applyShot(
+      entry.distanceId,
+      entry.endNumber,
+      entry.arrowNumber,
+      entry.nextShot,
+    );
+    if (errorMessage) {
+      setError(errorMessage);
+      setSubmitting(false);
+      return;
+    }
+
+    setRedoStack((prev) => prev.slice(0, -1));
+    setUndoStack((prev) => [...prev, entry]);
+    focusHistoryEntry(entry);
     setSubmitting(false);
   }
 
@@ -504,12 +618,34 @@ export function ScorecardClient({
                       type="button"
                       variant="outline"
                       size="lg"
-                      className="col-start-2 col-span-2"
+                      disabled={submitting || undoStack.length === 0}
+                      data-testid="score-button-undo"
+                      aria-label="一つ戻る"
+                      onClick={handleUndo}
+                    >
+                      <Undo />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="lg"
+                      className="col-span-2"
                       disabled={submitting}
                       data-testid="score-button-clear"
                       onClick={handleClear}
                     >
                       クリア
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="lg"
+                      disabled={submitting || redoStack.length === 0}
+                      data-testid="score-button-redo"
+                      aria-label="一つ進む"
+                      onClick={handleRedo}
+                    >
+                      <Redo />
                     </Button>
                   </div>
                   <div className="grid grid-cols-4 gap-2">
