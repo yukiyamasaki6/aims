@@ -36,6 +36,30 @@ export async function recordShot(input: {
   }
 }
 
+export async function updateRoundConfig(input: {
+  roundId: string;
+  name: string;
+  roundDate: string;
+  format: string;
+  bowType: string;
+}): Promise<{ error: string } | undefined> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("rounds")
+    .update({
+      name: input.name,
+      round_date: input.roundDate,
+      format: input.format,
+      bow_type: input.bowType,
+    })
+    .eq("id", input.roundId);
+
+  if (error) {
+    return { error: error.message };
+  }
+}
+
 export async function clearShot(input: {
   distanceId: string;
   endNumber: number;

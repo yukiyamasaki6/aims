@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { clearShot, recordShot } from "./actions";
+import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
 
 type Distance = {
   id: string;
@@ -167,9 +168,13 @@ function stepPosition(
 }
 
 export function ScorecardClient({
+  roundId,
+  initialRoundConfig,
   distances,
   initialShots,
 }: {
+  roundId: string;
+  initialRoundConfig: RoundConfig;
   distances: Distance[];
   initialShots: Shot[];
 }) {
@@ -194,7 +199,12 @@ export function ScorecardClient({
     // positionを残したままだと選択中マスのリング表示（isActive）が消えず、
     // 見た目上フォーカスが外れていないように見えるためクリアする。
     setPosition(null);
-    (document.activeElement as HTMLElement | null)?.blur();
+    // マス目のボタンだけフォーカスを外す。無条件にblurすると、キーパッド外の
+    // 他の入力欄（RoundConfigPanel等）へフォーカスした瞬間にも外れてしまう。
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.dataset.testid?.startsWith("shot-cell-")) {
+      active.blur();
+    }
   }, []);
 
   useEffect(() => {
@@ -459,6 +469,7 @@ export function ScorecardClient({
           <ChevronLeft className="size-4" />
           一覧へ戻る
         </Link>
+        <RoundConfigPanel roundId={roundId} initial={initialRoundConfig} />
         <div
           data-testid="round-summary"
           className="flex items-baseline justify-center gap-2 rounded-xl border bg-card p-4 text-card-foreground shadow-sm"
