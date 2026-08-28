@@ -7,17 +7,24 @@ set statement_timeout = '5s';
 -- Columns
 -- ============================================================
 
-alter table rounds add column if not exists format text not null
+alter table rounds add column if not exists format text
   check (format in ('outdoor', 'indoor', 'field'));
-alter table rounds add column if not exists bow_type text not null
+alter table rounds add column if not exists bow_type text
   check (bow_type in ('recurve', 'compound', 'barebow'));
 
-alter table distances add column if not exists target_face_id uuid not null;
+alter table rounds
+  add constraint rounds_format_not_null check (format is not null) not valid;
+alter table rounds
+  add constraint rounds_bow_type_not_null check (bow_type is not null) not valid;
+
+alter table distances add column if not exists target_face_id uuid;
 
 alter table distances
   add constraint distances_target_face_id_fkey
     foreign key (target_face_id) references target_faces (id)
     not valid;
+alter table distances
+  add constraint distances_target_face_id_not_null check (target_face_id is not null) not valid;
 
 -- ============================================================
 -- create_round RPCをformat・bow_type・distance毎のtarget_face_idに対応させる。
