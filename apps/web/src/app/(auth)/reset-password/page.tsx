@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { AuthCard } from "@/components/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { createClient } from "@/lib/supabase/client";
 
 const SignInLink = () => (
@@ -79,8 +80,7 @@ export default function ResetPasswordPage() {
           onSubmit={handleSetPassword}
           className="flex w-full flex-col gap-3"
         >
-          <Input
-            type="password"
+          <PasswordInput
             required
             minLength={6}
             placeholder="新しいパスワード（6文字以上）"

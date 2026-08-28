@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { AuthCard } from "@/components/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { createClient } from "@/lib/supabase/client";
 
 export default function SignInPage() {
@@ -39,8 +40,7 @@ export default function SignInPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
-        <Input
-          type="password"
+        <PasswordInput
           required
           placeholder="パスワード"
           value={password}
