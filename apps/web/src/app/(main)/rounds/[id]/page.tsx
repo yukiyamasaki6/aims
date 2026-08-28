@@ -12,7 +12,7 @@ export default async function RoundPage({
 
   const { data: round } = await supabase
     .from("rounds")
-    .select("id, name")
+    .select("id, name, round_date, format, bow_type")
     .eq("id", id)
     .maybeSingle();
 
@@ -37,6 +37,16 @@ export default async function RoundPage({
       : { data: [] };
 
   return (
-    <ScorecardClient distances={distances ?? []} initialShots={shots ?? []} />
+    <ScorecardClient
+      roundId={round.id}
+      initialRoundConfig={{
+        name: round.name,
+        roundDate: round.round_date,
+        format: round.format,
+        bowType: round.bow_type,
+      }}
+      distances={distances ?? []}
+      initialShots={shots ?? []}
+    />
   );
 }

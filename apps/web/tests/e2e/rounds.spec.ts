@@ -52,6 +52,10 @@ test("プリセットを選択すると距離構成が展開表示され、開�
   await expect(page.getByTestId("distance-summary-2")).toContainText("70m");
   await expect(page.getByTestId("distance-summary-3")).toContainText("50m");
   await expect(page.getByTestId("distance-summary-4")).toContainText("30m");
+
+  // プリセット名（WA 1440）でラウンド名を埋めない（デフォルトは空欄）。
+  await page.getByTestId("round-config-summary").click();
+  await expect(page.getByTestId("round-config-name")).toHaveValue("");
 });
 
 test("選択済みのプリセットをもう一度クリックすると選択解除され、カスタム扱いに戻る", async ({

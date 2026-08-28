@@ -11,7 +11,7 @@ export async function createRoundFromPreset(
   const { data: preset, error: presetError } = await supabase
     .from("round_presets")
     .select(
-      "name, format, bow_type, round_preset_distances(distance_number, distance, total_ends, arrows_per_end, target_face_id)",
+      "format, bow_type, round_preset_distances(distance_number, distance, total_ends, arrows_per_end, target_face_id)",
     )
     .eq("id", presetId)
     .maybeSingle();
@@ -30,7 +30,7 @@ export async function createRoundFromPreset(
     }));
 
   const { data: roundId, error } = await supabase.rpc("create_round", {
-    p_name: preset.name,
+    p_name: "",
     p_round_date: new Date().toISOString().slice(0, 10),
     p_format: preset.format,
     p_bow_type: preset.bow_type,
