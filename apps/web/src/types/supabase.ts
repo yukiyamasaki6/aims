@@ -42,6 +42,7 @@ export type Database = {
           distance_number: number;
           id: string;
           round_id: string;
+          target_face_id: string;
           total_ends: number;
           updated_at: string;
         };
@@ -52,6 +53,7 @@ export type Database = {
           distance_number: number;
           id?: string;
           round_id: string;
+          target_face_id: string;
           total_ends: number;
           updated_at?: string;
         };
@@ -62,6 +64,7 @@ export type Database = {
           distance_number?: number;
           id?: string;
           round_id?: string;
+          target_face_id?: string;
           total_ends?: number;
           updated_at?: string;
         };
@@ -71,6 +74,13 @@ export type Database = {
             columns: ["round_id"];
             isOneToOne: false;
             referencedRelation: "rounds";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "distances_target_face_id_fkey";
+            columns: ["target_face_id"];
+            isOneToOne: false;
+            referencedRelation: "target_faces";
             referencedColumns: ["id"];
           },
         ];
@@ -208,21 +218,27 @@ export type Database = {
       };
       rounds: {
         Row: {
+          bow_type: string;
           created_at: string;
+          format: string;
           id: string;
           name: string;
           round_date: string;
           updated_at: string;
         };
         Insert: {
+          bow_type: string;
           created_at?: string;
+          format: string;
           id?: string;
           name: string;
           round_date: string;
           updated_at?: string;
         };
         Update: {
+          bow_type?: string;
           created_at?: string;
+          format?: string;
           id?: string;
           name?: string;
           round_date?: string;
@@ -422,7 +438,13 @@ export type Database = {
     };
     Functions: {
       create_round: {
-        Args: { p_distances: Json; p_name: string; p_round_date: string };
+        Args: {
+          p_bow_type: string;
+          p_distances: Json;
+          p_format: string;
+          p_name: string;
+          p_round_date: string;
+        };
         Returns: string;
       };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };

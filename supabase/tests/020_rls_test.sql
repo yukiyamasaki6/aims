@@ -8,8 +8,8 @@ select plan(5);
 insert into auth.users (id) values ('11111111-1111-1111-1111-111111111111');
 insert into auth.users (id) values ('99999999-9999-9999-9999-999999999999');
 
-insert into public.rounds (id, name, round_date)
-values ('44444444-4444-4444-4444-444444444444', 'Private Round', current_date);
+insert into public.rounds (id, name, round_date, format, bow_type)
+values ('44444444-4444-4444-4444-444444444444', 'Private Round', current_date, 'outdoor', 'recurve');
 
 insert into public.round_users (round_id, user_id, role)
 values ('44444444-4444-4444-4444-444444444444', '11111111-1111-1111-1111-111111111111', 'editor');
@@ -33,14 +33,15 @@ select results_eq(
 );
 
 select throws_like(
-  $$insert into public.distances (round_id, distance_number, distance, total_ends, arrows_per_end)
-    values ('44444444-4444-4444-4444-444444444444', 1, 70, 6, 6)$$,
+  $$insert into public.distances (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+    values ('44444444-4444-4444-4444-444444444444', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
   '%row-level security%',
   'round_usersに存在しないユーザーは他人のラウンドにdistancesを追加できない'
 );
 
 select throws_like(
-  $$insert into public.rounds (name, round_date) values ('direct insert', current_date)$$,
+  $$insert into public.rounds (name, round_date, format, bow_type)
+    values ('direct insert', current_date, 'outdoor', 'recurve')$$,
   '%row-level security%',
   'roundsへの直接INSERTはRLSで拒否される（create_round RPC経由のみ許可）'
 );
@@ -51,7 +52,10 @@ select throws_like(
 -- 先に完了した登録は後続の評価から見える）ことを確認する。
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 select lives_ok(
-  $$select create_round('Atomic Round', current_date, '[{"distance":70,"total_ends":6,"arrows_per_end":6}]'::jsonb)$$,
+  $$select create_round(
+    'Atomic Round', current_date, 'outdoor', 'recurve',
+    '[{"distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
+  )$$,
   'create_round RPCでround_users・rounds・distancesが原子的に作成される'
 );
 
