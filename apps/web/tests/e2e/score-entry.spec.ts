@@ -158,6 +158,77 @@ test("クリアボタンで選択中のマスの点数がその場で消え、�
   await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("8");
 });
 
+test("テンキーの点数ボタンが的の配色に合わせて色分けされている", async ({
+  page,
+}) => {
+  // 金: X, 10, 9
+  await expect(page.getByTestId("score-button-X")).toHaveCSS(
+    "background-color",
+    "rgb(255, 229, 82)",
+  );
+  await expect(page.getByTestId("score-button-9")).toHaveCSS(
+    "background-color",
+    "rgb(255, 229, 82)",
+  );
+  // 赤: 8, 7
+  await expect(page.getByTestId("score-button-8")).toHaveCSS(
+    "background-color",
+    "rgb(246, 80, 88)",
+  );
+  // 青: 6, 5
+  await expect(page.getByTestId("score-button-6")).toHaveCSS(
+    "background-color",
+    "rgb(0, 180, 228)",
+  );
+  // 黒: 4, 3
+  await expect(page.getByTestId("score-button-4")).toHaveCSS(
+    "background-color",
+    "rgb(35, 31, 32)",
+  );
+  // 白: 2, 1
+  await expect(page.getByTestId("score-button-2")).toHaveCSS(
+    "background-color",
+    "rgb(255, 255, 255)",
+  );
+  // M（ミス）: 他バンドと同じトーンの緑
+  await expect(page.getByTestId("score-button-M")).toHaveCSS(
+    "background-color",
+    "rgb(76, 217, 100)",
+  );
+});
+
+test("マス目の点数表示は的の配色を薄くしたトーンで背景全体が色分けされている", async ({
+  page,
+}) => {
+  await page.getByTestId("score-button-X").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveCSS(
+    "background-color",
+    "rgb(255, 246, 216)",
+  );
+
+  await page.getByTestId("score-button-8").click();
+  await expect(page.getByTestId("shot-cell-1-1-2")).toHaveCSS(
+    "background-color",
+    "rgb(253, 227, 228)",
+  );
+});
+
+test("黒いテンキーボタンもホバーで視覚フィードバックが分かる", async ({
+  page,
+}) => {
+  const button = page.getByTestId("score-button-4");
+  const before = await button.evaluate((el) => getComputedStyle(el).boxShadow);
+
+  await button.hover();
+  await expect(async () => {
+    const during = await button.evaluate(
+      (el) => getComputedStyle(el).boxShadow,
+    );
+    expect(during).not.toBe(before);
+    expect(during).not.toBe("none");
+  }).toPass();
+});
+
 test("下矢印でテンキーを格納でき、マスをタップすると再表示される", async ({
   page,
 }) => {
