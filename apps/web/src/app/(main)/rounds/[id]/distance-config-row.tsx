@@ -21,10 +21,11 @@ export type TargetFaceOption = {
 export type DistanceConfig = {
   id: string;
   distanceNumber: number;
-  distance: number;
+  distance: number | null;
   totalEnds: number;
   arrowsPerEnd: number;
   targetFaceId: string;
+  isMarked: boolean;
 };
 
 // 的の選択UI。名称は一切表示せず、実際のリング配色・レイアウト（3つ目の
@@ -103,18 +104,25 @@ function TargetFacePicker({
   );
 }
 
+const MARKED_OPTIONS = [
+  { value: true, label: "Marked" },
+  { value: false, label: "Unmarked" },
+];
+
 // distance-summaryカードのヘッダーから展開される、距離1件分の編集フィールド。
 // 自身では折りたたみ状態を持たず、開閉はScorecardClient側が管理する。
 export function DistanceEditFields({
   distance,
   hasShots,
   targetFaces,
+  roundFormat,
   onSaved,
   onDeleted,
 }: {
   distance: DistanceConfig;
   hasShots: boolean;
   targetFaces: TargetFaceOption[];
+  roundFormat: string;
   onSaved: (updated: DistanceConfig) => void;
   onDeleted: () => void;
 }) {
@@ -133,6 +141,7 @@ export function DistanceEditFields({
       totalEnds: draft.totalEnds,
       arrowsPerEnd: draft.arrowsPerEnd,
       targetFaceId: draft.targetFaceId,
+      isMarked: draft.isMarked,
     });
 
     if (result?.error) {
@@ -182,12 +191,37 @@ export function DistanceEditFields({
           id={`distance-config-distance-${distance.distanceNumber}`}
           type="number"
           data-testid={`distance-config-distance-${distance.distanceNumber}`}
-          value={draft.distance}
+          value={draft.distance ?? ""}
           onChange={(e) =>
-            setDraft((d) => ({ ...d, distance: Number(e.target.value) }))
+            setDraft((d) => ({
+              ...d,
+              distance: e.target.value === "" ? null : Number(e.target.value),
+            }))
           }
         />
       </div>
+
+      {roundFormat === "field" && (
+        <div className="flex flex-col gap-1">
+          <span className="text-muted-foreground text-xs">
+            Marked / Unmarked
+          </span>
+          <div className="grid grid-cols-2 gap-2">
+            {MARKED_OPTIONS.map((o) => (
+              <Button
+                key={String(o.value)}
+                type="button"
+                variant={draft.isMarked === o.value ? "default" : "outline"}
+                size="sm"
+                data-testid={`distance-config-${o.label.toLowerCase()}-${distance.distanceNumber}`}
+                onClick={() => setDraft((d) => ({ ...d, isMarked: o.value }))}
+              >
+                {o.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-1">
         <label

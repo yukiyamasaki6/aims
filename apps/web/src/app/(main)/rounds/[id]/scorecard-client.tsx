@@ -17,10 +17,11 @@ import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
 type Distance = {
   id: string;
   distance_number: number;
-  distance: number;
+  distance: number | null;
   total_ends: number;
   arrows_per_end: number;
   target_face_id: string;
+  is_marked: boolean;
 };
 
 type Shot = {
@@ -228,6 +229,8 @@ export function ScorecardClient({
   initialShots: Shot[];
   targetFaces: TargetFaceOption[];
 }) {
+  const [roundConfig, setRoundConfig] =
+    useState<RoundConfig>(initialRoundConfig);
   const [distances, setDistances] = useState<Distance[]>(initialDistances);
   const [shots, setShots] = useState<Shot[]>(initialShots);
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
@@ -387,6 +390,7 @@ export function ScorecardClient({
         total_ends: result.distance.totalEnds,
         arrows_per_end: result.distance.arrowsPerEnd,
         target_face_id: result.distance.targetFaceId,
+        is_marked: result.distance.isMarked,
       },
     ]);
     // 追加した距離はすぐ編集できるよう、編集パネルを展開しておく。
@@ -415,6 +419,7 @@ export function ScorecardClient({
               total_ends: updated.totalEnds,
               arrows_per_end: updated.arrowsPerEnd,
               target_face_id: updated.targetFaceId,
+              is_marked: updated.isMarked,
             }
           : d,
       ),
@@ -639,7 +644,11 @@ export function ScorecardClient({
           <ChevronLeft className="size-4" />
           一覧へ戻る
         </Link>
-        <RoundConfigPanel roundId={roundId} initial={initialRoundConfig} />
+        <RoundConfigPanel
+          roundId={roundId}
+          initial={initialRoundConfig}
+          onSaved={setRoundConfig}
+        />
         <div
           data-testid="round-summary"
           className="flex items-baseline justify-center gap-2 rounded-xl border bg-card p-4 text-card-foreground shadow-sm"
@@ -681,7 +690,16 @@ export function ScorecardClient({
                     className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-muted-foreground text-xs"
                   >
                     <span className="flex items-center gap-2">
-                      {d.distance}m
+                      {[
+                        d.distance !== null ? `${d.distance}m` : null,
+                        roundConfig.format === "field"
+                          ? d.is_marked
+                            ? "Marked"
+                            : "Unmarked"
+                          : null,
+                      ]
+                        .filter((part): part is string => part !== null)
+                        .join(" / ")}
                       {face ? (
                         <TargetFaceTile
                           spots={face.target_face_spots}
@@ -714,9 +732,11 @@ export function ScorecardClient({
                         totalEnds: d.total_ends,
                         arrowsPerEnd: d.arrows_per_end,
                         targetFaceId: d.target_face_id,
+                        isMarked: d.is_marked,
                       }}
                       hasShots={distanceIdsWithShots.has(d.id)}
                       targetFaces={targetFaces}
+                      roundFormat={roundConfig.format}
                       onSaved={handleDistanceSaved}
                       onDeleted={() => handleDistanceDeleted(d.id)}
                     />

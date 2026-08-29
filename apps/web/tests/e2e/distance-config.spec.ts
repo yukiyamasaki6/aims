@@ -273,6 +273,83 @@ test("ある距離を削除しても、他の距離のundo/redo履歴に影響�
   await expect(page.getByTestId("score-button-redo")).toBeEnabled();
 });
 
+test("Marked/Unmarkedの切り替えはフィールド以外のラウンドでは表示されない", async ({
+  page,
+}) => {
+  // beforeEachで作成されるラウンドはoutdoor。
+  await page.getByTestId("distance-config-toggle-1").click();
+
+  await expect(page.getByTestId("distance-config-marked-1")).toBeHidden();
+  await expect(page.getByTestId("distance-config-unmarked-1")).toBeHidden();
+});
+
+test("フィールドのラウンドでUnmarkedを選択すると距離欄を空のまま保存でき、一覧にUnmarkedと表示される", async ({
+  page,
+}) => {
+  const roundId = await createRoundViaApi(page, {
+    name: "フィールドUnmarkedテスト",
+    roundDate: "2026-08-24",
+    format: "field",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  // フィールドのラウンドでは既定でMarkedと表示される。
+  await expect(page.getByTestId("distance-summary-1")).toContainText("Marked");
+
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-unmarked-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("");
+  await page.getByTestId("distance-config-save-1").click();
+
+  await expect(page.getByTestId("distance-summary-1")).toContainText(
+    "Unmarked",
+  );
+});
+
+test("フィールドのラウンドではUnmarkedのままでも自己目測の距離を入力・保存でき、一覧に距離とUnmarkedの両方が表示される", async ({
+  page,
+}) => {
+  const roundId = await createRoundViaApi(page, {
+    name: "フィールドUnmarked自己目測テスト",
+    roundDate: "2026-08-24",
+    format: "field",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-unmarked-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("45");
+  await page.getByTestId("distance-config-save-1").click();
+
+  await expect(page.getByTestId("distance-summary-1")).toContainText("45m");
+  await expect(page.getByTestId("distance-summary-1")).toContainText(
+    "Unmarked",
+  );
+});
+
+test("フィールドのラウンドでMarkedのまま距離（m）欄を空にして保存しようとするとエラーになり、保存されない", async ({
+  page,
+}) => {
+  const roundId = await createRoundViaApi(page, {
+    name: "フィールドMarkedバリデーションテスト",
+    roundDate: "2026-08-24",
+    format: "field",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("");
+  await page.getByTestId("distance-config-save-1").click();
+
+  await expect(
+    page.getByText("Markedの場合は距離（m）を入力してください。"),
+  ).toBeVisible();
+  await expect(page.getByTestId("distance-config-distance-1")).toBeVisible();
+});
+
 test("shotsが存在する距離を削除しようとすると確認ダイアログが表示され、キャンセルすると削除されない", async ({
   page,
 }) => {
