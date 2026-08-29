@@ -79,6 +79,8 @@ erDiagram
         uuid id PK
         uuid owner_id FK "null=グローバル"
         string name
+        bigint size "的紙の実サイズ（cm）。6点的等はリング最外径と一致しない"
+        string format "outdoor/indoor/field。的選択UIの並び順に使う"
         timestamp created_at
         timestamp updated_at
     }

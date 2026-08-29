@@ -1,0 +1,267 @@
+"use client";
+
+import { useState } from "react";
+import {
+  type TargetFaceSpotLayout,
+  TargetFaceTile,
+} from "@/components/target-face-icon";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { deleteDistance, updateDistance } from "./actions";
+
+export type TargetFaceOption = {
+  id: string;
+  name: string;
+  size: number;
+  target_face_spots: TargetFaceSpotLayout[];
+};
+
+export type DistanceConfig = {
+  id: string;
+  distanceNumber: number;
+  distance: number;
+  totalEnds: number;
+  arrowsPerEnd: number;
+  targetFaceId: string;
+};
+
+// 的の選択UI。名称は一切表示せず、実際のリング配色・レイアウト（3つ目の
+// トライアングル/バーティカル等）とサイズの数字だけで見分けられるようにする。
+// 通常は選択中の1枚だけを表示し、タップするとポップアップで一覧から選び直せる。
+function TargetFacePicker({
+  targetFaces,
+  selectedId,
+  onSelect,
+  disabled,
+}: {
+  targetFaces: TargetFaceOption[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedFace = targetFaces.find((f) => f.id === selectedId);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        data-testid="target-face-picker-trigger"
+        disabled={disabled}
+        aria-label={
+          disabled
+            ? `${selectedFace?.name ?? "的"}（スコア記録済みのため変更不可）`
+            : selectedFace
+              ? `${selectedFace.name}（タップで変更）`
+              : "的を選択"
+        }
+        className="p-0 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {selectedFace ? (
+          <TargetFaceTile
+            spots={selectedFace.target_face_spots}
+            sizeCm={selectedFace.size}
+            pixelSize={80}
+          />
+        ) : (
+          <span className="flex size-20 items-center justify-center rounded-lg border border-dashed text-muted-foreground text-xs">
+            未選択
+          </span>
+        )}
+      </DialogTrigger>
+      <DialogContent>
+        <div className="grid grid-cols-3 justify-items-center gap-2">
+          {targetFaces.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              aria-label={f.name}
+              aria-pressed={f.id === selectedId}
+              data-testid={`target-face-option-${f.id}`}
+              onClick={() => {
+                onSelect(f.id);
+                setOpen(false);
+              }}
+              className={cn(
+                "rounded-md p-0",
+                f.id === selectedId
+                  ? "ring-2 ring-primary"
+                  : "opacity-60 hover:opacity-100",
+              )}
+            >
+              <TargetFaceTile
+                spots={f.target_face_spots}
+                sizeCm={f.size}
+                pixelSize={100}
+              />
+            </button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// distance-summaryカードのヘッダーから展開される、距離1件分の編集フィールド。
+// 自身では折りたたみ状態を持たず、開閉はScorecardClient側が管理する。
+export function DistanceEditFields({
+  distance,
+  hasShots,
+  targetFaces,
+  onSaved,
+  onDeleted,
+}: {
+  distance: DistanceConfig;
+  hasShots: boolean;
+  targetFaces: TargetFaceOption[];
+  onSaved: (updated: DistanceConfig) => void;
+  onDeleted: () => void;
+}) {
+  const [draft, setDraft] = useState(distance);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+
+    const result = await updateDistance({
+      distanceId: distance.id,
+      distance: draft.distance,
+      totalEnds: draft.totalEnds,
+      arrowsPerEnd: draft.arrowsPerEnd,
+      targetFaceId: draft.targetFaceId,
+    });
+
+    if (result?.error) {
+      setError(result.error);
+      setSubmitting(false);
+      return;
+    }
+
+    onSaved(draft);
+    setSubmitting(false);
+  }
+
+  async function handleDelete() {
+    if (submitting) return;
+    if (
+      hasShots &&
+      !window.confirm(
+        "この距離にはすでにスコアが記録されています。削除するとスコアも失われます。削除しますか？",
+      )
+    ) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    const result = await deleteDistance({ distanceId: distance.id });
+    if (result?.error) {
+      setError(result.error);
+      setSubmitting(false);
+      return;
+    }
+
+    onDeleted();
+  }
+
+  return (
+    <div className="flex flex-col gap-3 p-3">
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor={`distance-config-distance-${distance.distanceNumber}`}
+          className="text-muted-foreground text-xs"
+        >
+          距離（m）
+        </label>
+        <Input
+          id={`distance-config-distance-${distance.distanceNumber}`}
+          type="number"
+          data-testid={`distance-config-distance-${distance.distanceNumber}`}
+          value={draft.distance}
+          onChange={(e) =>
+            setDraft((d) => ({ ...d, distance: Number(e.target.value) }))
+          }
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor={`distance-config-total-ends-${distance.distanceNumber}`}
+          className="text-muted-foreground text-xs"
+        >
+          総エンド数
+        </label>
+        <Input
+          id={`distance-config-total-ends-${distance.distanceNumber}`}
+          type="number"
+          disabled={hasShots}
+          data-testid={`distance-config-total-ends-${distance.distanceNumber}`}
+          value={draft.totalEnds}
+          onChange={(e) =>
+            setDraft((d) => ({ ...d, totalEnds: Number(e.target.value) }))
+          }
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor={`distance-config-arrows-${distance.distanceNumber}`}
+          className="text-muted-foreground text-xs"
+        >
+          エンドあたりの本数
+        </label>
+        <Input
+          id={`distance-config-arrows-${distance.distanceNumber}`}
+          type="number"
+          disabled={hasShots}
+          data-testid={`distance-config-arrows-${distance.distanceNumber}`}
+          value={draft.arrowsPerEnd}
+          onChange={(e) =>
+            setDraft((d) => ({
+              ...d,
+              arrowsPerEnd: Number(e.target.value),
+            }))
+          }
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-muted-foreground text-xs">的</span>
+        <TargetFacePicker
+          targetFaces={targetFaces}
+          selectedId={draft.targetFaceId}
+          onSelect={(id) => setDraft((d) => ({ ...d, targetFaceId: id }))}
+          disabled={hasShots}
+        />
+      </div>
+
+      {error && <p className="text-destructive text-sm">{error}</p>}
+
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={submitting}
+          data-testid={`distance-config-delete-${distance.distanceNumber}`}
+          onClick={handleDelete}
+        >
+          削除
+        </Button>
+        <Button
+          type="button"
+          className="flex-1"
+          disabled={submitting}
+          data-testid={`distance-config-save-${distance.distanceNumber}`}
+          onClick={handleSave}
+        >
+          保存
+        </Button>
+      </div>
+    </div>
+  );
+}

@@ -382,23 +382,29 @@ export type Database = {
       target_faces: {
         Row: {
           created_at: string;
+          format: string;
           id: string;
           name: string;
           owner_id: string | null;
+          size: number;
           updated_at: string;
         };
         Insert: {
           created_at?: string;
+          format: string;
           id?: string;
           name: string;
           owner_id?: string | null;
+          size: number;
           updated_at?: string;
         };
         Update: {
           created_at?: string;
+          format?: string;
           id?: string;
           name?: string;
           owner_id?: string | null;
+          size?: number;
           updated_at?: string;
         };
         Relationships: [

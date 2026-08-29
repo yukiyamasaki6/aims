@@ -1,0 +1,178 @@
+import { expect, test } from "@playwright/test";
+import { getOtpCodeFromMailpit } from "./helpers/mailpit";
+import { createRoundViaApi } from "./helpers/rounds";
+
+const TARGET_FACE_40CM_INDOOR = "a1000000-0000-0000-0000-000000000007";
+
+// user-a@aims.testを使うとauth.spec.tsのサインアウトテスト（global scopeで
+// 全セッションを無効化する）と並列実行時に競合するため、専用ユーザーを都度作成する。
+test.beforeEach(async ({ page }) => {
+  const email = `distance-config-test-${Date.now()}@aims.test`;
+  const password = "password-distance";
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "確認コードを送信" }).click();
+
+  const code = await getOtpCodeFromMailpit(email);
+  await page.getByPlaceholder("123456").fill(code);
+  await page.getByRole("button", { name: "確認" }).click();
+
+  await page.getByPlaceholder("パスワード（6文字以上）").fill(password);
+  await page.getByRole("button", { name: "登録してサインイン" }).click();
+
+  await expect(page).toHaveURL(/\/rounds/);
+
+  const roundId = await createRoundViaApi(page, {
+    name: "距離構成テスト",
+    roundDate: "2026-08-24",
+    format: "outdoor",
+    bowType: "recurve",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+});
+
+test("距離の編集はRoundConfigPanelを開かなくても各距離から直接行える", async ({
+  page,
+}) => {
+  await page.getByTestId("distance-config-toggle-1").click();
+
+  await expect(page.getByTestId("distance-config-distance-1")).toBeVisible();
+});
+
+test("末尾の「距離を追加」ボタンで距離を追加すると一覧に反映され、編集パネルが展開済みになる", async ({
+  page,
+}) => {
+  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
+
+  await page.getByTestId("add-distance-button").click();
+
+  await expect(page.getByTestId("distance-summary-2")).toBeVisible();
+  // タップして展開しなくても、追加直後から編集フィールドが見えている。
+  await expect(page.getByTestId("distance-config-distance-2")).toBeVisible();
+});
+
+test("距離を追加すると、直前の距離の内容（距離・エンド構成・的）がコピーされる", async ({
+  page,
+}) => {
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("50");
+  await page.getByTestId("distance-config-total-ends-1").fill("4");
+  await page.getByTestId("distance-config-arrows-1").fill("5");
+  await page.getByTestId("target-face-picker-trigger").click();
+  await page
+    .getByTestId(`target-face-option-${TARGET_FACE_40CM_INDOOR}`)
+    .click();
+  await page.getByTestId("distance-config-save-1").click();
+  await expect(page.getByTestId("distance-summary-1")).toContainText("50m");
+
+  await page.getByTestId("add-distance-button").click();
+
+  await expect(page.getByTestId("distance-config-distance-2")).toHaveValue(
+    "50",
+  );
+  await expect(page.getByTestId("distance-config-total-ends-2")).toHaveValue(
+    "4",
+  );
+  await expect(page.getByTestId("distance-config-arrows-2")).toHaveValue("5");
+});
+
+test("距離を編集して保存すると反映される", async ({ page }) => {
+  await page.getByTestId("distance-config-toggle-1").click();
+
+  await page.getByTestId("distance-config-distance-1").fill("30");
+  await page.getByTestId("distance-config-total-ends-1").fill("3");
+  await page.getByTestId("distance-config-arrows-1").fill("6");
+  await page.getByTestId("target-face-picker-trigger").click();
+  await page
+    .getByTestId(`target-face-option-${TARGET_FACE_40CM_INDOOR}`)
+    .click();
+  await page.getByTestId("distance-config-save-1").click();
+
+  await expect(page.getByTestId("distance-summary-1")).toContainText("30m");
+});
+
+test("的は選択中の1枚だけを表示し、タップするとポップアップで選び直せる", async ({
+  page,
+}) => {
+  await page.getByTestId("distance-config-toggle-1").click();
+
+  // 通常は選択中の1枚のみ表示され、他の選択肢は隠れている。
+  await expect(page.getByTestId("target-face-picker-trigger")).toBeVisible();
+  await expect(
+    page.getByTestId(`target-face-option-${TARGET_FACE_40CM_INDOOR}`),
+  ).toBeHidden();
+
+  await page.getByTestId("target-face-picker-trigger").click();
+
+  const option = page.getByTestId(
+    `target-face-option-${TARGET_FACE_40CM_INDOOR}`,
+  );
+  await expect(option).toBeVisible();
+  await expect(option.locator("svg")).toBeVisible();
+  await expect(option).not.toContainText("インドア");
+  await expect(option).not.toContainText("点的");
+});
+
+test("的の選択肢は種類（アウトドア→インドア→フィールド）→サイズの大きい順に並ぶ", async ({
+  page,
+}) => {
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("target-face-picker-trigger").click();
+
+  const testIds = await page
+    .locator('[data-testid^="target-face-option-"]')
+    .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
+
+  // アウトドア最大の122cm（0001）が先頭、フィールド最小の20cm（0013）が末尾になる。
+  expect(testIds[0]).toBe(
+    "target-face-option-a1000000-0000-0000-0000-000000000001",
+  );
+  expect(testIds.at(-1)).toBe(
+    "target-face-option-a1000000-0000-0000-0000-000000000013",
+  );
+});
+
+test("shotsが存在する距離は総エンド数・エンドあたりの本数・的が編集不可になる", async ({
+  page,
+}) => {
+  await page.getByTestId("score-button-X").click();
+  await expect(page.getByTestId("distance-summary-1")).toContainText("小計10");
+
+  await page.getByTestId("distance-config-toggle-1").click();
+
+  await expect(page.getByTestId("distance-config-total-ends-1")).toBeDisabled();
+  await expect(page.getByTestId("distance-config-arrows-1")).toBeDisabled();
+  // 的の種類が変わると点数の意味も変わってしまうため、的も変更不可にする。
+  await expect(page.getByTestId("target-face-picker-trigger")).toBeDisabled();
+});
+
+test("距離を削除すると一覧から消える", async ({ page }) => {
+  await page.getByTestId("add-distance-button").click();
+  // 追加直後から編集パネルが展開済みのため、改めてトグルをタップする必要はない。
+  await expect(page.getByTestId("distance-config-delete-2")).toBeVisible();
+
+  await page.getByTestId("distance-config-delete-2").click();
+
+  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
+});
+
+test("shotsが存在する距離を削除しようとすると確認ダイアログが表示され、キャンセルすると削除されない", async ({
+  page,
+}) => {
+  await page.getByTestId("score-button-X").click();
+  await expect(page.getByTestId("distance-summary-1")).toContainText("小計10");
+
+  await page.getByTestId("distance-config-toggle-1").click();
+
+  let dialogShown = false;
+  page.once("dialog", (dialog) => {
+    dialogShown = true;
+    dialog.dismiss();
+  });
+  await page.getByTestId("distance-config-delete-1").click();
+  await expect(page.getByTestId("distance-summary-1")).toBeVisible();
+
+  expect(dialogShown).toBe(true);
+});
