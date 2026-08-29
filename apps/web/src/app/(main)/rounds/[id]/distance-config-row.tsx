@@ -85,10 +85,9 @@ function TargetFacePicker({
                 setOpen(false);
               }}
               className={cn(
-                "rounded-md p-0",
-                f.id === selectedId
-                  ? "ring-2 ring-primary"
-                  : "opacity-60 hover:opacity-100",
+                "flex rounded-md p-0 transition-shadow hover:ring-2 hover:ring-muted-foreground/40 hover:ring-offset-2 hover:ring-offset-background",
+                f.id === selectedId &&
+                  "ring-2 ring-primary ring-offset-2 ring-offset-background hover:ring-primary",
               )}
             >
               <TargetFaceTile

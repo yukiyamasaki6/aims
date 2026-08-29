@@ -15,6 +15,11 @@ export type TargetFaceSpotLayout = {
   target_face_rings: TargetFaceRing[];
 };
 
+// 的画像本体の境界線は、得点帯を区切る情報として最低限見えれば十分で、
+// 主役はあくまで色（得点帯）なので極力薄くする（拡大バッジの境界線はこれとは
+// 別に太さを持つ）。
+const STROKE_WIDTH_RATIO = 0.008;
+
 // 的をリングデータ（半径・色・境界線色）から同心円として描画する。
 // target_facesの名称文字列には依存しない。cm単位の半径をそのままviewBoxに
 // 渡すことで、拡縮・将来のクリック座標の逆変換（着弾記録UI等）にも同じ
@@ -37,10 +42,14 @@ export function TargetFaceIcon({
 
   const maxRadius = Math.max(...rings.map((r) => r.radius));
   const sorted = [...rings].sort((a, b) => b.radius - a.radius);
+  const strokeWidth = maxRadius * STROKE_WIDTH_RATIO;
+  // strokeはパス（リング半径）を中心に太さの半分ずつ内外に描かれるため、
+  // 最外リングの境界線がviewBoxの端で見切れないよう半分だけ余白を確保する。
+  const viewExtent = maxRadius + strokeWidth / 2;
 
   return (
     <svg
-      viewBox={`${-maxRadius} ${-maxRadius} ${maxRadius * 2} ${maxRadius * 2}`}
+      viewBox={`${-viewExtent} ${-viewExtent} ${viewExtent * 2} ${viewExtent * 2}`}
       width={size}
       height={size}
       className="shrink-0"
@@ -54,7 +63,7 @@ export function TargetFaceIcon({
           r={r.radius}
           fill={r.color}
           stroke={r.line_color ?? "none"}
-          strokeWidth={r.line_color ? maxRadius * 0.02 : 0}
+          strokeWidth={r.line_color ? strokeWidth : 0}
         />
       ))}
     </svg>
@@ -100,10 +109,13 @@ export function TargetFaceThumbnail({
       Math.abs(spot.center_y) + spotMaxRadius,
     );
   }
+  // strokeはパス（リング半径）を中心に太さの半分ずつ内外に描かれるため、
+  // 最外リングの境界線がviewBoxの端で見切れないよう半分だけ余白を確保する。
+  const viewExtent = extent + (extent * STROKE_WIDTH_RATIO) / 2;
 
   return (
     <svg
-      viewBox={`${-extent} ${-extent} ${extent * 2} ${extent * 2}`}
+      viewBox={`${-viewExtent} ${-viewExtent} ${viewExtent * 2} ${viewExtent * 2}`}
       width={size}
       height={size}
       className={cn("shrink-0", className)}
@@ -127,7 +139,9 @@ export function TargetFaceThumbnail({
                 r={r.radius}
                 fill={r.color}
                 stroke={r.line_color ?? "none"}
-                strokeWidth={r.line_color ? spotMaxRadius * 0.02 : 0}
+                strokeWidth={
+                  r.line_color ? spotMaxRadius * STROKE_WIDTH_RATIO : 0
+                }
               />
             ))}
           </g>
@@ -137,10 +151,99 @@ export function TargetFaceThumbnail({
   );
 }
 
+// 中心から見て的の色が変わるまで連続する内側のリング（例: 標準はX,10,9の黄）を
+// 取り出す。得点表記を重ねる対象を「色」という見た目の単位で機械的に決めることで、
+// 弓種等によって得点帯の構成が変わってもハードコードなしに追従できる。
+function innerSameColorRings(rings: TargetFaceRing[]): TargetFaceRing[] {
+  const sorted = [...rings].sort((a, b) => a.radius - b.radius);
+  if (sorted.length === 0) return [];
+  const innerColor = sorted[0].color;
+  const result: TargetFaceRing[] = [];
+  for (const r of sorted) {
+    if (r.color !== innerColor) break;
+    result.push(r);
+  }
+  return result;
+}
+
+// 的中心部（同色の内側リング）の右上90度分だけを切り出し、得点帯ごとに得点表記を
+// 重ねたバッジ。色・半径だけでは見分けがつかない的（例: 弓種によってXリングの
+// 有無・得点帯の境界が異なる場合）を、実際の得点表記で見分けられるようにする。
+//
+// 枠（ビューポート）は「最外リングの外径が右上の角（中心から最も遠い対角の点）に
+// ちょうど接する」大きさにする。中心から枠の角までの距離は枠の一辺の√2倍なので、
+// 一辺は最外リングの半径÷√2。クラスタの要素数に関わらず、常に「配色が同じ内側
+// リング全部」を対象にするだけなので、フィールド的等の得点帯構成にも自動的に
+// 追従する。
+function TargetFaceCenterBadge({
+  rings,
+  pixelSize,
+}: {
+  rings: TargetFaceRing[];
+  pixelSize: number;
+}) {
+  const cluster = innerSameColorRings(rings);
+  if (cluster.length === 0) return null;
+
+  const outerRadius = cluster[cluster.length - 1].radius;
+  const boxSide = outerRadius / Math.SQRT2;
+  // フォントサイズはpixelSizeではなくviewBoxと同じcm単位のスケールで指定する
+  // 必要がある（そうしないと極端に巨大な文字になる）。
+  const fontSize = boxSide / 4.5;
+
+  return (
+    <span
+      className="pointer-events-none absolute top-0 right-0 overflow-hidden border border-black bg-white"
+      style={{ width: pixelSize, height: pixelSize }}
+    >
+      <svg
+        viewBox={`0 ${-boxSide} ${boxSide} ${boxSide}`}
+        width={pixelSize}
+        height={pixelSize}
+        role="img"
+        aria-label={cluster.map((r) => r.score_str).join(", ")}
+      >
+        {[...cluster].reverse().map((r) => (
+          <circle
+            key={r.z_index}
+            cx={0}
+            cy={0}
+            r={r.radius}
+            fill={r.color}
+            stroke={r.line_color ?? "none"}
+            strokeWidth={r.line_color ? boxSide * 0.04 : 0}
+          />
+        ))}
+        {cluster.map((r, i) => {
+          const innerEdge = i === 0 ? 0 : cluster[i - 1].radius;
+          const mid = (innerEdge + r.radius) / 2;
+          const offset = mid / Math.SQRT2;
+          return (
+            <text
+              key={r.z_index}
+              x={offset}
+              y={-offset}
+              fontSize={fontSize}
+              fontWeight="bold"
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fill="#231F20"
+            >
+              {r.score_str}
+            </text>
+          );
+        })}
+      </svg>
+    </span>
+  );
+}
+
 // 的の見た目（TargetFaceThumbnail）とサイズの数字を1枚のタイルにまとめたもの。
 // 的選択のポップアップ・その選択中1枚のプレビュー・距離の要約行など、
 // 「文字のラベルなしで、見た目とサイズだけで的を示す」場面で共通して使う。
 // サイズの文字はタイルサイズ（pixelSize）のおよそ1/3になるよう比例させる。
+// 右上には中心部（同色の内側リング）をズームして得点表記を重ねたバッジを重ね、
+// 色・半径が同じでも得点帯の構成が異なる的（弓種差分等）を見分けられるようにする。
 export function TargetFaceTile({
   spots,
   sizeCm,
@@ -152,17 +255,19 @@ export function TargetFaceTile({
   pixelSize?: number;
   className?: string;
 }) {
+  const representativeRings = spots[0]?.target_face_rings ?? [];
+
   return (
     <span
       className={cn(
-        "relative inline-flex shrink-0 items-center justify-center",
+        "relative inline-flex shrink-0 items-center justify-center overflow-hidden",
         className,
       )}
       style={{ width: pixelSize, height: pixelSize }}
     >
-      <TargetFaceThumbnail spots={spots} className="size-full p-1" />
+      <TargetFaceThumbnail spots={spots} className="size-full" />
       <span
-        className="pointer-events-none absolute top-0 right-0.5 font-heading text-black leading-none"
+        className="pointer-events-none absolute bottom-0 left-0 font-heading text-black leading-none"
         style={{
           fontSize: pixelSize / 3,
           WebkitTextStroke: `${Math.max(1, pixelSize / 40)}px white`,
@@ -171,6 +276,10 @@ export function TargetFaceTile({
       >
         {sizeCm}
       </span>
+      <TargetFaceCenterBadge
+        rings={representativeRings}
+        pixelSize={pixelSize * 0.5}
+      />
     </span>
   );
 }

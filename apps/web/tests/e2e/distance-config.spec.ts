@@ -110,7 +110,8 @@ test("的は選択中の1枚だけを表示し、タップするとポップア�
     `target-face-option-${TARGET_FACE_40CM_INDOOR}`,
   );
   await expect(option).toBeVisible();
-  await expect(option.locator("svg")).toBeVisible();
+  // 見た目のSVG本体に加えて、中心部の得点表記バッジもSVGとして重なっている。
+  await expect(option.locator("svg").first()).toBeVisible();
   await expect(option).not.toContainText("インドア");
   await expect(option).not.toContainText("点的");
 });
