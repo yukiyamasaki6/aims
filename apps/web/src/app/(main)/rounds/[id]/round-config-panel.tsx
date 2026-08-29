@@ -41,9 +41,11 @@ export type RoundConfig = {
 export function RoundConfigPanel({
   roundId,
   initial,
+  onSaved,
 }: {
   roundId: string;
   initial: RoundConfig;
+  onSaved: (updated: RoundConfig) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [saved, setSaved] = useState(initial);
@@ -73,6 +75,7 @@ export function RoundConfigPanel({
     }
 
     setSaved(draft);
+    onSaved(draft);
     setSubmitting(false);
     setExpanded(false);
   }

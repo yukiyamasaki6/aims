@@ -81,6 +81,53 @@ test("名前欄・実施日欄は実際のキー入力でフォーカスを保�
   await expect(dateInput).toBeFocused();
 });
 
+test("Unmarkedな距離が残ったままフィールド以外の種別に変更しようとするとエラーになり、変更されない", async ({
+  page,
+}) => {
+  const roundId = await createRoundViaApi(page, {
+    name: "フィールド種別変更テスト",
+    roundDate: "2026-08-24",
+    format: "field",
+    bowType: "recurve",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-unmarked-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("");
+  await page.getByTestId("distance-config-save-1").click();
+  await expect(page.getByTestId("distance-summary-1")).toContainText(
+    "Unmarked",
+  );
+
+  await page.getByTestId("round-config-summary").click();
+  await page.getByTestId("round-config-format-outdoor").click();
+  await page.getByTestId("round-config-save").click();
+
+  await expect(
+    page.getByText(
+      "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。",
+    ),
+  ).toBeVisible();
+  // 保存は失敗しているため、編集パネルは開いたままで種別もフィールドのまま。
+  await expect(page.getByTestId("round-config-save")).toBeVisible();
+
+  // 距離をMarkedに戻して距離を入力すれば、種別変更もできるようになる。
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-marked-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("18");
+  await page.getByTestId("distance-config-save-1").click();
+  await expect(page.getByTestId("distance-config-distance-1")).toBeHidden();
+
+  await page.getByTestId("round-config-format-outdoor").click();
+  await page.getByTestId("round-config-save").click();
+
+  await expect(page.getByTestId("round-config-summary")).toContainText(
+    "アウトドア",
+  );
+});
+
 test("ラウンド名・実施日・種別・弓種を編集して保存すると反映され、再読み込み後も保持される", async ({
   page,
 }) => {

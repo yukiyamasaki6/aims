@@ -23,7 +23,7 @@ export default async function RoundPage({
   const { data: distances } = await supabase
     .from("distances")
     .select(
-      "id, distance_number, distance, total_ends, arrows_per_end, target_face_id",
+      "id, distance_number, distance, total_ends, arrows_per_end, target_face_id, is_marked",
     )
     .eq("round_id", id)
     .order("distance_number");
