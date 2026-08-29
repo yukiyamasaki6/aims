@@ -1,6 +1,6 @@
 begin;
 
-select plan(26);
+select plan(37);
 
 select has_table('public', 'target_faces', 'target_faces テーブルが存在する');
 select has_table('public', 'target_face_spots', 'target_face_spots テーブルが存在する');
@@ -57,10 +57,11 @@ select results_eq(
 );
 
 -- Seed data: グローバル的（owner_id is null）が投入されている。
+-- 標準13件 + インドア・コンパウンド用に追加した6件 = 19件。
 select results_eq(
   $$select count(*) from public.target_faces where owner_id is null$$,
-  $$values (13::bigint)$$,
-  'グローバル的が13件シードされている'
+  $$values (19::bigint)$$,
+  'グローバル的が19件シードされている（標準13件+インドア・コンパウンド用6件）'
 );
 
 select results_eq(
@@ -73,14 +74,119 @@ select results_eq(
 
 select results_eq(
   $$select count(*) from public.target_face_rings$$,
-  $$values (159::bigint)$$,
-  'シードされた的の点数帯は合計159件'
+  $$values (225::bigint)$$,
+  'シードされた的の点数帯は合計225件'
 );
 
 select results_eq(
   $$select count(*) from public.target_face_rings where line_color is null$$,
-  $$values (27::bigint)$$,
+  $$values (18::bigint)$$,
   '境界線なしのリングが存在する'
+);
+
+-- インドアの弓種差分（issue #163）:
+-- インドアにはXという区分自体が存在しない（弓種を問わず最高得点帯は常に"10"）。
+--   - リカーブ・ベアボウ共通の的は旧Xリングを削除し、旧10リング（半径はそのまま）が中心をカバーする。
+--   - コンパウンド専用の的（英語名）は旧10リングを削除し、旧Xリングの半径がscore_str="10"として中心をカバーする。
+-- リング半径・色はどちらも標準（9,10,X）のシードと同一で、score_str/score_intのみ異なる。
+-- コンパウンド専用の的だけが英語名（例: 'Indoor 60cm Compound'）で追加されている。
+
+select is_empty(
+  $$select r.id from public.target_face_rings r
+    join public.target_face_spots s on s.id = r.spot_id
+    join public.target_faces tf on tf.id = s.target_face_id
+    where tf.format = 'indoor' and r.score_str = 'X'$$,
+  'インドアの的（リカーブ・ベアボウ・コンパウンドいずれも）にXリングは存在しない'
+);
+
+select results_eq(
+  $$select score_str, score_int from public.target_face_rings r
+    join public.target_face_spots s on s.id = r.spot_id
+    join public.target_faces tf on tf.id = s.target_face_id
+    where tf.name = '10点的（インドア・60cm）'
+    order by r.radius asc limit 1$$,
+  $$values ('10'::text, 10::bigint)$$,
+  '10点的（インドア・60cm）は旧Xリング（半径1.5cm）が削除され、最小半径(3cm)の10リングが中心をカバーする'
+);
+
+select results_eq(
+  $$select score_str, score_int from public.target_face_rings r
+    join public.target_face_spots s on s.id = r.spot_id
+    join public.target_faces tf on tf.id = s.target_face_id
+    where tf.name = '10点的（インドア・40cm）'
+    order by r.radius asc limit 1$$,
+  $$values ('10'::text, 10::bigint)$$,
+  '10点的（インドア・40cm）は旧Xリング（半径1cm）が削除され、最小半径(2cm)の10リングが中心をカバーする'
+);
+
+select results_eq(
+  $$select score_str, score_int from public.target_face_rings r
+    join public.target_face_spots s on s.id = r.spot_id
+    join public.target_faces tf on tf.id = s.target_face_id
+    where tf.name = 'Indoor 60cm Compound'
+    order by r.radius asc limit 1$$,
+  $$values ('10'::text, 10::bigint)$$,
+  'Indoor 60cm Compoundは旧10リングが削除され、旧Xリング（半径1.5cm）がscore_str=10として中心をカバーする'
+);
+
+select results_eq(
+  $$select score_str, score_int from public.target_face_rings r
+    join public.target_face_spots s on s.id = r.spot_id
+    join public.target_faces tf on tf.id = s.target_face_id
+    where tf.name = 'Indoor 40cm Compound'
+    order by r.radius asc limit 1$$,
+  $$values ('10'::text, 10::bigint)$$,
+  'Indoor 40cm Compoundは旧10リングが削除され、旧Xリング（半径1cm）がscore_str=10として中心をカバーする'
+);
+
+-- インドアの3つ目（6点的）は最外周が青（6点）で、他の的の最外周（白1点等）と
+-- 同様に黒い境界線を持つ（線なしでシードされていたのを修正、リカーブ/ベアボウ・
+-- コンパウンドいずれも対象）。
+select is_empty(
+  $$select r.id from public.target_face_rings r
+    join public.target_face_spots s on s.id = r.spot_id
+    join public.target_faces tf on tf.id = s.target_face_id
+    where tf.format = 'indoor' and r.score_str = '6' and r.line_color is null$$,
+  'インドアの3つ目（6点的）の最外周（6点）は境界線なしではない'
+);
+
+-- 6点的（アウトドア・80cm）も同様に最外周（5点）が境界線なしでシードされて
+-- いたのを黒に修正する。
+select results_eq(
+  $$select line_color from public.target_face_rings r
+    join public.target_face_spots s on s.id = r.spot_id
+    join public.target_faces tf on tf.id = s.target_face_id
+    where tf.name = '6点的（アウトドア・80cm）' and r.score_str = '5'$$,
+  $$values ('#231F20'::text)$$,
+  '6点的（アウトドア・80cm）の最外周（5点）は境界線なしではない'
+);
+
+select results_eq(
+  $$select format, size from public.target_faces where name = 'Indoor 60cm Compound'$$,
+  $$values ('indoor'::text, 60::bigint)$$,
+  'Indoor 60cm Compoundのformat/sizeが正しい'
+);
+
+select results_eq(
+  $$select format, size from public.target_faces where name = 'Indoor 40cm Compound'$$,
+  $$values ('indoor'::text, 40::bigint)$$,
+  'Indoor 40cm Compoundのformat/sizeが正しい'
+);
+
+select results_eq(
+  $$select count(*) from public.target_face_spots s
+    join public.target_faces tf on tf.id = s.target_face_id
+    where tf.name = 'Indoor 40cm Triangular 3-spot Compound'$$,
+  $$values (3::bigint)$$,
+  'Indoor 40cm Triangular 3-spot Compoundも3スポットを持つ'
+);
+
+select results_eq(
+  $$select count(*) from public.target_face_spots s
+    join public.target_faces tf on tf.id = s.target_face_id
+    where tf.name = 'Indoor 60cm Vertical 3-spot Compound'$$,
+  $$values (3::bigint)$$,
+  'Indoor 60cm Vertical 3-spot Compoundも3スポットを持つ'
 );
 
 -- Fixture: two users. RLS挙動を確認する。
