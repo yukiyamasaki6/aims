@@ -1,6 +1,6 @@
 # ラウンドプリセット (Round Presets)
 
-`round_presets`/`round_preset_distances`にシードしているグローバルプリセットの一覧。データモデルの設計方針は[docs/erd.md](./erd.md)、的の詳細は[docs/target-faces.md](./target-faces.md)を参照。
+`round_presets`/`round_preset_distances`にシードしているグローバルプリセットの一覧。
 
 プリセットは、名前だけで自分向けと判断でき、かつ手入力より明確に速いものに限定する（README記載の「最速で記録できる体験」が目的であり、ラウンドの網羅や学習支援が目的ではない）。
 

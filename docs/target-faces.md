@@ -1,6 +1,6 @@
 # 的候補一覧 (Target Face Candidates)
 
-WAルールブックに基づく的（`target_faces`〜`target_face_rings`）のシード候補。データモデルの設計方針は[docs/erd.md](./erd.md)を参照。
+WAルールブックに基づく的（`target_faces`〜`target_face_rings`）のシード候補。
 
 ## 色
 
