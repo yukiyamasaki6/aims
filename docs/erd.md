@@ -57,10 +57,11 @@ erDiagram
         uuid id PK
         uuid round_id FK
         integer distance_number "距離の順番"
-        integer distance "70 / 50 / 30 / 18 等"
+        integer distance "70 / 50 / 30 / 18 等。is_marked=falseの場合はnull可"
         integer total_ends
         integer arrows_per_end "3 / 6 等"
         uuid target_face_id FK
+        boolean is_marked "既定true。falseはアンマークド（フィールド等で距離非公開）"
         timestamp created_at
         timestamp updated_at
     }
@@ -117,10 +118,11 @@ erDiagram
         uuid id PK
         uuid preset_id FK
         integer distance_number
-        integer distance
+        integer distance "is_marked=falseの場合はnull可"
         integer total_ends
         integer arrows_per_end
         uuid target_face_id FK
+        boolean is_marked "既定true。distancesと同じ意味"
         timestamp created_at
         timestamp updated_at
     }

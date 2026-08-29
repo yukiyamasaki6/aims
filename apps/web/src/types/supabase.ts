@@ -38,9 +38,10 @@ export type Database = {
         Row: {
           arrows_per_end: number;
           created_at: string;
-          distance: number;
+          distance: number | null;
           distance_number: number;
           id: string;
+          is_marked: boolean;
           round_id: string;
           target_face_id: string;
           total_ends: number;
@@ -49,9 +50,10 @@ export type Database = {
         Insert: {
           arrows_per_end: number;
           created_at?: string;
-          distance: number;
+          distance?: number | null;
           distance_number: number;
           id?: string;
+          is_marked?: boolean;
           round_id: string;
           target_face_id: string;
           total_ends: number;
@@ -60,9 +62,10 @@ export type Database = {
         Update: {
           arrows_per_end?: number;
           created_at?: string;
-          distance?: number;
+          distance?: number | null;
           distance_number?: number;
           id?: string;
+          is_marked?: boolean;
           round_id?: string;
           target_face_id?: string;
           total_ends?: number;
@@ -89,9 +92,10 @@ export type Database = {
         Row: {
           arrows_per_end: number;
           created_at: string;
-          distance: number;
+          distance: number | null;
           distance_number: number;
           id: string;
+          is_marked: boolean;
           preset_id: string;
           target_face_id: string;
           total_ends: number;
@@ -100,9 +104,10 @@ export type Database = {
         Insert: {
           arrows_per_end: number;
           created_at?: string;
-          distance: number;
+          distance?: number | null;
           distance_number: number;
           id?: string;
+          is_marked?: boolean;
           preset_id: string;
           target_face_id: string;
           total_ends: number;
@@ -111,9 +116,10 @@ export type Database = {
         Update: {
           arrows_per_end?: number;
           created_at?: string;
-          distance?: number;
+          distance?: number | null;
           distance_number?: number;
           id?: string;
+          is_marked?: boolean;
           preset_id?: string;
           target_face_id?: string;
           total_ends?: number;
