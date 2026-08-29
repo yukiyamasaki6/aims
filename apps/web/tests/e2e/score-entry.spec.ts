@@ -324,8 +324,8 @@ test("的のリング構成が少ないほど、テンキーは実在する点�
 test("スポットが複数ある的でも、テンキーのキーはスポット間で重複表示されない", async ({
   page,
 }) => {
-  // 3つ目的（トライアングル）は3スポットとも同一のX,10,9,8,7,6を持つが、
-  // キーはスポットごとではなく点数ごとに1つだけ表示される。
+  // 3つ目的（トライアングル）は3スポットとも同一の10,9,8,7,6を持つ
+  // （Xリングを持たない）が、キーはスポットごとではなく点数ごとに1つだけ表示される。
   const roundId = await createRoundViaApi(page, {
     name: "3つ目的テスト",
     roundDate: "2026-08-24",
@@ -340,7 +340,8 @@ test("スポットが複数ある的でも、テンキーのキーはスポッ�
   });
   await page.goto(`/rounds/${roundId}`);
 
-  await expect(page.getByTestId("score-button-X")).toHaveCount(1);
+  await expect(page.getByTestId("score-button-X")).toHaveCount(0);
+  await expect(page.getByTestId("score-button-10")).toHaveCount(1);
   await expect(page.getByTestId("score-button-6")).toHaveCount(1);
   await expect(page.getByTestId("score-button-5")).toHaveCount(0);
 });
