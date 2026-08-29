@@ -1,5 +1,8 @@
 # Agent Guidelines
 
+## 0. Communication
+- **Match the user's language:** Respond in the language the user is using. Format responses with Markdown for clarity.
+
 ## 1. Project Context
 - Read [README.md](README.md) for the product overview and [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow (structure, setup, branching, PR process).
 - Inspect `package.json` (root and `apps/web/`) for available scripts and package manager (`pnpm`) before running any command.
@@ -29,6 +32,7 @@
 
 ## 4. Test-Driven Implementation Workflow
 - **Confirm intent before coding:** Restate the user's objective in your own words (or ask clarifying questions if ambiguous) before writing any code or tests.
+- **Ground shared understanding in docs:** Before implementing, read and, when needed, edit relevant docs (`docs/*.md`, `README.md`, this file) with the user to establish shared understanding of the design before writing code.
 - **Write tests first:** Write tests asserting the intended user outcome before starting implementation.
 - **Implement to satisfy tests:** Run tests, adjust implementation, and repeat until all tests pass.
 - **Do not force green:** If a test fails, determine whether the test misencodes intent or the code is wrong. Fix the root cause; never weaken assertions to pass tests.
