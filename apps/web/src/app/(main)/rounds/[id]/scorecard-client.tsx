@@ -395,6 +395,17 @@ export function ScorecardClient({
   }
 
   function handleDistanceSaved(updated: DistanceConfig) {
+    const previous = distances.find((d) => d.id === updated.id);
+    // 距離（m）はマス構成にも得点判定にも影響しないため、変更してもこの距離の
+    // undo/redo履歴は壊れない。的・総エンド数・エンドあたりの本数が変わった
+    // 場合のみ、この距離のマスを指す履歴を破棄する（他の距離の履歴は無関係
+    // なので残す）。
+    const structureChanged =
+      !previous ||
+      previous.total_ends !== updated.totalEnds ||
+      previous.arrows_per_end !== updated.arrowsPerEnd ||
+      previous.target_face_id !== updated.targetFaceId;
+
     setDistances((prev) =>
       prev.map((d) =>
         d.id === updated.id
@@ -412,14 +423,19 @@ export function ScorecardClient({
     // 構成（総エンド数・エンドあたりの本数）が変わった可能性があるため、
     // 選択中マスの参照が古いままにならないようフォーカスを一旦クリアする。
     setPosition(null);
+    if (structureChanged) {
+      setUndoStack((prev) => prev.filter((e) => e.distanceId !== updated.id));
+      setRedoStack((prev) => prev.filter((e) => e.distanceId !== updated.id));
+    }
   }
 
   function handleDistanceDeleted(distanceId: string) {
     setDistances((prev) => prev.filter((d) => d.id !== distanceId));
     setShots((prev) => prev.filter((s) => s.distance_id !== distanceId));
-    // 距離構成が変わるとundo/redo履歴が指すマスの前提が崩れるため破棄する。
-    setUndoStack([]);
-    setRedoStack([]);
+    // 削除された距離のマスを指す履歴だけを破棄する。他の距離の履歴は
+    // 引き続き有効なので残す。
+    setUndoStack((prev) => prev.filter((e) => e.distanceId !== distanceId));
+    setRedoStack((prev) => prev.filter((e) => e.distanceId !== distanceId));
     setEditingDistanceIds((prev) => {
       const next = new Set(prev);
       next.delete(distanceId);

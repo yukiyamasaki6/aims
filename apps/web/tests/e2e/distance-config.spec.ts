@@ -148,6 +148,92 @@ test("shotsが存在する距離は総エンド数・エンドあたりの本数
   await expect(page.getByTestId("target-face-picker-trigger")).toBeDisabled();
 });
 
+test("距離の的・エンド構成を変更して保存すると、undo/redo履歴が破棄される", async ({
+  page,
+}) => {
+  // 変更前の構成（的・本数）を前提としたundo/redoが変更後に使われると、
+  // 存在しないマス・点数のshotがそのまま書き戻されてしまうため、
+  // 保存時に履歴が破棄されることを確認する。
+  await page.getByTestId("score-button-X").click();
+  await expect(page.getByTestId("distance-summary-1")).toContainText("小計10");
+
+  // 全エンド入力完了でテンキーが閉じるため、選び直して開き直す。
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("score-button-undo").click();
+  await expect(page.getByTestId("distance-summary-1")).toContainText("小計0");
+  await expect(page.getByTestId("score-button-redo")).toBeEnabled();
+
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-arrows-1").fill("2");
+  await page.getByTestId("target-face-picker-trigger").click();
+  await page
+    .getByTestId(`target-face-option-${TARGET_FACE_40CM_INDOOR}`)
+    .click();
+  await page.getByTestId("distance-config-save-1").click();
+  // 保存完了（編集パネルが閉じる）を待ってから次の操作に進む。
+  await expect(page.getByTestId("distance-config-arrows-1")).toBeHidden();
+
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await expect(page.getByTestId("score-button-undo")).toBeDisabled();
+  await expect(page.getByTestId("score-button-redo")).toBeDisabled();
+});
+
+test("距離（m）だけを変更して保存しても、undo/redo履歴は保持される", async ({
+  page,
+}) => {
+  // 距離の値はマス構成にも得点判定にも影響しないため、この変更だけでは
+  // 破棄する必要がない。
+  const roundId = await createRoundViaApi(page, {
+    name: "距離のみ変更テスト",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await page.getByTestId("score-button-X").click();
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("score-button-undo").click();
+  await expect(page.getByTestId("score-button-redo")).toBeEnabled();
+
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("20");
+  await page.getByTestId("distance-config-save-1").click();
+  await expect(page.getByTestId("distance-summary-1")).toContainText("20m");
+
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await expect(page.getByTestId("score-button-redo")).toBeEnabled();
+});
+
+test("ある距離の構成変更は、他の距離のundo/redo履歴に影響しない", async ({
+  page,
+}) => {
+  const roundId = await createRoundViaApi(page, {
+    name: "複数距離undo履歴テスト",
+    roundDate: "2026-08-24",
+    distances: [
+      { distance: 18, totalEnds: 1, arrowsPerEnd: 1 },
+      { distance: 30, totalEnds: 1, arrowsPerEnd: 1 },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await page.getByTestId("score-button-X").click();
+  await expect(page.getByTestId("distance-summary-1")).toContainText("小計10");
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("score-button-undo").click();
+  await expect(page.getByTestId("score-button-redo")).toBeEnabled();
+
+  // 距離2（無関係）の構成を変更する。
+  await page.getByTestId("distance-config-toggle-2").click();
+  await page.getByTestId("distance-config-arrows-2").fill("2");
+  await page.getByTestId("distance-config-save-2").click();
+  await expect(page.getByTestId("distance-config-arrows-2")).toBeHidden();
+
+  // 距離1のundo/redo履歴は影響を受けていない。
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await expect(page.getByTestId("score-button-redo")).toBeEnabled();
+});
+
 test("距離を削除すると一覧から消える", async ({ page }) => {
   await page.getByTestId("add-distance-button").click();
   // 追加直後から編集パネルが展開済みのため、改めてトグルをタップする必要はない。
@@ -156,6 +242,35 @@ test("距離を削除すると一覧から消える", async ({ page }) => {
   await page.getByTestId("distance-config-delete-2").click();
 
   await expect(page.getByTestId("distance-summary-2")).toBeHidden();
+});
+
+test("ある距離を削除しても、他の距離のundo/redo履歴に影響しない", async ({
+  page,
+}) => {
+  const roundId = await createRoundViaApi(page, {
+    name: "距離削除undo履歴テスト",
+    roundDate: "2026-08-24",
+    distances: [
+      { distance: 18, totalEnds: 1, arrowsPerEnd: 1 },
+      { distance: 30, totalEnds: 1, arrowsPerEnd: 1 },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await page.getByTestId("score-button-X").click();
+  await expect(page.getByTestId("distance-summary-1")).toContainText("小計10");
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("score-button-undo").click();
+  await expect(page.getByTestId("score-button-redo")).toBeEnabled();
+
+  // 距離2（無関係、shotsなし）を削除する。
+  await page.getByTestId("distance-config-toggle-2").click();
+  await page.getByTestId("distance-config-delete-2").click();
+  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
+
+  // 距離1のundo/redo履歴は影響を受けていない。
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await expect(page.getByTestId("score-button-redo")).toBeEnabled();
 });
 
 test("shotsが存在する距離を削除しようとすると確認ダイアログが表示され、キャンセルすると削除されない", async ({
