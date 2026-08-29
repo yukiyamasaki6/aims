@@ -41,7 +41,7 @@ export default async function RoundPage({
   const { data: targetFaces } = await supabase
     .from("target_faces")
     .select(
-      "id, name, size, target_face_spots(center_x, center_y, target_face_rings(radius, color, line_color, z_index))",
+      "id, name, size, target_face_spots(center_x, center_y, target_face_rings(radius, color, line_color, z_index, score_str, score_int))",
     )
     // 種類（アウトドア/インドア/フィールド）→サイズの順で並べる。
     // format昇順だとfield/indoor/outdoorのアルファベット順になってしまうため、

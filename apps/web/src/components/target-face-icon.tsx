@@ -5,6 +5,8 @@ export type TargetFaceRing = {
   color: string;
   line_color: string | null;
   z_index: number;
+  score_str: string;
+  score_int: number;
 };
 
 export type TargetFaceSpotLayout = {
