@@ -35,11 +35,14 @@
 - **Iterate in dialogue:** Revise tests and implementation together until both strictly align with the confirmed intent.
 
 ## 5. Issue → PR Workflow
-- **Issue Hierarchy:** Decompose milestones into Epics by feature area (e.g., screen, data foundation). Decompose Epics into sub-issues by PR unit (1 sub-issue = exactly 1 PR). Never split single-PR work across multiple sub-issues, and never bundle distinct PRs into one.
-- **Environment & PATH:** Verify `gh` location via `where.exe gh` or prepend `$env:Path += ";C:\Program Files\GitHub CLI"` in PowerShell if not found.
-- **Clean Staging:** Inspect `git status` thoroughly before branching or committing. Stage and commit only files strictly related to the current issue.
-- **Check Existing Files:** Check `git status` and `git log -- <path>` before creating files to avoid overwriting or duplicating merged work.
-- **Explicit Approval:** Never run `git commit` or `gh pr create` autonomously. Prepare changes, display the diff, and execute only upon explicit user command.
-- **Honest Verification:** State "verified/confirmed X" in PR descriptions only if X was explicitly executed in the current session.
-- **Concise & Formatted Writing:** State only what changed and why (intent); omit debugging narratives, trial logs, and diff walkthroughs. Inspect and follow `.github/pull_request_template.md` strictly before drafting PRs.
-- **Post-Merge Cleanup:** After confirming a PR is merged (`gh pr view <n> --json state,mergedAt`), run: `git checkout main`, `git pull`, `git branch -d <branch>`.
+- **Issue Hierarchy:** Decompose milestones into Epics by feature area. Decompose Epics into sub-issues by PR unit (1 sub-issue = 1 PR). Never split one PR across sub-issues; never bundle multiple PRs into one.
+- **Milestone on Creation:** Set the milestone at issue creation, matching the parent Epic exactly. Use `gh issue create --milestone <title>`; for closed milestones use `-F milestone=<number>` via the REST API (`gh issue edit --milestone` cannot resolve closed milestones by name).
+- **Environment & PATH:** Verify `gh` is on PATH (`where.exe gh`); if not, prepend `$env:Path += ";C:\Program Files\GitHub CLI"`.
+- **Clean Staging:** Run `git status` before branching or committing. Stage only files related to the current issue.
+- **Check Existing Files:** Run `git status` and `git log -- <path>` before creating a file, to avoid overwriting merged work.
+- **Explicit Approval:** Never run `git commit` or `gh pr create` unasked. Show the diff and wait for an explicit command.
+- **Honest Verification:** Write "verified/confirmed X" only if X was actually executed this session.
+- **Summary, Not Log:** A PR/Issue body is a summary of intent, not a sequential diff log. State only what changed and why; omit debugging narratives, trial logs, and diff walkthroughs. Follow `.github/pull_request_template.md` exactly.
+- **Pre-Submit Review:** Before submitting, diff the drafted body against `git diff` and the template headings. Fix every gap: diff content missing from the body, and body claims the diff doesn't support.
+- **Docs-Implementation Consistency:** Before submitting, verify docs (README, CONTRIBUTING, `docs/*.md`, this file) match the implementation. Update docs to follow the code, never the reverse.
+- **Post-Merge Cleanup:** After confirming the merge (`gh pr view <n> --json state,mergedAt`), run `git checkout main && git pull && git branch -d <branch>`.
