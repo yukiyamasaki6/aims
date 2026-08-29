@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { getOtpCodeFromMailpit } from "./helpers/mailpit";
-import { createRoundViaApi } from "./helpers/rounds";
+import {
+  createRoundViaApi,
+  FIELD_TARGET_FACE_ID,
+  SIX_RING_TARGET_FACE_ID,
+  TRIPLE_SPOT_TARGET_FACE_ID,
+} from "./helpers/rounds";
 
 // user-a@aims.testを使うとauth.spec.tsのサインアウトテスト（global scopeで
 // 全セッションを無効化する）と並列実行時に競合するため、専用ユーザーを都度作成する。
@@ -203,13 +208,55 @@ test("マス目の点数表示は的の配色を薄くしたトーンで背景�
   await page.getByTestId("score-button-X").click();
   await expect(page.getByTestId("shot-cell-1-1-1")).toHaveCSS(
     "background-color",
-    "rgb(255, 246, 216)",
+    "rgb(255, 247, 204)",
   );
 
   await page.getByTestId("score-button-8").click();
   await expect(page.getByTestId("shot-cell-1-1-2")).toHaveCSS(
     "background-color",
-    "rgb(253, 227, 228)",
+    "rgb(253, 206, 209)",
+  );
+});
+
+test("的の配色がWA標準の得点しきい値と対応しない場合も、キー・マス目の色は的の実際のリング色に追従する", async ({
+  page,
+}) => {
+  // フィールド的80cmは得点6,5が黄・4,3,2,1が黒。標準の的（9以上=黄,7-8=赤,
+  // 5-6=青,3-4=黒,1-2=白）のしきい値をそのまま使うと6,5が青、2,1が白に
+  // なってしまうため、リング色を直接見ていることを確認する。
+  const roundId = await createRoundViaApi(page, {
+    name: "フィールド配色テスト",
+    roundDate: "2026-08-24",
+    distances: [
+      {
+        distance: 50,
+        totalEnds: 1,
+        arrowsPerEnd: 2,
+        targetFaceId: FIELD_TARGET_FACE_ID,
+      },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await expect(page.getByTestId("score-button-6")).toHaveCSS(
+    "background-color",
+    "rgb(255, 229, 82)",
+  );
+  await expect(page.getByTestId("score-button-2")).toHaveCSS(
+    "background-color",
+    "rgb(35, 31, 32)",
+  );
+
+  await page.getByTestId("score-button-6").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveCSS(
+    "background-color",
+    "rgb(255, 247, 204)",
+  );
+
+  await page.getByTestId("score-button-2").click();
+  await expect(page.getByTestId("shot-cell-1-1-2")).toHaveCSS(
+    "background-color",
+    "rgb(231, 228, 229)",
   );
 });
 
@@ -227,6 +274,75 @@ test("黒いテンキーボタンもホバーで視覚フィードバックが�
     expect(during).not.toBe(before);
     expect(during).not.toBe("none");
   }).toPass();
+});
+
+test("的のリング構成が少ないほど、テンキーは実在する点数のキーのみを表示する", async ({
+  page,
+}) => {
+  // 距離1: 標準10点的（X,10,9,8,7,6,5,4,3,2,1 + M = 12キー）
+  // 距離2: 6点的・アウトドア80cm（X,10,9,8,7,6,5 + M = 8キー、4,3,2,1は無い）
+  const roundId = await createRoundViaApi(page, {
+    name: "的構成テスト",
+    roundDate: "2026-08-24",
+    distances: [
+      { distance: 18, totalEnds: 1, arrowsPerEnd: 1 },
+      {
+        distance: 30,
+        totalEnds: 1,
+        arrowsPerEnd: 1,
+        targetFaceId: SIX_RING_TARGET_FACE_ID,
+      },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await expect(page.getByTestId("score-button-4")).toBeVisible();
+  await expect(page.getByTestId("score-button-1")).toBeVisible();
+
+  const keypadOnFullFace = page.getByTestId("keypad-toggle").locator("..");
+  const fullFaceHeight = (await keypadOnFullFace.boundingBox())?.height ?? 0;
+
+  await page.getByTestId("shot-cell-2-1-1").click();
+  await expect(page.getByTestId("score-button-5")).toBeVisible();
+  await expect(page.getByTestId("score-button-4")).toHaveCount(0);
+  await expect(page.getByTestId("score-button-1")).toHaveCount(0);
+  // Mは的のリングではなく常に追加される固定キーのため、リングが少ない的でも表示される。
+  await expect(page.getByTestId("score-button-M")).toBeVisible();
+
+  // キー数が減った分、テンキーの高さも小さくなる（固定高さに依存していない）。
+  const keypadOnReducedFace = page.getByTestId("keypad-toggle").locator("..");
+  await expect(async () => {
+    const height = (await keypadOnReducedFace.boundingBox())?.height ?? 0;
+    expect(height).toBeLessThan(fullFaceHeight);
+  }).toPass();
+
+  await page.getByTestId("score-button-X").click();
+  await expect(page.getByTestId("shot-cell-2-1-1")).toHaveText("X");
+});
+
+test("スポットが複数ある的でも、テンキーのキーはスポット間で重複表示されない", async ({
+  page,
+}) => {
+  // 3つ目的（トライアングル）は3スポットとも同一のX,10,9,8,7,6を持つが、
+  // キーはスポットごとではなく点数ごとに1つだけ表示される。
+  const roundId = await createRoundViaApi(page, {
+    name: "3つ目的テスト",
+    roundDate: "2026-08-24",
+    distances: [
+      {
+        distance: 18,
+        totalEnds: 1,
+        arrowsPerEnd: 1,
+        targetFaceId: TRIPLE_SPOT_TARGET_FACE_ID,
+      },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await expect(page.getByTestId("score-button-X")).toHaveCount(1);
+  await expect(page.getByTestId("score-button-6")).toHaveCount(1);
+  await expect(page.getByTestId("score-button-5")).toHaveCount(0);
 });
 
 test("下矢印でテンキーを格納でき、マスをタップすると再表示される", async ({

@@ -41,85 +41,126 @@ type HistoryEntry = {
   nextShot: Shot | null;
 };
 
-// テンキー（クリア行+スコア行+トグルボタン）の実測高さ。中身は固定内容なので
-// 定数として扱う。中身のレイアウトを変えた場合はここも合わせて更新すること。
-const KEYPAD_HEIGHT = 220;
+// テンキーは中身のキー数が距離の的ごとに変わるため実測高さを使う。この値は
+// ResizeObserverが初回計測を終えるまでの暫定値。
+const KEYPAD_HEIGHT_FALLBACK = 220;
 
-const SCORE_BUTTONS: { label: string; scoreStr: string; scoreInt: number }[] = [
-  { label: "X", scoreStr: "X", scoreInt: 10 },
-  { label: "10", scoreStr: "10", scoreInt: 10 },
-  { label: "9", scoreStr: "9", scoreInt: 9 },
-  { label: "8", scoreStr: "8", scoreInt: 8 },
-  { label: "7", scoreStr: "7", scoreInt: 7 },
-  { label: "6", scoreStr: "6", scoreInt: 6 },
-  { label: "5", scoreStr: "5", scoreInt: 5 },
-  { label: "4", scoreStr: "4", scoreInt: 4 },
-  { label: "3", scoreStr: "3", scoreInt: 3 },
-  { label: "2", scoreStr: "2", scoreInt: 2 },
-  { label: "1", scoreStr: "1", scoreInt: 1 },
-  { label: "M", scoreStr: "M", scoreInt: 0 },
-];
+// Mは的のリングではなく「的の外」を表す固定キーのため、常に末尾に追加する。
+const MISS_KEY = {
+  label: "M",
+  scoreStr: "M",
+  scoreInt: 0,
+  bg: "#4CD964",
+  fg: "#231F20",
+};
 
-// WAルールブックの的の配色（金/赤/青/黒/白）。bg/fgはテンキーボタン用の原色、
-// paleBg/paleFgはマス目の点数表示用に薄くしたトーン。target_face_ringsのシード
-// データと同じHEX値を基準に、paleBg/paleFgは同系統の色相で明度のみ調整している。
-// M（ミス）は的の外＝グラウンドを表す緑で、他バンドと同じトーンで揃える。
-const SCORE_BANDS: {
-  min: number;
-  bg: string;
-  fg: string;
-  paleBg: string;
-  paleFg: string;
-}[] = [
-  {
-    min: 9,
-    bg: "#FFE552",
-    fg: "#231F20",
-    paleBg: "#FFF6D8",
-    paleFg: "#8A6D00",
-  },
-  {
-    min: 7,
-    bg: "#F65058",
-    fg: "#FFFFFF",
-    paleBg: "#FDE3E4",
-    paleFg: "#C81E27",
-  },
-  {
-    min: 5,
-    bg: "#00B4E4",
-    fg: "#FFFFFF",
-    paleBg: "#DFF4FB",
-    paleFg: "#006C8C",
-  },
-  {
-    min: 3,
-    bg: "#231F20",
-    fg: "#FFFFFF",
-    paleBg: "#E7E7E7",
-    paleFg: "#231F20",
-  },
-  {
-    min: 1,
-    bg: "#FFFFFF",
-    fg: "#231F20",
-    paleBg: "#F5F5F5",
-    paleFg: "#231F20",
-  },
-  {
-    min: 0,
-    bg: "#4CD964",
-    fg: "#231F20",
-    paleBg: "#E1F8E6",
-    paleFg: "#1B7A32",
-  },
-];
+function contrastText(hex: string): string {
+  const r = Number.parseInt(hex.slice(1, 3), 16);
+  const g = Number.parseInt(hex.slice(3, 5), 16);
+  const b = Number.parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? "#231F20" : "#FFFFFF";
+}
 
-function scoreColor(scoreInt: number) {
-  // min: 0のバンドが必ず該当するため、SCORE_BANDSは非空を保つ限り常にマッチする。
-  return SCORE_BANDS.find(
-    (band) => scoreInt >= band.min,
-  ) as (typeof SCORE_BANDS)[number];
+// 距離の的（target_face_rings）に実在する点数のリングだけを、点数ごとに1つに
+// 重複排除して返す。3つ目の的（トライアングル/バーティカル）は通常スポットごとに
+// 同一の点数構成だが、異なる可能性も考慮して全スポットのリングを対象にする。
+function uniqueRingsFor(targetFace: TargetFaceOption | undefined) {
+  const allRings = (targetFace?.target_face_spots ?? []).flatMap(
+    (spot) => spot.target_face_rings,
+  );
+  return Array.from(new Map(allRings.map((r) => [r.score_str, r])).values());
+}
+
+// 距離の的に実在する点数・配色だけをテンキーのキーとして構成する。的によって
+// リング数が異なる（例: 6点的は1〜4が無い）ため、固定のキー一覧は持たない。
+function keypadKeysFor(targetFace: TargetFaceOption | undefined) {
+  const scoreKeys = uniqueRingsFor(targetFace)
+    .sort((a, b) => b.z_index - a.z_index)
+    .map((r) => ({
+      label: r.score_str,
+      scoreStr: r.score_str,
+      scoreInt: r.score_int,
+      bg: r.color,
+      fg: contrastText(r.color),
+    }));
+  return [...scoreKeys, MISS_KEY];
+}
+
+// マス目に記録済みの点数の実際のリング色を引く。Mは的のリングではなく
+// 「的の外」を表す固定色のため、MISS_KEYの色をそのまま使う。
+function ringColorFor(
+  targetFace: TargetFaceOption | undefined,
+  scoreStr: string,
+): string {
+  if (scoreStr === "M") return MISS_KEY.bg;
+  return (
+    uniqueRingsFor(targetFace).find((r) => r.score_str === scoreStr)?.color ??
+    MISS_KEY.bg
+  );
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  return [
+    Number.parseInt(hex.slice(1, 3), 16),
+    Number.parseInt(hex.slice(3, 5), 16),
+    Number.parseInt(hex.slice(5, 7), 16),
+  ];
+}
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  const diff = max - min;
+  if (diff === 0) return [0, 0, l];
+
+  const s = l > 0.5 ? diff / (2 - max - min) : diff / (max + min);
+  let h: number;
+  if (max === rn) {
+    h = ((gn - bn) / diff) % 6;
+  } else if (max === gn) {
+    h = (bn - rn) / diff + 2;
+  } else {
+    h = (rn - gn) / diff + 4;
+  }
+  h *= 60;
+  if (h < 0) h += 360;
+  return [h, s, l];
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let [r, g, b] = [0, 0, 0];
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+
+  const toHex = (v: number) =>
+    Math.round((v + m) * 255)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+}
+
+// 的の実際のリング色から、同じ色相・彩度のまま明度だけを上げた薄いトーンを
+// 生成する。固定の配色テーブルを持たないことで、任意の的の配色（フィールド的
+// 等、標準のWAしきい値と対応しない配色を含む）にそのまま追従できる。
+// 背景は常に薄い色になるため、文字色は輝度判定不要で固定の黒でよい。
+function paleTone(hex: string): { bg: string; fg: string } {
+  const [h, s] = rgbToHsl(...hexToRgb(hex));
+  return {
+    bg: hslToHex(h, s, 0.9),
+    fg: "#231F20",
+  };
 }
 
 type Position = { distance: Distance; end: number; arrow: number };
@@ -206,8 +247,24 @@ export function ScorecardClient({
   const [position, setPosition] = useState<Position | null>(() =>
     findCurrentPosition(distances, initialShots),
   );
+  const [keypadHeight, setKeypadHeight] = useState(KEYPAD_HEIGHT_FALLBACK);
   const keypadRef = useRef<HTMLDivElement>(null);
+  const keypadResizeObserverRef = useRef<ResizeObserver | null>(null);
   const rafRef = useRef(0);
+
+  // テンキーのキー数は距離ごとの的によって変わり、高さも連動する。固定値では
+  // なく実測値を使うことで、キー数変化時もマス選択のスクロール計算が崩れない。
+  const setKeypadNode = useCallback((el: HTMLDivElement | null) => {
+    keypadRef.current = el;
+    keypadResizeObserverRef.current?.disconnect();
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setKeypadHeight(entry.contentRect.height);
+    });
+    observer.observe(el);
+    keypadResizeObserverRef.current = observer;
+  }, []);
 
   const closeKeypad = useCallback(() => {
     setKeypadOpen(false);
@@ -269,11 +326,11 @@ export function ScorecardClient({
 
     // マスを選択すれば必ずテンキーが開く前提のため、開閉状態に関わらず常に
     // テンキー分の高さが隠れることを見込んでスクロール位置を計算する
-    // （高さ確保用の透明な枠は常にKEYPAD_HEIGHT分の領域を占有している）。
+    // （高さ確保用の透明な枠は常にkeypadHeight分の領域を占有している）。
     const margin = 16;
     const cellRect = cell.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
-    const visibleBottom = containerRect.bottom - KEYPAD_HEIGHT - margin;
+    const visibleBottom = containerRect.bottom - keypadHeight - margin;
 
     let delta = 0;
     if (cellRect.bottom > visibleBottom) {
@@ -285,7 +342,7 @@ export function ScorecardClient({
     if (delta !== 0) {
       container.scrollBy({ top: delta, behavior: "smooth" });
     }
-  }, [position]);
+  }, [position, keypadHeight]);
 
   const total = shots.reduce((sum, s) => sum + s.score_int, 0);
   const xCount = shots.filter((s) => s.score_str === "X").length;
@@ -692,7 +749,12 @@ export function ScorecardClient({
                                 position.end === end &&
                                 position.arrow === arrow;
                               const color = shot
-                                ? scoreColor(shot.score_int)
+                                ? paleTone(
+                                    ringColorFor(
+                                      targetFaceOf(d.target_face_id),
+                                      shot.score_str,
+                                    ),
+                                  )
                                 : null;
 
                               return (
@@ -709,8 +771,8 @@ export function ScorecardClient({
                                   style={
                                     color
                                       ? {
-                                          backgroundColor: color.paleBg,
-                                          color: color.paleFg,
+                                          backgroundColor: color.bg,
+                                          color: color.fg,
                                         }
                                       : undefined
                                   }
@@ -754,18 +816,18 @@ export function ScorecardClient({
       </div>
 
       {position && (
-        // 高さ確保用の透明な枠。常にKEYPAD_HEIGHT分の領域をスクロール可能域として
+        // 高さ確保用の透明な枠。常にkeypadHeight分の領域をスクロール可能域として
         // 確保しておくことで、展開アニメーションの進み具合に関わらずスクロール
         // 計算が安定する。クリックも透過させ、実際の操作は下の実体側で受ける。
         <div
           className="sticky bottom-0 pointer-events-none"
-          style={{ height: KEYPAD_HEIGHT }}
+          style={{ height: keypadHeight }}
         >
           {keypadMounted && (
             <div
-              ref={keypadRef}
+              ref={setKeypadNode}
               className={cn(
-                "pointer-events-auto absolute inset-0 border-t bg-card shadow-lg transition-transform duration-200",
+                "pointer-events-auto absolute inset-x-0 bottom-0 border-t bg-card shadow-lg transition-transform duration-200",
                 keypadVisible ? "translate-y-0" : "translate-y-full",
               )}
             >
@@ -816,32 +878,31 @@ export function ScorecardClient({
                     </Button>
                   </div>
                   <div className="grid grid-cols-4 gap-2">
-                    {SCORE_BUTTONS.map((b) => {
-                      const color = scoreColor(b.scoreInt);
-                      return (
-                        <Button
-                          key={b.label}
-                          type="button"
-                          variant="outline"
-                          size="lg"
-                          disabled={submitting}
-                          data-testid={`score-button-${b.label}`}
-                          onClick={() => handleScore(b.scoreStr, b.scoreInt)}
-                          // 背景色をstyleで直接指定するとhover:bg-muted等のクラスは
-                          // 上書きされて効かなくなる。brightnessフィルターは黒（#231F20）
-                          // のような暗い色では変化が知覚できないため、明暗どちらの背景
-                          // でも均一に視認できるグレー半透明のオーバーレイをinset
-                          // box-shadowで重ねてホバー/押下の視覚フィードバックとする。
-                          className="transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.25)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.35)]"
-                          style={{
-                            backgroundColor: color.bg,
-                            color: color.fg,
-                          }}
-                        >
-                          {b.label}
-                        </Button>
-                      );
-                    })}
+                    {keypadKeysFor(
+                      targetFaceOf(position.distance.target_face_id),
+                    ).map((b) => (
+                      <Button
+                        key={b.label}
+                        type="button"
+                        variant="outline"
+                        size="lg"
+                        disabled={submitting}
+                        data-testid={`score-button-${b.label}`}
+                        onClick={() => handleScore(b.scoreStr, b.scoreInt)}
+                        // 背景色をstyleで直接指定するとhover:bg-muted等のクラスは
+                        // 上書きされて効かなくなる。brightnessフィルターは黒（#231F20）
+                        // のような暗い色では変化が知覚できないため、明暗どちらの背景
+                        // でも均一に視認できるグレー半透明のオーバーレイをinset
+                        // box-shadowで重ねてホバー/押下の視覚フィードバックとする。
+                        className="transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.25)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.35)]"
+                        style={{
+                          backgroundColor: b.bg,
+                          color: b.fg,
+                        }}
+                      >
+                        {b.label}
+                      </Button>
+                    ))}
                   </div>
                 </div>
               </div>
