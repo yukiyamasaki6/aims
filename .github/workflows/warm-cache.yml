@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - test/cache-verification-base
   workflow_dispatch:
 
 jobs:
