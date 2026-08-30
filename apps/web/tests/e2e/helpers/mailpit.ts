@@ -1,3 +1,4 @@
+// cache-verification: trivial diff to trigger e2e-test job (throwaway branch)
 const MAILPIT_URL = "http://127.0.0.1:54324";
 
 async function findOtpEmailHtml(email: string): Promise<string> {
