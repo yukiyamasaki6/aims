@@ -28,7 +28,7 @@ test("認証済みで/にアクセスすると/roundsにリダイレクトされ
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "確認コードを送信" }).click();
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
 
   const code = await getOtpCodeFromMailpit(email);
   await page.getByPlaceholder("123456").fill(code);
@@ -63,10 +63,11 @@ test("ユーザBがサインアップできる", async ({ page }) => {
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "確認コードを送信" }).click();
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
   await expect(
-    page.getByRole("heading", { name: "確認コードを入力" }),
+    page.getByRole("heading", { name: "認証コードを入力" }),
   ).toBeVisible();
+  await expect(page.getByText("迷惑メールフォルダ")).toBeVisible();
 
   const code = await getOtpCodeFromMailpit(email);
   await page.getByPlaceholder("123456").fill(code);
@@ -84,14 +85,14 @@ test("ユーザBがサインアップできる", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("サインアップの確認コードメールに送信元がわかるフッターが入っている", async ({
+test("サインアップの認証コードメールに送信元がわかるフッターが入っている", async ({
   page,
 }) => {
   const email = `user-d-${Date.now()}@aims.test`;
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "確認コードを送信" }).click();
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
 
   const html = await getOtpEmailHtmlFromMailpit(email);
 

@@ -13,7 +13,7 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "確認コードを送信" }).click();
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
 
   const signupCode = await getOtpCodeFromMailpit(email);
   await page.getByPlaceholder("123456").fill(signupCode);
@@ -30,10 +30,11 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
   await expect(page).toHaveURL(/\/reset-password/);
 
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "確認コードを送信" }).click();
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
   await expect(
-    page.getByRole("heading", { name: "確認コードを入力" }),
+    page.getByRole("heading", { name: "認証コードを入力" }),
   ).toBeVisible();
+  await expect(page.getByText("迷惑メールフォルダ")).toBeVisible();
 
   const resetEmailHtml = await getOtpEmailHtmlFromMailpit(email);
   expect(resetEmailHtml).toContain("AIMS");

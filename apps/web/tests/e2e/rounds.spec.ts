@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "確認コードを送信" }).click();
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
 
   const code = await getOtpCodeFromMailpit(email);
   await page.getByPlaceholder("123456").fill(code);
