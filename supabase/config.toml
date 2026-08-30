@@ -428,8 +428,8 @@ enabled = true
 project_id = "lsqbiaosjkcwntewjhzv"
 
 [remotes.production.auth]
-site_url = "https://aims-archery.vercel.app"
-additional_redirect_urls = ["https://aims-archery.vercel.app/**"]
+site_url = "https://aims-archery.com"
+additional_redirect_urls = ["https://aims-archery.com/**"]
 
 [remotes.production.storage]
 enabled = true
@@ -441,7 +441,7 @@ enabled = true
 project_id = "ywrkmawovwceedzzhgwk"
 
 [remotes.preview.auth]
-site_url = "https://aims-archery.vercel.app"
+site_url = "https://aims-archery.com"
 additional_redirect_urls = ["https://*-yuki-ab8c.vercel.app/**"]
 
 [remotes.preview.storage]
