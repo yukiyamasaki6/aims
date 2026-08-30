@@ -116,6 +116,9 @@ export default function ResetPasswordPage() {
           />
           <Button type="submit">確認</Button>
         </form>
+        <p className="text-muted-foreground text-sm">
+          メールが届かない場合は、迷惑メールフォルダもご確認ください。
+        </p>
         {error && <p className="text-destructive text-sm">{error}</p>}
         <SignInLink />
       </AuthCard>

@@ -67,6 +67,7 @@ test("ユーザBがサインアップできる", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "確認コードを入力" }),
   ).toBeVisible();
+  await expect(page.getByText("迷惑メールフォルダ")).toBeVisible();
 
   const code = await getOtpCodeFromMailpit(email);
   await page.getByPlaceholder("123456").fill(code);

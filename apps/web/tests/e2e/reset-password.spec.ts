@@ -34,6 +34,7 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
   await expect(
     page.getByRole("heading", { name: "確認コードを入力" }),
   ).toBeVisible();
+  await expect(page.getByText("迷惑メールフォルダ")).toBeVisible();
 
   const resetEmailHtml = await getOtpEmailHtmlFromMailpit(email);
   expect(resetEmailHtml).toContain("AIMS");
