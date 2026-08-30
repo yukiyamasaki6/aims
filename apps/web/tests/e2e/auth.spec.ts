@@ -146,6 +146,8 @@ test("認証コード送信後に未確認のまま再度アクセスしても�
   ).toBeVisible();
 
   // コードを未確認のまま画面を離れ、同じメールアドレスで再度送信する。
+  // max_frequency（1秒）に引っかからないよう、間隔を空けてから送信する。
+  await page.waitForTimeout(1500);
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByRole("button", { name: "認証コードを送信" }).click();
