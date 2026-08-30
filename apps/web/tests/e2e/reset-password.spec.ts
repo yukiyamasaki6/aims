@@ -63,3 +63,26 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
     page.getByRole("button", { name: "サインアウト" }),
   ).toBeVisible();
 });
+
+test("パスワード再設定の認証コード入力画面で、再送はクールダウン中で戻るボタンが使える", async ({
+  page,
+}) => {
+  const email = `reset-target-b-${Date.now()}@aims.test`;
+
+  await page.goto("/reset-password");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+  await expect(
+    page.getByRole("heading", { name: "認証コードを入力" }),
+  ).toBeVisible();
+
+  const resendButton = page.getByRole("button", { name: /^再送/ });
+  await expect(resendButton).toBeDisabled();
+  await expect(page.getByText(/再送（\d+秒）/)).toBeVisible();
+
+  await page.getByRole("button", { name: "戻る" }).click();
+  await expect(
+    page.getByRole("heading", { name: "パスワードを再設定" }),
+  ).toBeVisible();
+  await expect(page.getByPlaceholder("you@example.com")).toHaveValue(email);
+});

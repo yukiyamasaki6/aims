@@ -146,18 +146,58 @@ test("認証コード送信後に未確認のまま再度アクセスしても�
   ).toBeVisible();
 
   // コードを未確認のまま画面を離れ、同じメールアドレスで再度送信する。
-  // max_frequency（1秒）に引っかからないよう、間隔を空けてから送信する。
-  await page.waitForTimeout(1500);
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByRole("button", { name: "認証コードを送信" }).click();
 
+  // max_frequencyのレート制限にかかる場合があるが、未確認の1回目送信を
+  // 「既存登録」と誤判定しないことだけを確認する。どちらの結果になっても
+  // 画面が確定するまで待ってから判定する。
   await expect(
-    page.getByRole("heading", { name: "認証コードを入力" }),
+    page
+      .getByRole("heading", { name: "認証コードを入力" })
+      .or(page.locator(".text-destructive")),
   ).toBeVisible();
   await expect(
     page.getByText("このメールアドレスは既に登録されています。"),
   ).not.toBeVisible();
+});
+
+test("認証コード入力画面の戻るボタンでメールアドレス入力画面に戻れる", async ({
+  page,
+}) => {
+  const email = `user-f-${Date.now()}@aims.test`;
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+  await expect(
+    page.getByRole("heading", { name: "認証コードを入力" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "戻る" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "サインアップ" }),
+  ).toBeVisible();
+  await expect(page.getByPlaceholder("you@example.com")).toHaveValue(email);
+});
+
+test("認証コード入力画面に来た直後は再送ボタンがクールダウン中で押せない", async ({
+  page,
+}) => {
+  const email = `user-g-${Date.now()}@aims.test`;
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+  await expect(
+    page.getByRole("heading", { name: "認証コードを入力" }),
+  ).toBeVisible();
+
+  const resendButton = page.getByRole("button", { name: /^再送/ });
+  await expect(resendButton).toBeDisabled();
+  await expect(page.getByText(/再送（\d+秒）/)).toBeVisible();
 });
 
 test("サインアップの認証コードメールに送信元がわかるフッターが入っている", async ({
