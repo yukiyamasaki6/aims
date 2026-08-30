@@ -49,7 +49,7 @@ export default function SignInPage() {
         />
         <Button type="submit">サインイン</Button>
       </form>
-      {error && <p className="text-destructive text-sm">{error}</p>}
+      {error && <p className="text-center text-destructive text-sm">{error}</p>}
       <p className="text-muted-foreground text-sm">
         <Link href="/reset-password" className="underline">
           パスワードをお忘れですか

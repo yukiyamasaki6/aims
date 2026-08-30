@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { AuthCard } from "@/components/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,31 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [step, setStep] = useState<"email" | "code" | "password">("email");
   const [error, setError] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown === 0) return;
+    const timer = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
+  function handleBack() {
+    setStep("email");
+    setCode("");
+    setError(null);
+  }
+
+  async function handleResend() {
+    setError(null);
+    setResendCooldown(60);
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+
+    if (error) {
+      setError(translateAuthErrorMessage(error));
+    }
+  }
 
   async function handleSendCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -34,6 +59,7 @@ export default function ResetPasswordPage() {
     if (error) {
       setError(translateAuthErrorMessage(error));
     } else {
+      setResendCooldown(60);
       setStep("code");
     }
   }
@@ -90,7 +116,9 @@ export default function ResetPasswordPage() {
           />
           <Button type="submit">パスワードを変更</Button>
         </form>
-        {error && <p className="text-destructive text-sm">{error}</p>}
+        {error && (
+          <p className="text-center text-destructive text-sm">{error}</p>
+        )}
         <SignInLink />
       </AuthCard>
     );
@@ -101,6 +129,7 @@ export default function ResetPasswordPage() {
       <AuthCard
         title="認証コードを入力"
         description={`${email} に送信されたコードを入力してください。`}
+        onBack={handleBack}
       >
         <form
           onSubmit={handleVerifyCode}
@@ -117,11 +146,21 @@ export default function ResetPasswordPage() {
           />
           <Button type="submit">確認</Button>
         </form>
+        {error && (
+          <p className="text-center text-destructive text-sm">{error}</p>
+        )}
         <p className="text-center text-muted-foreground text-sm">
           メールが届かない場合は、迷惑メールフォルダをご確認ください。
         </p>
-        {error && <p className="text-destructive text-sm">{error}</p>}
-        <SignInLink />
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          disabled={resendCooldown > 0}
+          onClick={handleResend}
+        >
+          {resendCooldown > 0 ? `再送（${resendCooldown}秒）` : "再送"}
+        </Button>
       </AuthCard>
     );
   }
@@ -138,7 +177,7 @@ export default function ResetPasswordPage() {
         />
         <Button type="submit">認証コードを送信</Button>
       </form>
-      {error && <p className="text-destructive text-sm">{error}</p>}
+      {error && <p className="text-center text-destructive text-sm">{error}</p>}
       <SignInLink />
     </AuthCard>
   );
