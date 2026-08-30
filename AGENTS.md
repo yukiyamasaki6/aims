@@ -39,8 +39,7 @@
 - **Iterate in dialogue:** Revise tests and implementation together until both strictly align with the confirmed intent.
 
 ## 5. Issue → PR Workflow
-- **Issue Hierarchy:** Decompose milestones into Epics by feature area. Decompose Epics into sub-issues by PR unit (1 sub-issue = 1 PR). Never split one PR across sub-issues; never bundle multiple PRs into one.
-- **Milestone on Creation:** Set the milestone at issue creation, matching the parent Epic exactly. Use `gh issue create --milestone <title>`; for closed milestones use `-F milestone=<number>` via the REST API (`gh issue edit --milestone` cannot resolve closed milestones by name).
+- **Issue Filing:** File every issue from the template. Split into an Epic with sub-issues only when the work spans multiple PRs. Always set the milestone.
 - **Environment & PATH:** Verify `gh` is on PATH (`where.exe gh`); if not, prepend `$env:Path += ";C:\Program Files\GitHub CLI"`.
 - **Clean Staging:** Run `git status` before branching or committing. Stage only files related to the current issue.
 - **Check Existing Files:** Run `git status` and `git log -- <path>` before creating a file, to avoid overwriting merged work.
