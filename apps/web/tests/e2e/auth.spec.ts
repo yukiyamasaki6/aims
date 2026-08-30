@@ -58,8 +58,12 @@ test("ユーザAがサインインし、サインアウトできる", async ({ p
 });
 
 test("パスワードを間違えると日本語のエラーが表示される", async ({ page }) => {
+  // Supabaseは存在有無を区別せず同じエラーを返すため、実在するアカウント
+  // （user-a等）を使う必要はなく、並列実行時の競合を避けられる。
+  const email = `user-j-${Date.now()}@aims.test`;
+
   await page.goto("/signin");
-  await page.getByPlaceholder("you@example.com").fill("user-a@aims.test");
+  await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByPlaceholder("パスワード").fill("wrong-password");
   await page.getByRole("button", { name: "サインイン" }).click();
 
@@ -117,8 +121,28 @@ test("認証コードを間違えると日本語のエラーが表示される",
 test("既存アカウントのメールアドレスでサインアップすると、登録済みの案内が表示されパスワードは変わらない", async ({
   page,
 }) => {
+  // 共有のシードユーザー（user-a等）を使うと並列実行中の他テストと競合する
+  // ため、このテスト専用のアカウントを都度作成してから検証する。
+  const email = `user-k-${Date.now()}@aims.test`;
+  const password = "password-k";
+
   await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill("user-a@aims.test");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+
+  const code = await getOtpCodeFromMailpit(email);
+  await page.getByPlaceholder("123456").fill(code);
+  await page.getByRole("button", { name: "確認" }).click();
+
+  await page.getByPlaceholder("パスワード（6文字以上）").fill(password);
+  await page.getByRole("button", { name: "登録してサインイン" }).click();
+  await expect(page).toHaveURL(/\/rounds/);
+
+  await page.getByRole("button", { name: "サインアウト" }).click();
+  await expect(page).toHaveURL(/\/signin/);
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByRole("button", { name: "認証コードを送信" }).click();
 
   await expect(
@@ -127,8 +151,8 @@ test("既存アカウントのメールアドレスでサインアップする�
   await page.getByRole("link", { name: "サインイン", exact: true }).click();
   await expect(page).toHaveURL(/\/signin/);
 
-  await page.getByPlaceholder("you@example.com").fill("user-a@aims.test");
-  await page.getByPlaceholder("パスワード").fill("password-a");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByPlaceholder("パスワード").fill(password);
   await page.getByRole("button", { name: "サインイン" }).click();
   await expect(page).toHaveURL(/\/rounds/);
 });
