@@ -57,6 +57,17 @@ test("ユーザAがサインインし、サインアウトできる", async ({ p
   await expect(page).toHaveURL(/\/signin/);
 });
 
+test("パスワードを間違えると日本語のエラーが表示される", async ({ page }) => {
+  await page.goto("/signin");
+  await page.getByPlaceholder("you@example.com").fill("user-a@aims.test");
+  await page.getByPlaceholder("パスワード").fill("wrong-password");
+  await page.getByRole("button", { name: "サインイン" }).click();
+
+  await expect(
+    page.getByText("メールアドレスまたはパスワードが間違っています。"),
+  ).toBeVisible();
+});
+
 test("ユーザBがサインアップできる", async ({ page }) => {
   const email = `user-b-${Date.now()}@aims.test`;
   const password = "password-b";
@@ -82,6 +93,24 @@ test("ユーザBがサインアップできる", async ({ page }) => {
   await expect(page).toHaveURL(/\/rounds/);
   await expect(
     page.getByRole("button", { name: "サインアウト" }),
+  ).toBeVisible();
+});
+
+test("認証コードを間違えると日本語のエラーが表示される", async ({ page }) => {
+  const email = `user-e-${Date.now()}@aims.test`;
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+  await expect(
+    page.getByRole("heading", { name: "認証コードを入力" }),
+  ).toBeVisible();
+
+  await page.getByPlaceholder("123456").fill("000000");
+  await page.getByRole("button", { name: "確認" }).click();
+
+  await expect(
+    page.getByText("認証コードが正しくないか、有効期限が切れています。"),
   ).toBeVisible();
 });
 

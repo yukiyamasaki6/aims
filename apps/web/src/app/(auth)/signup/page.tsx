@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { isEmailRegistered } from "@/lib/supabase/actions";
 import { createClient } from "@/lib/supabase/client";
+import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 
 const SignInLink = () => (
   <p className="text-muted-foreground text-sm">
@@ -38,7 +39,7 @@ export default function SignUpPage() {
     const { error } = await supabase.auth.signInWithOtp({ email });
 
     if (error) {
-      setError(error.message);
+      setError(translateAuthErrorMessage(error));
     } else {
       setStep("code");
     }
@@ -56,7 +57,7 @@ export default function SignUpPage() {
     });
 
     if (error) {
-      setError(error.message);
+      setError(translateAuthErrorMessage(error));
     } else {
       setStep("password");
     }
@@ -70,7 +71,7 @@ export default function SignUpPage() {
     const { error } = await supabase.auth.updateUser({ password });
 
     if (error) {
-      setError(error.message);
+      setError(translateAuthErrorMessage(error));
     } else {
       window.location.assign("/rounds");
     }

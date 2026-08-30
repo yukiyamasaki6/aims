@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { createClient } from "@/lib/supabase/client";
+import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
@@ -24,7 +25,7 @@ export default function SignInPage() {
     });
 
     if (error) {
-      setError(error.message);
+      setError(translateAuthErrorMessage(error));
     } else {
       window.location.assign("/rounds");
     }

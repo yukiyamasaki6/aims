@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { createClient } from "@/lib/supabase/client";
+import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 
 const SignInLink = () => (
   <p className="text-muted-foreground text-sm">
@@ -31,7 +32,7 @@ export default function ResetPasswordPage() {
     const { error } = await supabase.auth.resetPasswordForEmail(email);
 
     if (error) {
-      setError(error.message);
+      setError(translateAuthErrorMessage(error));
     } else {
       setStep("code");
     }
@@ -49,7 +50,7 @@ export default function ResetPasswordPage() {
     });
 
     if (error) {
-      setError(error.message);
+      setError(translateAuthErrorMessage(error));
     } else {
       setStep("password");
     }
@@ -63,7 +64,7 @@ export default function ResetPasswordPage() {
     const { error } = await supabase.auth.updateUser({ password });
 
     if (error) {
-      setError(error.message);
+      setError(translateAuthErrorMessage(error));
     } else {
       await supabase.auth.signOut();
       window.location.assign("/signin");
