@@ -10,7 +10,7 @@ test("作成したラウンドが一覧に合計点付きで表示され、ク�
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "確認コードを送信" }).click();
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
 
   const code = await getOtpCodeFromMailpit(email);
   await page.getByPlaceholder("123456").fill(code);
@@ -47,7 +47,7 @@ test("新規作成ボタンをタップすると/rounds/newへ遷移する", asy
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "確認コードを送信" }).click();
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
 
   const code = await getOtpCodeFromMailpit(email);
   await page.getByPlaceholder("123456").fill(code);

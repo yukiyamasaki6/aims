@@ -98,8 +98,8 @@ export default function ResetPasswordPage() {
   if (step === "code") {
     return (
       <AuthCard
-        title="確認コードを入力"
-        description={`${email} に送信された確認コードを入力してください。`}
+        title="認証コードを入力"
+        description={`${email} に送信されたコードを入力してください。`}
       >
         <form
           onSubmit={handleVerifyCode}
@@ -116,8 +116,8 @@ export default function ResetPasswordPage() {
           />
           <Button type="submit">確認</Button>
         </form>
-        <p className="text-muted-foreground text-sm">
-          メールが届かない場合は、迷惑メールフォルダもご確認ください。
+        <p className="text-center text-muted-foreground text-sm">
+          メールが届かない場合は、迷惑メールフォルダをご確認ください。
         </p>
         {error && <p className="text-destructive text-sm">{error}</p>}
         <SignInLink />
@@ -135,7 +135,7 @@ export default function ResetPasswordPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
-        <Button type="submit">確認コードを送信</Button>
+        <Button type="submit">認証コードを送信</Button>
       </form>
       {error && <p className="text-destructive text-sm">{error}</p>}
       <SignInLink />
