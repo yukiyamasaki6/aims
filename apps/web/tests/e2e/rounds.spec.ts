@@ -101,6 +101,41 @@ test("個人のプリセットが無い場合はプレースホルダーが表�
   await expect(page.getByText("公式プリセット")).toBeVisible();
 });
 
+test("カスタムで開始したラウンドの弓種をベアボウに変更できる（作成直後は選択肢を持たない唯一の弓種）", async ({
+  page,
+}) => {
+  // 公式プリセットは全てrecurve（アウトドア6種・インドア2種）で、「カスタムで
+  // 開始」もrecurve固定で作成される（createCustomRound参照）。そのため
+  // /rounds/newの選択肢だけではbarebow（ベアボウ）のラウンドを作ることが
+  // できず、作成後にラウンド設定パネルでbow_typeを変更する必要がある。
+  // この「作成→設定変更」という一連の流れ、かつbarebow自体を選ぶケースは、
+  // これまでどのE2Eテストも通していなかった（round-config-panel.spec.tsの
+  // 弓種変更テストはcompoundのみを検証し、かつAPI経由で作成した固定データ
+  // から始まる）。
+  //
+  // ユーザー状態: 認証済み・個人プリセット無し。/rounds/newで選べる選択肢は
+  // 「公式プリセット（recurve固定）」または「カスタムで開始（recurve固定）」の
+  // いずれか。ここでは後者を選ぶ。
+  await page.goto("/rounds/new");
+  await page.getByTestId("round-start-button").click();
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+
+  // ユーザー状態: 作成直後のラウンド詳細画面。弓種はrecurve（デフォルト）。
+  // 選択肢: ラウンド設定を展開し、種別（アウトドア/インドア/フィールド）・
+  // 弓種（リカーブ/コンパウンド/ベアボウ）を変更できる。ここではベアボウを選ぶ。
+  await page.getByTestId("round-config-summary").click();
+  await page.getByTestId("round-config-bow-type-barebow").click();
+  await page.getByTestId("round-config-save").click();
+
+  const summary = page.getByTestId("round-config-summary");
+  await expect(summary).toContainText("ベアボウ");
+
+  await page.reload();
+  await expect(page.getByTestId("round-config-summary")).toContainText(
+    "ベアボウ",
+  );
+});
+
 test("/rounds/newから一覧へ戻るリンクで/roundsへ遷移する", async ({ page }) => {
   await page.goto("/rounds/new");
 

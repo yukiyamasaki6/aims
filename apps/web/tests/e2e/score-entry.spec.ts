@@ -411,3 +411,41 @@ test("新たな入力を行うとredo履歴が無効になる", async ({ page })
   await page.getByTestId("score-button-9").click();
   await expect(page.getByTestId("score-button-redo")).toBeDisabled();
 });
+
+test("コンパウンド弓種×インドアの的でスコア入力できる（Xを持たず10が最高点）", async ({
+  page,
+}) => {
+  // round-config-panel.spec.tsでbowType=compoundへの変更は検証済みだが、
+  // compound弓種のラウンドでコンパウンド専用の的（issue #163でformat=indoorに
+  // 追加）を実際に選び、スコア入力まで到達する組み合わせはこれまでどの
+  // E2Eテストも検証していなかった。インドアの的はリカーブ/ベアボウ用・
+  // コンパウンド用のいずれもXという区分を持たない（最高得点帯は常に10）ため、
+  // ここではその前提が実際のスコア入力画面に反映されていることを確認する。
+  // 得点入力はテンキー（自己申告のスコア値ボタン）方式で、的上の座標クリックでは
+  // ないため、リカーブ用とコンパウンド用の的の違い（得点帯の半径の閾値）自体は
+  // このUIからは観測できない。
+  const roundId = await createRoundViaApi(page, {
+    name: "コンパウンド弓種テスト",
+    roundDate: "2026-08-24",
+    format: "indoor",
+    bowType: "compound",
+    distances: [
+      {
+        distance: 18,
+        totalEnds: 1,
+        arrowsPerEnd: 1,
+        targetFaceId: "b1000000-0000-0000-0000-000000000002", // Indoor 40cm Compound
+      },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await expect(page.getByTestId("score-button-X")).toHaveCount(0);
+  await expect(page.getByTestId("score-button-10")).toBeVisible();
+
+  await page.getByTestId("score-button-10").click();
+
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("10");
+  await expect(page.getByTestId("round-summary")).toContainText("合計10");
+  await expect(page.getByTestId("round-summary")).toContainText("X: 0 / 10: 1");
+});
