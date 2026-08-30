@@ -85,6 +85,25 @@ test("ユーザBがサインアップできる", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("既存アカウントのメールアドレスでサインアップすると、登録済みの案内が表示されパスワードは変わらない", async ({
+  page,
+}) => {
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill("user-a@aims.test");
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+
+  await expect(
+    page.getByText("このメールアドレスは既に登録されています。"),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "サインイン", exact: true }).click();
+  await expect(page).toHaveURL(/\/signin/);
+
+  await page.getByPlaceholder("you@example.com").fill("user-a@aims.test");
+  await page.getByPlaceholder("パスワード").fill("password-a");
+  await page.getByRole("button", { name: "サインイン" }).click();
+  await expect(page).toHaveURL(/\/rounds/);
+});
+
 test("サインアップの認証コードメールに送信元がわかるフッターが入っている", async ({
   page,
 }) => {

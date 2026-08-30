@@ -6,6 +6,7 @@ import { AuthCard } from "@/components/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { isEmailRegistered } from "@/lib/supabase/actions";
 import { createClient } from "@/lib/supabase/client";
 
 const SignInLink = () => (
@@ -27,6 +28,11 @@ export default function SignUpPage() {
   async function handleSendCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+
+    if (await isEmailRegistered(email)) {
+      setError("このメールアドレスは既に登録されています。");
+      return;
+    }
 
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({ email });

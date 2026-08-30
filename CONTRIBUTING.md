@@ -49,6 +49,7 @@ aims/
     ```bash
     cp apps/web/.env.example apps/web/.env.local
     ```
+5. Start the local Supabase environment (see [Managing Local Supabase](#managing-local-supabase)) and fill in `apps/web/.env.local` with the values from `supabase status`.
 
 ### Using an AI Coding Agent (Optional)
 
