@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { getOtpCodeFromMailpit } from "./helpers/mailpit";
+import {
+  getOtpCodeFromMailpit,
+  getOtpEmailHtmlFromMailpit,
+} from "./helpers/mailpit";
 
 test("/signinからパスワードを再設定し、新しいパスワードでサインインできる", async ({
   page,
@@ -31,6 +34,10 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
   await expect(
     page.getByRole("heading", { name: "確認コードを入力" }),
   ).toBeVisible();
+
+  const resetEmailHtml = await getOtpEmailHtmlFromMailpit(email);
+  expect(resetEmailHtml).toContain("AIMS");
+  expect(resetEmailHtml).toContain("aims-archery.com");
 
   const resetCode = await getOtpCodeFromMailpit(email);
   await page.getByPlaceholder("123456").fill(resetCode);

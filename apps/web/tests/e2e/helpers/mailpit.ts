@@ -1,6 +1,6 @@
 const MAILPIT_URL = "http://127.0.0.1:54324";
 
-export async function getOtpCodeFromMailpit(email: string): Promise<string> {
+async function findOtpEmailHtml(email: string): Promise<string> {
   for (let i = 0; i < 20; i++) {
     const listRes = await fetch(
       `${MAILPIT_URL}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`,
@@ -13,10 +13,9 @@ export async function getOtpCodeFromMailpit(email: string): Promise<string> {
         `${MAILPIT_URL}/api/v1/message/${found.ID}`,
       );
       const detail = await detailRes.json();
-      const match = /(\d{6})/.exec(detail.HTML);
 
-      if (match) {
-        return match[1];
+      if (/\d{6}/.test(detail.HTML)) {
+        return detail.HTML;
       }
     }
 
@@ -24,4 +23,21 @@ export async function getOtpCodeFromMailpit(email: string): Promise<string> {
   }
 
   throw new Error(`OTP code email not found for ${email}`);
+}
+
+export async function getOtpCodeFromMailpit(email: string): Promise<string> {
+  const html = await findOtpEmailHtml(email);
+  const match = /(\d{6})/.exec(html);
+
+  if (!match) {
+    throw new Error(`OTP code email not found for ${email}`);
+  }
+
+  return match[1];
+}
+
+export async function getOtpEmailHtmlFromMailpit(
+  email: string,
+): Promise<string> {
+  return findOtpEmailHtml(email);
 }
