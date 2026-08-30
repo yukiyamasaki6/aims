@@ -231,7 +231,7 @@ max_frequency = "1s"
 # Number of characters used in the email OTP.
 otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
-otp_expiry = 3600
+otp_expiry = 900
 
 # Use a production-ready SMTP server
 # [auth.email.smtp]
@@ -250,12 +250,12 @@ otp_expiry = 3600
 
 # マジックリンクではなく確認コード(OTP)でサインインするため、コードを表示するテンプレートに差し替える。
 [auth.email.template.magic_link]
-subject = "サインイン確認コード"
+subject = "AIMS メールアドレス認証"
 content_path = "./supabase/templates/otp.html"
 
 # パスワード再設定もリンクではなく確認コード(OTP)で行うため、コードを表示するテンプレートに差し替える。
 [auth.email.template.recovery]
-subject = "パスワード再設定確認コード"
+subject = "AIMS パスワード再設定"
 content_path = "./supabase/templates/reset-password-otp.html"
 
 # Uncomment to customize notification email template

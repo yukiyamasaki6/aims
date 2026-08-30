@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { getOtpCodeFromMailpit } from "./helpers/mailpit";
+import {
+  getOtpCodeFromMailpit,
+  getOtpEmailHtmlFromMailpit,
+} from "./helpers/mailpit";
 
 test("未認証で/roundsにアクセスすると/signinにリダイレクトされる", async ({
   page,
@@ -79,4 +82,19 @@ test("ユーザBがサインアップできる", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "サインアウト" }),
   ).toBeVisible();
+});
+
+test("サインアップの確認コードメールに送信元がわかるフッターが入っている", async ({
+  page,
+}) => {
+  const email = `user-d-${Date.now()}@aims.test`;
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "確認コードを送信" }).click();
+
+  const html = await getOtpEmailHtmlFromMailpit(email);
+
+  expect(html).toContain("AIMS");
+  expect(html).toContain("aims-archery.com");
 });
