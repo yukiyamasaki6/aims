@@ -252,7 +252,7 @@ jobs:
         run: pnpm build
 
       - name: Run E2E Tests
-        run: pnpm --filter web test:e2e -- --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+        run: pnpm --filter web exec playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
 
       - name: Stop local Supabase
         if: always()
