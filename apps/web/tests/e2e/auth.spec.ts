@@ -133,6 +133,33 @@ test("既存アカウントのメールアドレスでサインアップする�
   await expect(page).toHaveURL(/\/rounds/);
 });
 
+test("認証コード送信後に未確認のまま再度アクセスしても、既存登録扱いにならない", async ({
+  page,
+}) => {
+  const email = `user-h-${Date.now()}@aims.test`;
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+  await expect(
+    page.getByRole("heading", { name: "認証コードを入力" }),
+  ).toBeVisible();
+
+  // コードを未確認のまま画面を離れ、同じメールアドレスで再度送信する。
+  // max_frequency（1秒）に引っかからないよう、間隔を空けてから送信する。
+  await page.waitForTimeout(1500);
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "認証コードを入力" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("このメールアドレスは既に登録されています。"),
+  ).not.toBeVisible();
+});
+
 test("サインアップの認証コードメールに送信元がわかるフッターが入っている", async ({
   page,
 }) => {

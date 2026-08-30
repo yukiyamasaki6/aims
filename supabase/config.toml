@@ -223,7 +223,7 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
@@ -247,6 +247,12 @@ otp_expiry = 900
 # [auth.email.template.invite]
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
+
+# enable_confirmations = trueにより新規メールのsignInWithOtpはこちらを使う
+# （magic_linkは既に確認済みの既存ユーザーへのサインインで使われる）。
+[auth.email.template.confirmation]
+subject = "AIMS メールアドレス認証"
+content_path = "./supabase/templates/otp.html"
 
 # マジックリンクではなく認証コード(OTP)でサインインするため、コードを表示するテンプレートに差し替える。
 [auth.email.template.magic_link]
