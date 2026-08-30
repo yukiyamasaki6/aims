@@ -128,11 +128,11 @@ gh auth login
 
 ## Creating issues
 
-We utilize a structured hierarchy to manage development tasks efficiently.
 You can use both **English** and **Japanese** for issue titles and descriptions.
+Every issue uses the [Create Issue template](.github/ISSUE_TEMPLATE/issue.md) and is attached directly to its milestone.
 
 ### Epic (Parent Issue)
-Fill out the Epic issue description using the [📦 Create Epic template](.github/ISSUE_TEMPLATE/epic.md).
+Add the `Type: Epic` label only when a feature needs multiple PRs — never for unrelated issues sharing just a topic.
 
 ### Sub-issue (Child Issue)
-No template required. Create directly from the parent issue page using the "Create sub-issue" button.
+No template. Create from the parent Epic's issue page using the "Create sub-issue" button.
