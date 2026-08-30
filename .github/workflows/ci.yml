@@ -157,9 +157,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Setup environment variables
-        run: cp apps/web/.env.example apps/web/.env.local
-
       - name: Get installed Playwright version
         id: playwright-version
         run: echo "version=$(node -e "console.log(require('./apps/web/node_modules/@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
@@ -194,6 +191,15 @@ jobs:
 
       - name: Start local Supabase
         run: supabase start
+
+      - name: Setup environment variables
+        run: |
+          eval "$(supabase status -o env)"
+          cat <<EOF > apps/web/.env.local
+          NEXT_PUBLIC_SUPABASE_URL=$API_URL
+          NEXT_PUBLIC_SUPABASE_ANON_KEY=$PUBLISHABLE_KEY
+          SUPABASE_SECRET_KEY=$SECRET_KEY
+          EOF
 
       - name: Apply migrations and seed data
         run: supabase db reset
