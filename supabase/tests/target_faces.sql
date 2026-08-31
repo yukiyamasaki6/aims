@@ -1,6 +1,6 @@
 begin;
 
-select plan(37);
+select plan(43);
 
 select has_table('public', 'target_faces', 'target_faces テーブルが存在する');
 select has_table('public', 'target_face_spots', 'target_face_spots テーブルが存在する');
@@ -189,6 +189,13 @@ select results_eq(
   'Indoor 60cm Vertical 3-spot Compoundも3スポットを持つ'
 );
 
+select throws_ok(
+  $$delete from public.target_faces where id = 'a1000000-0000-0000-0000-000000000001'$$,
+  '23503',
+  null,
+  '参照中のtarget_faceは外部キー制約で削除できない'
+);
+
 -- Fixture: two users. RLS挙動を確認する。
 insert into auth.users (id) values ('11111111-1111-1111-1111-111111111111');
 insert into auth.users (id) values ('99999999-9999-9999-9999-999999999999');
@@ -201,6 +208,22 @@ select lives_ok(
   $$insert into public.target_faces (id, owner_id, name, size, format)
     values ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'My Target', 80, 'outdoor')$$,
   'ユーザーは自分のowner_idで的を作成できる'
+);
+
+select throws_ok(
+  $$insert into public.target_faces (owner_id, name, format)
+    values ('11111111-1111-1111-1111-111111111111', 'Missing Size', 'outdoor')$$,
+  '23502',
+  null,
+  'target_faces.sizeを省略した作成はNOT NULL制約で拒否される'
+);
+
+select throws_ok(
+  $$insert into public.target_faces (owner_id, name, size)
+    values ('11111111-1111-1111-1111-111111111111', 'Missing Format', 80)$$,
+  '23502',
+  null,
+  'target_faces.formatを省略した作成はNOT NULL制約で拒否される'
 );
 
 select throws_like(
@@ -238,6 +261,13 @@ select is_empty(
   '他ユーザーは自分が所有しない的を更新できない（0件更新）'
 );
 
+select is_empty(
+  $$delete from public.target_faces
+    where id = '22222222-2222-2222-2222-222222222222'
+    returning id$$,
+  '他ユーザーは自分が所有しない的を削除できない（0件削除）'
+);
+
 -- User A: 自分の的にスポット・点数帯を追加でき、削除もできる（子テーブルは親のowner_idに従う）。
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 select lives_ok(
@@ -252,6 +282,14 @@ select lives_ok(
   '所有者は自分の的のスポットに点数帯を追加できる（境界線なしも許容される）'
 );
 
+select throws_ok(
+  $$insert into public.target_face_rings (spot_id, radius, color, line_color, z_index, score_str, score_int)
+    values ('33333333-3333-3333-3333-333333333333', 5.0, '#FFFFFF', null, 1, '9', 9)$$,
+  '23505',
+  null,
+  '同一(spot_id, z_index)の重複挿入は一意制約で拒否される'
+);
+
 select lives_ok(
   $$delete from public.target_faces where id = '22222222-2222-2222-2222-222222222222'$$,
   '所有者は自分の的を削除できる'
@@ -260,7 +298,13 @@ select lives_ok(
 select results_eq(
   $$select count(*) from public.target_face_spots where target_face_id = '22222222-2222-2222-2222-222222222222'$$,
   $$values (0::bigint)$$,
-  '的の削除でスポット・点数帯もカスケード削除される'
+  '的の削除でスポットがカスケード削除される'
+);
+
+select results_eq(
+  $$select count(*) from public.target_face_rings where spot_id = '33333333-3333-3333-3333-333333333333'$$,
+  $$values (0::bigint)$$,
+  '的の削除で点数帯もカスケード削除される（スポット経由の多段カスケード）'
 );
 
 select * from finish();
