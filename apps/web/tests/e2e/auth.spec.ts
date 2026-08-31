@@ -23,8 +23,8 @@ test("未認証で/にアクセスすると/signinにリダイレクトされる
 test("認証済みで/にアクセスすると/roundsにリダイレクトされる", async ({
   page,
 }) => {
-  const email = `user-c-${Date.now()}@aims.test`;
-  const password = "password-c";
+  const email = `signed-in-redirect-${Date.now()}@aims.test`;
+  const password = "password";
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
@@ -43,10 +43,30 @@ test("認証済みで/にアクセスすると/roundsにリダイレクトされ
   await expect(page).toHaveURL(/\/rounds/);
 });
 
-test("ユーザAがサインインし、サインアウトできる", async ({ page }) => {
-  await page.goto("/signin");
-  await page.getByPlaceholder("you@example.com").fill("user-a@aims.test");
-  await page.getByPlaceholder("パスワード").fill("password-a");
+test("サインインし、サインアウトできる", async ({ page }) => {
+  // user@aims.testは人間が手動で動作確認する専用のアカウントで、E2Eでは
+  // 使わない。ここでは専用の使い捨てアカウントを都度作成し、サインアップ直後の
+  // 自動サインインではなく/signinからの明示的なサインインを検証する。
+  const email = `signin-signout-${Date.now()}@aims.test`;
+  const password = "password";
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+
+  const code = await getOtpCodeFromMailpit(email);
+  await page.getByPlaceholder("123456").fill(code);
+  await page.getByRole("button", { name: "確認" }).click();
+
+  await page.getByPlaceholder("パスワード（6文字以上）").fill(password);
+  await page.getByRole("button", { name: "登録してサインイン" }).click();
+  await expect(page).toHaveURL(/\/rounds/);
+
+  await page.getByRole("button", { name: "サインアウト" }).click();
+  await expect(page).toHaveURL(/\/signin/);
+
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByPlaceholder("パスワード").fill(password);
   await page.getByRole("button", { name: "サインイン" }).click();
   await expect(page).toHaveURL(/\/rounds/);
   await expect(
@@ -58,8 +78,12 @@ test("ユーザAがサインインし、サインアウトできる", async ({ p
 });
 
 test("パスワードを間違えると日本語のエラーが表示される", async ({ page }) => {
+  // Supabaseは存在有無を区別せず同じエラーを返すため、実在するアカウント
+  // を使う必要はなく、並列実行時の競合を避けられる。
+  const email = `wrong-password-${Date.now()}@aims.test`;
+
   await page.goto("/signin");
-  await page.getByPlaceholder("you@example.com").fill("user-a@aims.test");
+  await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByPlaceholder("パスワード").fill("wrong-password");
   await page.getByRole("button", { name: "サインイン" }).click();
 
@@ -68,9 +92,9 @@ test("パスワードを間違えると日本語のエラーが表示される",
   ).toBeVisible();
 });
 
-test("ユーザBがサインアップできる", async ({ page }) => {
-  const email = `user-b-${Date.now()}@aims.test`;
-  const password = "password-b";
+test("サインアップできる", async ({ page }) => {
+  const email = `signup-${Date.now()}@aims.test`;
+  const password = "password";
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
@@ -97,7 +121,7 @@ test("ユーザBがサインアップできる", async ({ page }) => {
 });
 
 test("認証コードを間違えると日本語のエラーが表示される", async ({ page }) => {
-  const email = `user-e-${Date.now()}@aims.test`;
+  const email = `wrong-otp-${Date.now()}@aims.test`;
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
@@ -117,8 +141,28 @@ test("認証コードを間違えると日本語のエラーが表示される",
 test("既存アカウントのメールアドレスでサインアップすると、登録済みの案内が表示されパスワードは変わらない", async ({
   page,
 }) => {
+  // 共有のシードユーザー（user@aims.test）を使うと並列実行中の他テストと
+  // 競合するため、このテスト専用のアカウントを都度作成してから検証する。
+  const email = `existing-account-${Date.now()}@aims.test`;
+  const password = "password";
+
   await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill("user-a@aims.test");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+
+  const code = await getOtpCodeFromMailpit(email);
+  await page.getByPlaceholder("123456").fill(code);
+  await page.getByRole("button", { name: "確認" }).click();
+
+  await page.getByPlaceholder("パスワード（6文字以上）").fill(password);
+  await page.getByRole("button", { name: "登録してサインイン" }).click();
+  await expect(page).toHaveURL(/\/rounds/);
+
+  await page.getByRole("button", { name: "サインアウト" }).click();
+  await expect(page).toHaveURL(/\/signin/);
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByRole("button", { name: "認証コードを送信" }).click();
 
   await expect(
@@ -127,8 +171,8 @@ test("既存アカウントのメールアドレスでサインアップする�
   await page.getByRole("link", { name: "サインイン", exact: true }).click();
   await expect(page).toHaveURL(/\/signin/);
 
-  await page.getByPlaceholder("you@example.com").fill("user-a@aims.test");
-  await page.getByPlaceholder("パスワード").fill("password-a");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByPlaceholder("パスワード").fill(password);
   await page.getByRole("button", { name: "サインイン" }).click();
   await expect(page).toHaveURL(/\/rounds/);
 });
@@ -136,7 +180,7 @@ test("既存アカウントのメールアドレスでサインアップする�
 test("認証コード送信後に未確認のまま再度アクセスしても、既存登録扱いにならない", async ({
   page,
 }) => {
-  const email = `user-h-${Date.now()}@aims.test`;
+  const email = `unconfirmed-resend-${Date.now()}@aims.test`;
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
@@ -166,7 +210,7 @@ test("認証コード送信後に未確認のまま再度アクセスしても�
 test("認証コード入力画面の戻るボタンでメールアドレス入力画面に戻れる", async ({
   page,
 }) => {
-  const email = `user-f-${Date.now()}@aims.test`;
+  const email = `signup-back-button-${Date.now()}@aims.test`;
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
@@ -186,7 +230,7 @@ test("認証コード入力画面の戻るボタンでメールアドレス入�
 test("認証コード入力画面に来た直後は再送ボタンがクールダウン中で押せない", async ({
   page,
 }) => {
-  const email = `user-g-${Date.now()}@aims.test`;
+  const email = `resend-cooldown-${Date.now()}@aims.test`;
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
@@ -203,7 +247,7 @@ test("認証コード入力画面に来た直後は再送ボタンがクール�
 test("サインアップの認証コードメールに送信元がわかるフッターが入っている", async ({
   page,
 }) => {
-  const email = `user-d-${Date.now()}@aims.test`;
+  const email = `otp-email-footer-${Date.now()}@aims.test`;
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);

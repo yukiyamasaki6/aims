@@ -6,8 +6,7 @@ import { AuthCard } from "@/components/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
-import { createClient } from "@/lib/supabase/client";
-import { translateAuthErrorMessage } from "@/lib/supabase/errors";
+import { signIn } from "@/lib/supabase/actions";
 
 export default function SignInPage() {
   const [email, setEmail] = useState("");
@@ -18,16 +17,10 @@ export default function SignInPage() {
     e.preventDefault();
     setError(null);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const result = await signIn(email, password);
 
-    if (error) {
-      setError(translateAuthErrorMessage(error));
-    } else {
-      window.location.assign("/rounds");
+    if (result?.error) {
+      setError(result.error);
     }
   }
 
