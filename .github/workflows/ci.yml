@@ -137,7 +137,7 @@ jobs:
         run: pnpm test
 
   db-test:
-    name: DB Test (pgTAP)
+    name: pgTAP Test
     needs: changes
     if: needs.changes.outputs.web == 'true' || needs.changes.outputs.supabase == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
