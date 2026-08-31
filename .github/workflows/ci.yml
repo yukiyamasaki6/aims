@@ -136,55 +136,11 @@ jobs:
       - name: Run Unit Tests
         run: pnpm test
 
-  db-test:
-    name: pgTAP Test
-    needs: changes
-    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.supabase == 'true' || needs.changes.outputs.workflows == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: ".node-version"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: 2.115.0
-
-      - name: Start local Supabase
-        run: supabase start
-
-      - name: Apply migrations and seed data
-        run: supabase db reset
-
-      - name: Run pgTAP Tests
-        run: pnpm test:db
-
-      - name: Stop local Supabase
-        if: always()
-        run: supabase stop
-
   e2e-test:
-    name: E2E Test (Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
+    name: pgTAP and E2E Test
     needs: changes
     if: needs.changes.outputs.web == 'true' || needs.changes.outputs.supabase == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shardIndex: [1, 2, 3]
-        shardTotal: [3]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -248,11 +204,14 @@ jobs:
       - name: Apply migrations and seed data
         run: supabase db reset
 
+      - name: Run pgTAP Tests
+        run: pnpm test:db
+
       - name: Build
         run: pnpm build
 
       - name: Run E2E Tests
-        run: pnpm --filter web exec playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+        run: pnpm --filter web exec playwright test --workers=6
 
       - name: Stop local Supabase
         if: always()
