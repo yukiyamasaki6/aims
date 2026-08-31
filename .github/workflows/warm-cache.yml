@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  warm-playwright-cache:
-    name: Warm Playwright Cache
+  warm-caches:
+    name: Warm Caches
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
