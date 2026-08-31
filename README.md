@@ -41,7 +41,16 @@ Please read the [contribution guidelines](CONTRIBUTING.md) before contributing t
 
 ## Tech Stack
 
-- **Framework**: Next.js (TypeScript)
-- **BaaS**: Supabase (PostgreSQL)
-- **UI / Styling**: Tailwind CSS, shadcn/ui
-- **Hosting**: Vercel
+| Category | Technology | Key Rationale |
+| :--- | :--- | :--- |
+| **Application** | Next.js (TypeScript) | Full-stack type safety without separate native apps |
+| | Supabase (PostgreSQL) | Advanced SQL analytics, built-in Auth, and RLS |
+| | Tailwind CSS, shadcn/ui | Consistent styling suited for AI-assisted development |
+| **Infrastructure** | Vercel | Seamless Next.js deployment with automatic PR previews |
+| | Cloudflare | At-cost registrar and DNS managed in one dashboard |
+| | Resend | High deliverability and reliable Supabase Auth integration |
+| **Testing** | Vitest | Fast feedback loop for pure scoring & calculation logic |
+| | pgTAP | Direct validation of Row Level Security policies at DB layer |
+| | Playwright | E2E regression guardrail for critical user flows |
+| **Tooling** | pnpm | Strict dependency resolution with fast caching in CI / local |
+| | Biome | Ultra-fast linting acting as a guardrail for code consistency |
