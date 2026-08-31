@@ -34,6 +34,7 @@
 - **Confirm intent before coding:** Restate the user's objective in your own words (or ask clarifying questions if ambiguous) before writing any code or tests.
 - **Ground shared understanding in docs:** Before implementing, read and, when needed, edit relevant docs (`docs/*.md`, `README.md`, this file) with the user to establish shared understanding of the design before writing code.
 - **Write tests first:** Write tests asserting the intended user outcome before starting implementation.
+- **Match coverage to the test type:** Write a Vitest unit test for essentially every component with behavior. Audit pgTAP coverage across three axes — constraints, cross-table effects, and RLS policies. Audit E2E coverage by enumerating each screen's possible states and the actions available in each.
 - **Implement to satisfy tests:** Run tests, adjust implementation, and repeat until all tests pass.
 - **Do not force green:** If a test fails, determine whether the test misencodes intent or the code is wrong. Fix the root cause; never weaken assertions to pass tests.
 - **Iterate in dialogue:** Revise tests and implementation together until both strictly align with the confirmed intent.
