@@ -6,7 +6,10 @@ import { AuthCard } from "@/components/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
-import { isEmailRegistered } from "@/lib/supabase/actions";
+import {
+  isEmailRegistered,
+  setPassword as setPasswordAction,
+} from "@/lib/supabase/actions";
 import { createClient } from "@/lib/supabase/client";
 import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 
@@ -93,13 +96,10 @@ export default function SignUpPage() {
     e.preventDefault();
     setError(null);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({ password });
+    const result = await setPasswordAction(password);
 
-    if (error) {
-      setError(translateAuthErrorMessage(error));
-    } else {
-      window.location.assign("/rounds");
+    if (result?.error) {
+      setError(result.error);
     }
   }
 
