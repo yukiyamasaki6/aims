@@ -57,7 +57,11 @@ jobs:
             migrations:
               - 'supabase/migrations/**'
             supabase:
-              - 'supabase/**'
+              - 'supabase/migrations/**'
+              - 'supabase/tests/**'
+              - 'supabase/seed.sql'
+              - 'supabase/config.toml'
+              - 'supabase/templates/**'
             workflows:
               - '.github/workflows/**'
 
