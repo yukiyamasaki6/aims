@@ -163,11 +163,11 @@ create policy "delete_if_owner" on target_face_rings
 
 -- ============================================================
 -- Seed data (グローバル的。owner_id = null はマイグレーションでのみ作成する)
--- WAルールブックに基づく候補的一覧（docs/target-faces.md参照）。
+-- WAルールブックに基づく候補的一覧（supabase/docs/target-faces.md参照）。
 -- colorとline_colorはWAルールブックが定義する色（黄/赤/青/黒/白）をHEXで直接格納する。
 -- line_color = null は「境界線なし」（帯の色の変化のみで区切り、追加の線は印刷されない）。
 -- 3つ目（トライアングル/バーティカル）のスポット中心座標は実測の的中心間距離dに基づく
--- （下の各insert文の直前コメント参照。docs/target-faces.mdも参照）。
+-- （下の各insert文の直前コメント参照。supabase/docs/target-faces.mdも参照）。
 -- ============================================================
 
 insert into target_faces (id, owner_id, name) values

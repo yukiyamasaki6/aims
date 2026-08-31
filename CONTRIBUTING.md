@@ -19,7 +19,8 @@ aims/
 │           └── types/        # Type definitions, incl. the generated Supabase schema types
 ├── packages/             # Shared packages consumed by apps/* (currently empty)
 ├── supabase/             # Local Supabase config, database migrations, and snippets
-├── docs/                 # Project documentation (ERD, security notes, etc.)
+│   └── docs/              # Seed-data reference tied to specific migrations (target faces, round presets)
+├── docs/                 # Cross-cutting project documentation (ERD, security notes, etc.)
 └── .github/               # Issue templates and CI/CD workflows
 ```
 
