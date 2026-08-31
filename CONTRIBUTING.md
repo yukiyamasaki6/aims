@@ -10,18 +10,23 @@ AIMS is a [pnpm workspace](https://pnpm.io/workspaces) monorepo. See the [README
 
 ```
 aims/
+├── docs/          # Project documentation
 ├── apps/
-│   └── web/              # Next.js frontend
-│       └── src/
-│           ├── app/          # App Router pages
-│           ├── components/   # Reusable UI components (shadcn/ui-based)
-│           ├── lib/          # Client-side utilities, incl. the Supabase client
-│           └── types/        # Type definitions, incl. the generated Supabase schema types
-├── packages/             # Shared packages consumed by apps/* (currently empty)
-├── supabase/             # Local Supabase config, database migrations, and snippets
-│   └── docs/              # Seed-data reference tied to specific migrations (target faces, round presets)
-├── docs/                 # Cross-cutting project documentation (ERD, security notes, etc.)
-└── .github/               # Issue templates and CI/CD workflows
+│   └── web/           # Next.js frontend
+│       ├── src/
+│       │   ├── app/           # App Router pages
+│       │   ├── components/    # UI components (shadcn/ui)
+│       │   │   └── *.test.tsx     # Unit tests
+│       │   ├── lib/           # Client-side utilities
+│       │   └── types/         # Type definitions
+│       └── tests/
+│           └── e2e/           # E2E tests
+├── supabase/      # Local Supabase config
+│   ├── docs/          # Seed-data reference
+│   ├── migrations/    # Database migrations
+│   └── tests/         # pgTAP tests
+├── packages/      # Shared packages (currently empty)
+└── .github/       # Issue templates, CI/CD workflows
 ```
 
 ## Development workflow
