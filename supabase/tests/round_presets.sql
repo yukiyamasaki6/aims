@@ -1,9 +1,13 @@
 begin;
 
-select plan(13);
+select plan(20);
 
 select has_table('public', 'round_presets', 'round_presets テーブルが存在する');
 select has_table('public', 'round_preset_distances', 'round_preset_distances テーブルが存在する');
+select has_column(
+  'public', 'round_preset_distances', 'is_marked',
+  'round_preset_distances.is_marked カラムが存在する'
+);
 
 select results_eq(
   $$select count(*) from public.round_presets where owner_id is null$$,
@@ -29,6 +33,20 @@ select lives_ok(
   $$insert into public.round_presets (id, owner_id, name, format, bow_type)
     values ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'My Preset', 'outdoor', 'recurve')$$,
   'ユーザーは自分のowner_idでプリセットを作成できる'
+);
+
+select throws_ok(
+  $$update public.round_presets set format = 'invalid' where id = '22222222-2222-2222-2222-222222222222'$$,
+  '23514',
+  null,
+  '不正なformatはCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$update public.round_presets set bow_type = 'invalid' where id = '22222222-2222-2222-2222-222222222222'$$,
+  '23514',
+  null,
+  '不正なbow_typeはCHECK制約で拒否される'
 );
 
 select throws_like(
@@ -67,12 +85,44 @@ select is_empty(
   '他ユーザーは自分が所有しないプリセットを更新できない（0件更新）'
 );
 
+select is_empty(
+  $$delete from public.round_presets
+    where id = '22222222-2222-2222-2222-222222222222'
+    returning id$$,
+  '他ユーザーは自分が所有しないプリセットを削除できない（0件削除）'
+);
+
 -- User A: 自分のプリセットに距離を追加でき、削除もできる（子テーブルは親のowner_idに従う）。
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 select lives_ok(
   $$insert into public.round_preset_distances (id, preset_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
     values ('33333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
   '所有者は自分のプリセットに距離構成を追加できる'
+);
+
+-- round_preset_distances.is_markedの既定値・制約を検証する。
+select results_eq(
+  $$select is_marked from public.round_preset_distances where id = '33333333-3333-3333-3333-333333333333'$$,
+  $$values (true)$$,
+  'round_preset_distances.is_markedを省略すると既定値はtrue'
+);
+
+select lives_ok(
+  $$insert into public.round_preset_distances
+      (preset_id, distance_number, distance, total_ends, arrows_per_end, target_face_id, is_marked)
+    values
+      ('22222222-2222-2222-2222-222222222222', 2, null, 6, 6, 'a1000000-0000-0000-0000-000000000001', false)$$,
+  'round_preset_distancesもis_marked=falseならdistanceがnullでも挿入できる'
+);
+
+select throws_ok(
+  $$insert into public.round_preset_distances
+      (preset_id, distance_number, distance, total_ends, arrows_per_end, target_face_id, is_marked)
+    values
+      ('22222222-2222-2222-2222-222222222222', 3, null, 6, 6, 'a1000000-0000-0000-0000-000000000001', true)$$,
+  '23514',
+  null,
+  'round_preset_distancesもis_marked=true（既定）でdistanceがnullだとCHECK制約で拒否される'
 );
 
 select lives_ok(
