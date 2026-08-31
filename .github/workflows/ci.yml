@@ -211,11 +211,7 @@ jobs:
         run: pnpm build
 
       - name: Run E2E Tests
-        run: pnpm --filter web exec playwright test --workers=6
-
-      - name: Stop local Supabase
-        if: always()
-        run: supabase stop
+        run: pnpm --filter web exec playwright test --workers=4
 
   sync-preview-db:
     name: Sync Preview Database

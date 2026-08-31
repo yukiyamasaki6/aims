@@ -1,29 +1,19 @@
 import { expect, test } from "@playwright/test";
-import { getOtpCodeFromMailpit } from "./helpers/mailpit";
-import { createRoundViaApi } from "./helpers/rounds";
+import {
+  SHARED_AUTH_STATE_PATH,
+  SHARED_EMAIL,
+  SHARED_PASSWORD,
+} from "../helpers/auth";
+import { createRound } from "../helpers/rounds";
 
 const TARGET_FACE_40CM_INDOOR = "a1000000-0000-0000-0000-000000000007";
 
-// user-a@aims.testを使うとauth.spec.tsのサインアウトテスト（global scopeで
-// 全セッションを無効化する）と並列実行時に競合するため、専用ユーザーを都度作成する。
+test.use({ storageState: SHARED_AUTH_STATE_PATH });
+
 test.beforeEach(async ({ page }) => {
-  const email = `distance-config-test-${Date.now()}@aims.test`;
-  const password = "password-distance";
-
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-
-  const code = await getOtpCodeFromMailpit(email);
-  await page.getByPlaceholder("123456").fill(code);
-  await page.getByRole("button", { name: "確認" }).click();
-
-  await page.getByPlaceholder("パスワード（6文字以上）").fill(password);
-  await page.getByRole("button", { name: "登録してサインイン" }).click();
-
-  await expect(page).toHaveURL(/\/rounds/);
-
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "距離構成テスト",
     roundDate: "2026-08-24",
     format: "outdoor",
@@ -184,7 +174,9 @@ test("距離（m）だけを変更して保存しても、undo/redo履歴は保�
 }) => {
   // 距離の値はマス構成にも得点判定にも影響しないため、この変更だけでは
   // 破棄する必要がない。
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "距離のみ変更テスト",
     roundDate: "2026-08-24",
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
@@ -208,7 +200,9 @@ test("距離（m）だけを変更して保存しても、undo/redo履歴は保�
 test("ある距離の構成変更は、他の距離のundo/redo履歴に影響しない", async ({
   page,
 }) => {
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "複数距離undo履歴テスト",
     roundDate: "2026-08-24",
     distances: [
@@ -248,7 +242,9 @@ test("距離を削除すると一覧から消える", async ({ page }) => {
 test("ある距離を削除しても、他の距離のundo/redo履歴に影響しない", async ({
   page,
 }) => {
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "距離削除undo履歴テスト",
     roundDate: "2026-08-24",
     distances: [
@@ -287,7 +283,9 @@ test("Marked/Unmarkedの切り替えはフィールド以外のラウンドで�
 test("フィールドのラウンドでUnmarkedを選択すると距離欄を空のまま保存でき、一覧にUnmarkedと表示される", async ({
   page,
 }) => {
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "フィールドUnmarkedテスト",
     roundDate: "2026-08-24",
     format: "field",
@@ -311,7 +309,9 @@ test("フィールドのラウンドでUnmarkedを選択すると距離欄を空
 test("フィールドのラウンドではUnmarkedのままでも自己目測の距離を入力・保存でき、一覧に距離とUnmarkedの両方が表示される", async ({
   page,
 }) => {
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "フィールドUnmarked自己目測テスト",
     roundDate: "2026-08-24",
     format: "field",
@@ -333,7 +333,9 @@ test("フィールドのラウンドではUnmarkedのままでも自己目測の
 test("フィールドのラウンドでMarkedのまま距離（m）欄を空にして保存しようとするとエラーになり、保存されない", async ({
   page,
 }) => {
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "フィールドMarkedバリデーションテスト",
     roundDate: "2026-08-24",
     format: "field",

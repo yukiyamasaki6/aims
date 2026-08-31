@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+process.loadEnvFile(".env.local");
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
@@ -12,8 +14,14 @@ export default defineConfig({
   },
   projects: [
     {
+      name: "setup",
+      testMatch: /auth\.setup\.ts/,
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"],
     },
   ],
   webServer: {
