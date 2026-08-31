@@ -1,4 +1,6 @@
--- 開発・確認用のテストユーザー（ローカルとPreview環境にのみ適用。本番には絶対に適用しない）。
+-- 人間が手動で動作確認する際に使うアカウント（ローカルとPreview環境にのみ適用。
+-- 本番には絶対に適用しない）。E2Eテストでは使わない（テストは全て
+-- <テスト名>-${Date.now()}@aims.test という使い捨てアカウントを都度作成する）。
 -- サインアップ済み（メール確認済み・パスワード設定済み）の状態で用意し、
 -- 一度 /signin でサインインすれば以後の手間を省ける。
 -- 既に存在する場合は何もしない（何度実行しても安全）。
@@ -25,8 +27,8 @@ insert into auth.users (
   '00000000-0000-0000-0000-00000000000a',
   'authenticated',
   'authenticated',
-  'user-a@aims.test',
-  extensions.crypt('password-a', extensions.gen_salt('bf')),
+  'user@aims.test',
+  extensions.crypt('password', extensions.gen_salt('bf')),
   now(),
   now(),
   now(),
@@ -54,7 +56,7 @@ insert into auth.identities (
   gen_random_uuid(),
   '00000000-0000-0000-0000-00000000000a',
   '00000000-0000-0000-0000-00000000000a',
-  jsonb_build_object('sub', '00000000-0000-0000-0000-00000000000a', 'email', 'user-a@aims.test'),
+  jsonb_build_object('sub', '00000000-0000-0000-0000-00000000000a', 'email', 'user@aims.test'),
   'email',
   now(),
   now(),
