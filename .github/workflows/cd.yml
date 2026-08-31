@@ -10,6 +10,10 @@ on:
       - "supabase/templates/**"
   workflow_dispatch:
 
+concurrency:
+  group: deploy-prod-db
+  cancel-in-progress: true
+
 jobs:
   deploy-prod-db:
     name: Deploy Production Database
