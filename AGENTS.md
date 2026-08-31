@@ -21,6 +21,7 @@
   - Apply **both** an RLS policy **and** an explicit `grant select, insert, update, delete on <table> to anon, authenticated;` to every new table (`auto_expose_new_tables` is unset in `supabase/config.toml`).
   - Fix issues reported by `pnpm lint:sql` (Squawk) directly (e.g., add `if not exists`, wrap in `begin`/`commit` with timeouts); do not exclude lint rules.
   - Verify tables, RLS policies, and triggers via pgTAP (`supabase/tests/`, executed via `pnpm test:db`). Write pgTAP tests before writing the corresponding migrations.
+  - When auditing pgTAP coverage, check it against multiple axes rather than one pass: table constraints (UNIQUE/CHECK/NOT NULL/FK), cross-table effects (cascades, triggers, multi-table RPCs), and RLS policies per command (SELECT/INSERT/UPDATE/DELETE, including the `anon` role) — each axis tends to surface gaps the others miss.
 - **Frontend practices:**
   - Use Tailwind CSS and reuse existing `shadcn/ui` components from `apps/web/src/components/ui/`.
   - Default to React Server Components; use `"use client"` only when state, browser APIs, or lifecycle hooks are strictly required.
