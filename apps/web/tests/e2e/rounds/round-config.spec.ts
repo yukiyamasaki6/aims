@@ -1,27 +1,17 @@
 import { expect, test } from "@playwright/test";
-import { getOtpCodeFromMailpit } from "./helpers/mailpit";
-import { createRoundViaApi } from "./helpers/rounds";
+import {
+  SHARED_AUTH_STATE_PATH,
+  SHARED_EMAIL,
+  SHARED_PASSWORD,
+} from "../helpers/auth";
+import { createRound } from "../helpers/rounds";
 
-// user-a@aims.testを使うとauth.spec.tsのサインアウトテスト（global scopeで
-// 全セッションを無効化する）と並列実行時に競合するため、専用ユーザーを都度作成する。
+test.use({ storageState: SHARED_AUTH_STATE_PATH });
+
 test.beforeEach(async ({ page }) => {
-  const email = `round-config-test-${Date.now()}@aims.test`;
-  const password = "password-config";
-
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-
-  const code = await getOtpCodeFromMailpit(email);
-  await page.getByPlaceholder("123456").fill(code);
-  await page.getByRole("button", { name: "確認" }).click();
-
-  await page.getByPlaceholder("パスワード（6文字以上）").fill(password);
-  await page.getByRole("button", { name: "登録してサインイン" }).click();
-
-  await expect(page).toHaveURL(/\/rounds/);
-
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "設定パネルテスト",
     roundDate: "2026-08-24",
     format: "outdoor",
@@ -48,7 +38,9 @@ test("普段は要約1行表示（区切りは/）で、タップすると編集
 test("ラウンド名が未設定のときは要約にプレースホルダーを表示せず、名前の区切りも出ない", async ({
   page,
 }) => {
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "",
     roundDate: "2026-08-24",
     format: "outdoor",
@@ -84,7 +76,9 @@ test("名前欄・実施日欄は実際のキー入力でフォーカスを保�
 test("Unmarkedな距離が残ったままフィールド以外の種別に変更しようとするとエラーになり、変更されない", async ({
   page,
 }) => {
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "フィールド種別変更テスト",
     roundDate: "2026-08-24",
     format: "field",
