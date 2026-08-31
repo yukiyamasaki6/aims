@@ -1,33 +1,23 @@
 import { expect, test } from "@playwright/test";
-import { getOtpCodeFromMailpit } from "./helpers/mailpit";
 import {
-  createRoundViaApi,
+  SHARED_AUTH_STATE_PATH,
+  SHARED_EMAIL,
+  SHARED_PASSWORD,
+} from "../helpers/auth";
+import {
+  createRound,
   FIELD_TARGET_FACE_ID,
   SIX_RING_TARGET_FACE_ID,
   TRIPLE_SPOT_TARGET_FACE_ID,
-} from "./helpers/rounds";
+} from "../helpers/rounds";
 
-// user-a@aims.testを使うとauth.spec.tsのサインアウトテスト（global scopeで
-// 全セッションを無効化する）と並列実行時に競合するため、専用ユーザーを都度作成する。
+test.use({ storageState: SHARED_AUTH_STATE_PATH });
+
 test.beforeEach(async ({ page }) => {
-  const email = `score-entry-test-${Date.now()}@aims.test`;
-  const password = "password-score";
-
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-
-  const code = await getOtpCodeFromMailpit(email);
-  await page.getByPlaceholder("123456").fill(code);
-  await page.getByRole("button", { name: "確認" }).click();
-
-  await page.getByPlaceholder("パスワード（6文字以上）").fill(password);
-  await page.getByRole("button", { name: "登録してサインイン" }).click();
-
-  await expect(page).toHaveURL(/\/rounds/);
-
   // 1距離・1エンド・2射という最小構成のラウンドを作成し、ラウンド画面に遷移する。
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "スコア入力テスト",
     roundDate: "2026-08-24",
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
@@ -75,7 +65,9 @@ test("距離が複数あるとき、距離ごとの合計・X数・10数も表�
   page,
 }) => {
   // 2距離（18m, 30m）・各1エンド1射のラウンドを別途作成する。
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "複数距離テスト",
     roundDate: "2026-08-24",
     distances: [
@@ -104,7 +96,9 @@ test("入力済み・未入力にかかわらずマス目をタップして選�
   page,
 }) => {
   // beforeEachの1エンド2射では前エンドへ戻る検証ができないため、2エンド×2射のラウンドを別途作成する。
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "修正テスト",
     roundDate: "2026-08-24",
     distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 2 }],
@@ -224,7 +218,9 @@ test("的の配色がWA標準の得点しきい値と対応しない場合も、
   // フィールド的80cmは得点6,5が黄・4,3,2,1が黒。標準の的（9以上=黄,7-8=赤,
   // 5-6=青,3-4=黒,1-2=白）のしきい値をそのまま使うと6,5が青、2,1が白に
   // なってしまうため、リング色を直接見ていることを確認する。
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "フィールド配色テスト",
     roundDate: "2026-08-24",
     distances: [
@@ -281,7 +277,9 @@ test("的のリング構成が少ないほど、テンキーは実在する点�
 }) => {
   // 距離1: 標準10点的（X,10,9,8,7,6,5,4,3,2,1 + M = 12キー）
   // 距離2: 6点的・アウトドア80cm（X,10,9,8,7,6,5 + M = 8キー、4,3,2,1は無い）
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "的構成テスト",
     roundDate: "2026-08-24",
     distances: [
@@ -326,7 +324,9 @@ test("スポットが複数ある的でも、テンキーのキーはスポッ�
 }) => {
   // 3つ目的（トライアングル）は3スポットとも同一の10,9,8,7,6を持つ
   // （Xリングを持たない）が、キーはスポットごとではなく点数ごとに1つだけ表示される。
-  const roundId = await createRoundViaApi(page, {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "3つ目的テスト",
     roundDate: "2026-08-24",
     distances: [
@@ -415,16 +415,13 @@ test("新たな入力を行うとredo履歴が無効になる", async ({ page })
 test("コンパウンド弓種×インドアの的でスコア入力できる（Xを持たず10が最高点）", async ({
   page,
 }) => {
-  // round-config-panel.spec.tsでbowType=compoundへの変更は検証済みだが、
-  // compound弓種のラウンドでコンパウンド専用の的（issue #163でformat=indoorに
-  // 追加）を実際に選び、スコア入力まで到達する組み合わせはこれまでどの
-  // E2Eテストも検証していなかった。インドアの的はリカーブ/ベアボウ用・
-  // コンパウンド用のいずれもXという区分を持たない（最高得点帯は常に10）ため、
-  // ここではその前提が実際のスコア入力画面に反映されていることを確認する。
-  // 得点入力はテンキー（自己申告のスコア値ボタン）方式で、的上の座標クリックでは
-  // ないため、リカーブ用とコンパウンド用の的の違い（得点帯の半径の閾値）自体は
-  // このUIからは観測できない。
-  const roundId = await createRoundViaApi(page, {
+  // インドアの的はリカーブ/ベアボウ用・コンパウンド用のいずれもXという区分を
+  // 持たない（最高得点帯は常に10）。得点入力はテンキー（自己申告のスコア値
+  // ボタン）方式で的上の座標クリックではないため、リカーブ用とコンパウンド用の
+  // 的の違い（得点帯の半径の閾値）自体はこのUIからは観測できない。
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
     name: "コンパウンド弓種テスト",
     roundDate: "2026-08-24",
     format: "indoor",

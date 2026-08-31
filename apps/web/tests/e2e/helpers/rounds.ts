@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 
 const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // 10点的（アウトドア・122cm）
 export const SIX_RING_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000003"; // 6点的（アウトドア・80cm）: X,10,9,8,7,6,5のみ
@@ -10,37 +10,54 @@ export const TRIPLE_SPOT_TARGET_FACE_ID =
 export const FIELD_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000010";
 
 // スコア入力等のUI検証には/rounds/newのプリセット選択では用意できない任意の
-// 距離構成（少エンド・少射数）が必要なため、/api/e2e/create-round経由で直接作成する。
-export async function createRoundViaApi(
-  page: Page,
-  input: {
-    name: string;
-    roundDate: string;
-    format?: string;
-    bowType?: string;
-    distances: {
-      distance: number;
-      totalEnds: number;
-      arrowsPerEnd: number;
-      targetFaceId?: string;
-    }[];
-  },
-): Promise<string> {
-  const response = await page.request.post("/api/e2e/create-round", {
-    data: {
-      name: input.name,
-      roundDate: input.roundDate,
-      format: input.format ?? "outdoor",
-      bowType: input.bowType ?? "recurve",
-      distances: input.distances.map((d) => ({
-        distance: d.distance,
-        total_ends: d.totalEnds,
-        arrows_per_end: d.arrowsPerEnd,
-        target_face_id: d.targetFaceId ?? DEFAULT_TARGET_FACE_ID,
-      })),
-    },
+// 距離構成（少エンド・少射数）が必要なため、本番アプリにテスト専用のAPIを持たせず、
+// supabase-jsから対象ユーザーでサインインしてcreate_round RPCを直接呼ぶ。
+export async function createRound(input: {
+  email: string;
+  password: string;
+  name: string;
+  roundDate: string;
+  format?: string;
+  bowType?: string;
+  distances: {
+    distance: number;
+    totalEnds: number;
+    arrowsPerEnd: number;
+    targetFaceId?: string;
+  }[];
+}): Promise<string> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Missing Supabase environment variables in e2e helper.");
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: input.email,
+    password: input.password,
+  });
+  if (signInError) {
+    throw signInError;
+  }
+
+  const { data: roundId, error } = await supabase.rpc("create_round", {
+    p_name: input.name,
+    p_round_date: input.roundDate,
+    p_format: input.format ?? "outdoor",
+    p_bow_type: input.bowType ?? "recurve",
+    p_distances: input.distances.map((d) => ({
+      distance: d.distance,
+      total_ends: d.totalEnds,
+      arrows_per_end: d.arrowsPerEnd,
+      target_face_id: d.targetFaceId ?? DEFAULT_TARGET_FACE_ID,
+    })),
   });
 
-  const { roundId } = await response.json();
+  if (error || !roundId) {
+    throw error ?? new Error("ラウンドの作成に失敗しました。");
+  }
+
   return roundId;
 }
