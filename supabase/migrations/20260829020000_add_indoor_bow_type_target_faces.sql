@@ -14,7 +14,7 @@ set statement_timeout = '5s';
 --     10点になり（score_strは"X"ではなく"10"）、その外側（旧10リング相当）は
 --     9点になる。
 -- リング半径・色は標準（9,10,X）のシードと完全に同一で、score_str/score_int
--- のみが異なる（データ形式は変更しない、docs/target-faces.md参照）。
+-- のみが異なる（データ形式は変更しない、supabase/docs/target-faces.md参照）。
 --
 -- 既存のインドア10点的（60cm・40cm、単一スポット・3つ目とも）はリカーブ/ベアボウ
 -- 共通で使うため、旧Xリングを削除するのみで名称は変更しない。
@@ -83,7 +83,7 @@ insert into target_faces (id, owner_id, name, size, format) values
   ('b1000000-0000-0000-0000-000000000005', null, 'Indoor 40cm Triangular 3-spot Compound', 40, 'indoor'),
   ('b1000000-0000-0000-0000-000000000006', null, 'Indoor 40cm Vertical 3-spot Compound', 40, 'indoor');
 
--- スポット中心座標は元のリカーブ版と同一（docs/target-faces.md参照）。
+-- スポット中心座標は元のリカーブ版と同一（supabase/docs/target-faces.md参照）。
 insert into target_face_spots (id, target_face_id, center_x, center_y) values
   ('b2000000-0000-0000-0000-000000000001', 'b1000000-0000-0000-0000-000000000001', 0, 0),
   ('b2000000-0000-0000-0000-000000000002', 'b1000000-0000-0000-0000-000000000002', 0, 0),
