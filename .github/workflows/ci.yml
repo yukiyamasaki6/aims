@@ -211,7 +211,7 @@ jobs:
         run: pnpm build
 
       - name: Run E2E Tests
-        run: pnpm test:e2e
+        run: pnpm --filter web exec playwright test --workers=4
 
       - name: Stop local Supabase
         if: always()
