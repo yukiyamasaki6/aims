@@ -161,19 +161,14 @@ jobs:
         id: playwright-version
         run: echo "version=$(node -e "console.log(require('./apps/web/node_modules/@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+      - name: Extract Playwright Chromium from official Docker image
+        run: |
+          docker create --name pw-extract mcr.microsoft.com/playwright:v${{ steps.playwright-version.outputs.version }}-noble
+          mkdir -p ~/.cache/ms-playwright
+          docker cp pw-extract:/ms-playwright/. ~/.cache/ms-playwright/
+          docker rm pw-extract
 
-      - name: Install Playwright Chromium (cache miss)
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter web exec playwright install --with-deps chromium
-
-      - name: Install Playwright OS dependencies (cache hit)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
+      - name: Install Playwright OS dependencies
         run: pnpm --filter web exec playwright install-deps chromium
 
       - name: Cache Next.js build cache
