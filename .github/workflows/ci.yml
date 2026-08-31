@@ -4,32 +4,10 @@ on:
   pull_request:
     types:
       - opened
-      - edited
       - synchronize
       - reopened
 
 jobs:
-  pr-title:
-    name: Check PR Title
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check PR Title
-        uses: amannn/action-semantic-pull-request@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          types: |
-            feat
-            fix
-            refactor
-            design
-            docs
-            test
-            ci
-            chore
-            revert
-          requireScope: false
-
   changes:
     name: Detect Changes
     runs-on: ubuntu-latest
