@@ -172,7 +172,7 @@ jobs:
           version: 2.115.0
 
       - name: Start local Supabase
-        run: supabase start
+        run: supabase start -x studio,postgres-meta
 
       - name: Setup environment variables
         run: |
