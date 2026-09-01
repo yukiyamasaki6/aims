@@ -62,3 +62,7 @@ Please read the [contribution guidelines](CONTRIBUTING.md) before contributing t
 | | Playwright | E2E regression guardrail for critical user flows |
 | **Tooling** | pnpm | Strict dependency resolution with fast caching in CI / local |
 | | Biome | Ultra-fast linting acting as a guardrail for code consistency |
+
+## License
+
+AIMS is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE) (AGPL-3.0-or-later). If you run a modified version of this project as a network service, the AGPL requires that you make your modified source available to its users.
