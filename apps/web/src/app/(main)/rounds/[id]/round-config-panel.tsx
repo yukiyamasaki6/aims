@@ -84,7 +84,7 @@ export function RoundConfigPanel({
   }
 
   return (
-    <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+    <>
       <button
         type="button"
         data-testid="round-config-summary"
@@ -203,6 +203,6 @@ export function RoundConfigPanel({
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

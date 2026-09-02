@@ -862,21 +862,23 @@ export function ScorecardClient({
           description="このラウンドを削除しますか？記録したスコアもすべて失われます。"
           onConfirm={handleDeleteRound}
         />
-        <RoundConfigPanel
-          roundId={roundId}
-          initial={initialRoundConfig}
-          onSaved={setRoundConfig}
-        />
-        <div
-          data-testid="round-summary"
-          className="flex items-baseline justify-center gap-2 rounded-xl border bg-card p-4 text-card-foreground shadow-sm"
-        >
-          <span className="font-heading text-2xl font-semibold">
-            合計{total}
-          </span>
-          <span className="text-muted-foreground text-sm">
-            X: {xCount} / 10: {tenCount}
-          </span>
+        <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+          <RoundConfigPanel
+            roundId={roundId}
+            initial={initialRoundConfig}
+            onSaved={setRoundConfig}
+          />
+          <div
+            data-testid="round-summary"
+            className="flex items-baseline justify-center gap-2 border-t p-2"
+          >
+            <span className="font-heading text-2xl font-semibold">
+              合計{total}
+            </span>
+            <span className="text-muted-foreground text-sm">
+              X: {xCount} / 10: {tenCount}
+            </span>
+          </div>
         </div>
 
         <div className="flex flex-col gap-4">
