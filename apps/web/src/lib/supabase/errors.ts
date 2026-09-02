@@ -7,6 +7,7 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
     "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
   over_request_rate_limit:
     "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
+  captcha_failed: "認証に失敗しました。もう一度お試しください。",
 };
 
 export function translateAuthErrorMessage(error: AuthError): string {

@@ -22,11 +22,13 @@ export async function signOut() {
 export async function signIn(
   email: string,
   password: string,
+  captchaToken: string,
 ): Promise<{ error: string } | undefined> {
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
     email,
     password,
+    options: { captchaToken },
   });
 
   if (error) {

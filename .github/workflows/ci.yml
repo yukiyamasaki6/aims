@@ -171,6 +171,9 @@ jobs:
         with:
           version: 2.115.0
 
+      - name: Setup Supabase CLI environment variables
+        run: cp .env.example .env
+
       - name: Start local Supabase
         run: supabase start -x studio,postgres-meta
 
@@ -181,6 +184,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL=$API_URL
           NEXT_PUBLIC_SUPABASE_ANON_KEY=$PUBLISHABLE_KEY
           SUPABASE_SECRET_KEY=$SECRET_KEY
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
           EOF
 
       - name: Apply migrations and seed data
