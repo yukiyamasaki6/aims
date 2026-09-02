@@ -19,12 +19,15 @@ export const Turnstile = forwardRef<
   }
 
   return (
-    <ReactTurnstile
-      ref={ref}
-      siteKey={siteKey}
-      onSuccess={(token) => onVerify(token)}
-      onExpire={() => onVerify(null)}
-      onError={() => onVerify(null)}
-    />
+    <div className="self-center">
+      <ReactTurnstile
+        ref={ref}
+        siteKey={siteKey}
+        onSuccess={(token) => onVerify(token)}
+        onExpire={() => onVerify(null)}
+        onError={() => onVerify(null)}
+        options={{ size: "normal" }}
+      />
+    </div>
   );
 });

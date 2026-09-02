@@ -2,12 +2,15 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Turnstile } from "./turnstile";
 
-const { onSuccess, onExpire, onError, siteKeyProp } = vi.hoisted(() => ({
-  onSuccess: { current: undefined as ((token: string) => void) | undefined },
-  onExpire: { current: undefined as (() => void) | undefined },
-  onError: { current: undefined as (() => void) | undefined },
-  siteKeyProp: { current: undefined as string | undefined },
-}));
+const { onSuccess, onExpire, onError, siteKeyProp, optionsProp } = vi.hoisted(
+  () => ({
+    onSuccess: { current: undefined as ((token: string) => void) | undefined },
+    onExpire: { current: undefined as (() => void) | undefined },
+    onError: { current: undefined as (() => void) | undefined },
+    siteKeyProp: { current: undefined as string | undefined },
+    optionsProp: { current: undefined as { size?: string } | undefined },
+  }),
+);
 
 vi.mock("@marsidev/react-turnstile", () => ({
   Turnstile: (props: {
@@ -15,11 +18,13 @@ vi.mock("@marsidev/react-turnstile", () => ({
     onSuccess?: (token: string) => void;
     onExpire?: () => void;
     onError?: () => void;
+    options?: { size?: string };
   }) => {
     siteKeyProp.current = props.siteKey;
     onSuccess.current = props.onSuccess;
     onExpire.current = props.onExpire;
     onError.current = props.onError;
+    optionsProp.current = props.options;
     return <div data-testid="turnstile" />;
   },
 }));
@@ -38,6 +43,7 @@ describe("Turnstile", () => {
 
     expect(screen.getByTestId("turnstile")).toBeInTheDocument();
     expect(siteKeyProp.current).toBe("test-site-key");
+    expect(optionsProp.current).toEqual({ size: "normal" });
   });
 
   it("calls onVerify with the token on success", async () => {
