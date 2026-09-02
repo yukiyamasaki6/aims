@@ -5,6 +5,18 @@
 - **方式**: Supabase Auth（メール + パスワード）。新規登録時のみメール認証コード（OTP）でメールアドレスを検証したうえでパスワードを設定し、以降はメール + パスワードでサインインする
 - **紐付け**: 認証成功時、`auth.users.id`と`public.users.id`を1:1で紐付ける
 
+## レート制限・CAPTCHA
+
+| 設定 | 制限対象 | 単位 | 制限値 |
+| :--- | :--- | :--- | :--- |
+| `rate_limit.sign_in_sign_ups` | 同一IPからのサインイン・サインアップリクエスト | 5分間 | 30回 |
+| `rate_limit.token_verifications` | 同一IPからのOTP/マジックリンク検証 | 5分間 | 30回 |
+| `rate_limit.token_refresh` | 同一IPからのセッションリフレッシュ | 5分間 | 150回 |
+| `rate_limit.email_sent` | プロジェクト全体のメール送信数 | 1時間 | 100通 |
+| `captcha`（Cloudflare Turnstile） | `signInWithPassword`・`signInWithOtp`・`resetPasswordForEmail`の各リクエスト（`verifyOtp`によるコード確認自体は対象外） | リクエストごと | Turnstile検証必須 |
+
+レート制限はいずれもIP単位のため、captchaでリクエストごとのコストを上げてブルートフォースを抑止する。
+
 ## 認可マトリクス
 
 | 対象テーブル   | SELECT                          | INSERT                        | UPDATE                        | DELETE                        |

@@ -54,6 +54,7 @@ aims/
 4. Copy the environment variables template:
     ```bash
     cp apps/web/.env.example apps/web/.env.local
+    cp .env.example .env
     ```
 5. Start the local Supabase environment (see [Managing Local Supabase](#managing-local-supabase)) and fill in `apps/web/.env.local` with the values from `supabase status`.
 

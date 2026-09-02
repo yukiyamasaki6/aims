@@ -37,6 +37,12 @@ describe("translateAuthErrorMessage", () => {
     );
   });
 
+  it("translates captcha_failed", () => {
+    expect(
+      translateAuthErrorMessage(makeAuthError("captcha_failed", "x")),
+    ).toBe("認証に失敗しました。もう一度お試しください。");
+  });
+
   it("falls back to the original message for an unmapped code", () => {
     expect(
       translateAuthErrorMessage(

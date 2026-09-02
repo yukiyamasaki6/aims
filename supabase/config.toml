@@ -211,10 +211,11 @@ token_verifications = 30
 web3 = 30
 
 # Configure one of the supported captcha providers: `hcaptcha`, `turnstile`.
-# [auth.captcha]
-# enabled = true
-# provider = "hcaptcha"
-# secret = ""
+[auth.captcha]
+enabled = true
+provider = "turnstile"
+# DO NOT commit your Turnstile secret key to git. Use environment variable substitution instead:
+secret = "env(TURNSTILE_SECRET_KEY)"
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.

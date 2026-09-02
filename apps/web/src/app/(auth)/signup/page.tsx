@@ -1,8 +1,10 @@
 "use client";
 
+import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import Link from "next/link";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { AuthCard } from "@/components/auth-card";
+import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -29,6 +31,13 @@ export default function SignUpPage() {
   const [step, setStep] = useState<"email" | "code" | "password">("email");
   const [error, setError] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileInstance>(undefined);
+
+  function consumeCaptchaToken() {
+    turnstileRef.current?.reset();
+    setCaptchaToken(null);
+  }
 
   useEffect(() => {
     if (resendCooldown === 0) return;
@@ -40,14 +49,20 @@ export default function SignUpPage() {
     setStep("email");
     setCode("");
     setError(null);
+    setCaptchaToken(null);
   }
 
   async function handleResend() {
+    if (!captchaToken) return;
     setError(null);
     setResendCooldown(60);
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({ email });
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { captchaToken },
+    });
+    consumeCaptchaToken();
 
     if (error) {
       setError(translateAuthErrorMessage(error));
@@ -56,15 +71,21 @@ export default function SignUpPage() {
 
   async function handleSendCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!captchaToken) return;
     setError(null);
 
     if (await isEmailRegistered(email)) {
       setError("このメールアドレスは既に登録されています。");
+      consumeCaptchaToken();
       return;
     }
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({ email });
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { captchaToken },
+    });
+    consumeCaptchaToken();
 
     if (error) {
       setError(translateAuthErrorMessage(error));
@@ -158,11 +179,12 @@ export default function SignUpPage() {
         <p className="text-center text-muted-foreground text-sm">
           メールが届かない場合は、迷惑メールフォルダをご確認ください。
         </p>
+        <Turnstile ref={turnstileRef} onVerify={setCaptchaToken} />
         <Button
           type="button"
           variant="outline"
           className="w-full"
-          disabled={resendCooldown > 0}
+          disabled={resendCooldown > 0 || !captchaToken}
           onClick={handleResend}
         >
           {resendCooldown > 0 ? `再送（${resendCooldown}秒）` : "再送"}
@@ -181,7 +203,10 @@ export default function SignUpPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
-        <Button type="submit">認証コードを送信</Button>
+        <Turnstile ref={turnstileRef} onVerify={setCaptchaToken} />
+        <Button type="submit" disabled={!captchaToken}>
+          認証コードを送信
+        </Button>
       </form>
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
       <SignInLink />

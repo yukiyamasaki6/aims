@@ -34,9 +34,13 @@ export async function createRound(input: {
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+  // ローカル・CIのTURNSTILE_SECRET_KEYはCloudflareのテスト専用
+  // シークレット（常に検証を通過する）のため、captchaTokenの値自体は
+  // 任意の非空文字列でよい。
   const { error: signInError } = await supabase.auth.signInWithPassword({
     email: input.email,
     password: input.password,
+    options: { captchaToken: "test-captcha-token" },
   });
   if (signInError) {
     throw signInError;
