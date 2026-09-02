@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  MoreHorizontal,
   Plus,
   Redo,
   Undo,
@@ -12,12 +13,20 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TargetFaceIcon, TargetFaceTile } from "@/components/target-face-icon";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   addDistance,
   clearShot,
+  deleteRound,
   recordShot,
   saveRoundAsPreset,
 } from "./actions";
@@ -294,6 +303,8 @@ export function ScorecardClient({
   const [presetName, setPresetName] = useState("");
   const [presetSubmitting, setPresetSubmitting] = useState(false);
   const [presetError, setPresetError] = useState<string | null>(null);
+  const [deleteRoundConfirmOpen, setDeleteRoundConfirmOpen] = useState(false);
+  const [deleteRoundError, setDeleteRoundError] = useState<string | null>(null);
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
     new Set(),
   );
@@ -512,6 +523,15 @@ export function ScorecardClient({
     setPresetName("");
   }
 
+  async function handleDeleteRound() {
+    const result = await deleteRound({ roundId });
+    if (result?.error) {
+      setDeleteRoundError(result.error);
+    }
+    // 成功時はdeleteRound内のredirect()がNEXT_REDIRECT例外をthrowして
+    // 遷移するため、ここでの状態更新は不要。
+  }
+
   function handleDistanceDeleted(distanceId: string) {
     setDistances((prev) => prev.filter((d) => d.id !== distanceId));
     setShots((prev) => prev.filter((s) => s.distance_id !== distanceId));
@@ -723,93 +743,125 @@ export function ScorecardClient({
             <ChevronLeft className="size-4" />
             一覧へ戻る
           </Link>
-          <Dialog
-            open={presetDialogOpen}
-            onOpenChange={(open) => {
-              setPresetDialogOpen(open);
-              if (!open) {
-                setPresetName("");
-                setPresetError(null);
-              }
-            }}
-          >
-            <DialogTrigger
-              data-testid="save-as-preset-trigger"
-              className={buttonVariants({ variant: "default", size: "sm" })}
+          <div className="flex items-center gap-2">
+            <Dialog
+              open={presetDialogOpen}
+              onOpenChange={(open) => {
+                setPresetDialogOpen(open);
+                if (!open) {
+                  setPresetName("");
+                  setPresetError(null);
+                }
+              }}
             >
-              プリセット保存
-            </DialogTrigger>
-            <DialogContent>
-              <div className="flex flex-col gap-3">
-                <h2 className="font-medium text-sm">
-                  現在の構成をプリセットとして保存しますか？
-                </h2>
-                <div className="flex flex-col gap-1 text-muted-foreground text-sm">
-                  {[...distances]
-                    .sort((a, b) => a.distance_number - b.distance_number)
-                    .map((d) => {
-                      const face = targetFaces.find(
-                        (f) => f.id === d.target_face_id,
-                      );
-                      const rings =
-                        face?.target_face_spots[0]?.target_face_rings ?? [];
+              <DialogTrigger
+                data-testid="save-as-preset-trigger"
+                className={buttonVariants({ variant: "default", size: "sm" })}
+              >
+                プリセット保存
+              </DialogTrigger>
+              <DialogContent>
+                <div className="flex flex-col gap-3">
+                  <h2 className="font-medium text-sm">
+                    現在の構成をプリセットとして保存しますか？
+                  </h2>
+                  <div className="flex flex-col gap-1 text-muted-foreground text-sm">
+                    {[...distances]
+                      .sort((a, b) => a.distance_number - b.distance_number)
+                      .map((d) => {
+                        const face = targetFaces.find(
+                          (f) => f.id === d.target_face_id,
+                        );
+                        const rings =
+                          face?.target_face_spots[0]?.target_face_rings ?? [];
 
-                      return (
-                        <div
-                          key={d.id}
-                          className="flex items-center justify-between gap-2"
-                        >
-                          <span className="flex items-center gap-2">
-                            {[
-                              d.distance !== null ? `${d.distance}m` : null,
-                              roundConfig.format === "field"
-                                ? d.is_marked
-                                  ? "Marked"
-                                  : "Unmarked"
-                                : null,
-                            ]
-                              .filter((part): part is string => part !== null)
-                              .join(" / ")}
-                            <TargetFaceIcon rings={rings} />
-                            {face ? `${face.size}cm` : "的未設定"}
-                          </span>
-                          <span className="shrink-0">
-                            {d.arrows_per_end}本×{d.total_ends}エンド
-                          </span>
-                        </div>
-                      );
-                    })}
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label
-                    htmlFor="save-as-preset-name"
-                    className="text-muted-foreground text-xs"
+                        return (
+                          <div
+                            key={d.id}
+                            className="flex items-center justify-between gap-2"
+                          >
+                            <span className="flex items-center gap-2">
+                              {[
+                                d.distance !== null ? `${d.distance}m` : null,
+                                roundConfig.format === "field"
+                                  ? d.is_marked
+                                    ? "Marked"
+                                    : "Unmarked"
+                                  : null,
+                              ]
+                                .filter((part): part is string => part !== null)
+                                .join(" / ")}
+                              <TargetFaceIcon rings={rings} />
+                              {face ? `${face.size}cm` : "的未設定"}
+                            </span>
+                            <span className="shrink-0">
+                              {d.arrows_per_end}本×{d.total_ends}エンド
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label
+                      htmlFor="save-as-preset-name"
+                      className="text-muted-foreground text-xs"
+                    >
+                      プリセット名
+                    </label>
+                    <Input
+                      id="save-as-preset-name"
+                      data-testid="save-as-preset-name"
+                      placeholder={presetNamePlaceholder(
+                        roundConfig,
+                        distances,
+                      )}
+                      value={presetName}
+                      onChange={(e) => setPresetName(e.target.value)}
+                    />
+                  </div>
+                  {presetError && (
+                    <p className="text-destructive text-sm">{presetError}</p>
+                  )}
+                  <Button
+                    type="button"
+                    disabled={presetSubmitting}
+                    data-testid="save-as-preset-confirm"
+                    onClick={handleSavePreset}
                   >
-                    プリセット名
-                  </label>
-                  <Input
-                    id="save-as-preset-name"
-                    data-testid="save-as-preset-name"
-                    placeholder={presetNamePlaceholder(roundConfig, distances)}
-                    value={presetName}
-                    onChange={(e) => setPresetName(e.target.value)}
-                  />
+                    保存
+                  </Button>
                 </div>
-                {presetError && (
-                  <p className="text-destructive text-sm">{presetError}</p>
-                )}
-                <Button
-                  type="button"
-                  disabled={presetSubmitting}
-                  data-testid="save-as-preset-confirm"
-                  onClick={handleSavePreset}
+              </DialogContent>
+            </Dialog>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="ラウンドのメニュー"
+                data-testid="round-menu-trigger"
+                className="p-2 text-muted-foreground hover:text-foreground"
+              >
+                <MoreHorizontal className="size-5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem
+                  data-testid="round-delete"
+                  className="text-destructive data-[highlighted]:text-destructive"
+                  onClick={() => setDeleteRoundConfirmOpen(true)}
                 >
-                  保存
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+                  ラウンドを削除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
+        {deleteRoundError && (
+          <p className="text-destructive text-sm">{deleteRoundError}</p>
+        )}
+        <ConfirmDialog
+          open={deleteRoundConfirmOpen}
+          onOpenChange={setDeleteRoundConfirmOpen}
+          description="このラウンドを削除しますか？記録したスコアもすべて失われます。"
+          onConfirm={handleDeleteRound}
+        />
         <RoundConfigPanel
           roundId={roundId}
           initial={initialRoundConfig}

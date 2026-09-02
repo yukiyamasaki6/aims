@@ -1,6 +1,5 @@
-import { Plus } from "lucide-react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { type RoundListItem, RoundsListClient } from "./rounds-list-client";
 
 export default async function RoundsPage() {
   const supabase = await createClient();
@@ -10,51 +9,22 @@ export default async function RoundsPage() {
     .select("id, name, round_date, distances(shots(score_int))")
     .order("round_date", { ascending: false });
 
+  const roundListItems: RoundListItem[] = (rounds ?? []).map((round) => ({
+    id: round.id,
+    name: round.name,
+    roundDate: round.round_date,
+    total: round.distances
+      .flatMap((d) => d.shots)
+      .reduce((sum, s) => sum + s.score_int, 0),
+  }));
+
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col gap-6 p-8">
       <h1 className="font-heading text-2xl leading-snug font-medium">
         ラウンド一覧
       </h1>
 
-      {!rounds || rounds.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          まだラウンドがありません。
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {rounds.map((round) => {
-            const total = round.distances
-              .flatMap((d) => d.shots)
-              .reduce((sum, s) => sum + s.score_int, 0);
-
-            return (
-              <li key={round.id}>
-                <Link
-                  href={`/rounds/${round.id}`}
-                  className="flex items-center justify-between rounded-xl border bg-card p-4 text-card-foreground shadow-sm transition-colors hover:bg-muted/60"
-                >
-                  <span className="flex flex-col gap-0.5">
-                    <span className="font-medium">{round.name}</span>
-                    <span className="text-muted-foreground text-sm">
-                      {round.round_date}
-                    </span>
-                  </span>
-                  <span className="text-lg font-semibold">{total}点</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      <Link
-        href="/rounds/new"
-        data-testid="new-round-fab"
-        aria-label="ラウンドを新規作成"
-        className="fixed right-6 bottom-6 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-colors hover:bg-primary/80"
-      >
-        <Plus className="size-6" />
-      </Link>
+      <RoundsListClient initialRounds={roundListItems} />
     </main>
   );
 }

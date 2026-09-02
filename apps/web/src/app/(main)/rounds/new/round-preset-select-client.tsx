@@ -80,7 +80,7 @@ function PresetRow({
             data-testid="round-preset-menu-trigger"
             className="-translate-y-1/2 absolute top-1/2 right-1 p-2 text-muted-foreground hover:text-foreground"
           >
-            <MoreHorizontal className="size-4" />
+            <MoreHorizontal className="size-5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent>
             <DropdownMenuItem

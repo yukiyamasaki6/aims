@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 // 10点的（アウトドア・122cm）。距離追加時の初期的として使う（e2eのcreate-round
@@ -285,6 +286,23 @@ export async function saveRoundAsPreset(input: {
     await supabase.from("round_presets").delete().eq("id", preset.id);
     return { error: presetDistancesError.message };
   }
+}
+
+export async function deleteRound(input: {
+  roundId: string;
+}): Promise<{ error: string } | undefined> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("rounds")
+    .delete()
+    .eq("id", input.roundId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  redirect("/rounds");
 }
 
 export async function clearShot(input: {
