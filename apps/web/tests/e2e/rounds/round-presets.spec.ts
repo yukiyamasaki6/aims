@@ -36,6 +36,10 @@ test.describe(() => {
     await expect(page.getByTestId("distance-summary-3")).toContainText("50m");
     await expect(page.getByTestId("distance-summary-4")).toContainText("30m");
 
+    // プリセットで開始した場合は、属性が既に確定しているためカスタム開始時と
+    // 異なり、ラウンド構成は折りたたまれた状態のまま。
+    await expect(page.getByTestId("round-config-name")).toBeHidden();
+
     // プリセット名（WA 1440）でラウンド名を埋めない（デフォルトは空欄）。
     await page.getByTestId("round-config-summary").click();
     await expect(page.getByTestId("round-config-name")).toHaveValue("");
