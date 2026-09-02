@@ -288,19 +288,17 @@ test("個人プリセットを削除でき、確認ダイアログでキャン�
 
   // メニューを開いてキャンセルすると削除されない。
   await presetRow.getByTestId("round-preset-menu-trigger").click();
-  let dialogShown = false;
-  page.once("dialog", (dialog) => {
-    dialogShown = true;
-    dialog.dismiss();
-  });
   await page.getByTestId("round-preset-delete").click();
-  expect(dialogShown).toBe(true);
+  await expect(
+    page.getByText("「削除対象プリセット」を削除しますか？"),
+  ).toBeVisible();
+  await page.getByTestId("confirm-dialog-cancel").click();
   await expect(presetRow).toBeVisible();
 
   // メニューを開いて確認すると削除され、一覧から消える。
   await presetRow.getByTestId("round-preset-menu-trigger").click();
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByTestId("round-preset-delete").click();
+  await page.getByTestId("confirm-dialog-confirm").click();
   await expect(presetRow).toBeHidden();
   await expect(page.getByTestId("personal-preset-placeholder")).toBeVisible();
 });

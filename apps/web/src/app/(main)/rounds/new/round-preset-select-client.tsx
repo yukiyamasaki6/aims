@@ -9,6 +9,7 @@ import {
   type TargetFaceRing,
 } from "@/components/target-face-icon";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -147,6 +148,7 @@ export function RoundPresetSelect({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [presetToDelete, setPresetToDelete] = useState<Preset | null>(null);
 
   const selectedPreset =
     [...personalPresets, ...globalPresets].find((p) => p.id === selectedId) ??
@@ -156,11 +158,7 @@ export function RoundPresetSelect({
     setSelectedId((prev) => (prev === id ? null : id));
   }
 
-  async function handleDeletePreset(preset: Preset) {
-    if (!window.confirm(`「${preset.name}」を削除しますか？`)) {
-      return;
-    }
-
+  async function performDeletePreset(preset: Preset) {
     const result = await deletePreset(preset.id);
     if (result?.error) {
       setError(result.error);
@@ -226,7 +224,7 @@ export function RoundPresetSelect({
                   preset={preset}
                   selected={selectedId === preset.id}
                   onSelect={() => toggleSelect(preset.id)}
-                  onDelete={() => handleDeletePreset(preset)}
+                  onDelete={() => setPresetToDelete(preset)}
                 />
               ))}
             </div>
@@ -266,6 +264,17 @@ export function RoundPresetSelect({
           </Button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={presetToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPresetToDelete(null);
+        }}
+        description={`「${presetToDelete?.name}」を削除しますか？`}
+        onConfirm={() => {
+          if (presetToDelete) performDeletePreset(presetToDelete);
+        }}
+      />
     </main>
   );
 }

@@ -6,6 +6,7 @@ import {
   TargetFaceTile,
 } from "@/components/target-face-icon";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -128,6 +129,7 @@ export function DistanceEditFields({
   const [draft, setDraft] = useState(distance);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function handleSave() {
     if (submitting) return;
@@ -153,17 +155,7 @@ export function DistanceEditFields({
     setSubmitting(false);
   }
 
-  async function handleDelete() {
-    if (submitting) return;
-    if (
-      hasShots &&
-      !window.confirm(
-        "この距離にはすでにスコアが記録されています。削除するとスコアも失われます。削除しますか？",
-      )
-    ) {
-      return;
-    }
-
+  async function performDelete() {
     setSubmitting(true);
     setError(null);
 
@@ -175,6 +167,15 @@ export function DistanceEditFields({
     }
 
     onDeleted();
+  }
+
+  function handleDeleteClick() {
+    if (submitting) return;
+    if (hasShots) {
+      setConfirmOpen(true);
+      return;
+    }
+    performDelete();
   }
 
   return (
@@ -281,7 +282,7 @@ export function DistanceEditFields({
           variant="outline"
           disabled={submitting}
           data-testid={`distance-config-delete-${distance.distanceNumber}`}
-          onClick={handleDelete}
+          onClick={handleDeleteClick}
         >
           削除
         </Button>
@@ -295,6 +296,13 @@ export function DistanceEditFields({
           保存
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        description="この距離にはすでにスコアが記録されています。削除するとスコアも失われます。削除しますか？"
+        onConfirm={performDelete}
+      />
     </div>
   );
 }

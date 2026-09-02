@@ -361,13 +361,13 @@ test("shotsが存在する距離を削除しようとすると確認ダイアロ
 
   await page.getByTestId("distance-config-toggle-1").click();
 
-  let dialogShown = false;
-  page.once("dialog", (dialog) => {
-    dialogShown = true;
-    dialog.dismiss();
-  });
   await page.getByTestId("distance-config-delete-1").click();
-  await expect(page.getByTestId("distance-summary-1")).toBeVisible();
+  await expect(
+    page.getByText(
+      "この距離にはすでにスコアが記録されています。削除するとスコアも失われます。削除しますか？",
+    ),
+  ).toBeVisible();
 
-  expect(dialogShown).toBe(true);
+  await page.getByTestId("confirm-dialog-cancel").click();
+  await expect(page.getByTestId("distance-summary-1")).toBeVisible();
 });
