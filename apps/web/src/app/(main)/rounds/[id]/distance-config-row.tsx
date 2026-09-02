@@ -233,25 +233,6 @@ export function DistanceEditFields({
 
           <div className="flex flex-col gap-1">
             <label
-              htmlFor={`distance-config-total-ends-${distance.distanceNumber}`}
-              className="text-muted-foreground text-xs"
-            >
-              総エンド数
-            </label>
-            <Input
-              id={`distance-config-total-ends-${distance.distanceNumber}`}
-              type="number"
-              disabled={hasShots}
-              data-testid={`distance-config-total-ends-${distance.distanceNumber}`}
-              value={draft.totalEnds}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, totalEnds: Number(e.target.value) }))
-              }
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label
               htmlFor={`distance-config-arrows-${distance.distanceNumber}`}
               className="text-muted-foreground text-xs"
             >
@@ -268,6 +249,25 @@ export function DistanceEditFields({
                   ...d,
                   arrowsPerEnd: Number(e.target.value),
                 }))
+              }
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor={`distance-config-total-ends-${distance.distanceNumber}`}
+              className="text-muted-foreground text-xs"
+            >
+              総エンド数
+            </label>
+            <Input
+              id={`distance-config-total-ends-${distance.distanceNumber}`}
+              type="number"
+              disabled={hasShots}
+              data-testid={`distance-config-total-ends-${distance.distanceNumber}`}
+              value={draft.totalEnds}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, totalEnds: Number(e.target.value) }))
               }
             />
           </div>
