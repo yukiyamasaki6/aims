@@ -106,6 +106,23 @@ test("的は選択中の1枚だけを表示し、タップするとポップア�
   await expect(option).not.toContainText("点的");
 });
 
+test("的選択ポップアップの範囲外をタップすると、的選択だけ閉じて距離編集ポップアップは開いたままになる", async ({
+  page,
+}) => {
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("target-face-picker-trigger").click();
+
+  const option = page.getByTestId(
+    `target-face-option-${TARGET_FACE_40CM_INDOOR}`,
+  );
+  await expect(option).toBeVisible();
+
+  await page.mouse.click(5, 5);
+
+  await expect(option).toBeHidden();
+  await expect(page.getByTestId("distance-config-distance-1")).toBeVisible();
+});
+
 test("的の選択肢は種類（アウトドア→インドア→フィールド）→サイズの大きい順に並ぶ", async ({
   page,
 }) => {
