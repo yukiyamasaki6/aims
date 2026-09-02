@@ -104,16 +104,18 @@ test("Unmarkedな距離が残ったままフィールド以外の種別に変更
       "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。",
     ),
   ).toBeVisible();
-  // 保存は失敗しているため、編集パネルは開いたままで種別もフィールドのまま。
+  // 保存は失敗しているため、編集ポップアップは開いたままで種別もフィールドのまま。
   await expect(page.getByTestId("round-config-save")).toBeVisible();
 
-  // 距離をMarkedに戻して距離を入力すれば、種別変更もできるようになる。
+  // ポップアップを閉じ、距離をMarkedに戻して距離を入力すれば、種別変更もできるようになる。
+  await page.keyboard.press("Escape");
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("distance-config-marked-1").click();
   await page.getByTestId("distance-config-distance-1").fill("18");
   await page.getByTestId("distance-config-save-1").click();
   await expect(page.getByTestId("distance-config-distance-1")).toBeHidden();
 
+  await page.getByTestId("round-config-summary").click();
   await page.getByTestId("round-config-format-outdoor").click();
   await page.getByTestId("round-config-save").click();
 
