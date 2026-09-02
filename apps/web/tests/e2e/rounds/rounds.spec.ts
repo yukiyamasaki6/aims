@@ -103,3 +103,52 @@ test("/rounds/[id]から一覧へ戻るリンクで/roundsへ遷移する", asyn
 
   await expect(page).toHaveURL(/\/rounds$/);
 });
+
+test("一覧のメニューからラウンドを削除でき、確認ダイアログでキャンセルすると削除されない", async ({
+  page,
+}) => {
+  const name = `一覧削除テスト-${Date.now()}`;
+  await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto("/rounds");
+
+  const roundLink = page.getByRole("link", { name: new RegExp(name) });
+  await expect(roundLink).toBeVisible();
+  const row = page.locator("li", { hasText: name });
+
+  await row.getByTestId("round-menu-trigger").click();
+  await page.getByTestId("round-delete").click();
+  await page.getByTestId("confirm-dialog-cancel").click();
+  await expect(roundLink).toBeVisible();
+
+  await row.getByTestId("round-menu-trigger").click();
+  await page.getByTestId("round-delete").click();
+  await page.getByTestId("confirm-dialog-confirm").click();
+  await expect(roundLink).toBeHidden();
+});
+
+test("詳細画面のメニューからラウンドを削除すると一覧へ遷移し、一覧から消える", async ({
+  page,
+}) => {
+  const name = `詳細削除テスト-${Date.now()}`;
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await page.getByTestId("round-menu-trigger").click();
+  await page.getByTestId("round-delete").click();
+  await page.getByTestId("confirm-dialog-confirm").click();
+
+  await expect(page).toHaveURL(/\/rounds$/);
+  await expect(page.getByRole("link", { name: new RegExp(name) })).toBeHidden();
+});

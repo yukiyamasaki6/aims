@@ -70,7 +70,7 @@ export function RoundsListClient({
                   data-testid="round-menu-trigger"
                   className="-translate-y-1/2 absolute top-1/2 right-2 p-2 text-muted-foreground hover:text-foreground"
                 >
-                  <MoreHorizontal className="size-4" />
+                  <MoreHorizontal className="size-5" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                   <DropdownMenuItem
