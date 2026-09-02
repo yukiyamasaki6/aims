@@ -1,6 +1,13 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, Plus, Redo, Undo } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Redo,
+  Undo,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TargetFaceIcon, TargetFaceTile } from "@/components/target-face-icon";
@@ -844,7 +851,6 @@ export function ScorecardClient({
                   <button
                     type="button"
                     data-testid={`distance-config-toggle-${d.distance_number}`}
-                    aria-expanded={editingDistanceIds.has(d.id)}
                     onClick={() => toggleDistanceEditing(d.id)}
                     className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-muted-foreground text-xs"
                   >
@@ -874,12 +880,7 @@ export function ScorecardClient({
                         <span>{d.arrows_per_end}本</span>
                         <span>{d.total_ends}エンド</span>
                       </span>
-                      <ChevronDown
-                        className={cn(
-                          "size-4 shrink-0 transition-transform",
-                          editingDistanceIds.has(d.id) && "rotate-180",
-                        )}
-                      />
+                      <ChevronRight className="size-4 shrink-0" />
                     </span>
                   </button>
                   {editingDistanceIds.has(d.id) && (
@@ -898,6 +899,9 @@ export function ScorecardClient({
                       roundFormat={roundConfig.format}
                       onSaved={handleDistanceSaved}
                       onDeleted={() => handleDistanceDeleted(d.id)}
+                      onOpenChange={(open) => {
+                        if (!open) toggleDistanceEditing(d.id);
+                      }}
                     />
                   )}
                   <div className="flex items-baseline justify-between gap-2 border-t border-b px-3 py-2 text-muted-foreground text-xs">
