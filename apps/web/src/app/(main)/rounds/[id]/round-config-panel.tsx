@@ -45,12 +45,14 @@ export function RoundConfigPanel({
   roundId,
   initial,
   onSaved,
+  defaultExpanded = false,
 }: {
   roundId: string;
   initial: RoundConfig;
   onSaved: (updated: RoundConfig) => void;
+  defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [saved, setSaved] = useState(initial);
   const [draft, setDraft] = useState(initial);
   const [submitting, setSubmitting] = useState(false);

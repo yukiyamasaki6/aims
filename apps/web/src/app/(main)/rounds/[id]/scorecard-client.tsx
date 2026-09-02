@@ -867,6 +867,7 @@ export function ScorecardClient({
             roundId={roundId}
             initial={initialRoundConfig}
             onSaved={setRoundConfig}
+            defaultExpanded={initialDistances.length === 0}
           />
           <div
             data-testid="round-summary"

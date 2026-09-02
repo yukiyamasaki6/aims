@@ -55,6 +55,26 @@ test("何も選択しないまま開始すると、カスタム（距離構成�
   await expect(page.getByTestId("round-summary")).toContainText("合計0");
 });
 
+test("カスタムで開始すると、ラウンド構成が展開された状態で詳細画面が表示される", async ({
+  page,
+}) => {
+  await page.goto("/rounds/new");
+  await page.getByTestId("round-start-button").click();
+
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+  await expect(page.getByTestId("round-config-name")).toBeVisible();
+
+  // 距離を1つ追加すれば、以降はカスタム開始直後ではなくなるため、
+  // 再読み込みしても展開されない（距離が空かどうかで判定しているため）。
+  await page.getByTestId("round-config-name").fill("編集後の名前");
+  await page.getByTestId("round-config-save").click();
+  await page.getByTestId("add-distance-button").click();
+  await expect(page.getByTestId("distance-config-distance-1")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByTestId("round-config-name")).toBeHidden();
+});
+
 test("カスタムで開始したラウンドの弓種をベアボウに変更できる（作成直後は選択肢を持たない唯一の弓種）", async ({
   page,
 }) => {
@@ -66,7 +86,8 @@ test("カスタムで開始したラウンドの弓種をベアボウに変更�
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
 
-  await page.getByTestId("round-config-summary").click();
+  // カスタムで開始した直後は、距離が0件のためラウンド構成ポップアップが
+  // 最初から開いた状態で表示される（#174）。改めて概要行をタップする必要はない。
   await page.getByTestId("round-config-bow-type-barebow").click();
   await page.getByTestId("round-config-save").click();
 
