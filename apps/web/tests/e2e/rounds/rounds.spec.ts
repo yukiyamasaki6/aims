@@ -86,7 +86,8 @@ test("カスタムで開始したラウンドの弓種をベアボウに変更�
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
 
-  await page.getByTestId("round-config-summary").click();
+  // カスタムで開始した直後は、距離が0件のためラウンド構成ポップアップが
+  // 最初から開いた状態で表示される（#174）。改めて概要行をタップする必要はない。
   await page.getByTestId("round-config-bow-type-barebow").click();
   await page.getByTestId("round-config-save").click();
 
