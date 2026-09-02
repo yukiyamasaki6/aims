@@ -15,7 +15,7 @@ export default async function NewRoundPage() {
   const { data: presets } = await supabase
     .from("round_presets")
     .select(
-      "id, name, owner_id, round_preset_distances(distance_number, distance, total_ends, arrows_per_end, target_faces(size, target_face_spots(target_face_rings(radius, color, line_color, z_index, score_str, score_int))))",
+      "id, name, format, owner_id, round_preset_distances(distance_number, distance, is_marked, total_ends, arrows_per_end, target_faces(size, target_face_spots(target_face_rings(radius, color, line_color, z_index, score_str, score_int))))",
     )
     .or(ownerFilter)
     .order("name");

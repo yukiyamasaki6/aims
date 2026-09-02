@@ -3,16 +3,29 @@
 import { ChevronDown, ChevronLeft, Plus, Redo, Undo } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { TargetFaceTile } from "@/components/target-face-icon";
-import { Button } from "@/components/ui/button";
+import { TargetFaceIcon, TargetFaceTile } from "@/components/target-face-icon";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { addDistance, clearShot, recordShot } from "./actions";
+import {
+  addDistance,
+  clearShot,
+  recordShot,
+  saveRoundAsPreset,
+} from "./actions";
 import {
   type DistanceConfig,
   DistanceEditFields,
   type TargetFaceOption,
 } from "./distance-config-row";
-import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
+import {
+  BOW_TYPE_OPTIONS,
+  FORMAT_OPTIONS,
+  labelOf,
+  type RoundConfig,
+  RoundConfigPanel,
+} from "./round-config-panel";
 
 type Distance = {
   id: string;
@@ -216,6 +229,39 @@ function stepPosition(
   return cells[index + offset] ?? null;
 }
 
+// プリセット保存ダイアログの名前欄プレースホルダーに使う、種別・弓種・距離構成
+// から機械的に組み立てたデフォルト名。ラウンド名が設定されている場合はそちらを
+// 優先する（generatePresetNameはラウンド名が空のときのフォールバックとして使う）。
+// ユーザーが何も入力せず保存した場合は、このプレースホルダーがそのまま採用される。
+function generatePresetName(
+  format: string,
+  bowType: string,
+  distances: Distance[],
+): string {
+  const distancePart = [...distances]
+    .sort((a, b) => a.distance_number - b.distance_number)
+    .map((d) => (d.distance !== null ? `${d.distance}` : "??"))
+    .join("-");
+
+  return [
+    labelOf(FORMAT_OPTIONS, format),
+    labelOf(BOW_TYPE_OPTIONS, bowType),
+    distancePart,
+  ]
+    .filter((part) => part !== "")
+    .join(" / ");
+}
+
+function presetNamePlaceholder(
+  roundConfig: RoundConfig,
+  distances: Distance[],
+): string {
+  if (roundConfig.name.trim() !== "") {
+    return roundConfig.name;
+  }
+  return generatePresetName(roundConfig.format, roundConfig.bowType, distances);
+}
+
 export function ScorecardClient({
   roundId,
   initialRoundConfig,
@@ -237,6 +283,10 @@ export function ScorecardClient({
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [presetDialogOpen, setPresetDialogOpen] = useState(false);
+  const [presetName, setPresetName] = useState("");
+  const [presetSubmitting, setPresetSubmitting] = useState(false);
+  const [presetError, setPresetError] = useState<string | null>(null);
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
     new Set(),
   );
@@ -432,6 +482,27 @@ export function ScorecardClient({
       setUndoStack((prev) => prev.filter((e) => e.distanceId !== updated.id));
       setRedoStack((prev) => prev.filter((e) => e.distanceId !== updated.id));
     }
+  }
+
+  async function handleSavePreset() {
+    if (presetSubmitting) return;
+    setPresetSubmitting(true);
+    setPresetError(null);
+
+    const name =
+      presetName.trim() !== ""
+        ? presetName.trim()
+        : presetNamePlaceholder(roundConfig, distances);
+    const result = await saveRoundAsPreset({ roundId, name });
+    if (result?.error) {
+      setPresetError(result.error);
+      setPresetSubmitting(false);
+      return;
+    }
+
+    setPresetSubmitting(false);
+    setPresetDialogOpen(false);
+    setPresetName("");
   }
 
   function handleDistanceDeleted(distanceId: string) {
@@ -637,13 +708,101 @@ export function ScorecardClient({
   return (
     <main className="flex min-h-full flex-col">
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-8">
-        <Link
-          href="/rounds"
-          className="inline-flex w-fit items-center gap-1 self-start text-muted-foreground text-sm hover:text-foreground"
-        >
-          <ChevronLeft className="size-4" />
-          一覧へ戻る
-        </Link>
+        <div className="flex items-center justify-between gap-2">
+          <Link
+            href="/rounds"
+            className="inline-flex w-fit items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
+          >
+            <ChevronLeft className="size-4" />
+            一覧へ戻る
+          </Link>
+          <Dialog
+            open={presetDialogOpen}
+            onOpenChange={(open) => {
+              setPresetDialogOpen(open);
+              if (!open) {
+                setPresetName("");
+                setPresetError(null);
+              }
+            }}
+          >
+            <DialogTrigger
+              data-testid="save-as-preset-trigger"
+              className={buttonVariants({ variant: "default", size: "sm" })}
+            >
+              プリセット保存
+            </DialogTrigger>
+            <DialogContent>
+              <div className="flex flex-col gap-3">
+                <h2 className="font-medium text-sm">
+                  現在の構成をプリセットとして保存しますか？
+                </h2>
+                <div className="flex flex-col gap-1 text-muted-foreground text-sm">
+                  {[...distances]
+                    .sort((a, b) => a.distance_number - b.distance_number)
+                    .map((d) => {
+                      const face = targetFaces.find(
+                        (f) => f.id === d.target_face_id,
+                      );
+                      const rings =
+                        face?.target_face_spots[0]?.target_face_rings ?? [];
+
+                      return (
+                        <div
+                          key={d.id}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <span className="flex items-center gap-2">
+                            {[
+                              d.distance !== null ? `${d.distance}m` : null,
+                              roundConfig.format === "field"
+                                ? d.is_marked
+                                  ? "Marked"
+                                  : "Unmarked"
+                                : null,
+                            ]
+                              .filter((part): part is string => part !== null)
+                              .join(" / ")}
+                            <TargetFaceIcon rings={rings} />
+                            {face ? `${face.size}cm` : "的未設定"}
+                          </span>
+                          <span className="shrink-0">
+                            {d.arrows_per_end}本×{d.total_ends}エンド
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label
+                    htmlFor="save-as-preset-name"
+                    className="text-muted-foreground text-xs"
+                  >
+                    プリセット名
+                  </label>
+                  <Input
+                    id="save-as-preset-name"
+                    data-testid="save-as-preset-name"
+                    placeholder={presetNamePlaceholder(roundConfig, distances)}
+                    value={presetName}
+                    onChange={(e) => setPresetName(e.target.value)}
+                  />
+                </div>
+                {presetError && (
+                  <p className="text-destructive text-sm">{presetError}</p>
+                )}
+                <Button
+                  type="button"
+                  disabled={presetSubmitting}
+                  data-testid="save-as-preset-confirm"
+                  onClick={handleSavePreset}
+                >
+                  保存
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
         <RoundConfigPanel
           roundId={roundId}
           initial={initialRoundConfig}

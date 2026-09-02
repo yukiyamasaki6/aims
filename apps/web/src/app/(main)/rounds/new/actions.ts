@@ -44,6 +44,21 @@ export async function createRoundFromPreset(
   redirect(`/rounds/${roundId}`);
 }
 
+export async function deletePreset(
+  presetId: string,
+): Promise<{ error: string } | undefined> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("round_presets")
+    .delete()
+    .eq("id", presetId);
+
+  if (error) {
+    return { error: error.message };
+  }
+}
+
 export async function createCustomRound(): Promise<
   { error: string } | undefined
 > {
