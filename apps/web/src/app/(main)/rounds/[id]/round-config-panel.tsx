@@ -7,19 +7,22 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { updateRoundConfig } from "./actions";
 
-const FORMAT_OPTIONS = [
+export const FORMAT_OPTIONS = [
   { value: "outdoor", label: "アウトドア" },
   { value: "indoor", label: "インドア" },
   { value: "field", label: "フィールド" },
 ];
 
-const BOW_TYPE_OPTIONS = [
+export const BOW_TYPE_OPTIONS = [
   { value: "recurve", label: "リカーブ" },
   { value: "compound", label: "コンパウンド" },
   { value: "barebow", label: "ベアボウ" },
 ];
 
-function labelOf(options: { value: string; label: string }[], value: string) {
+export function labelOf(
+  options: { value: string; label: string }[],
+  value: string,
+) {
   return options.find((o) => o.value === value)?.label ?? value;
 }
 

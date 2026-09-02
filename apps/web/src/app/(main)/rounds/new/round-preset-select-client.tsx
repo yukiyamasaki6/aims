@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { useState } from "react";
@@ -9,12 +9,23 @@ import {
   type TargetFaceRing,
 } from "@/components/target-face-icon";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { createCustomRound, createRoundFromPreset } from "./actions";
+import {
+  createCustomRound,
+  createRoundFromPreset,
+  deletePreset,
+} from "./actions";
 
 type PresetDistance = {
   distance_number: number;
-  distance: number;
+  distance: number | null;
+  is_marked: boolean;
   total_ends: number;
   arrows_per_end: number;
   target_faces: {
@@ -26,6 +37,7 @@ type PresetDistance = {
 export type Preset = {
   id: string;
   name: string;
+  format: string;
   round_preset_distances: PresetDistance[];
 };
 
@@ -33,10 +45,12 @@ function PresetRow({
   preset,
   selected,
   onSelect,
+  onDelete,
 }: {
   preset: Preset;
   selected: boolean;
   onSelect: () => void;
+  onDelete?: () => void;
 }) {
   const distances = [...preset.round_preset_distances].sort(
     (a, b) => a.distance_number - b.distance_number,
@@ -45,7 +59,7 @@ function PresetRow({
   return (
     <div
       className={cn(
-        "rounded-xl border bg-card text-card-foreground shadow-sm",
+        "relative rounded-xl border bg-card text-card-foreground shadow-sm",
         selected && "border-primary ring-1 ring-primary",
       )}
     >
@@ -54,10 +68,30 @@ function PresetRow({
         aria-pressed={selected}
         data-testid="round-preset-button"
         onClick={onSelect}
-        className="w-full p-3 text-left font-medium"
+        className={cn("w-full p-3 text-left font-medium", onDelete && "pr-10")}
       >
         {preset.name}
       </button>
+      {onDelete && (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={`「${preset.name}」のメニュー`}
+            data-testid="round-preset-menu-trigger"
+            className="-translate-y-1/2 absolute top-1/2 right-1 p-2 text-muted-foreground hover:text-foreground"
+          >
+            <MoreHorizontal className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem
+              data-testid="round-preset-delete"
+              className="text-destructive data-[highlighted]:text-destructive"
+              onClick={onDelete}
+            >
+              削除
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       {selected && (
         <button
           type="button"
@@ -75,7 +109,16 @@ function PresetRow({
                 className="flex items-center justify-between gap-2"
               >
                 <span className="flex items-center gap-2">
-                  {d.distance}m
+                  {[
+                    d.distance !== null ? `${d.distance}m` : null,
+                    preset.format === "field"
+                      ? d.is_marked
+                        ? "Marked"
+                        : "Unmarked"
+                      : null,
+                  ]
+                    .filter((part): part is string => part !== null)
+                    .join(" / ")}
                   <TargetFaceIcon rings={rings} />
                   {size !== null ? `${size}cm` : "的未設定"}
                 </span>
@@ -92,12 +135,15 @@ function PresetRow({
 }
 
 export function RoundPresetSelect({
-  personalPresets,
+  personalPresets: initialPersonalPresets,
   globalPresets,
 }: {
   personalPresets: Preset[];
   globalPresets: Preset[];
 }) {
+  const [personalPresets, setPersonalPresets] = useState(
+    initialPersonalPresets,
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -108,6 +154,21 @@ export function RoundPresetSelect({
 
   function toggleSelect(id: string) {
     setSelectedId((prev) => (prev === id ? null : id));
+  }
+
+  async function handleDeletePreset(preset: Preset) {
+    if (!window.confirm(`「${preset.name}」を削除しますか？`)) {
+      return;
+    }
+
+    const result = await deletePreset(preset.id);
+    if (result?.error) {
+      setError(result.error);
+      return;
+    }
+
+    setPersonalPresets((prev) => prev.filter((p) => p.id !== preset.id));
+    setSelectedId((prev) => (prev === preset.id ? null : prev));
   }
 
   async function handleStart() {
@@ -165,6 +226,7 @@ export function RoundPresetSelect({
                   preset={preset}
                   selected={selectedId === preset.id}
                   onSelect={() => toggleSelect(preset.id)}
+                  onDelete={() => handleDeletePreset(preset)}
                 />
               ))}
             </div>
