@@ -6,25 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { updateRoundConfig } from "./actions";
-
-export const FORMAT_OPTIONS = [
-  { value: "outdoor", label: "アウトドア" },
-  { value: "indoor", label: "インドア" },
-  { value: "field", label: "フィールド" },
-];
-
-export const BOW_TYPE_OPTIONS = [
-  { value: "recurve", label: "リカーブ" },
-  { value: "compound", label: "コンパウンド" },
-  { value: "barebow", label: "ベアボウ" },
-];
-
-export function labelOf(
-  options: { value: string; label: string }[],
-  value: string,
-) {
-  return options.find((o) => o.value === value)?.label ?? value;
-}
+import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
 
 function RequiredMark() {
   return (

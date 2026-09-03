@@ -20,62 +20,20 @@ export type TargetFaceSpotLayout = {
 // 別に太さを持つ）。
 const STROKE_WIDTH_RATIO = 0.008;
 
+// 規定（標的中心に太さ1mm・長さ4mm以下の「＋」を付け、中心位置を示す）に
+// 基づく固定値。radius等と同じcm単位で、的のサイズに関わらず一定の実寸。
+const CENTER_CROSS_ARM_LENGTH_CM = 0.2;
+const CENTER_CROSS_STROKE_WIDTH_CM = 0.1;
+
 // 的をリングデータ（半径・色・境界線色）から同心円として描画する。
 // target_facesの名称文字列には依存しない。cm単位の半径をそのままviewBoxに
 // 渡すことで、拡縮・将来のクリック座標の逆変換（着弾記録UI等）にも同じ
-// 幾何データを再利用できる。
-export function TargetFaceIcon({
-  rings,
-  size = 24,
-}: {
-  rings: TargetFaceRing[];
-  size?: number;
-}) {
-  if (rings.length === 0) {
-    return (
-      <span
-        className="inline-block shrink-0 rounded-full border border-dashed"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-
-  const maxRadius = Math.max(...rings.map((r) => r.radius));
-  const sorted = [...rings].sort((a, b) => b.radius - a.radius);
-  const strokeWidth = maxRadius * STROKE_WIDTH_RATIO;
-  // strokeはパス（リング半径）を中心に太さの半分ずつ内外に描かれるため、
-  // 最外リングの境界線がviewBoxの端で見切れないよう半分だけ余白を確保する。
-  const viewExtent = maxRadius + strokeWidth / 2;
-
-  return (
-    <svg
-      viewBox={`${-viewExtent} ${-viewExtent} ${viewExtent * 2} ${viewExtent * 2}`}
-      width={size}
-      height={size}
-      className="shrink-0"
-      aria-hidden="true"
-    >
-      {sorted.map((r) => (
-        <circle
-          key={r.z_index}
-          cx={0}
-          cy={0}
-          r={r.radius}
-          fill={r.color}
-          stroke={r.line_color ?? "none"}
-          strokeWidth={r.line_color ? strokeWidth : 0}
-        />
-      ))}
-    </svg>
-  );
-}
-
-// TargetFaceIconと異なり、3つ目（トライアングル/バーティカル）等の複数スポットを
-// center_x/center_yの相対位置で正しく配置して描画する。的選択UIのように、
-// 実際のレイアウト（1つ目/3つ目トライアングル/3つ目バーティカル）の違いを
+// 幾何データを再利用できる。1つ目の的はspotsに1要素だけ渡せばよく、
+// 3つ目（トライアングル/バーティカル）等の複数スポットもcenter_x/center_yの
+// 相対位置で正しく配置して描画する。的選択UIのように、実際のレイアウトの違いを
 // 一目で見分けたい場面で使う。center_yはデータ上「上が正」のため、SVGのy軸
 // （下が正）に合わせて符号を反転させる。
-export function TargetFaceThumbnail({
+export function TargetFaceIcon({
   spots,
   size = 64,
   className,
@@ -144,6 +102,22 @@ export function TargetFaceThumbnail({
                 }
               />
             ))}
+            <line
+              x1={-CENTER_CROSS_ARM_LENGTH_CM}
+              y1={0}
+              x2={CENTER_CROSS_ARM_LENGTH_CM}
+              y2={0}
+              stroke="#231F20"
+              strokeWidth={CENTER_CROSS_STROKE_WIDTH_CM}
+            />
+            <line
+              x1={0}
+              y1={-CENTER_CROSS_ARM_LENGTH_CM}
+              x2={0}
+              y2={CENTER_CROSS_ARM_LENGTH_CM}
+              stroke="#231F20"
+              strokeWidth={CENTER_CROSS_STROKE_WIDTH_CM}
+            />
           </g>
         );
       })}
@@ -166,119 +140,146 @@ function innerSameColorRings(rings: TargetFaceRing[]): TargetFaceRing[] {
   return result;
 }
 
-// 的中心部（同色の内側リング）の右上90度分だけを切り出し、得点帯ごとに得点表記を
-// 重ねたバッジ。色・半径だけでは見分けがつかない的（例: 弓種によってXリングの
-// 有無・得点帯の境界が異なる場合）を、実際の得点表記で見分けられるようにする。
-//
-// 枠（ビューポート）は「最外リングの外径が右上の角（中心から最も遠い対角の点）に
-// ちょうど接する」大きさにする。中心から枠の角までの距離は枠の一辺の√2倍なので、
-// 一辺は最外リングの半径÷√2。クラスタの要素数に関わらず、常に「配色が同じ内側
-// リング全部」を対象にするだけなので、フィールド的等の得点帯構成にも自動的に
-// 追従する。
-function TargetFaceCenterBadge({
+// 全体の円の半径に対する、切り出す横長の帯の高さ（中心から片側）の比率。
+const CENTER_DETAIL_BAND_RATIO = 0.3;
+// 得点表記は中心から右方向にしか置かれないため、左側は中心点が見える最小限
+// （半径に対するこの比率）だけ残し、大部分を右側（表記がある側）に使う。
+const CENTER_DETAIL_LEFT_MARGIN_RATIO = 0.15;
+
+// 的中心部（同色の内側リング）を、扇形に切り出すのではなく円のまま横長の帯で
+// クロップした拡大図。円自体は変形せず、単純に上下を狭く切り取るだけなので、
+// 「写真の横長トリミング」と同じ自然な見え方になり、扇形特有の「なぜこの形か」
+// という解釈の手間が生まれない。的サムネイル・サイズ表記と並べる独立した
+// 要素として使う。
+// 次の得点帯（色が変わる最初のリング）をどれだけ覗かせるかの比率
+// （次のリングまでの距離に対する割合）。これが的の中心部だけを切り取った
+// ものだと伝わるよう、少しだけ次の色を見せる。
+const NEXT_RING_PEEK_RATIO = 0.15;
+
+export function TargetFaceCenterDetail({
   rings,
-  pixelSize,
+  pixelWidth = 64,
 }: {
   rings: TargetFaceRing[];
-  pixelSize: number;
+  pixelWidth?: number;
 }) {
   const cluster = innerSameColorRings(rings);
   if (cluster.length === 0) return null;
 
-  const outerRadius = cluster[cluster.length - 1].radius;
-  const boxSide = outerRadius / Math.SQRT2;
-  // フォントサイズはpixelSizeではなくviewBoxと同じcm単位のスケールで指定する
+  const clusterOuterRadius = cluster[cluster.length - 1].radius;
+  const sorted = [...rings].sort((a, b) => a.radius - b.radius);
+  const nextRing = sorted[cluster.length];
+  const cropRadius = nextRing
+    ? clusterOuterRadius +
+      (nextRing.radius - clusterOuterRadius) * NEXT_RING_PEEK_RATIO
+    : clusterOuterRadius;
+
+  const strokeWidth = cropRadius * STROKE_WIDTH_RATIO;
+  // strokeはパス（リング半径）を中心に太さの半分ずつ内外に描かれるため、
+  // 最外リングの境界線がviewBoxの端で見切れないよう半分だけ余白を確保する
+  // （TargetFaceIconと同じ考え方）。
+  const viewExtent = cropRadius + strokeWidth / 2;
+  const bandHalfHeight = viewExtent * CENTER_DETAIL_BAND_RATIO;
+  const leftEdge = -viewExtent * CENTER_DETAIL_LEFT_MARGIN_RATIO;
+  const cropWidth = viewExtent - leftEdge;
+  const pixelHeight = pixelWidth * ((bandHalfHeight * 2) / cropWidth);
+  // フォントサイズはpixelWidthではなくviewBoxと同じcm単位のスケールで指定する
   // 必要がある（そうしないと極端に巨大な文字になる）。
-  const fontSize = boxSide / 4.5;
+  const fontSize = clusterOuterRadius / 6;
 
   return (
-    <span
-      className="pointer-events-none absolute top-0 right-0 overflow-hidden border border-black bg-white"
-      style={{ width: pixelSize, height: pixelSize }}
+    <svg
+      viewBox={`${leftEdge} ${-bandHalfHeight} ${cropWidth} ${bandHalfHeight * 2}`}
+      width={pixelWidth}
+      height={pixelHeight}
+      className="shrink-0 rounded-md border overflow-hidden"
+      role="img"
+      aria-label={cluster.map((r) => r.score_str).join(", ")}
     >
-      <svg
-        viewBox={`0 ${-boxSide} ${boxSide} ${boxSide}`}
-        width={pixelSize}
-        height={pixelSize}
-        role="img"
-        aria-label={cluster.map((r) => r.score_str).join(", ")}
-      >
-        {[...cluster].reverse().map((r) => (
-          <circle
+      {nextRing && (
+        <circle
+          cx={0}
+          cy={0}
+          r={nextRing.radius}
+          fill={nextRing.color}
+          stroke={nextRing.line_color ?? "none"}
+          strokeWidth={nextRing.line_color ? strokeWidth : 0}
+        />
+      )}
+      {[...cluster].reverse().map((r) => (
+        <circle
+          key={r.z_index}
+          cx={0}
+          cy={0}
+          r={r.radius}
+          fill={r.color}
+          stroke={r.line_color ?? "none"}
+          strokeWidth={r.line_color ? strokeWidth : 0}
+        />
+      ))}
+      {cluster.map((r, i) => {
+        const innerEdge = i === 0 ? 0 : cluster[i - 1].radius;
+        const mid = (innerEdge + r.radius) / 2;
+        return (
+          <text
             key={r.z_index}
-            cx={0}
-            cy={0}
-            r={r.radius}
-            fill={r.color}
-            stroke={r.line_color ?? "none"}
-            strokeWidth={r.line_color ? boxSide * 0.04 : 0}
-          />
-        ))}
-        {cluster.map((r, i) => {
-          const innerEdge = i === 0 ? 0 : cluster[i - 1].radius;
-          const mid = (innerEdge + r.radius) / 2;
-          const offset = mid / Math.SQRT2;
-          return (
-            <text
-              key={r.z_index}
-              x={offset}
-              y={-offset}
-              fontSize={fontSize}
-              fontWeight="bold"
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fill="#231F20"
-            >
-              {r.score_str}
-            </text>
-          );
-        })}
-      </svg>
-    </span>
+            x={mid}
+            y={0}
+            dy="-0.06em"
+            fontSize={fontSize}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="#231F20"
+          >
+            {r.score_str}
+          </text>
+        );
+      })}
+      <line
+        x1={-CENTER_CROSS_ARM_LENGTH_CM}
+        y1={0}
+        x2={CENTER_CROSS_ARM_LENGTH_CM}
+        y2={0}
+        stroke="#231F20"
+        strokeWidth={CENTER_CROSS_STROKE_WIDTH_CM}
+      />
+      <line
+        x1={0}
+        y1={-CENTER_CROSS_ARM_LENGTH_CM}
+        x2={0}
+        y2={CENTER_CROSS_ARM_LENGTH_CM}
+        stroke="#231F20"
+        strokeWidth={CENTER_CROSS_STROKE_WIDTH_CM}
+      />
+    </svg>
   );
 }
 
-// 的の見た目（TargetFaceThumbnail）とサイズの数字を1枚のタイルにまとめたもの。
-// 的選択のポップアップ・その選択中1枚のプレビュー・距離の要約行など、
-// 「文字のラベルなしで、見た目とサイズだけで的を示す」場面で共通して使う。
-// サイズの文字はタイルサイズ（pixelSize）のおよそ1/3になるよう比例させる。
-// 右上には中心部（同色の内側リング）をズームして得点表記を重ねたバッジを重ね、
-// 色・半径が同じでも得点帯の構成が異なる的（弓種差分等）を見分けられるようにする。
-export function TargetFaceTile({
-  spots,
-  sizeCm,
-  pixelSize = 64,
-  className,
+// 的の情報表示（サイズ・全体像・中心拡大）。距離ごとの情報行（プリセット選択・
+// ラウンド詳細の距離一覧・的選択リスト）で共通して使う。サイズ表記を固定幅・
+// 右寄せにすることで、桁数（60cmと122cm等）によらずTargetFaceInfo全体の
+// 幅が常に一定になり、複数行に並べたときも画像の位置が自動的に揃う
+// （呼び出し側で列を分解する必要がない）。
+export function TargetFaceInfo({
+  face,
+  thumbnailSize = 48,
+  centerDetailWidth = 68,
 }: {
-  spots: TargetFaceSpotLayout[];
-  sizeCm: number;
-  pixelSize?: number;
-  className?: string;
+  face: { size: number; target_face_spots: TargetFaceSpotLayout[] } | null;
+  thumbnailSize?: number;
+  centerDetailWidth?: number;
 }) {
-  const representativeRings = spots[0]?.target_face_rings ?? [];
+  if (!face) {
+    return <span>的未設定</span>;
+  }
 
   return (
-    <span
-      className={cn(
-        "relative inline-flex shrink-0 items-center justify-center overflow-hidden",
-        className,
-      )}
-      style={{ width: pixelSize, height: pixelSize }}
-    >
-      <TargetFaceThumbnail spots={spots} className="size-full" />
-      <span
-        className="pointer-events-none absolute bottom-0 left-0 font-heading text-black leading-none"
-        style={{
-          fontSize: pixelSize / 3,
-          WebkitTextStroke: `${Math.max(1, pixelSize / 40)}px white`,
-          paintOrder: "stroke fill",
-        }}
-      >
-        {sizeCm}
-      </span>
-      <TargetFaceCenterBadge
-        rings={representativeRings}
-        pixelSize={pixelSize * 0.5}
+    <span className="flex items-center justify-center gap-1">
+      <span className="inline-block w-12 text-right">{face.size}cm</span>
+      <TargetFaceIcon spots={face.target_face_spots} size={thumbnailSize} />
+      <TargetFaceCenterDetail
+        rings={face.target_face_spots[0]?.target_face_rings ?? []}
+        pixelWidth={centerDetailWidth}
       />
     </span>
   );
