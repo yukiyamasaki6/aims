@@ -37,7 +37,6 @@ import {
   type TargetFaceOption,
 } from "./distance-config-row";
 import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
 
 type Distance = {
   id: string;
@@ -241,37 +240,15 @@ function stepPosition(
   return cells[index + offset] ?? null;
 }
 
-// プリセット保存ダイアログの名前欄プレースホルダーに使う、種別・弓種・距離構成
-// から機械的に組み立てたデフォルト名。ラウンド名が設定されている場合はそちらを
-// 優先する（generatePresetNameはラウンド名が空のときのフォールバックとして使う）。
-// ユーザーが何も入力せず保存した場合は、このプレースホルダーがそのまま採用される。
-function generatePresetName(
-  format: string,
-  bowType: string,
-  distances: Distance[],
-): string {
-  const distancePart = [...distances]
+// プリセット保存ダイアログの名前欄プレースホルダー（自動生成の候補名）。
+// ラウンド名が設定されている場合は、こちらではなくラウンド名自体を名前欄に
+// 事前入力する（ScorecardClient側でpresetName初期値に使う）ため、
+// ここは距離構成のみのフォールバックでよい。
+function generatePresetName(distances: Distance[]): string {
+  return [...distances]
     .sort((a, b) => a.distance_number - b.distance_number)
     .map((d) => (d.distance !== null ? `${d.distance}` : "??"))
     .join("-");
-
-  return [
-    labelOf(FORMAT_OPTIONS, format),
-    labelOf(BOW_TYPE_OPTIONS, bowType),
-    distancePart,
-  ]
-    .filter((part) => part !== "")
-    .join(" / ");
-}
-
-function presetNamePlaceholder(
-  roundConfig: RoundConfig,
-  distances: Distance[],
-): string {
-  if (roundConfig.name.trim() !== "") {
-    return roundConfig.name;
-  }
-  return generatePresetName(roundConfig.format, roundConfig.bowType, distances);
 }
 
 export function ScorecardClient({
@@ -506,7 +483,7 @@ export function ScorecardClient({
     const name =
       presetName.trim() !== ""
         ? presetName.trim()
-        : presetNamePlaceholder(roundConfig, distances);
+        : generatePresetName(distances);
     const result = await saveRoundAsPreset({ roundId, name });
     if (result?.error) {
       setPresetError(result.error);
@@ -744,7 +721,9 @@ export function ScorecardClient({
               open={presetDialogOpen}
               onOpenChange={(open) => {
                 setPresetDialogOpen(open);
-                if (!open) {
+                if (open) {
+                  setPresetName(roundConfig.name);
+                } else {
                   setPresetName("");
                   setPresetError(null);
                 }
@@ -787,10 +766,7 @@ export function ScorecardClient({
                     <Input
                       id="save-as-preset-name"
                       data-testid="save-as-preset-name"
-                      placeholder={presetNamePlaceholder(
-                        roundConfig,
-                        distances,
-                      )}
+                      placeholder={generatePresetName(distances)}
                       value={presetName}
                       onChange={(e) => setPresetName(e.target.value)}
                     />

@@ -128,7 +128,7 @@ test("現在の構成を個人プリセットとして保存でき、/rounds/new
   await expect(presetCard).toContainText("6本×3エンド");
 });
 
-test("ラウンド名が空でプリセット名も空のまま保存すると、種別・弓種・距離構成から自動生成された名前が採用される", async ({
+test("ラウンド名が空でプリセット名も空のまま保存すると、距離構成から自動生成された名前が採用される", async ({
   page,
 }) => {
   const email = `save-as-preset-autoname-${Date.now()}@aims.test`;
@@ -151,23 +151,18 @@ test("ラウンド名が空でプリセット名も空のまま保存すると�
 
   await page.getByTestId("save-as-preset-trigger").click();
   const nameInput = page.getByTestId("save-as-preset-name");
-  await expect(nameInput).toHaveAttribute(
-    "placeholder",
-    "アウトドア / リカーブ / 30-30",
-  );
+  await expect(nameInput).toHaveAttribute("placeholder", "30-30");
   await expect(nameInput).toHaveValue("");
   await page.getByTestId("save-as-preset-confirm").click();
   await expect(nameInput).toBeHidden();
 
   await page.goto("/rounds/new");
   await expect(
-    page
-      .getByTestId("round-preset-button")
-      .filter({ hasText: "アウトドア / リカーブ / 30-30" }),
+    page.getByTestId("round-preset-button").filter({ hasText: "30-30" }),
   ).toBeVisible();
 });
 
-test("ラウンド名が設定されている場合、プリセット名のプレースホルダーにラウンド名が採用される", async ({
+test("ラウンド名が設定されている場合、プリセット名欄にラウンド名が事前入力される", async ({
   page,
 }) => {
   const email = `save-as-preset-roundname-${Date.now()}@aims.test`;
@@ -187,7 +182,8 @@ test("ラウンド名が設定されている場合、プリセット名のプ�
 
   await page.getByTestId("save-as-preset-trigger").click();
   const nameInput = page.getByTestId("save-as-preset-name");
-  await expect(nameInput).toHaveAttribute("placeholder", "県予選2026");
+  await expect(nameInput).toHaveValue("県予選2026");
+  await expect(nameInput).toHaveAttribute("placeholder", "30");
   await page.getByTestId("save-as-preset-confirm").click();
   await expect(nameInput).toBeHidden();
 
@@ -223,7 +219,7 @@ test("距離が未入力（Unmarked）の場合、自動生成された名前で
   await page.getByTestId("save-as-preset-trigger").click();
   await expect(page.getByTestId("save-as-preset-name")).toHaveAttribute(
     "placeholder",
-    "フィールド / リカーブ / ??",
+    "??",
   );
 });
 
