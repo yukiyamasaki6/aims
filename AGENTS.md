@@ -1,52 +1,47 @@
 # Agent Guidelines
 
-## 0. Communication
-- **Match the user's language:** Respond in the language the user is using. Format responses with Markdown for clarity.
+## 0. Core Directives
 
-## 1. Project Context
-- Read [README.md](README.md) for the product overview and [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow (structure, setup, branching, PR process).
-- Inspect `package.json` (root and `apps/web/`) for available scripts and package manager (`pnpm`) before running any command.
+- **Context Reference:** Read `README.md` and `CONTRIBUTING.md` first. Treat their rules with the same mandatory priority as this file.
+- **Memory Persistence:** Immediately persist all extracted rules, constraints, and project context into working memory. Do not depend on re-reading these files.
+- **Language:** Always respond in the language used by the user in the prompt.
+- **Security & Secrets:** NEVER output, hardcode, or request `service_role` keys or production secrets. Use only local `anon`/publishable keys in code and `.env.example`.
 
-## 2. Mandatory Rules & Quality Gates
-- **Validation before completion:**
-  - Pass `pnpm validate` (lint, typecheck, SQL lint, unit tests) with zero errors before considering any task done.
-  - Run `pnpm validate:all` (adds pgTAP DB tests and Playwright E2E; requires `pnpm db:start`) when changes touch application code, migrations, or E2E tests.
-  - Run `pnpm check:write` to resolve formatting and lint issues automatically.
-  - Keep the feedback loop with the user fast: run a given test/suite once, not repeatedly for reassurance, and skip validation steps that the change cannot affect (e.g., skip E2E for a docs-only change or a pure file move with zero content diff).
-- **Strict typing:** Never use `any`; ensure `pnpm typecheck` compiles cleanly.
-- **Database & secrets safety:**
-  - NEVER output, hardcode, or request `service_role` keys or production secrets. Use only local `anon`/publishable keys in code and `.env.example`.
-  - Place all schema changes in versioned SQL files under `supabase/migrations/` and apply locally via `pnpm db:reset`. Never execute ad-hoc schema changes or run migrations against production directly.
-  - Run `pnpm db:types`, commit the regenerated `apps/web/src/types/supabase.ts`, and update [docs/erd.md](docs/erd.md) immediately after modifying tables.
-  - Apply **both** an RLS policy **and** an explicit `grant select, insert, update, delete on <table> to anon, authenticated;` to every new table (`auto_expose_new_tables` is unset in `supabase/config.toml`).
-  - Fix issues reported by `pnpm lint:sql` (Squawk) directly (e.g., add `if not exists`, wrap in `begin`/`commit` with timeouts); do not exclude lint rules.
-  - Verify tables, RLS policies, and triggers via pgTAP (`supabase/tests/`, executed via `pnpm test:db`). Write pgTAP tests before writing the corresponding migrations.
-- **Frontend practices:**
-  - Use Tailwind CSS and reuse existing `shadcn/ui` components from `apps/web/src/components/ui/`.
-  - Default to React Server Components; use `"use client"` only when state, browser APIs, or lifecycle hooks are strictly required.
+## 1. Frontend Practices
 
-## 3. Framework & Tooling Notes
-- Check bundled Next.js docs at `apps/web/node_modules/next/dist/docs/` before writing App Router code, and heed deprecation notices.
-- Fall back to underlying CLIs (`npx supabase ...`, `npx next ...`, `npx biome ...`) if a pnpm wrapper fails with `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`.
-- Inspect the first line of generated types after running `pnpm db:types`; remove any prepended `Connecting to db ...` log lines before committing.
+- **Strict Typing:** Never use `any`. 
+- **Server-First:** Default to React Server Components; restrict `"use client"` strictly to leaf components.
+- **UI Reuse:** Use Tailwind CSS and reuse existing `shadcn/ui` components; never reinvent primitives.
+- **API Alignment:** Strictly adhere to the project's Next.js version APIs; never use deprecated patterns.
 
-## 4. Test-Driven Implementation Workflow
-- **Confirm intent before coding:** Restate the user's objective in your own words (or ask clarifying questions if ambiguous) before writing any code or tests.
-- **Ground shared understanding in docs:** Before implementing, read and, when needed, edit relevant docs (`docs/*.md`, `README.md`, this file) with the user to establish shared understanding of the design before writing code.
-- **Write tests first:** Write tests asserting the intended user outcome before starting implementation.
-- **Match coverage to the test type:** Write a Vitest unit test for essentially every component with behavior. Audit pgTAP coverage across three axes — constraints, cross-table effects, and RLS policies. Audit E2E coverage by enumerating each screen's possible states and the actions available in each.
-- **Implement to satisfy tests:** Run tests, adjust implementation, and repeat until all tests pass.
-- **Do not force green:** If a test fails, determine whether the test misencodes intent or the code is wrong. Fix the root cause; never weaken assertions to pass tests.
-- **Iterate in dialogue:** Revise tests and implementation together until both strictly align with the confirmed intent.
+## 2. Database Operations
 
-## 5. Issue → PR Workflow
-- **Issue Filing:** File every issue from the template. Split into an Epic with sub-issues only when the work spans multiple PRs. Always set the milestone.
-- **Environment & PATH:** Verify `gh` is on PATH (`where.exe gh`); if not, prepend `$env:Path += ";C:\Program Files\GitHub CLI"`.
-- **Clean Staging:** Run `git status` before branching or committing. Stage only files related to the current issue.
-- **Check Existing Files:** Run `git status` and `git log -- <path>` before creating a file, to avoid overwriting merged work.
-- **Explicit Approval:** Never run `git commit` or `gh pr create` unasked. Show the diff and wait for an explicit command.
-- **Honest Verification:** Write "verified/confirmed X" only if X was actually executed this session.
-- **Summary, Not Log:** A PR/Issue body is a summary of intent, not a sequential diff log. State only what changed and why; omit debugging narratives, trial logs, and diff walkthroughs. Follow `.github/pull_request_template.md` exactly.
-- **Pre-Submit Review:** Before submitting, diff the drafted body against `git diff` and the template headings. Fix every gap: diff content missing from the body, and body claims the diff doesn't support.
-- **Docs-Implementation Consistency:** Before submitting, verify docs (README, CONTRIBUTING, `docs/*.md`, this file) match the implementation. Update docs to follow the code, never the reverse.
-- **Post-Merge Cleanup:** After confirming the merge (`gh pr view <n> --json state,mergedAt`), run `git checkout main && git pull && git branch -d <branch>`.
+- **Migrations Only:** Apply all schema changes via versioned SQL files and `pnpm db:reset`; never execute ad-hoc SQL. Resolve `pnpm lint:sql` issues directly without disabling rules.
+- **Table Pipeline:** For every new or modified table:
+  1. Write pgTAP tests before creating migrations.
+  2. Define an RLS policy.
+  3. Explicitly grant permissions (`select, insert, update, delete`) to `anon, authenticated`.
+  4. Run `pnpm db:types`, strip any log prefixes, and commit the regenerated types.
+  5. Update `docs/erd.md`.
+
+## 3. Development Workflow
+
+- **Agile Principle:** Incremental progress precedes perfection; flawless code on a misaligned premise is worthless. Maintain a fast, continuous loop returning to Step 1.
+
+1. **Align:** Establish shared understanding before coding through iterative dialogue:
+   - Clarify intent through discussion and questions.
+   - Reflect understood design into documents to confirm alignment.
+2. **Test-First:** Write outcome-verifying tests before writing implementation.
+3. **Implement:** Write code strictly to satisfy the tests. Never weaken assertions.
+4. **Targeted Verify:** Run only specific tests or typecheck;  never run full test suites.
+
+## 4. Git & GitHub Operations
+
+1. **Issue:** File an issue from the template before starting work. Always set milestones; split into an Epic with sub-issues only when spanning multiple PRs.
+2. **Develop:** Loop Development Workflow with the user until implementation alignment is reached.
+3. **Commit with Approval:** Present the diff, stage only issue-related files, and obtain user approval before executing `git commit` (`<type>: <why and what>`). Keep messages high-level without debug logs.
+4. **Pre-PR Quality Gates:** Run final validations only after obtaining approval to proceed to a PR:
+   - Pass `pnpm validate` with zero errors.
+   - Run `pnpm validate:all` (pgTAP DB tests and Playwright E2E) when touching application logic, migrations, or E2E tests.
+5. **Create PR:** Follow `.github/pull_request_template.md` upon explicit user approval. Summarize intent concisely without trial logs, and claim "verified X" only if executed in the current session.
+6. **Cleanup:** Switch to `main`, pull latest, and delete the feature branch only after the PR merge is confirmed.
