@@ -92,6 +92,62 @@ test("距離が複数あるとき、距離ごとの合計・X数・10数も表�
   await expect(secondSummary).toContainText("X: 0 / 10: 0");
 });
 
+test("下にスクロールしてエンドを入力していても、合計と現在の距離の小計が常に画面上部に見える", async ({
+  page,
+}) => {
+  // 1画面に収まらないよう、距離ごとにエンド数を多めにしたラウンドを作成する。
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
+    name: "スクロール追従テスト",
+    roundDate: "2026-08-24",
+    distances: [
+      { distance: 90, totalEnds: 12, arrowsPerEnd: 6 },
+      { distance: 70, totalEnds: 12, arrowsPerEnd: 6 },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  const scrollContainer = page.locator("div.overflow-y-auto").first();
+  const roundSummary = page.getByTestId("round-summary");
+
+  // 距離1の途中までスクロールすると、合計と距離1の小計がともに画面上部に見える。
+  await scrollContainer.evaluate((el) => {
+    el.scrollTop = 300;
+  });
+  await expect(roundSummary).toBeVisible();
+  const summaryBoxAtDistance1 = await roundSummary.boundingBox();
+  expect(summaryBoxAtDistance1?.y).toBeLessThan(10);
+
+  const distance1Subtotal = page
+    .getByTestId("distance-summary-1")
+    .locator(".sticky");
+  await expect(distance1Subtotal).toBeVisible();
+  await expect(distance1Subtotal).toContainText("小計0");
+  const distance1Box = await distance1Subtotal.boundingBox();
+  expect(distance1Box?.y).toBeLessThan(100);
+
+  // 距離2の途中までスクロールすると、合計はそのままに、小計は距離2のものへ引き継がれる。
+  const distance2Top = await page
+    .getByTestId("distance-summary-2")
+    .evaluate((el) => (el as HTMLElement).offsetTop);
+  await scrollContainer.evaluate((el, top) => {
+    el.scrollTop = top + 100;
+  }, distance2Top);
+
+  await expect(roundSummary).toBeVisible();
+  const summaryBoxAtDistance2 = await roundSummary.boundingBox();
+  expect(summaryBoxAtDistance2?.y).toBeLessThan(10);
+
+  const distance2Subtotal = page
+    .getByTestId("distance-summary-2")
+    .locator(".sticky");
+  await expect(distance2Subtotal).toBeVisible();
+  await expect(distance2Subtotal).toContainText("小計0");
+  const distance2Box = await distance2Subtotal.boundingBox();
+  expect(distance2Box?.y).toBeLessThan(100);
+});
+
 test("入力済み・未入力にかかわらずマス目をタップして選び直し、上書きを続けられる", async ({
   page,
 }) => {
