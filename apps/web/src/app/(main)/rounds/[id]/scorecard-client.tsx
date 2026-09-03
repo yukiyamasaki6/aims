@@ -917,7 +917,16 @@ export function ScorecardClient({
                           data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
                           onClick={() => selectCell(d, end, arrow)}
                           className={cn(
-                            "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-colors hover:bg-muted/60",
+                            // 得点色をstyleで直接指定するため、hover:bg-muted等の
+                            // クラスは常にそのstyleに上書きされて効かない
+                            // （テンキーと同じ問題、issue #155）。明暗どちらの
+                            // 背景色でも均一に視認できるグレー半透明のオーバーレイ
+                            // をinset box-shadowで重ねてホバー/押下の視覚
+                            // フィードバックとする。不透明度はMaterial Design
+                            // のstate layerの目安（hover 8%/pressed 12%）に
+                            // 合わせる（issue #286で他の対話的要素も含めて
+                            // 同じ基準に揃える予定）。
+                            "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
                             isActive &&
                               "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
                           )}
@@ -1148,6 +1157,11 @@ export function ScorecardClient({
                         // のような暗い色では変化が知覚できないため、明暗どちらの背景
                         // でも均一に視認できるグレー半透明のオーバーレイをinset
                         // box-shadowで重ねてホバー/押下の視覚フィードバックとする。
+                        // マス目（issue #155）はpaleTone()で明度90%に統一された薄い
+                        // 背景のためMaterial Designのstate layerの目安（8%/12%）で
+                        // 十分だが、テンキーは彩度の高いベタ色のため同じ%では変化が
+                        // 知覚できず、実測で確認の上より強い不透明度にしている
+                        // （issue #286で他の対話的要素の基準を検討する際に再考）。
                         className="transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.25)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.35)]"
                         style={{
                           backgroundColor: b.bg,
