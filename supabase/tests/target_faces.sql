@@ -1,12 +1,13 @@
 begin;
 
-select plan(43);
+select plan(52);
 
 select has_table('public', 'target_faces', 'target_faces テーブルが存在する');
 select has_table('public', 'target_face_spots', 'target_face_spots テーブルが存在する');
 select has_table('public', 'target_face_rings', 'target_face_rings テーブルが存在する');
 select has_column('public', 'target_faces', 'size', 'target_faces.size カラムが存在する');
 select has_column('public', 'target_faces', 'format', 'target_faces.format カラムが存在する');
+select has_column('public', 'target_faces', 'bow_type', 'target_faces.bow_type カラムが存在する');
 
 -- formatは的の選択UIの並び順（種類→サイズ）を、名前文字列の解析ではなく
 -- roundsやdistancesと同じ意味を持つ列で扱うために持たせる。
@@ -33,6 +34,64 @@ select throws_ok(
   '23514',
   null,
   '不正なformatはCHECK制約で拒否される'
+);
+
+-- bow_typeはこの的が対応する弓種（複数可）。アウトドア・フィールドは弓種に
+-- よらず得点帯が共通のため全弓種、インドアはリカーブ・ベアボウ共通の的と
+-- コンパウンド専用の的（issue #163で追加）とで分かれる
+-- （JAAルールブック的仕様章で80cm-6リングもリカーブの中学生・小学生
+-- ラウンドで使用可能と明記されているため、アウトドアはコンパウンド限定
+-- ではなく全弓種とする）。
+select results_eq(
+  $$select bow_type from public.target_faces where name = '10点的（アウトドア・122cm）'$$,
+  $$values (array['recurve', 'compound', 'barebow']::text[])$$,
+  '10点的（アウトドア・122cm）のbow_typeは全弓種'
+);
+
+select results_eq(
+  $$select bow_type from public.target_faces where name = '6点的（アウトドア・80cm）'$$,
+  $$values (array['recurve', 'compound', 'barebow']::text[])$$,
+  '6点的（アウトドア・80cm）のbow_typeは全弓種（コンパウンド限定ではない）'
+);
+
+select results_eq(
+  $$select bow_type from public.target_faces where name = '10点的（インドア・60cm）'$$,
+  $$values (array['recurve', 'barebow']::text[])$$,
+  '10点的（インドア・60cm）のbow_typeはリカーブ・ベアボウ'
+);
+
+select results_eq(
+  $$select bow_type from public.target_faces where name = 'Indoor 60cm Compound'$$,
+  $$values (array['compound']::text[])$$,
+  'Indoor 60cm Compoundのbow_typeはコンパウンドのみ'
+);
+
+select results_eq(
+  $$select bow_type from public.target_faces where name = 'フィールド的（80cm）'$$,
+  $$values (array['recurve', 'compound', 'barebow']::text[])$$,
+  'フィールド的（80cm）のbow_typeは全弓種'
+);
+
+select throws_ok(
+  $$update public.target_faces set bow_type = array['invalid'] where name = '10点的（アウトドア・122cm）'$$,
+  '23514',
+  null,
+  '許可されていない値を含むbow_typeはCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$update public.target_faces set bow_type = array[]::text[] where name = '10点的（アウトドア・122cm）'$$,
+  '23514',
+  null,
+  '空配列のbow_typeはCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$insert into public.target_faces (owner_id, name, size, format)
+    values ('11111111-1111-1111-1111-111111111111', 'Missing Bow Type', 80, 'outdoor')$$,
+  '23502',
+  null,
+  'target_faces.bow_typeを省略した作成はNOT NULL制約で拒否される'
 );
 
 -- sizeは実際の的紙サイズであり、6点的（得点帯が中心の一部にしか印刷されない）
@@ -205,8 +264,8 @@ set local role authenticated;
 -- User A: 自分のowner_idで個人的な的を作成できる。
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 select lives_ok(
-  $$insert into public.target_faces (id, owner_id, name, size, format)
-    values ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'My Target', 80, 'outdoor')$$,
+  $$insert into public.target_faces (id, owner_id, name, size, format, bow_type)
+    values ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'My Target', 80, 'outdoor', array['recurve', 'compound', 'barebow'])$$,
   'ユーザーは自分のowner_idで的を作成できる'
 );
 
@@ -227,14 +286,15 @@ select throws_ok(
 );
 
 select throws_like(
-  $$insert into public.target_faces (owner_id, name, size, format) values (null, 'Global attempt', 80, 'outdoor')$$,
+  $$insert into public.target_faces (owner_id, name, size, format, bow_type)
+    values (null, 'Global attempt', 80, 'outdoor', array['recurve', 'compound', 'barebow'])$$,
   '%row-level security%',
   'クライアントはowner_idをnull（グローバル）にして的を作成できない'
 );
 
 select throws_like(
-  $$insert into public.target_faces (owner_id, name, size, format)
-    values ('99999999-9999-9999-9999-999999999999', 'Other owner attempt', 80, 'outdoor')$$,
+  $$insert into public.target_faces (owner_id, name, size, format, bow_type)
+    values ('99999999-9999-9999-9999-999999999999', 'Other owner attempt', 80, 'outdoor', array['recurve', 'compound', 'barebow'])$$,
   '%row-level security%',
   'ユーザーは他人のowner_idで的を作成できない'
 );

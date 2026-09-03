@@ -16,6 +16,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 
 ## Outdoor 122cm
 
+format: outdoor
+bow_type: recurve, compound, barebow
+
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
 | X | 黄 | 黒 | 3.05 |
@@ -31,6 +34,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 | 1点 | 白 | 黒 | 61.00 |
 
 ## Outdoor 80cm
+
+format: outdoor
+bow_type: recurve, compound, barebow
 
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
@@ -48,6 +54,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 
 ## Outdoor 80cm 6-ring
 
+format: outdoor
+bow_type: recurve, compound, barebow
+
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
 | X | 黄 | 黒 | 2.00 |
@@ -59,6 +68,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 | 5点 | 青 | 黒 | 24.00 |
 
 ## Indoor 60cm
+
+format: indoor
+bow_type: recurve, barebow
 
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
@@ -75,6 +87,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 
 ## Indoor 60cm Compound
 
+format: indoor
+bow_type: compound
+
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
 | 10点 | 黄 | 黒 | 1.50 |
@@ -90,6 +105,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 
 ## Indoor 60cm Triangular 3-spot / Vertical 3-spot
 
+format: indoor
+bow_type: recurve, barebow
+
 同一のリング構成を3スポット分持つ（トライアングル配置・バーティカル配置とも点数帯の構成自体は同一）。
 
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
@@ -102,6 +120,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 
 ## Indoor 60cm Triangular 3-spot / Vertical 3-spot Compound
 
+format: indoor
+bow_type: compound
+
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
 | 10点 | 黄 | 黒 | 1.50 |
@@ -111,6 +132,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 | 6点 | 青 | 黒 | 15.00 |
 
 ## Indoor 40cm
+
+format: indoor
+bow_type: recurve, barebow
 
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
@@ -127,6 +151,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 
 ## Indoor 40cm Compound
 
+format: indoor
+bow_type: compound
+
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
 | 10点 | 黄 | 黒 | 1.00 |
@@ -142,6 +169,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 
 ## Indoor 40cm Triangular 3-spot / Vertical 3-spot
 
+format: indoor
+bow_type: recurve, barebow
+
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
 | 10点 | 黄 | 黒 | 2.00 |
@@ -152,6 +182,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 
 ## Indoor 40cm Triangular 3-spot / Vertical 3-spot Compound
 
+format: indoor
+bow_type: compound
+
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
 | 10点 | 黄 | 黒 | 1.00 |
@@ -161,6 +194,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 | 6点 | 青 | 黒 | 10.00 |
 
 ## Field 80cm
+
+format: field
+bow_type: recurve, compound, barebow
 
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
@@ -173,6 +209,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 
 ## Field 60cm
 
+format: field
+bow_type: recurve, compound, barebow
+
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
 | 6点 | 黄 | 黒 | 5.00 |
@@ -184,6 +223,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 
 ## Field 40cm
 
+format: field
+bow_type: recurve, compound, barebow
+
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |
 | 6点 | 黄 | 黒 | 3.33 |
@@ -194,6 +236,9 @@ WAルールブックに基づく的（`target_faces`〜`target_face_rings`）の
 | 1点 | 黒 | 白 | 20.00 |
 
 ## Field 20cm Vertical 3-spot
+
+format: field
+bow_type: recurve, compound, barebow
 
 | 点数帯 | 色 | 境界の色 | 半径(cm) |
 | :--- | :--- | :--- | :--- |

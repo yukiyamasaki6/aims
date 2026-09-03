@@ -18,6 +18,8 @@ export type TargetFaceOption = {
   id: string;
   name: string;
   size: number;
+  format: string;
+  bow_type: string[];
   target_face_spots: TargetFaceSpotLayout[];
 };
 
@@ -129,6 +131,19 @@ export function PresetInfo({
   );
 }
 
+// フィルタ（種別・弓種）は「すべて」も選択肢に含める。ラウンドの種別・弓種を
+// 既定にはするが、絞り込みが自由度を奪って目的の的を選べなくなることが
+// ないよう、常に全件へ戻れる逃げ道を残す。
+const FILTER_ALL = "all";
+const FORMAT_FILTER_OPTIONS = [
+  { value: FILTER_ALL, label: "すべて" },
+  ...FORMAT_OPTIONS,
+];
+const BOW_TYPE_FILTER_OPTIONS = [
+  { value: FILTER_ALL, label: "すべて" },
+  ...BOW_TYPE_OPTIONS,
+];
+
 // 的の選択UI。名称は一切表示せず、実際のリング配色・レイアウト（3つ目の
 // トライアングル/バーティカル等）とサイズの数字だけで見分けられるようにする。
 // 通常は選択中の1枚だけを的情報（TargetFaceInfo）として表示し、タップすると
@@ -136,16 +151,30 @@ export function PresetInfo({
 function TargetFacePicker({
   targetFaces,
   selectedId,
+  roundFormat,
+  roundBowType,
   onSelect,
   disabled,
 }: {
   targetFaces: TargetFaceOption[];
   selectedId: string;
+  roundFormat: string;
+  roundBowType: string;
   onSelect: (id: string) => void;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  // ラウンドの種別・弓種に対応するタブを既定にする。選び直した場合はダイアログを
+  // 再度開いてもそのまま保持する（開くたびに毎回既定へ戻すと、直前に見ていた
+  // タブを見失ってしまうため）。
+  const [selectedFormat, setSelectedFormat] = useState(roundFormat);
+  const [selectedBowType, setSelectedBowType] = useState(roundBowType);
   const selectedFace = targetFaces.find((f) => f.id === selectedId);
+  const visibleFaces = targetFaces.filter(
+    (f) =>
+      (selectedFormat === FILTER_ALL || f.format === selectedFormat) &&
+      (selectedBowType === FILTER_ALL || f.bow_type.includes(selectedBowType)),
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -163,27 +192,66 @@ function TargetFacePicker({
       >
         <TargetFaceInfo face={selectedFace ?? null} />
       </DialogTrigger>
-      <DialogContent nested>
-        <div className="flex flex-col gap-2">
-          {targetFaces.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              aria-label={f.name}
-              aria-pressed={f.id === selectedId}
-              data-testid={`target-face-option-${f.id}`}
-              onClick={() => {
-                onSelect(f.id);
-                setOpen(false);
-              }}
-              className={cn(
-                "flex items-center rounded-md p-2 transition-colors hover:bg-muted",
-                f.id === selectedId && "bg-muted ring-1 ring-primary",
-              )}
-            >
-              <TargetFaceInfo face={f} />
-            </button>
-          ))}
+      {/* フィルタで絞り込んだ的の件数（3件〜19件）によってポップアップ自体の
+          大きさが変わらないよう高さを固定し、フィルタ部分は常に見える位置に
+          固定した上で、的の一覧部分だけをスクロールさせる。 */}
+      <DialogContent
+        nested
+        className="flex h-[70vh] flex-col overflow-y-hidden"
+      >
+        <div className="flex h-full flex-col gap-3">
+          <div className="grid grid-cols-4 gap-2">
+            {FORMAT_FILTER_OPTIONS.map((o) => (
+              <Button
+                key={o.value}
+                type="button"
+                variant={selectedFormat === o.value ? "default" : "outline"}
+                size="sm"
+                data-testid={`target-face-format-tab-${o.value}`}
+                onClick={() => setSelectedFormat(o.value)}
+              >
+                {o.label}
+              </Button>
+            ))}
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {BOW_TYPE_FILTER_OPTIONS.map((o) => (
+              <Button
+                key={o.value}
+                type="button"
+                variant={selectedBowType === o.value ? "default" : "outline"}
+                size="sm"
+                data-testid={`target-face-bow-type-tab-${o.value}`}
+                onClick={() => setSelectedBowType(o.value)}
+              >
+                {o.label}
+              </Button>
+            ))}
+          </div>
+          {/* 選択中の項目に付くring（box-shadow）がコンテナの縁に接して
+              overflowで見切れないよう、-mx-1で横幅（上のタブ行との揃え）を
+              保ちつつ、内側に上下左右のpを取ってringの逃げ場を作る。 */}
+          <div className="-mx-1 flex flex-1 flex-col gap-2 overflow-y-auto p-1">
+            {visibleFaces.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                aria-label={f.name}
+                aria-pressed={f.id === selectedId}
+                data-testid={`target-face-option-${f.id}`}
+                onClick={() => {
+                  onSelect(f.id);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex shrink-0 items-center rounded-md p-2 transition-colors hover:bg-muted",
+                  f.id === selectedId && "bg-muted ring-1 ring-primary",
+                )}
+              >
+                <TargetFaceInfo face={f} />
+              </button>
+            ))}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -203,6 +271,7 @@ export function DistanceEditFields({
   hasShots,
   targetFaces,
   roundFormat,
+  roundBowType,
   onSaved,
   onDeleted,
   onOpenChange,
@@ -211,6 +280,7 @@ export function DistanceEditFields({
   hasShots: boolean;
   targetFaces: TargetFaceOption[];
   roundFormat: string;
+  roundBowType: string;
   onSaved: (updated: DistanceConfig) => void;
   onDeleted: () => void;
   onOpenChange: (open: boolean) => void;
@@ -322,6 +392,8 @@ export function DistanceEditFields({
             <TargetFacePicker
               targetFaces={targetFaces}
               selectedId={draft.targetFaceId}
+              roundFormat={roundFormat}
+              roundBowType={roundBowType}
               onSelect={(id) => setDraft((d) => ({ ...d, targetFaceId: id }))}
               disabled={hasShots}
             />

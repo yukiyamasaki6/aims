@@ -20,8 +20,8 @@ select is(
 -- 記録済みshotsまで巻き込んでカスケード削除されることを確認する。
 insert into auth.users (id) values ('e0000000-0000-0000-0000-000000000001');
 
-insert into public.target_faces (owner_id, name, size, format)
-values ('e0000000-0000-0000-0000-000000000001', 'Owned Target', 80, 'outdoor');
+insert into public.target_faces (owner_id, name, size, format, bow_type)
+values ('e0000000-0000-0000-0000-000000000001', 'Owned Target', 80, 'outdoor', array['recurve', 'compound', 'barebow']);
 
 insert into public.round_presets (owner_id, name, format, bow_type)
 values ('e0000000-0000-0000-0000-000000000001', 'Owned Preset', 'outdoor', 'recurve');
