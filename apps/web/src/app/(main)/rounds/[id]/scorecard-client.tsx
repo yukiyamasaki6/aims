@@ -814,24 +814,42 @@ export function ScorecardClient({
           description="このラウンドを削除しますか？記録したスコアもすべて失われます。"
           onConfirm={handleDeleteRound}
         />
-        <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+        {/* 下端は合計バーと接する内部の継ぎ目のため、shadowが下方向へ滲まない
+            よう、上・左・右にはみ出す分だけをclip-pathで残す（距離情報の
+            トグルボタンと同じ考え方）。 */}
+        <div className="rounded-t-xl border bg-card text-card-foreground shadow-sm [clip-path:inset(-8px_-8px_0_-8px)]">
           <RoundConfigPanel
             roundId={roundId}
             initial={initialRoundConfig}
             onSaved={setRoundConfig}
             defaultExpanded={initialDistances.length === 0}
           />
-          <div
-            data-testid="round-summary"
-            className="flex items-baseline justify-center gap-2 border-t p-2"
-          >
-            <span className="font-heading text-2xl font-semibold">
-              合計{total}
-            </span>
-            <span className="text-muted-foreground text-sm">
-              X: {xCount} / 10: {tenCount}
-            </span>
-          </div>
+        </div>
+        {/* position: stickyは直接の親の高さの範囲でしか張り付かないため、
+            RoundConfigPanelと同じ小さいカードの中に置くと、そのカードの
+            高さを過ぎた時点で張り付きが外れてしまう（1つのdivに包む案は
+            実測で確認済み：張り付きが外れる）。見た目は直前のカードと
+            継ぎ目なく繋がって見えるよう角丸・枠線・-mt-6（親のgap-6を打ち
+            消す）で調整しつつ、DOM上はこのページ全体（distances一覧を含む
+            flex-colコンテナ）の直接の子にすることで、ページ全体をスクロール
+            している間ずっと張り付くようにする。RoundConfigPanel側と合わせて
+            1枚の結合カードに見せているため、この合計バー自身の外周（左右・
+            下端）にもshadowが必要（RoundConfigPanel側のshadowは自分自身の
+            外周にしかかからず、この合計バーの下端側は覆えない）。区切り線は
+            RoundConfigPanel側のborder-bが持ち、この合計バー自体は
+            border-topを持たない。上端はRoundConfigPanelと接する内部の
+            継ぎ目のため、shadowが上方向へ滲まないようclip-pathで下・左・右
+            にはみ出す分だけを残す。 */}
+        <div
+          data-testid="round-summary"
+          className="-mt-6 sticky top-0 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border-x border-b bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
+        >
+          <span className="text-muted-foreground text-sm">
+            X: {xCount} / 10: {tenCount}
+          </span>
+          <span className="font-heading text-lg font-semibold">
+            合計{total}
+          </span>
         </div>
 
         <div className="flex flex-col gap-4">
@@ -849,17 +867,112 @@ export function ScorecardClient({
             ).length;
             const face = targetFaceOf(d.target_face_id);
 
+            // end行1件分の描画。最終行だけ小計のsticky境界（下記の内側
+            // ラッパー）の外に出すため、共通化して2箇所から呼べるようにする。
+            const renderEndRow = (end: number) => {
+              const endShots = shots.filter(
+                (s) => s.distance_id === d.id && s.end_number === end,
+              );
+              const subtotal = endShots.reduce(
+                (sum, s) => sum + s.score_int,
+                0,
+              );
+              const hasAnyShot = endShots.length > 0;
+
+              return (
+                <div key={end} className="flex items-stretch">
+                  <div className="flex w-8 shrink-0 items-center justify-center border-r text-muted-foreground text-xs">
+                    {end}
+                  </div>
+                  <div
+                    className="grid flex-1 divide-x"
+                    style={{
+                      gridTemplateColumns: `repeat(${d.arrows_per_end}, minmax(0, 1fr))`,
+                    }}
+                  >
+                    {Array.from(
+                      { length: d.arrows_per_end },
+                      (_, i) => i + 1,
+                    ).map((arrow) => {
+                      const shot = endShots.find(
+                        (s) => s.arrow_number === arrow,
+                      );
+                      const isActive =
+                        position?.distance.id === d.id &&
+                        position.end === end &&
+                        position.arrow === arrow;
+                      const color = shot
+                        ? paleTone(
+                            ringColorFor(
+                              targetFaceOf(d.target_face_id),
+                              shot.score_str,
+                            ),
+                          )
+                        : null;
+
+                      return (
+                        <button
+                          key={arrow}
+                          type="button"
+                          data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
+                          onClick={() => selectCell(d, end, arrow)}
+                          className={cn(
+                            "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-colors hover:bg-muted/60",
+                            isActive &&
+                              "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
+                          )}
+                          style={
+                            color
+                              ? {
+                                  backgroundColor: color.bg,
+                                  color: color.fg,
+                                }
+                              : undefined
+                          }
+                        >
+                          {shot?.score_str ?? ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div
+                    data-testid={`end-subtotal-${d.distance_number}-${end}`}
+                    className="flex min-h-10 w-14 shrink-0 items-center justify-center border-l text-muted-foreground text-base"
+                  >
+                    {hasAnyShot ? `${subtotal}` : ""}
+                  </div>
+                </div>
+              );
+            };
+
             return (
               <div
                 key={d.id}
-                className="overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm"
+                data-testid={`distance-summary-${d.distance_number}`}
+                className="rounded-xl border bg-card text-card-foreground shadow-sm"
               >
-                <div data-testid={`distance-summary-${d.distance_number}`}>
+                {/* 小計のsticky境界（position: stickyの直接の親）を最終行の
+                    手前までにするため、トグル・編集・小計・最終行以外の
+                    end行をこの内側ラッパーにまとめる。これにより、最終行は
+                    この親の外（下記の兄弟div）に置かれ、小計はこの親の下端
+                    ＝最終行の手前でstickyが自然に外れる。 */}
+                <div>
+                  {/* 小計（sticky、z-10）が-mt-3.5でこのボタンの下paddingへ
+                      食い込むため、区切り線として持たせるこのborder-bが
+                      その小計自身の背景に覆われて見えなくならないよう、
+                      小計より高いz-indexにしておく（食い込むのは余白部分
+                      のみで、この線自体は隠れない）。ただし合計バー
+                      （z-20）より高くしてしまうと、スクロールでこのボタン
+                      が画面上部を通過する瞬間に合計バー自体を覆ってしまう
+                      ため、小計(10)＜このボタン(15)＜合計(20)の順にする。
+                      このカード自体の丸角（rounded-xl）がこのボタンの
+                      不透明な背景で隠れないよう、上端もrounded-t-xlで
+                      揃える。 */}
                   <button
                     type="button"
                     data-testid={`distance-config-toggle-${d.distance_number}`}
                     onClick={() => toggleDistanceEditing(d.id)}
-                    className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 px-3 py-2 text-left text-muted-foreground text-sm"
+                    className="relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm"
                   >
                     <DistanceInfo
                       distance={d.distance}
@@ -893,93 +1006,41 @@ export function ScorecardClient({
                       }}
                     />
                   )}
-                  <div className="flex items-baseline justify-between gap-2 border-t border-b px-3 py-2 text-muted-foreground text-xs">
-                    <span className="text-foreground text-sm font-semibold">
-                      小計{distanceTotal}
-                    </span>
+                  {/* 常に上（トグルボタンの余っている下paddingの中）に食い込ま
+                      せておく（-mt-3.5、合計バーの丸みの半径分）。上端は枠線を
+                      持たせず、区切り線はトグルボタン側のborder-bが担う。これに
+                      より通常表示時はトグルボタンの余白に、スクロールで合計バー
+                      の下に張り付いた時は合計バー自身に、それぞれ自然に隠れる
+                      ため、「張り付いている時だけ隙間ができない」ための余白が
+                      どの状態でも無駄な空白に見えない（JS判定不要）。食い込む分
+                      だけ上のpaddingを増やし、テキストが隠れないようにする。
+                      この小計の親（この内側ラッパー）が最終行を含まないため、
+                      最終行の手前でstickyが自然に外れる。 */}
+                  <div className="-mt-3.5 sticky top-8 z-10 flex items-baseline justify-end gap-2 border-b bg-card px-3 pt-6 pb-2 text-muted-foreground text-xs">
                     <span>
                       X: {distanceXCount} / 10: {distanceTenCount}
                     </span>
+                    <span className="text-foreground text-sm font-semibold">
+                      小計{distanceTotal}
+                    </span>
                   </div>
-                </div>
-                <div className="divide-y">
-                  {Array.from({ length: d.total_ends }, (_, i) => i + 1).map(
-                    (end) => {
-                      const endShots = shots.filter(
-                        (s) => s.distance_id === d.id && s.end_number === end,
-                      );
-                      const subtotal = endShots.reduce(
-                        (sum, s) => sum + s.score_int,
-                        0,
-                      );
-                      const hasAnyShot = endShots.length > 0;
-
-                      return (
-                        <div key={end} className="flex items-stretch">
-                          <div className="flex w-8 shrink-0 items-center justify-center border-r text-muted-foreground text-xs">
-                            {end}
-                          </div>
-                          <div
-                            className="grid flex-1 divide-x"
-                            style={{
-                              gridTemplateColumns: `repeat(${d.arrows_per_end}, minmax(0, 1fr))`,
-                            }}
-                          >
-                            {Array.from(
-                              { length: d.arrows_per_end },
-                              (_, i) => i + 1,
-                            ).map((arrow) => {
-                              const shot = endShots.find(
-                                (s) => s.arrow_number === arrow,
-                              );
-                              const isActive =
-                                position?.distance.id === d.id &&
-                                position.end === end &&
-                                position.arrow === arrow;
-                              const color = shot
-                                ? paleTone(
-                                    ringColorFor(
-                                      targetFaceOf(d.target_face_id),
-                                      shot.score_str,
-                                    ),
-                                  )
-                                : null;
-
-                              return (
-                                <button
-                                  key={arrow}
-                                  type="button"
-                                  data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
-                                  onClick={() => selectCell(d, end, arrow)}
-                                  className={cn(
-                                    "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-colors hover:bg-muted/60",
-                                    isActive &&
-                                      "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
-                                  )}
-                                  style={
-                                    color
-                                      ? {
-                                          backgroundColor: color.bg,
-                                          color: color.fg,
-                                        }
-                                      : undefined
-                                  }
-                                >
-                                  {shot?.score_str ?? ""}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <div
-                            data-testid={`end-subtotal-${d.distance_number}-${end}`}
-                            className="flex min-h-10 w-14 shrink-0 items-center justify-center border-l text-muted-foreground text-base"
-                          >
-                            {hasAnyShot ? `${subtotal}` : ""}
-                          </div>
-                        </div>
-                      );
-                    },
+                  {d.total_ends > 1 && (
+                    <div className="divide-y">
+                      {Array.from(
+                        { length: d.total_ends - 1 },
+                        (_, i) => i + 1,
+                      ).map((end) => renderEndRow(end))}
+                    </div>
                   )}
+                </div>
+                {/* 最終行だけを小計のsticky境界の外に出す。border-tは
+                    「1〜N-1行目」グループとの間のdivide-y相当の区切り線。
+                    overflow-hiddenはこのend行側だけに付ける。カード直下
+                    （親）に付けると、sticky（小計バー）がこの
+                    overflow-hiddenを基準にしてしまい、ページ全体の
+                    スクロールに追従しなくなるため。 */}
+                <div className="divide-y overflow-hidden rounded-b-xl border-t">
+                  {renderEndRow(d.total_ends)}
                 </div>
               </div>
             );
@@ -1007,15 +1068,20 @@ export function ScorecardClient({
         // 高さ確保用の透明な枠。常にkeypadHeight分の領域をスクロール可能域として
         // 確保しておくことで、展開アニメーションの進み具合に関わらずスクロール
         // 計算が安定する。クリックも透過させ、実際の操作は下の実体側で受ける。
+        // position:stickyの要素はz-indexの値に関わらず独自のスタッキング
+        // コンテキストを作るため、子のz-30だけでは合計・小計（sticky, z-20/z-10）
+        // より手前に出せない。この枠自体にもそれらより大きいz-indexを付ける。
         <div
-          className="sticky bottom-0 pointer-events-none"
+          className="sticky bottom-0 z-30 pointer-events-none"
           style={{ height: keypadHeight }}
         >
           {keypadMounted && (
             <div
               ref={setKeypadNode}
               className={cn(
-                "pointer-events-auto absolute inset-x-0 bottom-0 border-t bg-card shadow-lg transition-transform duration-200",
+                // 合計・小計のsticky（z-20/z-10）より確実に手前に描画されるよう、
+                // それらより高いz-indexを明示する。
+                "pointer-events-auto absolute inset-x-0 bottom-0 z-30 border-t bg-card shadow-lg transition-transform duration-200",
                 keypadVisible ? "translate-y-0" : "translate-y-full",
               )}
             >
