@@ -82,6 +82,7 @@ erDiagram
         string name
         bigint size "的紙の実サイズ（cm）。6点的等はリング最外径と一致しない"
         string format "outdoor/indoor/field。的選択UIの並び順に使う"
+        string_array bow_type "recurve/compound/barebow。対応する弓種（複数可、非空）"
         timestamp created_at
         timestamp updated_at
     }

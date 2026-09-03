@@ -387,6 +387,7 @@ export type Database = {
       };
       target_faces: {
         Row: {
+          bow_type: string[];
           created_at: string;
           format: string;
           id: string;
@@ -396,6 +397,7 @@ export type Database = {
           updated_at: string;
         };
         Insert: {
+          bow_type: string[];
           created_at?: string;
           format: string;
           id?: string;
@@ -405,6 +407,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          bow_type?: string[];
           created_at?: string;
           format?: string;
           id?: string;

@@ -51,6 +51,7 @@ test("距離を追加すると、直前の距離の内容（距離・エンド�
   await page.getByTestId("distance-config-total-ends-1").fill("4");
   await page.getByTestId("distance-config-arrows-1").fill("5");
   await page.getByTestId("target-face-picker-trigger").click();
+  await page.getByTestId("target-face-format-tab-indoor").click();
   await page
     .getByTestId(`target-face-option-${TARGET_FACE_40CM_INDOOR}`)
     .click();
@@ -75,6 +76,7 @@ test("距離を編集して保存すると反映される", async ({ page }) => 
   await page.getByTestId("distance-config-total-ends-1").fill("3");
   await page.getByTestId("distance-config-arrows-1").fill("6");
   await page.getByTestId("target-face-picker-trigger").click();
+  await page.getByTestId("target-face-format-tab-indoor").click();
   await page
     .getByTestId(`target-face-option-${TARGET_FACE_40CM_INDOOR}`)
     .click();
@@ -95,6 +97,7 @@ test("的は選択中の1枚だけを表示し、タップするとポップア�
   ).toBeHidden();
 
   await page.getByTestId("target-face-picker-trigger").click();
+  await page.getByTestId("target-face-format-tab-indoor").click();
 
   const option = page.getByTestId(
     `target-face-option-${TARGET_FACE_40CM_INDOOR}`,
@@ -111,6 +114,7 @@ test("的選択ポップアップの範囲外をタップすると、的選択�
 }) => {
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("target-face-picker-trigger").click();
+  await page.getByTestId("target-face-format-tab-indoor").click();
 
   const option = page.getByTestId(
     `target-face-option-${TARGET_FACE_40CM_INDOOR}`,
@@ -123,9 +127,10 @@ test("的選択ポップアップの範囲外をタップすると、的選択�
   await expect(page.getByTestId("distance-config-distance-1")).toBeVisible();
 });
 
-test("的の選択肢は種類（アウトドア→インドア→フィールド）→サイズの大きい順に並ぶ", async ({
+test("的選択ポップアップの既定タブはラウンドの種別と一致し、選択肢はサイズの大きい順に並ぶ", async ({
   page,
 }) => {
+  // beforeEachで作成されるラウンドはoutdoor。
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("target-face-picker-trigger").click();
 
@@ -133,13 +138,82 @@ test("的の選択肢は種類（アウトドア→インドア→フィール�
     .locator('[data-testid^="target-face-option-"]')
     .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
 
-  // アウトドア最大の122cm（0001）が先頭、フィールド最小の20cm（0013）が末尾になる。
+  // アウトドアタブが既定で選択され、アウトドア最大の122cm（0001）が先頭になる。
+  // フィールド（0013等）はこの時点では選択肢に含まれない。
   expect(testIds[0]).toBe(
     "target-face-option-a1000000-0000-0000-0000-000000000001",
+  );
+  expect(testIds).not.toContain(
+    "target-face-option-a1000000-0000-0000-0000-000000000013",
+  );
+});
+
+test("的選択ポップアップで種別タブを切り替えると、その種別の的だけがサイズの大きい順で表示される", async ({
+  page,
+}) => {
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("target-face-picker-trigger").click();
+
+  await page.getByTestId("target-face-format-tab-field").click();
+
+  const testIds = await page
+    .locator('[data-testid^="target-face-option-"]')
+    .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
+
+  // フィールド最大の80cm（0010）が先頭、最小の20cm（0013）が末尾になる。
+  expect(testIds[0]).toBe(
+    "target-face-option-a1000000-0000-0000-0000-000000000010",
   );
   expect(testIds.at(-1)).toBe(
     "target-face-option-a1000000-0000-0000-0000-000000000013",
   );
+});
+
+test("インドアタブでは、ラウンドの弓種に対応しない的（弓種違いで得点方式が異なる的）は選択肢に表示されない", async ({
+  page,
+}) => {
+  // beforeEachで作成されるラウンドの弓種はrecurve。
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("target-face-picker-trigger").click();
+  await page.getByTestId("target-face-format-tab-indoor").click();
+
+  // リカーブ・ベアボウ共通の的（TARGET_FACE_40CM_INDOOR）は表示される。
+  await expect(
+    page.getByTestId(`target-face-option-${TARGET_FACE_40CM_INDOOR}`),
+  ).toBeVisible();
+
+  // コンパウンド専用の的（得点方式が異なる）は表示されない。
+  await expect(
+    page.getByTestId("target-face-option-b1000000-0000-0000-0000-000000000002"),
+  ).toBeHidden();
+});
+
+test("コンパウンドのラウンドでは、インドアタブでコンパウンド専用の的だけが選択肢に表示される", async ({
+  page,
+}) => {
+  const roundId = await createRound({
+    email: SHARED_EMAIL,
+    password: SHARED_PASSWORD,
+    name: "コンパウンド弓種フィルタテスト",
+    roundDate: "2026-08-24",
+    format: "indoor",
+    bowType: "compound",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("target-face-picker-trigger").click();
+
+  // コンパウンド専用の的（得点方式が異なる）が表示される。
+  await expect(
+    page.getByTestId("target-face-option-b1000000-0000-0000-0000-000000000002"),
+  ).toBeVisible();
+
+  // リカーブ・ベアボウ共通の的（コンパウンドでは得点方式が異なる）は表示されない。
+  await expect(
+    page.getByTestId(`target-face-option-${TARGET_FACE_40CM_INDOOR}`),
+  ).toBeHidden();
 });
 
 test("shotsが存在する距離は総エンド数・エンドあたりの本数・的が編集不可になる", async ({
@@ -174,6 +248,7 @@ test("距離の的・エンド構成を変更して保存すると、undo/redo�
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("distance-config-arrows-1").fill("2");
   await page.getByTestId("target-face-picker-trigger").click();
+  await page.getByTestId("target-face-format-tab-indoor").click();
   await page
     .getByTestId(`target-face-option-${TARGET_FACE_40CM_INDOOR}`)
     .click();

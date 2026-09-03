@@ -885,6 +885,7 @@ export function ScorecardClient({
                       hasShots={distanceIdsWithShots.has(d.id)}
                       targetFaces={targetFaces}
                       roundFormat={roundConfig.format}
+                      roundBowType={roundConfig.bowType}
                       onSaved={handleDistanceSaved}
                       onDeleted={() => handleDistanceDeleted(d.id)}
                       onOpenChange={(open) => {
