@@ -11,7 +11,7 @@ test.describe(() => {
     await page.goto("/rounds/new");
 
     const startButton = page.getByTestId("round-start-button");
-    await expect(startButton).toHaveText("カスタムで開始");
+    await expect(startButton).toHaveText("プリセット無しで開始");
 
     const presetButton = page
       .getByTestId("round-preset-button")
@@ -21,11 +21,14 @@ test.describe(() => {
 
     // 選択すると距離構成（距離・的アイコン・サイズ・エンド構成）が展開表示され、
     // 開始ボタンの表記が選択中のプリセット名に変わる。
+    await expect(
+      presetCard.getByTestId("round-preset-format-bow-type"),
+    ).toHaveText("アウトドア / リカーブ");
     await expect(presetCard).toContainText("90m");
-    await expect(presetCard).toContainText("122cm");
-    await expect(presetCard).toContainText("80cm");
+    await expect(presetCard).toContainText("122");
+    await expect(presetCard).toContainText("80");
     await expect(presetCard).toContainText("6本×6エンド");
-    await expect(presetCard.locator("svg")).toHaveCount(4);
+    await expect(presetCard.locator('[role="img"]')).toHaveCount(4);
     await expect(startButton).toHaveText("「WA 1440」で開始");
 
     await startButton.click();
@@ -59,12 +62,12 @@ test.describe(() => {
 
     await presetButton.click();
     await expect(startButton).toHaveText("「WA 1440」で開始");
-    await expect(presetCard.locator("svg")).toHaveCount(4);
+    await expect(presetCard.locator('[role="img"]')).toHaveCount(4);
 
     // プリセット名のボタンだけでなく、展開された詳細部分を押しても選択が解除される。
     await presetCard.getByText("90m").click();
-    await expect(startButton).toHaveText("カスタムで開始");
-    await expect(presetCard.locator("svg")).toHaveCount(0);
+    await expect(startButton).toHaveText("プリセット無しで開始");
+    await expect(presetCard.locator('[role="img"]')).toHaveCount(0);
   });
 });
 

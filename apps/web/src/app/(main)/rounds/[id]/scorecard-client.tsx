@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { TargetFaceIcon, TargetFaceTile } from "@/components/target-face-icon";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
@@ -33,15 +32,12 @@ import {
 import {
   type DistanceConfig,
   DistanceEditFields,
+  DistanceInfo,
+  PresetInfo,
   type TargetFaceOption,
 } from "./distance-config-row";
-import {
-  BOW_TYPE_OPTIONS,
-  FORMAT_OPTIONS,
-  labelOf,
-  type RoundConfig,
-  RoundConfigPanel,
-} from "./round-config-panel";
+import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
+import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
 
 type Distance = {
   id: string;
@@ -765,42 +761,22 @@ export function ScorecardClient({
                   <h2 className="font-medium text-sm">
                     現在の構成をプリセットとして保存しますか？
                   </h2>
-                  <div className="flex flex-col gap-1 text-muted-foreground text-sm">
-                    {[...distances]
+                  <PresetInfo
+                    format={roundConfig.format}
+                    bowType={roundConfig.bowType}
+                    distances={[...distances]
                       .sort((a, b) => a.distance_number - b.distance_number)
-                      .map((d) => {
-                        const face = targetFaces.find(
-                          (f) => f.id === d.target_face_id,
-                        );
-                        const rings =
-                          face?.target_face_spots[0]?.target_face_rings ?? [];
-
-                        return (
-                          <div
-                            key={d.id}
-                            className="flex items-center justify-between gap-2"
-                          >
-                            <span className="flex items-center gap-2">
-                              {[
-                                d.distance !== null ? `${d.distance}m` : null,
-                                roundConfig.format === "field"
-                                  ? d.is_marked
-                                    ? "Marked"
-                                    : "Unmarked"
-                                  : null,
-                              ]
-                                .filter((part): part is string => part !== null)
-                                .join(" / ")}
-                              <TargetFaceIcon rings={rings} />
-                              {face ? `${face.size}cm` : "的未設定"}
-                            </span>
-                            <span className="shrink-0">
-                              {d.arrows_per_end}本×{d.total_ends}エンド
-                            </span>
-                          </div>
-                        );
-                      })}
-                  </div>
+                      .map((d) => ({
+                        key: d.id,
+                        distance: d.distance,
+                        isMarked: d.is_marked,
+                        face:
+                          targetFaces.find((f) => f.id === d.target_face_id) ??
+                          null,
+                        arrowsPerEnd: d.arrows_per_end,
+                        totalEnds: d.total_ends,
+                      }))}
+                  />
                   <div className="flex flex-col gap-1">
                     <label
                       htmlFor="save-as-preset-name"
@@ -907,36 +883,17 @@ export function ScorecardClient({
                     type="button"
                     data-testid={`distance-config-toggle-${d.distance_number}`}
                     onClick={() => toggleDistanceEditing(d.id)}
-                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-muted-foreground text-xs"
+                    className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 px-3 py-2 text-left text-muted-foreground text-sm"
                   >
-                    <span className="flex items-center gap-2">
-                      {[
-                        d.distance !== null ? `${d.distance}m` : null,
-                        roundConfig.format === "field"
-                          ? d.is_marked
-                            ? "Marked"
-                            : "Unmarked"
-                          : null,
-                      ]
-                        .filter((part): part is string => part !== null)
-                        .join(" / ")}
-                      {face ? (
-                        <TargetFaceTile
-                          spots={face.target_face_spots}
-                          sizeCm={face.size}
-                          pixelSize={32}
-                        />
-                      ) : (
-                        "的未設定"
-                      )}
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <span className="flex flex-col items-end leading-tight">
-                        <span>{d.arrows_per_end}本</span>
-                        <span>{d.total_ends}エンド</span>
-                      </span>
-                      <ChevronRight className="size-4 shrink-0" />
-                    </span>
+                    <DistanceInfo
+                      distance={d.distance}
+                      isMarked={d.is_marked}
+                      format={roundConfig.format}
+                      face={face ?? null}
+                      arrowsPerEnd={d.arrows_per_end}
+                      totalEnds={d.total_ends}
+                      trailing={<ChevronRight className="size-4 shrink-0" />}
+                    />
                   </button>
                   {editingDistanceIds.has(d.id) && (
                     <DistanceEditFields

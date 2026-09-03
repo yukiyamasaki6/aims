@@ -4,10 +4,7 @@ import { ChevronLeft, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { useState } from "react";
-import {
-  TargetFaceIcon,
-  type TargetFaceRing,
-} from "@/components/target-face-icon";
+import type { TargetFaceRing } from "@/components/target-face-icon";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -17,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { PresetInfo } from "../[id]/distance-config-row";
 import {
   createCustomRound,
   createRoundFromPreset,
@@ -31,7 +29,11 @@ type PresetDistance = {
   arrows_per_end: number;
   target_faces: {
     size: number;
-    target_face_spots: { target_face_rings: TargetFaceRing[] }[];
+    target_face_spots: {
+      center_x: number;
+      center_y: number;
+      target_face_rings: TargetFaceRing[];
+    }[];
   } | null;
 };
 
@@ -39,6 +41,7 @@ export type Preset = {
   id: string;
   name: string;
   format: string;
+  bow_type: string;
   round_preset_distances: PresetDistance[];
 };
 
@@ -99,36 +102,18 @@ function PresetRow({
           onClick={onSelect}
           className="flex w-full flex-col gap-1 border-t px-3 py-2 text-left text-muted-foreground text-sm"
         >
-          {distances.map((d) => {
-            const rings =
-              d.target_faces?.target_face_spots[0]?.target_face_rings ?? [];
-            const size = d.target_faces?.size ?? null;
-
-            return (
-              <div
-                key={d.distance_number}
-                className="flex items-center justify-between gap-2"
-              >
-                <span className="flex items-center gap-2">
-                  {[
-                    d.distance !== null ? `${d.distance}m` : null,
-                    preset.format === "field"
-                      ? d.is_marked
-                        ? "Marked"
-                        : "Unmarked"
-                      : null,
-                  ]
-                    .filter((part): part is string => part !== null)
-                    .join(" / ")}
-                  <TargetFaceIcon rings={rings} />
-                  {size !== null ? `${size}cm` : "的未設定"}
-                </span>
-                <span className="shrink-0">
-                  {d.arrows_per_end}本×{d.total_ends}エンド
-                </span>
-              </div>
-            );
-          })}
+          <PresetInfo
+            format={preset.format}
+            bowType={preset.bow_type}
+            distances={distances.map((d) => ({
+              key: d.distance_number,
+              distance: d.distance,
+              isMarked: d.is_marked,
+              face: d.target_faces,
+              arrowsPerEnd: d.arrows_per_end,
+              totalEnds: d.total_ends,
+            }))}
+          />
         </button>
       )}
     </div>
@@ -249,8 +234,8 @@ export function RoundPresetSelect({
       <div className="border-t bg-card shadow-lg">
         <div className="mx-auto flex w-full max-w-xl flex-col gap-2 p-4">
           {error && <p className="text-destructive text-sm">{error}</p>}
-          <p className="text-center text-muted-foreground text-xs">
-            開始後もラウンド構成は変更可能です。
+          <p className="text-center font-medium text-sm">
+            種別・弓種・距離は開始後に変更可能です。
           </p>
           <Button
             type="button"
@@ -260,7 +245,7 @@ export function RoundPresetSelect({
           >
             {selectedPreset
               ? `「${selectedPreset.name}」で開始`
-              : "カスタムで開始"}
+              : "プリセット無しで開始"}
           </Button>
         </div>
       </div>
