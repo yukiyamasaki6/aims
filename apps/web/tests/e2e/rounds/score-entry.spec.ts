@@ -328,6 +328,25 @@ test("黒いテンキーボタンもホバーで視覚フィードバックが�
   }).toPass();
 });
 
+test("得点入力済みの黒いマス目もホバーで視覚フィードバックが分かる", async ({
+  page,
+}) => {
+  // 得点色をstyleで直接指定するマス目は、テンキー同様hover:bg-muted等の
+  // クラスが効かないため、box-shadowオーバーレイで視覚フィードバックを出す
+  // （issue #155）。
+  await page.getByTestId("score-button-4").click();
+
+  const cell = page.getByTestId("shot-cell-1-1-1");
+  const before = await cell.evaluate((el) => getComputedStyle(el).boxShadow);
+
+  await cell.hover();
+  await expect(async () => {
+    const during = await cell.evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(during).not.toBe(before);
+    expect(during).not.toBe("none");
+  }).toPass();
+});
+
 test("的のリング構成が少ないほど、テンキーは実在する点数のキーのみを表示する", async ({
   page,
 }) => {
