@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
+  getSharedEmail,
   SHARED_AUTH_STATE_PATH,
-  SHARED_EMAIL,
   SHARED_PASSWORD,
 } from "../helpers/auth";
 import {
@@ -16,7 +16,7 @@ test.use({ storageState: SHARED_AUTH_STATE_PATH });
 test.beforeEach(async ({ page }) => {
   // 1距離・1エンド・2射という最小構成のラウンドを作成し、ラウンド画面に遷移する。
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "スコア入力テスト",
     roundDate: "2026-08-24",
@@ -66,7 +66,7 @@ test("距離が複数あるとき、距離ごとの合計・X数・10数も表�
 }) => {
   // 2距離（18m, 30m）・各1エンド1射のラウンドを別途作成する。
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "複数距離テスト",
     roundDate: "2026-08-24",
@@ -97,7 +97,7 @@ test("下にスクロールしてエンドを入力していても、合計と�
 }) => {
   // 1画面に収まらないよう、距離ごとにエンド数を多めにしたラウンドを作成する。
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "スクロール追従テスト",
     roundDate: "2026-08-24",
@@ -153,7 +153,7 @@ test("入力済み・未入力にかかわらずマス目をタップして選�
 }) => {
   // beforeEachの1エンド2射では前エンドへ戻る検証ができないため、2エンド×2射のラウンドを別途作成する。
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "修正テスト",
     roundDate: "2026-08-24",
@@ -275,7 +275,7 @@ test("的の配色がWA標準の得点しきい値と対応しない場合も、
   // 5-6=青,3-4=黒,1-2=白）のしきい値をそのまま使うと6,5が青、2,1が白に
   // なってしまうため、リング色を直接見ていることを確認する。
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "フィールド配色テスト",
     roundDate: "2026-08-24",
@@ -353,7 +353,7 @@ test("的のリング構成が少ないほど、テンキーは実在する点�
   // 距離1: 標準10点的（X,10,9,8,7,6,5,4,3,2,1 + M = 12キー）
   // 距離2: 6点的・アウトドア80cm（X,10,9,8,7,6,5 + M = 8キー、4,3,2,1は無い）
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "的構成テスト",
     roundDate: "2026-08-24",
@@ -400,7 +400,7 @@ test("スポットが複数ある的でも、テンキーのキーはスポッ�
   // 3つ目的（トライアングル）は3スポットとも同一の10,9,8,7,6を持つ
   // （Xリングを持たない）が、キーはスポットごとではなく点数ごとに1つだけ表示される。
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "3つ目的テスト",
     roundDate: "2026-08-24",
@@ -495,7 +495,7 @@ test("コンパウンド弓種×インドアの的でスコア入力できる（
   // ボタン）方式で的上の座標クリックではないため、リカーブ用とコンパウンド用の
   // 的の違い（得点帯の半径の閾値）自体はこのUIからは観測できない。
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "コンパウンド弓種テスト",
     roundDate: "2026-08-24",

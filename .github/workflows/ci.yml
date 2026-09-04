@@ -193,8 +193,5 @@ jobs:
       - name: Run pgTAP Tests
         run: pnpm test:db
 
-      - name: Build
-        run: pnpm build
-
       - name: Run E2E Tests
         run: pnpm --filter web exec playwright test --workers=4

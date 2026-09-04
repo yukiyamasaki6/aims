@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
+  getSharedEmail,
   SHARED_AUTH_STATE_PATH,
-  SHARED_EMAIL,
   SHARED_PASSWORD,
 } from "../helpers/auth";
 import { createRound } from "../helpers/rounds";
@@ -10,7 +10,7 @@ test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
 test.beforeEach(async ({ page }) => {
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "設定パネルテスト",
     roundDate: "2026-08-24",
@@ -39,7 +39,7 @@ test("ラウンド名が未設定のときは要約にプレースホルダー�
   page,
 }) => {
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "",
     roundDate: "2026-08-24",
@@ -77,7 +77,7 @@ test("Unmarkedな距離が残ったままフィールド以外の種別に変更
   page,
 }) => {
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "フィールド種別変更テスト",
     roundDate: "2026-08-24",
