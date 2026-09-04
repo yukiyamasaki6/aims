@@ -15,8 +15,12 @@ select results_eq(
   'グローバルプリセットが10件シードされている'
 );
 
+-- e2e等で個人プリセットが作成され得るため、公式プリセット（owner_id is
+-- null）分だけに絞って数える。
 select results_eq(
-  $$select count(*) from public.round_preset_distances$$,
+  $$select count(*) from public.round_preset_distances rpd
+    join public.round_presets rp on rp.id = rpd.preset_id
+    where rp.owner_id is null$$,
   $$values (18::bigint)$$,
   'シードされたプリセットの距離構成は合計18件'
 );
