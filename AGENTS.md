@@ -3,7 +3,7 @@
 ## 0. Core Directives
 
 - **Context Reference:** Read `README.md` and `CONTRIBUTING.md` first. Treat their rules with the same mandatory priority as this file.
-- **Memory Persistence:** Immediately persist all extracted rules, constraints, and project context into working memory. Do not depend on re-reading these files.
+- **Proactive Compliance Check:** Context presence does not guarantee compliance. At natural checkpoints (before running tests, git operations, or creating GitHub artifacts), actively verify the planned action against these guidelines.
 - **Language:** Always respond in the language used by the user in the prompt.
 - **Security & Secrets:** NEVER output, hardcode, or request `service_role` keys or production secrets. Use only local `anon`/publishable keys in code and `.env.example`.
 
@@ -37,11 +37,12 @@
 
 ## 4. Git & GitHub Operations
 
-1. **Issue:** File an issue from the template before starting work. Always set milestones; split into an Epic with sub-issues only when spanning multiple PRs.
+1. **Issue (Optional):** File an issue from the template before starting work. Always set milestones; split into an Epic with sub-issues only when spanning multiple PRs.
 2. **Develop:** Loop Development Workflow with the user until implementation alignment is reached.
 3. **Commit with Approval:** Present the diff, stage only issue-related files, and obtain user approval before executing `git commit` (`<type>: <why and what>`). Keep messages high-level without debug logs.
 4. **Pre-PR Quality Gates:** Run final validations only after obtaining approval to proceed to a PR:
    - Pass `pnpm validate` with zero errors.
    - Run `pnpm validate:all` (pgTAP DB tests and Playwright E2E) when touching application logic, migrations, or E2E tests.
 5. **Create PR:** Follow `.github/pull_request_template.md` upon explicit user approval. Summarize intent concisely without trial logs, and claim "verified X" only if executed in the current session.
-6. **Cleanup:** Switch to `main`, pull latest, and delete the feature branch only after the PR merge is confirmed.
+6. **Monitor CI:** Watch CI runs post-creation; promptly resolve root causes and push fixes if any checks fail.
+7. **Cleanup:** Switch to `main`, pull latest, and delete the feature branch only after the PR merge is confirmed.
