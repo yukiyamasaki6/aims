@@ -108,7 +108,7 @@ test("下にスクロールしてエンドを入力していても、合計と�
   });
   await page.goto(`/rounds/${roundId}`);
 
-  const scrollContainer = page.locator("div.overflow-y-auto").first();
+  const scrollContainer = page.locator("main.overflow-y-auto");
   const roundSummary = page.getByTestId("round-summary");
 
   // 距離1の途中までスクロールすると、合計と距離1の小計がともに画面上部に見える。

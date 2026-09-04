@@ -722,24 +722,13 @@ export function ScorecardClient({
           type="button"
           variant="outline"
           size="lg"
-          className="h-12"
+          className="col-span-2 h-12"
           disabled={submitting || undoStack.length === 0}
           data-testid="score-button-undo"
           aria-label="一つ戻る"
           onClick={handleUndo}
         >
           <Undo />
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="lg"
-          className="col-span-2 h-12 text-lg"
-          disabled={submitting}
-          data-testid="score-button-clear"
-          onClick={handleClear}
-        >
-          クリア
         </Button>
         <Button
           type="button"
@@ -752,6 +741,18 @@ export function ScorecardClient({
           onClick={handleRedo}
         >
           <Redo />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          className="h-12 text-lg"
+          disabled={submitting}
+          data-testid="score-button-clear"
+          aria-label="クリア"
+          onClick={handleClear}
+        >
+          C
         </Button>
       </div>
       <div className="grid grid-cols-4 gap-2">
@@ -794,13 +795,15 @@ export function ScorecardClient({
   );
 
   return (
-    // h-full（min-h-fullではない）にすることで、この行の高さが常に実際の
-    // 可視領域（レフトパネルのモバイルヘッダー分を除いた高さ）に一致する。
-    // KeypadPanelはこの行のflexアイテムとしてデフォルトのstretchで高さを
-    // 得ており、この値が正しくないと横向き時にパネル下端が画面外へ
-    // はみ出す（h-screen固定にしていた際の不具合）。
+    // h-fullにすることで、この行の高さが常に実際の可視領域（レフトパネルの
+    // モバイルヘッダー分を除いた高さ）に一致する。KeypadPanelはこの行の
+    // flexアイテムとしてデフォルトのstretchで高さを得ており、この値が
+    // 正しくないと横向き時にパネル下端が画面外へはみ出す（h-screen固定に
+    // していた際の不具合）。<main>自身がoverflow-y-autoで内部スクロール
+    // するため、この行自体は画面の高さを超えて伸びることがなく、
+    // KeypadPanelは（sticky等を使わずとも）常に画面内に留まる。
     <div className="flex h-full">
-      <main className="flex min-h-full min-w-0 flex-1 flex-col">
+      <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto">
         <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-8">
           <div className="flex items-center justify-between gap-2">
             <Link

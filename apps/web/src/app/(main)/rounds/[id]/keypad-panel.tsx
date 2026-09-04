@@ -35,10 +35,10 @@ export function KeypadPanel({
       aria-hidden={!visible}
       className={cn(
         // スコア領域（flex-1）とのおおよそ3:2の比率になるよう、固定pxでは
-        // なく画面幅に対する割合（40%）で幅を決める。スクロールする祖先
-        // （(main)/layout.tsxのoverflow-y-auto枠）はここまでと変えず、その
-        // 中でstickyにして画面上に留まる（合計・小計バーと同じ手法）。
-        "sticky top-0 z-30 h-full shrink-0 overflow-hidden bg-card text-card-foreground transition-[width]",
+        // なく画面幅に対する割合（40%）で幅を決める。<main>が自身の
+        // overflow-y-autoで内部スクロールするため、この行自体は画面の
+        // 高さを超えて伸びることがなく、この要素は常に画面内に留まる。
+        "z-30 h-full shrink-0 overflow-hidden bg-card text-card-foreground transition-[width]",
         visible ? "w-2/5 border-l" : "w-0",
       )}
     >
@@ -48,13 +48,14 @@ export function KeypadPanel({
           data-testid="keypad-panel-close"
           onClick={onClose}
           aria-label="テンキーパネルを閉じる"
-          className="flex shrink-0 items-center justify-center bg-muted px-1.5 text-muted-foreground hover:text-foreground"
+          className="flex w-full items-center justify-center bg-muted py-1.5 text-muted-foreground hover:text-foreground"
         >
           <ChevronRight className="size-5" />
         </button>
-        {/* テンキー本体をパネル下部に置く。閉じるボタンと接する上辺の余白は
-            キー同士の間隔（gap-2）と揃える。 */}
-        <div className="flex flex-1 flex-col justify-end gap-2 overflow-y-auto p-4 pt-2">
+        {/* テンキー本体をパネル中央に置く。スマホでは下部固定と体感距離が
+            大差なく、PCではマウス操作に指の届きやすさは関係しない上、
+            縦長パネルの上半分が常に空白になる下部固定より見た目のバランスが良い。 */}
+        <div className="flex flex-1 flex-col justify-center gap-2 overflow-y-auto p-4">
           {children}
         </div>
       </div>
