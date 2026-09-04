@@ -6,7 +6,8 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  // 未認証時の/signinリダイレクト判定は/rounds配下にしか使われないため、
+  // getUser()（Supabaseへの通信）が不要な他ページでは呼ばれないようにする。
+  // "/"は独自にgetUser()するためこのmatcherの対象外で問題ない。
+  matcher: ["/rounds/:path*"],
 };
