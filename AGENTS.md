@@ -40,9 +40,10 @@
 1. **Issue (Optional):** File an issue from the template before starting work. Always set milestones; split into an Epic with sub-issues only when spanning multiple PRs.
 2. **Develop:** Loop Development Workflow with the user until implementation alignment is reached.
 3. **Commit with Approval:** Present the diff, stage only issue-related files, and obtain user approval before executing `git commit` (`<type>: <why and what>`). Keep messages high-level without debug logs.
-4. **Pre-PR Quality Gates:** Run final validations only after obtaining approval to proceed to a PR:
-   - Pass `pnpm validate` with zero errors.
-   - Run `pnpm validate:all` (pgTAP DB tests and Playwright E2E) when touching application logic, migrations, or E2E tests.
+4. **Pre-PR Quality Gate:** After approval, run the required validation before opening a PR:
+   - `pnpm validate:all` if changes touch logic, migrations, or E2E.
+   - `pnpm validate` otherwise.
+   - Never dismiss failures as flaky; verify root causes before proceeding.
 5. **Create PR:** Follow `.github/pull_request_template.md` upon explicit user approval. Summarize intent concisely without trial logs, and claim "verified X" only if executed in the current session.
 6. **Monitor CI:** Watch CI runs post-creation; promptly resolve root causes and push fixes if any checks fail.
 7. **Cleanup:** Switch to `main`, pull latest, and delete the feature branch only after the PR merge is confirmed.
