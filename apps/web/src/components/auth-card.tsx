@@ -13,7 +13,7 @@ export function AuthCard({
   children: ReactNode;
 }) {
   return (
-    <main className="mx-auto flex h-screen w-full max-w-sm flex-col items-center justify-center gap-4 overflow-y-auto p-8">
+    <main className="mx-auto flex h-dvh w-full max-w-sm flex-col items-center justify-center gap-4 overflow-y-auto p-8">
       {onBack && (
         <button
           type="button"
