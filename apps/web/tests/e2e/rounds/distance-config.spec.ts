@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
+  getSharedEmail,
   SHARED_AUTH_STATE_PATH,
-  SHARED_EMAIL,
   SHARED_PASSWORD,
 } from "../helpers/auth";
 import { createRound } from "../helpers/rounds";
@@ -12,7 +12,7 @@ test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
 test.beforeEach(async ({ page }) => {
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "距離構成テスト",
     roundDate: "2026-08-24",
@@ -192,7 +192,7 @@ test("コンパウンドのラウンドでは、インドアタブでコンパ�
   page,
 }) => {
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "コンパウンド弓種フィルタテスト",
     roundDate: "2026-08-24",
@@ -267,7 +267,7 @@ test("距離（m）だけを変更して保存しても、undo/redo履歴は保�
   // 距離の値はマス構成にも得点判定にも影響しないため、この変更だけでは
   // 破棄する必要がない。
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "距離のみ変更テスト",
     roundDate: "2026-08-24",
@@ -293,7 +293,7 @@ test("ある距離の構成変更は、他の距離のundo/redo履歴に影響�
   page,
 }) => {
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "複数距離undo履歴テスト",
     roundDate: "2026-08-24",
@@ -335,7 +335,7 @@ test("ある距離を削除しても、他の距離のundo/redo履歴に影響�
   page,
 }) => {
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "距離削除undo履歴テスト",
     roundDate: "2026-08-24",
@@ -376,7 +376,7 @@ test("フィールドのラウンドでUnmarkedを選択すると距離欄を空
   page,
 }) => {
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "フィールドUnmarkedテスト",
     roundDate: "2026-08-24",
@@ -402,7 +402,7 @@ test("フィールドのラウンドではUnmarkedのままでも自己目測の
   page,
 }) => {
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "フィールドUnmarked自己目測テスト",
     roundDate: "2026-08-24",
@@ -426,7 +426,7 @@ test("フィールドのラウンドでMarkedのまま距離（m）欄を空に�
   page,
 }) => {
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: "フィールドMarkedバリデーションテスト",
     roundDate: "2026-08-24",
