@@ -28,7 +28,7 @@ insert into auth.users (
   'authenticated',
   'authenticated',
   'user@aims.test',
-  extensions.crypt('password', extensions.gen_salt('bf')),
+  extensions.crypt('password1', extensions.gen_salt('bf')),
   now(),
   now(),
   now(),

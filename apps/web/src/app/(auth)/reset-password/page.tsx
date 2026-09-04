@@ -127,8 +127,8 @@ export default function ResetPasswordPage() {
         >
           <PasswordInput
             required
-            minLength={6}
-            placeholder="新しいパスワード（6文字以上）"
+            minLength={8}
+            placeholder="新しいパスワード（8文字以上・英数字を含む）"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
