@@ -21,6 +21,7 @@ jobs:
           types: |
             feat
             fix
+            perf
             refactor
             design
             docs

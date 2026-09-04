@@ -124,6 +124,7 @@ gh auth login
     Types:
      - `feat`: New features
      - `fix`: Bug fixes
+     - `perf`: Performance improvements without changing behavior
      - `refactor`: Code changes without adding features or fixing bugs
      - `design`: Visual/UI-only changes (styling, layout, component appearance) without adding features or fixing bugs
      - `docs`: Documentation changes
