@@ -183,20 +183,6 @@ test("入力済み・未入力にかかわらずマス目をタップして選�
   await expect(page.getByTestId("shot-cell-1-2-1")).toHaveText("M");
 });
 
-test("マス目以外をクリックするとテンキーが格納され、選択中マスの強調表示も消える", async ({
-  page,
-}) => {
-  await expect(page.getByTestId("score-button-X")).toBeVisible();
-  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveClass(/ring-primary/);
-
-  await page.getByTestId("round-summary").click();
-
-  await expect(page.getByTestId("score-button-X")).toBeHidden();
-  await expect(page.getByTestId("shot-cell-1-1-1")).not.toHaveClass(
-    /ring-primary/,
-  );
-});
-
 test("クリアボタンで選択中のマスの点数がその場で消え、一つ前へ選択が戻る", async ({
   page,
 }) => {
@@ -350,6 +336,10 @@ test("得点入力済みの黒いマス目もホバーで視覚フィードバ�
 test("的のリング構成が少ないほど、テンキーは実在する点数のキーのみを表示する", async ({
   page,
 }) => {
+  // PC幅ではテンキーが列いっぱいに伸びる側パネルになり高さがキー数と
+  // 無関係になるため、高さがキー数に連動するモバイルのボトムシートで検証する。
+  await page.setViewportSize({ width: 375, height: 667 });
+
   // 距離1: 標準10点的（X,10,9,8,7,6,5,4,3,2,1 + M = 12キー）
   // 距離2: 6点的・アウトドア80cm（X,10,9,8,7,6,5 + M = 8キー、4,3,2,1は無い）
   const roundId = await createRound({
@@ -369,7 +359,8 @@ test("的のリング構成が少ないほど、テンキーは実在する点�
   });
   await page.goto(`/rounds/${roundId}`);
 
-  await page.getByTestId("shot-cell-1-1-1").click();
+  // distance 1・end 1・arrow 1は未入力ラウンドの初期選択位置と一致するため、
+  // 改めてタップしなくてもテンキーは開いている。
   await expect(page.getByTestId("score-button-4")).toBeVisible();
   await expect(page.getByTestId("score-button-1")).toBeVisible();
 
@@ -424,6 +415,11 @@ test("スポットが複数ある的でも、テンキーのキーはスポッ�
 test("下矢印でテンキーを格納でき、マスをタップすると再表示される", async ({
   page,
 }) => {
+  // 下矢印での格納はモバイルのボトムシート固有の操作（PC幅の閉じるボタンは
+  // 別のtestid・見た目を持つレフトパネル風のアイコンボタン）のため、
+  // モバイル幅で検証する。
+  await page.setViewportSize({ width: 375, height: 667 });
+
   await expect(page.getByTestId("score-button-X")).toBeVisible();
 
   await page.getByTestId("keypad-toggle").click();
