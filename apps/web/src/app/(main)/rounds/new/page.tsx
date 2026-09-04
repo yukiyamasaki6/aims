@@ -1,3 +1,7 @@
+import {
+  getGlobalRoundPresets,
+  ROUND_PRESET_SELECT,
+} from "@/lib/supabase/cached-queries";
 import { createClient } from "@/lib/supabase/server";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../[id]/round-options";
 import { type Preset, RoundPresetSelect } from "./round-preset-select-client";
@@ -48,22 +52,24 @@ export default async function NewRoundPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const ownerFilter = user
-    ? `owner_id.eq.${user.id},owner_id.is.null`
-    : "owner_id.is.null";
-
-  const { data: presets } = await supabase
-    .from("round_presets")
-    .select(
-      "id, name, format, bow_type, owner_id, created_at, round_preset_distances(distance_number, distance, is_marked, total_ends, arrows_per_end, target_faces(size, target_face_spots(center_x, center_y, target_face_rings(radius, color, line_color, z_index, score_str, score_int))))",
-    )
-    .or(ownerFilter);
+  // グローバル分はunstable_cacheされた匿名クエリで取得し、個人分だけを
+  // 都度取得する（保存直後に反映される必要があるためキャッシュしない）。
+  const [{ data: personalPresetsRaw }, globalPresetsRaw] = await Promise.all([
+    user
+      ? supabase
+          .from("round_presets")
+          .select(ROUND_PRESET_SELECT)
+          .eq("owner_id", user.id)
+      : Promise.resolve({ data: [] }),
+    getGlobalRoundPresets(),
+  ]);
 
   // round_preset_distances.target_facesはFKの多重度（多対1）上つねに単一のオブジェクトだが、
   // 生成型は入れ子embedのカーディナリティを配列として広く推論するため、実体に合わせてキャストする。
-  const typedPresets = ((presets ?? []) as unknown as PresetWithMeta[]).sort(
-    comparePresets,
-  );
+  const typedPresets = [
+    ...((personalPresetsRaw ?? []) as unknown as PresetWithMeta[]),
+    ...(globalPresetsRaw as unknown as PresetWithMeta[]),
+  ].sort(comparePresets);
 
   const personalPresets = typedPresets.filter((p) => p.owner_id !== null);
   const globalPresets = typedPresets.filter((p) => p.owner_id === null);

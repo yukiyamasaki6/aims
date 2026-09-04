@@ -1,6 +1,6 @@
 begin;
 
-select plan(52);
+select plan(55);
 
 select has_table('public', 'target_faces', 'target_faces テーブルが存在する');
 select has_table('public', 'target_face_spots', 'target_face_spots テーブルが存在する');
@@ -313,6 +313,30 @@ select throws_like(
   '%row-level security%',
   '他ユーザーは自分が所有しない的にスポットを追加できない'
 );
+
+-- グローバルな的をキャッシュ可能にするため、未認証（anon）でもグローバル分
+-- だけは閲覧できるようにRLSを緩和する。個人的な的は引き続き閲覧できない。
+set local role anon;
+select results_eq(
+  $$select count(*) from public.target_faces where owner_id is null$$,
+  $$values (19::bigint)$$,
+  '未認証（anon）でもグローバルな的は閲覧できる'
+);
+
+select is_empty(
+  $$select id from public.target_faces where id = '22222222-2222-2222-2222-222222222222'$$,
+  '未認証（anon）は個人的な的を閲覧できない'
+);
+
+select is_empty(
+  $$select s.id from public.target_face_spots s
+    join public.target_faces tf on tf.id = s.target_face_id
+    where tf.id = '22222222-2222-2222-2222-222222222222'$$,
+  '未認証（anon）は個人的な的のスポットも閲覧できない'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-9999-9999-9999-999999999999', true);
 
 select is_empty(
   $$update public.target_faces set name = 'Hijacked'

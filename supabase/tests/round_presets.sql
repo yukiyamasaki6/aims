@@ -1,6 +1,6 @@
 begin;
 
-select plan(20);
+select plan(23);
 
 select has_table('public', 'round_presets', 'round_presets テーブルが存在する');
 select has_table('public', 'round_preset_distances', 'round_preset_distances テーブルが存在する');
@@ -74,6 +74,31 @@ select results_eq(
   $$values (1::bigint)$$,
   '他ユーザーの個人的なプリセットも閲覧できる'
 );
+
+-- グローバルなプリセットをキャッシュ可能にするため、未認証（anon）でもグローバル
+-- 分だけは閲覧できるようにRLSを緩和する。個人的なプリセットは引き続き閲覧できない。
+set local role anon;
+select results_eq(
+  $$select count(*) from public.round_presets where owner_id is null$$,
+  $$values (10::bigint)$$,
+  '未認証（anon）でもグローバルなプリセットは閲覧できる'
+);
+
+select is_empty(
+  $$select id from public.round_presets where id = '22222222-2222-2222-2222-222222222222'$$,
+  '未認証（anon）は個人的なプリセットを閲覧できない'
+);
+
+select results_eq(
+  $$select count(*) from public.round_preset_distances rpd
+    join public.round_presets rp on rp.id = rpd.preset_id
+    where rp.owner_id is null$$,
+  $$values (18::bigint)$$,
+  '未認証（anon）でもグローバルなプリセットの距離構成は閲覧できる'
+);
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-9999-9999-9999-999999999999', true);
 
 select throws_like(
   $$insert into public.round_preset_distances (preset_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
