@@ -31,7 +31,7 @@ test("認証済みで/にアクセスすると/roundsにリダイレクトされ
   page,
 }) => {
   const email = `signed-in-redirect-${Date.now()}@aims.test`;
-  const password = "password";
+  const password = "password1";
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
@@ -41,7 +41,9 @@ test("認証済みで/にアクセスすると/roundsにリダイレクトされ
   await page.getByPlaceholder("123456").fill(code);
   await page.getByRole("button", { name: "確認" }).click();
 
-  await page.getByPlaceholder("パスワード（6文字以上）").fill(password);
+  await page
+    .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
+    .fill(password);
   await page.getByRole("button", { name: "登録してサインイン" }).click();
   await expect(page).toHaveURL(/\/rounds/);
 
@@ -55,7 +57,7 @@ test("サインインし、サインアウトできる", async ({ page }) => {
   // 使わない。ここでは専用の使い捨てアカウントを都度作成し、サインアップ直後の
   // 自動サインインではなく/signinからの明示的なサインインを検証する。
   const email = `signin-signout-${Date.now()}@aims.test`;
-  const password = "password";
+  const password = "password1";
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
@@ -65,7 +67,9 @@ test("サインインし、サインアウトできる", async ({ page }) => {
   await page.getByPlaceholder("123456").fill(code);
   await page.getByRole("button", { name: "確認" }).click();
 
-  await page.getByPlaceholder("パスワード（6文字以上）").fill(password);
+  await page
+    .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
+    .fill(password);
   await page.getByRole("button", { name: "登録してサインイン" }).click();
   await expect(page).toHaveURL(/\/rounds/);
 
@@ -99,7 +103,7 @@ test("パスワードを間違えると日本語のエラーが表示される",
 
 test("サインアップできる", async ({ page }) => {
   const email = `signup-${Date.now()}@aims.test`;
-  const password = "password";
+  const password = "password1";
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
@@ -116,13 +120,42 @@ test("サインアップできる", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "パスワードを設定" }),
   ).toBeVisible();
-  await page.getByPlaceholder("パスワード（6文字以上）").fill(password);
+  await page
+    .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
+    .fill(password);
   await page.getByRole("button", { name: "登録してサインイン" }).click();
 
   await expect(page).toHaveURL(/\/rounds/);
   await expect(
     page.getByRole("button", { name: "サインアウト" }),
   ).toBeVisible();
+});
+
+test("要件を満たさないパスワードで登録しようとするとエラーが表示される", async ({
+  page,
+}) => {
+  const email = `weak-password-${Date.now()}@aims.test`;
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+
+  const code = await getOtpCodeFromMailpit(email);
+  await page.getByPlaceholder("123456").fill(code);
+  await page.getByRole("button", { name: "確認" }).click();
+
+  // 8文字以上だが数字を含まないため、文字種要件を満たさない。
+  await page
+    .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
+    .fill("onlyletters");
+  await page.getByRole("button", { name: "登録してサインイン" }).click();
+
+  await expect(
+    page.getByText(
+      "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+    ),
+  ).toBeVisible();
+  await expect(page).not.toHaveURL(/\/rounds/);
 });
 
 test("認証コードを間違えると日本語のエラーが表示される", async ({ page }) => {
@@ -149,7 +182,7 @@ test("既存アカウントのメールアドレスでサインアップする�
   // 共有のシードユーザー（user@aims.test）を使うと並列実行中の他テストと
   // 競合するため、このテスト専用のアカウントを都度作成してから検証する。
   const email = `existing-account-${Date.now()}@aims.test`;
-  const password = "password";
+  const password = "password1";
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
@@ -159,7 +192,9 @@ test("既存アカウントのメールアドレスでサインアップする�
   await page.getByPlaceholder("123456").fill(code);
   await page.getByRole("button", { name: "確認" }).click();
 
-  await page.getByPlaceholder("パスワード（6文字以上）").fill(password);
+  await page
+    .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
+    .fill(password);
   await page.getByRole("button", { name: "登録してサインイン" }).click();
   await expect(page).toHaveURL(/\/rounds/);
 
@@ -268,7 +303,7 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
   page,
 }) => {
   const email = `reset-target-${Date.now()}@aims.test`;
-  const newPassword = "password-changed";
+  const newPassword = "password-changed1";
 
   // サインアップ自体（OTP確認・初期パスワード設定）の検証は「サインアップできる」
   // テストが担うため、ここでは管理APIで確認済みユーザーを直接作成し、パスワード
@@ -298,7 +333,7 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
     page.getByRole("heading", { name: "新しいパスワードを設定" }),
   ).toBeVisible();
   await page
-    .getByPlaceholder("新しいパスワード（6文字以上）")
+    .getByPlaceholder("新しいパスワード（8文字以上・英数字を含む）")
     .fill(newPassword);
   await page.getByRole("button", { name: "パスワードを変更" }).click();
 
