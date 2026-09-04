@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
+  getSharedEmail,
   SHARED_AUTH_STATE_PATH,
-  SHARED_EMAIL,
   SHARED_PASSWORD,
 } from "../helpers/auth";
 import { createRound } from "../helpers/rounds";
@@ -17,7 +17,7 @@ test("作成したラウンドが一覧に合計点付きで表示され、ク�
 }) => {
   const name = `一覧テスト-${Date.now()}`;
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name,
     roundDate: "2026-08-24",
@@ -112,7 +112,7 @@ test("/rounds/[id]から一覧へ戻るリンクで/roundsへ遷移する", asyn
   page,
 }) => {
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name: `戻るリンクテスト-${Date.now()}`,
     roundDate: "2026-08-24",
@@ -130,7 +130,7 @@ test("一覧のメニューからラウンドを削除でき、確認ダイア�
 }) => {
   const name = `一覧削除テスト-${Date.now()}`;
   await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name,
     roundDate: "2026-08-24",
@@ -158,7 +158,7 @@ test("詳細画面のメニューからラウンドを削除すると一覧へ�
 }) => {
   const name = `詳細削除テスト-${Date.now()}`;
   const roundId = await createRound({
-    email: SHARED_EMAIL,
+    email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name,
     roundDate: "2026-08-24",

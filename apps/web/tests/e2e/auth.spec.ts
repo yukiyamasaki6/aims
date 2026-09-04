@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createConfirmedUser } from "./helpers/auth";
 import {
   getOtpCodeFromMailpit,
   getOtpEmailHtmlFromMailpit,
@@ -267,24 +268,14 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
   page,
 }) => {
   const email = `reset-target-${Date.now()}@aims.test`;
-  const originalPassword = "password-original";
   const newPassword = "password-changed";
 
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
+  // サインアップ自体（OTP確認・初期パスワード設定）の検証は「サインアップできる」
+  // テストが担うため、ここでは管理APIで確認済みユーザーを直接作成し、パスワード
+  // 再設定フロー自体に絞る。
+  await createConfirmedUser({ email, password: "password-original" });
 
-  const signupCode = await getOtpCodeFromMailpit(email);
-  await page.getByPlaceholder("123456").fill(signupCode);
-  await page.getByRole("button", { name: "確認" }).click();
-
-  await page.getByPlaceholder("パスワード（6文字以上）").fill(originalPassword);
-  await page.getByRole("button", { name: "登録してサインイン" }).click();
-  await expect(page).toHaveURL(/\/rounds/);
-
-  await page.getByRole("button", { name: "サインアウト" }).click();
-  await expect(page).toHaveURL(/\/signin/);
-
+  await page.goto("/signin");
   await page.getByRole("link", { name: "パスワードをお忘れですか" }).click();
   await expect(page).toHaveURL(/\/reset-password/);
 
@@ -312,9 +303,16 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
   await page.getByRole("button", { name: "パスワードを変更" }).click();
 
   await expect(page).toHaveURL(/\/signin/);
+  await expect(page.getByRole("heading", { name: "サインイン" })).toBeVisible();
 
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByPlaceholder("パスワード").fill(newPassword);
+  // 遷移直後はハイドレーション中の再描画でfillした値が消えることがあるため、
+  // 入力後に両方の値が保持されているかまで確認し、消えていればfillからやり直す。
+  await expect(async () => {
+    await page.getByPlaceholder("you@example.com").fill(email);
+    await page.getByPlaceholder("パスワード").fill(newPassword);
+    await expect(page.getByPlaceholder("you@example.com")).toHaveValue(email);
+    await expect(page.getByPlaceholder("パスワード")).toHaveValue(newPassword);
+  }).toPass();
   await page.getByRole("button", { name: "サインイン" }).click();
 
   await expect(page).toHaveURL(/\/rounds/);
