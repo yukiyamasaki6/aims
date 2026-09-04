@@ -36,6 +36,7 @@ import {
   PresetInfo,
   type TargetFaceOption,
 } from "./distance-config-row";
+import { KeypadPanel } from "./keypad-panel";
 import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
 
 type Distance = {
@@ -283,18 +284,40 @@ export function ScorecardClient({
   );
   const [addingDistance, setAddingDistance] = useState(false);
   const [distanceError, setDistanceError] = useState<string | null>(null);
-  const [keypadOpen, setKeypadOpen] = useState(true);
-  // keypadOpenの変化をそのままアンマウントすると格納アニメーションが再生できないため、
-  // トランジション終了後に実際にアンマウントするまでの間だけmountedをtrueに保つ。
-  const [keypadMounted, setKeypadMounted] = useState(true);
-  const [keypadVisible, setKeypadVisible] = useState(true);
+  // マス目の選択有無（position）がそのままテンキーの開閉状態であり、
+  // 別のstateとして二重管理しない。selectCell等で常にpositionとセットで
+  // 更新していた旧keypadOpenを廃止し、ここから直接導出する。
   const [position, setPosition] = useState<Position | null>(() =>
     findCurrentPosition(distances, initialShots),
   );
+  // keypadOpen（=position有無）の変化をそのままアンマウントすると格納
+  // アニメーションが再生できないため、トランジション終了後に実際に
+  // アンマウントするまでの間だけmountedをtrueに保つ。
+  const [keypadMounted, setKeypadMounted] = useState(position !== null);
+  const [keypadVisible, setKeypadVisible] = useState(position !== null);
   const [keypadHeight, setKeypadHeight] = useState(KEYPAD_HEIGHT_FALLBACK);
   const keypadRef = useRef<HTMLDivElement>(null);
   const keypadResizeObserverRef = useRef<ResizeObserver | null>(null);
   const rafRef = useRef(0);
+  // 横向きではテンキーをスコア領域の隣に並ぶ側パネルとして<main>の外側に、
+  // 縦向きでは<main>内蔵のボトムシートとして描画を完全に分ける（CSSの
+  // 出し分けではなくJSで判定し、どちらか一方だけをマウントする）。これに
+  // より、縦向きのボトムシートはposition:fixedにする必要が無くなり、常に
+  // <main>の内側（＝レフトパネルより右のコンテンツ領域）に収まるため、
+  // レフトパネルの実占有幅を気にする必要が一切無くなる。
+  const [isLandscape, setIsLandscape] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia("(orientation: landscape)");
+    const update = () => setIsLandscape(mql.matches);
+    update();
+    mql.addEventListener("change", update);
+    return () => mql.removeEventListener("change", update);
+  }, []);
+  // 格納アニメーション中もテンキーの中身（点数ボタン）を表示し続けられる
+  // よう、positionがnullになった後も直近のpositionを保持しておく。
+  const lastPositionRef = useRef<Position | null>(position);
+  if (position) lastPositionRef.current = position;
+  const displayPosition = position ?? lastPositionRef.current;
 
   // テンキーのキー数は距離ごとの的によって変わり、高さも連動する。固定値では
   // なく実測値を使うことで、キー数変化時もマス選択のスクロール計算が崩れない。
@@ -311,9 +334,10 @@ export function ScorecardClient({
   }, []);
 
   const closeKeypad = useCallback(() => {
-    setKeypadOpen(false);
     // positionを残したままだと選択中マスのリング表示（isActive）が消えず、
     // 見た目上フォーカスが外れていないように見えるためクリアする。
+    // これによりkeypadShouldBeOpen（=position有無）もfalseになり、
+    // 下の格納アニメーション用useEffectが発火する。
     setPosition(null);
     // マス目のボタンだけフォーカスを外す。無条件にblurすると、キーパッド外の
     // 他の入力欄（RoundConfigPanel等）へフォーカスした瞬間にも外れてしまう。
@@ -323,8 +347,10 @@ export function ScorecardClient({
     }
   }, []);
 
+  const keypadShouldBeOpen = position !== null;
+
   useEffect(() => {
-    if (keypadOpen) {
+    if (keypadShouldBeOpen) {
       setKeypadMounted(true);
       // マウント直後の1フレーム目でtrueにするとブラウザがtranslate-y-fullを描画
       // する前に遷移先の状態へ変わってしまいアニメーションしないため、
@@ -340,26 +366,7 @@ export function ScorecardClient({
     setKeypadVisible(false);
     const timeout = setTimeout(() => setKeypadMounted(false), 200);
     return () => clearTimeout(timeout);
-  }, [keypadOpen]);
-
-  useEffect(() => {
-    function handleDocumentClick(e: MouseEvent) {
-      // e.targetはハンドラ実行までにアイコンの差し替え等でDOMから外れている
-      // ことがあるため、dispatch時点のパスを保持するcomposedPath()で判定する。
-      const path = e.composedPath();
-      if (keypadRef.current && path.includes(keypadRef.current)) return;
-      const clickedShotCell = path.some(
-        (el) =>
-          el instanceof HTMLElement &&
-          el.dataset.testid?.startsWith("shot-cell-"),
-      );
-      if (clickedShotCell) return;
-      closeKeypad();
-    }
-
-    document.addEventListener("click", handleDocumentClick);
-    return () => document.removeEventListener("click", handleDocumentClick);
-  }, [closeKeypad]);
+  }, [keypadShouldBeOpen]);
 
   useEffect(() => {
     if (!position) return;
@@ -371,10 +378,15 @@ export function ScorecardClient({
     // マスを選択すれば必ずテンキーが開く前提のため、開閉状態に関わらず常に
     // テンキー分の高さが隠れることを見込んでスクロール位置を計算する
     // （高さ確保用の透明な枠は常にkeypadHeight分の領域を占有している）。
+    // 横向きではテンキーは横に並ぶ側パネルで、keypadHeightは列いっぱいに
+    // 伸びたパネル自身の高さ（コンテンツと無関係な値）になり、コンテンツを
+    // 覆い隠すことも無いため、この補正は縦向き（isLandscape=false、
+    // ボトムシート表示時）でのみ適用する。
     const margin = 16;
     const cellRect = cell.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
-    const visibleBottom = containerRect.bottom - keypadHeight - margin;
+    const visibleBottom =
+      containerRect.bottom - (isLandscape ? 0 : keypadHeight) - margin;
 
     let delta = 0;
     if (cellRect.bottom > visibleBottom) {
@@ -386,7 +398,7 @@ export function ScorecardClient({
     if (delta !== 0) {
       container.scrollBy({ top: delta, behavior: "smooth" });
     }
-  }, [position, keypadHeight]);
+  }, [position, keypadHeight, isLandscape]);
 
   const total = shots.reduce((sum, s) => sum + s.score_int, 0);
   const xCount = shots.filter((s) => s.score_str === "X").length;
@@ -645,7 +657,6 @@ export function ScorecardClient({
     if (!distance) return;
     setKeypadMounted(true);
     setPosition({ distance, end: entry.endNumber, arrow: entry.arrowNumber });
-    setKeypadOpen(true);
   }
 
   async function handleUndo() {
@@ -702,130 +713,217 @@ export function ScorecardClient({
     // しまうため、ここで同期的にマウント済みにしておく。
     setKeypadMounted(true);
     setPosition({ distance, end, arrow });
-    setKeypadOpen(true);
   }
 
-  return (
-    <main className="flex min-h-full flex-col">
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-8">
-        <div className="flex items-center justify-between gap-2">
-          <Link
-            href="/rounds"
-            className="inline-flex w-fit items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
+  const keypadButtons = displayPosition && (
+    <>
+      <div className="grid grid-cols-4 gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          className="col-span-2 h-12"
+          disabled={submitting || undoStack.length === 0}
+          data-testid="score-button-undo"
+          aria-label="一つ戻る"
+          onClick={handleUndo}
+        >
+          <Undo />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          className="h-12"
+          disabled={submitting || redoStack.length === 0}
+          data-testid="score-button-redo"
+          aria-label="一つ進む"
+          onClick={handleRedo}
+        >
+          <Redo />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          className="h-12 text-lg"
+          disabled={submitting}
+          data-testid="score-button-clear"
+          aria-label="クリア"
+          onClick={handleClear}
+        >
+          C
+        </Button>
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        {keypadKeysFor(
+          targetFaceOf(displayPosition.distance.target_face_id),
+        ).map((b) => (
+          <Button
+            key={b.label}
+            type="button"
+            variant="outline"
+            size="lg"
+            disabled={submitting}
+            data-testid={`score-button-${b.label}`}
+            onClick={() => handleScore(b.scoreStr, b.scoreInt)}
+            // 背景色をstyleで直接指定するとhover:bg-muted等のクラスは
+            // 上書きされて効かなくなる。brightnessフィルターは黒（#231F20）
+            // のような暗い色では変化が知覚できないため、明暗どちらの背景
+            // でも均一に視認できるグレー半透明のオーバーレイをinset
+            // box-shadowで重ねてホバー/押下の視覚フィードバックとする。
+            // マス目（issue #155）はpaleTone()で明度90%に統一された薄い
+            // 背景のためMaterial Designのstate layerの目安（8%/12%）で
+            // 十分だが、テンキーは彩度の高いベタ色のため同じ%では変化が
+            // 知覚できず、実測で確認の上より強い不透明度にしている
+            // （issue #286で他の対話的要素の基準を検討する際に再考）。
+            // 高さ・文字サイズはタッチターゲット推奨（44〜48px目安）に
+            // 合わせてh-12・text-lgへ引き上げる。PCもテンキーとしての
+            // 押しやすさ・視認性を優先し、PCの他ボタン（lg標準のh-9）
+            // より大きいこの値で統一する。
+            className="h-12 text-lg transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.25)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.35)]"
+            style={{
+              backgroundColor: b.bg,
+              color: b.fg,
+            }}
           >
-            <ChevronLeft className="size-4" />
-            一覧へ戻る
-          </Link>
-          <div className="flex items-center gap-2">
-            <Dialog
-              open={presetDialogOpen}
-              onOpenChange={(open) => {
-                setPresetDialogOpen(open);
-                if (open) {
-                  setPresetName(roundConfig.name);
-                } else {
-                  setPresetName("");
-                  setPresetError(null);
-                }
-              }}
+            {b.label}
+          </Button>
+        ))}
+      </div>
+    </>
+  );
+
+  return (
+    // h-fullにすることで、この行の高さが常に実際の可視領域（レフトパネルの
+    // モバイルヘッダー分を除いた高さ）に一致する。KeypadPanelはこの行の
+    // flexアイテムとしてデフォルトのstretchで高さを得ており、この値が
+    // 正しくないと横向き時にパネル下端が画面外へはみ出す（h-screen固定に
+    // していた際の不具合）。<main>自身がoverflow-y-autoで内部スクロール
+    // するため、この行自体は画面の高さを超えて伸びることがなく、
+    // KeypadPanelは（sticky等を使わずとも）常に画面内に留まる。
+    <div className="flex h-full">
+      <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-8">
+          <div className="flex items-center justify-between gap-2">
+            <Link
+              href="/rounds"
+              className="inline-flex w-fit items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
             >
-              <DialogTrigger
-                data-testid="save-as-preset-trigger"
-                className={buttonVariants({ variant: "default", size: "sm" })}
+              <ChevronLeft className="size-4" />
+              一覧へ戻る
+            </Link>
+            <div className="flex items-center gap-2">
+              <Dialog
+                open={presetDialogOpen}
+                onOpenChange={(open) => {
+                  setPresetDialogOpen(open);
+                  if (open) {
+                    setPresetName(roundConfig.name);
+                  } else {
+                    setPresetName("");
+                    setPresetError(null);
+                  }
+                }}
               >
-                プリセット保存
-              </DialogTrigger>
-              <DialogContent>
-                <div className="flex flex-col gap-3">
-                  <h2 className="font-medium text-sm">
-                    現在の構成をプリセットとして保存しますか？
-                  </h2>
-                  <PresetInfo
-                    format={roundConfig.format}
-                    bowType={roundConfig.bowType}
-                    distances={[...distances]
-                      .sort((a, b) => a.distance_number - b.distance_number)
-                      .map((d) => ({
-                        key: d.id,
-                        distance: d.distance,
-                        isMarked: d.is_marked,
-                        face:
-                          targetFaces.find((f) => f.id === d.target_face_id) ??
-                          null,
-                        arrowsPerEnd: d.arrows_per_end,
-                        totalEnds: d.total_ends,
-                      }))}
-                  />
-                  <div className="flex flex-col gap-1">
-                    <label
-                      htmlFor="save-as-preset-name"
-                      className="text-muted-foreground text-xs"
-                    >
-                      プリセット名
-                    </label>
-                    <Input
-                      id="save-as-preset-name"
-                      data-testid="save-as-preset-name"
-                      placeholder={generatePresetName(distances)}
-                      value={presetName}
-                      onChange={(e) => setPresetName(e.target.value)}
-                    />
-                  </div>
-                  {presetError && (
-                    <p className="text-destructive text-sm">{presetError}</p>
-                  )}
-                  <Button
-                    type="button"
-                    disabled={presetSubmitting}
-                    data-testid="save-as-preset-confirm"
-                    onClick={handleSavePreset}
-                  >
-                    保存
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                aria-label="ラウンドのメニュー"
-                data-testid="round-menu-trigger"
-                className="p-2 text-muted-foreground hover:text-foreground"
-              >
-                <MoreHorizontal className="size-5" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem
-                  data-testid="round-delete"
-                  className="text-destructive data-[highlighted]:text-destructive"
-                  onClick={() => setDeleteRoundConfirmOpen(true)}
+                <DialogTrigger
+                  data-testid="save-as-preset-trigger"
+                  className={buttonVariants({ variant: "default", size: "sm" })}
                 >
-                  ラウンドを削除
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  プリセット保存
+                </DialogTrigger>
+                <DialogContent>
+                  <div className="flex flex-col gap-3">
+                    <h2 className="font-medium text-sm">
+                      現在の構成をプリセットとして保存しますか？
+                    </h2>
+                    <PresetInfo
+                      format={roundConfig.format}
+                      bowType={roundConfig.bowType}
+                      distances={[...distances]
+                        .sort((a, b) => a.distance_number - b.distance_number)
+                        .map((d) => ({
+                          key: d.id,
+                          distance: d.distance,
+                          isMarked: d.is_marked,
+                          face:
+                            targetFaces.find(
+                              (f) => f.id === d.target_face_id,
+                            ) ?? null,
+                          arrowsPerEnd: d.arrows_per_end,
+                          totalEnds: d.total_ends,
+                        }))}
+                    />
+                    <div className="flex flex-col gap-1">
+                      <label
+                        htmlFor="save-as-preset-name"
+                        className="text-muted-foreground text-xs"
+                      >
+                        プリセット名
+                      </label>
+                      <Input
+                        id="save-as-preset-name"
+                        data-testid="save-as-preset-name"
+                        placeholder={generatePresetName(distances)}
+                        value={presetName}
+                        onChange={(e) => setPresetName(e.target.value)}
+                      />
+                    </div>
+                    {presetError && (
+                      <p className="text-destructive text-sm">{presetError}</p>
+                    )}
+                    <Button
+                      type="button"
+                      disabled={presetSubmitting}
+                      data-testid="save-as-preset-confirm"
+                      onClick={handleSavePreset}
+                    >
+                      保存
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label="ラウンドのメニュー"
+                  data-testid="round-menu-trigger"
+                  className="p-2 text-muted-foreground hover:text-foreground"
+                >
+                  <MoreHorizontal className="size-5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem
+                    data-testid="round-delete"
+                    className="text-destructive data-[highlighted]:text-destructive"
+                    onClick={() => setDeleteRoundConfirmOpen(true)}
+                  >
+                    ラウンドを削除
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-        </div>
-        {deleteRoundError && (
-          <p className="text-destructive text-sm">{deleteRoundError}</p>
-        )}
-        <ConfirmDialog
-          open={deleteRoundConfirmOpen}
-          onOpenChange={setDeleteRoundConfirmOpen}
-          description="このラウンドを削除しますか？記録したスコアもすべて失われます。"
-          onConfirm={handleDeleteRound}
-        />
-        {/* 下端は合計バーと接する内部の継ぎ目のため、shadowが下方向へ滲まない
+          {deleteRoundError && (
+            <p className="text-destructive text-sm">{deleteRoundError}</p>
+          )}
+          <ConfirmDialog
+            open={deleteRoundConfirmOpen}
+            onOpenChange={setDeleteRoundConfirmOpen}
+            description="このラウンドを削除しますか？記録したスコアもすべて失われます。"
+            onConfirm={handleDeleteRound}
+          />
+          {/* 下端は合計バーと接する内部の継ぎ目のため、shadowが下方向へ滲まない
             よう、上・左・右にはみ出す分だけをclip-pathで残す（距離情報の
             トグルボタンと同じ考え方）。 */}
-        <div className="rounded-t-xl border bg-card text-card-foreground shadow-sm [clip-path:inset(-8px_-8px_0_-8px)]">
-          <RoundConfigPanel
-            roundId={roundId}
-            initial={initialRoundConfig}
-            onSaved={setRoundConfig}
-            defaultExpanded={initialDistances.length === 0}
-          />
-        </div>
-        {/* position: stickyは直接の親の高さの範囲でしか張り付かないため、
+          <div className="rounded-t-xl border bg-card text-card-foreground shadow-sm [clip-path:inset(-8px_-8px_0_-8px)]">
+            <RoundConfigPanel
+              roundId={roundId}
+              initial={initialRoundConfig}
+              onSaved={setRoundConfig}
+              defaultExpanded={initialDistances.length === 0}
+            />
+          </div>
+          {/* position: stickyは直接の親の高さの範囲でしか張り付かないため、
             RoundConfigPanelと同じ小さいカードの中に置くと、そのカードの
             高さを過ぎた時点で張り付きが外れてしまう（1つのdivに包む案は
             実測で確認済み：張り付きが外れる）。見た目は直前のカードと
@@ -840,133 +938,133 @@ export function ScorecardClient({
             border-topを持たない。上端はRoundConfigPanelと接する内部の
             継ぎ目のため、shadowが上方向へ滲まないようclip-pathで下・左・右
             にはみ出す分だけを残す。 */}
-        <div
-          data-testid="round-summary"
-          className="-mt-6 sticky top-0 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border-x border-b bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
-        >
-          <span className="text-muted-foreground text-sm">
-            X: {xCount} / 10: {tenCount}
-          </span>
-          <span className="font-heading text-lg font-semibold">
-            合計{total}
-          </span>
-        </div>
+          <div
+            data-testid="round-summary"
+            className="-mt-6 sticky top-0 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border-x border-b bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
+          >
+            <span className="text-muted-foreground text-sm">
+              X: {xCount} / 10: {tenCount}
+            </span>
+            <span className="font-heading text-lg font-semibold">
+              合計{total}
+            </span>
+          </div>
 
-        <div className="flex flex-col gap-4">
-          {distances.map((d) => {
-            const distanceShots = shots.filter((s) => s.distance_id === d.id);
-            const distanceTotal = distanceShots.reduce(
-              (sum, s) => sum + s.score_int,
-              0,
-            );
-            const distanceXCount = distanceShots.filter(
-              (s) => s.score_str === "X",
-            ).length;
-            const distanceTenCount = distanceShots.filter(
-              (s) => s.score_str === "10",
-            ).length;
-            const face = targetFaceOf(d.target_face_id);
-
-            // end行1件分の描画。最終行だけ小計のsticky境界（下記の内側
-            // ラッパー）の外に出すため、共通化して2箇所から呼べるようにする。
-            const renderEndRow = (end: number) => {
-              const endShots = shots.filter(
-                (s) => s.distance_id === d.id && s.end_number === end,
-              );
-              const subtotal = endShots.reduce(
+          <div className="flex flex-col gap-4">
+            {distances.map((d) => {
+              const distanceShots = shots.filter((s) => s.distance_id === d.id);
+              const distanceTotal = distanceShots.reduce(
                 (sum, s) => sum + s.score_int,
                 0,
               );
-              const hasAnyShot = endShots.length > 0;
+              const distanceXCount = distanceShots.filter(
+                (s) => s.score_str === "X",
+              ).length;
+              const distanceTenCount = distanceShots.filter(
+                (s) => s.score_str === "10",
+              ).length;
+              const face = targetFaceOf(d.target_face_id);
+
+              // end行1件分の描画。最終行だけ小計のsticky境界（下記の内側
+              // ラッパー）の外に出すため、共通化して2箇所から呼べるようにする。
+              const renderEndRow = (end: number) => {
+                const endShots = shots.filter(
+                  (s) => s.distance_id === d.id && s.end_number === end,
+                );
+                const subtotal = endShots.reduce(
+                  (sum, s) => sum + s.score_int,
+                  0,
+                );
+                const hasAnyShot = endShots.length > 0;
+
+                return (
+                  <div key={end} className="flex items-stretch">
+                    <div className="flex w-8 shrink-0 items-center justify-center border-r text-muted-foreground text-xs">
+                      {end}
+                    </div>
+                    <div
+                      className="grid flex-1 divide-x"
+                      style={{
+                        gridTemplateColumns: `repeat(${d.arrows_per_end}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {Array.from(
+                        { length: d.arrows_per_end },
+                        (_, i) => i + 1,
+                      ).map((arrow) => {
+                        const shot = endShots.find(
+                          (s) => s.arrow_number === arrow,
+                        );
+                        const isActive =
+                          position?.distance.id === d.id &&
+                          position.end === end &&
+                          position.arrow === arrow;
+                        const color = shot
+                          ? paleTone(
+                              ringColorFor(
+                                targetFaceOf(d.target_face_id),
+                                shot.score_str,
+                              ),
+                            )
+                          : null;
+
+                        return (
+                          <button
+                            key={arrow}
+                            type="button"
+                            data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
+                            onClick={() => selectCell(d, end, arrow)}
+                            className={cn(
+                              // 得点色をstyleで直接指定するため、hover:bg-muted等の
+                              // クラスは常にそのstyleに上書きされて効かない
+                              // （テンキーと同じ問題、issue #155）。明暗どちらの
+                              // 背景色でも均一に視認できるグレー半透明のオーバーレイ
+                              // をinset box-shadowで重ねてホバー/押下の視覚
+                              // フィードバックとする。不透明度はMaterial Design
+                              // のstate layerの目安（hover 8%/pressed 12%）に
+                              // 合わせる（issue #286で他の対話的要素も含めて
+                              // 同じ基準に揃える予定）。
+                              "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
+                              isActive &&
+                                "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
+                            )}
+                            style={
+                              color
+                                ? {
+                                    backgroundColor: color.bg,
+                                    color: color.fg,
+                                  }
+                                : undefined
+                            }
+                          >
+                            {shot?.score_str ?? ""}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div
+                      data-testid={`end-subtotal-${d.distance_number}-${end}`}
+                      className="flex min-h-10 w-14 shrink-0 items-center justify-center border-l text-muted-foreground text-base"
+                    >
+                      {hasAnyShot ? `${subtotal}` : ""}
+                    </div>
+                  </div>
+                );
+              };
 
               return (
-                <div key={end} className="flex items-stretch">
-                  <div className="flex w-8 shrink-0 items-center justify-center border-r text-muted-foreground text-xs">
-                    {end}
-                  </div>
-                  <div
-                    className="grid flex-1 divide-x"
-                    style={{
-                      gridTemplateColumns: `repeat(${d.arrows_per_end}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {Array.from(
-                      { length: d.arrows_per_end },
-                      (_, i) => i + 1,
-                    ).map((arrow) => {
-                      const shot = endShots.find(
-                        (s) => s.arrow_number === arrow,
-                      );
-                      const isActive =
-                        position?.distance.id === d.id &&
-                        position.end === end &&
-                        position.arrow === arrow;
-                      const color = shot
-                        ? paleTone(
-                            ringColorFor(
-                              targetFaceOf(d.target_face_id),
-                              shot.score_str,
-                            ),
-                          )
-                        : null;
-
-                      return (
-                        <button
-                          key={arrow}
-                          type="button"
-                          data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
-                          onClick={() => selectCell(d, end, arrow)}
-                          className={cn(
-                            // 得点色をstyleで直接指定するため、hover:bg-muted等の
-                            // クラスは常にそのstyleに上書きされて効かない
-                            // （テンキーと同じ問題、issue #155）。明暗どちらの
-                            // 背景色でも均一に視認できるグレー半透明のオーバーレイ
-                            // をinset box-shadowで重ねてホバー/押下の視覚
-                            // フィードバックとする。不透明度はMaterial Design
-                            // のstate layerの目安（hover 8%/pressed 12%）に
-                            // 合わせる（issue #286で他の対話的要素も含めて
-                            // 同じ基準に揃える予定）。
-                            "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
-                            isActive &&
-                              "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
-                          )}
-                          style={
-                            color
-                              ? {
-                                  backgroundColor: color.bg,
-                                  color: color.fg,
-                                }
-                              : undefined
-                          }
-                        >
-                          {shot?.score_str ?? ""}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div
-                    data-testid={`end-subtotal-${d.distance_number}-${end}`}
-                    className="flex min-h-10 w-14 shrink-0 items-center justify-center border-l text-muted-foreground text-base"
-                  >
-                    {hasAnyShot ? `${subtotal}` : ""}
-                  </div>
-                </div>
-              );
-            };
-
-            return (
-              <div
-                key={d.id}
-                data-testid={`distance-summary-${d.distance_number}`}
-                className="rounded-xl border bg-card text-card-foreground shadow-sm"
-              >
-                {/* 小計のsticky境界（position: stickyの直接の親）を最終行の
+                <div
+                  key={d.id}
+                  data-testid={`distance-summary-${d.distance_number}`}
+                  className="rounded-xl border bg-card text-card-foreground shadow-sm"
+                >
+                  {/* 小計のsticky境界（position: stickyの直接の親）を最終行の
                     手前までにするため、トグル・編集・小計・最終行以外の
                     end行をこの内側ラッパーにまとめる。これにより、最終行は
                     この親の外（下記の兄弟div）に置かれ、小計はこの親の下端
                     ＝最終行の手前でstickyが自然に外れる。 */}
-                <div>
-                  {/* 小計（sticky、z-10）が-mt-3.5でこのボタンの下paddingへ
+                  <div>
+                    {/* 小計（sticky、z-10）が-mt-3.5でこのボタンの下paddingへ
                       食い込むため、区切り線として持たせるこのborder-bが
                       その小計自身の背景に覆われて見えなくならないよう、
                       小計より高いz-indexにしておく（食い込むのは余白部分
@@ -977,45 +1075,45 @@ export function ScorecardClient({
                       このカード自体の丸角（rounded-xl）がこのボタンの
                       不透明な背景で隠れないよう、上端もrounded-t-xlで
                       揃える。 */}
-                  <button
-                    type="button"
-                    data-testid={`distance-config-toggle-${d.distance_number}`}
-                    onClick={() => toggleDistanceEditing(d.id)}
-                    className="relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm"
-                  >
-                    <DistanceInfo
-                      distance={d.distance}
-                      isMarked={d.is_marked}
-                      format={roundConfig.format}
-                      face={face ?? null}
-                      arrowsPerEnd={d.arrows_per_end}
-                      totalEnds={d.total_ends}
-                      trailing={<ChevronRight className="size-4 shrink-0" />}
-                    />
-                  </button>
-                  {editingDistanceIds.has(d.id) && (
-                    <DistanceEditFields
-                      distance={{
-                        id: d.id,
-                        distanceNumber: d.distance_number,
-                        distance: d.distance,
-                        totalEnds: d.total_ends,
-                        arrowsPerEnd: d.arrows_per_end,
-                        targetFaceId: d.target_face_id,
-                        isMarked: d.is_marked,
-                      }}
-                      hasShots={distanceIdsWithShots.has(d.id)}
-                      targetFaces={targetFaces}
-                      roundFormat={roundConfig.format}
-                      roundBowType={roundConfig.bowType}
-                      onSaved={handleDistanceSaved}
-                      onDeleted={() => handleDistanceDeleted(d.id)}
-                      onOpenChange={(open) => {
-                        if (!open) toggleDistanceEditing(d.id);
-                      }}
-                    />
-                  )}
-                  {/* 常に上（トグルボタンの余っている下paddingの中）に食い込ま
+                    <button
+                      type="button"
+                      data-testid={`distance-config-toggle-${d.distance_number}`}
+                      onClick={() => toggleDistanceEditing(d.id)}
+                      className="relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm"
+                    >
+                      <DistanceInfo
+                        distance={d.distance}
+                        isMarked={d.is_marked}
+                        format={roundConfig.format}
+                        face={face ?? null}
+                        arrowsPerEnd={d.arrows_per_end}
+                        totalEnds={d.total_ends}
+                        trailing={<ChevronRight className="size-4 shrink-0" />}
+                      />
+                    </button>
+                    {editingDistanceIds.has(d.id) && (
+                      <DistanceEditFields
+                        distance={{
+                          id: d.id,
+                          distanceNumber: d.distance_number,
+                          distance: d.distance,
+                          totalEnds: d.total_ends,
+                          arrowsPerEnd: d.arrows_per_end,
+                          targetFaceId: d.target_face_id,
+                          isMarked: d.is_marked,
+                        }}
+                        hasShots={distanceIdsWithShots.has(d.id)}
+                        targetFaces={targetFaces}
+                        roundFormat={roundConfig.format}
+                        roundBowType={roundConfig.bowType}
+                        onSaved={handleDistanceSaved}
+                        onDeleted={() => handleDistanceDeleted(d.id)}
+                        onOpenChange={(open) => {
+                          if (!open) toggleDistanceEditing(d.id);
+                        }}
+                      />
+                    )}
+                    {/* 常に上（トグルボタンの余っている下paddingの中）に食い込ま
                       せておく（-mt-3.5、合計バーの丸みの半径分）。上端は枠線を
                       持たせず、区切り線はトグルボタン側のborder-bが担う。これに
                       より通常表示時はトグルボタンの余白に、スクロールで合計バー
@@ -1025,71 +1123,73 @@ export function ScorecardClient({
                       だけ上のpaddingを増やし、テキストが隠れないようにする。
                       この小計の親（この内側ラッパー）が最終行を含まないため、
                       最終行の手前でstickyが自然に外れる。 */}
-                  <div className="-mt-3.5 sticky top-8 z-10 flex items-baseline justify-end gap-2 border-b bg-card px-3 pt-6 pb-2 text-muted-foreground text-xs">
-                    <span>
-                      X: {distanceXCount} / 10: {distanceTenCount}
-                    </span>
-                    <span className="text-foreground text-sm font-semibold">
-                      小計{distanceTotal}
-                    </span>
-                  </div>
-                  {d.total_ends > 1 && (
-                    <div className="divide-y">
-                      {Array.from(
-                        { length: d.total_ends - 1 },
-                        (_, i) => i + 1,
-                      ).map((end) => renderEndRow(end))}
+                    <div className="-mt-3.5 sticky top-8 z-10 flex items-baseline justify-end gap-2 border-b bg-card px-3 pt-6 pb-2 text-muted-foreground text-xs">
+                      <span>
+                        X: {distanceXCount} / 10: {distanceTenCount}
+                      </span>
+                      <span className="text-foreground text-sm font-semibold">
+                        小計{distanceTotal}
+                      </span>
                     </div>
-                  )}
-                </div>
-                {/* 最終行だけを小計のsticky境界の外に出す。border-tは
+                    {d.total_ends > 1 && (
+                      <div className="divide-y">
+                        {Array.from(
+                          { length: d.total_ends - 1 },
+                          (_, i) => i + 1,
+                        ).map((end) => renderEndRow(end))}
+                      </div>
+                    )}
+                  </div>
+                  {/* 最終行だけを小計のsticky境界の外に出す。border-tは
                     「1〜N-1行目」グループとの間のdivide-y相当の区切り線。
                     overflow-hiddenはこのend行側だけに付ける。カード直下
                     （親）に付けると、sticky（小計バー）がこの
                     overflow-hiddenを基準にしてしまい、ページ全体の
                     スクロールに追従しなくなるため。 */}
-                <div className="divide-y overflow-hidden rounded-b-xl border-t">
-                  {renderEndRow(d.total_ends)}
+                  <div className="divide-y overflow-hidden rounded-b-xl border-t">
+                    {renderEndRow(d.total_ends)}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={addingDistance}
-            data-testid="add-distance-button"
-            onClick={handleAddDistance}
-            className="border-dashed"
-          >
-            <Plus />
-            距離を追加
-          </Button>
-          {distanceError && (
-            <p className="text-destructive text-sm">{distanceError}</p>
-          )}
+              );
+            })}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={addingDistance}
+              data-testid="add-distance-button"
+              onClick={handleAddDistance}
+              className="border-dashed"
+            >
+              <Plus />
+              距離を追加
+            </Button>
+            {distanceError && (
+              <p className="text-destructive text-sm">{distanceError}</p>
+            )}
+          </div>
+
+          {error && <p className="text-destructive text-sm">{error}</p>}
         </div>
 
-        {error && <p className="text-destructive text-sm">{error}</p>}
-      </div>
-
-      {position && (
-        // 高さ確保用の透明な枠。常にkeypadHeight分の領域をスクロール可能域として
-        // 確保しておくことで、展開アニメーションの進み具合に関わらずスクロール
-        // 計算が安定する。クリックも透過させ、実際の操作は下の実体側で受ける。
-        // position:stickyの要素はz-indexの値に関わらず独自のスタッキング
-        // コンテキストを作るため、子のz-30だけでは合計・小計（sticky, z-20/z-10）
-        // より手前に出せない。この枠自体にもそれらより大きいz-indexを付ける。
-        <div
-          className="sticky bottom-0 z-30 pointer-events-none"
-          style={{ height: keypadHeight }}
-        >
-          {keypadMounted && (
+        {!isLandscape && keypadMounted && (
+          // 縦向き専用のボトムシート。<main>に内蔵し、position:fixedは
+          // 使わない。これにより常にレフトパネルより右のコンテンツ領域に
+          // 収まり、レフトパネルの実占有幅を一切気にする必要が無い。
+          // 高さ確保用の透明な枠（sticky）を挟むことで、展開アニメーションの
+          // 進み具合に関わらずスクロール計算が安定する。keypadMounted基準に
+          // することで、格納アニメーション中も確保し続け、スライド完了前に
+          // レイアウトが詰まらないようにする。shrink-0は必須: <main>が
+          // 横向き側パネルとの高さ調整のためflexアイテム（高さが固定）に
+          // なったことで、中身の無いこの枠だけがflexのデフォルトshrinkで
+          // 潰され、指定した高さぶんのスクロール領域を確保できなくなる
+          // （実際に指定高さの1/10程度まで潰れる不具合があった）。
+          <div
+            className="sticky bottom-0 z-30 shrink-0 pointer-events-none"
+            style={{ height: keypadHeight }}
+          >
             <div
               ref={setKeypadNode}
               className={cn(
-                // 合計・小計のsticky（z-20/z-10）より確実に手前に描画されるよう、
-                // それらより高いz-indexを明示する。
                 "pointer-events-auto absolute inset-x-0 bottom-0 z-30 border-t bg-card shadow-lg transition-transform duration-200",
                 keypadVisible ? "translate-y-0" : "translate-y-full",
               )}
@@ -1100,84 +1200,28 @@ export function ScorecardClient({
                   data-testid="keypad-toggle"
                   onClick={closeKeypad}
                   aria-label="テンキーを閉じる"
-                  className="flex w-full items-center justify-center py-1.5 text-muted-foreground hover:text-foreground"
+                  className="flex w-full items-center justify-center bg-muted py-1.5 text-muted-foreground hover:text-foreground"
                 >
                   <ChevronDown className="size-5" />
                 </button>
-                <div className="flex flex-col gap-2 p-4 pt-0">
-                  <div className="grid grid-cols-4 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="lg"
-                      disabled={submitting || undoStack.length === 0}
-                      data-testid="score-button-undo"
-                      aria-label="一つ戻る"
-                      onClick={handleUndo}
-                    >
-                      <Undo />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="lg"
-                      className="col-span-2"
-                      disabled={submitting}
-                      data-testid="score-button-clear"
-                      onClick={handleClear}
-                    >
-                      クリア
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="lg"
-                      disabled={submitting || redoStack.length === 0}
-                      data-testid="score-button-redo"
-                      aria-label="一つ進む"
-                      onClick={handleRedo}
-                    >
-                      <Redo />
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {keypadKeysFor(
-                      targetFaceOf(position.distance.target_face_id),
-                    ).map((b) => (
-                      <Button
-                        key={b.label}
-                        type="button"
-                        variant="outline"
-                        size="lg"
-                        disabled={submitting}
-                        data-testid={`score-button-${b.label}`}
-                        onClick={() => handleScore(b.scoreStr, b.scoreInt)}
-                        // 背景色をstyleで直接指定するとhover:bg-muted等のクラスは
-                        // 上書きされて効かなくなる。brightnessフィルターは黒（#231F20）
-                        // のような暗い色では変化が知覚できないため、明暗どちらの背景
-                        // でも均一に視認できるグレー半透明のオーバーレイをinset
-                        // box-shadowで重ねてホバー/押下の視覚フィードバックとする。
-                        // マス目（issue #155）はpaleTone()で明度90%に統一された薄い
-                        // 背景のためMaterial Designのstate layerの目安（8%/12%）で
-                        // 十分だが、テンキーは彩度の高いベタ色のため同じ%では変化が
-                        // 知覚できず、実測で確認の上より強い不透明度にしている
-                        // （issue #286で他の対話的要素の基準を検討する際に再考）。
-                        className="transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.25)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.35)]"
-                        style={{
-                          backgroundColor: b.bg,
-                          color: b.fg,
-                        }}
-                      >
-                        {b.label}
-                      </Button>
-                    ))}
-                  </div>
+                <div className="flex flex-col gap-2 p-4 pt-2">
+                  {keypadButtons}
                 </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+      </main>
+      {isLandscape && (
+        <KeypadPanel
+          mounted={keypadMounted}
+          visible={keypadVisible}
+          onNodeChange={setKeypadNode}
+          onClose={closeKeypad}
+        >
+          {keypadButtons}
+        </KeypadPanel>
       )}
-    </main>
+    </div>
   );
 }
