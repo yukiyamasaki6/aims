@@ -155,7 +155,7 @@ test("ラウンド名・実施日・種別・弓種を編集して保存する�
   await expect(summaryAfterReload).toContainText("コンパウンド");
 });
 
-test("サインインが切れた状態でラウンド設定を保存すると、上部にエラーが表示され原因を確認できる", async ({
+test("サインインが切れた状態でラウンド設定を保存すると、サインイン画面へ誘導される", async ({
   page,
 }) => {
   await page.getByTestId("round-config-summary").click();
@@ -164,14 +164,5 @@ test("サインインが切れた状態でラウンド設定を保存すると�
   await page.context().clearCookies();
   await page.getByTestId("round-config-save").click();
 
-  await expect(page.getByTestId("round-config-summary")).toContainText(
-    "編集後の名前",
-  );
-  await expect(page.getByTestId("sync-status")).toHaveText("同期失敗");
-  await expect(page.getByTestId("round-config-summary")).toHaveClass(
-    /ring-destructive/,
-  );
-
-  await page.getByTestId("sync-status").click();
-  await expect(page.getByText("サインインが必要です。")).toBeVisible();
+  await expect(page).toHaveURL(/\/signin/);
 });

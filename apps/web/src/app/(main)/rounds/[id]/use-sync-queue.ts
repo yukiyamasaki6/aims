@@ -43,6 +43,11 @@ type RunShotBatch = (batch: {
   clear: ShotClear[];
 }) => Promise<BatchResult>;
 
+// サインイン切れは「特定の操作が失敗した」のではなくセッション自体が
+// 無効という別種の状態で、以降の全操作が同じ理由で失敗し続けるだけなので、
+// 個別のエラーとして溜めずに検出したら即座にサインイン画面へ誘導する。
+export const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
+
 function toSafeResult(promise: Promise<BatchResult>): Promise<BatchResult> {
   // run()が例外を投げた場合（ネットワーク切断等の予期しない失敗）も
   // 永久にsyncingのまま止まらないよう、必ずcatchして通常の失敗と
@@ -69,7 +74,7 @@ function toSafeResult(promise: Promise<BatchResult>): Promise<BatchResult> {
 // どちらもdependsOnKeyで、新規distance作成のように他の操作から参照されうる
 // 操作の完了を必要な範囲だけ待たせられる。
 // 自動リトライ・永続化は将来の別issueで追加する前提で、ここでは1回のみ試行する。
-export function useSyncQueue() {
+export function useSyncQueue(options?: { onAuthRequired?: () => void }) {
   const [errorMap, setErrorMap] = useState<Map<string, SyncError>>(new Map());
   const [pendingCount, setPendingCount] = useState(0);
   const [shotPendingKeys, setShotPendingKeys] = useState<Set<string>>(
@@ -78,9 +83,14 @@ export function useSyncQueue() {
   const tailsRef = useRef<Map<string, Promise<unknown>>>(new Map());
   const shotBatchRef = useRef<Map<string, EnqueueShotInput>>(new Map());
   const shotFlightRef = useRef(false);
+  const onAuthRequired = options?.onAuthRequired;
 
   const settleKeys = useCallback(
     (items: { key: string; label: string }[], result: BatchResult) => {
+      if (result?.error === AUTH_REQUIRED_MESSAGE) {
+        onAuthRequired?.();
+        return;
+      }
       setErrorMap((prev) => {
         const copy = new Map(prev);
         for (const item of items) {
@@ -97,7 +107,7 @@ export function useSyncQueue() {
         return copy;
       });
     },
-    [],
+    [onAuthRequired],
   );
 
   const enqueue = useCallback(

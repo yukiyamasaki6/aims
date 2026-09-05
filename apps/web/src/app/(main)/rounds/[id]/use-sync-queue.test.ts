@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ShotUpsert } from "./use-sync-queue";
-import { useSyncQueue } from "./use-sync-queue";
+import { AUTH_REQUIRED_MESSAGE, useSyncQueue } from "./use-sync-queue";
 
 type Result = { error: string } | undefined;
 
@@ -162,7 +162,7 @@ describe("useSyncQueue", () => {
       result.current.enqueue({
         key: "shot:d1:1:1",
         label: "距離1 1エンド1本目",
-        run: () => Promise.resolve({ error: "サインインが必要です。" }),
+        run: () => Promise.resolve({ error: "boom" }),
       });
     });
 
@@ -171,9 +171,7 @@ describe("useSyncQueue", () => {
     });
 
     expect(result.current.status).toBe("error");
-    expect(result.current.errorFor("shot:d1:1:1")).toBe(
-      "サインインが必要です。",
-    );
+    expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
   });
 
   it("clears a key's error once a later operation for that key succeeds", async () => {
@@ -487,9 +485,7 @@ describe("useSyncQueue", () => {
 
     it("marks every shot in a failed batch with the same error", async () => {
       const { result } = renderHook(() => useSyncQueue());
-      const runBatch = vi.fn(() =>
-        Promise.resolve({ error: "サインインが必要です。" }),
-      );
+      const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
 
       act(() => {
         result.current.enqueueShot(
@@ -513,9 +509,7 @@ describe("useSyncQueue", () => {
       });
 
       expect(result.current.status).toBe("error");
-      expect(result.current.errorFor("shot:d1:1:1")).toBe(
-        "サインインが必要です。",
-      );
+      expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
     });
 
     it("waits for dependsOnKey before including a shot in a batch", async () => {
@@ -572,6 +566,83 @@ describe("useSyncQueue", () => {
       });
 
       expect(order).toEqual(["create-start", "create-end", "batch:1"]);
+    });
+  });
+
+  describe("onAuthRequired", () => {
+    it("calls onAuthRequired instead of recording a per-key error when the message is the auth-required message", async () => {
+      const onAuthRequired = vi.fn();
+      const { result } = renderHook(() => useSyncQueue({ onAuthRequired }));
+
+      act(() => {
+        result.current.enqueue({
+          key: "roundConfig",
+          label: "ラウンド設定",
+          run: () => Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
+        });
+      });
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(onAuthRequired).toHaveBeenCalledTimes(1);
+      expect(result.current.errorFor("roundConfig")).toBeUndefined();
+      expect(result.current.status).toBe("synced");
+    });
+
+    it("calls onAuthRequired for a failed shot batch too, without marking the shots as errored", async () => {
+      const onAuthRequired = vi.fn();
+      const { result } = renderHook(() => useSyncQueue({ onAuthRequired }));
+      const runBatch = vi.fn(() =>
+        Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
+      );
+
+      act(() => {
+        result.current.enqueueShot(
+          {
+            key: "shot:d1:1:1",
+            label: "距離1 1エンド1本目",
+            upsert: {
+              distanceId: "d1",
+              endNumber: 1,
+              arrowNumber: 1,
+              scoreStr: "X",
+              scoreInt: 10,
+            },
+          },
+          runBatch,
+        );
+      });
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(onAuthRequired).toHaveBeenCalledTimes(1);
+      expect(result.current.errorFor("shot:d1:1:1")).toBeUndefined();
+      expect(result.current.status).toBe("synced");
+    });
+
+    it("still records a normal (non-auth) error as a per-key error", async () => {
+      const onAuthRequired = vi.fn();
+      const { result } = renderHook(() => useSyncQueue({ onAuthRequired }));
+
+      act(() => {
+        result.current.enqueue({
+          key: "roundConfig",
+          label: "ラウンド設定",
+          run: () => Promise.resolve({ error: "boom" }),
+        });
+      });
+
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(onAuthRequired).not.toHaveBeenCalled();
+      expect(result.current.errorFor("roundConfig")).toBe("boom");
     });
   });
 });

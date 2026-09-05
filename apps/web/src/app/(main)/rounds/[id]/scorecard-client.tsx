@@ -13,6 +13,7 @@ import {
   Undo,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -275,7 +276,18 @@ export function ScorecardClient({
   const [shots, setShots] = useState<Shot[]>(initialShots);
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
-  const sync = useSyncQueue();
+  const router = useRouter();
+  const redirectedToSigninRef = useRef(false);
+  const sync = useSyncQueue({
+    onAuthRequired: () => {
+      // セッション切れは個別のエラーとして溜めても仕方がないため、
+      // 検出したら即座にサインイン画面へ誘導する。複数の操作がほぼ同時に
+      // 同じ理由で失敗しても、リダイレクトは1回だけでよい。
+      if (redirectedToSigninRef.current) return;
+      redirectedToSigninRef.current = true;
+      router.push("/signin");
+    },
+  });
   const [syncErrorsOpen, setSyncErrorsOpen] = useState(false);
   const [presetDialogOpen, setPresetDialogOpen] = useState(false);
   const [presetName, setPresetName] = useState("");
@@ -991,14 +1003,17 @@ export function ScorecardClient({
 
           <Dialog open={syncErrorsOpen} onOpenChange={setSyncErrorsOpen}>
             <DialogContent>
-              <div className="flex flex-col gap-2">
-                <p className="font-heading font-semibold">同期エラー</p>
-                {sync.errors.map((e) => (
-                  <p key={e.key} className="text-sm">
-                    <span className="font-medium">{e.label}</span>：{e.message}
+              {/* 複数の失敗が同時に溜まっても一度に全部は出さず、最も古い
+                  未解決の1件だけを見せる。解決すると次のものが表示される。 */}
+              {sync.errors[0] && (
+                <div className="flex flex-col gap-2">
+                  <p className="font-heading font-semibold">同期失敗</p>
+                  <p className="text-sm">
+                    <span className="font-medium">{sync.errors[0].label}</span>
+                    ：{sync.errors[0].message}
                   </p>
-                ))}
-              </div>
+                </div>
+              )}
             </DialogContent>
           </Dialog>
 
