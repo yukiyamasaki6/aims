@@ -40,7 +40,7 @@ describe("useSyncQueue", () => {
     expect(result.current.status).toBe("synced");
   });
 
-  it("processes operations strictly one at a time (FIFO)", async () => {
+  it("sends operations enqueued together in the same batch concurrently, not one at a time", async () => {
     const { result } = renderHook(() => useSyncQueue());
     const first = createDeferred<Result>();
     const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
@@ -54,6 +54,32 @@ describe("useSyncQueue", () => {
       result.current.enqueue({ key: "b", label: "B", run: secondRun });
     });
 
+    // 同じバッチ内の操作は、先に積まれたものの解決を待たずに送信される。
+    expect(secondRun).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      first.resolve(undefined);
+      await first.promise;
+    });
+  });
+
+  it("waits for the current batch to fully settle before starting a batch enqueued afterward", async () => {
+    const { result } = renderHook(() => useSyncQueue());
+    const first = createDeferred<Result>();
+    const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
+
+    act(() => {
+      result.current.enqueue({
+        key: "a",
+        label: "A",
+        run: () => first.promise,
+      });
+    });
+    act(() => {
+      result.current.enqueue({ key: "b", label: "B", run: secondRun });
+    });
+
+    // bは新しいバッチとして扱われ、aを含む現在のバッチが解決するまで送信されない。
     expect(secondRun).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -61,6 +87,44 @@ describe("useSyncQueue", () => {
       await first.promise;
     });
     expect(secondRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("completes isCreate operations before other operations in the same batch", async () => {
+    const { result } = renderHook(() => useSyncQueue());
+    const order: string[] = [];
+    const createDone = createDeferred<Result>();
+
+    act(() => {
+      result.current.enqueue({
+        key: "distance:new",
+        label: "新しい距離",
+        isCreate: true,
+        run: () => {
+          order.push("create-start");
+          return createDone.promise.then((r) => {
+            order.push("create-end");
+            return r;
+          });
+        },
+      });
+      result.current.enqueue({
+        key: "shot:new:1:1",
+        label: "新しい距離 1エンド1本目",
+        run: () => {
+          order.push("shot");
+          return Promise.resolve(undefined as Result);
+        },
+      });
+    });
+
+    // createが解決するまでは、同じバッチ内の他の操作は開始されない。
+    expect(order).toEqual(["create-start"]);
+
+    await act(async () => {
+      createDone.resolve(undefined);
+      await createDone.promise;
+    });
+    expect(order).toEqual(["create-start", "create-end", "shot"]);
   });
 
   it("executes operations in the order they were enqueued", async () => {

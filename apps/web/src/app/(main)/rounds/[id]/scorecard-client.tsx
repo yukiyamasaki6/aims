@@ -1,9 +1,12 @@
 "use client";
 
 import {
+  AlertCircle,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Loader2,
   MoreHorizontal,
   Plus,
   Redo,
@@ -445,6 +448,7 @@ export function ScorecardClient({
     sync.enqueue({
       key: `distance:${newDistance.id}`,
       label: `距離${newDistance.distance_number}`,
+      isCreate: true,
       run: () =>
         addDistance({
           id: newDistance.id,
@@ -804,15 +808,41 @@ export function ScorecardClient({
     <div className="flex h-full">
       <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto">
         <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-8">
-          <div className="flex items-center justify-between gap-2">
-            <Link
-              href="/rounds"
-              className="inline-flex w-fit items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
+          <div className="flex items-center gap-2">
+            <div className="flex flex-1 justify-start">
+              <Link
+                href="/rounds"
+                className="inline-flex w-fit items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
+              >
+                <ChevronLeft className="size-4" />
+                一覧へ戻る
+              </Link>
+            </div>
+            <button
+              type="button"
+              data-testid="sync-status"
+              onClick={() => {
+                if (sync.status === "error") setSyncErrorsOpen(true);
+              }}
+              className={cn(
+                "flex shrink-0 items-center gap-1 text-xs",
+                sync.status === "error" &&
+                  "font-medium text-destructive underline underline-offset-2",
+                sync.status === "syncing" && "text-muted-foreground",
+                sync.status === "synced" &&
+                  "text-emerald-600 dark:text-emerald-500",
+              )}
             >
-              <ChevronLeft className="size-4" />
-              一覧へ戻る
-            </Link>
-            <div className="flex items-center gap-2">
+              {sync.status === "syncing" && (
+                <Loader2 className="size-3.5 animate-spin" />
+              )}
+              {sync.status === "error" && <AlertCircle className="size-3.5" />}
+              {sync.status === "synced" && <Check className="size-3.5" />}
+              {sync.status === "syncing" && "同期中…"}
+              {sync.status === "error" && "エラー"}
+              {sync.status === "synced" && "同期済み"}
+            </button>
+            <div className="flex flex-1 items-center justify-end gap-2">
               <Dialog
                 open={presetDialogOpen}
                 onOpenChange={(open) => {
@@ -943,25 +973,8 @@ export function ScorecardClient({
             にはみ出す分だけを残す。 */}
           <div
             data-testid="round-summary"
-            className="-mt-6 sticky top-0 z-20 flex items-baseline justify-between gap-2 rounded-b-xl border-x border-b bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
+            className="-mt-6 sticky top-0 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border-x border-b bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
           >
-            <button
-              type="button"
-              data-testid="sync-status"
-              onClick={() => {
-                if (sync.status === "error") setSyncErrorsOpen(true);
-              }}
-              className={cn(
-                "text-xs",
-                sync.status === "error"
-                  ? "font-medium text-destructive underline underline-offset-2"
-                  : "text-muted-foreground",
-              )}
-            >
-              {sync.status === "syncing" && "同期中…"}
-              {sync.status === "error" && "エラー"}
-              {sync.status === "synced" && "同期済み"}
-            </button>
             <div className="flex items-baseline gap-2">
               <span className="text-muted-foreground text-sm">
                 X: {xCount} / 10: {tenCount}
@@ -1068,9 +1081,14 @@ export function ScorecardClient({
                               // のstate layerの目安（hover 8%/pressed 12%）に
                               // 合わせる（issue #286で他の対話的要素も含めて
                               // 同じ基準に揃える予定）。
-                              "relative flex min-h-10 items-center justify-center py-2 text-base font-medium transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
+                              "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
                               isActive &&
                                 "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
+                              // 選択中のring-2より細く、通常のborder（1px）より太い
+                              // 枠でエラーを示す。
+                              cellError &&
+                                !isActive &&
+                                "ring-[1.5px] ring-destructive ring-inset",
                             )}
                             style={
                               color
@@ -1082,13 +1100,6 @@ export function ScorecardClient({
                             }
                           >
                             {shot?.score_str ?? ""}
-                            {cellError && (
-                              <span
-                                data-testid={`shot-cell-error-${d.distance_number}-${end}-${arrow}`}
-                                aria-hidden="true"
-                                className="absolute top-0.5 right-0.5 size-2 rounded-full bg-destructive"
-                              />
-                            )}
                           </button>
                         );
                       })}
@@ -1136,7 +1147,13 @@ export function ScorecardClient({
                         }
                         toggleDistanceEditing(d.id);
                       }}
-                      className="relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm"
+                      className={cn(
+                        "relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm",
+                        // 通常のborder（1px）より太く、選択中の枠（ring-2）より
+                        // 細いリングでエラーを示す。
+                        sync.errorFor(`distance:${d.id}`) &&
+                          "ring-[1.5px] ring-destructive ring-inset",
+                      )}
                     >
                       <DistanceInfo
                         distance={d.distance}
@@ -1147,13 +1164,6 @@ export function ScorecardClient({
                         totalEnds={d.total_ends}
                         trailing={<ChevronRight className="size-4 shrink-0" />}
                       />
-                      {sync.errorFor(`distance:${d.id}`) && (
-                        <span
-                          data-testid={`distance-error-${d.distance_number}`}
-                          aria-hidden="true"
-                          className="absolute top-1 right-1 size-2 rounded-full bg-destructive"
-                        />
-                      )}
                     </button>
                     {editingDistanceIds.has(d.id) && (
                       <DistanceEditFields

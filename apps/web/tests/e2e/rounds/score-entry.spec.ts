@@ -544,7 +544,9 @@ test("サインインが切れた状態でスコアを入力すると、マス�
 
   await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("X");
   await expect(page.getByTestId("sync-status")).toHaveText("エラー");
-  await expect(page.getByTestId("shot-cell-error-1-1-1")).toBeVisible();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveClass(
+    /ring-destructive/,
+  );
 
   await page.getByTestId("sync-status").click();
   await expect(page.getByText("サインインが必要です。")).toBeVisible();

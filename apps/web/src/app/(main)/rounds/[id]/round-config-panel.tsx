@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { updateRoundConfig } from "./actions";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
 import type { EnqueueInput } from "./use-sync-queue";
@@ -91,7 +92,12 @@ export function RoundConfigPanel({
           }
           toggleExpanded();
         }}
-        className="flex w-full items-center justify-between gap-2 p-3 text-left text-sm"
+        className={cn(
+          "flex w-full items-center justify-between gap-2 rounded-t-xl p-3 text-left text-sm",
+          // 通常のborder（1px）より太く、選択中の枠（ring-2）より細い
+          // リングでエラーを示す。
+          hasSyncError && "ring-[1.5px] ring-destructive ring-inset",
+        )}
       >
         <span className="truncate">
           {[
@@ -103,16 +109,7 @@ export function RoundConfigPanel({
             .filter((part) => part !== "")
             .join(" / ")}
         </span>
-        <span className="flex shrink-0 items-center gap-1">
-          {hasSyncError && (
-            <span
-              data-testid="round-config-error"
-              aria-hidden="true"
-              className="size-2 rounded-full bg-destructive"
-            />
-          )}
-          <ChevronRight className="size-4" />
-        </span>
+        <ChevronRight className="size-4 shrink-0" />
       </button>
 
       <Dialog

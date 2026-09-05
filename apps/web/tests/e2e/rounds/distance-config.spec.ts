@@ -477,7 +477,9 @@ test("サインインが切れた状態で距離を保存すると、距離カ�
     "30m",
   );
   await expect(page.getByTestId("sync-status")).toHaveText("エラー");
-  await expect(page.getByTestId("distance-error-1")).toBeVisible();
+  await expect(page.getByTestId("distance-config-toggle-1")).toHaveClass(
+    /ring-destructive/,
+  );
 
   await page.getByTestId("sync-status").click();
   await expect(page.getByText("サインインが必要です。")).toBeVisible();
