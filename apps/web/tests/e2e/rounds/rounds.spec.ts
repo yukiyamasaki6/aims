@@ -29,6 +29,10 @@ test("作成したラウンドが一覧に合計点付きで表示され、ク�
   await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("7");
   await expect(page.getByTestId("keypad-toggle")).toBeHidden();
 
+  // 送信キューの書き込みが完了する前に他ページへ移動すると、進行中の
+  // リクエストがナビゲーションで打ち切られてしまうため、同期完了を待つ。
+  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+
   await page.goto("/rounds");
   const roundLink = page.getByRole("link", { name: new RegExp(name) });
   await expect(roundLink).toBeVisible();
@@ -71,6 +75,10 @@ test("カスタムで開始すると、ラウンド構成が展開された状�
   await page.getByTestId("add-distance-button").click();
   await expect(page.getByTestId("distance-config-distance-1")).toBeVisible();
 
+  // 送信キューの書き込みが完了する前にreloadすると、進行中のリクエストが
+  // ナビゲーションで打ち切られてしまうため、同期完了を待ってからreloadする。
+  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+
   await page.reload();
   await expect(page.getByTestId("round-config-name")).toBeHidden();
 });
@@ -93,6 +101,10 @@ test("カスタムで開始したラウンドの弓種をベアボウに変更�
 
   const summary = page.getByTestId("round-config-summary");
   await expect(summary).toContainText("ベアボウ");
+
+  // 送信キューの書き込みが完了する前にreloadすると、進行中のリクエストが
+  // ナビゲーションで打ち切られてしまうため、同期完了を待ってからreloadする。
+  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
 
   await page.reload();
   await expect(page.getByTestId("round-config-summary")).toContainText(

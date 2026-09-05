@@ -143,10 +143,26 @@ test("ラウンド名・実施日・種別・弓種を編集して保存する�
   // 保存後は折りたたまれる
   await expect(page.getByTestId("round-config-save")).toBeHidden();
 
+  // 送信キューの書き込みが完了する前にreloadすると、進行中のリクエストが
+  // ナビゲーションで打ち切られてしまうため、同期完了を待ってからreloadする。
+  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+
   await page.reload();
   const summaryAfterReload = page.getByTestId("round-config-summary");
   await expect(summaryAfterReload).toContainText("編集後の名前");
   await expect(summaryAfterReload).toContainText("2026-08-25");
   await expect(summaryAfterReload).toContainText("インドア");
   await expect(summaryAfterReload).toContainText("コンパウンド");
+});
+
+test("サインインが切れた状態でラウンド設定を保存すると、サインイン画面へ誘導される", async ({
+  page,
+}) => {
+  await page.getByTestId("round-config-summary").click();
+  await page.getByTestId("round-config-name").fill("編集後の名前");
+
+  await page.context().clearCookies();
+  await page.getByTestId("round-config-save").click();
+
+  await expect(page).toHaveURL(/\/signin/);
 });

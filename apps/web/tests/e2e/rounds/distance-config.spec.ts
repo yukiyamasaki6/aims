@@ -463,3 +463,15 @@ test("shotsが存在する距離を削除しようとすると確認ダイアロ
   await page.getByTestId("confirm-dialog-cancel").click();
   await expect(page.getByTestId("distance-summary-1")).toBeVisible();
 });
+
+test("サインインが切れた状態で距離を保存すると、サインイン画面へ誘導される", async ({
+  page,
+}) => {
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("30");
+
+  await page.context().clearCookies();
+  await page.getByTestId("distance-config-save-1").click();
+
+  await expect(page).toHaveURL(/\/signin/);
+});

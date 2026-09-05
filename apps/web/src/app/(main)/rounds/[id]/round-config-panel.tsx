@@ -5,8 +5,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { updateRoundConfig } from "./actions";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
+import type { EnqueueInput } from "./use-sync-queue";
 
 function RequiredMark() {
   return (
@@ -28,16 +30,23 @@ export function RoundConfigPanel({
   initial,
   onSaved,
   defaultExpanded = false,
+  hasUnmarkedDistances,
+  enqueue,
+  hasSyncError,
+  onOpenSyncErrors,
 }: {
   roundId: string;
   initial: RoundConfig;
   onSaved: (updated: RoundConfig) => void;
   defaultExpanded?: boolean;
+  hasUnmarkedDistances: boolean;
+  enqueue: (input: EnqueueInput) => void;
+  hasSyncError: boolean;
+  onOpenSyncErrors: () => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [saved, setSaved] = useState(initial);
   const [draft, setDraft] = useState(initial);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function toggleExpanded() {
@@ -49,22 +58,26 @@ export function RoundConfigPanel({
     setExpanded((v) => !v);
   }
 
-  async function handleSave() {
-    if (submitting) return;
-    setSubmitting(true);
-    setError(null);
-
-    const result = await updateRoundConfig({ roundId, ...draft });
-    if (result?.error) {
-      setError(result.error);
-      setSubmitting(false);
+  function handleSave() {
+    // クライアントが既に持っている値（distancesのis_marked）だけで判定
+    // できるため、サーバーへ投げる前に同期的に検証する
+    // （キュー経由の非同期エラーにはしない）。
+    if (draft.format !== "field" && hasUnmarkedDistances) {
+      setError(
+        "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。",
+      );
       return;
     }
+    setError(null);
 
     setSaved(draft);
     onSaved(draft);
-    setSubmitting(false);
     setExpanded(false);
+    enqueue({
+      key: "roundConfig",
+      label: "ラウンド設定",
+      run: () => updateRoundConfig({ roundId, ...draft }),
+    });
   }
 
   return (
@@ -72,8 +85,19 @@ export function RoundConfigPanel({
       <button
         type="button"
         data-testid="round-config-summary"
-        onClick={toggleExpanded}
-        className="flex w-full items-center justify-between gap-2 p-3 text-left text-sm"
+        onClick={() => {
+          if (hasSyncError) {
+            onOpenSyncErrors();
+            return;
+          }
+          toggleExpanded();
+        }}
+        className={cn(
+          "flex w-full items-center justify-between gap-2 rounded-t-xl p-3 text-left text-sm",
+          // 通常のborder（1px）より太く、選択中の枠（ring-2）より細い
+          // リングでエラーを示す。
+          hasSyncError && "ring-[1.5px] ring-destructive ring-inset",
+        )}
       >
         <span className="truncate">
           {[
@@ -178,7 +202,6 @@ export function RoundConfigPanel({
             <Button
               type="button"
               className="w-full"
-              disabled={submitting}
               data-testid="round-config-save"
               onClick={handleSave}
             >

@@ -1,15 +1,19 @@
 "use client";
 
 import {
+  AlertCircle,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Loader2,
   MoreHorizontal,
   Plus,
   Redo,
   Undo,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -24,12 +28,12 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   addDistance,
-  clearShot,
   deleteRound,
-  recordShot,
   saveRoundAsPreset,
+  syncShots,
 } from "./actions";
 import {
+  DEFAULT_TARGET_FACE_ID,
   type DistanceConfig,
   DistanceEditFields,
   DistanceInfo,
@@ -38,6 +42,7 @@ import {
 } from "./distance-config-row";
 import { KeypadPanel } from "./keypad-panel";
 import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
+import { useSyncQueue } from "./use-sync-queue";
 
 type Distance = {
   id: string;
@@ -271,8 +276,19 @@ export function ScorecardClient({
   const [shots, setShots] = useState<Shot[]>(initialShots);
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const redirectedToSigninRef = useRef(false);
+  const sync = useSyncQueue({
+    onAuthRequired: () => {
+      // セッション切れは個別のエラーとして溜めても仕方がないため、
+      // 検出したら即座にサインイン画面へ誘導する。複数の操作がほぼ同時に
+      // 同じ理由で失敗しても、リダイレクトは1回だけでよい。
+      if (redirectedToSigninRef.current) return;
+      redirectedToSigninRef.current = true;
+      router.push("/signin");
+    },
+  });
+  const [syncErrorsOpen, setSyncErrorsOpen] = useState(false);
   const [presetDialogOpen, setPresetDialogOpen] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [presetSubmitting, setPresetSubmitting] = useState(false);
@@ -282,8 +298,6 @@ export function ScorecardClient({
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
     new Set(),
   );
-  const [addingDistance, setAddingDistance] = useState(false);
-  const [distanceError, setDistanceError] = useState<string | null>(null);
   // マス目の選択有無（position）がそのままテンキーの開閉状態であり、
   // 別のstateとして二重管理しない。selectCell等で常にpositionとセットで
   // 更新していた旧keypadOpenを廃止し、ここから直接導出する。
@@ -422,33 +436,41 @@ export function ScorecardClient({
     });
   }
 
-  async function handleAddDistance() {
-    if (addingDistance) return;
-    setAddingDistance(true);
-    setDistanceError(null);
+  function handleAddDistance() {
+    // 直前（一番大きいdistance_number）の距離の内容をそのまま初期値として
+    // 引き継ぐ。距離が1件も無い場合のみ、決め打ちの初期値にフォールバック
+    // する。IDも楽観的UIのためここで確定し、そのままキューに積む。
+    const last = [...distances].sort(
+      (a, b) => b.distance_number - a.distance_number,
+    )[0];
+    const newDistance: Distance = {
+      id: crypto.randomUUID(),
+      distance_number: (last?.distance_number ?? 0) + 1,
+      distance: last?.distance ?? 18,
+      total_ends: last?.total_ends ?? 6,
+      arrows_per_end: last?.arrows_per_end ?? 6,
+      target_face_id: last?.target_face_id ?? DEFAULT_TARGET_FACE_ID,
+      is_marked: last?.is_marked ?? true,
+    };
 
-    const result = await addDistance({ roundId });
-    if ("error" in result) {
-      setDistanceError(result.error);
-      setAddingDistance(false);
-      return;
-    }
-
-    setDistances((prev) => [
-      ...prev,
-      {
-        id: result.distance.id,
-        distance_number: result.distance.distanceNumber,
-        distance: result.distance.distance,
-        total_ends: result.distance.totalEnds,
-        arrows_per_end: result.distance.arrowsPerEnd,
-        target_face_id: result.distance.targetFaceId,
-        is_marked: result.distance.isMarked,
-      },
-    ]);
+    setDistances((prev) => [...prev, newDistance]);
     // 追加した距離はすぐ編集できるよう、編集パネルを展開しておく。
-    setEditingDistanceIds((prev) => new Set(prev).add(result.distance.id));
-    setAddingDistance(false);
+    setEditingDistanceIds((prev) => new Set(prev).add(newDistance.id));
+    sync.enqueue({
+      key: `distance:${newDistance.id}`,
+      label: `距離${newDistance.distance_number}`,
+      run: () =>
+        addDistance({
+          id: newDistance.id,
+          roundId,
+          distanceNumber: newDistance.distance_number,
+          distance: newDistance.distance,
+          totalEnds: newDistance.total_ends,
+          arrowsPerEnd: newDistance.arrows_per_end,
+          targetFaceId: newDistance.target_face_id,
+          isMarked: newDistance.is_marked,
+        }),
+    });
   }
 
   function handleDistanceSaved(updated: DistanceConfig) {
@@ -549,26 +571,16 @@ export function ScorecardClient({
     );
   }
 
-  // 指定マスの状態をshotへ反映する（サーバーへの反映＋ローカルstateの更新）。
-  // undo/redoはこの適用処理を、記録時とは逆方向・同方向にそれぞれ1回呼ぶだけで実現する。
-  async function applyShot(
+  // 指定マスの状態をshotへ反映する（ローカルstateを即座に更新し、実際の
+  // 書き込みは送信キューへ積む）。undo/redoはこの適用処理を、記録時とは
+  // 逆方向・同方向にそれぞれ1回呼ぶだけで実現する。
+  function applyShot(
     distanceId: string,
     endNumber: number,
     arrowNumber: number,
     shot: Shot | null,
-  ): Promise<string | undefined> {
-    const result = shot
-      ? await recordShot({
-          distanceId,
-          endNumber,
-          arrowNumber,
-          scoreStr: shot.score_str,
-          scoreInt: shot.score_int,
-        })
-      : await clearShot({ distanceId, endNumber, arrowNumber });
-
-    if (result?.error) return result.error;
-
+    label: string,
+  ) {
     setShots((prev) => {
       const filtered = prev.filter(
         (s) =>
@@ -580,12 +592,33 @@ export function ScorecardClient({
       );
       return shot ? [...filtered, shot] : filtered;
     });
+
+    sync.enqueueShot(
+      {
+        key: `shot:${distanceId}:${endNumber}:${arrowNumber}`,
+        label,
+        // 作成中の距離（追加直後でまだ書き込みが完了していない可能性がある）
+        // へのスコア記録が、その距離のinsertより先にサーバーへ届いて外部キー
+        // 制約違反にならないよう、同じdistanceIdのキューを待ってから送る。
+        // 既に作成済みの距離の場合は待ち時間なしで即座に実行される。
+        dependsOnKey: `distance:${distanceId}`,
+        upsert: shot
+          ? {
+              distanceId,
+              endNumber,
+              arrowNumber,
+              scoreStr: shot.score_str,
+              scoreInt: shot.score_int,
+            }
+          : undefined,
+        clear: shot ? undefined : { distanceId, endNumber, arrowNumber },
+      },
+      syncShots,
+    );
   }
 
-  async function handleScore(scoreStr: string, scoreInt: number) {
-    if (!position || submitting) return;
-    setSubmitting(true);
-    setError(null);
+  function handleScore(scoreStr: string, scoreInt: number) {
+    if (!position) return;
 
     const { distance, end, arrow } = position;
     const prevShot = findShot(distance.id, end, arrow);
@@ -597,12 +630,13 @@ export function ScorecardClient({
       score_int: scoreInt,
     };
 
-    const errorMessage = await applyShot(distance.id, end, arrow, nextShot);
-    if (errorMessage) {
-      setError(errorMessage);
-      setSubmitting(false);
-      return;
-    }
+    applyShot(
+      distance.id,
+      end,
+      arrow,
+      nextShot,
+      `距離${distance.distance_number} ${end}エンド${arrow}本目`,
+    );
 
     setUndoStack((prev) => [
       ...prev,
@@ -616,23 +650,21 @@ export function ScorecardClient({
     ]);
     setRedoStack([]);
     setPosition(stepPosition(distances, position, 1));
-    setSubmitting(false);
   }
 
-  async function handleClear() {
-    if (!position || submitting) return;
-    setSubmitting(true);
-    setError(null);
+  function handleClear() {
+    if (!position) return;
 
     const { distance, end, arrow } = position;
     const prevShot = findShot(distance.id, end, arrow);
 
-    const errorMessage = await applyShot(distance.id, end, arrow, null);
-    if (errorMessage) {
-      setError(errorMessage);
-      setSubmitting(false);
-      return;
-    }
+    applyShot(
+      distance.id,
+      end,
+      arrow,
+      null,
+      `距離${distance.distance_number} ${end}エンド${arrow}本目`,
+    );
 
     if (prevShot) {
       setUndoStack((prev) => [
@@ -648,7 +680,6 @@ export function ScorecardClient({
       setRedoStack([]);
     }
     setPosition(stepPosition(distances, position, -1) ?? position);
-    setSubmitting(false);
   }
 
   // 取り消した/やり直したマスへフォーカスを移動し、何が変わったか見えるようにする。
@@ -659,52 +690,44 @@ export function ScorecardClient({
     setPosition({ distance, end: entry.endNumber, arrow: entry.arrowNumber });
   }
 
-  async function handleUndo() {
-    const entry = undoStack.at(-1);
-    if (!entry || submitting) return;
-    setSubmitting(true);
-    setError(null);
+  function historyEntryLabel(entry: HistoryEntry): string {
+    const distanceNumber =
+      distances.find((d) => d.id === entry.distanceId)?.distance_number ?? "?";
+    return `距離${distanceNumber} ${entry.endNumber}エンド${entry.arrowNumber}本目`;
+  }
 
-    const errorMessage = await applyShot(
+  function handleUndo() {
+    const entry = undoStack.at(-1);
+    if (!entry) return;
+
+    applyShot(
       entry.distanceId,
       entry.endNumber,
       entry.arrowNumber,
       entry.prevShot,
+      historyEntryLabel(entry),
     );
-    if (errorMessage) {
-      setError(errorMessage);
-      setSubmitting(false);
-      return;
-    }
 
     setUndoStack((prev) => prev.slice(0, -1));
     setRedoStack((prev) => [...prev, entry]);
     focusHistoryEntry(entry);
-    setSubmitting(false);
   }
 
-  async function handleRedo() {
+  function handleRedo() {
     const entry = redoStack.at(-1);
-    if (!entry || submitting) return;
-    setSubmitting(true);
-    setError(null);
+    if (!entry) return;
 
-    const errorMessage = await applyShot(
+    applyShot(
       entry.distanceId,
       entry.endNumber,
       entry.arrowNumber,
       entry.nextShot,
+      historyEntryLabel(entry),
     );
-    if (errorMessage) {
-      setError(errorMessage);
-      setSubmitting(false);
-      return;
-    }
 
     setRedoStack((prev) => prev.slice(0, -1));
     setUndoStack((prev) => [...prev, entry]);
     focusHistoryEntry(entry);
-    setSubmitting(false);
   }
 
   function selectCell(distance: Distance, end: number, arrow: number) {
@@ -723,7 +746,7 @@ export function ScorecardClient({
           variant="outline"
           size="lg"
           className="col-span-2 h-12"
-          disabled={submitting || undoStack.length === 0}
+          disabled={undoStack.length === 0}
           data-testid="score-button-undo"
           aria-label="一つ戻る"
           onClick={handleUndo}
@@ -735,7 +758,7 @@ export function ScorecardClient({
           variant="outline"
           size="lg"
           className="h-12"
-          disabled={submitting || redoStack.length === 0}
+          disabled={redoStack.length === 0}
           data-testid="score-button-redo"
           aria-label="一つ進む"
           onClick={handleRedo}
@@ -747,7 +770,6 @@ export function ScorecardClient({
           variant="outline"
           size="lg"
           className="h-12 text-lg"
-          disabled={submitting}
           data-testid="score-button-clear"
           aria-label="クリア"
           onClick={handleClear}
@@ -764,7 +786,6 @@ export function ScorecardClient({
             type="button"
             variant="outline"
             size="lg"
-            disabled={submitting}
             data-testid={`score-button-${b.label}`}
             onClick={() => handleScore(b.scoreStr, b.scoreInt)}
             // 背景色をstyleで直接指定するとhover:bg-muted等のクラスは
@@ -805,7 +826,7 @@ export function ScorecardClient({
     <div className="flex h-full">
       <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto">
         <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-8">
-          <div className="flex items-center justify-between gap-2">
+          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
             <Link
               href="/rounds"
               className="inline-flex w-fit items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
@@ -813,7 +834,31 @@ export function ScorecardClient({
               <ChevronLeft className="size-4" />
               一覧へ戻る
             </Link>
-            <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="sync-status"
+              onClick={() => {
+                if (sync.status === "error") setSyncErrorsOpen(true);
+              }}
+              className={cn(
+                "flex items-center justify-self-center gap-1 text-xs",
+                sync.status === "error" &&
+                  "font-medium text-destructive underline underline-offset-2",
+                sync.status === "syncing" && "text-muted-foreground",
+                sync.status === "synced" &&
+                  "text-emerald-600 dark:text-emerald-500",
+              )}
+            >
+              {sync.status === "syncing" && (
+                <Loader2 className="size-3.5 animate-spin" />
+              )}
+              {sync.status === "error" && <AlertCircle className="size-3.5" />}
+              {sync.status === "synced" && <Check className="size-3.5" />}
+              {sync.status === "syncing" && "同期中…"}
+              {sync.status === "error" && "同期失敗"}
+              {sync.status === "synced" && "同期済み"}
+            </button>
+            <div className="flex items-center justify-end gap-2">
               <Dialog
                 open={presetDialogOpen}
                 onOpenChange={(open) => {
@@ -921,6 +966,10 @@ export function ScorecardClient({
               initial={initialRoundConfig}
               onSaved={setRoundConfig}
               defaultExpanded={initialDistances.length === 0}
+              hasUnmarkedDistances={distances.some((d) => !d.is_marked)}
+              enqueue={sync.enqueue}
+              hasSyncError={sync.errorFor("roundConfig") !== undefined}
+              onOpenSyncErrors={() => setSyncErrorsOpen(true)}
             />
           </div>
           {/* position: stickyは直接の親の高さの範囲でしか張り付かないため、
@@ -942,13 +991,31 @@ export function ScorecardClient({
             data-testid="round-summary"
             className="-mt-6 sticky top-0 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border-x border-b bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
           >
-            <span className="text-muted-foreground text-sm">
-              X: {xCount} / 10: {tenCount}
-            </span>
-            <span className="font-heading text-lg font-semibold">
-              合計{total}
-            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-muted-foreground text-sm">
+                X: {xCount} / 10: {tenCount}
+              </span>
+              <span className="font-heading text-lg font-semibold">
+                合計{total}
+              </span>
+            </div>
           </div>
+
+          <Dialog open={syncErrorsOpen} onOpenChange={setSyncErrorsOpen}>
+            <DialogContent>
+              {/* 複数の失敗が同時に溜まっても一度に全部は出さず、最も古い
+                  未解決の1件だけを見せる。解決すると次のものが表示される。 */}
+              {sync.errors[0] && (
+                <div className="flex flex-col gap-2">
+                  <p className="font-heading font-semibold">同期失敗</p>
+                  <p className="text-sm">
+                    <span className="font-medium">{sync.errors[0].label}</span>
+                    ：{sync.errors[0].message}
+                  </p>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
 
           <div className="flex flex-col gap-4">
             {distances.map((d) => {
@@ -1007,13 +1074,22 @@ export function ScorecardClient({
                               ),
                             )
                           : null;
+                        const cellError = sync.errorFor(
+                          `shot:${d.id}:${end}:${arrow}`,
+                        );
 
                         return (
                           <button
                             key={arrow}
                             type="button"
                             data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
-                            onClick={() => selectCell(d, end, arrow)}
+                            onClick={() => {
+                              if (cellError) {
+                                setSyncErrorsOpen(true);
+                                return;
+                              }
+                              selectCell(d, end, arrow);
+                            }}
                             className={cn(
                               // 得点色をstyleで直接指定するため、hover:bg-muted等の
                               // クラスは常にそのstyleに上書きされて効かない
@@ -1027,6 +1103,11 @@ export function ScorecardClient({
                               "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
                               isActive &&
                                 "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
+                              // 選択中のring-2より細く、通常のborder（1px）より太い
+                              // 枠でエラーを示す。
+                              cellError &&
+                                !isActive &&
+                                "ring-[1.5px] ring-destructive ring-inset",
                             )}
                             style={
                               color
@@ -1078,8 +1159,20 @@ export function ScorecardClient({
                     <button
                       type="button"
                       data-testid={`distance-config-toggle-${d.distance_number}`}
-                      onClick={() => toggleDistanceEditing(d.id)}
-                      className="relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm"
+                      onClick={() => {
+                        if (sync.errorFor(`distance:${d.id}`)) {
+                          setSyncErrorsOpen(true);
+                          return;
+                        }
+                        toggleDistanceEditing(d.id);
+                      }}
+                      className={cn(
+                        "relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm",
+                        // 通常のborder（1px）より太く、選択中の枠（ring-2）より
+                        // 細いリングでエラーを示す。
+                        sync.errorFor(`distance:${d.id}`) &&
+                          "ring-[1.5px] ring-destructive ring-inset",
+                      )}
                     >
                       <DistanceInfo
                         distance={d.distance}
@@ -1111,6 +1204,7 @@ export function ScorecardClient({
                         onOpenChange={(open) => {
                           if (!open) toggleDistanceEditing(d.id);
                         }}
+                        enqueue={sync.enqueue}
                       />
                     )}
                     {/* 常に上（トグルボタンの余っている下paddingの中）に食い込ま
@@ -1155,7 +1249,6 @@ export function ScorecardClient({
             <Button
               type="button"
               variant="outline"
-              disabled={addingDistance}
               data-testid="add-distance-button"
               onClick={handleAddDistance}
               className="border-dashed"
@@ -1163,12 +1256,7 @@ export function ScorecardClient({
               <Plus />
               距離を追加
             </Button>
-            {distanceError && (
-              <p className="text-destructive text-sm">{distanceError}</p>
-            )}
           </div>
-
-          {error && <p className="text-destructive text-sm">{error}</p>}
         </div>
 
         {!isLandscape && keypadMounted && (

@@ -13,6 +13,11 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { deleteDistance, updateDistance } from "./actions";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
+import type { EnqueueInput } from "./use-sync-queue";
+
+// 10点的（アウトドア・122cm）。距離追加時の初期的として使う（e2eのcreate-round
+// APIヘルパーが使う既定の的と同じもの）。
+export const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001";
 
 export type TargetFaceOption = {
   id: string;
@@ -275,6 +280,7 @@ export function DistanceEditFields({
   onSaved,
   onDeleted,
   onOpenChange,
+  enqueue,
 }: {
   distance: DistanceConfig;
   hasShots: boolean;
@@ -284,52 +290,47 @@ export function DistanceEditFields({
   onSaved: (updated: DistanceConfig) => void;
   onDeleted: () => void;
   onOpenChange: (open: boolean) => void;
+  enqueue: (input: EnqueueInput) => void;
 }) {
   const [draft, setDraft] = useState(distance);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  async function handleSave() {
-    if (submitting) return;
-    setSubmitting(true);
-    setError(null);
-
-    const result = await updateDistance({
-      distanceId: distance.id,
-      distance: draft.distance,
-      totalEnds: draft.totalEnds,
-      arrowsPerEnd: draft.arrowsPerEnd,
-      targetFaceId: draft.targetFaceId,
-      isMarked: draft.isMarked,
-    });
-
-    if (result?.error) {
-      setError(result.error);
-      setSubmitting(false);
+  function handleSave() {
+    // クライアントが既に持っている値だけで判定できるため、サーバーへ
+    // 投げる前に同期的に検証する（キュー経由の非同期エラーにはしない）。
+    if (draft.isMarked && draft.distance === null) {
+      setError("Markedの場合は距離（m）を入力してください。");
       return;
     }
+    setError(null);
 
     onSaved(draft);
-    setSubmitting(false);
+    enqueue({
+      key: `distance:${distance.id}`,
+      label: `距離${distance.distanceNumber}`,
+      run: () =>
+        updateDistance({
+          distanceId: distance.id,
+          distance: draft.distance,
+          totalEnds: draft.totalEnds,
+          arrowsPerEnd: draft.arrowsPerEnd,
+          targetFaceId: draft.targetFaceId,
+          isMarked: draft.isMarked,
+        }),
+    });
   }
 
-  async function performDelete() {
-    setSubmitting(true);
-    setError(null);
-
-    const result = await deleteDistance({ distanceId: distance.id });
-    if (result?.error) {
-      setError(result.error);
-      setSubmitting(false);
-      return;
-    }
-
+  function performDelete() {
     onDeleted();
+    enqueue({
+      key: `distance:${distance.id}`,
+      label: `距離${distance.distanceNumber}`,
+      run: () => deleteDistance({ distanceId: distance.id }),
+    });
   }
 
   function handleDeleteClick() {
-    if (submitting) return;
     if (hasShots) {
       setConfirmOpen(true);
       return;
@@ -445,7 +446,6 @@ export function DistanceEditFields({
           <Button
             type="button"
             className="w-full"
-            disabled={submitting}
             data-testid={`distance-config-save-${distance.distanceNumber}`}
             onClick={handleSave}
           >
@@ -457,7 +457,6 @@ export function DistanceEditFields({
               type="button"
               variant="destructive"
               className="w-full"
-              disabled={submitting}
               data-testid={`distance-config-delete-${distance.distanceNumber}`}
               onClick={handleDeleteClick}
             >
