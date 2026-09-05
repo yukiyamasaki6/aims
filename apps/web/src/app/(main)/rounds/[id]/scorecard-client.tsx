@@ -843,7 +843,7 @@ export function ScorecardClient({
               {sync.status === "error" && <AlertCircle className="size-3.5" />}
               {sync.status === "synced" && <Check className="size-3.5" />}
               {sync.status === "syncing" && "同期中…"}
-              {sync.status === "error" && "エラー"}
+              {sync.status === "error" && "同期失敗"}
               {sync.status === "synced" && "同期済み"}
             </button>
             <div className="flex items-center justify-end gap-2">

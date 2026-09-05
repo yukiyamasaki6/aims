@@ -543,7 +543,7 @@ test("サインインが切れた状態でスコアを入力すると、マス�
   await page.getByTestId("score-button-X").click();
 
   await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("X");
-  await expect(page.getByTestId("sync-status")).toHaveText("エラー");
+  await expect(page.getByTestId("sync-status")).toHaveText("同期失敗");
   await expect(page.getByTestId("shot-cell-1-1-1")).toHaveClass(
     /ring-destructive/,
   );

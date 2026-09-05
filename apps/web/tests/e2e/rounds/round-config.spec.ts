@@ -167,7 +167,7 @@ test("サインインが切れた状態でラウンド設定を保存すると�
   await expect(page.getByTestId("round-config-summary")).toContainText(
     "編集後の名前",
   );
-  await expect(page.getByTestId("sync-status")).toHaveText("エラー");
+  await expect(page.getByTestId("sync-status")).toHaveText("同期失敗");
   await expect(page.getByTestId("round-config-summary")).toHaveClass(
     /ring-destructive/,
   );

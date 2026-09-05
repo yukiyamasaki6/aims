@@ -476,7 +476,7 @@ test("サインインが切れた状態で距離を保存すると、距離カ�
   await expect(page.getByTestId("distance-config-toggle-1")).toContainText(
     "30m",
   );
-  await expect(page.getByTestId("sync-status")).toHaveText("エラー");
+  await expect(page.getByTestId("sync-status")).toHaveText("同期失敗");
   await expect(page.getByTestId("distance-config-toggle-1")).toHaveClass(
     /ring-destructive/,
   );
