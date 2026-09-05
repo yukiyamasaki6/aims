@@ -119,12 +119,21 @@ export async function deleteDistance(input: {
   }
 }
 
-export async function recordShot(input: {
-  distanceId: string;
-  endNumber: number;
-  arrowNumber: number;
-  scoreStr: string;
-  scoreInt: number;
+// スコアの連打時に、記録・取り消しをそれぞれ1件ずつサーバーアクションと
+// して送ると、Next.jsのServer Actionはクライアント側でどれだけ並列に
+// 呼んでもサーバー側で直列にしか処理されないため、通信本数分だけ同期完了
+// までの体感速度が悪化する。そのため、1回の呼び出しで複数件の記録・取り
+// 消しをまとめて処理できるようにする（送信側の詰め方はuse-sync-queue.ts
+// 参照）。
+export async function syncShots(input: {
+  upsert: {
+    distanceId: string;
+    endNumber: number;
+    arrowNumber: number;
+    scoreStr: string;
+    scoreInt: number;
+  }[];
+  clear: { distanceId: string; endNumber: number; arrowNumber: number }[];
 }): Promise<{ error: string } | undefined> {
   const supabase = await createClient();
 
@@ -136,20 +145,41 @@ export async function recordShot(input: {
     return { error: "サインインが必要です。" };
   }
 
-  const { error } = await supabase.from("shots").upsert(
-    {
-      distance_id: input.distanceId,
-      end_number: input.endNumber,
-      arrow_number: input.arrowNumber,
-      user_id: user.id,
-      score_str: input.scoreStr,
-      score_int: input.scoreInt,
-    },
-    { onConflict: "distance_id,user_id,end_number,arrow_number" },
-  );
+  if (input.upsert.length > 0) {
+    const { error } = await supabase.from("shots").upsert(
+      input.upsert.map((s) => ({
+        distance_id: s.distanceId,
+        end_number: s.endNumber,
+        arrow_number: s.arrowNumber,
+        user_id: user.id,
+        score_str: s.scoreStr,
+        score_int: s.scoreInt,
+      })),
+      { onConflict: "distance_id,user_id,end_number,arrow_number" },
+    );
 
-  if (error) {
-    return { error: error.message };
+    if (error) {
+      return { error: error.message };
+    }
+  }
+
+  if (input.clear.length > 0) {
+    const filter = input.clear
+      .map(
+        (c) =>
+          `and(distance_id.eq.${c.distanceId},end_number.eq.${c.endNumber},arrow_number.eq.${c.arrowNumber})`,
+      )
+      .join(",");
+
+    const { error } = await supabase
+      .from("shots")
+      .delete()
+      .eq("user_id", user.id)
+      .or(filter);
+
+    if (error) {
+      return { error: error.message };
+    }
   }
 }
 
@@ -294,31 +324,4 @@ export async function deleteRound(input: {
   }
 
   redirect("/rounds");
-}
-
-export async function clearShot(input: {
-  distanceId: string;
-  endNumber: number;
-  arrowNumber: number;
-}): Promise<{ error: string } | undefined> {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { error: "サインインが必要です。" };
-  }
-
-  const { error } = await supabase.from("shots").delete().match({
-    distance_id: input.distanceId,
-    end_number: input.endNumber,
-    arrow_number: input.arrowNumber,
-    user_id: user.id,
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
 }

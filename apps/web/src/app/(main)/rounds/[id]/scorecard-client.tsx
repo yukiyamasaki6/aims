@@ -27,10 +27,9 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   addDistance,
-  clearShot,
   deleteRound,
-  recordShot,
   saveRoundAsPreset,
+  syncShots,
 } from "./actions";
 import {
   DEFAULT_TARGET_FACE_ID,
@@ -582,25 +581,28 @@ export function ScorecardClient({
       return shot ? [...filtered, shot] : filtered;
     });
 
-    sync.enqueue({
-      key: `shot:${distanceId}:${endNumber}:${arrowNumber}`,
-      label,
-      // 作成中の距離（追加直後でまだ書き込みが完了していない可能性がある）
-      // へのスコア記録が、その距離のinsertより先にサーバーへ届いて外部キー
-      // 制約違反にならないよう、同じdistanceIdのキューを待ってから送る。
-      // 既に作成済みの距離の場合は待ち時間なしで即座に実行される。
-      dependsOnKey: `distance:${distanceId}`,
-      run: () =>
-        shot
-          ? recordShot({
+    sync.enqueueShot(
+      {
+        key: `shot:${distanceId}:${endNumber}:${arrowNumber}`,
+        label,
+        // 作成中の距離（追加直後でまだ書き込みが完了していない可能性がある）
+        // へのスコア記録が、その距離のinsertより先にサーバーへ届いて外部キー
+        // 制約違反にならないよう、同じdistanceIdのキューを待ってから送る。
+        // 既に作成済みの距離の場合は待ち時間なしで即座に実行される。
+        dependsOnKey: `distance:${distanceId}`,
+        upsert: shot
+          ? {
               distanceId,
               endNumber,
               arrowNumber,
               scoreStr: shot.score_str,
               scoreInt: shot.score_int,
-            })
-          : clearShot({ distanceId, endNumber, arrowNumber }),
-    });
+            }
+          : undefined,
+        clear: shot ? undefined : { distanceId, endNumber, arrowNumber },
+      },
+      syncShots,
+    );
   }
 
   function handleScore(scoreStr: string, scoreInt: number) {
