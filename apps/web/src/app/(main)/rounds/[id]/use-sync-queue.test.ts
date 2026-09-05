@@ -40,7 +40,7 @@ describe("useSyncQueue", () => {
     expect(result.current.status).toBe("synced");
   });
 
-  it("sends operations enqueued together in the same batch concurrently, not one at a time", async () => {
+  it("runs operations with different keys concurrently, without waiting for each other", async () => {
     const { result } = renderHook(() => useSyncQueue());
     const first = createDeferred<Result>();
     const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
@@ -53,8 +53,11 @@ describe("useSyncQueue", () => {
       });
       result.current.enqueue({ key: "b", label: "B", run: secondRun });
     });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
-    // 同じバッチ内の操作は、先に積まれたものの解決を待たずに送信される。
+    // 別のkeyの操作は、先に積まれたものの解決を待たずに即座に実行される。
     expect(secondRun).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -63,7 +66,7 @@ describe("useSyncQueue", () => {
     });
   });
 
-  it("waits for the current batch to fully settle before starting a batch enqueued afterward", async () => {
+  it("runs operations with the same key strictly in enqueue order, never overlapping", async () => {
     const { result } = renderHook(() => useSyncQueue());
     const first = createDeferred<Result>();
     const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
@@ -74,12 +77,9 @@ describe("useSyncQueue", () => {
         label: "A",
         run: () => first.promise,
       });
-    });
-    act(() => {
-      result.current.enqueue({ key: "b", label: "B", run: secondRun });
+      result.current.enqueue({ key: "a", label: "A", run: secondRun });
     });
 
-    // bは新しいバッチとして扱われ、aを含む現在のバッチが解決するまで送信されない。
     expect(secondRun).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -89,7 +89,7 @@ describe("useSyncQueue", () => {
     expect(secondRun).toHaveBeenCalledTimes(1);
   });
 
-  it("completes isCreate operations before other operations in the same batch", async () => {
+  it("waits for dependsOnKey's current tail to resolve before running", async () => {
     const { result } = renderHook(() => useSyncQueue());
     const order: string[] = [];
     const createDone = createDeferred<Result>();
@@ -98,7 +98,6 @@ describe("useSyncQueue", () => {
       result.current.enqueue({
         key: "distance:new",
         label: "新しい距離",
-        isCreate: true,
         run: () => {
           order.push("create-start");
           return createDone.promise.then((r) => {
@@ -110,6 +109,7 @@ describe("useSyncQueue", () => {
       result.current.enqueue({
         key: "shot:new:1:1",
         label: "新しい距離 1エンド1本目",
+        dependsOnKey: "distance:new",
         run: () => {
           order.push("shot");
           return Promise.resolve(undefined as Result);
@@ -117,7 +117,11 @@ describe("useSyncQueue", () => {
       });
     });
 
-    // createが解決するまでは、同じバッチ内の他の操作は開始されない。
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // 依存先（distance:new）が解決するまで、依存する操作は開始されない。
     expect(order).toEqual(["create-start"]);
 
     await act(async () => {
@@ -127,27 +131,27 @@ describe("useSyncQueue", () => {
     expect(order).toEqual(["create-start", "create-end", "shot"]);
   });
 
-  it("executes operations in the order they were enqueued", async () => {
+  it("does not wait when dependsOnKey has nothing currently running", async () => {
     const { result } = renderHook(() => useSyncQueue());
-    const order: string[] = [];
-    const makeRun = (key: string) => () => {
-      order.push(key);
-      return Promise.resolve(undefined as Result);
-    };
+    const run = vi.fn(() => Promise.resolve(undefined as Result));
 
     act(() => {
-      result.current.enqueue({ key: "a", label: "A", run: makeRun("a") });
-      result.current.enqueue({ key: "b", label: "B", run: makeRun("b") });
-      result.current.enqueue({ key: "c", label: "C", run: makeRun("c") });
+      result.current.enqueue({
+        key: "shot:existing:1:1",
+        label: "距離1 1エンド1本目",
+        dependsOnKey: "distance:existing",
+        run,
+      });
     });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(run).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-      await new Promise((r) => setTimeout(r, 0));
-      await new Promise((r) => setTimeout(r, 0));
+      await Promise.resolve();
     });
-
-    expect(order).toEqual(["a", "b", "c"]);
   });
 
   it("surfaces a failed operation as an error keyed by its operation key", async () => {

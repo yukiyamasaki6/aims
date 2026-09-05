@@ -448,7 +448,6 @@ export function ScorecardClient({
     sync.enqueue({
       key: `distance:${newDistance.id}`,
       label: `距離${newDistance.distance_number}`,
-      isCreate: true,
       run: () =>
         addDistance({
           id: newDistance.id,
@@ -586,6 +585,11 @@ export function ScorecardClient({
     sync.enqueue({
       key: `shot:${distanceId}:${endNumber}:${arrowNumber}`,
       label,
+      // 作成中の距離（追加直後でまだ書き込みが完了していない可能性がある）
+      // へのスコア記録が、その距離のinsertより先にサーバーへ届いて外部キー
+      // 制約違反にならないよう、同じdistanceIdのキューを待ってから送る。
+      // 既に作成済みの距離の場合は待ち時間なしで即座に実行される。
+      dependsOnKey: `distance:${distanceId}`,
       run: () =>
         shot
           ? recordShot({
