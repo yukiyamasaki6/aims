@@ -808,16 +808,14 @@ export function ScorecardClient({
     <div className="flex h-full">
       <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto">
         <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-8">
-          <div className="flex items-center gap-2">
-            <div className="flex flex-1 justify-start">
-              <Link
-                href="/rounds"
-                className="inline-flex w-fit items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
-              >
-                <ChevronLeft className="size-4" />
-                一覧へ戻る
-              </Link>
-            </div>
+          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+            <Link
+              href="/rounds"
+              className="inline-flex w-fit items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
+            >
+              <ChevronLeft className="size-4" />
+              一覧へ戻る
+            </Link>
             <button
               type="button"
               data-testid="sync-status"
@@ -825,7 +823,7 @@ export function ScorecardClient({
                 if (sync.status === "error") setSyncErrorsOpen(true);
               }}
               className={cn(
-                "flex shrink-0 items-center gap-1 text-xs",
+                "flex items-center justify-self-center gap-1 text-xs",
                 sync.status === "error" &&
                   "font-medium text-destructive underline underline-offset-2",
                 sync.status === "syncing" && "text-muted-foreground",
@@ -842,7 +840,7 @@ export function ScorecardClient({
               {sync.status === "error" && "エラー"}
               {sync.status === "synced" && "同期済み"}
             </button>
-            <div className="flex flex-1 items-center justify-end gap-2">
+            <div className="flex items-center justify-end gap-2">
               <Dialog
                 open={presetDialogOpen}
                 onOpenChange={(open) => {
