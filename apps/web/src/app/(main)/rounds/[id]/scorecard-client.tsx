@@ -30,6 +30,7 @@ import {
   saveRoundAsPreset,
 } from "./actions";
 import {
+  DEFAULT_TARGET_FACE_ID,
   type DistanceConfig,
   DistanceEditFields,
   DistanceInfo,
@@ -38,6 +39,7 @@ import {
 } from "./distance-config-row";
 import { KeypadPanel } from "./keypad-panel";
 import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
+import { useSyncQueue } from "./use-sync-queue";
 
 type Distance = {
   id: string;
@@ -271,8 +273,8 @@ export function ScorecardClient({
   const [shots, setShots] = useState<Shot[]>(initialShots);
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const sync = useSyncQueue();
+  const [syncErrorsOpen, setSyncErrorsOpen] = useState(false);
   const [presetDialogOpen, setPresetDialogOpen] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [presetSubmitting, setPresetSubmitting] = useState(false);
@@ -282,8 +284,6 @@ export function ScorecardClient({
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
     new Set(),
   );
-  const [addingDistance, setAddingDistance] = useState(false);
-  const [distanceError, setDistanceError] = useState<string | null>(null);
   // マス目の選択有無（position）がそのままテンキーの開閉状態であり、
   // 別のstateとして二重管理しない。selectCell等で常にpositionとセットで
   // 更新していた旧keypadOpenを廃止し、ここから直接導出する。
@@ -422,33 +422,41 @@ export function ScorecardClient({
     });
   }
 
-  async function handleAddDistance() {
-    if (addingDistance) return;
-    setAddingDistance(true);
-    setDistanceError(null);
+  function handleAddDistance() {
+    // 直前（一番大きいdistance_number）の距離の内容をそのまま初期値として
+    // 引き継ぐ。距離が1件も無い場合のみ、決め打ちの初期値にフォールバック
+    // する。IDも楽観的UIのためここで確定し、そのままキューに積む。
+    const last = [...distances].sort(
+      (a, b) => b.distance_number - a.distance_number,
+    )[0];
+    const newDistance: Distance = {
+      id: crypto.randomUUID(),
+      distance_number: (last?.distance_number ?? 0) + 1,
+      distance: last?.distance ?? 18,
+      total_ends: last?.total_ends ?? 6,
+      arrows_per_end: last?.arrows_per_end ?? 6,
+      target_face_id: last?.target_face_id ?? DEFAULT_TARGET_FACE_ID,
+      is_marked: last?.is_marked ?? true,
+    };
 
-    const result = await addDistance({ roundId });
-    if ("error" in result) {
-      setDistanceError(result.error);
-      setAddingDistance(false);
-      return;
-    }
-
-    setDistances((prev) => [
-      ...prev,
-      {
-        id: result.distance.id,
-        distance_number: result.distance.distanceNumber,
-        distance: result.distance.distance,
-        total_ends: result.distance.totalEnds,
-        arrows_per_end: result.distance.arrowsPerEnd,
-        target_face_id: result.distance.targetFaceId,
-        is_marked: result.distance.isMarked,
-      },
-    ]);
+    setDistances((prev) => [...prev, newDistance]);
     // 追加した距離はすぐ編集できるよう、編集パネルを展開しておく。
-    setEditingDistanceIds((prev) => new Set(prev).add(result.distance.id));
-    setAddingDistance(false);
+    setEditingDistanceIds((prev) => new Set(prev).add(newDistance.id));
+    sync.enqueue({
+      key: `distance:${newDistance.id}`,
+      label: `距離${newDistance.distance_number}`,
+      run: () =>
+        addDistance({
+          id: newDistance.id,
+          roundId,
+          distanceNumber: newDistance.distance_number,
+          distance: newDistance.distance,
+          totalEnds: newDistance.total_ends,
+          arrowsPerEnd: newDistance.arrows_per_end,
+          targetFaceId: newDistance.target_face_id,
+          isMarked: newDistance.is_marked,
+        }),
+    });
   }
 
   function handleDistanceSaved(updated: DistanceConfig) {
@@ -549,26 +557,16 @@ export function ScorecardClient({
     );
   }
 
-  // 指定マスの状態をshotへ反映する（サーバーへの反映＋ローカルstateの更新）。
-  // undo/redoはこの適用処理を、記録時とは逆方向・同方向にそれぞれ1回呼ぶだけで実現する。
-  async function applyShot(
+  // 指定マスの状態をshotへ反映する（ローカルstateを即座に更新し、実際の
+  // 書き込みは送信キューへ積む）。undo/redoはこの適用処理を、記録時とは
+  // 逆方向・同方向にそれぞれ1回呼ぶだけで実現する。
+  function applyShot(
     distanceId: string,
     endNumber: number,
     arrowNumber: number,
     shot: Shot | null,
-  ): Promise<string | undefined> {
-    const result = shot
-      ? await recordShot({
-          distanceId,
-          endNumber,
-          arrowNumber,
-          scoreStr: shot.score_str,
-          scoreInt: shot.score_int,
-        })
-      : await clearShot({ distanceId, endNumber, arrowNumber });
-
-    if (result?.error) return result.error;
-
+    label: string,
+  ) {
     setShots((prev) => {
       const filtered = prev.filter(
         (s) =>
@@ -580,12 +578,25 @@ export function ScorecardClient({
       );
       return shot ? [...filtered, shot] : filtered;
     });
+
+    sync.enqueue({
+      key: `shot:${distanceId}:${endNumber}:${arrowNumber}`,
+      label,
+      run: () =>
+        shot
+          ? recordShot({
+              distanceId,
+              endNumber,
+              arrowNumber,
+              scoreStr: shot.score_str,
+              scoreInt: shot.score_int,
+            })
+          : clearShot({ distanceId, endNumber, arrowNumber }),
+    });
   }
 
-  async function handleScore(scoreStr: string, scoreInt: number) {
-    if (!position || submitting) return;
-    setSubmitting(true);
-    setError(null);
+  function handleScore(scoreStr: string, scoreInt: number) {
+    if (!position) return;
 
     const { distance, end, arrow } = position;
     const prevShot = findShot(distance.id, end, arrow);
@@ -597,12 +608,13 @@ export function ScorecardClient({
       score_int: scoreInt,
     };
 
-    const errorMessage = await applyShot(distance.id, end, arrow, nextShot);
-    if (errorMessage) {
-      setError(errorMessage);
-      setSubmitting(false);
-      return;
-    }
+    applyShot(
+      distance.id,
+      end,
+      arrow,
+      nextShot,
+      `距離${distance.distance_number} ${end}エンド${arrow}本目`,
+    );
 
     setUndoStack((prev) => [
       ...prev,
@@ -616,23 +628,21 @@ export function ScorecardClient({
     ]);
     setRedoStack([]);
     setPosition(stepPosition(distances, position, 1));
-    setSubmitting(false);
   }
 
-  async function handleClear() {
-    if (!position || submitting) return;
-    setSubmitting(true);
-    setError(null);
+  function handleClear() {
+    if (!position) return;
 
     const { distance, end, arrow } = position;
     const prevShot = findShot(distance.id, end, arrow);
 
-    const errorMessage = await applyShot(distance.id, end, arrow, null);
-    if (errorMessage) {
-      setError(errorMessage);
-      setSubmitting(false);
-      return;
-    }
+    applyShot(
+      distance.id,
+      end,
+      arrow,
+      null,
+      `距離${distance.distance_number} ${end}エンド${arrow}本目`,
+    );
 
     if (prevShot) {
       setUndoStack((prev) => [
@@ -648,7 +658,6 @@ export function ScorecardClient({
       setRedoStack([]);
     }
     setPosition(stepPosition(distances, position, -1) ?? position);
-    setSubmitting(false);
   }
 
   // 取り消した/やり直したマスへフォーカスを移動し、何が変わったか見えるようにする。
@@ -659,52 +668,44 @@ export function ScorecardClient({
     setPosition({ distance, end: entry.endNumber, arrow: entry.arrowNumber });
   }
 
-  async function handleUndo() {
-    const entry = undoStack.at(-1);
-    if (!entry || submitting) return;
-    setSubmitting(true);
-    setError(null);
+  function historyEntryLabel(entry: HistoryEntry): string {
+    const distanceNumber =
+      distances.find((d) => d.id === entry.distanceId)?.distance_number ?? "?";
+    return `距離${distanceNumber} ${entry.endNumber}エンド${entry.arrowNumber}本目`;
+  }
 
-    const errorMessage = await applyShot(
+  function handleUndo() {
+    const entry = undoStack.at(-1);
+    if (!entry) return;
+
+    applyShot(
       entry.distanceId,
       entry.endNumber,
       entry.arrowNumber,
       entry.prevShot,
+      historyEntryLabel(entry),
     );
-    if (errorMessage) {
-      setError(errorMessage);
-      setSubmitting(false);
-      return;
-    }
 
     setUndoStack((prev) => prev.slice(0, -1));
     setRedoStack((prev) => [...prev, entry]);
     focusHistoryEntry(entry);
-    setSubmitting(false);
   }
 
-  async function handleRedo() {
+  function handleRedo() {
     const entry = redoStack.at(-1);
-    if (!entry || submitting) return;
-    setSubmitting(true);
-    setError(null);
+    if (!entry) return;
 
-    const errorMessage = await applyShot(
+    applyShot(
       entry.distanceId,
       entry.endNumber,
       entry.arrowNumber,
       entry.nextShot,
+      historyEntryLabel(entry),
     );
-    if (errorMessage) {
-      setError(errorMessage);
-      setSubmitting(false);
-      return;
-    }
 
     setRedoStack((prev) => prev.slice(0, -1));
     setUndoStack((prev) => [...prev, entry]);
     focusHistoryEntry(entry);
-    setSubmitting(false);
   }
 
   function selectCell(distance: Distance, end: number, arrow: number) {
@@ -723,7 +724,7 @@ export function ScorecardClient({
           variant="outline"
           size="lg"
           className="col-span-2 h-12"
-          disabled={submitting || undoStack.length === 0}
+          disabled={undoStack.length === 0}
           data-testid="score-button-undo"
           aria-label="一つ戻る"
           onClick={handleUndo}
@@ -735,7 +736,7 @@ export function ScorecardClient({
           variant="outline"
           size="lg"
           className="h-12"
-          disabled={submitting || redoStack.length === 0}
+          disabled={redoStack.length === 0}
           data-testid="score-button-redo"
           aria-label="一つ進む"
           onClick={handleRedo}
@@ -747,7 +748,6 @@ export function ScorecardClient({
           variant="outline"
           size="lg"
           className="h-12 text-lg"
-          disabled={submitting}
           data-testid="score-button-clear"
           aria-label="クリア"
           onClick={handleClear}
@@ -764,7 +764,6 @@ export function ScorecardClient({
             type="button"
             variant="outline"
             size="lg"
-            disabled={submitting}
             data-testid={`score-button-${b.label}`}
             onClick={() => handleScore(b.scoreStr, b.scoreInt)}
             // 背景色をstyleで直接指定するとhover:bg-muted等のクラスは
@@ -921,6 +920,10 @@ export function ScorecardClient({
               initial={initialRoundConfig}
               onSaved={setRoundConfig}
               defaultExpanded={initialDistances.length === 0}
+              hasUnmarkedDistances={distances.some((d) => !d.is_marked)}
+              enqueue={sync.enqueue}
+              hasSyncError={sync.errorFor("roundConfig") !== undefined}
+              onOpenSyncErrors={() => setSyncErrorsOpen(true)}
             />
           </div>
           {/* position: stickyは直接の親の高さの範囲でしか張り付かないため、
@@ -940,15 +943,47 @@ export function ScorecardClient({
             にはみ出す分だけを残す。 */}
           <div
             data-testid="round-summary"
-            className="-mt-6 sticky top-0 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border-x border-b bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
+            className="-mt-6 sticky top-0 z-20 flex items-baseline justify-between gap-2 rounded-b-xl border-x border-b bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
           >
-            <span className="text-muted-foreground text-sm">
-              X: {xCount} / 10: {tenCount}
-            </span>
-            <span className="font-heading text-lg font-semibold">
-              合計{total}
-            </span>
+            <button
+              type="button"
+              data-testid="sync-status"
+              onClick={() => {
+                if (sync.status === "error") setSyncErrorsOpen(true);
+              }}
+              className={cn(
+                "text-xs",
+                sync.status === "error"
+                  ? "font-medium text-destructive underline underline-offset-2"
+                  : "text-muted-foreground",
+              )}
+            >
+              {sync.status === "syncing" && "同期中…"}
+              {sync.status === "error" && "エラー"}
+              {sync.status === "synced" && "同期済み"}
+            </button>
+            <div className="flex items-baseline gap-2">
+              <span className="text-muted-foreground text-sm">
+                X: {xCount} / 10: {tenCount}
+              </span>
+              <span className="font-heading text-lg font-semibold">
+                合計{total}
+              </span>
+            </div>
           </div>
+
+          <Dialog open={syncErrorsOpen} onOpenChange={setSyncErrorsOpen}>
+            <DialogContent>
+              <div className="flex flex-col gap-2">
+                <p className="font-heading font-semibold">同期エラー</p>
+                {sync.errors.map((e) => (
+                  <p key={e.key} className="text-sm">
+                    <span className="font-medium">{e.label}</span>：{e.message}
+                  </p>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
 
           <div className="flex flex-col gap-4">
             {distances.map((d) => {
@@ -1007,13 +1042,22 @@ export function ScorecardClient({
                               ),
                             )
                           : null;
+                        const cellError = sync.errorFor(
+                          `shot:${d.id}:${end}:${arrow}`,
+                        );
 
                         return (
                           <button
                             key={arrow}
                             type="button"
                             data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
-                            onClick={() => selectCell(d, end, arrow)}
+                            onClick={() => {
+                              if (cellError) {
+                                setSyncErrorsOpen(true);
+                                return;
+                              }
+                              selectCell(d, end, arrow);
+                            }}
                             className={cn(
                               // 得点色をstyleで直接指定するため、hover:bg-muted等の
                               // クラスは常にそのstyleに上書きされて効かない
@@ -1024,7 +1068,7 @@ export function ScorecardClient({
                               // のstate layerの目安（hover 8%/pressed 12%）に
                               // 合わせる（issue #286で他の対話的要素も含めて
                               // 同じ基準に揃える予定）。
-                              "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
+                              "relative flex min-h-10 items-center justify-center py-2 text-base font-medium transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
                               isActive &&
                                 "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
                             )}
@@ -1038,6 +1082,13 @@ export function ScorecardClient({
                             }
                           >
                             {shot?.score_str ?? ""}
+                            {cellError && (
+                              <span
+                                data-testid={`shot-cell-error-${d.distance_number}-${end}-${arrow}`}
+                                aria-hidden="true"
+                                className="absolute top-0.5 right-0.5 size-2 rounded-full bg-destructive"
+                              />
+                            )}
                           </button>
                         );
                       })}
@@ -1078,7 +1129,13 @@ export function ScorecardClient({
                     <button
                       type="button"
                       data-testid={`distance-config-toggle-${d.distance_number}`}
-                      onClick={() => toggleDistanceEditing(d.id)}
+                      onClick={() => {
+                        if (sync.errorFor(`distance:${d.id}`)) {
+                          setSyncErrorsOpen(true);
+                          return;
+                        }
+                        toggleDistanceEditing(d.id);
+                      }}
                       className="relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm"
                     >
                       <DistanceInfo
@@ -1090,6 +1147,13 @@ export function ScorecardClient({
                         totalEnds={d.total_ends}
                         trailing={<ChevronRight className="size-4 shrink-0" />}
                       />
+                      {sync.errorFor(`distance:${d.id}`) && (
+                        <span
+                          data-testid={`distance-error-${d.distance_number}`}
+                          aria-hidden="true"
+                          className="absolute top-1 right-1 size-2 rounded-full bg-destructive"
+                        />
+                      )}
                     </button>
                     {editingDistanceIds.has(d.id) && (
                       <DistanceEditFields
@@ -1111,6 +1175,7 @@ export function ScorecardClient({
                         onOpenChange={(open) => {
                           if (!open) toggleDistanceEditing(d.id);
                         }}
+                        enqueue={sync.enqueue}
                       />
                     )}
                     {/* 常に上（トグルボタンの余っている下paddingの中）に食い込ま
@@ -1155,7 +1220,6 @@ export function ScorecardClient({
             <Button
               type="button"
               variant="outline"
-              disabled={addingDistance}
               data-testid="add-distance-button"
               onClick={handleAddDistance}
               className="border-dashed"
@@ -1163,12 +1227,7 @@ export function ScorecardClient({
               <Plus />
               距離を追加
             </Button>
-            {distanceError && (
-              <p className="text-destructive text-sm">{distanceError}</p>
-            )}
           </div>
-
-          {error && <p className="text-destructive text-sm">{error}</p>}
         </div>
 
         {!isLandscape && keypadMounted && (

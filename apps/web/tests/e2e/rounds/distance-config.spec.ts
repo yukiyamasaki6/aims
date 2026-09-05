@@ -463,3 +463,22 @@ test("shotsが存在する距離を削除しようとすると確認ダイアロ
   await page.getByTestId("confirm-dialog-cancel").click();
   await expect(page.getByTestId("distance-summary-1")).toBeVisible();
 });
+
+test("サインインが切れた状態で距離を保存すると、距離カードにエラーが表示され原因を確認できる", async ({
+  page,
+}) => {
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("30");
+
+  await page.context().clearCookies();
+  await page.getByTestId("distance-config-save-1").click();
+
+  await expect(page.getByTestId("distance-config-toggle-1")).toContainText(
+    "30m",
+  );
+  await expect(page.getByTestId("sync-status")).toHaveText("エラー");
+  await expect(page.getByTestId("distance-error-1")).toBeVisible();
+
+  await page.getByTestId("sync-status").click();
+  await expect(page.getByText("サインインが必要です。")).toBeVisible();
+});
