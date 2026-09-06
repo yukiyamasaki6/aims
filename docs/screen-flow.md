@@ -6,17 +6,21 @@
 
 ```mermaid
 flowchart TD
+    Landing["/<br/>紹介画面<br/>（アプリ名・一言説明・サインインへのCTAのみ）"]
     SignIn["/signin<br/>サインイン画面"]
     SignUp["/signup<br/>サインアップ画面<br/>（メール→認証コード→パスワード設定の3ステップ）"]
     ResetPass["/reset-password<br/>パスワード再設定画面<br/>（メール→認証コード→新パスワードの3ステップ）"]
     MainApp["メイン画面へ<br/>（/rounds）"]
 
+    Landing -->|サインインCTA| SignIn
     SignIn <--> SignUp
     SignIn --> ResetPass
     SignIn -->|サインイン成功| MainApp
     SignUp -->|登録完了| MainApp
     ResetPass -->|設定完了| SignIn
 ```
+
+未認証で`/`にアクセスすると紹介画面が表示される（`/signin`への即時リダイレクトはしない）。認証済みで`/`にアクセスした場合は`/rounds`へリダイレクトされる。
 
 各ステップは同一URL内のクライアント側の状態遷移であり、ステップごとに別URLは持たない（`/signup`と同じパターン）。
 
