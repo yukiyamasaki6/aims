@@ -43,10 +43,18 @@ type RunShotBatch = (batch: {
   clear: ShotClear[];
 }) => Promise<BatchResult>;
 
-// サインイン切れは「特定の操作が失敗した」のではなくセッション自体が
-// 無効という別種の状態で、以降の全操作が同じ理由で失敗し続けるだけなので、
-// 個別のエラーとして溜めずに検出したら即座にサインイン画面へ誘導する。
+// サインイン切れはリトライしても解決しないため、リトライ対象からは除外し
+// 即座に通常のエラーとして表示する（他の失敗と同様、errorMapに積むだけ）。
+// アプリ全体でセッション切れを検知してサインイン画面へ誘導する仕組みは
+// 別issue（#303）で扱う。
 export const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
+
+// 通信の一時的な不調（屋外での電波不安定等）から自動的に回復できるよう、
+// 指数バックオフで有限回数リトライする。オンライン/オフラインイベントには
+// 頼らない（電波はあるように見えて実際には届かない状況に強くするため、
+// 実際の通信結果だけを根拠にする）。タブを閉じる・リロードした場合や、
+// この回数を使い切った場合の永続化・無期限リトライは別issue（#263）で扱う。
+export const RETRY_DELAYS_MS = [3000, 6000, 12000, 24000];
 
 function toSafeResult(promise: Promise<BatchResult>): Promise<BatchResult> {
   // run()が例外を投げた場合（ネットワーク切断等の予期しない失敗）も
@@ -73,24 +81,30 @@ function toSafeResult(promise: Promise<BatchResult>): Promise<BatchResult> {
 //
 // どちらもdependsOnKeyで、新規distance作成のように他の操作から参照されうる
 // 操作の完了を必要な範囲だけ待たせられる。
-// 自動リトライ・永続化は将来の別issueで追加する前提で、ここでは1回のみ試行する。
-export function useSyncQueue(options?: { onAuthRequired?: () => void }) {
+// どちらも失敗時はRETRY_DELAYS_MSに従って自動リトライし、使い切ってから
+// 初めてエラーとして表示する。リトライ待機中に同じ箇所への新しい操作が
+// 積まれた場合は、古い値のリトライより新しい値を優先する。
+export function useSyncQueue() {
   const [errorMap, setErrorMap] = useState<Map<string, SyncError>>(new Map());
   const [pendingCount, setPendingCount] = useState(0);
   const [shotPendingKeys, setShotPendingKeys] = useState<Set<string>>(
     new Set(),
   );
+  const [retryingKeys, setRetryingKeys] = useState<Set<string>>(new Set());
+  const [shotRetrying, setShotRetrying] = useState(false);
   const tailsRef = useRef<Map<string, Promise<unknown>>>(new Map());
   const shotBatchRef = useRef<Map<string, EnqueueShotInput>>(new Map());
   const shotFlightRef = useRef(false);
-  const onAuthRequired = options?.onAuthRequired;
+  // タイマーだけでなく、それに紐づくPromiseのresolveも保持する。clearTimeout
+  // だけでは待機中のattempt()が返したPromiseが永遠に解決されないままになり、
+  // 同じkeyへの次のenqueueがtailsRefの古いPromiseを待ち続けて固まってしまう
+  // ため、キャンセル時は必ずresolveも呼ぶ。
+  const retryTimersRef = useRef<
+    Map<string, { timer: ReturnType<typeof setTimeout>; resolve: () => void }>
+  >(new Map());
 
   const settleKeys = useCallback(
     (items: { key: string; label: string }[], result: BatchResult) => {
-      if (result?.error === AUTH_REQUIRED_MESSAGE) {
-        onAuthRequired?.();
-        return;
-      }
       setErrorMap((prev) => {
         const copy = new Map(prev);
         for (const item of items) {
@@ -107,13 +121,34 @@ export function useSyncQueue(options?: { onAuthRequired?: () => void }) {
         return copy;
       });
     },
-    [onAuthRequired],
+    [],
   );
+
+  const clearRetryTimer = useCallback((key: string) => {
+    const scheduled = retryTimersRef.current.get(key);
+    if (scheduled) {
+      clearTimeout(scheduled.timer);
+      retryTimersRef.current.delete(key);
+      // 待機中だったattempt()のPromiseを解決し、tailsRefに残る古いPromiseが
+      // 永遠にpendingのまま次のenqueueを塞き止めないようにする。この経路は
+      // attempt()内の最終settle（pendingCountのdecrement）を経由しないため、
+      // ここで代わりに減らす（打ち切られた試行はもう完了しないため）。
+      scheduled.resolve();
+      setPendingCount((n) => n - 1);
+    }
+    setRetryingKeys((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  }, []);
 
   const enqueue = useCallback(
     (input: EnqueueInput) => {
-      // 新しい楽観値が古い失敗を上書きするため、同じkeyへの再送信は
-      // 直前の失敗表示を即座にクリアする（この試行の結果を待たない）。
+      // 新しい楽観値が古い失敗・待機中のリトライを上書きするため、同じkeyへの
+      // 再送信は直前の失敗表示・予約済みリトライを即座に打ち切る。
+      clearRetryTimer(input.key);
       setErrorMap((prev) => {
         if (!prev.has(input.key)) return prev;
         const copy = new Map(prev);
@@ -127,17 +162,35 @@ export function useSyncQueue(options?: { onAuthRequired?: () => void }) {
         ? (tailsRef.current.get(input.dependsOnKey) ?? Promise.resolve())
         : Promise.resolve();
 
-      const runPromise = Promise.all([ownTail, depTail]).then(() =>
-        toSafeResult(input.run()),
-      );
-      tailsRef.current.set(input.key, runPromise);
+      const attempt = (attemptIndex: number): Promise<void> =>
+        toSafeResult(input.run()).then((result) => {
+          if (
+            result?.error &&
+            result.error !== AUTH_REQUIRED_MESSAGE &&
+            attemptIndex < RETRY_DELAYS_MS.length
+          ) {
+            setRetryingKeys((prev) => new Set(prev).add(input.key));
+            return new Promise<void>((resolve) => {
+              const timer = setTimeout(() => {
+                retryTimersRef.current.delete(input.key);
+                setRetryingKeys((prev) => {
+                  const next = new Set(prev);
+                  next.delete(input.key);
+                  return next;
+                });
+                attempt(attemptIndex + 1).then(resolve);
+              }, RETRY_DELAYS_MS[attemptIndex]);
+              retryTimersRef.current.set(input.key, { timer, resolve });
+            });
+          }
+          settleKeys([input], result);
+          setPendingCount((n) => n - 1);
+        });
 
-      runPromise.then((result) => {
-        settleKeys([input], result);
-        setPendingCount((n) => n - 1);
-      });
+      const runPromise = Promise.all([ownTail, depTail]).then(() => attempt(0));
+      tailsRef.current.set(input.key, runPromise);
     },
-    [settleKeys],
+    [settleKeys, clearRetryTimer],
   );
 
   const flushShots = useCallback(
@@ -149,23 +202,56 @@ export function useSyncQueue(options?: { onAuthRequired?: () => void }) {
       const items = Array.from(shotBatchRef.current.values());
       shotBatchRef.current = new Map();
 
-      const upsert = items
-        .map((i) => i.upsert)
-        .filter((s): s is ShotUpsert => s !== undefined);
-      const clear = items
-        .map((i) => i.clear)
-        .filter((s): s is ShotClear => s !== undefined);
-
-      toSafeResult(runBatch({ upsert, clear })).then((result) => {
-        settleKeys(items, result);
-        setShotPendingKeys((prev) => {
-          const next = new Set(prev);
-          for (const item of items) next.delete(item.key);
-          return next;
-        });
+      const finishFlight = () => {
         shotFlightRef.current = false;
         flushShots(runBatch);
-      });
+      };
+
+      const attempt = (pending: EnqueueShotInput[], attemptIndex: number) => {
+        // リトライ実行時点で既に新しい値が積まれているkeyは、古い値を送らず
+        // 除外する（新しい入力が待機中のリトライより優先される）。
+        const itemsToRetry = pending.filter(
+          (item) => !shotBatchRef.current.has(item.key),
+        );
+        if (itemsToRetry.length === 0) {
+          finishFlight();
+          return;
+        }
+
+        const upsert = itemsToRetry
+          .map((i) => i.upsert)
+          .filter((s): s is ShotUpsert => s !== undefined);
+        const clear = itemsToRetry
+          .map((i) => i.clear)
+          .filter((s): s is ShotClear => s !== undefined);
+
+        toSafeResult(runBatch({ upsert, clear })).then((result) => {
+          if (
+            result?.error &&
+            result.error !== AUTH_REQUIRED_MESSAGE &&
+            attemptIndex < RETRY_DELAYS_MS.length
+          ) {
+            // このタイマー自体は誰にも参照されない。同じマスへの新しい入力に
+            // よるキャンセルは、発火時にitemsToRetryをshotBatchRefと照合する
+            // filterで行う（バッチ全体を打ち切る必要は無いため）。
+            setShotRetrying(true);
+            setTimeout(() => {
+              setShotRetrying(false);
+              attempt(itemsToRetry, attemptIndex + 1);
+            }, RETRY_DELAYS_MS[attemptIndex]);
+            return;
+          }
+          settleKeys(itemsToRetry, result);
+          setShotPendingKeys((prev) => {
+            const next = new Set(prev);
+            for (const item of itemsToRetry) next.delete(item.key);
+            return next;
+          });
+          finishFlight();
+        });
+      };
+
+      attempt(items, 0);
     },
     [settleKeys],
   );
@@ -199,11 +285,13 @@ export function useSyncQueue(options?: { onAuthRequired?: () => void }) {
   );
 
   const status: SyncStatus =
-    pendingCount > 0 || shotPendingKeys.size > 0
-      ? "syncing"
-      : errorMap.size > 0
-        ? "error"
-        : "synced";
+    retryingKeys.size > 0 || shotRetrying
+      ? "pending"
+      : pendingCount > 0 || shotPendingKeys.size > 0
+        ? "syncing"
+        : errorMap.size > 0
+          ? "error"
+          : "synced";
 
   return {
     status,

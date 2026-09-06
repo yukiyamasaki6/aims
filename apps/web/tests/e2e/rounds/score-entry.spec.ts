@@ -535,12 +535,14 @@ test("入力の送信中もテンキーはロックされず、続けて次の�
   await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
 });
 
-test("サインインが切れた状態でスコアを入力すると、サインイン画面へ誘導される", async ({
+test("サインインが切れた状態でスコアを入力すると、同期失敗として表示される", async ({
   page,
 }) => {
   await page.context().clearCookies();
 
   await page.getByTestId("score-button-X").click();
 
-  await expect(page).toHaveURL(/\/signin/);
+  await expect(page.getByTestId("sync-status")).toHaveText("同期失敗");
+  await page.getByTestId("sync-status").click();
+  await expect(page.getByText("サインインが必要です。")).toBeVisible();
 });

@@ -11,9 +11,9 @@ import {
   Plus,
   Redo,
   Undo,
+  WifiOff,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -276,18 +276,7 @@ export function ScorecardClient({
   const [shots, setShots] = useState<Shot[]>(initialShots);
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
-  const router = useRouter();
-  const redirectedToSigninRef = useRef(false);
-  const sync = useSyncQueue({
-    onAuthRequired: () => {
-      // セッション切れは個別のエラーとして溜めても仕方がないため、
-      // 検出したら即座にサインイン画面へ誘導する。複数の操作がほぼ同時に
-      // 同じ理由で失敗しても、リダイレクトは1回だけでよい。
-      if (redirectedToSigninRef.current) return;
-      redirectedToSigninRef.current = true;
-      router.push("/signin");
-    },
-  });
+  const sync = useSyncQueue();
   const [syncErrorsOpen, setSyncErrorsOpen] = useState(false);
   const [presetDialogOpen, setPresetDialogOpen] = useState(false);
   const [presetName, setPresetName] = useState("");
@@ -845,6 +834,8 @@ export function ScorecardClient({
                 sync.status === "error" &&
                   "font-medium text-destructive underline underline-offset-2",
                 sync.status === "syncing" && "text-muted-foreground",
+                sync.status === "pending" &&
+                  "text-amber-600 dark:text-amber-500",
                 sync.status === "synced" &&
                   "text-emerald-600 dark:text-emerald-500",
               )}
@@ -853,9 +844,11 @@ export function ScorecardClient({
                 <Loader2 className="size-3.5 animate-spin" />
               )}
               {sync.status === "error" && <AlertCircle className="size-3.5" />}
+              {sync.status === "pending" && <WifiOff className="size-3.5" />}
               {sync.status === "synced" && <Check className="size-3.5" />}
               {sync.status === "syncing" && "同期中…"}
               {sync.status === "error" && "同期失敗"}
+              {sync.status === "pending" && "同期保留中"}
               {sync.status === "synced" && "同期済み"}
             </button>
             <div className="flex items-center justify-end gap-2">

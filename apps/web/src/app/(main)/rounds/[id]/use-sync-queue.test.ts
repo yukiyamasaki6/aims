@@ -1,7 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ShotUpsert } from "./use-sync-queue";
-import { AUTH_REQUIRED_MESSAGE, useSyncQueue } from "./use-sync-queue";
+import {
+  AUTH_REQUIRED_MESSAGE,
+  RETRY_DELAYS_MS,
+  useSyncQueue,
+} from "./use-sync-queue";
 
 type Result = { error: string } | undefined;
 
@@ -11,6 +15,14 @@ function createDeferred<T>() {
     resolve = res;
   });
   return { promise, resolve };
+}
+
+// 失敗が最終的なエラーとして確定するまで、自動リトライの全バックオフを
+// 進める（テスト対象がfake timersを使っている前提）。
+async function exhaustRetries() {
+  for (const delay of RETRY_DELAYS_MS) {
+    await vi.advanceTimersByTimeAsync(delay);
+  }
 }
 
 describe("useSyncQueue", () => {
@@ -156,111 +168,131 @@ describe("useSyncQueue", () => {
   });
 
   it("surfaces a failed operation as an error keyed by its operation key", async () => {
-    const { result } = renderHook(() => useSyncQueue());
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSyncQueue());
 
-    act(() => {
-      result.current.enqueue({
-        key: "shot:d1:1:1",
-        label: "距離1 1エンド1本目",
-        run: () => Promise.resolve({ error: "boom" }),
+      act(() => {
+        result.current.enqueue({
+          key: "shot:d1:1:1",
+          label: "距離1 1エンド1本目",
+          run: () => Promise.resolve({ error: "boom" }),
+        });
       });
-    });
 
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
+      await act(async () => {
+        await exhaustRetries();
+      });
 
-    expect(result.current.status).toBe("error");
-    expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+      expect(result.current.status).toBe("error");
+      expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("clears a key's error once a later operation for that key succeeds", async () => {
-    const { result } = renderHook(() => useSyncQueue());
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSyncQueue());
 
-    act(() => {
-      result.current.enqueue({
-        key: "a",
-        label: "A",
-        run: () => Promise.resolve({ error: "boom" }),
+      act(() => {
+        result.current.enqueue({
+          key: "a",
+          label: "A",
+          run: () => Promise.resolve({ error: "boom" }),
+        });
       });
-    });
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(result.current.errorFor("a")).toBe("boom");
-
-    act(() => {
-      result.current.enqueue({
-        key: "a",
-        label: "A",
-        run: () => Promise.resolve(undefined),
+      await act(async () => {
+        await exhaustRetries();
       });
-    });
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
+      expect(result.current.errorFor("a")).toBe("boom");
 
-    expect(result.current.errorFor("a")).toBeUndefined();
-    expect(result.current.status).toBe("synced");
+      act(() => {
+        result.current.enqueue({
+          key: "a",
+          label: "A",
+          run: () => Promise.resolve(undefined),
+        });
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(result.current.errorFor("a")).toBeUndefined();
+      expect(result.current.status).toBe("synced");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("clears a key's stale error immediately when re-enqueued, before the new attempt resolves", async () => {
-    const { result } = renderHook(() => useSyncQueue());
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSyncQueue());
 
-    act(() => {
-      result.current.enqueue({
-        key: "a",
-        label: "A",
-        run: () => Promise.resolve({ error: "boom" }),
+      act(() => {
+        result.current.enqueue({
+          key: "a",
+          label: "A",
+          run: () => Promise.resolve({ error: "boom" }),
+        });
       });
-    });
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(result.current.errorFor("a")).toBe("boom");
-
-    const deferred = createDeferred<Result>();
-    act(() => {
-      result.current.enqueue({
-        key: "a",
-        label: "A",
-        run: () => deferred.promise,
+      await act(async () => {
+        await exhaustRetries();
       });
-    });
+      expect(result.current.errorFor("a")).toBe("boom");
 
-    // 新しい試行がまだ解決していない時点で、古いエラーは既に消えている。
-    expect(result.current.errorFor("a")).toBeUndefined();
+      const deferred = createDeferred<Result>();
+      act(() => {
+        result.current.enqueue({
+          key: "a",
+          label: "A",
+          run: () => deferred.promise,
+        });
+      });
 
-    await act(async () => {
-      deferred.resolve(undefined);
-      await deferred.promise;
-    });
+      // 新しい試行がまだ解決していない時点で、古いエラーは既に消えている。
+      expect(result.current.errorFor("a")).toBeUndefined();
+
+      await act(async () => {
+        deferred.resolve(undefined);
+        await deferred.promise;
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps one key's failure independent of another key's success", async () => {
-    const { result } = renderHook(() => useSyncQueue());
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSyncQueue());
 
-    act(() => {
-      result.current.enqueue({
-        key: "a",
-        label: "A",
-        run: () => Promise.resolve({ error: "boom" }),
+      act(() => {
+        result.current.enqueue({
+          key: "a",
+          label: "A",
+          run: () => Promise.resolve({ error: "boom" }),
+        });
+        result.current.enqueue({
+          key: "b",
+          label: "B",
+          run: () => Promise.resolve(undefined),
+        });
       });
-      result.current.enqueue({
-        key: "b",
-        label: "B",
-        run: () => Promise.resolve(undefined),
+
+      await act(async () => {
+        await exhaustRetries();
       });
-    });
 
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-      await new Promise((r) => setTimeout(r, 0));
-    });
-
-    expect(result.current.errorFor("a")).toBe("boom");
-    expect(result.current.errorFor("b")).toBeUndefined();
-    expect(result.current.status).toBe("error");
+      expect(result.current.errorFor("a")).toBe("boom");
+      expect(result.current.errorFor("b")).toBeUndefined();
+      expect(result.current.status).toBe("error");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   describe("enqueueShot", () => {
@@ -484,32 +516,36 @@ describe("useSyncQueue", () => {
     });
 
     it("marks every shot in a failed batch with the same error", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
+      vi.useFakeTimers();
+      try {
+        const { result } = renderHook(() => useSyncQueue());
+        const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
 
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            upsert: {
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "A",
+              upsert: {
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
             },
-          },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await exhaustRetries();
+        });
 
-      expect(result.current.status).toBe("error");
-      expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+        expect(result.current.status).toBe("error");
+        expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("waits for dependsOnKey before including a shot in a batch", async () => {
@@ -569,40 +605,232 @@ describe("useSyncQueue", () => {
     });
   });
 
-  describe("onAuthRequired", () => {
-    it("calls onAuthRequired instead of recording a per-key error when the message is the auth-required message", async () => {
-      const onAuthRequired = vi.fn();
-      const { result } = renderHook(() => useSyncQueue({ onAuthRequired }));
+  describe("auth-required error", () => {
+    it("records the auth-required message as a per-key error without retrying", async () => {
+      vi.useFakeTimers();
+      try {
+        const run = vi.fn(() =>
+          Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
+        );
+        const { result } = renderHook(() => useSyncQueue());
+
+        act(() => {
+          result.current.enqueue({
+            key: "roundConfig",
+            label: "ラウンド設定",
+            run,
+          });
+        });
+
+        await act(async () => {
+          await exhaustRetries();
+        });
+
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(result.current.errorFor("roundConfig")).toBe(
+          AUTH_REQUIRED_MESSAGE,
+        );
+        expect(result.current.status).toBe("error");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("records the auth-required message as an error for a failed shot batch without retrying", async () => {
+      vi.useFakeTimers();
+      try {
+        const runBatch = vi.fn(() =>
+          Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
+        );
+        const { result } = renderHook(() => useSyncQueue());
+
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "距離1 1エンド1本目",
+              upsert: {
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
+            },
+            runBatch,
+          );
+        });
+
+        await act(async () => {
+          await exhaustRetries();
+        });
+
+        expect(runBatch).toHaveBeenCalledTimes(1);
+        expect(result.current.errorFor("shot:d1:1:1")).toBe(
+          AUTH_REQUIRED_MESSAGE,
+        );
+        expect(result.current.status).toBe("error");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("still retries a normal (non-auth) error", async () => {
+      vi.useFakeTimers();
+      try {
+        const run = vi
+          .fn()
+          .mockResolvedValueOnce({ error: "boom" })
+          .mockResolvedValueOnce(undefined as Result);
+        const { result } = renderHook(() => useSyncQueue());
+
+        act(() => {
+          result.current.enqueue({
+            key: "roundConfig",
+            label: "ラウンド設定",
+            run,
+          });
+        });
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+        });
+
+        expect(run).toHaveBeenCalledTimes(2);
+        expect(result.current.errorFor("roundConfig")).toBeUndefined();
+        expect(result.current.status).toBe("synced");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe("automatic retry with backoff", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("shows pending (not error) while a retry is scheduled, and retries after the backoff delay", async () => {
+      const { result } = renderHook(() => useSyncQueue());
+      const run = vi
+        .fn()
+        .mockResolvedValueOnce({ error: "boom" })
+        .mockResolvedValueOnce(undefined as Result);
 
       act(() => {
-        result.current.enqueue({
-          key: "roundConfig",
-          label: "ラウンド設定",
-          run: () => Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
-        });
+        result.current.enqueue({ key: "a", label: "A", run });
       });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(result.current.status).toBe("pending");
+      expect(result.current.errorFor("a")).toBeUndefined();
 
       await act(async () => {
-        await new Promise((r) => setTimeout(r, 0));
+        await vi.advanceTimersByTimeAsync(3000);
       });
 
-      expect(onAuthRequired).toHaveBeenCalledTimes(1);
-      expect(result.current.errorFor("roundConfig")).toBeUndefined();
+      expect(run).toHaveBeenCalledTimes(2);
       expect(result.current.status).toBe("synced");
     });
 
-    it("calls onAuthRequired for a failed shot batch too, without marking the shots as errored", async () => {
-      const onAuthRequired = vi.fn();
-      const { result } = renderHook(() => useSyncQueue({ onAuthRequired }));
-      const runBatch = vi.fn(() =>
+    it("gives up and surfaces an error only after exhausting all retry attempts", async () => {
+      const { result } = renderHook(() => useSyncQueue());
+      const run = vi.fn(() => Promise.resolve({ error: "boom" }));
+
+      act(() => {
+        result.current.enqueue({ key: "a", label: "A", run });
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(run).toHaveBeenCalledTimes(1);
+
+      for (const delay of [3000, 6000, 12000, 24000]) {
+        expect(result.current.status).toBe("pending");
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(delay);
+        });
+      }
+
+      expect(run).toHaveBeenCalledTimes(5);
+      expect(result.current.status).toBe("error");
+      expect(result.current.errorFor("a")).toBe("boom");
+    });
+
+    it("cancels a scheduled retry when a new attempt is enqueued for the same key", async () => {
+      const { result } = renderHook(() => useSyncQueue());
+      const firstRun = vi.fn(() => Promise.resolve({ error: "boom" }));
+      const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
+
+      act(() => {
+        result.current.enqueue({ key: "a", label: "A", run: firstRun });
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(result.current.status).toBe("pending");
+
+      act(() => {
+        result.current.enqueue({ key: "a", label: "A", run: secondRun });
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(secondRun).toHaveBeenCalledTimes(1);
+      expect(result.current.status).toBe("synced");
+
+      // 打ち切られた古いリトライのタイマーが後から発火しても、再試行しない。
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(firstRun).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops retrying immediately on an auth-required error", async () => {
+      const { result } = renderHook(() => useSyncQueue());
+      const run = vi.fn(() =>
         Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
       );
+
+      act(() => {
+        result.current.enqueue({ key: "a", label: "A", run });
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(result.current.errorFor("a")).toBe(AUTH_REQUIRED_MESSAGE);
+      expect(result.current.status).toBe("error");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30000);
+      });
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+
+    it("retries a failed shot batch after the backoff delay", async () => {
+      const { result } = renderHook(() => useSyncQueue());
+      const runBatch = vi
+        .fn()
+        .mockResolvedValueOnce({ error: "boom" })
+        .mockResolvedValueOnce(undefined as Result);
 
       act(() => {
         result.current.enqueueShot(
           {
             key: "shot:d1:1:1",
-            label: "距離1 1エンド1本目",
+            label: "A",
             upsert: {
               distanceId: "d1",
               endNumber: 1,
@@ -614,35 +842,83 @@ describe("useSyncQueue", () => {
           runBatch,
         );
       });
-
       await act(async () => {
         await Promise.resolve();
         await Promise.resolve();
       });
+      expect(runBatch).toHaveBeenCalledTimes(1);
+      expect(result.current.status).toBe("pending");
 
-      expect(onAuthRequired).toHaveBeenCalledTimes(1);
-      expect(result.current.errorFor("shot:d1:1:1")).toBeUndefined();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+
+      expect(runBatch).toHaveBeenCalledTimes(2);
       expect(result.current.status).toBe("synced");
     });
 
-    it("still records a normal (non-auth) error as a per-key error", async () => {
-      const onAuthRequired = vi.fn();
-      const { result } = renderHook(() => useSyncQueue({ onAuthRequired }));
+    it("drops a shot from a retrying batch once a newer value is queued for the same cell", async () => {
+      const { result } = renderHook(() => useSyncQueue());
+      const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
 
       act(() => {
-        result.current.enqueue({
-          key: "roundConfig",
-          label: "ラウンド設定",
-          run: () => Promise.resolve({ error: "boom" }),
-        });
+        result.current.enqueueShot(
+          {
+            key: "shot:d1:1:1",
+            label: "A",
+            upsert: {
+              distanceId: "d1",
+              endNumber: 1,
+              arrowNumber: 1,
+              scoreStr: "X",
+              scoreInt: 10,
+            },
+          },
+          runBatch,
+        );
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(runBatch).toHaveBeenCalledTimes(1);
+
+      // リトライ待機中に、同じマスへ新しい値を入力する。
+      act(() => {
+        result.current.enqueueShot(
+          {
+            key: "shot:d1:1:1",
+            label: "A",
+            upsert: {
+              distanceId: "d1",
+              endNumber: 1,
+              arrowNumber: 1,
+              scoreStr: "9",
+              scoreInt: 9,
+            },
+          },
+          runBatch,
+        );
       });
 
       await act(async () => {
-        await new Promise((r) => setTimeout(r, 0));
+        await vi.advanceTimersByTimeAsync(3000);
       });
 
-      expect(onAuthRequired).not.toHaveBeenCalled();
-      expect(result.current.errorFor("roundConfig")).toBe("boom");
+      // 古い値（X）のリトライは送られず、新しい値（9）だけが送信される。
+      expect(runBatch).toHaveBeenCalledTimes(2);
+      expect(runBatch).toHaveBeenNthCalledWith(2, {
+        upsert: [
+          {
+            distanceId: "d1",
+            endNumber: 1,
+            arrowNumber: 1,
+            scoreStr: "9",
+            scoreInt: 9,
+          },
+        ],
+        clear: [],
+      });
     });
   });
 });
