@@ -18,13 +18,19 @@ test("未認証で/roundsにアクセスすると/signinにリダイレクトさ
   await expect(page).toHaveURL(/\/signin/);
 });
 
-test("未認証で/にアクセスすると/signinにリダイレクトされる", async ({
+test("未認証で/にアクセスするとリダイレクトされず、紹介画面が表示される", async ({
   page,
 }) => {
   await page.goto("/");
 
+  await expect(page).toHaveURL("/");
+  await expect(page.getByRole("heading", { name: "AIMS" })).toBeVisible();
+  await expect(
+    page.getByText("アーチェリーのスコア記録・分析・共有アプリ"),
+  ).toBeVisible();
+
+  await page.getByRole("link", { name: "サインイン" }).click();
   await expect(page).toHaveURL(/\/signin/);
-  await expect(page.getByRole("heading", { name: "サインイン" })).toBeVisible();
 });
 
 test("認証済みで/にアクセスすると/roundsにリダイレクトされる", async ({
@@ -74,8 +80,10 @@ test("サインインし、サインアウトできる", async ({ page }) => {
   await expect(page).toHaveURL(/\/rounds/);
 
   await page.getByRole("button", { name: "サインアウト" }).click();
-  await expect(page).toHaveURL(/\/signin/);
+  await expect(page).toHaveURL("/");
 
+  await page.getByRole("link", { name: "サインイン" }).click();
+  await expect(page).toHaveURL(/\/signin/);
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByPlaceholder("パスワード").fill(password);
   await page.getByRole("button", { name: "サインイン" }).click();
@@ -85,7 +93,7 @@ test("サインインし、サインアウトできる", async ({ page }) => {
   ).toBeVisible();
 
   await page.getByRole("button", { name: "サインアウト" }).click();
-  await expect(page).toHaveURL(/\/signin/);
+  await expect(page).toHaveURL("/");
 });
 
 test("パスワードを間違えると日本語のエラーが表示される", async ({ page }) => {
@@ -199,7 +207,7 @@ test("既存アカウントのメールアドレスでサインアップする�
   await expect(page).toHaveURL(/\/rounds/);
 
   await page.getByRole("button", { name: "サインアウト" }).click();
-  await expect(page).toHaveURL(/\/signin/);
+  await expect(page).toHaveURL("/");
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
