@@ -3,75 +3,42 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-// 10点的（アウトドア・122cm）。距離追加時の初期的として使う（e2eのcreate-round
-// APIヘルパーが使う既定の的と同じもの）。
-const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001";
-
-export async function addDistance(input: { roundId: string }): Promise<
-  | {
-      distance: {
-        id: string;
-        distanceNumber: number;
-        distance: number | null;
-        totalEnds: number;
-        arrowsPerEnd: number;
-        targetFaceId: string;
-        isMarked: boolean;
-      };
-    }
-  | { error: string }
-> {
+export async function addDistance(input: {
+  id: string;
+  roundId: string;
+  distanceNumber: number;
+  distance: number | null;
+  totalEnds: number;
+  arrowsPerEnd: number;
+  targetFaceId: string;
+  isMarked: boolean;
+}): Promise<{ error: string } | undefined> {
   const supabase = await createClient();
 
-  // 直前（一番大きいdistance_number）の距離の内容をそのまま初期値として引き継ぐ。
-  // 距離が1件も無い場合のみ、決め打ちの初期値にフォールバックする。
-  const { data: last, error: fetchError } = await supabase
-    .from("distances")
-    .select(
-      "distance_number, distance, total_ends, arrows_per_end, target_face_id, is_marked",
-    )
-    .eq("round_id", input.roundId)
-    .order("distance_number", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (fetchError) {
-    return { error: fetchError.message };
+  if (!user) {
+    return { error: "サインインが必要です。" };
   }
 
-  const nextNumber = (last?.distance_number ?? 0) + 1;
+  // IDは楽観的UIのためクライアントで確定済みの値をそのまま使う
+  // （id列のdefault gen_random_uuid()は明示的な値があれば上書きされる）。
+  const { error } = await supabase.from("distances").insert({
+    id: input.id,
+    round_id: input.roundId,
+    distance_number: input.distanceNumber,
+    distance: input.distance,
+    total_ends: input.totalEnds,
+    arrows_per_end: input.arrowsPerEnd,
+    target_face_id: input.targetFaceId,
+    is_marked: input.isMarked,
+  });
 
-  const { data, error } = await supabase
-    .from("distances")
-    .insert({
-      round_id: input.roundId,
-      distance_number: nextNumber,
-      distance: last?.distance ?? 18,
-      total_ends: last?.total_ends ?? 6,
-      arrows_per_end: last?.arrows_per_end ?? 6,
-      target_face_id: last?.target_face_id ?? DEFAULT_TARGET_FACE_ID,
-      is_marked: last?.is_marked ?? true,
-    })
-    .select(
-      "id, distance_number, distance, total_ends, arrows_per_end, target_face_id, is_marked",
-    )
-    .single();
-
-  if (error || !data) {
-    return { error: error?.message ?? "距離の追加に失敗しました。" };
+  if (error) {
+    return { error: error.message };
   }
-
-  return {
-    distance: {
-      id: data.id,
-      distanceNumber: data.distance_number,
-      distance: data.distance,
-      totalEnds: data.total_ends,
-      arrowsPerEnd: data.arrows_per_end,
-      targetFaceId: data.target_face_id,
-      isMarked: data.is_marked,
-    },
-  };
 }
 
 export async function updateDistance(input: {
@@ -87,6 +54,14 @@ export async function updateDistance(input: {
   }
 
   const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "サインインが必要です。" };
+  }
 
   const { count } = await supabase
     .from("shots")
@@ -126,6 +101,14 @@ export async function deleteDistance(input: {
 }): Promise<{ error: string } | undefined> {
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "サインインが必要です。" };
+  }
+
   const { error } = await supabase
     .from("distances")
     .delete()
@@ -136,12 +119,21 @@ export async function deleteDistance(input: {
   }
 }
 
-export async function recordShot(input: {
-  distanceId: string;
-  endNumber: number;
-  arrowNumber: number;
-  scoreStr: string;
-  scoreInt: number;
+// スコアの連打時に、記録・取り消しをそれぞれ1件ずつサーバーアクションと
+// して送ると、Next.jsのServer Actionはクライアント側でどれだけ並列に
+// 呼んでもサーバー側で直列にしか処理されないため、通信本数分だけ同期完了
+// までの体感速度が悪化する。そのため、1回の呼び出しで複数件の記録・取り
+// 消しをまとめて処理できるようにする（送信側の詰め方はuse-sync-queue.ts
+// 参照）。
+export async function syncShots(input: {
+  upsert: {
+    distanceId: string;
+    endNumber: number;
+    arrowNumber: number;
+    scoreStr: string;
+    scoreInt: number;
+  }[];
+  clear: { distanceId: string; endNumber: number; arrowNumber: number }[];
 }): Promise<{ error: string } | undefined> {
   const supabase = await createClient();
 
@@ -153,20 +145,41 @@ export async function recordShot(input: {
     return { error: "サインインが必要です。" };
   }
 
-  const { error } = await supabase.from("shots").upsert(
-    {
-      distance_id: input.distanceId,
-      end_number: input.endNumber,
-      arrow_number: input.arrowNumber,
-      user_id: user.id,
-      score_str: input.scoreStr,
-      score_int: input.scoreInt,
-    },
-    { onConflict: "distance_id,user_id,end_number,arrow_number" },
-  );
+  if (input.upsert.length > 0) {
+    const { error } = await supabase.from("shots").upsert(
+      input.upsert.map((s) => ({
+        distance_id: s.distanceId,
+        end_number: s.endNumber,
+        arrow_number: s.arrowNumber,
+        user_id: user.id,
+        score_str: s.scoreStr,
+        score_int: s.scoreInt,
+      })),
+      { onConflict: "distance_id,user_id,end_number,arrow_number" },
+    );
 
-  if (error) {
-    return { error: error.message };
+    if (error) {
+      return { error: error.message };
+    }
+  }
+
+  if (input.clear.length > 0) {
+    const filter = input.clear
+      .map(
+        (c) =>
+          `and(distance_id.eq.${c.distanceId},end_number.eq.${c.endNumber},arrow_number.eq.${c.arrowNumber})`,
+      )
+      .join(",");
+
+    const { error } = await supabase
+      .from("shots")
+      .delete()
+      .eq("user_id", user.id)
+      .or(filter);
+
+    if (error) {
+      return { error: error.message };
+    }
   }
 }
 
@@ -178,6 +191,14 @@ export async function updateRoundConfig(input: {
   bowType: string;
 }): Promise<{ error: string } | undefined> {
   const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "サインインが必要です。" };
+  }
 
   // Marked/Unmarkedはフィールドのみの概念のため、Unmarkedな距離（distanceが
   // 未入力のこともある）を残したまま他の種別に変更すると、距離が無いのに
@@ -303,31 +324,4 @@ export async function deleteRound(input: {
   }
 
   redirect("/rounds");
-}
-
-export async function clearShot(input: {
-  distanceId: string;
-  endNumber: number;
-  arrowNumber: number;
-}): Promise<{ error: string } | undefined> {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { error: "サインインが必要です。" };
-  }
-
-  const { error } = await supabase.from("shots").delete().match({
-    distance_id: input.distanceId,
-    end_number: input.endNumber,
-    arrow_number: input.arrowNumber,
-    user_id: user.id,
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
 }

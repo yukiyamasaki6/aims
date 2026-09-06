@@ -517,3 +517,32 @@ test("コンパウンド弓種×インドアの的でスコア入力できる（
   await expect(page.getByTestId("round-summary")).toContainText("合計10");
   await expect(page.getByTestId("round-summary")).toContainText("X: 0 / 10: 1");
 });
+
+test("入力の送信中もテンキーはロックされず、続けて次の入力ができる", async ({
+  page,
+}) => {
+  await page.getByTestId("score-button-X").click();
+
+  // 送信完了を待たずに次のボタンが操作可能であること（送信中はキーパッド
+  // 全体を無効化していた旧実装ではこの直後は押せなかった）。
+  await expect(page.getByTestId("score-button-5")).toBeEnabled();
+  await page.getByTestId("score-button-5").click();
+
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("X");
+  await expect(page.getByTestId("shot-cell-1-1-2")).toHaveText("5");
+  await expect(page.getByTestId("round-summary")).toContainText("合計15");
+
+  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+});
+
+test("サインインが切れた状態でスコアを入力すると、同期失敗として表示される", async ({
+  page,
+}) => {
+  await page.context().clearCookies();
+
+  await page.getByTestId("score-button-X").click();
+
+  await expect(page.getByTestId("sync-status")).toHaveText("同期失敗");
+  await page.getByTestId("sync-status").click();
+  await expect(page.getByText("サインインが必要です。")).toBeVisible();
+});

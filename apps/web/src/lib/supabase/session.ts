@@ -32,7 +32,16 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user && request.nextUrl.pathname.startsWith("/rounds")) {
+  // Server Action呼び出し（Next-Actionヘッダー付きのPOST）はページ遷移では
+  // ないため、ここでリダイレクトしてしまうとNext.jsが期待するアクションの
+  // レスポンス形式と一致せず「An unexpected response was received from the
+  // server.」という分かりにくいエラーになる。未サインイン時の扱いは各
+  // Server Action自身のガード（"サインインが必要です。"）に任せる。
+  if (
+    !user &&
+    request.nextUrl.pathname.startsWith("/rounds") &&
+    !request.headers.has("next-action")
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/signin";
     return NextResponse.redirect(url);
