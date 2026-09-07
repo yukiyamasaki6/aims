@@ -19,8 +19,8 @@ export default async function Home() {
       title="AIMS"
       description="アーチェリーのスコア記録・分析・共有アプリ"
     >
-      <Link href="/signin" className={buttonVariants({ variant: "default" })}>
-        サインイン
+      <Link href="/signup" className={buttonVariants({ variant: "default" })}>
+        開始
       </Link>
     </AuthCard>
   );

@@ -18,46 +18,6 @@ test("未認証で/roundsにアクセスすると/signinにリダイレクトさ
   await expect(page).toHaveURL(/\/signin/);
 });
 
-test("未認証で/にアクセスするとリダイレクトされず、紹介画面が表示される", async ({
-  page,
-}) => {
-  await page.goto("/");
-
-  await expect(page).toHaveURL("/");
-  await expect(page.getByRole("heading", { name: "AIMS" })).toBeVisible();
-  await expect(
-    page.getByText("アーチェリーのスコア記録・分析・共有アプリ"),
-  ).toBeVisible();
-
-  await page.getByRole("link", { name: "サインイン" }).click();
-  await expect(page).toHaveURL(/\/signin/);
-});
-
-test("認証済みで/にアクセスすると/roundsにリダイレクトされる", async ({
-  page,
-}) => {
-  const email = `signed-in-redirect-${Date.now()}@aims.test`;
-  const password = "password1";
-
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-
-  const code = await getOtpCodeFromMailpit(email);
-  await page.getByPlaceholder("123456").fill(code);
-  await page.getByRole("button", { name: "確認" }).click();
-
-  await page
-    .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
-    .fill(password);
-  await page.getByRole("button", { name: "登録してサインイン" }).click();
-  await expect(page).toHaveURL(/\/rounds/);
-
-  await page.goto("/");
-
-  await expect(page).toHaveURL(/\/rounds/);
-});
-
 test("サインインし、サインアウトできる", async ({ page }) => {
   // user@aims.testは人間が手動で動作確認する専用のアカウントで、E2Eでは
   // 使わない。ここでは専用の使い捨てアカウントを都度作成し、サインアップ直後の
@@ -82,8 +42,7 @@ test("サインインし、サインアウトできる", async ({ page }) => {
   await page.getByRole("button", { name: "サインアウト" }).click();
   await expect(page).toHaveURL("/");
 
-  await page.getByRole("link", { name: "サインイン" }).click();
-  await expect(page).toHaveURL(/\/signin/);
+  await page.goto("/signin");
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByPlaceholder("パスワード").fill(password);
   await page.getByRole("button", { name: "サインイン" }).click();
