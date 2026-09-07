@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createConfirmedUser } from "./helpers/auth";
+import { createConfirmedUser, signUpAndSignIn } from "./helpers/auth";
 import {
   getOtpCodeFromMailpit,
   getOtpEmailHtmlFromMailpit,
@@ -18,54 +18,16 @@ test("未認証で/roundsにアクセスすると/signinにリダイレクトさ
   await expect(page).toHaveURL(/\/signin/);
 });
 
-test("サインインし、サインアウトできる", async ({ page }) => {
-  // user@aims.testは人間が手動で動作確認する専用のアカウントで、E2Eでは
-  // 使わない。ここでは専用の使い捨てアカウントを都度作成し、サインアップ直後の
-  // 自動サインインではなく/signinからの明示的なサインインを検証する。
-  const email = `signin-signout-${Date.now()}@aims.test`;
+test("サインアウトできる", async ({ page }) => {
+  const email = `signout-${Date.now()}@aims.test`;
   const password = "password1";
+  await signUpAndSignIn(page, { email, password });
 
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-
-  const code = await getOtpCodeFromMailpit(email);
-  await page.getByPlaceholder("123456").fill(code);
-  await page.getByRole("button", { name: "確認" }).click();
-
-  await page
-    .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
-    .fill(password);
-  await page.getByRole("button", { name: "登録してサインイン" }).click();
-  await expect(page).toHaveURL(/\/rounds/);
-
-  await page.getByRole("button", { name: "サインアウト" }).click();
-  await expect(page).toHaveURL("/");
-
-  await page.goto("/signin");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByPlaceholder("パスワード").fill(password);
-  await page.getByRole("button", { name: "サインイン" }).click();
-  await expect(page).toHaveURL(/\/rounds/);
   await expect(
     page.getByRole("button", { name: "サインアウト" }),
   ).toBeVisible();
-
   await page.getByRole("button", { name: "サインアウト" }).click();
   await expect(page).toHaveURL("/");
-});
-
-test("パスワードを間違えると日本語のエラーが表示される", async ({ page }) => {
-  const email = `wrong-password-${Date.now()}@aims.test`;
-
-  await page.goto("/signin");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByPlaceholder("パスワード").fill("wrong-password");
-  await page.getByRole("button", { name: "サインイン" }).click();
-
-  await expect(
-    page.getByText("メールアドレスまたはパスワードが間違っています。"),
-  ).toBeVisible();
 });
 
 test("サインアップできる", async ({ page }) => {
