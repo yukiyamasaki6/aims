@@ -9,6 +9,15 @@ test("未認証で/signinにアクセスするとサインイン画面が表示�
   await expect(page.getByRole("heading", { name: "サインイン" })).toBeVisible();
 });
 
+test("サインアップリンクをクリックすると/signupへ遷移する", async ({
+  page,
+}) => {
+  await page.goto("/signin");
+  await page.getByRole("link", { name: "サインアップ" }).click();
+
+  await expect(page).toHaveURL(/\/signup/);
+});
+
 test("パスワードを間違えると日本語のエラーが表示される", async ({ page }) => {
   const email = `wrong-password-${Date.now()}@aims.test`;
 
