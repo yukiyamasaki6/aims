@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createConfirmedUser } from "./helpers/auth";
+import { createConfirmedUser, SHARED_AUTH_STATE_PATH } from "./helpers/auth";
 
 test("未認証で/signinにアクセスするとサインイン画面が表示される", async ({
   page,
@@ -7,6 +7,18 @@ test("未認証で/signinにアクセスするとサインイン画面が表示�
   await page.goto("/signin");
 
   await expect(page.getByRole("heading", { name: "サインイン" })).toBeVisible();
+});
+
+test.describe(() => {
+  test.use({ storageState: SHARED_AUTH_STATE_PATH });
+
+  test("認証済みで/signinにアクセスすると/roundsにリダイレクトされる", async ({
+    page,
+  }) => {
+    await page.goto("/signin");
+
+    await expect(page).toHaveURL(/\/rounds/);
+  });
 });
 
 test("サインアップリンクをクリックすると/signupへ遷移する", async ({
