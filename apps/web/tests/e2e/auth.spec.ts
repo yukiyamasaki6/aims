@@ -142,7 +142,9 @@ test("既存アカウントのメールアドレスでサインアップする�
 
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByPlaceholder("パスワード").fill(password);
-  await page.getByRole("button", { name: "サインイン" }).click();
+  const signInButton = page.getByRole("button", { name: "サインイン" });
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await signInButton.click();
   await expect(page).toHaveURL(/\/rounds/);
 });
 
@@ -277,7 +279,9 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
     await expect(page.getByPlaceholder("you@example.com")).toHaveValue(email);
     await expect(page.getByPlaceholder("パスワード")).toHaveValue(newPassword);
   }).toPass();
-  await page.getByRole("button", { name: "サインイン" }).click();
+  const signInButton = page.getByRole("button", { name: "サインイン" });
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await signInButton.click();
 
   await expect(page).toHaveURL(/\/rounds/);
   await expect(
