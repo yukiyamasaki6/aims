@@ -30,81 +30,6 @@ test("サインアウトできる", async ({ page }) => {
   await expect(page).toHaveURL("/");
 });
 
-test("サインアップできる", async ({ page }) => {
-  const email = `signup-${Date.now()}@aims.test`;
-  const password = "password1";
-
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-  await expect(
-    page.getByRole("heading", { name: "認証コードを入力" }),
-  ).toBeVisible();
-  await expect(page.getByText("迷惑メールフォルダ")).toBeVisible();
-
-  const code = await getOtpCodeFromMailpit(email);
-  await page.getByPlaceholder("123456").fill(code);
-  await page.getByRole("button", { name: "確認" }).click();
-
-  await expect(
-    page.getByRole("heading", { name: "パスワードを設定" }),
-  ).toBeVisible();
-  await page
-    .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
-    .fill(password);
-  await page.getByRole("button", { name: "登録してサインイン" }).click();
-
-  await expect(page).toHaveURL(/\/rounds/);
-  await expect(
-    page.getByRole("button", { name: "サインアウト" }),
-  ).toBeVisible();
-});
-
-test("要件を満たさないパスワードで登録しようとするとエラーが表示される", async ({
-  page,
-}) => {
-  const email = `weak-password-${Date.now()}@aims.test`;
-
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-
-  const code = await getOtpCodeFromMailpit(email);
-  await page.getByPlaceholder("123456").fill(code);
-  await page.getByRole("button", { name: "確認" }).click();
-
-  // 8文字以上だが数字を含まないため、文字種要件を満たさない。
-  await page
-    .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
-    .fill("onlyletters");
-  await page.getByRole("button", { name: "登録してサインイン" }).click();
-
-  await expect(
-    page.getByText(
-      "パスワードは8文字以上で、英字と数字の両方を含めてください。",
-    ),
-  ).toBeVisible();
-  await expect(page).not.toHaveURL(/\/rounds/);
-});
-
-test("認証コードを間違えると日本語のエラーが表示される", async ({ page }) => {
-  const email = `wrong-otp-${Date.now()}@aims.test`;
-
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-  await expect(
-    page.getByRole("heading", { name: "認証コードを入力" }),
-  ).toBeVisible();
-
-  await page.getByPlaceholder("123456").fill("000000");
-  await page.getByRole("button", { name: "確認" }).click();
-
-  await expect(
-    page.getByText("認証コードが正しくないか、有効期限が切れています。"),
-  ).toBeVisible();
-});
-
 test("既存アカウントのメールアドレスでサインアップすると、登録済みの案内が表示されパスワードは変わらない", async ({
   page,
 }) => {
@@ -148,73 +73,6 @@ test("既存アカウントのメールアドレスでサインアップする�
   await expect(page).toHaveURL(/\/rounds/);
 });
 
-test("認証コード送信後に未確認のまま再度アクセスしても、既存登録扱いにならない", async ({
-  page,
-}) => {
-  const email = `unconfirmed-resend-${Date.now()}@aims.test`;
-
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-  await expect(
-    page.getByRole("heading", { name: "認証コードを入力" }),
-  ).toBeVisible();
-
-  // コードを未確認のまま画面を離れ、同じメールアドレスで再度送信する。
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-
-  // max_frequencyのレート制限にかかる場合があるが、未確認の1回目送信を
-  // 「既存登録」と誤判定しないことだけを確認する。どちらの結果になっても
-  // 画面が確定するまで待ってから判定する。
-  await expect(
-    page
-      .getByRole("heading", { name: "認証コードを入力" })
-      .or(page.locator(".text-destructive")),
-  ).toBeVisible();
-  await expect(
-    page.getByText("このメールアドレスは既に登録されています。"),
-  ).not.toBeVisible();
-});
-
-test("認証コード入力画面の戻るボタンでメールアドレス入力画面に戻れる", async ({
-  page,
-}) => {
-  const email = `signup-back-button-${Date.now()}@aims.test`;
-
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-  await expect(
-    page.getByRole("heading", { name: "認証コードを入力" }),
-  ).toBeVisible();
-
-  await page.getByRole("button", { name: "戻る" }).click();
-
-  await expect(
-    page.getByRole("heading", { name: "サインアップ" }),
-  ).toBeVisible();
-  await expect(page.getByPlaceholder("you@example.com")).toHaveValue(email);
-});
-
-test("認証コード入力画面に来た直後は再送ボタンがクールダウン中で押せない", async ({
-  page,
-}) => {
-  const email = `resend-cooldown-${Date.now()}@aims.test`;
-
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-  await expect(
-    page.getByRole("heading", { name: "認証コードを入力" }),
-  ).toBeVisible();
-
-  const resendButton = page.getByRole("button", { name: /^再送/ });
-  await expect(resendButton).toBeDisabled();
-  await expect(page.getByText(/再送（\d+秒）/)).toBeVisible();
-});
-
 test("サインアップの認証コードメールに送信元がわかるフッターが入っている", async ({
   page,
 }) => {
@@ -236,8 +94,8 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
   const email = `reset-target-${Date.now()}@aims.test`;
   const newPassword = "password-changed1";
 
-  // サインアップ自体（OTP確認・初期パスワード設定）の検証は「サインアップできる」
-  // テストが担うため、ここでは管理APIで確認済みユーザーを直接作成し、パスワード
+  // サインアップ自体（OTP確認・初期パスワード設定）の検証はsignup.spec.tsが
+  // 担うため、ここでは管理APIで確認済みユーザーを直接作成し、パスワード
   // 再設定フロー自体に絞る。
   await createConfirmedUser({ email, password: "password-original" });
 
