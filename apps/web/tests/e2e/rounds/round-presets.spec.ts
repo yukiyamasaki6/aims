@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { SHARED_AUTH_STATE_PATH, signUpAndSignIn } from "../helpers/auth";
+import {
+  SHARED_AUTH_STATE_PATH,
+  signUpAndSignIn,
+  waitForHydration,
+} from "../helpers/auth";
 import { createRound } from "../helpers/rounds";
 
 test.describe(() => {
@@ -9,6 +13,7 @@ test.describe(() => {
     page,
   }) => {
     await page.goto("/rounds/new");
+    await waitForHydration(page);
 
     const startButton = page.getByTestId("round-start-button");
     await expect(startButton).toHaveText("プリセット無しで開始");
@@ -52,6 +57,7 @@ test.describe(() => {
     page,
   }) => {
     await page.goto("/rounds/new");
+    await waitForHydration(page);
 
     const presetButton = page
       .getByTestId("round-preset-button")
@@ -82,6 +88,7 @@ test("個人のプリセットが無い場合はプレースホルダーが表�
   await signUpAndSignIn(page, { email, password });
 
   await page.goto("/rounds/new");
+  await waitForHydration(page);
 
   await expect(page.getByText("個人プリセット")).toBeVisible();
   await expect(page.getByTestId("personal-preset-placeholder")).toBeVisible();
@@ -107,6 +114,7 @@ test("現在の構成を個人プリセットとして保存でき、/rounds/new
     distances: [{ distance: 30, totalEnds: 3, arrowsPerEnd: 6 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("save-as-preset-trigger").click();
   await page.getByTestId("save-as-preset-name").fill("マイプリセットA");
@@ -116,6 +124,7 @@ test("現在の構成を個人プリセットとして保存でき、/rounds/new
   await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
 
   await page.goto("/rounds/new");
+  await waitForHydration(page);
   await expect(page.getByTestId("personal-preset-placeholder")).toBeHidden();
 
   const presetButton = page
@@ -148,6 +157,7 @@ test("ラウンド名が空でプリセット名も空のまま保存すると�
     ],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("save-as-preset-trigger").click();
   const nameInput = page.getByTestId("save-as-preset-name");
@@ -157,6 +167,7 @@ test("ラウンド名が空でプリセット名も空のまま保存すると�
   await expect(nameInput).toBeHidden();
 
   await page.goto("/rounds/new");
+  await waitForHydration(page);
   await expect(
     page.getByTestId("round-preset-button").filter({ hasText: "30-30" }),
   ).toBeVisible();
@@ -179,6 +190,7 @@ test("ラウンド名が設定されている場合、プリセット名欄に�
     distances: [{ distance: 30, totalEnds: 3, arrowsPerEnd: 6 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("save-as-preset-trigger").click();
   const nameInput = page.getByTestId("save-as-preset-name");
@@ -188,6 +200,7 @@ test("ラウンド名が設定されている場合、プリセット名欄に�
   await expect(nameInput).toBeHidden();
 
   await page.goto("/rounds/new");
+  await waitForHydration(page);
   await expect(
     page.getByTestId("round-preset-button").filter({ hasText: "県予選2026" }),
   ).toBeVisible();
@@ -210,6 +223,7 @@ test("距離が未入力（Unmarked）の場合、自動生成された名前で
     distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 3 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("distance-config-unmarked-1").click();
@@ -240,6 +254,7 @@ test("Unmarkedな距離を含む構成をプリセット保存すると、選択
     distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 3 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("distance-config-unmarked-1").click();
@@ -251,6 +266,7 @@ test("Unmarkedな距離を含む構成をプリセット保存すると、選択
   await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
 
   await page.goto("/rounds/new");
+  await waitForHydration(page);
   const presetButton = page
     .getByTestId("round-preset-button")
     .filter({ hasText: "アンマークドプリセット" });
@@ -277,6 +293,7 @@ test("個人プリセットを削除でき、確認ダイアログでキャン�
     distances: [{ distance: 30, totalEnds: 3, arrowsPerEnd: 6 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("save-as-preset-trigger").click();
   await page.getByTestId("save-as-preset-name").fill("削除対象プリセット");
@@ -284,6 +301,7 @@ test("個人プリセットを削除でき、確認ダイアログでキャン�
   await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
 
   await page.goto("/rounds/new");
+  await waitForHydration(page);
   const presetRow = page
     .getByTestId("round-preset-button")
     .filter({ hasText: "削除対象プリセット" })
@@ -312,6 +330,7 @@ test("公式プリセットにはメニューが表示されない", async ({ pa
   await signUpAndSignIn(page, { email, password });
 
   await page.goto("/rounds/new");
+  await waitForHydration(page);
   const globalPresetRow = page
     .getByTestId("round-preset-button")
     .filter({ hasText: "WA 1440" })

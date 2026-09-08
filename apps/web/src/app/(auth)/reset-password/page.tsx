@@ -8,6 +8,7 @@ import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 
@@ -28,6 +29,7 @@ export default function ResetPasswordPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(undefined);
+  const hydrated = useHydrated();
 
   function consumeCaptchaToken() {
     turnstileRef.current?.reset();
@@ -186,7 +188,11 @@ export default function ResetPasswordPage() {
 
   return (
     <AuthCard title="パスワードを再設定">
-      <form onSubmit={handleSendCode} className="flex w-full flex-col gap-3">
+      <form
+        onSubmit={handleSendCode}
+        data-hydrated={hydrated}
+        className="flex w-full flex-col gap-3"
+      >
         <Input
           type="email"
           required

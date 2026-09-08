@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import {
   addDistance,
@@ -284,6 +285,7 @@ export function ScorecardClient({
   const [presetError, setPresetError] = useState<string | null>(null);
   const [deleteRoundConfirmOpen, setDeleteRoundConfirmOpen] = useState(false);
   const [deleteRoundError, setDeleteRoundError] = useState<string | null>(null);
+  const hydrated = useHydrated();
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
     new Set(),
   );
@@ -812,7 +814,7 @@ export function ScorecardClient({
     // していた際の不具合）。<main>自身がoverflow-y-autoで内部スクロール
     // するため、この行自体は画面の高さを超えて伸びることがなく、
     // KeypadPanelは（sticky等を使わずとも）常に画面内に留まる。
-    <div className="flex h-full">
+    <div data-hydrated={hydrated} className="flex h-full">
       <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto">
         <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-8">
           <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">

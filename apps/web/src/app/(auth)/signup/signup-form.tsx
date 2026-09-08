@@ -10,6 +10,7 @@ import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { isEmailRegistered } from "@/lib/supabase/actions";
 import { createClient } from "@/lib/supabase/client";
 import { translateAuthErrorMessage } from "@/lib/supabase/errors";
@@ -43,6 +44,7 @@ export function SignUpForm() {
   const mountedRef = useRef(true);
   const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
+  const hydrated = useHydrated();
 
   function consumeCaptchaToken() {
     turnstileRef.current?.reset();
@@ -265,7 +267,11 @@ export function SignUpForm() {
 
   return (
     <AuthCard title="サインアップ">
-      <form onSubmit={handleSendCode} className="flex w-full flex-col gap-3">
+      <form
+        onSubmit={handleSendCode}
+        data-hydrated={hydrated}
+        className="flex w-full flex-col gap-3"
+      >
         <Input
           type="email"
           required

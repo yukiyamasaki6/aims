@@ -3,6 +3,7 @@ import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
+  waitForHydration,
 } from "../helpers/auth";
 import { createRound } from "../helpers/rounds";
 
@@ -19,6 +20,7 @@ test.beforeEach(async ({ page }) => {
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 });
 
 test("普段は要約1行表示（区切りは/）で、タップすると編集フィールドが展開する", async ({
@@ -48,6 +50,7 @@ test("ラウンド名が未設定のときは要約にプレースホルダー�
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   const summary = page.getByTestId("round-config-summary");
   await expect(summary).toHaveText("2026-08-24 / アウトドア / リカーブ");
@@ -86,6 +89,7 @@ test("Unmarkedな距離が残ったままフィールド以外の種別に変更
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("distance-config-unmarked-1").click();

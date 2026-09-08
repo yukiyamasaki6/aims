@@ -3,6 +3,7 @@ import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
+  waitForHydration,
 } from "../helpers/auth";
 import { createRound } from "../helpers/rounds";
 
@@ -21,6 +22,7 @@ test.beforeEach(async ({ page }) => {
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 });
 
 test("距離の編集はRoundConfigPanelを開かなくても各距離から直接行える", async ({
@@ -201,6 +203,7 @@ test("コンパウンドのラウンドでは、インドアタブでコンパ�
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("target-face-picker-trigger").click();
@@ -274,6 +277,7 @@ test("距離（m）だけを変更して保存しても、undo/redo履歴は保�
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("score-button-X").click();
   await page.getByTestId("shot-cell-1-1-1").click();
@@ -303,6 +307,7 @@ test("ある距離の構成変更は、他の距離のundo/redo履歴に影響�
     ],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("score-button-X").click();
   await expect(page.getByTestId("distance-summary-1")).toContainText("小計10");
@@ -345,6 +350,7 @@ test("ある距離を削除しても、他の距離のundo/redo履歴に影響�
     ],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("score-button-X").click();
   await expect(page.getByTestId("distance-summary-1")).toContainText("小計10");
@@ -384,6 +390,7 @@ test("フィールドのラウンドでUnmarkedを選択すると距離欄を空
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   // フィールドのラウンドでは既定でMarkedと表示される。
   await expect(page.getByTestId("distance-summary-1")).toContainText("Marked");
@@ -410,6 +417,7 @@ test("フィールドのラウンドではUnmarkedのままでも自己目測の
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("distance-config-unmarked-1").click();
@@ -434,6 +442,7 @@ test("フィールドのラウンドでMarkedのまま距離（m）欄を空に�
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("distance-config-distance-1").fill("");

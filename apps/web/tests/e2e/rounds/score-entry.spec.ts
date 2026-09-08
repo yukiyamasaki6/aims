@@ -3,6 +3,7 @@ import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
+  waitForHydration,
 } from "../helpers/auth";
 import {
   createRound,
@@ -23,6 +24,7 @@ test.beforeEach(async ({ page }) => {
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 });
 
 test("エンドごとに矢を入力すると合計点が更新され、マス目に反映される", async ({
@@ -76,6 +78,7 @@ test("距離が複数あるとき、距離ごとの合計・X数・10数も表�
     ],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("score-button-X").click();
 
@@ -107,6 +110,7 @@ test("下にスクロールしてエンドを入力していても、合計と�
     ],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   const scrollContainer = page.locator("main.overflow-y-auto");
   const roundSummary = page.getByTestId("round-summary");
@@ -160,6 +164,7 @@ test("入力済み・未入力にかかわらずマス目をタップして選�
     distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 2 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   // エンド1を2射入力する。
   await page.getByTestId("score-button-X").click();
@@ -275,6 +280,7 @@ test("的の配色がWA標準の得点しきい値と対応しない場合も、
     ],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await expect(page.getByTestId("score-button-6")).toHaveCSS(
     "background-color",
@@ -358,6 +364,7 @@ test("的のリング構成が少ないほど、テンキーは実在する点�
     ],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   // distance 1・end 1・arrow 1は未入力ラウンドの初期選択位置と一致するため、
   // 改めてタップしなくてもテンキーは開いている。
@@ -405,6 +412,7 @@ test("スポットが複数ある的でも、テンキーのキーはスポッ�
     ],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await expect(page.getByTestId("score-button-X")).toHaveCount(0);
   await expect(page.getByTestId("score-button-10")).toHaveCount(1);
@@ -507,6 +515,7 @@ test("コンパウンド弓種×インドアの的でスコア入力できる（
     ],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await expect(page.getByTestId("score-button-X")).toHaveCount(0);
   await expect(page.getByTestId("score-button-10")).toBeVisible();

@@ -13,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import { PresetInfo } from "../[id]/distance-config-row";
 import {
@@ -134,6 +135,7 @@ export function RoundPresetSelect({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [presetToDelete, setPresetToDelete] = useState<Preset | null>(null);
+  const hydrated = useHydrated();
 
   const selectedPreset =
     [...personalPresets, ...globalPresets].find((p) => p.id === selectedId) ??
@@ -177,7 +179,10 @@ export function RoundPresetSelect({
   }
 
   return (
-    <main className="flex h-full flex-col overflow-hidden">
+    <main
+      data-hydrated={hydrated}
+      className="flex h-full flex-col overflow-hidden"
+    >
       <div className="mx-auto w-full max-w-xl px-8 pt-8">
         <Link
           href="/rounds"
