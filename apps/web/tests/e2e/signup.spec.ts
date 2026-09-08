@@ -143,6 +143,51 @@ test("認証コード入力画面に来た直後は再送ボタンがクール�
   await expect(page.getByText(/再送（\d+秒）/)).toBeVisible();
 });
 
+test("再送ボタンで認証コードを再送できる", async ({ page }) => {
+  test.setTimeout(90_000);
+  const email = `signup-resend-${Date.now()}@aims.test`;
+
+  await goToCodeStep(page, email);
+  const firstCode = await getOtpCodeFromMailpit(email);
+
+  const resendButton = page.getByRole("button", { name: /^再送/ });
+  // クールダウン（60秒）が明けて、かつ再送ボタン用のTurnstileウィジェットの
+  // 検証が完了するまで待つ。
+  await expect(resendButton).toBeEnabled({ timeout: 70_000 });
+  await resendButton.click();
+
+  let latestCode = firstCode;
+  await expect(async () => {
+    latestCode = await getOtpCodeFromMailpit(email);
+    expect(latestCode).not.toBe(firstCode);
+  }).toPass();
+
+  await page.getByPlaceholder("123456").fill(latestCode);
+  await page.getByRole("button", { name: "確認" }).click();
+  await expect(
+    page.getByRole("heading", { name: "パスワードを設定" }),
+  ).toBeVisible();
+});
+
+test("再送で通信エラーが発生するとメッセージが表示される", async ({ page }) => {
+  test.setTimeout(90_000);
+  const email = `signup-resend-network-error-${Date.now()}@aims.test`;
+
+  await goToCodeStep(page, email);
+
+  const resendButton = page.getByRole("button", { name: /^再送/ });
+  await expect(resendButton).toBeEnabled({ timeout: 70_000 });
+
+  await page.route("**/auth/v1/otp*", (route) => route.abort());
+  await resendButton.click();
+
+  await expect(
+    page.getByText(
+      "通信エラーが発生しました。しばらくしてから再度お試しください。",
+    ),
+  ).toBeVisible();
+});
+
 test("認証コード入力画面の戻るボタンでメールアドレス入力画面に戻れる", async ({
   page,
 }) => {
