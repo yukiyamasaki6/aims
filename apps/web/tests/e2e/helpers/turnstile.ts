@@ -20,12 +20,21 @@ export async function mockTurnstile(page: Page): Promise<void> {
         status: 200,
         contentType: "application/javascript",
         body: `
+          window.__turnstileRenderCount = 0;
           window.turnstile = {
             render: function (container, options) {
-              if (options && typeof options.callback === "function") {
+              window.__turnstileRenderCount++;
+              // window.__turnstileFailFromCallをテスト側がpage.addInitScript()で
+              // 事前に設定しておくと、指定した呼び出し回数目以降のウィジェットだけ
+              // callbackを発火させない（captcha未完了の状態を再現する）。それより
+              // 前の呼び出し（例: メール入力ステップの1回目）は通常通り成功する。
+              var shouldFail =
+                window.__turnstileFailFromCall &&
+                window.__turnstileRenderCount >= window.__turnstileFailFromCall;
+              if (!shouldFail && options && typeof options.callback === "function") {
                 setTimeout(function () { options.callback("${DUMMY_TOKEN}"); }, 0);
               }
-              return "mock-widget-id";
+              return "mock-widget-id-" + window.__turnstileRenderCount;
             },
             reset: function () {},
             remove: function () {},
