@@ -67,6 +67,8 @@ export async function signUpAndSignIn(
   await page.goto("/signin");
   await page.getByPlaceholder("you@example.com").fill(input.email);
   await page.getByPlaceholder("パスワード").fill(input.password);
-  await page.getByRole("button", { name: "サインイン" }).click();
+  const signInButton = page.getByRole("button", { name: "サインイン" });
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await signInButton.click();
   await expect(page).toHaveURL(/\/rounds/);
 }
