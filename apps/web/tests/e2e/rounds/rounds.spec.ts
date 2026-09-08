@@ -3,6 +3,7 @@ import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
+  waitForHydration,
 } from "../helpers/auth";
 import { createRound } from "../helpers/rounds";
 
@@ -24,6 +25,7 @@ test("作成したラウンドが一覧に合計点付きで表示され、ク�
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("score-button-7").click();
   await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("7");
@@ -52,6 +54,7 @@ test("何も選択しないまま開始すると、カスタム（距離構成�
   page,
 }) => {
   await page.goto("/rounds/new");
+  await waitForHydration(page);
 
   await page.getByTestId("round-start-button").click();
 
@@ -63,6 +66,7 @@ test("カスタムで開始すると、ラウンド構成が展開された状�
   page,
 }) => {
   await page.goto("/rounds/new");
+  await waitForHydration(page);
   await page.getByTestId("round-start-button").click();
 
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
@@ -91,6 +95,7 @@ test("カスタムで開始したラウンドの弓種をベアボウに変更�
   // /rounds/newの選択肢だけではbarebow（ベアボウ）のラウンドを作ることが
   // できず、作成後にラウンド設定パネルでbow_typeを変更する必要がある。
   await page.goto("/rounds/new");
+  await waitForHydration(page);
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
 
@@ -114,6 +119,7 @@ test("カスタムで開始したラウンドの弓種をベアボウに変更�
 
 test("/rounds/newから一覧へ戻るリンクで/roundsへ遷移する", async ({ page }) => {
   await page.goto("/rounds/new");
+  await waitForHydration(page);
 
   await page.getByRole("link", { name: "一覧へ戻る" }).click();
 
@@ -131,6 +137,7 @@ test("/rounds/[id]から一覧へ戻るリンクで/roundsへ遷移する", asyn
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByRole("link", { name: "一覧へ戻る" }).click();
 
@@ -177,6 +184,7 @@ test("詳細画面のメニューからラウンドを削除すると一覧へ�
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
   await page.getByTestId("round-menu-trigger").click();
   await page.getByTestId("round-delete").click();
