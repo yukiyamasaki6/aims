@@ -1,6 +1,7 @@
 "use client";
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -23,9 +24,16 @@ export function SignInForm() {
   const [fieldErrors, setFieldErrors] = useState<SignInFieldErrors>({});
   const turnstileRef = useRef<TurnstileInstance>(undefined);
   const mountedRef = useRef(true);
+  // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
+  // 挟むまで更新されず、連打で2回目のhandleSubmitが古いsubmitting=falseの
+  // クロージャのまま実行されてしまうため、stateだけでは防げない。
+  const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
+    // 対応するため、マウント時にも明示的にtrueへ戻す。
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -33,7 +41,7 @@ export function SignInForm() {
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (submitting) return;
+    if (submittingRef.current) return;
     setError(null);
     setFieldErrors({});
     const errors = validateSignInFields(email, password);
@@ -46,6 +54,7 @@ export function SignInForm() {
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const supabase = createClient();
@@ -55,25 +64,32 @@ export function SignInForm() {
         options: { captchaToken },
       });
 
+      // 送信中に別リンク（PW再設定・サインアップ）へ移動してこのコンポーネントが
+      // アンマウントされていた場合、遅れて届いた結果では何もしない。
+      if (!mountedRef.current) return;
+
       if (error) {
         setError(translateAuthErrorMessage(error));
         turnstileRef.current?.reset();
         setCaptchaToken(null);
+        submittingRef.current = false;
+        setSubmitting(false);
         return;
       }
 
-      // 送信中に別リンク（PW再設定・サインアップ）へ移動してこのコンポーネントが
-      // アンマウントされていた場合、遅れて成功しても遷移を横取りしない。
-      if (mountedRef.current) {
-        router.push("/rounds");
-      }
+      // 成功時はここでsubmittingを解除しない。router.push()は遷移先の取得中も
+      // このコンポーネントを保持し続けるため、ここで解除すると遷移完了前に
+      // ボタンが再度押せる状態に戻り、同じ（使用済みの）captchaトークンで
+      // 二重に送信されてしまう。アンマウント時に自然に破棄される。
+      router.push("/rounds");
     } catch {
+      if (!mountedRef.current) return;
       setError(
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
       );
       turnstileRef.current?.reset();
       setCaptchaToken(null);
-    } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
@@ -137,6 +153,7 @@ export function SignInForm() {
           aria-disabled={submitting}
           className={cn(submitting && "pointer-events-none opacity-50")}
         >
+          {submitting && <Loader2 className="size-3.5 animate-spin" />}
           サインイン
         </Button>
       </form>
