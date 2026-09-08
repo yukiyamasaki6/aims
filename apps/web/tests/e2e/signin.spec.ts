@@ -84,16 +84,6 @@ test("別の入力エラーで再試行するとエラーメッセージが正�
   await expect(page.getByText("パスワードを入力してください。")).toBeVisible();
 });
 
-test("サインアップリンクをクリックすると/signupへ遷移する", async ({
-  page,
-}) => {
-  await page.goto("/signin");
-  await waitForHydration(page);
-  await page.getByRole("link", { name: "サインアップ" }).click();
-
-  await expect(page).toHaveURL(/\/signup/);
-});
-
 test("送信中はサインインボタンが無効になる", async ({ page }) => {
   const email = `submitting-${Date.now()}@aims.test`;
   const password = "password1";
@@ -125,6 +115,26 @@ test("送信中はサインインボタンが無効になる", async ({ page }) 
 
   releaseToken();
   await expect(page).toHaveURL(/\/rounds/);
+});
+
+test("PW再設定リンクをクリックすると/reset-passwordへ遷移する", async ({
+  page,
+}) => {
+  await page.goto("/signin");
+  await waitForHydration(page);
+  await page.getByRole("link", { name: "パスワードをお忘れですか" }).click();
+
+  await expect(page).toHaveURL(/\/reset-password/);
+});
+
+test("サインアップリンクをクリックすると/signupへ遷移する", async ({
+  page,
+}) => {
+  await page.goto("/signin");
+  await waitForHydration(page);
+  await page.getByRole("link", { name: "サインアップ" }).click();
+
+  await expect(page).toHaveURL(/\/signup/);
 });
 
 test("パスワードを間違えるとエラーメッセージが表示される", async ({ page }) => {
