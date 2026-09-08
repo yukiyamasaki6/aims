@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../fixtures";
 import {
   SHARED_AUTH_STATE_PATH,
   signUpAndSignIn,
