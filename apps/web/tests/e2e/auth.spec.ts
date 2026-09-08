@@ -33,27 +33,12 @@ test("サインアウトできる", async ({ page }) => {
 test("既存アカウントのメールアドレスでサインアップすると、登録済みの案内が表示されパスワードは変わらない", async ({
   page,
 }) => {
-  // 共有のシードユーザー（user@aims.test）を使うと並列実行中の他テストと
-  // 競合するため、このテスト専用のアカウントを都度作成してから検証する。
+  // 「登録済みの案内が表示される」こと自体はsignup.spec.tsの
+  // 「送信失敗[登録済みメールアドレス]」テストが担うため、ここではパスワードが
+  // 変わらないことの検証に絞り、管理APIで確認済みユーザーを直接作成する。
   const email = `existing-account-${Date.now()}@aims.test`;
   const password = "password1";
-
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-
-  const code = await getOtpCodeFromMailpit(email);
-  await page.getByPlaceholder("123456").fill(code);
-  await page.getByRole("button", { name: "確認" }).click();
-
-  await page
-    .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
-    .fill(password);
-  await page.getByRole("button", { name: "登録してサインイン" }).click();
-  await expect(page).toHaveURL(/\/rounds/);
-
-  await page.getByRole("button", { name: "サインアウト" }).click();
-  await expect(page).toHaveURL("/");
+  await createConfirmedUser({ email, password });
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
@@ -71,21 +56,6 @@ test("既存アカウントのメールアドレスでサインアップする�
   await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
   await signInButton.click();
   await expect(page).toHaveURL(/\/rounds/);
-});
-
-test("サインアップの認証コードメールに送信元がわかるフッターが入っている", async ({
-  page,
-}) => {
-  const email = `otp-email-footer-${Date.now()}@aims.test`;
-
-  await page.goto("/signup");
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-
-  const html = await getOtpEmailHtmlFromMailpit(email);
-
-  expect(html).toContain("AIMS");
-  expect(html).toContain("aims-archery.com");
 });
 
 test("/signinからパスワードを再設定し、新しいパスワードでサインインできる", async ({

@@ -91,6 +91,24 @@ test("認証コード送信後に未確認のまま再度アクセスしても�
   ).not.toBeVisible();
 });
 
+test("通信エラーが発生するとメッセージが表示される", async ({ page }) => {
+  const email = `signup-network-error-${Date.now()}@aims.test`;
+  await page.route("**/auth/v1/otp*", (route) => route.abort());
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+
+  await expect(
+    page.getByText(
+      "通信エラーが発生しました。しばらくしてから再度お試しください。",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "サインアップ" }),
+  ).toBeVisible();
+});
+
 test("正しい認証コードを入力するとパスワード設定画面へ進む", async ({
   page,
 }) => {
