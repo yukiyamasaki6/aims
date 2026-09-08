@@ -85,7 +85,7 @@ test("別の入力エラーで再試行するとエラーメッセージが正�
 });
 
 test("送信中はサインインボタンが無効になる", async ({ page }) => {
-  const email = `submitting-${Date.now()}@aims.test`;
+  const email = `signin-submitting-${Date.now()}@aims.test`;
   const password = "password1";
   await createConfirmedUser({ email, password });
 
@@ -110,6 +110,7 @@ test("送信中はサインインボタンが無効になる", async ({ page }) 
 
   await expect(signInButton).toHaveAttribute("aria-disabled", "true");
 
+  // 無効化が実際にクリックを防いでいることを確認する。
   await signInButton.click({ force: true });
   expect(requestCount).toBe(1);
 
@@ -138,7 +139,7 @@ test("サインアップリンクをクリックすると/signupへ遷移する"
 });
 
 test("パスワードを間違えるとエラーメッセージが表示される", async ({ page }) => {
-  const email = `wrong-password-${Date.now()}@aims.test`;
+  const email = `signin-wrong-password-${Date.now()}@aims.test`;
 
   await page.goto("/signin");
   await waitForHydration(page);

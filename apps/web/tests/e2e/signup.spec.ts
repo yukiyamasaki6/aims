@@ -56,6 +56,7 @@ test("未入力のまま送信ボタンを押すとメールアドレスのメ�
   page,
 }) => {
   await page.goto("/signup");
+  await waitForHydration(page);
   const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
   await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
   await sendCodeButton.click();
@@ -71,6 +72,7 @@ test("captcha未完了のまま送信ボタンを押すとメッセージが表�
   await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
 
   await page.goto("/signup");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill("someone@example.com");
   await page.getByRole("button", { name: "認証コードを送信" }).click();
 
@@ -99,6 +101,7 @@ test("送信中は送信ボタンが無効になる", async ({ page }) => {
   });
 
   await page.goto("/signup");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(email);
   const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
   await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
@@ -171,7 +174,7 @@ test("メール送信で通信エラーが発生するとメッセージが表�
 test("未確認のメールアドレスで送信するとコード入力画面へ進む", async ({
   page,
 }) => {
-  const email = `unconfirmed-resend-${Date.now()}@aims.test`;
+  const email = `signup-unconfirmed-resend-${Date.now()}@aims.test`;
 
   await goToCodeStep(page, email);
 
@@ -212,7 +215,7 @@ test("送信するとコード入力画面へ進む", async ({ page }) => {
 test("コード未入力のまま確認ボタンを押すとメッセージが表示される", async ({
   page,
 }) => {
-  const email = `code-empty-${Date.now()}@aims.test`;
+  const email = `signup-code-empty-${Date.now()}@aims.test`;
 
   await goToCodeStep(page, email);
   await page.getByRole("button", { name: "確認" }).click();
@@ -242,6 +245,7 @@ test("確認中は確認ボタンが無効になる", async ({ page }) => {
 
   await expect(confirmButton).toHaveAttribute("aria-disabled", "true");
 
+  // 無効化が実際にクリックを防いでいることを確認する。
   await confirmButton.click({ force: true });
   expect(requestCount).toBe(1);
 
@@ -254,7 +258,7 @@ test("確認中は確認ボタンが無効になる", async ({ page }) => {
 test("クールダウン中に再送ボタンを押すとメッセージが表示される", async ({
   page,
 }) => {
-  const email = `resend-cooldown-${Date.now()}@aims.test`;
+  const email = `signup-resend-cooldown-${Date.now()}@aims.test`;
 
   await goToCodeStep(page, email);
 
@@ -273,7 +277,7 @@ test("captcha未完了のまま再送ボタンを押すとメッセージが表�
   page,
 }) => {
   test.setTimeout(90_000);
-  const email = `resend-captcha-${Date.now()}@aims.test`;
+  const email = `signup-resend-captcha-${Date.now()}@aims.test`;
 
   // 1回目（メール入力ステップ）のTurnstileウィジェットは通常通り成功させ、
   // 2回目（コード入力ステップの再送用ウィジェット）だけ検証を完了させない。
@@ -318,6 +322,7 @@ test("再送中は再送ボタンが無効になる", async ({ page }) => {
   await resendButton.click();
   await expect(resendButton).toHaveAttribute("aria-disabled", "true");
 
+  // 無効化が実際にクリックを防いでいることを確認する。
   await resendButton.click({ force: true });
   expect(requestCount).toBe(1);
 
@@ -325,7 +330,7 @@ test("再送中は再送ボタンが無効になる", async ({ page }) => {
 });
 
 test("戻るボタンでメールアドレス入力画面に戻れる", async ({ page }) => {
-  const email = `signup-back-button-${Date.now()}@aims.test`;
+  const email = `signup-back-${Date.now()}@aims.test`;
 
   await goToCodeStep(page, email);
   await page.getByRole("button", { name: "戻る" }).click();
@@ -337,7 +342,7 @@ test("戻るボタンでメールアドレス入力画面に戻れる", async ({
 });
 
 test("認証コードを間違えるとエラーメッセージが表示される", async ({ page }) => {
-  const email = `wrong-otp-${Date.now()}@aims.test`;
+  const email = `signup-wrong-otp-${Date.now()}@aims.test`;
 
   await goToCodeStep(page, email);
   await page.getByPlaceholder("123456").fill("000000");
@@ -404,7 +409,7 @@ test("再送ボタンで認証コードを再送できる", async ({ page }) => 
 test("要件を満たさないパスワードで登録するとエラーが表示される", async ({
   page,
 }) => {
-  const email = `weak-password-${Date.now()}@aims.test`;
+  const email = `signup-weak-password-${Date.now()}@aims.test`;
 
   await goToPasswordStep(page, email);
 

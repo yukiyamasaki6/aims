@@ -26,11 +26,16 @@ export function SignInForm() {
   const turnstileRef = useRef<TurnstileInstance>(undefined);
   const mountedRef = useRef(true);
   // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
-  // 挟むまで更新されず、連打で2回目のhandleSubmitが古いsubmitting=falseの
+  // 挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseの
   // クロージャのまま実行されてしまうため、stateだけでは防げない。
   const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const hydrated = useHydrated();
+
+  function consumeCaptchaToken() {
+    turnstileRef.current?.reset();
+    setCaptchaToken(null);
+  }
 
   useEffect(() => {
     // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
@@ -66,14 +71,14 @@ export function SignInForm() {
         options: { captchaToken },
       });
 
-      // 送信中に別リンク（PW再設定・サインアップ）へ移動してこのコンポーネントが
-      // アンマウントされていた場合、遅れて届いた結果では何もしない。
+      // mountedRefの確認より前にturnstileRefへ触れない。送信中に別リンクへ
+      // 移動してアンマウントされていた場合、破棄済みのウィジェットへの
+      // reset()呼び出しを避ける。
       if (!mountedRef.current) return;
 
       if (error) {
         setError(translateAuthErrorMessage(error));
-        turnstileRef.current?.reset();
-        setCaptchaToken(null);
+        consumeCaptchaToken();
         submittingRef.current = false;
         setSubmitting(false);
         return;
@@ -89,8 +94,7 @@ export function SignInForm() {
       setError(
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
       );
-      turnstileRef.current?.reset();
-      setCaptchaToken(null);
+      consumeCaptchaToken();
       submittingRef.current = false;
       setSubmitting(false);
     }
