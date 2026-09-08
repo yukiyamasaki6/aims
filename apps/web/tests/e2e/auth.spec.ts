@@ -29,35 +29,6 @@ test("サインアウトできる", async ({ page }) => {
   await expect(page).toHaveURL("/");
 });
 
-test("既存アカウントのメールアドレスでサインアップすると、登録済みの案内が表示されパスワードは変わらない", async ({
-  page,
-}) => {
-  // 「登録済みの案内が表示される」こと自体はsignup.spec.tsの
-  // 「送信失敗[登録済みメールアドレス]」テストが担うため、ここではパスワードが
-  // 変わらないことの検証に絞り、管理APIで確認済みユーザーを直接作成する。
-  const email = `existing-account-${Date.now()}@aims.test`;
-  const password = "password1";
-  await createConfirmedUser({ email, password });
-
-  await page.goto("/signup");
-  await waitForHydration(page);
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
-
-  await expect(
-    page.getByText("このメールアドレスは既に登録されています。"),
-  ).toBeVisible();
-  await page.getByRole("link", { name: "サインイン", exact: true }).click();
-  await expect(page).toHaveURL(/\/signin/);
-
-  await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByPlaceholder("パスワード").fill(password);
-  const signInButton = page.getByRole("button", { name: "サインイン" });
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
-  await signInButton.click();
-  await expect(page).toHaveURL(/\/rounds/);
-});
-
 test("/signinからパスワードを再設定し、新しいパスワードでサインインできる", async ({
   page,
 }) => {

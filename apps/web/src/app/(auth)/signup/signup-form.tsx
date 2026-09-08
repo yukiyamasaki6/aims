@@ -16,8 +16,13 @@ import { createClient } from "@/lib/supabase/client";
 import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 import { cn } from "@/lib/utils";
 import {
+  type SignUpCodeFieldErrors,
+  type SignUpEmailFieldErrors,
   type SignUpPasswordFieldErrors,
+  validateCodeField,
+  validateEmailField,
   validatePasswordField,
+  validateResendReady,
 } from "./validate";
 
 const SignInLink = () => (
@@ -36,8 +41,14 @@ export function SignUpForm() {
   const [password, setPassword] = useState("");
   const [step, setStep] = useState<"email" | "code" | "password">("email");
   const [error, setError] = useState<string | null>(null);
+  const [emailFieldErrors, setEmailFieldErrors] = useState<
+    SignUpEmailFieldErrors & { captcha?: string }
+  >({});
   const [passwordFieldErrors, setPasswordFieldErrors] =
     useState<SignUpPasswordFieldErrors>({});
+  const [codeFieldErrors, setCodeFieldErrors] = useState<SignUpCodeFieldErrors>(
+    {},
+  );
   const [resendCooldown, setResendCooldown] = useState(0);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(undefined);
@@ -69,11 +80,22 @@ export function SignUpForm() {
     setCode("");
     setError(null);
     setCaptchaToken(null);
+    setCodeFieldErrors({});
   }
 
   async function handleResend() {
-    if (!captchaToken) return;
+    if (submittingRef.current) return;
     setError(null);
+    setCodeFieldErrors({});
+
+    const errors = validateResendReady(resendCooldown, captchaToken);
+    if (errors.resend || !captchaToken) {
+      setCodeFieldErrors(errors);
+      return;
+    }
+
+    submittingRef.current = true;
+    setSubmitting(true);
     setResendCooldown(60);
 
     const supabase = createClient();
@@ -81,55 +103,118 @@ export function SignUpForm() {
       email,
       options: { captchaToken },
     });
+
+    if (!mountedRef.current) return;
+
     consumeCaptchaToken();
 
     if (error) {
       setError(translateAuthErrorMessage(error));
     }
+    submittingRef.current = false;
+    setSubmitting(false);
   }
 
   async function handleSendCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!captchaToken) return;
+    if (submittingRef.current) return;
     setError(null);
+    setEmailFieldErrors({});
 
-    if (await isEmailRegistered(email)) {
-      // このチェックはcaptchaTokenを使わないため、まだ消費されていない
-      // トークンをここでリセットする必要はない（次の送信でそのまま使える）。
-      setError("このメールアドレスは既に登録されています。");
+    const errors = validateEmailField(email);
+    if (errors.email) {
+      setEmailFieldErrors(errors);
+      return;
+    }
+    if (!captchaToken) {
+      setEmailFieldErrors({
+        captcha: "セキュリティチェックが完了していません。",
+      });
       return;
     }
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { captchaToken },
-    });
-    consumeCaptchaToken();
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      if (await isEmailRegistered(email)) {
+        // このチェックはcaptchaTokenを使わないため、まだ消費されていない
+        // トークンをここでリセットする必要はない（次の送信でそのまま使える）。
+        if (!mountedRef.current) return;
+        setError("このメールアドレスは既に登録されています。");
+        submittingRef.current = false;
+        setSubmitting(false);
+        return;
+      }
 
-    if (error) {
-      setError(translateAuthErrorMessage(error));
-    } else {
-      setResendCooldown(60);
-      setStep("code");
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { captchaToken },
+      });
+
+      // mountedRefの確認より前にturnstileRefへ触れない。送信中に別リンクへ
+      // 移動してアンマウントされていた場合、破棄済みのウィジェットへの
+      // reset()呼び出しを避ける。
+      if (!mountedRef.current) return;
+
+      consumeCaptchaToken();
+
+      if (error) {
+        setError(translateAuthErrorMessage(error));
+      } else {
+        setResendCooldown(60);
+        setStep("code");
+      }
+      submittingRef.current = false;
+      setSubmitting(false);
+    } catch {
+      if (!mountedRef.current) return;
+      setError(
+        "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      );
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   }
 
   async function handleVerifyCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submittingRef.current) return;
     setError(null);
+    setCodeFieldErrors({});
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: code,
-      type: "email",
-    });
+    const errors = validateCodeField(code);
+    if (errors.code) {
+      setCodeFieldErrors(errors);
+      return;
+    }
 
-    if (error) {
-      setError(translateAuthErrorMessage(error));
-    } else {
-      setStep("password");
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: code,
+        type: "email",
+      });
+
+      if (!mountedRef.current) return;
+
+      if (error) {
+        setError(translateAuthErrorMessage(error));
+      } else {
+        setStep("password");
+      }
+      submittingRef.current = false;
+      setSubmitting(false);
+    } catch {
+      if (!mountedRef.current) return;
+      setError(
+        "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      );
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   }
 
@@ -232,18 +317,36 @@ export function SignUpForm() {
       >
         <form
           onSubmit={handleVerifyCode}
+          noValidate
           className="flex w-full flex-col gap-3"
         >
-          <Input
-            type="text"
-            inputMode="numeric"
-            required
-            placeholder="123456"
-            className="text-center tracking-widest"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-          />
-          <Button type="submit">確認</Button>
+          <div className="flex flex-col gap-1">
+            <Input
+              type="text"
+              inputMode="numeric"
+              placeholder="123456"
+              className="text-center tracking-widest"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              aria-invalid={Boolean(codeFieldErrors.code)}
+              aria-describedby={
+                codeFieldErrors.code ? "signup-code-error" : undefined
+              }
+            />
+            {codeFieldErrors.code && (
+              <p id="signup-code-error" className="text-destructive text-sm">
+                {codeFieldErrors.code}
+              </p>
+            )}
+          </div>
+          <Button
+            type="submit"
+            aria-disabled={submitting}
+            className={cn(submitting && "pointer-events-none opacity-50")}
+          >
+            {submitting && <Loader2 className="size-3.5 animate-spin" />}
+            確認
+          </Button>
         </form>
         {error && (
           <p className="text-center text-destructive text-sm">{error}</p>
@@ -252,15 +355,25 @@ export function SignUpForm() {
           メールが届かない場合は、迷惑メールフォルダをご確認ください。
         </p>
         <Turnstile ref={turnstileRef} onVerify={setCaptchaToken} />
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          disabled={resendCooldown > 0 || !captchaToken}
-          onClick={handleResend}
-        >
-          {resendCooldown > 0 ? `再送（${resendCooldown}秒）` : "再送"}
-        </Button>
+        <div className="flex flex-col items-center gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            className={cn(
+              "w-full",
+              submitting && "pointer-events-none opacity-50",
+            )}
+            aria-disabled={submitting}
+            data-captcha-ready={captchaToken !== null}
+            onClick={handleResend}
+          >
+            {submitting && <Loader2 className="size-3.5 animate-spin" />}
+            {resendCooldown > 0 ? `再送（${resendCooldown}秒）` : "再送"}
+          </Button>
+          {codeFieldErrors.resend && (
+            <p className="text-destructive text-sm">{codeFieldErrors.resend}</p>
+          )}
+        </div>
       </AuthCard>
     );
   }
@@ -269,18 +382,49 @@ export function SignUpForm() {
     <AuthCard title="サインアップ">
       <form
         onSubmit={handleSendCode}
+        noValidate
         data-hydrated={hydrated}
         className="flex w-full flex-col gap-3"
       >
-        <Input
-          type="email"
-          required
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <Turnstile ref={turnstileRef} onVerify={setCaptchaToken} />
-        <Button type="submit" disabled={!captchaToken}>
+        <div className="flex flex-col gap-1">
+          <Input
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            aria-invalid={Boolean(emailFieldErrors.email)}
+            aria-describedby={
+              emailFieldErrors.email ? "signup-email-error" : undefined
+            }
+          />
+          {emailFieldErrors.email && (
+            <p id="signup-email-error" className="text-destructive text-sm">
+              {emailFieldErrors.email}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <div
+            className={cn(
+              "rounded-lg p-1",
+              emailFieldErrors.captcha && "ring-3 ring-destructive/50",
+            )}
+          >
+            <Turnstile ref={turnstileRef} onVerify={setCaptchaToken} />
+          </div>
+          {emailFieldErrors.captcha && (
+            <p className="text-destructive text-sm">
+              {emailFieldErrors.captcha}
+            </p>
+          )}
+        </div>
+        <Button
+          type="submit"
+          data-captcha-ready={captchaToken !== null}
+          aria-disabled={submitting}
+          className={cn(submitting && "pointer-events-none opacity-50")}
+        >
+          {submitting && <Loader2 className="size-3.5 animate-spin" />}
           認証コードを送信
         </Button>
       </form>

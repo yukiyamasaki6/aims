@@ -1,3 +1,20 @@
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export type SignUpEmailFieldErrors = {
+  email?: string;
+};
+
+export function validateEmailField(email: string): SignUpEmailFieldErrors {
+  if (!email) {
+    return { email: "メールアドレスを入力してください。" };
+  }
+  if (!EMAIL_PATTERN.test(email)) {
+    return { email: "メールアドレスの形式が正しくありません。" };
+  }
+
+  return {};
+}
+
 export type SignUpPasswordFieldErrors = {
   password?: string;
 };
@@ -16,6 +33,35 @@ export function validatePasswordField(
     return {
       password: "パスワードは8文字以上で、英字と数字の両方を含めてください。",
     };
+  }
+
+  return {};
+}
+
+export type SignUpCodeFieldErrors = {
+  code?: string;
+  resend?: string;
+};
+
+export function validateCodeField(code: string): SignUpCodeFieldErrors {
+  if (!code) {
+    return { code: "認証コードを入力してください。" };
+  }
+
+  return {};
+}
+
+export function validateResendReady(
+  resendCooldown: number,
+  captchaToken: string | null,
+): SignUpCodeFieldErrors {
+  if (resendCooldown > 0) {
+    return {
+      resend: "再送はクールダウン中です。しばらくしてから再度お試しください。",
+    };
+  }
+  if (!captchaToken) {
+    return { resend: "セキュリティチェックが完了していません。" };
   }
 
   return {};
