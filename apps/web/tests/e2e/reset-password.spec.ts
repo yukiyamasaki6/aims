@@ -15,7 +15,7 @@ async function goToCodeStep(page: Page, email: string): Promise<void> {
   await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(email);
   const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
-  await expect(sendCodeButton).toBeEnabled();
+  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
   await sendCodeButton.click();
   await expect(
     page.getByRole("heading", { name: "認証コードを入力" }),
@@ -55,6 +55,93 @@ test.describe(() => {
   });
 });
 
+test("未入力のまま送信ボタンを押すとメールアドレスのメッセージが表示される", async ({
+  page,
+}) => {
+  await page.goto("/reset-password");
+  const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
+  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await sendCodeButton.click();
+
+  await expect(
+    page.getByText("メールアドレスを入力してください。"),
+  ).toBeVisible();
+});
+
+test("captcha未完了のまま送信ボタンを押すとメッセージが表示される", async ({
+  page,
+}) => {
+  await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
+
+  await page.goto("/reset-password");
+  await page.getByPlaceholder("you@example.com").fill("someone@example.com");
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+
+  await expect(
+    page.getByText("セキュリティチェックが完了していません。"),
+  ).toBeVisible();
+});
+
+test("送信中は送信ボタンが無効になる", async ({ page }) => {
+  const email = `reset-password-submitting-${Date.now()}@aims.test`;
+
+  let requestCount = 0;
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/auth/v1/recover*", async (route) => {
+    requestCount++;
+    await requestGate;
+    await route.continue();
+  });
+
+  await page.goto("/reset-password");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
+  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await sendCodeButton.click();
+
+  await expect(sendCodeButton).toHaveAttribute("aria-disabled", "true");
+
+  // 無効化が実際にクリックを防いでいることを確認する。
+  await sendCodeButton.click({ force: true });
+  expect(requestCount).toBe(1);
+
+  releaseRequest();
+  await expect(
+    page.getByRole("heading", { name: "認証コードを入力" }),
+  ).toBeVisible();
+});
+
+test("サインインリンクをクリックすると/signinへ遷移する", async ({ page }) => {
+  await page.goto("/reset-password");
+  await waitForHydration(page);
+  await page.getByRole("link", { name: "サインインに戻る" }).click();
+
+  await expect(page).toHaveURL(/\/signin/);
+});
+
+test("メール送信で通信エラーが発生するとメッセージが表示される", async ({
+  page,
+}) => {
+  const email = `reset-password-network-error-${Date.now()}@aims.test`;
+  await page.route("**/auth/v1/recover*", (route) => route.abort());
+
+  await page.goto("/reset-password");
+  await waitForHydration(page);
+  await page.getByPlaceholder("you@example.com").fill(email);
+  const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
+  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await sendCodeButton.click();
+
+  await expect(
+    page.getByText(
+      "通信エラーが発生しました。しばらくしてから再度お試しください。",
+    ),
+  ).toBeVisible();
+});
+
 test("送信するとコード入力画面へ進む", async ({ page }) => {
   const email = `reset-password-code-${Date.now()}@aims.test`;
   await createConfirmedUser({ email, password: "password-original" });
@@ -68,42 +155,51 @@ test("送信するとコード入力画面へ進む", async ({ page }) => {
   expect(resetEmailHtml).toContain("aims-archery.com");
 });
 
-test("サインインに戻るリンクをクリックすると/signinへ遷移する", async ({
+test("コード未入力のまま確認ボタンを押すとメッセージが表示される", async ({
   page,
 }) => {
-  await page.goto("/reset-password");
-  await waitForHydration(page);
-  await page.getByRole("link", { name: "サインインに戻る" }).click();
+  const email = `reset-password-code-empty-${Date.now()}@aims.test`;
+  await createConfirmedUser({ email, password: "password-original" });
 
-  await expect(page).toHaveURL(/\/signin/);
+  await goToCodeStep(page, email);
+  await page.getByRole("button", { name: "確認" }).click();
+
+  await expect(page.getByText("認証コードを入力してください。")).toBeVisible();
 });
 
-test("送信で通信エラーが発生するとメッセージが表示される", async ({ page }) => {
-  const email = `reset-password-network-error-${Date.now()}@aims.test`;
-  await page.route("**/auth/v1/recover*", (route) => route.abort());
+test("確認中は確認ボタンが無効になる", async ({ page }) => {
+  const email = `reset-password-verify-submitting-${Date.now()}@aims.test`;
+  await createConfirmedUser({ email, password: "password-original" });
+  await goToCodeStep(page, email);
+  const code = await getOtpCodeFromMailpit(email);
 
-  await page.goto("/reset-password");
-  await waitForHydration(page);
-  await page.getByPlaceholder("you@example.com").fill(email);
-  const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
-  await expect(sendCodeButton).toBeEnabled();
-  await sendCodeButton.click();
+  let requestCount = 0;
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/auth/v1/verify*", async (route) => {
+    requestCount++;
+    await requestGate;
+    await route.continue();
+  });
 
+  await page.getByPlaceholder("123456").fill(code);
+  const confirmButton = page.getByRole("button", { name: "確認" });
+  await confirmButton.click();
+
+  await expect(confirmButton).toHaveAttribute("aria-disabled", "true");
+
+  await confirmButton.click({ force: true });
+  expect(requestCount).toBe(1);
+
+  releaseRequest();
   await expect(
-    page.getByText(
-      "通信エラーが発生しました。しばらくしてから再度お試しください。",
-    ),
+    page.getByRole("heading", { name: "新しいパスワードを設定" }),
   ).toBeVisible();
 });
 
-test("確認するとパスワード設定画面へ進む", async ({ page }) => {
-  const email = `reset-password-verify-${Date.now()}@aims.test`;
-  await createConfirmedUser({ email, password: "password-original" });
-
-  await goToPasswordStep(page, email);
-});
-
-test("認証コード入力画面に来た直後は再送ボタンがクールダウン中で押せない", async ({
+test("クールダウン中に再送ボタンを押すとメッセージが表示される", async ({
   page,
 }) => {
   const email = `reset-password-resend-cooldown-${Date.now()}@aims.test`;
@@ -112,35 +208,71 @@ test("認証コード入力画面に来た直後は再送ボタンがクール�
   await goToCodeStep(page, email);
 
   const resendButton = page.getByRole("button", { name: /^再送/ });
-  await expect(resendButton).toBeDisabled();
   await expect(page.getByText(/再送（\d+秒）/)).toBeVisible();
+  await resendButton.click();
+
+  await expect(
+    page.getByText(
+      "再送はクールダウン中です。しばらくしてから再度お試しください。",
+    ),
+  ).toBeVisible();
 });
 
-test("再送ボタンで認証コードを再送できる", async ({ page }) => {
+test("captcha未完了のまま再送ボタンを押すとメッセージが表示される", async ({
+  page,
+}) => {
   test.setTimeout(90_000);
-  const email = `reset-password-resend-${Date.now()}@aims.test`;
+  const email = `reset-password-resend-captcha-${Date.now()}@aims.test`;
+  await createConfirmedUser({ email, password: "password-original" });
+
+  // 1回目（メール入力ステップ）のTurnstileウィジェットは通常通り成功させ、
+  // 2回目（コード入力ステップの再送用ウィジェット）だけ検証を完了させない。
+  await page.addInitScript(() => {
+    (
+      window as unknown as { __turnstileFailFromCall?: number }
+    ).__turnstileFailFromCall = 2;
+  });
+
+  await goToCodeStep(page, email);
+
+  const resendButton = page.getByRole("button", { name: /^再送/ });
+  await expect(resendButton).toHaveText("再送", { timeout: 70_000 });
+  await resendButton.click();
+
+  await expect(
+    page.getByText("セキュリティチェックが完了していません。"),
+  ).toBeVisible();
+});
+
+test("再送中は再送ボタンが無効になる", async ({ page }) => {
+  test.setTimeout(90_000);
+  const email = `reset-password-resend-submitting-${Date.now()}@aims.test`;
   await createConfirmedUser({ email, password: "password-original" });
 
   await goToCodeStep(page, email);
-  const firstCode = await getOtpCodeFromMailpit(email);
 
   const resendButton = page.getByRole("button", { name: /^再送/ });
-  // クールダウン（60秒）が明けて、かつ再送ボタン用のTurnstileウィジェットの
-  // 検証が完了するまで待つ。
-  await expect(resendButton).toBeEnabled({ timeout: 70_000 });
+  await expect(resendButton).toHaveText("再送", { timeout: 70_000 });
+  await expect(resendButton).toHaveAttribute("data-captcha-ready", "true");
+
+  let requestCount = 0;
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/auth/v1/recover*", async (route) => {
+    requestCount++;
+    await requestGate;
+    await route.continue();
+  });
+
   await resendButton.click();
+  await expect(resendButton).toHaveAttribute("aria-disabled", "true");
 
-  let latestCode = firstCode;
-  await expect(async () => {
-    latestCode = await getOtpCodeFromMailpit(email);
-    expect(latestCode).not.toBe(firstCode);
-  }).toPass();
+  await resendButton.click({ force: true });
+  expect(requestCount).toBe(1);
 
-  await page.getByPlaceholder("123456").fill(latestCode);
-  await page.getByRole("button", { name: "確認" }).click();
-  await expect(
-    page.getByRole("heading", { name: "新しいパスワードを設定" }),
-  ).toBeVisible();
+  releaseRequest();
 });
 
 test("戻るボタンでメールアドレス入力画面に戻れる", async ({ page }) => {
@@ -169,6 +301,13 @@ test("認証コードを間違えるとエラーメッセージが表示され�
   ).toBeVisible();
 });
 
+test("確認するとパスワード設定画面へ進む", async ({ page }) => {
+  const email = `reset-password-verify-${Date.now()}@aims.test`;
+  await createConfirmedUser({ email, password: "password-original" });
+
+  await goToPasswordStep(page, email);
+});
+
 test("再送で通信エラーが発生するとメッセージが表示される", async ({ page }) => {
   test.setTimeout(90_000);
   const email = `reset-password-resend-network-error-${Date.now()}@aims.test`;
@@ -177,7 +316,8 @@ test("再送で通信エラーが発生するとメッセージが表示され�
   await goToCodeStep(page, email);
 
   const resendButton = page.getByRole("button", { name: /^再送/ });
-  await expect(resendButton).toBeEnabled({ timeout: 70_000 });
+  await expect(resendButton).toHaveText("再送", { timeout: 70_000 });
+  await expect(resendButton).toHaveAttribute("data-captcha-ready", "true");
 
   await page.route("**/auth/v1/recover*", (route) => route.abort());
   await resendButton.click();
@@ -187,6 +327,110 @@ test("再送で通信エラーが発生するとメッセージが表示され�
       "通信エラーが発生しました。しばらくしてから再度お試しください。",
     ),
   ).toBeVisible();
+});
+
+test("再送ボタンで認証コードを再送できる", async ({ page }) => {
+  test.setTimeout(90_000);
+  const email = `reset-password-resend-${Date.now()}@aims.test`;
+  await createConfirmedUser({ email, password: "password-original" });
+
+  await goToCodeStep(page, email);
+  const firstCode = await getOtpCodeFromMailpit(email);
+
+  const resendButton = page.getByRole("button", { name: /^再送/ });
+  // クールダウン（60秒）が明けて、かつ再送ボタン用のTurnstileウィジェットの
+  // 検証が完了するまで待つ。
+  await expect(resendButton).toHaveText("再送", { timeout: 70_000 });
+  await expect(resendButton).toHaveAttribute("data-captcha-ready", "true");
+  await resendButton.click();
+
+  let latestCode = firstCode;
+  await expect(async () => {
+    latestCode = await getOtpCodeFromMailpit(email);
+    expect(latestCode).not.toBe(firstCode);
+  }).toPass();
+
+  await page.getByPlaceholder("123456").fill(latestCode);
+  await page.getByRole("button", { name: "確認" }).click();
+  await expect(
+    page.getByRole("heading", { name: "新しいパスワードを設定" }),
+  ).toBeVisible();
+});
+
+test("要件を満たさないパスワードで変更するとエラーが表示される", async ({
+  page,
+}) => {
+  const email = `reset-password-weak-password-${Date.now()}@aims.test`;
+  await createConfirmedUser({ email, password: "password-original" });
+
+  await goToPasswordStep(page, email);
+
+  // 8文字以上だが数字を含まないため、文字種要件を満たさない。
+  await page
+    .getByPlaceholder("新しいパスワード（8文字以上・英数字を含む）")
+    .fill("onlyletters");
+  await page.getByRole("button", { name: "パスワードを変更" }).click();
+
+  await expect(
+    page.getByText(
+      "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+    ),
+  ).toBeVisible();
+  await expect(page).not.toHaveURL(/\/signin/);
+});
+
+test("送信中は変更ボタンが無効になる", async ({ page }) => {
+  const email = `reset-password-change-submitting-${Date.now()}@aims.test`;
+  await createConfirmedUser({ email, password: "password-original" });
+
+  let requestCount = 0;
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/auth/v1/user*", async (route) => {
+    requestCount++;
+    await requestGate;
+    await route.continue();
+  });
+
+  await goToPasswordStep(page, email);
+  await page
+    .getByPlaceholder("新しいパスワード（8文字以上・英数字を含む）")
+    .fill("password-changed1");
+  const changeButton = page.getByRole("button", { name: "パスワードを変更" });
+  await changeButton.click();
+
+  await expect(changeButton).toHaveAttribute("aria-disabled", "true");
+
+  // 無効化が実際にクリックを防いでいることを確認する。
+  await changeButton.click({ force: true });
+  expect(requestCount).toBe(1);
+
+  releaseRequest();
+  await expect(page).toHaveURL(/\/signin/);
+});
+
+test("パスワード変更で通信エラーが発生するとメッセージが表示される", async ({
+  page,
+}) => {
+  const email = `reset-password-change-network-error-${Date.now()}@aims.test`;
+  await createConfirmedUser({ email, password: "password-original" });
+
+  await goToPasswordStep(page, email);
+  await page.route("**/auth/v1/user*", (route) => route.abort());
+
+  await page
+    .getByPlaceholder("新しいパスワード（8文字以上・英数字を含む）")
+    .fill("password-changed1");
+  await page.getByRole("button", { name: "パスワードを変更" }).click();
+
+  await expect(
+    page.getByText(
+      "通信エラーが発生しました。しばらくしてから再度お試しください。",
+    ),
+  ).toBeVisible();
+  await expect(page).not.toHaveURL(/\/signin/);
 });
 
 test("パスワードを変更すると新しいパスワードでサインインできる", async ({
@@ -218,26 +462,4 @@ test("パスワードを変更すると新しいパスワードでサインイ�
   await expect(
     page.getByRole("button", { name: "サインアウト" }),
   ).toBeVisible();
-});
-
-test("パスワード変更で通信エラーが発生するとメッセージが表示される", async ({
-  page,
-}) => {
-  const email = `reset-password-change-network-error-${Date.now()}@aims.test`;
-  await createConfirmedUser({ email, password: "password-original" });
-
-  await goToPasswordStep(page, email);
-  await page.route("**/auth/v1/user*", (route) => route.abort());
-
-  await page
-    .getByPlaceholder("新しいパスワード（8文字以上・英数字を含む）")
-    .fill("password-changed1");
-  await page.getByRole("button", { name: "パスワードを変更" }).click();
-
-  await expect(
-    page.getByText(
-      "通信エラーが発生しました。しばらくしてから再度お試しください。",
-    ),
-  ).toBeVisible();
-  await expect(page).not.toHaveURL(/\/signin/);
 });
