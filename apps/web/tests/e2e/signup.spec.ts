@@ -2,11 +2,6 @@ import { expect, type Page, test } from "@playwright/test";
 import { createConfirmedUser, SHARED_AUTH_STATE_PATH } from "./helpers/auth";
 import { getOtpCodeFromMailpit } from "./helpers/mailpit";
 
-// 実際のOTPサインアップを検証するテストが集中しており、他ファイルのように
-// 共有セッションを使い回せない。並列実行によるSupabaseスタックへの負荷集中を
-// 避けるため、このファイル内のテストは直列実行する。
-test.describe.configure({ mode: "serial" });
-
 async function goToCodeStep(page: Page, email: string): Promise<void> {
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
