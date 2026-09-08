@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { createConfirmedUser } from "./helpers/auth";
+import { createConfirmedUser, SHARED_AUTH_STATE_PATH } from "./helpers/auth";
 import { getOtpCodeFromMailpit } from "./helpers/mailpit";
 
 // 実際のOTPサインアップを検証するテストが集中しており、他ファイルのように
@@ -34,6 +34,18 @@ test("未認証で/signupにアクセスするとメールアドレス入力画�
   await expect(
     page.getByRole("heading", { name: "サインアップ" }),
   ).toBeVisible();
+});
+
+test.describe(() => {
+  test.use({ storageState: SHARED_AUTH_STATE_PATH });
+
+  test("認証済みで/signupにアクセスすると/roundsにリダイレクトされる", async ({
+    page,
+  }) => {
+    await page.goto("/signup");
+
+    await expect(page).toHaveURL(/\/rounds/);
+  });
 });
 
 test("認証コードを送信すると認証コード入力画面へ進む", async ({ page }) => {
