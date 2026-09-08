@@ -1,4 +1,4 @@
-import { test as setup } from "@playwright/test";
+import { test as setup } from "./fixtures";
 import {
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
