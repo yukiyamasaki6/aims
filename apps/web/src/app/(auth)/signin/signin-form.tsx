@@ -10,6 +10,7 @@ import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ export function SignInForm() {
   // クロージャのまま実行されてしまうため、stateだけでは防げない。
   const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
+  const hydrated = useHydrated();
 
   useEffect(() => {
     // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
@@ -99,6 +101,7 @@ export function SignInForm() {
       <form
         onSubmit={handleSubmit}
         noValidate
+        data-hydrated={hydrated}
         className="flex w-full flex-col gap-3"
       >
         <div className="flex flex-col gap-1">

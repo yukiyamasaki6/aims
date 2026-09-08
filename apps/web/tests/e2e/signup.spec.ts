@@ -1,9 +1,14 @@
 import { expect, type Page, test } from "@playwright/test";
-import { createConfirmedUser, SHARED_AUTH_STATE_PATH } from "./helpers/auth";
+import {
+  createConfirmedUser,
+  SHARED_AUTH_STATE_PATH,
+  waitForHydration,
+} from "./helpers/auth";
 import { getOtpCodeFromMailpit } from "./helpers/mailpit";
 
 async function goToCodeStep(page: Page, email: string): Promise<void> {
   await page.goto("/signup");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByRole("button", { name: "認証コードを送信" }).click();
   await expect(
@@ -25,6 +30,7 @@ test("未認証で/signupにアクセスするとメールアドレス入力画�
   page,
 }) => {
   await page.goto("/signup");
+  await waitForHydration(page);
 
   await expect(
     page.getByRole("heading", { name: "サインアップ" }),
@@ -53,6 +59,7 @@ test("認証コードを送信すると認証コード入力画面へ進む", as
 
 test("サインインリンクをクリックすると/signinへ遷移する", async ({ page }) => {
   await page.goto("/signup");
+  await waitForHydration(page);
   await page.getByRole("link", { name: "サインイン", exact: true }).click();
 
   await expect(page).toHaveURL(/\/signin/);
@@ -65,6 +72,7 @@ test("登録済みのメールアドレスで送信するとメッセージが�
   await createConfirmedUser({ email, password: "password1" });
 
   await page.goto("/signup");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByRole("button", { name: "認証コードを送信" }).click();
 
@@ -82,6 +90,7 @@ test("認証コード送信後に未確認のまま再度アクセスしても�
 
   // コードを未確認のまま画面を離れ、同じメールアドレスで再度送信する。
   await page.goto("/signup");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByRole("button", { name: "認証コードを送信" }).click();
 
@@ -105,6 +114,7 @@ test("メール送信で通信エラーが発生するとメッセージが表�
   await page.route("**/auth/v1/otp*", (route) => route.abort());
 
   await page.goto("/signup");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByRole("button", { name: "認証コードを送信" }).click();
 

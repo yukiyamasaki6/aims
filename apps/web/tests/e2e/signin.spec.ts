@@ -1,10 +1,15 @@
 import { expect, test } from "@playwright/test";
-import { createConfirmedUser, SHARED_AUTH_STATE_PATH } from "./helpers/auth";
+import {
+  createConfirmedUser,
+  SHARED_AUTH_STATE_PATH,
+  waitForHydration,
+} from "./helpers/auth";
 
 test("未認証で/signinにアクセスするとサインイン画面が表示される", async ({
   page,
 }) => {
   await page.goto("/signin");
+  await waitForHydration(page);
 
   await expect(page.getByRole("heading", { name: "サインイン" })).toBeVisible();
 });
@@ -25,6 +30,7 @@ test("未入力のままサインインボタンを押すとメールアドレ�
   page,
 }) => {
   await page.goto("/signin");
+  await waitForHydration(page);
   const signInButton = page.getByRole("button", { name: "サインイン" });
   await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
   await signInButton.click();
@@ -43,6 +49,7 @@ test("captcha未完了のままサインインボタンを押すとメッセー�
   await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
 
   await page.goto("/signin");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill("someone@example.com");
   await page.getByPlaceholder("パスワード").fill("password1");
   await page.getByRole("button", { name: "サインイン" }).click();
@@ -58,6 +65,7 @@ test("別の入力エラーで再試行するとエラーメッセージが正�
   await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
 
   await page.goto("/signin");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill("someone@example.com");
   await page.getByPlaceholder("パスワード").fill("password1");
   const signInButton = page.getByRole("button", { name: "サインイン" });
@@ -80,6 +88,7 @@ test("サインアップリンクをクリックすると/signupへ遷移する"
   page,
 }) => {
   await page.goto("/signin");
+  await waitForHydration(page);
   await page.getByRole("link", { name: "サインアップ" }).click();
 
   await expect(page).toHaveURL(/\/signup/);
@@ -102,6 +111,7 @@ test("送信中はサインインボタンが無効になる", async ({ page }) 
   });
 
   await page.goto("/signin");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByPlaceholder("パスワード").fill(password);
   const signInButton = page.getByRole("button", { name: "サインイン" });
@@ -121,6 +131,7 @@ test("パスワードを間違えるとエラーメッセージが表示され�
   const email = `wrong-password-${Date.now()}@aims.test`;
 
   await page.goto("/signin");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByPlaceholder("パスワード").fill("wrong-password");
   const signInButton = page.getByRole("button", { name: "サインイン" });
@@ -139,6 +150,7 @@ test("サインインすると/roundsへ遷移する", async ({ page }) => {
   await createConfirmedUser({ email, password });
 
   await page.goto("/signin");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByPlaceholder("パスワード").fill(password);
   const signInButton = page.getByRole("button", { name: "サインイン" });

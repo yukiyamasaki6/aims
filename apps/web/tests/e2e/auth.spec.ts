@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { createConfirmedUser, signUpAndSignIn } from "./helpers/auth";
+import {
+  createConfirmedUser,
+  signUpAndSignIn,
+  waitForHydration,
+} from "./helpers/auth";
 import {
   getOtpCodeFromMailpit,
   getOtpEmailHtmlFromMailpit,
@@ -36,6 +40,7 @@ test("既存アカウントのメールアドレスでサインアップする�
   await createConfirmedUser({ email, password });
 
   await page.goto("/signup");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByRole("button", { name: "認証コードを送信" }).click();
 
@@ -65,6 +70,7 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
   await createConfirmedUser({ email, password: "password-original" });
 
   await page.goto("/signin");
+  await waitForHydration(page);
   await page.getByRole("link", { name: "パスワードをお忘れですか" }).click();
   await expect(page).toHaveURL(/\/reset-password/);
 
@@ -94,14 +100,11 @@ test("/signinからパスワードを再設定し、新しいパスワードで�
   await expect(page).toHaveURL(/\/signin/);
   await expect(page.getByRole("heading", { name: "サインイン" })).toBeVisible();
 
-  // 遷移直後はハイドレーション中の再描画でfillした値が消えることがあるため、
-  // 入力後に両方の値が保持されているかまで確認し、消えていればfillからやり直す。
-  await expect(async () => {
-    await page.getByPlaceholder("you@example.com").fill(email);
-    await page.getByPlaceholder("パスワード").fill(newPassword);
-    await expect(page.getByPlaceholder("you@example.com")).toHaveValue(email);
-    await expect(page.getByPlaceholder("パスワード")).toHaveValue(newPassword);
-  }).toPass();
+  // ハイドレーション完了前に入力すると、直後の再描画で値が消えることが
+  // あるため、data-hydrated="true"を待ってから入力する。
+  await waitForHydration(page);
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByPlaceholder("パスワード").fill(newPassword);
   const signInButton = page.getByRole("button", { name: "サインイン" });
   await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
   await signInButton.click();
@@ -118,6 +121,7 @@ test("パスワード再設定の認証コード入力画面で、再送はク�
   const email = `reset-target-b-${Date.now()}@aims.test`;
 
   await page.goto("/reset-password");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(email);
   await page.getByRole("button", { name: "認証コードを送信" }).click();
   await expect(

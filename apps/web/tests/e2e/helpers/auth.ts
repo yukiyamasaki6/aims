@@ -7,6 +7,14 @@ export const SHARED_AUTH_STATE_PATH = "playwright/.auth/e2e-shared-user.json";
 const SHARED_EMAIL_PATH = "playwright/.auth/e2e-shared-email.txt";
 export const SHARED_PASSWORD = "password-e2e-shared";
 
+// ハイドレーション完了前にクリック・入力すると、ハンドラ未接続で空振り
+// したり、直後の再描画で入力値が消えたりすることがある（e2eで確認済み）。
+// ハードナビゲーション（page.goto）直後に操作する前に、各画面のクライアント
+// コンポーネントが立てるdata-hydrated属性を待つ。
+export async function waitForHydration(page: Page): Promise<void> {
+  await expect(page.locator('[data-hydrated="true"]')).toBeAttached();
+}
+
 // テストは毎回同じ初期状態から始まるべきという原則を、DBリセットに頼らず
 // 保証する。rounds/round_presetsはユーザー単位でRLS・owner_idにより
 // 可視性が絞られるため、実行のたびに使い捨ての新しいメールアドレスに
@@ -65,6 +73,7 @@ export async function signUpAndSignIn(
   await createConfirmedUser(input);
 
   await page.goto("/signin");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(input.email);
   await page.getByPlaceholder("パスワード").fill(input.password);
   const signInButton = page.getByRole("button", { name: "サインイン" });
