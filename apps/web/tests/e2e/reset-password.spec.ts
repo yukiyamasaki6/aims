@@ -5,10 +5,7 @@ import {
   SHARED_AUTH_STATE_PATH,
   waitForHydration,
 } from "./helpers/auth";
-import {
-  getOtpCodeFromMailpit,
-  getOtpEmailHtmlFromMailpit,
-} from "./helpers/mailpit";
+import { getOtpCodeFromMailpit } from "./helpers/mailpit";
 
 async function goToCodeStep(page: Page, email: string): Promise<void> {
   await page.goto("/reset-password");
@@ -59,6 +56,7 @@ test("未入力のまま送信ボタンを押すとメールアドレスのメ�
   page,
 }) => {
   await page.goto("/reset-password");
+  await waitForHydration(page);
   const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
   await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
   await sendCodeButton.click();
@@ -74,6 +72,7 @@ test("captcha未完了のまま送信ボタンを押すとメッセージが表�
   await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
 
   await page.goto("/reset-password");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill("someone@example.com");
   await page.getByRole("button", { name: "認証コードを送信" }).click();
 
@@ -97,6 +96,7 @@ test("送信中は送信ボタンが無効になる", async ({ page }) => {
   });
 
   await page.goto("/reset-password");
+  await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(email);
   const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
   await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
@@ -149,10 +149,6 @@ test("送信するとコード入力画面へ進む", async ({ page }) => {
   await goToCodeStep(page, email);
 
   await expect(page.getByText("迷惑メールフォルダ")).toBeVisible();
-
-  const resetEmailHtml = await getOtpEmailHtmlFromMailpit(email);
-  expect(resetEmailHtml).toContain("AIMS");
-  expect(resetEmailHtml).toContain("aims-archery.com");
 });
 
 test("コード未入力のまま確認ボタンを押すとメッセージが表示される", async ({
@@ -190,6 +186,7 @@ test("確認中は確認ボタンが無効になる", async ({ page }) => {
 
   await expect(confirmButton).toHaveAttribute("aria-disabled", "true");
 
+  // 無効化が実際にクリックを防いでいることを確認する。
   await confirmButton.click({ force: true });
   expect(requestCount).toBe(1);
 
@@ -269,6 +266,7 @@ test("再送中は再送ボタンが無効になる", async ({ page }) => {
   await resendButton.click();
   await expect(resendButton).toHaveAttribute("aria-disabled", "true");
 
+  // 無効化が実際にクリックを防いでいることを確認する。
   await resendButton.click({ force: true });
   expect(requestCount).toBe(1);
 

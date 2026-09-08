@@ -25,15 +25,6 @@ import {
   validateResendReady,
 } from "./validate";
 
-const SignInLink = () => (
-  <p className="text-muted-foreground text-sm">
-    既にアカウントをお持ちの方は{" "}
-    <Link href="/signin" className="underline">
-      サインイン
-    </Link>
-  </p>
-);
-
 export function SignUpForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -44,15 +35,18 @@ export function SignUpForm() {
   const [emailFieldErrors, setEmailFieldErrors] = useState<
     SignUpEmailFieldErrors & { captcha?: string }
   >({});
-  const [passwordFieldErrors, setPasswordFieldErrors] =
-    useState<SignUpPasswordFieldErrors>({});
   const [codeFieldErrors, setCodeFieldErrors] = useState<SignUpCodeFieldErrors>(
     {},
   );
+  const [passwordFieldErrors, setPasswordFieldErrors] =
+    useState<SignUpPasswordFieldErrors>({});
   const [resendCooldown, setResendCooldown] = useState(0);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(undefined);
   const mountedRef = useRef(true);
+  // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
+  // 挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseの
+  // クロージャのまま実行されてしまうため、stateだけでは防げない。
   const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const hydrated = useHydrated();
@@ -69,6 +63,8 @@ export function SignUpForm() {
   }, [resendCooldown]);
 
   useEffect(() => {
+    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
+    // 対応するため、マウント時にも明示的にtrueへ戻す。
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -104,6 +100,9 @@ export function SignUpForm() {
       options: { captchaToken },
     });
 
+    // mountedRefの確認より前にturnstileRefへ触れない。送信中に別リンクへ
+    // 移動してアンマウントされていた場合、破棄済みのウィジェットへの
+    // reset()呼び出しを避ける。
     if (!mountedRef.current) return;
 
     consumeCaptchaToken();
@@ -152,9 +151,6 @@ export function SignUpForm() {
         options: { captchaToken },
       });
 
-      // mountedRefの確認より前にturnstileRefへ触れない。送信中に別リンクへ
-      // 移動してアンマウントされていた場合、破棄済みのウィジェットへの
-      // reset()呼び出しを避ける。
       if (!mountedRef.current) return;
 
       consumeCaptchaToken();
@@ -236,7 +232,6 @@ export function SignUpForm() {
       const supabase = createClient();
       const { error } = await supabase.auth.updateUser({ password });
 
-      // 送信中にアンマウントされていた場合、遅れて届いた結果では何もしない。
       if (!mountedRef.current) return;
 
       if (error) {
@@ -429,7 +424,12 @@ export function SignUpForm() {
         </Button>
       </form>
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
-      <SignInLink />
+      <p className="text-muted-foreground text-sm">
+        既にアカウントをお持ちの方は{" "}
+        <Link href="/signin" className="underline">
+          サインイン
+        </Link>
+      </p>
     </AuthCard>
   );
 }

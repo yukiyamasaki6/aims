@@ -15,29 +15,6 @@ export function validateEmailField(email: string): SignUpEmailFieldErrors {
   return {};
 }
 
-export type SignUpPasswordFieldErrors = {
-  password?: string;
-};
-
-export function validatePasswordField(
-  password: string,
-): SignUpPasswordFieldErrors {
-  if (!password) {
-    return { password: "パスワードを入力してください。" };
-  }
-  if (
-    password.length < 8 ||
-    !/[a-zA-Z]/.test(password) ||
-    !/[0-9]/.test(password)
-  ) {
-    return {
-      password: "パスワードは8文字以上で、英字と数字の両方を含めてください。",
-    };
-  }
-
-  return {};
-}
-
 export type SignUpCodeFieldErrors = {
   code?: string;
   resend?: string;
@@ -62,6 +39,29 @@ export function validateResendReady(
   }
   if (!captchaToken) {
     return { resend: "セキュリティチェックが完了していません。" };
+  }
+
+  return {};
+}
+
+export type SignUpPasswordFieldErrors = {
+  password?: string;
+};
+
+export function validatePasswordField(
+  password: string,
+): SignUpPasswordFieldErrors {
+  if (!password) {
+    return { password: "パスワードを入力してください。" };
+  }
+  if (
+    password.length < 8 ||
+    !/[a-zA-Z]/.test(password) ||
+    !/[0-9]/.test(password)
+  ) {
+    return {
+      password: "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+    };
   }
 
   return {};

@@ -48,6 +48,9 @@ export function ResetPasswordForm() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(undefined);
   const mountedRef = useRef(true);
+  // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
+  // 挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseの
+  // クロージャのまま実行されてしまうため、stateだけでは防げない。
   const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const hydrated = useHydrated();
@@ -64,6 +67,8 @@ export function ResetPasswordForm() {
   }, [resendCooldown]);
 
   useEffect(() => {
+    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
+    // 対応するため、マウント時にも明示的にtrueへ戻す。
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -98,6 +103,9 @@ export function ResetPasswordForm() {
       captchaToken,
     });
 
+    // mountedRefの確認より前にturnstileRefへ触れない。送信中に別リンクへ
+    // 移動してアンマウントされていた場合、破棄済みのウィジェットへの
+    // reset()呼び出しを避ける。
     if (!mountedRef.current) return;
 
     consumeCaptchaToken();
