@@ -92,8 +92,9 @@ export function SignUpForm() {
     setError(null);
 
     if (await isEmailRegistered(email)) {
+      // このチェックはcaptchaTokenを使わないため、まだ消費されていない
+      // トークンをここでリセットする必要はない（次の送信でそのまま使える）。
       setError("このメールアドレスは既に登録されています。");
-      consumeCaptchaToken();
       return;
     }
 
