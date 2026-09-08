@@ -1,6 +1,10 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
-import { createConfirmedUser, waitForHydration } from "./helpers/auth";
+import {
+  createConfirmedUser,
+  SHARED_AUTH_STATE_PATH,
+  waitForHydration,
+} from "./helpers/auth";
 import {
   getOtpCodeFromMailpit,
   getOtpEmailHtmlFromMailpit,
@@ -37,6 +41,18 @@ test("未認証で/reset-passwordにアクセスするとメールアドレス�
   await expect(
     page.getByRole("heading", { name: "パスワードを再設定" }),
   ).toBeVisible();
+});
+
+test.describe(() => {
+  test.use({ storageState: SHARED_AUTH_STATE_PATH });
+
+  test("認証済みで/reset-passwordにアクセスすると/roundsにリダイレクトされる", async ({
+    page,
+  }) => {
+    await page.goto("/reset-password");
+
+    await expect(page).toHaveURL(/\/rounds/);
+  });
 });
 
 test("送信するとコード入力画面へ進む", async ({ page }) => {
