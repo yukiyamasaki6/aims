@@ -12,6 +12,13 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
 };
 
 export function translateAuthErrorMessage(error: AuthError): string {
+  // ネットワーク断・DNS失敗等はGoTrueクライアント側でAuthRetryableFetchErrorに
+  // 分類され、error.codeが付かないままerror.message（ブラウザの生の"Failed to
+  // fetch"等）が返ってくるため、AUTH_ERROR_MESSAGESより先にnameで判定する。
+  if (error.name === "AuthRetryableFetchError") {
+    return "通信エラーが発生しました。しばらくしてから再度お試しください。";
+  }
+
   if (error.code && error.code in AUTH_ERROR_MESSAGES) {
     return AUTH_ERROR_MESSAGES[error.code];
   }

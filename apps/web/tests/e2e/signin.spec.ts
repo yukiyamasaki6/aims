@@ -52,17 +52,10 @@ test("captcha未完了のままサインインボタンを押すとメッセー�
   ).toBeVisible();
 });
 
-test("セキュリティ確認完了後に再試行すると未完了メッセージが消える", async ({
+test("別の入力エラーで再試行するとエラーメッセージが正しく切り替わる", async ({
   page,
 }) => {
-  let releaseChallenge: () => void = () => {};
-  const challengeGate = new Promise<void>((resolve) => {
-    releaseChallenge = resolve;
-  });
-  await page.route("**/challenges.cloudflare.com/**", async (route) => {
-    await challengeGate;
-    await route.continue();
-  });
+  await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
 
   await page.goto("/signin");
   await page.getByPlaceholder("you@example.com").fill("someone@example.com");
@@ -74,11 +67,6 @@ test("セキュリティ確認完了後に再試行すると未完了メッセ�
     page.getByText("セキュリティチェックが完了していません。"),
   ).toBeVisible();
 
-  releaseChallenge();
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
-
-  // captcha完了済みでも、再試行時に別のエラー（ここではパスワード未入力）が
-  // 見つかった場合に、古いcaptchaメッセージが残らず正しく切り替わることを確認する。
   await page.getByPlaceholder("パスワード").fill("");
   await signInButton.click();
 
@@ -97,7 +85,39 @@ test("サインアップリンクをクリックすると/signupへ遷移する"
   await expect(page).toHaveURL(/\/signup/);
 });
 
-test("パスワードを間違えると日本語のエラーが表示される", async ({ page }) => {
+test("送信中はサインインボタンが無効になる", async ({ page }) => {
+  const email = `submitting-${Date.now()}@aims.test`;
+  const password = "password1";
+  await createConfirmedUser({ email, password });
+
+  let requestCount = 0;
+  let releaseToken: () => void = () => {};
+  const tokenGate = new Promise<void>((resolve) => {
+    releaseToken = resolve;
+  });
+  await page.route("**/auth/v1/token*", async (route) => {
+    requestCount++;
+    await tokenGate;
+    await route.continue();
+  });
+
+  await page.goto("/signin");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByPlaceholder("パスワード").fill(password);
+  const signInButton = page.getByRole("button", { name: "サインイン" });
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await signInButton.click();
+
+  await expect(signInButton).toHaveAttribute("aria-disabled", "true");
+
+  await signInButton.click({ force: true });
+  expect(requestCount).toBe(1);
+
+  releaseToken();
+  await expect(page).toHaveURL(/\/rounds/);
+});
+
+test("パスワードを間違えるとエラーメッセージが表示される", async ({ page }) => {
   const email = `wrong-password-${Date.now()}@aims.test`;
 
   await page.goto("/signin");
@@ -110,6 +130,7 @@ test("パスワードを間違えると日本語のエラーが表示される",
   await expect(
     page.getByText("メールアドレスまたはパスワードが間違っています。"),
   ).toBeVisible();
+  await expect(signInButton).toHaveAttribute("aria-disabled", "false");
 });
 
 test("サインインすると/roundsへ遷移する", async ({ page }) => {

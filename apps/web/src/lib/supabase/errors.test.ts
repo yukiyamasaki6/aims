@@ -55,4 +55,14 @@ describe("translateAuthErrorMessage", () => {
     const error = { message: "original message" } as AuthError;
     expect(translateAuthErrorMessage(error)).toBe("original message");
   });
+
+  it("translates AuthRetryableFetchError regardless of message content", () => {
+    const error = {
+      name: "AuthRetryableFetchError",
+      message: "Failed to fetch",
+    } as AuthError;
+    expect(translateAuthErrorMessage(error)).toBe(
+      "通信エラーが発生しました。しばらくしてから再度お試しください。",
+    );
+  });
 });
