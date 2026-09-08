@@ -5,11 +5,6 @@ import {
   getOtpEmailHtmlFromMailpit,
 } from "./helpers/mailpit";
 
-// 実際のOTPサインアップ・サインインを検証するテストが集中しており、他ファイルの
-// ように共有セッションを使い回せない。並列実行によるSupabaseスタックへの負荷
-// 集中を避けるため、このファイル内のテストは直列実行する。
-test.describe.configure({ mode: "serial" });
-
 test("未認証で/roundsにアクセスすると/signinにリダイレクトされる", async ({
   page,
 }) => {
