@@ -103,7 +103,9 @@ test("認証コード送信後に未確認のまま再度アクセスしても�
   ).not.toBeVisible();
 });
 
-test("通信エラーが発生するとメッセージが表示される", async ({ page }) => {
+test("メール送信で通信エラーが発生するとメッセージが表示される", async ({
+  page,
+}) => {
   const email = `signup-network-error-${Date.now()}@aims.test`;
   await page.route("**/auth/v1/otp*", (route) => route.abort());
 
@@ -183,6 +185,59 @@ test("要件を満たさないパスワードで登録しようとするとエ�
   await expect(
     page.getByText(
       "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+    ),
+  ).toBeVisible();
+  await expect(page).not.toHaveURL(/\/rounds/);
+});
+
+test("送信中は登録ボタンが無効になる", async ({ page }) => {
+  const email = `signup-submitting-${Date.now()}@aims.test`;
+  const password = "password1";
+
+  let requestCount = 0;
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/auth/v1/user*", async (route) => {
+    requestCount++;
+    await requestGate;
+    await route.continue();
+  });
+
+  await goToPasswordStep(page, email);
+  await page
+    .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
+    .fill(password);
+  const submitButton = page.getByRole("button", { name: "登録してサインイン" });
+  await submitButton.click();
+
+  await expect(submitButton).toHaveAttribute("aria-disabled", "true");
+
+  // 無効化が実際にクリックを防いでいることを確認する。
+  await submitButton.click({ force: true });
+  expect(requestCount).toBe(1);
+
+  releaseRequest();
+  await expect(page).toHaveURL(/\/rounds/);
+});
+
+test("パスワード設定で通信エラーが発生するとメッセージが表示される", async ({
+  page,
+}) => {
+  const email = `signup-password-network-error-${Date.now()}@aims.test`;
+
+  await goToPasswordStep(page, email);
+  await page.route("**/auth/v1/user*", (route) => route.abort());
+
+  await page
+    .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
+    .fill("password1");
+  await page.getByRole("button", { name: "登録してサインイン" }).click();
+
+  await expect(
+    page.getByText(
+      "通信エラーが発生しました。しばらくしてから再度お試しください。",
     ),
   ).toBeVisible();
   await expect(page).not.toHaveURL(/\/rounds/);

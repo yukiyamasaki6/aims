@@ -1,19 +1,23 @@
 "use client";
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { AuthCard } from "@/components/auth-card";
 import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
-import {
-  isEmailRegistered,
-  setPassword as setPasswordAction,
-} from "@/lib/supabase/actions";
+import { isEmailRegistered } from "@/lib/supabase/actions";
 import { createClient } from "@/lib/supabase/client";
 import { translateAuthErrorMessage } from "@/lib/supabase/errors";
+import { cn } from "@/lib/utils";
+import {
+  type SignUpPasswordFieldErrors,
+  validatePasswordField,
+} from "./validate";
 
 const SignInLink = () => (
   <p className="text-muted-foreground text-sm">
@@ -25,14 +29,20 @@ const SignInLink = () => (
 );
 
 export function SignUpForm() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [step, setStep] = useState<"email" | "code" | "password">("email");
   const [error, setError] = useState<string | null>(null);
+  const [passwordFieldErrors, setPasswordFieldErrors] =
+    useState<SignUpPasswordFieldErrors>({});
   const [resendCooldown, setResendCooldown] = useState(0);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(undefined);
+  const mountedRef = useRef(true);
+  const submittingRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
 
   function consumeCaptchaToken() {
     turnstileRef.current?.reset();
@@ -44,6 +54,13 @@ export function SignUpForm() {
     const timer = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
     return () => clearTimeout(timer);
   }, [resendCooldown]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   function handleBack() {
     setStep("email");
@@ -115,12 +132,43 @@ export function SignUpForm() {
 
   async function handleSetPassword(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submittingRef.current) return;
     setError(null);
+    setPasswordFieldErrors({});
 
-    const result = await setPasswordAction(password);
+    const errors = validatePasswordField(password);
+    if (errors.password) {
+      setPasswordFieldErrors(errors);
+      return;
+    }
 
-    if (result?.error) {
-      setError(result.error);
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({ password });
+
+      // 送信中にアンマウントされていた場合、遅れて届いた結果では何もしない。
+      if (!mountedRef.current) return;
+
+      if (error) {
+        setError(translateAuthErrorMessage(error));
+        submittingRef.current = false;
+        setSubmitting(false);
+        return;
+      }
+
+      // 成功時はここでsubmittingを解除しない。router.push()は遷移先の取得中も
+      // このコンポーネントを保持し続けるため、ここで解除すると遷移完了前に
+      // ボタンが再度押せる状態に戻ってしまう。アンマウント時に自然に破棄される。
+      router.push("/rounds");
+    } catch {
+      if (!mountedRef.current) return;
+      setError(
+        "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      );
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   }
 
@@ -132,21 +180,42 @@ export function SignUpForm() {
       >
         <form
           onSubmit={handleSetPassword}
+          noValidate
           className="flex w-full flex-col gap-3"
         >
-          <PasswordInput
-            required
-            minLength={8}
-            placeholder="パスワード（8文字以上・英数字を含む）"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <Button type="submit">登録してサインイン</Button>
+          <div className="flex flex-col gap-1">
+            <PasswordInput
+              placeholder="パスワード（8文字以上・英数字を含む）"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              aria-invalid={Boolean(passwordFieldErrors.password)}
+              aria-describedby={
+                passwordFieldErrors.password
+                  ? "signup-password-error"
+                  : undefined
+              }
+            />
+            {passwordFieldErrors.password && (
+              <p
+                id="signup-password-error"
+                className="text-destructive text-sm"
+              >
+                {passwordFieldErrors.password}
+              </p>
+            )}
+          </div>
+          <Button
+            type="submit"
+            aria-disabled={submitting}
+            className={cn(submitting && "pointer-events-none opacity-50")}
+          >
+            {submitting && <Loader2 className="size-3.5 animate-spin" />}
+            登録してサインイン
+          </Button>
         </form>
         {error && (
           <p className="text-center text-destructive text-sm">{error}</p>
         )}
-        <SignInLink />
       </AuthCard>
     );
   }
