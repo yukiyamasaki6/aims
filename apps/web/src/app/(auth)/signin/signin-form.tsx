@@ -2,26 +2,38 @@
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import Link from "next/link";
-import { type FormEvent, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { AuthCard } from "@/components/auth-card";
 import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
-import { signIn } from "@/lib/supabase/actions";
+import { createClient } from "@/lib/supabase/client";
+import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 import { cn } from "@/lib/utils";
 import { type SignInFieldErrors, validateSignInFields } from "./validate";
 
 export function SignInForm() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<SignInFieldErrors>({});
   const turnstileRef = useRef<TurnstileInstance>(undefined);
+  const mountedRef = useRef(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submitting) return;
     setError(null);
     setFieldErrors({});
     const errors = validateSignInFields(email, password);
@@ -34,12 +46,35 @@ export function SignInForm() {
       return;
     }
 
-    const result = await signIn(email, password, captchaToken);
+    setSubmitting(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+        options: { captchaToken },
+      });
 
-    if (result?.error) {
-      setError(result.error);
+      if (error) {
+        setError(translateAuthErrorMessage(error));
+        turnstileRef.current?.reset();
+        setCaptchaToken(null);
+        return;
+      }
+
+      // 送信中に別リンク（PW再設定・サインアップ）へ移動してこのコンポーネントが
+      // アンマウントされていた場合、遅れて成功しても遷移を横取りしない。
+      if (mountedRef.current) {
+        router.push("/rounds");
+      }
+    } catch {
+      setError(
+        "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      );
       turnstileRef.current?.reset();
       setCaptchaToken(null);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -96,7 +131,12 @@ export function SignInForm() {
             <p className="text-destructive text-sm">{fieldErrors.captcha}</p>
           )}
         </div>
-        <Button type="submit" data-captcha-ready={captchaToken !== null}>
+        <Button
+          type="submit"
+          data-captcha-ready={captchaToken !== null}
+          aria-disabled={submitting}
+          className={cn(submitting && "pointer-events-none opacity-50")}
+        >
           サインイン
         </Button>
       </form>

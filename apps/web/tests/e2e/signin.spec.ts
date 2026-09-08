@@ -97,6 +97,33 @@ test("サインアップリンクをクリックすると/signupへ遷移する"
   await expect(page).toHaveURL(/\/signup/);
 });
 
+test("送信中はサインインボタンが無効になる", async ({ page }) => {
+  const email = `submitting-${Date.now()}@aims.test`;
+  const password = "password1";
+  await createConfirmedUser({ email, password });
+
+  let releaseToken: () => void = () => {};
+  const tokenGate = new Promise<void>((resolve) => {
+    releaseToken = resolve;
+  });
+  await page.route("**/auth/v1/token*", async (route) => {
+    await tokenGate;
+    await route.continue();
+  });
+
+  await page.goto("/signin");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByPlaceholder("パスワード").fill(password);
+  const signInButton = page.getByRole("button", { name: "サインイン" });
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await signInButton.click();
+
+  await expect(signInButton).toHaveAttribute("aria-disabled", "true");
+
+  releaseToken();
+  await expect(page).toHaveURL(/\/rounds/);
+});
+
 test("パスワードを間違えると日本語のエラーが表示される", async ({ page }) => {
   const email = `wrong-password-${Date.now()}@aims.test`;
 
@@ -110,6 +137,7 @@ test("パスワードを間違えると日本語のエラーが表示される",
   await expect(
     page.getByText("メールアドレスまたはパスワードが間違っています。"),
   ).toBeVisible();
+  await expect(signInButton).toHaveAttribute("aria-disabled", "false");
 });
 
 test("サインインすると/roundsへ遷移する", async ({ page }) => {
@@ -125,4 +153,28 @@ test("サインインすると/roundsへ遷移する", async ({ page }) => {
   await signInButton.click();
 
   await expect(page).toHaveURL(/\/rounds/);
+});
+
+test("サインアウト直後の連続再サインインでも/signinに戻されない", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+
+  const email = `rapid-signin-${Date.now()}@aims.test`;
+  const password = "password1";
+  await createConfirmedUser({ email, password });
+
+  const signInButton = page.getByRole("button", { name: "サインイン" });
+
+  for (let i = 0; i < 15; i++) {
+    await page.goto("/signin");
+    await page.getByPlaceholder("you@example.com").fill(email);
+    await page.getByPlaceholder("パスワード").fill(password);
+    await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+    await signInButton.click();
+    await expect(page).toHaveURL(/\/rounds/);
+
+    await page.getByRole("button", { name: "サインアウト" }).click();
+    await expect(page).toHaveURL("/");
+  }
 });

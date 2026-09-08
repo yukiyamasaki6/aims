@@ -13,33 +13,8 @@ export async function signOut() {
   redirect("/");
 }
 
-// クライアント側でsignInWithPassword実行後にwindow.location.assignしていた際、
-// ブラウザのSupabaseクライアントによるCookie書き込みがナビゲーションに間に
-// 合わず、直後のミドルウェアが未認証と判定して/signinに戻されることがあった
-// （signOut直後の再サインイン等、負荷が高い状況で顕在化）。サインインをServer
-// Action化することで、Cookieの書き込みとredirect()が同一サーバーレスポンス内で
-// 完結し、この競合が起きないようにする。
-export async function signIn(
-  email: string,
-  password: string,
-  captchaToken: string,
-): Promise<{ error: string } | undefined> {
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-    options: { captchaToken },
-  });
-
-  if (error) {
-    return { error: translateAuthErrorMessage(error) };
-  }
-
-  redirect("/rounds");
-}
-
-// サインアップ最終ステップ（パスワード設定）の直後のリダイレクトも、signIn同様の
-// Cookie書き込み競合を避けるためServer Action化する。updateUser自体は
+// サインアップ最終ステップ（パスワード設定）の直後のリダイレクトは、Cookie
+// 書き込み競合を避けるためServer Action化する。updateUser自体は
 // verifyOtpで既に確立済みのセッション（Cookie経由）に対して行われる。
 export async function setPassword(
   password: string,
