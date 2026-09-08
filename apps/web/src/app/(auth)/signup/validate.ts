@@ -1,3 +1,20 @@
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export type SignUpEmailFieldErrors = {
+  email?: string;
+};
+
+export function validateEmailField(email: string): SignUpEmailFieldErrors {
+  if (!email) {
+    return { email: "メールアドレスを入力してください。" };
+  }
+  if (!EMAIL_PATTERN.test(email)) {
+    return { email: "メールアドレスの形式が正しくありません。" };
+  }
+
+  return {};
+}
+
 export type SignUpPasswordFieldErrors = {
   password?: string;
 };

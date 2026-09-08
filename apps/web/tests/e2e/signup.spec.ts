@@ -10,7 +10,9 @@ test.describe.configure({ mode: "serial" });
 async function goToCodeStep(page: Page, email: string): Promise<void> {
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
+  const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
+  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await sendCodeButton.click();
   await expect(
     page.getByRole("heading", { name: "認証コードを入力" }),
   ).toBeVisible();
@@ -48,12 +50,79 @@ test.describe(() => {
   });
 });
 
+test("captcha未完了のまま認証コードを送信しようとするとメッセージが表示される", async ({
+  page,
+}) => {
+  await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill("someone@example.com");
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+
+  await expect(
+    page.getByText("セキュリティチェックが完了していません。"),
+  ).toBeVisible();
+});
+
+test("未入力のまま認証コードを送信しようとするとメールアドレスのメッセージが表示される", async ({
+  page,
+}) => {
+  await page.goto("/signup");
+  const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
+  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await sendCodeButton.click();
+
+  await expect(
+    page.getByText("メールアドレスを入力してください。"),
+  ).toBeVisible();
+});
+
 test("認証コードを送信すると認証コード入力画面へ進む", async ({ page }) => {
   const email = `signup-code-${Date.now()}@aims.test`;
 
   await goToCodeStep(page, email);
 
   await expect(page.getByText("迷惑メールフォルダ")).toBeVisible();
+});
+
+test("送信中は送信ボタンが無効になる", async ({ page }) => {
+  const email = `signup-email-submitting-${Date.now()}@aims.test`;
+
+  let requestCount = 0;
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  let resolveRequestStarted: () => void = () => {};
+  const requestStarted = new Promise<void>((resolve) => {
+    resolveRequestStarted = resolve;
+  });
+  await page.route("**/auth/v1/otp*", async (route) => {
+    requestCount++;
+    resolveRequestStarted();
+    await requestGate;
+    await route.continue();
+  });
+
+  await page.goto("/signup");
+  await page.getByPlaceholder("you@example.com").fill(email);
+  const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
+  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await sendCodeButton.click();
+
+  await expect(sendCodeButton).toHaveAttribute("aria-disabled", "true");
+  // isEmailRegistered()の非同期処理を挟むため、実際にotpリクエストが
+  // 発生するまで待ってから無効化の効果を検証する。
+  await requestStarted;
+
+  // 無効化が実際にクリックを防いでいることを確認する。
+  await sendCodeButton.click({ force: true });
+  expect(requestCount).toBe(1);
+
+  releaseRequest();
+  await expect(
+    page.getByRole("heading", { name: "認証コードを入力" }),
+  ).toBeVisible();
 });
 
 test("サインインリンクをクリックすると/signinへ遷移する", async ({ page }) => {
@@ -71,7 +140,9 @@ test("登録済みのメールアドレスで送信するとメッセージが�
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
+  const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
+  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await sendCodeButton.click();
 
   await expect(
     page.getByText("このメールアドレスは既に登録されています。"),
@@ -88,7 +159,14 @@ test("認証コード送信後に未確認のまま再度アクセスしても�
   // コードを未確認のまま画面を離れ、同じメールアドレスで再度送信する。
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
+  const resendSendCodeButton = page.getByRole("button", {
+    name: "認証コードを送信",
+  });
+  await expect(resendSendCodeButton).toHaveAttribute(
+    "data-captcha-ready",
+    "true",
+  );
+  await resendSendCodeButton.click();
 
   // max_frequencyのレート制限にかかる場合があるが、未確認の1回目送信を
   // 「既存登録」と誤判定しないことだけを確認する。どちらの結果になっても
@@ -111,7 +189,9 @@ test("メール送信で通信エラーが発生するとメッセージが表�
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
+  const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
+  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await sendCodeButton.click();
 
   await expect(
     page.getByText(

@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { validatePasswordField } from "./validate";
+import { validateEmailField, validatePasswordField } from "./validate";
+
+describe("validateEmailField", () => {
+  it("空の場合は入力を促すメッセージを返す", () => {
+    expect(validateEmailField("")).toEqual({
+      email: "メールアドレスを入力してください。",
+    });
+  });
+
+  it("形式が不正な場合はメッセージを返す", () => {
+    expect(validateEmailField("not-an-email")).toEqual({
+      email: "メールアドレスの形式が正しくありません。",
+    });
+  });
+
+  it("正しい形式の場合はエラーなし", () => {
+    expect(validateEmailField("you@example.com")).toEqual({});
+  });
+});
 
 describe("validatePasswordField", () => {
   it("空の場合は入力を促すメッセージを返す", () => {

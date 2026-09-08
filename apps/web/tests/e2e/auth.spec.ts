@@ -42,7 +42,9 @@ test("既存アカウントのメールアドレスでサインアップする�
 
   await page.goto("/signup");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.getByRole("button", { name: "認証コードを送信" }).click();
+  const sendCodeButton = page.getByRole("button", { name: "認証コードを送信" });
+  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await sendCodeButton.click();
 
   await expect(
     page.getByText("このメールアドレスは既に登録されています。"),
