@@ -1,19 +1,8 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { AuthCard } from "@/components/auth-card";
 import { buttonVariants } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/server";
 
-export default async function Home() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (user) {
-    redirect("/rounds");
-  }
-
+export default function Home() {
   return (
     <AuthCard
       title="AIMS"
