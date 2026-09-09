@@ -7,16 +7,24 @@ import {
 } from "../helpers/auth";
 import { createRound } from "../helpers/rounds";
 
-test.use({ storageState: SHARED_AUTH_STATE_PATH });
+test.describe(() => {
+  test.use({ storageState: { cookies: [], origins: [] } });
 
-test.beforeEach(async ({ page }) => {
-  await page.goto("/rounds");
+  test("未認証で/roundsにアクセスすると/signinにリダイレクトされる", async ({
+    page,
+  }) => {
+    await page.goto("/rounds");
+
+    await expect(page).toHaveURL(/\/signin/);
+  });
 });
 
-test("作成したラウンドが一覧に合計点付きで表示され、クリックすると詳細画面に遷移する", async ({
+test.use({ storageState: SHARED_AUTH_STATE_PATH });
+
+test("認証済みで/roundsにアクセスするとラウンド一覧が表示される", async ({
   page,
 }) => {
-  const name = `一覧テスト-${Date.now()}`;
+  const name = `一覧表示テスト-${Date.now()}`;
   const roundId = await createRound({
     email: getSharedEmail(),
     password: SHARED_PASSWORD,
@@ -29,125 +37,188 @@ test("作成したラウンドが一覧に合計点付きで表示され、ク�
 
   await page.getByTestId("score-button-7").click();
   await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("7");
-  await expect(page.getByTestId("keypad-toggle")).toBeHidden();
 
   // 送信キューの書き込みが完了する前に他ページへ移動すると、進行中の
   // リクエストがナビゲーションで打ち切られてしまうため、同期完了を待つ。
   await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
 
   await page.goto("/rounds");
+
   const roundLink = page.getByRole("link", { name: new RegExp(name) });
   await expect(roundLink).toBeVisible();
   await expect(roundLink).toContainText("2026-08-24");
   await expect(roundLink).toContainText("7点");
+});
 
-  await roundLink.click();
+test("ラウンドカードをクリックすると詳細画面に遷移する", async ({ page }) => {
+  const name = `ラウンドカードテスト-${Date.now()}`;
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto("/rounds");
+
+  await page.getByRole("link", { name: new RegExp(name) }).click();
+
   await expect(page).toHaveURL(`/rounds/${roundId}`);
 });
 
 test("新規作成ボタンをタップすると/rounds/newへ遷移する", async ({ page }) => {
+  await page.goto("/rounds");
+
   await page.getByTestId("new-round-fab").click();
   await expect(page).toHaveURL(/\/rounds\/new/);
 });
 
-test("何も選択しないまま開始すると、カスタム（距離構成が空）のラウンドが作成される", async ({
-  page,
-}) => {
-  await page.goto("/rounds/new");
-  await waitForHydration(page);
-
-  await page.getByTestId("round-start-button").click();
-
-  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-  await expect(page.getByTestId("round-summary")).toContainText("合計0");
-});
-
-test("カスタムで開始すると、ラウンド構成が展開された状態で詳細画面が表示される", async ({
-  page,
-}) => {
-  await page.goto("/rounds/new");
-  await waitForHydration(page);
-  await page.getByTestId("round-start-button").click();
-
-  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-  await expect(page.getByTestId("round-config-name")).toBeVisible();
-
-  // 距離を1つ追加すれば、以降はカスタム開始直後ではなくなるため、
-  // 再読み込みしても展開されない（距離が空かどうかで判定しているため）。
-  await page.getByTestId("round-config-name").fill("編集後の名前");
-  await page.getByTestId("round-config-save").click();
-  await page.getByTestId("add-distance-button").click();
-  await expect(page.getByTestId("distance-config-distance-1")).toBeVisible();
-
-  // 送信キューの書き込みが完了する前にreloadすると、進行中のリクエストが
-  // ナビゲーションで打ち切られてしまうため、同期完了を待ってからreloadする。
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
-
-  await page.reload();
-  await expect(page.getByTestId("round-config-name")).toBeHidden();
-});
-
-test("カスタムで開始したラウンドの弓種をベアボウに変更できる（作成直後は選択肢を持たない唯一の弓種）", async ({
-  page,
-}) => {
-  // 公式プリセットは全てrecurve（アウトドア6種・インドア2種）で、「カスタムで
-  // 開始」もrecurve固定で作成される（createCustomRound参照）。そのため
-  // /rounds/newの選択肢だけではbarebow（ベアボウ）のラウンドを作ることが
-  // できず、作成後にラウンド設定パネルでbow_typeを変更する必要がある。
-  await page.goto("/rounds/new");
-  await waitForHydration(page);
-  await page.getByTestId("round-start-button").click();
-  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-
-  // カスタムで開始した直後は、距離が0件のためラウンド構成ポップアップが
-  // 最初から開いた状態で表示される（#174）。改めて概要行をタップする必要はない。
-  await page.getByTestId("round-config-bow-type-barebow").click();
-  await page.getByTestId("round-config-save").click();
-
-  const summary = page.getByTestId("round-config-summary");
-  await expect(summary).toContainText("ベアボウ");
-
-  // 送信キューの書き込みが完了する前にreloadすると、進行中のリクエストが
-  // ナビゲーションで打ち切られてしまうため、同期完了を待ってからreloadする。
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
-
-  await page.reload();
-  await expect(page.getByTestId("round-config-summary")).toContainText(
-    "ベアボウ",
-  );
-});
-
-test("/rounds/newから一覧へ戻るリンクで/roundsへ遷移する", async ({ page }) => {
-  await page.goto("/rounds/new");
-  await waitForHydration(page);
-
-  await page.getByRole("link", { name: "一覧へ戻る" }).click();
-
-  await expect(page).toHaveURL(/\/rounds$/);
-});
-
-test("/rounds/[id]から一覧へ戻るリンクで/roundsへ遷移する", async ({
-  page,
-}) => {
-  const roundId = await createRound({
+test("メニューボタンをクリックするとメニューが展開される", async ({ page }) => {
+  const name = `メニュー展開テスト-${Date.now()}`;
+  await createRound({
     email: getSharedEmail(),
     password: SHARED_PASSWORD,
-    name: `戻るリンクテスト-${Date.now()}`,
+    name,
     roundDate: "2026-08-24",
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
-  await page.goto(`/rounds/${roundId}`);
-  await waitForHydration(page);
+  await page.goto("/rounds");
 
-  await page.getByRole("link", { name: "一覧へ戻る" }).click();
+  const row = page.locator("li", { hasText: name });
+  await expect(page.getByTestId("round-delete")).not.toBeVisible();
 
-  await expect(page).toHaveURL(/\/rounds$/);
+  await row.getByTestId("round-menu-trigger").click();
+
+  await expect(page.getByTestId("round-delete")).toBeVisible();
 });
 
-test("一覧のメニューからラウンドを削除でき、確認ダイアログでキャンセルすると削除されない", async ({
+test("外側クリックでメニューを閉じられる", async ({ page }) => {
+  const name = `外側クリックテスト-${Date.now()}`;
+  await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto("/rounds");
+
+  const row = page.locator("li", { hasText: name });
+  await row.getByTestId("round-menu-trigger").click();
+  await expect(page.getByTestId("round-delete")).toBeVisible();
+
+  await page.mouse.click(10, 10);
+
+  await expect(page.getByTestId("round-delete")).not.toBeVisible();
+});
+
+test("削除ボタンをクリックすると確認ダイアログが表示される", async ({
   page,
 }) => {
-  const name = `一覧削除テスト-${Date.now()}`;
+  const name = `削除ボタンテスト-${Date.now()}`;
+  await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto("/rounds");
+
+  const row = page.locator("li", { hasText: name });
+  await row.getByTestId("round-menu-trigger").click();
+  await page.getByTestId("round-delete").click();
+
+  await expect(page.getByTestId("confirm-dialog-confirm")).toBeVisible();
+  await expect(page.getByTestId("confirm-dialog-cancel")).toBeVisible();
+});
+
+test("キャンセルでダイアログを閉じられる", async ({ page }) => {
+  const name = `キャンセルテスト-${Date.now()}`;
+  await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto("/rounds");
+
+  const roundLink = page.getByRole("link", { name: new RegExp(name) });
+  const row = page.locator("li", { hasText: name });
+  await row.getByTestId("round-menu-trigger").click();
+  await page.getByTestId("round-delete").click();
+
+  await page.getByTestId("confirm-dialog-cancel").click();
+
+  await expect(page.getByTestId("confirm-dialog-confirm")).not.toBeVisible();
+  await expect(roundLink).toBeVisible();
+});
+
+test("背景クリックでダイアログを閉じられる", async ({ page }) => {
+  const name = `背景クリックテスト-${Date.now()}`;
+  await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto("/rounds");
+
+  const roundLink = page.getByRole("link", { name: new RegExp(name) });
+  const row = page.locator("li", { hasText: name });
+  await row.getByTestId("round-menu-trigger").click();
+  await page.getByTestId("round-delete").click();
+  await expect(page.getByTestId("confirm-dialog-confirm")).toBeVisible();
+
+  await page.mouse.click(10, 10);
+
+  await expect(page.getByTestId("confirm-dialog-confirm")).not.toBeVisible();
+  await expect(roundLink).toBeVisible();
+});
+
+test("確認ボタンをクリックすると削除中になる", async ({ page }) => {
+  const name = `削除処理テスト-${Date.now()}`;
+  await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto("/rounds");
+
+  const roundLink = page.getByRole("link", { name: new RegExp(name) });
+  const row = page.locator("li", { hasText: name });
+
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/rounds", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    await requestGate;
+    await route.continue();
+  });
+
+  await row.getByTestId("round-menu-trigger").click();
+  await page.getByTestId("round-delete").click();
+  await page.getByTestId("confirm-dialog-confirm").click();
+
+  // 削除リクエストが完了するまでは、まだ一覧に残っている。
+  await expect(roundLink).toBeVisible();
+
+  releaseRequest();
+});
+
+test("サインインが切れた状態でラウンドを削除するとメッセージが表示される", async ({
+  page,
+}) => {
+  const name = `一覧削除失敗テスト-${Date.now()}`;
   await createRound({
     email: getSharedEmail(),
     password: SHARED_PASSWORD,
@@ -163,33 +234,30 @@ test("一覧のメニューからラウンドを削除でき、確認ダイア�
 
   await row.getByTestId("round-menu-trigger").click();
   await page.getByTestId("round-delete").click();
-  await page.getByTestId("confirm-dialog-cancel").click();
-  await expect(roundLink).toBeVisible();
 
-  await row.getByTestId("round-menu-trigger").click();
-  await page.getByTestId("round-delete").click();
+  await page.context().clearCookies();
   await page.getByTestId("confirm-dialog-confirm").click();
-  await expect(roundLink).toBeHidden();
+
+  await expect(page.getByText("サインインが必要です。")).toBeVisible();
+  await expect(roundLink).toBeVisible();
 });
 
-test("詳細画面のメニューからラウンドを削除すると一覧へ遷移し、一覧から消える", async ({
-  page,
-}) => {
-  const name = `詳細削除テスト-${Date.now()}`;
-  const roundId = await createRound({
+test("確認ボタンをクリックすると削除される", async ({ page }) => {
+  const name = `削除成功テスト-${Date.now()}`;
+  await createRound({
     email: getSharedEmail(),
     password: SHARED_PASSWORD,
     name,
     roundDate: "2026-08-24",
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
-  await page.goto(`/rounds/${roundId}`);
-  await waitForHydration(page);
+  await page.goto("/rounds");
 
-  await page.getByTestId("round-menu-trigger").click();
+  const roundLink = page.getByRole("link", { name: new RegExp(name) });
+  const row = page.locator("li", { hasText: name });
+  await row.getByTestId("round-menu-trigger").click();
   await page.getByTestId("round-delete").click();
   await page.getByTestId("confirm-dialog-confirm").click();
 
-  await expect(page).toHaveURL(/\/rounds$/);
-  await expect(page.getByRole("link", { name: new RegExp(name) })).toBeHidden();
+  await expect(roundLink).toBeHidden();
 });

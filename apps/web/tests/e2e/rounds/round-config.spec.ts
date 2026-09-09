@@ -172,3 +172,31 @@ test("サインインが切れた状態でラウンド設定を保存すると�
   await page.getByTestId("sync-status").click();
   await expect(page.getByText("サインインが必要です。")).toBeVisible();
 });
+
+test("一覧へ戻るリンクで/roundsへ遷移する", async ({ page }) => {
+  await page.getByRole("link", { name: "一覧へ戻る" }).click();
+
+  await expect(page).toHaveURL(/\/rounds$/);
+});
+
+test("メニューからラウンドを削除すると一覧へ遷移し、一覧から消える", async ({
+  page,
+}) => {
+  const name = `詳細削除テスト-${Date.now()}`;
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  await page.getByTestId("round-menu-trigger").click();
+  await page.getByTestId("round-delete").click();
+  await page.getByTestId("confirm-dialog-confirm").click();
+
+  await expect(page).toHaveURL(/\/rounds$/);
+  await expect(page.getByRole("link", { name: new RegExp(name) })).toBeHidden();
+});
