@@ -54,6 +54,28 @@ test.describe(() => {
     ).not.toBeInViewport();
   });
 
+  test("モバイルでAIMSリンクをクリックすると/roundsへ遷移する", async ({
+    page,
+  }) => {
+    await page.goto("/rounds/new");
+    await page.getByRole("button", { name: "メニューを開く" }).click();
+
+    await page.getByRole("link", { name: "AIMS" }).click();
+
+    await expect(page).toHaveURL(/\/rounds$/);
+  });
+
+  test("モバイルで自分リンクをクリックすると/roundsへ遷移する", async ({
+    page,
+  }) => {
+    await page.goto("/rounds/new");
+    await page.getByRole("button", { name: "メニューを開く" }).click();
+
+    await page.getByRole("link", { name: "自分" }).click();
+
+    await expect(page).toHaveURL(/\/rounds$/);
+  });
+
   test("格納時は内容操作が無効になる", async ({ page }) => {
     await page.goto("/rounds");
     await page.getByRole("button", { name: "メニューを開く" }).click();
