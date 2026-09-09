@@ -202,32 +202,16 @@ export async function updateRoundConfig(input: {
 
   // Marked/Unmarkedはフィールドのみの概念のため、Unmarkedな距離（distanceが
   // 未入力のこともある）を残したまま他の種別に変更すると、距離が無いのに
-  // 「距離」として扱われる不整合な状態が生まれてしまう。先に各距離を
-  // Markedに戻してもらう。
-  if (input.format !== "field") {
-    const { count } = await supabase
-      .from("distances")
-      .select("id", { count: "exact", head: true })
-      .eq("round_id", input.roundId)
-      .eq("is_marked", false);
-
-    if ((count ?? 0) > 0) {
-      return {
-        error:
-          "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。",
-      };
-    }
-  }
-
-  const { error } = await supabase
-    .from("rounds")
-    .update({
-      name: input.name,
-      round_date: input.roundDate,
-      format: input.format,
-      bow_type: input.bowType,
-    })
-    .eq("id", input.roundId);
+  // 「距離」として扱われる不整合な状態が生まれてしまう。このチェックと
+  // rounds更新の間に別クライアントの書き込みが割り込まないよう、Postgres
+  // 関数（update_round_config）内で1つのトランザクションとして行う。
+  const { error } = await supabase.rpc("update_round_config", {
+    p_round_id: input.roundId,
+    p_name: input.name,
+    p_round_date: input.roundDate,
+    p_format: input.format,
+    p_bow_type: input.bowType,
+  });
 
   if (error) {
     return { error: error.message };
