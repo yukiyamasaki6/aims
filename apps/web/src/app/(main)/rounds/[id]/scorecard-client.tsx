@@ -14,6 +14,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -26,13 +27,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import {
-  addDistance,
-  deleteRound,
-  saveRoundAsPreset,
-  syncShots,
-} from "./actions";
+import { saveRoundAsPreset } from "./actions";
 import {
   DEFAULT_TARGET_FACE_ID,
   type DistanceConfig,
@@ -258,6 +255,106 @@ function generatePresetName(distances: Distance[]): string {
     .join("-");
 }
 
+async function addDistance(input: {
+  id: string;
+  roundId: string;
+  distanceNumber: number;
+  distance: number | null;
+  totalEnds: number;
+  arrowsPerEnd: number;
+  targetFaceId: string;
+  isMarked: boolean;
+}): Promise<{ error: string } | undefined> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "サインインが必要です。" };
+  }
+
+  // IDは楽観的UIのためクライアントで確定済みの値をそのまま使う
+  // （id列のdefault gen_random_uuid()は明示的な値があれば上書きされる）。
+  const { error } = await supabase.from("distances").insert({
+    id: input.id,
+    round_id: input.roundId,
+    distance_number: input.distanceNumber,
+    distance: input.distance,
+    total_ends: input.totalEnds,
+    arrows_per_end: input.arrowsPerEnd,
+    target_face_id: input.targetFaceId,
+    is_marked: input.isMarked,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+}
+
+// スコアの連打時に、記録・取り消しをそれぞれ1件ずつ送ると、通信本数分だけ
+// 同期完了までの体感速度が悪化する。そのため、1回の呼び出しで複数件の記録・
+// 取り消しをまとめて処理できるようにする（送信側の詰め方はuse-sync-queue.ts
+// 参照）。
+async function syncShots(input: {
+  upsert: {
+    distanceId: string;
+    endNumber: number;
+    arrowNumber: number;
+    scoreStr: string;
+    scoreInt: number;
+  }[];
+  clear: { distanceId: string; endNumber: number; arrowNumber: number }[];
+}): Promise<{ error: string } | undefined> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "サインインが必要です。" };
+  }
+
+  if (input.upsert.length > 0) {
+    const { error } = await supabase.from("shots").upsert(
+      input.upsert.map((s) => ({
+        distance_id: s.distanceId,
+        end_number: s.endNumber,
+        arrow_number: s.arrowNumber,
+        user_id: user.id,
+        score_str: s.scoreStr,
+        score_int: s.scoreInt,
+      })),
+      { onConflict: "distance_id,user_id,end_number,arrow_number" },
+    );
+
+    if (error) {
+      return { error: error.message };
+    }
+  }
+
+  if (input.clear.length > 0) {
+    const filter = input.clear
+      .map(
+        (c) =>
+          `and(distance_id.eq.${c.distanceId},end_number.eq.${c.endNumber},arrow_number.eq.${c.arrowNumber})`,
+      )
+      .join(",");
+
+    const { error } = await supabase
+      .from("shots")
+      .delete()
+      .eq("user_id", user.id)
+      .or(filter);
+
+    if (error) {
+      return { error: error.message };
+    }
+  }
+}
+
 export function ScorecardClient({
   roundId,
   initialRoundConfig,
@@ -271,6 +368,7 @@ export function ScorecardClient({
   initialShots: Shot[];
   targetFaces: TargetFaceOption[];
 }) {
+  const router = useRouter();
   const [roundConfig, setRoundConfig] =
     useState<RoundConfig>(initialRoundConfig);
   const [distances, setDistances] = useState<Distance[]>(initialDistances);
@@ -278,6 +376,16 @@ export function ScorecardClient({
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
   const sync = useSyncQueue();
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
+    // 対応するため、マウント時にも明示的にtrueへ戻す。
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const [syncErrorsOpen, setSyncErrorsOpen] = useState(false);
   const [presetDialogOpen, setPresetDialogOpen] = useState(false);
   const [presetName, setPresetName] = useState("");
@@ -522,12 +630,38 @@ export function ScorecardClient({
   }
 
   async function handleDeleteRound() {
-    const result = await deleteRound({ roundId });
-    if (result?.error) {
-      setDeleteRoundError(result.error);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!mountedRef.current) return;
+
+      if (!user) {
+        setDeleteRoundError("サインインが必要です。");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("rounds")
+        .delete()
+        .eq("id", roundId);
+
+      if (!mountedRef.current) return;
+
+      if (error) {
+        setDeleteRoundError(error.message);
+        return;
+      }
+
+      router.push("/rounds");
+    } catch {
+      if (!mountedRef.current) return;
+      setDeleteRoundError(
+        "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      );
     }
-    // 成功時はdeleteRound内のredirect()がNEXT_REDIRECT例外をthrowして
-    // 遷移するため、ここでの状態更新は不要。
   }
 
   function handleDistanceDeleted(distanceId: string) {

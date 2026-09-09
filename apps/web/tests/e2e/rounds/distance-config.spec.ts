@@ -486,3 +486,31 @@ test("サインインが切れた状態で距離を保存すると、同期失�
   await page.getByTestId("sync-status").click();
   await expect(page.getByText("サインインが必要です。")).toBeVisible();
 });
+
+test("サインインが切れた状態で距離を追加すると、同期失敗として表示される", async ({
+  page,
+}) => {
+  await page.context().clearCookies();
+  await page.getByTestId("add-distance-button").click();
+  // 追加直後は編集パネル（ダイアログ）が展開済みで背後の要素を覆うため、
+  // sync-statusを操作する前に閉じる。
+  await page.keyboard.press("Escape");
+
+  await expect(page.getByTestId("sync-status")).toHaveText("同期失敗");
+  await page.getByTestId("sync-status").click();
+  await expect(page.getByText("サインインが必要です。")).toBeVisible();
+});
+
+test("サインインが切れた状態で距離を削除すると、同期失敗として表示される", async ({
+  page,
+}) => {
+  await page.getByTestId("add-distance-button").click();
+  await expect(page.getByTestId("distance-config-delete-2")).toBeVisible();
+
+  await page.context().clearCookies();
+  await page.getByTestId("distance-config-delete-2").click();
+
+  await expect(page.getByTestId("sync-status")).toHaveText("同期失敗");
+  await page.getByTestId("sync-status").click();
+  await expect(page.getByText("サインインが必要です。")).toBeVisible();
+});
