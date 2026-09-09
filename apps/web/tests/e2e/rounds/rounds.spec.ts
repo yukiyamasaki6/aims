@@ -196,8 +196,8 @@ test("確認ボタンをクリックすると削除中になる", async ({ page 
   const requestGate = new Promise<void>((resolve) => {
     releaseRequest = resolve;
   });
-  await page.route("**/rounds", async (route) => {
-    if (route.request().method() !== "POST") {
+  await page.route("**/rest/v1/rounds*", async (route) => {
+    if (route.request().method() !== "DELETE") {
       await route.continue();
       return;
     }

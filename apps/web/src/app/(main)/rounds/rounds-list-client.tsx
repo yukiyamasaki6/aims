@@ -2,7 +2,7 @@
 
 import { MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { deleteRound } from "./actions";
+import { createClient } from "@/lib/supabase/client";
 
 export type RoundListItem = {
   id: string;
@@ -29,15 +29,49 @@ export function RoundsListClient({
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
+    // 対応するため、マウント時にも明示的にtrueへ戻す。
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   async function performDelete(round: RoundListItem) {
-    const result = await deleteRound(round.id);
-    if (result?.error) {
-      setError(result.error);
-      return;
-    }
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    setRounds((prev) => prev.filter((r) => r.id !== round.id));
+      if (!user) {
+        if (!mountedRef.current) return;
+        setError("サインインが必要です。");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("rounds")
+        .delete()
+        .eq("id", round.id);
+
+      if (!mountedRef.current) return;
+
+      if (error) {
+        setError(error.message);
+        return;
+      }
+
+      setRounds((prev) => prev.filter((r) => r.id !== round.id));
+    } catch {
+      if (!mountedRef.current) return;
+      setError(
+        "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      );
+    }
   }
 
   return (
