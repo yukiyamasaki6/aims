@@ -12,7 +12,6 @@ import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { updateDistance } from "./actions";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
 import type { EnqueueInput } from "./use-sync-queue";
 
@@ -33,6 +32,45 @@ async function deleteDistance(input: {
     .from("distances")
     .delete()
     .eq("id", input.distanceId);
+
+  if (error) {
+    return { error: error.message };
+  }
+}
+
+async function updateDistance(input: {
+  distanceId: string;
+  distance: number | null;
+  totalEnds: number;
+  arrowsPerEnd: number;
+  targetFaceId: string;
+  isMarked: boolean;
+}): Promise<{ error: string } | undefined> {
+  if (input.isMarked && input.distance === null) {
+    return { error: "Markedの場合は距離（m）を入力してください。" };
+  }
+
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "サインインが必要です。" };
+  }
+
+  // shotsの有無チェックと、その結果に応じて更新対象列を変えるdistancesの
+  // 更新の間に別クライアントが矢を記録しないよう、Postgres関数
+  // （update_distance）内で1つのトランザクションとして行う。
+  const { error } = await supabase.rpc("update_distance", {
+    p_distance_id: input.distanceId,
+    p_distance: input.distance,
+    p_total_ends: input.totalEnds,
+    p_arrows_per_end: input.arrowsPerEnd,
+    p_target_face_id: input.targetFaceId,
+    p_is_marked: input.isMarked,
+  });
 
   if (error) {
     return { error: error.message };

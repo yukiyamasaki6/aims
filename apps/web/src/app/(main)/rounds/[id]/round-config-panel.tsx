@@ -5,10 +5,45 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { updateRoundConfig } from "./actions";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
 import type { EnqueueInput } from "./use-sync-queue";
+
+async function updateRoundConfig(input: {
+  roundId: string;
+  name: string;
+  roundDate: string;
+  format: string;
+  bowType: string;
+}): Promise<{ error: string } | undefined> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "サインインが必要です。" };
+  }
+
+  // Marked/Unmarkedはフィールドのみの概念のため、Unmarkedな距離（distanceが
+  // 未入力のこともある）を残したまま他の種別に変更すると、距離が無いのに
+  // 「距離」として扱われる不整合な状態が生まれてしまう。このチェックと
+  // rounds更新の間に別クライアントの書き込みが割り込まないよう、Postgres
+  // 関数（update_round_config）内で1つのトランザクションとして行う。
+  const { error } = await supabase.rpc("update_round_config", {
+    p_round_id: input.roundId,
+    p_name: input.name,
+    p_round_date: input.roundDate,
+    p_format: input.format,
+    p_bow_type: input.bowType,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+}
 
 function RequiredMark() {
   return (
