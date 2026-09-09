@@ -37,15 +37,32 @@ export async function updateSession(request: NextRequest) {
   // レスポンス形式と一致せず「An unexpected response was received from the
   // server.」という分かりにくいエラーになる。未サインイン時の扱いは各
   // Server Action自身のガード（"サインインが必要です。"）に任せる。
+  const isServerAction = request.headers.has("next-action");
+
   if (
     !user &&
     request.nextUrl.pathname.startsWith("/rounds") &&
-    !request.headers.has("next-action")
+    !isServerAction
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/signin";
     return NextResponse.redirect(url);
   }
 
+  // /・/signin・/signup・/reset-passwordは未サインイン専用の入り口で、
+  // 認証済みなら/roundsへ戻す（"/"だけは未サインイン時にリダイレクトせず
+  // 紹介画面を表示するため、この一方向のみ扱う）。
+  if (
+    user &&
+    AUTH_ONLY_PATHS.includes(request.nextUrl.pathname) &&
+    !isServerAction
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/rounds";
+    return NextResponse.redirect(url);
+  }
+
   return supabaseResponse;
 }
+
+const AUTH_ONLY_PATHS = ["/", "/signin", "/signup", "/reset-password"];
