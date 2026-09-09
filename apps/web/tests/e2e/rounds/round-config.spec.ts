@@ -128,6 +128,58 @@ test("Unmarkedな距離が残ったままフィールド以外の種別に変更
   );
 });
 
+test("距離をMarkedに修正した直後に種別を変更しても、直前の修正の反映を待ってから判定される", async ({
+  page,
+}) => {
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "種別変更競合テスト",
+    roundDate: "2026-08-24",
+    format: "field",
+    bowType: "recurve",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  // まずUnmarkedへ変更する（種別変更を拒否させるための下準備）。
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-unmarked-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("");
+  await page.getByTestId("distance-config-save-1").click();
+  await expect(page.getByTestId("distance-summary-1")).toContainText(
+    "Unmarked",
+  );
+
+  // ここから、距離の更新リクエストを意図的に遅延させ、直後の種別変更が
+  // その反映を待たずに（サーバー側の距離状態を見て）誤って失敗しないかを
+  // 検証する。
+  let releaseDistanceUpdate: () => void = () => {};
+  const distanceUpdateGate = new Promise<void>((resolve) => {
+    releaseDistanceUpdate = resolve;
+  });
+  await page.route("**/rest/v1/rpc/update_distance", async (route) => {
+    await distanceUpdateGate;
+    await route.continue();
+  });
+
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-marked-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("18");
+  await page.getByTestId("distance-config-save-1").click();
+
+  await page.getByTestId("round-config-summary").click();
+  await page.getByTestId("round-config-format-outdoor").click();
+  await page.getByTestId("round-config-save").click();
+
+  releaseDistanceUpdate();
+
+  await expect(page.getByTestId("round-config-summary")).toContainText(
+    "アウトドア",
+  );
+});
+
 test("ラウンド名・実施日・種別・弓種を編集して保存すると反映され、再読み込み後も保持される", async ({
   page,
 }) => {
