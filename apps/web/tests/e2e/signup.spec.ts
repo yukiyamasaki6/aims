@@ -5,6 +5,7 @@ import {
   SHARED_AUTH_STATE_PATH,
   waitForHydration,
 } from "./helpers/auth";
+import { fastForwardResendCooldown } from "./helpers/clock";
 import { getOtpCodeFromMailpit } from "./helpers/mailpit";
 
 async function goToCodeStep(page: Page, email: string): Promise<void> {
@@ -276,8 +277,8 @@ test("クールダウン中に再送ボタンを押すとメッセージが表�
 test("captcha未完了のまま再送ボタンを押すとメッセージが表示される", async ({
   page,
 }) => {
-  test.setTimeout(90_000);
   const email = `signup-resend-captcha-${Date.now()}@aims.test`;
+  await page.clock.install();
 
   // 1回目（メール入力ステップ）のTurnstileウィジェットは通常通り成功させ、
   // 2回目（コード入力ステップの再送用ウィジェット）だけ検証を完了させない。
@@ -290,7 +291,8 @@ test("captcha未完了のまま再送ボタンを押すとメッセージが表�
   await goToCodeStep(page, email);
 
   const resendButton = page.getByRole("button", { name: /^再送/ });
-  await expect(resendButton).toHaveText("再送", { timeout: 70_000 });
+  await fastForwardResendCooldown(page);
+  await expect(resendButton).toHaveText("再送");
   await resendButton.click();
 
   await expect(
@@ -299,14 +301,15 @@ test("captcha未完了のまま再送ボタンを押すとメッセージが表�
 });
 
 test("再送中は再送ボタンが無効になる", async ({ page }) => {
-  test.setTimeout(90_000);
   const email = `signup-resend-submitting-${Date.now()}@aims.test`;
+  await page.clock.install();
 
   await goToCodeStep(page, email);
 
   const resendButton = page.getByRole("button", { name: /^再送/ });
-  await expect(resendButton).toHaveText("再送", { timeout: 70_000 });
   await expect(resendButton).toHaveAttribute("data-captcha-ready", "true");
+  await fastForwardResendCooldown(page);
+  await expect(resendButton).toHaveText("再送");
 
   let requestCount = 0;
   let releaseRequest: () => void = () => {};
@@ -360,14 +363,15 @@ test("確認するとパスワード設定画面へ進む", async ({ page }) => 
 });
 
 test("再送で通信エラーが発生するとメッセージが表示される", async ({ page }) => {
-  test.setTimeout(90_000);
   const email = `signup-resend-network-error-${Date.now()}@aims.test`;
+  await page.clock.install();
 
   await goToCodeStep(page, email);
 
   const resendButton = page.getByRole("button", { name: /^再送/ });
-  await expect(resendButton).toHaveText("再送", { timeout: 70_000 });
   await expect(resendButton).toHaveAttribute("data-captcha-ready", "true");
+  await fastForwardResendCooldown(page);
+  await expect(resendButton).toHaveText("再送");
 
   await page.route("**/auth/v1/otp*", (route) => route.abort());
   await resendButton.click();
@@ -380,17 +384,20 @@ test("再送で通信エラーが発生するとメッセージが表示され�
 });
 
 test("再送ボタンで認証コードを再送できる", async ({ page }) => {
-  test.setTimeout(90_000);
   const email = `signup-resend-${Date.now()}@aims.test`;
+  await page.clock.install();
 
   await goToCodeStep(page, email);
   const firstCode = await getOtpCodeFromMailpit(email);
 
   const resendButton = page.getByRole("button", { name: /^再送/ });
-  // クールダウン（60秒）が明けて、かつ再送ボタン用のTurnstileウィジェットの
-  // 検証が完了するまで待つ。
-  await expect(resendButton).toHaveText("再送", { timeout: 70_000 });
   await expect(resendButton).toHaveAttribute("data-captcha-ready", "true");
+  await fastForwardResendCooldown(page);
+  await expect(resendButton).toHaveText("再送");
+  // クールダウンはクロックで即座に消化しているが、サーバー側のメール送信
+  // レート制限（ローカル/CI用に短縮済み）は実時間で判定されるため、
+  // 最初の送信から確実にその時間が経過するよう実待機を挟む。
+  await page.waitForTimeout(1_200);
   await resendButton.click();
 
   let latestCode = firstCode;

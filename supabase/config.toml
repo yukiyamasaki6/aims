@@ -228,7 +228,7 @@ enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
-max_frequency = "60s"
+max_frequency = "1s"
 # Number of characters used in the email OTP.
 otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
@@ -438,6 +438,9 @@ project_id = "lsqbiaosjkcwntewjhzv"
 site_url = "https://aims-archery.com"
 additional_redirect_urls = ["https://aims-archery.com/**"]
 
+[remotes.production.auth.email]
+max_frequency = "60s"
+
 [remotes.production.storage]
 enabled = true
 
@@ -446,6 +449,9 @@ enabled = true
 
 [remotes.preview]
 project_id = "ywrkmawovwceedzzhgwk"
+
+[remotes.preview.auth.email]
+max_frequency = "60s"
 
 [remotes.preview.auth]
 site_url = "https://aims-archery.com"
