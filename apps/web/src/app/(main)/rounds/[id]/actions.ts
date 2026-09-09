@@ -63,33 +63,17 @@ export async function updateDistance(input: {
     return { error: "サインインが必要です。" };
   }
 
-  const { count } = await supabase
-    .from("shots")
-    .select("id", { count: "exact", head: true })
-    .eq("distance_id", input.distanceId);
-
-  // shotsが1件でも存在する距離は、総エンド数・エンドあたりの本数に加えて
-  // 的（target_face_id）も変更させない。的の種類が変わると点数の意味も
-  // 変わってしまい、既に記録済みのshotsと整合しなくなるため
-  // （UI側でも読み取り専用にしているが、サーバー側でも防御的に無視する）。
-  // distance・is_markedは点数構成に関係しないメタ情報なので、shots有無に
-  // かかわらず常に変更できる。
-  const hasShots = (count ?? 0) > 0;
-
-  const { error } = await supabase
-    .from("distances")
-    .update(
-      hasShots
-        ? { distance: input.distance, is_marked: input.isMarked }
-        : {
-            distance: input.distance,
-            total_ends: input.totalEnds,
-            arrows_per_end: input.arrowsPerEnd,
-            target_face_id: input.targetFaceId,
-            is_marked: input.isMarked,
-          },
-    )
-    .eq("id", input.distanceId);
+  // shotsの有無チェックと、その結果に応じて更新対象列を変えるdistancesの
+  // 更新の間に別クライアントが矢を記録しないよう、Postgres関数
+  // （update_distance）内で1つのトランザクションとして行う。
+  const { error } = await supabase.rpc("update_distance", {
+    p_distance_id: input.distanceId,
+    p_distance: input.distance,
+    p_total_ends: input.totalEnds,
+    p_arrows_per_end: input.arrowsPerEnd,
+    p_target_face_id: input.targetFaceId,
+    p_is_marked: input.isMarked,
+  });
 
   if (error) {
     return { error: error.message };
