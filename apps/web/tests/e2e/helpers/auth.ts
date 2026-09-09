@@ -39,7 +39,7 @@ export function getSharedEmail(): string {
   return readFileSync(SHARED_EMAIL_PATH, "utf-8");
 }
 
-// サインアップ自体（OTPメール確認）の検証はauth.spec.ts/reset-password.spec.tsが
+// サインアップ自体（OTPメール確認）の検証はsignup.spec.ts/reset-password.spec.tsが
 // 担うため、それ以外のテストでは管理APIで確認済みユーザーを直接作成し、Mailpitへの
 // OTPポーリングを経由しない。
 export async function createConfirmedUser(input: {

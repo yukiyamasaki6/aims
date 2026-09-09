@@ -75,6 +75,82 @@ test.describe(() => {
     await expect(startButton).toHaveText("プリセット無しで開始");
     await expect(presetCard.locator('[role="img"]')).toHaveCount(0);
   });
+
+  test("何も選択しないまま開始すると、カスタム（距離構成が空）のラウンドが作成される", async ({
+    page,
+  }) => {
+    await page.goto("/rounds/new");
+    await waitForHydration(page);
+
+    await page.getByTestId("round-start-button").click();
+
+    await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+    await expect(page.getByTestId("round-summary")).toContainText("合計0");
+  });
+
+  test("カスタムで開始すると、ラウンド構成が展開された状態で詳細画面が表示される", async ({
+    page,
+  }) => {
+    await page.goto("/rounds/new");
+    await waitForHydration(page);
+    await page.getByTestId("round-start-button").click();
+
+    await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+    await expect(page.getByTestId("round-config-name")).toBeVisible();
+
+    // 距離を1つ追加すれば、以降はカスタム開始直後ではなくなるため、
+    // 再読み込みしても展開されない（距離が空かどうかで判定しているため）。
+    await page.getByTestId("round-config-name").fill("編集後の名前");
+    await page.getByTestId("round-config-save").click();
+    await page.getByTestId("add-distance-button").click();
+    await expect(page.getByTestId("distance-config-distance-1")).toBeVisible();
+
+    // 送信キューの書き込みが完了する前にreloadすると、進行中のリクエストが
+    // ナビゲーションで打ち切られてしまうため、同期完了を待ってからreloadする。
+    await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+
+    await page.reload();
+    await expect(page.getByTestId("round-config-name")).toBeHidden();
+  });
+
+  test("カスタムで開始したラウンドの弓種をベアボウに変更できる（作成直後は選択肢を持たない唯一の弓種）", async ({
+    page,
+  }) => {
+    // 公式プリセットは全てrecurve（アウトドア6種・インドア2種）で、「カスタムで
+    // 開始」もrecurve固定で作成される（createCustomRound参照）。そのため
+    // /rounds/newの選択肢だけではbarebow（ベアボウ）のラウンドを作ることが
+    // できず、作成後にラウンド設定パネルでbow_typeを変更する必要がある。
+    await page.goto("/rounds/new");
+    await waitForHydration(page);
+    await page.getByTestId("round-start-button").click();
+    await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+
+    // カスタムで開始した直後は、距離が0件のためラウンド構成ポップアップが
+    // 最初から開いた状態で表示される（#174）。改めて概要行をタップする必要はない。
+    await page.getByTestId("round-config-bow-type-barebow").click();
+    await page.getByTestId("round-config-save").click();
+
+    const summary = page.getByTestId("round-config-summary");
+    await expect(summary).toContainText("ベアボウ");
+
+    // 送信キューの書き込みが完了する前にreloadすると、進行中のリクエストが
+    // ナビゲーションで打ち切られてしまうため、同期完了を待ってからreloadする。
+    await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+
+    await page.reload();
+    await expect(page.getByTestId("round-config-summary")).toContainText(
+      "ベアボウ",
+    );
+  });
+
+  test("一覧へ戻るリンクで/roundsへ遷移する", async ({ page }) => {
+    await page.goto("/rounds/new");
+    await waitForHydration(page);
+
+    await page.getByRole("link", { name: "一覧へ戻る" }).click();
+
+    await expect(page).toHaveURL(/\/rounds$/);
+  });
 });
 
 // 「個人プリセットが0件である」という不在を検証するため、他のテストが作成した
