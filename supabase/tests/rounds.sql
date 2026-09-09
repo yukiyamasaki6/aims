@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(72);
+select plan(79);
 
 -- ============================================================
 -- RLS: editor / 非メンバー
@@ -698,6 +698,80 @@ select results_eq(
   $$select name from public.rounds where id = '$$ || :'update_config_round_id' || $$'$$,
   $$values ('Outdoor Renamed'::text)$$,
   'viewerの呼び出しではラウンド名が変更されない'
+);
+
+-- ============================================================
+-- update_distance RPC: shots件数チェックとトランザクション
+-- ============================================================
+-- shotsの有無チェックと、その結果に応じて更新対象列を変えるdistancesの
+-- 更新を1つの関数呼び出しにまとめることで、この2つのSupabase呼び出しの
+-- 間に別クライアントが矢を記録する競合状態を防ぐ。
+
+reset role;
+
+insert into auth.users (id) values ('70000000-0000-0000-0000-000000000001'); -- editor
+insert into auth.users (id) values ('70000000-0000-0000-0000-000000000002'); -- viewer
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '70000000-0000-0000-0000-000000000001', true);
+
+select create_round(
+  'Update Distance Round', current_date, 'outdoor', 'recurve',
+  '[{"distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
+) as update_distance_round_id \gset
+
+select id as update_distance_id from public.distances
+  where round_id = :'update_distance_round_id' \gset
+
+reset role;
+insert into public.round_users (round_id, user_id, role)
+values (:'update_distance_round_id', '70000000-0000-0000-0000-000000000002', 'viewer');
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '70000000-0000-0000-0000-000000000001', true);
+
+select has_function(
+  'public', 'update_distance', array['uuid','bigint','bigint','bigint','uuid','boolean'],
+  'update_distance関数が存在する'
+);
+
+select lives_ok(
+  $$select update_distance('$$ || :'update_distance_id' || $$', 50, 3, 3, 'a1000000-0000-0000-0000-000000000002', false)$$,
+  'shotsが無い距離は全列を更新できる'
+);
+
+select results_eq(
+  $$select distance, total_ends, arrows_per_end, target_face_id, is_marked
+    from public.distances where id = '$$ || :'update_distance_id' || $$'$$,
+  $$values (50::bigint, 3::bigint, 3::bigint, 'a1000000-0000-0000-0000-000000000002'::uuid, false)$$,
+  'shotsが無い距離は全列の更新内容が反映される'
+);
+
+insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)
+values (:'update_distance_id', 1, 1, '70000000-0000-0000-0000-000000000001', 'X', 10);
+
+select lives_ok(
+  $$select update_distance('$$ || :'update_distance_id' || $$', 55, 6, 6, 'a1000000-0000-0000-0000-000000000001', true)$$,
+  'shotsが存在する距離への更新も例外にはならない（対象外の列は無視される）'
+);
+
+select results_eq(
+  $$select distance, total_ends, arrows_per_end, target_face_id, is_marked
+    from public.distances where id = '$$ || :'update_distance_id' || $$'$$,
+  $$values (55::bigint, 3::bigint, 3::bigint, 'a1000000-0000-0000-0000-000000000002'::uuid, true)$$,
+  'shotsが存在する距離はdistance/is_markedのみ更新され、総エンド数・エンドあたりの本数・的は変更されない'
+);
+
+select set_config('request.jwt.claim.sub', '70000000-0000-0000-0000-000000000002', true);
+
+select lives_ok(
+  $$select update_distance('$$ || :'update_distance_id' || $$', 90, 12, 12, 'a1000000-0000-0000-0000-000000000001', false)$$,
+  'viewerが呼び出しても例外にはならない（RLSにより対象行が0件になる）'
+);
+
+select results_eq(
+  $$select distance, is_marked from public.distances where id = '$$ || :'update_distance_id' || $$'$$,
+  $$values (55::bigint, true)$$,
+  'viewerの呼び出しでは距離の内容が変更されない'
 );
 
 select * from finish();

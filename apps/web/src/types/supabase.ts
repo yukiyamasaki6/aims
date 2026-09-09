@@ -468,6 +468,17 @@ export type Database = {
         Args: { p_name: string; p_round_id: string };
         Returns: string;
       };
+      update_distance: {
+        Args: {
+          p_arrows_per_end: number;
+          p_distance: number;
+          p_distance_id: string;
+          p_is_marked: boolean;
+          p_target_face_id: string;
+          p_total_ends: number;
+        };
+        Returns: undefined;
+      };
       update_round_config: {
         Args: {
           p_bow_type: string;
