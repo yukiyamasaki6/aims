@@ -232,64 +232,16 @@ export async function saveRoundAsPreset(input: {
     return { error: "サインインが必要です。" };
   }
 
-  const { data: round, error: roundError } = await supabase
-    .from("rounds")
-    .select("format, bow_type")
-    .eq("id", input.roundId)
-    .single();
+  // ラウンド取得・距離取得・プリセット作成・距離複製を、Postgres関数
+  // （save_round_as_preset）内で1つのトランザクションとして行う。距離の
+  // insertが失敗しても、距離を持たない空のプリセットが残ることはない。
+  const { error } = await supabase.rpc("save_round_as_preset", {
+    p_round_id: input.roundId,
+    p_name: input.name,
+  });
 
-  if (roundError || !round) {
-    return { error: roundError?.message ?? "ラウンドの取得に失敗しました。" };
-  }
-
-  const { data: distances, error: distancesError } = await supabase
-    .from("distances")
-    .select(
-      "distance_number, distance, total_ends, arrows_per_end, target_face_id, is_marked",
-    )
-    .eq("round_id", input.roundId)
-    .order("distance_number");
-
-  if (distancesError) {
-    return { error: distancesError.message };
-  }
-
-  const { data: preset, error: presetError } = await supabase
-    .from("round_presets")
-    .insert({
-      owner_id: user.id,
-      name: input.name,
-      format: round.format,
-      bow_type: round.bow_type,
-    })
-    .select("id")
-    .single();
-
-  if (presetError || !preset) {
-    return {
-      error: presetError?.message ?? "プリセットの保存に失敗しました。",
-    };
-  }
-
-  const { error: presetDistancesError } = await supabase
-    .from("round_preset_distances")
-    .insert(
-      (distances ?? []).map((d) => ({
-        preset_id: preset.id,
-        distance_number: d.distance_number,
-        distance: d.distance,
-        total_ends: d.total_ends,
-        arrows_per_end: d.arrows_per_end,
-        target_face_id: d.target_face_id,
-        is_marked: d.is_marked,
-      })),
-    );
-
-  if (presetDistancesError) {
-    // 距離の登録に失敗した場合、距離を持たない空のプリセットだけが
-    // 残らないよう削除する。
-    await supabase.from("round_presets").delete().eq("id", preset.id);
-    return { error: presetDistancesError.message };
+  if (error) {
+    return { error: error.message };
   }
 }
 

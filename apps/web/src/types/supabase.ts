@@ -464,6 +464,10 @@ export type Database = {
       };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
+      save_round_as_preset: {
+        Args: { p_name: string; p_round_id: string };
+        Returns: string;
+      };
       update_round_config: {
         Args: {
           p_bow_type: string;
