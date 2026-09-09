@@ -427,11 +427,3 @@ stateDiagram-v2
 
 対応事項（実装済みだが削除・修正が必要）:
 - `signOut()`（Server Action内の`supabase.auth.signOut()`＋`redirect()`）を、`/signin`の`signIn()`と同じ理由で通常のクライアント側`fetch()`＋`router.push()`に置き換える。ただしこの画面でそのレースコンディションが実際に確認されたわけではなく、`/signin`と同じ構造を持つことによる予防的な統一。対応要否は`/signin`での知見を踏まえて判断する
-
-## `/rounds` ラウンド一覧
-
-（未着手）
-
-## `/rounds/new` ラウンド新規作成
-
-（未着手）
