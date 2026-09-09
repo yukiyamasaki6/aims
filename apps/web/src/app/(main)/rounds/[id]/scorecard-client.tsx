@@ -29,7 +29,6 @@ import { Input } from "@/components/ui/input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { saveRoundAsPreset } from "./actions";
 import {
   DEFAULT_TARGET_FACE_ID,
   type DistanceConfig,
@@ -352,6 +351,33 @@ async function syncShots(input: {
     if (error) {
       return { error: error.message };
     }
+  }
+}
+
+async function saveRoundAsPreset(input: {
+  roundId: string;
+  name: string;
+}): Promise<{ error: string } | undefined> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "サインインが必要です。" };
+  }
+
+  // ラウンド取得・距離取得・プリセット作成・距離複製を、Postgres関数
+  // （save_round_as_preset）内で1つのトランザクションとして行う。距離の
+  // insertが失敗しても、距離を持たない空のプリセットが残ることはない。
+  const { error } = await supabase.rpc("save_round_as_preset", {
+    p_round_id: input.roundId,
+    p_name: input.name,
+  });
+
+  if (error) {
+    return { error: error.message };
   }
 }
 
