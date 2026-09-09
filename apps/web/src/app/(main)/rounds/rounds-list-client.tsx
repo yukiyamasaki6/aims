@@ -3,7 +3,7 @@
 import { MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +28,6 @@ export function RoundsListClient({
   const [roundToDelete, setRoundToDelete] = useState<RoundListItem | null>(
     null,
   );
-  const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -40,17 +39,19 @@ export function RoundsListClient({
     };
   }, []);
 
-  async function performDelete(round: RoundListItem) {
+  async function performDelete(
+    round: RoundListItem,
+  ): Promise<{ error: string } | undefined> {
     try {
       const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
+      if (!mountedRef.current) return;
+
       if (!user) {
-        if (!mountedRef.current) return;
-        setError("サインインが必要です。");
-        return;
+        return { error: "サインインが必要です。" };
       }
 
       const { error } = await supabase
@@ -61,23 +62,20 @@ export function RoundsListClient({
       if (!mountedRef.current) return;
 
       if (error) {
-        setError(error.message);
-        return;
+        return { error: error.message };
       }
 
       setRounds((prev) => prev.filter((r) => r.id !== round.id));
     } catch {
       if (!mountedRef.current) return;
-      setError(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      return {
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      };
     }
   }
 
   return (
     <>
-      {error && <p className="text-destructive text-sm">{error}</p>}
-
       {rounds.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           まだラウンドがありません。
@@ -130,14 +128,15 @@ export function RoundsListClient({
         <Plus className="size-6" />
       </Link>
 
-      <ConfirmDialog
+      <BlockingConfirmDialog
         open={roundToDelete !== null}
         onOpenChange={(open) => {
           if (!open) setRoundToDelete(null);
         }}
         description={`「${roundToDelete?.name}」を削除しますか？記録したスコアもすべて失われます。`}
-        onConfirm={() => {
-          if (roundToDelete) performDelete(roundToDelete);
+        onConfirm={async () => {
+          if (!roundToDelete) return;
+          return performDelete(roundToDelete);
         }}
       />
     </>

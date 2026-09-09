@@ -178,7 +178,7 @@ test("背景クリックでダイアログを閉じられる", async ({ page }) 
   await expect(roundLink).toBeVisible();
 });
 
-test("確認ボタンをクリックすると削除中になる", async ({ page }) => {
+test("送信中は確認ボタンが無効になる", async ({ page }) => {
   const name = `削除処理テスト-${Date.now()}`;
   await createRound({
     email: getSharedEmail(),
@@ -189,7 +189,92 @@ test("確認ボタンをクリックすると削除中になる", async ({ page 
   });
   await page.goto("/rounds");
 
-  const roundLink = page.getByRole("link", { name: new RegExp(name) });
+  const row = page.locator("li", { hasText: name });
+
+  let requestCount = 0;
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/rest/v1/rounds*", async (route) => {
+    if (route.request().method() !== "DELETE") {
+      await route.continue();
+      return;
+    }
+    requestCount++;
+    await requestGate;
+    await route.continue();
+  });
+
+  await row.getByTestId("round-menu-trigger").click();
+  await page.getByTestId("round-delete").click();
+  const confirmButton = page.getByTestId("confirm-dialog-confirm");
+  await confirmButton.click();
+
+  await expect(confirmButton).toHaveAttribute("aria-disabled", "true");
+
+  // getUser()の解決を挟むため、削除リクエスト自体が実際に送信される
+  // （ゲートに到達する）までのラグがある。
+  await expect.poll(() => requestCount).toBe(1);
+
+  // 無効化が実際にクリックを防いでいることを確認する。
+  await confirmButton.click({ force: true });
+  expect(requestCount).toBe(1);
+
+  releaseRequest();
+});
+
+test("送信中はキャンセルが無効になる", async ({ page }) => {
+  const name = `キャンセル無効テスト-${Date.now()}`;
+  await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto("/rounds");
+
+  const row = page.locator("li", { hasText: name });
+
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/rest/v1/rounds*", async (route) => {
+    if (route.request().method() !== "DELETE") {
+      await route.continue();
+      return;
+    }
+    await requestGate;
+    await route.continue();
+  });
+
+  await row.getByTestId("round-menu-trigger").click();
+  await page.getByTestId("round-delete").click();
+  await page.getByTestId("confirm-dialog-confirm").click();
+  const cancelButton = page.getByTestId("confirm-dialog-cancel");
+
+  await expect(cancelButton).toHaveAttribute("aria-disabled", "true");
+
+  // 無効化が実際にクリックを防いでいることを確認する。
+  await cancelButton.click({ force: true });
+  await expect(page.getByTestId("confirm-dialog-confirm")).toBeVisible();
+
+  releaseRequest();
+});
+
+test("送信中は背景クリックでダイアログを閉じられない", async ({ page }) => {
+  const name = `背景クリック無効テスト-${Date.now()}`;
+  await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+  });
+  await page.goto("/rounds");
+
   const row = page.locator("li", { hasText: name });
 
   let releaseRequest: () => void = () => {};
@@ -209,8 +294,9 @@ test("確認ボタンをクリックすると削除中になる", async ({ page 
   await page.getByTestId("round-delete").click();
   await page.getByTestId("confirm-dialog-confirm").click();
 
-  // 削除リクエストが完了するまでは、まだ一覧に残っている。
-  await expect(roundLink).toBeVisible();
+  await page.mouse.click(10, 10);
+
+  await expect(page.getByTestId("confirm-dialog-confirm")).toBeVisible();
 
   releaseRequest();
 });
@@ -239,6 +325,9 @@ test("サインインが切れた状態でラウンドを削除するとメッ�
   await page.getByTestId("confirm-dialog-confirm").click();
 
   await expect(page.getByText("サインインが必要です。")).toBeVisible();
+
+  // ダイアログを閉じれば、一覧にはまだ残っている。
+  await page.getByTestId("confirm-dialog-cancel").click();
   await expect(roundLink).toBeVisible();
 });
 
