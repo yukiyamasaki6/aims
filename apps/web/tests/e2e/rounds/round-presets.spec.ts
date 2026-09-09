@@ -400,6 +400,64 @@ test("個人プリセットを削除でき、確認ダイアログでキャン�
   await expect(page.getByTestId("personal-preset-placeholder")).toBeVisible();
 });
 
+test("サインインが切れた状態でプリセットを削除するとメッセージが表示される", async ({
+  page,
+}) => {
+  const email = `delete-preset-signed-out-${Date.now()}@aims.test`;
+  const password = "password-delete-preset-signed-out";
+  await signUpAndSignIn(page, { email, password });
+
+  const roundId = await createRound({
+    email,
+    password,
+    name: "削除失敗テスト用ラウンド",
+    roundDate: "2026-08-24",
+    format: "outdoor",
+    bowType: "recurve",
+    distances: [{ distance: 30, totalEnds: 3, arrowsPerEnd: 6 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  await page.getByTestId("save-as-preset-trigger").click();
+  await page.getByTestId("save-as-preset-name").fill("削除失敗対象プリセット");
+  await page.getByTestId("save-as-preset-confirm").click();
+  await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
+
+  await page.goto("/rounds/new");
+  await waitForHydration(page);
+  const presetRow = page
+    .getByTestId("round-preset-button")
+    .filter({ hasText: "削除失敗対象プリセット" })
+    .locator("..");
+
+  await presetRow.getByTestId("round-preset-menu-trigger").click();
+  await page.getByTestId("round-preset-delete").click();
+
+  await page.context().clearCookies();
+  await page.getByTestId("confirm-dialog-confirm").click();
+
+  await expect(page.getByText("サインインが必要です。")).toBeVisible();
+  await expect(presetRow).toBeVisible();
+});
+
+test("サインインが切れた状態で開始するとメッセージが表示される", async ({
+  page,
+}) => {
+  const email = `start-signed-out-${Date.now()}@aims.test`;
+  const password = "password-start-signed-out";
+  await signUpAndSignIn(page, { email, password });
+
+  await page.goto("/rounds/new");
+  await waitForHydration(page);
+
+  await page.context().clearCookies();
+  await page.getByTestId("round-start-button").click();
+
+  await expect(page.getByText("サインインが必要です。")).toBeVisible();
+  await expect(page).toHaveURL(/\/rounds\/new/);
+});
+
 test("公式プリセットにはメニューが表示されない", async ({ page }) => {
   const email = `delete-preset-global-${Date.now()}@aims.test`;
   const password = "password-delete-preset-global";
