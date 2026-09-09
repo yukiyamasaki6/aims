@@ -265,3 +265,37 @@ test("サインインが切れた状態でラウンドを削除するとメッ�
   await expect(page.getByText("サインインが必要です。")).toBeVisible();
   await expect(page).not.toHaveURL(/\/rounds$/);
 });
+
+test("削除リクエストの送信中は確認ボタンが無効になる", async ({ page }) => {
+  let requestCount = 0;
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/rest/v1/rounds*", async (route) => {
+    if (route.request().method() !== "DELETE") {
+      await route.continue();
+      return;
+    }
+    requestCount++;
+    await requestGate;
+    await route.continue();
+  });
+
+  await page.getByTestId("round-menu-trigger").click();
+  await page.getByTestId("round-delete").click();
+  const confirmButton = page.getByTestId("confirm-dialog-confirm");
+  await confirmButton.click();
+
+  await expect(confirmButton).toHaveAttribute("aria-disabled", "true");
+
+  // getUser()の解決を挟むため、削除リクエスト自体が実際に送信される
+  // （ゲートに到達する）までのラグがある。
+  await expect.poll(() => requestCount).toBe(1);
+
+  // 無効化が実際にクリックを防いでいることを確認する。
+  await confirmButton.click({ force: true });
+  expect(requestCount).toBe(1);
+
+  releaseRequest();
+});

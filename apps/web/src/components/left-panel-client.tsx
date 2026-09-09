@@ -1,11 +1,11 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Loader2, Menu, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 import { cn } from "@/lib/utils";
@@ -15,13 +15,7 @@ export function LeftPanelClient({ isSignedIn }: { isSignedIn: boolean }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(true);
   const [signOutDialogOpen, setSignOutDialogOpen] = useState(false);
-  const [signOutError, setSignOutError] = useState<string | null>(null);
   const mountedRef = useRef(true);
-  // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
-  // 挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseの
-  // クロージャのまま実行されてしまうため、stateだけでは防げない。
-  const submittingRef = useRef(false);
-  const [signOutSubmitting, setSignOutSubmitting] = useState(false);
 
   useEffect(() => {
     // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
@@ -32,11 +26,7 @@ export function LeftPanelClient({ isSignedIn }: { isSignedIn: boolean }) {
     };
   }, []);
 
-  async function handleSignOut() {
-    if (submittingRef.current) return;
-    submittingRef.current = true;
-    setSignOutSubmitting(true);
-    setSignOutError(null);
+  async function handleSignOut(): Promise<{ error: string } | undefined> {
     try {
       const supabase = createClient();
       // scope未指定だとデフォルトでglobal（そのユーザーの全デバイス・
@@ -47,23 +37,15 @@ export function LeftPanelClient({ isSignedIn }: { isSignedIn: boolean }) {
       if (!mountedRef.current) return;
 
       if (error) {
-        setSignOutError(translateAuthErrorMessage(error));
-        submittingRef.current = false;
-        setSignOutSubmitting(false);
-        return;
+        return { error: translateAuthErrorMessage(error) };
       }
 
-      // 成功時はここでsubmittingを解除しない。router.push()は遷移先の取得中も
-      // このコンポーネントを保持し続けるため、ここで解除すると遷移完了前に
-      // ボタンが再度押せる状態に戻ってしまう。アンマウント時に自然に破棄される。
       router.push("/");
     } catch {
       if (!mountedRef.current) return;
-      setSignOutError(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
-      submittingRef.current = false;
-      setSignOutSubmitting(false);
+      return {
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      };
     }
   }
 
@@ -159,54 +141,13 @@ export function LeftPanelClient({ isSignedIn }: { isSignedIn: boolean }) {
         )}
       </aside>
 
-      <Dialog
+      <BlockingConfirmDialog
         open={signOutDialogOpen}
-        onOpenChange={(open) => {
-          // 送信中は背景クリック・Escでは閉じさせない。
-          if (!open && submittingRef.current) return;
-          setSignOutDialogOpen(open);
-          if (!open) setSignOutError(null);
-        }}
-      >
-        <DialogContent>
-          <div className="flex flex-col gap-4">
-            <p className="text-sm">サインアウトしますか？</p>
-            {signOutError && (
-              <p className="text-destructive text-sm">{signOutError}</p>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                aria-disabled={signOutSubmitting}
-                className={cn(
-                  signOutSubmitting && "pointer-events-none opacity-50",
-                )}
-                onClick={() => {
-                  if (submittingRef.current) return;
-                  setSignOutDialogOpen(false);
-                }}
-              >
-                キャンセル
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                aria-disabled={signOutSubmitting}
-                className={cn(
-                  signOutSubmitting && "pointer-events-none opacity-50",
-                )}
-                onClick={handleSignOut}
-              >
-                {signOutSubmitting && (
-                  <Loader2 className="size-3.5 animate-spin" />
-                )}
-                サインアウトする
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setSignOutDialogOpen}
+        description="サインアウトしますか？"
+        confirmLabel="サインアウトする"
+        onConfirm={handleSignOut}
+      />
     </>
   );
 }

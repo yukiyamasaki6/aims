@@ -17,7 +17,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -418,7 +418,6 @@ export function ScorecardClient({
   const [presetSubmitting, setPresetSubmitting] = useState(false);
   const [presetError, setPresetError] = useState<string | null>(null);
   const [deleteRoundConfirmOpen, setDeleteRoundConfirmOpen] = useState(false);
-  const [deleteRoundError, setDeleteRoundError] = useState<string | null>(null);
   const hydrated = useHydrated();
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
     new Set(),
@@ -660,7 +659,7 @@ export function ScorecardClient({
     setPresetName("");
   }
 
-  async function handleDeleteRound() {
+  async function handleDeleteRound(): Promise<{ error: string } | undefined> {
     try {
       const supabase = createClient();
       const {
@@ -670,8 +669,7 @@ export function ScorecardClient({
       if (!mountedRef.current) return;
 
       if (!user) {
-        setDeleteRoundError("サインインが必要です。");
-        return;
+        return { error: "サインインが必要です。" };
       }
 
       const { error } = await supabase
@@ -682,16 +680,15 @@ export function ScorecardClient({
       if (!mountedRef.current) return;
 
       if (error) {
-        setDeleteRoundError(error.message);
-        return;
+        return { error: error.message };
       }
 
       router.push("/rounds");
     } catch {
       if (!mountedRef.current) return;
-      setDeleteRoundError(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      return {
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      };
     }
   }
 
@@ -1108,10 +1105,7 @@ export function ScorecardClient({
               </DropdownMenu>
             </div>
           </div>
-          {deleteRoundError && (
-            <p className="text-destructive text-sm">{deleteRoundError}</p>
-          )}
-          <ConfirmDialog
+          <BlockingConfirmDialog
             open={deleteRoundConfirmOpen}
             onOpenChange={setDeleteRoundConfirmOpen}
             description="このラウンドを削除しますか？記録したスコアもすべて失われます。"

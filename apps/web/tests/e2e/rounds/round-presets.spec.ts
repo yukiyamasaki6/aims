@@ -496,6 +496,70 @@ test("サインインが切れた状態でプリセットを削除するとメ�
   await expect(presetRow).toBeVisible();
 });
 
+test("削除リクエストの送信中は確認ボタンが無効になる", async ({ page }) => {
+  const email = `delete-preset-submitting-${Date.now()}@aims.test`;
+  const password = "password-delete-preset-submitting";
+  await signUpAndSignIn(page, { email, password });
+
+  const roundId = await createRound({
+    email,
+    password,
+    name: "削除送信中テスト用ラウンド",
+    roundDate: "2026-08-24",
+    format: "outdoor",
+    bowType: "recurve",
+    distances: [{ distance: 30, totalEnds: 3, arrowsPerEnd: 6 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  await page.getByTestId("save-as-preset-trigger").click();
+  await page
+    .getByTestId("save-as-preset-name")
+    .fill("削除送信中対象プリセット");
+  await page.getByTestId("save-as-preset-confirm").click();
+  await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
+
+  await page.goto("/rounds/new");
+  await waitForHydration(page);
+  const presetRow = page
+    .getByTestId("round-preset-button")
+    .filter({ hasText: "削除送信中対象プリセット" })
+    .locator("..");
+
+  let requestCount = 0;
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/rest/v1/round_presets*", async (route) => {
+    if (route.request().method() !== "DELETE") {
+      await route.continue();
+      return;
+    }
+    requestCount++;
+    await requestGate;
+    await route.continue();
+  });
+
+  await presetRow.getByTestId("round-preset-menu-trigger").click();
+  await page.getByTestId("round-preset-delete").click();
+  const confirmButton = page.getByTestId("confirm-dialog-confirm");
+  await confirmButton.click();
+
+  await expect(confirmButton).toHaveAttribute("aria-disabled", "true");
+
+  // getUser()の解決を挟むため、削除リクエスト自体が実際に送信される
+  // （ゲートに到達する）までのラグがある。
+  await expect.poll(() => requestCount).toBe(1);
+
+  // 無効化が実際にクリックを防いでいることを確認する。
+  await confirmButton.click({ force: true });
+  expect(requestCount).toBe(1);
+
+  releaseRequest();
+});
+
 test("サインインが切れた状態で開始するとメッセージが表示される", async ({
   page,
 }) => {

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { TargetFaceRing } from "@/components/target-face-icon";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -156,7 +156,9 @@ export function RoundPresetSelect({
     setSelectedId((prev) => (prev === id ? null : id));
   }
 
-  async function performDeletePreset(preset: Preset) {
+  async function performDeletePreset(
+    preset: Preset,
+  ): Promise<{ error: string } | undefined> {
     try {
       const supabase = createClient();
       const {
@@ -166,8 +168,7 @@ export function RoundPresetSelect({
       if (!mountedRef.current) return;
 
       if (!user) {
-        setError("サインインが必要です。");
-        return;
+        return { error: "サインインが必要です。" };
       }
 
       const { error } = await supabase
@@ -178,17 +179,16 @@ export function RoundPresetSelect({
       if (!mountedRef.current) return;
 
       if (error) {
-        setError(error.message);
-        return;
+        return { error: error.message };
       }
 
       setPersonalPresets((prev) => prev.filter((p) => p.id !== preset.id));
       setSelectedId((prev) => (prev === preset.id ? null : prev));
     } catch {
       if (!mountedRef.current) return;
-      setError(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      return {
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      };
     }
   }
 
@@ -360,14 +360,15 @@ export function RoundPresetSelect({
         </div>
       </div>
 
-      <ConfirmDialog
+      <BlockingConfirmDialog
         open={presetToDelete !== null}
         onOpenChange={(open) => {
           if (!open) setPresetToDelete(null);
         }}
         description={`「${presetToDelete?.name}」を削除しますか？`}
-        onConfirm={() => {
-          if (presetToDelete) performDeletePreset(presetToDelete);
+        onConfirm={async () => {
+          if (!presetToDelete) return;
+          return performDeletePreset(presetToDelete);
         }}
       />
     </main>
