@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(63);
+select plan(72);
 
 -- ============================================================
 -- RLS: editor / 非メンバー
@@ -613,6 +613,91 @@ select results_eq(
   $$select count(*) from public.round_users where round_id = 'd0000000-0000-0000-0000-000000000010'$$,
   $$values (0::bigint)$$,
   'ラウンド削除でround_usersもカスケード削除される'
+);
+
+-- ============================================================
+-- update_round_config RPC: Unmarkedチェックとトランザクション
+-- ============================================================
+-- チェック（Unmarkedな距離の有無）と更新（rounds）を1つの関数呼び出しに
+-- まとめることで、この2つのSupabase呼び出しの間に別クライアントが割り込む
+-- 競合状態を防ぐ。
+
+reset role;
+
+insert into auth.users (id) values ('e0000000-0000-0000-0000-000000000001'); -- editor
+insert into auth.users (id) values ('e0000000-0000-0000-0000-000000000002'); -- viewer
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'e0000000-0000-0000-0000-000000000001', true);
+
+select create_round(
+  'Update Config Round', current_date, 'field', 'recurve', '[]'::jsonb
+) as update_config_round_id \gset
+
+insert into public.distances
+    (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id, is_marked)
+  values
+    (:'update_config_round_id', 1, null, 6, 6, 'a1000000-0000-0000-0000-000000000001', false);
+
+reset role;
+insert into public.round_users (round_id, user_id, role)
+values (:'update_config_round_id', 'e0000000-0000-0000-0000-000000000002', 'viewer');
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'e0000000-0000-0000-0000-000000000001', true);
+
+select has_function(
+  'public', 'update_round_config', array['uuid','text','date','text','text'],
+  'update_round_config関数が存在する'
+);
+
+select throws_like(
+  $$select update_round_config('$$ || :'update_config_round_id' || $$', 'Renamed', current_date, 'outdoor', 'recurve')$$,
+  '%Unmarked%',
+  'Unmarkedな距離が残ったままフィールド以外への変更はエラーになる'
+);
+
+select results_eq(
+  $$select format from public.rounds where id = '$$ || :'update_config_round_id' || $$'$$,
+  $$values ('field'::text)$$,
+  'エラー時はformatが変更されない'
+);
+
+select lives_ok(
+  $$select update_round_config('$$ || :'update_config_round_id' || $$', 'Field Renamed', current_date, 'field', 'barebow')$$,
+  'formatがfieldのままの変更はUnmarkedが残っていても成功する'
+);
+
+select results_eq(
+  $$select name, bow_type from public.rounds where id = '$$ || :'update_config_round_id' || $$'$$,
+  $$values ('Field Renamed'::text, 'barebow'::text)$$,
+  'field据え置きの更新内容が反映される'
+);
+
+update public.distances set is_marked = true, distance = 70
+  where round_id = :'update_config_round_id';
+
+select lives_ok(
+  $$select update_round_config('$$ || :'update_config_round_id' || $$', 'Outdoor Renamed', current_date, 'outdoor', 'recurve')$$,
+  'Unmarkedな距離が無ければフィールド以外への変更が成功する'
+);
+
+select results_eq(
+  $$select name, format, bow_type from public.rounds where id = '$$ || :'update_config_round_id' || $$'$$,
+  $$values ('Outdoor Renamed'::text, 'outdoor'::text, 'recurve'::text)$$,
+  'Unmarked解消後の更新内容が反映される'
+);
+
+select set_config('request.jwt.claim.sub', 'e0000000-0000-0000-0000-000000000002', true);
+
+select lives_ok(
+  $$select update_round_config('$$ || :'update_config_round_id' || $$', 'Hacked By Viewer', current_date, 'outdoor', 'recurve')$$,
+  'viewerが呼び出しても例外にはならない（RLSにより対象行が0件になる）'
+);
+
+select results_eq(
+  $$select name from public.rounds where id = '$$ || :'update_config_round_id' || $$'$$,
+  $$values ('Outdoor Renamed'::text)$$,
+  'viewerの呼び出しではラウンド名が変更されない'
 );
 
 select * from finish();

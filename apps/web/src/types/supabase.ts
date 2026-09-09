@@ -464,6 +464,16 @@ export type Database = {
       };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
+      update_round_config: {
+        Args: {
+          p_bow_type: string;
+          p_format: string;
+          p_name: string;
+          p_round_date: string;
+          p_round_id: string;
+        };
+        Returns: undefined;
+      };
     };
     Enums: {
       [_ in never]: never;
