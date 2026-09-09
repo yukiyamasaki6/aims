@@ -10,10 +10,34 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { deleteDistance, updateDistance } from "./actions";
+import { updateDistance } from "./actions";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
 import type { EnqueueInput } from "./use-sync-queue";
+
+async function deleteDistance(input: {
+  distanceId: string;
+}): Promise<{ error: string } | undefined> {
+  const supabase = createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "サインインが必要です。" };
+  }
+
+  const { error } = await supabase
+    .from("distances")
+    .delete()
+    .eq("id", input.distanceId);
+
+  if (error) {
+    return { error: error.message };
+  }
+}
 
 // 10点的（アウトドア・122cm）。距離追加時の初期的として使う（e2eのcreate-round
 // APIヘルパーが使う既定の的と同じもの）。

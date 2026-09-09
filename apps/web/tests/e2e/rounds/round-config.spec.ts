@@ -200,3 +200,16 @@ test("メニューからラウンドを削除すると一覧へ遷移し、一�
   await expect(page).toHaveURL(/\/rounds$/);
   await expect(page.getByRole("link", { name: new RegExp(name) })).toBeHidden();
 });
+
+test("サインインが切れた状態でラウンドを削除するとメッセージが表示される", async ({
+  page,
+}) => {
+  await page.getByTestId("round-menu-trigger").click();
+  await page.getByTestId("round-delete").click();
+
+  await page.context().clearCookies();
+  await page.getByTestId("confirm-dialog-confirm").click();
+
+  await expect(page.getByText("サインインが必要です。")).toBeVisible();
+  await expect(page).not.toHaveURL(/\/rounds$/);
+});
