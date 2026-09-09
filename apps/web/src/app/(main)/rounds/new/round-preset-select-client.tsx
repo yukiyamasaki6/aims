@@ -2,8 +2,8 @@
 
 import { ChevronLeft, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
-import { unstable_rethrow } from "next/navigation";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import type { TargetFaceRing } from "@/components/target-face-icon";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -14,13 +14,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { PresetInfo } from "../[id]/distance-config-row";
-import {
-  createCustomRound,
-  createRoundFromPreset,
-  deletePreset,
-} from "./actions";
 
 type PresetDistance = {
   distance_number: number;
@@ -128,14 +124,29 @@ export function RoundPresetSelect({
   personalPresets: Preset[];
   globalPresets: Preset[];
 }) {
+  const router = useRouter();
   const [personalPresets, setPersonalPresets] = useState(
     initialPersonalPresets,
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
+  // 挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseの
+  // クロージャのまま実行されてしまうため、stateだけでは防げない。
+  const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [presetToDelete, setPresetToDelete] = useState<Preset | null>(null);
   const hydrated = useHydrated();
+
+  useEffect(() => {
+    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
+    // 対応するため、マウント時にも明示的にtrueへ戻す。
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const selectedPreset =
     [...personalPresets, ...globalPresets].find((p) => p.id === selectedId) ??
@@ -146,34 +157,128 @@ export function RoundPresetSelect({
   }
 
   async function performDeletePreset(preset: Preset) {
-    const result = await deletePreset(preset.id);
-    if (result?.error) {
-      setError(result.error);
-      return;
-    }
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    setPersonalPresets((prev) => prev.filter((p) => p.id !== preset.id));
-    setSelectedId((prev) => (prev === preset.id ? null : prev));
+      if (!mountedRef.current) return;
+
+      if (!user) {
+        setError("サインインが必要です。");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("round_presets")
+        .delete()
+        .eq("id", preset.id);
+
+      if (!mountedRef.current) return;
+
+      if (error) {
+        setError(error.message);
+        return;
+      }
+
+      setPersonalPresets((prev) => prev.filter((p) => p.id !== preset.id));
+      setSelectedId((prev) => (prev === preset.id ? null : prev));
+    } catch {
+      if (!mountedRef.current) return;
+      setError(
+        "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      );
+    }
   }
 
   async function handleStart() {
-    if (submitting) return;
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError(null);
     setSubmitting(true);
 
     try {
-      const result = selectedId
-        ? await createRoundFromPreset(selectedId)
-        : await createCustomRound();
-      if (result?.error) {
-        setError(result.error);
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!mountedRef.current) return;
+
+      if (!user) {
+        setError("サインインが必要です。");
+        submittingRef.current = false;
+        setSubmitting(false);
+        return;
       }
-    } catch (e) {
-      // redirect()はNext.js内部的にNEXT_REDIRECT例外をthrowして遷移を実行するため、
-      // ここで握りつぶさず再送出する。
-      unstable_rethrow(e);
-      setError("通信に失敗しました。もう一度お試しください。");
-    } finally {
+
+      let format = "outdoor";
+      let bowType = "recurve";
+      let distances: {
+        distance: number | null;
+        total_ends: number;
+        arrows_per_end: number;
+        target_face_id: string;
+      }[] = [];
+
+      if (selectedId) {
+        const { data: preset, error: presetError } = await supabase
+          .from("round_presets")
+          .select(
+            "format, bow_type, round_preset_distances(distance_number, distance, total_ends, arrows_per_end, target_face_id)",
+          )
+          .eq("id", selectedId)
+          .maybeSingle();
+
+        if (!mountedRef.current) return;
+
+        if (presetError || !preset) {
+          setError("プリセットの取得に失敗しました。");
+          submittingRef.current = false;
+          setSubmitting(false);
+          return;
+        }
+
+        format = preset.format;
+        bowType = preset.bow_type;
+        distances = [...preset.round_preset_distances]
+          .sort((a, b) => a.distance_number - b.distance_number)
+          .map((d) => ({
+            distance: d.distance,
+            total_ends: d.total_ends,
+            arrows_per_end: d.arrows_per_end,
+            target_face_id: d.target_face_id,
+          }));
+      }
+
+      const { data: roundId, error } = await supabase.rpc("create_round", {
+        p_name: "",
+        p_round_date: new Date().toISOString().slice(0, 10),
+        p_format: format,
+        p_bow_type: bowType,
+        p_distances: distances,
+      });
+
+      if (!mountedRef.current) return;
+
+      if (error || !roundId) {
+        setError(error?.message ?? "ラウンドの作成に失敗しました。");
+        submittingRef.current = false;
+        setSubmitting(false);
+        return;
+      }
+
+      // 成功時はここでsubmittingを解除しない。router.push()は遷移先の取得中も
+      // このコンポーネントを保持し続けるため、ここで解除すると遷移完了前に
+      // ボタンが再度押せる状態に戻ってしまう。アンマウント時に自然に破棄される。
+      router.push(`/rounds/${roundId}`);
+    } catch {
+      if (!mountedRef.current) return;
+      setError(
+        "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      );
+      submittingRef.current = false;
       setSubmitting(false);
     }
   }
