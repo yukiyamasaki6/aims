@@ -284,6 +284,14 @@ export function useSyncQueue() {
     [errorMap],
   );
 
+  // enqueueされた書き込みは呼び出し元を待たせないため、DBの現在状態を
+  // 読み直す操作（プリセット保存等）がその直前の書き込みより先にサーバーへ
+  // 届いてしまうことがある。そのような操作の前にこれを待つことで、その時点で
+  // 積まれている書き込みが実際に反映されてから読みに行けるようにする。
+  const flush = useCallback(async () => {
+    await Promise.allSettled(Array.from(tailsRef.current.values()));
+  }, []);
+
   const status: SyncStatus =
     retryingKeys.size > 0 || shotRetrying
       ? "pending"
@@ -299,5 +307,6 @@ export function useSyncQueue() {
     errorFor,
     enqueue,
     enqueueShot,
+    flush,
   };
 }

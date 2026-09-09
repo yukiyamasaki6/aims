@@ -639,6 +639,11 @@ export function ScorecardClient({
     setPresetSubmitting(true);
     setPresetError(null);
 
+    // 保留中の距離・ラウンド設定の書き込みがDBへ反映される前にラウンドの
+    // 現在状態を読んでしまわないよう、直前までにキューへ積まれた書き込みの
+    // 完了を待ってから読みに行く。
+    await sync.flush();
+
     const name =
       presetName.trim() !== ""
         ? presetName.trim()

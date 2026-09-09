@@ -352,6 +352,61 @@ test("Unmarkedな距離を含む構成をプリセット保存すると、選択
   await expect(presetCard).toContainText("Unmarked");
 });
 
+test("距離を編集した直後にプリセット保存すると、直前の変更の反映を待ってから保存される", async ({
+  page,
+}) => {
+  const email = `save-as-preset-race-${Date.now()}@aims.test`;
+  const password = "password-save-preset-race";
+  await signUpAndSignIn(page, { email, password });
+
+  const roundId = await createRound({
+    email,
+    password,
+    name: "直後保存元",
+    roundDate: "2026-08-24",
+    format: "field",
+    bowType: "recurve",
+    distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 3 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  // 距離の更新リクエストを意図的に遅延させ、直後のプリセット保存の
+  // リクエスト自体がその反映を待たずに送られてしまわないかを検証する。
+  let releaseDistanceUpdate: () => void = () => {};
+  const distanceUpdateGate = new Promise<void>((resolve) => {
+    releaseDistanceUpdate = resolve;
+  });
+  await page.route("**/rest/v1/rpc/update_distance", async (route) => {
+    await distanceUpdateGate;
+    await route.continue();
+  });
+
+  let saveAsPresetRequested = false;
+  await page.route("**/rest/v1/rpc/save_round_as_preset", async (route) => {
+    saveAsPresetRequested = true;
+    await route.continue();
+  });
+
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-unmarked-1").click();
+  await page.getByTestId("distance-config-save-1").click();
+
+  await page.getByTestId("save-as-preset-trigger").click();
+  await page.getByTestId("save-as-preset-name").fill("直後保存プリセット");
+  await page.getByTestId("save-as-preset-confirm").click();
+
+  // 距離の更新が完了するまでは、プリセット保存のリクエストはまだ
+  // 送信されていないはず。
+  await page.waitForTimeout(500);
+  expect(saveAsPresetRequested).toBe(false);
+
+  releaseDistanceUpdate();
+
+  await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
+  expect(saveAsPresetRequested).toBe(true);
+});
+
 test("個人プリセットを削除でき、確認ダイアログでキャンセルすると削除されない", async ({
   page,
 }) => {
