@@ -54,6 +54,28 @@ test.describe(() => {
     ).not.toBeInViewport();
   });
 
+  test("モバイルでAIMSリンクをクリックすると/roundsへ遷移する", async ({
+    page,
+  }) => {
+    await page.goto("/rounds/new");
+    await page.getByRole("button", { name: "メニューを開く" }).click();
+
+    await page.getByRole("link", { name: "AIMS" }).click();
+
+    await expect(page).toHaveURL(/\/rounds$/);
+  });
+
+  test("モバイルで自分リンクをクリックすると/roundsへ遷移する", async ({
+    page,
+  }) => {
+    await page.goto("/rounds/new");
+    await page.getByRole("button", { name: "メニューを開く" }).click();
+
+    await page.getByRole("link", { name: "自分" }).click();
+
+    await expect(page).toHaveURL(/\/rounds$/);
+  });
+
   test("格納時は内容操作が無効になる", async ({ page }) => {
     await page.goto("/rounds");
     await page.getByRole("button", { name: "メニューを開く" }).click();
@@ -90,6 +112,22 @@ test("格納ボタンで格納でき、内容操作が無効になる", async ({
   await page.getByRole("button", { name: "パネルを格納する" }).click();
 
   await expect(page.getByRole("button", { name: "サインアウト" })).toBeHidden();
+});
+
+test("AIMSリンクをクリックすると/roundsへ遷移する", async ({ page }) => {
+  await page.goto("/rounds/new");
+
+  await page.getByRole("link", { name: "AIMS" }).click();
+
+  await expect(page).toHaveURL(/\/rounds$/);
+});
+
+test("自分リンクをクリックすると/roundsへ遷移する", async ({ page }) => {
+  await page.goto("/rounds/new");
+
+  await page.getByRole("link", { name: "自分" }).click();
+
+  await expect(page).toHaveURL(/\/rounds$/);
 });
 
 test("開くボタンで展開できる", async ({ page }) => {

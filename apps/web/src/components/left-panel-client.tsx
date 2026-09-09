@@ -48,7 +48,7 @@ export function LeftPanelClient({ isSignedIn }: { isSignedIn: boolean }) {
           )}
         >
           <Link
-            href="/"
+            href="/rounds"
             className={cn("truncate font-bold", !desktopOpen && "md:hidden")}
           >
             AIMS
@@ -81,9 +81,12 @@ export function LeftPanelClient({ isSignedIn }: { isSignedIn: boolean }) {
             !desktopOpen && "md:hidden",
           )}
         >
-          <span className="rounded-lg bg-muted px-3 py-2 text-sm font-medium">
+          <Link
+            href="/rounds"
+            className="rounded-lg bg-muted px-3 py-2 text-sm font-medium"
+          >
             自分
-          </span>
+          </Link>
         </nav>
 
         {isSignedIn && (
