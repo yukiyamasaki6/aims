@@ -84,6 +84,20 @@ test("別の入力エラーで再試行するとエラーメッセージが正�
   await expect(page.getByText("パスワードを入力してください。")).toBeVisible();
 });
 
+test("メールアドレスの形式が不正だとメッセージが表示される", async ({
+  page,
+}) => {
+  await page.goto("/signin");
+  await waitForHydration(page);
+  await page.getByPlaceholder("you@example.com").fill("invalid-email");
+  await page.getByPlaceholder("パスワード").fill("password1");
+  await page.getByRole("button", { name: "サインイン" }).click();
+
+  await expect(
+    page.getByText("メールアドレスの形式が正しくありません。"),
+  ).toBeVisible();
+});
+
 test("送信中はサインインボタンが無効になる", async ({ page }) => {
   const email = `signin-submitting-${Date.now()}@aims.test`;
   const password = "password1";
@@ -138,7 +152,9 @@ test("サインアップリンクをクリックすると/signupへ遷移する"
   await expect(page).toHaveURL(/\/signup/);
 });
 
-test("パスワードを間違えるとエラーメッセージが表示される", async ({ page }) => {
+test("パスワードを間違えるとエラーメッセージが表示され、captchaトークンがリセットされる", async ({
+  page,
+}) => {
   const email = `signin-wrong-password-${Date.now()}@aims.test`;
 
   await page.goto("/signin");
@@ -147,12 +163,41 @@ test("パスワードを間違えるとエラーメッセージが表示され�
   await page.getByPlaceholder("パスワード").fill("wrong-password");
   const signInButton = page.getByRole("button", { name: "サインイン" });
   await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+
+  // 失敗後の再検証をブロックし、リセットされたまま戻らないことを確認する。
+  await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
   await signInButton.click();
 
   await expect(
     page.getByText("メールアドレスまたはパスワードが間違っています。"),
   ).toBeVisible();
   await expect(signInButton).toHaveAttribute("aria-disabled", "false");
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "false");
+});
+
+test("通信エラーが発生するとエラーメッセージが表示され、captchaトークンがリセットされる", async ({
+  page,
+}) => {
+  const email = `signin-network-error-${Date.now()}@aims.test`;
+
+  await page.goto("/signin");
+  await waitForHydration(page);
+  await page.getByPlaceholder("you@example.com").fill(email);
+  await page.getByPlaceholder("パスワード").fill("password1");
+  const signInButton = page.getByRole("button", { name: "サインイン" });
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+
+  await page.route("**/auth/v1/token*", (route) => route.abort());
+  await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
+  await signInButton.click();
+
+  await expect(
+    page.getByText(
+      "通信エラーが発生しました。しばらくしてから再度お試しください。",
+    ),
+  ).toBeVisible();
+  await expect(signInButton).toHaveAttribute("aria-disabled", "false");
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "false");
 });
 
 test("サインインすると/roundsへ遷移する", async ({ page }) => {
