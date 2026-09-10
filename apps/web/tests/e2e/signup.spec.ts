@@ -326,6 +326,8 @@ test("再送で通信エラーが発生するとメッセージが表示され�
   await expect(resendButton).toHaveText("再送");
 
   await page.route("**/auth/v1/otp*", (route) => route.abort());
+  // 失敗後の再検証をブロックし、リセットされたまま戻らないことを確認する。
+  await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
   await resendButton.click();
 
   await expect(
@@ -333,6 +335,7 @@ test("再送で通信エラーが発生するとメッセージが表示され�
       "通信エラーが発生しました。しばらくしてから再度お試しください。",
     ),
   ).toBeVisible();
+  await expect(resendButton).toHaveAttribute("data-captcha-ready", "false");
 });
 
 test("再送ボタンで認証コードを再送できる", async ({ page }) => {
@@ -350,7 +353,11 @@ test("再送ボタンで認証コードを再送できる", async ({ page }) => 
   // レート制限（ローカル/CI用に短縮済み）は実時間で判定されるため、
   // 最初の送信から確実にその時間が経過するよう実待機を挟む。
   await page.waitForTimeout(1_200);
+  // 再送成功後の再検証をブロックし、リセットされたまま戻らないことを確認する。
+  await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
   await resendButton.click();
+
+  await expect(resendButton).toHaveAttribute("data-captcha-ready", "false");
 
   let latestCode = firstCode;
   await expect(async () => {
@@ -413,11 +420,13 @@ test("認証コードを間違えるとエラーメッセージが表示され�
 
   await goToCodeStep(page, email);
   await page.getByPlaceholder("123456").fill("000000");
-  await page.getByRole("button", { name: "確認" }).click();
+  const confirmButton = page.getByRole("button", { name: "確認" });
+  await confirmButton.click();
 
   await expect(
     page.getByText("認証コードが正しくないか、有効期限が切れています。"),
   ).toBeVisible();
+  await expect(confirmButton).toHaveAttribute("aria-disabled", "false");
 });
 
 test("確認するとパスワード設定画面へ進む", async ({ page }) => {
@@ -501,7 +510,8 @@ test("パスワード設定で通信エラーが発生するとメッセージ�
   await page
     .getByPlaceholder("パスワード（8文字以上・英数字を含む）")
     .fill("password1");
-  await page.getByRole("button", { name: "登録してサインイン" }).click();
+  const submitButton = page.getByRole("button", { name: "登録してサインイン" });
+  await submitButton.click();
 
   await expect(
     page.getByText(
@@ -509,6 +519,7 @@ test("パスワード設定で通信エラーが発生するとメッセージ�
     ),
   ).toBeVisible();
   await expect(page).not.toHaveURL(/\/rounds/);
+  await expect(submitButton).toHaveAttribute("aria-disabled", "false");
 });
 
 test("パスワードを設定するとサインインされて/roundsへ遷移する", async ({
