@@ -396,25 +396,25 @@ stateDiagram-v2
     direction LR
     state "/" as Landing
 
-    [*] --> 確認ダイアログ
+    [*] --> 未確定
 
-    確認ダイアログ --> [*]: キャンセル
-    確認ダイアログ --> [*]: 背景クリック
-    確認ダイアログ --> 送信中: 確認ボタン
+    未確定 --> [*]: キャンセル
+    未確定 --> [*]: 背景クリック
+    未確定 --> 送信中: 確認ボタン
 
-    送信中 --> 確認ダイアログ: 送信失敗
+    送信中 --> 未確定: 送信失敗
     送信中 --> Landing: 送信成功
 
     classDef external stroke-dasharray: 4 4
     class Landing external
 ```
 
-| イベント | 確認ダイアログ |  | 送信中 |  |
+| イベント | 未確定 |  | 送信中 |  |
 | :--- | :---: | :---: | :---: | :---: |
 | キャンセル | ダイアログを閉じる | 〇 | 無効 | 〇 |
 | 背景クリック | ダイアログを閉じる | 〇 | 無効 | 〇 |
 | 確認ボタン | 送信中 | 〇 | 無効 | 〇 |
-| 送信失敗 | - |  | 確認ダイアログ（メッセージ表示） | 〇 |
+| 送信失敗 | - |  | 未確定（メッセージ表示） | 〇 |
 | 送信成功 | - |  | / | 〇 |
 
 ## `/rounds` ラウンド一覧
@@ -476,23 +476,178 @@ stateDiagram-v2
     direction LR
     state "ラウンド一覧" as Rounds
 
-    [*] --> 確認ダイアログ
+    [*] --> 未確定
 
-    確認ダイアログ --> [*]: キャンセル
-    確認ダイアログ --> [*]: 背景クリック
-    確認ダイアログ --> 削除中: 確認ボタン
+    未確定 --> [*]: キャンセル
+    未確定 --> [*]: 背景クリック
+    未確定 --> 削除中: 確認ボタン
 
-    削除中 --> 確認ダイアログ: 削除失敗
+    削除中 --> 未確定: 削除失敗
     削除中 --> Rounds: 削除成功
 
     classDef external stroke-dasharray: 4 4
     class Rounds external
 ```
 
-| イベント | 確認ダイアログ |  | 削除中 |  |
+| イベント | 未確定 |  | 削除中 |  |
 | :--- | :---: | :---: | :---: | :---: |
 | キャンセル | ダイアログを閉じる | 〇 | 無効 | 〇 |
 | 背景クリック | ダイアログを閉じる | 〇 | 無効 | 〇 |
 | 確認ボタン | 削除中 | 〇 | 無効 | 〇 |
-| 削除失敗 | - |  | 確認ダイアログ（メッセージ表示） | 〇 |
+| 削除失敗 | - |  | 未確定（メッセージ表示） | 〇 |
 | 削除成功 | - |  | ラウンド一覧 | 〇 |
+
+## `/rounds/new` ラウンド新規作成
+
+### 初期アクセス
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "未選択" as Unselected
+    state "/signin" as SignIn
+
+    [*] --> SignIn: 未認証
+    [*] --> Unselected: 認証済み
+
+    classDef external stroke-dasharray: 4 4
+    class Unselected,SignIn external
+```
+
+| イベント | 初期 |  |
+| :--- | :---: | :---: |
+| 未認証でアクセス | /signin | △ |
+| 認証済みでアクセス | 未選択 | 〇 |
+
+### プリセット一覧
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "プリセット選択" as PresetSelect
+    state "/rounds" as Rounds
+    state "プリセット削除確認" as PresetDelete
+
+    [*] --> PresetSelect
+
+    PresetSelect --> Rounds: 一覧へ戻るリンク
+    PresetSelect --> メニュー展開: メニューボタン
+
+    メニュー展開 --> PresetSelect: 外側クリック
+    メニュー展開 --> PresetDelete: 削除ボタン
+
+    classDef external stroke-dasharray: 4 4
+    class PresetSelect,Rounds,PresetDelete external
+```
+
+| イベント | プリセット選択 |  | メニュー展開 |  |
+| :--- | :---: | :---: | :---: | :---: |
+| 一覧へ戻るリンク | /rounds | 〇 | - |  |
+| メニューボタン | メニュー展開 | △ | - |  |
+| 外側クリック | - |  | プリセット選択 | △ |
+| 削除ボタン | - |  | プリセット削除確認 | 〇 |
+
+### プリセット選択
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "未選択" as Unselected
+    state "選択中" as Selected
+
+    [*] --> Unselected
+
+    Unselected --> Selected: 選択
+
+    Selected --> Unselected: 選択解除
+    Selected --> Selected: 別のプリセットを選択
+
+    classDef external stroke-dasharray: 4 4
+    class Unselected,Selected external
+```
+
+| イベント | 未選択 |  | 選択中 |  |
+| :--- | :---: | :---: | :---: | :---: |
+| 選択 | 選択中 | 〇 | - |  |
+| 選択解除 | - |  | 未選択 | 〇 |
+| 別のプリセットを選択 | - |  | 選択中 | △ |
+
+### 未選択
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "/rounds/[id]" as RoundDetail
+
+    [*] --> 未選択
+
+    未選択 --> 作成中: 開始ボタン
+
+    作成中 --> 未選択: 送信失敗
+    作成中 --> RoundDetail: 送信成功
+
+    classDef external stroke-dasharray: 4 4
+    class RoundDetail external
+```
+
+| イベント | 未選択 |  | 作成中 |  |
+| :--- | :---: | :---: | :---: | :---: |
+| 開始ボタン | 作成中 | 〇 | - |  |
+| 送信失敗 | - |  | 未選択（メッセージ表示） | 〇 |
+| 送信成功 | - |  | /rounds/[id] | 〇 |
+
+対応事項（実装済みだが削除・修正が必要）:
+- 開始ボタンの`disabled={submitting}`を、ローディングオーバーレイ＋`inert`のパターンに置き換える
+
+### 選択中
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "/rounds/[id]" as RoundDetail
+
+    [*] --> 選択中
+
+    選択中 --> 作成中: 開始ボタン
+
+    作成中 --> 選択中: 送信失敗
+    作成中 --> RoundDetail: 送信成功
+
+    classDef external stroke-dasharray: 4 4
+    class RoundDetail external
+```
+
+| イベント | 選択中 |  | 作成中 |  |
+| :--- | :---: | :---: | :---: | :---: |
+| 開始ボタン | 作成中 | 〇 | - |  |
+| 送信失敗 | - |  | 選択中（メッセージ表示） | △ |
+| 送信成功 | - |  | /rounds/[id] | 〇 |
+
+### プリセット削除確認
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "プリセット選択" as PresetSelect
+
+    [*] --> 未確定
+
+    未確定 --> [*]: キャンセル
+    未確定 --> [*]: 背景クリック
+    未確定 --> 削除中: 確認ボタン
+
+    削除中 --> 未確定: 削除失敗
+    削除中 --> PresetSelect: 削除成功
+
+    classDef external stroke-dasharray: 4 4
+    class PresetSelect external
+```
+
+| イベント | 未確定 |  | 削除中 |  |
+| :--- | :---: | :---: | :---: | :---: |
+| キャンセル | ダイアログを閉じる | 〇 | 無効 | △ |
+| 背景クリック | ダイアログを閉じる | △ | 無効 | △ |
+| 確認ボタン | 削除中 | 〇 | 無効 | 〇 |
+| 削除失敗 | - |  | 未確定（メッセージ表示） | 〇 |
+| 削除成功[選択中のプリセットを削除] | - |  | プリセット選択（未選択） | △ |
+| 削除成功 | - |  | プリセット選択 | 〇 |
