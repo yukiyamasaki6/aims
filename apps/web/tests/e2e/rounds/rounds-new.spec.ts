@@ -621,11 +621,13 @@ test.describe(() => {
     await page.goto("/rounds/new");
     await waitForHydration(page);
 
+    let requestCount = 0;
     let releaseRequest: () => void = () => {};
     const requestGate = new Promise<void>((resolve) => {
       releaseRequest = resolve;
     });
     await page.route("**/rest/v1/rpc/create_round", async (route) => {
+      requestCount++;
       await requestGate;
       await route.continue();
     });
@@ -633,7 +635,15 @@ test.describe(() => {
     const startButton = page.getByTestId("round-start-button");
     await startButton.click();
 
-    await expect(startButton).toBeDisabled();
+    await expect(startButton).toHaveAttribute("aria-disabled", "true");
+
+    // getUser()の解決を挟むため、リクエスト自体が実際に送信される
+    // （ゲートに到達する）までのラグがある。
+    await expect.poll(() => requestCount).toBe(1);
+
+    // 無効化が実際にクリックを防いでいることを確認する。
+    await startButton.click({ force: true });
+    expect(requestCount).toBe(1);
 
     releaseRequest();
     await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
@@ -654,7 +664,7 @@ test.describe(() => {
     // 具体的な文言（ブラウザ依存のfetch例外メッセージ）ではなく、エラー表示と
     // 再試行可能な状態に戻ることだけを確認する。
     await expect(page.locator(".text-destructive")).toBeVisible();
-    await expect(startButton).toBeEnabled();
+    await expect(startButton).toHaveAttribute("aria-disabled", "false");
     await expect(page).toHaveURL(/\/rounds\/new$/);
   });
 });

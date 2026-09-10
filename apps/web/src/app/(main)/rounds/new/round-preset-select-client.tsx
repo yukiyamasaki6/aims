@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, Loader2, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -349,10 +349,12 @@ export function RoundPresetSelect({
           </p>
           <Button
             type="button"
-            disabled={submitting}
+            aria-disabled={submitting}
             data-testid="round-start-button"
+            className={cn(submitting && "pointer-events-none opacity-50")}
             onClick={handleStart}
           >
+            {submitting && <Loader2 className="size-3.5 animate-spin" />}
             {selectedPreset
               ? `「${selectedPreset.name}」で開始`
               : "プリセット無しで開始"}
