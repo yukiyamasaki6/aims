@@ -53,6 +53,14 @@ test.describe(() => {
   });
 });
 
+test("サインインリンクをクリックすると/signinへ遷移する", async ({ page }) => {
+  await page.goto("/signup");
+  await waitForHydration(page);
+  await page.getByRole("link", { name: "サインイン", exact: true }).click();
+
+  await expect(page).toHaveURL(/\/signin/);
+});
+
 test("未入力のまま送信ボタンを押すとメールアドレスのメッセージが表示される", async ({
   page,
 }) => {
@@ -64,6 +72,19 @@ test("未入力のまま送信ボタンを押すとメールアドレスのメ�
 
   await expect(
     page.getByText("メールアドレスを入力してください。"),
+  ).toBeVisible();
+});
+
+test("メールアドレスの形式が不正だとメッセージが表示される", async ({
+  page,
+}) => {
+  await page.goto("/signup");
+  await waitForHydration(page);
+  await page.getByPlaceholder("you@example.com").fill("invalid-email");
+  await page.getByRole("button", { name: "認証コードを送信" }).click();
+
+  await expect(
+    page.getByText("メールアドレスの形式が正しくありません。"),
   ).toBeVisible();
 });
 
@@ -121,14 +142,6 @@ test("送信中は送信ボタンが無効になる", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "認証コードを入力" }),
   ).toBeVisible();
-});
-
-test("サインインリンクをクリックすると/signinへ遷移する", async ({ page }) => {
-  await page.goto("/signup");
-  await waitForHydration(page);
-  await page.getByRole("link", { name: "サインイン", exact: true }).click();
-
-  await expect(page).toHaveURL(/\/signin/);
 });
 
 test("登録済みのメールアドレスで送信するとメッセージが表示される", async ({
@@ -213,47 +226,16 @@ test("送信するとコード入力画面へ進む", async ({ page }) => {
   await expect(page.getByText("迷惑メールフォルダ")).toBeVisible();
 });
 
-test("コード未入力のまま確認ボタンを押すとメッセージが表示される", async ({
-  page,
-}) => {
-  const email = `signup-code-empty-${Date.now()}@aims.test`;
+test("戻るボタンでメールアドレス入力画面に戻れる", async ({ page }) => {
+  const email = `signup-back-${Date.now()}@aims.test`;
 
   await goToCodeStep(page, email);
-  await page.getByRole("button", { name: "確認" }).click();
+  await page.getByRole("button", { name: "戻る" }).click();
 
-  await expect(page.getByText("認証コードを入力してください。")).toBeVisible();
-});
-
-test("確認中は確認ボタンが無効になる", async ({ page }) => {
-  const email = `signup-verify-submitting-${Date.now()}@aims.test`;
-  await goToCodeStep(page, email);
-  const code = await getOtpCodeFromMailpit(email);
-
-  let requestCount = 0;
-  let releaseRequest: () => void = () => {};
-  const requestGate = new Promise<void>((resolve) => {
-    releaseRequest = resolve;
-  });
-  await page.route("**/auth/v1/verify*", async (route) => {
-    requestCount++;
-    await requestGate;
-    await route.continue();
-  });
-
-  await page.getByPlaceholder("123456").fill(code);
-  const confirmButton = page.getByRole("button", { name: "確認" });
-  await confirmButton.click();
-
-  await expect(confirmButton).toHaveAttribute("aria-disabled", "true");
-
-  // 無効化が実際にクリックを防いでいることを確認する。
-  await confirmButton.click({ force: true });
-  expect(requestCount).toBe(1);
-
-  releaseRequest();
   await expect(
-    page.getByRole("heading", { name: "パスワードを設定" }),
+    page.getByRole("heading", { name: "サインアップ" }),
   ).toBeVisible();
+  await expect(page.getByPlaceholder("you@example.com")).toHaveValue(email);
 });
 
 test("クールダウン中に再送ボタンを押すとメッセージが表示される", async ({
@@ -332,36 +314,6 @@ test("再送中は再送ボタンが無効になる", async ({ page }) => {
   releaseRequest();
 });
 
-test("戻るボタンでメールアドレス入力画面に戻れる", async ({ page }) => {
-  const email = `signup-back-${Date.now()}@aims.test`;
-
-  await goToCodeStep(page, email);
-  await page.getByRole("button", { name: "戻る" }).click();
-
-  await expect(
-    page.getByRole("heading", { name: "サインアップ" }),
-  ).toBeVisible();
-  await expect(page.getByPlaceholder("you@example.com")).toHaveValue(email);
-});
-
-test("認証コードを間違えるとエラーメッセージが表示される", async ({ page }) => {
-  const email = `signup-wrong-otp-${Date.now()}@aims.test`;
-
-  await goToCodeStep(page, email);
-  await page.getByPlaceholder("123456").fill("000000");
-  await page.getByRole("button", { name: "確認" }).click();
-
-  await expect(
-    page.getByText("認証コードが正しくないか、有効期限が切れています。"),
-  ).toBeVisible();
-});
-
-test("確認するとパスワード設定画面へ進む", async ({ page }) => {
-  const email = `signup-verify-${Date.now()}@aims.test`;
-
-  await goToPasswordStep(page, email);
-});
-
 test("再送で通信エラーが発生するとメッセージが表示される", async ({ page }) => {
   const email = `signup-resend-network-error-${Date.now()}@aims.test`;
   await page.clock.install();
@@ -411,6 +363,78 @@ test("再送ボタンで認証コードを再送できる", async ({ page }) => 
   await expect(
     page.getByRole("heading", { name: "パスワードを設定" }),
   ).toBeVisible();
+});
+
+test("コード未入力のまま確認ボタンを押すとメッセージが表示される", async ({
+  page,
+}) => {
+  const email = `signup-code-empty-${Date.now()}@aims.test`;
+
+  await goToCodeStep(page, email);
+  await page.getByRole("button", { name: "確認" }).click();
+
+  await expect(page.getByText("認証コードを入力してください。")).toBeVisible();
+});
+
+test("確認中は確認ボタンが無効になる", async ({ page }) => {
+  const email = `signup-verify-submitting-${Date.now()}@aims.test`;
+  await goToCodeStep(page, email);
+  const code = await getOtpCodeFromMailpit(email);
+
+  let requestCount = 0;
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/auth/v1/verify*", async (route) => {
+    requestCount++;
+    await requestGate;
+    await route.continue();
+  });
+
+  await page.getByPlaceholder("123456").fill(code);
+  const confirmButton = page.getByRole("button", { name: "確認" });
+  await confirmButton.click();
+
+  await expect(confirmButton).toHaveAttribute("aria-disabled", "true");
+
+  // 無効化が実際にクリックを防いでいることを確認する。
+  await confirmButton.click({ force: true });
+  expect(requestCount).toBe(1);
+
+  releaseRequest();
+  await expect(
+    page.getByRole("heading", { name: "パスワードを設定" }),
+  ).toBeVisible();
+});
+
+test("認証コードを間違えるとエラーメッセージが表示される", async ({ page }) => {
+  const email = `signup-wrong-otp-${Date.now()}@aims.test`;
+
+  await goToCodeStep(page, email);
+  await page.getByPlaceholder("123456").fill("000000");
+  await page.getByRole("button", { name: "確認" }).click();
+
+  await expect(
+    page.getByText("認証コードが正しくないか、有効期限が切れています。"),
+  ).toBeVisible();
+});
+
+test("確認するとパスワード設定画面へ進む", async ({ page }) => {
+  const email = `signup-verify-${Date.now()}@aims.test`;
+
+  await goToPasswordStep(page, email);
+});
+
+test("パスワード未入力のまま登録ボタンを押すとメッセージが表示される", async ({
+  page,
+}) => {
+  const email = `signup-password-empty-${Date.now()}@aims.test`;
+
+  await goToPasswordStep(page, email);
+  await page.getByRole("button", { name: "登録してサインイン" }).click();
+
+  await expect(page.getByText("パスワードを入力してください。")).toBeVisible();
 });
 
 test("要件を満たさないパスワードで登録するとエラーが表示される", async ({
