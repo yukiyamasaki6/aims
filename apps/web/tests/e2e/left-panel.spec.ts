@@ -54,6 +54,64 @@ test.describe(() => {
     ).not.toBeInViewport();
   });
 
+  test("ハンバーガーボタンで展開できる", async ({ page }) => {
+    await page.goto("/rounds");
+
+    await page.getByRole("button", { name: "メニューを開く" }).click();
+
+    await expect(
+      page.getByRole("button", { name: "サインアウト" }),
+    ).toBeVisible();
+  });
+});
+
+test("初期表示は展開されている", async ({ page }) => {
+  await page.goto("/rounds");
+
+  await expect(
+    page.getByRole("button", { name: "サインアウト" }),
+  ).toBeVisible();
+});
+
+test("格納ボタンでAIMSリンクが無効になる", async ({ page }) => {
+  await page.goto("/rounds");
+
+  await page.getByRole("button", { name: "パネルを格納する" }).click();
+
+  await expect(page.getByRole("link", { name: "AIMS" })).toBeHidden();
+});
+
+test("格納ボタンで自分リンクが無効になる", async ({ page }) => {
+  await page.goto("/rounds");
+
+  await page.getByRole("button", { name: "パネルを格納する" }).click();
+
+  await expect(page.getByRole("link", { name: "自分" })).toBeHidden();
+});
+
+test("格納ボタンでサインアウトボタンが無効になる", async ({ page }) => {
+  await page.goto("/rounds");
+
+  await page.getByRole("button", { name: "パネルを格納する" }).click();
+
+  await expect(page.getByRole("button", { name: "サインアウト" })).toBeHidden();
+});
+
+test("開くボタンで展開できる", async ({ page }) => {
+  await page.goto("/rounds");
+  await page.getByRole("button", { name: "パネルを格納する" }).click();
+  await expect(page.getByRole("button", { name: "サインアウト" })).toBeHidden();
+
+  await page.getByRole("button", { name: "パネルを開く" }).click();
+
+  await expect(
+    page.getByRole("button", { name: "サインアウト" }),
+  ).toBeVisible();
+});
+
+test.describe(() => {
+  test.use({ viewport: { width: 375, height: 667 } });
+
   test("モバイルでAIMSリンクをクリックすると/roundsへ遷移する", async ({
     page,
   }) => {
@@ -115,48 +173,6 @@ test.describe(() => {
       page.getByRole("button", { name: "サインアウト" }),
     ).not.toBeInViewport();
   });
-
-  test("ハンバーガーボタンで展開できる", async ({ page }) => {
-    await page.goto("/rounds");
-
-    await page.getByRole("button", { name: "メニューを開く" }).click();
-
-    await expect(
-      page.getByRole("button", { name: "サインアウト" }),
-    ).toBeVisible();
-  });
-});
-
-test("初期表示は展開されている", async ({ page }) => {
-  await page.goto("/rounds");
-
-  await expect(
-    page.getByRole("button", { name: "サインアウト" }),
-  ).toBeVisible();
-});
-
-test("格納ボタンでAIMSリンクが無効になる", async ({ page }) => {
-  await page.goto("/rounds");
-
-  await page.getByRole("button", { name: "パネルを格納する" }).click();
-
-  await expect(page.getByRole("link", { name: "AIMS" })).toBeHidden();
-});
-
-test("格納ボタンで自分リンクが無効になる", async ({ page }) => {
-  await page.goto("/rounds");
-
-  await page.getByRole("button", { name: "パネルを格納する" }).click();
-
-  await expect(page.getByRole("link", { name: "自分" })).toBeHidden();
-});
-
-test("格納ボタンでサインアウトボタンが無効になる", async ({ page }) => {
-  await page.goto("/rounds");
-
-  await page.getByRole("button", { name: "パネルを格納する" }).click();
-
-  await expect(page.getByRole("button", { name: "サインアウト" })).toBeHidden();
 });
 
 test("デスクトップでAIMSリンクをクリックすると/roundsへ遷移する", async ({
@@ -188,18 +204,6 @@ test("デスクトップでサインアウトボタンをクリックすると�
 
   await expect(
     page.getByRole("button", { name: "サインアウトする" }),
-  ).toBeVisible();
-});
-
-test("開くボタンで展開できる", async ({ page }) => {
-  await page.goto("/rounds");
-  await page.getByRole("button", { name: "パネルを格納する" }).click();
-  await expect(page.getByRole("button", { name: "サインアウト" })).toBeHidden();
-
-  await page.getByRole("button", { name: "パネルを開く" }).click();
-
-  await expect(
-    page.getByRole("button", { name: "サインアウト" }),
   ).toBeVisible();
 });
 
@@ -335,7 +339,10 @@ test.describe(() => {
     await page.route("**/auth/v1/logout*", (route) => route.abort());
 
     await page.getByRole("button", { name: "サインアウト" }).click();
-    await page.getByRole("button", { name: "サインアウトする" }).click();
+    const confirmButton = page.getByRole("button", {
+      name: "サインアウトする",
+    });
+    await confirmButton.click();
 
     await expect(
       page.getByText(
@@ -343,6 +350,7 @@ test.describe(() => {
       ),
     ).toBeVisible();
     await expect(page).toHaveURL(/\/rounds/);
+    await expect(confirmButton).toHaveAttribute("aria-disabled", "false");
   });
 
   test("サインアウトすると/へ遷移する", async ({ page }) => {
