@@ -3,6 +3,7 @@ import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
+  signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
 import { createRound } from "../helpers/rounds";
@@ -16,6 +17,15 @@ test.describe(() => {
     await page.goto("/rounds");
 
     await expect(page).toHaveURL(/\/signin/);
+  });
+
+  test("ラウンドが1件もない場合はプレースホルダーが表示される", async ({
+    page,
+  }) => {
+    const email = `rounds-empty-${Date.now()}@aims.test`;
+    await signUpAndSignIn(page, { email, password: "password1" });
+
+    await expect(page.getByText("まだラウンドがありません。")).toBeVisible();
   });
 });
 
@@ -50,6 +60,13 @@ test("認証済みで/roundsにアクセスするとラウンド一覧が表示�
   await expect(roundLink).toContainText("7点");
 });
 
+test("新規作成ボタンをタップすると/rounds/newへ遷移する", async ({ page }) => {
+  await page.goto("/rounds");
+
+  await page.getByTestId("new-round-fab").click();
+  await expect(page).toHaveURL(/\/rounds\/new/);
+});
+
 test("ラウンドカードをクリックすると詳細画面に遷移する", async ({ page }) => {
   const name = `ラウンドカードテスト-${Date.now()}`;
   const roundId = await createRound({
@@ -64,13 +81,6 @@ test("ラウンドカードをクリックすると詳細画面に遷移する",
   await page.getByRole("link", { name: new RegExp(name) }).click();
 
   await expect(page).toHaveURL(`/rounds/${roundId}`);
-});
-
-test("新規作成ボタンをタップすると/rounds/newへ遷移する", async ({ page }) => {
-  await page.goto("/rounds");
-
-  await page.getByTestId("new-round-fab").click();
-  await expect(page).toHaveURL(/\/rounds\/new/);
 });
 
 test("メニューボタンをクリックするとメニューが展開される", async ({ page }) => {
@@ -320,11 +330,13 @@ test("サインインが切れた状態でラウンドを削除するとメッ�
 
   await row.getByTestId("round-menu-trigger").click();
   await page.getByTestId("round-delete").click();
+  const confirmButton = page.getByTestId("confirm-dialog-confirm");
 
   await page.context().clearCookies();
-  await page.getByTestId("confirm-dialog-confirm").click();
+  await confirmButton.click();
 
   await expect(page.getByText("サインインが必要です。")).toBeVisible();
+  await expect(confirmButton).toHaveAttribute("aria-disabled", "false");
 
   // ダイアログを閉じれば、一覧にはまだ残っている。
   await page.getByTestId("confirm-dialog-cancel").click();
