@@ -147,6 +147,57 @@ test("プリセット保存ダイアログの背景をクリックすると閉�
   await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
 });
 
+test("プリセット保存の送信中は保存ボタンが無効になり、背景クリックでダイアログを閉じられない", async ({
+  page,
+}) => {
+  const email = `save-as-preset-submitting-${Date.now()}@aims.test`;
+  const password = "password-save-preset-submitting";
+  await signUpAndSignIn(page, { email, password });
+
+  const roundId = await createRound({
+    email,
+    password,
+    name: "送信中無効化テスト",
+    roundDate: "2026-08-24",
+    format: "outdoor",
+    bowType: "recurve",
+    distances: [{ distance: 30, totalEnds: 3, arrowsPerEnd: 6 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  let requestCount = 0;
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route("**/rest/v1/rpc/save_round_as_preset", async (route) => {
+    requestCount++;
+    await requestGate;
+    await route.continue();
+  });
+
+  await page.getByTestId("save-as-preset-trigger").click();
+  const confirmButton = page.getByTestId("save-as-preset-confirm");
+  await confirmButton.click();
+
+  await expect(confirmButton).toHaveAttribute("aria-disabled", "true");
+
+  // sync.flush()の解決を挟むため、保存リクエスト自体が実際に送信される
+  // （ゲートに到達する）までのラグがある。
+  await expect.poll(() => requestCount).toBe(1);
+
+  // 無効化が実際にクリックを防いでいることを確認する。
+  await confirmButton.click({ force: true });
+  expect(requestCount).toBe(1);
+
+  // 背景クリックでも閉じない。
+  await page.mouse.click(5, 5);
+  await expect(page.getByTestId("save-as-preset-name")).toBeVisible();
+
+  releaseRequest();
+});
+
 // 保存したプリセットが共有アカウントの個人プリセット一覧に残り続けると、
 // 他のテスト（個人プリセット0件の検証等）に影響するため、専用ユーザーで行う。
 test("現在の構成を個人プリセットとして保存でき、/rounds/newの選択肢に表示される", async ({

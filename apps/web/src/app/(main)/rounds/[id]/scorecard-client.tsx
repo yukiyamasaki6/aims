@@ -1019,6 +1019,8 @@ export function ScorecardClient({
               <Dialog
                 open={presetDialogOpen}
                 onOpenChange={(open) => {
+                  // 送信中は背景クリック・Escでは閉じさせない。
+                  if (!open && presetSubmitting) return;
                   setPresetDialogOpen(open);
                   if (open) {
                     setPresetName(roundConfig.name);
