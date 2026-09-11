@@ -243,6 +243,19 @@ function stepPosition(
   return cells[index + offset] ?? null;
 }
 
+// 次の距離の先頭マスへ意図せず引き継がれてしまわないよう、「マス送り」は
+// 距離をまたがない（距離ごとの最後/最初のマスが境界になる）。
+function isLastCellOfDistance(position: Position): boolean {
+  return (
+    position.end === position.distance.total_ends &&
+    position.arrow === position.distance.arrows_per_end
+  );
+}
+
+function isFirstCellOfDistance(position: Position): boolean {
+  return position.end === 1 && position.arrow === 1;
+}
+
 // プリセット保存ダイアログの名前欄プレースホルダー（自動生成の候補名）。
 // ラウンド名が設定されている場合は、こちらではなくラウンド名自体を名前欄に
 // 事前入力する（ScorecardClient側でpresetName初期値に使う）ため、
@@ -802,7 +815,11 @@ export function ScorecardClient({
       },
     ]);
     setRedoStack([]);
-    setPosition(stepPosition(distances, position, 1));
+    setPosition(
+      isLastCellOfDistance(position)
+        ? null
+        : stepPosition(distances, position, 1),
+    );
   }
 
   function handleClear() {
@@ -832,7 +849,11 @@ export function ScorecardClient({
       ]);
       setRedoStack([]);
     }
-    setPosition(stepPosition(distances, position, -1) ?? position);
+    setPosition(
+      isFirstCellOfDistance(position)
+        ? position
+        : (stepPosition(distances, position, -1) ?? position),
+    );
   }
 
   // 取り消した/やり直したマスへフォーカスを移動し、何が変わったか見えるようにする。
@@ -884,6 +905,15 @@ export function ScorecardClient({
   }
 
   function selectCell(distance: Distance, end: number, arrow: number) {
+    if (
+      position &&
+      position.distance.id === distance.id &&
+      position.end === end &&
+      position.arrow === arrow
+    ) {
+      setPosition(null);
+      return;
+    }
     // 格納後に再度開く場合、keypadMountedがマウント用useEffectを経由して
     // 遅れて反映されると、スクロール計算がkeypadRef未接続のまま実行されて
     // しまうため、ここで同期的にマウント済みにしておく。
