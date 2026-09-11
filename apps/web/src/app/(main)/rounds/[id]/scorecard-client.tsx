@@ -1518,20 +1518,25 @@ export function ScorecardClient({
               ref={setKeypadNode}
               className={cn(
                 "pointer-events-auto absolute inset-x-0 bottom-0 z-30 border-t bg-card shadow-lg transition-transform duration-200",
-                keypadVisible ? "translate-y-0" : "translate-y-full",
+                // 格納ボタンが本体の上に2rem（-top-8）はみ出しているため、
+                // 100%移動だけではそのはみ出し分が画面下端に残って見えて
+                // しまう。はみ出し分を上乗せして完全に隠す。
+                keypadVisible
+                  ? "translate-y-0"
+                  : "translate-y-[calc(100%+2rem)]",
               )}
             >
-              <div className="mx-auto max-w-xl">
+              <div className="relative mx-auto max-w-xl">
                 <button
                   type="button"
                   data-testid="keypad-toggle"
                   onClick={closeKeypad}
                   aria-label="テンキーを閉じる"
-                  className="flex w-full items-center justify-center bg-muted py-1.5 text-muted-foreground hover:text-foreground"
+                  className="-top-8 absolute right-4 flex h-8 w-12 items-center justify-center rounded-t-lg border border-b-0 bg-card text-muted-foreground hover:text-foreground"
                 >
-                  <ChevronDown className="size-5" />
+                  <ChevronDown className="size-4" />
                 </button>
-                <div className="flex flex-col gap-2 p-4 pt-2">
+                <div className="flex flex-col gap-2 p-4 pt-4">
                   {keypadButtons}
                 </div>
               </div>
