@@ -453,6 +453,20 @@ test("未入力のマスをタップするとテンキーを開く", async ({ pa
   await expect(page.getByTestId("score-button-X")).toBeVisible();
 });
 
+test("選択中のマスと同じマスをクリックすると、選択を解除してテンキーを格納する", async ({
+  page,
+}) => {
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveClass(/ring-primary/);
+  await expect(page.getByTestId("score-button-X")).toBeVisible();
+
+  await page.getByTestId("shot-cell-1-1-1").click();
+
+  await expect(page.getByTestId("shot-cell-1-1-1")).not.toHaveClass(
+    /ring-primary/,
+  );
+  await expect(page.getByTestId("score-button-X")).toBeHidden();
+});
+
 test("点数ボタンをタップすると合計が更新される", async ({ page }) => {
   await expect(page.getByTestId("round-summary")).toContainText("合計0");
 
@@ -479,13 +493,28 @@ test("点数ボタンをタップすると、選択中のマスへ点数を記�
   await expect(page.getByTestId("end-subtotal-1-1")).toHaveText("15");
 });
 
-test("末尾のマスで点数ボタンをタップすると、記録した上でテンキーを閉じる", async ({
+test("距離の最後のマスで点数ボタンをタップすると、次の距離へは進まずマスの選択を外してテンキーを格納する", async ({
   page,
 }) => {
-  await page.getByTestId("score-button-X").click();
-  await page.getByTestId("score-button-5").click();
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "距離境界テスト",
+    roundDate: "2026-08-24",
+    distances: [
+      { distance: 18, totalEnds: 1, arrowsPerEnd: 1 },
+      { distance: 30, totalEnds: 1, arrowsPerEnd: 1 },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
-  // 全エンド入力完了後はテンキーが表示されない
+  await page.getByTestId("score-button-X").click();
+
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("X");
+  await expect(page.getByTestId("shot-cell-2-1-1")).not.toHaveClass(
+    /ring-primary/,
+  );
   await expect(page.getByTestId("score-button-X")).toBeHidden();
 });
 
@@ -515,21 +544,37 @@ test("クリアボタンをタップすると選択中のマスの点数を消�
   await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("8");
 });
 
-test("先頭のマスでクリアボタンをタップすると、選択中のマスの点数を消し選択を維持する", async ({
+test("距離の最初のマスでクリアボタンをタップすると、前の距離へは戻らず選択を維持する", async ({
   page,
 }) => {
-  await page.getByTestId("score-button-X").click();
-  await expect(page.getByTestId("round-summary")).toContainText("合計10");
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "距離境界クリアテスト",
+    roundDate: "2026-08-24",
+    distances: [
+      { distance: 18, totalEnds: 1, arrowsPerEnd: 1 },
+      { distance: 30, totalEnds: 1, arrowsPerEnd: 1 },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
 
-  // 先頭（1射目）を選び直してからクリアすると、点数がその場で消え、
-  // 戻り先が無いため選択はそのまま維持される。
-  await page.getByTestId("shot-cell-1-1-1").click();
+  // 距離1の末尾マスへの記録で選択が外れるため、距離2の先頭マスは選び直す。
+  await page.getByTestId("score-button-X").click();
+  await page.getByTestId("shot-cell-2-1-1").click();
+  await page.getByTestId("score-button-5").click();
+
+  // 距離2の先頭マスを選び直してクリアすると、戻り先（距離1の末尾マス）が
+  // あっても距離をまたがず、そのまま選択が維持される。
+  await page.getByTestId("shot-cell-2-1-1").click();
   await page.getByTestId("score-button-clear").click();
-  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("");
-  await expect(page.getByTestId("round-summary")).toContainText("合計0");
+  await expect(page.getByTestId("shot-cell-2-1-1")).toHaveText("");
+  await expect(page.getByTestId("shot-cell-2-1-1")).toHaveClass(/ring-primary/);
 
   await page.getByTestId("score-button-8").click();
-  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("8");
+  await expect(page.getByTestId("shot-cell-2-1-1")).toHaveText("8");
+  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("X");
 });
 
 test("一つ戻るボタンで直前の入力が取り消され、一つ進むボタンでやり直せる", async ({
