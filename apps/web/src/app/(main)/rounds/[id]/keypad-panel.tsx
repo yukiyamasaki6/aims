@@ -43,15 +43,17 @@ export function KeypadPanel({
       )}
     >
       <div className="flex h-full flex-col">
-        <button
-          type="button"
-          data-testid="keypad-panel-close"
-          onClick={onClose}
-          aria-label="テンキーパネルを閉じる"
-          className="flex w-full items-center justify-center bg-muted py-1.5 text-muted-foreground hover:text-foreground"
-        >
-          <ChevronRight className="size-5" />
-        </button>
+        <div className="flex items-center justify-start p-4">
+          <button
+            type="button"
+            data-testid="keypad-panel-close"
+            onClick={onClose}
+            aria-label="テンキーパネルを閉じる"
+            className="shrink-0"
+          >
+            <ChevronRight className="size-5" />
+          </button>
+        </div>
         {/* テンキー本体をパネル中央に置く。スマホでは下部固定と体感距離が
             大差なく、PCではマウス操作に指の届きやすさは関係しない上、
             縦長パネルの上半分が常に空白になる下部固定より見た目のバランスが良い。 */}
