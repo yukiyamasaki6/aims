@@ -1488,9 +1488,10 @@ export function ScorecardClient({
             <Button
               type="button"
               variant="outline"
+              size="lg"
               data-testid="add-distance-button"
               onClick={handleAddDistance}
-              className="border-dashed"
+              className="h-12 border-dashed"
             >
               <Plus />
               距離を追加
