@@ -63,6 +63,10 @@ test("距離が複数あるとき、距離ごとの合計・X数・10数も表�
   await page.goto(`/rounds/${roundId}`);
   await waitForHydration(page);
 
+  // 記録前は、両距離とも的にXリングがあり最高点数（10）が一致するため、
+  // ラウンド結果にもX数/最高点数が集計表示される。
+  await expect(page.getByTestId("round-top-scores")).toHaveText("X: 0 / 10: 0");
+
   await page.getByTestId("score-button-X").click();
 
   await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("X");
@@ -70,12 +74,49 @@ test("距離が複数あるとき、距離ごとの合計・X数・10数も表�
   const firstSummary = page.getByTestId("distance-summary-1");
   await expect(firstSummary).toContainText("18m");
   await expect(firstSummary).toContainText("小計10");
-  await expect(firstSummary).toContainText("X: 1 / 10: 0");
+  await expect(page.getByTestId("distance-top-scores-1")).toHaveText(
+    "X: 1 / 10: 0",
+  );
 
   const secondSummary = page.getByTestId("distance-summary-2");
   await expect(secondSummary).toContainText("30m");
   await expect(secondSummary).toContainText("小計0");
-  await expect(secondSummary).toContainText("X: 0 / 10: 0");
+  await expect(page.getByTestId("distance-top-scores-2")).toHaveText(
+    "X: 0 / 10: 0",
+  );
+
+  await expect(page.getByTestId("round-top-scores")).toHaveText("X: 1 / 10: 0");
+});
+
+test("距離間で的のX有無・最高点数・次点数が異なると、ラウンド結果にX数/最高点数/次点数を表示しない", async ({
+  page,
+}) => {
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "的構成不一致テスト",
+    roundDate: "2026-08-24",
+    distances: [
+      { distance: 18, totalEnds: 1, arrowsPerEnd: 1 },
+      {
+        distance: 30,
+        totalEnds: 1,
+        arrowsPerEnd: 1,
+        targetFaceId: FIELD_TARGET_FACE_ID,
+      },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  await expect(page.getByTestId("round-top-scores")).toBeHidden();
+  // 距離ごとの表示はそれぞれの的の構成にしたがって個別に出る。
+  await expect(page.getByTestId("distance-top-scores-1")).toHaveText(
+    "X: 0 / 10: 0",
+  );
+  await expect(page.getByTestId("distance-top-scores-2")).toHaveText(
+    "6: 0 / 5: 0",
+  );
 });
 
 test("下にスクロールしても、ラウンド結果の合計が常に画面上部に見える", async ({
@@ -362,11 +403,14 @@ test("コンパウンド弓種×インドアの的でスコア入力できる（
   await expect(page.getByTestId("score-button-X")).toHaveCount(0);
   await expect(page.getByTestId("score-button-10")).toBeVisible();
 
+  // Xリングを持たない的のため、X数ではなく最高点数（10）/次点数（9）を表示する。
+  await expect(page.getByTestId("round-top-scores")).toHaveText("10: 0 / 9: 0");
+
   await page.getByTestId("score-button-10").click();
 
   await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("10");
   await expect(page.getByTestId("round-summary")).toContainText("合計10");
-  await expect(page.getByTestId("round-summary")).toContainText("X: 0 / 10: 1");
+  await expect(page.getByTestId("round-top-scores")).toHaveText("10: 1 / 9: 0");
 });
 
 test("スポットが複数ある的でも、テンキーのキーはスポット間で重複表示されない", async ({
