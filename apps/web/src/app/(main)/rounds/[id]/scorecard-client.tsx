@@ -1066,8 +1066,12 @@ export function ScorecardClient({
     // KeypadPanelは（sticky等を使わずとも）常に画面内に留まる。
     <div data-hydrated={hydrated} className="flex h-full">
       <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 p-8">
-          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+        <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
+          {/* 一覧へ戻る・同期状態は常時見えていてほしい情報のため、
+              合計バー（round-summary、top-14でこの下に続けてstickyさせている）
+              と同じくページスクロール中ずっと張り付かせる。高さはh-14固定にし、
+              round-summary側のtopオフセットと正確に合わせられるようにする。 */}
+          <div className="sticky top-0 z-30 grid h-14 grid-cols-[auto_1fr_auto] items-center gap-2 bg-card px-8">
             <Link
               href="/rounds"
               className="inline-flex w-fit items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
@@ -1201,26 +1205,27 @@ export function ScorecardClient({
               </DropdownMenu>
             </div>
           </div>
-          <BlockingConfirmDialog
-            open={deleteRoundConfirmOpen}
-            onOpenChange={setDeleteRoundConfirmOpen}
-            description="このラウンドを削除しますか？記録したスコアもすべて失われます。"
-            onConfirm={handleDeleteRound}
-          />
-          {/* 下端は合計バーと接する内部の継ぎ目のため、shadowが下方向へ滲まない
+          <div className="flex flex-1 flex-col gap-6 px-8 pb-8">
+            <BlockingConfirmDialog
+              open={deleteRoundConfirmOpen}
+              onOpenChange={setDeleteRoundConfirmOpen}
+              description="このラウンドを削除しますか？記録したスコアもすべて失われます。"
+              onConfirm={handleDeleteRound}
+            />
+            {/* 下端は合計バーと接する内部の継ぎ目のため、shadowが下方向へ滲まない
             よう、上・左・右にはみ出す分だけをclip-pathで残す（距離情報の
             トグルボタンと同じ考え方）。 */}
-          <div className="rounded-t-xl border bg-card text-card-foreground shadow-sm [clip-path:inset(-8px_-8px_0_-8px)]">
-            <RoundConfigPanel
-              roundId={roundId}
-              initial={initialRoundConfig}
-              onSaved={setRoundConfig}
-              defaultExpanded={initialDistances.length === 0}
-              hasUnmarkedDistances={distances.some((d) => !d.is_marked)}
-              enqueue={sync.enqueue}
-            />
-          </div>
-          {/* position: stickyは直接の親の高さの範囲でしか張り付かないため、
+            <div className="rounded-t-xl border-x border-t bg-card text-card-foreground shadow-sm [clip-path:inset(-8px_-8px_0_-8px)]">
+              <RoundConfigPanel
+                roundId={roundId}
+                initial={initialRoundConfig}
+                onSaved={setRoundConfig}
+                defaultExpanded={initialDistances.length === 0}
+                hasUnmarkedDistances={distances.some((d) => !d.is_marked)}
+                enqueue={sync.enqueue}
+              />
+            </div>
+            {/* position: stickyは直接の親の高さの範囲でしか張り付かないため、
             RoundConfigPanelと同じ小さいカードの中に置くと、そのカードの
             高さを過ぎた時点で張り付きが外れてしまう（1つのdivに包む案は
             実測で確認済み：張り付きが外れる）。見た目は直前のカードと
@@ -1235,162 +1240,166 @@ export function ScorecardClient({
             border-topを持たない。上端はRoundConfigPanelと接する内部の
             継ぎ目のため、shadowが上方向へ滲まないようclip-pathで下・左・右
             にはみ出す分だけを残す。 */}
-          <div
-            data-testid="round-summary"
-            className="-mt-6 sticky top-0 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border-x border-b bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
-          >
-            <div className="flex items-baseline gap-2">
-              {roundLabels && (
-                <span
-                  data-testid="round-top-scores"
-                  className="text-muted-foreground text-sm"
-                >
-                  {roundLabels.primaryLabel}: {roundPrimaryCount} /{" "}
-                  {roundLabels.secondaryLabel}: {roundSecondaryCount}
+            <div
+              data-testid="round-summary"
+              className="-mt-6 sticky top-14 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
+            >
+              <div className="flex items-baseline gap-2">
+                {roundLabels && (
+                  <span
+                    data-testid="round-top-scores"
+                    className="text-muted-foreground text-sm"
+                  >
+                    {roundLabels.primaryLabel}: {roundPrimaryCount} /{" "}
+                    {roundLabels.secondaryLabel}: {roundSecondaryCount}
+                  </span>
+                )}
+                <span className="font-heading text-lg font-semibold">
+                  合計{total}
                 </span>
-              )}
-              <span className="font-heading text-lg font-semibold">
-                合計{total}
-              </span>
+              </div>
             </div>
-          </div>
 
-          <Dialog open={syncErrorsOpen} onOpenChange={setSyncErrorsOpen}>
-            <DialogContent>
-              {/* 複数の失敗が同時に溜まっても一度に全部は出さず、最も古い
+            <Dialog open={syncErrorsOpen} onOpenChange={setSyncErrorsOpen}>
+              <DialogContent>
+                {/* 複数の失敗が同時に溜まっても一度に全部は出さず、最も古い
                   未解決の1件だけを見せる。解決すると次のものが表示される。 */}
-              {sync.errors[0] && (
-                <div className="flex flex-col gap-2">
-                  <p className="font-heading font-semibold">同期失敗</p>
-                  <p className="text-sm">
-                    <span className="font-medium">{sync.errors[0].label}</span>
-                    ：{sync.errors[0].message}
-                  </p>
-                </div>
-              )}
-            </DialogContent>
-          </Dialog>
+                {sync.errors[0] && (
+                  <div className="flex flex-col gap-2">
+                    <p className="font-heading font-semibold">同期失敗</p>
+                    <p className="text-sm">
+                      <span className="font-medium">
+                        {sync.errors[0].label}
+                      </span>
+                      ：{sync.errors[0].message}
+                    </p>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
 
-          <div className="flex flex-col gap-4">
-            {distances.map((d) => {
-              const distanceShots = shots.filter((s) => s.distance_id === d.id);
-              const distanceTotal = distanceShots.reduce(
-                (sum, s) => sum + s.score_int,
-                0,
-              );
-              const face = targetFaceOf(d.target_face_id);
-              const distanceLabels = topScoreLabels(face);
-              const distancePrimaryCount = distanceLabels
-                ? distanceShots.filter(
-                    (s) => s.score_str === distanceLabels.primaryLabel,
-                  ).length
-                : 0;
-              const distanceSecondaryCount = distanceLabels
-                ? distanceShots.filter(
-                    (s) => s.score_str === distanceLabels.secondaryLabel,
-                  ).length
-                : 0;
-
-              // end行1件分の描画。最終行だけ小計のsticky境界（下記の内側
-              // ラッパー）の外に出すため、共通化して2箇所から呼べるようにする。
-              const renderEndRow = (end: number) => {
-                const endShots = shots.filter(
-                  (s) => s.distance_id === d.id && s.end_number === end,
+            <div className="flex flex-col gap-4">
+              {distances.map((d) => {
+                const distanceShots = shots.filter(
+                  (s) => s.distance_id === d.id,
                 );
-                const subtotal = endShots.reduce(
+                const distanceTotal = distanceShots.reduce(
                   (sum, s) => sum + s.score_int,
                   0,
                 );
-                const hasAnyShot = endShots.length > 0;
+                const face = targetFaceOf(d.target_face_id);
+                const distanceLabels = topScoreLabels(face);
+                const distancePrimaryCount = distanceLabels
+                  ? distanceShots.filter(
+                      (s) => s.score_str === distanceLabels.primaryLabel,
+                    ).length
+                  : 0;
+                const distanceSecondaryCount = distanceLabels
+                  ? distanceShots.filter(
+                      (s) => s.score_str === distanceLabels.secondaryLabel,
+                    ).length
+                  : 0;
+
+                // end行1件分の描画。最終行だけ小計のsticky境界（下記の内側
+                // ラッパー）の外に出すため、共通化して2箇所から呼べるようにする。
+                const renderEndRow = (end: number) => {
+                  const endShots = shots.filter(
+                    (s) => s.distance_id === d.id && s.end_number === end,
+                  );
+                  const subtotal = endShots.reduce(
+                    (sum, s) => sum + s.score_int,
+                    0,
+                  );
+                  const hasAnyShot = endShots.length > 0;
+
+                  return (
+                    <div key={end} className="flex items-stretch">
+                      <div className="flex w-8 shrink-0 items-center justify-center border-r text-muted-foreground text-xs">
+                        {end}
+                      </div>
+                      <div
+                        className="grid flex-1 divide-x"
+                        style={{
+                          gridTemplateColumns: `repeat(${d.arrows_per_end}, minmax(0, 1fr))`,
+                        }}
+                      >
+                        {Array.from(
+                          { length: d.arrows_per_end },
+                          (_, i) => i + 1,
+                        ).map((arrow) => {
+                          const shot = endShots.find(
+                            (s) => s.arrow_number === arrow,
+                          );
+                          const isActive =
+                            position?.distance.id === d.id &&
+                            position.end === end &&
+                            position.arrow === arrow;
+                          const color = shot
+                            ? paleTone(
+                                ringColorFor(
+                                  targetFaceOf(d.target_face_id),
+                                  shot.score_str,
+                                ),
+                              )
+                            : null;
+
+                          return (
+                            <button
+                              key={arrow}
+                              type="button"
+                              data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
+                              onClick={() => selectCell(d, end, arrow)}
+                              className={cn(
+                                // 得点色をstyleで直接指定するため、hover:bg-muted等の
+                                // クラスは常にそのstyleに上書きされて効かない
+                                // （テンキーと同じ問題、issue #155）。明暗どちらの
+                                // 背景色でも均一に視認できるグレー半透明のオーバーレイ
+                                // をinset box-shadowで重ねてホバー/押下の視覚
+                                // フィードバックとする。不透明度はMaterial Design
+                                // のstate layerの目安（hover 8%/pressed 12%）に
+                                // 合わせる（issue #286で他の対話的要素も含めて
+                                // 同じ基準に揃える予定）。
+                                "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
+                                isActive &&
+                                  "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
+                              )}
+                              style={
+                                color
+                                  ? {
+                                      backgroundColor: color.bg,
+                                      color: color.fg,
+                                    }
+                                  : undefined
+                              }
+                            >
+                              {shot?.score_str ?? ""}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div
+                        data-testid={`end-subtotal-${d.distance_number}-${end}`}
+                        className="flex min-h-10 w-14 shrink-0 items-center justify-center border-l text-muted-foreground text-base"
+                      >
+                        {hasAnyShot ? `${subtotal}` : ""}
+                      </div>
+                    </div>
+                  );
+                };
 
                 return (
-                  <div key={end} className="flex items-stretch">
-                    <div className="flex w-8 shrink-0 items-center justify-center border-r text-muted-foreground text-xs">
-                      {end}
-                    </div>
-                    <div
-                      className="grid flex-1 divide-x"
-                      style={{
-                        gridTemplateColumns: `repeat(${d.arrows_per_end}, minmax(0, 1fr))`,
-                      }}
-                    >
-                      {Array.from(
-                        { length: d.arrows_per_end },
-                        (_, i) => i + 1,
-                      ).map((arrow) => {
-                        const shot = endShots.find(
-                          (s) => s.arrow_number === arrow,
-                        );
-                        const isActive =
-                          position?.distance.id === d.id &&
-                          position.end === end &&
-                          position.arrow === arrow;
-                        const color = shot
-                          ? paleTone(
-                              ringColorFor(
-                                targetFaceOf(d.target_face_id),
-                                shot.score_str,
-                              ),
-                            )
-                          : null;
-
-                        return (
-                          <button
-                            key={arrow}
-                            type="button"
-                            data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
-                            onClick={() => selectCell(d, end, arrow)}
-                            className={cn(
-                              // 得点色をstyleで直接指定するため、hover:bg-muted等の
-                              // クラスは常にそのstyleに上書きされて効かない
-                              // （テンキーと同じ問題、issue #155）。明暗どちらの
-                              // 背景色でも均一に視認できるグレー半透明のオーバーレイ
-                              // をinset box-shadowで重ねてホバー/押下の視覚
-                              // フィードバックとする。不透明度はMaterial Design
-                              // のstate layerの目安（hover 8%/pressed 12%）に
-                              // 合わせる（issue #286で他の対話的要素も含めて
-                              // 同じ基準に揃える予定）。
-                              "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
-                              isActive &&
-                                "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
-                            )}
-                            style={
-                              color
-                                ? {
-                                    backgroundColor: color.bg,
-                                    color: color.fg,
-                                  }
-                                : undefined
-                            }
-                          >
-                            {shot?.score_str ?? ""}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div
-                      data-testid={`end-subtotal-${d.distance_number}-${end}`}
-                      className="flex min-h-10 w-14 shrink-0 items-center justify-center border-l text-muted-foreground text-base"
-                    >
-                      {hasAnyShot ? `${subtotal}` : ""}
-                    </div>
-                  </div>
-                );
-              };
-
-              return (
-                <div
-                  key={d.id}
-                  data-testid={`distance-summary-${d.distance_number}`}
-                  className="rounded-xl border bg-card text-card-foreground shadow-sm"
-                >
-                  {/* 小計のsticky境界（position: stickyの直接の親）を最終行の
+                  <div
+                    key={d.id}
+                    data-testid={`distance-summary-${d.distance_number}`}
+                    className="rounded-xl border bg-card text-card-foreground shadow-sm"
+                  >
+                    {/* 小計のsticky境界（position: stickyの直接の親）を最終行の
                     手前までにするため、トグル・編集・小計・最終行以外の
                     end行をこの内側ラッパーにまとめる。これにより、最終行は
                     この親の外（下記の兄弟div）に置かれ、小計はこの親の下端
                     ＝最終行の手前でstickyが自然に外れる。 */}
-                  <div>
-                    {/* 小計（sticky、z-10）が-mt-3.5でこのボタンの下paddingへ
+                    <div>
+                      {/* 小計（sticky、z-10）が-mt-3.5でこのボタンの下paddingへ
                       食い込むため、区切り線として持たせるこのborder-bが
                       その小計自身の背景に覆われて見えなくならないよう、
                       小計より高いz-indexにしておく（食い込むのは余白部分
@@ -1401,46 +1410,48 @@ export function ScorecardClient({
                       このカード自体の丸角（rounded-xl）がこのボタンの
                       不透明な背景で隠れないよう、上端もrounded-t-xlで
                       揃える。 */}
-                    <button
-                      type="button"
-                      data-testid={`distance-config-toggle-${d.distance_number}`}
-                      onClick={() => toggleDistanceEditing(d.id)}
-                      className="relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm"
-                    >
-                      <DistanceInfo
-                        distance={d.distance}
-                        isMarked={d.is_marked}
-                        format={roundConfig.format}
-                        face={face ?? null}
-                        arrowsPerEnd={d.arrows_per_end}
-                        totalEnds={d.total_ends}
-                        trailing={<ChevronRight className="size-4 shrink-0" />}
-                      />
-                    </button>
-                    {editingDistanceIds.has(d.id) && (
-                      <DistanceEditFields
-                        distance={{
-                          id: d.id,
-                          distanceNumber: d.distance_number,
-                          distance: d.distance,
-                          totalEnds: d.total_ends,
-                          arrowsPerEnd: d.arrows_per_end,
-                          targetFaceId: d.target_face_id,
-                          isMarked: d.is_marked,
-                        }}
-                        hasShots={distanceIdsWithShots.has(d.id)}
-                        targetFaces={targetFaces}
-                        roundFormat={roundConfig.format}
-                        roundBowType={roundConfig.bowType}
-                        onSaved={handleDistanceSaved}
-                        onDeleted={() => handleDistanceDeleted(d.id)}
-                        onOpenChange={(open) => {
-                          if (!open) toggleDistanceEditing(d.id);
-                        }}
-                        enqueue={sync.enqueue}
-                      />
-                    )}
-                    {/* 常に上（トグルボタンの余っている下paddingの中）に食い込ま
+                      <button
+                        type="button"
+                        data-testid={`distance-config-toggle-${d.distance_number}`}
+                        onClick={() => toggleDistanceEditing(d.id)}
+                        className="relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm"
+                      >
+                        <DistanceInfo
+                          distance={d.distance}
+                          isMarked={d.is_marked}
+                          format={roundConfig.format}
+                          face={face ?? null}
+                          arrowsPerEnd={d.arrows_per_end}
+                          totalEnds={d.total_ends}
+                          trailing={
+                            <ChevronRight className="size-4 shrink-0" />
+                          }
+                        />
+                      </button>
+                      {editingDistanceIds.has(d.id) && (
+                        <DistanceEditFields
+                          distance={{
+                            id: d.id,
+                            distanceNumber: d.distance_number,
+                            distance: d.distance,
+                            totalEnds: d.total_ends,
+                            arrowsPerEnd: d.arrows_per_end,
+                            targetFaceId: d.target_face_id,
+                            isMarked: d.is_marked,
+                          }}
+                          hasShots={distanceIdsWithShots.has(d.id)}
+                          targetFaces={targetFaces}
+                          roundFormat={roundConfig.format}
+                          roundBowType={roundConfig.bowType}
+                          onSaved={handleDistanceSaved}
+                          onDeleted={() => handleDistanceDeleted(d.id)}
+                          onOpenChange={(open) => {
+                            if (!open) toggleDistanceEditing(d.id);
+                          }}
+                          enqueue={sync.enqueue}
+                        />
+                      )}
+                      {/* 常に上（トグルボタンの余っている下paddingの中）に食い込ま
                       せておく（-mt-3.5、合計バーの丸みの半径分）。上端は枠線を
                       持たせず、区切り線はトグルボタン側のborder-bが担う。これに
                       より通常表示時はトグルボタンの余白に、スクロールで合計バー
@@ -1450,52 +1461,54 @@ export function ScorecardClient({
                       だけ上のpaddingを増やし、テキストが隠れないようにする。
                       この小計の親（この内側ラッパー）が最終行を含まないため、
                       最終行の手前でstickyが自然に外れる。 */}
-                    <div className="-mt-3.5 sticky top-8 z-10 flex items-baseline justify-end gap-2 border-b bg-card px-3 pt-6 pb-2 text-muted-foreground text-xs">
-                      {distanceLabels && (
-                        <span
-                          data-testid={`distance-top-scores-${d.distance_number}`}
-                        >
-                          {distanceLabels.primaryLabel}: {distancePrimaryCount}{" "}
-                          / {distanceLabels.secondaryLabel}:{" "}
-                          {distanceSecondaryCount}
+                      <div className="-mt-3.5 sticky top-[88px] z-10 flex items-baseline justify-end gap-2 border-b bg-card px-3 pt-6 pb-2 text-muted-foreground text-xs">
+                        {distanceLabels && (
+                          <span
+                            data-testid={`distance-top-scores-${d.distance_number}`}
+                          >
+                            {distanceLabels.primaryLabel}:{" "}
+                            {distancePrimaryCount} /{" "}
+                            {distanceLabels.secondaryLabel}:{" "}
+                            {distanceSecondaryCount}
+                          </span>
+                        )}
+                        <span className="text-foreground text-sm font-semibold">
+                          小計{distanceTotal}
                         </span>
-                      )}
-                      <span className="text-foreground text-sm font-semibold">
-                        小計{distanceTotal}
-                      </span>
-                    </div>
-                    {d.total_ends > 1 && (
-                      <div className="divide-y">
-                        {Array.from(
-                          { length: d.total_ends - 1 },
-                          (_, i) => i + 1,
-                        ).map((end) => renderEndRow(end))}
                       </div>
-                    )}
-                  </div>
-                  {/* 最終行だけを小計のsticky境界の外に出す。border-tは
+                      {d.total_ends > 1 && (
+                        <div className="divide-y">
+                          {Array.from(
+                            { length: d.total_ends - 1 },
+                            (_, i) => i + 1,
+                          ).map((end) => renderEndRow(end))}
+                        </div>
+                      )}
+                    </div>
+                    {/* 最終行だけを小計のsticky境界の外に出す。border-tは
                     「1〜N-1行目」グループとの間のdivide-y相当の区切り線。
                     overflow-hiddenはこのend行側だけに付ける。カード直下
                     （親）に付けると、sticky（小計バー）がこの
                     overflow-hiddenを基準にしてしまい、ページ全体の
                     スクロールに追従しなくなるため。 */}
-                  <div className="divide-y overflow-hidden rounded-b-xl border-t">
-                    {renderEndRow(d.total_ends)}
+                    <div className="divide-y overflow-hidden rounded-b-xl border-t">
+                      {renderEndRow(d.total_ends)}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              data-testid="add-distance-button"
-              onClick={handleAddDistance}
-              className="h-12 border-dashed"
-            >
-              <Plus />
-              距離を追加
-            </Button>
+                );
+              })}
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                data-testid="add-distance-button"
+                onClick={handleAddDistance}
+                className="h-12 border-dashed"
+              >
+                <Plus />
+                距離を追加
+              </Button>
+            </div>
           </div>
         </div>
 
