@@ -135,14 +135,22 @@ test("下にスクロールしても、ラウンド結果の合計が常に画�
 
   const scrollContainer = page.locator("main.overflow-y-auto");
   const roundSummary = page.getByTestId("round-summary");
+  const backLink = page.getByRole("link", { name: "一覧へ戻る" });
 
   await scrollContainer.evaluate((el) => {
     el.scrollTop = 300;
   });
 
+  // 一覧へ戻る・同期状態の行（h-14固定）も画面上部に張り付き、
+  // 合計バーはその直下（top-14）に続けて張り付く。
+  await expect(backLink).toBeVisible();
+  const backLinkBox = await backLink.boundingBox();
+  expect(backLinkBox?.y).toBeLessThan(20);
+
   await expect(roundSummary).toBeVisible();
   const summaryBox = await roundSummary.boundingBox();
-  expect(summaryBox?.y).toBeLessThan(10);
+  expect(summaryBox?.y).toBeLessThan(66);
+  expect(summaryBox?.y).toBeGreaterThan(40);
 });
 
 test("下にスクロールして別の距離のエンドに移っても、現在の距離の距離結果が常に画面上部に見える", async ({
@@ -174,7 +182,7 @@ test("下にスクロールして別の距離のエンドに移っても、現�
   await expect(distance1Subtotal).toBeVisible();
   await expect(distance1Subtotal).toContainText("小計0");
   const distance1Box = await distance1Subtotal.boundingBox();
-  expect(distance1Box?.y).toBeLessThan(100);
+  expect(distance1Box?.y).toBeLessThan(120);
 
   // 距離2の途中までスクロールすると、小計は距離2のものへ引き継がれる。
   const distance2Top = await page
@@ -190,7 +198,7 @@ test("下にスクロールして別の距離のエンドに移っても、現�
   await expect(distance2Subtotal).toBeVisible();
   await expect(distance2Subtotal).toContainText("小計0");
   const distance2Box = await distance2Subtotal.boundingBox();
-  expect(distance2Box?.y).toBeLessThan(100);
+  expect(distance2Box?.y).toBeLessThan(120);
 });
 
 test("モバイルでマスをタップすると、そのマスを選択して下パネルでテンキーを展開し、マスをテンキー上部までスクロールする", async ({
