@@ -16,16 +16,20 @@ export function ConfirmDialog({
   description,
   confirmLabel = "削除",
   onConfirm,
+  nested = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   description: string;
   confirmLabel?: string;
   onConfirm: () => void;
+  // 他のDialogの中から開かれる場合はtrueにする（距離削除確認等）。
+  // 詳細はDialogContentのnestedの説明を参照。
+  nested?: boolean;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent nested={nested}>
         <div className="flex flex-col gap-4">
           <p className="text-sm">{description}</p>
           <div className="flex justify-end gap-2">
