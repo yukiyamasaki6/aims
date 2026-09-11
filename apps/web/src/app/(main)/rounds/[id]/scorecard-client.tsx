@@ -100,6 +100,59 @@ function uniqueRingsFor(targetFace: TargetFaceOption | undefined) {
   return Array.from(new Map(allRings.map((r) => [r.score_str, r])).values());
 }
 
+type TopScoreLabels = {
+  hasX: boolean;
+  primaryLabel: string;
+  secondaryLabel: string;
+};
+
+// 的にXリングがあるかどうかで、集計欄に出す2つの点数ラベルを決める。
+// Xリングがあれば「X数/最高点数（Xの次に高い実点数）」、無ければ
+// 「最高点数/次点数」を表示する（フィールド的のように最高点が10未満の
+// 的でも、実在する点数で動的に決まる）。
+function topScoreLabels(
+  targetFace: TargetFaceOption | undefined,
+): TopScoreLabels | null {
+  const rings = uniqueRingsFor(targetFace).sort(
+    (a, b) => b.z_index - a.z_index,
+  );
+  if (rings.length === 0) return null;
+
+  const hasX = rings[0].score_str === "X";
+  const nonXRings = rings.filter((r) => r.score_str !== "X");
+  const primaryLabel = hasX ? "X" : nonXRings[0]?.score_str;
+  const secondaryLabel = hasX
+    ? nonXRings[0]?.score_str
+    : nonXRings[1]?.score_str;
+  if (primaryLabel === undefined || secondaryLabel === undefined) return null;
+
+  return { hasX, primaryLabel, secondaryLabel };
+}
+
+// ラウンド結果の集計は、全ての距離で的のX有無・最高点数・次点数が一致する
+// 場合のみ意味を持つ（例: 18mが10点的・30mが6点的だと「X数」も「10」も
+// 両方の距離を跨いで比較できない）。一致しなければnullを返し、呼び出し側で
+// 非表示にする。
+function roundTopScoreLabels(
+  distances: Distance[],
+  targetFaces: TargetFaceOption[],
+): TopScoreLabels | null {
+  const perDistance = distances.map((d) =>
+    topScoreLabels(targetFaces.find((f) => f.id === d.target_face_id)),
+  );
+  const first = perDistance[0];
+  if (!first) return null;
+
+  const allSame = perDistance.every(
+    (labels) =>
+      labels !== null &&
+      labels.hasX === first.hasX &&
+      labels.primaryLabel === first.primaryLabel &&
+      labels.secondaryLabel === first.secondaryLabel,
+  );
+  return allSame ? first : null;
+}
+
 // 距離の的に実在する点数・配色だけをテンキーのキーとして構成する。的によって
 // リング数が異なる（例: 6点的は1〜4が無い）ため、固定のキー一覧は持たない。
 function keypadKeysFor(targetFace: TargetFaceOption | undefined) {
@@ -552,8 +605,13 @@ export function ScorecardClient({
   }, [position, keypadHeight, isLandscape]);
 
   const total = shots.reduce((sum, s) => sum + s.score_int, 0);
-  const xCount = shots.filter((s) => s.score_str === "X").length;
-  const tenCount = shots.filter((s) => s.score_str === "10").length;
+  const roundLabels = roundTopScoreLabels(distances, targetFaces);
+  const roundPrimaryCount = roundLabels
+    ? shots.filter((s) => s.score_str === roundLabels.primaryLabel).length
+    : 0;
+  const roundSecondaryCount = roundLabels
+    ? shots.filter((s) => s.score_str === roundLabels.secondaryLabel).length
+    : 0;
 
   const distanceIdsWithShots = new Set(shots.map((s) => s.distance_id));
 
@@ -1182,9 +1240,15 @@ export function ScorecardClient({
             className="-mt-6 sticky top-0 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border-x border-b bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
           >
             <div className="flex items-baseline gap-2">
-              <span className="text-muted-foreground text-sm">
-                X: {xCount} / 10: {tenCount}
-              </span>
+              {roundLabels && (
+                <span
+                  data-testid="round-top-scores"
+                  className="text-muted-foreground text-sm"
+                >
+                  {roundLabels.primaryLabel}: {roundPrimaryCount} /{" "}
+                  {roundLabels.secondaryLabel}: {roundSecondaryCount}
+                </span>
+              )}
               <span className="font-heading text-lg font-semibold">
                 合計{total}
               </span>
@@ -1214,13 +1278,18 @@ export function ScorecardClient({
                 (sum, s) => sum + s.score_int,
                 0,
               );
-              const distanceXCount = distanceShots.filter(
-                (s) => s.score_str === "X",
-              ).length;
-              const distanceTenCount = distanceShots.filter(
-                (s) => s.score_str === "10",
-              ).length;
               const face = targetFaceOf(d.target_face_id);
+              const distanceLabels = topScoreLabels(face);
+              const distancePrimaryCount = distanceLabels
+                ? distanceShots.filter(
+                    (s) => s.score_str === distanceLabels.primaryLabel,
+                  ).length
+                : 0;
+              const distanceSecondaryCount = distanceLabels
+                ? distanceShots.filter(
+                    (s) => s.score_str === distanceLabels.secondaryLabel,
+                  ).length
+                : 0;
 
               // end行1件分の描画。最終行だけ小計のsticky境界（下記の内側
               // ラッパー）の外に出すため、共通化して2箇所から呼べるようにする。
@@ -1382,9 +1451,15 @@ export function ScorecardClient({
                       この小計の親（この内側ラッパー）が最終行を含まないため、
                       最終行の手前でstickyが自然に外れる。 */}
                     <div className="-mt-3.5 sticky top-8 z-10 flex items-baseline justify-end gap-2 border-b bg-card px-3 pt-6 pb-2 text-muted-foreground text-xs">
-                      <span>
-                        X: {distanceXCount} / 10: {distanceTenCount}
-                      </span>
+                      {distanceLabels && (
+                        <span
+                          data-testid={`distance-top-scores-${d.distance_number}`}
+                        >
+                          {distanceLabels.primaryLabel}: {distancePrimaryCount}{" "}
+                          / {distanceLabels.secondaryLabel}:{" "}
+                          {distanceSecondaryCount}
+                        </span>
+                      )}
                       <span className="text-foreground text-sm font-semibold">
                         小計{distanceTotal}
                       </span>
