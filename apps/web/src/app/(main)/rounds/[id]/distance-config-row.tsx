@@ -365,6 +365,14 @@ export function DistanceEditFields({
       setError("Markedの場合は距離（m）を入力してください。");
       return;
     }
+    if (draft.arrowsPerEnd === 0) {
+      setError("エンドあたりの本数を入力してください。");
+      return;
+    }
+    if (draft.totalEnds === 0) {
+      setError("総エンド数を入力してください。");
+      return;
+    }
     setError(null);
 
     onSaved(draft);

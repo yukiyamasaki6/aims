@@ -92,6 +92,10 @@ export function RoundConfigPanel({
     // クライアントが既に持っている値（distancesのis_marked）だけで判定
     // できるため、サーバーへ投げる前に同期的に検証する
     // （キュー経由の非同期エラーにはしない）。
+    if (draft.roundDate === "") {
+      setError("実施日を入力してください。");
+      return;
+    }
     if (draft.format !== "field" && hasUnmarkedDistances) {
       setError(
         "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。",

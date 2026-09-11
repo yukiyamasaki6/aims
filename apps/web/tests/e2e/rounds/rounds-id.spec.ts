@@ -290,6 +290,20 @@ test("ラウンド設定編集ダイアログで背景をクリックすると�
   );
 });
 
+test("実施日を空にして保存しようとするとエラーになり、保存されない", async ({
+  page,
+}) => {
+  await page.getByTestId("round-config-summary").click();
+  await page.getByTestId("round-config-date").fill("");
+  await page.getByTestId("round-config-save").click();
+
+  await expect(page.getByText("実施日を入力してください。")).toBeVisible();
+  await expect(page.getByTestId("round-config-save")).toBeVisible();
+  await expect(page.getByTestId("round-config-summary")).toContainText(
+    "2026-08-24",
+  );
+});
+
 test("ラウンド名が未設定のときは要約にプレースホルダーを表示せず、名前の区切りも出ない", async ({
   page,
 }) => {
