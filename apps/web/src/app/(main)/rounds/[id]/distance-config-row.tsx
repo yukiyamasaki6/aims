@@ -533,6 +533,7 @@ export function DistanceEditFields({
         onOpenChange={setConfirmOpen}
         description="この距離にはすでにスコアが記録されています。削除するとスコアも失われます。削除しますか？"
         onConfirm={performDelete}
+        nested
       />
     </Dialog>
   );

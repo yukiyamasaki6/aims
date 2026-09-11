@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
 import type { EnqueueInput } from "./use-sync-queue";
 
@@ -67,8 +66,6 @@ export function RoundConfigPanel({
   defaultExpanded = false,
   hasUnmarkedDistances,
   enqueue,
-  hasSyncError,
-  onOpenSyncErrors,
 }: {
   roundId: string;
   initial: RoundConfig;
@@ -76,8 +73,6 @@ export function RoundConfigPanel({
   defaultExpanded?: boolean;
   hasUnmarkedDistances: boolean;
   enqueue: (input: EnqueueInput) => void;
-  hasSyncError: boolean;
-  onOpenSyncErrors: () => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [saved, setSaved] = useState(initial);
@@ -120,19 +115,8 @@ export function RoundConfigPanel({
       <button
         type="button"
         data-testid="round-config-summary"
-        onClick={() => {
-          if (hasSyncError) {
-            onOpenSyncErrors();
-            return;
-          }
-          toggleExpanded();
-        }}
-        className={cn(
-          "flex w-full items-center justify-between gap-2 rounded-t-xl p-3 text-left text-sm",
-          // 通常のborder（1px）より太く、選択中の枠（ring-2）より細い
-          // リングでエラーを示す。
-          hasSyncError && "ring-[1.5px] ring-destructive ring-inset",
-        )}
+        onClick={toggleExpanded}
+        className="flex w-full items-center justify-between gap-2 rounded-t-xl p-3 text-left text-sm"
       >
         <span className="truncate">
           {[

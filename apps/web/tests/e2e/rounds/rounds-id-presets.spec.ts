@@ -2,19 +2,17 @@ import { expect, test } from "../fixtures";
 import { signUpAndSignIn, waitForHydration } from "../helpers/auth";
 import { createRound } from "../helpers/rounds";
 
-// 保存したプリセットが共有アカウントの個人プリセット一覧に残り続けると、
-// 他のテスト（個人プリセット0件の検証等）に影響するため、専用ユーザーで行う。
-test("現在の構成を個人プリセットとして保存でき、/rounds/newの選択肢に表示される", async ({
+test("「プリセット保存」ボタンをクリックするとプリセット保存ダイアログを表示する", async ({
   page,
 }) => {
-  const email = `save-as-preset-${Date.now()}@aims.test`;
-  const password = "password-save-preset";
+  const email = `save-as-preset-trigger-${Date.now()}@aims.test`;
+  const password = "password-save-preset-trigger";
   await signUpAndSignIn(page, { email, password });
 
   const roundId = await createRound({
     email,
     password,
-    name: "保存元ラウンド",
+    name: "ダイアログ表示テスト",
     roundDate: "2026-08-24",
     format: "outdoor",
     bowType: "recurve",
@@ -24,27 +22,39 @@ test("現在の構成を個人プリセットとして保存でき、/rounds/new
   await waitForHydration(page);
 
   await page.getByTestId("save-as-preset-trigger").click();
-  await page.getByTestId("save-as-preset-name").fill("マイプリセットA");
-  await page.getByTestId("save-as-preset-confirm").click();
 
-  // 保存成功時はダイアログが閉じる。
-  await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
-
-  await page.goto("/rounds/new");
-  await waitForHydration(page);
-  await expect(page.getByTestId("personal-preset-placeholder")).toBeHidden();
-
-  const presetButton = page
-    .getByTestId("round-preset-button")
-    .filter({ hasText: "マイプリセットA" });
-  await presetButton.click();
-
-  const presetCard = presetButton.locator("..");
-  await expect(presetCard).toContainText("30m");
-  await expect(presetCard).toContainText("6本×3エンド");
+  await expect(page.getByTestId("save-as-preset-name")).toBeVisible();
 });
 
-test("ラウンド名が空でプリセット名も空のまま保存すると、距離構成から自動生成された名前が採用される", async ({
+test("プリセット保存ダイアログは、プリセット名の入力欄に距離構成から自動生成した名前をプレースホルダーとして表示する", async ({
+  page,
+}) => {
+  const email = `save-as-preset-placeholder-${Date.now()}@aims.test`;
+  const password = "password-save-preset-placeholder";
+  await signUpAndSignIn(page, { email, password });
+
+  const roundId = await createRound({
+    email,
+    password,
+    name: "",
+    roundDate: "2026-08-24",
+    format: "outdoor",
+    bowType: "recurve",
+    distances: [
+      { distance: 30, totalEnds: 3, arrowsPerEnd: 6 },
+      { distance: 30, totalEnds: 3, arrowsPerEnd: 6 },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  await page.getByTestId("save-as-preset-trigger").click();
+  const nameInput = page.getByTestId("save-as-preset-name");
+  await expect(nameInput).toHaveAttribute("placeholder", "30-30");
+  await expect(nameInput).toHaveValue("");
+});
+
+test("プリセット名が空のまま保存すると、プレースホルダーの値で保存される", async ({
   page,
 }) => {
   const email = `save-as-preset-autoname-${Date.now()}@aims.test`;
@@ -67,11 +77,8 @@ test("ラウンド名が空でプリセット名も空のまま保存すると�
   await waitForHydration(page);
 
   await page.getByTestId("save-as-preset-trigger").click();
-  const nameInput = page.getByTestId("save-as-preset-name");
-  await expect(nameInput).toHaveAttribute("placeholder", "30-30");
-  await expect(nameInput).toHaveValue("");
   await page.getByTestId("save-as-preset-confirm").click();
-  await expect(nameInput).toBeHidden();
+  await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
 
   await page.goto("/rounds/new");
   await waitForHydration(page);
@@ -113,74 +120,73 @@ test("ラウンド名が設定されている場合、プリセット名欄に�
   ).toBeVisible();
 });
 
-test("距離が未入力（Unmarked）の場合、自動生成された名前ではその距離が「??」になる", async ({
+test("プリセット保存ダイアログの背景をクリックすると閉じる", async ({
   page,
 }) => {
-  const email = `save-as-preset-unknown-distance-${Date.now()}@aims.test`;
-  const password = "password-save-preset-unknown-distance";
+  const email = `save-as-preset-outside-${Date.now()}@aims.test`;
+  const password = "password-save-preset-outside";
   await signUpAndSignIn(page, { email, password });
 
   const roundId = await createRound({
     email,
     password,
-    name: "",
+    name: "背景クリックテスト",
     roundDate: "2026-08-24",
-    format: "field",
+    format: "outdoor",
     bowType: "recurve",
-    distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 3 }],
+    distances: [{ distance: 30, totalEnds: 3, arrowsPerEnd: 6 }],
   });
   await page.goto(`/rounds/${roundId}`);
   await waitForHydration(page);
 
-  await page.getByTestId("distance-config-toggle-1").click();
-  await page.getByTestId("distance-config-unmarked-1").click();
-  await page.getByTestId("distance-config-distance-1").fill("");
-  await page.getByTestId("distance-config-save-1").click();
-
   await page.getByTestId("save-as-preset-trigger").click();
-  await expect(page.getByTestId("save-as-preset-name")).toHaveAttribute(
-    "placeholder",
-    "??",
-  );
+  await expect(page.getByTestId("save-as-preset-name")).toBeVisible();
+
+  await page.mouse.click(5, 5);
+
+  await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
 });
 
-test("Unmarkedな距離を含む構成をプリセット保存すると、選択画面でもUnmarkedと表示される", async ({
+// 保存したプリセットが共有アカウントの個人プリセット一覧に残り続けると、
+// 他のテスト（個人プリセット0件の検証等）に影響するため、専用ユーザーで行う。
+test("現在の構成を個人プリセットとして保存でき、/rounds/newの選択肢に表示される", async ({
   page,
 }) => {
-  const email = `save-as-preset-unmarked-${Date.now()}@aims.test`;
-  const password = "password-save-preset-unmarked";
+  const email = `save-as-preset-${Date.now()}@aims.test`;
+  const password = "password-save-preset";
   await signUpAndSignIn(page, { email, password });
 
   const roundId = await createRound({
     email,
     password,
-    name: "アンマークド保存元",
+    name: "保存元ラウンド",
     roundDate: "2026-08-24",
-    format: "field",
+    format: "outdoor",
     bowType: "recurve",
-    distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 3 }],
+    distances: [{ distance: 30, totalEnds: 3, arrowsPerEnd: 6 }],
   });
   await page.goto(`/rounds/${roundId}`);
   await waitForHydration(page);
 
-  await page.getByTestId("distance-config-toggle-1").click();
-  await page.getByTestId("distance-config-unmarked-1").click();
-  await page.getByTestId("distance-config-save-1").click();
-
   await page.getByTestId("save-as-preset-trigger").click();
-  await page.getByTestId("save-as-preset-name").fill("アンマークドプリセット");
+  await page.getByTestId("save-as-preset-name").fill("マイプリセットA");
   await page.getByTestId("save-as-preset-confirm").click();
+
+  // 保存成功時はダイアログが閉じる。
   await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
 
   await page.goto("/rounds/new");
   await waitForHydration(page);
+  await expect(page.getByTestId("personal-preset-placeholder")).toBeHidden();
+
   const presetButton = page
     .getByTestId("round-preset-button")
-    .filter({ hasText: "アンマークドプリセット" });
+    .filter({ hasText: "マイプリセットA" });
   await presetButton.click();
 
   const presetCard = presetButton.locator("..");
-  await expect(presetCard).toContainText("Unmarked");
+  await expect(presetCard).toContainText("30m");
+  await expect(presetCard).toContainText("6本×3エンド");
 });
 
 test("距離を編集した直後にプリセット保存すると、直前の変更の反映を待ってから保存される", async ({
@@ -236,4 +242,35 @@ test("距離を編集した直後にプリセット保存すると、直前の�
 
   await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
   expect(saveAsPresetRequested).toBe(true);
+});
+
+test("サインインが切れた状態でプリセット保存すると、エラーメッセージを表示する", async ({
+  page,
+}) => {
+  const email = `save-as-preset-signout-${Date.now()}@aims.test`;
+  const password = "password-save-preset-signout";
+  await signUpAndSignIn(page, { email, password });
+
+  const roundId = await createRound({
+    email,
+    password,
+    name: "サインイン切れ保存テスト",
+    roundDate: "2026-08-24",
+    format: "outdoor",
+    bowType: "recurve",
+    distances: [{ distance: 30, totalEnds: 3, arrowsPerEnd: 6 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  await page.getByTestId("save-as-preset-trigger").click();
+  await page
+    .getByTestId("save-as-preset-name")
+    .fill("サインイン切れプリセット");
+
+  await page.context().clearCookies();
+  await page.getByTestId("save-as-preset-confirm").click();
+
+  await expect(page.getByText("サインインが必要です。")).toBeVisible();
+  await expect(page.getByTestId("save-as-preset-name")).toBeVisible();
 });

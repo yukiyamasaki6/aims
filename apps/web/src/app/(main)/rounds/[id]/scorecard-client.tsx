@@ -1076,10 +1076,16 @@ export function ScorecardClient({
                     )}
                     <Button
                       type="button"
-                      disabled={presetSubmitting}
+                      aria-disabled={presetSubmitting}
+                      className={cn(
+                        presetSubmitting && "pointer-events-none opacity-50",
+                      )}
                       data-testid="save-as-preset-confirm"
                       onClick={handleSavePreset}
                     >
+                      {presetSubmitting && (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      )}
                       保存
                     </Button>
                   </div>
@@ -1122,8 +1128,6 @@ export function ScorecardClient({
               defaultExpanded={initialDistances.length === 0}
               hasUnmarkedDistances={distances.some((d) => !d.is_marked)}
               enqueue={sync.enqueue}
-              hasSyncError={sync.errorFor("roundConfig") !== undefined}
-              onOpenSyncErrors={() => setSyncErrorsOpen(true)}
             />
           </div>
           {/* position: stickyは直接の親の高さの範囲でしか張り付かないため、
@@ -1228,22 +1232,13 @@ export function ScorecardClient({
                               ),
                             )
                           : null;
-                        const cellError = sync.errorFor(
-                          `shot:${d.id}:${end}:${arrow}`,
-                        );
 
                         return (
                           <button
                             key={arrow}
                             type="button"
                             data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
-                            onClick={() => {
-                              if (cellError) {
-                                setSyncErrorsOpen(true);
-                                return;
-                              }
-                              selectCell(d, end, arrow);
-                            }}
+                            onClick={() => selectCell(d, end, arrow)}
                             className={cn(
                               // 得点色をstyleで直接指定するため、hover:bg-muted等の
                               // クラスは常にそのstyleに上書きされて効かない
@@ -1257,11 +1252,6 @@ export function ScorecardClient({
                               "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
                               isActive &&
                                 "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
-                              // 選択中のring-2より細く、通常のborder（1px）より太い
-                              // 枠でエラーを示す。
-                              cellError &&
-                                !isActive &&
-                                "ring-[1.5px] ring-destructive ring-inset",
                             )}
                             style={
                               color
@@ -1313,20 +1303,8 @@ export function ScorecardClient({
                     <button
                       type="button"
                       data-testid={`distance-config-toggle-${d.distance_number}`}
-                      onClick={() => {
-                        if (sync.errorFor(`distance:${d.id}`)) {
-                          setSyncErrorsOpen(true);
-                          return;
-                        }
-                        toggleDistanceEditing(d.id);
-                      }}
-                      className={cn(
-                        "relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm",
-                        // 通常のborder（1px）より太く、選択中の枠（ring-2）より
-                        // 細いリングでエラーを示す。
-                        sync.errorFor(`distance:${d.id}`) &&
-                          "ring-[1.5px] ring-destructive ring-inset",
-                      )}
+                      onClick={() => toggleDistanceEditing(d.id)}
+                      className="relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm"
                     >
                       <DistanceInfo
                         distance={d.distance}
