@@ -60,7 +60,7 @@ flowchart TD
     RoundsNew -->|ラウンド作成成功| RoundDetail
     RoundDetail -->|「一覧へ戻る」リンク| Rounds
     RoundDetail -->|ラウンド削除成功| Rounds
-    LeftPanel -->|AIMS/自分リンク| Rounds
+    LeftPanel -->|AIMS/個人リンク| Rounds
     LeftPanel -->|サインアウト成功| Landing
 ```
 
@@ -228,7 +228,7 @@ flowchart TD
 | 展開 | デスクトップ | 格納ボタンをクリック | 格納する | 〇 |
 | 格納 | デスクトップ | 開くボタンをクリック | 展開する | 〇 |
 | 展開 | - | AIMSリンクをクリック | /roundsへ遷移 | 〇 |
-| 展開 | - | 自分リンクをクリック | /roundsへ遷移 | 〇 |
+| 展開 | - | 個人リンクをクリック | /roundsへ遷移 | 〇 |
 | 展開 | - | サインアウトボタンをクリック | サインアウト確認ダイアログを表示する | 〇 |
 | 格納 | - | - | パネルの中身を非表示にする | 〇 |
 

@@ -81,12 +81,12 @@ test("格納ボタンでAIMSリンクが無効になる", async ({ page }) => {
   await expect(page.getByRole("link", { name: "AIMS" })).toBeHidden();
 });
 
-test("格納ボタンで自分リンクが無効になる", async ({ page }) => {
+test("格納ボタンで個人リンクが無効になる", async ({ page }) => {
   await page.goto("/rounds");
 
   await page.getByRole("button", { name: "パネルを格納する" }).click();
 
-  await expect(page.getByRole("link", { name: "自分" })).toBeHidden();
+  await expect(page.getByRole("link", { name: "個人" })).toBeHidden();
 });
 
 test("格納ボタンでサインアウトボタンが無効になる", async ({ page }) => {
@@ -123,13 +123,13 @@ test.describe(() => {
     await expect(page).toHaveURL(/\/rounds$/);
   });
 
-  test("モバイルで自分リンクをクリックすると/roundsへ遷移する", async ({
+  test("モバイルで個人リンクをクリックすると/roundsへ遷移する", async ({
     page,
   }) => {
     await page.goto("/rounds/new");
     await page.getByRole("button", { name: "メニューを開く" }).click();
 
-    await page.getByRole("link", { name: "自分" }).click();
+    await page.getByRole("link", { name: "個人" }).click();
 
     await expect(page).toHaveURL(/\/rounds$/);
   });
@@ -156,12 +156,12 @@ test.describe(() => {
     await expect(page.getByRole("link", { name: "AIMS" })).not.toBeInViewport();
   });
 
-  test("格納時は自分リンクが無効になる", async ({ page }) => {
+  test("格納時は個人リンクが無効になる", async ({ page }) => {
     await page.goto("/rounds");
     await page.getByRole("button", { name: "メニューを開く" }).click();
     await page.getByRole("button", { name: "メニューを閉じる" }).last().click();
 
-    await expect(page.getByRole("link", { name: "自分" })).not.toBeInViewport();
+    await expect(page.getByRole("link", { name: "個人" })).not.toBeInViewport();
   });
 
   test("格納時はサインアウトボタンが無効になる", async ({ page }) => {
@@ -185,12 +185,12 @@ test("デスクトップでAIMSリンクをクリックすると/roundsへ遷移
   await expect(page).toHaveURL(/\/rounds$/);
 });
 
-test("デスクトップで自分リンクをクリックすると/roundsへ遷移する", async ({
+test("デスクトップで個人リンクをクリックすると/roundsへ遷移する", async ({
   page,
 }) => {
   await page.goto("/rounds/new");
 
-  await page.getByRole("link", { name: "自分" }).click();
+  await page.getByRole("link", { name: "個人" }).click();
 
   await expect(page).toHaveURL(/\/rounds$/);
 });
