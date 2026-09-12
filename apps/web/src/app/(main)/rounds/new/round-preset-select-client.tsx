@@ -64,35 +64,44 @@ function PresetRow({
         selected && "border-primary ring-1 ring-primary",
       )}
     >
-      <button
-        type="button"
-        aria-pressed={selected}
-        data-testid="round-preset-button"
-        onClick={onSelect}
-        className={cn("w-full p-3 text-left font-medium", onDelete && "pr-10")}
-      >
-        {preset.name}
-      </button>
-      {onDelete && (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            aria-label={`「${preset.name}」のメニュー`}
-            data-testid="round-preset-menu-trigger"
-            className="-translate-y-1/2 absolute top-1/2 right-1 p-2 text-muted-foreground hover:text-foreground"
-          >
-            <MoreHorizontal className="size-5" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem
-              data-testid="round-preset-delete"
-              className="text-destructive data-[highlighted]:text-destructive"
-              onClick={onDelete}
+      {/* このrelativeは名前行だけの高さに絞るためのもの。カード全体（外側の
+          relative）に対して中央寄せすると、選択中の展開表示（下の
+          PresetInfo）を含んだ高さで中央が計算され、展開時にメニュー
+          ボタンの位置がずれてしまう。 */}
+      <div className="relative">
+        <button
+          type="button"
+          aria-pressed={selected}
+          data-testid="round-preset-button"
+          onClick={onSelect}
+          className={cn(
+            "w-full p-3 text-left font-medium",
+            onDelete && "pr-10",
+          )}
+        >
+          {preset.name}
+        </button>
+        {onDelete && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label={`「${preset.name}」のメニュー`}
+              data-testid="round-preset-menu-trigger"
+              className="-translate-y-1/2 absolute top-1/2 right-1 p-2 text-muted-foreground hover:text-foreground"
             >
-              削除
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+              <MoreHorizontal className="size-5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem
+                data-testid="round-preset-delete"
+                className="text-destructive data-[highlighted]:text-destructive"
+                onClick={onDelete}
+              >
+                削除
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
       {selected && (
         <button
           type="button"
