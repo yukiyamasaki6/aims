@@ -59,7 +59,7 @@ export function LeftPanelClient({ isSignedIn }: { isSignedIn: boolean }) {
           className="flex items-center gap-2 text-sm"
         >
           <Menu className="size-5" />
-          自分
+          個人
         </button>
       </div>
 
@@ -123,7 +123,7 @@ export function LeftPanelClient({ isSignedIn }: { isSignedIn: boolean }) {
             href="/rounds"
             className="rounded-lg bg-muted px-3 py-2 text-sm font-medium"
           >
-            自分
+            個人
           </Link>
         </nav>
 
