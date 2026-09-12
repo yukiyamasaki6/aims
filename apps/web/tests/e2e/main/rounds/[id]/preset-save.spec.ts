@@ -1,6 +1,6 @@
-import { expect, test } from "../fixtures";
-import { signUpAndSignIn, waitForHydration } from "../helpers/auth";
-import { createRound } from "../helpers/rounds";
+import { expect, test } from "../../../fixtures";
+import { signUpAndSignIn, waitForHydration } from "../../../helpers/auth";
+import { createRound } from "../../../helpers/rounds";
 
 test("「プリセット保存」ボタンをクリックするとプリセット保存ダイアログを表示する", async ({
   page,

@@ -4,8 +4,8 @@ import {
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
   waitForHydration,
-} from "../helpers/auth";
-import { createRound } from "../helpers/rounds";
+} from "../../../helpers/auth";
+import { createRound } from "../../../helpers/rounds";
 
 const TARGET_FACE_40CM_INDOOR = "a1000000-0000-0000-0000-000000000007";
 
