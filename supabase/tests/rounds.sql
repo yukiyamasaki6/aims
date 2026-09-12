@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(79);
+select plan(84);
 
 -- ============================================================
 -- RLS: editor / 非メンバー
@@ -573,6 +573,48 @@ select throws_ok(
 );
 
 -- ============================================================
+-- distances: distance/total_ends/arrows_per_endの1以上の整数CHECK制約
+-- ============================================================
+
+select throws_ok(
+  $$insert into public.distances
+      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('$$ || :'marked_round_id' || $$', 10, 0, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23514',
+  null,
+  'distance=0はCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$insert into public.distances
+      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('$$ || :'marked_round_id' || $$', 10, 70, 0, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23514',
+  null,
+  'total_ends=0はCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$insert into public.distances
+      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('$$ || :'marked_round_id' || $$', 10, 70, 6, 0, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23514',
+  null,
+  'arrows_per_end=0はCHECK制約で拒否される'
+);
+
+select lives_ok(
+  $$insert into public.distances
+      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('$$ || :'marked_round_id' || $$', 10, 1, 1, 1, 'a1000000-0000-0000-0000-000000000001')$$,
+  'distance/total_ends/arrows_per_endが1（境界値）なら挿入できる'
+);
+
+-- ============================================================
 -- カスケード削除: rounds → distances/shots/round_users
 -- ============================================================
 
@@ -744,6 +786,13 @@ select results_eq(
     from public.distances where id = '$$ || :'update_distance_id' || $$'$$,
   $$values (50::bigint, 3::bigint, 3::bigint, 'a1000000-0000-0000-0000-000000000002'::uuid, false)$$,
   'shotsが無い距離は全列の更新内容が反映される'
+);
+
+select throws_ok(
+  $$select update_distance('$$ || :'update_distance_id' || $$', 50, 0, 3, 'a1000000-0000-0000-0000-000000000002', false)$$,
+  '23514',
+  null,
+  'update_distance経由でもtotal_ends=0はCHECK制約で拒否される'
 );
 
 insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)

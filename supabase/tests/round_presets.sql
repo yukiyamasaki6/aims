@@ -1,6 +1,6 @@
 begin;
 
-select plan(28);
+select plan(32);
 
 select has_table('public', 'round_presets', 'round_presets テーブルが存在する');
 select has_table('public', 'round_preset_distances', 'round_preset_distances テーブルが存在する');
@@ -152,6 +152,47 @@ select throws_ok(
   '23514',
   null,
   'round_preset_distancesもis_marked=true（既定）でdistanceがnullだとCHECK制約で拒否される'
+);
+
+-- round_preset_distances: distance/total_ends/arrows_per_endの1以上の整数CHECK制約
+-- （distances側と同じ制約をここでも保証する）。
+
+select throws_ok(
+  $$insert into public.round_preset_distances
+      (preset_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('22222222-2222-2222-2222-222222222222', 10, 0, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23514',
+  null,
+  'round_preset_distances.distance=0はCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$insert into public.round_preset_distances
+      (preset_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('22222222-2222-2222-2222-222222222222', 10, 70, 0, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23514',
+  null,
+  'round_preset_distances.total_ends=0はCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$insert into public.round_preset_distances
+      (preset_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('22222222-2222-2222-2222-222222222222', 10, 70, 6, 0, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23514',
+  null,
+  'round_preset_distances.arrows_per_end=0はCHECK制約で拒否される'
+);
+
+select lives_ok(
+  $$insert into public.round_preset_distances
+      (preset_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('22222222-2222-2222-2222-222222222222', 10, 1, 1, 1, 'a1000000-0000-0000-0000-000000000001')$$,
+  'round_preset_distancesもdistance/total_ends/arrows_per_endが1（境界値）なら挿入できる'
 );
 
 select lives_ok(
