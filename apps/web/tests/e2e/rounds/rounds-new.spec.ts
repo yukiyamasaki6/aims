@@ -472,7 +472,9 @@ test.describe(() => {
     const presetButton = page
       .getByTestId("round-preset-button")
       .filter({ hasText: "WA 1440" });
-    const presetCard = presetButton.locator("..");
+    // 名前ボタン＋メニューの行だけを囲むrelativeラッパーが親のため、
+    // 選択時に展開されるPresetInfo（兄弟要素）まで含めるには2階層上がる。
+    const presetCard = presetButton.locator("../..");
     await presetButton.click();
 
     // 選択すると距離構成（距離・的アイコン・サイズ・エンド構成）が展開表示され、
@@ -582,7 +584,9 @@ test.describe(() => {
       .filter({ hasText: "WA 1440" });
     const startButton = page.getByTestId("round-start-button");
 
-    const presetCard = presetButton.locator("..");
+    // 名前ボタン＋メニューの行だけを囲むrelativeラッパーが親のため、
+    // 選択時に展開されるPresetInfo（兄弟要素）まで含めるには2階層上がる。
+    const presetCard = presetButton.locator("../..");
 
     await presetButton.click();
     await expect(startButton).toHaveText("「WA 1440」で開始");
@@ -602,11 +606,13 @@ test.describe(() => {
     const wa1440Button = page
       .getByTestId("round-preset-button")
       .filter({ hasText: "WA 1440" });
-    const wa1440Card = wa1440Button.locator("..");
+    // 名前ボタン＋メニューの行だけを囲むrelativeラッパーが親のため、
+    // 選択時に展開されるPresetInfo（兄弟要素）まで含めるには2階層上がる。
+    const wa1440Card = wa1440Button.locator("../..");
     const m70Button = page
       .getByTestId("round-preset-button")
       .filter({ hasText: "70m (720)" });
-    const m70Card = m70Button.locator("..");
+    const m70Card = m70Button.locator("../..");
 
     await wa1440Button.click();
     await expect(startButton).toHaveText("「WA 1440」で開始");
