@@ -461,7 +461,7 @@ test("要件を満たさないパスワードで登録するとエラーが表�
 
   await expect(
     page.getByText(
-      "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+      "パスワードは8文字以上72文字以内の半角英数記号で、英字と数字の両方を含めてください。",
     ),
   ).toBeVisible();
   await expect(page).not.toHaveURL(/\/rounds/);

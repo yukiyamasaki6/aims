@@ -1,3 +1,8 @@
+import {
+  PASSWORD_ALLOWED_PATTERN,
+  PASSWORD_MAX_LENGTH,
+} from "../auth-constants";
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type SignUpEmailFieldErrors = {
@@ -56,11 +61,13 @@ export function validatePasswordField(
   }
   if (
     password.length < 8 ||
+    password.length > PASSWORD_MAX_LENGTH ||
+    !PASSWORD_ALLOWED_PATTERN.test(password) ||
     !/[a-zA-Z]/.test(password) ||
     !/[0-9]/.test(password)
   ) {
     return {
-      password: "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+      password: `パスワードは8文字以上${PASSWORD_MAX_LENGTH}文字以内の半角英数記号で、英字と数字の両方を含めてください。`,
     };
   }
 

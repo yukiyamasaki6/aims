@@ -14,6 +14,7 @@ import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 import { cn } from "@/lib/utils";
+import { EMAIL_MAX_LENGTH } from "../auth-constants";
 import { type SignInFieldErrors, validateSignInFields } from "./validate";
 
 export function SignInForm() {
@@ -112,6 +113,7 @@ export function SignInForm() {
           <Input
             type="email"
             placeholder="you@example.com"
+            maxLength={EMAIL_MAX_LENGTH}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             aria-invalid={Boolean(fieldErrors.email)}

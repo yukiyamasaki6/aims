@@ -13,6 +13,7 @@ import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 import { cn } from "@/lib/utils";
+import { EMAIL_MAX_LENGTH, OTP_CODE_LENGTH } from "../auth-constants";
 import {
   type ResetPasswordCodeFieldErrors,
   type ResetPasswordEmailFieldErrors,
@@ -312,6 +313,7 @@ export function ResetPasswordForm() {
               inputMode="numeric"
               placeholder="123456"
               className="text-center tracking-widest"
+              maxLength={OTP_CODE_LENGTH}
               value={code}
               onChange={(e) => setCode(e.target.value)}
               aria-invalid={Boolean(codeFieldErrors.code)}
@@ -379,6 +381,7 @@ export function ResetPasswordForm() {
           <Input
             type="email"
             placeholder="you@example.com"
+            maxLength={EMAIL_MAX_LENGTH}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             aria-invalid={Boolean(emailFieldErrors.email)}
