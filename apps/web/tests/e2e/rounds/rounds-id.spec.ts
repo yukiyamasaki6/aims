@@ -290,6 +290,19 @@ test("ラウンド設定編集ダイアログで背景をクリックすると�
   );
 });
 
+test("ラウンド名が51文字以上だと保存しようとしてもエラーになり、保存されない", async ({
+  page,
+}) => {
+  await page.getByTestId("round-config-summary").click();
+  await page.getByTestId("round-config-name").fill("a".repeat(51));
+  await page.getByTestId("round-config-save").click();
+
+  await expect(
+    page.getByText("ラウンド名は50文字以内で入力してください。"),
+  ).toBeVisible();
+  await expect(page.getByTestId("round-config-save")).toBeVisible();
+});
+
 test("実施日を空にして保存しようとするとエラーになり、保存されない", async ({
   page,
 }) => {

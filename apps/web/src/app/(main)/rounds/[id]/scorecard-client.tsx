@@ -39,6 +39,7 @@ import {
 } from "./distance-config-row";
 import { KeypadPanel } from "./keypad-panel";
 import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
+import { NAME_MAX_LENGTH } from "./round-options";
 import { useSyncQueue } from "./use-sync-queue";
 
 type Distance = {
@@ -741,6 +742,18 @@ export function ScorecardClient({
 
   async function handleSavePreset() {
     if (presetSubmitting) return;
+
+    const name =
+      presetName.trim() !== ""
+        ? presetName.trim()
+        : generatePresetName(distances);
+    if (name.length > NAME_MAX_LENGTH) {
+      setPresetError(
+        `プリセット名は${NAME_MAX_LENGTH}文字以内で入力してください。`,
+      );
+      return;
+    }
+
     setPresetSubmitting(true);
     setPresetError(null);
 
@@ -749,10 +762,6 @@ export function ScorecardClient({
     // 完了を待ってから読みに行く。
     await sync.flush();
 
-    const name =
-      presetName.trim() !== ""
-        ? presetName.trim()
-        : generatePresetName(distances);
     const result = await saveRoundAsPreset({ roundId, name });
     if (result?.error) {
       setPresetError(result.error);
