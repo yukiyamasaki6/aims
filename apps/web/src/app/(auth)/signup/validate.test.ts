@@ -33,24 +33,45 @@ describe("validatePasswordField", () => {
 
   it("8文字未満の場合は要件のメッセージを返す", () => {
     expect(validatePasswordField("abc123")).toEqual({
-      password: "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+      password:
+        "パスワードは8文字以上72文字以内の半角英数記号で、英字と数字の両方を含めてください。",
     });
   });
 
   it("英字のみの場合は要件のメッセージを返す", () => {
     expect(validatePasswordField("onlyletters")).toEqual({
-      password: "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+      password:
+        "パスワードは8文字以上72文字以内の半角英数記号で、英字と数字の両方を含めてください。",
     });
   });
 
   it("数字のみの場合は要件のメッセージを返す", () => {
     expect(validatePasswordField("12345678")).toEqual({
-      password: "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+      password:
+        "パスワードは8文字以上72文字以内の半角英数記号で、英字と数字の両方を含めてください。",
+    });
+  });
+
+  it("73文字以上の場合は要件のメッセージを返す", () => {
+    expect(validatePasswordField(`${"a".repeat(72)}1`)).toEqual({
+      password:
+        "パスワードは8文字以上72文字以内の半角英数記号で、英字と数字の両方を含めてください。",
+    });
+  });
+
+  it("半角英数記号以外の文字を含む場合は要件のメッセージを返す", () => {
+    expect(validatePasswordField("password1あ")).toEqual({
+      password:
+        "パスワードは8文字以上72文字以内の半角英数記号で、英字と数字の両方を含めてください。",
     });
   });
 
   it("8文字以上で英数字を含む場合はエラーなし", () => {
     expect(validatePasswordField("password1")).toEqual({});
+  });
+
+  it("72文字（境界値）で英数字を含む場合はエラーなし", () => {
+    expect(validatePasswordField(`${"a".repeat(71)}1`)).toEqual({});
   });
 });
 
