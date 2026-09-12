@@ -676,7 +676,7 @@ export function ScorecardClient({
     const newDistance: Distance = {
       id: crypto.randomUUID(),
       distance_number: (last?.distance_number ?? 0) + 1,
-      distance: last?.distance ?? 18,
+      distance: last?.distance ?? 70,
       total_ends: last?.total_ends ?? 6,
       arrows_per_end: last?.arrows_per_end ?? 6,
       target_face_id: last?.target_face_id ?? DEFAULT_TARGET_FACE_ID,

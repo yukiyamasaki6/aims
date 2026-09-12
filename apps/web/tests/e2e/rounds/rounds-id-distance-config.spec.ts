@@ -45,7 +45,7 @@ test("距離が無いラウンドで「距離を追加」ボタンをクリッ�
   await page.getByTestId("add-distance-button").click();
 
   await expect(page.getByTestId("distance-config-distance-1")).toHaveValue(
-    "18",
+    "70",
   );
   await expect(page.getByTestId("distance-config-total-ends-1")).toHaveValue(
     "6",
