@@ -1163,11 +1163,14 @@ export function ScorecardClient({
                         placeholder={generatePresetName(distances)}
                         value={presetName}
                         onChange={(e) => setPresetName(e.target.value)}
+                        aria-invalid={Boolean(presetError)}
                       />
+                      {presetError && (
+                        <p className="text-destructive text-sm">
+                          {presetError}
+                        </p>
+                      )}
                     </div>
-                    {presetError && (
-                      <p className="text-destructive text-sm">{presetError}</p>
-                    )}
                     <Button
                       type="button"
                       aria-disabled={presetSubmitting}
