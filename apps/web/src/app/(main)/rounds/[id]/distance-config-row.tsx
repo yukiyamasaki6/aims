@@ -354,7 +354,15 @@ export function DistanceEditFields({
   onOpenChange: (open: boolean) => void;
   enqueue: (input: EnqueueInput) => void;
 }) {
-  const [draft, setDraft] = useState(distance);
+  // エンドあたりの本数・総エンド数は、入力欄を一旦空にできるよう編集中は
+  // nullを許容する（距離（m）欄と同じ扱い）。number型のまま空文字を
+  // Number("")=0として保持すると、常に「0」が残ってしまい消せなくなる。
+  const [draft, setDraft] = useState<
+    Omit<DistanceConfig, "totalEnds" | "arrowsPerEnd"> & {
+      totalEnds: number | null;
+      arrowsPerEnd: number | null;
+    }
+  >(distance);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -365,28 +373,34 @@ export function DistanceEditFields({
       setError("Markedの場合は距離（m）を入力してください。");
       return;
     }
-    if (draft.arrowsPerEnd === 0) {
+    if (draft.arrowsPerEnd === null || draft.arrowsPerEnd === 0) {
       setError("エンドあたりの本数を入力してください。");
       return;
     }
-    if (draft.totalEnds === 0) {
+    if (draft.totalEnds === null || draft.totalEnds === 0) {
       setError("総エンド数を入力してください。");
       return;
     }
     setError(null);
 
-    onSaved(draft);
+    const validated: DistanceConfig = {
+      ...draft,
+      arrowsPerEnd: draft.arrowsPerEnd,
+      totalEnds: draft.totalEnds,
+    };
+
+    onSaved(validated);
     enqueue({
       key: `distance:${distance.id}`,
       label: `距離${distance.distanceNumber}`,
       run: () =>
         updateDistance({
           distanceId: distance.id,
-          distance: draft.distance,
-          totalEnds: draft.totalEnds,
-          arrowsPerEnd: draft.arrowsPerEnd,
-          targetFaceId: draft.targetFaceId,
-          isMarked: draft.isMarked,
+          distance: validated.distance,
+          totalEnds: validated.totalEnds,
+          arrowsPerEnd: validated.arrowsPerEnd,
+          targetFaceId: validated.targetFaceId,
+          isMarked: validated.isMarked,
         }),
     });
   }
@@ -482,11 +496,12 @@ export function DistanceEditFields({
               type="number"
               disabled={hasShots}
               data-testid={`distance-config-arrows-${distance.distanceNumber}`}
-              value={draft.arrowsPerEnd}
+              value={draft.arrowsPerEnd ?? ""}
               onChange={(e) =>
                 setDraft((d) => ({
                   ...d,
-                  arrowsPerEnd: Number(e.target.value),
+                  arrowsPerEnd:
+                    e.target.value === "" ? null : Number(e.target.value),
                 }))
               }
             />
@@ -504,9 +519,13 @@ export function DistanceEditFields({
               type="number"
               disabled={hasShots}
               data-testid={`distance-config-total-ends-${distance.distanceNumber}`}
-              value={draft.totalEnds}
+              value={draft.totalEnds ?? ""}
               onChange={(e) =>
-                setDraft((d) => ({ ...d, totalEnds: Number(e.target.value) }))
+                setDraft((d) => ({
+                  ...d,
+                  totalEnds:
+                    e.target.value === "" ? null : Number(e.target.value),
+                }))
               }
             />
           </div>
