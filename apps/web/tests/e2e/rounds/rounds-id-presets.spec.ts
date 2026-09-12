@@ -235,7 +235,9 @@ test("現在の構成を個人プリセットとして保存でき、/rounds/new
     .filter({ hasText: "マイプリセットA" });
   await presetButton.click();
 
-  const presetCard = presetButton.locator("..");
+  // 名前ボタン＋メニューの行だけを囲むrelativeラッパーが親のため、
+  // 選択時に展開されるPresetInfo（兄弟要素）まで含めるには2階層上がる。
+  const presetCard = presetButton.locator("../..");
   await expect(presetCard).toContainText("30m");
   await expect(presetCard).toContainText("6本×3エンド");
 });
