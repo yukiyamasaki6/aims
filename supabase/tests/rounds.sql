@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(84);
+select plan(87);
 
 -- ============================================================
 -- RLS: editor / 非メンバー
@@ -474,6 +474,29 @@ select results_eq(
     order by distance_number$$,
   $$values (1::bigint, 90::bigint), (2::bigint, 70::bigint)$$,
   'create_roundは複数distancesを連番（distance_number）で正しく作成する'
+);
+
+-- ============================================================
+-- rounds.name: 50文字までのCHECK制約
+-- ============================================================
+
+select throws_ok(
+  $$select create_round(repeat('a', 51), current_date, 'outdoor', 'recurve', '[]'::jsonb)$$,
+  '23514',
+  null,
+  'rounds.nameが51文字以上だとCHECK制約で拒否される'
+);
+
+select lives_ok(
+  $$select create_round(repeat('a', 50), current_date, 'outdoor', 'recurve', '[]'::jsonb)$$,
+  'rounds.nameが50文字（境界値）なら作成できる'
+);
+
+select throws_ok(
+  $$select update_round_config('$$ || :'round_id' || $$', repeat('a', 51), current_date, 'outdoor', 'recurve')$$,
+  '23514',
+  null,
+  'update_round_config経由でもrounds.nameが51文字以上だとCHECK制約で拒否される'
 );
 
 -- ============================================================

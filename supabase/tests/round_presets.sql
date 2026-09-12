@@ -1,6 +1,6 @@
 begin;
 
-select plan(32);
+select plan(34);
 
 select has_table('public', 'round_presets', 'round_presets テーブルが存在する');
 select has_table('public', 'round_preset_distances', 'round_preset_distances テーブルが存在する');
@@ -250,6 +250,19 @@ select results_eq(
     order by distance_number$$,
   $$values (1::bigint, 50::bigint, true), (2::bigint, null::bigint, false)$$,
   'save_round_as_presetでラウンドの距離構成が複製される（is_markedも含む）'
+);
+
+-- round_presets.name: 50文字までのCHECK制約
+select throws_ok(
+  $$select save_round_as_preset('$$ || :'save_preset_round_id' || $$', repeat('a', 51))$$,
+  '23514',
+  null,
+  'save_round_as_preset経由でもround_presets.nameが51文字以上だとCHECK制約で拒否される'
+);
+
+select lives_ok(
+  $$select save_round_as_preset('$$ || :'save_preset_round_id' || $$', repeat('a', 50))$$,
+  'round_presets.nameが50文字（境界値）なら保存できる'
 );
 
 select set_config('request.jwt.claim.sub', 'f0000000-0000-0000-0000-000000000002', true);

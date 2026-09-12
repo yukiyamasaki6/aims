@@ -147,6 +147,35 @@ test("プリセット保存ダイアログの背景をクリックすると閉�
   await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
 });
 
+test("プリセット名が51文字以上だと保存しようとしてもエラーになり、保存されない", async ({
+  page,
+}) => {
+  const email = `save-as-preset-toolong-${Date.now()}@aims.test`;
+  const password = "password-save-preset-toolong";
+  await signUpAndSignIn(page, { email, password });
+
+  const roundId = await createRound({
+    email,
+    password,
+    name: "文字数上限テスト",
+    roundDate: "2026-08-24",
+    format: "outdoor",
+    bowType: "recurve",
+    distances: [{ distance: 30, totalEnds: 3, arrowsPerEnd: 6 }],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  await page.getByTestId("save-as-preset-trigger").click();
+  await page.getByTestId("save-as-preset-name").fill("a".repeat(51));
+  await page.getByTestId("save-as-preset-confirm").click();
+
+  await expect(
+    page.getByText("プリセット名は50文字以内で入力してください。"),
+  ).toBeVisible();
+  await expect(page.getByTestId("save-as-preset-name")).toBeVisible();
+});
+
 test("プリセット保存の送信中は保存ボタンが無効になり、背景クリックでダイアログを閉じられない", async ({
   page,
 }) => {

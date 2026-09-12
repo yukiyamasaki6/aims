@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
+import {
+  BOW_TYPE_OPTIONS,
+  FORMAT_OPTIONS,
+  labelOf,
+  NAME_MAX_LENGTH,
+} from "./round-options";
 import type { EnqueueInput } from "./use-sync-queue";
 
 async function updateRoundConfig(input: {
@@ -78,6 +83,7 @@ export function RoundConfigPanel({
   const [saved, setSaved] = useState(initial);
   const [draft, setDraft] = useState(initial);
   const [fieldErrors, setFieldErrors] = useState<{
+    name?: string;
     roundDate?: string;
     format?: string;
   }>({});
@@ -96,6 +102,9 @@ export function RoundConfigPanel({
     // できるため、サーバーへ投げる前に同期的に検証する
     // （キュー経由の非同期エラーにはしない）。
     const errors: typeof fieldErrors = {};
+    if (draft.name.length > NAME_MAX_LENGTH) {
+      errors.name = `ラウンド名は${NAME_MAX_LENGTH}文字以内で入力してください。`;
+    }
     if (draft.roundDate === "") {
       errors.roundDate = "実施日を入力してください。";
     }
@@ -162,7 +171,11 @@ export function RoundConfigPanel({
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, name: e.target.value }))
                 }
+                aria-invalid={Boolean(fieldErrors.name)}
               />
+              {fieldErrors.name && (
+                <p className="text-destructive text-sm">{fieldErrors.name}</p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1">
