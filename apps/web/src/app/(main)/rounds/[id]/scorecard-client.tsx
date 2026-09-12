@@ -102,12 +102,13 @@ function uniqueRingsFor(targetFace: TargetFaceOption | undefined) {
 
 type TopScoreLabels = {
   hasX: boolean;
-  primaryLabel: string;
-  secondaryLabel: string;
+  // 表示順は常に「最高点数/X数」（Xが無い的では「最高点数/次点数」）。
+  firstLabel: string;
+  secondLabel: string;
 };
 
 // 的にXリングがあるかどうかで、集計欄に出す2つの点数ラベルを決める。
-// Xリングがあれば「X数/最高点数（Xの次に高い実点数）」、無ければ
+// Xリングがあれば「最高点数（Xを含む実点数）/X数」、無ければ
 // 「最高点数/次点数」を表示する（フィールド的のように最高点が10未満の
 // 的でも、実在する点数で動的に決まる）。
 function topScoreLabels(
@@ -120,13 +121,44 @@ function topScoreLabels(
 
   const hasX = rings[0].score_str === "X";
   const nonXRings = rings.filter((r) => r.score_str !== "X");
-  const primaryLabel = hasX ? "X" : nonXRings[0]?.score_str;
-  const secondaryLabel = hasX
-    ? nonXRings[0]?.score_str
-    : nonXRings[1]?.score_str;
-  if (primaryLabel === undefined || secondaryLabel === undefined) return null;
+  const firstLabel = nonXRings[0]?.score_str;
+  if (firstLabel === undefined) return null;
+  if (hasX) {
+    return { hasX, firstLabel, secondLabel: "X" };
+  }
+  const secondLabel = nonXRings[1]?.score_str;
+  if (secondLabel === undefined) return null;
+  return { hasX, firstLabel, secondLabel };
+}
 
-  return { hasX, primaryLabel, secondaryLabel };
+// 実際のカウントを求める。X以外は常に実点数（score_int）で数える
+// （最高点数はXも含めた実点数で数える。Xは最高点数のリングに含まれる
+// 特別な当たりであり、別の点数帯ではないため）。X数だけはリング種別
+// （score_str）で数える（score_intだけでは「10」と区別できないため）。
+function countTopScores(
+  targetFace: TargetFaceOption | undefined,
+  shots: Shot[],
+  labels: TopScoreLabels,
+): { firstCount: number; secondCount: number } {
+  const rings = uniqueRingsFor(targetFace);
+  const firstScoreInt = rings.find(
+    (r) => r.score_str === labels.firstLabel,
+  )?.score_int;
+  const firstCount = shots.filter((s) => s.score_int === firstScoreInt).length;
+
+  if (labels.hasX) {
+    return {
+      firstCount,
+      secondCount: shots.filter((s) => s.score_str === "X").length,
+    };
+  }
+  const secondScoreInt = rings.find(
+    (r) => r.score_str === labels.secondLabel,
+  )?.score_int;
+  return {
+    firstCount,
+    secondCount: shots.filter((s) => s.score_int === secondScoreInt).length,
+  };
 }
 
 // ラウンド結果の集計は、全ての距離で的のX有無・最高点数・次点数が一致する
@@ -147,8 +179,8 @@ function roundTopScoreLabels(
     (labels) =>
       labels !== null &&
       labels.hasX === first.hasX &&
-      labels.primaryLabel === first.primaryLabel &&
-      labels.secondaryLabel === first.secondaryLabel,
+      labels.firstLabel === first.firstLabel &&
+      labels.secondLabel === first.secondLabel,
   );
   return allSame ? first : null;
 }
@@ -606,12 +638,15 @@ export function ScorecardClient({
 
   const total = shots.reduce((sum, s) => sum + s.score_int, 0);
   const roundLabels = roundTopScoreLabels(distances, targetFaces);
-  const roundPrimaryCount = roundLabels
-    ? shots.filter((s) => s.score_str === roundLabels.primaryLabel).length
-    : 0;
-  const roundSecondaryCount = roundLabels
-    ? shots.filter((s) => s.score_str === roundLabels.secondaryLabel).length
-    : 0;
+  // 全距離でラベルが一致することは確認済みなので、カウントの基準となる
+  // リング構成（Xの実点数を引くため）は先頭の距離の的を代表として使えばよい。
+  const roundCounts = roundLabels
+    ? countTopScores(
+        targetFaces.find((f) => f.id === distances[0]?.target_face_id),
+        shots,
+        roundLabels,
+      )
+    : null;
 
   const distanceIdsWithShots = new Set(shots.map((s) => s.distance_id));
 
@@ -1248,13 +1283,13 @@ export function ScorecardClient({
               className="-mt-6 sticky top-14 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
             >
               <div className="flex items-baseline gap-2">
-                {roundLabels && (
+                {roundLabels && roundCounts && (
                   <span
                     data-testid="round-top-scores"
                     className="text-muted-foreground text-sm"
                   >
-                    {roundLabels.primaryLabel}: {roundPrimaryCount} /{" "}
-                    {roundLabels.secondaryLabel}: {roundSecondaryCount}
+                    {roundLabels.firstLabel}: {roundCounts.firstCount} /{" "}
+                    {roundLabels.secondLabel}: {roundCounts.secondCount}
                   </span>
                 )}
                 <span className="font-heading text-lg font-semibold">
@@ -1292,16 +1327,9 @@ export function ScorecardClient({
                 );
                 const face = targetFaceOf(d.target_face_id);
                 const distanceLabels = topScoreLabels(face);
-                const distancePrimaryCount = distanceLabels
-                  ? distanceShots.filter(
-                      (s) => s.score_str === distanceLabels.primaryLabel,
-                    ).length
-                  : 0;
-                const distanceSecondaryCount = distanceLabels
-                  ? distanceShots.filter(
-                      (s) => s.score_str === distanceLabels.secondaryLabel,
-                    ).length
-                  : 0;
+                const distanceCounts = distanceLabels
+                  ? countTopScores(face, distanceShots, distanceLabels)
+                  : null;
 
                 // end行1件分の描画。最終行だけ小計のsticky境界（下記の内側
                 // ラッパー）の外に出すため、共通化して2箇所から呼べるようにする。
@@ -1465,14 +1493,14 @@ export function ScorecardClient({
                       この小計の親（この内側ラッパー）が最終行を含まないため、
                       最終行の手前でstickyが自然に外れる。 */}
                       <div className="-mt-3.5 sticky top-[88px] z-10 flex items-baseline justify-end gap-2 border-b bg-card px-3 pt-6 pb-2 text-muted-foreground text-xs">
-                        {distanceLabels && (
+                        {distanceLabels && distanceCounts && (
                           <span
                             data-testid={`distance-top-scores-${d.distance_number}`}
                           >
-                            {distanceLabels.primaryLabel}:{" "}
-                            {distancePrimaryCount} /{" "}
-                            {distanceLabels.secondaryLabel}:{" "}
-                            {distanceSecondaryCount}
+                            {distanceLabels.firstLabel}:{" "}
+                            {distanceCounts.firstCount} /{" "}
+                            {distanceLabels.secondLabel}:{" "}
+                            {distanceCounts.secondCount}
                           </span>
                         )}
                         <span className="text-foreground text-sm font-semibold">

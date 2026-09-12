@@ -64,8 +64,8 @@ test("距離が複数あるとき、距離ごとの合計・X数・10数も表�
   await waitForHydration(page);
 
   // 記録前は、両距離とも的にXリングがあり最高点数（10）が一致するため、
-  // ラウンド結果にもX数/最高点数が集計表示される。
-  await expect(page.getByTestId("round-top-scores")).toHaveText("X: 0 / 10: 0");
+  // ラウンド結果にも最高点数/X数が集計表示される。
+  await expect(page.getByTestId("round-top-scores")).toHaveText("10: 0 / X: 0");
 
   await page.getByTestId("score-button-X").click();
 
@@ -74,18 +74,19 @@ test("距離が複数あるとき、距離ごとの合計・X数・10数も表�
   const firstSummary = page.getByTestId("distance-summary-1");
   await expect(firstSummary).toContainText("18m");
   await expect(firstSummary).toContainText("小計10");
+  // 最高点数はXも含めた実点数で数えるため、Xを打った時点で10の数も1になる。
   await expect(page.getByTestId("distance-top-scores-1")).toHaveText(
-    "X: 1 / 10: 0",
+    "10: 1 / X: 1",
   );
 
   const secondSummary = page.getByTestId("distance-summary-2");
   await expect(secondSummary).toContainText("30m");
   await expect(secondSummary).toContainText("小計0");
   await expect(page.getByTestId("distance-top-scores-2")).toHaveText(
-    "X: 0 / 10: 0",
+    "10: 0 / X: 0",
   );
 
-  await expect(page.getByTestId("round-top-scores")).toHaveText("X: 1 / 10: 0");
+  await expect(page.getByTestId("round-top-scores")).toHaveText("10: 1 / X: 1");
 });
 
 test("距離間で的のX有無・最高点数・次点数が異なると、ラウンド結果にX数/最高点数/次点数を表示しない", async ({
@@ -112,7 +113,7 @@ test("距離間で的のX有無・最高点数・次点数が異なると、ラ�
   await expect(page.getByTestId("round-top-scores")).toBeHidden();
   // 距離ごとの表示はそれぞれの的の構成にしたがって個別に出る。
   await expect(page.getByTestId("distance-top-scores-1")).toHaveText(
-    "X: 0 / 10: 0",
+    "10: 0 / X: 0",
   );
   await expect(page.getByTestId("distance-top-scores-2")).toHaveText(
     "6: 0 / 5: 0",
