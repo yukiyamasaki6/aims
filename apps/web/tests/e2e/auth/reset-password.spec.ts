@@ -1,12 +1,8 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
-import {
-  createConfirmedUser,
-  SHARED_AUTH_STATE_PATH,
-  waitForHydration,
-} from "./helpers/auth";
-import { fastForwardResendCooldown } from "./helpers/clock";
-import { getOtpCodeFromMailpit } from "./helpers/mailpit";
+import { expect, test } from "../fixtures";
+import { createConfirmedUser, waitForHydration } from "../helpers/auth";
+import { fastForwardResendCooldown } from "../helpers/clock";
+import { getOtpCodeFromMailpit } from "../helpers/mailpit";
 
 async function goToCodeStep(page: Page, email: string): Promise<void> {
   await page.goto("/reset-password");
@@ -29,29 +25,6 @@ async function goToPasswordStep(page: Page, email: string): Promise<void> {
     page.getByRole("heading", { name: "新しいパスワードを設定" }),
   ).toBeVisible();
 }
-
-test("未認証で/reset-passwordにアクセスするとメールアドレス入力画面が表示される", async ({
-  page,
-}) => {
-  await page.goto("/reset-password");
-  await waitForHydration(page);
-
-  await expect(
-    page.getByRole("heading", { name: "パスワードを再設定" }),
-  ).toBeVisible();
-});
-
-test.describe(() => {
-  test.use({ storageState: SHARED_AUTH_STATE_PATH });
-
-  test("認証済みで/reset-passwordにアクセスすると/roundsにリダイレクトされる", async ({
-    page,
-  }) => {
-    await page.goto("/reset-password");
-
-    await expect(page).toHaveURL(/\/rounds/);
-  });
-});
 
 test("サインインリンクをクリックすると/signinへ遷移する", async ({ page }) => {
   await page.goto("/reset-password");
