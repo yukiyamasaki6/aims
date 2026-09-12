@@ -77,13 +77,16 @@ export function RoundConfigPanel({
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [saved, setSaved] = useState(initial);
   const [draft, setDraft] = useState(initial);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    roundDate?: string;
+    format?: string;
+  }>({});
 
   function toggleExpanded() {
     if (!expanded) {
       // 展開のたびに、直前の保存値を編集の起点にする（未保存の変更は破棄する）。
       setDraft(saved);
-      setError(null);
+      setFieldErrors({});
     }
     setExpanded((v) => !v);
   }
@@ -92,17 +95,19 @@ export function RoundConfigPanel({
     // クライアントが既に持っている値（distancesのis_marked）だけで判定
     // できるため、サーバーへ投げる前に同期的に検証する
     // （キュー経由の非同期エラーにはしない）。
+    const errors: typeof fieldErrors = {};
     if (draft.roundDate === "") {
-      setError("実施日を入力してください。");
-      return;
+      errors.roundDate = "実施日を入力してください。";
     }
     if (draft.format !== "field" && hasUnmarkedDistances) {
-      setError(
-        "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。",
-      );
+      errors.format =
+        "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。";
+    }
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
-    setError(null);
+    setFieldErrors({});
 
     setSaved(draft);
     onSaved(draft);
@@ -175,7 +180,13 @@ export function RoundConfigPanel({
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, roundDate: e.target.value }))
                 }
+                aria-invalid={Boolean(fieldErrors.roundDate)}
               />
+              {fieldErrors.roundDate && (
+                <p className="text-destructive text-sm">
+                  {fieldErrors.roundDate}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1">
@@ -196,6 +207,9 @@ export function RoundConfigPanel({
                   </Button>
                 ))}
               </div>
+              {fieldErrors.format && (
+                <p className="text-destructive text-sm">{fieldErrors.format}</p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1">
@@ -219,8 +233,6 @@ export function RoundConfigPanel({
                 ))}
               </div>
             </div>
-
-            {error && <p className="text-destructive text-sm">{error}</p>}
 
             <Button
               type="button"

@@ -343,34 +343,36 @@ test("フィールドのラウンドでMarkedのまま距離（m）欄を空に�
   await page.getByTestId("distance-config-distance-1").fill("");
   await page.getByTestId("distance-config-save-1").click();
 
-  await expect(
-    page.getByText("Markedの場合は距離（m）を入力してください。"),
-  ).toBeVisible();
+  await expect(page.getByText("距離を入力してください。")).toBeVisible();
   await expect(page.getByTestId("distance-config-distance-1")).toBeVisible();
 });
 
-test("本数を空にして保存しようとするとエラーになり、保存されない", async ({
+test("本数が1以上の整数でないと保存しようとしてもエラーになり、保存されない", async ({
   page,
 }) => {
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("distance-config-arrows-1").fill("");
   await page.getByTestId("distance-config-save-1").click();
-
-  await expect(
-    page.getByText("エンドあたりの本数を入力してください。"),
-  ).toBeVisible();
+  await expect(page.getByText("1以上の整数を入力してください。")).toBeVisible();
   await expect(page.getByTestId("distance-config-arrows-1")).toBeVisible();
+
+  await page.getByTestId("distance-config-arrows-1").fill("0");
+  await page.getByTestId("distance-config-save-1").click();
+  await expect(page.getByText("1以上の整数を入力してください。")).toBeVisible();
 });
 
-test("エンド数を空にして保存しようとするとエラーになり、保存されない", async ({
+test("エンド数が1以上の整数でないと保存しようとしてもエラーになり、保存されない", async ({
   page,
 }) => {
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("distance-config-total-ends-1").fill("");
   await page.getByTestId("distance-config-save-1").click();
-
-  await expect(page.getByText("総エンド数を入力してください。")).toBeVisible();
+  await expect(page.getByText("1以上の整数を入力してください。")).toBeVisible();
   await expect(page.getByTestId("distance-config-total-ends-1")).toBeVisible();
+
+  await page.getByTestId("distance-config-total-ends-1").fill("0");
+  await page.getByTestId("distance-config-save-1").click();
+  await expect(page.getByText("1以上の整数を入力してください。")).toBeVisible();
 });
 
 test("距離を編集して保存すると反映される", async ({ page }) => {

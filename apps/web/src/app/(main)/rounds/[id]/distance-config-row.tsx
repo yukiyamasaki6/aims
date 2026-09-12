@@ -363,25 +363,42 @@ export function DistanceEditFields({
       arrowsPerEnd: number | null;
     }
   >(distance);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    distance?: string;
+    arrowsPerEnd?: string;
+    totalEnds?: string;
+  }>({});
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   function handleSave() {
     // クライアントが既に持っている値だけで判定できるため、サーバーへ
     // 投げる前に同期的に検証する（キュー経由の非同期エラーにはしない）。
+    const errors: typeof fieldErrors = {};
     if (draft.isMarked && draft.distance === null) {
-      setError("Markedの場合は距離（m）を入力してください。");
+      errors.distance = "距離を入力してください。";
+    }
+    if (
+      draft.arrowsPerEnd === null ||
+      !Number.isInteger(draft.arrowsPerEnd) ||
+      draft.arrowsPerEnd < 1
+    ) {
+      errors.arrowsPerEnd = "1以上の整数を入力してください。";
+    }
+    if (
+      draft.totalEnds === null ||
+      !Number.isInteger(draft.totalEnds) ||
+      draft.totalEnds < 1
+    ) {
+      errors.totalEnds = "1以上の整数を入力してください。";
+    }
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
-    if (draft.arrowsPerEnd === null || draft.arrowsPerEnd === 0) {
-      setError("エンドあたりの本数を入力してください。");
-      return;
-    }
-    if (draft.totalEnds === null || draft.totalEnds === 0) {
-      setError("総エンド数を入力してください。");
-      return;
-    }
-    setError(null);
+    setFieldErrors({});
+    // 上のerrorsチェックで弾かれているはずだが、TypeScriptにnullでないことを
+    // 伝えるための保険。
+    if (draft.arrowsPerEnd === null || draft.totalEnds === null) return;
 
     const validated: DistanceConfig = {
       ...draft,
@@ -445,7 +462,11 @@ export function DistanceEditFields({
                     e.target.value === "" ? null : Number(e.target.value),
                 }))
               }
+              aria-invalid={Boolean(fieldErrors.distance)}
             />
+            {fieldErrors.distance && (
+              <p className="text-destructive text-sm">{fieldErrors.distance}</p>
+            )}
           </div>
 
           {roundFormat === "field" && (
@@ -504,7 +525,13 @@ export function DistanceEditFields({
                     e.target.value === "" ? null : Number(e.target.value),
                 }))
               }
+              aria-invalid={Boolean(fieldErrors.arrowsPerEnd)}
             />
+            {fieldErrors.arrowsPerEnd && (
+              <p className="text-destructive text-sm">
+                {fieldErrors.arrowsPerEnd}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-1">
@@ -527,10 +554,14 @@ export function DistanceEditFields({
                     e.target.value === "" ? null : Number(e.target.value),
                 }))
               }
+              aria-invalid={Boolean(fieldErrors.totalEnds)}
             />
+            {fieldErrors.totalEnds && (
+              <p className="text-destructive text-sm">
+                {fieldErrors.totalEnds}
+              </p>
+            )}
           </div>
-
-          {error && <p className="text-destructive text-sm">{error}</p>}
 
           <Button
             type="button"
