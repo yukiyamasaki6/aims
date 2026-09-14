@@ -261,8 +261,8 @@ export type Database = {
           id: string;
           score_int: number;
           score_str: string;
+          shooter_id: string;
           updated_at: string;
-          user_id: string;
         };
         Insert: {
           arrow_number: number;
@@ -272,8 +272,8 @@ export type Database = {
           id?: string;
           score_int: number;
           score_str: string;
+          shooter_id: string;
           updated_at?: string;
-          user_id: string;
         };
         Update: {
           arrow_number?: number;
@@ -283,8 +283,8 @@ export type Database = {
           id?: string;
           score_int?: number;
           score_str?: string;
+          shooter_id?: string;
           updated_at?: string;
-          user_id?: string;
         };
         Relationships: [
           {
@@ -295,8 +295,8 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "shots_user_id_fkey";
-            columns: ["user_id"];
+            foreignKeyName: "shots_shooter_id_fkey";
+            columns: ["shooter_id"];
             isOneToOne: false;
             referencedRelation: "users";
             referencedColumns: ["id"];

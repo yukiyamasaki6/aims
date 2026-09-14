@@ -35,7 +35,7 @@ values ('e0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-0000000
 insert into public.distances (id, round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
 values ('e0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000002', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
-insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)
+insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
 values ('e0000000-0000-0000-0000-000000000003', 1, 1, 'e0000000-0000-0000-0000-000000000001', 'X', 10);
 
 delete from auth.users where id = 'e0000000-0000-0000-0000-000000000001';
@@ -61,7 +61,7 @@ select is_empty(
 );
 
 select is_empty(
-  $$select distance_id from public.shots where user_id = 'e0000000-0000-0000-0000-000000000001'$$,
+  $$select distance_id from public.shots where shooter_id = 'e0000000-0000-0000-0000-000000000001'$$,
   'auth.users削除で記録したshotsもカスケード削除される'
 );
 

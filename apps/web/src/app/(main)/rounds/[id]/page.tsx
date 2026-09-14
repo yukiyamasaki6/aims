@@ -58,7 +58,9 @@ export default async function RoundPage({
     distanceIds.length > 0
       ? await supabase
           .from("shots")
-          .select("distance_id, end_number, arrow_number, score_str, score_int")
+          .select(
+            "distance_id, end_number, arrow_number, shooter_id, score_str, score_int",
+          )
           .in("distance_id", distanceIds)
       : { data: [] };
 

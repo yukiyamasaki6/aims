@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(87);
+select plan(89);
 
 -- ============================================================
 -- RLS: editor / 非メンバー
@@ -102,7 +102,7 @@ values ('77777777-7777-7777-7777-777777777777', '66666666-6666-6666-6666-6666666
 insert into public.distances (id, round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
 values ('88888888-8888-8888-8888-888888888888', '77777777-7777-7777-7777-777777777777', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
-insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)
+insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
 values ('88888888-8888-8888-8888-888888888888', 1, 1, '55555555-5555-5555-5555-555555555555', 'X', 10);
 
 set local role authenticated;
@@ -153,7 +153,7 @@ select throws_like(
 );
 
 select throws_like(
-  $$insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)
+  $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
     values ('88888888-8888-8888-8888-888888888888', 1, 2, '66666666-6666-6666-6666-666666666666', '9', 9)$$,
   '%row-level security%',
   'viewerロールのユーザーはshotsを記録できない'
@@ -208,7 +208,7 @@ values ('c0000000-0000-0000-0000-000000000010', 'c0000000-0000-0000-0000-0000000
 insert into public.distances (id, round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
 values ('c0000000-0000-0000-0000-000000000020', 'c0000000-0000-0000-0000-000000000010', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
-insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)
+insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
 values ('c0000000-0000-0000-0000-000000000020', 1, 1, 'c0000000-0000-0000-0000-000000000001', 'X', 10);
 
 set local role authenticated;
@@ -517,13 +517,13 @@ select create_round(
 select id as shots_distance_id from public.distances where round_id = :'shots_round_id' \gset
 
 select lives_ok(
-  $$insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)
+  $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
     values ('$$ || :'shots_distance_id' || $$', 1, 1, 'b0000000-0000-0000-0000-000000000004', 'X', 10)$$,
   '有効なshotsの挿入は成功する'
 );
 
 select throws_ok(
-  $$insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)
+  $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
     values ('$$ || :'shots_distance_id' || $$', 1, 2, 'b0000000-0000-0000-0000-000000000004', 'X', 5)$$,
   '23514',
   null,
@@ -531,15 +531,35 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)
+  $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
     values ('$$ || :'shots_distance_id' || $$', 1, 1, 'b0000000-0000-0000-0000-000000000004', '9', 9)$$,
   '23505',
   null,
-  '同一(distance_id, user_id, end_number, arrow_number)の重複挿入は一意制約で拒否される'
+  '同一(distance_id, end_number, arrow_number)の重複挿入は一意制約で拒否される'
 );
 
+-- 一意制約はshooter_idを含まない（同じ位置の矢は射手によらず1本）。
+-- 別のeditorが同じ(distance_id, end_number, arrow_number)に記録しようとしても
+-- 一意制約で拒否されることを確認する。
+reset role;
+insert into auth.users (id) values ('b0000000-0000-0000-0000-000000000006');
+insert into public.round_users (round_id, user_id, role)
+values (:'shots_round_id', 'b0000000-0000-0000-0000-000000000006', 'editor');
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'b0000000-0000-0000-0000-000000000006', true);
+
+select throws_ok(
+  $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
+    values ('$$ || :'shots_distance_id' || $$', 1, 1, 'b0000000-0000-0000-0000-000000000006', '9', 9)$$,
+  '23505',
+  null,
+  '異なるshooter_idでも同一(distance_id, end_number, arrow_number)の挿入は一意制約で拒否される（shooter_idはキーに含まれない）'
+);
+
+select set_config('request.jwt.claim.sub', 'b0000000-0000-0000-0000-000000000004', true);
+
 select lives_ok(
-  $$insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)
+  $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
     values ('$$ || :'shots_distance_id' || $$', 2, 1, 'b0000000-0000-0000-0000-000000000004', 'X', 10)$$,
   'editorロールのユーザーはRLS経由でshotsを記録できる（create_roundの呼び出し者自身がeditorとして書き込む）'
 );
@@ -638,6 +658,20 @@ select lives_ok(
 );
 
 -- ============================================================
+-- distances: (round_id, distance_number)の一意制約
+-- ============================================================
+
+select throws_ok(
+  $$insert into public.distances
+      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('$$ || :'marked_round_id' || $$', 10, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23505',
+  null,
+  '同一round_id内でdistance_numberが重複する挿入は一意制約で拒否される'
+);
+
+-- ============================================================
 -- カスケード削除: rounds → distances/shots/round_users
 -- ============================================================
 
@@ -657,7 +691,7 @@ values ('d0000000-0000-0000-0000-000000000010', 'd0000000-0000-0000-0000-0000000
 insert into public.distances (id, round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
 values ('d0000000-0000-0000-0000-000000000020', 'd0000000-0000-0000-0000-000000000010', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
-insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)
+insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
 values ('d0000000-0000-0000-0000-000000000020', 1, 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10);
 
 delete from public.rounds where id = 'd0000000-0000-0000-0000-000000000010';
@@ -818,7 +852,7 @@ select throws_ok(
   'update_distance経由でもtotal_ends=0はCHECK制約で拒否される'
 );
 
-insert into public.shots (distance_id, end_number, arrow_number, user_id, score_str, score_int)
+insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
 values (:'update_distance_id', 1, 1, '70000000-0000-0000-0000-000000000001', 'X', 10);
 
 select lives_ok(
