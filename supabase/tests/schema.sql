@@ -20,8 +20,8 @@ select tables_are(
 );
 
 select col_is_unique(
-  'public', 'shots', array['distance_id', 'user_id', 'end_number', 'arrow_number'],
-  'shots は (distance_id, user_id, end_number, arrow_number) で一意'
+  'public', 'shots', array['distance_id', 'end_number', 'arrow_number'],
+  'shots は (distance_id, end_number, arrow_number) で一意'
 );
 
 select * from finish();

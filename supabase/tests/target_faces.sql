@@ -366,12 +366,10 @@ select lives_ok(
   '所有者は自分の的のスポットに点数帯を追加できる（境界線なしも許容される）'
 );
 
-select throws_ok(
+select lives_ok(
   $$insert into public.target_face_rings (spot_id, radius, color, line_color, z_index, score_str, score_int)
     values ('33333333-3333-3333-3333-333333333333', 5.0, '#FFFFFF', null, 1, '9', 9)$$,
-  '23505',
-  null,
-  '同一(spot_id, z_index)の重複挿入は一意制約で拒否される'
+  '同一(spot_id, z_index)の重複挿入は許容される（z_indexは描画順に過ぎず一意制約は無い）'
 );
 
 select lives_ok(

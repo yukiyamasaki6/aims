@@ -1,6 +1,6 @@
 begin;
 
-select plan(34);
+select plan(35);
 
 select has_table('public', 'round_presets', 'round_presets テーブルが存在する');
 select has_table('public', 'round_preset_distances', 'round_preset_distances テーブルが存在する');
@@ -193,6 +193,16 @@ select lives_ok(
     values
       ('22222222-2222-2222-2222-222222222222', 10, 1, 1, 1, 'a1000000-0000-0000-0000-000000000001')$$,
   'round_preset_distancesもdistance/total_ends/arrows_per_endが1（境界値）なら挿入できる'
+);
+
+select throws_ok(
+  $$insert into public.round_preset_distances
+      (preset_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('22222222-2222-2222-2222-222222222222', 10, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23505',
+  null,
+  '同一preset_id内でdistance_numberが重複する挿入は一意制約で拒否される'
 );
 
 select lives_ok(
