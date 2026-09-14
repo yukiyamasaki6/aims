@@ -21,22 +21,17 @@
 
 | 対象テーブル   | SELECT                          | INSERT                        | UPDATE                        | DELETE                        |
 | :------------ | :----------------------------- | :---------------------------- | :---------------------------- | :---------------------------- |
-| `users`       | 認証済みユーザー全員               | なし                          | `auth.uid() = id`             | `auth.uid() = id`             |
-| `rounds`      | `round_users`に自分が存在する      | なし（`create_round` RPC経由のみ） | `round_users.role` = 'editor' | `round_users.role` = 'editor' |
-| `round_users` | `round_users`に自分が存在する      | `round_users.role` = 'editor' | `round_users.role` = 'editor' | `round_users.role` = 'editor' |
-| `distances`   | `round_users`に自分が存在する      | `round_users.role` = 'editor' | `round_users.role` = 'editor' | `round_users.role` = 'editor' |
-| `shots`       | `round_users`に自分が存在する      | `round_users.role` = 'editor' | `round_users.role` = 'editor' | `round_users.role` = 'editor' |
-| `target_faces`, `target_face_spots`, `target_face_rings` | 認証済みユーザー全員（グローバル・個人問わず全て閲覧可）／未認証（anon）はグローバル分（`owner_id is null`）のみ閲覧可 | `owner_id` = 自分（グローバル行はマイグレーションでのみ作成し、クライアントからのnull登録は許可しない） | `owner_id` = 自分 | `owner_id` = 自分 |
-| `round_presets`, `round_preset_distances` | 認証済みユーザー全員（グローバル・個人問わず全て閲覧可）／未認証（anon）はグローバル分（`owner_id is null`）のみ閲覧可 | `owner_id` = 自分（グローバル行はマイグレーションでのみ作成） | `owner_id` = 自分 | `owner_id` = 自分 |
+| `users`       | RLS: 認証済みユーザー全員 | RLS: 不可 | RLS: `auth.uid() = id` | RLS: `auth.uid() = id` |
+| `rounds`      | RLS: `round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 認証済みユーザー（作成時に`editor`として登録） | RLS: 直接操作不可<br>RPC: `round_users.role = 'editor'` | RLS: 直接操作不可<br>RPC: `round_users.role = 'editor'` |
+| `round_users` | RLS: `round_users`に自分が存在する | RLS: `round_users.role = 'editor'` | RLS: `round_users.role = 'editor'` | RLS: `round_users.role = 'editor'` |
+| `distances`   | RLS: 所属ラウンドの`round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` |
+| `shots`       | RLS: 所属ラウンドの`round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` |
+| `round_events` | RLS: `round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 作成時は認証済み、以後は`round_users.role = 'editor'` | RLS: 不可（追記専用） | RLS: 不可（追記専用） |
+| `distance_events` | RLS: 所属ラウンドの`round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 不可（追記専用） | RLS: 不可（追記専用） |
+| `shot_events` | RLS: 所属ラウンドの`round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 不可（追記専用） | RLS: 不可（追記専用） |
+| `target_faces`, `target_face_spots`, `target_face_rings` | RLS: 認証済みユーザー全員 | RLS: `auth.uid() = owner_id` | RLS: `auth.uid() = owner_id` | RLS: `auth.uid() = owner_id` |
+| `round_presets`, `preset_distances` | RLS: 認証済みユーザー全員 | RLS: `auth.uid() = owner_id` | RLS: `auth.uid() = owner_id` | RLS: `auth.uid() = owner_id` |
 
-子テーブル（`target_face_spots`/`target_face_rings`、`round_preset_distances`）は親テーブルの`owner_id`判定に従う（親を辿ってRLSを評価する。`distances`/`shots`が`round_users`を辿るのと同じパターン）。
+子テーブル（`target_face_spots`/`target_face_rings`、`preset_distances`）は親テーブルの`owner_id`判定に従う（親を辿ってRLSを評価する。`distances`/`shots`が`round_users`を辿るのと同じパターン）。
 
-`target_faces`・`round_presets`のグローバル分をanonにも開放しているのは、これらが「誰が読んでも常に同じ内容」の参照データであり、サーバー側でCookie（セッション）に依存しないキャッシュ（`unstable_cache`）を可能にするため。個人データ（`owner_id`が自分以外）は引き続きanonから閲覧できない。
-
-## 初期データの自動登録
-
-`round_users`のINSERT条件は自己参照（既に`editor`である必要がある）のため、クライアントからの素朴なINSERTでは、あるラウンドの最初の1行（作成者自身の`editor`登録）を作ることができない。また`INSERT ... RETURNING`（`supabase-js`の`.select()`等）は挿入直後にSELECTポリシーの評価も要求するが、これは同一ステートメント内のトリガー副作用を参照できないため、「`rounds`作成→トリガーで`round_users`登録」という順序ではRETURNING時点で`round_users`が未反映のままRLSに弾かれる。
-
-このため、ラウンド作成は`create_round(name, round_date, distances)` RPC（`SECURITY DEFINER`、RLSの対象外）に一本化し、関数内で**`round_users`への登録を先に行ってから**`rounds`・`distances`を作成する。別ステートメントとして先に完了した登録は後続のRETURNINGから正しく参照できるため、RLSに弾かれない。`rounds`への直接INSERTポリシーは設けず、この関数経由の作成のみを許可する。
-
-同様に自己参照で初回登録ができない`users`テーブルの初期化（`auth.users`の作成をトリガーに`public.users`を生成）は、素朴な1テーブルのAFTER INSERTトリガーのままで問題ない（RETURNINGで即座に自分自身の行を参照する必要がないため）。
+ラウンド・距離・矢の変更は専用のイベントRPCだけを経由する。RPCはクライアントから受け取った識別子を権限判定の根拠としてそのまま信用せず、対象の親関係から実際のラウンドを特定し、`auth.uid()`がそのラウンドの`editor`であることを確認する。`author_id`もRPC内で`auth.uid()`から設定する。権限確認、イベント追記、`revision`採番、射影更新は同一トランザクションで行う。
