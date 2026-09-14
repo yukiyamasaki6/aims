@@ -522,12 +522,10 @@ select lives_ok(
   '有効なshotsの挿入は成功する'
 );
 
-select throws_ok(
+select lives_ok(
   $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
-    values ('$$ || :'shots_distance_id' || $$', 1, 2, 'b0000000-0000-0000-0000-000000000004', 'X', 5)$$,
-  '23514',
-  null,
-  'score_str=X で score_int<>10 の挿入はCHECK制約で拒否される'
+    values ('$$ || :'shots_distance_id' || $$', 1, 2, 'b0000000-0000-0000-0000-000000000004', 'bullseye', -1)$$,
+  'score_strとscore_intの対応は固定せず、入力ツールの結果を保存できる'
 );
 
 select throws_ok(
