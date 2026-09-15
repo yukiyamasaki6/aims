@@ -15,8 +15,8 @@
 | `target_faces`            | 的を表す。`owner_id`がnullならグローバル、値があれば個人登録   |
 | `target_face_spots`       | 的の中の的中スポット（中心座標）を表す。1つの的が複数スポットを持てる（3つ目等の複数的配置）   |
 | `target_face_rings`       | スポットの中の点数帯（同心円1本）を表す。半径・色・重なり順・得点を持つ                    |
-| `round_presets`           | ラウンドの定型フォーマット（種別・弓種・距離構成）を表す。`owner_id`がnullならグローバル、値があれば個人プリセット |
-| `preset_distances`        | `round_presets`が持つ距離構成の1行を表す                                            |
+| `preset_rounds`           | ラウンドの定型フォーマット（種別・弓種・距離構成）を表す。`owner_id`がnullならグローバル、値があれば個人プリセット |
+| `preset_distances`        | `preset_rounds`が持つ距離構成の1行を表す                                             |
 
 ---
 
@@ -31,8 +31,8 @@ erDiagram
     target_faces ||--o{ target_face_spots : "1対多"
     target_face_spots ||--o{ target_face_rings : "1対多"
     target_faces ||--o{ distances : "1対多"
-    users ||--o{ round_presets : "1対多（owner）"
-    round_presets ||--o{ preset_distances : "1対多"
+    users ||--o{ preset_rounds : "1対多（owner）"
+    preset_rounds ||--o{ preset_distances : "1対多"
     target_faces ||--o{ preset_distances : "1対多"
     users ||--o{ round_events : "1対多"
     users ||--o{ distance_events : "1対多"
@@ -162,7 +162,7 @@ erDiagram
         timestamp created_at "作成時刻"
         timestamp updated_at "最終更新時刻"
     }
-    round_presets {
+    preset_rounds {
         uuid id PK "サロゲートID"
         uuid owner_id FK "所有ユーザー [NULLABLE: null=グローバル、値あり=個人プリセット]"
         string name "プリセット名（例：WA 1440）"
