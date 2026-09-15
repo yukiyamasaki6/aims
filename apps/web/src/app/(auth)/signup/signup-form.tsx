@@ -45,11 +45,15 @@ export function SignUpForm() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(undefined);
   const mountedRef = useRef(true);
-  // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
-  // 挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseの
-  // クロージャのまま実行されてしまうため、stateだけでは防げない。
-  const submittingRef = useRef(false);
-  const [submitting, setSubmitting] = useState(false);
+  // コード入力画面では確認・再送が別々の独立した操作のため、無効化・二重送信
+  // 防止も画面（送信/確認/登録）ごと・再送ごとに別々に持つ（互いをブロック
+  // しない）。二重送信の判定は同期的なrefで行う。setStateのstateはレンダーを
+  // 挟むまで更新されず、連打で2回目の呼び出しが古いfalseのクロージャのまま
+  // 実行されてしまうため、stateだけでは防げない。
+  const primarySubmittingRef = useRef(false);
+  const [primarySubmitting, setPrimarySubmitting] = useState(false);
+  const resendSubmittingRef = useRef(false);
+  const [resendSubmitting, setResendSubmitting] = useState(false);
   const hydrated = useHydrated();
 
   function consumeCaptchaToken() {
@@ -81,7 +85,7 @@ export function SignUpForm() {
   }
 
   async function handleResend() {
-    if (submittingRef.current) return;
+    if (resendSubmittingRef.current) return;
     setError(null);
     setCodeFieldErrors({});
 
@@ -91,8 +95,8 @@ export function SignUpForm() {
       return;
     }
 
-    submittingRef.current = true;
-    setSubmitting(true);
+    resendSubmittingRef.current = true;
+    setResendSubmitting(true);
     setResendCooldown(60);
 
     const supabase = createClient();
@@ -111,13 +115,13 @@ export function SignUpForm() {
     if (error) {
       setError(translateAuthErrorMessage(error));
     }
-    submittingRef.current = false;
-    setSubmitting(false);
+    resendSubmittingRef.current = false;
+    setResendSubmitting(false);
   }
 
   async function handleSendCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (submittingRef.current) return;
+    if (primarySubmittingRef.current) return;
     setError(null);
     setEmailFieldErrors({});
 
@@ -133,16 +137,16 @@ export function SignUpForm() {
       return;
     }
 
-    submittingRef.current = true;
-    setSubmitting(true);
+    primarySubmittingRef.current = true;
+    setPrimarySubmitting(true);
     try {
       if (await isEmailRegistered(email)) {
         // このチェックはcaptchaTokenを使わないため、まだ消費されていない
         // トークンをここでリセットする必要はない（次の送信でそのまま使える）。
         if (!mountedRef.current) return;
         setError("このメールアドレスは既に登録されています。");
-        submittingRef.current = false;
-        setSubmitting(false);
+        primarySubmittingRef.current = false;
+        setPrimarySubmitting(false);
         return;
       }
 
@@ -162,21 +166,21 @@ export function SignUpForm() {
         setResendCooldown(60);
         setStep("code");
       }
-      submittingRef.current = false;
-      setSubmitting(false);
+      primarySubmittingRef.current = false;
+      setPrimarySubmitting(false);
     } catch {
       if (!mountedRef.current) return;
       setError(
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
       );
-      submittingRef.current = false;
-      setSubmitting(false);
+      primarySubmittingRef.current = false;
+      setPrimarySubmitting(false);
     }
   }
 
   async function handleVerifyCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (submittingRef.current) return;
+    if (primarySubmittingRef.current) return;
     setError(null);
     setCodeFieldErrors({});
 
@@ -186,8 +190,8 @@ export function SignUpForm() {
       return;
     }
 
-    submittingRef.current = true;
-    setSubmitting(true);
+    primarySubmittingRef.current = true;
+    setPrimarySubmitting(true);
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.verifyOtp({
@@ -203,21 +207,21 @@ export function SignUpForm() {
       } else {
         setStep("password");
       }
-      submittingRef.current = false;
-      setSubmitting(false);
+      primarySubmittingRef.current = false;
+      setPrimarySubmitting(false);
     } catch {
       if (!mountedRef.current) return;
       setError(
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
       );
-      submittingRef.current = false;
-      setSubmitting(false);
+      primarySubmittingRef.current = false;
+      setPrimarySubmitting(false);
     }
   }
 
   async function handleSetPassword(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (submittingRef.current) return;
+    if (primarySubmittingRef.current) return;
     setError(null);
     setPasswordFieldErrors({});
 
@@ -227,8 +231,8 @@ export function SignUpForm() {
       return;
     }
 
-    submittingRef.current = true;
-    setSubmitting(true);
+    primarySubmittingRef.current = true;
+    setPrimarySubmitting(true);
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.updateUser({ password });
@@ -237,8 +241,8 @@ export function SignUpForm() {
 
       if (error) {
         setError(translateAuthErrorMessage(error));
-        submittingRef.current = false;
-        setSubmitting(false);
+        primarySubmittingRef.current = false;
+        setPrimarySubmitting(false);
         return;
       }
 
@@ -251,8 +255,8 @@ export function SignUpForm() {
       setError(
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
       );
-      submittingRef.current = false;
-      setSubmitting(false);
+      primarySubmittingRef.current = false;
+      setPrimarySubmitting(false);
     }
   }
 
@@ -290,10 +294,12 @@ export function SignUpForm() {
           </div>
           <Button
             type="submit"
-            aria-disabled={submitting}
-            className={cn(submitting && "pointer-events-none opacity-50")}
+            aria-disabled={primarySubmitting}
+            className={cn(
+              primarySubmitting && "pointer-events-none opacity-50",
+            )}
           >
-            {submitting && <Loader2 className="size-3.5 animate-spin" />}
+            {primarySubmitting && <Loader2 className="size-3.5 animate-spin" />}
             登録してサインイン
           </Button>
         </form>
@@ -338,10 +344,12 @@ export function SignUpForm() {
           </div>
           <Button
             type="submit"
-            aria-disabled={submitting}
-            className={cn(submitting && "pointer-events-none opacity-50")}
+            aria-disabled={primarySubmitting}
+            className={cn(
+              primarySubmitting && "pointer-events-none opacity-50",
+            )}
           >
-            {submitting && <Loader2 className="size-3.5 animate-spin" />}
+            {primarySubmitting && <Loader2 className="size-3.5 animate-spin" />}
             確認
           </Button>
         </form>
@@ -352,19 +360,19 @@ export function SignUpForm() {
           メールが届かない場合は、迷惑メールフォルダをご確認ください。
         </p>
         <Turnstile ref={turnstileRef} onVerify={setCaptchaToken} />
-        <div className="flex flex-col items-center gap-1">
+        <div className="flex w-full flex-col items-center gap-1">
           <Button
             type="button"
             variant="outline"
             className={cn(
               "w-full",
-              submitting && "pointer-events-none opacity-50",
+              resendSubmitting && "pointer-events-none opacity-50",
             )}
-            aria-disabled={submitting}
+            aria-disabled={resendSubmitting}
             data-captcha-ready={captchaToken !== null}
             onClick={handleResend}
           >
-            {submitting && <Loader2 className="size-3.5 animate-spin" />}
+            {resendSubmitting && <Loader2 className="size-3.5 animate-spin" />}
             {resendCooldown > 0 ? `再送（${resendCooldown}秒）` : "再送"}
           </Button>
           {codeFieldErrors.resend && (
@@ -419,10 +427,10 @@ export function SignUpForm() {
         <Button
           type="submit"
           data-captcha-ready={captchaToken !== null}
-          aria-disabled={submitting}
-          className={cn(submitting && "pointer-events-none opacity-50")}
+          aria-disabled={primarySubmitting}
+          className={cn(primarySubmitting && "pointer-events-none opacity-50")}
         >
-          {submitting && <Loader2 className="size-3.5 animate-spin" />}
+          {primarySubmitting && <Loader2 className="size-3.5 animate-spin" />}
           認証コードを送信
         </Button>
       </form>
