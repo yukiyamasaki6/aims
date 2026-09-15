@@ -10,75 +10,9 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
 import type { EnqueueInput } from "./use-sync-queue";
-
-async function deleteDistance(input: {
-  distanceEventId: string;
-  distanceId: string;
-}): Promise<{ error: string } | undefined> {
-  const supabase = createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { error: "サインインが必要です。" };
-  }
-
-  const { error } = await supabase.rpc("disable_distance", {
-    p_distance_event_id: input.distanceEventId,
-    p_distance_id: input.distanceId,
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-}
-
-async function updateDistance(input: {
-  distanceEventId: string;
-  distanceId: string;
-  distance: number | null;
-  totalEnds: number;
-  arrowsPerEnd: number;
-  targetFaceId: string;
-  isMarked: boolean;
-}): Promise<{ error: string } | undefined> {
-  if (input.isMarked && input.distance === null) {
-    return { error: "Markedの場合は距離（m）を入力してください。" };
-  }
-
-  const supabase = createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { error: "サインインが必要です。" };
-  }
-
-  // shotsの有無チェックと、その結果に応じて更新対象列を変えるdistancesの
-  // 更新の間に別クライアントが矢を記録しないよう、Postgres関数
-  // （update_distance）内で1つのトランザクションとして行う。
-  const { error } = await supabase.rpc("update_distance", {
-    p_distance_event_id: input.distanceEventId,
-    p_distance_id: input.distanceId,
-    p_distance: input.distance,
-    p_total_ends: input.totalEnds,
-    p_arrows_per_end: input.arrowsPerEnd,
-    p_target_face_id: input.targetFaceId,
-    p_is_marked: input.isMarked,
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-}
 
 // 10点的（アウトドア・122cm）。距離追加時の初期的として使う（e2eのcreate-round
 // APIヘルパーが使う既定の的と同じもの）。
@@ -414,16 +348,16 @@ export function DistanceEditFields({
     enqueue({
       key: `distance:${distance.id}`,
       label: `距離${distance.distanceNumber}`,
-      run: () =>
-        updateDistance({
-          distanceEventId,
-          distanceId: distance.id,
-          distance: validated.distance,
-          totalEnds: validated.totalEnds,
-          arrowsPerEnd: validated.arrowsPerEnd,
-          targetFaceId: validated.targetFaceId,
-          isMarked: validated.isMarked,
-        }),
+      operation: {
+        type: "distance.updated",
+        eventId: distanceEventId,
+        distanceId: distance.id,
+        distance: validated.distance,
+        totalEnds: validated.totalEnds,
+        arrowsPerEnd: validated.arrowsPerEnd,
+        targetFaceId: validated.targetFaceId,
+        isMarked: validated.isMarked,
+      },
     });
   }
 
@@ -433,7 +367,11 @@ export function DistanceEditFields({
     enqueue({
       key: `distance:${distance.id}`,
       label: `距離${distance.distanceNumber}`,
-      run: () => deleteDistance({ distanceEventId, distanceId: distance.id }),
+      operation: {
+        type: "distance.disabled",
+        eventId: distanceEventId,
+        distanceId: distance.id,
+      },
     });
   }
 

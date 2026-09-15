@@ -88,6 +88,7 @@ it("未認証では書き込まない", async () => {
   db.getUser.mockResolvedValue({ data: { user: null } });
   expect(await syncShots({ upsert: [], clear: [] })).toEqual({
     error: "サインインが必要です。",
+    permanent: true,
   });
   expect(db.rpc).not.toHaveBeenCalled();
 });

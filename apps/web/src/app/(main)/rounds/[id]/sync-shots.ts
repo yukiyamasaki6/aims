@@ -1,4 +1,13 @@
+import type { PostgrestError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+
+function toResult(error: PostgrestError | null) {
+  if (!error) return undefined;
+  return {
+    error: error.message,
+    permanent: error.code === "P0001" || error.code === "42501",
+  };
+}
 
 // スコアの連打時に、記録・取り消しをそれぞれ1件ずつ送ると、通信本数分だけ
 // 同期完了までの体感速度が悪化する。そのため、1回の呼び出しで複数件の記録・
@@ -20,7 +29,7 @@ export async function syncShots(input: {
     endNumber: number;
     arrowNumber: number;
   }[];
-}): Promise<{ error: string } | undefined> {
+}): Promise<{ error: string; permanent?: boolean } | undefined> {
   const supabase = createClient();
 
   const {
@@ -28,7 +37,7 @@ export async function syncShots(input: {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { error: "サインインが必要です。" };
+    return { error: "サインインが必要です。", permanent: true };
   }
 
   if (input.upsert.length > 0) {
@@ -45,7 +54,7 @@ export async function syncShots(input: {
     });
 
     if (error) {
-      return { error: error.message };
+      return toResult(error);
     }
   }
 
@@ -60,7 +69,7 @@ export async function syncShots(input: {
     });
 
     if (error) {
-      return { error: error.message };
+      return toResult(error);
     }
   }
 }

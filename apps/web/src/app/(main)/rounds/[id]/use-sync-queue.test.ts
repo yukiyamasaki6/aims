@@ -1,3 +1,4 @@
+import "fake-indexeddb/auto";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ShotUpsert } from "./use-sync-queue";
@@ -31,6 +32,34 @@ describe("useSyncQueue", () => {
 
     expect(result.current.status).toBe("synced");
     expect(result.current.errors).toEqual([]);
+  });
+
+  it("does not retry a permanent failure", async () => {
+    const { result } = renderHook(() => useSyncQueue());
+    const run = vi.fn(() =>
+      Promise.resolve({
+        error: "このラウンドを編集する権限がありません。",
+        permanent: true,
+      }),
+    );
+
+    act(() => {
+      result.current.enqueue({
+        key: "roundConfig",
+        label: "ラウンド設定",
+        run,
+      });
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBe("error");
+    expect(result.current.errors).toEqual([
+      expect.objectContaining({ key: "roundConfig" }),
+    ]);
   });
 
   it("becomes syncing while an operation is in flight, then synced once it resolves", async () => {
