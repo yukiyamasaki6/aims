@@ -675,7 +675,12 @@ export type Database = {
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
       record_shots: { Args: { p_shots: Json }; Returns: undefined };
       save_round_as_preset: {
-        Args: { p_name: string; p_round_id: string };
+        Args: {
+          p_bow_type: string;
+          p_distances: Json;
+          p_format: string;
+          p_name: string;
+        };
         Returns: string;
       };
       update_distance: {
