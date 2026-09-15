@@ -6,8 +6,8 @@ select tables_are(
   'public',
   array[
     'distances',
-    'round_preset_distances',
-    'round_presets',
+    'preset_distances',
+    'preset_rounds',
     'round_users',
     'rounds',
     'shots',
@@ -19,9 +19,9 @@ select tables_are(
   'publicスキーマのテーブルは想定通りの集合と完全に一致する'
 );
 
-select col_is_unique(
+select col_is_pk(
   'public', 'shots', array['distance_id', 'end_number', 'arrow_number'],
-  'shots は (distance_id, end_number, arrow_number) で一意'
+  'shots は (distance_id, end_number, arrow_number) を主キーとする'
 );
 
 insert into auth.users (id)
@@ -33,10 +33,9 @@ insert into public.rounds (id, name, round_date, format, bow_type)
 values ('88888888-8888-8888-8888-888888888888', 'Flexible scores', current_date, 'outdoor', 'recurve');
 
 insert into public.distances
-    (id, round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+    (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
   values
-    ('99999999-9999-9999-9999-999999999999', '88888888-8888-8888-8888-888888888888', 1, 70, 1, 1,
-      'a1000000-0000-0000-0000-000000000001');
+    ('99999999-9999-9999-9999-999999999999', '88888888-8888-8888-8888-888888888888', 'a', 70, 1, 1, 'a1000000-0000-0000-0000-000000000001');
 
 select lives_ok(
   $$insert into public.shots

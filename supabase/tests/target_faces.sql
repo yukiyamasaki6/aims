@@ -1,13 +1,6 @@
 begin;
 
-select plan(55);
-
-select has_table('public', 'target_faces', 'target_faces テーブルが存在する');
-select has_table('public', 'target_face_spots', 'target_face_spots テーブルが存在する');
-select has_table('public', 'target_face_rings', 'target_face_rings テーブルが存在する');
-select has_column('public', 'target_faces', 'size', 'target_faces.size カラムが存在する');
-select has_column('public', 'target_faces', 'format', 'target_faces.format カラムが存在する');
-select has_column('public', 'target_faces', 'bow_type', 'target_faces.bow_type カラムが存在する');
+select plan(49);
 
 -- formatは的の選択UIの並び順（種類→サイズ）を、名前文字列の解析ではなく
 -- roundsやdistancesと同じ意味を持つ列で扱うために持たせる。
@@ -144,9 +137,7 @@ select results_eq(
 );
 
 -- インドアの弓種差分（issue #163）:
--- インドアにはXという区分自体が存在しない（弓種を問わず最高得点帯は常に"10"）。
---   - リカーブ・ベアボウ共通の的は旧Xリングを削除し、旧10リング（半径はそのまま）が中心をカバーする。
---   - コンパウンド専用の的（英語名）は旧10リングを削除し、旧Xリングの半径がscore_str="10"として中心をカバーする。
+-- インドアにはXという区分自体が存在せず、弓種を問わず最高得点帯は常に"10"とする。
 -- リング半径・色はどちらも標準（9,10,X）のシードと同一で、score_str/score_intのみ異なる。
 -- コンパウンド専用の的だけが英語名（例: 'Indoor 60cm Compound'）で追加されている。
 
@@ -165,7 +156,7 @@ select results_eq(
     where tf.name = '10点的（インドア・60cm）'
     order by r.radius asc limit 1$$,
   $$values ('10'::text, 10::bigint)$$,
-  '10点的（インドア・60cm）は旧Xリング（半径1.5cm）が削除され、最小半径(3cm)の10リングが中心をカバーする'
+  '10点的（インドア・60cm）は最小半径3cmの10リングが中心をカバーする'
 );
 
 select results_eq(
@@ -175,7 +166,7 @@ select results_eq(
     where tf.name = '10点的（インドア・40cm）'
     order by r.radius asc limit 1$$,
   $$values ('10'::text, 10::bigint)$$,
-  '10点的（インドア・40cm）は旧Xリング（半径1cm）が削除され、最小半径(2cm)の10リングが中心をカバーする'
+  '10点的（インドア・40cm）は最小半径2cmの10リングが中心をカバーする'
 );
 
 select results_eq(
@@ -185,7 +176,7 @@ select results_eq(
     where tf.name = 'Indoor 60cm Compound'
     order by r.radius asc limit 1$$,
   $$values ('10'::text, 10::bigint)$$,
-  'Indoor 60cm Compoundは旧10リングが削除され、旧Xリング（半径1.5cm）がscore_str=10として中心をカバーする'
+  'Indoor 60cm Compoundは最小半径1.5cmの10リングが中心をカバーする'
 );
 
 select results_eq(
@@ -195,7 +186,7 @@ select results_eq(
     where tf.name = 'Indoor 40cm Compound'
     order by r.radius asc limit 1$$,
   $$values ('10'::text, 10::bigint)$$,
-  'Indoor 40cm Compoundは旧10リングが削除され、旧Xリング（半径1cm）がscore_str=10として中心をカバーする'
+  'Indoor 40cm Compoundは最小半径1cmの10リングが中心をカバーする'
 );
 
 -- インドアの3つ目（6点的）は最外周が青（6点）で、他の的の最外周（白1点等）と
@@ -314,24 +305,28 @@ select throws_like(
   '他ユーザーは自分が所有しない的にスポットを追加できない'
 );
 
--- グローバルな的をキャッシュ可能にするため、未認証（anon）でもグローバル分
--- だけは閲覧できるようにRLSを緩和する。個人的な的は引き続き閲覧できない。
+-- このアプリは認証済みユーザーだけが利用するため、未認証では参照できない。
 set local role anon;
-select results_eq(
+select throws_ok(
   $$select count(*) from public.target_faces where owner_id is null$$,
-  $$values (19::bigint)$$,
-  '未認証（anon）でもグローバルな的は閲覧できる'
+  '42501',
+  null,
+  '未認証（anon）はグローバルな的を閲覧できない'
 );
 
-select is_empty(
+select throws_ok(
   $$select id from public.target_faces where id = '22222222-2222-2222-2222-222222222222'$$,
+  '42501',
+  null,
   '未認証（anon）は個人的な的を閲覧できない'
 );
 
-select is_empty(
+select throws_ok(
   $$select s.id from public.target_face_spots s
     join public.target_faces tf on tf.id = s.target_face_id
     where tf.id = '22222222-2222-2222-2222-222222222222'$$,
+  '42501',
+  null,
   '未認証（anon）は個人的な的のスポットも閲覧できない'
 );
 

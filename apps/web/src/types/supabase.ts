@@ -39,9 +39,9 @@ export type Database = {
           arrows_per_end: number;
           created_at: string;
           distance: number | null;
-          distance_number: number;
           id: string;
           is_marked: boolean;
+          position_key: string;
           round_id: string;
           target_face_id: string;
           total_ends: number;
@@ -51,9 +51,9 @@ export type Database = {
           arrows_per_end: number;
           created_at?: string;
           distance?: number | null;
-          distance_number: number;
           id?: string;
           is_marked?: boolean;
+          position_key: string;
           round_id: string;
           target_face_id: string;
           total_ends: number;
@@ -63,9 +63,9 @@ export type Database = {
           arrows_per_end?: number;
           created_at?: string;
           distance?: number | null;
-          distance_number?: number;
           id?: string;
           is_marked?: boolean;
+          position_key?: string;
           round_id?: string;
           target_face_id?: string;
           total_ends?: number;
@@ -88,14 +88,14 @@ export type Database = {
           },
         ];
       };
-      round_preset_distances: {
+      preset_distances: {
         Row: {
           arrows_per_end: number;
           created_at: string;
           distance: number | null;
-          distance_number: number;
           id: string;
           is_marked: boolean;
+          position_key: string;
           preset_id: string;
           target_face_id: string;
           total_ends: number;
@@ -105,9 +105,9 @@ export type Database = {
           arrows_per_end: number;
           created_at?: string;
           distance?: number | null;
-          distance_number: number;
           id?: string;
           is_marked?: boolean;
+          position_key: string;
           preset_id: string;
           target_face_id: string;
           total_ends: number;
@@ -117,9 +117,9 @@ export type Database = {
           arrows_per_end?: number;
           created_at?: string;
           distance?: number | null;
-          distance_number?: number;
           id?: string;
           is_marked?: boolean;
+          position_key?: string;
           preset_id?: string;
           target_face_id?: string;
           total_ends?: number;
@@ -127,14 +127,14 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "round_preset_distances_preset_id_fkey";
+            foreignKeyName: "preset_distances_preset_id_fkey";
             columns: ["preset_id"];
             isOneToOne: false;
-            referencedRelation: "round_presets";
+            referencedRelation: "preset_rounds";
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "round_preset_distances_target_face_id_fkey";
+            foreignKeyName: "preset_distances_target_face_id_fkey";
             columns: ["target_face_id"];
             isOneToOne: false;
             referencedRelation: "target_faces";
@@ -142,7 +142,7 @@ export type Database = {
           },
         ];
       };
-      round_presets: {
+      preset_rounds: {
         Row: {
           bow_type: string;
           created_at: string;
@@ -172,7 +172,7 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "round_presets_owner_id_fkey";
+            foreignKeyName: "preset_rounds_owner_id_fkey";
             columns: ["owner_id"];
             isOneToOne: false;
             referencedRelation: "users";
@@ -258,7 +258,6 @@ export type Database = {
           created_at: string;
           distance_id: string;
           end_number: number;
-          id: string;
           score_int: number;
           score_str: string;
           shooter_id: string;
@@ -269,7 +268,6 @@ export type Database = {
           created_at?: string;
           distance_id: string;
           end_number: number;
-          id?: string;
           score_int: number;
           score_str: string;
           shooter_id: string;
@@ -280,7 +278,6 @@ export type Database = {
           created_at?: string;
           distance_id?: string;
           end_number?: number;
-          id?: string;
           score_int?: number;
           score_str?: string;
           shooter_id?: string;

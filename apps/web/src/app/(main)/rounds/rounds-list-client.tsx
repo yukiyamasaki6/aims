@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 
 export type RoundListItem = {
@@ -24,6 +25,7 @@ export function RoundsListClient({
 }: {
   initialRounds: RoundListItem[];
 }) {
+  const hydrated = useHydrated();
   const [rounds, setRounds] = useState(initialRounds);
   const [roundToDelete, setRoundToDelete] = useState<RoundListItem | null>(
     null,
@@ -121,6 +123,7 @@ export function RoundsListClient({
 
       <Link
         href="/rounds/new"
+        data-hydrated={hydrated}
         data-testid="new-round-fab"
         aria-label="ラウンドを新規作成"
         className="fixed right-6 bottom-6 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-colors hover:bg-primary/80"

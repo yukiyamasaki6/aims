@@ -23,7 +23,7 @@ insert into auth.users (id) values ('e0000000-0000-0000-0000-000000000001');
 insert into public.target_faces (owner_id, name, size, format, bow_type)
 values ('e0000000-0000-0000-0000-000000000001', 'Owned Target', 80, 'outdoor', array['recurve', 'compound', 'barebow']);
 
-insert into public.round_presets (owner_id, name, format, bow_type)
+insert into public.preset_rounds (owner_id, name, format, bow_type)
 values ('e0000000-0000-0000-0000-000000000001', 'Owned Preset', 'outdoor', 'recurve');
 
 insert into public.rounds (id, name, round_date, format, bow_type)
@@ -32,8 +32,8 @@ values ('e0000000-0000-0000-0000-000000000002', 'User Delete Round', current_dat
 insert into public.round_users (round_id, user_id, role)
 values ('e0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000001', 'editor');
 
-insert into public.distances (id, round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
-values ('e0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000002', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
+insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+values ('e0000000-0000-0000-0000-000000000003', 'e0000000-0000-0000-0000-000000000002', '1', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
 insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
 values ('e0000000-0000-0000-0000-000000000003', 1, 1, 'e0000000-0000-0000-0000-000000000001', 'X', 10);
@@ -51,8 +51,8 @@ select is_empty(
 );
 
 select is_empty(
-  $$select id from public.round_presets where owner_id = 'e0000000-0000-0000-0000-000000000001'$$,
-  'auth.users削除で所有するround_presetsもカスケード削除される'
+  $$select id from public.preset_rounds where owner_id = 'e0000000-0000-0000-0000-000000000001'$$,
+  'auth.users削除で所有するpreset_roundsもカスケード削除される'
 );
 
 select is_empty(

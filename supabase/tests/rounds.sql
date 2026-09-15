@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(89);
+select plan(83);
 
 -- ============================================================
 -- RLS: editor / 非メンバー
@@ -49,8 +49,8 @@ select results_eq(
 );
 
 select throws_like(
-  $$insert into public.distances (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
-    values ('44444444-4444-4444-4444-444444444444', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  $$insert into public.distances (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values ('44444444-4444-4444-4444-444444444444', '1', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
   '%row-level security%',
   'round_usersに存在しないユーザーは他人のラウンドにdistancesを追加できない'
 );
@@ -99,8 +99,8 @@ values ('77777777-7777-7777-7777-777777777777', '55555555-5555-5555-5555-5555555
 insert into public.round_users (round_id, user_id, role)
 values ('77777777-7777-7777-7777-777777777777', '66666666-6666-6666-6666-666666666666', 'viewer');
 
-insert into public.distances (id, round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
-values ('88888888-8888-8888-8888-888888888888', '77777777-7777-7777-7777-777777777777', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
+insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+values ('88888888-8888-8888-8888-888888888888', '77777777-7777-7777-7777-777777777777', '1', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
 insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
 values ('88888888-8888-8888-8888-888888888888', 1, 1, '55555555-5555-5555-5555-555555555555', 'X', 10);
@@ -146,8 +146,8 @@ select results_eq(
 );
 
 select throws_like(
-  $$insert into public.distances (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
-    values ('77777777-7777-7777-7777-777777777777', 2, 50, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  $$insert into public.distances (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values ('77777777-7777-7777-7777-777777777777', '2', 50, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
   '%row-level security%',
   'viewerロールのユーザーはdistancesを追加できない'
 );
@@ -205,8 +205,8 @@ values ('c0000000-0000-0000-0000-000000000010', 'c0000000-0000-0000-0000-0000000
 insert into public.round_users (round_id, user_id, role)
 values ('c0000000-0000-0000-0000-000000000010', 'c0000000-0000-0000-0000-000000000003', 'viewer');
 
-insert into public.distances (id, round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
-values ('c0000000-0000-0000-0000-000000000020', 'c0000000-0000-0000-0000-000000000010', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
+insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+values ('c0000000-0000-0000-0000-000000000020', 'c0000000-0000-0000-0000-000000000010', '1', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
 insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
 values ('c0000000-0000-0000-0000-000000000020', 1, 1, 'c0000000-0000-0000-0000-000000000001', 'X', 10);
@@ -352,10 +352,6 @@ select throws_ok(
 -- create_round RPC: format / bow_type / target_face
 -- ============================================================
 
-select has_column('public', 'rounds', 'format', 'rounds.format カラムが存在する');
-select has_column('public', 'rounds', 'bow_type', 'rounds.bow_type カラムが存在する');
-select has_column('public', 'distances', 'target_face_id', 'distances.target_face_id カラムが存在する');
-
 insert into auth.users (id) values ('b0000000-0000-0000-0000-000000000003');
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'b0000000-0000-0000-0000-000000000003', true);
@@ -469,11 +465,11 @@ select create_round(
 ) as multi_round_id \gset
 
 select results_eq(
-  $$select distance_number, distance from public.distances
+  $$select position_key collate "default", distance from public.distances
     where round_id = '$$ || :'multi_round_id' || $$'
-    order by distance_number$$,
-  $$values (1::bigint, 90::bigint), (2::bigint, 70::bigint)$$,
-  'create_roundは複数distancesを連番（distance_number）で正しく作成する'
+    order by position_key$$,
+  $$values ('000000000001'::text, 90::bigint), ('000000000002'::text, 70::bigint)$$,
+  'create_roundは複数distancesをposition_key順で作成する'
 );
 
 -- ============================================================
@@ -566,8 +562,6 @@ select lives_ok(
 -- distances.is_marked
 -- ============================================================
 
-select has_column('public', 'distances', 'is_marked', 'distances.is_marked カラムが存在する');
-
 reset role;
 
 insert into auth.users (id) values ('b0000000-0000-0000-0000-000000000005');
@@ -578,36 +572,36 @@ select create_round(
   'Marked Test Round', current_date, 'field', 'recurve', '[]'::jsonb
 ) as marked_round_id \gset
 
-insert into public.distances (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
-values (:'marked_round_id', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
+insert into public.distances (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+values (:'marked_round_id', '1', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
 select results_eq(
-  $$select is_marked from public.distances where round_id = '$$ || :'marked_round_id' || $$' and distance_number = 1$$,
+  $$select is_marked from public.distances where round_id = '$$ || :'marked_round_id' || $$' and position_key = '1'$$,
   $$values (true)$$,
   'is_markedを省略すると既定値はtrue'
 );
 
 select lives_ok(
   $$insert into public.distances
-      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id, is_marked)
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked)
     values
-      ('$$ || :'marked_round_id' || $$', 2, null, 6, 6, 'a1000000-0000-0000-0000-000000000001', false)$$,
+      ('$$ || :'marked_round_id' || $$', '2', null, 6, 6, 'a1000000-0000-0000-0000-000000000001', false)$$,
   'is_marked=falseならdistanceがnullでも挿入できる（アンマークドで距離不明）'
 );
 
 select lives_ok(
   $$insert into public.distances
-      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id, is_marked)
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked)
     values
-      ('$$ || :'marked_round_id' || $$', 3, 55, 6, 6, 'a1000000-0000-0000-0000-000000000001', false)$$,
+      ('$$ || :'marked_round_id' || $$', '3', 55, 6, 6, 'a1000000-0000-0000-0000-000000000001', false)$$,
   'is_marked=falseでもdistanceを持てる（自己目測の記録）'
 );
 
 select throws_ok(
   $$insert into public.distances
-      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id, is_marked)
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked)
     values
-      ('$$ || :'marked_round_id' || $$', 4, null, 6, 6, 'a1000000-0000-0000-0000-000000000001', true)$$,
+      ('$$ || :'marked_round_id' || $$', '4', null, 6, 6, 'a1000000-0000-0000-0000-000000000001', true)$$,
   '23514',
   null,
   'is_marked=true（既定）でdistanceがnullだとCHECK制約で拒否される'
@@ -619,9 +613,9 @@ select throws_ok(
 
 select throws_ok(
   $$insert into public.distances
-      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
     values
-      ('$$ || :'marked_round_id' || $$', 10, 0, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+      ('$$ || :'marked_round_id' || $$', '10', 0, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
   '23514',
   null,
   'distance=0はCHECK制約で拒否される'
@@ -629,9 +623,9 @@ select throws_ok(
 
 select throws_ok(
   $$insert into public.distances
-      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
     values
-      ('$$ || :'marked_round_id' || $$', 10, 70, 0, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+      ('$$ || :'marked_round_id' || $$', '10', 70, 0, 6, 'a1000000-0000-0000-0000-000000000001')$$,
   '23514',
   null,
   'total_ends=0はCHECK制約で拒否される'
@@ -639,9 +633,9 @@ select throws_ok(
 
 select throws_ok(
   $$insert into public.distances
-      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
     values
-      ('$$ || :'marked_round_id' || $$', 10, 70, 6, 0, 'a1000000-0000-0000-0000-000000000001')$$,
+      ('$$ || :'marked_round_id' || $$', '10', 70, 6, 0, 'a1000000-0000-0000-0000-000000000001')$$,
   '23514',
   null,
   'arrows_per_end=0はCHECK制約で拒否される'
@@ -649,24 +643,22 @@ select throws_ok(
 
 select lives_ok(
   $$insert into public.distances
-      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
     values
-      ('$$ || :'marked_round_id' || $$', 10, 1, 1, 1, 'a1000000-0000-0000-0000-000000000001')$$,
+      ('$$ || :'marked_round_id' || $$', '10', 1, 1, 1, 'a1000000-0000-0000-0000-000000000001')$$,
   'distance/total_ends/arrows_per_endが1（境界値）なら挿入できる'
 );
 
 -- ============================================================
--- distances: (round_id, distance_number)の一意制約
+-- distances: position_keyの同値を許容し、idで表示順を確定できる
 -- ============================================================
 
-select throws_ok(
+select lives_ok(
   $$insert into public.distances
-      (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
     values
-      ('$$ || :'marked_round_id' || $$', 10, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
-  '23505',
-  null,
-  '同一round_id内でdistance_numberが重複する挿入は一意制約で拒否される'
+      ('$$ || :'marked_round_id' || $$', '10', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  '同一round_id内でposition_keyが重複しても挿入できる'
 );
 
 -- ============================================================
@@ -686,8 +678,8 @@ values ('d0000000-0000-0000-0000-000000000010', 'd0000000-0000-0000-0000-0000000
 insert into public.round_users (round_id, user_id, role)
 values ('d0000000-0000-0000-0000-000000000010', 'd0000000-0000-0000-0000-000000000002', 'viewer');
 
-insert into public.distances (id, round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id)
-values ('d0000000-0000-0000-0000-000000000020', 'd0000000-0000-0000-0000-000000000010', 1, 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
+insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+values ('d0000000-0000-0000-0000-000000000020', 'd0000000-0000-0000-0000-000000000010', '1', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
 insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
 values ('d0000000-0000-0000-0000-000000000020', 1, 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10);
@@ -732,20 +724,15 @@ select create_round(
 ) as update_config_round_id \gset
 
 insert into public.distances
-    (round_id, distance_number, distance, total_ends, arrows_per_end, target_face_id, is_marked)
+    (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked)
   values
-    (:'update_config_round_id', 1, null, 6, 6, 'a1000000-0000-0000-0000-000000000001', false);
+    (:'update_config_round_id', '1', null, 6, 6, 'a1000000-0000-0000-0000-000000000001', false);
 
 reset role;
 insert into public.round_users (round_id, user_id, role)
 values (:'update_config_round_id', 'e0000000-0000-0000-0000-000000000002', 'viewer');
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'e0000000-0000-0000-0000-000000000001', true);
-
-select has_function(
-  'public', 'update_round_config', array['uuid','text','date','text','text'],
-  'update_round_config関数が存在する'
-);
 
 select throws_like(
   $$select update_round_config('$$ || :'update_config_round_id' || $$', 'Renamed', current_date, 'outdoor', 'recurve')$$,
@@ -825,11 +812,6 @@ insert into public.round_users (round_id, user_id, role)
 values (:'update_distance_round_id', '70000000-0000-0000-0000-000000000002', 'viewer');
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '70000000-0000-0000-0000-000000000001', true);
-
-select has_function(
-  'public', 'update_distance', array['uuid','bigint','bigint','bigint','uuid','boolean'],
-  'update_distance関数が存在する'
-);
 
 select lives_ok(
   $$select update_distance('$$ || :'update_distance_id' || $$', 50, 3, 3, 'a1000000-0000-0000-0000-000000000002', false)$$,
