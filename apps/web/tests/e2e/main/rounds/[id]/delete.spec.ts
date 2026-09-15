@@ -66,8 +66,8 @@ test("ラウンド削除確認ダイアログの背景をクリックすると�
 
 test("確認ボタンをクリックすると削除を実行する", async ({ page }) => {
   let requestCount = 0;
-  await page.route("**/rest/v1/rounds*", async (route) => {
-    if (route.request().method() === "DELETE") requestCount++;
+  await page.route("**/rest/v1/rpc/delete_round", async (route) => {
+    requestCount++;
     await route.continue();
   });
 
@@ -104,11 +104,7 @@ test("削除リクエストの送信中は確認ボタンが無効になる", as
   const requestGate = new Promise<void>((resolve) => {
     releaseRequest = resolve;
   });
-  await page.route("**/rest/v1/rounds*", async (route) => {
-    if (route.request().method() !== "DELETE") {
-      await route.continue();
-      return;
-    }
+  await page.route("**/rest/v1/rpc/delete_round", async (route) => {
     requestCount++;
     await requestGate;
     await route.continue();

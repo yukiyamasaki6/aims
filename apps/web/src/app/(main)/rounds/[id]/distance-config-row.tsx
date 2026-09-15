@@ -28,10 +28,9 @@ async function deleteDistance(input: {
     return { error: "サインインが必要です。" };
   }
 
-  const { error } = await supabase
-    .from("distances")
-    .delete()
-    .eq("id", input.distanceId);
+  const { error } = await supabase.rpc("delete_distance", {
+    p_distance_id: input.distanceId,
+  });
 
   if (error) {
     return { error: error.message };

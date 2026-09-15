@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // 10点的（アウトドア・122cm）
@@ -47,12 +48,16 @@ export async function createRound(input: {
   }
 
   const { data: roundId, error } = await supabase.rpc("create_round", {
+    p_id: randomUUID(),
     p_name: input.name,
     p_round_date: input.roundDate,
     p_format: input.format ?? "outdoor",
     p_bow_type: input.bowType ?? "recurve",
-    p_distances: input.distances.map((d) => ({
+    p_distances: input.distances.map((d, index) => ({
+      id: randomUUID(),
+      position_key: String(index + 1).padStart(12, "0"),
       distance: d.distance,
+      is_marked: true,
       total_ends: d.totalEnds,
       arrows_per_end: d.arrowsPerEnd,
       target_face_id: d.targetFaceId ?? DEFAULT_TARGET_FACE_ID,

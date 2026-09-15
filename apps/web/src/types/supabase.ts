@@ -449,18 +449,36 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      clear_shots: { Args: { p_shots: Json }; Returns: undefined };
+      create_distance: {
+        Args: {
+          p_arrows_per_end: number;
+          p_distance: number;
+          p_id: string;
+          p_is_marked: boolean;
+          p_position_key: string;
+          p_round_id: string;
+          p_target_face_id: string;
+          p_total_ends: number;
+        };
+        Returns: undefined;
+      };
       create_round: {
         Args: {
           p_bow_type: string;
           p_distances: Json;
           p_format: string;
+          p_id: string;
           p_name: string;
           p_round_date: string;
         };
         Returns: string;
       };
+      delete_distance: { Args: { p_distance_id: string }; Returns: undefined };
+      delete_round: { Args: { p_round_id: string }; Returns: undefined };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
+      record_shots: { Args: { p_shots: Json }; Returns: undefined };
       save_round_as_preset: {
         Args: { p_name: string; p_round_id: string };
         Returns: string;
@@ -476,7 +494,7 @@ export type Database = {
         };
         Returns: undefined;
       };
-      update_round_config: {
+      update_round: {
         Args: {
           p_bow_type: string;
           p_format: string;

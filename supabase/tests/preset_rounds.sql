@@ -225,15 +225,15 @@ insert into auth.users (id) values ('f0000000-0000-0000-0000-000000000002'); -- 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'f0000000-0000-0000-0000-000000000001', true);
 
-select create_round(
+select create_round(gen_random_uuid(),
   'Save As Preset Round', current_date, 'field', 'compound',
-  '[{"distance":50,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
+  '[{"id":"f0000000-0000-0000-0000-000000000009","position_key":"000000000001","distance":50,"is_marked":true,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
 ) as save_preset_round_id \gset
 
-insert into public.distances
-    (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked)
-  values
-    (:'save_preset_round_id', '2', null, 4, 6, 'a1000000-0000-0000-0000-000000000001', false);
+select create_distance(
+  gen_random_uuid(), :'save_preset_round_id', '2',
+  null, 4, 6, 'a1000000-0000-0000-0000-000000000001', false
+);
 
 select save_round_as_preset(:'save_preset_round_id', 'My Saved Preset') as saved_preset_id \gset
 
