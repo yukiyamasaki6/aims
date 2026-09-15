@@ -791,14 +791,39 @@ export function ScorecardClient({
   }
 
   async function handleDeleteRound(): Promise<{ error: string } | undefined> {
-    const roundEventId = crypto.randomUUID();
-    sync.enqueue({
-      key: `round:${roundId}`,
-      label: "ラウンド削除",
-      operation: { type: "round.disabled", eventId: roundEventId, roundId },
-    });
-    router.push("/rounds");
-    return undefined;
+    // BlockingConfirmDialog向けの操作のため、他の書き込みと異なりオフライン
+    // 対応の送信キューは使わず、完了を待ってから遷移する（confirm-dialog.tsx
+    // のBlockingConfirmDialogのコメントを参照）。
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!mountedRef.current) return;
+
+      if (!user) {
+        return { error: "サインインが必要です。" };
+      }
+
+      const { error } = await supabase.rpc("disable_round", {
+        p_round_event_id: crypto.randomUUID(),
+        p_round_id: roundId,
+      });
+
+      if (!mountedRef.current) return;
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      router.push("/rounds");
+    } catch {
+      if (!mountedRef.current) return;
+      return {
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      };
+    }
   }
 
   function handleDistanceDeleted(distanceId: string) {

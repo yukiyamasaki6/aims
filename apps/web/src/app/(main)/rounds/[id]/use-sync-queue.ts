@@ -229,7 +229,12 @@ export function useSyncQueue(
           ) {
             void removePendingOperation(eventIdOf(input.operation));
           }
-          if (isPermanentFailure(result)) onPermanentFailure?.();
+          if (
+            isPermanentFailure(result) &&
+            result?.error !== AUTH_REQUIRED_MESSAGE
+          ) {
+            onPermanentFailure?.();
+          }
           setPendingCount((n) => n - 1);
         });
 
@@ -302,7 +307,12 @@ export function useSyncQueue(
               }
             }
           }
-          if (isPermanentFailure(result)) onPermanentFailure?.();
+          if (
+            isPermanentFailure(result) &&
+            result?.error !== AUTH_REQUIRED_MESSAGE
+          ) {
+            onPermanentFailure?.();
+          }
           setShotPendingKeys((prev) => {
             const next = new Set(prev);
             for (const item of itemsToRetry) next.delete(item.key);
