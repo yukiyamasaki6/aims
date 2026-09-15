@@ -738,10 +738,9 @@ export function ScorecardClient({
         return { error: "サインインが必要です。" };
       }
 
-      const { error } = await supabase
-        .from("rounds")
-        .delete()
-        .eq("id", roundId);
+      const { error } = await supabase.rpc("delete_round", {
+        p_round_id: roundId,
+      });
 
       if (!mountedRef.current) return;
 
