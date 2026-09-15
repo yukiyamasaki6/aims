@@ -271,7 +271,7 @@ test("現在の構成を個人プリセットとして保存でき、/rounds/new
   await expect(presetCard).toContainText("6本×3エンド");
 });
 
-test("距離を編集した直後にプリセット保存すると、直前の変更の反映を待ってから保存される", async ({
+test("距離を編集した直後にプリセット保存すると、DBへの反映を待たずローカルの表示内容で保存される", async ({
   page,
 }) => {
   const email = `save-as-preset-race-${Date.now()}@aims.test`;
@@ -290,8 +290,9 @@ test("距離を編集した直後にプリセット保存すると、直前の�
   await page.goto(`/rounds/${roundId}`);
   await waitForHydration(page);
 
-  // 距離の更新リクエストを意図的に遅延させ、直後のプリセット保存の
-  // リクエスト自体がその反映を待たずに送られてしまわないかを検証する。
+  // 距離の更新リクエストを意図的に遅延させる。プリセット保存はサーバーへの
+  // 反映を待たず、画面に表示中の内容（この変更後の値）をそのまま送信する
+  // ことを検証する。
   let releaseDistanceUpdate: () => void = () => {};
   const distanceUpdateGate = new Promise<void>((resolve) => {
     releaseDistanceUpdate = resolve;
@@ -315,15 +316,23 @@ test("距離を編集した直後にプリセット保存すると、直前の�
   await page.getByTestId("save-as-preset-name").fill("直後保存プリセット");
   await page.getByTestId("save-as-preset-confirm").click();
 
-  // 距離の更新が完了するまでは、プリセット保存のリクエストはまだ
-  // 送信されていないはず。
-  await page.waitForTimeout(500);
-  expect(saveAsPresetRequested).toBe(false);
+  // 距離の更新がまだサーバーへ届いていなくても、プリセット保存のリクエスト
+  // は即座に送信され、ダイアログも閉じる。
+  await expect.poll(() => saveAsPresetRequested).toBe(true);
+  await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
 
   releaseDistanceUpdate();
 
-  await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
-  expect(saveAsPresetRequested).toBe(true);
+  await page.goto("/rounds/new");
+  await waitForHydration(page);
+  const presetButton = page
+    .getByTestId("round-preset-button")
+    .filter({ hasText: "直後保存プリセット" });
+  await presetButton.click();
+  const presetCard = presetButton.locator("../..");
+  // サーバーへの反映を待っていればまだ「Marked」のはずの内容が、
+  // 直前にローカルで変更した「Unmarked」で保存されている。
+  await expect(presetCard).toContainText("Unmarked");
 });
 
 test("サインインが切れた状態でプリセット保存すると、エラーメッセージを表示する", async ({

@@ -370,8 +370,10 @@ function generatePresetName(distances: Distance[]): string {
 }
 
 async function saveRoundAsPreset(input: {
-  roundId: string;
   name: string;
+  format: string;
+  bowType: string;
+  distances: Distance[];
 }): Promise<{ error: string } | undefined> {
   const supabase = createClient();
 
@@ -383,12 +385,22 @@ async function saveRoundAsPreset(input: {
     return { error: "サインインが必要です。" };
   }
 
-  // ラウンド取得・距離取得・プリセット作成・距離複製を、Postgres関数
+  // 画面に表示中の内容をそのまま送る（ローカル起点）。DBに未送信の編集が
+  // あってもそれを待つ必要はない。プリセット作成・距離複製は、Postgres関数
   // （save_round_as_preset）内で1つのトランザクションとして行う。距離の
   // insertが失敗しても、距離を持たない空のプリセットが残ることはない。
   const { error } = await supabase.rpc("save_round_as_preset", {
-    p_round_id: input.roundId,
     p_name: input.name,
+    p_format: input.format,
+    p_bow_type: input.bowType,
+    p_distances: input.distances.map((d) => ({
+      position_key: d.position_key,
+      distance: d.distance,
+      total_ends: d.total_ends,
+      arrows_per_end: d.arrows_per_end,
+      target_face_id: d.target_face_id,
+      is_marked: d.is_marked,
+    })),
   });
 
   if (error) {
@@ -773,12 +785,12 @@ export function ScorecardClient({
     setPresetSubmitting(true);
     setPresetError(null);
 
-    // 保留中の距離・ラウンド設定の書き込みがDBへ反映される前にラウンドの
-    // 現在状態を読んでしまわないよう、直前までにキューへ積まれた書き込みの
-    // 完了を待ってから読みに行く。
-    await sync.flush();
-
-    const result = await saveRoundAsPreset({ roundId, name });
+    const result = await saveRoundAsPreset({
+      name,
+      format: roundConfig.format,
+      bowType: roundConfig.bowType,
+      distances,
+    });
     if (result?.error) {
       setPresetError(result.error);
       setPresetSubmitting(false);
