@@ -138,7 +138,7 @@ test("送信中は確認ボタンが無効になる", async ({ page }) => {
   const requestGate = new Promise<void>((resolve) => {
     releaseRequest = resolve;
   });
-  await page.route("**/rest/v1/rpc/delete_round", async (route) => {
+  await page.route("**/rest/v1/rpc/disable_round", async (route) => {
     requestCount++;
     await requestGate;
     await route.continue();
@@ -180,7 +180,7 @@ test("送信中はキャンセルが無効になる", async ({ page }) => {
   const requestGate = new Promise<void>((resolve) => {
     releaseRequest = resolve;
   });
-  await page.route("**/rest/v1/rpc/delete_round", async (route) => {
+  await page.route("**/rest/v1/rpc/disable_round", async (route) => {
     await requestGate;
     await route.continue();
   });
@@ -217,7 +217,7 @@ test("送信中は背景クリックでダイアログを閉じられない", as
   const requestGate = new Promise<void>((resolve) => {
     releaseRequest = resolve;
   });
-  await page.route("**/rest/v1/rpc/delete_round", async (route) => {
+  await page.route("**/rest/v1/rpc/disable_round", async (route) => {
     await requestGate;
     await route.continue();
   });

@@ -18,6 +18,7 @@ export type EnqueueInput = {
 };
 
 export type ShotUpsert = {
+  shotEventId: string;
   shooterId?: string;
   distanceId: string;
   endNumber: number;
@@ -26,6 +27,7 @@ export type ShotUpsert = {
   scoreInt: number;
 };
 export type ShotClear = {
+  shotEventId: string;
   distanceId: string;
   endNumber: number;
   arrowNumber: number;

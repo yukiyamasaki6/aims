@@ -6,7 +6,10 @@ export default async function RoundsPage() {
 
   const { data: rounds } = await supabase
     .from("rounds")
-    .select("id, name, round_date, distances(shots(score_int))")
+    .select(
+      "id, name, round_date, distances(disabled_at, shots(score_int, disabled_at))",
+    )
+    .is("disabled_at", null)
     .order("round_date", { ascending: false });
 
   const roundListItems: RoundListItem[] = (rounds ?? []).map((round) => ({
@@ -14,7 +17,9 @@ export default async function RoundsPage() {
     name: round.name,
     roundDate: round.round_date,
     total: round.distances
+      .filter((d) => d.disabled_at === null)
       .flatMap((d) => d.shots)
+      .filter((s) => s.disabled_at === null)
       .reduce((sum, s) => sum + s.score_int, 0),
   }));
 

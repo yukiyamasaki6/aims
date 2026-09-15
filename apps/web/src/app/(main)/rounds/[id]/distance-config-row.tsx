@@ -16,6 +16,7 @@ import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
 import type { EnqueueInput } from "./use-sync-queue";
 
 async function deleteDistance(input: {
+  distanceEventId: string;
   distanceId: string;
 }): Promise<{ error: string } | undefined> {
   const supabase = createClient();
@@ -28,7 +29,8 @@ async function deleteDistance(input: {
     return { error: "サインインが必要です。" };
   }
 
-  const { error } = await supabase.rpc("delete_distance", {
+  const { error } = await supabase.rpc("disable_distance", {
+    p_distance_event_id: input.distanceEventId,
     p_distance_id: input.distanceId,
   });
 
@@ -38,6 +40,7 @@ async function deleteDistance(input: {
 }
 
 async function updateDistance(input: {
+  distanceEventId: string;
   distanceId: string;
   distance: number | null;
   totalEnds: number;
@@ -63,6 +66,7 @@ async function updateDistance(input: {
   // 更新の間に別クライアントが矢を記録しないよう、Postgres関数
   // （update_distance）内で1つのトランザクションとして行う。
   const { error } = await supabase.rpc("update_distance", {
+    p_distance_event_id: input.distanceEventId,
     p_distance_id: input.distanceId,
     p_distance: input.distance,
     p_total_ends: input.totalEnds,
@@ -406,11 +410,13 @@ export function DistanceEditFields({
     };
 
     onSaved(validated);
+    const distanceEventId = crypto.randomUUID();
     enqueue({
       key: `distance:${distance.id}`,
       label: `距離${distance.distanceNumber}`,
       run: () =>
         updateDistance({
+          distanceEventId,
           distanceId: distance.id,
           distance: validated.distance,
           totalEnds: validated.totalEnds,
@@ -423,10 +429,11 @@ export function DistanceEditFields({
 
   function performDelete() {
     onDeleted();
+    const distanceEventId = crypto.randomUUID();
     enqueue({
       key: `distance:${distance.id}`,
       label: `距離${distance.distanceNumber}`,
-      run: () => deleteDistance({ distanceId: distance.id }),
+      run: () => deleteDistance({ distanceEventId, distanceId: distance.id }),
     });
   }
 

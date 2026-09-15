@@ -23,6 +23,7 @@ it("代理修正でも射手を保持し、同じ矢の位置を更新する", a
   await syncShots({
     upsert: [
       {
+        shotEventId: "event-1",
         distanceId: "distance",
         endNumber: 1,
         arrowNumber: 2,
@@ -42,6 +43,7 @@ it("射手が未指定の新規入力は本人の矢として記録する", asyn
   await syncShots({
     upsert: [
       {
+        shotEventId: "event-1",
         distanceId: "distance",
         endNumber: 1,
         arrowNumber: 1,
@@ -60,11 +62,25 @@ it("クリア対象を射手で制限せず、編集権限の検証をRPCに委�
   await expect(
     syncShots({
       upsert: [],
-      clear: [{ distanceId: "distance", endNumber: 1, arrowNumber: 2 }],
+      clear: [
+        {
+          shotEventId: "event-2",
+          distanceId: "distance",
+          endNumber: 1,
+          arrowNumber: 2,
+        },
+      ],
     }),
   ).resolves.toBeUndefined();
   expect(db.rpc).toHaveBeenCalledWith("clear_shots", {
-    p_shots: [{ distance_id: "distance", end_number: 1, arrow_number: 2 }],
+    p_shots: [
+      {
+        shot_event_id: "event-2",
+        distance_id: "distance",
+        end_number: 1,
+        arrow_number: 2,
+      },
+    ],
   });
 });
 

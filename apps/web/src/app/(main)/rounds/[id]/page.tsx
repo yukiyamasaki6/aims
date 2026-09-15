@@ -30,6 +30,7 @@ export default async function RoundPage({
       .from("rounds")
       .select("id, name, round_date, format, bow_type")
       .eq("id", id)
+      .is("disabled_at", null)
       .maybeSingle(),
     supabase
       .from("distances")
@@ -37,6 +38,7 @@ export default async function RoundPage({
         "id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked",
       )
       .eq("round_id", id)
+      .is("disabled_at", null)
       .order("position_key")
       .order("id"),
     user
@@ -62,6 +64,7 @@ export default async function RoundPage({
             "distance_id, end_number, arrow_number, shooter_id, score_str, score_int",
           )
           .in("distance_id", distanceIds)
+          .is("disabled_at", null)
       : { data: [] };
 
   return (

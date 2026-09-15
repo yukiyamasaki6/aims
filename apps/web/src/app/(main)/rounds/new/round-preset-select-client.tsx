@@ -227,6 +227,7 @@ export function RoundPresetSelect({
       let format = "outdoor";
       let bowType = "recurve";
       let distances: {
+        distance_event_id: string;
         id: string;
         position_key: string;
         distance: number | null;
@@ -261,6 +262,7 @@ export function RoundPresetSelect({
             comparePositionKey(a.position_key, a.id, b.position_key, b.id),
           )
           .map((d) => ({
+            distance_event_id: crypto.randomUUID(),
             id: crypto.randomUUID(),
             position_key: d.position_key,
             distance: d.distance,
@@ -273,6 +275,7 @@ export function RoundPresetSelect({
 
       const newRoundId = crypto.randomUUID();
       const { data: roundId, error } = await supabase.rpc("create_round", {
+        p_round_event_id: crypto.randomUUID(),
         p_id: newRoundId,
         p_name: "",
         p_round_date: new Date().toISOString().slice(0, 10),

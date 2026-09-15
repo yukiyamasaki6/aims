@@ -48,12 +48,14 @@ export async function createRound(input: {
   }
 
   const { data: roundId, error } = await supabase.rpc("create_round", {
+    p_round_event_id: randomUUID(),
     p_id: randomUUID(),
     p_name: input.name,
     p_round_date: input.roundDate,
     p_format: input.format ?? "outdoor",
     p_bow_type: input.bowType ?? "recurve",
     p_distances: input.distances.map((d, index) => ({
+      distance_event_id: randomUUID(),
       id: randomUUID(),
       position_key: String(index + 1).padStart(12, "0"),
       distance: d.distance,

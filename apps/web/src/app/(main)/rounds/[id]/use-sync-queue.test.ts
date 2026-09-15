@@ -306,6 +306,7 @@ describe("useSyncQueue", () => {
             key: "shot:d1:1:1",
             label: "距離1 1エンド1本目",
             upsert: {
+              shotEventId: "e1",
               distanceId: "d1",
               endNumber: 1,
               arrowNumber: 1,
@@ -327,6 +328,7 @@ describe("useSyncQueue", () => {
       expect(runBatch).toHaveBeenCalledWith({
         upsert: [
           {
+            shotEventId: "e1",
             distanceId: "d1",
             endNumber: 1,
             arrowNumber: 1,
@@ -350,6 +352,7 @@ describe("useSyncQueue", () => {
             key: "shot:d1:1:1",
             label: "A",
             upsert: {
+              shotEventId: "e2",
               distanceId: "d1",
               endNumber: 1,
               arrowNumber: 1,
@@ -373,6 +376,7 @@ describe("useSyncQueue", () => {
             key: "shot:d1:1:2",
             label: "B",
             upsert: {
+              shotEventId: "e3",
               distanceId: "d1",
               endNumber: 1,
               arrowNumber: 2,
@@ -387,6 +391,7 @@ describe("useSyncQueue", () => {
             key: "shot:d1:1:3",
             label: "C",
             upsert: {
+              shotEventId: "e4",
               distanceId: "d1",
               endNumber: 1,
               arrowNumber: 3,
@@ -416,6 +421,7 @@ describe("useSyncQueue", () => {
       expect(runBatch).toHaveBeenNthCalledWith(2, {
         upsert: [
           {
+            shotEventId: "e3",
             distanceId: "d1",
             endNumber: 1,
             arrowNumber: 2,
@@ -423,6 +429,7 @@ describe("useSyncQueue", () => {
             scoreInt: 9,
           },
           {
+            shotEventId: "e4",
             distanceId: "d1",
             endNumber: 1,
             arrowNumber: 3,
@@ -446,6 +453,7 @@ describe("useSyncQueue", () => {
             key: "shot:d1:1:1",
             label: "A",
             upsert: {
+              shotEventId: "e5",
               distanceId: "d1",
               endNumber: 1,
               arrowNumber: 1,
@@ -468,6 +476,7 @@ describe("useSyncQueue", () => {
             key: "shot:d1:1:1",
             label: "A",
             upsert: {
+              shotEventId: "e6",
               distanceId: "d1",
               endNumber: 1,
               arrowNumber: 1,
@@ -482,6 +491,7 @@ describe("useSyncQueue", () => {
             key: "shot:d1:1:1",
             label: "A",
             upsert: {
+              shotEventId: "e7",
               distanceId: "d1",
               endNumber: 1,
               arrowNumber: 1,
@@ -504,6 +514,7 @@ describe("useSyncQueue", () => {
       expect(runBatch).toHaveBeenNthCalledWith(2, {
         upsert: [
           {
+            shotEventId: "e7",
             distanceId: "d1",
             endNumber: 1,
             arrowNumber: 1,
@@ -527,6 +538,7 @@ describe("useSyncQueue", () => {
               key: "shot:d1:1:1",
               label: "A",
               upsert: {
+                shotEventId: "e8",
                 distanceId: "d1",
                 endNumber: 1,
                 arrowNumber: 1,
@@ -577,6 +589,7 @@ describe("useSyncQueue", () => {
             label: "新しい距離 1エンド1本目",
             dependsOnKey: "distance:new",
             upsert: {
+              shotEventId: "e9",
               distanceId: "new",
               endNumber: 1,
               arrowNumber: 1,
@@ -650,6 +663,7 @@ describe("useSyncQueue", () => {
               key: "shot:d1:1:1",
               label: "距離1 1エンド1本目",
               upsert: {
+                shotEventId: "e10",
                 distanceId: "d1",
                 endNumber: 1,
                 arrowNumber: 1,
@@ -832,6 +846,7 @@ describe("useSyncQueue", () => {
             key: "shot:d1:1:1",
             label: "A",
             upsert: {
+              shotEventId: "e11",
               distanceId: "d1",
               endNumber: 1,
               arrowNumber: 1,
@@ -867,6 +882,7 @@ describe("useSyncQueue", () => {
             key: "shot:d1:1:1",
             label: "A",
             upsert: {
+              shotEventId: "e12",
               distanceId: "d1",
               endNumber: 1,
               arrowNumber: 1,
@@ -890,6 +906,7 @@ describe("useSyncQueue", () => {
             key: "shot:d1:1:1",
             label: "A",
             upsert: {
+              shotEventId: "e13",
               distanceId: "d1",
               endNumber: 1,
               arrowNumber: 1,
@@ -910,6 +927,7 @@ describe("useSyncQueue", () => {
       expect(runBatch).toHaveBeenNthCalledWith(2, {
         upsert: [
           {
+            shotEventId: "e13",
             distanceId: "d1",
             endNumber: 1,
             arrowNumber: 1,
