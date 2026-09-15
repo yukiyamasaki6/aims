@@ -33,11 +33,14 @@ jobs:
       - name: Link to Production Project
         run: supabase link --project-ref ${{ vars.SUPABASE_PROD_PROJECT_ID }}
 
-      - name: Dry-run migrations
-        run: supabase db push --dry-run
-
-      - name: Push migrations to Production DB
-        run: supabase db push
+      # NOTE: issue #458のマイグレーション統合に伴う一回限りの本番リセット。
+      # 通常のsupabase db pushでは、squash後の新マイグレーションが本番の
+      # 旧スキーマに対して差分適用されず、リネーム前の列を参照するRPC等で
+      # 不整合を起こすため、db resetで作り直す。
+      # 本番リセット完了を確認したら、このステップは元のdry-run+db pushに
+      # 戻すこと（戻し忘れると以降のマージのたびに本番が全消去される）。
+      - name: Reset Production DB
+        run: supabase db reset --linked --yes
 
       - name: Push config to Production Project
         run: supabase config push
