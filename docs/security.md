@@ -30,7 +30,7 @@
 | `distance_events` | RLS: 所属ラウンドの`round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 不可（追記専用） | RLS: 不可（追記専用） |
 | `shot_events` | RLS: 所属ラウンドの`round_users`に自分が存在する | RLS: 直接操作不可<br>RPC: 所属ラウンドの`round_users.role = 'editor'` | RLS: 不可（追記専用） | RLS: 不可（追記専用） |
 | `target_faces`, `target_face_spots`, `target_face_rings` | RLS: 認証済みユーザー全員 | RLS: `auth.uid() = owner_id` | RLS: `auth.uid() = owner_id` | RLS: `auth.uid() = owner_id` |
-| `round_presets`, `preset_distances` | RLS: 認証済みユーザー全員 | RLS: `auth.uid() = owner_id` | RLS: `auth.uid() = owner_id` | RLS: `auth.uid() = owner_id` |
+| `preset_rounds`, `preset_distances` | RLS: 認証済みユーザー全員 | RLS: `auth.uid() = owner_id` | RLS: `auth.uid() = owner_id` | RLS: `auth.uid() = owner_id` |
 
 子テーブル（`target_face_spots`/`target_face_rings`、`preset_distances`）は親テーブルの`owner_id`判定に従う（親を辿ってRLSを評価する。`distances`/`shots`が`round_users`を辿るのと同じパターン）。
 
