@@ -26,8 +26,8 @@ export async function syncShots(input: {
   }
 
   if (input.upsert.length > 0) {
-    const { error } = await supabase.from("shots").upsert(
-      input.upsert.map((s) => ({
+    const { error } = await supabase.rpc("record_shots", {
+      p_shots: input.upsert.map((s) => ({
         distance_id: s.distanceId,
         end_number: s.endNumber,
         arrow_number: s.arrowNumber,
@@ -35,8 +35,7 @@ export async function syncShots(input: {
         score_str: s.scoreStr,
         score_int: s.scoreInt,
       })),
-      { onConflict: "distance_id,end_number,arrow_number" },
-    );
+    });
 
     if (error) {
       return { error: error.message };
@@ -44,14 +43,13 @@ export async function syncShots(input: {
   }
 
   if (input.clear.length > 0) {
-    const filter = input.clear
-      .map(
-        (c) =>
-          `and(distance_id.eq.${c.distanceId},end_number.eq.${c.endNumber},arrow_number.eq.${c.arrowNumber})`,
-      )
-      .join(",");
-
-    const { error } = await supabase.from("shots").delete().or(filter);
+    const { error } = await supabase.rpc("clear_shots", {
+      p_shots: input.clear.map((c) => ({
+        distance_id: c.distanceId,
+        end_number: c.endNumber,
+        arrow_number: c.arrowNumber,
+      })),
+    });
 
     if (error) {
       return { error: error.message };

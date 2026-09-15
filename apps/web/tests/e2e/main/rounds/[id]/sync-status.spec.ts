@@ -28,7 +28,7 @@ test("送信中の操作があると「同期中…」と表示する", async ({
   const requestGate = new Promise<void>((resolve) => {
     releaseRequest = resolve;
   });
-  await page.route("**/rest/v1/rpc/update_round_config", async (route) => {
+  await page.route("**/rest/v1/rpc/update_round", async (route) => {
     await requestGate;
     await route.continue();
   });
@@ -48,7 +48,7 @@ test("送信のリトライ待機中があると「同期保留中」と表示�
   // 初回リクエストだけ失敗させ、指数バックオフのリトライ待機に入らせる
   // （AUTH_REQUIRED_MESSAGEと一致しないエラーのため通常のリトライ対象になる）。
   let attempt = 0;
-  await page.route("**/rest/v1/rpc/update_round_config", async (route) => {
+  await page.route("**/rest/v1/rpc/update_round", async (route) => {
     attempt++;
     if (attempt === 1) {
       await route.fulfill({ status: 500, body: "temporary error" });

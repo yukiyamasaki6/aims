@@ -35,8 +35,8 @@ async function updateRoundConfig(input: {
   // 未入力のこともある）を残したまま他の種別に変更すると、距離が無いのに
   // 「距離」として扱われる不整合な状態が生まれてしまう。このチェックと
   // rounds更新の間に別クライアントの書き込みが割り込まないよう、Postgres
-  // 関数（update_round_config）内で1つのトランザクションとして行う。
-  const { error } = await supabase.rpc("update_round_config", {
+  // 関数（update_round）内で1つのトランザクションとして行う。
+  const { error } = await supabase.rpc("update_round", {
     p_round_id: input.roundId,
     p_name: input.name,
     p_round_date: input.roundDate,

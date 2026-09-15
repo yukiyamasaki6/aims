@@ -4,7 +4,41 @@
 
 begin;
 
-select plan(83);
+select plan(105);
+
+-- 既存の制約・権限テスト向けのfixture生成ヘルパー。プロダクションの
+-- create_roundはid/position_keyを必須とするため、旧形式の簡潔なfixtureだけを
+-- 新しい入力形式へ正規化する。関数自体の契約は下の明示的なcreate_roundテストで
+-- 検証する。このテスト用関数は最後のrollbackでDBに残らない。
+create function create_test_round(
+  p_name text,
+  p_round_date date,
+  p_format text,
+  p_bow_type text,
+  p_distances jsonb
+) returns uuid
+language sql
+volatile
+as $$
+  with normalized_distances as (
+    select coalesce(
+      jsonb_agg(
+        distance || jsonb_build_object(
+          'id', gen_random_uuid(),
+          'position_key', lpad(ordinality::text, 12, '0'),
+          'is_marked', coalesce((distance ->> 'is_marked')::boolean, true)
+        )
+        order by ordinality
+      ),
+      '[]'::jsonb
+    ) as distances
+    from jsonb_array_elements(p_distances) with ordinality as items(distance, ordinality)
+  )
+  select create_round(
+    gen_random_uuid(), p_name, p_round_date, p_format, p_bow_type, distances
+  )
+  from normalized_distances;
+$$;
 
 -- ============================================================
 -- RLS: editor / 非メンバー
@@ -68,11 +102,43 @@ select throws_like(
 -- 先に完了した登録は後続の評価から見える）ことを確認する。
 select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
 select lives_ok(
-  $$select create_round(
-    'Atomic Round', current_date, 'outdoor', 'recurve',
+  $$select create_test_round('Atomic Round', current_date, 'outdoor', 'recurve',
     '[{"distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
   )$$,
   'create_round RPCでround_users・rounds・distancesが原子的に作成される'
+);
+
+select results_eq(
+  $$select create_round(
+      'c0000000-0000-0000-0000-000000000090',
+      'Client ID Round', current_date, 'outdoor', 'recurve',
+      '[{"id":"c0000000-0000-0000-0000-000000000091","position_key":"m","distance":70,"is_marked":true,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
+    )$$,
+  $$values ('c0000000-0000-0000-0000-000000000090'::uuid)$$,
+  'create_roundはクライアント生成のラウンドIDをそのまま返す'
+);
+
+select results_eq(
+  $$select id from distances where round_id = 'c0000000-0000-0000-0000-000000000090'$$,
+  $$values ('c0000000-0000-0000-0000-000000000091'::uuid)$$,
+  'create_roundは初期距離のクライアント生成IDをそのまま保存する'
+);
+
+select is(
+  (select position_key from distances where id = 'c0000000-0000-0000-0000-000000000091'),
+  'm',
+  'create_roundは初期距離のクライアント生成position_keyをそのまま保存する'
+);
+
+select throws_ok(
+  $$select create_round(
+      'c0000000-0000-0000-0000-000000000092',
+      'Missing Marked State', current_date, 'outdoor', 'recurve',
+      '[{"id":"c0000000-0000-0000-0000-000000000093","position_key":"a","distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
+    )$$,
+  'P0001',
+  '初期距離のis_markedは必須です。',
+  'create_roundは初期距離のis_marked省略を入力エラーとして拒否する'
 );
 
 -- ============================================================
@@ -184,16 +250,18 @@ select throws_like(
 );
 
 -- ============================================================
--- RLS: editorの正常系操作（更新・削除）
+-- issue459: 直接書き込みの拒否（editorであっても）とRPC経由の正常系操作
 -- ============================================================
--- shotsのupdate_if_editor/delete_if_editorは記録者本人限定ではなく、
--- 「そのラウンドのeditorなら誰でも」という非自明な仕様である点を検証する。
+-- rounds/distances/shotsへの変更はSECURITY DEFINER RPC経由に一本化する。
+-- round_usersは権限変更・参加者追加をオンラインで即時に扱うため、editorに
+-- よる直接INSERT/UPDATE/DELETEを維持する。
 
 reset role;
 
 insert into auth.users (id) values ('c0000000-0000-0000-0000-000000000001'); -- editor1（記録者）
 insert into auth.users (id) values ('c0000000-0000-0000-0000-000000000002'); -- editor2（別のeditor）
 insert into auth.users (id) values ('c0000000-0000-0000-0000-000000000003'); -- viewer
+insert into auth.users (id) values ('c0000000-0000-0000-0000-000000000004'); -- 招待対象
 
 insert into public.rounds (id, name, round_date, format, bow_type)
 values ('c0000000-0000-0000-0000-000000000010', 'Editor CRUD Round', current_date, 'outdoor', 'recurve');
@@ -212,122 +280,249 @@ insert into public.shots (distance_id, end_number, arrow_number, shooter_id, sco
 values ('c0000000-0000-0000-0000-000000000020', 1, 1, 'c0000000-0000-0000-0000-000000000001', 'X', 10);
 
 set local role authenticated;
+select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000001', true);
 
--- editor1: 自分のラウンド・距離を更新できる。
+update public.rounds set name = 'Direct Update' where id = 'c0000000-0000-0000-0000-000000000010';
+select results_eq(
+  $$select name from public.rounds where id = 'c0000000-0000-0000-0000-000000000010'$$,
+  $$values ('Editor CRUD Round'::text)$$,
+  'editorであってもroundsへの直接UPDATEはRLSにより対象行が0件になる'
+);
+
+delete from public.rounds where id = 'c0000000-0000-0000-0000-000000000010';
+select results_eq(
+  $$select count(*) from public.rounds where id = 'c0000000-0000-0000-0000-000000000010'$$,
+  $$values (1::bigint)$$,
+  'editorであってもroundsへの直接DELETEはRLSにより対象行が0件になる'
+);
+
+update public.distances set arrows_per_end = 3 where id = 'c0000000-0000-0000-0000-000000000020';
+select results_eq(
+  $$select arrows_per_end from public.distances where id = 'c0000000-0000-0000-0000-000000000020'$$,
+  $$values (6::bigint)$$,
+  'editorであってもdistancesへの直接UPDATEはRLSにより対象行が0件になる'
+);
+
+delete from public.distances where id = 'c0000000-0000-0000-0000-000000000020';
+select results_eq(
+  $$select count(*) from public.distances where id = 'c0000000-0000-0000-0000-000000000020'$$,
+  $$values (1::bigint)$$,
+  'editorであってもdistancesへの直接DELETEはRLSにより対象行が0件になる'
+);
+
+select throws_like(
+  $$insert into public.distances (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values ('c0000000-0000-0000-0000-000000000010', '2', 50, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  '%row-level security%',
+  'editorであってもdistancesへの直接INSERTはRLSで拒否される（create_distance RPC経由のみ許可）'
+);
+
+update public.shots set score_str = '9', score_int = 9
+  where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 1 and arrow_number = 1;
+select results_eq(
+  $$select score_str from public.shots
+    where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 1 and arrow_number = 1$$,
+  $$values ('X'::text)$$,
+  'editorであってもshotsへの直接UPDATEはRLSにより対象行が0件になる'
+);
+
+delete from public.shots
+  where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 1 and arrow_number = 1;
+select results_eq(
+  $$select count(*) from public.shots where distance_id = 'c0000000-0000-0000-0000-000000000020'$$,
+  $$values (1::bigint)$$,
+  'editorであってもshotsへの直接DELETEはRLSにより対象行が0件になる'
+);
+
+select throws_like(
+  $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
+    values ('c0000000-0000-0000-0000-000000000020', 1, 2, 'c0000000-0000-0000-0000-000000000001', '9', 9)$$,
+  '%row-level security%',
+  'editorであってもshotsへの直接INSERTはRLSで拒否される（record_shots RPC経由のみ許可）'
+);
+
+insert into public.round_users (round_id, user_id, role)
+values ('c0000000-0000-0000-0000-000000000010', 'c0000000-0000-0000-0000-000000000004', 'viewer');
+select results_eq(
+  $$select role from public.round_users
+    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000004'$$,
+  $$values ('viewer'::text)$$,
+  'editorはround_usersへ参加者を追加できる'
+);
+
+update public.round_users set role = 'editor'
+  where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000004';
+select results_eq(
+  $$select role from public.round_users
+    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000004'$$,
+  $$values ('editor'::text)$$,
+  'editorはround_usersのロールを更新できる'
+);
+
+delete from public.round_users
+  where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000004';
+select results_eq(
+  $$select count(*) from public.round_users
+    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000004'$$,
+  $$values (0::bigint)$$,
+  'editorはround_usersから参加者を削除できる'
+);
+
+-- ------------------------------------------------------------
+-- create_distance RPC
+-- ------------------------------------------------------------
+
+select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000003', true);
+
+select throws_ok(
+  $$select create_distance('c0000000-0000-0000-0000-000000000021', 'c0000000-0000-0000-0000-000000000010', '2', 50, 6, 6, 'a1000000-0000-0000-0000-000000000001', true)$$,
+  'P0001',
+  'このラウンドに距離を追加する権限がありません。',
+  'viewerはcreate_distance RPCで距離を追加できない'
+);
+
 select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000001', true);
 
 select lives_ok(
-  $$update public.rounds set name = 'Renamed Round' where id = 'c0000000-0000-0000-0000-000000000010'$$,
-  'editorはラウンド名を更新できる'
+  $$select create_distance('c0000000-0000-0000-0000-000000000021', 'c0000000-0000-0000-0000-000000000010', '2', 50, 6, 6, 'a1000000-0000-0000-0000-000000000001', true)$$,
+  'editorはcreate_distance RPCで距離を追加できる'
 );
 select results_eq(
-  $$select name from public.rounds where id = 'c0000000-0000-0000-0000-000000000010'$$,
-  $$values ('Renamed Round'::text)$$,
-  '更新したラウンド名が反映される'
+  $$select distance, total_ends, arrows_per_end from public.distances
+    where id = 'c0000000-0000-0000-0000-000000000021'$$,
+  $$values (50::bigint, 6::bigint, 6::bigint)$$,
+  'create_distanceで指定した内容がdistancesに反映される'
+);
+
+-- ------------------------------------------------------------
+-- record_shots / clear_shots RPC（バッチ・shooter_idのラウンドメンバー検証）
+-- ------------------------------------------------------------
+
+select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000003', true);
+
+select throws_ok(
+  $$select record_shots('[{"distance_id":"c0000000-0000-0000-0000-000000000020","end_number":2,"arrow_number":1,"score_str":"9","score_int":9}]'::jsonb)$$,
+  'P0001',
+  'この距離に矢を記録する権限がありません。',
+  'viewerはrecord_shots RPCで矢を記録できない'
+);
+
+select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000001', true);
+
+select throws_ok(
+  $$select record_shots('[{"distance_id":"c0000000-0000-0000-0000-000000000020","end_number":2,"arrow_number":3,"score_str":"1","score_int":1,"shooter_id":"99999999-9999-9999-9999-999999999999"}]'::jsonb)$$,
+  'P0001',
+  '指定された射手はこのラウンドのメンバーではありません。',
+  'このラウンドのメンバーではないshooter_idを指定するとrecord_shotsは拒否される'
 );
 
 select lives_ok(
-  $$update public.distances set arrows_per_end = 3 where id = 'c0000000-0000-0000-0000-000000000020'$$,
-  'editorはdistancesを更新できる'
-);
-select results_eq(
-  $$select arrows_per_end from public.distances where id = 'c0000000-0000-0000-0000-000000000020'$$,
-  $$values (3::bigint)$$,
-  '更新したdistancesの値が反映される'
+  $$select record_shots('[
+      {"distance_id":"c0000000-0000-0000-0000-000000000020","end_number":1,"arrow_number":1,"score_str":"9","score_int":9},
+      {"distance_id":"c0000000-0000-0000-0000-000000000020","end_number":2,"arrow_number":1,"score_str":"7","score_int":7},
+      {"distance_id":"c0000000-0000-0000-0000-000000000020","end_number":2,"arrow_number":2,"score_str":"5","score_int":5,"shooter_id":"c0000000-0000-0000-0000-000000000002"}
+    ]'::jsonb)$$,
+  'editorはrecord_shots RPCで複数件の矢をまとめて記録できる（既存分は上書き）'
 );
 
--- editor2: 記録者（editor1）でなくても、同じラウンドのeditorならshotsを更新・削除できる。
-select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000002', true);
-
-select lives_ok(
-  $$update public.shots set score_str = '9', score_int = 9
-    where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 1 and arrow_number = 1$$,
-  '記録者と異なるeditorでも同じラウンドのshotsを更新できる'
-);
 select results_eq(
   $$select score_str from public.shots
     where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 1 and arrow_number = 1$$,
   $$values ('9'::text)$$,
-  '更新したshotsの値が反映される'
+  '既存(distance_id, end_number, arrow_number)への再記録は上書きされる'
 );
 
-select lives_ok(
-  $$delete from public.shots
-    where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 1 and arrow_number = 1$$,
-  '記録者と異なるeditorでも同じラウンドのshotsを削除できる'
-);
 select results_eq(
-  $$select count(*) from public.shots where distance_id = 'c0000000-0000-0000-0000-000000000020'$$,
-  $$values (0::bigint)$$,
-  '削除したshotsが0件になる'
+  $$select shooter_id from public.shots
+    where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 2 and arrow_number = 1$$,
+  $$values ('c0000000-0000-0000-0000-000000000001'::uuid)$$,
+  'shooter_idを省略するとauth.uid()（実行者本人）が記録される'
 );
 
--- viewer: round_usersの更新・削除はeditor限定で、viewerはできない（0件更新・0件削除）。
+select results_eq(
+  $$select shooter_id from public.shots
+    where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 2 and arrow_number = 2$$,
+  $$values ('c0000000-0000-0000-0000-000000000002'::uuid)$$,
+  '同じラウンドのメンバーであれば、実行者と異なるshooter_idを指定して代理記録できる'
+);
+
 select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000003', true);
 
-update public.round_users set role = 'editor'
-  where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000003';
-select results_eq(
-  $$select role from public.round_users
-    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000003'$$,
-  $$values ('viewer'::text)$$,
-  'viewerはround_usersの自分のロールを更新できない（RLSにより対象行が0件になる）'
+select throws_ok(
+  $$select clear_shots('[{"distance_id":"c0000000-0000-0000-0000-000000000020","end_number":2,"arrow_number":1}]'::jsonb)$$,
+  'P0001',
+  'この距離の矢を取り消す権限がありません。',
+  'viewerはclear_shots RPCで矢を取り消せない'
 );
 
-delete from public.round_users
-  where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000002';
-select results_eq(
-  $$select count(*) from public.round_users
-    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000002'$$,
-  $$values (1::bigint)$$,
-  'viewerは他のメンバーをround_usersから削除できない（RLSにより対象行が0件になる）'
-);
-
--- editor1: round_usersの更新・削除、distances/roundsの削除もできる。
 select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000001', true);
 
 select lives_ok(
-  $$update public.round_users set role = 'editor'
-    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000003'$$,
-  'editorはround_usersのロールを更新できる'
-);
-select results_eq(
-  $$select role from public.round_users
-    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000003'$$,
-  $$values ('editor'::text)$$,
-  '更新したround_usersのロールが反映される'
+  $$select clear_shots('[
+      {"distance_id":"c0000000-0000-0000-0000-000000000020","end_number":2,"arrow_number":1},
+      {"distance_id":"c0000000-0000-0000-0000-000000000020","end_number":2,"arrow_number":2}
+    ]'::jsonb)$$,
+  'editorはclear_shots RPCで複数件の矢をまとめて取り消せる'
 );
 
-select lives_ok(
-  $$delete from public.round_users
-    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000003'$$,
-  'editorはround_usersからメンバーを削除できる'
-);
 select results_eq(
-  $$select count(*) from public.round_users
-    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000003'$$,
+  $$select count(*) from public.shots
+    where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 2$$,
   $$values (0::bigint)$$,
-  '削除したround_usersが0件になる'
+  'clear_shotsで指定した矢が削除される'
 );
 
+select results_eq(
+  $$select count(*) from public.shots
+    where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 1 and arrow_number = 1$$,
+  $$values (1::bigint)$$,
+  'clear_shotsで指定していない矢は削除されない'
+);
+
+-- ------------------------------------------------------------
+-- delete_distance / delete_round RPC
+-- ------------------------------------------------------------
+
+select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000003', true);
+
+select throws_ok(
+  $$select delete_distance('c0000000-0000-0000-0000-000000000021')$$,
+  'P0001',
+  'この距離を削除する権限がありません。',
+  'viewerはdelete_distance RPCで距離を削除できない'
+);
+
+select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000001', true);
+
 select lives_ok(
-  $$delete from public.distances where id = 'c0000000-0000-0000-0000-000000000020'$$,
-  'editorはdistancesを削除できる'
+  $$select delete_distance('c0000000-0000-0000-0000-000000000021')$$,
+  'editorはdelete_distance RPCで距離を削除できる'
 );
 select results_eq(
-  $$select count(*) from public.distances where id = 'c0000000-0000-0000-0000-000000000020'$$,
+  $$select count(*) from public.distances where id = 'c0000000-0000-0000-0000-000000000021'$$,
   $$values (0::bigint)$$,
-  '削除したdistancesが0件になる'
+  'delete_distanceで削除したdistancesが0件になる'
 );
 
+select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000003', true);
+
+select throws_ok(
+  $$select delete_round('c0000000-0000-0000-0000-000000000010')$$,
+  'P0001',
+  'このラウンドを削除する権限がありません。',
+  'viewerはdelete_round RPCでラウンドを削除できない'
+);
+
+select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000001', true);
+
 select lives_ok(
-  $$delete from public.rounds where id = 'c0000000-0000-0000-0000-000000000010'$$,
-  'editorは自分のラウンドを削除できる'
+  $$select delete_round('c0000000-0000-0000-0000-000000000010')$$,
+  'editorはdelete_round RPCでラウンドを削除できる'
 );
 select results_eq(
   $$select count(*) from public.rounds where id = 'c0000000-0000-0000-0000-000000000010'$$,
   $$values (0::bigint)$$,
-  '削除したラウンドが0件になる'
+  'delete_roundで削除したラウンドが0件になる（distances/shots/round_usersもカスケード削除される）'
 );
 
 -- ============================================================
@@ -356,8 +551,7 @@ insert into auth.users (id) values ('b0000000-0000-0000-0000-000000000003');
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'b0000000-0000-0000-0000-000000000003', true);
 
-select create_round(
-  'Format Test Round', current_date, 'outdoor', 'recurve',
+select create_test_round('Format Test Round', current_date, 'outdoor', 'recurve',
   '[{"distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
 ) as round_id \gset
 
@@ -378,6 +572,10 @@ select results_eq(
   $$values ('editor'::text)$$,
   'create_roundは呼び出しユーザーをround_usersにeditorとして登録する'
 );
+
+-- rounds/distancesへの直接UPDATEはRLSで拒否されるため、ここではRLS対象外の
+-- 接続ロールに戻し、CHECK/FK制約そのものの検証に限定する。
+reset role;
 
 select throws_ok(
   $$update public.rounds set format = 'invalid' where id = '$$ || :'round_id' || $$'$$,
@@ -401,9 +599,11 @@ select throws_ok(
   '存在しないtarget_face_idは外部キー制約で拒否される'
 );
 
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'b0000000-0000-0000-0000-000000000003', true);
+
 select throws_ok(
-  $$select create_round(
-    'No Format Round', current_date, null, 'recurve',
+  $$select create_test_round('No Format Round', current_date, null, 'recurve',
     '[{"distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
   )$$,
   '23502',
@@ -412,8 +612,7 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$select create_round(
-    'No Bow Type Round', current_date, 'outdoor', null,
+  $$select create_test_round('No Bow Type Round', current_date, 'outdoor', null,
     '[{"distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
   )$$,
   '23502',
@@ -422,8 +621,7 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$select create_round(
-    'No Target Face Round', current_date, 'outdoor', 'recurve',
+  $$select create_test_round('No Target Face Round', current_date, 'outdoor', 'recurve',
     '[{"distance":70,"total_ends":6,"arrows_per_end":6}]'::jsonb
   )$$,
   '23502',
@@ -432,8 +630,7 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$select create_round(
-    'Invalid Format Round', current_date, 'invalid_format', 'recurve',
+  $$select create_test_round('Invalid Format Round', current_date, 'invalid_format', 'recurve',
     '[{"distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
   )$$,
   '23514',
@@ -442,8 +639,7 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$select create_round(
-    'Invalid Bow Type Round', current_date, 'outdoor', 'invalid_bow_type',
+  $$select create_test_round('Invalid Bow Type Round', current_date, 'outdoor', 'invalid_bow_type',
     '[{"distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
   )$$,
   '23514',
@@ -452,12 +648,11 @@ select throws_ok(
 );
 
 select lives_ok(
-  $$select create_round('Empty Distances Round', current_date, 'outdoor', 'recurve', '[]'::jsonb)$$,
+  $$select create_test_round('Empty Distances Round', current_date, 'outdoor', 'recurve', '[]'::jsonb)$$,
   'distancesが空配列でもラウンドを作成できる'
 );
 
-select create_round(
-  'Multi Distance Round', current_date, 'outdoor', 'recurve',
+select create_test_round('Multi Distance Round', current_date, 'outdoor', 'recurve',
   '[
     {"distance":90,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"},
     {"distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}
@@ -477,22 +672,22 @@ select results_eq(
 -- ============================================================
 
 select throws_ok(
-  $$select create_round(repeat('a', 51), current_date, 'outdoor', 'recurve', '[]'::jsonb)$$,
+  $$select create_test_round(repeat('a', 51), current_date, 'outdoor', 'recurve', '[]'::jsonb)$$,
   '23514',
   null,
   'rounds.nameが51文字以上だとCHECK制約で拒否される'
 );
 
 select lives_ok(
-  $$select create_round(repeat('a', 50), current_date, 'outdoor', 'recurve', '[]'::jsonb)$$,
+  $$select create_test_round(repeat('a', 50), current_date, 'outdoor', 'recurve', '[]'::jsonb)$$,
   'rounds.nameが50文字（境界値）なら作成できる'
 );
 
 select throws_ok(
-  $$select update_round_config('$$ || :'round_id' || $$', repeat('a', 51), current_date, 'outdoor', 'recurve')$$,
+  $$select update_round('$$ || :'round_id' || $$', repeat('a', 51), current_date, 'outdoor', 'recurve')$$,
   '23514',
   null,
-  'update_round_config経由でもrounds.nameが51文字以上だとCHECK制約で拒否される'
+  'update_round経由でもrounds.nameが51文字以上だとCHECK制約で拒否される'
 );
 
 -- ============================================================
@@ -505,24 +700,32 @@ insert into auth.users (id) values ('b0000000-0000-0000-0000-000000000004');
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'b0000000-0000-0000-0000-000000000004', true);
 
-select create_round(
-  'Shots Constraint Round', current_date, 'outdoor', 'recurve',
+select create_test_round('Shots Constraint Round', current_date, 'outdoor', 'recurve',
   '[{"distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
 ) as shots_round_id \gset
 
 select id as shots_distance_id from public.distances where round_id = :'shots_round_id' \gset
 
 select lives_ok(
-  $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
-    values ('$$ || :'shots_distance_id' || $$', 1, 1, 'b0000000-0000-0000-0000-000000000004', 'X', 10)$$,
-  '有効なshotsの挿入は成功する'
+  $$select record_shots(jsonb_build_array(jsonb_build_object(
+      'distance_id', '$$ || :'shots_distance_id' || $$'::uuid,
+      'end_number', 1, 'arrow_number', 1, 'score_str', 'X', 'score_int', 10
+    )))$$,
+  '有効なshotsの挿入はrecord_shots RPCで成功する'
 );
 
 select lives_ok(
-  $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
-    values ('$$ || :'shots_distance_id' || $$', 1, 2, 'b0000000-0000-0000-0000-000000000004', 'bullseye', -1)$$,
+  $$select record_shots(jsonb_build_array(jsonb_build_object(
+      'distance_id', '$$ || :'shots_distance_id' || $$'::uuid,
+      'end_number', 1, 'arrow_number', 2, 'score_str', 'bullseye', 'score_int', -1
+    )))$$,
   'score_strとscore_intの対応は固定せず、入力ツールの結果を保存できる'
 );
+
+-- record_shotsは同一キーへの再記録をON CONFLICT DO UPDATEで上書きする
+-- （通信リトライ時に同じ内容を再送しても失敗しない、意図した冪等性）。
+-- そのため生の一意制約（23505）はRLS対象外の接続ロールで直接検証する。
+reset role;
 
 select throws_ok(
   $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
@@ -533,14 +736,9 @@ select throws_ok(
 );
 
 -- 一意制約はshooter_idを含まない（同じ位置の矢は射手によらず1本）。
--- 別のeditorが同じ(distance_id, end_number, arrow_number)に記録しようとしても
--- 一意制約で拒否されることを確認する。
-reset role;
 insert into auth.users (id) values ('b0000000-0000-0000-0000-000000000006');
 insert into public.round_users (round_id, user_id, role)
 values (:'shots_round_id', 'b0000000-0000-0000-0000-000000000006', 'editor');
-set local role authenticated;
-select set_config('request.jwt.claim.sub', 'b0000000-0000-0000-0000-000000000006', true);
 
 select throws_ok(
   $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
@@ -550,12 +748,15 @@ select throws_ok(
   '異なるshooter_idでも同一(distance_id, end_number, arrow_number)の挿入は一意制約で拒否される（shooter_idはキーに含まれない）'
 );
 
+set local role authenticated;
 select set_config('request.jwt.claim.sub', 'b0000000-0000-0000-0000-000000000004', true);
 
 select lives_ok(
-  $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
-    values ('$$ || :'shots_distance_id' || $$', 2, 1, 'b0000000-0000-0000-0000-000000000004', 'X', 10)$$,
-  'editorロールのユーザーはRLS経由でshotsを記録できる（create_roundの呼び出し者自身がeditorとして書き込む）'
+  $$select record_shots(jsonb_build_array(jsonb_build_object(
+      'distance_id', '$$ || :'shots_distance_id' || $$'::uuid,
+      'end_number', 2, 'arrow_number', 1, 'score_str', 'X', 'score_int', 10
+    )))$$,
+  'editorロールのユーザーはrecord_shots RPC経由でshotsを記録できる（create_roundの呼び出し者自身がeditorとして書き込む）'
 );
 
 -- ============================================================
@@ -568,9 +769,12 @@ insert into auth.users (id) values ('b0000000-0000-0000-0000-000000000005');
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'b0000000-0000-0000-0000-000000000005', true);
 
-select create_round(
-  'Marked Test Round', current_date, 'field', 'recurve', '[]'::jsonb
+select create_test_round('Marked Test Round', current_date, 'field', 'recurve', '[]'::jsonb
 ) as marked_round_id \gset
+
+-- 以降はdistancesのCHECK制約そのものの検証であり、RLS/RPCの権限とは無関係
+-- なため、RLS対象外の接続ロールに戻して直接INSERTで検証する。
+reset role;
 
 insert into public.distances (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
 values (:'marked_round_id', '1', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001');
@@ -705,7 +909,7 @@ select results_eq(
 );
 
 -- ============================================================
--- update_round_config RPC: Unmarkedチェックとトランザクション
+-- update_round RPC: Unmarkedチェックとトランザクション
 -- ============================================================
 -- チェック（Unmarkedな距離の有無）と更新（rounds）を1つの関数呼び出しに
 -- まとめることで、この2つのSupabase呼び出しの間に別クライアントが割り込む
@@ -719,14 +923,13 @@ insert into auth.users (id) values ('e0000000-0000-0000-0000-000000000002'); -- 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'e0000000-0000-0000-0000-000000000001', true);
 
-select create_round(
-  'Update Config Round', current_date, 'field', 'recurve', '[]'::jsonb
+select create_test_round('Update Config Round', current_date, 'field', 'recurve', '[]'::jsonb
 ) as update_config_round_id \gset
 
-insert into public.distances
-    (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked)
-  values
-    (:'update_config_round_id', '1', null, 6, 6, 'a1000000-0000-0000-0000-000000000001', false);
+select create_distance(
+  'e0000000-0000-0000-0000-000000000009', :'update_config_round_id', '1',
+  null, 6, 6, 'a1000000-0000-0000-0000-000000000001', false
+);
 
 reset role;
 insert into public.round_users (round_id, user_id, role)
@@ -735,7 +938,7 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', 'e0000000-0000-0000-0000-000000000001', true);
 
 select throws_like(
-  $$select update_round_config('$$ || :'update_config_round_id' || $$', 'Renamed', current_date, 'outdoor', 'recurve')$$,
+  $$select update_round('$$ || :'update_config_round_id' || $$', 'Renamed', current_date, 'outdoor', 'recurve')$$,
   '%Unmarked%',
   'Unmarkedな距離が残ったままフィールド以外への変更はエラーになる'
 );
@@ -747,7 +950,7 @@ select results_eq(
 );
 
 select lives_ok(
-  $$select update_round_config('$$ || :'update_config_round_id' || $$', 'Field Renamed', current_date, 'field', 'barebow')$$,
+  $$select update_round('$$ || :'update_config_round_id' || $$', 'Field Renamed', current_date, 'field', 'barebow')$$,
   'formatがfieldのままの変更はUnmarkedが残っていても成功する'
 );
 
@@ -757,11 +960,10 @@ select results_eq(
   'field据え置きの更新内容が反映される'
 );
 
-update public.distances set is_marked = true, distance = 70
-  where round_id = :'update_config_round_id';
+select update_distance('e0000000-0000-0000-0000-000000000009', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001', true);
 
 select lives_ok(
-  $$select update_round_config('$$ || :'update_config_round_id' || $$', 'Outdoor Renamed', current_date, 'outdoor', 'recurve')$$,
+  $$select update_round('$$ || :'update_config_round_id' || $$', 'Outdoor Renamed', current_date, 'outdoor', 'recurve')$$,
   'Unmarkedな距離が無ければフィールド以外への変更が成功する'
 );
 
@@ -773,9 +975,11 @@ select results_eq(
 
 select set_config('request.jwt.claim.sub', 'e0000000-0000-0000-0000-000000000002', true);
 
-select lives_ok(
-  $$select update_round_config('$$ || :'update_config_round_id' || $$', 'Hacked By Viewer', current_date, 'outdoor', 'recurve')$$,
-  'viewerが呼び出しても例外にはならない（RLSにより対象行が0件になる）'
+select throws_ok(
+  $$select update_round('$$ || :'update_config_round_id' || $$', 'Hacked By Viewer', current_date, 'outdoor', 'recurve')$$,
+  'P0001',
+  'このラウンドを編集する権限がありません。',
+  'viewerがupdate_roundを呼び出すと権限エラーになる'
 );
 
 select results_eq(
@@ -799,8 +1003,7 @@ insert into auth.users (id) values ('70000000-0000-0000-0000-000000000002'); -- 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '70000000-0000-0000-0000-000000000001', true);
 
-select create_round(
-  'Update Distance Round', current_date, 'outdoor', 'recurve',
+select create_test_round('Update Distance Round', current_date, 'field', 'recurve',
   '[{"distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
 ) as update_distance_round_id \gset
 
@@ -832,12 +1035,21 @@ select throws_ok(
   'update_distance経由でもtotal_ends=0はCHECK制約で拒否される'
 );
 
-insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
-values (:'update_distance_id', 1, 1, '70000000-0000-0000-0000-000000000001', 'X', 10);
+select record_shots(jsonb_build_array(jsonb_build_object(
+  'distance_id', :'update_distance_id', 'end_number', 1, 'arrow_number', 1,
+  'score_str', 'X', 'score_int', 10
+)));
+
+select throws_ok(
+  $$select update_distance('$$ || :'update_distance_id' || $$', 55, 6, 6, 'a1000000-0000-0000-0000-000000000001', true)$$,
+  'P0001',
+  '既に得点が記録されているため、エンド数・矢数・的は変更できません。',
+  'shotsが存在する距離の構成変更は成功扱いにせず拒否される'
+);
 
 select lives_ok(
-  $$select update_distance('$$ || :'update_distance_id' || $$', 55, 6, 6, 'a1000000-0000-0000-0000-000000000001', true)$$,
-  'shotsが存在する距離への更新も例外にはならない（対象外の列は無視される）'
+  $$select update_distance('$$ || :'update_distance_id' || $$', 55, 3, 3, 'a1000000-0000-0000-0000-000000000002', true)$$,
+  'shotsが存在する距離でも、構成を変えない距離値・Marked変更はできる'
 );
 
 select results_eq(
@@ -849,15 +1061,93 @@ select results_eq(
 
 select set_config('request.jwt.claim.sub', '70000000-0000-0000-0000-000000000002', true);
 
-select lives_ok(
+select throws_ok(
   $$select update_distance('$$ || :'update_distance_id' || $$', 90, 12, 12, 'a1000000-0000-0000-0000-000000000001', false)$$,
-  'viewerが呼び出しても例外にはならない（RLSにより対象行が0件になる）'
+  'P0001',
+  'この距離を編集する権限がありません。',
+  'viewerがupdate_distanceを呼び出すと権限エラーになる'
 );
 
 select results_eq(
   $$select distance, is_marked from public.distances where id = '$$ || :'update_distance_id' || $$'$$,
   $$values (55::bigint, true)$$,
   'viewerの呼び出しでは距離の内容が変更されない'
+);
+
+-- ============================================================
+-- Unmarked距離はfieldラウンド限定
+-- ============================================================
+-- UIの選択肢だけに依存せず、書き込みRPCの全入口で種別との整合を保証する。
+select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000001', true);
+
+select create_test_round('Unmarked Invariant Round', current_date, 'outdoor', 'recurve',
+  '[{"distance":70,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001","is_marked":true}]'::jsonb
+) as unmarked_invariant_round_id \gset
+
+select id as unmarked_invariant_distance_id
+from public.distances
+where round_id = :'unmarked_invariant_round_id' \gset
+
+select throws_ok(
+  $$select create_distance('c0000000-0000-0000-0000-000000000022', '$$ || :'unmarked_invariant_round_id' || $$', '2', null, 6, 6, 'a1000000-0000-0000-0000-000000000001', false)$$,
+  'P0001',
+  'Unmarkedの距離はフィールド種別でのみ使用できます。',
+  'outdoorラウンドへUnmarked距離を追加できない'
+);
+
+select throws_ok(
+  $$select update_distance('$$ || :'unmarked_invariant_distance_id' || $$', null, 6, 6, 'a1000000-0000-0000-0000-000000000001', false)$$,
+  'P0001',
+  'Unmarkedの距離はフィールド種別でのみ使用できます。',
+  'outdoorラウンドの距離をUnmarkedへ変更できない'
+);
+
+select throws_ok(
+  $$select create_test_round('Invalid Unmarked Round', current_date, 'outdoor', 'recurve',
+      '[{"distance":null,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001","is_marked":false}]'::jsonb
+    )$$,
+  'P0001',
+  'Unmarkedの距離はフィールド種別でのみ使用できます。',
+  'outdoorラウンドをUnmarked距離付きで作成できない'
+);
+
+-- ============================================================
+-- 書き込みRPCの実行権限
+-- ============================================================
+-- SECURITY DEFINER関数は既定でPUBLICにEXECUTEが付くため、明示的に剥奪する。
+-- 認証済みユーザーだけが書き込みRPCを呼べることを確認する。
+select ok(
+  (
+    select bool_and(not has_function_privilege('anon', function_signature, 'execute'))
+    from unnest(array[
+      'public.create_round(uuid,text,date,text,text,jsonb)'::regprocedure,
+      'public.update_round(uuid,text,date,text,text)'::regprocedure,
+      'public.update_distance(uuid,bigint,bigint,bigint,uuid,boolean)'::regprocedure,
+      'public.create_distance(uuid,uuid,text,bigint,bigint,bigint,uuid,boolean)'::regprocedure,
+      'public.delete_round(uuid)'::regprocedure,
+      'public.delete_distance(uuid)'::regprocedure,
+      'public.record_shots(jsonb)'::regprocedure,
+      'public.clear_shots(jsonb)'::regprocedure
+    ]) as function_signature
+  ),
+  'anonは書き込みRPCを実行できない'
+);
+
+select ok(
+  (
+    select bool_and(has_function_privilege('authenticated', function_signature, 'execute'))
+    from unnest(array[
+      'public.create_round(uuid,text,date,text,text,jsonb)'::regprocedure,
+      'public.update_round(uuid,text,date,text,text)'::regprocedure,
+      'public.update_distance(uuid,bigint,bigint,bigint,uuid,boolean)'::regprocedure,
+      'public.create_distance(uuid,uuid,text,bigint,bigint,bigint,uuid,boolean)'::regprocedure,
+      'public.delete_round(uuid)'::regprocedure,
+      'public.delete_distance(uuid)'::regprocedure,
+      'public.record_shots(jsonb)'::regprocedure,
+      'public.clear_shots(jsonb)'::regprocedure
+    ]) as function_signature
+  ),
+  'authenticatedは書き込みRPCを実行できる'
 );
 
 select * from finish();

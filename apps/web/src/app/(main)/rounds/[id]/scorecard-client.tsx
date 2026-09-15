@@ -389,16 +389,16 @@ async function addDistance(input: {
   }
 
   // IDは楽観的UIのためクライアントで確定済みの値をそのまま使う
-  // （id列のdefault gen_random_uuid()は明示的な値があれば上書きされる）。
-  const { error } = await supabase.from("distances").insert({
-    id: input.id,
-    round_id: input.roundId,
-    position_key: input.positionKey,
-    distance: input.distance,
-    total_ends: input.totalEnds,
-    arrows_per_end: input.arrowsPerEnd,
-    target_face_id: input.targetFaceId,
-    is_marked: input.isMarked,
+  // （create_distance RPCはp_idをそのまま主キーとしてINSERTする）。
+  const { error } = await supabase.rpc("create_distance", {
+    p_id: input.id,
+    p_round_id: input.roundId,
+    p_position_key: input.positionKey,
+    p_distance: input.distance,
+    p_total_ends: input.totalEnds,
+    p_arrows_per_end: input.arrowsPerEnd,
+    p_target_face_id: input.targetFaceId,
+    p_is_marked: input.isMarked,
   });
 
   if (error) {
@@ -738,10 +738,9 @@ export function ScorecardClient({
         return { error: "サインインが必要です。" };
       }
 
-      const { error } = await supabase
-        .from("rounds")
-        .delete()
-        .eq("id", roundId);
+      const { error } = await supabase.rpc("delete_round", {
+        p_round_id: roundId,
+      });
 
       if (!mountedRef.current) return;
 
