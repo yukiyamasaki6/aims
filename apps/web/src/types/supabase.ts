@@ -34,14 +34,75 @@ export type Database = {
   };
   public: {
     Tables: {
+      distance_events: {
+        Row: {
+          arrows_per_end: number | null;
+          author_id: string;
+          created_at: string;
+          distance: number | null;
+          distance_id: string;
+          event_id: string;
+          is_marked: boolean | null;
+          position_key: string | null;
+          revision: number;
+          round_id: string;
+          target_face_id: string | null;
+          total_ends: number | null;
+          type: string;
+          updated_at: string;
+        };
+        Insert: {
+          arrows_per_end?: number | null;
+          author_id: string;
+          created_at?: string;
+          distance?: number | null;
+          distance_id: string;
+          event_id: string;
+          is_marked?: boolean | null;
+          position_key?: string | null;
+          revision: number;
+          round_id: string;
+          target_face_id?: string | null;
+          total_ends?: number | null;
+          type: string;
+          updated_at?: string;
+        };
+        Update: {
+          arrows_per_end?: number | null;
+          author_id?: string;
+          created_at?: string;
+          distance?: number | null;
+          distance_id?: string;
+          event_id?: string;
+          is_marked?: boolean | null;
+          position_key?: string | null;
+          revision?: number;
+          round_id?: string;
+          target_face_id?: string | null;
+          total_ends?: number | null;
+          type?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "distance_events_author_id_fkey";
+            columns: ["author_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       distances: {
         Row: {
           arrows_per_end: number;
           created_at: string;
+          disabled_at: string | null;
           distance: number | null;
           id: string;
           is_marked: boolean;
           position_key: string;
+          revision: number;
           round_id: string;
           target_face_id: string;
           total_ends: number;
@@ -50,10 +111,12 @@ export type Database = {
         Insert: {
           arrows_per_end: number;
           created_at?: string;
+          disabled_at?: string | null;
           distance?: number | null;
           id?: string;
           is_marked?: boolean;
           position_key: string;
+          revision?: number;
           round_id: string;
           target_face_id: string;
           total_ends: number;
@@ -62,10 +125,12 @@ export type Database = {
         Update: {
           arrows_per_end?: number;
           created_at?: string;
+          disabled_at?: string | null;
           distance?: number | null;
           id?: string;
           is_marked?: boolean;
           position_key?: string;
+          revision?: number;
           round_id?: string;
           target_face_id?: string;
           total_ends?: number;
@@ -180,6 +245,56 @@ export type Database = {
           },
         ];
       };
+      round_events: {
+        Row: {
+          author_id: string;
+          bow_type: string | null;
+          created_at: string;
+          event_id: string;
+          format: string | null;
+          name: string | null;
+          revision: number;
+          round_date: string | null;
+          round_id: string;
+          type: string;
+          updated_at: string;
+        };
+        Insert: {
+          author_id: string;
+          bow_type?: string | null;
+          created_at?: string;
+          event_id: string;
+          format?: string | null;
+          name?: string | null;
+          revision: number;
+          round_date?: string | null;
+          round_id: string;
+          type: string;
+          updated_at?: string;
+        };
+        Update: {
+          author_id?: string;
+          bow_type?: string | null;
+          created_at?: string;
+          event_id?: string;
+          format?: string | null;
+          name?: string | null;
+          revision?: number;
+          round_date?: string | null;
+          round_id?: string;
+          type?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "round_events_author_id_fkey";
+            columns: ["author_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       round_users: {
         Row: {
           created_at: string;
@@ -226,38 +341,106 @@ export type Database = {
         Row: {
           bow_type: string;
           created_at: string;
+          disabled_at: string | null;
           format: string;
           id: string;
           name: string;
+          revision: number;
           round_date: string;
           updated_at: string;
         };
         Insert: {
           bow_type: string;
           created_at?: string;
+          disabled_at?: string | null;
           format: string;
           id?: string;
           name: string;
+          revision?: number;
           round_date: string;
           updated_at?: string;
         };
         Update: {
           bow_type?: string;
           created_at?: string;
+          disabled_at?: string | null;
           format?: string;
           id?: string;
           name?: string;
+          revision?: number;
           round_date?: string;
           updated_at?: string;
         };
         Relationships: [];
       };
+      shot_events: {
+        Row: {
+          arrow_number: number;
+          author_id: string;
+          created_at: string;
+          distance_id: string;
+          end_number: number;
+          event_id: string;
+          revision: number;
+          score_int: number | null;
+          score_str: string | null;
+          shooter_id: string | null;
+          type: string;
+          updated_at: string;
+        };
+        Insert: {
+          arrow_number: number;
+          author_id: string;
+          created_at?: string;
+          distance_id: string;
+          end_number: number;
+          event_id: string;
+          revision: number;
+          score_int?: number | null;
+          score_str?: string | null;
+          shooter_id?: string | null;
+          type: string;
+          updated_at?: string;
+        };
+        Update: {
+          arrow_number?: number;
+          author_id?: string;
+          created_at?: string;
+          distance_id?: string;
+          end_number?: number;
+          event_id?: string;
+          revision?: number;
+          score_int?: number | null;
+          score_str?: string | null;
+          shooter_id?: string | null;
+          type?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "shot_events_author_id_fkey";
+            columns: ["author_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "shot_events_shooter_id_fkey";
+            columns: ["shooter_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       shots: {
         Row: {
           arrow_number: number;
           created_at: string;
+          disabled_at: string | null;
           distance_id: string;
           end_number: number;
+          revision: number;
           score_int: number;
           score_str: string;
           shooter_id: string;
@@ -266,8 +449,10 @@ export type Database = {
         Insert: {
           arrow_number: number;
           created_at?: string;
+          disabled_at?: string | null;
           distance_id: string;
           end_number: number;
+          revision?: number;
           score_int: number;
           score_str: string;
           shooter_id: string;
@@ -276,8 +461,10 @@ export type Database = {
         Update: {
           arrow_number?: number;
           created_at?: string;
+          disabled_at?: string | null;
           distance_id?: string;
           end_number?: number;
+          revision?: number;
           score_int?: number;
           score_str?: string;
           shooter_id?: string;
@@ -454,6 +641,7 @@ export type Database = {
         Args: {
           p_arrows_per_end: number;
           p_distance: number;
+          p_distance_event_id: string;
           p_id: string;
           p_is_marked: boolean;
           p_position_key: string;
@@ -471,11 +659,18 @@ export type Database = {
           p_id: string;
           p_name: string;
           p_round_date: string;
+          p_round_event_id: string;
         };
         Returns: string;
       };
-      delete_distance: { Args: { p_distance_id: string }; Returns: undefined };
-      delete_round: { Args: { p_round_id: string }; Returns: undefined };
+      disable_distance: {
+        Args: { p_distance_event_id: string; p_distance_id: string };
+        Returns: undefined;
+      };
+      disable_round: {
+        Args: { p_round_event_id: string; p_round_id: string };
+        Returns: undefined;
+      };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
       record_shots: { Args: { p_shots: Json }; Returns: undefined };
@@ -487,6 +682,7 @@ export type Database = {
         Args: {
           p_arrows_per_end: number;
           p_distance: number;
+          p_distance_event_id: string;
           p_distance_id: string;
           p_is_marked: boolean;
           p_target_face_id: string;
@@ -500,6 +696,7 @@ export type Database = {
           p_format: string;
           p_name: string;
           p_round_date: string;
+          p_round_event_id: string;
           p_round_id: string;
         };
         Returns: undefined;

@@ -56,7 +56,8 @@ export function RoundsListClient({
         return { error: "サインインが必要です。" };
       }
 
-      const { error } = await supabase.rpc("delete_round", {
+      const { error } = await supabase.rpc("disable_round", {
+        p_round_event_id: crypto.randomUUID(),
         p_round_id: round.id,
       });
 

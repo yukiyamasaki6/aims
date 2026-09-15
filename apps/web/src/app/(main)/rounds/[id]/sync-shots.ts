@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 // 参照）。
 export async function syncShots(input: {
   upsert: {
+    shotEventId: string;
     distanceId: string;
     endNumber: number;
     arrowNumber: number;
@@ -13,7 +14,12 @@ export async function syncShots(input: {
     scoreInt: number;
     shooterId?: string;
   }[];
-  clear: { distanceId: string; endNumber: number; arrowNumber: number }[];
+  clear: {
+    shotEventId: string;
+    distanceId: string;
+    endNumber: number;
+    arrowNumber: number;
+  }[];
 }): Promise<{ error: string } | undefined> {
   const supabase = createClient();
 
@@ -28,6 +34,7 @@ export async function syncShots(input: {
   if (input.upsert.length > 0) {
     const { error } = await supabase.rpc("record_shots", {
       p_shots: input.upsert.map((s) => ({
+        shot_event_id: s.shotEventId,
         distance_id: s.distanceId,
         end_number: s.endNumber,
         arrow_number: s.arrowNumber,
@@ -45,6 +52,7 @@ export async function syncShots(input: {
   if (input.clear.length > 0) {
     const { error } = await supabase.rpc("clear_shots", {
       p_shots: input.clear.map((c) => ({
+        shot_event_id: c.shotEventId,
         distance_id: c.distanceId,
         end_number: c.endNumber,
         arrow_number: c.arrowNumber,

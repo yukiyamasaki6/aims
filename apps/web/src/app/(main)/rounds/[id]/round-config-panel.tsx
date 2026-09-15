@@ -15,6 +15,7 @@ import {
 import type { EnqueueInput } from "./use-sync-queue";
 
 async function updateRoundConfig(input: {
+  roundEventId: string;
   roundId: string;
   name: string;
   roundDate: string;
@@ -37,6 +38,7 @@ async function updateRoundConfig(input: {
   // rounds更新の間に別クライアントの書き込みが割り込まないよう、Postgres
   // 関数（update_round）内で1つのトランザクションとして行う。
   const { error } = await supabase.rpc("update_round", {
+    p_round_event_id: input.roundEventId,
     p_round_id: input.roundId,
     p_name: input.name,
     p_round_date: input.roundDate,
@@ -121,10 +123,11 @@ export function RoundConfigPanel({
     setSaved(draft);
     onSaved(draft);
     setExpanded(false);
+    const roundEventId = crypto.randomUUID();
     enqueue({
       key: "roundConfig",
       label: "ラウンド設定",
-      run: () => updateRoundConfig({ roundId, ...draft }),
+      run: () => updateRoundConfig({ roundEventId, roundId, ...draft }),
     });
   }
 

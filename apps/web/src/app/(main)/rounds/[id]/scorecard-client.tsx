@@ -369,6 +369,7 @@ function generatePresetName(distances: Distance[]): string {
 }
 
 async function addDistance(input: {
+  distanceEventId: string;
   id: string;
   roundId: string;
   positionKey: string;
@@ -391,6 +392,7 @@ async function addDistance(input: {
   // IDは楽観的UIのためクライアントで確定済みの値をそのまま使う
   // （create_distance RPCはp_idをそのまま主キーとしてINSERTする）。
   const { error } = await supabase.rpc("create_distance", {
+    p_distance_event_id: input.distanceEventId,
     p_id: input.id,
     p_round_id: input.roundId,
     p_position_key: input.positionKey,
@@ -638,11 +640,13 @@ export function ScorecardClient({
     setDistances((prev) => [...prev, newDistance]);
     // 追加した距離はすぐ編集できるよう、編集パネルを展開しておく。
     setEditingDistanceIds((prev) => new Set(prev).add(newDistance.id));
+    const distanceEventId = crypto.randomUUID();
     sync.enqueue({
       key: `distance:${newDistance.id}`,
       label: `距離${distances.length + 1}`,
       run: () =>
         addDistance({
+          distanceEventId,
           id: newDistance.id,
           roundId,
           positionKey: newDistance.position_key,
@@ -738,7 +742,8 @@ export function ScorecardClient({
         return { error: "サインインが必要です。" };
       }
 
-      const { error } = await supabase.rpc("delete_round", {
+      const { error } = await supabase.rpc("disable_round", {
+        p_round_event_id: crypto.randomUUID(),
         p_round_id: roundId,
       });
 
@@ -822,6 +827,7 @@ export function ScorecardClient({
         dependsOnKey: `distance:${distanceId}`,
         upsert: shot
           ? {
+              shotEventId: crypto.randomUUID(),
               distanceId,
               endNumber,
               arrowNumber,
@@ -830,7 +836,14 @@ export function ScorecardClient({
               scoreInt: shot.score_int,
             }
           : undefined,
-        clear: shot ? undefined : { distanceId, endNumber, arrowNumber },
+        clear: shot
+          ? undefined
+          : {
+              shotEventId: crypto.randomUUID(),
+              distanceId,
+              endNumber,
+              arrowNumber,
+            },
       },
       syncShots,
     );
