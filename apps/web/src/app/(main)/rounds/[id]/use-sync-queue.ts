@@ -1,20 +1,33 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  eventIdOf,
+  executeSyncOperation,
+  type SyncOperation,
+} from "./sync-events";
+import {
+  loadPendingOperations,
+  removePendingOperation,
+  savePendingOperation,
+} from "./sync-outbox";
+import { syncShots } from "./sync-shots";
 
 export type SyncStatus = "synced" | "syncing" | "error" | "pending";
 
 export type SyncError = { key: string; label: string; message: string };
 
-export type BatchResult = { error: string } | undefined;
+export type BatchResult = { error: string; permanent?: boolean } | undefined;
 
 export type EnqueueInput = {
   key: string;
   label: string;
-  run: () => Promise<BatchResult>;
+  run?: () => Promise<BatchResult>;
   // 別のkeyの操作が先に完了している必要がある場合に指定する
   // （例: まだ作成中の距離へのスコア記録は、その距離のdistance:{id}
   // キーの完了を待つ必要がある）。指定したkeyに何も走っていなければ
   // 待ち時間なしで即座に実行される。
   dependsOnKey?: string;
+  operation?: SyncOperation;
+  restored?: boolean;
 };
 
 export type ShotUpsert = {
@@ -39,6 +52,8 @@ export type EnqueueShotInput = {
   dependsOnKey?: string; // 作成中のdistanceへのスコアの場合、`distance:{id}`
   upsert?: ShotUpsert;
   clear?: ShotClear;
+  operation?: SyncOperation;
+  restored?: boolean;
 };
 
 type RunShotBatch = (batch: {
@@ -56,7 +71,7 @@ export const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
 // 指数バックオフで有限回数リトライする。オンライン/オフラインイベントには
 // 頼らない（電波はあるように見えて実際には届かない状況に強くするため、
 // 実際の通信結果だけを根拠にする）。タブを閉じる・リロードした場合や、
-// この回数を使い切った場合の永続化・無期限リトライは別issue（#263）で扱う。
+// この回数を使い切った場合の永続化・無期限リトライはこのoutboxで扱う。
 export const RETRY_DELAYS_MS = [3000, 6000, 12000, 24000];
 
 function toSafeResult(promise: Promise<BatchResult>): Promise<BatchResult> {
@@ -87,9 +102,17 @@ function toSafeResult(promise: Promise<BatchResult>): Promise<BatchResult> {
 // どちらも失敗時はRETRY_DELAYS_MSに従って自動リトライし、使い切ってから
 // 初めてエラーとして表示する。リトライ待機中に同じ箇所への新しい操作が
 // 積まれた場合は、古い値のリトライより新しい値を優先する。
-export function useSyncQueue() {
+function isPermanentFailure(result: BatchResult): boolean {
+  return result?.permanent === true;
+}
+
+export function useSyncQueue(
+  roundId?: string,
+  onPermanentFailure?: () => void,
+) {
   const [errorMap, setErrorMap] = useState<Map<string, SyncError>>(new Map());
   const [pendingCount, setPendingCount] = useState(0);
+  const [persistingCount, setPersistingCount] = useState(0);
   const [shotPendingKeys, setShotPendingKeys] = useState<Set<string>>(
     new Set(),
   );
@@ -105,6 +128,8 @@ export function useSyncQueue() {
   const retryTimersRef = useRef<
     Map<string, { timer: ReturnType<typeof setTimeout>; resolve: () => void }>
   >(new Map());
+  const restoredRef = useRef(false);
+  const persistenceRef = useRef<Set<Promise<void>>>(new Set());
 
   const settleKeys = useCallback(
     (items: { key: string; label: string }[], result: BatchResult) => {
@@ -147,7 +172,7 @@ export function useSyncQueue() {
     });
   }, []);
 
-  const enqueue = useCallback(
+  const schedule = useCallback(
     (input: EnqueueInput) => {
       // 新しい楽観値が古い失敗・待機中のリトライを上書きするため、同じkeyへの
       // 再送信は直前の失敗表示・予約済みリトライを即座に打ち切る。
@@ -166,34 +191,52 @@ export function useSyncQueue() {
         : Promise.resolve();
 
       const attempt = (attemptIndex: number): Promise<void> =>
-        toSafeResult(input.run()).then((result) => {
+        toSafeResult(
+          input.operation
+            ? executeSyncOperation(input.operation)
+            : (input.run?.() ??
+                Promise.resolve({ error: "同期する操作が見つかりません。" })),
+        ).then((result) => {
           if (
             result?.error &&
             result.error !== AUTH_REQUIRED_MESSAGE &&
-            attemptIndex < RETRY_DELAYS_MS.length
+            !isPermanentFailure(result) &&
+            (input.operation || attemptIndex < RETRY_DELAYS_MS.length)
           ) {
             setRetryingKeys((prev) => new Set(prev).add(input.key));
             return new Promise<void>((resolve) => {
-              const timer = setTimeout(() => {
-                retryTimersRef.current.delete(input.key);
-                setRetryingKeys((prev) => {
-                  const next = new Set(prev);
-                  next.delete(input.key);
-                  return next;
-                });
-                attempt(attemptIndex + 1).then(resolve);
-              }, RETRY_DELAYS_MS[attemptIndex]);
+              const timer = setTimeout(
+                () => {
+                  retryTimersRef.current.delete(input.key);
+                  setRetryingKeys((prev) => {
+                    const next = new Set(prev);
+                    next.delete(input.key);
+                    return next;
+                  });
+                  attempt(attemptIndex + 1).then(resolve);
+                },
+                RETRY_DELAYS_MS[
+                  Math.min(attemptIndex, RETRY_DELAYS_MS.length - 1)
+                ],
+              );
               retryTimersRef.current.set(input.key, { timer, resolve });
             });
           }
           settleKeys([input], result);
+          if (
+            (!result?.error || isPermanentFailure(result)) &&
+            input.operation
+          ) {
+            void removePendingOperation(eventIdOf(input.operation));
+          }
+          if (isPermanentFailure(result)) onPermanentFailure?.();
           setPendingCount((n) => n - 1);
         });
 
       const runPromise = Promise.all([ownTail, depTail]).then(() => attempt(0));
       tailsRef.current.set(input.key, runPromise);
     },
-    [settleKeys, clearRetryTimer],
+    [settleKeys, clearRetryTimer, onPermanentFailure],
   );
 
   const flushShots = useCallback(
@@ -232,19 +275,34 @@ export function useSyncQueue() {
           if (
             result?.error &&
             result.error !== AUTH_REQUIRED_MESSAGE &&
-            attemptIndex < RETRY_DELAYS_MS.length
+            !isPermanentFailure(result) &&
+            (itemsToRetry.some((item) => item.operation) ||
+              attemptIndex < RETRY_DELAYS_MS.length)
           ) {
             // このタイマー自体は誰にも参照されない。同じマスへの新しい入力に
             // よるキャンセルは、発火時にitemsToRetryをshotBatchRefと照合する
             // filterで行う（バッチ全体を打ち切る必要は無いため）。
             setShotRetrying(true);
-            setTimeout(() => {
-              setShotRetrying(false);
-              attempt(itemsToRetry, attemptIndex + 1);
-            }, RETRY_DELAYS_MS[attemptIndex]);
+            setTimeout(
+              () => {
+                setShotRetrying(false);
+                attempt(itemsToRetry, attemptIndex + 1);
+              },
+              RETRY_DELAYS_MS[
+                Math.min(attemptIndex, RETRY_DELAYS_MS.length - 1)
+              ],
+            );
             return;
           }
           settleKeys(itemsToRetry, result);
+          if (!result?.error || isPermanentFailure(result)) {
+            for (const item of itemsToRetry) {
+              if (item.operation) {
+                void removePendingOperation(eventIdOf(item.operation));
+              }
+            }
+          }
+          if (isPermanentFailure(result)) onPermanentFailure?.();
           setShotPendingKeys((prev) => {
             const next = new Set(prev);
             for (const item of itemsToRetry) next.delete(item.key);
@@ -256,10 +314,10 @@ export function useSyncQueue() {
 
       attempt(items, 0);
     },
-    [settleKeys],
+    [settleKeys, onPermanentFailure],
   );
 
-  const enqueueShot = useCallback(
+  const scheduleShot = useCallback(
     (input: EnqueueShotInput, runBatch: RunShotBatch) => {
       setErrorMap((prev) => {
         if (!prev.has(input.key)) return prev;
@@ -275,12 +333,130 @@ export function useSyncQueue() {
 
       depTail.then(() => {
         // 同じマスへの連続上書きは、送信済みでなければ最後の値だけが残る。
+        const previous = shotBatchRef.current.get(input.key);
+        if (previous?.operation) {
+          // 同じマスへの未送信の古い値は最終状態に不要なため、永続outboxからも
+          // 取り除く。これにより再読み込み後に古い入力が再生されない。
+          void removePendingOperation(eventIdOf(previous.operation));
+        }
         shotBatchRef.current.set(input.key, input);
         flushShots(runBatch);
       });
     },
     [flushShots],
   );
+
+  const enqueue = useCallback(
+    (input: EnqueueInput) => {
+      if (!input.operation || !roundId || input.restored) {
+        schedule(input);
+        return;
+      }
+      setPersistingCount((count) => count + 1);
+      const persistence = savePendingOperation({
+        eventId: eventIdOf(input.operation),
+        roundId,
+        key: input.key,
+        dependsOnKey: input.dependsOnKey,
+        label: input.label,
+        operation: input.operation,
+      })
+        .then(() => schedule(input))
+        .finally(() => {
+          persistenceRef.current.delete(persistence);
+          setPersistingCount((count) => count - 1);
+        });
+      persistenceRef.current.add(persistence);
+    },
+    [roundId, schedule],
+  );
+
+  const enqueueShot = useCallback(
+    (input: EnqueueShotInput, runBatch: RunShotBatch) => {
+      if (!input.operation || !roundId || input.restored) {
+        scheduleShot(input, runBatch);
+        return;
+      }
+      setPersistingCount((count) => count + 1);
+      const persistence = savePendingOperation({
+        eventId: eventIdOf(input.operation),
+        roundId,
+        key: input.key,
+        dependsOnKey: input.dependsOnKey,
+        label: input.label,
+        operation: input.operation,
+      })
+        .then(() => scheduleShot(input, runBatch))
+        .finally(() => {
+          persistenceRef.current.delete(persistence);
+          setPersistingCount((count) => count - 1);
+        });
+      persistenceRef.current.add(persistence);
+    },
+    [roundId, scheduleShot],
+  );
+
+  useEffect(() => {
+    if (!roundId || restoredRef.current) return;
+    restoredRef.current = true;
+    void loadPendingOperations(roundId).then((operations) => {
+      const remaining = [...operations];
+      while (remaining.length > 0) {
+        const index = remaining.findIndex(
+          (pending) =>
+            !pending.dependsOnKey ||
+            !remaining.some((other) => other.key === pending.dependsOnKey),
+        );
+        const pending = remaining.splice(index === -1 ? 0 : index, 1)[0];
+        if (!pending) continue;
+        const shotInput: EnqueueShotInput | undefined =
+          pending.operation.type === "shot.recorded"
+            ? {
+                key: pending.key,
+                label: pending.label,
+                dependsOnKey: pending.dependsOnKey,
+                operation: pending.operation,
+                restored: true,
+                upsert: {
+                  shotEventId: pending.operation.eventId,
+                  distanceId: pending.operation.distanceId,
+                  endNumber: pending.operation.endNumber,
+                  arrowNumber: pending.operation.arrowNumber,
+                  shooterId: pending.operation.shooterId,
+                  scoreStr: pending.operation.scoreStr,
+                  scoreInt: pending.operation.scoreInt,
+                },
+              }
+            : pending.operation.type === "shot.cleared"
+              ? {
+                  key: pending.key,
+                  label: pending.label,
+                  dependsOnKey: pending.dependsOnKey,
+                  operation: pending.operation,
+                  restored: true,
+                  clear: {
+                    shotEventId: pending.operation.eventId,
+                    distanceId: pending.operation.distanceId,
+                    endNumber: pending.operation.endNumber,
+                    arrowNumber: pending.operation.arrowNumber,
+                  },
+                }
+              : undefined;
+        if (shotInput) {
+          scheduleShot(shotInput, syncShots);
+          continue;
+        }
+        schedule({
+          key: pending.key,
+          label: pending.label,
+          dependsOnKey: pending.dependsOnKey,
+          operation: pending.operation,
+          restored: true,
+          run: () => executeSyncOperation(pending.operation),
+        });
+      }
+    });
+  }, [roundId, schedule, scheduleShot]);
 
   const errorFor = useCallback(
     (key: string) => errorMap.get(key)?.message,
@@ -292,13 +468,14 @@ export function useSyncQueue() {
   // 届いてしまうことがある。そのような操作の前にこれを待つことで、その時点で
   // 積まれている書き込みが実際に反映されてから読みに行けるようにする。
   const flush = useCallback(async () => {
+    await Promise.allSettled(Array.from(persistenceRef.current));
     await Promise.allSettled(Array.from(tailsRef.current.values()));
   }, []);
 
   const status: SyncStatus =
     retryingKeys.size > 0 || shotRetrying
       ? "pending"
-      : pendingCount > 0 || shotPendingKeys.size > 0
+      : persistingCount > 0 || pendingCount > 0 || shotPendingKeys.size > 0
         ? "syncing"
         : errorMap.size > 0
           ? "error"

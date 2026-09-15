@@ -41,6 +41,7 @@ import {
 import { KeypadPanel } from "./keypad-panel";
 import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
 import { NAME_MAX_LENGTH } from "./round-options";
+import { loadPendingOperations } from "./sync-outbox";
 import { syncShots } from "./sync-shots";
 import { useSyncQueue } from "./use-sync-queue";
 
@@ -368,46 +369,6 @@ function generatePresetName(distances: Distance[]): string {
     .join("-");
 }
 
-async function addDistance(input: {
-  distanceEventId: string;
-  id: string;
-  roundId: string;
-  positionKey: string;
-  distance: number | null;
-  totalEnds: number;
-  arrowsPerEnd: number;
-  targetFaceId: string;
-  isMarked: boolean;
-}): Promise<{ error: string } | undefined> {
-  const supabase = createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { error: "サインインが必要です。" };
-  }
-
-  // IDは楽観的UIのためクライアントで確定済みの値をそのまま使う
-  // （create_distance RPCはp_idをそのまま主キーとしてINSERTする）。
-  const { error } = await supabase.rpc("create_distance", {
-    p_distance_event_id: input.distanceEventId,
-    p_id: input.id,
-    p_round_id: input.roundId,
-    p_position_key: input.positionKey,
-    p_distance: input.distance,
-    p_total_ends: input.totalEnds,
-    p_arrows_per_end: input.arrowsPerEnd,
-    p_target_face_id: input.targetFaceId,
-    p_is_marked: input.isMarked,
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-}
-
 async function saveRoundAsPreset(input: {
   roundId: string;
   name: string;
@@ -455,8 +416,108 @@ export function ScorecardClient({
   const [shots, setShots] = useState<Shot[]>(initialShots);
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
-  const sync = useSyncQueue();
+  const sync = useSyncQueue(roundId, () => router.refresh());
   const mountedRef = useRef(true);
+
+  useEffect(() => {
+    setRoundConfig(initialRoundConfig);
+    setDistances(initialDistances);
+    setShots(initialShots);
+  }, [initialDistances, initialRoundConfig, initialShots]);
+
+  useEffect(() => {
+    void loadPendingOperations(roundId).then((pending) => {
+      for (const { operation } of pending) {
+        switch (operation.type) {
+          case "round.updated":
+            setRoundConfig({
+              name: operation.name,
+              roundDate: operation.roundDate,
+              format: operation.format,
+              bowType: operation.bowType,
+            });
+            break;
+          case "distance.created":
+            setDistances((current) =>
+              current.some((distance) => distance.id === operation.id)
+                ? current
+                : [
+                    ...current,
+                    {
+                      id: operation.id,
+                      position_key: operation.positionKey,
+                      distance: operation.distance,
+                      total_ends: operation.totalEnds,
+                      arrows_per_end: operation.arrowsPerEnd,
+                      target_face_id: operation.targetFaceId,
+                      is_marked: operation.isMarked,
+                    },
+                  ],
+            );
+            break;
+          case "distance.updated":
+            setDistances((current) =>
+              current.map((distance) =>
+                distance.id === operation.distanceId
+                  ? {
+                      ...distance,
+                      distance: operation.distance,
+                      total_ends: operation.totalEnds,
+                      arrows_per_end: operation.arrowsPerEnd,
+                      target_face_id: operation.targetFaceId,
+                      is_marked: operation.isMarked,
+                    }
+                  : distance,
+              ),
+            );
+            break;
+          case "distance.disabled":
+            setDistances((current) =>
+              current.filter(
+                (distance) => distance.id !== operation.distanceId,
+              ),
+            );
+            setShots((current) =>
+              current.filter(
+                (shot) => shot.distance_id !== operation.distanceId,
+              ),
+            );
+            break;
+          case "shot.recorded":
+            setShots((current) => [
+              ...current.filter(
+                (shot) =>
+                  shot.distance_id !== operation.distanceId ||
+                  shot.end_number !== operation.endNumber ||
+                  shot.arrow_number !== operation.arrowNumber,
+              ),
+              {
+                distance_id: operation.distanceId,
+                end_number: operation.endNumber,
+                arrow_number: operation.arrowNumber,
+                shooter_id: operation.shooterId,
+                score_str: operation.scoreStr,
+                score_int: operation.scoreInt,
+              },
+            ]);
+            break;
+          case "shot.cleared":
+            setShots((current) =>
+              current.filter(
+                (shot) =>
+                  shot.distance_id !== operation.distanceId ||
+                  shot.end_number !== operation.endNumber ||
+                  shot.arrow_number !== operation.arrowNumber,
+              ),
+            );
+            break;
+          case "round.disabled":
+            router.replace("/rounds");
+            return;
+        }
+      }
+    });
+  }, [roundId, router]);
 
   useEffect(() => {
     // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
@@ -644,18 +705,18 @@ export function ScorecardClient({
     sync.enqueue({
       key: `distance:${newDistance.id}`,
       label: `距離${distances.length + 1}`,
-      run: () =>
-        addDistance({
-          distanceEventId,
-          id: newDistance.id,
-          roundId,
-          positionKey: newDistance.position_key,
-          distance: newDistance.distance,
-          totalEnds: newDistance.total_ends,
-          arrowsPerEnd: newDistance.arrows_per_end,
-          targetFaceId: newDistance.target_face_id,
-          isMarked: newDistance.is_marked,
-        }),
+      operation: {
+        type: "distance.created",
+        eventId: distanceEventId,
+        id: newDistance.id,
+        roundId,
+        positionKey: newDistance.position_key,
+        distance: newDistance.distance,
+        totalEnds: newDistance.total_ends,
+        arrowsPerEnd: newDistance.arrows_per_end,
+        targetFaceId: newDistance.target_face_id,
+        isMarked: newDistance.is_marked,
+      },
     });
   }
 
@@ -730,36 +791,14 @@ export function ScorecardClient({
   }
 
   async function handleDeleteRound(): Promise<{ error: string } | undefined> {
-    try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!mountedRef.current) return;
-
-      if (!user) {
-        return { error: "サインインが必要です。" };
-      }
-
-      const { error } = await supabase.rpc("disable_round", {
-        p_round_event_id: crypto.randomUUID(),
-        p_round_id: roundId,
-      });
-
-      if (!mountedRef.current) return;
-
-      if (error) {
-        return { error: error.message };
-      }
-
-      router.push("/rounds");
-    } catch {
-      if (!mountedRef.current) return;
-      return {
-        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      };
-    }
+    const roundEventId = crypto.randomUUID();
+    sync.enqueue({
+      key: `round:${roundId}`,
+      label: "ラウンド削除",
+      operation: { type: "round.disabled", eventId: roundEventId, roundId },
+    });
+    router.push("/rounds");
+    return undefined;
   }
 
   function handleDistanceDeleted(distanceId: string) {
@@ -804,6 +843,7 @@ export function ScorecardClient({
     shot: Shot | null,
     label: string,
   ) {
+    const shotEventId = crypto.randomUUID();
     setShots((prev) => {
       const filtered = prev.filter(
         (s) =>
@@ -827,7 +867,7 @@ export function ScorecardClient({
         dependsOnKey: `distance:${distanceId}`,
         upsert: shot
           ? {
-              shotEventId: crypto.randomUUID(),
+              shotEventId,
               distanceId,
               endNumber,
               arrowNumber,
@@ -839,7 +879,25 @@ export function ScorecardClient({
         clear: shot
           ? undefined
           : {
-              shotEventId: crypto.randomUUID(),
+              shotEventId,
+              distanceId,
+              endNumber,
+              arrowNumber,
+            },
+        operation: shot
+          ? {
+              type: "shot.recorded",
+              eventId: shotEventId,
+              distanceId,
+              endNumber,
+              arrowNumber,
+              shooterId: shot.shooter_id,
+              scoreStr: shot.score_str,
+              scoreInt: shot.score_int,
+            }
+          : {
+              type: "shot.cleared",
+              eventId: shotEventId,
               distanceId,
               endNumber,
               arrowNumber,
@@ -1229,7 +1287,7 @@ export function ScorecardClient({
             <div className="rounded-t-xl border-x border-t bg-card text-card-foreground shadow-sm [clip-path:inset(-8px_-8px_0_-8px)]">
               <RoundConfigPanel
                 roundId={roundId}
-                initial={initialRoundConfig}
+                initial={roundConfig}
                 onSaved={setRoundConfig}
                 defaultExpanded={initialDistances.length === 0}
                 hasUnmarkedDistances={distances.some((d) => !d.is_marked)}
