@@ -14,12 +14,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { comparePositionKey } from "@/lib/position-key";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { PresetInfo } from "../[id]/distance-config-row";
 
 type PresetDistance = {
-  distance_number: number;
+  id: string;
+  position_key: string;
   distance: number | null;
   is_marked: boolean;
   total_ends: number;
@@ -39,7 +41,7 @@ export type Preset = {
   name: string;
   format: string;
   bow_type: string;
-  round_preset_distances: PresetDistance[];
+  preset_distances: PresetDistance[];
 };
 
 function PresetRow({
@@ -53,8 +55,8 @@ function PresetRow({
   onSelect: () => void;
   onDelete?: () => void;
 }) {
-  const distances = [...preset.round_preset_distances].sort(
-    (a, b) => a.distance_number - b.distance_number,
+  const distances = [...preset.preset_distances].sort((a, b) =>
+    comparePositionKey(a.position_key, a.id, b.position_key, b.id),
   );
 
   return (
@@ -112,7 +114,7 @@ function PresetRow({
             format={preset.format}
             bowType={preset.bow_type}
             distances={distances.map((d) => ({
-              key: d.distance_number,
+              key: d.id,
               distance: d.distance,
               isMarked: d.is_marked,
               face: d.target_faces,
@@ -181,7 +183,7 @@ export function RoundPresetSelect({
       }
 
       const { error } = await supabase
-        .from("round_presets")
+        .from("preset_rounds")
         .delete()
         .eq("id", preset.id);
 
@@ -233,9 +235,9 @@ export function RoundPresetSelect({
 
       if (selectedId) {
         const { data: preset, error: presetError } = await supabase
-          .from("round_presets")
+          .from("preset_rounds")
           .select(
-            "format, bow_type, round_preset_distances(distance_number, distance, total_ends, arrows_per_end, target_face_id)",
+            "format, bow_type, preset_distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id)",
           )
           .eq("id", selectedId)
           .maybeSingle();
@@ -251,8 +253,10 @@ export function RoundPresetSelect({
 
         format = preset.format;
         bowType = preset.bow_type;
-        distances = [...preset.round_preset_distances]
-          .sort((a, b) => a.distance_number - b.distance_number)
+        distances = [...preset.preset_distances]
+          .sort((a, b) =>
+            comparePositionKey(a.position_key, a.id, b.position_key, b.id),
+          )
           .map((d) => ({
             distance: d.distance,
             total_ends: d.total_ends,

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import {
   getGlobalTargetFaces,
   TARGET_FACE_SELECT,
-} from "@/lib/supabase/cached-queries";
+} from "@/lib/supabase/reference-queries";
 import { createClient } from "@/lib/supabase/server";
 import { ScorecardClient } from "./scorecard-client";
 
@@ -14,9 +14,8 @@ export default async function RoundPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  // round・distances・target_faces（個人分）は互いに独立しているため並列実行する。
-  // target_facesのグローバル分はunstable_cacheされた匿名クエリで別途取得する
-  // （毎回のDB問い合わせを避けるため）。shotsのみdistances取得後でよい。
+  // round・distances・target_facesは互いに独立しているため、同じ認証済み
+  // セッションで並列実行する。shotsのみdistances取得後でよい。
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -35,17 +34,18 @@ export default async function RoundPage({
     supabase
       .from("distances")
       .select(
-        "id, distance_number, distance, total_ends, arrows_per_end, target_face_id, is_marked",
+        "id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked",
       )
       .eq("round_id", id)
-      .order("distance_number"),
+      .order("position_key")
+      .order("id"),
     user
       ? supabase
           .from("target_faces")
           .select(TARGET_FACE_SELECT)
           .eq("owner_id", user.id)
       : Promise.resolve({ data: [] }),
-    getGlobalTargetFaces(),
+    getGlobalTargetFaces(supabase),
   ]);
 
   if (!round) {

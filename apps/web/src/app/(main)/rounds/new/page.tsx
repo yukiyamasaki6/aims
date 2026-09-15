@@ -1,7 +1,8 @@
+import { comparePositionKey } from "@/lib/position-key";
 import {
   getGlobalRoundPresets,
   ROUND_PRESET_SELECT,
-} from "@/lib/supabase/cached-queries";
+} from "@/lib/supabase/reference-queries";
 import { createClient } from "@/lib/supabase/server";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../[id]/round-options";
 import { type Preset, RoundPresetSelect } from "./round-preset-select-client";
@@ -25,11 +26,15 @@ function comparePresets(a: PresetWithMeta, b: PresetWithMeta): number {
     BOW_TYPE_OPTIONS.findIndex((o) => o.value === b.bow_type);
   if (bowTypeDiff !== 0) return bowTypeDiff;
 
-  const aDistances = [...a.round_preset_distances]
-    .sort((x, y) => x.distance_number - y.distance_number)
+  const aDistances = [...a.preset_distances]
+    .sort((x, y) =>
+      comparePositionKey(x.position_key, x.id, y.position_key, y.id),
+    )
     .map((d) => d.distance ?? Number.NEGATIVE_INFINITY);
-  const bDistances = [...b.round_preset_distances]
-    .sort((x, y) => x.distance_number - y.distance_number)
+  const bDistances = [...b.preset_distances]
+    .sort((x, y) =>
+      comparePositionKey(x.position_key, x.id, y.position_key, y.id),
+    )
     .map((d) => d.distance ?? Number.NEGATIVE_INFINITY);
 
   if (aDistances.length !== bDistances.length) {
@@ -52,19 +57,18 @@ export default async function NewRoundPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // グローバル分はunstable_cacheされた匿名クエリで取得し、個人分だけを
-  // 都度取得する（保存直後に反映される必要があるためキャッシュしない）。
+  // グローバル分と個人分を同じ認証済みセッションで並列取得する。
   const [{ data: personalPresetsRaw }, globalPresetsRaw] = await Promise.all([
     user
       ? supabase
-          .from("round_presets")
+          .from("preset_rounds")
           .select(ROUND_PRESET_SELECT)
           .eq("owner_id", user.id)
       : Promise.resolve({ data: [] }),
-    getGlobalRoundPresets(),
+    getGlobalRoundPresets(supabase),
   ]);
 
-  // round_preset_distances.target_facesはFKの多重度（多対1）上つねに単一のオブジェクトだが、
+  // preset_distances.target_facesはFKの多重度（多対1）上つねに単一のオブジェクトだが、
   // 生成型は入れ子embedのカーディナリティを配列として広く推論するため、実体に合わせてキャストする。
   const typedPresets = [
     ...((personalPresetsRaw ?? []) as unknown as PresetWithMeta[]),

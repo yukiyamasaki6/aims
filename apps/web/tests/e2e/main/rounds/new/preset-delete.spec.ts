@@ -164,7 +164,7 @@ test("削除リクエストの送信中は確認ボタンが無効になる", as
   const requestGate = new Promise<void>((resolve) => {
     releaseRequest = resolve;
   });
-  await page.route("**/rest/v1/round_presets*", async (route) => {
+  await page.route("**/rest/v1/preset_rounds*", async (route) => {
     if (route.request().method() !== "DELETE") {
       await route.continue();
       return;
@@ -227,7 +227,7 @@ test("削除リクエストの送信中はキャンセルが無効になる", as
   const requestGate = new Promise<void>((resolve) => {
     releaseRequest = resolve;
   });
-  await page.route("**/rest/v1/round_presets*", async (route) => {
+  await page.route("**/rest/v1/preset_rounds*", async (route) => {
     if (route.request().method() !== "DELETE") {
       await route.continue();
       return;
@@ -287,7 +287,7 @@ test("削除リクエストの送信中は背景クリックでダイアログ�
   const requestGate = new Promise<void>((resolve) => {
     releaseRequest = resolve;
   });
-  await page.route("**/rest/v1/round_presets*", async (route) => {
+  await page.route("**/rest/v1/preset_rounds*", async (route) => {
     if (route.request().method() !== "DELETE") {
       await route.continue();
       return;

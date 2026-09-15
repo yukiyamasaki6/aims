@@ -16,7 +16,7 @@ export async function waitForHydration(page: Page): Promise<void> {
 }
 
 // テストは毎回同じ初期状態から始まるべきという原則を、DBリセットに頼らず
-// 保証する。rounds/round_presetsはユーザー単位でRLS・owner_idにより
+// 保証する。rounds/preset_roundsはユーザー単位でRLS・owner_idにより
 // 可視性が絞られるため、実行のたびに使い捨ての新しいメールアドレスに
 // することで、過去の実行で作成したラウンドやプリセットがこのユーザーには
 // 一切見えない＝一覧が必ず空から始まる状態を実現できる（データを消す

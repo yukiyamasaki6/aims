@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { comparePositionKey } from "@/lib/position-key";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -45,13 +46,25 @@ import { useSyncQueue } from "./use-sync-queue";
 
 type Distance = {
   id: string;
-  distance_number: number;
+  position_key: string;
   distance: number | null;
   total_ends: number;
   arrows_per_end: number;
   target_face_id: string;
   is_marked: boolean;
 };
+
+function compareDistancePosition(a: Distance, b: Distance): number {
+  return comparePositionKey(a.position_key, a.id, b.position_key, b.id);
+}
+
+function distanceNumber(distances: Distance[], distanceId: string): number {
+  return (
+    [...distances]
+      .sort(compareDistancePosition)
+      .findIndex((d) => d.id === distanceId) + 1
+  );
+}
 
 type Shot = {
   distance_id: string;
@@ -350,7 +363,7 @@ function isFirstCellOfDistance(position: Position): boolean {
 // ここは距離構成のみのフォールバックでよい。
 function generatePresetName(distances: Distance[]): string {
   return [...distances]
-    .sort((a, b) => a.distance_number - b.distance_number)
+    .sort(compareDistancePosition)
     .map((d) => (d.distance !== null ? `${d.distance}` : "??"))
     .join("-");
 }
@@ -358,7 +371,7 @@ function generatePresetName(distances: Distance[]): string {
 async function addDistance(input: {
   id: string;
   roundId: string;
-  distanceNumber: number;
+  positionKey: string;
   distance: number | null;
   totalEnds: number;
   arrowsPerEnd: number;
@@ -380,7 +393,7 @@ async function addDistance(input: {
   const { error } = await supabase.from("distances").insert({
     id: input.id,
     round_id: input.roundId,
-    distance_number: input.distanceNumber,
+    position_key: input.positionKey,
     distance: input.distance,
     total_ends: input.totalEnds,
     arrows_per_end: input.arrowsPerEnd,
@@ -547,7 +560,7 @@ export function ScorecardClient({
 
   useEffect(() => {
     if (!position) return;
-    const testId = `shot-cell-${position.distance.distance_number}-${position.end}-${position.arrow}`;
+    const testId = `shot-cell-${distanceNumber(distances, position.distance.id)}-${position.end}-${position.arrow}`;
     const cell = document.querySelector(`[data-testid="${testId}"]`);
     const container = cell?.closest<HTMLElement>(".overflow-y-auto");
     if (!cell || !container) return;
@@ -575,7 +588,7 @@ export function ScorecardClient({
     if (delta !== 0) {
       container.scrollBy({ top: delta, behavior: "smooth" });
     }
-  }, [position, keypadHeight, isLandscape]);
+  }, [position, keypadHeight, isLandscape, distances]);
 
   const total = shots.reduce((sum, s) => sum + s.score_int, 0);
   const roundLabels = roundTopScoreLabels(distances, targetFaces);
@@ -608,15 +621,13 @@ export function ScorecardClient({
   }
 
   function handleAddDistance() {
-    // 直前（一番大きいdistance_number）の距離の内容をそのまま初期値として
+    // 直前（一番大きいposition_key）の距離の内容をそのまま初期値として
     // 引き継ぐ。距離が1件も無い場合のみ、決め打ちの初期値にフォールバック
     // する。IDも楽観的UIのためここで確定し、そのままキューに積む。
-    const last = [...distances].sort(
-      (a, b) => b.distance_number - a.distance_number,
-    )[0];
+    const last = [...distances].sort(compareDistancePosition).at(-1);
     const newDistance: Distance = {
       id: crypto.randomUUID(),
-      distance_number: (last?.distance_number ?? 0) + 1,
+      position_key: last ? `${last.position_key}a` : "a",
       distance: last?.distance ?? 70,
       total_ends: last?.total_ends ?? 6,
       arrows_per_end: last?.arrows_per_end ?? 6,
@@ -629,12 +640,12 @@ export function ScorecardClient({
     setEditingDistanceIds((prev) => new Set(prev).add(newDistance.id));
     sync.enqueue({
       key: `distance:${newDistance.id}`,
-      label: `距離${newDistance.distance_number}`,
+      label: `距離${distances.length + 1}`,
       run: () =>
         addDistance({
           id: newDistance.id,
           roundId,
-          distanceNumber: newDistance.distance_number,
+          positionKey: newDistance.position_key,
           distance: newDistance.distance,
           totalEnds: newDistance.total_ends,
           arrowsPerEnd: newDistance.arrows_per_end,
@@ -845,7 +856,7 @@ export function ScorecardClient({
       end,
       arrow,
       nextShot,
-      `距離${distance.distance_number} ${end}エンド${arrow}本目`,
+      `距離${distanceNumber(distances, distance.id)} ${end}エンド${arrow}本目`,
     );
 
     setUndoStack((prev) => [
@@ -877,7 +888,7 @@ export function ScorecardClient({
       end,
       arrow,
       null,
-      `距離${distance.distance_number} ${end}エンド${arrow}本目`,
+      `距離${distanceNumber(distances, distance.id)} ${end}エンド${arrow}本目`,
     );
 
     if (prevShot) {
@@ -909,9 +920,8 @@ export function ScorecardClient({
   }
 
   function historyEntryLabel(entry: HistoryEntry): string {
-    const distanceNumber =
-      distances.find((d) => d.id === entry.distanceId)?.distance_number ?? "?";
-    return `距離${distanceNumber} ${entry.endNumber}エンド${entry.arrowNumber}本目`;
+    const number = distanceNumber(distances, entry.distanceId);
+    return `距離${number || "?"} ${entry.endNumber}エンド${entry.arrowNumber}本目`;
   }
 
   function handleUndo() {
@@ -1123,7 +1133,7 @@ export function ScorecardClient({
                       format={roundConfig.format}
                       bowType={roundConfig.bowType}
                       distances={[...distances]
-                        .sort((a, b) => a.distance_number - b.distance_number)
+                        .sort(compareDistancePosition)
                         .map((d) => ({
                           key: d.id,
                           distance: d.distance,
@@ -1269,6 +1279,7 @@ export function ScorecardClient({
 
             <div className="flex flex-col gap-4">
               {distances.map((d) => {
+                const displayNumber = distanceNumber(distances, d.id);
                 const distanceShots = shots.filter(
                   (s) => s.distance_id === d.id,
                 );
@@ -1329,7 +1340,7 @@ export function ScorecardClient({
                             <button
                               key={arrow}
                               type="button"
-                              data-testid={`shot-cell-${d.distance_number}-${end}-${arrow}`}
+                              data-testid={`shot-cell-${displayNumber}-${end}-${arrow}`}
                               onClick={() => selectCell(d, end, arrow)}
                               className={cn(
                                 // 得点色をstyleで直接指定するため、hover:bg-muted等の
@@ -1360,7 +1371,7 @@ export function ScorecardClient({
                         })}
                       </div>
                       <div
-                        data-testid={`end-subtotal-${d.distance_number}-${end}`}
+                        data-testid={`end-subtotal-${displayNumber}-${end}`}
                         className="flex min-h-10 w-14 shrink-0 items-center justify-center border-l text-muted-foreground text-base"
                       >
                         {hasAnyShot ? `${subtotal}` : ""}
@@ -1372,7 +1383,7 @@ export function ScorecardClient({
                 return (
                   <div
                     key={d.id}
-                    data-testid={`distance-summary-${d.distance_number}`}
+                    data-testid={`distance-summary-${displayNumber}`}
                     className="rounded-xl border bg-card text-card-foreground shadow-sm"
                   >
                     {/* 小計のsticky境界（position: stickyの直接の親）を最終行の
@@ -1394,7 +1405,7 @@ export function ScorecardClient({
                       揃える。 */}
                       <button
                         type="button"
-                        data-testid={`distance-config-toggle-${d.distance_number}`}
+                        data-testid={`distance-config-toggle-${displayNumber}`}
                         onClick={() => toggleDistanceEditing(d.id)}
                         className="relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm"
                       >
@@ -1414,7 +1425,7 @@ export function ScorecardClient({
                         <DistanceEditFields
                           distance={{
                             id: d.id,
-                            distanceNumber: d.distance_number,
+                            distanceNumber: displayNumber,
                             distance: d.distance,
                             totalEnds: d.total_ends,
                             arrowsPerEnd: d.arrows_per_end,
@@ -1446,7 +1457,7 @@ export function ScorecardClient({
                       <div className="-mt-3.5 sticky top-[88px] z-10 flex items-baseline justify-end gap-2 border-b bg-card px-3 pt-6 pb-2 text-muted-foreground text-xs">
                         {distanceLabels && distanceCounts && (
                           <span
-                            data-testid={`distance-top-scores-${d.distance_number}`}
+                            data-testid={`distance-top-scores-${displayNumber}`}
                           >
                             {distanceLabels.firstLabel}:{" "}
                             {distanceCounts.firstCount} /{" "}

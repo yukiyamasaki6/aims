@@ -3,6 +3,7 @@ import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
+  waitForHydration,
 } from "../../helpers/auth";
 import { createRound } from "../../helpers/rounds";
 
@@ -18,6 +19,7 @@ test("メニューボタンをクリックするとメニューが展開され�
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto("/rounds");
+  await waitForHydration(page);
 
   const row = page.locator("li", { hasText: name });
   await expect(page.getByTestId("round-delete")).not.toBeVisible();
@@ -37,6 +39,7 @@ test("外側クリックでメニューを閉じられる", async ({ page }) => 
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto("/rounds");
+  await waitForHydration(page);
 
   const row = page.locator("li", { hasText: name });
   await row.getByTestId("round-menu-trigger").click();
@@ -59,6 +62,7 @@ test("削除ボタンをクリックすると確認ダイアログが表示さ�
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto("/rounds");
+  await waitForHydration(page);
 
   const row = page.locator("li", { hasText: name });
   await row.getByTestId("round-menu-trigger").click();
@@ -78,6 +82,7 @@ test("キャンセルでダイアログを閉じられる", async ({ page }) => 
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto("/rounds");
+  await waitForHydration(page);
 
   const roundLink = page.getByRole("link", { name: new RegExp(name) });
   const row = page.locator("li", { hasText: name });
@@ -100,6 +105,7 @@ test("背景クリックでダイアログを閉じられる", async ({ page }) 
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto("/rounds");
+  await waitForHydration(page);
 
   const roundLink = page.getByRole("link", { name: new RegExp(name) });
   const row = page.locator("li", { hasText: name });
@@ -123,6 +129,7 @@ test("送信中は確認ボタンが無効になる", async ({ page }) => {
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto("/rounds");
+  await waitForHydration(page);
 
   const row = page.locator("li", { hasText: name });
 
@@ -169,6 +176,7 @@ test("送信中はキャンセルが無効になる", async ({ page }) => {
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto("/rounds");
+  await waitForHydration(page);
 
   const row = page.locator("li", { hasText: name });
 
@@ -209,6 +217,7 @@ test("送信中は背景クリックでダイアログを閉じられない", as
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto("/rounds");
+  await waitForHydration(page);
 
   const row = page.locator("li", { hasText: name });
 
@@ -248,6 +257,7 @@ test("サインインが切れた状態でラウンドを削除するとメッ�
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto("/rounds");
+  await waitForHydration(page);
 
   const roundLink = page.getByRole("link", { name: new RegExp(name) });
   await expect(roundLink).toBeVisible();
@@ -278,6 +288,7 @@ test("確認ボタンをクリックすると削除される", async ({ page }) 
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await page.goto("/rounds");
+  await waitForHydration(page);
 
   const roundLink = page.getByRole("link", { name: new RegExp(name) });
   const row = page.locator("li", { hasText: name });
