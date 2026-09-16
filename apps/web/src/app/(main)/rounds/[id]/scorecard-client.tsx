@@ -378,8 +378,9 @@ async function saveRoundAsPreset(input: {
   const supabase = createClient();
 
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user;
 
   if (!user) {
     return { error: "サインインが必要です。" };
@@ -809,8 +810,9 @@ export function ScorecardClient({
     try {
       const supabase = createClient();
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
+      const user = session?.user;
 
       if (!mountedRef.current) return;
 
