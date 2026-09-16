@@ -2,20 +2,22 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { syncShots } from "./sync-shots";
 
 const db = vi.hoisted(() => ({
-  getUser: vi.fn(),
+  getSession: vi.fn(),
   rpc: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
-    auth: { getUser: db.getUser },
+    auth: { getSession: db.getSession },
     rpc: db.rpc,
   }),
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  db.getUser.mockResolvedValue({ data: { user: { id: "editor" } } });
+  db.getSession.mockResolvedValue({
+    data: { session: { user: { id: "editor" } } },
+  });
   db.rpc.mockResolvedValue({ error: null });
 });
 
@@ -85,7 +87,7 @@ it("クリア対象を射手で制限せず、編集権限の検証をRPCに委�
 });
 
 it("未認証では書き込まない", async () => {
-  db.getUser.mockResolvedValue({ data: { user: null } });
+  db.getSession.mockResolvedValue({ data: { session: null } });
   expect(await syncShots({ upsert: [], clear: [] })).toEqual({
     error: "サインインが必要です。",
     permanent: true,
