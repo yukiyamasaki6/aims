@@ -33,15 +33,15 @@ By analyzing score trends and shot distributions, we pinpoint specific challenge
 
 ## About the Name
 
-The acronym "AIMS" echoes the very essence of archery—to "Aim"—embodying a steadfast commitment to precisely targeting user challenges and walking alongside them toward their goals.
+The name AIMS carries a philosophy: to take precise aim at the challenges users face, and to support them, from their own point of view, all the way to their goals.
 
-> 略称のAIMSには、アーチェリーの本質である「狙う（Aim）」という意味を重ね合わせ、ユーザーが直面する課題を的確に捉え、目標達成まで伴走するという強い決意を込めている。
+> サービス名のAIMSには、ユーザーが直面する課題に的確に狙いを定め、ユーザー目線で目標達成まで支援するという理念を込めている。
 
 ## About the Icon
 
-The AIMS symbol expresses the precision of archery through a composition of geometric circular arcs and target colors. The cyan streamline evokes the flex of the bow and the trajectory of an arrow, symbolizing a stress-free tracking experience. The yellow and red circular rings represent a community where peers connect and share. By flowing seamlessly into the central rings, the streamline illustrates continuous growth driven by data analytics.
+The AIMS logo takes its motif from the archery sight used to take aim, carrying — just like the service name — a philosophy of taking precise aim at the challenges users face and supporting them, from their own point of view, all the way to their goals. The smooth, streamlined ring symbolizes the stress-free recording the service provides, and reflects the continuous growth it supports through data analysis. The red circle at its center represents the circle of community where peers come together and share.
 
-> AIMSのシンボルは、幾何学的な円弧のみの構成と配色によってアーチェリーの精密さを表している。青の流線型は弓のしなりと矢の軌跡を表し、ストレスフリーな記録体験を象徴している。黄と赤の円環は仲間が集まり共有し合うコミュニティの輪を表現している。流線型が途切れることなく円環へとつながる造形は、データ分析を通じた継続的な成長支援を示している。
+> AIMSのロゴはアーチェリーで狙いを定めるためのサイトをモチーフにしており、サービス名と同様に、ユーザーが直面する課題に的確に狙いを定め、ユーザー目線で目標達成まで支援するという理念を込めている。滑らかな流線型の円環はサービスが提供するストレスフリーな記録を象徴し、データ分析を通じた継続的な成長支援を示している。中央の赤い円は仲間が集まり共有し合うコミュニティの輪を表現している。
 
 ## Contribution
 
