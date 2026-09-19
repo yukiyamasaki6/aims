@@ -126,7 +126,10 @@ function sampleTaperedArc(center, fromDeg, toDeg, fromR, toR, steps) {
 
 // ==================== Build the ring + swish outline ====================
 const O = SHAPE_CENTER;
-const swishStartAngle = clockwiseTo(RING_START_ANGLE_DEG, SWISH_START_ANGLE_DEG);
+const swishStartAngle = clockwiseTo(
+  RING_START_ANGLE_DEG,
+  SWISH_START_ANGLE_DEG,
+);
 const swishEndAngle = clockwiseTo(swishStartAngle, SWISH_END_ANGLE_DEG);
 
 const outerStart = polar(O, RING_OUTER_R, RING_START_ANGLE_DEG);
@@ -251,6 +254,8 @@ const pngBuffers = await Promise.all(
   ),
 );
 const ico = await pngToIco(pngBuffers);
-const icoPath = fileURLToPath(new URL("../src/app/favicon.ico", import.meta.url));
+const icoPath = fileURLToPath(
+  new URL("../src/app/favicon.ico", import.meta.url),
+);
 writeFileSync(icoPath, ico);
 console.log(`Wrote ${icoPath} (${FAVICON_SIZES.join("x, ")}x px)`);
