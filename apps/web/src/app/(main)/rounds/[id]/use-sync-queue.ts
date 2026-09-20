@@ -11,7 +11,12 @@ import {
 } from "./sync-outbox";
 import { syncShots } from "./sync-shots";
 
-export type SyncStatus = "synced" | "syncing" | "error" | "pending";
+export type SyncStatus =
+  | "synced"
+  | "sending"
+  | "retrying"
+  | "offline-pending"
+  | "error";
 
 export type SyncError = { key: string; label: string; message: string };
 
@@ -21,10 +26,7 @@ export type EnqueueInput = {
   key: string;
   label: string;
   run?: () => Promise<BatchResult>;
-  // 別のkeyの操作が先に完了している必要がある場合に指定する
-  // （例: まだ作成中の距離へのスコア記録は、その距離のdistance:{id}
-  // キーの完了を待つ必要がある）。指定したkeyに何も走っていなければ
-  // 待ち時間なしで即座に実行される。
+  // 例: 作成中の距離へのスコア記録は`distance:{id}`の完了を待つ。
   dependsOnKey?: string;
   operation?: SyncOperation;
   restored?: boolean;
@@ -61,23 +63,22 @@ type RunShotBatch = (batch: {
   clear: ShotClear[];
 }) => Promise<BatchResult>;
 
-// サインイン切れはリトライしても解決しないため、リトライ対象からは除外し
-// 即座に通常のエラーとして表示する（他の失敗と同様、errorMapに積むだけ）。
-// アプリ全体でセッション切れを検知してサインイン画面へ誘導する仕組みは
-// 別issue（#303）で扱う。
+// リトライ対象外（サインイン画面への誘導は別issue #303で扱う）。
 export const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
 
-// 通信の一時的な不調（屋外での電波不安定等）から自動的に回復できるよう、
-// 指数バックオフで有限回数リトライする。オンライン/オフラインイベントには
-// 頼らない（電波はあるように見えて実際には届かない状況に強くするため、
-// 実際の通信結果だけを根拠にする）。タブを閉じる・リロードした場合や、
-// この回数を使い切った場合の永続化・無期限リトライはこのoutboxで扱う。
 export const RETRY_DELAYS_MS = [3000, 6000, 12000, 24000];
 
+// navigator.onLineは実際の通信可否を保証しないが、誤ってオンライン判定
+// された場合は通常のバックオフリトライに任せる。
+function isOffline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+// 何も積まれていないtailの目印。schedule()がこれと参照一致する間は
+// 待つべきものが無いと判定し、attempt(0)を同期的に呼べる。
+const RESOLVED_TAIL: Promise<unknown> = Promise.resolve();
+
 function toSafeResult(promise: Promise<BatchResult>): Promise<BatchResult> {
-  // run()が例外を投げた場合（ネットワーク切断等の予期しない失敗）も
-  // 永久にsyncingのまま止まらないよう、必ずcatchして通常の失敗と
-  // 同じ扱いにする。
   return promise.catch((e) => ({
     error: e instanceof Error ? e.message : "予期しないエラーが発生しました。",
   }));
@@ -87,45 +88,6 @@ function distanceIdOf(input: EnqueueShotInput): string | undefined {
   return input.upsert?.distanceId ?? input.clear?.distanceId;
 }
 
-// 送信待ちの操作を2つの方式で扱う。
-//
-// 1. enqueue（ラウンド設定・距離の追加/更新/削除）: そのラウンド全体で
-//    共有する1本の直列tailに乗せる。ラウンド設定の更新も、そのラウンドに
-//    属する全distanceの作成・更新・削除も、keyに関わらず投入順を守って
-//    直列に実行される。これはサーバー側のcreate_round/update_round/
-//    create_distance/update_distanceが、いずれも対象roundの行をfor update
-//    でロックしてから処理する、という直列化粒度に合わせたもの。
-//    同じkeyへの新しい操作が積まれても、古い操作の待機（リトライ待機等）を
-//    打ち切ることは無い（打ち切ると、例えばまだリトライ中のdistance作成を
-//    直後の同じkeyへの更新が追い越して先に完了してしまい、サーバー上は
-//    まだ存在しない距離への更新として失敗する、といった不整合を招くため。
-//    event_id起点の冪等性とサーバー側のrevision採番があるため、全操作を
-//    打ち切らず順番通り送っても結果の正しさは保たれる）。
-//    距離の設定（的・エンド数・矢数等）を変更する更新は、送信を始める前に
-//    同じ距離の未送信・進行中のショットバッチ（後述のenqueueShot）が
-//    片付くのを待つ。ショットが残っている距離は構成を変更できないという
-//    サーバー側の制約に、送信順序を合わせるため。
-//
-// 2. enqueueShot（スコアの記録・取り消し）: 高頻度に連打されるため、
-//    個別送信では通信本数分の往復（Next.jsのServer Actionは並列に投げても
-//    サーバー側で直列にしか処理されない）で同期完了までの体感速度が悪化する。
-//    そのため、送信中でない時にちょうど溜まっている分をまとめて1回の
-//    リクエストに含めて送る（同じマスへの連続上書きは最後の値だけを送る）。
-//    送信中に新たに積まれた分は、今の送信が終わり次第すぐ次のまとまりとして
-//    送る。このバッチ・直列化は距離単位（distanceId）で独立している
-//    （サーバー側のrecord_shots/clear_shotsが対象distanceの行だけをfor
-//    updateでロックし、round行はロックしない、という粒度に合わせたもの）。
-//    距離自身の設定変更（1.のenqueue）は、この距離単位のtail
-//    （shotTailByDistanceRef）が空になるのを待つことで、「その距離の
-//    未送信ショットが片付くまで待つ」を実現している。距離ごとの
-//    バッチ・tailを素直に共有しているだけなので、1.のround単位のtailと
-//    同じ「投入順を守って直列に実行する」という単純な仕組みの繰り返しであり、
-//    個別の待ち合わせ・通知ロジックを別途持たない。
-//
-// どちらもdependsOnKeyで、新規distance作成のように他の操作から参照されうる
-// 操作の完了を必要な範囲だけ待たせられる。
-// どちらも失敗時はRETRY_DELAYS_MSに従って自動リトライし、使い切ってから
-// 初めてエラーとして表示する。
 function isPermanentFailure(result: BatchResult): boolean {
   return result?.permanent === true;
 }
@@ -141,33 +103,32 @@ export function useSyncQueue(
     new Set(),
   );
   const [retryingKeys, setRetryingKeys] = useState<Set<string>>(new Set());
-  // 距離ごとに独立してリトライ待機し得るため、単一のbooleanではなく
-  // 「今リトライ待機中の距離id」の集合で持つ（他の距離のリトライ完了で
-  // 誤って解除されないように）。
+  // 距離ごとに独立してリトライ待機し得るため集合で持つ。
   const [shotRetryingDistances, setShotRetryingDistances] = useState<
     Set<string>
   >(new Set());
-  // ラウンド設定・distance操作（enqueue経由）が全て乗る、ラウンド単位で
-  // 共有する1本の直列tail。useSyncQueue自体がラウンドごとに1つ生成される
-  // ため、ここでroundIdごとにMap管理する必要はない。
-  const roundTailRef = useRef<Promise<unknown>>(Promise.resolve());
-  // key単位のtail（現状はdependsOnKey解決専用）。enqueueShotがdistance:{id}
-  // の完了を待つ際に参照する。
+  const [offlinePendingKeys, setOfflinePendingKeys] = useState<Set<string>>(
+    new Set(),
+  );
+  const [shotOfflinePendingDistances, setShotOfflinePendingDistances] =
+    useState<Set<string>>(new Set());
+  const roundTailRef = useRef<Promise<unknown>>(RESOLVED_TAIL);
   const tailsRef = useRef<Map<string, Promise<unknown>>>(new Map());
-  // 距離ごとに独立したショットの未送信バッチ・送信中フラグ・直列tail。
-  // distanceIdをキーとするMapで、距離間は完全に独立して並行動作する
+  // 距離ごとに独立したショットの未送信バッチ・送信中フラグ・直列tail
   // （サーバーが距離ごとの行ロックしか取らないのと同じ粒度）。
   const shotBatchByDistanceRef = useRef<
     Map<string, Map<string, EnqueueShotInput>>
   >(new Map());
   const shotFlightByDistanceRef = useRef<Set<string>>(new Set());
-  // 距離ごとの「その距離のショットが全部片付くまで待つ」ためのtail。
-  // 新しいショットがenqueueされてバッチ・送信・リトライ・後続の再帰flushが
-  // 続く限り、このPromiseは解決を待ち続ける（roundTailRef/tailsRefと
-  // 全く同じ、投入順に.then()で連結していくだけの単純な仕組み）。距離の
-  // 設定変更はenqueue時点でこれを読むだけでよく、個別の待ち合わせ・通知
-  // ロジックを別途持つ必要がない。
   const shotTailByDistanceRef = useRef<Map<string, Promise<void>>>(new Map());
+  // `offline`/`online`イベントで即座にキャンセル・再開できるよう、
+  // 進行中のリトライタイマーと再開処理をkey/distanceIdごとに保持する。
+  const retryTimersRef = useRef<Map<string, { cancel: () => void }>>(new Map());
+  const shotRetryTimersRef = useRef<Map<string, { cancel: () => void }>>(
+    new Map(),
+  );
+  const offlineResumeRef = useRef<Map<string, () => void>>(new Map());
+  const shotOfflineResumeRef = useRef<Map<string, () => void>>(new Map());
   const restoredRef = useRef(false);
   const persistenceRef = useRef<Set<Promise<void>>>(new Set());
 
@@ -194,10 +155,8 @@ export function useSyncQueue(
 
   const schedule = useCallback(
     (input: EnqueueInput) => {
-      // 新しい楽観値の表示を優先するため、直前の失敗表示だけは上書きする
-      // （実行中・待機中の古い操作自体を打ち切るわけではない。ラウンド・
-      // 距離の操作は同じ共有tailに乗るため、古い操作は打ち切られず
-      // 投入順のまま実行される）。
+      // 新しい楽観値の表示を優先するため、直前の失敗表示だけ上書きする
+      // （古い操作自体は打ち切らず、共有tailの投入順のまま実行される）。
       setErrorMap((prev) => {
         if (!prev.has(input.key)) return prev;
         const copy = new Map(prev);
@@ -206,23 +165,49 @@ export function useSyncQueue(
       });
       setPendingCount((n) => n + 1);
 
+      const hasOwnTail = roundTailRef.current !== RESOLVED_TAIL;
+      const hasDepTail = Boolean(
+        input.dependsOnKey && tailsRef.current.has(input.dependsOnKey),
+      );
+      const shotWaitDistanceId =
+        input.operation?.type === "distance.updated"
+          ? input.operation.distanceId
+          : undefined;
+      const hasShotWaitTail = Boolean(
+        shotWaitDistanceId &&
+          shotTailByDistanceRef.current.has(shotWaitDistanceId),
+      );
+
       const ownTail = roundTailRef.current;
       const depTail = input.dependsOnKey
-        ? (tailsRef.current.get(input.dependsOnKey) ?? Promise.resolve())
-        : Promise.resolve();
-      // 距離の設定変更（distance.updated）は、既に得点が記録されている
-      // 距離の構成列（的・エンド数・矢数）を変更できないというサーバー側の
-      // 制約があるため、送信前にその距離の未送信ショットバッチ（distance単位
-      // のtail）が片付くのを待つ（例: オフライン中の「ショットを全クリア→
-      // 距離の構成変更」の順序を、送信順でも保つ）。
-      const shotWaitTail =
-        input.operation?.type === "distance.updated"
-          ? (shotTailByDistanceRef.current.get(input.operation.distanceId) ??
-            Promise.resolve())
-          : Promise.resolve();
+        ? (tailsRef.current.get(input.dependsOnKey) ?? RESOLVED_TAIL)
+        : RESOLVED_TAIL;
+      // distance.updatedは、得点が残る距離の構成列を変更できないという
+      // サーバー制約に合わせ、同じ距離の未送信ショットバッチが片付くのを待つ。
+      const shotWaitTail = shotWaitDistanceId
+        ? (shotTailByDistanceRef.current.get(shotWaitDistanceId) ??
+          RESOLVED_TAIL)
+        : RESOLVED_TAIL;
 
-      const attempt = (attemptIndex: number): Promise<void> =>
-        toSafeResult(
+      const attempt = (attemptIndex: number): Promise<void> => {
+        // オフラインなら送らず、online復帰まで待って同じattemptIndexで
+        // 再開する（見送りはリトライ回数を消費しない）。
+        if (isOffline()) {
+          return new Promise<void>((resolve) => {
+            setOfflinePendingKeys((prev) => new Set(prev).add(input.key));
+            offlineResumeRef.current.set(input.key, () => {
+              offlineResumeRef.current.delete(input.key);
+              setOfflinePendingKeys((prev) => {
+                const next = new Set(prev);
+                next.delete(input.key);
+                return next;
+              });
+              attempt(attemptIndex).then(resolve);
+            });
+          });
+        }
+
+        return toSafeResult(
           input.operation
             ? executeSyncOperation(input.operation)
             : (input.run?.() ??
@@ -236,8 +221,9 @@ export function useSyncQueue(
           ) {
             setRetryingKeys((prev) => new Set(prev).add(input.key));
             return new Promise<void>((resolve) => {
-              setTimeout(
+              const timer = setTimeout(
                 () => {
+                  retryTimersRef.current.delete(input.key);
                   setRetryingKeys((prev) => {
                     const next = new Set(prev);
                     next.delete(input.key);
@@ -249,6 +235,27 @@ export function useSyncQueue(
                   Math.min(attemptIndex, RETRY_DELAYS_MS.length - 1)
                 ],
               );
+              retryTimersRef.current.set(input.key, {
+                cancel: () => {
+                  clearTimeout(timer);
+                  retryTimersRef.current.delete(input.key);
+                  setRetryingKeys((prev) => {
+                    const next = new Set(prev);
+                    next.delete(input.key);
+                    return next;
+                  });
+                  setOfflinePendingKeys((prev) => new Set(prev).add(input.key));
+                  offlineResumeRef.current.set(input.key, () => {
+                    offlineResumeRef.current.delete(input.key);
+                    setOfflinePendingKeys((prev) => {
+                      const next = new Set(prev);
+                      next.delete(input.key);
+                      return next;
+                    });
+                    attempt(attemptIndex + 1).then(resolve);
+                  });
+                },
+              });
             });
           }
           settleKeys([input], result);
@@ -266,22 +273,22 @@ export function useSyncQueue(
           }
           setPendingCount((n) => n - 1);
         });
+      };
 
-      const runPromise = Promise.all([ownTail, depTail, shotWaitTail]).then(
-        () => attempt(0),
-      );
+      const runPromise =
+        !hasOwnTail && !hasDepTail && !hasShotWaitTail
+          ? attempt(0)
+          : Promise.all([ownTail, depTail, shotWaitTail]).then(() =>
+              attempt(0),
+            );
       roundTailRef.current = runPromise;
       tailsRef.current.set(input.key, runPromise);
     },
     [settleKeys, onPermanentFailure],
   );
 
-  // 指定した距離の、現在たまっている未送信ショットバッチを送信する。
-  // 距離ごとに完全に独立した直列tail（shotTailByDistanceRef）として動作し、
-  // 戻り値のPromiseは「今回の送信」だけでなく、その最中・その後に新たに
-  // 積まれた分の再帰的な送信も含めて、その距離のショットが完全に片付くまで
-  // 解決しない。distance側はこのtailを読むだけで「その距離のショットが
-  // 片付くまで待つ」を実現できる。
+  // 戻り値のPromiseは、今回の送信中・後に新たに積まれた分の再帰的な送信も
+  // 含め、この距離のショットが完全に片付くまで解決しない。
   const flushShots = useCallback(
     (distanceId: string, runBatch: RunShotBatch): Promise<void> => {
       if (shotFlightByDistanceRef.current.has(distanceId)) {
@@ -300,9 +307,26 @@ export function useSyncQueue(
         pending: EnqueueShotInput[],
         attemptIndex: number,
       ): Promise<void> => {
-        // リトライ実行時点で既に新しい値が積まれているkeyは、古い値を送らず
-        // 除外する（新しい入力が待機中のリトライより優先される。その新しい
-        // 値自体は、現在のバッチ・次の再帰flushで別途送られる）。
+        // schedule()側のattemptと同じオフライン判定。
+        if (isOffline()) {
+          return new Promise<void>((resolve) => {
+            setShotOfflinePendingDistances((prev) =>
+              new Set(prev).add(distanceId),
+            );
+            shotOfflineResumeRef.current.set(distanceId, () => {
+              shotOfflineResumeRef.current.delete(distanceId);
+              setShotOfflinePendingDistances((prev) => {
+                const next = new Set(prev);
+                next.delete(distanceId);
+                return next;
+              });
+              attempt(pending, attemptIndex).then(resolve);
+            });
+          });
+        }
+
+        // リトライ時点で既に新しい値が積まれているkeyは古い値を送らず除外
+        // する（新しい値は現在のバッチ・次の再帰flushで別途送られる）。
         const currentBatch = shotBatchByDistanceRef.current.get(distanceId);
         const itemsToRetry = pending.filter(
           (item) => !currentBatch?.has(item.key),
@@ -324,13 +348,11 @@ export function useSyncQueue(
             (itemsToRetry.some((item) => item.operation) ||
               attemptIndex < RETRY_DELAYS_MS.length)
           ) {
-            // このタイマー自体は誰にも参照されない。同じマスへの新しい入力に
-            // よるキャンセルは、発火時にitemsToRetryをshotBatchByDistanceRef
-            // と照合するfilterで行う（バッチ全体を打ち切る必要は無いため）。
             setShotRetryingDistances((prev) => new Set(prev).add(distanceId));
             return new Promise<void>((resolve) => {
-              setTimeout(
+              const timer = setTimeout(
                 () => {
+                  shotRetryTimersRef.current.delete(distanceId);
                   setShotRetryingDistances((prev) => {
                     const next = new Set(prev);
                     next.delete(distanceId);
@@ -342,6 +364,29 @@ export function useSyncQueue(
                   Math.min(attemptIndex, RETRY_DELAYS_MS.length - 1)
                 ],
               );
+              shotRetryTimersRef.current.set(distanceId, {
+                cancel: () => {
+                  clearTimeout(timer);
+                  shotRetryTimersRef.current.delete(distanceId);
+                  setShotRetryingDistances((prev) => {
+                    const next = new Set(prev);
+                    next.delete(distanceId);
+                    return next;
+                  });
+                  setShotOfflinePendingDistances((prev) =>
+                    new Set(prev).add(distanceId),
+                  );
+                  shotOfflineResumeRef.current.set(distanceId, () => {
+                    shotOfflineResumeRef.current.delete(distanceId);
+                    setShotOfflinePendingDistances((prev) => {
+                      const next = new Set(prev);
+                      next.delete(distanceId);
+                      return next;
+                    });
+                    attempt(itemsToRetry, attemptIndex + 1).then(resolve);
+                  });
+                },
+              });
             });
           }
           settleKeys(itemsToRetry, result);
@@ -368,9 +413,6 @@ export function useSyncQueue(
 
       const resultPromise = attempt(items, 0).then(() => {
         shotFlightByDistanceRef.current.delete(distanceId);
-        // 送信中・リトライ待機中に新しく積まれた分があれば、続けて送る
-        // （このthenチェーンに連結されるため、tailは全体が片付くまで
-        // 解決しない）。
         return flushShots(distanceId, runBatch);
       });
       shotTailByDistanceRef.current.set(distanceId, resultPromise);
@@ -389,28 +431,30 @@ export function useSyncQueue(
       });
       setShotPendingKeys((prev) => new Set(prev).add(input.key));
 
-      const depTail = input.dependsOnKey
-        ? (tailsRef.current.get(input.dependsOnKey) ?? Promise.resolve())
-        : Promise.resolve();
-
-      depTail.then(() => {
+      const proceed = () => {
         const distanceId = distanceIdOf(input);
         if (!distanceId) return;
         const batch =
           shotBatchByDistanceRef.current.get(distanceId) ??
           new Map<string, EnqueueShotInput>();
-        // 同じマスへの連続上書きは、送信済みでなければ最後の値だけが残る。
+        // 同じマスへの未送信の古い値は不要なため、永続outboxからも
+        // 取り除く（再読み込み後に古い入力が再生されないように）。
         const previous = batch.get(input.key);
         if (previous?.operation) {
-          // 同じマスへの未送信の古い値は最終状態に不要なため、永続outbox
-          // からも取り除く。これにより再読み込み後に古い入力が再生
-          // されない。
           void removePendingOperation(eventIdOf(previous.operation));
         }
         batch.set(input.key, input);
         shotBatchByDistanceRef.current.set(distanceId, batch);
         flushShots(distanceId, runBatch);
-      });
+      };
+
+      // dependsOnKey先に何も走っていなければ、1ティックの遅延を挟まず
+      // 同期的にバッチへ積む（schedule()側と同種の理由）。
+      if (input.dependsOnKey && tailsRef.current.has(input.dependsOnKey)) {
+        tailsRef.current.get(input.dependsOnKey)?.then(proceed);
+      } else {
+        proceed();
+      }
     },
     [flushShots],
   );
@@ -464,6 +508,29 @@ export function useSyncQueue(
     },
     [roundId, scheduleShot],
   );
+
+  useEffect(() => {
+    const handleOnline = () => {
+      const resumes = [
+        ...offlineResumeRef.current.values(),
+        ...shotOfflineResumeRef.current.values(),
+      ];
+      for (const resume of resumes) resume();
+    };
+    const handleOffline = () => {
+      const cancels = [
+        ...retryTimersRef.current.values(),
+        ...shotRetryTimersRef.current.values(),
+      ];
+      for (const entry of cancels) entry.cancel();
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     if (!roundId || restoredRef.current) return;
@@ -533,13 +600,15 @@ export function useSyncQueue(
   );
 
   const status: SyncStatus =
-    retryingKeys.size > 0 || shotRetryingDistances.size > 0
-      ? "pending"
-      : persistingCount > 0 || pendingCount > 0 || shotPendingKeys.size > 0
-        ? "syncing"
-        : errorMap.size > 0
-          ? "error"
-          : "synced";
+    offlinePendingKeys.size > 0 || shotOfflinePendingDistances.size > 0
+      ? "offline-pending"
+      : retryingKeys.size > 0 || shotRetryingDistances.size > 0
+        ? "retrying"
+        : persistingCount > 0 || pendingCount > 0 || shotPendingKeys.size > 0
+          ? "sending"
+          : errorMap.size > 0
+            ? "error"
+            : "synced";
 
   return {
     status,

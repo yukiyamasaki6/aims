@@ -111,7 +111,7 @@ describe("useSyncQueue", () => {
         run: () => deferred.promise,
       });
     });
-    expect(result.current.status).toBe("syncing");
+    expect(result.current.status).toBe("sending");
 
     await act(async () => {
       deferred.resolve(undefined);
@@ -393,7 +393,7 @@ describe("useSyncQueue", () => {
           runBatch,
         );
       });
-      expect(result.current.status).toBe("syncing");
+      expect(result.current.status).toBe("sending");
 
       await act(async () => {
         await Promise.resolve();
@@ -819,7 +819,7 @@ describe("useSyncQueue", () => {
       });
 
       expect(run).toHaveBeenCalledTimes(1);
-      expect(result.current.status).toBe("pending");
+      expect(result.current.status).toBe("retrying");
       expect(result.current.errorFor("a")).toBeUndefined();
 
       await act(async () => {
@@ -844,7 +844,7 @@ describe("useSyncQueue", () => {
       expect(run).toHaveBeenCalledTimes(1);
 
       for (const delay of [3000, 6000, 12000, 24000]) {
-        expect(result.current.status).toBe("pending");
+        expect(result.current.status).toBe("retrying");
         await act(async () => {
           await vi.advanceTimersByTimeAsync(delay);
         });
@@ -874,7 +874,7 @@ describe("useSyncQueue", () => {
         await Promise.resolve();
       });
       expect(firstRun).toHaveBeenCalledTimes(1);
-      expect(result.current.status).toBe("pending");
+      expect(result.current.status).toBe("retrying");
 
       act(() => {
         result.current.enqueue({ key: "a", label: "A", run: secondRun });
@@ -953,7 +953,7 @@ describe("useSyncQueue", () => {
         await Promise.resolve();
       });
       expect(runBatch).toHaveBeenCalledTimes(1);
-      expect(result.current.status).toBe("pending");
+      expect(result.current.status).toBe("retrying");
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(3000);
@@ -1164,7 +1164,7 @@ describe("useSyncQueue", () => {
           await Promise.resolve();
         });
         expect(createRun).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("pending"); // リトライ待機中
+        expect(result.current.status).toBe("retrying"); // リトライ待機中
 
         act(() => {
           result.current.enqueue({
@@ -1224,7 +1224,7 @@ describe("useSyncQueue", () => {
           await Promise.resolve();
         });
         expect(firstUpdate).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("pending");
+        expect(result.current.status).toBe("retrying");
 
         act(() => {
           result.current.enqueue({
@@ -1670,6 +1670,246 @@ describe("useSyncQueue", () => {
           .mock.calls.filter(([eventId]) => eventId === "shot-evt-2"),
       ).toHaveLength(1);
       expect(removePendingOperation).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  // navigator.onLineを送信直前（初回・リトライとも）に同期的に参照し、
+  // window の online/offline イベントを監視する。
+  //   同期済み + オンライン + キューに追加 → 送信中
+  //   同期済み + オフライン + キューに追加 → 送信中を経由せず同期保留中
+  //   送信中 + 失敗（リトライ残） → リトライ待機
+  //   リトライ待機 + バックオフ経過 → 送信中（再試行）
+  //   リトライ待機 + 'offline'検知 → 同期保留中（待機タイマーを打ち切る）
+  //   同期保留中 + 'online'検知 → 送信中（保留中の操作を自動再送する）
+  describe("offline detection (rounds-id-sync-status)", () => {
+    function setOnline(online: boolean) {
+      Object.defineProperty(window.navigator, "onLine", {
+        configurable: true,
+        value: online,
+      });
+    }
+
+    beforeEach(() => {
+      setOnline(true);
+    });
+    afterEach(() => {
+      setOnline(true);
+    });
+
+    it("queues without sending and shows offline-pending when enqueued while offline", async () => {
+      setOnline(false);
+      const { result } = renderHook(() => useSyncQueue());
+      const run = vi.fn(() => Promise.resolve(undefined as Result));
+
+      act(() => {
+        result.current.enqueue({ key: "a", label: "A", run });
+      });
+
+      // 送信中を経由せず、いきなり同期保留中になる。実際のリクエストも
+      // 送らない（試行前チェックにより、初回試行でも1ティックの遅延なく
+      // 同期的に判定される）。
+      expect(result.current.status).toBe("offline-pending");
+      expect(run).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(run).not.toHaveBeenCalled();
+      expect(result.current.status).toBe("offline-pending");
+    });
+
+    it("resends automatically on the 'online' event, without a page revisit", async () => {
+      setOnline(false);
+      const { result } = renderHook(() => useSyncQueue());
+      const runA = vi.fn(() => Promise.resolve(undefined as Result));
+      const runB = vi.fn(() => Promise.resolve(undefined as Result));
+
+      act(() => {
+        result.current.enqueue({ key: "a", label: "A", run: runA });
+        result.current.enqueue({ key: "b", label: "B", run: runB });
+      });
+      expect(result.current.status).toBe("offline-pending");
+      expect(runA).not.toHaveBeenCalled();
+      expect(runB).not.toHaveBeenCalled();
+
+      setOnline(true);
+      act(() => {
+        window.dispatchEvent(new Event("online"));
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(runA).toHaveBeenCalledTimes(1);
+      expect(runB).toHaveBeenCalledTimes(1);
+      expect(result.current.status).toBe("synced");
+    });
+
+    it("shows sending while online and failing, not offline-pending, during backoff wait", async () => {
+      vi.useFakeTimers();
+      try {
+        const { result } = renderHook(() => useSyncQueue());
+        const run = vi
+          .fn()
+          .mockResolvedValueOnce({ error: "network flaky" })
+          .mockResolvedValueOnce(undefined as Result);
+
+        act(() => {
+          result.current.enqueue({ key: "a", label: "A", run });
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+        expect(run).toHaveBeenCalledTimes(1);
+
+        // オンラインのままの失敗によるバックオフ待機中は「送信中」と同じ
+        // 扱いで、「同期保留中」にはならない。
+        expect(result.current.status).toBe("retrying");
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+        });
+        expect(run).toHaveBeenCalledTimes(2);
+        expect(result.current.status).toBe("synced");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("cuts a scheduled retry short and switches to offline-pending on the 'offline' event, then resumes on 'online' without losing the retry", async () => {
+      vi.useFakeTimers();
+      try {
+        const { result } = renderHook(() => useSyncQueue());
+        const run = vi
+          .fn()
+          .mockResolvedValueOnce({ error: "network flaky" })
+          .mockResolvedValueOnce(undefined as Result);
+
+        act(() => {
+          result.current.enqueue({ key: "a", label: "A", run });
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("retrying");
+
+        // バックオフの待機時間が明ける前にオフラインになる。
+        setOnline(false);
+        act(() => {
+          window.dispatchEvent(new Event("offline"));
+        });
+        expect(result.current.status).toBe("offline-pending");
+
+        // 打ち切られたタイマーが後で発火しても、二重に再送しない
+        // （run()は1回のままのはず）。
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+        });
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("offline-pending");
+
+        setOnline(true);
+        act(() => {
+          window.dispatchEvent(new Event("online"));
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        expect(run).toHaveBeenCalledTimes(2);
+        expect(result.current.status).toBe("synced");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("checks navigator.onLine synchronously right before a retry attempt fires, even without an explicit offline event", async () => {
+      vi.useFakeTimers();
+      try {
+        const { result } = renderHook(() => useSyncQueue());
+        const run = vi
+          .fn()
+          .mockResolvedValueOnce({ error: "network flaky" })
+          .mockResolvedValueOnce(undefined as Result);
+
+        act(() => {
+          result.current.enqueue({ key: "a", label: "A", run });
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+        expect(run).toHaveBeenCalledTimes(1);
+
+        // 'offline'イベントは発火せず、navigator.onLineだけがfalseになる
+        // ケースでも、次に送信しようとする直前のnavigator.onLine参照で
+        // 捉えられる。
+        setOnline(false);
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+        });
+        // 試行前チェックに引っかかって実際には送信されず、同期保留中になる。
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("offline-pending");
+
+        setOnline(true);
+        act(() => {
+          window.dispatchEvent(new Event("online"));
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+        expect(run).toHaveBeenCalledTimes(2);
+        expect(result.current.status).toBe("synced");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("queues shots without sending and resends automatically on 'online', independent of the round/distance tail", async () => {
+      setOnline(false);
+      const { result } = renderHook(() => useSyncQueue());
+      const runBatch = vi.fn(() => Promise.resolve(undefined as Result));
+
+      act(() => {
+        result.current.enqueueShot(
+          {
+            key: "shot:d1:1:1",
+            label: "A",
+            upsert: {
+              shotEventId: "e1",
+              distanceId: "d1",
+              endNumber: 1,
+              arrowNumber: 1,
+              scoreStr: "X",
+              scoreInt: 10,
+            },
+          },
+          runBatch,
+        );
+      });
+      expect(result.current.status).toBe("offline-pending");
+      expect(runBatch).not.toHaveBeenCalled();
+
+      setOnline(true);
+      act(() => {
+        window.dispatchEvent(new Event("online"));
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(runBatch).toHaveBeenCalledTimes(1);
+      expect(result.current.status).toBe("synced");
     });
   });
 });
