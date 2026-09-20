@@ -1194,22 +1194,26 @@ export function ScorecardClient({
                 "flex items-center justify-self-center gap-1 text-xs",
                 sync.status === "error" &&
                   "font-medium text-destructive underline underline-offset-2",
-                sync.status === "syncing" && "text-muted-foreground",
-                sync.status === "pending" &&
+                (sync.status === "sending" || sync.status === "retrying") &&
+                  "text-muted-foreground",
+                sync.status === "offline-pending" &&
                   "text-amber-600 dark:text-amber-500",
                 sync.status === "synced" &&
                   "text-emerald-600 dark:text-emerald-500",
               )}
             >
-              {sync.status === "syncing" && (
+              {(sync.status === "sending" || sync.status === "retrying") && (
                 <Loader2 className="size-3.5 animate-spin" />
               )}
               {sync.status === "error" && <AlertCircle className="size-3.5" />}
-              {sync.status === "pending" && <WifiOff className="size-3.5" />}
+              {sync.status === "offline-pending" && (
+                <WifiOff className="size-3.5" />
+              )}
               {sync.status === "synced" && <Check className="size-3.5" />}
-              {sync.status === "syncing" && "同期中…"}
+              {(sync.status === "sending" || sync.status === "retrying") &&
+                "同期中…"}
               {sync.status === "error" && "同期失敗"}
-              {sync.status === "pending" && "同期保留中"}
+              {sync.status === "offline-pending" && "同期保留中"}
               {sync.status === "synced" && "同期済み"}
             </button>
             <div className="flex items-center justify-end gap-2">

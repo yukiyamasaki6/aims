@@ -42,11 +42,13 @@ test("送信中の操作があると「同期中…」と表示する", async ({
   releaseRequest();
 });
 
-test("送信のリトライ待機中があると「同期保留中」と表示する", async ({
+test("送信のリトライ待機中があっても「同期中…」の表示のまま（同期保留中にはならない）", async ({
   page,
 }) => {
   // 初回リクエストだけ失敗させ、指数バックオフのリトライ待機に入らせる
   // （AUTH_REQUIRED_MESSAGEと一致しないエラーのため通常のリトライ対象になる）。
+  // オンラインのままの失敗によるリトライ待機は「送信中」と同じ表示で、
+  // 「同期保留中」はオフラインそのものを意味する別の状態。
   let attempt = 0;
   await page.route("**/rest/v1/rpc/update_round", async (route) => {
     attempt++;
@@ -58,10 +60,29 @@ test("送信のリトライ待機中があると「同期保留中」と表示�
   });
 
   await page.getByTestId("round-config-summary").click();
-  await page.getByTestId("round-config-name").fill("同期保留中テスト");
+  await page.getByTestId("round-config-name").fill("リトライ待機テスト");
+  await page.getByTestId("round-config-save").click();
+
+  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
+});
+
+test("オフライン中にキューへ追加すると送信されず「同期保留中」と表示し、オンライン復帰で自動的に再送する", async ({
+  page,
+}) => {
+  await page.context().setOffline(true);
+
+  await page.getByTestId("round-config-summary").click();
+  await page.getByTestId("round-config-name").fill("オフラインテスト");
   await page.getByTestId("round-config-save").click();
 
   await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
+
+  await page.context().setOffline(false);
+  // ページの再読み込み・再訪問は行わない（オンライン復帰イベントのみで
+  // 自動的に再送されることを確認する）。
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+
+  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
 });
 
 test("送信した操作の反映が完了すると「同期済み」と表示する", async ({
