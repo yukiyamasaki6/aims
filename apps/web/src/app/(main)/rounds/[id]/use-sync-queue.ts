@@ -147,10 +147,23 @@ export function useSyncQueue(
   // 判定・実現するには、setState経由では読めない最新値を同期的に参照できる
   // 必要があるため、更新のたびにこちらにも反映する。
   const shotPendingKeysRef = useRef<Set<string>>(new Set());
-  // 距離IDごとに、その距離のショットバッチが片付くのを待っているresolve群。
-  const shotDistanceWaitersRef = useRef<Map<string, Array<() => void>>>(
-    new Map(),
-  );
+  // キーごとに「今そのマスに紐づいている最新のショット入力」を保持する。
+  // 送信中に同じキーへ新しい値（例: 記録→クリア）が積まれた場合、送信中
+  // だった古い値が完了しても、それはもう「そのキーの最新の状態」ではない
+  // ため、pending解除・waiter通知の対象にしない（P2: 順序違反防止）。
+  const latestShotInputRef = useRef<Map<string, EnqueueShotInput>>(new Map());
+  // distanceIdごとに、その距離のショットの決着を待っているwaiter群。各
+  // waiterは「enqueue時点でその距離に紐づいていた未決着キーの集合」を
+  // 自分専用にスナップショットとして持ち、それらが1件ずつ決着するたびに
+  // 減っていく。enqueue後に新たに積まれたショット（例: 別マスへの新しい
+  // 記録）はこの集合に含まれないため、待つ対象が後から増えることはない
+  // （P1: 循環待機によるデッドロック防止。distance更新はenqueue時点で
+  // 既に存在したショットの決着だけを待ち、後から来たショット自身は
+  // dependsOnKeyでそのdistance更新の完了を待つ設計のため、含めてしまうと
+  // 互いを待ち合う循環になる）。
+  const shotDistanceWaitersRef = useRef<
+    Map<string, { keys: Set<string>; resolve: () => void }[]>
+  >(new Map());
   const restoredRef = useRef(false);
   const persistenceRef = useRef<Set<Promise<void>>>(new Set());
 
@@ -175,29 +188,46 @@ export function useSyncQueue(
     [],
   );
 
-  // 指定した距離宛のショットが1件もshotPendingKeysに残っていなければ、
-  // その距離を待っているwaiterを解決する。
-  const resolveShotDistanceWaiters = useCallback((distanceId: string) => {
-    const stillPending = Array.from(shotPendingKeysRef.current).some((key) =>
-      shotKeyBelongsToDistance(key, distanceId),
-    );
-    if (stillPending) return;
-    const waiters = shotDistanceWaitersRef.current.get(distanceId);
-    if (!waiters || waiters.length === 0) return;
-    shotDistanceWaitersRef.current.delete(distanceId);
-    for (const resolve of waiters) resolve();
-  }, []);
+  // 指定したキー（1マス）が実際に決着したことを、そのキーを待っている
+  // waiterに通知する。各waiterは自分のスナップショットからこのキーを
+  // 取り除き、空になったwaiterだけを解決する。
+  const notifyShotKeySettled = useCallback(
+    (distanceId: string, key: string) => {
+      const waiters = shotDistanceWaitersRef.current.get(distanceId);
+      if (!waiters || waiters.length === 0) return;
+      const remaining: typeof waiters = [];
+      for (const waiter of waiters) {
+        waiter.keys.delete(key);
+        if (waiter.keys.size === 0) {
+          waiter.resolve();
+        } else {
+          remaining.push(waiter);
+        }
+      }
+      if (remaining.length > 0) {
+        shotDistanceWaitersRef.current.set(distanceId, remaining);
+      } else {
+        shotDistanceWaitersRef.current.delete(distanceId);
+      }
+    },
+    [],
+  );
 
   // 指定した距離に紐づく、未送信・進行中のショットバッチが片付くまで待つ。
-  // 何も残っていなければ待ち時間なしで即座に解決する。
+  // 呼び出し時点でその距離に紐づいていたキーだけをスナップショットとして
+  // 待つ（呼び出し後に新規追加されたキーは待たない。理由は
+  // shotDistanceWaitersRefのコメントを参照）。何も残っていなければ
+  // 待ち時間なしで即座に解決する。
   const waitForShotBatch = useCallback((distanceId: string): Promise<void> => {
-    const hasPending = Array.from(shotPendingKeysRef.current).some((key) =>
-      shotKeyBelongsToDistance(key, distanceId),
+    const keys = new Set(
+      Array.from(shotPendingKeysRef.current).filter((key) =>
+        shotKeyBelongsToDistance(key, distanceId),
+      ),
     );
-    if (!hasPending) return Promise.resolve();
+    if (keys.size === 0) return Promise.resolve();
     return new Promise<void>((resolve) => {
       const waiters = shotDistanceWaitersRef.current.get(distanceId) ?? [];
-      waiters.push(resolve);
+      waiters.push({ keys, resolve });
       shotDistanceWaitersRef.current.set(distanceId, waiters);
     });
   }, []);
@@ -355,20 +385,34 @@ export function useSyncQueue(
             onPermanentFailure?.();
           }
           // setStateのupdaterコールバックの実行タイミングに依存すると、直後の
-          // resolveShotDistanceWaitersがshotPendingKeysRef.current
-          // をまだ古い値のまま読んでしまう可能性がある（Reactはupdaterの
-          // 同期実行を保証しない）。そのため次の値を先に同期的に計算し、
-          // refへの反映とsetStateへの反映を両方ここで済ませてから
-          // waiterを起こす。
+          // notifyShotKeySettledがshotPendingKeysRef.currentをまだ古い値の
+          // まま読んでしまう可能性がある（Reactはupdaterの同期実行を保証
+          // しない）。そのため次の値を先に同期的に計算し、refへの反映と
+          // setStateへの反映を両方ここで済ませてからwaiterを起こす。
           const nextShotPendingKeys = new Set(shotPendingKeysRef.current);
-          for (const item of itemsToRetry) nextShotPendingKeys.delete(item.key);
-          shotPendingKeysRef.current = nextShotPendingKeys;
-          setShotPendingKeys(nextShotPendingKeys);
-          // このバッチで片付いた距離を待っているdistance更新があれば起こす。
+          const settledDistanceKeys: { distanceId: string; key: string }[] = [];
           for (const item of itemsToRetry) {
+            // 送信中（今回のtoSafeResult(runBatch(...))待ち）に、同じキーへ
+            // さらに新しい値（例: 記録が送信中の間にクリアがenqueueされる）
+            // が積まれていた場合、今回決着したのは「そのキーの当時の値」で
+            // あって「そのキーの最新の値」ではない。最新の値はまだ一度も
+            // 送信されていないので、ここでpendingを解除してはいけない
+            // （解除すると、まだ送っていないクリアより先に距離更新が
+            // 送信されてしまう順序違反＝P2バグになる）。
+            if (latestShotInputRef.current.get(item.key) !== item) continue;
+            nextShotPendingKeys.delete(item.key);
+            latestShotInputRef.current.delete(item.key);
             const distanceId =
               item.upsert?.distanceId ?? item.clear?.distanceId;
-            if (distanceId) resolveShotDistanceWaiters(distanceId);
+            if (distanceId)
+              settledDistanceKeys.push({ distanceId, key: item.key });
+          }
+          shotPendingKeysRef.current = nextShotPendingKeys;
+          setShotPendingKeys(nextShotPendingKeys);
+          // このバッチで実際に決着した（＝最新の値だった）キーについて、
+          // それを待っているdistance更新があれば起こす。
+          for (const { distanceId, key } of settledDistanceKeys) {
+            notifyShotKeySettled(distanceId, key);
           }
           finishFlight();
         });
@@ -376,7 +420,7 @@ export function useSyncQueue(
 
       attempt(items, 0);
     },
-    [settleKeys, onPermanentFailure, resolveShotDistanceWaiters],
+    [settleKeys, onPermanentFailure, notifyShotKeySettled],
   );
 
   const scheduleShot = useCallback(
@@ -387,6 +431,10 @@ export function useSyncQueue(
         copy.delete(input.key);
         return copy;
       });
+      // このキーの「今のところ最新」の入力として記録する。送信中に
+      // これより新しい入力が来ればここが上書きされ、送信中だった古い方は
+      // 決着してもpendingを解除しない（latestShotInputRefのコメント参照）。
+      latestShotInputRef.current.set(input.key, input);
       // shotPendingKeysRefを常にsetState呼び出しと同期して更新する
       // （flushShots側の完了処理と同じ理由。updaterコールバックの実行
       // タイミングに依存しない）。
