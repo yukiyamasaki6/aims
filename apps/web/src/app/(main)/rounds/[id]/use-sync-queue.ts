@@ -141,7 +141,12 @@ export function useSyncQueue(
     new Set(),
   );
   const [retryingKeys, setRetryingKeys] = useState<Set<string>>(new Set());
-  const [shotRetrying, setShotRetrying] = useState(false);
+  // 距離ごとに独立してリトライ待機し得るため、単一のbooleanではなく
+  // 「今リトライ待機中の距離id」の集合で持つ（他の距離のリトライ完了で
+  // 誤って解除されないように）。
+  const [shotRetryingDistances, setShotRetryingDistances] = useState<
+    Set<string>
+  >(new Set());
   // ラウンド設定・distance操作（enqueue経由）が全て乗る、ラウンド単位で
   // 共有する1本の直列tail。useSyncQueue自体がラウンドごとに1つ生成される
   // ため、ここでroundIdごとにMap管理する必要はない。
@@ -322,11 +327,15 @@ export function useSyncQueue(
             // このタイマー自体は誰にも参照されない。同じマスへの新しい入力に
             // よるキャンセルは、発火時にitemsToRetryをshotBatchByDistanceRef
             // と照合するfilterで行う（バッチ全体を打ち切る必要は無いため）。
-            setShotRetrying(true);
+            setShotRetryingDistances((prev) => new Set(prev).add(distanceId));
             return new Promise<void>((resolve) => {
               setTimeout(
                 () => {
-                  setShotRetrying(false);
+                  setShotRetryingDistances((prev) => {
+                    const next = new Set(prev);
+                    next.delete(distanceId);
+                    return next;
+                  });
                   attempt(itemsToRetry, attemptIndex + 1).then(resolve);
                 },
                 RETRY_DELAYS_MS[
@@ -524,7 +533,7 @@ export function useSyncQueue(
   );
 
   const status: SyncStatus =
-    retryingKeys.size > 0 || shotRetrying
+    retryingKeys.size > 0 || shotRetryingDistances.size > 0
       ? "pending"
       : persistingCount > 0 || pendingCount > 0 || shotPendingKeys.size > 0
         ? "syncing"
