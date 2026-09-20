@@ -14,7 +14,20 @@ vi.mock("./sync-outbox", () => ({
   removePendingOperation: vi.fn(() => Promise.resolve()),
   loadPendingOperations: vi.fn(() => Promise.resolve([])),
 }));
+// enqueue()のattempt()は`input.operation`が指定されていると`input.run`を
+// 無視して常に本物の`executeSyncOperation`（実際のSupabase RPC呼び出し）を
+// 呼ぶ実装になっている。`operation`を使うテストではrunではなくこちらの
+// 呼び出しを検証する必要があるためモックする。`eventIdOf`はeventIdをその
+// まま返すだけの純粋関数なので実物を使う。
+vi.mock("./sync-events", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./sync-events")>();
+  return {
+    ...actual,
+    executeSyncOperation: vi.fn(),
+  };
+});
 
+import { executeSyncOperation } from "./sync-events";
 import { removePendingOperation, savePendingOperation } from "./sync-outbox";
 import type { ShotUpsert } from "./use-sync-queue";
 import {
@@ -31,6 +44,16 @@ function createDeferred<T>() {
     resolve = res;
   });
   return { promise, resolve };
+}
+
+// 距離の設定変更待ち（waitForShotBatch）は、ショットバッチの解決から
+// 実際にexecuteSyncOperationが呼ばれるまでの間に、複数の手動Promiseの
+// 連鎖（waiterのresolve → Promise.all → attempt(0)）を挟むため、
+// 固定回数のawait Promise.resolve()では足りないことがある。実タイマーの
+// マクロタスク境界まで進めれば、その時点までのマイクロタスクは確実に
+// すべて処理される。
+async function flushMicrotasks() {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
 // 失敗が最終的なエラーとして確定するまで、自動リトライの全バックオフを
@@ -97,7 +120,12 @@ describe("useSyncQueue", () => {
     expect(result.current.status).toBe("synced");
   });
 
-  it("runs operations with different keys concurrently, without waiting for each other", async () => {
+  it("serializes enqueue() operations across different keys onto the round-wide shared tail, instead of running them concurrently", async () => {
+    // enqueue()（ラウンド設定・distanceの追加/更新/削除）は、実際の本番
+    // 利用がroundConfig/distance:{id}の2種類のkeyに限られるため、key単位で
+    // 独立させる複雑さを避け、roundごとに1本の共有直列tail
+    // （roundTailRef）に統一されている。これによりkeyが違っても投入順に
+    // 直列実行される。
     const { result } = renderHook(() => useSyncQueue());
     const first = createDeferred<Result>();
     const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
@@ -112,15 +140,19 @@ describe("useSyncQueue", () => {
     });
     await act(async () => {
       await Promise.resolve();
+      await Promise.resolve();
     });
 
-    // 別のkeyの操作は、先に積まれたものの解決を待たずに即座に実行される。
-    expect(secondRun).toHaveBeenCalledTimes(1);
+    // 別のkeyの操作でも、共有tailにより先に積まれたものの解決を待つ。
+    expect(secondRun).not.toHaveBeenCalled();
 
     await act(async () => {
       first.resolve(undefined);
       await first.promise;
+      await Promise.resolve();
+      await Promise.resolve();
     });
+    expect(secondRun).toHaveBeenCalledTimes(1);
   });
 
   it("runs operations with the same key strictly in enqueue order, never overlapping", async () => {
@@ -823,9 +855,15 @@ describe("useSyncQueue", () => {
       expect(result.current.errorFor("a")).toBe("boom");
     });
 
-    it("cancels a scheduled retry when a new attempt is enqueued for the same key", async () => {
+    it("does not cancel a scheduled retry when a new attempt is enqueued for the same key — both eventually send", async () => {
+      // ラウンド・distanceの操作はevent_id起点の冪等性があるため、同じkeyへの
+      // 新しい操作をenqueueしても、古い操作のリトライ待機は打ち切られない。
+      // 両方とも実際に（投入順で）送信される。
       const { result } = renderHook(() => useSyncQueue());
-      const firstRun = vi.fn(() => Promise.resolve({ error: "boom" }));
+      const firstRun = vi
+        .fn()
+        .mockResolvedValueOnce({ error: "boom" })
+        .mockResolvedValueOnce(undefined as Result);
       const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
 
       act(() => {
@@ -835,6 +873,7 @@ describe("useSyncQueue", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
+      expect(firstRun).toHaveBeenCalledTimes(1);
       expect(result.current.status).toBe("pending");
 
       act(() => {
@@ -844,14 +883,22 @@ describe("useSyncQueue", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
+      // firstのリトライ待機がまだ残っているので、secondはまだ走らない。
+      expect(secondRun).not.toHaveBeenCalled();
+
+      // firstのリトライ待機が明けると、打ち切られずに再試行される。
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+      });
+      expect(firstRun).toHaveBeenCalledTimes(2);
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      // firstが完了して初めて、secondが送信される。
       expect(secondRun).toHaveBeenCalledTimes(1);
       expect(result.current.status).toBe("synced");
-
-      // 打ち切られた古いリトライのタイマーが後から発火しても、再試行しない。
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3000);
-      });
-      expect(firstRun).toHaveBeenCalledTimes(1);
     });
 
     it("stops retrying immediately on an auth-required error", async () => {
@@ -1212,6 +1259,7 @@ describe("useSyncQueue", () => {
       try {
         vi.mocked(savePendingOperation).mockClear();
         vi.mocked(removePendingOperation).mockClear();
+        vi.mocked(executeSyncOperation).mockReset();
 
         const { result } = renderHook(() => useSyncQueue("round1"));
 
@@ -1237,18 +1285,28 @@ describe("useSyncQueue", () => {
           targetFaceId: "face2",
           isMarked: false,
         };
-        const createRun = vi
-          .fn()
-          .mockResolvedValueOnce({ error: "network flaky" })
-          .mockResolvedValueOnce(undefined as Result);
-        const updateRun = vi.fn(() => Promise.resolve(undefined as Result));
+        // attempt()は`input.operation`がある場合`input.run`を無視し、常に
+        // 本物の`executeSyncOperation`を呼ぶ実装なので、runではなくこちらを
+        // モックして検証する。createOpは1回目失敗・2回目成功、updateOpは
+        // 常に成功する（eventIdで呼び分ける）。
+        let createAttempts = 0;
+        vi.mocked(executeSyncOperation).mockImplementation((op) => {
+          if (op.eventId === "create-evt") {
+            createAttempts += 1;
+            return Promise.resolve(
+              createAttempts === 1
+                ? { error: "network flaky" }
+                : (undefined as Result),
+            );
+          }
+          return Promise.resolve(undefined as Result);
+        });
 
         act(() => {
           result.current.enqueue({
             key: "distance:d1",
             label: "距離1（作成）",
             operation: createOp,
-            run: createRun,
           });
         });
         await act(async () => {
@@ -1258,14 +1316,14 @@ describe("useSyncQueue", () => {
         expect(savePendingOperation).toHaveBeenCalledWith(
           expect.objectContaining({ eventId: "create-evt" }),
         );
-        expect(createRun).toHaveBeenCalledTimes(1);
+        expect(executeSyncOperation).toHaveBeenCalledWith(createOp);
+        expect(executeSyncOperation).toHaveBeenCalledTimes(1);
 
         act(() => {
           result.current.enqueue({
             key: "distance:d1",
             label: "距離1（更新）",
             operation: updateOp,
-            run: updateRun,
           });
         });
         await act(async () => {
@@ -1281,18 +1339,21 @@ describe("useSyncQueue", () => {
         // 消えてしまうと、リロード時に更新だけが復元され、作成が
         // 永久に失われる（バグ2）。
         expect(removePendingOperation).not.toHaveBeenCalledWith("create-evt");
+        // 更新はまだ送信されていない（作成の完了待ち）。
+        expect(executeSyncOperation).not.toHaveBeenCalledWith(updateOp);
+        expect(executeSyncOperation).toHaveBeenCalledTimes(1);
 
+        // リトライ待機が明けると、作成が打ち切られずに再試行されて成功し、
+        // 続けて共有tailが解放された更新も送信される
+        // （advanceTimersByTimeAsyncは両方の完了まで一度に進む）。
         await act(async () => {
           await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
         });
+        expect(executeSyncOperation).toHaveBeenCalledWith(createOp);
+        expect(executeSyncOperation).toHaveBeenCalledWith(updateOp);
+        expect(executeSyncOperation).toHaveBeenCalledTimes(3); // 作成2回（失敗+成功）＋更新1回
         // 作成が実際に送信され成功して初めて、outboxから削除される。
         expect(removePendingOperation).toHaveBeenCalledWith("create-evt");
-
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-        expect(updateRun).toHaveBeenCalledTimes(1);
         expect(removePendingOperation).toHaveBeenCalledWith("update-evt");
       } finally {
         vi.useRealTimers();
@@ -1306,17 +1367,34 @@ describe("useSyncQueue", () => {
   // shot:キューとdistance:キューは独立していて順序保証が無いため、距離の
   // 更新がショットのクリアより先に届くと拒否されてしまう。
   //
-  // 修正方針: 距離の設定変更（的・本数・エンド数のいずれかを変更する更新）
-  // は、送信前にその距離の進行中・未送信のショットバッチが完了するのを
-  // 待つ。ここでは、そのための新しい入力`dependsOnShotsOfDistanceId`
-  // （EnqueueInputへの追加が必要）を想定してテストする。詳細は作業報告を
-  // 参照。
-  describe("distance settings change waits for its own pending shots (bug 3, not yet implemented)", () => {
+  // 修正方針: 距離の設定変更（`operation.type === "distance.updated"`）は、
+  // 送信前にその距離の進行中・未送信のショットバッチが完了するのを待つ。
+  // 呼び出し側が明示的にフラグを指定する必要はなく、`operation`の型だけを
+  // 見て自動的に待つ設計（実装: `waitForShotBatch(operation.distanceId)`）。
+  // そのためテストでも`run`ではなく実際の`operation`を渡し、（`operation`が
+  // あると`run`は無視され常に本物の`executeSyncOperation`が呼ばれる実装の
+  // ため）モックした`executeSyncOperation`の呼び出しを検証する。
+  describe("distance settings change waits for its own pending shots (bug 3)", () => {
+    beforeEach(() => {
+      vi.mocked(executeSyncOperation).mockReset();
+      vi.mocked(executeSyncOperation).mockResolvedValue(undefined as Result);
+    });
+
+    const distanceUpdateOp: SyncOperation = {
+      type: "distance.updated",
+      eventId: "update-evt",
+      distanceId: "d1",
+      distance: 70,
+      totalEnds: 6,
+      arrowsPerEnd: 6,
+      targetFaceId: "face2",
+      isMarked: false,
+    };
+
     it("waits for an in-flight shot batch of the distance to finish before sending a distance settings change", async () => {
       const { result } = renderHook(() => useSyncQueue());
       const shotDone = createDeferred<Result>();
       const runBatch = vi.fn(() => shotDone.promise);
-      const updateRun = vi.fn(() => Promise.resolve(undefined as Result));
 
       act(() => {
         result.current.enqueueShot(
@@ -1346,9 +1424,7 @@ describe("useSyncQueue", () => {
         result.current.enqueue({
           key: "distance:d1",
           label: "距離1",
-          // NOTE: この入力は現状のEnqueueInputにまだ存在しない想定の新フィールド。
-          ...({ dependsOnShotsOfDistanceId: "d1" } as Record<string, unknown>),
-          run: updateRun,
+          operation: distanceUpdateOp,
         });
       });
       await act(async () => {
@@ -1358,16 +1434,16 @@ describe("useSyncQueue", () => {
 
       // ショットのバッチがまだサーバーに届いていないので、距離の設定変更は
       // 送られない（先に送るとサーバーのv_has_shotsチェックに引っかかる）。
-      expect(updateRun).not.toHaveBeenCalled();
+      expect(executeSyncOperation).not.toHaveBeenCalled();
 
       await act(async () => {
         shotDone.resolve(undefined);
         await shotDone.promise;
-        await Promise.resolve();
-        await Promise.resolve();
+        await flushMicrotasks();
       });
 
-      expect(updateRun).toHaveBeenCalledTimes(1);
+      expect(executeSyncOperation).toHaveBeenCalledWith(distanceUpdateOp);
+      expect(executeSyncOperation).toHaveBeenCalledTimes(1);
     });
 
     it("also waits for a still-queued (not yet sent) shot batch of the distance, not only the in-flight one", async () => {
@@ -1378,7 +1454,6 @@ describe("useSyncQueue", () => {
         .fn()
         .mockImplementationOnce(() => firstBatch.promise)
         .mockImplementationOnce(() => secondBatch.promise);
-      const updateRun = vi.fn(() => Promise.resolve(undefined as Result));
 
       act(() => {
         result.current.enqueueShot(
@@ -1424,15 +1499,14 @@ describe("useSyncQueue", () => {
         result.current.enqueue({
           key: "distance:d1",
           label: "距離1",
-          ...({ dependsOnShotsOfDistanceId: "d1" } as Record<string, unknown>),
-          run: updateRun,
+          operation: distanceUpdateOp,
         });
       });
       await act(async () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(updateRun).not.toHaveBeenCalled();
+      expect(executeSyncOperation).not.toHaveBeenCalled();
 
       // 1回目のバッチが解決しても、まだ2回目（積まれていた分）が残っている
       // ので、距離の設定変更はまだ送られない。
@@ -1443,16 +1517,16 @@ describe("useSyncQueue", () => {
         await Promise.resolve();
       });
       expect(runBatch).toHaveBeenCalledTimes(2);
-      expect(updateRun).not.toHaveBeenCalled();
+      expect(executeSyncOperation).not.toHaveBeenCalled();
 
       // 2回目のバッチも解決して、ようやく距離の設定変更が送信される。
       await act(async () => {
         secondBatch.resolve(undefined);
         await secondBatch.promise;
-        await Promise.resolve();
-        await Promise.resolve();
+        await flushMicrotasks();
       });
-      expect(updateRun).toHaveBeenCalledTimes(1);
+      expect(executeSyncOperation).toHaveBeenCalledWith(distanceUpdateOp);
+      expect(executeSyncOperation).toHaveBeenCalledTimes(1);
     });
   });
 
