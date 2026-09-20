@@ -83,12 +83,28 @@ function toSafeResult(promise: Promise<BatchResult>): Promise<BatchResult> {
   }));
 }
 
+function shotKeyBelongsToDistance(shotKey: string, distanceId: string) {
+  return shotKey.startsWith(`shot:${distanceId}:`);
+}
+
 // 送信待ちの操作を2つの方式で扱う。
 //
-// 1. enqueue（ラウンド設定・距離の追加/更新/削除）: keyごとに独立した列。
-//    異なるkeyの操作は互いを待たずに即座に実行され、同じkeyへの操作だけが
-//    投入順を守って直列に実行される。これらは連打されるものではないため、
-//    まとめて送る必要はない。
+// 1. enqueue（ラウンド設定・距離の追加/更新/削除）: そのラウンド全体で
+//    共有する1本の直列tailに乗せる。ラウンド設定の更新も、そのラウンドに
+//    属する全distanceの作成・更新・削除も、keyに関わらず投入順を守って
+//    直列に実行される。これはサーバー側のcreate_round/update_round/
+//    create_distance/update_distanceが、いずれも対象roundの行をfor update
+//    でロックしてから処理する、という直列化粒度に合わせたもの。
+//    同じkeyへの新しい操作が積まれても、古い操作の待機（リトライ待機等）を
+//    打ち切ることは無い（打ち切ると、例えばまだリトライ中のdistance作成を
+//    直後の同じkeyへの更新が追い越して先に完了してしまい、サーバー上は
+//    まだ存在しない距離への更新として失敗する、といった不整合を招くため。
+//    event_id起点の冪等性とサーバー側のrevision採番があるため、全操作を
+//    打ち切らず順番通り送っても結果の正しさは保たれる）。
+//    距離の設定（的・エンド数・矢数等）を変更する更新は、送信を始める前に
+//    同じ距離の未送信・進行中のショットバッチ（後述のenqueueShot）が
+//    片付くのを待つ。ショットが残っている距離は構成を変更できないという
+//    サーバー側の制約に、送信順序を合わせるため。
 //
 // 2. enqueueShot（スコアの記録・取り消し）: 高頻度に連打されるため、
 //    個別送信では通信本数分の往復（Next.jsのServer Actionは並列に投げても
@@ -100,8 +116,7 @@ function toSafeResult(promise: Promise<BatchResult>): Promise<BatchResult> {
 // どちらもdependsOnKeyで、新規distance作成のように他の操作から参照されうる
 // 操作の完了を必要な範囲だけ待たせられる。
 // どちらも失敗時はRETRY_DELAYS_MSに従って自動リトライし、使い切ってから
-// 初めてエラーとして表示する。リトライ待機中に同じ箇所への新しい操作が
-// 積まれた場合は、古い値のリトライより新しい値を優先する。
+// 初めてエラーとして表示する。
 function isPermanentFailure(result: BatchResult): boolean {
   return result?.permanent === true;
 }
@@ -118,16 +133,24 @@ export function useSyncQueue(
   );
   const [retryingKeys, setRetryingKeys] = useState<Set<string>>(new Set());
   const [shotRetrying, setShotRetrying] = useState(false);
+  // ラウンド設定・distance操作（enqueue経由）が全て乗る、ラウンド単位で
+  // 共有する1本の直列tail。useSyncQueue自体がラウンドごとに1つ生成される
+  // ため、ここでroundIdごとにMap管理する必要はない。
+  const roundTailRef = useRef<Promise<unknown>>(Promise.resolve());
+  // key単位のtail（現状はdependsOnKey解決専用）。enqueueShotがdistance:{id}
+  // の完了を待つ際に参照する。
   const tailsRef = useRef<Map<string, Promise<unknown>>>(new Map());
   const shotBatchRef = useRef<Map<string, EnqueueShotInput>>(new Map());
   const shotFlightRef = useRef(false);
-  // タイマーだけでなく、それに紐づくPromiseのresolveも保持する。clearTimeout
-  // だけでは待機中のattempt()が返したPromiseが永遠に解決されないままになり、
-  // 同じkeyへの次のenqueueがtailsRefの古いPromiseを待ち続けて固まってしまう
-  // ため、キャンセル時は必ずresolveも呼ぶ。
-  const retryTimersRef = useRef<
-    Map<string, { timer: ReturnType<typeof setTimeout>; resolve: () => void }>
-  >(new Map());
+  // shotPendingKeys（React state）と同じ内容を同期的に参照するための複製。
+  // 距離の設定変更が「その距離のショットバッチが空になるまで待つ」ことを
+  // 判定・実現するには、setState経由では読めない最新値を同期的に参照できる
+  // 必要があるため、更新のたびにこちらにも反映する。
+  const shotPendingKeysRef = useRef<Set<string>>(new Set());
+  // 距離IDごとに、その距離のショットバッチが片付くのを待っているresolve群。
+  const shotDistanceWaitersRef = useRef<Map<string, Array<() => void>>>(
+    new Map(),
+  );
   const restoredRef = useRef(false);
   const persistenceRef = useRef<Set<Promise<void>>>(new Set());
 
@@ -152,31 +175,39 @@ export function useSyncQueue(
     [],
   );
 
-  const clearRetryTimer = useCallback((key: string) => {
-    const scheduled = retryTimersRef.current.get(key);
-    if (scheduled) {
-      clearTimeout(scheduled.timer);
-      retryTimersRef.current.delete(key);
-      // 待機中だったattempt()のPromiseを解決し、tailsRefに残る古いPromiseが
-      // 永遠にpendingのまま次のenqueueを塞き止めないようにする。この経路は
-      // attempt()内の最終settle（pendingCountのdecrement）を経由しないため、
-      // ここで代わりに減らす（打ち切られた試行はもう完了しないため）。
-      scheduled.resolve();
-      setPendingCount((n) => n - 1);
-    }
-    setRetryingKeys((prev) => {
-      if (!prev.has(key)) return prev;
-      const next = new Set(prev);
-      next.delete(key);
-      return next;
+  // 指定した距離宛のショットが1件もshotPendingKeysに残っていなければ、
+  // その距離を待っているwaiterを解決する。
+  const resolveShotDistanceWaiters = useCallback((distanceId: string) => {
+    const stillPending = Array.from(shotPendingKeysRef.current).some((key) =>
+      shotKeyBelongsToDistance(key, distanceId),
+    );
+    if (stillPending) return;
+    const waiters = shotDistanceWaitersRef.current.get(distanceId);
+    if (!waiters || waiters.length === 0) return;
+    shotDistanceWaitersRef.current.delete(distanceId);
+    for (const resolve of waiters) resolve();
+  }, []);
+
+  // 指定した距離に紐づく、未送信・進行中のショットバッチが片付くまで待つ。
+  // 何も残っていなければ待ち時間なしで即座に解決する。
+  const waitForShotBatch = useCallback((distanceId: string): Promise<void> => {
+    const hasPending = Array.from(shotPendingKeysRef.current).some((key) =>
+      shotKeyBelongsToDistance(key, distanceId),
+    );
+    if (!hasPending) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const waiters = shotDistanceWaitersRef.current.get(distanceId) ?? [];
+      waiters.push(resolve);
+      shotDistanceWaitersRef.current.set(distanceId, waiters);
     });
   }, []);
 
   const schedule = useCallback(
     (input: EnqueueInput) => {
-      // 新しい楽観値が古い失敗・待機中のリトライを上書きするため、同じkeyへの
-      // 再送信は直前の失敗表示・予約済みリトライを即座に打ち切る。
-      clearRetryTimer(input.key);
+      // 新しい楽観値の表示を優先するため、直前の失敗表示だけは上書きする
+      // （実行中・待機中の古い操作自体を打ち切るわけではない。ラウンド・
+      // 距離の操作は同じ共有tailに乗るため、古い操作は打ち切られず
+      // 投入順のまま実行される）。
       setErrorMap((prev) => {
         if (!prev.has(input.key)) return prev;
         const copy = new Map(prev);
@@ -185,10 +216,19 @@ export function useSyncQueue(
       });
       setPendingCount((n) => n + 1);
 
-      const ownTail = tailsRef.current.get(input.key) ?? Promise.resolve();
+      const ownTail = roundTailRef.current;
       const depTail = input.dependsOnKey
         ? (tailsRef.current.get(input.dependsOnKey) ?? Promise.resolve())
         : Promise.resolve();
+      // 距離の設定変更（distance.updated）は、既に得点が記録されている
+      // 距離の構成列（的・エンド数・矢数）を変更できないというサーバー側の
+      // 制約があるため、送信前にその距離の未送信ショットバッチが片付くのを
+      // 待つ（例: オフライン中の「ショットを全クリア→距離の構成変更」の
+      // 順序を、送信順でも保つ）。
+      const shotWaitTail =
+        input.operation?.type === "distance.updated"
+          ? waitForShotBatch(input.operation.distanceId)
+          : Promise.resolve();
 
       const attempt = (attemptIndex: number): Promise<void> =>
         toSafeResult(
@@ -205,9 +245,8 @@ export function useSyncQueue(
           ) {
             setRetryingKeys((prev) => new Set(prev).add(input.key));
             return new Promise<void>((resolve) => {
-              const timer = setTimeout(
+              setTimeout(
                 () => {
-                  retryTimersRef.current.delete(input.key);
                   setRetryingKeys((prev) => {
                     const next = new Set(prev);
                     next.delete(input.key);
@@ -219,7 +258,6 @@ export function useSyncQueue(
                   Math.min(attemptIndex, RETRY_DELAYS_MS.length - 1)
                 ],
               );
-              retryTimersRef.current.set(input.key, { timer, resolve });
             });
           }
           settleKeys([input], result);
@@ -238,10 +276,13 @@ export function useSyncQueue(
           setPendingCount((n) => n - 1);
         });
 
-      const runPromise = Promise.all([ownTail, depTail]).then(() => attempt(0));
+      const runPromise = Promise.all([ownTail, depTail, shotWaitTail]).then(
+        () => attempt(0),
+      );
+      roundTailRef.current = runPromise;
       tailsRef.current.set(input.key, runPromise);
     },
-    [settleKeys, clearRetryTimer, onPermanentFailure],
+    [settleKeys, onPermanentFailure, waitForShotBatch],
   );
 
   const flushShots = useCallback(
@@ -316,15 +357,22 @@ export function useSyncQueue(
           setShotPendingKeys((prev) => {
             const next = new Set(prev);
             for (const item of itemsToRetry) next.delete(item.key);
+            shotPendingKeysRef.current = next;
             return next;
           });
+          // このバッチで片付いた距離を待っているdistance更新があれば起こす。
+          for (const item of itemsToRetry) {
+            const distanceId =
+              item.upsert?.distanceId ?? item.clear?.distanceId;
+            if (distanceId) resolveShotDistanceWaiters(distanceId);
+          }
           finishFlight();
         });
       };
 
       attempt(items, 0);
     },
-    [settleKeys, onPermanentFailure],
+    [settleKeys, onPermanentFailure, resolveShotDistanceWaiters],
   );
 
   const scheduleShot = useCallback(
@@ -335,7 +383,11 @@ export function useSyncQueue(
         copy.delete(input.key);
         return copy;
       });
-      setShotPendingKeys((prev) => new Set(prev).add(input.key));
+      setShotPendingKeys((prev) => {
+        const next = new Set(prev).add(input.key);
+        shotPendingKeysRef.current = next;
+        return next;
+      });
 
       const depTail = input.dependsOnKey
         ? (tailsRef.current.get(input.dependsOnKey) ?? Promise.resolve())
