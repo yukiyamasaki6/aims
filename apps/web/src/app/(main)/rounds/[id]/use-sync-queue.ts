@@ -354,12 +354,16 @@ export function useSyncQueue(
           ) {
             onPermanentFailure?.();
           }
-          setShotPendingKeys((prev) => {
-            const next = new Set(prev);
-            for (const item of itemsToRetry) next.delete(item.key);
-            shotPendingKeysRef.current = next;
-            return next;
-          });
+          // setStateのupdaterコールバックの実行タイミングに依存すると、直後の
+          // resolveShotDistanceWaitersがshotPendingKeysRef.current
+          // をまだ古い値のまま読んでしまう可能性がある（Reactはupdaterの
+          // 同期実行を保証しない）。そのため次の値を先に同期的に計算し、
+          // refへの反映とsetStateへの反映を両方ここで済ませてから
+          // waiterを起こす。
+          const nextShotPendingKeys = new Set(shotPendingKeysRef.current);
+          for (const item of itemsToRetry) nextShotPendingKeys.delete(item.key);
+          shotPendingKeysRef.current = nextShotPendingKeys;
+          setShotPendingKeys(nextShotPendingKeys);
           // このバッチで片付いた距離を待っているdistance更新があれば起こす。
           for (const item of itemsToRetry) {
             const distanceId =
@@ -383,11 +387,14 @@ export function useSyncQueue(
         copy.delete(input.key);
         return copy;
       });
-      setShotPendingKeys((prev) => {
-        const next = new Set(prev).add(input.key);
-        shotPendingKeysRef.current = next;
-        return next;
-      });
+      // shotPendingKeysRefを常にsetState呼び出しと同期して更新する
+      // （flushShots側の完了処理と同じ理由。updaterコールバックの実行
+      // タイミングに依存しない）。
+      const nextShotPendingKeys = new Set(shotPendingKeysRef.current).add(
+        input.key,
+      );
+      shotPendingKeysRef.current = nextShotPendingKeys;
+      setShotPendingKeys(nextShotPendingKeys);
 
       const depTail = input.dependsOnKey
         ? (tailsRef.current.get(input.dependsOnKey) ?? Promise.resolve())
