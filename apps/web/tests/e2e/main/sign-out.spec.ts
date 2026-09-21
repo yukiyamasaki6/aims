@@ -123,25 +123,22 @@ test("送信中は背景クリックでダイアログを閉じられない", as
   releaseRequest();
 });
 
-test("送信で通信エラーが発生するとメッセージが表示される", async ({ page }) => {
+test("ログアウトAPIへの通信が失敗しても（オフライン相当）/へ遷移する", async ({
+  page,
+}) => {
+  // scope:"local"のsignOut()は、サーバーへの通信が失敗してもローカル
+  // セッションの削除自体は必ず行い、SIGNED_OUTを発火する（GoTrueClient
+  // ._removeSessionの実挙動）。UIはこれを根拠に遷移すべきで、通信の
+  // 成否だけを見て「失敗した」と扱ってはならない。
   const email = `signout-network-error-${Date.now()}@aims.test`;
   await signUpAndSignIn(page, { email, password: "password1" });
 
   await page.route("**/auth/v1/logout*", (route) => route.abort());
 
   await page.getByRole("button", { name: "サインアウト" }).click();
-  const confirmButton = page.getByRole("button", {
-    name: "サインアウトする",
-  });
-  await confirmButton.click();
+  await page.getByRole("button", { name: "サインアウトする" }).click();
 
-  await expect(
-    page.getByText(
-      "通信エラーが発生しました。しばらくしてから再度お試しください。",
-    ),
-  ).toBeVisible();
-  await expect(page).toHaveURL(/\/rounds/);
-  await expect(confirmButton).toHaveAttribute("aria-disabled", "false");
+  await expect(page).toHaveURL("/");
 });
 
 test("サインアウトすると/へ遷移する", async ({ page }) => {

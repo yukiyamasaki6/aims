@@ -1,6 +1,7 @@
 import { SerwistProvider } from "@serwist/next/react";
 import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
+import { LocalIdentityProvider } from "@/components/local-identity-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -32,6 +33,7 @@ export default function RootLayout({
           h-dvh（動的ビューポート高さ）にすることで実際に見えている範囲に
           常に一致させる。 */}
       <body className="h-dvh overflow-hidden">
+        <LocalIdentityProvider />
         <SerwistProvider
           swUrl="/sw.js"
           disable={process.env.NODE_ENV !== "production"}

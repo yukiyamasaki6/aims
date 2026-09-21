@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { comparePositionKey } from "@/lib/position-key";
 import { createClient } from "@/lib/supabase/client";
+import { getLocalIdentity } from "@/lib/supabase/local-identity";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_TARGET_FACE_ID,
@@ -439,7 +440,7 @@ export function ScorecardClient({
   }, [initialDistances, initialRoundConfig, initialShots]);
 
   useEffect(() => {
-    void loadPendingOperations(roundId).then((pending) => {
+    void loadPendingOperations(roundId, getLocalIdentity()).then((pending) => {
       for (const { operation } of pending) {
         switch (operation.type) {
           case "round.updated":
