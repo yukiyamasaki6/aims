@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
   // /supabase-apiに差し替え、実アドレスへのrewriteを登録する。
   env: useLocalProxy
     ? {
-        NEXT_PUBLIC_SUPABASE_URL: `http://localhost:${process.env.PORT}/supabase-api`,
+        NEXT_PUBLIC_SUPABASE_URL: `http://localhost:${process.env.PORT ?? 3000}/supabase-api`,
       }
     : undefined,
   async rewrites() {

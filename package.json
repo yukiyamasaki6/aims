@@ -6,6 +6,7 @@
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "start": "pnpm --filter web start",
+    "preview": "pnpm --filter web preview",
 
     "check": "biome check .",
     "check:write": "biome check --write .",
