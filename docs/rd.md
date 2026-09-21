@@ -72,6 +72,7 @@ flowchart TD
 | :--- | :--- |
 | ルーティング | [認証状態による自動リダイレクト](#routing-auth-guard) |
 | Service Worker | [PWAインストール](#service-worker-pwa-install) |
+|  | [オフラインフォールバック](#service-worker-offline-fallback) |
 | / | [最小限の紹介画面](#landing-introduction) |
 | /signin | [Email/PW認証](#signin-email-auth) |
 | /signup | [Email/PW認証](#signup-email-auth) |
@@ -115,9 +116,17 @@ flowchart TD
 
 | 状態 | 条件 | 行動 | 結果 | 実装 |
 | :--- | :--- | :--- | :--- | :---: |
-| 初回アクセス | - | - | Service Workerが登録され、静的アセットがプリキャッシュされる | 〇 |
-| 通常 | Manifestを満たしている | ブラウザのインストール操作 | ホーム画面/デスクトップにアプリとして追加される | 〇 |
-| 通常 | 新しいビルドが存在する | - | 新しいService Workerが即座に有効化され、新しいビルドを参照する | △ |
+| 初回アクセス | - | - | Service Workerを登録し、静的アセットをプリキャッシュ | 〇 |
+| 通常 | Manifestを満たしている | ブラウザのインストール操作 | ホーム画面/デスクトップにアプリとして追加 | 〇 |
+| 通常 | 新しいビルドが存在する | - | 新しいService Workerを即座に有効化し、新しいビルドを参照 | △ |
+
+<a id="service-worker-offline-fallback"></a>
+
+### オフラインフォールバック
+
+| 状態 | 条件 | 行動 | 結果 | 実装 |
+| :--- | :--- | :--- | :--- | :---: |
+| オフライン | ページがキャッシュされていない | ページへアクセス | /offlineページを表示 | 〇 |
 
 ## `/` 紹介画面
 
