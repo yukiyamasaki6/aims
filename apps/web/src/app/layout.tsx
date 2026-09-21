@@ -1,3 +1,4 @@
+import { SerwistProvider } from "@serwist/next/react";
 import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
@@ -5,6 +6,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "AIMS",
   description: "AIMS Web Application",
+  manifest: "/manifest.webmanifest",
 };
 
 // interactiveWidget: "resizes-content" により、モバイルのソフトキーボード
@@ -29,7 +31,25 @@ export default function RootLayout({
           実際の可視高さの変化に追従せず、下部要素が隠れることがある。
           h-dvh（動的ビューポート高さ）にすることで実際に見えている範囲に
           常に一致させる。 */}
-      <body className="h-dvh overflow-hidden">{children}</body>
+      <body className="h-dvh overflow-hidden">
+        <SerwistProvider
+          swUrl="/sw.js"
+          disable={process.env.NODE_ENV !== "production"}
+          // sw.tsはページをキャッシュしないため、reloadOnOnlineの本来の
+          // 目的（古いキャッシュ済みページの最新化）はそもそも発生しない。
+          // さらに送信キュー（use-sync-queue）が`online`イベント検知で
+          // 既にリロード無しの再送を行っているため、trueのままだと目的の
+          // 重複に加え、展開中のパネルや入力中の下書きを毎回失わせる
+          // だけの余計な副作用になる。
+          reloadOnOnline={false}
+          // ページ（HTML/RSC）はsw.ts側でNetworkOnlyにしておりキャッシュ
+          // 対象外のため、デフォルトのtrueのままだとナビゲーションのたびに
+          // 何もキャッシュしない無駄なリクエストが余計に発生してしまう。
+          cacheOnNavigation={false}
+        >
+          {children}
+        </SerwistProvider>
+      </body>
     </html>
   );
 }
