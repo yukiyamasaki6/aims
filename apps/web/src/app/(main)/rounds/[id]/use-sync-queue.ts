@@ -218,7 +218,7 @@ export function useSyncQueue(
             result?.error &&
             result.error !== AUTH_REQUIRED_MESSAGE &&
             !isPermanentFailure(result) &&
-            (input.operation || attemptIndex < RETRY_DELAYS_MS.length)
+            attemptIndex < RETRY_DELAYS_MS.length
           ) {
             setRetryingKeys((prev) => new Set(prev).add(input.key));
             return new Promise<void>((resolve) => {
@@ -346,8 +346,7 @@ export function useSyncQueue(
             result?.error &&
             result.error !== AUTH_REQUIRED_MESSAGE &&
             !isPermanentFailure(result) &&
-            (itemsToRetry.some((item) => item.operation) ||
-              attemptIndex < RETRY_DELAYS_MS.length)
+            attemptIndex < RETRY_DELAYS_MS.length
           ) {
             setShotRetryingDistances((prev) => new Set(prev).add(distanceId));
             return new Promise<void>((resolve) => {
