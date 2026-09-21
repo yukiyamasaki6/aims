@@ -51,12 +51,11 @@ aims/
     ```bash
     pnpm install
     ```
-4. Copy the environment variables template:
+4. Ensure the Docker engine is running.
+5. Create the environment files and start the local Supabase environment:
     ```bash
-    cp apps/web/.env.example apps/web/.env.local
-    cp .env.example .env
+    pnpm setup:env
     ```
-5. Start the local Supabase environment (see [Managing Local Supabase](#managing-local-supabase)) and fill in `apps/web/.env.local` with the values from `supabase status`.
 
 ### Using an AI Coding Agent (Optional)
 
@@ -65,6 +64,12 @@ To let AI agents read issues and create PRs via CLI, install and authenticate th
 ```bash
 gh auth login
 ```
+
+### Developing over SSH (Optional)
+
+If you develop over an SSH port forward, only the app's own port needs forwarding.
+
+1. Set `USE_SUPABASE_LOCAL_PROXY="true"` in `apps/web/.env.local`.
 
 ### Managing Local Supabase
 
@@ -82,12 +87,6 @@ gh auth login
     ```bash
     pnpm db:stop
     ```
-
-### Developing over SSH (Optional)
-
-If you develop over an SSH port forward, only the app's own port needs forwarding.
-
-1. Set `USE_SUPABASE_LOCAL_PROXY="true"` in `apps/web/.env.local`.
 
 ### Development & Testing
 
