@@ -65,12 +65,6 @@ To let AI agents read issues and create PRs via CLI, install and authenticate th
 gh auth login
 ```
 
-### Developing over SSH (Optional)
-
-If you develop over an SSH port forward, only the app's own port needs forwarding.
-
-1. Set `USE_SUPABASE_LOCAL_PROXY="true"` in `apps/web/.env.local`.
-
 ### Managing Local Supabase
 
 1. Ensure the Docker engine is running.
