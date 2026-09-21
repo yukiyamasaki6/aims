@@ -94,3 +94,35 @@ test("送信した操作の反映が完了すると「同期済み」と表示�
 
   await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
 });
+
+test("一時的な失敗が続き、リトライ回数（4回）を使い切ると「送信失敗」に遷移する", async ({
+  page,
+}) => {
+  // オンラインのまま、一時的な失敗（AUTH_REQUIRED_MESSAGEでも
+  // permanentでもない）が続くケース。RETRY_DELAYS_MS
+  // ([3000, 6000, 12000, 24000]、計45秒）の実待機を避けるため、
+  // 再送クールダウンのfastForwardResendCooldownと同じ手法
+  // （1秒刻みでrunFor()を繰り返す）でページのタイマーを進める。
+  await page.clock.install();
+  await page.route("**/rest/v1/rpc/update_round", (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "temporary error" }),
+    }),
+  );
+
+  await page.getByTestId("round-config-summary").click();
+  await page.getByTestId("round-config-name").fill("リトライ上限テスト");
+  await page.getByTestId("round-config-save").click();
+
+  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
+
+  for (let i = 0; i < 46; i++) {
+    await page.clock.runFor(1_000);
+  }
+
+  await expect(page.getByTestId("sync-status")).toHaveText("同期失敗");
+  await page.getByTestId("sync-status").click();
+  await expect(page.getByText("temporary error")).toBeVisible();
+});

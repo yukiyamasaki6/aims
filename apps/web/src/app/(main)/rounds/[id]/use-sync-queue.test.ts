@@ -100,6 +100,53 @@ describe("useSyncQueue", () => {
     ]);
   });
 
+  it("gives up and becomes an error after exhausting retries, even for a real operation (not just a run-only task)", async () => {
+    // `operation`付きのenqueue（ラウンド・距離への実際の操作）は、以前は
+    // `input.operation || attemptIndex < RETRY_DELAYS_MS.length`という
+    // 条件のせいでリトライ回数の上限が一切効かず、恒久的な失敗
+    // （permanent: true）でない限り無期限にリトライし続けてしまっていた
+    // （PR #468のPR説明にある「一時的な通信失敗は無期限に再送する」は
+    // 意図した設計だったが、rd.mdの定義するリトライ上限付きの挙動とは
+    // 矛盾しており、後者を正とする）。`run`のみのテスト用タスクでしか
+    // このリトライ上限が検証されていなかったため、実際の`operation`付き
+    // 呼び出しでも同様に上限で失敗することを確認する。
+    vi.useFakeTimers();
+    try {
+      vi.mocked(executeSyncOperation).mockResolvedValue({
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      });
+      const { result } = renderHook(() => useSyncQueue("round-1"));
+      const operation: SyncOperation = {
+        type: "round.updated",
+        eventId: "event-1",
+        roundId: "round-1",
+        name: "午後練習",
+        roundDate: "2026-09-15",
+        format: "outdoor",
+        bowType: "recurve",
+      };
+
+      act(() => {
+        result.current.enqueue({
+          key: "roundConfig",
+          label: "ラウンド設定",
+          operation,
+        });
+      });
+
+      await act(async () => {
+        await exhaustRetries();
+      });
+
+      expect(result.current.status).toBe("error");
+      expect(result.current.errors).toEqual([
+        expect.objectContaining({ key: "roundConfig" }),
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("becomes syncing while an operation is in flight, then synced once it resolves", async () => {
     const { result } = renderHook(() => useSyncQueue());
     const deferred = createDeferred<Result>();
