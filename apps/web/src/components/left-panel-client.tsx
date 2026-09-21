@@ -1,5 +1,6 @@
 "use client";
 
+import type { AuthError } from "@supabase/supabase-js";
 import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { translateAuthErrorMessage } from "@/lib/supabase/errors";
+import { getLocalIdentity } from "@/lib/supabase/local-identity";
 import { cn } from "@/lib/utils";
 
 export function LeftPanelClient({ isSignedIn }: { isSignedIn: boolean }) {
@@ -27,26 +29,38 @@ export function LeftPanelClient({ isSignedIn }: { isSignedIn: boolean }) {
   }, []);
 
   async function handleSignOut(): Promise<{ error: string } | undefined> {
+    const supabase = createClient();
+    let signOutError: AuthError | undefined;
+
     try {
-      const supabase = createClient();
       // scope未指定だとデフォルトでglobal（そのユーザーの全デバイス・
       // 全セッションを無効化）になる。この端末だけのサインアウトを
       // 意図しているのでlocalを指定する。
       const { error } = await supabase.auth.signOut({ scope: "local" });
-
-      if (!mountedRef.current) return;
-
-      if (error) {
-        return { error: translateAuthErrorMessage(error) };
-      }
-
-      router.push("/");
+      signOutError = error ?? undefined;
     } catch {
-      if (!mountedRef.current) return;
-      return {
-        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      };
+      // ネットワーク例外等。scope!=="others"のsignOut()はサーバーへの
+      // 通信が失敗してもローカルセッションの削除自体は必ず行うため、
+      // 判断は下のgetLocalIdentity()に委ねる。
     }
+
+    if (!mountedRef.current) return;
+
+    // ネットワーク呼び出しの成否ではなく、ローカルの識別情報
+    // （onAuthStateChangeのSIGNED_OUTで更新される）が実際に消えたかどうかを
+    // 根拠に画面遷移する。オフラインでサーバーへの通信が失敗した場合でも、
+    // ローカルセッションの削除自体は行われているため、エラー表示のまま
+    // 画面遷移しない、という矛盾した状態を避けられる。
+    if (getLocalIdentity() === null) {
+      router.push("/");
+      return;
+    }
+
+    return {
+      error: signOutError
+        ? translateAuthErrorMessage(signOutError)
+        : "通信エラーが発生しました。しばらくしてから再度お試しください。",
+    };
   }
 
   return (

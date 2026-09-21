@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getLocalIdentity } from "@/lib/supabase/local-identity";
 import {
   eventIdOf,
   executeSyncOperation,
@@ -473,6 +474,7 @@ export function useSyncQueue(
         dependsOnKey: input.dependsOnKey,
         label: input.label,
         operation: input.operation,
+        userId: getLocalIdentity(),
       })
         .then(() => schedule(input))
         .finally(() => {
@@ -498,6 +500,7 @@ export function useSyncQueue(
         dependsOnKey: input.dependsOnKey,
         label: input.label,
         operation: input.operation,
+        userId: getLocalIdentity(),
       })
         .then(() => scheduleShot(input, runBatch))
         .finally(() => {
@@ -535,63 +538,65 @@ export function useSyncQueue(
   useEffect(() => {
     if (!roundId || restoredRef.current) return;
     restoredRef.current = true;
-    void loadPendingOperations(roundId).then((operations) => {
-      const remaining = [...operations];
-      while (remaining.length > 0) {
-        const index = remaining.findIndex(
-          (pending) =>
-            !pending.dependsOnKey ||
-            !remaining.some((other) => other.key === pending.dependsOnKey),
-        );
-        const pending = remaining.splice(index === -1 ? 0 : index, 1)[0];
-        if (!pending) continue;
-        const shotInput: EnqueueShotInput | undefined =
-          pending.operation.type === "shot.recorded"
-            ? {
-                key: pending.key,
-                label: pending.label,
-                dependsOnKey: pending.dependsOnKey,
-                operation: pending.operation,
-                restored: true,
-                upsert: {
-                  shotEventId: pending.operation.eventId,
-                  distanceId: pending.operation.distanceId,
-                  endNumber: pending.operation.endNumber,
-                  arrowNumber: pending.operation.arrowNumber,
-                  shooterId: pending.operation.shooterId,
-                  scoreStr: pending.operation.scoreStr,
-                  scoreInt: pending.operation.scoreInt,
-                },
-              }
-            : pending.operation.type === "shot.cleared"
+    void loadPendingOperations(roundId, getLocalIdentity()).then(
+      (operations) => {
+        const remaining = [...operations];
+        while (remaining.length > 0) {
+          const index = remaining.findIndex(
+            (pending) =>
+              !pending.dependsOnKey ||
+              !remaining.some((other) => other.key === pending.dependsOnKey),
+          );
+          const pending = remaining.splice(index === -1 ? 0 : index, 1)[0];
+          if (!pending) continue;
+          const shotInput: EnqueueShotInput | undefined =
+            pending.operation.type === "shot.recorded"
               ? {
                   key: pending.key,
                   label: pending.label,
                   dependsOnKey: pending.dependsOnKey,
                   operation: pending.operation,
                   restored: true,
-                  clear: {
+                  upsert: {
                     shotEventId: pending.operation.eventId,
                     distanceId: pending.operation.distanceId,
                     endNumber: pending.operation.endNumber,
                     arrowNumber: pending.operation.arrowNumber,
+                    shooterId: pending.operation.shooterId,
+                    scoreStr: pending.operation.scoreStr,
+                    scoreInt: pending.operation.scoreInt,
                   },
                 }
-              : undefined;
-        if (shotInput) {
-          scheduleShot(shotInput, syncShots);
-          continue;
+              : pending.operation.type === "shot.cleared"
+                ? {
+                    key: pending.key,
+                    label: pending.label,
+                    dependsOnKey: pending.dependsOnKey,
+                    operation: pending.operation,
+                    restored: true,
+                    clear: {
+                      shotEventId: pending.operation.eventId,
+                      distanceId: pending.operation.distanceId,
+                      endNumber: pending.operation.endNumber,
+                      arrowNumber: pending.operation.arrowNumber,
+                    },
+                  }
+                : undefined;
+          if (shotInput) {
+            scheduleShot(shotInput, syncShots);
+            continue;
+          }
+          schedule({
+            key: pending.key,
+            label: pending.label,
+            dependsOnKey: pending.dependsOnKey,
+            operation: pending.operation,
+            restored: true,
+            run: () => executeSyncOperation(pending.operation),
+          });
         }
-        schedule({
-          key: pending.key,
-          label: pending.label,
-          dependsOnKey: pending.dependsOnKey,
-          operation: pending.operation,
-          restored: true,
-          run: () => executeSyncOperation(pending.operation),
-        });
-      }
-    });
+      },
+    );
   }, [roundId, schedule, scheduleShot]);
 
   const errorFor = useCallback(
