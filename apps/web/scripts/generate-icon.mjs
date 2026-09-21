@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import pngToIco from "png-to-ico";
 import sharp from "sharp";
@@ -259,3 +259,44 @@ const icoPath = fileURLToPath(
 );
 writeFileSync(icoPath, ico);
 console.log(`Wrote ${icoPath} (${FAVICON_SIZES.join("x, ")}x px)`);
+
+// ==================== Manifest install icons: solid background ====================
+// PWAインストールアイコンは透過背景ではなく単色背景が必要（favicon.icoとの違いは
+// icon.svgの230行目付近のコメント参照）。maskableは、OSがアイコンを丸型等に
+// トリミングしても図形が欠けないよう、中央のセーフゾーン内に収まる縮小率で描画する。
+const MANIFEST_ICON_SIZES = [192, 512];
+const STANDARD_CONTENT_SCALE = 0.8;
+const MASKABLE_CONTENT_SCALE = 0.6;
+
+async function renderManifestIcon(size, contentScale) {
+  const contentSize = Math.round(size * contentScale);
+  const content = await sharp(Buffer.from(iconSvg))
+    .resize(contentSize, contentSize)
+    .png()
+    .toBuffer();
+  return sharp({
+    create: { width: size, height: size, channels: 4, background: BLACK },
+  })
+    .composite([{ input: content, gravity: "center" }])
+    .png()
+    .toBuffer();
+}
+
+const iconsDir = fileURLToPath(new URL("../public/icons", import.meta.url));
+mkdirSync(iconsDir, { recursive: true });
+
+for (const size of MANIFEST_ICON_SIZES) {
+  const standardIcon = await renderManifestIcon(size, STANDARD_CONTENT_SCALE);
+  const standardPath = fileURLToPath(
+    new URL(`../public/icons/icon-${size}.png`, import.meta.url),
+  );
+  writeFileSync(standardPath, standardIcon);
+  console.log(`Wrote ${standardPath}`);
+
+  const maskableIcon = await renderManifestIcon(size, MASKABLE_CONTENT_SCALE);
+  const maskablePath = fileURLToPath(
+    new URL(`../public/icons/icon-${size}-maskable.png`, import.meta.url),
+  );
+  writeFileSync(maskablePath, maskableIcon);
+  console.log(`Wrote ${maskablePath}`);
+}

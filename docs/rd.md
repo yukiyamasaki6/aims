@@ -71,6 +71,7 @@ flowchart TD
 | 画面 | 機能 |
 | :--- | :--- |
 | ルーティング | [認証状態による自動リダイレクト](#routing-auth-guard) |
+| Service Worker | [PWAインストール](#service-worker-pwa-install) |
 | / | [最小限の紹介画面](#landing-introduction) |
 | /signin | [Email/PW認証](#signin-email-auth) |
 | /signup | [Email/PW認証](#signup-email-auth) |
@@ -105,6 +106,18 @@ flowchart TD
 | `/signup`への初期アクセス | 認証済み | - | /roundsへ遷移 | 〇 |
 | `/reset-password`への初期アクセス | 認証済み | - | /roundsへ遷移 | 〇 |
 | `/rounds/:path*`への初期アクセス | 未認証 | - | /signinへ遷移 | 〇 |
+
+## Service Worker
+
+<a id="service-worker-pwa-install"></a>
+
+### PWAインストール
+
+| 状態 | 条件 | 行動 | 結果 | 実装 |
+| :--- | :--- | :--- | :--- | :---: |
+| 初回アクセス | - | - | Service Workerが登録され、静的アセットがプリキャッシュされる | ⚠ |
+| 通常 | Manifestを満たしている | ブラウザのインストール操作 | ホーム画面/デスクトップにアプリとして追加される | ⚠ |
+| 通常 | 新しいビルドが存在する | - | 新しいService Workerが即座に有効化され、新しいビルドを参照する | ⚠ |
 
 ## `/` 紹介画面
 

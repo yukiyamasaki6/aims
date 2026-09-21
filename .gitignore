@@ -15,6 +15,10 @@ out/
 build/
 dist/
 
+# Serwist (Service Worker) build output
+apps/web/public/sw.js
+apps/web/public/sw.js.map
+
 # TypeScript cache
 *.tsbuildinfo
 next-env.d.ts
