@@ -7,6 +7,8 @@ const STORAGE_KEY = "aims:local-user-id";
 // 誰か」を保持する。オフライン中にアクセストークンが失効しても、それだけで
 // 自分のローカルデータ（未同期の入力等）にアクセスできなくなってはならない。
 export function getLocalIdentity(): string | null {
+  // SSR中に誤って呼ばれた場合の防御。jsdomのテスト環境ではwindowが
+  // 常に存在するため、このガードは到達不能で検証できない。
   if (typeof window === "undefined") return null;
   try {
     return window.localStorage.getItem(STORAGE_KEY);
@@ -16,6 +18,7 @@ export function getLocalIdentity(): string | null {
 }
 
 function setLocalIdentity(userId: string | null): void {
+  // getLocalIdentity同様、SSR中の呼び出しに対する防御でテスト環境では到達不能。
   if (typeof window === "undefined") return;
   try {
     if (userId) {

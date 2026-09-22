@@ -591,7 +591,6 @@ export function useSyncQueue(
             dependsOnKey: pending.dependsOnKey,
             operation: pending.operation,
             restored: true,
-            run: () => executeSyncOperation(pending.operation),
           });
         }
       },
