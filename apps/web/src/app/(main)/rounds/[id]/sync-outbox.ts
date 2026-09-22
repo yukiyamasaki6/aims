@@ -22,6 +22,9 @@ export type PendingSyncOperation = {
 async function db() {
   return openDB(DB_NAME, 2, {
     upgrade(database, _oldVersion, _newVersion, transaction) {
+      // 現行のDB_NAME/versionでは初回作成時にしかupgradeが走らないため、
+      // 「既に存在する」側の分岐は現状のテストでは到達しない（将来の
+      // バージョン移行で再実行された場合の安全策）。
       const store = database.objectStoreNames.contains(STORE_NAME)
         ? transaction.objectStore(STORE_NAME)
         : database.createObjectStore(STORE_NAME, { keyPath: "eventId" });
@@ -63,6 +66,9 @@ export async function loadPendingOperations(
   return operations
     .filter((operation) => operation.userId === userId)
     .sort(
+      // by-round-created-atはcreatedAtを含む複合indexのため、createdAtが
+      // 存在しないレコードはこのクエリ自体で除外される。`?? 0`は型上の
+      // 安全策であり、実際には到達しない。
       (first, second) =>
         (first.createdAt ?? 0) - (second.createdAt ?? 0) ||
         first.eventId.localeCompare(second.eventId),
