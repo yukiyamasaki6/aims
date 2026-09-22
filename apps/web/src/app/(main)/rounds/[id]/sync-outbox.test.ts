@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   loadPendingOperations,
   removePendingOperation,
@@ -103,6 +103,57 @@ describe("sync outbox", () => {
     // サインインし直せば、bobの未同期レコードはそのまま復元できる。
     expect(await loadPendingOperations(roundId, "bob")).toMatchObject([
       { eventId: bobEventId, userId: "bob" },
+    ]);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("createdAtが同値の場合、eventIdの辞書順でタイブレークする", async () => {
+    const roundId = crypto.randomUUID();
+    const laterEventId = "zzz-later";
+    const earlierEventId = "aaa-earlier";
+    vi.spyOn(Date, "now").mockReturnValue(1700000000000);
+
+    await savePendingOperation({
+      eventId: laterEventId,
+      roundId,
+      userId: "user-1",
+      key: "roundConfig",
+      label: "後で保存したが辞書順は後ろ",
+      operation: {
+        type: "round.updated",
+        eventId: laterEventId,
+        roundId,
+        name: "practice",
+        roundDate: "2026-09-15",
+        format: "outdoor",
+        bowType: "recurve",
+      },
+    });
+    await savePendingOperation({
+      eventId: earlierEventId,
+      roundId,
+      userId: "user-1",
+      key: "roundConfig",
+      label: "後で保存したが辞書順は前",
+      operation: {
+        type: "round.updated",
+        eventId: earlierEventId,
+        roundId,
+        name: "practice",
+        roundDate: "2026-09-15",
+        format: "outdoor",
+        bowType: "recurve",
+      },
+    });
+
+    const operations = await loadPendingOperations(roundId, "user-1");
+
+    expect(operations.map((o) => o.eventId)).toEqual([
+      earlierEventId,
+      laterEventId,
     ]);
   });
 });

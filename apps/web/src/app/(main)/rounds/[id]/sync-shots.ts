@@ -2,6 +2,8 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
 function toResult(error: PostgrestError | null) {
+  // 呼び出し元は常にerrorがtruthyな場合のみtoResultを呼ぶため、
+  // この分岐は現状のコールサイトでは到達不能。
   if (!error) return undefined;
   return {
     error: error.message,
