@@ -4,7 +4,7 @@ import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
 import { AuthCard } from "@/components/auth-card";
 import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,10 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { isEmailRegistered } from "@/lib/supabase/actions";
 import { createClient } from "@/lib/supabase/client";
-import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 import { cn } from "@/lib/utils";
 import { EMAIL_MAX_LENGTH, OTP_CODE_LENGTH } from "../auth-constants";
+import { initialSignUpState, signupReducer } from "./signup-flow";
 import {
-  type SignUpCodeFieldErrors,
-  type SignUpEmailFieldErrors,
-  type SignUpPasswordFieldErrors,
   validateCodeField,
   validateEmailField,
   validatePasswordField,
@@ -31,17 +28,17 @@ export function SignUpForm() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
-  const [step, setStep] = useState<"email" | "code" | "password">("email");
-  const [error, setError] = useState<string | null>(null);
-  const [emailFieldErrors, setEmailFieldErrors] = useState<
-    SignUpEmailFieldErrors & { captcha?: string }
-  >({});
-  const [codeFieldErrors, setCodeFieldErrors] = useState<SignUpCodeFieldErrors>(
-    {},
-  );
-  const [passwordFieldErrors, setPasswordFieldErrors] =
-    useState<SignUpPasswordFieldErrors>({});
-  const [resendCooldown, setResendCooldown] = useState(0);
+  const [
+    {
+      step,
+      error,
+      emailFieldErrors,
+      codeFieldErrors,
+      passwordFieldErrors,
+      resendCooldown,
+    },
+    dispatch,
+  ] = useReducer(signupReducer, initialSignUpState);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(undefined);
   const mountedRef = useRef(true);
@@ -63,7 +60,7 @@ export function SignUpForm() {
 
   useEffect(() => {
     if (resendCooldown === 0) return;
-    const timer = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    const timer = setTimeout(() => dispatch({ type: "resend_tick" }), 1000);
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
@@ -77,27 +74,23 @@ export function SignUpForm() {
   }, []);
 
   function handleBack() {
-    setStep("email");
+    dispatch({ type: "reset_to_email" });
     setCode("");
-    setError(null);
     setCaptchaToken(null);
-    setCodeFieldErrors({});
   }
 
   async function handleResend() {
     if (resendSubmittingRef.current) return;
-    setError(null);
-    setCodeFieldErrors({});
 
     const errors = validateResendReady(resendCooldown, captchaToken);
     if (errors.resend || !captchaToken) {
-      setCodeFieldErrors(errors);
+      dispatch({ type: "resend_invalid", errors });
       return;
     }
 
     resendSubmittingRef.current = true;
     setResendSubmitting(true);
-    setResendCooldown(60);
+    dispatch({ type: "resend_started" });
 
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
@@ -113,7 +106,7 @@ export function SignUpForm() {
     consumeCaptchaToken();
 
     if (error) {
-      setError(translateAuthErrorMessage(error));
+      dispatch({ type: "resend_auth_error", error });
     }
     resendSubmittingRef.current = false;
     setResendSubmitting(false);
@@ -122,17 +115,16 @@ export function SignUpForm() {
   async function handleSendCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (primarySubmittingRef.current) return;
-    setError(null);
-    setEmailFieldErrors({});
 
     const errors = validateEmailField(email);
     if (errors.email) {
-      setEmailFieldErrors(errors);
+      dispatch({ type: "send_code_invalid", errors });
       return;
     }
     if (!captchaToken) {
-      setEmailFieldErrors({
-        captcha: "セキュリティチェックが完了していません。",
+      dispatch({
+        type: "send_code_invalid",
+        errors: { captcha: "セキュリティチェックが完了していません。" },
       });
       return;
     }
@@ -144,7 +136,7 @@ export function SignUpForm() {
         // このチェックはcaptchaTokenを使わないため、まだ消費されていない
         // トークンをここでリセットする必要はない（次の送信でそのまま使える）。
         if (!mountedRef.current) return;
-        setError("このメールアドレスは既に登録されています。");
+        dispatch({ type: "send_code_already_registered" });
         primarySubmittingRef.current = false;
         setPrimarySubmitting(false);
         return;
@@ -161,18 +153,15 @@ export function SignUpForm() {
       consumeCaptchaToken();
 
       if (error) {
-        setError(translateAuthErrorMessage(error));
+        dispatch({ type: "send_code_auth_error", error });
       } else {
-        setResendCooldown(60);
-        setStep("code");
+        dispatch({ type: "send_code_succeeded" });
       }
       primarySubmittingRef.current = false;
       setPrimarySubmitting(false);
     } catch {
       if (!mountedRef.current) return;
-      setError(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      dispatch({ type: "send_code_network_error" });
       primarySubmittingRef.current = false;
       setPrimarySubmitting(false);
     }
@@ -181,12 +170,10 @@ export function SignUpForm() {
   async function handleVerifyCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (primarySubmittingRef.current) return;
-    setError(null);
-    setCodeFieldErrors({});
 
     const errors = validateCodeField(code);
     if (errors.code) {
-      setCodeFieldErrors(errors);
+      dispatch({ type: "verify_code_invalid", errors });
       return;
     }
 
@@ -203,17 +190,15 @@ export function SignUpForm() {
       if (!mountedRef.current) return;
 
       if (error) {
-        setError(translateAuthErrorMessage(error));
+        dispatch({ type: "verify_code_auth_error", error });
       } else {
-        setStep("password");
+        dispatch({ type: "verify_code_succeeded" });
       }
       primarySubmittingRef.current = false;
       setPrimarySubmitting(false);
     } catch {
       if (!mountedRef.current) return;
-      setError(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      dispatch({ type: "verify_code_network_error" });
       primarySubmittingRef.current = false;
       setPrimarySubmitting(false);
     }
@@ -222,12 +207,10 @@ export function SignUpForm() {
   async function handleSetPassword(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (primarySubmittingRef.current) return;
-    setError(null);
-    setPasswordFieldErrors({});
 
     const errors = validatePasswordField(password);
     if (errors.password) {
-      setPasswordFieldErrors(errors);
+      dispatch({ type: "set_password_invalid", errors });
       return;
     }
 
@@ -240,7 +223,7 @@ export function SignUpForm() {
       if (!mountedRef.current) return;
 
       if (error) {
-        setError(translateAuthErrorMessage(error));
+        dispatch({ type: "set_password_auth_error", error });
         primarySubmittingRef.current = false;
         setPrimarySubmitting(false);
         return;
@@ -252,9 +235,7 @@ export function SignUpForm() {
       router.push("/rounds");
     } catch {
       if (!mountedRef.current) return;
-      setError(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      dispatch({ type: "set_password_network_error" });
       primarySubmittingRef.current = false;
       setPrimarySubmitting(false);
     }
