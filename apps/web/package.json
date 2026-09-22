@@ -43,6 +43,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "esbuild": "^0.28.2",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^30.0.1",

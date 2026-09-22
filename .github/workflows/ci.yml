@@ -118,6 +118,14 @@ jobs:
       - name: Run Unit Tests
         run: pnpm test
 
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-coverage-report
+          path: apps/web/coverage
+          retention-days: 14
+
   e2e-test:
     name: pgTAP and E2E Test
     needs: changes
