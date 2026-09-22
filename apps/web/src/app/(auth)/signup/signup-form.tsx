@@ -129,6 +129,7 @@ export function SignUpForm() {
       return;
     }
 
+    dispatch({ type: "send_code_started" });
     primarySubmittingRef.current = true;
     setPrimarySubmitting(true);
     try {
@@ -177,6 +178,7 @@ export function SignUpForm() {
       return;
     }
 
+    dispatch({ type: "verify_code_started" });
     primarySubmittingRef.current = true;
     setPrimarySubmitting(true);
     try {
@@ -214,6 +216,7 @@ export function SignUpForm() {
       return;
     }
 
+    dispatch({ type: "set_password_started" });
     primarySubmittingRef.current = true;
     setPrimarySubmitting(true);
     try {

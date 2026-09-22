@@ -75,6 +75,16 @@ describe("signupReducer", () => {
       });
     });
 
+    it("send_code_startedはerror・emailFieldErrorsをクリアする（前回の失敗を引きずらない）", () => {
+      const state = stateWith({
+        error: "前回のエラー",
+        emailFieldErrors: { email: "stale" },
+      });
+      const next = signupReducer(state, { type: "send_code_started" });
+      expect(next.error).toBeNull();
+      expect(next.emailFieldErrors).toEqual({});
+    });
+
     it("send_code_already_registeredは専用メッセージを表示しemailFieldErrorsをクリアする", () => {
       const state = stateWith({ emailFieldErrors: { email: "stale" } });
       const next = signupReducer(state, {
@@ -128,6 +138,17 @@ describe("signupReducer", () => {
       expect(next.codeFieldErrors).toEqual({
         code: "認証コードを入力してください。",
       });
+    });
+
+    it("verify_code_startedはerror・codeFieldErrorsをクリアする（前回の失敗を引きずらない）", () => {
+      const state = stateWith({
+        step: "code",
+        error: "前回のエラー",
+        codeFieldErrors: { code: "stale" },
+      });
+      const next = signupReducer(state, { type: "verify_code_started" });
+      expect(next.error).toBeNull();
+      expect(next.codeFieldErrors).toEqual({});
     });
 
     it("verify_code_succeededはpasswordステップへ進む", () => {
@@ -215,6 +236,17 @@ describe("signupReducer", () => {
       expect(next.passwordFieldErrors).toEqual({
         password: "パスワードを入力してください。",
       });
+    });
+
+    it("set_password_startedはerror・passwordFieldErrorsをクリアする（前回の失敗を引きずらない）", () => {
+      const state = stateWith({
+        step: "password",
+        error: "前回のエラー",
+        passwordFieldErrors: { password: "stale" },
+      });
+      const next = signupReducer(state, { type: "set_password_started" });
+      expect(next.error).toBeNull();
+      expect(next.passwordFieldErrors).toEqual({});
     });
 
     it("set_password_auth_errorはtranslateAuthErrorMessageの結果をerrorに設定する", () => {

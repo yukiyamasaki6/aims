@@ -83,15 +83,104 @@ describe("SignUpForm", () => {
 
   // 状態遷移の判断ロジック（バリデーション結果・API結果に応じたstep/エラー
   // 表示の切り替え）はsignup-flow.test.tsでsignupReducerを直接検証している。
-  // ここではmountedRefガード（アンマウント後に外部へ副作用を及ぼさないか）
-  // のみを検証する。mountedRefガードは各ハンドラに個別に書かれており共通化
-  // されていないため、一箇所で検証しても他のハンドラの担保にはならない。
-  // 外部モックへの副作用（turnstile.reset呼び出し・router.push呼び出し）
-  // として観測できる3箇所を検証する。それ以外のガード（emailステップの
-  // catch節、既に登録済み判定後、codeステップの成功/catch節、passwordステップ
-  // のcatch節）は、内部のdispatch以外に外部から観測できる副作用がなく、
-  // アンマウント後はDOMも参照できないため、ブラックボックステストでは
-  // 「ガードの有無」を判別できず意味のある検証にならない。
+  // ここでは、reducerのstateだけを見ても分からない「境界（Supabase呼び出し・
+  // captcha消費）へ実際に到達するかどうか」という制御フロー自体を検証する。
+  // dispatchするaction名が正しくても、その手前のreturnを誤って消せば境界へ
+  // 進んでしまうため、reducerのテストだけではこの制御フローの正しさは
+  // 担保できない。
+  describe("境界呼び出しの抑止", () => {
+    it("不正なメールではisEmailRegisteredを呼ばない", async () => {
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+
+      await user.click(
+        screen.getByRole("button", { name: "認証コードを送信" }),
+      );
+
+      expect(actions.isEmailRegistered).not.toHaveBeenCalled();
+    });
+
+    it("captcha未完了ではisEmailRegisteredを呼ばない", async () => {
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+
+      await user.type(
+        screen.getByPlaceholderText("you@example.com"),
+        "user@example.com",
+      );
+      await user.click(
+        screen.getByRole("button", { name: "認証コードを送信" }),
+      );
+
+      expect(actions.isEmailRegistered).not.toHaveBeenCalled();
+    });
+
+    it("登録済みメールの場合、signInWithOtpを呼ばずcaptchaも消費しない", async () => {
+      actions.isEmailRegistered.mockResolvedValue(true);
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+
+      await submitEmailStep(user);
+      await screen.findByText("このメールアドレスは既に登録されています。");
+
+      expect(auth.signInWithOtp).not.toHaveBeenCalled();
+      expect(turnstile.reset).not.toHaveBeenCalled();
+    });
+
+    it("メール送信で通信エラー(例外)が発生した場合、captchaを消費しない", async () => {
+      actions.isEmailRegistered.mockRejectedValue(new Error("network down"));
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+
+      await submitEmailStep(user);
+      await screen.findByText(
+        "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      );
+
+      expect(turnstile.reset).not.toHaveBeenCalled();
+    });
+
+    it("コード未入力ではverifyOtpを呼ばない", async () => {
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+
+      await user.click(screen.getByRole("button", { name: "確認" }));
+
+      expect(auth.verifyOtp).not.toHaveBeenCalled();
+    });
+
+    it("再送がクールダウン中の場合、signInWithOtpを呼ばない", async () => {
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+
+      await user.click(screen.getByRole("button", { name: "再送（60秒）" }));
+
+      expect(auth.signInWithOtp).not.toHaveBeenCalled();
+    });
+
+    it("パスワード未入力ではupdateUserを呼ばない", async () => {
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToPasswordStep(user);
+
+      await user.click(
+        screen.getByRole("button", { name: "登録してサインイン" }),
+      );
+
+      expect(auth.updateUser).not.toHaveBeenCalled();
+    });
+  });
+
+  // mountedRefガードは各ハンドラに個別に書かれており共通化されていないため、
+  // 一箇所で検証しても他のハンドラの担保にはならない。外部モックへの副作用
+  // （turnstile.reset呼び出し・router.push呼び出し）として観測できる3箇所を
+  // 検証する。それ以外のガード（emailステップのcatch節、既に登録済み判定後、
+  // codeステップの成功/catch節、passwordステップのcatch節）は、内部の
+  // dispatch以外に外部から観測できる副作用がなく、アンマウント後はDOMも
+  // 参照できないため、ブラックボックステストでは「ガードの有無」を判別できず
+  // 意味のある検証にならない。
   describe("送信中にアンマウントされた場合の副作用抑止", () => {
     it("再送中にアンマウントされた場合、captchaのリセットを行わない", async () => {
       // fake timerとRTLのwaitFor/findBy（内部でsetTimeoutポーリングする）は

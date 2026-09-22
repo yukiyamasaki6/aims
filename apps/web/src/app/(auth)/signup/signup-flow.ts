@@ -34,11 +34,13 @@ export type SignUpAction =
       type: "send_code_invalid";
       errors: SignUpEmailFieldErrors & { captcha?: string };
     }
+  | { type: "send_code_started" }
   | { type: "send_code_already_registered" }
   | { type: "send_code_succeeded" }
   | { type: "send_code_auth_error"; error: AuthError }
   | { type: "send_code_network_error" }
   | { type: "verify_code_invalid"; errors: SignUpCodeFieldErrors }
+  | { type: "verify_code_started" }
   | { type: "verify_code_succeeded" }
   | { type: "verify_code_auth_error"; error: AuthError }
   | { type: "verify_code_network_error" }
@@ -46,6 +48,7 @@ export type SignUpAction =
   | { type: "resend_started" }
   | { type: "resend_auth_error"; error: AuthError }
   | { type: "set_password_invalid"; errors: SignUpPasswordFieldErrors }
+  | { type: "set_password_started" }
   | { type: "set_password_auth_error"; error: AuthError }
   | { type: "set_password_network_error" };
 
@@ -61,6 +64,8 @@ export function signupReducer(
 
     case "send_code_invalid":
       return { ...state, error: null, emailFieldErrors: action.errors };
+    case "send_code_started":
+      return { ...state, error: null, emailFieldErrors: {} };
     case "send_code_already_registered":
       return {
         ...state,
@@ -86,6 +91,8 @@ export function signupReducer(
 
     case "verify_code_invalid":
       return { ...state, error: null, codeFieldErrors: action.errors };
+    case "verify_code_started":
+      return { ...state, error: null, codeFieldErrors: {} };
     case "verify_code_succeeded":
       return { ...state, error: null, codeFieldErrors: {}, step: "password" };
     case "verify_code_auth_error":
@@ -111,6 +118,8 @@ export function signupReducer(
 
     case "set_password_invalid":
       return { ...state, error: null, passwordFieldErrors: action.errors };
+    case "set_password_started":
+      return { ...state, error: null, passwordFieldErrors: {} };
     case "set_password_auth_error":
       return {
         ...state,
