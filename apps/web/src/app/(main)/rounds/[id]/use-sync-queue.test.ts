@@ -14,6 +14,20 @@ vi.mock("./sync-outbox", () => ({
   removePendingOperation: vi.fn(() => Promise.resolve()),
   loadPendingOperations: vi.fn(() => Promise.resolve([])),
 }));
+// 起動時の復元（loadPendingOperations経由）で復元されたshot操作は、
+// scheduleShot()に実物のsyncShotsが渡される。syncShotsは
+// @/lib/supabase/clientのcreateClient()を呼ぶため、復元テストのために
+// 最小限のSupabaseクライアントスタブを用意する。
+const restoredSupabase = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  rpc: vi.fn(),
+}));
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({
+    auth: { getSession: restoredSupabase.getSession },
+    rpc: restoredSupabase.rpc,
+  }),
+}));
 // enqueue()のattempt()は`input.operation`が指定されていると`input.run`を
 // 無視して常に本物の`executeSyncOperation`（実際のSupabase RPC呼び出し）を
 // 呼ぶ実装になっている。`operation`を使うテストではrunではなくこちらの
@@ -28,7 +42,11 @@ vi.mock("./sync-events", async (importOriginal) => {
 });
 
 import { executeSyncOperation } from "./sync-events";
-import { removePendingOperation, savePendingOperation } from "./sync-outbox";
+import {
+  loadPendingOperations,
+  removePendingOperation,
+  savePendingOperation,
+} from "./sync-outbox";
 import type { ShotUpsert } from "./use-sync-queue";
 import {
   AUTH_REQUIRED_MESSAGE,
@@ -98,6 +116,113 @@ describe("useSyncQueue", () => {
     expect(result.current.errors).toEqual([
       expect.objectContaining({ key: "roundConfig" }),
     ]);
+  });
+
+  it("calls onPermanentFailure when a round-level operation fails permanently", async () => {
+    const onPermanentFailure = vi.fn();
+    const { result } = renderHook(() =>
+      useSyncQueue(undefined, onPermanentFailure),
+    );
+    const run = vi.fn(() =>
+      Promise.resolve({
+        error: "このラウンドを編集する権限がありません。",
+        permanent: true,
+      }),
+    );
+
+    act(() => {
+      result.current.enqueue({
+        key: "roundConfig",
+        label: "ラウンド設定",
+        run,
+      });
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(onPermanentFailure).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call onPermanentFailure for the auth-required message, even though it is treated as unretryable", async () => {
+    const onPermanentFailure = vi.fn();
+    const { result } = renderHook(() =>
+      useSyncQueue(undefined, onPermanentFailure),
+    );
+    const run = vi.fn(() => Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }));
+
+    act(() => {
+      result.current.enqueue({
+        key: "roundConfig",
+        label: "ラウンド設定",
+        run,
+      });
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(onPermanentFailure).not.toHaveBeenCalled();
+  });
+
+  it("errors with a fixed message when neither operation nor run is given", async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSyncQueue());
+
+      act(() => {
+        result.current.enqueue({ key: "noop", label: "何もしない" });
+      });
+      await act(async () => {
+        await exhaustRetries();
+      });
+
+      expect(result.current.errorFor("noop")).toBe(
+        "同期する操作が見つかりません。",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back to a fixed message when run throws something that is not an Error", async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSyncQueue());
+      const run = vi.fn(() => Promise.reject("boom"));
+
+      act(() => {
+        result.current.enqueue({ key: "a", label: "A", run });
+      });
+      await act(async () => {
+        await exhaustRetries();
+      });
+
+      expect(result.current.errorFor("a")).toBe(
+        "予期しないエラーが発生しました。",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses the Error's own message when run throws a real Error", async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useSyncQueue());
+      const run = vi.fn(() => Promise.reject(new Error("real error")));
+
+      act(() => {
+        result.current.enqueue({ key: "a", label: "A", run });
+      });
+      await act(async () => {
+        await exhaustRetries();
+      });
+
+      expect(result.current.errorFor("a")).toBe("real error");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("gives up and becomes an error after exhausting retries, even for a real operation (not just a run-only task)", async () => {
@@ -738,6 +863,220 @@ describe("useSyncQueue", () => {
       });
 
       expect(order).toEqual(["create-start", "create-end", "batch:1"]);
+    });
+
+    it("dispatches a clear-only shot input using the distanceId from clear", async () => {
+      const { result } = renderHook(() => useSyncQueue());
+      const runBatch = vi.fn(() => Promise.resolve(undefined as Result));
+
+      act(() => {
+        result.current.enqueueShot(
+          {
+            key: "shot:d1:1:1",
+            label: "距離1 1エンド1本目",
+            clear: {
+              shotEventId: "e11",
+              distanceId: "d1",
+              endNumber: 1,
+              arrowNumber: 1,
+            },
+          },
+          runBatch,
+        );
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(runBatch).toHaveBeenCalledWith({
+        upsert: [],
+        clear: [
+          {
+            shotEventId: "e11",
+            distanceId: "d1",
+            endNumber: 1,
+            arrowNumber: 1,
+          },
+        ],
+      });
+    });
+
+    it("does nothing when a shot input has neither upsert nor clear", async () => {
+      const { result } = renderHook(() => useSyncQueue());
+      const runBatch = vi.fn(() => Promise.resolve(undefined as Result));
+
+      act(() => {
+        result.current.enqueueShot(
+          { key: "shot:?:1:1", label: "不明" },
+          runBatch,
+        );
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(runBatch).not.toHaveBeenCalled();
+    });
+
+    it("clears a shot's existing error when it is re-enqueued", async () => {
+      vi.useFakeTimers();
+      try {
+        const { result } = renderHook(() => useSyncQueue());
+        const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
+
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "距離1 1エンド1本目",
+              upsert: {
+                shotEventId: "e12",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await exhaustRetries();
+        });
+        expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "距離1 1エンド1本目",
+              upsert: {
+                shotEventId: "e12",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "9",
+                scoreInt: 9,
+              },
+            },
+            runBatch,
+          );
+        });
+
+        expect(result.current.errorFor("shot:d1:1:1")).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("reuses the in-flight tail instead of starting a second retry chain when enqueued again for the same distance while sending", async () => {
+      const { result } = renderHook(() => useSyncQueue());
+      const first = createDeferred<Result>();
+      const runBatch = vi.fn(() => first.promise);
+
+      act(() => {
+        result.current.enqueueShot(
+          {
+            key: "shot:d1:1:1",
+            label: "距離1 1エンド1本目",
+            upsert: {
+              shotEventId: "e13",
+              distanceId: "d1",
+              endNumber: 1,
+              arrowNumber: 1,
+              scoreStr: "X",
+              scoreInt: 10,
+            },
+          },
+          runBatch,
+        );
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(runBatch).toHaveBeenCalledTimes(1);
+
+      // 1本目が送信中の間に同じ距離へ2本目を積む。バッチはflight中の
+      // ため新しいリトライ連鎖を始めず、既存のtailに合流するはず。
+      act(() => {
+        result.current.enqueueShot(
+          {
+            key: "shot:d1:1:2",
+            label: "距離1 1エンド2本目",
+            upsert: {
+              shotEventId: "e13",
+              distanceId: "d1",
+              endNumber: 1,
+              arrowNumber: 2,
+              scoreStr: "9",
+              scoreInt: 9,
+            },
+          },
+          runBatch,
+        );
+      });
+      await act(async () => {
+        first.resolve(undefined);
+        await first.promise;
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(runBatch).toHaveBeenCalledTimes(2);
+      expect(runBatch).toHaveBeenLastCalledWith({
+        upsert: [
+          {
+            shotEventId: "e13",
+            distanceId: "d1",
+            endNumber: 1,
+            arrowNumber: 2,
+            scoreStr: "9",
+            scoreInt: 9,
+          },
+        ],
+        clear: [],
+      });
+      expect(result.current.status).toBe("synced");
+    });
+
+    it("calls onPermanentFailure when a shot batch fails permanently", async () => {
+      const onPermanentFailure = vi.fn();
+      const { result } = renderHook(() =>
+        useSyncQueue(undefined, onPermanentFailure),
+      );
+      const runBatch = vi.fn(() =>
+        Promise.resolve({
+          error: "このラウンドを編集する権限がありません。",
+          permanent: true,
+        }),
+      );
+
+      act(() => {
+        result.current.enqueueShot(
+          {
+            key: "shot:d1:1:1",
+            label: "距離1 1エンド1本目",
+            upsert: {
+              shotEventId: "e14",
+              distanceId: "d1",
+              endNumber: 1,
+              arrowNumber: 1,
+              scoreStr: "X",
+              scoreInt: 10,
+            },
+          },
+          runBatch,
+        );
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(onPermanentFailure).toHaveBeenCalledTimes(1);
+      expect(result.current.status).toBe("error");
     });
   });
 
@@ -1957,6 +2296,191 @@ describe("useSyncQueue", () => {
 
       expect(runBatch).toHaveBeenCalledTimes(1);
       expect(result.current.status).toBe("synced");
+    });
+
+    it("cuts a scheduled shot retry short and switches to offline-pending on the 'offline' event, then resumes on 'online' without losing the retry", async () => {
+      vi.useFakeTimers();
+      try {
+        const { result } = renderHook(() => useSyncQueue());
+        const runBatch = vi
+          .fn()
+          .mockResolvedValueOnce({ error: "network flaky" })
+          .mockResolvedValueOnce(undefined as Result);
+
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "距離1 1エンド1本目",
+              upsert: {
+                shotEventId: "e15",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+        expect(runBatch).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("retrying");
+
+        setOnline(false);
+        act(() => {
+          window.dispatchEvent(new Event("offline"));
+        });
+        expect(result.current.status).toBe("offline-pending");
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+        });
+        expect(runBatch).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("offline-pending");
+
+        setOnline(true);
+        act(() => {
+          window.dispatchEvent(new Event("online"));
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        expect(runBatch).toHaveBeenCalledTimes(2);
+        expect(result.current.status).toBe("synced");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe("restoring pending operations from persisted storage on mount", () => {
+    afterEach(() => {
+      vi.mocked(loadPendingOperations).mockReset();
+      vi.mocked(loadPendingOperations).mockResolvedValue([]);
+    });
+
+    it("restores in dependency order, dispatching shot operations via scheduleShot and other operations via schedule", async () => {
+      const order: string[] = [];
+      vi.mocked(executeSyncOperation).mockImplementation((op) => {
+        order.push(`generic:${op.eventId}`);
+        return Promise.resolve(undefined as Result);
+      });
+      restoredSupabase.getSession.mockResolvedValue({
+        data: { session: { user: { id: "user-1" } } },
+      });
+      restoredSupabase.rpc.mockImplementation(
+        (_fn: string, args: { p_shots: { shot_event_id: string }[] }) => {
+          order.push(`shot:${args.p_shots[0].shot_event_id}`);
+          return Promise.resolve({ error: null });
+        },
+      );
+
+      const distanceOperation: SyncOperation = {
+        type: "distance.created",
+        eventId: "eA",
+        id: "d1",
+        roundId: "round-1",
+        positionKey: "1-1",
+        distance: 70,
+        totalEnds: 6,
+        arrowsPerEnd: 6,
+        targetFaceId: "face-1",
+        isMarked: false,
+      };
+      const shotOperation: SyncOperation = {
+        type: "shot.recorded",
+        eventId: "eB",
+        distanceId: "d1",
+        endNumber: 1,
+        arrowNumber: 1,
+        scoreStr: "X",
+        scoreInt: 10,
+      };
+
+      // 依存先（distance:d1）より先に依存元（shot）を並べて返し、復元処理
+      // 自体が保存順ではなく依存関係で並べ替えることを検証する。
+      vi.mocked(loadPendingOperations).mockResolvedValueOnce([
+        {
+          eventId: "eB",
+          roundId: "round-1",
+          key: "shot:d1:1:1",
+          dependsOnKey: "distance:d1",
+          label: "距離1 1エンド1本目",
+          operation: shotOperation,
+          userId: "user-1",
+        },
+        {
+          eventId: "eA",
+          roundId: "round-1",
+          key: "distance:d1",
+          label: "距離1",
+          operation: distanceOperation,
+          userId: "user-1",
+        },
+      ]);
+
+      renderHook(() => useSyncQueue("round-1"));
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(order).toEqual(["generic:eA", "shot:eB"]);
+    });
+
+    it("restores a shot.cleared operation via scheduleShot", async () => {
+      restoredSupabase.getSession.mockResolvedValue({
+        data: { session: { user: { id: "user-1" } } },
+      });
+      restoredSupabase.rpc.mockResolvedValue({ error: null });
+
+      const clearOperation: SyncOperation = {
+        type: "shot.cleared",
+        eventId: "eC",
+        distanceId: "d1",
+        endNumber: 1,
+        arrowNumber: 1,
+      };
+
+      vi.mocked(loadPendingOperations).mockResolvedValueOnce([
+        {
+          eventId: "eC",
+          roundId: "round-1",
+          key: "shot:d1:1:1",
+          label: "距離1 1エンド1本目",
+          operation: clearOperation,
+          userId: "user-1",
+        },
+      ]);
+
+      renderHook(() => useSyncQueue("round-1"));
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(restoredSupabase.rpc).toHaveBeenCalledWith("clear_shots", {
+        p_shots: [
+          {
+            shot_event_id: "eC",
+            distance_id: "d1",
+            end_number: 1,
+            arrow_number: 1,
+          },
+        ],
+      });
     });
   });
 });
