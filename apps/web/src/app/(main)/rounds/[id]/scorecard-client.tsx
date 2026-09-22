@@ -342,6 +342,8 @@ function stepPosition(
       c.end === current.end &&
       c.arrow === current.arrow,
   );
+  // currentは常にdistances由来のマスのため、実際には見つからないことは
+  // ない（型上nullを許容するための安全策で、テストでは到達不能）。
   if (index === -1) return null;
   return cells[index + offset] ?? null;
 }
@@ -1024,6 +1026,8 @@ export function ScorecardClient({
   // 取り消した/やり直したマスへフォーカスを移動し、何が変わったか見えるようにする。
   function focusHistoryEntry(entry: HistoryEntry) {
     const distance = distances.find((d) => d.id === entry.distanceId);
+    // 距離削除時にその距離のundo/redo履歴も併せて破棄しているため、
+    // 履歴に残っているentryは常に現存する距離を指す（安全策、到達不能）。
     if (!distance) return;
     setKeypadMounted(true);
     setPosition({ distance, end: entry.endNumber, arrow: entry.arrowNumber });
@@ -1036,6 +1040,8 @@ export function ScorecardClient({
 
   function handleUndo() {
     const entry = undoStack.at(-1);
+    // ボタン自体がundoStack.length===0でdisabledのため、実際には
+    // 空の状態で呼ばれることはない（安全策、到達不能）。
     if (!entry) return;
 
     applyShot(
@@ -1053,6 +1059,8 @@ export function ScorecardClient({
 
   function handleRedo() {
     const entry = redoStack.at(-1);
+    // ボタン自体がredoStack.length===0でdisabledのため、実際には
+    // 空の状態で呼ばれることはない（安全策、到達不能）。
     if (!entry) return;
 
     applyShot(
