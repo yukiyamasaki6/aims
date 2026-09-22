@@ -9,6 +9,13 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./vitest.setup.mts"],
     exclude: ["node_modules/**", "tests/e2e/**"],
+    coverage: {
+      enabled: true,
+      provider: "v8",
+      reporter: ["text-summary", "html"],
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/types/supabase.ts"],
+    },
   },
   resolve: {
     alias: {
