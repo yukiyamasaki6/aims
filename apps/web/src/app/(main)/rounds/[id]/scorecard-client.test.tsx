@@ -1,0 +1,936 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { TargetFaceOption } from "./distance-config-row";
+import type { RoundConfig } from "./round-config-panel";
+import { ScorecardClient } from "./scorecard-client";
+
+const nav = vi.hoisted(() => ({
+  push: vi.fn(),
+  replace: vi.fn(),
+  refresh: vi.fn(),
+}));
+vi.mock("next/navigation", () => ({ useRouter: () => nav }));
+
+const db = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  rpc: vi.fn(),
+}));
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => ({
+    auth: { getSession: db.getSession },
+    rpc: db.rpc,
+  }),
+}));
+
+const sync = vi.hoisted(() => ({
+  status: "synced" as
+    | "synced"
+    | "sending"
+    | "retrying"
+    | "offline-pending"
+    | "error",
+  errors: [] as { key: string; label: string; message: string }[],
+  enqueue: vi.fn(),
+  enqueueShot: vi.fn(),
+}));
+vi.mock("./use-sync-queue", () => ({ useSyncQueue: () => sync }));
+
+const outbox = vi.hoisted(() => ({
+  loadPendingOperations: vi.fn(),
+}));
+vi.mock("./sync-outbox", () => ({
+  loadPendingOperations: outbox.loadPendingOperations,
+}));
+
+const targetFaceX: TargetFaceOption = {
+  id: "face-x",
+  name: "10点的",
+  size: 122,
+  format: "outdoor",
+  bow_type: ["recurve", "compound"],
+  target_face_spots: [
+    {
+      center_x: 0,
+      center_y: 0,
+      target_face_rings: [
+        {
+          radius: 1,
+          color: "#FFF200",
+          line_color: null,
+          z_index: 10,
+          score_str: "X",
+          score_int: 10,
+        },
+        {
+          radius: 2,
+          color: "#FFF200",
+          line_color: "#000000",
+          z_index: 9,
+          score_str: "10",
+          score_int: 10,
+        },
+        {
+          radius: 3,
+          color: "#FFF200",
+          line_color: "#000000",
+          z_index: 8,
+          score_str: "9",
+          score_int: 9,
+        },
+      ],
+    },
+  ],
+};
+
+const targetFaceNoX: TargetFaceOption = {
+  id: "face-no-x",
+  name: "6点的",
+  size: 60,
+  format: "field",
+  bow_type: ["recurve"],
+  target_face_spots: [
+    {
+      center_x: 0,
+      center_y: 0,
+      target_face_rings: [
+        {
+          radius: 1,
+          color: "#FFF200",
+          line_color: null,
+          z_index: 6,
+          score_str: "6",
+          score_int: 6,
+        },
+        {
+          radius: 2,
+          color: "#0066B3",
+          line_color: "#000000",
+          z_index: 5,
+          score_str: "5",
+          score_int: 5,
+        },
+      ],
+    },
+  ],
+};
+
+const targetFaces = [targetFaceX, targetFaceNoX];
+
+const distanceA = {
+  id: "distance-a",
+  position_key: "a",
+  distance: 70,
+  total_ends: 2,
+  arrows_per_end: 2,
+  target_face_id: targetFaceX.id,
+  is_marked: true,
+};
+
+const distanceB = {
+  id: "distance-b",
+  position_key: "b",
+  distance: 50,
+  total_ends: 1,
+  arrows_per_end: 1,
+  target_face_id: targetFaceX.id,
+  is_marked: true,
+};
+
+const roundConfig: RoundConfig = {
+  name: "テストラウンド",
+  roundDate: "2026-09-15",
+  format: "outdoor",
+  bowType: "recurve",
+};
+
+function setup(overrides: Partial<Parameters<typeof ScorecardClient>[0]> = {}) {
+  return render(
+    <ScorecardClient
+      roundId="round-1"
+      initialRoundConfig={roundConfig}
+      distances={[distanceA]}
+      initialShots={[]}
+      targetFaces={targetFaces}
+      {...overrides}
+    />,
+  );
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  sync.status = "synced";
+  sync.errors = [];
+  outbox.loadPendingOperations.mockResolvedValue([]);
+  db.getSession.mockResolvedValue({
+    data: { session: { user: { id: "user-1" } } },
+  });
+  db.rpc.mockResolvedValue({ error: null });
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  );
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  Element.prototype.scrollBy = vi.fn();
+});
+
+describe("ScorecardClient 初期表示・集計", () => {
+  it("的にXがある場合、ラウンド全体の10点/X数を集計して表示する", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("score-button-10"));
+    await user.click(screen.getByTestId("score-button-X"));
+
+    // 最高点数（10点）はXを含む実点数で数えるため、Xの1本も10点側の
+    // カウントに含まれる（X数自体は別途score_strで数える）。
+    expect(screen.getByTestId("round-top-scores")).toHaveTextContent(
+      "10: 2 / X: 1",
+    );
+    expect(screen.getByText("合計20")).toBeInTheDocument();
+  });
+
+  it("距離間で的の点数構成が異なる場合、ラウンド全体の集計は表示しないが、距離ごとの集計（Xが無い的の次点数集計を含む）は表示する", () => {
+    setup({
+      distances: [
+        distanceA,
+        { ...distanceB, target_face_id: targetFaceNoX.id },
+      ],
+      initialShots: [
+        {
+          distance_id: distanceB.id,
+          end_number: 1,
+          arrow_number: 1,
+          score_str: "5",
+          score_int: 5,
+        },
+      ],
+    });
+
+    expect(screen.queryByTestId("round-top-scores")).not.toBeInTheDocument();
+    expect(screen.getByTestId("distance-top-scores-1")).toBeInTheDocument();
+    // Xが無い的（targetFaceNoX）では「最高点数/次点数」を集計する。
+    expect(screen.getByTestId("distance-top-scores-2")).toHaveTextContent(
+      "6: 0 / 5: 1",
+    );
+  });
+
+  it("的にリングが無い場合、その距離の最高点数集計は表示しない", () => {
+    const targetFaceBlank: TargetFaceOption = {
+      id: "face-blank",
+      name: "未設定の的",
+      size: 40,
+      format: "outdoor",
+      bow_type: ["recurve"],
+      target_face_spots: [],
+    };
+    setup({
+      distances: [{ ...distanceA, target_face_id: targetFaceBlank.id }],
+      targetFaces: [targetFaceBlank],
+    });
+
+    expect(
+      screen.queryByTestId("distance-top-scores-1"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("距離が1件も無い場合は追加ボタンのみを表示する", () => {
+    setup({ distances: [] });
+
+    expect(screen.queryByTestId("round-top-scores")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("distance-summary-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("add-distance-button")).toBeInTheDocument();
+  });
+
+  it("すべてのマスが記録済みの場合、マウント時にテンキーは開かない", () => {
+    setup({
+      initialShots: [
+        {
+          distance_id: distanceA.id,
+          end_number: 1,
+          arrow_number: 1,
+          score_str: "10",
+          score_int: 10,
+        },
+        {
+          distance_id: distanceA.id,
+          end_number: 1,
+          arrow_number: 2,
+          score_str: "9",
+          score_int: 9,
+        },
+        {
+          distance_id: distanceA.id,
+          end_number: 2,
+          arrow_number: 1,
+          score_str: "X",
+          score_int: 10,
+        },
+        {
+          distance_id: distanceA.id,
+          end_number: 2,
+          arrow_number: 2,
+          score_str: "9",
+          score_int: 9,
+        },
+      ],
+    });
+
+    expect(screen.queryByTestId("score-button-10")).not.toBeInTheDocument();
+    expect(screen.getByText("合計38")).toBeInTheDocument();
+  });
+
+  it("テンキーの閉じるボタンで選択を解除できる", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("keypad-toggle"));
+    // 選択解除後はhandleScoreのpositionガードによりスコア入力が無視される。
+    await user.click(screen.getByTestId("score-button-10"));
+
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("");
+  });
+});
+
+describe("ScorecardClient マス選択とスコア入力", () => {
+  // 未記録のラウンドはfindCurrentPositionにより、マウント時点で最初の
+  // マス（1-1-1）が自動的に選択・キーパッド展開済みになっている
+  // （shots未記録の初期状態）。そのため以下のテストでは1-1-1を明示的に
+  // タップしない（タップすると選択中マスの再タップ＝解除になってしまう）。
+
+  it("スコアを入力すると次のマスへ自動的に進む", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("score-button-10"));
+    // Mは的の外を表す固定キーのため、的のリングとは別の色（MISS_KEYの色）
+    // で描画される分岐を兼ねて検証する。
+    await user.click(screen.getByTestId("score-button-M"));
+
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
+    expect(screen.getByTestId("shot-cell-1-1-2")).toHaveTextContent("M");
+    expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("10");
+  });
+
+  it("距離の最後のマスに入力すると選択が解除され、以降のキー入力は無視される", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("score-button-10")); // 1-1-1
+    await user.click(screen.getByTestId("score-button-9")); // 1-1-2
+    await user.click(screen.getByTestId("score-button-X")); // 1-2-1
+    await user.click(screen.getByTestId("score-button-9")); // 1-2-2（最終マス）
+
+    // 最終マスに到達すると選択が解除される（position=null）。以降の
+    // キー入力（スコア・クリアのいずれも）はpositionガードで無視され、
+    // 直近の表示内容が上書きされない。
+    await user.click(screen.getByTestId("score-button-X"));
+    await user.click(screen.getByTestId("score-button-clear"));
+
+    expect(screen.getByTestId("shot-cell-1-2-2")).toHaveTextContent("9");
+  });
+
+  it("Cボタンで選択中マスをクリアし、1つ前のマスへ戻る", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("score-button-10")); // 1-1-1に記録、1-1-2へ自動遷移
+    // 未記録の1-1-2をクリアしても記録上は変化しないが、1つ前（記録済みの
+    // 1-1-1）へ選択が戻る。
+    await user.click(screen.getByTestId("score-button-clear"));
+    // 選択が戻った1-1-1を今度は実際にクリアする。
+    await user.click(screen.getByTestId("score-button-clear"));
+
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("");
+  });
+
+  it("記録済みのマスを再度タップすると選択が解除される", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("score-button-10")); // 1-1-1に記録、1-1-2へ自動遷移
+    await user.click(screen.getByTestId("shot-cell-1-1-1")); // 記録済みの1-1-1を選択し直す
+    await user.click(screen.getByTestId("shot-cell-1-1-1")); // 選択中マスを再タップ→解除
+
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
+  });
+});
+
+describe("ScorecardClient Undo/Redo", () => {
+  it("Undo/Redoで記録が巻き戻り・やり直され、ボタンの有効/無効が切り替わる", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    expect(screen.getByTestId("score-button-undo")).toBeDisabled();
+    expect(screen.getByTestId("score-button-redo")).toBeDisabled();
+
+    await user.click(screen.getByTestId("score-button-10"));
+    await user.click(screen.getByTestId("score-button-9"));
+
+    expect(screen.getByTestId("score-button-undo")).not.toBeDisabled();
+
+    await user.click(screen.getByTestId("score-button-undo"));
+    expect(screen.getByTestId("shot-cell-1-1-2")).toHaveTextContent("");
+    expect(screen.getByTestId("score-button-redo")).not.toBeDisabled();
+
+    await user.click(screen.getByTestId("score-button-undo"));
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("");
+    expect(screen.getByTestId("score-button-undo")).toBeDisabled();
+
+    await user.click(screen.getByTestId("score-button-redo"));
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
+
+    await user.click(screen.getByTestId("score-button-redo"));
+    expect(screen.getByTestId("shot-cell-1-1-2")).toHaveTextContent("9");
+    expect(screen.getByTestId("score-button-redo")).toBeDisabled();
+  });
+
+  it("Undo後に新たに記録すると、以前のRedo履歴は破棄される", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("score-button-10"));
+    await user.click(screen.getByTestId("score-button-undo"));
+    expect(screen.getByTestId("score-button-redo")).not.toBeDisabled();
+
+    // undoにより選択は取り消したマス（1-1-1）へ自動的に戻っているため、
+    // 再タップせずそのままスコアを入力する。
+    await user.click(screen.getByTestId("score-button-9"));
+
+    expect(screen.getByTestId("score-button-redo")).toBeDisabled();
+  });
+});
+
+describe("ScorecardClient 距離の追加・編集・削除", () => {
+  it("距離を追加すると直前の距離の内容を引き継ぎ、編集パネルが自動的に展開される", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("add-distance-button"));
+
+    expect(screen.getByTestId("distance-config-distance-2")).toHaveValue(70);
+    expect(sync.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: expect.objectContaining({
+          type: "distance.created",
+          roundId: "round-1",
+          positionKey: "aa",
+          distance: 70,
+          totalEnds: 2,
+          arrowsPerEnd: 2,
+          targetFaceId: targetFaceX.id,
+          isMarked: true,
+        }),
+      }),
+    );
+  });
+
+  it("的を変更して距離を保存すると、その距離のUndo/Redo履歴のみが破棄される（他の距離の履歴は残る）", async () => {
+    const user = userEvent.setup();
+    setup({ distances: [distanceA, distanceB] });
+
+    // 的・本数・エンド数はスコアが記録済みの距離では編集できないため
+    // （DistanceEditFieldsのhasShots制約）、まずdistanceBに記録してUndo
+    // 履歴を残し、次にdistanceA自身は記録してからUndoしてスコアの無い
+    // 状態でRedo履歴だけを残す。この状態でdistanceAの的を変更すると、
+    // distanceA分のRedo履歴だけが破棄され、distanceB分のUndo履歴は
+    // 影響を受けない。
+    await user.click(screen.getByTestId("shot-cell-2-1-1"));
+    await user.click(screen.getByTestId("score-button-9"));
+
+    await user.click(screen.getByTestId("shot-cell-1-1-1"));
+    await user.click(screen.getByTestId("score-button-10"));
+    await user.click(screen.getByTestId("score-button-undo"));
+    expect(screen.getByTestId("score-button-undo")).not.toBeDisabled();
+    expect(screen.getByTestId("score-button-redo")).not.toBeDisabled();
+
+    await user.click(screen.getByTestId("distance-config-toggle-1"));
+    await user.click(screen.getByTestId("target-face-picker-trigger"));
+    await user.click(screen.getByTestId("target-face-format-tab-all"));
+    await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
+    await user.click(
+      screen.getByTestId(`target-face-option-${targetFaceNoX.id}`),
+    );
+    await user.click(screen.getByTestId("distance-config-save-1"));
+
+    expect(screen.getByTestId("score-button-undo")).not.toBeDisabled();
+    expect(screen.getByTestId("score-button-redo")).toBeDisabled();
+  });
+
+  it("的を変更せず距離を保存しても、Undo/Redo履歴は維持される", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("score-button-10"));
+
+    await user.click(screen.getByTestId("distance-config-toggle-1"));
+    await user.click(screen.getByTestId("distance-config-save-1"));
+
+    expect(screen.getByTestId("score-button-undo")).not.toBeDisabled();
+  });
+
+  it("スコアが記録されていない距離を削除すると一覧から取り除かれる", async () => {
+    const user = userEvent.setup();
+    setup({ distances: [distanceA, distanceB] });
+
+    await user.click(screen.getByTestId("distance-config-toggle-2"));
+    await user.click(screen.getByTestId("distance-config-delete-2"));
+
+    expect(screen.queryByTestId("distance-summary-2")).not.toBeInTheDocument();
+  });
+
+  it("距離編集パネルをEscapeで閉じると、保存せずパネルが閉じる", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("distance-config-toggle-1"));
+    expect(
+      screen.getByTestId("distance-config-distance-1"),
+    ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.queryByTestId("distance-config-distance-1"),
+    ).not.toBeInTheDocument();
+    expect(sync.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("スコア記録済みの距離を確認の上で削除すると、そのショット・Undo履歴・選択状態も併せて破棄される", async () => {
+    const user = userEvent.setup();
+    setup({ distances: [distanceA, distanceB] });
+
+    // distanceAの1マス目に記録（選択は自動的に2マス目へ進むが、
+    // distanceA自体は選択中のまま）。
+    await user.click(screen.getByTestId("score-button-10"));
+    expect(screen.getByText("合計10")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("distance-config-toggle-1"));
+    await user.click(screen.getByTestId("distance-config-delete-1"));
+    await user.click(screen.getByTestId("confirm-dialog-confirm"));
+
+    expect(screen.queryByTestId("distance-summary-2")).not.toBeInTheDocument();
+    // distanceBがdistanceAの削除後、1番目の距離として表示される。
+    expect(screen.getByTestId("distance-summary-1")).toBeInTheDocument();
+    expect(screen.getByText("合計0")).toBeInTheDocument();
+    expect(screen.getByTestId("score-button-undo")).toBeDisabled();
+  });
+});
+
+describe("ScorecardClient プリセット保存", () => {
+  it("保存すると save_round_as_preset が正しい内容で呼ばれ、ダイアログが閉じる", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("save-as-preset-trigger"));
+    expect(screen.getByTestId("save-as-preset-name")).toHaveValue(
+      "テストラウンド",
+    );
+
+    await user.click(screen.getByTestId("save-as-preset-confirm"));
+
+    await waitFor(() => {
+      expect(db.rpc).toHaveBeenCalledWith("save_round_as_preset", {
+        p_name: "テストラウンド",
+        p_format: "outdoor",
+        p_bow_type: "recurve",
+        p_distances: [
+          {
+            position_key: "a",
+            distance: 70,
+            total_ends: 2,
+            arrows_per_end: 2,
+            target_face_id: targetFaceX.id,
+            is_marked: true,
+          },
+        ],
+      });
+    });
+    expect(screen.queryByTestId("save-as-preset-name")).not.toBeInTheDocument();
+  });
+
+  it("未認証の場合はエラーを表示し、ダイアログは閉じない", async () => {
+    db.getSession.mockResolvedValue({ data: { session: null } });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("save-as-preset-trigger"));
+    await user.click(screen.getByTestId("save-as-preset-confirm"));
+
+    expect(
+      await screen.findByText("サインインが必要です。"),
+    ).toBeInTheDocument();
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it("プリセット名が50文字を超える場合、送信せずエラーを表示する", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("save-as-preset-trigger"));
+    await user.clear(screen.getByTestId("save-as-preset-name"));
+    await user.type(screen.getByTestId("save-as-preset-name"), "あ".repeat(51));
+    await user.click(screen.getByTestId("save-as-preset-confirm"));
+
+    expect(
+      screen.getByText("プリセット名は50文字以内で入力してください。"),
+    ).toBeInTheDocument();
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it("save_round_as_presetが失敗した場合はエラーを表示する", async () => {
+    db.rpc.mockResolvedValue({ error: { message: "保存に失敗しました。" } });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("save-as-preset-trigger"));
+    await user.click(screen.getByTestId("save-as-preset-confirm"));
+
+    expect(await screen.findByText("保存に失敗しました。")).toBeInTheDocument();
+  });
+
+  it("送信中はEscapeで閉じない", async () => {
+    let resolveRpc: (value: { error: null }) => void = () => {};
+    db.rpc.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRpc = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("save-as-preset-trigger"));
+    await user.click(screen.getByTestId("save-as-preset-confirm"));
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
+
+    resolveRpc({ error: null });
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("save-as-preset-name"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("送信中に確定ボタンを連打しても二重送信しない", async () => {
+    let resolveRpc: (value: { error: null }) => void = () => {};
+    db.rpc.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRpc = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("save-as-preset-trigger"));
+    await user.click(screen.getByTestId("save-as-preset-confirm"));
+    await user.click(screen.getByTestId("save-as-preset-confirm"));
+
+    resolveRpc({ error: null });
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("save-as-preset-name"),
+      ).not.toBeInTheDocument();
+    });
+    expect(db.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("Escapeで閉じて再度開くと、直前のエラーはクリアされる", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByTestId("save-as-preset-trigger"));
+    await user.clear(screen.getByTestId("save-as-preset-name"));
+    await user.type(screen.getByTestId("save-as-preset-name"), "あ".repeat(51));
+    await user.click(screen.getByTestId("save-as-preset-confirm"));
+    expect(
+      screen.getByText("プリセット名は50文字以内で入力してください。"),
+    ).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByTestId("save-as-preset-trigger"));
+
+    expect(
+      screen.queryByText("プリセット名は50文字以内で入力してください。"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("ScorecardClient ラウンド削除", () => {
+  async function openDeleteConfirm(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByTestId("round-menu-trigger"));
+    await user.click(await screen.findByTestId("round-delete"));
+  }
+
+  it("確認すると disable_round を実行し、一覧へ遷移する", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await openDeleteConfirm(user);
+    await user.click(screen.getByTestId("confirm-dialog-confirm"));
+
+    await waitFor(() => {
+      expect(db.rpc).toHaveBeenCalledWith("disable_round", {
+        p_round_event_id: expect.any(String),
+        p_round_id: "round-1",
+      });
+    });
+    await waitFor(() => {
+      expect(nav.push).toHaveBeenCalledWith("/rounds");
+    });
+  });
+
+  it("未認証の場合はエラーを表示し、遷移しない", async () => {
+    db.getSession.mockResolvedValue({ data: { session: null } });
+    const user = userEvent.setup();
+    setup();
+
+    await openDeleteConfirm(user);
+    await user.click(screen.getByTestId("confirm-dialog-confirm"));
+
+    expect(
+      await screen.findByText("サインインが必要です。"),
+    ).toBeInTheDocument();
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("通信エラー(例外)の場合は汎用エラーを表示する", async () => {
+    db.getSession.mockRejectedValue(new Error("network down"));
+    const user = userEvent.setup();
+    setup();
+
+    await openDeleteConfirm(user);
+    await user.click(screen.getByTestId("confirm-dialog-confirm"));
+
+    expect(
+      await screen.findByText(
+        "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("セッション確認中にアンマウントされた場合、disable_roundを呼ばない", async () => {
+    let resolveSession: (value: {
+      data: { session: { user: { id: string } } | null };
+    }) => void = () => {};
+    db.getSession.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSession = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    const { unmount } = setup();
+
+    await openDeleteConfirm(user);
+    await user.click(screen.getByTestId("confirm-dialog-confirm"));
+    unmount();
+
+    resolveSession({ data: { session: { user: { id: "user-1" } } } });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe("ScorecardClient 保留中の操作の反映", () => {
+  it("保留中の距離作成・スコア記録操作が反映される", async () => {
+    outbox.loadPendingOperations.mockResolvedValue([
+      {
+        operation: {
+          type: "distance.created",
+          eventId: "e-distance",
+          id: "distance-new",
+          roundId: "round-1",
+          positionKey: "aa",
+          distance: 30,
+          totalEnds: 1,
+          arrowsPerEnd: 1,
+          targetFaceId: targetFaceX.id,
+          isMarked: true,
+        },
+      },
+      {
+        operation: {
+          type: "shot.recorded",
+          eventId: "e-shot",
+          distanceId: distanceA.id,
+          endNumber: 1,
+          arrowNumber: 1,
+          scoreStr: "10",
+          scoreInt: 10,
+        },
+      },
+    ]);
+    // 既存のショット（別マス）を持たせることで、shot.recorded適用時の
+    // 重複排除フィルタ（同じマスの既存ショットの除去）が実際に既存要素を
+    // 走査する経路も検証する。
+    setup({
+      initialShots: [
+        {
+          distance_id: distanceA.id,
+          end_number: 1,
+          arrow_number: 2,
+          score_str: "9",
+          score_int: 9,
+        },
+      ],
+    });
+
+    expect(await screen.findByTestId("distance-summary-2")).toBeInTheDocument();
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
+    expect(screen.getByTestId("shot-cell-1-1-2")).toHaveTextContent("9");
+  });
+
+  it("ラウンド設定更新・距離更新・ショットクリアの各操作が反映される", async () => {
+    outbox.loadPendingOperations.mockResolvedValue([
+      {
+        operation: {
+          type: "round.updated",
+          eventId: "e-round",
+          roundId: "round-1",
+          name: "更新後ラウンド",
+          roundDate: "2026-09-20",
+          format: "outdoor",
+          bowType: "compound",
+        },
+      },
+      {
+        operation: {
+          type: "distance.updated",
+          eventId: "e-distance",
+          distanceId: distanceA.id,
+          distance: 50,
+          totalEnds: distanceA.total_ends,
+          arrowsPerEnd: distanceA.arrows_per_end,
+          targetFaceId: distanceA.target_face_id,
+          isMarked: distanceA.is_marked,
+        },
+      },
+      {
+        operation: {
+          type: "shot.cleared",
+          eventId: "e-clear",
+          distanceId: distanceA.id,
+          endNumber: 1,
+          arrowNumber: 1,
+        },
+      },
+    ]);
+    setup({
+      initialShots: [
+        {
+          distance_id: distanceA.id,
+          end_number: 1,
+          arrow_number: 1,
+          score_str: "10",
+          score_int: 10,
+        },
+      ],
+    });
+
+    expect(await screen.findByText(/更新後ラウンド/)).toBeInTheDocument();
+    expect(screen.getByText(/50m/)).toBeInTheDocument();
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("");
+  });
+
+  it("保留中の距離無効化操作が反映される", async () => {
+    outbox.loadPendingOperations.mockResolvedValue([
+      {
+        operation: {
+          type: "distance.disabled",
+          eventId: "e-distance-disabled",
+          distanceId: distanceB.id,
+        },
+      },
+    ]);
+    setup({
+      distances: [distanceA, distanceB],
+      initialShots: [
+        {
+          distance_id: distanceB.id,
+          end_number: 1,
+          arrow_number: 1,
+          score_str: "9",
+          score_int: 9,
+        },
+      ],
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("distance-summary-2"),
+      ).not.toBeInTheDocument();
+    });
+    // distanceBのショットも併せて破棄されるため、合計から除かれる。
+    expect(screen.getByText("合計0")).toBeInTheDocument();
+  });
+
+  it("round.disabledの保留操作以降は処理を中断し、一覧へ遷移する", async () => {
+    outbox.loadPendingOperations.mockResolvedValue([
+      {
+        operation: {
+          type: "round.disabled",
+          eventId: "e-round-disabled",
+          roundId: "round-1",
+        },
+      },
+      {
+        operation: {
+          type: "distance.disabled",
+          eventId: "e-distance-disabled",
+          distanceId: distanceA.id,
+        },
+      },
+    ]);
+    setup();
+
+    await waitFor(() => {
+      expect(nav.replace).toHaveBeenCalledWith("/rounds");
+    });
+    expect(screen.getByTestId("distance-summary-1")).toBeInTheDocument();
+  });
+});
+
+describe("ScorecardClient 同期状態の表示", () => {
+  it.each([
+    ["sending", "同期中…"],
+    ["retrying", "同期中…"],
+    ["offline-pending", "同期保留中"],
+    ["synced", "同期済み"],
+  ] as const)("sync.statusが%sの場合、「%s」を表示する", (status, text) => {
+    sync.status = status;
+    setup();
+
+    expect(screen.getByTestId("sync-status")).toHaveTextContent(text);
+  });
+
+  it("sync.statusがerrorの場合、同期失敗を表示しクリックでエラー内容を開ける", async () => {
+    sync.status = "error";
+    sync.errors = [
+      { key: "distance:x", label: "距離1", message: "保存に失敗しました" },
+    ];
+    const user = userEvent.setup();
+    setup();
+
+    expect(screen.getByTestId("sync-status")).toHaveTextContent("同期失敗");
+
+    await user.click(screen.getByTestId("sync-status"));
+
+    expect(screen.getByText(/保存に失敗しました/)).toBeInTheDocument();
+    expect(screen.getByText(/距離1/)).toBeInTheDocument();
+  });
+});
