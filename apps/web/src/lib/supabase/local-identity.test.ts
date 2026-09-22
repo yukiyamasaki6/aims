@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getLocalIdentity, initLocalIdentity } from "./local-identity";
 
 // SupabaseクライアントのonAuthStateChangeを模した最小限のスタブ。
@@ -101,5 +101,45 @@ describe("local-identity", () => {
     // 新規にモジュールを読み直したのと同じ状況を、getLocalIdentityの
     // 再呼び出し（内部状態ではなく永続化ストレージを見る）で模す。
     expect(getLocalIdentity()).toBe("user-1");
+  });
+
+  it("initLocalIdentityが返す関数はunsubscribeを呼び出す", () => {
+    const unsubscribe = vi.fn();
+    const client = {
+      auth: {
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe } } }),
+      },
+    };
+
+    const cleanup = initLocalIdentity(client as never);
+    cleanup();
+
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  describe("localStorageが使用できない場合（プライベートブラウジング等）", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("getLocalIdentityはエラーを投げずnullを返す", () => {
+      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+
+      expect(getLocalIdentity()).toBeNull();
+    });
+
+    it("SIGNED_INでの記録失敗はエラーを投げず黙って無視する", () => {
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      const stub = createSupabaseStub();
+      initLocalIdentity(stub.client as never);
+
+      expect(() =>
+        stub.emit("SIGNED_IN", { user: { id: "user-1" } }),
+      ).not.toThrow();
+    });
   });
 });
