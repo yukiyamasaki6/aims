@@ -94,3 +94,41 @@ it("未認証では書き込まない", async () => {
   });
   expect(db.rpc).not.toHaveBeenCalled();
 });
+
+it("record_shotsが失敗した場合、エラーを返す", async () => {
+  db.rpc.mockResolvedValue({
+    error: { message: "duplicate", code: "P0001" },
+  });
+  const result = await syncShots({
+    upsert: [
+      {
+        shotEventId: "event-1",
+        distanceId: "distance",
+        endNumber: 1,
+        arrowNumber: 1,
+        scoreStr: "X",
+        scoreInt: 10,
+      },
+    ],
+    clear: [],
+  });
+  expect(result).toEqual({ error: "duplicate", permanent: true });
+});
+
+it("clear_shotsが失敗した場合、エラーを返す", async () => {
+  db.rpc.mockResolvedValue({
+    error: { message: "network error", code: "08006" },
+  });
+  const result = await syncShots({
+    upsert: [],
+    clear: [
+      {
+        shotEventId: "event-2",
+        distanceId: "distance",
+        endNumber: 1,
+        arrowNumber: 2,
+      },
+    ],
+  });
+  expect(result).toEqual({ error: "network error", permanent: false });
+});
