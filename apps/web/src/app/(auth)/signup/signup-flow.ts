@@ -47,6 +47,7 @@ export type SignUpAction =
   | { type: "resend_invalid"; errors: SignUpCodeFieldErrors }
   | { type: "resend_started" }
   | { type: "resend_auth_error"; error: AuthError }
+  | { type: "resend_network_error" }
   | { type: "set_password_invalid"; errors: SignUpPasswordFieldErrors }
   | { type: "set_password_started" }
   | { type: "set_password_auth_error"; error: AuthError }
@@ -115,6 +116,8 @@ export function signupReducer(
       };
     case "resend_auth_error":
       return { ...state, error: translateAuthErrorMessage(action.error) };
+    case "resend_network_error":
+      return { ...state, error: NETWORK_ERROR_MESSAGE };
 
     case "set_password_invalid":
       return { ...state, error: null, passwordFieldErrors: action.errors };

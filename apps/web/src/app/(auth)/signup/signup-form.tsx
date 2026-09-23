@@ -42,11 +42,9 @@ export function SignUpForm() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(undefined);
   const mountedRef = useRef(true);
-  // コード入力画面では確認・再送が別々の独立した操作のため、無効化・二重送信
-  // 防止も画面（送信/確認/登録）ごと・再送ごとに別々に持つ（互いをブロック
-  // しない）。二重送信の判定は同期的なrefで行う。setStateのstateはレンダーを
-  // 挟むまで更新されず、連打で2回目の呼び出しが古いfalseのクロージャのまま
-  // 実行されてしまうため、stateだけでは防げない。
+  // コード入力画面では確認・再送が別々の独立した操作のため、無効化・二重送信防止も画面（送信/確認/登録）ごと・再送ごとに別々に持つ（互いをブロックしない）。
+  // 二重送信の判定は同期的なrefで行う。
+  // setStateのstateはレンダーを挟むまで更新されず、連打で2回目の呼び出しが古いfalseのクロージャのまま実行されてしまうため、stateだけでは防げない。
   const primarySubmittingRef = useRef(false);
   const [primarySubmitting, setPrimarySubmitting] = useState(false);
   const resendSubmittingRef = useRef(false);
@@ -65,8 +63,7 @@ export function SignUpForm() {
   }, [resendCooldown]);
 
   useEffect(() => {
-    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
-    // 対応するため、マウント時にも明示的にtrueへ戻す。
+    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に対応するため、マウント時にも明示的にtrueへ戻す。
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -92,24 +89,30 @@ export function SignUpForm() {
     setResendSubmitting(true);
     dispatch({ type: "resend_started" });
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { captchaToken },
-    });
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { captchaToken },
+      });
 
-    // mountedRefの確認より前にturnstileRefへ触れない。送信中に別リンクへ
-    // 移動してアンマウントされていた場合、破棄済みのウィジェットへの
-    // reset()呼び出しを避ける。
-    if (!mountedRef.current) return;
+      // mountedRefの確認より前にturnstileRefへ触れない。
+      // 送信中に別リンクへ移動してアンマウントされていた場合、破棄済みのウィジェットへのreset()呼び出しを避ける。
+      if (!mountedRef.current) return;
 
-    consumeCaptchaToken();
+      consumeCaptchaToken();
 
-    if (error) {
-      dispatch({ type: "resend_auth_error", error });
+      if (error) {
+        dispatch({ type: "resend_auth_error", error });
+      }
+      resendSubmittingRef.current = false;
+      setResendSubmitting(false);
+    } catch {
+      if (!mountedRef.current) return;
+      dispatch({ type: "resend_network_error" });
+      resendSubmittingRef.current = false;
+      setResendSubmitting(false);
     }
-    resendSubmittingRef.current = false;
-    setResendSubmitting(false);
   }
 
   async function handleSendCode(e: FormEvent<HTMLFormElement>) {
@@ -134,8 +137,7 @@ export function SignUpForm() {
     setPrimarySubmitting(true);
     try {
       if (await isEmailRegistered(email)) {
-        // このチェックはcaptchaTokenを使わないため、まだ消費されていない
-        // トークンをここでリセットする必要はない（次の送信でそのまま使える）。
+        // このチェックはcaptchaTokenを使わないため、まだ消費されていないトークンをここでリセットする必要はない（次の送信でそのまま使える）。
         if (!mountedRef.current) return;
         dispatch({ type: "send_code_already_registered" });
         primarySubmittingRef.current = false;
@@ -232,9 +234,9 @@ export function SignUpForm() {
         return;
       }
 
-      // 成功時はここでsubmittingを解除しない。router.push()は遷移先の取得中も
-      // このコンポーネントを保持し続けるため、ここで解除すると遷移完了前に
-      // ボタンが再度押せる状態に戻ってしまう。アンマウント時に自然に破棄される。
+      // 成功時はここでsubmittingを解除しない。
+      // router.push()は遷移先の取得中もこのコンポーネントを保持し続けるため、ここで解除すると遷移完了前にボタンが再度押せる状態に戻ってしまう。
+      // アンマウント時に自然に破棄される。
       router.push("/rounds");
     } catch {
       if (!mountedRef.current) return;
