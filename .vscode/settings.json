@@ -6,5 +6,6 @@
   },
   "editor.formatOnSave": true,
   "editor.formatOnType": false,
+  "editor.wordWrap": "on",
   "css.validate": false
 }
