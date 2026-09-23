@@ -93,6 +93,13 @@ describe("SignUpForm", () => {
       const user = userEvent.setup();
       render(<SignUpForm />);
 
+      // captchaは有効にしておき、メールの不正だけを阻止条件にする
+      // （captcha未完了と混同すると、メール検証自体が壊れても見逃す）。
+      await user.type(
+        screen.getByPlaceholderText("you@example.com"),
+        "invalid-email",
+      );
+      turnstile.onVerify?.("captcha-token");
       await user.click(
         screen.getByRole("button", { name: "認証コードを送信" }),
       );
@@ -127,7 +134,7 @@ describe("SignUpForm", () => {
       expect(turnstile.reset).not.toHaveBeenCalled();
     });
 
-    it("メール送信で通信エラー(例外)が発生した場合、captchaを消費しない", async () => {
+    it("isEmailRegisteredで通信エラー(例外)が発生した場合、signInWithOtpを呼ばずcaptchaも消費しない", async () => {
       actions.isEmailRegistered.mockRejectedValue(new Error("network down"));
       const user = userEvent.setup();
       render(<SignUpForm />);
@@ -137,6 +144,7 @@ describe("SignUpForm", () => {
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
       );
 
+      expect(auth.signInWithOtp).not.toHaveBeenCalled();
       expect(turnstile.reset).not.toHaveBeenCalled();
     });
 
@@ -155,6 +163,12 @@ describe("SignUpForm", () => {
       render(<SignUpForm />);
       await advanceToCodeStep(user);
 
+      // 送信成功時にcaptchaは消費済み（null）のため、新しいトークンを
+      // 設定してクールダウンだけを阻止条件にする（captcha未完了と
+      // 混同すると、クールダウンの検証自体が壊れても見逃す）。
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
       await user.click(screen.getByRole("button", { name: "再送（60秒）" }));
 
       expect(auth.signInWithOtp).not.toHaveBeenCalled();
@@ -173,14 +187,150 @@ describe("SignUpForm", () => {
     });
   });
 
-  // mountedRefガードは各ハンドラに個別に書かれており共通化されていないため、
-  // 一箇所で検証しても他のハンドラの担保にはならない。外部モックへの副作用
-  // （turnstile.reset呼び出し・router.push呼び出し）として観測できる3箇所を
-  // 検証する。それ以外のガード（emailステップのcatch節、既に登録済み判定後、
-  // codeステップの成功/catch節、passwordステップのcatch節）は、内部の
-  // dispatch以外に外部から観測できる副作用がなく、アンマウント後はDOMも
-  // 参照できないため、ブラックボックステストでは「ガードの有無」を判別できず
-  // 意味のある検証にならない。
+  // 正常系での配線（正しい引数でAPIが呼ばれるか、成功後に正しい副作用が
+  // 起きるか）は、reducerのテストでは検証できない、コンポーネント自体の
+  // 責務。coverage稼ぎではなく、境界呼び出しの抑止テストと対になる。
+  describe("正常系の配線", () => {
+    it("送信は正しい引数でsignInWithOtpを1回呼ぶ", async () => {
+      actions.isEmailRegistered.mockResolvedValue(false);
+      auth.signInWithOtp.mockResolvedValue({ error: null });
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+
+      await submitEmailStep(user, "new@example.com");
+
+      await screen.findByPlaceholderText("123456");
+      expect(auth.signInWithOtp).toHaveBeenCalledOnce();
+      expect(auth.signInWithOtp).toHaveBeenCalledWith({
+        email: "new@example.com",
+        options: { captchaToken: "captcha-token" },
+      });
+    });
+
+    it("送信中の二重クリックではisEmailRegisteredを1回しか呼ばない", async () => {
+      const deferred = createDeferred<boolean>();
+      actions.isEmailRegistered.mockReturnValue(deferred.promise);
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+
+      await user.type(
+        screen.getByPlaceholderText("you@example.com"),
+        "user@example.com",
+      );
+      turnstile.onVerify?.("captcha-token");
+      const button = screen.getByRole("button", { name: "認証コードを送信" });
+      await user.click(button);
+      await user.click(button);
+
+      expect(actions.isEmailRegistered).toHaveBeenCalledOnce();
+      deferred.resolve(false);
+    });
+
+    it("確認は正しい引数でverifyOtpを1回呼ぶ", async () => {
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+      auth.verifyOtp.mockResolvedValue({ error: null });
+
+      await user.type(screen.getByPlaceholderText("123456"), "123456");
+      await user.click(screen.getByRole("button", { name: "確認" }));
+
+      await screen.findByPlaceholderText(
+        "パスワード（8文字以上・英数字を含む）",
+      );
+      expect(auth.verifyOtp).toHaveBeenCalledOnce();
+      expect(auth.verifyOtp).toHaveBeenCalledWith({
+        email: "user@example.com",
+        token: "123456",
+        type: "email",
+      });
+    });
+
+    it("パスワード登録は正しい引数でupdateUserを1回呼び、成功後/roundsへ遷移する", async () => {
+      auth.updateUser.mockResolvedValue({ error: null });
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToPasswordStep(user);
+
+      await user.type(
+        screen.getByPlaceholderText("パスワード（8文字以上・英数字を含む）"),
+        "password123",
+      );
+      await user.click(
+        screen.getByRole("button", { name: "登録してサインイン" }),
+      );
+
+      await vi.waitFor(() => {
+        expect(nav.push).toHaveBeenCalledWith("/rounds");
+      });
+      expect(auth.updateUser).toHaveBeenCalledOnce();
+      expect(auth.updateUser).toHaveBeenCalledWith({
+        password: "password123",
+      });
+    });
+
+    it("再送は正しい引数でsignInWithOtpを1回呼ぶ", async () => {
+      // fake timerとRTLのwaitFor/findBy（内部でsetTimeoutポーリングする）は
+      // 競合するため、fireEventと手動flushのみで進める。
+      vi.useFakeTimers();
+      try {
+        actions.isEmailRegistered.mockResolvedValue(false);
+        auth.signInWithOtp.mockResolvedValueOnce({ error: null });
+
+        render(<SignUpForm />);
+        fireEvent.change(screen.getByPlaceholderText("you@example.com"), {
+          target: { value: "user@example.com" },
+        });
+        act(() => {
+          turnstile.onVerify?.("captcha-token");
+        });
+        fireEvent.click(
+          screen.getByRole("button", { name: "認証コードを送信" }),
+        );
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+        expect(screen.getByPlaceholderText("123456")).toBeInTheDocument();
+        auth.signInWithOtp.mockClear();
+
+        for (let i = 0; i < 60; i++) {
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(1000);
+          });
+        }
+
+        auth.signInWithOtp.mockResolvedValueOnce({ error: null });
+        act(() => {
+          turnstile.onVerify?.("resend-captcha-token");
+        });
+        fireEvent.click(screen.getByRole("button", { name: "再送" }));
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        expect(auth.signInWithOtp).toHaveBeenCalledOnce();
+        expect(auth.signInWithOtp).toHaveBeenCalledWith({
+          email: "user@example.com",
+          options: { captchaToken: "resend-captcha-token" },
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  // アンマウント後に外部モックへ副作用が及ばないことを検証する。
+  // 「/roundsへ遷移しない」テストは、router.pushがアンマウント後も呼び出し
+  // 可能な独立した関数であるため、mountedRefガードの効果を直接観測できる。
+  // 一方、captchaのreset()を検証する2件は、Reactがアンマウント時にref
+  // （useImperativeHandleで渡した値を含む）を自動的にnullへ解除するため、
+  // mountedRefガード自体を外してもturnstileRef.current?.reset()は同様に
+  // 呼ばれない可能性がある。したがってこの2件は「アンマウント後にreset()を
+  // 呼ばない」という観測可能な振る舞いの検証として残すが、mountedRefガード
+  // 固有の効果を担保しているとは限らない。
   describe("送信中にアンマウントされた場合の副作用抑止", () => {
     it("再送中にアンマウントされた場合、captchaのリセットを行わない", async () => {
       // fake timerとRTLのwaitFor/findBy（内部でsetTimeoutポーリングする）は
