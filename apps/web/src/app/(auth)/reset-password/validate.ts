@@ -1,4 +1,6 @@
 import {
+  EMAIL_MAX_LENGTH,
+  OTP_CODE_LENGTH,
   PASSWORD_ALLOWED_PATTERN,
   PASSWORD_MAX_LENGTH,
 } from "../auth-constants";
@@ -15,6 +17,12 @@ export function validateEmailField(
   if (!email) {
     return { email: "メールアドレスを入力してください。" };
   }
+  // UIのmaxLength属性はブラウザ側の制限に過ぎず、devtools操作等で回避され得るため、アプリケーション層でも上限を検証する。
+  if (email.length > EMAIL_MAX_LENGTH) {
+    return {
+      email: `メールアドレスは${EMAIL_MAX_LENGTH}文字以内で入力してください。`,
+    };
+  }
   if (!EMAIL_PATTERN.test(email)) {
     return { email: "メールアドレスの形式が正しくありません。" };
   }
@@ -27,9 +35,16 @@ export type ResetPasswordCodeFieldErrors = {
   resend?: string;
 };
 
+const CODE_PATTERN = new RegExp(`^\\d{${OTP_CODE_LENGTH}}$`);
+
 export function validateCodeField(code: string): ResetPasswordCodeFieldErrors {
   if (!code) {
     return { code: "認証コードを入力してください。" };
+  }
+  if (!CODE_PATTERN.test(code)) {
+    return {
+      code: `認証コードは${OTP_CODE_LENGTH}桁の数字で入力してください。`,
+    };
   }
 
   return {};
