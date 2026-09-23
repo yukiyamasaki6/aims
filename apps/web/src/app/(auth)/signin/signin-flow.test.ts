@@ -30,43 +30,6 @@ describe("signinReducer", () => {
     vi.clearAllMocks();
   });
 
-  it("submit_invalidはerrorをクリアしfieldErrorsを差し替える", () => {
-    // Given
-    const state = stateWith({
-      error: "前回のエラー",
-      fieldErrors: { password: "stale" },
-    });
-
-    // When
-    const next = signinReducer(state, {
-      type: "submit_invalid",
-      errors: { email: "メールアドレスを入力してください。" },
-    });
-
-    // Then
-    expect(next.error).toBeNull();
-    expect(next.fieldErrors).toEqual({
-      email: "メールアドレスを入力してください。",
-    });
-  });
-
-  it("submit_invalidはcaptchaエラーも表現できる", () => {
-    // Given
-    const state = initialSignInState;
-
-    // When
-    const next = signinReducer(state, {
-      type: "submit_invalid",
-      errors: { captcha: "セキュリティチェックが完了していません。" },
-    });
-
-    // Then
-    expect(next.error).toBeNull();
-    expect(next.fieldErrors).toEqual({
-      captcha: "セキュリティチェックが完了していません。",
-    });
-  });
-
   it("submit_startedはerror・fieldErrorsをクリアする（前回の失敗を引きずらない）", () => {
     // Given
     const state = stateWith({
@@ -80,6 +43,45 @@ describe("signinReducer", () => {
     // Then
     expect(next.error).toBeNull();
     expect(next.fieldErrors).toEqual({});
+  });
+
+  describe("submit_invalid", () => {
+    it("errorをクリアしfieldErrorsを差し替える", () => {
+      // Given
+      const state = stateWith({
+        error: "前回のエラー",
+        fieldErrors: { password: "stale" },
+      });
+
+      // When
+      const next = signinReducer(state, {
+        type: "submit_invalid",
+        errors: { email: "メールアドレスを入力してください。" },
+      });
+
+      // Then
+      expect(next.error).toBeNull();
+      expect(next.fieldErrors).toEqual({
+        email: "メールアドレスを入力してください。",
+      });
+    });
+
+    it("captchaエラーも表現できる", () => {
+      // Given
+      const state = initialSignInState;
+
+      // When
+      const next = signinReducer(state, {
+        type: "submit_invalid",
+        errors: { captcha: "セキュリティチェックが完了していません。" },
+      });
+
+      // Then
+      expect(next.error).toBeNull();
+      expect(next.fieldErrors).toEqual({
+        captcha: "セキュリティチェックが完了していません。",
+      });
+    });
   });
 
   it("submit_auth_errorはtranslateAuthErrorMessageの結果をerrorに設定しfieldErrorsをクリアする", () => {
