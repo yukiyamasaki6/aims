@@ -1,11 +1,5 @@
 import type { AuthError } from "@supabase/supabase-js";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,8 +24,7 @@ vi.mock("@/lib/supabase/actions", () => ({
   isEmailRegistered: actions.isEmailRegistered,
 }));
 
-// TurnstileのSDK自体はturnstile.test.tsxで検証済みのためここでは境界として
-// モックし、onVerifyの発火とreset()呼び出しのみ差し替えたコンポーネントで模す。
+// TurnstileのSDK自体はturnstile.test.tsxで検証済みのためここでは境界としてモックし、onVerifyの発火とreset()呼び出しのみ差し替えたコンポーネントで模す。
 const turnstile = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
   reset: vi.fn(),
@@ -54,15 +47,6 @@ function createDeferred<T>() {
     reject = rej;
   });
   return { promise, resolve, reject };
-}
-
-function authError(overrides: Partial<AuthError>): AuthError {
-  return {
-    name: "AuthApiError",
-    message: "",
-    status: 400,
-    ...overrides,
-  } as AuthError;
 }
 
 async function submitEmailStep(
@@ -96,250 +80,224 @@ describe("SignUpForm", () => {
     vi.clearAllMocks();
   });
 
-  describe("emailステップ", () => {
-    it("不正なメールでは送信せず、バリデーションエラーを表示する", async () => {
+  // 状態遷移の判断ロジック（バリデーション結果・API結果に応じたstep/エラー表示の切り替え）はsignup-flow.test.tsでsignupReducerを直接検証している。
+  // ここでは、reducerのstateだけを見ても分からない「境界（Supabase呼び出し・captcha消費）へ実際に到達するかどうか」という制御フロー自体を検証する。
+  // dispatchするaction名が正しくても、その手前のreturnを誤って消せば境界へ進んでしまうため、reducerのテストだけではこの制御フローの正しさは担保できない。
+  describe("境界呼び出しの抑止", () => {
+    it("不正なメールではisEmailRegisteredを呼ばない", async () => {
+      // Given
       const user = userEvent.setup();
       render(<SignUpForm />);
+      // captchaは有効にしておき、メールの不正だけを阻止条件にする（captcha未完了と混同すると、メール検証自体が壊れても見逃す）。
+      await user.type(
+        screen.getByPlaceholderText("you@example.com"),
+        "invalid-email",
+      );
+      turnstile.onVerify?.("captcha-token");
 
+      // When
       await user.click(
         screen.getByRole("button", { name: "認証コードを送信" }),
       );
 
-      expect(
-        screen.getByText("メールアドレスを入力してください。"),
-      ).toBeInTheDocument();
+      // Then
       expect(actions.isEmailRegistered).not.toHaveBeenCalled();
     });
 
-    it("captcha未完了では送信しない", async () => {
+    it("captcha未完了ではisEmailRegisteredを呼ばない", async () => {
+      // Given
       const user = userEvent.setup();
       render(<SignUpForm />);
-
       await user.type(
         screen.getByPlaceholderText("you@example.com"),
         "user@example.com",
       );
+
+      // When
       await user.click(
         screen.getByRole("button", { name: "認証コードを送信" }),
       );
 
-      expect(
-        screen.getByText("セキュリティチェックが完了していません。"),
-      ).toBeInTheDocument();
+      // Then
       expect(actions.isEmailRegistered).not.toHaveBeenCalled();
     });
 
-    it("登録済みメールの場合、エラー表示のみでcodeステップへ進まずcaptchaも消費しない", async () => {
+    it("登録済みメールの場合、signInWithOtpを呼ばずcaptchaも消費しない", async () => {
+      // Given
       actions.isEmailRegistered.mockResolvedValue(true);
       const user = userEvent.setup();
       render(<SignUpForm />);
 
+      // When
       await submitEmailStep(user);
+      await screen.findByText("このメールアドレスは既に登録されています。");
 
-      expect(
-        await screen.findByText("このメールアドレスは既に登録されています。"),
-      ).toBeInTheDocument();
+      // Then
       expect(auth.signInWithOtp).not.toHaveBeenCalled();
       expect(turnstile.reset).not.toHaveBeenCalled();
-      expect(
-        screen.getByPlaceholderText("you@example.com"),
-      ).toBeInTheDocument();
     });
 
-    it("未登録メールでOTP送信に成功すると、codeステップへ遷移しcaptchaを消費する", async () => {
+    it("isEmailRegisteredで通信エラー(例外)が発生した場合、signInWithOtpを呼ばずcaptchaも消費しない", async () => {
+      // Given
+      actions.isEmailRegistered.mockRejectedValue(new Error("network down"));
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+
+      // When
+      await submitEmailStep(user);
+      await screen.findByText(
+        "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      );
+
+      // Then
+      expect(auth.signInWithOtp).not.toHaveBeenCalled();
+      expect(turnstile.reset).not.toHaveBeenCalled();
+    });
+
+    it("コード未入力ではverifyOtpを呼ばない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+
+      // When
+      await user.click(screen.getByRole("button", { name: "確認" }));
+
+      // Then
+      expect(auth.verifyOtp).not.toHaveBeenCalled();
+    });
+
+    it("再送がクールダウン中の場合、signInWithOtpを呼ばない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+      // 送信成功時にcaptchaは消費済み（null）のため、新しいトークンを設定してクールダウンだけを阻止条件にする（captcha未完了と混同すると、クールダウンの検証自体が壊れても見逃す）。
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
+
+      // When
+      await user.click(screen.getByRole("button", { name: "再送（60秒）" }));
+
+      // Then
+      expect(auth.signInWithOtp).not.toHaveBeenCalled();
+    });
+
+    it("パスワード未入力ではupdateUserを呼ばない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToPasswordStep(user);
+
+      // When
+      await user.click(
+        screen.getByRole("button", { name: "登録してサインイン" }),
+      );
+
+      // Then
+      expect(auth.updateUser).not.toHaveBeenCalled();
+    });
+  });
+
+  // 正常系での配線（正しい引数でAPIが呼ばれるか、成功後に正しい副作用が起きるか）は、reducerのテストでは検証できない、コンポーネント自体の責務。
+  // coverage稼ぎではなく、境界呼び出しの抑止テストと対になる。
+  describe("正常系の配線", () => {
+    it("送信は正しい引数でsignInWithOtpを1回呼ぶ", async () => {
+      // Given
       actions.isEmailRegistered.mockResolvedValue(false);
       auth.signInWithOtp.mockResolvedValue({ error: null });
       const user = userEvent.setup();
       render(<SignUpForm />);
 
+      // When
       await submitEmailStep(user, "new@example.com");
+      await screen.findByPlaceholderText("123456");
 
-      await waitFor(() => {
-        expect(auth.signInWithOtp).toHaveBeenCalledWith({
-          email: "new@example.com",
-          options: { captchaToken: "captcha-token" },
-        });
+      // Then
+      expect(auth.signInWithOtp).toHaveBeenCalledOnce();
+      expect(auth.signInWithOtp).toHaveBeenCalledWith({
+        email: "new@example.com",
+        options: { captchaToken: "captcha-token" },
       });
-      expect(await screen.findByPlaceholderText("123456")).toBeInTheDocument();
-      expect(turnstile.reset).toHaveBeenCalledOnce();
-      expect(screen.getByText("再送（60秒）")).toBeInTheDocument();
-    });
-
-    it("OTP送信に失敗すると、エラーを表示しemailステップに留まる", async () => {
-      actions.isEmailRegistered.mockResolvedValue(false);
-      auth.signInWithOtp.mockResolvedValue({
-        error: authError({ code: "over_email_send_rate_limit" }),
-      });
-      const user = userEvent.setup();
-      render(<SignUpForm />);
-
-      await submitEmailStep(user);
-
-      expect(
-        await screen.findByText(
-          "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
-        ),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByPlaceholderText("you@example.com"),
-      ).toBeInTheDocument();
-      expect(turnstile.reset).toHaveBeenCalledOnce();
-    });
-
-    it("通信エラー(例外)時は汎用エラーを表示し、captchaは消費しない", async () => {
-      actions.isEmailRegistered.mockRejectedValue(new Error("network down"));
-      const user = userEvent.setup();
-      render(<SignUpForm />);
-
-      await submitEmailStep(user);
-
-      expect(
-        await screen.findByText(
-          "通信エラーが発生しました。しばらくしてから再度お試しください。",
-        ),
-      ).toBeInTheDocument();
-      expect(turnstile.reset).not.toHaveBeenCalled();
     });
 
     it("送信中の二重クリックではisEmailRegisteredを1回しか呼ばない", async () => {
-      let resolveCheck: (value: boolean) => void = () => {};
-      actions.isEmailRegistered.mockReturnValue(
-        new Promise((resolve) => {
-          resolveCheck = resolve;
-        }),
-      );
+      // Given
+      const deferred = createDeferred<boolean>();
+      actions.isEmailRegistered.mockReturnValue(deferred.promise);
       const user = userEvent.setup();
       render(<SignUpForm />);
-
       await user.type(
         screen.getByPlaceholderText("you@example.com"),
         "user@example.com",
       );
       turnstile.onVerify?.("captcha-token");
       const button = screen.getByRole("button", { name: "認証コードを送信" });
+
+      // When
       await user.click(button);
       await user.click(button);
 
-      expect(actions.isEmailRegistered).toHaveBeenCalledTimes(1);
-      resolveCheck(false);
-    });
-  });
-
-  describe("codeステップ", () => {
-    it("空のコードでは確認せず、バリデーションエラーを表示する", async () => {
-      const user = userEvent.setup();
-      render(<SignUpForm />);
-      await advanceToCodeStep(user);
-
-      await user.click(screen.getByRole("button", { name: "確認" }));
-
-      expect(
-        screen.getByText("認証コードを入力してください。"),
-      ).toBeInTheDocument();
-      expect(auth.verifyOtp).not.toHaveBeenCalled();
+      // Then
+      expect(actions.isEmailRegistered).toHaveBeenCalledOnce();
+      deferred.resolve(false);
     });
 
-    it("正しいコードでverifyOtpが成功すると、passwordステップへ進む", async () => {
+    it("確認は正しい引数でverifyOtpを1回呼ぶ", async () => {
+      // Given
       const user = userEvent.setup();
       render(<SignUpForm />);
       await advanceToCodeStep(user);
       auth.verifyOtp.mockResolvedValue({ error: null });
 
+      // When
       await user.type(screen.getByPlaceholderText("123456"), "123456");
       await user.click(screen.getByRole("button", { name: "確認" }));
+      await screen.findByPlaceholderText(
+        "パスワード（8文字以上・英数字を含む）",
+      );
 
+      // Then
+      expect(auth.verifyOtp).toHaveBeenCalledOnce();
       expect(auth.verifyOtp).toHaveBeenCalledWith({
         email: "user@example.com",
         token: "123456",
         type: "email",
       });
-      expect(
-        await screen.findByPlaceholderText(
-          "パスワード（8文字以上・英数字を含む）",
-        ),
-      ).toBeInTheDocument();
     });
 
-    it("verifyOtpが失敗すると、エラーを表示しcodeステップに留まる", async () => {
+    it("パスワード登録は正しい引数でupdateUserを1回呼び、成功後/roundsへ遷移する", async () => {
+      // Given
+      auth.updateUser.mockResolvedValue({ error: null });
       const user = userEvent.setup();
       render(<SignUpForm />);
-      await advanceToCodeStep(user);
-      auth.verifyOtp.mockResolvedValue({
-        error: authError({ code: "otp_expired" }),
-      });
+      await advanceToPasswordStep(user);
 
-      await user.type(screen.getByPlaceholderText("123456"), "000000");
-      await user.click(screen.getByRole("button", { name: "確認" }));
-
-      expect(
-        await screen.findByText(
-          "認証コードが正しくないか、有効期限が切れています。",
-        ),
-      ).toBeInTheDocument();
-      expect(screen.getByPlaceholderText("123456")).toBeInTheDocument();
-    });
-
-    it("通信エラー時は汎用エラーを表示する", async () => {
-      const user = userEvent.setup();
-      render(<SignUpForm />);
-      await advanceToCodeStep(user);
-      auth.verifyOtp.mockRejectedValue(new Error("network down"));
-
-      await user.type(screen.getByPlaceholderText("123456"), "123456");
-      await user.click(screen.getByRole("button", { name: "確認" }));
-
-      expect(
-        await screen.findByText(
-          "通信エラーが発生しました。しばらくしてから再度お試しください。",
-        ),
-      ).toBeInTheDocument();
-    });
-
-    it("戻るボタンでemailステップに戻り、コード・エラー・captchaをクリアする", async () => {
-      const user = userEvent.setup();
-      render(<SignUpForm />);
-      await advanceToCodeStep(user);
-      auth.verifyOtp.mockResolvedValue({
-        error: authError({ code: "otp_expired" }),
-      });
-      await user.type(screen.getByPlaceholderText("123456"), "000000");
-      await user.click(screen.getByRole("button", { name: "確認" }));
-      await screen.findByText(
-        "認証コードが正しくないか、有効期限が切れています。",
+      // When
+      await user.type(
+        screen.getByPlaceholderText("パスワード（8文字以上・英数字を含む）"),
+        "password123",
       );
+      await user.click(
+        screen.getByRole("button", { name: "登録してサインイン" }),
+      );
+      await vi.waitFor(() => {
+        expect(nav.push).toHaveBeenCalledWith("/rounds");
+      });
 
-      await user.click(screen.getByRole("button", { name: "戻る" }));
-
-      expect(
-        screen.getByPlaceholderText("you@example.com"),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText(
-          "認証コードが正しくないか、有効期限が切れています。",
-        ),
-      ).not.toBeInTheDocument();
+      // Then
+      expect(auth.updateUser).toHaveBeenCalledOnce();
+      expect(auth.updateUser).toHaveBeenCalledWith({
+        password: "password123",
+      });
     });
 
-    it("再送はクールダウン中は送信しない", async () => {
-      const user = userEvent.setup();
-      render(<SignUpForm />);
-      await advanceToCodeStep(user);
-
-      await user.click(screen.getByRole("button", { name: "再送（60秒）" }));
-
-      expect(
-        screen.getByText(
-          "再送はクールダウン中です。しばらくしてから再度お試しください。",
-        ),
-      ).toBeInTheDocument();
-      expect(auth.signInWithOtp).not.toHaveBeenCalled();
-    });
-
-    it("再送はcaptchaTokenを渡してOTPを再送し、成否によらずcaptchaを消費する", async () => {
-      // fake timerとRTLのwaitFor/findBy（内部でsetTimeoutポーリングする）は
-      // 競合するため、このテストはfireEventと手動flushのみで進める。
+    it("再送は正しい引数でsignInWithOtpを1回呼ぶ", async () => {
+      // fake timerとRTLのwaitFor/findBy（内部でsetTimeoutポーリングする）は競合するため、fireEventと手動flushのみで進める。
       vi.useFakeTimers();
       try {
+        // Given
         actions.isEmailRegistered.mockResolvedValue(false);
         auth.signInWithOtp.mockResolvedValueOnce({ error: null });
 
@@ -359,153 +317,107 @@ describe("SignUpForm", () => {
           await Promise.resolve();
         });
         expect(screen.getByPlaceholderText("123456")).toBeInTheDocument();
-        turnstile.reset.mockClear();
+        auth.signInWithOtp.mockClear();
 
-        // クールダウン(60秒)を消化し、再送可能な状態にする。1秒ごとに
-        // setTimeoutを張り直す実装のため、まとめて60秒分進めるのではなく
-        // 1秒刻みで60回進め、都度のReact再レンダーを反映させる。
         for (let i = 0; i < 60; i++) {
           await act(async () => {
             await vi.advanceTimersByTimeAsync(1000);
           });
         }
 
-        auth.signInWithOtp.mockResolvedValueOnce({
-          error: authError({ code: "captcha_failed" }),
-        });
+        auth.signInWithOtp.mockResolvedValueOnce({ error: null });
         act(() => {
           turnstile.onVerify?.("resend-captcha-token");
         });
+
+        // When
         fireEvent.click(screen.getByRole("button", { name: "再送" }));
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then
+        expect(auth.signInWithOtp).toHaveBeenCalledOnce();
+        expect(auth.signInWithOtp).toHaveBeenCalledWith({
+          email: "user@example.com",
+          options: { captchaToken: "resend-captcha-token" },
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("再送でsignInWithOtpが例外を投げた場合、エラーを表示し再送ボタンを再度有効にする", async () => {
+      // fake timerとRTLのwaitFor/findBy（内部でsetTimeoutポーリングする）は競合するため、fireEventと手動flushのみで進める。
+      vi.useFakeTimers();
+      try {
+        // Given
+        actions.isEmailRegistered.mockResolvedValue(false);
+        auth.signInWithOtp.mockResolvedValueOnce({ error: null });
+
+        render(<SignUpForm />);
+        fireEvent.change(screen.getByPlaceholderText("you@example.com"), {
+          target: { value: "user@example.com" },
+        });
+        act(() => {
+          turnstile.onVerify?.("captcha-token");
+        });
+        fireEvent.click(
+          screen.getByRole("button", { name: "認証コードを送信" }),
+        );
         await act(async () => {
           await Promise.resolve();
           await Promise.resolve();
           await Promise.resolve();
         });
+        expect(screen.getByPlaceholderText("123456")).toBeInTheDocument();
+        auth.signInWithOtp.mockClear();
 
-        expect(auth.signInWithOtp).toHaveBeenCalledWith({
-          email: "user@example.com",
-          options: { captchaToken: "resend-captcha-token" },
+        for (let i = 0; i < 60; i++) {
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(1000);
+          });
+        }
+
+        // handleResendは他の3ハンドラと異なりtry/catchを持たなかったため、例外時にsubmitting状態が解除されず再送ボタンが固まる回帰があった。
+        // ここではその再発を防ぐ。
+        auth.signInWithOtp.mockRejectedValueOnce(new Error("network down"));
+        act(() => {
+          turnstile.onVerify?.("resend-captcha-token");
         });
-        expect(turnstile.reset).toHaveBeenCalledOnce();
+        const resendButton = screen.getByRole("button", { name: /^再送/ });
+
+        // When
+        fireEvent.click(resendButton);
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then
         expect(
-          screen.getByText("認証に失敗しました。もう一度お試しください。"),
+          screen.getByText(
+            "通信エラーが発生しました。しばらくしてから再度お試しください。",
+          ),
         ).toBeInTheDocument();
+        expect(resendButton).toHaveAttribute("aria-disabled", "false");
       } finally {
         vi.useRealTimers();
       }
     });
   });
 
-  describe("passwordステップ", () => {
-    it("空のパスワードでは登録せず、バリデーションエラーを表示する", async () => {
-      const user = userEvent.setup();
-      render(<SignUpForm />);
-      await advanceToPasswordStep(user);
-
-      await user.click(
-        screen.getByRole("button", { name: "登録してサインイン" }),
-      );
-
-      expect(
-        screen.getByText("パスワードを入力してください。"),
-      ).toBeInTheDocument();
-      expect(auth.updateUser).not.toHaveBeenCalled();
-    });
-
-    it("有効なパスワードでupdateUserが成功すると/roundsへ遷移する", async () => {
-      auth.updateUser.mockResolvedValue({ error: null });
-      const user = userEvent.setup();
-      render(<SignUpForm />);
-      await advanceToPasswordStep(user);
-
-      await user.type(
-        screen.getByPlaceholderText("パスワード（8文字以上・英数字を含む）"),
-        "password123",
-      );
-      await user.click(
-        screen.getByRole("button", { name: "登録してサインイン" }),
-      );
-
-      await waitFor(() => {
-        expect(auth.updateUser).toHaveBeenCalledWith({
-          password: "password123",
-        });
-      });
-      await waitFor(() => {
-        expect(nav.push).toHaveBeenCalledWith("/rounds");
-      });
-    });
-
-    it("updateUserが失敗するとエラーを表示し再送信可能にする", async () => {
-      auth.updateUser.mockResolvedValue({
-        error: authError({ code: "weak_password" }),
-      });
-      const user = userEvent.setup();
-      render(<SignUpForm />);
-      await advanceToPasswordStep(user);
-
-      await user.type(
-        screen.getByPlaceholderText("パスワード（8文字以上・英数字を含む）"),
-        "password123",
-      );
-      await user.click(
-        screen.getByRole("button", { name: "登録してサインイン" }),
-      );
-
-      expect(
-        await screen.findByText(
-          "パスワードは8文字以上で、英字と数字の両方を含めてください。",
-        ),
-      ).toBeInTheDocument();
-      expect(nav.push).not.toHaveBeenCalled();
-
-      auth.updateUser.mockResolvedValue({ error: null });
-      await user.click(
-        screen.getByRole("button", { name: "登録してサインイン" }),
-      );
-      await waitFor(() => {
-        expect(auth.updateUser).toHaveBeenCalledTimes(2);
-      });
-    });
-
-    it("通信エラー時は汎用エラーを表示する", async () => {
-      auth.updateUser.mockRejectedValue(new Error("network down"));
-      const user = userEvent.setup();
-      render(<SignUpForm />);
-      await advanceToPasswordStep(user);
-
-      await user.type(
-        screen.getByPlaceholderText("パスワード（8文字以上・英数字を含む）"),
-        "password123",
-      );
-      await user.click(
-        screen.getByRole("button", { name: "登録してサインイン" }),
-      );
-
-      expect(
-        await screen.findByText(
-          "通信エラーが発生しました。しばらくしてから再度お試しください。",
-        ),
-      ).toBeInTheDocument();
-    });
-  });
-
-  // mountedRefガードは各ハンドラに個別に書かれており共通化されていないため、
-  // 一箇所で検証しても他のハンドラの担保にはならない。ここでは外部モックへの
-  // 副作用（turnstile.reset呼び出し・router.push呼び出し）として観測できる
-  // 3箇所を検証する。それ以外のガード（emailステップのcatch節、既に登録済み
-  // 判定後、codeステップの成功/catch節、passwordステップのcatch節）は、内部の
-  // setState以外に外部から観測できる副作用がなく、アンマウント後はDOMも
-  // 参照できないため、ブラックボックステストでは「ガードの有無」を判別できず
-  // 意味のある検証にならない。
+  // アンマウント後に外部モックへ副作用が及ばないことを検証する。
+  // 「/roundsへ遷移しない」テストは、router.pushがアンマウント後も呼び出し可能な独立した関数であるため、mountedRefガードの効果を直接観測できる。
+  // 一方、captchaのreset()を検証する2件は、Reactがアンマウント時にref（useImperativeHandleで渡した値を含む）を自動的にnullへ解除するため、mountedRefガード自体を外してもturnstileRef.current?.reset()は同様に呼ばれない可能性がある。
+  // したがってこの2件は「アンマウント後にreset()を呼ばない」という観測可能な振る舞いの検証として残すが、mountedRefガード固有の効果を担保しているとは限らない。
   describe("送信中にアンマウントされた場合の副作用抑止", () => {
     it("再送中にアンマウントされた場合、captchaのリセットを行わない", async () => {
-      // fake timerとRTLのwaitFor/findBy（内部でsetTimeoutポーリングする）は
-      // 競合するため、このテストはfireEventと手動flushのみで最初から進める
-      // （advanceToCodeStepは内部でfindByを使うため使えない）。
+      // fake timerとRTLのwaitFor/findBy（内部でsetTimeoutポーリングする）は競合するため、このテストはfireEventと手動flushのみで最初から進める（advanceToCodeStepは内部でfindByを使うため使えない）。
       vi.useFakeTimers();
       try {
+        // Given
         actions.isEmailRegistered.mockResolvedValue(false);
         auth.signInWithOtp.mockResolvedValueOnce({ error: null });
 
@@ -540,14 +452,16 @@ describe("SignUpForm", () => {
           turnstile.onVerify?.("resend-captcha-token");
         });
         fireEvent.click(screen.getByRole("button", { name: "再送" }));
-        unmount();
 
+        // When
+        unmount();
         deferred.resolve({ error: null });
         await act(async () => {
           await Promise.resolve();
           await Promise.resolve();
         });
 
+        // Then
         expect(turnstile.reset).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
@@ -555,6 +469,7 @@ describe("SignUpForm", () => {
     });
 
     it("認証コード送信中にアンマウントされた場合、captchaのリセットを行わない", async () => {
+      // Given
       actions.isEmailRegistered.mockResolvedValue(false);
       const deferred = createDeferred<{ error: AuthError | null }>();
       auth.signInWithOtp.mockReturnValue(deferred.promise);
@@ -569,25 +484,26 @@ describe("SignUpForm", () => {
         turnstile.onVerify?.("captcha-token");
       });
       fireEvent.click(screen.getByRole("button", { name: "認証コードを送信" }));
-      // isEmailRegistered(false)の解決を待ってから、signInWithOtpの
-      // 未解決中にアンマウントする（isEmailRegistered直後のガードではなく
-      // signInWithOtp後のガードを対象にするため）。
+      // isEmailRegistered(false)の解決を待ってから、signInWithOtpの未解決中にアンマウントする（isEmailRegistered直後のガードではなくsignInWithOtp後のガードを対象にするため）。
       await act(async () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      unmount();
 
+      // When
+      unmount();
       deferred.resolve({ error: null });
       await act(async () => {
         await Promise.resolve();
         await Promise.resolve();
       });
 
+      // Then
       expect(turnstile.reset).not.toHaveBeenCalled();
     });
 
     it("パスワード登録中にアンマウントされた場合、/roundsへ遷移しない", async () => {
+      // Given
       const user = userEvent.setup();
       const { unmount } = render(<SignUpForm />);
       await advanceToPasswordStep(user);
@@ -601,14 +517,16 @@ describe("SignUpForm", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "登録してサインイン" }),
       );
-      unmount();
 
+      // When
+      unmount();
       deferred.resolve({ error: null });
       await act(async () => {
         await Promise.resolve();
         await Promise.resolve();
       });
 
+      // Then
       expect(nav.push).not.toHaveBeenCalled();
     });
   });

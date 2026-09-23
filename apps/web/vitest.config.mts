@@ -13,25 +13,33 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       reporter: ["text-summary", "html"],
-      // UIコンポーネントとアプリケーションロジックの責務を分離し、単体
-      // テストすべきロジックは.tsに切り出す方針のため、.tsxはcoverage対象
-      // から除外する（見た目・状態変更そのものの検証はPlaywright E2Eに
-      // 委ねる）。src/app/manifest.ts・src/app/sw.ts・src/proxy.tsは静的な
-      // 設定値または委譲のみでアプリケーション固有の判断を持たないため、
-      // 生成型のsrc/types/supabase.tsと同様に対象外とする。
+      // .ts/.tsx双方をcoverageの計測・可視化対象に含める。CIでブロックする
+      // 閾値（thresholds）は.tsのみを対象とする。.tsxのテストの目的は
+      // コンポーネント境界の配線（UIイベント→ロジック/副作用の呼び出しが
+      // 正しいか）を検証することであり、汎用的な統計的coverage%（実行され
+      // たかは測れるが、正しい引数か・重要な副作用が止まったかは測れない）
+      // と相性が悪いため、一律の閾値ではゲートしない。
+      // 除外対象は個別に中身を確認した上で判断する。
+      // - src/types/supabase.ts: 生成型
+      // - src/app/manifest.ts: Next.jsの静的メタデータ返却契約のみ
+      // - src/proxy.ts: updateSessionへの単純委譲のみ
+      // - src/app/sw.ts: 実際にはキャッシュ対象・オフラインフォールバックの
+      //   判断ロジックを持つため、この除外は暫定。テスト方針は未検討
+      //   （個別に再評価する）。
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/types/supabase.ts",
         "src/app/manifest.ts",
         "src/app/sw.ts",
         "src/proxy.ts",
-        "src/**/*.tsx",
       ],
       thresholds: {
-        statements: 90,
-        branches: 85,
-        functions: 95,
-        lines: 90,
+        "src/**/*.ts": {
+          statements: 90,
+          branches: 85,
+          functions: 95,
+          lines: 90,
+        },
       },
     },
   },

@@ -4,7 +4,7 @@ import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
 import { AuthCard } from "@/components/auth-card";
 import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,10 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { isEmailRegistered } from "@/lib/supabase/actions";
 import { createClient } from "@/lib/supabase/client";
-import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 import { cn } from "@/lib/utils";
 import { EMAIL_MAX_LENGTH, OTP_CODE_LENGTH } from "../auth-constants";
+import { initialSignUpState, signupReducer } from "./signup-flow";
 import {
-  type SignUpCodeFieldErrors,
-  type SignUpEmailFieldErrors,
-  type SignUpPasswordFieldErrors,
   validateCodeField,
   validateEmailField,
   validatePasswordField,
@@ -31,25 +28,23 @@ export function SignUpForm() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
-  const [step, setStep] = useState<"email" | "code" | "password">("email");
-  const [error, setError] = useState<string | null>(null);
-  const [emailFieldErrors, setEmailFieldErrors] = useState<
-    SignUpEmailFieldErrors & { captcha?: string }
-  >({});
-  const [codeFieldErrors, setCodeFieldErrors] = useState<SignUpCodeFieldErrors>(
-    {},
-  );
-  const [passwordFieldErrors, setPasswordFieldErrors] =
-    useState<SignUpPasswordFieldErrors>({});
-  const [resendCooldown, setResendCooldown] = useState(0);
+  const [
+    {
+      step,
+      error,
+      emailFieldErrors,
+      codeFieldErrors,
+      passwordFieldErrors,
+      resendCooldown,
+    },
+    dispatch,
+  ] = useReducer(signupReducer, initialSignUpState);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(undefined);
   const mountedRef = useRef(true);
-  // コード入力画面では確認・再送が別々の独立した操作のため、無効化・二重送信
-  // 防止も画面（送信/確認/登録）ごと・再送ごとに別々に持つ（互いをブロック
-  // しない）。二重送信の判定は同期的なrefで行う。setStateのstateはレンダーを
-  // 挟むまで更新されず、連打で2回目の呼び出しが古いfalseのクロージャのまま
-  // 実行されてしまうため、stateだけでは防げない。
+  // コード入力画面では確認・再送が別々の独立した操作のため、無効化・二重送信防止も画面（送信/確認/登録）ごと・再送ごとに別々に持つ（互いをブロックしない）。
+  // 二重送信の判定は同期的なrefで行う。
+  // setStateのstateはレンダーを挟むまで更新されず、連打で2回目の呼び出しが古いfalseのクロージャのまま実行されてしまうため、stateだけでは防げない。
   const primarySubmittingRef = useRef(false);
   const [primarySubmitting, setPrimarySubmitting] = useState(false);
   const resendSubmittingRef = useRef(false);
@@ -63,13 +58,12 @@ export function SignUpForm() {
 
   useEffect(() => {
     if (resendCooldown === 0) return;
-    const timer = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    const timer = setTimeout(() => dispatch({ type: "resend_tick" }), 1000);
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
   useEffect(() => {
-    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
-    // 対応するため、マウント時にも明示的にtrueへ戻す。
+    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に対応するため、マウント時にも明示的にtrueへ戻す。
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -77,74 +71,75 @@ export function SignUpForm() {
   }, []);
 
   function handleBack() {
-    setStep("email");
+    dispatch({ type: "reset_to_email" });
     setCode("");
-    setError(null);
     setCaptchaToken(null);
-    setCodeFieldErrors({});
   }
 
   async function handleResend() {
     if (resendSubmittingRef.current) return;
-    setError(null);
-    setCodeFieldErrors({});
 
     const errors = validateResendReady(resendCooldown, captchaToken);
     if (errors.resend || !captchaToken) {
-      setCodeFieldErrors(errors);
+      dispatch({ type: "resend_invalid", errors });
       return;
     }
 
     resendSubmittingRef.current = true;
     setResendSubmitting(true);
-    setResendCooldown(60);
+    dispatch({ type: "resend_started" });
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { captchaToken },
-    });
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { captchaToken },
+      });
 
-    // mountedRefの確認より前にturnstileRefへ触れない。送信中に別リンクへ
-    // 移動してアンマウントされていた場合、破棄済みのウィジェットへの
-    // reset()呼び出しを避ける。
-    if (!mountedRef.current) return;
+      // mountedRefの確認より前にturnstileRefへ触れない。
+      // 送信中に別リンクへ移動してアンマウントされていた場合、破棄済みのウィジェットへのreset()呼び出しを避ける。
+      if (!mountedRef.current) return;
 
-    consumeCaptchaToken();
+      consumeCaptchaToken();
 
-    if (error) {
-      setError(translateAuthErrorMessage(error));
+      if (error) {
+        dispatch({ type: "resend_auth_error", error });
+      }
+      resendSubmittingRef.current = false;
+      setResendSubmitting(false);
+    } catch {
+      if (!mountedRef.current) return;
+      dispatch({ type: "resend_network_error" });
+      resendSubmittingRef.current = false;
+      setResendSubmitting(false);
     }
-    resendSubmittingRef.current = false;
-    setResendSubmitting(false);
   }
 
   async function handleSendCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (primarySubmittingRef.current) return;
-    setError(null);
-    setEmailFieldErrors({});
 
     const errors = validateEmailField(email);
     if (errors.email) {
-      setEmailFieldErrors(errors);
+      dispatch({ type: "send_code_invalid", errors });
       return;
     }
     if (!captchaToken) {
-      setEmailFieldErrors({
-        captcha: "セキュリティチェックが完了していません。",
+      dispatch({
+        type: "send_code_invalid",
+        errors: { captcha: "セキュリティチェックが完了していません。" },
       });
       return;
     }
 
+    dispatch({ type: "send_code_started" });
     primarySubmittingRef.current = true;
     setPrimarySubmitting(true);
     try {
       if (await isEmailRegistered(email)) {
-        // このチェックはcaptchaTokenを使わないため、まだ消費されていない
-        // トークンをここでリセットする必要はない（次の送信でそのまま使える）。
+        // このチェックはcaptchaTokenを使わないため、まだ消費されていないトークンをここでリセットする必要はない（次の送信でそのまま使える）。
         if (!mountedRef.current) return;
-        setError("このメールアドレスは既に登録されています。");
+        dispatch({ type: "send_code_already_registered" });
         primarySubmittingRef.current = false;
         setPrimarySubmitting(false);
         return;
@@ -161,18 +156,15 @@ export function SignUpForm() {
       consumeCaptchaToken();
 
       if (error) {
-        setError(translateAuthErrorMessage(error));
+        dispatch({ type: "send_code_auth_error", error });
       } else {
-        setResendCooldown(60);
-        setStep("code");
+        dispatch({ type: "send_code_succeeded" });
       }
       primarySubmittingRef.current = false;
       setPrimarySubmitting(false);
     } catch {
       if (!mountedRef.current) return;
-      setError(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      dispatch({ type: "send_code_network_error" });
       primarySubmittingRef.current = false;
       setPrimarySubmitting(false);
     }
@@ -181,15 +173,14 @@ export function SignUpForm() {
   async function handleVerifyCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (primarySubmittingRef.current) return;
-    setError(null);
-    setCodeFieldErrors({});
 
     const errors = validateCodeField(code);
     if (errors.code) {
-      setCodeFieldErrors(errors);
+      dispatch({ type: "verify_code_invalid", errors });
       return;
     }
 
+    dispatch({ type: "verify_code_started" });
     primarySubmittingRef.current = true;
     setPrimarySubmitting(true);
     try {
@@ -203,17 +194,15 @@ export function SignUpForm() {
       if (!mountedRef.current) return;
 
       if (error) {
-        setError(translateAuthErrorMessage(error));
+        dispatch({ type: "verify_code_auth_error", error });
       } else {
-        setStep("password");
+        dispatch({ type: "verify_code_succeeded" });
       }
       primarySubmittingRef.current = false;
       setPrimarySubmitting(false);
     } catch {
       if (!mountedRef.current) return;
-      setError(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      dispatch({ type: "verify_code_network_error" });
       primarySubmittingRef.current = false;
       setPrimarySubmitting(false);
     }
@@ -222,15 +211,14 @@ export function SignUpForm() {
   async function handleSetPassword(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (primarySubmittingRef.current) return;
-    setError(null);
-    setPasswordFieldErrors({});
 
     const errors = validatePasswordField(password);
     if (errors.password) {
-      setPasswordFieldErrors(errors);
+      dispatch({ type: "set_password_invalid", errors });
       return;
     }
 
+    dispatch({ type: "set_password_started" });
     primarySubmittingRef.current = true;
     setPrimarySubmitting(true);
     try {
@@ -240,21 +228,19 @@ export function SignUpForm() {
       if (!mountedRef.current) return;
 
       if (error) {
-        setError(translateAuthErrorMessage(error));
+        dispatch({ type: "set_password_auth_error", error });
         primarySubmittingRef.current = false;
         setPrimarySubmitting(false);
         return;
       }
 
-      // 成功時はここでsubmittingを解除しない。router.push()は遷移先の取得中も
-      // このコンポーネントを保持し続けるため、ここで解除すると遷移完了前に
-      // ボタンが再度押せる状態に戻ってしまう。アンマウント時に自然に破棄される。
+      // 成功時はここでsubmittingを解除しない。
+      // router.push()は遷移先の取得中もこのコンポーネントを保持し続けるため、ここで解除すると遷移完了前にボタンが再度押せる状態に戻ってしまう。
+      // アンマウント時に自然に破棄される。
       router.push("/rounds");
     } catch {
       if (!mountedRef.current) return;
-      setError(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      dispatch({ type: "set_password_network_error" });
       primarySubmittingRef.current = false;
       setPrimarySubmitting(false);
     }
