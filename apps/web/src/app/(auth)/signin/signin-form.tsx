@@ -4,7 +4,7 @@ import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
 import { AuthCard } from "@/components/auth-card";
 import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
@@ -12,23 +12,24 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
-import { translateAuthErrorMessage } from "@/lib/supabase/errors";
 import { cn } from "@/lib/utils";
 import { EMAIL_MAX_LENGTH } from "../auth-constants";
-import { type SignInFieldErrors, validateSignInFields } from "./validate";
+import { initialSignInState, signinReducer } from "./signin-flow";
+import { validateSignInFields } from "./validate";
 
 export function SignInForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [{ error, fieldErrors }, dispatch] = useReducer(
+    signinReducer,
+    initialSignInState,
+  );
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<SignInFieldErrors>({});
   const turnstileRef = useRef<TurnstileInstance>(undefined);
   const mountedRef = useRef(true);
-  // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
-  // 挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseの
-  // クロージャのまま実行されてしまうため、stateだけでは防げない。
+  // 二重送信の判定は同期的なrefで行う。
+  // setSubmitting()由来のstateはレンダーを挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseのクロージャのまま実行されてしまうため、stateだけでは防げない。
   const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const hydrated = useHydrated();
@@ -39,8 +40,7 @@ export function SignInForm() {
   }
 
   useEffect(() => {
-    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
-    // 対応するため、マウント時にも明示的にtrueへ戻す。
+    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に対応するため、マウント時にも明示的にtrueへ戻す。
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -50,18 +50,21 @@ export function SignInForm() {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (submittingRef.current) return;
-    setError(null);
-    setFieldErrors({});
+
     const errors = validateSignInFields(email, password);
     if (errors.email || errors.password) {
-      setFieldErrors(errors);
+      dispatch({ type: "submit_invalid", errors });
       return;
     }
     if (!captchaToken) {
-      setFieldErrors({ captcha: "セキュリティチェックが完了していません。" });
+      dispatch({
+        type: "submit_invalid",
+        errors: { captcha: "セキュリティチェックが完了していません。" },
+      });
       return;
     }
 
+    dispatch({ type: "submit_started" });
     submittingRef.current = true;
     setSubmitting(true);
     try {
@@ -72,29 +75,25 @@ export function SignInForm() {
         options: { captchaToken },
       });
 
-      // mountedRefの確認より前にturnstileRefへ触れない。送信中に別リンクへ
-      // 移動してアンマウントされていた場合、破棄済みのウィジェットへの
-      // reset()呼び出しを避ける。
+      // mountedRefの確認より前にturnstileRefへ触れない。
+      // 送信中に別リンクへ移動してアンマウントされていた場合、破棄済みのウィジェットへのreset()呼び出しを避ける。
       if (!mountedRef.current) return;
 
       if (error) {
-        setError(translateAuthErrorMessage(error));
+        dispatch({ type: "submit_auth_error", error });
         consumeCaptchaToken();
         submittingRef.current = false;
         setSubmitting(false);
         return;
       }
 
-      // 成功時はここでsubmittingを解除しない。router.push()は遷移先の取得中も
-      // このコンポーネントを保持し続けるため、ここで解除すると遷移完了前に
-      // ボタンが再度押せる状態に戻り、同じ（使用済みの）captchaトークンで
-      // 二重に送信されてしまう。アンマウント時に自然に破棄される。
+      // 成功時はここでsubmittingを解除しない。
+      // router.push()は遷移先の取得中もこのコンポーネントを保持し続けるため、ここで解除すると遷移完了前にボタンが再度押せる状態に戻り、同じ（使用済みの）captchaトークンで二重に送信されてしまう。
+      // アンマウント時に自然に破棄される。
       router.push("/rounds");
     } catch {
       if (!mountedRef.current) return;
-      setError(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      dispatch({ type: "submit_network_error" });
       consumeCaptchaToken();
       submittingRef.current = false;
       setSubmitting(false);

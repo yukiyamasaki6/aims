@@ -51,7 +51,7 @@ vi.mock("@/components/turnstile", () => ({
 // signupReducer（signup-flow.test.tsで検証済み）とvalidate*関数群（validate.test.tsで検証済み）は、
 // いずれもここでは別モジュールの境界としてモックする。実装へ委譲せず入力（action・引数）ごとの戻り値を
 // テスト側で明示することで、それぞれの単体テストを削除した場合にsignup-form.test.tsx側の実行によって
-// カバレッジが維持されてしまう（削除がCIで検知できなくなる）ことを防ぐ。
+// カバレッジが維持されてしまうことを防ぐ。
 // 「正しく呼び出せているか（境界呼び出しの抑止・正常系の配線）」と「reducerの出力を正しく表示に反映できているか」を
 // 別個に検証する。
 const flow = vi.hoisted(() => ({

@@ -1,10 +1,18 @@
 import type { AuthError } from "@supabase/supabase-js";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   initialSignUpState,
   type SignUpState,
   signupReducer,
 } from "./signup-flow";
+
+// translateAuthErrorMessage（errors.test.tsで検証済み）は、このテストを削除してもテスト対象以外のカバレッジに影響しないように、別モジュールとの境界としてモックする。
+const errors = vi.hoisted(() => ({
+  translateAuthErrorMessage: vi.fn<(error: AuthError) => string>(),
+}));
+vi.mock("@/lib/supabase/errors", () => ({
+  translateAuthErrorMessage: errors.translateAuthErrorMessage,
+}));
 
 const NETWORK_ERROR_MESSAGE =
   "通信エラーが発生しました。しばらくしてから再度お試しください。";
@@ -18,6 +26,10 @@ function stateWith(overrides: Partial<SignUpState>): SignUpState {
 }
 
 describe("signupReducer", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("reset_to_emailはstepをemailへ戻し、error・codeFieldErrorsをクリアするが他は変更しない", () => {
     // Given
     const state = stateWith({
@@ -147,6 +159,7 @@ describe("signupReducer", () => {
       // Given
       const state = initialSignUpState;
       const error = makeAuthError("otp_expired");
+      errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
       // When
       const next = signupReducer(state, {
@@ -155,9 +168,8 @@ describe("signupReducer", () => {
       });
 
       // Then
-      expect(next.error).toBe(
-        "認証コードが正しくないか、有効期限が切れています。",
-      );
+      expect(errors.translateAuthErrorMessage).toHaveBeenCalledWith(error);
+      expect(next.error).toBe("翻訳済みメッセージ");
       expect(next.emailFieldErrors).toEqual({});
       expect(next.step).toBe("email");
     });
@@ -229,6 +241,7 @@ describe("signupReducer", () => {
       // Given
       const state = stateWith({ step: "code" });
       const error = makeAuthError("otp_expired");
+      errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
       // When
       const next = signupReducer(state, {
@@ -237,9 +250,8 @@ describe("signupReducer", () => {
       });
 
       // Then
-      expect(next.error).toBe(
-        "認証コードが正しくないか、有効期限が切れています。",
-      );
+      expect(errors.translateAuthErrorMessage).toHaveBeenCalledWith(error);
+      expect(next.error).toBe("翻訳済みメッセージ");
       expect(next.codeFieldErrors).toEqual({});
       expect(next.step).toBe("code");
     });
@@ -298,6 +310,7 @@ describe("signupReducer", () => {
       // Given
       const state = stateWith({ step: "code", codeFieldErrors: {} });
       const error = makeAuthError("otp_expired");
+      errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
       // When
       const next = signupReducer(state, {
@@ -306,9 +319,8 @@ describe("signupReducer", () => {
       });
 
       // Then
-      expect(next.error).toBe(
-        "認証コードが正しくないか、有効期限が切れています。",
-      );
+      expect(errors.translateAuthErrorMessage).toHaveBeenCalledWith(error);
+      expect(next.error).toBe("翻訳済みメッセージ");
       expect(next.codeFieldErrors).toEqual({});
     });
 
@@ -362,6 +374,7 @@ describe("signupReducer", () => {
       // Given
       const state = stateWith({ step: "password" });
       const error = makeAuthError("weak_password");
+      errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
       // When
       const next = signupReducer(state, {
@@ -370,9 +383,8 @@ describe("signupReducer", () => {
       });
 
       // Then
-      expect(next.error).toBe(
-        "パスワードは8文字以上で、英字と数字の両方を含めてください。",
-      );
+      expect(errors.translateAuthErrorMessage).toHaveBeenCalledWith(error);
+      expect(next.error).toBe("翻訳済みメッセージ");
       expect(next.passwordFieldErrors).toEqual({});
     });
 
