@@ -1,11 +1,11 @@
 import {
   EMAIL_MAX_LENGTH,
-  EMAIL_PATTERN,
   OTP_CODE_LENGTH,
   PASSWORD_ALLOWED_PATTERN,
   PASSWORD_MAX_LENGTH,
 } from "../_shared/auth-constants";
-import { CODE_PATTERN } from "../_shared/otp-code-pattern";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type SignUpEmailFieldErrors = {
   email?: string;
@@ -32,6 +32,8 @@ export type SignUpCodeFieldErrors = {
   code?: string;
   resend?: string;
 };
+
+const CODE_PATTERN = new RegExp(`^\\d{${OTP_CODE_LENGTH}}$`);
 
 export function validateCodeField(code: string): SignUpCodeFieldErrors {
   if (!code) {
