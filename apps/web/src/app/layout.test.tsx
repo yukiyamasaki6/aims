@@ -1,7 +1,7 @@
 import { SerwistProvider } from "@serwist/next/react";
 import { render, screen } from "@testing-library/react";
 import { Children, isValidElement, type ReactElement } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalIdentityProvider } from "@/features/auth/local-identity-provider";
 import RootLayout from "./layout";
 
@@ -20,11 +20,6 @@ vi.mock("@supabase/ssr", () => ({
     },
   }),
 }));
-
-beforeEach(() => {
-  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
-  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
-});
 
 afterEach(() => {
   vi.unstubAllEnvs();
