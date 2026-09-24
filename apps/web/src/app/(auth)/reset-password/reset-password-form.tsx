@@ -4,15 +4,15 @@ import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
-import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { EMAIL_MAX_LENGTH, OTP_CODE_LENGTH } from "../_shared/auth-constants";
 import { AuthHeader } from "../_shared/auth-header";
-import { EMAIL_MAX_LENGTH, OTP_CODE_LENGTH } from "../auth-constants";
+import { Turnstile } from "../_shared/turnstile";
 import {
   initialResetPasswordState,
   resetPasswordReducer,

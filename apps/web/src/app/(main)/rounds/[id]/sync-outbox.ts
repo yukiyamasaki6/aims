@@ -12,7 +12,7 @@ export type PendingSyncOperation = {
   label: string;
   createdAt?: number;
   operation: SyncOperation;
-  // この端末に最後にサインインしていたユーザー（lib/supabase/local-identity
+  // この端末に最後にサインインしていたユーザー（features/auth/local-identity
   // のgetLocalIdentity()）。同一端末を複数ユーザーが使う場合に、別ユーザーの
   // 未同期レコードを表示・同期処理の対象から除外するために使う。未サインイン
   // 状態で書き込まれた場合のみnullになり得る想定（通常は発生しない）。

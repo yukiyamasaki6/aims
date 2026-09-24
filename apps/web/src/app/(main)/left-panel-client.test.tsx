@@ -14,7 +14,7 @@ vi.mock("@/lib/supabase/client", () => ({
 }));
 
 const identity = vi.hoisted(() => ({ value: null as string | null }));
-vi.mock("@/lib/supabase/local-identity", () => ({
+vi.mock("@/features/auth/local-identity", () => ({
   getLocalIdentity: () => identity.value,
 }));
 

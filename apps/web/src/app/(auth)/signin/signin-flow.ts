@@ -1,5 +1,5 @@
 import type { AuthError } from "@supabase/supabase-js";
-import { translateAuthErrorMessage } from "@/lib/supabase/errors";
+import { translateAuthErrorMessage } from "@/features/auth/errors";
 import type { SignInFieldErrors } from "./validate";
 
 const NETWORK_ERROR_MESSAGE =

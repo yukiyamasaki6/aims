@@ -1,4 +1,4 @@
-import { LeftPanel } from "@/components/left-panel";
+import { LeftPanel } from "./left-panel";
 
 export default function MainLayout({
   children,

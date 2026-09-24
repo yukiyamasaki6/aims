@@ -1,7 +1,7 @@
 import { SerwistProvider } from "@serwist/next/react";
 import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
-import { LocalIdentityProvider } from "@/components/local-identity-provider";
+import { LocalIdentityProvider } from "@/features/auth/local-identity-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {

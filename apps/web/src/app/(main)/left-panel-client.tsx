@@ -7,9 +7,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
+import { translateAuthErrorMessage } from "@/features/auth/errors";
+import { getLocalIdentity } from "@/features/auth/local-identity";
 import { createClient } from "@/lib/supabase/client";
-import { translateAuthErrorMessage } from "@/lib/supabase/errors";
-import { getLocalIdentity } from "@/lib/supabase/local-identity";
 import { cn } from "@/lib/utils";
 
 export function LeftPanelClient({ isSignedIn }: { isSignedIn: boolean }) {

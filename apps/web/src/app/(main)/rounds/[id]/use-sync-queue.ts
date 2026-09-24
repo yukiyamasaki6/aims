@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getLocalIdentity } from "@/lib/supabase/local-identity";
+import { getLocalIdentity } from "@/features/auth/local-identity";
 import {
   eventIdOf,
   executeSyncOperation,
