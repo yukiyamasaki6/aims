@@ -1,10 +1,10 @@
 import type { AuthError } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  initialSignUpState,
-  type SignUpState,
-  signupReducer,
-} from "./signup-flow";
+  initialResetPasswordState,
+  type ResetPasswordState,
+  resetPasswordReducer,
+} from "./reset-password-flow";
 
 // translateAuthErrorMessage（errors.test.tsで検証済み）は、このテストを削除してもテスト対象以外のカバレッジに影響しないように、別モジュールとの境界としてモックする。
 const errors = vi.hoisted(() => ({
@@ -21,11 +21,11 @@ function makeAuthError(code: string, message = "x"): AuthError {
   return { code, message } as AuthError;
 }
 
-function stateWith(overrides: Partial<SignUpState>): SignUpState {
-  return { ...initialSignUpState, ...overrides };
+function stateWith(overrides: Partial<ResetPasswordState>): ResetPasswordState {
+  return { ...initialResetPasswordState, ...overrides };
 }
 
-describe("signupReducer", () => {
+describe("resetPasswordReducer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -39,7 +39,7 @@ describe("signupReducer", () => {
       });
 
       // When
-      const next = signupReducer(state, { type: "send_code_started" });
+      const next = resetPasswordReducer(state, { type: "send_code_started" });
 
       // Then
       expect(next.error).toBeNull();
@@ -54,7 +54,7 @@ describe("signupReducer", () => {
       });
 
       // When
-      const next = signupReducer(state, { type: "send_code_succeeded" });
+      const next = resetPasswordReducer(state, { type: "send_code_succeeded" });
 
       // Then
       expect(next.step).toBe("code");
@@ -68,7 +68,7 @@ describe("signupReducer", () => {
       const state = stateWith({ error: "前回のエラー" });
 
       // When
-      const next = signupReducer(state, {
+      const next = resetPasswordReducer(state, {
         type: "send_code_invalid",
         errors: { email: "メールアドレスを入力してください。" },
       });
@@ -82,10 +82,10 @@ describe("signupReducer", () => {
 
     it("send_code_invalidはcaptchaエラーも表現できる", () => {
       // Given
-      const state = initialSignUpState;
+      const state = initialResetPasswordState;
 
       // When
-      const next = signupReducer(state, {
+      const next = resetPasswordReducer(state, {
         type: "send_code_invalid",
         errors: { captcha: "セキュリティチェックが完了していません。" },
       });
@@ -96,28 +96,14 @@ describe("signupReducer", () => {
       });
     });
 
-    it("send_code_already_registeredは専用メッセージを表示しemailFieldErrorsをクリアする", () => {
-      // Given
-      const state = stateWith({ emailFieldErrors: { email: "stale" } });
-
-      // When
-      const next = signupReducer(state, {
-        type: "send_code_already_registered",
-      });
-
-      // Then
-      expect(next.error).toBe("このメールアドレスは既に登録されています。");
-      expect(next.emailFieldErrors).toEqual({});
-    });
-
     it("send_code_auth_errorはtranslateAuthErrorMessageの結果をerrorに設定する", () => {
       // Given
-      const state = initialSignUpState;
+      const state = initialResetPasswordState;
       const error = makeAuthError("otp_expired");
       errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
       // When
-      const next = signupReducer(state, {
+      const next = resetPasswordReducer(state, {
         type: "send_code_auth_error",
         error,
       });
@@ -131,10 +117,12 @@ describe("signupReducer", () => {
 
     it("send_code_network_errorは通信エラーメッセージを設定する", () => {
       // Given
-      const state = initialSignUpState;
+      const state = initialResetPasswordState;
 
       // When
-      const next = signupReducer(state, { type: "send_code_network_error" });
+      const next = resetPasswordReducer(state, {
+        type: "send_code_network_error",
+      });
 
       // Then
       expect(next.error).toBe(NETWORK_ERROR_MESSAGE);
@@ -152,7 +140,7 @@ describe("signupReducer", () => {
       });
 
       // When
-      const next = signupReducer(state, { type: "verify_code_started" });
+      const next = resetPasswordReducer(state, { type: "verify_code_started" });
 
       // Then
       expect(next.error).toBeNull();
@@ -167,7 +155,9 @@ describe("signupReducer", () => {
       });
 
       // When
-      const next = signupReducer(state, { type: "verify_code_succeeded" });
+      const next = resetPasswordReducer(state, {
+        type: "verify_code_succeeded",
+      });
 
       // Then
       expect(next.step).toBe("password");
@@ -180,7 +170,7 @@ describe("signupReducer", () => {
       const state = stateWith({ error: "前回のエラー" });
 
       // When
-      const next = signupReducer(state, {
+      const next = resetPasswordReducer(state, {
         type: "verify_code_invalid",
         errors: { code: "認証コードを入力してください。" },
       });
@@ -199,7 +189,7 @@ describe("signupReducer", () => {
       errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
       // When
-      const next = signupReducer(state, {
+      const next = resetPasswordReducer(state, {
         type: "verify_code_auth_error",
         error,
       });
@@ -216,7 +206,7 @@ describe("signupReducer", () => {
       const state = stateWith({ step: "code" });
 
       // When
-      const next = signupReducer(state, {
+      const next = resetPasswordReducer(state, {
         type: "verify_code_network_error",
       });
 
@@ -236,7 +226,7 @@ describe("signupReducer", () => {
       });
 
       // When
-      const next = signupReducer(state, { type: "resend_started" });
+      const next = resetPasswordReducer(state, { type: "resend_started" });
 
       // Then
       expect(next.error).toBeNull();
@@ -251,7 +241,7 @@ describe("signupReducer", () => {
         "再送はクールダウン中です。しばらくしてから再度お試しください。";
 
       // When
-      const next = signupReducer(state, {
+      const next = resetPasswordReducer(state, {
         type: "resend_invalid",
         errors: { resend: cooldownMessage },
       });
@@ -269,7 +259,7 @@ describe("signupReducer", () => {
       errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
       // When
-      const next = signupReducer(state, {
+      const next = resetPasswordReducer(state, {
         type: "resend_auth_error",
         error,
       });
@@ -285,7 +275,9 @@ describe("signupReducer", () => {
       const state = stateWith({ step: "code" });
 
       // When
-      const next = signupReducer(state, { type: "resend_network_error" });
+      const next = resetPasswordReducer(state, {
+        type: "resend_network_error",
+      });
 
       // Then
       expect(next.error).toBe(NETWORK_ERROR_MESSAGE);
@@ -298,7 +290,7 @@ describe("signupReducer", () => {
       const state = stateWith({ resendCooldown: 5 });
 
       // When
-      const next = signupReducer(state, { type: "resend_tick" });
+      const next = resetPasswordReducer(state, { type: "resend_tick" });
 
       // Then
       expect(next.resendCooldown).toBe(4);
@@ -309,7 +301,7 @@ describe("signupReducer", () => {
       const state = stateWith({ resendCooldown: 1 });
 
       // When
-      const next = signupReducer(state, { type: "resend_tick" });
+      const next = resetPasswordReducer(state, { type: "resend_tick" });
 
       // Then
       expect(next.resendCooldown).toBe(0);
@@ -326,7 +318,9 @@ describe("signupReducer", () => {
       });
 
       // When
-      const next = signupReducer(state, { type: "set_password_started" });
+      const next = resetPasswordReducer(state, {
+        type: "set_password_started",
+      });
 
       // Then
       expect(next.error).toBeNull();
@@ -338,7 +332,7 @@ describe("signupReducer", () => {
       const state = stateWith({ step: "password", error: "前回のエラー" });
 
       // When
-      const next = signupReducer(state, {
+      const next = resetPasswordReducer(state, {
         type: "set_password_invalid",
         errors: { password: "パスワードを入力してください。" },
       });
@@ -357,7 +351,7 @@ describe("signupReducer", () => {
       errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
       // When
-      const next = signupReducer(state, {
+      const next = resetPasswordReducer(state, {
         type: "set_password_auth_error",
         error,
       });
@@ -373,7 +367,7 @@ describe("signupReducer", () => {
       const state = stateWith({ step: "password" });
 
       // When
-      const next = signupReducer(state, {
+      const next = resetPasswordReducer(state, {
         type: "set_password_network_error",
       });
 
@@ -383,24 +377,26 @@ describe("signupReducer", () => {
     });
   });
 
-  it("reset_to_emailはstepをemailへ戻し、error・codeFieldErrorsをクリアするが他は変更しない", () => {
-    // Given
-    const state = stateWith({
-      step: "code",
-      error: "何かのエラー",
-      codeFieldErrors: { code: "認証コードを入力してください。" },
-      emailFieldErrors: { email: "触れられない" },
-      resendCooldown: 30,
+  describe("reset_to_email", () => {
+    it("stepをemailへ戻し、error・codeFieldErrorsをクリアするが他は変更しない", () => {
+      // Given
+      const state = stateWith({
+        step: "code",
+        error: "何かのエラー",
+        codeFieldErrors: { code: "認証コードを入力してください。" },
+        emailFieldErrors: { email: "触れられない" },
+        resendCooldown: 30,
+      });
+
+      // When
+      const next = resetPasswordReducer(state, { type: "reset_to_email" });
+
+      // Then
+      expect(next.step).toBe("email");
+      expect(next.error).toBeNull();
+      expect(next.codeFieldErrors).toEqual({});
+      expect(next.emailFieldErrors).toEqual({ email: "触れられない" });
+      expect(next.resendCooldown).toBe(30);
     });
-
-    // When
-    const next = signupReducer(state, { type: "reset_to_email" });
-
-    // Then
-    expect(next.step).toBe("email");
-    expect(next.error).toBeNull();
-    expect(next.codeFieldErrors).toEqual({});
-    expect(next.emailFieldErrors).toEqual({ email: "触れられない" });
-    expect(next.resendCooldown).toBe(30);
   });
 });

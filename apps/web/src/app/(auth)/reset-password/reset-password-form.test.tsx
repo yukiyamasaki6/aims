@@ -1,15 +1,18 @@
 import type { AuthError } from "@supabase/supabase-js";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  ResetPasswordAction,
+  ResetPasswordState,
+} from "./reset-password-flow";
 import { ResetPasswordForm } from "./reset-password-form";
+import type {
+  ResetPasswordCodeFieldErrors,
+  ResetPasswordEmailFieldErrors,
+  ResetPasswordPasswordFieldErrors,
+} from "./validate";
 
 const auth = vi.hoisted(() => ({
   resetPasswordForEmail: vi.fn(),
@@ -21,8 +24,7 @@ vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({ auth }),
 }));
 
-// TurnstileのSDK自体はturnstile.test.tsxで検証済みのためここでは境界として
-// モックし、onVerifyの発火とreset()呼び出しのみ差し替えたコンポーネントで模す。
+// TurnstileのSDK自体はturnstile.test.tsxで検証済みのためここでは境界としてモックし、onVerifyの発火とreset()呼び出しのみ差し替えたコンポーネントで模す。
 const turnstile = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
   reset: vi.fn(),
@@ -37,49 +39,143 @@ vi.mock("@/components/turnstile", () => ({
   ),
 }));
 
-function createDeferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (err: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
+// resetPasswordReducer（reset-password-flow.test.tsで検証済み）とvalidate*関数群（validate.test.tsで検証済み）は、このテストを削除してもテスト対象以外のカバレッジに影響しないように、別モジュールとの境界としてモックする。
+// 「正しく呼び出せているか（各操作のdescribe）」と「reducerの出力を正しく表示に反映できているか（表示のdescribe）」を別個に検証する。
+const flow = vi.hoisted(() => ({
+  reducer:
+    vi.fn<
+      (
+        state: ResetPasswordState,
+        action: ResetPasswordAction,
+      ) => ResetPasswordState
+    >(),
+  initialState: {
+    step: "email",
+    error: null,
+    emailFieldErrors: {},
+    codeFieldErrors: {},
+    passwordFieldErrors: {},
+    resendCooldown: 0,
+  } as ResetPasswordState,
+}));
+vi.mock("./reset-password-flow", () => ({
+  get initialResetPasswordState() {
+    return flow.initialState;
+  },
+  resetPasswordReducer: flow.reducer,
+}));
+
+const validateMock = vi.hoisted(() => ({
+  email: vi.fn<(email: string) => ResetPasswordEmailFieldErrors>(),
+  code: vi.fn<(code: string) => ResetPasswordCodeFieldErrors>(),
+  password: vi.fn<(password: string) => ResetPasswordPasswordFieldErrors>(),
+  resend:
+    vi.fn<
+      (
+        resendCooldown: number,
+        captchaToken: string | null,
+      ) => ResetPasswordCodeFieldErrors
+    >(),
+}));
+vi.mock("./validate", () => ({
+  validateEmailField: validateMock.email,
+  validateCodeField: validateMock.code,
+  validatePasswordField: validateMock.password,
+  validateResendReady: validateMock.resend,
+}));
+
+const PASSWORD_PLACEHOLDER = "新しいパスワード（8文字以上・英数字を含む）";
+
+function baseState(
+  overrides: Partial<ResetPasswordState> = {},
+): ResetPasswordState {
+  return {
+    step: "email",
+    error: null,
+    emailFieldErrors: {},
+    codeFieldErrors: {},
+    passwordFieldErrors: {},
+    resendCooldown: 0,
+    ...overrides,
+  };
 }
 
-function authError(overrides: Partial<AuthError>): AuthError {
-  return {
-    name: "AuthApiError",
-    message: "",
-    status: 400,
-    ...overrides,
-  } as AuthError;
+type Transitions = Partial<
+  Record<
+    ResetPasswordAction["type"],
+    (
+      state: ResetPasswordState,
+      action: ResetPasswordAction,
+    ) => ResetPasswordState
+  >
+>;
+let transitions: Transitions = {};
+function setTransitions(map: Transitions) {
+  transitions = { ...transitions, ...map };
+}
+
+function makeAuthError(code: string, message = "x"): AuthError {
+  return { code, message } as AuthError;
+}
+
+function sendCodeButton() {
+  return screen.getByRole("button", { name: "認証コードを送信" });
+}
+
+function verifyButton() {
+  return screen.getByRole("button", { name: "確認" });
+}
+
+function setPasswordButton() {
+  return screen.getByRole("button", { name: "パスワードを変更" });
+}
+
+async function fillEmailAndCompleteCaptcha(
+  user: ReturnType<typeof userEvent.setup>,
+  email = "user@example.com",
+) {
+  await user.type(screen.getByPlaceholderText("you@example.com"), email);
+  act(() => {
+    turnstile.onVerify?.("captcha-token");
+  });
 }
 
 async function submitEmailStep(
   user: ReturnType<typeof userEvent.setup>,
   email = "user@example.com",
 ) {
-  await user.type(screen.getByPlaceholderText("you@example.com"), email);
-  turnstile.onVerify?.("captcha-token");
-  await user.click(screen.getByRole("button", { name: "認証コードを送信" }));
+  await fillEmailAndCompleteCaptcha(user, email);
+  await user.click(sendCodeButton());
 }
 
-async function advanceToCodeStep(user: ReturnType<typeof userEvent.setup>) {
+async function advanceToCodeStep(
+  user: ReturnType<typeof userEvent.setup>,
+  email = "user@example.com",
+) {
   auth.resetPasswordForEmail.mockResolvedValue({ error: null });
-  await submitEmailStep(user);
+  // resendCooldownをここで60（実際のreducerの値）にすると、コード確認系のテストごとに再送クールダウンの解除待ちが必要になり本来の検証と無関係な待機が増えるため、0を返す。
+  // resendCooldown:60への遷移自体はreset-password-flow.test.tsで別途検証済み。
+  setTransitions({
+    send_code_succeeded: (state) => ({
+      ...state,
+      step: "code",
+      resendCooldown: 0,
+    }),
+  });
+  await submitEmailStep(user, email);
   await screen.findByPlaceholderText("123456");
   vi.clearAllMocks();
 }
 
 async function advanceToPasswordStep(user: ReturnType<typeof userEvent.setup>) {
   await advanceToCodeStep(user);
+  setTransitions({
+    verify_code_succeeded: (state) => ({ ...state, step: "password" }),
+  });
   auth.verifyOtp.mockResolvedValue({ error: null });
   await user.type(screen.getByPlaceholderText("123456"), "123456");
-  await user.click(screen.getByRole("button", { name: "確認" }));
-  await screen.findByPlaceholderText(
-    "新しいパスワード（8文字以上・英数字を含む）",
-  );
+  await user.click(verifyButton());
+  await screen.findByPlaceholderText(PASSWORD_PLACEHOLDER);
   vi.clearAllMocks();
 }
 
@@ -89,8 +185,17 @@ describe("ResetPasswordForm", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // jsdomのlocation.assignはnon-configurableでvi.spyOnできないため、
-    // window.locationごと差し替える。
+    flow.initialState = baseState();
+    transitions = {};
+    flow.reducer.mockImplementation((state, action) => {
+      const transition = transitions[action.type];
+      return transition ? transition(state, action) : state;
+    });
+    validateMock.email.mockReturnValue({});
+    validateMock.code.mockReturnValue({});
+    validateMock.password.mockReturnValue({});
+    validateMock.resend.mockReturnValue({});
+    // jsdomのlocation.assignはnon-configurableでvi.spyOnできないため、window.locationごと差し替える。
     Object.defineProperty(window, "location", {
       configurable: true,
       value: { ...originalLocation, assign: locationAssign },
@@ -104,489 +209,877 @@ describe("ResetPasswordForm", () => {
     });
   });
 
-  describe("emailステップ", () => {
-    it("不正なメールでは送信せず、バリデーションエラーを表示する", async () => {
-      const user = userEvent.setup();
-      render(<ResetPasswordForm />);
+  // 正常系での配線（正しい引数でAPIが呼ばれるか、結果に応じて正しいactionをdispatchするか）は、reducerのテストでは検証できない、コンポーネント自体の責務。
+  // 入力検証エラー等で境界の手前で止まる異常系では、resetPasswordReducer・validate*関数群はいずれもモック化しているため、dispatchされたactionとvalidate*関数への呼び出し引数を検証することで、「境界（Supabase呼び出し・captcha消費）の手前で正しく止まっているか」を確認する。
+  // 「送信中にアンマウントされた場合」では、アンマウント後に外部モックへ副作用が及ばないことを検証する。
+  // signOut・window.location.assignはアンマウント後も呼び出し可能な独立した関数であるため、mountedRefガードの効果を直接観測できる。
+  // 一方、captchaのreset()は、Reactがアンマウント時にref（useImperativeHandleで渡した値を含む）を自動的にnullへ解除するため、mountedRefガード自体を外してもturnstileRef.current?.reset()は同様に呼ばれない可能性がある。
+  // したがってreset()の検証は「アンマウント後にreset()を呼ばない」という観測可能な振る舞いの検証として残すが、mountedRefガード固有の効果を担保しているとは限らない。
 
-      await user.click(
-        screen.getByRole("button", { name: "認証コードを送信" }),
-      );
-
-      expect(
-        screen.getByText("メールアドレスを入力してください。"),
-      ).toBeInTheDocument();
-      expect(auth.resetPasswordForEmail).not.toHaveBeenCalled();
-    });
-
-    it("captcha未完了では送信しない", async () => {
-      const user = userEvent.setup();
-      render(<ResetPasswordForm />);
-
-      await user.type(
-        screen.getByPlaceholderText("you@example.com"),
-        "user@example.com",
-      );
-      await user.click(
-        screen.getByRole("button", { name: "認証コードを送信" }),
-      );
-
-      expect(
-        screen.getByText("セキュリティチェックが完了していません。"),
-      ).toBeInTheDocument();
-      expect(auth.resetPasswordForEmail).not.toHaveBeenCalled();
-    });
-
-    it("送信に成功すると、email/captchaTokenを渡してcodeステップへ遷移しcaptchaを消費する", async () => {
+  describe("認証コード送信", () => {
+    it("resetPasswordForEmailが成功した場合、send_code_startedをdispatchし正しい引数でresetPasswordForEmailを呼び、captchaをリセットしてsend_code_succeededをdispatchする", async () => {
+      // Given
       auth.resetPasswordForEmail.mockResolvedValue({ error: null });
       const user = userEvent.setup();
       render(<ResetPasswordForm />);
 
+      // When
       await submitEmailStep(user, "user@example.com");
 
-      await waitFor(() => {
-        expect(auth.resetPasswordForEmail).toHaveBeenCalledWith(
-          "user@example.com",
-          { captchaToken: "captcha-token" },
-        );
+      // Then
+      expect(validateMock.email).toHaveBeenCalledWith("user@example.com");
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "send_code_succeeded",
+        });
       });
-      expect(await screen.findByPlaceholderText("123456")).toBeInTheDocument();
-      expect(turnstile.reset).toHaveBeenCalledOnce();
-      expect(screen.getByText("再送（60秒）")).toBeInTheDocument();
-    });
-
-    it("送信に失敗すると、エラーを表示しemailステップに留まる", async () => {
-      auth.resetPasswordForEmail.mockResolvedValue({
-        error: authError({ code: "over_email_send_rate_limit" }),
+      expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+        type: "send_code_started",
       });
-      const user = userEvent.setup();
-      render(<ResetPasswordForm />);
-
-      await submitEmailStep(user);
-
-      expect(
-        await screen.findByText(
-          "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
-        ),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByPlaceholderText("you@example.com"),
-      ).toBeInTheDocument();
+      expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
+      expect(auth.resetPasswordForEmail).toHaveBeenCalledWith(
+        "user@example.com",
+        { captchaToken: "captcha-token" },
+      );
       expect(turnstile.reset).toHaveBeenCalledOnce();
     });
 
-    it("通信エラー(例外)時は汎用エラーを表示し、captchaは消費しない", async () => {
-      auth.resetPasswordForEmail.mockRejectedValue(new Error("network down"));
-      const user = userEvent.setup();
-      render(<ResetPasswordForm />);
-
-      await submitEmailStep(user);
-
-      expect(
-        await screen.findByText(
-          "通信エラーが発生しました。しばらくしてから再度お試しください。",
-        ),
-      ).toBeInTheDocument();
-      expect(turnstile.reset).not.toHaveBeenCalled();
-    });
-
-    it("送信中の二重クリックではresetPasswordForEmailを1回しか呼ばない", async () => {
-      const deferred = createDeferred<{ error: AuthError | null }>();
+    it("送信中に二重クリックした場合、resetPasswordForEmailを1回しか呼ばない", async () => {
+      // Given
+      const deferred = Promise.withResolvers<{ error: AuthError | null }>();
       auth.resetPasswordForEmail.mockReturnValue(deferred.promise);
       const user = userEvent.setup();
       render(<ResetPasswordForm />);
+      await fillEmailAndCompleteCaptcha(user);
+      const button = sendCodeButton();
 
+      // When
+      await user.click(button);
+      await user.click(button);
+
+      // Then
+      expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
+      deferred.resolve({ error: null });
+    });
+
+    it("validateEmailFieldがエラーを返した場合、send_code_invalidをdispatchしresetPasswordForEmailを呼ばない", async () => {
+      // Given
+      const emailErrors = { email: "メールアドレスの形式が正しくありません。" };
+      validateMock.email.mockReturnValue(emailErrors);
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
+      await fillEmailAndCompleteCaptcha(user, "invalid-email");
+
+      // When
+      await user.click(sendCodeButton());
+
+      // Then
+      expect(validateMock.email).toHaveBeenCalledWith("invalid-email");
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "send_code_invalid",
+          errors: emailErrors,
+        });
+      });
+      expect(auth.resetPasswordForEmail).not.toHaveBeenCalled();
+    });
+
+    it("captcha未完了の場合、send_code_invalidをdispatchしresetPasswordForEmailを呼ばない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
       await user.type(
         screen.getByPlaceholderText("you@example.com"),
         "user@example.com",
       );
-      turnstile.onVerify?.("captcha-token");
-      const button = screen.getByRole("button", { name: "認証コードを送信" });
-      await user.click(button);
-      await user.click(button);
 
-      expect(auth.resetPasswordForEmail).toHaveBeenCalledTimes(1);
+      // When
+      await user.click(sendCodeButton());
+
+      // Then
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "send_code_invalid",
+          errors: { captcha: "セキュリティチェックが完了していません。" },
+        });
+      });
+      expect(auth.resetPasswordForEmail).not.toHaveBeenCalled();
+    });
+
+    it("resetPasswordForEmailがエラーを返した場合、send_code_auth_errorをdispatchしcaptchaをリセットする", async () => {
+      // Given
+      const authError = makeAuthError("over_email_send_rate_limit");
+      auth.resetPasswordForEmail.mockResolvedValue({ error: authError });
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
+
+      // When
+      await submitEmailStep(user);
+
+      // Then
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "send_code_auth_error",
+          error: authError,
+        });
+      });
+      expect(turnstile.reset).toHaveBeenCalledOnce();
+      await vi.waitFor(() => {
+        expect(sendCodeButton()).toHaveAttribute("aria-disabled", "false");
+      });
+    });
+
+    it("resetPasswordForEmailが例外を投げた場合、send_code_network_errorをdispatchしcaptchaを消費せず再送信可能にする", async () => {
+      // Given
+      auth.resetPasswordForEmail.mockRejectedValue(new Error("network down"));
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
+
+      // When
+      await submitEmailStep(user);
+
+      // Then
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "send_code_network_error",
+        });
+      });
+      expect(turnstile.reset).not.toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(sendCodeButton()).toHaveAttribute("aria-disabled", "false");
+      });
+      expect(sendCodeButton()).toHaveAttribute("data-captcha-ready", "true");
+    });
+
+    it("送信中にアンマウントされた場合、応答の後にcaptchaのリセットを行わない", async () => {
+      // Given
+      const deferred = Promise.withResolvers<{ error: AuthError | null }>();
+      auth.resetPasswordForEmail.mockReturnValue(deferred.promise);
+      const user = userEvent.setup();
+      const { unmount } = render(<ResetPasswordForm />);
+      await fillEmailAndCompleteCaptcha(user);
+      fireEvent.click(sendCodeButton());
+
+      // When
+      unmount();
       deferred.resolve({ error: null });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Then
+      expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
+      expect(turnstile.reset).not.toHaveBeenCalled();
     });
   });
 
-  describe("codeステップ", () => {
-    it("空のコードでは確認せず、バリデーションエラーを表示する", async () => {
+  describe("確認", () => {
+    it("verifyOtpが成功した場合、verify_code_startedをdispatchしtype: recoveryでverifyOtpを呼び、verify_code_succeededをdispatchする", async () => {
+      // Given
       const user = userEvent.setup();
       render(<ResetPasswordForm />);
-      await advanceToCodeStep(user);
-
-      await user.click(screen.getByRole("button", { name: "確認" }));
-
-      expect(
-        screen.getByText("認証コードを入力してください。"),
-      ).toBeInTheDocument();
-      expect(auth.verifyOtp).not.toHaveBeenCalled();
-    });
-
-    it("正しいコードでverifyOtpが成功すると、type: recoveryで呼び出しpasswordステップへ進む", async () => {
-      const user = userEvent.setup();
-      render(<ResetPasswordForm />);
-      await advanceToCodeStep(user);
+      await advanceToCodeStep(user, "user@example.com");
       auth.verifyOtp.mockResolvedValue({ error: null });
 
+      // When
       await user.type(screen.getByPlaceholderText("123456"), "123456");
-      await user.click(screen.getByRole("button", { name: "確認" }));
+      await user.click(verifyButton());
 
+      // Then
+      expect(validateMock.code).toHaveBeenCalledWith("123456");
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "verify_code_succeeded",
+        });
+      });
+      expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+        type: "verify_code_started",
+      });
+      expect(auth.verifyOtp).toHaveBeenCalledOnce();
       expect(auth.verifyOtp).toHaveBeenCalledWith({
         email: "user@example.com",
         token: "123456",
         type: "recovery",
       });
-      expect(
-        await screen.findByPlaceholderText(
-          "新しいパスワード（8文字以上・英数字を含む）",
-        ),
-      ).toBeInTheDocument();
     });
 
-    it("verifyOtpが失敗すると、エラーを表示しcodeステップに留まる", async () => {
+    it("validateCodeFieldがエラーを返した場合、verify_code_invalidをdispatchしverifyOtpを呼ばない", async () => {
+      // Given
+      const codeErrors = { code: "認証コードを入力してください。" };
+      validateMock.code.mockReturnValue(codeErrors);
+      flow.initialState = baseState({ step: "code" });
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
+
+      // When
+      await user.click(verifyButton());
+
+      // Then
+      expect(validateMock.code).toHaveBeenCalledWith("");
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "verify_code_invalid",
+          errors: codeErrors,
+        });
+      });
+      expect(auth.verifyOtp).not.toHaveBeenCalled();
+    });
+
+    it("verifyOtpがエラーを返した場合、verify_code_auth_errorをdispatchし再送信可能にする", async () => {
+      // Given
+      const authError = makeAuthError("otp_expired");
       const user = userEvent.setup();
       render(<ResetPasswordForm />);
       await advanceToCodeStep(user);
-      auth.verifyOtp.mockResolvedValue({
-        error: authError({ code: "otp_expired" }),
-      });
+      auth.verifyOtp.mockResolvedValue({ error: authError });
 
+      // When
       await user.type(screen.getByPlaceholderText("123456"), "000000");
-      await user.click(screen.getByRole("button", { name: "確認" }));
+      await user.click(verifyButton());
 
-      expect(
-        await screen.findByText(
-          "認証コードが正しくないか、有効期限が切れています。",
-        ),
-      ).toBeInTheDocument();
-      expect(screen.getByPlaceholderText("123456")).toBeInTheDocument();
+      // Then
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "verify_code_auth_error",
+          error: authError,
+        });
+      });
+      await vi.waitFor(() => {
+        expect(verifyButton()).toHaveAttribute("aria-disabled", "false");
+      });
     });
 
-    it("通信エラー時は汎用エラーを表示する", async () => {
+    it("verifyOtpが例外を投げた場合、verify_code_network_errorをdispatchし再送信可能にする", async () => {
+      // Given
       const user = userEvent.setup();
       render(<ResetPasswordForm />);
       await advanceToCodeStep(user);
       auth.verifyOtp.mockRejectedValue(new Error("network down"));
 
+      // When
       await user.type(screen.getByPlaceholderText("123456"), "123456");
-      await user.click(screen.getByRole("button", { name: "確認" }));
+      await user.click(verifyButton());
 
-      expect(
-        await screen.findByText(
-          "通信エラーが発生しました。しばらくしてから再度お試しください。",
-        ),
-      ).toBeInTheDocument();
+      // Then
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "verify_code_network_error",
+        });
+      });
+      await vi.waitFor(() => {
+        expect(verifyButton()).toHaveAttribute("aria-disabled", "false");
+      });
     });
+  });
 
-    it("戻るボタンでemailステップに戻り、コード・エラー・captchaをクリアする", async () => {
+  describe("戻る", () => {
+    it("reset_to_emailをdispatchし、コード入力値とcaptchaトークンをクリアする", async () => {
+      // Given
       const user = userEvent.setup();
       render(<ResetPasswordForm />);
       await advanceToCodeStep(user);
-      auth.verifyOtp.mockResolvedValue({
-        error: authError({ code: "otp_expired" }),
+      setTransitions({
+        reset_to_email: (state) => ({ ...state, step: "email" }),
       });
-      await user.type(screen.getByPlaceholderText("123456"), "000000");
-      await user.click(screen.getByRole("button", { name: "確認" }));
-      await screen.findByText(
-        "認証コードが正しくないか、有効期限が切れています。",
-      );
+      await user.type(screen.getByPlaceholderText("123456"), "123456");
+      act(() => {
+        turnstile.onVerify?.("code-step-captcha-token");
+      });
 
+      // When
       await user.click(screen.getByRole("button", { name: "戻る" }));
 
-      expect(
-        screen.getByPlaceholderText("you@example.com"),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText(
-          "認証コードが正しくないか、有効期限が切れています。",
-        ),
-      ).not.toBeInTheDocument();
+      // Then
+      expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+        type: "reset_to_email",
+      });
+      expect(sendCodeButton()).toHaveAttribute("data-captcha-ready", "false");
+
+      // 再度codeステップへ進んだとき、前回のコード入力値が残っていないこと。
+      auth.resetPasswordForEmail.mockResolvedValue({ error: null });
+      act(() => {
+        turnstile.onVerify?.("captcha-token-2");
+      });
+      await user.click(sendCodeButton());
+      expect(await screen.findByPlaceholderText("123456")).toHaveValue("");
+    });
+  });
+
+  describe("再送", () => {
+    it("resetPasswordForEmailが成功した場合、resend_startedをdispatchし正しい引数でresetPasswordForEmailを呼び、captchaをリセットする", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
+      await advanceToCodeStep(user, "user@example.com");
+      auth.resetPasswordForEmail.mockResolvedValue({ error: null });
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
+
+      // When
+      await user.click(screen.getByRole("button", { name: "再送" }));
+
+      // Then
+      expect(validateMock.resend).toHaveBeenCalledWith(
+        0,
+        "resend-captcha-token",
+      );
+      await vi.waitFor(() => {
+        expect(turnstile.reset).toHaveBeenCalledOnce();
+      });
+      expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+        type: "resend_started",
+      });
+      expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
+      expect(auth.resetPasswordForEmail).toHaveBeenCalledWith(
+        "user@example.com",
+        { captchaToken: "resend-captcha-token" },
+      );
     });
 
-    it("再送はクールダウン中は送信しない", async () => {
+    it("クールダウン中は、1秒ごとにresend_tickをdispatchする", async () => {
+      vi.useFakeTimers();
+      try {
+        // Given
+        flow.initialState = baseState({ step: "code", resendCooldown: 2 });
+        render(<ResetPasswordForm />);
+
+        // When
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1000);
+        });
+
+        // Then
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "resend_tick",
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("送信中に二重クリックした場合、resetPasswordForEmailを1回しか呼ばない", async () => {
+      // Given
       const user = userEvent.setup();
       render(<ResetPasswordForm />);
       await advanceToCodeStep(user);
+      const deferred = Promise.withResolvers<{ error: AuthError | null }>();
+      auth.resetPasswordForEmail.mockReturnValue(deferred.promise);
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
+      const button = screen.getByRole("button", { name: "再送" });
 
+      // When
+      await user.click(button);
+      await user.click(button);
+
+      // Then
+      expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
+      deferred.resolve({ error: null });
+    });
+
+    it("validateResendReadyがエラーを返した場合、resend_invalidをdispatchしresetPasswordForEmailを呼ばない", async () => {
+      // Given
+      const resendErrors = {
+        resend:
+          "再送はクールダウン中です。しばらくしてから再度お試しください。",
+      };
+      validateMock.resend.mockReturnValue(resendErrors);
+      flow.initialState = baseState({ step: "code", resendCooldown: 60 });
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
+
+      // When
       await user.click(screen.getByRole("button", { name: "再送（60秒）" }));
 
+      // Then
+      expect(validateMock.resend).toHaveBeenCalledWith(
+        60,
+        "resend-captcha-token",
+      );
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "resend_invalid",
+          errors: resendErrors,
+        });
+      });
+      expect(auth.resetPasswordForEmail).not.toHaveBeenCalled();
+    });
+
+    it("captcha未完了の場合、validateResendReadyがエラーを返さなくてもresend_invalidをdispatchしresetPasswordForEmailを呼ばない", async () => {
+      // Given
+      flow.initialState = baseState({ step: "code" });
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
+
+      // When
+      await user.click(screen.getByRole("button", { name: "再送" }));
+
+      // Then
+      expect(validateMock.resend).toHaveBeenCalledWith(0, null);
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "resend_invalid",
+          errors: {},
+        });
+      });
+      expect(auth.resetPasswordForEmail).not.toHaveBeenCalled();
+    });
+
+    it("resetPasswordForEmailがエラーを返した場合、resend_auth_errorをdispatchしcaptchaをリセットして再送ボタンを再度有効にする", async () => {
+      // Given
+      const authError = makeAuthError("captcha_failed");
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
+      await advanceToCodeStep(user);
+      auth.resetPasswordForEmail.mockResolvedValue({ error: authError });
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
+      const resendButton = screen.getByRole("button", { name: "再送" });
+
+      // When
+      await user.click(resendButton);
+
+      // Then
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "resend_auth_error",
+          error: authError,
+        });
+      });
+      expect(turnstile.reset).toHaveBeenCalledOnce();
+      await vi.waitFor(() => {
+        expect(resendButton).toHaveAttribute("aria-disabled", "false");
+      });
+    });
+
+    it("resetPasswordForEmailが例外を投げた場合、resend_network_errorをdispatchし再送ボタンを再度有効にする", async () => {
+      // handleResendはtry/catchを持たず、例外時にsubmitting状態が解除されず再送ボタンが固まる不具合があった。ここではその修正を検証する。
+      // Given
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
+      await advanceToCodeStep(user);
+      auth.resetPasswordForEmail.mockRejectedValue(new Error("network down"));
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
+      const resendButton = screen.getByRole("button", { name: "再送" });
+
+      // When
+      await user.click(resendButton);
+
+      // Then
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "resend_network_error",
+        });
+      });
+      await vi.waitFor(() => {
+        expect(resendButton).toHaveAttribute("aria-disabled", "false");
+      });
+
+      // 見た目だけでなく、実際に再送できる状態に戻っていること。
+      const callsBeforeRetry = auth.resetPasswordForEmail.mock.calls.length;
+      auth.resetPasswordForEmail.mockResolvedValue({ error: null });
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token-2");
+      });
+      await user.click(resendButton);
+      await vi.waitFor(() => {
+        expect(auth.resetPasswordForEmail).toHaveBeenCalledTimes(
+          callsBeforeRetry + 1,
+        );
+      });
+    });
+
+    it("送信中にアンマウントされた場合、応答の後にcaptchaのリセットを行わない", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { unmount } = render(<ResetPasswordForm />);
+      await advanceToCodeStep(user);
+      const deferred = Promise.withResolvers<{ error: AuthError | null }>();
+      auth.resetPasswordForEmail.mockReturnValue(deferred.promise);
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
+      fireEvent.click(screen.getByRole("button", { name: "再送" }));
+
+      // When
+      unmount();
+      deferred.resolve({ error: null });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Then
+      expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
+      expect(turnstile.reset).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("パスワード変更", () => {
+    describe("updateUserが成功した場合", () => {
+      it("set_password_startedをdispatchし正しい引数でupdateUserを呼び、signOutしてから/signinへ遷移する", async () => {
+        // Given
+        auth.updateUser.mockResolvedValue({ error: null });
+        auth.signOut.mockResolvedValue({ error: null });
+        const user = userEvent.setup();
+        render(<ResetPasswordForm />);
+        await advanceToPasswordStep(user);
+
+        // When
+        await user.type(
+          screen.getByPlaceholderText(PASSWORD_PLACEHOLDER),
+          "password123",
+        );
+        await user.click(setPasswordButton());
+
+        // Then
+        expect(validateMock.password).toHaveBeenCalledWith("password123");
+        await vi.waitFor(() => {
+          expect(locationAssign).toHaveBeenCalledWith("/signin");
+        });
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "set_password_started",
+        });
+        expect(auth.updateUser).toHaveBeenCalledOnce();
+        expect(auth.updateUser).toHaveBeenCalledWith({
+          password: "password123",
+        });
+        expect(auth.signOut).toHaveBeenCalledOnce();
+        expect(auth.signOut.mock.invocationCallOrder[0]).toBeLessThan(
+          locationAssign.mock.invocationCallOrder[0],
+        );
+      });
+
+      it("送信中状態を解除せず、遷移完了前に再度押しても再送信しない", async () => {
+        // Given
+        auth.updateUser.mockResolvedValue({ error: null });
+        auth.signOut.mockResolvedValue({ error: null });
+        const user = userEvent.setup();
+        render(<ResetPasswordForm />);
+        await advanceToPasswordStep(user);
+        await user.type(
+          screen.getByPlaceholderText(PASSWORD_PLACEHOLDER),
+          "password123",
+        );
+        await user.click(setPasswordButton());
+        await vi.waitFor(() => {
+          expect(locationAssign).toHaveBeenCalledWith("/signin");
+        });
+
+        // When
+        await user.click(setPasswordButton());
+
+        // Then
+        expect(setPasswordButton()).toHaveAttribute("aria-disabled", "true");
+        expect(auth.updateUser).toHaveBeenCalledOnce();
+      });
+    });
+
+    it("validatePasswordFieldがエラーを返した場合、set_password_invalidをdispatchしupdateUserを呼ばない", async () => {
+      // Given
+      const passwordErrors = { password: "パスワードを入力してください。" };
+      validateMock.password.mockReturnValue(passwordErrors);
+      flow.initialState = baseState({ step: "password" });
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
+
+      // When
+      await user.click(setPasswordButton());
+
+      // Then
+      expect(validateMock.password).toHaveBeenCalledWith("");
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "set_password_invalid",
+          errors: passwordErrors,
+        });
+      });
+      expect(auth.updateUser).not.toHaveBeenCalled();
+    });
+
+    it("updateUserがエラーを返した場合、set_password_auth_errorをdispatchしsignOutせず再送信可能にする", async () => {
+      // Given
+      const authError = makeAuthError("weak_password");
+      auth.updateUser.mockResolvedValue({ error: authError });
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
+      await advanceToPasswordStep(user);
+      await user.type(
+        screen.getByPlaceholderText(PASSWORD_PLACEHOLDER),
+        "password123",
+      );
+
+      // When
+      await user.click(setPasswordButton());
+
+      // Then
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "set_password_auth_error",
+          error: authError,
+        });
+      });
+      expect(auth.signOut).not.toHaveBeenCalled();
+      expect(locationAssign).not.toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(setPasswordButton()).toHaveAttribute("aria-disabled", "false");
+      });
+
+      // 再度送信できること。
+      auth.updateUser.mockResolvedValue({ error: null });
+      auth.signOut.mockResolvedValue({ error: null });
+      await user.click(setPasswordButton());
+      await vi.waitFor(() => {
+        expect(auth.updateUser).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it("updateUserが例外を投げた場合、set_password_network_errorをdispatchしsignOutせず再送信可能にする", async () => {
+      // Given
+      auth.updateUser.mockRejectedValue(new Error("network down"));
+      const user = userEvent.setup();
+      render(<ResetPasswordForm />);
+      await advanceToPasswordStep(user);
+      await user.type(
+        screen.getByPlaceholderText(PASSWORD_PLACEHOLDER),
+        "password123",
+      );
+
+      // When
+      await user.click(setPasswordButton());
+
+      // Then
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "set_password_network_error",
+        });
+      });
+      expect(auth.signOut).not.toHaveBeenCalled();
+      expect(locationAssign).not.toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(setPasswordButton()).toHaveAttribute("aria-disabled", "false");
+      });
+    });
+
+    it("送信中にアンマウントされた場合、成功応答の後にsignOutや画面遷移を行わない", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { unmount } = render(<ResetPasswordForm />);
+      await advanceToPasswordStep(user);
+      const deferred = Promise.withResolvers<{ error: AuthError | null }>();
+      auth.updateUser.mockReturnValue(deferred.promise);
+      await user.type(
+        screen.getByPlaceholderText(PASSWORD_PLACEHOLDER),
+        "password123",
+      );
+      fireEvent.click(setPasswordButton());
+
+      // When
+      unmount();
+      deferred.resolve({ error: null });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Then
+      expect(auth.updateUser).toHaveBeenCalledOnce();
+      expect(auth.signOut).not.toHaveBeenCalled();
+      expect(locationAssign).not.toHaveBeenCalled();
+    });
+  });
+
+  // resetPasswordReducerをモックしているため、状態遷移の正しさそのものはreset-password-flow.test.tsの責務とし、ここではreducerが返した状態（入力として直接与える）が画面へ正しく反映されるかだけを検証する。
+  describe("表示", () => {
+    describe("step", () => {
+      it("emailの場合、メールアドレス入力画面を表示する", () => {
+        // Given
+        flow.initialState = baseState({ step: "email" });
+
+        // When
+        render(<ResetPasswordForm />);
+
+        // Then
+        expect(screen.getByText("パスワードを再設定")).toBeInTheDocument();
+        expect(
+          screen.getByPlaceholderText("you@example.com"),
+        ).toBeInTheDocument();
+      });
+
+      it("codeの場合、認証コード入力画面を表示する", () => {
+        // Given
+        flow.initialState = baseState({ step: "code" });
+
+        // When
+        render(<ResetPasswordForm />);
+
+        // Then
+        expect(screen.getByText("認証コードを入力")).toBeInTheDocument();
+        expect(screen.getByPlaceholderText("123456")).toBeInTheDocument();
+      });
+
+      it("passwordの場合、新しいパスワード入力画面を表示する", () => {
+        // Given
+        flow.initialState = baseState({ step: "password" });
+
+        // When
+        render(<ResetPasswordForm />);
+
+        // Then
+        expect(screen.getByText("新しいパスワードを設定")).toBeInTheDocument();
+        expect(
+          screen.getByPlaceholderText(PASSWORD_PLACEHOLDER),
+        ).toBeInTheDocument();
+      });
+    });
+
+    describe("resendCooldown", () => {
+      it("0の場合、再送ボタンに秒数を表示しない", () => {
+        // Given
+        flow.initialState = baseState({ step: "code", resendCooldown: 0 });
+
+        // When
+        render(<ResetPasswordForm />);
+
+        // Then
+        expect(
+          screen.getByRole("button", { name: "再送" }),
+        ).toBeInTheDocument();
+      });
+
+      it("0より大きい場合、再送ボタンに残り秒数を表示する", () => {
+        // Given
+        flow.initialState = baseState({ step: "code", resendCooldown: 45 });
+
+        // When
+        render(<ResetPasswordForm />);
+
+        // Then
+        expect(
+          screen.getByRole("button", { name: "再送（45秒）" }),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("errorがある場合、メッセージを表示する", () => {
+      // Given
+      flow.initialState = baseState({ error: "何かのエラー" });
+
+      // When
+      render(<ResetPasswordForm />);
+
+      // Then
+      expect(screen.getByText("何かのエラー")).toBeInTheDocument();
+    });
+
+    it("emailFieldErrorsが空の場合、メール欄をエラー状態にしない", () => {
+      // Given
+      flow.initialState = baseState();
+
+      // When
+      render(<ResetPasswordForm />);
+
+      // Then
+      const input = screen.getByPlaceholderText("you@example.com");
+      expect(input).toHaveAttribute("aria-invalid", "false");
+      expect(input).not.toHaveAttribute("aria-describedby");
+    });
+
+    it("emailFieldErrors.emailがある場合、メール欄にエラーを表示しaria属性で関連付ける", () => {
+      // Given
+      flow.initialState = baseState({
+        emailFieldErrors: { email: "メールアドレスを入力してください。" },
+      });
+
+      // When
+      render(<ResetPasswordForm />);
+
+      // Then
+      const message = screen.getByText("メールアドレスを入力してください。");
+      const input = screen.getByPlaceholderText("you@example.com");
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input).toHaveAttribute("aria-describedby", message.id);
+    });
+
+    it("emailFieldErrors.captchaがある場合、captcha欄にエラーを表示する", () => {
+      // Given
+      flow.initialState = baseState({
+        emailFieldErrors: {
+          captcha: "セキュリティチェックが完了していません。",
+        },
+      });
+
+      // When
+      render(<ResetPasswordForm />);
+
+      // Then
+      expect(
+        screen.getByText("セキュリティチェックが完了していません。"),
+      ).toBeInTheDocument();
+    });
+
+    it("codeFieldErrors.codeがある場合、コード欄にエラーを表示しaria属性で関連付ける", () => {
+      // Given
+      flow.initialState = baseState({
+        step: "code",
+        codeFieldErrors: { code: "認証コードを入力してください。" },
+      });
+
+      // When
+      render(<ResetPasswordForm />);
+
+      // Then
+      const message = screen.getByText("認証コードを入力してください。");
+      const input = screen.getByPlaceholderText("123456");
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input).toHaveAttribute("aria-describedby", message.id);
+    });
+
+    it("codeFieldErrors.resendがある場合、再送欄にエラーを表示する", () => {
+      // Given
+      flow.initialState = baseState({
+        step: "code",
+        codeFieldErrors: {
+          resend:
+            "再送はクールダウン中です。しばらくしてから再度お試しください。",
+        },
+      });
+
+      // When
+      render(<ResetPasswordForm />);
+
+      // Then
       expect(
         screen.getByText(
           "再送はクールダウン中です。しばらくしてから再度お試しください。",
         ),
       ).toBeInTheDocument();
-      expect(auth.resetPasswordForEmail).not.toHaveBeenCalled();
     });
 
-    it("再送はcaptchaTokenを渡して送信し、成否によらずcaptchaを消費する", async () => {
-      // fake timerとRTLのwaitFor/findBy（内部でsetTimeoutポーリングする）は
-      // 競合するため、このテストはfireEventと手動flushのみで最初から進める。
-      vi.useFakeTimers();
-      try {
-        auth.resetPasswordForEmail.mockResolvedValueOnce({ error: null });
+    it("passwordFieldErrors.passwordがある場合、パスワード欄にエラーを表示しaria属性で関連付ける", () => {
+      // Given
+      flow.initialState = baseState({
+        step: "password",
+        passwordFieldErrors: { password: "パスワードを入力してください。" },
+      });
 
-        render(<ResetPasswordForm />);
-        fireEvent.change(screen.getByPlaceholderText("you@example.com"), {
-          target: { value: "user@example.com" },
-        });
-        act(() => {
-          turnstile.onVerify?.("captcha-token");
-        });
-        fireEvent.click(
-          screen.getByRole("button", { name: "認証コードを送信" }),
-        );
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-        expect(screen.getByPlaceholderText("123456")).toBeInTheDocument();
-        turnstile.reset.mockClear();
-
-        // クールダウン(60秒)を消化し、再送可能な状態にする。
-        for (let i = 0; i < 60; i++) {
-          await act(async () => {
-            await vi.advanceTimersByTimeAsync(1000);
-          });
-        }
-
-        auth.resetPasswordForEmail.mockResolvedValue({
-          error: authError({ code: "captcha_failed" }),
-        });
-        act(() => {
-          turnstile.onVerify?.("resend-captcha-token");
-        });
-        fireEvent.click(screen.getByRole("button", { name: "再送" }));
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-
-        expect(auth.resetPasswordForEmail).toHaveBeenCalledWith(
-          "user@example.com",
-          { captchaToken: "resend-captcha-token" },
-        );
-        expect(turnstile.reset).toHaveBeenCalledOnce();
-        expect(
-          screen.getByText("認証に失敗しました。もう一度お試しください。"),
-        ).toBeInTheDocument();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-  });
-
-  describe("passwordステップ", () => {
-    it("空のパスワードでは変更せず、バリデーションエラーを表示する", async () => {
-      const user = userEvent.setup();
+      // When
       render(<ResetPasswordForm />);
-      await advanceToPasswordStep(user);
 
-      await user.click(
-        screen.getByRole("button", { name: "パスワードを変更" }),
-      );
-
-      expect(
-        screen.getByText("パスワードを入力してください。"),
-      ).toBeInTheDocument();
-      expect(auth.updateUser).not.toHaveBeenCalled();
-    });
-
-    it("有効なパスワードでupdateUserが成功すると、signOutしてサインイン画面へ遷移する", async () => {
-      auth.updateUser.mockResolvedValue({ error: null });
-      auth.signOut.mockResolvedValue({ error: null });
-      const user = userEvent.setup();
-      render(<ResetPasswordForm />);
-      await advanceToPasswordStep(user);
-
-      await user.type(
-        screen.getByPlaceholderText(
-          "新しいパスワード（8文字以上・英数字を含む）",
-        ),
-        "password123",
-      );
-      await user.click(
-        screen.getByRole("button", { name: "パスワードを変更" }),
-      );
-
-      await waitFor(() => {
-        expect(auth.updateUser).toHaveBeenCalledWith({
-          password: "password123",
-        });
-      });
-      await waitFor(() => {
-        expect(auth.signOut).toHaveBeenCalledOnce();
-      });
-      await waitFor(() => {
-        expect(window.location.assign).toHaveBeenCalledWith("/signin");
-      });
-    });
-
-    it("updateUserが失敗するとエラーを表示し再送信可能にする", async () => {
-      auth.updateUser.mockResolvedValue({
-        error: authError({ code: "weak_password" }),
-      });
-      const user = userEvent.setup();
-      render(<ResetPasswordForm />);
-      await advanceToPasswordStep(user);
-
-      await user.type(
-        screen.getByPlaceholderText(
-          "新しいパスワード（8文字以上・英数字を含む）",
-        ),
-        "password123",
-      );
-      await user.click(
-        screen.getByRole("button", { name: "パスワードを変更" }),
-      );
-
-      expect(
-        await screen.findByText(
-          "パスワードは8文字以上で、英字と数字の両方を含めてください。",
-        ),
-      ).toBeInTheDocument();
-      expect(auth.signOut).not.toHaveBeenCalled();
-
-      auth.updateUser.mockResolvedValue({ error: null });
-      auth.signOut.mockResolvedValue({ error: null });
-      await user.click(
-        screen.getByRole("button", { name: "パスワードを変更" }),
-      );
-      await waitFor(() => {
-        expect(auth.updateUser).toHaveBeenCalledTimes(2);
-      });
-    });
-
-    it("通信エラー時は汎用エラーを表示する", async () => {
-      auth.updateUser.mockRejectedValue(new Error("network down"));
-      const user = userEvent.setup();
-      render(<ResetPasswordForm />);
-      await advanceToPasswordStep(user);
-
-      await user.type(
-        screen.getByPlaceholderText(
-          "新しいパスワード（8文字以上・英数字を含む）",
-        ),
-        "password123",
-      );
-      await user.click(
-        screen.getByRole("button", { name: "パスワードを変更" }),
-      );
-
-      expect(
-        await screen.findByText(
-          "通信エラーが発生しました。しばらくしてから再度お試しください。",
-        ),
-      ).toBeInTheDocument();
-    });
-  });
-
-  // mountedRefガードは各ハンドラに個別に書かれており共通化されていないため、
-  // 外部モックへの副作用として観測できる3箇所のみ検証する（他は内部の
-  // setState以外に外部から観測できる副作用がなく、アンマウント後はDOMも
-  // 参照できないため、ブラックボックステストでは意味のある検証にならない）。
-  describe("送信中にアンマウントされた場合の副作用抑止", () => {
-    it("再送中にアンマウントされた場合、captchaのリセットを行わない", async () => {
-      vi.useFakeTimers();
-      try {
-        auth.resetPasswordForEmail.mockResolvedValueOnce({ error: null });
-
-        const { unmount } = render(<ResetPasswordForm />);
-        fireEvent.change(screen.getByPlaceholderText("you@example.com"), {
-          target: { value: "user@example.com" },
-        });
-        act(() => {
-          turnstile.onVerify?.("captcha-token");
-        });
-        fireEvent.click(
-          screen.getByRole("button", { name: "認証コードを送信" }),
-        );
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-        expect(screen.getByPlaceholderText("123456")).toBeInTheDocument();
-        turnstile.reset.mockClear();
-
-        for (let i = 0; i < 60; i++) {
-          await act(async () => {
-            await vi.advanceTimersByTimeAsync(1000);
-          });
-        }
-
-        const deferred = createDeferred<{ error: AuthError | null }>();
-        auth.resetPasswordForEmail.mockReturnValue(deferred.promise);
-        act(() => {
-          turnstile.onVerify?.("resend-captcha-token");
-        });
-        fireEvent.click(screen.getByRole("button", { name: "再送" }));
-        unmount();
-
-        deferred.resolve({ error: null });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-
-        expect(turnstile.reset).not.toHaveBeenCalled();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("認証コード送信中にアンマウントされた場合、captchaのリセットを行わない", async () => {
-      const deferred = createDeferred<{ error: AuthError | null }>();
-      auth.resetPasswordForEmail.mockReturnValue(deferred.promise);
-      const user = userEvent.setup();
-      const { unmount } = render(<ResetPasswordForm />);
-
-      await user.type(
-        screen.getByPlaceholderText("you@example.com"),
-        "user@example.com",
-      );
-      act(() => {
-        turnstile.onVerify?.("captcha-token");
-      });
-      fireEvent.click(screen.getByRole("button", { name: "認証コードを送信" }));
-      unmount();
-
-      deferred.resolve({ error: null });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(turnstile.reset).not.toHaveBeenCalled();
-    });
-
-    it("パスワード変更中にアンマウントされた場合、signOutや画面遷移を行わない", async () => {
-      const user = userEvent.setup();
-      const { unmount } = render(<ResetPasswordForm />);
-      await advanceToPasswordStep(user);
-
-      const deferred = createDeferred<{ error: AuthError | null }>();
-      auth.updateUser.mockReturnValue(deferred.promise);
-      await user.type(
-        screen.getByPlaceholderText(
-          "新しいパスワード（8文字以上・英数字を含む）",
-        ),
-        "password123",
-      );
-      fireEvent.click(screen.getByRole("button", { name: "パスワードを変更" }));
-      unmount();
-
-      deferred.resolve({ error: null });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(auth.signOut).not.toHaveBeenCalled();
-      expect(window.location.assign).not.toHaveBeenCalled();
+      // Then
+      const message = screen.getByText("パスワードを入力してください。");
+      const input = screen.getByPlaceholderText(PASSWORD_PLACEHOLDER);
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input).toHaveAttribute("aria-describedby", message.id);
     });
   });
 });
