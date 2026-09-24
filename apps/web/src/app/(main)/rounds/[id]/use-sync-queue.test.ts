@@ -1,58 +1,39 @@
 import "fake-indexeddb/auto";
 import { act, renderHook } from "@testing-library/react";
+import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SyncOperation } from "./sync-events";
-
-// 未修正の既存バグ（ラウンド・距離のキューが同じキーへの新しい操作で古い
-// 待機を無条件にキャンセルしてしまう）を検証するテストでは、実際に
-// IndexedDBへ書き込むタイミングをキャンセル判定に使わず、savePendingOperation
-// / removePendingOperationの呼び出しそのものを直接検証したいのでモックする。
-// enqueue()に`roundId`と`operation`を渡さない既存テストは元々このモジュールに
-// 触れないため、このモックによる影響はない。
-vi.mock("./sync-outbox", () => ({
-  savePendingOperation: vi.fn(() => Promise.resolve()),
-  removePendingOperation: vi.fn(() => Promise.resolve()),
-  loadPendingOperations: vi.fn(() => Promise.resolve([])),
-}));
-// 起動時の復元（loadPendingOperations経由）で復元されたshot操作は、
-// scheduleShot()に実物のsyncShotsが渡される。syncShotsは
-// @/lib/supabase/clientのcreateClient()を呼ぶため、復元テストのために
-// 最小限のSupabaseクライアントスタブを用意する。
-const restoredSupabase = vi.hoisted(() => ({
-  getSession: vi.fn(),
-  rpc: vi.fn(),
-}));
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({
-    auth: { getSession: restoredSupabase.getSession },
-    rpc: restoredSupabase.rpc,
-  }),
-}));
-// enqueue()のattempt()は`input.operation`が指定されていると`input.run`を
-// 無視して常に本物の`executeSyncOperation`（実際のSupabase RPC呼び出し）を
-// 呼ぶ実装になっている。`operation`を使うテストではrunではなくこちらの
-// 呼び出しを検証する必要があるためモックする。`eventIdOf`はeventIdをその
-// まま返すだけの純粋関数なので実物を使う。
-vi.mock("./sync-events", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./sync-events")>();
-  return {
-    ...actual,
-    executeSyncOperation: vi.fn(),
-  };
-});
-
-import { executeSyncOperation } from "./sync-events";
-import {
-  loadPendingOperations,
-  removePendingOperation,
-  savePendingOperation,
-} from "./sync-outbox";
+import { loadPendingOperations, savePendingOperation } from "./sync-outbox";
 import type { ShotUpsert } from "./use-sync-queue";
 import {
   AUTH_REQUIRED_MESSAGE,
   RETRY_DELAYS_MS,
   useSyncQueue,
 } from "./use-sync-queue";
+
+// SupabaseのSDKは外部サービスとの境界のため、セッションの取得結果とRPCの結果を任意に制御できるスタブで模す。
+// operation付きの操作と、復元されたショット操作は、実物のexecuteSyncOperation・syncShotsを通してこのスタブのrpcに届く。
+const supabase = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  rpc: vi.fn(),
+}));
+vi.mock("@supabase/ssr", () => ({
+  createBrowserClient: () => ({
+    auth: { getSession: supabase.getSession },
+    rpc: supabase.rpc,
+  }),
+}));
+
+beforeEach(() => {
+  // IndexedDBはfake-indexeddbで代替し、テストごとに空のDBから始める。
+  globalThis.indexedDB = new IDBFactory();
+  supabase.getSession.mockReset();
+  supabase.getSession.mockResolvedValue({
+    data: { session: { user: { id: "user-1" } } },
+  });
+  supabase.rpc.mockReset();
+  supabase.rpc.mockResolvedValue({ data: null, error: null });
+});
 
 type Result = { error: string } | undefined;
 
@@ -64,729 +45,414 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
-// 距離の設定変更待ち（waitForShotBatch）は、ショットバッチの解決から
-// 実際にexecuteSyncOperationが呼ばれるまでの間に、複数の手動Promiseの
-// 連鎖（waiterのresolve → Promise.all → attempt(0)）を挟むため、
-// 固定回数のawait Promise.resolve()では足りないことがある。実タイマーの
-// マクロタスク境界まで進めれば、その時点までのマイクロタスクは確実に
-// すべて処理される。
+// 距離の設定変更待ちは、ショットバッチの解決から実際にRPCが呼ばれるまでの間に、複数のPromiseの連鎖（Promise.all → attempt(0) → セッション取得）を挟む。
+// 固定回数のawait Promise.resolve()では足りないことがあるため、実タイマーのマクロタスク境界まで進めて、その時点までのマイクロタスクを確実に処理する。
 async function flushMicrotasks() {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
-// 失敗が最終的なエラーとして確定するまで、自動リトライの全バックオフを
-// 進める（テスト対象がfake timersを使っている前提）。
+// 失敗が最終的なエラーとして確定するまで、自動リトライの全バックオフを進める（fake timersの使用が前提）。
 async function exhaustRetries() {
   for (const delay of RETRY_DELAYS_MS) {
     await vi.advanceTimersByTimeAsync(delay);
   }
 }
 
+// 永続outboxに残っている未同期操作のeventIdを保存順に返す。
+// テストではサインイン記録のない端末（getLocalIdentity()がnull）として書き込まれるため、userIdはnullで読み出す。
+async function pendingEventIds(roundId: string): Promise<string[]> {
+  const operations = await loadPendingOperations(roundId, null);
+  return operations.map((pending) => pending.eventId);
+}
+
+// fake-indexeddbはsetImmediateで処理を進めるため、永続outboxを使うfake timersのテストではリトライ待機のタイマーだけを偽装する。
+const RETRY_TIMERS_ONLY: Parameters<typeof vi.useFakeTimers>[0] = {
+  toFake: ["setTimeout", "clearTimeout"],
+};
+
+// fake timers中はwaitForで待てないため、実際のsetImmediateでマクロタスクを1つずつ進めながら、期待する状態になるまで検証を繰り返す。
+// 上限に達した場合は、最後の検証の失敗をそのまま投げる。
+async function pollWithRealTasks(
+  assertion: () => void | Promise<void>,
+  maxTasks = 200,
+) {
+  let lastError: unknown;
+  for (let i = 0; i < maxTasks; i += 1) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    try {
+      await assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 describe("useSyncQueue", () => {
-  it("starts synced with no errors", () => {
-    const { result } = renderHook(() => useSyncQueue());
-
-    expect(result.current.status).toBe("synced");
-    expect(result.current.errors).toEqual([]);
-  });
-
-  it("does not retry a permanent failure", async () => {
-    const { result } = renderHook(() => useSyncQueue());
-    const run = vi.fn(() =>
-      Promise.resolve({
-        error: "このラウンドを編集する権限がありません。",
-        permanent: true,
-      }),
-    );
-
-    act(() => {
-      result.current.enqueue({
-        key: "roundConfig",
-        label: "ラウンド設定",
-        run,
-      });
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(run).toHaveBeenCalledTimes(1);
-    expect(result.current.status).toBe("error");
-    expect(result.current.errors).toEqual([
-      expect.objectContaining({ key: "roundConfig" }),
-    ]);
-  });
-
-  it("calls onPermanentFailure when a round-level operation fails permanently", async () => {
-    const onPermanentFailure = vi.fn();
-    const { result } = renderHook(() =>
-      useSyncQueue(undefined, onPermanentFailure),
-    );
-    const run = vi.fn(() =>
-      Promise.resolve({
-        error: "このラウンドを編集する権限がありません。",
-        permanent: true,
-      }),
-    );
-
-    act(() => {
-      result.current.enqueue({
-        key: "roundConfig",
-        label: "ラウンド設定",
-        run,
-      });
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(onPermanentFailure).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not call onPermanentFailure for the auth-required message, even though it is treated as unretryable", async () => {
-    const onPermanentFailure = vi.fn();
-    const { result } = renderHook(() =>
-      useSyncQueue(undefined, onPermanentFailure),
-    );
-    const run = vi.fn(() => Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }));
-
-    act(() => {
-      result.current.enqueue({
-        key: "roundConfig",
-        label: "ラウンド設定",
-        run,
-      });
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(onPermanentFailure).not.toHaveBeenCalled();
-  });
-
-  it("errors with a fixed message when neither operation nor run is given", async () => {
-    vi.useFakeTimers();
-    try {
+  describe("初期状態", () => {
+    it("同期済みでエラーがない", () => {
+      // Given: 何も積まれていない
+      // When: フックをマウントする
       const { result } = renderHook(() => useSyncQueue());
 
-      act(() => {
-        result.current.enqueue({ key: "noop", label: "何もしない" });
-      });
-      await act(async () => {
-        await exhaustRetries();
-      });
-
-      expect(result.current.errorFor("noop")).toBe(
-        "同期する操作が見つかりません。",
-      );
-    } finally {
-      vi.useRealTimers();
-    }
+      // Then: 同期済みでエラーがない
+      expect(result.current.status).toBe("synced");
+      expect(result.current.errors).toEqual([]);
+    });
   });
 
-  it("falls back to a fixed message when run throws something that is not an Error", async () => {
-    vi.useFakeTimers();
-    try {
-      const { result } = renderHook(() => useSyncQueue());
-      const run = vi.fn(() => Promise.reject("boom"));
+  describe("enqueue", () => {
+    describe("送信が成功する場合", () => {
+      it("送信中はsendingになり、完了するとsyncedになる", async () => {
+        // Given: 完了を制御できる操作
+        const { result } = renderHook(() => useSyncQueue());
+        const deferred = createDeferred<Result>();
 
-      act(() => {
-        result.current.enqueue({ key: "a", label: "A", run });
-      });
-      await act(async () => {
-        await exhaustRetries();
-      });
+        // When: 操作を積む
+        act(() => {
+          result.current.enqueue({
+            key: "a",
+            label: "A",
+            run: () => deferred.promise,
+          });
+        });
 
-      expect(result.current.errorFor("a")).toBe(
-        "予期しないエラーが発生しました。",
-      );
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+        // Then: 送信中になる
+        expect(result.current.status).toBe("sending");
 
-  it("uses the Error's own message when run throws a real Error", async () => {
-    vi.useFakeTimers();
-    try {
-      const { result } = renderHook(() => useSyncQueue());
-      const run = vi.fn(() => Promise.reject(new Error("real error")));
+        // When: 操作が完了する
+        await act(async () => {
+          deferred.resolve(undefined);
+          await deferred.promise;
+        });
 
-      act(() => {
-        result.current.enqueue({ key: "a", label: "A", run });
-      });
-      await act(async () => {
-        await exhaustRetries();
+        // Then: 同期済みになる
+        expect(result.current.status).toBe("synced");
       });
 
-      expect(result.current.errorFor("a")).toBe("real error");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+      it("異なるキーの操作も、ラウンド共通の直列tailで投入順に実行する", async () => {
+        // Given: 実際に使うキーはroundConfigとdistance:{id}に限られるため、キーごとに独立させずラウンドで1本の直列tailにまとめている
+        const { result } = renderHook(() => useSyncQueue());
+        const first = createDeferred<Result>();
+        const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
 
-  it("gives up and becomes an error after exhausting retries, even for a real operation (not just a run-only task)", async () => {
-    // `operation`付きのenqueue（ラウンド・距離への実際の操作）は、以前は
-    // `input.operation || attemptIndex < RETRY_DELAYS_MS.length`という
-    // 条件のせいでリトライ回数の上限が一切効かず、恒久的な失敗
-    // （permanent: true）でない限り無期限にリトライし続けてしまっていた
-    // （PR #468のPR説明にある「一時的な通信失敗は無期限に再送する」は
-    // 意図した設計だったが、rd.mdの定義するリトライ上限付きの挙動とは
-    // 矛盾しており、後者を正とする）。`run`のみのテスト用タスクでしか
-    // このリトライ上限が検証されていなかったため、実際の`operation`付き
-    // 呼び出しでも同様に上限で失敗することを確認する。
-    vi.useFakeTimers();
-    try {
-      vi.mocked(executeSyncOperation).mockResolvedValue({
-        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+        // When: 異なるキーの操作を続けて積む
+        act(() => {
+          result.current.enqueue({
+            key: "a",
+            label: "A",
+            run: () => first.promise,
+          });
+          result.current.enqueue({ key: "b", label: "B", run: secondRun });
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: 先に積んだ操作が完了するまで、後の操作は実行しない
+        expect(secondRun).not.toHaveBeenCalled();
+
+        // When: 先に積んだ操作が完了する
+        await act(async () => {
+          first.resolve(undefined);
+          await first.promise;
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: 後の操作を実行する
+        expect(secondRun).toHaveBeenCalledTimes(1);
       });
-      const { result } = renderHook(() => useSyncQueue("round-1"));
-      const operation: SyncOperation = {
-        type: "round.updated",
-        eventId: "event-1",
-        roundId: "round-1",
-        name: "午後練習",
-        roundDate: "2026-09-15",
-        format: "outdoor",
-        bowType: "recurve",
+
+      it("同じキーの操作は、重ならずに投入順に実行する", async () => {
+        // Given: 同じキーの2つの操作
+        const { result } = renderHook(() => useSyncQueue());
+        const first = createDeferred<Result>();
+        const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
+
+        // When: 続けて積む
+        act(() => {
+          result.current.enqueue({
+            key: "a",
+            label: "A",
+            run: () => first.promise,
+          });
+          result.current.enqueue({ key: "a", label: "A", run: secondRun });
+        });
+
+        // Then: 1つ目が完了するまで2つ目は実行しない
+        expect(secondRun).not.toHaveBeenCalled();
+
+        // When: 1つ目が完了する
+        await act(async () => {
+          first.resolve(undefined);
+          await first.promise;
+        });
+
+        // Then: 2つ目を実行する
+        expect(secondRun).toHaveBeenCalledTimes(1);
+      });
+
+      it("ラウンド設定と距離の操作を、1本の直列tailで投入順に実行する", async () => {
+        // Given: ラウンド設定の更新と距離の操作
+        const { result } = renderHook(() => useSyncQueue());
+        const order: string[] = [];
+        const roundConfigDone = createDeferred<Result>();
+
+        // When: 続けて積む
+        act(() => {
+          result.current.enqueue({
+            key: "roundConfig",
+            label: "ラウンド設定",
+            run: () => {
+              order.push("roundConfig-start");
+              return roundConfigDone.promise.then((r) => {
+                order.push("roundConfig-end");
+                return r;
+              });
+            },
+          });
+          result.current.enqueue({
+            key: "distance:d1",
+            label: "距離1",
+            run: () => {
+              order.push("distance-run");
+              return Promise.resolve(undefined as Result);
+            },
+          });
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: ラウンド設定の完了を待ち、距離の操作はまだ実行しない
+        expect(order).toEqual(["roundConfig-start"]);
+
+        // When: ラウンド設定が完了する
+        await act(async () => {
+          roundConfigDone.resolve(undefined);
+          await roundConfigDone.promise;
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: 続けて距離の操作を実行する
+        expect(order).toEqual([
+          "roundConfig-start",
+          "roundConfig-end",
+          "distance-run",
+        ]);
+      });
+
+      it("同じラウンドの異なる距離の操作も、並行させず直列に実行する", async () => {
+        // Given: 2つの距離の操作
+        const { result } = renderHook(() => useSyncQueue());
+        const order: string[] = [];
+        const firstDone = createDeferred<Result>();
+
+        // When: 続けて積む
+        act(() => {
+          result.current.enqueue({
+            key: "distance:d1",
+            label: "距離1",
+            run: () => {
+              order.push("d1-start");
+              return firstDone.promise.then((r) => {
+                order.push("d1-end");
+                return r;
+              });
+            },
+          });
+          result.current.enqueue({
+            key: "distance:d2",
+            label: "距離2",
+            run: () => {
+              order.push("d2-run");
+              return Promise.resolve(undefined as Result);
+            },
+          });
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: 1つ目の距離の完了を待つ
+        expect(order).toEqual(["d1-start"]);
+
+        // When: 1つ目の距離の操作が完了する
+        await act(async () => {
+          firstDone.resolve(undefined);
+          await firstDone.promise;
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: 2つ目の距離の操作を実行する
+        expect(order).toEqual(["d1-start", "d1-end", "d2-run"]);
+      });
+    });
+
+    describe("dependsOnKeyを指定した場合", () => {
+      it("依存先が実行中なら、その完了を待ってから実行する", async () => {
+        // Given: 新しい距離の作成と、それに依存する操作
+        const { result } = renderHook(() => useSyncQueue());
+        const order: string[] = [];
+        const createDone = createDeferred<Result>();
+
+        // When: 続けて積む
+        act(() => {
+          result.current.enqueue({
+            key: "distance:new",
+            label: "新しい距離",
+            run: () => {
+              order.push("create-start");
+              return createDone.promise.then((r) => {
+                order.push("create-end");
+                return r;
+              });
+            },
+          });
+          result.current.enqueue({
+            key: "shot:new:1:1",
+            label: "新しい距離 1エンド1本目",
+            dependsOnKey: "distance:new",
+            run: () => {
+              order.push("shot");
+              return Promise.resolve(undefined as Result);
+            },
+          });
+        });
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        // Then: 依存先が完了するまで、依存する操作は開始しない
+        expect(order).toEqual(["create-start"]);
+
+        // When: 依存先が完了する
+        await act(async () => {
+          createDone.resolve(undefined);
+          await createDone.promise;
+        });
+
+        // Then: 依存する操作を実行する
+        expect(order).toEqual(["create-start", "create-end", "shot"]);
+      });
+
+      it("依存先に実行中のものがなければ、待たずに実行する", async () => {
+        // Given: 実行中の操作がない
+        const { result } = renderHook(() => useSyncQueue());
+        const run = vi.fn(() => Promise.resolve(undefined as Result));
+
+        // When: 既存の距離に依存する操作を積む
+        act(() => {
+          result.current.enqueue({
+            key: "shot:existing:1:1",
+            label: "距離1 1エンド1本目",
+            dependsOnKey: "distance:existing",
+            run,
+          });
+        });
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        // Then: すぐに実行する
+        expect(run).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    // `update_distance`は的・エンド数・本数を変更する際、既にshotsが記録されていると拒否する（`v_has_shots`チェック）。
+    // そのため距離の設定変更（`operation.type === "distance.updated"`）は、呼び出し側のフラグなしに、送信前にその距離の進行中・未送信のショットバッチの完了を待つ。
+    // テストでも`run`ではなく実際の`operation`を渡し、SDKスタブのrpcに届く呼び出しを検証する。
+    describe("距離の設定変更の場合", () => {
+      const distanceUpdateOp: SyncOperation = {
+        type: "distance.updated",
+        eventId: "update-evt",
+        distanceId: "d1",
+        distance: 70,
+        totalEnds: 6,
+        arrowsPerEnd: 6,
+        targetFaceId: "face2",
+        isMarked: false,
       };
 
-      act(() => {
-        result.current.enqueue({
-          key: "roundConfig",
-          label: "ラウンド設定",
-          operation,
-        });
-      });
-
-      await act(async () => {
-        await exhaustRetries();
-      });
-
-      expect(result.current.status).toBe("error");
-      expect(result.current.errors).toEqual([
-        expect.objectContaining({ key: "roundConfig" }),
-      ]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("becomes syncing while an operation is in flight, then synced once it resolves", async () => {
-    const { result } = renderHook(() => useSyncQueue());
-    const deferred = createDeferred<Result>();
-
-    act(() => {
-      result.current.enqueue({
-        key: "a",
-        label: "A",
-        run: () => deferred.promise,
-      });
-    });
-    expect(result.current.status).toBe("sending");
-
-    await act(async () => {
-      deferred.resolve(undefined);
-      await deferred.promise;
-    });
-    expect(result.current.status).toBe("synced");
-  });
-
-  it("serializes enqueue() operations across different keys onto the round-wide shared tail, instead of running them concurrently", async () => {
-    // enqueue()（ラウンド設定・distanceの追加/更新/削除）は、実際の本番
-    // 利用がroundConfig/distance:{id}の2種類のkeyに限られるため、key単位で
-    // 独立させる複雑さを避け、roundごとに1本の共有直列tail
-    // （roundTailRef）に統一されている。これによりkeyが違っても投入順に
-    // 直列実行される。
-    const { result } = renderHook(() => useSyncQueue());
-    const first = createDeferred<Result>();
-    const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
-
-    act(() => {
-      result.current.enqueue({
-        key: "a",
-        label: "A",
-        run: () => first.promise,
-      });
-      result.current.enqueue({ key: "b", label: "B", run: secondRun });
-    });
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    // 別のkeyの操作でも、共有tailにより先に積まれたものの解決を待つ。
-    expect(secondRun).not.toHaveBeenCalled();
-
-    await act(async () => {
-      first.resolve(undefined);
-      await first.promise;
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(secondRun).toHaveBeenCalledTimes(1);
-  });
-
-  it("runs operations with the same key strictly in enqueue order, never overlapping", async () => {
-    const { result } = renderHook(() => useSyncQueue());
-    const first = createDeferred<Result>();
-    const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
-
-    act(() => {
-      result.current.enqueue({
-        key: "a",
-        label: "A",
-        run: () => first.promise,
-      });
-      result.current.enqueue({ key: "a", label: "A", run: secondRun });
-    });
-
-    expect(secondRun).not.toHaveBeenCalled();
-
-    await act(async () => {
-      first.resolve(undefined);
-      await first.promise;
-    });
-    expect(secondRun).toHaveBeenCalledTimes(1);
-  });
-
-  it("waits for dependsOnKey's current tail to resolve before running", async () => {
-    const { result } = renderHook(() => useSyncQueue());
-    const order: string[] = [];
-    const createDone = createDeferred<Result>();
-
-    act(() => {
-      result.current.enqueue({
-        key: "distance:new",
-        label: "新しい距離",
-        run: () => {
-          order.push("create-start");
-          return createDone.promise.then((r) => {
-            order.push("create-end");
-            return r;
-          });
-        },
-      });
-      result.current.enqueue({
-        key: "shot:new:1:1",
-        label: "新しい距離 1エンド1本目",
-        dependsOnKey: "distance:new",
-        run: () => {
-          order.push("shot");
-          return Promise.resolve(undefined as Result);
-        },
-      });
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // 依存先（distance:new）が解決するまで、依存する操作は開始されない。
-    expect(order).toEqual(["create-start"]);
-
-    await act(async () => {
-      createDone.resolve(undefined);
-      await createDone.promise;
-    });
-    expect(order).toEqual(["create-start", "create-end", "shot"]);
-  });
-
-  it("does not wait when dependsOnKey has nothing currently running", async () => {
-    const { result } = renderHook(() => useSyncQueue());
-    const run = vi.fn(() => Promise.resolve(undefined as Result));
-
-    act(() => {
-      result.current.enqueue({
-        key: "shot:existing:1:1",
-        label: "距離1 1エンド1本目",
-        dependsOnKey: "distance:existing",
-        run,
-      });
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(run).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-  });
-
-  it("surfaces a failed operation as an error keyed by its operation key", async () => {
-    vi.useFakeTimers();
-    try {
-      const { result } = renderHook(() => useSyncQueue());
-
-      act(() => {
-        result.current.enqueue({
-          key: "shot:d1:1:1",
-          label: "距離1 1エンド1本目",
-          run: () => Promise.resolve({ error: "boom" }),
-        });
-      });
-
-      await act(async () => {
-        await exhaustRetries();
-      });
-
-      expect(result.current.status).toBe("error");
-      expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("clears a key's error once a later operation for that key succeeds", async () => {
-    vi.useFakeTimers();
-    try {
-      const { result } = renderHook(() => useSyncQueue());
-
-      act(() => {
-        result.current.enqueue({
-          key: "a",
-          label: "A",
-          run: () => Promise.resolve({ error: "boom" }),
-        });
-      });
-      await act(async () => {
-        await exhaustRetries();
-      });
-      expect(result.current.errorFor("a")).toBe("boom");
-
-      act(() => {
-        result.current.enqueue({
-          key: "a",
-          label: "A",
-          run: () => Promise.resolve(undefined),
-        });
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(result.current.errorFor("a")).toBeUndefined();
-      expect(result.current.status).toBe("synced");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("clears a key's stale error immediately when re-enqueued, before the new attempt resolves", async () => {
-    vi.useFakeTimers();
-    try {
-      const { result } = renderHook(() => useSyncQueue());
-
-      act(() => {
-        result.current.enqueue({
-          key: "a",
-          label: "A",
-          run: () => Promise.resolve({ error: "boom" }),
-        });
-      });
-      await act(async () => {
-        await exhaustRetries();
-      });
-      expect(result.current.errorFor("a")).toBe("boom");
-
-      const deferred = createDeferred<Result>();
-      act(() => {
-        result.current.enqueue({
-          key: "a",
-          label: "A",
-          run: () => deferred.promise,
-        });
-      });
-
-      // 新しい試行がまだ解決していない時点で、古いエラーは既に消えている。
-      expect(result.current.errorFor("a")).toBeUndefined();
-
-      await act(async () => {
-        deferred.resolve(undefined);
-        await deferred.promise;
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("keeps one key's failure independent of another key's success", async () => {
-    vi.useFakeTimers();
-    try {
-      const { result } = renderHook(() => useSyncQueue());
-
-      act(() => {
-        result.current.enqueue({
-          key: "a",
-          label: "A",
-          run: () => Promise.resolve({ error: "boom" }),
-        });
-        result.current.enqueue({
-          key: "b",
-          label: "B",
-          run: () => Promise.resolve(undefined),
-        });
-      });
-
-      await act(async () => {
-        await exhaustRetries();
-      });
-
-      expect(result.current.errorFor("a")).toBe("boom");
-      expect(result.current.errorFor("b")).toBeUndefined();
-      expect(result.current.status).toBe("error");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  describe("enqueueShot", () => {
-    it("sends a single shot as a batch of one", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const runBatch = vi.fn(() => Promise.resolve(undefined as Result));
-
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "距離1 1エンド1本目",
-            upsert: {
-              shotEventId: "e1",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
-            },
-          },
-          runBatch,
-        );
-      });
-      expect(result.current.status).toBe("sending");
-
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(runBatch).toHaveBeenCalledTimes(1);
-      expect(runBatch).toHaveBeenCalledWith({
-        upsert: [
-          {
-            shotEventId: "e1",
-            distanceId: "d1",
-            endNumber: 1,
-            arrowNumber: 1,
-            scoreStr: "X",
-            scoreInt: 10,
-          },
-        ],
-        clear: [],
-      });
-      expect(result.current.status).toBe("synced");
-    });
-
-    it("combines shots enqueued while a batch is in flight into the next single batch call", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const first = createDeferred<Result>();
-      const runBatch = vi.fn(() => first.promise);
-
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            upsert: {
-              shotEventId: "e2",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
-            },
-          },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(runBatch).toHaveBeenCalledTimes(1);
-
-      // 1件目が送信中の間に、別々のマスへの入力が2件積まれる。
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:2",
-            label: "B",
-            upsert: {
-              shotEventId: "e3",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 2,
-              scoreStr: "9",
-              scoreInt: 9,
-            },
-          },
-          runBatch,
-        );
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:3",
-            label: "C",
-            upsert: {
-              shotEventId: "e4",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 3,
-              scoreStr: "8",
-              scoreInt: 8,
-            },
-          },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      // 1件目がまだ送信中なので、2件目のバッチはまだ送られていない。
-      expect(runBatch).toHaveBeenCalledTimes(1);
-
-      await act(async () => {
-        first.resolve(undefined);
-        await first.promise;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      // 送信中に積まれた2件は、1回のバッチにまとめて送られる。
-      expect(runBatch).toHaveBeenCalledTimes(2);
-      expect(runBatch).toHaveBeenNthCalledWith(2, {
-        upsert: [
-          {
-            shotEventId: "e3",
-            distanceId: "d1",
-            endNumber: 1,
-            arrowNumber: 2,
-            scoreStr: "9",
-            scoreInt: 9,
-          },
-          {
-            shotEventId: "e4",
-            distanceId: "d1",
-            endNumber: 1,
-            arrowNumber: 3,
-            scoreStr: "8",
-            scoreInt: 8,
-          },
-        ],
-        clear: [],
-      });
-      expect(result.current.status).toBe("synced");
-    });
-
-    it("coalesces repeated overwrites of the same cell into only the latest value", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const first = createDeferred<Result>();
-      const runBatch = vi.fn(() => first.promise);
-
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            upsert: {
-              shotEventId: "e5",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
-            },
-          },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      // 送信中に同じマスを2回上書きする。
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            upsert: {
-              shotEventId: "e6",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "9",
-              scoreInt: 9,
-            },
-          },
-          runBatch,
-        );
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            upsert: {
-              shotEventId: "e7",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "8",
-              scoreInt: 8,
-            },
-          },
-          runBatch,
-        );
-      });
-
-      await act(async () => {
-        first.resolve(undefined);
-        await first.promise;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(runBatch).toHaveBeenCalledTimes(2);
-      expect(runBatch).toHaveBeenNthCalledWith(2, {
-        upsert: [
-          {
-            shotEventId: "e7",
-            distanceId: "d1",
-            endNumber: 1,
-            arrowNumber: 1,
-            scoreStr: "8",
-            scoreInt: 8,
-          },
-        ],
-        clear: [],
-      });
-    });
-
-    it("marks every shot in a failed batch with the same error", async () => {
-      vi.useFakeTimers();
-      try {
+      it("その距離のショットバッチが送信中なら、完了を待ってから送る", async () => {
+        // Given: 距離のショットバッチが送信中
         const { result } = renderHook(() => useSyncQueue());
-        const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
+        const shotDone = createDeferred<Result>();
+        const runBatch = vi.fn(() => shotDone.promise);
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "距離1 1エンド1本目",
+              upsert: {
+                shotEventId: "e1",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await flushMicrotasks();
+        });
+        expect(runBatch).toHaveBeenCalledTimes(1);
 
+        // When: 同じ距離の設定変更を積む
+        act(() => {
+          result.current.enqueue({
+            key: "distance:d1",
+            label: "距離1",
+            operation: distanceUpdateOp,
+          });
+        });
+        await act(async () => {
+          await flushMicrotasks();
+        });
+
+        // Then: ショットのバッチがまだサーバーに届いていないため、距離の設定変更は送られない
+        expect(supabase.rpc).not.toHaveBeenCalled();
+
+        // When: ショットのバッチが完了する
+        await act(async () => {
+          shotDone.resolve(undefined);
+          await flushMicrotasks();
+        });
+
+        // Then: 距離の設定変更が送られる
+        expect(supabase.rpc).toHaveBeenCalledTimes(1);
+        expect(supabase.rpc).toHaveBeenCalledWith(
+          "update_distance",
+          expect.objectContaining({ p_distance_event_id: "update-evt" }),
+        );
+      });
+
+      it("送信中のバッチに加えて、まだ送られていないバッチの完了も待つ", async () => {
+        // Given: 距離の1回目のショットバッチが送信中
+        const { result } = renderHook(() => useSyncQueue());
+        const firstBatch = createDeferred<Result>();
+        const secondBatch = createDeferred<Result>();
+        const runBatch = vi
+          .fn()
+          .mockImplementationOnce(() => firstBatch.promise)
+          .mockImplementationOnce(() => secondBatch.promise);
         act(() => {
           result.current.enqueueShot(
             {
               key: "shot:d1:1:1",
               label: "A",
               upsert: {
-                shotEventId: "e8",
+                shotEventId: "e1",
                 distanceId: "d1",
                 endNumber: 1,
                 arrowNumber: 1,
@@ -798,368 +464,114 @@ describe("useSyncQueue", () => {
           );
         });
         await act(async () => {
-          await exhaustRetries();
+          await flushMicrotasks();
         });
+        expect(runBatch).toHaveBeenCalledTimes(1);
 
-        expect(result.current.status).toBe("error");
-        expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("waits for dependsOnKey before including a shot in a batch", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const order: string[] = [];
-      const createDone = createDeferred<Result>();
-      const runBatch = vi.fn((batch) => {
-        order.push(
-          `batch:${batch.upsert.map((s: ShotUpsert) => s.arrowNumber).join(",")}`,
-        );
-        return Promise.resolve(undefined as Result);
-      });
-
-      act(() => {
-        result.current.enqueue({
-          key: "distance:new",
-          label: "新しい距離",
-          run: () => {
-            order.push("create-start");
-            return createDone.promise.then((r) => {
-              order.push("create-end");
-              return r;
-            });
-          },
-        });
-        result.current.enqueueShot(
-          {
-            key: "shot:new:1:1",
-            label: "新しい距離 1エンド1本目",
-            dependsOnKey: "distance:new",
-            upsert: {
-              shotEventId: "e9",
-              distanceId: "new",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
-            },
-          },
-          runBatch,
-        );
-      });
-
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(runBatch).not.toHaveBeenCalled();
-
-      await act(async () => {
-        createDone.resolve(undefined);
-        await createDone.promise;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(order).toEqual(["create-start", "create-end", "batch:1"]);
-    });
-
-    it("dispatches a clear-only shot input using the distanceId from clear", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const runBatch = vi.fn(() => Promise.resolve(undefined as Result));
-
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "距離1 1エンド1本目",
-            clear: {
-              shotEventId: "e11",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-            },
-          },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(runBatch).toHaveBeenCalledWith({
-        upsert: [],
-        clear: [
-          {
-            shotEventId: "e11",
-            distanceId: "d1",
-            endNumber: 1,
-            arrowNumber: 1,
-          },
-        ],
-      });
-    });
-
-    it("does nothing when a shot input has neither upsert nor clear", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const runBatch = vi.fn(() => Promise.resolve(undefined as Result));
-
-      act(() => {
-        result.current.enqueueShot(
-          { key: "shot:?:1:1", label: "不明" },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      expect(runBatch).not.toHaveBeenCalled();
-    });
-
-    it("clears a shot's existing error when it is re-enqueued", async () => {
-      vi.useFakeTimers();
-      try {
-        const { result } = renderHook(() => useSyncQueue());
-        const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
-
+        // When: 送信中に、同じ距離の別マスへのショットと距離の設定変更を積む
         act(() => {
           result.current.enqueueShot(
             {
-              key: "shot:d1:1:1",
-              label: "距離1 1エンド1本目",
+              key: "shot:d1:1:2",
+              label: "B",
               upsert: {
-                shotEventId: "e12",
+                shotEventId: "e2",
                 distanceId: "d1",
                 endNumber: 1,
-                arrowNumber: 1,
-                scoreStr: "X",
-                scoreInt: 10,
-              },
-            },
-            runBatch,
-          );
-        });
-        await act(async () => {
-          await exhaustRetries();
-        });
-        expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
-
-        act(() => {
-          result.current.enqueueShot(
-            {
-              key: "shot:d1:1:1",
-              label: "距離1 1エンド1本目",
-              upsert: {
-                shotEventId: "e12",
-                distanceId: "d1",
-                endNumber: 1,
-                arrowNumber: 1,
+                arrowNumber: 2,
                 scoreStr: "9",
                 scoreInt: 9,
               },
             },
             runBatch,
           );
-        });
-
-        expect(result.current.errorFor("shot:d1:1:1")).toBeUndefined();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("reuses the in-flight tail instead of starting a second retry chain when enqueued again for the same distance while sending", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const first = createDeferred<Result>();
-      const runBatch = vi.fn(() => first.promise);
-
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "距離1 1エンド1本目",
-            upsert: {
-              shotEventId: "e13",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
-            },
-          },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(runBatch).toHaveBeenCalledTimes(1);
-
-      // 1本目が送信中の間に同じ距離へ2本目を積む。バッチはflight中の
-      // ため新しいリトライ連鎖を始めず、既存のtailに合流するはず。
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:2",
-            label: "距離1 1エンド2本目",
-            upsert: {
-              shotEventId: "e13",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 2,
-              scoreStr: "9",
-              scoreInt: 9,
-            },
-          },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        first.resolve(undefined);
-        await first.promise;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(runBatch).toHaveBeenCalledTimes(2);
-      expect(runBatch).toHaveBeenLastCalledWith({
-        upsert: [
-          {
-            shotEventId: "e13",
-            distanceId: "d1",
-            endNumber: 1,
-            arrowNumber: 2,
-            scoreStr: "9",
-            scoreInt: 9,
-          },
-        ],
-        clear: [],
-      });
-      expect(result.current.status).toBe("synced");
-    });
-
-    it("calls onPermanentFailure when a shot batch fails permanently", async () => {
-      const onPermanentFailure = vi.fn();
-      const { result } = renderHook(() =>
-        useSyncQueue(undefined, onPermanentFailure),
-      );
-      const runBatch = vi.fn(() =>
-        Promise.resolve({
-          error: "このラウンドを編集する権限がありません。",
-          permanent: true,
-        }),
-      );
-
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "距離1 1エンド1本目",
-            upsert: {
-              shotEventId: "e14",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
-            },
-          },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(onPermanentFailure).toHaveBeenCalledTimes(1);
-      expect(result.current.status).toBe("error");
-    });
-  });
-
-  describe("auth-required error", () => {
-    it("records the auth-required message as a per-key error without retrying", async () => {
-      vi.useFakeTimers();
-      try {
-        const run = vi.fn(() =>
-          Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
-        );
-        const { result } = renderHook(() => useSyncQueue());
-
-        act(() => {
           result.current.enqueue({
-            key: "roundConfig",
-            label: "ラウンド設定",
-            run,
+            key: "distance:d1",
+            label: "距離1",
+            operation: distanceUpdateOp,
           });
         });
-
         await act(async () => {
-          await exhaustRetries();
+          await flushMicrotasks();
         });
 
-        expect(run).toHaveBeenCalledTimes(1);
-        expect(result.current.errorFor("roundConfig")).toBe(
-          AUTH_REQUIRED_MESSAGE,
+        // Then: 距離の設定変更は送られない
+        expect(supabase.rpc).not.toHaveBeenCalled();
+
+        // When: 1回目のバッチが完了する
+        await act(async () => {
+          firstBatch.resolve(undefined);
+          await flushMicrotasks();
+        });
+
+        // Then: 積まれていた2回目のバッチが送られ、距離の設定変更はまだ送られない
+        expect(runBatch).toHaveBeenCalledTimes(2);
+        expect(supabase.rpc).not.toHaveBeenCalled();
+
+        // When: 2回目のバッチも完了する
+        await act(async () => {
+          secondBatch.resolve(undefined);
+          await flushMicrotasks();
+        });
+
+        // Then: 距離の設定変更が送られる
+        expect(supabase.rpc).toHaveBeenCalledTimes(1);
+        expect(supabase.rpc).toHaveBeenCalledWith(
+          "update_distance",
+          expect.objectContaining({ p_distance_event_id: "update-evt" }),
         );
-        expect(result.current.status).toBe("error");
-      } finally {
-        vi.useRealTimers();
-      }
+      });
     });
 
-    it("records the auth-required message as an error for a failed shot batch without retrying", async () => {
-      vi.useFakeTimers();
-      try {
-        const runBatch = vi.fn(() =>
-          Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
-        );
+    describe("一時的な失敗の場合", () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it("リトライ待機中はエラーを出さずretryingになり、バックオフ後に再試行する", async () => {
+        // Given: 初回だけ失敗する操作
         const { result } = renderHook(() => useSyncQueue());
+        const run = vi
+          .fn()
+          .mockResolvedValueOnce({ error: "boom" })
+          .mockResolvedValueOnce(undefined as Result);
 
+        // When: 積む
         act(() => {
-          result.current.enqueueShot(
-            {
-              key: "shot:d1:1:1",
-              label: "距離1 1エンド1本目",
-              upsert: {
-                shotEventId: "e10",
-                distanceId: "d1",
-                endNumber: 1,
-                arrowNumber: 1,
-                scoreStr: "X",
-                scoreInt: 10,
-              },
-            },
-            runBatch,
-          );
+          result.current.enqueue({ key: "a", label: "A", run });
         });
-
         await act(async () => {
-          await exhaustRetries();
+          await Promise.resolve();
+          await Promise.resolve();
         });
 
-        expect(runBatch).toHaveBeenCalledTimes(1);
-        expect(result.current.errorFor("shot:d1:1:1")).toBe(
-          AUTH_REQUIRED_MESSAGE,
-        );
-        expect(result.current.status).toBe("error");
-      } finally {
-        vi.useRealTimers();
-      }
-    });
+        // Then: リトライ待機中になり、エラーは出さない
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("retrying");
+        expect(result.current.errorFor("a")).toBeUndefined();
 
-    it("still retries a normal (non-auth) error", async () => {
-      vi.useFakeTimers();
-      try {
+        // When: バックオフの待機時間が経過する
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3000);
+        });
+
+        // Then: 再試行して同期済みになる
+        expect(run).toHaveBeenCalledTimes(2);
+        expect(result.current.status).toBe("synced");
+      });
+
+      it("認証以外のエラーは再試行し、成功すればエラーを残さない", async () => {
+        // Given: 初回だけ通常のエラーで失敗するラウンド設定の操作
         const run = vi
           .fn()
           .mockResolvedValueOnce({ error: "boom" })
           .mockResolvedValueOnce(undefined as Result);
         const { result } = renderHook(() => useSyncQueue());
 
+        // When: 積んで、最初のバックオフを経過させる
         act(() => {
           result.current.enqueue({
             key: "roundConfig",
@@ -1167,377 +579,73 @@ describe("useSyncQueue", () => {
             run,
           });
         });
-
         await act(async () => {
           await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
         });
 
+        // Then: 再試行して同期済みになる
         expect(run).toHaveBeenCalledTimes(2);
         expect(result.current.errorFor("roundConfig")).toBeUndefined();
         expect(result.current.status).toBe("synced");
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-  });
-
-  describe("automatic retry with backoff", () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it("shows pending (not error) while a retry is scheduled, and retries after the backoff delay", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const run = vi
-        .fn()
-        .mockResolvedValueOnce({ error: "boom" })
-        .mockResolvedValueOnce(undefined as Result);
-
-      act(() => {
-        result.current.enqueue({ key: "a", label: "A", run });
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
       });
 
-      expect(run).toHaveBeenCalledTimes(1);
-      expect(result.current.status).toBe("retrying");
-      expect(result.current.errorFor("a")).toBeUndefined();
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3000);
-      });
-
-      expect(run).toHaveBeenCalledTimes(2);
-      expect(result.current.status).toBe("synced");
-    });
-
-    it("gives up and surfaces an error only after exhausting all retry attempts", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const run = vi.fn(() => Promise.resolve({ error: "boom" }));
-
-      act(() => {
-        result.current.enqueue({ key: "a", label: "A", run });
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(run).toHaveBeenCalledTimes(1);
-
-      for (const delay of [3000, 6000, 12000, 24000]) {
-        expect(result.current.status).toBe("retrying");
+      it("リトライ待機中に同じキーへ新しい操作を積んでも、待機を打ち切らず両方を投入順に送る", async () => {
+        // Given: ラウンド・距離の操作はevent_idにより冪等なため、古い操作のリトライ待機は打ち切らない
+        const { result } = renderHook(() => useSyncQueue());
+        const firstRun = vi
+          .fn()
+          .mockResolvedValueOnce({ error: "boom" })
+          .mockResolvedValueOnce(undefined as Result);
+        const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
+        act(() => {
+          result.current.enqueue({ key: "a", label: "A", run: firstRun });
+        });
         await act(async () => {
-          await vi.advanceTimersByTimeAsync(delay);
+          await Promise.resolve();
+          await Promise.resolve();
         });
-      }
+        expect(firstRun).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("retrying");
 
-      expect(run).toHaveBeenCalledTimes(5);
-      expect(result.current.status).toBe("error");
-      expect(result.current.errorFor("a")).toBe("boom");
-    });
-
-    it("does not cancel a scheduled retry when a new attempt is enqueued for the same key — both eventually send", async () => {
-      // ラウンド・distanceの操作はevent_id起点の冪等性があるため、同じkeyへの
-      // 新しい操作をenqueueしても、古い操作のリトライ待機は打ち切られない。
-      // 両方とも実際に（投入順で）送信される。
-      const { result } = renderHook(() => useSyncQueue());
-      const firstRun = vi
-        .fn()
-        .mockResolvedValueOnce({ error: "boom" })
-        .mockResolvedValueOnce(undefined as Result);
-      const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
-
-      act(() => {
-        result.current.enqueue({ key: "a", label: "A", run: firstRun });
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(firstRun).toHaveBeenCalledTimes(1);
-      expect(result.current.status).toBe("retrying");
-
-      act(() => {
-        result.current.enqueue({ key: "a", label: "A", run: secondRun });
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      // firstのリトライ待機がまだ残っているので、secondはまだ走らない。
-      expect(secondRun).not.toHaveBeenCalled();
-
-      // firstのリトライ待機が明けると、打ち切られずに再試行される。
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
-      });
-      expect(firstRun).toHaveBeenCalledTimes(2);
-
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      // firstが完了して初めて、secondが送信される。
-      expect(secondRun).toHaveBeenCalledTimes(1);
-      expect(result.current.status).toBe("synced");
-    });
-
-    it("stops retrying immediately on an auth-required error", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const run = vi.fn(() =>
-        Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
-      );
-
-      act(() => {
-        result.current.enqueue({ key: "a", label: "A", run });
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(result.current.errorFor("a")).toBe(AUTH_REQUIRED_MESSAGE);
-      expect(result.current.status).toBe("error");
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(30000);
-      });
-      expect(run).toHaveBeenCalledTimes(1);
-    });
-
-    it("retries a failed shot batch after the backoff delay", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const runBatch = vi
-        .fn()
-        .mockResolvedValueOnce({ error: "boom" })
-        .mockResolvedValueOnce(undefined as Result);
-
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            upsert: {
-              shotEventId: "e11",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
-            },
-          },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(runBatch).toHaveBeenCalledTimes(1);
-      expect(result.current.status).toBe("retrying");
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3000);
-      });
-
-      expect(runBatch).toHaveBeenCalledTimes(2);
-      expect(result.current.status).toBe("synced");
-    });
-
-    it("drops a shot from a retrying batch once a newer value is queued for the same cell", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
-
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            upsert: {
-              shotEventId: "e12",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
-            },
-          },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(runBatch).toHaveBeenCalledTimes(1);
-
-      // リトライ待機中に、同じマスへ新しい値を入力する。
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            upsert: {
-              shotEventId: "e13",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "9",
-              scoreInt: 9,
-            },
-          },
-          runBatch,
-        );
-      });
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3000);
-      });
-
-      // 古い値（X）のリトライは送られず、新しい値（9）だけが送信される。
-      expect(runBatch).toHaveBeenCalledTimes(2);
-      expect(runBatch).toHaveBeenNthCalledWith(2, {
-        upsert: [
-          {
-            shotEventId: "e13",
-            distanceId: "d1",
-            endNumber: 1,
-            arrowNumber: 1,
-            scoreStr: "9",
-            scoreInt: 9,
-          },
-        ],
-        clear: [],
-      });
-    });
-  });
-
-  // --- ここから下は、コードレビューで発見された既存バグ（未修正）に対する
-  // 期待仕様のテスト。現時点の実装ではまだ対応していないため、これらは
-  // 失敗する。詳細は作業報告を参照。
-  //
-  // バグ1・バグ2: `distance:${id}`キーはdistanceの作成にも更新にも使われる。
-  // 同じキーへの新しい操作をenqueueすると、`clearRetryTimer`が古い操作の
-  // リトライ待機を無条件にキャンセルしてしまい、(a) 作成が二度と送信され
-  // ない、(b) IndexedDBに残った古い操作が再読み込み時に再生され値が
-  // 巻き戻る、という2つの実害がある。
-  //
-  // 修正方針: round設定(`roundConfig`)とそのラウンドの全distance操作
-  // (`distance:${id}`)を、キーごとに独立したtailではなく、ラウンド単位で
-  // 1本の共有直列tailにまとめる。かつ、同じキーへの新しい操作は古い操作の
-  // リトライ待機をキャンセルしない（両方とも実際に送信される。event_id
-  // による冪等性があるため無駄打ちは許容する）。
-  describe("round/distance queue unification (not yet implemented)", () => {
-    it("runs a round config update and a distance operation on one shared serial tail, in enqueue order", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const order: string[] = [];
-      const roundConfigDone = createDeferred<Result>();
-
-      act(() => {
-        result.current.enqueue({
-          key: "roundConfig",
-          label: "ラウンド設定",
-          run: () => {
-            order.push("roundConfig-start");
-            return roundConfigDone.promise.then((r) => {
-              order.push("roundConfig-end");
-              return r;
-            });
-          },
+        // When: 同じキーへ新しい操作を積む
+        act(() => {
+          result.current.enqueue({ key: "a", label: "A", run: secondRun });
         });
-        result.current.enqueue({
-          key: "distance:d1",
-          label: "距離1",
-          run: () => {
-            order.push("distance-run");
-            return Promise.resolve(undefined as Result);
-          },
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
         });
-      });
 
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+        // Then: 1つ目のリトライ待機が残っているため、2つ目はまだ実行しない
+        expect(secondRun).not.toHaveBeenCalled();
 
-      // 現状はroundConfigとdistance:d1が別々のtailなので、この時点で
-      // distance-runも既に走ってしまう。新仕様ではラウンド設定の完了を
-      // 待つべきなので、ここでは走っていないことを期待する。
-      expect(order).toEqual(["roundConfig-start"]);
-
-      await act(async () => {
-        roundConfigDone.resolve(undefined);
-        await roundConfigDone.promise;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(order).toEqual([
-        "roundConfig-start",
-        "roundConfig-end",
-        "distance-run",
-      ]);
-    });
-
-    it("serializes operations across two different distances in the same round onto the shared tail, instead of running them concurrently", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const order: string[] = [];
-      const firstDone = createDeferred<Result>();
-
-      act(() => {
-        result.current.enqueue({
-          key: "distance:d1",
-          label: "距離1",
-          run: () => {
-            order.push("d1-start");
-            return firstDone.promise.then((r) => {
-              order.push("d1-end");
-              return r;
-            });
-          },
+        // When: 1つ目のリトライ待機が明ける
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
         });
-        result.current.enqueue({
-          key: "distance:d2",
-          label: "距離2",
-          run: () => {
-            order.push("d2-run");
-            return Promise.resolve(undefined as Result);
-          },
+
+        // Then: 1つ目が打ち切られずに再試行される
+        expect(firstRun).toHaveBeenCalledTimes(2);
+
+        // When: 1つ目の再試行が完了する
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
         });
+
+        // Then: 2つ目を送り、同期済みになる
+        expect(secondRun).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("synced");
       });
 
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      // 現状は距離ごとに独立したtailなのでd2-runも既に走ってしまう。
-      // 新仕様ではラウンド共有tailにより、d1の完了を待つべき。
-      expect(order).toEqual(["d1-start"]);
-
-      await act(async () => {
-        firstDone.resolve(undefined);
-        await firstDone.promise;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(order).toEqual(["d1-start", "d1-end", "d2-run"]);
-    });
-
-    it("does not cancel a pending retry when an update is enqueued for the same distance key right after a create — both eventually send (bug 1)", async () => {
-      vi.useFakeTimers();
-      try {
+      it("距離の作成のリトライ待機中に同じ距離の更新を積んでも、作成を打ち切らず両方を送る", async () => {
+        // Given: 距離の作成が初回だけ失敗し、リトライ待機中
         const { result } = renderHook(() => useSyncQueue());
         const createRun = vi
           .fn()
           .mockResolvedValueOnce({ error: "network flaky" })
           .mockResolvedValueOnce(undefined as Result);
         const updateRun = vi.fn(() => Promise.resolve(undefined as Result));
-
         act(() => {
           result.current.enqueue({
             key: "distance:d1",
@@ -1550,8 +658,9 @@ describe("useSyncQueue", () => {
           await Promise.resolve();
         });
         expect(createRun).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("retrying"); // リトライ待機中
+        expect(result.current.status).toBe("retrying");
 
+        // When: 同じ距離の更新を積む
         act(() => {
           result.current.enqueue({
             key: "distance:d1",
@@ -1564,40 +673,35 @@ describe("useSyncQueue", () => {
           await Promise.resolve();
         });
 
-        // 現状の実装は、この時点で作成のリトライ待機をキャンセルして
-        // すぐ更新を走らせてしまう（作成は二度と送信されない = バグ1）。
-        // 新仕様では、作成のリトライ待機はキャンセルされず、更新は
-        // 作成が完了するまで待ってから走るべき。
+        // Then: 更新は作成の完了を待つ
         expect(updateRun).not.toHaveBeenCalled();
 
+        // When: 作成のリトライ待機が明ける
         await act(async () => {
           await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
         });
 
-        // 作成はキャンセルされず、リトライで実際に送信される。
+        // Then: 作成が打ち切られずに再試行される
         expect(createRun).toHaveBeenCalledTimes(2);
 
+        // When: 作成の再試行が完了する
         await act(async () => {
           await Promise.resolve();
           await Promise.resolve();
         });
-        // 作成完了後、更新も送信される。
-        expect(updateRun).toHaveBeenCalledTimes(1);
-      } finally {
-        vi.useRealTimers();
-      }
-    });
 
-    it("does not cancel a pending retry when a second update is enqueued for the same distance key — both consecutive updates eventually send", async () => {
-      vi.useFakeTimers();
-      try {
+        // Then: 更新も送る
+        expect(updateRun).toHaveBeenCalledTimes(1);
+      });
+
+      it("距離の更新のリトライ待機中に2回目の更新を積んでも、両方を送る", async () => {
+        // Given: 1回目の更新が初回だけ失敗し、リトライ待機中
         const { result } = renderHook(() => useSyncQueue());
         const firstUpdate = vi
           .fn()
           .mockResolvedValueOnce({ error: "network flaky" })
           .mockResolvedValueOnce(undefined as Result);
         const secondUpdate = vi.fn(() => Promise.resolve(undefined as Result));
-
         act(() => {
           result.current.enqueue({
             key: "distance:d1",
@@ -1612,6 +716,7 @@ describe("useSyncQueue", () => {
         expect(firstUpdate).toHaveBeenCalledTimes(1);
         expect(result.current.status).toBe("retrying");
 
+        // When: 2回目の更新を積む
         act(() => {
           result.current.enqueue({
             key: "distance:d1",
@@ -1623,32 +728,197 @@ describe("useSyncQueue", () => {
           await Promise.resolve();
           await Promise.resolve();
         });
+
+        // Then: 2回目は1回目の完了を待つ
         expect(secondUpdate).not.toHaveBeenCalled();
 
+        // When: 1回目のリトライ待機が明ける
         await act(async () => {
           await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
         });
+
+        // Then: 1回目が再試行される
         expect(firstUpdate).toHaveBeenCalledTimes(2);
 
+        // When: 1回目の再試行が完了する
         await act(async () => {
           await Promise.resolve();
           await Promise.resolve();
         });
+
+        // Then: 2回目も送る
         expect(secondUpdate).toHaveBeenCalledTimes(1);
-      } finally {
-        vi.useRealTimers();
-      }
+      });
+
+      it("失敗を操作のキーごとのエラーとして表示する", async () => {
+        // Given: 常に失敗する操作
+        const { result } = renderHook(() => useSyncQueue());
+
+        // When: 積んで、全てのバックオフを経過させる
+        act(() => {
+          result.current.enqueue({
+            key: "shot:d1:1:1",
+            label: "距離1 1エンド1本目",
+            run: () => Promise.resolve({ error: "boom" }),
+          });
+        });
+        await act(async () => {
+          await exhaustRetries();
+        });
+
+        // Then: そのキーのエラーとして表示する
+        expect(result.current.status).toBe("error");
+        expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+      });
+
+      it("あるキーの失敗は、別のキーの成功に影響しない", async () => {
+        // Given: 失敗する操作と成功する操作
+        const { result } = renderHook(() => useSyncQueue());
+
+        // When: 両方を積んで、全てのバックオフを経過させる
+        act(() => {
+          result.current.enqueue({
+            key: "a",
+            label: "A",
+            run: () => Promise.resolve({ error: "boom" }),
+          });
+          result.current.enqueue({
+            key: "b",
+            label: "B",
+            run: () => Promise.resolve(undefined),
+          });
+        });
+        await act(async () => {
+          await exhaustRetries();
+        });
+
+        // Then: 失敗したキーだけがエラーになる
+        expect(result.current.errorFor("a")).toBe("boom");
+        expect(result.current.errorFor("b")).toBeUndefined();
+        expect(result.current.status).toBe("error");
+      });
+
+      it("全ての再試行を使い切って初めてエラーとして確定する", async () => {
+        // Given: 常に失敗する操作
+        const { result } = renderHook(() => useSyncQueue());
+        const run = vi.fn(() => Promise.resolve({ error: "boom" }));
+        act(() => {
+          result.current.enqueue({ key: "a", label: "A", run });
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+        expect(run).toHaveBeenCalledTimes(1);
+
+        // When: 各バックオフを順に経過させる
+        // Then: 再試行を使い切るまではリトライ待機のまま
+        for (const delay of [3000, 6000, 12000, 24000]) {
+          expect(result.current.status).toBe("retrying");
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(delay);
+          });
+        }
+
+        // Then: 初回と4回の再試行の後にエラーとして確定する
+        expect(run).toHaveBeenCalledTimes(5);
+        expect(result.current.status).toBe("error");
+        expect(result.current.errorFor("a")).toBe("boom");
+      });
+
+      it("後から同じキーの操作が成功すると、そのキーのエラーを消す", async () => {
+        // Given: 失敗が確定したキー
+        const { result } = renderHook(() => useSyncQueue());
+        act(() => {
+          result.current.enqueue({
+            key: "a",
+            label: "A",
+            run: () => Promise.resolve({ error: "boom" }),
+          });
+        });
+        await act(async () => {
+          await exhaustRetries();
+        });
+        expect(result.current.errorFor("a")).toBe("boom");
+
+        // When: 同じキーの成功する操作を積む
+        act(() => {
+          result.current.enqueue({
+            key: "a",
+            label: "A",
+            run: () => Promise.resolve(undefined),
+          });
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: エラーが消え、同期済みになる
+        expect(result.current.errorFor("a")).toBeUndefined();
+        expect(result.current.status).toBe("synced");
+      });
+
+      it("同じキーを積み直した時点で、新しい試行の完了を待たずに古いエラーを消す", async () => {
+        // Given: 失敗が確定したキー
+        const { result } = renderHook(() => useSyncQueue());
+        act(() => {
+          result.current.enqueue({
+            key: "a",
+            label: "A",
+            run: () => Promise.resolve({ error: "boom" }),
+          });
+        });
+        await act(async () => {
+          await exhaustRetries();
+        });
+        expect(result.current.errorFor("a")).toBe("boom");
+
+        // When: 完了を制御できる操作を同じキーに積む
+        const deferred = createDeferred<Result>();
+        act(() => {
+          result.current.enqueue({
+            key: "a",
+            label: "A",
+            run: () => deferred.promise,
+          });
+        });
+
+        // Then: 新しい試行が完了する前に、古いエラーは消えている
+        expect(result.current.errorFor("a")).toBeUndefined();
+        await act(async () => {
+          deferred.resolve(undefined);
+          await deferred.promise;
+        });
+      });
     });
 
-    it("keeps a create's persisted outbox record until it actually sends, even after an update is enqueued for the same key (bug 2)", async () => {
-      vi.useFakeTimers();
-      try {
-        vi.mocked(savePendingOperation).mockClear();
-        vi.mocked(removePendingOperation).mockClear();
-        vi.mocked(executeSyncOperation).mockReset();
+    describe("一時的な失敗が続き、永続outboxを使う場合", () => {
+      beforeEach(() => {
+        vi.useFakeTimers(RETRY_TIMERS_ONLY);
+      });
+      afterEach(() => {
+        vi.useRealTimers();
+      });
 
+      it("作成のリトライ待機中に同じキーの更新を積んでも、作成が送られるまでoutboxの記録を残す", async () => {
+        // Given: 距離の作成は初回だけ通信エラーで失敗し、更新は成功する
+        let createAttempts = 0;
+        supabase.rpc.mockImplementation((name: string) => {
+          if (name === "create_distance") {
+            createAttempts += 1;
+            return Promise.resolve(
+              createAttempts === 1
+                ? {
+                    data: null,
+                    error: { message: "network flaky", code: "08006" },
+                  }
+                : { data: null, error: null },
+            );
+          }
+          return Promise.resolve({ data: null, error: null });
+        });
         const { result } = renderHook(() => useSyncQueue("round1"));
-
         const createOp: SyncOperation = {
           type: "distance.created",
           eventId: "create-evt",
@@ -1671,23 +941,6 @@ describe("useSyncQueue", () => {
           targetFaceId: "face2",
           isMarked: false,
         };
-        // attempt()は`input.operation`がある場合`input.run`を無視し、常に
-        // 本物の`executeSyncOperation`を呼ぶ実装なので、runではなくこちらを
-        // モックして検証する。createOpは1回目失敗・2回目成功、updateOpは
-        // 常に成功する（eventIdで呼び分ける）。
-        let createAttempts = 0;
-        vi.mocked(executeSyncOperation).mockImplementation((op) => {
-          if (op.eventId === "create-evt") {
-            createAttempts += 1;
-            return Promise.resolve(
-              createAttempts === 1
-                ? { error: "network flaky" }
-                : (undefined as Result),
-            );
-          }
-          return Promise.resolve(undefined as Result);
-        });
-
         act(() => {
           result.current.enqueue({
             key: "distance:d1",
@@ -1696,15 +949,13 @@ describe("useSyncQueue", () => {
           });
         });
         await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
+          await pollWithRealTasks(() =>
+            expect(supabase.rpc).toHaveBeenCalledTimes(1),
+          );
         });
-        expect(savePendingOperation).toHaveBeenCalledWith(
-          expect.objectContaining({ eventId: "create-evt" }),
-        );
-        expect(executeSyncOperation).toHaveBeenCalledWith(createOp);
-        expect(executeSyncOperation).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("retrying");
 
+        // When: 作成のリトライ待機中に、同じ距離の更新を積む
         act(() => {
           result.current.enqueue({
             key: "distance:d1",
@@ -1712,141 +963,349 @@ describe("useSyncQueue", () => {
             operation: updateOp,
           });
         });
+
+        // Then: 作成はまだサーバーに届いていないため、outboxに作成と更新の両方が残り、更新は作成の完了を待って送られない
+        // 新しい操作を積んだだけで作成の記録が消えると、再読み込み時に更新だけが復元され、作成が永久に失われる。
         await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
+          await pollWithRealTasks(async () =>
+            expect(await pendingEventIds("round1")).toEqual([
+              "create-evt",
+              "update-evt",
+            ]),
+          );
         });
-        expect(savePendingOperation).toHaveBeenCalledWith(
-          expect.objectContaining({ eventId: "update-evt" }),
-        );
+        expect(supabase.rpc).toHaveBeenCalledTimes(1);
 
-        // 作成はまだ一度もサーバーに届いていない（リトライ待機中）ので、
-        // outboxの記録は残っているべき。新しい操作をenqueueしただけで
-        // 消えてしまうと、リロード時に更新だけが復元され、作成が
-        // 永久に失われる（バグ2）。
-        expect(removePendingOperation).not.toHaveBeenCalledWith("create-evt");
-        // 更新はまだ送信されていない（作成の完了待ち）。
-        expect(executeSyncOperation).not.toHaveBeenCalledWith(updateOp);
-        expect(executeSyncOperation).toHaveBeenCalledTimes(1);
-
-        // リトライ待機が明けると、作成が打ち切られずに再試行されて成功し、
-        // 続けて共有tailが解放された更新も送信される
-        // （advanceTimersByTimeAsyncは両方の完了まで一度に進む）。
+        // When: リトライ待機が明ける
         await act(async () => {
           await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
         });
-        expect(executeSyncOperation).toHaveBeenCalledWith(createOp);
-        expect(executeSyncOperation).toHaveBeenCalledWith(updateOp);
-        expect(executeSyncOperation).toHaveBeenCalledTimes(3); // 作成2回（失敗+成功）＋更新1回
-        // 作成が実際に送信され成功して初めて、outboxから削除される。
-        expect(removePendingOperation).toHaveBeenCalledWith("create-evt");
-        expect(removePendingOperation).toHaveBeenCalledWith("update-evt");
-      } finally {
+
+        // Then: 作成が打ち切られずに再試行されて成功し、続けて更新も送られ、どちらもoutboxから取り除かれる
+        await act(async () => {
+          await pollWithRealTasks(async () => {
+            expect(supabase.rpc.mock.calls.map(([name]) => name)).toEqual([
+              "create_distance",
+              "create_distance",
+              "update_distance",
+            ]);
+            expect(await pendingEventIds("round1")).toEqual([]);
+          });
+        });
+        expect(result.current.status).toBe("synced");
+      });
+
+      it("operation付きの操作も再試行の上限で打ち切ってエラーとして確定し、再送できるようoutboxに残す", async () => {
+        // Given: RPCが常に再試行できる通信エラーで失敗する
+        // operation付きの操作もrd.mdの定義どおり、恒久的な失敗でなくても再試行の上限で打ち切る。
+        supabase.rpc.mockResolvedValue({
+          data: null,
+          error: { message: "通信エラー", code: "08006" },
+        });
+        const { result } = renderHook(() => useSyncQueue("round-1"));
+        const operation: SyncOperation = {
+          type: "round.updated",
+          eventId: "event-1",
+          roundId: "round-1",
+          name: "午後練習",
+          roundDate: "2026-09-15",
+          format: "outdoor",
+          bowType: "recurve",
+        };
+
+        // When: operation付きで積み、初回の失敗の後に全てのバックオフを経過させる
+        act(() => {
+          result.current.enqueue({
+            key: "roundConfig",
+            label: "ラウンド設定",
+            operation,
+          });
+        });
+        await act(async () => {
+          await pollWithRealTasks(() =>
+            expect(supabase.rpc).toHaveBeenCalledTimes(1),
+          );
+          await exhaustRetries();
+        });
+
+        // Then: 初回と上限回数分の再試行だけ送り、エラーとして確定する
+        expect(supabase.rpc).toHaveBeenCalledTimes(5);
+        expect(supabase.rpc).toHaveBeenCalledWith(
+          "update_round",
+          expect.objectContaining({ p_round_event_id: "event-1" }),
+        );
+        expect(result.current.status).toBe("error");
+        expect(result.current.errors).toEqual([
+          expect.objectContaining({ key: "roundConfig" }),
+        ]);
+        // 再試行できる失敗のため、再読み込み後に再送できるようoutboxに残す。
+        expect(await pendingEventIds("round-1")).toEqual(["event-1"]);
+      });
+    });
+
+    describe("恒久的な失敗の場合", () => {
+      it("再試行せずにエラーとして確定する", async () => {
+        // Given: 権限がなく恒久的に失敗する操作
+        const { result } = renderHook(() => useSyncQueue());
+        const run = vi.fn(() =>
+          Promise.resolve({
+            error: "このラウンドを編集する権限がありません。",
+            permanent: true,
+          }),
+        );
+
+        // When: 積む
+        act(() => {
+          result.current.enqueue({
+            key: "roundConfig",
+            label: "ラウンド設定",
+            run,
+          });
+        });
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        // Then: 1回だけ実行してエラーになる
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("error");
+        expect(result.current.errors).toEqual([
+          expect.objectContaining({ key: "roundConfig" }),
+        ]);
+      });
+
+      it("onPermanentFailureを呼ぶ", async () => {
+        // Given: 恒久的に失敗する操作と、onPermanentFailureを受け取るフック
+        const onPermanentFailure = vi.fn();
+        const { result } = renderHook(() =>
+          useSyncQueue(undefined, onPermanentFailure),
+        );
+        const run = vi.fn(() =>
+          Promise.resolve({
+            error: "このラウンドを編集する権限がありません。",
+            permanent: true,
+          }),
+        );
+
+        // When: 積む
+        act(() => {
+          result.current.enqueue({
+            key: "roundConfig",
+            label: "ラウンド設定",
+            run,
+          });
+        });
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        // Then: onPermanentFailureを1回呼ぶ
+        expect(onPermanentFailure).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe("サインインが必要な失敗の場合", () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+      afterEach(() => {
         vi.useRealTimers();
-      }
+      });
+
+      it("再試行せず、キーごとのエラーとして記録する", async () => {
+        // Given: サインインが必要なエラーを返す操作
+        const run = vi.fn(() =>
+          Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
+        );
+        const { result } = renderHook(() => useSyncQueue());
+
+        // When: 積んで、全てのバックオフ分の時間を経過させる
+        act(() => {
+          result.current.enqueue({
+            key: "roundConfig",
+            label: "ラウンド設定",
+            run,
+          });
+        });
+        await act(async () => {
+          await exhaustRetries();
+        });
+
+        // Then: 1回だけ実行し、そのキーのエラーとして記録する
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(result.current.errorFor("roundConfig")).toBe(
+          AUTH_REQUIRED_MESSAGE,
+        );
+        expect(result.current.status).toBe("error");
+      });
+
+      it("失敗した時点でエラーになり、その後も再試行しない", async () => {
+        // Given: サインインが必要なエラーを返す操作
+        const { result } = renderHook(() => useSyncQueue());
+        const run = vi.fn(() =>
+          Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
+        );
+
+        // When: 積む
+        act(() => {
+          result.current.enqueue({ key: "a", label: "A", run });
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: すぐにエラーになる
+        expect(result.current.errorFor("a")).toBe(AUTH_REQUIRED_MESSAGE);
+        expect(result.current.status).toBe("error");
+
+        // When: 十分な時間が経過する
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30000);
+        });
+
+        // Then: 再試行しない
+        expect(run).toHaveBeenCalledTimes(1);
+      });
+
+      it("再試行しない失敗として扱うが、onPermanentFailureは呼ばない", async () => {
+        // Given: サインインが必要なエラーを返す操作と、onPermanentFailureを受け取るフック
+        const onPermanentFailure = vi.fn();
+        const { result } = renderHook(() =>
+          useSyncQueue(undefined, onPermanentFailure),
+        );
+        const run = vi.fn(() =>
+          Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
+        );
+
+        // When: 積む
+        act(() => {
+          result.current.enqueue({
+            key: "roundConfig",
+            label: "ラウンド設定",
+            run,
+          });
+        });
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        // Then: onPermanentFailureを呼ばない
+        expect(onPermanentFailure).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("operationもrunも指定しない場合", () => {
+      it("固定のメッセージでエラーになる", async () => {
+        vi.useFakeTimers();
+        try {
+          // Given: 同期する操作を持たない入力
+          const { result } = renderHook(() => useSyncQueue());
+
+          // When: 積んで、全てのバックオフを経過させる
+          act(() => {
+            result.current.enqueue({ key: "noop", label: "何もしない" });
+          });
+          await act(async () => {
+            await exhaustRetries();
+          });
+
+          // Then: 固定のメッセージでエラーになる
+          expect(result.current.errorFor("noop")).toBe(
+            "同期する操作が見つかりません。",
+          );
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+    });
+
+    describe("runが例外を投げる場合", () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it("Errorであれば、そのメッセージをエラーとして表示する", async () => {
+        // Given: Errorを投げる操作
+        const { result } = renderHook(() => useSyncQueue());
+        const run = vi.fn(() => Promise.reject(new Error("real error")));
+
+        // When: 積んで、全てのバックオフを経過させる
+        act(() => {
+          result.current.enqueue({ key: "a", label: "A", run });
+        });
+        await act(async () => {
+          await exhaustRetries();
+        });
+
+        // Then: Errorのメッセージを表示する
+        expect(result.current.errorFor("a")).toBe("real error");
+      });
+
+      it("Error以外であれば、固定のメッセージをエラーとして表示する", async () => {
+        // Given: Error以外を投げる操作
+        const { result } = renderHook(() => useSyncQueue());
+        const run = vi.fn(() => Promise.reject("boom"));
+
+        // When: 積んで、全てのバックオフを経過させる
+        act(() => {
+          result.current.enqueue({ key: "a", label: "A", run });
+        });
+        await act(async () => {
+          await exhaustRetries();
+        });
+
+        // Then: 固定のメッセージを表示する
+        expect(result.current.errorFor("a")).toBe(
+          "予期しないエラーが発生しました。",
+        );
+      });
     });
   });
 
-  // バグ3: `update_distance`は対象の的・エンド数・本数を変更する際、既に
-  // shotsが記録されていると拒否する（`v_has_shots`チェック）。オフライン中に
-  // 「ショットを全部クリア→距離の設定を変更」の順で操作しても、
-  // shot:キューとdistance:キューは独立していて順序保証が無いため、距離の
-  // 更新がショットのクリアより先に届くと拒否されてしまう。
-  //
-  // 修正方針: 距離の設定変更（`operation.type === "distance.updated"`）は、
-  // 送信前にその距離の進行中・未送信のショットバッチが完了するのを待つ。
-  // 呼び出し側が明示的にフラグを指定する必要はなく、`operation`の型だけを
-  // 見て自動的に待つ設計（実装: `waitForShotBatch(operation.distanceId)`）。
-  // そのためテストでも`run`ではなく実際の`operation`を渡し、（`operation`が
-  // あると`run`は無視され常に本物の`executeSyncOperation`が呼ばれる実装の
-  // ため）モックした`executeSyncOperation`の呼び出しを検証する。
-  describe("distance settings change waits for its own pending shots (bug 3)", () => {
-    beforeEach(() => {
-      vi.mocked(executeSyncOperation).mockReset();
-      vi.mocked(executeSyncOperation).mockResolvedValue(undefined as Result);
-    });
+  describe("enqueueShot", () => {
+    describe("送信が成功する場合", () => {
+      it("1件のショットを1件のバッチとして送る", async () => {
+        // Given: バッチの送信が成功する
+        const { result } = renderHook(() => useSyncQueue());
+        const runBatch = vi.fn(() => Promise.resolve(undefined as Result));
 
-    const distanceUpdateOp: SyncOperation = {
-      type: "distance.updated",
-      eventId: "update-evt",
-      distanceId: "d1",
-      distance: 70,
-      totalEnds: 6,
-      arrowsPerEnd: 6,
-      targetFaceId: "face2",
-      isMarked: false,
-    };
-
-    it("waits for an in-flight shot batch of the distance to finish before sending a distance settings change", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const shotDone = createDeferred<Result>();
-      const runBatch = vi.fn(() => shotDone.promise);
-
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "距離1 1エンド1本目",
-            upsert: {
-              shotEventId: "e1",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
+        // When: ショットを1件積む
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "距離1 1エンド1本目",
+              upsert: {
+                shotEventId: "e1",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
             },
-          },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(runBatch).toHaveBeenCalledTimes(1); // まだ未解決＝送信中
-
-      // 全ショットをクリアした直後に、的・エンド数などの設定を変更する。
-      act(() => {
-        result.current.enqueue({
-          key: "distance:d1",
-          label: "距離1",
-          operation: distanceUpdateOp,
+            runBatch,
+          );
         });
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
 
-      // ショットのバッチがまだサーバーに届いていないので、距離の設定変更は
-      // 送られない（先に送るとサーバーのv_has_shotsチェックに引っかかる）。
-      expect(executeSyncOperation).not.toHaveBeenCalled();
+        // Then: 送信中になる
+        expect(result.current.status).toBe("sending");
 
-      await act(async () => {
-        shotDone.resolve(undefined);
-        await shotDone.promise;
-        await flushMicrotasks();
-      });
+        // When: 送信が完了する
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
 
-      expect(executeSyncOperation).toHaveBeenCalledWith(distanceUpdateOp);
-      expect(executeSyncOperation).toHaveBeenCalledTimes(1);
-    });
-
-    it("also waits for a still-queued (not yet sent) shot batch of the distance, not only the in-flight one", async () => {
-      const { result } = renderHook(() => useSyncQueue());
-      const firstBatch = createDeferred<Result>();
-      const secondBatch = createDeferred<Result>();
-      const runBatch = vi
-        .fn()
-        .mockImplementationOnce(() => firstBatch.promise)
-        .mockImplementationOnce(() => secondBatch.promise);
-
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            upsert: {
+        // Then: 1件のバッチとして送り、同期済みになる
+        expect(runBatch).toHaveBeenCalledTimes(1);
+        expect(runBatch).toHaveBeenCalledWith({
+          upsert: [
+            {
               shotEventId: "e1",
               distanceId: "d1",
               endNumber: 1,
@@ -1854,167 +1313,381 @@ describe("useSyncQueue", () => {
               scoreStr: "X",
               scoreInt: 10,
             },
-          },
-          runBatch,
-        );
+          ],
+          clear: [],
+        });
+        expect(result.current.status).toBe("synced");
       });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(runBatch).toHaveBeenCalledTimes(1);
 
-      // 1件目が送信中の間に、同じ距離の別マスへのショットと、距離の
-      // 設定変更を積む。
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:2",
-            label: "B",
-            upsert: {
-              shotEventId: "e2",
+      it("送信中に積まれたショットを、次の1回のバッチにまとめて送る", async () => {
+        // Given: 1件目のバッチが送信中
+        const { result } = renderHook(() => useSyncQueue());
+        const first = createDeferred<Result>();
+        const runBatch = vi.fn(() => first.promise);
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "A",
+              upsert: {
+                shotEventId: "e2",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+        expect(runBatch).toHaveBeenCalledTimes(1);
+
+        // When: 送信中に別々のマスへの入力を2件積む
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:2",
+              label: "B",
+              upsert: {
+                shotEventId: "e3",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 2,
+                scoreStr: "9",
+                scoreInt: 9,
+              },
+            },
+            runBatch,
+          );
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:3",
+              label: "C",
+              upsert: {
+                shotEventId: "e4",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 3,
+                scoreStr: "8",
+                scoreInt: 8,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: 1件目が送信中のため、まだ次のバッチは送らない
+        expect(runBatch).toHaveBeenCalledTimes(1);
+
+        // When: 1件目の送信が完了する
+        await act(async () => {
+          first.resolve(undefined);
+          await first.promise;
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: 送信中に積まれた2件を1回のバッチにまとめて送る
+        expect(runBatch).toHaveBeenCalledTimes(2);
+        expect(runBatch).toHaveBeenNthCalledWith(2, {
+          upsert: [
+            {
+              shotEventId: "e3",
               distanceId: "d1",
               endNumber: 1,
               arrowNumber: 2,
               scoreStr: "9",
               scoreInt: 9,
             },
-          },
-          runBatch,
-        );
-        result.current.enqueue({
-          key: "distance:d1",
-          label: "距離1",
-          operation: distanceUpdateOp,
+            {
+              shotEventId: "e4",
+              distanceId: "d1",
+              endNumber: 1,
+              arrowNumber: 3,
+              scoreStr: "8",
+              scoreInt: 8,
+            },
+          ],
+          clear: [],
         });
+        expect(result.current.status).toBe("synced");
       });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(executeSyncOperation).not.toHaveBeenCalled();
 
-      // 1回目のバッチが解決しても、まだ2回目（積まれていた分）が残っている
-      // ので、距離の設定変更はまだ送られない。
-      await act(async () => {
-        firstBatch.resolve(undefined);
-        await firstBatch.promise;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(runBatch).toHaveBeenCalledTimes(2);
-      expect(executeSyncOperation).not.toHaveBeenCalled();
-
-      // 2回目のバッチも解決して、ようやく距離の設定変更が送信される。
-      await act(async () => {
-        secondBatch.resolve(undefined);
-        await secondBatch.promise;
-        await flushMicrotasks();
-      });
-      expect(executeSyncOperation).toHaveBeenCalledWith(distanceUpdateOp);
-      expect(executeSyncOperation).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  // 参考: ショット側の「同じマスへの連続上書きは最後の値だけを送り、
-  // 送信済みでない古い値のoutbox記録は上書き時点で即座に削除する」挙動は
-  // 既に正しく実装されている（record_shotsはupsert、clear_shotsは対象が
-  // 無くても無害な空振りになるため、まとめて最後だけ送っても結果は必ず
-  // 正しい）。ここでは今回の変更でこれを壊していないことを確認する
-  // 回帰防止テストとして追加する。このテストは現状の実装でも成功するはず。
-  describe("shot outbox cleanup on overwrite (existing correct behavior — regression guard)", () => {
-    beforeEach(() => {
-      vi.mocked(savePendingOperation).mockClear();
-      vi.mocked(removePendingOperation).mockClear();
-    });
-
-    it("removes the superseded shot's outbox record as soon as a newer value overwrites it while still unflushed, without waiting to send", async () => {
-      // 上書きによる即時削除が起きるのは、2件目・3件目が「まだ一度も
-      // flushShotsに取り込まれていない（=まだshotBatchRef上に載っている）」
-      // 間に届いた場合だけ。そのため、1件目を先に送信中(flight)にした上で、
-      // 2件目・3件目は同じactブロック内でawaitを挟まず連続してenqueueし、
-      // 3件目が2件目をまだ未送信のうちに上書きする状況を作る
-      // （「coalesces repeated overwrites of the same cell」テストと同型）。
-      const { result } = renderHook(() => useSyncQueue("round1"));
-      const first = createDeferred<Result>();
-      const runBatch = vi.fn(() => first.promise);
-
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            operation: {
-              type: "shot.recorded",
-              eventId: "shot-evt-1",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
+      it("同じマスへの連続した上書きは、最新の値だけを送る", async () => {
+        // Given: 1件目のバッチが送信中
+        const { result } = renderHook(() => useSyncQueue());
+        const first = createDeferred<Result>();
+        const runBatch = vi.fn(() => first.promise);
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "A",
+              upsert: {
+                shotEventId: "e5",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
             },
-            upsert: {
-              shotEventId: "shot-evt-1",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
-            },
-          },
-          runBatch,
-        );
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(runBatch).toHaveBeenCalledTimes(1); // 1件目は送信中（未解決）
-      expect(savePendingOperation).toHaveBeenCalledWith(
-        expect.objectContaining({ eventId: "shot-evt-1" }),
-      );
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
 
-      // 1件目が送信中の間に、同じマスへ2件連続で新しい値を積む
-      // （2件目は3件目にまだ未送信のうちに上書きされる）。
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            operation: {
-              type: "shot.recorded",
-              eventId: "shot-evt-2",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "9",
-              scoreInt: 9,
+        // When: 送信中に同じマスを2回上書きし、1件目の送信が完了する
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "A",
+              upsert: {
+                shotEventId: "e6",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "9",
+                scoreInt: 9,
+              },
             },
-            upsert: {
-              shotEventId: "shot-evt-2",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "9",
-              scoreInt: 9,
+            runBatch,
+          );
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "A",
+              upsert: {
+                shotEventId: "e7",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "8",
+                scoreInt: 8,
+              },
             },
-          },
-          runBatch,
-        );
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            operation: {
-              type: "shot.recorded",
-              eventId: "shot-evt-3",
+            runBatch,
+          );
+        });
+        await act(async () => {
+          first.resolve(undefined);
+          await first.promise;
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: 次のバッチでは最新の値だけを送る
+        expect(runBatch).toHaveBeenCalledTimes(2);
+        expect(runBatch).toHaveBeenNthCalledWith(2, {
+          upsert: [
+            {
+              shotEventId: "e7",
               distanceId: "d1",
               endNumber: 1,
               arrowNumber: 1,
               scoreStr: "8",
               scoreInt: 8,
             },
-            upsert: {
+          ],
+          clear: [],
+        });
+      });
+
+      it("送信中に同じ距離へ積むと、新しい再試行の連鎖を始めず送信中のtailに合流する", async () => {
+        // Given: 1本目が送信中
+        const { result } = renderHook(() => useSyncQueue());
+        const first = createDeferred<Result>();
+        const runBatch = vi.fn(() => first.promise);
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "距離1 1エンド1本目",
+              upsert: {
+                shotEventId: "e13",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await Promise.resolve();
+        });
+        expect(runBatch).toHaveBeenCalledTimes(1);
+
+        // When: 同じ距離へ2本目を積み、1本目の送信が完了する
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:2",
+              label: "距離1 1エンド2本目",
+              upsert: {
+                shotEventId: "e13",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 2,
+                scoreStr: "9",
+                scoreInt: 9,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          first.resolve(undefined);
+          await first.promise;
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: 2本目を次のバッチで1回だけ送り、同期済みになる
+        expect(runBatch).toHaveBeenCalledTimes(2);
+        expect(runBatch).toHaveBeenLastCalledWith({
+          upsert: [
+            {
+              shotEventId: "e13",
+              distanceId: "d1",
+              endNumber: 1,
+              arrowNumber: 2,
+              scoreStr: "9",
+              scoreInt: 9,
+            },
+          ],
+          clear: [],
+        });
+        expect(result.current.status).toBe("synced");
+      });
+
+      it("取り消しだけの入力は、clearの距離IDでバッチを送る", async () => {
+        // Given: バッチの送信が成功する
+        const { result } = renderHook(() => useSyncQueue());
+        const runBatch = vi.fn(() => Promise.resolve(undefined as Result));
+
+        // When: 取り消しだけの入力を積む
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "距離1 1エンド1本目",
+              clear: {
+                shotEventId: "e11",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: 取り消しとしてバッチを送る
+        expect(runBatch).toHaveBeenCalledWith({
+          upsert: [],
+          clear: [
+            {
+              shotEventId: "e11",
+              distanceId: "d1",
+              endNumber: 1,
+              arrowNumber: 1,
+            },
+          ],
+        });
+      });
+
+      // record_shotsはupsert、clear_shotsは対象がなくても無害なため、同じマスの最後の値だけを送っても結果は正しい。
+      it("未送信のうちに上書きされた古い値は、送信を待たずにoutboxから削除する", async () => {
+        // Given: 1件目のショットが送信中
+        // 上書きによる削除が起きるのは、古い値がまだバッチに取り込まれていない間に新しい値が届いた場合だけなので、1件目を送信中にしておく。
+        const { result } = renderHook(() => useSyncQueue("round1"));
+        const first = createDeferred<Result>();
+        const runBatch = vi.fn(() => first.promise);
+        const recordShot = (
+          eventId: string,
+          scoreStr: string,
+          scoreInt: number,
+        ) => ({
+          key: "shot:d1:1:1",
+          label: "A",
+          operation: {
+            type: "shot.recorded",
+            eventId,
+            distanceId: "d1",
+            endNumber: 1,
+            arrowNumber: 1,
+            scoreStr,
+            scoreInt,
+          } satisfies SyncOperation,
+          upsert: {
+            shotEventId: eventId,
+            distanceId: "d1",
+            endNumber: 1,
+            arrowNumber: 1,
+            scoreStr,
+            scoreInt,
+          },
+        });
+        act(() => {
+          result.current.enqueueShot(
+            recordShot("shot-evt-1", "X", 10),
+            runBatch,
+          );
+        });
+        await vi.waitFor(() => expect(runBatch).toHaveBeenCalledTimes(1));
+
+        // When: 送信中に、同じマスへ2件続けて新しい値を積む
+        act(() => {
+          result.current.enqueueShot(
+            recordShot("shot-evt-2", "9", 9),
+            runBatch,
+          );
+          result.current.enqueueShot(
+            recordShot("shot-evt-3", "8", 8),
+            runBatch,
+          );
+        });
+
+        // Then: 送信前に3件目で上書きされた2件目だけがoutboxから削除され、送信中の1件目と最新の3件目は残る
+        await vi.waitFor(async () =>
+          expect(await pendingEventIds("round1")).toEqual([
+            "shot-evt-1",
+            "shot-evt-3",
+          ]),
+        );
+        expect(runBatch).toHaveBeenCalledTimes(1);
+
+        // When: 1件目の送信が完了する
+        await act(async () => {
+          first.resolve(undefined);
+          await first.promise;
+        });
+
+        // Then: 最新の3件目だけが次のバッチで送られ、送信を終えた1件目と3件目もoutboxから削除される
+        await vi.waitFor(() => expect(runBatch).toHaveBeenCalledTimes(2));
+        expect(runBatch).toHaveBeenLastCalledWith({
+          upsert: [
+            {
               shotEventId: "shot-evt-3",
               distanceId: "d1",
               endNumber: 1,
@@ -2022,298 +1695,101 @@ describe("useSyncQueue", () => {
               scoreStr: "8",
               scoreInt: 8,
             },
-          },
-          runBatch,
+          ],
+          clear: [],
+        });
+        await vi.waitFor(async () =>
+          expect(await pendingEventIds("round1")).toEqual([]),
         );
       });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      // 2件目は、一度も送信されないうちに3件目で上書きされたので、
-      // 送っても無意味な古い値としてoutboxから即座に削除される。
-      // 1件目（送信中）・3件目（まだ送信されていない最新値）は削除されない。
-      expect(removePendingOperation).toHaveBeenCalledWith("shot-evt-2");
-      expect(removePendingOperation).not.toHaveBeenCalledWith("shot-evt-1");
-      expect(removePendingOperation).not.toHaveBeenCalledWith("shot-evt-3");
-
-      await act(async () => {
-        first.resolve(undefined);
-        await first.promise;
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      // 実際に送信された1件目・3件目（コアレスされた最終値）は、
-      // それぞれ送信完了後に削除される。2件目は上書き時点の1回だけで、
-      // 二重に削除されたりはしない。
-      expect(removePendingOperation).toHaveBeenCalledWith("shot-evt-1");
-      expect(removePendingOperation).toHaveBeenCalledWith("shot-evt-3");
-      expect(
-        vi
-          .mocked(removePendingOperation)
-          .mock.calls.filter(([eventId]) => eventId === "shot-evt-2"),
-      ).toHaveLength(1);
-      expect(removePendingOperation).toHaveBeenCalledTimes(3);
-    });
-  });
-
-  // navigator.onLineを送信直前（初回・リトライとも）に同期的に参照し、
-  // window の online/offline イベントを監視する。
-  //   同期済み + オンライン + キューに追加 → 送信中
-  //   同期済み + オフライン + キューに追加 → 送信中を経由せず同期保留中
-  //   送信中 + 失敗（リトライ残） → リトライ待機
-  //   リトライ待機 + バックオフ経過 → 送信中（再試行）
-  //   リトライ待機 + 'offline'検知 → 同期保留中（待機タイマーを打ち切る）
-  //   同期保留中 + 'online'検知 → 送信中（保留中の操作を自動再送する）
-  describe("offline detection (rounds-id-sync-status)", () => {
-    function setOnline(online: boolean) {
-      Object.defineProperty(window.navigator, "onLine", {
-        configurable: true,
-        value: online,
-      });
-    }
-
-    beforeEach(() => {
-      setOnline(true);
-    });
-    afterEach(() => {
-      setOnline(true);
     });
 
-    it("queues without sending and shows offline-pending when enqueued while offline", async () => {
-      setOnline(false);
-      const { result } = renderHook(() => useSyncQueue());
-      const run = vi.fn(() => Promise.resolve(undefined as Result));
-
-      act(() => {
-        result.current.enqueue({ key: "a", label: "A", run });
-      });
-
-      // 送信中を経由せず、いきなり同期保留中になる。実際のリクエストも
-      // 送らない（試行前チェックにより、初回試行でも1ティックの遅延なく
-      // 同期的に判定される）。
-      expect(result.current.status).toBe("offline-pending");
-      expect(run).not.toHaveBeenCalled();
-
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(run).not.toHaveBeenCalled();
-      expect(result.current.status).toBe("offline-pending");
-    });
-
-    it("resends automatically on the 'online' event, without a page revisit", async () => {
-      setOnline(false);
-      const { result } = renderHook(() => useSyncQueue());
-      const runA = vi.fn(() => Promise.resolve(undefined as Result));
-      const runB = vi.fn(() => Promise.resolve(undefined as Result));
-
-      act(() => {
-        result.current.enqueue({ key: "a", label: "A", run: runA });
-        result.current.enqueue({ key: "b", label: "B", run: runB });
-      });
-      expect(result.current.status).toBe("offline-pending");
-      expect(runA).not.toHaveBeenCalled();
-      expect(runB).not.toHaveBeenCalled();
-
-      setOnline(true);
-      act(() => {
-        window.dispatchEvent(new Event("online"));
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(runA).toHaveBeenCalledTimes(1);
-      expect(runB).toHaveBeenCalledTimes(1);
-      expect(result.current.status).toBe("synced");
-    });
-
-    it("shows sending while online and failing, not offline-pending, during backoff wait", async () => {
-      vi.useFakeTimers();
-      try {
+    describe("dependsOnKeyを指定した場合", () => {
+      it("依存先の完了を待ってからバッチに含める", async () => {
+        // Given: 新しい距離の作成と、それに依存するショット
         const { result } = renderHook(() => useSyncQueue());
-        const run = vi
-          .fn()
-          .mockResolvedValueOnce({ error: "network flaky" })
-          .mockResolvedValueOnce(undefined as Result);
+        const order: string[] = [];
+        const createDone = createDeferred<Result>();
+        const runBatch = vi.fn((batch) => {
+          order.push(
+            `batch:${batch.upsert.map((s: ShotUpsert) => s.arrowNumber).join(",")}`,
+          );
+          return Promise.resolve(undefined as Result);
+        });
 
+        // When: 続けて積む
         act(() => {
-          result.current.enqueue({ key: "a", label: "A", run });
-        });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-        expect(run).toHaveBeenCalledTimes(1);
-
-        // オンラインのままの失敗によるバックオフ待機中は「送信中」と同じ
-        // 扱いで、「同期保留中」にはならない。
-        expect(result.current.status).toBe("retrying");
-
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
-        });
-        expect(run).toHaveBeenCalledTimes(2);
-        expect(result.current.status).toBe("synced");
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("cuts a scheduled retry short and switches to offline-pending on the 'offline' event, then resumes on 'online' without losing the retry", async () => {
-      vi.useFakeTimers();
-      try {
-        const { result } = renderHook(() => useSyncQueue());
-        const run = vi
-          .fn()
-          .mockResolvedValueOnce({ error: "network flaky" })
-          .mockResolvedValueOnce(undefined as Result);
-
-        act(() => {
-          result.current.enqueue({ key: "a", label: "A", run });
-        });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-        expect(run).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("retrying");
-
-        // バックオフの待機時間が明ける前にオフラインになる。
-        setOnline(false);
-        act(() => {
-          window.dispatchEvent(new Event("offline"));
-        });
-        expect(result.current.status).toBe("offline-pending");
-
-        // 打ち切られたタイマーが後で発火しても、二重に再送しない
-        // （run()は1回のままのはず）。
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
-        });
-        expect(run).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("offline-pending");
-
-        setOnline(true);
-        act(() => {
-          window.dispatchEvent(new Event("online"));
-        });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-
-        expect(run).toHaveBeenCalledTimes(2);
-        expect(result.current.status).toBe("synced");
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("checks navigator.onLine synchronously right before a retry attempt fires, even without an explicit offline event", async () => {
-      vi.useFakeTimers();
-      try {
-        const { result } = renderHook(() => useSyncQueue());
-        const run = vi
-          .fn()
-          .mockResolvedValueOnce({ error: "network flaky" })
-          .mockResolvedValueOnce(undefined as Result);
-
-        act(() => {
-          result.current.enqueue({ key: "a", label: "A", run });
-        });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-        expect(run).toHaveBeenCalledTimes(1);
-
-        // 'offline'イベントは発火せず、navigator.onLineだけがfalseになる
-        // ケースでも、次に送信しようとする直前のnavigator.onLine参照で
-        // 捉えられる。
-        setOnline(false);
-
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
-        });
-        // 試行前チェックに引っかかって実際には送信されず、同期保留中になる。
-        expect(run).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("offline-pending");
-
-        setOnline(true);
-        act(() => {
-          window.dispatchEvent(new Event("online"));
-        });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-        expect(run).toHaveBeenCalledTimes(2);
-        expect(result.current.status).toBe("synced");
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("queues shots without sending and resends automatically on 'online', independent of the round/distance tail", async () => {
-      setOnline(false);
-      const { result } = renderHook(() => useSyncQueue());
-      const runBatch = vi.fn(() => Promise.resolve(undefined as Result));
-
-      act(() => {
-        result.current.enqueueShot(
-          {
-            key: "shot:d1:1:1",
-            label: "A",
-            upsert: {
-              shotEventId: "e1",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-              scoreStr: "X",
-              scoreInt: 10,
+          result.current.enqueue({
+            key: "distance:new",
+            label: "新しい距離",
+            run: () => {
+              order.push("create-start");
+              return createDone.promise.then((r) => {
+                order.push("create-end");
+                return r;
+              });
             },
-          },
-          runBatch,
-        );
-      });
-      expect(result.current.status).toBe("offline-pending");
-      expect(runBatch).not.toHaveBeenCalled();
+          });
+          result.current.enqueueShot(
+            {
+              key: "shot:new:1:1",
+              label: "新しい距離 1エンド1本目",
+              dependsOnKey: "distance:new",
+              upsert: {
+                shotEventId: "e9",
+                distanceId: "new",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
 
-      setOnline(true);
-      act(() => {
-        window.dispatchEvent(new Event("online"));
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+        // Then: 依存先が完了するまでバッチを送らない
+        expect(runBatch).not.toHaveBeenCalled();
 
-      expect(runBatch).toHaveBeenCalledTimes(1);
-      expect(result.current.status).toBe("synced");
+        // When: 依存先が完了する
+        await act(async () => {
+          createDone.resolve(undefined);
+          await createDone.promise;
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: 依存先の完了後にバッチを送る
+        expect(order).toEqual(["create-start", "create-end", "batch:1"]);
+      });
     });
 
-    it("cuts a scheduled shot retry short and switches to offline-pending on the 'offline' event, then resumes on 'online' without losing the retry", async () => {
-      vi.useFakeTimers();
-      try {
+    describe("一時的な失敗の場合", () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it("バックオフ後に失敗したバッチを再試行する", async () => {
+        // Given: 初回だけ失敗するバッチ
         const { result } = renderHook(() => useSyncQueue());
         const runBatch = vi
           .fn()
-          .mockResolvedValueOnce({ error: "network flaky" })
+          .mockResolvedValueOnce({ error: "boom" })
           .mockResolvedValueOnce(undefined as Result);
-
         act(() => {
           result.current.enqueueShot(
             {
               key: "shot:d1:1:1",
-              label: "距離1 1エンド1本目",
+              label: "A",
               upsert: {
-                shotEventId: "e15",
+                shotEventId: "e11",
                 distanceId: "d1",
                 endNumber: 1,
                 arrowNumber: 1,
@@ -2331,18 +1807,374 @@ describe("useSyncQueue", () => {
         expect(runBatch).toHaveBeenCalledTimes(1);
         expect(result.current.status).toBe("retrying");
 
-        setOnline(false);
-        act(() => {
-          window.dispatchEvent(new Event("offline"));
-        });
-        expect(result.current.status).toBe("offline-pending");
-
+        // When: バックオフの待機時間が経過する
         await act(async () => {
-          await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+          await vi.advanceTimersByTimeAsync(3000);
+        });
+
+        // Then: 再試行して同期済みになる
+        expect(runBatch).toHaveBeenCalledTimes(2);
+        expect(result.current.status).toBe("synced");
+      });
+
+      it("リトライ待機中に同じマスへ新しい値が積まれると、古い値は再試行せず新しい値だけを送る", async () => {
+        // Given: 1件目のバッチが失敗してリトライ待機中
+        const { result } = renderHook(() => useSyncQueue());
+        const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "A",
+              upsert: {
+                shotEventId: "e12",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
         });
         expect(runBatch).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("offline-pending");
 
+        // When: 同じマスへ新しい値を入力し、バックオフの待機時間が経過する
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "A",
+              upsert: {
+                shotEventId: "e13",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "9",
+                scoreInt: 9,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3000);
+        });
+
+        // Then: 古い値（X）は送らず、新しい値（9）だけを送る
+        expect(runBatch).toHaveBeenCalledTimes(2);
+        expect(runBatch).toHaveBeenNthCalledWith(2, {
+          upsert: [
+            {
+              shotEventId: "e13",
+              distanceId: "d1",
+              endNumber: 1,
+              arrowNumber: 1,
+              scoreStr: "9",
+              scoreInt: 9,
+            },
+          ],
+          clear: [],
+        });
+      });
+
+      it("失敗したバッチのショットに同じエラーを付ける", async () => {
+        // Given: 常に失敗するバッチ
+        const { result } = renderHook(() => useSyncQueue());
+        const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
+
+        // When: ショットを積んで、全てのバックオフを経過させる
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "A",
+              upsert: {
+                shotEventId: "e8",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await exhaustRetries();
+        });
+
+        // Then: そのショットのエラーとして表示する
+        expect(result.current.status).toBe("error");
+        expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+      });
+
+      it("失敗したショットを積み直すと、既存のエラーを消す", async () => {
+        // Given: 失敗が確定したショット
+        const { result } = renderHook(() => useSyncQueue());
+        const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "距離1 1エンド1本目",
+              upsert: {
+                shotEventId: "e12",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await exhaustRetries();
+        });
+        expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+
+        // When: 同じマスを積み直す
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "距離1 1エンド1本目",
+              upsert: {
+                shotEventId: "e12",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "9",
+                scoreInt: 9,
+              },
+            },
+            runBatch,
+          );
+        });
+
+        // Then: 既存のエラーが消える
+        expect(result.current.errorFor("shot:d1:1:1")).toBeUndefined();
+      });
+    });
+
+    describe("恒久的な失敗の場合", () => {
+      it("onPermanentFailureを呼び、エラーになる", async () => {
+        // Given: 恒久的に失敗するバッチと、onPermanentFailureを受け取るフック
+        const onPermanentFailure = vi.fn();
+        const { result } = renderHook(() =>
+          useSyncQueue(undefined, onPermanentFailure),
+        );
+        const runBatch = vi.fn(() =>
+          Promise.resolve({
+            error: "このラウンドを編集する権限がありません。",
+            permanent: true,
+          }),
+        );
+
+        // When: ショットを積む
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "距離1 1エンド1本目",
+              upsert: {
+                shotEventId: "e14",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
+            },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: onPermanentFailureを1回呼び、エラーになる
+        expect(onPermanentFailure).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("error");
+      });
+    });
+
+    describe("サインインが必要な失敗の場合", () => {
+      it("再試行せず、ショットのエラーとして記録する", async () => {
+        vi.useFakeTimers();
+        try {
+          // Given: サインインが必要なエラーを返すバッチ
+          const runBatch = vi.fn(() =>
+            Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
+          );
+          const { result } = renderHook(() => useSyncQueue());
+
+          // When: ショットを積んで、全てのバックオフ分の時間を経過させる
+          act(() => {
+            result.current.enqueueShot(
+              {
+                key: "shot:d1:1:1",
+                label: "距離1 1エンド1本目",
+                upsert: {
+                  shotEventId: "e10",
+                  distanceId: "d1",
+                  endNumber: 1,
+                  arrowNumber: 1,
+                  scoreStr: "X",
+                  scoreInt: 10,
+                },
+              },
+              runBatch,
+            );
+          });
+          await act(async () => {
+            await exhaustRetries();
+          });
+
+          // Then: 1回だけ送り、そのショットのエラーとして記録する
+          expect(runBatch).toHaveBeenCalledTimes(1);
+          expect(result.current.errorFor("shot:d1:1:1")).toBe(
+            AUTH_REQUIRED_MESSAGE,
+          );
+          expect(result.current.status).toBe("error");
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+    });
+
+    describe("upsertもclearも指定しない場合", () => {
+      it("何も送らない", async () => {
+        // Given: 送る内容を持たないショットの入力
+        const { result } = renderHook(() => useSyncQueue());
+        const runBatch = vi.fn(() => Promise.resolve(undefined as Result));
+
+        // When: 積む
+        act(() => {
+          result.current.enqueueShot(
+            { key: "shot:?:1:1", label: "不明" },
+            runBatch,
+          );
+        });
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        // Then: バッチを送らない
+        expect(runBatch).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  // navigator.onLineを送信直前（初回・リトライとも）に同期的に参照し、windowのonline/offlineイベントを監視する。
+  //   同期済み + オンライン + キューに追加 → 送信中
+  //   同期済み + オフライン + キューに追加 → 送信中を経由せず同期保留中
+  //   送信中 + 失敗（リトライ残） → リトライ待機
+  //   リトライ待機 + バックオフ経過 → 送信中（再試行）
+  //   リトライ待機 + 'offline'検知 → 同期保留中（待機タイマーを打ち切る）
+  //   同期保留中 + 'online'検知 → 送信中（保留中の操作を自動再送する）
+  describe("オフラインの検知", () => {
+    function setOnline(online: boolean) {
+      Object.defineProperty(window.navigator, "onLine", {
+        configurable: true,
+        value: online,
+      });
+    }
+
+    beforeEach(() => {
+      setOnline(true);
+    });
+    afterEach(() => {
+      setOnline(true);
+    });
+
+    describe("enqueue", () => {
+      it("オンラインのまま失敗したバックオフ待機中は、同期保留中ではなくretryingになる", async () => {
+        vi.useFakeTimers();
+        try {
+          // Given: 初回だけ失敗する操作
+          const { result } = renderHook(() => useSyncQueue());
+          const run = vi
+            .fn()
+            .mockResolvedValueOnce({ error: "network flaky" })
+            .mockResolvedValueOnce(undefined as Result);
+
+          // When: オンラインのまま積む
+          act(() => {
+            result.current.enqueue({ key: "a", label: "A", run });
+          });
+          await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+          });
+
+          // Then: リトライ待機中になる
+          expect(run).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("retrying");
+
+          // When: バックオフの待機時間が経過する
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+          });
+
+          // Then: 再試行して同期済みになる
+          expect(run).toHaveBeenCalledTimes(2);
+          expect(result.current.status).toBe("synced");
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("オフライン中に積むと、送らずにoffline-pendingになる", async () => {
+        // Given: オフライン
+        setOnline(false);
+        const { result } = renderHook(() => useSyncQueue());
+        const run = vi.fn(() => Promise.resolve(undefined as Result));
+
+        // When: 操作を積む
+        act(() => {
+          result.current.enqueue({ key: "a", label: "A", run });
+        });
+
+        // Then: 送信中を経由せず、初回の試行前の同期的な判定で同期保留中になり、送らない
+        expect(result.current.status).toBe("offline-pending");
+        expect(run).not.toHaveBeenCalled();
+
+        // When: 時間が進む
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: 同期保留中のまま送らない
+        expect(run).not.toHaveBeenCalled();
+        expect(result.current.status).toBe("offline-pending");
+      });
+
+      it("onlineイベントで、ページを開き直さずに自動で再送する", async () => {
+        // Given: オフライン中に2つの操作が積まれている
+        setOnline(false);
+        const { result } = renderHook(() => useSyncQueue());
+        const runA = vi.fn(() => Promise.resolve(undefined as Result));
+        const runB = vi.fn(() => Promise.resolve(undefined as Result));
+        act(() => {
+          result.current.enqueue({ key: "a", label: "A", run: runA });
+          result.current.enqueue({ key: "b", label: "B", run: runB });
+        });
+        expect(result.current.status).toBe("offline-pending");
+        expect(runA).not.toHaveBeenCalled();
+        expect(runB).not.toHaveBeenCalled();
+
+        // When: オンラインに戻り、onlineイベントが発火する
         setOnline(true);
         act(() => {
           window.dispatchEvent(new Event("online"));
@@ -2352,135 +2184,336 @@ describe("useSyncQueue", () => {
           await Promise.resolve();
         });
 
-        expect(runBatch).toHaveBeenCalledTimes(2);
+        // Then: 両方を送り、同期済みになる
+        expect(runA).toHaveBeenCalledTimes(1);
+        expect(runB).toHaveBeenCalledTimes(1);
         expect(result.current.status).toBe("synced");
-      } finally {
-        vi.useRealTimers();
-      }
+      });
+
+      it("offlineイベントでリトライ待機を打ち切ってoffline-pendingになり、onlineイベントで再試行を失わずに再開する", async () => {
+        vi.useFakeTimers();
+        try {
+          // Given: 初回が失敗してリトライ待機中
+          const { result } = renderHook(() => useSyncQueue());
+          const run = vi
+            .fn()
+            .mockResolvedValueOnce({ error: "network flaky" })
+            .mockResolvedValueOnce(undefined as Result);
+          act(() => {
+            result.current.enqueue({ key: "a", label: "A", run });
+          });
+          await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+          });
+          expect(run).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("retrying");
+
+          // When: バックオフが明ける前にオフラインになる
+          setOnline(false);
+          act(() => {
+            window.dispatchEvent(new Event("offline"));
+          });
+
+          // Then: 同期保留中になる
+          expect(result.current.status).toBe("offline-pending");
+
+          // When: 打ち切られたタイマーの時刻が経過する
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+          });
+
+          // Then: 二重に再送せず、同期保留中のまま
+          expect(run).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("offline-pending");
+
+          // When: オンラインに戻る
+          setOnline(true);
+          act(() => {
+            window.dispatchEvent(new Event("online"));
+          });
+          await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+          });
+
+          // Then: 再試行して同期済みになる
+          expect(run).toHaveBeenCalledTimes(2);
+          expect(result.current.status).toBe("synced");
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("offlineイベントがなくても、再試行の直前にnavigator.onLineを確認する", async () => {
+        vi.useFakeTimers();
+        try {
+          // Given: 初回が失敗してリトライ待機中
+          const { result } = renderHook(() => useSyncQueue());
+          const run = vi
+            .fn()
+            .mockResolvedValueOnce({ error: "network flaky" })
+            .mockResolvedValueOnce(undefined as Result);
+          act(() => {
+            result.current.enqueue({ key: "a", label: "A", run });
+          });
+          await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+          });
+          expect(run).toHaveBeenCalledTimes(1);
+
+          // When: offlineイベントは発火せずnavigator.onLineだけがfalseになり、バックオフが経過する
+          setOnline(false);
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+          });
+
+          // Then: 試行前の確認で送らず、同期保留中になる
+          expect(run).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("offline-pending");
+
+          // When: オンラインに戻る
+          setOnline(true);
+          act(() => {
+            window.dispatchEvent(new Event("online"));
+          });
+          await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+          });
+
+          // Then: 再試行して同期済みになる
+          expect(run).toHaveBeenCalledTimes(2);
+          expect(result.current.status).toBe("synced");
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+    });
+
+    describe("enqueueShot", () => {
+      it("オフライン中は送らず、ラウンド・距離のtailとは独立にonlineイベントで自動で再送する", async () => {
+        // Given: オフライン中にショットが積まれている
+        setOnline(false);
+        const { result } = renderHook(() => useSyncQueue());
+        const runBatch = vi.fn(() => Promise.resolve(undefined as Result));
+        act(() => {
+          result.current.enqueueShot(
+            {
+              key: "shot:d1:1:1",
+              label: "A",
+              upsert: {
+                shotEventId: "e1",
+                distanceId: "d1",
+                endNumber: 1,
+                arrowNumber: 1,
+                scoreStr: "X",
+                scoreInt: 10,
+              },
+            },
+            runBatch,
+          );
+        });
+        expect(result.current.status).toBe("offline-pending");
+        expect(runBatch).not.toHaveBeenCalled();
+
+        // When: オンラインに戻る
+        setOnline(true);
+        act(() => {
+          window.dispatchEvent(new Event("online"));
+        });
+        await act(async () => {
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // Then: バッチを送り、同期済みになる
+        expect(runBatch).toHaveBeenCalledTimes(1);
+        expect(result.current.status).toBe("synced");
+      });
+
+      it("offlineイベントでショットのリトライ待機を打ち切ってoffline-pendingになり、onlineイベントで再試行を失わずに再開する", async () => {
+        vi.useFakeTimers();
+        try {
+          // Given: ショットのバッチが初回に失敗してリトライ待機中
+          const { result } = renderHook(() => useSyncQueue());
+          const runBatch = vi
+            .fn()
+            .mockResolvedValueOnce({ error: "network flaky" })
+            .mockResolvedValueOnce(undefined as Result);
+          act(() => {
+            result.current.enqueueShot(
+              {
+                key: "shot:d1:1:1",
+                label: "距離1 1エンド1本目",
+                upsert: {
+                  shotEventId: "e15",
+                  distanceId: "d1",
+                  endNumber: 1,
+                  arrowNumber: 1,
+                  scoreStr: "X",
+                  scoreInt: 10,
+                },
+              },
+              runBatch,
+            );
+          });
+          await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+          });
+          expect(runBatch).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("retrying");
+
+          // When: オフラインになる
+          setOnline(false);
+          act(() => {
+            window.dispatchEvent(new Event("offline"));
+          });
+
+          // Then: 同期保留中になる
+          expect(result.current.status).toBe("offline-pending");
+
+          // When: 打ち切られたタイマーの時刻が経過する
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+          });
+
+          // Then: 二重に再送せず、同期保留中のまま
+          expect(runBatch).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("offline-pending");
+
+          // When: オンラインに戻る
+          setOnline(true);
+          act(() => {
+            window.dispatchEvent(new Event("online"));
+          });
+          await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+          });
+
+          // Then: 再試行して同期済みになる
+          expect(runBatch).toHaveBeenCalledTimes(2);
+          expect(result.current.status).toBe("synced");
+        } finally {
+          vi.useRealTimers();
+        }
+      });
     });
   });
 
-  describe("restoring pending operations from persisted storage on mount", () => {
-    afterEach(() => {
-      vi.mocked(loadPendingOperations).mockReset();
-      vi.mocked(loadPendingOperations).mockResolvedValue([]);
-    });
-
-    it("restores in dependency order, dispatching shot operations via scheduleShot and other operations via schedule", async () => {
-      const order: string[] = [];
-      vi.mocked(executeSyncOperation).mockImplementation((op) => {
-        order.push(`generic:${op.eventId}`);
-        return Promise.resolve(undefined as Result);
-      });
-      restoredSupabase.getSession.mockResolvedValue({
-        data: { session: { user: { id: "user-1" } } },
-      });
-      restoredSupabase.rpc.mockImplementation(
-        (_fn: string, args: { p_shots: { shot_event_id: string }[] }) => {
-          order.push(`shot:${args.p_shots[0].shot_event_id}`);
-          return Promise.resolve({ error: null });
+  // 復元の対象は、この端末にサインイン記録がない状態（getLocalIdentity()がnull）で保存された未同期操作とする。
+  describe("マウント時の未同期操作の復元", () => {
+    it("依存関係の順に復元し、ショットはショットのバッチとして、それ以外は操作として送る", async () => {
+      // Given: 依存先の距離の作成より先に、依存元のショットがoutboxに保存されている
+      // 復元処理が保存順ではなく依存関係で並べ替えることを検証するため、依存元を先に保存する。
+      await savePendingOperation({
+        eventId: "e1",
+        roundId: "round-1",
+        key: "shot:d1:1:1",
+        dependsOnKey: "distance:d1",
+        label: "距離1 1エンド1本目",
+        operation: {
+          type: "shot.recorded",
+          eventId: "e1",
+          distanceId: "d1",
+          endNumber: 1,
+          arrowNumber: 1,
+          scoreStr: "X",
+          scoreInt: 10,
         },
+        userId: null,
+      });
+      await savePendingOperation({
+        eventId: "e2",
+        roundId: "round-1",
+        key: "distance:d1",
+        label: "距離1",
+        operation: {
+          type: "distance.created",
+          eventId: "e2",
+          id: "d1",
+          roundId: "round-1",
+          positionKey: "1-1",
+          distance: 70,
+          totalEnds: 6,
+          arrowsPerEnd: 6,
+          targetFaceId: "face-1",
+          isMarked: false,
+        },
+        userId: null,
+      });
+      const createDone = createDeferred<{ data: null; error: null }>();
+      supabase.rpc.mockImplementation((name: string) =>
+        name === "create_distance"
+          ? createDone.promise
+          : Promise.resolve({ data: null, error: null }),
       );
 
-      const distanceOperation: SyncOperation = {
-        type: "distance.created",
-        eventId: "eA",
-        id: "d1",
-        roundId: "round-1",
-        positionKey: "1-1",
-        distance: 70,
-        totalEnds: 6,
-        arrowsPerEnd: 6,
-        targetFaceId: "face-1",
-        isMarked: false,
-      };
-      const shotOperation: SyncOperation = {
-        type: "shot.recorded",
-        eventId: "eB",
-        distanceId: "d1",
-        endNumber: 1,
-        arrowNumber: 1,
-        scoreStr: "X",
-        scoreInt: 10,
-      };
-
-      // 依存先（distance:d1）より先に依存元（shot）を並べて返し、復元処理
-      // 自体が保存順ではなく依存関係で並べ替えることを検証する。
-      vi.mocked(loadPendingOperations).mockResolvedValueOnce([
-        {
-          eventId: "eB",
-          roundId: "round-1",
-          key: "shot:d1:1:1",
-          dependsOnKey: "distance:d1",
-          label: "距離1 1エンド1本目",
-          operation: shotOperation,
-          userId: "user-1",
-        },
-        {
-          eventId: "eA",
-          roundId: "round-1",
-          key: "distance:d1",
-          label: "距離1",
-          operation: distanceOperation,
-          userId: "user-1",
-        },
-      ]);
-
+      // When: フックをマウントする
       renderHook(() => useSyncQueue("round-1"));
 
+      // Then: 距離の作成が先に送られ、その完了までショットは送られない
+      await vi.waitFor(() =>
+        expect(supabase.rpc.mock.calls.map(([name]) => name)).toEqual([
+          "create_distance",
+        ]),
+      );
       await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
+        await flushMicrotasks();
+      });
+      expect(supabase.rpc).toHaveBeenCalledTimes(1);
+
+      // When: 距離の作成が完了する
+      await act(async () => {
+        createDone.resolve({ data: null, error: null });
+        await createDone.promise;
       });
 
-      expect(order).toEqual(["generic:eA", "shot:eB"]);
+      // Then: 続けてショットが送られ、同期を終えた操作はoutboxから取り除かれる
+      await vi.waitFor(() =>
+        expect(supabase.rpc.mock.calls.map(([name]) => name)).toEqual([
+          "create_distance",
+          "record_shots",
+        ]),
+      );
+      await vi.waitFor(async () =>
+        expect(await pendingEventIds("round-1")).toEqual([]),
+      );
     });
 
-    it("restores a shot.cleared operation via scheduleShot", async () => {
-      restoredSupabase.getSession.mockResolvedValue({
-        data: { session: { user: { id: "user-1" } } },
-      });
-      restoredSupabase.rpc.mockResolvedValue({ error: null });
-
-      const clearOperation: SyncOperation = {
-        type: "shot.cleared",
+    it("ショットの取り消しをショットのバッチとして送る", async () => {
+      // Given: ショットの取り消しがoutboxに保存されている
+      await savePendingOperation({
         eventId: "eC",
-        distanceId: "d1",
-        endNumber: 1,
-        arrowNumber: 1,
-      };
-
-      vi.mocked(loadPendingOperations).mockResolvedValueOnce([
-        {
+        roundId: "round-1",
+        key: "shot:d1:1:1",
+        label: "距離1 1エンド1本目",
+        operation: {
+          type: "shot.cleared",
           eventId: "eC",
-          roundId: "round-1",
-          key: "shot:d1:1:1",
-          label: "距離1 1エンド1本目",
-          operation: clearOperation,
-          userId: "user-1",
+          distanceId: "d1",
+          endNumber: 1,
+          arrowNumber: 1,
         },
-      ]);
+        userId: null,
+      });
 
+      // When: フックをマウントする
       renderHook(() => useSyncQueue("round-1"));
 
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(restoredSupabase.rpc).toHaveBeenCalledWith("clear_shots", {
-        p_shots: [
-          {
-            shot_event_id: "eC",
-            distance_id: "d1",
-            end_number: 1,
-            arrow_number: 1,
-          },
-        ],
-      });
+      // Then: 取り消しが送られ、outboxから取り除かれる
+      await vi.waitFor(() =>
+        expect(supabase.rpc).toHaveBeenCalledWith("clear_shots", {
+          p_shots: [expect.objectContaining({ shot_event_id: "eC" })],
+        }),
+      );
+      expect(supabase.rpc).toHaveBeenCalledTimes(1);
+      await vi.waitFor(async () =>
+        expect(await pendingEventIds("round-1")).toEqual([]),
+      );
     });
   });
 });

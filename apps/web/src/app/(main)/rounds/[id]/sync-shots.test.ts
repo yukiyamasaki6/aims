@@ -1,134 +1,204 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { syncShots } from "./sync-shots";
 
-const db = vi.hoisted(() => ({
+// SupabaseのSDKは外部サービスとの境界のため、セッションの取得結果とRPCの結果を任意に制御できるスタブで模す。
+const supabase = vi.hoisted(() => ({
   getSession: vi.fn(),
   rpc: vi.fn(),
 }));
-
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({
-    auth: { getSession: db.getSession },
-    rpc: db.rpc,
+vi.mock("@supabase/ssr", () => ({
+  createBrowserClient: () => ({
+    auth: { getSession: supabase.getSession },
+    rpc: supabase.rpc,
   }),
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  db.getSession.mockResolvedValue({
+  supabase.getSession.mockResolvedValue({
     data: { session: { user: { id: "editor" } } },
   });
-  db.rpc.mockResolvedValue({ error: null });
+  supabase.rpc.mockResolvedValue({ data: null, error: null });
 });
 
-it("代理修正でも射手を保持し、同じ矢の位置を更新する", async () => {
-  await syncShots({
-    upsert: [
-      {
-        shotEventId: "event-1",
-        distanceId: "distance",
-        endNumber: 1,
-        arrowNumber: 2,
-        scoreStr: "9",
-        scoreInt: 9,
-        shooterId: "shooter",
-      },
-    ],
-    clear: [],
-  });
-  expect(db.rpc).toHaveBeenCalledWith("record_shots", {
-    p_shots: [expect.objectContaining({ shooter_id: "shooter", score_int: 9 })],
-  });
-});
+describe("syncShots", () => {
+  describe("サインイン済みの場合", () => {
+    it("代理修正では指定された射手のまま、同じ矢の位置を記録する", async () => {
+      // Given: 別の射手のスコアの修正
+      // When: 同期する
+      const result = await syncShots({
+        upsert: [
+          {
+            shotEventId: "event-1",
+            distanceId: "distance",
+            endNumber: 1,
+            arrowNumber: 2,
+            scoreStr: "9",
+            scoreInt: 9,
+            shooterId: "shooter",
+          },
+        ],
+        clear: [],
+      });
 
-it("射手が未指定の新規入力は本人の矢として記録する", async () => {
-  await syncShots({
-    upsert: [
-      {
-        shotEventId: "event-1",
-        distanceId: "distance",
-        endNumber: 1,
-        arrowNumber: 1,
-        scoreStr: "X",
-        scoreInt: 10,
-      },
-    ],
-    clear: [],
-  });
-  expect(db.rpc).toHaveBeenCalledWith("record_shots", {
-    p_shots: [expect.objectContaining({ shooter_id: "editor" })],
-  });
-});
+      // Then: record_shotsに指定された射手を渡し、clear_shotsは呼ばない
+      expect(result).toBeUndefined();
+      expect(supabase.rpc).toHaveBeenCalledTimes(1);
+      expect(supabase.rpc).toHaveBeenCalledWith("record_shots", {
+        p_shots: [
+          {
+            shot_event_id: "event-1",
+            distance_id: "distance",
+            end_number: 1,
+            arrow_number: 2,
+            shooter_id: "shooter",
+            score_str: "9",
+            score_int: 9,
+          },
+        ],
+      });
+    });
 
-it("クリア対象を射手で制限せず、編集権限の検証をRPCに委ねる", async () => {
-  await expect(
-    syncShots({
-      upsert: [],
-      clear: [
-        {
-          shotEventId: "event-2",
-          distanceId: "distance",
-          endNumber: 1,
-          arrowNumber: 2,
-        },
-      ],
-    }),
-  ).resolves.toBeUndefined();
-  expect(db.rpc).toHaveBeenCalledWith("clear_shots", {
-    p_shots: [
-      {
-        shot_event_id: "event-2",
-        distance_id: "distance",
-        end_number: 1,
-        arrow_number: 2,
-      },
-    ],
-  });
-});
+    it("射手が未指定の新規入力は本人の矢として記録する", async () => {
+      // Given: 射手を指定しない新規入力
+      // When: 同期する
+      await syncShots({
+        upsert: [
+          {
+            shotEventId: "event-1",
+            distanceId: "distance",
+            endNumber: 1,
+            arrowNumber: 1,
+            scoreStr: "X",
+            scoreInt: 10,
+          },
+        ],
+        clear: [],
+      });
 
-it("未認証では書き込まない", async () => {
-  db.getSession.mockResolvedValue({ data: { session: null } });
-  expect(await syncShots({ upsert: [], clear: [] })).toEqual({
-    error: "サインインが必要です。",
-    permanent: true,
-  });
-  expect(db.rpc).not.toHaveBeenCalled();
-});
+      // Then: サインイン中のユーザーを射手として渡す
+      expect(supabase.rpc).toHaveBeenCalledWith("record_shots", {
+        p_shots: [
+          {
+            shot_event_id: "event-1",
+            distance_id: "distance",
+            end_number: 1,
+            arrow_number: 1,
+            shooter_id: "editor",
+            score_str: "X",
+            score_int: 10,
+          },
+        ],
+      });
+    });
 
-it("record_shotsが失敗した場合、エラーを返す", async () => {
-  db.rpc.mockResolvedValue({
-    error: { message: "duplicate", code: "P0001" },
-  });
-  const result = await syncShots({
-    upsert: [
-      {
-        shotEventId: "event-1",
-        distanceId: "distance",
-        endNumber: 1,
-        arrowNumber: 1,
-        scoreStr: "X",
-        scoreInt: 10,
-      },
-    ],
-    clear: [],
-  });
-  expect(result).toEqual({ error: "duplicate", permanent: true });
-});
+    it("取り消しは射手で絞り込まず、編集権限の検証をRPCに委ねる", async () => {
+      // Given: スコアの取り消しのみ
+      // When: 同期する
+      const result = await syncShots({
+        upsert: [],
+        clear: [
+          {
+            shotEventId: "event-2",
+            distanceId: "distance",
+            endNumber: 1,
+            arrowNumber: 2,
+          },
+        ],
+      });
 
-it("clear_shotsが失敗した場合、エラーを返す", async () => {
-  db.rpc.mockResolvedValue({
-    error: { message: "network error", code: "08006" },
+      // Then: clear_shotsだけを射手の指定なしで呼ぶ
+      expect(result).toBeUndefined();
+      expect(supabase.rpc).toHaveBeenCalledTimes(1);
+      expect(supabase.rpc).toHaveBeenCalledWith("clear_shots", {
+        p_shots: [
+          {
+            shot_event_id: "event-2",
+            distance_id: "distance",
+            end_number: 1,
+            arrow_number: 2,
+          },
+        ],
+      });
+    });
+
+    it("record_shotsが失敗した場合、clear_shotsを呼ばずにエラーを返す", async () => {
+      // Given: record_shotsが業務ルール違反で失敗する
+      supabase.rpc.mockResolvedValue({
+        data: null,
+        error: { message: "duplicate", code: "P0001" },
+      });
+
+      // When: 記録と取り消しをまとめて同期する
+      const result = await syncShots({
+        upsert: [
+          {
+            shotEventId: "event-1",
+            distanceId: "distance",
+            endNumber: 1,
+            arrowNumber: 1,
+            scoreStr: "X",
+            scoreInt: 10,
+          },
+        ],
+        clear: [
+          {
+            shotEventId: "event-2",
+            distanceId: "distance",
+            endNumber: 1,
+            arrowNumber: 2,
+          },
+        ],
+      });
+
+      // Then: 再試行しない失敗として返し、取り消しは送らない
+      expect(result).toEqual({ error: "duplicate", permanent: true });
+      expect(supabase.rpc).toHaveBeenCalledTimes(1);
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        "record_shots",
+        expect.anything(),
+      );
+    });
+
+    it("clear_shotsが失敗した場合、エラーを返す", async () => {
+      // Given: clear_shotsが通信エラーで失敗する
+      supabase.rpc.mockResolvedValue({
+        data: null,
+        error: { message: "network error", code: "08006" },
+      });
+
+      // When: 取り消しを同期する
+      const result = await syncShots({
+        upsert: [],
+        clear: [
+          {
+            shotEventId: "event-2",
+            distanceId: "distance",
+            endNumber: 1,
+            arrowNumber: 2,
+          },
+        ],
+      });
+
+      // Then: 再試行できる失敗として返す
+      expect(result).toEqual({ error: "network error", permanent: false });
+    });
   });
-  const result = await syncShots({
-    upsert: [],
-    clear: [
-      {
-        shotEventId: "event-2",
-        distanceId: "distance",
-        endNumber: 1,
-        arrowNumber: 2,
-      },
-    ],
+
+  describe("未サインインの場合", () => {
+    it("RPCを呼ばず、再試行しない失敗として返す", async () => {
+      // Given: セッションがない
+      supabase.getSession.mockResolvedValue({ data: { session: null } });
+
+      // When: 同期する
+      const result = await syncShots({ upsert: [], clear: [] });
+
+      // Then: サインインを求める失敗を返し、RPCは呼ばない
+      expect(result).toEqual({
+        error: "サインインが必要です。",
+        permanent: true,
+      });
+      expect(supabase.rpc).not.toHaveBeenCalled();
+    });
   });
-  expect(result).toEqual({ error: "network error", permanent: false });
 });
