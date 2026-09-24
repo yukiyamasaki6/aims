@@ -2,8 +2,7 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { labelOf } from "./option-label";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "./round-constants";
+import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS, labelOf } from "./round-options";
 import { TargetFaceInfo, type TargetFaceSpotLayout } from "./target-face-icon";
 
 // 距離1件分の情報表示（距離/Marked・的情報・エンド構成）。プリセット選択・
