@@ -1,19 +1,11 @@
 import type { AuthError } from "@supabase/supabase-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   initialSignUpState,
   type SignUpAction,
   type SignUpState,
   signupReducer,
 } from "./signup-flow";
-
-// translateAuthErrorMessage（errors.test.tsで検証済み）は、このテストを削除してもテスト対象以外のカバレッジに影響しないように、別モジュールとの境界としてモックする。
-const errors = vi.hoisted(() => ({
-  translateAuthErrorMessage: vi.fn<(error: AuthError) => string>(),
-}));
-vi.mock("@/features/auth/errors", () => ({
-  translateAuthErrorMessage: errors.translateAuthErrorMessage,
-}));
 
 const NETWORK_ERROR_MESSAGE =
   "通信エラーが発生しました。しばらくしてから再度お試しください。";
@@ -27,10 +19,6 @@ function stateWith(overrides: Partial<SignUpState>): SignUpState {
 }
 
 describe("signupReducer", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   describe("initialSignUpState", () => {
     it("codeStepPendingはnull（確認・再送のいずれも通信中でない）", () => {
       // Given
@@ -124,11 +112,10 @@ describe("signupReducer", () => {
       expect(next.emailFieldErrors).toEqual({});
     });
 
-    it("send_code_auth_errorはtranslateAuthErrorMessageの結果をerrorに設定する", () => {
+    it("send_code_auth_errorは翻訳したメッセージをerrorに設定する", () => {
       // Given
       const state = initialSignUpState;
       const error = makeAuthError("otp_expired");
-      errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
       // When
       const next = signupReducer(state, {
@@ -137,8 +124,9 @@ describe("signupReducer", () => {
       });
 
       // Then
-      expect(errors.translateAuthErrorMessage).toHaveBeenCalledWith(error);
-      expect(next.error).toBe("翻訳済みメッセージ");
+      expect(next.error).toBe(
+        "認証コードが正しくないか、有効期限が切れています。",
+      );
       expect(next.emailFieldErrors).toEqual({});
       expect(next.step).toBe("email");
     });
@@ -206,11 +194,10 @@ describe("signupReducer", () => {
       });
     });
 
-    it("verify_code_auth_errorはtranslateAuthErrorMessageの結果をerrorに設定する", () => {
+    it("verify_code_auth_errorは翻訳したメッセージをerrorに設定する", () => {
       // Given
       const state = stateWith({ step: "code" });
       const error = makeAuthError("otp_expired");
-      errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
       // When
       const next = signupReducer(state, {
@@ -219,8 +206,9 @@ describe("signupReducer", () => {
       });
 
       // Then
-      expect(errors.translateAuthErrorMessage).toHaveBeenCalledWith(error);
-      expect(next.error).toBe("翻訳済みメッセージ");
+      expect(next.error).toBe(
+        "認証コードが正しくないか、有効期限が切れています。",
+      );
       expect(next.codeFieldErrors).toEqual({});
       expect(next.step).toBe("code");
     });
@@ -301,12 +289,11 @@ describe("signupReducer", () => {
       expect(next.codeFieldErrors).toEqual({ resend: cooldownMessage });
     });
 
-    it("resend_auth_errorはtranslateAuthErrorMessageの結果をerrorに設定しcodeFieldErrorsには触れない", () => {
+    it("resend_auth_errorは翻訳したメッセージをerrorに設定しcodeFieldErrorsには触れない", () => {
       // Given
       const codeFieldErrors = { code: "認証コードを入力してください。" };
       const state = stateWith({ step: "code", codeFieldErrors });
       const error = makeAuthError("otp_expired");
-      errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
       // When
       const next = signupReducer(state, {
@@ -315,8 +302,9 @@ describe("signupReducer", () => {
       });
 
       // Then
-      expect(errors.translateAuthErrorMessage).toHaveBeenCalledWith(error);
-      expect(next.error).toBe("翻訳済みメッセージ");
+      expect(next.error).toBe(
+        "認証コードが正しくないか、有効期限が切れています。",
+      );
       expect(next.codeFieldErrors).toEqual(codeFieldErrors);
     });
 
@@ -432,11 +420,10 @@ describe("signupReducer", () => {
       });
     });
 
-    it("set_password_auth_errorはtranslateAuthErrorMessageの結果をerrorに設定する", () => {
+    it("set_password_auth_errorは翻訳したメッセージをerrorに設定する", () => {
       // Given
       const state = stateWith({ step: "password" });
       const error = makeAuthError("weak_password");
-      errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
       // When
       const next = signupReducer(state, {
@@ -445,8 +432,9 @@ describe("signupReducer", () => {
       });
 
       // Then
-      expect(errors.translateAuthErrorMessage).toHaveBeenCalledWith(error);
-      expect(next.error).toBe("翻訳済みメッセージ");
+      expect(next.error).toBe(
+        "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+      );
       expect(next.passwordFieldErrors).toEqual({});
     });
 

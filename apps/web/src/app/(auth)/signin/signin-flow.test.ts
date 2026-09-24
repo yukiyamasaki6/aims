@@ -1,18 +1,10 @@
 import type { AuthError } from "@supabase/supabase-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   initialSignInState,
   type SignInState,
   signinReducer,
 } from "./signin-flow";
-
-// translateAuthErrorMessage（errors.test.tsで検証済み）は、このテストを削除してもテスト対象以外のカバレッジに影響しないように、別モジュールとの境界としてモックする。
-const errors = vi.hoisted(() => ({
-  translateAuthErrorMessage: vi.fn<(error: AuthError) => string>(),
-}));
-vi.mock("@/features/auth/errors", () => ({
-  translateAuthErrorMessage: errors.translateAuthErrorMessage,
-}));
 
 const NETWORK_ERROR_MESSAGE =
   "通信エラーが発生しました。しばらくしてから再度お試しください。";
@@ -26,10 +18,6 @@ function stateWith(overrides: Partial<SignInState>): SignInState {
 }
 
 describe("signinReducer", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("submit_startedはerror・fieldErrorsをクリアする（前回の失敗を引きずらない）", () => {
     // Given
     const state = stateWith({
@@ -84,18 +72,16 @@ describe("signinReducer", () => {
     });
   });
 
-  it("submit_auth_errorはtranslateAuthErrorMessageの結果をerrorに設定しfieldErrorsをクリアする", () => {
+  it("submit_auth_errorは翻訳したメッセージをerrorに設定しfieldErrorsをクリアする", () => {
     // Given
     const state = stateWith({ fieldErrors: { email: "stale" } });
     const error = makeAuthError("invalid_credentials");
-    errors.translateAuthErrorMessage.mockReturnValue("翻訳済みメッセージ");
 
     // When
     const next = signinReducer(state, { type: "submit_auth_error", error });
 
     // Then
-    expect(errors.translateAuthErrorMessage).toHaveBeenCalledWith(error);
-    expect(next.error).toBe("翻訳済みメッセージ");
+    expect(next.error).toBe("メールアドレスまたはパスワードが間違っています。");
     expect(next.fieldErrors).toEqual({});
   });
 
