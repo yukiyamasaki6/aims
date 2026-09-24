@@ -22,24 +22,13 @@ export default defineConfig({
       // .ts/.tsx双方をcoverageの計測対象に含め、閾値はファイルごとに判定する
       // 方針。現在の.tsのみ・全体集計の閾値は、既存テストの移行が完了する
       // までの暫定措置。
-      // 除外はテスト用コード・生成物・型のみ・定数のみ・re-exportのみのファイルに
-      // 限り、理由を記載する（テストファイルはVitestが自動で除外する）。
+      // 後からロジックが混入した場合に閾値で検出できるよう、型のみ・定数のみ・re-exportのみのファイルも含め、本番コードは原則すべて計測対象とする。
+      // 除外は生成物とテスト用コードに限り、理由を記載する（テストファイルはVitestが自動で除外する）。
       // - src/types/supabase.ts: 生成物
-      // - src/app/manifest.ts: Next.jsの規約上、関数で返す静的データのみ
       // - src/hooks/use-hydrated.ts: E2Eの待機に使う属性を出すためのテスト用コード
-      // - src/app/(auth)/_shared/auth-constants.ts: 定数のみ
-      // - src/app/(main)/rounds/_shared/reference-query-constants.ts: 定数のみ
-      // - src/app/(main)/rounds/_shared/round-constants.ts: 定数のみ
       // パス中の()・[]はglobの特殊文字として解釈されるため、エスケープして指定する。
       include: ["src/**/*.{ts,tsx}"],
-      exclude: [
-        "src/types/supabase.ts",
-        "src/app/manifest.ts",
-        "src/hooks/use-hydrated.ts",
-        "src/app/\\(auth\\)/_shared/auth-constants.ts",
-        "src/app/\\(main\\)/rounds/_shared/reference-query-constants.ts",
-        "src/app/\\(main\\)/rounds/_shared/round-constants.ts",
-      ],
+      exclude: ["src/types/supabase.ts", "src/hooks/use-hydrated.ts"],
       thresholds: {
         "src/**/*.ts": {
           statements: 90,
