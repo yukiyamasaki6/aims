@@ -20,6 +20,7 @@ export default defineConfig({
       // 限り、理由を記載する（テストファイルはVitestが自動で除外する）。
       // - src/types/supabase.ts: 生成物
       // - src/app/manifest.ts: Next.jsの規約上、関数で返す静的データのみ
+      // - src/hooks/use-hydrated.ts: E2Eの待機に使う属性を出すためのテスト用コード
       // - src/app/(auth)/_shared/auth-constants.ts: 定数のみ
       // - src/app/(main)/rounds/_shared/reference-query-constants.ts: 定数のみ
       // - src/app/(main)/rounds/_shared/round-constants.ts: 定数のみ
@@ -28,6 +29,7 @@ export default defineConfig({
       exclude: [
         "src/types/supabase.ts",
         "src/app/manifest.ts",
+        "src/hooks/use-hydrated.ts",
         "src/app/\\(auth\\)/_shared/auth-constants.ts",
         "src/app/\\(main\\)/rounds/_shared/reference-query-constants.ts",
         "src/app/\\(main\\)/rounds/_shared/round-constants.ts",
