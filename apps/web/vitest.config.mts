@@ -13,12 +13,9 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       reporter: ["text-summary", "html"],
-      // .ts/.tsx双方をcoverageの計測・可視化対象に含める。CIでブロックする
-      // 閾値（thresholds）は.tsのみを対象とする。.tsxのテストの目的は
-      // コンポーネント境界の配線（UIイベント→ロジック/副作用の呼び出しが
-      // 正しいか）を検証することであり、汎用的な統計的coverage%（実行され
-      // たかは測れるが、正しい引数か・重要な副作用が止まったかは測れない）
-      // と相性が悪いため、一律の閾値ではゲートしない。
+      // .ts/.tsx双方をcoverageの計測対象に含め、閾値はファイルごとに判定する
+      // 方針（agents/testing.md）。現在の.tsのみ・全体集計の閾値は、既存
+      // テストの移行が完了するまでの暫定措置。
       // 除外対象は個別に中身を確認した上で判断する。
       // - src/types/supabase.ts: 生成型
       // - src/app/manifest.ts: Next.jsの静的メタデータ返却契約のみ
