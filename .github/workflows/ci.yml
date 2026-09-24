@@ -118,6 +118,11 @@ jobs:
       - name: Run Unit Tests
         run: pnpm test
 
+      # 既存テストの移行が完了するまでは、モック漏れがあってもジョブを失敗させない
+      - name: Check Test Mocks
+        continue-on-error: true
+        run: pnpm check:mocks
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
