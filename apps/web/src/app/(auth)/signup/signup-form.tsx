@@ -36,19 +36,21 @@ export function SignUpForm() {
       codeFieldErrors,
       passwordFieldErrors,
       resendCooldown,
+      codeStepPending,
     },
     dispatch,
   ] = useReducer(signupReducer, initialSignUpState);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileInstance>(undefined);
   const mountedRef = useRef(true);
-  // コード入力画面では確認・再送が別々の独立した操作のため、無効化・二重送信防止も画面（送信/確認/登録）ごと・再送ごとに別々に持つ（互いをブロックしない）。
+  // 送信・登録の無効化・二重送信防止はprimarySubmittingで持つ。
+  // コード入力画面の確認・再送・戻るは排他にし、codeStepBusyRefとcodeStepPendingで扱う。
+  // 確認・再送の応答待ちに他の操作を許すと、後から届いた応答が別の画面（メールアドレス入力やパスワード設定）へ反映されてしまうため。
   // 二重送信の判定は同期的なrefで行う。
   // setStateのstateはレンダーを挟むまで更新されず、連打で2回目の呼び出しが古いfalseのクロージャのまま実行されてしまうため、stateだけでは防げない。
   const primarySubmittingRef = useRef(false);
   const [primarySubmitting, setPrimarySubmitting] = useState(false);
-  const resendSubmittingRef = useRef(false);
-  const [resendSubmitting, setResendSubmitting] = useState(false);
+  const codeStepBusyRef = useRef(false);
   const hydrated = useHydrated();
 
   function consumeCaptchaToken() {
@@ -71,13 +73,14 @@ export function SignUpForm() {
   }, []);
 
   function handleBack() {
+    if (codeStepBusyRef.current) return;
     dispatch({ type: "reset_to_email" });
     setCode("");
     setCaptchaToken(null);
   }
 
   async function handleResend() {
-    if (resendSubmittingRef.current) return;
+    if (codeStepBusyRef.current) return;
 
     const errors = validateResendReady(resendCooldown, captchaToken);
     if (errors.resend || !captchaToken) {
@@ -85,8 +88,7 @@ export function SignUpForm() {
       return;
     }
 
-    resendSubmittingRef.current = true;
-    setResendSubmitting(true);
+    codeStepBusyRef.current = true;
     dispatch({ type: "resend_started" });
 
     try {
@@ -104,14 +106,14 @@ export function SignUpForm() {
 
       if (error) {
         dispatch({ type: "resend_auth_error", error });
+      } else {
+        dispatch({ type: "resend_succeeded" });
       }
-      resendSubmittingRef.current = false;
-      setResendSubmitting(false);
+      codeStepBusyRef.current = false;
     } catch {
       if (!mountedRef.current) return;
       dispatch({ type: "resend_network_error" });
-      resendSubmittingRef.current = false;
-      setResendSubmitting(false);
+      codeStepBusyRef.current = false;
     }
   }
 
@@ -172,7 +174,7 @@ export function SignUpForm() {
 
   async function handleVerifyCode(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (primarySubmittingRef.current) return;
+    if (codeStepBusyRef.current) return;
 
     const errors = validateCodeField(code);
     if (errors.code) {
@@ -180,9 +182,8 @@ export function SignUpForm() {
       return;
     }
 
+    codeStepBusyRef.current = true;
     dispatch({ type: "verify_code_started" });
-    primarySubmittingRef.current = true;
-    setPrimarySubmitting(true);
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.verifyOtp({
@@ -198,13 +199,11 @@ export function SignUpForm() {
       } else {
         dispatch({ type: "verify_code_succeeded" });
       }
-      primarySubmittingRef.current = false;
-      setPrimarySubmitting(false);
+      codeStepBusyRef.current = false;
     } catch {
       if (!mountedRef.current) return;
       dispatch({ type: "verify_code_network_error" });
-      primarySubmittingRef.current = false;
-      setPrimarySubmitting(false);
+      codeStepBusyRef.current = false;
     }
   }
 
@@ -302,6 +301,7 @@ export function SignUpForm() {
         title="認証コードを入力"
         description={`${email} に送信されたコードを入力してください。`}
         onBack={handleBack}
+        backDisabled={codeStepPending !== null}
       >
         <form
           onSubmit={handleVerifyCode}
@@ -330,12 +330,14 @@ export function SignUpForm() {
           </div>
           <Button
             type="submit"
-            aria-disabled={primarySubmitting}
+            aria-disabled={codeStepPending !== null}
             className={cn(
-              primarySubmitting && "pointer-events-none opacity-50",
+              codeStepPending !== null && "pointer-events-none opacity-50",
             )}
           >
-            {primarySubmitting && <Loader2 className="size-3.5 animate-spin" />}
+            {codeStepPending === "verify" && (
+              <Loader2 className="size-3.5 animate-spin" />
+            )}
             確認
           </Button>
         </form>
@@ -352,13 +354,15 @@ export function SignUpForm() {
             variant="outline"
             className={cn(
               "w-full",
-              resendSubmitting && "pointer-events-none opacity-50",
+              codeStepPending !== null && "pointer-events-none opacity-50",
             )}
-            aria-disabled={resendSubmitting}
+            aria-disabled={codeStepPending !== null}
             data-captcha-ready={captchaToken !== null}
             onClick={handleResend}
           >
-            {resendSubmitting && <Loader2 className="size-3.5 animate-spin" />}
+            {codeStepPending === "resend" && (
+              <Loader2 className="size-3.5 animate-spin" />
+            )}
             {resendCooldown > 0 ? `再送（${resendCooldown}秒）` : "再送"}
           </Button>
           {codeFieldErrors.resend && (

@@ -16,6 +16,7 @@ export type ResetPasswordState = {
   codeFieldErrors: ResetPasswordCodeFieldErrors;
   passwordFieldErrors: ResetPasswordPasswordFieldErrors;
   resendCooldown: number;
+  codeStepPending: "verify" | "resend" | null;
 };
 
 export const initialResetPasswordState: ResetPasswordState = {
@@ -25,6 +26,7 @@ export const initialResetPasswordState: ResetPasswordState = {
   codeFieldErrors: {},
   passwordFieldErrors: {},
   resendCooldown: 0,
+  codeStepPending: null,
 };
 
 export type ResetPasswordAction =
@@ -45,6 +47,7 @@ export type ResetPasswordAction =
   | { type: "verify_code_network_error" }
   | { type: "resend_invalid"; errors: ResetPasswordCodeFieldErrors }
   | { type: "resend_started" }
+  | { type: "resend_succeeded" }
   | { type: "resend_auth_error"; error: AuthError }
   | { type: "resend_network_error" }
   | { type: "set_password_invalid"; errors: ResetPasswordPasswordFieldErrors }
@@ -86,17 +89,34 @@ export function resetPasswordReducer(
     case "verify_code_invalid":
       return { ...state, error: null, codeFieldErrors: action.errors };
     case "verify_code_started":
-      return { ...state, error: null, codeFieldErrors: {} };
+      return {
+        ...state,
+        error: null,
+        codeFieldErrors: {},
+        codeStepPending: "verify",
+      };
     case "verify_code_succeeded":
-      return { ...state, error: null, codeFieldErrors: {}, step: "password" };
+      return {
+        ...state,
+        error: null,
+        codeFieldErrors: {},
+        step: "password",
+        codeStepPending: null,
+      };
     case "verify_code_auth_error":
       return {
         ...state,
         error: translateAuthErrorMessage(action.error),
         codeFieldErrors: {},
+        codeStepPending: null,
       };
     case "verify_code_network_error":
-      return { ...state, error: NETWORK_ERROR_MESSAGE, codeFieldErrors: {} };
+      return {
+        ...state,
+        error: NETWORK_ERROR_MESSAGE,
+        codeFieldErrors: {},
+        codeStepPending: null,
+      };
 
     case "resend_invalid":
       return { ...state, error: null, codeFieldErrors: action.errors };
@@ -106,11 +126,18 @@ export function resetPasswordReducer(
         error: null,
         codeFieldErrors: {},
         resendCooldown: 60,
+        codeStepPending: "resend",
       };
+    case "resend_succeeded":
+      return { ...state, codeStepPending: null };
     case "resend_auth_error":
-      return { ...state, error: translateAuthErrorMessage(action.error) };
+      return {
+        ...state,
+        error: translateAuthErrorMessage(action.error),
+        codeStepPending: null,
+      };
     case "resend_network_error":
-      return { ...state, error: NETWORK_ERROR_MESSAGE };
+      return { ...state, error: NETWORK_ERROR_MESSAGE, codeStepPending: null };
 
     case "set_password_invalid":
       return { ...state, error: null, passwordFieldErrors: action.errors };

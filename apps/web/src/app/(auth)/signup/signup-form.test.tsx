@@ -54,6 +54,8 @@ vi.mock("@/components/turnstile", () => ({
 // カバレッジが維持されてしまうことを防ぐ。
 // 「正しく呼び出せているか（各操作のdescribe）」と「reducerの出力を正しく表示に反映できているか（表示のdescribe）」を
 // 別個に検証する。
+// reducerモックは既定でcodeStepPendingを変えないため、確認・再送の通信中もボタンは表示上有効なまま操作できる。
+// これにより、確認・再送・戻るの排他（同期ガード）の効果を表示の無効化とは独立に観測する。
 const flow = vi.hoisted(() => ({
   reducer: vi.fn<(state: SignUpState, action: SignUpAction) => SignUpState>(),
   initialState: {
@@ -63,6 +65,7 @@ const flow = vi.hoisted(() => ({
     codeFieldErrors: {},
     passwordFieldErrors: {},
     resendCooldown: 0,
+    codeStepPending: null,
   } as SignUpState,
 }));
 vi.mock("./signup-flow", () => ({
@@ -99,6 +102,7 @@ function baseState(overrides: Partial<SignUpState> = {}): SignUpState {
     codeFieldErrors: {},
     passwordFieldErrors: {},
     resendCooldown: 0,
+    codeStepPending: null,
     ...overrides,
   };
 }
@@ -116,6 +120,51 @@ function setTransitions(map: Transitions) {
 
 function makeAuthError(code: string, message = "x"): AuthError {
   return { code, message } as AuthError;
+}
+
+function verifyButton() {
+  return screen.getByRole("button", { name: "確認" });
+}
+
+function resendButton() {
+  return screen.getByRole("button", { name: "再送" });
+}
+
+function backButton() {
+  return screen.getByRole("button", { name: "戻る" });
+}
+
+function loadingIndicator(button: HTMLElement) {
+  return button.querySelector(".animate-spin");
+}
+
+// 確認・再送が終わった後に、再送・戻る・確認のいずれも再び実行できる（共有の同期ガードが解除されている）ことを検証する。
+// 確認の成功はpasswordステップへの遷移で終わり、成功後のガード解除は設計上求められていないため、確認は最後に行う。
+async function expectCodeStepOperationsAvailable(
+  user: ReturnType<typeof userEvent.setup>,
+) {
+  auth.signInWithOtp.mockClear().mockResolvedValue({ error: null });
+  auth.verifyOtp.mockClear().mockResolvedValue({ error: null });
+  flow.reducer.mockClear();
+
+  act(() => {
+    turnstile.onVerify?.("retry-captcha-token");
+  });
+  await user.click(resendButton());
+  expect(auth.signInWithOtp).toHaveBeenCalledOnce();
+  await vi.waitFor(() => {
+    expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+      type: "resend_succeeded",
+    });
+  });
+
+  await user.click(backButton());
+  expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+    type: "reset_to_email",
+  });
+
+  await user.click(verifyButton());
+  expect(auth.verifyOtp).toHaveBeenCalledOnce();
 }
 
 async function submitEmailStep(
@@ -405,6 +454,48 @@ describe("SignUpForm", () => {
       });
     });
 
+    it("送信中に二重クリックした場合、verifyOtpを1回しか呼ばない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+      const deferred = Promise.withResolvers<{ error: AuthError | null }>();
+      auth.verifyOtp.mockReturnValue(deferred.promise);
+      await user.type(screen.getByPlaceholderText("123456"), "123456");
+
+      // When
+      await user.click(verifyButton());
+      await user.click(verifyButton());
+
+      // Then
+      expect(auth.verifyOtp).toHaveBeenCalledOnce();
+      deferred.resolve({ error: null });
+    });
+
+    it("再送の通信中の場合、verifyOtpを呼ばずverify_code_startedもdispatchしない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+      const deferred = Promise.withResolvers<{ error: AuthError | null }>();
+      auth.signInWithOtp.mockReturnValue(deferred.promise);
+      await user.type(screen.getByPlaceholderText("123456"), "123456");
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
+      await user.click(resendButton());
+
+      // When
+      await user.click(verifyButton());
+
+      // Then
+      expect(auth.verifyOtp).not.toHaveBeenCalled();
+      expect(flow.reducer).not.toHaveBeenCalledWith(expect.anything(), {
+        type: "verify_code_started",
+      });
+      deferred.resolve({ error: null });
+    });
+
     it("validateCodeFieldがエラーを返した場合、verify_code_invalidをdispatchしverifyOtpを呼ばない", async () => {
       // Given
       const codeErrors = { code: "認証コードを入力してください。" };
@@ -426,10 +517,111 @@ describe("SignUpForm", () => {
       });
       expect(auth.verifyOtp).not.toHaveBeenCalled();
     });
+
+    it("verifyOtpがエラーを返した場合、verify_code_auth_errorをdispatchし、再送・戻る・確認を再び実行できる", async () => {
+      // Given
+      const authError = makeAuthError("otp_expired");
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+      auth.verifyOtp.mockResolvedValue({ error: authError });
+      await user.type(screen.getByPlaceholderText("123456"), "000000");
+
+      // When
+      await user.click(verifyButton());
+
+      // Then
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "verify_code_auth_error",
+          error: authError,
+        });
+      });
+      await expectCodeStepOperationsAvailable(user);
+    });
+
+    it("verifyOtpが例外を投げた場合、verify_code_network_errorをdispatchし、再送・戻る・確認を再び実行できる", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+      auth.verifyOtp.mockRejectedValue(new Error("network down"));
+      await user.type(screen.getByPlaceholderText("123456"), "123456");
+
+      // When
+      await user.click(verifyButton());
+
+      // Then
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "verify_code_network_error",
+        });
+      });
+      await expectCodeStepOperationsAvailable(user);
+    });
+  });
+
+  describe("戻る", () => {
+    it("通信中でない場合、reset_to_emailをdispatchする", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+
+      // When
+      await user.click(backButton());
+
+      // Then
+      expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+        type: "reset_to_email",
+      });
+    });
+
+    it("確認の通信中の場合、reset_to_emailをdispatchしない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+      const deferred = Promise.withResolvers<{ error: AuthError | null }>();
+      auth.verifyOtp.mockReturnValue(deferred.promise);
+      await user.type(screen.getByPlaceholderText("123456"), "123456");
+      await user.click(verifyButton());
+
+      // When
+      await user.click(backButton());
+
+      // Then
+      expect(flow.reducer).not.toHaveBeenCalledWith(expect.anything(), {
+        type: "reset_to_email",
+      });
+      deferred.resolve({ error: null });
+    });
+
+    it("再送の通信中の場合、reset_to_emailをdispatchしない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+      const deferred = Promise.withResolvers<{ error: AuthError | null }>();
+      auth.signInWithOtp.mockReturnValue(deferred.promise);
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
+      await user.click(resendButton());
+
+      // When
+      await user.click(backButton());
+
+      // Then
+      expect(flow.reducer).not.toHaveBeenCalledWith(expect.anything(), {
+        type: "reset_to_email",
+      });
+      deferred.resolve({ error: null });
+    });
   });
 
   describe("再送", () => {
-    it("成功した場合、正しい引数でsignInWithOtpを呼びresend_startedをdispatchする", async () => {
+    it("成功した場合、正しい引数でsignInWithOtpを呼びresend_started・resend_succeededをdispatchする", async () => {
       // Given
       const user = userEvent.setup();
       render(<SignUpForm />);
@@ -449,8 +641,11 @@ describe("SignUpForm", () => {
       );
       await vi.waitFor(() => {
         expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
-          type: "resend_started",
+          type: "resend_succeeded",
         });
+      });
+      expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+        type: "resend_started",
       });
       expect(auth.signInWithOtp).toHaveBeenCalledOnce();
       expect(auth.signInWithOtp).toHaveBeenCalledWith({
@@ -478,6 +673,50 @@ describe("SignUpForm", () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it("送信中に二重クリックした場合、signInWithOtpを1回しか呼ばない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+      const deferred = Promise.withResolvers<{ error: AuthError | null }>();
+      auth.signInWithOtp.mockReturnValue(deferred.promise);
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
+
+      // When
+      await user.click(resendButton());
+      await user.click(resendButton());
+
+      // Then
+      expect(auth.signInWithOtp).toHaveBeenCalledOnce();
+      deferred.resolve({ error: null });
+    });
+
+    it("確認の通信中の場合、signInWithOtpを呼ばずresend_startedもdispatchしない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+      const deferred = Promise.withResolvers<{ error: AuthError | null }>();
+      auth.verifyOtp.mockReturnValue(deferred.promise);
+      await user.type(screen.getByPlaceholderText("123456"), "123456");
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
+      await user.click(verifyButton());
+
+      // When
+      await user.click(resendButton());
+
+      // Then
+      expect(auth.signInWithOtp).not.toHaveBeenCalled();
+      expect(flow.reducer).not.toHaveBeenCalledWith(expect.anything(), {
+        type: "resend_started",
+      });
+      deferred.resolve({ error: null });
     });
 
     it("validateResendReadyがエラーを返した場合、resend_invalidをdispatchしsignInWithOtpを呼ばない", async () => {
@@ -511,7 +750,32 @@ describe("SignUpForm", () => {
       expect(auth.signInWithOtp).not.toHaveBeenCalled();
     });
 
-    it("signInWithOtpが例外を投げた場合、resend_network_errorをdispatchし再送ボタンを再度有効にする", async () => {
+    it("signInWithOtpがエラーを返した場合、resend_auth_errorをdispatchしcaptchaをリセットして、再送・戻る・確認を再び実行できる", async () => {
+      // Given
+      const authError = makeAuthError("captcha_failed");
+      const user = userEvent.setup();
+      render(<SignUpForm />);
+      await advanceToCodeStep(user);
+      auth.signInWithOtp.mockResolvedValue({ error: authError });
+      act(() => {
+        turnstile.onVerify?.("resend-captcha-token");
+      });
+
+      // When
+      await user.click(resendButton());
+
+      // Then
+      await vi.waitFor(() => {
+        expect(flow.reducer).toHaveBeenCalledWith(expect.anything(), {
+          type: "resend_auth_error",
+          error: authError,
+        });
+      });
+      expect(turnstile.reset).toHaveBeenCalledOnce();
+      await expectCodeStepOperationsAvailable(user);
+    });
+
+    it("signInWithOtpが例外を投げた場合、resend_network_errorをdispatchし、再送・戻る・確認を再び実行できる", async () => {
       // handleResendは他の3ハンドラと異なりtry/catchを持たなかったため、例外時にsubmitting状態（ローカルstate）が
       // 解除されず再送ボタンが固まる回帰があった。ここではその再発を防ぐ。
       // Given
@@ -522,10 +786,9 @@ describe("SignUpForm", () => {
       act(() => {
         turnstile.onVerify?.("resend-captcha-token");
       });
-      const resendButton = screen.getByRole("button", { name: "再送" });
 
       // When
-      await user.click(resendButton);
+      await user.click(resendButton());
 
       // Then
       await vi.waitFor(() => {
@@ -533,7 +796,7 @@ describe("SignUpForm", () => {
           type: "resend_network_error",
         });
       });
-      expect(resendButton).toHaveAttribute("aria-disabled", "false");
+      await expectCodeStepOperationsAvailable(user);
     });
 
     it("送信中にアンマウントされた場合、captchaのリセットを行わない", async () => {
@@ -645,6 +908,59 @@ describe("SignUpForm", () => {
   // signupReducerをモックしているため、状態遷移の正しさそのものはsignup-flow.test.tsの責務とし、
   // ここではreducerが返した状態（入力として直接与える）が画面へ正しく反映されるかだけを検証する。
   describe("表示", () => {
+    describe("codeStepPending", () => {
+      it("nullの場合、確認・再送・戻るボタンを有効にし、ローディングを表示しない", () => {
+        // Given
+        flow.initialState = baseState({ step: "code", codeStepPending: null });
+
+        // When
+        render(<SignUpForm />);
+
+        // Then
+        expect(verifyButton()).toHaveAttribute("aria-disabled", "false");
+        expect(resendButton()).toHaveAttribute("aria-disabled", "false");
+        expect(backButton()).not.toHaveAttribute("aria-disabled", "true");
+        expect(loadingIndicator(verifyButton())).toBeNull();
+        expect(loadingIndicator(resendButton())).toBeNull();
+      });
+
+      it("verifyの場合、確認・再送・戻るボタンを無効にし、確認ボタンのみローディングを表示する", () => {
+        // Given
+        flow.initialState = baseState({
+          step: "code",
+          codeStepPending: "verify",
+        });
+
+        // When
+        render(<SignUpForm />);
+
+        // Then
+        expect(verifyButton()).toHaveAttribute("aria-disabled", "true");
+        expect(resendButton()).toHaveAttribute("aria-disabled", "true");
+        expect(backButton()).toHaveAttribute("aria-disabled", "true");
+        expect(loadingIndicator(verifyButton())).not.toBeNull();
+        expect(loadingIndicator(resendButton())).toBeNull();
+      });
+
+      it("resendの場合、確認・再送・戻るボタンを無効にし、再送ボタンのみローディングを表示する", () => {
+        // Given
+        flow.initialState = baseState({
+          step: "code",
+          codeStepPending: "resend",
+        });
+
+        // When
+        render(<SignUpForm />);
+
+        // Then
+        expect(verifyButton()).toHaveAttribute("aria-disabled", "true");
+        expect(resendButton()).toHaveAttribute("aria-disabled", "true");
+        expect(backButton()).toHaveAttribute("aria-disabled", "true");
+        expect(loadingIndicator(resendButton())).not.toBeNull();
+        expect(loadingIndicator(verifyButton())).toBeNull();
+      });
+    });
+
     it("resendCooldownが0の場合、再送ボタンに秒数を表示しない", () => {
       // Given
       flow.initialState = baseState({ step: "code", resendCooldown: 0 });

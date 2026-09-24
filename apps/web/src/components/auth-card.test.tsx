@@ -47,4 +47,67 @@ describe("AuthCard", () => {
 
     expect(handleBack).toHaveBeenCalledTimes(1);
   });
+
+  it("marks the back button as aria-disabled when backDisabled is true", () => {
+    // Given
+    const handleBack = vi.fn();
+
+    // When
+    render(
+      <AuthCard title="サインイン" onBack={handleBack} backDisabled>
+        <p>content</p>
+      </AuthCard>,
+    );
+
+    // Then
+    expect(screen.getByRole("button", { name: /戻る/ })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  });
+
+  it.each([
+    { label: "false", backDisabled: false },
+    { label: "omitted", backDisabled: undefined },
+  ])(
+    "does not mark the back button as aria-disabled when backDisabled is $label",
+    ({ backDisabled }) => {
+      // Given
+      const handleBack = vi.fn();
+
+      // When
+      render(
+        <AuthCard
+          title="サインイン"
+          onBack={handleBack}
+          backDisabled={backDisabled}
+        >
+          <p>content</p>
+        </AuthCard>,
+      );
+
+      // Then
+      expect(screen.getByRole("button", { name: /戻る/ })).not.toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+    },
+  );
+
+  it("still calls onBack when backDisabled is true (suppressing the action is the caller's responsibility)", async () => {
+    // Given
+    const handleBack = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <AuthCard title="サインイン" onBack={handleBack} backDisabled>
+        <p>content</p>
+      </AuthCard>,
+    );
+
+    // When
+    await user.click(screen.getByRole("button", { name: /戻る/ }));
+
+    // Then
+    expect(handleBack).toHaveBeenCalledTimes(1);
+  });
 });
