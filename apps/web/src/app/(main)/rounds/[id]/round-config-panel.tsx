@@ -5,12 +5,12 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { labelOf } from "../_shared/option-label";
 import {
   BOW_TYPE_OPTIONS,
   FORMAT_OPTIONS,
-  labelOf,
   NAME_MAX_LENGTH,
-} from "../_shared/round-options";
+} from "../_shared/round-constants";
 import type { EnqueueInput } from "./use-sync-queue";
 
 function RequiredMark() {

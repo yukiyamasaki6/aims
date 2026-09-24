@@ -6,16 +6,12 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../_shared/round-options";
+import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../_shared/round-constants";
 import {
   TargetFaceInfo,
   type TargetFaceSpotLayout,
 } from "../_shared/target-face-icon";
 import type { EnqueueInput } from "./use-sync-queue";
-
-// 10点的（アウトドア・122cm）。距離追加時の初期的として使う（e2eのcreate-round
-// APIヘルパーが使う既定の的と同じもの）。
-export const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001";
 
 export type TargetFaceOption = {
   id: string;

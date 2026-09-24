@@ -1,10 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { comparePositionKey } from "../_shared/position-key";
-import {
-  getGlobalRoundPresets,
-  ROUND_PRESET_SELECT,
-} from "../_shared/reference-queries";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../_shared/round-options";
+import { getGlobalRoundPresets } from "../_shared/reference-queries";
+import { ROUND_PRESET_SELECT } from "../_shared/reference-query-constants";
+import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../_shared/round-constants";
 import { type Preset, RoundPresetSelect } from "./round-preset-select-client";
 
 type PresetWithMeta = Preset & { owner_id: string | null; created_at: string };

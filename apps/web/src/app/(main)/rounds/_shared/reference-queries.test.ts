@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   getGlobalRoundPresets,
   getGlobalTargetFaces,
+} from "./reference-queries";
+import {
   ROUND_PRESET_SELECT,
   TARGET_FACE_SELECT,
-} from "./reference-queries";
+} from "./reference-query-constants";
 
 // Supabaseのクエリビルダーはメソッドチェーンでフィルタを積み上げ、
 // awaitした時点でthenが呼ばれてPromiseとして解決する。この形を模す。

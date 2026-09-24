@@ -21,11 +21,16 @@ export default defineConfig({
       // - src/types/supabase.ts: 生成物
       // - src/app/manifest.ts: Next.jsの規約上、関数で返す静的データのみ
       // - src/app/(auth)/_shared/auth-constants.ts: 定数のみ
+      // - src/app/(main)/rounds/_shared/reference-query-constants.ts: 定数のみ
+      // - src/app/(main)/rounds/_shared/round-constants.ts: 定数のみ
+      // パス中の()・[]はglobの特殊文字として解釈されるため、エスケープして指定する。
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/types/supabase.ts",
         "src/app/manifest.ts",
-        "src/app/(auth)/_shared/auth-constants.ts",
+        "src/app/\\(auth\\)/_shared/auth-constants.ts",
+        "src/app/\\(main\\)/rounds/_shared/reference-query-constants.ts",
+        "src/app/\\(main\\)/rounds/_shared/round-constants.ts",
       ],
       thresholds: {
         "src/**/*.ts": {
