@@ -4,7 +4,6 @@ import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
-import { AuthCard } from "@/components/auth-card";
 import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +11,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { AuthHeader } from "../_shared/auth-header";
 import { EMAIL_MAX_LENGTH, OTP_CODE_LENGTH } from "../auth-constants";
 import {
   initialResetPasswordState,
@@ -242,10 +242,11 @@ export function ResetPasswordForm() {
 
   if (step === "password") {
     return (
-      <AuthCard
-        title="新しいパスワードを設定"
-        description="このパスワードで次回からサインインします。"
-      >
+      <>
+        <AuthHeader
+          title="新しいパスワードを設定"
+          description="このパスワードで次回からサインインします。"
+        />
         <form
           onSubmit={handleSetPassword}
           noValidate
@@ -287,18 +288,19 @@ export function ResetPasswordForm() {
           <p className="text-center text-destructive text-sm">{error}</p>
         )}
         <SignInLink />
-      </AuthCard>
+      </>
     );
   }
 
   if (step === "code") {
     return (
-      <AuthCard
-        title="認証コードを入力"
-        description={`${email} に送信されたコードを入力してください。`}
-        onBack={handleBack}
-        backDisabled={codeStepPending !== null}
-      >
+      <>
+        <AuthHeader
+          title="認証コードを入力"
+          description={`${email} に送信されたコードを入力してください。`}
+          onBack={handleBack}
+          backDisabled={codeStepPending !== null}
+        />
         <form
           onSubmit={handleVerifyCode}
           noValidate
@@ -368,12 +370,13 @@ export function ResetPasswordForm() {
             <p className="text-destructive text-sm">{codeFieldErrors.resend}</p>
           )}
         </div>
-      </AuthCard>
+      </>
     );
   }
 
   return (
-    <AuthCard title="パスワードを再設定">
+    <>
+      <AuthHeader title="パスワードを再設定" />
       <form
         onSubmit={handleSendCode}
         noValidate
@@ -428,6 +431,6 @@ export function ResetPasswordForm() {
       </form>
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
       <SignInLink />
-    </AuthCard>
+    </>
   );
 }

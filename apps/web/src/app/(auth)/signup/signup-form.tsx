@@ -5,7 +5,6 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
-import { AuthCard } from "@/components/auth-card";
 import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +13,7 @@ import { useHydrated } from "@/hooks/use-hydrated";
 import { isEmailRegistered } from "@/lib/supabase/actions";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { AuthHeader } from "../_shared/auth-header";
 import { EMAIL_MAX_LENGTH, OTP_CODE_LENGTH } from "../auth-constants";
 import { initialSignUpState, signupReducer } from "./signup-flow";
 import {
@@ -247,10 +247,11 @@ export function SignUpForm() {
 
   if (step === "password") {
     return (
-      <AuthCard
-        title="パスワードを設定"
-        description="次回以降はこのパスワードでサインインします。"
-      >
+      <>
+        <AuthHeader
+          title="パスワードを設定"
+          description="次回以降はこのパスワードでサインインします。"
+        />
         <form
           onSubmit={handleSetPassword}
           noValidate
@@ -291,18 +292,19 @@ export function SignUpForm() {
         {error && (
           <p className="text-center text-destructive text-sm">{error}</p>
         )}
-      </AuthCard>
+      </>
     );
   }
 
   if (step === "code") {
     return (
-      <AuthCard
-        title="認証コードを入力"
-        description={`${email} に送信されたコードを入力してください。`}
-        onBack={handleBack}
-        backDisabled={codeStepPending !== null}
-      >
+      <>
+        <AuthHeader
+          title="認証コードを入力"
+          description={`${email} に送信されたコードを入力してください。`}
+          onBack={handleBack}
+          backDisabled={codeStepPending !== null}
+        />
         <form
           onSubmit={handleVerifyCode}
           noValidate
@@ -369,12 +371,13 @@ export function SignUpForm() {
             <p className="text-destructive text-sm">{codeFieldErrors.resend}</p>
           )}
         </div>
-      </AuthCard>
+      </>
     );
   }
 
   return (
-    <AuthCard title="サインアップ">
+    <>
+      <AuthHeader title="サインアップ" />
       <form
         onSubmit={handleSendCode}
         noValidate
@@ -431,6 +434,6 @@ export function SignUpForm() {
           サインイン
         </Link>
       </p>
-    </AuthCard>
+    </>
   );
 }
