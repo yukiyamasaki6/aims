@@ -18,10 +18,3 @@ export const BOW_TYPE_OPTIONS = [
 // いないため、表示崩れを防ぐ目的で上限を設ける（DB側にも同じ上限のCHECK
 // 制約がある）。
 export const NAME_MAX_LENGTH = 50;
-
-export function labelOf(
-  options: { value: string; label: string }[],
-  value: string,
-) {
-  return options.find((o) => o.value === value)?.label ?? value;
-}
