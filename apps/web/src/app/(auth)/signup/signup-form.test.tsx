@@ -48,6 +48,31 @@ vi.mock("@/components/turnstile", () => ({
   ),
 }));
 
+// AuthHeader（auth-header.test.tsxで検証済み）は、このテストを削除してもテスト対象以外のカバレッジに影響しないように、別モジュールとの境界としてモックする。
+// タイトルの見出しと、onBackがある場合の戻るボタン（backDisabledをaria-disabledに反映し、クリックでonBackを呼ぶ）のみを描画するスタブで模す。
+vi.mock("../_shared/auth-header", () => ({
+  AuthHeader: function AuthHeaderStub(props: {
+    title: string;
+    onBack?: () => void;
+    backDisabled?: boolean;
+  }) {
+    return (
+      <>
+        <h1>{props.title}</h1>
+        {props.onBack && (
+          <button
+            type="button"
+            onClick={props.onBack}
+            aria-disabled={props.backDisabled}
+          >
+            戻る
+          </button>
+        )}
+      </>
+    );
+  },
+}));
+
 // signupReducer（signup-flow.test.tsで検証済み）とvalidate*関数群（validate.test.tsで検証済み）は、
 // いずれもここでは別モジュールの境界としてモックする。実装へ委譲せず入力（action・引数）ごとの戻り値を
 // テスト側で明示することで、それぞれの単体テストを削除した場合にsignup-form.test.tsx側の実行によって

@@ -5,7 +5,6 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
-import { AuthCard } from "@/components/auth-card";
 import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +12,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { AuthHeader } from "../_shared/auth-header";
 import { EMAIL_MAX_LENGTH } from "../auth-constants";
 import { initialSignInState, signinReducer } from "./signin-flow";
 import { validateSignInFields } from "./validate";
@@ -101,7 +101,8 @@ export function SignInForm() {
   }
 
   return (
-    <AuthCard title="サインイン">
+    <>
+      <AuthHeader title="サインイン" />
       <form
         onSubmit={handleSubmit}
         noValidate
@@ -177,6 +178,6 @@ export function SignInForm() {
           サインアップ
         </Link>
       </p>
-    </AuthCard>
+    </>
   );
 }

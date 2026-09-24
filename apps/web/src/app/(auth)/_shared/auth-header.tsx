@@ -1,22 +1,19 @@
 import { ChevronLeft } from "lucide-react";
-import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export function AuthCard({
+export function AuthHeader({
   title,
   description,
   onBack,
   backDisabled,
-  children,
 }: {
   title: string;
   description?: string;
   onBack?: () => void;
   backDisabled?: boolean;
-  children: ReactNode;
 }) {
   return (
-    <main className="mx-auto flex h-dvh w-full max-w-sm flex-col items-center justify-center gap-4 overflow-y-auto p-8">
+    <>
       {onBack && (
         <button
           type="button"
@@ -39,7 +36,6 @@ export function AuthCard({
           <p className="text-sm text-muted-foreground">{description}</p>
         )}
       </div>
-      {children}
-    </main>
+    </>
   );
 }

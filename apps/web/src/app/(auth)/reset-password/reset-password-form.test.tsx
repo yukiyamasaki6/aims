@@ -39,6 +39,31 @@ vi.mock("@/components/turnstile", () => ({
   ),
 }));
 
+// AuthHeader（auth-header.test.tsxで検証済み）は、このテストを削除してもテスト対象以外のカバレッジに影響しないように、別モジュールとの境界としてモックする。
+// タイトルの見出しと、onBackがある場合の戻るボタン（backDisabledをaria-disabledに反映し、クリックでonBackを呼ぶ）のみを描画するスタブで模す。
+vi.mock("../_shared/auth-header", () => ({
+  AuthHeader: function AuthHeaderStub(props: {
+    title: string;
+    onBack?: () => void;
+    backDisabled?: boolean;
+  }) {
+    return (
+      <>
+        <h1>{props.title}</h1>
+        {props.onBack && (
+          <button
+            type="button"
+            onClick={props.onBack}
+            aria-disabled={props.backDisabled}
+          >
+            戻る
+          </button>
+        )}
+      </>
+    );
+  },
+}));
+
 // resetPasswordReducer（reset-password-flow.test.tsで検証済み）とvalidate*関数群（validate.test.tsで検証済み）は、このテストを削除してもテスト対象以外のカバレッジに影響しないように、別モジュールとの境界としてモックする。
 // 「正しく呼び出せているか（各操作のdescribe）」と「reducerの出力を正しく表示に反映できているか（表示のdescribe）」を別個に検証する。
 // reducerモックは既定でcodeStepPendingを変えないため、確認・再送の通信中もボタンは表示上有効なまま操作できる。
