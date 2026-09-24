@@ -1,9 +1,7 @@
 import type { AuthError } from "@supabase/supabase-js";
 import { translateAuthErrorMessage } from "@/features/auth/errors";
+import { NETWORK_ERROR_MESSAGE } from "../_shared/auth-constants";
 import type { SignInFieldErrors } from "./validate";
-
-const NETWORK_ERROR_MESSAGE =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
 
 export type SignInState = {
   error: string | null;

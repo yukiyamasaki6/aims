@@ -32,9 +32,8 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { comparePositionKey } from "../_shared/position-key";
 import { DistanceInfo, PresetInfo } from "../_shared/preset-info";
-import { NAME_MAX_LENGTH } from "../_shared/round-options";
+import { NAME_MAX_LENGTH } from "../_shared/round-constants";
 import {
-  DEFAULT_TARGET_FACE_ID,
   type DistanceConfig,
   DistanceEditFields,
   type TargetFaceOption,
@@ -85,6 +84,10 @@ type HistoryEntry = {
   prevShot: Shot | null;
   nextShot: Shot | null;
 };
+
+// 10点的（アウトドア・122cm）。距離追加時の初期的として使う（e2eのcreate-round
+// APIヘルパーが使う既定の的と同じもの）。
+const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001";
 
 // テンキーは中身のキー数が距離の的ごとに変わるため実測高さを使う。この値は
 // ResizeObserverが初回計測を終えるまでの暫定値。

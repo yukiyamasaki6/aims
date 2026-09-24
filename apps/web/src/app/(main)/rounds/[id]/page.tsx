@@ -1,9 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import {
-  getGlobalTargetFaces,
-  TARGET_FACE_SELECT,
-} from "../_shared/reference-queries";
+import { getGlobalTargetFaces } from "../_shared/reference-queries";
+import { TARGET_FACE_SELECT } from "../_shared/reference-query-constants";
 import { ScorecardClient } from "./scorecard-client";
 
 export default async function RoundPage({
