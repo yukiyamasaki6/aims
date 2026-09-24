@@ -8,6 +8,12 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.mts"],
+    // テスト環境の既定値として、自前のSupabaseクライアントラッパーを実物で通すためのダミー値を設定する。
+    env: {
+      NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
+      SUPABASE_SECRET_KEY: "secret-key",
+    },
     exclude: ["node_modules/**", "tests/e2e/**"],
     coverage: {
       enabled: true,

@@ -12,7 +12,7 @@ const supabase = vi.hoisted(() => {
   return {
     listeners,
     unsubscribe,
-    createClient: vi.fn(() => ({
+    createBrowserClient: vi.fn(() => ({
       auth: {
         onAuthStateChange: (listener: (typeof listeners)[number]) => {
           listeners.push(listener);
@@ -25,8 +25,8 @@ const supabase = vi.hoisted(() => {
     },
   };
 });
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: supabase.createClient,
+vi.mock("@supabase/ssr", () => ({
+  createBrowserClient: supabase.createBrowserClient,
 }));
 
 beforeEach(() => {

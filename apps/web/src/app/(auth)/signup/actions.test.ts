@@ -5,8 +5,8 @@ const db = vi.hoisted(() => ({
   generateLink: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: () => ({
     auth: { admin: { generateLink: db.generateLink } },
   }),
 }));

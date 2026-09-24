@@ -1,6 +1,6 @@
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { config, proxy } from "./proxy";
 
 // Supabaseクライアントは外部サービスとの境界のため、getUserの結果を制御できるスタブで模す。
@@ -9,13 +9,7 @@ vi.mock("@supabase/ssr", () => ({
   createServerClient: () => ({ auth: { getUser: db.getUser } }),
 }));
 
-beforeEach(() => {
-  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
-  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
-});
-
 afterEach(() => {
-  vi.unstubAllEnvs();
   vi.clearAllMocks();
 });
 

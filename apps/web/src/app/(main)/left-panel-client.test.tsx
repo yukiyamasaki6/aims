@@ -69,8 +69,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   supabase.listeners.length = 0;
   localStorage.clear();
-  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
-  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
   // 端末ローカルの識別情報はルートレイアウトと同様にinitLocalIdentityで認証状態の変化へ追従させ、この端末にuser-1がサインイン済みの状態から始める。
   disposeLocalIdentity = initLocalIdentity(createClient());
   supabase.emit("SIGNED_IN", { user: { id: "user-1" } });
@@ -78,7 +76,6 @@ beforeEach(() => {
 
 afterEach(() => {
   disposeLocalIdentity();
-  vi.unstubAllEnvs();
 });
 
 describe("LeftPanelClient", () => {

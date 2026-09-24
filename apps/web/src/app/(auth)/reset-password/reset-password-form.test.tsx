@@ -26,8 +26,8 @@ const auth = vi.hoisted(() => ({
   updateUser: vi.fn(),
   signOut: vi.fn(),
 }));
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({ auth }),
+vi.mock("@supabase/ssr", () => ({
+  createBrowserClient: () => ({ auth }),
 }));
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、onVerifyの発火とreset()の呼び出しを制御できるスタブで模す。

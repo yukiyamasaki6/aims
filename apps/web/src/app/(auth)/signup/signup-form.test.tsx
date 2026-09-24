@@ -30,8 +30,8 @@ const auth = vi.hoisted(() => ({
   verifyOtp: vi.fn(),
   updateUser: vi.fn(),
 }));
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({ auth }),
+vi.mock("@supabase/ssr", () => ({
+  createBrowserClient: () => ({ auth }),
 }));
 
 // Server Actionはクライアントから見るとサーバーとの通信のため、境界としてモックする。
