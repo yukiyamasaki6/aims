@@ -1,6 +1,4 @@
-import { EMAIL_MAX_LENGTH } from "../_shared/auth-constants";
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { EMAIL_MAX_LENGTH, EMAIL_PATTERN } from "../_shared/auth-constants";
 
 export type SignInFieldErrors = {
   email?: string;
