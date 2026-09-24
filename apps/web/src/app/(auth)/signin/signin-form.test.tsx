@@ -22,7 +22,7 @@ const turnstile = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
   reset: vi.fn(),
 }));
-vi.mock("@/components/turnstile", () => ({
+vi.mock("../_shared/turnstile", () => ({
   Turnstile: forwardRef<unknown, { onVerify: (token: string | null) => void }>(
     function TurnstileStub(props, ref) {
       turnstile.onVerify = props.onVerify;

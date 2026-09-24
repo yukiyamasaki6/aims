@@ -26,22 +26,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { getLocalIdentity } from "@/features/auth/local-identity";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { comparePositionKey } from "@/lib/position-key";
 import { createClient } from "@/lib/supabase/client";
-import { getLocalIdentity } from "@/lib/supabase/local-identity";
 import { cn } from "@/lib/utils";
+import { comparePositionKey } from "../_shared/position-key";
+import { DistanceInfo, PresetInfo } from "../_shared/preset-info";
+import { NAME_MAX_LENGTH } from "../_shared/round-options";
 import {
   DEFAULT_TARGET_FACE_ID,
   type DistanceConfig,
   DistanceEditFields,
-  DistanceInfo,
-  PresetInfo,
   type TargetFaceOption,
 } from "./distance-config-row";
 import { KeypadPanel } from "./keypad-panel";
 import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
-import { NAME_MAX_LENGTH } from "./round-options";
 import { loadPendingOperations } from "./sync-outbox";
 import { syncShots } from "./sync-shots";
 import { useSyncQueue } from "./use-sync-queue";

@@ -10,7 +10,7 @@ import {
   FORMAT_OPTIONS,
   labelOf,
   NAME_MAX_LENGTH,
-} from "./round-options";
+} from "../_shared/round-options";
 import type { EnqueueInput } from "./use-sync-queue";
 
 function RequiredMark() {

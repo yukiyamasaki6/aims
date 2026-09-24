@@ -11,7 +11,7 @@ import {
 const errors = vi.hoisted(() => ({
   translateAuthErrorMessage: vi.fn<(error: AuthError) => string>(),
 }));
-vi.mock("@/lib/supabase/errors", () => ({
+vi.mock("@/features/auth/errors", () => ({
   translateAuthErrorMessage: errors.translateAuthErrorMessage,
 }));
 

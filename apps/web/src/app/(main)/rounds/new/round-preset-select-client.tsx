@@ -4,7 +4,6 @@ import { ChevronLeft, Loader2, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { TargetFaceRing } from "@/components/target-face-icon";
 import { Button } from "@/components/ui/button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -14,10 +13,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { comparePositionKey } from "@/lib/position-key";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { PresetInfo } from "../[id]/distance-config-row";
+import { comparePositionKey } from "../_shared/position-key";
+import { PresetInfo } from "../_shared/preset-info";
+import type { TargetFaceRing } from "../_shared/target-face-icon";
 
 type PresetDistance = {
   id: string;
