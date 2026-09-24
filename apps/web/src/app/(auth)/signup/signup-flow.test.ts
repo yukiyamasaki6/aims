@@ -2,6 +2,7 @@ import type { AuthError } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   initialSignUpState,
+  type SignUpAction,
   type SignUpState,
   signupReducer,
 } from "./signup-flow";
@@ -28,6 +29,19 @@ function stateWith(overrides: Partial<SignUpState>): SignUpState {
 describe("signupReducer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe("initialSignUpState", () => {
+    it("codeStepPendingはnull（確認・再送のいずれも通信中でない）", () => {
+      // Given
+      const state = initialSignUpState;
+
+      // When
+      const { codeStepPending } = state;
+
+      // Then
+      expect(codeStepPending).toBeNull();
+    });
   });
 
   describe("send_code_*", () => {
@@ -224,6 +238,32 @@ describe("signupReducer", () => {
       expect(next.error).toBe(NETWORK_ERROR_MESSAGE);
       expect(next.codeFieldErrors).toEqual({});
     });
+
+    it("verify_code_startedはcodeStepPendingをverifyにする", () => {
+      // Given
+      const state = stateWith({ step: "code", codeStepPending: null });
+
+      // When
+      const next = signupReducer(state, { type: "verify_code_started" });
+
+      // Then
+      expect(next.codeStepPending).toBe("verify");
+    });
+
+    it.each<SignUpAction>([
+      { type: "verify_code_succeeded" },
+      { type: "verify_code_auth_error", error: makeAuthError("otp_expired") },
+      { type: "verify_code_network_error" },
+    ])("$typeはcodeStepPendingをnullに戻す", (action) => {
+      // Given
+      const state = stateWith({ step: "code", codeStepPending: "verify" });
+
+      // When
+      const next = signupReducer(state, action);
+
+      // Then
+      expect(next.codeStepPending).toBeNull();
+    });
   });
 
   describe("resend_*", () => {
@@ -289,6 +329,48 @@ describe("signupReducer", () => {
 
       // Then
       expect(next.error).toBe(NETWORK_ERROR_MESSAGE);
+    });
+
+    it("resend_startedはcodeStepPendingをresendにする", () => {
+      // Given
+      const state = stateWith({ step: "code", codeStepPending: null });
+
+      // When
+      const next = signupReducer(state, { type: "resend_started" });
+
+      // Then
+      expect(next.codeStepPending).toBe("resend");
+    });
+
+    it("resend_succeededはcodeStepPendingをnullに戻し、それ以外の状態は変更しない", () => {
+      // Given
+      const state = stateWith({
+        step: "code",
+        error: "何かのエラー",
+        codeFieldErrors: { code: "認証コードを入力してください。" },
+        resendCooldown: 60,
+        codeStepPending: "resend",
+      });
+
+      // When
+      const next = signupReducer(state, { type: "resend_succeeded" });
+
+      // Then
+      expect(next).toEqual({ ...state, codeStepPending: null });
+    });
+
+    it.each<SignUpAction>([
+      { type: "resend_auth_error", error: makeAuthError("captcha_failed") },
+      { type: "resend_network_error" },
+    ])("$typeはcodeStepPendingをnullに戻す", (action) => {
+      // Given
+      const state = stateWith({ step: "code", codeStepPending: "resend" });
+
+      // When
+      const next = signupReducer(state, action);
+
+      // Then
+      expect(next.codeStepPending).toBeNull();
     });
   });
 
@@ -402,5 +484,51 @@ describe("signupReducer", () => {
     expect(next.codeFieldErrors).toEqual({});
     expect(next.emailFieldErrors).toEqual({ email: "触れられない" });
     expect(next.resendCooldown).toBe(30);
+  });
+
+  // 確認・再送の開始・終了以外のactionで通信中の状態が変わると、確認・再送・戻るの排他が崩れるため、いずれの値からも変更しないことを検証する。
+  describe("確認・再送の開始・終了以外のaction", () => {
+    const otherActions: SignUpAction[] = [
+      { type: "reset_to_email" },
+      { type: "resend_tick" },
+      { type: "send_code_invalid", errors: { email: "x" } },
+      { type: "send_code_started" },
+      { type: "send_code_already_registered" },
+      { type: "send_code_succeeded" },
+      { type: "send_code_auth_error", error: makeAuthError("otp_expired") },
+      { type: "send_code_network_error" },
+      { type: "verify_code_invalid", errors: { code: "x" } },
+      { type: "resend_invalid", errors: { resend: "x" } },
+      { type: "set_password_invalid", errors: { password: "x" } },
+      { type: "set_password_started" },
+      {
+        type: "set_password_auth_error",
+        error: makeAuthError("weak_password"),
+      },
+      { type: "set_password_network_error" },
+    ];
+
+    describe.each<SignUpState["codeStepPending"]>([null, "verify", "resend"])(
+      "codeStepPendingが%sの場合",
+      (codeStepPending) => {
+        it.each(otherActions)(
+          "$typeはcodeStepPendingを変更しない",
+          (action) => {
+            // Given
+            const state = stateWith({
+              step: "code",
+              resendCooldown: 5,
+              codeStepPending,
+            });
+
+            // When
+            const next = signupReducer(state, action);
+
+            // Then
+            expect(next.codeStepPending).toBe(codeStepPending);
+          },
+        );
+      },
+    );
   });
 });
