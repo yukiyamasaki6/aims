@@ -30,7 +30,6 @@ import { getLocalIdentity } from "@/features/auth/local-identity";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { comparePositionKey } from "../_shared/position-key";
 import { DistanceInfo, PresetInfo } from "../_shared/preset-info";
 import { NAME_MAX_LENGTH } from "../_shared/round-constants";
 import type { DistanceConfig } from "./distance-config";
@@ -41,40 +40,19 @@ import {
 import { KeypadPanel } from "./keypad-panel";
 import type { RoundConfig } from "./round-config";
 import { RoundConfigPanel } from "./round-config-panel";
+import {
+  compareDistancePosition,
+  distanceNumber,
+  endSubtotal,
+  type ScoringTargetFace,
+  scoreKeysFor,
+  summarizeDistance,
+  summarizeRound,
+} from "./scorecard-scoring";
+import type { Distance, Shot } from "./scorecard-types";
 import { loadPendingOperations } from "./sync-outbox";
 import { syncShots } from "./sync-shots";
 import { useSyncQueue } from "./use-sync-queue";
-
-type Distance = {
-  id: string;
-  position_key: string;
-  distance: number | null;
-  total_ends: number;
-  arrows_per_end: number;
-  target_face_id: string;
-  is_marked: boolean;
-};
-
-function compareDistancePosition(a: Distance, b: Distance): number {
-  return comparePositionKey(a.position_key, a.id, b.position_key, b.id);
-}
-
-function distanceNumber(distances: Distance[], distanceId: string): number {
-  return (
-    [...distances]
-      .sort(compareDistancePosition)
-      .findIndex((d) => d.id === distanceId) + 1
-  );
-}
-
-type Shot = {
-  distance_id: string;
-  end_number: number;
-  arrow_number: number;
-  shooter_id?: string;
-  score_str: string;
-  score_int: number;
-};
 
 // 1回の入力操作（記録・上書き・クリア）による、あるマスの状態遷移。
 // undo時はprevShotへ、redo時はnextShotへそのマスを戻す。
@@ -94,15 +72,6 @@ const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001";
 // ResizeObserverが初回計測を終えるまでの暫定値。
 const KEYPAD_HEIGHT_FALLBACK = 220;
 
-// Mは的のリングではなく「的の外」を表す固定キーのため、常に末尾に追加する。
-const MISS_KEY = {
-  label: "M",
-  scoreStr: "M",
-  scoreInt: 0,
-  bg: "#4CD964",
-  fg: "#231F20",
-};
-
 function contrastText(hex: string): string {
   const r = Number.parseInt(hex.slice(1, 3), 16);
   const g = Number.parseInt(hex.slice(3, 5), 16);
@@ -111,127 +80,16 @@ function contrastText(hex: string): string {
   return luminance > 0.6 ? "#231F20" : "#FFFFFF";
 }
 
-// 距離の的（target_face_rings）に実在する点数のリングだけを、点数ごとに1つに
-// 重複排除して返す。3つ目の的（トライアングル/バーティカル）は通常スポットごとに
-// 同一の点数構成だが、異なる可能性も考慮して全スポットのリングを対象にする。
-function uniqueRingsFor(targetFace: TargetFaceOption | undefined) {
-  const allRings = (targetFace?.target_face_spots ?? []).flatMap(
-    (spot) => spot.target_face_rings,
-  );
-  return Array.from(new Map(allRings.map((r) => [r.score_str, r])).values());
-}
-
-type TopScoreLabels = {
-  hasX: boolean;
-  // 表示順は常に「最高点数/X数」（Xが無い的では「最高点数/次点数」）。
-  firstLabel: string;
-  secondLabel: string;
-};
-
-// 的にXリングがあるかどうかで、集計欄に出す2つの点数ラベルを決める。
-// Xリングがあれば「最高点数（Xを含む実点数）/X数」、無ければ
-// 「最高点数/次点数」を表示する（フィールド的のように最高点が10未満の
-// 的でも、実在する点数で動的に決まる）。
-function topScoreLabels(
-  targetFace: TargetFaceOption | undefined,
-): TopScoreLabels | null {
-  const rings = uniqueRingsFor(targetFace).sort(
-    (a, b) => b.z_index - a.z_index,
-  );
-  if (rings.length === 0) return null;
-
-  const hasX = rings[0].score_str === "X";
-  const nonXRings = rings.filter((r) => r.score_str !== "X");
-  const firstLabel = nonXRings[0]?.score_str;
-  if (firstLabel === undefined) return null;
-  if (hasX) {
-    return { hasX, firstLabel, secondLabel: "X" };
-  }
-  const secondLabel = nonXRings[1]?.score_str;
-  if (secondLabel === undefined) return null;
-  return { hasX, firstLabel, secondLabel };
-}
-
-// 実際のカウントを求める。X以外は常に実点数（score_int）で数える
-// （最高点数はXも含めた実点数で数える。Xは最高点数のリングに含まれる
-// 特別な当たりであり、別の点数帯ではないため）。X数だけはリング種別
-// （score_str）で数える（score_intだけでは「10」と区別できないため）。
-function countTopScores(
-  targetFace: TargetFaceOption | undefined,
-  shots: Shot[],
-  labels: TopScoreLabels,
-): { firstCount: number; secondCount: number } {
-  const rings = uniqueRingsFor(targetFace);
-  const firstScoreInt = rings.find(
-    (r) => r.score_str === labels.firstLabel,
-  )?.score_int;
-  const firstCount = shots.filter((s) => s.score_int === firstScoreInt).length;
-
-  if (labels.hasX) {
-    return {
-      firstCount,
-      secondCount: shots.filter((s) => s.score_str === "X").length,
-    };
-  }
-  const secondScoreInt = rings.find(
-    (r) => r.score_str === labels.secondLabel,
-  )?.score_int;
-  return {
-    firstCount,
-    secondCount: shots.filter((s) => s.score_int === secondScoreInt).length,
-  };
-}
-
-// ラウンド結果の集計は、全ての距離で的のX有無・最高点数・次点数が一致する
-// 場合のみ意味を持つ（例: 18mが10点的・30mが6点的だと「X数」も「10」も
-// 両方の距離を跨いで比較できない）。一致しなければnullを返し、呼び出し側で
-// 非表示にする。
-function roundTopScoreLabels(
-  distances: Distance[],
-  targetFaces: TargetFaceOption[],
-): TopScoreLabels | null {
-  const perDistance = distances.map((d) =>
-    topScoreLabels(targetFaces.find((f) => f.id === d.target_face_id)),
-  );
-  const first = perDistance[0];
-  if (!first) return null;
-
-  const allSame = perDistance.every(
-    (labels) =>
-      labels !== null &&
-      labels.hasX === first.hasX &&
-      labels.firstLabel === first.firstLabel &&
-      labels.secondLabel === first.secondLabel,
-  );
-  return allSame ? first : null;
-}
-
-// 距離の的に実在する点数・配色だけをテンキーのキーとして構成する。的によって
-// リング数が異なる（例: 6点的は1〜4が無い）ため、固定のキー一覧は持たない。
-function keypadKeysFor(targetFace: TargetFaceOption | undefined) {
-  const scoreKeys = uniqueRingsFor(targetFace)
-    .sort((a, b) => b.z_index - a.z_index)
-    .map((r) => ({
-      label: r.score_str,
-      scoreStr: r.score_str,
-      scoreInt: r.score_int,
-      bg: r.color,
-      fg: contrastText(r.color),
-    }));
-  return [...scoreKeys, MISS_KEY];
-}
-
-// マス目に記録済みの点数の実際のリング色を引く。Mは的のリングではなく
-// 「的の外」を表す固定色のため、MISS_KEYの色をそのまま使う。
+// マス目に記録済みの点数の実際のリング色を、テンキーと同じキー構成から引く。
+// Mや的に無い点数は、的の外を表すM（キー構成の末尾）の色とする。
 function ringColorFor(
-  targetFace: TargetFaceOption | undefined,
+  targetFace: ScoringTargetFace | undefined,
   scoreStr: string,
 ): string {
-  if (scoreStr === "M") return MISS_KEY.bg;
-  return (
-    uniqueRingsFor(targetFace).find((r) => r.score_str === scoreStr)?.color ??
-    MISS_KEY.bg
-  );
+  const keys = scoreKeysFor(targetFace);
+  const key =
+    keys.find((k) => k.scoreStr === scoreStr) ?? keys[keys.length - 1];
+  return key.color;
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -672,17 +530,7 @@ export function ScorecardClient({
     }
   }, [position, keypadHeight, isLandscape, distances]);
 
-  const total = shots.reduce((sum, s) => sum + s.score_int, 0);
-  const roundLabels = roundTopScoreLabels(distances, targetFaces);
-  // 全距離でラベルが一致することは確認済みなので、カウントの基準となる
-  // リング構成（Xの実点数を引くため）は先頭の距離の的を代表として使えばよい。
-  const roundCounts = roundLabels
-    ? countTopScores(
-        targetFaces.find((f) => f.id === distances[0]?.target_face_id),
-        shots,
-        roundLabels,
-      )
-    : null;
+  const roundSummary = summarizeRound(distances, targetFaces, shots);
 
   const distanceIdsWithShots = new Set(shots.map((s) => s.distance_id));
 
@@ -1136,15 +984,15 @@ export function ScorecardClient({
         </Button>
       </div>
       <div className="grid grid-cols-4 gap-2">
-        {keypadKeysFor(
+        {scoreKeysFor(
           targetFaceOf(displayPosition.distance.target_face_id),
         ).map((b) => (
           <Button
-            key={b.label}
+            key={b.scoreStr}
             type="button"
             variant="outline"
             size="lg"
-            data-testid={`score-button-${b.label}`}
+            data-testid={`score-button-${b.scoreStr}`}
             onClick={() => handleScore(b.scoreStr, b.scoreInt)}
             // 背景色をstyleで直接指定するとhover:bg-muted等のクラスは
             // 上書きされて効かなくなる。brightnessフィルターは黒（#231F20）
@@ -1162,11 +1010,11 @@ export function ScorecardClient({
             // より大きいこの値で統一する。
             className="h-12 text-lg transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.25)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.35)]"
             style={{
-              backgroundColor: b.bg,
-              color: b.fg,
+              backgroundColor: b.color,
+              color: contrastText(b.color),
             }}
           >
-            {b.label}
+            {b.scoreStr}
           </Button>
         ))}
       </div>
@@ -1369,17 +1217,19 @@ export function ScorecardClient({
               className="-mt-6 sticky top-14 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
             >
               <div className="flex items-baseline gap-2">
-                {roundLabels && roundCounts && (
+                {roundSummary.topScores && (
                   <span
                     data-testid="round-top-scores"
                     className="text-muted-foreground text-sm"
                   >
-                    {roundLabels.firstLabel}: {roundCounts.firstCount} /{" "}
-                    {roundLabels.secondLabel}: {roundCounts.secondCount}
+                    {roundSummary.topScores.firstLabel}:{" "}
+                    {roundSummary.topScores.firstCount} /{" "}
+                    {roundSummary.topScores.secondLabel}:{" "}
+                    {roundSummary.topScores.secondCount}
                   </span>
                 )}
                 <span className="font-heading text-lg font-semibold">
-                  合計{total}
+                  合計{roundSummary.total}
                 </span>
               </div>
             </div>
@@ -1405,18 +1255,8 @@ export function ScorecardClient({
             <div className="flex flex-col gap-4">
               {distances.map((d) => {
                 const displayNumber = distanceNumber(distances, d.id);
-                const distanceShots = shots.filter(
-                  (s) => s.distance_id === d.id,
-                );
-                const distanceTotal = distanceShots.reduce(
-                  (sum, s) => sum + s.score_int,
-                  0,
-                );
                 const face = targetFaceOf(d.target_face_id);
-                const distanceLabels = topScoreLabels(face);
-                const distanceCounts = distanceLabels
-                  ? countTopScores(face, distanceShots, distanceLabels)
-                  : null;
+                const distanceSummary = summarizeDistance(d.id, face, shots);
 
                 // end行1件分の描画。最終行だけ小計のsticky境界（下記の内側
                 // ラッパー）の外に出すため、共通化して2箇所から呼べるようにする。
@@ -1424,11 +1264,7 @@ export function ScorecardClient({
                   const endShots = shots.filter(
                     (s) => s.distance_id === d.id && s.end_number === end,
                   );
-                  const subtotal = endShots.reduce(
-                    (sum, s) => sum + s.score_int,
-                    0,
-                  );
-                  const hasAnyShot = endShots.length > 0;
+                  const subtotal = endSubtotal(endShots);
 
                   return (
                     <div key={end} className="flex items-stretch">
@@ -1499,7 +1335,7 @@ export function ScorecardClient({
                         data-testid={`end-subtotal-${displayNumber}-${end}`}
                         className="flex min-h-10 w-14 shrink-0 items-center justify-center border-l text-muted-foreground text-base"
                       >
-                        {hasAnyShot ? `${subtotal}` : ""}
+                        {subtotal ?? ""}
                       </div>
                     </div>
                   );
@@ -1580,18 +1416,18 @@ export function ScorecardClient({
                       この小計の親（この内側ラッパー）が最終行を含まないため、
                       最終行の手前でstickyが自然に外れる。 */}
                       <div className="-mt-3.5 sticky top-[88px] z-10 flex items-baseline justify-end gap-2 border-b bg-card px-3 pt-6 pb-2 text-muted-foreground text-xs">
-                        {distanceLabels && distanceCounts && (
+                        {distanceSummary.topScores && (
                           <span
                             data-testid={`distance-top-scores-${displayNumber}`}
                           >
-                            {distanceLabels.firstLabel}:{" "}
-                            {distanceCounts.firstCount} /{" "}
-                            {distanceLabels.secondLabel}:{" "}
-                            {distanceCounts.secondCount}
+                            {distanceSummary.topScores.firstLabel}:{" "}
+                            {distanceSummary.topScores.firstCount} /{" "}
+                            {distanceSummary.topScores.secondLabel}:{" "}
+                            {distanceSummary.topScores.secondCount}
                           </span>
                         )}
                         <span className="text-foreground text-sm font-semibold">
-                          小計{distanceTotal}
+                          小計{distanceSummary.total}
                         </span>
                       </div>
                       {d.total_ends > 1 && (
