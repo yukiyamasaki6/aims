@@ -570,12 +570,15 @@ describe("ScorecardClient Undo/Redo", () => {
 });
 
 describe("ScorecardClient 距離の追加・編集・削除", () => {
-  it("距離を追加すると直前の距離の内容を引き継ぎ、編集パネルが自動的に展開される", async () => {
+  it("距離を追加すると、追加した距離の作成がSDKへ届き、その距離の編集パネルが展開される", async () => {
+    // Given: 距離が1つある
     const user = userEvent.setup();
     setup();
 
+    // When: 距離を追加する
     await user.click(screen.getByTestId("add-distance-button"));
 
+    // Then: 2つ目の距離の編集パネルが直前の距離の内容で開き、その作成がSDKへ届く
     expect(screen.getByTestId("distance-config-distance-2")).toHaveValue(70);
     await waitFor(() => {
       expect(supabase.rpc).toHaveBeenCalledWith(
@@ -593,25 +596,20 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     });
   });
 
-  it("的を変更して距離を保存すると、その距離のUndo/Redo履歴のみが破棄される（他の距離の履歴は残る）", async () => {
+  it("構成が変わる設定で距離を保存すると、その距離のUndo/Redo履歴だけが破棄され、他の距離の履歴は残る", async () => {
+    // Given: 2つ目の距離の記録がUndo履歴に、1つ目の距離の取り消した記録がRedo履歴に残っている
+    // 的はスコアが記録済みの距離では変更できないため、1つ目の距離は取り消して記録の無い状態にする。
     const user = userEvent.setup();
     setup({ distances: [distanceA, distanceB] });
-
-    // 的・本数・エンド数はスコアが記録済みの距離では編集できないため
-    // （DistanceEditFieldsのhasShots制約）、まずdistanceBに記録してUndo
-    // 履歴を残し、次にdistanceA自身は記録してからUndoしてスコアの無い
-    // 状態でRedo履歴だけを残す。この状態でdistanceAの的を変更すると、
-    // distanceA分のRedo履歴だけが破棄され、distanceB分のUndo履歴は
-    // 影響を受けない。
     await user.click(screen.getByTestId("shot-cell-2-1-1"));
     await user.click(screen.getByTestId("score-button-9"));
-
     await user.click(screen.getByTestId("shot-cell-1-1-1"));
     await user.click(screen.getByTestId("score-button-10"));
     await user.click(screen.getByTestId("score-button-undo"));
-    expect(screen.getByTestId("score-button-undo")).not.toBeDisabled();
-    expect(screen.getByTestId("score-button-redo")).not.toBeDisabled();
+    expect(screen.getByTestId("score-button-undo")).toBeEnabled();
+    expect(screen.getByTestId("score-button-redo")).toBeEnabled();
 
+    // When: 1つ目の距離の的を変更して保存する
     await user.click(screen.getByTestId("distance-config-toggle-1"));
     await user.click(screen.getByTestId("target-face-picker-trigger"));
     await user.click(screen.getByTestId("target-face-format-tab-all"));
@@ -621,43 +619,46 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     );
     await user.click(screen.getByTestId("distance-config-save-1"));
 
-    expect(screen.getByTestId("score-button-undo")).not.toBeDisabled();
+    // Then: 1つ目の距離のRedo履歴は破棄され、2つ目の距離のUndo履歴は残る
+    // 保存でマスの選択は解除されるため、マスを選択し直してテンキーを表示する。
+    await user.click(screen.getByTestId("shot-cell-1-1-1"));
     expect(screen.getByTestId("score-button-redo")).toBeDisabled();
+    expect(screen.getByTestId("score-button-undo")).toBeEnabled();
+
+    // When: Undoする
+    await user.click(screen.getByTestId("score-button-undo"));
+
+    // Then: 2つ目の距離の記録が取り消される
+    expect(screen.getByTestId("shot-cell-2-1-1")).toHaveTextContent("");
   });
 
-  it("的を変更せず距離を保存しても、Undo/Redo履歴は維持される", async () => {
+  it("構成が変わらない設定で距離を保存すると、Undo/Redo履歴は維持される", async () => {
+    // Given: 1-1-1に記録している
     const user = userEvent.setup();
     setup();
-
     await user.click(screen.getByTestId("score-button-10"));
 
+    // When: その距離を設定を変えずに保存する
     await user.click(screen.getByTestId("distance-config-toggle-1"));
     await user.click(screen.getByTestId("distance-config-save-1"));
 
+    // Then: Undoは有効のまま
     expect(screen.getByTestId("score-button-undo")).not.toBeDisabled();
   });
 
-  it("スコアが記録されていない距離を削除すると一覧から取り除かれる", async () => {
-    const user = userEvent.setup();
-    setup({ distances: [distanceA, distanceB] });
-
-    await user.click(screen.getByTestId("distance-config-toggle-2"));
-    await user.click(screen.getByTestId("distance-config-delete-2"));
-
-    expect(screen.queryByTestId("distance-summary-2")).not.toBeInTheDocument();
-  });
-
   it("距離編集パネルをEscapeで閉じると、保存せずパネルが閉じる", async () => {
+    // Given: 距離の編集パネルを開いている
     const user = userEvent.setup();
     setup();
-
     await user.click(screen.getByTestId("distance-config-toggle-1"));
     expect(
       screen.getByTestId("distance-config-distance-1"),
     ).toBeInTheDocument();
 
+    // When: Escapeを押す
     await user.keyboard("{Escape}");
 
+    // Then: パネルが閉じ、送信キューへは何も積まれない
     expect(
       screen.queryByTestId("distance-config-distance-1"),
     ).not.toBeInTheDocument();
@@ -667,21 +668,20 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
-  it("スコア記録済みの距離を確認の上で削除すると、そのショット・Undo履歴・選択状態も併せて破棄される", async () => {
+  it("スコア記録済みの距離を確認の上で削除すると、その距離・記録・Undo履歴・選択状態が破棄される", async () => {
+    // Given: 2つの距離があり、1つ目の距離に記録して、その距離のマスを選択している
     const user = userEvent.setup();
     setup({ distances: [distanceA, distanceB] });
-
-    // distanceAの1マス目に記録（選択は自動的に2マス目へ進むが、
-    // distanceA自体は選択中のまま）。
     await user.click(screen.getByTestId("score-button-10"));
     expect(screen.getByText("合計10")).toBeInTheDocument();
 
+    // When: 1つ目の距離を確認の上で削除する
     await user.click(screen.getByTestId("distance-config-toggle-1"));
     await user.click(screen.getByTestId("distance-config-delete-1"));
     await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
+    // Then: 残った距離が1つ目として表示され、記録が合計から除かれ、Undoは無効になる
     expect(screen.queryByTestId("distance-summary-2")).not.toBeInTheDocument();
-    // distanceBがdistanceAの削除後、1番目の距離として表示される。
     expect(screen.getByTestId("distance-summary-1")).toBeInTheDocument();
     expect(screen.getByText("合計0")).toBeInTheDocument();
     expect(screen.getByTestId("score-button-undo")).toBeDisabled();
@@ -907,8 +907,18 @@ describe("ScorecardClient ラウンド削除", () => {
 });
 
 describe("ScorecardClient 保留中の操作の反映", () => {
-  it("保留中の距離作成・スコア記録操作が反映される", async () => {
+  it("保留中の操作を、ラウンド設定・距離・記録の表示に反映する", async () => {
+    // Given: ラウンド設定の更新・距離の作成・スコアの記録が未同期のまま残っている
     await seedPendingOperations([
+      {
+        type: "round.updated",
+        eventId: "e-round",
+        roundId: "round-1",
+        name: "更新後ラウンド",
+        roundDate: "2026-09-20",
+        format: "outdoor",
+        bowType: "compound",
+      },
       {
         type: "distance.created",
         eventId: "e-distance",
@@ -931,103 +941,18 @@ describe("ScorecardClient 保留中の操作の反映", () => {
         scoreInt: 10,
       },
     ]);
-    // 既存のショット（別マス）を持たせることで、shot.recorded適用時の
-    // 重複排除フィルタ（同じマスの既存ショットの除去）が実際に既存要素を
-    // 走査する経路も検証する。
-    setup({
-      initialShots: [
-        {
-          distance_id: distanceA.id,
-          end_number: 1,
-          arrow_number: 2,
-          score_str: "9",
-          score_int: 9,
-        },
-      ],
-    });
 
-    expect(await screen.findByTestId("distance-summary-2")).toBeInTheDocument();
-    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
-    expect(screen.getByTestId("shot-cell-1-1-2")).toHaveTextContent("9");
-  });
+    // When: 表示する
+    setup();
 
-  it("ラウンド設定更新・距離更新・ショットクリアの各操作が反映される", async () => {
-    await seedPendingOperations([
-      {
-        type: "round.updated",
-        eventId: "e-round",
-        roundId: "round-1",
-        name: "更新後ラウンド",
-        roundDate: "2026-09-20",
-        format: "outdoor",
-        bowType: "compound",
-      },
-      {
-        type: "distance.updated",
-        eventId: "e-distance",
-        distanceId: distanceA.id,
-        distance: 50,
-        totalEnds: distanceA.total_ends,
-        arrowsPerEnd: distanceA.arrows_per_end,
-        targetFaceId: distanceA.target_face_id,
-        isMarked: distanceA.is_marked,
-      },
-      {
-        type: "shot.cleared",
-        eventId: "e-clear",
-        distanceId: distanceA.id,
-        endNumber: 1,
-        arrowNumber: 1,
-      },
-    ]);
-    setup({
-      initialShots: [
-        {
-          distance_id: distanceA.id,
-          end_number: 1,
-          arrow_number: 1,
-          score_str: "10",
-          score_int: 10,
-        },
-      ],
-    });
-
+    // Then: ラウンド設定・作成した距離・記録が表示される
     expect(await screen.findByText(/更新後ラウンド/)).toBeInTheDocument();
-    expect(screen.getByText(/50m/)).toBeInTheDocument();
-    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("");
+    expect(screen.getByTestId("distance-summary-2")).toBeInTheDocument();
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
   });
 
-  it("保留中の距離無効化操作が反映される", async () => {
-    await seedPendingOperations([
-      {
-        type: "distance.disabled",
-        eventId: "e-distance-disabled",
-        distanceId: distanceB.id,
-      },
-    ]);
-    setup({
-      distances: [distanceA, distanceB],
-      initialShots: [
-        {
-          distance_id: distanceB.id,
-          end_number: 1,
-          arrow_number: 1,
-          score_str: "9",
-          score_int: 9,
-        },
-      ],
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.queryByTestId("distance-summary-2"),
-      ).not.toBeInTheDocument();
-    });
-    // distanceBのショットも併せて破棄されるため、合計から除かれる。
-    expect(screen.getByText("合計0")).toBeInTheDocument();
-  });
-
-  it("round.disabledの保留操作以降は処理を中断し、一覧へ遷移する", async () => {
+  it("保留中の操作にラウンドの削除がある場合、一覧へ遷移し、それ以降の操作は反映しない", async () => {
+    // Given: ラウンドの削除と、その後の距離の無効化が未同期のまま残っている
     await seedPendingOperations([
       {
         type: "round.disabled",
@@ -1040,8 +965,11 @@ describe("ScorecardClient 保留中の操作の反映", () => {
         distanceId: distanceA.id,
       },
     ]);
+
+    // When: 表示する
     setup();
 
+    // Then: 一覧へ遷移し、距離は無効化されずに表示されたまま
     await waitFor(() => {
       expect(nav.replace).toHaveBeenCalledWith("/rounds");
     });

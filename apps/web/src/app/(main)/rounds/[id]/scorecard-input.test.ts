@@ -4,6 +4,7 @@ import {
   cellLabel,
   cellOf,
   clearHistoryEntry,
+  discardDistanceEntries,
   findCurrentPosition,
   type HistoryEntry,
   type Position,
@@ -562,6 +563,35 @@ describe("redoHistory", () => {
 
     // Then: やり直す遷移は無い
     expect(result).toBeNull();
+  });
+});
+
+describe("discardDistanceEntries", () => {
+  const scoredA = entry("d-a", 1, 1, null, shot("d-a", 1, 1, "10", 10));
+  const scoredB = entry("d-b", 1, 1, null, shot("d-b", 1, 1, "9", 9));
+  const undoneA = entry("d-a", 1, 2, null, shot("d-a", 1, 2, "8", 8));
+  const undoneB = entry("d-b", 1, 2, null, shot("d-b", 1, 2, "7", 7));
+
+  it("指定した距離の遷移だけを取り除き、他の距離の遷移は順序を保って残す", () => {
+    // Given: 2つの距離の遷移が混在している
+    const entries = [scoredA, scoredB, undoneA, undoneB];
+
+    // When: distanceAの履歴を破棄する
+    const result = discardDistanceEntries(entries, "d-a");
+
+    // Then: distanceBの遷移だけが順序を保って残る
+    expect(result).toEqual([scoredB, undoneB]);
+  });
+
+  it("指定した距離の遷移が無い場合、履歴を変えない", () => {
+    // Given: distanceBの遷移だけがある
+    const entries = [scoredB, undoneB];
+
+    // When: distanceAの履歴を破棄する
+    const result = discardDistanceEntries(entries, "d-a");
+
+    // Then: 履歴は元のまま
+    expect(result).toEqual([scoredB, undoneB]);
   });
 });
 

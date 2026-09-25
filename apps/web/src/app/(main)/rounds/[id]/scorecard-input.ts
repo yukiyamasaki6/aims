@@ -226,6 +226,16 @@ export function redoHistory(
   };
 }
 
+// 距離の構成の変更・削除で指すマスが無くなる、その距離の履歴を破棄する。
+// 他の距離の履歴は引き続き有効なため残す。
+// 取り消し履歴・やり直し履歴のそれぞれに適用する。
+export function discardDistanceEntries(
+  entries: HistoryEntry[],
+  distanceId: string,
+): HistoryEntry[] {
+  return entries.filter((e) => e.distanceId !== distanceId);
+}
+
 // 同期状態の表示などで、操作の対象のマスを示すラベル。
 // 距離が見つからない場合、距離の番号は?とする。
 export function cellLabel(distances: Distance[], cell: Cell): string {
