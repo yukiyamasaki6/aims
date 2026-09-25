@@ -11,7 +11,7 @@ import {
   FORMAT_OPTIONS,
   NAME_MAX_LENGTH,
 } from "../_shared/round-constants";
-import type { EnqueueInput } from "./use-sync-queue";
+import type { EnqueueInput } from "./sync-queue-types";
 
 function RequiredMark() {
   return (

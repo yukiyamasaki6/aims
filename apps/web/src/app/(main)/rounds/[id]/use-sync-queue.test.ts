@@ -4,12 +4,9 @@ import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SyncOperation } from "./sync-events";
 import { loadPendingOperations, savePendingOperation } from "./sync-outbox";
-import type { ShotUpsert } from "./use-sync-queue";
-import {
-  AUTH_REQUIRED_MESSAGE,
-  RETRY_DELAYS_MS,
-  useSyncQueue,
-} from "./use-sync-queue";
+import type { ShotUpsert } from "./sync-queue-types";
+import { AUTH_REQUIRED_MESSAGE, RETRY_DELAYS_MS } from "./sync-result";
+import { useSyncQueue } from "./use-sync-queue";
 
 // SupabaseのSDKは外部サービスとの境界のため、セッションの取得結果とRPCの結果を任意に制御できるスタブで模す。
 // operation付きの操作と、復元されたショット操作は、実物のexecuteSyncOperation・syncShotsを通してこのスタブのrpcに届く。
@@ -563,32 +560,6 @@ describe("useSyncQueue", () => {
         expect(result.current.status).toBe("synced");
       });
 
-      it("認証以外のエラーは再試行し、成功すればエラーを残さない", async () => {
-        // Given: 初回だけ通常のエラーで失敗するラウンド設定の操作
-        const run = vi
-          .fn()
-          .mockResolvedValueOnce({ error: "boom" })
-          .mockResolvedValueOnce(undefined as Result);
-        const { result } = renderHook(() => useSyncQueue());
-
-        // When: 積んで、最初のバックオフを経過させる
-        act(() => {
-          result.current.enqueue({
-            key: "roundConfig",
-            label: "ラウンド設定",
-            run,
-          });
-        });
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
-        });
-
-        // Then: 再試行して同期済みになる
-        expect(run).toHaveBeenCalledTimes(2);
-        expect(result.current.errorFor("roundConfig")).toBeUndefined();
-        expect(result.current.status).toBe("synced");
-      });
-
       it("リトライ待機中に同じキーへ新しい操作を積んでも、待機を打ち切らず両方を投入順に送る", async () => {
         // Given: ラウンド・距離の操作はevent_idにより冪等なため、古い操作のリトライ待機は打ち切らない
         const { result } = renderHook(() => useSyncQueue());
@@ -1044,9 +1015,12 @@ describe("useSyncQueue", () => {
     });
 
     describe("恒久的な失敗の場合", () => {
-      it("再試行せずにエラーとして確定する", async () => {
-        // Given: 権限がなく恒久的に失敗する操作
-        const { result } = renderHook(() => useSyncQueue());
+      it("再試行せずにエラーとして確定し、onPermanentFailureを呼ぶ", async () => {
+        // Given: 権限がなく恒久的に失敗する操作と、onPermanentFailureを受け取るフック
+        const onPermanentFailure = vi.fn();
+        const { result } = renderHook(() =>
+          useSyncQueue(undefined, onPermanentFailure),
+        );
         const run = vi.fn(() =>
           Promise.resolve({
             error: "このラウンドを編集する権限がありません。",
@@ -1066,132 +1040,59 @@ describe("useSyncQueue", () => {
           await Promise.resolve();
         });
 
-        // Then: 1回だけ実行してエラーになる
+        // Then: 1回だけ実行してエラーになり、onPermanentFailureを1回呼ぶ
         expect(run).toHaveBeenCalledTimes(1);
         expect(result.current.status).toBe("error");
         expect(result.current.errors).toEqual([
           expect.objectContaining({ key: "roundConfig" }),
         ]);
-      });
-
-      it("onPermanentFailureを呼ぶ", async () => {
-        // Given: 恒久的に失敗する操作と、onPermanentFailureを受け取るフック
-        const onPermanentFailure = vi.fn();
-        const { result } = renderHook(() =>
-          useSyncQueue(undefined, onPermanentFailure),
-        );
-        const run = vi.fn(() =>
-          Promise.resolve({
-            error: "このラウンドを編集する権限がありません。",
-            permanent: true,
-          }),
-        );
-
-        // When: 積む
-        act(() => {
-          result.current.enqueue({
-            key: "roundConfig",
-            label: "ラウンド設定",
-            run,
-          });
-        });
-        await act(async () => {
-          await Promise.resolve();
-        });
-
-        // Then: onPermanentFailureを1回呼ぶ
         expect(onPermanentFailure).toHaveBeenCalledTimes(1);
       });
     });
 
     describe("サインインが必要な失敗の場合", () => {
-      beforeEach(() => {
+      it("再試行せずにすぐエラーとして確定し、onPermanentFailureは呼ばない", async () => {
         vi.useFakeTimers();
-      });
-      afterEach(() => {
-        vi.useRealTimers();
-      });
+        try {
+          // Given: サインインが必要なエラーを返す操作と、onPermanentFailureを受け取るフック
+          const onPermanentFailure = vi.fn();
+          const { result } = renderHook(() =>
+            useSyncQueue(undefined, onPermanentFailure),
+          );
+          const run = vi.fn(() =>
+            Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
+          );
 
-      it("再試行せず、キーごとのエラーとして記録する", async () => {
-        // Given: サインインが必要なエラーを返す操作
-        const run = vi.fn(() =>
-          Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
-        );
-        const { result } = renderHook(() => useSyncQueue());
-
-        // When: 積んで、全てのバックオフ分の時間を経過させる
-        act(() => {
-          result.current.enqueue({
-            key: "roundConfig",
-            label: "ラウンド設定",
-            run,
+          // When: 積む
+          act(() => {
+            result.current.enqueue({
+              key: "roundConfig",
+              label: "ラウンド設定",
+              run,
+            });
           });
-        });
-        await act(async () => {
-          await exhaustRetries();
-        });
-
-        // Then: 1回だけ実行し、そのキーのエラーとして記録する
-        expect(run).toHaveBeenCalledTimes(1);
-        expect(result.current.errorFor("roundConfig")).toBe(
-          AUTH_REQUIRED_MESSAGE,
-        );
-        expect(result.current.status).toBe("error");
-      });
-
-      it("失敗した時点でエラーになり、その後も再試行しない", async () => {
-        // Given: サインインが必要なエラーを返す操作
-        const { result } = renderHook(() => useSyncQueue());
-        const run = vi.fn(() =>
-          Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
-        );
-
-        // When: 積む
-        act(() => {
-          result.current.enqueue({ key: "a", label: "A", run });
-        });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-
-        // Then: すぐにエラーになる
-        expect(result.current.errorFor("a")).toBe(AUTH_REQUIRED_MESSAGE);
-        expect(result.current.status).toBe("error");
-
-        // When: 十分な時間が経過する
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(30000);
-        });
-
-        // Then: 再試行しない
-        expect(run).toHaveBeenCalledTimes(1);
-      });
-
-      it("再試行しない失敗として扱うが、onPermanentFailureは呼ばない", async () => {
-        // Given: サインインが必要なエラーを返す操作と、onPermanentFailureを受け取るフック
-        const onPermanentFailure = vi.fn();
-        const { result } = renderHook(() =>
-          useSyncQueue(undefined, onPermanentFailure),
-        );
-        const run = vi.fn(() =>
-          Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
-        );
-
-        // When: 積む
-        act(() => {
-          result.current.enqueue({
-            key: "roundConfig",
-            label: "ラウンド設定",
-            run,
+          await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
           });
-        });
-        await act(async () => {
-          await Promise.resolve();
-        });
 
-        // Then: onPermanentFailureを呼ばない
-        expect(onPermanentFailure).not.toHaveBeenCalled();
+          // Then: すぐにそのキーのエラーになる
+          expect(result.current.errorFor("roundConfig")).toBe(
+            AUTH_REQUIRED_MESSAGE,
+          );
+          expect(result.current.status).toBe("error");
+
+          // When: 全てのバックオフ分の時間が経過する
+          await act(async () => {
+            await exhaustRetries();
+          });
+
+          // Then: 再試行せず、onPermanentFailureも呼ばない
+          expect(run).toHaveBeenCalledTimes(1);
+          expect(onPermanentFailure).not.toHaveBeenCalled();
+        } finally {
+          vi.useRealTimers();
+        }
       });
     });
 
@@ -1228,7 +1129,7 @@ describe("useSyncQueue", () => {
         vi.useRealTimers();
       });
 
-      it("Errorであれば、そのメッセージをエラーとして表示する", async () => {
+      it("例外を失敗として扱い、そのメッセージをエラーとして表示する", async () => {
         // Given: Errorを投げる操作
         const { result } = renderHook(() => useSyncQueue());
         const run = vi.fn(() => Promise.reject(new Error("real error")));
@@ -1243,25 +1144,6 @@ describe("useSyncQueue", () => {
 
         // Then: Errorのメッセージを表示する
         expect(result.current.errorFor("a")).toBe("real error");
-      });
-
-      it("Error以外であれば、固定のメッセージをエラーとして表示する", async () => {
-        // Given: Error以外を投げる操作
-        const { result } = renderHook(() => useSyncQueue());
-        const run = vi.fn(() => Promise.reject("boom"));
-
-        // When: 積んで、全てのバックオフを経過させる
-        act(() => {
-          result.current.enqueue({ key: "a", label: "A", run });
-        });
-        await act(async () => {
-          await exhaustRetries();
-        });
-
-        // Then: 固定のメッセージを表示する
-        expect(result.current.errorFor("a")).toBe(
-          "予期しないエラーが発生しました。",
-        );
       });
     });
   });
@@ -1574,46 +1456,6 @@ describe("useSyncQueue", () => {
           clear: [],
         });
         expect(result.current.status).toBe("synced");
-      });
-
-      it("取り消しだけの入力は、clearの距離IDでバッチを送る", async () => {
-        // Given: バッチの送信が成功する
-        const { result } = renderHook(() => useSyncQueue());
-        const runBatch = vi.fn(() => Promise.resolve(undefined as Result));
-
-        // When: 取り消しだけの入力を積む
-        act(() => {
-          result.current.enqueueShot(
-            {
-              key: "shot:d1:1:1",
-              label: "距離1 1エンド1本目",
-              clear: {
-                shotEventId: "e11",
-                distanceId: "d1",
-                endNumber: 1,
-                arrowNumber: 1,
-              },
-            },
-            runBatch,
-          );
-        });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-
-        // Then: 取り消しとしてバッチを送る
-        expect(runBatch).toHaveBeenCalledWith({
-          upsert: [],
-          clear: [
-            {
-              shotEventId: "e11",
-              distanceId: "d1",
-              endNumber: 1,
-              arrowNumber: 1,
-            },
-          ],
-        });
       });
 
       // record_shotsはupsert、clear_shotsは対象がなくても無害なため、同じマスの最後の値だけを送っても結果は正しい。
@@ -2009,16 +1851,19 @@ describe("useSyncQueue", () => {
     });
 
     describe("サインインが必要な失敗の場合", () => {
-      it("再試行せず、ショットのエラーとして記録する", async () => {
+      it("再試行せずにすぐショットのエラーとして確定し、onPermanentFailureは呼ばない", async () => {
         vi.useFakeTimers();
         try {
-          // Given: サインインが必要なエラーを返すバッチ
+          // Given: サインインが必要なエラーを返すバッチと、onPermanentFailureを受け取るフック
+          const onPermanentFailure = vi.fn();
+          const { result } = renderHook(() =>
+            useSyncQueue(undefined, onPermanentFailure),
+          );
           const runBatch = vi.fn(() =>
             Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
           );
-          const { result } = renderHook(() => useSyncQueue());
 
-          // When: ショットを積んで、全てのバックオフ分の時間を経過させる
+          // When: ショットを積む
           act(() => {
             result.current.enqueueShot(
               {
@@ -2037,15 +1882,24 @@ describe("useSyncQueue", () => {
             );
           });
           await act(async () => {
-            await exhaustRetries();
+            await Promise.resolve();
+            await Promise.resolve();
           });
 
-          // Then: 1回だけ送り、そのショットのエラーとして記録する
-          expect(runBatch).toHaveBeenCalledTimes(1);
+          // Then: すぐにそのショットのエラーになる
           expect(result.current.errorFor("shot:d1:1:1")).toBe(
             AUTH_REQUIRED_MESSAGE,
           );
           expect(result.current.status).toBe("error");
+
+          // When: 全てのバックオフ分の時間が経過する
+          await act(async () => {
+            await exhaustRetries();
+          });
+
+          // Then: 再試行せず、onPermanentFailureも呼ばない
+          expect(runBatch).toHaveBeenCalledTimes(1);
+          expect(onPermanentFailure).not.toHaveBeenCalled();
         } finally {
           vi.useRealTimers();
         }

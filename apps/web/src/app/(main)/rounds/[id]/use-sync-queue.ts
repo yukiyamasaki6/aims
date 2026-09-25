@@ -1,73 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getLocalIdentity } from "@/features/auth/local-identity";
-import {
-  eventIdOf,
-  executeSyncOperation,
-  type SyncOperation,
-} from "./sync-events";
+import { eventIdOf, executeSyncOperation } from "./sync-events";
 import {
   loadPendingOperations,
   removePendingOperation,
   savePendingOperation,
 } from "./sync-outbox";
+import type {
+  BatchResult,
+  EnqueueInput,
+  EnqueueShotInput,
+  ShotBatch,
+  SyncError,
+} from "./sync-queue-types";
+import { orderByDependency, toRestoredInput } from "./sync-restore";
+import { decideSyncResult, toSafeResult } from "./sync-result";
+import {
+  distanceIdOf,
+  excludeSuperseded,
+  toShotBatch,
+} from "./sync-shot-batch";
 import { syncShots } from "./sync-shots";
+import { deriveSyncStatus } from "./sync-status";
 
-export type SyncStatus =
-  | "synced"
-  | "sending"
-  | "retrying"
-  | "offline-pending"
-  | "error";
-
-export type SyncError = { key: string; label: string; message: string };
-
-export type BatchResult = { error: string; permanent?: boolean } | undefined;
-
-export type EnqueueInput = {
-  key: string;
-  label: string;
-  run?: () => Promise<BatchResult>;
-  // 例: 作成中の距離へのスコア記録は`distance:{id}`の完了を待つ。
-  dependsOnKey?: string;
-  operation?: SyncOperation;
-  restored?: boolean;
-};
-
-export type ShotUpsert = {
-  shotEventId: string;
-  shooterId?: string;
-  distanceId: string;
-  endNumber: number;
-  arrowNumber: number;
-  scoreStr: string;
-  scoreInt: number;
-};
-export type ShotClear = {
-  shotEventId: string;
-  distanceId: string;
-  endNumber: number;
-  arrowNumber: number;
-};
-
-export type EnqueueShotInput = {
-  key: string; // `shot:${distanceId}:${end}:${arrow}`
-  label: string;
-  dependsOnKey?: string; // 作成中のdistanceへのスコアの場合、`distance:{id}`
-  upsert?: ShotUpsert;
-  clear?: ShotClear;
-  operation?: SyncOperation;
-  restored?: boolean;
-};
-
-type RunShotBatch = (batch: {
-  upsert: ShotUpsert[];
-  clear: ShotClear[];
-}) => Promise<BatchResult>;
-
-// リトライ対象外（サインイン画面への誘導は別issue #303で扱う）。
-export const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
-
-export const RETRY_DELAYS_MS = [3000, 6000, 12000, 24000];
+type RunShotBatch = (batch: ShotBatch) => Promise<BatchResult>;
 
 // navigator.onLineは実際の通信可否を保証しないが、誤ってオンライン判定
 // された場合は通常のバックオフリトライに任せる。
@@ -78,20 +34,6 @@ function isOffline(): boolean {
 // 何も積まれていないtailの目印。schedule()がこれと参照一致する間は
 // 待つべきものが無いと判定し、attempt(0)を同期的に呼べる。
 const RESOLVED_TAIL: Promise<unknown> = Promise.resolve();
-
-function toSafeResult(promise: Promise<BatchResult>): Promise<BatchResult> {
-  return promise.catch((e) => ({
-    error: e instanceof Error ? e.message : "予期しないエラーが発生しました。",
-  }));
-}
-
-function distanceIdOf(input: EnqueueShotInput): string | undefined {
-  return input.upsert?.distanceId ?? input.clear?.distanceId;
-}
-
-function isPermanentFailure(result: BatchResult): boolean {
-  return result?.permanent === true;
-}
 
 export function useSyncQueue(
   roundId?: string,
@@ -214,28 +156,19 @@ export function useSyncQueue(
             : (input.run?.() ??
                 Promise.resolve({ error: "同期する操作が見つかりません。" })),
         ).then((result) => {
-          if (
-            result?.error &&
-            result.error !== AUTH_REQUIRED_MESSAGE &&
-            !isPermanentFailure(result) &&
-            attemptIndex < RETRY_DELAYS_MS.length
-          ) {
+          const decision = decideSyncResult(result, attemptIndex);
+          if (decision.type === "retry") {
             setRetryingKeys((prev) => new Set(prev).add(input.key));
             return new Promise<void>((resolve) => {
-              const timer = setTimeout(
-                () => {
-                  retryTimersRef.current.delete(input.key);
-                  setRetryingKeys((prev) => {
-                    const next = new Set(prev);
-                    next.delete(input.key);
-                    return next;
-                  });
-                  attempt(attemptIndex + 1).then(resolve);
-                },
-                RETRY_DELAYS_MS[
-                  Math.min(attemptIndex, RETRY_DELAYS_MS.length - 1)
-                ],
-              );
+              const timer = setTimeout(() => {
+                retryTimersRef.current.delete(input.key);
+                setRetryingKeys((prev) => {
+                  const next = new Set(prev);
+                  next.delete(input.key);
+                  return next;
+                });
+                attempt(attemptIndex + 1).then(resolve);
+              }, decision.delayMs);
               retryTimersRef.current.set(input.key, {
                 cancel: () => {
                   clearTimeout(timer);
@@ -260,16 +193,10 @@ export function useSyncQueue(
             });
           }
           settleKeys([input], result);
-          if (
-            (!result?.error || isPermanentFailure(result)) &&
-            input.operation
-          ) {
+          if (decision.removeFromOutbox && input.operation) {
             void removePendingOperation(eventIdOf(input.operation));
           }
-          if (
-            isPermanentFailure(result) &&
-            result?.error !== AUTH_REQUIRED_MESSAGE
-          ) {
+          if (decision.notifyPermanentFailure) {
             onPermanentFailure?.();
           }
           setPendingCount((n) => n - 1);
@@ -326,32 +253,19 @@ export function useSyncQueue(
           });
         }
 
-        // リトライ時点で既に新しい値が積まれているkeyは古い値を送らず除外
-        // する（新しい値は現在のバッチ・次の再帰flushで別途送られる）。
-        const currentBatch = shotBatchByDistanceRef.current.get(distanceId);
-        const itemsToRetry = pending.filter(
-          (item) => !currentBatch?.has(item.key),
+        const itemsToRetry = excludeSuperseded(
+          pending,
+          shotBatchByDistanceRef.current.get(distanceId),
         );
         if (itemsToRetry.length === 0) return Promise.resolve();
 
-        const upsert = itemsToRetry
-          .map((i) => i.upsert)
-          .filter((s): s is ShotUpsert => s !== undefined);
-        const clear = itemsToRetry
-          .map((i) => i.clear)
-          .filter((s): s is ShotClear => s !== undefined);
-
-        return toSafeResult(runBatch({ upsert, clear })).then((result) => {
-          if (
-            result?.error &&
-            result.error !== AUTH_REQUIRED_MESSAGE &&
-            !isPermanentFailure(result) &&
-            attemptIndex < RETRY_DELAYS_MS.length
-          ) {
-            setShotRetryingDistances((prev) => new Set(prev).add(distanceId));
-            return new Promise<void>((resolve) => {
-              const timer = setTimeout(
-                () => {
+        return toSafeResult(runBatch(toShotBatch(itemsToRetry))).then(
+          (result) => {
+            const decision = decideSyncResult(result, attemptIndex);
+            if (decision.type === "retry") {
+              setShotRetryingDistances((prev) => new Set(prev).add(distanceId));
+              return new Promise<void>((resolve) => {
+                const timer = setTimeout(() => {
                   shotRetryTimersRef.current.delete(distanceId);
                   setShotRetryingDistances((prev) => {
                     const next = new Set(prev);
@@ -359,56 +273,50 @@ export function useSyncQueue(
                     return next;
                   });
                   attempt(itemsToRetry, attemptIndex + 1).then(resolve);
-                },
-                RETRY_DELAYS_MS[
-                  Math.min(attemptIndex, RETRY_DELAYS_MS.length - 1)
-                ],
-              );
-              shotRetryTimersRef.current.set(distanceId, {
-                cancel: () => {
-                  clearTimeout(timer);
-                  shotRetryTimersRef.current.delete(distanceId);
-                  setShotRetryingDistances((prev) => {
-                    const next = new Set(prev);
-                    next.delete(distanceId);
-                    return next;
-                  });
-                  setShotOfflinePendingDistances((prev) =>
-                    new Set(prev).add(distanceId),
-                  );
-                  shotOfflineResumeRef.current.set(distanceId, () => {
-                    shotOfflineResumeRef.current.delete(distanceId);
-                    setShotOfflinePendingDistances((prev) => {
+                }, decision.delayMs);
+                shotRetryTimersRef.current.set(distanceId, {
+                  cancel: () => {
+                    clearTimeout(timer);
+                    shotRetryTimersRef.current.delete(distanceId);
+                    setShotRetryingDistances((prev) => {
                       const next = new Set(prev);
                       next.delete(distanceId);
                       return next;
                     });
-                    attempt(itemsToRetry, attemptIndex + 1).then(resolve);
-                  });
-                },
+                    setShotOfflinePendingDistances((prev) =>
+                      new Set(prev).add(distanceId),
+                    );
+                    shotOfflineResumeRef.current.set(distanceId, () => {
+                      shotOfflineResumeRef.current.delete(distanceId);
+                      setShotOfflinePendingDistances((prev) => {
+                        const next = new Set(prev);
+                        next.delete(distanceId);
+                        return next;
+                      });
+                      attempt(itemsToRetry, attemptIndex + 1).then(resolve);
+                    });
+                  },
+                });
               });
-            });
-          }
-          settleKeys(itemsToRetry, result);
-          if (!result?.error || isPermanentFailure(result)) {
-            for (const item of itemsToRetry) {
-              if (item.operation) {
-                void removePendingOperation(eventIdOf(item.operation));
+            }
+            settleKeys(itemsToRetry, result);
+            if (decision.removeFromOutbox) {
+              for (const item of itemsToRetry) {
+                if (item.operation) {
+                  void removePendingOperation(eventIdOf(item.operation));
+                }
               }
             }
-          }
-          if (
-            isPermanentFailure(result) &&
-            result?.error !== AUTH_REQUIRED_MESSAGE
-          ) {
-            onPermanentFailure?.();
-          }
-          setShotPendingKeys((prev) => {
-            const next = new Set(prev);
-            for (const item of itemsToRetry) next.delete(item.key);
-            return next;
-          });
-        });
+            if (decision.notifyPermanentFailure) {
+              onPermanentFailure?.();
+            }
+            setShotPendingKeys((prev) => {
+              const next = new Set(prev);
+              for (const item of itemsToRetry) next.delete(item.key);
+              return next;
+            });
+          },
+        );
       };
 
       const resultPromise = attempt(items, 0).then(() => {
@@ -539,59 +447,13 @@ export function useSyncQueue(
     restoredRef.current = true;
     void loadPendingOperations(roundId, getLocalIdentity()).then(
       (operations) => {
-        const remaining = [...operations];
-        while (remaining.length > 0) {
-          const index = remaining.findIndex(
-            (pending) =>
-              !pending.dependsOnKey ||
-              !remaining.some((other) => other.key === pending.dependsOnKey),
-          );
-          const pending = remaining.splice(index === -1 ? 0 : index, 1)[0];
-          if (!pending) continue;
-          const shotInput: EnqueueShotInput | undefined =
-            pending.operation.type === "shot.recorded"
-              ? {
-                  key: pending.key,
-                  label: pending.label,
-                  dependsOnKey: pending.dependsOnKey,
-                  operation: pending.operation,
-                  restored: true,
-                  upsert: {
-                    shotEventId: pending.operation.eventId,
-                    distanceId: pending.operation.distanceId,
-                    endNumber: pending.operation.endNumber,
-                    arrowNumber: pending.operation.arrowNumber,
-                    shooterId: pending.operation.shooterId,
-                    scoreStr: pending.operation.scoreStr,
-                    scoreInt: pending.operation.scoreInt,
-                  },
-                }
-              : pending.operation.type === "shot.cleared"
-                ? {
-                    key: pending.key,
-                    label: pending.label,
-                    dependsOnKey: pending.dependsOnKey,
-                    operation: pending.operation,
-                    restored: true,
-                    clear: {
-                      shotEventId: pending.operation.eventId,
-                      distanceId: pending.operation.distanceId,
-                      endNumber: pending.operation.endNumber,
-                      arrowNumber: pending.operation.arrowNumber,
-                    },
-                  }
-                : undefined;
-          if (shotInput) {
-            scheduleShot(shotInput, syncShots);
-            continue;
+        for (const pending of orderByDependency(operations)) {
+          const restored = toRestoredInput(pending);
+          if (restored.type === "shot") {
+            scheduleShot(restored.input, syncShots);
+          } else {
+            schedule(restored.input);
           }
-          schedule({
-            key: pending.key,
-            label: pending.label,
-            dependsOnKey: pending.dependsOnKey,
-            operation: pending.operation,
-            restored: true,
-          });
         }
       },
     );
@@ -602,16 +464,12 @@ export function useSyncQueue(
     [errorMap],
   );
 
-  const status: SyncStatus =
-    offlinePendingKeys.size > 0 || shotOfflinePendingDistances.size > 0
-      ? "offline-pending"
-      : retryingKeys.size > 0 || shotRetryingDistances.size > 0
-        ? "retrying"
-        : persistingCount > 0 || pendingCount > 0 || shotPendingKeys.size > 0
-          ? "sending"
-          : errorMap.size > 0
-            ? "error"
-            : "synced";
+  const status = deriveSyncStatus({
+    offlinePending: offlinePendingKeys.size + shotOfflinePendingDistances.size,
+    retrying: retryingKeys.size + shotRetryingDistances.size,
+    sending: persistingCount + pendingCount + shotPendingKeys.size,
+    errors: errorMap.size,
+  });
 
   return {
     status,

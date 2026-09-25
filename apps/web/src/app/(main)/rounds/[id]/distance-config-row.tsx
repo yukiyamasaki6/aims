@@ -11,7 +11,7 @@ import {
   TargetFaceInfo,
   type TargetFaceSpotLayout,
 } from "../_shared/target-face-icon";
-import type { EnqueueInput } from "./use-sync-queue";
+import type { EnqueueInput } from "./sync-queue-types";
 
 export type TargetFaceOption = {
   id: string;
