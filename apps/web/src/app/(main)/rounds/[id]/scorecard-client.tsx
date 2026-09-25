@@ -41,6 +41,25 @@ import { KeypadPanel } from "./keypad-panel";
 import type { RoundConfig } from "./round-config";
 import { RoundConfigPanel } from "./round-config-panel";
 import {
+  type Cell,
+  cellLabel,
+  cellOf,
+  clearHistoryEntry,
+  findCurrentPosition,
+  type HistoryEntry,
+  type Position,
+  positionAfterClear,
+  positionAfterScore,
+  positionAfterSelect,
+  positionOfCell,
+  pushHistory,
+  redoHistory,
+  replaceShot,
+  scoreHistoryEntry,
+  shotEnqueueInput,
+  undoHistory,
+} from "./scorecard-input";
+import {
   compareDistancePosition,
   distanceNumber,
   endSubtotal,
@@ -53,16 +72,6 @@ import type { Distance, Shot } from "./scorecard-types";
 import { loadPendingOperations } from "./sync-outbox";
 import { syncShots } from "./sync-shots";
 import { useSyncQueue } from "./use-sync-queue";
-
-// 1回の入力操作（記録・上書き・クリア）による、あるマスの状態遷移。
-// undo時はprevShotへ、redo時はnextShotへそのマスを戻す。
-type HistoryEntry = {
-  distanceId: string;
-  endNumber: number;
-  arrowNumber: number;
-  prevShot: Shot | null;
-  nextShot: Shot | null;
-};
 
 // 10点的（アウトドア・122cm）。距離追加時の初期的として使う（e2eのcreate-round
 // APIヘルパーが使う既定の的と同じもの）。
@@ -153,73 +162,6 @@ function paleTone(hex: string): { bg: string; fg: string } {
     bg: hslToHex(h, s, 0.9),
     fg: "#231F20",
   };
-}
-
-type Position = { distance: Distance; end: number; arrow: number };
-
-function findCurrentPosition(
-  distances: Distance[],
-  shots: Shot[],
-): Position | null {
-  for (const d of distances) {
-    for (let end = 1; end <= d.total_ends; end++) {
-      for (let arrow = 1; arrow <= d.arrows_per_end; arrow++) {
-        const recorded = shots.some(
-          (s) =>
-            s.distance_id === d.id &&
-            s.end_number === end &&
-            s.arrow_number === arrow,
-        );
-        if (!recorded) {
-          return { distance: d, end, arrow };
-        }
-      }
-    }
-  }
-  return null;
-}
-
-function flattenCells(distances: Distance[]): Position[] {
-  const cells: Position[] = [];
-  for (const d of distances) {
-    for (let end = 1; end <= d.total_ends; end++) {
-      for (let arrow = 1; arrow <= d.arrows_per_end; arrow++) {
-        cells.push({ distance: d, end, arrow });
-      }
-    }
-  }
-  return cells;
-}
-
-function stepPosition(
-  distances: Distance[],
-  current: Position,
-  offset: 1 | -1,
-): Position | null {
-  const cells = flattenCells(distances);
-  const index = cells.findIndex(
-    (c) =>
-      c.distance.id === current.distance.id &&
-      c.end === current.end &&
-      c.arrow === current.arrow,
-  );
-  // currentは常にdistances由来のマスのため、実際には見つからないことは
-  // ない（型上nullを許容するための安全策で、テストでは到達不能）。
-  if (index === -1) return null;
-  return cells[index + offset] ?? null;
-}
-
-// 次の距離の先頭マスへ意図せず引き継がれてしまわないよう、「マス送り」は
-// 距離をまたがない（距離ごとの最後/最初のマスが境界になる）。
-function isLastCellOfDistance(position: Position): boolean {
-  return (
-    position.end === position.distance.total_ends &&
-    position.arrow === position.distance.arrows_per_end
-  );
-}
-
-function isFirstCellOfDistance(position: Position): boolean {
-  return position.end === 1 && position.arrow === 1;
 }
 
 // プリセット保存ダイアログの名前欄プレースホルダー（自動生成の候補名）。
@@ -711,91 +653,18 @@ export function ScorecardClient({
     }
   }
 
-  function findShot(
-    distanceId: string,
-    endNumber: number,
-    arrowNumber: number,
-  ): Shot | null {
-    return (
-      shots.find(
-        (s) =>
-          s.distance_id === distanceId &&
-          s.end_number === endNumber &&
-          s.arrow_number === arrowNumber,
-      ) ?? null
-    );
-  }
-
   // 指定マスの状態をshotへ反映する（ローカルstateを即座に更新し、実際の
   // 書き込みは送信キューへ積む）。undo/redoはこの適用処理を、記録時とは
   // 逆方向・同方向にそれぞれ1回呼ぶだけで実現する。
-  function applyShot(
-    distanceId: string,
-    endNumber: number,
-    arrowNumber: number,
-    shot: Shot | null,
-    label: string,
-  ) {
-    const shotEventId = crypto.randomUUID();
-    setShots((prev) => {
-      const filtered = prev.filter(
-        (s) =>
-          !(
-            s.distance_id === distanceId &&
-            s.end_number === endNumber &&
-            s.arrow_number === arrowNumber
-          ),
-      );
-      return shot ? [...filtered, shot] : filtered;
-    });
-
+  function applyShot(cell: Cell, shot: Shot | null) {
+    setShots((prev) => replaceShot(prev, cell, shot));
     sync.enqueueShot(
-      {
-        key: `shot:${distanceId}:${endNumber}:${arrowNumber}`,
-        label,
-        // 作成中の距離（追加直後でまだ書き込みが完了していない可能性がある）
-        // へのスコア記録が、その距離のinsertより先にサーバーへ届いて外部キー
-        // 制約違反にならないよう、同じdistanceIdのキューを待ってから送る。
-        // 既に作成済みの距離の場合は待ち時間なしで即座に実行される。
-        dependsOnKey: `distance:${distanceId}`,
-        upsert: shot
-          ? {
-              shotEventId,
-              distanceId,
-              endNumber,
-              arrowNumber,
-              shooterId: shot.shooter_id,
-              scoreStr: shot.score_str,
-              scoreInt: shot.score_int,
-            }
-          : undefined,
-        clear: shot
-          ? undefined
-          : {
-              shotEventId,
-              distanceId,
-              endNumber,
-              arrowNumber,
-            },
-        operation: shot
-          ? {
-              type: "shot.recorded",
-              eventId: shotEventId,
-              distanceId,
-              endNumber,
-              arrowNumber,
-              shooterId: shot.shooter_id,
-              scoreStr: shot.score_str,
-              scoreInt: shot.score_int,
-            }
-          : {
-              type: "shot.cleared",
-              eventId: shotEventId,
-              distanceId,
-              endNumber,
-              arrowNumber,
-            },
-      },
+      shotEnqueueInput({
+        cell,
+        shot,
+        label: cellLabel(distances, cell),
+        eventId: crypto.randomUUID(),
+      }),
       syncShots,
     );
   }
@@ -803,145 +672,67 @@ export function ScorecardClient({
   function handleScore(scoreStr: string, scoreInt: number) {
     if (!position) return;
 
-    const { distance, end, arrow } = position;
-    const prevShot = findShot(distance.id, end, arrow);
-    const nextShot: Shot = {
-      distance_id: distance.id,
-      end_number: end,
-      arrow_number: arrow,
-      shooter_id: prevShot?.shooter_id,
-      score_str: scoreStr,
-      score_int: scoreInt,
-    };
-
-    applyShot(
-      distance.id,
-      end,
-      arrow,
-      nextShot,
-      `距離${distanceNumber(distances, distance.id)} ${end}エンド${arrow}本目`,
-    );
-
-    setUndoStack((prev) => [
-      ...prev,
-      {
-        distanceId: distance.id,
-        endNumber: end,
-        arrowNumber: arrow,
-        prevShot,
-        nextShot,
-      },
-    ]);
-    setRedoStack([]);
-    setPosition(
-      isLastCellOfDistance(position)
-        ? null
-        : stepPosition(distances, position, 1),
-    );
+    const entry = scoreHistoryEntry(shots, position, scoreStr, scoreInt);
+    applyShot(entry, entry.nextShot);
+    const history = pushHistory({ undoStack, redoStack }, entry);
+    setUndoStack(history.undoStack);
+    setRedoStack(history.redoStack);
+    setPosition(positionAfterScore(distances, position));
   }
 
   function handleClear() {
     if (!position) return;
 
-    const { distance, end, arrow } = position;
-    const prevShot = findShot(distance.id, end, arrow);
-
-    applyShot(
-      distance.id,
-      end,
-      arrow,
-      null,
-      `距離${distanceNumber(distances, distance.id)} ${end}エンド${arrow}本目`,
-    );
-
-    if (prevShot) {
-      setUndoStack((prev) => [
-        ...prev,
-        {
-          distanceId: distance.id,
-          endNumber: end,
-          arrowNumber: arrow,
-          prevShot,
-          nextShot: null,
-        },
-      ]);
-      setRedoStack([]);
-    }
-    setPosition(
-      isFirstCellOfDistance(position)
-        ? position
-        : (stepPosition(distances, position, -1) ?? position),
-    );
+    // 未記録のマスのクリアも送信キューへ積むが、履歴には残さない。
+    const entry = clearHistoryEntry(shots, position);
+    applyShot(cellOf(position), null);
+    const history = pushHistory({ undoStack, redoStack }, entry);
+    setUndoStack(history.undoStack);
+    setRedoStack(history.redoStack);
+    setPosition(positionAfterClear(distances, position));
   }
 
   // 取り消した/やり直したマスへフォーカスを移動し、何が変わったか見えるようにする。
   function focusHistoryEntry(entry: HistoryEntry) {
-    const distance = distances.find((d) => d.id === entry.distanceId);
+    const next = positionOfCell(distances, entry);
     // 距離削除時にその距離のundo/redo履歴も併せて破棄しているため、
     // 履歴に残っているentryは常に現存する距離を指す（安全策、到達不能）。
-    if (!distance) return;
+    if (!next) return;
     setKeypadMounted(true);
-    setPosition({ distance, end: entry.endNumber, arrow: entry.arrowNumber });
-  }
-
-  function historyEntryLabel(entry: HistoryEntry): string {
-    const number = distanceNumber(distances, entry.distanceId);
-    return `距離${number || "?"} ${entry.endNumber}エンド${entry.arrowNumber}本目`;
+    setPosition(next);
   }
 
   function handleUndo() {
-    const entry = undoStack.at(-1);
+    const result = undoHistory({ undoStack, redoStack });
     // ボタン自体がundoStack.length===0でdisabledのため、実際には
     // 空の状態で呼ばれることはない（安全策、到達不能）。
-    if (!entry) return;
+    if (!result) return;
 
-    applyShot(
-      entry.distanceId,
-      entry.endNumber,
-      entry.arrowNumber,
-      entry.prevShot,
-      historyEntryLabel(entry),
-    );
-
-    setUndoStack((prev) => prev.slice(0, -1));
-    setRedoStack((prev) => [...prev, entry]);
-    focusHistoryEntry(entry);
+    applyShot(result.entry, result.entry.prevShot);
+    setUndoStack(result.history.undoStack);
+    setRedoStack(result.history.redoStack);
+    focusHistoryEntry(result.entry);
   }
 
   function handleRedo() {
-    const entry = redoStack.at(-1);
+    const result = redoHistory({ undoStack, redoStack });
     // ボタン自体がredoStack.length===0でdisabledのため、実際には
     // 空の状態で呼ばれることはない（安全策、到達不能）。
-    if (!entry) return;
+    if (!result) return;
 
-    applyShot(
-      entry.distanceId,
-      entry.endNumber,
-      entry.arrowNumber,
-      entry.nextShot,
-      historyEntryLabel(entry),
-    );
-
-    setRedoStack((prev) => prev.slice(0, -1));
-    setUndoStack((prev) => [...prev, entry]);
-    focusHistoryEntry(entry);
+    applyShot(result.entry, result.entry.nextShot);
+    setUndoStack(result.history.undoStack);
+    setRedoStack(result.history.redoStack);
+    focusHistoryEntry(result.entry);
   }
 
   function selectCell(distance: Distance, end: number, arrow: number) {
-    if (
-      position &&
-      position.distance.id === distance.id &&
-      position.end === end &&
-      position.arrow === arrow
-    ) {
-      setPosition(null);
-      return;
-    }
+    const next = positionAfterSelect(position, { distance, end, arrow });
     // 格納後に再度開く場合、keypadMountedがマウント用useEffectを経由して
     // 遅れて反映されると、スクロール計算がkeypadRef未接続のまま実行されて
     // しまうため、ここで同期的にマウント済みにしておく。
-    setKeypadMounted(true);
-    setPosition({ distance, end, arrow });
+    if (next) setKeypadMounted(true);
+    setPosition(next);
   }
 
   const keypadButtons = displayPosition && (

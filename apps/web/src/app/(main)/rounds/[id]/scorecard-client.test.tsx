@@ -372,25 +372,35 @@ describe("ScorecardClient 初期表示・集計", () => {
     expect(screen.queryByTestId("score-button-10")).not.toBeInTheDocument();
   });
 
-  it("テンキーの閉じるボタンで選択を解除できる", async () => {
+  it("テンキーの閉じるボタンで選択を解除すると、格納中のテンキーへの入力は無視される", async () => {
+    // Given: 最初のマスが選択されている
     const user = userEvent.setup();
     setup();
 
+    // When: テンキーを閉じ、格納が終わる前に点数とCを押す
     await user.click(screen.getByTestId("keypad-toggle"));
-    // 選択解除後はhandleScoreのpositionガードによりスコア入力が無視される。
     await user.click(screen.getByTestId("score-button-10"));
+    await user.click(screen.getByTestId("score-button-clear"));
 
+    // Then: マスは記録されず、SDKへも送られない
     expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("");
+    await flushMicrotasks();
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 });
 
-describe("ScorecardClient マス選択とスコア入力", () => {
-  // 未記録のラウンドはfindCurrentPositionにより、マウント時点で最初の
-  // マス（1-1-1）が自動的に選択・キーパッド展開済みになっている
-  // （shots未記録の初期状態）。そのため以下のテストでは1-1-1を明示的に
-  // タップしない（タップすると選択中マスの再タップ＝解除になってしまう）。
+// 送信キューがSDKへ送ったマスの操作を、呼び出しをまたいで順に並べる。
+function sentShots(rpcName: "record_shots" | "clear_shots") {
+  return supabase.rpc.mock.calls
+    .filter(([name]) => name === rpcName)
+    .flatMap(([, args]) => args.p_shots);
+}
 
-  it("スコアを入力すると次のマスへ自動的に進む", async () => {
+describe("ScorecardClient マス選択とスコア入力", () => {
+  // 未記録のラウンドは、マウント時点で最初のマス（1-1-1）が選択され、テンキーが開いている。
+  // そのため以下のテストでは1-1-1を明示的にタップしない（選択中マスの再タップは選択の解除になる）。
+
+  it("スコアを入力すると、選択中のマスに記録して次のマスへ進み、記録がSDKへ届く", async () => {
     // Given: 最初のマスが選択されている
     const user = userEvent.setup();
     setup();
@@ -399,9 +409,27 @@ describe("ScorecardClient マス選択とスコア入力", () => {
     await user.click(screen.getByTestId("score-button-10"));
     await user.click(screen.getByTestId("score-button-M"));
 
-    // Then: 入力ごとに次のマスへ進み、それぞれのマスに記録される
+    // Then: 入力ごとに次のマスへ進んで記録され、それぞれの記録がSDKへ届く
     expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
     expect(screen.getByTestId("shot-cell-1-1-2")).toHaveTextContent("M");
+    await waitFor(() => {
+      expect(sentShots("record_shots")).toEqual([
+        expect.objectContaining({
+          distance_id: distanceA.id,
+          end_number: 1,
+          arrow_number: 1,
+          score_str: "10",
+          score_int: 10,
+        }),
+        expect.objectContaining({
+          distance_id: distanceA.id,
+          end_number: 1,
+          arrow_number: 2,
+          score_str: "M",
+          score_int: 0,
+        }),
+      ]);
+    });
   });
 
   it("テンキーは距離の的のリング色と、その色に応じた文字色で表示する", () => {
@@ -420,91 +448,123 @@ describe("ScorecardClient マス選択とスコア入力", () => {
     });
   });
 
-  it("距離の最後のマスに入力すると選択が解除され、以降のキー入力は無視される", async () => {
+  it("Cボタンで選択中マスの記録をクリアして1つ前のマスへ戻り、クリアがSDKへ届く", async () => {
+    // Given: 1-1-1と1-1-2に記録し、1-1-2を選択し直している
     const user = userEvent.setup();
     setup();
+    await user.click(screen.getByTestId("score-button-10"));
+    await user.click(screen.getByTestId("score-button-9"));
+    await user.click(screen.getByTestId("shot-cell-1-1-2"));
 
-    await user.click(screen.getByTestId("score-button-10")); // 1-1-1
-    await user.click(screen.getByTestId("score-button-9")); // 1-1-2
-    await user.click(screen.getByTestId("score-button-X")); // 1-2-1
-    await user.click(screen.getByTestId("score-button-9")); // 1-2-2（最終マス）
-
-    // 最終マスに到達すると選択が解除される（position=null）。以降の
-    // キー入力（スコア・クリアのいずれも）はpositionガードで無視され、
-    // 直近の表示内容が上書きされない。
-    await user.click(screen.getByTestId("score-button-X"));
+    // When: Cを2回押す
+    await user.click(screen.getByTestId("score-button-clear"));
     await user.click(screen.getByTestId("score-button-clear"));
 
-    expect(screen.getByTestId("shot-cell-1-2-2")).toHaveTextContent("9");
-  });
-
-  it("Cボタンで選択中マスをクリアし、1つ前のマスへ戻る", async () => {
-    const user = userEvent.setup();
-    setup();
-
-    await user.click(screen.getByTestId("score-button-10")); // 1-1-1に記録、1-1-2へ自動遷移
-    // 未記録の1-1-2をクリアしても記録上は変化しないが、1つ前（記録済みの
-    // 1-1-1）へ選択が戻る。
-    await user.click(screen.getByTestId("score-button-clear"));
-    // 選択が戻った1-1-1を今度は実際にクリアする。
-    await user.click(screen.getByTestId("score-button-clear"));
-
+    // Then: 1-1-2をクリアした後に1-1-1へ戻ってクリアし、それぞれのクリアがSDKへ届く
+    expect(screen.getByTestId("shot-cell-1-1-2")).toHaveTextContent("");
     expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("");
+    await waitFor(() => {
+      expect(sentShots("clear_shots")).toEqual([
+        expect.objectContaining({
+          distance_id: distanceA.id,
+          end_number: 1,
+          arrow_number: 2,
+        }),
+        expect.objectContaining({
+          distance_id: distanceA.id,
+          end_number: 1,
+          arrow_number: 1,
+        }),
+      ]);
+    });
   });
 
-  it("記録済みのマスを再度タップすると選択が解除される", async () => {
+  it("未記録のマスでCボタンを押すと、クリアはSDKへ届くが履歴には残らない", async () => {
+    // Given: 記録が無く、未記録の1-2-1を選択している
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId("shot-cell-1-2-1"));
+
+    // When: Cを押す
+    await user.click(screen.getByTestId("score-button-clear"));
+
+    // Then: クリアはSDKへ届くが、Undoは無効のまま
+    await waitFor(() => {
+      expect(sentShots("clear_shots")).toEqual([
+        expect.objectContaining({
+          distance_id: distanceA.id,
+          end_number: 2,
+          arrow_number: 1,
+        }),
+      ]);
+    });
+    expect(screen.getByTestId("score-button-undo")).toBeDisabled();
+  });
+
+  it("マスをタップすると選択し、選択中のマスを再度タップすると選択を解除する", async () => {
+    // Given: 最初のマスが選択されている
     const user = userEvent.setup();
     setup();
 
-    await user.click(screen.getByTestId("score-button-10")); // 1-1-1に記録、1-1-2へ自動遷移
-    await user.click(screen.getByTestId("shot-cell-1-1-1")); // 記録済みの1-1-1を選択し直す
-    await user.click(screen.getByTestId("shot-cell-1-1-1")); // 選択中マスを再タップ→解除
+    // When: 別のマスをタップしてスコアを入力する
+    await user.click(screen.getByTestId("shot-cell-1-2-1"));
+    await user.click(screen.getByTestId("score-button-9"));
 
-    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
+    // Then: タップしたマスに記録される
+    expect(screen.getByTestId("shot-cell-1-2-1")).toHaveTextContent("9");
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("");
+
+    // When: 選択中のマス（記録後に進んだ1-2-2）をタップしてから、格納が終わる前にスコアを押す
+    await user.click(screen.getByTestId("shot-cell-1-2-2"));
+    await user.click(screen.getByTestId("score-button-X"));
+
+    // Then: 選択が解除されているため、記録されない
+    expect(screen.getByTestId("shot-cell-1-2-2")).toHaveTextContent("");
   });
 });
 
 describe("ScorecardClient Undo/Redo", () => {
-  it("Undo/Redoで記録が巻き戻り・やり直され、ボタンの有効/無効が切り替わる", async () => {
+  it("Undo/Redoで記録を巻き戻し・やり直してそのマスを選択し、操作がSDKへ届く", async () => {
+    // Given: 1-1-1に10を記録している
     const user = userEvent.setup();
     setup();
-
     expect(screen.getByTestId("score-button-undo")).toBeDisabled();
     expect(screen.getByTestId("score-button-redo")).toBeDisabled();
-
     await user.click(screen.getByTestId("score-button-10"));
-    await user.click(screen.getByTestId("score-button-9"));
 
-    expect(screen.getByTestId("score-button-undo")).not.toBeDisabled();
-
+    // When: Undoする
     await user.click(screen.getByTestId("score-button-undo"));
-    expect(screen.getByTestId("shot-cell-1-1-2")).toHaveTextContent("");
-    expect(screen.getByTestId("score-button-redo")).not.toBeDisabled();
 
-    await user.click(screen.getByTestId("score-button-undo"));
+    // Then: 記録が消え、Redoだけが有効になり、クリアがSDKへ届く
     expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("");
     expect(screen.getByTestId("score-button-undo")).toBeDisabled();
+    expect(screen.getByTestId("score-button-redo")).toBeEnabled();
+    await waitFor(() => {
+      expect(sentShots("clear_shots")).toEqual([
+        expect.objectContaining({ end_number: 1, arrow_number: 1 }),
+      ]);
+    });
 
+    // When: Redoする
     await user.click(screen.getByTestId("score-button-redo"));
+
+    // Then: 記録が戻り、Undoだけが有効になり、記録がSDKへ届く
     expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
-
-    await user.click(screen.getByTestId("score-button-redo"));
-    expect(screen.getByTestId("shot-cell-1-1-2")).toHaveTextContent("9");
+    expect(screen.getByTestId("score-button-undo")).toBeEnabled();
     expect(screen.getByTestId("score-button-redo")).toBeDisabled();
-  });
+    await waitFor(() => {
+      expect(sentShots("record_shots")).toEqual([
+        expect.objectContaining({ end_number: 1, arrow_number: 1 }),
+        expect.objectContaining({ end_number: 1, arrow_number: 1 }),
+      ]);
+    });
 
-  it("Undo後に新たに記録すると、以前のRedo履歴は破棄される", async () => {
-    const user = userEvent.setup();
-    setup();
-
-    await user.click(screen.getByTestId("score-button-10"));
+    // When: もう一度Undoし、そのまま別のスコアを入力する
     await user.click(screen.getByTestId("score-button-undo"));
-    expect(screen.getByTestId("score-button-redo")).not.toBeDisabled();
-
-    // undoにより選択は取り消したマス（1-1-1）へ自動的に戻っているため、
-    // 再タップせずそのままスコアを入力する。
     await user.click(screen.getByTestId("score-button-9"));
 
+    // Then: 取り消したマスが選択されているためそのマスに記録され、Redo履歴は破棄される
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("9");
     expect(screen.getByTestId("score-button-redo")).toBeDisabled();
   });
 });
