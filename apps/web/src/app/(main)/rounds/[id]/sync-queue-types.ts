@@ -72,3 +72,25 @@ export type SyncStatusCounts = {
   sending: number;
   errors: number;
 };
+
+// 1回の試行。
+// retryを呼ぶと待機時間の後に次の番号で試行し直し、その完了まで解決しないPromiseを返す。
+export type SyncRetryAttempt = (
+  attemptIndex: number,
+  retry: (delayMs: number) => Promise<void>,
+) => Promise<void>;
+
+// idはリトライ待機・同期保留を管理する単位（操作のkeyやショットの距離）。
+export type SyncRetryOptions = {
+  isOffline: () => boolean;
+  onRetryingChange: (id: string, retrying: boolean) => void;
+  onOfflinePendingChange: (id: string, offlinePending: boolean) => void;
+};
+
+export type SyncRetry = {
+  run: (id: string, attempt: SyncRetryAttempt) => Promise<void>;
+  // `offline`イベント時に、進行中のリトライ待機を打ち切って同期保留にする。
+  handleOffline: () => void;
+  // `online`イベント時に、同期保留中の試行を再開する。
+  handleOnline: () => void;
+};

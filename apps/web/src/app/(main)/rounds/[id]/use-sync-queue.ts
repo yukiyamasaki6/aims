@@ -12,9 +12,11 @@ import type {
   EnqueueShotInput,
   ShotBatch,
   SyncError,
+  SyncRetryAttempt,
 } from "./sync-queue-types";
 import { orderByDependency, toRestoredInput } from "./sync-restore";
 import { decideSyncResult, toSafeResult } from "./sync-result";
+import { createSyncRetry } from "./sync-retry";
 import {
   distanceIdOf,
   excludeSuperseded,
@@ -29,6 +31,14 @@ type RunShotBatch = (batch: ShotBatch) => Promise<BatchResult>;
 // された場合は通常のバックオフリトライに任せる。
 function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+// Reactの状態として扱うため、常に新しいSetを返す。
+function toggled(set: Set<string>, id: string, included: boolean) {
+  const next = new Set(set);
+  if (included) next.add(id);
+  else next.delete(id);
+  return next;
 }
 
 // 何も積まれていないtailの目印。schedule()がこれと参照一致する間は
@@ -64,14 +74,27 @@ export function useSyncQueue(
   >(new Map());
   const shotFlightByDistanceRef = useRef<Set<string>>(new Set());
   const shotTailByDistanceRef = useRef<Map<string, Promise<void>>>(new Map());
-  // `offline`/`online`イベントで即座にキャンセル・再開できるよう、
-  // 進行中のリトライタイマーと再開処理をkey/distanceIdごとに保持する。
-  const retryTimersRef = useRef<Map<string, { cancel: () => void }>>(new Map());
-  const shotRetryTimersRef = useRef<Map<string, { cancel: () => void }>>(
-    new Map(),
+  // リトライ待機とオフライン中の再開は、操作のkeyごと・ショットの距離ごとに管理する。
+  const [keyRetry] = useState(() =>
+    createSyncRetry({
+      isOffline,
+      onRetryingChange: (key, retrying) =>
+        setRetryingKeys((prev) => toggled(prev, key, retrying)),
+      onOfflinePendingChange: (key, offlinePending) =>
+        setOfflinePendingKeys((prev) => toggled(prev, key, offlinePending)),
+    }),
   );
-  const offlineResumeRef = useRef<Map<string, () => void>>(new Map());
-  const shotOfflineResumeRef = useRef<Map<string, () => void>>(new Map());
+  const [shotRetry] = useState(() =>
+    createSyncRetry({
+      isOffline,
+      onRetryingChange: (distanceId, retrying) =>
+        setShotRetryingDistances((prev) => toggled(prev, distanceId, retrying)),
+      onOfflinePendingChange: (distanceId, offlinePending) =>
+        setShotOfflinePendingDistances((prev) =>
+          toggled(prev, distanceId, offlinePending),
+        ),
+    }),
+  );
   const restoredRef = useRef(false);
   const persistenceRef = useRef<Set<Promise<void>>>(new Set());
 
@@ -132,66 +155,15 @@ export function useSyncQueue(
           RESOLVED_TAIL)
         : RESOLVED_TAIL;
 
-      const attempt = (attemptIndex: number): Promise<void> => {
-        // オフラインなら送らず、online復帰まで待って同じattemptIndexで
-        // 再開する（見送りはリトライ回数を消費しない）。
-        if (isOffline()) {
-          return new Promise<void>((resolve) => {
-            setOfflinePendingKeys((prev) => new Set(prev).add(input.key));
-            offlineResumeRef.current.set(input.key, () => {
-              offlineResumeRef.current.delete(input.key);
-              setOfflinePendingKeys((prev) => {
-                const next = new Set(prev);
-                next.delete(input.key);
-                return next;
-              });
-              attempt(attemptIndex).then(resolve);
-            });
-          });
-        }
-
-        return toSafeResult(
+      const attempt: SyncRetryAttempt = (attemptIndex, retry) =>
+        toSafeResult(
           input.operation
             ? executeSyncOperation(input.operation)
             : (input.run?.() ??
                 Promise.resolve({ error: "同期する操作が見つかりません。" })),
         ).then((result) => {
           const decision = decideSyncResult(result, attemptIndex);
-          if (decision.type === "retry") {
-            setRetryingKeys((prev) => new Set(prev).add(input.key));
-            return new Promise<void>((resolve) => {
-              const timer = setTimeout(() => {
-                retryTimersRef.current.delete(input.key);
-                setRetryingKeys((prev) => {
-                  const next = new Set(prev);
-                  next.delete(input.key);
-                  return next;
-                });
-                attempt(attemptIndex + 1).then(resolve);
-              }, decision.delayMs);
-              retryTimersRef.current.set(input.key, {
-                cancel: () => {
-                  clearTimeout(timer);
-                  retryTimersRef.current.delete(input.key);
-                  setRetryingKeys((prev) => {
-                    const next = new Set(prev);
-                    next.delete(input.key);
-                    return next;
-                  });
-                  setOfflinePendingKeys((prev) => new Set(prev).add(input.key));
-                  offlineResumeRef.current.set(input.key, () => {
-                    offlineResumeRef.current.delete(input.key);
-                    setOfflinePendingKeys((prev) => {
-                      const next = new Set(prev);
-                      next.delete(input.key);
-                      return next;
-                    });
-                    attempt(attemptIndex + 1).then(resolve);
-                  });
-                },
-              });
-            });
-          }
+          if (decision.type === "retry") return retry(decision.delayMs);
           settleKeys([input], result);
           if (decision.removeFromOutbox && input.operation) {
             void removePendingOperation(eventIdOf(input.operation));
@@ -201,18 +173,17 @@ export function useSyncQueue(
           }
           setPendingCount((n) => n - 1);
         });
-      };
 
       const runPromise =
         !hasOwnTail && !hasDepTail && !hasShotWaitTail
-          ? attempt(0)
+          ? keyRetry.run(input.key, attempt)
           : Promise.all([ownTail, depTail, shotWaitTail]).then(() =>
-              attempt(0),
+              keyRetry.run(input.key, attempt),
             );
       roundTailRef.current = runPromise;
       tailsRef.current.set(input.key, runPromise);
     },
-    [settleKeys, onPermanentFailure],
+    [keyRetry, settleKeys, onPermanentFailure],
   );
 
   // 戻り値のPromiseは、今回の送信中・後に新たに積まれた分の再帰的な送信も
@@ -231,28 +202,9 @@ export function useSyncQueue(
       const items = Array.from(batch.values());
       shotBatchByDistanceRef.current.set(distanceId, new Map());
 
-      const attempt = (
-        pending: EnqueueShotInput[],
-        attemptIndex: number,
-      ): Promise<void> => {
-        // schedule()側のattemptと同じオフライン判定。
-        if (isOffline()) {
-          return new Promise<void>((resolve) => {
-            setShotOfflinePendingDistances((prev) =>
-              new Set(prev).add(distanceId),
-            );
-            shotOfflineResumeRef.current.set(distanceId, () => {
-              shotOfflineResumeRef.current.delete(distanceId);
-              setShotOfflinePendingDistances((prev) => {
-                const next = new Set(prev);
-                next.delete(distanceId);
-                return next;
-              });
-              attempt(pending, attemptIndex).then(resolve);
-            });
-          });
-        }
-
+      // 再試行では、前回送った分のうち新しい値に置き換わっていないものだけを送る。
+      let pending = items;
+      const attempt: SyncRetryAttempt = (attemptIndex, retry) => {
         const itemsToRetry = excludeSuperseded(
           pending,
           shotBatchByDistanceRef.current.get(distanceId),
@@ -263,41 +215,8 @@ export function useSyncQueue(
           (result) => {
             const decision = decideSyncResult(result, attemptIndex);
             if (decision.type === "retry") {
-              setShotRetryingDistances((prev) => new Set(prev).add(distanceId));
-              return new Promise<void>((resolve) => {
-                const timer = setTimeout(() => {
-                  shotRetryTimersRef.current.delete(distanceId);
-                  setShotRetryingDistances((prev) => {
-                    const next = new Set(prev);
-                    next.delete(distanceId);
-                    return next;
-                  });
-                  attempt(itemsToRetry, attemptIndex + 1).then(resolve);
-                }, decision.delayMs);
-                shotRetryTimersRef.current.set(distanceId, {
-                  cancel: () => {
-                    clearTimeout(timer);
-                    shotRetryTimersRef.current.delete(distanceId);
-                    setShotRetryingDistances((prev) => {
-                      const next = new Set(prev);
-                      next.delete(distanceId);
-                      return next;
-                    });
-                    setShotOfflinePendingDistances((prev) =>
-                      new Set(prev).add(distanceId),
-                    );
-                    shotOfflineResumeRef.current.set(distanceId, () => {
-                      shotOfflineResumeRef.current.delete(distanceId);
-                      setShotOfflinePendingDistances((prev) => {
-                        const next = new Set(prev);
-                        next.delete(distanceId);
-                        return next;
-                      });
-                      attempt(itemsToRetry, attemptIndex + 1).then(resolve);
-                    });
-                  },
-                });
-              });
+              pending = itemsToRetry;
+              return retry(decision.delayMs);
             }
             settleKeys(itemsToRetry, result);
             if (decision.removeFromOutbox) {
@@ -319,14 +238,14 @@ export function useSyncQueue(
         );
       };
 
-      const resultPromise = attempt(items, 0).then(() => {
+      const resultPromise = shotRetry.run(distanceId, attempt).then(() => {
         shotFlightByDistanceRef.current.delete(distanceId);
         return flushShots(distanceId, runBatch);
       });
       shotTailByDistanceRef.current.set(distanceId, resultPromise);
       return resultPromise;
     },
-    [settleKeys, onPermanentFailure],
+    [shotRetry, settleKeys, onPermanentFailure],
   );
 
   const scheduleShot = useCallback(
@@ -421,18 +340,12 @@ export function useSyncQueue(
 
   useEffect(() => {
     const handleOnline = () => {
-      const resumes = [
-        ...offlineResumeRef.current.values(),
-        ...shotOfflineResumeRef.current.values(),
-      ];
-      for (const resume of resumes) resume();
+      keyRetry.handleOnline();
+      shotRetry.handleOnline();
     };
     const handleOffline = () => {
-      const cancels = [
-        ...retryTimersRef.current.values(),
-        ...shotRetryTimersRef.current.values(),
-      ];
-      for (const entry of cancels) entry.cancel();
+      keyRetry.handleOffline();
+      shotRetry.handleOffline();
     };
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
@@ -440,7 +353,7 @@ export function useSyncQueue(
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, []);
+  }, [keyRetry, shotRetry]);
 
   useEffect(() => {
     if (!roundId || restoredRef.current) return;
