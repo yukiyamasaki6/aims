@@ -16,22 +16,20 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { getLocalIdentity } from "@/features/auth/local-identity";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { DistanceInfo, PresetInfo } from "../_shared/preset-info";
-import { NAME_MAX_LENGTH } from "../_shared/round-constants";
+import { DistanceInfo } from "../_shared/preset-info";
 import type { DistanceConfig } from "./distance-config";
 import {
   DistanceEditFields,
@@ -40,6 +38,7 @@ import {
 import { KeypadPanel } from "./keypad-panel";
 import type { RoundConfig } from "./round-config";
 import { RoundConfigPanel } from "./round-config-panel";
+import { SavePresetDialog } from "./save-preset-dialog";
 import {
   changesDistanceStructure,
   distanceToAdd,
@@ -69,7 +68,6 @@ import {
 } from "./scorecard-input";
 import { restorePendingOperations } from "./scorecard-pending";
 import {
-  compareDistancePosition,
   distanceNumber,
   endSubtotal,
   type ScoringTargetFace,
@@ -169,57 +167,6 @@ function paleTone(hex: string): { bg: string; fg: string } {
   };
 }
 
-// プリセット保存ダイアログの名前欄プレースホルダー（自動生成の候補名）。
-// ラウンド名が設定されている場合は、こちらではなくラウンド名自体を名前欄に
-// 事前入力する（ScorecardClient側でpresetName初期値に使う）ため、
-// ここは距離構成のみのフォールバックでよい。
-function generatePresetName(distances: Distance[]): string {
-  return [...distances]
-    .sort(compareDistancePosition)
-    .map((d) => (d.distance !== null ? `${d.distance}` : "??"))
-    .join("-");
-}
-
-async function saveRoundAsPreset(input: {
-  name: string;
-  format: string;
-  bowType: string;
-  distances: Distance[];
-}): Promise<{ error: string } | undefined> {
-  const supabase = createClient();
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const user = session?.user;
-
-  if (!user) {
-    return { error: "サインインが必要です。" };
-  }
-
-  // 画面に表示中の内容をそのまま送る（ローカル起点）。DBに未送信の編集が
-  // あってもそれを待つ必要はない。プリセット作成・距離複製は、Postgres関数
-  // （save_round_as_preset）内で1つのトランザクションとして行う。距離の
-  // insertが失敗しても、距離を持たない空のプリセットが残ることはない。
-  const { error } = await supabase.rpc("save_round_as_preset", {
-    p_name: input.name,
-    p_format: input.format,
-    p_bow_type: input.bowType,
-    p_distances: input.distances.map((d) => ({
-      position_key: d.position_key,
-      distance: d.distance,
-      total_ends: d.total_ends,
-      arrows_per_end: d.arrows_per_end,
-      target_face_id: d.target_face_id,
-      is_marked: d.is_marked,
-    })),
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-}
-
 export function ScorecardClient({
   roundId,
   initialRoundConfig,
@@ -271,10 +218,6 @@ export function ScorecardClient({
     };
   }, []);
   const [syncErrorsOpen, setSyncErrorsOpen] = useState(false);
-  const [presetDialogOpen, setPresetDialogOpen] = useState(false);
-  const [presetName, setPresetName] = useState("");
-  const [presetSubmitting, setPresetSubmitting] = useState(false);
-  const [presetError, setPresetError] = useState<string | null>(null);
   const [deleteRoundConfirmOpen, setDeleteRoundConfirmOpen] = useState(false);
   const hydrated = useHydrated();
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
@@ -440,40 +383,6 @@ export function ScorecardClient({
       setUndoStack((prev) => discardDistanceEntries(prev, updated.id));
       setRedoStack((prev) => discardDistanceEntries(prev, updated.id));
     }
-  }
-
-  async function handleSavePreset() {
-    if (presetSubmitting) return;
-
-    const name =
-      presetName.trim() !== ""
-        ? presetName.trim()
-        : generatePresetName(distances);
-    if (name.length > NAME_MAX_LENGTH) {
-      setPresetError(
-        `プリセット名は${NAME_MAX_LENGTH}文字以内で入力してください。`,
-      );
-      return;
-    }
-
-    setPresetSubmitting(true);
-    setPresetError(null);
-
-    const result = await saveRoundAsPreset({
-      name,
-      format: roundConfig.format,
-      bowType: roundConfig.bowType,
-      distances,
-    });
-    if (result?.error) {
-      setPresetError(result.error);
-      setPresetSubmitting(false);
-      return;
-    }
-
-    setPresetSubmitting(false);
-    setPresetDialogOpen(false);
-    setPresetName("");
   }
 
   async function handleDeleteRound(): Promise<{ error: string } | undefined> {
@@ -743,86 +652,13 @@ export function ScorecardClient({
               {sync.status === "synced" && "同期済み"}
             </button>
             <div className="flex items-center justify-end gap-2">
-              <Dialog
-                open={presetDialogOpen}
-                onOpenChange={(open) => {
-                  // 送信中は背景クリック・Escでは閉じさせない。
-                  if (!open && presetSubmitting) return;
-                  setPresetDialogOpen(open);
-                  if (open) {
-                    setPresetName(roundConfig.name);
-                  } else {
-                    setPresetName("");
-                    setPresetError(null);
-                  }
-                }}
-              >
-                <DialogTrigger
-                  data-testid="save-as-preset-trigger"
-                  className={buttonVariants({ variant: "default", size: "sm" })}
-                >
-                  プリセット保存
-                </DialogTrigger>
-                <DialogContent>
-                  <div className="flex flex-col gap-3">
-                    <h2 className="font-medium text-sm">
-                      現在の構成をプリセットとして保存しますか？
-                    </h2>
-                    <PresetInfo
-                      format={roundConfig.format}
-                      bowType={roundConfig.bowType}
-                      distances={[...distances]
-                        .sort(compareDistancePosition)
-                        .map((d) => ({
-                          key: d.id,
-                          distance: d.distance,
-                          isMarked: d.is_marked,
-                          face:
-                            targetFaces.find(
-                              (f) => f.id === d.target_face_id,
-                            ) ?? null,
-                          arrowsPerEnd: d.arrows_per_end,
-                          totalEnds: d.total_ends,
-                        }))}
-                    />
-                    <div className="flex flex-col gap-1">
-                      <label
-                        htmlFor="save-as-preset-name"
-                        className="text-muted-foreground text-xs"
-                      >
-                        プリセット名
-                      </label>
-                      <Input
-                        id="save-as-preset-name"
-                        data-testid="save-as-preset-name"
-                        placeholder={generatePresetName(distances)}
-                        value={presetName}
-                        onChange={(e) => setPresetName(e.target.value)}
-                        aria-invalid={Boolean(presetError)}
-                      />
-                      {presetError && (
-                        <p className="text-destructive text-sm">
-                          {presetError}
-                        </p>
-                      )}
-                    </div>
-                    <Button
-                      type="button"
-                      aria-disabled={presetSubmitting}
-                      className={cn(
-                        presetSubmitting && "pointer-events-none opacity-50",
-                      )}
-                      data-testid="save-as-preset-confirm"
-                      onClick={handleSavePreset}
-                    >
-                      {presetSubmitting && (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      )}
-                      保存
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <SavePresetDialog
+                roundName={roundConfig.name}
+                format={roundConfig.format}
+                bowType={roundConfig.bowType}
+                distances={distances}
+                targetFaces={targetFaces}
+              />
               <DropdownMenu>
                 <DropdownMenuTrigger
                   aria-label="ラウンドのメニュー"
