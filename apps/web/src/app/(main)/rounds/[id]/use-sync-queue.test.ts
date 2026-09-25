@@ -1,4 +1,5 @@
 import "fake-indexeddb/auto";
+import { setImmediate as realSetImmediate } from "node:timers";
 import { act, renderHook } from "@testing-library/react";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -42,16 +43,24 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
-// 距離の設定変更待ちは、ショットバッチの解決から実際にRPCが呼ばれるまでの間に、複数のPromiseの連鎖（Promise.all → attempt(0) → セッション取得）を挟む。
-// 固定回数のawait Promise.resolve()では足りないことがあるため、実タイマーのマクロタスク境界まで進めて、その時点までのマイクロタスクを確実に処理する。
+// 実際のマクロタスク境界まで進め、その時点までに積まれたマイクロタスクを、実装の非同期処理の段数によらず全て処理する。
+// 「まだ起きていないこと」は条件が満たされるまで待つ形では確かめられないため、これで進めてから検証する。
+// fake timersはグローバルのタイマーだけを置き換えるため、node:timersのsetImmediateはfake timers中も実際のマクロタスクとして進む。
 async function flushMicrotasks() {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await act(async () => {
+    await new Promise<void>((resolve) => realSetImmediate(resolve));
+  });
 }
 
-// 失敗が最終的なエラーとして確定するまで、自動リトライの全バックオフを進める（fake timersの使用が前提）。
+// 失敗が最終的なエラーとして確定するまで、リトライ待機のタイマーが積まれるのを待ってから、そのバックオフを経過させることを繰り返す（fake timersの使用が前提）。
 async function exhaustRetries() {
   for (const delay of RETRY_DELAYS_MS) {
-    await vi.advanceTimersByTimeAsync(delay);
+    await pollWithRealTasks(() =>
+      expect(vi.getTimerCount()).toBeGreaterThan(0),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(delay);
+    });
   }
 }
 
@@ -67,7 +76,8 @@ const RETRY_TIMERS_ONLY: Parameters<typeof vi.useFakeTimers>[0] = {
   toFake: ["setTimeout", "clearTimeout"],
 };
 
-// fake timers中はwaitForで待てないため、実際のsetImmediateでマクロタスクを1つずつ進めながら、期待する状態になるまで検証を繰り返す。
+// fake timers中はvi.waitForがタイマーを進めてしまうため、実際のマクロタスクを1つずつ進めながら、期待する状態になるまで検証を繰り返す。
+// 各段をactで包み、フックの状態更新を反映してから検証する。
 // 上限に達した場合は、最後の検証の失敗をそのまま投げる。
 async function pollWithRealTasks(
   assertion: () => void | Promise<void>,
@@ -75,7 +85,7 @@ async function pollWithRealTasks(
 ) {
   let lastError: unknown;
   for (let i = 0; i < maxTasks; i += 1) {
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await flushMicrotasks();
     try {
       await assertion();
       return;
@@ -121,11 +131,10 @@ describe("useSyncQueue", () => {
         // When: 操作が完了する
         await act(async () => {
           deferred.resolve(undefined);
-          await deferred.promise;
         });
 
         // Then: 同期済みになる
-        expect(result.current.status).toBe("synced");
+        await vi.waitFor(() => expect(result.current.status).toBe("synced"));
       });
 
       it("異なるキーの操作も、ラウンド共通の直列tailで投入順に実行する", async () => {
@@ -143,10 +152,7 @@ describe("useSyncQueue", () => {
           });
           result.current.enqueue({ key: "b", label: "B", run: secondRun });
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then: 先に積んだ操作が完了するまで、後の操作は実行しない
         expect(secondRun).not.toHaveBeenCalled();
@@ -154,13 +160,10 @@ describe("useSyncQueue", () => {
         // When: 先に積んだ操作が完了する
         await act(async () => {
           first.resolve(undefined);
-          await first.promise;
-          await Promise.resolve();
-          await Promise.resolve();
         });
 
         // Then: 後の操作を実行する
-        expect(secondRun).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(secondRun).toHaveBeenCalledTimes(1));
       });
 
       it("同じキーの操作は、重ならずに投入順に実行する", async () => {
@@ -178,6 +181,7 @@ describe("useSyncQueue", () => {
           });
           result.current.enqueue({ key: "a", label: "A", run: secondRun });
         });
+        await flushMicrotasks();
 
         // Then: 1つ目が完了するまで2つ目は実行しない
         expect(secondRun).not.toHaveBeenCalled();
@@ -185,11 +189,10 @@ describe("useSyncQueue", () => {
         // When: 1つ目が完了する
         await act(async () => {
           first.resolve(undefined);
-          await first.promise;
         });
 
         // Then: 2つ目を実行する
-        expect(secondRun).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(secondRun).toHaveBeenCalledTimes(1));
       });
 
       it("ラウンド設定と距離の操作を、1本の直列tailで投入順に実行する", async () => {
@@ -220,10 +223,7 @@ describe("useSyncQueue", () => {
             },
           });
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then: ラウンド設定の完了を待ち、距離の操作はまだ実行しない
         expect(order).toEqual(["roundConfig-start"]);
@@ -231,17 +231,16 @@ describe("useSyncQueue", () => {
         // When: ラウンド設定が完了する
         await act(async () => {
           roundConfigDone.resolve(undefined);
-          await roundConfigDone.promise;
-          await Promise.resolve();
-          await Promise.resolve();
         });
 
         // Then: 続けて距離の操作を実行する
-        expect(order).toEqual([
-          "roundConfig-start",
-          "roundConfig-end",
-          "distance-run",
-        ]);
+        await vi.waitFor(() =>
+          expect(order).toEqual([
+            "roundConfig-start",
+            "roundConfig-end",
+            "distance-run",
+          ]),
+        );
       });
 
       it("同じラウンドの異なる距離の操作も、並行させず直列に実行する", async () => {
@@ -272,10 +271,7 @@ describe("useSyncQueue", () => {
             },
           });
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then: 1つ目の距離の完了を待つ
         expect(order).toEqual(["d1-start"]);
@@ -283,13 +279,12 @@ describe("useSyncQueue", () => {
         // When: 1つ目の距離の操作が完了する
         await act(async () => {
           firstDone.resolve(undefined);
-          await firstDone.promise;
-          await Promise.resolve();
-          await Promise.resolve();
         });
 
         // Then: 2つ目の距離の操作を実行する
-        expect(order).toEqual(["d1-start", "d1-end", "d2-run"]);
+        await vi.waitFor(() =>
+          expect(order).toEqual(["d1-start", "d1-end", "d2-run"]),
+        );
       });
     });
 
@@ -323,9 +318,7 @@ describe("useSyncQueue", () => {
             },
           });
         });
-        await act(async () => {
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then: 依存先が完了するまで、依存する操作は開始しない
         expect(order).toEqual(["create-start"]);
@@ -333,11 +326,12 @@ describe("useSyncQueue", () => {
         // When: 依存先が完了する
         await act(async () => {
           createDone.resolve(undefined);
-          await createDone.promise;
         });
 
         // Then: 依存する操作を実行する
-        expect(order).toEqual(["create-start", "create-end", "shot"]);
+        await vi.waitFor(() =>
+          expect(order).toEqual(["create-start", "create-end", "shot"]),
+        );
       });
 
       it("依存先に実行中のものがなければ、待たずに実行する", async () => {
@@ -354,12 +348,9 @@ describe("useSyncQueue", () => {
             run,
           });
         });
-        await act(async () => {
-          await Promise.resolve();
-        });
 
         // Then: すぐに実行する
-        expect(run).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
       });
     });
 
@@ -400,10 +391,7 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await flushMicrotasks();
-        });
-        expect(runBatch).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(runBatch).toHaveBeenCalledTimes(1));
 
         // When: 同じ距離の設定変更を積む
         act(() => {
@@ -413,9 +401,7 @@ describe("useSyncQueue", () => {
             operation: distanceUpdateOp,
           });
         });
-        await act(async () => {
-          await flushMicrotasks();
-        });
+        await flushMicrotasks();
 
         // Then: ショットのバッチがまだサーバーに届いていないため、距離の設定変更は送られない
         expect(supabase.rpc).not.toHaveBeenCalled();
@@ -423,11 +409,10 @@ describe("useSyncQueue", () => {
         // When: ショットのバッチが完了する
         await act(async () => {
           shotDone.resolve(undefined);
-          await flushMicrotasks();
         });
 
         // Then: 距離の設定変更が送られる
-        expect(supabase.rpc).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(supabase.rpc).toHaveBeenCalledTimes(1));
         expect(supabase.rpc).toHaveBeenCalledWith(
           "update_distance",
           expect.objectContaining({ p_distance_event_id: "update-evt" }),
@@ -460,10 +445,7 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await flushMicrotasks();
-        });
-        expect(runBatch).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(runBatch).toHaveBeenCalledTimes(1));
 
         // When: 送信中に、同じ距離の別マスへのショットと距離の設定変更を積む
         act(() => {
@@ -488,9 +470,7 @@ describe("useSyncQueue", () => {
             operation: distanceUpdateOp,
           });
         });
-        await act(async () => {
-          await flushMicrotasks();
-        });
+        await flushMicrotasks();
 
         // Then: 距離の設定変更は送られない
         expect(supabase.rpc).not.toHaveBeenCalled();
@@ -498,21 +478,20 @@ describe("useSyncQueue", () => {
         // When: 1回目のバッチが完了する
         await act(async () => {
           firstBatch.resolve(undefined);
-          await flushMicrotasks();
         });
 
         // Then: 積まれていた2回目のバッチが送られ、距離の設定変更はまだ送られない
-        expect(runBatch).toHaveBeenCalledTimes(2);
+        await vi.waitFor(() => expect(runBatch).toHaveBeenCalledTimes(2));
+        await flushMicrotasks();
         expect(supabase.rpc).not.toHaveBeenCalled();
 
         // When: 2回目のバッチも完了する
         await act(async () => {
           secondBatch.resolve(undefined);
-          await flushMicrotasks();
         });
 
         // Then: 距離の設定変更が送られる
-        expect(supabase.rpc).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(supabase.rpc).toHaveBeenCalledTimes(1));
         expect(supabase.rpc).toHaveBeenCalledWith(
           "update_distance",
           expect.objectContaining({ p_distance_event_id: "update-evt" }),
@@ -540,14 +519,12 @@ describe("useSyncQueue", () => {
         act(() => {
           result.current.enqueue({ key: "a", label: "A", run });
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
 
         // Then: リトライ待機中になり、エラーは出さない
-        expect(run).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("retrying");
+        await pollWithRealTasks(() => {
+          expect(run).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("retrying");
+        });
         expect(result.current.errorFor("a")).toBeUndefined();
 
         // When: バックオフの待機時間が経過する
@@ -556,8 +533,10 @@ describe("useSyncQueue", () => {
         });
 
         // Then: 再試行して同期済みになる
-        expect(run).toHaveBeenCalledTimes(2);
-        expect(result.current.status).toBe("synced");
+        await pollWithRealTasks(() => {
+          expect(run).toHaveBeenCalledTimes(2);
+          expect(result.current.status).toBe("synced");
+        });
       });
 
       it("リトライ待機中に同じキーへ新しい操作を積んでも、待機を打ち切らず両方を投入順に送る", async () => {
@@ -571,21 +550,16 @@ describe("useSyncQueue", () => {
         act(() => {
           result.current.enqueue({ key: "a", label: "A", run: firstRun });
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
+        await pollWithRealTasks(() => {
+          expect(firstRun).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("retrying");
         });
-        expect(firstRun).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("retrying");
 
         // When: 同じキーへ新しい操作を積む
         act(() => {
           result.current.enqueue({ key: "a", label: "A", run: secondRun });
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then: 1つ目のリトライ待機が残っているため、2つ目はまだ実行しない
         expect(secondRun).not.toHaveBeenCalled();
@@ -596,17 +570,16 @@ describe("useSyncQueue", () => {
         });
 
         // Then: 1つ目が打ち切られずに再試行される
-        expect(firstRun).toHaveBeenCalledTimes(2);
+        await pollWithRealTasks(() =>
+          expect(firstRun).toHaveBeenCalledTimes(2),
+        );
 
         // When: 1つ目の再試行が完了する
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-
         // Then: 2つ目を送り、同期済みになる
-        expect(secondRun).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("synced");
+        await pollWithRealTasks(() => {
+          expect(secondRun).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("synced");
+        });
       });
 
       it("距離の作成のリトライ待機中に同じ距離の更新を積んでも、作成を打ち切らず両方を送る", async () => {
@@ -624,12 +597,10 @@ describe("useSyncQueue", () => {
             run: createRun,
           });
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
+        await pollWithRealTasks(() => {
+          expect(createRun).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("retrying");
         });
-        expect(createRun).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("retrying");
 
         // When: 同じ距離の更新を積む
         act(() => {
@@ -639,10 +610,7 @@ describe("useSyncQueue", () => {
             run: updateRun,
           });
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then: 更新は作成の完了を待つ
         expect(updateRun).not.toHaveBeenCalled();
@@ -653,16 +621,15 @@ describe("useSyncQueue", () => {
         });
 
         // Then: 作成が打ち切られずに再試行される
-        expect(createRun).toHaveBeenCalledTimes(2);
+        await pollWithRealTasks(() =>
+          expect(createRun).toHaveBeenCalledTimes(2),
+        );
 
         // When: 作成の再試行が完了する
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-
         // Then: 更新も送る
-        expect(updateRun).toHaveBeenCalledTimes(1);
+        await pollWithRealTasks(() =>
+          expect(updateRun).toHaveBeenCalledTimes(1),
+        );
       });
 
       it("距離の更新のリトライ待機中に2回目の更新を積んでも、両方を送る", async () => {
@@ -680,12 +647,10 @@ describe("useSyncQueue", () => {
             run: firstUpdate,
           });
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
+        await pollWithRealTasks(() => {
+          expect(firstUpdate).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("retrying");
         });
-        expect(firstUpdate).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("retrying");
 
         // When: 2回目の更新を積む
         act(() => {
@@ -695,10 +660,7 @@ describe("useSyncQueue", () => {
             run: secondUpdate,
           });
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then: 2回目は1回目の完了を待つ
         expect(secondUpdate).not.toHaveBeenCalled();
@@ -709,16 +671,15 @@ describe("useSyncQueue", () => {
         });
 
         // Then: 1回目が再試行される
-        expect(firstUpdate).toHaveBeenCalledTimes(2);
+        await pollWithRealTasks(() =>
+          expect(firstUpdate).toHaveBeenCalledTimes(2),
+        );
 
         // When: 1回目の再試行が完了する
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-
         // Then: 2回目も送る
-        expect(secondUpdate).toHaveBeenCalledTimes(1);
+        await pollWithRealTasks(() =>
+          expect(secondUpdate).toHaveBeenCalledTimes(1),
+        );
       });
 
       it("失敗を操作のキーごとのエラーとして表示する", async () => {
@@ -733,13 +694,13 @@ describe("useSyncQueue", () => {
             run: () => Promise.resolve({ error: "boom" }),
           });
         });
-        await act(async () => {
-          await exhaustRetries();
-        });
+        await exhaustRetries();
 
         // Then: そのキーのエラーとして表示する
-        expect(result.current.status).toBe("error");
-        expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+        await pollWithRealTasks(() => {
+          expect(result.current.status).toBe("error");
+          expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+        });
       });
 
       it("あるキーの失敗は、別のキーの成功に影響しない", async () => {
@@ -759,14 +720,14 @@ describe("useSyncQueue", () => {
             run: () => Promise.resolve(undefined),
           });
         });
-        await act(async () => {
-          await exhaustRetries();
-        });
+        await exhaustRetries();
 
         // Then: 失敗したキーだけがエラーになる
-        expect(result.current.errorFor("a")).toBe("boom");
-        expect(result.current.errorFor("b")).toBeUndefined();
-        expect(result.current.status).toBe("error");
+        await pollWithRealTasks(() => {
+          expect(result.current.errorFor("a")).toBe("boom");
+          expect(result.current.errorFor("b")).toBeUndefined();
+          expect(result.current.status).toBe("error");
+        });
       });
 
       it("全ての再試行を使い切って初めてエラーとして確定する", async () => {
@@ -776,25 +737,26 @@ describe("useSyncQueue", () => {
         act(() => {
           result.current.enqueue({ key: "a", label: "A", run });
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-        expect(run).toHaveBeenCalledTimes(1);
+        await pollWithRealTasks(() => expect(run).toHaveBeenCalledTimes(1));
 
         // When: 各バックオフを順に経過させる
         // Then: 再試行を使い切るまではリトライ待機のまま
-        for (const delay of [3000, 6000, 12000, 24000]) {
-          expect(result.current.status).toBe("retrying");
+        for (const [index, delay] of [3000, 6000, 12000, 24000].entries()) {
+          await pollWithRealTasks(() => {
+            expect(run).toHaveBeenCalledTimes(index + 1);
+            expect(result.current.status).toBe("retrying");
+          });
           await act(async () => {
             await vi.advanceTimersByTimeAsync(delay);
           });
         }
 
         // Then: 初回と4回の再試行の後にエラーとして確定する
-        expect(run).toHaveBeenCalledTimes(5);
-        expect(result.current.status).toBe("error");
-        expect(result.current.errorFor("a")).toBe("boom");
+        await pollWithRealTasks(() => {
+          expect(run).toHaveBeenCalledTimes(5);
+          expect(result.current.status).toBe("error");
+          expect(result.current.errorFor("a")).toBe("boom");
+        });
       });
 
       it("後から同じキーの操作が成功すると、そのキーのエラーを消す", async () => {
@@ -807,10 +769,10 @@ describe("useSyncQueue", () => {
             run: () => Promise.resolve({ error: "boom" }),
           });
         });
-        await act(async () => {
-          await exhaustRetries();
-        });
-        expect(result.current.errorFor("a")).toBe("boom");
+        await exhaustRetries();
+        await pollWithRealTasks(() =>
+          expect(result.current.errorFor("a")).toBe("boom"),
+        );
 
         // When: 同じキーの成功する操作を積む
         act(() => {
@@ -820,14 +782,12 @@ describe("useSyncQueue", () => {
             run: () => Promise.resolve(undefined),
           });
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
 
         // Then: エラーが消え、同期済みになる
-        expect(result.current.errorFor("a")).toBeUndefined();
-        expect(result.current.status).toBe("synced");
+        await pollWithRealTasks(() => {
+          expect(result.current.errorFor("a")).toBeUndefined();
+          expect(result.current.status).toBe("synced");
+        });
       });
 
       it("同じキーを積み直した時点で、新しい試行の完了を待たずに古いエラーを消す", async () => {
@@ -840,10 +800,10 @@ describe("useSyncQueue", () => {
             run: () => Promise.resolve({ error: "boom" }),
           });
         });
-        await act(async () => {
-          await exhaustRetries();
-        });
-        expect(result.current.errorFor("a")).toBe("boom");
+        await exhaustRetries();
+        await pollWithRealTasks(() =>
+          expect(result.current.errorFor("a")).toBe("boom"),
+        );
 
         // When: 完了を制御できる操作を同じキーに積む
         const deferred = createDeferred<Result>();
@@ -859,7 +819,6 @@ describe("useSyncQueue", () => {
         expect(result.current.errorFor("a")).toBeUndefined();
         await act(async () => {
           deferred.resolve(undefined);
-          await deferred.promise;
         });
       });
     });
@@ -919,12 +878,10 @@ describe("useSyncQueue", () => {
             operation: createOp,
           });
         });
-        await act(async () => {
-          await pollWithRealTasks(() =>
-            expect(supabase.rpc).toHaveBeenCalledTimes(1),
-          );
+        await pollWithRealTasks(() => {
+          expect(supabase.rpc).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("retrying");
         });
-        expect(result.current.status).toBe("retrying");
 
         // When: 作成のリトライ待機中に、同じ距離の更新を積む
         act(() => {
@@ -937,14 +894,13 @@ describe("useSyncQueue", () => {
 
         // Then: 作成はまだサーバーに届いていないため、outboxに作成と更新の両方が残り、更新は作成の完了を待って送られない
         // 新しい操作を積んだだけで作成の記録が消えると、再読み込み時に更新だけが復元され、作成が永久に失われる。
-        await act(async () => {
-          await pollWithRealTasks(async () =>
-            expect(await pendingEventIds("round1")).toEqual([
-              "create-evt",
-              "update-evt",
-            ]),
-          );
-        });
+        await pollWithRealTasks(async () =>
+          expect(await pendingEventIds("round1")).toEqual([
+            "create-evt",
+            "update-evt",
+          ]),
+        );
+        await flushMicrotasks();
         expect(supabase.rpc).toHaveBeenCalledTimes(1);
 
         // When: リトライ待機が明ける
@@ -953,17 +909,15 @@ describe("useSyncQueue", () => {
         });
 
         // Then: 作成が打ち切られずに再試行されて成功し、続けて更新も送られ、どちらもoutboxから取り除かれる
-        await act(async () => {
-          await pollWithRealTasks(async () => {
-            expect(supabase.rpc.mock.calls.map(([name]) => name)).toEqual([
-              "create_distance",
-              "create_distance",
-              "update_distance",
-            ]);
-            expect(await pendingEventIds("round1")).toEqual([]);
-          });
+        await pollWithRealTasks(async () => {
+          expect(supabase.rpc.mock.calls.map(([name]) => name)).toEqual([
+            "create_distance",
+            "create_distance",
+            "update_distance",
+          ]);
+          expect(await pendingEventIds("round1")).toEqual([]);
+          expect(result.current.status).toBe("synced");
         });
-        expect(result.current.status).toBe("synced");
       });
 
       it("operation付きの操作も再試行の上限で打ち切ってエラーとして確定し、再送できるようoutboxに残す", async () => {
@@ -992,20 +946,20 @@ describe("useSyncQueue", () => {
             operation,
           });
         });
-        await act(async () => {
-          await pollWithRealTasks(() =>
-            expect(supabase.rpc).toHaveBeenCalledTimes(1),
-          );
-          await exhaustRetries();
-        });
+        await pollWithRealTasks(() =>
+          expect(supabase.rpc).toHaveBeenCalledTimes(1),
+        );
+        await exhaustRetries();
 
         // Then: 初回と上限回数分の再試行だけ送り、エラーとして確定する
-        expect(supabase.rpc).toHaveBeenCalledTimes(5);
+        await pollWithRealTasks(() => {
+          expect(supabase.rpc).toHaveBeenCalledTimes(5);
+          expect(result.current.status).toBe("error");
+        });
         expect(supabase.rpc).toHaveBeenCalledWith(
           "update_round",
           expect.objectContaining({ p_round_event_id: "event-1" }),
         );
-        expect(result.current.status).toBe("error");
         expect(result.current.errors).toEqual([
           expect.objectContaining({ key: "roundConfig" }),
         ]);
@@ -1036,13 +990,10 @@ describe("useSyncQueue", () => {
             run,
           });
         });
-        await act(async () => {
-          await Promise.resolve();
-        });
 
         // Then: 1回だけ実行してエラーになり、onPermanentFailureを1回呼ぶ
+        await vi.waitFor(() => expect(result.current.status).toBe("error"));
         expect(run).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("error");
         expect(result.current.errors).toEqual([
           expect.objectContaining({ key: "roundConfig" }),
         ]);
@@ -1071,21 +1022,22 @@ describe("useSyncQueue", () => {
               run,
             });
           });
-          await act(async () => {
-            await Promise.resolve();
-            await Promise.resolve();
-          });
 
           // Then: すぐにそのキーのエラーになる
-          expect(result.current.errorFor("roundConfig")).toBe(
-            AUTH_REQUIRED_MESSAGE,
-          );
-          expect(result.current.status).toBe("error");
+          await pollWithRealTasks(() => {
+            expect(result.current.errorFor("roundConfig")).toBe(
+              AUTH_REQUIRED_MESSAGE,
+            );
+            expect(result.current.status).toBe("error");
+          });
 
           // When: 全てのバックオフ分の時間が経過する
           await act(async () => {
-            await exhaustRetries();
+            await vi.advanceTimersByTimeAsync(
+              RETRY_DELAYS_MS.reduce((sum, delay) => sum + delay, 0),
+            );
           });
+          await flushMicrotasks();
 
           // Then: 再試行せず、onPermanentFailureも呼ばない
           expect(run).toHaveBeenCalledTimes(1);
@@ -1107,13 +1059,13 @@ describe("useSyncQueue", () => {
           act(() => {
             result.current.enqueue({ key: "noop", label: "何もしない" });
           });
-          await act(async () => {
-            await exhaustRetries();
-          });
+          await exhaustRetries();
 
           // Then: 固定のメッセージでエラーになる
-          expect(result.current.errorFor("noop")).toBe(
-            "同期する操作が見つかりません。",
+          await pollWithRealTasks(() =>
+            expect(result.current.errorFor("noop")).toBe(
+              "同期する操作が見つかりません。",
+            ),
           );
         } finally {
           vi.useRealTimers();
@@ -1138,12 +1090,12 @@ describe("useSyncQueue", () => {
         act(() => {
           result.current.enqueue({ key: "a", label: "A", run });
         });
-        await act(async () => {
-          await exhaustRetries();
-        });
+        await exhaustRetries();
 
         // Then: Errorのメッセージを表示する
-        expect(result.current.errorFor("a")).toBe("real error");
+        await pollWithRealTasks(() =>
+          expect(result.current.errorFor("a")).toBe("real error"),
+        );
       });
     });
   });
@@ -1178,12 +1130,8 @@ describe("useSyncQueue", () => {
         expect(result.current.status).toBe("sending");
 
         // When: 送信が完了する
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-
         // Then: 1件のバッチとして送り、同期済みになる
+        await vi.waitFor(() => expect(result.current.status).toBe("synced"));
         expect(runBatch).toHaveBeenCalledTimes(1);
         expect(runBatch).toHaveBeenCalledWith({
           upsert: [
@@ -1198,7 +1146,6 @@ describe("useSyncQueue", () => {
           ],
           clear: [],
         });
-        expect(result.current.status).toBe("synced");
       });
 
       it("送信中に積まれたショットを、次の1回のバッチにまとめて送る", async () => {
@@ -1223,11 +1170,7 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-        expect(runBatch).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(runBatch).toHaveBeenCalledTimes(1));
 
         // When: 送信中に別々のマスへの入力を2件積む
         act(() => {
@@ -1262,10 +1205,7 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then: 1件目が送信中のため、まだ次のバッチは送らない
         expect(runBatch).toHaveBeenCalledTimes(1);
@@ -1273,13 +1213,13 @@ describe("useSyncQueue", () => {
         // When: 1件目の送信が完了する
         await act(async () => {
           first.resolve(undefined);
-          await first.promise;
-          await Promise.resolve();
-          await Promise.resolve();
         });
 
         // Then: 送信中に積まれた2件を1回のバッチにまとめて送る
-        expect(runBatch).toHaveBeenCalledTimes(2);
+        await vi.waitFor(() => {
+          expect(runBatch).toHaveBeenCalledTimes(2);
+          expect(result.current.status).toBe("synced");
+        });
         expect(runBatch).toHaveBeenNthCalledWith(2, {
           upsert: [
             {
@@ -1301,7 +1241,6 @@ describe("useSyncQueue", () => {
           ],
           clear: [],
         });
-        expect(result.current.status).toBe("synced");
       });
 
       it("同じマスへの連続した上書きは、最新の値だけを送る", async () => {
@@ -1326,10 +1265,7 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await vi.waitFor(() => expect(runBatch).toHaveBeenCalledTimes(1));
 
         // When: 送信中に同じマスを2回上書きし、1件目の送信が完了する
         act(() => {
@@ -1366,13 +1302,10 @@ describe("useSyncQueue", () => {
         });
         await act(async () => {
           first.resolve(undefined);
-          await first.promise;
-          await Promise.resolve();
-          await Promise.resolve();
         });
 
         // Then: 次のバッチでは最新の値だけを送る
-        expect(runBatch).toHaveBeenCalledTimes(2);
+        await vi.waitFor(() => expect(runBatch).toHaveBeenCalledTimes(2));
         expect(runBatch).toHaveBeenNthCalledWith(2, {
           upsert: [
             {
@@ -1410,10 +1343,7 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await Promise.resolve();
-        });
-        expect(runBatch).toHaveBeenCalledTimes(1);
+        await vi.waitFor(() => expect(runBatch).toHaveBeenCalledTimes(1));
 
         // When: 同じ距離へ2本目を積み、1本目の送信が完了する
         act(() => {
@@ -1435,13 +1365,13 @@ describe("useSyncQueue", () => {
         });
         await act(async () => {
           first.resolve(undefined);
-          await first.promise;
-          await Promise.resolve();
-          await Promise.resolve();
         });
 
         // Then: 2本目を次のバッチで1回だけ送り、同期済みになる
-        expect(runBatch).toHaveBeenCalledTimes(2);
+        await vi.waitFor(() => {
+          expect(runBatch).toHaveBeenCalledTimes(2);
+          expect(result.current.status).toBe("synced");
+        });
         expect(runBatch).toHaveBeenLastCalledWith({
           upsert: [
             {
@@ -1455,7 +1385,6 @@ describe("useSyncQueue", () => {
           ],
           clear: [],
         });
-        expect(result.current.status).toBe("synced");
       });
 
       // record_shotsはupsert、clear_shotsは対象がなくても無害なため、同じマスの最後の値だけを送っても結果は正しい。
@@ -1522,7 +1451,6 @@ describe("useSyncQueue", () => {
         // When: 1件目の送信が完了する
         await act(async () => {
           first.resolve(undefined);
-          await first.promise;
         });
 
         // Then: 最新の3件目だけが次のバッチで送られ、送信を終えた1件目と3件目もoutboxから削除される
@@ -1589,10 +1517,7 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then: 依存先が完了するまでバッチを送らない
         expect(runBatch).not.toHaveBeenCalled();
@@ -1600,13 +1525,12 @@ describe("useSyncQueue", () => {
         // When: 依存先が完了する
         await act(async () => {
           createDone.resolve(undefined);
-          await createDone.promise;
-          await Promise.resolve();
-          await Promise.resolve();
         });
 
         // Then: 依存先の完了後にバッチを送る
-        expect(order).toEqual(["create-start", "create-end", "batch:1"]);
+        await vi.waitFor(() =>
+          expect(order).toEqual(["create-start", "create-end", "batch:1"]),
+        );
       });
     });
 
@@ -1642,12 +1566,10 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
+        await pollWithRealTasks(() => {
+          expect(runBatch).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("retrying");
         });
-        expect(runBatch).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("retrying");
 
         // When: バックオフの待機時間が経過する
         await act(async () => {
@@ -1655,8 +1577,10 @@ describe("useSyncQueue", () => {
         });
 
         // Then: 再試行して同期済みになる
-        expect(runBatch).toHaveBeenCalledTimes(2);
-        expect(result.current.status).toBe("synced");
+        await pollWithRealTasks(() => {
+          expect(runBatch).toHaveBeenCalledTimes(2);
+          expect(result.current.status).toBe("synced");
+        });
       });
 
       it("リトライ待機中に同じマスへ新しい値が積まれると、古い値は再試行せず新しい値だけを送る", async () => {
@@ -1680,11 +1604,10 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
+        await pollWithRealTasks(() => {
+          expect(runBatch).toHaveBeenCalledTimes(1);
+          expect(result.current.status).toBe("retrying");
         });
-        expect(runBatch).toHaveBeenCalledTimes(1);
 
         // When: 同じマスへ新しい値を入力し、バックオフの待機時間が経過する
         act(() => {
@@ -1709,7 +1632,9 @@ describe("useSyncQueue", () => {
         });
 
         // Then: 古い値（X）は送らず、新しい値（9）だけを送る
-        expect(runBatch).toHaveBeenCalledTimes(2);
+        await pollWithRealTasks(() =>
+          expect(runBatch).toHaveBeenCalledTimes(2),
+        );
         expect(runBatch).toHaveBeenNthCalledWith(2, {
           upsert: [
             {
@@ -1748,13 +1673,13 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await exhaustRetries();
-        });
+        await exhaustRetries();
 
         // Then: そのショットのエラーとして表示する
-        expect(result.current.status).toBe("error");
-        expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+        await pollWithRealTasks(() => {
+          expect(result.current.status).toBe("error");
+          expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+        });
       });
 
       it("失敗したショットを積み直すと、既存のエラーを消す", async () => {
@@ -1778,10 +1703,10 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await exhaustRetries();
-        });
-        expect(result.current.errorFor("shot:d1:1:1")).toBe("boom");
+        await exhaustRetries();
+        await pollWithRealTasks(() =>
+          expect(result.current.errorFor("shot:d1:1:1")).toBe("boom"),
+        );
 
         // When: 同じマスを積み直す
         act(() => {
@@ -1839,14 +1764,10 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
 
         // Then: onPermanentFailureを1回呼び、エラーになる
+        await vi.waitFor(() => expect(result.current.status).toBe("error"));
         expect(onPermanentFailure).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("error");
       });
     });
 
@@ -1881,21 +1802,22 @@ describe("useSyncQueue", () => {
               runBatch,
             );
           });
-          await act(async () => {
-            await Promise.resolve();
-            await Promise.resolve();
-          });
 
           // Then: すぐにそのショットのエラーになる
-          expect(result.current.errorFor("shot:d1:1:1")).toBe(
-            AUTH_REQUIRED_MESSAGE,
-          );
-          expect(result.current.status).toBe("error");
+          await pollWithRealTasks(() => {
+            expect(result.current.errorFor("shot:d1:1:1")).toBe(
+              AUTH_REQUIRED_MESSAGE,
+            );
+            expect(result.current.status).toBe("error");
+          });
 
           // When: 全てのバックオフ分の時間が経過する
           await act(async () => {
-            await exhaustRetries();
+            await vi.advanceTimersByTimeAsync(
+              RETRY_DELAYS_MS.reduce((sum, delay) => sum + delay, 0),
+            );
           });
+          await flushMicrotasks();
 
           // Then: 再試行せず、onPermanentFailureも呼ばない
           expect(runBatch).toHaveBeenCalledTimes(1);
@@ -1919,9 +1841,7 @@ describe("useSyncQueue", () => {
             runBatch,
           );
         });
-        await act(async () => {
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then: バッチを送らない
         expect(runBatch).not.toHaveBeenCalled();
@@ -1987,15 +1907,11 @@ describe("useSyncQueue", () => {
         act(() => {
           window.dispatchEvent(new Event("online"));
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
 
         // Then: 両方を送り、同期済みになる
+        await vi.waitFor(() => expect(result.current.status).toBe("synced"));
         expect(runA).toHaveBeenCalledTimes(1);
         expect(runB).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("synced");
       });
 
       it("offlineイベントでリトライ待機を打ち切ってoffline-pendingになり、onlineイベントで再試行を失わずに再開する", async () => {
@@ -2010,12 +1926,10 @@ describe("useSyncQueue", () => {
           act(() => {
             result.current.enqueue({ key: "a", label: "A", run });
           });
-          await act(async () => {
-            await Promise.resolve();
-            await Promise.resolve();
+          await pollWithRealTasks(() => {
+            expect(run).toHaveBeenCalledTimes(1);
+            expect(result.current.status).toBe("retrying");
           });
-          expect(run).toHaveBeenCalledTimes(1);
-          expect(result.current.status).toBe("retrying");
 
           // When: バックオフが明ける前にオフラインになる
           setOnline(false);
@@ -2031,14 +1945,12 @@ describe("useSyncQueue", () => {
           act(() => {
             window.dispatchEvent(new Event("online"));
           });
-          await act(async () => {
-            await Promise.resolve();
-            await Promise.resolve();
-          });
 
           // Then: 再試行して同期済みになる
-          expect(run).toHaveBeenCalledTimes(2);
-          expect(result.current.status).toBe("synced");
+          await pollWithRealTasks(() => {
+            expect(run).toHaveBeenCalledTimes(2);
+            expect(result.current.status).toBe("synced");
+          });
         } finally {
           vi.useRealTimers();
         }
@@ -2076,14 +1988,10 @@ describe("useSyncQueue", () => {
         act(() => {
           window.dispatchEvent(new Event("online"));
         });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
 
         // Then: バッチを送り、同期済みになる
+        await vi.waitFor(() => expect(result.current.status).toBe("synced"));
         expect(runBatch).toHaveBeenCalledTimes(1);
-        expect(result.current.status).toBe("synced");
       });
 
       it("offlineイベントでショットのリトライ待機を打ち切ってoffline-pendingになり、onlineイベントで再試行を失わずに再開する", async () => {
@@ -2112,12 +2020,10 @@ describe("useSyncQueue", () => {
               runBatch,
             );
           });
-          await act(async () => {
-            await Promise.resolve();
-            await Promise.resolve();
+          await pollWithRealTasks(() => {
+            expect(runBatch).toHaveBeenCalledTimes(1);
+            expect(result.current.status).toBe("retrying");
           });
-          expect(runBatch).toHaveBeenCalledTimes(1);
-          expect(result.current.status).toBe("retrying");
 
           // When: オフラインになる
           setOnline(false);
@@ -2133,14 +2039,12 @@ describe("useSyncQueue", () => {
           act(() => {
             window.dispatchEvent(new Event("online"));
           });
-          await act(async () => {
-            await Promise.resolve();
-            await Promise.resolve();
-          });
 
           // Then: 再試行して同期済みになる
-          expect(runBatch).toHaveBeenCalledTimes(2);
-          expect(result.current.status).toBe("synced");
+          await pollWithRealTasks(() => {
+            expect(runBatch).toHaveBeenCalledTimes(2);
+            expect(result.current.status).toBe("synced");
+          });
         } finally {
           vi.useRealTimers();
         }
@@ -2205,15 +2109,12 @@ describe("useSyncQueue", () => {
           "create_distance",
         ]),
       );
-      await act(async () => {
-        await flushMicrotasks();
-      });
+      await flushMicrotasks();
       expect(supabase.rpc).toHaveBeenCalledTimes(1);
 
       // When: 距離の作成が完了する
       await act(async () => {
         createDone.resolve({ data: null, error: null });
-        await createDone.promise;
       });
 
       // Then: 続けてショットが送られ、同期を終えた操作はoutboxから取り除かれる
