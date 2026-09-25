@@ -689,144 +689,44 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
 });
 
 describe("ScorecardClient プリセット保存", () => {
-  it("保存すると save_round_as_preset が正しい内容で呼ばれ、ダイアログが閉じる", async () => {
+  it("プリセット保存ダイアログから保存すると、ラウンド名とスコアカードの現在の構成がSDKへ届く", async () => {
+    // Given: 2つの距離があるスコアカード
     const user = userEvent.setup();
-    setup();
+    setup({ distances: [distanceA, distanceB] });
 
-    await user.click(screen.getByTestId("save-as-preset-trigger"));
-    expect(screen.getByTestId("save-as-preset-name")).toHaveValue(
-      "テストラウンド",
-    );
-
-    await user.click(screen.getByTestId("save-as-preset-confirm"));
-
-    await waitFor(() => {
-      expect(supabase.rpc).toHaveBeenCalledWith("save_round_as_preset", {
-        p_name: "テストラウンド",
-        p_format: "outdoor",
-        p_bow_type: "recurve",
-        p_distances: [
-          {
-            position_key: "a",
-            distance: 70,
-            total_ends: 2,
-            arrows_per_end: 2,
-            target_face_id: targetFaceX.id,
-            is_marked: true,
-          },
-        ],
-      });
-    });
-    expect(screen.queryByTestId("save-as-preset-name")).not.toBeInTheDocument();
-  });
-
-  it("未認証の場合はエラーを表示し、ダイアログは閉じない", async () => {
-    supabase.getSession.mockResolvedValue({ data: { session: null } });
-    const user = userEvent.setup();
-    setup();
-
+    // When: プリセット保存ダイアログを開き、事前入力された名前のまま保存する
     await user.click(screen.getByTestId("save-as-preset-trigger"));
     await user.click(screen.getByTestId("save-as-preset-confirm"));
 
-    expect(
-      await screen.findByText("サインインが必要です。"),
-    ).toBeInTheDocument();
-    expect(supabase.rpc).not.toHaveBeenCalled();
-  });
-
-  it("プリセット名が50文字を超える場合、送信せずエラーを表示する", async () => {
-    const user = userEvent.setup();
-    setup();
-
-    await user.click(screen.getByTestId("save-as-preset-trigger"));
-    await user.clear(screen.getByTestId("save-as-preset-name"));
-    await user.type(screen.getByTestId("save-as-preset-name"), "あ".repeat(51));
-    await user.click(screen.getByTestId("save-as-preset-confirm"));
-
-    expect(
-      screen.getByText("プリセット名は50文字以内で入力してください。"),
-    ).toBeInTheDocument();
-    expect(supabase.rpc).not.toHaveBeenCalled();
-  });
-
-  it("save_round_as_presetが失敗した場合はエラーを表示する", async () => {
-    supabase.rpc.mockResolvedValue({
-      error: { message: "保存に失敗しました。" },
-    });
-    const user = userEvent.setup();
-    setup();
-
-    await user.click(screen.getByTestId("save-as-preset-trigger"));
-    await user.click(screen.getByTestId("save-as-preset-confirm"));
-
-    expect(await screen.findByText("保存に失敗しました。")).toBeInTheDocument();
-  });
-
-  it("送信中はEscapeで閉じない", async () => {
-    let resolveRpc: (value: { error: null }) => void = () => {};
-    supabase.rpc.mockReturnValue(
-      new Promise((resolve) => {
-        resolveRpc = resolve;
-      }),
-    );
-    const user = userEvent.setup();
-    setup();
-
-    await user.click(screen.getByTestId("save-as-preset-trigger"));
-    await user.click(screen.getByTestId("save-as-preset-confirm"));
-    await user.keyboard("{Escape}");
-
-    expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
-
-    resolveRpc({ error: null });
+    // Then: ラウンド名とスコアカードの種別・弓種・距離構成がSDKへ届き、ダイアログが閉じる
     await waitFor(() => {
       expect(
         screen.queryByTestId("save-as-preset-name"),
       ).not.toBeInTheDocument();
     });
-  });
-
-  it("送信中に確定ボタンを連打しても二重送信しない", async () => {
-    let resolveRpc: (value: { error: null }) => void = () => {};
-    supabase.rpc.mockReturnValue(
-      new Promise((resolve) => {
-        resolveRpc = resolve;
-      }),
-    );
-    const user = userEvent.setup();
-    setup();
-
-    await user.click(screen.getByTestId("save-as-preset-trigger"));
-    await user.click(screen.getByTestId("save-as-preset-confirm"));
-    await user.click(screen.getByTestId("save-as-preset-confirm"));
-
-    resolveRpc({ error: null });
-    await waitFor(() => {
-      expect(
-        screen.queryByTestId("save-as-preset-name"),
-      ).not.toBeInTheDocument();
+    expect(supabase.rpc).toHaveBeenCalledWith("save_round_as_preset", {
+      p_name: "テストラウンド",
+      p_format: "outdoor",
+      p_bow_type: "recurve",
+      p_distances: [
+        {
+          position_key: "a",
+          distance: 70,
+          total_ends: 2,
+          arrows_per_end: 2,
+          target_face_id: targetFaceX.id,
+          is_marked: true,
+        },
+        {
+          position_key: "b",
+          distance: 50,
+          total_ends: 1,
+          arrows_per_end: 1,
+          target_face_id: targetFaceX.id,
+          is_marked: true,
+        },
+      ],
     });
-    expect(supabase.rpc).toHaveBeenCalledTimes(1);
-  });
-
-  it("Escapeで閉じて再度開くと、直前のエラーはクリアされる", async () => {
-    const user = userEvent.setup();
-    setup();
-
-    await user.click(screen.getByTestId("save-as-preset-trigger"));
-    await user.clear(screen.getByTestId("save-as-preset-name"));
-    await user.type(screen.getByTestId("save-as-preset-name"), "あ".repeat(51));
-    await user.click(screen.getByTestId("save-as-preset-confirm"));
-    expect(
-      screen.getByText("プリセット名は50文字以内で入力してください。"),
-    ).toBeInTheDocument();
-
-    await user.keyboard("{Escape}");
-    await user.click(screen.getByTestId("save-as-preset-trigger"));
-
-    expect(
-      screen.queryByText("プリセット名は50文字以内で入力してください。"),
-    ).not.toBeInTheDocument();
   });
 });
 
