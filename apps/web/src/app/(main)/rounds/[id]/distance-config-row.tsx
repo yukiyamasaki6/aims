@@ -11,6 +11,16 @@ import {
   TargetFaceInfo,
   type TargetFaceSpotLayout,
 } from "../_shared/target-face-icon";
+import {
+  buildDistanceDisabledInput,
+  buildDistanceUpdatedInput,
+  type DistanceConfig,
+  type DistanceConfigErrors,
+  type DistanceDraft,
+  filterTargetFaces,
+  validateDistanceDraft,
+} from "./distance-config";
+import { FILTER_ALL } from "./distance-config-constants";
 import type { EnqueueInput } from "./sync-queue-types";
 
 export type TargetFaceOption = {
@@ -22,20 +32,9 @@ export type TargetFaceOption = {
   target_face_spots: TargetFaceSpotLayout[];
 };
 
-export type DistanceConfig = {
-  id: string;
-  distanceNumber: number;
-  distance: number | null;
-  totalEnds: number;
-  arrowsPerEnd: number;
-  targetFaceId: string;
-  isMarked: boolean;
-};
-
 // フィルタ（種別・弓種）は「すべて」も選択肢に含める。ラウンドの種別・弓種を
 // 既定にはするが、絞り込みが自由度を奪って目的の的を選べなくなることが
 // ないよう、常に全件へ戻れる逃げ道を残す。
-const FILTER_ALL = "all";
 const FORMAT_FILTER_OPTIONS = [
   { value: FILTER_ALL, label: "すべて" },
   ...FORMAT_OPTIONS,
@@ -71,10 +70,10 @@ function TargetFacePicker({
   const [selectedFormat, setSelectedFormat] = useState(roundFormat);
   const [selectedBowType, setSelectedBowType] = useState(roundBowType);
   const selectedFace = targetFaces.find((f) => f.id === selectedId);
-  const visibleFaces = targetFaces.filter(
-    (f) =>
-      (selectedFormat === FILTER_ALL || f.format === selectedFormat) &&
-      (selectedBowType === FILTER_ALL || f.bow_type.includes(selectedBowType)),
+  const visibleFaces = filterTargetFaces(
+    targetFaces,
+    selectedFormat,
+    selectedBowType,
   );
 
   return (
@@ -188,88 +187,25 @@ export function DistanceEditFields({
   onOpenChange: (open: boolean) => void;
   enqueue: (input: EnqueueInput) => void;
 }) {
-  // エンドあたりの本数・総エンド数は、入力欄を一旦空にできるよう編集中は
-  // nullを許容する（距離（m）欄と同じ扱い）。number型のまま空文字を
-  // Number("")=0として保持すると、常に「0」が残ってしまい消せなくなる。
-  const [draft, setDraft] = useState<
-    Omit<DistanceConfig, "totalEnds" | "arrowsPerEnd"> & {
-      totalEnds: number | null;
-      arrowsPerEnd: number | null;
-    }
-  >(distance);
-  const [fieldErrors, setFieldErrors] = useState<{
-    distance?: string;
-    arrowsPerEnd?: string;
-    totalEnds?: string;
-  }>({});
+  const [draft, setDraft] = useState<DistanceDraft>(distance);
+  const [fieldErrors, setFieldErrors] = useState<DistanceConfigErrors>({});
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   function handleSave() {
-    // クライアントが既に持っている値だけで判定できるため、サーバーへ
-    // 投げる前に同期的に検証する（キュー経由の非同期エラーにはしない）。
-    const errors: typeof fieldErrors = {};
-    if (draft.isMarked && draft.distance === null) {
-      errors.distance = "距離を入力してください。";
-    }
-    if (
-      draft.arrowsPerEnd === null ||
-      !Number.isInteger(draft.arrowsPerEnd) ||
-      draft.arrowsPerEnd < 1
-    ) {
-      errors.arrowsPerEnd = "1以上の整数を入力してください。";
-    }
-    if (
-      draft.totalEnds === null ||
-      !Number.isInteger(draft.totalEnds) ||
-      draft.totalEnds < 1
-    ) {
-      errors.totalEnds = "1以上の整数を入力してください。";
-    }
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors);
+    const validation = validateDistanceDraft(draft);
+    if (validation.type === "invalid") {
+      setFieldErrors(validation.errors);
       return;
     }
     setFieldErrors({});
-    // 上のerrorsチェックで弾かれているはずだが、TypeScriptにnullでないことを
-    // 伝えるための保険。
-    if (draft.arrowsPerEnd === null || draft.totalEnds === null) return;
 
-    const validated: DistanceConfig = {
-      ...draft,
-      arrowsPerEnd: draft.arrowsPerEnd,
-      totalEnds: draft.totalEnds,
-    };
-
-    onSaved(validated);
-    const distanceEventId = crypto.randomUUID();
-    enqueue({
-      key: `distance:${distance.id}`,
-      label: `距離${distance.distanceNumber}`,
-      operation: {
-        type: "distance.updated",
-        eventId: distanceEventId,
-        distanceId: distance.id,
-        distance: validated.distance,
-        totalEnds: validated.totalEnds,
-        arrowsPerEnd: validated.arrowsPerEnd,
-        targetFaceId: validated.targetFaceId,
-        isMarked: validated.isMarked,
-      },
-    });
+    onSaved(validation.config);
+    enqueue(buildDistanceUpdatedInput(validation.config, crypto.randomUUID()));
   }
 
   function performDelete() {
     onDeleted();
-    const distanceEventId = crypto.randomUUID();
-    enqueue({
-      key: `distance:${distance.id}`,
-      label: `距離${distance.distanceNumber}`,
-      operation: {
-        type: "distance.disabled",
-        eventId: distanceEventId,
-        distanceId: distance.id,
-      },
-    });
+    enqueue(buildDistanceDisabledInput(distance, crypto.randomUUID()));
   }
 
   function handleDeleteClick() {

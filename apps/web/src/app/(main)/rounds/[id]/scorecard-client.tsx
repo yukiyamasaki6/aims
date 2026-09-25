@@ -33,13 +33,14 @@ import { cn } from "@/lib/utils";
 import { comparePositionKey } from "../_shared/position-key";
 import { DistanceInfo, PresetInfo } from "../_shared/preset-info";
 import { NAME_MAX_LENGTH } from "../_shared/round-constants";
+import type { DistanceConfig } from "./distance-config";
 import {
-  type DistanceConfig,
   DistanceEditFields,
   type TargetFaceOption,
 } from "./distance-config-row";
 import { KeypadPanel } from "./keypad-panel";
-import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
+import type { RoundConfig } from "./round-config";
+import { RoundConfigPanel } from "./round-config-panel";
 import { loadPendingOperations } from "./sync-outbox";
 import { syncShots } from "./sync-shots";
 import { useSyncQueue } from "./use-sync-queue";

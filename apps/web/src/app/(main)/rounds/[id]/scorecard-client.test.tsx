@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TargetFaceOption } from "./distance-config-row";
-import type { RoundConfig } from "./round-config-panel";
+import type { RoundConfig } from "./round-config";
 import { ScorecardClient } from "./scorecard-client";
 import type { SyncError, SyncStatus } from "./sync-queue-types";
 

@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { labelOf } from "../_shared/option-label";
+import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../_shared/round-constants";
 import {
-  BOW_TYPE_OPTIONS,
-  FORMAT_OPTIONS,
-  NAME_MAX_LENGTH,
-} from "../_shared/round-constants";
+  buildRoundUpdatedInput,
+  type RoundConfig,
+  type RoundConfigErrors,
+  validateRoundConfig,
+} from "./round-config";
 import type { EnqueueInput } from "./sync-queue-types";
 
 function RequiredMark() {
@@ -20,13 +22,6 @@ function RequiredMark() {
     </span>
   );
 }
-
-export type RoundConfig = {
-  name: string;
-  roundDate: string;
-  format: string;
-  bowType: string;
-};
 
 export function RoundConfigPanel({
   roundId,
@@ -46,11 +41,7 @@ export function RoundConfigPanel({
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [saved, setSaved] = useState(initial);
   const [draft, setDraft] = useState(initial);
-  const [fieldErrors, setFieldErrors] = useState<{
-    name?: string;
-    roundDate?: string;
-    format?: string;
-  }>({});
+  const [fieldErrors, setFieldErrors] = useState<RoundConfigErrors>({});
 
   useEffect(() => {
     setSaved(initial);
@@ -67,43 +58,18 @@ export function RoundConfigPanel({
   }
 
   function handleSave() {
-    // クライアントが既に持っている値（distancesのis_marked）だけで判定
-    // できるため、サーバーへ投げる前に同期的に検証する
-    // （キュー経由の非同期エラーにはしない）。
-    const errors: typeof fieldErrors = {};
-    if (draft.name.length > NAME_MAX_LENGTH) {
-      errors.name = `ラウンド名は${NAME_MAX_LENGTH}文字以内で入力してください。`;
-    }
-    if (draft.roundDate === "") {
-      errors.roundDate = "実施日を入力してください。";
-    }
-    if (draft.format !== "field" && hasUnmarkedDistances) {
-      errors.format =
-        "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。";
-    }
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors);
+    const validation = validateRoundConfig(draft, hasUnmarkedDistances);
+    if (validation.type === "invalid") {
+      setFieldErrors(validation.errors);
       return;
     }
     setFieldErrors({});
 
-    setSaved(draft);
-    onSaved(draft);
+    const { config } = validation;
+    setSaved(config);
+    onSaved(config);
     setExpanded(false);
-    const roundEventId = crypto.randomUUID();
-    enqueue({
-      key: "roundConfig",
-      label: "ラウンド設定",
-      operation: {
-        type: "round.updated",
-        eventId: roundEventId,
-        roundId,
-        name: draft.name,
-        roundDate: draft.roundDate,
-        format: draft.format,
-        bowType: draft.bowType,
-      },
-    });
+    enqueue(buildRoundUpdatedInput(roundId, config, crypto.randomUUID()));
   }
 
   return (
