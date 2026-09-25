@@ -7,7 +7,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  MoreHorizontal,
   Plus,
   Redo,
   Undo,
@@ -17,17 +16,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { getLocalIdentity } from "@/features/auth/local-identity";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { DistanceInfo } from "../_shared/preset-info";
 import type { DistanceConfig } from "./distance-config";
@@ -38,6 +29,7 @@ import {
 import { KeypadPanel } from "./keypad-panel";
 import type { RoundConfig } from "./round-config";
 import { RoundConfigPanel } from "./round-config-panel";
+import { RoundMenu } from "./round-menu";
 import { SavePresetDialog } from "./save-preset-dialog";
 import {
   changesDistanceStructure,
@@ -188,7 +180,6 @@ export function ScorecardClient({
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
   const sync = useSyncQueue(roundId, () => router.refresh());
-  const mountedRef = useRef(true);
 
   useEffect(() => {
     setRoundConfig(initialRoundConfig);
@@ -209,16 +200,7 @@ export function ScorecardClient({
     });
   }, [roundId, router]);
 
-  useEffect(() => {
-    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
-    // 対応するため、マウント時にも明示的にtrueへ戻す。
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
   const [syncErrorsOpen, setSyncErrorsOpen] = useState(false);
-  const [deleteRoundConfirmOpen, setDeleteRoundConfirmOpen] = useState(false);
   const hydrated = useHydrated();
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
     new Set(),
@@ -382,43 +364,6 @@ export function ScorecardClient({
     if (structureChanged) {
       setUndoStack((prev) => discardDistanceEntries(prev, updated.id));
       setRedoStack((prev) => discardDistanceEntries(prev, updated.id));
-    }
-  }
-
-  async function handleDeleteRound(): Promise<{ error: string } | undefined> {
-    // BlockingConfirmDialog向けの操作のため、他の書き込みと異なりオフライン
-    // 対応の送信キューは使わず、完了を待ってから遷移する（confirm-dialog.tsx
-    // のBlockingConfirmDialogのコメントを参照）。
-    try {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user;
-
-      if (!mountedRef.current) return;
-
-      if (!user) {
-        return { error: "サインインが必要です。" };
-      }
-
-      const { error } = await supabase.rpc("disable_round", {
-        p_round_event_id: crypto.randomUUID(),
-        p_round_id: roundId,
-      });
-
-      if (!mountedRef.current) return;
-
-      if (error) {
-        return { error: error.message };
-      }
-
-      router.push("/rounds");
-    } catch {
-      if (!mountedRef.current) return;
-      return {
-        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      };
     }
   }
 
@@ -659,33 +604,10 @@ export function ScorecardClient({
                 distances={distances}
                 targetFaces={targetFaces}
               />
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  aria-label="ラウンドのメニュー"
-                  data-testid="round-menu-trigger"
-                  className="p-2 text-muted-foreground hover:text-foreground"
-                >
-                  <MoreHorizontal className="size-5" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem
-                    data-testid="round-delete"
-                    className="text-destructive data-[highlighted]:text-destructive"
-                    onClick={() => setDeleteRoundConfirmOpen(true)}
-                  >
-                    ラウンドを削除
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <RoundMenu roundId={roundId} />
             </div>
           </div>
           <div className="flex flex-1 flex-col gap-6 px-8 pb-8">
-            <BlockingConfirmDialog
-              open={deleteRoundConfirmOpen}
-              onOpenChange={setDeleteRoundConfirmOpen}
-              description="このラウンドを削除しますか？記録したスコアもすべて失われます。"
-              onConfirm={handleDeleteRound}
-            />
             {/* 下端は合計バーと接する内部の継ぎ目のため、shadowが下方向へ滲まない
             よう、上・左・右にはみ出す分だけをclip-pathで残す（距離情報の
             トグルボタンと同じ考え方）。 */}
