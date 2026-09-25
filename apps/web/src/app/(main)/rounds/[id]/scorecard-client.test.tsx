@@ -1,10 +1,21 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import "fake-indexeddb/auto";
+import { setImmediate as realSetImmediate } from "node:timers";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { IDBFactory } from "fake-indexeddb";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TargetFaceOption } from "./distance-config-row";
 import type { RoundConfig } from "./round-config";
 import { ScorecardClient } from "./scorecard-client";
-import type { SyncError, SyncStatus } from "./sync-queue-types";
+import type { SyncOperation } from "./sync-events";
+import { savePendingOperation } from "./sync-outbox";
+import { RETRY_DELAYS_MS } from "./sync-result";
 
 const nav = vi.hoisted(() => ({
   push: vi.fn(),
@@ -13,31 +24,72 @@ const nav = vi.hoisted(() => ({
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => nav }));
 
-const db = vi.hoisted(() => ({
+// SupabaseのSDKは外部サービスとの境界のため、セッションの取得結果とRPCの結果を任意に制御できるスタブで模す。
+// 画面の操作は、実物のSupabaseクライアントラッパー・送信キューを通してこのスタブのrpcに届く。
+const supabase = vi.hoisted(() => ({
   getSession: vi.fn(),
   rpc: vi.fn(),
 }));
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({
-    auth: { getSession: db.getSession },
-    rpc: db.rpc,
+vi.mock("@supabase/ssr", () => ({
+  createBrowserClient: () => ({
+    auth: { getSession: supabase.getSession },
+    rpc: supabase.rpc,
   }),
 }));
 
-const sync = vi.hoisted(() => ({
-  status: "synced" as SyncStatus,
-  errors: [] as SyncError[],
-  enqueue: vi.fn(),
-  enqueueShot: vi.fn(),
-}));
-vi.mock("./use-sync-queue", () => ({ useSyncQueue: () => sync }));
+// 実際のマクロタスク境界まで進め、その時点までに積まれたマイクロタスクを、実装の非同期処理の段数によらず全て処理する。
+// 「まだ起きていないこと」は条件が満たされるまで待つ形では確かめられないため、これで進めてから検証する。
+// fake timersはグローバルのタイマーだけを置き換えるため、node:timersのsetImmediateはfake timers中も実際のマクロタスクとして進む。
+async function flushMicrotasks() {
+  await act(async () => {
+    await new Promise<void>((resolve) => realSetImmediate(resolve));
+  });
+}
 
-const outbox = vi.hoisted(() => ({
-  loadPendingOperations: vi.fn(),
-}));
-vi.mock("./sync-outbox", () => ({
-  loadPendingOperations: outbox.loadPendingOperations,
-}));
+// fake timers中はwaitFor・findByがタイマーに依存して進まないため、実際のマクロタスクを1つずつ進めながら、期待する状態になるまで検証を繰り返す。
+// 上限に達した場合は、最後の検証の失敗をそのまま投げる。
+async function pollWithRealTasks(assertion: () => void, maxTasks = 200) {
+  let lastError: unknown;
+  for (let i = 0; i < maxTasks; i += 1) {
+    await flushMicrotasks();
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+// 前回の表示中に積まれ、まだ同期されていない操作として、永続outboxに渡した順で書き込む。
+// 保存時刻が同じだと読み出し順がeventIdの順になるため、Dateだけを偽装して保存時刻を1msずつずらす。
+// テストの端末にはサインインの記録がない（getLocalIdentity()がnull）ため、userIdはnullで書き込む。
+async function seedPendingOperations(operations: SyncOperation[]) {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    for (const [index, operation] of operations.entries()) {
+      vi.setSystemTime(Date.UTC(2026, 8, 15) + index);
+      await savePendingOperation({
+        eventId: operation.eventId,
+        roundId: "round-1",
+        key: `pending:${operation.eventId}`,
+        label: operation.type,
+        operation,
+        userId: null,
+      });
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
+function setOnline(online: boolean) {
+  Object.defineProperty(window.navigator, "onLine", {
+    configurable: true,
+    value: online,
+  });
+}
 
 const targetFaceX: TargetFaceOption = {
   id: "face-x",
@@ -155,13 +207,13 @@ function setup(overrides: Partial<Parameters<typeof ScorecardClient>[0]> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  sync.status = "synced";
-  sync.errors = [];
-  outbox.loadPendingOperations.mockResolvedValue([]);
-  db.getSession.mockResolvedValue({
+  // IndexedDBはfake-indexeddbで代替し、テストごとに空のDBから始める。
+  globalThis.indexedDB = new IDBFactory();
+  setOnline(true);
+  supabase.getSession.mockResolvedValue({
     data: { session: { user: { id: "user-1" } } },
   });
-  db.rpc.mockResolvedValue({ error: null });
+  supabase.rpc.mockResolvedValue({ data: null, error: null });
   vi.stubGlobal(
     "matchMedia",
     vi.fn().mockImplementation((query: string) => ({
@@ -180,6 +232,22 @@ beforeEach(() => {
     },
   );
   Element.prototype.scrollBy = vi.fn();
+});
+
+afterEach(async () => {
+  vi.useRealTimers();
+  setOnline(true);
+  // 送信キューはアンマウント後も送信を続けるため、送信中の操作が次のテストのスタブに届かないよう、マウント中に送信を終わらせる。
+  // オフラインで保留中の操作はonlineイベントで再開させ、同期済みか同期失敗の最終状態になるまで待つ。
+  // Testing Libraryのcleanup（アンマウント）より先に実行される。
+  const syncStatus = screen.queryByTestId("sync-status");
+  if (!syncStatus) return;
+  act(() => {
+    window.dispatchEvent(new Event("online"));
+  });
+  await waitFor(() => {
+    expect(syncStatus.textContent).toMatch(/同期済み|同期失敗/);
+  });
 });
 
 describe("ScorecardClient 初期表示・集計", () => {
@@ -417,20 +485,20 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     await user.click(screen.getByTestId("add-distance-button"));
 
     expect(screen.getByTestId("distance-config-distance-2")).toHaveValue(70);
-    expect(sync.enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({
-        operation: expect.objectContaining({
-          type: "distance.created",
-          roundId: "round-1",
-          positionKey: "aa",
-          distance: 70,
-          totalEnds: 2,
-          arrowsPerEnd: 2,
-          targetFaceId: targetFaceX.id,
-          isMarked: true,
+    await waitFor(() => {
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        "create_distance",
+        expect.objectContaining({
+          p_round_id: "round-1",
+          p_position_key: "aa",
+          p_distance: 70,
+          p_total_ends: 2,
+          p_arrows_per_end: 2,
+          p_target_face_id: targetFaceX.id,
+          p_is_marked: true,
         }),
-      }),
-    );
+      );
+    });
   });
 
   it("的を変更して距離を保存すると、その距離のUndo/Redo履歴のみが破棄される（他の距離の履歴は残る）", async () => {
@@ -501,7 +569,10 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     expect(
       screen.queryByTestId("distance-config-distance-1"),
     ).not.toBeInTheDocument();
-    expect(sync.enqueue).not.toHaveBeenCalled();
+    // 送信キューに積まれると送信が完了するまで同期中の表示になるため、同期済みのままであることで積まれていないことを確かめる。
+    expect(screen.getByTestId("sync-status")).toHaveTextContent("同期済み");
+    await flushMicrotasks();
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it("スコア記録済みの距離を確認の上で削除すると、そのショット・Undo履歴・選択状態も併せて破棄される", async () => {
@@ -538,7 +609,7 @@ describe("ScorecardClient プリセット保存", () => {
     await user.click(screen.getByTestId("save-as-preset-confirm"));
 
     await waitFor(() => {
-      expect(db.rpc).toHaveBeenCalledWith("save_round_as_preset", {
+      expect(supabase.rpc).toHaveBeenCalledWith("save_round_as_preset", {
         p_name: "テストラウンド",
         p_format: "outdoor",
         p_bow_type: "recurve",
@@ -558,7 +629,7 @@ describe("ScorecardClient プリセット保存", () => {
   });
 
   it("未認証の場合はエラーを表示し、ダイアログは閉じない", async () => {
-    db.getSession.mockResolvedValue({ data: { session: null } });
+    supabase.getSession.mockResolvedValue({ data: { session: null } });
     const user = userEvent.setup();
     setup();
 
@@ -568,7 +639,7 @@ describe("ScorecardClient プリセット保存", () => {
     expect(
       await screen.findByText("サインインが必要です。"),
     ).toBeInTheDocument();
-    expect(db.rpc).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it("プリセット名が50文字を超える場合、送信せずエラーを表示する", async () => {
@@ -583,11 +654,13 @@ describe("ScorecardClient プリセット保存", () => {
     expect(
       screen.getByText("プリセット名は50文字以内で入力してください。"),
     ).toBeInTheDocument();
-    expect(db.rpc).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it("save_round_as_presetが失敗した場合はエラーを表示する", async () => {
-    db.rpc.mockResolvedValue({ error: { message: "保存に失敗しました。" } });
+    supabase.rpc.mockResolvedValue({
+      error: { message: "保存に失敗しました。" },
+    });
     const user = userEvent.setup();
     setup();
 
@@ -599,7 +672,7 @@ describe("ScorecardClient プリセット保存", () => {
 
   it("送信中はEscapeで閉じない", async () => {
     let resolveRpc: (value: { error: null }) => void = () => {};
-    db.rpc.mockReturnValue(
+    supabase.rpc.mockReturnValue(
       new Promise((resolve) => {
         resolveRpc = resolve;
       }),
@@ -623,7 +696,7 @@ describe("ScorecardClient プリセット保存", () => {
 
   it("送信中に確定ボタンを連打しても二重送信しない", async () => {
     let resolveRpc: (value: { error: null }) => void = () => {};
-    db.rpc.mockReturnValue(
+    supabase.rpc.mockReturnValue(
       new Promise((resolve) => {
         resolveRpc = resolve;
       }),
@@ -641,7 +714,7 @@ describe("ScorecardClient プリセット保存", () => {
         screen.queryByTestId("save-as-preset-name"),
       ).not.toBeInTheDocument();
     });
-    expect(db.rpc).toHaveBeenCalledTimes(1);
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
   });
 
   it("Escapeで閉じて再度開くと、直前のエラーはクリアされる", async () => {
@@ -679,7 +752,7 @@ describe("ScorecardClient ラウンド削除", () => {
     await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
     await waitFor(() => {
-      expect(db.rpc).toHaveBeenCalledWith("disable_round", {
+      expect(supabase.rpc).toHaveBeenCalledWith("disable_round", {
         p_round_event_id: expect.any(String),
         p_round_id: "round-1",
       });
@@ -690,7 +763,7 @@ describe("ScorecardClient ラウンド削除", () => {
   });
 
   it("未認証の場合はエラーを表示し、遷移しない", async () => {
-    db.getSession.mockResolvedValue({ data: { session: null } });
+    supabase.getSession.mockResolvedValue({ data: { session: null } });
     const user = userEvent.setup();
     setup();
 
@@ -704,7 +777,7 @@ describe("ScorecardClient ラウンド削除", () => {
   });
 
   it("通信エラー(例外)の場合は汎用エラーを表示する", async () => {
-    db.getSession.mockRejectedValue(new Error("network down"));
+    supabase.getSession.mockRejectedValue(new Error("network down"));
     const user = userEvent.setup();
     setup();
 
@@ -722,7 +795,7 @@ describe("ScorecardClient ラウンド削除", () => {
     let resolveSession: (value: {
       data: { session: { user: { id: string } } | null };
     }) => void = () => {};
-    db.getSession.mockReturnValue(
+    supabase.getSession.mockReturnValue(
       new Promise((resolve) => {
         resolveSession = resolve;
       }),
@@ -735,40 +808,35 @@ describe("ScorecardClient ラウンド削除", () => {
     unmount();
 
     resolveSession({ data: { session: { user: { id: "user-1" } } } });
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushMicrotasks();
 
-    expect(db.rpc).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 });
 
 describe("ScorecardClient 保留中の操作の反映", () => {
   it("保留中の距離作成・スコア記録操作が反映される", async () => {
-    outbox.loadPendingOperations.mockResolvedValue([
+    await seedPendingOperations([
       {
-        operation: {
-          type: "distance.created",
-          eventId: "e-distance",
-          id: "distance-new",
-          roundId: "round-1",
-          positionKey: "aa",
-          distance: 30,
-          totalEnds: 1,
-          arrowsPerEnd: 1,
-          targetFaceId: targetFaceX.id,
-          isMarked: true,
-        },
+        type: "distance.created",
+        eventId: "e-distance",
+        id: "distance-new",
+        roundId: "round-1",
+        positionKey: "aa",
+        distance: 30,
+        totalEnds: 1,
+        arrowsPerEnd: 1,
+        targetFaceId: targetFaceX.id,
+        isMarked: true,
       },
       {
-        operation: {
-          type: "shot.recorded",
-          eventId: "e-shot",
-          distanceId: distanceA.id,
-          endNumber: 1,
-          arrowNumber: 1,
-          scoreStr: "10",
-          scoreInt: 10,
-        },
+        type: "shot.recorded",
+        eventId: "e-shot",
+        distanceId: distanceA.id,
+        endNumber: 1,
+        arrowNumber: 1,
+        scoreStr: "10",
+        scoreInt: 10,
       },
     ]);
     // 既存のショット（別マス）を持たせることで、shot.recorded適用時の
@@ -792,38 +860,32 @@ describe("ScorecardClient 保留中の操作の反映", () => {
   });
 
   it("ラウンド設定更新・距離更新・ショットクリアの各操作が反映される", async () => {
-    outbox.loadPendingOperations.mockResolvedValue([
+    await seedPendingOperations([
       {
-        operation: {
-          type: "round.updated",
-          eventId: "e-round",
-          roundId: "round-1",
-          name: "更新後ラウンド",
-          roundDate: "2026-09-20",
-          format: "outdoor",
-          bowType: "compound",
-        },
+        type: "round.updated",
+        eventId: "e-round",
+        roundId: "round-1",
+        name: "更新後ラウンド",
+        roundDate: "2026-09-20",
+        format: "outdoor",
+        bowType: "compound",
       },
       {
-        operation: {
-          type: "distance.updated",
-          eventId: "e-distance",
-          distanceId: distanceA.id,
-          distance: 50,
-          totalEnds: distanceA.total_ends,
-          arrowsPerEnd: distanceA.arrows_per_end,
-          targetFaceId: distanceA.target_face_id,
-          isMarked: distanceA.is_marked,
-        },
+        type: "distance.updated",
+        eventId: "e-distance",
+        distanceId: distanceA.id,
+        distance: 50,
+        totalEnds: distanceA.total_ends,
+        arrowsPerEnd: distanceA.arrows_per_end,
+        targetFaceId: distanceA.target_face_id,
+        isMarked: distanceA.is_marked,
       },
       {
-        operation: {
-          type: "shot.cleared",
-          eventId: "e-clear",
-          distanceId: distanceA.id,
-          endNumber: 1,
-          arrowNumber: 1,
-        },
+        type: "shot.cleared",
+        eventId: "e-clear",
+        distanceId: distanceA.id,
+        endNumber: 1,
+        arrowNumber: 1,
       },
     ]);
     setup({
@@ -844,13 +906,11 @@ describe("ScorecardClient 保留中の操作の反映", () => {
   });
 
   it("保留中の距離無効化操作が反映される", async () => {
-    outbox.loadPendingOperations.mockResolvedValue([
+    await seedPendingOperations([
       {
-        operation: {
-          type: "distance.disabled",
-          eventId: "e-distance-disabled",
-          distanceId: distanceB.id,
-        },
+        type: "distance.disabled",
+        eventId: "e-distance-disabled",
+        distanceId: distanceB.id,
       },
     ]);
     setup({
@@ -876,20 +936,16 @@ describe("ScorecardClient 保留中の操作の反映", () => {
   });
 
   it("round.disabledの保留操作以降は処理を中断し、一覧へ遷移する", async () => {
-    outbox.loadPendingOperations.mockResolvedValue([
+    await seedPendingOperations([
       {
-        operation: {
-          type: "round.disabled",
-          eventId: "e-round-disabled",
-          roundId: "round-1",
-        },
+        type: "round.disabled",
+        eventId: "e-round-disabled",
+        roundId: "round-1",
       },
       {
-        operation: {
-          type: "distance.disabled",
-          eventId: "e-distance-disabled",
-          distanceId: distanceA.id,
-        },
+        type: "distance.disabled",
+        eventId: "e-distance-disabled",
+        distanceId: distanceA.id,
       },
     ]);
     setup();
@@ -902,31 +958,140 @@ describe("ScorecardClient 保留中の操作の反映", () => {
 });
 
 describe("ScorecardClient 同期状態の表示", () => {
-  it.each([
-    ["sending", "同期中…"],
-    ["retrying", "同期中…"],
-    ["offline-pending", "同期保留中"],
-    ["synced", "同期済み"],
-  ] as const)("sync.statusが%sの場合、「%s」を表示する", (status, text) => {
-    sync.status = status;
-    setup();
-
-    expect(screen.getByTestId("sync-status")).toHaveTextContent(text);
-  });
-
-  it("sync.statusがerrorの場合、同期失敗を表示しクリックでエラー内容を開ける", async () => {
-    sync.status = "error";
-    sync.errors = [
-      { key: "distance:x", label: "距離1", message: "保存に失敗しました" },
-    ];
+  it("送信中は「同期中…」を表示し、応答が返ると「同期済み」になる", async () => {
+    // Given: RPCの応答を任意の時点で返せる
+    let resolveRpc: (value: { data: null; error: null }) => void = () => {};
+    supabase.rpc.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRpc = resolve;
+      }),
+    );
     const user = userEvent.setup();
     setup();
 
-    expect(screen.getByTestId("sync-status")).toHaveTextContent("同期失敗");
+    // When: スコアを入力する
+    await user.click(screen.getByTestId("score-button-10"));
 
+    // Then: 記録がSDKへ送られ、応答待ちの間は同期中を表示する
+    await waitFor(() => {
+      expect(supabase.rpc).toHaveBeenCalledWith("record_shots", {
+        p_shots: [expect.objectContaining({ score_str: "10" })],
+      });
+    });
+    expect(screen.getByTestId("sync-status")).toHaveTextContent("同期中…");
+
+    // When: 応答が返る
+    resolveRpc({ data: null, error: null });
+
+    // Then: 同期済みになる
+    await waitFor(() => {
+      expect(screen.getByTestId("sync-status")).toHaveTextContent("同期済み");
+    });
+  });
+
+  it("送信が一時的に失敗してリトライを待つ間は「同期中…」を表示する", async () => {
+    // Given: RPCが初回だけ再試行で解消し得るエラーを返す
+    // fake-indexeddbはsetImmediateで処理を進めるため、リトライ待機のタイマーだけを偽装する。
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    supabase.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: "通信に失敗しました", code: "" },
+    });
+    setup();
+
+    // When: スコアを入力し、送信が失敗する
+    // userEventはsetTimeoutで待機するため、fake timers中はfireEventで操作する。
+    fireEvent.click(screen.getByTestId("score-button-10"));
+    await pollWithRealTasks(() =>
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        "record_shots",
+        expect.anything(),
+      ),
+    );
+    await flushMicrotasks();
+
+    // Then: 失敗は表示せず、同期中の表示のままリトライを待つ
+    expect(screen.getByTestId("sync-status")).toHaveTextContent("同期中…");
+
+    // When: リトライ待機が経過し、再送が成功する
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
+    });
+
+    // Then: 同期済みになる
+    await pollWithRealTasks(() =>
+      expect(screen.getByTestId("sync-status")).toHaveTextContent("同期済み"),
+    );
+  });
+
+  it("オフライン中は送らず「同期保留中」を表示する", async () => {
+    // Given: オフライン
+    setOnline(false);
+    const user = userEvent.setup();
+    setup();
+
+    // When: スコアを入力する
+    await user.click(screen.getByTestId("score-button-10"));
+
+    // Then: 同期保留中を表示し、SDKへは送らない
+    await waitFor(() => {
+      expect(screen.getByTestId("sync-status")).toHaveTextContent("同期保留中");
+    });
+    await flushMicrotasks();
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it("送信が完了すると「同期済み」を表示する", async () => {
+    // Given: RPCが成功する
+    const user = userEvent.setup();
+    setup();
+
+    // When: スコアを入力する
+    await user.click(screen.getByTestId("score-button-10"));
+
+    // Then: 記録がSDKへ送られ、完了後に同期済みを表示する
+    await waitFor(() => {
+      expect(supabase.rpc).toHaveBeenCalledWith("record_shots", {
+        p_shots: [
+          expect.objectContaining({
+            distance_id: distanceA.id,
+            end_number: 1,
+            arrow_number: 1,
+            shooter_id: "user-1",
+            score_str: "10",
+            score_int: 10,
+          }),
+        ],
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("sync-status")).toHaveTextContent("同期済み");
+    });
+  });
+
+  it("送信が恒久的に失敗した場合、同期失敗を表示しクリックでエラー内容を開ける", async () => {
+    // Given: RPCが業務ルール違反（再試行しても解消しないエラー）を返す
+    supabase.rpc.mockResolvedValue({
+      data: null,
+      error: { message: "保存に失敗しました", code: "P0001" },
+    });
+    const user = userEvent.setup();
+    setup();
+
+    // When: スコアを入力する
+    await user.click(screen.getByTestId("score-button-10"));
+
+    // Then: 同期失敗を表示し、サーバーの状態を取り直す
+    await waitFor(() => {
+      expect(screen.getByTestId("sync-status")).toHaveTextContent("同期失敗");
+    });
+    expect(nav.refresh).toHaveBeenCalledTimes(1);
+
+    // When: 同期状態の表示をクリックする
     await user.click(screen.getByTestId("sync-status"));
 
+    // Then: 失敗した操作とエラー内容を表示する
     expect(screen.getByText(/保存に失敗しました/)).toBeInTheDocument();
-    expect(screen.getByText(/距離1/)).toBeInTheDocument();
+    expect(screen.getByText(/距離1 1エンド1本目/)).toBeInTheDocument();
   });
 });
