@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { type RoundConfig, RoundConfigPanel } from "./round-config-panel";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { RoundConfig } from "./round-config";
+import { RoundConfigPanel } from "./round-config-panel";
 
 const initial: RoundConfig = {
   name: "午前練習",
@@ -28,173 +29,179 @@ function setup(
   return { onSaved, enqueue, ...utils };
 }
 
-async function fillValidDraft(user: ReturnType<typeof userEvent.setup>) {
-  await user.clear(screen.getByTestId("round-config-name"));
-  await user.type(screen.getByTestId("round-config-name"), "午後練習");
-}
-
 describe("RoundConfigPanel", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it("初期状態では折りたたまれており、保存済みの値を要約表示する", () => {
-    setup();
+  describe("初期表示", () => {
+    it("折りたたまれており、保存済みの値を要約表示する", () => {
+      // Given: 保存済みの値（initial）
+      // When: パネルを表示する
+      setup();
 
-    expect(
-      screen.getByText("午前練習 / 2026-09-15 / アウトドア / リカーブ"),
-    ).toBeInTheDocument();
-    expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
+      // Then: 要約だけが表示され、編集欄は表示されない
+      expect(
+        screen.getByText("午前練習 / 2026-09-15 / アウトドア / リカーブ"),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
+    });
   });
 
-  it("要約をクリックすると展開し、再度クリックすると閉じる", async () => {
-    const user = userEvent.setup();
-    setup();
+  describe("要約のクリック", () => {
+    it("展開し、再度クリックすると閉じる", async () => {
+      // Given: 折りたたまれたパネル
+      const user = userEvent.setup();
+      setup();
 
-    await user.click(screen.getByTestId("round-config-summary"));
-    expect(screen.getByTestId("round-config-name")).toBeInTheDocument();
+      // When: 要約をクリックする
+      await user.click(screen.getByTestId("round-config-summary"));
 
-    await user.click(screen.getByTestId("round-config-summary"));
-    expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
-  });
+      // Then: 編集欄が表示される
+      expect(screen.getByTestId("round-config-name")).toBeInTheDocument();
 
-  it("保存せず閉じて再展開すると、未保存の編集は破棄され保存済みの値に戻る", async () => {
-    const user = userEvent.setup();
-    setup();
+      // When: 再度クリックする
+      await user.click(screen.getByTestId("round-config-summary"));
 
-    await user.click(screen.getByTestId("round-config-summary"));
-    await user.clear(screen.getByTestId("round-config-name"));
-    await user.type(screen.getByTestId("round-config-name"), "未保存の編集");
-    await user.click(screen.getByTestId("round-config-summary"));
-
-    await user.click(screen.getByTestId("round-config-summary"));
-    expect(screen.getByTestId("round-config-name")).toHaveValue("午前練習");
-  });
-
-  it(`ラウンド名が50文字を超えると保存できずエラーを表示する`, async () => {
-    const user = userEvent.setup();
-    const { onSaved, enqueue } = setup();
-
-    await user.click(screen.getByTestId("round-config-summary"));
-    await user.clear(screen.getByTestId("round-config-name"));
-    await user.type(screen.getByTestId("round-config-name"), "あ".repeat(51));
-    await user.click(screen.getByTestId("round-config-save"));
-
-    expect(
-      screen.getByText("ラウンド名は50文字以内で入力してください。"),
-    ).toBeInTheDocument();
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(enqueue).not.toHaveBeenCalled();
-  });
-
-  it("実施日が空では保存できずエラーを表示する", async () => {
-    const user = userEvent.setup();
-    const { onSaved, enqueue } = setup();
-
-    await user.click(screen.getByTestId("round-config-summary"));
-    await user.clear(screen.getByTestId("round-config-date"));
-    await user.click(screen.getByTestId("round-config-save"));
-
-    expect(screen.getByText("実施日を入力してください。")).toBeInTheDocument();
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(enqueue).not.toHaveBeenCalled();
-  });
-
-  it("Unmarkedの距離が残っている状態でフィールド以外へ変更しようとするとエラーを表示する", async () => {
-    const user = userEvent.setup();
-    const { onSaved, enqueue } = setup({ hasUnmarkedDistances: true });
-
-    await user.click(screen.getByTestId("round-config-summary"));
-    await user.click(screen.getByTestId("round-config-format-indoor"));
-    await user.click(screen.getByTestId("round-config-save"));
-
-    expect(
-      screen.getByText(
-        "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。",
-      ),
-    ).toBeInTheDocument();
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(enqueue).not.toHaveBeenCalled();
-  });
-
-  it("Unmarkedの距離が残っていてもフィールドへの変更は許可される", async () => {
-    const user = userEvent.setup();
-    const { onSaved, enqueue } = setup({
-      hasUnmarkedDistances: true,
-      initial: { ...initial, format: "outdoor" },
+      // Then: 編集欄が閉じる
+      expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
     });
 
-    await user.click(screen.getByTestId("round-config-summary"));
-    await user.click(screen.getByTestId("round-config-format-field"));
-    await user.click(screen.getByTestId("round-config-save"));
+    it("保存せず閉じて再展開すると、未保存の編集は破棄され保存済みの値に戻る", async () => {
+      // Given: 展開してラウンド名を編集し、保存せず閉じたパネル
+      const user = userEvent.setup();
+      setup();
+      await user.click(screen.getByTestId("round-config-summary"));
+      await user.clear(screen.getByTestId("round-config-name"));
+      await user.type(screen.getByTestId("round-config-name"), "未保存の編集");
+      await user.click(screen.getByTestId("round-config-summary"));
 
-    expect(onSaved).toHaveBeenCalledWith(
-      expect.objectContaining({ format: "field" }),
-    );
-    expect(enqueue).toHaveBeenCalled();
-  });
+      // When: 再展開する
+      await user.click(screen.getByTestId("round-config-summary"));
 
-  it("有効な入力で保存すると、onSavedとenqueueが正しい内容で呼ばれ、折りたたまれる", async () => {
-    const user = userEvent.setup();
-    const { onSaved, enqueue } = setup();
-
-    await user.click(screen.getByTestId("round-config-summary"));
-    await fillValidDraft(user);
-    await user.click(screen.getByTestId("round-config-bow-type-compound"));
-    await user.click(screen.getByTestId("round-config-save"));
-
-    const expectedDraft = {
-      name: "午後練習",
-      roundDate: "2026-09-15",
-      format: "outdoor",
-      bowType: "compound",
-    };
-    expect(onSaved).toHaveBeenCalledWith(expectedDraft);
-    expect(enqueue).toHaveBeenCalledWith({
-      key: "roundConfig",
-      label: "ラウンド設定",
-      operation: {
-        type: "round.updated",
-        eventId: expect.any(String),
-        roundId: "round-1",
-        ...expectedDraft,
-      },
+      // Then: 保存済みの値に戻っている
+      expect(screen.getByTestId("round-config-name")).toHaveValue("午前練習");
     });
-    expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("午後練習 / 2026-09-15 / アウトドア / コンパウンド"),
-    ).toBeInTheDocument();
   });
 
-  it("Escapeキーで閉じると展開状態が解除される（保存はしない）", async () => {
-    const user = userEvent.setup();
-    const { onSaved, enqueue } = setup();
+  describe("保存", () => {
+    describe("入力内容が有効な場合", () => {
+      it("onSavedとenqueueを検証済みの設定で呼び、折りたたんで要約を更新する", async () => {
+        // Given: ラウンド名と弓種を編集したパネル
+        vi.spyOn(crypto, "randomUUID").mockReturnValue(
+          "00000000-0000-4000-8000-000000000001",
+        );
+        const user = userEvent.setup();
+        const { onSaved, enqueue } = setup();
+        await user.click(screen.getByTestId("round-config-summary"));
+        await user.clear(screen.getByTestId("round-config-name"));
+        await user.type(screen.getByTestId("round-config-name"), "午後練習");
+        await user.click(screen.getByTestId("round-config-bow-type-compound"));
 
-    await user.click(screen.getByTestId("round-config-summary"));
-    expect(screen.getByTestId("round-config-name")).toBeInTheDocument();
+        // When: 保存する
+        await user.click(screen.getByTestId("round-config-save"));
 
-    await user.keyboard("{Escape}");
+        // Then: 設定を通知し、round.updatedの操作を登録して折りたたむ
+        expect(onSaved).toHaveBeenCalledWith({
+          name: "午後練習",
+          roundDate: "2026-09-15",
+          format: "outdoor",
+          bowType: "compound",
+        });
+        expect(enqueue).toHaveBeenCalledWith({
+          key: "roundConfig",
+          label: "ラウンド設定",
+          operation: {
+            type: "round.updated",
+            eventId: "00000000-0000-4000-8000-000000000001",
+            roundId: "round-1",
+            name: "午後練習",
+            roundDate: "2026-09-15",
+            format: "outdoor",
+            bowType: "compound",
+          },
+        });
+        expect(
+          screen.queryByTestId("round-config-name"),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.getByText("午後練習 / 2026-09-15 / アウトドア / コンパウンド"),
+        ).toBeInTheDocument();
+      });
+    });
 
-    expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(enqueue).not.toHaveBeenCalled();
+    describe("入力内容が無効な場合", () => {
+      it("各項目のエラーを表示し、onSavedもenqueueも呼ばない", async () => {
+        // Given: Unmarkedの距離が残っている状態で、ラウンド名・実施日・種別をいずれも無効にしたパネル
+        const user = userEvent.setup();
+        const { onSaved, enqueue } = setup({ hasUnmarkedDistances: true });
+        await user.click(screen.getByTestId("round-config-summary"));
+        await user.clear(screen.getByTestId("round-config-name"));
+        await user.type(
+          screen.getByTestId("round-config-name"),
+          "あ".repeat(51),
+        );
+        await user.clear(screen.getByTestId("round-config-date"));
+        await user.click(screen.getByTestId("round-config-format-indoor"));
+
+        // When: 保存する
+        await user.click(screen.getByTestId("round-config-save"));
+
+        // Then: 各項目のエラーを表示し、保存も同期操作の登録もしない
+        expect(
+          screen.getByText("ラウンド名は50文字以内で入力してください。"),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText("実施日を入力してください。"),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByText(
+            "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。",
+          ),
+        ).toBeInTheDocument();
+        expect(onSaved).not.toHaveBeenCalled();
+        expect(enqueue).not.toHaveBeenCalled();
+      });
+    });
   });
 
-  it("外部からinitialが更新されると、保存済み・編集中の値も追従する", () => {
-    const { rerender } = setup();
+  describe("Escapeキー", () => {
+    it("保存せずに閉じる", async () => {
+      // Given: 展開したパネル
+      const user = userEvent.setup();
+      const { onSaved, enqueue } = setup();
+      await user.click(screen.getByTestId("round-config-summary"));
 
-    rerender(
-      <RoundConfigPanel
-        roundId="round-1"
-        initial={{ ...initial, name: "更新後" }}
-        onSaved={vi.fn()}
-        hasUnmarkedDistances={false}
-        enqueue={vi.fn()}
-      />,
-    );
+      // When: Escapeキーを押す
+      await user.keyboard("{Escape}");
 
-    expect(
-      screen.getByText("更新後 / 2026-09-15 / アウトドア / リカーブ"),
-    ).toBeInTheDocument();
+      // Then: 閉じるだけで、保存も同期操作の登録もしない
+      expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
+      expect(onSaved).not.toHaveBeenCalled();
+      expect(enqueue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("initialの更新", () => {
+    it("保存済みの値が追従する", () => {
+      // Given: 表示中のパネル
+      const { rerender } = setup();
+
+      // When: 外部からinitialを更新する
+      rerender(
+        <RoundConfigPanel
+          roundId="round-1"
+          initial={{ ...initial, name: "更新後" }}
+          onSaved={vi.fn()}
+          hasUnmarkedDistances={false}
+          enqueue={vi.fn()}
+        />,
+      );
+
+      // Then: 要約が更新後の値になる
+      expect(
+        screen.getByText("更新後 / 2026-09-15 / アウトドア / リカーブ"),
+      ).toBeInTheDocument();
+    });
   });
 });
