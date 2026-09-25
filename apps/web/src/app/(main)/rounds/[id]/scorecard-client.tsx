@@ -41,10 +41,18 @@ import { KeypadPanel } from "./keypad-panel";
 import type { RoundConfig } from "./round-config";
 import { RoundConfigPanel } from "./round-config-panel";
 import {
+  changesDistanceStructure,
+  distanceToAdd,
+  removeDistance,
+  removeDistanceShots,
+  updateDistance,
+} from "./scorecard-distances";
+import {
   type Cell,
   cellLabel,
   cellOf,
   clearHistoryEntry,
+  discardDistanceEntries,
   findCurrentPosition,
   type HistoryEntry,
   type Position,
@@ -59,6 +67,7 @@ import {
   shotEnqueueInput,
   undoHistory,
 } from "./scorecard-input";
+import { restorePendingOperations } from "./scorecard-pending";
 import {
   compareDistancePosition,
   distanceNumber,
@@ -72,10 +81,6 @@ import type { Distance, Shot } from "./scorecard-types";
 import { loadPendingOperations } from "./sync-outbox";
 import { syncShots } from "./sync-shots";
 import { useSyncQueue } from "./use-sync-queue";
-
-// 10点的（アウトドア・122cm）。距離追加時の初期的として使う（e2eのcreate-round
-// APIヘルパーが使う既定の的と同じもの）。
-const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001";
 
 // テンキーは中身のキー数が距離の的ごとに変わるため実測高さを使う。この値は
 // ResizeObserverが初回計測を終えるまでの暫定値。
@@ -246,95 +251,14 @@ export function ScorecardClient({
 
   useEffect(() => {
     void loadPendingOperations(roundId, getLocalIdentity()).then((pending) => {
-      for (const { operation } of pending) {
-        switch (operation.type) {
-          case "round.updated":
-            setRoundConfig({
-              name: operation.name,
-              roundDate: operation.roundDate,
-              format: operation.format,
-              bowType: operation.bowType,
-            });
-            break;
-          case "distance.created":
-            setDistances((current) =>
-              current.some((distance) => distance.id === operation.id)
-                ? current
-                : [
-                    ...current,
-                    {
-                      id: operation.id,
-                      position_key: operation.positionKey,
-                      distance: operation.distance,
-                      total_ends: operation.totalEnds,
-                      arrows_per_end: operation.arrowsPerEnd,
-                      target_face_id: operation.targetFaceId,
-                      is_marked: operation.isMarked,
-                    },
-                  ],
-            );
-            break;
-          case "distance.updated":
-            setDistances((current) =>
-              current.map((distance) =>
-                distance.id === operation.distanceId
-                  ? {
-                      ...distance,
-                      distance: operation.distance,
-                      total_ends: operation.totalEnds,
-                      arrows_per_end: operation.arrowsPerEnd,
-                      target_face_id: operation.targetFaceId,
-                      is_marked: operation.isMarked,
-                    }
-                  : distance,
-              ),
-            );
-            break;
-          case "distance.disabled":
-            setDistances((current) =>
-              current.filter(
-                (distance) => distance.id !== operation.distanceId,
-              ),
-            );
-            setShots((current) =>
-              current.filter(
-                (shot) => shot.distance_id !== operation.distanceId,
-              ),
-            );
-            break;
-          case "shot.recorded":
-            setShots((current) => [
-              ...current.filter(
-                (shot) =>
-                  shot.distance_id !== operation.distanceId ||
-                  shot.end_number !== operation.endNumber ||
-                  shot.arrow_number !== operation.arrowNumber,
-              ),
-              {
-                distance_id: operation.distanceId,
-                end_number: operation.endNumber,
-                arrow_number: operation.arrowNumber,
-                shooter_id: operation.shooterId,
-                score_str: operation.scoreStr,
-                score_int: operation.scoreInt,
-              },
-            ]);
-            break;
-          case "shot.cleared":
-            setShots((current) =>
-              current.filter(
-                (shot) =>
-                  shot.distance_id !== operation.distanceId ||
-                  shot.end_number !== operation.endNumber ||
-                  shot.arrow_number !== operation.arrowNumber,
-              ),
-            );
-            break;
-          case "round.disabled":
-            router.replace("/rounds");
-            return;
-        }
-      }
+      const restore = restorePendingOperations(
+        pending.map(({ operation }) => operation),
+      );
+      // 読み込み中に初期値の反映や入力で状態が変わっていても、その最新の状態へ反映する。
+      setRoundConfig(restore.roundConfig);
+      setDistances(restore.distances);
+      setShots(restore.shots);
+      if (restore.leaveRound) router.replace("/rounds");
     });
   }, [roundId, router]);
 
@@ -493,75 +417,28 @@ export function ScorecardClient({
   }
 
   function handleAddDistance() {
-    // 直前（一番大きいposition_key）の距離の内容をそのまま初期値として
-    // 引き継ぐ。距離が1件も無い場合のみ、決め打ちの初期値にフォールバック
-    // する。IDも楽観的UIのためここで確定し、そのままキューに積む。
-    const last = [...distances].sort(compareDistancePosition).at(-1);
-    const newDistance: Distance = {
+    // IDは楽観的UIのためここで確定し、そのままキューに積む。
+    const { distance: newDistance, enqueueInput } = distanceToAdd(distances, {
       id: crypto.randomUUID(),
-      position_key: last ? `${last.position_key}a` : "a",
-      distance: last?.distance ?? 70,
-      total_ends: last?.total_ends ?? 6,
-      arrows_per_end: last?.arrows_per_end ?? 6,
-      target_face_id: last?.target_face_id ?? DEFAULT_TARGET_FACE_ID,
-      is_marked: last?.is_marked ?? true,
-    };
-
+      eventId: crypto.randomUUID(),
+      roundId,
+    });
     setDistances((prev) => [...prev, newDistance]);
     // 追加した距離はすぐ編集できるよう、編集パネルを展開しておく。
     setEditingDistanceIds((prev) => new Set(prev).add(newDistance.id));
-    const distanceEventId = crypto.randomUUID();
-    sync.enqueue({
-      key: `distance:${newDistance.id}`,
-      label: `距離${distances.length + 1}`,
-      operation: {
-        type: "distance.created",
-        eventId: distanceEventId,
-        id: newDistance.id,
-        roundId,
-        positionKey: newDistance.position_key,
-        distance: newDistance.distance,
-        totalEnds: newDistance.total_ends,
-        arrowsPerEnd: newDistance.arrows_per_end,
-        targetFaceId: newDistance.target_face_id,
-        isMarked: newDistance.is_marked,
-      },
-    });
+    sync.enqueue(enqueueInput);
   }
 
   function handleDistanceSaved(updated: DistanceConfig) {
-    const previous = distances.find((d) => d.id === updated.id);
-    // 距離（m）はマス構成にも得点判定にも影響しないため、変更してもこの距離の
-    // undo/redo履歴は壊れない。的・総エンド数・エンドあたりの本数が変わった
-    // 場合のみ、この距離のマスを指す履歴を破棄する（他の距離の履歴は無関係
-    // なので残す）。
-    const structureChanged =
-      !previous ||
-      previous.total_ends !== updated.totalEnds ||
-      previous.arrows_per_end !== updated.arrowsPerEnd ||
-      previous.target_face_id !== updated.targetFaceId;
-
-    setDistances((prev) =>
-      prev.map((d) =>
-        d.id === updated.id
-          ? {
-              ...d,
-              distance: updated.distance,
-              total_ends: updated.totalEnds,
-              arrows_per_end: updated.arrowsPerEnd,
-              target_face_id: updated.targetFaceId,
-              is_marked: updated.isMarked,
-            }
-          : d,
-      ),
-    );
+    const structureChanged = changesDistanceStructure(distances, updated);
+    setDistances((prev) => updateDistance(prev, updated.id, updated));
     toggleDistanceEditing(updated.id);
     // 構成（総エンド数・エンドあたりの本数）が変わった可能性があるため、
     // 選択中マスの参照が古いままにならないようフォーカスを一旦クリアする。
     setPosition(null);
     if (structureChanged) {
-      setUndoStack((prev) => prev.filter((e) => e.distanceId !== updated.id));
-      setRedoStack((prev) => prev.filter((e) => e.distanceId !== updated.id));
+      setUndoStack((prev) => discardDistanceEntries(prev, updated.id));
+      setRedoStack((prev) => discardDistanceEntries(prev, updated.id));
     }
   }
 
@@ -637,12 +514,10 @@ export function ScorecardClient({
   }
 
   function handleDistanceDeleted(distanceId: string) {
-    setDistances((prev) => prev.filter((d) => d.id !== distanceId));
-    setShots((prev) => prev.filter((s) => s.distance_id !== distanceId));
-    // 削除された距離のマスを指す履歴だけを破棄する。他の距離の履歴は
-    // 引き続き有効なので残す。
-    setUndoStack((prev) => prev.filter((e) => e.distanceId !== distanceId));
-    setRedoStack((prev) => prev.filter((e) => e.distanceId !== distanceId));
+    setDistances((prev) => removeDistance(prev, distanceId));
+    setShots((prev) => removeDistanceShots(prev, distanceId));
+    setUndoStack((prev) => discardDistanceEntries(prev, distanceId));
+    setRedoStack((prev) => discardDistanceEntries(prev, distanceId));
     setEditingDistanceIds((prev) => {
       const next = new Set(prev);
       next.delete(distanceId);
