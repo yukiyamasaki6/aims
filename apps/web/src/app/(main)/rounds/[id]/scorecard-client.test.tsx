@@ -731,78 +731,24 @@ describe("ScorecardClient プリセット保存", () => {
 });
 
 describe("ScorecardClient ラウンド削除", () => {
-  async function openDeleteConfirm(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(screen.getByTestId("round-menu-trigger"));
-    await user.click(await screen.findByTestId("round-delete"));
-  }
-
-  it("確認すると disable_round を実行し、一覧へ遷移する", async () => {
+  it("ラウンドのメニューから削除を確認すると、このラウンドのdisable_roundを実行し、一覧へ遷移する", async () => {
+    // Given: ラウンドを表示している
     const user = userEvent.setup();
     setup();
 
-    await openDeleteConfirm(user);
+    // When: ラウンドのメニューから削除を確認する
+    await user.click(screen.getByTestId("round-menu-trigger"));
+    await user.click(await screen.findByTestId("round-delete"));
     await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
-    await waitFor(() => {
-      expect(supabase.rpc).toHaveBeenCalledWith("disable_round", {
-        p_round_event_id: expect.any(String),
-        p_round_id: "round-1",
-      });
-    });
+    // Then: このラウンドのdisable_roundを実行し、一覧へ遷移する
     await waitFor(() => {
       expect(nav.push).toHaveBeenCalledWith("/rounds");
     });
-  });
-
-  it("未認証の場合はエラーを表示し、遷移しない", async () => {
-    supabase.getSession.mockResolvedValue({ data: { session: null } });
-    const user = userEvent.setup();
-    setup();
-
-    await openDeleteConfirm(user);
-    await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-    expect(
-      await screen.findByText("サインインが必要です。"),
-    ).toBeInTheDocument();
-    expect(nav.push).not.toHaveBeenCalled();
-  });
-
-  it("通信エラー(例外)の場合は汎用エラーを表示する", async () => {
-    supabase.getSession.mockRejectedValue(new Error("network down"));
-    const user = userEvent.setup();
-    setup();
-
-    await openDeleteConfirm(user);
-    await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-    expect(
-      await screen.findByText(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("セッション確認中にアンマウントされた場合、disable_roundを呼ばない", async () => {
-    let resolveSession: (value: {
-      data: { session: { user: { id: string } } | null };
-    }) => void = () => {};
-    supabase.getSession.mockReturnValue(
-      new Promise((resolve) => {
-        resolveSession = resolve;
-      }),
-    );
-    const user = userEvent.setup();
-    const { unmount } = setup();
-
-    await openDeleteConfirm(user);
-    await user.click(screen.getByTestId("confirm-dialog-confirm"));
-    unmount();
-
-    resolveSession({ data: { session: { user: { id: "user-1" } } } });
-    await flushMicrotasks();
-
-    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(supabase.rpc).toHaveBeenCalledWith("disable_round", {
+      p_round_event_id: expect.any(String),
+      p_round_id: "round-1",
+    });
   });
 });
 

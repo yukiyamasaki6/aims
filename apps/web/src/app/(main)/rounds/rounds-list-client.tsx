@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { createClient } from "@/lib/supabase/client";
+import { deleteRound } from "./_shared/delete-round";
 
 export type RoundListItem = {
   id: string;
@@ -44,36 +44,15 @@ export function RoundsListClient({
   async function performDelete(
     round: RoundListItem,
   ): Promise<{ error: string } | undefined> {
-    try {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user;
+    const result = await deleteRound({
+      roundId: round.id,
+      eventId: crypto.randomUUID(),
+      isMounted: () => mountedRef.current,
+    });
 
-      if (!mountedRef.current) return;
-
-      if (!user) {
-        return { error: "サインインが必要です。" };
-      }
-
-      const { error } = await supabase.rpc("disable_round", {
-        p_round_event_id: crypto.randomUUID(),
-        p_round_id: round.id,
-      });
-
-      if (!mountedRef.current) return;
-
-      if (error) {
-        return { error: error.message };
-      }
-
+    if (result.status === "failed") return { error: result.error };
+    if (result.status === "deleted") {
       setRounds((prev) => prev.filter((r) => r.id !== round.id));
-    } catch {
-      if (!mountedRef.current) return;
-      return {
-        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      };
     }
   }
 
