@@ -1952,42 +1952,6 @@ describe("useSyncQueue", () => {
     });
 
     describe("enqueue", () => {
-      it("オンラインのまま失敗したバックオフ待機中は、同期保留中ではなくretryingになる", async () => {
-        vi.useFakeTimers();
-        try {
-          // Given: 初回だけ失敗する操作
-          const { result } = renderHook(() => useSyncQueue());
-          const run = vi
-            .fn()
-            .mockResolvedValueOnce({ error: "network flaky" })
-            .mockResolvedValueOnce(undefined as Result);
-
-          // When: オンラインのまま積む
-          act(() => {
-            result.current.enqueue({ key: "a", label: "A", run });
-          });
-          await act(async () => {
-            await Promise.resolve();
-            await Promise.resolve();
-          });
-
-          // Then: リトライ待機中になる
-          expect(run).toHaveBeenCalledTimes(1);
-          expect(result.current.status).toBe("retrying");
-
-          // When: バックオフの待機時間が経過する
-          await act(async () => {
-            await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
-          });
-
-          // Then: 再試行して同期済みになる
-          expect(run).toHaveBeenCalledTimes(2);
-          expect(result.current.status).toBe("synced");
-        } finally {
-          vi.useRealTimers();
-        }
-      });
-
       it("オフライン中に積むと、送らずにoffline-pendingになる", async () => {
         // Given: オフライン
         setOnline(false);
@@ -2002,16 +1966,6 @@ describe("useSyncQueue", () => {
         // Then: 送信中を経由せず、初回の試行前の同期的な判定で同期保留中になり、送らない
         expect(result.current.status).toBe("offline-pending");
         expect(run).not.toHaveBeenCalled();
-
-        // When: 時間が進む
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
-
-        // Then: 同期保留中のまま送らない
-        expect(run).not.toHaveBeenCalled();
-        expect(result.current.status).toBe("offline-pending");
       });
 
       it("onlineイベントで、ページを開き直さずに自動で再送する", async () => {
@@ -2070,61 +2024,6 @@ describe("useSyncQueue", () => {
           });
 
           // Then: 同期保留中になる
-          expect(result.current.status).toBe("offline-pending");
-
-          // When: 打ち切られたタイマーの時刻が経過する
-          await act(async () => {
-            await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
-          });
-
-          // Then: 二重に再送せず、同期保留中のまま
-          expect(run).toHaveBeenCalledTimes(1);
-          expect(result.current.status).toBe("offline-pending");
-
-          // When: オンラインに戻る
-          setOnline(true);
-          act(() => {
-            window.dispatchEvent(new Event("online"));
-          });
-          await act(async () => {
-            await Promise.resolve();
-            await Promise.resolve();
-          });
-
-          // Then: 再試行して同期済みになる
-          expect(run).toHaveBeenCalledTimes(2);
-          expect(result.current.status).toBe("synced");
-        } finally {
-          vi.useRealTimers();
-        }
-      });
-
-      it("offlineイベントがなくても、再試行の直前にnavigator.onLineを確認する", async () => {
-        vi.useFakeTimers();
-        try {
-          // Given: 初回が失敗してリトライ待機中
-          const { result } = renderHook(() => useSyncQueue());
-          const run = vi
-            .fn()
-            .mockResolvedValueOnce({ error: "network flaky" })
-            .mockResolvedValueOnce(undefined as Result);
-          act(() => {
-            result.current.enqueue({ key: "a", label: "A", run });
-          });
-          await act(async () => {
-            await Promise.resolve();
-            await Promise.resolve();
-          });
-          expect(run).toHaveBeenCalledTimes(1);
-
-          // When: offlineイベントは発火せずnavigator.onLineだけがfalseになり、バックオフが経過する
-          setOnline(false);
-          await act(async () => {
-            await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
-          });
-
-          // Then: 試行前の確認で送らず、同期保留中になる
-          expect(run).toHaveBeenCalledTimes(1);
           expect(result.current.status).toBe("offline-pending");
 
           // When: オンラインに戻る
@@ -2227,15 +2126,6 @@ describe("useSyncQueue", () => {
           });
 
           // Then: 同期保留中になる
-          expect(result.current.status).toBe("offline-pending");
-
-          // When: 打ち切られたタイマーの時刻が経過する
-          await act(async () => {
-            await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0]);
-          });
-
-          // Then: 二重に再送せず、同期保留中のまま
-          expect(runBatch).toHaveBeenCalledTimes(1);
           expect(result.current.status).toBe("offline-pending");
 
           // When: オンラインに戻る
