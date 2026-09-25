@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TargetFaceOption } from "./distance-config-row";
 import type { RoundConfig } from "./round-config-panel";
 import { ScorecardClient } from "./scorecard-client";
+import type { SyncError, SyncStatus } from "./sync-queue-types";
 
 const nav = vi.hoisted(() => ({
   push: vi.fn(),
@@ -24,13 +25,8 @@ vi.mock("@/lib/supabase/client", () => ({
 }));
 
 const sync = vi.hoisted(() => ({
-  status: "synced" as
-    | "synced"
-    | "sending"
-    | "retrying"
-    | "offline-pending"
-    | "error",
-  errors: [] as { key: string; label: string; message: string }[],
+  status: "synced" as SyncStatus,
+  errors: [] as SyncError[],
   enqueue: vi.fn(),
   enqueueShot: vi.fn(),
 }));
