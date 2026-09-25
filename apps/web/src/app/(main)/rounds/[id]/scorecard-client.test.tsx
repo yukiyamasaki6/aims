@@ -251,22 +251,32 @@ afterEach(async () => {
 });
 
 describe("ScorecardClient 初期表示・集計", () => {
-  it("的にXがある場合、ラウンド全体の10点/X数を集計して表示する", async () => {
+  it("スコアを入力すると、エンド小計・距離の集計・ラウンド全体の集計に反映される", async () => {
+    // Given: Xのある的の距離が1つあり、記録が無い
     const user = userEvent.setup();
     setup();
 
+    // When: 1エンド目に10とXを入力する
     await user.click(screen.getByTestId("score-button-10"));
     await user.click(screen.getByTestId("score-button-X"));
 
-    // 最高点数（10点）はXを含む実点数で数えるため、Xの1本も10点側の
-    // カウントに含まれる（X数自体は別途score_strで数える）。
+    // Then: 1エンド目だけに小計が表示され、距離とラウンド全体の合計・最高点数/X数が表示される
+    expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("20");
+    expect(screen.getByTestId("end-subtotal-1-2")).toHaveTextContent("");
+    expect(screen.getByTestId("distance-summary-1")).toHaveTextContent(
+      "小計20",
+    );
+    expect(screen.getByTestId("distance-top-scores-1")).toHaveTextContent(
+      "10: 2 / X: 1",
+    );
     expect(screen.getByTestId("round-top-scores")).toHaveTextContent(
       "10: 2 / X: 1",
     );
     expect(screen.getByText("合計20")).toBeInTheDocument();
   });
 
-  it("距離間で的の点数構成が異なる場合、ラウンド全体の集計は表示しないが、距離ごとの集計（Xが無い的の次点数集計を含む）は表示する", () => {
+  it("距離間で的の点数構成が異なる場合、ラウンド全体の最高点数などは表示せず、距離ごとには表示する", () => {
+    // Given: Xのある的とXの無い的の距離があり、Xの無い的の距離に記録がある
     setup({
       distances: [
         distanceA,
@@ -283,15 +293,17 @@ describe("ScorecardClient 初期表示・集計", () => {
       ],
     });
 
+    // When: 表示する（初期表示）
+    // Then: ラウンド全体の最高点数などは表示せず、距離ごとの最高点数などと合計は表示する
     expect(screen.queryByTestId("round-top-scores")).not.toBeInTheDocument();
-    expect(screen.getByTestId("distance-top-scores-1")).toBeInTheDocument();
-    // Xが無い的（targetFaceNoX）では「最高点数/次点数」を集計する。
     expect(screen.getByTestId("distance-top-scores-2")).toHaveTextContent(
       "6: 0 / 5: 1",
     );
+    expect(screen.getByText("合計5")).toBeInTheDocument();
   });
 
-  it("的にリングが無い場合、その距離の最高点数集計は表示しない", () => {
+  it("距離の的で最高点数などを集計できない場合、その距離の最高点数などは表示しない", () => {
+    // Given: リングの無い的の距離
     const targetFaceBlank: TargetFaceOption = {
       id: "face-blank",
       name: "未設定の的",
@@ -305,6 +317,8 @@ describe("ScorecardClient 初期表示・集計", () => {
       targetFaces: [targetFaceBlank],
     });
 
+    // When: 表示する（初期表示）
+    // Then: その距離の最高点数などは表示しない
     expect(
       screen.queryByTestId("distance-top-scores-1"),
     ).not.toBeInTheDocument();
@@ -319,6 +333,7 @@ describe("ScorecardClient 初期表示・集計", () => {
   });
 
   it("すべてのマスが記録済みの場合、マウント時にテンキーは開かない", () => {
+    // Given: 距離の全てのマスが記録済み
     setup({
       initialShots: [
         {
@@ -352,8 +367,9 @@ describe("ScorecardClient 初期表示・集計", () => {
       ],
     });
 
+    // When: 表示する（初期表示）
+    // Then: テンキーは開かない
     expect(screen.queryByTestId("score-button-10")).not.toBeInTheDocument();
-    expect(screen.getByText("合計38")).toBeInTheDocument();
   });
 
   it("テンキーの閉じるボタンで選択を解除できる", async () => {
@@ -375,17 +391,33 @@ describe("ScorecardClient マス選択とスコア入力", () => {
   // タップしない（タップすると選択中マスの再タップ＝解除になってしまう）。
 
   it("スコアを入力すると次のマスへ自動的に進む", async () => {
+    // Given: 最初のマスが選択されている
     const user = userEvent.setup();
     setup();
 
+    // When: 10とMを続けて入力する
     await user.click(screen.getByTestId("score-button-10"));
-    // Mは的の外を表す固定キーのため、的のリングとは別の色（MISS_KEYの色）
-    // で描画される分岐を兼ねて検証する。
     await user.click(screen.getByTestId("score-button-M"));
 
+    // Then: 入力ごとに次のマスへ進み、それぞれのマスに記録される
     expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
     expect(screen.getByTestId("shot-cell-1-1-2")).toHaveTextContent("M");
-    expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("10");
+  });
+
+  it("テンキーは距離の的のリング色と、その色に応じた文字色で表示する", () => {
+    // Given: Xの無い的の距離が選択されている
+    setup({ distances: [{ ...distanceA, target_face_id: targetFaceNoX.id }] });
+
+    // When: 表示する（初期表示）
+    // Then: 暗いリング色のキーは白文字、Mは固定の背景色と黒文字で表示される
+    expect(screen.getByTestId("score-button-5")).toHaveStyle({
+      backgroundColor: "#0066B3",
+      color: "#FFFFFF",
+    });
+    expect(screen.getByTestId("score-button-M")).toHaveStyle({
+      backgroundColor: "#4CD964",
+      color: "#231F20",
+    });
   });
 
   it("距離の最後のマスに入力すると選択が解除され、以降のキー入力は無視される", async () => {
