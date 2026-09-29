@@ -1,3 +1,4 @@
+import { setImmediate as realSetImmediate } from "node:timers";
 import type { AuthError } from "@supabase/supabase-js";
 import {
   act,
@@ -101,9 +102,13 @@ async function submitEmailStep(user: User, email = "user@example.com") {
 }
 
 // 応答済みのモックの結果を画面へ反映させる。
-// act()は実時間のマクロタスクを挟んで完了するため、フェイクタイマーの有無によらずPromiseの連鎖を最後まで処理できる。
+// 実際のマクロタスク境界まで進め、その時点までに積まれたマイクロタスクを、実装の非同期処理の段数によらず全て処理する。
+// 「まだ起きていないこと」は条件が満たされるまで待つ形では確かめられないため、否定の検証の前にもこれで進める。
+// fake timersはグローバルのタイマーだけを置き換えるため、node:timersのsetImmediateはfake timers中も実際のマクロタスクとして進む。
 async function settle() {
-  await act(async () => {});
+  await act(async () => {
+    await new Promise<void>((resolve) => realSetImmediate(resolve));
+  });
 }
 
 function changeValue(input: HTMLElement, value: string) {
@@ -343,10 +348,7 @@ describe("ResetPasswordForm", () => {
       // When
       unmount();
       deferred.resolve({ error: null });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+      await settle();
 
       // Then
       expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
@@ -643,10 +645,7 @@ describe("ResetPasswordForm", () => {
       // When
       unmount();
       deferred.resolve({ error: null });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+      await settle();
 
       // Then
       expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
@@ -820,10 +819,7 @@ describe("ResetPasswordForm", () => {
       // When
       unmount();
       deferred.resolve({ error: null });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+      await settle();
 
       // Then
       expect(auth.updateUser).toHaveBeenCalledOnce();

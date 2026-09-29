@@ -1,3 +1,4 @@
+import { setImmediate as realSetImmediate } from "node:timers";
 import type { AuthError } from "@supabase/supabase-js";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -8,6 +9,15 @@ import { SignInForm } from "./signin-form";
 const NETWORK_ERROR_MESSAGE =
   "通信エラーが発生しました。しばらくしてから再度お試しください。";
 const CAPTCHA_ERROR_MESSAGE = "セキュリティチェックが完了していません。";
+
+// 実際のマクロタスク境界まで進め、その時点までに積まれたマイクロタスクを、実装の非同期処理の段数によらず全て処理する。
+// 「まだ起きていないこと」は条件が満たされるまで待つ形では確かめられないため、これで進めてから検証する。
+// fake timersはグローバルのタイマーだけを置き換えるため、node:timersのsetImmediateはfake timers中も実際のマクロタスクとして進む。
+async function flushMicrotasks() {
+  await act(async () => {
+    await new Promise<void>((resolve) => realSetImmediate(resolve));
+  });
+}
 
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -299,10 +309,7 @@ describe("SignInForm", () => {
         // When
         unmount();
         deferred.resolve({ error: null });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then
         expect(auth.signInWithPassword).toHaveBeenCalledOnce();
@@ -322,10 +329,7 @@ describe("SignInForm", () => {
         // When
         unmount();
         deferred.resolve({ error: makeAuthError("invalid_credentials") });
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then
         expect(auth.signInWithPassword).toHaveBeenCalledOnce();
@@ -345,10 +349,7 @@ describe("SignInForm", () => {
         // When
         unmount();
         deferred.reject(new Error("network down"));
-        await act(async () => {
-          await Promise.resolve();
-          await Promise.resolve();
-        });
+        await flushMicrotasks();
 
         // Then
         expect(auth.signInWithPassword).toHaveBeenCalledOnce();
