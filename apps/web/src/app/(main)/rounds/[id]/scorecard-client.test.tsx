@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { IDBFactory } from "fake-indexeddb";
@@ -372,6 +373,72 @@ describe("ScorecardClient 初期表示・集計", () => {
     expect(screen.queryByTestId("score-button-10")).not.toBeInTheDocument();
   });
 
+  it("記録済みのマスは、リングの色相・彩度のまま明度を上げた背景色と黒の文字色で表示する", () => {
+    // Given: 赤と白のリングを持つ的の距離に、それぞれのリングの記録がある
+    const targetFaceRedWhite: TargetFaceOption = {
+      id: "face-red-white",
+      name: "赤白の的",
+      size: 122,
+      format: "outdoor",
+      bow_type: ["recurve"],
+      target_face_spots: [
+        {
+          center_x: 0,
+          center_y: 0,
+          target_face_rings: [
+            {
+              radius: 1,
+              color: "#F65058",
+              line_color: null,
+              z_index: 2,
+              score_str: "8",
+              score_int: 8,
+            },
+            {
+              radius: 2,
+              color: "#FFFFFF",
+              line_color: "#231F20",
+              z_index: 1,
+              score_str: "2",
+              score_int: 2,
+            },
+          ],
+        },
+      ],
+    };
+    setup({
+      distances: [{ ...distanceA, target_face_id: targetFaceRedWhite.id }],
+      targetFaces: [targetFaceRedWhite],
+      initialShots: [
+        {
+          distance_id: distanceA.id,
+          end_number: 1,
+          arrow_number: 1,
+          score_str: "8",
+          score_int: 8,
+        },
+        {
+          distance_id: distanceA.id,
+          end_number: 1,
+          arrow_number: 2,
+          score_str: "2",
+          score_int: 2,
+        },
+      ],
+    });
+
+    // When: 表示する（初期表示）
+    // Then: 赤は薄い赤、無彩色の白は薄い灰色の背景になり、文字色はいずれも黒になる
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveStyle({
+      backgroundColor: "#FDCED1",
+      color: "#231F20",
+    });
+    expect(screen.getByTestId("shot-cell-1-1-2")).toHaveStyle({
+      backgroundColor: "#E6E6E6",
+      color: "#231F20",
+    });
+  });
+
   it("テンキーの閉じるボタンで選択を解除すると、格納中のテンキーへの入力は無視される", async () => {
     // Given: 最初のマスが選択されている
     const user = userEvent.setup();
@@ -520,6 +587,190 @@ describe("ScorecardClient マス選択とスコア入力", () => {
 
     // Then: 選択が解除されているため、記録されない
     expect(screen.getByTestId("shot-cell-1-2-2")).toHaveTextContent("");
+  });
+});
+
+describe("ScorecardClient テンキーの開閉と配置", () => {
+  it("閉じたテンキーは、格納アニメーションの後に取り除く", async () => {
+    // Given: 最初のマスが選択され、テンキーが開いている
+    const user = userEvent.setup();
+    setup();
+
+    // When: テンキーを閉じる
+    await user.click(screen.getByTestId("keypad-toggle"));
+
+    // Then: 格納中は表示し続け、格納が終わると取り除く
+    expect(screen.getByTestId("score-button-10")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByTestId("score-button-10")).not.toBeInTheDocument();
+    });
+  });
+
+  it("テンキーを閉じると、選択していたマスに残るフォーカスを外す", async () => {
+    // Given: 2本目のマスをタップして選択している
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId("shot-cell-1-1-2"));
+    expect(screen.getByTestId("shot-cell-1-1-2")).toHaveFocus();
+
+    // When: テンキーを閉じる
+    // iOSのSafariなど、ボタンをタップしてもフォーカスが移らない環境を模すため、フォーカスを移さないfireEventで押す。
+    fireEvent.click(screen.getByTestId("keypad-toggle"));
+
+    // Then: マスのフォーカスが外れる
+    expect(screen.getByTestId("shot-cell-1-1-2")).not.toHaveFocus();
+  });
+
+  it("横向きの場合は、テンキーをボトムシートではなく横の側パネルに表示する", () => {
+    // Given: 横向きの画面
+    vi.mocked(window.matchMedia).mockImplementation(
+      (query: string) =>
+        ({
+          matches: query === "(orientation: landscape)",
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+
+    // When: 表示する（初期表示）
+    setup();
+
+    // Then: 側パネルにテンキーを表示し、ボトムシートの閉じるボタンは表示しない
+    expect(
+      within(screen.getByTestId("keypad-panel")).getByTestId("score-button-10"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("keypad-toggle")).not.toBeInTheDocument();
+  });
+});
+
+describe("ScorecardClient 選択中のマスへのスクロール", () => {
+  // jsdomはレイアウトを計算しないため、マスとスクロール領域（<main>）の表示位置を境界として与える。
+  // 未記録のラウンドはマウント時点で最初のマス（1-1-1）が選択されるため、そのマスの位置で検証する。
+  function stubLayout({
+    cell,
+    container,
+  }: {
+    cell: { top: number; bottom: number };
+    container: { top: number; bottom: number };
+  }) {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const rect =
+          this.tagName === "MAIN"
+            ? container
+            : this.getAttribute("data-testid")?.startsWith("shot-cell-")
+              ? cell
+              : { top: 0, bottom: 0 };
+        return {
+          ...rect,
+          x: 0,
+          y: rect.top,
+          left: 0,
+          right: 0,
+          width: 0,
+          height: rect.bottom - rect.top,
+          toJSON: () => ({}),
+        };
+      },
+    );
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("テンキーの実測の高さが変わり、選択中のマスがテンキーに隠れる場合は、隠れる分だけ下へスクロールする", () => {
+    // Given: 高さ800の領域の500〜540にマスがあり、テンキーの高さを測れていない（既定の220を見込む）ため隠れていない
+    let reportKeypadHeight: (height: number) => void = () => {};
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          reportKeypadHeight = (height) =>
+            callback(
+              [{ contentRect: { height } } as ResizeObserverEntry],
+              this as unknown as ResizeObserver,
+            );
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    stubLayout({
+      cell: { top: 500, bottom: 540 },
+      container: { top: 0, bottom: 800 },
+    });
+    setup();
+    expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+
+    // When: テンキーの高さが300と測れる
+    act(() => reportKeypadHeight(300));
+
+    // Then: 見える下端（800-300-余白16=484）を超えた56だけ下へスクロールする
+    expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
+    expect(Element.prototype.scrollBy).toHaveBeenCalledWith({
+      top: 56,
+      behavior: "smooth",
+    });
+  });
+
+  it("選択中のマスが表示領域より上にある場合は、上端の余白の位置まで上へスクロールする", () => {
+    // Given: マスが表示領域の上端（0）より上の-100〜-60にある
+    stubLayout({
+      cell: { top: -100, bottom: -60 },
+      container: { top: 0, bottom: 800 },
+    });
+
+    // When: 表示する（初期表示で最初のマスを選択する）
+    setup();
+
+    // Then: 上端の余白16の位置まで、116だけ上へスクロールする
+    expect(Element.prototype.scrollBy).toHaveBeenLastCalledWith({
+      top: -116,
+      behavior: "smooth",
+    });
+  });
+
+  it("選択中のマスが見えている場合は、スクロールしない", () => {
+    // Given: マスが表示領域内の100〜140にある
+    stubLayout({
+      cell: { top: 100, bottom: 140 },
+      container: { top: 0, bottom: 800 },
+    });
+
+    // When: 表示する（初期表示で最初のマスを選択する）
+    setup();
+
+    // Then: スクロールしない
+    expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("横向きの場合は、テンキーの高さを見込まずにスクロールする", () => {
+    // Given: 横向きの画面で、マスが表示領域の下端近くの760〜790にある
+    vi.mocked(window.matchMedia).mockImplementation(
+      (query: string) =>
+        ({
+          matches: query === "(orientation: landscape)",
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+    stubLayout({
+      cell: { top: 760, bottom: 790 },
+      container: { top: 0, bottom: 800 },
+    });
+
+    // When: 表示する（初期表示で最初のマスを選択する）
+    setup();
+
+    // Then: 見える下端（800-余白16=784）を超えた6だけ下へスクロールする
+    expect(Element.prototype.scrollBy).toHaveBeenLastCalledWith({
+      top: 6,
+      behavior: "smooth",
+    });
   });
 });
 
@@ -685,6 +936,21 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     expect(screen.getByTestId("distance-summary-1")).toBeInTheDocument();
     expect(screen.getByText("合計0")).toBeInTheDocument();
     expect(screen.getByTestId("score-button-undo")).toBeDisabled();
+  });
+
+  it("選択中のマスが無い距離を削除すると、選択中のマスはそのまま残る", async () => {
+    // Given: 2つの距離があり、1つ目の距離の最初のマスを選択している
+    const user = userEvent.setup();
+    setup({ distances: [distanceA, distanceB] });
+
+    // When: 記録の無い2つ目の距離を削除する
+    await user.click(screen.getByTestId("distance-config-toggle-2"));
+    await user.click(screen.getByTestId("distance-config-delete-2"));
+
+    // Then: 2つ目の距離は無くなり、テンキーの入力は選択中だった1つ目の距離のマスに記録される
+    expect(screen.queryByTestId("distance-summary-2")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("score-button-10"));
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
   });
 });
 
@@ -933,6 +1199,19 @@ describe("ScorecardClient 同期状態の表示", () => {
     await waitFor(() => {
       expect(screen.getByTestId("sync-status")).toHaveTextContent("同期済み");
     });
+  });
+
+  it("同期失敗でない場合は、同期状態の表示をクリックしてもエラー内容を開かない", async () => {
+    // Given: 同期済みの状態
+    const user = userEvent.setup();
+    setup();
+    expect(screen.getByTestId("sync-status")).toHaveTextContent("同期済み");
+
+    // When: 同期状態の表示をクリックする
+    await user.click(screen.getByTestId("sync-status"));
+
+    // Then: エラー内容のダイアログを開かない
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("送信が恒久的に失敗した場合、同期失敗を表示しクリックでエラー内容を開ける", async () => {

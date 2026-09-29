@@ -19,9 +19,8 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       reporter: ["text-summary", "html"],
-      // .ts/.tsx双方をcoverageの計測対象に含め、閾値はファイルごとに判定する
-      // 方針。現在の.tsのみ・全体集計の閾値は、既存テストの移行が完了する
-      // までの暫定措置。
+      // .ts/.tsx双方を計測対象とし、閾値はファイルごとに判定する。
+      // 全体集計では、テストの薄いファイルが他のファイルのcoverageに埋もれて検出できないため。
       // 後からロジックが混入した場合に閾値で検出できるよう、型のみ・定数のみ・re-exportのみのファイルも含め、本番コードは原則すべて計測対象とする。
       // 除外は生成物とテスト用コードに限り、理由を記載する（テストファイルはVitestが自動で除外する）。
       // - src/types/supabase.ts: 生成物
@@ -30,7 +29,8 @@ export default defineConfig({
       include: ["src/**/*.{ts,tsx}"],
       exclude: ["src/types/supabase.ts", "src/hooks/use-hydrated.ts"],
       thresholds: {
-        "src/**/*.ts": {
+        perFile: true,
+        "src/**/*.{ts,tsx}": {
           statements: 90,
           branches: 85,
           functions: 95,

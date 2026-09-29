@@ -113,9 +113,7 @@ export function RoundsListClient({
 
       <BlockingConfirmDialog
         open={roundToDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) setRoundToDelete(null);
-        }}
+        onOpenChange={() => setRoundToDelete(null)}
         description={`「${roundToDelete?.name}」を削除しますか？記録したスコアもすべて失われます。`}
         onConfirm={async () => {
           if (!roundToDelete) return;
