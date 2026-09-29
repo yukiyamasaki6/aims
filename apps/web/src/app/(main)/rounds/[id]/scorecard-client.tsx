@@ -823,9 +823,7 @@ export function ScorecardClient({
                           roundBowType={roundConfig.bowType}
                           onSaved={handleDistanceSaved}
                           onDeleted={() => handleDistanceDeleted(d.id)}
-                          onOpenChange={(open) => {
-                            if (!open) toggleDistanceEditing(d.id);
-                          }}
+                          onOpenChange={() => toggleDistanceEditing(d.id)}
                           enqueue={sync.enqueue}
                         />
                       )}

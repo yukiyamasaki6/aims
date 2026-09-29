@@ -19,21 +19,19 @@ export type PendingSyncOperation = {
   userId: string | null;
 };
 
+// 保存時にcreatedAtを必ず付与するため、保存済みのレコードではcreatedAtは常に存在する。
+type StoredSyncOperation = PendingSyncOperation & { createdAt: number };
+
 async function db() {
   return openDB(DB_NAME, 2, {
-    upgrade(database, _oldVersion, _newVersion, transaction) {
-      // 現行のDB_NAME/versionでは初回作成時にしかupgradeが走らないため、
-      // 「既に存在する」側の分岐は現状のテストでは到達しない（将来の
-      // バージョン移行で再実行された場合の安全策）。
-      const store = database.objectStoreNames.contains(STORE_NAME)
-        ? transaction.objectStore(STORE_NAME)
-        : database.createObjectStore(STORE_NAME, { keyPath: "eventId" });
-      if (!store.indexNames.contains("by-round")) {
-        store.createIndex("by-round", "roundId");
-      }
-      if (!store.indexNames.contains("by-round-created-at")) {
-        store.createIndex("by-round-created-at", ["roundId", "createdAt"]);
-      }
+    // 初回リリースからversion 2のため、upgradeは新規作成時にしか走らない。
+    // versionを上げる場合は、既存のDBからの移行をここに追加する。
+    upgrade(database) {
+      const store = database.createObjectStore(STORE_NAME, {
+        keyPath: "eventId",
+      });
+      store.createIndex("by-round", "roundId");
+      store.createIndex("by-round-created-at", ["roundId", "createdAt"]);
     },
   });
 }
@@ -55,7 +53,7 @@ export async function loadPendingOperations(
   userId: string | null,
 ): Promise<PendingSyncOperation[]> {
   const database = await db();
-  const operations = await database.getAllFromIndex(
+  const operations: StoredSyncOperation[] = await database.getAllFromIndex(
     STORE_NAME,
     "by-round-created-at",
     IDBKeyRange.bound([roundId, 0], [roundId, Number.MAX_SAFE_INTEGER]),
@@ -66,11 +64,8 @@ export async function loadPendingOperations(
   return operations
     .filter((operation) => operation.userId === userId)
     .sort(
-      // by-round-created-atはcreatedAtを含む複合indexのため、createdAtが
-      // 存在しないレコードはこのクエリ自体で除外される。`?? 0`は型上の
-      // 安全策であり、実際には到達しない。
       (first, second) =>
-        (first.createdAt ?? 0) - (second.createdAt ?? 0) ||
+        first.createdAt - second.createdAt ||
         first.eventId.localeCompare(second.eventId),
     );
 }
