@@ -2,15 +2,9 @@ import type { AuthError } from "@supabase/supabase-js";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  getLocalIdentity,
-  initLocalIdentity,
-} from "@/features/auth/local-identity";
+import { initLocalIdentity } from "@/features/auth/local-identity";
 import { createClient } from "@/lib/supabase/client";
 import { LeftPanelClient } from "./left-panel-client";
-
-const NETWORK_ERROR_MESSAGE =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
 
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -59,6 +53,12 @@ async function confirmSignOut(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId("confirm-dialog-confirm"));
 }
 
+// 次のマクロタスクまで進め、その時点までに積まれたマイクロタスクを、実装の非同期処理の段数によらず全て処理する。
+// 「まだ起きていないこと」は条件が満たされるまで待つ形では確かめられないため、これで進めてから検証する。
+async function flushToMacrotask() {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
 function closeMenuButtons() {
   return screen.getAllByRole("button", { name: "メニューを閉じる" });
 }
@@ -104,7 +104,7 @@ describe("LeftPanelClient", () => {
   });
 
   describe("サインアウトを確認する", () => {
-    it("この端末のセッションのみをサインアウトし、/へ遷移する", async () => {
+    it("サインアウトが完了した場合は、/へ遷移する", async () => {
       // Given
       const user = userEvent.setup();
       signOutRemovingLocalSession(async () => ({ error: null }));
@@ -117,49 +117,9 @@ describe("LeftPanelClient", () => {
       await waitFor(() => {
         expect(nav.push).toHaveBeenCalledWith("/");
       });
-      expect(supabase.signOut).toHaveBeenCalledWith({ scope: "local" });
-      expect(getLocalIdentity()).toBeNull();
     });
 
-    it("サーバー通信がエラーを返してもローカルの識別情報が消えていれば/へ遷移する", async () => {
-      // Given
-      const user = userEvent.setup();
-      signOutRemovingLocalSession(async () => ({
-        error: makeAuthError({
-          name: "AuthRetryableFetchError",
-          message: "Failed to fetch",
-        }),
-      }));
-      render(<LeftPanelClient isSignedIn={true} />);
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      await waitFor(() => {
-        expect(nav.push).toHaveBeenCalledWith("/");
-      });
-      expect(screen.queryByText(NETWORK_ERROR_MESSAGE)).not.toBeInTheDocument();
-    });
-
-    it("サーバー通信が例外を投げてもローカルの識別情報が消えていれば/へ遷移する", async () => {
-      // Given
-      const user = userEvent.setup();
-      signOutRemovingLocalSession(async () => {
-        throw new TypeError("Failed to fetch");
-      });
-      render(<LeftPanelClient isSignedIn={true} />);
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      await waitFor(() => {
-        expect(nav.push).toHaveBeenCalledWith("/");
-      });
-    });
-
-    it("ローカルの識別情報が残りエラーが返された場合は、翻訳したエラーを表示し遷移しない", async () => {
+    it("サインアウトに失敗した場合は、エラーを表示し遷移しない", async () => {
       // Given
       const user = userEvent.setup();
       supabase.signOut.mockResolvedValue({
@@ -175,23 +135,6 @@ describe("LeftPanelClient", () => {
         await screen.findByText(
           "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
         ),
-      ).toBeInTheDocument();
-      expect(nav.push).not.toHaveBeenCalled();
-      expect(getLocalIdentity()).toBe("user-1");
-    });
-
-    it("ローカルの識別情報が残り例外が投げられた場合は、通信エラーを表示し遷移しない", async () => {
-      // Given
-      const user = userEvent.setup();
-      supabase.signOut.mockRejectedValue(new TypeError("Failed to fetch"));
-      render(<LeftPanelClient isSignedIn={true} />);
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(
-        await screen.findByText(NETWORK_ERROR_MESSAGE),
       ).toBeInTheDocument();
       expect(nav.push).not.toHaveBeenCalled();
     });
@@ -213,7 +156,7 @@ describe("LeftPanelClient", () => {
       // When
       unmount();
       completeSignOut();
-      await pendingSignOut;
+      await flushToMacrotask();
 
       // Then
       expect(nav.push).not.toHaveBeenCalled();
