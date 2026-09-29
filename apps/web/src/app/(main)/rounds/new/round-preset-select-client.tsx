@@ -13,11 +13,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { comparePositionKey } from "../_shared/position-key";
 import { PresetInfo } from "../_shared/preset-info";
 import type { TargetFaceRing } from "../_shared/target-face-icon";
+import { deletePersonalPreset } from "./delete-preset";
+import { startRound } from "./start-round";
 
 type PresetDistance = {
   id: string;
@@ -170,38 +171,15 @@ export function RoundPresetSelect({
   async function performDeletePreset(
     preset: Preset,
   ): Promise<{ error: string } | undefined> {
-    try {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user;
+    const result = await deletePersonalPreset({
+      presetId: preset.id,
+      isMounted: () => mountedRef.current,
+    });
+    if (result.status === "discarded") return;
+    if (result.status === "failed") return { error: result.error };
 
-      if (!mountedRef.current) return;
-
-      if (!user) {
-        return { error: "サインインが必要です。" };
-      }
-
-      const { error } = await supabase
-        .from("preset_rounds")
-        .delete()
-        .eq("id", preset.id);
-
-      if (!mountedRef.current) return;
-
-      if (error) {
-        return { error: error.message };
-      }
-
-      setPersonalPresets((prev) => prev.filter((p) => p.id !== preset.id));
-      setSelectedId((prev) => (prev === preset.id ? null : prev));
-    } catch {
-      if (!mountedRef.current) return;
-      return {
-        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      };
-    }
+    setPersonalPresets((prev) => prev.filter((p) => p.id !== preset.id));
+    setSelectedId((prev) => (prev === preset.id ? null : prev));
   }
 
   async function handleStart() {
@@ -210,103 +188,25 @@ export function RoundPresetSelect({
     setError(null);
     setSubmitting(true);
 
-    try {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const user = session?.user;
+    const result = await startRound({
+      presetId: selectedId,
+      isMounted: () => mountedRef.current,
+      generateId: () => crypto.randomUUID(),
+      now: () => new Date(),
+    });
+    if (result.status === "discarded") return;
 
-      if (!mountedRef.current) return;
-
-      if (!user) {
-        setError("サインインが必要です。");
-        submittingRef.current = false;
-        setSubmitting(false);
-        return;
-      }
-
-      let format = "outdoor";
-      let bowType = "recurve";
-      let distances: {
-        distance_event_id: string;
-        id: string;
-        position_key: string;
-        distance: number | null;
-        is_marked: boolean;
-        total_ends: number;
-        arrows_per_end: number;
-        target_face_id: string;
-      }[] = [];
-
-      if (selectedId) {
-        const { data: preset, error: presetError } = await supabase
-          .from("preset_rounds")
-          .select(
-            "format, bow_type, preset_distances(id, position_key, distance, is_marked, total_ends, arrows_per_end, target_face_id)",
-          )
-          .eq("id", selectedId)
-          .maybeSingle();
-
-        if (!mountedRef.current) return;
-
-        if (presetError || !preset) {
-          setError("プリセットの取得に失敗しました。");
-          submittingRef.current = false;
-          setSubmitting(false);
-          return;
-        }
-
-        format = preset.format;
-        bowType = preset.bow_type;
-        distances = [...preset.preset_distances]
-          .sort((a, b) =>
-            comparePositionKey(a.position_key, a.id, b.position_key, b.id),
-          )
-          .map((d) => ({
-            distance_event_id: crypto.randomUUID(),
-            id: crypto.randomUUID(),
-            position_key: d.position_key,
-            distance: d.distance,
-            is_marked: d.is_marked,
-            total_ends: d.total_ends,
-            arrows_per_end: d.arrows_per_end,
-            target_face_id: d.target_face_id,
-          }));
-      }
-
-      const newRoundId = crypto.randomUUID();
-      const { data: roundId, error } = await supabase.rpc("create_round", {
-        p_round_event_id: crypto.randomUUID(),
-        p_id: newRoundId,
-        p_name: "",
-        p_round_date: new Date().toISOString().slice(0, 10),
-        p_format: format,
-        p_bow_type: bowType,
-        p_distances: distances,
-      });
-
-      if (!mountedRef.current) return;
-
-      if (error || !roundId) {
-        setError(error?.message ?? "ラウンドの作成に失敗しました。");
-        submittingRef.current = false;
-        setSubmitting(false);
-        return;
-      }
-
-      // 成功時はここでsubmittingを解除しない。router.push()は遷移先の取得中も
-      // このコンポーネントを保持し続けるため、ここで解除すると遷移完了前に
-      // ボタンが再度押せる状態に戻ってしまう。アンマウント時に自然に破棄される。
-      router.push(`/rounds/${roundId}`);
-    } catch {
-      if (!mountedRef.current) return;
-      setError(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+    if (result.status === "failed") {
+      setError(result.error);
       submittingRef.current = false;
       setSubmitting(false);
+      return;
     }
+
+    // 成功時はここでsubmittingを解除しない。router.push()は遷移先の取得中も
+    // このコンポーネントを保持し続けるため、ここで解除すると遷移完了前に
+    // ボタンが再度押せる状態に戻ってしまう。アンマウント時に自然に破棄される。
+    router.push(`/rounds/${result.roundId}`);
   }
 
   return (
