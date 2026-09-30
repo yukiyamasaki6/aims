@@ -10,6 +10,7 @@
     "preview": "PORT=${PORT:-3000} next build && serwist build && PORT=${PORT:-3000} next start",
 
     "typecheck": "tsc --noEmit",
+    "knip": "knip",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },
@@ -47,6 +48,7 @@
     "esbuild": "^0.28.2",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^30.0.1",
+    "knip": "^6.38.0",
     "png-to-ico": "^3.0.2",
     "sharp": "^0.35.4",
     "tailwindcss": "^4",

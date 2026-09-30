@@ -59,7 +59,7 @@ export type DistanceInfoItem = {
 // 複数の距離情報を1つの共通グリッドとしてまとめて描画する。TargetFaceInfo
 // 自体がサイズ表記を固定幅にして常に同じ幅になるため、DistanceInfoをそのまま
 // 各行に並べるだけで、行をまたいで的情報の画像位置が揃う。
-export function DistanceInfoList({
+function DistanceInfoList({
   items,
   format,
   className,

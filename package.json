@@ -13,6 +13,7 @@
     "check": "biome check .",
     "check:write": "biome check --write .",
     "typecheck": "pnpm --filter web typecheck",
+    "knip": "pnpm --filter web knip",
     "lint:sql": "squawk supabase/migrations/*.sql",
 
     "test": "pnpm --filter web test",
@@ -24,7 +25,7 @@
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > apps/web/src/types/supabase.ts && biome check --write apps/web/src/types/supabase.ts",
 
-    "validate": "pnpm check && pnpm typecheck && pnpm lint:sql && pnpm test",
+    "validate": "pnpm check && pnpm typecheck && pnpm knip && pnpm lint:sql && pnpm test",
     "validate:all": "pnpm validate && pnpm test:db && pnpm test:e2e"
   },
   "devDependencies": {

@@ -24,7 +24,7 @@ export type ScoreKey = {
 
 // 集計欄に出す2つの点数ラベルと、それぞれの本数。
 // 表示順は常に「最高点数/X数」（Xが無い的では「最高点数/次点数」）。
-export type TopScoreSummary = {
+type TopScoreSummary = {
   firstLabel: string;
   firstCount: number;
   secondLabel: string;
