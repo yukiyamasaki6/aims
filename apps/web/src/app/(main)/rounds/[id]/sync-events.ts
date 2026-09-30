@@ -102,7 +102,8 @@ export async function executeSyncOperation(
         p_id: operation.id,
         p_round_id: operation.roundId,
         p_position_key: operation.positionKey,
-        p_distance: operation.distance,
+        // 生成型はRPCの引数をnon-nullで出力するが、distanceはSQL側でnullを受け付ける。
+        p_distance: operation.distance as number,
         p_total_ends: operation.totalEnds,
         p_arrows_per_end: operation.arrowsPerEnd,
         p_target_face_id: operation.targetFaceId,
@@ -114,7 +115,8 @@ export async function executeSyncOperation(
       const { error } = await supabase.rpc("update_distance", {
         p_distance_event_id: operation.eventId,
         p_distance_id: operation.distanceId,
-        p_distance: operation.distance,
+        // 生成型はRPCの引数をnon-nullで出力するが、distanceはSQL側でnullを受け付ける。
+        p_distance: operation.distance as number,
         p_total_ends: operation.totalEnds,
         p_arrows_per_end: operation.arrowsPerEnd,
         p_target_face_id: operation.targetFaceId,
