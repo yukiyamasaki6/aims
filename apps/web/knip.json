@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["serwist.config.js", "scripts/*.mjs"],
+  "entry": ["serwist.config.mjs", "scripts/*.mjs"],
   "ignoreIssues": {
     "src/types/supabase.ts": ["exports", "types"]
   },

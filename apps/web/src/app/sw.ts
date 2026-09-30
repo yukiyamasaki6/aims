@@ -59,7 +59,7 @@ const serwist = new Serwist({
   navigationPreload: true,
   runtimeCaching,
   // 完全にオフラインでナビゲーションが失敗した場合のみ、認証非依存の
-  // 静的な/offlineページ（serwist.config.jsでプリキャッシュ済み）を返す。
+  // 静的な/offlineページ（serwist.config.mjsでプリキャッシュ済み）を返す。
   fallbacks: {
     entries: [
       {

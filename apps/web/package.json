@@ -5,9 +5,9 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "next dev",
-    "build": "next build && serwist build",
+    "build": "next build && serwist build serwist.config.mjs",
     "start": "next start",
-    "preview": "PORT=${PORT:-3000} next build && serwist build && PORT=${PORT:-3000} next start",
+    "preview": "PORT=${PORT:-3000} next build && serwist build serwist.config.mjs && PORT=${PORT:-3000} next start",
 
     "typecheck": "tsc --noEmit",
     "knip": "knip",
