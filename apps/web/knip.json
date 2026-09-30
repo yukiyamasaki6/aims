@@ -1,8 +1,9 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["serwist.config.js", "scripts/*.mjs"],
-  // 生成された型がどこからも参照されていないため暫定でignoreする。Database型を有効化するIssueで外す。
-  "ignore": ["src/types/supabase.ts"],
+  "ignoreIssues": {
+    "src/types/supabase.ts": ["exports", "types"]
+  },
   "playwright": {
     "config": [],
     "entry": ["playwright.config.ts", "tests/e2e/**/*.{spec,setup}.ts"]
