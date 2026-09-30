@@ -70,6 +70,9 @@ jobs:
       - name: Run Type Check
         run: pnpm typecheck
 
+      - name: Run Knip
+        run: pnpm knip
+
   lint-sql:
     name: Lint SQL
     needs: changes

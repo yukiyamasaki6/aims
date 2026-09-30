@@ -35,9 +35,3 @@ export async function getOtpCodeFromMailpit(email: string): Promise<string> {
 
   return match[1];
 }
-
-export async function getOtpEmailHtmlFromMailpit(
-  email: string,
-): Promise<string> {
-  return findOtpEmailHtml(email);
-}

@@ -156,7 +156,7 @@ const CENTER_DETAIL_LEFT_MARGIN_RATIO = 0.15;
 // ものだと伝わるよう、少しだけ次の色を見せる。
 const NEXT_RING_PEEK_RATIO = 0.15;
 
-export function TargetFaceCenterDetail({
+function TargetFaceCenterDetail({
   rings,
   pixelWidth = 64,
 }: {
