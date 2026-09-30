@@ -512,8 +512,6 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.disable_distance(uuid,uuid)',                                              'authenticated', true),
   ('public.disable_round(uuid,uuid)',                                                 'anon',          false),
   ('public.disable_round(uuid,uuid)',                                                 'authenticated', true),
-  ('public.get_round_view_status(uuid)',                                              'anon',          false),
-  ('public.get_round_view_status(uuid)',                                              'authenticated', true),
   ('public.handle_new_user()',                                                        'anon',          true),
   ('public.handle_new_user()',                                                        'authenticated', true),
   ('public.is_round_editor(uuid)',                                                    'anon',          true),
