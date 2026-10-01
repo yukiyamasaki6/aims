@@ -1,5 +1,5 @@
--- rounds / round_users / distances / shots は、is_round_member/is_round_editor
--- という同じRLSの仕組みで繋がり、create_round RPCが3テーブルへ原子的に
+-- rounds / round_users / distances / shots は、is_round_memberの
+-- SELECTポリシーという同じRLSの仕組みで繋がり、create_round RPCが3テーブルへ原子的に
 -- 書き込む、切り離せない1つのクラスタとして扱う。
 
 begin;
@@ -158,8 +158,8 @@ reset role;
 
 insert into auth.users (id) values ('55555555-5555-5555-5555-555555555555');
 insert into auth.users (id) values ('66666666-6666-6666-6666-666666666666');
--- どのラウンドにも未参加の第三者。round_usersへの追加自体がRLSで拒否される
--- ことを検証する際、外部キー違反ではなくRLS違反であることを保証するために使う。
+-- どのラウンドにも未参加の第三者。round_usersへの追加が、外部キー違反ではなく
+-- 権限不足で拒否されることを保証するために使う。
 insert into auth.users (id) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
 
 insert into public.rounds (id, name, round_date, format, bow_type)
@@ -268,20 +268,21 @@ select results_eq(
   'viewerロールのユーザーはdistancesを削除できない（直接の変更は拒否され、対象行は変化しない）'
 );
 
--- viewer自身を含め、round_usersへの新規追加（招待相当）もeditor限定である。
-select throws_like(
+-- viewer自身を含め、round_usersへの直接の新規追加（招待相当）はできない。
+select throws_ok(
   $$insert into public.round_users (round_id, user_id, role)
     values ('77777777-7777-7777-7777-777777777777', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'viewer')$$,
-  '%row-level security%',
-  'viewerロールのユーザーは他のユーザーをラウンドに追加できない'
+  '42501',
+  'permission denied for table round_users',
+  'viewerロールのユーザーは他のユーザーをラウンドに追加できない（GRANTがなくpermission denied）'
 );
 
 -- ============================================================
 -- issue459: 直接書き込みの拒否（editorであっても）とRPC経由の正常系操作
 -- ============================================================
 -- rounds/distances/shotsへの変更はSECURITY DEFINER RPC経由に一本化する。
--- round_usersは権限変更・参加者追加をオンラインで即時に扱うため、editorに
--- よる直接INSERT/UPDATE/DELETEを維持する。
+-- round_usersも書き込み経路がなく、editorであっても直接INSERT/UPDATE/DELETEできない
+-- （メンバー管理はチーム機能で必要になった時点で設計する）。
 
 reset role;
 
@@ -400,31 +401,28 @@ select throws_ok(
   'editorであってもshotsへの直接INSERTはGRANTがなくpermission deniedになる（record_shots RPC経由のみ許可）'
 );
 
-insert into public.round_users (round_id, user_id, role)
-values ('c0000000-0000-0000-0000-000000000010', 'c0000000-0000-0000-0000-000000000004', 'viewer');
-select results_eq(
-  $$select role from public.round_users
-    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000004'$$,
-  $$values ('viewer'::text)$$,
-  'editorはround_usersへ参加者を追加できる'
+select throws_ok(
+  $$insert into public.round_users (round_id, user_id, role)
+    values ('c0000000-0000-0000-0000-000000000010', 'c0000000-0000-0000-0000-000000000004', 'viewer')$$,
+  '42501',
+  'permission denied for table round_users',
+  'editorであってもround_usersへの直接INSERTはGRANTがなくpermission deniedになる'
 );
 
-update public.round_users set role = 'editor'
-  where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000004';
-select results_eq(
-  $$select role from public.round_users
-    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000004'$$,
-  $$values ('editor'::text)$$,
-  'editorはround_usersのロールを更新できる'
+select throws_ok(
+  $$update public.round_users set role = 'editor'
+    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000003'$$,
+  '42501',
+  'permission denied for table round_users',
+  'editorであってもround_usersへの直接UPDATEはGRANTがなくpermission deniedになる'
 );
 
-delete from public.round_users
-  where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000004';
-select results_eq(
-  $$select count(*) from public.round_users
-    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000004'$$,
-  $$values (0::bigint)$$,
-  'editorはround_usersから参加者を削除できる'
+select throws_ok(
+  $$delete from public.round_users
+    where round_id = 'c0000000-0000-0000-0000-000000000010' and user_id = 'c0000000-0000-0000-0000-000000000003'$$,
+  '42501',
+  'permission denied for table round_users',
+  'editorであってもround_usersへの直接DELETEはGRANTがなくpermission deniedになる'
 );
 
 -- ------------------------------------------------------------

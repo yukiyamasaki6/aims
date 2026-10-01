@@ -1,6 +1,6 @@
 begin;
 
-select plan(49);
+select plan(41);
 
 -- formatは的の選択UIの並び順（種類→サイズ）を、名前文字列の解析ではなく
 -- roundsやdistancesと同じ意味を持つ列で扱うために持たせる。
@@ -85,6 +85,22 @@ select throws_ok(
   '23502',
   null,
   'target_faces.bow_typeを省略した作成はNOT NULL制約で拒否される'
+);
+
+select throws_ok(
+  $$insert into public.target_faces (owner_id, name, format)
+    values ('11111111-1111-1111-1111-111111111111', 'Missing Size', 'outdoor')$$,
+  '23502',
+  null,
+  'target_faces.sizeを省略した作成はNOT NULL制約で拒否される'
+);
+
+select throws_ok(
+  $$insert into public.target_faces (owner_id, name, size)
+    values ('11111111-1111-1111-1111-111111111111', 'Missing Format', 80)$$,
+  '23502',
+  null,
+  'target_faces.formatを省略した作成はNOT NULL制約で拒否される'
 );
 
 -- sizeは実際の的紙サイズであり、6点的（得点帯が中心の一部にしか印刷されない）
@@ -246,51 +262,23 @@ select throws_ok(
   '参照中のtarget_faceは外部キー制約で削除できない'
 );
 
--- Fixture: two users. RLS挙動を確認する。
+-- Fixture: 別ユーザーが所有する個人的な的。
+-- 的はシードのみでアプリから書き込まないため、authenticatedにはSELECTだけを許可する。
 insert into auth.users (id) values ('11111111-1111-1111-1111-111111111111');
 insert into auth.users (id) values ('99999999-9999-9999-9999-999999999999');
 
+insert into public.target_faces (id, owner_id, name, size, format, bow_type)
+values ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'My Target', 80, 'outdoor', array['recurve', 'compound', 'barebow']);
+
+insert into public.target_face_spots (id, target_face_id, center_x, center_y)
+values ('33333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222', 0, 0);
+
+insert into public.target_face_rings (spot_id, radius, color, line_color, z_index, score_str, score_int)
+values ('33333333-3333-3333-3333-333333333333', 6.1, '#FFE552', null, 1, '10', 10);
+
 set local role authenticated;
 
--- User A: 自分のowner_idで個人的な的を作成できる。
-select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
-select lives_ok(
-  $$insert into public.target_faces (id, owner_id, name, size, format, bow_type)
-    values ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'My Target', 80, 'outdoor', array['recurve', 'compound', 'barebow'])$$,
-  'ユーザーは自分のowner_idで的を作成できる'
-);
-
-select throws_ok(
-  $$insert into public.target_faces (owner_id, name, format)
-    values ('11111111-1111-1111-1111-111111111111', 'Missing Size', 'outdoor')$$,
-  '23502',
-  null,
-  'target_faces.sizeを省略した作成はNOT NULL制約で拒否される'
-);
-
-select throws_ok(
-  $$insert into public.target_faces (owner_id, name, size)
-    values ('11111111-1111-1111-1111-111111111111', 'Missing Format', 80)$$,
-  '23502',
-  null,
-  'target_faces.formatを省略した作成はNOT NULL制約で拒否される'
-);
-
-select throws_like(
-  $$insert into public.target_faces (owner_id, name, size, format, bow_type)
-    values (null, 'Global attempt', 80, 'outdoor', array['recurve', 'compound', 'barebow'])$$,
-  '%row-level security%',
-  'クライアントはowner_idをnull（グローバル）にして的を作成できない'
-);
-
-select throws_like(
-  $$insert into public.target_faces (owner_id, name, size, format, bow_type)
-    values ('99999999-9999-9999-9999-999999999999', 'Other owner attempt', 80, 'outdoor', array['recurve', 'compound', 'barebow'])$$,
-  '%row-level security%',
-  'ユーザーは他人のowner_idで的を作成できない'
-);
-
--- User B: 他人の個人的な的も含め、グローバル・個人問わず全て閲覧できる。
+-- 認証済みユーザーは、他人の個人的な的を含め、グローバル・個人問わず全て閲覧できる。
 select set_config('request.jwt.claim.sub', '99999999-9999-9999-9999-999999999999', true);
 select results_eq(
   $$select count(*) from public.target_faces where id = '22222222-2222-2222-2222-222222222222'$$,
@@ -298,11 +286,10 @@ select results_eq(
   '他ユーザーの個人的な的も閲覧できる'
 );
 
-select throws_like(
-  $$insert into public.target_face_spots (target_face_id, center_x, center_y)
-    values ('22222222-2222-2222-2222-222222222222', 0, 0)$$,
-  '%row-level security%',
-  '他ユーザーは自分が所有しない的にスポットを追加できない'
+select results_eq(
+  $$select count(*) from public.target_face_spots where target_face_id = '22222222-2222-2222-2222-222222222222'$$,
+  $$values (1::bigint)$$,
+  '他ユーザーの個人的な的のスポットも閲覧できる'
 );
 
 -- このアプリは認証済みユーザーだけが利用するため、未認証では参照できない。
@@ -330,46 +317,12 @@ select throws_ok(
   '未認証（anon）は個人的な的のスポットも閲覧できない'
 );
 
-set local role authenticated;
-select set_config('request.jwt.claim.sub', '99999999-9999-9999-9999-999999999999', true);
-
-select is_empty(
-  $$update public.target_faces set name = 'Hijacked'
-    where id = '22222222-2222-2222-2222-222222222222'
-    returning id$$,
-  '他ユーザーは自分が所有しない的を更新できない（0件更新）'
-);
-
-select is_empty(
-  $$delete from public.target_faces
-    where id = '22222222-2222-2222-2222-222222222222'
-    returning id$$,
-  '他ユーザーは自分が所有しない的を削除できない（0件削除）'
-);
-
--- User A: 自分の的にスポット・点数帯を追加でき、削除もできる（子テーブルは親のowner_idに従う）。
-select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
-select lives_ok(
-  $$insert into public.target_face_spots (id, target_face_id, center_x, center_y)
-    values ('33333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222', 0, 0)$$,
-  '所有者は自分の的にスポットを追加できる'
-);
-
-select lives_ok(
-  $$insert into public.target_face_rings (spot_id, radius, color, line_color, z_index, score_str, score_int)
-    values ('33333333-3333-3333-3333-333333333333', 6.1, '#FFE552', null, 1, '10', 10)$$,
-  '所有者は自分の的のスポットに点数帯を追加できる（境界線なしも許容される）'
-);
-
-select lives_ok(
-  $$insert into public.target_face_rings (spot_id, radius, color, line_color, z_index, score_str, score_int)
-    values ('33333333-3333-3333-3333-333333333333', 5.0, '#FFFFFF', null, 1, '9', 9)$$,
-  '同一(spot_id, z_index)の重複挿入は許容される（z_indexは描画順に過ぎず一意制約は無い）'
-);
+-- 的を削除すると、子のスポット・点数帯がカスケード削除される。
+reset role;
 
 select lives_ok(
   $$delete from public.target_faces where id = '22222222-2222-2222-2222-222222222222'$$,
-  '所有者は自分の的を削除できる'
+  '的を削除できる'
 );
 
 select results_eq(
