@@ -1,6 +1,6 @@
 begin;
 
-select plan(29);
+select plan(30);
 
 select results_eq(
   $$select count(*) from public.preset_rounds where owner_id is null$$,
@@ -33,14 +33,16 @@ select lives_ok(
 );
 
 select throws_ok(
-  $$update public.preset_rounds set format = 'invalid' where id = '22222222-2222-2222-2222-222222222222'$$,
+  $$insert into public.preset_rounds (owner_id, name, format, bow_type)
+    values ('11111111-1111-1111-1111-111111111111', 'Invalid Format', 'invalid', 'recurve')$$,
   '23514',
   null,
   '不正なformatはCHECK制約で拒否される'
 );
 
 select throws_ok(
-  $$update public.preset_rounds set bow_type = 'invalid' where id = '22222222-2222-2222-2222-222222222222'$$,
+  $$insert into public.preset_rounds (owner_id, name, format, bow_type)
+    values ('11111111-1111-1111-1111-111111111111', 'Invalid Bow Type', 'outdoor', 'invalid')$$,
   '23514',
   null,
   '不正なbow_typeはCHECK制約で拒否される'
@@ -103,11 +105,12 @@ select throws_like(
   '他ユーザーは自分が所有しないプリセットに距離を追加できない'
 );
 
-select is_empty(
+select throws_ok(
   $$update public.preset_rounds set name = 'Hijacked'
-    where id = '22222222-2222-2222-2222-222222222222'
-    returning id$$,
-  '他ユーザーは自分が所有しないプリセットを更新できない（0件更新）'
+    where id = '22222222-2222-2222-2222-222222222222'$$,
+  '42501',
+  'permission denied for table preset_rounds',
+  'プリセットの直接UPDATEはGRANTがなくpermission deniedになる'
 );
 
 select is_empty(
@@ -199,6 +202,13 @@ select lives_ok(
   '同一preset_id内でposition_keyが重複しても挿入できる'
 );
 
+select throws_ok(
+  $$delete from public.preset_distances where id = '33333333-3333-3333-3333-333333333333'$$,
+  '42501',
+  'permission denied for table preset_distances',
+  '親が残っている間は、preset_distancesを直接DELETEできない'
+);
+
 select lives_ok(
   $$delete from public.preset_rounds where id = '22222222-2222-2222-2222-222222222222'$$,
   '所有者は自分のプリセットを削除できる'
@@ -207,7 +217,7 @@ select lives_ok(
 select results_eq(
   $$select count(*) from public.preset_distances where preset_id = '22222222-2222-2222-2222-222222222222'$$,
   $$values (0::bigint)$$,
-  'プリセットの削除で距離構成もカスケード削除される'
+  'プリセットの削除で距離構成もカスケード削除される（preset_distancesにDELETE権限がなくても外部キーのCASCADEは動く）'
 );
 
 -- ============================================================
