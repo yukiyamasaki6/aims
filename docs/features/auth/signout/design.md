@@ -19,7 +19,7 @@
 
 ## 構成とデータの流れ
 
-- `src/app/(main)/left-panel-client.tsx`: サインアウトボタンとダイアログを持つ。
+- `src/app/(main)/left-panel.tsx`: サインアウトボタンとダイアログを持つ。
 - `src/components/ui/confirm-dialog.tsx`: `BlockingConfirmDialog`。二重送信の防止、送信中の無効化、エラー表示、再試行を担う。`rounds/delete`と共通である。
 - `src/app/(main)/sign-out.ts`: `signOut`を呼び、成否を判定する。
 - `src/features/auth/local-identity.ts`: 端末の識別情報を持つ。
