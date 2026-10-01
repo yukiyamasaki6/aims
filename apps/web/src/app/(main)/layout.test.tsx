@@ -4,7 +4,7 @@ import MainLayout from "./layout";
 import { LeftPanel } from "./left-panel";
 
 describe("MainLayout", () => {
-  // LeftPanelは非同期のServer Componentで、jsdom上のクライアント描画では実行できないため、返される要素ツリーを検査する（LeftPanel自体の表示はleft-panel.test.tsxで検証する）。
+  // 返される要素ツリーを検査する（LeftPanel自体の表示はleft-panel.test.tsxで検証する）。
   it("左パネルと子要素を並べて配置する", () => {
     // Given
     const children = <p>子要素</p>;
