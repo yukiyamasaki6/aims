@@ -25,7 +25,7 @@
 - スキーマ変更はversion管理されたmigrationで行い、ad-hoc SQLを使用しない。
 - migrationは `pnpm db:reset` を通して適用する。
 - 新規または変更するテーブルにはRLSポリシーを定義する。
-- `anon, authenticated` に必要な権限を明示的に付与する。
+- `anon, authenticated` に必要な権限だけを明示的に付与する。アプリが使わない書き込みのポリシーとGRANT、および不要な関数のEXECUTEを残さない。
 - スキーマ変更後は `pnpm db:types` で型定義を再生成し、生成結果にログのprefixが含まれる場合は除去する。
 
 ### 成果物
