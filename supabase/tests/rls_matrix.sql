@@ -17,7 +17,7 @@
 
 begin;
 
-select plan(19);
+select plan(20);
 
 -- fixture: 各アクターに対応するユーザーと、検証対象の行を用意する。
 -- 接続ロール（RLS対象外）で直接INSERTする。
@@ -617,6 +617,10 @@ from pg_proc p
 cross join (select role_name from rls_role where kind = 'target') as r
 where p.pronamespace = 'public'::regnamespace;
 
+-- 期待値の方針:
+--   RPCとRLSポリシーのヘルパー: authenticatedだけtrue。anonはfalse。
+--   トリガー関数（handle_new_user, set_updated_at）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
+-- 新しい関数を追加したら、PUBLICからREVOKEし、この表に行を追加する。
 create temp table rls_fn_expected (
   signature text, role_name text, can_execute boolean,
   primary key (signature, role_name)
@@ -632,18 +636,18 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.disable_distance(uuid,uuid)',                                              'authenticated', true),
   ('public.disable_round(uuid,uuid)',                                                 'anon',          false),
   ('public.disable_round(uuid,uuid)',                                                 'authenticated', true),
-  ('public.handle_new_user()',                                                        'anon',          true),
-  ('public.handle_new_user()',                                                        'authenticated', true),
-  ('public.is_round_editor(uuid)',                                                    'anon',          true),
+  ('public.handle_new_user()',                                                        'anon',          false),
+  ('public.handle_new_user()',                                                        'authenticated', false),
+  ('public.is_round_editor(uuid)',                                                    'anon',          false),
   ('public.is_round_editor(uuid)',                                                    'authenticated', true),
-  ('public.is_round_member(uuid)',                                                    'anon',          true),
+  ('public.is_round_member(uuid)',                                                    'anon',          false),
   ('public.is_round_member(uuid)',                                                    'authenticated', true),
   ('public.record_shots(jsonb)',                                                      'anon',          false),
   ('public.record_shots(jsonb)',                                                      'authenticated', true),
-  ('public.save_round_as_preset(text,text,text,jsonb)',                               'anon',          true),
+  ('public.save_round_as_preset(text,text,text,jsonb)',                               'anon',          false),
   ('public.save_round_as_preset(text,text,text,jsonb)',                               'authenticated', true),
-  ('public.set_updated_at()',                                                         'anon',          true),
-  ('public.set_updated_at()',                                                         'authenticated', true),
+  ('public.set_updated_at()',                                                         'anon',          false),
+  ('public.set_updated_at()',                                                         'authenticated', false),
   ('public.update_distance(uuid,uuid,bigint,bigint,bigint,uuid,boolean)',             'anon',          false),
   ('public.update_distance(uuid,uuid,bigint,bigint,bigint,uuid,boolean)',             'authenticated', true),
   ('public.update_round(uuid,uuid,text,date,text,text)',                              'anon',          false),
@@ -680,6 +684,8 @@ select is_empty(
 );
 
 -- 検証対象外のロールに、publicの関数のEXECUTEが付いていない。proaclがnullの関数は既定権限で判定する。
+-- PUBLICは上の実測ではanon・authenticatedへの実効権限として現れるため、内部ロールとして許容している。
+-- PUBLICのEXECUTEは次の検証で別に禁止する。
 select is_empty(
   $$select p.proname, g.role_name
     from pg_proc p
@@ -690,6 +696,17 @@ select is_empty(
     where p.pronamespace = 'public'::regnamespace and a.privilege_type = 'EXECUTE'
       and g.role_name not in (select role_name from rls_role)$$,
   'publicの全関数のEXECUTEは、検証対象ロールと内部ロールにしか付いていない'
+);
+
+-- PUBLICにpublicの全関数のEXECUTEが付いていない。
+-- 関数の作成時に自動で付くPUBLICのEXECUTEは、REVOKEし忘れるとanon・authenticatedへの実効権限になる。
+-- 新しい関数でREVOKEが漏れた場合は、この検証と期待値表の網羅性の検証が落ちる。
+select is_empty(
+  $$select p.proname
+    from pg_proc p
+    cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+    where p.pronamespace = 'public'::regnamespace and a.privilege_type = 'EXECUTE' and a.grantee = 0$$,
+  'publicの全関数にPUBLICのEXECUTEが付いていない'
 );
 
 -- ============================================================
