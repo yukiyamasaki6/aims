@@ -48,6 +48,19 @@ describe("RoundConfigPanel", () => {
     });
   });
 
+  describe("ラウンド名が空の場合", () => {
+    it("名前の区切りを表示せず、実施日・種別・弓種だけを要約表示する", () => {
+      // Given: ラウンド名が空の保存済みの値
+      // When: パネルを表示する
+      setup({ initial: { ...initial, name: "" } });
+
+      // Then: 先頭に区切りを付けず、実施日・種別・弓種を表示する
+      expect(screen.getByTestId("round-config-summary")).toHaveTextContent(
+        /^2026-09-15 \/ アウトドア \/ リカーブ$/,
+      );
+    });
+  });
+
   describe("要約のクリック", () => {
     it("展開し、再度クリックすると閉じる", async () => {
       // Given: 折りたたまれたパネル

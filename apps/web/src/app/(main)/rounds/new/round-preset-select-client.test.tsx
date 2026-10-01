@@ -159,6 +159,27 @@ describe("RoundPresetSelect", () => {
       ).toBeInTheDocument();
     });
 
+    it("選択中に別のプリセットをクリックすると、そのプリセットへ選択が移る", async () => {
+      // Given: 個人プリセットを選択している
+      const user = userEvent.setup();
+      render(
+        <RoundPresetSelect
+          personalPresets={[personalPreset, otherPersonalPreset]}
+          globalPresets={[globalPreset]}
+        />,
+      );
+      await user.click(screen.getAllByTestId("round-preset-button")[0]);
+
+      // When: 別の個人プリセットをクリックする
+      await user.click(screen.getAllByTestId("round-preset-button")[1]);
+
+      // Then: 開始ボタンのラベルがクリックしたプリセット名になり、元のプリセットの距離構成は閉じる
+      expect(
+        screen.getByRole("button", { name: "「別の個人セット」で開始" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("70m")).not.toBeInTheDocument();
+    });
+
     it("公式プリセットも選択でき、開始ボタンのラベルが変わる", async () => {
       // Given: 個人プリセットと公式プリセットを表示している
       const user = userEvent.setup();
@@ -176,6 +197,96 @@ describe("RoundPresetSelect", () => {
       // Then: 開始ボタンのラベルが公式プリセット名になる
       expect(
         screen.getByRole("button", { name: "「公式720ラウンド」で開始" }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("プリセットのメニュー", () => {
+    it("個人プリセットにだけメニューボタンを表示し、公式プリセットには表示しない", () => {
+      // Given/When: 個人プリセット1件と公式プリセット1件を表示する
+      render(
+        <RoundPresetSelect
+          personalPresets={[personalPreset]}
+          globalPresets={[globalPreset]}
+        />,
+      );
+
+      // Then: メニューボタンは個人プリセットの1件分だけで、公式プリセットの行には無い
+      const triggers = screen.getAllByTestId("round-preset-menu-trigger");
+      expect(triggers).toHaveLength(1);
+      const globalRow = screen.getByText("公式720ラウンド").closest("div");
+      if (!globalRow) throw new Error("global preset row not found");
+      expect(
+        within(globalRow).queryByTestId("round-preset-menu-trigger"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("メニューを開いて外側をクリックすると、メニューが閉じる", async () => {
+      // Given: 個人プリセットのメニューを開いている
+      const user = userEvent.setup();
+      render(
+        <RoundPresetSelect
+          personalPresets={[personalPreset]}
+          globalPresets={[]}
+        />,
+      );
+      await user.click(screen.getByTestId("round-preset-menu-trigger"));
+      expect(await screen.findByTestId("round-preset-delete")).toBeVisible();
+
+      // When: メニューの外側をクリックする
+      await user.click(document.body);
+
+      // Then: メニューが閉じる
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("round-preset-delete"),
+        ).not.toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("選択中のプリセットの展開表示", () => {
+    it("形式・弓種と、距離構成（距離・エンド構成）を展開表示する", async () => {
+      // Given: 個人プリセットを表示している
+      const user = userEvent.setup();
+      render(
+        <RoundPresetSelect
+          personalPresets={[personalPreset]}
+          globalPresets={[globalPreset]}
+        />,
+      );
+
+      // When: 個人プリセットをクリックする
+      await user.click(screen.getAllByTestId("round-preset-button")[0]);
+
+      // Then: 形式・弓種と、各距離の距離とエンド構成を表示する
+      expect(
+        screen.getByTestId("round-preset-format-bow-type"),
+      ).toHaveTextContent("アウトドア / リカーブ");
+      expect(screen.getByText("70m")).toBeInTheDocument();
+      expect(screen.getByText("50m")).toBeInTheDocument();
+      expect(screen.getAllByText("6本×6エンド")).toHaveLength(2);
+    });
+
+    it("展開された距離構成の部分をクリックしても、選択が解除される", async () => {
+      // Given: 個人プリセットを選択して、距離構成を展開している
+      const user = userEvent.setup();
+      render(
+        <RoundPresetSelect
+          personalPresets={[personalPreset]}
+          globalPresets={[globalPreset]}
+        />,
+      );
+      await user.click(screen.getAllByTestId("round-preset-button")[0]);
+      expect(screen.getByText("70m")).toBeInTheDocument();
+
+      // When: 展開された距離構成の部分をクリックする
+      await user.click(screen.getByText("70m"));
+
+      // Then: 選択が解除され、距離構成が閉じ、開始ボタンは既定表示に戻る
+      expect(screen.queryByText("70m")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "プリセット無しで開始" }),
       ).toBeInTheDocument();
     });
   });
@@ -418,6 +529,33 @@ describe("RoundPresetSelect", () => {
           await screen.findByText("権限がありません。"),
         ).toBeInTheDocument();
         expect(screen.getByText("個人練習セット")).toBeInTheDocument();
+      });
+
+      it("削除確認ダイアログは開いたままで、確認ボタンを再度押せる", async () => {
+        // Given: 削除がエラーを返す
+        supabase.deleteEq.mockResolvedValue({
+          error: { message: "権限がありません。" },
+        });
+        const user = userEvent.setup();
+        render(
+          <RoundPresetSelect
+            personalPresets={[personalPreset]}
+            globalPresets={[]}
+          />,
+        );
+
+        // When: 削除を確定する
+        await openDeleteDialog(user, "個人練習セット");
+        await user.click(screen.getByTestId("confirm-dialog-confirm"));
+
+        // Then: エラーを表示したままダイアログが開いており、確認ボタンが再度有効になる
+        expect(
+          await screen.findByText("権限がありません。"),
+        ).toBeInTheDocument();
+        expect(screen.getByTestId("confirm-dialog-confirm")).toBeEnabled();
+        expect(
+          screen.getByTestId("confirm-dialog-confirm"),
+        ).not.toHaveAttribute("aria-disabled", "true");
       });
     });
   });

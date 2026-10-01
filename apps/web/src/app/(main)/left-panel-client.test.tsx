@@ -103,6 +103,24 @@ describe("LeftPanelClient", () => {
     });
   });
 
+  describe("リンク", () => {
+    it("AIMSリンクと個人リンクは/roundsへのリンクである", () => {
+      // Given
+      // When
+      render(<LeftPanelClient isSignedIn={true} />);
+
+      // Then
+      expect(screen.getByRole("link", { name: "AIMS" })).toHaveAttribute(
+        "href",
+        "/rounds",
+      );
+      expect(screen.getByRole("link", { name: "個人" })).toHaveAttribute(
+        "href",
+        "/rounds",
+      );
+    });
+  });
+
   describe("サインアウトを確認する", () => {
     it("サインアウトが完了した場合は、/へ遷移する", async () => {
       // Given

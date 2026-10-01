@@ -10,6 +10,28 @@ export const TRIPLE_SPOT_TARGET_FACE_ID =
 // リング色に追従しているかの検証に使う。
 export const FIELD_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000010";
 
+// ローカル・CIのTURNSTILE_SECRET_KEYはCloudflareのテスト専用
+// シークレット（常に検証を通過する）のため、captchaTokenの値自体は
+// 任意の非空文字列でよい。
+export async function signInAsTestUser(email: string, password: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Missing Supabase environment variables in e2e helper.");
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+    options: { captchaToken: "test-captcha-token" },
+  });
+  if (error) {
+    throw error;
+  }
+  return { supabase, userId: data.user.id };
+}
+
 // スコア入力等のUI検証には/rounds/newのプリセット選択では用意できない任意の
 // 距離構成（少エンド・少射数）が必要なため、本番アプリにテスト専用のAPIを持たせず、
 // supabase-jsから対象ユーザーでサインインしてcreate_round RPCを直接呼ぶ。
@@ -25,27 +47,23 @@ export async function createRound(input: {
     totalEnds: number;
     arrowsPerEnd: number;
     targetFaceId?: string;
+    isMarked?: boolean;
+  }[];
+  // 記録済みの得点を持つラウンドが必要なテスト用。distanceIndexはdistancesの添字。
+  shots?: {
+    distanceIndex: number;
+    endNumber: number;
+    arrowNumber: number;
+    scoreStr: string;
+    scoreInt: number;
   }[];
 }): Promise<string> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error("Missing Supabase environment variables in e2e helper.");
-  }
+  const { supabase, userId } = await signInAsTestUser(
+    input.email,
+    input.password,
+  );
 
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-  // ローカル・CIのTURNSTILE_SECRET_KEYはCloudflareのテスト専用
-  // シークレット（常に検証を通過する）のため、captchaTokenの値自体は
-  // 任意の非空文字列でよい。
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email: input.email,
-    password: input.password,
-    options: { captchaToken: "test-captcha-token" },
-  });
-  if (signInError) {
-    throw signInError;
-  }
+  const distanceIds = input.distances.map(() => randomUUID());
 
   const { data: roundId, error } = await supabase.rpc("create_round", {
     p_round_event_id: randomUUID(),
@@ -56,10 +74,10 @@ export async function createRound(input: {
     p_bow_type: input.bowType ?? "recurve",
     p_distances: input.distances.map((d, index) => ({
       distance_event_id: randomUUID(),
-      id: randomUUID(),
+      id: distanceIds[index],
       position_key: String(index + 1).padStart(12, "0"),
       distance: d.distance,
-      is_marked: true,
+      is_marked: d.isMarked ?? true,
       total_ends: d.totalEnds,
       arrows_per_end: d.arrowsPerEnd,
       target_face_id: d.targetFaceId ?? DEFAULT_TARGET_FACE_ID,
@@ -68,6 +86,23 @@ export async function createRound(input: {
 
   if (error || !roundId) {
     throw error ?? new Error("ラウンドの作成に失敗しました。");
+  }
+
+  if (input.shots && input.shots.length > 0) {
+    const { error: shotsError } = await supabase.rpc("record_shots", {
+      p_shots: input.shots.map((s) => ({
+        shot_event_id: randomUUID(),
+        distance_id: distanceIds[s.distanceIndex],
+        end_number: s.endNumber,
+        arrow_number: s.arrowNumber,
+        shooter_id: userId,
+        score_str: s.scoreStr,
+        score_int: s.scoreInt,
+      })),
+    });
+    if (shotsError) {
+      throw shotsError;
+    }
   }
 
   return roundId;

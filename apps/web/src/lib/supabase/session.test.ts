@@ -32,9 +32,13 @@ describe("updateSession", () => {
     );
   });
 
-  it("未認証で/rounds配下にアクセスすると/signinへリダイレクトする", async () => {
+  it.each([
+    "/rounds",
+    "/rounds/new",
+    "/rounds/00000000-0000-0000-0000-000000000000",
+  ])("未認証で%sにアクセスすると/signinへリダイレクトする", async (path) => {
     mockUser(null);
-    const request = new NextRequest("https://app.example.com/rounds/1");
+    const request = new NextRequest(`https://app.example.com${path}`);
 
     const res = await updateSession(request);
 
@@ -61,14 +65,19 @@ describe("updateSession", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 
-  it("認証済みで/signinにアクセスすると/roundsへリダイレクトする", async () => {
-    mockUser({ id: "user-1" });
-    const request = new NextRequest("https://app.example.com/signin");
+  it.each(["/", "/signin", "/signup", "/reset-password"])(
+    "認証済みで%sにアクセスすると/roundsへリダイレクトする",
+    async (path) => {
+      mockUser({ id: "user-1" });
+      const request = new NextRequest(`https://app.example.com${path}`);
 
-    const res = await updateSession(request);
+      const res = await updateSession(request);
 
-    expect(res.headers.get("location")).toBe("https://app.example.com/rounds");
-  });
+      expect(res.headers.get("location")).toBe(
+        "https://app.example.com/rounds",
+      );
+    },
+  );
 
   it("認証済みでもServer Action呼び出しはサインイン専用パスでリダイレクトしない", async () => {
     mockUser({ id: "user-1" });
