@@ -1,6 +1,6 @@
 begin;
 
-select plan(17);
+select plan(18);
 
 insert into auth.users (id) values ('d0000000-0000-0000-0000-000000000001');
 
@@ -125,6 +125,18 @@ update public.shot_events set score_str = '9' where event_id = 'd0000000-0000-00
 select ok(
   (select updated_at > created_at from public.shot_events where event_id = 'd0000000-0000-0000-0000-00000000000e'),
   'shot_eventsのupdated_atはUPDATEで更新される'
+);
+
+-- authenticatedにset_updated_atのEXECUTEがなくても、そのロールによるUPDATEでトリガーが発火してupdated_atが更新される。
+update public.users set updated_at = '2000-01-01' where id = 'd0000000-0000-0000-0000-000000000001';
+select set_config('request.jwt.claim.sub', 'd0000000-0000-0000-0000-000000000001', true);
+set local role authenticated;
+update public.users set name = 'updated by authenticated' where id = 'd0000000-0000-0000-0000-000000000001';
+reset role;
+
+select ok(
+  (select updated_at > '2000-01-01' from public.users where id = 'd0000000-0000-0000-0000-000000000001'),
+  'authenticatedによるusersのUPDATEでも、EXECUTE権限なしにupdated_atが更新される'
 );
 
 select * from finish();
