@@ -5,6 +5,9 @@
 -- 実行結果は 'rows:N'（SELECTで見える行数、UPDATE/DELETEの影響行数、INSERT成功は1）か
 -- 'error:SQLSTATE'（権限不足・RLS違反など）に正規化する。
 -- rows:0 はRLSのUSING句で対象行が見えず、静かに0件になったことを表す。
+-- error:42501 はGRANT不足（permission denied）とRLSのWITH CHECK違反の両方を表す。
+-- どちらで拒否されたかは、後段のテーブル権限の期待値表（anon・authenticated × 権限）で固定する。
+-- 書き込みポリシーのない操作はGRANTも付けず、行を見る前にpermission deniedで拒否する。
 --
 -- アクター
 --   editor / viewer / non_member / anon: ラウンド系。editor・viewerは対象ラウンドのメンバー
@@ -14,7 +17,7 @@
 
 begin;
 
-select plan(11);
+select plan(19);
 
 -- fixture: 各アクターに対応するユーザーと、検証対象の行を用意する。
 -- 接続ロール（RLS対象外）で直接INSERTする。
@@ -217,16 +220,16 @@ create temp table rls_expected (
 insert into rls_expected (tbl, op, actor, expected) values
   ('users',              'select',  'self',        'rows:1'),
   ('users',              'select',  'other',       'rows:1'),
-  ('users',              'select',  'anon',        'rows:0'),
+  ('users',              'select',  'anon',        'error:42501'),
   ('users',              'insert',  'self',        'error:42501'),
   ('users',              'insert',  'other',       'error:42501'),
   ('users',              'insert',  'anon',        'error:42501'),
   ('users',              'update',  'self',        'rows:1'),
   ('users',              'update',  'other',       'rows:0'),
-  ('users',              'update',  'anon',        'rows:0'),
+  ('users',              'update',  'anon',        'error:42501'),
   ('users',              'delete',  'self',        'rows:1'),
   ('users',              'delete',  'other',       'rows:0'),
-  ('users',              'delete',  'anon',        'rows:0'),
+  ('users',              'delete',  'anon',        'error:42501'),
   ('target_faces',       'select',  'owner',       'rows:1'),
   ('target_faces',       'select',  'other',       'rows:1'),
   ('target_faces',       'select',  'anon',        'error:42501'),
@@ -290,55 +293,55 @@ insert into rls_expected (tbl, op, actor, expected) values
   ('rounds',             'select',  'editor',      'rows:1'),
   ('rounds',             'select',  'viewer',      'rows:1'),
   ('rounds',             'select',  'non_member',  'rows:0'),
-  ('rounds',             'select',  'anon',        'rows:0'),
+  ('rounds',             'select',  'anon',        'error:42501'),
   ('rounds',             'insert',  'editor',      'error:42501'),
   ('rounds',             'insert',  'viewer',      'error:42501'),
   ('rounds',             'insert',  'non_member',  'error:42501'),
   ('rounds',             'insert',  'anon',        'error:42501'),
-  ('rounds',             'update',  'editor',      'rows:0'),
-  ('rounds',             'update',  'viewer',      'rows:0'),
-  ('rounds',             'update',  'non_member',  'rows:0'),
-  ('rounds',             'update',  'anon',        'rows:0'),
-  ('rounds',             'delete',  'editor',      'rows:0'),
-  ('rounds',             'delete',  'viewer',      'rows:0'),
-  ('rounds',             'delete',  'non_member',  'rows:0'),
-  ('rounds',             'delete',  'anon',        'rows:0'),
+  ('rounds',             'update',  'editor',      'error:42501'),
+  ('rounds',             'update',  'viewer',      'error:42501'),
+  ('rounds',             'update',  'non_member',  'error:42501'),
+  ('rounds',             'update',  'anon',        'error:42501'),
+  ('rounds',             'delete',  'editor',      'error:42501'),
+  ('rounds',             'delete',  'viewer',      'error:42501'),
+  ('rounds',             'delete',  'non_member',  'error:42501'),
+  ('rounds',             'delete',  'anon',        'error:42501'),
   ('distances',          'select',  'editor',      'rows:1'),
   ('distances',          'select',  'viewer',      'rows:1'),
   ('distances',          'select',  'non_member',  'rows:0'),
-  ('distances',          'select',  'anon',        'rows:0'),
+  ('distances',          'select',  'anon',        'error:42501'),
   ('distances',          'insert',  'editor',      'error:42501'),
   ('distances',          'insert',  'viewer',      'error:42501'),
   ('distances',          'insert',  'non_member',  'error:42501'),
   ('distances',          'insert',  'anon',        'error:42501'),
-  ('distances',          'update',  'editor',      'rows:0'),
-  ('distances',          'update',  'viewer',      'rows:0'),
-  ('distances',          'update',  'non_member',  'rows:0'),
-  ('distances',          'update',  'anon',        'rows:0'),
-  ('distances',          'delete',  'editor',      'rows:0'),
-  ('distances',          'delete',  'viewer',      'rows:0'),
-  ('distances',          'delete',  'non_member',  'rows:0'),
-  ('distances',          'delete',  'anon',        'rows:0'),
+  ('distances',          'update',  'editor',      'error:42501'),
+  ('distances',          'update',  'viewer',      'error:42501'),
+  ('distances',          'update',  'non_member',  'error:42501'),
+  ('distances',          'update',  'anon',        'error:42501'),
+  ('distances',          'delete',  'editor',      'error:42501'),
+  ('distances',          'delete',  'viewer',      'error:42501'),
+  ('distances',          'delete',  'non_member',  'error:42501'),
+  ('distances',          'delete',  'anon',        'error:42501'),
   ('shots',              'select',  'editor',      'rows:1'),
   ('shots',              'select',  'viewer',      'rows:1'),
   ('shots',              'select',  'non_member',  'rows:0'),
-  ('shots',              'select',  'anon',        'rows:0'),
+  ('shots',              'select',  'anon',        'error:42501'),
   ('shots',              'insert',  'editor',      'error:42501'),
   ('shots',              'insert',  'viewer',      'error:42501'),
   ('shots',              'insert',  'non_member',  'error:42501'),
   ('shots',              'insert',  'anon',        'error:42501'),
-  ('shots',              'update',  'editor',      'rows:0'),
-  ('shots',              'update',  'viewer',      'rows:0'),
-  ('shots',              'update',  'non_member',  'rows:0'),
-  ('shots',              'update',  'anon',        'rows:0'),
-  ('shots',              'delete',  'editor',      'rows:0'),
-  ('shots',              'delete',  'viewer',      'rows:0'),
-  ('shots',              'delete',  'non_member',  'rows:0'),
-  ('shots',              'delete',  'anon',        'rows:0'),
+  ('shots',              'update',  'editor',      'error:42501'),
+  ('shots',              'update',  'viewer',      'error:42501'),
+  ('shots',              'update',  'non_member',  'error:42501'),
+  ('shots',              'update',  'anon',        'error:42501'),
+  ('shots',              'delete',  'editor',      'error:42501'),
+  ('shots',              'delete',  'viewer',      'error:42501'),
+  ('shots',              'delete',  'non_member',  'error:42501'),
+  ('shots',              'delete',  'anon',        'error:42501'),
   ('round_users',        'select',  'editor',      'rows:2'),
   ('round_users',        'select',  'viewer',      'rows:2'),
   ('round_users',        'select',  'non_member',  'rows:0'),
-  ('round_users',        'select',  'anon',        'rows:0'),
+  ('round_users',        'select',  'anon',        'error:42501'),
   ('round_users',        'insert',  'editor',      'rows:1'),
   ('round_users',        'insert',  'viewer',      'error:42501'),
   ('round_users',        'insert',  'non_member',  'error:42501'),
@@ -346,11 +349,11 @@ insert into rls_expected (tbl, op, actor, expected) values
   ('round_users',        'update',  'editor',      'rows:1'),
   ('round_users',        'update',  'viewer',      'rows:0'),
   ('round_users',        'update',  'non_member',  'rows:0'),
-  ('round_users',        'update',  'anon',        'rows:0'),
+  ('round_users',        'update',  'anon',        'error:42501'),
   ('round_users',        'delete',  'editor',      'rows:1'),
   ('round_users',        'delete',  'viewer',      'rows:0'),
   ('round_users',        'delete',  'non_member',  'rows:0'),
-  ('round_users',        'delete',  'anon',        'rows:0'),
+  ('round_users',        'delete',  'anon',        'error:42501'),
   ('round_events',       'select',  'editor',      'rows:1'),
   ('round_events',       'select',  'viewer',      'rows:1'),
   ('round_events',       'select',  'non_member',  'rows:0'),
@@ -359,13 +362,13 @@ insert into rls_expected (tbl, op, actor, expected) values
   ('round_events',       'insert',  'viewer',      'error:42501'),
   ('round_events',       'insert',  'non_member',  'error:42501'),
   ('round_events',       'insert',  'anon',        'error:42501'),
-  ('round_events',       'update',  'editor',      'rows:0'),
-  ('round_events',       'update',  'viewer',      'rows:0'),
-  ('round_events',       'update',  'non_member',  'rows:0'),
+  ('round_events',       'update',  'editor',      'error:42501'),
+  ('round_events',       'update',  'viewer',      'error:42501'),
+  ('round_events',       'update',  'non_member',  'error:42501'),
   ('round_events',       'update',  'anon',        'error:42501'),
-  ('round_events',       'delete',  'editor',      'rows:0'),
-  ('round_events',       'delete',  'viewer',      'rows:0'),
-  ('round_events',       'delete',  'non_member',  'rows:0'),
+  ('round_events',       'delete',  'editor',      'error:42501'),
+  ('round_events',       'delete',  'viewer',      'error:42501'),
+  ('round_events',       'delete',  'non_member',  'error:42501'),
   ('round_events',       'delete',  'anon',        'error:42501'),
   ('distance_events',    'select',  'editor',      'rows:1'),
   ('distance_events',    'select',  'viewer',      'rows:1'),
@@ -375,13 +378,13 @@ insert into rls_expected (tbl, op, actor, expected) values
   ('distance_events',    'insert',  'viewer',      'error:42501'),
   ('distance_events',    'insert',  'non_member',  'error:42501'),
   ('distance_events',    'insert',  'anon',        'error:42501'),
-  ('distance_events',    'update',  'editor',      'rows:0'),
-  ('distance_events',    'update',  'viewer',      'rows:0'),
-  ('distance_events',    'update',  'non_member',  'rows:0'),
+  ('distance_events',    'update',  'editor',      'error:42501'),
+  ('distance_events',    'update',  'viewer',      'error:42501'),
+  ('distance_events',    'update',  'non_member',  'error:42501'),
   ('distance_events',    'update',  'anon',        'error:42501'),
-  ('distance_events',    'delete',  'editor',      'rows:0'),
-  ('distance_events',    'delete',  'viewer',      'rows:0'),
-  ('distance_events',    'delete',  'non_member',  'rows:0'),
+  ('distance_events',    'delete',  'editor',      'error:42501'),
+  ('distance_events',    'delete',  'viewer',      'error:42501'),
+  ('distance_events',    'delete',  'non_member',  'error:42501'),
   ('distance_events',    'delete',  'anon',        'error:42501'),
   ('shot_events',        'select',  'editor',      'rows:1'),
   ('shot_events',        'select',  'viewer',      'rows:1'),
@@ -391,13 +394,13 @@ insert into rls_expected (tbl, op, actor, expected) values
   ('shot_events',        'insert',  'viewer',      'error:42501'),
   ('shot_events',        'insert',  'non_member',  'error:42501'),
   ('shot_events',        'insert',  'anon',        'error:42501'),
-  ('shot_events',        'update',  'editor',      'rows:0'),
-  ('shot_events',        'update',  'viewer',      'rows:0'),
-  ('shot_events',        'update',  'non_member',  'rows:0'),
+  ('shot_events',        'update',  'editor',      'error:42501'),
+  ('shot_events',        'update',  'viewer',      'error:42501'),
+  ('shot_events',        'update',  'non_member',  'error:42501'),
   ('shot_events',        'update',  'anon',        'error:42501'),
-  ('shot_events',        'delete',  'editor',      'rows:0'),
-  ('shot_events',        'delete',  'viewer',      'rows:0'),
-  ('shot_events',        'delete',  'non_member',  'rows:0'),
+  ('shot_events',        'delete',  'editor',      'error:42501'),
+  ('shot_events',        'delete',  'viewer',      'error:42501'),
+  ('shot_events',        'delete',  'non_member',  'error:42501'),
   ('shot_events',        'delete',  'anon',        'error:42501')
 ;
 
@@ -467,7 +470,10 @@ select is_empty(
   '全ての検証SQLはRLS対象外の接続ロールで1行以上に作用する'
 );
 
--- 検証対象外のロールに、publicのテーブルへのDML権限が付いていない。
+-- 検証対象ロール（anon・authenticated）と内部ロール以外に、publicのテーブルへのDML権限が付いていない。
+-- anon・authenticatedのテーブル権限は、下のテーブル権限の期待値表がPUBLIC経由の実効権限を含めて固定する。
+-- ここは、期待値表に現れない別のロールへDML権限が付くことを検出する。
+-- service_roleの権限は検証対象外とし、DML権限が付いていないことだけを確認する。
 select is_empty(
   $$select c.relname as tbl, g.role_name, a.privilege_type
     from pg_class c
@@ -475,10 +481,124 @@ select is_empty(
     cross join lateral (
       select case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end as role_name
     ) g
-    where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p')
+    where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p', 'v', 'm', 'f')
       and a.privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
       and g.role_name not in (select role_name from rls_role)$$,
   'publicの全テーブルのDML権限は、検証対象ロールと内部ロールにしか付いていない'
+);
+
+-- ============================================================
+-- テーブル権限: テーブル × ロール × 権限
+-- ============================================================
+-- RLSを通らない権限（TRUNCATE, REFERENCES, TRIGGERなど）と、ポリシーのない操作のDML権限は付けない。
+-- anonには何も付けず、authenticatedにはSELECTと、書き込みポリシーのある操作のDMLだけを付ける。
+-- has_table_privilegeはPUBLIC経由を含む実効権限を返す。
+-- 対象はテーブル(r, p)に加えて、同じテーブル権限でPostgRESTへ公開され得るview(v)・materialized view(m)・foreign table(f)とする。
+-- シーケンス(S)は別の権限体系（USAGE/SELECT/UPDATE）でテーブル権限の対象外のため含めない。
+
+create temp table rls_priv_spec (
+  tbl text, role_name text references rls_role,
+  p_select boolean, p_insert boolean, p_update boolean, p_delete boolean,
+  p_truncate boolean, p_references boolean, p_trigger boolean,
+  primary key (tbl, role_name)
+);
+insert into rls_priv_spec (tbl, role_name, p_select, p_insert, p_update, p_delete, p_truncate, p_references, p_trigger) values
+  ('users',             'anon',          false, false, false, false, false, false, false),
+  ('users',             'authenticated', true,  false, true,  true,  false, false, false),
+  ('target_faces',      'anon',          false, false, false, false, false, false, false),
+  ('target_faces',      'authenticated', true,  true,  true,  true,  false, false, false),
+  ('target_face_spots', 'anon',          false, false, false, false, false, false, false),
+  ('target_face_spots', 'authenticated', true,  true,  true,  true,  false, false, false),
+  ('target_face_rings', 'anon',          false, false, false, false, false, false, false),
+  ('target_face_rings', 'authenticated', true,  true,  true,  true,  false, false, false),
+  ('preset_rounds',     'anon',          false, false, false, false, false, false, false),
+  ('preset_rounds',     'authenticated', true,  true,  true,  true,  false, false, false),
+  ('preset_distances',  'anon',          false, false, false, false, false, false, false),
+  ('preset_distances',  'authenticated', true,  true,  true,  true,  false, false, false),
+  ('rounds',            'anon',          false, false, false, false, false, false, false),
+  ('rounds',            'authenticated', true,  false, false, false, false, false, false),
+  ('distances',         'anon',          false, false, false, false, false, false, false),
+  ('distances',         'authenticated', true,  false, false, false, false, false, false),
+  ('shots',             'anon',          false, false, false, false, false, false, false),
+  ('shots',             'authenticated', true,  false, false, false, false, false, false),
+  ('round_users',       'anon',          false, false, false, false, false, false, false),
+  ('round_users',       'authenticated', true,  true,  true,  true,  false, false, false),
+  ('round_events',      'anon',          false, false, false, false, false, false, false),
+  ('round_events',      'authenticated', true,  false, false, false, false, false, false),
+  ('distance_events',   'anon',          false, false, false, false, false, false, false),
+  ('distance_events',   'authenticated', true,  false, false, false, false, false, false),
+  ('shot_events',       'anon',          false, false, false, false, false, false, false),
+  ('shot_events',       'authenticated', true,  false, false, false, false, false, false);
+
+create temp table rls_priv_expected as
+select s.tbl, s.role_name, p.priv, p.allowed
+from rls_priv_spec s
+cross join lateral (values
+  ('select', s.p_select), ('insert', s.p_insert), ('update', s.p_update), ('delete', s.p_delete),
+  ('truncate', s.p_truncate), ('references', s.p_references), ('trigger', s.p_trigger)
+) as p(priv, allowed);
+
+-- 実測は、後でテーブルを作る検証より前に確定させる（作成したテーブルが網羅性の判定に混ざらないようにする）。
+create temp table rls_priv_actual as
+select c.relname as tbl, r.role_name, p.priv,
+  has_table_privilege(r.role_name, c.oid, p.priv) as allowed
+from pg_class c
+cross join (select role_name from rls_role where kind = 'target') as r
+cross join (values ('select'), ('insert'), ('update'), ('delete'), ('truncate'), ('references'), ('trigger')) as p(priv)
+where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p', 'v', 'm', 'f');
+
+select is_empty(
+  $$select coalesce(a.tbl, e.tbl) as tbl, coalesce(a.role_name, e.role_name) as role_name,
+      coalesce(a.priv, e.priv) as priv, a.allowed as actual, e.allowed as expected
+    from rls_priv_actual a
+    full join rls_priv_expected e on (a.tbl, a.role_name, a.priv) = (e.tbl, e.role_name, e.priv)
+    where a.allowed is distinct from e.allowed$$,
+  'publicの全テーブル × anon/authenticated × 7権限の実効権限が期待値表と全件一致する'
+);
+
+select is_empty(
+  $$select a.tbl, a.role_name, a.priv
+    from rls_priv_actual a
+    where not exists (
+      select 1 from rls_priv_expected e
+      where e.tbl = a.tbl and e.role_name = a.role_name and e.priv = a.priv
+    )$$,
+  'publicの全テーブル × ロール × 権限が権限の期待値表に含まれる'
+);
+
+select is_empty(
+  $$select e.tbl, e.role_name, e.priv
+    from rls_priv_expected e
+    where not exists (
+      select 1 from rls_priv_actual a
+      where a.tbl = e.tbl and a.role_name = e.role_name and a.priv = e.priv
+    )$$,
+  '権限の期待値表に存在しないテーブルの行が残っていない'
+);
+
+-- 上の表が扱う7権限以外（MAINTAINなど）や、GRANT OPTIONが、anon・authenticated・PUBLICに付いていない。
+select is_empty(
+  $$select c.relname as tbl, g.role_name, a.privilege_type, a.is_grantable
+    from pg_class c
+    cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
+    cross join lateral (
+      select case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end as role_name
+    ) g
+    where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p', 'v', 'm', 'f')
+      and g.role_name in ('anon', 'authenticated', 'PUBLIC')
+      and (a.privilege_type not in ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER')
+        or a.is_grantable)$$,
+  'anon・authenticated・PUBLICに、権限表の対象外の権限とGRANT OPTIONが付いていない'
+);
+
+-- has_table_privilegeはテーブル単位の権限だけを判定するため、列単位の権限は別に確認する。
+select is_empty(
+  $$select c.relname as tbl, a.attname as col
+    from pg_attribute a
+    join pg_class c on c.oid = a.attrelid
+    where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p', 'v', 'm', 'f')
+      and a.attnum > 0 and not a.attisdropped and a.attacl is not null$$,
+  'publicの全テーブルに列単位の権限が付いていない'
 );
 
 -- ============================================================
@@ -570,6 +690,40 @@ select is_empty(
     where p.pronamespace = 'public'::regnamespace and a.privilege_type = 'EXECUTE'
       and g.role_name not in (select role_name from rls_role)$$,
   'publicの全関数のEXECUTEは、検証対象ロールと内部ロールにしか付いていない'
+);
+
+-- ============================================================
+-- 新規テーブルへの自動付与: postgresロールの既定権限
+-- ============================================================
+-- postgresロールがpublicに作るテーブルにanon・authenticatedへの権限が自動で付かないことを確認する。
+-- 他のテーブル単位の検証が終わった後で作成し、最後のrollbackで消える。
+
+create table public.rls_matrix_probe (id int primary key);
+
+select is(
+  (select relowner::regrole::text from pg_class where oid = 'public.rls_matrix_probe'::regclass),
+  'postgres',
+  '検証用テーブルはpostgresロールが作成した（postgresの既定権限を検証している）'
+);
+
+select is_empty(
+  $$select r.role_name, p.priv
+    from (select role_name from rls_role where kind = 'target') r
+    cross join (values ('select'), ('insert'), ('update'), ('delete'), ('truncate'), ('references'), ('trigger')) as p(priv)
+    where has_table_privilege(r.role_name, 'public.rls_matrix_probe'::regclass, p.priv)$$,
+  '新規テーブルにanon・authenticatedの権限が自動で付かない'
+);
+
+select is_empty(
+  $$select g.role_name, a.privilege_type
+    from pg_class c
+    cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
+    cross join lateral (
+      select case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end as role_name
+    ) g
+    where c.oid = 'public.rls_matrix_probe'::regclass
+      and g.role_name in ('anon', 'authenticated', 'PUBLIC')$$,
+  '新規テーブルのACLにanon・authenticated・PUBLICが含まれない（MAINTAINなどの権限も付かない）'
 );
 
 select * from finish();

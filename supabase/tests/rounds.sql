@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(133);
+select plan(145);
 
 -- 既存の制約・権限テスト向けのfixture生成ヘルパー。プロダクションの
 -- create_roundはid/position_keyを必須とするため、旧形式の簡潔なfixtureだけを
@@ -83,18 +83,20 @@ select results_eq(
   'round_usersに存在しないユーザーにはラウンドが見えない'
 );
 
-select throws_like(
+select throws_ok(
   $$insert into public.distances (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
     values ('44444444-4444-4444-4444-444444444444', '1', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
-  '%row-level security%',
-  'round_usersに存在しないユーザーは他人のラウンドにdistancesを追加できない'
+  '42501',
+  'permission denied for table distances',
+  'round_usersに存在しないユーザーは他人のラウンドにdistancesを追加できない（GRANTがなくpermission denied）'
 );
 
-select throws_like(
+select throws_ok(
   $$insert into public.rounds (name, round_date, format, bow_type)
     values ('direct insert', current_date, 'outdoor', 'recurve')$$,
-  '%row-level security%',
-  'roundsへの直接INSERTはRLSで拒否される（create_round RPC経由のみ許可）'
+  '42501',
+  'permission denied for table rounds',
+  'roundsへの直接INSERTはGRANTがなくpermission deniedになる（create_round RPC経由のみ許可）'
 );
 
 -- create_round RPC: round_usersへの登録をroundsの作成より先に行うことで、
@@ -197,51 +199,73 @@ select results_eq(
 );
 
 -- viewerはis_round_editorを要求する変更系操作を一切実行できない。
--- UPDATE/DELETEはRLSのUSING句で対象行が静かに除外されるだけで例外は
--- 投げられない（0件更新・0件削除になる）ため、throws_likeではなく
--- 実行後に対象が変化していないことを確認する。
-update public.rounds set name = 'hacked' where id = '77777777-7777-7777-7777-777777777777';
+-- rounds/distances/shotsにはauthenticatedへのINSERT/UPDATE/DELETEのGRANTがないため、
+-- 直接の変更はpermission denied（42501）で拒否される。
+-- 拒否に加えて、実行後に対象が変化していないことも確認する。
+select throws_ok(
+  $$update public.rounds set name = 'hacked' where id = '77777777-7777-7777-7777-777777777777'$$,
+  '42501',
+  'permission denied for table rounds',
+  'viewerロールのユーザーはラウンドを直接UPDATEできない（GRANTがなくpermission denied）'
+);
 select results_eq(
   $$select name from public.rounds where id = '77777777-7777-7777-7777-777777777777'$$,
   $$values ('Viewer Test Round'::text)$$,
-  'viewerロールのユーザーはラウンド名を更新できない（RLSにより対象行が0件になる）'
+  'viewerロールのユーザーはラウンド名を更新できない（直接の変更は拒否され、対象行は変化しない）'
 );
 
-delete from public.rounds where id = '77777777-7777-7777-7777-777777777777';
+select throws_ok(
+  $$delete from public.rounds where id = '77777777-7777-7777-7777-777777777777'$$,
+  '42501',
+  'permission denied for table rounds',
+  'viewerロールのユーザーはラウンドを直接DELETEできない（GRANTがなくpermission denied）'
+);
 select results_eq(
   $$select count(*) from public.rounds where id = '77777777-7777-7777-7777-777777777777'$$,
   $$values (1::bigint)$$,
-  'viewerロールのユーザーはラウンドを削除できない（RLSにより対象行が0件になる）'
+  'viewerロールのユーザーはラウンドを削除できない（直接の変更は拒否され、対象行は変化しない）'
 );
 
-select throws_like(
+select throws_ok(
   $$insert into public.distances (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
     values ('77777777-7777-7777-7777-777777777777', '2', 50, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
-  '%row-level security%',
-  'viewerロールのユーザーはdistancesを追加できない'
+  '42501',
+  'permission denied for table distances',
+  'viewerロールのユーザーはdistancesを追加できない（GRANTがなくpermission denied）'
 );
 
-select throws_like(
+select throws_ok(
   $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
     values ('88888888-8888-8888-8888-888888888888', 1, 2, '66666666-6666-6666-6666-666666666666', '9', 9)$$,
-  '%row-level security%',
-  'viewerロールのユーザーはshotsを記録できない'
+  '42501',
+  'permission denied for table shots',
+  'viewerロールのユーザーはshotsを記録できない（GRANTがなくpermission denied）'
 );
 
-update public.shots set score_str = '9', score_int = 9
-  where distance_id = '88888888-8888-8888-8888-888888888888' and end_number = 1 and arrow_number = 1;
+select throws_ok(
+  $$update public.shots set score_str = '9', score_int = 9
+  where distance_id = '88888888-8888-8888-8888-888888888888' and end_number = 1 and arrow_number = 1$$,
+  '42501',
+  'permission denied for table shots',
+  'viewerロールのユーザーはshotsを直接UPDATEできない（GRANTがなくpermission denied）'
+);
 select results_eq(
   $$select score_str from public.shots
     where distance_id = '88888888-8888-8888-8888-888888888888' and end_number = 1 and arrow_number = 1$$,
   $$values ('X'::text)$$,
-  'viewerロールのユーザーはshotsを更新できない（RLSにより対象行が0件になる）'
+  'viewerロールのユーザーはshotsを更新できない（直接の変更は拒否され、対象行は変化しない）'
 );
 
-delete from public.distances where id = '88888888-8888-8888-8888-888888888888';
+select throws_ok(
+  $$delete from public.distances where id = '88888888-8888-8888-8888-888888888888'$$,
+  '42501',
+  'permission denied for table distances',
+  'viewerロールのユーザーはdistancesを直接DELETEできない（GRANTがなくpermission denied）'
+);
 select results_eq(
   $$select count(*) from public.distances where id = '88888888-8888-8888-8888-888888888888'$$,
   $$values (1::bigint)$$,
-  'viewerロールのユーザーはdistancesを削除できない（RLSにより対象行が0件になる）'
+  'viewerロールのユーザーはdistancesを削除できない（直接の変更は拒否され、対象行は変化しない）'
 );
 
 -- viewer自身を含め、round_usersへの新規追加（招待相当）もeditor限定である。
@@ -285,63 +309,95 @@ values ('c0000000-0000-0000-0000-000000000020', 1, 1, 'c0000000-0000-0000-0000-0
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-000000000001', true);
 
-update public.rounds set name = 'Direct Update' where id = 'c0000000-0000-0000-0000-000000000010';
+select throws_ok(
+  $$update public.rounds set name = 'Direct Update' where id = 'c0000000-0000-0000-0000-000000000010'$$,
+  '42501',
+  'permission denied for table rounds',
+  'editorであってもroundsへの直接UPDATEはGRANTがなくpermission deniedになる'
+);
 select results_eq(
   $$select name from public.rounds where id = 'c0000000-0000-0000-0000-000000000010'$$,
   $$values ('Editor CRUD Round'::text)$$,
-  'editorであってもroundsへの直接UPDATEはRLSにより対象行が0件になる'
+  'editorであってもroundsへの直接UPDATEは拒否され、対象行は変化しない'
 );
 
-delete from public.rounds where id = 'c0000000-0000-0000-0000-000000000010';
+select throws_ok(
+  $$delete from public.rounds where id = 'c0000000-0000-0000-0000-000000000010'$$,
+  '42501',
+  'permission denied for table rounds',
+  'editorであってもroundsへの直接DELETEはGRANTがなくpermission deniedになる'
+);
 select results_eq(
   $$select count(*) from public.rounds where id = 'c0000000-0000-0000-0000-000000000010'$$,
   $$values (1::bigint)$$,
-  'editorであってもroundsへの直接DELETEはRLSにより対象行が0件になる'
+  'editorであってもroundsへの直接DELETEは拒否され、対象行は変化しない'
 );
 
-update public.distances set arrows_per_end = 3 where id = 'c0000000-0000-0000-0000-000000000020';
+select throws_ok(
+  $$update public.distances set arrows_per_end = 3 where id = 'c0000000-0000-0000-0000-000000000020'$$,
+  '42501',
+  'permission denied for table distances',
+  'editorであってもdistancesへの直接UPDATEはGRANTがなくpermission deniedになる'
+);
 select results_eq(
   $$select arrows_per_end from public.distances where id = 'c0000000-0000-0000-0000-000000000020'$$,
   $$values (6::bigint)$$,
-  'editorであってもdistancesへの直接UPDATEはRLSにより対象行が0件になる'
+  'editorであってもdistancesへの直接UPDATEは拒否され、対象行は変化しない'
 );
 
-delete from public.distances where id = 'c0000000-0000-0000-0000-000000000020';
+select throws_ok(
+  $$delete from public.distances where id = 'c0000000-0000-0000-0000-000000000020'$$,
+  '42501',
+  'permission denied for table distances',
+  'editorであってもdistancesへの直接DELETEはGRANTがなくpermission deniedになる'
+);
 select results_eq(
   $$select count(*) from public.distances where id = 'c0000000-0000-0000-0000-000000000020'$$,
   $$values (1::bigint)$$,
-  'editorであってもdistancesへの直接DELETEはRLSにより対象行が0件になる'
+  'editorであってもdistancesへの直接DELETEは拒否され、対象行は変化しない'
 );
 
-select throws_like(
+select throws_ok(
   $$insert into public.distances (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
     values ('c0000000-0000-0000-0000-000000000010', '2', 50, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
-  '%row-level security%',
-  'editorであってもdistancesへの直接INSERTはRLSで拒否される（create_distance RPC経由のみ許可）'
+  '42501',
+  'permission denied for table distances',
+  'editorであってもdistancesへの直接INSERTはGRANTがなくpermission deniedになる（create_distance RPC経由のみ許可）'
 );
 
-update public.shots set score_str = '9', score_int = 9
-  where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 1 and arrow_number = 1;
+select throws_ok(
+  $$update public.shots set score_str = '9', score_int = 9
+  where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 1 and arrow_number = 1$$,
+  '42501',
+  'permission denied for table shots',
+  'editorであってもshotsへの直接UPDATEはGRANTがなくpermission deniedになる'
+);
 select results_eq(
   $$select score_str from public.shots
     where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 1 and arrow_number = 1$$,
   $$values ('X'::text)$$,
-  'editorであってもshotsへの直接UPDATEはRLSにより対象行が0件になる'
+  'editorであってもshotsへの直接UPDATEは拒否され、対象行は変化しない'
 );
 
-delete from public.shots
-  where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 1 and arrow_number = 1;
+select throws_ok(
+  $$delete from public.shots
+  where distance_id = 'c0000000-0000-0000-0000-000000000020' and end_number = 1 and arrow_number = 1$$,
+  '42501',
+  'permission denied for table shots',
+  'editorであってもshotsへの直接DELETEはGRANTがなくpermission deniedになる'
+);
 select results_eq(
   $$select count(*) from public.shots where distance_id = 'c0000000-0000-0000-0000-000000000020'$$,
   $$values (1::bigint)$$,
-  'editorであってもshotsへの直接DELETEはRLSにより対象行が0件になる'
+  'editorであってもshotsへの直接DELETEは拒否され、対象行は変化しない'
 );
 
-select throws_like(
+select throws_ok(
   $$insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
     values ('c0000000-0000-0000-0000-000000000020', 1, 2, 'c0000000-0000-0000-0000-000000000001', '9', 9)$$,
-  '%row-level security%',
-  'editorであってもshotsへの直接INSERTはRLSで拒否される（record_shots RPC経由のみ許可）'
+  '42501',
+  'permission denied for table shots',
+  'editorであってもshotsへの直接INSERTはGRANTがなくpermission deniedになる（record_shots RPC経由のみ許可）'
 );
 
 insert into public.round_users (round_id, user_id, role)
@@ -1305,40 +1361,53 @@ select results_eq(
   '未記録マスのクリア後の記録はイベント順序を保つ'
 );
 
--- 追記専用: 直接のINSERT/UPDATE/DELETEはeditorであってもRLSで拒否される。
-select throws_like(
+-- 追記専用: 直接のINSERT/UPDATE/DELETEはeditorであってもGRANTがなくpermission deniedで拒否される。
+select throws_ok(
   $$insert into public.round_events (event_id, round_id, type, author_id, revision, name, round_date, format, bow_type)
     values (gen_random_uuid(), '90000000-0000-0000-0000-000000000011', 'CREATED', '90000000-0000-0000-0000-000000000001', 99, 'x', current_date, 'outdoor', 'recurve')$$,
-  '%row-level security%',
-  'round_eventsへの直接INSERTはRLSで拒否される（RPC経由のみ許可）'
+  '42501',
+  'permission denied for table round_events',
+  'round_eventsへの直接INSERTはGRANTがなくpermission deniedになる（RPC経由のみ許可）'
 );
 
-select throws_like(
+select throws_ok(
   $$insert into public.distance_events (event_id, round_id, distance_id, type, author_id, revision, position_key, distance, is_marked, total_ends, arrows_per_end, target_face_id)
     values (gen_random_uuid(), '90000000-0000-0000-0000-000000000011', '90000000-0000-0000-0000-000000000013', 'CREATED', '90000000-0000-0000-0000-000000000001', 99, 'z', 70, true, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
-  '%row-level security%',
-  'distance_eventsへの直接INSERTはRLSで拒否される（RPC経由のみ許可）'
+  '42501',
+  'permission denied for table distance_events',
+  'distance_eventsへの直接INSERTはGRANTがなくpermission deniedになる（RPC経由のみ許可）'
 );
 
-select throws_like(
+select throws_ok(
   $$insert into public.shot_events (event_id, distance_id, type, author_id, revision, end_number, arrow_number, shooter_id, score_str, score_int)
     values (gen_random_uuid(), '90000000-0000-0000-0000-000000000013', 'RECORDED', '90000000-0000-0000-0000-000000000001', 99, 9, 9, '90000000-0000-0000-0000-000000000001', 'X', 10)$$,
-  '%row-level security%',
-  'shot_eventsへの直接INSERTはRLSで拒否される（RPC経由のみ許可）'
+  '42501',
+  'permission denied for table shot_events',
+  'shot_eventsへの直接INSERTはGRANTがなくpermission deniedになる（RPC経由のみ許可）'
 );
 
-update public.round_events set name = 'tampered' where round_id = '90000000-0000-0000-0000-000000000011';
+select throws_ok(
+  $$update public.round_events set name = 'tampered' where round_id = '90000000-0000-0000-0000-000000000011'$$,
+  '42501',
+  'permission denied for table round_events',
+  'round_eventsへの直接UPDATEはGRANTがなくpermission deniedになる'
+);
 select results_eq(
   $$select count(*) from round_events where round_id = '90000000-0000-0000-0000-000000000011' and name = 'tampered'$$,
   $$values (0::bigint)$$,
-  'round_eventsへの直接UPDATEはポリシー不在により対象行が0件になり反映されない'
+  'round_eventsへの直接UPDATEは拒否され、反映されない'
 );
 
-delete from public.round_events where round_id = '90000000-0000-0000-0000-000000000011';
+select throws_ok(
+  $$delete from public.round_events where round_id = '90000000-0000-0000-0000-000000000011'$$,
+  '42501',
+  'permission denied for table round_events',
+  'round_eventsへの直接DELETEはGRANTがなくpermission deniedになる'
+);
 select results_eq(
   $$select count(*) from round_events where round_id = '90000000-0000-0000-0000-000000000011'$$,
   $$values (4::bigint)$$,
-  'round_eventsへの直接DELETEはポリシー不在により対象行が0件になり件数が変わらない'
+  'round_eventsへの直接DELETEは拒否され、件数が変わらない'
 );
 
 -- ============================================================
