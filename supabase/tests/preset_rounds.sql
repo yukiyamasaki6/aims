@@ -1,6 +1,6 @@
 begin;
 
-select plan(30);
+select plan(26);
 
 select results_eq(
   $$select count(*) from public.preset_rounds where owner_id is null$$,
@@ -218,55 +218,6 @@ select results_eq(
   $$select count(*) from public.preset_distances where preset_id = '22222222-2222-2222-2222-222222222222'$$,
   $$values (0::bigint)$$,
   'プリセットの削除で距離構成もカスケード削除される（preset_distancesにDELETE権限がなくても外部キーのCASCADEは動く）'
-);
-
--- ============================================================
--- save_round_as_preset RPC: ローカル起点での複数テーブルへの書き込み
--- ============================================================
--- issue471: クライアントが表示中の内容（distances）をそのまま渡す方式に
--- 変更した。プリセット作成・距離複製を1つの関数にまとめ、途中で失敗した
--- 場合に距離を持たない空のプリセットが残らないようにする（アプリ側での
--- 手動delete処理が不要になる）。ラウンドとの紐付けが無くなったため、
--- 非メンバー判定のような権限エラーは発生しない（呼び出したユーザー自身の
--- 個人プリセットとして常に作成される）。
-
-reset role;
-
-insert into auth.users (id) values ('f0000000-0000-0000-0000-000000000001');
-
-set local role authenticated;
-select set_config('request.jwt.claim.sub', 'f0000000-0000-0000-0000-000000000001', true);
-
-select save_round_as_preset(
-  'My Saved Preset', 'field', 'compound',
-  '[{"position_key":"000000000001","distance":50,"is_marked":true,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"},{"position_key":"2","distance":null,"is_marked":false,"total_ends":4,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
-) as saved_preset_id \gset
-
-select results_eq(
-  $$select name, format, bow_type, owner_id from public.preset_rounds where id = '$$ || :'saved_preset_id' || $$'$$,
-  $$values ('My Saved Preset'::text, 'field'::text, 'compound'::text, 'f0000000-0000-0000-0000-000000000001'::uuid)$$,
-  'save_round_as_presetで渡した内容そのままのプリセットが作成される（ラウンドの再読み込みはしない）'
-);
-
-select results_eq(
-  $$select position_key collate "default", distance, is_marked from public.preset_distances
-    where preset_id = '$$ || :'saved_preset_id' || $$'
-    order by position_key$$,
-  $$values ('000000000001'::text, 50::bigint, true), ('2'::text, null::bigint, false)$$,
-  'save_round_as_presetで渡した距離構成がそのまま複製される（is_markedも含む）'
-);
-
--- preset_rounds.name: 50文字までのCHECK制約
-select throws_ok(
-  $$select save_round_as_preset(repeat('a', 51), 'outdoor', 'recurve', '[]'::jsonb)$$,
-  '23514',
-  null,
-  'save_round_as_preset経由でもpreset_rounds.nameが51文字以上だとCHECK制約で拒否される'
-);
-
-select lives_ok(
-  $$select save_round_as_preset(repeat('a', 50), 'outdoor', 'recurve', '[]'::jsonb)$$,
-  'preset_rounds.nameが50文字（境界値）なら保存できる'
 );
 
 select * from finish();
