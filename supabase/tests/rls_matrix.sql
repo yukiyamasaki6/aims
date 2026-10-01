@@ -17,7 +17,7 @@
 
 begin;
 
-select plan(20);
+select plan(28);
 
 -- fixture: 各アクターに対応するユーザーと、検証対象の行を用意する。
 -- 接続ロール（RLS対象外）で直接INSERTする。
@@ -711,10 +711,80 @@ select is_empty(
 );
 
 -- ============================================================
--- 新規テーブルへの自動付与: postgresロールの既定権限
+-- シーケンス権限: シーケンス × ロール × 権限
 -- ============================================================
--- postgresロールがpublicに作るテーブルにanon・authenticatedへの権限が自動で付かないことを確認する。
--- 他のテーブル単位の検証が終わった後で作成し、最後のrollbackで消える。
+-- 主キーはUUIDでアプリはシーケンスを使わないため、現在publicのシーケンスは存在せず、期待値表は空である。
+-- serial・identityを追加したら、必要な権限だけを付けて期待値表に行を追加する。表にないシーケンスは網羅性の検証が検出する。
+-- has_sequence_privilegeはPUBLIC経由を含む実効権限を返す。
+
+create temp table rls_seq_priv_spec (
+  seq text, role_name text references rls_role,
+  p_usage boolean, p_select boolean, p_update boolean,
+  primary key (seq, role_name)
+);
+
+create temp table rls_seq_priv_expected as
+select s.seq, s.role_name, p.priv, p.allowed
+from rls_seq_priv_spec s
+cross join lateral (values ('usage', s.p_usage), ('select', s.p_select), ('update', s.p_update)) as p(priv, allowed);
+
+-- 実測は、後でシーケンスを作る検証より前に確定させる（作成したシーケンスが網羅性の判定に混ざらないようにする）。
+create temp table rls_seq_priv_actual as
+select c.relname as seq, r.role_name, p.priv,
+  has_sequence_privilege(r.role_name, c.oid, p.priv) as allowed
+from pg_class c
+cross join (select role_name from rls_role where kind = 'target') as r
+cross join (values ('usage'), ('select'), ('update')) as p(priv)
+where c.relnamespace = 'public'::regnamespace and c.relkind = 'S';
+
+select is_empty(
+  $$select coalesce(a.seq, e.seq) as seq, coalesce(a.role_name, e.role_name) as role_name,
+      coalesce(a.priv, e.priv) as priv, a.allowed as actual, e.allowed as expected
+    from rls_seq_priv_actual a
+    full join rls_seq_priv_expected e on (a.seq, a.role_name, a.priv) = (e.seq, e.role_name, e.priv)
+    where a.allowed is distinct from e.allowed$$,
+  'publicの全シーケンス × anon/authenticated × 3権限の実効権限が期待値表と全件一致する'
+);
+
+select is_empty(
+  $$select a.seq, a.role_name, a.priv
+    from rls_seq_priv_actual a
+    where not exists (
+      select 1 from rls_seq_priv_expected e
+      where e.seq = a.seq and e.role_name = a.role_name and e.priv = a.priv
+    )$$,
+  'publicの全シーケンス × ロール × 権限がシーケンス権限の期待値表に含まれる'
+);
+
+select is_empty(
+  $$select e.seq, e.role_name, e.priv
+    from rls_seq_priv_expected e
+    where not exists (
+      select 1 from rls_seq_priv_actual a
+      where a.seq = e.seq and a.role_name = e.role_name and a.priv = e.priv
+    )$$,
+  'シーケンス権限の期待値表に存在しないシーケンスの行が残っていない'
+);
+
+-- 上の表が扱う3権限以外や、GRANT OPTIONが、anon・authenticated・PUBLICに付いていない。
+select is_empty(
+  $$select c.relname as seq, g.role_name, a.privilege_type, a.is_grantable
+    from pg_class c
+    cross join lateral aclexplode(coalesce(c.relacl, acldefault('s', c.relowner))) a
+    cross join lateral (
+      select case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end as role_name
+    ) g
+    where c.relnamespace = 'public'::regnamespace and c.relkind = 'S'
+      and g.role_name in ('anon', 'authenticated', 'PUBLIC')
+      and (a.privilege_type not in ('USAGE', 'SELECT', 'UPDATE') or a.is_grantable)$$,
+  'anon・authenticated・PUBLICに、シーケンス権限表の対象外の権限とGRANT OPTIONが付いていない'
+);
+
+-- ============================================================
+-- 新規テーブル・シーケンスへの自動付与: postgresロールの既定権限
+-- ============================================================
+-- postgresロールがpublicに作るテーブル・シーケンスにanon・authenticatedへの権限が自動で付かないことを確認する。
+-- 他のテーブル・シーケンス単位の検証が終わった後で作成し、最後のrollbackで消える。
 
 create table public.rls_matrix_probe (id int primary key);
 
@@ -742,6 +812,47 @@ select is_empty(
     where c.oid = 'public.rls_matrix_probe'::regclass
       and g.role_name in ('anon', 'authenticated', 'PUBLIC')$$,
   '新規テーブルのACLにanon・authenticated・PUBLICが含まれない（MAINTAINなどの権限も付かない）'
+);
+
+-- シーケンスの既定権限は、実際に作ったシーケンスの結果に加えて、pg_default_aclの設定そのものでも固定する。
+create sequence public.rls_matrix_seq_probe;
+
+select is(
+  (select relowner::regrole::text from pg_class where oid = 'public.rls_matrix_seq_probe'::regclass),
+  'postgres',
+  '検証用シーケンスはpostgresロールが作成した（postgresの既定権限を検証している）'
+);
+
+select is_empty(
+  $$select r.role_name, p.priv
+    from (select role_name from rls_role where kind = 'target') r
+    cross join (values ('usage'), ('select'), ('update')) as p(priv)
+    where has_sequence_privilege(r.role_name, 'public.rls_matrix_seq_probe'::regclass, p.priv)$$,
+  '新規シーケンスにanon・authenticatedの権限が自動で付かない'
+);
+
+select is_empty(
+  $$select g.role_name, a.privilege_type
+    from pg_class c
+    cross join lateral aclexplode(coalesce(c.relacl, acldefault('s', c.relowner))) a
+    cross join lateral (
+      select case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end as role_name
+    ) g
+    where c.oid = 'public.rls_matrix_seq_probe'::regclass
+      and g.role_name in ('anon', 'authenticated', 'PUBLIC')$$,
+  '新規シーケンスのACLにanon・authenticated・PUBLICが含まれない'
+);
+
+select is_empty(
+  $$select g.role_name, a.privilege_type
+    from pg_default_acl d
+    cross join lateral aclexplode(d.defaclacl) a
+    cross join lateral (
+      select case when a.grantee = 0 then 'PUBLIC' else a.grantee::regrole::text end as role_name
+    ) g
+    where d.defaclrole = 'postgres'::regrole and d.defaclnamespace = 'public'::regnamespace and d.defaclobjtype = 'S'
+      and g.role_name in ('anon', 'authenticated', 'PUBLIC')$$,
+  'postgresがpublicに作るシーケンスの既定権限（pg_default_acl）にanon・authenticated・PUBLICが含まれない'
 );
 
 select * from finish();
