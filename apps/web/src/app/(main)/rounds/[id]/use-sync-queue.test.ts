@@ -922,7 +922,7 @@ describe("useSyncQueue", () => {
 
       it("operation付きの操作も再試行の上限で打ち切ってエラーとして確定し、再送できるようoutboxに残す", async () => {
         // Given: RPCが常に再試行できる通信エラーで失敗する
-        // operation付きの操作もrd.mdの定義どおり、恒久的な失敗でなくても再試行の上限で打ち切る。
+        // operation付きの操作も`rounds/sync`の要求どおり、恒久的な失敗でなくても再試行の上限で打ち切る。
         supabase.rpc.mockResolvedValue({
           data: null,
           error: { message: "通信エラー", code: "08006" },

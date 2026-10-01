@@ -381,6 +381,41 @@ describe("DistanceEditFields", () => {
       });
     });
 
+    describe("種別タブの切り替え", () => {
+      it("選んだ種別・弓種に対応する的だけを表示する", async () => {
+        // Given: アウトドア・リカーブのラウンドで、フィールドの的も持つ的選択ポップアップ
+        const user = userEvent.setup();
+        const targetFaceField: TargetFaceOption = {
+          id: "face-field-recurve",
+          name: "フィールド的",
+          size: 80,
+          format: "field",
+          bow_type: ["recurve"],
+          target_face_spots: [],
+        };
+        setup({ targetFaces: [...targetFaces, targetFaceField] });
+        await user.click(screen.getByTestId("target-face-picker-trigger"));
+
+        // When: 種別タブをフィールドに切り替える
+        await user.click(screen.getByTestId("target-face-format-tab-field"));
+
+        // Then: フィールドで、選択中の弓種に対応する的だけを表示する
+        expect(
+          screen.getByTestId(`target-face-option-${targetFaceField.id}`),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByTestId(
+            `target-face-option-${targetFaceOutdoorRecurve.id}`,
+          ),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByTestId(
+            `target-face-option-${targetFaceIndoorCompound.id}`,
+          ),
+        ).not.toBeInTheDocument();
+      });
+    });
+
     describe("的の選択", () => {
       it("ポップアップが閉じ、選択内容が保存に反映される", async () => {
         // Given: 的選択ポップアップで全件を表示した状態

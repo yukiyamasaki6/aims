@@ -64,4 +64,19 @@ describe("DistanceInfo", () => {
 
     expect(screen.getByText("Unmarked")).toBeInTheDocument();
   });
+
+  it("フィールド種別かつUnmarkedで距離（自己目測）がある場合、距離とUnmarkedを併記する", () => {
+    render(
+      <DistanceInfo
+        distance={45}
+        isMarked={false}
+        format="field"
+        face={null}
+        arrowsPerEnd={6}
+        totalEnds={6}
+      />,
+    );
+
+    expect(screen.getByText("45m / Unmarked")).toBeInTheDocument();
+  });
 });

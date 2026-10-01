@@ -276,6 +276,29 @@ describe("ScorecardClient 初期表示・集計", () => {
     expect(screen.getByText("合計20")).toBeInTheDocument();
   });
 
+  it("Xの無い的では、スコアを入力すると、小計・合計・最高点数と次点数が距離とラウンド全体に反映される", async () => {
+    // Given: Xの無い的の距離が1つあり、記録が無い
+    const user = userEvent.setup();
+    setup({ distances: [{ ...distanceA, target_face_id: targetFaceNoX.id }] });
+
+    // When: 1エンド目に6と5を入力する
+    await user.click(screen.getByTestId("score-button-6"));
+    await user.click(screen.getByTestId("score-button-5"));
+
+    // Then: エンド小計・距離の小計・ラウンド全体の合計が更新され、距離とラウンド全体に最高点数と次点数を表示する
+    expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("11");
+    expect(screen.getByTestId("distance-summary-1")).toHaveTextContent(
+      "小計11",
+    );
+    expect(screen.getByTestId("distance-top-scores-1")).toHaveTextContent(
+      "6: 1 / 5: 1",
+    );
+    expect(screen.getByTestId("round-top-scores")).toHaveTextContent(
+      "6: 1 / 5: 1",
+    );
+    expect(screen.getByText("合計11")).toBeInTheDocument();
+  });
+
   it("距離間で的の点数構成が異なる場合、ラウンド全体の最高点数などは表示せず、距離ごとには表示する", () => {
     // Given: Xのある的とXの無い的の距離があり、Xの無い的の距離に記録がある
     setup({
@@ -454,6 +477,24 @@ describe("ScorecardClient 初期表示・集計", () => {
     await flushMicrotasks();
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
+
+  it("距離が無いラウンド（カスタム開始直後）は、ラウンド構成が展開された状態で表示する", () => {
+    // Given: 距離が0件のラウンド
+    // When: 表示する（初期表示）
+    setup({ distances: [] });
+
+    // Then: ラウンド構成の編集欄が展開されている
+    expect(screen.getByTestId("round-config-name")).toBeInTheDocument();
+  });
+
+  it("距離があるラウンド（プリセット開始など）は、ラウンド構成が折りたたまれた状態で表示する", () => {
+    // Given: 距離が1件以上あるラウンド
+    // When: 表示する（初期表示）
+    setup();
+
+    // Then: ラウンド構成の編集欄は表示されない
+    expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
+  });
 });
 
 // 送信キューがSDKへ送ったマスの操作を、呼び出しをまたいで順に並べる。
@@ -566,6 +607,122 @@ describe("ScorecardClient マス選択とスコア入力", () => {
       ]);
     });
     expect(screen.getByTestId("score-button-undo")).toBeDisabled();
+  });
+
+  it("複数スポットの的では、テンキーに点数のキーを重複なく、リング色で表示する", () => {
+    // Given: 同じ点数を持つ2つのスポットがある的の距離
+    const targetFaceTriple: TargetFaceOption = {
+      id: "face-triple",
+      name: "トリプルスポット",
+      size: 40,
+      format: "indoor",
+      bow_type: ["recurve"],
+      target_face_spots: [0, 1].map((index) => ({
+        center_x: index,
+        center_y: 0,
+        target_face_rings: [
+          {
+            radius: 1,
+            color: "#FFF200",
+            line_color: null,
+            z_index: 10,
+            score_str: "10",
+            score_int: 10,
+          },
+          {
+            radius: 2,
+            color: "#0066B3",
+            line_color: "#000000",
+            z_index: 9,
+            score_str: "9",
+            score_int: 9,
+          },
+        ],
+      })),
+    };
+
+    // When: 表示する（初期表示）
+    setup({
+      distances: [{ ...distanceA, target_face_id: targetFaceTriple.id }],
+      targetFaces: [targetFaceTriple],
+    });
+
+    // Then: スポットの数によらず、点数ごとに1つのキーがリング色で表示される
+    expect(screen.getAllByTestId("score-button-10")).toHaveLength(1);
+    expect(screen.getAllByTestId("score-button-9")).toHaveLength(1);
+    expect(screen.getByTestId("score-button-9")).toHaveStyle({
+      backgroundColor: "#0066B3",
+    });
+    expect(screen.getByTestId("score-button-M")).toBeInTheDocument();
+  });
+
+  it("選択中のマスを再度タップすると、選択を解除してテンキーを格納する", async () => {
+    // Given: 最初のマスが選択され、テンキーが開いている
+    const user = userEvent.setup();
+    setup();
+    expect(screen.getByTestId("score-button-10")).toBeInTheDocument();
+
+    // When: 選択中の最初のマスをタップする
+    await user.click(screen.getByTestId("shot-cell-1-1-1"));
+
+    // Then: 格納が終わるとテンキーが取り除かれる
+    await waitFor(() => {
+      expect(screen.queryByTestId("score-button-10")).not.toBeInTheDocument();
+    });
+  });
+
+  it("距離の最後のマスにスコアを入力すると、記録して選択を外し、テンキーを格納する", async () => {
+    // Given: 1マスだけの距離で、そのマスが選択されている
+    const user = userEvent.setup();
+    setup({ distances: [distanceB] });
+
+    // When: スコアを入力する
+    await user.click(screen.getByTestId("score-button-X"));
+
+    // Then: そのマスに記録され、記録がSDKへ届き、テンキーが格納される
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("X");
+    await waitFor(() => {
+      expect(sentShots("record_shots")).toEqual([
+        expect.objectContaining({
+          distance_id: distanceB.id,
+          end_number: 1,
+          arrow_number: 1,
+          score_str: "X",
+        }),
+      ]);
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("score-button-X")).not.toBeInTheDocument();
+    });
+  });
+
+  it("距離の最初のマスをクリアすると、前のマスへ戻らずそのマスの選択を保つ", async () => {
+    // Given: 最初のマスに記録して、そのマスを選択し直している
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId("score-button-10"));
+    await user.click(screen.getByTestId("shot-cell-1-1-1"));
+
+    // When: Cを押す
+    await user.click(screen.getByTestId("score-button-clear"));
+
+    // Then: 記録がクリアされ、クリアがSDKへ届く
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("");
+    await waitFor(() => {
+      expect(sentShots("clear_shots")).toEqual([
+        expect.objectContaining({
+          distance_id: distanceA.id,
+          end_number: 1,
+          arrow_number: 1,
+        }),
+      ]);
+    });
+
+    // When: 続けてスコアを入力する
+    await user.click(screen.getByTestId("score-button-9"));
+
+    // Then: テンキーは開いたままで、同じマスに記録される
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("9");
   });
 
   it("マスをタップすると選択し、選択中のマスを再度タップすると選択を解除する", async () => {
@@ -817,6 +974,58 @@ describe("ScorecardClient Undo/Redo", () => {
     // Then: 取り消したマスが選択されているためそのマスに記録され、Redo履歴は破棄される
     expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("9");
     expect(screen.getByTestId("score-button-redo")).toBeDisabled();
+  });
+
+  it("上書きしたマスをUndoすると、上書き前の点数に戻り、その記録がSDKへ届く", async () => {
+    // Given: 1-1-1に10を記録した後、9で上書きしている
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId("score-button-10"));
+    await user.click(screen.getByTestId("shot-cell-1-1-1"));
+    await user.click(screen.getByTestId("score-button-9"));
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("9");
+
+    // When: Undoする
+    await user.click(screen.getByTestId("score-button-undo"));
+
+    // Then: 空欄でなく上書き前の10に戻り、10の記録がSDKへ届く
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
+    await waitFor(() => {
+      expect(sentShots("record_shots").at(-1)).toEqual(
+        expect.objectContaining({
+          end_number: 1,
+          arrow_number: 1,
+          score_str: "10",
+          score_int: 10,
+        }),
+      );
+    });
+  });
+
+  it("クリアしたマスをUndoすると、クリア前の点数に戻り、その記録がSDKへ届く", async () => {
+    // Given: 1-1-1に10を記録した後、そのマスをクリアしている
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId("score-button-10"));
+    await user.click(screen.getByTestId("shot-cell-1-1-1"));
+    await user.click(screen.getByTestId("score-button-clear"));
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("");
+
+    // When: Undoする
+    await user.click(screen.getByTestId("score-button-undo"));
+
+    // Then: クリア前の10に戻り、10の記録がSDKへ届く
+    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
+    await waitFor(() => {
+      expect(sentShots("record_shots").at(-1)).toEqual(
+        expect.objectContaining({
+          end_number: 1,
+          arrow_number: 1,
+          score_str: "10",
+          score_int: 10,
+        }),
+      );
+    });
   });
 });
 
