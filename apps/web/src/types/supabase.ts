@@ -671,7 +671,6 @@ export type Database = {
         Args: { p_round_event_id: string; p_round_id: string };
         Returns: undefined;
       };
-      get_round_view_status: { Args: { p_round_id: string }; Returns: string };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
       record_shots: { Args: { p_shots: Json }; Returns: undefined };
