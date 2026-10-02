@@ -1,9 +1,13 @@
 import type { ReactNode } from "react";
+import { AppLogo } from "@/components/app-logo";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto flex h-dvh w-full max-w-sm flex-col items-center justify-center gap-4 overflow-y-auto p-8">
-      {children}
-    </main>
+    <>
+      <AppLogo />
+      <main className="mx-auto mt-14 flex h-[calc(100dvh-3.5rem)] w-full max-w-sm flex-col items-center justify-center gap-4 overflow-y-auto p-8">
+        {children}
+      </main>
+    </>
   );
 }

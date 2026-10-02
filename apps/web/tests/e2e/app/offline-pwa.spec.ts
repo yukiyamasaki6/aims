@@ -1,5 +1,6 @@
-import type { Page } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
 import { expect, test } from "../fixtures";
+import { SHARED_AUTH_STATE_PATH, waitForHydration } from "../helpers/auth";
 
 // 認証に依存しない/を使い、Service Workerが有効になるまで待つ。
 async function openWithServiceWorker(page: Page) {
@@ -141,7 +142,7 @@ test("offline-pwa-04: Service Workerが登録済みでオフラインのとき�
   context,
 }) => {
   // Given: Service Workerが登録済みで、オフライン
-  // /自体は認証に依存し、プリキャッシュ対象外のため、
+  // /はプリキャッシュ対象外のため、
   // ナビゲーションの失敗を認証に依存しない静的な/offlineで受け止める。
   await openWithServiceWorker(page);
   await context.setOffline(true);
@@ -158,4 +159,50 @@ test("offline-pwa-04: Service Workerが登録済みでオフラインのとき�
       "インターネットに接続されていません。接続を確認してから、もう一度お試しください。",
     ),
   ).toBeVisible();
+});
+
+// アプリの起動そのものは自動化できないため、Manifestのstart_urlを読み、
+// 起動時に開かれるURLをそのまま開くことで確かめる（offline-pwa-02と同じ方針）。
+async function openStartUrl(page: Page, context: BrowserContext) {
+  await page.goto("/");
+  const session = await context.newCDPSession(page);
+  const manifest = await session.send("Page.getAppManifest");
+  expect(manifest.data, "manifestの本文を取得できること").toBeDefined();
+  const { start_url } = JSON.parse(manifest.data as string) as {
+    start_url?: string;
+  };
+  expect(start_url, "manifestにstart_urlがあること").toBeDefined();
+  await page.goto(new URL(start_url as string, manifest.url).toString());
+}
+
+test.describe("認証済み", () => {
+  test.use({ storageState: SHARED_AUTH_STATE_PATH });
+
+  test("offline-pwa-05: 認証済みのとき、manifestのstart_urlを開くと、ラウンド一覧が表示される", async ({
+    page,
+    context,
+  }) => {
+    // Given: 認証済み
+    // When: manifestのstart_urlを開く
+    await openStartUrl(page, context);
+
+    // Then: ラウンド一覧が表示される
+    await expect(page).toHaveURL(/\/rounds$/);
+    await waitForHydration(page);
+    await expect(
+      page.getByRole("heading", { name: "ラウンド一覧" }),
+    ).toBeVisible();
+  });
+});
+
+test("offline-pwa-06: 未認証のとき、manifestのstart_urlを開くと、/signinへ遷移する", async ({
+  page,
+  context,
+}) => {
+  // Given: 未認証
+  // When: manifestのstart_urlを開く
+  await openStartUrl(page, context);
+
+  // Then: /signinへ遷移する
+  await expect(page).toHaveURL(/\/signin$/);
 });

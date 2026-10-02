@@ -13,4 +13,16 @@ describe("OfflinePage", () => {
       screen.getByRole("heading", { name: "オフラインです" }),
     ).toBeInTheDocument();
   });
+
+  it("/へのAIMSロゴを表示する", () => {
+    // Given
+    // When
+    render(<OfflinePage />);
+
+    // Then
+    expect(screen.getByRole("link", { name: "AIMS" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+  });
 });

@@ -1,3 +1,4 @@
+import { SessionGuard } from "@/features/auth/session-guard-provider";
 import { LeftPanel } from "./left-panel";
 
 export default function MainLayout({
@@ -7,6 +8,7 @@ export default function MainLayout({
 }>) {
   return (
     <div className="flex h-dvh flex-col overflow-hidden md:flex-row">
+      <SessionGuard />
       <LeftPanel />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</div>
     </div>

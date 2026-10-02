@@ -15,4 +15,16 @@ describe("AuthLayout", () => {
       screen.getByText("子要素"),
     );
   });
+
+  it("/へのAIMSロゴを表示する", () => {
+    // Given
+    // When
+    render(<AuthLayout>{null}</AuthLayout>);
+
+    // Then
+    expect(screen.getByRole("link", { name: "AIMS" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+  });
 });

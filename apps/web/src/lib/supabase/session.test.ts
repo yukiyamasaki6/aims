@@ -65,7 +65,7 @@ describe("updateSession", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 
-  it.each(["/", "/signin", "/signup", "/reset-password"])(
+  it.each(["/signin", "/signup", "/reset-password"])(
     "認証済みで%sにアクセスすると/roundsへリダイレクトする",
     async (path) => {
       mockUser({ id: "user-1" });
@@ -90,14 +90,17 @@ describe("updateSession", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 
-  it("認証済みでサインイン専用パス以外はリダイレクトしない", async () => {
-    mockUser({ id: "user-1" });
-    const request = new NextRequest("https://app.example.com/rounds/1");
+  it.each(["/", "/rounds/1"])(
+    "認証済みで未認証専用でない%sはリダイレクトしない",
+    async (path) => {
+      mockUser({ id: "user-1" });
+      const request = new NextRequest(`https://app.example.com${path}`);
 
-    const res = await updateSession(request);
+      const res = await updateSession(request);
 
-    expect(res.headers.get("location")).toBeNull();
-  });
+      expect(res.headers.get("location")).toBeNull();
+    },
+  );
 
   it("cookiesのgetAllはrequestのcookieをそのまま返す", async () => {
     mockUser({ id: "user-1" });

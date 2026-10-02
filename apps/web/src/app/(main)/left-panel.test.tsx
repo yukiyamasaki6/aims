@@ -6,11 +6,6 @@ import { initLocalIdentity } from "@/features/auth/local-identity";
 import { createClient } from "@/lib/supabase/client";
 import { LeftPanel } from "./left-panel";
 
-const nav = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock("next/navigation", () => ({
-  useRouter: () => nav,
-}));
-
 // SupabaseのSDKは外部サービスとの境界のため、signOutの結果と認証状態の変化（onAuthStateChange）を任意に制御できるスタブで模す。
 const supabase = vi.hoisted(() => {
   const listeners: Array<
@@ -53,12 +48,6 @@ async function confirmSignOut(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId("confirm-dialog-confirm"));
 }
 
-// 次のマクロタスクまで進め、その時点までに積まれたマイクロタスクを、実装の非同期処理の段数によらず全て処理する。
-// 「まだ起きていないこと」は条件が満たされるまで待つ形では確かめられないため、これで進めてから検証する。
-async function flushToMacrotask() {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-}
-
 function closeMenuButtons() {
   return screen.getAllByRole("button", { name: "メニューを閉じる" });
 }
@@ -93,7 +82,7 @@ describe("LeftPanel", () => {
   });
 
   describe("リンク", () => {
-    it("AIMSリンクと個人リンクは/roundsへのリンクである", () => {
+    it("AIMSリンクは/へ、個人リンクは/roundsへのリンクである", () => {
       // Given
       // When
       render(<LeftPanel />);
@@ -101,7 +90,7 @@ describe("LeftPanel", () => {
       // Then
       expect(screen.getByRole("link", { name: "AIMS" })).toHaveAttribute(
         "href",
-        "/rounds",
+        "/",
       );
       expect(screen.getByRole("link", { name: "個人" })).toHaveAttribute(
         "href",
@@ -111,7 +100,7 @@ describe("LeftPanel", () => {
   });
 
   describe("サインアウトを確認する", () => {
-    it("サインアウトが完了した場合は、/へ遷移する", async () => {
+    it("サインアウトが完了した場合は、確認ダイアログを閉じる", async () => {
       // Given
       const user = userEvent.setup();
       signOutRemovingLocalSession(async () => ({ error: null }));
@@ -122,11 +111,13 @@ describe("LeftPanel", () => {
 
       // Then
       await waitFor(() => {
-        expect(nav.push).toHaveBeenCalledWith("/");
+        expect(
+          screen.queryByTestId("confirm-dialog-confirm"),
+        ).not.toBeInTheDocument();
       });
     });
 
-    it("サインアウトに失敗した場合は、エラーを表示し遷移しない", async () => {
+    it("サインアウトに失敗した場合は、エラーを表示する", async () => {
       // Given
       const user = userEvent.setup();
       supabase.signOut.mockResolvedValue({
@@ -143,30 +134,6 @@ describe("LeftPanel", () => {
           "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
         ),
       ).toBeInTheDocument();
-      expect(nav.push).not.toHaveBeenCalled();
-    });
-
-    it("サインアウトの完了前にアンマウントされた場合は遷移しない", async () => {
-      // Given
-      const user = userEvent.setup();
-      let completeSignOut: () => void = () => {};
-      const pendingSignOut = new Promise<{ error: null }>((resolve) => {
-        completeSignOut = () => {
-          supabase.emit("SIGNED_OUT", null);
-          resolve({ error: null });
-        };
-      });
-      supabase.signOut.mockReturnValue(pendingSignOut);
-      const { unmount } = render(<LeftPanel />);
-      await confirmSignOut(user);
-
-      // When
-      unmount();
-      completeSignOut();
-      await flushToMacrotask();
-
-      // Then
-      expect(nav.push).not.toHaveBeenCalled();
     });
   });
 

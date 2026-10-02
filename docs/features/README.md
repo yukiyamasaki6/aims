@@ -70,11 +70,12 @@
 ## 画面遷移図
 
 実線：ユーザー操作による遷移
-破線：認証状態による自動リダイレクト（未認証/認証済みガード）
+破線：認証状態による自動リダイレクト（入口のガードと、表示中のセッション喪失の検知）
 
 ```mermaid
 flowchart TD
     Landing["/<br/>紹介画面"]
+    Logo(("AIMSロゴ<br/>（認証画面・紹介画面・オフライン画面の左上）"))
 
     subgraph auth ["(auth)"]
         SignIn["/signin<br/>サインイン画面"]
@@ -92,16 +93,15 @@ flowchart TD
     end
 
     %% 認証状態による自動リダイレクト
-    Landing -.->|認証済み| Rounds
     SignIn -.->|認証済み| Rounds
     SignUp -.->|認証済み| Rounds
     ResetPass -.->|認証済み| Rounds
-    Rounds -.->|未認証| SignIn
-    RoundsNew -.->|未認証| SignIn
-    RoundDetail -.->|未認証| SignIn
+    main -.->|未認証・セッション喪失| SignIn
 
     %% ユーザー操作による遷移
-    Landing -->|開始ボタン| SignUp
+    Logo -->|クリック| Landing
+    Landing -->|開始ボタン（未認証）| SignUp
+    Landing -->|開始ボタン（認証済み）| Rounds
     SignIn -->|「パスワードをお忘れですか」| ResetPass
     SignIn -->|「サインアップ」リンク| SignUp
     SignIn -->|サインイン成功| Rounds
@@ -115,7 +115,8 @@ flowchart TD
     RoundsNew -->|ラウンド作成成功| RoundDetail
     RoundDetail -->|「一覧へ戻る」リンク| Rounds
     RoundDetail -->|ラウンド削除成功| Rounds
-    LeftPanel -->|AIMS/個人リンク| Rounds
-    LeftPanel -->|サインアウト成功| Landing
+    LeftPanel -->|AIMSリンク| Landing
+    LeftPanel -->|個人リンク| Rounds
+    LeftPanel -->|サインアウト成功| SignIn
 ```
 

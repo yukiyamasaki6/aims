@@ -50,12 +50,10 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // /・/signin・/signup・/reset-passwordは未サインイン専用の入り口で、
-  // 認証済みなら/roundsへ戻す（"/"だけは未サインイン時にリダイレクトせず
-  // 紹介画面を表示するため、この一方向のみ扱う）。
+  // 未認証専用の入口。認証済みなら/roundsへ戻す。
   if (
     user &&
-    AUTH_ONLY_PATHS.includes(request.nextUrl.pathname) &&
+    GUEST_ONLY_PATHS.includes(request.nextUrl.pathname) &&
     !isServerAction
   ) {
     const url = request.nextUrl.clone();
@@ -66,4 +64,4 @@ export async function updateSession(request: NextRequest) {
   return supabaseResponse;
 }
 
-const AUTH_ONLY_PATHS = ["/", "/signin", "/signup", "/reset-password"];
+const GUEST_ONLY_PATHS = ["/signin", "/signup", "/reset-password"];

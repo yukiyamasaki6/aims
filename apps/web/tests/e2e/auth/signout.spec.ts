@@ -7,8 +7,16 @@ import { signUpAndSignIn, waitForHydration } from "../helpers/auth";
 test.use({ storageState: { cookies: [], origins: [] } });
 
 const LOGOUT_API = "**/auth/v1/logout*";
+// supabase/config.tomlのjwt_expiry（3600秒）を越える時間。
+const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
 
-async function signInAndOpenDialog(page: Page, prefix: string) {
+async function signInAndOpenDialog(
+  page: Page,
+  prefix: string,
+  options: { installClock?: boolean } = {},
+) {
+  // 時計は画面遷移より前に差し替える必要がある。
+  if (options.installClock) await page.clock.install();
   await signUpAndSignIn(page, {
     email: `${prefix}-${Date.now()}@aims.test`,
     password: "password1",
@@ -23,7 +31,7 @@ async function signInAndOpenDialog(page: Page, prefix: string) {
   };
 }
 
-test("signout-01: サインアウト確認ダイアログでサインアウトが成功するとき、確認ボタンをクリックすると、サインアウトされる、/へ遷移する", async ({
+test("signout-01: サインアウト確認ダイアログでサインアウトが成功するとき、確認ボタンをクリックすると、サインアウトされる、/signinへ遷移する", async ({
   page,
 }) => {
   // Given
@@ -33,7 +41,7 @@ test("signout-01: サインアウト確認ダイアログでサインアウト�
   await confirmButton.click();
 
   // Then
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL(/\/signin$/);
   await page.goto("/rounds");
   await expect(page).toHaveURL(/\/signin/);
 });
@@ -103,14 +111,24 @@ test("signout-04: サインアウト確認ダイアログでサインアウト�
   await expect(confirmButton).toBeVisible();
 
   release();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL(/\/signin$/);
 });
 
-test("signout-05: サインアウト確認ダイアログでオフラインのとき、確認ボタンをクリックすると、サインアウトされる、/へ遷移する", async ({
+test("signout-05: サインアウト確認ダイアログでオフラインのとき、確認ボタンをクリックすると、サインアウトされる、オフライン画面が表示される", async ({
   page,
 }) => {
   // Given
   const { confirmButton } = await signInAndOpenDialog(page, "signout-offline");
+  // オフラインの/signinはService Workerが/offlineを返すため、先に制御下に置く。
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    if (navigator.serviceWorker.controller) return;
+    await new Promise<void>((resolve) => {
+      navigator.serviceWorker.addEventListener("controllerchange", () =>
+        resolve(),
+      );
+    });
+  });
   // scope:"local"のsignOut()は、サーバーへの通信が失敗してもローカルセッションの
   // 削除自体は必ず行う。UIは通信の成否ではなく、これを根拠に遷移する。
   await page.context().setOffline(true);
@@ -119,7 +137,9 @@ test("signout-05: サインアウト確認ダイアログでオフラインの�
   await confirmButton.click();
 
   // Then
-  await expect(page).toHaveURL("/");
+  await expect(
+    page.getByRole("heading", { name: "オフラインです" }),
+  ).toBeVisible();
   // 端末のセッションが消えていることを、オンラインへ戻して確認する。
   await page.context().setOffline(false);
   await page.goto("/rounds");
@@ -130,25 +150,33 @@ test("signout-06: サインアウト確認ダイアログでサインアウト�
   page,
 }) => {
   // Given
-  const { confirmButton } = await signInAndOpenDialog(page, "signout-failure");
-  // 端末のローカルの識別情報を消せない状態にして、サインアウトを失敗させる。
-  await page.evaluate(() => {
-    const removeItem = Storage.prototype.removeItem;
-    Storage.prototype.removeItem = function (key: string) {
-      if (key === "aims:local-user-id") throw new Error("blocked");
-      return removeItem.call(this, key);
-    };
+  const { confirmButton } = await signInAndOpenDialog(page, "signout-failure", {
+    installClock: true,
   });
+  // サインアウトが実際に失敗する経路（オフラインかつアクセストークン期限切れ）を再現する。
+  // 期限切れのトークンはsignOutの前に更新が必要になり、更新が通信失敗すると、
+  // signOutはセッションを消さずSIGNED_OUTも出さずにエラーを返す。
+  await page.route("**/auth/v1/token*", (route) => route.abort());
+  await page.clock.fastForward(PAST_JWT_EXPIRY_MS);
 
   // When
   await confirmButton.click();
 
   // Then
-  await expect(
-    page.getByText(
-      "通信エラーが発生しました。しばらくしてから再度お試しください。",
-    ),
-  ).toBeVisible();
+  // auth-jsは更新の通信失敗を、待機（setTimeout）を挟んで再試行してから諦める。
+  // 時計を差し替えているため、エラーが表示されるまで1秒ずつ進める。
+  const errorMessage = page.getByText(
+    "通信エラーが発生しました。しばらくしてから再度お試しください。",
+  );
+  await expect
+    .poll(
+      async () => {
+        await page.clock.runFor(1_000);
+        return await errorMessage.isVisible();
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
   await expect(confirmButton).toHaveAttribute("aria-disabled", "false");
   await expect(page).toHaveURL(/\/rounds/);
 });
