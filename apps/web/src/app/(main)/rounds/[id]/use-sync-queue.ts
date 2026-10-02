@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getLocalIdentity } from "@/features/auth/local-identity";
+import { isOffline } from "@/features/fetch-result/network";
 import { eventIdOf, executeSyncOperation } from "./sync-events";
 import {
   loadPendingOperations,
@@ -26,12 +27,6 @@ import { syncShots } from "./sync-shots";
 import { deriveSyncStatus } from "./sync-status";
 
 type RunShotBatch = (batch: ShotBatch) => Promise<BatchResult>;
-
-// navigator.onLineは実際の通信可否を保証しないが、誤ってオンライン判定
-// された場合は通常のバックオフリトライに任せる。
-function isOffline(): boolean {
-  return typeof navigator !== "undefined" && navigator.onLine === false;
-}
 
 // Reactの状態として扱うため、常に新しいSetを返す。
 function toggled(set: Set<string>, id: string, included: boolean) {

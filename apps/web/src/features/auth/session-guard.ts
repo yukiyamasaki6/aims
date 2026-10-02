@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isOffline } from "@/features/fetch-result/network";
 import { classifySession } from "./session-state";
 
 let redirected = false;
@@ -22,7 +23,7 @@ export function watchSessionLoss(
   let disposed = false;
 
   async function check() {
-    if (navigator.onLine === false) return;
+    if (isOffline()) return;
     const result = await supabase.auth.getSession();
     if (disposed) return;
     if (classifySession(result).status === "unauthenticated") onLost();
