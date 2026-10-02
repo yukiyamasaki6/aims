@@ -1,3 +1,4 @@
+import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteRound } from "./delete-round";
 
@@ -57,6 +58,28 @@ describe("deleteRound", () => {
       expect(result).toEqual({
         status: "failed",
         error: "サインインが必要です。",
+      });
+      expect(supabase.rpc).not.toHaveBeenCalled();
+    });
+
+    it("セッションの確認が通信失敗で不明な場合、disable_roundを呼ばず通信エラーを返す", async () => {
+      // Given: セッションの確認が通信失敗で、認証状態が分からない
+      supabase.getSession.mockResolvedValue({
+        data: { session: null },
+        error: new AuthRetryableFetchError("Failed to fetch", 0),
+      });
+
+      // When: ラウンドを削除する
+      const result = await deleteRound({
+        roundId: "round-1",
+        eventId: "event-1",
+        isMounted: () => true,
+      });
+
+      // Then: disable_roundを呼ばず、通信エラーを返す
+      expect(result).toEqual({
+        status: "failed",
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
       });
       expect(supabase.rpc).not.toHaveBeenCalled();
     });

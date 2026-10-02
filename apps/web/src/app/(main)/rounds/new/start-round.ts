@@ -1,3 +1,5 @@
+import { sessionFailureMessage } from "@/features/auth/errors";
+import { classifySession } from "@/features/auth/session-state";
 import { createClient } from "@/lib/supabase/client";
 import { comparePositionKey } from "../_shared/position-key";
 
@@ -94,15 +96,12 @@ export async function startRound({
 }): Promise<StartRoundResult> {
   try {
     const supabase = createClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const user = session?.user;
+    const state = classifySession(await supabase.auth.getSession());
 
     if (!isMounted()) return { status: "discarded" };
 
-    if (!user) {
-      return { status: "failed", error: "サインインが必要です。" };
+    if (state.status !== "authenticated") {
+      return { status: "failed", error: sessionFailureMessage(state) };
     }
 
     let preset: PresetForRound | null = null;

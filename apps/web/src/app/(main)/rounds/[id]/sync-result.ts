@@ -1,5 +1,5 @@
 import type { PostgrestError } from "@supabase/supabase-js";
-import { translateAuthErrorMessage } from "@/features/auth/errors";
+import { sessionFailureMessage } from "@/features/auth/errors";
 import type { SessionState } from "@/features/auth/session-state";
 import type {
   BatchResult,
@@ -8,9 +8,6 @@ import type {
   SyncResultDecision,
 } from "./sync-queue-types";
 
-// 表示用の文言。サインイン画面への誘導は別issue #303で扱う。
-export const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
-
 // 再試行ごとの待機時間。要素数が再試行の上限回数になる。
 export const RETRY_DELAYS_MS = [3000, 6000, 12000, 24000];
 
@@ -18,12 +15,13 @@ export const RETRY_DELAYS_MS = [3000, 6000, 12000, 24000];
 export function authFailureResult(
   state: Exclude<SessionState, { status: "authenticated" }>,
 ): SyncFailure {
-  return state.status === "unauthenticated"
-    ? { error: AUTH_REQUIRED_MESSAGE, cause: { type: "unauthenticated" } }
-    : {
-        error: translateAuthErrorMessage(state.error),
-        cause: { type: "auth-unknown" },
-      };
+  return {
+    error: sessionFailureMessage(state),
+    cause: {
+      type:
+        state.status === "unauthenticated" ? "unauthenticated" : "auth-unknown",
+    },
+  };
 }
 
 export function rpcFailureResult(

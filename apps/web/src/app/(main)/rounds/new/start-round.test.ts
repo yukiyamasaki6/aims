@@ -1,3 +1,4 @@
+import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { startRound } from "./start-round";
 
@@ -178,6 +179,25 @@ describe("startRound", () => {
       expect(result).toEqual({
         status: "failed",
         error: "サインインが必要です。",
+      });
+      expect(supabase.from).not.toHaveBeenCalled();
+      expect(supabase.rpc).not.toHaveBeenCalled();
+    });
+
+    it("セッションの確認が通信失敗で不明な場合、サインインを求めず通信エラーを返し、プリセットの取得もcreate_roundも行わない", async () => {
+      // Given: セッションの確認が通信失敗で、認証状態が分からない
+      supabase.getSession.mockResolvedValue({
+        data: { session: null },
+        error: new AuthRetryableFetchError("Failed to fetch", 0),
+      });
+
+      // When: プリセットを選択してラウンドを作成する
+      const result = await startWith("preset-1");
+
+      // Then: プリセットの取得もcreate_roundも行わず、通信エラーを返す
+      expect(result).toEqual({
+        status: "failed",
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
       });
       expect(supabase.from).not.toHaveBeenCalled();
       expect(supabase.rpc).not.toHaveBeenCalled();

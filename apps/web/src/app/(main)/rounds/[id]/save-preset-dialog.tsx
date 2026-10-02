@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { sessionFailureMessage } from "@/features/auth/errors";
+import { classifySession } from "@/features/auth/session-state";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { PresetInfo } from "../_shared/preset-info";
@@ -25,13 +27,10 @@ async function saveRoundAsPreset(
 ): Promise<{ error: string } | undefined> {
   const supabase = createClient();
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const user = session?.user;
+  const state = classifySession(await supabase.auth.getSession());
 
-  if (!user) {
-    return { error: "サインインが必要です。" };
+  if (state.status !== "authenticated") {
+    return { error: sessionFailureMessage(state) };
   }
 
   // プリセット作成・距離複製は、Postgres関数（save_round_as_preset）内で1つのトランザクションとして行う。
