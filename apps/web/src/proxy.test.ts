@@ -16,7 +16,6 @@ afterEach(() => {
 describe("proxy", () => {
   describe("対象パス", () => {
     it.each([
-      "/",
       "/signin",
       "/signup",
       "/reset-password",
@@ -33,6 +32,7 @@ describe("proxy", () => {
     });
 
     it.each([
+      "/",
       "/offline",
       "/sw.js",
       "/manifest.webmanifest",

@@ -11,7 +11,7 @@ describe("manifest", () => {
     expect(result).toMatchObject({
       name: "AIMS",
       short_name: "AIMS",
-      start_url: "/",
+      start_url: "/rounds",
       display: "standalone",
       background_color: "#231F20",
       theme_color: "#231F20",

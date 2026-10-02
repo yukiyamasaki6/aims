@@ -2,7 +2,6 @@
 
 import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -10,7 +9,6 @@ import { cn } from "@/lib/utils";
 import { signOut } from "./sign-out";
 
 export function LeftPanel() {
-  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(true);
   const [signOutDialogOpen, setSignOutDialogOpen] = useState(false);
@@ -29,7 +27,6 @@ export function LeftPanel() {
     const result = await signOut({ isMounted: () => mountedRef.current });
 
     if (result.status === "failed") return { error: result.error };
-    if (result.status === "signed-out") router.push("/");
   }
 
   return (
@@ -69,7 +66,7 @@ export function LeftPanel() {
           )}
         >
           <Link
-            href="/rounds"
+            href="/"
             className={cn("truncate font-bold", !desktopOpen && "md:hidden")}
           >
             AIMS
