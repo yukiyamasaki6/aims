@@ -111,3 +111,41 @@ test("history-03: ラウンドが1件以上あるとき、ラウンドカード�
   // Then
   await expect(page).toHaveURL(`/rounds/${roundId}`);
 });
+
+const ROUNDS_LIST_REST = "**/rest/v1/rounds?*";
+
+test("history-06: ラウンド一覧で通信できないとき、/roundsを開くと、見出しと新規作成ボタンと「未接続」が表示される", async ({
+  page,
+}) => {
+  // Given
+  await page.route(ROUNDS_LIST_REST, (route) => route.abort("failed"));
+
+  // When
+  await page.goto("/rounds");
+
+  // Then
+  await expect(
+    page.getByRole("heading", { name: "ラウンド一覧" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("new-round-fab")).toBeVisible();
+  await expect(page.getByText("未接続")).toBeVisible();
+});
+
+test("history-07: ラウンド一覧で取得がエラーになるとき、/roundsを開くと、エラーメッセージが表示される", async ({
+  page,
+}) => {
+  // Given
+  // エラー表示の代表として、サーバーエラー(500)で確かめる。他のエラー種別は単体テストで確かめる。
+  await page.route(ROUNDS_LIST_REST, (route) =>
+    route.fulfill({ status: 500, body: "temporary error" }),
+  );
+
+  // When
+  await page.goto("/rounds");
+
+  // Then
+  // Next.jsのroute announcerも role="alert" を持つため、メッセージで絞る。
+  await expect(
+    page.getByRole("alert").filter({ hasText: "読み込めませんでした。" }),
+  ).toBeVisible();
+});
