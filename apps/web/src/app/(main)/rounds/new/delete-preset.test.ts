@@ -1,3 +1,4 @@
+import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { deletePersonalPreset } from "./delete-preset";
 
@@ -57,6 +58,27 @@ describe("deletePersonalPreset", () => {
       expect(result).toEqual({
         status: "failed",
         error: "サインインが必要です。",
+      });
+      expect(supabase.from).not.toHaveBeenCalled();
+    });
+
+    it("セッションの確認が通信失敗で不明な場合、削除せず通信エラーを返す", async () => {
+      // Given: セッションの確認が通信失敗で、認証状態が分からない
+      supabase.getSession.mockResolvedValue({
+        data: { session: null },
+        error: new AuthRetryableFetchError("Failed to fetch", 0),
+      });
+
+      // When: 個人プリセットを削除する
+      const result = await deletePersonalPreset({
+        presetId: "preset-1",
+        isMounted: () => true,
+      });
+
+      // Then: 削除せず、通信エラーを返す
+      expect(result).toEqual({
+        status: "failed",
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
       });
       expect(supabase.from).not.toHaveBeenCalled();
     });

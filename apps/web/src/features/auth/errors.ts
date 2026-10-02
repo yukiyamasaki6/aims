@@ -1,4 +1,7 @@
 import type { AuthError } from "@supabase/supabase-js";
+import type { SessionState } from "./session-state";
+
+export const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
   invalid_credentials: "メールアドレスまたはパスワードが間違っています。",
@@ -24,4 +27,13 @@ export function translateAuthErrorMessage(error: AuthError): string {
   }
 
   return error.message;
+}
+
+// 未認証はサインインを促し、不明（通信失敗）は通信できないことを示す。
+export function sessionFailureMessage(
+  state: Exclude<SessionState, { status: "authenticated" }>,
+): string {
+  return state.status === "unauthenticated"
+    ? AUTH_REQUIRED_MESSAGE
+    : translateAuthErrorMessage(state.error);
 }

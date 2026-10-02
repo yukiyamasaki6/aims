@@ -1,3 +1,4 @@
+import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -267,6 +268,31 @@ describe("SavePresetDialog", () => {
       expect(
         await screen.findByText("サインインが必要です。"),
       ).toBeInTheDocument();
+      expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
+      expect(supabase.rpc).not.toHaveBeenCalled();
+    });
+
+    it("セッションの確認が通信失敗で不明な場合は、サインインを求めず通信エラーを表示してダイアログを開いたままにする", async () => {
+      // Given: セッションの確認が通信失敗で、認証状態が分からない
+      supabase.getSession.mockResolvedValue({
+        data: { session: null },
+        error: new AuthRetryableFetchError("Failed to fetch", 0),
+      });
+      const { user } = setup();
+      await user.click(screen.getByTestId("save-as-preset-trigger"));
+
+      // When: 保存する
+      await user.click(screen.getByTestId("save-as-preset-confirm"));
+
+      // Then: 通信エラーが表示され、ダイアログは開いたままで、SDKのrpcへは届かない
+      expect(
+        await screen.findByText(
+          "通信エラーが発生しました。しばらくしてから再度お試しください。",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("サインインが必要です。"),
+      ).not.toBeInTheDocument();
       expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
       expect(supabase.rpc).not.toHaveBeenCalled();
     });

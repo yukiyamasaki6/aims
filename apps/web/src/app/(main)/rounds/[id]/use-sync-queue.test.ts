@@ -3,10 +3,11 @@ import { setImmediate as realSetImmediate } from "node:timers";
 import { act, renderHook } from "@testing-library/react";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
 import type { SyncOperation } from "./sync-events";
 import { loadPendingOperations, savePendingOperation } from "./sync-outbox";
 import type { FailureCause, ShotUpsert } from "./sync-queue-types";
-import { AUTH_REQUIRED_MESSAGE, RETRY_DELAYS_MS } from "./sync-result";
+import { RETRY_DELAYS_MS } from "./sync-result";
 import { useSyncQueue } from "./use-sync-queue";
 
 // SupabaseのSDKは外部サービスとの境界のため、セッションの取得結果とRPCの結果を任意に制御できるスタブで模す。

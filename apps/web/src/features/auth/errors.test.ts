@@ -1,6 +1,10 @@
-import type { AuthError } from "@supabase/supabase-js";
+import { type AuthError, AuthRetryableFetchError } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
-import { translateAuthErrorMessage } from "./errors";
+import {
+  AUTH_REQUIRED_MESSAGE,
+  sessionFailureMessage,
+  translateAuthErrorMessage,
+} from "./errors";
 
 function makeAuthError(code: string, message: string): AuthError {
   return { code, message } as AuthError;
@@ -62,6 +66,30 @@ describe("translateAuthErrorMessage", () => {
       message: "Failed to fetch",
     } as AuthError;
     expect(translateAuthErrorMessage(error)).toBe(
+      "通信エラーが発生しました。しばらくしてから再度お試しください。",
+    );
+  });
+});
+
+describe("sessionFailureMessage", () => {
+  it("未認証のときは、サインインを求める文言を返す", () => {
+    // Given: 未認証の状態
+    // When: 失敗の文言を求める
+    const message = sessionFailureMessage({ status: "unauthenticated" });
+
+    // Then: サインインを求める文言になる
+    expect(message).toBe(AUTH_REQUIRED_MESSAGE);
+  });
+
+  it("不明（通信失敗）のときは、通信エラーの文言を返す", () => {
+    // Given: 通信失敗で認証状態が分からない状態
+    const error = new AuthRetryableFetchError("Failed to fetch", 0);
+
+    // When: 失敗の文言を求める
+    const message = sessionFailureMessage({ status: "unknown", error });
+
+    // Then: サインインを求めず、通信エラーの文言になる
+    expect(message).toBe(
       "通信エラーが発生しました。しばらくしてから再度お試しください。",
     );
   });

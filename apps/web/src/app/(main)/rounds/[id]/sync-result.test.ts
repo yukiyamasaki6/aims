@@ -5,9 +5,9 @@ import {
   type PostgrestError,
 } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
+import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
 import { classifySession } from "@/features/auth/session-state";
 import {
-  AUTH_REQUIRED_MESSAGE,
   authFailureResult,
   classifyFailure,
   decideSyncResult,
