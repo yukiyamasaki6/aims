@@ -1,3 +1,4 @@
+import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { syncShots } from "./sync-shots";
 
@@ -123,10 +124,11 @@ describe("syncShots", () => {
     });
 
     it("record_shotsが失敗した場合、clear_shotsを呼ばずにエラーを返す", async () => {
-      // Given: record_shotsが業務ルール違反で失敗する
+      // Given: record_shotsが400で失敗する
       supabase.rpc.mockResolvedValue({
         data: null,
         error: { message: "duplicate", code: "P0001" },
+        status: 400,
       });
 
       // When: 記録と取り消しをまとめて同期する
@@ -151,8 +153,11 @@ describe("syncShots", () => {
         ],
       });
 
-      // Then: 再試行しない失敗として返し、取り消しは送らない
-      expect(result).toEqual({ error: "duplicate", permanent: true });
+      // Then: HTTPステータスを持つRPCの失敗として返し、取り消しは送らない
+      expect(result).toEqual({
+        error: "duplicate",
+        cause: { type: "rpc", status: 400 },
+      });
       expect(supabase.rpc).toHaveBeenCalledTimes(1);
       expect(supabase.rpc).toHaveBeenCalledWith(
         "record_shots",
@@ -161,10 +166,11 @@ describe("syncShots", () => {
     });
 
     it("clear_shotsが失敗した場合、エラーを返す", async () => {
-      // Given: clear_shotsが通信エラーで失敗する
+      // Given: clear_shotsが通信エラー（ステータス0）で失敗する
       supabase.rpc.mockResolvedValue({
         data: null,
         error: { message: "network error", code: "08006" },
+        status: 0,
       });
 
       // When: 取り消しを同期する
@@ -180,23 +186,67 @@ describe("syncShots", () => {
         ],
       });
 
-      // Then: 再試行できる失敗として返す
-      expect(result).toEqual({ error: "network error", permanent: false });
+      // Then: 通信失敗（ステータス0）のRPCの失敗として返す
+      expect(result).toEqual({
+        error: "network error",
+        cause: { type: "rpc", status: 0 },
+      });
     });
   });
 
   describe("未サインインの場合", () => {
-    it("RPCを呼ばず、再試行しない失敗として返す", async () => {
+    it("セッションがなければ、RPCを呼ばず、未認証の失敗として返す", async () => {
       // Given: セッションがない
-      supabase.getSession.mockResolvedValue({ data: { session: null } });
+      supabase.getSession.mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
 
       // When: 同期する
       const result = await syncShots({ upsert: [], clear: [] });
 
-      // Then: サインインを求める失敗を返し、RPCは呼ばない
+      // Then: サインインを求める未認証の失敗を返し、RPCは呼ばない
       expect(result).toEqual({
         error: "サインインが必要です。",
-        permanent: true,
+        cause: { type: "unauthenticated" },
+      });
+      expect(supabase.rpc).not.toHaveBeenCalled();
+    });
+
+    it("更新が拒否されたときも、セッションがない場合と同じ失敗として返す", async () => {
+      // Given: 更新が拒否されてセッションが得られない
+      supabase.getSession.mockResolvedValue({
+        data: { session: null },
+        error: new AuthApiError("denied", 401, "refresh_token_not_found"),
+      });
+
+      // When: 同期する
+      const result = await syncShots({ upsert: [], clear: [] });
+
+      // Then: サインインを求める未認証の失敗を返し、RPCは呼ばない
+      expect(result).toEqual({
+        error: "サインインが必要です。",
+        cause: { type: "unauthenticated" },
+      });
+      expect(supabase.rpc).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("認証を確認できない場合", () => {
+    it("更新が通信失敗なら、RPCを呼ばず、再試行できる失敗として返す", async () => {
+      // Given: アクセストークンの更新が通信失敗になる
+      supabase.getSession.mockResolvedValue({
+        data: { session: null },
+        error: new AuthRetryableFetchError("Failed to fetch", 0),
+      });
+
+      // When: 同期する
+      const result = await syncShots({ upsert: [], clear: [] });
+
+      // Then: 通信エラーの文言と認証の不明の種類で返し、RPCは呼ばない
+      expect(result).toEqual({
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+        cause: { type: "auth-unknown" },
       });
       expect(supabase.rpc).not.toHaveBeenCalled();
     });

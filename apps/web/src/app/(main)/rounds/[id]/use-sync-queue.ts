@@ -45,10 +45,7 @@ function toggled(set: Set<string>, id: string, included: boolean) {
 // 待つべきものが無いと判定し、attempt(0)を同期的に呼べる。
 const RESOLVED_TAIL: Promise<unknown> = Promise.resolve();
 
-export function useSyncQueue(
-  roundId?: string,
-  onPermanentFailure?: () => void,
-) {
+export function useSyncQueue(roundId?: string) {
   const [errorMap, setErrorMap] = useState<Map<string, SyncError>>(new Map());
   const [pendingCount, setPendingCount] = useState(0);
   const [persistingCount, setPersistingCount] = useState(0);
@@ -160,16 +157,16 @@ export function useSyncQueue(
           input.operation
             ? executeSyncOperation(input.operation)
             : (input.run?.() ??
-                Promise.resolve({ error: "同期する操作が見つかりません。" })),
+                Promise.resolve({
+                  error: "同期する操作が見つかりません。",
+                  cause: { type: "exception" } as const,
+                })),
         ).then((result) => {
           const decision = decideSyncResult(result, attemptIndex);
           if (decision.type === "retry") return retry(decision.delayMs);
           settleKeys([input], result);
           if (decision.removeFromOutbox && input.operation) {
             void removePendingOperation(eventIdOf(input.operation));
-          }
-          if (decision.notifyPermanentFailure) {
-            onPermanentFailure?.();
           }
           setPendingCount((n) => n - 1);
         });
@@ -183,7 +180,7 @@ export function useSyncQueue(
       roundTailRef.current = runPromise;
       tailsRef.current.set(input.key, runPromise);
     },
-    [keyRetry, settleKeys, onPermanentFailure],
+    [keyRetry, settleKeys],
   );
 
   // 戻り値のPromiseは、今回の送信中・後に新たに積まれた分の再帰的な送信も
@@ -226,9 +223,6 @@ export function useSyncQueue(
                 }
               }
             }
-            if (decision.notifyPermanentFailure) {
-              onPermanentFailure?.();
-            }
             setShotPendingKeys((prev) => {
               const next = new Set(prev);
               for (const item of itemsToRetry) next.delete(item.key);
@@ -245,7 +239,7 @@ export function useSyncQueue(
       shotTailByDistanceRef.current.set(distanceId, resultPromise);
       return resultPromise;
     },
-    [shotRetry, settleKeys, onPermanentFailure],
+    [shotRetry, settleKeys],
   );
 
   const scheduleShot = useCallback(
