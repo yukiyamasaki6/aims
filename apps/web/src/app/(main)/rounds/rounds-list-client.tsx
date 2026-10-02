@@ -10,22 +10,42 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { FetchState } from "@/features/fetch-result/fetch-state";
+import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { createClient } from "@/lib/supabase/client";
 import { deleteRound } from "./_shared/delete-round";
+import { fetchRoundsList, type RoundListItem } from "./fetch-rounds-list";
 
-export type RoundListItem = {
-  id: string;
-  name: string;
-  roundDate: string;
-  total: number;
-};
-
-export function RoundsListClient({
-  initialRounds,
-}: {
-  initialRounds: RoundListItem[];
-}) {
+export function RoundsListClient() {
   const hydrated = useHydrated();
+  const { view, retry } = useFetchResult(
+    () => fetchRoundsList(createClient()),
+    [],
+  );
+
+  return (
+    <>
+      {view.status === "ok" ? (
+        <RoundCards initialRounds={view.data} />
+      ) : (
+        <FetchState view={view} onRetry={retry} />
+      )}
+
+      <Link
+        href="/rounds/new"
+        data-hydrated={hydrated}
+        data-testid="new-round-fab"
+        aria-label="ラウンドを新規作成"
+        className="fixed right-6 bottom-6 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-colors hover:bg-primary/80"
+      >
+        <Plus className="size-6" />
+      </Link>
+    </>
+  );
+}
+
+function RoundCards({ initialRounds }: { initialRounds: RoundListItem[] }) {
   const [rounds, setRounds] = useState(initialRounds);
   const [roundToDelete, setRoundToDelete] = useState<RoundListItem | null>(
     null,
@@ -100,16 +120,6 @@ export function RoundsListClient({
           ))}
         </ul>
       )}
-
-      <Link
-        href="/rounds/new"
-        data-hydrated={hydrated}
-        data-testid="new-round-fab"
-        aria-label="ラウンドを新規作成"
-        className="fixed right-6 bottom-6 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-colors hover:bg-primary/80"
-      >
-        <Plus className="size-6" />
-      </Link>
 
       <BlockingConfirmDialog
         open={roundToDelete !== null}
