@@ -1,3 +1,4 @@
+import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   eventIdOf,
@@ -22,6 +23,81 @@ const ROUND_DISABLED: SyncOperation = {
   eventId: "event-1",
   roundId: "round-1",
 };
+
+const OPERATIONS: { type: SyncOperation["type"]; operation: SyncOperation }[] =
+  [
+    {
+      type: "round.updated",
+      operation: {
+        type: "round.updated",
+        eventId: "event-1",
+        roundId: "round-1",
+        name: "Practice",
+        roundDate: "2026-09-22",
+        format: "WA70",
+        bowType: "recurve",
+      },
+    },
+    { type: "round.disabled", operation: ROUND_DISABLED },
+    {
+      type: "distance.created",
+      operation: {
+        type: "distance.created",
+        eventId: "event-1",
+        id: "distance-1",
+        roundId: "round-1",
+        positionKey: "1-1",
+        distance: 70,
+        totalEnds: 6,
+        arrowsPerEnd: 6,
+        targetFaceId: "face-1",
+        isMarked: false,
+      },
+    },
+    {
+      type: "distance.updated",
+      operation: {
+        type: "distance.updated",
+        eventId: "event-1",
+        distanceId: "distance-1",
+        distance: 70,
+        totalEnds: 6,
+        arrowsPerEnd: 6,
+        targetFaceId: "face-1",
+        isMarked: false,
+      },
+    },
+    {
+      type: "distance.disabled",
+      operation: {
+        type: "distance.disabled",
+        eventId: "event-1",
+        distanceId: "distance-1",
+      },
+    },
+    {
+      type: "shot.recorded",
+      operation: {
+        type: "shot.recorded",
+        eventId: "event-1",
+        distanceId: "distance-1",
+        endNumber: 1,
+        arrowNumber: 1,
+        scoreStr: "X",
+        scoreInt: 10,
+      },
+    },
+    {
+      type: "shot.cleared",
+      operation: {
+        type: "shot.cleared",
+        eventId: "event-1",
+        distanceId: "distance-1",
+        endNumber: 1,
+        arrowNumber: 1,
+      },
+    },
+  ];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -254,62 +330,82 @@ describe("executeSyncOperation", () => {
         expect(result).toBeUndefined();
       });
 
-      it("業務ルール違反（P0001）は再試行しない失敗として返す", async () => {
-        // Given: RPCが業務ルール違反で失敗する
-        supabase.rpc.mockResolvedValue({
-          data: null,
-          error: { message: "duplicate", code: "P0001" },
-        });
+      it.each(OPERATIONS)(
+        "$type でRPCが失敗すると、メッセージとHTTPステータスを持つRPCの失敗として返す",
+        async ({ operation }) => {
+          // Given: RPCが403で失敗する
+          supabase.rpc.mockResolvedValue({
+            data: null,
+            error: { message: "forbidden", code: "42501" },
+            status: 403,
+          });
 
-        // When: 同期する
-        const result = await executeSyncOperation(ROUND_DISABLED);
+          // When: 同期する
+          const result = await executeSyncOperation(operation);
 
-        // Then: permanentな失敗として返す
-        expect(result).toEqual({ error: "duplicate", permanent: true });
-      });
-
-      it("RLSによる拒否（42501）は再試行しない失敗として返す", async () => {
-        // Given: RPCがRLSにより拒否される
-        supabase.rpc.mockResolvedValue({
-          data: null,
-          error: { message: "forbidden", code: "42501" },
-        });
-
-        // When: 同期する
-        const result = await executeSyncOperation(ROUND_DISABLED);
-
-        // Then: permanentな失敗として返す
-        expect(result).toEqual({ error: "forbidden", permanent: true });
-      });
-
-      it("それ以外のエラーは再試行できる失敗として返す", async () => {
-        // Given: RPCが通信エラーで失敗する
-        supabase.rpc.mockResolvedValue({
-          data: null,
-          error: { message: "network error", code: "08006" },
-        });
-
-        // When: 同期する
-        const result = await executeSyncOperation(ROUND_DISABLED);
-
-        // Then: permanentではない失敗として返す
-        expect(result).toEqual({ error: "network error", permanent: false });
-      });
+          // Then: エラーコードではなくHTTPステータスを失敗の種類に持つ
+          expect(result).toEqual({
+            error: "forbidden",
+            cause: { type: "rpc", status: 403 },
+          });
+        },
+      );
     });
   });
 
   describe("未サインインの場合", () => {
-    it("RPCを呼ばず、再試行しない失敗として返す", async () => {
+    it("セッションがなければ、RPCを呼ばず、未認証の失敗として返す", async () => {
       // Given: セッションがない
-      supabase.getSession.mockResolvedValue({ data: { session: null } });
+      supabase.getSession.mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
 
       // When: 同期する
       const result = await executeSyncOperation(ROUND_DISABLED);
 
-      // Then: サインインを求める失敗を返し、RPCは呼ばない
+      // Then: サインインを求める未認証の失敗を返し、RPCは呼ばない
       expect(result).toEqual({
         error: "サインインが必要です。",
-        permanent: true,
+        cause: { type: "unauthenticated" },
+      });
+      expect(supabase.rpc).not.toHaveBeenCalled();
+    });
+
+    it("更新が拒否されたときも、セッションがない場合と同じ失敗として返す", async () => {
+      // Given: 更新が拒否されてセッションが得られない
+      supabase.getSession.mockResolvedValue({
+        data: { session: null },
+        error: new AuthApiError("denied", 401, "refresh_token_not_found"),
+      });
+
+      // When: 同期する
+      const result = await executeSyncOperation(ROUND_DISABLED);
+
+      // Then: サインインを求める未認証の失敗を返し、RPCは呼ばない
+      expect(result).toEqual({
+        error: "サインインが必要です。",
+        cause: { type: "unauthenticated" },
+      });
+      expect(supabase.rpc).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("認証を確認できない場合", () => {
+    it("更新が通信失敗なら、RPCを呼ばず、再試行できる失敗として返す", async () => {
+      // Given: アクセストークンの更新が通信失敗になる
+      supabase.getSession.mockResolvedValue({
+        data: { session: null },
+        error: new AuthRetryableFetchError("Failed to fetch", 0),
+      });
+
+      // When: 同期する
+      const result = await executeSyncOperation(ROUND_DISABLED);
+
+      // Then: 通信エラーの文言と認証の不明の種類で返し、RPCは呼ばない
+      expect(result).toEqual({
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+        cause: { type: "auth-unknown" },
       });
       expect(supabase.rpc).not.toHaveBeenCalled();
     });

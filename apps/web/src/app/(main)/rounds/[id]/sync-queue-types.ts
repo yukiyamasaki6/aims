@@ -9,7 +9,20 @@ export type SyncStatus =
 
 export type SyncError = { key: string; label: string; message: string };
 
-export type BatchResult = { error: string; permanent?: boolean } | undefined;
+// 送信側が返す失敗の種類。再試行するかどうかは`classifyFailure`が判定する。
+export type FailureCause =
+  | { type: "unauthenticated" }
+  | { type: "auth-unknown" }
+  // statusはHTTPステータス。fetchの失敗は0、取得できなければ未定義。
+  | { type: "rpc"; status?: number }
+  | { type: "exception" };
+
+export type SyncFailure = { error: string; cause: FailureCause };
+
+export type BatchResult = SyncFailure | undefined;
+
+// retryは再試行し、使い切っても残す。holdは再試行せずに残す。
+export type SyncDisposition = "retry" | "hold";
 
 export type EnqueueInput = {
   key: string;
@@ -54,11 +67,7 @@ export type ShotBatch = { upsert: ShotUpsert[]; clear: ShotClear[] };
 // retryは待機時間の後に同じ操作を再試行し、settleはその結果で確定する。
 export type SyncResultDecision =
   | { type: "retry"; delayMs: number }
-  | {
-      type: "settle";
-      removeFromOutbox: boolean;
-      notifyPermanentFailure: boolean;
-    };
+  | { type: "settle"; removeFromOutbox: boolean };
 
 // 復元した未同期操作を、ショットのバッチとそれ以外の操作のどちらで積み直すか。
 export type RestoredInput =

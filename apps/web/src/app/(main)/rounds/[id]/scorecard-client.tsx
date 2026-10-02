@@ -179,7 +179,7 @@ export function ScorecardClient({
   const [shots, setShots] = useState<Shot[]>(initialShots);
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
-  const sync = useSyncQueue(roundId, () => router.refresh());
+  const sync = useSyncQueue(roundId);
 
   useEffect(() => {
     setRoundConfig(initialRoundConfig);

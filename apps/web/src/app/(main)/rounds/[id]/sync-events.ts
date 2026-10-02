@@ -1,5 +1,7 @@
-import type { PostgrestError } from "@supabase/supabase-js";
+import { classifySession } from "@/features/auth/session-state";
 import { createClient } from "@/lib/supabase/client";
+import type { BatchResult } from "./sync-queue-types";
+import { authFailureResult, rpcFailureResult } from "./sync-result";
 
 export type SyncOperation =
   | {
@@ -57,29 +59,17 @@ export function eventIdOf(operation: SyncOperation): string {
   return operation.eventId;
 }
 
-function toResult(error: PostgrestError | null) {
-  if (!error) return undefined;
-  return {
-    error: error.message,
-    // RPC内の業務ルール違反はRAISE EXCEPTION（P0001）、RLSによる拒否は
-    // 42501になる。いずれも通信を再試行しても解消しない。
-    permanent: error.code === "P0001" || error.code === "42501",
-  };
-}
-
 export async function executeSyncOperation(
   operation: SyncOperation,
-): Promise<{ error: string; permanent?: boolean } | undefined> {
+): Promise<BatchResult> {
   const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const user = session?.user;
-  if (!user) return { error: "サインインが必要です。", permanent: true };
+  const state = classifySession(await supabase.auth.getSession());
+  if (state.status !== "authenticated") return authFailureResult(state);
+  const user = state.session.user;
 
   switch (operation.type) {
     case "round.updated": {
-      const { error } = await supabase.rpc("update_round", {
+      const { error, status } = await supabase.rpc("update_round", {
         p_round_event_id: operation.eventId,
         p_round_id: operation.roundId,
         p_name: operation.name,
@@ -87,17 +77,19 @@ export async function executeSyncOperation(
         p_format: operation.format,
         p_bow_type: operation.bowType,
       });
-      return toResult(error);
+      if (error) return rpcFailureResult(error, status);
+      return undefined;
     }
     case "round.disabled": {
-      const { error } = await supabase.rpc("disable_round", {
+      const { error, status } = await supabase.rpc("disable_round", {
         p_round_event_id: operation.eventId,
         p_round_id: operation.roundId,
       });
-      return toResult(error);
+      if (error) return rpcFailureResult(error, status);
+      return undefined;
     }
     case "distance.created": {
-      const { error } = await supabase.rpc("create_distance", {
+      const { error, status } = await supabase.rpc("create_distance", {
         p_distance_event_id: operation.eventId,
         p_id: operation.id,
         p_round_id: operation.roundId,
@@ -109,10 +101,11 @@ export async function executeSyncOperation(
         p_target_face_id: operation.targetFaceId,
         p_is_marked: operation.isMarked,
       });
-      return toResult(error);
+      if (error) return rpcFailureResult(error, status);
+      return undefined;
     }
     case "distance.updated": {
-      const { error } = await supabase.rpc("update_distance", {
+      const { error, status } = await supabase.rpc("update_distance", {
         p_distance_event_id: operation.eventId,
         p_distance_id: operation.distanceId,
         // 生成型はRPCの引数をnon-nullで出力するが、distanceはSQL側でnullを受け付ける。
@@ -122,17 +115,19 @@ export async function executeSyncOperation(
         p_target_face_id: operation.targetFaceId,
         p_is_marked: operation.isMarked,
       });
-      return toResult(error);
+      if (error) return rpcFailureResult(error, status);
+      return undefined;
     }
     case "distance.disabled": {
-      const { error } = await supabase.rpc("disable_distance", {
+      const { error, status } = await supabase.rpc("disable_distance", {
         p_distance_event_id: operation.eventId,
         p_distance_id: operation.distanceId,
       });
-      return toResult(error);
+      if (error) return rpcFailureResult(error, status);
+      return undefined;
     }
     case "shot.recorded": {
-      const { error } = await supabase.rpc("record_shots", {
+      const { error, status } = await supabase.rpc("record_shots", {
         p_shots: [
           {
             shot_event_id: operation.eventId,
@@ -145,10 +140,11 @@ export async function executeSyncOperation(
           },
         ],
       });
-      return toResult(error);
+      if (error) return rpcFailureResult(error, status);
+      return undefined;
     }
     case "shot.cleared": {
-      const { error } = await supabase.rpc("clear_shots", {
+      const { error, status } = await supabase.rpc("clear_shots", {
         p_shots: [
           {
             shot_event_id: operation.eventId,
@@ -158,7 +154,8 @@ export async function executeSyncOperation(
           },
         ],
       });
-      return toResult(error);
+      if (error) return rpcFailureResult(error, status);
+      return undefined;
     }
   }
 }

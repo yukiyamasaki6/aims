@@ -5,7 +5,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SyncOperation } from "./sync-events";
 import { loadPendingOperations, savePendingOperation } from "./sync-outbox";
-import type { ShotUpsert } from "./sync-queue-types";
+import type { FailureCause, ShotUpsert } from "./sync-queue-types";
 import { AUTH_REQUIRED_MESSAGE, RETRY_DELAYS_MS } from "./sync-result";
 import { useSyncQueue } from "./use-sync-queue";
 
@@ -33,7 +33,14 @@ beforeEach(() => {
   supabase.rpc.mockResolvedValue({ data: null, error: null });
 });
 
-type Result = { error: string } | undefined;
+type Result = { error: string; cause: FailureCause } | undefined;
+
+function failure(
+  error: string,
+  cause: FailureCause = { type: "exception" },
+): { error: string; cause: FailureCause } {
+  return { error, cause };
+}
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -512,7 +519,7 @@ describe("useSyncQueue", () => {
         const { result } = renderHook(() => useSyncQueue());
         const run = vi
           .fn()
-          .mockResolvedValueOnce({ error: "boom" })
+          .mockResolvedValueOnce(failure("boom"))
           .mockResolvedValueOnce(undefined as Result);
 
         // When: 積む
@@ -544,7 +551,7 @@ describe("useSyncQueue", () => {
         const { result } = renderHook(() => useSyncQueue());
         const firstRun = vi
           .fn()
-          .mockResolvedValueOnce({ error: "boom" })
+          .mockResolvedValueOnce(failure("boom"))
           .mockResolvedValueOnce(undefined as Result);
         const secondRun = vi.fn(() => Promise.resolve(undefined as Result));
         act(() => {
@@ -587,7 +594,7 @@ describe("useSyncQueue", () => {
         const { result } = renderHook(() => useSyncQueue());
         const createRun = vi
           .fn()
-          .mockResolvedValueOnce({ error: "network flaky" })
+          .mockResolvedValueOnce(failure("network flaky"))
           .mockResolvedValueOnce(undefined as Result);
         const updateRun = vi.fn(() => Promise.resolve(undefined as Result));
         act(() => {
@@ -637,7 +644,7 @@ describe("useSyncQueue", () => {
         const { result } = renderHook(() => useSyncQueue());
         const firstUpdate = vi
           .fn()
-          .mockResolvedValueOnce({ error: "network flaky" })
+          .mockResolvedValueOnce(failure("network flaky"))
           .mockResolvedValueOnce(undefined as Result);
         const secondUpdate = vi.fn(() => Promise.resolve(undefined as Result));
         act(() => {
@@ -691,7 +698,7 @@ describe("useSyncQueue", () => {
           result.current.enqueue({
             key: "shot:d1:1:1",
             label: "距離1 1エンド1本目",
-            run: () => Promise.resolve({ error: "boom" }),
+            run: () => Promise.resolve(failure("boom")),
           });
         });
         await exhaustRetries();
@@ -712,7 +719,7 @@ describe("useSyncQueue", () => {
           result.current.enqueue({
             key: "a",
             label: "A",
-            run: () => Promise.resolve({ error: "boom" }),
+            run: () => Promise.resolve(failure("boom")),
           });
           result.current.enqueue({
             key: "b",
@@ -733,7 +740,7 @@ describe("useSyncQueue", () => {
       it("全ての再試行を使い切って初めてエラーとして確定する", async () => {
         // Given: 常に失敗する操作
         const { result } = renderHook(() => useSyncQueue());
-        const run = vi.fn(() => Promise.resolve({ error: "boom" }));
+        const run = vi.fn(() => Promise.resolve(failure("boom")));
         act(() => {
           result.current.enqueue({ key: "a", label: "A", run });
         });
@@ -766,7 +773,7 @@ describe("useSyncQueue", () => {
           result.current.enqueue({
             key: "a",
             label: "A",
-            run: () => Promise.resolve({ error: "boom" }),
+            run: () => Promise.resolve(failure("boom")),
           });
         });
         await exhaustRetries();
@@ -797,7 +804,7 @@ describe("useSyncQueue", () => {
           result.current.enqueue({
             key: "a",
             label: "A",
-            run: () => Promise.resolve({ error: "boom" }),
+            run: () => Promise.resolve(failure("boom")),
           });
         });
         await exhaustRetries();
@@ -968,50 +975,82 @@ describe("useSyncQueue", () => {
       });
     });
 
-    describe("恒久的な失敗の場合", () => {
-      it("再試行せずにエラーとして確定し、onPermanentFailureを呼ぶ", async () => {
-        // Given: 権限がなく恒久的に失敗する操作と、onPermanentFailureを受け取るフック
-        const onPermanentFailure = vi.fn();
-        const { result } = renderHook(() =>
-          useSyncQueue(undefined, onPermanentFailure),
-        );
-        const run = vi.fn(() =>
-          Promise.resolve({
-            error: "このラウンドを編集する権限がありません。",
-            permanent: true,
-          }),
-        );
+    describe("認証を確認できない場合に、永続outboxを使うとき", () => {
+      it("セッションがなくても、再試行せずエラーとして確定し、outboxに残す", async () => {
+        // Given: セッションが得られない状態で、operation付きの操作を積むフック
+        supabase.getSession.mockResolvedValue({
+          data: { session: null },
+          error: null,
+        });
+        const { result } = renderHook(() => useSyncQueue("round-1"));
 
-        // When: 積む
+        // When: operation付きで積む
         act(() => {
           result.current.enqueue({
             key: "roundConfig",
             label: "ラウンド設定",
-            run,
+            operation: {
+              type: "round.disabled",
+              eventId: "event-1",
+              roundId: "round-1",
+            },
           });
         });
 
-        // Then: 1回だけ実行してエラーになり、onPermanentFailureを1回呼ぶ
+        // Then: RPCを呼ばずにエラーとして確定し、再送できるようoutboxに残る
         await vi.waitFor(() => expect(result.current.status).toBe("error"));
-        expect(run).toHaveBeenCalledTimes(1);
-        expect(result.current.errors).toEqual([
-          expect.objectContaining({ key: "roundConfig" }),
-        ]);
-        expect(onPermanentFailure).toHaveBeenCalledTimes(1);
+        expect(result.current.errorFor("roundConfig")).toBe(
+          AUTH_REQUIRED_MESSAGE,
+        );
+        expect(supabase.rpc).not.toHaveBeenCalled();
+        expect(await pendingEventIds("round-1")).toEqual(["event-1"]);
+      });
+    });
+
+    describe("サーバーが拒否した（4xx）失敗の場合", () => {
+      it("再試行せずにすぐエラーとして確定し、outboxに残す", async () => {
+        // Given: RPCが400で拒否する、operation付きの操作を積むフック
+        supabase.rpc.mockResolvedValue({
+          data: null,
+          error: { message: "このラウンドを編集する権限がありません。" },
+          status: 400,
+        });
+        const { result } = renderHook(() => useSyncQueue("round-1"));
+
+        // When: operation付きで積む
+        act(() => {
+          result.current.enqueue({
+            key: "roundConfig",
+            label: "ラウンド設定",
+            operation: {
+              type: "round.disabled",
+              eventId: "event-1",
+              roundId: "round-1",
+            },
+          });
+        });
+
+        // Then: 再試行の待機に入らず（retrying経由でなく）エラーに確定し、
+        // RPCは1回だけ呼び、再送できるようoutboxに残る
+        await vi.waitFor(() => expect(result.current.status).toBe("error"));
+        expect(supabase.rpc).toHaveBeenCalledTimes(1);
+        expect(result.current.errorFor("roundConfig")).toBe(
+          "このラウンドを編集する権限がありません。",
+        );
+        expect(await pendingEventIds("round-1")).toEqual(["event-1"]);
       });
     });
 
     describe("サインインが必要な失敗の場合", () => {
-      it("再試行せずにすぐエラーとして確定し、onPermanentFailureは呼ばない", async () => {
+      it("再試行せずにすぐエラーとして確定する", async () => {
         vi.useFakeTimers();
         try {
-          // Given: サインインが必要なエラーを返す操作と、onPermanentFailureを受け取るフック
-          const onPermanentFailure = vi.fn();
-          const { result } = renderHook(() =>
-            useSyncQueue(undefined, onPermanentFailure),
-          );
+          // Given: サインインが必要なエラーを返す操作
+          const { result } = renderHook(() => useSyncQueue());
           const run = vi.fn(() =>
-            Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
+            Promise.resolve(
+              failure(AUTH_REQUIRED_MESSAGE, { type: "unauthenticated" }),
+            ),
           );
 
           // When: 積む
@@ -1039,9 +1078,8 @@ describe("useSyncQueue", () => {
           });
           await flushMicrotasks();
 
-          // Then: 再試行せず、onPermanentFailureも呼ばない
+          // Then: 再試行しない
           expect(run).toHaveBeenCalledTimes(1);
-          expect(onPermanentFailure).not.toHaveBeenCalled();
         } finally {
           vi.useRealTimers();
         }
@@ -1547,7 +1585,7 @@ describe("useSyncQueue", () => {
         const { result } = renderHook(() => useSyncQueue());
         const runBatch = vi
           .fn()
-          .mockResolvedValueOnce({ error: "boom" })
+          .mockResolvedValueOnce(failure("boom"))
           .mockResolvedValueOnce(undefined as Result);
         act(() => {
           result.current.enqueueShot(
@@ -1586,7 +1624,7 @@ describe("useSyncQueue", () => {
       it("リトライ待機中に同じマスへ新しい値が積まれると、古い値は再試行せず新しい値だけを送る", async () => {
         // Given: 1件目のバッチが失敗してリトライ待機中
         const { result } = renderHook(() => useSyncQueue());
-        const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
+        const runBatch = vi.fn(() => Promise.resolve(failure("boom")));
         act(() => {
           result.current.enqueueShot(
             {
@@ -1653,7 +1691,7 @@ describe("useSyncQueue", () => {
       it("失敗したバッチのショットに同じエラーを付ける", async () => {
         // Given: 常に失敗するバッチ
         const { result } = renderHook(() => useSyncQueue());
-        const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
+        const runBatch = vi.fn(() => Promise.resolve(failure("boom")));
 
         // When: ショットを積んで、全てのバックオフを経過させる
         act(() => {
@@ -1685,7 +1723,7 @@ describe("useSyncQueue", () => {
       it("失敗したショットを積み直すと、既存のエラーを消す", async () => {
         // Given: 失敗が確定したショット
         const { result } = renderHook(() => useSyncQueue());
-        const runBatch = vi.fn(() => Promise.resolve({ error: "boom" }));
+        const runBatch = vi.fn(() => Promise.resolve(failure("boom")));
         act(() => {
           result.current.enqueueShot(
             {
@@ -1732,56 +1770,70 @@ describe("useSyncQueue", () => {
       });
     });
 
-    describe("恒久的な失敗の場合", () => {
-      it("onPermanentFailureを呼び、エラーになる", async () => {
-        // Given: 恒久的に失敗するバッチと、onPermanentFailureを受け取るフック
-        const onPermanentFailure = vi.fn();
-        const { result } = renderHook(() =>
-          useSyncQueue(undefined, onPermanentFailure),
-        );
-        const runBatch = vi.fn(() =>
-          Promise.resolve({
-            error: "このラウンドを編集する権限がありません。",
-            permanent: true,
-          }),
-        );
-
-        // When: ショットを積む
-        act(() => {
-          result.current.enqueueShot(
-            {
-              key: "shot:d1:1:1",
-              label: "距離1 1エンド1本目",
-              upsert: {
-                shotEventId: "e14",
-                distanceId: "d1",
-                endNumber: 1,
-                arrowNumber: 1,
-                scoreStr: "X",
-                scoreInt: 10,
-              },
-            },
-            runBatch,
+    describe("サーバーが拒否した（4xx）失敗の場合", () => {
+      it("再試行せずにすぐショットのエラーとして確定する", async () => {
+        vi.useFakeTimers();
+        try {
+          // Given: 400で拒否するバッチ
+          const { result } = renderHook(() => useSyncQueue());
+          const runBatch = vi.fn(() =>
+            Promise.resolve(
+              failure("このラウンドを編集する権限がありません。", {
+                type: "rpc",
+                status: 400,
+              }),
+            ),
           );
-        });
 
-        // Then: onPermanentFailureを1回呼び、エラーになる
-        await vi.waitFor(() => expect(result.current.status).toBe("error"));
-        expect(onPermanentFailure).toHaveBeenCalledTimes(1);
+          // When: ショットを積み、全てのバックオフ分の時間が経過する
+          act(() => {
+            result.current.enqueueShot(
+              {
+                key: "shot:d1:1:1",
+                label: "距離1 1エンド1本目",
+                upsert: {
+                  shotEventId: "e14",
+                  distanceId: "d1",
+                  endNumber: 1,
+                  arrowNumber: 1,
+                  scoreStr: "X",
+                  scoreInt: 10,
+                },
+              },
+              runBatch,
+            );
+          });
+          await pollWithRealTasks(() =>
+            expect(result.current.status).toBe("error"),
+          );
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(
+              RETRY_DELAYS_MS.reduce((sum, delay) => sum + delay, 0),
+            );
+          });
+          await flushMicrotasks();
+
+          // Then: 1回だけ実行し、そのショットのエラーのままになる
+          expect(runBatch).toHaveBeenCalledTimes(1);
+          expect(result.current.errorFor("shot:d1:1:1")).toBe(
+            "このラウンドを編集する権限がありません。",
+          );
+        } finally {
+          vi.useRealTimers();
+        }
       });
     });
 
     describe("サインインが必要な失敗の場合", () => {
-      it("再試行せずにすぐショットのエラーとして確定し、onPermanentFailureは呼ばない", async () => {
+      it("再試行せずにすぐショットのエラーとして確定する", async () => {
         vi.useFakeTimers();
         try {
-          // Given: サインインが必要なエラーを返すバッチと、onPermanentFailureを受け取るフック
-          const onPermanentFailure = vi.fn();
-          const { result } = renderHook(() =>
-            useSyncQueue(undefined, onPermanentFailure),
-          );
+          // Given: サインインが必要なエラーを返すバッチ
+          const { result } = renderHook(() => useSyncQueue());
           const runBatch = vi.fn(() =>
-            Promise.resolve({ error: AUTH_REQUIRED_MESSAGE }),
+            Promise.resolve(
+              failure(AUTH_REQUIRED_MESSAGE, { type: "unauthenticated" }),
+            ),
           );
 
           // When: ショットを積む
@@ -1819,9 +1871,8 @@ describe("useSyncQueue", () => {
           });
           await flushMicrotasks();
 
-          // Then: 再試行せず、onPermanentFailureも呼ばない
+          // Then: 再試行しない
           expect(runBatch).toHaveBeenCalledTimes(1);
-          expect(onPermanentFailure).not.toHaveBeenCalled();
         } finally {
           vi.useRealTimers();
         }
@@ -1921,7 +1972,7 @@ describe("useSyncQueue", () => {
           const { result } = renderHook(() => useSyncQueue());
           const run = vi
             .fn()
-            .mockResolvedValueOnce({ error: "network flaky" })
+            .mockResolvedValueOnce(failure("network flaky"))
             .mockResolvedValueOnce(undefined as Result);
           act(() => {
             result.current.enqueue({ key: "a", label: "A", run });
@@ -2001,7 +2052,7 @@ describe("useSyncQueue", () => {
           const { result } = renderHook(() => useSyncQueue());
           const runBatch = vi
             .fn()
-            .mockResolvedValueOnce({ error: "network flaky" })
+            .mockResolvedValueOnce(failure("network flaky"))
             .mockResolvedValueOnce(undefined as Result);
           act(() => {
             result.current.enqueueShot(

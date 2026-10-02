@@ -1423,11 +1423,12 @@ describe("ScorecardClient 同期状態の表示", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("送信が恒久的に失敗した場合、同期失敗を表示しクリックでエラー内容を開ける", async () => {
-    // Given: RPCが業務ルール違反（再試行しても解消しないエラー）を返す
+  it("サーバーが送信を拒否した場合、同期失敗を表示しクリックでエラー内容を開ける", async () => {
+    // Given: RPCが400で拒否する（再試行しても解消しないエラー）
     supabase.rpc.mockResolvedValue({
       data: null,
       error: { message: "保存に失敗しました", code: "P0001" },
+      status: 400,
     });
     const user = userEvent.setup();
     setup();
@@ -1435,11 +1436,11 @@ describe("ScorecardClient 同期状態の表示", () => {
     // When: スコアを入力する
     await user.click(screen.getByTestId("score-button-10"));
 
-    // Then: 同期失敗を表示し、サーバーの状態を取り直す
+    // Then: 同期失敗を表示し、サーバーの状態は取り直さない
     await waitFor(() => {
       expect(screen.getByTestId("sync-status")).toHaveTextContent("同期失敗");
     });
-    expect(nav.refresh).toHaveBeenCalledTimes(1);
+    expect(nav.refresh).not.toHaveBeenCalled();
 
     // When: 同期状態の表示をクリックする
     await user.click(screen.getByTestId("sync-status"));

@@ -1,15 +1,7 @@
-import type { PostgrestError } from "@supabase/supabase-js";
+import { classifySession } from "@/features/auth/session-state";
 import { createClient } from "@/lib/supabase/client";
-
-function toResult(error: PostgrestError | null) {
-  // 呼び出し元は常にerrorがtruthyな場合のみtoResultを呼ぶため、
-  // この分岐は現状のコールサイトでは到達不能。
-  if (!error) return undefined;
-  return {
-    error: error.message,
-    permanent: error.code === "P0001" || error.code === "42501",
-  };
-}
+import type { BatchResult } from "./sync-queue-types";
+import { authFailureResult, rpcFailureResult } from "./sync-result";
 
 // スコアの連打時に、記録・取り消しをそれぞれ1件ずつ送ると、通信本数分だけ
 // 同期完了までの体感速度が悪化する。そのため、1回の呼び出しで複数件の記録・
@@ -31,20 +23,15 @@ export async function syncShots(input: {
     endNumber: number;
     arrowNumber: number;
   }[];
-}): Promise<{ error: string; permanent?: boolean } | undefined> {
+}): Promise<BatchResult> {
   const supabase = createClient();
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const user = session?.user;
-
-  if (!user) {
-    return { error: "サインインが必要です。", permanent: true };
-  }
+  const state = classifySession(await supabase.auth.getSession());
+  if (state.status !== "authenticated") return authFailureResult(state);
+  const user = state.session.user;
 
   if (input.upsert.length > 0) {
-    const { error } = await supabase.rpc("record_shots", {
+    const { error, status } = await supabase.rpc("record_shots", {
       p_shots: input.upsert.map((s) => ({
         shot_event_id: s.shotEventId,
         distance_id: s.distanceId,
@@ -56,13 +43,11 @@ export async function syncShots(input: {
       })),
     });
 
-    if (error) {
-      return toResult(error);
-    }
+    if (error) return rpcFailureResult(error, status);
   }
 
   if (input.clear.length > 0) {
-    const { error } = await supabase.rpc("clear_shots", {
+    const { error, status } = await supabase.rpc("clear_shots", {
       p_shots: input.clear.map((c) => ({
         shot_event_id: c.shotEventId,
         distance_id: c.distanceId,
@@ -71,8 +56,6 @@ export async function syncShots(input: {
       })),
     });
 
-    if (error) {
-      return toResult(error);
-    }
+    if (error) return rpcFailureResult(error, status);
   }
 }
