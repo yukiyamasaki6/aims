@@ -21,7 +21,7 @@ import {
   validateDistanceDraft,
 } from "./distance-config";
 import { FILTER_ALL } from "./distance-config-constants";
-import type { EnqueueInput } from "./sync-queue-types";
+import type { OpInput } from "./sync-events";
 
 export type TargetFaceOption = {
   id: string;
@@ -185,7 +185,7 @@ export function DistanceEditFields({
   onSaved: (updated: DistanceConfig) => void;
   onDeleted: () => void;
   onOpenChange: (open: boolean) => void;
-  enqueue: (input: EnqueueInput) => void;
+  enqueue: (input: OpInput) => void;
 }) {
   const [draft, setDraft] = useState<DistanceDraft>(distance);
   const [fieldErrors, setFieldErrors] = useState<DistanceConfigErrors>({});

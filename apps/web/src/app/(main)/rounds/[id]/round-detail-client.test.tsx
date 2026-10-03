@@ -22,13 +22,13 @@ const load = vi.mocked(loadRoundDetail);
 vi.mock("./scorecard-client", () => ({
   ScorecardClient: ({
     roundId,
-    initialRoundConfig,
+    loaded,
   }: {
     roundId: string;
-    initialRoundConfig: { name: string };
+    loaded: { base: { roundConfig: { name: string } } };
   }) => (
     <div data-testid="scorecard" data-round-id={roundId}>
-      {initialRoundConfig.name}
+      {loaded.base.roundConfig.name}
     </div>
   ),
 }));
@@ -36,14 +36,19 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 
 function detail(name: string, leaveRound = false): LoadedRoundDetail {
   return {
-    roundConfig: {
-      name,
-      roundDate: "2026-09-15",
-      format: "outdoor",
-      bowType: "recurve",
+    base: {
+      roundConfig: {
+        name,
+        roundDate: "2026-09-15",
+        format: "outdoor",
+        bowType: "recurve",
+      },
+      distances: [],
+      shots: [],
+      roundDisabled: false,
     },
-    distances: [],
-    shots: [],
+    entries: [],
+    reflected: [],
     targetFaces: [],
     leaveRound,
   };

@@ -1,5 +1,5 @@
 import { FILTER_ALL } from "./distance-config-constants";
-import type { EnqueueInput } from "./sync-queue-types";
+import type { OpInput } from "./sync-events";
 
 export type DistanceConfig = {
   id: string;
@@ -38,7 +38,7 @@ function isPositiveInteger(value: number | null): value is number {
 }
 
 // クライアントが既に持っている値だけで判定できるため、サーバーへ投げる前に同期的に検証する。
-// キュー経由の非同期エラーにはしない。
+// 送信後の非同期エラーにはしない。
 export function validateDistanceDraft(
   draft: DistanceDraft,
 ): DistanceConfigValidation {
@@ -66,19 +66,16 @@ export function validateDistanceDraft(
 
 type DistanceIdentity = Pick<DistanceConfig, "id" | "distanceNumber">;
 
-function distanceSyncTarget(distance: DistanceIdentity) {
-  return {
-    key: `distance:${distance.id}`,
-    label: `距離${distance.distanceNumber}`,
-  };
+function distanceLabel(distance: DistanceIdentity): string {
+  return `距離${distance.distanceNumber}`;
 }
 
 export function buildDistanceUpdatedInput(
   config: DistanceConfig,
   eventId: string,
-): EnqueueInput {
+): OpInput {
   return {
-    ...distanceSyncTarget(config),
+    label: distanceLabel(config),
     operation: {
       type: "distance.updated",
       eventId,
@@ -95,9 +92,9 @@ export function buildDistanceUpdatedInput(
 export function buildDistanceDisabledInput(
   distance: DistanceIdentity,
   eventId: string,
-): EnqueueInput {
+): OpInput {
   return {
-    ...distanceSyncTarget(distance),
+    label: distanceLabel(distance),
     operation: {
       type: "distance.disabled",
       eventId,

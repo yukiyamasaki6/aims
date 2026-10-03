@@ -1,4 +1,4 @@
-import type { SyncStatus, SyncStatusCounts } from "./sync-queue-types";
+import type { SyncStatus, SyncStatusCounts } from "./sync-types";
 
 // 利用者が対処を必要とする状態ほど優先して表示する。
 export function deriveSyncStatus(counts: SyncStatusCounts): SyncStatus {

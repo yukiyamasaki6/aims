@@ -24,18 +24,13 @@ import {
   type TargetFaceOption,
 } from "./distance-config-row";
 import { KeypadPanel } from "./keypad-panel";
-import type { RoundConfig } from "./round-config";
+import type { LoadedRoundDetail } from "./load-round-detail";
 import { RoundConfigPanel } from "./round-config-panel";
 import { RoundMenu } from "./round-menu";
 import { SavePresetDialog } from "./save-preset-dialog";
+import { changesDistanceStructure, distanceToAdd } from "./scorecard-distances";
 import {
-  changesDistanceStructure,
-  distanceToAdd,
-  removeDistance,
-  removeDistanceShots,
-  updateDistance,
-} from "./scorecard-distances";
-import {
+  buildShotOperation,
   type Cell,
   cellLabel,
   cellOf,
@@ -50,9 +45,7 @@ import {
   positionOfCell,
   pushHistory,
   redoHistory,
-  replaceShot,
   scoreHistoryEntry,
-  shotEnqueueInput,
   undoHistory,
 } from "./scorecard-input";
 import {
@@ -64,8 +57,7 @@ import {
   summarizeRound,
 } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
-import { syncShots } from "./sync-shots";
-import { useSyncQueue } from "./use-sync-queue";
+import { useRoundOpStack } from "./use-round-op-stack";
 
 // テンキーは中身のキー数が距離の的ごとに変わるため実測高さを使う。この値は
 // ResizeObserverが初回計測を終えるまでの暫定値。
@@ -156,30 +148,18 @@ function paleTone(hex: string): { bg: string; fg: string } {
 
 export function ScorecardClient({
   roundId,
-  initialRoundConfig,
-  distances: initialDistances,
-  initialShots,
+  loaded,
   targetFaces,
 }: {
   roundId: string;
-  initialRoundConfig: RoundConfig;
-  distances: Distance[];
-  initialShots: Shot[];
+  loaded: Pick<LoadedRoundDetail, "base" | "entries" | "reflected">;
   targetFaces: TargetFaceOption[];
 }) {
-  const [roundConfig, setRoundConfig] =
-    useState<RoundConfig>(initialRoundConfig);
-  const [distances, setDistances] = useState<Distance[]>(initialDistances);
-  const [shots, setShots] = useState<Shot[]>(initialShots);
+  // 画面の状態は、サーバーの状態へ操作の列を重ねた導出だけから得る。
+  const sync = useRoundOpStack(roundId, loaded);
+  const { roundConfig, distances, shots } = sync.state;
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
-  const sync = useSyncQueue(roundId);
-
-  useEffect(() => {
-    setRoundConfig(initialRoundConfig);
-    setDistances(initialDistances);
-    setShots(initialShots);
-  }, [initialDistances, initialRoundConfig, initialShots]);
 
   const [syncErrorsOpen, setSyncErrorsOpen] = useState(false);
   const hydrated = useHydrated();
@@ -190,7 +170,7 @@ export function ScorecardClient({
   // 別のstateとして二重管理しない。selectCell等で常にpositionとセットで
   // 更新していた旧keypadOpenを廃止し、ここから直接導出する。
   const [position, setPosition] = useState<Position | null>(() =>
-    findCurrentPosition(distances, initialShots),
+    findCurrentPosition(distances, shots),
   );
   // keypadOpen（=position有無）の変化をそのままアンマウントすると格納
   // アニメーションが再生できないため、トランジション終了後に実際に
@@ -323,21 +303,19 @@ export function ScorecardClient({
   }
 
   function handleAddDistance() {
-    // IDは楽観的UIのためここで確定し、そのままキューに積む。
-    const { distance: newDistance, enqueueInput } = distanceToAdd(distances, {
+    // IDは楽観的UIのためここで確定し、そのまま操作の列へ追記する。
+    const { distance: newDistance, input } = distanceToAdd(distances, {
       id: crypto.randomUUID(),
       eventId: crypto.randomUUID(),
       roundId,
     });
-    setDistances((prev) => [...prev, newDistance]);
     // 追加した距離はすぐ編集できるよう、編集パネルを展開しておく。
     setEditingDistanceIds((prev) => new Set(prev).add(newDistance.id));
-    sync.enqueue(enqueueInput);
+    sync.append(input);
   }
 
   function handleDistanceSaved(updated: DistanceConfig) {
     const structureChanged = changesDistanceStructure(distances, updated);
-    setDistances((prev) => updateDistance(prev, updated.id, updated));
     toggleDistanceEditing(updated.id);
     // 構成（総エンド数・エンドあたりの本数）が変わった可能性があるため、
     // 選択中マスの参照が古いままにならないようフォーカスを一旦クリアする。
@@ -349,8 +327,6 @@ export function ScorecardClient({
   }
 
   function handleDistanceDeleted(distanceId: string) {
-    setDistances((prev) => removeDistance(prev, distanceId));
-    setShots((prev) => removeDistanceShots(prev, distanceId));
     setUndoStack((prev) => discardDistanceEntries(prev, distanceId));
     setRedoStack((prev) => discardDistanceEntries(prev, distanceId));
     setEditingDistanceIds((prev) => {
@@ -364,18 +340,16 @@ export function ScorecardClient({
   }
 
   // 指定マスの状態をshotへ反映する（ローカルstateを即座に更新し、実際の
-  // 書き込みは送信キューへ積む）。undo/redoはこの適用処理を、記録時とは
+  // 書き込みは操作の列へ積む）。undo/redoはこの適用処理を、記録時とは
   // 逆方向・同方向にそれぞれ1回呼ぶだけで実現する。
   function applyShot(cell: Cell, shot: Shot | null) {
-    setShots((prev) => replaceShot(prev, cell, shot));
-    sync.enqueueShot(
-      shotEnqueueInput({
+    sync.append(
+      buildShotOperation({
         cell,
         shot,
         label: cellLabel(distances, cell),
         eventId: crypto.randomUUID(),
       }),
-      syncShots,
     );
   }
 
@@ -393,7 +367,7 @@ export function ScorecardClient({
   function handleClear() {
     if (!position) return;
 
-    // 未記録のマスのクリアも送信キューへ積むが、履歴には残さない。
+    // 未記録のマスのクリアも操作の列へ積むが、履歴には残さない。
     const entry = clearHistoryEntry(shots, position);
     applyShot(cellOf(position), null);
     const history = pushHistory({ undoStack, redoStack }, entry);
@@ -590,10 +564,9 @@ export function ScorecardClient({
               <RoundConfigPanel
                 roundId={roundId}
                 initial={roundConfig}
-                onSaved={setRoundConfig}
-                defaultExpanded={initialDistances.length === 0}
+                defaultExpanded={loaded.base.distances.length === 0}
                 hasUnmarkedDistances={distances.some((d) => !d.is_marked)}
-                enqueue={sync.enqueue}
+                enqueue={sync.append}
               />
             </div>
             {/* position: stickyは直接の親の高さの範囲でしか張り付かないため、
@@ -799,7 +772,7 @@ export function ScorecardClient({
                           onSaved={handleDistanceSaved}
                           onDeleted={() => handleDistanceDeleted(d.id)}
                           onOpenChange={() => toggleDistanceEditing(d.id)}
-                          enqueue={sync.enqueue}
+                          enqueue={sync.append}
                         />
                       )}
                       {/* 常に上（トグルボタンの余っている下paddingの中）に食い込ま

@@ -63,7 +63,7 @@ export function ConfirmDialog({
 // 向け。ConfirmDialogと異なり、確認後もリクエスト完了までダイアログを開いた
 // まま待ち、失敗時はダイアログ内にエラーを表示して再試行できるようにする
 // （サインアウト確認と同じ構造）。距離削除・スコア記録のようにオフラインでの
-// 動作が必要な操作には使わない（そちらは楽観的UI・送信キューを使う）。
+// 動作が必要な操作には使わない（そちらは楽観的UI・操作の列を使う）。
 export function BlockingConfirmDialog({
   open,
   onOpenChange,

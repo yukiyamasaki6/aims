@@ -1,6 +1,6 @@
 import { distanceNumber } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
-import type { EnqueueShotInput } from "./sync-queue-types";
+import type { OpInput } from "./sync-events";
 
 // スコアカード上で選択しているマス。
 export type Position = { distance: Distance; end: number; arrow: number };
@@ -243,34 +243,19 @@ export function cellLabel(distances: Distance[], cell: Cell): string {
   return `距離${number || "?"} ${cell.endNumber}エンド${cell.arrowNumber}本目`;
 }
 
-// マスの記録またはクリアを、送信キューへ積む入力に変換する。
-// 作成中の距離（追加直後でまだ書き込みが完了していない可能性がある）へのスコア記録が、その距離のinsertより先にサーバーへ届いて外部キー制約違反にならないよう、同じdistanceIdのキューを待ってから送る。
-// 既に作成済みの距離の場合は待ち時間なしで即座に実行される。
-export function shotEnqueueInput(input: {
+// マスの記録またはクリアを、操作の列へ追記する入力に変換する。
+// 距離の作成との順序は、操作の列の衝突の規則（同じ距離の操作は順に送る）が保つ。
+export function buildShotOperation(input: {
   cell: Cell;
   shot: Shot | null;
   label: string;
   eventId: string;
-}): EnqueueShotInput {
+}): OpInput {
   const { cell, shot, label, eventId } = input;
   const { distanceId, endNumber, arrowNumber } = cell;
-  const base = {
-    key: `shot:${distanceId}:${endNumber}:${arrowNumber}`,
-    label,
-    dependsOnKey: `distance:${distanceId}`,
-  };
   if (shot) {
     return {
-      ...base,
-      upsert: {
-        shotEventId: eventId,
-        distanceId,
-        endNumber,
-        arrowNumber,
-        shooterId: shot.shooter_id,
-        scoreStr: shot.score_str,
-        scoreInt: shot.score_int,
-      },
+      label,
       operation: {
         type: "shot.recorded",
         eventId,
@@ -284,8 +269,7 @@ export function shotEnqueueInput(input: {
     };
   }
   return {
-    ...base,
-    clear: { shotEventId: eventId, distanceId, endNumber, arrowNumber },
+    label,
     operation: {
       type: "shot.cleared",
       eventId,

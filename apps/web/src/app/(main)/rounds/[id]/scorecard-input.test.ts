@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildShotOperation,
   type Cell,
   cellLabel,
   cellOf,
@@ -16,7 +17,6 @@ import {
   redoHistory,
   replaceShot,
   scoreHistoryEntry,
-  shotEnqueueInput,
   undoHistory,
 } from "./scorecard-input";
 import type { Distance, Shot } from "./scorecard-types";
@@ -623,33 +623,22 @@ describe("cellLabel", () => {
   });
 });
 
-describe("shotEnqueueInput", () => {
+describe("buildShotOperation", () => {
   const cell: Cell = { distanceId: "d-a", endNumber: 2, arrowNumber: 1 };
 
-  it("記録する場合、その距離の作成を待つ記録の操作にする", () => {
+  it("記録する場合、記録の操作にする", () => {
     // Given: 射手付きの記録
-    // When: 送信キューへ積む入力に変換する
-    const input = shotEnqueueInput({
+    // When: 操作の列へ追記する入力に変換する
+    const input = buildShotOperation({
       cell,
       shot: shot("d-a", 2, 1, "X", 10, "shooter-1"),
       label: "距離1 2エンド1本目",
       eventId: "event-1",
     });
 
-    // Then: マスのキーで、距離の作成を待つ記録の操作になる
+    // Then: 記録の操作になる
     expect(input).toEqual({
-      key: "shot:d-a:2:1",
       label: "距離1 2エンド1本目",
-      dependsOnKey: "distance:d-a",
-      upsert: {
-        shotEventId: "event-1",
-        distanceId: "d-a",
-        endNumber: 2,
-        arrowNumber: 1,
-        shooterId: "shooter-1",
-        scoreStr: "X",
-        scoreInt: 10,
-      },
       operation: {
         type: "shot.recorded",
         eventId: "event-1",
@@ -663,27 +652,19 @@ describe("shotEnqueueInput", () => {
     });
   });
 
-  it("クリアする場合、その距離の作成を待つクリアの操作にする", () => {
+  it("クリアする場合、クリアの操作にする", () => {
     // Given: 記録が無い
-    // When: 送信キューへ積む入力に変換する
-    const input = shotEnqueueInput({
+    // When: 操作の列へ追記する入力に変換する
+    const input = buildShotOperation({
       cell,
       shot: null,
       label: "距離1 2エンド1本目",
       eventId: "event-2",
     });
 
-    // Then: マスのキーで、距離の作成を待つクリアの操作になる
+    // Then: クリアの操作になる
     expect(input).toEqual({
-      key: "shot:d-a:2:1",
       label: "距離1 2エンド1本目",
-      dependsOnKey: "distance:d-a",
-      clear: {
-        shotEventId: "event-2",
-        distanceId: "d-a",
-        endNumber: 2,
-        arrowNumber: 1,
-      },
       operation: {
         type: "shot.cleared",
         eventId: "event-2",

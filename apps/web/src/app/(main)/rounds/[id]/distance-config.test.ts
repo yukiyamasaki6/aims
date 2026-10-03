@@ -159,7 +159,6 @@ describe("buildDistanceUpdatedInput", () => {
 
     // Then: 距離ごとのキー・ラベルで、distance.updatedの操作を持つ
     expect(input).toEqual({
-      key: "distance:distance-2",
       label: "距離2",
       operation: {
         type: "distance.updated",
@@ -186,7 +185,6 @@ describe("buildDistanceDisabledInput", () => {
 
     // Then: 距離ごとのキー・ラベルで、distance.disabledの操作を持つ
     expect(input).toEqual({
-      key: "distance:distance-3",
       label: "距離3",
       operation: {
         type: "distance.disabled",

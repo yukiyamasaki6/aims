@@ -636,7 +636,7 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      clear_shots: { Args: { p_shots: Json }; Returns: undefined };
+      clear_shots: { Args: { p_shots: Json }; Returns: number[] };
       create_distance: {
         Args: {
           p_arrows_per_end: number;
@@ -649,7 +649,7 @@ export type Database = {
           p_target_face_id: string;
           p_total_ends: number;
         };
-        Returns: undefined;
+        Returns: number;
       };
       create_round: {
         Args: {
@@ -665,15 +665,15 @@ export type Database = {
       };
       disable_distance: {
         Args: { p_distance_event_id: string; p_distance_id: string };
-        Returns: undefined;
+        Returns: number;
       };
       disable_round: {
         Args: { p_round_event_id: string; p_round_id: string };
-        Returns: undefined;
+        Returns: number;
       };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
-      record_shots: { Args: { p_shots: Json }; Returns: undefined };
+      record_shots: { Args: { p_shots: Json }; Returns: number[] };
       save_round_as_preset: {
         Args: {
           p_bow_type: string;
@@ -693,7 +693,7 @@ export type Database = {
           p_target_face_id: string;
           p_total_ends: number;
         };
-        Returns: undefined;
+        Returns: number;
       };
       update_round: {
         Args: {
@@ -704,7 +704,7 @@ export type Database = {
           p_round_event_id: string;
           p_round_id: string;
         };
-        Returns: undefined;
+        Returns: number;
       };
     };
     Enums: {

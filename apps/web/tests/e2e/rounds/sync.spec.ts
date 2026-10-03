@@ -31,7 +31,7 @@ async function openRound(page: Page) {
   await waitForHydration(page);
 }
 
-// ラウンド名を変更して保存する。保存は送信キューに積まれ、update_round RPCで送信される。
+// ラウンド名を変更して保存する。保存は操作の列に積まれ、update_round RPCで送信される。
 async function saveRoundName(page: Page, name: string) {
   await page.getByTestId("round-config-summary").click();
   await page.getByTestId("round-config-name").fill(name);
@@ -191,6 +191,31 @@ test("sync-07: リトライ待機中のとき、バックオフの待機時間�
   expect(attempt).toBe(2);
 });
 
+test("sync-12: オフラインで、同じマスへ点数を記録し、クリアし、別の点数を記録したとき、オンラインへ復帰すると、最後の点数が保存され、再読み込みしても最後の点数が表示される", async ({
+  page,
+}) => {
+  // Given: オフラインで、同じマスへ10を記録し、クリアし、9を記録した
+  await openRound(page);
+  await page.context().setOffline(true);
+  await page.getByTestId("score-button-10").click();
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("score-button-clear").click();
+  await page.getByTestId("score-button-9").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("9");
+  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
+
+  // When: オンラインへ復帰する
+  await page.context().setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+
+  // Then: 最後の点数が保存され、再読み込みしても最後の点数が表示される
+  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+  await page.reload();
+  await waitForHydration(page);
+  await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("9");
+  await expect(page.getByTestId("shot-cell-1-1-1")).not.toContainText("10");
+});
+
 test("sync-11: 点数を記録したが送信に失敗して未送信のとき、通信が回復した状態で再読み込みすると、未送信の点数が失われず再送され、「同期済み」と表示される、記録した点数が保持される", async ({
   page,
 }) => {
@@ -221,6 +246,37 @@ test("sync-11: 点数を記録したが送信に失敗して未送信のとき�
   await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("10");
 });
 
+test("sync-13: 点数の送信が一時的に失敗してリトライ待機中で、同じマスの点数を記録し直したとき、通信が回復した状態で再読み込みすると、記録し直した点数が保持され、先の点数に戻らない", async ({
+  page,
+}) => {
+  // Given: 10の送信が失敗してリトライ待機中で、同じマスを9へ記録し直した
+  let attempts = 0;
+  await page.route(RECORD_SHOTS_RPC, async (route) => {
+    attempts++;
+    await route.abort("failed");
+  });
+  await openRound(page);
+  await page.getByTestId("score-button-10").click();
+  await expect.poll(() => attempts).toBeGreaterThan(0);
+  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("score-button-9").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("9");
+
+  // When: 通信が回復した状態で再読み込みする
+  await page.unroute(RECORD_SHOTS_RPC);
+  await page.reload();
+  await waitForHydration(page);
+
+  // Then: 記録し直した点数が保持され、先の点数に戻らない
+  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+  await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("9");
+  await page.reload();
+  await waitForHydration(page);
+  await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("9");
+  await expect(page.getByTestId("shot-cell-1-1-1")).not.toContainText("10");
+});
+
 test("sync-09: オンラインで送信が失敗しリトライ上限に達するとき、ラウンド設定を保存すると、「同期失敗」と表示される", async ({
   page,
 }) => {
@@ -238,4 +294,59 @@ test("sync-09: オンラインで送信が失敗しリトライ上限に達す�
 
   // Then: 「同期失敗」と表示する
   await expect(page.getByTestId("sync-status")).toHaveText("同期失敗");
+});
+
+test("sync-14: サーバーに拒否された点数が残るとき、同じマスの点数を記録し直し、別のマスにも点数を記録して再読み込みを繰り返すと、「同期失敗」が表示され続け、記録し直した点数が失われず、別のマスの点数が保存される", async ({
+  page,
+}) => {
+  // Given: 2本の距離で、1本目の10がサーバーに拒否される
+  roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "拒否テスト",
+    roundDate: "2026-08-24",
+    format: "outdoor",
+    bowType: "recurve",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+  });
+  await page.route(RECORD_SHOTS_RPC, async (route) => {
+    const shots = route.request().postDataJSON().p_shots as {
+      arrow_number: number;
+      score_str: string;
+    }[];
+    if (shots.some((s) => s.arrow_number === 1 && s.score_str === "10")) {
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "rejected", code: "P0001" }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await openRound(page);
+  await page.getByTestId("score-button-10").click();
+  await expect(page.getByTestId("sync-status")).toHaveText("同期失敗");
+
+  // When: 同じマスを9へ記録し直し、別のマス(2本目)にも8を記録して、再読み込みを繰り返す
+  const secondSaved = page.waitForResponse(
+    (response) =>
+      response.url().includes("/rpc/record_shots") &&
+      response.ok() &&
+      (response.request().postData() ?? "").includes('"score_str":"8"'),
+  );
+  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("score-button-9").click();
+  // 記録すると次のマス(2本目)が選択される。
+  await page.getByTestId("score-button-8").click();
+  await secondSaved;
+  for (let i = 0; i < 2; i++) {
+    await page.reload();
+    await waitForHydration(page);
+  }
+
+  // Then: 「同期失敗」が表示され続け、記録し直した点数が失われず、別のマスの点数が保存される
+  await expect(page.getByTestId("sync-status")).toHaveText("同期失敗");
+  await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("9");
+  await expect(page.getByTestId("shot-cell-1-1-2")).toContainText("8");
 });

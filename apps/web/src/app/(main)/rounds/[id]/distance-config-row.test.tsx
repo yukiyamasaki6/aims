@@ -203,7 +203,6 @@ describe("DistanceEditFields", () => {
           isMarked: false,
         });
         expect(enqueue).toHaveBeenCalledWith({
-          key: "distance:distance-1",
           label: "距離1",
           operation: {
             type: "distance.updated",
@@ -259,7 +258,6 @@ describe("DistanceEditFields", () => {
         // Then: 削除を通知し、distance.disabledの操作を登録する
         expect(onDeleted).toHaveBeenCalled();
         expect(enqueue).toHaveBeenCalledWith({
-          key: "distance:distance-1",
           label: "距離1",
           operation: {
             type: "distance.disabled",

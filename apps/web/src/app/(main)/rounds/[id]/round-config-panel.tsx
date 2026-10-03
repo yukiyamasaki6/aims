@@ -13,7 +13,7 @@ import {
   type RoundConfigErrors,
   validateRoundConfig,
 } from "./round-config";
-import type { EnqueueInput } from "./sync-queue-types";
+import type { OpInput } from "./sync-events";
 
 function RequiredMark() {
   return (
@@ -26,17 +26,15 @@ function RequiredMark() {
 export function RoundConfigPanel({
   roundId,
   initial,
-  onSaved,
   defaultExpanded = false,
   hasUnmarkedDistances,
   enqueue,
 }: {
   roundId: string;
   initial: RoundConfig;
-  onSaved: (updated: RoundConfig) => void;
   defaultExpanded?: boolean;
   hasUnmarkedDistances: boolean;
-  enqueue: (input: EnqueueInput) => void;
+  enqueue: (input: OpInput) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [saved, setSaved] = useState(initial);
@@ -67,7 +65,6 @@ export function RoundConfigPanel({
 
     const { config } = validation;
     setSaved(config);
-    onSaved(config);
     setExpanded(false);
     enqueue(buildRoundUpdatedInput(roundId, config, crypto.randomUUID()));
   }

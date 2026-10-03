@@ -49,14 +49,11 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
   }, [leaveRound, router]);
 
   if (roundId && view.status === "ok") {
-    const { roundConfig, distances, shots, targetFaces } = view.data;
     return (
       <ScorecardClient
         roundId={roundId}
-        initialRoundConfig={roundConfig}
-        distances={distances}
-        initialShots={shots}
-        targetFaces={targetFaces}
+        loaded={view.data}
+        targetFaces={view.data.targetFaces}
       />
     );
   }
