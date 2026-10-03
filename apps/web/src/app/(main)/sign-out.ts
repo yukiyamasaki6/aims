@@ -1,6 +1,10 @@
 import type { AuthError } from "@supabase/supabase-js";
 import { translateAuthErrorMessage } from "@/features/auth/errors";
 import { getLocalIdentity } from "@/features/auth/local-identity";
+import {
+  clearExplicitSignOut,
+  markExplicitSignOut,
+} from "@/features/auth/session-guard";
 import { createClient } from "@/lib/supabase/client";
 
 // signed-out: この端末のローカルの識別情報が消え、サインアウトが完了した。
@@ -21,6 +25,8 @@ export async function signOut({
   const supabase = createClient();
   let signOutError: AuthError | undefined;
 
+  // SIGNED_OUTの遷移(redirectToSignIn)に、サインアウト前の画面を遷移元として付けさせない。
+  markExplicitSignOut();
   try {
     // scope未指定だとデフォルトでglobal（そのユーザーの全デバイス・全セッションを無効化）になる。
     // この端末だけのサインアウトを意図しているのでlocalを指定する。
@@ -37,6 +43,7 @@ export async function signOut({
   // オフラインでサーバーへの通信が失敗した場合でも、ローカルセッションの削除自体は行われているため、エラー表示のまま画面遷移しない、という矛盾した状態を避けられる。
   if (getLocalIdentity() === null) return { status: "signed-out" };
 
+  clearExplicitSignOut();
   return {
     status: "failed",
     error: signOutError

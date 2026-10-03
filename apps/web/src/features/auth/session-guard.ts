@@ -1,15 +1,30 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { signInHref } from "@/features/auth/return-to";
 import { isOffline } from "@/features/fetch-result/network";
 import { classifySession } from "./session-state";
 
 let redirected = false;
+let explicitSignOut = false;
+
+// 同一タブの明示サインアウトでは、SIGNED_OUTの遷移に遷移元を付けない。
+export function markExplicitSignOut(): void {
+  explicitSignOut = true;
+}
+
+export function clearExplicitSignOut(): void {
+  explicitSignOut = false;
+}
 
 // 入力が重なっても遷移は1回にする。ハードナビゲーションで、前の利用者の
 // 画面の状態とRouter Cacheを捨てる。
 export function redirectToSignIn(): void {
   if (redirected) return;
   redirected = true;
-  window.location.replace("/signin");
+  window.location.replace(
+    explicitSignOut
+      ? "/signin"
+      : signInHref(window.location.pathname + window.location.search),
+  );
 }
 
 // セッション喪失は、SIGNED_OUTと、オンラインでのgetSession()の

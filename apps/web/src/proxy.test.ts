@@ -63,7 +63,7 @@ describe("proxy", () => {
 
       // Then
       expect(response.headers.get("location")).toBe(
-        "https://app.example.com/signin",
+        "https://app.example.com/signin?returnTo=%2Frounds%2F1",
       );
     });
   });

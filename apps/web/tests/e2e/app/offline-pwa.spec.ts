@@ -616,7 +616,7 @@ test("offline-pwa-12: Service Workerが登録済みで未認証のとき、/roun
 
   // Then: 枠から/signinへ遷移する
   expect(response?.fromServiceWorker()).toBe(true);
-  await expect(page).toHaveURL(/\/signin$/);
+  await expect(page).toHaveURL(/\/signin(\?|$)/);
 });
 
 test.describe("セッションが期限切れ", () => {

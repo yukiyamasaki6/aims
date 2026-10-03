@@ -12,9 +12,9 @@ AIMSロゴ・リンクは`/`へ戻る。
 | 画面・状態 | 内容 | 要求 |
 | :--- | :--- | :--- |
 | `/` | 未認証・認証済みとも、アプリ名、説明文、開始ボタンを持つ紹介画面を表示する。開始ボタンは判定中と未認証は `/signup`、認証済みは `/rounds` へのリンクである。 | navigation-01, 13, 02, 16 |
-| `/rounds` 配下（未認証） | `/signin` へリダイレクトする。`/rounds/new`、`/rounds/[id]` も対象である。 | navigation-14 |
+| `/rounds` 配下（未認証） | 遷移元のパス付きで `/signin` へリダイレクトする（`/rounds` のみは付けない）。`/rounds/new`、`/rounds/[id]` も対象である。 | navigation-14 |
 | ロゴ | レフトパネルのAIMSリンクと、認証画面・`/`・`/offline` の左上のロゴは `/` へ遷移する。 | navigation-03, 15 |
-| セッション喪失 | `SIGNED_OUT`（自タブ・他タブ）と、マウント時・`online` 時の `unauthenticated` で `/signin` へ遷移する。`unknown` とオフラインの `unauthenticated` では留まる。 | navigation-17, 18, 19 |
+| セッション喪失 | `SIGNED_OUT`（自タブ・他タブ）と、マウント時・`online` 時の `unauthenticated` で、遷移元のパス付き（`/rounds` のみは付けない）で `/signin` へ遷移する。同一タブの明示サインアウトは遷移元を付けない（`auth/signout`）。`unknown` とオフラインの `unauthenticated` では留まる。 | navigation-17, 18, 20, 19 |
 | レフトパネルのリンク | 個人リンクは `/rounds` へ遷移する。サインアウトボタンは確認ダイアログを開く。 | navigation-05 |
 | レフトパネル（モバイル） | 初期は格納。ハンバーガーボタンで展開し、閉じるボタンまたはオーバーレイで格納する。 | navigation-06, 07, 09 |
 | レフトパネル（デスクトップ） | 初期は展開。格納ボタンと開くボタンで切り替える。 | navigation-10, 11, 12 |
@@ -26,10 +26,10 @@ AIMSロゴ・リンクは`/`へ戻る。
 
 - `src/proxy.ts` は `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に `updateSession` を呼ぶ。`/` は対象外である。
 - `src/lib/supabase/session.ts` の `updateSession` が、認証状態で分岐する。
-  - 未認証で `/rounds` 配下なら `/signin` へリダイレクトする。
-  - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。
+  - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
+  - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。`/signin` は有効な遷移元があればそこへ送る（`auth/signin`）。
   - Server Action呼び出しはどちらも対象外とする。
-- `src/features/auth/session-guard.ts` が、セッション喪失の判定（`watchSessionLoss`）と、一度だけの `/signin` への遷移（`redirectToSignIn`）を持つ。`session-guard-provider.tsx` の `SessionGuard` が、`(main)` のレイアウトでこれを使う。
+- `src/features/auth/session-guard.ts` が、セッション喪失の判定（`watchSessionLoss`）と、一度だけの `/signin` への遷移（`redirectToSignIn`。`signInHref` で現在のパスを遷移元に付ける）を持つ。`session-guard-provider.tsx` の `SessionGuard` が、`(main)` のレイアウトでこれを使う。
 - `src/app/page.tsx` が静的な紹介画面で、`src/app/start-button.tsx` が開始ボタンの行き先をクライアントで決める。
 - `src/components/app-logo.tsx` が、認証画面・`/`・`/offline` の左上のロゴである。
 - `src/app/(main)/left-panel.tsx` が開閉、リンク、サインアウト確認ダイアログを持つ。認証状態は持たず、常に全内容を表示する。入口のガードは `proxy.ts`、表示中の喪失は `SessionGuard` が担う。
@@ -44,6 +44,7 @@ AIMSロゴ・リンクは`/`へ戻る。
 | `window.location.replace` で一度だけ遷移する | 前の利用者の画面の状態とRouter Cacheを捨てるため。`router.push` は捨てられないため採らない。 | Router Cacheを明示的に消せるようになったとき。 |
 | `/` は認証状態によらず紹介画面を表示し、開始ボタンだけをクライアントで判定する。判定中は `/signup` へのリンクにする | `/` を静的に保ちオフラインでも開けるようにするため。判定中に認証済みが押しても `/signup` のリダイレクトで `/rounds` へ着く。 | 紹介の内容を拡充するとき。 |
 | AIMSロゴ・リンクの遷移先を全画面で `/` にする | 認証画面を含め、どの画面からもアプリの入口へ戻れるようにするため。`/rounds` へは個人リンクと開始ボタンで移る。 | ロゴに別の役割を持たせるとき。 |
+| 同一タブの明示サインアウトは、モジュール内のフラグで遷移元を付けない | サインアウトの遷移も `SIGNED_OUT` の1経路に集約しているため、経路を分けずに、サインアウト直後に前の画面へ戻る遷移を避ける。 | サインアウトの遷移を別経路にするとき。 |
 | Server Action呼び出しをリダイレクトの対象外にする | リダイレクトするとNext.jsが期待する応答形式と合わず、分かりにくいエラーになるため。未サインイン時は各Server Actionのガードが扱う。 | Server Actionの認証を共通化するとき。 |
 | レフトパネルのサインアウトを確認ダイアログ経由にする | 誤操作を防ぐため。ダイアログはブロッキング方式に統一する。 | ダイアログをブロッキング方式以外にするとき。詳細: `auth/signout`。 |
 
@@ -51,5 +52,6 @@ AIMSロゴ・リンクは`/`へ戻る。
 
 - 開閉状態は画面遷移やリロードで初期状態へ戻る。
 - オフラインではrefresh tokenの失効を検知できず、オンライン復帰の更新で検知する。
+- 別タブのサインアウトは喪失検知として遷移元が付く。
 - 遷移の瞬間に未完了のIndexedDBの書き込みは中断されうる。
 - デスクトップでレフトパネルを格納するとAIMSリンクは隠れる（個人リンク・サインアウトと同じ）。

@@ -10,8 +10,9 @@ const EMAIL_PLACEHOLDER = "you@example.com";
 const PASSWORD_PLACEHOLDER = "パスワード";
 const CAPTCHA_INCOMPLETE_MESSAGE = "セキュリティチェックが完了していません。";
 
-async function openSignIn(page: Page) {
-  await page.goto("/signin");
+async function openSignIn(page: Page, returnTo?: string) {
+  const query = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : "";
+  await page.goto(`/signin${query}`);
   await waitForHydration(page);
   return page.getByRole("button", { name: "サインイン" });
 }
@@ -42,6 +43,43 @@ test("signin-01: サインイン画面で確認済みアカウントのメール
 
   // Then
   await expect(page).toHaveURL(/\/rounds/);
+});
+
+test("signin-11: サインイン画面を遷移元(/rounds/new)付きで開いていて、確認済みアカウントの認証情報を入力していて、captchaが完了しているとき、サインインボタンをクリックすると、遷移元の/rounds/newへ遷移する", async ({
+  page,
+}) => {
+  // Given
+  const { email, password } = await createUniqueUser("signin-return-to");
+  const signInButton = await openSignIn(page, "/rounds/new");
+  await fillCredentials(page, email, password);
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+
+  // When
+  await signInButton.click();
+
+  // Then
+  await expect(page).toHaveURL(/\/rounds\/new$/);
+});
+
+test("signin-12: サインイン画面を外部URLの遷移元付きで開いていて、確認済みアカウントの認証情報を入力していて、captchaが完了しているとき、サインインボタンをクリックすると、/roundsへ遷移する、外部へ遷移しない", async ({
+  page,
+}) => {
+  // 代表例: 外部URLの遷移元。不正値の網羅は単体テスト（return-to.test.ts）で検証する
+  // Given
+  const { email, password } = await createUniqueUser("signin-external");
+  const signInButton = await openSignIn(
+    page,
+    "https://evil.example.com/rounds",
+  );
+  await fillCredentials(page, email, password);
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+
+  // When
+  await signInButton.click();
+
+  // Then
+  await expect(page).toHaveURL(/\/rounds$/);
+  expect(new URL(page.url()).hostname).not.toBe("evil.example.com");
 });
 
 test("signin-02: サインイン画面のとき、「パスワードをお忘れですか」リンクをクリックすると、/reset-passwordへ遷移する", async ({
@@ -84,6 +122,19 @@ test.describe("認証済み", () => {
 
     // Then
     await expect(page).toHaveURL(/\/rounds/);
+  });
+
+  test("signin-13: 認証済みのとき、遷移元(/rounds/new)付きの/signinを開くと、遷移元の/rounds/newへリダイレクトされる", async ({
+    page,
+  }) => {
+    // Given
+    // 認証済みの状態は、storageStateで用意する。
+
+    // When
+    await page.goto(`/signin?returnTo=${encodeURIComponent("/rounds/new")}`);
+
+    // Then
+    await expect(page).toHaveURL(/\/rounds\/new$/);
   });
 });
 

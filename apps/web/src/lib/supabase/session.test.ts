@@ -32,18 +32,34 @@ describe("updateSession", () => {
     );
   });
 
-  it.each([
-    "/rounds",
-    "/rounds/new",
-    "/rounds/00000000-0000-0000-0000-000000000000",
-  ])("未認証で%sにアクセスすると/signinへリダイレクトする", async (path) => {
+  it("未認証で/roundsにアクセスすると、遷移元を付けずに/signinへリダイレクトする", async () => {
     mockUser(null);
-    const request = new NextRequest(`https://app.example.com${path}`);
+    const request = new NextRequest("https://app.example.com/rounds");
 
     const res = await updateSession(request);
 
     expect(res.headers.get("location")).toBe("https://app.example.com/signin");
   });
+
+  it.each([
+    ["/rounds/new", "%2Frounds%2Fnew"],
+    [
+      "/rounds/00000000-0000-0000-0000-000000000000?a=1",
+      "%2Frounds%2F00000000-0000-0000-0000-000000000000%3Fa%3D1",
+    ],
+  ])(
+    "未認証で%sにアクセスすると、遷移元付きの/signinへリダイレクトする",
+    async (path, encoded) => {
+      mockUser(null);
+      const request = new NextRequest(`https://app.example.com${path}`);
+
+      const res = await updateSession(request);
+
+      expect(res.headers.get("location")).toBe(
+        `https://app.example.com/signin?returnTo=${encoded}`,
+      );
+    },
+  );
 
   it("未認証でもServer Action呼び出しは/rounds配下でリダイレクトしない", async () => {
     mockUser(null);
@@ -70,6 +86,56 @@ describe("updateSession", () => {
     async (path) => {
       mockUser({ id: "user-1" });
       const request = new NextRequest(`https://app.example.com${path}`);
+
+      const res = await updateSession(request);
+
+      expect(res.headers.get("location")).toBe(
+        "https://app.example.com/rounds",
+      );
+    },
+  );
+
+  it("認証済みで有効な遷移元付きの/signinにアクセスすると、遷移元へリダイレクトする", async () => {
+    mockUser({ id: "user-1" });
+    const request = new NextRequest(
+      "https://app.example.com/signin?returnTo=%2Frounds%2Fnew%3Fa%3D1",
+    );
+
+    const res = await updateSession(request);
+
+    expect(res.headers.get("location")).toBe(
+      "https://app.example.com/rounds/new?a=1",
+    );
+  });
+
+  it.each([
+    ["外部URL", encodeURIComponent("https://evil.com")],
+    ["//で始まる値", encodeURIComponent("//evil.com")],
+    ["/signin", encodeURIComponent("/signin")],
+    ["/rounds配下から抜けるドットセグメント", "%2Frounds%2F..%2Fsignin"],
+  ])(
+    "認証済みで不正な遷移元(%s)付きの/signinにアクセスすると、遷移元を引き継がず/roundsへリダイレクトする",
+    async (_name, returnTo) => {
+      mockUser({ id: "user-1" });
+      const request = new NextRequest(
+        `https://app.example.com/signin?returnTo=${returnTo}`,
+      );
+
+      const res = await updateSession(request);
+
+      expect(res.headers.get("location")).toBe(
+        "https://app.example.com/rounds",
+      );
+    },
+  );
+
+  it.each(["/signup", "/reset-password"])(
+    "認証済みで有効な遷移元付きの%sにアクセスしても、遷移元を使わず/roundsへリダイレクトする",
+    async (path) => {
+      mockUser({ id: "user-1" });
+      const request = new NextRequest(
+        `https://app.example.com${path}?returnTo=%2Frounds%2Fnew`,
+      );
 
       const res = await updateSession(request);
 

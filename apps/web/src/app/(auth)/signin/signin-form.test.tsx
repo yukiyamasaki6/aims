@@ -104,9 +104,14 @@ async function expectResubmittableWithNewCaptcha(
   });
 }
 
+function setSearch(search: string) {
+  window.history.replaceState(null, "", `/signin${search}`);
+}
+
 describe("SignInForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setSearch("");
   });
 
   describe("初期表示", () => {
@@ -170,6 +175,80 @@ describe("SignInForm", () => {
         expect(submitButton()).toHaveAttribute("aria-disabled", "true");
         expect(spinnerIn(submitButton())).not.toBeNull();
         expect(auth.signInWithPassword).toHaveBeenCalledOnce();
+      });
+    });
+
+    describe("遷移元付きで開いた場合", () => {
+      it("認証に成功すると、遷移元へ遷移する", async () => {
+        // Given
+        setSearch("?returnTo=%2Frounds%2Fnew%3Fa%3D1");
+        auth.signInWithPassword.mockResolvedValue({ error: null });
+        const user = userEvent.setup();
+        render(<SignInForm />);
+        await fillFields(user);
+        completeCaptcha();
+
+        // When
+        await user.click(submitButton());
+
+        // Then
+        await vi.waitFor(() => {
+          expect(nav.push).toHaveBeenCalledWith("/rounds/new?a=1");
+        });
+        expect(nav.push).toHaveBeenCalledOnce();
+      });
+
+      it.each([
+        ["外部URL", encodeURIComponent("https://evil.com")],
+        ["//で始まる値", encodeURIComponent("//evil.com")],
+        ["/signin", encodeURIComponent("/signin")],
+        ["/rounds配下から抜けるドットセグメント", "%2Frounds%2F..%2Fsignin"],
+      ])("遷移元が不正(%s)なら、/roundsへ遷移する", async (_name, value) => {
+        // Given
+        setSearch(`?returnTo=${value}`);
+        auth.signInWithPassword.mockResolvedValue({ error: null });
+        const user = userEvent.setup();
+        render(<SignInForm />);
+        await fillFields(user);
+        completeCaptcha();
+
+        // When
+        await user.click(submitButton());
+
+        // Then
+        await vi.waitFor(() => {
+          expect(nav.push).toHaveBeenCalledWith("/rounds");
+        });
+        expect(nav.push).toHaveBeenCalledOnce();
+      });
+
+      it("認証に失敗した後に新しいcaptchaで再送信して成功しても、同じ遷移元へ遷移する", async () => {
+        // Given
+        setSearch("?returnTo=%2Frounds%2Fnew");
+        auth.signInWithPassword.mockResolvedValue({
+          error: makeAuthError("invalid_credentials"),
+        });
+        const user = userEvent.setup();
+        render(<SignInForm />);
+        await fillFields(user);
+        completeCaptcha();
+        await user.click(submitButton());
+        expect(
+          await screen.findByText(
+            "メールアドレスまたはパスワードが間違っています。",
+          ),
+        ).toBeInTheDocument();
+        expect(nav.push).not.toHaveBeenCalled();
+
+        // When
+        auth.signInWithPassword.mockResolvedValue({ error: null });
+        completeCaptcha("captcha-token-2");
+        await user.click(submitButton());
+
+        // Then
+        await vi.waitFor(() => {
+          expect(nav.push).toHaveBeenCalledWith("/rounds/new");
+        });
       });
     });
 

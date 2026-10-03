@@ -289,16 +289,16 @@ test.describe("認証済み", () => {
 test.describe("未認証のガード", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test("navigation-14: 任意の画面で未認証のとき、/rounds配下を開くと、/signinへリダイレクトされる", async ({
+  test("navigation-14: 任意の画面で未認証のとき、/rounds配下を開くと、遷移元のパス付きで/signinへリダイレクトされる", async ({
     page,
   }) => {
     // Given: 未認証
     // When: /rounds配下を開く
-    // 代表として/roundsを開く。/rounds/new、/rounds/[id]は単体テスト（session.test.ts）で検証する。
-    await page.goto("/rounds");
+    // 代表として/rounds/newを開く。/rounds（遷移元を付けない）、/rounds/[id]・クエリ付きは単体テスト（session.test.ts）で検証する。
+    await page.goto("/rounds/new");
 
-    // Then: /signinへリダイレクトされる
-    await expect(page).toHaveURL(/\/signin$/);
+    // Then: 遷移元のパス付きで/signinへリダイレクトされる
+    await expect(page).toHaveURL(/\/signin\?returnTo=%2Frounds%2Fnew$/);
   });
 });
 
@@ -337,6 +337,24 @@ test.describe("セッション喪失", () => {
 
     // Then: /signinへ遷移する
     await expect(page).toHaveURL(/\/signin$/);
+  });
+
+  test("navigation-20: メイン画面(/rounds/new)を開いていて、セッションが無効にされているとき、アクセストークンの期限まで時間が経過すると、遷移元のパス付きで/signinへ遷移する", async ({
+    page,
+  }) => {
+    // Given: /rounds/newを開いていて、サーバー側でセッションが無効にされている
+    const email = `nav-revoked-return-${Date.now()}@aims.test`;
+    await page.clock.install();
+    await signUpAndSignIn(page, { email, password: "password1" });
+    await page.goto("/rounds/new");
+    await waitForHydration(page);
+    await revokeAllSessions(email);
+
+    // When: アクセストークンの期限まで時間が経過する
+    await page.clock.fastForward(PAST_JWT_EXPIRY_MS);
+
+    // Then: 遷移元のパス付きで/signinへ遷移する
+    await expect(page).toHaveURL(/\/signin\?returnTo=%2Frounds%2Fnew$/);
   });
 
   test("navigation-19: メイン画面を開いていて、セッションの更新が通信失敗するとき、アクセストークンの期限まで時間が経過すると、/signinへ遷移せず、画面に留まる", async ({
