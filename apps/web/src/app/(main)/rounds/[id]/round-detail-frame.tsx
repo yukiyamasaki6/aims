@@ -11,7 +11,7 @@ export function RoundDetailFrame({ children }: { children: ReactNode }) {
           <div className="sticky top-0 z-30 flex h-14 items-center bg-card px-8">
             <BackToListLink />
           </div>
-          <div className="px-8 py-4">{children}</div>
+          <div className="flex flex-1 flex-col px-8 pb-8">{children}</div>
         </div>
       </main>
     </div>

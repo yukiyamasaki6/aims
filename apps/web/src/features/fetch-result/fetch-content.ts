@@ -9,7 +9,13 @@ import {
 } from "./fetch-result";
 import { isOffline } from "./network";
 
-// getSession()は待機に時間制限を設けず、offlineイベントと競わせる。
+// 取得が終わらないまま枠が「読み込み中」に固定されないよう、全体に時間制限を設ける。
+// navigator.onLineがtrueのまま通信できない場合、アクセストークンが期限切れだと
+// getSession()の更新の再試行だけで約30秒、通信が応答しないと数分止まるため。
+// 超えたらofflineとして再試行できるようにする（遅れて届いた結果は捨てる）。
+export const FETCH_TIMEOUT_MS = 10_000;
+
+// getSession()は、offlineイベントと競わせる。
 // 遷移はSessionGuardが担い、ここでは行わない。
 function waitOffline(): { promise: Promise<"offline">; stop: () => void } {
   const { promise, resolve } = Promise.withResolvers<"offline">();
@@ -23,6 +29,22 @@ function waitOffline(): { promise: Promise<"offline">; stop: () => void } {
 
 // runは呼び出し側が.retry(false)を付けたクエリを返す。
 export async function fetchContent<T>(
+  supabase: SupabaseClient,
+  run: () => PromiseLike<ResponseLike<T>>,
+  opts: { nullIsNotFound?: boolean } = {},
+): Promise<FetchResult<T>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<FetchResult<T>>((resolve) => {
+    timer = setTimeout(() => resolve({ status: "offline" }), FETCH_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([load(supabase, run, opts), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function load<T>(
   supabase: SupabaseClient,
   run: () => PromiseLike<ResponseLike<T>>,
   opts: { nullIsNotFound?: boolean } = {},

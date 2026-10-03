@@ -14,6 +14,23 @@ describe("FetchState", () => {
       expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
     });
 
+    it("loadingのとき、loadingを渡すと、その骨組みを取得中の表示にする", () => {
+      // Given
+      // When
+      render(
+        <FetchState
+          view={{ status: "loading" }}
+          onRetry={vi.fn()}
+          loading={<div data-testid="custom-skeleton" />}
+        />,
+      );
+
+      // Then
+      expect(screen.getByRole("status")).toContainElement(
+        screen.getByTestId("custom-skeleton"),
+      );
+    });
+
     it("not-foundのとき、渡したメッセージだけを表示し、リンクを表示しない", () => {
       // Given
       // When
@@ -32,11 +49,13 @@ describe("FetchState", () => {
       expect(screen.queryByRole("link")).not.toBeInTheDocument();
     });
 
-    it("offlineのとき、未接続と再試行ボタンを表示し、押すとonRetryを呼ぶ", async () => {
+    it("offlineのとき、ネットワークに接続されていませんと再試行ボタンを表示し、押すとonRetryを呼ぶ", async () => {
       // Given
       const onRetry = vi.fn();
       render(<FetchState view={{ status: "offline" }} onRetry={onRetry} />);
-      expect(screen.getByText("未接続")).toBeInTheDocument();
+      expect(
+        screen.getByText("ネットワークに接続されていません"),
+      ).toBeInTheDocument();
 
       // When
       await userEvent.click(screen.getByRole("button", { name: "再試行" }));

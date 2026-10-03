@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
-import { fetchContent } from "./fetch-content";
+import { FETCH_TIMEOUT_MS, fetchContent } from "./fetch-content";
 import { FETCH_ERROR_MESSAGE } from "./fetch-result";
 
 beforeEach(() => {
@@ -9,6 +9,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -184,6 +185,53 @@ describe("fetchContent", () => {
       // Then
       await expect(pending).resolves.toEqual({ status: "offline" });
       expect(run).not.toHaveBeenCalled();
+    });
+
+    it("getSessionが時間内に終わらないと（onLineがtrueのまま通信できない場合）、offlineにする", async () => {
+      // Given
+      vi.useFakeTimers();
+      const { client } = makeSupabase(() => new Promise(() => {}));
+      const run = vi.fn(async () => okResponse);
+      const pending = fetchContent(client, run);
+
+      // When
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS);
+
+      // Then
+      await expect(pending).resolves.toEqual({ status: "offline" });
+      expect(run).not.toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it("クエリが時間内に終わらないときも、offlineにする", async () => {
+      // Given
+      vi.useFakeTimers();
+      const { client } = makeSupabase(async () => ({ data: { session } }));
+      const pending = fetchContent(
+        client,
+        () => new Promise<typeof okResponse>(() => {}),
+      );
+
+      // When
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS);
+
+      // Then
+      await expect(pending).resolves.toEqual({ status: "offline" });
+      vi.useRealTimers();
+    });
+
+    it("時間内に終われば、時間切れのタイマーを残さない", async () => {
+      // Given
+      vi.useFakeTimers();
+      const { client } = makeSupabase(async () => ({ data: { session } }));
+
+      // When
+      const result = await fetchContent(client, async () => okResponse);
+
+      // Then
+      expect(result).toEqual({ status: "ok", data: { id: "a" } });
+      expect(vi.getTimerCount()).toBe(0);
+      vi.useRealTimers();
     });
 
     it("完了後に、offlineイベントのリスナーを解除する", async () => {

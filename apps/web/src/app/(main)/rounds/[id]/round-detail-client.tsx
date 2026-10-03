@@ -10,6 +10,20 @@ import { RoundDetailFrame } from "./round-detail-frame";
 import { parseRoundId } from "./round-detail-id";
 import { ScorecardClient } from "./scorecard-client";
 
+// ScorecardClientの設定パネル（45px）、合計バー（46px、-mt-6で設定パネルと接する）、
+// 距離の一覧（gap-6/gap-4）と同じ形にする。
+function ScorecardSkeleton() {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="h-[45px] animate-pulse rounded-t-xl bg-muted" />
+      <div className="-mt-6 h-[46px] animate-pulse rounded-b-xl bg-muted" />
+      <div className="flex flex-col gap-4">
+        <div className="h-12 animate-pulse rounded-xl bg-muted" />
+      </div>
+    </div>
+  );
+}
+
 const NOT_FOUND = { message: "ラウンドが見つかりません。" };
 
 // pathnameは取得のkeyにだけ使い、初回描画は取得中の枠になる。
@@ -52,6 +66,7 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
         view={view.status === "ok" ? { status: "loading" } : view}
         onRetry={retry}
         notFound={NOT_FOUND}
+        loading={<ScorecardSkeleton />}
       />
     </RoundDetailFrame>
   );
