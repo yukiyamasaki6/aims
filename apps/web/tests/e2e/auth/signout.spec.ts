@@ -13,7 +13,7 @@ const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
 async function signInAndOpenDialog(
   page: Page,
   prefix: string,
-  options: { installClock?: boolean } = {},
+  options: { installClock?: boolean; path?: string } = {},
 ) {
   // 時計は画面遷移より前に差し替える必要がある。
   if (options.installClock) await page.clock.install();
@@ -22,6 +22,10 @@ async function signInAndOpenDialog(
     password: "password1",
   });
   await waitForHydration(page);
+  if (options.path) {
+    await page.goto(options.path);
+    await waitForHydration(page);
+  }
   await page.getByRole("button", { name: "サインアウト" }).click();
   const confirmButton = page.getByRole("button", { name: "サインアウトする" });
   await expect(confirmButton).toBeVisible();
@@ -44,6 +48,23 @@ test("signout-01: サインアウト確認ダイアログでサインアウト�
   await expect(page).toHaveURL(/\/signin$/);
   await page.goto("/rounds");
   await expect(page).toHaveURL(/\/signin/);
+});
+
+test("signout-07: /rounds/newを開いていて、サインアウト確認ダイアログでサインアウトが成功するとき、確認ボタンをクリックすると、/signinへ遷移する、サインアウト前の画面への遷移元が付かない", async ({
+  page,
+}) => {
+  // Given
+  const { confirmButton } = await signInAndOpenDialog(
+    page,
+    "signout-no-return-to",
+    { path: "/rounds/new" },
+  );
+
+  // When
+  await confirmButton.click();
+
+  // Then
+  await expect(page).toHaveURL(/\/signin$/);
 });
 
 test("signout-02: サインアウト確認ダイアログのとき、キャンセルボタンをクリックすると、ダイアログが閉じられる", async ({

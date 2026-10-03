@@ -8,6 +8,7 @@ import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { readReturnTo } from "@/features/auth/return-to";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -90,7 +91,7 @@ export function SignInForm() {
       // 成功時はここでsubmittingを解除しない。
       // router.push()は遷移先の取得中もこのコンポーネントを保持し続けるため、ここで解除すると遷移完了前にボタンが再度押せる状態に戻り、同じ（使用済みの）captchaトークンで二重に送信されてしまう。
       // アンマウント時に自然に破棄される。
-      router.push("/rounds");
+      router.push(readReturnTo(window.location.search) ?? "/rounds");
     } catch {
       if (!mountedRef.current) return;
       dispatch({ type: "submit_network_error" });

@@ -196,8 +196,40 @@ describe("watchSessionLoss", () => {
 });
 
 describe("redirectToSignIn", () => {
-  it("/signinへ置き換えで遷移し、複数回呼んでも遷移は1回である", async () => {
+  function stubLocation(pathname: string, search = "") {
+    vi.stubGlobal("location", { replace, pathname, search });
+  }
+
+  it("/rounds配下の画面では、現在のパスとクエリを遷移元として/signinへ置き換えで遷移する", async () => {
     // Given
+    stubLocation("/rounds/new", "?a=1");
+    const { redirectToSignIn } = await load();
+
+    // When
+    redirectToSignIn();
+
+    // Then
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(replace).toHaveBeenCalledWith(
+      "/signin?returnTo=%2Frounds%2Fnew%3Fa%3D1",
+    );
+  });
+
+  it("/roundsでは、遷移元を付けずに/signinへ遷移する", async () => {
+    // Given
+    stubLocation("/rounds");
+    const { redirectToSignIn } = await load();
+
+    // When
+    redirectToSignIn();
+
+    // Then
+    expect(replace).toHaveBeenCalledWith("/signin");
+  });
+
+  it("複数回呼んでも、遷移は1回である", async () => {
+    // Given
+    stubLocation("/rounds/new");
     const { redirectToSignIn } = await load();
 
     // When
@@ -206,6 +238,36 @@ describe("redirectToSignIn", () => {
 
     // Then
     expect(replace).toHaveBeenCalledTimes(1);
-    expect(replace).toHaveBeenCalledWith("/signin");
+  });
+
+  describe("同一タブの明示サインアウトの場合", () => {
+    it("markExplicitSignOutの後は、遷移元を付けずに/signinへ遷移する", async () => {
+      // Given
+      stubLocation("/rounds/new", "?a=1");
+      const { redirectToSignIn, markExplicitSignOut } = await load();
+      markExplicitSignOut();
+
+      // When
+      redirectToSignIn();
+
+      // Then
+      expect(replace).toHaveBeenCalledTimes(1);
+      expect(replace).toHaveBeenCalledWith("/signin");
+    });
+
+    it("clearExplicitSignOutの後は、遷移元を付けて/signinへ遷移する", async () => {
+      // Given
+      stubLocation("/rounds/new");
+      const { redirectToSignIn, markExplicitSignOut, clearExplicitSignOut } =
+        await load();
+      markExplicitSignOut();
+      clearExplicitSignOut();
+
+      // When
+      redirectToSignIn();
+
+      // Then
+      expect(replace).toHaveBeenCalledWith("/signin?returnTo=%2Frounds%2Fnew");
+    });
   });
 });

@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
+import { readReturnTo, signInHref } from "@/features/auth/return-to";
 import type { Database } from "@/types/supabase";
 
 export async function updateSession(request: NextRequest) {
@@ -45,9 +46,12 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/rounds") &&
     !isServerAction
   ) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/signin";
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(
+      new URL(
+        signInHref(request.nextUrl.pathname + request.nextUrl.search),
+        request.url,
+      ),
+    );
   }
 
   // 未認証専用の入口。認証済みなら/roundsへ戻す。
@@ -56,8 +60,17 @@ export async function updateSession(request: NextRequest) {
     GUEST_ONLY_PATHS.includes(request.nextUrl.pathname) &&
     !isServerAction
   ) {
+    // 認証済みの/signinは、有効な遷移元があればそこへ送る。
+    const destination =
+      request.nextUrl.pathname === "/signin"
+        ? readReturnTo(request.nextUrl.search)
+        : null;
+    if (destination) {
+      return NextResponse.redirect(new URL(destination, request.url));
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/rounds";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 
