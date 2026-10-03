@@ -102,15 +102,17 @@ describe("RoundsListClient", () => {
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
     });
 
-    it("通信できない場合は未接続を表示し、空状態は表示せず、新規作成ボタンは表示する", async () => {
+    it("通信できない場合はネットワークに接続されていませんを表示し、空状態は表示せず、新規作成ボタンは表示する", async () => {
       // Given: 通信できない
       fetchResolves({ status: "offline" });
 
       // When: 一覧を表示する
       render(<RoundsListClient />);
 
-      // Then: 未接続と新規作成ボタンを表示し、空状態は表示しない
-      expect(await screen.findByText("未接続")).toBeInTheDocument();
+      // Then: ネットワークに接続されていませんと新規作成ボタンを表示し、空状態は表示しない
+      expect(
+        await screen.findByText("ネットワークに接続されていません"),
+      ).toBeInTheDocument();
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
       expect(
         screen.queryByText("まだラウンドがありません。"),
@@ -146,7 +148,9 @@ describe("RoundsListClient", () => {
       // Then: 取得し直して一覧を表示する
       expect(await screen.findByText("午前練習")).toBeInTheDocument();
       expect(fetchRounds).toHaveBeenCalledTimes(2);
-      expect(screen.queryByText("未接続")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("ネットワークに接続されていません"),
+      ).not.toBeInTheDocument();
     });
   });
 

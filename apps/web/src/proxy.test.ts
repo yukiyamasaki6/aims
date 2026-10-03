@@ -39,6 +39,9 @@ describe("proxy", () => {
       "/_next/static/chunks/main.js",
       "/signin/extra",
       "/roundsx",
+      "/__shell/rounds",
+      "/__shell/rounds/new",
+      "/__shell/rounds/_",
     ])("%sでは実行しない", (url) => {
       // Given
       // When

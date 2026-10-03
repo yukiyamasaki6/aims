@@ -4,6 +4,7 @@ import { Children, isValidElement, type ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalIdentityProvider } from "@/features/auth/local-identity-provider";
 import RootLayout from "./layout";
+import { SwUpdateActivator } from "./sw-update-activator";
 
 // next/font/localはNext.jsのコンパイラによる変換を前提とし、Vitest上では実行できないため境界としてモックする。
 vi.mock("geist/font/sans", () => ({
@@ -77,6 +78,19 @@ describe("RootLayout", () => {
       // Then
       expect(
         contents.some((element) => element.type === LocalIdentityProvider),
+      ).toBe(true);
+    });
+
+    it("waitingの新SWの有効化を再要求するSwUpdateActivatorを含める", () => {
+      // Given
+      const children = <p>子要素</p>;
+
+      // When
+      const contents = bodyContents(children);
+
+      // Then
+      expect(
+        contents.some((element) => element.type === SwUpdateActivator),
       ).toBe(true);
     });
   });

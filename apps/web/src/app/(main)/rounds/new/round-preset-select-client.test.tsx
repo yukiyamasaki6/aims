@@ -179,7 +179,7 @@ describe("RoundPresetSelect", () => {
       );
     });
 
-    it("通信できない場合は未接続を表示し、プリセットの見出しは出さず、開始ボタンでラウンドを作成できる", async () => {
+    it("通信できない場合はネットワークに接続されていませんを表示し、プリセットの見出しは出さず、開始ボタンでラウンドを作成できる", async () => {
       // Given
       fetchResolves({ status: "offline" });
       const user = userEvent.setup();
@@ -188,7 +188,9 @@ describe("RoundPresetSelect", () => {
       render(<RoundPresetSelect />);
 
       // Then
-      expect(await screen.findByText("未接続")).toBeInTheDocument();
+      expect(
+        await screen.findByText("ネットワークに接続されていません"),
+      ).toBeInTheDocument();
       expect(screen.queryByText("個人プリセット")).not.toBeInTheDocument();
       expect(screen.queryByText("公式プリセット")).not.toBeInTheDocument();
       await user.click(
@@ -235,7 +237,9 @@ describe("RoundPresetSelect", () => {
 
       // Then
       expect(await screen.findByText("公式720ラウンド")).toBeInTheDocument();
-      expect(screen.queryByText("未接続")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("ネットワークに接続されていません"),
+      ).not.toBeInTheDocument();
       expect(fetchPresetsMock).toHaveBeenCalledTimes(2);
     });
   });

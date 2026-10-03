@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
 import { LocalIdentityProvider } from "@/features/auth/local-identity-provider";
 import "./globals.css";
+import { SwUpdateActivator } from "./sw-update-activator";
 
 export const metadata: Metadata = {
   title: "AIMS",
@@ -34,19 +35,22 @@ export default function RootLayout({
           常に一致させる。 */}
       <body className="h-dvh overflow-hidden">
         <LocalIdentityProvider />
+        <SwUpdateActivator />
         <SerwistProvider
           swUrl="/sw.js"
           disable={process.env.NODE_ENV !== "production"}
-          // sw.tsはページをキャッシュしないため、reloadOnOnlineの本来の
-          // 目的（古いキャッシュ済みページの最新化）はそもそも発生しない。
+          // sw.tsはページ内容をキャッシュしない（枠はプリキャッシュで配り、
+          // 内容は枠内で取得する）ため、reloadOnOnlineの本来の目的（古い
+          // キャッシュ済みページの最新化）はそもそも発生しない。
           // さらに送信キュー（use-sync-queue）が`online`イベント検知で
           // 既にリロード無しの再送を行っているため、trueのままだと目的の
           // 重複に加え、展開中のパネルや入力中の下書きを毎回失わせる
           // だけの余計な副作用になる。
           reloadOnOnline={false}
-          // ページ（HTML/RSC）はsw.ts側でNetworkOnlyにしておりキャッシュ
-          // 対象外のため、デフォルトのtrueのままだとナビゲーションのたびに
-          // 何もキャッシュしない無駄なリクエストが余計に発生してしまう。
+          // ページ（HTML/RSC）はランタイムキャッシュの対象外（枠はプリ
+          // キャッシュ、それ以外はNetworkOnly）のため、デフォルトのtrueの
+          // ままだとナビゲーションのたびに何もキャッシュしない無駄な
+          // リクエストが余計に発生してしまう。
           cacheOnNavigation={false}
         >
           {children}

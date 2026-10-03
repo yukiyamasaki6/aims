@@ -24,6 +24,25 @@ import { fetchPresets } from "./fetch-presets";
 import type { Preset } from "./preset-types";
 import { startRound } from "./start-round";
 
+// 読み込み後の2つの節と同じ形にする（見出し20px、個人プリセットの案内1行20px、
+// 公式プリセット行50px、間隔gap-2/gap-4）。
+function PresetListSkeleton() {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <div className="h-5 w-24 animate-pulse rounded bg-muted" />
+        <div className="h-5 w-3/4 animate-pulse rounded bg-muted" />
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="h-5 w-24 animate-pulse rounded bg-muted" />
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-[50px] animate-pulse rounded-xl bg-muted" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PresetRow({
   preset,
   selected,
@@ -250,7 +269,11 @@ export function RoundPresetSelect() {
             </div>
           </>
         ) : (
-          <FetchState view={view} onRetry={retry} />
+          <FetchState
+            view={view}
+            onRetry={retry}
+            loading={<PresetListSkeleton />}
+          />
         )}
       </div>
 

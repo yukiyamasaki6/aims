@@ -29,7 +29,11 @@ export function RoundsListClient() {
       {view.status === "ok" ? (
         <RoundCards initialRounds={view.data} />
       ) : (
-        <FetchState view={view} onRetry={retry} />
+        <FetchState
+          view={view}
+          onRetry={retry}
+          loading={<RoundCardsSkeleton />}
+        />
       )}
 
       <Link
@@ -42,6 +46,17 @@ export function RoundsListClient() {
         <Plus className="size-6" />
       </Link>
     </>
+  );
+}
+
+// 読み込み後のカード（高さ62px、間隔gap-3）と同じ形にする。
+function RoundCardsSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="h-[62px] animate-pulse rounded-xl bg-muted" />
+      ))}
+    </div>
   );
 }
 

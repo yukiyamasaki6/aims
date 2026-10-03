@@ -143,7 +143,7 @@ describe("RoundDetailClient", () => {
     });
   });
 
-  describe("見つからない・未接続・エラー", () => {
+  describe("見つからない・オフライン・エラー", () => {
     it("見つからない場合は、メッセージと一覧へ戻るリンクを出す", async () => {
       resolves({ status: "not-found" });
 
@@ -176,12 +176,14 @@ describe("RoundDetailClient", () => {
       },
     );
 
-    it("通信できない場合は、一覧へ戻るリンクと未接続を出す", async () => {
+    it("通信できない場合は、一覧へ戻るリンクとネットワークに接続されていませんを出す", async () => {
       resolves({ status: "offline" });
 
       render(<RoundDetailClient />);
 
-      expect(await screen.findByText("未接続")).toBeInTheDocument();
+      expect(
+        await screen.findByText("ネットワークに接続されていません"),
+      ).toBeInTheDocument();
       expect(
         screen.getByRole("link", { name: "一覧へ戻る" }),
       ).toBeInTheDocument();
