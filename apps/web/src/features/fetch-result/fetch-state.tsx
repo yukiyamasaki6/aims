@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import type { FetchView } from "./fetch-result";
 
-type NotFoundLink = { message: string; href: string; label: string };
+type NotFoundMessage = { message: string };
 
 // okは画面ごとに描画するため受け取らない。
 export function FetchState({
@@ -12,7 +11,7 @@ export function FetchState({
 }: {
   view: Exclude<FetchView<unknown>, { status: "ok" }>;
   onRetry: () => void;
-  notFound?: NotFoundLink;
+  notFound?: NotFoundMessage;
 }) {
   switch (view.status) {
     case "loading":
@@ -27,11 +26,6 @@ export function FetchState({
       return (
         <div className="space-y-3 text-sm">
           <p>{notFound?.message ?? "見つかりませんでした。"}</p>
-          {notFound && (
-            <Link href={notFound.href} className="text-primary underline">
-              {notFound.label}
-            </Link>
-          )}
         </div>
       );
     case "offline":

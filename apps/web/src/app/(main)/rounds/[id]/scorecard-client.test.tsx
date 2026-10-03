@@ -14,8 +14,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TargetFaceOption } from "./distance-config-row";
 import type { RoundConfig } from "./round-config";
 import { ScorecardClient } from "./scorecard-client";
-import type { SyncOperation } from "./sync-events";
-import { savePendingOperation } from "./sync-outbox";
 import { RETRY_DELAYS_MS } from "./sync-result";
 
 const nav = vi.hoisted(() => ({
@@ -61,28 +59,6 @@ async function pollWithRealTasks(assertion: () => void, maxTasks = 200) {
     }
   }
   throw lastError;
-}
-
-// 前回の表示中に積まれ、まだ同期されていない操作として、永続outboxに渡した順で書き込む。
-// 保存時刻が同じだと読み出し順がeventIdの順になるため、Dateだけを偽装して保存時刻を1msずつずらす。
-// テストの端末にはサインインの記録がない（getLocalIdentity()がnull）ため、userIdはnullで書き込む。
-async function seedPendingOperations(operations: SyncOperation[]) {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  try {
-    for (const [index, operation] of operations.entries()) {
-      vi.setSystemTime(Date.UTC(2026, 8, 15) + index);
-      await savePendingOperation({
-        eventId: operation.eventId,
-        roundId: "round-1",
-        key: `pending:${operation.eventId}`,
-        label: operation.type,
-        operation,
-        userId: null,
-      });
-    }
-  } finally {
-    vi.useRealTimers();
-  }
 }
 
 function setOnline(online: boolean) {
@@ -1224,77 +1200,6 @@ describe("ScorecardClient ラウンド削除", () => {
       p_round_event_id: expect.any(String),
       p_round_id: "round-1",
     });
-  });
-});
-
-describe("ScorecardClient 保留中の操作の反映", () => {
-  it("保留中の操作を、ラウンド設定・距離・記録の表示に反映する", async () => {
-    // Given: ラウンド設定の更新・距離の作成・スコアの記録が未同期のまま残っている
-    await seedPendingOperations([
-      {
-        type: "round.updated",
-        eventId: "e-round",
-        roundId: "round-1",
-        name: "更新後ラウンド",
-        roundDate: "2026-09-20",
-        format: "outdoor",
-        bowType: "compound",
-      },
-      {
-        type: "distance.created",
-        eventId: "e-distance",
-        id: "distance-new",
-        roundId: "round-1",
-        positionKey: "aa",
-        distance: 30,
-        totalEnds: 1,
-        arrowsPerEnd: 1,
-        targetFaceId: targetFaceX.id,
-        isMarked: true,
-      },
-      {
-        type: "shot.recorded",
-        eventId: "e-shot",
-        distanceId: distanceA.id,
-        endNumber: 1,
-        arrowNumber: 1,
-        scoreStr: "10",
-        scoreInt: 10,
-      },
-    ]);
-
-    // When: 表示する
-    setup();
-
-    // Then: ラウンド設定・作成した距離・記録が表示される
-    expect(await screen.findByText(/更新後ラウンド/)).toBeInTheDocument();
-    expect(screen.getByTestId("distance-summary-2")).toBeInTheDocument();
-    expect(screen.getByTestId("shot-cell-1-1-1")).toHaveTextContent("10");
-  });
-
-  it("保留中の操作にラウンドの削除がある場合、一覧へ遷移し、それ以降の操作は反映しない", async () => {
-    // Given: ラウンドの削除と、その後の距離の無効化が未同期のまま残っている
-    await seedPendingOperations([
-      {
-        type: "round.disabled",
-        eventId: "e-round-disabled",
-        roundId: "round-1",
-      },
-      {
-        type: "distance.disabled",
-        eventId: "e-distance-disabled",
-        distanceId: distanceA.id,
-      },
-    ]);
-
-    // When: 表示する
-    setup();
-
-    // Then: 一覧へ遷移し、距離は無効化されずに表示されたまま
-    await waitFor(() => {
-      expect(nav.replace).toHaveBeenCalledWith("/rounds");
-    });
-    expect(screen.getByTestId("distance-summary-1")).toBeInTheDocument();
   });
 });
 

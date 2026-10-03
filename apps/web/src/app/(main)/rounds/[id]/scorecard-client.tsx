@@ -4,7 +4,6 @@ import {
   AlertCircle,
   Check,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Loader2,
   Plus,
@@ -12,15 +11,13 @@ import {
   Undo,
   WifiOff,
 } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { getLocalIdentity } from "@/features/auth/local-identity";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import { DistanceInfo } from "../_shared/preset-info";
+import { BackToListLink } from "./back-to-list-link";
 import type { DistanceConfig } from "./distance-config";
 import {
   DistanceEditFields,
@@ -58,7 +55,6 @@ import {
   shotEnqueueInput,
   undoHistory,
 } from "./scorecard-input";
-import { restorePendingOperations } from "./scorecard-pending";
 import {
   distanceNumber,
   endSubtotal,
@@ -68,7 +64,6 @@ import {
   summarizeRound,
 } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
-import { loadPendingOperations } from "./sync-outbox";
 import { syncShots } from "./sync-shots";
 import { useSyncQueue } from "./use-sync-queue";
 
@@ -172,7 +167,6 @@ export function ScorecardClient({
   initialShots: Shot[];
   targetFaces: TargetFaceOption[];
 }) {
-  const router = useRouter();
   const [roundConfig, setRoundConfig] =
     useState<RoundConfig>(initialRoundConfig);
   const [distances, setDistances] = useState<Distance[]>(initialDistances);
@@ -186,19 +180,6 @@ export function ScorecardClient({
     setDistances(initialDistances);
     setShots(initialShots);
   }, [initialDistances, initialRoundConfig, initialShots]);
-
-  useEffect(() => {
-    void loadPendingOperations(roundId, getLocalIdentity()).then((pending) => {
-      const restore = restorePendingOperations(
-        pending.map(({ operation }) => operation),
-      );
-      // 読み込み中に初期値の反映や入力で状態が変わっていても、その最新の状態へ反映する。
-      setRoundConfig(restore.roundConfig);
-      setDistances(restore.distances);
-      setShots(restore.shots);
-      if (restore.leaveRound) router.replace("/rounds");
-    });
-  }, [roundId, router]);
 
   const [syncErrorsOpen, setSyncErrorsOpen] = useState(false);
   const hydrated = useHydrated();
@@ -557,13 +538,7 @@ export function ScorecardClient({
               と同じくページスクロール中ずっと張り付かせる。高さはh-14固定にし、
               round-summary側のtopオフセットと正確に合わせられるようにする。 */}
           <div className="sticky top-0 z-30 grid h-14 grid-cols-[auto_1fr_auto] items-center gap-2 bg-card px-8">
-            <Link
-              href="/rounds"
-              className="inline-flex w-fit items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
-            >
-              <ChevronLeft className="size-4" />
-              一覧へ戻る
-            </Link>
+            <BackToListLink />
             <button
               type="button"
               data-testid="sync-status"

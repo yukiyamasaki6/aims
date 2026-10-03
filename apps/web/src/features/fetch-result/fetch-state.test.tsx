@@ -14,20 +14,14 @@ describe("FetchState", () => {
       expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
     });
 
-    it("not-foundのとき、メッセージと一覧への導線を表示する", () => {
+    it("not-foundのとき、渡したメッセージだけを表示し、リンクを表示しない", () => {
       // Given
-      const notFound = {
-        message: "ラウンドが見つかりません。",
-        href: "/rounds",
-        label: "ラウンド一覧へ",
-      };
-
       // When
       render(
         <FetchState
           view={{ status: "not-found" }}
           onRetry={vi.fn()}
-          notFound={notFound}
+          notFound={{ message: "ラウンドが見つかりません。" }}
         />,
       );
 
@@ -35,9 +29,7 @@ describe("FetchState", () => {
       expect(
         screen.getByText("ラウンドが見つかりません。"),
       ).toBeInTheDocument();
-      expect(
-        screen.getByRole("link", { name: "ラウンド一覧へ" }),
-      ).toHaveAttribute("href", "/rounds");
+      expect(screen.queryByRole("link")).not.toBeInTheDocument();
     });
 
     it("offlineのとき、未接続と再試行ボタンを表示し、押すとonRetryを呼ぶ", async () => {
@@ -75,12 +67,13 @@ describe("FetchState", () => {
   });
 
   describe("異常系", () => {
-    it("not-foundで導線を渡さないとき、リンクを表示しない", () => {
+    it("not-foundでメッセージを渡さないとき、既定の文言を表示し、リンクを表示しない", () => {
       // Given
       // When
       render(<FetchState view={{ status: "not-found" }} onRetry={vi.fn()} />);
 
       // Then
+      expect(screen.getByText("見つかりませんでした。")).toBeInTheDocument();
       expect(screen.queryByRole("link")).not.toBeInTheDocument();
     });
 
