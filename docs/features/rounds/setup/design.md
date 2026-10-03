@@ -34,7 +34,7 @@
 
 ## 構成とデータの流れ
 
-- `page.tsx`（Server Component）: ラウンド・距離・的を取得する。
+- `page.tsx`: 静的な枠。ラウンド・距離・的の取得は`rounds/detail`が扱う。
 - `scorecard-client.tsx`: ラウンド・距離・矢・取り消し/やり直しの履歴を状態に持つ。
 - `round-config-panel.tsx`: ラウンド概要と編集ダイアログ。`round-config.ts`の`validateRoundConfig`で検証する。
 - `distance-config-row.tsx`: 距離編集と削除確認。`distance-config.ts`の`validateDistanceDraft`で検証する。

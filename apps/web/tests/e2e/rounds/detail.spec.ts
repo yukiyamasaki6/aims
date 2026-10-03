@@ -221,15 +221,50 @@ test("detail-14: 距離がないとき、/rounds/[id]を開くと、ラウンド
   await expect(page.getByTestId("round-config-save")).toBeVisible();
 });
 
-test("detail-15: ラウンドが存在しない、または閲覧権限がないとき、/rounds/[id]を開くと、404が表示される", async ({
+const MISSING_ROUND_PATH = "/rounds/00000000-0000-0000-0000-000000000000";
+const ROUND_DETAIL_REST = "**/rest/v1/rounds?*";
+
+test("detail-15: ラウンドが存在しない、閲覧権限がない、または論理削除済みのとき、/rounds/[id]を開くと、枠内に「ラウンドが見つかりません。」と「一覧へ戻る」リンクが表示される", async ({
   page,
 }) => {
   // Given
   // When
-  const response = await page.goto(
-    "/rounds/00000000-0000-0000-0000-000000000000",
-  );
+  await page.goto(MISSING_ROUND_PATH);
 
   // Then
-  expect(response?.status()).toBe(404);
+  await expect(page.getByText("ラウンドが見つかりません。")).toBeVisible();
+  await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
+});
+
+test("detail-16: 通信できないとき、/rounds/[id]を開くと、枠(「一覧へ戻る」リンク)と「未接続」が表示される", async ({
+  page,
+}) => {
+  // Given
+  await page.route(ROUND_DETAIL_REST, (route) => route.abort("failed"));
+
+  // When
+  await page.goto(MISSING_ROUND_PATH);
+
+  // Then
+  await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
+  await expect(page.getByText("未接続")).toBeVisible();
+});
+
+test("detail-17: 取得がエラーになるとき、/rounds/[id]を開くと、エラーメッセージが表示される", async ({
+  page,
+}) => {
+  // Given
+  // エラー表示の代表として、サーバーエラー(500)で確かめる。他のエラー種別は単体テストで確かめる。
+  await page.route(ROUND_DETAIL_REST, (route) =>
+    route.fulfill({ status: 500, body: "temporary error" }),
+  );
+
+  // When
+  await page.goto(MISSING_ROUND_PATH);
+
+  // Then
+  // Next.jsのroute announcerも role="alert" を持つため、メッセージで絞る。
+  await expect(
+    page.getByRole("alert").filter({ hasText: "読み込めませんでした。" }),
+  ).toBeVisible();
 });

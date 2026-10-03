@@ -29,6 +29,7 @@ Service Workerが持つのは、ビルド成果物の静的アセットのキャ
 - `src/features/fetch-result/fetch-result.ts` が取得結果（ok / not-found / offline / error）と、レスポンスから結果を決める `classifyResponse` を持つ。通信失敗（`status: 0`）は `offline`、`PGRST116` は `not-found`、その他のエラーは固定文の `error` にする。
 - `fetch-content.ts` の `fetchContent` が取得の入口である。オフラインなら `getSession()` もクエリも呼ばず `offline` を返す。それ以外は `getSession()` を `offline` イベントと競わせ、authenticated のときだけクエリを実行する。クエリには `.retry(false)` を付ける。
 - `fetch-state.tsx` が取得中・見つからない・未接続・エラーの枠内表示を担い、`use-fetch-result.ts` が取得中の状態、アンマウント後の結果の破棄、取得関数の例外のerror化、再試行を持つ。depsが変わった描画では前の結果を見せずloadingにする。
+- `/rounds/_` は `/rounds/[id]` の静的な枠で、任意のIDの水和に使える。Service Workerが返す枠としての扱いは #646 で定める。
 
 ## 設計判断
 
