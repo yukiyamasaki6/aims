@@ -114,7 +114,7 @@ test("history-03: ラウンドが1件以上あるとき、ラウンドカード�
 
 const ROUNDS_LIST_REST = "**/rest/v1/rounds?*";
 
-test("history-06: ラウンド一覧で通信できないとき、/roundsを開くと、見出しと新規作成ボタンと「ネットワークに接続されていません」が表示される", async ({
+test("history-06: ラウンド一覧で通信できないとき、/roundsを開くと、見出しと新規作成ボタンと「読み込めませんでした。」と再試行ボタンが表示される", async ({
   page,
 }) => {
   // Given
@@ -128,9 +128,8 @@ test("history-06: ラウンド一覧で通信できないとき、/roundsを開�
     page.getByRole("heading", { name: "ラウンド一覧" }),
   ).toBeVisible();
   await expect(page.getByTestId("new-round-fab")).toBeVisible();
-  await expect(
-    page.getByText("ネットワークに接続されていません"),
-  ).toBeVisible();
+  await expect(page.getByText("読み込めませんでした。")).toBeVisible();
+  await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
 });
 
 test("history-07: ラウンド一覧で取得がエラーになるとき、/roundsを開くと、エラーメッセージが表示される", async ({

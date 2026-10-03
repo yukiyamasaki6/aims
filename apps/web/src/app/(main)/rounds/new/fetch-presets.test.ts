@@ -144,11 +144,12 @@ describe("fetchPresets", () => {
       expect(queries).toEqual([]);
     });
 
-    it("通信失敗(status 0)はofflineとする", async () => {
+    it("通信失敗(status 0)は、原因を断定せずerrorとする", async () => {
       const { client } = makeSupabase({ data: null, error: null, status: 0 });
 
       await expect(fetchPresets(client)).resolves.toEqual({
-        status: "offline",
+        status: "error",
+        message: "読み込めませんでした。",
       });
     });
 

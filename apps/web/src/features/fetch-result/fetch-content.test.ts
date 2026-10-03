@@ -54,7 +54,7 @@ describe("fetchContent", () => {
       expect(result).toEqual({ status: "not-found" });
     });
 
-    it("クエリが通信失敗(status 0)を返すと、offlineにする", async () => {
+    it("クエリが通信失敗(status 0)を返すと、原因を断定せずerrorにする", async () => {
       // Given
       const { client } = makeSupabase(async () => ({ data: { session } }));
       const run = async () => ({
@@ -67,7 +67,10 @@ describe("fetchContent", () => {
       const result = await fetchContent(client, run);
 
       // Then
-      expect(result).toEqual({ status: "offline" });
+      expect(result).toEqual({
+        status: "error",
+        message: "読み込めませんでした。",
+      });
     });
 
     it("ローカル識別の有無で結果が変わらない", async () => {
@@ -142,7 +145,7 @@ describe("fetchContent", () => {
       expect(run).not.toHaveBeenCalled();
     });
 
-    it("getSessionがAuthRetryableFetchErrorのとき、クエリを実行せずofflineにする", async () => {
+    it("getSessionがAuthRetryableFetchErrorのとき、クエリを実行せずerrorにする", async () => {
       // Given
       const { client } = makeSupabase(async () => ({
         data: { session: null },
@@ -154,11 +157,14 @@ describe("fetchContent", () => {
       const result = await fetchContent(client, run);
 
       // Then
-      expect(result).toEqual({ status: "offline" });
+      expect(result).toEqual({
+        status: "error",
+        message: "読み込めませんでした。",
+      });
       expect(run).not.toHaveBeenCalled();
     });
 
-    it("getSessionが例外を投げると、offlineにする", async () => {
+    it("getSessionが例外を投げると、errorにする", async () => {
       // Given
       const { client } = makeSupabase(async () => {
         throw new Error("boom");
@@ -169,7 +175,10 @@ describe("fetchContent", () => {
       const result = await fetchContent(client, run);
 
       // Then
-      expect(result).toEqual({ status: "offline" });
+      expect(result).toEqual({
+        status: "error",
+        message: "読み込めませんでした。",
+      });
       expect(run).not.toHaveBeenCalled();
     });
 
@@ -187,7 +196,7 @@ describe("fetchContent", () => {
       expect(run).not.toHaveBeenCalled();
     });
 
-    it("getSessionが時間内に終わらないと（onLineがtrueのまま通信できない場合）、offlineにする", async () => {
+    it("getSessionが時間内に終わらないと（onLineがtrueのまま通信できない場合）、errorにする", async () => {
       // Given
       vi.useFakeTimers();
       const { client } = makeSupabase(() => new Promise(() => {}));
@@ -198,12 +207,15 @@ describe("fetchContent", () => {
       await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS);
 
       // Then
-      await expect(pending).resolves.toEqual({ status: "offline" });
+      await expect(pending).resolves.toEqual({
+        status: "error",
+        message: "読み込めませんでした。",
+      });
       expect(run).not.toHaveBeenCalled();
       vi.useRealTimers();
     });
 
-    it("クエリが時間内に終わらないときも、offlineにする", async () => {
+    it("クエリが時間内に終わらないときも、errorにする", async () => {
       // Given
       vi.useFakeTimers();
       const { client } = makeSupabase(async () => ({ data: { session } }));
@@ -216,8 +228,89 @@ describe("fetchContent", () => {
       await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS);
 
       // Then
+      await expect(pending).resolves.toEqual({
+        status: "error",
+        message: "読み込めませんでした。",
+      });
+      vi.useRealTimers();
+    });
+
+    it.each([
+      [
+        "クエリがstatus 0を返す",
+        async () => ({ data: null, error: null, status: 0 }),
+      ],
+      [
+        "クエリが例外を投げる",
+        async () => {
+          throw new Error("boom");
+        },
+      ],
+    ])(
+      "取得中に回線が落ちてonLineがfalseになり、%sと、offlineにする",
+      async (_name, query) => {
+        // Given: クエリの実行中にonLineがfalseになる
+        const { client } = makeSupabase(async () => ({ data: { session } }));
+        const run = async () => {
+          vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+          return query();
+        };
+
+        // When
+        const result = await fetchContent(client, run);
+
+        // Then
+        expect(result).toEqual({ status: "offline" });
+      },
+    );
+
+    it("取得中に回線が落ちてonLineがfalseになり、クエリが時間内に終わらないと、offlineにする", async () => {
+      // Given
+      vi.useFakeTimers();
+      const { client } = makeSupabase(async () => ({ data: { session } }));
+      const pending = fetchContent(client, () => {
+        vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+        return new Promise<typeof okResponse>(() => {});
+      });
+
+      // When
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS);
+
+      // Then
       await expect(pending).resolves.toEqual({ status: "offline" });
       vi.useRealTimers();
+    });
+
+    it("getSessionの失敗の時点でonLineがfalseなら、offlineにする", async () => {
+      // Given
+      const { client } = makeSupabase(async () => {
+        vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+        throw new Error("boom");
+      });
+
+      // When
+      const result = await fetchContent(client, async () => okResponse);
+
+      // Then
+      expect(result).toEqual({ status: "offline" });
+    });
+
+    it("onLineがfalseでも、HTTP応答のあるエラーはerrorのままにする", async () => {
+      // Given
+      const { client } = makeSupabase(async () => ({ data: { session } }));
+      const run = async () => {
+        vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+        return { data: null, error: { message: "boom" }, status: 500 };
+      };
+
+      // When
+      const result = await fetchContent(client, run);
+
+      // Then
+      expect(result).toEqual({
+        status: "error",
+        message: "読み込めませんでした。",
+      });
     });
 
     it("時間内に終われば、時間切れのタイマーを残さない", async () => {

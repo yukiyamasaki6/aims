@@ -12,7 +12,7 @@ import { isOffline } from "./network";
 // 取得が終わらないまま枠が「読み込み中」に固定されないよう、全体に時間制限を設ける。
 // navigator.onLineがtrueのまま通信できない場合、アクセストークンが期限切れだと
 // getSession()の更新の再試行だけで約30秒、通信が応答しないと数分止まるため。
-// 超えたらofflineとして再試行できるようにする（遅れて届いた結果は捨てる）。
+// 超えたら原因を断定せずerrorとして再試行できるようにする（遅れて届いた結果は捨てる）。
 export const FETCH_TIMEOUT_MS = 10_000;
 
 // getSession()は、offlineイベントと競わせる。
@@ -27,6 +27,13 @@ function waitOffline(): { promise: Promise<"offline">; stop: () => void } {
   };
 }
 
+// 通信失敗由来の結果。取得中に回線が落ちてnavigator.onLineがfalseになっていればofflineにし、
+// 復帰のonlineイベントで再取得できるようにする。それ以外は原因を断定せずerrorにする。
+function commFailure<T>(): FetchResult<T> {
+  if (isOffline()) return { status: "offline" };
+  return { status: "error", message: FETCH_ERROR_MESSAGE };
+}
+
 // runは呼び出し側が.retry(false)を付けたクエリを返す。
 export async function fetchContent<T>(
   supabase: SupabaseClient,
@@ -35,7 +42,7 @@ export async function fetchContent<T>(
 ): Promise<FetchResult<T>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<FetchResult<T>>((resolve) => {
-    timer = setTimeout(() => resolve({ status: "offline" }), FETCH_TIMEOUT_MS);
+    timer = setTimeout(() => resolve(commFailure()), FETCH_TIMEOUT_MS);
   });
   try {
     return await Promise.race([load(supabase, run, opts), timeout]);
@@ -61,20 +68,22 @@ async function load<T>(
     if (raced === "offline") return { status: "offline" };
     sessionResult = raced;
   } catch {
-    return { status: "offline" };
+    return commFailure();
   } finally {
     offline.stop();
   }
 
   const state = classifySession(sessionResult);
-  if (state.status === "unknown") return { status: "offline" };
+  if (state.status === "unknown") return commFailure();
   if (state.status === "unauthenticated") {
     return { status: "error", message: sessionFailureMessage(state) };
   }
 
   try {
-    return classifyResponse(await run(), opts);
+    const res = await run();
+    if (res.status === 0) return commFailure();
+    return classifyResponse(res, opts);
   } catch {
-    return { status: "error", message: FETCH_ERROR_MESSAGE };
+    return commFailure();
   }
 }

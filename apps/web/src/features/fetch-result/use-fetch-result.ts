@@ -17,6 +17,7 @@ function sameKey(a: readonly unknown[], b: readonly unknown[]): boolean {
 }
 
 // 取得中の状態、アンマウント後の結果の破棄、再試行を扱う。
+// offline表示の間はonlineイベントでも再取得する。
 // depsが変わると取得し直す。fetcherはdepsに含めない。
 // 結果は取得時のdepsと対にして持ち、depsが変わった描画では前の結果を見せずloadingにする。
 export function useFetchResult<T>(
@@ -43,6 +44,20 @@ export function useFetchResult<T>(
   }, [...deps, attempt]);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
+
+  // offline表示の間だけ、通信の復帰(onlineイベント)で自動再取得する。
+  // errorは原因がonlineで解消するとは限らず、navigator.onLineの状態からの再試行は
+  // 通信できないまま10秒ごとに繰り返すため、契機はonlineイベントだけにする。
+  const offline =
+    settled !== null &&
+    sameKey(settled.key, key) &&
+    settled.result.status === "offline";
+  useEffect(() => {
+    if (!offline) return;
+    const onOnline = () => retry();
+    window.addEventListener("online", onOnline, { once: true });
+    return () => window.removeEventListener("online", onOnline);
+  }, [offline, retry]);
   const view: FetchView<T> =
     settled && sameKey(settled.key, key)
       ? settled.result

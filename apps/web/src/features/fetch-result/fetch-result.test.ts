@@ -66,16 +66,22 @@ describe("classifyResponse", () => {
       "TypeError: Failed to fetch",
       "AbortError: signal is aborted without reason",
       "",
-    ])("status 0は、error.message(%j)によらずofflineにする", (message) => {
-      // Given
-      const res = { data: null, error: { message }, status: 0 };
+    ])(
+      "status 0は、error.message(%j)によらず、原因を断定せずerrorにする",
+      (message) => {
+        // Given
+        const res = { data: null, error: { message }, status: 0 };
 
-      // When
-      const result = classifyResponse(res);
+        // When
+        const result = classifyResponse(res);
 
-      // Then
-      expect(result).toEqual({ status: "offline" });
-    });
+        // Then
+        expect(result).toEqual({
+          status: "error",
+          message: "読み込めませんでした。",
+        });
+      },
+    );
 
     it.each([
       ["401", { code: undefined, status: 401 }],
