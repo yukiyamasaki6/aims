@@ -1,8 +1,5 @@
 import type { createClient } from "@/lib/supabase/server";
-import {
-  ROUND_PRESET_SELECT,
-  TARGET_FACE_SELECT,
-} from "./reference-query-constants";
+import { TARGET_FACE_SELECT } from "./reference-query-constants";
 
 type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -17,16 +14,6 @@ export async function getGlobalTargetFaces(supabase: ServerSupabaseClient) {
     .order("format", { ascending: false })
     .order("size", { ascending: false })
     .order("name");
-
-  if (error) throw error;
-  return data;
-}
-
-export async function getGlobalRoundPresets(supabase: ServerSupabaseClient) {
-  const { data, error } = await supabase
-    .from("preset_rounds")
-    .select(ROUND_PRESET_SELECT)
-    .is("owner_id", null);
 
   if (error) throw error;
   return data;

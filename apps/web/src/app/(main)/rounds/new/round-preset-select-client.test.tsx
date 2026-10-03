@@ -1,7 +1,10 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { type Preset, RoundPresetSelect } from "./round-preset-select-client";
+import type { FetchResult } from "@/features/fetch-result/fetch-result";
+import { type FetchedPresets, fetchPresets } from "./fetch-presets";
+import type { Preset } from "./preset-types";
+import { RoundPresetSelect } from "./round-preset-select-client";
 
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -27,6 +30,24 @@ vi.mock("@supabase/ssr", () => ({
     }),
   }),
 }));
+
+// プリセットの取得は別のテストで確かめるため、取得関数を境界としてモックする。
+vi.mock("./fetch-presets", () => ({ fetchPresets: vi.fn() }));
+const fetchPresetsMock = vi.mocked(fetchPresets);
+
+function fetchResolves(result: FetchResult<FetchedPresets>) {
+  fetchPresetsMock.mockResolvedValue(result);
+}
+
+// 取得結果の一覧が出るまで待ってから返す。
+async function renderSelect(personal: Preset[], global: Preset[]) {
+  fetchResolves({ status: "ok", data: { personal, global } });
+  const view = render(<RoundPresetSelect />);
+  await waitFor(() => {
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+  return view;
+}
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -113,15 +134,116 @@ beforeEach(() => {
 });
 
 describe("RoundPresetSelect", () => {
-  describe("プリセットの選択", () => {
-    it("未選択では「プリセット無しで開始」を表示し、個人プリセットが無ければ案内文を出す", () => {
-      // Given/When: 個人プリセットが無い状態で表示する
-      render(
-        <RoundPresetSelect
-          personalPresets={[]}
-          globalPresets={[globalPreset]}
-        />,
+  describe("取得の状態", () => {
+    it("取得中は読み込み中の表示と、枠と、押せる開始ボタンを表示し、プリセットの見出しは出さない", () => {
+      // Given: 取得が完了しない
+      fetchPresetsMock.mockReturnValue(new Promise(() => {}));
+
+      // When
+      render(<RoundPresetSelect />);
+
+      // Then
+      expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
+      expect(
+        screen.getByRole("link", { name: "一覧へ戻る" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "プリセット無しで開始" }),
+      ).toHaveAttribute("aria-disabled", "false");
+      expect(screen.queryByText("個人プリセット")).not.toBeInTheDocument();
+    });
+
+    it("取得が完了しない間も開始ボタンは押せ、押すとプリセット無しの既定値でラウンドを作成して遷移する", async () => {
+      // Given: 取得が完了しない
+      fetchPresetsMock.mockReturnValue(new Promise(() => {}));
+      const user = userEvent.setup();
+      render(<RoundPresetSelect />);
+
+      // When
+      await user.click(
+        screen.getByRole("button", { name: "プリセット無しで開始" }),
       );
+
+      // Then
+      await waitFor(() => {
+        expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
+      });
+      expect(supabase.selectEq).not.toHaveBeenCalled();
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        "create_round",
+        expect.objectContaining({
+          p_format: "outdoor",
+          p_bow_type: "recurve",
+          p_distances: [],
+        }),
+      );
+    });
+
+    it("通信できない場合は未接続を表示し、プリセットの見出しは出さず、開始ボタンでラウンドを作成できる", async () => {
+      // Given
+      fetchResolves({ status: "offline" });
+      const user = userEvent.setup();
+
+      // When
+      render(<RoundPresetSelect />);
+
+      // Then
+      expect(await screen.findByText("未接続")).toBeInTheDocument();
+      expect(screen.queryByText("個人プリセット")).not.toBeInTheDocument();
+      expect(screen.queryByText("公式プリセット")).not.toBeInTheDocument();
+      await user.click(
+        screen.getByRole("button", { name: "プリセット無しで開始" }),
+      );
+      await waitFor(() => {
+        expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
+      });
+    });
+
+    it("取得がエラーの場合はエラーメッセージを表示し、開始ボタンでラウンドを作成できる", async () => {
+      // Given
+      fetchResolves({ status: "error", message: "読み込めませんでした。" });
+      const user = userEvent.setup();
+
+      // When
+      render(<RoundPresetSelect />);
+
+      // Then
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "読み込めませんでした。",
+      );
+      await user.click(
+        screen.getByRole("button", { name: "プリセット無しで開始" }),
+      );
+      await waitFor(() => {
+        expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
+      });
+    });
+
+    it("再試行すると取得し直し、取得できたプリセットを表示する", async () => {
+      // Given: 1回目は通信できず、2回目は取得できる
+      fetchPresetsMock
+        .mockResolvedValueOnce({ status: "offline" })
+        .mockResolvedValueOnce({
+          status: "ok",
+          data: { personal: [], global: [globalPreset] },
+        });
+      const user = userEvent.setup();
+      render(<RoundPresetSelect />);
+
+      // When
+      await user.click(await screen.findByRole("button", { name: "再試行" }));
+
+      // Then
+      expect(await screen.findByText("公式720ラウンド")).toBeInTheDocument();
+      expect(screen.queryByText("未接続")).not.toBeInTheDocument();
+      expect(fetchPresetsMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("プリセットの選択", () => {
+    it("未選択では「プリセット無しで開始」を表示し、個人プリセットが無ければ案内文を出す", async () => {
+      // Given/When: 個人プリセットが無い状態で表示する
+      await renderSelect([], [globalPreset]);
 
       // Then: 開始ボタンは「プリセット無しで開始」で、個人プリセットの案内文を表示する
       expect(
@@ -135,12 +257,7 @@ describe("RoundPresetSelect", () => {
     it("プリセットをクリックすると選択され、開始ボタンのラベルが変わる。再クリックで解除される", async () => {
       // Given: 個人プリセットと公式プリセットを表示している
       const user = userEvent.setup();
-      render(
-        <RoundPresetSelect
-          personalPresets={[personalPreset]}
-          globalPresets={[globalPreset]}
-        />,
-      );
+      await renderSelect([personalPreset], [globalPreset]);
 
       // When: 個人プリセットをクリックする
       await user.click(screen.getAllByTestId("round-preset-button")[0]);
@@ -162,12 +279,7 @@ describe("RoundPresetSelect", () => {
     it("選択中に別のプリセットをクリックすると、そのプリセットへ選択が移る", async () => {
       // Given: 個人プリセットを選択している
       const user = userEvent.setup();
-      render(
-        <RoundPresetSelect
-          personalPresets={[personalPreset, otherPersonalPreset]}
-          globalPresets={[globalPreset]}
-        />,
-      );
+      await renderSelect([personalPreset, otherPersonalPreset], [globalPreset]);
       await user.click(screen.getAllByTestId("round-preset-button")[0]);
 
       // When: 別の個人プリセットをクリックする
@@ -183,12 +295,7 @@ describe("RoundPresetSelect", () => {
     it("公式プリセットも選択でき、開始ボタンのラベルが変わる", async () => {
       // Given: 個人プリセットと公式プリセットを表示している
       const user = userEvent.setup();
-      render(
-        <RoundPresetSelect
-          personalPresets={[personalPreset]}
-          globalPresets={[globalPreset]}
-        />,
-      );
+      await renderSelect([personalPreset], [globalPreset]);
 
       // When: 公式プリセットをクリックする
       const buttons = screen.getAllByTestId("round-preset-button");
@@ -202,14 +309,9 @@ describe("RoundPresetSelect", () => {
   });
 
   describe("プリセットのメニュー", () => {
-    it("個人プリセットにだけメニューボタンを表示し、公式プリセットには表示しない", () => {
+    it("個人プリセットにだけメニューボタンを表示し、公式プリセットには表示しない", async () => {
       // Given/When: 個人プリセット1件と公式プリセット1件を表示する
-      render(
-        <RoundPresetSelect
-          personalPresets={[personalPreset]}
-          globalPresets={[globalPreset]}
-        />,
-      );
+      await renderSelect([personalPreset], [globalPreset]);
 
       // Then: メニューボタンは個人プリセットの1件分だけで、公式プリセットの行には無い
       const triggers = screen.getAllByTestId("round-preset-menu-trigger");
@@ -224,12 +326,7 @@ describe("RoundPresetSelect", () => {
     it("メニューを開いて外側をクリックすると、メニューが閉じる", async () => {
       // Given: 個人プリセットのメニューを開いている
       const user = userEvent.setup();
-      render(
-        <RoundPresetSelect
-          personalPresets={[personalPreset]}
-          globalPresets={[]}
-        />,
-      );
+      await renderSelect([personalPreset], []);
       await user.click(screen.getByTestId("round-preset-menu-trigger"));
       expect(await screen.findByTestId("round-preset-delete")).toBeVisible();
 
@@ -249,12 +346,7 @@ describe("RoundPresetSelect", () => {
     it("形式・弓種と、距離構成（距離・エンド構成）を展開表示する", async () => {
       // Given: 個人プリセットを表示している
       const user = userEvent.setup();
-      render(
-        <RoundPresetSelect
-          personalPresets={[personalPreset]}
-          globalPresets={[globalPreset]}
-        />,
-      );
+      await renderSelect([personalPreset], [globalPreset]);
 
       // When: 個人プリセットをクリックする
       await user.click(screen.getAllByTestId("round-preset-button")[0]);
@@ -271,12 +363,7 @@ describe("RoundPresetSelect", () => {
     it("展開された距離構成の部分をクリックしても、選択が解除される", async () => {
       // Given: 個人プリセットを選択して、距離構成を展開している
       const user = userEvent.setup();
-      render(
-        <RoundPresetSelect
-          personalPresets={[personalPreset]}
-          globalPresets={[globalPreset]}
-        />,
-      );
+      await renderSelect([personalPreset], [globalPreset]);
       await user.click(screen.getAllByTestId("round-preset-button")[0]);
       expect(screen.getByText("70m")).toBeInTheDocument();
 
@@ -296,7 +383,7 @@ describe("RoundPresetSelect", () => {
       it("既定値でラウンドを作成し、作成したラウンドへ遷移する", async () => {
         // Given: プリセットを選択していない
         const user = userEvent.setup();
-        render(<RoundPresetSelect personalPresets={[]} globalPresets={[]} />);
+        await renderSelect([], []);
 
         // When: 開始ボタンを押す
         await user.click(
@@ -323,12 +410,7 @@ describe("RoundPresetSelect", () => {
       it("選択中のプリセットを取得してその内容でラウンドを作成し、作成したラウンドへ遷移する", async () => {
         // Given: 個人プリセットを選択している
         const user = userEvent.setup();
-        render(
-          <RoundPresetSelect
-            personalPresets={[personalPreset]}
-            globalPresets={[]}
-          />,
-        );
+        await renderSelect([personalPreset], []);
         await user.click(screen.getAllByTestId("round-preset-button")[0]);
 
         // When: 開始ボタンを押す
@@ -366,7 +448,7 @@ describe("RoundPresetSelect", () => {
         }>();
         supabase.rpc.mockReturnValue(deferred.promise);
         const user = userEvent.setup();
-        render(<RoundPresetSelect personalPresets={[]} globalPresets={[]} />);
+        await renderSelect([], []);
         const button = screen.getByRole("button", {
           name: "プリセット無しで開始",
         });
@@ -396,7 +478,7 @@ describe("RoundPresetSelect", () => {
           error: { message: "権限がありません。" },
         });
         const user = userEvent.setup();
-        render(<RoundPresetSelect personalPresets={[]} globalPresets={[]} />);
+        await renderSelect([], []);
 
         // When: 開始ボタンを押す
         await user.click(
@@ -423,9 +505,7 @@ describe("RoundPresetSelect", () => {
         }>();
         supabase.rpc.mockReturnValue(deferred.promise);
         const user = userEvent.setup();
-        const { unmount } = render(
-          <RoundPresetSelect personalPresets={[]} globalPresets={[]} />,
-        );
+        const { unmount } = await renderSelect([], []);
         await user.click(
           screen.getByRole("button", { name: "プリセット無しで開始" }),
         );
@@ -459,12 +539,7 @@ describe("RoundPresetSelect", () => {
       it("選択中のプリセットを削除すると、一覧から取り除き選択を解除する", async () => {
         // Given: 個人プリセットを選択している
         const user = userEvent.setup();
-        render(
-          <RoundPresetSelect
-            personalPresets={[personalPreset]}
-            globalPresets={[]}
-          />,
-        );
+        await renderSelect([personalPreset], []);
         await user.click(screen.getAllByTestId("round-preset-button")[0]);
 
         // When: 選択中のプリセットの削除を確定する
@@ -484,12 +559,7 @@ describe("RoundPresetSelect", () => {
       it("選択中とは別のプリセットを削除すると、一覧から取り除き選択は維持する", async () => {
         // Given: 2つの個人プリセットのうち「個人練習セット」を選択している
         const user = userEvent.setup();
-        render(
-          <RoundPresetSelect
-            personalPresets={[personalPreset, otherPersonalPreset]}
-            globalPresets={[]}
-          />,
-        );
+        await renderSelect([personalPreset, otherPersonalPreset], []);
         await user.click(screen.getAllByTestId("round-preset-button")[0]);
 
         // When: 選択していない「別の個人セット」の削除を確定する
@@ -513,12 +583,7 @@ describe("RoundPresetSelect", () => {
           error: { message: "権限がありません。" },
         });
         const user = userEvent.setup();
-        render(
-          <RoundPresetSelect
-            personalPresets={[personalPreset]}
-            globalPresets={[]}
-          />,
-        );
+        await renderSelect([personalPreset], []);
 
         // When: 削除を確定する
         await openDeleteDialog(user, "個人練習セット");
@@ -537,12 +602,7 @@ describe("RoundPresetSelect", () => {
           error: { message: "権限がありません。" },
         });
         const user = userEvent.setup();
-        render(
-          <RoundPresetSelect
-            personalPresets={[personalPreset]}
-            globalPresets={[]}
-          />,
-        );
+        await renderSelect([personalPreset], []);
 
         // When: 削除を確定する
         await openDeleteDialog(user, "個人練習セット");

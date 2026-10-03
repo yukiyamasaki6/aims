@@ -1,12 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  getGlobalRoundPresets,
-  getGlobalTargetFaces,
-} from "./reference-queries";
-import {
-  ROUND_PRESET_SELECT,
-  TARGET_FACE_SELECT,
-} from "./reference-query-constants";
+import { getGlobalTargetFaces } from "./reference-queries";
+import { TARGET_FACE_SELECT } from "./reference-query-constants";
 
 // Supabaseのクエリビルダーはメソッドチェーンでフィルタを積み上げ、
 // awaitした時点でthenが呼ばれてPromiseとして解決する。この形を模す。
@@ -47,25 +41,5 @@ describe("getGlobalTargetFaces", () => {
     const chain = createQueryChain({ data: null, error });
 
     await expect(getGlobalTargetFaces(chain as never)).rejects.toBe(error);
-  });
-});
-
-describe("getGlobalRoundPresets", () => {
-  it("preset_roundsを正しい条件で取得する", async () => {
-    const chain = createQueryChain({ data: [{ id: "preset-1" }], error: null });
-
-    const result = await getGlobalRoundPresets(chain as never);
-
-    expect(chain.from).toHaveBeenCalledWith("preset_rounds");
-    expect(chain.select).toHaveBeenCalledWith(ROUND_PRESET_SELECT);
-    expect(chain.is).toHaveBeenCalledWith("owner_id", null);
-    expect(result).toEqual([{ id: "preset-1" }]);
-  });
-
-  it("取得に失敗した場合はエラーを投げる", async () => {
-    const error = new Error("query failed");
-    const chain = createQueryChain({ data: null, error });
-
-    await expect(getGlobalRoundPresets(chain as never)).rejects.toBe(error);
   });
 });
