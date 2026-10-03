@@ -149,6 +149,8 @@ test("start-13: 未認証のとき、開始ボタンをクリックすると、�
 }) => {
   // Given: ラウンド作成画面を開いた後で、サインインが切れる
   await openNewRound(page);
+  // 取得の完了を待ち、サインイン切れが開始ボタンの操作だけに影響する状態にする。
+  await expect(presetButton(page, "WA 1440")).toBeVisible();
   await page.context().clearCookies();
 
   // When: 開始ボタンをクリックする
@@ -178,4 +180,44 @@ test("start-14: 作成が失敗するとき、開始ボタンをクリックす�
   // Then: エラーメッセージを表示し、遷移しない
   await expect(page.getByText("作成に失敗しました")).toBeVisible();
   await expect(page).toHaveURL(/\/rounds\/new$/);
+});
+
+const PRESET_ROUNDS_REST = "**/rest/v1/preset_rounds?*";
+
+test("start-15: ラウンド作成画面でプリセットを取得できないとき、/rounds/newを開くと、「一覧へ戻る」リンクと開始ボタンが表示され、「未接続」が表示され、プリセット無しで開始できる", async ({
+  page,
+}) => {
+  // Given: プリセットの取得が通信できない
+  await page.route(PRESET_ROUNDS_REST, (route) => route.abort("failed"));
+
+  // When: /rounds/newを開く
+  await openNewRound(page);
+
+  // Then: 枠と「未接続」を表示し、プリセット無しで開始できる
+  await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
+  await expect(page.getByTestId("round-start-button")).toBeVisible();
+  await expect(page.getByText("未接続")).toBeVisible();
+  await page.getByTestId("round-start-button").click();
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+});
+
+test("start-16: プリセットの取得がエラーになるとき、/rounds/newを開くと、エラーメッセージが表示され、プリセット無しで開始できる", async ({
+  page,
+}) => {
+  // Given: プリセットの取得がエラーになる
+  // 取得エラー表示の代表として、サーバーエラー(500)で確かめる。他のエラー種別は単体テストで確かめる。
+  await page.route(PRESET_ROUNDS_REST, (route) =>
+    route.fulfill({ status: 500, body: "temporary error" }),
+  );
+
+  // When: /rounds/newを開く
+  await openNewRound(page);
+
+  // Then: エラーメッセージを表示し、プリセット無しで開始できる
+  // Next.jsのroute announcerも role="alert" を持つため、メッセージで絞る。
+  await expect(
+    page.getByRole("alert").filter({ hasText: "読み込めませんでした。" }),
+  ).toBeVisible();
+  await page.getByTestId("round-start-button").click();
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
 });

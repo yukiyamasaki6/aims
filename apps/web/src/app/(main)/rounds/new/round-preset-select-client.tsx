@@ -12,38 +12,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { FetchState } from "@/features/fetch-result/fetch-state";
+import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { comparePositionKey } from "../_shared/position-key";
 import { PresetInfo } from "../_shared/preset-info";
-import type { TargetFaceRing } from "../_shared/target-face-icon";
 import { deletePersonalPreset } from "./delete-preset";
+import { fetchPresets } from "./fetch-presets";
+import type { Preset } from "./preset-types";
 import { startRound } from "./start-round";
-
-type PresetDistance = {
-  id: string;
-  position_key: string;
-  distance: number | null;
-  is_marked: boolean;
-  total_ends: number;
-  arrows_per_end: number;
-  target_faces: {
-    size: number;
-    target_face_spots: {
-      center_x: number;
-      center_y: number;
-      target_face_rings: TargetFaceRing[];
-    }[];
-  } | null;
-};
-
-export type Preset = {
-  id: string;
-  name: string;
-  format: string;
-  bow_type: string;
-  preset_distances: PresetDistance[];
-};
 
 function PresetRow({
   preset,
@@ -129,17 +108,14 @@ function PresetRow({
   );
 }
 
-export function RoundPresetSelect({
-  personalPresets: initialPersonalPresets,
-  globalPresets,
-}: {
-  personalPresets: Preset[];
-  globalPresets: Preset[];
-}) {
+export function RoundPresetSelect() {
   const router = useRouter();
-  const [personalPresets, setPersonalPresets] = useState(
-    initialPersonalPresets,
+  const { view, retry } = useFetchResult(
+    () => fetchPresets(createClient()),
+    [],
   );
+  // 削除済みの個人プリセットは取得結果から除いて表示する。
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
@@ -160,6 +136,11 @@ export function RoundPresetSelect({
     };
   }, []);
 
+  const personalPresets =
+    view.status === "ok"
+      ? view.data.personal.filter((p) => !removedIds.includes(p.id))
+      : [];
+  const globalPresets = view.status === "ok" ? view.data.global : [];
   const selectedPreset =
     [...personalPresets, ...globalPresets].find((p) => p.id === selectedId) ??
     null;
@@ -178,7 +159,7 @@ export function RoundPresetSelect({
     if (result.status === "discarded") return;
     if (result.status === "failed") return { error: result.error };
 
-    setPersonalPresets((prev) => prev.filter((p) => p.id !== preset.id));
+    setRemovedIds((prev) => [...prev, preset.id]);
     setSelectedId((prev) => (prev === preset.id ? null : prev));
   }
 
@@ -228,43 +209,49 @@ export function RoundPresetSelect({
       </div>
 
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 overflow-y-auto px-8 py-4">
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium">個人プリセット</span>
-          {personalPresets.length === 0 ? (
-            <p
-              data-testid="personal-preset-placeholder"
-              className="text-muted-foreground text-sm"
-            >
-              プリセットとして保存すると、ここに表示されます。
-            </p>
-          ) : (
+        {view.status === "ok" ? (
+          <>
             <div className="flex flex-col gap-2">
-              {personalPresets.map((preset) => (
-                <PresetRow
-                  key={preset.id}
-                  preset={preset}
-                  selected={selectedId === preset.id}
-                  onSelect={() => toggleSelect(preset.id)}
-                  onDelete={() => setPresetToDelete(preset)}
-                />
-              ))}
+              <span className="text-sm font-medium">個人プリセット</span>
+              {personalPresets.length === 0 ? (
+                <p
+                  data-testid="personal-preset-placeholder"
+                  className="text-muted-foreground text-sm"
+                >
+                  プリセットとして保存すると、ここに表示されます。
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {personalPresets.map((preset) => (
+                    <PresetRow
+                      key={preset.id}
+                      preset={preset}
+                      selected={selectedId === preset.id}
+                      onSelect={() => toggleSelect(preset.id)}
+                      onDelete={() => setPresetToDelete(preset)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium">公式プリセット</span>
-          <div className="flex flex-col gap-2">
-            {globalPresets.map((preset) => (
-              <PresetRow
-                key={preset.id}
-                preset={preset}
-                selected={selectedId === preset.id}
-                onSelect={() => toggleSelect(preset.id)}
-              />
-            ))}
-          </div>
-        </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium">公式プリセット</span>
+              <div className="flex flex-col gap-2">
+                {globalPresets.map((preset) => (
+                  <PresetRow
+                    key={preset.id}
+                    preset={preset}
+                    selected={selectedId === preset.id}
+                    onSelect={() => toggleSelect(preset.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          </>
+        ) : (
+          <FetchState view={view} onRetry={retry} />
+        )}
       </div>
 
       <div className="border-t bg-card shadow-lg">
