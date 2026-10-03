@@ -76,7 +76,7 @@ describe("distanceToAdd", () => {
       });
     });
 
-    it("追加する距離の作成を、既存の距離の件数に続く番号のラベルで送信キューへ積む", () => {
+    it("追加する距離の作成を、既存の距離の件数に続く番号のラベルで操作の列へ積む", () => {
       // Given: 2つの距離
       const distances = [distanceA, distanceB];
 
@@ -84,8 +84,7 @@ describe("distanceToAdd", () => {
       const result = distanceToAdd(distances, ids);
 
       // Then: 追加する距離の作成操作を、渡したIDで積む
-      expect(result.enqueueInput).toEqual({
-        key: "distance:d-new",
+      expect(result.input).toEqual({
         label: "距離3",
         operation: {
           type: "distance.created",
@@ -123,7 +122,7 @@ describe("distanceToAdd", () => {
   });
 
   describe("距離が無い場合", () => {
-    it("既定の内容で先頭の位置キーの距離を追加し、1つ目の距離として送信キューへ積む", () => {
+    it("既定の内容で先頭の位置キーの距離を追加し、1つ目の距離として操作の列へ積む", () => {
       // Given: 距離が1件も無い
       const distances: Distance[] = [];
 
@@ -141,8 +140,7 @@ describe("distanceToAdd", () => {
           target_face_id: "a1000000-0000-0000-0000-000000000001",
           is_marked: true,
         },
-        enqueueInput: {
-          key: "distance:d-new",
+        input: {
           label: "距離1",
           operation: {
             type: "distance.created",

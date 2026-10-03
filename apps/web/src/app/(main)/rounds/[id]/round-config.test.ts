@@ -163,7 +163,6 @@ describe("buildRoundUpdatedInput", () => {
 
     // Then: ラウンド設定のキー・ラベルで、round.updatedの操作を持つ
     expect(input).toEqual({
-      key: "roundConfig",
       label: "ラウンド設定",
       operation: {
         type: "round.updated",

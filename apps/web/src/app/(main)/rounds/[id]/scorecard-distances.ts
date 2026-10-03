@@ -1,7 +1,7 @@
 import type { DistanceConfig } from "./distance-config";
 import { compareDistancePosition } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
-import type { EnqueueInput } from "./sync-queue-types";
+import type { OpInput } from "./sync-events";
 
 // 10点的（アウトドア・122cm）。
 // 距離が1件も無い状態で追加する距離の的として使う（e2eのcreate-round APIヘルパーが使う既定の的と同じもの）。
@@ -13,14 +13,14 @@ type DistanceSettings = Pick<
   "distance" | "totalEnds" | "arrowsPerEnd" | "targetFaceId" | "isMarked"
 >;
 
-// 追加する距離と、その作成を送信キューへ積む入力を返す。
+// 追加する距離と、その作成を操作の列へ追記する入力を返す。
 // 並び順で最後の距離の内容を引き継ぎ、距離が1件も無い場合は既定の内容にする。
 // 最後の距離の距離（m）が未設定の場合は、距離（m）だけ既定の値にする。
 // IDは楽観的UIのため呼び出し側で確定したものを使う。
 export function distanceToAdd(
   distances: Distance[],
   ids: { id: string; eventId: string; roundId: string },
-): { distance: Distance; enqueueInput: EnqueueInput } {
+): { distance: Distance; input: OpInput } {
   const last = [...distances].sort(compareDistancePosition).at(-1);
   const distance: Distance = {
     id: ids.id,
@@ -33,8 +33,7 @@ export function distanceToAdd(
   };
   return {
     distance,
-    enqueueInput: {
-      key: `distance:${distance.id}`,
+    input: {
       label: `距離${distances.length + 1}`,
       operation: {
         type: "distance.created",

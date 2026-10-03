@@ -84,9 +84,20 @@ const round = {
   round_date: "2026-09-15",
   format: "outdoor",
   bow_type: "recurve",
+  revision: 3,
   distances: [
-    { ...distanceA, shots: [shotA] },
-    { ...distanceB, shots: [shotB] },
+    {
+      ...distanceA,
+      revision: 4,
+      disabled_at: null,
+      shots: [{ ...shotA, revision: 5, disabled_at: null }],
+    },
+    {
+      ...distanceB,
+      revision: 6,
+      disabled_at: null,
+      shots: [{ ...shotB, revision: 7, disabled_at: null }],
+    },
   ],
 };
 
@@ -115,7 +126,7 @@ describe("fetchRoundDetail", () => {
       // When
       await fetchRoundDetail(client, "round-1");
 
-      // Then: 論理削除された距離・記録を除き、他人の個人の的を要求しない
+      // Then: 論理削除された距離・記録も取得し(revisionの判定に使う)、他人の個人の的を要求しない
       expect(queries).toEqual([
         {
           table: "rounds",
@@ -123,13 +134,11 @@ describe("fetchRoundDetail", () => {
             [
               "select",
               [
-                "id, name, round_date, format, bow_type, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, shots(distance_id, end_number, arrow_number, shooter_id, score_str, score_int))",
+                "id, name, round_date, format, bow_type, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(distance_id, end_number, arrow_number, shooter_id, score_str, score_int, revision, disabled_at))",
               ],
             ],
             ["eq", ["id", "round-1"]],
             ["is", ["disabled_at", null]],
-            ["is", ["distances.disabled_at", null]],
-            ["is", ["distances.shots.disabled_at", null]],
             ["order", ["position_key", { referencedTable: "distances" }]],
             ["order", ["id", { referencedTable: "distances" }]],
             ["maybeSingle", []],
@@ -170,6 +179,52 @@ describe("fetchRoundDetail", () => {
           distances: [distanceA, distanceB],
           shots: [shotA, shotB],
           targetFaces: [],
+          revisions: {
+            round: 3,
+            distances: { "d-a": 4, "d-b": 6 },
+            shots: { "d-a:1:1": 5, "d-b:1:1": 7 },
+          },
+        },
+      });
+    });
+
+    it("無効化された距離・記録は、表示に含めず、revisionだけを返す", async () => {
+      // Given: d-aの記録が無効化され、d-bが無効化されている
+      const disabledAt = "2026-09-16T00:00:00Z";
+      const { client } = makeSupabase({
+        rounds: ok({
+          ...round,
+          distances: [
+            {
+              ...distanceA,
+              revision: 4,
+              disabled_at: null,
+              shots: [{ ...shotA, revision: 8, disabled_at: disabledAt }],
+            },
+            {
+              ...distanceB,
+              revision: 9,
+              disabled_at: disabledAt,
+              shots: [{ ...shotB, revision: 7, disabled_at: null }],
+            },
+          ],
+        }),
+        target_faces: ok([]),
+      });
+
+      // When
+      const result = await fetchRoundDetail(client, "round-1");
+
+      // Then: 表示は距離d-aだけで記録は無く、revisionは無効化された行の分も持つ
+      expect(result).toMatchObject({
+        status: "ok",
+        data: {
+          distances: [distanceA],
+          shots: [],
+          revisions: {
+            distances: { "d-a": 4, "d-b": 9 },
+            shots: { "d-a:1:1": 8, "d-b:1:1": 7 },
+          },
         },
       });
     });

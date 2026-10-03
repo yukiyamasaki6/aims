@@ -14,19 +14,17 @@ const initial: RoundConfig = {
 function setup(
   overrides: Partial<Parameters<typeof RoundConfigPanel>[0]> = {},
 ) {
-  const onSaved = vi.fn();
   const enqueue = vi.fn();
   const utils = render(
     <RoundConfigPanel
       roundId="round-1"
       initial={initial}
-      onSaved={onSaved}
       hasUnmarkedDistances={false}
       enqueue={enqueue}
       {...overrides}
     />,
   );
-  return { onSaved, enqueue, ...utils };
+  return { enqueue, ...utils };
 }
 
 describe("RoundConfigPanel", () => {
@@ -99,13 +97,13 @@ describe("RoundConfigPanel", () => {
 
   describe("保存", () => {
     describe("入力内容が有効な場合", () => {
-      it("onSavedとenqueueを検証済みの設定で呼び、折りたたんで要約を更新する", async () => {
+      it("enqueueを検証済みの設定で呼び、折りたたんで要約を更新する", async () => {
         // Given: ラウンド名と弓種を編集したパネル
         vi.spyOn(crypto, "randomUUID").mockReturnValue(
           "00000000-0000-4000-8000-000000000001",
         );
         const user = userEvent.setup();
-        const { onSaved, enqueue } = setup();
+        const { enqueue } = setup();
         await user.click(screen.getByTestId("round-config-summary"));
         await user.clear(screen.getByTestId("round-config-name"));
         await user.type(screen.getByTestId("round-config-name"), "午後練習");
@@ -114,15 +112,8 @@ describe("RoundConfigPanel", () => {
         // When: 保存する
         await user.click(screen.getByTestId("round-config-save"));
 
-        // Then: 設定を通知し、round.updatedの操作を登録して折りたたむ
-        expect(onSaved).toHaveBeenCalledWith({
-          name: "午後練習",
-          roundDate: "2026-09-15",
-          format: "outdoor",
-          bowType: "compound",
-        });
+        // Then: round.updatedの操作を登録して折りたたむ
         expect(enqueue).toHaveBeenCalledWith({
-          key: "roundConfig",
           label: "ラウンド設定",
           operation: {
             type: "round.updated",
@@ -144,10 +135,10 @@ describe("RoundConfigPanel", () => {
     });
 
     describe("入力内容が無効な場合", () => {
-      it("各項目のエラーを表示し、onSavedもenqueueも呼ばない", async () => {
+      it("各項目のエラーを表示し、enqueueを呼ばない", async () => {
         // Given: Unmarkedの距離が残っている状態で、ラウンド名・実施日・種別をいずれも無効にしたパネル
         const user = userEvent.setup();
-        const { onSaved, enqueue } = setup({ hasUnmarkedDistances: true });
+        const { enqueue } = setup({ hasUnmarkedDistances: true });
         await user.click(screen.getByTestId("round-config-summary"));
         await user.clear(screen.getByTestId("round-config-name"));
         await user.type(
@@ -172,7 +163,6 @@ describe("RoundConfigPanel", () => {
             "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。",
           ),
         ).toBeInTheDocument();
-        expect(onSaved).not.toHaveBeenCalled();
         expect(enqueue).not.toHaveBeenCalled();
       });
     });
@@ -182,7 +172,7 @@ describe("RoundConfigPanel", () => {
     it("保存せずに閉じる", async () => {
       // Given: 展開したパネル
       const user = userEvent.setup();
-      const { onSaved, enqueue } = setup();
+      const { enqueue } = setup();
       await user.click(screen.getByTestId("round-config-summary"));
 
       // When: Escapeキーを押す
@@ -190,7 +180,6 @@ describe("RoundConfigPanel", () => {
 
       // Then: 閉じるだけで、保存も同期操作の登録もしない
       expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
-      expect(onSaved).not.toHaveBeenCalled();
       expect(enqueue).not.toHaveBeenCalled();
     });
   });
@@ -205,7 +194,6 @@ describe("RoundConfigPanel", () => {
         <RoundConfigPanel
           roundId="round-1"
           initial={{ ...initial, name: "更新後" }}
-          onSaved={vi.fn()}
           hasUnmarkedDistances={false}
           enqueue={vi.fn()}
         />,

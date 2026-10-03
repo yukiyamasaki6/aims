@@ -1,5 +1,5 @@
 import { NAME_MAX_LENGTH } from "../_shared/round-constants";
-import type { EnqueueInput } from "./sync-queue-types";
+import type { OpInput } from "./sync-events";
 
 export type RoundConfig = {
   name: string;
@@ -19,7 +19,7 @@ export type RoundConfigValidation =
   | { type: "invalid"; errors: RoundConfigErrors };
 
 // クライアントが既に持っている値（distancesのis_marked）だけで判定できるため、サーバーへ投げる前に同期的に検証する。
-// キュー経由の非同期エラーにはしない。
+// 送信後の非同期エラーにはしない。
 export function validateRoundConfig(
   draft: RoundConfig,
   hasUnmarkedDistances: boolean,
@@ -45,9 +45,8 @@ export function buildRoundUpdatedInput(
   roundId: string,
   config: RoundConfig,
   eventId: string,
-): EnqueueInput {
+): OpInput {
   return {
-    key: "roundConfig",
     label: "ラウンド設定",
     operation: {
       type: "round.updated",

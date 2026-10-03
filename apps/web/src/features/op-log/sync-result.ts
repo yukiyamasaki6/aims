@@ -6,7 +6,7 @@ import type {
   SyncDisposition,
   SyncFailure,
   SyncResultDecision,
-} from "./sync-queue-types";
+} from "./sync-types";
 
 // 再試行ごとの待機時間。要素数が再試行の上限回数になる。
 export const RETRY_DELAYS_MS = [3000, 6000, 12000, 24000];
@@ -61,7 +61,7 @@ export function classifyFailure(cause: SyncFailure["cause"]): SyncDisposition {
 }
 
 // attemptIndexは初回を0とする試行の番号。
-// outboxから削除するのは、成功のときだけ。
+// removeFromOutboxが真なのは成功のときだけ（操作の列では、確定の印を付ける契機になる）。
 export function decideSyncResult(
   result: BatchResult,
   attemptIndex: number,

@@ -11,7 +11,7 @@ export type DeleteRoundResult =
   | { status: "discarded" };
 
 // ラウンド一覧とスコアカードの双方から、BlockingConfirmDialogの確認後に呼ぶラウンドの削除。
-// 他の書き込みと異なりオフライン対応の送信キューは使わず、完了を待ってから結果を返す（confirm-dialog.tsxのBlockingConfirmDialogのコメントを参照）。
+// 他の書き込みと異なりオフライン対応の操作の列は使わず、完了を待ってから結果を返す（confirm-dialog.tsxのBlockingConfirmDialogのコメントを参照）。
 // 削除成功後の一覧の更新や遷移は、呼び出し元の画面が担う。
 export async function deleteRound({
   roundId,

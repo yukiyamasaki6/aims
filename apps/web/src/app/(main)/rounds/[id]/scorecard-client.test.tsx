@@ -11,10 +11,11 @@ import {
 import userEvent from "@testing-library/user-event";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { RETRY_DELAYS_MS } from "@/features/op-log/sync-result";
 import type { TargetFaceOption } from "./distance-config-row";
 import type { RoundConfig } from "./round-config";
 import { ScorecardClient } from "./scorecard-client";
-import { RETRY_DELAYS_MS } from "./sync-result";
+import type { Distance, Shot } from "./scorecard-types";
 
 const nav = vi.hoisted(() => ({
   push: vi.fn(),
@@ -24,7 +25,7 @@ const nav = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ useRouter: () => nav }));
 
 // SupabaseのSDKは外部サービスとの境界のため、セッションの取得結果とRPCの結果を任意に制御できるスタブで模す。
-// 画面の操作は、実物のSupabaseクライアントラッパー・送信キューを通してこのスタブのrpcに届く。
+// 画面の操作は、実物のSupabaseクライアントラッパー・操作の列を通してこのスタブのrpcに届く。
 const supabase = vi.hoisted(() => ({
   getSession: vi.fn(),
   rpc: vi.fn(),
@@ -169,17 +170,44 @@ const roundConfig: RoundConfig = {
   bowType: "recurve",
 };
 
-function setup(overrides: Partial<Parameters<typeof ScorecardClient>[0]> = {}) {
+function setup(
+  overrides: {
+    initialRoundConfig?: RoundConfig;
+    distances?: Distance[];
+    initialShots?: Shot[];
+    targetFaces?: TargetFaceOption[];
+  } = {},
+) {
+  const {
+    initialRoundConfig = roundConfig,
+    distances = [distanceA],
+    initialShots = [],
+    targetFaces: faces = targetFaces,
+  } = overrides;
   return render(
     <ScorecardClient
       roundId="round-1"
-      initialRoundConfig={roundConfig}
-      distances={[distanceA]}
-      initialShots={[]}
-      targetFaces={targetFaces}
-      {...overrides}
+      loaded={{
+        base: {
+          roundConfig: initialRoundConfig,
+          distances,
+          shots: initialShots,
+          roundDisabled: false,
+        },
+        entries: [],
+        reflected: [],
+      }}
+      targetFaces={faces}
     />,
   );
+}
+
+// RPCの成功は、確定したrevisionを返す。マスの操作は、渡した件数分の配列を返す。
+function rpcSucceeds(_name: string, args?: { p_shots?: unknown[] }) {
+  return Promise.resolve({
+    data: args?.p_shots ? args.p_shots.map(() => 2) : 2,
+    error: null,
+  });
 }
 
 beforeEach(() => {
@@ -190,7 +218,7 @@ beforeEach(() => {
   supabase.getSession.mockResolvedValue({
     data: { session: { user: { id: "user-1" } } },
   });
-  supabase.rpc.mockResolvedValue({ data: null, error: null });
+  supabase.rpc.mockImplementation(rpcSucceeds);
   vi.stubGlobal(
     "matchMedia",
     vi.fn().mockImplementation((query: string) => ({
@@ -214,7 +242,7 @@ beforeEach(() => {
 afterEach(async () => {
   vi.useRealTimers();
   setOnline(true);
-  // 送信キューはアンマウント後も送信を続けるため、送信中の操作が次のテストのスタブに届かないよう、マウント中に送信を終わらせる。
+  // 操作の列はアンマウント後も送信を続けるため、送信中の操作が次のテストのスタブに届かないよう、マウント中に送信を終わらせる。
   // オフラインで保留中の操作はonlineイベントで再開させ、同期済みか同期失敗の最終状態になるまで待つ。
   // Testing Libraryのcleanup（アンマウント）より先に実行される。
   const syncStatus = screen.queryByTestId("sync-status");
@@ -238,7 +266,9 @@ describe("ScorecardClient 初期表示・集計", () => {
     await user.click(screen.getByTestId("score-button-X"));
 
     // Then: 1エンド目だけに小計が表示され、距離とラウンド全体の合計・最高点数/X数が表示される
-    expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("20");
+    await waitFor(() =>
+      expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("20"),
+    );
     expect(screen.getByTestId("end-subtotal-1-2")).toHaveTextContent("");
     expect(screen.getByTestId("distance-summary-1")).toHaveTextContent(
       "小計20",
@@ -473,7 +503,7 @@ describe("ScorecardClient 初期表示・集計", () => {
   });
 });
 
-// 送信キューがSDKへ送ったマスの操作を、呼び出しをまたいで順に並べる。
+// 操作の列がSDKへ送ったマスの操作を、呼び出しをまたいで順に並べる。
 function sentShots(rpcName: "record_shots" | "clear_shots") {
   return supabase.rpc.mock.calls
     .filter(([name]) => name === rpcName)
@@ -1094,11 +1124,11 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     // When: Escapeを押す
     await user.keyboard("{Escape}");
 
-    // Then: パネルが閉じ、送信キューへは何も積まれない
+    // Then: パネルが閉じ、操作の列へは何も積まれない
     expect(
       screen.queryByTestId("distance-config-distance-1"),
     ).not.toBeInTheDocument();
-    // 送信キューに積まれると送信が完了するまで同期中の表示になるため、同期済みのままであることで積まれていないことを確かめる。
+    // 操作の列に積まれると送信が完了するまで同期中の表示になるため、同期済みのままであることで積まれていないことを確かめる。
     expect(screen.getByTestId("sync-status")).toHaveTextContent("同期済み");
     await flushMicrotasks();
     expect(supabase.rpc).not.toHaveBeenCalled();
@@ -1206,7 +1236,7 @@ describe("ScorecardClient ラウンド削除", () => {
 describe("ScorecardClient 同期状態の表示", () => {
   it("送信中は「同期中…」を表示し、応答が返ると「同期済み」になる", async () => {
     // Given: RPCの応答を任意の時点で返せる
-    let resolveRpc: (value: { data: null; error: null }) => void = () => {};
+    let resolveRpc: (value: { data: number[]; error: null }) => void = () => {};
     supabase.rpc.mockReturnValue(
       new Promise((resolve) => {
         resolveRpc = resolve;
@@ -1227,7 +1257,7 @@ describe("ScorecardClient 同期状態の表示", () => {
     expect(screen.getByTestId("sync-status")).toHaveTextContent("同期中…");
 
     // When: 応答が返る
-    resolveRpc({ data: null, error: null });
+    resolveRpc({ data: [2], error: null });
 
     // Then: 同期済みになる
     await waitFor(() => {
@@ -1237,8 +1267,8 @@ describe("ScorecardClient 同期状態の表示", () => {
 
   it("送信が一時的に失敗してリトライを待つ間は「同期中…」を表示する", async () => {
     // Given: RPCが初回だけ再試行で解消し得るエラーを返す
-    // fake-indexeddbはsetImmediateで処理を進めるため、リトライ待機のタイマーだけを偽装する。
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    // fake-indexeddbはsetImmediateで処理を進めるため、リトライ待機のタイマーと、再送の期限の判定に使う時刻だけを偽装する。
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     supabase.rpc.mockResolvedValueOnce({
       data: null,
       error: { message: "通信に失敗しました", code: "" },

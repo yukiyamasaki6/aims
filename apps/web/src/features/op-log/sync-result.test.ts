@@ -89,12 +89,12 @@ describe("classifyFailure", () => {
 
 describe("decideSyncResult", () => {
   describe("成功した場合", () => {
-    it("再試行せずに確定し、outboxから削除する", () => {
+    it("再試行せずに確定し、操作の列から削除する", () => {
       // Given: 失敗のない送信結果
       // When: 判定する
       const decision = decideSyncResult(undefined, 0);
 
-      // Then: outboxから削除する確定になる
+      // Then: 操作の列から削除する確定になる
       expect(decision).toEqual({ type: "settle", removeFromOutbox: true });
     });
   });
@@ -116,14 +116,14 @@ describe("decideSyncResult", () => {
       ]);
     });
 
-    it("再試行の上限に達すると、再送できるようoutboxに残して確定する", () => {
+    it("再試行の上限に達すると、再送できるよう操作の列に残して確定する", () => {
       // Given: 通信失敗による失敗
       // When: 上限の直前・上限・上限の後の試行で判定する
       const beforeLimit = decideSyncResult(NETWORK_FAILURE, 3);
       const atLimit = decideSyncResult(NETWORK_FAILURE, 4);
       const afterLimit = decideSyncResult(NETWORK_FAILURE, 5);
 
-      // Then: 上限の直前までは再試行し、上限以降はoutboxに残して確定する
+      // Then: 上限の直前までは再試行し、上限以降は操作の列に残して確定する
       expect(beforeLimit).toEqual({ type: "retry", delayMs: 24000 });
       expect(atLimit).toEqual({ type: "settle", removeFromOutbox: false });
       expect(afterLimit).toEqual({ type: "settle", removeFromOutbox: false });
@@ -131,7 +131,7 @@ describe("decideSyncResult", () => {
   });
 
   describe("止めて残す失敗の場合", () => {
-    it("初回でも再試行せず、outboxに残して確定する", () => {
+    it("初回でも再試行せず、操作の列に残して確定する", () => {
       // Given: サーバーが拒否した（4xx）失敗
       const result = {
         error: "このラウンドを編集する権限がありません。",
@@ -142,7 +142,7 @@ describe("decideSyncResult", () => {
       const first = decideSyncResult(result, 0);
       const afterLimit = decideSyncResult(result, 5);
 
-      // Then: いずれもoutboxに残して確定する
+      // Then: いずれも操作の列に残して確定する
       expect(first).toEqual({ type: "settle", removeFromOutbox: false });
       expect(afterLimit).toEqual({ type: "settle", removeFromOutbox: false });
     });
@@ -206,7 +206,7 @@ describe("authFailureResult", () => {
   });
 
   describe("不明（通信失敗）の場合", () => {
-    it("通信エラーの文言と、認証の不明の種類を返し、使い切ってもoutboxに残す", () => {
+    it("通信エラーの文言と、認証の不明の種類を返し、使い切っても操作の列に残す", () => {
       // Given: 更新が通信失敗になり、不明と分類された状態
       const state = unresolvedAuthState(
         new AuthRetryableFetchError("Failed to fetch", 0),
@@ -217,7 +217,7 @@ describe("authFailureResult", () => {
       const first = decideSyncResult(result, 0);
       const exhausted = decideSyncResult(result, 4);
 
-      // Then: 通信エラーの文言になり、初回は再試行し、使い切るとoutboxに残す
+      // Then: 通信エラーの文言になり、初回は再試行し、使い切ると操作の列に残す
       expect(result).toEqual({
         error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
         cause: { type: "auth-unknown" },
