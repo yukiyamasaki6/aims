@@ -163,7 +163,7 @@ describe("fetchRoundsList", () => {
       expect(result).toEqual({ status: "ok", data: [] });
     });
 
-    it("通信できないとき、offlineを返す", async () => {
+    it("通信できないとき、原因を断定せずerrorを返す", async () => {
       // Given: 通信失敗はstatus 0で返る
       const { client } = makeSupabase({ data: null, error: null, status: 0 });
 
@@ -171,7 +171,10 @@ describe("fetchRoundsList", () => {
       const result = await fetchRoundsList(client);
 
       // Then
-      expect(result).toEqual({ status: "offline" });
+      expect(result).toEqual({
+        status: "error",
+        message: "読み込めませんでした。",
+      });
     });
 
     it("取得がエラーのとき、errorを返し、一覧は返さない", async () => {

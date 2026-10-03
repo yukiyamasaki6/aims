@@ -184,7 +184,7 @@ test("start-14: 作成が失敗するとき、開始ボタンをクリックす�
 
 const PRESET_ROUNDS_REST = "**/rest/v1/preset_rounds?*";
 
-test("start-15: ラウンド作成画面でプリセットを取得できないとき、/rounds/newを開くと、「一覧へ戻る」リンクと開始ボタンが表示され、「ネットワークに接続されていません」が表示され、プリセット無しで開始できる", async ({
+test("start-15: ラウンド作成画面でプリセットを取得できないとき、/rounds/newを開くと、「一覧へ戻る」リンクと開始ボタンが表示され、「読み込めませんでした。」と再試行ボタンが表示され、プリセット無しで開始できる", async ({
   page,
 }) => {
   // Given: プリセットの取得が通信できない
@@ -193,12 +193,11 @@ test("start-15: ラウンド作成画面でプリセットを取得できない�
   // When: /rounds/newを開く
   await openNewRound(page);
 
-  // Then: 枠と「ネットワークに接続されていません」を表示し、プリセット無しで開始できる
+  // Then: 枠と「読み込めませんでした。」と再試行ボタンを表示し、プリセット無しで開始できる
   await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
   await expect(page.getByTestId("round-start-button")).toBeVisible();
-  await expect(
-    page.getByText("ネットワークに接続されていません"),
-  ).toBeVisible();
+  await expect(page.getByText("読み込めませんでした。")).toBeVisible();
+  await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
 });

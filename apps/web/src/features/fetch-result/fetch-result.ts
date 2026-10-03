@@ -18,12 +18,14 @@ export type ResponseLike<T> = {
 };
 
 // 通信失敗はpostgrest-jsが例外にせずstatus 0で返す。error.messageの文字列には依存しない。
+// 回線の断はnavigator.onLineがfalseのときだけofflineとし、status 0は原因を断定せずerrorにする。
 // not-foundは単一対象の取得だけで、配列の0件はokとする。
 export function classifyResponse<T>(
   res: ResponseLike<T>,
   opts: { nullIsNotFound?: boolean } = {},
 ): FetchResult<T> {
-  if (res.status === 0) return { status: "offline" };
+  if (res.status === 0)
+    return { status: "error", message: FETCH_ERROR_MESSAGE };
   if (res.status === 401 || res.error?.code === "PGRST301") {
     return { status: "error", message: AUTH_REQUIRED_MESSAGE };
   }

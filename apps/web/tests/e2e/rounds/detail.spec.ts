@@ -236,7 +236,7 @@ test("detail-15: ラウンドが存在しない、閲覧権限がない、また
   await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
 });
 
-test("detail-16: 通信できないとき、/rounds/[id]を開くと、枠(「一覧へ戻る」リンク)と「ネットワークに接続されていません」が表示される", async ({
+test("detail-16: 通信できないとき、/rounds/[id]を開くと、枠(「一覧へ戻る」リンク)と「読み込めませんでした。」と再試行ボタンが表示される", async ({
   page,
 }) => {
   // Given
@@ -247,9 +247,8 @@ test("detail-16: 通信できないとき、/rounds/[id]を開くと、枠(「�
 
   // Then
   await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
-  await expect(
-    page.getByText("ネットワークに接続されていません"),
-  ).toBeVisible();
+  await expect(page.getByText("読み込めませんでした。")).toBeVisible();
+  await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
 });
 
 test("detail-17: 取得がエラーになるとき、/rounds/[id]を開くと、エラーメッセージが表示される", async ({

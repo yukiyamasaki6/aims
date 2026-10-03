@@ -259,25 +259,27 @@ describe("fetchRoundDetail", () => {
       expect(queries).toEqual([]);
     });
 
-    it("どちらかの通信が失敗(status 0)したら、もう一方がエラーでもofflineとする", async () => {
+    it("どちらかの通信が失敗(status 0)したら、もう一方がエラーでも、原因を断定せずerrorとする", async () => {
       const { client } = makeSupabase({
         rounds: failed(500, { message: "boom" }),
         target_faces: failed(0),
       });
 
       await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
-        status: "offline",
+        status: "error",
+        message: "読み込めませんでした。",
       });
     });
 
-    it("的の通信失敗は、ラウンドが見つかった場合もofflineとし、見つからないと誤判定しない", async () => {
+    it("的の通信失敗は、ラウンドが見つからない場合もerrorとし、見つからないと誤判定しない", async () => {
       const { client } = makeSupabase({
         rounds: ok(null),
         target_faces: failed(0),
       });
 
       await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
-        status: "offline",
+        status: "error",
+        message: "読み込めませんでした。",
       });
     });
 
