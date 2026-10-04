@@ -44,6 +44,8 @@ export type PlanItem<Op extends OpBase> = {
   status: OpStatus;
   // 拒否の切り分けで、単独の要求にする操作。
   solo: boolean;
+  // いまこのタブが送ってよい操作か。偽でも、未確定であれば衝突する後続を止める。
+  sendable: boolean;
 };
 
 export type OpPlanPorts<Op extends OpBase> = {

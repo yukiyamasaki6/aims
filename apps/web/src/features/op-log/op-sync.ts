@@ -32,7 +32,25 @@ export type OpSyncDeps<Op extends OpBase> = OpPlanPorts<Op> & {
   store: OpSyncStore<Op>;
   send: (flight: OpFlight<Op>) => Promise<SendOutcome>;
   isOffline: () => boolean;
+  // 保存済みの操作を送ってよいか(送る役のタブか)。偽でも、保存に失敗して`seq`を持たない操作は、持っているタブが送る。
+  canSend: () => boolean;
+  // 他のタブと共有する状態が変わったときに呼ぶ。IndexedDBへの書き込みが終わった後と、`held`の集合が変わった後に呼ぶ。
+  // `held`は、いま保留である操作のeventId。
+  onSharedChange?: (change: { diverged: boolean; held: string[] }) => void;
+  // 与えられたときは、`append`の保存が終わっても`pump`せず、代わりにこれを呼ぶ(列を読み直してから送るため)。
+  afterAppend?: () => void;
   now?: () => number;
+};
+
+export type AdoptOptions = {
+  // 取得に反映済みと確かめた操作のeventId。列に入れない。
+  reflected?: string[];
+  // 効かなかった操作または項目がある結果を、他のタブが受けたか。
+  diverged?: boolean;
+  // 他のタブ(送る役)が保留にしている操作のeventId。
+  held?: string[];
+  // 読み込みを始める前に`mark()`で得た値。これより後に保存が終わった操作は、読み込みに映らなくても外さない。省略時は0(このタブで保存した操作を全て守る)。
+  readAt?: number;
 };
 
 // 画面が導出に使う、列の1件。
@@ -63,6 +81,8 @@ type Item<Op extends OpBase> = OpSyncItem<Op> & {
   solo: boolean;
   // 確定済みの結果。OpSyncOperation.confirmedFieldsと同じ意味。
   confirmedFields?: string[] | null;
+  // このタブでの保存が終わった時点の`persistTick`。
+  persistedTick?: number;
 };
 
 type Flight = {
@@ -75,7 +95,7 @@ type Flight = {
 };
 
 // 操作の列の送信器。Reactに依存せず、列の追記・衝突の規則に従った送信・再試行・保留を担う。
-// 認可・契約で拒否された操作は破棄し、効かなかった操作は列から外す。止めて残すのは未認証のときだけで、同じ対象の後続も止める（保持の状態はメモリだけで、再読み込みで再び送信を試みる）。
+// 認可・契約で拒否された操作は破棄し、効かなかった操作は列から外す。止めて残すのは未認証のときだけで、同じ対象の後続も止める（保留は、サインインし直したとき(`resumeHeld`)か再読み込みで再び送信を試みる）。
 export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
   const now = deps.now ?? (() => Date.now());
   let items: Item<Op>[] = [];
@@ -83,7 +103,11 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const listeners = new Set<() => void>();
   let disposed = false;
+  // 列から外した操作。IndexedDBから読み直した行を、外した後に足し直さないために覚える。
+  const retired = new Set<string>();
   let operations: OpSyncOperation<Op>[] = [];
+  // このタブでの保存が終わるたびに進める。古い読み込みが、保存済みの操作を外さないための目印。
+  let persistTick = 0;
   const divergedListeners = new Set<() => void>();
   let snapshot: OpSyncSnapshot<Op> = computeSnapshot();
 
@@ -206,9 +230,13 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
     results: OpResult[],
   ) {
     const decision = decideSyncResult(failure, flight.attempt);
+    // IndexedDBへの書き込み。完了後に、他のタブへ共有する状態の変化を知らせる。
+    const writes: Promise<void>[] = [];
+    let diverged = false;
+    let shared = false;
     if (!failure) {
       flights.delete(flight);
-      let diverged = false;
+      shared = true;
       const ineffective = new Set<string>();
       members.forEach((item, index) => {
         const result = results[index];
@@ -223,19 +251,22 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
         item.status = "acked";
         item.confirmedFields = result.appliedFields;
         // DBへのackの保存に失敗しても、再送が冪等で同じ結果を返すため続ける。
-        deps.store
-          .ack(
-            item.eventId,
-            result.revision,
-            result.applied,
-            result.appliedFields,
-          )
-          .catch(() => {});
+        writes.push(
+          deps.store
+            .ack(
+              item.eventId,
+              result.revision,
+              result.applied,
+              result.appliedFields,
+            )
+            .catch(() => {}),
+        );
       });
       if (ineffective.size > 0) {
         const ids = [...ineffective];
         items = items.filter((item) => !ineffective.has(item.eventId));
-        deps.store.retire(ids, "ineffective").catch(() => {});
+        for (const id of ids) retired.add(id);
+        writes.push(deps.store.retire(ids, "ineffective").catch(() => {}));
       }
       operations = persistedOperations();
       if (diverged) notifyDiverged();
@@ -256,14 +287,31 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
       } else if (disposition === "discard") {
         const ids = members.map((item) => item.eventId);
         items = items.filter((item) => !ids.includes(item.eventId));
-        deps.store.retire(ids, "discarded").catch(() => {});
+        for (const id of ids) retired.add(id);
+        writes.push(deps.store.retire(ids, "discarded").catch(() => {}));
         operations = persistedOperations();
+        shared = true;
       } else {
         for (const item of members) item.status = "held";
+        shared = true;
       }
     }
     emit();
+    if (shared) {
+      // 書き込みが終わってから知らせる。他のタブが読み直す時点で、書き込みが見えるようにするため。
+      void Promise.allSettled(writes).then(() => notifyShared(diverged));
+    }
     if (!disposed) pump();
+  }
+
+  function heldIds(): string[] {
+    return items
+      .filter((item) => item.status === "held")
+      .map((item) => item.eventId);
+  }
+
+  function notifyShared(diverged: boolean) {
+    deps.onSharedChange?.({ diverged, held: heldIds() });
   }
 
   function notifyDiverged() {
@@ -276,11 +324,14 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
   }
 
   function planItems(): PlanItem<Op>[] {
-    return items.map(({ eventId, operation, status, solo }) => ({
+    const canSend = deps.canSend();
+    return items.map(({ eventId, operation, status, solo, seq }) => ({
       eventId,
       operation,
       status,
       solo,
+      // 保存に失敗して`seq`を持たない操作は、他のタブから見えないため、持っているタブが送る。
+      sendable: canSend || seq === undefined,
     }));
   }
 
@@ -330,59 +381,141 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
         )
         .finally(() => {
           item.status = "queued";
+          persistTick += 1;
+          item.persistedTick = persistTick;
           // 画面へは、保存が完了した操作から反映する(保存の完了前の離脱で、見えた操作を失わないため)。
           operations = persistedOperations();
           emit();
-          pump();
+          notifyShared(false);
+          if (deps.afterAppend) deps.afterAppend();
+          else pump();
         });
     },
-    // 読み込んだ列を設定する。副作用（送信と列の更新）は`start`まで起こさないため、描画中に呼んでよい。
-    load(entries: OpLogEntry<Op>[]) {
-      items = entries
-        // 効かなかった操作は、送信器の列に含めない（`start`で外す）。
-        .filter((entry) => entry.ackedApplied !== false)
-        .map((entry) => ({
-          eventId: entry.eventId,
-          operation: entry.operation,
-          status: entry.ackedRevision === undefined ? "queued" : "acked",
-          solo: false,
-          seq: entry.seq,
-          confirmedFields: entry.ackedFields ?? null,
-        }));
+    // IndexedDBから読んだ列(現在のユーザーの、その列の全件)をメモリの列へ合わせる。入出力を起こさず送信もしないため、描画中に呼んでよい。
+    adopt(entries: OpLogEntry<Op>[], options: AdoptOptions = {}) {
+      const reflected = new Set(options.reflected ?? []);
+      const rows = entries.filter(
+        (entry) =>
+          entry.ackedApplied !== false &&
+          !retired.has(entry.eventId) &&
+          !reflected.has(entry.eventId),
+      );
+      const rowIds = new Set(rows.map((entry) => entry.eventId));
+      const isBusy = (item: Item<Op>) =>
+        item.status === "inflight" ||
+        item.status === "backoff" ||
+        item.status === "persisting";
+
+      const next: Item<Op>[] = [];
+      for (const item of items) {
+        if (reflected.has(item.eventId) && !isBusy(item)) {
+          retired.add(item.eventId);
+          continue;
+        }
+        // 別のタブが確定、破棄、反映済みとして外した操作。
+        const settledElsewhere =
+          item.seq !== undefined &&
+          (item.persistedTick ?? 0) <= (options.readAt ?? 0) &&
+          (item.status === "queued" ||
+            item.status === "held" ||
+            item.status === "acked") &&
+          !rowIds.has(item.eventId);
+        if (settledElsewhere) {
+          retired.add(item.eventId);
+          continue;
+        }
+        next.push(item);
+      }
+      const known = new Map(next.map((item) => [item.eventId, item]));
+      for (const entry of rows) {
+        const item = known.get(entry.eventId);
+        const confirmed = entry.ackedRevision !== undefined;
+        if (!item) {
+          const added: Item<Op> = {
+            eventId: entry.eventId,
+            operation: entry.operation,
+            status: confirmed ? "acked" : "queued",
+            solo: false,
+            seq: entry.seq,
+            confirmedFields: confirmed
+              ? (entry.ackedFields ?? null)
+              : undefined,
+          };
+          next.push(added);
+          known.set(added.eventId, added);
+          continue;
+        }
+        if (item.seq === undefined) item.seq = entry.seq;
+        if (confirmed && (item.status === "queued" || item.status === "held")) {
+          item.status = "acked";
+          item.confirmedFields = entry.ackedFields ?? null;
+        }
+      }
+      if (options.held) {
+        const held = new Set(options.held);
+        for (const item of next) {
+          if (item.status === "queued" && held.has(item.eventId)) {
+            item.status = "held";
+          } else if (item.status === "held" && !held.has(item.eventId)) {
+            item.status = "queued";
+          }
+        }
+      }
+      // `seq`を持つ操作を`seq`の昇順に、その後ろに`seq`を持たない操作を元の順で並べる。
+      const withSeq = next
+        .filter((item) => item.seq !== undefined)
+        .sort((first, second) => (first.seq ?? 0) - (second.seq ?? 0));
+      items = [...withSeq, ...next.filter((item) => item.seq === undefined)];
       operations = persistedOperations();
-      snapshot = computeSnapshot();
+      emit();
+      if (options.diverged) notifyDiverged();
     },
-    // 送信を始める。反映済みと確かめた操作は列から外す。再度呼んでよい(画面の再マウント)。
-    start(reflectedEventIds: string[]) {
-      disposed = false;
-      for (const flight of flights) {
-        if (flight.notBefore > now()) scheduleTimer(flight.notBefore - now());
-      }
-      if (reflectedEventIds.length > 0) {
-        deps.store.retire(reflectedEventIds, "reflected").catch(() => {});
-      }
+    // 読み込みを始める前に呼び、`adopt`の`readAt`へ渡す。
+    mark(): number {
+      return persistTick;
+    },
+    // 送る役になったときと、画面が列を取り込んだときに、再描画して送信を試みる。
+    wake() {
       emit();
       pump();
     },
+    // 保留を戻して送る。サインインし直したときに使う。試行の番号は、新しい要求として0から数える。
+    resumeHeld() {
+      let resumed = false;
+      for (const item of items) {
+        if (item.status === "held") {
+          item.status = "queued";
+          resumed = true;
+        }
+      }
+      if (!resumed) return;
+      emit();
+      pump();
+      notifyShared(false);
+    },
+    heldIds,
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
       };
     },
-    // 取得し直した状態に反映済みと確かめた操作を、列から外す。
+    // 取得し直した状態に反映済みと確かめた操作を、列とIndexedDBから外す。呼び出し元は、確定済みで反映済みと確かめた操作だけを渡す。
     reflect(eventIds: string[]) {
-      const ids = new Set(
-        eventIds.filter((id) => {
-          const item = findItem(id);
-          return item !== undefined && item.status === "acked";
-        }),
-      );
-      if (ids.size === 0) return;
-      items = items.filter((item) => !ids.has(item.eventId));
+      if (eventIds.length === 0) return;
+      const ids = new Set(eventIds);
+      items = items.filter((item) => {
+        const busy = item.status === "inflight" || item.status === "backoff";
+        if (!ids.has(item.eventId) || busy) return true;
+        retired.add(item.eventId);
+        return false;
+      });
       operations = persistedOperations();
-      deps.store.retire([...ids], "reflected").catch(() => {});
       emit();
+      void deps.store
+        .retire([...ids], "reflected")
+        .catch(() => {})
+        .then(() => notifyShared(false));
     },
     // 効かなかった操作または項目がある結果を受けたときに知らせる。
     subscribeDiverged(listener: () => void) {

@@ -21,8 +21,15 @@ function item(
   target: string,
   status: OpStatus = "queued",
   solo = false,
+  sendable = true,
 ): PlanItem<Op> {
-  return { eventId, operation: { eventId, kind, target }, status, solo };
+  return {
+    eventId,
+    operation: { eventId, kind, target },
+    status,
+    solo,
+    sendable,
+  };
 }
 
 function ids(flights: ReturnType<typeof planFlights<Op>>) {
@@ -186,5 +193,23 @@ describe("planFlights", () => {
 
       expect(ids(flights)).toEqual([["1", "2"]]);
     });
+  });
+
+  it("送れない`queued`の操作は候補にならず、laneを占有しない", () => {
+    const flights = planFlights(
+      [item("1", "a", "x", "queued", false, false), item("2", "a", "y")],
+      ports,
+    );
+
+    expect(ids(flights)).toEqual([["2"]]);
+  });
+
+  it("送れない操作も、未確定であれば衝突する後続を止める", () => {
+    const flights = planFlights(
+      [item("1", "a", "x", "queued", false, false), item("2", "a", "x")],
+      ports,
+    );
+
+    expect(ids(flights)).toEqual([]);
   });
 });

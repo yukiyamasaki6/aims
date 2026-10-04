@@ -11,14 +11,14 @@ import {
 } from "./fetch-round-detail";
 import { applyOperations, type RoundState } from "./round-op-apply";
 import { roundOpStore, roundStreamId } from "./round-op-store";
-import type { SyncOperation } from "./sync-events";
+import { type SyncOperation, upgradeLegacyOperation } from "./sync-events";
 
 export type LoadedRoundDetail = {
   // サーバーの状態。操作の列は重ねていない。
   base: RoundState;
   // 基準へ重ねる列(`seq`順)。反映済みと確かめた操作を含まない。
   entries: OpLogEntry<SyncOperation>[];
-  // 反映済みと確かめた操作のeventId。送信器の起動時に列から外す。
+  // 反映済みと確かめた操作のeventId。詳細画面の表示の開始時に列から外す。
   reflected: string[];
   targetFaces: TargetFaceOption[];
   // ラウンドの削除が列にあるため、一覧へ戻るか。
@@ -71,42 +71,6 @@ function fetchedRevision(
         ] ?? 0
       );
   }
-}
-
-// 全項目を持つ旧い形式の`round.updated`・`distance.updated`を、全項目を変えた差分の操作として読み替える。
-// 旧い形式の操作が端末に残らなくなった時点(次にDBのバージョンを上げるとき)で、この処理を削除する。
-function upgradeLegacyOperation(operation: SyncOperation): SyncOperation {
-  const legacy: Record<string, unknown> = { ...operation };
-  if (operation.type === "round.updated" && !("changes" in legacy)) {
-    return {
-      type: "round.updated",
-      eventId: operation.eventId,
-      roundId: operation.roundId,
-      changes: {
-        name: legacy.name as string,
-        roundDate: legacy.roundDate as string,
-        format: legacy.format as string,
-        bowType: legacy.bowType as string,
-      },
-    };
-  }
-  if (operation.type === "distance.updated" && !("changes" in legacy)) {
-    return {
-      type: "distance.updated",
-      eventId: operation.eventId,
-      distanceId: operation.distanceId,
-      changes: {
-        distance: legacy.distance as number | null,
-        isMarked: legacy.isMarked as boolean,
-        config: {
-          totalEnds: legacy.totalEnds as number,
-          arrowsPerEnd: legacy.arrowsPerEnd as number,
-          targetFaceId: legacy.targetFaceId as string,
-        },
-      },
-    };
-  }
-  return operation;
 }
 
 // 確定した操作が、取得の状態に反映済みか。
