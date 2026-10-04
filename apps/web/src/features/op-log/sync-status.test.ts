@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { deriveSyncStatus } from "./sync-status";
 
-const NONE = { offlinePending: 0, retrying: 0, sending: 0, errors: 0 };
+const NONE = { offlinePending: 0, retrying: 0, sending: 0, held: 0 };
 
 describe("deriveSyncStatus", () => {
-  describe("処理中の操作も失敗もない場合", () => {
+  describe("処理中の操作も保留もない場合", () => {
     it("syncedになる", () => {
       // Given: 全ての件数が0
       // When: 同期状態を導出する
@@ -20,7 +20,7 @@ describe("deriveSyncStatus", () => {
       // Given: 各状態の件数が0・1・2件
       // When: 同期状態を導出する
       const statuses = (
-        ["offlinePending", "retrying", "sending", "errors"] as const
+        ["offlinePending", "retrying", "sending", "held"] as const
       ).map((name) =>
         [0, 1, 2].map((count) => deriveSyncStatus({ ...NONE, [name]: count })),
       );
@@ -30,19 +30,19 @@ describe("deriveSyncStatus", () => {
         ["synced", "offline-pending", "offline-pending"],
         ["synced", "retrying", "retrying"],
         ["synced", "sending", "sending"],
-        ["synced", "error", "error"],
+        ["synced", "unauthenticated-pending", "unauthenticated-pending"],
       ]);
     });
   });
 
   describe("複数の状態に該当する場合", () => {
-    it("offline-pending・retrying・sending・errorの順に優先する", () => {
+    it("offline-pending・retrying・sending・unauthenticated-pendingの順に優先する", () => {
       // Given: 優先度の高い状態から順に外していった件数
       // When: 同期状態を導出する
       const statuses = [
-        { offlinePending: 1, retrying: 1, sending: 1, errors: 1 },
-        { offlinePending: 0, retrying: 1, sending: 1, errors: 1 },
-        { offlinePending: 0, retrying: 0, sending: 1, errors: 1 },
+        { offlinePending: 1, retrying: 1, sending: 1, held: 1 },
+        { offlinePending: 0, retrying: 1, sending: 1, held: 1 },
+        { offlinePending: 0, retrying: 0, sending: 1, held: 1 },
       ].map(deriveSyncStatus);
 
       // Then: 該当する中で最も優先度の高い状態になる

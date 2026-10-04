@@ -30,10 +30,14 @@ async function loadEntries(
   roundId: string,
 ): Promise<OpLogEntry<SyncOperation>[]> {
   try {
-    return await roundOpStore.loadStream(
+    const stored = await roundOpStore.loadStream(
       roundStreamId(roundId),
       getLocalIdentity(),
     );
+    return stored.map((entry) => ({
+      ...entry,
+      operation: upgradeLegacyOperation(entry.operation),
+    }));
   } catch {
     return [];
   }
@@ -67,6 +71,68 @@ function fetchedRevision(
         ] ?? 0
       );
   }
+}
+
+// 全項目を持つ旧い形式の`round.updated`・`distance.updated`を、全項目を変えた差分の操作として読み替える。
+// 旧い形式の操作が端末に残らなくなった時点(次にDBのバージョンを上げるとき)で、この処理を削除する。
+function upgradeLegacyOperation(operation: SyncOperation): SyncOperation {
+  const legacy: Record<string, unknown> = { ...operation };
+  if (operation.type === "round.updated" && !("changes" in legacy)) {
+    return {
+      type: "round.updated",
+      eventId: operation.eventId,
+      roundId: operation.roundId,
+      changes: {
+        name: legacy.name as string,
+        roundDate: legacy.roundDate as string,
+        format: legacy.format as string,
+        bowType: legacy.bowType as string,
+      },
+    };
+  }
+  if (operation.type === "distance.updated" && !("changes" in legacy)) {
+    return {
+      type: "distance.updated",
+      eventId: operation.eventId,
+      distanceId: operation.distanceId,
+      changes: {
+        distance: legacy.distance as number | null,
+        isMarked: legacy.isMarked as boolean,
+        config: {
+          totalEnds: legacy.totalEnds as number,
+          arrowsPerEnd: legacy.arrowsPerEnd as number,
+          targetFaceId: legacy.targetFaceId as string,
+        },
+      },
+    };
+  }
+  return operation;
+}
+
+// 確定した操作が、取得の状態に反映済みか。
+// 効かなかった操作は、どこにも記録されないため、反映済みとして扱う。
+function isReflected(
+  entry: OpLogEntry<SyncOperation>,
+  revisions: RoundRevisions,
+): boolean {
+  if (entry.ackedRevision === undefined) return false;
+  if (entry.ackedApplied === false) return true;
+  const { operation } = entry;
+  // 空のマスへの取り消しは、取得に行が無く、重ねても変わらない。
+  if (
+    operation.type === "shot.cleared" &&
+    revisions.shots[
+      shotRevisionKey(
+        operation.distanceId,
+        operation.endNumber,
+        operation.arrowNumber,
+      )
+    ] === undefined
+  ) {
+    return true;
+  }
+  const fetchedAt = fetchedRevision(operation, revisions);
+  return fetchedAt !== undefined && fetchedAt >= entry.ackedRevision;
 }
 
 // 取得の前後の列を合わせる。同じ操作は、確定のrevisionがある方を使う。
@@ -108,12 +174,7 @@ export async function loadRoundDetail(
   const entries: OpLogEntry<SyncOperation>[] = [];
   const reflected: string[] = [];
   for (const entry of mergeEntries(before, after)) {
-    const fetchedAt = fetchedRevision(entry.operation, revisions);
-    if (
-      entry.ackedRevision !== undefined &&
-      fetchedAt !== undefined &&
-      fetchedAt >= entry.ackedRevision
-    ) {
+    if (isReflected(entry, revisions)) {
       reflected.push(entry.eventId);
     } else {
       entries.push(entry);
@@ -135,7 +196,11 @@ export async function loadRoundDetail(
       targetFaces,
       leaveRound: applyOperations(
         base,
-        entries.map((entry) => entry.operation),
+        entries.map((entry) => ({
+          operation: entry.operation,
+          confirmedFields: undefined,
+        })),
+        targetFaces,
       ).roundDisabled,
     },
   };

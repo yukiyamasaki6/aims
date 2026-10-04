@@ -33,8 +33,13 @@ export type OpLogStore<Op extends OpBase> = {
     streamId: string,
     userId: string | null,
   ) => Promise<OpLogEntry<Op>[]>;
-  // 確定したrevisionを1度だけ付ける。列に無い、または付いている操作には何もしない。
-  ack: (eventId: string, revision: number) => Promise<void>;
+  // 確定の結果を1度だけ付ける。列に無い、または付いている操作には何もしない。
+  ack: (
+    eventId: string,
+    revision: number | null,
+    applied: boolean,
+    appliedFields: string[] | null,
+  ) => Promise<void>;
   // 列から外す。
   retire: (eventIds: string[], reason: RetireReason) => Promise<void>;
   close: () => Promise<void>;
@@ -93,12 +98,17 @@ export function createOpLogStore<Op extends OpBase>(): OpLogStore<Op> {
       }
       return stored.sort((first, second) => first.seq - second.seq);
     },
-    async ack(eventId, revision) {
+    async ack(eventId, revision, applied, appliedFields) {
       const db = await database();
       const tx = db.transaction(STORE_NAME, "readwrite");
       const entry = await tx.store.index("by-event-id").get(eventId);
       if (entry && entry.ackedRevision === undefined) {
-        await tx.store.put({ ...entry, ackedRevision: revision });
+        await tx.store.put({
+          ...entry,
+          ackedRevision: revision ?? 0,
+          ackedApplied: applied,
+          ...(appliedFields ? { ackedFields: appliedFields } : {}),
+        });
       }
       await tx.done;
     },

@@ -1,5 +1,5 @@
 import { NAME_MAX_LENGTH } from "../_shared/round-constants";
-import type { OpInput } from "./sync-events";
+import type { RoundChanges, SyncOperation } from "./sync-events";
 
 export type RoundConfig = {
   name: string;
@@ -41,21 +41,20 @@ export function validateRoundConfig(
   return { type: "valid", config: draft };
 }
 
-export function buildRoundUpdatedInput(
+// 保存した値と表示中の値の差分を、操作として返す。差分が無ければ操作を積まない。
+export function buildRoundUpdatedOperation(
   roundId: string,
+  saved: RoundConfig,
   config: RoundConfig,
   eventId: string,
-): OpInput {
-  return {
-    label: "ラウンド設定",
-    operation: {
-      type: "round.updated",
-      eventId,
-      roundId,
-      name: config.name,
-      roundDate: config.roundDate,
-      format: config.format,
-      bowType: config.bowType,
-    },
-  };
+): SyncOperation | null {
+  const changes: RoundChanges = {};
+  if (config.name !== saved.name) changes.name = config.name;
+  if (config.roundDate !== saved.roundDate) {
+    changes.roundDate = config.roundDate;
+  }
+  if (config.format !== saved.format) changes.format = config.format;
+  if (config.bowType !== saved.bowType) changes.bowType = config.bowType;
+  if (Object.keys(changes).length === 0) return null;
+  return { type: "round.updated", eventId, roundId, changes };
 }

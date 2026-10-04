@@ -1,12 +1,21 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import { classifySession } from "@/features/auth/session-state";
-import type { OpFlight, SendOutcome } from "@/features/op-log/op-log-types";
+import type {
+  OpFlight,
+  OpResult,
+  SendOutcome,
+} from "@/features/op-log/op-log-types";
 import {
   authFailureResult,
   rpcFailureResult,
 } from "@/features/op-log/sync-result";
 import { createClient } from "@/lib/supabase/client";
-import type { SyncOperation } from "./sync-events";
+import type { Json } from "@/types/supabase";
+import type {
+  DistanceChanges,
+  RoundChanges,
+  SyncOperation,
+} from "./sync-events";
 
 const INVALID_RESPONSE: SendOutcome = {
   ok: false,
@@ -16,17 +25,73 @@ const INVALID_RESPONSE: SendOutcome = {
   },
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// RPCの結果(jsonb)を、操作ごとの判定結果へ写す。形が不正ならundefined。
+function parseResult(data: unknown): OpResult | undefined {
+  if (!isRecord(data) || typeof data.applied !== "boolean") return undefined;
+  const { revision, applied_fields, rejected_fields, reason } = data;
+  if (revision !== null && typeof revision !== "number") return undefined;
+  const appliedFields =
+    Array.isArray(applied_fields) &&
+    applied_fields.every((f) => typeof f === "string")
+      ? applied_fields
+      : null;
+  const rejectedFields: OpResult["rejectedFields"] = [];
+  if (Array.isArray(rejected_fields)) {
+    for (const item of rejected_fields) {
+      if (
+        !isRecord(item) ||
+        typeof item.field !== "string" ||
+        typeof item.reason !== "string"
+      ) {
+        return undefined;
+      }
+      rejectedFields.push({ field: item.field, reason: item.reason });
+    }
+  }
+  return {
+    revision: revision ?? null,
+    applied: data.applied,
+    appliedFields,
+    rejectedFields,
+    reason: typeof reason === "string" ? reason : null,
+  };
+}
+
 function single(data: unknown): SendOutcome {
-  return typeof data === "number"
-    ? { ok: true, revisions: [data] }
-    : INVALID_RESPONSE;
+  const result = parseResult(data);
+  return result ? { ok: true, results: [result] } : INVALID_RESPONSE;
 }
 
 function many(data: unknown, count: number): SendOutcome {
-  return Array.isArray(data) &&
-    data.length === count &&
-    data.every((revision) => typeof revision === "number")
-    ? { ok: true, revisions: data }
+  if (!Array.isArray(data) || data.length !== count) return INVALID_RESPONSE;
+  const results: OpResult[] = [];
+  for (const item of data) {
+    const result = parseResult(item);
+    if (!result) return INVALID_RESPONSE;
+    results.push(result);
+  }
+  return { ok: true, results };
+}
+
+// 数値(revision)だけを返すRPC。効かせる条件が無く、常に効く。
+function revisionOnly(data: unknown): SendOutcome {
+  return typeof data === "number"
+    ? {
+        ok: true,
+        results: [
+          {
+            revision: data,
+            applied: true,
+            appliedFields: null,
+            rejectedFields: [],
+            reason: null,
+          },
+        ],
+      }
     : INVALID_RESPONSE;
 }
 
@@ -38,10 +103,38 @@ type RpcResponse = {
   status: number;
 };
 
-function outcomeOf(response: RpcResponse): SendOutcome {
+function outcomeOf(
+  response: RpcResponse,
+  parse: (data: unknown) => SendOutcome = single,
+): SendOutcome {
   const { data, error, status } = response;
   if (error) return { ok: false, failure: rpcFailureResult(error, status) };
-  return single(data);
+  return parse(data);
+}
+
+// 差分を、RPCのキー名(snake_case)の`p_changes`へ写す。値がundefinedの項目は送らない。
+function roundChangesToJson(changes: RoundChanges): Json {
+  const json: { [key: string]: Json } = {};
+  if (changes.name !== undefined) json.name = changes.name;
+  if (changes.roundDate !== undefined) json.round_date = changes.roundDate;
+  if (changes.format !== undefined) json.format = changes.format;
+  if (changes.bowType !== undefined) json.bow_type = changes.bowType;
+  return json;
+}
+
+function distanceChangesToJson(changes: DistanceChanges): Json {
+  const json: { [key: string]: Json } = {};
+  // 距離(m)の未設定は、キーを送ってnullにする。
+  if (changes.distance !== undefined) json.distance = changes.distance;
+  if (changes.isMarked !== undefined) json.is_marked = changes.isMarked;
+  if (changes.config) {
+    json.config = {
+      total_ends: changes.config.totalEnds,
+      arrows_per_end: changes.config.arrowsPerEnd,
+      target_face_id: changes.config.targetFaceId,
+    };
+  }
+  return json;
 }
 
 type ShotOperation = Extract<
@@ -60,10 +153,7 @@ async function sendSingle(
         await supabase.rpc("update_round", {
           p_round_event_id: operation.eventId,
           p_round_id: operation.roundId,
-          p_name: operation.name,
-          p_round_date: operation.roundDate,
-          p_format: operation.format,
-          p_bow_type: operation.bowType,
+          p_changes: roundChangesToJson(operation.changes),
         }),
       );
     case "round.disabled":
@@ -72,6 +162,7 @@ async function sendSingle(
           p_round_event_id: operation.eventId,
           p_round_id: operation.roundId,
         }),
+        revisionOnly,
       );
     case "distance.created":
       return outcomeOf(
@@ -93,12 +184,7 @@ async function sendSingle(
         await supabase.rpc("update_distance", {
           p_distance_event_id: operation.eventId,
           p_distance_id: operation.distanceId,
-          // 生成型はRPCの引数をnon-nullで出力するが、distanceはSQL側でnullを受け付ける。
-          p_distance: operation.distance as number,
-          p_total_ends: operation.totalEnds,
-          p_arrows_per_end: operation.arrowsPerEnd,
-          p_target_face_id: operation.targetFaceId,
-          p_is_marked: operation.isMarked,
+          p_changes: distanceChangesToJson(operation.changes),
         }),
       );
     case "distance.disabled":
@@ -148,7 +234,7 @@ async function sendShots(
   return many(data, operations.length);
 }
 
-// 要求の操作を、種類ごとの既存のRPCで送る。確定したrevisionを、要求の操作と同じ順で返す。
+// 要求の操作を、種類ごとのRPCで送る。サーバーの判定結果を、要求の操作と同じ順で返す。
 export async function sendRoundBatch(
   flight: OpFlight<SyncOperation>,
 ): Promise<SendOutcome> {

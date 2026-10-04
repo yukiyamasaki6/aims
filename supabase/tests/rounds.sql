@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(44);
+select plan(42);
 
 -- 既存の制約・権限テスト向けのfixture生成ヘルパー。プロダクションの
 -- create_roundはid/position_keyを必須とするため、旧形式の簡潔なfixtureだけを
@@ -205,12 +205,13 @@ select create_test_round('Shots Constraint Round', current_date, 'outdoor', 'rec
 
 select id as shots_distance_id from public.distances where round_id = :'shots_round_id' \gset
 
-select lives_ok(
+select results_eq(
   $$select record_shots(jsonb_build_array(jsonb_build_object(
       'shot_event_id', gen_random_uuid(), 'distance_id', '$$ || :'shots_distance_id' || $$'::uuid,
       'end_number', 1, 'arrow_number', 2, 'score_str', 'bullseye', 'score_int', -1
-    )))$$,
-  'score_strとscore_intの対応は固定せず、入力ツールの結果を保存できる'
+    ))) -> 0 ->> 'reason'$$,
+  $$values ('UNFIT'::text)$$,
+  '的に無い点数はUNFITで効かず、矢として記録されない'
 );
 
 -- 以降の一意制約テストが、(1, 1)に既存の矢がある状態を前提とする。
@@ -434,7 +435,7 @@ select results_eq(
 
 select update_round(
   '90000000-0000-0000-0000-000000000014', '90000000-0000-0000-0000-000000000011',
-  'Renamed Event Log Round', current_date, 'outdoor', 'recurve'
+  '{"name":"Renamed Event Log Round"}'::jsonb
 );
 
 select results_eq(
@@ -489,72 +490,81 @@ select results_eq(
 
 select disable_round('90000000-0000-0000-0000-000000000018', '90000000-0000-0000-0000-000000000011');
 
-select lives_ok(
-  $$select update_round(gen_random_uuid(), '90000000-0000-0000-0000-000000000011', 'x', current_date, 'outdoor', 'recurve')$$,
-  '無効化済みのラウンドへの更新もイベントとして受理される'
-);
-
-select lives_ok(
-  $$select create_distance(gen_random_uuid(), gen_random_uuid(), '90000000-0000-0000-0000-000000000011', 'z', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001', true)$$,
-  '無効化済みのラウンドへの距離追加もイベントとして受理される'
-);
-
-select lives_ok(
-  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', gen_random_uuid(), 'distance_id', '90000000-0000-0000-0000-000000000013', 'end_number', 2, 'arrow_number', 1, 'score_str', 'X', 'score_int', 10)))$$,
-  '無効化済みのラウンド配下への矢記録もイベントとして受理される'
+-- 削除済みのラウンドへの後続の操作は、効かない操作として応答で返し、記録しない。
+select results_eq(
+  $$select update_round(gen_random_uuid(), '90000000-0000-0000-0000-000000000011', '{"name":"x"}'::jsonb) ->> 'reason'$$,
+  $$values ('DISABLED'::text)$$,
+  '削除済みのラウンドへの更新はDISABLEDで効かない'
 );
 
 select results_eq(
-  $$select type, revision from round_events where round_id = '90000000-0000-0000-0000-000000000011' order by revision desc limit 1$$,
-  $$values ('UPDATED'::text, 4::bigint)$$,
-  '無効化後のラウンド更新も順序付きイベントとして追記される'
+  $$select create_distance(gen_random_uuid(), gen_random_uuid(), '90000000-0000-0000-0000-000000000011', 'z', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001', true) ->> 'reason'$$,
+  $$values ('DISABLED'::text)$$,
+  '削除済みのラウンドへの距離追加はDISABLEDで効かない'
 );
 
--- 無効化済みの距離に対する後続イベントも受理し、disabled_atは維持する。
+select results_eq(
+  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', gen_random_uuid(), 'distance_id', '90000000-0000-0000-0000-000000000013', 'end_number', 2, 'arrow_number', 1, 'score_str', 'X', 'score_int', 10))) -> 0 ->> 'reason'$$,
+  $$values ('DISABLED'::text)$$,
+  '削除済みのラウンド配下への矢記録はDISABLEDで効かない'
+);
+
+select results_eq(
+  $$select (select count(*) from round_events where round_id = '90000000-0000-0000-0000-000000000011'),
+           (select max(revision) from round_events where round_id = '90000000-0000-0000-0000-000000000011'),
+           (select revision from rounds where id = '90000000-0000-0000-0000-000000000011'),
+           (select count(*) from distance_events where round_id = '90000000-0000-0000-0000-000000000011'),
+           (select count(*) from shot_events where distance_id = '90000000-0000-0000-0000-000000000013' and end_number = 2)$$,
+  $$values (3::bigint, 3::bigint, 3::bigint, 1::bigint, 0::bigint)$$,
+  '削除済みのラウンドへの後続の操作は、イベントも射影のrevisionも進めない'
+);
+
+-- 削除済みの距離への後続の操作も、効かない操作として返し、記録しない。
 select create_round(
   '90000000-0000-0000-0000-000000000020', '90000000-0000-0000-0000-000000000021',
   'Disable Distance Round', current_date, 'outdoor', 'recurve',
-  '[{"distance_event_id":"90000000-0000-0000-0000-000000000022","id":"90000000-0000-0000-0000-000000000023","position_key":"a","distance":70,"is_marked":true,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
+  '[{"distance_event_id":"90000000-0000-0000-0000-000000000022","id":"90000000-0000-0000-0000-000000000023","position_key":"a","distance":70,"is_marked":true,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"},
+    {"distance_event_id":"90000000-0000-0000-0000-000000000027","id":"90000000-0000-0000-0000-000000000028","position_key":"b","distance":50,"is_marked":true,"total_ends":6,"arrows_per_end":6,"target_face_id":"a1000000-0000-0000-0000-000000000001"}]'::jsonb
 );
 
 select disable_distance('90000000-0000-0000-0000-000000000024', '90000000-0000-0000-0000-000000000023');
 
-select lives_ok(
-  $$select update_distance(gen_random_uuid(), '90000000-0000-0000-0000-000000000023', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001', true)$$,
-  '無効化済みの距離への更新もイベントとして受理される'
-);
-
-select lives_ok(
-  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', gen_random_uuid(), 'distance_id', '90000000-0000-0000-0000-000000000023', 'end_number', 1, 'arrow_number', 1, 'score_str', 'X', 'score_int', 10)))$$,
-  '無効化済みの距離への矢記録もイベントとして受理される'
+select results_eq(
+  $$select update_distance(gen_random_uuid(), '90000000-0000-0000-0000-000000000023', '{"distance":60}'::jsonb) ->> 'reason'$$,
+  $$values ('DISABLED'::text)$$,
+  '削除済みの距離への更新はDISABLEDで効かない'
 );
 
 select results_eq(
-  $$select disabled_at is not null, revision from distances where id = '90000000-0000-0000-0000-000000000023'$$,
-  $$values (true, 3::bigint)$$,
-  '無効化後の距離更新でもdisabled_atを維持し、射影のrevisionを進める'
-);
-
-select lives_ok(
-  $$select clear_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000025', 'distance_id', '90000000-0000-0000-0000-000000000023', 'end_number', 9, 'arrow_number', 1)))$$,
-  '未記録マスのクリアもイベントとして記録できる'
+  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', gen_random_uuid(), 'distance_id', '90000000-0000-0000-0000-000000000023', 'end_number', 1, 'arrow_number', 1, 'score_str', 'X', 'score_int', 10))) -> 0 ->> 'reason'$$,
+  $$values ('DISABLED'::text)$$,
+  '削除済みの距離への矢記録はDISABLEDで効かない'
 );
 
 select results_eq(
-  $$select type, revision from shot_events where event_id = '90000000-0000-0000-0000-000000000025'$$,
-  $$values ('CLEARED'::text, 1::bigint)$$,
-  '未記録マスのクリアはCLEAREDイベントとして追記される'
+  $$select disabled_at is not null, revision, (select count(*) from distance_events where distance_id = '90000000-0000-0000-0000-000000000023'), (select count(*) from shot_events where distance_id = '90000000-0000-0000-0000-000000000023')
+    from distances where id = '90000000-0000-0000-0000-000000000023'$$,
+  $$values (true, 2::bigint, 2::bigint, 0::bigint)$$,
+  '削除済みの距離への後続の操作は、削除を維持し、イベントも射影のrevisionも進めない'
 );
 
-select lives_ok(
-  $$select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000026', 'distance_id', '90000000-0000-0000-0000-000000000023', 'end_number', 9, 'arrow_number', 1, 'score_str', 'X', 'score_int', 10)))$$,
-  '未記録マスのクリア後も同じマスへ記録できる'
+-- 空のマスへの取り消しは効いた操作として記録し、マスの採番を進める。
+select results_eq(
+  $$select clear_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000025', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 9, 'arrow_number', 1))) -> 0 ->> 'applied'$$,
+  $$values ('true'::text)$$,
+  '空のマスへの取り消しは効いた操作として受理される'
 );
+
+select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000026', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'arrow_number', 1, 'score_str', 'X', 'score_int', 10)));
+
+select clear_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-000000000029', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'arrow_number', 1)));
+
+select record_shots(jsonb_build_array(jsonb_build_object('shot_event_id', '90000000-0000-0000-0000-00000000002a', 'distance_id', '90000000-0000-0000-0000-000000000028', 'end_number', 6, 'arrow_number', 1, 'score_str', '9', 'score_int', 9)));
 
 select results_eq(
-  $$select type, revision from shot_events where distance_id = '90000000-0000-0000-0000-000000000023' and end_number = 9 and arrow_number = 1 order by revision$$,
-  $$values ('CLEARED'::text, 1::bigint), ('RECORDED'::text, 2::bigint)$$,
-  '未記録マスのクリア後の記録はイベント順序を保つ'
+  $$select type, revision from shot_events where distance_id = '90000000-0000-0000-0000-000000000028' and end_number = 6 and arrow_number = 1 order by revision$$,
+  $$values ('RECORDED'::text, 1::bigint), ('CLEARED'::text, 2::bigint), ('RECORDED'::text, 3::bigint)$$,
+  '記録・取り消し・再記録はマスごとの順序を保って追記される'
 );
 
 select * from finish();

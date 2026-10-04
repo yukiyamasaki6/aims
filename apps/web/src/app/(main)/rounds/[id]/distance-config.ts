@@ -1,5 +1,5 @@
 import { FILTER_ALL } from "./distance-config-constants";
-import type { OpInput } from "./sync-events";
+import type { DistanceChanges, SyncOperation } from "./sync-events";
 
 export type DistanceConfig = {
   id: string;
@@ -64,43 +64,41 @@ export function validateDistanceDraft(
   return { type: "invalid", errors };
 }
 
-type DistanceIdentity = Pick<DistanceConfig, "id" | "distanceNumber">;
-
-function distanceLabel(distance: DistanceIdentity): string {
-  return `距離${distance.distanceNumber}`;
-}
-
-export function buildDistanceUpdatedInput(
+// 保存した値と編集後の値の差分を、操作として返す。差分が無ければ操作を積まない。
+// 構成は的・エンド数・矢数の1組で、どれかが変われば3項目全てを送る。
+export function buildDistanceUpdatedOperation(
+  saved: DistanceConfig,
   config: DistanceConfig,
   eventId: string,
-): OpInput {
-  return {
-    label: distanceLabel(config),
-    operation: {
-      type: "distance.updated",
-      eventId,
-      distanceId: config.id,
-      distance: config.distance,
+): SyncOperation | null {
+  const changes: DistanceChanges = {};
+  if (config.distance !== saved.distance) changes.distance = config.distance;
+  if (config.isMarked !== saved.isMarked) changes.isMarked = config.isMarked;
+  if (
+    config.totalEnds !== saved.totalEnds ||
+    config.arrowsPerEnd !== saved.arrowsPerEnd ||
+    config.targetFaceId !== saved.targetFaceId
+  ) {
+    changes.config = {
       totalEnds: config.totalEnds,
       arrowsPerEnd: config.arrowsPerEnd,
       targetFaceId: config.targetFaceId,
-      isMarked: config.isMarked,
-    },
+    };
+  }
+  if (Object.keys(changes).length === 0) return null;
+  return {
+    type: "distance.updated",
+    eventId,
+    distanceId: config.id,
+    changes,
   };
 }
 
-export function buildDistanceDisabledInput(
-  distance: DistanceIdentity,
+export function buildDistanceDisabledOperation(
+  distanceId: string,
   eventId: string,
-): OpInput {
-  return {
-    label: distanceLabel(distance),
-    operation: {
-      type: "distance.disabled",
-      eventId,
-      distanceId: distance.id,
-    },
-  };
+): SyncOperation {
+  return { type: "distance.disabled", eventId, distanceId };
 }
 
 // 種別・弓種のそれぞれについて、FILTER_ALLなら絞り込まない。

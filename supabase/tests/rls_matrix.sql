@@ -619,7 +619,7 @@ where p.pronamespace = 'public'::regnamespace;
 
 -- 期待値の方針:
 --   RPCとSELECTポリシーのヘルパー（is_round_member）: authenticatedだけtrue。anonはfalse。
---   is_round_editor: RPC（SECURITY DEFINER）の内部だけが呼ぶため、どちらもfalse。
+--   is_round_editor、shot_fits: RPC（SECURITY DEFINER）の内部だけが呼ぶため、どちらもfalse。
 --   トリガー関数（handle_new_user, set_updated_at）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
 -- 新しい関数を追加したら、PUBLICからREVOKEし、この表に行を追加する。
 create temp table rls_fn_expected (
@@ -649,10 +649,12 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.save_round_as_preset(text,text,text,jsonb)',                               'authenticated', true),
   ('public.set_updated_at()',                                                         'anon',          false),
   ('public.set_updated_at()',                                                         'authenticated', false),
-  ('public.update_distance(uuid,uuid,bigint,bigint,bigint,uuid,boolean)',             'anon',          false),
-  ('public.update_distance(uuid,uuid,bigint,bigint,bigint,uuid,boolean)',             'authenticated', true),
-  ('public.update_round(uuid,uuid,text,date,text,text)',                              'anon',          false),
-  ('public.update_round(uuid,uuid,text,date,text,text)',                              'authenticated', true)
+  ('public.shot_fits(uuid,bigint,bigint,bigint,bigint,text,bigint)',                  'anon',          false),
+  ('public.shot_fits(uuid,bigint,bigint,bigint,bigint,text,bigint)',                  'authenticated', false),
+  ('public.update_distance(uuid,uuid,jsonb)',                                         'anon',          false),
+  ('public.update_distance(uuid,uuid,jsonb)',                                         'authenticated', true),
+  ('public.update_round(uuid,uuid,jsonb)',                                            'anon',          false),
+  ('public.update_round(uuid,uuid,jsonb)',                                            'authenticated', true)
 ;
 
 select is_empty(

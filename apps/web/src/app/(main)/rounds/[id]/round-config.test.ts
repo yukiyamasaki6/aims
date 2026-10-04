@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildRoundUpdatedInput,
+  buildRoundUpdatedOperation,
   type RoundConfig,
   validateRoundConfig,
 } from "./round-config";
@@ -155,24 +155,62 @@ describe("validateRoundConfig", () => {
   });
 });
 
-describe("buildRoundUpdatedInput", () => {
-  it("ラウンド設定の更新操作を、ラウンド設定のキーで登録する入力を作る", () => {
-    // Given: ラウンドID・検証済みの設定・イベントID
-    // When: 登録内容を作る
-    const input = buildRoundUpdatedInput("round-1", validDraft, "event-1");
+describe("buildRoundUpdatedOperation", () => {
+  it("保存した値と変えた項目だけを、changesに持つ操作を作る", () => {
+    // Given: 名前と種別だけを変えた設定
+    const saved = validDraft;
+    const config = { ...validDraft, name: "夜練", format: "indoor" };
 
-    // Then: ラウンド設定のキー・ラベルで、round.updatedの操作を持つ
-    expect(input).toEqual({
-      label: "ラウンド設定",
-      operation: {
-        type: "round.updated",
-        eventId: "event-1",
-        roundId: "round-1",
-        name: "午前練習",
-        roundDate: "2026-09-15",
-        format: "outdoor",
-        bowType: "recurve",
-      },
+    // When: 操作を作る
+    const operation = buildRoundUpdatedOperation(
+      "round-1",
+      saved,
+      config,
+      "event-1",
+    );
+
+    // Then: 変えた項目だけを持つ
+    expect(operation).toEqual({
+      type: "round.updated",
+      eventId: "event-1",
+      roundId: "round-1",
+      changes: { name: "夜練", format: "indoor" },
     });
+  });
+
+  it("実施日と弓種の変更も、changesに持つ", () => {
+    // Given: 実施日と弓種だけを変えた設定
+    const config = {
+      ...validDraft,
+      roundDate: "2026-10-01",
+      bowType: "compound",
+    };
+
+    // When: 操作を作る
+    const operation = buildRoundUpdatedOperation(
+      "round-1",
+      validDraft,
+      config,
+      "event-1",
+    );
+
+    // Then: その2項目だけを持つ
+    expect(operation).toMatchObject({
+      changes: { roundDate: "2026-10-01", bowType: "compound" },
+    });
+  });
+
+  it("変えた項目が無ければ、操作を作らない", () => {
+    // Given: 保存した値と同じ設定
+    // When: 操作を作る
+    const operation = buildRoundUpdatedOperation(
+      "round-1",
+      validDraft,
+      { ...validDraft },
+      "event-1",
+    );
+
+    // Then: 操作は作られない
+    expect(operation).toBeNull();
   });
 });

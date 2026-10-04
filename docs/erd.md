@@ -7,8 +7,8 @@
 | `round_users`             | 特定のラウンドに対するユーザーのアクセス権限・ロールを管理する多対多の中間テーブル。1ラウンドに複数のeditor/viewerが存在しうる |
 | `distances`               | ラウンド中に射撃する特定の距離（70m、50m等）を表す。1ラウンドに複数の距離を持てる            |
 | `shots`                   | 個々の矢のスコアと、誰が射ったかを記録する。1つの(距離, エンド, 矢番号)は常に1本の矢を指す      |
-| `round_events` | `rounds`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない          |
-| `distance_events` | `distances`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない     |
+| `round_events` | `rounds`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない。効かせた操作の、効いた項目だけを記録する |
+| `distance_events` | `distances`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない。効かせた操作の、効いた項目だけを記録する |
 | `shot_events` | `shots`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない            |
 | `target_faces`            | 的を表す。`owner_id`がnullならグローバル、値があれば個人登録   |
 | `target_face_spots`       | 的の中の的中スポット（中心座標）を表す。1つの的が複数スポットを持てる（3つ目等の複数的配置）   |
@@ -93,6 +93,7 @@ erDiagram
         string type "操作種別 [CHECK: CREATED / UPDATED / DISABLED]"
         uuid author_id FK "操作実行ユーザ"
         bigint revision UK "サーバー確定順 [NOT NULL] [CHECK: >= 1] [UK: (round_id, revision)]"
+        text_array set_fields "UPDATEDで効いた項目。NULLは全項目 [CHECK: 空でなく、挙げた項目の値が非NULL]"
         string name "rounds.nameと同じ制約 [CREATED・UPDATED: 必須 / DISABLED: NULL]"
         date round_date "rounds.round_dateと同じ制約 [CREATED・UPDATED: 必須 / DISABLED: NULL]"
         string format "rounds.formatと同じ制約 [CREATED・UPDATED: 必須 / DISABLED: NULL]"
@@ -107,6 +108,7 @@ erDiagram
         string type "操作種別 [CHECK: CREATED / UPDATED / DISABLED]"
         uuid author_id FK "操作実行ユーザ"
         bigint revision UK "サーバー確定順 [NOT NULL] [CHECK: >= 1] [UK: (distance_id, revision)]"
+        text_array set_fields "UPDATEDで効いた項目。NULLは全項目 [CHECK: 空でなく、挙げた項目の値が非NULL。構成の3項目は全て含むか全て含まない]"
         string position_key "distances.position_keyと同じ制約 [CREATED・UPDATED: 必須 / DISABLED: NULL]"
         integer distance "distances.distanceと同じ制約 [CREATED・UPDATED: is_marked=trueなら必須・falseならNULL / DISABLED: NULL]"
         boolean is_marked "distances.is_markedと同じ制約 [CREATED・UPDATED: 必須 / DISABLED: NULL]"

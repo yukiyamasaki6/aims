@@ -1,13 +1,13 @@
 -- 書き込みRPCが、確定した対象のrevisionを返すことと、重複したevent_idの再送の扱いを確認する。
---   - 7つのRPCの返り値（新規はrevision、重複の再送は既存のイベントのrevision）
---   - record_shots/clear_shotsは、入力の順のbigint[]を返す
---   - 確定済みのevent_idの再送は、状態に依存する検証より先に判定し、拒否せず既存のrevisionを返す
+--   - 書き込みRPCの返り値（新規は確定したrevision、重複の再送は既存のイベントのrevision）
+--   - record_shots/clear_shotsは、入力の順の{revision, applied, reason}の配列を返す
+--   - 確定済みのevent_idの再送は、規則の判定より先に行い、効いた項目を同じ形で返す
 --   - 権限のない呼び出しは、確定済みのevent_idでも拒否される
 -- 呼び出しの権限と入力の検証はrpc_matrix.sqlで固定している。
 
 begin;
 
-select plan(31);
+select plan(32);
 
 create temp table rv_id (alias text primary key, id uuid not null);
 insert into rv_id (alias, id) values
@@ -44,6 +44,18 @@ as $$
   end
 $$;
 
+-- 応答のrevisionの列。
+create function pg_temp.revs(p_results jsonb) returns bigint[]
+language sql stable
+as $$
+  select coalesce(array_agg((e ->> 'revision')::bigint order by ord), '{}'::bigint[])
+  from jsonb_array_elements(p_results) with ordinality as t(e, ord)
+$$;
+
+create function pg_temp.rev(p_result jsonb) returns bigint
+language sql immutable
+as $$ select (p_result ->> 'revision')::bigint $$;
+
 insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('N'));
 
 -- R1: outdoor。D1は矢なし、D2は矢あり。R2: field。
@@ -64,14 +76,14 @@ select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
 -- 返り値: ラウンド・距離
 -- ============================================================
 select is(
-  public.update_round(pg_temp.ev(1), pg_temp.id('R1'), 'Rev Outdoor 2', '2026-01-02', 'outdoor', 'recurve'),
+  pg_temp.rev(public.update_round(pg_temp.ev(1), pg_temp.id('R1'), '{"name":"Rev Outdoor 2","round_date":"2026-01-02"}'::jsonb)),
   2::bigint,
   'update_roundは確定したラウンドのrevisionを返す'
 );
 select is(
-  public.update_round(pg_temp.ev(1), pg_temp.id('R1'), 'Rev Outdoor 2', '2026-01-02', 'outdoor', 'recurve'),
-  2::bigint,
-  'update_roundの同じevent_idの再送は既存のrevisionを返す'
+  public.update_round(pg_temp.ev(1), pg_temp.id('R1'), '{"name":"Rev Outdoor 2","round_date":"2026-01-02"}'::jsonb),
+  '{"revision":2,"applied":true,"applied_fields":["name","round_date"],"rejected_fields":[],"reason":null}'::jsonb,
+  'update_roundの同じevent_idの再送は、既存のrevisionと効いた項目を返す'
 );
 select is(
   (select revision from public.rounds where id = pg_temp.id('R1')) || '/' || (select count(*) from public.round_events where round_id = pg_temp.id('R1')),
@@ -80,12 +92,12 @@ select is(
 );
 
 select is(
-  public.create_distance(pg_temp.ev(2), pg_temp.id('DN'), pg_temp.id('R1'), 'c', 30, 4, 3, pg_temp.face(), true),
+  pg_temp.rev(public.create_distance(pg_temp.ev(2), pg_temp.id('DN'), pg_temp.id('R1'), 'c', 30, 4, 3, pg_temp.face(), true)),
   1::bigint,
   'create_distanceは1を返す'
 );
 select is(
-  public.create_distance(pg_temp.ev(2), pg_temp.id('DN'), pg_temp.id('R1'), 'c', 30, 4, 3, pg_temp.face(), true),
+  pg_temp.rev(public.create_distance(pg_temp.ev(2), pg_temp.id('DN'), pg_temp.id('R1'), 'c', 30, 4, 3, pg_temp.face(), true)),
   1::bigint,
   'create_distanceの再送は既存のrevisionを返す'
 );
@@ -96,23 +108,23 @@ select is(
 );
 
 select is(
-  public.update_distance(pg_temp.ev(3), pg_temp.id('DN'), 35, 4, 3, pg_temp.face(), true),
+  pg_temp.rev(public.update_distance(pg_temp.ev(3), pg_temp.id('DN'), '{"distance":35}'::jsonb)),
   2::bigint,
   'update_distanceは確定した距離のrevisionを返す'
 );
 select is(
-  public.update_distance(pg_temp.ev(3), pg_temp.id('DN'), 35, 4, 3, pg_temp.face(), true),
-  2::bigint,
-  'update_distanceの再送は既存のrevisionを返す'
+  public.update_distance(pg_temp.ev(3), pg_temp.id('DN'), '{"distance":35}'::jsonb),
+  '{"revision":2,"applied":true,"applied_fields":["distance"],"rejected_fields":[],"reason":null}'::jsonb,
+  'update_distanceの再送は、既存のrevisionと効いた項目を返す'
 );
 
 select is(
-  public.disable_distance(pg_temp.ev(4), pg_temp.id('DN')),
+  pg_temp.rev(public.disable_distance(pg_temp.ev(4), pg_temp.id('DN'))),
   3::bigint,
   'disable_distanceは確定した距離のrevisionを返す'
 );
 select is(
-  public.disable_distance(pg_temp.ev(4), pg_temp.id('DN')),
+  pg_temp.rev(public.disable_distance(pg_temp.ev(4), pg_temp.id('DN'))),
   3::bigint,
   'disable_distanceの再送は既存のrevisionを返す'
 );
@@ -126,17 +138,17 @@ select is(
 -- 返り値: 矢
 -- ============================================================
 select is(
-  public.record_shots(jsonb_build_array(pg_temp.shot(10, 'D2', 1, 1, 9), pg_temp.shot(11, 'D2', 1, 2, 8))),
+  pg_temp.revs(public.record_shots(jsonb_build_array(pg_temp.shot(10, 'D2', 1, 1, 9), pg_temp.shot(11, 'D2', 1, 2, 8)))),
   array[1, 1]::bigint[],
   'record_shotsは入力の順にイベントごとのrevisionを返す'
 );
 select is(
-  public.record_shots(jsonb_build_array(pg_temp.shot(12, 'D2', 2, 1, 7), pg_temp.shot(13, 'D2', 2, 1, 6))),
+  pg_temp.revs(public.record_shots(jsonb_build_array(pg_temp.shot(12, 'D2', 2, 1, 7), pg_temp.shot(13, 'D2', 2, 1, 6)))),
   array[1, 2]::bigint[],
   'record_shotsは同じマスが配列に複数あればrevisionを増やして返す'
 );
 select is(
-  public.record_shots(jsonb_build_array(pg_temp.shot(10, 'D2', 1, 1, 9), pg_temp.shot(14, 'D2', 1, 3, 5), pg_temp.shot(13, 'D2', 2, 1, 6))),
+  pg_temp.revs(public.record_shots(jsonb_build_array(pg_temp.shot(10, 'D2', 1, 1, 9), pg_temp.shot(14, 'D2', 1, 3, 5), pg_temp.shot(13, 'D2', 2, 1, 6)))),
   array[1, 1, 2]::bigint[],
   'record_shotsは新規と重複が混ざる配列で各要素のrevisionを返す'
 );
@@ -146,12 +158,12 @@ select is(
   'record_shotsの重複の要素はイベントを増やさない'
 );
 select is(
-  public.clear_shots(jsonb_build_array(pg_temp.shot(15, 'D2', 1, 1), pg_temp.shot(16, 'D2', 1, 1))),
+  pg_temp.revs(public.clear_shots(jsonb_build_array(pg_temp.shot(15, 'D2', 1, 1), pg_temp.shot(16, 'D2', 1, 1)))),
   array[2, 3]::bigint[],
   'clear_shotsは同じマスが配列に複数あればrevisionを増やして返す'
 );
 select is(
-  public.clear_shots(jsonb_build_array(pg_temp.shot(15, 'D2', 1, 1), pg_temp.shot(17, 'D2', 4, 4))),
+  pg_temp.revs(public.clear_shots(jsonb_build_array(pg_temp.shot(15, 'D2', 1, 1), pg_temp.shot(17, 'D2', 4, 4)))),
   array[2, 1]::bigint[],
   'clear_shotsは重複の要素に既存のrevisionを、行の無いマスに1を返す'
 );
@@ -162,80 +174,84 @@ select is(
 );
 select is(
   public.record_shots('[]'::jsonb),
-  '{}'::bigint[],
+  '[]'::jsonb,
   'record_shotsは空の配列に空の配列を返す'
 );
 
 -- ============================================================
--- 重複の判定が、状態に依存する検証より先に行われる
+-- 重複の判定が、規則の判定より先に行われる
 -- ============================================================
 -- update_distance: 矢のない距離の構成を変える更新を確定し、矢を記録した後に再送する。
 select is(
-  public.update_distance(pg_temp.ev(20), pg_temp.id('D1'), 70, 4, 6, pg_temp.face(), true),
+  pg_temp.rev(public.update_distance(pg_temp.ev(20), pg_temp.id('D1'), jsonb_build_object('config', jsonb_build_object('total_ends', 4, 'arrows_per_end', 6, 'target_face_id', pg_temp.face())))),
   2::bigint,
   '準備: 構成を変えるupdate_distanceが確定する'
 );
 select is(
-  public.record_shots(jsonb_build_array(pg_temp.shot(21, 'D1', 1, 1, 9))),
+  pg_temp.revs(public.record_shots(jsonb_build_array(pg_temp.shot(21, 'D1', 4, 1, 9)))),
   array[1]::bigint[],
-  '準備: その距離へ矢を記録する'
+  '準備: その距離の4エンド目へ矢を記録する'
 );
 select is(
-  public.update_distance(pg_temp.ev(20), pg_temp.id('D1'), 70, 4, 6, pg_temp.face(), true),
-  2::bigint,
-  'update_distance: 矢の記録後でも、確定済みのevent_idの再送は拒否されず既存のrevisionを返す'
+  public.update_distance(pg_temp.ev(20), pg_temp.id('D1'), jsonb_build_object('config', jsonb_build_object('total_ends', 4, 'arrows_per_end', 6, 'target_face_id', pg_temp.face()))),
+  '{"revision":2,"applied":true,"applied_fields":["config"],"rejected_fields":[],"reason":null}'::jsonb,
+  'update_distance: 矢の記録後でも、確定済みのevent_idの再送は効かないと判定されず既存のrevisionを返す'
 );
-select throws_ok(
-  format($$select public.update_distance(%L, %L, 70, 5, 6, %L, true)$$, pg_temp.ev(22), pg_temp.id('D1'), pg_temp.face()),
-  'P0001',
-  '既に得点が記録されているため、エンド数・矢数・的は変更できません。',
-  'update_distance: 新しいevent_idで構成を変える更新は、矢の記録後は拒否される'
+select is(
+  public.update_distance(pg_temp.ev(22), pg_temp.id('D1'), jsonb_build_object('config', jsonb_build_object('total_ends', 3, 'arrows_per_end', 6, 'target_face_id', pg_temp.face()))),
+  '{"revision":null,"applied":false,"applied_fields":[],"rejected_fields":[{"field":"config","reason":"UNFIT"}],"reason":null}'::jsonb,
+  'update_distance: 新しいevent_idで矢が無効になる構成へ変える更新は、UNFITで効かない'
+);
+select is(
+  (select revision || '/' || (select count(*) from public.distance_events where event_id = pg_temp.ev(22)) from public.distances where id = pg_temp.id('D1')),
+  '2/0',
+  'update_distance: 効かなかった更新は、イベントも射影のrevisionも進めない'
 );
 
 -- update_round: 種別を変える更新を確定し、フィールドへ戻してUnmarkedの距離を作った後に再送する。
 select is(
-  public.update_round(pg_temp.ev(30), pg_temp.id('R2'), 'Rev Field', '2026-01-01', 'outdoor', 'recurve'),
+  pg_temp.rev(public.update_round(pg_temp.ev(30), pg_temp.id('R2'), '{"format":"outdoor"}'::jsonb)),
   2::bigint,
   '準備: 種別を変えるupdate_roundが確定する'
 );
 select is(
-  public.update_round(pg_temp.ev(31), pg_temp.id('R2'), 'Rev Field', '2026-01-01', 'field', 'recurve'),
+  pg_temp.rev(public.update_round(pg_temp.ev(31), pg_temp.id('R2'), '{"format":"field"}'::jsonb)),
   3::bigint,
   '準備: フィールドへ戻す'
 );
 select is(
-  public.create_distance(pg_temp.ev(32), pg_temp.id('D3'), pg_temp.id('R2'), 'a', null, 6, 6, pg_temp.face(), false),
+  pg_temp.rev(public.create_distance(pg_temp.ev(32), pg_temp.id('D3'), pg_temp.id('R2'), 'a', null, 6, 6, pg_temp.face(), false)),
   1::bigint,
   '準備: Unmarkedの距離を作る'
 );
 select is(
-  public.update_round(pg_temp.ev(30), pg_temp.id('R2'), 'Rev Field', '2026-01-01', 'outdoor', 'recurve'),
+  pg_temp.rev(public.update_round(pg_temp.ev(30), pg_temp.id('R2'), '{"format":"outdoor"}'::jsonb)),
   2::bigint,
-  'update_round: Unmarkedの距離が作られた後でも、確定済みのevent_idの再送は拒否されず既存のrevisionを返す'
+  'update_round: Unmarkedの距離が作られた後でも、確定済みのevent_idの再送は効かないと判定されず既存のrevisionを返す'
 );
 
 -- create_distance: Unmarkedの距離の作成を確定し、種別を変えた後に再送する。
 select is(
-  public.disable_distance(pg_temp.ev(33), pg_temp.id('D3')),
+  pg_temp.rev(public.disable_distance(pg_temp.ev(33), pg_temp.id('D3'))),
   2::bigint,
   '準備: Unmarkedの距離を無効化して、種別を変えられるようにする'
 );
 select is(
-  public.update_round(pg_temp.ev(34), pg_temp.id('R2'), 'Rev Field', '2026-01-01', 'outdoor', 'recurve'),
+  pg_temp.rev(public.update_round(pg_temp.ev(34), pg_temp.id('R2'), '{"format":"outdoor"}'::jsonb)),
   4::bigint,
   '準備: フィールド以外へ変更する'
 );
 select is(
-  public.create_distance(pg_temp.ev(32), pg_temp.id('D3'), pg_temp.id('R2'), 'a', null, 6, 6, pg_temp.face(), false),
+  pg_temp.rev(public.create_distance(pg_temp.ev(32), pg_temp.id('D3'), pg_temp.id('R2'), 'a', null, 6, 6, pg_temp.face(), false)),
   1::bigint,
-  'create_distance: 種別の変更後でも、確定済みのevent_idの再送は拒否されず既存のrevisionを返す'
+  'create_distance: 種別の変更後でも、確定済みのevent_idの再送は効かないと判定されず既存のrevisionを返す'
 );
 
 -- 権限のない呼び出しは、確定済みのevent_idでも拒否される。
 select set_config('request.jwt.claim.sub', pg_temp.id('N')::text, true);
 select throws_ok(
-  format($$select public.update_round(%L, %L, 'Rev Outdoor 2', '2026-01-02', 'outdoor', 'recurve')$$, pg_temp.ev(1), pg_temp.id('R1')),
-  'P0001',
+  format($$select public.update_round(%L, %L, '{"name":"Rev Outdoor 2"}'::jsonb)$$, pg_temp.ev(1), pg_temp.id('R1')),
+  'PT403',
   'このラウンドを編集する権限がありません。',
   '権限のない呼び出しは、確定済みのevent_idでも拒否される'
 );

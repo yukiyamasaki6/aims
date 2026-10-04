@@ -12,8 +12,8 @@ import {
   type TargetFaceSpotLayout,
 } from "../_shared/target-face-icon";
 import {
-  buildDistanceDisabledInput,
-  buildDistanceUpdatedInput,
+  buildDistanceDisabledOperation,
+  buildDistanceUpdatedOperation,
   type DistanceConfig,
   type DistanceConfigErrors,
   type DistanceDraft,
@@ -21,7 +21,7 @@ import {
   validateDistanceDraft,
 } from "./distance-config";
 import { FILTER_ALL } from "./distance-config-constants";
-import type { OpInput } from "./sync-events";
+import type { SyncOperation } from "./sync-events";
 
 export type TargetFaceOption = {
   id: string;
@@ -185,7 +185,7 @@ export function DistanceEditFields({
   onSaved: (updated: DistanceConfig) => void;
   onDeleted: () => void;
   onOpenChange: (open: boolean) => void;
-  enqueue: (input: OpInput) => void;
+  enqueue: (operation: SyncOperation) => void;
 }) {
   const [draft, setDraft] = useState<DistanceDraft>(distance);
   const [fieldErrors, setFieldErrors] = useState<DistanceConfigErrors>({});
@@ -200,12 +200,18 @@ export function DistanceEditFields({
     setFieldErrors({});
 
     onSaved(validation.config);
-    enqueue(buildDistanceUpdatedInput(validation.config, crypto.randomUUID()));
+    // 変えた項目が無ければ、操作を積まない。
+    const operation = buildDistanceUpdatedOperation(
+      distance,
+      validation.config,
+      crypto.randomUUID(),
+    );
+    if (operation) enqueue(operation);
   }
 
   function performDelete() {
     onDeleted();
-    enqueue(buildDistanceDisabledInput(distance, crypto.randomUUID()));
+    enqueue(buildDistanceDisabledOperation(distance.id, crypto.randomUUID()));
   }
 
   function handleDeleteClick() {

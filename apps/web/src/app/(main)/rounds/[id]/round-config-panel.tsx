@@ -8,12 +8,12 @@ import { Input } from "@/components/ui/input";
 import { labelOf } from "../_shared/option-label";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../_shared/round-constants";
 import {
-  buildRoundUpdatedInput,
+  buildRoundUpdatedOperation,
   type RoundConfig,
   type RoundConfigErrors,
   validateRoundConfig,
 } from "./round-config";
-import type { OpInput } from "./sync-events";
+import type { SyncOperation } from "./sync-events";
 
 function RequiredMark() {
   return (
@@ -34,7 +34,7 @@ export function RoundConfigPanel({
   initial: RoundConfig;
   defaultExpanded?: boolean;
   hasUnmarkedDistances: boolean;
-  enqueue: (input: OpInput) => void;
+  enqueue: (operation: SyncOperation) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [saved, setSaved] = useState(initial);
@@ -64,9 +64,16 @@ export function RoundConfigPanel({
     setFieldErrors({});
 
     const { config } = validation;
+    const operation = buildRoundUpdatedOperation(
+      roundId,
+      saved,
+      config,
+      crypto.randomUUID(),
+    );
     setSaved(config);
     setExpanded(false);
-    enqueue(buildRoundUpdatedInput(roundId, config, crypto.randomUUID()));
+    // 変えた項目が無ければ、操作を積まない。
+    if (operation) enqueue(operation);
   }
 
   return (

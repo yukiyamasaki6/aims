@@ -67,6 +67,27 @@ export function distanceNumber(
   );
 }
 
+// 矢が、距離の構成(エンド数・矢数・的)で有効か。サーバーの`shot_fits`と同じ判定にする。
+// Mは的によらず有効。的のリングが手元に無い場合は、点数を判定せず有効とする(サーバーに委ねる)。
+export function shotFitsDistance(
+  distance: Pick<Distance, "total_ends" | "arrows_per_end" | "target_face_id">,
+  cell: { endNumber: number; arrowNumber: number },
+  score: { scoreStr: string; scoreInt: number },
+  targetFaces: ScoringTargetFace[],
+): boolean {
+  if (cell.endNumber < 1 || cell.endNumber > distance.total_ends) return false;
+  if (cell.arrowNumber < 1 || cell.arrowNumber > distance.arrows_per_end) {
+    return false;
+  }
+  if (score.scoreStr === "M" && score.scoreInt === 0) return true;
+  const targetFace = targetFaces.find((f) => f.id === distance.target_face_id);
+  const rings = uniqueRingsFor(targetFace);
+  if (rings.length === 0) return true;
+  return rings.some(
+    (r) => r.score_str === score.scoreStr && r.score_int === score.scoreInt,
+  );
+}
+
 // 距離の的に実在する点数のリングだけを、点数ごとに1つに重複排除して返す。
 // 3つ目の的（トライアングル/バーティカル）は通常スポットごとに同一の点数構成だが、異なる可能性も考慮して全スポットのリングを対象にする。
 function uniqueRingsFor(targetFace: ScoringTargetFace | undefined) {

@@ -114,16 +114,10 @@ describe("RoundConfigPanel", () => {
 
         // Then: round.updatedの操作を登録して折りたたむ
         expect(enqueue).toHaveBeenCalledWith({
-          label: "ラウンド設定",
-          operation: {
-            type: "round.updated",
-            eventId: "00000000-0000-4000-8000-000000000001",
-            roundId: "round-1",
-            name: "午後練習",
-            roundDate: "2026-09-15",
-            format: "outdoor",
-            bowType: "compound",
-          },
+          type: "round.updated",
+          eventId: "00000000-0000-4000-8000-000000000001",
+          roundId: "round-1",
+          changes: { name: "午後練習", bowType: "compound" },
         });
         expect(
           screen.queryByTestId("round-config-name"),

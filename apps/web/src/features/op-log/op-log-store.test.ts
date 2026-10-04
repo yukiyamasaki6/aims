@@ -17,7 +17,6 @@ function entry(
     eventId,
     streamId: STREAM,
     userId: "user-1",
-    label: value,
     operation: { eventId, value },
     ...overrides,
   };
@@ -114,17 +113,19 @@ describe("op log store", () => {
     ).toEqual(["other-user"]);
   });
 
-  it("ackは確定したrevisionを1度だけ付け、操作は列に残る", async () => {
+  it("ackは確定の結果を1度だけ付け、操作は列に残る", async () => {
     const store = newStore();
     const first = entry("a");
     await store.append(first);
 
-    await store.ack(first.eventId, 4);
-    await store.ack(first.eventId, 9);
-    await store.ack(crypto.randomUUID(), 1);
+    await store.ack(first.eventId, 4, true, ["name"]);
+    await store.ack(first.eventId, 9, true, null);
+    await store.ack(crypto.randomUUID(), 1, true, null);
 
     const [stored] = await store.loadStream(STREAM, "user-1");
     expect(stored.ackedRevision).toBe(4);
+    expect(stored.ackedApplied).toBe(true);
+    expect(stored.ackedFields).toEqual(["name"]);
     expect(stored.operation).toEqual(first.operation);
   });
 

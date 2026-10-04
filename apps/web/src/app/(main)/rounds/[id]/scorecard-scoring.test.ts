@@ -6,6 +6,7 @@ import {
   type ScoringRing,
   type ScoringTargetFace,
   scoreKeysFor,
+  shotFitsDistance,
   summarizeDistance,
   summarizeRound,
 } from "./scorecard-scoring";
@@ -457,5 +458,53 @@ describe("endSubtotal", () => {
 
     // Then: Mだけなら0、記録が無ければnullになる
     expect(results).toEqual([0, null]);
+  });
+});
+
+describe("shotFitsDistance", () => {
+  const config = { total_ends: 6, arrows_per_end: 3, target_face_id: "face-x" };
+  const faces = [faceX, face("face-empty", [])];
+  const score = { scoreStr: "9", scoreInt: 9 };
+
+  it("構成の範囲内で、的に実在する点数なら有効", () => {
+    expect(
+      shotFitsDistance(config, { endNumber: 6, arrowNumber: 3 }, score, faces),
+    ).toBe(true);
+  });
+
+  it("エンド番号が範囲外なら無効", () => {
+    expect(
+      shotFitsDistance(config, { endNumber: 7, arrowNumber: 1 }, score, faces),
+    ).toBe(false);
+    expect(
+      shotFitsDistance(config, { endNumber: 0, arrowNumber: 1 }, score, faces),
+    ).toBe(false);
+  });
+
+  it("矢番号が範囲外なら無効", () => {
+    expect(
+      shotFitsDistance(config, { endNumber: 1, arrowNumber: 4 }, score, faces),
+    ).toBe(false);
+    expect(
+      shotFitsDistance(config, { endNumber: 1, arrowNumber: 0 }, score, faces),
+    ).toBe(false);
+  });
+
+  it("的に無い点数は無効で、Mは的によらず有効", () => {
+    const cell = { endNumber: 1, arrowNumber: 1 };
+    expect(
+      shotFitsDistance(config, cell, { scoreStr: "5", scoreInt: 5 }, faces),
+    ).toBe(false);
+    expect(
+      shotFitsDistance(config, cell, { scoreStr: "M", scoreInt: 0 }, faces),
+    ).toBe(true);
+  });
+
+  it("的のリングが手元に無ければ点数を判定しない", () => {
+    const cell = { endNumber: 1, arrowNumber: 1 };
+    const unknown = { ...config, target_face_id: "unknown" };
+    expect(shotFitsDistance(unknown, cell, score, faces)).toBe(true);
+    const empty = { ...config, target_face_id: "face-empty" };
+    expect(shotFitsDistance(empty, cell, score, faces)).toBe(true);
   });
 });
