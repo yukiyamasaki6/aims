@@ -4,6 +4,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getLocalIdentity } from "@/features/auth/local-identity";
 import type { OpLogEntry } from "@/features/op-log/op-log-types";
+import { loadRoundDetail } from "./load-round-detail";
 import type { RoundState } from "./round-op-apply";
 import { roundOpStore, roundStreamId } from "./round-op-store";
 import { roundUpdated, shotRecorded } from "./round-op-test-helpers";
@@ -11,8 +12,26 @@ import { sendRoundBatch } from "./round-op-transport";
 import type { SyncOperation } from "./sync-events";
 import { useRoundOpStack } from "./use-round-op-stack";
 
+vi.mock("./load-round-detail", () => ({ loadRoundDetail: vi.fn() }));
+vi.mock("@/lib/supabase/client", () => ({ createClient: vi.fn(() => ({})) }));
 vi.mock("./round-op-transport", () => ({ sendRoundBatch: vi.fn() }));
 const send = vi.mocked(sendRoundBatch);
+const reload = vi.mocked(loadRoundDetail);
+
+const applied = {
+  revision: 2,
+  applied: true,
+  appliedFields: null,
+  rejectedFields: [],
+  reason: null,
+};
+const ineffective = {
+  revision: null,
+  applied: false,
+  appliedFields: [],
+  rejectedFields: [],
+  reason: "UNFIT",
+};
 
 const base: RoundState = {
   roundConfig: {
@@ -45,7 +64,6 @@ function entryOf(
     eventId: operation.eventId,
     streamId: roundStreamId("round-1"),
     userId: getLocalIdentity(),
-    label: operation.type,
     operation,
   };
 }
@@ -62,13 +80,13 @@ beforeEach(async () => {
   await roundOpStore.close();
   globalThis.indexedDB = new IDBFactory();
   setOnline(true);
-  send.mockResolvedValue({ ok: true, revisions: [2] });
+  send.mockResolvedValue({ ok: true, results: [applied] });
 });
 
 describe("useRoundOpStack", () => {
   it("列が空なら、画面の状態は基準と同じで、同期済みになる", () => {
     const { result } = renderHook(() =>
-      useRoundOpStack("round-1", { base, entries: [], reflected: [] }),
+      useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
     );
 
     expect(result.current.state.roundConfig).toEqual(base.roundConfig);
@@ -77,10 +95,10 @@ describe("useRoundOpStack", () => {
   });
 
   it("読み込んだ列を基準へ重ねた状態から始め、起動時に送信する", async () => {
-    const entries = [entryOf(roundUpdated({ name: "未送信" }), 1)];
+    const entries = [entryOf(roundUpdated({ changes: { name: "未送信" } }), 1)];
 
     const { result } = renderHook(() =>
-      useRoundOpStack("round-1", { base, entries, reflected: [] }),
+      useRoundOpStack("round-1", { base, entries, reflected: [] }, []),
     );
 
     expect(result.current.state.roundConfig.name).toBe("未送信");
@@ -90,14 +108,11 @@ describe("useRoundOpStack", () => {
 
   it("操作を追記すると、保存の完了後に画面の状態へ反映し、送信の完了は待たない", async () => {
     const { result } = renderHook(() =>
-      useRoundOpStack("round-1", { base, entries: [], reflected: [] }),
+      useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
     );
 
     act(() => {
-      result.current.append({
-        operation: shotRecorded(),
-        label: "距離1 1エンド1本目",
-      });
+      result.current.append(shotRecorded());
     });
 
     await waitFor(() => expect(result.current.state.shots).toHaveLength(1));
@@ -111,16 +126,19 @@ describe("useRoundOpStack", () => {
       eventId: operation.eventId,
       streamId: roundStreamId("round-1"),
       userId: getLocalIdentity(),
-      label: operation.type,
       operation,
     });
 
     renderHook(() =>
-      useRoundOpStack("round-1", {
-        base,
-        entries: [],
-        reflected: [operation.eventId],
-      }),
+      useRoundOpStack(
+        "round-1",
+        {
+          base,
+          entries: [],
+          reflected: [operation.eventId],
+        },
+        [],
+      ),
     );
 
     await waitFor(async () => {
@@ -132,15 +150,12 @@ describe("useRoundOpStack", () => {
 
   it("オフラインになると送らず保留し、オンラインに戻ると送信する", async () => {
     const { result } = renderHook(() =>
-      useRoundOpStack("round-1", { base, entries: [], reflected: [] }),
+      useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
     );
     setOnline(false);
     act(() => {
       window.dispatchEvent(new Event("offline"));
-      result.current.append({
-        operation: shotRecorded(),
-        label: "距離1 1エンド1本目",
-      });
+      result.current.append(shotRecorded());
     });
     await waitFor(() => expect(result.current.status).toBe("offline-pending"));
     expect(send).not.toHaveBeenCalled();
@@ -156,18 +171,114 @@ describe("useRoundOpStack", () => {
 
   it("画面を閉じた後は、新しい送信をしない", async () => {
     const { result, unmount } = renderHook(() =>
-      useRoundOpStack("round-1", { base, entries: [], reflected: [] }),
+      useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
     );
     unmount();
 
     act(() => {
-      result.current.append({
-        operation: shotRecorded(),
-        label: "距離1 1エンド1本目",
-      });
+      result.current.append(shotRecorded());
     });
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(send).not.toHaveBeenCalled();
+  });
+
+  describe("効かなかった操作または項目がある応答", () => {
+    const refreshed: RoundState = {
+      ...base,
+      roundConfig: { ...base.roundConfig, name: "他端末" },
+    };
+
+    it("基準を取り直し、画面の状態へ反映する", async () => {
+      // Given: サーバーが効かなかったと答える。取り直した基準は別の名前
+      send.mockResolvedValue({ ok: true, results: [ineffective] });
+      reload.mockResolvedValue({
+        status: "ok",
+        data: {
+          base: refreshed,
+          entries: [],
+          reflected: [],
+          targetFaces: [],
+          leaveRound: false,
+        },
+      });
+      const { result } = renderHook(() =>
+        useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
+      );
+
+      // When: 操作を追記する
+      act(() => {
+        result.current.append(shotRecorded());
+      });
+
+      // Then: 取り直した基準が画面の状態になる
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(result.current.state.roundConfig.name).toBe("他端末"),
+      );
+    });
+
+    it("効いた応答だけなら、取り直さない", async () => {
+      const { result } = renderHook(() =>
+        useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
+      );
+
+      act(() => {
+        result.current.append(shotRecorded());
+      });
+
+      await waitFor(() => expect(result.current.status).toBe("synced"));
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it("取得に失敗しても、画面の状態は変えない", async () => {
+      send.mockResolvedValue({ ok: true, results: [ineffective] });
+      reload.mockRejectedValue(new Error("fail"));
+      const { result } = renderHook(() =>
+        useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
+      );
+
+      act(() => {
+        result.current.append(shotRecorded());
+      });
+
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      expect(result.current.state.roundConfig.name).toBe("元");
+    });
+
+    it("取得中に別の知らせが届いたら、完了後にもう1度取得する", async () => {
+      send.mockResolvedValue({ ok: true, results: [ineffective] });
+      let release: () => void = () => {};
+      reload.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () =>
+              resolve({
+                status: "ok",
+                data: {
+                  base,
+                  entries: [],
+                  reflected: [],
+                  targetFaces: [],
+                  leaveRound: false,
+                },
+              });
+          }),
+      );
+      reload.mockResolvedValue({ status: "offline" });
+      const { result } = renderHook(() =>
+        useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
+      );
+
+      act(() => {
+        result.current.append(shotRecorded());
+        result.current.append(shotRecorded({ eventId: "e-2", arrowNumber: 2 }));
+      });
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      release();
+
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(2));
+    });
   });
 });

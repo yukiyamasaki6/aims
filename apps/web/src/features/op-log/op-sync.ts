@@ -4,6 +4,7 @@ import type {
   OpFlight,
   OpLogEntry,
   OpPlanPorts,
+  OpResult,
   OpStatus,
   PlanItem,
   RetireReason,
@@ -12,17 +13,16 @@ import type {
 import { planFlights } from "./op-plan";
 import { classifyFailure, decideSyncResult, toSafeResult } from "./sync-result";
 import { deriveSyncStatus } from "./sync-status";
-import type {
-  BatchResult,
-  SyncError,
-  SyncFailure,
-  SyncStatus,
-  SyncStatusCounts,
-} from "./sync-types";
+import type { BatchResult, SyncStatus, SyncStatusCounts } from "./sync-types";
 
 export type OpSyncStore<Op extends OpBase> = {
   append: (entry: NewOpLogEntry<Op>) => Promise<number>;
-  ack: (eventId: string, revision: number) => Promise<void>;
+  ack: (
+    eventId: string,
+    revision: number | null,
+    applied: boolean,
+    appliedFields: string[] | null,
+  ) => Promise<void>;
   retire: (eventIds: string[], reason: RetireReason) => Promise<void>;
 };
 
@@ -39,24 +39,30 @@ export type OpSyncDeps<Op extends OpBase> = OpPlanPorts<Op> & {
 type OpSyncItem<Op extends OpBase> = {
   eventId: string;
   operation: Op;
-  label: string;
   status: OpStatus;
   // 保存の完了後に付く。
   seq?: number;
 };
 
+// 画面が適用に使う、保存が完了した操作。
+// confirmedFieldsは、未確定ならundefined、確定済みで全項目が効いたならnull、項目に分ける操作で一部だけ効いたなら効いた項目。
+export type OpSyncOperation<Op extends OpBase> = {
+  operation: Op;
+  confirmedFields: string[] | null | undefined;
+};
+
 export type OpSyncSnapshot<Op extends OpBase> = {
-  // 列の順。確定済みと拒否された操作も含む。
+  // 列の順。確定済みの操作も含む。
   items: OpSyncItem<Op>[];
-  // 保存が完了した`items`の操作だけ。保存の完了と読み込みのときだけ新しい配列になり、状態の変化では変わらない。
-  operations: Op[];
+  // 保存が完了した`items`の操作だけ。保存の完了、確定、読み込みのときだけ新しい配列になり、送信中などの状態の変化では変わらない。
+  operations: OpSyncOperation<Op>[];
   status: SyncStatus;
-  errors: SyncError[];
 };
 
 type Item<Op extends OpBase> = OpSyncItem<Op> & {
   solo: boolean;
-  failure?: SyncFailure;
+  // 確定済みの結果。OpSyncOperation.confirmedFieldsと同じ意味。
+  confirmedFields?: string[] | null;
 };
 
 type Flight = {
@@ -69,7 +75,7 @@ type Flight = {
 };
 
 // 操作の列の送信器。Reactに依存せず、列の追記・衝突の規則に従った送信・再試行・保留を担う。
-// 拒否された操作は、同じ対象の後続を止める（保持の状態はメモリだけで、再読み込みで再び送信を試みる）。
+// 認可・契約で拒否された操作は破棄し、効かなかった操作は列から外す。止めて残すのは未認証のときだけで、同じ対象の後続も止める（保持の状態はメモリだけで、再読み込みで再び送信を試みる）。
 export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
   const now = deps.now ?? (() => Date.now());
   let items: Item<Op>[] = [];
@@ -77,7 +83,8 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const listeners = new Set<() => void>();
   let disposed = false;
-  let operations: Op[] = [];
+  let operations: OpSyncOperation<Op>[] = [];
+  const divergedListeners = new Set<() => void>();
   let snapshot: OpSyncSnapshot<Op> = computeSnapshot();
 
   function findItem(eventId: string): Item<Op> | undefined {
@@ -90,7 +97,7 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
 
   function computeCounts(): SyncStatusCounts {
     const offline = deps.isOffline();
-    // 拒否された操作と、それに止められた後続は、送信中として数えない。
+    // 保留された操作と、それに止められた後続は、送信中として数えない。
     const stuck = new Set<string>();
     items.forEach((item, index) => {
       if (item.status === "acked") return;
@@ -118,35 +125,33 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
             item.status === "inflight") &&
           !stuck.has(item.eventId),
       ).length,
-      errors: items.filter((item) => item.status === "held").length,
+      held: items.filter((item) => item.status === "held").length,
     };
   }
 
-  function persistedOperations(): Op[] {
+  function persistedOperations(): OpSyncOperation<Op>[] {
     return items
       .filter((entry) => entry.status !== "persisting")
-      .map((entry) => entry.operation);
+      .map((entry) => ({
+        operation: entry.operation,
+        confirmedFields:
+          entry.status === "acked"
+            ? (entry.confirmedFields ?? null)
+            : undefined,
+      }));
   }
 
   function computeSnapshot(): OpSyncSnapshot<Op> {
     const counts = computeCounts();
     return {
       operations,
-      items: items.map(({ eventId, operation, label, status, seq }) => ({
+      items: items.map(({ eventId, operation, status, seq }) => ({
         eventId,
         operation,
-        label,
         status,
         seq,
       })),
       status: deriveSyncStatus(counts),
-      errors: items
-        .filter((item) => item.status === "held")
-        .map((item) => ({
-          key: item.eventId,
-          label: item.label,
-          message: item.failure?.error ?? "",
-        })),
     };
   }
 
@@ -175,7 +180,7 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
     for (const item of members) item.status = "inflight";
     emit();
 
-    let revisions: number[] = [];
+    let results: OpResult[] = [];
     const failure = await toSafeResult(
       deps
         .send({
@@ -187,27 +192,53 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
         })
         .then((outcome): BatchResult => {
           if (!outcome.ok) return outcome.failure;
-          revisions = outcome.revisions;
+          results = outcome.results;
           return undefined;
         }),
     );
-    settle(flight, members, failure, revisions);
+    settle(flight, members, failure, results);
   }
 
   function settle(
     flight: Flight,
     members: Item<Op>[],
     failure: BatchResult,
-    revisions: number[],
+    results: OpResult[],
   ) {
     const decision = decideSyncResult(failure, flight.attempt);
     if (!failure) {
       flights.delete(flight);
+      let diverged = false;
+      const ineffective = new Set<string>();
       members.forEach((item, index) => {
+        const result = results[index];
+        if (!result.applied || result.rejectedFields.length > 0) {
+          diverged = true;
+        }
+        if (!result.applied) {
+          // 効かなかった操作はどこにも記録されないため、列から外す。
+          ineffective.add(item.eventId);
+          return;
+        }
         item.status = "acked";
-        // DBへのackの保存に失敗しても、再送が冪等で同じrevisionを返すため続ける。
-        deps.store.ack(item.eventId, revisions[index]).catch(() => {});
+        item.confirmedFields = result.appliedFields;
+        // DBへのackの保存に失敗しても、再送が冪等で同じ結果を返すため続ける。
+        deps.store
+          .ack(
+            item.eventId,
+            result.revision,
+            result.applied,
+            result.appliedFields,
+          )
+          .catch(() => {});
       });
+      if (ineffective.size > 0) {
+        const ids = [...ineffective];
+        items = items.filter((item) => !ineffective.has(item.eventId));
+        deps.store.retire(ids, "ineffective").catch(() => {});
+      }
+      operations = persistedOperations();
+      if (diverged) notifyDiverged();
     } else if (decision.type === "retry") {
       flight.attempt += 1;
       flight.notBefore = now() + decision.delayMs;
@@ -215,23 +246,28 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
       if (!disposed) scheduleTimer(decision.delayMs);
     } else {
       flights.delete(flight);
-      const splittable =
-        classifyFailure(failure.cause) === "hold" &&
-        failure.cause.type !== "unauthenticated" &&
-        members.length > 1;
-      for (const item of members) {
-        if (splittable) {
-          // 単独で拒否された操作だけを保持するため、単独の要求へ切り分ける。試行は消費しない。
+      const disposition = classifyFailure(failure.cause);
+      if (disposition === "discard" && members.length > 1) {
+        // 単独で拒否された操作だけを破棄するため、単独の要求へ切り分ける。試行は消費しない。
+        for (const item of members) {
           item.solo = true;
           item.status = "queued";
-        } else {
-          item.failure = failure;
-          item.status = "held";
         }
+      } else if (disposition === "discard") {
+        const ids = members.map((item) => item.eventId);
+        items = items.filter((item) => !ids.includes(item.eventId));
+        deps.store.retire(ids, "discarded").catch(() => {});
+        operations = persistedOperations();
+      } else {
+        for (const item of members) item.status = "held";
       }
     }
     emit();
     if (!disposed) pump();
+  }
+
+  function notifyDiverged() {
+    for (const listener of [...divergedListeners]) listener();
   }
 
   function start(flight: Flight) {
@@ -269,12 +305,10 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
 
   return {
     // メモリの列へ追記し、保存の完了後に画面へ反映して送信する。保存の完了前の離脱で、画面に見えた操作を失わないため。
-    append(input: { operation: Op; label: string }) {
-      const { operation, label } = input;
+    append(operation: Op) {
       const item: Item<Op> = {
         eventId: operation.eventId,
         operation,
-        label,
         status: "persisting",
         solo: false,
       };
@@ -285,7 +319,6 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
           eventId: operation.eventId,
           streamId: deps.streamId,
           userId: deps.userId,
-          label,
           operation,
         })
         .then(
@@ -305,14 +338,17 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
     },
     // 読み込んだ列を設定する。副作用（送信と列の更新）は`start`まで起こさないため、描画中に呼んでよい。
     load(entries: OpLogEntry<Op>[]) {
-      items = entries.map((entry) => ({
-        eventId: entry.eventId,
-        operation: entry.operation,
-        label: entry.label,
-        status: entry.ackedRevision === undefined ? "queued" : "acked",
-        solo: false,
-        seq: entry.seq,
-      }));
+      items = entries
+        // 効かなかった操作は、送信器の列に含めない（`start`で外す）。
+        .filter((entry) => entry.ackedApplied !== false)
+        .map((entry) => ({
+          eventId: entry.eventId,
+          operation: entry.operation,
+          status: entry.ackedRevision === undefined ? "queued" : "acked",
+          solo: false,
+          seq: entry.seq,
+          confirmedFields: entry.ackedFields ?? null,
+        }));
       operations = persistedOperations();
       snapshot = computeSnapshot();
     },
@@ -332,6 +368,27 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
+      };
+    },
+    // 取得し直した状態に反映済みと確かめた操作を、列から外す。
+    reflect(eventIds: string[]) {
+      const ids = new Set(
+        eventIds.filter((id) => {
+          const item = findItem(id);
+          return item !== undefined && item.status === "acked";
+        }),
+      );
+      if (ids.size === 0) return;
+      items = items.filter((item) => !ids.has(item.eventId));
+      operations = persistedOperations();
+      deps.store.retire([...ids], "reflected").catch(() => {});
+      emit();
+    },
+    // 効かなかった操作または項目がある結果を受けたときに知らせる。
+    subscribeDiverged(listener: () => void) {
+      divergedListeners.add(listener);
+      return () => {
+        divergedListeners.delete(listener);
       };
     },
     getSnapshot: () => snapshot,

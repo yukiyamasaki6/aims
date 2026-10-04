@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlertCircle,
   Check,
   ChevronDown,
   ChevronRight,
@@ -13,7 +12,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import { DistanceInfo } from "../_shared/preset-info";
@@ -32,7 +30,6 @@ import { changesDistanceStructure, distanceToAdd } from "./scorecard-distances";
 import {
   buildShotOperation,
   type Cell,
-  cellLabel,
   cellOf,
   clearHistoryEntry,
   discardDistanceEntries,
@@ -156,12 +153,11 @@ export function ScorecardClient({
   targetFaces: TargetFaceOption[];
 }) {
   // 画面の状態は、サーバーの状態へ操作の列を重ねた導出だけから得る。
-  const sync = useRoundOpStack(roundId, loaded);
+  const sync = useRoundOpStack(roundId, loaded, targetFaces);
   const { roundConfig, distances, shots } = sync.state;
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
 
-  const [syncErrorsOpen, setSyncErrorsOpen] = useState(false);
   const hydrated = useHydrated();
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
     new Set(),
@@ -304,14 +300,14 @@ export function ScorecardClient({
 
   function handleAddDistance() {
     // IDは楽観的UIのためここで確定し、そのまま操作の列へ追記する。
-    const { distance: newDistance, input } = distanceToAdd(distances, {
+    const { distance: newDistance, operation } = distanceToAdd(distances, {
       id: crypto.randomUUID(),
       eventId: crypto.randomUUID(),
       roundId,
     });
     // 追加した距離はすぐ編集できるよう、編集パネルを展開しておく。
     setEditingDistanceIds((prev) => new Set(prev).add(newDistance.id));
-    sync.append(input);
+    sync.append(operation);
   }
 
   function handleDistanceSaved(updated: DistanceConfig) {
@@ -347,7 +343,6 @@ export function ScorecardClient({
       buildShotOperation({
         cell,
         shot,
-        label: cellLabel(distances, cell),
         eventId: crypto.randomUUID(),
       }),
     );
@@ -513,19 +508,14 @@ export function ScorecardClient({
               round-summary側のtopオフセットと正確に合わせられるようにする。 */}
           <div className="sticky top-0 z-30 grid h-14 grid-cols-[auto_1fr_auto] items-center gap-2 bg-card px-8">
             <BackToListLink />
-            <button
-              type="button"
+            <div
               data-testid="sync-status"
-              onClick={() => {
-                if (sync.status === "error") setSyncErrorsOpen(true);
-              }}
               className={cn(
                 "flex items-center justify-self-center gap-1 text-xs",
-                sync.status === "error" &&
-                  "font-medium text-destructive underline underline-offset-2",
                 (sync.status === "sending" || sync.status === "retrying") &&
                   "text-muted-foreground",
-                sync.status === "offline-pending" &&
+                (sync.status === "offline-pending" ||
+                  sync.status === "unauthenticated-pending") &&
                   "text-amber-600 dark:text-amber-500",
                 sync.status === "synced" &&
                   "text-emerald-600 dark:text-emerald-500",
@@ -534,17 +524,18 @@ export function ScorecardClient({
               {(sync.status === "sending" || sync.status === "retrying") && (
                 <Loader2 className="size-3.5 animate-spin" />
               )}
-              {sync.status === "error" && <AlertCircle className="size-3.5" />}
-              {sync.status === "offline-pending" && (
+              {(sync.status === "offline-pending" ||
+                sync.status === "unauthenticated-pending") && (
                 <WifiOff className="size-3.5" />
               )}
               {sync.status === "synced" && <Check className="size-3.5" />}
               {(sync.status === "sending" || sync.status === "retrying") &&
                 "同期中…"}
-              {sync.status === "error" && "同期失敗"}
-              {sync.status === "offline-pending" && "同期保留中"}
+              {(sync.status === "offline-pending" ||
+                sync.status === "unauthenticated-pending") &&
+                "同期保留中"}
               {sync.status === "synced" && "同期済み"}
-            </button>
+            </div>
             <div className="flex items-center justify-end gap-2">
               <SavePresetDialog
                 roundName={roundConfig.name}
@@ -605,24 +596,6 @@ export function ScorecardClient({
                 </span>
               </div>
             </div>
-
-            <Dialog open={syncErrorsOpen} onOpenChange={setSyncErrorsOpen}>
-              <DialogContent>
-                {/* 複数の失敗が同時に溜まっても一度に全部は出さず、最も古い
-                  未解決の1件だけを見せる。解決すると次のものが表示される。 */}
-                {sync.errors[0] && (
-                  <div className="flex flex-col gap-2">
-                    <p className="font-heading font-semibold">同期失敗</p>
-                    <p className="text-sm">
-                      <span className="font-medium">
-                        {sync.errors[0].label}
-                      </span>
-                      ：{sync.errors[0].message}
-                    </p>
-                  </div>
-                )}
-              </DialogContent>
-            </Dialog>
 
             <div className="flex flex-col gap-4">
               {distances.map((d) => {

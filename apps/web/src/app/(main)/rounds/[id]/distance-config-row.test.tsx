@@ -203,18 +203,33 @@ describe("DistanceEditFields", () => {
           isMarked: false,
         });
         expect(enqueue).toHaveBeenCalledWith({
-          label: "距離1",
-          operation: {
-            type: "distance.updated",
-            eventId: EVENT_ID,
-            distanceId: "distance-1",
+          type: "distance.updated",
+          eventId: EVENT_ID,
+          distanceId: "distance-1",
+          changes: {
             distance: 50,
-            totalEnds: 10,
-            arrowsPerEnd: 3,
-            targetFaceId: "face-outdoor-recurve",
-            isMarked: false,
+            config: {
+              totalEnds: 10,
+              arrowsPerEnd: 3,
+              targetFaceId: "face-outdoor-recurve",
+            },
           },
         });
+      });
+    });
+
+    describe("変更がない場合", () => {
+      it("onSavedは呼ぶが、enqueueは呼ばない", async () => {
+        // Given: 何も編集しないフォーム
+        const user = userEvent.setup();
+        const { onSaved, enqueue } = setup();
+
+        // When: 保存する
+        await user.click(screen.getByTestId("distance-config-save-1"));
+
+        // Then: 同期操作を登録しない
+        expect(onSaved).toHaveBeenCalled();
+        expect(enqueue).not.toHaveBeenCalled();
       });
     });
 
@@ -258,12 +273,9 @@ describe("DistanceEditFields", () => {
         // Then: 削除を通知し、distance.disabledの操作を登録する
         expect(onDeleted).toHaveBeenCalled();
         expect(enqueue).toHaveBeenCalledWith({
-          label: "距離1",
-          operation: {
-            type: "distance.disabled",
-            eventId: EVENT_ID,
-            distanceId: "distance-1",
-          },
+          type: "distance.disabled",
+          eventId: EVENT_ID,
+          distanceId: "distance-1",
         });
       });
     });
@@ -291,9 +303,7 @@ describe("DistanceEditFields", () => {
         // Then: 削除を通知し、同期操作を登録する
         expect(onDeleted).toHaveBeenCalled();
         expect(enqueue).toHaveBeenCalledWith(
-          expect.objectContaining({
-            operation: expect.objectContaining({ type: "distance.disabled" }),
-          }),
+          expect.objectContaining({ type: "distance.disabled" }),
         );
       });
 
@@ -443,9 +453,13 @@ describe("DistanceEditFields", () => {
         // Then: 選択した的で同期操作を登録する
         expect(enqueue).toHaveBeenCalledWith(
           expect.objectContaining({
-            operation: expect.objectContaining({
-              targetFaceId: targetFaceIndoorCompound.id,
-            }),
+            changes: {
+              config: {
+                totalEnds: 6,
+                arrowsPerEnd: 6,
+                targetFaceId: targetFaceIndoorCompound.id,
+              },
+            },
           }),
         );
       });

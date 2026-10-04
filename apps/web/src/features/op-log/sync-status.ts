@@ -5,6 +5,6 @@ export function deriveSyncStatus(counts: SyncStatusCounts): SyncStatus {
   if (counts.offlinePending > 0) return "offline-pending";
   if (counts.retrying > 0) return "retrying";
   if (counts.sending > 0) return "sending";
-  if (counts.errors > 0) return "error";
+  if (counts.held > 0) return "unauthenticated-pending";
   return "synced";
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildDistanceDisabledInput,
-  buildDistanceUpdatedInput,
+  buildDistanceDisabledOperation,
+  buildDistanceUpdatedOperation,
   type DistanceConfig,
   type DistanceDraft,
   filterTargetFaces,
@@ -141,56 +141,73 @@ describe("validateDistanceDraft", () => {
   });
 });
 
-describe("buildDistanceUpdatedInput", () => {
-  it("距離設定の更新操作を、その距離のキーで登録する入力を作る", () => {
-    // Given: 検証済みの距離設定とイベントID
-    const config: DistanceConfig = {
-      id: "distance-2",
-      distanceNumber: 2,
-      distance: null,
-      totalEnds: 12,
-      arrowsPerEnd: 3,
-      targetFaceId: "face-2",
-      isMarked: false,
-    };
+describe("buildDistanceUpdatedOperation", () => {
+  const saved: DistanceConfig = {
+    id: "distance-2",
+    distanceNumber: 2,
+    distance: 70,
+    totalEnds: 6,
+    arrowsPerEnd: 6,
+    targetFaceId: "face-1",
+    isMarked: true,
+  };
 
-    // When: 登録内容を作る
-    const input = buildDistanceUpdatedInput(config, "event-1");
+  it("変えた項目だけを、changesに持つ操作を作る", () => {
+    // Given: 距離(m)とMarkedだけを変えた設定
+    const config = { ...saved, distance: null, isMarked: false };
 
-    // Then: 距離ごとのキー・ラベルで、distance.updatedの操作を持つ
-    expect(input).toEqual({
-      label: "距離2",
-      operation: {
-        type: "distance.updated",
-        eventId: "event-1",
-        distanceId: "distance-2",
-        distance: null,
-        totalEnds: 12,
-        arrowsPerEnd: 3,
-        targetFaceId: "face-2",
-        isMarked: false,
+    // When: 操作を作る
+    const operation = buildDistanceUpdatedOperation(saved, config, "event-1");
+
+    // Then: 構成を含めず、変えた項目だけを持つ(未設定の距離はnull)
+    expect(operation).toEqual({
+      type: "distance.updated",
+      eventId: "event-1",
+      distanceId: "distance-2",
+      changes: { distance: null, isMarked: false },
+    });
+  });
+
+  it("構成の3項目のどれかが変われば、config に3項目全てを持つ", () => {
+    // Given: エンド数だけを変えた設定
+    const config = { ...saved, totalEnds: 12 };
+
+    // When: 操作を作る
+    const operation = buildDistanceUpdatedOperation(saved, config, "event-1");
+
+    // Then: 構成の3項目が揃う
+    expect(operation).toMatchObject({
+      changes: {
+        config: { totalEnds: 12, arrowsPerEnd: 6, targetFaceId: "face-1" },
       },
     });
   });
-});
 
-describe("buildDistanceDisabledInput", () => {
-  it("距離の削除操作を、その距離のキーで登録する入力を作る", () => {
-    // Given: 削除する距離とイベントID
-    // When: 登録内容を作る
-    const input = buildDistanceDisabledInput(
-      { id: "distance-3", distanceNumber: 3 },
+  it("変えた項目が無ければ、操作を作らない", () => {
+    // Given: 保存した値と同じ設定
+    // When: 操作を作る
+    const operation = buildDistanceUpdatedOperation(
+      saved,
+      { ...saved },
       "event-1",
     );
 
-    // Then: 距離ごとのキー・ラベルで、distance.disabledの操作を持つ
-    expect(input).toEqual({
-      label: "距離3",
-      operation: {
-        type: "distance.disabled",
-        eventId: "event-1",
-        distanceId: "distance-3",
-      },
+    // Then: 操作は作られない
+    expect(operation).toBeNull();
+  });
+});
+
+describe("buildDistanceDisabledOperation", () => {
+  it("距離の削除操作を作る", () => {
+    // Given: 削除する距離のIDとイベントID
+    // When: 操作を作る
+    const operation = buildDistanceDisabledOperation("distance-3", "event-1");
+
+    // Then: distance.disabledの操作になる
+    expect(operation).toEqual({
+      type: "distance.disabled",
+      eventId: "event-1",
+      distanceId: "distance-3",
     });
   });
 });

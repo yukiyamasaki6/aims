@@ -8,10 +8,12 @@ export const roundUpdated = (
   type: "round.updated",
   eventId: "e-round-updated",
   roundId: "round-1",
-  name: "名前",
-  roundDate: "2026-09-15",
-  format: "outdoor",
-  bowType: "recurve",
+  changes: {
+    name: "名前",
+    roundDate: "2026-09-15",
+    format: "outdoor",
+    bowType: "recurve",
+  },
   ...overrides,
 });
 
@@ -43,11 +45,11 @@ export const distanceUpdated = (
   type: "distance.updated",
   eventId: "e-distance-updated",
   distanceId: "d-1",
-  distance: 50,
-  totalEnds: 3,
-  arrowsPerEnd: 3,
-  targetFaceId: "face-2",
-  isMarked: false,
+  changes: {
+    distance: 50,
+    isMarked: false,
+    config: { totalEnds: 3, arrowsPerEnd: 3, targetFaceId: "face-2" },
+  },
   ...overrides,
 });
 

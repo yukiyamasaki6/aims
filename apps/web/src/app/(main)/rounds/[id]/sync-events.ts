@@ -1,12 +1,30 @@
+// 保存で変えた項目だけの差分。値の無い(undefined)項目は変えない。
+export type RoundChanges = Partial<{
+  name: string;
+  roundDate: string;
+  format: string;
+  bowType: string;
+}>;
+
+// 構成は的・エンド数・矢数の1組で、どれかが変われば3項目全てを持つ。
+type DistanceConfigChange = {
+  totalEnds: number;
+  arrowsPerEnd: number;
+  targetFaceId: string;
+};
+
+export type DistanceChanges = Partial<{
+  distance: number | null;
+  isMarked: boolean;
+  config: DistanceConfigChange;
+}>;
+
 export type SyncOperation =
   | {
       type: "round.updated";
       eventId: string;
       roundId: string;
-      name: string;
-      roundDate: string;
-      format: string;
-      bowType: string;
+      changes: RoundChanges;
     }
   | { type: "round.disabled"; eventId: string; roundId: string }
   | {
@@ -25,11 +43,7 @@ export type SyncOperation =
       type: "distance.updated";
       eventId: string;
       distanceId: string;
-      distance: number | null;
-      totalEnds: number;
-      arrowsPerEnd: number;
-      targetFaceId: string;
-      isMarked: boolean;
+      changes: DistanceChanges;
     }
   | { type: "distance.disabled"; eventId: string; distanceId: string }
   | {
@@ -49,6 +63,3 @@ export type SyncOperation =
       endNumber: number;
       arrowNumber: number;
     };
-
-// 操作の列へ追記する入力。labelは「同期失敗」の表示に使う操作名。
-export type OpInput = { operation: SyncOperation; label: string };

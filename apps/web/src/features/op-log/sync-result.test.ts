@@ -54,35 +54,32 @@ describe("classifyFailure", () => {
   });
 
   describe("RPCの失敗の場合", () => {
-    it("408・429・5xx・通信失敗（0）・未定義は再試行する", () => {
-      // Given: 時間や通信の回復で解消し得るHTTPステータス
-      const statuses = [408, 429, 500, 503, 0, undefined];
-
+    it("認可の拒否(PT403)と契約の不一致(PT422)だけを破棄する", () => {
+      // Given: 破棄する2つのSQLSTATE
       // When: 判定する
-      const dispositions = statuses.map((status) =>
-        classifyFailure({ type: "rpc", status }),
+      const dispositions = ["PT403", "PT422"].map((code) =>
+        classifyFailure({ type: "rpc", status: 400, code }),
       );
 
-      // Then: すべて再試行する
-      expect(dispositions).toEqual(statuses.map(() => "retry"));
+      // Then: どちらも破棄する
+      expect(dispositions).toEqual(["discard", "discard"]);
     });
 
-    it("408・429以外の4xxは止めて残し、4xxの前後は再試行する", () => {
-      // Given: 4xxの両端の前後と、代表的な拒否のHTTPステータス
-      const holdStatuses = [400, 401, 403, 404, 409, 499];
-      const retryStatuses = [399, 500];
+    it("それ以外は、HTTPステータスやSQLSTATEによらず再試行する", () => {
+      // Given: 408・429・4xx・5xx・通信失敗・未定義のステータスと、PGRST202などのコード
+      const causes = [
+        ...[408, 429, 400, 401, 403, 404, 409, 499, 500, 503, 0, undefined].map(
+          (status) => ({ type: "rpc", status }) as const,
+        ),
+        { type: "rpc", status: 404, code: "PGRST202" } as const,
+        { type: "rpc", status: 400, code: "23505" } as const,
+      ];
 
       // When: 判定する
-      const holds = holdStatuses.map((status) =>
-        classifyFailure({ type: "rpc", status }),
-      );
-      const retries = retryStatuses.map((status) =>
-        classifyFailure({ type: "rpc", status }),
-      );
+      const dispositions = causes.map(classifyFailure);
 
-      // Then: 4xxは止めて残し、その外側は再試行する
-      expect(holds).toEqual(holdStatuses.map(() => "hold"));
-      expect(retries).toEqual(retryStatuses.map(() => "retry"));
+      // Then: すべて再試行する
+      expect(dispositions).toEqual(causes.map(() => "retry"));
     });
   });
 });
@@ -116,42 +113,45 @@ describe("decideSyncResult", () => {
       ]);
     });
 
-    it("再試行の上限に達すると、再送できるよう操作の列に残して確定する", () => {
+    it("上限なく再試行し、待機時間は60秒で頭打ちになる", () => {
       // Given: 通信失敗による失敗
-      // When: 上限の直前・上限・上限の後の試行で判定する
-      const beforeLimit = decideSyncResult(NETWORK_FAILURE, 3);
-      const atLimit = decideSyncResult(NETWORK_FAILURE, 4);
-      const afterLimit = decideSyncResult(NETWORK_FAILURE, 5);
+      // When: 多数回の試行で判定する
+      const decisions = [4, 5, 20, 100].map((attemptIndex) =>
+        decideSyncResult(NETWORK_FAILURE, attemptIndex),
+      );
 
-      // Then: 上限の直前までは再試行し、上限以降は操作の列に残して確定する
-      expect(beforeLimit).toEqual({ type: "retry", delayMs: 24000 });
-      expect(atLimit).toEqual({ type: "settle", removeFromOutbox: false });
-      expect(afterLimit).toEqual({ type: "settle", removeFromOutbox: false });
+      // Then: 常に再試行し、待機時間は60秒を超えない
+      expect(decisions).toEqual([
+        { type: "retry", delayMs: 48000 },
+        { type: "retry", delayMs: 60000 },
+        { type: "retry", delayMs: 60000 },
+        { type: "retry", delayMs: 60000 },
+      ]);
     });
   });
 
-  describe("止めて残す失敗の場合", () => {
-    it("初回でも再試行せず、操作の列に残して確定する", () => {
-      // Given: サーバーが拒否した（4xx）失敗
+  describe("破棄する失敗の場合", () => {
+    it("初回でも再試行せず、確定する", () => {
+      // Given: サーバーが拒否した(PT403)失敗
       const result = {
         error: "このラウンドを編集する権限がありません。",
-        cause: { type: "rpc", status: 400 },
+        cause: { type: "rpc", status: 403, code: "PT403" },
       } as const;
 
       // When: 初回と上限の後の試行で判定する
       const first = decideSyncResult(result, 0);
       const afterLimit = decideSyncResult(result, 5);
 
-      // Then: いずれも操作の列に残して確定する
+      // Then: いずれも再試行せず確定する
       expect(first).toEqual({ type: "settle", removeFromOutbox: false });
       expect(afterLimit).toEqual({ type: "settle", removeFromOutbox: false });
     });
 
     it("メッセージではなく失敗の種類で判定する", () => {
-      // Given: サインインが必要な文言を持つ、4xxの失敗と、通信失敗
+      // Given: サインインが必要な文言を持つ、契約の不一致の失敗と、通信失敗
       const rejected = {
         error: AUTH_REQUIRED_MESSAGE,
-        cause: { type: "rpc", status: 400 },
+        cause: { type: "rpc", status: 422, code: "PT422" },
       } as const;
       const network = {
         error: AUTH_REQUIRED_MESSAGE,
@@ -162,7 +162,7 @@ describe("decideSyncResult", () => {
       const rejectedDecision = decideSyncResult(rejected, 0);
       const networkDecision = decideSyncResult(network, 0);
 
-      // Then: 失敗の種類に従い、4xxは残し、通信失敗は再試行する
+      // Then: 失敗の種類に従い、契約の不一致は再試行せず、通信失敗は再試行する
       expect(rejectedDecision).toEqual({
         type: "settle",
         removeFromOutbox: false,
@@ -206,30 +206,30 @@ describe("authFailureResult", () => {
   });
 
   describe("不明（通信失敗）の場合", () => {
-    it("通信エラーの文言と、認証の不明の種類を返し、使い切っても操作の列に残す", () => {
+    it("通信エラーの文言と、認証の不明の種類を返し、上限なく再試行する", () => {
       // Given: 更新が通信失敗になり、不明と分類された状態
       const state = unresolvedAuthState(
         new AuthRetryableFetchError("Failed to fetch", 0),
       );
 
-      // When: 失敗の結果に変換し、初回と再試行を使い切った後で判定する
+      // When: 失敗の結果に変換し、初回と多数回の試行で判定する
       const result = authFailureResult(state);
       const first = decideSyncResult(result, 0);
-      const exhausted = decideSyncResult(result, 4);
+      const exhausted = decideSyncResult(result, 10);
 
-      // Then: 通信エラーの文言になり、初回は再試行し、使い切ると操作の列に残す
+      // Then: 通信エラーの文言になり、いずれも再試行する
       expect(result).toEqual({
         error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
         cause: { type: "auth-unknown" },
       });
       expect(first).toEqual({ type: "retry", delayMs: 3000 });
-      expect(exhausted).toEqual({ type: "settle", removeFromOutbox: false });
+      expect(exhausted).toEqual({ type: "retry", delayMs: 60000 });
     });
   });
 });
 
 describe("rpcFailureResult", () => {
-  it("エラーのメッセージと、HTTPステータスを持つRPCの失敗を返す", () => {
+  it("エラーのメッセージと、HTTPステータス、SQLSTATEを持つRPCの失敗を返す", () => {
     // Given: RPCのエラーと、HTTPステータス
     const error = { message: "forbidden", code: "42501" } as PostgrestError;
 
@@ -240,11 +240,11 @@ describe("rpcFailureResult", () => {
     // Then: メッセージと、ステータスを持つ（取得できなければ未定義）
     expect(withStatus).toEqual({
       error: "forbidden",
-      cause: { type: "rpc", status: 403 },
+      cause: { type: "rpc", status: 403, code: "42501" },
     });
     expect(withoutStatus).toEqual({
       error: "forbidden",
-      cause: { type: "rpc", status: undefined },
+      cause: { type: "rpc", status: undefined, code: "42501" },
     });
   });
 });

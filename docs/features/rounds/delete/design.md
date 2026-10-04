@@ -33,9 +33,10 @@
 完了を待つ間に画面がアンマウントされた場合は、結果を破棄し、state更新も遷移も起こさない。
 
 `disable_round`（`SECURITY DEFINER`、`authenticated`にのみEXECUTEを付与）の契約は次のとおり。
-- 認可: 対象ラウンドを行ロックし、呼び出し元が`round_users.role = 'editor'`でなければ拒否する。
+- 認可: 対象ラウンドを行ロックし、呼び出し元が`round_users.role = 'editor'`でなければ`PT403`で拒否する。
 - 冪等性: `event_id`が既に`round_events`にあれば何もしない。
 - 副作用: `DISABLED`イベントを追記し、`rounds.disabled_at`を設定して`revision`を進める。
+- 削除の前後に届いた距離・矢の操作は、サーバーで効かず、表示されない。
 - 論理削除であり、距離・矢の行は残る。一覧と詳細は`disabled_at is null`で絞るため、削除したラウンドは一覧に出ず、詳細は「見つかりません」になる。
 - クライアントからの直接のDELETEは、RLSで拒否する。
 

@@ -65,13 +65,22 @@ function setup(options: { offline?: boolean; perDistance?: boolean } = {}) {
 const flushed = () => vi.advanceTimersByTimeAsync(0);
 
 function ok(...revisions: number[]): SendOutcome {
-  return { ok: true, revisions };
+  return {
+    ok: true,
+    results: revisions.map((revision) => ({
+      revision,
+      applied: true,
+      appliedFields: null,
+      rejectedFields: [],
+      reason: null,
+    })),
+  };
 }
 
-function fail(status: number): SendOutcome {
+function fail(status: number, code?: string): SendOutcome {
   return {
     ok: false,
-    failure: { error: `rpc ${status}`, cause: { type: "rpc", status } },
+    failure: { error: `rpc ${status}`, cause: { type: "rpc", status, code } },
   };
 }
 
@@ -91,7 +100,7 @@ describe("createOpSync", () => {
     const { sync, send, store } = setup();
     const first = op("rec", "x");
 
-    sync.append({ operation: first, label: "矢" });
+    sync.append(first);
 
     expect(sync.getSnapshot().items.map((i) => i.status)).toEqual([
       "persisting",
@@ -100,13 +109,14 @@ describe("createOpSync", () => {
     expect(sync.getSnapshot().operations).toEqual([]);
     expect(send).not.toHaveBeenCalled();
     await flushed();
-    expect(sync.getSnapshot().operations).toEqual([first]);
+    expect(sync.getSnapshot().operations).toEqual([
+      { operation: first, confirmedFields: undefined },
+    ]);
     expect(store.append).toHaveBeenCalledWith(
       expect.objectContaining({
         eventId: first.eventId,
         streamId: STREAM,
         userId: "user-1",
-        label: "矢",
       }),
     );
     expect(send).toHaveBeenCalledTimes(1);
@@ -119,13 +129,13 @@ describe("createOpSync", () => {
   it("成功すると確定したrevisionでackし、操作は列に残る", async () => {
     const { sync, sent, store } = setup();
     const first = op("rec", "x");
-    sync.append({ operation: first, label: "矢" });
+    sync.append(first);
     await flushed();
 
     sent[0].resolve(ok(7));
     await flushed();
 
-    expect(store.ack).toHaveBeenCalledWith(first.eventId, 7);
+    expect(store.ack).toHaveBeenCalledWith(first.eventId, 7, true, null);
     expect(store.retire).not.toHaveBeenCalled();
     expect(sync.getSnapshot().items.map((i) => i.status)).toEqual(["acked"]);
     expect(sync.getSnapshot().status).toBe("synced");
@@ -133,10 +143,10 @@ describe("createOpSync", () => {
 
   it("応答待ちの間の連打は、残りを1本の要求にまとめる", async () => {
     const { sync, sent } = setup();
-    sync.append({ operation: op("rec", "t0"), label: "矢" });
+    sync.append(op("rec", "t0"));
     await flushed();
     const queued = Array.from({ length: 9 }, (_, i) => op("rec", `t${i + 1}`));
-    for (const operation of queued) sync.append({ operation, label: "矢" });
+    for (const operation of queued) sync.append(operation);
     await flushed();
 
     expect(sent).toHaveLength(1);
@@ -151,8 +161,8 @@ describe("createOpSync", () => {
     const { sync, sent } = setup();
     const record = op("rec", "x");
     const clear = op("clr", "x");
-    sync.append({ operation: record, label: "矢" });
-    sync.append({ operation: clear, label: "矢" });
+    sync.append(record);
+    sync.append(clear);
     await flushed();
 
     expect(sent.map((s) => eventIds(s.flight))).toEqual([[record.eventId]]);
@@ -170,12 +180,12 @@ describe("createOpSync", () => {
     const first = op("rec", "x");
     const follower = op("clr", "x");
     const other = op("clr", "y");
-    sync.append({ operation: first, label: "矢" });
+    sync.append(first);
     await flushed();
     sent[0].resolve(fail(500));
     await flushed();
-    sync.append({ operation: follower, label: "矢" });
-    sync.append({ operation: other, label: "矢" });
+    sync.append(follower);
+    sync.append(other);
     await flushed();
 
     expect(sync.getSnapshot().status).toBe("retrying");
@@ -196,111 +206,232 @@ describe("createOpSync", () => {
     expect(eventIds(sent[3].flight)).toEqual([follower.eventId]);
   });
 
-  it("再試行を使い切ると保持し、後続を止めたまま別の対象は送る", async () => {
+  it("再試行は上限なく続き、待機時間は60秒で頭打ちになり、衝突する後続は止めたまま別の対象は送る", async () => {
     const { sync, sent } = setup();
     const first = op("rec", "x");
-    sync.append({ operation: first, label: "矢1" });
+    sync.append(first);
     await flushed();
-    for (const delay of [0, 3000, 6000, 12000, 24000]) {
+    for (const delay of [0, 3000, 6000, 12000, 24000, 48000, 60000, 60000]) {
       await vi.advanceTimersByTimeAsync(delay);
       sent.at(-1)?.resolve(fail(500));
       await flushed();
     }
     const follower = op("clr", "x");
     const other = op("rec", "y");
-    sync.append({ operation: follower, label: "矢2" });
-    sync.append({ operation: other, label: "矢3" });
+    sync.append(follower);
+    sync.append(other);
     await flushed();
 
-    expect(sent).toHaveLength(6);
-    expect(eventIds(sent[5].flight)).toEqual([other.eventId]);
-    expect(sync.getSnapshot().errors).toEqual([
-      { key: first.eventId, label: "矢1", message: "rpc 500" },
-    ]);
+    expect(sent).toHaveLength(9);
+    expect(eventIds(sent[8].flight)).toEqual([other.eventId]);
     expect(sync.getSnapshot().items.map((i) => i.status)).toEqual([
-      "held",
+      "backoff",
       "queued",
       "inflight",
     ]);
   });
 
-  it("拒否された操作は保持し、止められた後続は送信中として数えない", async () => {
-    const { sync, sent } = setup();
-    sync.append({ operation: op("rec", "x"), label: "矢1" });
+  it("PT403で拒否された操作は破棄して列から外し、後続を止めない", async () => {
+    const { sync, sent, store } = setup();
+    const rejected = op("rec", "x");
+    const follower = op("clr", "x");
+    sync.append(rejected);
+    sync.append(follower);
     await flushed();
-    sent[0].resolve(fail(400));
-    await flushed();
-    sync.append({ operation: op("clr", "x"), label: "矢2" });
+    sent[0].resolve(fail(403, "PT403"));
     await flushed();
 
-    expect(sync.getSnapshot().status).toBe("error");
+    expect(store.retire).toHaveBeenCalledWith([rejected.eventId], "discarded");
+    expect(sync.getSnapshot().items.map((i) => i.eventId)).toEqual([
+      follower.eventId,
+    ]);
+    expect(sync.getSnapshot().operations.map((o) => o.operation)).toEqual([
+      follower,
+    ]);
+    expect(eventIds(sent[1].flight)).toEqual([follower.eventId]);
+  });
+
+  it("PGRST202や4xxなどのPT403・PT422以外の失敗は破棄せず再試行する", async () => {
+    const { sync, sent, store } = setup();
+    sync.append(op("rec", "x"));
+    await flushed();
+    sent[0].resolve(fail(404, "PGRST202"));
+    await flushed();
+
+    expect(sync.getSnapshot().status).toBe("retrying");
+    expect(store.retire).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(sent).toHaveLength(2);
+  });
+
+  it("未認証は保持し、同期保留中にして後続を止める", async () => {
+    const { sync, sent } = setup();
+    sync.append(op("rec", "x"));
+    await flushed();
+    sent[0].resolve({
+      ok: false,
+      failure: { error: "未認証", cause: { type: "unauthenticated" } },
+    });
+    await flushed();
+    sync.append(op("clr", "x"));
+    await flushed();
+
+    expect(sync.getSnapshot().status).toBe("unauthenticated-pending");
+    expect(sync.getSnapshot().items.map((i) => i.status)).toEqual([
+      "held",
+      "queued",
+    ]);
     expect(sent).toHaveLength(1);
   });
 
-  it("複数件の要求が拒否されたら単独に切り分け、拒否された1件だけを保持する", async () => {
-    const { sync, sent } = setup();
-    const bad = op("rec", "x");
-    const good = op("rec", "y");
-    sync.append({ operation: bad, label: "悪" });
-    sync.append({ operation: good, label: "良" });
+  it("複数件の要求がPT422で拒否されたら単独に切り分け、拒否された1件だけを破棄する", async () => {
+    const { sync, sent, store } = setup();
+    const first = op("rec", "x");
+    sync.append(first);
     await flushed();
-    expect(eventIds(sent[0].flight)).toEqual([bad.eventId]);
+    // 応答待ちの間に積んだ2件が、1本の要求になる。
+    const bad = op("rec", "a");
+    const good = op("rec", "b");
+    sync.append(bad);
+    sync.append(good);
+    await flushed();
     sent[0].resolve(ok(1));
     await flushed();
-    // 先頭が単独で送られたため、残りの1件は次の要求になる。2件の束を作るためにやり直す。
-    const secondBad = op("rec", "a");
-    const secondGood = op("rec", "b");
-    sync.append({ operation: secondBad, label: "悪2" });
-    sync.append({ operation: secondGood, label: "良2" });
-    await flushed();
-    sent[1].resolve(ok(1));
-    await flushed();
-    expect(eventIds(sent[2].flight)).toEqual([
-      secondBad.eventId,
-      secondGood.eventId,
-    ]);
+    expect(eventIds(sent[1].flight)).toEqual([bad.eventId, good.eventId]);
 
-    sent[2].resolve(fail(400));
+    sent[1].resolve(fail(422, "PT422"));
     await flushed();
-    expect(eventIds(sent[3].flight)).toEqual([secondBad.eventId]);
-    sent[3].resolve(fail(400));
+    expect(eventIds(sent[2].flight)).toEqual([bad.eventId]);
+    sent[2].resolve(fail(422, "PT422"));
     await flushed();
-    expect(eventIds(sent[4].flight)).toEqual([secondGood.eventId]);
-    sent[4].resolve(ok(2));
+    expect(eventIds(sent[3].flight)).toEqual([good.eventId]);
+    sent[3].resolve(ok(2));
     await flushed();
 
+    expect(store.retire).toHaveBeenCalledWith([bad.eventId], "discarded");
     const statuses = Object.fromEntries(
-      sync.getSnapshot().items.map((i) => [i.label, i.status]),
+      sync.getSnapshot().items.map((i) => [i.eventId, i.status]),
     );
-    expect(statuses).toMatchObject({ 悪2: "held", 良2: "acked" });
-    expect(sync.getSnapshot().errors).toHaveLength(1);
+    expect(statuses).toEqual({
+      [first.eventId]: "acked",
+      [good.eventId]: "acked",
+    });
   });
 
-  it("距離ごとのlaneでは、異なる距離の要求が同時に応答待ちになり、ある距離の拒否は別の距離に及ばない", async () => {
+  it("距離ごとのlaneでは、異なる距離の要求が同時に応答待ちになり、ある距離の破棄は別の距離に及ばない", async () => {
     const { sync, sent } = setup({ perDistance: true });
     const first = { ...op("rec", "x"), distance: "d1" };
     const second = { ...op("rec", "y"), distance: "d2" };
-    sync.append({ operation: first, label: "距離1" });
-    sync.append({ operation: second, label: "距離2" });
+    sync.append(first);
+    sync.append(second);
     await flushed();
 
     expect(sent).toHaveLength(2);
     expect(eventIds(sent[0].flight)).toEqual([first.eventId]);
     expect(eventIds(sent[1].flight)).toEqual([second.eventId]);
 
-    sent[0].resolve(fail(400));
+    sent[0].resolve(fail(403, "PT403"));
     sent[1].resolve(ok(1));
     await flushed();
 
     const statuses = Object.fromEntries(
-      sync.getSnapshot().items.map((i) => [i.label, i.status]),
+      sync.getSnapshot().items.map((i) => [i.eventId, i.status]),
     );
-    expect(statuses).toEqual({ 距離1: "held", 距離2: "acked" });
+    expect(statuses).toEqual({ [second.eventId]: "acked" });
+  });
+
+  it("効かなかった操作は記録されないため、列から外してretireし、再取得を知らせる", async () => {
+    const { sync, sent, store } = setup();
+    const diverged = vi.fn();
+    sync.subscribeDiverged(diverged);
+    const first = op("rec", "x");
+    sync.append(first);
+    await flushed();
+
+    sent[0].resolve({
+      ok: true,
+      results: [
+        {
+          revision: null,
+          applied: false,
+          appliedFields: null,
+          rejectedFields: [],
+          reason: "UNFIT",
+        },
+      ],
+    });
+    await flushed();
+
+    expect(store.ack).not.toHaveBeenCalled();
+    expect(store.retire).toHaveBeenCalledWith([first.eventId], "ineffective");
+    expect(sync.getSnapshot().items).toEqual([]);
+    expect(sync.getSnapshot().operations).toEqual([]);
+    expect(sync.getSnapshot().status).toBe("synced");
+    expect(diverged).toHaveBeenCalledTimes(1);
+  });
+
+  it("一部の項目だけが効いた操作は、効いた項目を持って確定し、再取得を知らせる", async () => {
+    const { sync, sent, store } = setup();
+    const diverged = vi.fn();
+    sync.subscribeDiverged(diverged);
+    const first = op("rec", "x");
+    sync.append(first);
+    await flushed();
+
+    sent[0].resolve({
+      ok: true,
+      results: [
+        {
+          revision: 5,
+          applied: true,
+          appliedFields: ["name"],
+          rejectedFields: [{ field: "format", reason: "INVARIANT" }],
+          reason: null,
+        },
+      ],
+    });
+    await flushed();
+
+    expect(store.ack).toHaveBeenCalledWith(first.eventId, 5, true, ["name"]);
+    expect(sync.getSnapshot().operations).toEqual([
+      { operation: first, confirmedFields: ["name"] },
+    ]);
+    expect(diverged).toHaveBeenCalledTimes(1);
+  });
+
+  it("全項目が効いた応答では、再取得を知らせない", async () => {
+    const { sync, sent } = setup();
+    const diverged = vi.fn();
+    sync.subscribeDiverged(diverged);
+    sync.append(op("rec", "x"));
+    await flushed();
+    sent[0].resolve(ok(1));
+    await flushed();
+
+    expect(diverged).not.toHaveBeenCalled();
+  });
+
+  it("reflectは、確定済みの操作だけを列から外してretireする", async () => {
+    const { sync, sent, store } = setup();
+    const confirmed = op("rec", "x");
+    const pending = op("clr", "x");
+    sync.append(confirmed);
+    sync.append(pending);
+    await flushed();
+    sent[0].resolve(ok(1));
+    await flushed();
+
+    sync.reflect([confirmed.eventId, pending.eventId]);
+
+    expect(store.retire).toHaveBeenCalledWith([confirmed.eventId], "reflected");
+    expect(sync.getSnapshot().items.map((i) => i.eventId)).toEqual([
+      pending.eventId,
+    ]);
   });
 
   it("オフラインの間は要求を始めず、onlineで再開する", async () => {
     const { sync, sent, state } = setup({ offline: true });
-    sync.append({ operation: op("rec", "x"), label: "矢" });
+    sync.append(op("rec", "x"));
     await flushed();
 
     expect(sent).toHaveLength(0);
@@ -314,7 +445,7 @@ describe("createOpSync", () => {
 
   it("オンラインへ戻ると、待機中の再送を待たずに再開する", async () => {
     const { sync, sent, state } = setup();
-    sync.append({ operation: op("rec", "x"), label: "矢" });
+    sync.append(op("rec", "x"));
     await flushed();
     state.offline = true;
     sync.handleOffline();
@@ -339,7 +470,6 @@ describe("createOpSync", () => {
         eventId: confirmed.eventId,
         streamId: STREAM,
         userId: "user-1",
-        label: "確定",
         ackedRevision: 3,
         operation: confirmed,
       },
@@ -348,7 +478,6 @@ describe("createOpSync", () => {
         eventId: pending.eventId,
         streamId: STREAM,
         userId: "user-1",
-        label: "未送信",
         operation: pending,
       },
     ];
@@ -369,7 +498,7 @@ describe("createOpSync", () => {
     const { sync, sent, store } = setup();
     store.append.mockRejectedValueOnce(new Error("quota"));
 
-    sync.append({ operation: op("rec", "x"), label: "矢" });
+    sync.append(op("rec", "x"));
     await flushed();
 
     expect(sent).toHaveLength(1);
@@ -388,19 +517,24 @@ describe("createOpSync", () => {
     const first = op("rec", "x");
     const second = op("rec", "y");
 
-    sync.append({ operation: first, label: "1" });
-    sync.append({ operation: second, label: "2" });
+    sync.append(first);
+    sync.append(second);
     await flushed();
     expect(sync.getSnapshot().operations).toEqual([]);
     expect(sync.getSnapshot().status).toBe("sending");
 
     resolvers[0]?.();
     await flushed();
-    expect(sync.getSnapshot().operations).toEqual([first]);
+    expect(sync.getSnapshot().operations.map((o) => o.operation)).toEqual([
+      first,
+    ]);
 
     resolvers[1]?.();
     await flushed();
-    expect(sync.getSnapshot().operations).toEqual([first, second]);
+    expect(sync.getSnapshot().operations.map((o) => o.operation)).toEqual([
+      first,
+      second,
+    ]);
     const stored = store.append.mock.calls.map(([entry]) => entry.eventId);
     expect(stored).toEqual([first.eventId, second.eventId]);
   });
@@ -409,7 +543,7 @@ describe("createOpSync", () => {
     const { sync, send } = setup();
     send.mockRejectedValueOnce(new Error("boom"));
 
-    sync.append({ operation: op("rec", "x"), label: "矢" });
+    sync.append(op("rec", "x"));
     await flushed();
 
     expect(sync.getSnapshot().status).toBe("retrying");
@@ -419,15 +553,15 @@ describe("createOpSync", () => {
     const { sync, sent, store } = setup();
     const first = op("rec", "x");
     const follower = op("clr", "x");
-    sync.append({ operation: first, label: "矢" });
-    sync.append({ operation: follower, label: "矢" });
+    sync.append(first);
+    sync.append(follower);
     await flushed();
 
     sync.dispose();
     sent[0].resolve(ok(2));
     await flushed();
 
-    expect(store.ack).toHaveBeenCalledWith(first.eventId, 2);
+    expect(store.ack).toHaveBeenCalledWith(first.eventId, 2, true, null);
     expect(sent).toHaveLength(1);
   });
 
@@ -436,12 +570,76 @@ describe("createOpSync", () => {
     const listener = vi.fn();
     const unsubscribe = sync.subscribe(listener);
 
-    sync.append({ operation: op("rec", "x"), label: "矢" });
+    sync.append(op("rec", "x"));
     expect(listener).toHaveBeenCalled();
     unsubscribe();
     listener.mockClear();
     await flushed();
 
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("再取得の通知は、購読を解除すると届かない", async () => {
+    const { sync, sent } = setup();
+    const listener = vi.fn();
+    sync.subscribeDiverged(listener)();
+    sync.append(op("rec", "x"));
+    await flushed();
+
+    sent[0].resolve({
+      ok: true,
+      results: [
+        {
+          revision: null,
+          applied: false,
+          appliedFields: [],
+          rejectedFields: [],
+          reason: "UNFIT",
+        },
+      ],
+    });
+    await flushed();
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("確定・破棄・反映済みの保存に失敗しても、メモリの列は進める", async () => {
+    // Given: ack・retireの保存がすべて失敗するストア
+    const { sync, sent, store } = setup();
+    store.ack.mockRejectedValue(new Error("fail"));
+    store.retire.mockRejectedValue(new Error("fail"));
+    const effective = op("rec", "a");
+    const ineffective = op("rec", "b");
+    const rejected = op("rec", "c");
+    sync.append(effective);
+    sync.append(ineffective);
+    await flushed();
+    sent[0].resolve(ok(2));
+    await flushed();
+    sync.append(rejected);
+    await flushed();
+
+    // When: 2件目が効かず、続く要求がPT422で拒否される
+    sent[1].resolve({
+      ok: true,
+      results: [
+        {
+          revision: null,
+          applied: false,
+          appliedFields: [],
+          rejectedFields: [],
+          reason: "UNFIT",
+        },
+      ],
+    });
+    await flushed();
+    sent[2].resolve(fail(400, "PT422"));
+    await flushed();
+    sync.reflect([effective.eventId]);
+    sync.start([ineffective.eventId]);
+    await flushed();
+
+    // Then: 例外にならず、列から外れている
+    expect(sync.getSnapshot().operations).toEqual([]);
   });
 });

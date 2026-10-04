@@ -8,8 +8,11 @@ import type {
   SyncResultDecision,
 } from "./sync-types";
 
-// 再試行ごとの待機時間。要素数が再試行の上限回数になる。
-export const RETRY_DELAYS_MS = [3000, 6000, 12000, 24000];
+const BASE_DELAY_MS = 3000;
+const MAX_DELAY_MS = 60000;
+
+// 破棄する失敗のSQLSTATE。認可の拒否と、契約の不一致だけが対象になる。
+const DISCARD_CODES = ["PT403", "PT422"];
 
 // 未認証はサインインが要るため再試行せず、不明（通信失敗）は通信の回復を待つ。
 export function authFailureResult(
@@ -28,7 +31,10 @@ export function rpcFailureResult(
   error: PostgrestError,
   status?: number,
 ): SyncFailure {
-  return { error: error.message, cause: { type: "rpc", status } };
+  return {
+    error: error.message,
+    cause: { type: "rpc", status, code: error.code },
+  };
 }
 
 // 送信処理の例外も、失敗の結果として同じ経路で扱えるようにする。
@@ -41,8 +47,8 @@ export function toSafeResult(
   }));
 }
 
-// 時間や通信の回復で解消し得る失敗は再試行する。
-// 同じ状態で再送しても結果が変わらない失敗（未認証、408・429以外の4xx）は止めて残す。
+// 認可の拒否(PT403)と契約の不一致(PT422)だけが、再送しても結果が変わらないため破棄する。
+// 未認証はサインインまで止めて残し、それ以外は全て再試行する。
 export function classifyFailure(cause: SyncFailure["cause"]): SyncDisposition {
   switch (cause.type) {
     case "unauthenticated":
@@ -50,14 +56,16 @@ export function classifyFailure(cause: SyncFailure["cause"]): SyncDisposition {
     case "auth-unknown":
     case "exception":
       return "retry";
-    case "rpc": {
-      const { status } = cause;
-      if (status === undefined || status === 408 || status === 429) {
-        return "retry";
-      }
-      return status >= 400 && status < 500 ? "hold" : "retry";
-    }
+    case "rpc":
+      return cause.code !== undefined && DISCARD_CODES.includes(cause.code)
+        ? "discard"
+        : "retry";
   }
+}
+
+// 再試行の待機時間。初回を0とする試行の番号から指数で伸ばし、上限で止める。
+export function retryDelayMs(attemptIndex: number): number {
+  return Math.min(BASE_DELAY_MS * 2 ** attemptIndex, MAX_DELAY_MS);
 }
 
 // attemptIndexは初回を0とする試行の番号。
@@ -67,11 +75,8 @@ export function decideSyncResult(
   attemptIndex: number,
 ): SyncResultDecision {
   if (!result) return { type: "settle", removeFromOutbox: true };
-  if (
-    classifyFailure(result.cause) === "retry" &&
-    attemptIndex < RETRY_DELAYS_MS.length
-  ) {
-    return { type: "retry", delayMs: RETRY_DELAYS_MS[attemptIndex] };
+  if (classifyFailure(result.cause) === "retry") {
+    return { type: "retry", delayMs: retryDelayMs(attemptIndex) };
   }
   return { type: "settle", removeFromOutbox: false };
 }

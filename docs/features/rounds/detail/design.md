@@ -38,7 +38,7 @@
 - `rounds/[id]/round-detail-client.tsx`: `usePathname()`のIDで取得し、状態に応じて枠の内表示かスコアカードを出す。ラウンドの削除が未送信なら`/rounds`へ遷移する。
 - `rounds/[id]/round-detail-id.ts`: pathnameからUUIDを取り出す。UUIDでなければ`null`で、問い合わせずに見つからないとする。
 - `rounds/[id]/fetch-round-detail.ts`: ラウンド・距離・矢を1回のネスト取得、的を1回の取得で得て、`FetchResult`に分類する。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。
-- `rounds/[id]/load-round-detail.ts`: 取得した基準と、反映済みを除いた操作の列を返す。
+- `rounds/[id]/load-round-detail.ts`: 取得した基準と、反映済みを除いた操作の列を返す。サーバーが効かなかったと答えた操作は反映済みとして除く。効かなかった操作または項目がある応答を受けたときは、`use-round-op-stack.ts`がこの関数で取り直し、基準を差し替える。
 - `rounds/[id]/round-op-apply.ts`、`use-round-op-stack.ts`: 基準へ操作の列を重ねる導出と、そのフック。`scorecard-client.tsx`は`state`(保存が完了した操作から導いた値)を`useRoundOpStack`から受ける。
 - `rounds/[id]/round-detail-frame.tsx`、`back-to-list-link.tsx`: 枠と「一覧へ戻る」リンク。
 - `rounds/[id]/scorecard-client.tsx`（Client Component）: `state`(保存が完了した操作から導いた`shots`と距離の構成)を`useRoundOpStack`から受け、表示を組み立てる。

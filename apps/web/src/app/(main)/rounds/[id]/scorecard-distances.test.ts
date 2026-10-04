@@ -84,20 +84,17 @@ describe("distanceToAdd", () => {
       const result = distanceToAdd(distances, ids);
 
       // Then: 追加する距離の作成操作を、渡したIDで積む
-      expect(result.input).toEqual({
-        label: "距離3",
-        operation: {
-          type: "distance.created",
-          eventId: "e-1",
-          id: "d-new",
-          roundId: "round-1",
-          positionKey: "ba",
-          distance: 30,
-          totalEnds: 2,
-          arrowsPerEnd: 3,
-          targetFaceId: "face-2",
-          isMarked: false,
-        },
+      expect(result.operation).toEqual({
+        type: "distance.created",
+        eventId: "e-1",
+        id: "d-new",
+        roundId: "round-1",
+        positionKey: "ba",
+        distance: 30,
+        totalEnds: 2,
+        arrowsPerEnd: 3,
+        targetFaceId: "face-2",
+        isMarked: false,
       });
     });
 
@@ -140,20 +137,17 @@ describe("distanceToAdd", () => {
           target_face_id: "a1000000-0000-0000-0000-000000000001",
           is_marked: true,
         },
-        input: {
-          label: "距離1",
-          operation: {
-            type: "distance.created",
-            eventId: "e-1",
-            id: "d-new",
-            roundId: "round-1",
-            positionKey: "a",
-            distance: 70,
-            totalEnds: 6,
-            arrowsPerEnd: 6,
-            targetFaceId: "a1000000-0000-0000-0000-000000000001",
-            isMarked: true,
-          },
+        operation: {
+          type: "distance.created",
+          eventId: "e-1",
+          id: "d-new",
+          roundId: "round-1",
+          positionKey: "a",
+          distance: 70,
+          totalEnds: 6,
+          arrowsPerEnd: 6,
+          targetFaceId: "a1000000-0000-0000-0000-000000000001",
+          isMarked: true,
         },
       });
     });
@@ -168,10 +162,8 @@ describe("updateDistance", () => {
     // When: distanceAの設定を置き換える
     const result = updateDistance(distances, "d-a", {
       distance: 50,
-      totalEnds: 3,
-      arrowsPerEnd: 4,
-      targetFaceId: "face-2",
       isMarked: false,
+      config: { totalEnds: 3, arrowsPerEnd: 4, targetFaceId: "face-2" },
     });
 
     // Then: distanceAだけが新しい設定になる
@@ -189,6 +181,26 @@ describe("updateDistance", () => {
     ]);
   });
 
+  it("差分に含まれない項目は変えない(構成は1組で置き換える)", () => {
+    // Given: 2つの距離
+    const distances = [distanceA, distanceB];
+
+    // When: 距離(m)だけの差分と、構成だけの差分を順に適用する
+    const onlyDistance = updateDistance(distances, "d-a", { distance: 90 });
+    const onlyConfig = updateDistance(distances, "d-a", {
+      config: { totalEnds: 1, arrowsPerEnd: 2, targetFaceId: "face-9" },
+    });
+
+    // Then: 差分の項目だけが変わる
+    expect(onlyDistance[0]).toEqual({ ...distanceA, distance: 90 });
+    expect(onlyConfig[0]).toEqual({
+      ...distanceA,
+      total_ends: 1,
+      arrows_per_end: 2,
+      target_face_id: "face-9",
+    });
+  });
+
   it("指定した距離が無い場合は、どの距離も変えない", () => {
     // Given: 2つの距離
     const distances = [distanceA, distanceB];
@@ -196,10 +208,8 @@ describe("updateDistance", () => {
     // When: 存在しない距離の設定を置き換える
     const result = updateDistance(distances, "d-missing", {
       distance: 50,
-      totalEnds: 3,
-      arrowsPerEnd: 4,
-      targetFaceId: "face-2",
       isMarked: false,
+      config: { totalEnds: 3, arrowsPerEnd: 4, targetFaceId: "face-2" },
     });
 
     // Then: 距離は元のまま

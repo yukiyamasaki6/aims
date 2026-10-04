@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildShotOperation,
   type Cell,
-  cellLabel,
   cellOf,
   clearHistoryEntry,
   discardDistanceEntries,
@@ -595,34 +594,6 @@ describe("discardDistanceEntries", () => {
   });
 });
 
-describe("cellLabel", () => {
-  it("距離の番号・エンド・本目を示す", () => {
-    // Given: 2番目の距離のマス
-    const cell: Cell = { distanceId: "d-b", endNumber: 1, arrowNumber: 2 };
-
-    // When: ラベルを作る
-    const label = cellLabel(distances, cell);
-
-    // Then: 距離の番号・エンド・本目を示す
-    expect(label).toBe("距離2 1エンド2本目");
-  });
-
-  it("距離構成に無い距離のマスでは、距離の番号を?とする", () => {
-    // Given: 距離構成に無い距離のマス
-    const cell: Cell = {
-      distanceId: "d-removed",
-      endNumber: 3,
-      arrowNumber: 4,
-    };
-
-    // When: ラベルを作る
-    const label = cellLabel(distances, cell);
-
-    // Then: 距離の番号を?とする
-    expect(label).toBe("距離? 3エンド4本目");
-  });
-});
-
 describe("buildShotOperation", () => {
   const cell: Cell = { distanceId: "d-a", endNumber: 2, arrowNumber: 1 };
 
@@ -632,23 +603,19 @@ describe("buildShotOperation", () => {
     const input = buildShotOperation({
       cell,
       shot: shot("d-a", 2, 1, "X", 10, "shooter-1"),
-      label: "距離1 2エンド1本目",
       eventId: "event-1",
     });
 
     // Then: 記録の操作になる
     expect(input).toEqual({
-      label: "距離1 2エンド1本目",
-      operation: {
-        type: "shot.recorded",
-        eventId: "event-1",
-        distanceId: "d-a",
-        endNumber: 2,
-        arrowNumber: 1,
-        shooterId: "shooter-1",
-        scoreStr: "X",
-        scoreInt: 10,
-      },
+      type: "shot.recorded",
+      eventId: "event-1",
+      distanceId: "d-a",
+      endNumber: 2,
+      arrowNumber: 1,
+      shooterId: "shooter-1",
+      scoreStr: "X",
+      scoreInt: 10,
     });
   });
 
@@ -658,20 +625,16 @@ describe("buildShotOperation", () => {
     const input = buildShotOperation({
       cell,
       shot: null,
-      label: "距離1 2エンド1本目",
       eventId: "event-2",
     });
 
     // Then: クリアの操作になる
     expect(input).toEqual({
-      label: "距離1 2エンド1本目",
-      operation: {
-        type: "shot.cleared",
-        eventId: "event-2",
-        distanceId: "d-a",
-        endNumber: 2,
-        arrowNumber: 1,
-      },
+      type: "shot.cleared",
+      eventId: "event-2",
+      distanceId: "d-a",
+      endNumber: 2,
+      arrowNumber: 1,
     });
   });
 });

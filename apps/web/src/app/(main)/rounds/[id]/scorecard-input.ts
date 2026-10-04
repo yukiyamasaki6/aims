@@ -1,6 +1,5 @@
-import { distanceNumber } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
-import type { OpInput } from "./sync-events";
+import type { SyncOperation } from "./sync-events";
 
 // スコアカード上で選択しているマス。
 export type Position = { distance: Distance; end: number; arrow: number };
@@ -236,46 +235,32 @@ export function discardDistanceEntries(
   return entries.filter((e) => e.distanceId !== distanceId);
 }
 
-// 同期状態の表示などで、操作の対象のマスを示すラベル。
-// 距離が見つからない場合、距離の番号は?とする。
-export function cellLabel(distances: Distance[], cell: Cell): string {
-  const number = distanceNumber(distances, cell.distanceId);
-  return `距離${number || "?"} ${cell.endNumber}エンド${cell.arrowNumber}本目`;
-}
-
-// マスの記録またはクリアを、操作の列へ追記する入力に変換する。
+// マスの記録またはクリアを、操作に変換する。
 // 距離の作成との順序は、操作の列の衝突の規則（同じ距離の操作は順に送る）が保つ。
 export function buildShotOperation(input: {
   cell: Cell;
   shot: Shot | null;
-  label: string;
   eventId: string;
-}): OpInput {
-  const { cell, shot, label, eventId } = input;
+}): SyncOperation {
+  const { cell, shot, eventId } = input;
   const { distanceId, endNumber, arrowNumber } = cell;
   if (shot) {
     return {
-      label,
-      operation: {
-        type: "shot.recorded",
-        eventId,
-        distanceId,
-        endNumber,
-        arrowNumber,
-        shooterId: shot.shooter_id,
-        scoreStr: shot.score_str,
-        scoreInt: shot.score_int,
-      },
-    };
-  }
-  return {
-    label,
-    operation: {
-      type: "shot.cleared",
+      type: "shot.recorded",
       eventId,
       distanceId,
       endNumber,
       arrowNumber,
-    },
+      shooterId: shot.shooter_id,
+      scoreStr: shot.score_str,
+      scoreInt: shot.score_int,
+    };
+  }
+  return {
+    type: "shot.cleared",
+    eventId,
+    distanceId,
+    endNumber,
+    arrowNumber,
   };
 }

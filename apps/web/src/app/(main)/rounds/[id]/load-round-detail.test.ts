@@ -71,10 +71,7 @@ function roundUpdated(eventId: string, name: string): SyncOperation {
     type: "round.updated",
     eventId,
     roundId: "round-1",
-    name,
-    roundDate: "2026-09-20",
-    format: "outdoor",
-    bowType: "compound",
+    changes: { name, roundDate: "2026-09-20", bowType: "compound" },
   };
 }
 
@@ -86,7 +83,6 @@ async function save(
     eventId: operation.eventId,
     streamId: roundStreamId(options.roundId ?? "round-1"),
     userId: options.userId === undefined ? getLocalIdentity() : options.userId,
-    label: operation.type,
     operation,
   });
 }
@@ -139,7 +135,11 @@ describe("loadRoundDetail", () => {
     expect(result.data.reflected).toEqual([]);
     const state = applyOperations(
       result.data.base,
-      result.data.entries.map((e) => e.operation),
+      result.data.entries.map((e) => ({
+        operation: e.operation,
+        confirmedFields: undefined,
+      })),
+      [],
     );
     expect(state.roundConfig.name).toBe("更新後");
     expect(state.shots).toEqual([
@@ -151,7 +151,7 @@ describe("loadRoundDetail", () => {
     it("確定したrevisionを取得が持っていれば、反映済みとして列へ含めない", async () => {
       // Given: revision 2で確定した設定の更新を、取得(revision 2)が反映している
       await save(roundUpdated("e1", "更新後"));
-      await roundOpStore.ack("e1", 2);
+      await roundOpStore.ack("e1", 2, true, null);
       fetchDetail.mockResolvedValue({
         status: "ok",
         data: { ...server, revisions: { ...server.revisions, round: 2 } },
@@ -169,7 +169,7 @@ describe("loadRoundDetail", () => {
     it("確定したrevisionに取得が届いていなければ、列へ残す", async () => {
       // Given: revision 3で確定した操作を、revision 2の取得はまだ反映していない
       await save(roundUpdated("e1", "更新後"));
-      await roundOpStore.ack("e1", 3);
+      await roundOpStore.ack("e1", 3, true, null);
       fetchDetail.mockResolvedValue({
         status: "ok",
         data: { ...server, revisions: { ...server.revisions, round: 2 } },
@@ -187,9 +187,9 @@ describe("loadRoundDetail", () => {
     it("矢は、マスごとのrevisionで判定する", async () => {
       // Given: 2本目だけ取得が反映している
       await save(shotRecorded("e1", "8", 1));
-      await roundOpStore.ack("e1", 2);
+      await roundOpStore.ack("e1", 2, true, null);
       await save(shotRecorded("e2", "9", 2));
-      await roundOpStore.ack("e2", 2);
+      await roundOpStore.ack("e2", 2, true, null);
       fetchDetail.mockResolvedValue({
         status: "ok",
         data: {
@@ -219,13 +219,9 @@ describe("loadRoundDetail", () => {
         type: "distance.updated",
         eventId: "e1",
         distanceId: "d-gone",
-        distance: 30,
-        totalEnds: 1,
-        arrowsPerEnd: 1,
-        targetFaceId: "face-1",
-        isMarked: true,
+        changes: { distance: 30 },
       });
-      await roundOpStore.ack("e1", 2);
+      await roundOpStore.ack("e1", 2, true, null);
 
       // When
       const result = await loadRoundDetail(supabase, "round-1");
@@ -235,10 +231,43 @@ describe("loadRoundDetail", () => {
       expect(result.data.entries.map((e) => e.eventId)).toEqual(["e1"]);
     });
 
+    it("効かなかった操作は、取得のrevisionによらず反映済みとして扱う", async () => {
+      // Given: サーバーが効かなかったと答えた設定の更新
+      await save(roundUpdated("e1", "更新後"));
+      await roundOpStore.ack("e1", null, false, null);
+
+      // When
+      const result = await loadRoundDetail(supabase, "round-1");
+
+      // Then
+      if (result.status !== "ok") throw new Error("not ok");
+      expect(result.data.entries).toEqual([]);
+      expect(result.data.reflected).toEqual(["e1"]);
+    });
+
+    it("取得に行が無いマスへの取り消しは、反映済みとして扱う", async () => {
+      // Given: 空のマスへの取り消しが確定している
+      await save({
+        type: "shot.cleared",
+        eventId: "e1",
+        distanceId: "d-a",
+        endNumber: 1,
+        arrowNumber: 1,
+      });
+      await roundOpStore.ack("e1", 2, true, null);
+
+      // When
+      const result = await loadRoundDetail(supabase, "round-1");
+
+      // Then
+      if (result.status !== "ok") throw new Error("not ok");
+      expect(result.data.reflected).toEqual(["e1"]);
+    });
+
     it("ラウンドの削除は、取得での確認ができないため、常に列へ重ねる", async () => {
       // Given: 確定したラウンドの削除
       await save({ type: "round.disabled", eventId: "e1", roundId: "round-1" });
-      await roundOpStore.ack("e1", 5);
+      await roundOpStore.ack("e1", 5, true, null);
 
       // When
       const result = await loadRoundDetail(supabase, "round-1");
@@ -248,6 +277,62 @@ describe("loadRoundDetail", () => {
         status: "ok",
         data: { leaveRound: true, reflected: [] },
       });
+    });
+  });
+
+  describe("旧い形式の未送信の操作", () => {
+    it("全項目を持つ操作は、全項目を変えた差分として読む", async () => {
+      // Given: 差分を持たない旧い形式の操作が端末に残っている
+      const legacyRound = {
+        type: "round.updated",
+        eventId: "e1",
+        roundId: "round-1",
+        name: "旧",
+        roundDate: "2026-09-20",
+        format: "outdoor",
+        bowType: "compound",
+      } as unknown as SyncOperation;
+      const legacyDistance = {
+        type: "distance.updated",
+        eventId: "e2",
+        distanceId: "d-a",
+        distance: 30,
+        totalEnds: 2,
+        arrowsPerEnd: 3,
+        targetFaceId: "face-1",
+        isMarked: true,
+      } as unknown as SyncOperation;
+      await save(legacyRound);
+      await save(legacyDistance);
+
+      // When
+      const result = await loadRoundDetail(supabase, "round-1");
+
+      // Then
+      if (result.status !== "ok") throw new Error("not ok");
+      expect(result.data.entries.map((e) => e.operation)).toEqual([
+        {
+          type: "round.updated",
+          eventId: "e1",
+          roundId: "round-1",
+          changes: {
+            name: "旧",
+            roundDate: "2026-09-20",
+            format: "outdoor",
+            bowType: "compound",
+          },
+        },
+        {
+          type: "distance.updated",
+          eventId: "e2",
+          distanceId: "d-a",
+          changes: {
+            distance: 30,
+            isMarked: true,
+            config: { totalEnds: 2, arrowsPerEnd: 3, targetFaceId: "face-1" },
+          },
+        },
+      ]);
     });
   });
 
@@ -283,7 +368,11 @@ describe("loadRoundDetail", () => {
     if (result.status !== "ok") throw new Error("not ok");
     const state = applyOperations(
       result.data.base,
-      result.data.entries.map((e) => e.operation),
+      result.data.entries.map((e) => ({
+        operation: e.operation,
+        confirmedFields: undefined,
+      })),
+      [],
     );
     expect(findCurrentPosition([oneEnd], [firstArrow])?.arrow).toBe(2);
     expect(findCurrentPosition(state.distances, state.shots)).toBeNull();
@@ -303,7 +392,7 @@ describe("loadRoundDetail", () => {
       // Given: 読み取りの開始時にはある操作が、読み取り中に確定してから別のタブに外される
       await save(shotRecorded("e1", "10"));
       fetchDetail.mockImplementation(async () => {
-        await roundOpStore.ack("e1", 2);
+        await roundOpStore.ack("e1", 2, true, null);
         await roundOpStore.retire(["e1"], "reflected");
         return { status: "ok", data: server };
       });
@@ -334,7 +423,7 @@ describe("loadRoundDetail", () => {
       await save(shotRecorded("e2", "7", 2));
       fetchDetail.mockImplementation(async () => {
         await roundOpStore.retire(["e1"], "reflected");
-        await roundOpStore.ack("e2", 4);
+        await roundOpStore.ack("e2", 4, true, null);
         await save(shotRecorded("e3", "8", 3));
         return { status: "ok", data: server };
       });
