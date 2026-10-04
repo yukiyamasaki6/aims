@@ -1,15 +1,14 @@
 import "fake-indexeddb/auto";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { IDBFactory } from "fake-indexeddb";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getLocalIdentity } from "@/features/auth/local-identity";
-import type { OpLogEntry } from "@/features/op-log/op-log-types";
 import { loadRoundDetail } from "./load-round-detail";
 import type { RoundState } from "./round-op-apply";
+import { roundOpHub } from "./round-op-hub";
 import { roundOpStore, roundStreamId } from "./round-op-store";
 import { roundUpdated, shotRecorded } from "./round-op-test-helpers";
 import { sendRoundBatch } from "./round-op-transport";
-import type { SyncOperation } from "./sync-events";
 import { useRoundOpStack } from "./use-round-op-stack";
 
 vi.mock("./load-round-detail", () => ({ loadRoundDetail: vi.fn() }));
@@ -55,19 +54,6 @@ const base: RoundState = {
   roundDisabled: false,
 };
 
-function entryOf(
-  operation: SyncOperation,
-  seq: number,
-): OpLogEntry<SyncOperation> {
-  return {
-    seq,
-    eventId: operation.eventId,
-    streamId: roundStreamId("round-1"),
-    userId: getLocalIdentity(),
-    operation,
-  };
-}
-
 function setOnline(online: boolean) {
   Object.defineProperty(window.navigator, "onLine", {
     configurable: true,
@@ -81,6 +67,11 @@ beforeEach(async () => {
   globalThis.indexedDB = new IDBFactory();
   setOnline(true);
   send.mockResolvedValue({ ok: true, results: [applied] });
+  roundOpHub.start(getLocalIdentity());
+});
+
+afterEach(() => {
+  roundOpHub.stop();
 });
 
 describe("useRoundOpStack", () => {
@@ -95,7 +86,17 @@ describe("useRoundOpStack", () => {
   });
 
   it("読み込んだ列を基準へ重ねた状態から始め、起動時に送信する", async () => {
-    const entries = [entryOf(roundUpdated({ changes: { name: "未送信" } }), 1)];
+    const operation = roundUpdated({ changes: { name: "未送信" } });
+    await roundOpStore.append({
+      eventId: operation.eventId,
+      streamId: roundStreamId("round-1"),
+      userId: getLocalIdentity(),
+      operation,
+    });
+    const entries = await roundOpStore.loadStream(
+      roundStreamId("round-1"),
+      getLocalIdentity(),
+    );
 
     const { result } = renderHook(() =>
       useRoundOpStack("round-1", { base, entries, reflected: [] }, []),
@@ -120,7 +121,7 @@ describe("useRoundOpStack", () => {
     await waitFor(() => expect(result.current.status).toBe("synced"));
   });
 
-  it("反映済みの操作は、起動時に列から外す", async () => {
+  it("反映済みの操作は、表示の開始時に列から外し、最初の描画から重ねない", async () => {
     const operation = roundUpdated();
     await roundOpStore.append({
       eventId: operation.eventId,
@@ -129,7 +130,7 @@ describe("useRoundOpStack", () => {
       operation,
     });
 
-    renderHook(() =>
+    const { result } = renderHook(() =>
       useRoundOpStack(
         "round-1",
         {
@@ -140,6 +141,7 @@ describe("useRoundOpStack", () => {
         [],
       ),
     );
+    expect(result.current.state.roundConfig).toEqual(base.roundConfig);
 
     await waitFor(async () => {
       expect(
@@ -154,7 +156,7 @@ describe("useRoundOpStack", () => {
     );
     setOnline(false);
     act(() => {
-      window.dispatchEvent(new Event("offline"));
+      roundOpHub.handleOffline();
       result.current.append(shotRecorded());
     });
     await waitFor(() => expect(result.current.status).toBe("offline-pending"));
@@ -162,25 +164,44 @@ describe("useRoundOpStack", () => {
 
     setOnline(true);
     act(() => {
-      window.dispatchEvent(new Event("online"));
+      roundOpHub.handleOnline();
     });
 
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(result.current.status).toBe("synced"));
   });
 
-  it("画面を閉じた後は、新しい送信をしない", async () => {
-    const { result, unmount } = renderHook(() =>
+  it("画面を閉じた後も送信が続き、開き直すと同じ送信器と状態を得る", async () => {
+    // Given: オフラインで操作を追記してから画面を閉じる
+    const first = renderHook(() =>
       useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
     );
-    unmount();
-
+    setOnline(false);
     act(() => {
-      result.current.append(shotRecorded());
+      roundOpHub.handleOffline();
+      first.result.current.append(shotRecorded());
     });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitFor(() =>
+      expect(first.result.current.state.shots).toHaveLength(1),
+    );
+    first.unmount();
 
-    expect(send).not.toHaveBeenCalled();
+    // When: 画面が無い状態でオンラインへ復帰する
+    setOnline(true);
+    act(() => {
+      roundOpHub.handleOnline();
+    });
+
+    // Then: 送信され、開き直した画面は同じ送信器の状態を得る
+    await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+    expect(roundOpHub.acquire(roundStreamId("round-1"))).toBe(
+      roundOpHub.acquire(roundStreamId("round-1")),
+    );
+    const second = renderHook(() =>
+      useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
+    );
+    await waitFor(() => expect(second.result.current.status).toBe("synced"));
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   describe("効かなかった操作または項目がある応答", () => {
@@ -247,7 +268,11 @@ describe("useRoundOpStack", () => {
     });
 
     it("取得中に別の知らせが届いたら、完了後にもう1度取得する", async () => {
-      send.mockResolvedValue({ ok: true, results: [ineffective] });
+      // 2件の追記は1つの要求にまとまるため、操作ごとの結果を返す。
+      send.mockImplementation(async (flight) => ({
+        ok: true,
+        results: flight.entries.map(() => ineffective),
+      }));
       let release: () => void = () => {};
       reload.mockImplementationOnce(
         () =>
@@ -272,9 +297,12 @@ describe("useRoundOpStack", () => {
 
       act(() => {
         result.current.append(shotRecorded());
-        result.current.append(shotRecorded({ eventId: "e-2", arrowNumber: 2 }));
       });
       await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+      act(() => {
+        result.current.append(shotRecorded({ eventId: "e-2", arrowNumber: 2 }));
+      });
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
       await new Promise((resolve) => setTimeout(resolve, 20));
       release();
 

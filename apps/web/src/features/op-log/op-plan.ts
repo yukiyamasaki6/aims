@@ -26,7 +26,7 @@ function isBlocked<Op extends OpBase>(
 const BUSY: OpStatus = "inflight";
 
 // 列（`seq`順）から、いま送れる要求の一覧を返す純粋な関数。
-// laneごとに応答待ちの要求は1本までで、候補は`queued`の操作だけである。ラウンドの矢のlaneは距離ごとで、異なる距離の要求は並行して送る。
+// laneごとに応答待ちの要求は1本までで、候補は`queued`で送ってよい操作だけである。ラウンドの矢のlaneは距離ごとで、異なる距離の要求は並行して送る。
 export function planFlights<Op extends OpBase>(
   items: PlanItem<Op>[],
   ports: OpPlanPorts<Op>,
@@ -38,7 +38,7 @@ export function planFlights<Op extends OpBase>(
 
   const lanes: string[] = [];
   for (const item of items) {
-    if (item.status !== "queued") continue;
+    if (item.status !== "queued" || !item.sendable) continue;
     const lane = ports.laneOf(item.operation);
     if (!busyLanes.has(lane) && !lanes.includes(lane)) lanes.push(lane);
   }
@@ -50,7 +50,11 @@ export function planFlights<Op extends OpBase>(
     const entries: OpFlight<Op>["entries"] = [];
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
-      if (item.status !== "queued" || ports.laneOf(item.operation) !== lane) {
+      if (
+        item.status !== "queued" ||
+        !item.sendable ||
+        ports.laneOf(item.operation) !== lane
+      ) {
         continue;
       }
       if (entries.length >= limit) break;

@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
 import { LocalIdentityProvider } from "@/features/auth/local-identity-provider";
 import "./globals.css";
+import { OpSyncProvider } from "./op-sync-provider";
 import { SwUpdateActivator } from "./sw-update-activator";
 
 export const metadata: Metadata = {
@@ -35,6 +36,7 @@ export default function RootLayout({
           常に一致させる。 */}
       <body className="h-dvh overflow-hidden">
         <LocalIdentityProvider />
+        <OpSyncProvider />
         <SwUpdateActivator />
         <SerwistProvider
           swUrl="/sw.js"
@@ -42,7 +44,7 @@ export default function RootLayout({
           // sw.tsはページ内容をキャッシュしない（枠はプリキャッシュで配り、
           // 内容は枠内で取得する）ため、reloadOnOnlineの本来の目的（古い
           // キャッシュ済みページの最新化）はそもそも発生しない。
-          // さらに操作の列の送信器（use-round-op-stack）が`online`イベント検知で
+          // さらに操作の列の常駐の送信（op-sync-provider）が`online`イベント検知で
           // 既にリロード無しの再送を行っているため、trueのままだと目的の
           // 重複に加え、展開中のパネルや入力中の下書きを毎回失わせる
           // だけの余計な副作用になる。

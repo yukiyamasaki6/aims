@@ -235,13 +235,21 @@ async function sendShots(
 }
 
 // 要求の操作を、種類ごとのRPCで送る。サーバーの判定結果を、要求の操作と同じ順で返す。
+// `expectedUserId`は列のユーザー。セッションのユーザーと違うときは未認証として保留する(別のユーザーの認証で送らないため)。nullの列は照合しない。
 export async function sendRoundBatch(
   flight: OpFlight<SyncOperation>,
+  expectedUserId: string | null,
 ): Promise<SendOutcome> {
   const supabase = createClient();
   const state = classifySession(await supabase.auth.getSession());
   if (state.status !== "authenticated") {
     return { ok: false, failure: authFailureResult(state) };
+  }
+  if (expectedUserId !== null && state.session.user.id !== expectedUserId) {
+    return {
+      ok: false,
+      failure: authFailureResult({ status: "unauthenticated" }),
+    };
   }
   const userId = state.session.user.id;
   const shots: ShotOperation[] = [];

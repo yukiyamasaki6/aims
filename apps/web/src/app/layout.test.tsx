@@ -4,6 +4,7 @@ import { Children, isValidElement, type ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalIdentityProvider } from "@/features/auth/local-identity-provider";
 import RootLayout from "./layout";
+import { OpSyncProvider } from "./op-sync-provider";
 import { SwUpdateActivator } from "./sw-update-activator";
 
 // next/font/localはNext.jsのコンパイラによる変換を前提とし、Vitest上では実行できないため境界としてモックする。
@@ -79,6 +80,19 @@ describe("RootLayout", () => {
       expect(
         contents.some((element) => element.type === LocalIdentityProvider),
       ).toBe(true);
+    });
+
+    it("どの画面でも操作の列を送るOpSyncProviderを含める", () => {
+      // Given
+      const children = <p>子要素</p>;
+
+      // When
+      const contents = bodyContents(children);
+
+      // Then
+      expect(contents.some((element) => element.type === OpSyncProvider)).toBe(
+        true,
+      );
     });
 
     it("waitingの新SWの有効化を再要求するSwUpdateActivatorを含める", () => {

@@ -11,9 +11,12 @@ import {
 import userEvent from "@testing-library/user-event";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getLocalIdentity } from "@/features/auth/local-identity";
 import { retryDelayMs } from "@/features/op-log/sync-result";
 import type { TargetFaceOption } from "./distance-config-row";
 import type { RoundConfig } from "./round-config";
+import { roundOpHub } from "./round-op-hub";
+import { roundOpStore } from "./round-op-store";
 import { ScorecardClient } from "./scorecard-client";
 import type { Distance, Shot } from "./scorecard-types";
 
@@ -219,11 +222,16 @@ function rpcSucceeds(name: string, args?: { p_shots?: unknown[] }) {
   return Promise.resolve({ data, error: null });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
-  // IndexedDBはfake-indexeddbで代替し、テストごとに空のDBから始める。
+  // IndexedDBはfake-indexeddbで代替し、テストごとに空のDBから始める。常駐の送信が前のテストのDBを読まないよう、接続を閉じてから替える。
+  await roundOpStore.close();
   globalThis.indexedDB = new IDBFactory();
   setOnline(true);
+  // アプリでは、ルートレイアウトのOpSyncProviderがハブを起動する。
+  roundOpHub.start(getLocalIdentity());
+  // 起動時の全列の読み込み(DBの初回の作成を含む)がテストの操作と重ならないよう、完了を待つ。同じDBへの読み込みは起動時の読み込みより後に完了する。
+  await roundOpStore.loadAll(getLocalIdentity());
   supabase.getSession.mockResolvedValue({
     data: { session: { user: { id: "user-1" } } },
   });
@@ -254,14 +262,18 @@ afterEach(async () => {
   // 操作の列はアンマウント後も送信を続けるため、送信中の操作が次のテストのスタブに届かないよう、マウント中に送信を終わらせる。
   // オフラインで保留中の操作はonlineイベントで再開させ、同期済みか同期保留中の最終状態になるまで待つ。
   // Testing Libraryのcleanup（アンマウント）より先に実行される。
-  const syncStatus = screen.queryByTestId("sync-status");
-  if (!syncStatus) return;
-  act(() => {
-    window.dispatchEvent(new Event("online"));
-  });
-  await waitFor(() => {
-    expect(syncStatus.textContent).toMatch(/同期済み|同期保留中/);
-  });
+  try {
+    const syncStatus = screen.queryByTestId("sync-status");
+    if (!syncStatus) return;
+    act(() => {
+      roundOpHub.handleOnline();
+    });
+    await waitFor(() => {
+      expect(syncStatus.textContent).toMatch(/同期済み|同期保留中/);
+    });
+  } finally {
+    roundOpHub.stop();
+  }
 });
 
 describe("ScorecardClient 初期表示・集計", () => {

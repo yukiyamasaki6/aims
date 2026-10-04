@@ -33,6 +33,8 @@ export type OpLogStore<Op extends OpBase> = {
     streamId: string,
     userId: string | null,
   ) => Promise<OpLogEntry<Op>[]>;
+  // 現在のユーザーの全ての列を、`streamId`ごとに`seq`順で返す。他ユーザーの操作は保存したまま読まない。
+  loadAll: (userId: string | null) => Promise<Map<string, OpLogEntry<Op>[]>>;
   // 確定の結果を1度だけ付ける。列に無い、または付いている操作には何もしない。
   ack: (
     eventId: string,
@@ -97,6 +99,19 @@ export function createOpLogStore<Op extends OpBase>(): OpLogStore<Op> {
         }
       }
       return stored.sort((first, second) => first.seq - second.seq);
+    },
+    async loadAll(userId) {
+      const db = await database();
+      // 主キー`seq`の昇順で返るため、並べ直さない。
+      const entries = await db.getAll(STORE_NAME);
+      const streams = new Map<string, OpLogEntry<Op>[]>();
+      for (const entry of entries) {
+        if (entry.userId !== userId || entry.seq === undefined) continue;
+        const stored = streams.get(entry.streamId) ?? [];
+        stored.push({ ...entry, seq: entry.seq });
+        streams.set(entry.streamId, stored);
+      }
+      return streams;
     },
     async ack(eventId, revision, applied, appliedFields) {
       const db = await database();

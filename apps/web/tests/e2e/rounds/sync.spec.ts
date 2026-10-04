@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, type Route, test } from "@playwright/test";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   createConfirmedUser,
   getSharedEmail,
@@ -19,7 +20,12 @@ import {
   updateDistance,
   updateRound,
 } from "../helpers/other-device";
-import { createRound, SIX_RING_TARGET_FACE_ID } from "../helpers/rounds";
+import {
+  createRound,
+  SIX_RING_TARGET_FACE_ID,
+  signInAsTestUser,
+} from "../helpers/rounds";
+import { mockTurnstile } from "../helpers/turnstile";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -1112,4 +1118,450 @@ test("sync-32: Unmarkedで距離(m)が空の距離のラウンド詳細画面で
   await expect(page.getByTestId("distance-config-distance-1")).toHaveValue(
     "60",
   );
+});
+
+// 保存された点数を「エンド-矢:点数」の配列で返す。
+async function savedShots(supabase: SupabaseClient, distanceId: string) {
+  const { data, error } = await supabase
+    .from("shots")
+    .select("end_number, arrow_number, score_str")
+    .eq("distance_id", distanceId)
+    .is("disabled_at", null)
+    .order("end_number")
+    .order("arrow_number");
+  if (error) throw error;
+  return data.map(
+    (shot) => `${shot.end_number}-${shot.arrow_number}:${shot.score_str}`,
+  );
+}
+
+async function expectSavedShots(
+  supabase: SupabaseClient,
+  distanceId: string,
+  expected: string[],
+) {
+  await expect
+    .poll(() => savedShots(supabase, distanceId), { timeout: 30_000 })
+    .toEqual(expected);
+}
+
+// 一覧と詳細の行き来は、ハブの常駐を確かめるため、画面を読み込み直さないリンクの遷移で行う。
+async function backToList(page: Page) {
+  await page.getByRole("link", { name: "一覧へ戻る" }).click();
+  await expect(page).toHaveURL(/\/rounds$/);
+}
+
+async function openFromList(page: Page, name: string) {
+  await page.getByRole("link", { name: new RegExp(name) }).click();
+  await expect(page.getByTestId("sync-status")).toBeVisible();
+}
+
+// オフラインのまま画面を移るため、Service Workerがページを制御するまで待つ。
+async function waitForServiceWorkerControl(page: Page) {
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    if (navigator.serviceWorker.controller) return;
+    await new Promise<void>((resolve) => {
+      navigator.serviceWorker.addEventListener("controllerchange", () =>
+        resolve(),
+      );
+    });
+  });
+}
+
+async function createNamedRound(email: string, password: string, name: string) {
+  const id = await createRound({
+    email,
+    password,
+    name,
+    roundDate: "2026-08-24",
+    format: "outdoor",
+    bowType: "recurve",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+  });
+  const { supabase } = await signInAsTestUser(email, password);
+  const [distanceId] = await getDistanceIds(supabase, id);
+  return { id, name, distanceId, supabase };
+}
+
+function uniqueName(label: string) {
+  return `${label}-${randomUUID().slice(0, 8)}`;
+}
+
+async function signInOnPage(
+  page: Page,
+  user: { email: string; password: string },
+) {
+  await page.getByPlaceholder("you@example.com").fill(user.email);
+  await page.getByPlaceholder("パスワード").fill(user.password);
+  const signInButton = page.getByRole("button", { name: "サインイン" });
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await signInButton.click();
+}
+
+async function signOutOnPage(page: Page) {
+  await page.getByRole("button", { name: "サインアウト" }).click();
+  await page.getByRole("button", { name: "サインアウトする" }).click();
+  await expect(page).toHaveURL(/\/signin/);
+}
+
+test("sync-33: ラウンド詳細画面で点数を記録した後、オフラインになり、ラウンド一覧へ移ったとき、オンラインへ復帰すると、そのラウンドを開き直さなくても、点数が保存される", async ({
+  page,
+}) => {
+  // Given: 点数を記録した後、オフラインになり、ラウンド一覧へ移った
+  const { supabase, distanceIds } = await createSyncRound({
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+  });
+  await openRound(page);
+  await waitForServiceWorkerControl(page);
+  await page.context().setOffline(true);
+  await page.getByTestId("score-button-10").click();
+  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
+  await backToList(page);
+
+  // When: オンラインへ復帰する
+  await goOnline(page);
+
+  // Then: そのラウンドを開き直さなくても、点数が保存される
+  await expectSavedShots(supabase, distanceIds[0], ["1-1:10"]);
+});
+
+test("sync-34: 未送信の点数を残してアプリを閉じたとき、通信がある状態でラウンド一覧を開くと、そのラウンドを開かなくても、点数が保存される", async ({
+  page,
+}) => {
+  // Given: 送信が失敗して未送信の点数を残し、アプリを閉じた
+  const { supabase, distanceIds } = await createSyncRound({
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+  });
+  let attempts = 0;
+  await page.route(RECORD_SHOTS_RPC, async (route) => {
+    attempts++;
+    await route.abort("failed");
+  });
+  await openRound(page);
+  await page.getByTestId("score-button-10").click();
+  await expect.poll(() => attempts).toBeGreaterThan(0);
+  const context = page.context();
+  await page.close();
+
+  // When: 通信がある状態でラウンド一覧を開く
+  const reopened = await context.newPage();
+  await reopened.goto("/rounds");
+  await waitForHydration(reopened);
+
+  // Then: そのラウンドを開かなくても、点数が保存される
+  await expectSavedShots(supabase, distanceIds[0], ["1-1:10"]);
+});
+
+test("sync-35: 送信中の点数があるとき、ラウンド詳細画面からラウンド一覧へ移ると、点数が1回だけ保存される", async ({
+  page,
+}) => {
+  // Given: record_shotsの応答を保留して、点数が送信中になっている
+  const { supabase, distanceIds } = await createSyncRound({
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+  });
+  let requests = 0;
+  let releaseRequest: () => void = () => {};
+  const requestGate = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route(RECORD_SHOTS_RPC, async (route) => {
+    requests++;
+    await requestGate;
+    await route.continue();
+  });
+  await openRound(page);
+  await page.getByTestId("score-button-10").click();
+  await expect.poll(() => requests).toBe(1);
+
+  // When: ラウンド一覧へ移る
+  await backToList(page);
+  releaseRequest();
+
+  // Then: 点数が1回だけ保存される
+  await expectSavedShots(supabase, distanceIds[0], ["1-1:10"]);
+  expect(requests).toBe(1);
+});
+
+test("sync-36: 2つのラウンドに未送信の点数があり、一方の送信が失敗し続けているとき、時間が経つと、もう一方のラウンドの点数が保存される", async ({
+  page,
+}) => {
+  // Given: 2つのラウンドに未送信の点数があり、一方の送信が失敗し続けている
+  const email = getSharedEmail();
+  const failing = await createNamedRound(
+    email,
+    SHARED_PASSWORD,
+    uniqueName("失敗し続ける"),
+  );
+  const other = await createNamedRound(
+    email,
+    SHARED_PASSWORD,
+    uniqueName("もう一方"),
+  );
+  let otherBlocked = true;
+  await page.route(RECORD_SHOTS_RPC, async (route) => {
+    const body = route.request().postData() ?? "";
+    if (otherBlocked || body.includes(failing.distanceId)) {
+      await route.abort("failed");
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto(`/rounds/${failing.id}`);
+  await waitForHydration(page);
+  await page.getByTestId("score-button-10").click();
+  await backToList(page);
+  await openFromList(page, other.name);
+  await page.getByTestId("score-button-9").click();
+
+  // When: 時間が経つ（もう一方の送信だけが成功するようになり、リトライ待機が終わる）
+  otherBlocked = false;
+
+  // Then: もう一方のラウンドの点数が保存される
+  await expectSavedShots(other.supabase, other.distanceId, ["1-1:9"]);
+  expect(await savedShots(failing.supabase, failing.distanceId)).toEqual([]);
+});
+
+test("sync-37: 3つのラウンドに未送信の点数があり、1つが認可で拒否されるとき、送信されると、拒否された点数だけが消え、他の点数が保存される", async ({
+  page,
+}) => {
+  // Given: 3つのラウンドに未送信の点数があり、2つ目だけが、ラウンドの参加者でないユーザーとして実サーバーで拒否される
+  const email = getSharedEmail();
+  const first = await createNamedRound(
+    email,
+    SHARED_PASSWORD,
+    uniqueName("1つ目"),
+  );
+  const rejected = await createNamedRound(
+    email,
+    SHARED_PASSWORD,
+    uniqueName("拒否される"),
+  );
+  const third = await createNamedRound(
+    email,
+    SHARED_PASSWORD,
+    uniqueName("3つ目"),
+  );
+  const outsider = {
+    email: `outsider-${randomUUID()}@example.com`,
+    password: "password-e2e-outsider",
+  };
+  await createConfirmedUser(outsider);
+  const outsiderDevice = await openOtherDevice(
+    outsider.email,
+    outsider.password,
+  );
+  let blocked = true;
+  let rejectedStatus = 0;
+  await page.route(RECORD_SHOTS_RPC, async (route: Route) => {
+    const body = route.request().postData() ?? "";
+    if (blocked) {
+      await route.abort("failed");
+      return;
+    }
+    if (body.includes(rejected.distanceId)) {
+      rejectedStatus = await forwardAs(route, outsiderDevice.supabase);
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto(`/rounds/${first.id}`);
+  await waitForHydration(page);
+  await page.getByTestId("score-button-10").click();
+  await backToList(page);
+  await openFromList(page, rejected.name);
+  await page.getByTestId("score-button-9").click();
+  await backToList(page);
+  await openFromList(page, third.name);
+  await page.getByTestId("score-button-8").click();
+
+  // When: 送信される
+  blocked = false;
+
+  // Then: 拒否された点数だけが消え、他の点数が保存される
+  await expectSavedShots(first.supabase, first.distanceId, ["1-1:10"]);
+  await expectSavedShots(third.supabase, third.distanceId, ["1-1:8"]);
+  await expect.poll(() => rejectedStatus).toBe(403);
+  expect(await savedShots(rejected.supabase, rejected.distanceId)).toEqual([]);
+  await backToList(page);
+  await openFromList(page, rejected.name);
+  await expect(page.getByTestId("shot-cell-1-1-1")).not.toContainText("9");
+});
+
+test("sync-38: 未認証で送れない点数がある状態で、ラウンド一覧にいるとき、サインインし直すと、そのラウンドを開き直さなくても、点数が保存される", async ({
+  page,
+  context,
+}) => {
+  // Given: 送信が失敗して未送信の点数があり、ラウンド一覧へ移った後で、サインインが切れて未認証で送れない
+  const { supabase, distanceIds } = await createSyncRound({
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+  });
+  await mockTurnstile(page);
+  let attempts = 0;
+  await page.route(RECORD_SHOTS_RPC, async (route) => {
+    attempts++;
+    await route.abort("failed");
+  });
+  await openRound(page);
+  await page.getByTestId("score-button-10").click();
+  await expect.poll(() => attempts).toBeGreaterThan(0);
+  await backToList(page);
+  await context.clearCookies();
+  await page.unroute(RECORD_SHOTS_RPC);
+  // 再送は、サインインが切れているため、未認証で保留になる。
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+
+  // When: サインイン画面を開き、サインインし直す
+  await page.goto("/signin");
+  await waitForHydration(page);
+  await signInOnPage(page, {
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+  });
+
+  // Then: そのラウンドを開き直さなくても、点数が保存される
+  await expect(page).toHaveURL(/\/rounds$/);
+  await expectSavedShots(supabase, distanceIds[0], ["1-1:10"]);
+});
+
+test("sync-39: 別の利用者の未送信の点数が残る端末のとき、サインインして操作すると、別の利用者の点数は送られず、表示されず、その利用者が再びサインインすると保存される", async ({
+  page,
+  context,
+}) => {
+  // Given: 利用者Aの未送信の点数が残る端末
+  const userA = {
+    email: `sync39-a-${randomUUID()}@example.com`,
+    password: "password-e2e-a",
+  };
+  const userB = {
+    email: `sync39-b-${randomUUID()}@example.com`,
+    password: "password-e2e-b",
+  };
+  await createConfirmedUser(userA);
+  await createConfirmedUser(userB);
+  const roundA = await createNamedRound(
+    userA.email,
+    userA.password,
+    uniqueName("利用者A"),
+  );
+  const roundB = await createNamedRound(
+    userB.email,
+    userB.password,
+    uniqueName("利用者B"),
+  );
+  await context.clearCookies();
+  await mockTurnstile(page);
+  // 利用者Aの点数の送信は、利用者Bの間も、利用者Aが再びサインインするまで失敗させ続け、試行の回数を数える。
+  let blockA = true;
+  let attemptsOfA = 0;
+  await page.route(RECORD_SHOTS_RPC, async (route) => {
+    const isA = (route.request().postData() ?? "").includes(roundA.distanceId);
+    if (isA) attemptsOfA++;
+    if (isA && blockA) {
+      await route.abort("failed");
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto("/signin");
+  await waitForHydration(page);
+  await signInOnPage(page, userA);
+  await expect(page).toHaveURL(/\/rounds$/);
+  await openFromList(page, roundA.name);
+  await page.getByTestId("score-button-10").click();
+  await expect.poll(() => attemptsOfA).toBeGreaterThan(0);
+  await signOutOnPage(page);
+  const attemptsBeforeB = attemptsOfA;
+
+  // When: 利用者Bがサインインして操作する
+  await signInOnPage(page, userB);
+  await expect(page).toHaveURL(/\/rounds$/);
+  await openFromList(page, roundB.name);
+  await page.getByTestId("score-button-9").click();
+  await expectSavedShots(roundB.supabase, roundB.distanceId, ["1-1:9"]);
+
+  // Then: 利用者Aの点数は送られず、表示されず、利用者Aが再びサインインすると保存される
+  expect(attemptsOfA).toBe(attemptsBeforeB);
+  expect(await savedShots(roundA.supabase, roundA.distanceId)).toEqual([]);
+  await backToList(page);
+  await expect(page.getByText(roundA.name)).toHaveCount(0);
+  await signOutOnPage(page);
+  blockA = false;
+  await signInOnPage(page, userA);
+  await expectSavedShots(roundA.supabase, roundA.distanceId, ["1-1:10"]);
+});
+
+test("sync-40: 2つのタブで、同じマスへの記録と取り消しをオフラインで行ったとき、オンラインへ復帰すると、後に行った操作の結果が保存される", async ({
+  page,
+  context,
+}) => {
+  // Given: 2つのタブで、一方が10を記録し、他方がそのマスを取り消した
+  const { supabase, distanceIds } = await createSyncRound({
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+  });
+  const other = await context.newPage();
+  await openRound(page);
+  await other.goto(`/rounds/${roundId}`);
+  await waitForHydration(other);
+  await context.setOffline(true);
+  // 背面のタブはアニメーションが進まず、操作の「安定」を待ち続けるため、操作するタブを前面にする。
+  await page.bringToFront();
+  await page.getByTestId("score-button-10").click();
+  await expect(other.getByTestId("shot-cell-1-1-1")).toContainText("10");
+  await other.bringToFront();
+  // 画面を開いた直後は1本目が選択済みのため、マスを押し直さずにクリアする(押すと選択が外れる)。
+  await other.getByTestId("score-button-clear").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).not.toContainText("10");
+  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
+
+  // When: オンラインへ復帰する
+  await context.setOffline(false);
+  await goOnline(page);
+  await goOnline(other);
+
+  // Then: 後に行った操作の結果(取り消し)が保存される
+  await expectSynced(page);
+  await expectSynced(other);
+  expect(await savedShots(supabase, distanceIds[0])).toEqual([]);
+  await reloadRound(page);
+  await expect(page.getByTestId("shot-cell-1-1-1")).not.toContainText("10");
+});
+
+test("sync-41: 2つのタブに未送信の点数があるとき、一方のタブを閉じると、残ったタブで、両方の点数が保存される", async ({
+  page,
+  context,
+}) => {
+  // Given: 送信が失敗して、2つのタブに未送信の点数がある
+  const { supabase, distanceIds } = await createSyncRound({
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+  });
+  let attempts = 0;
+  let failing = true;
+  await context.route(RECORD_SHOTS_RPC, async (route) => {
+    attempts++;
+    if (failing) {
+      await route.abort("failed");
+      return;
+    }
+    await route.continue();
+  });
+  const other = await context.newPage();
+  await openRound(page);
+  await other.goto(`/rounds/${roundId}`);
+  await waitForHydration(other);
+  await page.bringToFront();
+  await page.getByTestId("score-button-10").click();
+  await expect.poll(() => attempts).toBeGreaterThan(0);
+  await other.bringToFront();
+  await other.getByTestId("shot-cell-1-1-2").click();
+  await other.getByTestId("score-button-9").click();
+  await expect(other.getByTestId("shot-cell-1-1-1")).toContainText("10");
+  await expect(other.getByTestId("sync-status")).toHaveText("同期中…");
+
+  // When: 一方のタブを閉じる
+  failing = false;
+  await page.close();
+
+  // Then: 残ったタブで、両方の点数が保存される
+  await expectSavedShots(supabase, distanceIds[0], ["1-1:10", "1-2:9"]);
 });

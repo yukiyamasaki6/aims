@@ -8,7 +8,7 @@ import {
   shotCleared,
   shotRecorded,
 } from "./round-op-test-helpers";
-import { sendRoundBatch } from "./round-op-transport";
+import { sendRoundBatch as sendToUser } from "./round-op-transport";
 import type { SyncOperation } from "./sync-events";
 
 const client = vi.hoisted(() => ({ getSession: vi.fn(), rpc: vi.fn() }));
@@ -18,6 +18,14 @@ vi.mock("@/lib/supabase/client", () => ({
     rpc: client.rpc,
   }),
 }));
+
+// 既定では、列のユーザーはセッションのユーザーと同じ。
+function sendRoundBatch(
+  request: Parameters<typeof sendToUser>[0],
+  expectedUserId: string | null = "user-1",
+) {
+  return sendToUser(request, expectedUserId);
+}
 
 function flight(...operations: SyncOperation[]) {
   return {
@@ -313,5 +321,22 @@ describe("sendRoundBatch", () => {
       failure: { cause: { type: "unauthenticated" } },
     });
     expect(client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("列のユーザーとセッションのユーザーが違えば、送らずに未認証の失敗を返す", async () => {
+    const outcome = await sendRoundBatch(flight(roundUpdated()), "user-2");
+
+    expect(outcome).toMatchObject({
+      ok: false,
+      failure: { cause: { type: "unauthenticated" } },
+    });
+    expect(client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("列のユーザーがnullなら、照合せずに送る", async () => {
+    const outcome = await sendRoundBatch(flight(roundUpdated()), null);
+
+    expect(outcome).toMatchObject({ ok: true });
+    expect(client.rpc).toHaveBeenCalledTimes(1);
   });
 });

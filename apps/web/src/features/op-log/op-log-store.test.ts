@@ -162,4 +162,25 @@ describe("op log store", () => {
       database.close();
     }
   });
+
+  it("loadAllはユーザーで絞り、streamIdごとにseq順で返し、他のユーザーの行を残す", async () => {
+    const store = newStore();
+    await store.append(entry("a1", { streamId: "round:a" }));
+    await store.append(entry("b1", { streamId: "round:b" }));
+    await store.append(entry("other", { userId: "user-2" }));
+    await store.append(entry("a2", { streamId: "round:a" }));
+
+    const all = await store.loadAll("user-1");
+
+    expect([...all.keys()].sort()).toEqual(["round:a", "round:b"]);
+    expect(all.get("round:a")?.map((e) => e.operation.value)).toEqual([
+      "a1",
+      "a2",
+    ]);
+    expect(all.get("round:b")?.map((e) => e.operation.value)).toEqual(["b1"]);
+    const others = await store.loadAll("user-2");
+    expect([...others.values()].flat().map((e) => e.operation.value)).toEqual([
+      "other",
+    ]);
+  });
 });

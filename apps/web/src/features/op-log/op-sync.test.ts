@@ -36,7 +36,14 @@ type Deferred = {
   resolve: (outcome: SendOutcome) => void;
 };
 
-function setup(options: { offline?: boolean; perDistance?: boolean } = {}) {
+function setup(
+  options: {
+    offline?: boolean;
+    perDistance?: boolean;
+    leader?: boolean;
+    afterAppend?: () => void;
+  } = {},
+) {
   const store = fakeStore();
   const sent: Deferred[] = [];
   const send = vi.fn((flight: OpFlight<Op>) => {
@@ -44,13 +51,21 @@ function setup(options: { offline?: boolean; perDistance?: boolean } = {}) {
       sent.push({ flight, resolve });
     });
   });
-  const state = { offline: options.offline ?? false };
+  const state = {
+    offline: options.offline ?? false,
+    leader: options.leader ?? true,
+  };
+  const onSharedChange =
+    vi.fn<(change: { diverged: boolean; held: string[] }) => void>();
   const sync = createOpSync<Op>({
     streamId: STREAM,
     userId: "user-1",
     store,
     send,
     isOffline: () => state.offline,
+    canSend: () => state.leader,
+    onSharedChange,
+    afterAppend: options.afterAppend,
     conflicts: (previous, next) =>
       previous.target === next.target || previous.kind === "ser",
     laneOf: (operation) =>
@@ -59,7 +74,7 @@ function setup(options: { offline?: boolean; perDistance?: boolean } = {}) {
         : operation.kind,
     batchLimitOf: (lane) => (lane === "ser" ? 1 : 100),
   });
-  return { sync, store, send, sent, state };
+  return { sync, store, send, sent, state, onSharedChange };
 }
 
 const flushed = () => vi.advanceTimersByTimeAsync(0);
@@ -411,7 +426,7 @@ describe("createOpSync", () => {
     expect(diverged).not.toHaveBeenCalled();
   });
 
-  it("reflectは、確定済みの操作だけを列から外してretireする", async () => {
+  it("reflectは、渡された操作をretireし、送信中の操作は列に残す", async () => {
     const { sync, sent, store } = setup();
     const confirmed = op("rec", "x");
     const pending = op("clr", "x");
@@ -420,10 +435,17 @@ describe("createOpSync", () => {
     await flushed();
     sent[0].resolve(ok(1));
     await flushed();
+    expect(sync.getSnapshot().items.map((i) => i.status)).toEqual([
+      "acked",
+      "inflight",
+    ]);
 
     sync.reflect([confirmed.eventId, pending.eventId]);
 
-    expect(store.retire).toHaveBeenCalledWith([confirmed.eventId], "reflected");
+    expect(store.retire).toHaveBeenCalledWith(
+      [confirmed.eventId, pending.eventId],
+      "reflected",
+    );
     expect(sync.getSnapshot().items.map((i) => i.eventId)).toEqual([
       pending.eventId,
     ]);
@@ -460,7 +482,7 @@ describe("createOpSync", () => {
     expect(sent).toHaveLength(2);
   });
 
-  it("load/startは確定済みの操作を送らず衝突も止めず、反映済みをretireする", async () => {
+  it("adopt/reflect/wakeは確定済みの操作を送らず衝突も止めず、反映済みをretireする", async () => {
     const { sync, sent, store } = setup();
     const confirmed = op("rec", "x");
     const pending = op("clr", "x");
@@ -482,8 +504,9 @@ describe("createOpSync", () => {
       },
     ];
 
-    sync.load(entries);
-    sync.start(["reflected-1"]);
+    sync.adopt(entries);
+    sync.reflect(["reflected-1"]);
+    sync.wake();
     await flushed();
 
     expect(store.retire).toHaveBeenCalledWith(["reflected-1"], "reflected");
@@ -635,11 +658,274 @@ describe("createOpSync", () => {
     await flushed();
     sent[2].resolve(fail(400, "PT422"));
     await flushed();
-    sync.reflect([effective.eventId]);
-    sync.start([ineffective.eventId]);
+    sync.reflect([effective.eventId, ineffective.eventId]);
     await flushed();
 
     // Then: 例外にならず、列から外れている
     expect(sync.getSnapshot().operations).toEqual([]);
+  });
+
+  describe("複数タブ", () => {
+    function row(
+      operation: Op,
+      seq: number,
+      extra: Partial<OpLogEntry<Op>> = {},
+    ): OpLogEntry<Op> {
+      return {
+        seq,
+        eventId: operation.eventId,
+        streamId: STREAM,
+        userId: "user-1",
+        operation,
+        ...extra,
+      };
+    }
+    const statuses = (sync: ReturnType<typeof setup>["sync"]) =>
+      sync.getSnapshot().items.map((item) => item.status);
+
+    it("canSendが偽のとき、保存済みの操作を送らず、保存に失敗した操作だけを送る", async () => {
+      const { sync, sent, store } = setup({ leader: false });
+      const saved = op("rec", "x");
+      const unsaved = op("rec", "y");
+      sync.append(saved);
+      await flushed();
+      store.append.mockRejectedValueOnce(new Error("quota"));
+      sync.append(unsaved);
+      await flushed();
+
+      expect(sent.map((s) => eventIds(s.flight))).toEqual([[unsaved.eventId]]);
+    });
+
+    it("afterAppendがあれば、追記の保存後にpumpせずafterAppendを呼ぶ", async () => {
+      const afterAppend = vi.fn();
+      const { sync, send, onSharedChange } = setup({ afterAppend });
+
+      sync.append(op("rec", "x"));
+      await flushed();
+
+      expect(afterAppend).toHaveBeenCalledTimes(1);
+      expect(send).not.toHaveBeenCalled();
+      expect(onSharedChange).toHaveBeenCalledWith({
+        diverged: false,
+        held: [],
+      });
+    });
+
+    it("adoptは、メモリに無い行を足し、確定済みの行は確定済みにし、seq順に並べる", async () => {
+      const { sync } = setup({ leader: false });
+      const a = op("rec", "a");
+      const b = op("rec", "b");
+      const c = op("rec", "c");
+
+      sync.adopt([row(c, 3), row(a, 1, { ackedRevision: 2 }), row(b, 2)]);
+
+      expect(sync.getSnapshot().items.map((i) => i.eventId)).toEqual([
+        a.eventId,
+        b.eventId,
+        c.eventId,
+      ]);
+      expect(statuses(sync)).toEqual(["acked", "queued", "queued"]);
+      expect(sync.getSnapshot().operations[0]).toEqual({
+        operation: a,
+        confirmedFields: null,
+      });
+    });
+
+    it("adoptは、queuedの操作が他のタブで確定したらackedにし、外れた操作を取り除く", async () => {
+      const { sync } = setup({ leader: false });
+      const a = op("rec", "a");
+      const b = op("rec", "b");
+      sync.adopt([row(a, 1), row(b, 2)]);
+
+      sync.adopt([row(a, 1, { ackedRevision: 5, ackedFields: ["f"] })]);
+
+      expect(statuses(sync)).toEqual(["acked"]);
+      expect(sync.getSnapshot().operations).toEqual([
+        { operation: a, confirmedFields: ["f"] },
+      ]);
+    });
+
+    it("adoptは、読み込みの開始後に保存が終わった操作を、読み込みに映らなくても外さない", async () => {
+      const { sync } = setup({ leader: false });
+      const readAt = sync.mark();
+      const a = op("rec", "a");
+      sync.append(a);
+      await flushed();
+
+      sync.adopt([], { readAt });
+      expect(statuses(sync)).toEqual(["queued"]);
+
+      sync.adopt([], { readAt: sync.mark() });
+      expect(statuses(sync)).toEqual([]);
+    });
+
+    it("adoptは、inflightとbackoffの操作を変えない", async () => {
+      const { sync, sent } = setup();
+      const a = op("rec", "a");
+      sync.adopt([row(a, 1)]);
+      sync.wake();
+      await flushed();
+      expect(statuses(sync)).toEqual(["inflight"]);
+
+      sync.adopt([]);
+      expect(statuses(sync)).toEqual(["inflight"]);
+
+      sent[0].resolve(fail(500));
+      await flushed();
+      expect(statuses(sync)).toEqual(["backoff"]);
+      sync.adopt([]);
+      expect(statuses(sync)).toEqual(["backoff"]);
+    });
+
+    it("adoptは、外した操作と反映済みの行を足し直さない", async () => {
+      const { sync } = setup({ leader: false });
+      const a = op("rec", "a");
+      const b = op("rec", "b");
+      sync.adopt([row(a, 1), row(b, 2)]);
+      sync.adopt([row(b, 2)]);
+
+      sync.adopt([row(a, 1), row(b, 2)], { reflected: [b.eventId] });
+
+      expect(sync.getSnapshot().items).toEqual([]);
+    });
+
+    it("adoptは、効かなかった行を取り込まない", () => {
+      const { sync } = setup({ leader: false });
+      const a = op("rec", "a");
+
+      sync.adopt([row(a, 1, { ackedRevision: 0, ackedApplied: false })]);
+
+      expect(sync.getSnapshot().items).toEqual([]);
+    });
+
+    it("adoptはheldを受け取り、渡されなくなった保留を戻す", () => {
+      const { sync } = setup({ leader: false });
+      const a = op("rec", "a");
+      sync.adopt([row(a, 1)]);
+
+      sync.adopt([row(a, 1)], { held: [a.eventId] });
+      expect(statuses(sync)).toEqual(["held"]);
+      expect(sync.getSnapshot().status).toBe("unauthenticated-pending");
+
+      sync.adopt([row(a, 1)], { held: [] });
+      expect(statuses(sync)).toEqual(["queued"]);
+    });
+
+    it("adoptは入出力も送信も起こさず、divergedで購読者へ知らせる", async () => {
+      const { sync, send, store } = setup();
+      const listener = vi.fn();
+      sync.subscribeDiverged(listener);
+
+      sync.adopt([row(op("rec", "a"), 1)]);
+      await flushed();
+      expect(send).not.toHaveBeenCalled();
+      expect(store.retire).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+
+      sync.adopt([], { diverged: true });
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it("resumeHeldは保留を戻して送り、共有の状態を知らせる", async () => {
+      const { sync, sent, onSharedChange } = setup();
+      const a = op("rec", "a");
+      sync.append(a);
+      await flushed();
+      sent[0].resolve({
+        ok: false,
+        failure: { error: "未認証", cause: { type: "unauthenticated" } },
+      });
+      await flushed();
+      expect(statuses(sync)).toEqual(["held"]);
+      expect(onSharedChange).toHaveBeenLastCalledWith({
+        diverged: false,
+        held: [a.eventId],
+      });
+
+      sync.resumeHeld();
+      await flushed();
+
+      expect(statuses(sync)).toEqual(["inflight"]);
+      expect(sent).toHaveLength(2);
+      expect(onSharedChange).toHaveBeenLastCalledWith({
+        diverged: false,
+        held: [],
+      });
+    });
+
+    it("確定の後、ackとretireの書き込みが終わってからonSharedChangeを1回だけ呼ぶ", async () => {
+      const { sync, sent, store, onSharedChange } = setup();
+      let finishAck: () => void = () => {};
+      store.ack.mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finishAck = resolve;
+        }),
+      );
+      sync.append(op("rec", "a"));
+      await flushed();
+      onSharedChange.mockClear();
+
+      sent[0].resolve(ok(1));
+      await flushed();
+      expect(onSharedChange).not.toHaveBeenCalled();
+
+      finishAck();
+      await flushed();
+      expect(onSharedChange).toHaveBeenCalledTimes(1);
+      expect(onSharedChange).toHaveBeenCalledWith({
+        diverged: false,
+        held: [],
+      });
+    });
+
+    it("効かなかった結果では、divergedを付けて知らせる", async () => {
+      const { sync, sent, onSharedChange } = setup();
+      sync.append(op("rec", "a"));
+      await flushed();
+      onSharedChange.mockClear();
+
+      sent[0].resolve({
+        ok: true,
+        results: [
+          {
+            revision: null,
+            applied: false,
+            appliedFields: [],
+            rejectedFields: [],
+            reason: "UNFIT",
+          },
+        ],
+      });
+      await flushed();
+
+      expect(onSharedChange).toHaveBeenCalledWith({
+        diverged: true,
+        held: [],
+      });
+    });
+
+    it("破棄だけのときは、divergedを付けずに知らせる", async () => {
+      const { sync, sent, onSharedChange } = setup();
+      sync.append(op("rec", "a"));
+      await flushed();
+      onSharedChange.mockClear();
+
+      sent[0].resolve(fail(400, "PT422"));
+      await flushed();
+
+      expect(onSharedChange).toHaveBeenCalledWith({
+        diverged: false,
+        held: [],
+      });
+    });
+
+    it("reflectは、メモリに無いIDもIndexedDBから外す", async () => {
+      const { sync, store } = setup();
+
+      sync.reflect(["unknown"]);
+      await flushed();
+
+      expect(store.retire).toHaveBeenCalledWith(["unknown"], "reflected");
+    });
   });
 });
