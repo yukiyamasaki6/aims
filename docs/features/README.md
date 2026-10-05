@@ -112,7 +112,7 @@ flowchart TD
     Rounds -->|新規作成ボタン| RoundsNew
     Rounds -->|ラウンドカードクリック| RoundDetail
     RoundsNew -->|「一覧へ戻る」リンク| Rounds
-    RoundsNew -->|ラウンド作成成功| RoundDetail
+    RoundsNew -->|開始| RoundDetail
     RoundDetail -->|「一覧へ戻る」リンク| Rounds
     RoundDetail -->|ラウンド削除成功| Rounds
     LeftPanel -->|AIMSリンク| Landing

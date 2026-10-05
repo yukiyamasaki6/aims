@@ -189,7 +189,7 @@ export function RoundPresetSelect() {
     setSubmitting(true);
 
     const result = await startRound({
-      presetId: selectedId,
+      preset: selectedPreset,
       isMounted: () => mountedRef.current,
       generateId: () => crypto.randomUUID(),
       now: () => new Date(),

@@ -4,7 +4,7 @@ import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
 import { FETCH_ERROR_MESSAGE } from "@/features/fetch-result/fetch-result";
 import type { Database } from "@/types/supabase";
 import { TARGET_FACE_SELECT } from "../_shared/reference-query-constants";
-import { fetchRoundDetail } from "./fetch-round-detail";
+import { fetchRoundDetail, fetchTargetFaces } from "./fetch-round-detail";
 
 beforeEach(() => {
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
@@ -407,6 +407,82 @@ describe("fetchRoundDetail", () => {
         message: AUTH_REQUIRED_MESSAGE,
       });
       expect(queries).toEqual([]);
+    });
+  });
+});
+
+describe("fetchTargetFaces", () => {
+  it("的だけを取得し、共通の的を先に並べて返す", async () => {
+    const { client, queries } = makeSupabase({
+      rounds: ok(null),
+      target_faces: ok([face("own", "user-1"), face("common", null)]),
+    });
+
+    const result = await fetchTargetFaces(client);
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.data.map((f) => f.id).sort()).toEqual(["common", "own"]);
+    expect(queries.map((q) => q.table)).toEqual(["target_faces"]);
+  });
+
+  it("サインインしていない場合は、クエリを発行せずサインインを求める", async () => {
+    const { client, queries } = makeSupabase(
+      { rounds: ok(null), target_faces: ok([]) },
+      null,
+    );
+
+    await expect(fetchTargetFaces(client)).resolves.toEqual({
+      status: "error",
+      message: AUTH_REQUIRED_MESSAGE,
+    });
+    expect(queries).toEqual([]);
+  });
+
+  it("オフラインではクエリを発行せずofflineを返す", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    const { client, queries } = makeSupabase({
+      rounds: ok(null),
+      target_faces: ok([]),
+    });
+
+    await expect(fetchTargetFaces(client)).resolves.toEqual({
+      status: "offline",
+    });
+    expect(queries).toEqual([]);
+  });
+
+  it("通信が失敗(status 0)したら、そのレスポンスをそのまま返す", async () => {
+    const { client } = makeSupabase({
+      rounds: ok(null),
+      target_faces: failed(0),
+    });
+
+    const result = await fetchTargetFaces(client);
+
+    expect(result.status).toBe("error");
+  });
+
+  it("エラーレスポンスはerrorとして返す", async () => {
+    const { client } = makeSupabase({
+      rounds: ok(null),
+      target_faces: failed(500, { message: "boom" }),
+    });
+
+    const result = await fetchTargetFaces(client);
+
+    expect(result.status).toBe("error");
+  });
+
+  it("データがnullなら空の一覧として返す", async () => {
+    const { client } = makeSupabase({
+      rounds: ok(null),
+      target_faces: ok(null),
+    });
+
+    await expect(fetchTargetFaces(client)).resolves.toEqual({
+      status: "ok",
+      data: [],
     });
   });
 });

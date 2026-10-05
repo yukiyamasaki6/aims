@@ -141,6 +141,29 @@ describe("createOpSync", () => {
     });
   });
 
+  it("追記の戻り値は、保存の完了後に解決し、保存が失敗しても拒否しない", async () => {
+    const { sync, store } = setup();
+    let finish: (seq: number) => void = () => {};
+    store.append.mockReturnValueOnce(
+      new Promise<number>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    let settled = false;
+
+    const appended = sync.append(op("rec", "x")).then(() => {
+      settled = true;
+    });
+    await flushed();
+    expect(settled).toBe(false);
+    finish(1);
+    await appended;
+    expect(settled).toBe(true);
+
+    store.append.mockRejectedValueOnce(new Error("quota"));
+    await expect(sync.append(op("rec", "y"))).resolves.toBeUndefined();
+  });
+
   it("成功すると確定したrevisionでackし、操作は列に残る", async () => {
     const { sync, sent, store } = setup();
     const first = op("rec", "x");

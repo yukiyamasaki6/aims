@@ -3,9 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "@/features/fetch-result/fetch-result";
+import { fetchTargetFaces } from "./fetch-round-detail";
 import type { LoadedRoundDetail } from "./load-round-detail";
 import { loadRoundDetail } from "./load-round-detail";
 import { RoundDetailClient } from "./round-detail-client";
+import { useCreationGone } from "./use-creation-gone";
 
 const ID = "123e4567-e89b-12d3-a456-426614174000";
 const OTHER_ID = "223e4567-e89b-12d3-a456-426614174000";
@@ -19,22 +21,36 @@ vi.mock("next/navigation", () => ({
 // 取得とスコアカードは別のテストで確かめるため、境界としてモック・スタブにする。
 vi.mock("./load-round-detail", () => ({ loadRoundDetail: vi.fn() }));
 const load = vi.mocked(loadRoundDetail);
+vi.mock("./fetch-round-detail", () => ({ fetchTargetFaces: vi.fn() }));
+const fetchFaces = vi.mocked(fetchTargetFaces);
+vi.mock("./use-creation-gone", () => ({ useCreationGone: vi.fn() }));
+const creationGone = vi.mocked(useCreationGone);
 vi.mock("./scorecard-client", () => ({
   ScorecardClient: ({
     roundId,
     loaded,
+    targetFaces,
   }: {
     roundId: string;
     loaded: { base: { roundConfig: { name: string } } };
+    targetFaces: { id: string }[];
   }) => (
-    <div data-testid="scorecard" data-round-id={roundId}>
+    <div
+      data-testid="scorecard"
+      data-round-id={roundId}
+      data-faces={targetFaces.map((f) => f.id).join(",")}
+    >
       {loaded.base.roundConfig.name}
     </div>
   ),
 }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 
-function detail(name: string, leaveRound = false): LoadedRoundDetail {
+function detail(
+  name: string,
+  leaveRound = false,
+  pendingCreationEventId: string | null = null,
+): LoadedRoundDetail {
   return {
     base: {
       roundConfig: {
@@ -51,6 +67,7 @@ function detail(name: string, leaveRound = false): LoadedRoundDetail {
     reflected: [],
     targetFaces: [],
     leaveRound,
+    pendingCreationEventId,
   };
 }
 
@@ -217,6 +234,64 @@ describe("RoundDetailClient", () => {
         "午前練習",
       );
       expect(load).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("作成が未確定のラウンド", () => {
+    const EVENT_ID = "event-1";
+
+    it("取得済みの的を使わず、背景で取得した的をスコアカードへ渡す", async () => {
+      resolves({ status: "ok", data: detail("作成中", false, EVENT_ID) });
+      fetchFaces.mockResolvedValue({
+        status: "ok",
+        data: [{ id: "face-1" }, { id: "face-2" }] as never,
+      });
+
+      render(<RoundDetailClient />);
+
+      await waitFor(() =>
+        expect(screen.getByTestId("scorecard")).toHaveAttribute(
+          "data-faces",
+          "face-1,face-2",
+        ),
+      );
+    });
+
+    it("的の背景取得が失敗しても、詳細は表示し、的は空として渡す", async () => {
+      resolves({ status: "ok", data: detail("作成中", false, EVENT_ID) });
+      fetchFaces.mockResolvedValue({ status: "offline" });
+
+      render(<RoundDetailClient />);
+
+      const scorecard = await screen.findByTestId("scorecard");
+      await waitFor(() => expect(fetchFaces).toHaveBeenCalled());
+      expect(scorecard).toHaveAttribute("data-faces", "");
+    });
+
+    it("作成が確定していなければ、的を背景で取得しない", async () => {
+      resolves({ status: "ok", data: detail("午前練習") });
+
+      render(<RoundDetailClient />);
+
+      await screen.findByTestId("scorecard");
+      expect(fetchFaces).not.toHaveBeenCalled();
+    });
+
+    it("作成の消失の監視へラウンドIDと未確定のeventIdを渡し、検知したら取得し直す", async () => {
+      resolves({ status: "ok", data: detail("作成中", false, EVENT_ID) });
+      fetchFaces.mockResolvedValue({ status: "ok", data: [] });
+      render(<RoundDetailClient />);
+      await screen.findByTestId("scorecard");
+
+      const [roundId, eventId, onGone] = creationGone.mock.calls.at(-1) ?? [];
+      expect(roundId).toBe(ID);
+      expect(eventId).toBe(EVENT_ID);
+      const before = load.mock.calls.length;
+      await act(async () => {
+        onGone?.();
+      });
+
+      await waitFor(() => expect(load.mock.calls.length).toBe(before + 1));
     });
   });
 });

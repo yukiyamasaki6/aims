@@ -16,7 +16,7 @@
 | Service Workerの更新 | 新しいビルドが現れると、待機せずに有効になる。 | offline-pwa-03 |
 | `/offline` | 認証に依存しない静的なページ。枠のないパスで、通信に失敗したときだけ返す。 | offline-pwa-04 |
 | 起動 | `start_url` は `/rounds`。アプリの起動はmanifestの`start_url`を開くことと同じとして扱い、認証済みはラウンド一覧、未認証は `proxy.ts` が `/signin` へ移す。 | offline-pwa-05, 06 |
-| ラウンドの枠（`/rounds`、`/rounds/new`、`/rounds/<ID>`） | オンライン・オフラインともService Workerが枠を返す。内容は枠内の取得結果で決まり、オフラインの枠はオンライン復帰で自動再取得する。 | offline-pwa-07, 08, 09, 10, 11, 14, 15, 16 |
+| ラウンドの枠（`/rounds`、`/rounds/new`、`/rounds/<ID>`） | オンライン・オフラインともService Workerが枠を返す。内容は枠内の取得結果で決まり、オフラインの枠はオンライン復帰で自動再取得する。作成が未確定のラウンド詳細は、取得せず端末の操作の列から表示するため、オフラインでも内容を表示する(`rounds/detail`)。 | offline-pwa-07, 08, 09, 10, 11, 14, 15, 16 |
 | 未認証・期限切れ | 枠から `SessionGuard` が `/signin` へ移す。 | offline-pwa-12, 13 |
 
 ## 構成とデータの流れ

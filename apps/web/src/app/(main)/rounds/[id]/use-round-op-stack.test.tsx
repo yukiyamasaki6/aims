@@ -221,6 +221,7 @@ describe("useRoundOpStack", () => {
           reflected: [],
           targetFaces: [],
           leaveRound: false,
+          pendingCreationEventId: null,
         },
       });
       const { result } = renderHook(() =>
@@ -286,6 +287,7 @@ describe("useRoundOpStack", () => {
                   reflected: [],
                   targetFaces: [],
                   leaveRound: false,
+                  pendingCreationEventId: null,
                 },
               });
           }),

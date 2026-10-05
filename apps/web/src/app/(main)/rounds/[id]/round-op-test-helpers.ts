@@ -81,3 +81,28 @@ export const shotCleared = (
   arrowNumber: 1,
   ...overrides,
 });
+
+export const roundCreated = (
+  overrides: Partial<Op<"round.created">> = {},
+): SyncOperation => ({
+  type: "round.created",
+  eventId: "e-round-created",
+  roundId: "round-1",
+  name: "",
+  roundDate: "2026-09-29",
+  format: "indoor",
+  bowType: "compound",
+  distances: [
+    {
+      eventId: "e-created-d-1",
+      id: "d-1",
+      positionKey: "a",
+      distance: 18,
+      isMarked: true,
+      totalEnds: 10,
+      arrowsPerEnd: 3,
+      targetFaceId: "face-1",
+    },
+  ],
+  ...overrides,
+});

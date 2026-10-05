@@ -4,12 +4,14 @@ import {
   applyOperation,
   applyOperations,
   type RoundState,
+  roundStateFromCreated,
 } from "./round-op-apply";
 import { conflicts } from "./round-op-conflicts";
 import {
   distanceCreated,
   distanceDisabled,
   distanceUpdated,
+  roundCreated,
   roundDisabled,
   roundUpdated,
   shotCleared,
@@ -331,6 +333,43 @@ describe("applyOperation", () => {
     const disabled = apply(base, roundDisabled());
     expect(disabled.roundDisabled).toBe(true);
     expect(apply(disabled, roundUpdated())).toBe(disabled);
+  });
+});
+
+describe("round.created", () => {
+  it("作成の操作から、ラウンドの設定と距離を持つ矢の無い状態を作る", () => {
+    const operation = roundCreated();
+    if (operation.type !== "round.created") throw new Error("type");
+
+    expect(roundStateFromCreated(operation)).toEqual({
+      roundConfig: {
+        name: "",
+        roundDate: "2026-09-29",
+        format: "indoor",
+        bowType: "compound",
+      },
+      distances: [
+        {
+          id: "d-1",
+          position_key: "a",
+          distance: 18,
+          total_ends: 10,
+          arrows_per_end: 3,
+          target_face_id: "face-1",
+          is_marked: true,
+        },
+      ],
+      shots: [],
+      roundDisabled: false,
+    });
+  });
+
+  it("基準が作成の操作から作られているため、重ねても状態を変えない", () => {
+    const operation = roundCreated();
+    if (operation.type !== "round.created") throw new Error("type");
+    const state = roundStateFromCreated(operation);
+
+    expect(apply(state, operation)).toBe(state);
   });
 });
 

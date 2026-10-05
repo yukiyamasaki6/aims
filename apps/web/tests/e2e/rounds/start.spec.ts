@@ -1,10 +1,15 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "../fixtures";
 import { SHARED_AUTH_STATE_PATH, waitForHydration } from "../helpers/auth";
+import {
+  goOffline,
+  waitForServiceWorkerControl,
+} from "../helpers/service-worker";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
-const CREATE_ROUND_RPC = "**/rest/v1/rpc/create_round";
+// supabase/config.tomlのjwt_expiry（3600秒）を越える時間。
+const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
 
 async function openNewRound(page: Page) {
   await page.goto("/rounds/new");
@@ -68,7 +73,7 @@ test("start-05: プリセットが未選択のとき、プリセットをクリ�
   await expect(card.locator('[role="img"]')).toHaveCount(4);
 });
 
-test("start-08: プリセットが未選択のとき、開始ボタンをクリックすると、空の距離構成のラウンドが作成される", async ({
+test("start-08: プリセットが未選択のとき、開始ボタンをクリックすると、空の距離構成のラウンドが作成され、「同期済み」と表示される", async ({
   page,
 }) => {
   // Given: プリセットが未選択
@@ -81,6 +86,7 @@ test("start-08: プリセットが未選択のとき、開始ボタンをクリ�
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
   await expect(page.getByTestId("round-summary")).toContainText("合計0");
   await expect(page.getByTestId("distance-summary-1")).toHaveCount(0);
+  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
 });
 
 test("start-09: プリセットが選択されているとき、開始ボタンをクリックすると、プリセットの距離構成のラウンドが作成される", async ({
@@ -101,40 +107,10 @@ test("start-09: プリセットが選択されているとき、開始ボタン�
   await expect(page.getByTestId("distance-summary-4")).toContainText("30m");
 });
 
-test("start-10: 作成が完了していないとき、開始ボタンをクリックすると、開始ボタンが無効になる", async ({
+test("start-11: ラウンド作成画面で開始ボタンをクリックすると、/rounds/[id]へ遷移する", async ({
   page,
 }) => {
-  // Given: create_roundの応答を保留して、作成を完了させない
-  let requestCount = 0;
-  let releaseRequest: () => void = () => {};
-  const requestGate = new Promise<void>((resolve) => {
-    releaseRequest = resolve;
-  });
-  await page.route(CREATE_ROUND_RPC, async (route) => {
-    requestCount++;
-    await requestGate;
-    await route.continue();
-  });
-  await openNewRound(page);
-  const startButton = page.getByTestId("round-start-button");
-
-  // When: 開始ボタンをクリックする
-  await startButton.click();
-
-  // Then: 開始ボタンを無効にし、重ねてクリックしても作成を再送しない
-  await expect(startButton).toHaveAttribute("aria-disabled", "true");
-  await expect.poll(() => requestCount).toBe(1);
-  await startButton.click({ force: true });
-  expect(requestCount).toBe(1);
-
-  releaseRequest();
-  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-});
-
-test("start-11: 作成が成功するとき、開始ボタンをクリックすると、/rounds/[id]へ遷移する", async ({
-  page,
-}) => {
-  // Given: 作成が成功する
+  // Given: ラウンド作成画面
   await openNewRound(page);
 
   // When: 開始ボタンをクリックする
@@ -161,25 +137,41 @@ test("start-13: 未認証のとき、開始ボタンをクリックすると、�
   await expect(page).toHaveURL(/\/rounds\/new$/);
 });
 
-test("start-14: 作成が失敗するとき、開始ボタンをクリックすると、エラーメッセージが表示される", async ({
+test("start-17: オフラインのラウンド作成画面のとき、開始ボタンをクリックすると、/rounds/[id]へ遷移し、ラウンドが表示され、「同期保留中」と表示される", async ({
   page,
 }) => {
-  // Given: create_roundが失敗する
-  await page.route(CREATE_ROUND_RPC, (route) =>
-    route.fulfill({
-      status: 500,
-      contentType: "application/json",
-      body: JSON.stringify({ code: "P0001", message: "作成に失敗しました" }),
-    }),
-  );
+  // Given: オフラインのラウンド作成画面
   await openNewRound(page);
+  await waitForServiceWorkerControl(page);
+  await goOffline(page.context());
 
   // When: 開始ボタンをクリックする
   await page.getByTestId("round-start-button").click();
 
-  // Then: エラーメッセージを表示し、遷移しない
-  await expect(page.getByText("作成に失敗しました")).toBeVisible();
-  await expect(page).toHaveURL(/\/rounds\/new$/);
+  // Then: /rounds/[id]へ遷移し、ラウンドを表示して「同期保留中」と表示する
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+  await waitForHydration(page);
+  await expect(page.getByTestId("round-summary")).toContainText("合計0");
+  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
+});
+
+test("start-18: ラウンド作成画面で認証を確認できない(通信できない)とき、開始ボタンをクリックすると、/rounds/[id]へ遷移し、ラウンドが表示され、「同期中…」と表示される", async ({
+  page,
+}) => {
+  // Given: アクセストークンが失効し、更新の通信ができない
+  await page.clock.install();
+  await openNewRound(page);
+  await expect(presetButton(page, "WA 1440")).toBeVisible();
+  await page.route("**/auth/v1/token*", (route) => route.abort());
+  await page.clock.fastForward(PAST_JWT_EXPIRY_MS);
+
+  // When: 開始ボタンをクリックする
+  await page.getByTestId("round-start-button").click();
+
+  // Then: /rounds/[id]へ遷移し、ラウンドを表示して「同期中…」と表示する
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+  await expect(page.getByTestId("round-summary")).toContainText("合計0");
+  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
 });
 
 const PRESET_ROUNDS_REST = "**/rest/v1/preset_rounds?*";

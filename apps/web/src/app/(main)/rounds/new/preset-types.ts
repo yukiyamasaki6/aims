@@ -7,6 +7,7 @@ type PresetDistance = {
   is_marked: boolean;
   total_ends: number;
   arrows_per_end: number;
+  target_face_id: string;
   target_faces: {
     size: number;
     target_face_spots: {

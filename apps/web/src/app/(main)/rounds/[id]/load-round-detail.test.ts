@@ -12,6 +12,7 @@ import {
 import { loadRoundDetail } from "./load-round-detail";
 import { applyOperations } from "./round-op-apply";
 import { roundOpStore, roundStreamId } from "./round-op-store";
+import { roundCreated } from "./round-op-test-helpers";
 import { findCurrentPosition } from "./scorecard-input";
 import type { SyncOperation } from "./sync-events";
 
@@ -111,6 +112,7 @@ describe("loadRoundDetail", () => {
         reflected: [],
         targetFaces: [],
         leaveRound: false,
+        pendingCreationEventId: null,
       },
     });
     expect(fetchDetail).toHaveBeenCalledWith(supabase, "round-1");
@@ -277,6 +279,64 @@ describe("loadRoundDetail", () => {
         status: "ok",
         data: { leaveRound: true, reflected: [] },
       });
+    });
+  });
+
+  describe("確定していない作成がある場合", () => {
+    it("サーバーを取得せず、作成の操作を基準にして、作成のeventIdを返す", async () => {
+      // Given: 作成と、その後の操作が確定しないまま残っている
+      await save(roundCreated());
+      await save(roundUpdated("e2", "更新後"));
+
+      // When
+      const result = await loadRoundDetail(supabase, "round-1");
+
+      // Then
+      expect(fetchDetail).not.toHaveBeenCalled();
+      if (result.status !== "ok") throw new Error("not ok");
+      expect(result.data.pendingCreationEventId).toBe("e-round-created");
+      expect(result.data.base.roundConfig).toEqual({
+        name: "",
+        roundDate: "2026-09-29",
+        format: "indoor",
+        bowType: "compound",
+      });
+      expect(result.data.base.distances.map((d) => d.id)).toEqual(["d-1"]);
+      expect(result.data.entries.map((e) => e.eventId)).toEqual([
+        "e-round-created",
+        "e2",
+      ]);
+      expect(result.data.targetFaces).toEqual([]);
+      expect(result.data.reflected).toEqual([]);
+      expect(result.data.leaveRound).toBe(false);
+    });
+
+    it("作成の後にラウンドの削除が列にあれば、leaveRoundを立てる", async () => {
+      await save(roundCreated());
+      await save({ type: "round.disabled", eventId: "e2", roundId: "round-1" });
+
+      const result = await loadRoundDetail(supabase, "round-1");
+
+      expect(result).toMatchObject({
+        status: "ok",
+        data: { leaveRound: true, pendingCreationEventId: "e-round-created" },
+      });
+    });
+
+    it("作成が確定済みなら、サーバーを取得し、作成を反映済みとして扱う", async () => {
+      // Given: 作成が確定し、取得はrevision 1以上を持つ
+      await save(roundCreated());
+      await roundOpStore.ack("e-round-created", 1, true, null);
+
+      // When
+      const result = await loadRoundDetail(supabase, "round-1");
+
+      // Then
+      expect(fetchDetail).toHaveBeenCalledWith(supabase, "round-1");
+      if (result.status !== "ok") throw new Error("not ok");
+      expect(result.data.pendingCreationEventId).toBeNull();
+      expect(result.data.reflected).toEqual(["e-round-created"]);
+      expect(result.data.base.roundConfig).toEqual(server.roundConfig);
     });
   });
 

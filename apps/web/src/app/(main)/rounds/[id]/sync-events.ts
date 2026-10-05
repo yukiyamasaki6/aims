@@ -21,6 +21,25 @@ export type DistanceChanges = Partial<{
 
 export type SyncOperation =
   | {
+      type: "round.created";
+      eventId: string;
+      roundId: string;
+      name: string;
+      roundDate: string;
+      format: string;
+      bowType: string;
+      distances: {
+        eventId: string;
+        id: string;
+        positionKey: string;
+        distance: number | null;
+        isMarked: boolean;
+        totalEnds: number;
+        arrowsPerEnd: number;
+        targetFaceId: string;
+      }[];
+    }
+  | {
       type: "round.updated";
       eventId: string;
       roundId: string;
