@@ -1,9 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
+import {
+  FALLBACK_WAIT_MS,
+  FETCH_TIMEOUT_MS,
+} from "@/features/fetch-result/fetch-content";
 import { FETCH_ERROR_MESSAGE } from "@/features/fetch-result/fetch-result";
 import type { Database } from "@/types/supabase";
 import { TARGET_FACE_SELECT } from "../_shared/reference-query-constants";
+import {
+  loadReferenceSnapshot,
+  saveReferenceSnapshot,
+} from "../_shared/reference-snapshot";
 import { fetchRoundDetail, fetchTargetFaces } from "./fetch-round-detail";
 
 beforeEach(() => {
@@ -11,7 +19,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 type Response = { data: unknown; error: unknown; status: number };
@@ -22,6 +32,7 @@ type Call = [method: string, args: unknown[]];
 function makeSupabase(
   responses: { rounds: Response; target_faces: Response },
   session: unknown = { user: { id: "user-1" } },
+  delayMs = 0,
 ) {
   const queries: { table: string; calls: Call[] }[] = [];
   function createQuery(table: "rounds" | "target_faces"): unknown {
@@ -32,8 +43,13 @@ function makeSupabase(
       {
         get(_, method) {
           if (method === "then") {
-            return (resolve: (value: unknown) => void) =>
-              resolve(responses[table]);
+            return (resolve: (value: unknown) => void) => {
+              if (delayMs > 0) {
+                setTimeout(() => resolve(responses[table]), delayMs);
+              } else {
+                resolve(responses[table]);
+              }
+            };
           }
           return (...args: unknown[]) => {
             calls.push([String(method), args]);
@@ -483,6 +499,210 @@ describe("fetchTargetFaces", () => {
     await expect(fetchTargetFaces(client)).resolves.toEqual({
       status: "ok",
       data: [],
+    });
+  });
+});
+
+describe("的の端末への保存", () => {
+  const IDENTITY_KEY = "aims:local-user-id";
+  const SAVED = [face("saved", null)];
+  const idsOf = (faces: unknown) =>
+    (faces as { id: string }[]).map((f) => f.id);
+
+  function saveBefore() {
+    localStorage.setItem(IDENTITY_KEY, "user-1");
+    saveReferenceSnapshot("target-faces", "user-1", SAVED, 1);
+  }
+
+  describe("fetchTargetFaces", () => {
+    it("okの結果を並べて、クエリのユーザーのキーへ保存する", async () => {
+      const { client } = makeSupabase({
+        rounds: ok(null),
+        target_faces: ok([face("own", "user-1"), face("common", null)]),
+      });
+
+      await fetchTargetFaces(client);
+
+      localStorage.setItem(IDENTITY_KEY, "user-1");
+      expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual([
+        "own",
+        "common",
+      ]);
+    });
+
+    it("取得できたときは、保存済みを最新で上書きして返す(サーバーでの変更・削除の反映)", async () => {
+      saveBefore();
+      const { client } = makeSupabase({
+        rounds: ok(null),
+        target_faces: ok([face("fresh", null)]),
+      });
+
+      const result = await fetchTargetFaces(client);
+
+      expect(result.status === "ok" && idsOf(result.data)).toEqual(["fresh"]);
+      expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual(["fresh"]);
+    });
+
+    it.each([
+      ["通信失敗", { data: null, error: null, status: 0 }],
+      ["サーバーエラー", { data: null, error: { message: "x" }, status: 500 }],
+    ])("%sのとき、保存済みがあればそれを返す", async (_n, response) => {
+      saveBefore();
+      const { client } = makeSupabase({
+        rounds: ok(null),
+        target_faces: response as Response,
+      });
+
+      await expect(fetchTargetFaces(client)).resolves.toEqual({
+        status: "ok",
+        data: SAVED,
+      });
+    });
+
+    it("オフラインのとき、保存済みがあればそれを返し、無ければofflineを返す", async () => {
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+      const { client } = makeSupabase({
+        rounds: ok(null),
+        target_faces: ok([]),
+      });
+      await expect(fetchTargetFaces(client)).resolves.toEqual({
+        status: "offline",
+      });
+
+      saveBefore();
+
+      await expect(fetchTargetFaces(client)).resolves.toEqual({
+        status: "ok",
+        data: SAVED,
+      });
+    });
+
+    it("保存済みがあると、FALLBACK_WAIT_MSで終わらない取得を待たず保存済みを返す", async () => {
+      vi.useFakeTimers();
+      saveBefore();
+      const { client } = makeSupabase(
+        { rounds: ok(null), target_faces: ok([face("fresh", null)]) },
+        undefined,
+        5_000,
+      );
+      const pending = fetchTargetFaces(client);
+
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+
+      await expect(pending).resolves.toEqual({ status: "ok", data: SAVED });
+    });
+
+    it("保存済みが無いと、FALLBACK_WAIT_MSでは返らず、FETCH_TIMEOUT_MSでerrorになる", async () => {
+      vi.useFakeTimers();
+      const { client } = makeSupabase(
+        { rounds: ok(null), target_faces: ok([]) },
+        undefined,
+        FETCH_TIMEOUT_MS * 2,
+      );
+      let settled = false;
+      const pending = fetchTargetFaces(client).finally(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - FALLBACK_WAIT_MS);
+
+      await expect(pending).resolves.toEqual({
+        status: "error",
+        message: FETCH_ERROR_MESSAGE,
+      });
+    });
+
+    it("時間切れの後に届いたokは表示に使わず、開始時のユーザーのキーへ保存し、識別が変わっても新しいユーザーのキーへ書かない", async () => {
+      vi.useFakeTimers();
+      saveBefore();
+      const { client } = makeSupabase(
+        { rounds: ok(null), target_faces: ok([face("late", null)]) },
+        undefined,
+        3_000,
+      );
+      const pending = fetchTargetFaces(client);
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+      await expect(pending).resolves.toEqual({ status: "ok", data: SAVED });
+      localStorage.setItem(IDENTITY_KEY, "user-2");
+
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      expect(loadReferenceSnapshot("target-faces")).toBeNull();
+      localStorage.setItem(IDENTITY_KEY, "user-1");
+      expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual(["late"]);
+    });
+
+    it("時間切れの後に届いた結果がok以外なら、保存済みは変わらない", async () => {
+      vi.useFakeTimers();
+      saveBefore();
+      const { client } = makeSupabase(
+        { rounds: ok(null), target_faces: failed(500, { message: "x" }) },
+        undefined,
+        3_000,
+      );
+      const pending = fetchTargetFaces(client);
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+      await pending;
+
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      expect(loadReferenceSnapshot("target-faces")).toEqual(SAVED);
+    });
+  });
+
+  describe("fetchRoundDetail", () => {
+    it("okのとき、並べた的をクエリのユーザーのキーへ保存する", async () => {
+      const { client } = makeSupabase({
+        rounds: ok(round),
+        target_faces: ok([face("own", "user-1"), face("common", null)]),
+      });
+
+      await fetchRoundDetail(client, "round-1");
+
+      localStorage.setItem(IDENTITY_KEY, "user-1");
+      expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual([
+        "own",
+        "common",
+      ]);
+    });
+
+    it("失敗のときは、保存済みがあっても代わりにせず、結果をそのまま返す", async () => {
+      saveBefore();
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+      const { client } = makeSupabase({
+        rounds: ok(round),
+        target_faces: ok([]),
+      });
+
+      await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
+        status: "offline",
+      });
+      expect(loadReferenceSnapshot("target-faces")).toEqual(SAVED);
+    });
+
+    it("待ちは10秒のままで、FALLBACK_WAIT_MSでは返らない", async () => {
+      vi.useFakeTimers();
+      saveBefore();
+      const { client } = makeSupabase(
+        { rounds: ok(round), target_faces: ok([]) },
+        undefined,
+        FETCH_TIMEOUT_MS * 2,
+      );
+      let settled = false;
+      const pending = fetchRoundDetail(client, "round-1").finally(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - FALLBACK_WAIT_MS);
+
+      await expect(pending).resolves.toEqual({
+        status: "error",
+        message: FETCH_ERROR_MESSAGE,
+      });
     });
   });
 });

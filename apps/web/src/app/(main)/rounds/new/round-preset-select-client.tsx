@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { comparePositionKey } from "../_shared/position-key";
 import { PresetInfo } from "../_shared/preset-info";
 import { deletePersonalPreset } from "./delete-preset";
-import { fetchPresets } from "./fetch-presets";
+import { deletePresetFromSnapshot, fetchPresets } from "./fetch-presets";
 import type { Preset } from "./preset-types";
 import { startRound } from "./start-round";
 
@@ -116,7 +116,7 @@ function PresetRow({
               key: d.id,
               distance: d.distance,
               isMarked: d.is_marked,
-              face: d.target_faces,
+              face: d.target_faces ?? "missing",
               arrowsPerEnd: d.arrows_per_end,
               totalEnds: d.total_ends,
             }))}
@@ -178,6 +178,7 @@ export function RoundPresetSelect() {
     if (result.status === "discarded") return;
     if (result.status === "failed") return { error: result.error };
 
+    deletePresetFromSnapshot(preset.id);
     setRemovedIds((prev) => [...prev, preset.id]);
     setSelectedId((prev) => (prev === preset.id ? null : prev));
   }

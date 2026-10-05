@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../_shared/round-constants";
 import {
+  lookupTargetFace,
   TargetFaceInfo,
   type TargetFaceSpotLayout,
 } from "../_shared/target-face-icon";
@@ -44,6 +45,17 @@ const BOW_TYPE_FILTER_OPTIONS = [
   ...BOW_TYPE_OPTIONS,
 ];
 
+function triggerLabel(
+  selected: TargetFaceOption | "loading" | "missing",
+  disabled: boolean | undefined,
+): string {
+  const name = typeof selected === "string" ? "的" : selected.name;
+  if (disabled) return `${name}（スコア記録済みのため変更不可）`;
+  if (selected === "loading") return "的を読み込み中（タップで変更）";
+  if (selected === "missing") return "的データを取得できません（タップで変更）";
+  return `${name}（タップで変更）`;
+}
+
 // 的の選択UI。名称は一切表示せず、実際のリング配色・レイアウト（3つ目の
 // トライアングル/バーティカル等）とサイズの数字だけで見分けられるようにする。
 // 通常は選択中の1枚だけを的情報（TargetFaceInfo）として表示し、タップすると
@@ -56,7 +68,7 @@ function TargetFacePicker({
   onSelect,
   disabled,
 }: {
-  targetFaces: TargetFaceOption[];
+  targetFaces: TargetFaceOption[] | null;
   selectedId: string;
   roundFormat: string;
   roundBowType: string;
@@ -69,9 +81,9 @@ function TargetFacePicker({
   // タブを見失ってしまうため）。
   const [selectedFormat, setSelectedFormat] = useState(roundFormat);
   const [selectedBowType, setSelectedBowType] = useState(roundBowType);
-  const selectedFace = targetFaces.find((f) => f.id === selectedId);
+  const selected = lookupTargetFace(targetFaces, selectedId);
   const visibleFaces = filterTargetFaces(
-    targetFaces,
+    targetFaces ?? [],
     selectedFormat,
     selectedBowType,
   );
@@ -81,16 +93,10 @@ function TargetFacePicker({
       <DialogTrigger
         data-testid="target-face-picker-trigger"
         disabled={disabled}
-        aria-label={
-          disabled
-            ? `${selectedFace?.name ?? "的"}（スコア記録済みのため変更不可）`
-            : selectedFace
-              ? `${selectedFace.name}（タップで変更）`
-              : "的を選択"
-        }
+        aria-label={triggerLabel(selected, disabled)}
         className="w-full disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <TargetFaceInfo face={selectedFace ?? null} />
+        <TargetFaceInfo face={selected} />
       </DialogTrigger>
       {/* フィルタで絞り込んだ的の件数（3件〜19件）によってポップアップ自体の
           大きさが変わらないよう高さを固定し、フィルタ部分は常に見える位置に
@@ -179,7 +185,7 @@ export function DistanceEditFields({
 }: {
   distance: DistanceConfig;
   hasShots: boolean;
-  targetFaces: TargetFaceOption[];
+  targetFaces: TargetFaceOption[] | null;
   roundFormat: string;
   roundBowType: string;
   onSaved: (updated: DistanceConfig) => void;

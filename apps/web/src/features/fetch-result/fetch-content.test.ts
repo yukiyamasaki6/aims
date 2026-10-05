@@ -1,7 +1,11 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
-import { FETCH_TIMEOUT_MS, fetchContent } from "./fetch-content";
+import {
+  FALLBACK_WAIT_MS,
+  FETCH_TIMEOUT_MS,
+  fetchContent,
+} from "./fetch-content";
 import { FETCH_ERROR_MESSAGE } from "./fetch-result";
 
 beforeEach(() => {
@@ -351,6 +355,117 @@ describe("fetchContent", () => {
 
       // Then
       expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+    });
+  });
+
+  describe("timeoutMsとonLateResult", () => {
+    // 取得の終わる時刻を、テストから決められるクエリで模す。
+    function slowQuery(delayMs: number) {
+      return () =>
+        new Promise<typeof okResponse>((resolve) => {
+          setTimeout(() => resolve(okResponse), delayMs);
+        });
+    }
+
+    it("timeoutMsで時間切れになるとerrorを返す", async () => {
+      // Given
+      vi.useFakeTimers();
+      const { client } = makeSupabase(async () => ({ data: { session } }));
+      const pending = fetchContent(client, slowQuery(5_000), {
+        timeoutMs: FALLBACK_WAIT_MS,
+      });
+
+      // When
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+
+      // Then
+      await expect(pending).resolves.toEqual({
+        status: "error",
+        message: FETCH_ERROR_MESSAGE,
+      });
+    });
+
+    it("取得中にonLineがfalseになっていれば、時間切れはofflineを返す", async () => {
+      // Given
+      vi.useFakeTimers();
+      const { client } = makeSupabase(async () => ({ data: { session } }));
+      const pending = fetchContent(client, slowQuery(5_000), {
+        timeoutMs: FALLBACK_WAIT_MS,
+      });
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+
+      // When
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+
+      // Then
+      await expect(pending).resolves.toEqual({ status: "offline" });
+    });
+
+    it("時間切れの後、取得の開始からFETCH_TIMEOUT_MS以内に終われば、onLateResultが結果で1回呼ばれる", async () => {
+      // Given
+      vi.useFakeTimers();
+      const { client } = makeSupabase(async () => ({ data: { session } }));
+      const onLateResult = vi.fn();
+      const pending = fetchContent(client, slowQuery(5_000), {
+        timeoutMs: FALLBACK_WAIT_MS,
+        onLateResult,
+      });
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+      await pending;
+      expect(onLateResult).not.toHaveBeenCalled();
+
+      // When
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS);
+
+      // Then
+      expect(onLateResult).toHaveBeenCalledTimes(1);
+      expect(onLateResult).toHaveBeenCalledWith({
+        status: "ok",
+        data: { id: "a" },
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("FETCH_TIMEOUT_MSを超えて終わった結果では、onLateResultを呼ばない", async () => {
+      // Given
+      vi.useFakeTimers();
+      const { client } = makeSupabase(async () => ({ data: { session } }));
+      const onLateResult = vi.fn();
+      const pending = fetchContent(client, slowQuery(FETCH_TIMEOUT_MS + 1), {
+        timeoutMs: FALLBACK_WAIT_MS,
+        onLateResult,
+      });
+
+      // When
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 2);
+      await pending;
+
+      // Then
+      expect(onLateResult).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("時間切れにならなかったときは、onLateResultを呼ばず、タイマーも残さない", async () => {
+      // Given
+      vi.useFakeTimers();
+      const { client } = makeSupabase(async () => ({ data: { session } }));
+      const onLateResult = vi.fn();
+
+      // When
+      const pending = fetchContent(client, async () => okResponse, {
+        timeoutMs: FALLBACK_WAIT_MS,
+        onLateResult,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Then
+      await expect(pending).resolves.toEqual({
+        status: "ok",
+        data: { id: "a" },
+      });
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS);
+      expect(onLateResult).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 

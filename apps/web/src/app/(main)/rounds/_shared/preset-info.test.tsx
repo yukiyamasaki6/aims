@@ -9,7 +9,7 @@ describe("DistanceInfo", () => {
         distance={70}
         isMarked={false}
         format="outdoor"
-        face={null}
+        face="missing"
         arrowsPerEnd={6}
         totalEnds={6}
       />,
@@ -24,7 +24,7 @@ describe("DistanceInfo", () => {
         distance={null}
         isMarked={false}
         format="outdoor"
-        face={null}
+        face="missing"
         arrowsPerEnd={6}
         totalEnds={6}
       />,
@@ -41,7 +41,7 @@ describe("DistanceInfo", () => {
         distance={70}
         isMarked={true}
         format="field"
-        face={null}
+        face="missing"
         arrowsPerEnd={6}
         totalEnds={6}
       />,
@@ -56,7 +56,7 @@ describe("DistanceInfo", () => {
         distance={null}
         isMarked={false}
         format="field"
-        face={null}
+        face="missing"
         arrowsPerEnd={6}
         totalEnds={6}
       />,
@@ -71,12 +71,43 @@ describe("DistanceInfo", () => {
         distance={45}
         isMarked={false}
         format="field"
-        face={null}
+        face="missing"
         arrowsPerEnd={6}
         totalEnds={6}
       />,
     );
 
     expect(screen.getByText("45m / Unmarked")).toBeInTheDocument();
+  });
+});
+
+describe("DistanceInfo(的の状態)", () => {
+  function renderWith(face: "loading" | "missing") {
+    return render(
+      <DistanceInfo
+        distance={70}
+        isMarked={false}
+        format="outdoor"
+        face={face}
+        arrowsPerEnd={6}
+        totalEnds={6}
+      />,
+    );
+  }
+
+  it("的が読み込み中でも、距離・本数・エンド数を表示し、読み込み中の見た目を出す", () => {
+    const { container } = renderWith("loading");
+
+    expect(screen.getByText("70m")).toBeInTheDocument();
+    expect(container).toHaveTextContent("6本×6エンド");
+    expect(container.querySelector("[aria-busy='true']")).not.toBeNull();
+  });
+
+  it("的が見つからないときも、距離・本数・エンド数を表示し、「的データを取得できません」を出す", () => {
+    const { container } = renderWith("missing");
+
+    expect(screen.getByText("70m")).toBeInTheDocument();
+    expect(container).toHaveTextContent("6本×6エンド");
+    expect(container).toHaveTextContent("的データを取得できません");
   });
 });

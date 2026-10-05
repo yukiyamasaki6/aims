@@ -1,17 +1,31 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
+import {
+  FALLBACK_WAIT_MS,
+  FETCH_TIMEOUT_MS,
+} from "@/features/fetch-result/fetch-content";
 import { FETCH_ERROR_MESSAGE } from "@/features/fetch-result/fetch-result";
 import type { Database } from "@/types/supabase";
 import { ROUND_PRESET_SELECT } from "../_shared/reference-query-constants";
-import { fetchPresets } from "./fetch-presets";
+import {
+  loadReferenceSnapshot,
+  saveReferenceSnapshot,
+} from "../_shared/reference-snapshot";
+import {
+  deletePresetFromSnapshot,
+  type FetchedPresets,
+  fetchPresets,
+} from "./fetch-presets";
 
 beforeEach(() => {
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 type Response = { data: unknown; error: unknown; status: number };
@@ -22,6 +36,7 @@ type Call = [method: string, args: unknown[]];
 function makeSupabase(
   response: Response,
   session: unknown = { user: { id: "user-1" } },
+  delayMs = 0,
 ) {
   const queries: { table: string; calls: Call[] }[] = [];
   function createQuery(table: string): unknown {
@@ -32,7 +47,10 @@ function makeSupabase(
       {
         get(_, method) {
           if (method === "then") {
-            return (resolve: (value: unknown) => void) => resolve(response);
+            return (resolve: (value: unknown) => void) => {
+              if (delayMs > 0) setTimeout(() => resolve(response), delayMs);
+              else resolve(response);
+            };
           }
           return (...args: unknown[]) => {
             calls.push([String(method), args]);
@@ -193,6 +211,204 @@ describe("fetchPresets", () => {
         message: AUTH_REQUIRED_MESSAGE,
       });
       expect(queries).toEqual([]);
+    });
+  });
+
+  describe("端末への保存", () => {
+    const IDENTITY_KEY = "aims:local-user-id";
+    const SAVED = {
+      personal: [row("saved-personal", "user-1")],
+      global: [row("saved-global", null)],
+    };
+    const ids = (r: Awaited<ReturnType<typeof fetchPresets>>) =>
+      r.status === "ok"
+        ? [...r.data.personal, ...r.data.global].map((p) => p.id)
+        : r.status;
+
+    function savedIds() {
+      const saved = loadReferenceSnapshot<FetchedPresets>("presets");
+      return saved ? [...saved.personal, ...saved.global].map((p) => p.id) : [];
+    }
+
+    function saveBefore() {
+      localStorage.setItem(IDENTITY_KEY, "user-1");
+      saveReferenceSnapshot("presets", "user-1", SAVED, 1);
+    }
+
+    it("okの結果を、クエリのユーザーのキーへ保存する", async () => {
+      const { client } = makeSupabase(
+        ok([row("p1", "user-1"), row("g1", null)]),
+      );
+
+      await fetchPresets(client);
+
+      localStorage.setItem(IDENTITY_KEY, "user-1");
+      const saved = loadReferenceSnapshot<{
+        personal: { id: string }[];
+        global: { id: string }[];
+      }>("presets");
+      expect(saved?.personal.map((p) => p.id)).toEqual(["p1"]);
+      expect(saved?.global.map((p) => p.id)).toEqual(["g1"]);
+    });
+
+    it("取得できたときは最新で上書きして返す", async () => {
+      saveBefore();
+      const { client } = makeSupabase(ok([row("fresh", null)]));
+
+      const result = await fetchPresets(client);
+
+      expect(ids(result)).toEqual(["fresh"]);
+      expect(savedIds()).toEqual(["fresh"]);
+    });
+
+    it.each([
+      [
+        "オフライン",
+        () => vi.spyOn(navigator, "onLine", "get").mockReturnValue(false),
+        ok([]),
+      ],
+      ["通信失敗", () => {}, { data: null, error: null, status: 0 }],
+      [
+        "サーバーエラー",
+        () => {},
+        { data: null, error: { message: "x" }, status: 500 },
+      ],
+    ])("%sのとき、保存済みがあればそれを返す", async (_n, setup, response) => {
+      saveBefore();
+      setup();
+      const { client } = makeSupabase(response as Response);
+
+      const result = await fetchPresets(client);
+
+      expect(result).toEqual({ status: "ok", data: SAVED });
+    });
+
+    it("保存済みが無ければ、今の結果をそのまま返す", async () => {
+      localStorage.setItem(IDENTITY_KEY, "user-1");
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+      const { client } = makeSupabase(ok([]));
+
+      await expect(fetchPresets(client)).resolves.toEqual({
+        status: "offline",
+      });
+    });
+
+    it("保存済みがあると、FALLBACK_WAIT_MSで終わらない取得を待たず保存済みを返す", async () => {
+      vi.useFakeTimers();
+      saveBefore();
+      const { client } = makeSupabase(
+        ok([row("fresh", null)]),
+        undefined,
+        5_000,
+      );
+      const pending = fetchPresets(client);
+
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+
+      await expect(pending).resolves.toEqual({ status: "ok", data: SAVED });
+    });
+
+    it("保存済みが無いと、FALLBACK_WAIT_MSでは返らず、FETCH_TIMEOUT_MSでerrorになる", async () => {
+      vi.useFakeTimers();
+      const { client } = makeSupabase(ok([]), undefined, FETCH_TIMEOUT_MS * 2);
+      let settled = false;
+      const pending = fetchPresets(client).finally(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - FALLBACK_WAIT_MS);
+
+      await expect(pending).resolves.toEqual({
+        status: "error",
+        message: FETCH_ERROR_MESSAGE,
+      });
+    });
+
+    it("時間切れの後に届いたokは表示に使わず、取得の開始時のクエリのユーザーのキーへ保存する", async () => {
+      vi.useFakeTimers();
+      saveBefore();
+      const { client } = makeSupabase(
+        ok([row("late", null)]),
+        undefined,
+        3_000,
+      );
+      const pending = fetchPresets(client);
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+      await expect(pending).resolves.toEqual({ status: "ok", data: SAVED });
+
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      expect(savedIds()).toEqual(["late"]);
+    });
+
+    it("取得中に識別が別のユーザーへ変わっても、開始時のユーザーのキーへ保存し、新しいユーザーのキーへは書かない", async () => {
+      vi.useFakeTimers();
+      saveBefore();
+      const { client } = makeSupabase(
+        ok([row("late", null)]),
+        undefined,
+        3_000,
+      );
+      const pending = fetchPresets(client);
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+      await pending;
+      localStorage.setItem(IDENTITY_KEY, "user-2");
+
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      expect(loadReferenceSnapshot("presets")).toBeNull();
+      localStorage.setItem(IDENTITY_KEY, "user-1");
+      expect(savedIds()).toEqual(["late"]);
+    });
+
+    it("時間切れの後に届いた結果がok以外なら、保存済みは変わらない", async () => {
+      vi.useFakeTimers();
+      saveBefore();
+      const { client } = makeSupabase(
+        { data: null, error: { message: "x" }, status: 500 },
+        undefined,
+        3_000,
+      );
+      const pending = fetchPresets(client);
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+      await pending;
+
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      expect(loadReferenceSnapshot("presets")).toEqual(SAVED);
+    });
+
+    it("deletePresetFromSnapshotで個人から除かれ、削除前に始まった取得の遅れた結果では戻らない", async () => {
+      vi.useFakeTimers();
+      localStorage.setItem(IDENTITY_KEY, "user-1");
+      saveReferenceSnapshot(
+        "presets",
+        "user-1",
+        {
+          personal: [row("mine", "user-1"), row("keep", "user-1")],
+          global: [],
+        },
+        1,
+      );
+      vi.setSystemTime(10_000);
+      const { client } = makeSupabase(
+        ok([row("mine", "user-1"), row("keep", "user-1")]),
+        undefined,
+        3_000,
+      );
+      const pending = fetchPresets(client);
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+      await pending;
+
+      deletePresetFromSnapshot("mine");
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      const saved = loadReferenceSnapshot<{ personal: { id: string }[] }>(
+        "presets",
+      );
+      expect(saved?.personal.map((p) => p.id)).toEqual(["keep"]);
     });
   });
 });

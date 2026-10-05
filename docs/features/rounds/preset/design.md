@@ -31,7 +31,7 @@
 
 ## 構成とデータの流れ
 
-- `save-preset-dialog.tsx`: 保存ダイアログの状態を持ち、`save_round_as_preset`を呼ぶ。
+- `save-preset-dialog.tsx`: 保存ダイアログの状態を持ち、`save_round_as_preset`を呼ぶ。保存の成功後に、プリセット一覧を背景で再取得して端末の保存済みを更新する（preset-22）。
 - `scorecard-preset.ts`: 開閉時の事前入力と破棄、名前の決定と長さ検証、RPC引数の生成、結果の反映を純関数で行う。
 - `delete-preset.ts`: セッションを確認し、`preset_rounds`を`id`で直接DELETEする。
 - `features/auth/errors.ts`の`sessionFailureMessage`: 保存と削除のセッション確認が、`classifySession`で未認証と不明（通信失敗）に分けて返す文言。

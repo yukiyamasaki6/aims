@@ -156,18 +156,65 @@ describe("DistanceEditFields", () => {
       });
     });
 
-    describe("選択中の的が存在しない場合", () => {
-      it("的選択トリガーのラベルは「的を選択」になる", () => {
-        // Given: 存在しない的を選んだ距離
-        const props = {
-          distance: { ...baseDistance, targetFaceId: "unknown-face" },
-        };
+    describe("的の一覧の取得中の場合", () => {
+      it("的選択トリガーは読み込み中の表示とラベルになり、開いて的を選び直せない一覧が空のダイアログになる", async () => {
+        // Given: 的の一覧が取得中(null)
+        const user = userEvent.setup();
+        setup({ targetFaces: null });
 
-        // When: 表示する
+        // When: トリガーを開く
+        const trigger = screen.getByLabelText("的を読み込み中（タップで変更）");
+        expect(trigger).not.toBeDisabled();
+        expect(trigger.querySelector("[aria-busy='true']")).not.toBeNull();
+        await user.click(trigger);
+
+        // Then: 的の一覧は空で
+        expect(
+          screen.queryByTestId(/^target-face-option-/),
+        ).not.toBeInTheDocument();
+      });
+
+      it("スコア記録済みなら、トリガーは無効になる", () => {
+        setup({ targetFaces: null, hasShots: true });
+
+        expect(
+          screen.getByLabelText("的（スコア記録済みのため変更不可）"),
+        ).toBeDisabled();
+      });
+    });
+
+    describe("選択中の的が一覧に存在しない場合", () => {
+      const props = {
+        distance: { ...baseDistance, targetFaceId: "unknown-face" },
+      };
+
+      it("的選択トリガーは「的データを取得できません」の表示とラベルになり、開ける", async () => {
+        // Given: 存在しない的を選んだ距離
+        const user = userEvent.setup();
         setup(props);
 
-        // Then: 的の選択を促すラベルになる
-        expect(screen.getByLabelText("的を選択")).toBeInTheDocument();
+        // When: トリガーを開く
+        const trigger = screen.getByLabelText(
+          "的データを取得できません（タップで変更）",
+        );
+        expect(trigger).toHaveTextContent("的データを取得できません");
+        expect(trigger).not.toBeDisabled();
+        await user.click(trigger);
+
+        // Then: 一覧から的を選び直せる
+        expect(
+          screen.getByTestId(
+            `target-face-option-${targetFaceOutdoorRecurve.id}`,
+          ),
+        ).toBeInTheDocument();
+      });
+
+      it("スコア記録済みなら、トリガーは無効になる", () => {
+        setup({ ...props, hasShots: true });
+
+        expect(
+          screen.getByLabelText("的（スコア記録済みのため変更不可）"),
+        ).toBeDisabled();
       });
     });
   });

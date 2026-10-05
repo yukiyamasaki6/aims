@@ -25,6 +25,7 @@
 | 見つからない | 「ラウンドが見つかりません。」と「一覧へ戻る」リンク。存在しない・権限なし・論理削除済み・作成が破棄された・UUIDでないIDを区別しない | ラウンドが得られない | detail-15 |
 | オフライン | 「ネットワークに接続されていません」と再試行 | `navigator.onLine`が`false` | offline-pwa-10, 16 |
 | 取得エラー | エラーメッセージと再試行 | 取得がエラー。通信失敗は「読み込めませんでした。」 | detail-16, 17 |
+| 的の表示 | 取得中は読み込み中、取得後に的が見つからなければ「的データを取得できません」。距離・本数・エンド数と記録済みの点数は残す | 的の一覧が`null`（取得中）、または一覧に距離の的IDが無い | setup-27, 28、preset-21 |
 
 - 点数の記録で、合計・小計・最高点数・X数は、保存(約10ms)の完了後に更新する（detail-08）。
 - 距離がないラウンドでは、ラウンド編集ダイアログを開いた状態で表示する（detail-14）。
@@ -35,9 +36,9 @@
 ## 構成とデータの流れ
 
 - `rounds/[id]/page.tsx`: 静的な枠。`generateStaticParams`で`/rounds/_`だけをプリレンダーし（`dynamicParams = false`）、取得も`cookies()`も使わない。`/rounds/<ID>`はnext.configのrewriteで`/rounds/_`の枠へ向ける。
-- `rounds/[id]/round-detail-client.tsx`: `usePathname()`のIDで取得し、状態に応じて枠の内表示かスコアカードを出す。ラウンドの削除が未送信なら`/rounds`へ遷移する。作成が未確定なら的を背景で取得し、作成が確定せずに消えたら取り直す(`use-creation-gone.ts`)。
+- `rounds/[id]/round-detail-client.tsx`: `usePathname()`のIDで取得し、状態に応じて枠の内表示かスコアカードを出す。ラウンドの削除が未送信なら`/rounds`へ遷移する。作成が未確定なら的を背景で取得し、取得中は`ScorecardClient`へ`targetFaces`の`null`を渡す。作成が確定せずに消えたら取り直す(`use-creation-gone.ts`)。
 - `rounds/[id]/round-detail-id.ts`: pathnameからUUIDを取り出す。UUIDでなければ`null`で、問い合わせずに見つからないとする。
-- `rounds/[id]/fetch-round-detail.ts`: ラウンド・距離・矢を1回のネスト取得、的を1回の取得で得て、`FetchResult`に分類する。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。
+- `rounds/[id]/fetch-round-detail.ts`: ラウンド・距離・矢を1回のネスト取得、的を1回の取得で得て、`FetchResult`に分類する。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。的の取得(`fetchTargetFaces`)は、成功した一覧を端末に保存し(`rounds/_shared/reference-snapshot.ts`)、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。`fetchRoundDetail`は的を保存するが、代わりは持たず待ちは10秒のままである。
 - `rounds/[id]/load-round-detail.ts`: 取得した基準と、反映済みを除いた操作の列を返す。作成が未確定のラウンドは取得せず、作成の操作を基準にする。サーバーが効かなかったと答えた操作は反映済みとして除く。効かなかった操作または項目がある応答を受けたときは、`use-round-op-stack.ts`がこの関数で取り直し、基準を差し替える。
 - `rounds/[id]/round-op-apply.ts`、`use-round-op-stack.ts`: 基準へ操作の列を重ねる導出と、常駐のハブの送信器を購読するフック。`scorecard-client.tsx`は`state`(保存が完了した操作から導いた値)を`useRoundOpStack`から受ける。
 - `rounds/[id]/round-detail-frame.tsx`、`back-to-list-link.tsx`: 枠と「一覧へ戻る」リンク。

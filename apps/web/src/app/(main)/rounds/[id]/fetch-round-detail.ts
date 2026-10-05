@@ -1,12 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
-import { fetchContent } from "@/features/fetch-result/fetch-content";
+import {
+  FALLBACK_WAIT_MS,
+  FETCH_TIMEOUT_MS,
+  fetchContent,
+} from "@/features/fetch-result/fetch-content";
 import type {
   FetchResult,
   ResponseLike,
 } from "@/features/fetch-result/fetch-result";
 import type { Database } from "@/types/supabase";
 import { TARGET_FACE_SELECT } from "../_shared/reference-query-constants";
+import {
+  loadReferenceSnapshot,
+  saveReferenceSnapshot,
+} from "../_shared/reference-snapshot";
 import type { TargetFaceOption } from "./distance-config-row";
 import type { RoundConfig } from "./round-config";
 import type { Distance, Shot } from "./scorecard-types";
@@ -92,10 +100,19 @@ function selectTargetFaces(supabase: SupabaseClient<Database>, userId: string) {
     .retry(false);
 }
 
+function sortedTargetFaces(rows: TargetFaceRow[]): TargetFaceOption[] {
+  return [...rows].sort(compareTargetFaces);
+}
+
 // 的の一覧だけを取得する。作成が未確定のラウンドの詳細が、ラウンドの取得と別に的を得るために使う。
+// 取得できたら最新で端末へ保存して返す。取得できないとき（FALLBACK_WAIT_MS内に終わらないときを含む）は、
+// 保存済みがあればそれを返し、時間切れの後に届いた結果は表示せず保存だけする。
 export async function fetchTargetFaces(
   supabase: SupabaseClient<Database>,
 ): Promise<FetchResult<TargetFaceOption[]>> {
+  const startedAt = Date.now();
+  const saved = loadReferenceSnapshot<TargetFaceOption[]>("target-faces");
+  let queriedUserId: string | undefined;
   const result = await fetchContent<TargetFaceRow[]>(
     supabase as SupabaseClient,
     async () => {
@@ -108,6 +125,7 @@ export async function fetchTargetFaces(
           status: 401,
         };
       }
+      queriedUserId = userId;
       const faces = await selectTargetFaces(supabase, userId);
       if (faces.status === 0 || faces.error) {
         return faces as unknown as ResponseLike<TargetFaceRow[]>;
@@ -118,9 +136,28 @@ export async function fetchTargetFaces(
         status: 200,
       };
     },
+    {
+      timeoutMs: saved ? FALLBACK_WAIT_MS : FETCH_TIMEOUT_MS,
+      onLateResult: (late) => {
+        if (late.status === "ok" && queriedUserId) {
+          saveReferenceSnapshot(
+            "target-faces",
+            queriedUserId,
+            sortedTargetFaces(late.data),
+            startedAt,
+          );
+        }
+      },
+    },
   );
-  if (result.status !== "ok") return result;
-  return { status: "ok", data: [...result.data].sort(compareTargetFaces) };
+  if (result.status !== "ok") {
+    return saved ? { status: "ok", data: saved } : result;
+  }
+  const faces = sortedTargetFaces(result.data);
+  if (queriedUserId) {
+    saveReferenceSnapshot("target-faces", queriedUserId, faces, startedAt);
+  }
+  return { status: "ok", data: faces };
 }
 
 // 存在しない・権限なし・論理削除済みのラウンドは、いずれもroundがnullになり、区別しない。
@@ -128,6 +165,8 @@ export async function fetchRoundDetail(
   supabase: SupabaseClient<Database>,
   roundId: string,
 ): Promise<FetchResult<FetchedRoundDetail>> {
+  const startedAt = Date.now();
+  let queriedUserId: string | undefined;
   const result = await fetchContent<Fetched>(
     supabase as SupabaseClient,
     async () => {
@@ -140,6 +179,7 @@ export async function fetchRoundDetail(
           status: 401,
         };
       }
+      queriedUserId = userId;
       const [round, faces] = await Promise.all([
         supabase
           .from("rounds")
@@ -170,6 +210,11 @@ export async function fetchRoundDetail(
   if (result.status !== "ok") return result;
 
   const { round, targetFaces } = result.data;
+  const faces = sortedTargetFaces(targetFaces);
+  // 確定済みのラウンドの表示は代わりを持たないが、的の保存済みを最新にする機会として使う。
+  if (queriedUserId) {
+    saveReferenceSnapshot("target-faces", queriedUserId, faces, startedAt);
+  }
   const revisions: RoundRevisions = {
     round: round.revision,
     distances: {},
@@ -204,7 +249,7 @@ export async function fetchRoundDetail(
       },
       distances,
       shots,
-      targetFaces: [...targetFaces].sort(compareTargetFaces),
+      targetFaces: faces,
       revisions,
     },
   };

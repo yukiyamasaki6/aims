@@ -34,18 +34,57 @@ function commFailure<T>(): FetchResult<T> {
   return { status: "error", message: FETCH_ERROR_MESSAGE };
 }
 
+// 上限に達したときの代わりがある待ちはFALLBACK_WAIT_MS、無い待ちはFETCH_TIMEOUT_MSにする。
+export const FALLBACK_WAIT_MS = 1_000;
+
+const TIMED_OUT = Symbol("timed-out");
+
 // runは呼び出し側が.retry(false)を付けたクエリを返す。
+// timeoutMsは結果を返すまでの上限。超えた後も取得の開始からFETCH_TIMEOUT_MSまでは結果を待ち、
+// 終われば一度だけonLateResultへ渡す（表示には使わず、保存などに使う）。
 export async function fetchContent<T>(
   supabase: SupabaseClient,
   run: () => PromiseLike<ResponseLike<T>>,
-  opts: { nullIsNotFound?: boolean } = {},
+  opts: {
+    nullIsNotFound?: boolean;
+    timeoutMs?: number;
+    onLateResult?: (result: FetchResult<T>) => void;
+  } = {},
 ): Promise<FetchResult<T>> {
+  const { timeoutMs = FETCH_TIMEOUT_MS, onLateResult, ...loadOpts } = opts;
+  const loading = load(supabase, run, loadOpts);
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<FetchResult<T>>((resolve) => {
-    timer = setTimeout(() => resolve(commFailure()), FETCH_TIMEOUT_MS);
+  const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
   });
   try {
-    return await Promise.race([load(supabase, run, opts), timeout]);
+    const raced = await Promise.race([loading, timeout]);
+    if (raced !== TIMED_OUT) return raced;
+    if (onLateResult && timeoutMs < FETCH_TIMEOUT_MS) {
+      void deliverLateResult(
+        loading,
+        FETCH_TIMEOUT_MS - timeoutMs,
+        onLateResult,
+      );
+    }
+    return commFailure();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function deliverLateResult<T>(
+  loading: Promise<FetchResult<T>>,
+  remainingMs: number,
+  onLateResult: (result: FetchResult<T>) => void,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), remainingMs);
+  });
+  try {
+    const raced = await Promise.race([loading, limit]);
+    if (raced !== TIMED_OUT) onLateResult(raced);
   } finally {
     clearTimeout(timer);
   }

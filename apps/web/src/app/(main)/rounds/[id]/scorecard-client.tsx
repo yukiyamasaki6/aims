@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import { DistanceInfo } from "../_shared/preset-info";
+import { lookupTargetFace } from "../_shared/target-face-icon";
 import { BackToListLink } from "./back-to-list-link";
 import type { DistanceConfig } from "./distance-config";
 import {
@@ -143,6 +144,8 @@ function paleTone(hex: string): { bg: string; fg: string } {
   };
 }
 
+const NO_TARGET_FACES: TargetFaceOption[] = [];
+
 export function ScorecardClient({
   roundId,
   loaded,
@@ -150,10 +153,12 @@ export function ScorecardClient({
 }: {
   roundId: string;
   loaded: Pick<LoadedRoundDetail, "base" | "entries" | "reflected">;
-  targetFaces: TargetFaceOption[];
+  // nullは的の一覧の取得中。
+  targetFaces: TargetFaceOption[] | null;
 }) {
   // 画面の状態は、サーバーの状態へ操作の列を重ねた導出だけから得る。
-  const sync = useRoundOpStack(roundId, loaded, targetFaces);
+  const faces = targetFaces ?? NO_TARGET_FACES;
+  const sync = useRoundOpStack(roundId, loaded, faces);
   const { roundConfig, distances, shots } = sync.state;
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
@@ -278,12 +283,12 @@ export function ScorecardClient({
     }
   }, [position, keypadHeight, isLandscape, distances]);
 
-  const roundSummary = summarizeRound(distances, targetFaces, shots);
+  const roundSummary = summarizeRound(distances, faces, shots);
 
   const distanceIdsWithShots = new Set(shots.map((s) => s.distance_id));
 
   function targetFaceOf(targetFaceId: string) {
-    return targetFaces.find((f) => f.id === targetFaceId);
+    return faces.find((f) => f.id === targetFaceId);
   }
 
   function toggleDistanceEditing(distanceId: string) {
@@ -719,7 +724,7 @@ export function ScorecardClient({
                           distance={d.distance}
                           isMarked={d.is_marked}
                           format={roundConfig.format}
-                          face={face ?? null}
+                          face={lookupTargetFace(targetFaces, d.target_face_id)}
                           arrowsPerEnd={d.arrows_per_end}
                           totalEnds={d.total_ends}
                           trailing={
