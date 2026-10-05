@@ -10,6 +10,8 @@ import { classifySession } from "@/features/auth/session-state";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { PresetInfo } from "../_shared/preset-info";
+import { lookupTargetFace } from "../_shared/target-face-icon";
+import { fetchPresets } from "../new/fetch-presets";
 import type { TargetFaceOption } from "./distance-config-row";
 import {
   CLOSED_PRESET_DIALOG,
@@ -53,7 +55,7 @@ export function SavePresetDialog({
   format: string;
   bowType: string;
   distances: Distance[];
-  targetFaces: TargetFaceOption[];
+  targetFaces: TargetFaceOption[] | null;
 }) {
   const [state, setState] = useState(CLOSED_PRESET_DIALOG);
 
@@ -64,6 +66,8 @@ export function SavePresetDialog({
     if (start.type === "invalid") return;
 
     const result = await saveRoundAsPreset(start.args);
+    // 保存できたら、プリセット一覧を背景で再取得して保存済みを更新する（結果は使わない）。
+    if (!result) void fetchPresets(createClient());
     setState((prev) => finishPresetSave(prev, result));
   }
 
@@ -94,8 +98,7 @@ export function SavePresetDialog({
                 key: d.id,
                 distance: d.distance,
                 isMarked: d.is_marked,
-                face:
-                  targetFaces.find((f) => f.id === d.target_face_id) ?? null,
+                face: lookupTargetFace(targetFaces, d.target_face_id),
                 arrowsPerEnd: d.arrows_per_end,
                 totalEnds: d.total_ends,
               }))}

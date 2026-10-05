@@ -255,6 +255,22 @@ function TargetFaceCenterDetail({
   );
 }
 
+type TargetFaceLayout = {
+  size: number;
+  target_face_spots: TargetFaceSpotLayout[];
+};
+
+// 的の一覧の取得中は"loading"、取得後（保存済みの読み出し、失敗を含む）に見つからなければ"missing"。
+export type TargetFaceView = TargetFaceLayout | "loading" | "missing";
+
+export function lookupTargetFace<T extends { id: string }>(
+  faces: T[] | null,
+  id: string,
+): T | "loading" | "missing" {
+  if (faces === null) return "loading";
+  return faces.find((f) => f.id === id) ?? "missing";
+}
+
 // 的の情報表示（サイズ・全体像・中心拡大）。距離ごとの情報行（プリセット選択・
 // ラウンド詳細の距離一覧・的選択リスト）で共通して使う。サイズ表記を固定幅・
 // 右寄せにすることで、桁数（60cmと122cm等）によらずTargetFaceInfo全体の
@@ -265,12 +281,30 @@ export function TargetFaceInfo({
   thumbnailSize = 48,
   centerDetailWidth = 68,
 }: {
-  face: { size: number; target_face_spots: TargetFaceSpotLayout[] } | null;
+  face: TargetFaceView;
   thumbnailSize?: number;
   centerDetailWidth?: number;
 }) {
-  if (!face) {
-    return <span>的未設定</span>;
+  if (face === "missing") {
+    return <span>的データを取得できません</span>;
+  }
+  if (face === "loading") {
+    // 見つかったときと同じ外形にして、取得後に配置が動かないようにする。
+    // 距離の行の数だけライブリージョンが増えないよう、role="status"は付けない。
+    return (
+      <span aria-busy="true" className="flex items-center justify-center gap-1">
+        <span className="sr-only">的を読み込み中</span>
+        <span className="inline-block h-4 w-12 animate-pulse rounded bg-muted" />
+        <span
+          className="shrink-0 animate-pulse rounded-full bg-muted"
+          style={{ width: thumbnailSize, height: thumbnailSize }}
+        />
+        <span
+          className="shrink-0 animate-pulse rounded-md bg-muted"
+          style={{ width: centerDetailWidth, height: 36 }}
+        />
+      </span>
+    );
   }
 
   return (

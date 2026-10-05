@@ -3,15 +3,13 @@ import {
   classifySession,
   type SessionState,
 } from "@/features/auth/session-state";
+import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
 import { createClient } from "@/lib/supabase/client";
 import { comparePositionKey } from "../_shared/position-key";
 import { roundOpHub } from "../[id]/round-op-hub";
 import { roundStreamId } from "../[id]/round-op-store";
 import type { SyncOperation } from "../[id]/sync-events";
 import type { Preset } from "./preset-types";
-
-// 認証の確認で通信を待つ上限。アクセストークンが有効なら通信しないため、待つのは失効時だけ。
-export const SESSION_CHECK_TIMEOUT_MS = 1000;
 
 type CreatedOperation = Extract<SyncOperation, { type: "round.created" }>;
 
@@ -66,12 +64,12 @@ function buildCreatedOperation(
   };
 }
 
-// 認証を確認する。時間切れと例外は、認証を確認できない(unknown)として扱う。
+// 認証を確認する。アクセストークンが有効なら通信しないため、待つのは失効時だけで、上限はFALLBACK_WAIT_MS。時間切れと例外は、認証を確認できない(unknown)として扱う。
 async function checkSession(): Promise<SessionState | { status: "unknown" }> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const timeout = new Promise<null>((resolve) => {
-      timer = setTimeout(() => resolve(null), SESSION_CHECK_TIMEOUT_MS);
+      timer = setTimeout(() => resolve(null), FALLBACK_WAIT_MS);
     });
     const result = await Promise.race([
       createClient().auth.getSession(),

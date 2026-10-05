@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { labelOf } from "./option-label";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "./round-constants";
-import { TargetFaceInfo, type TargetFaceSpotLayout } from "./target-face-icon";
+import { TargetFaceInfo, type TargetFaceView } from "./target-face-icon";
 
 // 距離1件分の情報表示（距離/Marked・的情報・エンド構成）。プリセット選択・
 // ラウンド詳細の距離一覧で共通して使う。呼び出し側は
@@ -22,7 +22,7 @@ export function DistanceInfo({
   distance: number | null;
   isMarked: boolean;
   format: string;
-  face: { size: number; target_face_spots: TargetFaceSpotLayout[] } | null;
+  face: TargetFaceView;
   arrowsPerEnd: number;
   totalEnds: number;
   trailing?: ReactNode;
@@ -50,7 +50,7 @@ export type DistanceInfoItem = {
   key: string | number;
   distance: number | null;
   isMarked: boolean;
-  face: { size: number; target_face_spots: TargetFaceSpotLayout[] } | null;
+  face: TargetFaceView;
   arrowsPerEnd: number;
   totalEnds: number;
   trailing?: ReactNode;

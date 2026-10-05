@@ -76,9 +76,11 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
         loaded={view.data}
         targetFaces={
           pending
-            ? faces.status === "ok"
-              ? faces.data
-              : NO_TARGET_FACES
+            ? faces.status === "loading"
+              ? null
+              : faces.status === "ok"
+                ? faces.data
+                : NO_TARGET_FACES
             : view.data.targetFaces
         }
       />

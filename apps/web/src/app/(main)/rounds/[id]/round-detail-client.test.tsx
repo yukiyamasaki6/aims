@@ -33,12 +33,16 @@ vi.mock("./scorecard-client", () => ({
   }: {
     roundId: string;
     loaded: { base: { roundConfig: { name: string } } };
-    targetFaces: { id: string }[];
+    targetFaces: { id: string }[] | null;
   }) => (
     <div
       data-testid="scorecard"
       data-round-id={roundId}
-      data-faces={targetFaces.map((f) => f.id).join(",")}
+      data-faces={
+        targetFaces === null
+          ? "loading"
+          : targetFaces.map((f) => f.id).join(",")
+      }
     >
       {loaded.base.roundConfig.name}
     </div>
@@ -255,6 +259,17 @@ describe("RoundDetailClient", () => {
           "face-1,face-2",
         ),
       );
+    });
+
+    it("的の背景取得が終わるまでは、的の一覧をnull(取得中)として渡す", async () => {
+      resolves({ status: "ok", data: detail("作成中", false, EVENT_ID) });
+      fetchFaces.mockReturnValue(new Promise(() => {}));
+
+      render(<RoundDetailClient />);
+
+      const scorecard = await screen.findByTestId("scorecard");
+      await waitFor(() => expect(fetchFaces).toHaveBeenCalled());
+      expect(scorecard).toHaveAttribute("data-faces", "loading");
     });
 
     it("的の背景取得が失敗しても、詳細は表示し、的は空として渡す", async () => {

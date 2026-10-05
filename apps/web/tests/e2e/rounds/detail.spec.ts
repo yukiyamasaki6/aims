@@ -5,7 +5,17 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
+import {
+  CREATE_ROUND_RPC,
+  openNewRoundThenGoOffline,
+  saveTargetFacesOnDevice,
+  startRoundOffline,
+} from "../helpers/reference-data";
 import { createRound, TRIPLE_SPOT_TARGET_FACE_ID } from "../helpers/rounds";
+import {
+  goOffline,
+  waitForServiceWorkerControl,
+} from "../helpers/service-worker";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -268,4 +278,58 @@ test("detail-17: 取得がエラーになるとき、/rounds/[id]を開くと、
   await expect(
     page.getByRole("alert").filter({ hasText: "読み込めませんでした。" }),
   ).toBeVisible();
+});
+
+test("detail-18: オフラインで的を端末に保存済み、作成が未確定で距離があるラウンドでテンキーを展開しているとき、点数ボタンをタップすると、的に応じた点数ボタンが表示され、ラウンド結果の合計が更新される", async ({
+  page,
+}) => {
+  // Given: オフラインで的を端末に保存済み、作成が未確定で距離があるラウンドでテンキーを展開している
+  await saveTargetFacesOnDevice(page);
+  await openNewRoundThenGoOffline(page);
+  await startRoundOffline(page, "WA 1440");
+  // 先頭の未入力のマスが選ばれてテンキーが展開されている(detail-13)。
+  await expect(
+    page.getByTestId("distance-summary-1").locator('[role="img"]').first(),
+  ).toBeVisible();
+  await expect(page.getByTestId("round-summary")).toContainText("合計0");
+
+  // When: 点数ボタンをタップする
+  // 的に応じた点数ボタンが表示される(WA 1440の的は10点的で、Xリングがある)。
+  await expect(page.getByTestId("score-button-X")).toBeVisible();
+  await page.getByTestId("score-button-9").click();
+
+  // Then: ラウンド結果の合計が更新される
+  await expect(page.getByTestId("round-summary")).toContainText("合計9");
+});
+
+test("detail-19: オンラインでプリセットを選んで開始したラウンドが作成の未確定のままオフラインのとき、/rounds/[id]を開くと、全距離に的のサイズと図が表示される", async ({
+  page,
+}) => {
+  // Given: オンラインでプリセットを選んで開始したラウンドが作成の未確定のままオフライン
+  await page.route(CREATE_ROUND_RPC, (route) => route.abort("failed"));
+  await page.goto("/rounds/new");
+  await waitForHydration(page);
+  await page
+    .getByTestId("round-preset-button")
+    .filter({ hasText: "WA 1440" })
+    .click();
+  await page.getByTestId("round-start-button").click();
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+  await expect(page.getByTestId("distance-summary-4")).toBeVisible();
+  await expect(
+    page.getByTestId("distance-summary-4").locator('[role="img"]').first(),
+  ).toBeVisible();
+  await waitForServiceWorkerControl(page);
+  await goOffline(page.context());
+
+  // When: /rounds/[id]を開く
+  await page.reload();
+  await waitForHydration(page);
+
+  // Then: 全距離に的のサイズと図が表示される
+  for (const n of [1, 2, 3, 4]) {
+    const summary = page.getByTestId(`distance-summary-${n}`);
+    await expect(summary.locator('[role="img"]').first()).toBeVisible();
+  }
+  await expect(page.getByText("的データを取得できません")).toHaveCount(0);
 });

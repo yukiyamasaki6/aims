@@ -1,8 +1,9 @@
 import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
 import { roundOpHub } from "../[id]/round-op-hub";
 import type { Preset } from "./preset-types";
-import { SESSION_CHECK_TIMEOUT_MS, startRound } from "./start-round";
+import { startRound } from "./start-round";
 
 // SupabaseのSDKは外部サービスとの境界のため、セッションの確認結果を任意に制御できるスタブで模す。
 const supabase = vi.hoisted(() => ({ getSession: vi.fn() }));
@@ -203,7 +204,7 @@ describe("startRound", () => {
 
       // When
       const pending = startWith(null);
-      await vi.advanceTimersByTimeAsync(SESSION_CHECK_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
 
       // Then
       expect(await pending).toEqual({ status: "created", roundId: "id-2" });

@@ -5,6 +5,13 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
+import {
+  CREATE_ROUND_RPC,
+  openNewRoundThenGoOffline,
+  saveTargetFacesOnDevice,
+  startRoundOffline,
+  TARGET_FACES_REST,
+} from "../helpers/reference-data";
 import { createRound } from "../helpers/rounds";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
@@ -526,4 +533,106 @@ test("setup-24: ラウンド名が51文字以上のとき、保存ボタンを�
     page.getByText("ラウンド名は50文字以内で入力してください。"),
   ).toBeVisible();
   await expect(page.getByTestId("round-config-save")).toBeVisible();
+});
+
+const LOADING_TARGET = '[aria-busy="true"]';
+const MISSING_TARGET = "的データを取得できません";
+
+test("setup-25: オフラインで的を端末に保存済み、作成が未確定で距離がないラウンドのとき、「距離を追加」ボタンをクリックすると、追加した距離に的のサイズと図が表示される", async ({
+  page,
+}) => {
+  // Given: オフラインで的を端末に保存済み、作成が未確定で距離がないラウンド
+  await saveTargetFacesOnDevice(page);
+  await openNewRoundThenGoOffline(page);
+  await startRoundOffline(page);
+  // 距離がないラウンドはラウンド編集ダイアログが展開済みのため、閉じる。
+  await page.keyboard.press("Escape");
+
+  // When: 「距離を追加」ボタンをクリックする
+  await page.getByTestId("add-distance-button").click();
+
+  // Then: 追加した距離に的のサイズと図が表示される
+  const trigger = page.getByTestId("target-face-picker-trigger");
+  await expect(trigger).toHaveAccessibleName(/\d+cm/);
+  await expect(trigger.locator('[role="img"]').first()).toBeVisible();
+  await expect(trigger.locator(LOADING_TARGET)).toHaveCount(0);
+  await expect(page.getByText(MISSING_TARGET)).toHaveCount(0);
+});
+
+test("setup-26: オフラインで的を端末に保存済み、作成が未確定で距離がないラウンドの距離編集ダイアログのとき、的をクリックすると、的選択ダイアログに的の一覧が表示される", async ({
+  page,
+}) => {
+  // Given: オフラインで的を端末に保存済み、作成が未確定で距離がないラウンドの距離編集ダイアログ
+  await saveTargetFacesOnDevice(page);
+  await openNewRoundThenGoOffline(page);
+  await startRoundOffline(page);
+  await page.keyboard.press("Escape");
+  await page.getByTestId("add-distance-button").click();
+
+  // When: 的をクリックする
+  await page.getByTestId("target-face-picker-trigger").click();
+
+  // Then: 的選択ダイアログに的の一覧が表示される
+  await expect(
+    page.getByTestId(`target-face-option-${OUTDOOR_TARGET_FACE_ID}`),
+  ).toBeVisible();
+  expect(
+    await page.locator('[data-testid^="target-face-option-"]').count(),
+  ).toBeGreaterThan(1);
+});
+
+// Service Workerが制御するページのfetchは`page.route`に掛からないため、的の取得を止めるこの行ではSWを使わない。
+test.describe("的の取得を止める", () => {
+  test.use({ serviceWorkers: "block" });
+
+  test("setup-27: 作成が未確定で距離があるラウンドで、的の一覧の取得が完了していないとき、/rounds/[id]を開くと、距離の行に的の読み込み中の表示が出て、距離・本数・エンド数が表示される", async ({
+    page,
+  }) => {
+    // Given: 作成が未確定で距離があるラウンドで、的の一覧の取得が完了していない
+    await page.route(CREATE_ROUND_RPC, (route) => route.abort("failed"));
+    let releaseTargetFaces: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      releaseTargetFaces = resolve;
+    });
+    await page.route(TARGET_FACES_REST, async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto("/rounds/new");
+    await waitForHydration(page);
+    await page
+      .getByTestId("round-preset-button")
+      .filter({ hasText: "WA 1440" })
+      .click();
+
+    // When: /rounds/[id]を開く
+    await page.getByTestId("round-start-button").click();
+    await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+
+    // Then: 距離の行に的の読み込み中の表示が出て、距離・本数・エンド数が表示される
+    const first = page.getByTestId("distance-summary-1");
+    await expect(first.locator(LOADING_TARGET)).toBeVisible();
+    await expect(first).toContainText("90m");
+    await expect(first).toContainText("6本×6エンド");
+    await expect(page.getByText(MISSING_TARGET)).toHaveCount(0);
+    releaseTargetFaces();
+    await expect(first.locator(LOADING_TARGET)).toHaveCount(0);
+    await expect(first.locator('[role="img"]').first()).toBeVisible();
+  });
+});
+
+test("setup-28: オフラインで的を端末に保存しておらず、作成が未確定で距離があるラウンドのとき、/rounds/[id]を開くと、距離の行に「的データを取得できません」と表示され、距離・本数・エンド数が表示される", async ({
+  page,
+}) => {
+  // Given: オフラインで的を端末に保存しておらず、作成が未確定で距離があるラウンド
+  await openNewRoundThenGoOffline(page);
+
+  // When: /rounds/[id]を開く
+  await startRoundOffline(page, "WA 1440");
+
+  // Then: 距離の行に「的データを取得できません」と表示され、距離・本数・エンド数が表示される
+  const first = page.getByTestId("distance-summary-1");
+  await expect(first.getByText(MISSING_TARGET)).toBeVisible();
+  await expect(first).toContainText("90m");
+  await expect(first).toContainText("6本×6エンド");
 });

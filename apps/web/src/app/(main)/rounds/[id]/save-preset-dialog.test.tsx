@@ -2,6 +2,7 @@ import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fetchPresets } from "../new/fetch-presets";
 import type { TargetFaceOption } from "./distance-config-row";
 import { SavePresetDialog } from "./save-preset-dialog";
 import type { Distance } from "./scorecard-types";
@@ -18,6 +19,9 @@ vi.mock("@supabase/ssr", () => ({
     rpc: supabase.rpc,
   }),
 }));
+
+// 保存の成功後の背景の再取得は、取得の境界として呼ばれたことだけを確かめる。
+vi.mock("../new/fetch-presets", () => ({ fetchPresets: vi.fn() }));
 
 const targetFace: TargetFaceOption = {
   id: "face-x",
@@ -99,7 +103,7 @@ describe("SavePresetDialog", () => {
       expect(name).toHaveAttribute("placeholder", "70-50");
     });
 
-    it("表示中の構成を距離の並び順で表示し、的が見つからない距離は的未設定と表示する", async () => {
+    it("表示中の構成を距離の並び順で表示し、的が見つからない距離は「的データを取得できません」と表示する", async () => {
       // Given: 並び順で2つ目の距離の的が、的の一覧に無い
       const { user } = setup({
         distances: [
@@ -111,10 +115,25 @@ describe("SavePresetDialog", () => {
       // When: 開く
       await user.click(screen.getByTestId("save-as-preset-trigger"));
 
-      // Then: 種別・弓種と、並び順の距離（70m→50m）が表示され、50mの的は的未設定になる
+      // Then: 種別・弓種と、並び順の距離（70m→50m）が表示され、50mの的は「的データを取得できません」になる
       expect(screen.getByRole("dialog")).toHaveTextContent(
-        "アウトドア / リカーブ70m122cm6本×6エンド50m的未設定3本×2エンド",
+        "アウトドア / リカーブ70m122cm6本×6エンド50m的データを取得できません3本×2エンド",
       );
+    });
+
+    it("的の一覧の取得中は、全距離の的が読み込み中の表示になる", async () => {
+      // Given: 的の一覧が取得中(null)
+      const { user } = setup({ targetFaces: null });
+
+      // When: 開く
+      await user.click(screen.getByTestId("save-as-preset-trigger"));
+
+      // Then: 読み込み中の表示で、的データなしの表示は出ない
+      const dialog = screen.getByRole("dialog");
+      expect(dialog.querySelectorAll("[aria-busy='true']")).toHaveLength(2);
+      expect(dialog).toHaveTextContent("70m");
+      expect(dialog).toHaveTextContent("6本×6エンド");
+      expect(dialog).not.toHaveTextContent("的データを取得できません");
     });
   });
 
@@ -185,6 +204,8 @@ describe("SavePresetDialog", () => {
           },
         ],
       });
+      // 成功したので、プリセット一覧を背景で再取得して保存済みを更新する
+      expect(fetchPresets).toHaveBeenCalledTimes(1);
     });
 
     it("送信中は確定ボタンを無効表示にし、連打しても二重送信しない", async () => {
@@ -318,6 +339,7 @@ describe("SavePresetDialog", () => {
         "aria-disabled",
         "false",
       );
+      expect(fetchPresets).not.toHaveBeenCalled();
     });
   });
 });

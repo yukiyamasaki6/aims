@@ -7,7 +7,15 @@ import {
   waitForHydration,
 } from "../helpers/auth";
 import { createPreset } from "../helpers/presets";
+import {
+  openNewRoundThenGoOffline,
+  startRoundOffline,
+} from "../helpers/reference-data";
 import { createRound } from "../helpers/rounds";
+import {
+  goOffline,
+  waitForServiceWorkerControl,
+} from "../helpers/service-worker";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -448,4 +456,53 @@ test("preset-20: 保存が失敗するとき、保存ボタンをクリックす
   // Then: エラーメッセージを表示し、ダイアログは開いたままになる
   await expect(page.getByText("保存に失敗しました")).toBeVisible();
   await expect(page.getByTestId("save-as-preset-name")).toBeVisible();
+});
+
+test("preset-21: オフラインで的を端末に保存しておらず、作成が未確定で距離があるラウンドのとき、「プリセット保存」ボタンをクリックすると、プリセット保存ダイアログの距離に「的データを取得できません」と表示される", async ({
+  page,
+}) => {
+  // Given: オフラインで的を端末に保存しておらず、作成が未確定で距離があるラウンド
+  await openNewRoundThenGoOffline(page);
+  await startRoundOffline(page, "WA 1440");
+
+  // When: 「プリセット保存」ボタンをクリックする
+  await page.getByTestId("save-as-preset-trigger").click();
+
+  // Then: プリセット保存ダイアログの距離に「的データを取得できません」と表示される
+  await expect(
+    page.getByRole("dialog").getByText("的データを取得できません").first(),
+  ).toBeVisible();
+});
+
+test("preset-22: プリセット保存ダイアログで保存が成功した後にオフラインのとき、/rounds/newを開くと、保存したプリセットが個人プリセットに表示される", async ({
+  page,
+}) => {
+  // Given: プリセット保存ダイアログで保存が成功した後にオフライン
+  const name = uniqueName("オフライン");
+  await openRound(page);
+  await page.getByTestId("save-as-preset-trigger").click();
+  await page.getByTestId("save-as-preset-name").fill(name);
+  await page.getByTestId("save-as-preset-confirm").click();
+  await expect(page.getByTestId("save-as-preset-name")).toBeHidden();
+  // 保存の成功後の背景の再取得が端末の保存済みを更新するまで待つ。
+  await page.waitForFunction((presetName) => {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (
+        key?.startsWith("aims:reference:presets:") &&
+        localStorage.getItem(key)?.includes(presetName)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }, name);
+  await waitForServiceWorkerControl(page);
+  await goOffline(page.context());
+
+  // When: /rounds/newを開く
+  await page.goto("/rounds/new");
+
+  // Then: 保存したプリセットが個人プリセットに表示される
+  await expect(presetButton(page, name)).toBeVisible();
 });

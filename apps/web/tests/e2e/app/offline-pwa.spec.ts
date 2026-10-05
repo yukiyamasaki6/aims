@@ -389,7 +389,7 @@ test.describe("認証済みでService Workerが登録済み", () => {
       page,
       context,
     }) => {
-      // Given: Service Workerが登録済みで認証済みでオフライン
+      // Given: Service Workerが登録済みで認証済みでオフラインで、プリセットを端末に保存していない
       const errors = collectHydrationErrors(page);
       await openWithServiceWorker(page);
       await goOffline(context);
@@ -409,11 +409,11 @@ test.describe("認証済みでService Workerが登録済み", () => {
       expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
     });
 
-    test("offline-pwa-09: Service Workerが登録済みで認証済みでオフラインのとき、/rounds/newを開くと、ラウンド開始の枠と「ネットワークに接続されていません」が表示される", async ({
+    test("offline-pwa-09: Service Workerが登録済みで認証済みでオフラインで、プリセットを端末に保存していないとき、/rounds/newを開くと、ラウンド開始の枠と「ネットワークに接続されていません」が表示される", async ({
       page,
       context,
     }) => {
-      // Given: Service Workerが登録済みで認証済みでオフライン
+      // Given: Service Workerが登録済みで認証済みでオフラインで、プリセットを端末に保存していない
       const errors = collectHydrationErrors(page);
       await openWithServiceWorker(page);
       await goOffline(context);
@@ -436,7 +436,7 @@ test.describe("認証済みでService Workerが登録済み", () => {
       page,
       context,
     }) => {
-      // Given: Service Workerが登録済みで認証済みでオフライン
+      // Given: Service Workerが登録済みで認証済みでオフラインで、プリセットを端末に保存していない
       const errors = collectHydrationErrors(page);
       await openWithServiceWorker(page);
       await goOffline(context);
@@ -553,11 +553,11 @@ test.describe("オフラインの枠からのオンライン復帰", () => {
     ).toHaveCount(0);
   });
 
-  test("offline-pwa-15: Service Workerが登録済みで認証済みでオフラインの/rounds/newの枠に「ネットワークに接続されていません」が表示されているとき、オンラインへ復帰すると、プリセット一覧が表示される、「ネットワークに接続されていません」が表示されなくなる", async ({
+  test("offline-pwa-15: Service Workerが登録済みで認証済みで、プリセットを端末に保存していないオフラインの/rounds/newの枠に「ネットワークに接続されていません」が表示されているとき、オンラインへ復帰すると、プリセット一覧が表示される、「ネットワークに接続されていません」が表示されなくなる", async ({
     page,
     context,
   }) => {
-    // Given: オフラインの/rounds/newの枠に「ネットワークに接続されていません」が表示されている
+    // Given: プリセットを端末に保存していないオフラインの/rounds/newの枠に「ネットワークに接続されていません」が表示されている
     await openWithServiceWorker(page);
     await goOffline(context);
     await page.goto("/rounds/new");

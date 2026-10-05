@@ -2,7 +2,11 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "@/features/fetch-result/fetch-result";
-import { type FetchedPresets, fetchPresets } from "./fetch-presets";
+import {
+  deletePresetFromSnapshot,
+  type FetchedPresets,
+  fetchPresets,
+} from "./fetch-presets";
 import type { Preset } from "./preset-types";
 import { RoundPresetSelect } from "./round-preset-select-client";
 import { startRound } from "./start-round";
@@ -32,7 +36,10 @@ vi.mock("./start-round", () => ({ startRound: vi.fn() }));
 const startRoundMock = vi.mocked(startRound);
 
 // プリセットの取得は別のテストで確かめるため、取得関数を境界としてモックする。
-vi.mock("./fetch-presets", () => ({ fetchPresets: vi.fn() }));
+vi.mock("./fetch-presets", () => ({
+  fetchPresets: vi.fn(),
+  deletePresetFromSnapshot: vi.fn(),
+}));
 const fetchPresetsMock = vi.mocked(fetchPresets);
 
 function fetchResolves(result: FetchResult<FetchedPresets>) {
@@ -344,6 +351,18 @@ describe("RoundPresetSelect", () => {
       expect(screen.getAllByText("6本×6エンド")).toHaveLength(2);
     });
 
+    it("プリセットに的が埋め込まれていない距離は「的データを取得できません」と表示する", async () => {
+      // Given: 距離の的がnullの個人プリセットを表示している
+      const user = userEvent.setup();
+      await renderSelect([personalPreset], []);
+
+      // When: 選択して展開する
+      await user.click(screen.getAllByTestId("round-preset-button")[0]);
+
+      // Then: 的の代わりに「的データを取得できません」を表示する
+      expect(screen.getAllByText("的データを取得できません")).toHaveLength(2);
+    });
+
     it("展開された距離構成の部分をクリックしても、選択が解除される", async () => {
       // Given: 個人プリセットを選択して、距離構成を展開している
       const user = userEvent.setup();
@@ -539,6 +558,9 @@ describe("RoundPresetSelect", () => {
           expect(screen.queryByText("個人練習セット")).not.toBeInTheDocument();
         });
         expect(supabase.deleteEq).toHaveBeenCalledWith("id", "preset-personal");
+        expect(deletePresetFromSnapshot).toHaveBeenCalledWith(
+          "preset-personal",
+        );
         expect(
           screen.getByRole("button", { name: "プリセット無しで開始" }),
         ).toBeInTheDocument();
@@ -565,7 +587,7 @@ describe("RoundPresetSelect", () => {
     });
 
     describe("削除に失敗した場合", () => {
-      it("エラーを表示し、一覧から取り除かない", async () => {
+      it("エラーを表示し、一覧から取り除かず、保存済みからも除かない", async () => {
         // Given: 削除がエラーを返す
         supabase.deleteEq.mockResolvedValue({
           error: { message: "権限がありません。" },
@@ -582,6 +604,7 @@ describe("RoundPresetSelect", () => {
           await screen.findByText("権限がありません。"),
         ).toBeInTheDocument();
         expect(screen.getByText("個人練習セット")).toBeInTheDocument();
+        expect(deletePresetFromSnapshot).not.toHaveBeenCalled();
       });
 
       it("削除確認ダイアログは開いたままで、確認ボタンを再度押せる", async () => {

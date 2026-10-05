@@ -1,7 +1,9 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
+  lookupTargetFace,
   TargetFaceIcon,
+  TargetFaceInfo,
   type TargetFaceRing,
   type TargetFaceSpotLayout,
 } from "./target-face-icon";
@@ -58,5 +60,55 @@ describe("TargetFaceIcon", () => {
       `translate(${filledSpot.center_x} ${-filledSpot.center_y})`,
     );
     expect(filledGroup.querySelectorAll("circle")).toHaveLength(2);
+  });
+});
+
+describe("lookupTargetFace", () => {
+  const faces = [{ id: "a" }, { id: "b" }];
+
+  it('一覧が取得中(null)なら"loading"を返す', () => {
+    expect(lookupTargetFace(null, "a")).toBe("loading");
+  });
+
+  it('一覧にidが無ければ"missing"を返す(空の一覧を含む)', () => {
+    expect(lookupTargetFace(faces, "x")).toBe("missing");
+    expect(lookupTargetFace([], "a")).toBe("missing");
+  });
+
+  it("一覧にidがあれば、その的を返す", () => {
+    expect(lookupTargetFace(faces, "b")).toBe(faces[1]);
+  });
+});
+
+describe("TargetFaceInfo", () => {
+  const face = {
+    size: 122,
+    target_face_spots: [
+      { center_x: 0, center_y: 0, target_face_rings: [yellowRing, redRing] },
+    ],
+  };
+
+  it("的があれば、サイズと図を表示する", () => {
+    const { container } = render(<TargetFaceInfo face={face} />);
+
+    expect(container).toHaveTextContent("122cm");
+    expect(container.querySelectorAll("svg").length).toBeGreaterThan(0);
+  });
+
+  it("読み込み中は、読み込み中の見た目を出し、データなしの文言は出さない", () => {
+    const { container } = render(<TargetFaceInfo face="loading" />);
+
+    expect(container.querySelector("[aria-busy='true']")).not.toBeNull();
+    expect(container.querySelector("[role='status']")).toBeNull();
+    expect(container.querySelector(".animate-pulse")).not.toBeNull();
+    expect(screen.getByText("的を読み込み中")).toHaveClass("sr-only");
+    expect(container).not.toHaveTextContent("的データを取得できません");
+  });
+
+  it("見つからないときは、「的データを取得できません」を表示する", () => {
+    const { container } = render(<TargetFaceInfo face="missing" />);
+
+    expect(container).toHaveTextContent("的データを取得できません");
+    expect(container.querySelector("svg")).toBeNull();
   });
 });
