@@ -49,6 +49,10 @@ export function conflicts(
   previous: SyncOperation,
   next: SyncOperation,
 ): boolean {
+  // 作成の後の同じラウンドの操作は、作成の確定を待つ(プリセットの距離への矢は`distance.created`を前に持たないため)。
+  if (previous.type === "round.created" || next.type === "round.created") {
+    return true;
+  }
   // 削除済みのラウンドへの書き込みの扱いが、順序で変わる。
   if (previous.type === "round.disabled") return true;
   if (isRoundOperation(previous) && isRoundOperation(next)) return true;

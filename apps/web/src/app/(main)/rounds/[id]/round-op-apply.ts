@@ -52,6 +52,31 @@ function shotFits(
   );
 }
 
+// 作成の操作が表す、作成直後のラウンドの状態。
+export function roundStateFromCreated(
+  operation: Extract<SyncOperation, { type: "round.created" }>,
+): RoundState {
+  return {
+    roundConfig: {
+      name: operation.name,
+      roundDate: operation.roundDate,
+      format: operation.format,
+      bowType: operation.bowType,
+    },
+    distances: operation.distances.map((d) => ({
+      id: d.id,
+      position_key: d.positionKey,
+      distance: d.distance,
+      total_ends: d.totalEnds,
+      arrows_per_end: d.arrowsPerEnd,
+      target_face_id: d.targetFaceId,
+      is_marked: d.isMarked,
+    })),
+    shots: [],
+    roundDisabled: false,
+  };
+}
+
 function applyRoundUpdated(
   state: RoundState,
   operation: Extract<SyncOperation, { type: "round.updated" }>,
@@ -180,6 +205,9 @@ export function applyOperation(
 ): RoundState {
   if (state.roundDisabled) return state;
   switch (operation.type) {
+    case "round.created":
+      // 作成は基準(`roundStateFromCreated`)が表す。
+      return state;
     case "round.updated":
       return applyRoundUpdated(state, operation, confirmedFields);
     case "round.disabled":

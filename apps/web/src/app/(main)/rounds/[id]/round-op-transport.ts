@@ -95,6 +95,24 @@ function revisionOnly(data: unknown): SendOutcome {
     : INVALID_RESPONSE;
 }
 
+// `create_round`は旧版との互換のためラウンドIDを返す。作成のrevisionは常に1。
+function createdOnly(data: unknown): SendOutcome {
+  return typeof data === "string"
+    ? {
+        ok: true,
+        results: [
+          {
+            revision: 1,
+            applied: true,
+            appliedFields: null,
+            rejectedFields: [],
+            reason: null,
+          },
+        ],
+      }
+    : INVALID_RESPONSE;
+}
+
 type Client = ReturnType<typeof createClient>;
 
 type RpcResponse = {
@@ -148,6 +166,28 @@ async function sendSingle(
   userId: string,
 ): Promise<SendOutcome> {
   switch (operation.type) {
+    case "round.created":
+      return outcomeOf(
+        await supabase.rpc("create_round", {
+          p_round_event_id: operation.eventId,
+          p_id: operation.roundId,
+          p_name: operation.name,
+          p_round_date: operation.roundDate,
+          p_format: operation.format,
+          p_bow_type: operation.bowType,
+          p_distances: operation.distances.map((d) => ({
+            distance_event_id: d.eventId,
+            id: d.id,
+            position_key: d.positionKey,
+            distance: d.distance,
+            is_marked: d.isMarked,
+            total_ends: d.totalEnds,
+            arrows_per_end: d.arrowsPerEnd,
+            target_face_id: d.targetFaceId,
+          })),
+        }),
+        createdOnly,
+      );
     case "round.updated":
       return outcomeOf(
         await supabase.rpc("update_round", {

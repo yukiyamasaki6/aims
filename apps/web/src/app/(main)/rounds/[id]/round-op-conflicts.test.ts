@@ -9,6 +9,7 @@ import {
   distanceCreated,
   distanceDisabled,
   distanceUpdated,
+  roundCreated,
   roundDisabled,
   roundUpdated,
   shotCleared,
@@ -32,6 +33,12 @@ describe("conflicts", () => {
     ["同じマスの記録どうし", shotRecorded(), shotRecorded()],
     ["同じマスの記録の後の取り消し", shotRecorded(), shotCleared()],
     ["同じマスの取り消しの後の記録", shotCleared(), shotRecorded()],
+    ["作成の後のラウンド設定", roundCreated(), roundUpdated()],
+    ["作成の後の距離の作成", roundCreated(), distanceCreated()],
+    ["作成の後のプリセットの距離への矢", roundCreated(), shotRecorded()],
+    ["作成の後の矢の取り消し", roundCreated(), shotCleared()],
+    ["作成の後のラウンドの削除", roundCreated(), roundDisabled()],
+    ["矢の後の作成", shotRecorded(), roundCreated()],
   ])("衝突する: %s", (_name, previous, next) => {
     expect(conflicts(previous, next)).toBe(true);
   });
@@ -70,6 +77,7 @@ describe("laneOf", () => {
     expect(laneOf(shotRecorded({ distanceId: "d-2" }))).toBe("record:d-2");
     expect(laneOf(roundUpdated())).toBe(SERIAL_LANE);
     expect(laneOf(distanceCreated())).toBe(SERIAL_LANE);
+    expect(laneOf(roundCreated())).toBe(SERIAL_LANE);
   });
 });
 

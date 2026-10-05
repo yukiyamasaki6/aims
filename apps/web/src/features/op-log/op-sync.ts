@@ -356,7 +356,8 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
 
   return {
     // メモリの列へ追記し、保存の完了後に画面へ反映して送信する。保存の完了前の離脱で、画面に見えた操作を失わないため。
-    append(operation: Op) {
+    // 戻り値は、保存の試みが終わり、画面への反映と送信の手配まで済んだ時点で解決する(拒否しない)。
+    append(operation: Op): Promise<void> {
       const item: Item<Op> = {
         eventId: operation.eventId,
         operation,
@@ -365,7 +366,7 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
       };
       items.push(item);
       emit();
-      deps.store
+      return deps.store
         .append({
           eventId: operation.eventId,
           streamId: deps.streamId,

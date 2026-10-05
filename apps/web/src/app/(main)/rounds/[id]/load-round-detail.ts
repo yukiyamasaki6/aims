@@ -9,7 +9,11 @@ import {
   type RoundRevisions,
   shotRevisionKey,
 } from "./fetch-round-detail";
-import { applyOperations, type RoundState } from "./round-op-apply";
+import {
+  applyOperations,
+  type RoundState,
+  roundStateFromCreated,
+} from "./round-op-apply";
 import { roundOpStore, roundStreamId } from "./round-op-store";
 import { type SyncOperation, upgradeLegacyOperation } from "./sync-events";
 
@@ -23,6 +27,8 @@ export type LoadedRoundDetail = {
   targetFaces: TargetFaceOption[];
   // ラウンドの削除が列にあるため、一覧へ戻るか。
   leaveRound: boolean;
+  // 確定していない作成のeventId。あるとき、基準は端末の作成の操作で、的は含まない(呼び出し側が取得する)。
+  pendingCreationEventId: string | null;
 };
 
 // IndexedDBが使えなくても、サーバーの状態の表示は続ける。
@@ -50,6 +56,7 @@ function fetchedRevision(
   revisions: RoundRevisions,
 ): number | undefined {
   switch (operation.type) {
+    case "round.created":
     case "round.updated":
       return revisions.round;
     case "round.disabled":
@@ -126,7 +133,34 @@ export async function loadRoundDetail(
   supabase: SupabaseClient<Database>,
   roundId: string,
 ): Promise<FetchResult<LoadedRoundDetail>> {
-  const beforePromise = loadEntries(roundId);
+  const first = await loadEntries(roundId);
+  // 確定していない作成があれば、取得せずに作成の操作を基準にする。作成の後続は確定まで送られないため、サーバーの状態は作成の操作と一致する。
+  for (const entry of first) {
+    const { operation } = entry;
+    if (operation.type !== "round.created") continue;
+    if (entry.ackedRevision !== undefined) continue;
+    const base = roundStateFromCreated(operation);
+    return {
+      status: "ok",
+      data: {
+        base,
+        entries: first,
+        reflected: [],
+        targetFaces: [],
+        leaveRound: applyOperations(
+          base,
+          first.map((e) => ({
+            operation: e.operation,
+            confirmedFields: undefined,
+          })),
+          [],
+        ).roundDisabled,
+        pendingCreationEventId: operation.eventId,
+      },
+    };
+  }
+
+  const beforePromise = Promise.resolve(first);
   const fetched = await fetchRoundDetail(supabase, roundId);
   if (fetched.status !== "ok") return fetched;
 
@@ -166,6 +200,7 @@ export async function loadRoundDetail(
         })),
         targetFaces,
       ).roundDisabled,
+      pendingCreationEventId: null,
     },
   };
 }

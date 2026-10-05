@@ -3,6 +3,7 @@ import {
   distanceCreated,
   distanceDisabled,
   distanceUpdated,
+  roundCreated,
   roundDisabled,
   roundUpdated,
   shotCleared,
@@ -81,6 +82,59 @@ describe("sendRoundBatch", () => {
     expect(outcome).toEqual({ ok: true, results: [resultOf()] });
     expect(client.rpc).toHaveBeenCalledTimes(1);
     expect(client.rpc.mock.calls[0]?.[0]).toBe(rpc);
+  });
+
+  describe("ラウンドの作成", () => {
+    it("create_roundへ距離を含めて送り、ラウンドIDの返りをrevision 1の適用済みとして返す", async () => {
+      client.rpc.mockResolvedValue({
+        data: "round-1",
+        error: null,
+        status: 200,
+      });
+
+      const outcome = await sendRoundBatch(flight(roundCreated()));
+
+      expect(outcome).toEqual({
+        ok: true,
+        results: [
+          {
+            revision: 1,
+            applied: true,
+            appliedFields: null,
+            rejectedFields: [],
+            reason: null,
+          },
+        ],
+      });
+      expect(client.rpc).toHaveBeenCalledWith("create_round", {
+        p_round_event_id: "e-round-created",
+        p_id: "round-1",
+        p_name: "",
+        p_round_date: "2026-09-29",
+        p_format: "indoor",
+        p_bow_type: "compound",
+        p_distances: [
+          {
+            distance_event_id: "e-created-d-1",
+            id: "d-1",
+            position_key: "a",
+            distance: 18,
+            is_marked: true,
+            total_ends: 10,
+            arrows_per_end: 3,
+            target_face_id: "face-1",
+          },
+        ],
+      });
+    });
+
+    it("ラウンドIDでない返りは、不正な応答として扱う", async () => {
+      client.rpc.mockResolvedValue({ data: null, error: null, status: 200 });
+
+      const outcome = await sendRoundBatch(flight(roundCreated()));
+
+      expect(outcome.ok).toBe(false);
+    });
   });
 
   it("矢1件の記録は、射手の指定が無ければ自分のIDでrecord_shotsへ送る", async () => {

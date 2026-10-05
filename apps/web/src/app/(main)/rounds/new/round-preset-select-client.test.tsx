@@ -5,31 +5,31 @@ import type { FetchResult } from "@/features/fetch-result/fetch-result";
 import { type FetchedPresets, fetchPresets } from "./fetch-presets";
 import type { Preset } from "./preset-types";
 import { RoundPresetSelect } from "./round-preset-select-client";
+import { startRound } from "./start-round";
 
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => nav,
 }));
 
-// SupabaseのSDKは外部サービスとの境界のため、セッション・プリセットの取得・RPC・削除の結果を任意に制御できるスタブで模す。
-// 画面の操作は、実物のラウンド開始・プリセット削除の処理とSupabaseクライアントラッパーを通してこのスタブに届く。
+// SupabaseのSDKは外部サービスとの境界のため、セッションとプリセット削除の結果を任意に制御できるスタブで模す。
+// プリセット削除の処理は、実物の処理とSupabaseクライアントラッパーを通してこのスタブに届く。
 const supabase = vi.hoisted(() => ({
   getSession: vi.fn(),
-  rpc: vi.fn(),
-  selectEq: vi.fn(),
-  maybeSingle: vi.fn(),
   deleteEq: vi.fn(),
 }));
 vi.mock("@supabase/ssr", () => ({
   createBrowserClient: () => ({
     auth: { getSession: supabase.getSession },
-    rpc: supabase.rpc,
     from: () => ({
-      select: () => ({ eq: supabase.selectEq }),
       delete: () => ({ eq: supabase.deleteEq }),
     }),
   }),
 }));
+
+// ラウンドの開始(作成の操作の列への追記)は別のテストで確かめるため、開始関数を境界としてモックする。
+vi.mock("./start-round", () => ({ startRound: vi.fn() }));
+const startRoundMock = vi.mocked(startRound);
 
 // プリセットの取得は別のテストで確かめるため、取得関数を境界としてモックする。
 vi.mock("./fetch-presets", () => ({ fetchPresets: vi.fn() }));
@@ -75,6 +75,7 @@ const personalPreset: Preset = {
       is_marked: true,
       total_ends: 6,
       arrows_per_end: 6,
+      target_face_id: "face-1",
       target_faces: null,
     },
     {
@@ -84,6 +85,7 @@ const personalPreset: Preset = {
       is_marked: true,
       total_ends: 6,
       arrows_per_end: 6,
+      target_face_id: "face-1",
       target_faces: null,
     },
   ],
@@ -110,25 +112,9 @@ beforeEach(() => {
   supabase.getSession.mockResolvedValue({
     data: { session: { user: { id: "user-1" } } },
   });
-  supabase.rpc.mockResolvedValue({ data: "new-round-id", error: null });
-  supabase.selectEq.mockReturnValue({ maybeSingle: supabase.maybeSingle });
-  supabase.maybeSingle.mockResolvedValue({
-    data: {
-      format: "indoor",
-      bow_type: "compound",
-      preset_distances: [
-        {
-          id: "d1",
-          position_key: "1-1",
-          distance: 18,
-          is_marked: true,
-          total_ends: 10,
-          arrows_per_end: 3,
-          target_face_id: "face-1",
-        },
-      ],
-    },
-    error: null,
+  startRoundMock.mockResolvedValue({
+    status: "created",
+    roundId: "new-round-id",
   });
   supabase.deleteEq.mockResolvedValue({ error: null });
 });
@@ -153,7 +139,7 @@ describe("RoundPresetSelect", () => {
       expect(screen.queryByText("個人プリセット")).not.toBeInTheDocument();
     });
 
-    it("取得が完了しない間も開始ボタンは押せ、押すとプリセット無しの既定値でラウンドを作成して遷移する", async () => {
+    it("取得が完了しない間も開始ボタンは押せ、押すとプリセット未選択で開始して遷移する", async () => {
       // Given: 取得が完了しない
       fetchPresetsMock.mockReturnValue(new Promise(() => {}));
       const user = userEvent.setup();
@@ -168,14 +154,8 @@ describe("RoundPresetSelect", () => {
       await waitFor(() => {
         expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
       });
-      expect(supabase.selectEq).not.toHaveBeenCalled();
-      expect(supabase.rpc).toHaveBeenCalledWith(
-        "create_round",
-        expect.objectContaining({
-          p_format: "outdoor",
-          p_bow_type: "recurve",
-          p_distances: [],
-        }),
+      expect(startRoundMock).toHaveBeenCalledWith(
+        expect.objectContaining({ preset: null }),
       );
     });
 
@@ -384,7 +364,7 @@ describe("RoundPresetSelect", () => {
 
   describe("開始ボタン", () => {
     describe("プリセット未選択で押した場合", () => {
-      it("既定値でラウンドを作成し、作成したラウンドへ遷移する", async () => {
+      it("プリセット無しで開始し、作成したラウンドへ遷移する", async () => {
         // Given: プリセットを選択していない
         const user = userEvent.setup();
         await renderSelect([], []);
@@ -394,24 +374,18 @@ describe("RoundPresetSelect", () => {
           screen.getByRole("button", { name: "プリセット無しで開始" }),
         );
 
-        // Then: 既定値でcreate_roundを呼び、作成したラウンドへ遷移する
+        // Then: プリセット無しで開始し、作成したラウンドへ遷移する
         await waitFor(() => {
           expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
         });
-        expect(supabase.selectEq).not.toHaveBeenCalled();
-        expect(supabase.rpc).toHaveBeenCalledWith(
-          "create_round",
-          expect.objectContaining({
-            p_format: "outdoor",
-            p_bow_type: "recurve",
-            p_distances: [],
-          }),
+        expect(startRoundMock).toHaveBeenCalledWith(
+          expect.objectContaining({ preset: null }),
         );
       });
     });
 
     describe("プリセットを選択して押した場合", () => {
-      it("選択中のプリセットを取得してその内容でラウンドを作成し、作成したラウンドへ遷移する", async () => {
+      it("一覧の取得結果の選択中のプリセットで開始し、作成したラウンドへ遷移する", async () => {
         // Given: 個人プリセットを選択している
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);
@@ -422,64 +396,72 @@ describe("RoundPresetSelect", () => {
           screen.getByRole("button", { name: "「個人練習セット」で開始" }),
         );
 
-        // Then: 選択中のプリセットを取得し、その内容でcreate_roundを呼んで遷移する
+        // Then: 一覧の取得結果の選択中のプリセットを渡して開始し、遷移する
         await waitFor(() => {
           expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
         });
-        expect(supabase.selectEq).toHaveBeenCalledWith("id", "preset-personal");
-        expect(supabase.rpc).toHaveBeenCalledWith(
-          "create_round",
-          expect.objectContaining({
-            p_format: "indoor",
-            p_bow_type: "compound",
-            p_distances: [
-              expect.objectContaining({
-                position_key: "1-1",
-                target_face_id: "face-1",
-              }),
-            ],
-          }),
+        expect(startRoundMock).toHaveBeenCalledWith(
+          expect.objectContaining({ preset: personalPreset }),
         );
+      });
+
+      it("開始へ、マウント状態の判定と、ID生成、現在時刻の取得を渡す", async () => {
+        // Given: 個人プリセットを選択して開始する
+        const user = userEvent.setup();
+        await renderSelect([personalPreset], []);
+        await user.click(screen.getAllByTestId("round-preset-button")[0]);
+        await user.click(
+          screen.getByRole("button", { name: "「個人練習セット」で開始" }),
+        );
+        await waitFor(() => expect(startRoundMock).toHaveBeenCalled());
+
+        // When: 渡された関数を呼ぶ
+        const args = startRoundMock.mock.calls[0][0];
+
+        // Then: マウント中はtrue、IDはUUID、時刻はDateを返す
+        expect(args.isMounted()).toBe(true);
+        expect(args.generateId()).toMatch(/^[0-9a-f-]{36}$/);
+        expect(args.now()).toBeInstanceOf(Date);
       });
     });
 
     describe("送信中に再度押した場合", () => {
-      it("ラウンドを1回だけ作成し、遷移後も押せない表示のままにする", async () => {
-        // Given: create_roundの完了を保留にする
+      it("開始を1回だけ行い、遷移後も押せない表示のままにする", async () => {
+        // Given: 開始の完了を保留にする
         const deferred = createDeferred<{
-          data: string | null;
-          error: { message: string } | null;
+          status: "created";
+          roundId: string;
         }>();
-        supabase.rpc.mockReturnValue(deferred.promise);
+        startRoundMock.mockReturnValue(deferred.promise);
         const user = userEvent.setup();
         await renderSelect([], []);
         const button = screen.getByRole("button", {
           name: "プリセット無しで開始",
         });
 
-        // When: 送信中に開始ボタンを再度押し、その後create_roundが成功する
+        // When: 開始中に開始ボタンを再度押し、その後開始が完了する
         await user.click(button);
         await waitFor(() => {
-          expect(supabase.rpc).toHaveBeenCalled();
+          expect(startRoundMock).toHaveBeenCalled();
         });
         await user.click(button);
-        deferred.resolve({ data: "new-round-id", error: null });
+        deferred.resolve({ status: "created", roundId: "new-round-id" });
 
-        // Then: create_roundは1回だけ呼ばれ、遷移後も開始ボタンは押せない表示のまま
+        // Then: 開始は1回だけ呼ばれ、遷移後も開始ボタンは押せない表示のまま
         await waitFor(() => {
           expect(nav.push).toHaveBeenCalledTimes(1);
         });
-        expect(supabase.rpc).toHaveBeenCalledTimes(1);
+        expect(startRoundMock).toHaveBeenCalledTimes(1);
         expect(button).toHaveAttribute("aria-disabled", "true");
       });
     });
 
-    describe("作成に失敗した場合", () => {
+    describe("開始できなかった場合", () => {
       it("エラーを表示して遷移せず、開始ボタンを再度押せる表示に戻す", async () => {
-        // Given: create_roundがエラーを返す
-        supabase.rpc.mockResolvedValue({
-          data: null,
-          error: { message: "権限がありません。" },
+        // Given: 開始がエラーを返す
+        startRoundMock.mockResolvedValue({
+          status: "failed",
+          error: "権限がありません。",
         });
         const user = userEvent.setup();
         await renderSelect([], []);
@@ -500,26 +482,28 @@ describe("RoundPresetSelect", () => {
       });
     });
 
-    describe("作成の完了を待つ間にアンマウントされた場合", () => {
-      it("作成できても遷移しない", async () => {
-        // Given: create_roundの完了を保留にして開始ボタンを押している
-        const deferred = createDeferred<{
-          data: string | null;
-          error: { message: string } | null;
-        }>();
-        supabase.rpc.mockReturnValue(deferred.promise);
+    describe("開始の完了を待つ間にアンマウントされた場合", () => {
+      it("開始できても遷移しない", async () => {
+        // Given: 開始の完了を保留にして開始ボタンを押している。開始処理は完了後に、画面が残っているかを確かめる
+        const deferred = createDeferred<void>();
+        startRoundMock.mockImplementation(async ({ isMounted }) => {
+          await deferred.promise;
+          return isMounted()
+            ? { status: "created", roundId: "new-round-id" }
+            : { status: "discarded" };
+        });
         const user = userEvent.setup();
         const { unmount } = await renderSelect([], []);
         await user.click(
           screen.getByRole("button", { name: "プリセット無しで開始" }),
         );
         await waitFor(() => {
-          expect(supabase.rpc).toHaveBeenCalled();
+          expect(startRoundMock).toHaveBeenCalled();
         });
 
-        // When: アンマウントした後にcreate_roundが成功する
+        // When: アンマウントした後に開始が完了する
         unmount();
-        deferred.resolve({ data: "new-round-id", error: null });
+        deferred.resolve();
         await flushMacrotask();
 
         // Then: 遷移しない

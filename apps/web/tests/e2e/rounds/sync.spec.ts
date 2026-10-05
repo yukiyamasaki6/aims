@@ -25,6 +25,11 @@ import {
   SIX_RING_TARGET_FACE_ID,
   signInAsTestUser,
 } from "../helpers/rounds";
+import {
+  comeBackOnline,
+  goOffline,
+  waitForServiceWorkerControl,
+} from "../helpers/service-worker";
 import { mockTurnstile } from "../helpers/turnstile";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
@@ -1156,19 +1161,6 @@ async function openFromList(page: Page, name: string) {
   await expect(page.getByTestId("sync-status")).toBeVisible();
 }
 
-// オフラインのまま画面を移るため、Service Workerがページを制御するまで待つ。
-async function waitForServiceWorkerControl(page: Page) {
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.ready;
-    if (navigator.serviceWorker.controller) return;
-    await new Promise<void>((resolve) => {
-      navigator.serviceWorker.addEventListener("controllerchange", () =>
-        resolve(),
-      );
-    });
-  });
-}
-
 async function createNamedRound(email: string, password: string, name: string) {
   const id = await createRound({
     email,
@@ -1564,4 +1556,189 @@ test("sync-41: 2つのタブに未送信の点数があるとき、一方のタ�
 
   // Then: 残ったタブで、両方の点数が保存される
   await expectSavedShots(supabase, distanceIds[0], ["1-1:10", "1-2:9"]);
+});
+
+const CREATE_ROUND_RPC = "**/rest/v1/rpc/create_round";
+
+// ラウンド作成画面で開始し、作成した詳細画面のラウンドIDを返す。
+async function startRoundFromUi(page: Page, presetName?: string) {
+  await page.goto("/rounds/new");
+  await waitForHydration(page);
+  if (presetName) {
+    const preset = page
+      .getByTestId("round-preset-button")
+      .filter({ hasText: presetName });
+    await preset.click();
+  }
+  await page.getByTestId("round-start-button").click();
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+  await expect(page.getByTestId("sync-status")).toBeVisible();
+  return page.url().split("/").pop() as string;
+}
+
+// ラウンド一覧にそのラウンドへのリンクが何件あるか。
+function roundLinks(page: Page, id: string) {
+  return page.locator(`a[href="/rounds/${id}"]`);
+}
+
+async function savedRoundCount(supabase: SupabaseClient, id: string) {
+  const { data, error } = await supabase
+    .from("rounds")
+    .select("id")
+    .eq("id", id)
+    .is("disabled_at", null);
+  if (error) throw error;
+  return data.length;
+}
+
+test("sync-42: オフラインで開始したラウンド詳細画面のとき、オンラインへ復帰すると、「同期済み」と表示され、ラウンド一覧にそのラウンドが1件だけ表示される", async ({
+  page,
+}) => {
+  // Given: オフラインで開始したラウンド詳細画面
+  await page.goto("/rounds/new");
+  await waitForHydration(page);
+  await waitForServiceWorkerControl(page);
+  await goOffline(page.context());
+  await page.getByTestId("round-start-button").click();
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+  await waitForHydration(page);
+  // 距離がないラウンドはラウンド編集ダイアログが展開済みのため、閉じる。
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
+  const id = page.url().split("/").pop() as string;
+
+  // When: オンラインへ復帰する
+  await comeBackOnline(page.context(), page);
+
+  // Then: 「同期済み」と表示され、ラウンド一覧にそのラウンドが1件だけ表示される
+  await expectSynced(page);
+  await backToList(page);
+  await expect(roundLinks(page, id)).toHaveCount(1);
+});
+
+test("sync-43: 作成の送信が失敗し、リトライ待機中に距離を追加し点数を記録したラウンド詳細画面のとき、送信が回復すると、再読み込みしても、ラウンド・距離・点数が表示される", async ({
+  page,
+}) => {
+  // Given: 作成の送信が失敗し、リトライ待機中に距離を追加し点数を記録した
+  let attempts = 0;
+  let failing = true;
+  await page.route(CREATE_ROUND_RPC, async (route) => {
+    attempts++;
+    if (failing) {
+      await route.abort("failed");
+      return;
+    }
+    await route.continue();
+  });
+  const id = await startRoundFromUi(page, "WA 1440");
+  await expect.poll(() => attempts).toBeGreaterThan(0);
+  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
+  await page.getByTestId("add-distance-button").click();
+  await page.getByTestId("distance-config-save-5").click();
+  await page.getByTestId("shot-cell-5-1-1").click();
+  await page.getByTestId("score-button-9").click();
+  await expect(page.getByTestId("shot-cell-5-1-1")).toContainText("9");
+  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
+
+  // When: 送信が回復する
+  failing = false;
+
+  // Then: 再読み込みしても、ラウンド・距離・点数が表示される
+  await expectSynced(page);
+  await reloadRound(page);
+  await expect(page.getByTestId("distance-summary-5")).toBeVisible();
+  await expect(page.getByTestId("shot-cell-5-1-1")).toContainText("9");
+  const { supabase } = await signInAsTestUser(
+    getSharedEmail(),
+    SHARED_PASSWORD,
+  );
+  expect(await savedRoundCount(supabase, id)).toBe(1);
+});
+
+test("sync-44: 作成の送信が失敗し続けているラウンド詳細画面で点数を記録したとき、再読み込みすると、ラウンドと点数が表示される", async ({
+  page,
+}) => {
+  // Given: 作成の送信が失敗し続ける(的の取得は通す)ラウンドで、点数を記録した
+  let attempts = 0;
+  await page.route(CREATE_ROUND_RPC, (route) => {
+    attempts++;
+    return route.abort("failed");
+  });
+  const id = await startRoundFromUi(page, "WA 1440");
+  await expect.poll(() => attempts).toBeGreaterThan(0);
+  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
+  // 最初の空きマスは、開いた時点で選択済みでテンキーが開いているため、マスは選ばずに入力する。
+  await page.getByTestId("score-button-10").click();
+  await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("10");
+  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
+
+  // When: 再読み込みする
+  await reloadRound(page);
+
+  // Then: サーバーにラウンドが無くても、ラウンドと点数が表示される
+  await expect(page.getByTestId("distance-summary-1")).toContainText("90m");
+  await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("10");
+  const { supabase } = await signInAsTestUser(
+    getSharedEmail(),
+    SHARED_PASSWORD,
+  );
+  expect(await savedRoundCount(supabase, id)).toBe(0);
+});
+
+test("sync-45: オフラインでラウンドを開始し、ラウンド一覧へ移ったとき、オンラインへ復帰すると、そのラウンドを開き直さなくても、ラウンドが保存される", async ({
+  page,
+}) => {
+  // Given: オフラインでラウンドを開始し、ラウンド一覧へ移った
+  await page.goto("/rounds/new");
+  await waitForHydration(page);
+  await waitForServiceWorkerControl(page);
+  await goOffline(page.context());
+  await page.getByTestId("round-start-button").click();
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+  await waitForHydration(page);
+  // 距離がないラウンドはラウンド編集ダイアログが展開済みのため、閉じる。
+  await page.keyboard.press("Escape");
+  const id = page.url().split("/").pop() as string;
+  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
+  await backToList(page);
+
+  // When: オンラインへ復帰する
+  await comeBackOnline(page.context(), page);
+
+  // Then: そのラウンドを開き直さなくても、ラウンドが保存される
+  const { supabase } = await signInAsTestUser(
+    getSharedEmail(),
+    SHARED_PASSWORD,
+  );
+  await expect
+    .poll(() => savedRoundCount(supabase, id), { timeout: 30_000 })
+    .toBe(1);
+});
+
+test("sync-46: ラウンドを開始したとき、作成が契約の不一致で拒否されると、「ラウンドが見つかりません。」と表示され、ラウンド一覧にそのラウンドが表示されない", async ({
+  page,
+}) => {
+  // Given: 作成が契約の不一致(PT422)で拒否される。応答を保留して、詳細画面の表示を確かめてから返す
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(CREATE_ROUND_RPC, async (route) => {
+    await gate;
+    await route.fulfill({
+      status: 422,
+      contentType: "application/json",
+      body: JSON.stringify({ code: "PT422", message: "invalid" }),
+    });
+  });
+
+  // When: ラウンドを開始し、作成が拒否される
+  const id = await startRoundFromUi(page);
+  release();
+
+  // Then: 「ラウンドが見つかりません。」と表示され、ラウンド一覧に表示されない
+  await expect(page.getByText("ラウンドが見つかりません。")).toBeVisible();
+  await page.getByRole("link", { name: "一覧へ戻る" }).click();
+  await expect(page).toHaveURL(/\/rounds$/);
+  await expect(roundLinks(page, id)).toHaveCount(0);
 });

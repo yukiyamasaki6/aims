@@ -83,8 +83,47 @@ function compareTargetFaces(a: TargetFaceRow, b: TargetFaceRow): number {
   return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
 }
 
-// 存在しない・権限なし・論理削除済みのラウンドは、いずれもroundがnullになり、区別しない。
 // target_facesのRLSは認証済みの全員に全行を見せるため、他人の個人の的を除くクエリの絞りが必須である。
+function selectTargetFaces(supabase: SupabaseClient<Database>, userId: string) {
+  return supabase
+    .from("target_faces")
+    .select(TARGET_FACE_SELECT)
+    .or(`owner_id.is.null,owner_id.eq.${userId}`)
+    .retry(false);
+}
+
+// 的の一覧だけを取得する。作成が未確定のラウンドの詳細が、ラウンドの取得と別に的を得るために使う。
+export async function fetchTargetFaces(
+  supabase: SupabaseClient<Database>,
+): Promise<FetchResult<TargetFaceOption[]>> {
+  const result = await fetchContent<TargetFaceRow[]>(
+    supabase as SupabaseClient,
+    async () => {
+      const { data } = await supabase.auth.getSession();
+      const userId = data.session?.user.id;
+      if (!userId) {
+        return {
+          data: null,
+          error: { code: "PGRST301", message: AUTH_REQUIRED_MESSAGE },
+          status: 401,
+        };
+      }
+      const faces = await selectTargetFaces(supabase, userId);
+      if (faces.status === 0 || faces.error) {
+        return faces as unknown as ResponseLike<TargetFaceRow[]>;
+      }
+      return {
+        data: (faces.data ?? []) as unknown as TargetFaceRow[],
+        error: null,
+        status: 200,
+      };
+    },
+  );
+  if (result.status !== "ok") return result;
+  return { status: "ok", data: [...result.data].sort(compareTargetFaces) };
+}
+
+// 存在しない・権限なし・論理削除済みのラウンドは、いずれもroundがnullになり、区別しない。
 export async function fetchRoundDetail(
   supabase: SupabaseClient<Database>,
   roundId: string,
@@ -111,11 +150,7 @@ export async function fetchRoundDetail(
           .order("id", { referencedTable: "distances" })
           .maybeSingle()
           .retry(false),
-        supabase
-          .from("target_faces")
-          .select(TARGET_FACE_SELECT)
-          .or(`owner_id.is.null,owner_id.eq.${userId}`)
-          .retry(false),
+        selectTargetFaces(supabase, userId),
       ]);
       const failure = failureOf([round, faces]);
       if (failure) return failure as ResponseLike<Fetched>;

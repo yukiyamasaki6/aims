@@ -2,13 +2,17 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import type { FetchResult } from "@/features/fetch-result/fetch-result";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
 import { createClient } from "@/lib/supabase/client";
+import type { TargetFaceOption } from "./distance-config-row";
+import { fetchTargetFaces } from "./fetch-round-detail";
 import { loadRoundDetail } from "./load-round-detail";
 import { RoundDetailFrame } from "./round-detail-frame";
 import { parseRoundId } from "./round-detail-id";
 import { ScorecardClient } from "./scorecard-client";
+import { useCreationGone } from "./use-creation-gone";
 
 // ScorecardClientの設定パネル（45px）、合計バー（46px、-mt-6で設定パネルと接する）、
 // 距離の一覧（gap-6/gap-4）と同じ形にする。
@@ -23,6 +27,12 @@ function ScorecardSkeleton() {
     </div>
   );
 }
+
+const NO_TARGET_FACES: TargetFaceOption[] = [];
+const NO_TARGET_FACES_RESULT: FetchResult<TargetFaceOption[]> = {
+  status: "ok",
+  data: NO_TARGET_FACES,
+};
 
 const NOT_FOUND = { message: "ラウンドが見つかりません。" };
 
@@ -43,6 +53,17 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
     [roundId],
   );
   const leaveRound = view.status === "ok" && view.data.leaveRound;
+  const pending =
+    view.status === "ok" ? view.data.pendingCreationEventId : null;
+  // 作成が未確定のラウンドの的は、詳細を表示した後に背景で取得する。
+  const { view: faces } = useFetchResult(
+    () =>
+      pending
+        ? fetchTargetFaces(createClient())
+        : Promise.resolve(NO_TARGET_FACES_RESULT),
+    [pending],
+  );
+  useCreationGone(roundId, pending, retry);
 
   useEffect(() => {
     if (leaveRound) router.replace("/rounds");
@@ -53,7 +74,13 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
       <ScorecardClient
         roundId={roundId}
         loaded={view.data}
-        targetFaces={view.data.targetFaces}
+        targetFaces={
+          pending
+            ? faces.status === "ok"
+              ? faces.data
+              : NO_TARGET_FACES
+            : view.data.targetFaces
+        }
       />
     );
   }
