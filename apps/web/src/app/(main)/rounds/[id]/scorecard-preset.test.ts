@@ -129,6 +129,55 @@ describe("changePresetDialogOpen", () => {
 });
 
 describe("startPresetSave", () => {
+  describe("位置キーの振り直し", () => {
+    const submitted = (distances: Distance[]) => {
+      const start = startPresetSave(openDialog({ name: "n" }), {
+        ...source,
+        distances,
+      });
+      if (start.type !== "submit") throw new Error("submitではない");
+      return start.args.p_distances;
+    };
+
+    it("同じ位置キーの距離は(位置キー、ID)の順に並べ、連番の一意なキーを振り直す", () => {
+      // Given: 同じキーの2件(配列の順はIDの順と逆)と、その後ろの1件
+      const distances: Distance[] = [
+        { ...distanceB, id: "d-3", position_key: "b", distance: 20 },
+        { ...distanceA, id: "d-2", position_key: "a", distance: 30 },
+        { ...distanceA, id: "d-1", position_key: "a", distance: 70 },
+      ];
+
+      // When: 保存を始める
+      const sent = submitted(distances);
+
+      // Then: IDの小さい順に並び、キーはa, b, cになる
+      expect(sent.map((d) => [d.position_key, d.distance])).toEqual([
+        ["a", 70],
+        ["b", 30],
+        ["c", 20],
+      ]);
+    });
+
+    it("26件を超えても、振り直したキーは辞書順で増加する", () => {
+      // Given: 28件の距離
+      const distances: Distance[] = Array.from({ length: 28 }, (_, i) => ({
+        ...distanceA,
+        id: `d-${String(i).padStart(2, "0")}`,
+        position_key: "a",
+      }));
+
+      // When: 保存を始める
+      const keys = submitted(distances).map((d) => d.position_key);
+
+      // Then: zの次はzaで、全体が厳密に増加する
+      expect(keys[25]).toBe("z");
+      expect(keys[26]).toBe("za");
+      expect(keys[27]).toBe("zb");
+      expect(keys).toEqual([...keys].sort());
+      expect(new Set(keys).size).toBe(28);
+    });
+  });
+
   describe("名前が入力されている場合", () => {
     it("前後の空白を除いた名前と表示中の構成で送信し、直前のエラーを消して送信中にする", () => {
       // Given: 前後に空白のある名前と、直前のエラーが残っているダイアログ
@@ -152,20 +201,20 @@ describe("startPresetSave", () => {
           p_bow_type: "barebow",
           p_distances: [
             {
-              position_key: "b",
-              distance: 30,
-              total_ends: 2,
-              arrows_per_end: 3,
-              target_face_id: "face-2",
-              is_marked: false,
-            },
-            {
               position_key: "a",
               distance: 70,
               total_ends: 6,
               arrows_per_end: 6,
               target_face_id: "face-1",
               is_marked: true,
+            },
+            {
+              position_key: "b",
+              distance: 30,
+              total_ends: 2,
+              arrows_per_end: 3,
+              target_face_id: "face-2",
+              is_marked: false,
             },
           ],
         },
