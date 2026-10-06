@@ -11,9 +11,10 @@ import { isOffline } from "@/features/fetch-result/network";
 import type { SyncStatus } from "@/features/op-log/sync-types";
 import { createClient } from "@/lib/supabase/client";
 import { type LoadedRoundDetail, loadRoundDetail } from "./load-round-detail";
-import { applyOperations, type RoundState } from "./round-op-apply";
+import { applyOperations } from "./round-op-apply";
 import { roundOpHub } from "./round-op-hub";
 import { roundStreamId } from "./round-op-store";
+import { type RoundState, selectRoundState } from "./round-tables";
 import type { ScoringTargetFace } from "./scorecard-scoring";
 import type { SyncOperation } from "./sync-events";
 
@@ -25,7 +26,7 @@ export type RoundOpStack = {
   append: (operation: SyncOperation) => void;
 };
 
-// 画面の状態は`applyOperations(base, 操作の列, 的)`だけから導き、送信器の購読だけを行う。
+// 画面の状態は`selectRoundState(applyOperations(base, 操作の列, 的))`だけから導き、送信器の購読だけを行う。
 // 送信器はタブに常駐するハブ(round-op-hub.ts)が持ち、画面は購読と追記だけを行う。画面を閉じても送信は続く。
 // 効かなかった操作または項目がある応答を受けたときは、基準を取り直す。
 export function useRoundOpStack(
@@ -91,7 +92,8 @@ export function useRoundOpStack(
   }, [sync, roundId]);
 
   const state = useMemo(
-    () => applyOperations(base, snapshot.operations, targetFaces),
+    () =>
+      selectRoundState(applyOperations(base, snapshot.operations, targetFaces)),
     [base, snapshot.operations, targetFaces],
   );
 

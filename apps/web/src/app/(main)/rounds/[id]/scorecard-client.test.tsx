@@ -17,6 +17,7 @@ import type { TargetFaceOption } from "./distance-config-row";
 import type { RoundConfig } from "./round-config";
 import { roundOpHub } from "./round-op-hub";
 import { roundOpStore } from "./round-op-store";
+import { roundTablesFromServer } from "./round-tables";
 import { ScorecardClient } from "./scorecard-client";
 import type { Distance, Shot } from "./scorecard-types";
 
@@ -191,12 +192,11 @@ function setup(
     <ScorecardClient
       roundId="round-1"
       loaded={{
-        base: {
+        base: roundTablesFromServer({
           roundConfig: initialRoundConfig,
           distances,
           shots: initialShots,
-          roundDisabled: false,
-        },
+        }),
         entries: [],
         reflected: [],
       }}

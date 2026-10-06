@@ -14,7 +14,6 @@ import {
   positionOfCell,
   pushHistory,
   redoHistory,
-  replaceShot,
   scoreHistoryEntry,
   undoHistory,
 } from "./scorecard-input";
@@ -305,64 +304,6 @@ describe("cellOf", () => {
 
     // Then: 距離ID・エンド・本目で指す
     expect(cell).toEqual({ distanceId: "d-b", endNumber: 1, arrowNumber: 2 });
-  });
-});
-
-describe("replaceShot", () => {
-  const cell: Cell = { distanceId: "d-a", endNumber: 1, arrowNumber: 2 };
-
-  describe("記録で置き換える", () => {
-    it("マスに記録が無い場合、記録を追加する", () => {
-      // Given: 別のマスの記録だけがある
-      const shots = [shot("d-a", 1, 1, "10", 10)];
-
-      // When: マスの記録を置き換える
-      const replaced = replaceShot(shots, cell, shot("d-a", 1, 2, "9", 9));
-
-      // Then: 別のマスの記録を残して追加する
-      expect(replaced).toEqual([
-        shot("d-a", 1, 1, "10", 10),
-        shot("d-a", 1, 2, "9", 9),
-      ]);
-    });
-
-    it("マスに記録がある場合、その記録だけを置き換える", () => {
-      // Given: マスの記録と別のマスの記録がある
-      const shots = [shot("d-a", 1, 2, "9", 9), shot("d-b", 1, 2, "8", 8)];
-
-      // When: マスの記録を置き換える
-      const replaced = replaceShot(shots, cell, shot("d-a", 1, 2, "X", 10));
-
-      // Then: 同じマスの記録だけが置き換わる
-      expect(replaced).toEqual([
-        shot("d-b", 1, 2, "8", 8),
-        shot("d-a", 1, 2, "X", 10),
-      ]);
-    });
-  });
-
-  describe("記録を取り除く", () => {
-    it("マスに記録がある場合、その記録だけを取り除く", () => {
-      // Given: マスの記録と別のマスの記録がある
-      const shots = [shot("d-a", 1, 2, "9", 9), shot("d-a", 2, 2, "8", 8)];
-
-      // When: マスの記録を取り除く
-      const replaced = replaceShot(shots, cell, null);
-
-      // Then: 別のマスの記録だけが残る
-      expect(replaced).toEqual([shot("d-a", 2, 2, "8", 8)]);
-    });
-
-    it("マスに記録が無い場合、記録は変わらない", () => {
-      // Given: 別のマスの記録だけがある
-      const shots = [shot("d-a", 2, 2, "8", 8)];
-
-      // When: マスの記録を取り除く
-      const replaced = replaceShot(shots, cell, null);
-
-      // Then: 記録は変わらない
-      expect(replaced).toEqual([shot("d-a", 2, 2, "8", 8)]);
-    });
   });
 });
 

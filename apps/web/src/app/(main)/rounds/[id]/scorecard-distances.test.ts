@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DistanceConfig } from "./distance-config";
-import {
-  changesDistanceStructure,
-  distanceToAdd,
-  removeDistance,
-  removeDistanceShots,
-  updateDistance,
-} from "./scorecard-distances";
-import type { Distance, Shot } from "./scorecard-types";
+import { changesDistanceStructure, distanceToAdd } from "./scorecard-distances";
+import type { Distance } from "./scorecard-types";
 
 const distanceA: Distance = {
   id: "d-a",
@@ -28,16 +22,6 @@ const distanceB: Distance = {
   target_face_id: "face-2",
   is_marked: false,
 };
-
-function shot(distanceId: string, end: number, arrow: number): Shot {
-  return {
-    distance_id: distanceId,
-    end_number: end,
-    arrow_number: arrow,
-    score_str: "10",
-    score_int: 10,
-  };
-}
 
 // distanceAの設定をそのまま保存する内容。
 function configOfA(overrides: Partial<DistanceConfig> = {}): DistanceConfig {
@@ -154,69 +138,6 @@ describe("distanceToAdd", () => {
   });
 });
 
-describe("updateDistance", () => {
-  it("指定した距離の設定だけを置き換え、IDと位置キーは維持する", () => {
-    // Given: 2つの距離
-    const distances = [distanceA, distanceB];
-
-    // When: distanceAの設定を置き換える
-    const result = updateDistance(distances, "d-a", {
-      distance: 50,
-      isMarked: false,
-      config: { totalEnds: 3, arrowsPerEnd: 4, targetFaceId: "face-2" },
-    });
-
-    // Then: distanceAだけが新しい設定になる
-    expect(result).toEqual([
-      {
-        id: "d-a",
-        position_key: "a",
-        distance: 50,
-        total_ends: 3,
-        arrows_per_end: 4,
-        target_face_id: "face-2",
-        is_marked: false,
-      },
-      distanceB,
-    ]);
-  });
-
-  it("差分に含まれない項目は変えない(構成は1組で置き換える)", () => {
-    // Given: 2つの距離
-    const distances = [distanceA, distanceB];
-
-    // When: 距離(m)だけの差分と、構成だけの差分を順に適用する
-    const onlyDistance = updateDistance(distances, "d-a", { distance: 90 });
-    const onlyConfig = updateDistance(distances, "d-a", {
-      config: { totalEnds: 1, arrowsPerEnd: 2, targetFaceId: "face-9" },
-    });
-
-    // Then: 差分の項目だけが変わる
-    expect(onlyDistance[0]).toEqual({ ...distanceA, distance: 90 });
-    expect(onlyConfig[0]).toEqual({
-      ...distanceA,
-      total_ends: 1,
-      arrows_per_end: 2,
-      target_face_id: "face-9",
-    });
-  });
-
-  it("指定した距離が無い場合は、どの距離も変えない", () => {
-    // Given: 2つの距離
-    const distances = [distanceA, distanceB];
-
-    // When: 存在しない距離の設定を置き換える
-    const result = updateDistance(distances, "d-missing", {
-      distance: 50,
-      isMarked: false,
-      config: { totalEnds: 3, arrowsPerEnd: 4, targetFaceId: "face-2" },
-    });
-
-    // Then: 距離は元のまま
-    expect(result).toEqual([distanceA, distanceB]);
-  });
-});
-
 describe("changesDistanceStructure", () => {
   describe("構成が変わる場合", () => {
     it.each([
@@ -273,31 +194,5 @@ describe("changesDistanceStructure", () => {
       // Then: 構成が変わったと判定する
       expect(result).toBe(true);
     });
-  });
-});
-
-describe("removeDistance", () => {
-  it("指定した距離だけを取り除く", () => {
-    // Given: 2つの距離
-    const distances = [distanceA, distanceB];
-
-    // When: distanceAを取り除く
-    const result = removeDistance(distances, "d-a");
-
-    // Then: distanceBだけが残る
-    expect(result).toEqual([distanceB]);
-  });
-});
-
-describe("removeDistanceShots", () => {
-  it("指定した距離の記録だけを取り除く", () => {
-    // Given: 2つの距離の記録
-    const shots = [shot("d-a", 1, 1), shot("d-b", 1, 1), shot("d-a", 2, 1)];
-
-    // When: distanceAの記録を取り除く
-    const result = removeDistanceShots(shots, "d-a");
-
-    // Then: distanceBの記録だけが残る
-    expect(result).toEqual([shot("d-b", 1, 1)]);
   });
 });

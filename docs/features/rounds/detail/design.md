@@ -40,7 +40,7 @@
 - `rounds/[id]/round-detail-id.ts`: pathnameからUUIDを取り出す。UUIDでなければ`null`で、問い合わせずに見つからないとする。
 - `rounds/[id]/fetch-round-detail.ts`: ラウンド・距離・矢を1回のネスト取得、的を1回の取得で得て、`FetchResult`に分類する。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。的の取得(`fetchTargetFaces`)は、成功した一覧を端末に保存し(`rounds/_shared/reference-snapshot.ts`)、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。`fetchRoundDetail`は的を保存するが、代わりは持たず待ちは10秒のままである。
 - `rounds/[id]/load-round-detail.ts`: 取得した基準と、反映済みを除いた操作の列を返す。作成が未確定のラウンドは取得せず、作成の操作を基準にする。サーバーが効かなかったと答えた操作は反映済みとして除く。効かなかった操作または項目がある応答を受けたときは、`use-round-op-stack.ts`がこの関数で取り直し、基準を差し替える。
-- `rounds/[id]/round-op-apply.ts`、`use-round-op-stack.ts`: 基準へ操作の列を重ねる導出と、常駐のハブの送信器を購読するフック。`scorecard-client.tsx`は`state`(保存が完了した操作から導いた値)を`useRoundOpStack`から受ける。
+- `rounds/[id]/round-tables.ts`、`round-op-apply.ts`、`use-round-op-stack.ts`: サーバーのテーブルの形の基準(`RoundTables`)、操作の列を重ねる導出(RPCごとの処理)、画面の状態を導く`selectRoundState`と、常駐のハブの送信器を購読するフック。`scorecard-client.tsx`は`state`(保存が完了した操作から導いた値)を`useRoundOpStack`から受ける。
 - `rounds/[id]/round-detail-frame.tsx`、`back-to-list-link.tsx`: 枠と「一覧へ戻る」リンク。
 - `rounds/[id]/scorecard-client.tsx`（Client Component）: `state`(保存が完了した操作から導いた`shots`と距離の構成)を`useRoundOpStack`から受け、表示を組み立てる。
 - `rounds/[id]/scorecard-scoring.ts`: 距離とラウンドの集計、エンドの小計を求める純粋関数。
@@ -48,7 +48,7 @@
 
 集計は、点数を入力するたびにクライアントで再計算し、サーバーへ問い合わせない。
 取得の結果は`ScorecardClient`へ渡し、以降の更新は楽観的UIと操作の列で行って、再取得を待たない。
-操作の列は、取得の前後に読んだ結果を合わせ、`seq`順に`applyOperations`で重ねる。読み込み時と操作時で同じ関数を使う。確定した操作は、取得した`revision`が確定した`revision`以上なら重ねない(`rounds/sync`)。重ね合わせは冪等で、二重の適用は結果を変えない。
+操作の列は、取得の前後に読んだ結果を合わせ、`seq`順に`applyOperations`でテーブルへ重ね、`selectRoundState`で画面の状態にする。読み込み時と操作時で同じ関数を使う。確定した操作は、取得した`revision`が確定した`revision`以上なら重ねない(`rounds/sync`)。重ね合わせは冪等で、二重の適用は結果を変えない。
 `data-hydrated`はスコアカードの根にだけ付け、E2Eはこれを待つ。
 静的化は、`next build`の出力が`● /rounds/[id]`・`└ /rounds/_`になり、`.next/server/app/rounds/_.html`にユーザー・ラウンドのデータが含まれないことで確かめる。
 

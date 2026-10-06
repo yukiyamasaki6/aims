@@ -7,6 +7,7 @@ import { fetchTargetFaces } from "./fetch-round-detail";
 import type { LoadedRoundDetail } from "./load-round-detail";
 import { loadRoundDetail } from "./load-round-detail";
 import { RoundDetailClient } from "./round-detail-client";
+import { roundTablesFromServer } from "./round-tables";
 import { useCreationGone } from "./use-creation-gone";
 
 const ID = "123e4567-e89b-12d3-a456-426614174000";
@@ -32,7 +33,7 @@ vi.mock("./scorecard-client", () => ({
     targetFaces,
   }: {
     roundId: string;
-    loaded: { base: { roundConfig: { name: string } } };
+    loaded: { base: { round: { config: { name: string } } } };
     targetFaces: { id: string }[] | null;
   }) => (
     <div
@@ -44,7 +45,7 @@ vi.mock("./scorecard-client", () => ({
           : targetFaces.map((f) => f.id).join(",")
       }
     >
-      {loaded.base.roundConfig.name}
+      {loaded.base.round.config.name}
     </div>
   ),
 }));
@@ -56,7 +57,7 @@ function detail(
   pendingCreationEventId: string | null = null,
 ): LoadedRoundDetail {
   return {
-    base: {
+    base: roundTablesFromServer({
       roundConfig: {
         name,
         roundDate: "2026-09-15",
@@ -65,8 +66,7 @@ function detail(
       },
       distances: [],
       shots: [],
-      roundDisabled: false,
-    },
+    }),
     entries: [],
     reflected: [],
     targetFaces: [],

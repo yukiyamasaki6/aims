@@ -13,6 +13,7 @@ import { loadRoundDetail } from "./load-round-detail";
 import { applyOperations } from "./round-op-apply";
 import { roundOpStore, roundStreamId } from "./round-op-store";
 import { roundCreated } from "./round-op-test-helpers";
+import { roundTablesFromServer, selectRoundState } from "./round-tables";
 import { findCurrentPosition } from "./scorecard-input";
 import type { SyncOperation } from "./sync-events";
 
@@ -102,12 +103,7 @@ describe("loadRoundDetail", () => {
     expect(result).toEqual({
       status: "ok",
       data: {
-        base: {
-          roundConfig: server.roundConfig,
-          distances: server.distances,
-          shots: server.shots,
-          roundDisabled: false,
-        },
+        base: roundTablesFromServer(server),
         entries: [],
         reflected: [],
         targetFaces: [],
@@ -135,13 +131,15 @@ describe("loadRoundDetail", () => {
       "e3",
     ]);
     expect(result.data.reflected).toEqual([]);
-    const state = applyOperations(
-      result.data.base,
-      result.data.entries.map((e) => ({
-        operation: e.operation,
-        confirmedFields: undefined,
-      })),
-      [],
+    const state = selectRoundState(
+      applyOperations(
+        result.data.base,
+        result.data.entries.map((e) => ({
+          operation: e.operation,
+          confirmedFields: undefined,
+        })),
+        [],
+      ),
     );
     expect(state.roundConfig.name).toBe("更新後");
     expect(state.shots).toEqual([
@@ -295,7 +293,7 @@ describe("loadRoundDetail", () => {
       expect(fetchDetail).not.toHaveBeenCalled();
       if (result.status !== "ok") throw new Error("not ok");
       expect(result.data.pendingCreationEventId).toBe("e-round-created");
-      expect(result.data.base.roundConfig).toEqual({
+      expect(result.data.base.round.config).toEqual({
         name: "",
         roundDate: "2026-09-29",
         format: "indoor",
@@ -336,7 +334,7 @@ describe("loadRoundDetail", () => {
       if (result.status !== "ok") throw new Error("not ok");
       expect(result.data.pendingCreationEventId).toBeNull();
       expect(result.data.reflected).toEqual(["e-round-created"]);
-      expect(result.data.base.roundConfig).toEqual(server.roundConfig);
+      expect(result.data.base.round.config).toEqual(server.roundConfig);
     });
   });
 

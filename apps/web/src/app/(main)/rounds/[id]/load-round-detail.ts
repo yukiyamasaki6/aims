@@ -9,17 +9,18 @@ import {
   type RoundRevisions,
   shotRevisionKey,
 } from "./fetch-round-detail";
-import {
-  applyOperations,
-  type RoundState,
-  roundStateFromCreated,
-} from "./round-op-apply";
+import { applyOperations } from "./round-op-apply";
 import { roundOpStore, roundStreamId } from "./round-op-store";
+import {
+  type RoundTables,
+  roundTablesFromCreated,
+  roundTablesFromServer,
+} from "./round-tables";
 import { type SyncOperation, upgradeLegacyOperation } from "./sync-events";
 
 export type LoadedRoundDetail = {
   // サーバーの状態。操作の列は重ねていない。
-  base: RoundState;
+  base: RoundTables;
   // 基準へ重ねる列(`seq`順)。反映済みと確かめた操作を含まない。
   entries: OpLogEntry<SyncOperation>[];
   // 反映済みと確かめた操作のeventId。詳細画面の表示の開始時に列から外す。
@@ -139,7 +140,7 @@ export async function loadRoundDetail(
     const { operation } = entry;
     if (operation.type !== "round.created") continue;
     if (entry.ackedRevision !== undefined) continue;
-    const base = roundStateFromCreated(operation);
+    const base = roundTablesFromCreated(operation);
     return {
       status: "ok",
       data: {
@@ -154,7 +155,7 @@ export async function loadRoundDetail(
             confirmedFields: undefined,
           })),
           [],
-        ).roundDisabled,
+        ).round.disabled,
         pendingCreationEventId: operation.eventId,
       },
     };
@@ -179,12 +180,7 @@ export async function loadRoundDetail(
     }
   }
 
-  const base: RoundState = {
-    roundConfig,
-    distances,
-    shots,
-    roundDisabled: false,
-  };
+  const base = roundTablesFromServer({ roundConfig, distances, shots });
   return {
     status: "ok",
     data: {
@@ -199,7 +195,7 @@ export async function loadRoundDetail(
           confirmedFields: undefined,
         })),
         targetFaces,
-      ).roundDisabled,
+      ).round.disabled,
       pendingCreationEventId: null,
     },
   };
