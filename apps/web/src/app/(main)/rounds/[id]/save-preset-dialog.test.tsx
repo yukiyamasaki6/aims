@@ -187,18 +187,18 @@ describe("SavePresetDialog", () => {
         p_bow_type: "recurve",
         p_distances: [
           {
-            position_key: "b",
-            distance: 50,
-            total_ends: 2,
-            arrows_per_end: 3,
-            target_face_id: "face-x",
-            is_marked: true,
-          },
-          {
             position_key: "a",
             distance: 70,
             total_ends: 6,
             arrows_per_end: 6,
+            target_face_id: "face-x",
+            is_marked: true,
+          },
+          {
+            position_key: "b",
+            distance: 50,
+            total_ends: 2,
+            arrows_per_end: 3,
             target_face_id: "face-x",
             is_marked: true,
           },

@@ -7,6 +7,16 @@ import type { Distance } from "./scorecard-types";
 // 距離が1件も無い状態で追加する距離の的として使う（e2eのcreate-round APIヘルパーが使う既定の的と同じもの）。
 const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001";
 
+// 位置キーは、最後の有効な距離のキーより大きく、最後の文字を1つ進め、`z`以上なら`a`を足す。
+// 同じキーの距離は(位置キー、ID)の順で並ぶため、削除済みの距離や同時に追加した距離と同じキーでもよい。
+export function nextPositionKey(key: string): string {
+  const lastChar = key.charCodeAt(key.length - 1);
+  if (lastChar < "z".charCodeAt(0)) {
+    return key.slice(0, -1) + String.fromCharCode(lastChar + 1);
+  }
+  return `${key}a`;
+}
+
 // 追加する距離と、その作成の操作を返す。
 // 並び順で最後の距離の内容を引き継ぎ、距離が1件も無い場合は既定の内容にする。
 // 最後の距離の距離（m）が未設定の場合は、距離（m）だけ既定の値にする。
@@ -18,7 +28,7 @@ export function distanceToAdd(
   const last = [...distances].sort(compareDistancePosition).at(-1);
   const distance: Distance = {
     id: ids.id,
-    position_key: last ? `${last.position_key}a` : "a",
+    position_key: last ? nextPositionKey(last.position_key) : "a",
     distance: last?.distance ?? 70,
     total_ends: last?.total_ends ?? 6,
     arrows_per_end: last?.arrows_per_end ?? 6,

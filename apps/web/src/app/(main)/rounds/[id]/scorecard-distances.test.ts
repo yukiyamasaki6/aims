@@ -51,7 +51,7 @@ describe("distanceToAdd", () => {
       // Then: 位置キーが最後のdistanceBの内容を引き継ぎ、distanceBの後ろに並ぶ
       expect(result.distance).toEqual({
         id: "d-new",
-        position_key: "ba",
+        position_key: "c",
         distance: 30,
         total_ends: 2,
         arrows_per_end: 3,
@@ -73,13 +73,26 @@ describe("distanceToAdd", () => {
         eventId: "e-1",
         id: "d-new",
         roundId: "round-1",
-        positionKey: "ba",
+        positionKey: "c",
         distance: 30,
         totalEnds: 2,
         arrowsPerEnd: 3,
         targetFaceId: "face-2",
         isMarked: false,
       });
+    });
+
+    it("位置キーは、最後のキーの最後の文字を1つ進める。`z`以上なら`a`を足す", () => {
+      // Given: 最後のキーが`b`、`z`、`az`の距離
+      const keyOf = (position_key: string) =>
+        distanceToAdd([{ ...distanceB, position_key }], ids).distance
+          .position_key;
+
+      // When/Then: 追加するキーが最後のキーより大きいキーになる
+      expect(keyOf("b")).toBe("c");
+      expect(keyOf("y")).toBe("z");
+      expect(keyOf("z")).toBe("za");
+      expect(keyOf("az")).toBe("aza");
     });
 
     it("最後の距離の距離（m）が未設定の場合は、距離（m）だけ既定の70mにする", () => {
@@ -92,7 +105,7 @@ describe("distanceToAdd", () => {
       // Then: 距離（m）は70mになり、他の項目は引き継ぐ
       expect(result.distance).toEqual({
         id: "d-new",
-        position_key: "ba",
+        position_key: "c",
         distance: 70,
         total_ends: 2,
         arrows_per_end: 3,

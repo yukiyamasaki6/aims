@@ -228,7 +228,7 @@ as $$
       select string_agg(
         format('%s:%s:%s:%sx%s:%s:%s', position_key, coalesce(distance::text, '-'), is_marked::text,
           total_ends, arrows_per_end, right(target_face_id::text, 4), right(id::text, 2)),
-        ' ' order by position_key)
+        ' ' order by position_key, id)
       from distances where round_id = pg_temp.id('RN')
     ), ''))
 $$;
@@ -366,7 +366,7 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('create_round', 'invalid', 'event_id_of_update', pg_temp.q('update_round', '{"p_round_event_id":"@EV2","p_round_id":"@R1","p_changes":{"name":"Renamed"}}'), pg_temp.q('create_round', '{"p_round_event_id":"@EV2"}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'invalid', 'duplicate_distance_id', null, pg_temp.q('create_round', '{"p_distances":[{},{"distance_event_id":"@DEV2","position_key":"b"}]}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'invalid', 'duplicate_distance_event_id', null, pg_temp.q('create_round', '{"p_distances":[{},{"id":"@DN2","position_key":"b"}]}'), 1, 'select pg_temp.st_create_round($1)'),
-  ('create_round', 'invalid', 'duplicate_position_key', null, pg_temp.q('create_round', '{"p_distances":[{},{"id":"@DN2","distance_event_id":"@DEV2"}]}'), 1, 'select pg_temp.st_create_round($1)'),
+  ('create_round', 'success', 'duplicate_position_key', null, pg_temp.q('create_round', '{"p_distances":[{},{"id":"@DN2","distance_event_id":"@DEV2"}]}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'invalid', 'existing_distance_id', null, pg_temp.q('create_round', '{"p_distances":[{"id":"@D1"}]}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'invalid', 'existing_distance_event_id', null, pg_temp.q('create_round', '{"p_distances":[{"distance_event_id":"c0000000-0000-0000-0000-00000000f011"}]}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'invalid', 'distances_not_array', null, pg_temp.q('create_round', '{"p_distances":{"a":1}}'), 1, 'select pg_temp.st_create_round($1)'),
@@ -411,7 +411,7 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('create_distance', 'invalid', 'total_ends_zero', null, pg_temp.q('create_distance', '{"p_total_ends":0}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'invalid', 'unknown_target_face', null, pg_temp.q('create_distance', '{"p_target_face_id":"@UNKNOWN"}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'invalid', 'existing_distance_id', null, pg_temp.q('create_distance', '{"p_id":"@D1"}'), 1, $$select pg_temp.st_new_distance('D1') || ' ' || pg_temp.res($1)$$),
-  ('create_distance', 'invalid', 'duplicate_position_key', null, pg_temp.q('create_distance', '{"p_position_key":"a"}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
+  ('create_distance', 'success', 'duplicate_position_key', null, pg_temp.q('create_distance', '{"p_position_key":"a"}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'idempotent', 'replay', null, pg_temp.q('create_distance'), 2, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
 
   -- update_distance
@@ -598,9 +598,9 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('create_round', 'unauthorized', 'replay_of_others_event', 'viewer', 'error:[PT403]このラウンドを作成した操作ではありません。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
   ('create_round', 'unauthorized', 'replay_of_others_event', 'non_member', 'error:[PT403]このラウンドを作成した操作ではありません。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
   ('create_round', 'invalid', 'event_id_of_update', 'editor', 'error:[PT422]イベントIDが作成以外の操作で使われています。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'duplicate_distance_id', 'editor', 'error:[PT422]距離のID・イベントID・位置が重複しています。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'duplicate_distance_event_id', 'editor', 'error:[PT422]距離のID・イベントID・位置が重複しています。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'duplicate_position_key', 'editor', 'error:[PT422]距離のID・イベントID・位置が重複しています。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'duplicate_distance_id', 'editor', 'error:[PT422]距離のID・イベントIDが重複しています。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'duplicate_distance_event_id', 'editor', 'error:[PT422]距離のID・イベントIDが重複しています。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'success', 'duplicate_position_key', 'editor', 'ok', 'returned=true round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=2 distance_events=2 list=[a:70:true:6x6:0001:40 a:70:true:6x6:0001:41]'),
   ('create_round', 'invalid', 'existing_distance_id', 'editor', 'error:[PT422]既に存在する距離IDです。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
   ('create_round', 'invalid', 'existing_distance_event_id', 'editor', 'error:[PT422]既に使われている距離のイベントIDです。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
   ('create_round', 'invalid', 'distances_not_array', 'editor', 'error:[PT422]距離の指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
@@ -645,7 +645,7 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('create_distance', 'invalid', 'total_ends_zero', 'editor', 'error:[PT422]距離の指定が不正です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
   ('create_distance', 'invalid', 'unknown_target_face', 'editor', 'error:[PT422]指定された的が存在しません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
   ('create_distance', 'invalid', 'existing_distance_id', 'editor', 'error:[PT422]既に存在する距離IDです。', 'distances=1 distance_events=1 revision=1 position=a distance=70 ends=6 arrows=6 face=0001 marked=true ret=-'),
-  ('create_distance', 'invalid', 'duplicate_position_key', 'editor', 'error:[PT422]同じ位置の距離が既に存在します。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'success', 'duplicate_position_key', 'editor', 'ok', 'distances=1 distance_events=1 revision=1 position=a distance=30 ends=4 arrows=3 face=0002 marked=true ret=applied'),
   ('create_distance', 'idempotent', 'replay', 'editor', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=30 ends=4 arrows=3 face=0002 marked=true ret=applied'),
 
   ('update_distance', 'success', 'default', 'editor', 'ok', 'events=2 revision=2 distance=55 ends=3 arrows=3 face=0002 marked=true disabled=false ret=applied fields=distance,config'),

@@ -1797,3 +1797,72 @@ test("sync-48: ページ側が状態を、他端末が名前を、それぞれ�
   await reloadRound(page);
   await expect(page.getByTestId("complete-round-button")).toBeHidden();
 });
+
+test("sync-49: オフラインで距離を追加し削除した後、「距離を追加」ボタンをクリックし、オンラインへ復帰すると、追加した距離が表示され、再読み込みしても追加した距離が表示される", async ({
+  page,
+}) => {
+  // Given: オフラインで距離を追加して削除した
+  await openRound(page);
+  await page.context().setOffline(true);
+  await page.getByTestId("add-distance-button").click();
+  await page.getByTestId("distance-config-delete-2").click();
+  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
+
+  // When: もう一度距離を追加し、オンラインへ復帰する
+  await page.getByTestId("add-distance-button").click();
+  await page.getByTestId("distance-config-save-2").click();
+  await goOnline(page);
+
+  // Then: 追加した距離が表示され、再読み込みしても残る
+  await expectSynced(page);
+  await expect(page.getByTestId("distance-summary-2")).toBeVisible();
+  await reloadRound(page);
+  await expect(page.getByTestId("distance-summary-2")).toBeVisible();
+});
+
+test("sync-50: 2端末が同じ距離の列から同時に距離を追加し、一方がオフラインで得点を入力した後、オンラインへ復帰すると、両端末で追加した距離が2件とも同じ順で表示され、エラーメッセージが表示されず、オフラインで入力した得点が保持される", async ({
+  page,
+}) => {
+  // Given: ページ側がオフラインで距離(18m)を追加して得点を入力し、他端末が同じ位置へ距離(30m)を追加した
+  const { supabase } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  await openRound(page);
+  await page.context().setOffline(true);
+  await page.getByTestId("add-distance-button").click();
+  await page.getByTestId("distance-config-save-2").click();
+  await page.getByTestId("shot-cell-2-1-1").click();
+  await page.getByTestId("score-button-5").click();
+  await createDistance(supabase, roundId, {
+    positionKey: "000000000002",
+    distance: 30,
+    isMarked: true,
+    totalEnds: 1,
+    arrowsPerEnd: 1,
+    targetFaceId: OUTDOOR_TARGET_FACE_ID,
+  });
+
+  // When: オンラインへ復帰する
+  await goOnline(page);
+
+  // Then: 距離が2件とも、位置キーとIDの順で並び、得点が保持される
+  await expectSynced(page);
+  await reloadRound(page);
+  const { data } = await supabase
+    .from("distances")
+    .select("id, distance, position_key")
+    .eq("round_id", roundId)
+    .order("position_key")
+    .order("id");
+  expect(data?.map((d) => d.position_key)).toEqual([
+    "000000000001",
+    "000000000002",
+    "000000000002",
+  ]);
+  for (const [i, d] of (data ?? []).entries()) {
+    await expect(page.getByTestId(`distance-summary-${i + 1}`)).toContainText(
+      `${d.distance}m`,
+    );
+  }
+  await expect(
+    page.locator('[data-testid^="shot-cell-"]', { hasText: "5" }),
+  ).toHaveCount(1);
+});

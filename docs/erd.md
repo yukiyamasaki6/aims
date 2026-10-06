@@ -65,7 +65,7 @@ erDiagram
     distances {
         uuid id PK "サロゲートID"
         uuid round_id FK "所属ラウンド"
-        string position_key "ラウンド内の並び順を表す可変長キー。表示番号は(position_key, id)順から導出"
+        string position_key "ラウンド内の並び順を表す可変長キー。重複を許し、同じキーはIDで順序を決める。表示番号は(position_key, id)順から導出"
         integer distance "距離（m） [CHECK: > 0] [NULLABLE: is_marked=falseの場合]"
         integer total_ends "総エンド数 [CHECK: > 0]"
         integer arrows_per_end "1エンドあたりの矢数 [CHECK: > 0]"

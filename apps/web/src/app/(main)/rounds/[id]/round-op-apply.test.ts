@@ -21,7 +21,10 @@ import {
   roundTablesFromCreated,
   roundTablesFromServer,
 } from "./round-tables";
-import type { ScoringTargetFace } from "./scorecard-scoring";
+import {
+  compareDistancePosition,
+  type ScoringTargetFace,
+} from "./scorecard-scoring";
 
 const ring = (scoreStr: string, scoreInt: number, zIndex: number) => ({
   score_str: scoreStr,
@@ -275,12 +278,40 @@ describe("create_distance(distance.created)", () => {
     expect(apply(once, op)).toBe(once);
   });
 
-  it("同じ位置の距離があれば追加しない。削除済みの距離の位置も重複として扱う", () => {
+  it("同じ位置の距離があっても追加する。削除済みの距離の位置も同じ", () => {
+    // Given: 位置aの距離がある(削除済みを含む)
     const dup = distanceCreated({ id: "d-2", positionKey: "a" });
-    expect(apply(base, dup)).toBe(base);
-    expect(applyConfirmed(base, dup, null)).toBe(base);
     const deleted = apply(base, distanceDisabled());
-    expect(apply(deleted, dup)).toBe(deleted);
+
+    // When/Then: 同じ位置の作成はどちらも追加される
+    expect(apply(base, dup).distances.map((d) => d.id)).toEqual(["d-1", "d-2"]);
+    expect(applyConfirmed(base, dup, null).distances.map((d) => d.id)).toEqual([
+      "d-1",
+      "d-2",
+    ]);
+    expect(apply(deleted, dup).distances.map((d) => d.id)).toEqual([
+      "d-1",
+      "d-2",
+    ]);
+  });
+
+  it("同じ位置へ別IDで同時に追加した2件は、適用順によらず両方が効いて並びが同じで、得点が残る", () => {
+    // Given: 同じ位置bへの別IDの追加と、一方への得点
+    const first = distanceCreated({ id: "d-2", positionKey: "b" });
+    const second = distanceCreated({ id: "d-3", positionKey: "b" });
+    const shot = shotRecorded({ distanceId: "d-2" });
+    const order = (tables: RoundTables) =>
+      [...tables.distances].sort(compareDistancePosition).map((d) => d.id);
+
+    // When: どちらの順でも適用する
+    const a = applyOperations(base, [first, second, shot].map(pending), faces);
+    const b = applyOperations(base, [second, first, shot].map(pending), faces);
+
+    // Then: 両方が効き、並びは(位置キー、ID)で同じになり、得点が残る
+    expect(order(a)).toEqual(["d-1", "d-2", "d-3"]);
+    expect(order(b)).toEqual(order(a));
+    expect(a.shots.map((s) => s.distance_id)).toEqual(["d-2"]);
+    expect(b.shots.map((s) => s.distance_id)).toEqual(["d-2"]);
   });
 
   it("削除済みの距離と同じIDの作成は、効かない", () => {

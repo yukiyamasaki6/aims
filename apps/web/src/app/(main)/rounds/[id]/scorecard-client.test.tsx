@@ -1117,7 +1117,7 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
         "create_distance",
         expect.objectContaining({
           p_round_id: "round-1",
-          p_position_key: "aa",
+          p_position_key: "b",
           p_distance: 70,
           p_total_ends: 2,
           p_arrows_per_end: 2,

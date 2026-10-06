@@ -1,4 +1,5 @@
 import { NAME_MAX_LENGTH } from "../_shared/round-constants";
+import { nextPositionKey } from "./scorecard-distances";
 import { compareDistancePosition } from "./scorecard-scoring";
 import type { Distance } from "./scorecard-types";
 
@@ -66,6 +67,24 @@ export function changePresetDialogOpen(
   return { ...state, open: false, name: "", error: null };
 }
 
+// 同じ位置キーの距離の並びはIDで決まり、プリセットではIDが変わるため、並びを確定してから位置キーを連番で振り直す。
+function presetDistances(
+  distances: Distance[],
+): SaveRoundAsPresetArgs["p_distances"] {
+  let key: string | null = null;
+  return [...distances].sort(compareDistancePosition).map((d) => {
+    key = key === null ? "a" : nextPositionKey(key);
+    return {
+      position_key: key,
+      distance: d.distance,
+      total_ends: d.total_ends,
+      arrows_per_end: d.arrows_per_end,
+      target_face_id: d.target_face_id,
+      is_marked: d.is_marked,
+    };
+  });
+}
+
 // 名前欄が空（空白のみを含む）の場合は、距離構成から生成した名前で保存する。
 export function startPresetSave(
   state: PresetDialogState,
@@ -94,14 +113,7 @@ export function startPresetSave(
       p_name: name,
       p_format: source.format,
       p_bow_type: source.bowType,
-      p_distances: source.distances.map((d) => ({
-        position_key: d.position_key,
-        distance: d.distance,
-        total_ends: d.total_ends,
-        arrows_per_end: d.arrows_per_end,
-        target_face_id: d.target_face_id,
-        is_marked: d.is_marked,
-      })),
+      p_distances: presetDistances(source.distances),
     },
   };
 }

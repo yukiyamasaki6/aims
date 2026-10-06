@@ -121,17 +121,13 @@ function disableRound(tables: RoundTables): RoundTables {
   return { ...tables, round: { ...tables.round, disabled: true } };
 }
 
-// create_distance。同じIDまたは同じ位置(削除済みを含む)の行があれば効かない。
+// create_distance。同じIDの行(削除済みを含む)があれば効かない。同じ位置は許す。
 function createDistance(
   tables: RoundTables,
   operation: Op<"distance.created">,
   confirmedFields: Confirmed,
 ): RoundTables {
-  if (
-    tables.distances.some(
-      (d) => d.id === operation.id || d.position_key === operation.positionKey,
-    )
-  ) {
+  if (tables.distances.some((d) => d.id === operation.id)) {
     return tables;
   }
   // 決定4: Unmarkedの距離は、フィールドのラウンドだけに作れる。
