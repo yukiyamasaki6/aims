@@ -210,6 +210,19 @@ describe("sendRoundBatch", () => {
     expect(client.rpc.mock.calls[0]?.[0]).toBe("clear_shots");
   });
 
+  it("update_roundへ、状態をp_changesのstatusで送り、他の項目は含めない", async () => {
+    // Given / When
+    await sendRoundBatch(
+      flight(roundUpdated({ changes: { status: "completed" } })),
+    );
+
+    // Then
+    expect(client.rpc.mock.calls[0]?.[0]).toBe("update_round");
+    expect(client.rpc.mock.calls[0]?.[1].p_changes).toEqual({
+      status: "completed",
+    });
+  });
+
   it("update_roundとupdate_distanceへ、変えた項目だけをp_changesで送る", async () => {
     await sendRoundBatch(
       flight(

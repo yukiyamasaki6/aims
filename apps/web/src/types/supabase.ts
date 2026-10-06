@@ -260,6 +260,7 @@ export type Database = {
           round_date: string | null;
           round_id: string;
           set_fields: string[] | null;
+          status: string | null;
           type: string;
           updated_at: string;
         };
@@ -274,6 +275,7 @@ export type Database = {
           round_date?: string | null;
           round_id: string;
           set_fields?: string[] | null;
+          status?: string | null;
           type: string;
           updated_at?: string;
         };
@@ -288,6 +290,7 @@ export type Database = {
           round_date?: string | null;
           round_id?: string;
           set_fields?: string[] | null;
+          status?: string | null;
           type?: string;
           updated_at?: string;
         };
@@ -353,6 +356,7 @@ export type Database = {
           name: string;
           revision: number;
           round_date: string;
+          status: string;
           updated_at: string;
         };
         Insert: {
@@ -364,6 +368,7 @@ export type Database = {
           name: string;
           revision?: number;
           round_date: string;
+          status?: string;
           updated_at?: string;
         };
         Update: {
@@ -375,6 +380,7 @@ export type Database = {
           name?: string;
           revision?: number;
           round_date?: string;
+          status?: string;
           updated_at?: string;
         };
         Relationships: [];

@@ -180,9 +180,11 @@ function setup(
     distances?: Distance[];
     initialShots?: Shot[];
     targetFaces?: TargetFaceOption[] | null;
+    status?: "in_progress" | "completed";
   } = {},
 ) {
   const {
+    status = "in_progress",
     initialRoundConfig = roundConfig,
     distances = [distanceA],
     initialShots = [],
@@ -193,6 +195,7 @@ function setup(
       roundId="round-1"
       loaded={{
         base: roundTablesFromServer({
+          status,
           roundConfig: initialRoundConfig,
           distances,
           shots: initialShots,
@@ -1443,5 +1446,132 @@ describe("ScorecardClient 同期状態の表示", () => {
       expect(screen.getByTestId("sync-status")).toHaveTextContent("同期保留中");
     });
     expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+});
+
+// update_roundへ送られた状態の列。
+function sentStatuses() {
+  return supabase.rpc.mock.calls
+    .filter(([name]) => name === "update_round")
+    .map(([, args]) => args.p_changes.status);
+}
+
+describe("ScorecardClient ラウンドの完了", () => {
+  const recorded = {
+    distance_id: "distance-b",
+    end_number: 1,
+    arrow_number: 1,
+    shooter_id: "user-1",
+    score_str: "10",
+    score_int: 10,
+  };
+
+  it("全てのマスを記録済みの入力中のラウンドで完了ボタンを押すと、確認なしで完了にし、ボタンを消して状態を送る", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup({ distances: [distanceB], initialShots: [recorded] });
+
+    // When
+    await user.click(screen.getByTestId("complete-round-button"));
+
+    // Then
+    await waitFor(() => expect(sentStatuses()).toEqual(["completed"]));
+    expect(screen.queryByTestId("complete-round-button")).toBeNull();
+    expect(screen.queryByTestId("confirm-dialog-confirm")).toBeNull();
+  });
+
+  it("未入力のマスがあるときは、確認でキャンセルすると入力中のままで何も送らない", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId("complete-round-button"));
+
+    // When
+    await user.click(screen.getByTestId("confirm-dialog-cancel"));
+
+    // Then
+    expect(screen.getByTestId("complete-round-button")).toBeInTheDocument();
+    expect(sentStatuses()).toEqual([]);
+  });
+
+  it("完了ボタンを押すと、完了の保存の後にラウンド一覧へ移る", async () => {
+    // Given
+    const user = userEvent.setup();
+    nav.push.mockClear();
+    setup({ distances: [distanceB], initialShots: [recorded] });
+
+    // When
+    await user.click(screen.getByTestId("complete-round-button"));
+
+    // Then
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/rounds"));
+  });
+
+  it("確認でキャンセルすると、一覧へ移らない", async () => {
+    // Given
+    const user = userEvent.setup();
+    nav.push.mockClear();
+    setup();
+    await user.click(screen.getByTestId("complete-round-button"));
+
+    // When
+    await user.click(screen.getByTestId("confirm-dialog-cancel"));
+
+    // Then
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("距離が無いラウンドでは、記録がない旨の確認を出す", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup({ distances: [] });
+
+    // When
+    await user.click(screen.getByTestId("complete-round-button"));
+
+    // Then
+    expect(
+      screen.getByText("記録がありません。入力を完了しますか？"),
+    ).toBeInTheDocument();
+  });
+
+  it("完了のラウンドは、先頭の未入力のマスを選ばず、テンキーを展開しない", () => {
+    // Given / When
+    setup({ status: "completed" });
+
+    // Then
+    expect(screen.queryByTestId("score-button-10")).toBeNull();
+    expect(screen.queryByTestId("complete-round-button")).toBeNull();
+  });
+
+  it("完了のラウンドは、距離が無くてもラウンド編集欄を自動で開かない", () => {
+    // Given / When
+    setup({ status: "completed", distances: [] });
+
+    // Then
+    expect(screen.queryByTestId("round-config-name")).toBeNull();
+  });
+
+  it("入力中のラウンドは、先頭の未入力のマスを選んでテンキーを展開する", () => {
+    // Given / When
+    setup();
+
+    // Then
+    expect(screen.getByTestId("score-button-10")).toBeInTheDocument();
+  });
+
+  it("完了のラウンドでは完了ボタンを表示せず、マスを選んで点数を記録すると入力中へ戻して再表示する", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup({ status: "completed" });
+    expect(screen.queryByTestId("complete-round-button")).toBeNull();
+
+    // When
+    await user.click(screen.getByTestId("shot-cell-1-1-1"));
+    await user.click(screen.getByTestId("score-button-10"));
+
+    // Then
+    await waitFor(() => expect(sentStatuses()).toEqual(["in_progress"]));
+    expect(screen.getByTestId("complete-round-button")).toBeInTheDocument();
   });
 });

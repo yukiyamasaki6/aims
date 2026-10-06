@@ -5,6 +5,7 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
+import { openOtherDevice, updateRound } from "../helpers/other-device";
 import {
   CREATE_ROUND_RPC,
   openNewRoundThenGoOffline,
@@ -205,7 +206,7 @@ test("detail-12: 「一覧へ戻る」リンクをクリックすると、/round
   await expect(page).toHaveURL(/\/rounds$/);
 });
 
-test("detail-13: 未入力のマスがあるとき、/rounds/[id]を開くと、未入力のマスの内、先頭のマスが選択され、テンキーが展開される", async ({
+test("detail-13: 入力中で未入力のマスがあるとき、/rounds/[id]を開くと、未入力のマスの内、先頭のマスが選択され、テンキーが展開される", async ({
   page,
 }) => {
   // Given
@@ -220,7 +221,7 @@ test("detail-13: 未入力のマスがあるとき、/rounds/[id]を開くと、
   await expect(page.getByTestId("score-button-X")).toBeVisible();
 });
 
-test("detail-14: 距離がないとき、/rounds/[id]を開くと、ラウンド編集ダイアログが開く", async ({
+test("detail-14: 入力中で距離がないとき、/rounds/[id]を開くと、ラウンド編集ダイアログが開く", async ({
   page,
 }) => {
   // Given
@@ -229,6 +230,59 @@ test("detail-14: 距離がないとき、/rounds/[id]を開くと、ラウンド
 
   // Then
   await expect(page.getByTestId("round-config-save")).toBeVisible();
+});
+
+// 完了のラウンドにする(他端末が完了にした状態)。
+async function completeRound(roundId: string) {
+  const { supabase } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  await updateRound(supabase, roundId, { status: "completed" });
+}
+
+test("detail-20: 完了のラウンドで未入力のマスがあるとき、/rounds/[id]を開くと、マスが選択されず、テンキーが展開されない", async ({
+  page,
+}) => {
+  // Given
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "詳細テスト",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 3 }],
+    shots: [shot(0, 1, 1, "X")],
+  });
+  await completeRound(roundId);
+
+  // When
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  // Then
+  await expect(page.getByTestId("shot-cell-1-1-2")).not.toHaveClass(
+    /ring-primary/,
+  );
+  await expect(page.getByTestId("score-button-X")).toBeHidden();
+});
+
+test("detail-21: 完了のラウンドで距離がないとき、/rounds/[id]を開くと、ラウンド編集ダイアログが開かない", async ({
+  page,
+}) => {
+  // Given
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "詳細テスト",
+    roundDate: "2026-08-24",
+    distances: [],
+  });
+  await completeRound(roundId);
+
+  // When
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  // Then
+  await expect(page.getByTestId("add-distance-button")).toBeVisible();
+  await expect(page.getByTestId("round-config-save")).toBeHidden();
 });
 
 const MISSING_ROUND_PATH = "/rounds/00000000-0000-0000-0000-000000000000";

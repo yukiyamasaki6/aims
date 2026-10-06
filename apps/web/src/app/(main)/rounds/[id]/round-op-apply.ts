@@ -65,6 +65,8 @@ function judgeRoundFields(
   if (changes.name !== undefined) fields.add("name");
   if (changes.roundDate !== undefined) fields.add("round_date");
   if (changes.bowType !== undefined) fields.add("bow_type");
+  // 状態は常に効く。
+  if (changes.status !== undefined) fields.add("status");
   if (changes.format !== undefined) {
     // 決定4: Unmarkedの距離があるときは、フィールド以外へ変えない。
     const blocked =
@@ -86,6 +88,7 @@ function updateRound(
     round_date: changes.roundDate,
     format: changes.format,
     bow_type: changes.bowType,
+    status: changes.status,
   })
     .filter(([, value]) => value !== undefined)
     .map(([key]) => key);
@@ -106,7 +109,11 @@ function updateRound(
   if (fields.has("bow_type") && changes.bowType !== undefined) {
     next.bowType = changes.bowType;
   }
-  return { ...tables, round: { ...tables.round, config: next } };
+  const status =
+    fields.has("status") && changes.status !== undefined
+      ? changes.status
+      : tables.round.status;
+  return { ...tables, round: { ...tables.round, config: next, status } };
 }
 
 // disable_round。

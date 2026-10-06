@@ -147,7 +147,7 @@ export async function loadRoundDetail(
 
   const before = await beforePromise;
   const after = await roundOpLog.load(roundId);
-  const { revisions, roundConfig, distances, shots, targetFaces } =
+  const { revisions, roundConfig, status, distances, shots, targetFaces } =
     fetched.data;
 
   const merged = mergeEntries(before, after);
@@ -166,7 +166,12 @@ export async function loadRoundDetail(
     }
   }
 
-  const base = roundTablesFromServer({ roundConfig, distances, shots });
+  const base = roundTablesFromServer({
+    roundConfig,
+    status,
+    distances,
+    shots,
+  });
   return {
     status: "ok",
     data: {

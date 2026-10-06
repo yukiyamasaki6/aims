@@ -76,7 +76,7 @@
 - `create_round`は旧版との互換のためラウンドIDを返し、送信側で`revision` 1の確定として扱う。重複の`event_id`は作成者を照合し、違えば`PT403`とする。
 - 書き込みRPC(`update_round`、`create_distance`、`update_distance`、`disable_distance`、`record_shots`、`clear_shots`)は、操作ごとに`{revision, applied, applied_fields, rejected_fields, reason}`を返す。`disable_round`は従来どおり`revision`を返す。
 - `record_shots`と`clear_shots`は、配列の先頭から順に1トランザクションで処理し、入力の順の結果の配列を返す。
-- 設定の保存は、変えた項目だけを持つjsonbの差分(`p_changes`)で送る。キーがあれば変えた項目、無ければ変えていない項目で、値のnullは「未設定にする」を表す(距離(m)だけ)。構成は的・エンド数・矢数の1組で、`config`キーに3項目を揃えて持つ。
+- 設定の保存は、変えた項目だけを持つjsonbの差分(`p_changes`)で送る。`update_round`の差分は、ラウンドの状態(`status`。`rounds/completion`)も項目として持ち、常に効く。キーがあれば変えた項目、無ければ変えていない項目で、値のnullは「未設定にする」を表す(距離(m)だけ)。構成は的・エンド数・矢数の1組で、`config`キーに3項目を揃えて持つ。
 - 判定は確定の時点の状態だけで行い、操作に前提の版を持たせない。効く項目は同じ項目の後勝ちで、規則に当たる項目だけを効かせない。
   - 削除: 削除済みのラウンド・距離への操作は効かない(`DISABLED`)。削除が勝つ。
   - 存在しない距離への操作は、認可より前に`MISSING`で効かないと返す(距離IDは推測できず、情報は漏れない)。

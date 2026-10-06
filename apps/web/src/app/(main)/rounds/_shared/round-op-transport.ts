@@ -137,6 +137,7 @@ function roundChangesToJson(changes: RoundChanges): Json {
   if (changes.roundDate !== undefined) json.round_date = changes.roundDate;
   if (changes.format !== undefined) json.format = changes.format;
   if (changes.bowType !== undefined) json.bow_type = changes.bowType;
+  if (changes.status !== undefined) json.status = changes.status;
   return json;
 }
 

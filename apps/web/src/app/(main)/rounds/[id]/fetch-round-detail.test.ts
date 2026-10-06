@@ -100,6 +100,7 @@ const round = {
   round_date: "2026-09-15",
   format: "outdoor",
   bow_type: "recurve",
+  status: "completed",
   revision: 3,
   distances: [
     {
@@ -150,7 +151,7 @@ describe("fetchRoundDetail", () => {
             [
               "select",
               [
-                "id, name, round_date, format, bow_type, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(distance_id, end_number, arrow_number, shooter_id, score_str, score_int, revision, disabled_at))",
+                "id, name, round_date, format, bow_type, status, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(distance_id, end_number, arrow_number, shooter_id, score_str, score_int, revision, disabled_at))",
               ],
             ],
             ["eq", ["id", "round-1"]],
@@ -186,6 +187,7 @@ describe("fetchRoundDetail", () => {
       expect(result).toEqual({
         status: "ok",
         data: {
+          status: "completed",
           roundConfig: {
             name: "午前練習",
             roundDate: "2026-09-15",
