@@ -416,3 +416,209 @@ describe("createOpSyncHub", () => {
     expect(statuses(tab)).toEqual(["acked"]);
   });
 });
+
+// `loadAll`の完了を、呼び出しごとに手で解放する。
+function gateLoads(shared: ReturnType<typeof sharedStore>) {
+  const original = shared.store.loadAll;
+  const pending: (() => void)[] = [];
+  shared.store.loadAll = vi.fn(
+    (userId) =>
+      new Promise((resolve) => {
+        pending.push(() => resolve(original(userId)));
+      }),
+  ) as OpLogStore<Op>["loadAll"];
+  return {
+    pending,
+    release: async (index: number) => {
+      pending[index]?.();
+      await flushed();
+    },
+  };
+}
+
+async function settled(promise: Promise<unknown>): Promise<boolean> {
+  let done = false;
+  void promise.then(() => {
+    done = true;
+  });
+  await flushed();
+  return done;
+}
+
+describe("ready", () => {
+  it("起動後の読み込みが終わるまで解決せず、終わると解決する", async () => {
+    const shared = sharedStore();
+    const gate = gateLoads(shared);
+    const tab = open(shared, undefined);
+
+    const ready = tab.hub.ready();
+    expect(await settled(ready)).toBe(false);
+
+    await gate.release(0);
+    expect(await settled(ready)).toBe(true);
+  });
+
+  it("読み込みの後に呼んでも、すぐ解決する", async () => {
+    const tab = open(sharedStore(), undefined);
+    await flushed();
+
+    expect(await settled(tab.hub.ready())).toBe(true);
+  });
+
+  it("startの前は解決しない", async () => {
+    const hub = createOpSyncHub<Op>({
+      store: sharedStore().store,
+      streamDeps: () => {
+        throw new Error("not used");
+      },
+      locks: undefined,
+      createChannel: () => undefined,
+    });
+
+    expect(await settled(hub.ready())).toBe(false);
+  });
+
+  it("読み込みに失敗しても解決する", async () => {
+    const shared = sharedStore();
+    vi.mocked(shared.store.loadAll).mockRejectedValue(new Error("idb"));
+    const tab = open(shared, undefined);
+
+    expect(await settled(tab.hub.ready())).toBe(true);
+  });
+
+  it("setUserの後は、新しいユーザーの読み込みが終わるまで解決しない", async () => {
+    const shared = sharedStore();
+    const gate = gateLoads(shared);
+    const tab = open(shared, undefined);
+    await gate.release(0);
+    expect(await settled(tab.hub.ready())).toBe(true);
+
+    tab.hub.setUser("user-2");
+    const ready = tab.hub.ready();
+    expect(await settled(ready)).toBe(false);
+
+    await gate.release(1);
+    expect(await settled(ready)).toBe(true);
+  });
+
+  it("古い世代の読み込みの完了では解決しない", async () => {
+    const shared = sharedStore();
+    const gate = gateLoads(shared);
+    const tab = open(shared, undefined);
+    tab.hub.setUser("user-2");
+    const ready = tab.hub.ready();
+
+    await gate.release(0);
+    expect(await settled(ready)).toBe(false);
+
+    await gate.release(1);
+    expect(await settled(ready)).toBe(true);
+  });
+
+  it("stopの後は、次のstartの読み込みが終わるまで解決しない", async () => {
+    const shared = sharedStore();
+    const tab = open(shared, undefined);
+    await flushed();
+    tab.hub.stop();
+
+    expect(await settled(tab.hub.ready())).toBe(false);
+  });
+});
+
+describe("read", () => {
+  it("読み込みの後に、現在のユーザーのその列だけを、読み替えて返す", async () => {
+    const shared = sharedStore();
+    const mine = op("x");
+    const other = op("y");
+    const elsewhere = op("z");
+    for (const [operation, userId, streamId] of [
+      [mine, "user-1", STREAM],
+      [other, "user-2", STREAM],
+      [elsewhere, "user-1", "round:r2"],
+    ] as const) {
+      await shared.store.append({
+        eventId: operation.eventId,
+        streamId,
+        userId,
+        operation,
+      });
+    }
+    const gate = gateLoads(shared);
+    const tab = open(shared, undefined, {
+      upgrade: (operation) => ({ ...operation, legacy: true }),
+    });
+
+    const read = tab.hub.read(STREAM);
+    expect(await settled(read)).toBe(false);
+    await gate.release(0);
+
+    expect(
+      (await read).map((entry) => [entry.eventId, entry.operation.legacy]),
+    ).toEqual([[mine.eventId, true]]);
+  });
+
+  it("保存の読み込みに失敗したら、そのまま投げる", async () => {
+    const shared = sharedStore();
+    const tab = open(shared, undefined);
+    await flushed();
+    vi.mocked(shared.store.loadStream).mockRejectedValue(new Error("idb"));
+
+    await expect(tab.hub.read(STREAM)).rejects.toThrow("idb");
+  });
+});
+
+describe("readAll", () => {
+  it("現在のユーザーの列だけを、列IDごとに返す", async () => {
+    const shared = sharedStore();
+    const mine = op("x");
+    const other = op("y");
+    await shared.store.append({
+      eventId: mine.eventId,
+      streamId: STREAM,
+      userId: "user-1",
+      operation: mine,
+    });
+    await shared.store.append({
+      eventId: other.eventId,
+      streamId: "round:r2",
+      userId: "user-2",
+      operation: other,
+    });
+    const tab = open(shared, undefined);
+    await flushed();
+
+    const all = await tab.hub.readAll();
+
+    expect([...all.keys()]).toEqual([STREAM]);
+    expect(all.get(STREAM)?.map((entry) => entry.operation.eventId)).toEqual([
+      mine.eventId,
+    ]);
+  });
+
+  it("保存に失敗してメモリにだけある操作も含む", async () => {
+    const shared = sharedStore();
+    const tab = open(shared, undefined);
+    await flushed();
+    vi.mocked(shared.store.append).mockRejectedValue(new Error("idb"));
+    const unsaved = op("x");
+
+    await tab.hub.acquire(STREAM).append(unsaved);
+    const all = await tab.hub.readAll();
+
+    expect(all.get(STREAM)?.map((entry) => entry.operation.eventId)).toEqual([
+      unsaved.eventId,
+    ]);
+  });
+
+  it("確定済みの操作は、confirmedFieldsが未確定でない", async () => {
+    const shared = sharedStore();
+    const tab = open(shared, undefined);
+    await flushed();
+    await tab.hub.acquire(STREAM).append(op("x"));
+    await flushed();
+
+    const all = await tab.hub.readAll();
+
+    expect(all.get(STREAM)?.[0]?.confirmedFields).not.toBeUndefined();
+  });
+});

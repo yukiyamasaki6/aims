@@ -13,10 +13,10 @@ import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getLocalIdentity } from "@/features/auth/local-identity";
 import { retryDelayMs } from "@/features/op-log/sync-result";
+import { roundOpHub } from "../_shared/round-op-hub";
+import { roundOpStore } from "../_shared/round-op-store";
 import type { TargetFaceOption } from "./distance-config-row";
 import type { RoundConfig } from "./round-config";
-import { roundOpHub } from "./round-op-hub";
-import { roundOpStore } from "./round-op-store";
 import { roundTablesFromServer } from "./round-tables";
 import { ScorecardClient } from "./scorecard-client";
 import type { Distance, Shot } from "./scorecard-types";
@@ -1275,7 +1275,7 @@ describe("ScorecardClient プリセット保存", () => {
 });
 
 describe("ScorecardClient ラウンド削除", () => {
-  it("ラウンドのメニューから削除を確認すると、このラウンドのdisable_roundを実行し、一覧へ遷移する", async () => {
+  it("ラウンドのメニューから削除を確認すると、このラウンドのdisable_roundを実行し、一覧へ置き換えて遷移する", async () => {
     // Given: ラウンドを表示している
     const user = userEvent.setup();
     setup();
@@ -1285,9 +1285,9 @@ describe("ScorecardClient ラウンド削除", () => {
     await user.click(await screen.findByTestId("round-delete"));
     await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
-    // Then: このラウンドのdisable_roundを実行し、一覧へ遷移する
+    // Then: このラウンドのdisable_roundを実行し、一覧へ置き換えて遷移する
     await waitFor(() => {
-      expect(nav.push).toHaveBeenCalledWith("/rounds");
+      expect(nav.replace).toHaveBeenCalledWith("/rounds");
     });
     expect(supabase.rpc).toHaveBeenCalledWith("disable_round", {
       p_round_event_id: expect.any(String),

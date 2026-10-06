@@ -23,7 +23,7 @@ import {
   type TargetFaceOption,
 } from "./distance-config-row";
 import { KeypadPanel } from "./keypad-panel";
-import type { LoadedRoundDetail } from "./load-round-detail";
+import type { LoadedRound } from "./load-round-detail";
 import { RoundConfigPanel } from "./round-config-panel";
 import { RoundMenu } from "./round-menu";
 import { SavePresetDialog } from "./save-preset-dialog";
@@ -152,7 +152,7 @@ export function ScorecardClient({
   targetFaces,
 }: {
   roundId: string;
-  loaded: Pick<LoadedRoundDetail, "base" | "entries" | "reflected">;
+  loaded: Pick<LoadedRound, "base" | "entries" | "reflected">;
   // nullは的の一覧の取得中。
   targetFaces: TargetFaceOption[] | null;
 }) {

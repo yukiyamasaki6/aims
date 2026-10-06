@@ -2,8 +2,8 @@
 
 import { MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useEffect, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,19 +15,22 @@ import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/client";
 import { deleteRound } from "./_shared/delete-round";
-import { fetchRoundsList, type RoundListItem } from "./fetch-rounds-list";
+import { roundOpLog } from "./_shared/round-op-log";
+import type { RoundListItem } from "./fetch-rounds-list";
+import { type LoadedRoundsList, loadRoundsList } from "./load-rounds-list";
+import { overlayRoundsList } from "./overlay-rounds-list";
 
 export function RoundsListClient() {
   const hydrated = useHydrated();
   const { view, retry } = useFetchResult(
-    () => fetchRoundsList(createClient()),
+    () => loadRoundsList(createClient()),
     [],
   );
 
   return (
     <>
       {view.status === "ok" ? (
-        <RoundCards initialRounds={view.data} />
+        <RoundCards loaded={view.data} />
       ) : (
         <FetchState
           view={view}
@@ -60,36 +63,31 @@ function RoundCardsSkeleton() {
   );
 }
 
-function RoundCards({ initialRounds }: { initialRounds: RoundListItem[] }) {
-  const [rounds, setRounds] = useState(initialRounds);
-  const [roundToDelete, setRoundToDelete] = useState<RoundListItem | null>(
-    null,
-  );
-  const mountedRef = useRef(true);
+function RoundCards({ loaded }: { loaded: LoadedRoundsList }) {
+  // 自分の削除はその場で足す。列は取得時に1回読み、購読しない。
+  const [deleted, setDeleted] = useState(loaded.deleted);
+  const rounds = overlayRoundsList(loaded.items, deleted);
+  // 確認中のラウンド。確認の処理は、描画時のラウンドに束ねる。
+  const [target, setTarget] = useState<{
+    name: string;
+    confirm: () => void;
+  } | null>(null);
+
+  function startDelete(round: RoundListItem) {
+    setTarget({
+      name: round.name,
+      confirm: () => {
+        void deleteRound(round.id);
+        setDeleted((prev) => new Set(prev).add(round.id));
+      },
+    });
+  }
 
   useEffect(() => {
-    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
-    // 対応するため、マウント時にも明示的にtrueへ戻す。
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  async function performDelete(
-    round: RoundListItem,
-  ): Promise<{ error: string } | undefined> {
-    const result = await deleteRound({
-      roundId: round.id,
-      eventId: crypto.randomUUID(),
-      isMounted: () => mountedRef.current,
-    });
-
-    if (result.status === "failed") return { error: result.error };
-    if (result.status === "deleted") {
-      setRounds((prev) => prev.filter((r) => r.id !== round.id));
+    for (const { roundId, eventIds } of loaded.reflected) {
+      roundOpLog.round(roundId).reflect(eventIds);
     }
-  }
+  }, [loaded]);
 
   return (
     <>
@@ -125,7 +123,7 @@ function RoundCards({ initialRounds }: { initialRounds: RoundListItem[] }) {
                   <DropdownMenuItem
                     data-testid="round-delete"
                     className="text-destructive data-[highlighted]:text-destructive"
-                    onClick={() => setRoundToDelete(round)}
+                    onClick={() => startDelete(round)}
                   >
                     削除
                   </DropdownMenuItem>
@@ -136,14 +134,11 @@ function RoundCards({ initialRounds }: { initialRounds: RoundListItem[] }) {
         </ul>
       )}
 
-      <BlockingConfirmDialog
-        open={roundToDelete !== null}
-        onOpenChange={() => setRoundToDelete(null)}
-        description={`「${roundToDelete?.name}」を削除しますか？記録したスコアもすべて失われます。`}
-        onConfirm={async () => {
-          if (!roundToDelete) return;
-          return performDelete(roundToDelete);
-        }}
+      <ConfirmDialog
+        open={target !== null}
+        onOpenChange={() => setTarget(null)}
+        description={`「${target?.name}」を削除しますか？記録したスコアもすべて失われます。`}
+        onConfirm={() => target?.confirm()}
       />
     </>
   );

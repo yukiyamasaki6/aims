@@ -36,10 +36,10 @@
 ## 構成とデータの流れ
 
 - `rounds/[id]/page.tsx`: 静的な枠。`generateStaticParams`で`/rounds/_`だけをプリレンダーし（`dynamicParams = false`）、取得も`cookies()`も使わない。`/rounds/<ID>`はnext.configのrewriteで`/rounds/_`の枠へ向ける。
-- `rounds/[id]/round-detail-client.tsx`: `usePathname()`のIDで取得し、状態に応じて枠の内表示かスコアカードを出す。ラウンドの削除が未送信なら`/rounds`へ遷移する。作成が未確定なら的を背景で取得し、取得中は`ScorecardClient`へ`targetFaces`の`null`を渡す。作成が確定せずに消えたら取り直す(`use-creation-gone.ts`)。
+- `rounds/[id]/round-detail-client.tsx`: `usePathname()`のIDで取得し、状態に応じて枠の内表示かスコアカードを出す。列に削除があれば`/rounds`へ置き換えて遷移する。作成が未確定なら的を背景で取得し、取得中は`ScorecardClient`へ`targetFaces`の`null`を渡す。作成が確定せずに消えたら取り直す(`use-creation-gone.ts`)。
 - `rounds/[id]/round-detail-id.ts`: pathnameからUUIDを取り出す。UUIDでなければ`null`で、問い合わせずに見つからないとする。
 - `rounds/[id]/fetch-round-detail.ts`: ラウンド・距離・矢を1回のネスト取得、的を1回の取得で得て、`FetchResult`に分類する。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。的の取得(`fetchTargetFaces`)は、成功した一覧を端末に保存し(`rounds/_shared/reference-snapshot.ts`)、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。`fetchRoundDetail`は的を保存するが、代わりは持たず待ちは10秒のままである。
-- `rounds/[id]/load-round-detail.ts`: 取得した基準と、反映済みを除いた操作の列を返す。作成が未確定のラウンドは取得せず、作成の操作を基準にする。サーバーが効かなかったと答えた操作は反映済みとして除く。効かなかった操作または項目がある応答を受けたときは、`use-round-op-stack.ts`がこの関数で取り直し、基準を差し替える。
+- `rounds/[id]/load-round-detail.ts`: 取得した基準と、反映済みを除いた操作の列を返す。列は`roundOpLog.load`で読み、最初の読み込みで列に削除があれば、取得せずに削除済みを返す(作成が未確定でも同じ)。取得の後に合わせた列に削除があるときも、削除済みを返す。作成が未確定のラウンドは取得せず、作成の操作を基準にする。サーバーが効かなかったと答えた操作は反映済みとして除く。効かなかった操作または項目がある応答を受けたときは、`use-round-op-stack.ts`がこの関数で取り直し、基準を差し替える。
 - `rounds/[id]/round-tables.ts`、`round-op-apply.ts`、`use-round-op-stack.ts`: サーバーのテーブルの形の基準(`RoundTables`)、操作の列を重ねる導出(RPCごとの処理)、画面の状態を導く`selectRoundState`と、常駐のハブの送信器を購読するフック。`scorecard-client.tsx`は`state`(保存が完了した操作から導いた値)を`useRoundOpStack`から受ける。
 - `rounds/[id]/round-detail-frame.tsx`、`back-to-list-link.tsx`: 枠と「一覧へ戻る」リンク。
 - `rounds/[id]/scorecard-client.tsx`（Client Component）: `state`(保存が完了した操作から導いた`shots`と距離の構成)を`useRoundOpStack`から受け、表示を組み立てる。

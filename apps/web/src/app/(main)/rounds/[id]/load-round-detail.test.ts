@@ -4,6 +4,13 @@ import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getLocalIdentity } from "@/features/auth/local-identity";
 import type { Database } from "@/types/supabase";
+import { roundStreamId } from "../_shared/round-op-log";
+import { roundOpStore } from "../_shared/round-op-store";
+import { roundCreated } from "../_shared/round-op-test-helpers";
+import {
+  type SyncOperation,
+  upgradeLegacyOperation,
+} from "../_shared/sync-events";
 import {
   type FetchedRoundDetail,
   type fetchRoundDetail,
@@ -11,11 +18,8 @@ import {
 } from "./fetch-round-detail";
 import { loadRoundDetail } from "./load-round-detail";
 import { applyOperations } from "./round-op-apply";
-import { roundOpStore, roundStreamId } from "./round-op-store";
-import { roundCreated } from "./round-op-test-helpers";
 import { roundTablesFromServer, selectRoundState } from "./round-tables";
 import { findCurrentPosition } from "./scorecard-input";
-import type { SyncOperation } from "./sync-events";
 
 // サーバーからの取得は別のテストで確かめるため、取得関数を境界としてモックする。
 const fetcher = vi.hoisted(() => ({ fetchRoundDetail: vi.fn() }));
@@ -26,6 +30,28 @@ vi.mock("./fetch-round-detail", async (importOriginal) => ({
 const fetchDetail = vi.mocked<typeof fetchRoundDetail>(
   fetcher.fetchRoundDetail,
 );
+
+// 列への入り口は境界としてモックし、読み込みは同じユーザーのIndexedDBから読む(ハブの起動を要さない)。
+vi.mock("../_shared/round-op-log", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../_shared/round-op-log")>()),
+  roundOpLog: {
+    // 実物と同じく、読めないときは空にする。
+    load: vi.fn(async (roundId: string) => {
+      try {
+        const stored = await roundOpStore.loadStream(
+          roundStreamId(roundId),
+          getLocalIdentity(),
+        );
+        return stored.map((entry) => ({
+          ...entry,
+          operation: upgradeLegacyOperation(entry.operation),
+        }));
+      } catch {
+        return [];
+      }
+    }),
+  },
+}));
 
 const supabase = {} as SupabaseClient<Database>;
 
@@ -107,7 +133,7 @@ describe("loadRoundDetail", () => {
         entries: [],
         reflected: [],
         targetFaces: [],
-        leaveRound: false,
+        deleted: false,
         pendingCreationEventId: null,
       },
     });
@@ -124,7 +150,8 @@ describe("loadRoundDetail", () => {
     const result = await loadRoundDetail(supabase, "round-1");
 
     // Then: 列にそのまま残り、重ねると最後の記録が残る
-    if (result.status !== "ok") throw new Error("not ok");
+    if (result.status !== "ok" || result.data.deleted)
+      throw new Error("not ok");
     expect(result.data.entries.map((e) => e.eventId)).toEqual([
       "e1",
       "e2",
@@ -161,7 +188,8 @@ describe("loadRoundDetail", () => {
       const result = await loadRoundDetail(supabase, "round-1");
 
       // Then
-      if (result.status !== "ok") throw new Error("not ok");
+      if (result.status !== "ok" || result.data.deleted)
+        throw new Error("not ok");
       expect(result.data.entries).toEqual([]);
       expect(result.data.reflected).toEqual(["e1"]);
     });
@@ -179,7 +207,8 @@ describe("loadRoundDetail", () => {
       const result = await loadRoundDetail(supabase, "round-1");
 
       // Then
-      if (result.status !== "ok") throw new Error("not ok");
+      if (result.status !== "ok" || result.data.deleted)
+        throw new Error("not ok");
       expect(result.data.entries.map((e) => e.eventId)).toEqual(["e1"]);
       expect(result.data.reflected).toEqual([]);
     });
@@ -208,7 +237,8 @@ describe("loadRoundDetail", () => {
       const result = await loadRoundDetail(supabase, "round-1");
 
       // Then
-      if (result.status !== "ok") throw new Error("not ok");
+      if (result.status !== "ok" || result.data.deleted)
+        throw new Error("not ok");
       expect(result.data.entries.map((e) => e.eventId)).toEqual(["e1"]);
       expect(result.data.reflected).toEqual(["e2"]);
     });
@@ -227,7 +257,8 @@ describe("loadRoundDetail", () => {
       const result = await loadRoundDetail(supabase, "round-1");
 
       // Then
-      if (result.status !== "ok") throw new Error("not ok");
+      if (result.status !== "ok" || result.data.deleted)
+        throw new Error("not ok");
       expect(result.data.entries.map((e) => e.eventId)).toEqual(["e1"]);
     });
 
@@ -240,7 +271,8 @@ describe("loadRoundDetail", () => {
       const result = await loadRoundDetail(supabase, "round-1");
 
       // Then
-      if (result.status !== "ok") throw new Error("not ok");
+      if (result.status !== "ok" || result.data.deleted)
+        throw new Error("not ok");
       expect(result.data.entries).toEqual([]);
       expect(result.data.reflected).toEqual(["e1"]);
     });
@@ -260,23 +292,19 @@ describe("loadRoundDetail", () => {
       const result = await loadRoundDetail(supabase, "round-1");
 
       // Then
-      if (result.status !== "ok") throw new Error("not ok");
+      if (result.status !== "ok" || result.data.deleted)
+        throw new Error("not ok");
       expect(result.data.reflected).toEqual(["e1"]);
     });
 
-    it("ラウンドの削除は、取得での確認ができないため、常に列へ重ねる", async () => {
-      // Given: 確定したラウンドの削除
+    it("確定済みのラウンドの削除が列にあれば、取得せずに削除済みを返す", async () => {
       await save({ type: "round.disabled", eventId: "e1", roundId: "round-1" });
       await roundOpStore.ack("e1", 5, true, null);
 
-      // When
       const result = await loadRoundDetail(supabase, "round-1");
 
-      // Then
-      expect(result).toMatchObject({
-        status: "ok",
-        data: { leaveRound: true, reflected: [] },
-      });
+      expect(result).toEqual({ status: "ok", data: { deleted: true } });
+      expect(fetchDetail).not.toHaveBeenCalled();
     });
   });
 
@@ -291,7 +319,8 @@ describe("loadRoundDetail", () => {
 
       // Then
       expect(fetchDetail).not.toHaveBeenCalled();
-      if (result.status !== "ok") throw new Error("not ok");
+      if (result.status !== "ok" || result.data.deleted)
+        throw new Error("not ok");
       expect(result.data.pendingCreationEventId).toBe("e-round-created");
       expect(result.data.base.round.config).toEqual({
         name: "",
@@ -306,19 +335,16 @@ describe("loadRoundDetail", () => {
       ]);
       expect(result.data.targetFaces).toEqual([]);
       expect(result.data.reflected).toEqual([]);
-      expect(result.data.leaveRound).toBe(false);
     });
 
-    it("作成の後にラウンドの削除が列にあれば、leaveRoundを立てる", async () => {
+    it("作成の後にラウンドの削除が列にあれば、取得せずに削除済みを返す", async () => {
       await save(roundCreated());
       await save({ type: "round.disabled", eventId: "e2", roundId: "round-1" });
 
       const result = await loadRoundDetail(supabase, "round-1");
 
-      expect(result).toMatchObject({
-        status: "ok",
-        data: { leaveRound: true, pendingCreationEventId: "e-round-created" },
-      });
+      expect(result).toEqual({ status: "ok", data: { deleted: true } });
+      expect(fetchDetail).not.toHaveBeenCalled();
     });
 
     it("作成が確定済みなら、サーバーを取得し、作成を反映済みとして扱う", async () => {
@@ -331,7 +357,8 @@ describe("loadRoundDetail", () => {
 
       // Then
       expect(fetchDetail).toHaveBeenCalledWith(supabase, "round-1");
-      if (result.status !== "ok") throw new Error("not ok");
+      if (result.status !== "ok" || result.data.deleted)
+        throw new Error("not ok");
       expect(result.data.pendingCreationEventId).toBeNull();
       expect(result.data.reflected).toEqual(["e-round-created"]);
       expect(result.data.base.round.config).toEqual(server.roundConfig);
@@ -367,7 +394,8 @@ describe("loadRoundDetail", () => {
       const result = await loadRoundDetail(supabase, "round-1");
 
       // Then
-      if (result.status !== "ok") throw new Error("not ok");
+      if (result.status !== "ok" || result.data.deleted)
+        throw new Error("not ok");
       expect(result.data.entries.map((e) => e.operation)).toEqual([
         {
           type: "round.updated",
@@ -394,13 +422,36 @@ describe("loadRoundDetail", () => {
     });
   });
 
-  it("ラウンドの削除が列にあれば、leaveRoundを立て、それ以降の操作は重ねない", async () => {
+  it("未確定のラウンドの削除が列にあれば、取得せずに削除済みを返す", async () => {
     await save({ type: "round.disabled", eventId: "e1", roundId: "round-1" });
     await save({ type: "distance.disabled", eventId: "e2", distanceId: "d-a" });
 
     const result = await loadRoundDetail(supabase, "round-1");
 
-    expect(result).toMatchObject({ status: "ok", data: { leaveRound: true } });
+    expect(result).toEqual({ status: "ok", data: { deleted: true } });
+    expect(fetchDetail).not.toHaveBeenCalled();
+  });
+
+  it("取得の間に削除が追記されたら、削除済みを返す", async () => {
+    fetchDetail.mockImplementationOnce(async () => {
+      await save({ type: "round.disabled", eventId: "e1", roundId: "round-1" });
+      return { status: "ok", data: server };
+    });
+
+    const result = await loadRoundDetail(supabase, "round-1");
+
+    expect(result).toEqual({ status: "ok", data: { deleted: true } });
+  });
+
+  it("別のユーザーのラウンドの削除は影響しない", async () => {
+    await save(
+      { type: "round.disabled", eventId: "e1", roundId: "round-1" },
+      { userId: "other-user" },
+    );
+
+    const result = await loadRoundDetail(supabase, "round-1");
+
+    expect(result).toMatchObject({ status: "ok", data: { deleted: false } });
   });
 
   it("重ねた後の状態から、最初の未記録のマスが決まる", async () => {
@@ -423,7 +474,8 @@ describe("loadRoundDetail", () => {
     const result = await loadRoundDetail(supabase, "round-1");
 
     // Then: 全マスが記録済みとなり、選択するマスは無い(重ねる前は2本目が選ばれる)
-    if (result.status !== "ok") throw new Error("not ok");
+    if (result.status !== "ok" || result.data.deleted)
+      throw new Error("not ok");
     const state = applyOperations(
       result.data.base,
       result.data.entries.map((e) => ({
@@ -459,7 +511,8 @@ describe("loadRoundDetail", () => {
       const result = await loadRoundDetail(supabase, "round-1");
 
       // Then: 取得は反映前のため、列へ重ねる
-      if (result.status !== "ok") throw new Error("not ok");
+      if (result.status !== "ok" || result.data.deleted)
+        throw new Error("not ok");
       expect(result.data.entries.map((e) => e.eventId)).toEqual(["e1"]);
     });
 
@@ -471,7 +524,8 @@ describe("loadRoundDetail", () => {
 
       const result = await loadRoundDetail(supabase, "round-1");
 
-      if (result.status !== "ok") throw new Error("not ok");
+      if (result.status !== "ok" || result.data.deleted)
+        throw new Error("not ok");
       expect(result.data.entries.map((e) => e.eventId)).toEqual(["e1"]);
     });
 
@@ -490,7 +544,8 @@ describe("loadRoundDetail", () => {
       const result = await loadRoundDetail(supabase, "round-1");
 
       // Then
-      if (result.status !== "ok") throw new Error("not ok");
+      if (result.status !== "ok" || result.data.deleted)
+        throw new Error("not ok");
       expect(result.data.entries.map((e) => e.eventId)).toEqual([
         "e1",
         "e2",
@@ -522,7 +577,7 @@ describe("loadRoundDetail", () => {
 
     await expect(loadRoundDetail(supabase, "round-1")).resolves.toMatchObject({
       status: "ok",
-      data: { entries: [], reflected: [], leaveRound: false },
+      data: { deleted: false, entries: [], reflected: [] },
     });
   });
 });

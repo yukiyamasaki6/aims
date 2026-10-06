@@ -8,9 +8,9 @@ const fake = vi.hoisted(() => ({
   items: [] as { eventId: string; status: string }[],
   listeners: new Set<() => void>(),
 }));
-vi.mock("./round-op-hub", () => ({
-  roundOpHub: {
-    acquire: () => ({
+vi.mock("../_shared/round-op-log", () => ({
+  roundOpLog: {
+    round: () => ({
       getSnapshot: () => ({ items: fake.items }),
       subscribe: (listener: () => void) => {
         fake.listeners.add(listener);

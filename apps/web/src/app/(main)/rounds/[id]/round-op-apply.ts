@@ -1,8 +1,8 @@
+import type { DistanceChanges, SyncOperation } from "../_shared/sync-events";
 import type { RoundConfig } from "./round-config";
 import type { DistanceRow, RoundTables, ShotRow } from "./round-tables";
 import { type ScoringTargetFace, shotFitsDistance } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
-import type { DistanceChanges, SyncOperation } from "./sync-events";
 
 type Op<T extends SyncOperation["type"]> = Extract<SyncOperation, { type: T }>;
 

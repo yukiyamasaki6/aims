@@ -3,17 +3,18 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getLocalIdentity } from "@/features/auth/local-identity";
+import { roundOpHub } from "../_shared/round-op-hub";
+import { roundOpLog, roundStreamId } from "../_shared/round-op-log";
+import { roundOpStore } from "../_shared/round-op-store";
+import { roundUpdated, shotRecorded } from "../_shared/round-op-test-helpers";
+import { sendRoundBatch } from "../_shared/round-op-transport";
 import { loadRoundDetail } from "./load-round-detail";
-import { roundOpHub } from "./round-op-hub";
-import { roundOpStore, roundStreamId } from "./round-op-store";
-import { roundUpdated, shotRecorded } from "./round-op-test-helpers";
-import { sendRoundBatch } from "./round-op-transport";
 import { roundTablesFromServer } from "./round-tables";
 import { useRoundOpStack } from "./use-round-op-stack";
 
 vi.mock("./load-round-detail", () => ({ loadRoundDetail: vi.fn() }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: vi.fn(() => ({})) }));
-vi.mock("./round-op-transport", () => ({ sendRoundBatch: vi.fn() }));
+vi.mock("../_shared/round-op-transport", () => ({ sendRoundBatch: vi.fn() }));
 const send = vi.mocked(sendRoundBatch);
 const reload = vi.mocked(loadRoundDetail);
 
@@ -193,9 +194,7 @@ describe("useRoundOpStack", () => {
 
     // Then: 送信され、開き直した画面は同じ送信器の状態を得る
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
-    expect(roundOpHub.acquire(roundStreamId("round-1"))).toBe(
-      roundOpHub.acquire(roundStreamId("round-1")),
-    );
+    expect(roundOpLog.round("round-1")).toBe(roundOpLog.round("round-1"));
     const second = renderHook(() =>
       useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
     );
@@ -222,7 +221,7 @@ describe("useRoundOpStack", () => {
           entries: [],
           reflected: [],
           targetFaces: [],
-          leaveRound: false,
+          deleted: false,
           pendingCreationEventId: null,
         },
       });
@@ -288,7 +287,7 @@ describe("useRoundOpStack", () => {
                   entries: [],
                   reflected: [],
                   targetFaces: [],
-                  leaveRound: false,
+                  deleted: false,
                   pendingCreationEventId: null,
                 },
               });

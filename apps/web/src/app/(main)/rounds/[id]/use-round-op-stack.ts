@@ -10,13 +10,12 @@ import {
 import { isOffline } from "@/features/fetch-result/network";
 import type { SyncStatus } from "@/features/op-log/sync-types";
 import { createClient } from "@/lib/supabase/client";
-import { type LoadedRoundDetail, loadRoundDetail } from "./load-round-detail";
+import { roundOpLog } from "../_shared/round-op-log";
+import type { SyncOperation } from "../_shared/sync-events";
+import { type LoadedRound, loadRoundDetail } from "./load-round-detail";
 import { applyOperations } from "./round-op-apply";
-import { roundOpHub } from "./round-op-hub";
-import { roundStreamId } from "./round-op-store";
 import { type RoundState, selectRoundState } from "./round-tables";
 import type { ScoringTargetFace } from "./scorecard-scoring";
-import type { SyncOperation } from "./sync-events";
 
 export type RoundOpStack = {
   // サーバーの状態へ操作の列を重ねた、画面の状態。
@@ -31,7 +30,7 @@ export type RoundOpStack = {
 // 効かなかった操作または項目がある応答を受けたときは、基準を取り直す。
 export function useRoundOpStack(
   roundId: string,
-  loaded: Pick<LoadedRoundDetail, "base" | "entries" | "reflected">,
+  loaded: Pick<LoadedRound, "base" | "entries" | "reflected">,
   targetFaces: ScoringTargetFace[],
 ): RoundOpStack {
   const { entries, reflected } = loaded;
@@ -39,7 +38,7 @@ export function useRoundOpStack(
   // 反映済みの列からの除去は、表示の開始時の1回だけ行う。呼び出し側が毎回新しい配列を渡しても、やり直さない。
   const reflectedRef = useRef(reflected);
   const [sync] = useState(() => {
-    const acquired = roundOpHub.acquire(roundStreamId(roundId));
+    const acquired = roundOpLog.round(roundId);
     acquired.adopt(entries, { reflected });
     return acquired;
   });
@@ -67,7 +66,8 @@ export function useRoundOpStack(
       fetching = true;
       try {
         const result = await loadRoundDetail(createClient(), roundId);
-        if (active && result.status === "ok") {
+        // 削除済みのラウンドは、基準を取り直さない。
+        if (active && result.status === "ok" && !result.data.deleted) {
           setBase(result.data.base);
           sync.reflect(result.data.reflected);
         }

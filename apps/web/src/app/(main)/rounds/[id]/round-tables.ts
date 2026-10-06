@@ -1,6 +1,6 @@
+import type { SyncOperation } from "../_shared/sync-events";
 import type { RoundConfig } from "./round-config";
 import type { Distance, Shot } from "./scorecard-types";
-import type { SyncOperation } from "./sync-events";
 
 // サーバーのテーブルの行の形。各行は削除済みの印(`disabled`)を持つ。時刻は端末が持たない。
 // rounds行。

@@ -2,28 +2,39 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "@/features/fetch-result/fetch-result";
-import { fetchRoundsList, type RoundListItem } from "./fetch-rounds-list";
+import type { RoundListItem } from "./fetch-rounds-list";
+import { type LoadedRoundsList, loadRoundsList } from "./load-rounds-list";
 import { RoundsListClient } from "./rounds-list-client";
 
-// SupabaseのSDKは外部サービスとの境界のため、セッションの取得結果とRPCの結果を任意に制御できるスタブで模す。
-// 削除の操作は、実物のSupabaseクライアントラッパーを通してこのスタブに届く。
-const supabase = vi.hoisted(() => ({
-  getSession: vi.fn(),
-  rpc: vi.fn(),
-}));
-vi.mock("@supabase/ssr", () => ({
-  createBrowserClient: () => ({
-    auth: { getSession: supabase.getSession },
-    rpc: supabase.rpc,
-  }),
+// 一覧の読み込みは別のテストで確かめるため、境界としてモックする。
+vi.mock("./load-rounds-list", () => ({ loadRoundsList: vi.fn() }));
+const load = vi.mocked(loadRoundsList);
+
+// 削除は列への入り口の先で行うため、境界としてモックする。
+const deletion = vi.hoisted(() => ({ deleteRound: vi.fn() }));
+vi.mock("./_shared/delete-round", () => deletion);
+
+// 反映済みの除去は、ラウンドごとの送信器へ渡る。
+const sync = vi.hoisted(() => ({ reflect: vi.fn(), round: vi.fn() }));
+vi.mock("./_shared/round-op-log", () => ({
+  roundOpLog: { round: sync.round },
 }));
 
-// 一覧の取得は別のテストで確かめるため、取得関数を境界としてモックする。
-vi.mock("./fetch-rounds-list", () => ({ fetchRoundsList: vi.fn() }));
-const fetchRounds = vi.mocked(fetchRoundsList);
+vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
+
+function loaded(
+  items: RoundListItem[],
+  overrides: Partial<LoadedRoundsList> = {},
+): LoadedRoundsList {
+  return { items, deleted: new Set(), reflected: [], ...overrides };
+}
 
 function fetchResolves(result: FetchResult<RoundListItem[]>) {
-  fetchRounds.mockResolvedValue(result);
+  load.mockResolvedValue(
+    result.status === "ok"
+      ? { status: "ok", data: loaded(result.data) }
+      : result,
+  );
 }
 
 const rounds: RoundListItem[] = [
@@ -41,25 +52,17 @@ async function openDeleteDialog(
   await user.click(await screen.findByTestId("round-delete"));
 }
 
-// 次のマクロタスクまで進め、その時点までに積まれたマイクロタスクを、実装の非同期処理の段数によらず全て処理する。
-// 「まだ起きていないこと」は条件が満たされるまで待つ形では確かめられないため、これで進めてから検証する。
-async function flushToMacrotask() {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
-  supabase.getSession.mockResolvedValue({
-    data: { session: { user: { id: "user-1" } } },
-  });
-  supabase.rpc.mockResolvedValue({ data: null, error: null });
+  deletion.deleteRound.mockResolvedValue(undefined);
+  sync.round.mockReturnValue({ reflect: sync.reflect });
 });
 
 describe("RoundsListClient", () => {
   describe("一覧の表示", () => {
     it("取得中は、読み込み中の表示と新規作成ボタンを表示する", () => {
       // Given: 取得が完了しない
-      fetchRounds.mockReturnValue(new Promise(() => {}));
+      load.mockReturnValue(new Promise(() => {}));
 
       // When: 一覧を表示する
       render(<RoundsListClient />);
@@ -138,25 +141,62 @@ describe("RoundsListClient", () => {
 
     it("再試行すると取得し直し、取得できた一覧を表示する", async () => {
       // Given: 1回目は通信できず、2回目は取得できる
-      fetchRounds
+      load
         .mockResolvedValueOnce({ status: "offline" })
-        .mockResolvedValueOnce({ status: "ok", data: rounds });
+        .mockResolvedValueOnce({ status: "ok", data: loaded(rounds) });
       const user = userEvent.setup();
       render(<RoundsListClient />);
       await user.click(await screen.findByRole("button", { name: "再試行" }));
 
       // Then: 取得し直して一覧を表示する
       expect(await screen.findByText("午前練習")).toBeInTheDocument();
-      expect(fetchRounds).toHaveBeenCalledTimes(2);
+      expect(load).toHaveBeenCalledTimes(2);
       expect(
         screen.queryByText("ネットワークに接続されていません"),
       ).not.toBeInTheDocument();
     });
   });
 
+  describe("端末の列", () => {
+    it("列で削除済みのラウンドを表示しない", async () => {
+      // Given: 取得結果に、端末の列で削除済みのラウンドがある
+      load.mockResolvedValue({
+        status: "ok",
+        data: loaded(rounds, { deleted: new Set(["round-1"]) }),
+      });
+
+      // When
+      render(<RoundsListClient />);
+
+      // Then
+      expect(await screen.findByText("午後練習")).toBeInTheDocument();
+      expect(screen.queryByText("午前練習")).not.toBeInTheDocument();
+    });
+
+    it("反映済みと確かめた操作を、そのラウンドの送信器から外す", async () => {
+      // Given
+      load.mockResolvedValue({
+        status: "ok",
+        data: loaded(rounds, {
+          deleted: new Set(["round-1"]),
+          reflected: [{ roundId: "round-1", eventIds: ["e1", "e2"] }],
+        }),
+      });
+
+      // When
+      render(<RoundsListClient />);
+      await screen.findByText("午後練習");
+
+      // Then
+      expect(sync.round).toHaveBeenCalledWith("round-1");
+      expect(sync.reflect).toHaveBeenCalledWith(["e1", "e2"]);
+    });
+  });
+
   describe("ラウンドの削除", () => {
-    it("確認すると、そのラウンドのdisable_roundを実行し、一覧から取り除く", async () => {
-      // Given: 2件のラウンドを表示し、1件目の削除確認を開いている
+    it("確認すると、そのラウンドを削除し、ダイアログがすぐ閉じ、一覧から取り除く", async () => {
+      // Given: 2件のラウンドを表示し、1件目の削除確認を開いている。削除の保存は終わらない
+      deletion.deleteRound.mockReturnValue(new Promise(() => {}));
       const user = userEvent.setup();
       fetchResolves({ status: "ok", data: rounds });
       render(<RoundsListClient />);
@@ -171,18 +211,17 @@ describe("RoundsListClient", () => {
       // When: 削除を確認する
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
-      // Then: そのラウンドのdisable_roundを実行し、そのラウンドだけを一覧から取り除く
+      // Then: そのラウンドを削除し、そのラウンドだけが一覧から消え、ダイアログは閉じ、スピナーとエラーは出ない
+      expect(deletion.deleteRound).toHaveBeenCalledWith("round-1");
       await waitFor(() => {
         expect(screen.queryByText("午前練習")).not.toBeInTheDocument();
       });
-      expect(supabase.rpc).toHaveBeenCalledWith("disable_round", {
-        p_round_event_id: expect.any(String),
-        p_round_id: "round-1",
-      });
       expect(screen.getByText("午後練習")).toBeInTheDocument();
+      expect(screen.queryByTestId("confirm-dialog-confirm")).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
     });
 
-    it("キャンセルすると削除確認を閉じ、何も送信しない", async () => {
+    it("キャンセルすると削除確認を閉じ、削除せず、一覧に残す", async () => {
       // Given: 削除確認を開いている
       const user = userEvent.setup();
       fetchResolves({ status: "ok", data: rounds });
@@ -192,62 +231,13 @@ describe("RoundsListClient", () => {
 
       // When: キャンセルする
       await user.click(screen.getByTestId("confirm-dialog-cancel"));
-      await flushToMacrotask();
 
-      // Then: 削除確認を閉じ、disable_roundを呼ばず、一覧に残す
-      expect(
-        screen.queryByText(
-          "「午前練習」を削除しますか？記録したスコアもすべて失われます。",
-        ),
-      ).not.toBeInTheDocument();
-      expect(supabase.rpc).not.toHaveBeenCalled();
-      expect(screen.getByText("午前練習")).toBeInTheDocument();
-    });
-
-    it("削除できなかった場合はエラーを表示し、一覧からは取り除かない", async () => {
-      // Given: disable_roundがエラーを返す状態で、削除確認を開いている
-      supabase.rpc.mockResolvedValue({
-        data: null,
-        error: { message: "権限がありません。" },
+      // Then
+      await waitFor(() => {
+        expect(screen.queryByTestId("confirm-dialog-cancel")).toBeNull();
       });
-      const user = userEvent.setup();
-      fetchResolves({ status: "ok", data: rounds });
-      render(<RoundsListClient />);
-      await screen.findByText("午前練習");
-      await openDeleteDialog(user, "午前練習");
-
-      // When: 削除を確認する
-      await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-      // Then: エラーを表示し、一覧に残す
-      expect(await screen.findByText("権限がありません。")).toBeInTheDocument();
+      expect(deletion.deleteRound).not.toHaveBeenCalled();
       expect(screen.getByText("午前練習")).toBeInTheDocument();
-    });
-
-    it("セッション確認中にアンマウントされた場合、disable_roundを呼ばない", async () => {
-      // Given: セッションの確認が完了しないまま、削除を確認している
-      let resolveSession: (value: {
-        data: { session: { user: { id: string } } | null };
-      }) => void = () => {};
-      supabase.getSession.mockReturnValue(
-        new Promise((resolve) => {
-          resolveSession = resolve;
-        }),
-      );
-      const user = userEvent.setup();
-      fetchResolves({ status: "ok", data: rounds });
-      const { unmount } = render(<RoundsListClient />);
-      await screen.findByText("午前練習");
-      await openDeleteDialog(user, "午前練習");
-      await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-      // When: アンマウントしてから、セッションの確認が完了する
-      unmount();
-      resolveSession({ data: { session: { user: { id: "user-1" } } } });
-      await flushToMacrotask();
-
-      // Then: disable_roundを呼ばない
-      expect(supabase.rpc).not.toHaveBeenCalled();
     });
   });
 });

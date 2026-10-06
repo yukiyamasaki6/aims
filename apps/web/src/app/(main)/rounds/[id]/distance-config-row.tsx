@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../_shared/round-constants";
+import type { SyncOperation } from "../_shared/sync-events";
 import {
   lookupTargetFace,
   TargetFaceInfo,
@@ -22,7 +23,6 @@ import {
   validateDistanceDraft,
 } from "./distance-config";
 import { FILTER_ALL } from "./distance-config-constants";
-import type { SyncOperation } from "./sync-events";
 
 export type TargetFaceOption = {
   id: string;

@@ -7,13 +7,13 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { labelOf } from "../_shared/option-label";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../_shared/round-constants";
+import type { SyncOperation } from "../_shared/sync-events";
 import {
   buildRoundUpdatedOperation,
   type RoundConfig,
   type RoundConfigErrors,
   validateRoundConfig,
 } from "./round-config";
-import type { SyncOperation } from "./sync-events";
 
 function RequiredMark() {
   return (

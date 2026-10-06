@@ -11,7 +11,7 @@ const hub = vi.hoisted(() => ({
   handleOffline: vi.fn(),
   getUserId: vi.fn<() => string | null>(),
 }));
-vi.mock("./(main)/rounds/[id]/round-op-hub", () => ({ roundOpHub: hub }));
+vi.mock("./(main)/rounds/_shared/round-op-hub", () => ({ roundOpHub: hub }));
 vi.mock("@/features/auth/local-identity", () => ({
   getLocalIdentity: () => "user-1",
 }));
