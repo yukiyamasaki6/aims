@@ -4,11 +4,11 @@ import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getLocalIdentity } from "@/features/auth/local-identity";
 import { loadRoundDetail } from "./load-round-detail";
-import type { RoundState } from "./round-op-apply";
 import { roundOpHub } from "./round-op-hub";
 import { roundOpStore, roundStreamId } from "./round-op-store";
 import { roundUpdated, shotRecorded } from "./round-op-test-helpers";
 import { sendRoundBatch } from "./round-op-transport";
+import { roundTablesFromServer } from "./round-tables";
 import { useRoundOpStack } from "./use-round-op-stack";
 
 vi.mock("./load-round-detail", () => ({ loadRoundDetail: vi.fn() }));
@@ -32,7 +32,7 @@ const ineffective = {
   reason: "UNFIT",
 };
 
-const base: RoundState = {
+const base = roundTablesFromServer({
   roundConfig: {
     name: "元",
     roundDate: "2026-09-01",
@@ -51,8 +51,7 @@ const base: RoundState = {
     },
   ],
   shots: [],
-  roundDisabled: false,
-};
+});
 
 function setOnline(online: boolean) {
   Object.defineProperty(window.navigator, "onLine", {
@@ -80,7 +79,7 @@ describe("useRoundOpStack", () => {
       useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
     );
 
-    expect(result.current.state.roundConfig).toEqual(base.roundConfig);
+    expect(result.current.state.roundConfig).toEqual(base.round.config);
     expect(result.current.status).toBe("synced");
     expect(send).not.toHaveBeenCalled();
   });
@@ -141,7 +140,7 @@ describe("useRoundOpStack", () => {
         [],
       ),
     );
-    expect(result.current.state.roundConfig).toEqual(base.roundConfig);
+    expect(result.current.state.roundConfig).toEqual(base.round.config);
 
     await waitFor(async () => {
       expect(
@@ -205,9 +204,12 @@ describe("useRoundOpStack", () => {
   });
 
   describe("効かなかった操作または項目がある応答", () => {
-    const refreshed: RoundState = {
+    const refreshed = {
       ...base,
-      roundConfig: { ...base.roundConfig, name: "他端末" },
+      round: {
+        ...base.round,
+        config: { ...base.round.config, name: "他端末" },
+      },
     };
 
     it("基準を取り直し、画面の状態へ反映する", async () => {

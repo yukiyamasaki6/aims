@@ -1,7 +1,7 @@
 import type { DistanceConfig } from "./distance-config";
 import { compareDistancePosition } from "./scorecard-scoring";
-import type { Distance, Shot } from "./scorecard-types";
-import type { DistanceChanges, SyncOperation } from "./sync-events";
+import type { Distance } from "./scorecard-types";
+import type { SyncOperation } from "./sync-events";
 
 // 10点的（アウトドア・122cm）。
 // 距離が1件も無い状態で追加する距離の的として使う（e2eのcreate-round APIヘルパーが使う既定の的と同じもの）。
@@ -42,26 +42,6 @@ export function distanceToAdd(
   };
 }
 
-// 指定した距離の、差分に含まれる項目だけを置き換える。
-export function updateDistance(
-  distances: Distance[],
-  distanceId: string,
-  changes: DistanceChanges,
-): Distance[] {
-  return distances.map((d) => {
-    if (d.id !== distanceId) return d;
-    const next = { ...d };
-    if (changes.distance !== undefined) next.distance = changes.distance;
-    if (changes.isMarked !== undefined) next.is_marked = changes.isMarked;
-    if (changes.config) {
-      next.total_ends = changes.config.totalEnds;
-      next.arrows_per_end = changes.config.arrowsPerEnd;
-      next.target_face_id = changes.config.targetFaceId;
-    }
-    return next;
-  });
-}
-
 // 設定の保存で、その距離のマスの構成または得点判定が変わるか。
 // 距離（m）とMarked/Unmarkedはマスの構成にも得点判定にも影響しないため、変わらない扱いとする。
 // 変更前の距離が見つからない場合は、変わったものとして扱う。
@@ -76,16 +56,4 @@ export function changesDistanceStructure(
     previous.arrows_per_end !== config.arrowsPerEnd ||
     previous.target_face_id !== config.targetFaceId
   );
-}
-
-export function removeDistance(
-  distances: Distance[],
-  distanceId: string,
-): Distance[] {
-  return distances.filter((d) => d.id !== distanceId);
-}
-
-// 削除した距離の記録を取り除く。
-export function removeDistanceShots(shots: Shot[], distanceId: string): Shot[] {
-  return shots.filter((s) => s.distance_id !== distanceId);
 }

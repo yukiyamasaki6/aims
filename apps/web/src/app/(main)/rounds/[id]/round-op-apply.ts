@@ -1,22 +1,10 @@
 import type { RoundConfig } from "./round-config";
-import {
-  removeDistance,
-  removeDistanceShots,
-  updateDistance,
-} from "./scorecard-distances";
-import { replaceShot } from "./scorecard-input";
+import type { DistanceRow, RoundTables, ShotRow } from "./round-tables";
 import { type ScoringTargetFace, shotFitsDistance } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
 import type { DistanceChanges, SyncOperation } from "./sync-events";
 
-// 画面の状態。サーバーから得た基準に操作の列を重ねて導出する。
-export type RoundState = {
-  roundConfig: RoundConfig;
-  distances: Distance[];
-  shots: Shot[];
-  // ラウンドの削除が列にあるか。画面は一覧へ戻る。
-  roundDisabled: boolean;
-};
+type Op<T extends SyncOperation["type"]> = Extract<SyncOperation, { type: T }>;
 
 // 操作と、サーバーが確定した効いた項目。
 // confirmedFieldsは、未確定ならundefined、確定済みで全項目が効いたならnull、一部だけ効いたなら効いた項目(RPCのキー名)。
@@ -25,18 +13,16 @@ export type AppliedOperation = {
   confirmedFields: string[] | null | undefined;
 };
 
-// 確定済みの操作の項目を効かせるか。未確定の操作は、規則で判定する。
-function isConfirmed(confirmedFields: AppliedOperation["confirmedFields"]) {
-  return confirmedFields !== undefined;
-}
+type Confirmed = AppliedOperation["confirmedFields"];
 
-function fieldApplies(
-  confirmedFields: AppliedOperation["confirmedFields"],
-  field: string,
-): boolean {
-  return (
-    confirmedFields === null || (confirmedFields?.includes(field) ?? false)
-  );
+// 確定済みの操作で効く項目。差分に含まれるキーのうち、サーバーが効かせたものだけ。
+// 未確定(undefined)は呼び出し側が規則で判定する。
+function appliedFields(
+  confirmedFields: Confirmed,
+  keys: string[],
+): Set<string> {
+  if (confirmedFields === null) return new Set(keys);
+  return new Set(keys.filter((key) => confirmedFields?.includes(key)));
 }
 
 function shotFits(
@@ -52,73 +38,125 @@ function shotFits(
   );
 }
 
-// 作成の操作が表す、作成直後のラウンドの状態。
-export function roundStateFromCreated(
-  operation: Extract<SyncOperation, { type: "round.created" }>,
-): RoundState {
+function isSameShotCell(
+  shot: ShotRow,
+  cell: { distanceId: string; endNumber: number; arrowNumber: number },
+): boolean {
+  return (
+    shot.distance_id === cell.distanceId &&
+    shot.end_number === cell.endNumber &&
+    shot.arrow_number === cell.arrowNumber
+  );
+}
+
+function replaceDistance(tables: RoundTables, next: DistanceRow): RoundTables {
   return {
-    roundConfig: {
-      name: operation.name,
-      roundDate: operation.roundDate,
-      format: operation.format,
-      bowType: operation.bowType,
-    },
-    distances: operation.distances.map((d) => ({
-      id: d.id,
-      position_key: d.positionKey,
-      distance: d.distance,
-      total_ends: d.totalEnds,
-      arrows_per_end: d.arrowsPerEnd,
-      target_face_id: d.targetFaceId,
-      is_marked: d.isMarked,
-    })),
-    shots: [],
-    roundDisabled: false,
+    ...tables,
+    distances: tables.distances.map((d) => (d.id === next.id ? next : d)),
   };
 }
 
-function applyRoundUpdated(
-  state: RoundState,
-  operation: Extract<SyncOperation, { type: "round.updated" }>,
-  confirmedFields: AppliedOperation["confirmedFields"],
-): RoundState {
-  const { changes } = operation;
-  const confirmed = isConfirmed(confirmedFields);
-  const next = { ...state.roundConfig };
-  if (
-    changes.name !== undefined &&
-    (!confirmed || fieldApplies(confirmedFields, "name"))
-  ) {
-    next.name = changes.name;
-  }
-  if (
-    changes.roundDate !== undefined &&
-    (!confirmed || fieldApplies(confirmedFields, "round_date"))
-  ) {
-    next.roundDate = changes.roundDate;
-  }
+// update_round。効く項目は、確定済みはサーバーが返した項目、未確定は規則の判定。書き込みは共通。
+function judgeRoundFields(
+  tables: RoundTables,
+  changes: Op<"round.updated">["changes"],
+): Set<string> {
+  const fields = new Set<string>();
+  if (changes.name !== undefined) fields.add("name");
+  if (changes.roundDate !== undefined) fields.add("round_date");
+  if (changes.bowType !== undefined) fields.add("bow_type");
   if (changes.format !== undefined) {
     // 決定4: Unmarkedの距離があるときは、フィールド以外へ変えない。
     const blocked =
-      changes.format !== "field" && state.distances.some((d) => !d.is_marked);
-    const applies = confirmed
-      ? fieldApplies(confirmedFields, "format")
-      : !blocked;
-    if (applies) next.format = changes.format;
+      changes.format !== "field" &&
+      tables.distances.some((d) => !d.disabled && !d.is_marked);
+    if (!blocked) fields.add("format");
   }
-  if (
-    changes.bowType !== undefined &&
-    (!confirmed || fieldApplies(confirmedFields, "bow_type"))
-  ) {
-    next.bowType = changes.bowType;
-  }
-  return { ...state, roundConfig: next };
+  return fields;
 }
 
-// 構成を変えるとき、新しい構成で無効な矢があるか。
+function updateRound(
+  tables: RoundTables,
+  operation: Op<"round.updated">,
+  confirmedFields: Confirmed,
+): RoundTables {
+  const { changes } = operation;
+  const keys = Object.entries({
+    name: changes.name,
+    round_date: changes.roundDate,
+    format: changes.format,
+    bow_type: changes.bowType,
+  })
+    .filter(([, value]) => value !== undefined)
+    .map(([key]) => key);
+  const fields =
+    confirmedFields === undefined
+      ? judgeRoundFields(tables, changes)
+      : appliedFields(confirmedFields, keys);
+  const next: RoundConfig = { ...tables.round.config };
+  if (fields.has("name") && changes.name !== undefined) {
+    next.name = changes.name;
+  }
+  if (fields.has("round_date") && changes.roundDate !== undefined) {
+    next.roundDate = changes.roundDate;
+  }
+  if (fields.has("format") && changes.format !== undefined) {
+    next.format = changes.format;
+  }
+  if (fields.has("bow_type") && changes.bowType !== undefined) {
+    next.bowType = changes.bowType;
+  }
+  return { ...tables, round: { ...tables.round, config: next } };
+}
+
+// disable_round。
+function disableRound(tables: RoundTables): RoundTables {
+  return { ...tables, round: { ...tables.round, disabled: true } };
+}
+
+// create_distance。同じIDまたは同じ位置(削除済みを含む)の行があれば効かない。
+function createDistance(
+  tables: RoundTables,
+  operation: Op<"distance.created">,
+  confirmedFields: Confirmed,
+): RoundTables {
+  if (
+    tables.distances.some(
+      (d) => d.id === operation.id || d.position_key === operation.positionKey,
+    )
+  ) {
+    return tables;
+  }
+  // 決定4: Unmarkedの距離は、フィールドのラウンドだけに作れる。
+  if (
+    confirmedFields === undefined &&
+    !operation.isMarked &&
+    tables.round.config.format !== "field"
+  ) {
+    return tables;
+  }
+  return {
+    ...tables,
+    distances: [
+      ...tables.distances,
+      {
+        id: operation.id,
+        position_key: operation.positionKey,
+        distance: operation.distance,
+        total_ends: operation.totalEnds,
+        arrows_per_end: operation.arrowsPerEnd,
+        target_face_id: operation.targetFaceId,
+        is_marked: operation.isMarked,
+        disabled: false,
+      },
+    ],
+  };
+}
+
+// 構成を変えるとき、新しい構成で無効な表示中の矢があるか。
 function hasShotInvalidUnder(
-  state: RoundState,
-  distance: Distance,
+  tables: RoundTables,
+  distance: DistanceRow,
   config: NonNullable<DistanceChanges["config"]>,
   faces: ScoringTargetFace[],
 ): boolean {
@@ -128,165 +166,176 @@ function hasShotInvalidUnder(
     arrows_per_end: config.arrowsPerEnd,
     target_face_id: config.targetFaceId,
   };
-  return state.shots.some(
-    (shot) => shot.distance_id === distance.id && !shotFits(next, shot, faces),
+  return tables.shots.some(
+    (shot) =>
+      !shot.disabled &&
+      shot.distance_id === distance.id &&
+      !shotFits(next, shot, faces),
   );
 }
 
-function applyDistanceUpdated(
-  state: RoundState,
-  operation: Extract<SyncOperation, { type: "distance.updated" }>,
-  confirmedFields: AppliedOperation["confirmedFields"],
+// update_distanceの規則の判定。is_marked、distance、configの順に、先に効いた項目を重ねた値で判定する。
+function judgeDistanceFields(
+  tables: RoundTables,
+  target: DistanceRow,
+  changes: DistanceChanges,
   faces: ScoringTargetFace[],
-): RoundState {
-  const target = state.distances.find((d) => d.id === operation.distanceId);
-  if (!target) return state;
-  const { changes } = operation;
-  const confirmed = isConfirmed(confirmedFields);
-  // 同じ操作の先に効いた項目を重ねた値で、後の項目を判定する(Marked/Unmarked、距離(m)、構成の順)。
-  const effective: DistanceChanges = {};
+): Set<string> {
+  const fields = new Set<string>();
   let isMarked = target.is_marked;
-  let distance = target.distance;
-
   if (changes.isMarked !== undefined) {
+    // Markedへ変えるときは、同じ操作の距離(m)があればその値で判定する。
+    const distance =
+      changes.distance !== undefined ? changes.distance : target.distance;
     const blocked = changes.isMarked
       ? distance === null
-      : state.roundConfig.format !== "field";
-    const applies = confirmed
-      ? fieldApplies(confirmedFields, "is_marked")
-      : !blocked;
-    if (applies) {
-      effective.isMarked = changes.isMarked;
+      : tables.round.config.format !== "field";
+    if (!blocked) {
+      fields.add("is_marked");
       isMarked = changes.isMarked;
     }
   }
   if (changes.distance !== undefined) {
     const blocked = changes.distance === null && isMarked;
-    const applies = confirmed
-      ? fieldApplies(confirmedFields, "distance")
-      : !blocked;
-    if (applies) {
-      effective.distance = changes.distance;
-      distance = changes.distance;
-    }
+    if (!blocked) fields.add("distance");
   }
-  let dropInvalidShots = false;
-  if (changes.config) {
-    const applies = confirmed
-      ? fieldApplies(confirmedFields, "config")
-      : !hasShotInvalidUnder(state, target, changes.config, faces);
-    if (applies) {
-      effective.config = changes.config;
-      dropInvalidShots = confirmed;
-    }
+  if (
+    changes.config &&
+    !hasShotInvalidUnder(tables, target, changes.config, faces)
+  ) {
+    fields.add("config");
   }
+  return fields;
+}
 
-  const distances = updateDistance(state.distances, target.id, effective);
-  if (!dropInvalidShots) return { ...state, distances };
-  const updated = distances.find((d) => d.id === target.id);
+// update_distance。矢の行は変えない(サーバーは構成の変更で矢を取り除かない)。
+function updateDistance(
+  tables: RoundTables,
+  operation: Op<"distance.updated">,
+  confirmedFields: Confirmed,
+  faces: ScoringTargetFace[],
+): RoundTables {
+  const target = tables.distances.find((d) => d.id === operation.distanceId);
+  if (!target || target.disabled) return tables;
+  const { changes } = operation;
+  const keys: string[] = [];
+  if (changes.isMarked !== undefined) keys.push("is_marked");
+  if (changes.distance !== undefined) keys.push("distance");
+  if (changes.config) keys.push("config");
+  const fields =
+    confirmedFields === undefined
+      ? judgeDistanceFields(tables, target, changes, faces)
+      : appliedFields(confirmedFields, keys);
+  const next: DistanceRow = { ...target };
+  if (fields.has("is_marked") && changes.isMarked !== undefined) {
+    next.is_marked = changes.isMarked;
+  }
+  if (fields.has("distance") && changes.distance !== undefined) {
+    next.distance = changes.distance;
+  }
+  if (fields.has("config") && changes.config) {
+    next.total_ends = changes.config.totalEnds;
+    next.arrows_per_end = changes.config.arrowsPerEnd;
+    next.target_face_id = changes.config.targetFaceId;
+  }
+  return replaceDistance(tables, next);
+}
+
+// disable_distance。矢の行は残す。
+function disableDistance(
+  tables: RoundTables,
+  operation: Op<"distance.disabled">,
+): RoundTables {
+  const target = tables.distances.find((d) => d.id === operation.distanceId);
+  if (!target || target.disabled) return tables;
+  return replaceDistance(tables, { ...target, disabled: true });
+}
+
+// record_shots。同じマスの行は、削除済みでも値を置き換えて復活させる。
+function recordShot(
+  tables: RoundTables,
+  operation: Op<"shot.recorded">,
+  confirmedFields: Confirmed,
+  faces: ScoringTargetFace[],
+): RoundTables {
+  const distance = tables.distances.find((d) => d.id === operation.distanceId);
+  if (!distance || distance.disabled) return tables;
+  const row: ShotRow = {
+    distance_id: operation.distanceId,
+    end_number: operation.endNumber,
+    arrow_number: operation.arrowNumber,
+    shooter_id: operation.shooterId,
+    score_str: operation.scoreStr,
+    score_int: operation.scoreInt,
+    disabled: false,
+  };
+  // 決定1: 現在の構成で無効な矢は、先のマスの矢も置き換えない。
+  if (confirmedFields === undefined && !shotFits(distance, row, faces)) {
+    return tables;
+  }
+  const exists = tables.shots.some((s) => isSameShotCell(s, operation));
   return {
-    ...state,
-    distances,
-    shots: state.shots.filter(
-      (shot) =>
-        shot.distance_id !== target.id ||
-        (updated !== undefined && shotFits(updated, shot, faces)),
+    ...tables,
+    shots: exists
+      ? tables.shots.map((s) => (isSameShotCell(s, operation) ? row : s))
+      : [...tables.shots, row],
+  };
+}
+
+// clear_shots。行は残して削除済みにする。
+function clearShot(
+  tables: RoundTables,
+  operation: Op<"shot.cleared">,
+): RoundTables {
+  const distance = tables.distances.find((d) => d.id === operation.distanceId);
+  if (!distance || distance.disabled) return tables;
+  if (!tables.shots.some((s) => isSameShotCell(s, operation))) return tables;
+  return {
+    ...tables,
+    shots: tables.shots.map((s) =>
+      isSameShotCell(s, operation) ? { ...s, disabled: true } : s,
     ),
   };
 }
 
-// 1つの操作を状態へ反映する。未確定の操作は、サーバーと同じ規則(後勝ち、決定1・4・6、削除、存在しない距離)で項目ごとに判定し、効かない項目は状態を変えない。
-// 確定済みの操作は、サーバーが効かせた項目(confirmedFields)だけを、判定せずに反映する。
+// 1つの操作を、サーバーの対応するRPCと同じ判定の順序でテーブルへ反映する。
+// 未確定の操作は規則で項目ごとに判定し、確定済みの操作はサーバーが効かせた項目(confirmedFields)だけを判定せずに反映する。
 // 同じ操作を重ねて適用しても結果は変わらない。ラウンドの削除以降の操作は、削除済みのラウンドに対するものとして反映しない。
 export function applyOperation(
-  state: RoundState,
+  tables: RoundTables,
   { operation, confirmedFields }: AppliedOperation,
   faces: ScoringTargetFace[],
-): RoundState {
-  if (state.roundDisabled) return state;
+): RoundTables {
+  if (tables.round.disabled) return tables;
   switch (operation.type) {
     case "round.created":
-      // 作成は基準(`roundStateFromCreated`)が表す。
-      return state;
+      // 作成は基準(`roundTablesFromCreated`)が表す。
+      return tables;
     case "round.updated":
-      return applyRoundUpdated(state, operation, confirmedFields);
+      return updateRound(tables, operation, confirmedFields);
     case "round.disabled":
-      return { ...state, roundDisabled: true };
+      return disableRound(tables);
     case "distance.created":
-      // 同じ距離の作成が既に反映されている場合は、重ねて追加しない。
-      if (state.distances.some((d) => d.id === operation.id)) return state;
-      // 決定4: Unmarkedの距離は、フィールドのラウンドだけに作れる。
-      if (
-        !isConfirmed(confirmedFields) &&
-        !operation.isMarked &&
-        state.roundConfig.format !== "field"
-      ) {
-        return state;
-      }
-      return {
-        ...state,
-        distances: [
-          ...state.distances,
-          {
-            id: operation.id,
-            position_key: operation.positionKey,
-            distance: operation.distance,
-            total_ends: operation.totalEnds,
-            arrows_per_end: operation.arrowsPerEnd,
-            target_face_id: operation.targetFaceId,
-            is_marked: operation.isMarked,
-          },
-        ],
-      };
+      return createDistance(tables, operation, confirmedFields);
     case "distance.updated":
-      return applyDistanceUpdated(state, operation, confirmedFields, faces);
+      return updateDistance(tables, operation, confirmedFields, faces);
     case "distance.disabled":
-      return {
-        ...state,
-        distances: removeDistance(state.distances, operation.distanceId),
-        shots: removeDistanceShots(state.shots, operation.distanceId),
-      };
-    case "shot.recorded": {
-      const distance = state.distances.find(
-        (d) => d.id === operation.distanceId,
-      );
-      if (!distance) return state;
-      const shot: Shot = {
-        distance_id: operation.distanceId,
-        end_number: operation.endNumber,
-        arrow_number: operation.arrowNumber,
-        shooter_id: operation.shooterId,
-        score_str: operation.scoreStr,
-        score_int: operation.scoreInt,
-      };
-      // 決定1: 現在の構成で無効な矢は、先のマスの矢も置き換えない。
-      if (!isConfirmed(confirmedFields) && !shotFits(distance, shot, faces)) {
-        return state;
-      }
-      return {
-        ...state,
-        shots: replaceShot(state.shots, operation, shot),
-      };
-    }
+      return disableDistance(tables, operation);
+    case "shot.recorded":
+      return recordShot(tables, operation, confirmedFields, faces);
     case "shot.cleared":
-      if (!state.distances.some((d) => d.id === operation.distanceId)) {
-        return state;
-      }
-      return {
-        ...state,
-        shots: replaceShot(state.shots, operation, null),
-      };
+      return clearShot(tables, operation);
   }
 }
 
-// 操作を列の順（`seq`順）に状態へ反映する。読み込み時も操作時も、この関数が唯一の導出である。
+// 操作を列の順（`seq`順）にテーブルへ反映する。読み込み時も操作時も、この関数が唯一の導出である。
 export function applyOperations(
-  base: RoundState,
+  base: RoundTables,
   operations: AppliedOperation[],
   faces: ScoringTargetFace[],
-): RoundState {
+): RoundTables {
   return operations.reduce(
-    (state, applied) => applyOperation(state, applied, faces),
+    (tables, applied) => applyOperation(tables, applied, faces),
     base,
   );
 }

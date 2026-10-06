@@ -137,16 +137,6 @@ function findShot(shots: Shot[], cell: Cell): Shot | null {
   return shots.find((s) => isSameCell(s, cell)) ?? null;
 }
 
-// マスの記録をshotで置き換え、shotがnullの場合はマスの記録を取り除く。
-export function replaceShot(
-  shots: Shot[],
-  cell: Cell,
-  shot: Shot | null,
-): Shot[] {
-  const filtered = shots.filter((s) => !isSameCell(s, cell));
-  return shot ? [...filtered, shot] : filtered;
-}
-
 // 記録・上書きによるマスの状態遷移。
 // 上書きでは、元の記録の射手を引き継ぐ。
 export function scoreHistoryEntry(
