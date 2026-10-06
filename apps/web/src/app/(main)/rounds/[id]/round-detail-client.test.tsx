@@ -53,10 +53,10 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 
 function detail(
   name: string,
-  leaveRound = false,
   pendingCreationEventId: string | null = null,
 ): LoadedRoundDetail {
   return {
+    deleted: false,
     base: roundTablesFromServer({
       roundConfig: {
         name,
@@ -70,7 +70,6 @@ function detail(
     entries: [],
     reflected: [],
     targetFaces: [],
-    leaveRound,
     pendingCreationEventId,
   };
 }
@@ -134,15 +133,17 @@ describe("RoundDetailClient", () => {
       expect(load.mock.calls[0][1]).toBe(ID);
     });
 
-    it("ラウンドの削除が未送信なら、一覧へ遷移する", async () => {
-      resolves({ status: "ok", data: detail("削除済み", true) });
+    it("列に削除があれば、スコアカードを出さず、一覧へ置き換えて遷移する", async () => {
+      resolves({ status: "ok", data: { deleted: true } });
 
       render(<RoundDetailClient />);
 
       await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/rounds"));
+      expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
     });
 
-    it("削除が未送信でなければ、遷移しない", async () => {
+    it("列に削除がなければ、遷移しない", async () => {
       resolves({ status: "ok", data: detail("午前練習") });
 
       render(<RoundDetailClient />);
@@ -245,7 +246,7 @@ describe("RoundDetailClient", () => {
     const EVENT_ID = "event-1";
 
     it("取得済みの的を使わず、背景で取得した的をスコアカードへ渡す", async () => {
-      resolves({ status: "ok", data: detail("作成中", false, EVENT_ID) });
+      resolves({ status: "ok", data: detail("作成中", EVENT_ID) });
       fetchFaces.mockResolvedValue({
         status: "ok",
         data: [{ id: "face-1" }, { id: "face-2" }] as never,
@@ -262,7 +263,7 @@ describe("RoundDetailClient", () => {
     });
 
     it("的の背景取得が終わるまでは、的の一覧をnull(取得中)として渡す", async () => {
-      resolves({ status: "ok", data: detail("作成中", false, EVENT_ID) });
+      resolves({ status: "ok", data: detail("作成中", EVENT_ID) });
       fetchFaces.mockReturnValue(new Promise(() => {}));
 
       render(<RoundDetailClient />);
@@ -273,7 +274,7 @@ describe("RoundDetailClient", () => {
     });
 
     it("的の背景取得が失敗しても、詳細は表示し、的は空として渡す", async () => {
-      resolves({ status: "ok", data: detail("作成中", false, EVENT_ID) });
+      resolves({ status: "ok", data: detail("作成中", EVENT_ID) });
       fetchFaces.mockResolvedValue({ status: "offline" });
 
       render(<RoundDetailClient />);
@@ -293,7 +294,7 @@ describe("RoundDetailClient", () => {
     });
 
     it("作成の消失の監視へラウンドIDと未確定のeventIdを渡し、検知したら取得し直す", async () => {
-      resolves({ status: "ok", data: detail("作成中", false, EVENT_ID) });
+      resolves({ status: "ok", data: detail("作成中", EVENT_ID) });
       fetchFaces.mockResolvedValue({ status: "ok", data: [] });
       render(<RoundDetailClient />);
       await screen.findByTestId("scorecard");

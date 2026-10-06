@@ -1,5 +1,5 @@
+import type { DistanceChanges, SyncOperation } from "../_shared/sync-events";
 import { FILTER_ALL } from "./distance-config-constants";
-import type { DistanceChanges, SyncOperation } from "./sync-events";
 
 export type DistanceConfig = {
   id: string;

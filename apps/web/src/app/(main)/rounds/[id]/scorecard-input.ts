@@ -1,5 +1,5 @@
+import type { SyncOperation } from "../_shared/sync-events";
 import type { Distance, Shot } from "./scorecard-types";
-import type { SyncOperation } from "./sync-events";
 
 // スコアカード上で選択しているマス。
 export type Position = { distance: Distance; end: number; arrow: number };

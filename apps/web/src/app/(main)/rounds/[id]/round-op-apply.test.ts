@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  type AppliedOperation,
-  applyOperation,
-  applyOperations,
-} from "./round-op-apply";
-import { conflicts } from "./round-op-conflicts";
+import { conflicts } from "../_shared/round-op-conflicts";
 import {
   distanceCreated,
   distanceDisabled,
@@ -14,14 +9,19 @@ import {
   roundUpdated,
   shotCleared,
   shotRecorded,
-} from "./round-op-test-helpers";
+} from "../_shared/round-op-test-helpers";
+import type { SyncOperation } from "../_shared/sync-events";
+import {
+  type AppliedOperation,
+  applyOperation,
+  applyOperations,
+} from "./round-op-apply";
 import {
   type RoundTables,
   roundTablesFromCreated,
   roundTablesFromServer,
 } from "./round-tables";
 import type { ScoringTargetFace } from "./scorecard-scoring";
-import type { SyncOperation } from "./sync-events";
 
 const ring = (scoreStr: string, scoreInt: number, zIndex: number) => ({
   score_str: scoreStr,

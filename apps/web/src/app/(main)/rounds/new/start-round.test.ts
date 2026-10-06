@@ -1,7 +1,7 @@
 import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
-import { roundOpHub } from "../[id]/round-op-hub";
+import { roundOpLog } from "../_shared/round-op-log";
 import type { Preset } from "./preset-types";
 import { startRound } from "./start-round";
 
@@ -11,10 +11,10 @@ vi.mock("@supabase/ssr", () => ({
   createBrowserClient: () => ({ auth: { getSession: supabase.getSession } }),
 }));
 
-// 端末の操作の列(IndexedDBへの保存と常駐の送信)は別のテストで確かめるため、常駐のハブを境界としてモックする。
+// 端末の操作の列(IndexedDBへの保存と常駐の送信)は別のテストで確かめるため、列への入り口を境界としてモックする。
 const hub = vi.hoisted(() => ({ acquire: vi.fn(), append: vi.fn() }));
-vi.mock("../[id]/round-op-hub", () => ({
-  roundOpHub: { acquire: hub.acquire },
+vi.mock("../_shared/round-op-log", () => ({
+  roundOpLog: { round: hub.acquire },
 }));
 
 const signedInSession = { data: { session: { user: { id: "user-1" } } } };
@@ -145,7 +145,7 @@ describe("startRound", () => {
 
       // Then
       expect(hub.acquire).toHaveBeenCalledTimes(1);
-      expect(roundOpHub.acquire).toBe(hub.acquire);
+      expect(roundOpLog.round).toBe(hub.acquire);
     });
 
     it("端末への保存の完了を待ってから結果を返す", async () => {

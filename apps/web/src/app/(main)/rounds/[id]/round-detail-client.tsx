@@ -52,9 +52,11 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
         : Promise.resolve({ status: "not-found" as const }),
     [roundId],
   );
-  const leaveRound = view.status === "ok" && view.data.leaveRound;
+  const deleted = view.status === "ok" && view.data.deleted;
   const pending =
-    view.status === "ok" ? view.data.pendingCreationEventId : null;
+    view.status === "ok" && !view.data.deleted
+      ? view.data.pendingCreationEventId
+      : null;
   // 作成が未確定のラウンドの的は、詳細を表示した後に背景で取得する。
   const { view: faces } = useFetchResult(
     () =>
@@ -66,10 +68,10 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
   useCreationGone(roundId, pending, retry);
 
   useEffect(() => {
-    if (leaveRound) router.replace("/rounds");
-  }, [leaveRound, router]);
+    if (deleted) router.replace("/rounds");
+  }, [deleted, router]);
 
-  if (roundId && view.status === "ok") {
+  if (roundId && view.status === "ok" && !view.data.deleted) {
     return (
       <ScorecardClient
         roundId={roundId}

@@ -1,6 +1,6 @@
 import type { OpLogStore } from "./op-log-store";
 import type { OpBase, OpLogEntry } from "./op-log-types";
-import { createOpSync, type OpSyncDeps } from "./op-sync";
+import { createOpSync, type OpSyncDeps, type OpSyncOperation } from "./op-sync";
 
 type StreamDeps<Op extends OpBase> = Omit<
   OpSyncDeps<Op>,
@@ -60,6 +60,9 @@ export function createOpSyncHub<Op extends OpBase>(
   let leader = false;
   // 起動、停止、ユーザーの変更のたびに進める。古い読み込みの結果を捨てるため。
   let epoch = 0;
+  // `reloadAll`が終わった世代。`ready`の判定に使う。
+  let loadedEpoch = -1;
+  let readyWaiters: (() => void)[] = [];
   const senders = new Map<string, Sender>();
   let channel: BroadcastChannel | undefined;
   let lockAbort: AbortController | undefined;
@@ -82,6 +85,20 @@ export function createOpSyncHub<Op extends OpBase>(
     }
   }
 
+  // 現在の世代の読み込みの完了を記録し、`ready`を待つ呼び出しを解決する。古い世代の完了は無視する。
+  function markLoaded(target: number) {
+    if (epoch !== target) return;
+    loadedEpoch = target;
+    const waiters = readyWaiters;
+    readyWaiters = [];
+    for (const resolve of waiters) resolve();
+  }
+
+  function ready(): Promise<void> {
+    if (started && loadedEpoch === epoch) return Promise.resolve();
+    return new Promise((resolve) => readyWaiters.push(resolve));
+  }
+
   // 現在のユーザーの全ての列を読み、送信器へ取り込んで送る。読み込みに失敗したときは何もしない。
   async function reloadAll() {
     const target = epoch;
@@ -92,6 +109,7 @@ export function createOpSyncHub<Op extends OpBase>(
     try {
       streams = await store.loadAll(userId);
     } catch {
+      markLoaded(target);
       return;
     }
     if (epoch !== target) return;
@@ -105,6 +123,7 @@ export function createOpSyncHub<Op extends OpBase>(
         sender.adopt([], { readAt: marks.get(streamId) ?? 0 });
     }
     for (const sender of senders.values()) sender.wake();
+    markLoaded(target);
   }
 
   async function reloadStream(
@@ -239,6 +258,21 @@ export function createOpSyncHub<Op extends OpBase>(
       for (const sender of senders.values()) sender.handleOffline();
     },
     getUserId: () => userId,
+    // 現在の世代の読み込みが終わる(失敗を含む)まで解決しない。`start`前、`setUser`と`stop`の後は次の読み込みの完了まで待つ。
+    ready,
+    // 現在のユーザーの列を、読み替えて返す。読み込みの完了後に読み、失敗は投げる。
+    async read(streamId: string): Promise<OpLogEntry<Op>[]> {
+      await ready();
+      return upgraded(await store.loadStream(streamId, userId));
+    },
+    // 読み込みの完了後の、メモリにある現在のユーザーの全ての列の操作を返す。保存に失敗した操作も含む。
+    async readAll(): Promise<Map<string, readonly OpSyncOperation<Op>[]>> {
+      await ready();
+      const all = new Map<string, readonly OpSyncOperation<Op>[]>();
+      for (const [streamId, sender] of senders)
+        all.set(streamId, sender.getSnapshot().operations);
+      return all;
+    },
   };
 }
 

@@ -1,24 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getLocalIdentity } from "@/features/auth/local-identity";
 import type { FetchResult } from "@/features/fetch-result/fetch-result";
 import type { OpLogEntry } from "@/features/op-log/op-log-types";
 import type { Database } from "@/types/supabase";
+import { hasRoundDeletion, roundOpLog } from "../_shared/round-op-log";
+import type { SyncOperation } from "../_shared/sync-events";
 import type { TargetFaceOption } from "./distance-config-row";
 import {
   fetchRoundDetail,
   type RoundRevisions,
   shotRevisionKey,
 } from "./fetch-round-detail";
-import { applyOperations } from "./round-op-apply";
-import { roundOpStore, roundStreamId } from "./round-op-store";
 import {
   type RoundTables,
   roundTablesFromCreated,
   roundTablesFromServer,
 } from "./round-tables";
-import { type SyncOperation, upgradeLegacyOperation } from "./sync-events";
 
-export type LoadedRoundDetail = {
+export type LoadedRound = {
   // サーバーの状態。操作の列は重ねていない。
   base: RoundTables;
   // 基準へ重ねる列(`seq`順)。反映済みと確かめた操作を含まない。
@@ -26,29 +24,14 @@ export type LoadedRoundDetail = {
   // 反映済みと確かめた操作のeventId。詳細画面の表示の開始時に列から外す。
   reflected: string[];
   targetFaces: TargetFaceOption[];
-  // ラウンドの削除が列にあるため、一覧へ戻るか。
-  leaveRound: boolean;
   // 確定していない作成のeventId。あるとき、基準は端末の作成の操作で、的は含まない(呼び出し側が取得する)。
   pendingCreationEventId: string | null;
 };
 
-// IndexedDBが使えなくても、サーバーの状態の表示は続ける。
-async function loadEntries(
-  roundId: string,
-): Promise<OpLogEntry<SyncOperation>[]> {
-  try {
-    const stored = await roundOpStore.loadStream(
-      roundStreamId(roundId),
-      getLocalIdentity(),
-    );
-    return stored.map((entry) => ({
-      ...entry,
-      operation: upgradeLegacyOperation(entry.operation),
-    }));
-  } catch {
-    return [];
-  }
-}
+// deleted: ラウンドの削除が列にあるため、取得した状態を表示せず一覧へ戻る。
+export type LoadedRoundDetail =
+  | { deleted: true }
+  | ({ deleted: false } & LoadedRound);
 
 // 操作の対象について、取得が持つrevision。取得に行が無ければ0。
 // ラウンドの削除は、取得が「見つからない」になるため、確認する対象がない(undefined)。
@@ -134,7 +117,11 @@ export async function loadRoundDetail(
   supabase: SupabaseClient<Database>,
   roundId: string,
 ): Promise<FetchResult<LoadedRoundDetail>> {
-  const first = await loadEntries(roundId);
+  const first = await roundOpLog.load(roundId);
+  // 削除は、取得せずに離れる。削除以降の操作は反映されないため、取得した状態を表示する意味がない。
+  if (hasRoundDeletion(first.map((entry) => entry.operation))) {
+    return { status: "ok", data: { deleted: true } };
+  }
   // 確定していない作成があれば、取得せずに作成の操作を基準にする。作成の後続は確定まで送られないため、サーバーの状態は作成の操作と一致する。
   for (const entry of first) {
     const { operation } = entry;
@@ -144,18 +131,11 @@ export async function loadRoundDetail(
     return {
       status: "ok",
       data: {
+        deleted: false,
         base,
         entries: first,
         reflected: [],
         targetFaces: [],
-        leaveRound: applyOperations(
-          base,
-          first.map((e) => ({
-            operation: e.operation,
-            confirmedFields: undefined,
-          })),
-          [],
-        ).round.disabled,
         pendingCreationEventId: operation.eventId,
       },
     };
@@ -166,13 +146,19 @@ export async function loadRoundDetail(
   if (fetched.status !== "ok") return fetched;
 
   const before = await beforePromise;
-  const after = await loadEntries(roundId);
+  const after = await roundOpLog.load(roundId);
   const { revisions, roundConfig, distances, shots, targetFaces } =
     fetched.data;
 
+  const merged = mergeEntries(before, after);
+  // 取得の間に追記された削除も、取得した状態を表示せずに離れる。
+  if (hasRoundDeletion(merged.map((entry) => entry.operation))) {
+    return { status: "ok", data: { deleted: true } };
+  }
+
   const entries: OpLogEntry<SyncOperation>[] = [];
   const reflected: string[] = [];
-  for (const entry of mergeEntries(before, after)) {
+  for (const entry of merged) {
     if (isReflected(entry, revisions)) {
       reflected.push(entry.eventId);
     } else {
@@ -184,18 +170,11 @@ export async function loadRoundDetail(
   return {
     status: "ok",
     data: {
+      deleted: false,
       base,
       entries,
       reflected,
       targetFaces,
-      leaveRound: applyOperations(
-        base,
-        entries.map((entry) => ({
-          operation: entry.operation,
-          confirmedFields: undefined,
-        })),
-        targetFaces,
-      ).round.disabled,
       pendingCreationEventId: null,
     },
   };

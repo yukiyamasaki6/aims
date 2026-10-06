@@ -6,9 +6,8 @@ import {
 import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
 import { createClient } from "@/lib/supabase/client";
 import { comparePositionKey } from "../_shared/position-key";
-import { roundOpHub } from "../[id]/round-op-hub";
-import { roundStreamId } from "../[id]/round-op-store";
-import type { SyncOperation } from "../[id]/sync-events";
+import { roundOpLog } from "../_shared/round-op-log";
+import type { SyncOperation } from "../_shared/sync-events";
 import type { Preset } from "./preset-types";
 
 type CreatedOperation = Extract<SyncOperation, { type: "round.created" }>;
@@ -105,6 +104,6 @@ export async function startRound({
   }
 
   const operation = buildCreatedOperation(preset, generateId, now());
-  await roundOpHub.acquire(roundStreamId(operation.roundId)).append(operation);
+  await roundOpLog.round(operation.roundId).append(operation);
   return { status: "created", roundId: operation.roundId };
 }
