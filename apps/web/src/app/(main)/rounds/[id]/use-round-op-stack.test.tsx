@@ -34,6 +34,7 @@ const ineffective = {
 };
 
 const base = roundTablesFromServer({
+  status: "in_progress",
   roundConfig: {
     name: "元",
     roundDate: "2026-09-01",
@@ -119,6 +120,18 @@ describe("useRoundOpStack", () => {
     await waitFor(() => expect(result.current.state.shots).toHaveLength(1));
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(result.current.status).toBe("synced"));
+  });
+
+  it("appendは、保存の完了で解決し、解決の時点で画面の状態へ反映済みである", async () => {
+    const { result } = renderHook(() =>
+      useRoundOpStack("round-1", { base, entries: [], reflected: [] }, []),
+    );
+
+    await act(async () => {
+      await result.current.append(shotRecorded());
+    });
+
+    expect(result.current.state.shots).toHaveLength(1);
   });
 
   it("反映済みの操作は、表示の開始時に列から外し、最初の描画から重ねない", async () => {
@@ -310,6 +323,93 @@ describe("useRoundOpStack", () => {
       release();
 
       await waitFor(() => expect(reload).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe("完了のラウンドへの編集", () => {
+    const completed = {
+      ...base,
+      round: { ...base.round, status: "completed" as const },
+    };
+    const faces = [
+      {
+        id: "face-1",
+        target_face_spots: [
+          {
+            target_face_rings: [
+              { score_str: "10", score_int: 10, z_index: 1, color: "#000000" },
+            ],
+          },
+        ],
+      },
+    ];
+
+    it("表示が変わる記録を積むと、続けて入力中へ戻す操作も積み、状態が入力中になる", async () => {
+      // Given
+      const { result } = renderHook(() =>
+        useRoundOpStack(
+          "round-1",
+          { base: completed, entries: [], reflected: [] },
+          faces,
+        ),
+      );
+      expect(result.current.state.status).toBe("completed");
+
+      // When
+      act(() => {
+        result.current.append(shotRecorded());
+      });
+
+      // Then
+      await waitFor(() => expect(result.current.state.shots).toHaveLength(1));
+      await waitFor(() =>
+        expect(result.current.state.status).toBe("in_progress"),
+      );
+      await waitFor(() => expect(result.current.status).toBe("synced"));
+      expect(JSON.stringify(send.mock.calls)).toContain(
+        '"status":"in_progress"',
+      );
+    });
+
+    it("ラウンド設定の変更では、完了のまま戻さない", async () => {
+      // Given
+      const { result } = renderHook(() =>
+        useRoundOpStack(
+          "round-1",
+          { base: completed, entries: [], reflected: [] },
+          faces,
+        ),
+      );
+
+      // When
+      act(() => {
+        result.current.append(roundUpdated({ changes: { name: "新" } }));
+      });
+
+      // Then
+      await waitFor(() =>
+        expect(result.current.state.roundConfig.name).toBe("新"),
+      );
+      await waitFor(() => expect(result.current.status).toBe("synced"));
+      expect(result.current.state.status).toBe("completed");
+      expect(JSON.stringify(send.mock.calls)).not.toContain("in_progress");
+    });
+
+    it("入力中のラウンドへの記録では、状態を変える操作を積まない", async () => {
+      // Given
+      const { result } = renderHook(() =>
+        useRoundOpStack("round-1", { base, entries: [], reflected: [] }, faces),
+      );
+
+      // When
+      act(() => {
+        result.current.append(shotRecorded());
+      });
+
+      // Then
+      await waitFor(() => expect(result.current.status).toBe("synced"));
+      expect(JSON.stringify(send.mock.calls)).not.toContain("in_progress");
+      expect(result.current.state.status).toBe("in_progress");
     });
   });
 });

@@ -1,9 +1,13 @@
+// ラウンドの状態。入力中は記録や編集を続けている途中、完了は利用者が入力を終えたと示した状態。
+export type RoundStatus = "in_progress" | "completed";
+
 // 保存で変えた項目だけの差分。値の無い(undefined)項目は変えない。
 export type RoundChanges = Partial<{
   name: string;
   roundDate: string;
   format: string;
   bowType: string;
+  status: RoundStatus;
 }>;
 
 // 構成は的・エンド数・矢数の1組で、どれかが変われば3項目全てを持つ。

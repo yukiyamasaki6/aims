@@ -58,6 +58,7 @@ function detail(
   return {
     deleted: false,
     base: roundTablesFromServer({
+      status: "in_progress",
       roundConfig: {
         name,
         roundDate: "2026-09-15",

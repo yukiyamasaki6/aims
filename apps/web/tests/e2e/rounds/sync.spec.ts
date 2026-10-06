@@ -1742,3 +1742,58 @@ test("sync-46: ラウンドを開始したとき、作成が契約の不一致�
   await expect(page).toHaveURL(/\/rounds$/);
   await expect(roundLinks(page, id)).toHaveCount(0);
 });
+
+test("sync-47: オフラインのラウンド詳細画面で入力を完了にしたとき、オンラインへ復帰すると、「同期済み」と表示され、別の端末でもそのラウンドは完了で表示される", async ({
+  page,
+}) => {
+  // Given: オフラインで、入力を完了にした
+  await openRound(page);
+  await waitForServiceWorkerControl(page);
+  await page.context().setOffline(true);
+  await page.getByTestId("complete-round-button").click();
+  await page.getByTestId("confirm-dialog-confirm").click();
+  await expect(page).toHaveURL(/\/rounds$/);
+
+  // When: オンラインへ復帰し、詳細を開く
+  await goOnline(page);
+  await openRound(page);
+
+  // Then: 「同期済み」と表示され、別の端末でも完了で表示される
+  await expectSynced(page);
+  const { supabase } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const { data } = await supabase
+    .from("rounds")
+    .select("status")
+    .eq("id", roundId)
+    .single();
+  expect(data?.status).toBe("completed");
+});
+
+test("sync-48: ページ側が状態を、他端末が名前を、それぞれ別に変えたとき、両方がオンラインへ復帰すると、状態の変更と名前の変更の両方が残る", async ({
+  page,
+}) => {
+  // Given: ページ側がオフラインで入力を完了にし、他端末が名前を変えて確定した
+  const { supabase } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  await openRound(page);
+  await waitForServiceWorkerControl(page);
+  await page.context().setOffline(true);
+  await page.getByTestId("complete-round-button").click();
+  await page.getByTestId("confirm-dialog-confirm").click();
+  await expect(page).toHaveURL(/\/rounds$/);
+  await updateRound(supabase, roundId, { name: "他端末の名前" });
+
+  // When: ページ側がオンラインへ復帰する
+  await goOnline(page);
+  await openRound(page);
+
+  // Then: 完了が残り、他端末の名前も残る
+  await expectSynced(page);
+  const { data } = await supabase
+    .from("rounds")
+    .select("status, name")
+    .eq("id", roundId)
+    .single();
+  expect(data).toEqual({ status: "completed", name: "他端末の名前" });
+  await reloadRound(page);
+  await expect(page.getByTestId("complete-round-button")).toBeHidden();
+});

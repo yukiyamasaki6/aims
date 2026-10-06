@@ -16,6 +16,7 @@ export function ConfirmDialog({
   onOpenChange,
   description,
   confirmLabel = "削除",
+  confirmVariant = "destructive",
   onConfirm,
   nested = false,
 }: {
@@ -23,6 +24,8 @@ export function ConfirmDialog({
   onOpenChange: (open: boolean) => void;
   description: string;
   confirmLabel?: string;
+  // 削除など破壊的でない確認(入力の完了など)では"default"にする。
+  confirmVariant?: "destructive" | "default";
   onConfirm: () => void;
   // 他のDialogの中から開かれる場合はtrueにする（距離削除確認等）。
   // 詳細はDialogContentのnestedの説明を参照。
@@ -44,7 +47,7 @@ export function ConfirmDialog({
             </Button>
             <Button
               type="button"
-              variant="destructive"
+              variant={confirmVariant}
               data-testid="confirm-dialog-confirm"
               onClick={() => {
                 onOpenChange(false);

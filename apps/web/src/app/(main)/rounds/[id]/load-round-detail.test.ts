@@ -66,6 +66,7 @@ const distanceA = {
 };
 
 const server: FetchedRoundDetail = {
+  status: "in_progress",
   roundConfig: {
     name: "午前練習",
     roundDate: "2026-09-15",

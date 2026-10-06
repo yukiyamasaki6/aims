@@ -62,6 +62,7 @@
 | rounds | preset | 構成をプリセットにして管理する | ラウンド・種目管理 |
 | rounds | history | 過去のラウンドを探す | 履歴一覧・スコア詳細 |
 | rounds | detail | ラウンドの成績を見る | 履歴一覧・スコア詳細 |
+| rounds | completion | ラウンドの入力を完了にする | 履歴一覧・スコア詳細 |
 | rounds | delete | ラウンドを削除する | 履歴一覧・スコア詳細 |
 | rounds | sync | 記録を失わず同期する | RDBMS・データ基盤 |
 | app | navigation | 迷わず移動する | 最小限の紹介画面、基本テーマ |
@@ -113,6 +114,7 @@ flowchart TD
     Rounds -->|ラウンドカードクリック| RoundDetail
     RoundsNew -->|「一覧へ戻る」リンク| Rounds
     RoundsNew -->|開始| RoundDetail
+    RoundDetail -->|入力を完了する| Rounds
     RoundDetail -->|「一覧へ戻る」リンク| Rounds
     RoundDetail -->|ラウンド削除成功| Rounds
     LeftPanel -->|AIMSリンク| Landing

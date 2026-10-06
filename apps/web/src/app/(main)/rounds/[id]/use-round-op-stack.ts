@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -14,6 +15,7 @@ import { roundOpLog } from "../_shared/round-op-log";
 import type { SyncOperation } from "../_shared/sync-events";
 import { type LoadedRound, loadRoundDetail } from "./load-round-detail";
 import { applyOperations } from "./round-op-apply";
+import { reopenOperation } from "./round-progress";
 import { type RoundState, selectRoundState } from "./round-tables";
 import type { ScoringTargetFace } from "./scorecard-scoring";
 
@@ -22,7 +24,7 @@ export type RoundOpStack = {
   state: RoundState;
   status: SyncStatus;
   // 操作を列へ追記する。画面への反映と送信は保存の完了後で、送信の完了は待たない。
-  append: (operation: SyncOperation) => void;
+  append: (operation: SyncOperation) => Promise<void>;
 };
 
 // 画面の状態は`selectRoundState(applyOperations(base, 操作の列, 的))`だけから導き、送信器の購読だけを行う。
@@ -91,15 +93,36 @@ export function useRoundOpStack(
     };
   }, [sync, roundId]);
 
-  const state = useMemo(
-    () =>
-      selectRoundState(applyOperations(base, snapshot.operations, targetFaces)),
+  const tables = useMemo(
+    () => applyOperations(base, snapshot.operations, targetFaces),
     [base, snapshot.operations, targetFaces],
+  );
+  const state = useMemo(() => selectRoundState(tables), [tables]);
+
+  // 追記の判定は、積む時点の最新の状態に対して行う。
+  const latest = useRef({ tables, targetFaces });
+  latest.current = { tables, targetFaces };
+
+  // 完了のラウンドへ編集の操作を積むときは、続けて入力中へ戻す操作を積む。
+  const append = useCallback(
+    (operation: SyncOperation): Promise<void> => {
+      const saved = sync.append(operation);
+      const reopen = reopenOperation(
+        roundId,
+        latest.current.tables,
+        operation,
+        latest.current.targetFaces,
+        crypto.randomUUID(),
+      );
+      if (reopen) void sync.append(reopen);
+      return saved;
+    },
+    [sync, roundId],
   );
 
   return {
     state,
     status: snapshot.status,
-    append: sync.append,
+    append,
   };
 }

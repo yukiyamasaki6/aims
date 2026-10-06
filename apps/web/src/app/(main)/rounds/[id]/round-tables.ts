@@ -1,10 +1,14 @@
-import type { SyncOperation } from "../_shared/sync-events";
+import type { RoundStatus, SyncOperation } from "../_shared/sync-events";
 import type { RoundConfig } from "./round-config";
 import type { Distance, Shot } from "./scorecard-types";
 
 // サーバーのテーブルの行の形。各行は削除済みの印(`disabled`)を持つ。時刻は端末が持たない。
 // rounds行。
-type RoundRow = { config: RoundConfig; disabled: boolean };
+type RoundRow = {
+  config: RoundConfig;
+  status: RoundStatus;
+  disabled: boolean;
+};
 // distances行。
 export type DistanceRow = Distance & { disabled: boolean };
 // shots行。主キーは(distance_id, end_number, arrow_number)。
@@ -20,6 +24,7 @@ export type RoundTables = {
 // 画面の状態。`RoundTables`から削除済みを除いて導く。
 export type RoundState = {
   roundConfig: RoundConfig;
+  status: RoundStatus;
   distances: Distance[];
   shots: Shot[];
   // ラウンドの削除が列にあるか。画面は一覧へ戻る。
@@ -29,11 +34,16 @@ export type RoundState = {
 // サーバーから取得した状態。取得は削除済みの行を含まない。
 export function roundTablesFromServer(fetched: {
   roundConfig: RoundConfig;
+  status: RoundStatus;
   distances: Distance[];
   shots: Shot[];
 }): RoundTables {
   return {
-    round: { config: fetched.roundConfig, disabled: false },
+    round: {
+      config: fetched.roundConfig,
+      status: fetched.status,
+      disabled: false,
+    },
     distances: fetched.distances.map((d) => ({ ...d, disabled: false })),
     shots: fetched.shots.map((s) => ({ ...s, disabled: false })),
   };
@@ -51,6 +61,8 @@ export function roundTablesFromCreated(
         format: operation.format,
         bowType: operation.bowType,
       },
+      // 作成直後は入力中。作成の操作は状態を持たない。
+      status: "in_progress",
       disabled: false,
     },
     distances: operation.distances.map((d) => ({
@@ -81,6 +93,7 @@ export function selectRoundState(tables: RoundTables): RoundState {
   const liveIds = new Set(live.map((d) => d.id));
   return {
     roundConfig: tables.round.config,
+    status: tables.round.status,
     distances: live.map(withoutDisabled),
     shots: tables.shots
       .filter((s) => !s.disabled && liveIds.has(s.distance_id))

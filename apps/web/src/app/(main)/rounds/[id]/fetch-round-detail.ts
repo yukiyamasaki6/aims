@@ -15,12 +15,14 @@ import {
   loadReferenceSnapshot,
   saveReferenceSnapshot,
 } from "../_shared/reference-snapshot";
+import type { RoundStatus } from "../_shared/sync-events";
 import type { TargetFaceOption } from "./distance-config-row";
 import type { RoundConfig } from "./round-config";
 import type { Distance, Shot } from "./scorecard-types";
 
 type RoundDetail = {
   roundConfig: RoundConfig;
+  status: RoundStatus;
   distances: Distance[];
   shots: Shot[];
   targetFaces: TargetFaceOption[];
@@ -48,7 +50,7 @@ export function shotRevisionKey(
 
 // 無効化した距離と取り消した矢の行も取得し、表示にはdisabled_atが無い行だけを使う。
 const ROUND_SELECT =
-  "id, name, round_date, format, bow_type, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(distance_id, end_number, arrow_number, shooter_id, score_str, score_int, revision, disabled_at))";
+  "id, name, round_date, format, bow_type, status, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(distance_id, end_number, arrow_number, shooter_id, score_str, score_int, revision, disabled_at))";
 
 type ShotRow = Shot & { revision: number; disabled_at: string | null };
 type DistanceRow = Distance & {
@@ -62,6 +64,7 @@ type RoundRow = {
   round_date: string;
   format: string;
   bow_type: string;
+  status: RoundStatus;
   revision: number;
   distances: DistanceRow[];
 };
@@ -247,6 +250,7 @@ export async function fetchRoundDetail(
         format: round.format,
         bowType: round.bow_type,
       },
+      status: round.status,
       distances,
       shots,
       targetFaces: faces,

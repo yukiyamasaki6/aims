@@ -10,6 +10,7 @@ import {
   Undo,
   WifiOff,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { DistanceInfo } from "../_shared/preset-info";
 import { lookupTargetFace } from "../_shared/target-face-icon";
 import { BackToListLink } from "./back-to-list-link";
+import { CompleteRoundBar } from "./complete-round-bar";
 import type { DistanceConfig } from "./distance-config";
 import {
   DistanceEditFields,
@@ -26,6 +28,7 @@ import { KeypadPanel } from "./keypad-panel";
 import type { LoadedRound } from "./load-round-detail";
 import { RoundConfigPanel } from "./round-config-panel";
 import { RoundMenu } from "./round-menu";
+import { completionConfirmation, statusOperation } from "./round-progress";
 import { SavePresetDialog } from "./save-preset-dialog";
 import { changesDistanceStructure, distanceToAdd } from "./scorecard-distances";
 import {
@@ -60,6 +63,8 @@ import { useRoundOpStack } from "./use-round-op-stack";
 // テンキーは中身のキー数が距離の的ごとに変わるため実測高さを使う。この値は
 // ResizeObserverが初回計測を終えるまでの暫定値。
 const KEYPAD_HEIGHT_FALLBACK = 220;
+// 格納ボタンがテンキー本体の上にはみ出す高さ（-top-8 = 2rem = 32px）。
+const KEYPAD_TOGGLE_OVERHANG = 32;
 
 function contrastText(hex: string): string {
   const r = Number.parseInt(hex.slice(1, 3), 16);
@@ -159,10 +164,11 @@ export function ScorecardClient({
   // 画面の状態は、サーバーの状態へ操作の列を重ねた導出だけから得る。
   const faces = targetFaces ?? NO_TARGET_FACES;
   const sync = useRoundOpStack(roundId, loaded, faces);
-  const { roundConfig, distances, shots } = sync.state;
+  const { roundConfig, distances, shots, status: roundStatus } = sync.state;
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
 
+  const router = useRouter();
   const hydrated = useHydrated();
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
     new Set(),
@@ -170,8 +176,9 @@ export function ScorecardClient({
   // マス目の選択有無（position）がそのままテンキーの開閉状態であり、
   // 別のstateとして二重管理しない。selectCell等で常にpositionとセットで
   // 更新していた旧keypadOpenを廃止し、ここから直接導出する。
+  // 完了のラウンドは、先頭の未入力のマスを選ばず、テンキーも展開しない。
   const [position, setPosition] = useState<Position | null>(() =>
-    findCurrentPosition(distances, shots),
+    roundStatus === "completed" ? null : findCurrentPosition(distances, shots),
   );
   // keypadOpen（=position有無）の変化をそのままアンマウントすると格納
   // アニメーションが再生できないため、トランジション終了後に実際に
@@ -560,7 +567,10 @@ export function ScorecardClient({
               <RoundConfigPanel
                 roundId={roundId}
                 initial={roundConfig}
-                defaultExpanded={loaded.base.distances.length === 0}
+                defaultExpanded={
+                  loaded.base.distances.length === 0 &&
+                  roundStatus !== "completed"
+                }
                 hasUnmarkedDistances={distances.some((d) => !d.is_marked)}
                 enqueue={sync.append}
               />
@@ -814,22 +824,49 @@ export function ScorecardClient({
           </div>
         </div>
 
-        {!isLandscape && keypadMounted && (
-          // 縦向き専用のボトムシート。<main>に内蔵し、position:fixedは
-          // 使わない。これにより常にレフトパネルより右のコンテンツ領域に
-          // 収まり、レフトパネルの実占有幅を一切気にする必要が無い。
-          // 高さ確保用の透明な枠（sticky）を挟むことで、展開アニメーションの
-          // 進み具合に関わらずスクロール計算が安定する。keypadMounted基準に
-          // することで、格納アニメーション中も確保し続け、スライド完了前に
-          // レイアウトが詰まらないようにする。shrink-0は必須: <main>が
-          // 横向き側パネルとの高さ調整のためflexアイテム（高さが固定）に
-          // なったことで、中身の無いこの枠だけがflexのデフォルトshrinkで
-          // 潰され、指定した高さぶんのスクロール領域を確保できなくなる
-          // （実際に指定高さの1/10程度まで潰れる不具合があった）。
-          <div
-            className="sticky bottom-0 z-30 shrink-0 pointer-events-none"
-            style={{ height: keypadHeight }}
-          >
+        {/* 完了の帯とテンキーを、<main>の最下部に張り付く1つの枠に入れる。
+            帯は枠の下端に置き、テンキーは同じ枠の中で帯の上に重ねる。
+            枠の高さだけがテンキーの表示で変わるため、帯の位置と見た目は
+            テンキーの表示前後で変わらず、テンキーが帯を覆う。
+            縦向きのテンキーを開く間は、枠の高さをテンキーの高さ以上にして
+            内容が隠れないようにする。開くときは即座に確保し、格納するときは
+            テンキーのスライドと同じ200msで高さを戻す。アンマウント時に一度に
+            戻すと、スクロール領域の下側がテンキーが閉じた後に急に変わる。
+            枠はoverflow-y-clipにする。格納中にスライドで下へ出たテンキーが
+            <main>のスクロール領域を一時的に広げ、アンマウント時に一度に
+            縮めて、スクロール領域の下側を急に変えるため。クリップで格納ボタン
+            （テンキーの上に2rem出ている）が切れないよう、枠の高さに含める。
+            shrink-0は必須: <main>が横向き側パネルとの高さ調整のためflexアイテム
+            （高さが固定）になったことで、枠がflexのデフォルトshrinkで潰される。 */}
+        <div
+          data-testid="bottom-frame"
+          className={cn(
+            "pointer-events-none sticky bottom-0 z-30 flex shrink-0 flex-col justify-end overflow-y-clip",
+            !keypadShouldBeOpen && "transition-[min-height] duration-200",
+          )}
+          style={{
+            minHeight:
+              !isLandscape && keypadMounted && keypadShouldBeOpen
+                ? keypadHeight + KEYPAD_TOGGLE_OVERHANG
+                : 0,
+          }}
+        >
+          <div className="pointer-events-auto">
+            <CompleteRoundBar
+              status={roundStatus}
+              confirmation={completionConfirmation(distances, shots)}
+              onComplete={() => {
+                // 保存を待ってから一覧へ移る。移った後も送信は常駐の送信器が続ける。
+                void sync
+                  .append(
+                    statusOperation(roundId, "completed", crypto.randomUUID()),
+                  )
+                  .then(() => router.push("/rounds"));
+              }}
+            />
+          </div>
+
+          {!isLandscape && keypadMounted && (
             <div
               ref={setKeypadNode}
               className={cn(
@@ -857,8 +894,8 @@ export function ScorecardClient({
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </main>
       {isLandscape && (
         <KeypadPanel

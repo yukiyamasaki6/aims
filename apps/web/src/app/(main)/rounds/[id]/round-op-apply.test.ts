@@ -62,6 +62,7 @@ const distance1 = {
 };
 
 const base: RoundTables = roundTablesFromServer({
+  status: "in_progress",
   roundConfig: {
     name: "元",
     roundDate: "2026-09-01",
@@ -193,6 +194,63 @@ describe("update_round(round.updated)", () => {
       );
       expect(next.round.config.format).toBe("indoor");
     });
+  });
+});
+
+describe("round.updatedのstatus", () => {
+  it("未確定でも状態は常に効き、他の項目は変えない", () => {
+    // Given: 入力中の基準
+    expect(base.round.status).toBe("in_progress");
+
+    // When
+    const next = apply(base, round({ status: "completed" }));
+
+    // Then
+    expect(next.round.status).toBe("completed");
+    expect(next.round.config).toEqual(base.round.config);
+  });
+
+  it("Unmarkedの距離でformatが効かなくても、同じ差分の状態は効く", () => {
+    const next = apply(
+      fieldWithUnmarked,
+      round({ format: "indoor", status: "completed" }),
+    );
+    expect(next.round.config.format).toBe("field");
+    expect(next.round.status).toBe("completed");
+  });
+
+  it("名前だけの差分は状態を変えない", () => {
+    const completed = apply(base, round({ status: "completed" }));
+    expect(apply(completed, round({ name: "N" })).round.status).toBe(
+      "completed",
+    );
+  });
+
+  it("後勝ち: 完了の後の入力中へ戻す操作で入力中になる", () => {
+    const next = applyOperations(
+      base,
+      [
+        pending(round({ status: "completed" })),
+        pending(round({ status: "in_progress" })),
+      ],
+      faces,
+    );
+    expect(next.round.status).toBe("in_progress");
+  });
+
+  it("確定済み: 効いた項目にstatusがあれば反映し、無ければ反映しない", () => {
+    const op = round({ name: "N", status: "completed" });
+    expect(applyConfirmed(base, op, ["status"]).round.status).toBe("completed");
+    expect(applyConfirmed(base, op, null).round.status).toBe("completed");
+    expect(applyConfirmed(base, op, ["name"]).round.status).toBe("in_progress");
+    expect(applyConfirmed(base, op, []).round.status).toBe("in_progress");
+  });
+
+  it("作成の操作から作るテーブルは入力中になる", () => {
+    const created = roundTablesFromCreated(
+      roundCreated() as Extract<SyncOperation, { type: "round.created" }>,
+    );
+    expect(created.round.status).toBe("in_progress");
   });
 });
 
@@ -511,6 +569,7 @@ describe("round.created", () => {
           format: "indoor",
           bowType: "compound",
         },
+        status: "in_progress",
         disabled: false,
       },
       distances: [

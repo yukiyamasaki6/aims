@@ -89,6 +89,41 @@ describe("ConfirmDialog", () => {
     });
   });
 
+  describe("confirmVariant", () => {
+    it("未指定の場合、確認ボタンは破壊的な見た目になる", () => {
+      // Given / When
+      render(
+        <ConfirmDialog
+          open
+          onOpenChange={vi.fn()}
+          description="説明"
+          onConfirm={vi.fn()}
+        />,
+      );
+
+      // Then
+      expect(confirmButton()).toHaveClass("text-destructive");
+    });
+
+    it("defaultを指定した場合、確認ボタンは破壊的な見た目にならない", () => {
+      // Given / When
+      render(
+        <ConfirmDialog
+          open
+          onOpenChange={vi.fn()}
+          description="説明"
+          confirmLabel="完了する"
+          confirmVariant="default"
+          onConfirm={vi.fn()}
+        />,
+      );
+
+      // Then
+      expect(confirmButton("完了する")).not.toHaveClass("text-destructive");
+      expect(confirmButton("完了する")).toHaveClass("bg-primary");
+    });
+  });
+
   describe("確認ボタンのクリック", () => {
     it("ダイアログを閉じ、onConfirmを呼び出す", async () => {
       // Given

@@ -48,6 +48,7 @@ erDiagram
         date round_date "記録日"
         string format "種別 [CHECK: outdoor / indoor / field]"
         string bow_type "弓種 [CHECK: recurve / compound / barebow]"
+        string status "状態 [NOT NULL] [DEFAULT: in_progress] [CHECK: in_progress / completed]"
         bigint revision "現在のサーバー確定リビジョン [NOT NULL] [CHECK: >= 1]"
         timestamp disabled_at "論理削除時刻 [NULLABLE: null=有効、値あり=無効]"
         timestamp created_at "作成時刻"
@@ -98,6 +99,7 @@ erDiagram
         date round_date "rounds.round_dateと同じ制約 [CREATED・UPDATED: 必須 / DISABLED: NULL]"
         string format "rounds.formatと同じ制約 [CREATED・UPDATED: 必須 / DISABLED: NULL]"
         string bow_type "rounds.bow_typeと同じ制約 [CREATED・UPDATED: 必須 / DISABLED: NULL]"
+        string status "rounds.statusと同じ制約 [UPDATED: set_fieldsにstatusを含むとき必須 / それ以外: NULL]"
         timestamp created_at "サーバー受領時刻 [DEFAULT: clock_timestamp()]"
         timestamp updated_at "最終更新時刻"
     }
