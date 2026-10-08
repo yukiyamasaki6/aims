@@ -114,18 +114,21 @@ describe("roundOpLog", () => {
   });
 
   it("loadAllは、列IDをラウンドIDへ写し、ラウンドの列でないものを除く", async () => {
-    const operations = [{ operation: disabled, confirmedFields: undefined }];
+    const snapshot = {
+      base: { startedAt: 1, base: null },
+      operations: [{ operation: disabled, confirmedFields: undefined }],
+    };
     hub.readAll.mockResolvedValue(
       new Map([
-        ["round:r1", operations],
-        ["other:x", operations],
+        ["round:r1", snapshot],
+        ["other:x", snapshot],
       ]),
     );
 
     const all = await roundOpLog.loadAll();
 
     expect([...all.keys()]).toEqual(["r1"]);
-    expect(all.get("r1")).toBe(operations);
+    expect(all.get("r1")).toBe(snapshot);
   });
 
   it("loadAllは、読み込みに失敗したら空を返す", async () => {

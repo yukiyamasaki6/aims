@@ -1,15 +1,21 @@
-import type { StreamEntry, StreamRules } from "@/features/op-log/op-log-types";
+import type {
+  StreamBase,
+  StreamEntry,
+  StreamRules,
+} from "@/features/op-log/op-log-types";
 import {
   type SyncOperation,
   upgradeLegacyOperation,
 } from "../_shared/sync-events";
 import { type RoundRevisions, shotRevisionKey } from "./fetch-round-detail";
-import { applyOperations } from "./round-op-apply";
+import { type AppliedOperation, applyOperations } from "./round-op-apply";
 import {
   type RoundState,
   type RoundTables,
+  roundTablesFromCreated,
   selectRoundState,
 } from "./round-tables";
+import type { ScoringTargetFace } from "./scorecard-scoring";
 
 // 取得して端末に持つ、ラウンドのベース。サーバーの状態と、その時点の対象ごとのrevision。
 export type RoundBaseRecord = {
@@ -31,6 +37,25 @@ export function shouldKeepRoundBase(
   hasUnsent: boolean,
 ): boolean {
   return isRoundInProgress(state) || hasUnsent;
+}
+
+// 端末の組から、画面と同じ導出で状態を求める。ベースが無いときは作成の操作が表す状態を基準にする。
+// 削除の印のとき、または基準がないときはnull。
+export function deriveRoundState(
+  base: StreamBase<RoundBaseRecord> | undefined,
+  operations: readonly AppliedOperation[],
+  faces: ScoringTargetFace[],
+): RoundState | null {
+  if (base?.base === null) return null;
+  let tables: RoundTables | undefined = base?.base?.tables;
+  if (!tables) {
+    const created = operations.find(
+      (applied) => applied.operation.type === "round.created",
+    )?.operation;
+    if (created?.type !== "round.created") return null;
+    tables = roundTablesFromCreated(created);
+  }
+  return selectRoundState(applyOperations(tables, [...operations], faces));
 }
 
 type StreamOperationEntry = StreamEntry<SyncOperation>;

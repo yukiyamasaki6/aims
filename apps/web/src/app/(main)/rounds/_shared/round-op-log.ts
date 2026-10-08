@@ -1,4 +1,4 @@
-import type { StreamGroup } from "@/features/op-log/op-log-types";
+import type { StreamBase, StreamGroup } from "@/features/op-log/op-log-types";
 import type { OpSyncOperation } from "@/features/op-log/op-sync";
 import type { RoundBaseRecord } from "../[id]/round-base";
 import { roundOpHub } from "./round-op-hub";
@@ -15,6 +15,12 @@ function roundIdOf(streamId: string): string | null {
 }
 
 export type RoundGroup = StreamGroup<SyncOperation, RoundBaseRecord>;
+
+// 端末のメモリにある、1つのラウンドのベースと操作(保存が完了したもの)。
+export type RoundSnapshot = {
+  base: StreamBase<RoundBaseRecord> | undefined;
+  operations: readonly OpSyncOperation<SyncOperation>[];
+};
 
 export type RoundOpSync = ReturnType<typeof roundOpHub.acquire>;
 
@@ -82,19 +88,14 @@ export const roundOpLog = {
       return [];
     }
   },
-  // 起動時の読み込みの完了後の、ハブのメモリにある全てのラウンドの列(保存が完了した操作)。失敗時は空。
-  async loadAll(): Promise<
-    Map<string, readonly OpSyncOperation<SyncOperation>[]>
-  > {
+  // 起動時の読み込みの完了後の、ハブのメモリにある全てのラウンドのベースと列(保存が完了した操作)。失敗時は空。
+  async loadAll(): Promise<Map<string, RoundSnapshot>> {
     try {
       const all = await roundOpHub.readAll();
-      const byRound = new Map<
-        string,
-        readonly OpSyncOperation<SyncOperation>[]
-      >();
-      for (const [streamId, operations] of all) {
+      const byRound = new Map<string, RoundSnapshot>();
+      for (const [streamId, snapshot] of all) {
         const roundId = roundIdOf(streamId);
-        if (roundId !== null) byRound.set(roundId, operations);
+        if (roundId !== null) byRound.set(roundId, snapshot);
       }
       return byRound;
     } catch {

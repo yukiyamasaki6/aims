@@ -1,5 +1,5 @@
 import type { OpLogStore } from "./op-log-store";
-import type { OpBase, StreamGroup } from "./op-log-types";
+import type { OpBase, StreamBase, StreamGroup } from "./op-log-types";
 import { createOpSync, type OpSyncDeps, type OpSyncOperation } from "./op-sync";
 
 type StreamDeps<Op extends OpBase, Base> = Omit<
@@ -19,6 +19,12 @@ export type OpSyncHubOptions<Op extends OpBase, Base> = {
   locks?: LockManager;
   // テストで差し替える。BroadcastChannelが無いブラウザではundefined。
   createChannel?: (name: string) => BroadcastChannel | undefined;
+};
+
+// 1つの列の、メモリにあるベースと保存が完了した操作。
+export type HubSnapshot<Op extends OpBase, Base> = {
+  base: StreamBase<Base> | undefined;
+  operations: readonly OpSyncOperation<Op>[];
 };
 
 // 他のタブへ知らせるメッセージ。
@@ -292,12 +298,14 @@ export function createOpSyncHub<Op extends OpBase, Base>(
         await acquire(streamId).commit(fetched, startedAt, fetchedUserId),
       );
     },
-    // 読み込みの完了後の、メモリにある現在のユーザーの全ての列の操作を返す。保存に失敗した操作も含む。
-    async readAll(): Promise<Map<string, readonly OpSyncOperation<Op>[]>> {
+    // 読み込みの完了後の、メモリにある現在のユーザーの全ての列の、ベースと操作を返す。保存に失敗した操作も含む。
+    async readAll(): Promise<Map<string, HubSnapshot<Op, Base>>> {
       await ready();
-      const all = new Map<string, readonly OpSyncOperation<Op>[]>();
-      for (const [streamId, sender] of senders)
-        all.set(streamId, sender.getSnapshot().operations);
+      const all = new Map<string, HubSnapshot<Op, Base>>();
+      for (const [streamId, sender] of senders) {
+        const { base, operations } = sender.getSnapshot();
+        all.set(streamId, { base, operations });
+      }
       return all;
     },
   };

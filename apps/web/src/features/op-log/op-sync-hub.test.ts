@@ -695,9 +695,23 @@ describe("readAll", () => {
     const all = await tab.hub.readAll();
 
     expect([...all.keys()]).toEqual([STREAM]);
-    expect(all.get(STREAM)?.map((entry) => entry.operation.eventId)).toEqual([
-      mine.eventId,
-    ]);
+    expect(
+      all.get(STREAM)?.operations.map((entry) => entry.operation.eventId),
+    ).toEqual([mine.eventId]);
+  });
+
+  it("取得したベースも返す", async () => {
+    const shared = sharedStore();
+    const tab = open(shared, undefined);
+    await flushed();
+    await tab.hub.commit(STREAM, { revision: 2 }, 10, "user-1");
+
+    const all = await tab.hub.readAll();
+
+    expect(all.get(STREAM)?.base).toEqual({
+      startedAt: 10,
+      base: { revision: 2 },
+    });
   });
 
   it("保存に失敗してメモリにだけある操作も含む", async () => {
@@ -710,9 +724,9 @@ describe("readAll", () => {
     await tab.hub.acquire(STREAM).append(unsaved);
     const all = await tab.hub.readAll();
 
-    expect(all.get(STREAM)?.map((entry) => entry.operation.eventId)).toEqual([
-      unsaved.eventId,
-    ]);
+    expect(
+      all.get(STREAM)?.operations.map((entry) => entry.operation.eventId),
+    ).toEqual([unsaved.eventId]);
   });
 
   it("確定済みの操作は、confirmedFieldsが未確定でない", async () => {
@@ -724,6 +738,6 @@ describe("readAll", () => {
 
     const all = await tab.hub.readAll();
 
-    expect(all.get(STREAM)?.[0]?.confirmedFields).not.toBeUndefined();
+    expect(all.get(STREAM)?.operations[0]?.confirmedFields).not.toBeUndefined();
   });
 });

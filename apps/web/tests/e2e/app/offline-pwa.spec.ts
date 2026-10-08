@@ -385,30 +385,6 @@ test.describe("認証済みでService Workerが登録済み", () => {
   });
 
   test.describe("オフライン", () => {
-    test("offline-pwa-08: Service Workerが登録済みで認証済みでオフラインのとき、/roundsを開くと、ラウンド一覧の枠と「ネットワークに接続されていません」が表示される", async ({
-      page,
-      context,
-    }) => {
-      // Given: Service Workerが登録済みで認証済みでオフラインで、プリセットを端末に保存していない
-      const errors = collectHydrationErrors(page);
-      await openWithServiceWorker(page);
-      await goOffline(context);
-
-      // When: /roundsを開く
-      const response = await page.goto("/rounds");
-
-      // Then: ラウンド一覧の枠と「ネットワークに接続されていません」が表示される
-      expect(response?.fromServiceWorker()).toBe(true);
-      await expect(
-        page.getByRole("heading", { name: "ラウンド一覧" }),
-      ).toBeVisible();
-      await expect(page.getByTestId("new-round-fab")).toBeVisible();
-      await expect(
-        page.getByText("ネットワークに接続されていません"),
-      ).toBeVisible();
-      expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
-    });
-
     test("offline-pwa-09: Service Workerが登録済みで認証済みでオフラインで、プリセットを端末に保存していないとき、/rounds/newを開くと、ラウンド開始の枠と「ネットワークに接続されていません」が表示される", async ({
       page,
       context,
@@ -455,6 +431,37 @@ test.describe("認証済みでService Workerが登録済み", () => {
       expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
     });
   });
+});
+
+test("offline-pwa-08: Service Workerが登録済みで認証済みでオフラインで、入力中のラウンドが無いとき、/roundsを開くと、ラウンド一覧の枠と「ネットワークに接続されていません」が表示される、「まだラウンドがありません。」は表示されない、入力中と「過去履歴」の見出しは表示されない", async ({
+  page,
+  context,
+}) => {
+  // Given: 入力中のラウンドが端末に入らないよう、使い捨てのユーザーでサインインし、オフラインにする
+  const errors = collectHydrationErrors(page);
+  await openWithServiceWorker(page);
+  await signUpAndSignIn(page, {
+    email: `e2e-offline-pwa-08-${Date.now()}-${randomUUID().slice(0, 8)}@example.com`,
+    password: "password-e2e-offline-pwa-08",
+  });
+  await goOffline(context);
+
+  // When: /roundsを開く
+  const response = await page.goto("/rounds");
+
+  // Then: ラウンド一覧の枠と「ネットワークに接続されていません」が表示される
+  expect(response?.fromServiceWorker()).toBe(true);
+  await expect(
+    page.getByRole("heading", { name: "ラウンド一覧" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("new-round-fab")).toBeVisible();
+  await expect(
+    page.getByText("ネットワークに接続されていません"),
+  ).toBeVisible();
+  await expect(page.getByText("まだラウンドがありません。")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "入力中" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "過去履歴" })).toHaveCount(0);
+  expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
 });
 
 test("offline-pwa-11: 未認証でService Workerが登録された後にサインインしてオフラインのとき、/roundsを開くと、ラウンド一覧の枠と「ネットワークに接続されていません」が表示される(サインイン画面は表示されない)", async ({

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/types/supabase";
 import type { FetchedRoundDetail } from "./fetch-round-detail";
-import { refreshRoundBases } from "./refresh-round-bases";
+import { commitRoundDetails, refreshRoundBases } from "./refresh-round-bases";
 
 // 取得と端末の組は別のテストで確かめるため、境界としてモックする。
 const deps = vi.hoisted(() => ({
@@ -160,5 +160,46 @@ describe("refreshRoundBases", () => {
 
     expect(await refreshRoundBases(supabaseOf("user-1"))).toBe(false);
     expect(deps.commit).not.toHaveBeenCalled();
+  });
+});
+
+describe("commitRoundDetails", () => {
+  it("返ったラウンドはベースとして、返らなかった保持のラウンドは削除の印として反映し、全て待つ", async () => {
+    let release: () => void = () => {};
+    deps.commit.mockImplementation(
+      (roundId: string) =>
+        new Promise<void>((resolve) => {
+          if (roundId === "gone") release = resolve;
+          else resolve();
+        }),
+    );
+    let done = false;
+
+    const pending = commitRoundDetails(
+      {
+        rounds: new Map([["kept", detail("in_progress")]]),
+        startedAt: 100,
+        userId: "user-1",
+      },
+      ["gone", "kept"],
+    ).then(() => {
+      done = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(done).toBe(false);
+    release();
+    await pending;
+    expect(done).toBe(true);
+    expect(deps.commit).toHaveBeenCalledWith("gone", null, 100, "user-1");
+    expect(deps.commit).toHaveBeenCalledWith(
+      "kept",
+      expect.objectContaining({
+        revisions: { round: 3, distances: {}, shots: {} },
+      }),
+      100,
+      "user-1",
+    );
   });
 });
