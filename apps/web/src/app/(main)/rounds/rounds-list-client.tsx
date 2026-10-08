@@ -2,7 +2,7 @@
 
 import { MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
@@ -17,8 +17,9 @@ import { createClient } from "@/lib/supabase/client";
 import { deleteRound } from "./_shared/delete-round";
 import { roundOpLog } from "./_shared/round-op-log";
 import type { RoundListItem } from "./fetch-rounds-list";
-import { type LoadedRoundsList, loadRoundsList } from "./load-rounds-list";
-import { overlayRoundsList } from "./overlay-rounds-list";
+import { loadRoundsList } from "./load-rounds-list";
+import { roundsListView } from "./overlay-rounds-list";
+import { useLocalRoundsList } from "./use-local-rounds-list";
 
 export function RoundsListClient() {
   const hydrated = useHydrated();
@@ -26,18 +27,89 @@ export function RoundsListClient() {
     () => loadRoundsList(createClient()),
     [],
   );
+  const { local, waited } = useLocalRoundsList();
+  // この画面で削除したラウンドのID。取得の状態が変わっても失わない。
+  const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
+  // 確認中のラウンド。確認の処理は、描画時のラウンドに束ねる。
+  const [target, setTarget] = useState<{
+    name: string;
+    confirm: () => void;
+  } | null>(null);
+  const { inProgress, others, rest, empty } = roundsListView(
+    view,
+    local,
+    waited,
+    removed,
+  );
+
+  function startDelete(round: RoundListItem) {
+    setTarget({
+      name: round.name,
+      confirm: () => {
+        void deleteRound(round.id);
+        setRemoved((prev) => new Set(prev).add(round.id));
+      },
+    });
+  }
+
+  // 削除が確定していたラウンドは、取得の完了時に1回、削除の印として端末の組へ反映する。列は購読しない。
+  const loaded = view.status === "ok" ? view.data : null;
+  useEffect(() => {
+    if (!loaded) return;
+    for (const roundId of loaded.confirmedDeletions) {
+      void roundOpLog.commitDeleted(roundId, loaded.startedAt);
+    }
+  }, [loaded]);
+
+  let below: ReactNode = null;
+  if (others && others.length > 0) {
+    below = <RoundCards rounds={others} onDelete={startDelete} />;
+  } else if (empty) {
+    below = (
+      <p className="text-muted-foreground text-sm">
+        まだラウンドがありません。
+      </p>
+    );
+  } else if (rest) {
+    below = (
+      <FetchState
+        view={rest}
+        onRetry={retry}
+        loading={<RoundCardsSkeleton />}
+      />
+    );
+  }
 
   return (
     <>
-      {view.status === "ok" ? (
-        <RoundCards loaded={view.data} />
-      ) : (
-        <FetchState
-          view={view}
-          onRetry={retry}
-          loading={<RoundCardsSkeleton />}
-        />
+      {inProgress.length > 0 && (
+        <section
+          data-testid="in-progress-rounds"
+          className="flex flex-col gap-2"
+        >
+          <h2 className="text-sm font-medium">入力中</h2>
+          <RoundCards rounds={inProgress} onDelete={startDelete} />
+        </section>
       )}
+
+      {inProgress.length > 0 && below !== null ? (
+        <section
+          data-testid="other-rounds"
+          className="flex flex-1 flex-col gap-2"
+        >
+          <h2 className="text-sm font-medium">過去履歴</h2>
+          {below}
+        </section>
+      ) : (
+        below
+      )}
+
+      <ConfirmDialog
+        open={target !== null}
+        onOpenChange={() => setTarget(null)}
+        description={`「${target?.name}」を削除しますか？記録したスコアもすべて失われます。`}
+        onConfirm={() => target?.confirm()}
+      />
 
       <Link
         href="/rounds/new"
@@ -63,83 +135,49 @@ function RoundCardsSkeleton() {
   );
 }
 
-function RoundCards({ loaded }: { loaded: LoadedRoundsList }) {
-  // 自分の削除はその場で足す。列は取得時に1回読み、購読しない。
-  const [deleted, setDeleted] = useState(loaded.deleted);
-  const rounds = overlayRoundsList(loaded.items, deleted);
-  // 確認中のラウンド。確認の処理は、描画時のラウンドに束ねる。
-  const [target, setTarget] = useState<{
-    name: string;
-    confirm: () => void;
-  } | null>(null);
-
-  function startDelete(round: RoundListItem) {
-    setTarget({
-      name: round.name,
-      confirm: () => {
-        void deleteRound(round.id);
-        setDeleted((prev) => new Set(prev).add(round.id));
-      },
-    });
-  }
-
-  useEffect(() => {
-    for (const roundId of loaded.confirmedDeletions) {
-      void roundOpLog.commitDeleted(roundId, loaded.startedAt);
-    }
-  }, [loaded]);
-
+function RoundCards({
+  rounds,
+  onDelete,
+}: {
+  rounds: RoundListItem[];
+  onDelete: (round: RoundListItem) => void;
+}) {
   return (
-    <>
-      {rounds.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          まだラウンドがありません。
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {rounds.map((round) => (
-            <li key={round.id} className="relative">
-              <Link
-                href={`/rounds/${round.id}`}
-                className="flex items-center justify-between rounded-xl border bg-card p-4 pr-12 text-card-foreground shadow-sm transition-colors hover:bg-muted/60"
+    <ul className="flex flex-col gap-3">
+      {rounds.map((round) => (
+        <li key={round.id} className="relative">
+          <Link
+            href={`/rounds/${round.id}`}
+            className="flex items-center justify-between rounded-xl border bg-card p-4 pr-12 text-card-foreground shadow-sm transition-colors hover:bg-muted/60"
+          >
+            <span className="flex flex-col gap-0.5">
+              <span className="font-medium">{round.name}</span>
+              <span className="text-muted-foreground text-sm">
+                {round.roundDate}
+              </span>
+            </span>
+            <span className="text-lg font-semibold">{round.total}点</span>
+          </Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label={`「${round.name}」のメニュー`}
+              data-testid="round-menu-trigger"
+              className="-translate-y-1/2 absolute top-1/2 right-2 p-2 text-muted-foreground hover:text-foreground"
+            >
+              <MoreHorizontal className="size-5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem
+                data-testid="round-delete"
+                className="text-destructive data-[highlighted]:text-destructive"
+                onClick={() => onDelete(round)}
               >
-                <span className="flex flex-col gap-0.5">
-                  <span className="font-medium">{round.name}</span>
-                  <span className="text-muted-foreground text-sm">
-                    {round.roundDate}
-                  </span>
-                </span>
-                <span className="text-lg font-semibold">{round.total}点</span>
-              </Link>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  aria-label={`「${round.name}」のメニュー`}
-                  data-testid="round-menu-trigger"
-                  className="-translate-y-1/2 absolute top-1/2 right-2 p-2 text-muted-foreground hover:text-foreground"
-                >
-                  <MoreHorizontal className="size-5" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem
-                    data-testid="round-delete"
-                    className="text-destructive data-[highlighted]:text-destructive"
-                    onClick={() => startDelete(round)}
-                  >
-                    削除
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <ConfirmDialog
-        open={target !== null}
-        onOpenChange={() => setTarget(null)}
-        description={`「${target?.name}」を削除しますか？記録したスコアもすべて失われます。`}
-        onConfirm={() => target?.confirm()}
-      />
-    </>
+                削除
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </li>
+      ))}
+    </ul>
   );
 }

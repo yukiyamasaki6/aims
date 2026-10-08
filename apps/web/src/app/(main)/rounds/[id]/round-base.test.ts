@@ -5,13 +5,15 @@ import type { StreamEntry } from "@/features/op-log/op-log-types";
 import type { SyncOperation } from "../_shared/sync-events";
 import { shotRevisionKey } from "./fetch-round-detail";
 import {
+  deriveRoundState,
   isRoundInProgress,
   type RoundBaseRecord,
   roundStreamRules,
   shouldKeepRoundBase,
 } from "./round-base";
 import { applyOperations } from "./round-op-apply";
-import { roundTablesFromServer } from "./round-tables";
+import { roundTablesFromServer, selectRoundState } from "./round-tables";
+import type { ScoringTargetFace } from "./scorecard-scoring";
 
 const { reflects, keeps } = roundStreamRules;
 
@@ -251,5 +253,121 @@ describe("keeps", () => {
     } as unknown as SyncOperation;
 
     expect(keeps(record({ status: "completed" }), [entry(legacy)])).toBe(true);
+  });
+});
+
+describe("deriveRoundState", () => {
+  const ring = (scoreStr: string, scoreInt: number, zIndex: number) => ({
+    score_str: scoreStr,
+    score_int: scoreInt,
+    z_index: zIndex,
+    color: "#000000",
+  });
+  const faces: ScoringTargetFace[] = [
+    {
+      id: "face-1",
+      target_face_spots: [
+        { target_face_rings: [ring("10", 10, 2), ring("9", 9, 1)] },
+      ],
+    },
+  ];
+  const created: SyncOperation = {
+    type: "round.created",
+    eventId: "c1",
+    roundId: "r1",
+    name: "作成直後",
+    roundDate: "2026-09-20",
+    format: "outdoor",
+    bowType: "recurve",
+    distances: [
+      {
+        eventId: "cd1",
+        id: "d1",
+        positionKey: "a",
+        distance: 70,
+        isMarked: true,
+        totalEnds: 6,
+        arrowsPerEnd: 6,
+        targetFaceId: "face-1",
+      },
+    ],
+  };
+  const shot: SyncOperation = {
+    type: "shot.recorded",
+    eventId: "s1",
+    distanceId: "d1",
+    endNumber: 1,
+    arrowNumber: 1,
+    scoreStr: "10",
+    scoreInt: 10,
+  };
+  const pending = (operation: SyncOperation) => ({
+    operation,
+    confirmedFields: undefined,
+  });
+
+  it("ベースに操作を重ねた状態を返す", () => {
+    const base = { startedAt: 1, base: record() };
+
+    const state = deriveRoundState(base, [pending(roundUpdated)], faces);
+
+    expect(state?.roundConfig.name).toBe("更新後");
+    expect(state?.status).toBe("in_progress");
+  });
+
+  it("画面と同じ導出(applyOperationsとselectRoundState)と同じ状態になる", () => {
+    const base = { startedAt: 1, base: record() };
+    const operations = [pending(roundUpdated), pending(completedOp)];
+
+    expect(deriveRoundState(base, operations, faces)).toEqual(
+      selectRoundState(applyOperations(base.base.tables, operations, faces)),
+    );
+  });
+
+  it("ベースが無いときは、作成の操作が表す状態を基準にする", () => {
+    const state = deriveRoundState(
+      undefined,
+      [pending(created), pending(shot)],
+      faces,
+    );
+
+    expect(state?.roundConfig.name).toBe("作成直後");
+    expect(state?.status).toBe("in_progress");
+    expect(state?.shots.map((s) => s.score_int)).toEqual([10]);
+  });
+
+  it("矢は渡した的で判定し、的に無い点数は反映しない", () => {
+    const offRing: SyncOperation = {
+      ...(shot as Extract<SyncOperation, { type: "shot.recorded" }>),
+      scoreStr: "7",
+      scoreInt: 7,
+    };
+
+    const withFaces = deriveRoundState(
+      undefined,
+      [pending(created), pending(offRing)],
+      faces,
+    );
+    const withoutFaces = deriveRoundState(
+      undefined,
+      [pending(created), pending(offRing)],
+      [],
+    );
+
+    expect(withFaces?.shots).toEqual([]);
+    expect(withoutFaces?.shots.map((s) => s.score_int)).toEqual([7]);
+  });
+
+  it("ベースが削除の印(null)のときは、nullを返す", () => {
+    expect(
+      deriveRoundState({ startedAt: 1, base: null }, [pending(created)], faces),
+    ).toBeNull();
+  });
+
+  it("ベースも作成の操作も無いときは、nullを返す", () => {
+    expect(
+      deriveRoundState(undefined, [pending(roundUpdated)], faces),
+    ).toBeNull();
+    expect(deriveRoundState(undefined, [], faces)).toBeNull();
   });
 });

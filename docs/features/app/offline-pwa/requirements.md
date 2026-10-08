@@ -9,7 +9,7 @@
 | offline-pwa-05 | 認証済み | manifestの`start_url`を開く | ラウンド一覧が表示される |
 | offline-pwa-06 | 未認証 | manifestの`start_url`を開く | /signinへ遷移する |
 | offline-pwa-07 | Service Workerが登録済みで認証済み | /rounds/[id]を開く | ラウンド詳細の枠が表示された後、内容が表示される |
-| offline-pwa-08 | Service Workerが登録済みで認証済みでオフライン | /roundsを開く | ラウンド一覧の枠と「ネットワークに接続されていません」が表示される |
+| offline-pwa-08 | Service Workerが登録済みで認証済みでオフラインで、入力中のラウンドが無い | /roundsを開く | ラウンド一覧の枠と「ネットワークに接続されていません」が表示される<br>「まだラウンドがありません。」は表示されない<br>入力中と「過去履歴」の見出しは表示されない |
 | offline-pwa-09 | Service Workerが登録済みで認証済みでオフラインで、プリセットを端末に保存していない | /rounds/newを開く | ラウンド開始の枠と「ネットワークに接続されていません」が表示される |
 | offline-pwa-10 | Service Workerが登録済みで認証済みでオフラインで、端末がオフラインで開けるベースを持たないラウンド | /rounds/[id]を開く | ラウンド詳細の枠と「ネットワークに接続されていません」が表示される |
 | offline-pwa-11 | 未認証でService Workerが登録された後にサインインしてオフライン | /roundsを開く | ラウンド一覧の枠と「ネットワークに接続されていません」が表示される(サインイン画面は表示されない) |
