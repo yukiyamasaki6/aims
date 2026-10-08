@@ -1,16 +1,16 @@
 import type { OpLogStore } from "./op-log-store";
-import type { OpBase, OpLogEntry } from "./op-log-types";
+import type { OpBase, StreamGroup } from "./op-log-types";
 import { createOpSync, type OpSyncDeps, type OpSyncOperation } from "./op-sync";
 
-type StreamDeps<Op extends OpBase> = Omit<
-  OpSyncDeps<Op>,
+type StreamDeps<Op extends OpBase, Base> = Omit<
+  OpSyncDeps<Op, Base>,
   "streamId" | "userId" | "store" | "canSend" | "onSharedChange" | "afterAppend"
 >;
 
-export type OpSyncHubOptions<Op extends OpBase> = {
-  store: OpLogStore<Op>;
-  // 送信、衝突、lane、上限、`isOffline`を返す。
-  streamDeps: (streamId: string, userId: string | null) => StreamDeps<Op>;
+export type OpSyncHubOptions<Op extends OpBase, Base> = {
+  store: OpLogStore<Op, Base>;
+  // 送信、衝突、lane、上限、`isOffline`、反映済みの判定を返す。
+  streamDeps: (streamId: string, userId: string | null) => StreamDeps<Op, Base>;
   // 読み込んだ操作の読み替え。
   upgrade?: (operation: Op) => Op;
   lockName?: string;
@@ -44,8 +44,8 @@ function defaultCreateChannel(name: string): BroadcastChannel | undefined {
 
 // タブに常駐する、操作の列の送信の集まり。Reactに依存しない。
 // 列ごとに送信器を1つ持ち、Web Locksで選ばれた1つのタブだけが送る。IndexedDBを共有の真実とし、変化はBroadcastChannelで知らせる。
-export function createOpSyncHub<Op extends OpBase>(
-  options: OpSyncHubOptions<Op>,
+export function createOpSyncHub<Op extends OpBase, Base>(
+  options: OpSyncHubOptions<Op, Base>,
 ) {
   const { store } = options;
   const lockName = options.lockName ?? "aims-sync-sender";
@@ -53,7 +53,7 @@ export function createOpSyncHub<Op extends OpBase>(
   const locks = "locks" in options ? options.locks : defaultLocks();
   const createChannel = options.createChannel ?? defaultCreateChannel;
 
-  type Sender = ReturnType<typeof createOpSync<Op>>;
+  type Sender = ReturnType<typeof createOpSync<Op, Base>>;
 
   let userId: string | null = null;
   let started = false;
@@ -68,13 +68,16 @@ export function createOpSyncHub<Op extends OpBase>(
   let lockAbort: AbortController | undefined;
   let releaseLock: (() => void) | undefined;
 
-  function upgraded(entries: OpLogEntry<Op>[]): OpLogEntry<Op>[] {
+  function upgraded(group: StreamGroup<Op, Base>): StreamGroup<Op, Base> {
     const upgrade = options.upgrade;
-    if (!upgrade) return entries;
-    return entries.map((entry) => ({
-      ...entry,
-      operation: upgrade(entry.operation),
-    }));
+    if (!upgrade) return group;
+    return {
+      base: group.base,
+      entries: group.entries.map((entry) => ({
+        ...entry,
+        operation: upgrade(entry.operation),
+      })),
+    };
   }
 
   function post(message: HubMessage) {
@@ -105,7 +108,7 @@ export function createOpSyncHub<Op extends OpBase>(
     const marks = new Map<string, number>();
     for (const [streamId, sender] of senders)
       marks.set(streamId, sender.mark());
-    let streams: Map<string, OpLogEntry<Op>[]>;
+    let streams: Map<string, StreamGroup<Op, Base>>;
     try {
       streams = await store.loadAll(userId);
     } catch {
@@ -113,14 +116,17 @@ export function createOpSyncHub<Op extends OpBase>(
       return;
     }
     if (epoch !== target) return;
-    for (const [streamId, entries] of streams) {
-      acquire(streamId).adopt(upgraded(entries), {
+    for (const [streamId, group] of streams) {
+      acquire(streamId).adopt(upgraded(group), {
         readAt: marks.get(streamId) ?? 0,
       });
     }
     for (const [streamId, sender] of senders) {
       if (!streams.has(streamId))
-        sender.adopt([], { readAt: marks.get(streamId) ?? 0 });
+        sender.adopt(
+          { base: undefined, entries: [] },
+          { readAt: marks.get(streamId) ?? 0 },
+        );
     }
     for (const sender of senders.values()) sender.wake();
     markLoaded(target);
@@ -133,9 +139,9 @@ export function createOpSyncHub<Op extends OpBase>(
     const target = epoch;
     const readAt = senders.get(streamId)?.mark() ?? 0;
     try {
-      const entries = await store.loadStream(streamId, userId);
+      const group = await store.loadStream(streamId, userId);
       if (epoch !== target) return;
-      acquire(streamId).adopt(upgraded(entries), { ...adoptOptions, readAt });
+      acquire(streamId).adopt(upgraded(group), { ...adoptOptions, readAt });
     } catch {
       // 読み込みに失敗しても、メモリの列から送信は続ける。
     }
@@ -185,7 +191,7 @@ export function createOpSyncHub<Op extends OpBase>(
   function acquire(streamId: string): Sender {
     const existing = senders.get(streamId);
     if (existing) return existing;
-    const created = createOpSync<Op>({
+    const created = createOpSync<Op, Base>({
       ...options.streamDeps(streamId, userId),
       streamId,
       userId,
@@ -260,10 +266,31 @@ export function createOpSyncHub<Op extends OpBase>(
     getUserId: () => userId,
     // 現在の世代の読み込みが終わる(失敗を含む)まで解決しない。`start`前、`setUser`と`stop`の後は次の読み込みの完了まで待つ。
     ready,
-    // 現在のユーザーの列を、読み替えて返す。読み込みの完了後に読み、失敗は投げる。
-    async read(streamId: string): Promise<OpLogEntry<Op>[]> {
+    // 現在のユーザーの列の組を、読み替えて返す。読み込みの完了後に読み、失敗は投げる。
+    async read(streamId: string): Promise<StreamGroup<Op, Base>> {
       await ready();
       return upgraded(await store.loadStream(streamId, userId));
+    },
+    // 端末に保存されている現在のユーザーの全ての組を、読み替えて返す。メモリの列は使わない。読み込みの完了後に読み、失敗は投げる。
+    async readStored(): Promise<Map<string, StreamGroup<Op, Base>>> {
+      await ready();
+      const stored = await store.loadAll(userId);
+      return new Map(
+        [...stored].map(([streamId, group]) => [streamId, upgraded(group)]),
+      );
+    },
+    // 取得したベースを、列の組へ反映する。読み込みの完了後に行い、結果の組を返す。
+    // `fetchedUserId`が現在のユーザーと違うときは、端末へ保存せず、このタブだけに反映する。
+    async commit(
+      streamId: string,
+      fetched: Base | null,
+      startedAt: number,
+      fetchedUserId: string | null,
+    ): Promise<StreamGroup<Op, Base>> {
+      await ready();
+      return upgraded(
+        await acquire(streamId).commit(fetched, startedAt, fetchedUserId),
+      );
     },
     // 読み込みの完了後の、メモリにある現在のユーザーの全ての列の操作を返す。保存に失敗した操作も含む。
     async readAll(): Promise<Map<string, readonly OpSyncOperation<Op>[]>> {
@@ -276,6 +303,6 @@ export function createOpSyncHub<Op extends OpBase>(
   };
 }
 
-export type OpSyncHub<Op extends OpBase> = ReturnType<
-  typeof createOpSyncHub<Op>
+export type OpSyncHub<Op extends OpBase, Base> = ReturnType<
+  typeof createOpSyncHub<Op, Base>
 >;

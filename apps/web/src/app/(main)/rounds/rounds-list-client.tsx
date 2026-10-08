@@ -84,8 +84,8 @@ function RoundCards({ loaded }: { loaded: LoadedRoundsList }) {
   }
 
   useEffect(() => {
-    for (const { roundId, eventIds } of loaded.reflected) {
-      roundOpLog.round(roundId).reflect(eventIds);
+    for (const roundId of loaded.confirmedDeletions) {
+      void roundOpLog.commitDeleted(roundId, loaded.startedAt);
     }
   }, [loaded]);
 

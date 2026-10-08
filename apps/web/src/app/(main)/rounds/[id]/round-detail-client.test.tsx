@@ -31,10 +31,12 @@ vi.mock("./scorecard-client", () => ({
     roundId,
     loaded,
     targetFaces,
+    onGone,
   }: {
     roundId: string;
     loaded: { base: { round: { config: { name: string } } } };
     targetFaces: { id: string }[] | null;
+    onGone?: () => void;
   }) => (
     <div
       data-testid="scorecard"
@@ -46,6 +48,9 @@ vi.mock("./scorecard-client", () => ({
       }
     >
       {loaded.base.round.config.name}
+      <button type="button" onClick={onGone}>
+        gone
+      </button>
     </div>
   ),
 }));
@@ -54,6 +59,7 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 function detail(
   name: string,
   pendingCreationEventId: string | null = null,
+  source: "server" | "local" = "server",
 ): LoadedRoundDetail {
   return {
     deleted: false,
@@ -68,10 +74,10 @@ function detail(
       distances: [],
       shots: [],
     }),
-    entries: [],
-    reflected: [],
+    group: { base: undefined, entries: [] },
     targetFaces: [],
     pendingCreationEventId,
+    source,
   };
 }
 
@@ -240,6 +246,31 @@ describe("RoundDetailClient", () => {
         "午前練習",
       );
       expect(load).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("端末のベースで開いたラウンド", () => {
+    it("的を背景で取得してスコアカードへ渡し、サーバーにラウンドが無いと分かったら一覧へ置き換える", async () => {
+      // Given
+      resolves({ status: "ok", data: detail("入力中", null, "local") });
+      fetchFaces.mockResolvedValue({
+        status: "ok",
+        data: [{ id: "face-1" }] as never,
+      });
+      const user = userEvent.setup();
+      render(<RoundDetailClient />);
+      await waitFor(() =>
+        expect(screen.getByTestId("scorecard")).toHaveAttribute(
+          "data-faces",
+          "face-1",
+        ),
+      );
+
+      // When: スコアカードが、ラウンドが無いと知らせる
+      await user.click(screen.getByRole("button", { name: "gone" }));
+
+      // Then
+      expect(nav.replace).toHaveBeenCalledWith("/rounds");
     });
   });
 

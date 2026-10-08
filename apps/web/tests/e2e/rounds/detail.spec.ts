@@ -1,8 +1,10 @@
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "../fixtures";
 import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
+  signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
 import { openOtherDevice, updateRound } from "../helpers/other-device";
@@ -300,7 +302,7 @@ test("detail-15: ラウンドが存在しない、閲覧権限がない、また
   await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
 });
 
-test("detail-16: 通信できないとき、/rounds/[id]を開くと、枠(「一覧へ戻る」リンク)と「読み込めませんでした。」と再試行ボタンが表示される", async ({
+test("detail-16: 端末がオフラインで開けるベースを持たないラウンドの詳細画面で通信できないとき、/rounds/[id]を開くと、枠(「一覧へ戻る」リンク)と「読み込めませんでした。」と再試行ボタンが表示される", async ({
   page,
 }) => {
   // Given
@@ -386,4 +388,121 @@ test("detail-19: オンラインでプリセットを選んで開始したラウ
     await expect(summary.locator('[role="img"]').first()).toBeVisible();
   }
   await expect(page.getByText("的データを取得できません")).toHaveCount(0);
+});
+
+// 端末への取得の完了は、常駐の取得の部品が出す成功の回数で確かめる。
+async function expectRoundBasesFetched(page: Page) {
+  await expect(page.getByTestId("round-base-refresher")).not.toHaveAttribute(
+    "data-refreshed-count",
+    "0",
+  );
+}
+
+test("detail-22: 他端末で作成し記録した入力中のラウンドを、この端末で一度も開かずにオンラインで取得を済ませ、オフラインで再起動したとき、/rounds/[id]を開くと、距離・記録済みの点数・的・合計が表示され、先頭の未入力のマスが選択され、テンキーが展開される", async ({
+  profile,
+}) => {
+  // Given: 他端末で作成し記録した入力中のラウンドがあり、この端末でオンラインのまま取得を済ませてから、オフラインで再起動する
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "他端末で記録",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 3 }],
+    shots: [shot(0, 1, 1, "X"), shot(0, 1, 2, "8")],
+  });
+  const first = await profile.open();
+  await signUpAndSignIn(first.page, {
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+  });
+  await waitForServiceWorkerControl(first.page);
+  await expectRoundBasesFetched(first.page);
+  await profile.close();
+  const { context, page } = await profile.open();
+  await goOffline(context);
+
+  // When: /rounds/[id]を開く
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  // Then: 距離・記録済みの点数・的・合計が表示され、先頭の未入力のマスが選択されてテンキーが展開される
+  await expect(page.getByTestId("round-summary")).toContainText("合計18");
+  await expect(page.getByTestId("distance-summary-1")).toContainText("18m");
+  await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("X");
+  await expect(page.getByTestId("shot-cell-1-1-2")).toContainText("8");
+  await expect(
+    page.getByTestId("distance-summary-1").locator('[role="img"]').first(),
+  ).toBeVisible();
+  await expect(page.getByTestId("score-button-9")).toBeVisible();
+
+  // And: 続けて点数を記録でき、表示される
+  await page.getByTestId("score-button-9").click();
+  await expect(page.getByTestId("shot-cell-1-1-3")).toContainText("9");
+  await expect(page.getByTestId("round-summary")).toContainText("合計27");
+});
+
+// src/features/fetch-result/fetch-content.tsのFALLBACK_WAIT_MS。
+const FALLBACK_WAIT_MS = 1_000;
+// 待ちの後の描画とブラウザ・CIの揺れの余裕。
+const RENDER_MARGIN_MS = 500;
+
+test("detail-23: navigator.onLineがtrueのまま通信できず、端末が保持する入力中のラウンドのとき、/rounds/[id]を開くと、通信の開始から1秒以内に、ラウンドが表示される", async ({
+  page,
+}) => {
+  // Given: 端末が入力中のラウンドを保持し、その後、通信が応答しなくなる
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "通信できない",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+    shots: [shot(0, 1, 1, "9")],
+  });
+  await page.goto("/rounds");
+  await expectRoundBasesFetched(page);
+  // 待ちと表示の時刻をページ内で測る(Node側の時刻はポーリングの間隔を含むため)。
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __firstRequestAt?: number;
+      __shownAt?: number;
+    };
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (/\/(rest|auth)\/v1\//.test(url)) {
+        w.__firstRequestAt ??= performance.now();
+      }
+      return originalFetch(input, init);
+    };
+    new MutationObserver(() => {
+      const el = document.querySelector('[data-testid="round-summary"]');
+      if (el?.textContent?.includes("合計9")) w.__shownAt ??= performance.now();
+    }).observe(document, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+  });
+  // Service Workerが制御する文書の通信も止めるため、contextで止める。
+  await page.context().route(/\/(rest|auth)\/v1\//, () => {});
+
+  // When: /rounds/[id]を開く
+  await page.goto(`/rounds/${roundId}`);
+  await expect(page.getByTestId("round-summary")).toContainText("合計9", {
+    timeout: 10_000,
+  });
+
+  // Then: 通信の開始から、待ちの上限(FALLBACK_WAIT_MS)と描画の余裕のうちに表示されている
+  const { firstRequestAt, shownAt } = await page.evaluate(() => {
+    const w = window as unknown as {
+      __firstRequestAt?: number;
+      __shownAt?: number;
+    };
+    return { firstRequestAt: w.__firstRequestAt, shownAt: w.__shownAt };
+  });
+  if (firstRequestAt === undefined) throw new Error("通信を始めていない");
+  if (shownAt === undefined) throw new Error("表示されていない");
+  expect(shownAt - firstRequestAt).toBeLessThan(
+    FALLBACK_WAIT_MS + RENDER_MARGIN_MS,
+  );
 });

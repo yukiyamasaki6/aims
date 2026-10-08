@@ -200,8 +200,8 @@ function setup(
           distances,
           shots: initialShots,
         }),
-        entries: [],
-        reflected: [],
+        group: { base: undefined, entries: [] },
+        source: "server",
       }}
       targetFaces={faces}
     />,
@@ -1292,9 +1292,11 @@ describe("ScorecardClient ラウンド削除", () => {
     await waitFor(() => {
       expect(nav.replace).toHaveBeenCalledWith("/rounds");
     });
-    expect(supabase.rpc).toHaveBeenCalledWith("disable_round", {
-      p_round_event_id: expect.any(String),
-      p_round_id: "round-1",
+    await waitFor(() => {
+      expect(supabase.rpc).toHaveBeenCalledWith("disable_round", {
+        p_round_event_id: expect.any(String),
+        p_round_id: "round-1",
+      });
     });
   });
 });

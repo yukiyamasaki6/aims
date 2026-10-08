@@ -25,6 +25,30 @@ export type NewOpLogEntry<Op extends OpBase> = Omit<
   "seq" | "ackedRevision" | "ackedApplied" | "ackedFields"
 >;
 
+// 取得して得た、列の対象の状態(ベース)。`base`がnullは、サーバーに無い(削除された)ことの印。
+// `startedAt`は取得の開始時刻で、古い取得の結果で新しい保存を上書きしないために使う。
+export type StreamBase<Base> = { startedAt: number; base: Base | null };
+
+// ベースと操作の列の組。ベースは取得されていなければundefined。
+export type StreamGroup<Op extends OpBase, Base> = {
+  base: StreamBase<Base> | undefined;
+  entries: OpLogEntry<Op>[];
+};
+
+// 反映済みと保持の判定が使う、列の1件の項目。
+export type StreamEntry<Op extends OpBase> = Pick<
+  OpLogEntry<Op>,
+  "operation" | "ackedRevision" | "ackedApplied" | "ackedFields"
+>;
+
+// 列の対象ごとに決まる規則。
+export type StreamRules<Op extends OpBase, Base> = {
+  // 確定した操作が、ベースに反映済みか。ベースがnullのときは、確定済みの操作は全て反映済み。
+  reflects: (base: Base | null, entry: StreamEntry<Op>) => boolean;
+  // ベースに、反映済みでない操作を重ねた状態を端末に保持するか。未送信の操作が残るときは真を返す(保持しない組は丸ごと消すため)。
+  keeps: (base: Base, entries: StreamEntry<Op>[]) => boolean;
+};
+
 // ineffectiveは効かなかった操作、discardedは認可・契約で拒否された操作。
 export type RetireReason = "reflected" | "ineffective" | "discarded";
 

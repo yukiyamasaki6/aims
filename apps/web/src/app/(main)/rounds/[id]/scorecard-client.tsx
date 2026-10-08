@@ -26,6 +26,7 @@ import {
 } from "./distance-config-row";
 import { KeypadPanel } from "./keypad-panel";
 import type { LoadedRound } from "./load-round-detail";
+import { isRoundInProgress } from "./round-base";
 import { RoundConfigPanel } from "./round-config-panel";
 import { RoundMenu } from "./round-menu";
 import { completionConfirmation, statusOperation } from "./round-progress";
@@ -155,16 +156,20 @@ export function ScorecardClient({
   roundId,
   loaded,
   targetFaces,
+  onGone,
 }: {
   roundId: string;
-  loaded: Pick<LoadedRound, "base" | "entries" | "reflected">;
+  loaded: Pick<LoadedRound, "base" | "group" | "source" | "pendingServer">;
   // nullは的の一覧の取得中。
   targetFaces: TargetFaceOption[] | null;
+  // 端末のベースで開いたラウンドが、取り直したサーバーに無いとき(削除済みなど)に呼ぶ。
+  onGone?: () => void;
 }) {
-  // 画面の状態は、サーバーの状態へ操作の列を重ねた導出だけから得る。
+  // 画面の状態は、ベースへ操作の列を重ねた導出だけから得る。
   const faces = targetFaces ?? NO_TARGET_FACES;
-  const sync = useRoundOpStack(roundId, loaded, faces);
+  const sync = useRoundOpStack(roundId, loaded, faces, onGone);
   const { roundConfig, distances, shots, status: roundStatus } = sync.state;
+  const inProgress = isRoundInProgress(sync.state);
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
 
@@ -178,7 +183,7 @@ export function ScorecardClient({
   // 更新していた旧keypadOpenを廃止し、ここから直接導出する。
   // 完了のラウンドは、先頭の未入力のマスを選ばず、テンキーも展開しない。
   const [position, setPosition] = useState<Position | null>(() =>
-    roundStatus === "completed" ? null : findCurrentPosition(distances, shots),
+    inProgress ? findCurrentPosition(distances, shots) : null,
   );
   // keypadOpen（=position有無）の変化をそのままアンマウントすると格納
   // アニメーションが再生できないため、トランジション終了後に実際に
@@ -568,8 +573,7 @@ export function ScorecardClient({
                 roundId={roundId}
                 initial={roundConfig}
                 defaultExpanded={
-                  loaded.base.distances.length === 0 &&
-                  roundStatus !== "completed"
+                  loaded.base.distances.length === 0 && inProgress
                 }
                 hasUnmarkedDistances={distances.some((d) => !d.is_marked)}
                 enqueue={sync.append}

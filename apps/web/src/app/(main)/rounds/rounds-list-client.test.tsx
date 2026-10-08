@@ -14,11 +14,9 @@ const load = vi.mocked(loadRoundsList);
 const deletion = vi.hoisted(() => ({ deleteRound: vi.fn() }));
 vi.mock("./_shared/delete-round", () => deletion);
 
-// 反映済みの除去は、ラウンドごとの送信器へ渡る。
-const sync = vi.hoisted(() => ({ reflect: vi.fn(), round: vi.fn() }));
-vi.mock("./_shared/round-op-log", () => ({
-  roundOpLog: { round: sync.round },
-}));
+// 削除の確定は、削除の印として端末の組へ渡る。
+const log = vi.hoisted(() => ({ commitDeleted: vi.fn() }));
+vi.mock("./_shared/round-op-log", () => ({ roundOpLog: log }));
 
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 
@@ -26,7 +24,13 @@ function loaded(
   items: RoundListItem[],
   overrides: Partial<LoadedRoundsList> = {},
 ): LoadedRoundsList {
-  return { items, deleted: new Set(), reflected: [], ...overrides };
+  return {
+    items,
+    deleted: new Set(),
+    confirmedDeletions: [],
+    startedAt: 100,
+    ...overrides,
+  };
 }
 
 function fetchResolves(result: FetchResult<RoundListItem[]>) {
@@ -55,7 +59,7 @@ async function openDeleteDialog(
 beforeEach(() => {
   vi.clearAllMocks();
   deletion.deleteRound.mockResolvedValue(undefined);
-  sync.round.mockReturnValue({ reflect: sync.reflect });
+  log.commitDeleted.mockResolvedValue({ base: undefined, entries: [] });
 });
 
 describe("RoundsListClient", () => {
@@ -173,13 +177,13 @@ describe("RoundsListClient", () => {
       expect(screen.queryByText("午前練習")).not.toBeInTheDocument();
     });
 
-    it("反映済みと確かめた操作を、そのラウンドの送信器から外す", async () => {
+    it("取得の前に削除が確定していたラウンドを、削除の印として端末の組へ反映する", async () => {
       // Given
       load.mockResolvedValue({
         status: "ok",
         data: loaded(rounds, {
           deleted: new Set(["round-1"]),
-          reflected: [{ roundId: "round-1", eventIds: ["e1", "e2"] }],
+          confirmedDeletions: ["round-1"],
         }),
       });
 
@@ -188,8 +192,7 @@ describe("RoundsListClient", () => {
       await screen.findByText("午後練習");
 
       // Then
-      expect(sync.round).toHaveBeenCalledWith("round-1");
-      expect(sync.reflect).toHaveBeenCalledWith(["e1", "e2"]);
+      expect(log.commitDeleted).toHaveBeenCalledWith("round-1", 100);
     });
   });
 

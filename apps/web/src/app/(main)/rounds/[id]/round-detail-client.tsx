@@ -57,13 +57,18 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
     view.status === "ok" && !view.data.deleted
       ? view.data.pendingCreationEventId
       : null;
-  // 作成が未確定のラウンドの的は、詳細を表示した後に背景で取得する。
+  // 作成が未確定のラウンドと、端末のベースで開いたラウンドの的は、詳細を表示した後に背景で取得する。
+  const loadsFaces =
+    view.status === "ok" && !view.data.deleted
+      ? view.data.pendingCreationEventId !== null ||
+        view.data.source === "local"
+      : false;
   const { view: faces } = useFetchResult(
     () =>
-      pending
+      loadsFaces
         ? fetchTargetFaces(createClient())
         : Promise.resolve(NO_TARGET_FACES_RESULT),
-    [pending],
+    [loadsFaces],
   );
   useCreationGone(roundId, pending, retry);
 
@@ -76,8 +81,9 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
       <ScorecardClient
         roundId={roundId}
         loaded={view.data}
+        onGone={() => router.replace("/rounds")}
         targetFaces={
-          pending
+          loadsFaces
             ? faces.status === "loading"
               ? null
               : faces.status === "ok"

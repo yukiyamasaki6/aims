@@ -5,10 +5,20 @@ import type {
   OpLogEntry,
   RetireReason,
   SendOutcome,
+  StreamBase,
+  StreamEntry,
+  StreamGroup,
 } from "./op-log-types";
 import { createOpSyncHub, type OpSyncHub } from "./op-sync-hub";
 
 type Op = { eventId: string; target: string; legacy?: boolean };
+
+// ベースは取得時点のrevisionだけを持つ。確定した操作は、revisionがベース以下なら反映済み。
+type Base = { revision: number };
+
+const reflects = (base: Base | null, entry: StreamEntry<Op>) =>
+  entry.ackedRevision !== undefined &&
+  (base === null || entry.ackedRevision <= base.revision);
 
 const STREAM = "round:r1";
 
@@ -21,23 +31,39 @@ function op(target: string): Op {
 // IndexedDBの代わりに、タブをまたいで共有するメモリのストア。
 function sharedStore() {
   const rows: OpLogEntry<Op>[] = [];
+  const bases = new Map<string, StreamBase<Base>>();
   let seq = 0;
-  const store: OpLogStore<Op> = {
+  const groupOf = (streamId: string, userId: string | null) => ({
+    base: bases.get(`${userId}/${streamId}`),
+    entries: rows.filter(
+      (row) => row.streamId === streamId && row.userId === userId,
+    ),
+  });
+  const store: OpLogStore<Op, Base> = {
     append: vi.fn(async (entry) => {
       seq += 1;
       rows.push({ ...entry, seq });
       return seq;
     }),
-    loadStream: vi.fn(async (streamId, userId) =>
-      rows.filter((row) => row.streamId === streamId && row.userId === userId),
-    ),
+    loadStream: vi.fn(async (streamId, userId) => groupOf(streamId, userId)),
     loadAll: vi.fn(async (userId) => {
-      const all = new Map<string, OpLogEntry<Op>[]>();
+      const all = new Map<string, StreamGroup<Op, Base>>();
       for (const row of rows) {
         if (row.userId !== userId) continue;
-        all.set(row.streamId, [...(all.get(row.streamId) ?? []), row]);
+        all.set(row.streamId, groupOf(row.streamId, userId));
       }
       return all;
+    }),
+    commit: vi.fn(async (streamId, userId, base, startedAt) => {
+      const key = `${userId}/${streamId}`;
+      const stored = bases.get(key);
+      const newer = stored !== undefined && stored.startedAt > startedAt;
+      const adopted = newer ? stored : { startedAt, base };
+      for (const row of groupOf(streamId, userId).entries) {
+        if (reflects(adopted.base, row)) rows.splice(rows.indexOf(row), 1);
+      }
+      if (!newer) bases.set(key, adopted);
+      return groupOf(streamId, userId);
     }),
     ack: vi.fn(async (eventId, revision, applied, appliedFields) => {
       const row = rows.find((r) => r.eventId === eventId);
@@ -141,7 +167,7 @@ const heldFailure: SendOutcome = {
 };
 
 type Tab = {
-  hub: OpSyncHub<Op>;
+  hub: OpSyncHub<Op, Base>;
   sent: string[][];
   send: ReturnType<typeof vi.fn>;
 };
@@ -156,7 +182,7 @@ function openTab(
     sent.push(flight.entries.map((entry) => entry.eventId));
     return okFor(flight);
   });
-  const hub = createOpSyncHub<Op>({
+  const hub = createOpSyncHub<Op, Base>({
     store: shared.store,
     upgrade: options.upgrade,
     streamDeps: () => ({
@@ -165,6 +191,7 @@ function openTab(
       conflicts: (previous, next) => previous.target === next.target,
       laneOf: () => "lane",
       batchLimitOf: () => 100,
+      reflects,
     }),
     locks,
     createChannel: (name) =>
@@ -263,6 +290,54 @@ describe("createOpSyncHub", () => {
 
     expect(statuses(leader)).toEqual(["acked"]);
     expect(statuses(follower)).toEqual(["acked"]);
+  });
+
+  describe("取得の反映(commit)", () => {
+    // 2つのタブが、revision 1で確定した同じ操作を持つ。
+    async function confirmedInBothTabs() {
+      const shared = sharedStore();
+      const locks = fakeLocks();
+      const leader = open(shared, locks);
+      const follower = open(shared, locks);
+      await flushed();
+      follower.hub.acquire(STREAM).append(op("x"));
+      await flushed();
+      expect(statuses(follower)).toEqual(["acked"]);
+      return { shared, leader, follower };
+    }
+
+    it("一方のタブの取得が、確定済みの操作を外してベースを保存したら、他方のタブはその操作を、ベースが新しくなるのと同時に外す", async () => {
+      // Given
+      const { leader, follower } = await confirmedInBothTabs();
+
+      // When: リーダーが、その操作を反映済みのベース(revision 1)を取得して反映する
+      await leader.hub.commit(STREAM, { revision: 1 }, 10, "user-1");
+      await flushed();
+
+      // Then: フォロワーのタブは、新しいベースを使い、反映済みの操作を外す(片方だけが変わった組を見せない)
+      const snapshot = follower.hub.acquire(STREAM).getSnapshot();
+      expect(snapshot.base).toEqual({ startedAt: 10, base: { revision: 1 } });
+      expect(snapshot.operations).toEqual([]);
+    });
+
+    it("保存せずに操作だけを外した取得があっても、他方のタブは自分のベースに未反映の確定済みの操作を残す", async () => {
+      // Given: 取得が保持の対象でなく、ベースを保存せず、反映済みの操作だけを消す
+      const { shared, leader, follower } = await confirmedInBothTabs();
+      vi.mocked(shared.store.commit).mockImplementationOnce(async () => {
+        shared.rows.splice(0, shared.rows.length);
+        return { base: undefined, entries: [] };
+      });
+
+      // When
+      await leader.hub.commit(STREAM, { revision: 1 }, 10, "user-1");
+      await flushed();
+
+      // Then: フォロワーは、ベースが古いまま、操作を外さない(点数が消えない)
+      const snapshot = follower.hub.acquire(STREAM).getSnapshot();
+      expect(snapshot.base).toBeUndefined();
+      expect(snapshot.operations).toHaveLength(1);
+      expect(statuses(follower)).toEqual(["acked"]);
+    });
   });
 
   it("保留の知らせで、他のタブも保留になり、後から起動したタブにも伝わる", async () => {
@@ -426,7 +501,7 @@ function gateLoads(shared: ReturnType<typeof sharedStore>) {
       new Promise((resolve) => {
         pending.push(() => resolve(original(userId)));
       }),
-  ) as OpLogStore<Op>["loadAll"];
+  ) as OpLogStore<Op, Base>["loadAll"];
   return {
     pending,
     release: async (index: number) => {
@@ -466,7 +541,7 @@ describe("ready", () => {
   });
 
   it("startの前は解決しない", async () => {
-    const hub = createOpSyncHub<Op>({
+    const hub = createOpSyncHub<Op, Base>({
       store: sharedStore().store,
       streamDeps: () => {
         throw new Error("not used");
@@ -553,7 +628,10 @@ describe("read", () => {
     await gate.release(0);
 
     expect(
-      (await read).map((entry) => [entry.eventId, entry.operation.legacy]),
+      (await read).entries.map((entry) => [
+        entry.eventId,
+        entry.operation.legacy,
+      ]),
     ).toEqual([[mine.eventId, true]]);
   });
 
@@ -564,6 +642,33 @@ describe("read", () => {
     vi.mocked(shared.store.loadStream).mockRejectedValue(new Error("idb"));
 
     await expect(tab.hub.read(STREAM)).rejects.toThrow("idb");
+  });
+});
+
+describe("readStored", () => {
+  it("読み込みの完了後に、端末に保存されている現在のユーザーの組を、読み替えて返す", async () => {
+    const shared = sharedStore();
+    const mine = op("x");
+    await shared.store.append({
+      eventId: mine.eventId,
+      streamId: STREAM,
+      userId: "user-1",
+      operation: mine,
+    });
+    await shared.store.commit(STREAM, "user-1", { revision: 1 }, 10);
+    const tab = open(shared, undefined, {
+      upgrade: (operation) => ({ ...operation, legacy: true }),
+    });
+
+    const stored = await tab.hub.readStored();
+
+    expect(stored.get(STREAM)?.base).toEqual({
+      startedAt: 10,
+      base: { revision: 1 },
+    });
+    expect(stored.get(STREAM)?.entries.map((e) => e.operation.legacy)).toEqual([
+      true,
+    ]);
   });
 });
 
