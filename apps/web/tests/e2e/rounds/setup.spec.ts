@@ -6,6 +6,13 @@ import {
   waitForHydration,
 } from "../helpers/auth";
 import {
+  getDistanceIds,
+  openOtherDevice,
+  updateDistance,
+  updateRound,
+} from "../helpers/other-device";
+import {
+  blockTargetFacesOnDevice,
   CREATE_ROUND_RPC,
   openNewRoundThenGoOffline,
   saveTargetFacesOnDevice,
@@ -625,6 +632,7 @@ test("setup-28: オフラインで的を端末に保存しておらず、作成�
   page,
 }) => {
   // Given: オフラインで的を端末に保存しておらず、作成が未確定で距離があるラウンド
+  await blockTargetFacesOnDevice(page);
   await openNewRoundThenGoOffline(page);
 
   // When: /rounds/[id]を開く
@@ -663,4 +671,67 @@ test("setup-29: ラウンド詳細画面で距離を追加して削除した後�
   await page.reload();
   await waitForHydration(page);
   await expect(page.getByTestId("distance-summary-2")).toBeVisible();
+});
+
+// 一括の取得を起こし、成功の回数が増えるまで待つ。
+async function refreshRoundBases(page: Page) {
+  const refresher = page.getByTestId("round-base-refresher");
+  const before = Number(await refresher.getAttribute("data-refreshed-count"));
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect
+    .poll(async () =>
+      Number(await refresher.getAttribute("data-refreshed-count")),
+    )
+    .toBeGreaterThan(before);
+}
+
+test("setup-30: ラウンド編集ダイアログで内容を変更しているとき、他端末の変更が取得で届くと、変更中の内容が残り、保存すると、変更した項目と他端末で変更された項目の両方が保たれる", async ({
+  page,
+}) => {
+  // Given
+  const roundId = await openRound(page);
+  await page.getByTestId("round-config-summary").click();
+  await page.getByTestId("round-config-name").fill("編集中の名前");
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+
+  // When
+  await updateRound(device.supabase, roundId, { round_date: "2026-08-25" });
+  await refreshRoundBases(page);
+
+  // Then
+  await expect(page.getByTestId("round-config-name")).toHaveValue(
+    "編集中の名前",
+  );
+  const sent = page.waitForResponse(UPDATE_ROUND_RPC);
+  await page.getByTestId("round-config-save").click();
+  await reloadAfter(page, sent);
+  await expect(page.getByTestId("round-config-summary")).toHaveText(
+    "編集中の名前 / 2026-08-25 / アウトドア / リカーブ",
+  );
+});
+
+test("setup-31: 距離編集ダイアログで内容を変更しているとき、他端末の変更が取得で届くと、変更中の内容が残り、保存すると、変更した項目と他端末で変更された項目の両方が保たれる", async ({
+  page,
+}) => {
+  // Given
+  const roundId = await openRound(page);
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-total-ends-1").fill("3");
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const [distanceId] = await getDistanceIds(device.supabase, roundId);
+
+  // When
+  await updateDistance(device.supabase, distanceId, { distance: 30 });
+  await refreshRoundBases(page);
+
+  // Then
+  await expect(page.getByTestId("distance-config-total-ends-1")).toHaveValue(
+    "3",
+  );
+  const sent = page.waitForResponse(UPDATE_DISTANCE_RPC);
+  await page.getByTestId("distance-config-save-1").click();
+  await reloadAfter(page, sent);
+  const summary = page.getByTestId("distance-summary-1");
+  await expect(summary).toContainText("30m");
+  await expect(summary).toContainText("1本×3エンド");
 });

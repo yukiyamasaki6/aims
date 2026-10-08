@@ -69,11 +69,16 @@ describe("loadRoundsList", () => {
 
     expect(await loadRoundsList(supabase)).toEqual({
       status: "ok",
-      data: { items, deleted: new Set(), reflected: [] },
+      data: {
+        items,
+        deleted: new Set(),
+        confirmedDeletions: [],
+        startedAt: expect.any(Number),
+      },
     });
   });
 
-  it("確定済みの削除は、削除済みにし、確定済みの操作を反映済みにする(取得結果に含まれるかに依らない)", async () => {
+  it("確定済みの削除は、削除済みにし、削除の確定として返す(取得結果に含まれるかに依らない)", async () => {
     log.loadAll.mockResolvedValue(
       new Map([["r1", [created("r1", true), disabled("r1", true)]]]),
     );
@@ -85,12 +90,13 @@ describe("loadRoundsList", () => {
       data: {
         items,
         deleted: new Set(["r1"]),
-        reflected: [{ roundId: "r1", eventIds: ["c-r1", "d-r1"] }],
+        confirmedDeletions: ["r1"],
+        startedAt: expect.any(Number),
       },
     });
   });
 
-  it("未確定の削除は、削除済みにするが、反映済みにしない", async () => {
+  it("未確定の削除は、削除済みにするが、削除の確定として返さない", async () => {
     log.loadAll.mockResolvedValue(
       new Map([["r1", [created("r1", true), disabled("r1", false)]]]),
     );
@@ -99,7 +105,7 @@ describe("loadRoundsList", () => {
 
     expect(result).toMatchObject({
       status: "ok",
-      data: { deleted: new Set(["r1"]), reflected: [] },
+      data: { deleted: new Set(["r1"]), confirmedDeletions: [] },
     });
   });
 

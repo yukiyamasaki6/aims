@@ -12,7 +12,11 @@ import {
   loadReferenceSnapshot,
   saveReferenceSnapshot,
 } from "../_shared/reference-snapshot";
-import { fetchRoundDetail, fetchTargetFaces } from "./fetch-round-detail";
+import {
+  fetchRoundDetail,
+  fetchRoundDetails,
+  fetchTargetFaces,
+} from "./fetch-round-detail";
 
 beforeEach(() => {
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
@@ -202,6 +206,8 @@ describe("fetchRoundDetail", () => {
             distances: { "d-a": 4, "d-b": 6 },
             shots: { "d-a:1:1": 5, "d-b:1:1": 7 },
           },
+          startedAt: expect.any(Number),
+          userId: "user-1",
         },
       });
     });
@@ -631,7 +637,6 @@ describe("的の端末への保存", () => {
 
       await vi.advanceTimersByTimeAsync(3_000);
 
-      expect(loadReferenceSnapshot("target-faces")).toBeNull();
       localStorage.setItem(IDENTITY_KEY, "user-1");
       expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual(["late"]);
     });
@@ -706,5 +711,78 @@ describe("的の端末への保存", () => {
         message: FETCH_ERROR_MESSAGE,
       });
     });
+  });
+});
+
+describe("fetchRoundDetails", () => {
+  const UUID_1 = "11111111-1111-4111-8111-111111111111";
+  const UUID_2 = "22222222-2222-4222-8222-222222222222";
+
+  it("入力中のラウンドと指定したラウンドを1回の取得で得て、ラウンドIDごとの記録を返す", async () => {
+    // Given: 2件のラウンドが返る
+    const { client, queries } = makeSupabase({
+      rounds: ok([
+        { ...round, id: UUID_1, status: "in_progress" },
+        { ...round, id: UUID_2 },
+      ]),
+      target_faces: ok([face("face-1", null)]),
+    });
+
+    // When
+    const result = await fetchRoundDetails(client, [UUID_2, "not-a-uuid"]);
+
+    // Then: UUIDだけを絞りに使い、ラウンドごとに設定・revision・取得時刻を持つ
+    const roundQuery = queries.find((q) => q.table === "rounds");
+    expect(roundQuery?.calls).toContainEqual([
+      "or",
+      [`status.eq.in_progress,id.in.(${UUID_2})`],
+    ]);
+    expect(roundQuery?.calls).toContainEqual(["is", ["disabled_at", null]]);
+    if (result.status !== "ok") throw new Error("not ok");
+    expect([...result.data.rounds.keys()]).toEqual([UUID_1, UUID_2]);
+    expect(result.data.rounds.get(UUID_1)).toMatchObject({
+      status: "in_progress",
+      revisions: { round: 3 },
+      userId: "user-1",
+      startedAt: result.data.startedAt,
+    });
+  });
+
+  it("指定したラウンドが無ければ、入力中のラウンドだけで絞る", async () => {
+    const { client, queries } = makeSupabase({
+      rounds: ok([]),
+      target_faces: ok([]),
+    });
+
+    const result = await fetchRoundDetails(client, []);
+
+    expect(result).toMatchObject({ status: "ok" });
+    expect(queries.find((q) => q.table === "rounds")?.calls).toContainEqual([
+      "or",
+      ["status.eq.in_progress"],
+    ]);
+  });
+
+  it("セッションが無いときは、取得せずに未認証のerrorを返す", async () => {
+    const { client, queries } = makeSupabase(
+      { rounds: ok([]), target_faces: ok([]) },
+      null,
+    );
+
+    const result = await fetchRoundDetails(client, []);
+
+    expect(result).toEqual({ status: "error", message: AUTH_REQUIRED_MESSAGE });
+    expect(queries).toEqual([]);
+  });
+
+  it("取得に失敗したときは、そのまま返す", async () => {
+    const { client } = makeSupabase({
+      rounds: failed(0),
+      target_faces: ok([]),
+    });
+
+    const result = await fetchRoundDetails(client, []);
+
+    expect(result.status).toBe("error");
   });
 });

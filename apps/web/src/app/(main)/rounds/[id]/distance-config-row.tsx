@@ -171,7 +171,7 @@ const MARKED_OPTIONS = [
 
 // distance-summary行のタップでポップアップ表示される、距離1件分の編集フォーム。
 // 自身では開閉状態を持たず、ScorecardClient側の管理下でマウント/アンマウントされる
-// （マウントのたびにdraftが現在値へリセットされる）。
+// （マウントのたびにdraftと起点が現在値から作られ、開いている間は`distance`の変化で書き換えない）。
 export function DistanceEditFields({
   distance,
   hasShots,
@@ -193,6 +193,8 @@ export function DistanceEditFields({
   onOpenChange: (open: boolean) => void;
   enqueue: (operation: SyncOperation) => void;
 }) {
+  // 保存の差は、開いたときの値(起点)と比べる。開いている間に届いた他の端末の変更を、変えていない項目の古い値で戻さないため。
+  const [origin] = useState(distance);
   const [draft, setDraft] = useState<DistanceDraft>(distance);
   const [fieldErrors, setFieldErrors] = useState<DistanceConfigErrors>({});
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -208,7 +210,7 @@ export function DistanceEditFields({
     onSaved(validation.config);
     // 変えた項目が無ければ、操作を積まない。
     const operation = buildDistanceUpdatedOperation(
-      distance,
+      origin,
       validation.config,
       crypto.randomUUID(),
     );

@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { expect, type Page, type Route, test } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
+  signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
 import {
@@ -1865,4 +1867,50 @@ test("sync-50: 2端末が同じ距離の列から同時に距離を追加し、�
   await expect(
     page.locator('[data-testid^="shot-cell-"]', { hasText: "5" }),
   ).toHaveCount(1);
+});
+
+test("sync-51: オフラインで点数を記録した入力中のラウンドを、再起動してオフラインのまま開き、その間に他端末が別のマスへ点数を記録したとき、オンラインへ復帰すると、操作なしで、他端末が記録した点数とオフラインで記録した点数の両方が表示され、「同期済み」と表示される", async ({
+  profile,
+}) => {
+  // Given: オンラインで端末への取得を済ませ、オフラインで点数を記録し、再起動してオフラインのまま開くと、点数と「同期保留中」が表示される。その間に、他端末が別のマスへ点数を記録した
+  const { supabase, userId, distanceIds } = await createSyncRound({
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 3 }],
+  });
+  const first = await profile.open();
+  await signUpAndSignIn(first.page, {
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+  });
+  await waitForServiceWorkerControl(first.page);
+  await expect(
+    first.page.getByTestId("round-base-refresher"),
+  ).not.toHaveAttribute("data-refreshed-count", "0");
+  await goOffline(first.context);
+  await first.page.goto(`/rounds/${roundId}`);
+  await waitForHydration(first.page);
+  await first.page.getByTestId("score-button-9").click();
+  await expect(first.page.getByTestId("shot-cell-1-1-1")).toContainText("9");
+  await profile.close();
+  const { context, page } = await profile.open();
+  await goOffline(context);
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+  await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("9");
+  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
+  await recordShot(supabase, {
+    distanceId: distanceIds[0],
+    endNumber: 1,
+    arrowNumber: 2,
+    scoreStr: "5",
+    scoreInt: 5,
+    shooterId: userId,
+  });
+
+  // When: オンラインへ復帰する
+  await comeBackOnline(context, page);
+
+  // Then: 操作なしで、他端末の点数とオフラインで記録した点数の両方が表示され、「同期済み」と表示される
+  await expect(page.getByTestId("shot-cell-1-1-2")).toContainText("5");
+  await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("9");
+  await expectSynced(page);
 });

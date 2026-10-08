@@ -2,21 +2,33 @@ import type {
   NewOpLogEntry,
   OpBase,
   OpFlight,
-  OpLogEntry,
   OpPlanPorts,
   OpResult,
   OpStatus,
   PlanItem,
   RetireReason,
   SendOutcome,
+  StreamBase,
+  StreamEntry,
+  StreamGroup,
+  StreamRules,
 } from "./op-log-types";
 import { planFlights } from "./op-plan";
 import { classifyFailure, decideSyncResult, toSafeResult } from "./sync-result";
 import { deriveSyncStatus } from "./sync-status";
 import type { BatchResult, SyncStatus, SyncStatusCounts } from "./sync-types";
 
-export type OpSyncStore<Op extends OpBase> = {
-  append: (entry: NewOpLogEntry<Op>) => Promise<number>;
+export type OpSyncStore<Op extends OpBase, Base> = {
+  append: (
+    entry: NewOpLogEntry<Op>,
+    base?: StreamBase<Base>,
+  ) => Promise<number>;
+  commit: (
+    streamId: string,
+    userId: string | null,
+    base: Base | null,
+    startedAt: number,
+  ) => Promise<StreamGroup<Op, Base>>;
   ack: (
     eventId: string,
     revision: number | null,
@@ -26,25 +38,26 @@ export type OpSyncStore<Op extends OpBase> = {
   retire: (eventIds: string[], reason: RetireReason) => Promise<void>;
 };
 
-export type OpSyncDeps<Op extends OpBase> = OpPlanPorts<Op> & {
-  streamId: string;
-  userId: string | null;
-  store: OpSyncStore<Op>;
-  send: (flight: OpFlight<Op>) => Promise<SendOutcome>;
-  isOffline: () => boolean;
-  // 保存済みの操作を送ってよいか(送る役のタブか)。偽でも、保存に失敗して`seq`を持たない操作は、持っているタブが送る。
-  canSend: () => boolean;
-  // 他のタブと共有する状態が変わったときに呼ぶ。IndexedDBへの書き込みが終わった後と、`held`の集合が変わった後に呼ぶ。
-  // `held`は、いま保留である操作のeventId。
-  onSharedChange?: (change: { diverged: boolean; held: string[] }) => void;
-  // 与えられたときは、`append`の保存が終わっても`pump`せず、代わりにこれを呼ぶ(列を読み直してから送るため)。
-  afterAppend?: () => void;
-  now?: () => number;
-};
+export type OpSyncDeps<Op extends OpBase, Base> = OpPlanPorts<Op> &
+  Pick<StreamRules<Op, Base>, "reflects"> & {
+    streamId: string;
+    userId: string | null;
+    store: OpSyncStore<Op, Base>;
+    send: (flight: OpFlight<Op>) => Promise<SendOutcome>;
+    isOffline: () => boolean;
+    // 保存済みの操作を送ってよいか(送る役のタブか)。偽でも、保存に失敗して`seq`を持たない操作は、持っているタブが送る。
+    canSend: () => boolean;
+    // 他のタブと共有する状態が変わったときに呼ぶ。IndexedDBへの書き込みが終わった後と、`held`の集合が変わった後に呼ぶ。
+    // `held`は、いま保留である操作のeventId。
+    onSharedChange?: (change: { diverged: boolean; held: string[] }) => void;
+    // 与えられたときは、`append`の保存が終わっても`pump`せず、代わりにこれを呼ぶ(列を読み直してから送るため)。
+    afterAppend?: () => void;
+    now?: () => number;
+  };
 
-export type AdoptOptions = {
-  // 取得に反映済みと確かめた操作のeventId。列に入れない。
-  reflected?: string[];
+export type AdoptOptions<Base> = {
+  // 取得して得たベース。保存に失敗して組に載らなかったときも、このタブのベースの候補になる。
+  fetched?: StreamBase<Base>;
   // 効かなかった操作または項目がある結果を、他のタブが受けたか。
   diverged?: boolean;
   // 他のタブ(送る役)が保留にしている操作のeventId。
@@ -69,7 +82,9 @@ export type OpSyncOperation<Op extends OpBase> = {
   confirmedFields: string[] | null | undefined;
 };
 
-export type OpSyncSnapshot<Op extends OpBase> = {
+export type OpSyncSnapshot<Op extends OpBase, Base> = {
+  // このタブのベース。画面の状態は、これに`operations`を重ねて求める。取得されていない(作成が未確定など)ときはundefined。
+  base: StreamBase<Base> | undefined;
   // 列の順。確定済みの操作も含む。
   items: OpSyncItem<Op>[];
   // 保存が完了した`items`の操作だけ。保存の完了、確定、読み込みのときだけ新しい配列になり、送信中などの状態の変化では変わらない。
@@ -81,6 +96,9 @@ type Item<Op extends OpBase> = OpSyncItem<Op> & {
   solo: boolean;
   // 確定済みの結果。OpSyncOperation.confirmedFieldsと同じ意味。
   confirmedFields?: string[] | null;
+  // 確定のrevisionと、効いたか。ベースへの反映済みの判定に使う。
+  ackedRevision?: number;
+  ackedApplied?: boolean;
   // このタブでの保存が終わった時点の`persistTick`。
   persistedTick?: number;
 };
@@ -96,7 +114,9 @@ type Flight = {
 
 // 操作の列の送信器。Reactに依存せず、列の追記・衝突の規則に従った送信・再試行・保留を担う。
 // 認可・契約で拒否された操作は破棄し、効かなかった操作は列から外す。止めて残すのは未認証のときだけで、同じ対象の後続も止める（保留は、サインインし直したとき(`resumeHeld`)か再読み込みで再び送信を試みる）。
-export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
+export function createOpSync<Op extends OpBase, Base>(
+  deps: OpSyncDeps<Op, Base>,
+) {
   const now = deps.now ?? (() => Date.now());
   let items: Item<Op>[] = [];
   const flights = new Set<Flight>();
@@ -106,10 +126,11 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
   // 列から外した操作。IndexedDBから読み直した行を、外した後に足し直さないために覚える。
   const retired = new Set<string>();
   let operations: OpSyncOperation<Op>[] = [];
+  let base: StreamBase<Base> | undefined;
   // このタブでの保存が終わるたびに進める。古い読み込みが、保存済みの操作を外さないための目印。
   let persistTick = 0;
   const divergedListeners = new Set<() => void>();
-  let snapshot: OpSyncSnapshot<Op> = computeSnapshot();
+  let snapshot: OpSyncSnapshot<Op, Base> = computeSnapshot();
 
   function findItem(eventId: string): Item<Op> | undefined {
     return items.find((item) => item.eventId === eventId);
@@ -165,9 +186,10 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
       }));
   }
 
-  function computeSnapshot(): OpSyncSnapshot<Op> {
+  function computeSnapshot(): OpSyncSnapshot<Op, Base> {
     const counts = computeCounts();
     return {
+      base,
       operations,
       items: items.map(({ eventId, operation, status, seq }) => ({
         eventId,
@@ -177,6 +199,35 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
       })),
       status: deriveSyncStatus(counts),
     };
+  }
+
+  function itemEntry(item: Item<Op>): StreamEntry<Op> {
+    return {
+      operation: item.operation,
+      ackedRevision: item.ackedRevision,
+      ackedApplied: item.ackedApplied,
+    };
+  }
+
+  // 取得したベースを組に入れたときに、そのベースに反映済みの確定済みの操作を外す。送信中の操作は外さない。
+  function dropReflected() {
+    if (!base) return;
+    const current = base.base;
+    items = items.filter((item) => {
+      if (item.status === "acked" && deps.reflects(current, itemEntry(item))) {
+        retired.add(item.eventId);
+        return false;
+      }
+      return true;
+    });
+  }
+
+  // 新しい方のベースを使う。変わったときは真。
+  function chooseBase(candidate: StreamBase<Base> | undefined): boolean {
+    if (!candidate) return false;
+    if (base && base.startedAt >= candidate.startedAt) return false;
+    base = candidate;
+    return true;
   }
 
   function emit() {
@@ -250,6 +301,8 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
         }
         item.status = "acked";
         item.confirmedFields = result.appliedFields;
+        item.ackedRevision = result.revision ?? 0;
+        item.ackedApplied = true;
         // DBへのackの保存に失敗しても、再送が冪等で同じ結果を返すため続ける。
         writes.push(
           deps.store
@@ -354,6 +407,81 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
     }
   }
 
+  function adoptGroup(
+    group: StreamGroup<Op, Base>,
+    options: AdoptOptions<Base> = {},
+  ) {
+    const sharedBaseTaken = chooseBase(group.base);
+    const fetchedBaseTaken = chooseBase(options.fetched);
+    const rows = group.entries.filter(
+      (entry) => entry.ackedApplied !== false && !retired.has(entry.eventId),
+    );
+    const rowIds = new Set(rows.map((entry) => entry.eventId));
+
+    const next: Item<Op>[] = [];
+    for (const item of items) {
+      // 別のタブが確定前に破棄した操作。確定済みの操作は、共有の組のベースを取ったときだけ、組から無くなったものを外す(そのベースとともに外れたもの)。
+      const settledElsewhere =
+        item.seq !== undefined &&
+        (item.persistedTick ?? 0) <= (options.readAt ?? 0) &&
+        (item.status === "queued" ||
+          item.status === "held" ||
+          (sharedBaseTaken && item.status === "acked")) &&
+        !rowIds.has(item.eventId);
+      if (settledElsewhere) {
+        retired.add(item.eventId);
+        continue;
+      }
+      next.push(item);
+    }
+    const known = new Map(next.map((item) => [item.eventId, item]));
+    for (const entry of rows) {
+      const item = known.get(entry.eventId);
+      const confirmed = entry.ackedRevision !== undefined;
+      if (!item) {
+        const added: Item<Op> = {
+          eventId: entry.eventId,
+          operation: entry.operation,
+          status: confirmed ? "acked" : "queued",
+          solo: false,
+          seq: entry.seq,
+          confirmedFields: confirmed ? (entry.ackedFields ?? null) : undefined,
+          ackedRevision: entry.ackedRevision,
+          ackedApplied: entry.ackedApplied,
+        };
+        next.push(added);
+        known.set(added.eventId, added);
+        continue;
+      }
+      if (item.seq === undefined) item.seq = entry.seq;
+      if (confirmed && (item.status === "queued" || item.status === "held")) {
+        item.status = "acked";
+        item.confirmedFields = entry.ackedFields ?? null;
+        item.ackedRevision = entry.ackedRevision;
+        item.ackedApplied = entry.ackedApplied;
+      }
+    }
+    if (options.held) {
+      const held = new Set(options.held);
+      for (const item of next) {
+        if (item.status === "queued" && held.has(item.eventId)) {
+          item.status = "held";
+        } else if (item.status === "held" && !held.has(item.eventId)) {
+          item.status = "queued";
+        }
+      }
+    }
+    // `seq`を持つ操作を`seq`の昇順に、その後ろに`seq`を持たない操作を元の順で並べる。
+    const withSeq = next
+      .filter((item) => item.seq !== undefined)
+      .sort((first, second) => (first.seq ?? 0) - (second.seq ?? 0));
+    items = [...withSeq, ...next.filter((item) => item.seq === undefined)];
+    if (fetchedBaseTaken) dropReflected();
+    operations = persistedOperations();
+    emit();
+    if (options.diverged) notifyDiverged();
+  }
+
   return {
     // メモリの列へ追記し、保存の完了後に画面へ反映して送信する。保存の完了前の離脱で、画面に見えた操作を失わないため。
     // 戻り値は、保存の試みが終わり、画面への反映と送信の手配まで済んだ時点で解決する(拒否しない)。
@@ -367,12 +495,15 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
       items.push(item);
       emit();
       return deps.store
-        .append({
-          eventId: operation.eventId,
-          streamId: deps.streamId,
-          userId: deps.userId,
-          operation,
-        })
+        .append(
+          {
+            eventId: operation.eventId,
+            streamId: deps.streamId,
+            userId: deps.userId,
+            operation,
+          },
+          base,
+        )
         .then(
           (seq) => {
             item.seq = seq;
@@ -392,85 +523,9 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
           else pump();
         });
     },
-    // IndexedDBから読んだ列(現在のユーザーの、その列の全件)をメモリの列へ合わせる。入出力を起こさず送信もしないため、描画中に呼んでよい。
-    adopt(entries: OpLogEntry<Op>[], options: AdoptOptions = {}) {
-      const reflected = new Set(options.reflected ?? []);
-      const rows = entries.filter(
-        (entry) =>
-          entry.ackedApplied !== false &&
-          !retired.has(entry.eventId) &&
-          !reflected.has(entry.eventId),
-      );
-      const rowIds = new Set(rows.map((entry) => entry.eventId));
-      const isBusy = (item: Item<Op>) =>
-        item.status === "inflight" ||
-        item.status === "backoff" ||
-        item.status === "persisting";
-
-      const next: Item<Op>[] = [];
-      for (const item of items) {
-        if (reflected.has(item.eventId) && !isBusy(item)) {
-          retired.add(item.eventId);
-          continue;
-        }
-        // 別のタブが確定、破棄、反映済みとして外した操作。
-        const settledElsewhere =
-          item.seq !== undefined &&
-          (item.persistedTick ?? 0) <= (options.readAt ?? 0) &&
-          (item.status === "queued" ||
-            item.status === "held" ||
-            item.status === "acked") &&
-          !rowIds.has(item.eventId);
-        if (settledElsewhere) {
-          retired.add(item.eventId);
-          continue;
-        }
-        next.push(item);
-      }
-      const known = new Map(next.map((item) => [item.eventId, item]));
-      for (const entry of rows) {
-        const item = known.get(entry.eventId);
-        const confirmed = entry.ackedRevision !== undefined;
-        if (!item) {
-          const added: Item<Op> = {
-            eventId: entry.eventId,
-            operation: entry.operation,
-            status: confirmed ? "acked" : "queued",
-            solo: false,
-            seq: entry.seq,
-            confirmedFields: confirmed
-              ? (entry.ackedFields ?? null)
-              : undefined,
-          };
-          next.push(added);
-          known.set(added.eventId, added);
-          continue;
-        }
-        if (item.seq === undefined) item.seq = entry.seq;
-        if (confirmed && (item.status === "queued" || item.status === "held")) {
-          item.status = "acked";
-          item.confirmedFields = entry.ackedFields ?? null;
-        }
-      }
-      if (options.held) {
-        const held = new Set(options.held);
-        for (const item of next) {
-          if (item.status === "queued" && held.has(item.eventId)) {
-            item.status = "held";
-          } else if (item.status === "held" && !held.has(item.eventId)) {
-            item.status = "queued";
-          }
-        }
-      }
-      // `seq`を持つ操作を`seq`の昇順に、その後ろに`seq`を持たない操作を元の順で並べる。
-      const withSeq = next
-        .filter((item) => item.seq !== undefined)
-        .sort((first, second) => (first.seq ?? 0) - (second.seq ?? 0));
-      items = [...withSeq, ...next.filter((item) => item.seq === undefined)];
-      operations = persistedOperations();
-      emit();
-      if (options.diverged) notifyDiverged();
-    },
+    // IndexedDBから読んだ組(現在のユーザーの、その列の全件)をメモリの組へ合わせる。入出力を起こさず送信もしないため、描画中に呼んでよい。
+    // ベースは新しい方を使う。確定済みの操作は、取得のベースをこのタブのベースにしたときはそのベースに反映済みのものを、共有の組のベースを取ったときは組から無くなったものを外す。それ以外では外さない。
+    adopt: adoptGroup,
     // 読み込みを始める前に呼び、`adopt`の`readAt`へ渡す。
     mark(): number {
       return persistTick;
@@ -501,22 +556,48 @@ export function createOpSync<Op extends OpBase>(deps: OpSyncDeps<Op>) {
         listeners.delete(listener);
       };
     },
-    // 取得し直した状態に反映済みと確かめた操作を、列とIndexedDBから外す。呼び出し元は、確定済みで反映済みと確かめた操作だけを渡す。
-    reflect(eventIds: string[]) {
-      if (eventIds.length === 0) return;
-      const ids = new Set(eventIds);
-      items = items.filter((item) => {
-        const busy = item.status === "inflight" || item.status === "backoff";
-        if (!ids.has(item.eventId) || busy) return true;
-        retired.add(item.eventId);
-        return false;
-      });
+    // 取得したベースを反映する。保存(1つのトランザクション)を待ち、その結果の組でこのタブの組を1回の通知で変える。
+    // 保存できなかったとき(別のユーザーの取得を含む)は、このタブのベースだけを変える。結果の組を返す。保存に失敗しても拒否しない。
+    async commit(
+      fetched: Base | null,
+      startedAt: number,
+      fetchedUserId: string | null,
+    ): Promise<StreamGroup<Op, Base>> {
+      const readAt = persistTick;
+      const incoming: StreamBase<Base> = { startedAt, base: fetched };
+      let group: StreamGroup<Op, Base> | undefined;
+      if (fetchedUserId === deps.userId) {
+        try {
+          group = await deps.store.commit(
+            deps.streamId,
+            deps.userId,
+            fetched,
+            startedAt,
+          );
+        } catch {
+          // 保存に失敗しても、このタブの画面は取得したベースで続ける。
+        }
+      }
+      if (group) {
+        adoptGroup(group, { readAt, fetched: incoming });
+        notifyShared(false);
+        return group;
+      }
+      if (chooseBase(incoming)) dropReflected();
       operations = persistedOperations();
       emit();
-      void deps.store
-        .retire([...ids], "reflected")
-        .catch(() => {})
-        .then(() => notifyShared(false));
+      return {
+        base: incoming,
+        entries: items.map((item) => ({
+          seq: item.seq ?? -1,
+          eventId: item.eventId,
+          streamId: deps.streamId,
+          userId: deps.userId,
+          operation: item.operation,
+          ackedRevision: item.ackedRevision,
+          ackedApplied: item.ackedApplied,
+        })),
+      };
     },
     // 効かなかった操作または項目がある結果を受けたときに知らせる。
     subscribeDiverged(listener: () => void) {

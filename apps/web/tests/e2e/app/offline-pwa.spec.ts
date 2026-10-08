@@ -432,16 +432,16 @@ test.describe("認証済みでService Workerが登録済み", () => {
       expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
     });
 
-    test("offline-pwa-10: Service Workerが登録済みで認証済みでオフラインのとき、/rounds/[id]を開くと、ラウンド詳細の枠と「ネットワークに接続されていません」が表示される", async ({
+    test("offline-pwa-10: Service Workerが登録済みで認証済みでオフラインで、端末がオフラインで開けるベースを持たないラウンドのとき、/rounds/[id]を開くと、ラウンド詳細の枠と「ネットワークに接続されていません」が表示される", async ({
       page,
       context,
     }) => {
-      // Given: Service Workerが登録済みで認証済みでオフラインで、プリセットを端末に保存していない
+      // Given: Service Workerが登録済みで認証済みでオフラインで、端末がオフラインで開けるベースを持たない(ビルド時に存在しないID)
       const errors = collectHydrationErrors(page);
       await openWithServiceWorker(page);
       await goOffline(context);
 
-      // When: ビルド時に存在しないIDの/rounds/[id]を開く
+      // When: /rounds/[id]を開く
       const response = await page.goto(unknownRoundPath());
 
       // Then: ラウンド詳細の枠と「ネットワークに接続されていません」が表示される
@@ -575,11 +575,16 @@ test.describe("オフラインの枠からのオンライン復帰", () => {
     ).toHaveCount(0);
   });
 
-  test("offline-pwa-16: Service Workerが登録済みで認証済みでオフラインの/rounds/[id]の枠に「ネットワークに接続されていません」が表示されているとき、オンラインへ復帰すると、ラウンド詳細の内容が表示される、「ネットワークに接続されていません」が表示されなくなる", async ({
+  test("offline-pwa-16: Service Workerが登録済みで認証済みでオフラインで、端末がオフラインで開けるベースを持たないラウンドの/rounds/[id]の枠に「ネットワークに接続されていません」が表示されているとき、オンラインへ復帰すると、ラウンド詳細の内容が表示される、「ネットワークに接続されていません」が表示されなくなる", async ({
     page,
     context,
   }) => {
-    // Given: オフラインの/rounds/[id]の枠に「ネットワークに接続されていません」が表示されている
+    // Given: 端末が最後に取得した後に作られ、オフラインで開けるベースを持たないラウンドの、オフラインの/rounds/[id]の枠に「ネットワークに接続されていません」が表示されている
+    await openWithServiceWorker(page);
+    await expect(page.getByTestId("round-base-refresher")).not.toHaveAttribute(
+      "data-refreshed-count",
+      "0",
+    );
     const roundId = await createRound({
       email: getSharedEmail(),
       password: SHARED_PASSWORD,
@@ -587,7 +592,6 @@ test.describe("オフラインの枠からのオンライン復帰", () => {
       roundDate: "2026-08-24",
       distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
     });
-    await openWithServiceWorker(page);
     await goOffline(context);
     await page.goto(`/rounds/${roundId}`);
     await expect(

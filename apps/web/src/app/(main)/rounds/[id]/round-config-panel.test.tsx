@@ -11,6 +11,17 @@ const initial: RoundConfig = {
   bowType: "recurve",
 };
 
+function panel(config: RoundConfig, enqueue = vi.fn()) {
+  return (
+    <RoundConfigPanel
+      roundId="round-1"
+      initial={config}
+      hasUnmarkedDistances={false}
+      enqueue={enqueue}
+    />
+  );
+}
+
 function setup(
   overrides: Partial<Parameters<typeof RoundConfigPanel>[0]> = {},
 ) {
@@ -78,26 +89,29 @@ describe("RoundConfigPanel", () => {
       expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
     });
 
-    it("保存せず閉じて再展開すると、未保存の編集は破棄され保存済みの値に戻る", async () => {
-      // Given: 展開してラウンド名を編集し、保存せず閉じたパネル
+    it("閉じて再展開すると、未保存の編集は破棄され、その時点の値から作り直す", async () => {
+      // Given: 展開してラウンド名を編集し、保存せず閉じたパネルで、閉じている間にinitialが変わった
       const user = userEvent.setup();
-      setup();
+      const { rerender } = setup();
       await user.click(screen.getByTestId("round-config-summary"));
       await user.clear(screen.getByTestId("round-config-name"));
       await user.type(screen.getByTestId("round-config-name"), "未保存の編集");
       await user.click(screen.getByTestId("round-config-summary"));
+      rerender(panel({ ...initial, name: "他の端末の名前" }));
 
       // When: 再展開する
       await user.click(screen.getByTestId("round-config-summary"));
 
-      // Then: 保存済みの値に戻っている
-      expect(screen.getByTestId("round-config-name")).toHaveValue("午前練習");
+      // Then: その時点のinitialの値になっている
+      expect(screen.getByTestId("round-config-name")).toHaveValue(
+        "他の端末の名前",
+      );
     });
   });
 
   describe("保存", () => {
     describe("入力内容が有効な場合", () => {
-      it("enqueueを検証済みの設定で呼び、折りたたんで要約を更新する", async () => {
+      it("enqueueを検証済みの設定で呼び、折りたたむ", async () => {
         // Given: ラウンド名と弓種を編集したパネル
         vi.spyOn(crypto, "randomUUID").mockReturnValue(
           "00000000-0000-4000-8000-000000000001",
@@ -122,9 +136,6 @@ describe("RoundConfigPanel", () => {
         expect(
           screen.queryByTestId("round-config-name"),
         ).not.toBeInTheDocument();
-        expect(
-          screen.getByText("午後練習 / 2026-09-15 / アウトドア / コンパウンド"),
-        ).toBeInTheDocument();
       });
     });
 
@@ -179,24 +190,34 @@ describe("RoundConfigPanel", () => {
   });
 
   describe("initialの更新", () => {
-    it("保存済みの値が追従する", () => {
-      // Given: 表示中のパネル
+    it("閉じているときは、要約が追従する", () => {
       const { rerender } = setup();
 
-      // When: 外部からinitialを更新する
-      rerender(
-        <RoundConfigPanel
-          roundId="round-1"
-          initial={{ ...initial, name: "更新後" }}
-          hasUnmarkedDistances={false}
-          enqueue={vi.fn()}
-        />,
-      );
+      rerender(panel({ ...initial, name: "更新後" }));
 
-      // Then: 要約が更新後の値になる
       expect(
         screen.getByText("更新後 / 2026-09-15 / アウトドア / リカーブ"),
       ).toBeInTheDocument();
+    });
+
+    it("開いている間は、参照や内容が変わっても下書きを書き換えず、保存は開いたときの値との差だけを送る", async () => {
+      // Given: 展開してラウンド名を編集している
+      const user = userEvent.setup();
+      const { enqueue, rerender } = setup();
+      await user.click(screen.getByTestId("round-config-summary"));
+      await user.clear(screen.getByTestId("round-config-name"));
+      await user.type(screen.getByTestId("round-config-name"), "編集中");
+
+      // When: 同じ内容の別の参照、続けて他の端末で変わった内容が届く
+      rerender(panel({ ...initial }, enqueue));
+      rerender(panel({ ...initial, bowType: "compound" }, enqueue));
+
+      // Then: 下書きは残り、保存はユーザーが変えた項目だけを送る
+      expect(screen.getByTestId("round-config-name")).toHaveValue("編集中");
+      await user.click(screen.getByTestId("round-config-save"));
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({ changes: { name: "編集中" } }),
+      );
     });
   });
 });

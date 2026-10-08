@@ -280,6 +280,46 @@ describe("DistanceEditFields", () => {
       });
     });
 
+    describe("開いている間にdistanceが変わった場合", () => {
+      it("下書きを書き換えず、保存は開いたときの値との差だけを送る", async () => {
+        // Given: 距離を編集しているフォーム
+        vi.spyOn(crypto, "randomUUID").mockReturnValue(EVENT_ID);
+        const user = userEvent.setup();
+        const { enqueue, rerender, ...props } = setup();
+        await user.clear(screen.getByTestId("distance-config-distance-1"));
+        await user.type(screen.getByTestId("distance-config-distance-1"), "50");
+
+        // When: 同じ内容の別の参照、続けて他の端末で本数が変わった内容が届く
+        const element = (distance: DistanceConfig) => (
+          <DistanceEditFields
+            distance={distance}
+            hasShots={false}
+            targetFaces={targetFaces}
+            roundFormat="outdoor"
+            roundBowType="recurve"
+            onSaved={props.onSaved}
+            onDeleted={props.onDeleted}
+            onOpenChange={props.onOpenChange}
+            enqueue={enqueue}
+          />
+        );
+        rerender(element({ ...baseDistance }));
+        rerender(element({ ...baseDistance, arrowsPerEnd: 3 }));
+
+        // Then: 下書きは残り、保存は変えた距離だけを送る
+        expect(screen.getByTestId("distance-config-distance-1")).toHaveValue(
+          50,
+        );
+        await user.click(screen.getByTestId("distance-config-save-1"));
+        expect(enqueue).toHaveBeenCalledWith({
+          type: "distance.updated",
+          eventId: EVENT_ID,
+          distanceId: "distance-1",
+          changes: { distance: 50 },
+        });
+      });
+    });
+
     describe("入力内容が無効な場合", () => {
       it("各項目のエラーを表示し、onSavedもenqueueも呼ばない", async () => {
         // Given: Markedに切り替え、距離・本数・エンド数を空にしたフォーム

@@ -8,6 +8,7 @@ import {
 } from "../helpers/auth";
 import { createPreset } from "../helpers/presets";
 import {
+  blockTargetFacesOnDevice,
   openNewRoundThenGoOffline,
   startRoundOffline,
 } from "../helpers/reference-data";
@@ -462,6 +463,7 @@ test("preset-21: オフラインで的を端末に保存しておらず、作成
   page,
 }) => {
   // Given: オフラインで的を端末に保存しておらず、作成が未確定で距離があるラウンド
+  await blockTargetFacesOnDevice(page);
   await openNewRoundThenGoOffline(page);
   await startRoundOffline(page, "WA 1440");
 

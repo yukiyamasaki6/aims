@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -37,19 +37,15 @@ export function RoundConfigPanel({
   enqueue: (operation: SyncOperation) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const [saved, setSaved] = useState(initial);
+  // 下書きと起点(開いたときの値)は、開いたときに作り、閉じるまで`initial`の変化で書き換えない。
+  const [origin, setOrigin] = useState(initial);
   const [draft, setDraft] = useState(initial);
   const [fieldErrors, setFieldErrors] = useState<RoundConfigErrors>({});
 
-  useEffect(() => {
-    setSaved(initial);
-    setDraft(initial);
-  }, [initial]);
-
   function toggleExpanded() {
     if (!expanded) {
-      // 展開のたびに、直前の保存値を編集の起点にする（未保存の変更は破棄する）。
-      setDraft(saved);
+      setOrigin(initial);
+      setDraft(initial);
       setFieldErrors({});
     }
     setExpanded((v) => !v);
@@ -66,11 +62,10 @@ export function RoundConfigPanel({
     const { config } = validation;
     const operation = buildRoundUpdatedOperation(
       roundId,
-      saved,
+      origin,
       config,
       crypto.randomUUID(),
     );
-    setSaved(config);
     setExpanded(false);
     // 変えた項目が無ければ、操作を積まない。
     if (operation) enqueue(operation);
@@ -86,10 +81,10 @@ export function RoundConfigPanel({
       >
         <span className="truncate">
           {[
-            saved.name,
-            saved.roundDate,
-            labelOf(FORMAT_OPTIONS, saved.format),
-            labelOf(BOW_TYPE_OPTIONS, saved.bowType),
+            initial.name,
+            initial.roundDate,
+            labelOf(FORMAT_OPTIONS, initial.format),
+            labelOf(BOW_TYPE_OPTIONS, initial.bowType),
           ]
             .filter((part) => part !== "")
             .join(" / ")}

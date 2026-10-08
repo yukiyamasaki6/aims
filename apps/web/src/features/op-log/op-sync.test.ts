@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpFlight, OpLogEntry, SendOutcome } from "./op-log-types";
+import type {
+  OpFlight,
+  OpLogEntry,
+  SendOutcome,
+  StreamGroup,
+} from "./op-log-types";
 import { createOpSync, type OpSyncStore } from "./op-sync";
 
 type Op = {
@@ -9,7 +14,23 @@ type Op = {
   distance?: string;
 };
 
+// ベースは取得時点のrevisionだけを持つ。確定した操作は、revisionがベース以下なら反映済み。
+type Base = { revision: number };
+
 const STREAM = "round:r1";
+
+function group(
+  entries: OpLogEntry<Op>[],
+  base?: { startedAt: number; revision: number },
+): StreamGroup<Op, Base> {
+  return {
+    base: base && {
+      startedAt: base.startedAt,
+      base: { revision: base.revision },
+    },
+    entries,
+  };
+}
 
 let counter = 0;
 function op(kind: Op["kind"], target: string): Op {
@@ -18,17 +39,21 @@ function op(kind: Op["kind"], target: string): Op {
 }
 
 function fakeStore() {
-  const append = vi.fn<OpSyncStore<Op>["append"]>();
+  const append = vi.fn<OpSyncStore<Op, Base>["append"]>();
   let seq = 0;
   append.mockImplementation(async () => {
     seq += 1;
     return seq;
   });
-  const ack = vi.fn<OpSyncStore<Op>["ack"]>().mockResolvedValue(undefined);
-  const retire = vi
-    .fn<OpSyncStore<Op>["retire"]>()
+  const ack = vi
+    .fn<OpSyncStore<Op, Base>["ack"]>()
     .mockResolvedValue(undefined);
-  return { append, ack, retire };
+  const retire = vi
+    .fn<OpSyncStore<Op, Base>["retire"]>()
+    .mockResolvedValue(undefined);
+  const commit = vi.fn<OpSyncStore<Op, Base>["commit"]>();
+  commit.mockResolvedValue({ base: undefined, entries: [] });
+  return { append, ack, retire, commit };
 }
 
 type Deferred = {
@@ -57,10 +82,13 @@ function setup(
   };
   const onSharedChange =
     vi.fn<(change: { diverged: boolean; held: string[] }) => void>();
-  const sync = createOpSync<Op>({
+  const sync = createOpSync<Op, Base>({
     streamId: STREAM,
     userId: "user-1",
     store,
+    reflects: (base, entry) =>
+      entry.ackedRevision !== undefined &&
+      (base === null || entry.ackedRevision <= base.revision),
     send,
     isOffline: () => state.offline,
     canSend: () => state.leader,
@@ -133,6 +161,7 @@ describe("createOpSync", () => {
         streamId: STREAM,
         userId: "user-1",
       }),
+      undefined,
     );
     expect(send).toHaveBeenCalledTimes(1);
     expect(sync.getSnapshot().items[0]).toMatchObject({
@@ -449,7 +478,7 @@ describe("createOpSync", () => {
     expect(diverged).not.toHaveBeenCalled();
   });
 
-  it("reflectは、渡された操作をretireし、送信中の操作は列に残す", async () => {
+  it("commitは、取得のベースに反映済みの確定済みの操作を列から外し、送信中の操作は残す", async () => {
     const { sync, sent, store } = setup();
     const confirmed = op("rec", "x");
     const pending = op("clr", "x");
@@ -458,20 +487,83 @@ describe("createOpSync", () => {
     await flushed();
     sent[0].resolve(ok(1));
     await flushed();
-    expect(sync.getSnapshot().items.map((i) => i.status)).toEqual([
-      "acked",
-      "inflight",
-    ]);
 
-    sync.reflect([confirmed.eventId, pending.eventId]);
+    await sync.commit({ revision: 1 }, 10, "user-1");
 
-    expect(store.retire).toHaveBeenCalledWith(
-      [confirmed.eventId, pending.eventId],
-      "reflected",
+    expect(store.commit).toHaveBeenCalledWith(
+      STREAM,
+      "user-1",
+      { revision: 1 },
+      10,
     );
+    expect(sync.getSnapshot().base).toEqual({
+      startedAt: 10,
+      base: { revision: 1 },
+    });
     expect(sync.getSnapshot().items.map((i) => i.eventId)).toEqual([
       pending.eventId,
     ]);
+  });
+
+  it("commitは、古い取得で新しいベースを戻さず、別のユーザーの取得は端末へ保存しない", async () => {
+    const { sync, store } = setup();
+
+    await sync.commit({ revision: 5 }, 20, "user-1");
+    await sync.commit({ revision: 1 }, 10, "user-1");
+    await sync.commit({ revision: 9 }, 30, "user-2");
+
+    expect(sync.getSnapshot().base).toEqual({
+      startedAt: 30,
+      base: { revision: 9 },
+    });
+    expect(store.commit).toHaveBeenCalledTimes(2);
+  });
+
+  it("commitは、保存に失敗しても、このタブのベースを取得したものにする", async () => {
+    const { sync, store } = setup();
+    store.commit.mockRejectedValueOnce(new Error("quota"));
+
+    await sync.commit({ revision: 2 }, 10, "user-1");
+
+    expect(sync.getSnapshot().base?.base).toEqual({ revision: 2 });
+  });
+
+  it("確定した操作は、確定の時点では外さず、取得のベースが入るときに、そのベースに反映済みのものを位置によらず外す", async () => {
+    const { sync, sent } = setup();
+    const later = op("rec", "x");
+    const reflected = op("rec", "y");
+    await sync.commit({ revision: 3 }, 10, "user-1");
+    sync.append(later);
+    await flushed();
+    sent[0].resolve(ok(4));
+    await flushed();
+    sync.append(reflected);
+    await flushed();
+    sent[1].resolve(ok(3));
+    await flushed();
+
+    expect(sync.getSnapshot().items.map((i) => [i.eventId, i.status])).toEqual([
+      [later.eventId, "acked"],
+      [reflected.eventId, "acked"],
+    ]);
+
+    await sync.commit({ revision: 3 }, 11, "user-1");
+    expect(sync.getSnapshot().items.map((i) => i.eventId)).toEqual([
+      later.eventId,
+    ]);
+  });
+
+  it("追記は、タブのベースを保存の依頼に渡す", async () => {
+    const { sync, store } = setup();
+    await sync.commit({ revision: 3 }, 10, "user-1");
+
+    sync.append(op("rec", "x"));
+    await flushed();
+
+    expect(store.append).toHaveBeenCalledWith(expect.anything(), {
+      startedAt: 10,
+      base: { revision: 3 },
+    });
   });
 
   it("オフラインの間は要求を始めず、onlineで再開する", async () => {
@@ -505,8 +597,8 @@ describe("createOpSync", () => {
     expect(sent).toHaveLength(2);
   });
 
-  it("adopt/reflect/wakeは確定済みの操作を送らず衝突も止めず、反映済みをretireする", async () => {
-    const { sync, sent, store } = setup();
+  it("adopt/wakeは確定済みの操作を送らず、衝突も止めない", async () => {
+    const { sync, sent } = setup();
     const confirmed = op("rec", "x");
     const pending = op("clr", "x");
     const entries: OpLogEntry<Op>[] = [
@@ -527,12 +619,10 @@ describe("createOpSync", () => {
       },
     ];
 
-    sync.adopt(entries);
-    sync.reflect(["reflected-1"]);
+    sync.adopt(group(entries));
     sync.wake();
     await flushed();
 
-    expect(store.retire).toHaveBeenCalledWith(["reflected-1"], "reflected");
     expect(sent.map((s) => eventIds(s.flight))).toEqual([[pending.eventId]]);
     expect(sync.getSnapshot().items.map((i) => i.status)).toEqual([
       "acked",
@@ -649,7 +739,7 @@ describe("createOpSync", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it("確定・破棄・反映済みの保存に失敗しても、メモリの列は進める", async () => {
+  it("確定・破棄の保存に失敗しても、メモリの列は進める", async () => {
     // Given: ack・retireの保存がすべて失敗するストア
     const { sync, sent, store } = setup();
     store.ack.mockRejectedValue(new Error("fail"));
@@ -681,11 +771,11 @@ describe("createOpSync", () => {
     await flushed();
     sent[2].resolve(fail(400, "PT422"));
     await flushed();
-    sync.reflect([effective.eventId, ineffective.eventId]);
-    await flushed();
 
-    // Then: 例外にならず、列から外れている
-    expect(sync.getSnapshot().operations).toEqual([]);
+    // Then: 例外にならず、効かなかった操作と破棄された操作は列から外れ、確定した操作は残る
+    expect(sync.getSnapshot().operations).toEqual([
+      { operation: effective, confirmedFields: null },
+    ]);
   });
 
   describe("複数タブ", () => {
@@ -740,7 +830,9 @@ describe("createOpSync", () => {
       const b = op("rec", "b");
       const c = op("rec", "c");
 
-      sync.adopt([row(c, 3), row(a, 1, { ackedRevision: 2 }), row(b, 2)]);
+      sync.adopt(
+        group([row(c, 3), row(a, 1, { ackedRevision: 2 }), row(b, 2)]),
+      );
 
       expect(sync.getSnapshot().items.map((i) => i.eventId)).toEqual([
         a.eventId,
@@ -758,9 +850,9 @@ describe("createOpSync", () => {
       const { sync } = setup({ leader: false });
       const a = op("rec", "a");
       const b = op("rec", "b");
-      sync.adopt([row(a, 1), row(b, 2)]);
+      sync.adopt(group([row(a, 1), row(b, 2)]));
 
-      sync.adopt([row(a, 1, { ackedRevision: 5, ackedFields: ["f"] })]);
+      sync.adopt(group([row(a, 1, { ackedRevision: 5, ackedFields: ["f"] })]));
 
       expect(statuses(sync)).toEqual(["acked"]);
       expect(sync.getSnapshot().operations).toEqual([
@@ -775,48 +867,84 @@ describe("createOpSync", () => {
       sync.append(a);
       await flushed();
 
-      sync.adopt([], { readAt });
+      sync.adopt(group([]), { readAt });
       expect(statuses(sync)).toEqual(["queued"]);
 
-      sync.adopt([], { readAt: sync.mark() });
+      sync.adopt(group([]), { readAt: sync.mark() });
       expect(statuses(sync)).toEqual([]);
     });
 
     it("adoptは、inflightとbackoffの操作を変えない", async () => {
       const { sync, sent } = setup();
       const a = op("rec", "a");
-      sync.adopt([row(a, 1)]);
+      sync.adopt(group([row(a, 1)]));
       sync.wake();
       await flushed();
       expect(statuses(sync)).toEqual(["inflight"]);
 
-      sync.adopt([]);
+      sync.adopt(group([]));
       expect(statuses(sync)).toEqual(["inflight"]);
 
       sent[0].resolve(fail(500));
       await flushed();
       expect(statuses(sync)).toEqual(["backoff"]);
-      sync.adopt([]);
+      sync.adopt(group([]));
       expect(statuses(sync)).toEqual(["backoff"]);
     });
 
-    it("adoptは、外した操作と反映済みの行を足し直さない", async () => {
+    it("adoptは、外した操作と、取得のベースに反映済みの行を足し直さない", async () => {
       const { sync } = setup({ leader: false });
       const a = op("rec", "a");
       const b = op("rec", "b");
-      sync.adopt([row(a, 1), row(b, 2)]);
-      sync.adopt([row(b, 2)]);
+      sync.adopt(group([row(a, 1), row(b, 2)]));
+      sync.adopt(group([row(b, 2)]));
 
-      sync.adopt([row(a, 1), row(b, 2)], { reflected: [b.eventId] });
+      sync.adopt(group([row(a, 1), row(b, 2, { ackedRevision: 2 })]), {
+        fetched: { startedAt: 10, base: { revision: 2 } },
+      });
 
       expect(sync.getSnapshot().items).toEqual([]);
+    });
+
+    it("adoptは、新しい方のベースを使い、共有の組のベースを取ったときだけ、組から無くなった確定済みの操作を外す", async () => {
+      const { sync } = setup({ leader: false });
+      const a = op("rec", "a");
+      const b = op("rec", "b");
+      sync.adopt(
+        group(
+          [row(a, 1, { ackedRevision: 2 }), row(b, 2, { ackedRevision: 5 })],
+          { startedAt: 10, revision: 1 },
+        ),
+      );
+
+      // ベースが変わらない組では、組から無くなっていても外さない。
+      sync.adopt(group([row(b, 2, { ackedRevision: 5 })], undefined));
+      expect(sync.getSnapshot().items).toHaveLength(2);
+
+      // 他のタブの取得が、組からaを外し、新しいベースを保存した。
+      sync.adopt(
+        group([row(b, 2, { ackedRevision: 5 })], {
+          startedAt: 20,
+          revision: 2,
+        }),
+      );
+      expect(sync.getSnapshot().base?.startedAt).toBe(20);
+      expect(sync.getSnapshot().items.map((i) => i.eventId)).toEqual([
+        b.eventId,
+      ]);
+      expect(sync.getSnapshot().operations).toHaveLength(1);
+
+      // 古いベースの組は、ベースを戻さない。
+      sync.adopt(group([], { startedAt: 10, revision: 0 }));
+      expect(sync.getSnapshot().base?.startedAt).toBe(20);
+      expect(sync.getSnapshot().items).toHaveLength(1);
     });
 
     it("adoptは、効かなかった行を取り込まない", () => {
       const { sync } = setup({ leader: false });
       const a = op("rec", "a");
 
-      sync.adopt([row(a, 1, { ackedRevision: 0, ackedApplied: false })]);
+      sync.adopt(group([row(a, 1, { ackedRevision: 0, ackedApplied: false })]));
 
       expect(sync.getSnapshot().items).toEqual([]);
     });
@@ -824,13 +952,13 @@ describe("createOpSync", () => {
     it("adoptはheldを受け取り、渡されなくなった保留を戻す", () => {
       const { sync } = setup({ leader: false });
       const a = op("rec", "a");
-      sync.adopt([row(a, 1)]);
+      sync.adopt(group([row(a, 1)]));
 
-      sync.adopt([row(a, 1)], { held: [a.eventId] });
+      sync.adopt(group([row(a, 1)]), { held: [a.eventId] });
       expect(statuses(sync)).toEqual(["held"]);
       expect(sync.getSnapshot().status).toBe("unauthenticated-pending");
 
-      sync.adopt([row(a, 1)], { held: [] });
+      sync.adopt(group([row(a, 1)]), { held: [] });
       expect(statuses(sync)).toEqual(["queued"]);
     });
 
@@ -839,13 +967,13 @@ describe("createOpSync", () => {
       const listener = vi.fn();
       sync.subscribeDiverged(listener);
 
-      sync.adopt([row(op("rec", "a"), 1)]);
+      sync.adopt(group([row(op("rec", "a"), 1)]));
       await flushed();
       expect(send).not.toHaveBeenCalled();
       expect(store.retire).not.toHaveBeenCalled();
       expect(listener).not.toHaveBeenCalled();
 
-      sync.adopt([], { diverged: true });
+      sync.adopt(group([]), { diverged: true });
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
@@ -940,15 +1068,6 @@ describe("createOpSync", () => {
         diverged: false,
         held: [],
       });
-    });
-
-    it("reflectは、メモリに無いIDもIndexedDBから外す", async () => {
-      const { sync, store } = setup();
-
-      sync.reflect(["unknown"]);
-      await flushed();
-
-      expect(store.retire).toHaveBeenCalledWith(["unknown"], "reflected");
     });
   });
 });
