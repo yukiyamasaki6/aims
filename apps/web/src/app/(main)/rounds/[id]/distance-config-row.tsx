@@ -46,12 +46,11 @@ const BOW_TYPE_FILTER_OPTIONS = [
 ];
 
 function triggerLabel(
-  selected: TargetFaceOption | "loading" | "missing",
+  selected: TargetFaceOption | "missing",
   disabled: boolean | undefined,
 ): string {
   const name = typeof selected === "string" ? "的" : selected.name;
   if (disabled) return `${name}（スコア記録済みのため変更不可）`;
-  if (selected === "loading") return "的を読み込み中（タップで変更）";
   if (selected === "missing") return "的データを取得できません（タップで変更）";
   return `${name}（タップで変更）`;
 }
@@ -68,7 +67,7 @@ function TargetFacePicker({
   onSelect,
   disabled,
 }: {
-  targetFaces: TargetFaceOption[] | null;
+  targetFaces: TargetFaceOption[];
   selectedId: string;
   roundFormat: string;
   roundBowType: string;
@@ -83,7 +82,7 @@ function TargetFacePicker({
   const [selectedBowType, setSelectedBowType] = useState(roundBowType);
   const selected = lookupTargetFace(targetFaces, selectedId);
   const visibleFaces = filterTargetFaces(
-    targetFaces ?? [],
+    targetFaces,
     selectedFormat,
     selectedBowType,
   );
@@ -185,7 +184,7 @@ export function DistanceEditFields({
 }: {
   distance: DistanceConfig;
   hasShots: boolean;
-  targetFaces: TargetFaceOption[] | null;
+  targetFaces: TargetFaceOption[];
   roundFormat: string;
   roundBowType: string;
   onSaved: (updated: DistanceConfig) => void;

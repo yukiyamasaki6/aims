@@ -12,8 +12,8 @@ import {
   updateRound,
 } from "../helpers/other-device";
 import {
-  blockTargetFacesOnDevice,
   CREATE_ROUND_RPC,
+  forgetTargetFacesOnDevice,
   openNewRoundThenGoOffline,
   saveTargetFacesOnDevice,
   startRoundOffline,
@@ -541,7 +541,6 @@ test("setup-24: ラウンド名が51文字以上のとき、保存ボタンを�
   await expect(page.getByTestId("round-config-save")).toBeVisible();
 });
 
-const LOADING_TARGET = '[aria-busy="true"]';
 const MISSING_TARGET = "的データを取得できません";
 
 test("setup-25: オフラインで的を端末に保存済み、作成が未確定で距離がないラウンドのとき、「距離を追加」ボタンをクリックすると、追加した距離に的のサイズと図が表示される", async ({
@@ -561,7 +560,6 @@ test("setup-25: オフラインで的を端末に保存済み、作成が未確�
   const trigger = page.getByTestId("target-face-picker-trigger");
   await expect(trigger).toHaveAccessibleName(/\d+cm/);
   await expect(trigger.locator('[role="img"]').first()).toBeVisible();
-  await expect(trigger.locator(LOADING_TARGET)).toHaveCount(0);
   await expect(page.getByText(MISSING_TARGET)).toHaveCount(0);
 });
 
@@ -591,14 +589,14 @@ test("setup-26: オフラインで的を端末に保存済み、作成が未確�
 test.describe("的の取得を止める", () => {
   test.use({ serviceWorkers: "block" });
 
-  test("setup-27: 作成が未確定で距離があるラウンドで、的の一覧の取得が完了していないとき、/rounds/[id]を開くと、距離の行に的の読み込み中の表示が出て、距離・本数・エンド数が表示される", async ({
-    page,
-  }) => {
-    // Given: 作成が未確定で距離があるラウンドで、的の一覧の取得が完了していない
+  // 的の一覧の保存分を消して取得を保留し、create_roundを失敗させて、/rounds/newでWA 1440を選ぶ。
+  // 開始すると、作成が未確定で距離があるラウンドで、的の一覧の取得が完了しない。保留の解放を返す。
+  async function holdTargetFacesThenSelectPreset(page: Page) {
+    await forgetTargetFacesOnDevice(page);
     await page.route(CREATE_ROUND_RPC, (route) => route.abort("failed"));
-    let releaseTargetFaces: () => void = () => {};
+    let release: () => void = () => {};
     const held = new Promise<void>((resolve) => {
-      releaseTargetFaces = resolve;
+      release = resolve;
     });
     await page.route(TARGET_FACES_REST, async (route) => {
       await held;
@@ -610,38 +608,42 @@ test.describe("的の取得を止める", () => {
       .getByTestId("round-preset-button")
       .filter({ hasText: "WA 1440" })
       .click();
+    return release;
+  }
+
+  test("setup-27: 作成が未確定で距離があるラウンドで、的の一覧の取得が完了していないとき、/rounds/[id]を開くと、ラウンドの内容が表示されず、読み込み中と表示される", async ({
+    page,
+  }) => {
+    // Given: 作成が未確定で距離があるラウンドで、的の一覧の取得が完了していない(端末の保存分も無い)
+    await holdTargetFacesThenSelectPreset(page);
 
     // When: /rounds/[id]を開く
     await page.getByTestId("round-start-button").click();
     await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
 
-    // Then: 距離の行に的の読み込み中の表示が出て、距離・本数・エンド数が表示される
-    const first = page.getByTestId("distance-summary-1");
-    await expect(first.locator(LOADING_TARGET)).toBeVisible();
-    await expect(first).toContainText("90m");
-    await expect(first).toContainText("6本×6エンド");
-    await expect(page.getByText(MISSING_TARGET)).toHaveCount(0);
-    releaseTargetFaces();
-    await expect(first.locator(LOADING_TARGET)).toHaveCount(0);
-    await expect(first.locator('[role="img"]').first()).toBeVisible();
+    // Then: ラウンドの内容が表示されず、読み込み中と表示される
+    await expect(page.getByRole("status")).toContainText("読み込み中");
+    await expect(page.getByTestId("distance-summary-1")).toHaveCount(0);
   });
-});
 
-test("setup-28: オフラインで的を端末に保存しておらず、作成が未確定で距離があるラウンドのとき、/rounds/[id]を開くと、距離の行に「的データを取得できません」と表示され、距離・本数・エンド数が表示される", async ({
-  page,
-}) => {
-  // Given: オフラインで的を端末に保存しておらず、作成が未確定で距離があるラウンド
-  await blockTargetFacesOnDevice(page);
-  await openNewRoundThenGoOffline(page);
+  test("setup-32: 作成が未確定で距離があるラウンドで、的の一覧の取得が完了せず、読み込み中と表示されているとき、的の一覧の取得が完了すると、距離の行に的のサイズと図が表示され、テンキーに的の点数ボタンが表示される", async ({
+    page,
+  }) => {
+    // Given: 作成が未確定で距離があるラウンドで、的の一覧の取得が完了せず、読み込み中と表示されている
+    const releaseTargetFaces = await holdTargetFacesThenSelectPreset(page);
+    await page.getByTestId("round-start-button").click();
+    await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+    await expect(page.getByRole("status")).toContainText("読み込み中");
 
-  // When: /rounds/[id]を開く
-  await startRoundOffline(page, "WA 1440");
+    // When: 的の一覧の取得が完了する
+    releaseTargetFaces();
 
-  // Then: 距離の行に「的データを取得できません」と表示され、距離・本数・エンド数が表示される
-  const first = page.getByTestId("distance-summary-1");
-  await expect(first.getByText(MISSING_TARGET)).toBeVisible();
-  await expect(first).toContainText("90m");
-  await expect(first).toContainText("6本×6エンド");
+    // Then: 距離の行に的のサイズと図が表示され、テンキーに的の点数ボタンが表示される
+    const first = page.getByTestId("distance-summary-1");
+    await expect(first.locator('[role="img"]').first()).toBeVisible();
+    await expect(first).toContainText(/\d+cm/);
+    await expect(page.getByTestId("score-button-10")).toBeVisible();
+  });
 });
 
 test("setup-29: ラウンド詳細画面で距離を追加して削除した後、「距離を追加」ボタンをクリックすると、距離が追加され、エラーメッセージが表示されず、追加した距離が保持される", async ({

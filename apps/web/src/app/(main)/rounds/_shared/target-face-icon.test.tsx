@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
   lookupTargetFace,
@@ -66,10 +66,6 @@ describe("TargetFaceIcon", () => {
 describe("lookupTargetFace", () => {
   const faces = [{ id: "a" }, { id: "b" }];
 
-  it('一覧が取得中(null)なら"loading"を返す', () => {
-    expect(lookupTargetFace(null, "a")).toBe("loading");
-  });
-
   it('一覧にidが無ければ"missing"を返す(空の一覧を含む)', () => {
     expect(lookupTargetFace(faces, "x")).toBe("missing");
     expect(lookupTargetFace([], "a")).toBe("missing");
@@ -93,16 +89,6 @@ describe("TargetFaceInfo", () => {
 
     expect(container).toHaveTextContent("122cm");
     expect(container.querySelectorAll("svg").length).toBeGreaterThan(0);
-  });
-
-  it("読み込み中は、読み込み中の見た目を出し、データなしの文言は出さない", () => {
-    const { container } = render(<TargetFaceInfo face="loading" />);
-
-    expect(container.querySelector("[aria-busy='true']")).not.toBeNull();
-    expect(container.querySelector("[role='status']")).toBeNull();
-    expect(container.querySelector(".animate-pulse")).not.toBeNull();
-    expect(screen.getByText("的を読み込み中")).toHaveClass("sr-only");
-    expect(container).not.toHaveTextContent("的データを取得できません");
   });
 
   it("見つからないときは、「的データを取得できません」を表示する", () => {

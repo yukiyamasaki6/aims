@@ -2,12 +2,9 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import type { FetchResult } from "@/features/fetch-result/fetch-result";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
 import { createClient } from "@/lib/supabase/client";
-import type { TargetFaceOption } from "./distance-config-row";
-import { fetchTargetFaces } from "./fetch-round-detail";
 import { loadRoundDetail } from "./load-round-detail";
 import { RoundDetailFrame } from "./round-detail-frame";
 import { parseRoundId } from "./round-detail-id";
@@ -27,12 +24,6 @@ function ScorecardSkeleton() {
     </div>
   );
 }
-
-const NO_TARGET_FACES: TargetFaceOption[] = [];
-const NO_TARGET_FACES_RESULT: FetchResult<TargetFaceOption[]> = {
-  status: "ok",
-  data: NO_TARGET_FACES,
-};
 
 const NOT_FOUND = { message: "ラウンドが見つかりません。" };
 
@@ -57,19 +48,6 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
     view.status === "ok" && !view.data.deleted
       ? view.data.pendingCreationEventId
       : null;
-  // 作成が未確定のラウンドと、端末のベースで開いたラウンドの的は、詳細を表示した後に背景で取得する。
-  const loadsFaces =
-    view.status === "ok" && !view.data.deleted
-      ? view.data.pendingCreationEventId !== null ||
-        view.data.source === "local"
-      : false;
-  const { view: faces } = useFetchResult(
-    () =>
-      loadsFaces
-        ? fetchTargetFaces(createClient())
-        : Promise.resolve(NO_TARGET_FACES_RESULT),
-    [loadsFaces],
-  );
   useCreationGone(roundId, pending, retry);
 
   useEffect(() => {
@@ -82,15 +60,7 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
         roundId={roundId}
         loaded={view.data}
         onGone={() => router.replace("/rounds")}
-        targetFaces={
-          loadsFaces
-            ? faces.status === "loading"
-              ? null
-              : faces.status === "ok"
-                ? faces.data
-                : NO_TARGET_FACES
-            : view.data.targetFaces
-        }
+        targetFaces={view.data.targetFaces}
       />
     );
   }

@@ -260,14 +260,13 @@ type TargetFaceLayout = {
   target_face_spots: TargetFaceSpotLayout[];
 };
 
-// 的の一覧の取得中は"loading"、取得後（保存済みの読み出し、失敗を含む）に見つからなければ"missing"。
-export type TargetFaceView = TargetFaceLayout | "loading" | "missing";
+// 的の一覧に見つからなければ"missing"。
+export type TargetFaceView = TargetFaceLayout | "missing";
 
 export function lookupTargetFace<T extends { id: string }>(
-  faces: T[] | null,
+  faces: T[],
   id: string,
-): T | "loading" | "missing" {
-  if (faces === null) return "loading";
+): T | "missing" {
   return faces.find((f) => f.id === id) ?? "missing";
 }
 
@@ -287,24 +286,6 @@ export function TargetFaceInfo({
 }) {
   if (face === "missing") {
     return <span>的データを取得できません</span>;
-  }
-  if (face === "loading") {
-    // 見つかったときと同じ外形にして、取得後に配置が動かないようにする。
-    // 距離の行の数だけライブリージョンが増えないよう、role="status"は付けない。
-    return (
-      <span aria-busy="true" className="flex items-center justify-center gap-1">
-        <span className="sr-only">的を読み込み中</span>
-        <span className="inline-block h-4 w-12 animate-pulse rounded bg-muted" />
-        <span
-          className="shrink-0 animate-pulse rounded-full bg-muted"
-          style={{ width: thumbnailSize, height: thumbnailSize }}
-        />
-        <span
-          className="shrink-0 animate-pulse rounded-md bg-muted"
-          style={{ width: centerDetailWidth, height: 36 }}
-        />
-      </span>
-    );
   }
 
   return (

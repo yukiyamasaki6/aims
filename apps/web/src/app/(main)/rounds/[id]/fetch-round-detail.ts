@@ -119,7 +119,7 @@ function sortedTargetFaces(rows: TargetFaceRow[]): TargetFaceOption[] {
   return [...rows].sort(compareTargetFaces);
 }
 
-// 的の一覧だけを取得する。作成が未確定のラウンドの詳細が、ラウンドの取得と別に的を得るために使う。
+// 的の一覧だけを取得する。作成が未確定のラウンドの読み込み(load-round-detail.ts)が、ラウンドの取得と別に的を得るために使う。
 // 取得できたら最新で端末へ保存して返す。取得できないとき（FALLBACK_WAIT_MS内に終わらないときを含む）は、
 // 保存済みがあればそれを返し、時間切れの後に届いた結果は表示せず保存だけする。
 export async function fetchTargetFaces(

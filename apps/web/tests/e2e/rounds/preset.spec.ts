@@ -7,11 +7,6 @@ import {
   waitForHydration,
 } from "../helpers/auth";
 import { createPreset } from "../helpers/presets";
-import {
-  blockTargetFacesOnDevice,
-  openNewRoundThenGoOffline,
-  startRoundOffline,
-} from "../helpers/reference-data";
 import { createRound } from "../helpers/rounds";
 import {
   goOffline,
@@ -457,23 +452,6 @@ test("preset-20: 保存が失敗するとき、保存ボタンをクリックす
   // Then: エラーメッセージを表示し、ダイアログは開いたままになる
   await expect(page.getByText("保存に失敗しました")).toBeVisible();
   await expect(page.getByTestId("save-as-preset-name")).toBeVisible();
-});
-
-test("preset-21: オフラインで的を端末に保存しておらず、作成が未確定で距離があるラウンドのとき、「プリセット保存」ボタンをクリックすると、プリセット保存ダイアログの距離に「的データを取得できません」と表示される", async ({
-  page,
-}) => {
-  // Given: オフラインで的を端末に保存しておらず、作成が未確定で距離があるラウンド
-  await blockTargetFacesOnDevice(page);
-  await openNewRoundThenGoOffline(page);
-  await startRoundOffline(page, "WA 1440");
-
-  // When: 「プリセット保存」ボタンをクリックする
-  await page.getByTestId("save-as-preset-trigger").click();
-
-  // Then: プリセット保存ダイアログの距離に「的データを取得できません」と表示される
-  await expect(
-    page.getByRole("dialog").getByText("的データを取得できません").first(),
-  ).toBeVisible();
 });
 
 test("preset-22: プリセット保存ダイアログで保存が成功した後にオフラインのとき、/rounds/newを開くと、保存したプリセットが個人プリセットに表示される", async ({
