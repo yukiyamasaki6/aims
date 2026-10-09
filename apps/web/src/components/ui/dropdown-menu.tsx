@@ -20,7 +20,12 @@ function DropdownMenuContent({
   >) {
   return (
     <MenuPrimitive.Portal>
-      <MenuPrimitive.Positioner align={align} sideOffset={sideOffset}>
+      {/* Portalでbody直下に出るが、Positionerは既定でz-indexを持たない。スクロール中のsticky(z-10〜z-30)の下に隠れないよう、Dialogと同じz-50にする */}
+      <MenuPrimitive.Positioner
+        align={align}
+        sideOffset={sideOffset}
+        className="z-50"
+      >
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
           className={cn(
