@@ -270,6 +270,51 @@ describe("RoundsListClient", () => {
       expect(deletion.deleteRound).not.toHaveBeenCalled();
       expect(screen.getByText("午前練習")).toBeInTheDocument();
     });
+
+    it("名前の無いラウンドは、削除確認で名前を引用せず、メニューの名前も「ラウンドのメニュー」にし、確認すると削除する", async () => {
+      // Given: 名前の有るラウンドと無いラウンドを表示している
+      const user = userEvent.setup();
+      fetchResolves({
+        status: "ok",
+        data: [
+          rounds[0],
+          { id: "round-9", name: "", roundDate: "2026-09-17", total: 100 },
+        ],
+      });
+      render(<RoundsListClient />);
+      await screen.findByText("2026-09-17");
+
+      // Then: メニューボタンの名前は、名前の有る方は引用し、無い方は引用しない
+      expect(
+        screen.getByRole("button", { name: "「午前練習」のメニュー" }),
+      ).toBeInTheDocument();
+      const item = screen.getByText("2026-09-17").closest("li");
+      if (!item) throw new Error("round item not found");
+      await user.click(
+        within(item).getByRole("button", { name: "ラウンドのメニュー" }),
+      );
+
+      // When: 削除を開く
+      await user.click(await screen.findByTestId("round-delete"));
+
+      // Then: 名前を引用しない確認文になる
+      expect(
+        screen.getByText(
+          "このラウンドを削除しますか？記録したスコアもすべて失われます。",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/「」/)).toBeNull();
+
+      // When: 確認する
+      await user.click(screen.getByTestId("confirm-dialog-confirm"));
+
+      // Then: そのラウンドを削除し、一覧から消す
+      expect(deletion.deleteRound).toHaveBeenCalledWith("round-9");
+      await waitFor(() => {
+        expect(screen.queryByText("2026-09-17")).not.toBeInTheDocument();
+      });
+      expect(screen.getByText("午前練習")).toBeInTheDocument();
+    });
   });
   describe("入力中の領域", () => {
     it("取得が成功し、入力中のラウンドがあれば、見出し「入力中」の領域に表示し、その下に見出し「過去履歴」と入力中でないラウンドを表示する", async () => {

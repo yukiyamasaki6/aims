@@ -107,7 +107,7 @@ export function RoundsListClient() {
       <ConfirmDialog
         open={target !== null}
         onOpenChange={() => setTarget(null)}
-        description={`「${target?.name}」を削除しますか？記録したスコアもすべて失われます。`}
+        description={deleteDescription(target?.name ?? "")}
         onConfirm={() => target?.confirm()}
       />
 
@@ -122,6 +122,17 @@ export function RoundsListClient() {
       </Link>
     </>
   );
+}
+
+// 名前の無いラウンドは、詳細画面と同じく名前を引用せずに指す。
+function deleteDescription(name: string): string {
+  return name === ""
+    ? "このラウンドを削除しますか？記録したスコアもすべて失われます。"
+    : `「${name}」を削除しますか？記録したスコアもすべて失われます。`;
+}
+
+function menuLabel(name: string): string {
+  return name === "" ? "ラウンドのメニュー" : `「${name}」のメニュー`;
 }
 
 // 読み込み後のカード（高さ62px、間隔gap-3）と同じ形にする。
@@ -160,7 +171,7 @@ function RoundCards({
           </Link>
           <DropdownMenu>
             <DropdownMenuTrigger
-              aria-label={`「${round.name}」のメニュー`}
+              aria-label={menuLabel(round.name)}
               data-testid="round-menu-trigger"
               className="-translate-y-1/2 absolute top-1/2 right-2 p-2 text-muted-foreground hover:text-foreground"
             >
