@@ -11,7 +11,7 @@ import type {
 } from "./op-log-types";
 import { createOpSyncHub, type OpSyncHub } from "./op-sync-hub";
 
-type Op = { eventId: string; target: string; legacy?: boolean };
+type Op = { eventId: string; target: string };
 
 // ベースは取得時点のrevisionだけを持つ。確定した操作は、revisionがベース以下なら反映済み。
 type Base = { revision: number };
@@ -175,7 +175,7 @@ type Tab = {
 function openTab(
   shared: ReturnType<typeof sharedStore>,
   locks: LockManager | undefined,
-  options: { upgrade?: (operation: Op) => Op; userId?: string } = {},
+  options: { userId?: string } = {},
 ): Tab {
   const sent: string[][] = [];
   const send = vi.fn(async (flight: OpFlight<Op>) => {
@@ -184,7 +184,6 @@ function openTab(
   });
   const hub = createOpSyncHub<Op, Base>({
     store: shared.store,
-    upgrade: options.upgrade,
     streamDeps: () => ({
       send,
       isOffline: () => false,
@@ -446,25 +445,6 @@ describe("createOpSyncHub", () => {
     expect(shared.rows.some((row) => row.eventId === mine.eventId)).toBe(true);
   });
 
-  it("upgradeを読み込んだ操作へ適用する", async () => {
-    const shared = sharedStore();
-    const a = op("x");
-    await shared.store.append({
-      eventId: a.eventId,
-      streamId: STREAM,
-      userId: "user-1",
-      operation: a,
-    });
-    const tab = open(shared, fakeLocks(), {
-      upgrade: (operation) => ({ ...operation, legacy: true }),
-    });
-    await flushed();
-
-    expect(
-      tab.hub.acquire(STREAM).getSnapshot().items[0]?.operation.legacy,
-    ).toBe(true);
-  });
-
   it("locksが無ければ、単独で送る", async () => {
     const shared = sharedStore();
     const tab = open(shared, undefined);
@@ -601,7 +581,7 @@ describe("ready", () => {
 });
 
 describe("read", () => {
-  it("読み込みの後に、現在のユーザーのその列だけを、読み替えて返す", async () => {
+  it("読み込みの後に、現在のユーザーのその列だけを、返す", async () => {
     const shared = sharedStore();
     const mine = op("x");
     const other = op("y");
@@ -619,20 +599,15 @@ describe("read", () => {
       });
     }
     const gate = gateLoads(shared);
-    const tab = open(shared, undefined, {
-      upgrade: (operation) => ({ ...operation, legacy: true }),
-    });
+    const tab = open(shared, undefined);
 
     const read = tab.hub.read(STREAM);
     expect(await settled(read)).toBe(false);
     await gate.release(0);
 
-    expect(
-      (await read).entries.map((entry) => [
-        entry.eventId,
-        entry.operation.legacy,
-      ]),
-    ).toEqual([[mine.eventId, true]]);
+    expect((await read).entries.map((entry) => entry.eventId)).toEqual([
+      mine.eventId,
+    ]);
   });
 
   it("保存の読み込みに失敗したら、そのまま投げる", async () => {
@@ -646,7 +621,7 @@ describe("read", () => {
 });
 
 describe("readStored", () => {
-  it("読み込みの完了後に、端末に保存されている現在のユーザーの組を、読み替えて返す", async () => {
+  it("読み込みの完了後に、端末に保存されている現在のユーザーの組を、返す", async () => {
     const shared = sharedStore();
     const mine = op("x");
     await shared.store.append({
@@ -656,9 +631,7 @@ describe("readStored", () => {
       operation: mine,
     });
     await shared.store.commit(STREAM, "user-1", { revision: 1 }, 10);
-    const tab = open(shared, undefined, {
-      upgrade: (operation) => ({ ...operation, legacy: true }),
-    });
+    const tab = open(shared, undefined);
 
     const stored = await tab.hub.readStored();
 
@@ -666,8 +639,8 @@ describe("readStored", () => {
       startedAt: 10,
       base: { revision: 1 },
     });
-    expect(stored.get(STREAM)?.entries.map((e) => e.operation.legacy)).toEqual([
-      true,
+    expect(stored.get(STREAM)?.entries.map((e) => e.eventId)).toEqual([
+      mine.eventId,
     ]);
   });
 });

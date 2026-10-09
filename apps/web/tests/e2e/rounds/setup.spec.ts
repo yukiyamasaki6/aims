@@ -63,7 +63,6 @@ async function openRoundWithShot(page: Page) {
       {
         distanceIndex: 0,
         endNumber: 1,
-        arrowNumber: 1,
         scoreStr: "10",
         scoreInt: 10,
       },
@@ -258,7 +257,7 @@ test("setup-08: 距離・的・本数・エンド数を変更して保存ボタ�
   ).toHaveAccessibleName(new RegExp(INDOOR_40CM_TARGET_FACE_LABEL));
 });
 
-test("setup-09: 取り消し・やり直しの履歴があり、記録済みの得点がないとき、的・本数・エンド数を変更して保存ボタンをクリックすると、編集内容が即座に反映されてダイアログが閉じられ、その距離の取り消し・やり直しの履歴が破棄される", async ({
+test("setup-09: 取り消し・やり直しの履歴があり、記録済みの得点がないとき、的・本数・エンド数を変更して保存ボタンをクリックすると、編集内容が即座に反映されてダイアログが閉じられ、その距離の矢への書き込みを、一つ戻る・一つ進むで戻せなくなる", async ({
   page,
 }) => {
   // Given
@@ -266,8 +265,8 @@ test("setup-09: 取り消し・やり直しの履歴があり、記録済みの�
   await openRound(page);
   await page.getByTestId("score-button-X").click();
   await expect(page.getByTestId("distance-summary-1")).toContainText("小計10");
-  // 全エンドの入力が終わるとテンキーが閉じるため、マスを選び直して開く。
-  await page.getByTestId("shot-cell-1-1-1").click();
+  // 全エンドの入力が終わるとテンキーが閉じるため、記録した矢を指して開く。
+  await page.getByTestId("shot-ball-1-1-1").click();
   await page.getByTestId("score-button-undo").click();
   await expect(page.getByTestId("distance-summary-1")).toContainText("小計0");
   await expect(page.getByTestId("score-button-redo")).toBeEnabled();
@@ -282,7 +281,7 @@ test("setup-09: 取り消し・やり直しの履歴があり、記録済みの�
     "2本×1エンド",
   );
   await expect(page.getByTestId("distance-config-arrows-1")).toBeHidden();
-  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("end-blank-1-1").click();
   await expect(page.getByTestId("score-button-undo")).toBeDisabled();
   await expect(page.getByTestId("score-button-redo")).toBeDisabled();
 });

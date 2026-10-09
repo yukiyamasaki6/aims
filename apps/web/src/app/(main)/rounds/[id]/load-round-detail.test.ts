@@ -7,10 +7,7 @@ import type { Database } from "@/types/supabase";
 import { roundStreamId } from "../_shared/round-op-log";
 import { roundOpStore } from "../_shared/round-op-store";
 import { roundCreated } from "../_shared/round-op-test-helpers";
-import {
-  type SyncOperation,
-  upgradeLegacyOperation,
-} from "../_shared/sync-events";
+import type { SyncOperation } from "../_shared/sync-events";
 import type {
   FetchedRoundDetail,
   fetchRoundDetail,
@@ -19,7 +16,7 @@ import { loadRoundDetail } from "./load-round-detail";
 import type { RoundBaseRecord } from "./round-base";
 import { applyOperations } from "./round-op-apply";
 import { roundTablesFromServer, selectRoundState } from "./round-tables";
-import { findCurrentPosition } from "./scorecard-input";
+import { firstOpenEnd } from "./scorecard-input";
 
 // 取得の待ちの上限を短くする。
 vi.mock("@/features/fetch-result/fetch-content", async (importOriginal) => ({
@@ -51,17 +48,10 @@ vi.mock("../_shared/round-op-log", async (importOriginal) => ({
     // 実物と同じく、読めないときは空にする。
     load: vi.fn(async (roundId: string) => {
       try {
-        const stored = await roundOpStore.loadStream(
+        return await roundOpStore.loadStream(
           roundStreamId(roundId),
           getLocalIdentity(),
         );
-        return {
-          base: stored.base,
-          entries: stored.entries.map((entry) => ({
-            ...entry,
-            operation: upgradeLegacyOperation(entry.operation),
-          })),
-        };
       } catch {
         return { base: undefined, entries: [] };
       }
@@ -119,14 +109,14 @@ const server: FetchedRoundDetail = {
 function shotRecorded(
   eventId: string,
   scoreStr: string,
-  arrowNumber = 1,
+  shotId = "s-1",
 ): SyncOperation {
   return {
     type: "shot.recorded",
     eventId,
+    shotId,
     distanceId: "d-a",
     endNumber: 1,
-    arrowNumber,
     scoreStr,
     scoreInt: Number(scoreStr),
   };
@@ -329,39 +319,6 @@ describe("loadRoundDetail", () => {
     });
   });
 
-  describe("旧い形式の未送信の操作", () => {
-    it("全項目を持つ操作は、全項目を変えた差分として読む", async () => {
-      // Given: 差分を持たない旧い形式の操作が端末に残っている
-      const legacyRound = {
-        type: "round.updated",
-        eventId: "e1",
-        roundId: "round-1",
-        name: "旧",
-        roundDate: "2026-09-20",
-        format: "outdoor",
-        bowType: "compound",
-      } as unknown as SyncOperation;
-      const legacyDistance = {
-        type: "distance.updated",
-        eventId: "e2",
-        distanceId: "d-a",
-        distance: 30,
-        totalEnds: 2,
-        arrowsPerEnd: 3,
-        targetFaceId: "face-1",
-        isMarked: true,
-      } as unknown as SyncOperation;
-      await save(legacyRound);
-      await save(legacyDistance);
-
-      // When
-      const data = loaded(await loadRoundDetail(supabase, "round-1"));
-
-      // Then: 取得で組へ反映した後も、読み替えた形で返す(組の読み込みは読み替える)
-      expect(data.group.entries.map((e) => e.eventId)).toEqual(["e1", "e2"]);
-    });
-  });
-
   it("未確定のラウンドの削除が列にあれば、取得せずに削除済みを返す", async () => {
     await save({ type: "round.disabled", eventId: "e1", roundId: "round-1" });
     await save({ type: "distance.disabled", eventId: "e2", distanceId: "d-a" });
@@ -400,13 +357,14 @@ describe("loadRoundDetail", () => {
     expect(result).toMatchObject({ status: "ok", data: { deleted: false } });
   });
 
-  it("重ねた後の状態から、最初の未記録のマスが決まる", async () => {
+  it("重ねた後の状態から、最初に指す新しい矢が決まる", async () => {
     // Given: 1エンド2本の距離で、サーバーには1本目だけがあり、2本目が列に残っている
     const oneEnd = { ...distanceA, total_ends: 1, arrows_per_end: 2 };
     const firstArrow = {
+      id: "s-1",
       distance_id: "d-a",
       end_number: 1,
-      arrow_number: 1,
+      shot_number: null,
       score_str: "10",
       score_int: 10,
     };
@@ -414,12 +372,12 @@ describe("loadRoundDetail", () => {
       status: "ok",
       data: { ...server, distances: [oneEnd], shots: [firstArrow] },
     });
-    await save(shotRecorded("e1", "9", 2));
+    await save(shotRecorded("e1", "9", "s-2"));
 
     // When
     const data = loaded(await loadRoundDetail(supabase, "round-1"));
 
-    // Then: 全マスが記録済みとなり、選択するマスは無い(重ねる前は2本目が選ばれる)
+    // Then: 全てのエンドが矢数に達し、指す新しい矢は無い(重ねる前はエンド1の新しい矢を指す)
     const state = applyOperations(
       data.base,
       data.group.entries.map((e) => ({
@@ -428,8 +386,12 @@ describe("loadRoundDetail", () => {
       })),
       [],
     );
-    expect(findCurrentPosition([oneEnd], [firstArrow])?.arrow).toBe(2);
-    expect(findCurrentPosition(state.distances, state.shots)).toBeNull();
+    expect(firstOpenEnd([oneEnd], [firstArrow])).toEqual({
+      kind: "new",
+      distanceId: "d-a",
+      endNumber: 1,
+    });
+    expect(firstOpenEnd(state.distances, state.shots)).toBeNull();
   });
 
   it("別のラウンドと別のユーザーの操作は含めない", async () => {
@@ -446,7 +408,7 @@ describe("loadRoundDetail", () => {
     await save(shotRecorded("e1", "10"));
     fetchDetail.mockImplementation(async () => {
       await roundOpStore.ack("e1", 2, true, null);
-      await save(shotRecorded("e2", "9", 2));
+      await save(shotRecorded("e2", "9", "s-2"));
       return { status: "ok", data: server };
     });
 

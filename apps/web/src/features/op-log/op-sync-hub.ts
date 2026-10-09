@@ -11,8 +11,6 @@ export type OpSyncHubOptions<Op extends OpBase, Base> = {
   store: OpLogStore<Op, Base>;
   // 送信、衝突、lane、上限、`isOffline`、反映済みの判定を返す。
   streamDeps: (streamId: string, userId: string | null) => StreamDeps<Op, Base>;
-  // 読み込んだ操作の読み替え。
-  upgrade?: (operation: Op) => Op;
   lockName?: string;
   channelName?: string;
   // テストで差し替える。Web Locksが無いブラウザではundefined。
@@ -74,18 +72,6 @@ export function createOpSyncHub<Op extends OpBase, Base>(
   let lockAbort: AbortController | undefined;
   let releaseLock: (() => void) | undefined;
 
-  function upgraded(group: StreamGroup<Op, Base>): StreamGroup<Op, Base> {
-    const upgrade = options.upgrade;
-    if (!upgrade) return group;
-    return {
-      base: group.base,
-      entries: group.entries.map((entry) => ({
-        ...entry,
-        operation: upgrade(entry.operation),
-      })),
-    };
-  }
-
   function post(message: HubMessage) {
     try {
       channel?.postMessage(message);
@@ -123,7 +109,7 @@ export function createOpSyncHub<Op extends OpBase, Base>(
     }
     if (epoch !== target) return;
     for (const [streamId, group] of streams) {
-      acquire(streamId).adopt(upgraded(group), {
+      acquire(streamId).adopt(group, {
         readAt: marks.get(streamId) ?? 0,
       });
     }
@@ -147,7 +133,7 @@ export function createOpSyncHub<Op extends OpBase, Base>(
     try {
       const group = await store.loadStream(streamId, userId);
       if (epoch !== target) return;
-      acquire(streamId).adopt(upgraded(group), { ...adoptOptions, readAt });
+      acquire(streamId).adopt(group, { ...adoptOptions, readAt });
     } catch {
       // 読み込みに失敗しても、メモリの列から送信は続ける。
     }
@@ -272,18 +258,15 @@ export function createOpSyncHub<Op extends OpBase, Base>(
     getUserId: () => userId,
     // 現在の世代の読み込みが終わる(失敗を含む)まで解決しない。`start`前、`setUser`と`stop`の後は次の読み込みの完了まで待つ。
     ready,
-    // 現在のユーザーの列の組を、読み替えて返す。読み込みの完了後に読み、失敗は投げる。
+    // 現在のユーザーの列の組を、返す。読み込みの完了後に読み、失敗は投げる。
     async read(streamId: string): Promise<StreamGroup<Op, Base>> {
       await ready();
-      return upgraded(await store.loadStream(streamId, userId));
+      return store.loadStream(streamId, userId);
     },
-    // 端末に保存されている現在のユーザーの全ての組を、読み替えて返す。メモリの列は使わない。読み込みの完了後に読み、失敗は投げる。
+    // 端末に保存されている現在のユーザーの全ての組を、返す。メモリの列は使わない。読み込みの完了後に読み、失敗は投げる。
     async readStored(): Promise<Map<string, StreamGroup<Op, Base>>> {
       await ready();
-      const stored = await store.loadAll(userId);
-      return new Map(
-        [...stored].map(([streamId, group]) => [streamId, upgraded(group)]),
-      );
+      return store.loadAll(userId);
     },
     // 取得したベースを、列の組へ反映する。読み込みの完了後に行い、結果の組を返す。
     // `fetchedUserId`が現在のユーザーと違うときは、端末へ保存せず、このタブだけに反映する。
@@ -294,9 +277,7 @@ export function createOpSyncHub<Op extends OpBase, Base>(
       fetchedUserId: string | null,
     ): Promise<StreamGroup<Op, Base>> {
       await ready();
-      return upgraded(
-        await acquire(streamId).commit(fetched, startedAt, fetchedUserId),
-      );
+      return acquire(streamId).commit(fetched, startedAt, fetchedUserId);
     },
     // 読み込みの完了後の、メモリにある現在のユーザーの全ての列の、ベースと操作を返す。保存に失敗した操作も含む。
     async readAll(): Promise<Map<string, HubSnapshot<Op, Base>>> {

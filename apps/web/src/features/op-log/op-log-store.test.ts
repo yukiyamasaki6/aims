@@ -380,7 +380,44 @@ describe("op log store", () => {
   });
 
   describe("保存形式の更新", () => {
-    it("version 3の操作を残したまま、basesを追加する", async () => {
+    it("version 4のopsとbasesは、内容を読まずに作り直す", async () => {
+      // Given: version 4のopsに操作、basesにベースが残っている
+      const legacy = await openDB("aims-sync", 4, {
+        upgrade(database) {
+          const ops = database.createObjectStore("ops", {
+            keyPath: "seq",
+            autoIncrement: true,
+          });
+          ops.createIndex("by-event-id", "eventId", { unique: true });
+          ops.createIndex("by-stream", "streamId");
+          database.createObjectStore("bases", {
+            keyPath: ["userId", "streamId"],
+          });
+        },
+      });
+      await legacy.add("ops", entry("legacy"));
+      await legacy.put("bases", {
+        userId: "user-1",
+        streamId: STREAM,
+        startedAt: 1,
+        base: { revision: 1, keep: true },
+      });
+      legacy.close();
+
+      // When
+      const store = newStore();
+      const result = await store.loadStream(STREAM, "user-1");
+
+      // Then: 旧い内容は残らず、新しい操作とベースを保存できる
+      expect(result).toEqual({ base: undefined, entries: [] });
+      await store.append(entry("a"));
+      await store.commit(STREAM, "user-1", { revision: 1, keep: true }, 10);
+      const reloaded = await store.loadStream(STREAM, "user-1");
+      expect(reloaded.entries.map((e) => e.operation.value)).toEqual(["a"]);
+      expect(reloaded.base?.startedAt).toBe(10);
+    });
+
+    it("version 3のopsは、内容を読まずに作り直し、basesを足す", async () => {
       // Given: version 3のopsに操作が残っている
       const legacy = await openDB("aims-sync", 3, {
         upgrade(database) {
@@ -392,7 +429,7 @@ describe("op log store", () => {
           ops.createIndex("by-stream", "streamId");
         },
       });
-      await legacy.add("ops", entry("kept"));
+      await legacy.add("ops", entry("legacy"));
       legacy.close();
 
       // When
@@ -400,7 +437,7 @@ describe("op log store", () => {
       const result = await store.loadStream(STREAM, "user-1");
 
       // Then
-      expect(result.entries.map((e) => e.operation.value)).toEqual(["kept"]);
+      expect(result.entries).toEqual([]);
       await store.commit(STREAM, "user-1", { revision: 1, keep: true }, 10);
       expect((await store.loadStream(STREAM, "user-1")).base).toBeDefined();
     });
@@ -411,10 +448,10 @@ describe("op log store", () => {
       await store.append(entry("a"));
 
       // When: 後のversionが更新を待つ
-      const next = await openDB("aims-sync", 5);
+      const next = await openDB("aims-sync", 6);
 
       // Then: 譲って更新が済む
-      expect(next.version).toBe(5);
+      expect(next.version).toBe(6);
       next.close();
     });
 

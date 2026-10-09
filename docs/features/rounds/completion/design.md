@@ -15,18 +15,18 @@
 
 | 操作 | 結果 | 要求 |
 | :--- | :--- | :--- |
-| 入力を完了する(全マス記録済み) | 確認なしで`status: completed`を積み、保存の後に一覧へ移る | completion-03 |
-| 入力を完了する(未入力のマスがある、または距離が無い) | それぞれの文言で確認ダイアログを出し、完了するで積んで一覧へ移る。キャンセルは何もせず詳細に留まる | completion-04, 05, 11 |
+| 入力を完了する(全てのエンドが矢数に達している) | 確認なしで`status: completed`を積み、保存の後に一覧へ移る | completion-03 |
+| 入力を完了する(矢数に達していないエンドがある、または距離が無い) | それぞれの文言で確認ダイアログを出し、完了するで積んで一覧へ移る。キャンセルは何もせず詳細に留まる | completion-04, 05, 11 |
 | 完了で点数の記録、距離の追加を積む | 続けて`status: in_progress`を積む | completion-06, 07 |
-| 完了の詳細を開く | 先頭の未入力のマスを選ばず、テンキーも展開せず、距離が無くても編集ダイアログを開かない | detail-20, 21 |
-| 完了で設定の変更、空のマスのクリアを積む | 状態は変えない | completion-08, 09 |
+| 完了の詳細を開く | 新しい矢を指さず、テンキーも展開せず、距離が無くても編集ダイアログを開かない | detail-20, 21 |
+| 完了で設定の変更、記録が変わらない操作(記録済みの矢に同じ点数を書く)を行う | 状態は変えない | completion-08, 09 |
 
-- 戻す対象は`shot.recorded`・`shot.cleared`・`distance.created`・`distance.updated`・`distance.disabled`のうち、積む時点の画面の状態に重ねて、表示中の距離か矢が変わるものである。端末の規則で効かない操作と、同じ点数の上書きは対象にしない。取り消しとやり直しは`shot.*`として積まれるため含まれる。
+- 戻す対象は`shot.recorded`・`shot.cleared`・`distance.created`・`distance.updated`・`distance.disabled`のうち、積む時点の画面の状態に重ねて、表示中の距離か矢が変わるものである。端末の規則で効かない操作と、同じ点数の上書きは対象にしない。矢の比較は矢のIDと点数で行う。取り消しとやり直しは`shot.*`として積まれるため含まれる。
 - 帯とテンキーは、`<main>`の末尾にある最下部に張り付く1つの枠(`sticky bottom-0 z-30`)に入れる。帯は枠の下端に置き、縦向きのテンキーは同じ枠の中で帯の上に絶対配置で重ねる。テンキーの表示で変わるのは枠の高さ(テンキーの高さ以上)だけで、帯は枠の下端に固定されたまま動かず、テンキーが覆う(completion-10)。横向きのテンキーは右のパネルで、帯は`<main>`の下端に残る。テンキーを格納する間にスライドで枠の下へ出た分が`<main>`のスクロール領域を広げ、アンマウント時に一度に縮んで下側が急に変わらないよう、枠は`overflow-y: clip`にし、格納ボタンのはみ出し(2rem)を枠の高さに含める(completion-13)。
 
 ## 構成とデータの流れ
 
-- `[id]/round-progress.ts`: 確認の要否と文言`completionConfirmation`(距離なし、未入力のマスあり、全マス記録済みの3通り)、状態の操作`statusOperation`、戻す操作の判定`reopenOperation`。
+- `[id]/round-progress.ts`: 確認の要否と文言`completionConfirmation`(距離なし、矢数に達していないエンドあり、全てのエンドが矢数に達しているの3通り。文言は変えない)、状態の操作`statusOperation`、戻す操作の判定`reopenOperation`。
 - `[id]/use-round-op-stack.ts`: `append`を包み、積んだ直後に`reopenOperation`が返す操作を続けて積む。保存の完了で解決するPromiseを返す。呼び出し側は変えない。
 - `[id]/complete-round-bar.tsx`: 帯と、渡された文言(`confirmation`)があるときの確認(`ConfirmDialog`、`confirmVariant="default"`)。
 - `[id]/round-op-apply.ts`: `round.updated`の`status`は常に効く項目として`rounds.status`へ反映する。

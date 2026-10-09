@@ -97,30 +97,76 @@ export function createDistance(
   });
 }
 
-export function recordShot(
+// 矢を記録する。shotIdを省くと無作為のUUIDで新しい矢を記録し、そのIDを返す。射手と射順は、指定したときだけ送る。
+export async function recordShot(
   supabase: SupabaseClient,
   shot: {
+    shotId?: string;
     distanceId: string;
     endNumber: number;
-    arrowNumber: number;
     scoreStr: string;
     scoreInt: number;
-    shooterId: string;
+    shooterId?: string;
+    shotNumber?: number | null;
   },
-) {
-  return call(supabase, "record_shots", {
+): Promise<string> {
+  const shotId = shot.shotId ?? randomUUID();
+  await call(supabase, "record_shots", {
     p_shots: [
       {
         shot_event_id: randomUUID(),
+        shot_id: shotId,
         distance_id: shot.distanceId,
         end_number: shot.endNumber,
-        arrow_number: shot.arrowNumber,
-        shooter_id: shot.shooterId,
         score_str: shot.scoreStr,
         score_int: shot.scoreInt,
+        ...(shot.shooterId === undefined ? {} : { shooter_id: shot.shooterId }),
+        ...(shot.shotNumber === undefined
+          ? {}
+          : { shot_number: shot.shotNumber }),
       },
     ],
   });
+  return shotId;
+}
+
+export function clearShot(
+  supabase: SupabaseClient,
+  shot: { shotId: string; distanceId: string },
+) {
+  return call(supabase, "clear_shots", {
+    p_shots: [
+      {
+        shot_event_id: randomUUID(),
+        shot_id: shot.shotId,
+        distance_id: shot.distanceId,
+      },
+    ],
+  });
+}
+
+// 距離の生きている矢を、エンド、点数の順で返す。
+export async function getLiveShots(
+  supabase: SupabaseClient,
+  distanceId: string,
+): Promise<
+  {
+    id: string;
+    end_number: number;
+    score_str: string;
+    shooter_id: string;
+    shot_number: number | null;
+  }[]
+> {
+  const { data, error } = await supabase
+    .from("shots")
+    .select("id, end_number, score_str, shooter_id, shot_number")
+    .eq("distance_id", distanceId)
+    .is("disabled_at", null)
+    .order("end_number")
+    .order("score_str");
+  if (error) throw error;
+  return data;
 }
 
 // ページの送信を、指定したユーザーとして実サーバーへ転送し、サーバーの応答をそのままページへ返す。

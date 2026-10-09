@@ -46,18 +46,18 @@ export async function createRound(input: {
     isMarked?: boolean;
   }[];
   // 記録済みの得点を持つラウンドが必要なテスト用。distanceIndexはdistancesの添字。
+  // idを省くと無作為のUUIDで新しい矢を記録する。射手と射順は、指定したときだけ送る。
   shots?: {
+    id?: string;
     distanceIndex: number;
     endNumber: number;
-    arrowNumber: number;
     scoreStr: string;
     scoreInt: number;
+    shooterId?: string;
+    shotNumber?: number;
   }[];
 }): Promise<string> {
-  const { supabase, userId } = await signInAsTestUser(
-    input.email,
-    input.password,
-  );
+  const { supabase } = await signInAsTestUser(input.email, input.password);
 
   const distanceIds = input.distances.map(() => randomUUID());
 
@@ -88,12 +88,13 @@ export async function createRound(input: {
     const { error: shotsError } = await supabase.rpc("record_shots", {
       p_shots: input.shots.map((s) => ({
         shot_event_id: randomUUID(),
+        shot_id: s.id ?? randomUUID(),
         distance_id: distanceIds[s.distanceIndex],
         end_number: s.endNumber,
-        arrow_number: s.arrowNumber,
-        shooter_id: userId,
         score_str: s.scoreStr,
         score_int: s.scoreInt,
+        ...(s.shooterId === undefined ? {} : { shooter_id: s.shooterId }),
+        ...(s.shotNumber === undefined ? {} : { shot_number: s.shotNumber }),
       })),
     });
     if (shotsError) {

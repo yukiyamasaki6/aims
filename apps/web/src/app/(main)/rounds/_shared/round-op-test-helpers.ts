@@ -63,9 +63,9 @@ export const shotRecorded = (
 ): SyncOperation => ({
   type: "shot.recorded",
   eventId: "e-shot-recorded",
+  shotId: "s-1",
   distanceId: "d-1",
   endNumber: 1,
-  arrowNumber: 1,
   scoreStr: "10",
   scoreInt: 10,
   ...overrides,
@@ -76,9 +76,9 @@ export const shotCleared = (
 ): SyncOperation => ({
   type: "shot.cleared",
   eventId: "e-shot-cleared",
+  shotId: "s-1",
   distanceId: "d-1",
   endNumber: 1,
-  arrowNumber: 1,
   ...overrides,
 });
 

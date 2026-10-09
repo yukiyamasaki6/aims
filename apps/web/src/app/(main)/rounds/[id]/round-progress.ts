@@ -1,17 +1,17 @@
 import type { RoundStatus, SyncOperation } from "../_shared/sync-events";
 import { applyOperation } from "./round-op-apply";
 import { type RoundTables, selectRoundState } from "./round-tables";
-import { findCurrentPosition } from "./scorecard-input";
+import { firstOpenEnd } from "./scorecard-input";
 import type { ScoringTargetFace } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
 
-// 入力を完了にする前の確認の文言。確認が要らない(全マス記録済み)ときはnull。
+// 入力を完了にする前の確認の文言。確認が要らない(全てのエンドが矢数に達している)ときはnull。
 export function completionConfirmation(
   distances: Distance[],
   shots: Shot[],
 ): string | null {
   if (distances.length === 0) return "記録がありません。入力を完了しますか？";
-  if (findCurrentPosition(distances, shots) !== null) {
+  if (firstOpenEnd(distances, shots) !== null) {
     return "未入力のマスがあります。入力を完了しますか？";
   }
   return null;
@@ -56,15 +56,11 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return [...keys].every((key) => deepEqual(left[key], right[key]));
 }
 
-// 点数の比較に使う項目だけを取り出す。射手などは、同じ点数の上書きの判定に使わない。
-function shotCells(shots: Shot[]) {
-  return shots.map((s) => ({
-    distance_id: s.distance_id,
-    end_number: s.end_number,
-    arrow_number: s.arrow_number,
-    score_str: s.score_str,
-    score_int: s.score_int,
-  }));
+// 矢のIDと点数だけを、IDの順に取り出す。射手などは、同じ点数の上書きの判定に使わない。
+function shotScores(shots: Shot[]) {
+  return shots
+    .map((s) => ({ id: s.id, score_str: s.score_str, score_int: s.score_int }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 // 完了のラウンドで、表示中の距離か矢が変わる編集の操作を積むとき、続けて積む入力中への変更。
@@ -85,7 +81,7 @@ export function reopenOperation(
   );
   if (
     deepEqual(before.distances, after.distances) &&
-    deepEqual(shotCells(before.shots), shotCells(after.shots))
+    deepEqual(shotScores(before.shots), shotScores(after.shots))
   ) {
     return null;
   }

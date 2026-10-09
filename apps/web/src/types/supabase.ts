@@ -387,7 +387,6 @@ export type Database = {
       };
       shot_events: {
         Row: {
-          arrow_number: number;
           author_id: string;
           created_at: string;
           distance_id: string;
@@ -396,12 +395,14 @@ export type Database = {
           revision: number;
           score_int: number | null;
           score_str: string | null;
+          set_fields: string[] | null;
           shooter_id: string | null;
+          shot_id: string;
+          shot_number: number | null;
           type: string;
           updated_at: string;
         };
         Insert: {
-          arrow_number: number;
           author_id: string;
           created_at?: string;
           distance_id: string;
@@ -410,12 +411,14 @@ export type Database = {
           revision: number;
           score_int?: number | null;
           score_str?: string | null;
+          set_fields?: string[] | null;
           shooter_id?: string | null;
+          shot_id: string;
+          shot_number?: number | null;
           type: string;
           updated_at?: string;
         };
         Update: {
-          arrow_number?: number;
           author_id?: string;
           created_at?: string;
           distance_id?: string;
@@ -424,7 +427,10 @@ export type Database = {
           revision?: number;
           score_int?: number | null;
           score_str?: string | null;
+          set_fields?: string[] | null;
           shooter_id?: string | null;
+          shot_id?: string;
+          shot_number?: number | null;
           type?: string;
           updated_at?: string;
         };
@@ -447,39 +453,42 @@ export type Database = {
       };
       shots: {
         Row: {
-          arrow_number: number;
           created_at: string;
           disabled_at: string | null;
           distance_id: string;
           end_number: number;
+          id: string;
           revision: number;
           score_int: number;
           score_str: string;
           shooter_id: string;
+          shot_number: number | null;
           updated_at: string;
         };
         Insert: {
-          arrow_number: number;
           created_at?: string;
           disabled_at?: string | null;
           distance_id: string;
           end_number: number;
+          id?: string;
           revision?: number;
           score_int: number;
           score_str: string;
           shooter_id: string;
+          shot_number?: number | null;
           updated_at?: string;
         };
         Update: {
-          arrow_number?: number;
           created_at?: string;
           disabled_at?: string | null;
           distance_id?: string;
           end_number?: number;
+          id?: string;
           revision?: number;
           score_int?: number;
           score_str?: string;
           shooter_id?: string;
+          shot_number?: number | null;
           updated_at?: string;
         };
         Relationships: [
@@ -697,11 +706,11 @@ export type Database = {
       };
       shot_fits: {
         Args: {
-          p_arrow: number;
           p_arrows_per_end: number;
           p_end: number;
           p_score_int: number;
           p_score_str: string;
+          p_shot_number: number;
           p_target_face_id: string;
           p_total_ends: number;
         };

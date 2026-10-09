@@ -11,7 +11,7 @@ type RoundRow = {
 };
 // distances行。
 export type DistanceRow = Distance & { disabled: boolean };
-// shots行。主キーは(distance_id, end_number, arrow_number)。
+// shots行。主キーは`id`。
 export type ShotRow = Shot & { disabled: boolean };
 
 // サーバーのテーブルのうち、1つのラウンドに属する行。端末の基準と操作を重ねた最終状態の形。

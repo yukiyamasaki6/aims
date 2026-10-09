@@ -19,25 +19,19 @@ const MOBILE = { width: 375, height: 667 };
 
 type RoundInput = Omit<Parameters<typeof createRound>[0], "email" | "password">;
 
-function shot(
-  distanceIndex: number,
-  endNumber: number,
-  arrowNumber: number,
-  score = "5",
-) {
+function shot(distanceIndex: number, endNumber: number, score = "5") {
   return {
     distanceIndex,
     endNumber,
-    arrowNumber,
     scoreStr: score,
     scoreInt: Number(score),
   };
 }
 
-// 全てのマスが記録済みになる記録を作る。
+// 全てのエンドが矢数に達する記録を作る。
 function allShots(distanceIndex: number, ends: number, arrows: number) {
   return Array.from({ length: ends * arrows }, (_, i) =>
-    shot(distanceIndex, Math.floor(i / arrows) + 1, (i % arrows) + 1),
+    shot(distanceIndex, Math.floor(i / arrows) + 1),
   );
 }
 
@@ -148,12 +142,12 @@ test("completion-02: 距離が複数あり、スクロールが必要なラウ�
     { viewport: MOBILE },
   );
   const button = completeButton(page);
-  const lastCell = page.getByTestId("shot-cell-3-4-6");
+  const lastCell = page.getByTestId("shot-ball-3-4-6");
 
   // When
   await lastCell.scrollIntoViewIfNeeded();
 
-  // Then: ボタンは画面の最下部に残り、最後のマスはボタンの上に見える
+  // Then: ボタンは画面の最下部に残り、最後の玉はボタンの上に見える
   const viewportHeight = MOBILE.height;
   const buttonBox = await button.boundingBox();
   const cellBox = await lastCell.boundingBox();
@@ -163,7 +157,7 @@ test("completion-02: 距離が複数あり、スクロールが必要なラウ�
   expect(cellBox.y + cellBox.height).toBeLessThanOrEqual(buttonBox.y);
 });
 
-test("completion-03: 全てのマスを記録済みのラウンド詳細画面のとき、入力を完了するボタンをクリックすると、確認なしで完了になり、ボタンが消え、再読み込みしてもボタンは表示されない", async ({
+test("completion-03: 全てのエンドが矢数に達したラウンド詳細画面のとき、入力を完了するボタンをクリックすると、確認なしで完了になり、ボタンが消え、再読み込みしてもボタンは表示されない", async ({
   page,
 }) => {
   // Given
@@ -180,14 +174,14 @@ test("completion-03: 全てのマスを記録済みのラウンド詳細画面�
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
   await waitForHydration(page);
-  await expect(page.getByTestId("shot-cell-1-1-3")).toHaveText("5");
+  await expect(page.getByTestId("shot-ball-1-1-3")).toHaveText("5");
   await expect(completeButton(page)).toBeHidden();
   await reload(page);
   await expect(completeButton(page)).toBeHidden();
   expect(await status(roundId)).toBe("completed");
 });
 
-test("completion-04: 未入力のマスがあるラウンド詳細画面のとき、入力を完了するボタンをクリックし、確認ダイアログで完了するを選ぶと、完了になりボタンが消える", async ({
+test("completion-04: 矢数に達していないエンドがあるラウンド詳細画面のとき、入力を完了するボタンをクリックし、確認ダイアログで完了するを選ぶと、完了になりボタンが消える", async ({
   page,
 }) => {
   // Given
@@ -210,7 +204,7 @@ test("completion-04: 未入力のマスがあるラウンド詳細画面のと�
   expect(await status(roundId)).toBe("completed");
 });
 
-test("completion-05: 未入力のマスがあるラウンド詳細画面のとき、入力を完了するボタンをクリックし、確認ダイアログでキャンセルすると、入力中のままで、ボタンが表示され続ける", async ({
+test("completion-05: 矢数に達していないエンドがあるラウンド詳細画面のとき、入力を完了するボタンをクリックし、確認ダイアログでキャンセルすると、入力中のままで、ボタンが表示され続ける", async ({
   page,
 }) => {
   // Given
@@ -228,16 +222,16 @@ test("completion-05: 未入力のマスがあるラウンド詳細画面のと�
   expect(await status(roundId)).toBe("in_progress");
 });
 
-test("completion-06: 完了にしたラウンド詳細画面のとき、点数を記録すると、入力を完了するボタンが再び表示され、再読み込みしても表示される", async ({
+test("completion-06: 完了にして一覧へ戻った後に開いたラウンド詳細画面のとき、エンドの空白をクリックして点数を記録すると、入力を完了するボタンが再び表示され、再読み込みしても表示される", async ({
   page,
 }) => {
-  // Given: 完了のラウンド(マスは選択されていない)
+  // Given: 完了のラウンド(矢を指していない)
   const roundId = await openRound(page, {}, { completed: true });
   await expect(completeButton(page)).toBeHidden();
   await expect(page.getByTestId("score-button-X")).toBeHidden();
 
   // When
-  await page.getByTestId("shot-cell-1-1-1").click();
+  await page.getByTestId("end-blank-1-1").click();
   await page.getByTestId("score-button-X").click();
 
   // Then
@@ -288,20 +282,24 @@ test("completion-08: 完了にしたラウンド詳細画面のとき、ラウ�
   expect(await status(roundId)).toBe("completed");
 });
 
-test("completion-09: 完了にしたラウンド詳細画面で空のマスがあるとき、空のマスをクリアすると、入力を完了するボタンは表示されない", async ({
+test("completion-09: 完了にして一覧へ戻った後に開いた、記録済みの矢があるラウンド詳細画面のとき、その矢の玉をクリックし、同じ点数のボタンをクリックすると、入力を完了するボタンは表示されない", async ({
   page,
 }) => {
-  // Given: 完了のラウンドで、空の最初のマスを選択した
-  const roundId = await openRound(page, {}, { completed: true });
-  await expect(page.getByTestId("shot-cell-1-1-1")).toHaveText("");
-  await page.getByTestId("shot-cell-1-1-1").click();
-  await expect(page.getByTestId("score-button-clear")).toBeVisible();
+  // Given: 完了のラウンドで、記録済みの矢を指した
+  const roundId = await openRound(
+    page,
+    { shots: [shot(0, 1, "5")] },
+    { completed: true },
+  );
+  await page.getByTestId("shot-ball-1-1-1").click();
+  await expect(page.getByTestId("score-button-5")).toBeVisible();
 
   // When
-  await page.getByTestId("score-button-clear").click();
+  await page.getByTestId("score-button-5").click();
 
   // Then
   await expectSynced(page);
+  await expect(page.getByTestId("shot-ball-1-1-1")).toHaveText("5");
   await expect(completeButton(page)).toBeHidden();
   expect(await status(roundId)).toBe("completed");
 });
@@ -331,8 +329,8 @@ for (const [name, viewport] of [
     await expect(completeButton(page)).toBeVisible();
     const before = await barBox(page);
 
-    // When: マスを選んでテンキーを展開する
-    await page.getByTestId("shot-cell-1-1-1").click();
+    // When: エンドの空白を押してテンキーを展開する
+    await page.getByTestId("end-blank-1-1").click();
     await expect(page.getByTestId("score-button-X")).toBeVisible();
     // 展開のアニメーションが終わるまで待つ
     await page.waitForTimeout(500);

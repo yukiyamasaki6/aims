@@ -68,15 +68,18 @@ export function distanceNumber(
 }
 
 // 矢が、距離の構成(エンド数・矢数・的)で有効か。サーバーの`shot_fits`と同じ判定にする。
-// Mは的によらず有効。的のリングが手元に無い場合は、点数を判定せず有効とする(サーバーに委ねる)。
+// 射順はnull(射順不明)か1〜矢数。Mは的によらず有効。的のリングが手元に無い場合は、点数を判定せず有効とする(サーバーに委ねる)。
 export function shotFitsDistance(
   distance: Pick<Distance, "total_ends" | "arrows_per_end" | "target_face_id">,
-  cell: { endNumber: number; arrowNumber: number },
+  shot: { endNumber: number; shotNumber: number | null },
   score: { scoreStr: string; scoreInt: number },
   targetFaces: ScoringTargetFace[],
 ): boolean {
-  if (cell.endNumber < 1 || cell.endNumber > distance.total_ends) return false;
-  if (cell.arrowNumber < 1 || cell.arrowNumber > distance.arrows_per_end) {
+  if (shot.endNumber < 1 || shot.endNumber > distance.total_ends) return false;
+  if (
+    shot.shotNumber !== null &&
+    (shot.shotNumber < 1 || shot.shotNumber > distance.arrows_per_end)
+  ) {
     return false;
   }
   if (score.scoreStr === "M" && score.scoreInt === 0) return true;
@@ -86,6 +89,44 @@ export function shotFitsDistance(
   return rings.some(
     (r) => r.score_str === score.scoreStr && r.score_int === score.scoreInt,
   );
+}
+
+// エンドの生きている矢の数。渡す矢は生きている矢だけとする。
+export function liveCountOf(
+  shots: Pick<Shot, "distance_id" | "end_number">[],
+  distanceId: string,
+  endNumber: number,
+): number {
+  return shots.filter(
+    (s) => s.distance_id === distanceId && s.end_number === endNumber,
+  ).length;
+}
+
+// エンドに、矢をもう1本足せるか。
+export function endHasRoom(
+  distance: Pick<Distance, "id" | "arrows_per_end">,
+  shots: Pick<Shot, "distance_id" | "end_number">[],
+  endNumber: number,
+): boolean {
+  return liveCountOf(shots, distance.id, endNumber) < distance.arrows_per_end;
+}
+
+// 点数の順位。Xを10より上、Mを最下位にする。
+function scoreRank(shot: Pick<Shot, "score_str" | "score_int">): number {
+  if (shot.score_str === "X") return shot.score_int + 0.5;
+  if (shot.score_str === "M") return -1;
+  return shot.score_int;
+}
+
+// 射順不明の矢を、点数の高い順(X、10、9、…、1、M)に並べる。同点はIDの昇順。新しい矢のIDは既にある矢より大きいため、足した矢は同点の後ろに入る。
+export function sortEndShots<
+  T extends Pick<Shot, "id" | "score_str" | "score_int">,
+>(shots: T[]): T[] {
+  return [...shots].sort((a, b) => {
+    const rank = scoreRank(b) - scoreRank(a);
+    if (rank !== 0) return rank;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
 }
 
 // 距離の的に実在する点数のリングだけを、点数ごとに1つに重複排除して返す。

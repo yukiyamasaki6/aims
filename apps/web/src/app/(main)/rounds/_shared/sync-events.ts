@@ -72,55 +72,20 @@ export type SyncOperation =
   | {
       type: "shot.recorded";
       eventId: string;
+      // 矢のID。新しい矢は端末が無作為のUUIDで作る。
+      shotId: string;
       distanceId: string;
       endNumber: number;
-      arrowNumber: number;
       scoreStr: string;
       scoreInt: number;
+      // 射手と射順は、変えるときだけ持つ。射順のnullは射順を外す(画面は付けない)。
       shooterId?: string;
+      shotNumber?: number | null;
     }
   | {
       type: "shot.cleared";
       eventId: string;
+      shotId: string;
       distanceId: string;
       endNumber: number;
-      arrowNumber: number;
     };
-
-// 全項目を持つ旧い形式の`round.updated`・`distance.updated`を、全項目を変えた差分の操作として読み替える。
-// 旧い形式の操作が端末に残らなくなった時点(次にDBのバージョンを上げるとき)で、この処理を削除する。
-export function upgradeLegacyOperation(
-  operation: SyncOperation,
-): SyncOperation {
-  const legacy: Record<string, unknown> = { ...operation };
-  if (operation.type === "round.updated" && !("changes" in legacy)) {
-    return {
-      type: "round.updated",
-      eventId: operation.eventId,
-      roundId: operation.roundId,
-      changes: {
-        name: legacy.name as string,
-        roundDate: legacy.roundDate as string,
-        format: legacy.format as string,
-        bowType: legacy.bowType as string,
-      },
-    };
-  }
-  if (operation.type === "distance.updated" && !("changes" in legacy)) {
-    return {
-      type: "distance.updated",
-      eventId: operation.eventId,
-      distanceId: operation.distanceId,
-      changes: {
-        distance: legacy.distance as number | null,
-        isMarked: legacy.isMarked as boolean,
-        config: {
-          totalEnds: legacy.totalEnds as number,
-          arrowsPerEnd: legacy.arrowsPerEnd as number,
-          targetFaceId: legacy.targetFaceId as string,
-        },
-      },
-    };
-  }
-  return operation;
-}

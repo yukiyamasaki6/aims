@@ -401,13 +401,75 @@ describe("useRoundOpStack", () => {
       });
       await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
       act(() => {
-        result.current.append(shotRecorded({ eventId: "e-2", arrowNumber: 2 }));
+        result.current.append(shotRecorded({ eventId: "e-2", shotId: "s-2" }));
       });
       await waitFor(() => expect(send).toHaveBeenCalledTimes(2));
       await new Promise((resolve) => setTimeout(resolve, 20));
       release();
 
       await waitFor(() => expect(reload).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe("確定済みの操作をベースに重ねられないとき", () => {
+    // 矢数1のエンド1に、他端末の矢がある基準。
+    const full = roundTablesFromServer({
+      status: "in_progress",
+      roundConfig: base.round.config,
+      distances: [{ ...base.distances[0], arrows_per_end: 1 }],
+      shots: [
+        {
+          id: "s-other",
+          distance_id: "d-1",
+          end_number: 1,
+          score_str: "9",
+          score_int: 9,
+          shot_number: null,
+        },
+      ],
+    });
+
+    async function confirmedGroup() {
+      const operation = shotRecorded();
+      await roundOpStore.append({
+        eventId: operation.eventId,
+        streamId: roundStreamId("round-1"),
+        userId: getLocalIdentity(),
+        operation,
+      });
+      await roundOpStore.ack(operation.eventId, 1, true, null);
+      return roundOpStore.loadStream(
+        roundStreamId("round-1"),
+        getLocalIdentity(),
+      );
+    }
+
+    it("オンラインなら、基準を取り直す", async () => {
+      // Given: 確定済みの新しい矢が、満杯のエンドの基準に重ならない
+      reload.mockResolvedValue({ status: "offline" });
+      const group = await confirmedGroup();
+
+      // When
+      renderHook(() => useRoundOpStack("round-1", loaded(full, group), []));
+
+      // Then
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    });
+
+    it("オフラインなら、取り直さない", async () => {
+      // Given
+      setOnline(false);
+      const group = await confirmedGroup();
+
+      // When
+      const { result } = renderHook(() =>
+        useRoundOpStack("round-1", loaded(full, group), []),
+      );
+
+      // Then: 重ならない矢は表示しない
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(reload).not.toHaveBeenCalled();
+      expect(result.current.state.shots.map((s) => s.id)).toEqual(["s-other"]);
     });
   });
 

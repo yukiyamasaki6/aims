@@ -2,15 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   compareDistancePosition,
   distanceNumber,
+  endHasRoom,
   endSubtotal,
+  liveCountOf,
   type ScoringRing,
   type ScoringTargetFace,
   scoreKeysFor,
   shotFitsDistance,
+  sortEndShots,
   summarizeDistance,
   summarizeRound,
 } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
+import { shotIdAfter } from "./shot-id";
 
 function ring(
   scoreStr: string,
@@ -56,13 +60,20 @@ function distance(
   };
 }
 
-function shot(distanceId: string, scoreStr: string, scoreInt: number): Shot {
+function shot(
+  distanceId: string,
+  scoreStr: string,
+  scoreInt: number,
+  overrides: Partial<Shot> = {},
+): Shot {
   return {
+    id: `${distanceId}-${scoreStr}`,
     distance_id: distanceId,
     end_number: 1,
-    arrow_number: 1,
     score_str: scoreStr,
     score_int: scoreInt,
+    shot_number: null,
+    ...overrides,
   };
 }
 
@@ -465,46 +476,146 @@ describe("shotFitsDistance", () => {
   const config = { total_ends: 6, arrows_per_end: 3, target_face_id: "face-x" };
   const faces = [faceX, face("face-empty", [])];
   const score = { scoreStr: "9", scoreInt: 9 };
+  const unknownOrder = { endNumber: 1, shotNumber: null };
 
-  it("構成の範囲内で、的に実在する点数なら有効", () => {
+  it("構成の範囲内で、的に実在する点数なら、射順が無くても有効", () => {
     expect(
-      shotFitsDistance(config, { endNumber: 6, arrowNumber: 3 }, score, faces),
+      shotFitsDistance(
+        config,
+        { endNumber: 6, shotNumber: null },
+        score,
+        faces,
+      ),
     ).toBe(true);
   });
 
   it("エンド番号が範囲外なら無効", () => {
     expect(
-      shotFitsDistance(config, { endNumber: 7, arrowNumber: 1 }, score, faces),
+      shotFitsDistance(
+        config,
+        { endNumber: 7, shotNumber: null },
+        score,
+        faces,
+      ),
     ).toBe(false);
     expect(
-      shotFitsDistance(config, { endNumber: 0, arrowNumber: 1 }, score, faces),
+      shotFitsDistance(
+        config,
+        { endNumber: 0, shotNumber: null },
+        score,
+        faces,
+      ),
     ).toBe(false);
   });
 
-  it("矢番号が範囲外なら無効", () => {
-    expect(
-      shotFitsDistance(config, { endNumber: 1, arrowNumber: 4 }, score, faces),
-    ).toBe(false);
-    expect(
-      shotFitsDistance(config, { endNumber: 1, arrowNumber: 0 }, score, faces),
-    ).toBe(false);
+  it("射順は1〜矢数なら有効で、範囲外なら無効", () => {
+    const fits = (shotNumber: number) =>
+      shotFitsDistance(config, { endNumber: 1, shotNumber }, score, faces);
+    expect([0, 1, 3, 4].map(fits)).toEqual([false, true, true, false]);
   });
 
   it("的に無い点数は無効で、Mは的によらず有効", () => {
-    const cell = { endNumber: 1, arrowNumber: 1 };
     expect(
-      shotFitsDistance(config, cell, { scoreStr: "5", scoreInt: 5 }, faces),
+      shotFitsDistance(
+        config,
+        unknownOrder,
+        { scoreStr: "5", scoreInt: 5 },
+        faces,
+      ),
     ).toBe(false);
     expect(
-      shotFitsDistance(config, cell, { scoreStr: "M", scoreInt: 0 }, faces),
+      shotFitsDistance(
+        config,
+        unknownOrder,
+        { scoreStr: "M", scoreInt: 0 },
+        faces,
+      ),
     ).toBe(true);
   });
 
   it("的のリングが手元に無ければ点数を判定しない", () => {
-    const cell = { endNumber: 1, arrowNumber: 1 };
     const unknown = { ...config, target_face_id: "unknown" };
-    expect(shotFitsDistance(unknown, cell, score, faces)).toBe(true);
+    expect(shotFitsDistance(unknown, unknownOrder, score, faces)).toBe(true);
     const empty = { ...config, target_face_id: "face-empty" };
-    expect(shotFitsDistance(empty, cell, score, faces)).toBe(true);
+    expect(shotFitsDistance(empty, unknownOrder, score, faces)).toBe(true);
+  });
+});
+
+describe("liveCountOf・endHasRoom", () => {
+  const distance = { id: "d-1", arrows_per_end: 2 };
+
+  it("同じ距離の同じエンドの矢だけを数え、矢数に達していなければ空きがある", () => {
+    // Given: エンド1に1本、エンド2に2本、別の距離のエンド1に1本
+    const shots = [
+      shot("d-1", "10", 10, { id: "a" }),
+      shot("d-1", "9", 9, { id: "b", end_number: 2 }),
+      shot("d-1", "8", 8, { id: "c", end_number: 2 }),
+      shot("d-2", "7", 7, { id: "d" }),
+    ];
+
+    // When/Then: 矢数の前後(1本、2本、0本)で判定する
+    expect(liveCountOf(shots, "d-1", 1)).toBe(1);
+    expect(liveCountOf(shots, "d-1", 2)).toBe(2);
+    expect([1, 2, 3].map((end) => endHasRoom(distance, shots, end))).toEqual([
+      true,
+      false,
+      true,
+    ]);
+  });
+});
+
+describe("sortEndShots", () => {
+  it("点数の高い順(X、10、9、…、1、M)に並べ、同点はIDの昇順にする", () => {
+    // Given: 7、10、X、9、M、8の順に入れた矢と、同点の矢
+    const shots = [
+      shot("d-1", "7", 7, { id: "s1" }),
+      shot("d-1", "10", 10, { id: "s2" }),
+      shot("d-1", "X", 10, { id: "s3" }),
+      shot("d-1", "9", 9, { id: "s5" }),
+      shot("d-1", "M", 0, { id: "s6" }),
+      shot("d-1", "8", 8, { id: "s7" }),
+      shot("d-1", "9", 9, { id: "s4" }),
+    ];
+
+    // When
+    const sorted = sortEndShots(shots);
+
+    // Then
+    expect(sorted.map((s) => s.id)).toEqual([
+      "s3",
+      "s2",
+      "s4",
+      "s5",
+      "s7",
+      "s1",
+      "s6",
+    ]);
+  });
+
+  it("新しい矢のIDで作った同点の矢は、既にある同点の矢の後ろに並ぶ", () => {
+    // Given: IDの大小がまちまちな既存の9の矢と、それらの後に作った9の矢
+    const existing = [
+      shot("d-1", "9", 9, { id: "ffffffff-fff0-4fff-bfff-ffffffffffff" }),
+      shot("d-1", "9", 9, { id: "01990000-0000-7fff-bfff-ffffffffffff" }),
+      shot("d-1", "10", 10, { id: "00000000-0000-4000-8000-000000000000" }),
+    ];
+    const added = shot("d-1", "9", 9, {
+      id: shotIdAfter(
+        existing.map((s) => s.id),
+        0x0199_0000_0000,
+        new Uint8Array(10),
+      ),
+    });
+
+    // When
+    const sorted = sortEndShots([added, ...existing]);
+
+    // Then
+    expect(sorted.map((s) => s.id)).toEqual([
+      "00000000-0000-4000-8000-000000000000",
+      "01990000-0000-7fff-bfff-ffffffffffff",
+      "ffffffff-fff0-4fff-bfff-ffffffffffff",
+      added.id,
+    ]);
   });
 });

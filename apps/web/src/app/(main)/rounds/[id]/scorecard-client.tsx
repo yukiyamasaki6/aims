@@ -11,11 +11,19 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { cn } from "@/lib/utils";
 import { DistanceInfo } from "../_shared/preset-info";
+import type { SyncOperation } from "../_shared/sync-events";
 import { lookupTargetFace } from "../_shared/target-face-icon";
 import { BackToListLink } from "./back-to-list-link";
 import { CompleteRoundBar } from "./complete-round-bar";
@@ -34,31 +42,35 @@ import { SavePresetDialog } from "./save-preset-dialog";
 import { changesDistanceStructure, distanceToAdd } from "./scorecard-distances";
 import {
   buildShotOperation,
-  type Cell,
-  cellOf,
   clearHistoryEntry,
   discardDistanceEntries,
-  findCurrentPosition,
+  firstOpenEnd,
   type HistoryEntry,
-  type Position,
-  positionAfterClear,
-  positionAfterScore,
-  positionAfterSelect,
-  positionOfCell,
+  isSamePointer,
+  newShotPointer,
+  type Pointer,
+  pointerAfterScore,
   pushHistory,
+  reconcilePointer,
   redoHistory,
+  replayHistoryEntry,
   scoreHistoryEntry,
+  shotPointer,
   undoHistory,
+  withPendingShots,
 } from "./scorecard-input";
 import {
   distanceNumber,
+  endHasRoom,
   endSubtotal,
   type ScoringTargetFace,
   scoreKeysFor,
+  sortEndShots,
   summarizeDistance,
   summarizeRound,
 } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
+import { newShotId } from "./shot-id";
 import { useRoundOpStack } from "./use-round-op-stack";
 
 // テンキーは中身のキー数が距離の的ごとに変わるため実測高さを使う。この値は
@@ -75,7 +87,7 @@ function contrastText(hex: string): string {
   return luminance > 0.6 ? "#231F20" : "#FFFFFF";
 }
 
-// マス目に記録済みの点数の実際のリング色を、テンキーと同じキー構成から引く。
+// 記録済みの玉の点数の実際のリング色を、テンキーと同じキー構成から引く。
 // Mや的に無い点数は、的の外を表すM（キー構成の末尾）の色とする。
 function ringColorFor(
   targetFace: ScoringTargetFace | undefined,
@@ -150,6 +162,305 @@ function paleTone(hex: string): { bg: string; fg: string } {
   };
 }
 
+// 場所の最小の幅(玉32px + 左右の余白2pxずつ、玉の間隔は最小4px)と、1段の高さ(行の高さ40px)。
+const BALL_SLOT_WIDTH = 36;
+const BALL_LINE_HEIGHT = 40;
+// 記録済みの玉が並び直る動きの長さ。
+const REORDER_DURATION_MS = 200;
+
+// 記録済みの玉と仮の矢が並び直る様子を、前の位置から今の位置へ動かして見せる。
+// 玉は矢のIDで、輪は玉の領域ごとに追う。仮の矢は、前の輪の位置から動かす。前の輪が玉に付いていたときは、その玉が消えたときだけ動かす。
+// 同じエンドの中で位置が変わったものだけを動かす。動きを減らす設定では動かさない。
+// 場所の幅は玉の領域の幅と列の数で決まるため、どちらかが前の描画から変わったとき(開いた直後の幅の測定、回転や窓の大きさの変更)は動かさない。
+// 前の位置はレイアウト上の位置で覚える。動いている途中で次の反映が来たときは、その動きを止め、途中の変形を足した見た目の位置から動かし直す。
+type BallPosition = {
+  parent: Element | null;
+  parentWidth: number;
+  parentColumns: string;
+  x: number;
+  y: number;
+};
+
+// 輪の位置は、玉のボタンと空白のボタンの幅が違うため中心で比べる。
+type RingPosition = {
+  parentWidth: number;
+  parentColumns: string;
+  x: number;
+  y: number;
+  shotId: string | null;
+};
+
+// 要素の動いている動きを止め、止める前の見た目の位置との差(動きの途中の変形)を返す。動いていなければ(0, 0)とする。
+function stopMoving(
+  element: Element,
+  moving: WeakMap<Element, Animation>,
+): { x: number; y: number } {
+  const animation = moving.get(element);
+  moving.delete(element);
+  if (animation?.playState !== "running") return { x: 0, y: 0 };
+  const shown = element.getBoundingClientRect();
+  animation.cancel();
+  const settled = element.getBoundingClientRect();
+  return { x: shown.left - settled.left, y: shown.top - settled.top };
+}
+
+// 要素を、レイアウト上の差(dx, dy)に動いている途中の変形を足した位置から、今の位置へ動かす。
+function moveFrom(
+  element: HTMLElement,
+  dx: number,
+  dy: number,
+  moving: WeakMap<Element, Animation>,
+) {
+  const offset = stopMoving(element, moving);
+  const x = dx + offset.x;
+  const y = dy + offset.y;
+  if (x === 0 && y === 0) return;
+  const animation = element.animate(
+    [
+      { transform: `translate(${x}px, ${y}px)` },
+      { transform: "translate(0, 0)" },
+    ],
+    { duration: REORDER_DURATION_MS, easing: "ease-out" },
+  );
+  // テストのモックのように値を返さない環境では覚えない。
+  if (animation) moving.set(element, animation);
+}
+
+function useReorderAnimation(rootRef: RefObject<HTMLElement | null>) {
+  const previous = useRef(new Map<string, BallPosition>());
+  const previousRings = useRef(new Map<Element, RingPosition>());
+  const moving = useRef(new WeakMap<Element, Animation>());
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const next = new Map<string, BallPosition>();
+    for (const element of root.querySelectorAll<HTMLElement>(
+      "[data-shot-id]",
+    )) {
+      const id = element.dataset.shotId as string;
+      const position: BallPosition = {
+        parent: element.parentElement,
+        parentWidth: element.parentElement?.clientWidth ?? 0,
+        parentColumns: element.parentElement?.style.gridTemplateColumns ?? "",
+        x: element.offsetLeft,
+        y: element.offsetTop,
+      };
+      next.set(id, position);
+      const before = previous.current.get(id);
+      if (!before || typeof element.animate !== "function") continue;
+      if (
+        reduced ||
+        before.parent !== position.parent ||
+        before.parentWidth !== position.parentWidth ||
+        before.parentColumns !== position.parentColumns
+      ) {
+        stopMoving(element, moving.current);
+        continue;
+      }
+      const dx = before.x - position.x;
+      const dy = before.y - position.y;
+      // 位置が変わらないものの動きは止めない。
+      if (dx === 0 && dy === 0) continue;
+      moveFrom(element, dx, dy, moving.current);
+    }
+    previous.current = next;
+
+    const nextRings = new Map<Element, RingPosition>();
+    for (const element of root.querySelectorAll<HTMLElement>("[data-ring]")) {
+      const parent = element.parentElement;
+      if (!parent) continue;
+      const ring: RingPosition = {
+        parentWidth: parent.clientWidth,
+        parentColumns: parent.style.gridTemplateColumns,
+        x: element.offsetLeft + element.offsetWidth / 2,
+        y: element.offsetTop + element.offsetHeight / 2,
+        shotId: element.dataset.shotId ?? null,
+      };
+      nextRings.set(parent, ring);
+      if (element.dataset.ring !== "new") continue;
+      // 押せる範囲を動かさないよう、空白のボタンでなく中の輪を動かす。
+      const mark = element.querySelector<HTMLElement>(
+        '[data-testid="provisional-shot"]',
+      );
+      const before = previousRings.current.get(parent);
+      if (!mark || !before || typeof mark.animate !== "function") continue;
+      if (
+        reduced ||
+        before.parentWidth !== ring.parentWidth ||
+        before.parentColumns !== ring.parentColumns
+      ) {
+        stopMoving(mark, moving.current);
+        continue;
+      }
+      if (before.shotId !== null && next.has(before.shotId)) continue;
+      const dx = before.x - ring.x;
+      const dy = before.y - ring.y;
+      if (dx === 0 && dy === 0) continue;
+      moveFrom(mark, dx, dy, moving.current);
+    }
+    previousRings.current = nextRings;
+  });
+}
+
+// 玉の領域の幅から、矢数分の場所が収まる段の数と、1段の場所の数(列の数)を求める。幅を測れるまでは1段とする。
+// 同じ距離の行は同じ幅のため、段の数は距離の中で揃う。
+function useBallLines(arrows: number) {
+  const [width, setWidth] = useState(0);
+  const ref = useCallback((element: HTMLDivElement | null) => {
+    if (!element) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setWidth(entry.contentRect.width);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const perLine = Math.max(1, Math.floor(width / BALL_SLOT_WIDTH));
+  const lines = width > 0 ? Math.ceil(arrows / perLine) : 1;
+  return { ref, lines, columns: Math.ceil(arrows / lines) };
+}
+
+// エンド1行。左に番号、右に小計、中に矢数分の場所を等間隔で置く。
+// エンドは枠で囲まない。上下の線は親が引き、左右は距離の枠と共通にする。
+// 記録済みの玉(点数の高い順)を左の場所から入れ、残りは空白にする。新しい矢を指しているときは最初の空白に仮の矢を出す。
+// 指している矢を消した操作が未反映の間は、輪をその玉に残し、仮の矢を出さない。
+// 番号・小計は1段分の高さのまま、行全体の上下中央に置く。
+function EndRow({
+  distance,
+  displayNumber,
+  end,
+  shots,
+  targetFace,
+  pointer,
+  leavingShotId,
+  onSelectShot,
+  onSelectEnd,
+}: {
+  distance: Distance;
+  displayNumber: number;
+  end: number;
+  shots: Shot[];
+  targetFace: ScoringTargetFace | undefined;
+  pointer: Pointer;
+  leavingShotId: string | null;
+  onSelectShot: (shot: Shot) => void;
+  onSelectEnd: (distance: Distance, end: number) => void;
+}) {
+  const { ref, lines, columns } = useBallLines(distance.arrows_per_end);
+  const endShots = sortEndShots(
+    shots.filter((s) => s.distance_id === distance.id && s.end_number === end),
+  );
+  const subtotal = endSubtotal(endShots);
+  const blanks = Math.max(0, distance.arrows_per_end - endShots.length);
+  const pointsNew =
+    pointer?.kind === "new" &&
+    pointer.distanceId === distance.id &&
+    pointer.endNumber === end;
+  const leaving =
+    pointsNew &&
+    leavingShotId !== null &&
+    endShots.some((s) => s.id === leavingShotId);
+  const showProvisional = pointsNew && !leaving;
+
+  return (
+    <div
+      data-testid={`end-row-${displayNumber}-${end}`}
+      className="flex items-center gap-0.5"
+    >
+      <div className="flex h-10 w-5 shrink-0 items-center justify-center text-muted-foreground text-xs">
+        {end}
+      </div>
+      <div
+        ref={ref}
+        className="relative grid min-w-0 flex-1"
+        style={{
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          minHeight: lines * BALL_LINE_HEIGHT,
+        }}
+      >
+        {endShots.map((shot, index) => {
+          const pointed =
+            pointer?.kind === "shot" && pointer.shotId === shot.id;
+          const ringed = pointed || (leaving && shot.id === leavingShotId);
+          const color = paleTone(ringColorFor(targetFace, shot.score_str));
+          return (
+            <button
+              key={shot.id}
+              type="button"
+              data-testid={`shot-ball-${displayNumber}-${end}-${index + 1}`}
+              data-shot-id={shot.id}
+              data-ring={ringed ? "shot" : undefined}
+              aria-pressed={pointed}
+              onClick={() => onSelectShot(shot)}
+              // 押せる範囲を玉の間隔と行の高さまで広げ、玉は中に置く。
+              className="group flex h-10 w-9 items-center justify-center justify-self-center"
+            >
+              <span
+                className={cn(
+                  // 得点色をstyleで直接指定するため、hover:bg-muted等のクラスは
+                  // 常にそのstyleに上書きされて効かない（テンキーと同じ問題、
+                  // issue #155）。明暗どちらの背景色でも均一に視認できる
+                  // グレー半透明のオーバーレイをinset box-shadowで重ねて
+                  // ホバー/押下の視覚フィードバックとする。不透明度は
+                  // Material Designのstate layerの目安（hover 8%/pressed
+                  // 12%）に合わせる（issue #286で他の対話的要素も含めて
+                  // 同じ基準に揃える予定）。
+                  "flex size-8 items-center justify-center rounded-full text-base font-medium transition-shadow group-hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] group-active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
+                  ringed && "outline-2 outline-primary outline-offset-0",
+                )}
+                style={{ backgroundColor: color.bg, color: color.fg }}
+              >
+                {shot.score_str}
+              </span>
+            </button>
+          );
+        })}
+        {blanks > 0 && (
+          <button
+            type="button"
+            data-testid={`end-blank-${displayNumber}-${end}`}
+            aria-label={`エンド${end}に追加`}
+            data-ring={showProvisional ? "new" : undefined}
+            onClick={() => onSelectEnd(distance, end)}
+            className="flex h-10 items-center justify-center"
+          >
+            {showProvisional && (
+              // 指している輪だけを描く。内径は入力済みの玉の直径(size-8)に合わせる。
+              <span
+                data-testid="provisional-shot"
+                className="size-8 shrink-0 rounded-full outline-2 outline-primary outline-offset-0"
+              />
+            )}
+          </button>
+        )}
+        {Array.from({ length: Math.max(0, blanks - 1) }, (_, i) => {
+          const slot = endShots.length + i + 2;
+          return (
+            <button
+              key={`slot-${slot}`}
+              type="button"
+              tabIndex={-1}
+              aria-hidden="true"
+              data-testid={`end-slot-${displayNumber}-${end}-${slot}`}
+              onClick={() => onSelectEnd(distance, end)}
+              className="h-10"
+            />
+          );
+        })}
+      </div>
+      <div
+        data-testid={`end-subtotal-${displayNumber}-${end}`}
+        className="flex h-10 w-8 shrink-0 items-center justify-center text-muted-foreground text-base"
+      >
+        {subtotal ?? ""}
+      </div>
+    </div>
+  );
+}
+
 const NO_TARGET_FACES: TargetFaceOption[] = [];
 
 export function ScorecardClient({
@@ -178,18 +489,29 @@ export function ScorecardClient({
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
     new Set(),
   );
-  // マス目の選択有無（position）がそのままテンキーの開閉状態であり、
-  // 別のstateとして二重管理しない。selectCell等で常にpositionとセットで
-  // 更新していた旧keypadOpenを廃止し、ここから直接導出する。
-  // 完了のラウンドは、先頭の未入力のマスを選ばず、テンキーも展開しない。
-  const [position, setPosition] = useState<Position | null>(() =>
-    inProgress ? findCurrentPosition(distances, shots) : null,
+  // 画面へまだ反映されていない(保存の完了を待つ)自分の矢の操作。空白・新しい矢・次のエンドの判定に数える。
+  const [pendingShots, setPendingShots] = useState<SyncOperation[]>([]);
+  const liveShots = withPendingShots(shots, pendingShots);
+  // 指している矢を消した操作。未反映の間だけ、輪をその玉に残す。
+  const [leavingClear, setLeavingClear] = useState<SyncOperation | null>(null);
+  const leavingShotId =
+    leavingClear?.type === "shot.cleared" && pendingShots.includes(leavingClear)
+      ? leavingClear.shotId
+      : null;
+  // 指している矢の有無がそのままテンキーの開閉状態であり、別のstateとして
+  // 二重管理しない。
+  // 完了のラウンドは、新しい矢を指さず、テンキーも展開しない。
+  const [storedPointer, setPointer] = useState<Pointer>(() =>
+    inProgress ? firstOpenEnd(distances, shots) : null,
   );
+  // 指している矢が他端末で消えた、エンドが満杯になった、距離が無効になったときは、いまの状態に合わせる。
+  const pointer = reconcilePointer(distances, liveShots, storedPointer);
+  if (!isSamePointer(pointer, storedPointer)) setPointer(pointer);
   // keypadOpen（=position有無）の変化をそのままアンマウントすると格納
   // アニメーションが再生できないため、トランジション終了後に実際に
   // アンマウントするまでの間だけmountedをtrueに保つ。
-  const [keypadMounted, setKeypadMounted] = useState(position !== null);
-  const [keypadVisible, setKeypadVisible] = useState(position !== null);
+  const [keypadMounted, setKeypadMounted] = useState(pointer !== null);
+  const [keypadVisible, setKeypadVisible] = useState(pointer !== null);
   const [keypadHeight, setKeypadHeight] = useState(KEYPAD_HEIGHT_FALLBACK);
   const keypadRef = useRef<HTMLDivElement>(null);
   const keypadResizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -209,13 +531,17 @@ export function ScorecardClient({
     return () => mql.removeEventListener("change", update);
   }, []);
   // 格納アニメーション中もテンキーの中身（点数ボタン）を表示し続けられる
-  // よう、positionがnullになった後も直近のpositionを保持しておく。
-  const lastPositionRef = useRef<Position | null>(position);
-  if (position) lastPositionRef.current = position;
-  const displayPosition = position ?? lastPositionRef.current;
+  // よう、何も指さなくなった後も直近に指していた矢の距離を保持しておく。
+  const pointedDistance =
+    pointer && distances.find((d) => d.id === pointer.distanceId);
+  const lastDistanceRef = useRef<Distance | null>(pointedDistance ?? null);
+  if (pointedDistance) lastDistanceRef.current = pointedDistance;
+  const keypadDistance = pointedDistance ?? lastDistanceRef.current;
+  const scorecardRef = useRef<HTMLDivElement>(null);
+  useReorderAnimation(scorecardRef);
 
   // テンキーのキー数は距離ごとの的によって変わり、高さも連動する。固定値では
-  // なく実測値を使うことで、キー数変化時もマス選択のスクロール計算が崩れない。
+  // なく実測値を使うことで、キー数変化時も指した矢へのスクロール計算が崩れない。
   const setKeypadNode = useCallback((el: HTMLDivElement | null) => {
     keypadRef.current = el;
     keypadResizeObserverRef.current?.disconnect();
@@ -229,20 +555,25 @@ export function ScorecardClient({
   }, []);
 
   const closeKeypad = useCallback(() => {
-    // positionを残したままだと選択中マスのリング表示（isActive）が消えず、
-    // 見た目上フォーカスが外れていないように見えるためクリアする。
-    // これによりkeypadShouldBeOpen（=position有無）もfalseになり、
+    // 指している矢を残したままだと輪の表示が消えず、見た目上フォーカスが
+    // 外れていないように見えるため外す。
+    // これによりkeypadShouldBeOpen（=指している矢の有無）もfalseになり、
     // 下の格納アニメーション用useEffectが発火する。
-    setPosition(null);
-    // マス目のボタンだけフォーカスを外す。無条件にblurすると、キーパッド外の
+    setPointer(null);
+    // 玉と空白のボタンだけフォーカスを外す。無条件にblurすると、キーパッド外の
     // 他の入力欄（RoundConfigPanel等）へフォーカスした瞬間にも外れてしまう。
     const active = document.activeElement as HTMLElement | null;
-    if (active?.dataset.testid?.startsWith("shot-cell-")) {
-      active.blur();
+    const testId = active?.dataset.testid;
+    if (
+      testId?.startsWith("shot-ball-") ||
+      testId?.startsWith("end-blank-") ||
+      testId?.startsWith("end-slot-")
+    ) {
+      active?.blur();
     }
   }, []);
 
-  const keypadShouldBeOpen = position !== null;
+  const keypadShouldBeOpen = pointer !== null;
 
   useEffect(() => {
     if (keypadShouldBeOpen) {
@@ -264,13 +595,13 @@ export function ScorecardClient({
   }, [keypadShouldBeOpen]);
 
   useEffect(() => {
-    if (!position) return;
-    const testId = `shot-cell-${distanceNumber(distances, position.distance.id)}-${position.end}-${position.arrow}`;
+    if (!pointer) return;
+    const testId = `end-row-${distanceNumber(distances, pointer.distanceId)}-${pointer.endNumber}`;
     const cell = document.querySelector(`[data-testid="${testId}"]`);
     const container = cell?.closest<HTMLElement>(".overflow-y-auto");
     if (!cell || !container) return;
 
-    // マスを選択すれば必ずテンキーが開く前提のため、開閉状態に関わらず常に
+    // 矢を指せば必ずテンキーが開く前提のため、開閉状態に関わらず常に
     // テンキー分の高さが隠れることを見込んでスクロール位置を計算する
     // （高さ確保用の透明な枠は常にkeypadHeight分の領域を占有している）。
     // 横向きではテンキーは横に並ぶ側パネルで、keypadHeightは列いっぱいに
@@ -293,7 +624,7 @@ export function ScorecardClient({
     if (delta !== 0) {
       container.scrollBy({ top: delta, behavior: "smooth" });
     }
-  }, [position, keypadHeight, isLandscape, distances]);
+  }, [pointer, keypadHeight, isLandscape, distances]);
 
   const roundSummary = summarizeRound(distances, faces, shots);
 
@@ -330,9 +661,7 @@ export function ScorecardClient({
   function handleDistanceSaved(updated: DistanceConfig) {
     const structureChanged = changesDistanceStructure(distances, updated);
     toggleDistanceEditing(updated.id);
-    // 構成（総エンド数・エンドあたりの本数）が変わった可能性があるため、
-    // 選択中マスの参照が古いままにならないようフォーカスを一旦クリアする。
-    setPosition(null);
+    // 指している矢が新しい構成で無効になったときは、reconcilePointerが何も指さなくする。
     if (structureChanged) {
       setUndoStack((prev) => discardDistanceEntries(prev, updated.id));
       setRedoStack((prev) => discardDistanceEntries(prev, updated.id));
@@ -347,55 +676,100 @@ export function ScorecardClient({
       next.delete(distanceId);
       return next;
     });
-    if (position?.distance.id === distanceId) {
-      setPosition(null);
-    }
+    if (pointer?.distanceId === distanceId) setPointer(null);
   }
 
-  // 指定マスの状態をshotへ反映する（ローカルstateを即座に更新し、実際の
-  // 書き込みは操作の列へ積む）。undo/redoはこの適用処理を、記録時とは
-  // 逆方向・同方向にそれぞれ1回呼ぶだけで実現する。
-  function applyShot(cell: Cell, shot: Shot | null) {
-    sync.append(
-      buildShotOperation({
-        cell,
-        shot,
-        eventId: crypto.randomUUID(),
-      }),
-    );
+  // 矢の操作を操作の列へ積む。画面へ反映されるまで(保存の完了まで)、指す先の判定に数える。
+  // 指している矢を消す操作(クリア、その矢を消す戻る・進む)は、未反映の間の輪のために覚える。
+  function appendShot(operation: SyncOperation) {
+    setPendingShots((prev) => [...prev, operation]);
+    if (
+      operation.type === "shot.cleared" &&
+      pointer?.kind === "shot" &&
+      pointer.shotId === operation.shotId
+    ) {
+      setLeavingClear(operation);
+    }
+    const settle = () =>
+      setPendingShots((prev) => prev.filter((p) => p !== operation));
+    void sync.append(operation).then(settle, settle);
+  }
+
+  function recordHistory(entry: HistoryEntry) {
+    const history = pushHistory({ undoStack, redoStack }, entry);
+    setUndoStack(history.undoStack);
+    setRedoStack(history.redoStack);
   }
 
   function handleScore(scoreStr: string, scoreInt: number) {
-    if (!position) return;
+    if (!pointer) return;
+    const distance = distances.find((d) => d.id === pointer.distanceId);
+    // 指している新しい矢は、reconcilePointerにより常に空きのあるエンドにある(安全策)。
+    if (
+      !distance ||
+      (pointer.kind === "new" &&
+        !endHasRoom(distance, liveShots, pointer.endNumber))
+    ) {
+      return;
+    }
 
-    const entry = scoreHistoryEntry(shots, position, scoreStr, scoreInt);
-    applyShot(entry, entry.nextShot);
-    const history = pushHistory({ undoStack, redoStack }, entry);
-    setUndoStack(history.undoStack);
-    setRedoStack(history.redoStack);
-    setPosition(positionAfterScore(distances, position));
+    // 新しい矢のIDは、そのエンドの既にある矢より後ろに並ぶ時刻順のUUIDにする。
+    const entry = scoreHistoryEntry(
+      liveShots,
+      pointer,
+      { scoreStr, scoreInt },
+      newShotId(
+        liveShots
+          .filter(
+            (s) =>
+              s.distance_id === pointer.distanceId &&
+              s.end_number === pointer.endNumber,
+          )
+          .map((s) => s.id),
+      ),
+    );
+    const operation = buildShotOperation(
+      entry,
+      entry.after,
+      crypto.randomUUID(),
+    );
+    appendShot(operation);
+    recordHistory(entry);
+    setPointer(
+      pointerAfterScore(
+        distances,
+        withPendingShots(liveShots, [operation]),
+        pointer,
+      ),
+    );
   }
 
   function handleClear() {
-    if (!position) return;
+    if (pointer?.kind !== "shot") return;
+    const shot = liveShots.find((s) => s.id === pointer.shotId);
+    // 指している記録済みの矢は、reconcilePointerにより常に生きている(安全策)。
+    if (!shot) return;
 
-    // 未記録のマスのクリアも操作の列へ積むが、履歴には残さない。
-    const entry = clearHistoryEntry(shots, position);
-    applyShot(cellOf(position), null);
-    const history = pushHistory({ undoStack, redoStack }, entry);
-    setUndoStack(history.undoStack);
-    setRedoStack(history.redoStack);
-    setPosition(positionAfterClear(distances, position));
+    const entry = clearHistoryEntry(shot);
+    appendShot(buildShotOperation(entry, entry.after, crypto.randomUUID()));
+    recordHistory(entry);
+    setPointer(newShotPointer(shot.distance_id, shot.end_number));
   }
 
-  // 取り消した/やり直したマスへフォーカスを移動し、何が変わったか見えるようにする。
-  function focusHistoryEntry(entry: HistoryEntry) {
-    const next = positionOfCell(distances, entry);
-    // 距離削除時にその距離のundo/redo履歴も併せて破棄しているため、
-    // 履歴に残っているentryは常に現存する距離を指す（安全策、到達不能）。
-    if (!next) return;
+  // 戻した・やり直した矢を指し、何が変わったか見えるようにする。
+  // 復活がその時点のエンドに入らないときは、操作を積まず列だけを進める。
+  function replay(entry: HistoryEntry, forward: boolean) {
+    const result = replayHistoryEntry(
+      distances,
+      liveShots,
+      entry,
+      forward ? entry.after : entry.before,
+      crypto.randomUUID(),
+    );
+    if (!result) return;
+    appendShot(result.operation);
     setKeypadMounted(true);
-    setPosition(next);
+    setPointer(result.pointer);
   }
 
   function handleUndo() {
@@ -404,10 +778,9 @@ export function ScorecardClient({
     // 空の状態で呼ばれることはない（安全策、到達不能）。
     if (!result) return;
 
-    applyShot(result.entry, result.entry.prevShot);
     setUndoStack(result.history.undoStack);
     setRedoStack(result.history.redoStack);
-    focusHistoryEntry(result.entry);
+    replay(result.entry, false);
   }
 
   function handleRedo() {
@@ -416,22 +789,25 @@ export function ScorecardClient({
     // 空の状態で呼ばれることはない（安全策、到達不能）。
     if (!result) return;
 
-    applyShot(result.entry, result.entry.nextShot);
     setUndoStack(result.history.undoStack);
     setRedoStack(result.history.redoStack);
-    focusHistoryEntry(result.entry);
+    replay(result.entry, true);
   }
 
-  function selectCell(distance: Distance, end: number, arrow: number) {
-    const next = positionAfterSelect(position, { distance, end, arrow });
-    // 格納後に再度開く場合、keypadMountedがマウント用useEffectを経由して
-    // 遅れて反映されると、スクロール計算がkeypadRef未接続のまま実行されて
-    // しまうため、ここで同期的にマウント済みにしておく。
-    if (next) setKeypadMounted(true);
-    setPosition(next);
+  // 格納後に再度開く場合、keypadMountedがマウント用useEffectを経由して
+  // 遅れて反映されると、スクロール計算がkeypadRef未接続のまま実行されて
+  // しまうため、ここで同期的にマウント済みにしておく。
+  function selectShot(shot: Shot) {
+    setKeypadMounted(true);
+    setPointer(shotPointer(shot));
   }
 
-  const keypadButtons = displayPosition && (
+  function selectEnd(distance: Distance, end: number) {
+    setKeypadMounted(true);
+    setPointer(newShotPointer(distance.id, end));
+  }
+
+  const keypadButtons = keypadDistance && (
     <>
       <div className="grid grid-cols-4 gap-2">
         <Button
@@ -463,6 +839,7 @@ export function ScorecardClient({
           variant="outline"
           size="lg"
           className="h-12 text-lg"
+          disabled={pointer?.kind !== "shot"}
           data-testid="score-button-clear"
           aria-label="クリア"
           onClick={handleClear}
@@ -471,9 +848,7 @@ export function ScorecardClient({
         </Button>
       </div>
       <div className="grid grid-cols-4 gap-2">
-        {scoreKeysFor(
-          targetFaceOf(displayPosition.distance.target_face_id),
-        ).map((b) => (
+        {scoreKeysFor(targetFaceOf(keypadDistance.target_face_id)).map((b) => (
           <Button
             key={b.scoreStr}
             type="button"
@@ -486,7 +861,7 @@ export function ScorecardClient({
             // のような暗い色では変化が知覚できないため、明暗どちらの背景
             // でも均一に視認できるグレー半透明のオーバーレイをinset
             // box-shadowで重ねてホバー/押下の視覚フィードバックとする。
-            // マス目（issue #155）はpaleTone()で明度90%に統一された薄い
+            // 玉（issue #155）はpaleTone()で明度90%に統一された薄い
             // 背景のためMaterial Designのstate layerの目安（8%/12%）で
             // 十分だが、テンキーは彩度の高いベタ色のため同じ%では変化が
             // 知覚できず、実測で確認の上より強い不透明度にしている
@@ -616,7 +991,7 @@ export function ScorecardClient({
               </div>
             </div>
 
-            <div className="flex flex-col gap-4">
+            <div ref={scorecardRef} className="flex flex-col gap-4">
               {distances.map((d) => {
                 const displayNumber = distanceNumber(distances, d.id);
                 const face = targetFaceOf(d.target_face_id);
@@ -624,86 +999,20 @@ export function ScorecardClient({
 
                 // end行1件分の描画。最終行だけ小計のsticky境界（下記の内側
                 // ラッパー）の外に出すため、共通化して2箇所から呼べるようにする。
-                const renderEndRow = (end: number) => {
-                  const endShots = shots.filter(
-                    (s) => s.distance_id === d.id && s.end_number === end,
-                  );
-                  const subtotal = endSubtotal(endShots);
-
-                  return (
-                    <div key={end} className="flex items-stretch">
-                      <div className="flex w-8 shrink-0 items-center justify-center border-r text-muted-foreground text-xs">
-                        {end}
-                      </div>
-                      <div
-                        className="grid flex-1 divide-x"
-                        style={{
-                          gridTemplateColumns: `repeat(${d.arrows_per_end}, minmax(0, 1fr))`,
-                        }}
-                      >
-                        {Array.from(
-                          { length: d.arrows_per_end },
-                          (_, i) => i + 1,
-                        ).map((arrow) => {
-                          const shot = endShots.find(
-                            (s) => s.arrow_number === arrow,
-                          );
-                          const isActive =
-                            position?.distance.id === d.id &&
-                            position.end === end &&
-                            position.arrow === arrow;
-                          const color = shot
-                            ? paleTone(
-                                ringColorFor(
-                                  targetFaceOf(d.target_face_id),
-                                  shot.score_str,
-                                ),
-                              )
-                            : null;
-
-                          return (
-                            <button
-                              key={arrow}
-                              type="button"
-                              data-testid={`shot-cell-${displayNumber}-${end}-${arrow}`}
-                              onClick={() => selectCell(d, end, arrow)}
-                              className={cn(
-                                // 得点色をstyleで直接指定するため、hover:bg-muted等の
-                                // クラスは常にそのstyleに上書きされて効かない
-                                // （テンキーと同じ問題、issue #155）。明暗どちらの
-                                // 背景色でも均一に視認できるグレー半透明のオーバーレイ
-                                // をinset box-shadowで重ねてホバー/押下の視覚
-                                // フィードバックとする。不透明度はMaterial Design
-                                // のstate layerの目安（hover 8%/pressed 12%）に
-                                // 合わせる（issue #286で他の対話的要素も含めて
-                                // 同じ基準に揃える予定）。
-                                "flex min-h-10 items-center justify-center py-2 text-base font-medium transition-shadow hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
-                                isActive &&
-                                  "bg-primary/10 text-primary ring-2 ring-primary ring-inset",
-                              )}
-                              style={
-                                color
-                                  ? {
-                                      backgroundColor: color.bg,
-                                      color: color.fg,
-                                    }
-                                  : undefined
-                              }
-                            >
-                              {shot?.score_str ?? ""}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div
-                        data-testid={`end-subtotal-${displayNumber}-${end}`}
-                        className="flex min-h-10 w-14 shrink-0 items-center justify-center border-l text-muted-foreground text-base"
-                      >
-                        {subtotal ?? ""}
-                      </div>
-                    </div>
-                  );
-                };
+                const renderEndRow = (end: number) => (
+                  <EndRow
+                    key={end}
+                    distance={d}
+                    displayNumber={displayNumber}
+                    end={end}
+                    shots={shots}
+                    targetFace={face}
+                    pointer={pointer}
+                    leavingShotId={leavingShotId}
+                    onSelectShot={selectShot}
+                    onSelectEnd={selectEnd}
+                  />
+                );
 
                 return (
                   <div
@@ -801,13 +1110,11 @@ export function ScorecardClient({
                         </div>
                       )}
                     </div>
-                    {/* 最終行だけを小計のsticky境界の外に出す。border-tは
-                    「1〜N-1行目」グループとの間のdivide-y相当の区切り線。
-                    overflow-hiddenはこのend行側だけに付ける。カード直下
-                    （親）に付けると、sticky（小計バー）がこの
-                    overflow-hiddenを基準にしてしまい、ページ全体の
-                    スクロールに追従しなくなるため。 */}
-                    <div className="divide-y overflow-hidden rounded-b-xl border-t">
+                    {/* 最終行だけを小計のsticky境界の外に出す。border-tは1〜N-1行目との
+                    間の区切り線(divide-yと同じ線)。1エンドのときは小計のborder-bが
+                    上の線になるため引かない。行の端に背景を持つ要素が無いため、
+                    カードの角で切るoverflow-hiddenは付けない(付けるとstickyの基準が変わる)。 */}
+                    <div className={cn(d.total_ends > 1 && "border-t")}>
                       {renderEndRow(d.total_ends)}
                     </div>
                   </div>

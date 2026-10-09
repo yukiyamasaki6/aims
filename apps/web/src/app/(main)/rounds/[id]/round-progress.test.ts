@@ -41,10 +41,11 @@ const distance = {
   target_face_id: "face-1",
   is_marked: true,
 };
-const shot = (arrowNumber: number, scoreStr = "10") => ({
+const shot = (n: number, scoreStr = "10") => ({
+  id: `s-${n}`,
   distance_id: "d-1",
   end_number: 1,
-  arrow_number: arrowNumber,
+  shot_number: null,
   // 取得した行は、DBのNOT NULL列のため必ず射手のIDを持つ。
   shooter_id: "user-1",
   score_str: scoreStr,
@@ -73,7 +74,7 @@ const reopen = (t: RoundTables, op: SyncOperation) =>
   reopenOperation("round-1", t, op, faces, "e-reopen");
 
 describe("completionConfirmation", () => {
-  it("距離が無ければ記録がない旨、未入力のマスがあれば未入力の旨、全マス記録済みならnullを返す", () => {
+  it("距離が無ければ記録がない旨、矢数に達していないエンドがあれば未入力の旨、全てのエンドが矢数に達していればnullを返す", () => {
     // Given
     const full = tables("completed", [shot(1), shot(2)]);
     const partial = tables("completed", [shot(1)]);
@@ -103,14 +104,14 @@ describe("reopenOperation", () => {
   describe("完了のラウンドで表示が変わる編集", () => {
     it.each<[string, SyncOperation]>([
       [
-        "空のマスへの記録",
-        shotRecorded({ arrowNumber: 2, scoreStr: "9", scoreInt: 9 }),
+        "新しい矢の記録",
+        shotRecorded({ shotId: "s-2", scoreStr: "9", scoreInt: 9 }),
       ],
       [
-        "別の点数への上書き",
-        shotRecorded({ arrowNumber: 1, scoreStr: "9", scoreInt: 9 }),
+        "別の点数への変更",
+        shotRecorded({ shotId: "s-1", scoreStr: "9", scoreInt: 9 }),
       ],
-      ["記録済みのマスのクリア", shotCleared({ arrowNumber: 1 })],
+      ["記録済みの矢のクリア", shotCleared({ shotId: "s-1" })],
       ["距離の追加", distanceCreated({ id: "d-2", positionKey: "b" })],
       ["距離の変更", distanceUpdated({ changes: { distance: 50 } })],
       ["距離の削除", distanceDisabled("d-1")],
@@ -135,16 +136,25 @@ describe("reopenOperation", () => {
     it.each<[string, SyncOperation]>([
       [
         "同じ点数の上書き",
-        shotRecorded({ arrowNumber: 1, scoreStr: "10", scoreInt: 10 }),
+        shotRecorded({ shotId: "s-1", scoreStr: "10", scoreInt: 10 }),
       ],
-      ["空のマスのクリア", shotCleared({ arrowNumber: 2 })],
+      [
+        "射手だけの変更",
+        shotRecorded({
+          shotId: "s-1",
+          scoreStr: "10",
+          scoreInt: 10,
+          shooterId: "user-2",
+        }),
+      ],
+      ["存在しない矢のクリア", shotCleared({ shotId: "s-2" })],
       [
         "的にない点数の記録",
-        shotRecorded({ arrowNumber: 2, scoreStr: "7", scoreInt: 7 }),
+        shotRecorded({ shotId: "s-2", scoreStr: "7", scoreInt: 7 }),
       ],
       [
         "存在しない距離への記録",
-        shotRecorded({ distanceId: "d-x", arrowNumber: 2 }),
+        shotRecorded({ distanceId: "d-x", shotId: "s-2" }),
       ],
       [
         "削除済みでない距離の同じ値への変更",
@@ -160,9 +170,14 @@ describe("reopenOperation", () => {
       expect(
         reopen(
           tables("in_progress"),
-          shotRecorded({ arrowNumber: 2, scoreStr: "9", scoreInt: 9 }),
+          shotRecorded({ shotId: "s-2", scoreStr: "9", scoreInt: 9 }),
         ),
       ).toBeNull();
+    });
+
+    it("完了で、矢数に達したエンドへの新しい矢の記録は戻さない", () => {
+      const full = tables("completed", [shot(1), shot(2)]);
+      expect(reopen(full, shotRecorded({ shotId: "s-3" }))).toBeNull();
     });
 
     it("完了で、削除済みの距離への記録は戻さない", () => {

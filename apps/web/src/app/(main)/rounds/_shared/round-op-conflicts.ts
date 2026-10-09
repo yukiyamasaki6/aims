@@ -36,11 +36,15 @@ function isRoundOperation(operation: SyncOperation): boolean {
   return operation.type.startsWith("round.");
 }
 
-function isSameCell(previous: ShotOperation, next: ShotOperation): boolean {
+// 同じ矢か、同じエンド。エンドの矢数の上限と射順の重なりの判定が、同じエンドの矢の確定の順に依存する。
+function isSameShotOrEnd(
+  previous: ShotOperation,
+  next: ShotOperation,
+): boolean {
   return (
-    previous.distanceId === next.distanceId &&
-    previous.endNumber === next.endNumber &&
-    previous.arrowNumber === next.arrowNumber
+    previous.shotId === next.shotId ||
+    (previous.distanceId === next.distanceId &&
+      previous.endNumber === next.endNumber)
   );
 }
 
@@ -74,7 +78,7 @@ export function conflicts(
     return true;
   }
   if (isShotOperation(previous) && isShotOperation(next)) {
-    return isSameCell(previous, next);
+    return isSameShotOrEnd(previous, next);
   }
   return false;
 }

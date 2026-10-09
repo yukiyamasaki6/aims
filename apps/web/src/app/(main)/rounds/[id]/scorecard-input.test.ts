@@ -1,21 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   buildShotOperation,
-  type Cell,
-  cellOf,
   clearHistoryEntry,
   discardDistanceEntries,
-  findCurrentPosition,
+  firstOpenEnd,
   type HistoryEntry,
-  type Position,
-  positionAfterClear,
-  positionAfterScore,
-  positionAfterSelect,
-  positionOfCell,
+  isSamePointer,
+  newShotPointer,
+  type Pointer,
+  pointerAfterScore,
   pushHistory,
+  reconcilePointer,
   redoHistory,
+  replayHistoryEntry,
   scoreHistoryEntry,
+  shotPointer,
   undoHistory,
+  withPendingShots,
 } from "./scorecard-input";
 import type { Distance, Shot } from "./scorecard-types";
 
@@ -36,546 +37,385 @@ function distance(
   };
 }
 
-// 2エンド×2本の距離と、1エンド×2本の距離。
-const distanceA = distance("d-a", "a", 2, 2);
+// 3エンド×2本の距離と、1エンド×2本の距離。
+const distanceA = distance("d-a", "a", 3, 2);
 const distanceB = distance("d-b", "b", 1, 2);
 const distances = [distanceA, distanceB];
 
-function at(d: Distance, end: number, arrow: number): Position {
-  return { distance: d, end, arrow };
-}
-
-// 位置を「距離ID/エンド/本目」の文字列で表し、期待値をリテラルで書けるようにする。
-function describePosition(position: Position | null): string | null {
-  return position
-    ? `${position.distance.id}/${position.end}/${position.arrow}`
-    : null;
-}
-
 function shot(
+  id: string,
   distanceId: string,
   end: number,
-  arrow: number,
-  scoreStr: string,
-  scoreInt: number,
-  shooterId?: string,
+  scoreStr = "10",
+  scoreInt = 10,
 ): Shot {
   return {
+    id,
     distance_id: distanceId,
     end_number: end,
-    arrow_number: arrow,
-    shooter_id: shooterId,
     score_str: scoreStr,
     score_int: scoreInt,
+    shot_number: null,
   };
 }
 
-function entry(
-  distanceId: string,
-  end: number,
-  arrow: number,
-  prevShot: Shot | null,
-  nextShot: Shot | null,
-): HistoryEntry {
-  return {
-    distanceId,
-    endNumber: end,
-    arrowNumber: arrow,
-    prevShot,
-    nextShot,
-  };
+// エンドを満たす2本の矢。
+function fill(distanceId: string, end: number): Shot[] {
+  return [
+    shot(`${distanceId}-${end}-1`, distanceId, end),
+    shot(`${distanceId}-${end}-2`, distanceId, end),
+  ];
 }
 
-describe("findCurrentPosition", () => {
-  it("記録が無い場合、最初の距離の最初のマスを返す", () => {
-    // Given: 記録が無い
-    // When: 最初の未記録のマスを探す
-    const position = findCurrentPosition(distances, []);
+// 指している矢を「new:距離/エンド」「shot:ID」の文字列で表し、期待値をリテラルで書けるようにする。
+function describePointer(pointer: Pointer): string | null {
+  if (pointer === null) return null;
+  return pointer.kind === "new"
+    ? `new:${pointer.distanceId}/${pointer.endNumber}`
+    : `shot:${pointer.shotId}`;
+}
 
-    // Then: 最初のマス
-    expect(describePosition(position)).toBe("d-a/1/1");
+const score = { scoreStr: "9", scoreInt: 9 };
+
+describe("firstOpenEnd", () => {
+  it("矢が無ければ、最初の距離のエンド1の新しい矢を指す", () => {
+    expect(describePointer(firstOpenEnd(distances, []))).toBe("new:d-a/1");
   });
 
-  it("途中のマスが未記録の場合、それより後に記録があってもそのマスを返す", () => {
-    // Given: 1-1と2-1が記録済みで、1-2が未記録
-    const shots = [shot("d-a", 1, 1, "10", 10), shot("d-a", 2, 1, "9", 9)];
+  it("矢数に達していない最初のエンドを、後ろのエンドに矢があっても指す", () => {
+    // Given: エンド1が満杯、エンド2が1本、エンド3が満杯
+    const shots = [...fill("d-a", 1), shot("x", "d-a", 2), ...fill("d-a", 3)];
 
-    // When: 最初の未記録のマスを探す
-    const position = findCurrentPosition(distances, shots);
-
-    // Then: 1-2
-    expect(describePosition(position)).toBe("d-a/1/2");
+    // When/Then
+    expect(describePointer(firstOpenEnd(distances, shots))).toBe("new:d-a/2");
   });
 
-  it("最初の距離が全て記録済みの場合、次の距離の最初のマスを返す", () => {
-    // Given: 最初の距離の全マスが記録済み
-    const shots = [
-      shot("d-a", 1, 1, "10", 10),
-      shot("d-a", 1, 2, "10", 10),
-      shot("d-a", 2, 1, "10", 10),
-      shot("d-a", 2, 2, "10", 10),
-    ];
-
-    // When: 最初の未記録のマスを探す
-    const position = findCurrentPosition(distances, shots);
-
-    // Then: 次の距離の最初のマス
-    expect(describePosition(position)).toBe("d-b/1/1");
-  });
-
-  it("全てのマスが記録済みの場合、nullを返す", () => {
-    // Given: 全てのマスが記録済み
-    const shots = [
-      shot("d-a", 1, 1, "10", 10),
-      shot("d-a", 1, 2, "10", 10),
-      shot("d-a", 2, 1, "10", 10),
-      shot("d-a", 2, 2, "10", 10),
-      shot("d-b", 1, 1, "10", 10),
-      shot("d-b", 1, 2, "10", 10),
-    ];
-
-    // When: 最初の未記録のマスを探す
-    const position = findCurrentPosition(distances, shots);
-
-    // Then: 未記録のマスは無い
-    expect(position).toBeNull();
-  });
-
-  it("距離が無い場合、nullを返す", () => {
-    // Given: 距離が無い
-    // When: 最初の未記録のマスを探す
-    const position = findCurrentPosition([], []);
-
-    // Then: マスは無い
-    expect(position).toBeNull();
+  it("最初の距離が全て満杯なら次の距離、全て満杯ならnull", () => {
+    const allA = [...fill("d-a", 1), ...fill("d-a", 2), ...fill("d-a", 3)];
+    expect(describePointer(firstOpenEnd(distances, allA))).toBe("new:d-b/1");
+    expect(firstOpenEnd(distances, [...allA, ...fill("d-b", 1)])).toBeNull();
   });
 });
 
-describe("positionAfterScore", () => {
-  it("距離の最後のマス以外では、同じエンドの次の本目か次のエンドの最初の本目へ進む", () => {
-    // Given: エンドの途中のマス、最終エンドではないエンドの最後のマス、最終エンドの最後の1つ前のマス
-    // When: 記録する
-    // Then: それぞれ次のマスへ進む
-    expect(
-      describePosition(positionAfterScore(distances, at(distanceA, 1, 1))),
-    ).toBe("d-a/1/2");
-    expect(
-      describePosition(positionAfterScore(distances, at(distanceA, 1, 2))),
-    ).toBe("d-a/2/1");
-    expect(
-      describePosition(positionAfterScore(distances, at(distanceA, 2, 1))),
-    ).toBe("d-a/2/2");
+describe("pointerAfterScore", () => {
+  it("記録済みの矢を指しているなら、そのまま指す", () => {
+    const pointed = shotPointer(shot("s", "d-a", 1));
+    expect(pointerAfterScore(distances, [], pointed)).toBe(pointed);
   });
 
-  it("距離の最後のマスでは、次の距離へ進まず選択を解除する", () => {
-    // Given: 次の距離がある距離の最後のマスと、最後の距離の最後のマス
-    // When: 記録する
-    // Then: どちらも選択を解除する
-    expect(positionAfterScore(distances, at(distanceA, 2, 2))).toBeNull();
-    expect(positionAfterScore(distances, at(distanceB, 1, 2))).toBeNull();
+  it("新しい矢のエンドに空きがあれば、同じエンドの新しい矢を指す", () => {
+    const shots = [shot("x", "d-a", 1)];
+    expect(
+      describePointer(
+        pointerAfterScore(distances, shots, newShotPointer("d-a", 1)),
+      ),
+    ).toBe("new:d-a/1");
   });
 
-  it("選択中のマスが距離構成に無い場合、選択を解除する", () => {
-    // Given: 距離構成に無い距離のマスと、現在の構成より多いエンド数を持つ古い距離の、現在の構成では最後にあたるマス
-    const removed = distance("d-removed", "c", 2, 2);
-    const staleB = distance("d-b", "b", 2, 2);
+  it("満杯なら同じ距離で後ろの空きのあるエンドを指し、満杯のエンドは飛ばす", () => {
+    // Given: エンド1と2が満杯
+    const shots = [...fill("d-a", 1), ...fill("d-a", 2)];
 
-    // When: 記録する
-    // Then: どちらも移動先が無く、選択を解除する
-    expect(positionAfterScore(distances, at(removed, 1, 1))).toBeNull();
-    expect(positionAfterScore(distances, at(staleB, 1, 2))).toBeNull();
+    // When/Then
+    expect(
+      describePointer(
+        pointerAfterScore(distances, shots, newShotPointer("d-a", 1)),
+      ),
+    ).toBe("new:d-a/3");
+  });
+
+  it("同じ距離の後ろに空きが無ければ、前のエンドや次の距離に空きがあっても何も指さない", () => {
+    // Given: エンド3だけが満杯で、エンド1と次の距離に空きがある
+    const shots = fill("d-a", 3);
+
+    // When/Then
+    expect(
+      pointerAfterScore(distances, shots, newShotPointer("d-a", 3)),
+    ).toBeNull();
+  });
+
+  it("距離が無ければ何も指さない", () => {
+    expect(
+      pointerAfterScore(distances, [], newShotPointer("none", 1)),
+    ).toBeNull();
   });
 });
 
-describe("positionAfterClear", () => {
-  it("距離の最初のマス以外では、同じエンドの前の本目か前のエンドの最後の本目へ戻る", () => {
-    // Given: エンドの途中のマスと、2エンド目の最初のマス
-    // When: クリアする
-    // Then: それぞれ前のマスへ戻る
-    expect(
-      describePosition(positionAfterClear(distances, at(distanceA, 1, 2))),
-    ).toBe("d-a/1/1");
-    expect(
-      describePosition(positionAfterClear(distances, at(distanceA, 2, 1))),
-    ).toBe("d-a/1/2");
+describe("reconcilePointer", () => {
+  it("何も指していなければ、そのまま", () => {
+    expect(reconcilePointer(distances, [], null)).toBeNull();
   });
 
-  it("距離の最初のマスでは、前の距離へ戻らずそのマスに留まる", () => {
-    // Given: 前の距離がある距離の最初のマスと、最初の距離の最初のマス
-    // When: クリアする
-    // Then: どちらもそのマスに留まる
-    expect(
-      describePosition(positionAfterClear(distances, at(distanceB, 1, 1))),
-    ).toBe("d-b/1/1");
-    expect(
-      describePosition(positionAfterClear(distances, at(distanceA, 1, 1))),
-    ).toBe("d-a/1/1");
+  it("生きている記録済みの矢と、空きのあるエンドの新しい矢は、そのまま指す", () => {
+    const s = shot("s", "d-a", 1);
+    const pointed = shotPointer(s);
+    const fresh = newShotPointer("d-a", 2);
+    expect(reconcilePointer(distances, [s], pointed)).toBe(pointed);
+    expect(reconcilePointer(distances, [s], fresh)).toBe(fresh);
   });
 
-  it("距離構成に無いマスでは、そのマスに留まる", () => {
-    // Given: 距離構成に無い距離の、最初ではないマス
-    const removed = distance("d-removed", "c", 1, 2);
-
-    // When: クリアする
-    const position = positionAfterClear(distances, at(removed, 1, 2));
-
-    // Then: そのマスに留まる
-    expect(describePosition(position)).toBe("d-removed/1/2");
-  });
-});
-
-describe("positionAfterSelect", () => {
-  it("選択中のマスと別のマスを選ぶと、そのマスを選択する", () => {
-    // Given: 同じ距離・エンドで本目だけが異なるマス、同じ位置で距離だけが異なるマスを選択中
-    // When: マスを選ぶ
-    // Then: 選んだマスを選択する
-    expect(
-      describePosition(
-        positionAfterSelect(at(distanceA, 1, 1), at(distanceA, 1, 2)),
-      ),
-    ).toBe("d-a/1/2");
-    expect(
-      describePosition(
-        positionAfterSelect(at(distanceA, 1, 2), at(distanceA, 2, 2)),
-      ),
-    ).toBe("d-a/2/2");
-    expect(
-      describePosition(
-        positionAfterSelect(at(distanceA, 1, 1), at(distanceB, 1, 1)),
-      ),
-    ).toBe("d-b/1/1");
-  });
-
-  it("選択中のマスが無い場合、選んだマスを選択する", () => {
-    // Given: 選択中のマスが無い
-    // When: マスを選ぶ
-    const position = positionAfterSelect(null, at(distanceA, 2, 1));
-
-    // Then: 選んだマスを選択する
-    expect(describePosition(position)).toBe("d-a/2/1");
-  });
-
-  it("選択中のマスを再度選ぶと、選択を解除する", () => {
-    // Given: マスを選択中
-    // When: 同じマスを選ぶ
-    const position = positionAfterSelect(
-      at(distanceA, 1, 2),
-      at(distanceA, 1, 2),
+  it("指している記録済みの矢が消えたら、そのエンドの新しい矢を指す", () => {
+    const pointed = shotPointer(shot("s", "d-a", 2));
+    expect(describePointer(reconcilePointer(distances, [], pointed))).toBe(
+      "new:d-a/2",
     );
+  });
 
-    // Then: 選択を解除する
-    expect(position).toBeNull();
+  it("新しい矢のエンドが満杯になったら、点数を書いた後と同じ規則で進む", () => {
+    expect(
+      describePointer(
+        reconcilePointer(distances, fill("d-a", 1), newShotPointer("d-a", 1)),
+      ),
+    ).toBe("new:d-a/2");
+  });
+
+  it("距離が無い、またはエンドが範囲外になったら何も指さない", () => {
+    expect(
+      reconcilePointer(distances, [], newShotPointer("none", 1)),
+    ).toBeNull();
+    // エンド数3の境界: 3は指し、4は指さない
+    expect(
+      describePointer(
+        reconcilePointer(distances, [], newShotPointer("d-a", 3)),
+      ),
+    ).toBe("new:d-a/3");
+    expect(
+      reconcilePointer(distances, [], newShotPointer("d-a", 4)),
+    ).toBeNull();
   });
 });
 
-describe("positionOfCell", () => {
-  it("距離構成にある距離のマスを、その距離のマスとして返す", () => {
-    // Given: 距離構成にある距離のマス
-    const cell: Cell = { distanceId: "d-b", endNumber: 1, arrowNumber: 2 };
-
-    // When: マスを引く
-    const position = positionOfCell(distances, cell);
-
-    // Then: その距離のマス
-    expect(position).toEqual(at(distanceB, 1, 2));
-  });
-
-  it("距離構成に無い距離のマスでは、nullを返す", () => {
-    // Given: 距離構成に無い距離のマス
-    const cell: Cell = {
-      distanceId: "d-removed",
-      endNumber: 1,
-      arrowNumber: 1,
-    };
-
-    // When: マスを引く
-    const position = positionOfCell(distances, cell);
-
-    // Then: マスは無い
-    expect(position).toBeNull();
+describe("isSamePointer", () => {
+  it("記録済みの矢はIDで、新しい矢は距離とエンドで比べる", () => {
+    const a = shot("s", "d-a", 1);
+    expect(isSamePointer(shotPointer(a), shotPointer({ ...a }))).toBe(true);
+    expect(
+      isSamePointer(shotPointer(a), shotPointer(shot("t", "d-a", 1))),
+    ).toBe(false);
+    expect(
+      isSamePointer(newShotPointer("d-a", 1), newShotPointer("d-a", 1)),
+    ).toBe(true);
+    expect(
+      isSamePointer(newShotPointer("d-a", 1), newShotPointer("d-a", 2)),
+    ).toBe(false);
+    expect(isSamePointer(newShotPointer("d-a", 1), shotPointer(a))).toBe(false);
+    expect(isSamePointer(null, null)).toBe(true);
+    expect(isSamePointer(null, newShotPointer("d-a", 1))).toBe(false);
   });
 });
 
-describe("cellOf", () => {
-  it("選択中のマスを、距離IDで指すマスに変換する", () => {
-    // Given: 選択中のマス
-    // When: 変換する
-    const cell = cellOf(at(distanceB, 1, 2));
-
-    // Then: 距離ID・エンド・本目で指す
-    expect(cell).toEqual({ distanceId: "d-b", endNumber: 1, arrowNumber: 2 });
-  });
-});
-
-describe("scoreHistoryEntry", () => {
-  it("未記録のマスに記録すると、未記録から記録への遷移になる", () => {
-    // Given: 別のマスの記録だけがある
-    const shots = [shot("d-a", 1, 1, "10", 10, "shooter-1")];
-
-    // When: 未記録のマスに記録する
-    const result = scoreHistoryEntry(shots, at(distanceA, 1, 2), "9", 9);
-
-    // Then: 射手を持たない記録への遷移になる
-    expect(result).toEqual({
-      distanceId: "d-a",
-      endNumber: 1,
-      arrowNumber: 2,
-      prevShot: null,
-      nextShot: {
-        distance_id: "d-a",
-        end_number: 1,
-        arrow_number: 2,
-        shooter_id: undefined,
-        score_str: "9",
-        score_int: 9,
-      },
-    });
-  });
-
-  it("記録済みのマスに上書きすると、元の記録の射手を引き継ぐ", () => {
-    // Given: マスに射手付きの記録がある
-    const shots = [shot("d-a", 1, 2, "9", 9, "shooter-1")];
-
-    // When: 上書きする
-    const result = scoreHistoryEntry(shots, at(distanceA, 1, 2), "X", 10);
-
-    // Then: 元の記録から、射手を引き継いだ新しい記録への遷移になる
-    expect(result).toEqual({
-      distanceId: "d-a",
-      endNumber: 1,
-      arrowNumber: 2,
-      prevShot: {
-        distance_id: "d-a",
-        end_number: 1,
-        arrow_number: 2,
-        shooter_id: "shooter-1",
-        score_str: "9",
-        score_int: 9,
-      },
-      nextShot: {
-        distance_id: "d-a",
-        end_number: 1,
-        arrow_number: 2,
-        shooter_id: "shooter-1",
-        score_str: "X",
-        score_int: 10,
-      },
-    });
-  });
-});
-
-describe("clearHistoryEntry", () => {
-  it("記録済みのマスをクリアすると、記録から未記録への遷移になる", () => {
-    // Given: マスに記録がある
-    const shots = [shot("d-a", 2, 1, "8", 8, "shooter-1")];
-
-    // When: クリアする
-    const result = clearHistoryEntry(shots, at(distanceA, 2, 1));
-
-    // Then: 記録から未記録への遷移になる
-    expect(result).toEqual({
+describe("取り消しの列の1件", () => {
+  it("新しい矢へ書くと、渡したIDの矢が無い状態から点数を持つ状態への1件になる", () => {
+    const entry = scoreHistoryEntry(
+      [],
+      newShotPointer("d-a", 2) as NonNullable<Pointer>,
+      score,
+      "new-id",
+    );
+    expect(entry).toEqual({
+      shotId: "new-id",
       distanceId: "d-a",
       endNumber: 2,
-      arrowNumber: 1,
-      prevShot: {
-        distance_id: "d-a",
-        end_number: 2,
-        arrow_number: 1,
-        shooter_id: "shooter-1",
-        score_str: "8",
-        score_int: 8,
-      },
-      nextShot: null,
+      before: { alive: false },
+      after: { alive: true, scoreStr: "9", scoreInt: 9 },
     });
   });
 
-  it("距離・エンド・本目のいずれかだけが異なる記録は、そのマスの記録とみなさない", () => {
-    // Given: 距離だけ・エンドだけ・本目だけが2-1と異なる記録がある
-    const shots = [
-      shot("d-b", 2, 1, "10", 10),
-      shot("d-a", 1, 1, "9", 9),
-      shot("d-a", 2, 2, "8", 8),
-    ];
-
-    // When: 2-1をクリアする
-    const result = clearHistoryEntry(shots, at(distanceA, 2, 1));
-
-    // Then: 未記録のマスとして、履歴に残す遷移は無い
-    expect(result).toBeNull();
-  });
-
-  it("未記録のマスをクリアしても、遷移は無い", () => {
-    // Given: 別のマスの記録だけがある
-    const shots = [shot("d-a", 1, 1, "10", 10)];
-
-    // When: 未記録のマスをクリアする
-    const result = clearHistoryEntry(shots, at(distanceA, 2, 1));
-
-    // Then: 履歴に残す遷移は無い
-    expect(result).toBeNull();
-  });
-});
-
-describe("pushHistory", () => {
-  const first = entry("d-a", 1, 1, null, shot("d-a", 1, 1, "10", 10));
-  const second = entry("d-a", 1, 2, null, shot("d-a", 1, 2, "9", 9));
-  const undone = entry("d-a", 2, 1, null, shot("d-a", 2, 1, "8", 8));
-
-  it("遷移を取り消し履歴の末尾に積み、やり直し履歴を破棄する", () => {
-    // Given: 取り消し履歴とやり直し履歴がある
-    const history = { undoStack: [first], redoStack: [undone] };
-
-    // When: 遷移を積む
-    const result = pushHistory(history, second);
-
-    // Then: 取り消し履歴の末尾に積まれ、やり直し履歴は空になる
-    expect(result).toEqual({ undoStack: [first, second], redoStack: [] });
-  });
-
-  it("遷移が無い場合、履歴は変わらない", () => {
-    // Given: 取り消し履歴とやり直し履歴がある
-    const history = { undoStack: [first], redoStack: [undone] };
-
-    // When: 遷移が無いまま積む
-    const result = pushHistory(history, null);
-
-    // Then: やり直し履歴も含めて変わらない
-    expect(result).toEqual({ undoStack: [first], redoStack: [undone] });
-  });
-});
-
-describe("undoHistory", () => {
-  const first = entry("d-a", 1, 1, null, shot("d-a", 1, 1, "10", 10));
-  const second = entry("d-a", 1, 2, null, shot("d-a", 1, 2, "9", 9));
-  const undone = entry("d-a", 2, 1, null, shot("d-a", 2, 1, "8", 8));
-
-  it("取り消し履歴の末尾の遷移を取り出し、やり直し履歴の末尾に移す", () => {
-    // Given: 取り消し履歴とやり直し履歴がある
-    const history = { undoStack: [first, second], redoStack: [undone] };
-
-    // When: 取り消す
-    const result = undoHistory(history);
-
-    // Then: 直近の遷移がやり直し履歴の末尾へ移る
-    expect(result).toEqual({
-      entry: second,
-      history: { undoStack: [first], redoStack: [undone, second] },
+  it("記録済みの矢へ書くと、その矢の前の点数から新しい点数への1件になる", () => {
+    const s = shot("s", "d-a", 1, "X", 10);
+    const entry = scoreHistoryEntry(
+      [s],
+      shotPointer(s) as NonNullable<Pointer>,
+      score,
+      "unused",
+    );
+    expect(entry).toEqual({
+      shotId: "s",
+      distanceId: "d-a",
+      endNumber: 1,
+      before: { alive: true, scoreStr: "X", scoreInt: 10 },
+      after: { alive: true, scoreStr: "9", scoreInt: 9 },
     });
   });
 
-  it("取り消し履歴が空の場合、nullを返す", () => {
-    // Given: 取り消し履歴が空
-    const history = { undoStack: [], redoStack: [undone] };
-
-    // When: 取り消す
-    const result = undoHistory(history);
-
-    // Then: 取り消す遷移は無い
-    expect(result).toBeNull();
+  it("クリアは、前の点数を持つ状態から消えた状態への1件になる", () => {
+    expect(clearHistoryEntry(shot("s", "d-a", 1, "X", 10))).toEqual({
+      shotId: "s",
+      distanceId: "d-a",
+      endNumber: 1,
+      before: { alive: true, scoreStr: "X", scoreInt: 10 },
+      after: { alive: false },
+    });
   });
 });
 
-describe("redoHistory", () => {
-  const first = entry("d-a", 1, 1, null, shot("d-a", 1, 1, "10", 10));
-  const undone1 = entry("d-a", 1, 2, null, shot("d-a", 1, 2, "9", 9));
-  const undone2 = entry("d-a", 2, 1, null, shot("d-a", 2, 1, "8", 8));
+describe("取り消しの列", () => {
+  const e = (shotId: string, distanceId = "d-a"): HistoryEntry => ({
+    shotId,
+    distanceId,
+    endNumber: 1,
+    before: { alive: false },
+    after: { alive: true, scoreStr: "9", scoreInt: 9 },
+  });
 
-  it("やり直し履歴の末尾の遷移を取り出し、取り消し履歴の末尾に戻す", () => {
-    // Given: 取り消し履歴とやり直し履歴がある
-    const history = { undoStack: [first], redoStack: [undone1, undone2] };
+  it("新たな書き込みを積むと、やり直しの列を捨てる", () => {
+    const history = pushHistory(
+      { undoStack: [e("a")], redoStack: [e("b")] },
+      e("c"),
+    );
+    expect(history).toEqual({ undoStack: [e("a"), e("c")], redoStack: [] });
+  });
 
-    // When: やり直す
-    const result = redoHistory(history);
-
-    // Then: 直近に取り消した遷移が取り消し履歴の末尾へ戻る
-    expect(result).toEqual({
-      entry: undone2,
-      history: { undoStack: [first, undone2], redoStack: [undone1] },
+  it("戻ると直近の1件をやり直しの列へ移し、進むと取り消しの列へ戻す", () => {
+    const undone = undoHistory({ undoStack: [e("a"), e("b")], redoStack: [] });
+    expect(undone).toEqual({
+      entry: e("b"),
+      history: { undoStack: [e("a")], redoStack: [e("b")] },
+    });
+    const redone = redoHistory(
+      undone?.history ?? { undoStack: [], redoStack: [] },
+    );
+    expect(redone).toEqual({
+      entry: e("b"),
+      history: { undoStack: [e("a"), e("b")], redoStack: [] },
     });
   });
 
-  it("やり直し履歴が空の場合、nullを返す", () => {
-    // Given: やり直し履歴が空
-    const history = { undoStack: [first], redoStack: [] };
-
-    // When: やり直す
-    const result = redoHistory(history);
-
-    // Then: やり直す遷移は無い
-    expect(result).toBeNull();
-  });
-});
-
-describe("discardDistanceEntries", () => {
-  const scoredA = entry("d-a", 1, 1, null, shot("d-a", 1, 1, "10", 10));
-  const scoredB = entry("d-b", 1, 1, null, shot("d-b", 1, 1, "9", 9));
-  const undoneA = entry("d-a", 1, 2, null, shot("d-a", 1, 2, "8", 8));
-  const undoneB = entry("d-b", 1, 2, null, shot("d-b", 1, 2, "7", 7));
-
-  it("指定した距離の遷移だけを取り除き、他の距離の遷移は順序を保って残す", () => {
-    // Given: 2つの距離の遷移が混在している
-    const entries = [scoredA, scoredB, undoneA, undoneB];
-
-    // When: distanceAの履歴を破棄する
-    const result = discardDistanceEntries(entries, "d-a");
-
-    // Then: distanceBの遷移だけが順序を保って残る
-    expect(result).toEqual([scoredB, undoneB]);
+  it("列が空なら、戻る・進むはnull", () => {
+    const empty = { undoStack: [], redoStack: [] };
+    expect(undoHistory(empty)).toBeNull();
+    expect(redoHistory(empty)).toBeNull();
   });
 
-  it("指定した距離の遷移が無い場合、履歴を変えない", () => {
-    // Given: distanceBの遷移だけがある
-    const entries = [scoredB, undoneB];
-
-    // When: distanceAの履歴を破棄する
-    const result = discardDistanceEntries(entries, "d-a");
-
-    // Then: 履歴は元のまま
-    expect(result).toEqual([scoredB, undoneB]);
+  it("距離の構成の変更・削除では、その距離の書き込みだけを捨てる", () => {
+    expect(
+      discardDistanceEntries([e("a"), e("b", "d-b"), e("c")], "d-a"),
+    ).toEqual([e("b", "d-b")]);
   });
 });
 
 describe("buildShotOperation", () => {
-  const cell: Cell = { distanceId: "d-a", endNumber: 2, arrowNumber: 1 };
+  const target = { shotId: "s", distanceId: "d-a", endNumber: 2 };
 
-  it("記録する場合、記録の操作にする", () => {
-    // Given: 射手付きの記録
-    // When: 操作の列へ追記する入力に変換する
-    const input = buildShotOperation({
-      cell,
-      shot: shot("d-a", 2, 1, "X", 10, "shooter-1"),
-      eventId: "event-1",
-    });
-
-    // Then: 記録の操作になる
-    expect(input).toEqual({
+  it("生きている状態は、射手・射順を持たない記録にする", () => {
+    expect(
+      buildShotOperation(target, { alive: true, ...score }, "e-1"),
+    ).toEqual({
       type: "shot.recorded",
-      eventId: "event-1",
+      eventId: "e-1",
+      shotId: "s",
       distanceId: "d-a",
       endNumber: 2,
-      arrowNumber: 1,
-      shooterId: "shooter-1",
-      scoreStr: "X",
-      scoreInt: 10,
+      scoreStr: "9",
+      scoreInt: 9,
     });
   });
 
-  it("クリアする場合、クリアの操作にする", () => {
-    // Given: 記録が無い
-    // When: 操作の列へ追記する入力に変換する
-    const input = buildShotOperation({
-      cell,
-      shot: null,
-      eventId: "event-2",
-    });
-
-    // Then: クリアの操作になる
-    expect(input).toEqual({
+  it("消えた状態は、クリアにする", () => {
+    expect(buildShotOperation(target, { alive: false }, "e-1")).toEqual({
       type: "shot.cleared",
-      eventId: "event-2",
+      eventId: "e-1",
+      shotId: "s",
       distanceId: "d-a",
       endNumber: 2,
-      arrowNumber: 1,
     });
+  });
+});
+
+describe("replayHistoryEntry", () => {
+  const entry: HistoryEntry = {
+    shotId: "s",
+    distanceId: "d-a",
+    endNumber: 1,
+    before: { alive: false },
+    after: { alive: true, ...score },
+  };
+
+  it("矢を生きている状態にするときは、記録を積み、その矢を指す", () => {
+    const result = replayHistoryEntry(distances, [], entry, entry.after, "e-1");
+    expect(result?.operation).toMatchObject({
+      type: "shot.recorded",
+      shotId: "s",
+    });
+    expect(describePointer(result?.pointer ?? null)).toBe("shot:s");
+  });
+
+  it("矢を消えた状態にするときは、クリアを積み、そのエンドの新しい矢を指す", () => {
+    const result = replayHistoryEntry(
+      distances,
+      [shot("s", "d-a", 1)],
+      entry,
+      entry.before,
+      "e-1",
+    );
+    expect(result?.operation).toMatchObject({
+      type: "shot.cleared",
+      shotId: "s",
+    });
+    expect(describePointer(result?.pointer ?? null)).toBe("new:d-a/1");
+  });
+
+  it("復活がエンドに入らないときはnullを返す。生きている矢の点数を変えるときは満杯でも積む", () => {
+    // Given: エンド1が他の矢で満杯
+    const full = fill("d-a", 1);
+
+    // When/Then
+    expect(
+      replayHistoryEntry(distances, full, entry, entry.after, "e-1"),
+    ).toBeNull();
+    const live = [shot("s", "d-a", 1), shot("t", "d-a", 1)];
+    expect(
+      replayHistoryEntry(distances, live, entry, entry.after, "e-1"),
+    ).not.toBeNull();
+  });
+
+  it("距離が無ければnullを返す", () => {
+    expect(
+      replayHistoryEntry(
+        distances,
+        [],
+        { ...entry, distanceId: "none" },
+        entry.after,
+        "e-1",
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("withPendingShots", () => {
+  it("画面へまだ反映されていない記録とクリアを、生きている矢に重ねる", () => {
+    // Given: 矢aがあり、新しい矢bの記録、aの点数の変更、新しい矢cの記録とクリアが未反映
+    const shots = [{ ...shot("a", "d-a", 1), shooter_id: "u-1" }];
+
+    // When
+    const result = withPendingShots(shots, [
+      buildShotOperation(
+        { shotId: "b", distanceId: "d-a", endNumber: 1 },
+        { alive: true, ...score },
+        "e-1",
+      ),
+      buildShotOperation(
+        { shotId: "a", distanceId: "d-a", endNumber: 1 },
+        { alive: true, scoreStr: "M", scoreInt: 0 },
+        "e-2",
+      ),
+      buildShotOperation(
+        { shotId: "c", distanceId: "d-a", endNumber: 2 },
+        { alive: true, ...score },
+        "e-3",
+      ),
+      buildShotOperation(
+        { shotId: "c", distanceId: "d-a", endNumber: 2 },
+        { alive: false },
+        "e-4",
+      ),
+      { type: "round.updated", eventId: "e-5", roundId: "r", changes: {} },
+    ]);
+
+    // Then: aは射手を保ったまま点数が変わり、bが足され、cは残らない
+    expect(result).toEqual([
+      { ...shot("a", "d-a", 1, "M", 0), shooter_id: "u-1" },
+      shot("b", "d-a", 1, "9", 9),
+    ]);
   });
 });
