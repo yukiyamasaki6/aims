@@ -155,7 +155,7 @@ test("detail-10: 1画面に収まらないとき、スクロールすると、�
   });
 
   // Then
-  // 一覧へ戻る・同期状態の行（h-14固定）の直下（top-14）に張り付く。
+  // 一覧へ戻るの行（h-14固定）の直下（top-14）に張り付く。
   const summaryBox = await page.getByTestId("round-summary").boundingBox();
   expect(summaryBox?.y).toBeGreaterThan(40);
   expect(summaryBox?.y).toBeLessThan(66);

@@ -89,14 +89,27 @@ afterEach(() => {
   roundOpHub.stop();
 });
 
+// round-1の列の操作の状態。
+function statuses() {
+  return roundOpLog
+    .round("round-1")
+    .getSnapshot()
+    .items.map((item) => item.status);
+}
+
+// 列の全ての操作が確定済みである(列が空のときを含む)。
+function expectAllAcked() {
+  expect(statuses().filter((status) => status !== "acked")).toEqual([]);
+}
+
 describe("useRoundOpStack", () => {
-  it("列が空なら、画面の状態は基準と同じで、同期済みになる", () => {
+  it("列が空なら、画面の状態は基準と同じで、送信しない", () => {
     const { result } = renderHook(() =>
       useRoundOpStack("round-1", loaded(), []),
     );
 
     expect(result.current.state.roundConfig).toEqual(base.round.config);
-    expect(result.current.status).toBe("synced");
+    expect(statuses()).toEqual([]);
     expect(send).not.toHaveBeenCalled();
   });
 
@@ -119,7 +132,7 @@ describe("useRoundOpStack", () => {
 
     expect(result.current.state.roundConfig.name).toBe("未送信");
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(result.current.status).toBe("synced"));
+    await waitFor(() => expectAllAcked());
   });
 
   it("操作を追記すると、保存の完了後に画面の状態へ反映し、送信の完了は待たない", async () => {
@@ -133,7 +146,7 @@ describe("useRoundOpStack", () => {
 
     await waitFor(() => expect(result.current.state.shots).toHaveLength(1));
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(result.current.status).toBe("synced"));
+    await waitFor(() => expectAllAcked());
   });
 
   it("appendは、保存の完了で解決し、解決の時点で画面の状態へ反映済みである", async () => {
@@ -154,10 +167,9 @@ describe("useRoundOpStack", () => {
     );
     setOnline(false);
     act(() => {
-      roundOpHub.handleOffline();
       result.current.append(shotRecorded());
     });
-    await waitFor(() => expect(result.current.status).toBe("offline-pending"));
+    await waitFor(() => expect(statuses()).toEqual(["queued"]));
     expect(send).not.toHaveBeenCalled();
 
     setOnline(true);
@@ -166,7 +178,7 @@ describe("useRoundOpStack", () => {
     });
 
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(result.current.status).toBe("synced"));
+    await waitFor(() => expectAllAcked());
   });
 
   it("画面を閉じた後も送信が続き、開き直すと同じ送信器と状態を得る", async () => {
@@ -174,7 +186,6 @@ describe("useRoundOpStack", () => {
     const first = renderHook(() => useRoundOpStack("round-1", loaded(), []));
     setOnline(false);
     act(() => {
-      roundOpHub.handleOffline();
       first.result.current.append(shotRecorded());
     });
     await waitFor(() =>
@@ -192,7 +203,8 @@ describe("useRoundOpStack", () => {
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
     expect(roundOpLog.round("round-1")).toBe(roundOpLog.round("round-1"));
     const second = renderHook(() => useRoundOpStack("round-1", loaded(), []));
-    await waitFor(() => expect(second.result.current.status).toBe("synced"));
+    expect(second.result.current.state.shots).toHaveLength(1);
+    await waitFor(() => expectAllAcked());
     expect(send).toHaveBeenCalledTimes(1);
   });
 
@@ -359,7 +371,7 @@ describe("useRoundOpStack", () => {
         result.current.append(shotRecorded());
       });
 
-      await waitFor(() => expect(result.current.status).toBe("synced"));
+      await waitFor(() => expectAllAcked());
       expect(reload).not.toHaveBeenCalled();
     });
 
@@ -508,7 +520,7 @@ describe("useRoundOpStack", () => {
       await waitFor(() =>
         expect(result.current.state.status).toBe("in_progress"),
       );
-      await waitFor(() => expect(result.current.status).toBe("synced"));
+      await waitFor(() => expectAllAcked());
       expect(JSON.stringify(send.mock.calls)).toContain(
         '"status":"in_progress"',
       );
@@ -529,7 +541,7 @@ describe("useRoundOpStack", () => {
       await waitFor(() =>
         expect(result.current.state.roundConfig.name).toBe("新"),
       );
-      await waitFor(() => expect(result.current.status).toBe("synced"));
+      await waitFor(() => expectAllAcked());
       expect(result.current.state.status).toBe("completed");
       expect(JSON.stringify(send.mock.calls)).not.toContain("in_progress");
     });
@@ -546,7 +558,7 @@ describe("useRoundOpStack", () => {
       });
 
       // Then
-      await waitFor(() => expect(result.current.status).toBe("synced"));
+      await waitFor(() => expectAllAcked());
       expect(JSON.stringify(send.mock.calls)).not.toContain("in_progress");
       expect(result.current.state.status).toBe("in_progress");
     });

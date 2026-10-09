@@ -24,6 +24,46 @@ export async function getDistanceIds(
   return data.map((d) => d.id as string);
 }
 
+// ラウンドの行の、同期で変わる項目。
+export async function getRoundRow(supabase: SupabaseClient, roundId: string) {
+  const { data, error } = await supabase
+    .from("rounds")
+    .select("name, status, format, bow_type, round_date")
+    .eq("id", roundId)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// 削除されていない距離の、同期で変わる項目を、位置キー、IDの順で返す。
+export async function getLiveDistances(
+  supabase: SupabaseClient,
+  roundId: string,
+) {
+  const { data, error } = await supabase
+    .from("distances")
+    .select(
+      "id, distance, is_marked, total_ends, arrows_per_end, target_face_id, position_key",
+    )
+    .eq("round_id", roundId)
+    .is("disabled_at", null)
+    .order("position_key")
+    .order("id");
+  if (error) throw error;
+  return data;
+}
+
+// 保存された(削除されていない)ラウンドの件数。
+export async function savedRoundCount(supabase: SupabaseClient, id: string) {
+  const { data, error } = await supabase
+    .from("rounds")
+    .select("id")
+    .eq("id", id)
+    .is("disabled_at", null);
+  if (error) throw error;
+  return data.length;
+}
+
 async function call(
   supabase: SupabaseClient,
   fn: string,

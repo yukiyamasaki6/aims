@@ -148,7 +148,6 @@ describe("createOpSync", () => {
     expect(sync.getSnapshot().items.map((i) => i.status)).toEqual([
       "persisting",
     ]);
-    expect(sync.getSnapshot().status).toBe("sending");
     expect(sync.getSnapshot().operations).toEqual([]);
     expect(send).not.toHaveBeenCalled();
     await flushed();
@@ -205,7 +204,6 @@ describe("createOpSync", () => {
     expect(store.ack).toHaveBeenCalledWith(first.eventId, 7, true, null);
     expect(store.retire).not.toHaveBeenCalled();
     expect(sync.getSnapshot().items.map((i) => i.status)).toEqual(["acked"]);
-    expect(sync.getSnapshot().status).toBe("synced");
   });
 
   it("応答待ちの間の連打は、残りを1本の要求にまとめる", async () => {
@@ -255,7 +253,7 @@ describe("createOpSync", () => {
     sync.append(other);
     await flushed();
 
-    expect(sync.getSnapshot().status).toBe("retrying");
+    expect(sync.getSnapshot().items[0]?.status).toBe("backoff");
     expect(sent.map((s) => eventIds(s.flight))).toEqual([
       [first.eventId],
       [other.eventId],
@@ -325,13 +323,13 @@ describe("createOpSync", () => {
     sent[0].resolve(fail(404, "PGRST202"));
     await flushed();
 
-    expect(sync.getSnapshot().status).toBe("retrying");
+    expect(sync.getSnapshot().items.map((i) => i.status)).toEqual(["backoff"]);
     expect(store.retire).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(3000);
     expect(sent).toHaveLength(2);
   });
 
-  it("未認証は保持し、同期保留中にして後続を止める", async () => {
+  it("未認証は保持し、後続を止める", async () => {
     const { sync, sent } = setup();
     sync.append(op("rec", "x"));
     await flushed();
@@ -343,7 +341,6 @@ describe("createOpSync", () => {
     sync.append(op("clr", "x"));
     await flushed();
 
-    expect(sync.getSnapshot().status).toBe("unauthenticated-pending");
     expect(sync.getSnapshot().items.map((i) => i.status)).toEqual([
       "held",
       "queued",
@@ -433,7 +430,6 @@ describe("createOpSync", () => {
     expect(store.retire).toHaveBeenCalledWith([first.eventId], "ineffective");
     expect(sync.getSnapshot().items).toEqual([]);
     expect(sync.getSnapshot().operations).toEqual([]);
-    expect(sync.getSnapshot().status).toBe("synced");
     expect(diverged).toHaveBeenCalledTimes(1);
   });
 
@@ -572,7 +568,7 @@ describe("createOpSync", () => {
     await flushed();
 
     expect(sent).toHaveLength(0);
-    expect(sync.getSnapshot().status).toBe("offline-pending");
+    expect(sync.getSnapshot().items.map((i) => i.status)).toEqual(["queued"]);
 
     state.offline = false;
     sync.handleOnline();
@@ -585,10 +581,9 @@ describe("createOpSync", () => {
     sync.append(op("rec", "x"));
     await flushed();
     state.offline = true;
-    sync.handleOffline();
     sent[0].resolve(fail(0));
     await flushed();
-    expect(sync.getSnapshot().status).toBe("offline-pending");
+    expect(sync.getSnapshot().items.map((i) => i.status)).toEqual(["backoff"]);
 
     state.offline = false;
     sync.handleOnline();
@@ -657,7 +652,10 @@ describe("createOpSync", () => {
     sync.append(second);
     await flushed();
     expect(sync.getSnapshot().operations).toEqual([]);
-    expect(sync.getSnapshot().status).toBe("sending");
+    expect(sync.getSnapshot().items.map((i) => i.status)).toEqual([
+      "persisting",
+      "persisting",
+    ]);
 
     resolvers[0]?.();
     await flushed();
@@ -682,7 +680,7 @@ describe("createOpSync", () => {
     sync.append(op("rec", "x"));
     await flushed();
 
-    expect(sync.getSnapshot().status).toBe("retrying");
+    expect(sync.getSnapshot().items.map((i) => i.status)).toEqual(["backoff"]);
   });
 
   it("disposeの後は新しい送信とタイマーを止め、送信中の要求の成功は列に反映する", async () => {
@@ -956,7 +954,6 @@ describe("createOpSync", () => {
 
       sync.adopt(group([row(a, 1)]), { held: [a.eventId] });
       expect(statuses(sync)).toEqual(["held"]);
-      expect(sync.getSnapshot().status).toBe("unauthenticated-pending");
 
       sync.adopt(group([row(a, 1)]), { held: [] });
       expect(statuses(sync)).toEqual(["queued"]);

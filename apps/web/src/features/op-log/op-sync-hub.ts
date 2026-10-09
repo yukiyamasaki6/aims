@@ -26,7 +26,7 @@ export type HubSnapshot<Op extends OpBase, Base> = {
 };
 
 // 他のタブへ知らせるメッセージ。
-// `held`は、送る役のタブだけが付ける(送る役でないタブの追記で、他のタブの保留の表示を戻さないため)。
+// `held`は、送る役のタブだけが付ける(送る役でないタブの追記で、他のタブの保留を戻さないため)。
 type HubMessage =
   | {
       type: "changed";
@@ -251,9 +251,6 @@ export function createOpSyncHub<Op extends OpBase, Base>(
     },
     handleOnline() {
       for (const sender of senders.values()) sender.handleOnline();
-    },
-    handleOffline() {
-      for (const sender of senders.values()) sender.handleOffline();
     },
     getUserId: () => userId,
     // 現在の世代の読み込みが終わる(失敗を含む)まで解決しない。`start`前、`setUser`と`stop`の後は次の読み込みの完了まで待つ。

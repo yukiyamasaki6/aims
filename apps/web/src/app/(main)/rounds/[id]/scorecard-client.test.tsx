@@ -301,16 +301,17 @@ afterEach(async () => {
   vi.useRealTimers();
   setOnline(true);
   // 操作の列はアンマウント後も送信を続けるため、送信中の操作が次のテストのスタブに届かないよう、マウント中に送信を終わらせる。
-  // オフラインで保留中の操作はonlineイベントで再開させ、同期済みか同期保留中の最終状態になるまで待つ。
+  // オフラインで保留中の操作はonlineイベントで再開させ、全ての操作が確定済みか保留の最終状態になるまで待つ。
   // Testing Libraryのcleanup（アンマウント）より先に実行される。
   try {
-    const syncStatus = screen.queryByTestId("sync-status");
-    if (!syncStatus) return;
+    const sender = roundOpLog.round("round-1");
     act(() => {
       roundOpHub.handleOnline();
     });
     await waitFor(() => {
-      expect(syncStatus.textContent).toMatch(/同期済み|同期保留中/);
+      for (const item of sender.getSnapshot().items) {
+        expect(["acked", "held"]).toContain(item.status);
+      }
     });
   } finally {
     roundOpHub.stop();
@@ -1854,8 +1855,7 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     expect(
       screen.queryByTestId("distance-config-distance-1"),
     ).not.toBeInTheDocument();
-    // 操作の列に積まれると送信が完了するまで同期中の表示になるため、同期済みのままであることで積まれていないことを確かめる。
-    expect(screen.getByTestId("sync-status")).toHaveTextContent("同期済み");
+    expect(roundOpLog.round("round-1").getSnapshot().items).toEqual([]);
     await flushMicrotasks();
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
@@ -1963,8 +1963,24 @@ describe("ScorecardClient ラウンド削除", () => {
   });
 });
 
-describe("ScorecardClient 同期状態の表示", () => {
-  it("送信中は「同期中…」を表示し、応答が返ると「同期済み」になる", async () => {
+// 同期の状態(枠、文言)を表示していない。
+function expectNoSyncStatus() {
+  expect(screen.queryByTestId("sync-status")).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(/同期済み|同期中…|同期保留中/),
+  ).not.toBeInTheDocument();
+}
+
+// round-1の列の操作の状態。
+function itemStatuses() {
+  return roundOpLog
+    .round("round-1")
+    .getSnapshot()
+    .items.map((item) => item.status);
+}
+
+describe("ScorecardClient 同期の状態を表示しない", () => {
+  it("送信中も、応答が返った後も、同期の状態を表示しない", async () => {
     // Given: RPCの応答を任意の時点で返せる
     let resolveRpc: (value: { data: unknown; error: null }) => void = () => {};
     supabase.rpc.mockReturnValue(
@@ -1978,24 +1994,35 @@ describe("ScorecardClient 同期状態の表示", () => {
     // When: スコアを入力する
     await user.click(screen.getByTestId("score-button-10"));
 
-    // Then: 記録がSDKへ送られ、応答待ちの間は同期中を表示する
+    // Then: 記録がSDKへ送られ、応答待ちの間も同期の状態を表示しない
     await waitFor(() => {
       expect(supabase.rpc).toHaveBeenCalledWith("record_shots", {
-        p_shots: [expect.objectContaining({ score_str: "10" })],
+        p_shots: [
+          {
+            shot_event_id: expect.any(String),
+            shot_id: expect.any(String),
+            distance_id: distanceA.id,
+            end_number: 1,
+            score_str: "10",
+            score_int: 10,
+          },
+        ],
       });
     });
-    expect(screen.getByTestId("sync-status")).toHaveTextContent("同期中…");
+    expect(itemStatuses()).toEqual(["inflight"]);
+    expectNoSyncStatus();
 
     // When: 応答が返る
     resolveRpc({ data: [APPLIED], error: null });
 
-    // Then: 同期済みになる
+    // Then: 確定した後も同期の状態を表示しない
     await waitFor(() => {
-      expect(screen.getByTestId("sync-status")).toHaveTextContent("同期済み");
+      expect(itemStatuses()).toEqual(["acked"]);
     });
+    expectNoSyncStatus();
   });
 
-  it("送信が一時的に失敗してリトライを待つ間は「同期中…」を表示する", async () => {
+  it("送信が一時的に失敗してリトライを待つ間も、再送が成功した後も、同期の状態を表示しない", async () => {
     // Given: RPCが初回だけ再試行で解消し得るエラーを返す
     // fake-indexeddbはsetImmediateで処理を進めるため、リトライ待機のタイマーと、再送の期限の判定に使う時刻だけを偽装する。
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
@@ -2016,21 +2043,21 @@ describe("ScorecardClient 同期状態の表示", () => {
     );
     await flushMicrotasks();
 
-    // Then: 失敗は表示せず、同期中の表示のままリトライを待つ
-    expect(screen.getByTestId("sync-status")).toHaveTextContent("同期中…");
+    // Then: リトライを待つ間、失敗も同期の状態も表示しない
+    expect(itemStatuses()).toEqual(["backoff"]);
+    expectNoSyncStatus();
 
     // When: リトライ待機が経過し、再送が成功する
     await act(async () => {
       await vi.advanceTimersByTimeAsync(retryDelayMs(0));
     });
 
-    // Then: 同期済みになる
-    await pollWithRealTasks(() =>
-      expect(screen.getByTestId("sync-status")).toHaveTextContent("同期済み"),
-    );
+    // Then: 確定した後も同期の状態を表示しない
+    await pollWithRealTasks(() => expect(itemStatuses()).toEqual(["acked"]));
+    expectNoSyncStatus();
   });
 
-  it("オフライン中は送らず「同期保留中」を表示する", async () => {
+  it("オフライン中は送らず、同期の状態を表示しない", async () => {
     // Given: オフライン
     setOnline(false);
     const user = userEvent.setup();
@@ -2039,43 +2066,16 @@ describe("ScorecardClient 同期状態の表示", () => {
     // When: スコアを入力する
     await user.click(screen.getByTestId("score-button-10"));
 
-    // Then: 同期保留中を表示し、SDKへは送らない
+    // Then: 送らずに残し、同期の状態を表示しない
     await waitFor(() => {
-      expect(screen.getByTestId("sync-status")).toHaveTextContent("同期保留中");
+      expect(itemStatuses()).toEqual(["queued"]);
     });
+    expectNoSyncStatus();
     await flushMicrotasks();
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
-  it("送信が完了すると「同期済み」を表示する", async () => {
-    // Given: RPCが成功する
-    const user = userEvent.setup();
-    setup();
-
-    // When: スコアを入力する
-    await user.click(screen.getByTestId("score-button-10"));
-
-    // Then: 記録がSDKへ送られ、完了後に同期済みを表示する
-    await waitFor(() => {
-      expect(supabase.rpc).toHaveBeenCalledWith("record_shots", {
-        p_shots: [
-          {
-            shot_event_id: expect.any(String),
-            shot_id: expect.any(String),
-            distance_id: distanceA.id,
-            end_number: 1,
-            score_str: "10",
-            score_int: 10,
-          },
-        ],
-      });
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId("sync-status")).toHaveTextContent("同期済み");
-    });
-  });
-
-  it("サーバーが契約の不一致で拒否した操作は、破棄して同期済みに戻り、エラーは表示しない", async () => {
+  it("サーバーが契約の不一致で拒否した操作は破棄し、エラーも同期の状態も表示しない", async () => {
     // Given: RPCがPT422で拒否する
     supabase.rpc.mockResolvedValue({
       data: null,
@@ -2088,15 +2088,21 @@ describe("ScorecardClient 同期状態の表示", () => {
     // When: スコアを入力する
     await user.click(screen.getByTestId("score-button-10"));
 
-    // Then: 同期済みに戻り、ダイアログも開かない
+    // Then: 操作は破棄され、ダイアログも同期の状態も表示しない
     await waitFor(() => {
-      expect(screen.getByTestId("sync-status")).toHaveTextContent("同期済み");
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        "record_shots",
+        expect.anything(),
+      );
     });
-    await user.click(screen.getByTestId("sync-status"));
+    await waitFor(() => {
+      expect(itemStatuses()).toEqual([]);
+    });
+    expectNoSyncStatus();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("未認証で送信できない間は、同期保留中を表示する", async () => {
+  it("未認証で送信できない間も、同期の状態を表示しない", async () => {
     // Given: セッションが無い
     supabase.getSession.mockResolvedValue({ data: { session: null } });
     const user = userEvent.setup();
@@ -2105,10 +2111,11 @@ describe("ScorecardClient 同期状態の表示", () => {
     // When: スコアを入力する
     await user.click(screen.getByTestId("score-button-10"));
 
-    // Then: 同期保留中を表示し、RPCは呼ばない
+    // Then: 送らずに保留し、同期の状態を表示しない
     await waitFor(() => {
-      expect(screen.getByTestId("sync-status")).toHaveTextContent("同期保留中");
+      expect(itemStatuses()).toEqual(["held"]);
     });
+    expectNoSyncStatus();
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 });

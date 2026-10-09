@@ -1,15 +1,6 @@
 "use client";
 
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-  Plus,
-  Redo,
-  Undo,
-  WifiOff,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Redo, Undo } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   type RefObject,
@@ -890,40 +881,12 @@ export function ScorecardClient({
     <div data-hydrated={hydrated} className="flex h-full">
       <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto">
         <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
-          {/* 一覧へ戻る・同期状態は常時見えていてほしい情報のため、
+          {/* 一覧へ戻る・プリセット保存・メニューは常時使えてほしい操作のため、
               合計バー（round-summary、top-14でこの下に続けてstickyさせている）
               と同じくページスクロール中ずっと張り付かせる。高さはh-14固定にし、
               round-summary側のtopオフセットと正確に合わせられるようにする。 */}
-          <div className="sticky top-0 z-30 grid h-14 grid-cols-[auto_1fr_auto] items-center gap-2 bg-card px-8">
+          <div className="sticky top-0 z-30 grid h-14 grid-cols-[auto_1fr] items-center gap-2 bg-card px-8">
             <BackToListLink />
-            <div
-              data-testid="sync-status"
-              className={cn(
-                "flex items-center justify-self-center gap-1 text-xs",
-                (sync.status === "sending" || sync.status === "retrying") &&
-                  "text-muted-foreground",
-                (sync.status === "offline-pending" ||
-                  sync.status === "unauthenticated-pending") &&
-                  "text-amber-600 dark:text-amber-500",
-                sync.status === "synced" &&
-                  "text-emerald-600 dark:text-emerald-500",
-              )}
-            >
-              {(sync.status === "sending" || sync.status === "retrying") && (
-                <Loader2 className="size-3.5 animate-spin" />
-              )}
-              {(sync.status === "offline-pending" ||
-                sync.status === "unauthenticated-pending") && (
-                <WifiOff className="size-3.5" />
-              )}
-              {sync.status === "synced" && <Check className="size-3.5" />}
-              {(sync.status === "sending" || sync.status === "retrying") &&
-                "同期中…"}
-              {(sync.status === "offline-pending" ||
-                sync.status === "unauthenticated-pending") &&
-                "同期保留中"}
-              {sync.status === "synced" && "同期済み"}
-            </div>
             <div className="flex items-center justify-end gap-2">
               <SavePresetDialog
                 roundName={roundConfig.name}

@@ -666,9 +666,6 @@ test("setup-29: ラウンド詳細画面で距離を追加して削除した後�
   // Then
   expect((await sent).ok()).toBe(true);
   await expect(page.getByTestId("distance-config-distance-2")).toBeVisible();
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み", {
-    timeout: 15_000,
-  });
   await page.reload();
   await waitForHydration(page);
   await expect(page.getByTestId("distance-summary-2")).toBeVisible();

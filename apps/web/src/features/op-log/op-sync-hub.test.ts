@@ -351,9 +351,6 @@ describe("createOpSyncHub", () => {
     await flushed();
     expect(statuses(leader)).toEqual(["held"]);
     expect(statuses(follower)).toEqual(["held"]);
-    expect(follower.hub.acquire(STREAM).getSnapshot().status).toBe(
-      "unauthenticated-pending",
-    );
 
     const late = open(shared, locks);
     await flushed();
