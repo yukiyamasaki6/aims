@@ -137,63 +137,128 @@ describe("sendRoundBatch", () => {
     });
   });
 
-  it("矢1件の記録は、射手の指定が無ければ自分のIDでrecord_shotsへ送る", async () => {
+  it("矢1件の記録は、射手と射順の指定が無ければキーを送らずにrecord_shotsへ送る", async () => {
+    // Given
     client.rpc.mockResolvedValue({
       data: [resultJson(7)],
       error: null,
       status: 200,
     });
 
+    // When
     const outcome = await sendRoundBatch(flight(shotRecorded()));
 
+    // Then
     expect(outcome).toEqual({ ok: true, results: [resultOf(7)] });
     expect(client.rpc).toHaveBeenCalledWith("record_shots", {
-      p_shots: [expect.objectContaining({ shooter_id: "user-1" })],
-    });
-  });
-
-  it("矢の束は1回のRPCへ列の順で詰め、revisionを同じ順で返す", async () => {
-    client.rpc.mockResolvedValue({
-      data: [resultJson(2), resultJson(3)],
-      error: null,
-      status: 200,
-    });
-
-    const outcome = await sendRoundBatch(
-      flight(
-        shotRecorded({ eventId: "a", shooterId: "other" }),
-        shotRecorded({ eventId: "b", arrowNumber: 2 }),
-      ),
-    );
-
-    expect(outcome).toEqual({ ok: true, results: [resultOf(2), resultOf(3)] });
-    expect(client.rpc).toHaveBeenCalledWith("record_shots", {
       p_shots: [
-        expect.objectContaining({ shot_event_id: "a", shooter_id: "other" }),
-        expect.objectContaining({ shot_event_id: "b", shooter_id: "user-1" }),
+        {
+          shot_event_id: "e-shot-recorded",
+          shot_id: "s-1",
+          distance_id: "d-1",
+          end_number: 1,
+          score_str: "10",
+          score_int: 10,
+        },
       ],
     });
   });
 
-  it("取り消しの束はclear_shotsへ送る", async () => {
+  it("矢の束は1回のRPCへ列の順で詰め、射手と射順は値があるときだけ送り、revisionを同じ順で返す", async () => {
+    // Given
+    client.rpc.mockResolvedValue({
+      data: [resultJson(2), resultJson(3), resultJson(4)],
+      error: null,
+      status: 200,
+    });
+
+    // When
+    const outcome = await sendRoundBatch(
+      flight(
+        shotRecorded({ eventId: "a", shooterId: "other", shotNumber: 3 }),
+        shotRecorded({ eventId: "b", shotId: "s-2", shotNumber: null }),
+        shotRecorded({ eventId: "c", shotId: "s-3" }),
+      ),
+    );
+
+    // Then
+    expect(outcome).toEqual({
+      ok: true,
+      results: [resultOf(2), resultOf(3), resultOf(4)],
+    });
+    const [, { p_shots }] = client.rpc.mock.calls[0];
+    expect(p_shots).toEqual([
+      expect.objectContaining({
+        shot_event_id: "a",
+        shooter_id: "other",
+        shot_number: 3,
+      }),
+      expect.objectContaining({ shot_event_id: "b", shot_number: null }),
+      expect.objectContaining({ shot_event_id: "c" }),
+    ]);
+    expect(p_shots[1]).not.toHaveProperty("shooter_id");
+    expect(p_shots[2]).not.toHaveProperty("shooter_id");
+    expect(p_shots[2]).not.toHaveProperty("shot_number");
+  });
+
+  it("矢の記録の応答の効いた項目と効かなかった項目を、判定結果へ写す", async () => {
+    // Given
+    client.rpc.mockResolvedValue({
+      data: [
+        {
+          revision: 3,
+          applied: true,
+          applied_fields: ["score", "shooter_id"],
+          rejected_fields: [{ field: "shot_number", reason: "UNFIT" }],
+          reason: null,
+        },
+      ],
+      error: null,
+      status: 200,
+    });
+
+    // When
+    const outcome = await sendRoundBatch(
+      flight(shotRecorded({ shotNumber: 2 })),
+    );
+
+    // Then
+    expect(outcome).toEqual({
+      ok: true,
+      results: [
+        {
+          revision: 3,
+          applied: true,
+          appliedFields: ["score", "shooter_id"],
+          rejectedFields: [{ field: "shot_number", reason: "UNFIT" }],
+          reason: null,
+        },
+      ],
+    });
+  });
+
+  it("取り消しの束は、矢のIDと距離をclear_shotsへ送る", async () => {
+    // Given
     client.rpc.mockResolvedValue({
       data: [resultJson(4), resultJson(5)],
       error: null,
       status: 200,
     });
 
+    // When
     const outcome = await sendRoundBatch(
       flight(
         shotCleared({ eventId: "a" }),
-        shotCleared({ eventId: "b", arrowNumber: 2 }),
+        shotCleared({ eventId: "b", shotId: "s-2" }),
       ),
     );
 
+    // Then
     expect(outcome).toEqual({ ok: true, results: [resultOf(4), resultOf(5)] });
     expect(client.rpc).toHaveBeenCalledWith("clear_shots", {
       p_shots: [
-        expect.objectContaining({ shot_event_id: "a" }),
-        expect.objectContaining({ shot_event_id: "b" }),
+        { shot_event_id: "a", shot_id: "s-1", distance_id: "d-1" },
+        { shot_event_id: "b", shot_id: "s-2", distance_id: "d-1" },
       ],
     });
   });
@@ -330,7 +395,7 @@ describe("sendRoundBatch", () => {
     const outcome = await sendRoundBatch(
       flight(
         shotRecorded({ eventId: "a" }),
-        shotRecorded({ eventId: "b", arrowNumber: 2 }),
+        shotRecorded({ eventId: "b", shotId: "s-2" }),
       ),
     );
 
@@ -355,7 +420,7 @@ describe("sendRoundBatch", () => {
       "矢の束の件数が合わない",
       flight(
         shotRecorded({ eventId: "a" }),
-        shotRecorded({ eventId: "b", arrowNumber: 2 }),
+        shotRecorded({ eventId: "b", shotId: "s-2" }),
       ),
       [resultJson(1)],
     ],
@@ -363,7 +428,7 @@ describe("sendRoundBatch", () => {
       "矢の束が判定結果でない値を含む",
       flight(
         shotRecorded({ eventId: "a" }),
-        shotRecorded({ eventId: "b", arrowNumber: 2 }),
+        shotRecorded({ eventId: "b", shotId: "s-2" }),
       ),
       [resultJson(1), "x"],
     ],

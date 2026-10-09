@@ -15,9 +15,10 @@ const distance = (id: string, key: string) => ({
   is_marked: true,
 });
 const shot = (distanceId: string, end: number) => ({
+  id: `${distanceId}-${end}`,
   distance_id: distanceId,
   end_number: end,
-  arrow_number: 1,
+  shot_number: null,
   score_str: "10",
   score_int: 10,
 });

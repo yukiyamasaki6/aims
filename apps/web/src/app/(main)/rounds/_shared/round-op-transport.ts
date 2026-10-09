@@ -164,7 +164,6 @@ type ShotOperation = Extract<
 async function sendSingle(
   supabase: Client,
   operation: SyncOperation,
-  userId: string,
 ): Promise<SendOutcome> {
   switch (operation.type) {
     case "round.created":
@@ -237,28 +236,37 @@ async function sendSingle(
       );
     case "shot.recorded":
     case "shot.cleared":
-      return sendShots(supabase, [operation], userId);
+      return sendShots(supabase, [operation]);
   }
+}
+
+// 矢の記録の要素。射手と射順は、値があるときだけキーを送る(キーの無い項目はサーバーが変えない)。
+function recordedShotToJson(
+  operation: Extract<SyncOperation, { type: "shot.recorded" }>,
+): Json {
+  const json: { [key: string]: Json } = {
+    shot_event_id: operation.eventId,
+    shot_id: operation.shotId,
+    distance_id: operation.distanceId,
+    end_number: operation.endNumber,
+    score_str: operation.scoreStr,
+    score_int: operation.scoreInt,
+  };
+  if (operation.shooterId !== undefined) json.shooter_id = operation.shooterId;
+  if (operation.shotNumber !== undefined)
+    json.shot_number = operation.shotNumber;
+  return json;
 }
 
 // 矢の記録と取り消しの束は、列の順で1本のRPCへ詰める。planFlightsは、記録と取り消しを同じ要求に混ぜない。
 async function sendShots(
   supabase: Client,
   operations: ShotOperation[],
-  userId: string,
 ): Promise<SendOutcome> {
   const recorded = operations.filter((op) => op.type === "shot.recorded");
   if (recorded.length === operations.length) {
     const { data, error, status } = await supabase.rpc("record_shots", {
-      p_shots: recorded.map((operation) => ({
-        shot_event_id: operation.eventId,
-        distance_id: operation.distanceId,
-        end_number: operation.endNumber,
-        arrow_number: operation.arrowNumber,
-        shooter_id: operation.shooterId ?? userId,
-        score_str: operation.scoreStr,
-        score_int: operation.scoreInt,
-      })),
+      p_shots: recorded.map(recordedShotToJson),
     });
     if (error) return { ok: false, failure: rpcFailureResult(error, status) };
     return many(data, recorded.length);
@@ -266,9 +274,8 @@ async function sendShots(
   const { data, error, status } = await supabase.rpc("clear_shots", {
     p_shots: operations.map((operation) => ({
       shot_event_id: operation.eventId,
+      shot_id: operation.shotId,
       distance_id: operation.distanceId,
-      end_number: operation.endNumber,
-      arrow_number: operation.arrowNumber,
     })),
   });
   if (error) return { ok: false, failure: rpcFailureResult(error, status) };
@@ -292,7 +299,6 @@ export async function sendRoundBatch(
       failure: authFailureResult({ status: "unauthenticated" }),
     };
   }
-  const userId = state.session.user.id;
   const shots: ShotOperation[] = [];
   for (const { operation } of flight.entries) {
     if (
@@ -302,7 +308,7 @@ export async function sendRoundBatch(
       shots.push(operation);
     }
   }
-  if (shots.length > 1) return sendShots(supabase, shots, userId);
+  if (shots.length > 1) return sendShots(supabase, shots);
   // 矢の束以外は、planFlightsが1件ずつの要求にする。
-  return sendSingle(supabase, flight.entries[0].operation, userId);
+  return sendSingle(supabase, flight.entries[0].operation);
 }

@@ -34,7 +34,7 @@ export type RoundRevisions = {
   round: number;
   // 距離IDごと。
   distances: Record<string, number>;
-  // `shotRevisionKey`ごと。
+  // 矢のIDごと。
   shots: Record<string, number>;
 };
 
@@ -52,17 +52,9 @@ export type FetchedRoundDetails = {
   userId: string;
 };
 
-export function shotRevisionKey(
-  distanceId: string,
-  endNumber: number,
-  arrowNumber: number,
-): string {
-  return `${distanceId}:${endNumber}:${arrowNumber}`;
-}
-
 // 無効化した距離と取り消した矢の行も取得し、表示にはdisabled_atが無い行だけを使う。
 const ROUND_SELECT =
-  "id, name, round_date, format, bow_type, status, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(distance_id, end_number, arrow_number, shooter_id, score_str, score_int, revision, disabled_at))";
+  "id, name, round_date, format, bow_type, status, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(id, distance_id, end_number, shooter_id, score_str, score_int, shot_number, revision, disabled_at))";
 
 type ShotRow = Shot & { revision: number; disabled_at: string | null };
 type DistanceRow = Distance & {
@@ -209,9 +201,7 @@ function toRoundDetail(
         disabled_at: shotDisabledAt,
         ...shot
       } = shotRow;
-      revisions.shots[
-        shotRevisionKey(shot.distance_id, shot.end_number, shot.arrow_number)
-      ] = shotRevision;
+      revisions.shots[shot.id] = shotRevision;
       if (disabled_at === null && shotDisabledAt === null) shots.push(shot);
     }
   }

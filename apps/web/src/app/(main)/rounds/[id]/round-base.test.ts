@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { createOpLogStore } from "@/features/op-log/op-log-store";
 import type { StreamEntry } from "@/features/op-log/op-log-types";
 import type { SyncOperation } from "../_shared/sync-events";
-import { shotRevisionKey } from "./fetch-round-detail";
 import {
   deriveRoundState,
   isRoundInProgress,
@@ -115,19 +114,19 @@ describe("reflects", () => {
     expect(reflects(base, entry(roundUpdated, 3))).toBe(false);
   });
 
-  it("矢はマスごと、距離は距離ごとのrevisionで判定する。ベースに行が無い対象は0として比べる", () => {
+  it("矢は矢のIDごと、距離は距離ごとのrevisionで判定する。ベースに行が無い対象は0として比べる", () => {
     const base = record({
       revisions: {
         distances: { "d-a": 3 },
-        shots: { [shotRevisionKey("d-a", 1, 2)]: 2 },
+        shots: { "shot-2": 2 },
       },
     });
-    const recorded = (arrowNumber: number): SyncOperation => ({
+    const recorded = (n: number): SyncOperation => ({
       type: "shot.recorded",
-      eventId: `s${arrowNumber}`,
+      eventId: `s${n}`,
+      shotId: `shot-${n}`,
       distanceId: "d-a",
       endNumber: 1,
-      arrowNumber,
       scoreStr: "9",
       scoreInt: 9,
     });
@@ -144,13 +143,13 @@ describe("reflects", () => {
     expect(reflects(base, entry(distanceUpdated("d-gone"), 2))).toBe(false);
   });
 
-  it("効かなかった操作は反映済み。行の無いマスへの取り消しは、取得に行が無ければ反映済みでない", () => {
+  it("効かなかった操作は反映済み。確定した取り消しは、取得にその矢が無ければ反映済みでない", () => {
     const cleared: SyncOperation = {
       type: "shot.cleared",
       eventId: "c",
+      shotId: "shot-1",
       distanceId: "d-a",
       endNumber: 1,
-      arrowNumber: 1,
     };
 
     expect(
@@ -159,25 +158,25 @@ describe("reflects", () => {
     expect(reflects(record(), entry(cleared, 9))).toBe(false);
   });
 
-  it("空のマスに記録してから取り消し、両方が確定した後、古いベースのままでもそのマスは空のまま", async () => {
+  it("新しい矢を記録してから消し、両方が確定した後、古いベースのままでもその矢は表示されない", async () => {
     const store = createOpLogStore<SyncOperation, RoundBaseRecord>(
       roundStreamRules,
     );
     const recorded: SyncOperation = {
       type: "shot.recorded",
       eventId: "s1",
+      shotId: "shot-1",
       distanceId: "d-a",
       endNumber: 1,
-      arrowNumber: 1,
       scoreStr: "9",
       scoreInt: 9,
     };
     const cleared: SyncOperation = {
       type: "shot.cleared",
       eventId: "s2",
+      shotId: "shot-1",
       distanceId: "d-a",
       endNumber: 1,
-      arrowNumber: 1,
     };
     const log = (operation: SyncOperation) => ({
       eventId: operation.eventId,
@@ -191,7 +190,7 @@ describe("reflects", () => {
       await store.ack("s1", 1, true, null);
       await store.ack("s2", 2, true, null);
 
-      // 取得した時点では、このマスに行が無い(取り消しは行を残さない)
+      // 取得した時点では、この矢の行が無い(記録より前の取得)
       const result = await store.commit("round:r1", "user-1", record(), 10);
 
       const tables = applyOperations(
@@ -240,20 +239,6 @@ describe("keeps", () => {
     expect(keeps(record(), [entry(disabledOp)])).toBe(true);
     expect(keeps(record(), [entry(disabledOp, 5)])).toBe(false);
   });
-
-  it("端末に残る旧い形式の操作も、読み替えて重ねる", () => {
-    const legacy = {
-      type: "round.updated",
-      eventId: "l",
-      roundId: "r1",
-      name: "旧",
-      roundDate: "2026-09-20",
-      format: "outdoor",
-      bowType: "compound",
-    } as unknown as SyncOperation;
-
-    expect(keeps(record({ status: "completed" }), [entry(legacy)])).toBe(true);
-  });
 });
 
 describe("deriveRoundState", () => {
@@ -295,9 +280,9 @@ describe("deriveRoundState", () => {
   const shot: SyncOperation = {
     type: "shot.recorded",
     eventId: "s1",
+    shotId: "shot-1",
     distanceId: "d1",
     endNumber: 1,
-    arrowNumber: 1,
     scoreStr: "10",
     scoreInt: 10,
   };

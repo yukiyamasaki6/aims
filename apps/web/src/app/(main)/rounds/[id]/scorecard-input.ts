@@ -1,21 +1,25 @@
 import type { SyncOperation } from "../_shared/sync-events";
+import { endHasRoom } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
 
-// スコアカード上で選択しているマス。
-export type Position = { distance: Distance; end: number; arrow: number };
+// 指している矢。まだ記録していない新しい矢(エンドで決まる)か、記録済みの矢。何も指していないときはnull。
+export type Pointer =
+  | { kind: "new"; distanceId: string; endNumber: number }
+  | { kind: "shot"; shotId: string; distanceId: string; endNumber: number }
+  | null;
 
-// 記録の対象となるマスを、距離のIDで指したもの。
-export type Cell = {
+// 取り消しの列の1件が持つ、矢の状態。変えた属性(今は点数)と生死だけを持つ。
+export type ShotState =
+  | { alive: false }
+  | { alive: true; scoreStr: string; scoreInt: number };
+
+// 矢1本への1回の書き込み。戻るは`before`、進むは`after`で上書きする。
+export type HistoryEntry = {
+  shotId: string;
   distanceId: string;
   endNumber: number;
-  arrowNumber: number;
-};
-
-// 1回の入力操作（記録・上書き・クリア）による、あるマスの状態遷移。
-// undo時はprevShotへ、redo時はnextShotへそのマスを戻す。
-export type HistoryEntry = Cell & {
-  prevShot: Shot | null;
-  nextShot: Shot | null;
+  before: ShotState;
+  after: ShotState;
 };
 
 type HistoryStacks = {
@@ -23,168 +27,131 @@ type HistoryStacks = {
   redoStack: HistoryEntry[];
 };
 
-export function cellOf(position: Position): Cell {
+export function newShotPointer(distanceId: string, endNumber: number): Pointer {
+  return { kind: "new", distanceId, endNumber };
+}
+
+export function shotPointer(shot: Shot): Pointer {
   return {
-    distanceId: position.distance.id,
-    endNumber: position.end,
-    arrowNumber: position.arrow,
+    kind: "shot",
+    shotId: shot.id,
+    distanceId: shot.distance_id,
+    endNumber: shot.end_number,
   };
 }
 
-function isSameCell(shot: Shot, cell: Cell): boolean {
+export function isSamePointer(a: Pointer, b: Pointer): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.kind === "shot" && b.kind === "shot") return a.shotId === b.shotId;
   return (
-    shot.distance_id === cell.distanceId &&
-    shot.end_number === cell.endNumber &&
-    shot.arrow_number === cell.arrowNumber
+    a.kind === b.kind &&
+    a.distanceId === b.distanceId &&
+    a.endNumber === b.endNumber
   );
 }
 
-function isSamePosition(a: Position, b: Position): boolean {
-  return (
-    a.distance.id === b.distance.id && a.end === b.end && a.arrow === b.arrow
-  );
-}
-
-// 距離の並び順・マスの並び順で最初の未記録のマスを返す。
-export function findCurrentPosition(
-  distances: Distance[],
+// 距離の中で、`fromEnd`以降の、矢数に達していない最初のエンドの新しい矢。無ければnull。
+function openEndFrom(
+  distance: Distance,
   shots: Shot[],
-): Position | null {
-  return (
-    flattenCells(distances).find(
-      (position) => findShot(shots, cellOf(position)) === null,
-    ) ?? null
-  );
-}
-
-function flattenCells(distances: Distance[]): Position[] {
-  const cells: Position[] = [];
-  for (const d of distances) {
-    for (let end = 1; end <= d.total_ends; end++) {
-      for (let arrow = 1; arrow <= d.arrows_per_end; arrow++) {
-        cells.push({ distance: d, end, arrow });
-      }
+  fromEnd: number,
+): Pointer {
+  for (let end = fromEnd; end <= distance.total_ends; end++) {
+    if (endHasRoom(distance, shots, end)) {
+      return newShotPointer(distance.id, end);
     }
   }
-  return cells;
+  return null;
 }
 
-// 距離をまたいで前後のマスへ移動する。
-// 端を越える場合と、currentが距離構成に無い場合はnullを返す。
-function stepPosition(
+// 矢数に達していない最初のエンド(距離の並び順、エンドの昇順)の新しい矢。全て満杯ならnull。
+// `distances`は並び順、`shots`は生きている矢とする。
+export function firstOpenEnd(distances: Distance[], shots: Shot[]): Pointer {
+  for (const distance of distances) {
+    const pointer = openEndFrom(distance, shots, 1);
+    if (pointer) return pointer;
+  }
+  return null;
+}
+
+// 点数を書いた後に指す矢。記録済みの矢はそのまま指す。
+// 新しい矢は、そのエンドに空きがあれば同じエンド、満杯なら同じ距離で後ろの空きのあるエンド、無ければnull(距離をまたがない)。
+// `shots`は書いた矢を含む。
+export function pointerAfterScore(
   distances: Distance[],
-  current: Position,
-  offset: 1 | -1,
-): Position | null {
-  const cells = flattenCells(distances);
-  const index = cells.findIndex((c) => isSamePosition(c, current));
-  if (index === -1) return null;
-  return cells[index + offset] ?? null;
-}
-
-// 次の距離の先頭マスへ意図せず引き継がれてしまわないよう、「マス送り」は距離をまたがない。
-// 距離ごとの最後/最初のマスが境界になる。
-function isLastCellOfDistance(position: Position): boolean {
-  return (
-    position.end === position.distance.total_ends &&
-    position.arrow === position.distance.arrows_per_end
-  );
-}
-
-function isFirstCellOfDistance(position: Position): boolean {
-  return position.end === 1 && position.arrow === 1;
-}
-
-// 記録後は次のマスへ進み、距離の最後のマスでは選択を解除する。
-export function positionAfterScore(
-  distances: Distance[],
-  position: Position,
-): Position | null {
-  if (isLastCellOfDistance(position)) return null;
-  return stepPosition(distances, position, 1);
-}
-
-// クリア後は1つ前のマスへ戻り、距離の最初のマスではそのマスに留まる。
-export function positionAfterClear(
-  distances: Distance[],
-  position: Position,
-): Position {
-  if (isFirstCellOfDistance(position)) return position;
-  return stepPosition(distances, position, -1) ?? position;
-}
-
-// 選択中のマスを再度選ぶと選択を解除し、それ以外は選んだマスを選択する。
-export function positionAfterSelect(
-  current: Position | null,
-  selected: Position,
-): Position | null {
-  if (current && isSamePosition(current, selected)) return null;
-  return selected;
-}
-
-// 履歴が指すマスを、現在の距離構成上のマスとして返す。
-// 距離が既に無い場合はnullを返す。
-export function positionOfCell(
-  distances: Distance[],
-  cell: Cell,
-): Position | null {
-  const distance = distances.find((d) => d.id === cell.distanceId);
+  shots: Shot[],
+  pointer: Pointer,
+): Pointer {
+  if (pointer?.kind !== "new") return pointer;
+  const distance = distances.find((d) => d.id === pointer.distanceId);
   if (!distance) return null;
-  return { distance, end: cell.endNumber, arrow: cell.arrowNumber };
+  return openEndFrom(distance, shots, pointer.endNumber);
 }
 
-function findShot(shots: Shot[], cell: Cell): Shot | null {
-  return shots.find((s) => isSameCell(s, cell)) ?? null;
+// 指している矢を、いまの状態に合わせる。
+// 記録済みの矢が消えたらそのエンドの新しい矢、新しい矢のエンドが満杯なら点数を書いた後と同じ規則で進む。
+// 距離が無い、またはエンドが距離の範囲外になったら何も指さない。
+export function reconcilePointer(
+  distances: Distance[],
+  shots: Shot[],
+  pointer: Pointer,
+): Pointer {
+  if (pointer === null) return null;
+  const distance = distances.find((d) => d.id === pointer.distanceId);
+  if (!distance || pointer.endNumber > distance.total_ends) return null;
+  if (pointer.kind === "shot" && shots.some((s) => s.id === pointer.shotId)) {
+    return pointer;
+  }
+  const next = pointerAfterScore(
+    distances,
+    shots,
+    newShotPointer(pointer.distanceId, pointer.endNumber),
+  );
+  return isSamePointer(next, pointer) ? pointer : next;
 }
 
-// 記録・上書きによるマスの状態遷移。
-// 上書きでは、元の記録の射手を引き継ぐ。
+// 点数を書く1件。新しい矢は`newShotId`の矢として記録する。
 export function scoreHistoryEntry(
   shots: Shot[],
-  position: Position,
-  scoreStr: string,
-  scoreInt: number,
+  pointer: NonNullable<Pointer>,
+  score: { scoreStr: string; scoreInt: number },
+  newShotId: string,
 ): HistoryEntry {
-  const cell = cellOf(position);
-  const prevShot = findShot(shots, cell);
+  const shot =
+    pointer.kind === "shot"
+      ? shots.find((s) => s.id === pointer.shotId)
+      : undefined;
   return {
-    ...cell,
-    prevShot,
-    nextShot: {
-      distance_id: cell.distanceId,
-      end_number: cell.endNumber,
-      arrow_number: cell.arrowNumber,
-      shooter_id: prevShot?.shooter_id,
-      score_str: scoreStr,
-      score_int: scoreInt,
-    },
+    shotId: shot ? shot.id : newShotId,
+    distanceId: pointer.distanceId,
+    endNumber: pointer.endNumber,
+    before: shot
+      ? { alive: true, scoreStr: shot.score_str, scoreInt: shot.score_int }
+      : { alive: false },
+    after: { alive: true, ...score },
   };
 }
 
-// クリアによるマスの状態遷移。
-// 未記録のマスのクリアは状態が変わらないため、履歴に残さずnullを返す。
-export function clearHistoryEntry(
-  shots: Shot[],
-  position: Position,
-): HistoryEntry | null {
-  const cell = cellOf(position);
-  const prevShot = findShot(shots, cell);
-  if (!prevShot) return null;
-  return { ...cell, prevShot, nextShot: null };
+// 記録済みの矢を消す1件。戻すときに同じ点数で復活させるため、前の点数を持つ。
+export function clearHistoryEntry(shot: Shot): HistoryEntry {
+  return {
+    shotId: shot.id,
+    distanceId: shot.distance_id,
+    endNumber: shot.end_number,
+    before: { alive: true, scoreStr: shot.score_str, scoreInt: shot.score_int },
+    after: { alive: false },
+  };
 }
 
-// 新たな入力操作を履歴に積み、やり直し履歴を破棄する。
-// entryがnullの場合は履歴を変えない。
+// 新たな書き込みを列に積み、やり直しの列を捨てる。
 export function pushHistory(
   history: HistoryStacks,
-  entry: HistoryEntry | null,
+  entry: HistoryEntry,
 ): HistoryStacks {
-  if (!entry) return history;
   return { undoStack: [...history.undoStack, entry], redoStack: [] };
 }
 
-// 直近の入力操作を取り消し、やり直し履歴へ移す。
-// 取り消す操作が無い場合はnullを返す。
+// 直近の書き込みを取り消し、やり直しの列へ移す。取り消すものが無ければnull。
 export function undoHistory(
   history: HistoryStacks,
 ): { entry: HistoryEntry; history: HistoryStacks } | null {
@@ -199,8 +166,7 @@ export function undoHistory(
   };
 }
 
-// 直近に取り消した入力操作をやり直し、取り消し履歴へ戻す。
-// やり直す操作が無い場合はnullを返す。
+// 直近に取り消した書き込みをやり直し、取り消しの列へ戻す。やり直すものが無ければnull。
 export function redoHistory(
   history: HistoryStacks,
 ): { entry: HistoryEntry; history: HistoryStacks } | null {
@@ -215,9 +181,7 @@ export function redoHistory(
   };
 }
 
-// 距離の構成の変更・削除で指すマスが無くなる、その距離の履歴を破棄する。
-// 他の距離の履歴は引き続き有効なため残す。
-// 取り消し履歴・やり直し履歴のそれぞれに適用する。
+// 距離の構成の変更・削除で、その距離の矢への書き込みだけを捨てる。他の距離の書き込みは残す。
 export function discardDistanceEntries(
   entries: HistoryEntry[],
   distanceId: string,
@@ -225,32 +189,82 @@ export function discardDistanceEntries(
   return entries.filter((e) => e.distanceId !== distanceId);
 }
 
-// マスの記録またはクリアを、操作に変換する。
+// 矢を状態`state`にする操作。生きている状態は記録、消えた状態はクリアで、射手・射順は送らない。
 // 距離の作成との順序は、操作の列の衝突の規則（同じ距離の操作は順に送る）が保つ。
-export function buildShotOperation(input: {
-  cell: Cell;
-  shot: Shot | null;
-  eventId: string;
-}): SyncOperation {
-  const { cell, shot, eventId } = input;
-  const { distanceId, endNumber, arrowNumber } = cell;
-  if (shot) {
+export function buildShotOperation(
+  entry: Pick<HistoryEntry, "shotId" | "distanceId" | "endNumber">,
+  state: ShotState,
+  eventId: string,
+): SyncOperation {
+  const { shotId, distanceId, endNumber } = entry;
+  if (state.alive) {
     return {
       type: "shot.recorded",
       eventId,
+      shotId,
       distanceId,
       endNumber,
-      arrowNumber,
-      shooterId: shot.shooter_id,
-      scoreStr: shot.score_str,
-      scoreInt: shot.score_int,
+      scoreStr: state.scoreStr,
+      scoreInt: state.scoreInt,
     };
   }
+  return { type: "shot.cleared", eventId, shotId, distanceId, endNumber };
+}
+
+// 戻る・進むで矢を`state`にする操作と、その後に指す矢。
+// 戻した矢を指し、矢が消えたらそのエンドの新しい矢を指す。
+// 復活がその時点のエンドに入らないときはnullで、操作を積まない(列は呼び出し側が進める)。
+// `shots`は生きている矢とする。
+export function replayHistoryEntry(
+  distances: Distance[],
+  shots: Shot[],
+  entry: HistoryEntry,
+  state: ShotState,
+  eventId: string,
+): { operation: SyncOperation; pointer: Pointer } | null {
+  const distance = distances.find((d) => d.id === entry.distanceId);
+  // 距離の削除と構成の変更でその距離の書き込みは捨てるため、距離は常にある(安全策)。
+  if (!distance) return null;
+  const revives = state.alive && !shots.some((s) => s.id === entry.shotId);
+  if (revives && !endHasRoom(distance, shots, entry.endNumber)) return null;
   return {
-    type: "shot.cleared",
-    eventId,
-    distanceId,
-    endNumber,
-    arrowNumber,
+    operation: buildShotOperation(entry, state, eventId),
+    pointer: state.alive
+      ? {
+          kind: "shot",
+          shotId: entry.shotId,
+          distanceId: entry.distanceId,
+          endNumber: entry.endNumber,
+        }
+      : newShotPointer(entry.distanceId, entry.endNumber),
   };
+}
+
+// 画面へまだ反映されていない自分の矢の操作を、生きている矢に重ねる。
+// 空白・新しい矢・次のエンドの判定が、保存の完了を待たずに自分の追加を数えるために使う。
+export function withPendingShots(
+  shots: Shot[],
+  pending: readonly SyncOperation[],
+): Shot[] {
+  let result = shots;
+  for (const operation of pending) {
+    if (operation.type === "shot.cleared") {
+      result = result.filter((s) => s.id !== operation.shotId);
+    } else if (operation.type === "shot.recorded") {
+      const existing = result.find((s) => s.id === operation.shotId);
+      const next: Shot = {
+        shot_number: null,
+        ...existing,
+        id: operation.shotId,
+        distance_id: operation.distanceId,
+        end_number: operation.endNumber,
+        score_str: operation.scoreStr,
+        score_int: operation.scoreInt,
+      };
+      result = existing
+        ? result.map((s) => (s.id === next.id ? next : s))
+        : [...result, next];
+    }
+  }
+  return result;
 }

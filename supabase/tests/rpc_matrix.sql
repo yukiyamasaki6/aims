@@ -32,6 +32,7 @@ select plan(11);
 --   D1: R1の距離（得点なし）、D2: R1の距離（得点2件）、D3: R2のUnmarkedの距離（得点1件）
 --   RN/DN/DN2: 作成系RPCが新規に作るラウンド・距離。DEV/DEV2はその初期距離のイベントID
 --   EV1〜EV3: 呼び出しごとのevent_id。ケースは巻き戻されるため、ケース間で使い回せる
+--   SA/SB: D2の1エンド目の矢、SC: D3の1エンド目の矢、SN/SN2: 新しい矢のID
 --   F1/F2: シードの的。UNKNOWN: どこにも存在しないID
 create temp table rpc_id (alias text primary key, id uuid not null);
 insert into rpc_id (alias, id) values
@@ -51,6 +52,11 @@ insert into rpc_id (alias, id) values
   ('EV3',     'c0000000-0000-0000-0000-0000000000e3'),
   ('DEV',     'c0000000-0000-0000-0000-0000000000d1'),
   ('DEV2',    'c0000000-0000-0000-0000-0000000000d2'),
+  ('SA',      'c0000000-0000-0000-0000-0000000000a1'),
+  ('SB',      'c0000000-0000-0000-0000-0000000000a2'),
+  ('SC',      'c0000000-0000-0000-0000-0000000000a3'),
+  ('SN',      'c0000000-0000-0000-0000-0000000000b1'),
+  ('SN2',     'c0000000-0000-0000-0000-0000000000b2'),
   ('F1',      'a1000000-0000-0000-0000-000000000001'),
   ('F2',      'a1000000-0000-0000-0000-000000000002'),
   ('UNKNOWN', 'c0000000-0000-0000-0000-0000000000ff');
@@ -86,15 +92,15 @@ insert into public.distance_events (event_id, round_id, distance_id, type, autho
   ('c0000000-0000-0000-0000-00000000f012', pg_temp.id('R1'), pg_temp.id('D2'), 'CREATED', pg_temp.id('E'), 1, 'b', 50, true, 6, 6, pg_temp.id('F1')),
   ('c0000000-0000-0000-0000-00000000f013', pg_temp.id('R2'), pg_temp.id('D3'), 'CREATED', pg_temp.id('E'), 1, 'a', null, false, 6, 6, pg_temp.id('F1'));
 
-insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int) values
-  (pg_temp.id('D2'), 1, 1, pg_temp.id('E'), 'X', 10),
-  (pg_temp.id('D2'), 1, 2, pg_temp.id('E'), '9', 9),
-  (pg_temp.id('D3'), 1, 1, pg_temp.id('E'), '9', 9);
+insert into public.shots (id, distance_id, end_number, shooter_id, score_str, score_int) values
+  (pg_temp.id('SA'), pg_temp.id('D2'), 1, pg_temp.id('E'), 'X', 10),
+  (pg_temp.id('SB'), pg_temp.id('D2'), 1, pg_temp.id('E'), '9', 9),
+  (pg_temp.id('SC'), pg_temp.id('D3'), 1, pg_temp.id('E'), '9', 9);
 
-insert into public.shot_events (event_id, distance_id, type, author_id, revision, end_number, arrow_number, shooter_id, score_str, score_int) values
-  ('c0000000-0000-0000-0000-00000000f021', pg_temp.id('D2'), 'RECORDED', pg_temp.id('E'), 1, 1, 1, pg_temp.id('E'), 'X', 10),
-  ('c0000000-0000-0000-0000-00000000f022', pg_temp.id('D2'), 'RECORDED', pg_temp.id('E'), 1, 1, 2, pg_temp.id('E'), '9', 9),
-  ('c0000000-0000-0000-0000-00000000f023', pg_temp.id('D3'), 'RECORDED', pg_temp.id('E'), 1, 1, 1, pg_temp.id('E'), '9', 9);
+insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int) values
+  ('c0000000-0000-0000-0000-00000000f021', pg_temp.id('D2'), pg_temp.id('SA'), 'RECORDED', pg_temp.id('E'), 1, 1, pg_temp.id('E'), 'X', 10),
+  ('c0000000-0000-0000-0000-00000000f022', pg_temp.id('D2'), pg_temp.id('SB'), 'RECORDED', pg_temp.id('E'), 1, 1, pg_temp.id('E'), '9', 9),
+  ('c0000000-0000-0000-0000-00000000f023', pg_temp.id('D3'), pg_temp.id('SC'), 'RECORDED', pg_temp.id('E'), 1, 1, pg_temp.id('E'), '9', 9);
 
 -- ============================================================
 -- 共通ヘルパー
@@ -137,10 +143,10 @@ insert into rpc_default (fn, args, element) values
   ('disable_distance', '{"p_distance_event_id":"@EV1","p_distance_id":"@D1"}', '{}'),
   ('record_shots',
     '{"p_shots":[{}]}',
-    '{"p_shots":{"shot_event_id":"@EV1","distance_id":"@D1","end_number":1,"arrow_number":1,"score_str":"9","score_int":9}}'),
+    '{"p_shots":{"shot_event_id":"@EV1","shot_id":"@SN","distance_id":"@D1","end_number":1,"score_str":"9","score_int":9}}'),
   ('clear_shots',
     '{"p_shots":[{}]}',
-    '{"p_shots":{"shot_event_id":"@EV1","distance_id":"@D2","end_number":1,"arrow_number":1}}'),
+    '{"p_shots":{"shot_event_id":"@EV1","shot_id":"@SA","distance_id":"@D2"}}'),
   ('save_round_as_preset',
     '{"p_name":"Matrix Preset","p_format":"field","p_bow_type":"compound","p_distances":[{},{"position_key":"b","distance":null,"is_marked":false,"total_ends":4}]}',
     '{"p_distances":{"position_key":"a","distance":50,"is_marked":true,"total_ends":6,"arrows_per_end":6,"target_face_id":"@F1"}}');
@@ -233,6 +239,7 @@ as $$
     ), ''))
 $$;
 
+-- 矢は エンド:矢の別名:点数/射手/revision[/#射順][/cleared] で表す。
 create function pg_temp.st_shots(p_alias text) returns text
 language sql stable
 as $$
@@ -240,10 +247,12 @@ as $$
     (select count(*) from shot_events where distance_id = pg_temp.id(p_alias)),
     coalesce((
       select string_agg(
-        format('%s-%s:%s/%s/r%s%s', s.end_number, s.arrow_number, s.score_str, coalesce(a.actor, '?'), s.revision,
+        format('%s:%s:%s/%s/r%s%s%s', s.end_number, coalesce(i.alias, '?'), s.score_str, coalesce(a.actor, '?'), s.revision,
+          coalesce('/#' || s.shot_number, ''),
           case when s.disabled_at is not null then '/cleared' else '' end),
-        ' ' order by s.end_number, s.arrow_number)
+        ' ' order by s.end_number, i.alias)
       from shots s
+      left join rpc_id i on i.id = s.id
       left join rpc_actor a on pg_temp.id(a.alias) = s.shooter_id
       where s.distance_id = pg_temp.id(p_alias)
     ), ''))
@@ -271,7 +280,8 @@ as $$
   where p.name = p_name
 $$;
 
--- RPCの戻り値の要約。配列は要素ごとの理由（効いた要素はapplied）、オブジェクトは効いたか、効いた項目、効かなかった項目と理由を表す。
+-- RPCの戻り値の要約。配列は要素ごとの理由（効いた要素はapplied）と、要素が持てば{効いた項目}と!効かなかった項目:理由を表す。
+-- オブジェクトは効いたか、効いた項目、効かなかった項目と理由を表す。
 create function pg_temp.res(p_returned text) returns text
 language sql stable
 as $$
@@ -279,7 +289,11 @@ as $$
     when p_returned is null then 'ret=-'
     when jsonb_typeof(p_returned::jsonb) = 'array' then
       'ret=[' || coalesce((
-        select string_agg(coalesce(e ->> 'reason', case when (e ->> 'applied')::boolean then 'applied' else 'none' end), ',' order by o)
+        select string_agg(
+          coalesce(e ->> 'reason', case when (e ->> 'applied')::boolean then 'applied' else 'none' end)
+            || coalesce('{' || (select string_agg(f, ',') from jsonb_array_elements_text(case when jsonb_typeof(e -> 'applied_fields') = 'array' then e -> 'applied_fields' else '[]' end) f) || '}', '')
+            || coalesce('!' || (select string_agg((r ->> 'field') || ':' || (r ->> 'reason'), ',') from jsonb_array_elements(case when jsonb_typeof(e -> 'rejected_fields') = 'array' then e -> 'rejected_fields' else '[]' end) r), ''),
+          ',' order by o)
         from jsonb_array_elements(p_returned::jsonb) with ordinality as t(e, o)
       ), '') || ']'
     else
@@ -429,7 +443,7 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('update_distance', 'invalid', 'unmarked_in_outdoor', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"is_marked":false}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'invalid', 'marked_distance_cleared', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"distance":null}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'invalid', 'with_shots_arrows_unfit', null, pg_temp.q('update_distance', '{"p_distance_id":"@D2","p_distance_event_id":"@EV1","p_changes":{"config":{"total_ends":6,"arrows_per_end":1,"target_face_id":"@F1"}}}'), 1, $$select pg_temp.st_distance('D2') || ' ' || pg_temp.res($1)$$),
-  ('update_distance', 'invalid', 'with_shots_ends_unfit', pg_temp.q('record_shots', '{"p_shots":[{"distance_id":"@D2","shot_event_id":"@EV3","end_number":2,"arrow_number":1,"score_str":"9","score_int":9}]}'), pg_temp.q('update_distance', '{"p_distance_id":"@D2","p_distance_event_id":"@EV1","p_changes":{"config":{"total_ends":1,"arrows_per_end":1,"target_face_id":"@F1"}}}'), 1, $$select pg_temp.st_distance('D2') || ' ' || pg_temp.res($1)$$),
+  ('update_distance', 'invalid', 'with_shots_ends_unfit', pg_temp.q('record_shots', '{"p_shots":[{"distance_id":"@D2","shot_event_id":"@EV3","shot_id":"@SN","end_number":2,"score_str":"9","score_int":9}]}'), pg_temp.q('update_distance', '{"p_distance_id":"@D2","p_distance_event_id":"@EV1","p_changes":{"config":{"total_ends":1,"arrows_per_end":1,"target_face_id":"@F1"}}}'), 1, $$select pg_temp.st_distance('D2') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'invalid', 'distance_disabled', pg_temp.q('disable_distance', '{"p_distance_event_id":"@EV2"}'), pg_temp.q('update_distance'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'invalid', 'unknown_distance', null, pg_temp.q('update_distance', '{"p_distance_id":"@UNKNOWN","p_distance_event_id":"@EV1","p_changes":{"distance":40}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'invalid', 'missing_is_marked', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"is_marked":null}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
@@ -461,34 +475,44 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   -- record_shots
   ('record_shots', 'success', 'single', null, pg_temp.q('record_shots'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'success', 'batch_overwrite_and_proxy', null, pg_temp.q('record_shots', '{"p_shots":[
-      {"distance_id":"@D2"},
+      {"distance_id":"@D2","shot_id":"@SA"},
       {"distance_id":"@D2","shot_event_id":"@EV2","end_number":2,"score_str":"7","score_int":7},
-      {"distance_id":"@D2","shot_event_id":"@EV3","end_number":2,"arrow_number":2,"score_str":"5","score_int":5,"shooter_id":"@V"}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
-  ('record_shots', 'success', 'batch_partial_unfit', null, pg_temp.q('record_shots', '{"p_shots":[{},{"shot_event_id":"@EV2","arrow_number":2,"score_str":"Z","score_int":99}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+      {"distance_id":"@D2","shot_event_id":"@EV3","shot_id":"@SN2","end_number":2,"score_str":"5","score_int":5,"shooter_id":"@V"}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'success', 'batch_partial_unfit', null, pg_temp.q('record_shots', '{"p_shots":[{},{"shot_event_id":"@EV2","shot_id":"@SN2","score_str":"Z","score_int":99}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'success', 'with_shot_number', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_number":6}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'success', 'shot_number_taken', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_number":1},{"shot_event_id":"@EV2","shot_id":"@SN2","score_str":"7","score_int":7,"shot_number":1}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'unauthorized', 'default', null, pg_temp.q('record_shots'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'shooter_not_member', null, pg_temp.q('record_shots', '{"p_shots":[{"shooter_id":"@N"}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
-  ('record_shots', 'invalid', 'batch_with_invalid_shooter', null, pg_temp.q('record_shots', '{"p_shots":[{},{"shot_event_id":"@EV2","arrow_number":2,"shooter_id":"@N"}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'invalid', 'batch_with_invalid_shooter', null, pg_temp.q('record_shots', '{"p_shots":[{},{"shot_event_id":"@EV2","shot_id":"@SN2","shooter_id":"@N"}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'unknown_distance', null, pg_temp.q('record_shots', '{"p_shots":[{"distance_id":"@UNKNOWN"}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'end_out_of_range', null, pg_temp.q('record_shots', '{"p_shots":[{"end_number":7}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'score_not_on_target', null, pg_temp.q('record_shots', '{"p_shots":[{"score_str":"Z","score_int":99}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'invalid', 'shot_number_out_of_range', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_number":7}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'distance_disabled', pg_temp.q('disable_distance', '{"p_distance_event_id":"@EV2"}'), pg_temp.q('record_shots'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'invalid', 'shot_of_other_distance', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_id":"@SC"}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'invalid', 'shot_of_other_end', null, pg_temp.q('record_shots', '{"p_shots":[{"distance_id":"@D2","shot_id":"@SA","end_number":2}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'missing_score_str', null, pg_temp.q('record_shots', '{"p_shots":[{"score_str":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'missing_score_int', null, pg_temp.q('record_shots', '{"p_shots":[{"score_int":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'missing_end_number', null, pg_temp.q('record_shots', '{"p_shots":[{"end_number":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
-  ('record_shots', 'invalid', 'missing_arrow_number', null, pg_temp.q('record_shots', '{"p_shots":[{"arrow_number":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'invalid', 'missing_shot_id', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_id":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'missing_event_id', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_event_id":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'invalid', 'legacy_arrow_number', null, pg_temp.q('record_shots', '{"p_shots":[{"arrow_number":1}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'invalid', 'null_shooter', null, pg_temp.q('record_shots', '{"p_shots":[{"shooter_id":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
+  ('record_shots', 'invalid', 'fractional_shot_number', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_number":1.5}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'idempotent', 'replay', null, pg_temp.q('record_shots'), 2, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
 
   -- clear_shots
   ('clear_shots', 'success', 'single', null, pg_temp.q('clear_shots'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
-  ('clear_shots', 'success', 'batch', null, pg_temp.q('clear_shots', '{"p_shots":[{},{"shot_event_id":"@EV2","arrow_number":2}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
-  ('clear_shots', 'success', 'unrecorded_cell', null, pg_temp.q('clear_shots', '{"p_shots":[{"end_number":3}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
+  ('clear_shots', 'success', 'batch', null, pg_temp.q('clear_shots', '{"p_shots":[{},{"shot_event_id":"@EV2","shot_id":"@SB"}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
+  ('clear_shots', 'success', 'already_cleared', pg_temp.q('clear_shots', '{"p_shots":[{"shot_event_id":"@EV2"}]}'), pg_temp.q('clear_shots'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
   ('clear_shots', 'unauthorized', 'default', null, pg_temp.q('clear_shots'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
   ('clear_shots', 'invalid', 'unknown_distance', null, pg_temp.q('clear_shots', '{"p_shots":[{"distance_id":"@UNKNOWN"}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
+  ('clear_shots', 'invalid', 'unknown_shot', null, pg_temp.q('clear_shots', '{"p_shots":[{"shot_id":"@SN"}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
   ('clear_shots', 'invalid', 'distance_disabled', pg_temp.q('disable_distance', '{"p_distance_event_id":"@EV2","p_distance_id":"@D2"}'), pg_temp.q('clear_shots'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
-  ('clear_shots', 'invalid', 'missing_end_number', null, pg_temp.q('clear_shots', '{"p_shots":[{"end_number":null}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
-  ('clear_shots', 'invalid', 'missing_arrow_number', null, pg_temp.q('clear_shots', '{"p_shots":[{"arrow_number":null}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
+  ('clear_shots', 'invalid', 'shot_of_other_distance', null, pg_temp.q('clear_shots', '{"p_shots":[{"shot_id":"@SC"}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
+  ('clear_shots', 'invalid', 'missing_shot_id', null, pg_temp.q('clear_shots', '{"p_shots":[{"shot_id":null}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
   ('clear_shots', 'invalid', 'missing_event_id', null, pg_temp.q('clear_shots', '{"p_shots":[{"shot_event_id":null}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
+  ('clear_shots', 'invalid', 'legacy_arrow_number', null, pg_temp.q('clear_shots', '{"p_shots":[{"end_number":1,"arrow_number":1}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
   ('clear_shots', 'idempotent', 'replay', null, pg_temp.q('clear_shots'), 2, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
 
   -- save_round_as_preset
@@ -692,9 +716,11 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('disable_distance', 'idempotent', 'replay', 'editor', 'ok', 'events=2 revision=2 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=true ret=applied'),
   ('disable_distance', 'idempotent', 'already_disabled', 'editor', 'ok', 'events=2 revision=2 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=true ret=DISABLED'),
 
-  ('record_shots', 'success', 'single', 'editor', 'ok', 'events=1 shots=[1-1:9/editor/r1] ret=[applied]'),
-  ('record_shots', 'success', 'batch_overwrite_and_proxy', 'editor', 'ok', 'events=5 shots=[1-1:9/editor/r2 1-2:9/editor/r1 2-1:7/editor/r1 2-2:5/viewer/r1] ret=[applied,applied,applied]'),
-  ('record_shots', 'success', 'batch_partial_unfit', 'editor', 'ok', 'events=1 shots=[1-1:9/editor/r1] ret=[applied,UNFIT]'),
+  ('record_shots', 'success', 'single', 'editor', 'ok', 'events=1 shots=[1:SN:9/editor/r1] ret=[applied{score,shooter_id}]'),
+  ('record_shots', 'success', 'batch_overwrite_and_proxy', 'editor', 'ok', 'events=5 shots=[1:SA:9/editor/r2 1:SB:9/editor/r1 2:SN:7/editor/r1 2:SN2:5/viewer/r1] ret=[applied{score},applied{score,shooter_id},applied{score,shooter_id}]'),
+  ('record_shots', 'success', 'batch_partial_unfit', 'editor', 'ok', 'events=1 shots=[1:SN:9/editor/r1] ret=[applied{score,shooter_id},UNFIT]'),
+  ('record_shots', 'success', 'with_shot_number', 'editor', 'ok', 'events=1 shots=[1:SN:9/editor/r1/#6] ret=[applied{score,shooter_id,shot_number}]'),
+  ('record_shots', 'success', 'shot_number_taken', 'editor', 'ok', 'events=2 shots=[1:SN:9/editor/r1/#1 1:SN2:7/editor/r1] ret=[applied{score,shooter_id,shot_number},applied{score,shooter_id}!shot_number:UNFIT]'),
   ('record_shots', 'unauthorized', 'default', 'viewer', 'error:[PT403]この距離に矢を記録する権限がありません。', 'events=0 shots=[] ret=-'),
   ('record_shots', 'unauthorized', 'default', 'non_member', 'error:[PT403]この距離に矢を記録する権限がありません。', 'events=0 shots=[] ret=-'),
   ('record_shots', 'invalid', 'shooter_not_member', 'editor', 'error:[PT403]指定された射手はこのラウンドのメンバーではありません。', 'events=0 shots=[] ret=-'),
@@ -702,25 +728,33 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('record_shots', 'invalid', 'unknown_distance', 'editor', 'ok', 'events=0 shots=[] ret=[MISSING]'),
   ('record_shots', 'invalid', 'end_out_of_range', 'editor', 'ok', 'events=0 shots=[] ret=[UNFIT]'),
   ('record_shots', 'invalid', 'score_not_on_target', 'editor', 'ok', 'events=0 shots=[] ret=[UNFIT]'),
+  ('record_shots', 'invalid', 'shot_number_out_of_range', 'editor', 'ok', 'events=0 shots=[] ret=[UNFIT]'),
   ('record_shots', 'invalid', 'distance_disabled', 'editor', 'ok', 'events=0 shots=[] ret=[DISABLED]'),
+  ('record_shots', 'invalid', 'shot_of_other_distance', 'editor', 'error:[PT422]矢の距離が記録と一致しません。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'shot_of_other_end', 'editor', 'error:[PT422]矢のエンドが記録と一致しません。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
   ('record_shots', 'invalid', 'missing_score_str', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
   ('record_shots', 'invalid', 'missing_score_int', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
   ('record_shots', 'invalid', 'missing_end_number', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'missing_arrow_number', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'missing_shot_id', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
   ('record_shots', 'invalid', 'missing_event_id', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'idempotent', 'replay', 'editor', 'ok', 'events=1 shots=[1-1:9/editor/r1] ret=[applied]'),
+  ('record_shots', 'invalid', 'legacy_arrow_number', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'null_shooter', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'invalid', 'fractional_shot_number', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
+  ('record_shots', 'idempotent', 'replay', 'editor', 'ok', 'events=1 shots=[1:SN:9/editor/r1] ret=[applied{score,shooter_id}]'),
 
-  ('clear_shots', 'success', 'single', 'editor', 'ok', 'events=3 shots=[1-1:X/editor/r2/cleared 1-2:9/editor/r1] ret=[applied]'),
-  ('clear_shots', 'success', 'batch', 'editor', 'ok', 'events=4 shots=[1-1:X/editor/r2/cleared 1-2:9/editor/r2/cleared] ret=[applied,applied]'),
-  ('clear_shots', 'success', 'unrecorded_cell', 'editor', 'ok', 'events=3 shots=[1-1:X/editor/r1 1-2:9/editor/r1] ret=[applied]'),
-  ('clear_shots', 'unauthorized', 'default', 'viewer', 'error:[PT403]この距離の矢を取り消す権限がありません。', 'events=2 shots=[1-1:X/editor/r1 1-2:9/editor/r1] ret=-'),
-  ('clear_shots', 'unauthorized', 'default', 'non_member', 'error:[PT403]この距離の矢を取り消す権限がありません。', 'events=2 shots=[1-1:X/editor/r1 1-2:9/editor/r1] ret=-'),
-  ('clear_shots', 'invalid', 'unknown_distance', 'editor', 'ok', 'events=2 shots=[1-1:X/editor/r1 1-2:9/editor/r1] ret=[MISSING]'),
-  ('clear_shots', 'invalid', 'distance_disabled', 'editor', 'ok', 'events=2 shots=[1-1:X/editor/r1 1-2:9/editor/r1] ret=[DISABLED]'),
-  ('clear_shots', 'invalid', 'missing_end_number', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1-1:X/editor/r1 1-2:9/editor/r1] ret=-'),
-  ('clear_shots', 'invalid', 'missing_arrow_number', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1-1:X/editor/r1 1-2:9/editor/r1] ret=-'),
-  ('clear_shots', 'invalid', 'missing_event_id', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1-1:X/editor/r1 1-2:9/editor/r1] ret=-'),
-  ('clear_shots', 'idempotent', 'replay', 'editor', 'ok', 'events=3 shots=[1-1:X/editor/r2/cleared 1-2:9/editor/r1] ret=[applied]'),
+  ('clear_shots', 'success', 'single', 'editor', 'ok', 'events=3 shots=[1:SA:X/editor/r2/cleared 1:SB:9/editor/r1] ret=[applied]'),
+  ('clear_shots', 'success', 'batch', 'editor', 'ok', 'events=4 shots=[1:SA:X/editor/r2/cleared 1:SB:9/editor/r2/cleared] ret=[applied,applied]'),
+  ('clear_shots', 'success', 'already_cleared', 'editor', 'ok', 'events=4 shots=[1:SA:X/editor/r3/cleared 1:SB:9/editor/r1] ret=[applied]'),
+  ('clear_shots', 'unauthorized', 'default', 'viewer', 'error:[PT403]この距離の矢を取り消す権限がありません。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
+  ('clear_shots', 'unauthorized', 'default', 'non_member', 'error:[PT403]この距離の矢を取り消す権限がありません。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
+  ('clear_shots', 'invalid', 'unknown_distance', 'editor', 'ok', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=[MISSING]'),
+  ('clear_shots', 'invalid', 'unknown_shot', 'editor', 'ok', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=[MISSING]'),
+  ('clear_shots', 'invalid', 'distance_disabled', 'editor', 'ok', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=[DISABLED]'),
+  ('clear_shots', 'invalid', 'shot_of_other_distance', 'editor', 'error:[PT422]矢の距離が記録と一致しません。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
+  ('clear_shots', 'invalid', 'missing_shot_id', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
+  ('clear_shots', 'invalid', 'missing_event_id', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
+  ('clear_shots', 'invalid', 'legacy_arrow_number', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
+  ('clear_shots', 'idempotent', 'replay', 'editor', 'ok', 'events=3 shots=[1:SA:X/editor/r2/cleared 1:SB:9/editor/r1] ret=[applied]'),
 
   ('save_round_as_preset', 'success', 'default', 'editor', 'ok', 'presets=1 owner=editor format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),
   ('save_round_as_preset', 'success', 'default', 'viewer', 'ok', 'presets=1 owner=viewer format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),

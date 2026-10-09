@@ -6,7 +6,7 @@
 | `rounds`                  | アーチェリーの記録単位となる「ラウンド」（1回の練習・試合セッション）を表す。距離構成は`distances`が持つ |
 | `round_users`             | 特定のラウンドに対するユーザーのアクセス権限・ロールを管理する多対多の中間テーブル。1ラウンドに複数のeditor/viewerが存在しうる |
 | `distances`               | ラウンド中に射撃する特定の距離（70m、50m等）を表す。1ラウンドに複数の距離を持てる            |
-| `shots`                   | 個々の矢のスコアと、誰が射ったかを記録する。1つの(距離, エンド, 矢番号)は常に1本の矢を指す      |
+| `shots`                   | 1行が1本の矢で、点数・射手・射順を記録する。矢はIDで識別し、表示の位置・射順・点数に依存しない。エンドの生きている矢は矢数を超えない |
 | `round_events` | `rounds`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない。効かせた操作の、効いた項目だけを記録する |
 | `distance_events` | `distances`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない。効かせた操作の、効いた項目だけを記録する |
 | `shot_events` | `shots`への変更を表す追記専用イベントログ。書き込みの正。削除・修正は行わない            |
@@ -77,9 +77,10 @@ erDiagram
         timestamp updated_at "最終更新時刻"
     }
     shots {
-        uuid distance_id PK, FK "所属する距離 [PK: (distance_id, end_number, arrow_number)]"
-        integer end_number PK "距離内で何番目のエンドか [PK: (distance_id, end_number, arrow_number)] [CHECK: > 0]"
-        integer arrow_number PK "エンド内で何本目の射か [PK: (distance_id, end_number, arrow_number)] [CHECK: > 0]"
+        uuid id PK "矢のID。新しい矢は端末が作る時刻順のUUID(UUIDv7の形式)。点数の変更・消去・復活で変わらない"
+        uuid distance_id FK "所属する距離"
+        integer end_number "距離内で何番目のエンドか [CHECK: > 0]。生きている矢の数は距離の矢数以下(制約トリガー)"
+        integer shot_number "エンド内で何射目か [NULLABLE: null=射順不明] [CHECK: >= 1] [矢数以下] [UK: (distance_id, end_number, shot_number) 生きている矢でnullでないもの]"
         uuid shooter_id FK "行射したユーザ"
         string score_str "点数の文字列表現（例：X, M, 10）"
         integer score_int "点数の整数表現"
@@ -125,9 +126,11 @@ erDiagram
         uuid distance_id "対象距離の論理FK"
         string type "操作種別 [CHECK: RECORDED / CLEARED]"
         uuid author_id FK "操作実行ユーザ"
-        bigint revision UK "サーバー確定順 [NOT NULL] [CHECK: >= 1] [UK: (distance_id, end_number, arrow_number, revision)]"
+        uuid shot_id "対象の矢の論理FK"
+        bigint revision UK "サーバー確定順 [NOT NULL] [CHECK: >= 1] [UK: (shot_id, revision)]"
+        text_array set_fields "RECORDEDで効いた属性(score、shooter_id、shot_number)。NULLは全項目"
         integer end_number "shots.end_numberと同じ制約。全イベント種別で必須"
-        integer arrow_number "shots.arrow_numberと同じ制約。全イベント種別で必須"
+        integer shot_number "shots.shot_numberと同じ制約 [RECORDED: set_fieldsにshot_numberを含むとき記録した値 / CLEARED: NULL]"
         uuid shooter_id FK "shots.shooter_idと同じ制約 [RECORDED: 必須 / CLEARED: NULL]"
         string score_str "shots.score_strと同じ制約 [RECORDED: 必須 / CLEARED: NULL]"
         integer score_int "shots.score_intと同じ制約 [RECORDED: 必須 / CLEARED: NULL]"
@@ -186,3 +189,11 @@ erDiagram
         timestamp updated_at "最終更新時刻"
     }
 ```
+
+## 矢の記録
+
+- `shots`の1行は1本の矢である。エンド内の何本目かという位置の列は持たず、表示の順(射順不明の矢は点数の高い順、同点は`id`の昇順)は画面が決める。新しい矢の`id`は、端末がそのエンドの既にある矢の`id`より大きい時刻順のUUIDにするため、同点の後ろに並ぶ(`rounds/score-entry`)。
+- `shot_number`がnullの矢は射順不明である。利用者が射順を明示しない限り、矢は射順を持たない。
+- 同じ距離・同じエンドの生きている矢(`disabled_at`がnull)は、その距離の`arrows_per_end`本を超えない。書き込みのRPCが距離の行をロックして数え、制約トリガーが最後に止める。
+- 同じエンドの生きている矢は、同じ`shot_number`を持たない(部分一意索引)。消した矢を戻すときに、その射順を他の生きている矢が使っていれば、射順だけがnullになる。
+- 既存の矢(エンド内の入力順の番号`arrow_number`で識別していた行)は、移行で無作為のUUIDを付け、`shot_number`をnullにした。入力順の番号は射順でないため残していない。

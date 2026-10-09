@@ -18,7 +18,9 @@ insert into fa_id (alias, id) values
   ('RO', 'e0000000-0000-0000-0000-000000000011'),
   ('U',  'e0000000-0000-0000-0000-000000000021'),
   ('S',  'e0000000-0000-0000-0000-000000000022'),
-  ('X',  'e0000000-0000-0000-0000-000000000023');
+  ('X',  'e0000000-0000-0000-0000-000000000023'),
+  ('SS', 'e0000000-0000-0000-0000-000000000031'),
+  ('XS', 'e0000000-0000-0000-0000-000000000032');
 
 grant select on fa_id to authenticated;
 
@@ -70,11 +72,11 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
 
 select public.record_shots(jsonb_build_array(
-  jsonb_build_object('shot_event_id', pg_temp.ev(1), 'distance_id', pg_temp.id('S'), 'end_number', 3, 'arrow_number', 4, 'score_str', '9', 'score_int', 9),
-  jsonb_build_object('shot_event_id', pg_temp.ev(2), 'distance_id', pg_temp.id('X'), 'end_number', 5, 'arrow_number', 6, 'score_str', '9', 'score_int', 9)
+  jsonb_build_object('shot_event_id', pg_temp.ev(1), 'shot_id', pg_temp.id('SS'), 'distance_id', pg_temp.id('S'), 'end_number', 3, 'score_str', '9', 'score_int', 9),
+  jsonb_build_object('shot_event_id', pg_temp.ev(2), 'shot_id', pg_temp.id('XS'), 'distance_id', pg_temp.id('X'), 'end_number', 5, 'score_str', '9', 'score_int', 9)
 ));
 select public.clear_shots(jsonb_build_array(
-  jsonb_build_object('shot_event_id', pg_temp.ev(3), 'distance_id', pg_temp.id('X'), 'end_number', 5, 'arrow_number', 6)
+  jsonb_build_object('shot_event_id', pg_temp.ev(3), 'shot_id', pg_temp.id('XS'), 'distance_id', pg_temp.id('X'))
 ));
 
 -- ============================================================
@@ -169,7 +171,7 @@ select is(pg_temp.fields((select r from fa_d3)), 'is_marked,distance', 'update_d
 -- 距離: configは3項目を一体で判定する
 -- ============================================================
 
--- Given: 3エンド目4本目に矢がある距離
+-- Given: 3エンド目に矢がある距離
 -- When: 距離(m)の変更と、矢が収まらないエンド数のconfigの変更を同時に送る
 create temp table fa_c1 as
 select public.update_distance(pg_temp.ev(30), pg_temp.id('S'),
@@ -197,8 +199,8 @@ select is(
 );
 select is(pg_temp.set_fields(31), 'total_ends,arrows_per_end,target_face_id', 'update_distance: configのset_fieldsは3項目に展開される');
 
--- Given: 5エンド目6本目の矢が取り消されている距離
--- When: 取り消した矢の位置が収まらないconfigへ変更する
+-- Given: 5エンド目の矢が取り消されている距離
+-- When: 取り消した矢のエンドが収まらないconfigへ変更する
 create temp table fa_c3 as
 select public.update_distance(pg_temp.ev(32), pg_temp.id('X'),
   jsonb_build_object('config', jsonb_build_object('total_ends', 2, 'arrows_per_end', 2, 'target_face_id', pg_temp.face()))) as r;

@@ -1,6 +1,6 @@
 -- 書き込みRPCが、確定した対象のrevisionを返すことと、重複したevent_idの再送の扱いを確認する。
 --   - 書き込みRPCの返り値（新規は確定したrevision、重複の再送は既存のイベントのrevision）
---   - record_shots/clear_shotsは、入力の順の{revision, applied, reason}の配列を返す
+--   - record_shots/clear_shotsは、入力の順の要素ごとの結果（revisionを含む）の配列を返す
 --   - 確定済みのevent_idの再送は、規則の判定より先に行い、効いた項目を同じ形で返す
 --   - 権限のない呼び出しは、確定済みのevent_idでも拒否される
 -- 呼び出しの権限と入力の検証はrpc_matrix.sqlで固定している。
@@ -35,12 +35,18 @@ create function pg_temp.face() returns uuid
 language sql stable
 as $$ select id from public.target_faces order by id limit 1 $$;
 
-create function pg_temp.shot(p_n int, p_distance text, p_end int, p_arrow int, p_score int default null) returns jsonb
+-- 矢のIDは番号から作る。
+create function pg_temp.shot_id(p_shot int) returns uuid
+language sql immutable
+as $$ select ('d0000000-0000-0000-0000-0000000a' || lpad(p_shot::text, 4, '0'))::uuid $$;
+
+-- 点数が無ければクリアの要素を作る。
+create function pg_temp.shot(p_n int, p_distance text, p_end int, p_shot int, p_score int default null) returns jsonb
 language sql stable
 as $$
   select case when p_score is null
-    then jsonb_build_object('shot_event_id', pg_temp.ev(p_n), 'distance_id', pg_temp.id(p_distance), 'end_number', p_end, 'arrow_number', p_arrow)
-    else jsonb_build_object('shot_event_id', pg_temp.ev(p_n), 'distance_id', pg_temp.id(p_distance), 'end_number', p_end, 'arrow_number', p_arrow, 'score_str', p_score::text, 'score_int', p_score)
+    then jsonb_build_object('shot_event_id', pg_temp.ev(p_n), 'shot_id', pg_temp.shot_id(p_shot), 'distance_id', pg_temp.id(p_distance))
+    else jsonb_build_object('shot_event_id', pg_temp.ev(p_n), 'shot_id', pg_temp.shot_id(p_shot), 'distance_id', pg_temp.id(p_distance), 'end_number', p_end, 'score_str', p_score::text, 'score_int', p_score)
   end
 $$;
 
@@ -143,12 +149,12 @@ select is(
   'record_shotsは入力の順にイベントごとのrevisionを返す'
 );
 select is(
-  pg_temp.revs(public.record_shots(jsonb_build_array(pg_temp.shot(12, 'D2', 2, 1, 7), pg_temp.shot(13, 'D2', 2, 1, 6)))),
+  pg_temp.revs(public.record_shots(jsonb_build_array(pg_temp.shot(12, 'D2', 2, 21, 7), pg_temp.shot(13, 'D2', 2, 21, 6)))),
   array[1, 2]::bigint[],
-  'record_shotsは同じマスが配列に複数あればrevisionを増やして返す'
+  'record_shotsは同じ矢が配列に複数あればrevisionを増やして返す'
 );
 select is(
-  pg_temp.revs(public.record_shots(jsonb_build_array(pg_temp.shot(10, 'D2', 1, 1, 9), pg_temp.shot(14, 'D2', 1, 3, 5), pg_temp.shot(13, 'D2', 2, 1, 6)))),
+  pg_temp.revs(public.record_shots(jsonb_build_array(pg_temp.shot(10, 'D2', 1, 1, 9), pg_temp.shot(14, 'D2', 1, 3, 5), pg_temp.shot(13, 'D2', 2, 21, 6)))),
   array[1, 1, 2]::bigint[],
   'record_shotsは新規と重複が混ざる配列で各要素のrevisionを返す'
 );
@@ -160,15 +166,15 @@ select is(
 select is(
   pg_temp.revs(public.clear_shots(jsonb_build_array(pg_temp.shot(15, 'D2', 1, 1), pg_temp.shot(16, 'D2', 1, 1)))),
   array[2, 3]::bigint[],
-  'clear_shotsは同じマスが配列に複数あればrevisionを増やして返す'
+  'clear_shotsは同じ矢が配列に複数あればrevisionを増やして返す'
 );
 select is(
-  pg_temp.revs(public.clear_shots(jsonb_build_array(pg_temp.shot(15, 'D2', 1, 1), pg_temp.shot(17, 'D2', 4, 4)))),
-  array[2, 1]::bigint[],
-  'clear_shotsは重複の要素に既存のrevisionを、行の無いマスに1を返す'
+  pg_temp.revs(public.clear_shots(jsonb_build_array(pg_temp.shot(15, 'D2', 1, 1), pg_temp.shot(17, 'D2', 4, 44)))),
+  array[2, null]::bigint[],
+  'clear_shotsは重複の要素に既存のrevisionを、存在しない矢にrevisionの無い結果を返す'
 );
 select is(
-  (select revision || '/' || (disabled_at is not null)::text from public.shots where distance_id = pg_temp.id('D2') and end_number = 1 and arrow_number = 1),
+  (select revision || '/' || (disabled_at is not null)::text from public.shots where id = pg_temp.shot_id(1)),
   '3/true',
   '取り消した矢の行は、disabled_atと取り消しのrevisionを持つ'
 );
@@ -188,7 +194,7 @@ select is(
   '準備: 構成を変えるupdate_distanceが確定する'
 );
 select is(
-  pg_temp.revs(public.record_shots(jsonb_build_array(pg_temp.shot(21, 'D1', 4, 1, 9)))),
+  pg_temp.revs(public.record_shots(jsonb_build_array(pg_temp.shot(21, 'D1', 4, 31, 9)))),
   array[1]::bigint[],
   '準備: その距離の4エンド目へ矢を記録する'
 );

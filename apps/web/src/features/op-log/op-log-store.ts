@@ -16,7 +16,7 @@ import type {
 } from "./op-log-types";
 
 const DB_NAME = "aims-sync";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const STORE_NAME = "ops";
 const BASE_STORE_NAME = "bases";
 // version 2までのstore。利用者がいない段階のため、内容は移行せずに捨てる。
@@ -95,20 +95,21 @@ function openOpLogDB<Op extends OpBase, Base>(
     let failed = false;
     openDB<OpLogDB<Op, Base>>(DB_NAME, DB_VERSION, {
       upgrade(database, oldVersion) {
-        if (oldVersion < 3) {
-          dropLegacyStore(unwrap(database));
-          const store = database.createObjectStore(STORE_NAME, {
-            keyPath: "seq",
-            autoIncrement: true,
-          });
-          store.createIndex("by-event-id", "eventId", { unique: true });
-          store.createIndex("by-stream", "streamId");
+        if (oldVersion < 3) dropLegacyStore(unwrap(database));
+        // version 5で矢の操作とベースの形が変わった。旧い形の内容は互換を持たないため、移行せずにstoreごと作り直す。
+        if (oldVersion >= 3) {
+          database.deleteObjectStore(STORE_NAME);
+          if (oldVersion >= 4) database.deleteObjectStore(BASE_STORE_NAME);
         }
-        if (oldVersion < 4) {
-          database.createObjectStore(BASE_STORE_NAME, {
-            keyPath: ["userId", "streamId"],
-          });
-        }
+        const store = database.createObjectStore(STORE_NAME, {
+          keyPath: "seq",
+          autoIncrement: true,
+        });
+        store.createIndex("by-event-id", "eventId", { unique: true });
+        store.createIndex("by-stream", "streamId");
+        database.createObjectStore(BASE_STORE_NAME, {
+          keyPath: ["userId", "streamId"],
+        });
       },
       blocked() {
         failed = true;

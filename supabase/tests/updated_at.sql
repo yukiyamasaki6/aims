@@ -22,8 +22,8 @@ values ('d0000000-0000-0000-0000-000000000006', 'd0000000-0000-0000-0000-0000000
 insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
 values ('d0000000-0000-0000-0000-000000000007', 'd0000000-0000-0000-0000-000000000002', 'a', 70, 6, 6, 'd0000000-0000-0000-0000-000000000004');
 
-insert into public.shots (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
-values ('d0000000-0000-0000-0000-000000000007', 1, 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10);
+insert into public.shots (id, distance_id, end_number, shooter_id, score_str, score_int)
+values ('d0000000-0000-0000-0000-000000000008', 'd0000000-0000-0000-0000-000000000007', 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10);
 
 insert into public.preset_rounds (id, owner_id, name, format, bow_type)
 values ('d0000000-0000-0000-0000-000000000009', 'd0000000-0000-0000-0000-000000000001', 'updated_at preset', 'outdoor', 'recurve');
@@ -40,7 +40,7 @@ update public.round_users set updated_at = '2000-01-01', role = 'viewer'
 update public.distances set updated_at = '2000-01-01', distance = 60
   where id = 'd0000000-0000-0000-0000-000000000007';
 update public.shots set updated_at = '2000-01-01', score_str = '9', score_int = 9
-  where distance_id = 'd0000000-0000-0000-0000-000000000007' and end_number = 1 and arrow_number = 1;
+  where id = 'd0000000-0000-0000-0000-000000000008';
 update public.target_faces set updated_at = '2000-01-01', name = 'updated target'
   where id = 'd0000000-0000-0000-0000-000000000004';
 update public.target_face_spots set updated_at = '2000-01-01', center_x = 1
@@ -56,7 +56,7 @@ select ok((select updated_at > '2000-01-01' from public.users where id = 'd00000
 select ok((select updated_at > '2000-01-01' from public.rounds where id = 'd0000000-0000-0000-0000-000000000002'), 'roundsのupdated_atが更新される');
 select ok((select updated_at > '2000-01-01' from public.round_users where id = 'd0000000-0000-0000-0000-000000000003'), 'round_usersのupdated_atが更新される');
 select ok((select updated_at > '2000-01-01' from public.distances where id = 'd0000000-0000-0000-0000-000000000007'), 'distancesのupdated_atが更新される');
-select ok((select updated_at > '2000-01-01' from public.shots where distance_id = 'd0000000-0000-0000-0000-000000000007' and end_number = 1 and arrow_number = 1), 'shotsのupdated_atが更新される');
+select ok((select updated_at > '2000-01-01' from public.shots where id = 'd0000000-0000-0000-0000-000000000008'), 'shotsのupdated_atが更新される');
 select ok((select updated_at > '2000-01-01' from public.target_faces where id = 'd0000000-0000-0000-0000-000000000004'), 'target_facesのupdated_atが更新される');
 select ok((select updated_at > '2000-01-01' from public.target_face_spots where id = 'd0000000-0000-0000-0000-000000000005'), 'target_face_spotsのupdated_atが更新される');
 select ok((select updated_at > '2000-01-01' from public.target_face_rings where id = 'd0000000-0000-0000-0000-000000000006'), 'target_face_ringsのupdated_atが更新される');
@@ -112,8 +112,8 @@ select ok(
   'distance_eventsのupdated_atはUPDATEで更新される'
 );
 
-insert into public.shot_events (event_id, distance_id, type, author_id, revision, end_number, arrow_number, shooter_id, score_str, score_int)
-values ('d0000000-0000-0000-0000-00000000000e', 'd0000000-0000-0000-0000-000000000007', 'RECORDED', 'd0000000-0000-0000-0000-000000000001', 1, 1, 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10);
+insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int)
+values ('d0000000-0000-0000-0000-00000000000e', 'd0000000-0000-0000-0000-000000000007', 'd0000000-0000-0000-0000-000000000008', 'RECORDED', 'd0000000-0000-0000-0000-000000000001', 1, 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10);
 
 select ok(
   (select updated_at >= created_at from public.shot_events where event_id = 'd0000000-0000-0000-0000-00000000000e'),

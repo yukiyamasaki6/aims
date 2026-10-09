@@ -23,8 +23,8 @@ select tables_are(
 );
 
 select col_is_pk(
-  'public', 'shots', array['distance_id', 'end_number', 'arrow_number'],
-  'shots は (distance_id, end_number, arrow_number) を主キーとする'
+  'public', 'shots', array['id'],
+  'shots は矢のID（id）を主キーとする'
 );
 
 insert into auth.users (id)
@@ -42,9 +42,9 @@ insert into public.distances
 
 select lives_ok(
   $$insert into public.shots
-      (distance_id, end_number, arrow_number, shooter_id, score_str, score_int)
+      (distance_id, end_number, shooter_id, score_str, score_int)
     values
-      ('99999999-9999-9999-9999-999999999999', 1, 1,
+      ('99999999-9999-9999-9999-999999999999', 1,
         '77777777-7777-7777-7777-777777777777', 'bullseye', -1)$$,
   'score_strとscore_intの対応を固定せず、入力ツールの結果を保存できる'
 );

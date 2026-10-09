@@ -3,11 +3,8 @@ import type {
   StreamEntry,
   StreamRules,
 } from "@/features/op-log/op-log-types";
-import {
-  type SyncOperation,
-  upgradeLegacyOperation,
-} from "../_shared/sync-events";
-import { type RoundRevisions, shotRevisionKey } from "./fetch-round-detail";
+import type { SyncOperation } from "../_shared/sync-events";
+import type { RoundRevisions } from "./fetch-round-detail";
 import { type AppliedOperation, applyOperations } from "./round-op-apply";
 import {
   type RoundState,
@@ -23,7 +20,7 @@ export type RoundBaseRecord = {
   revisions: RoundRevisions;
 };
 
-// 入力中と見せるか。状態が入力中かだけで決め、未入力のマスの有無や記録日では決めない。
+// 入力中と見せるか。状態が入力中かだけで決め、矢数に達していないエンドの有無や記録日では決めない。
 export function isRoundInProgress(
   state: Pick<RoundState, "status" | "roundDisabled">,
 ): boolean {
@@ -79,15 +76,7 @@ function fetchedRevision(
       return revisions.distances[operation.distanceId] ?? 0;
     case "shot.recorded":
     case "shot.cleared":
-      return (
-        revisions.shots[
-          shotRevisionKey(
-            operation.distanceId,
-            operation.endNumber,
-            operation.arrowNumber,
-          )
-        ] ?? 0
-      );
+      return revisions.shots[operation.shotId] ?? 0;
   }
 }
 
@@ -112,8 +101,7 @@ function keeps(
   const applied = entries
     .filter((entry) => entry.ackedApplied !== false)
     .map((entry) => ({
-      // 端末の保存は読み替える前の形のため、重ねる前に読み替える。
-      operation: upgradeLegacyOperation(entry.operation),
+      operation: entry.operation,
       confirmedFields:
         entry.ackedRevision === undefined
           ? undefined

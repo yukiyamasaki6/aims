@@ -43,7 +43,6 @@ test("history-01: 認証済みでラウンドが1件以上あるとき、/rounds
       {
         distanceIndex: 0,
         endNumber: 1,
-        arrowNumber: 1,
         scoreStr: "7",
         scoreInt: 7,
       },
@@ -162,10 +161,9 @@ test.describe("入力中の領域", () => {
       name,
       roundDate,
       distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 3 }],
-      shots: options.shots?.map((shot, index) => ({
+      shots: options.shots?.map((shot) => ({
         distanceIndex: 0,
         endNumber: 1,
-        arrowNumber: index + 1,
         ...shot,
       })),
     });
@@ -447,15 +445,13 @@ test.describe("入力中の領域", () => {
     // Given / When
     const { name } = await openAfterOtherDevice(
       page,
-      async ({ supabase, userId, roundId }) => {
+      async ({ supabase, roundId }) => {
         const [distanceId] = await getDistanceIds(supabase, roundId);
         await recordShot(supabase, {
           distanceId,
           endNumber: 1,
-          arrowNumber: 2,
           scoreStr: "7",
           scoreInt: 7,
-          shooterId: userId,
         });
       },
     );

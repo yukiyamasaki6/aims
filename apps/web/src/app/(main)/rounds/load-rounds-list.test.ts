@@ -83,9 +83,9 @@ function shotOp(roundId: string, arrow: number, score: number): SyncOperation {
   return {
     type: "shot.recorded",
     eventId: `s-${roundId}-${arrow}`,
+    shotId: `shot-${roundId}-${arrow}`,
     distanceId: `d-${roundId}`,
     endNumber: 1,
-    arrowNumber: arrow,
     scoreStr: String(score),
     scoreInt: score,
   };

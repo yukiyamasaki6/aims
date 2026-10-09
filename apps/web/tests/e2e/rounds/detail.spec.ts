@@ -39,16 +39,10 @@ async function openRound(page: Page, overrides: Partial<RoundInput> = {}) {
   return roundId;
 }
 
-function shot(
-  distanceIndex: number,
-  endNumber: number,
-  arrowNumber: number,
-  score: string,
-) {
+function shot(distanceIndex: number, endNumber: number, score: string) {
   return {
     distanceIndex,
     endNumber,
-    arrowNumber,
     scoreStr: score,
     scoreInt: score === "X" ? 10 : Number(score),
   };
@@ -68,7 +62,7 @@ test("detail-01: 認証済みでラウンドが存在するとき、/rounds/[id]
 
   // Then
   await expect(page.getByTestId("round-config-summary")).toBeVisible();
-  await expect(page.getByTestId("shot-cell-1-1-1")).toBeVisible();
+  await expect(page.getByTestId("end-row-1-1")).toBeVisible();
 });
 
 test("detail-02: 記録済みの得点があるとき、/rounds/[id]を開くと、ラウンド結果に合計が、距離結果に距離ごとの小計が表示される", async ({
@@ -78,7 +72,7 @@ test("detail-02: 記録済みの得点があるとき、/rounds/[id]を開くと
   // When
   await openRound(page, {
     distances: TWO_DISTANCES,
-    shots: [shot(0, 1, 1, "X"), shot(0, 1, 2, "8"), shot(1, 1, 1, "5")],
+    shots: [shot(0, 1, "X"), shot(0, 1, "8"), shot(1, 1, "5")],
   });
 
   // Then
@@ -92,7 +86,7 @@ test("detail-06: 距離の的にXリングがあるとき、/rounds/[id]を開�
 }) => {
   // Given
   // When
-  await openRound(page, { shots: [shot(0, 1, 1, "X"), shot(0, 1, 2, "9")] });
+  await openRound(page, { shots: [shot(0, 1, "X"), shot(0, 1, "9")] });
 
   // Then
   await expect(page.getByTestId("distance-top-scores-1")).toHaveText(
@@ -114,7 +108,7 @@ test("detail-07: 距離の的にXリングがないとき、/rounds/[id]を開�
         targetFaceId: TRIPLE_SPOT_TARGET_FACE_ID,
       },
     ],
-    shots: [shot(0, 1, 1, "10"), shot(0, 1, 2, "9")],
+    shots: [shot(0, 1, "10"), shot(0, 1, "9")],
   });
 
   // Then
@@ -163,7 +157,7 @@ test("detail-10: 1画面に収まらないとき、スクロールすると、�
   expect(summaryBox?.y).toBeLessThan(66);
 });
 
-test("detail-11: 1画面に収まらず、距離が複数あるとき、別の距離のマスまでスクロールすると、現在の距離の距離結果が画面上部に固定表示される", async ({
+test("detail-11: 1画面に収まらず、距離が複数あるとき、別の距離のエンドまでスクロールすると、現在の距離の距離結果が画面上部に固定表示される", async ({
   page,
 }) => {
   // Given
@@ -208,18 +202,21 @@ test("detail-12: 「一覧へ戻る」リンクをクリックすると、/round
   await expect(page).toHaveURL(/\/rounds$/);
 });
 
-test("detail-13: 入力中で未入力のマスがあるとき、/rounds/[id]を開くと、未入力のマスの内、先頭のマスが選択され、テンキーが展開される", async ({
+test("detail-13: 入力中のラウンド詳細画面で矢数に達していないエンドがあるとき、/rounds/[id]を開くと、矢数に達していない最初のエンドに仮の矢が表示され、テンキーが展開される", async ({
   page,
 }) => {
   // Given
   // When
   await openRound(page, {
-    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 3 }],
-    shots: [shot(0, 1, 1, "X")],
+    distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 2 }],
+    shots: [shot(0, 1, "X"), shot(0, 1, "9"), shot(0, 2, "8")],
   });
 
   // Then
-  await expect(page.getByTestId("shot-cell-1-1-2")).toHaveClass(/ring-primary/);
+  await expect(page.getByTestId("provisional-shot")).toHaveCount(1);
+  await expect(
+    page.getByTestId("end-row-1-2").getByTestId("provisional-shot"),
+  ).toBeVisible();
   await expect(page.getByTestId("score-button-X")).toBeVisible();
 });
 
@@ -240,7 +237,7 @@ async function completeRound(roundId: string) {
   await updateRound(supabase, roundId, { status: "completed" });
 }
 
-test("detail-20: 完了のラウンドで未入力のマスがあるとき、/rounds/[id]を開くと、マスが選択されず、テンキーが展開されない", async ({
+test("detail-20: 完了のラウンド詳細画面で矢数に達していないエンドがあるとき、/rounds/[id]を開くと、仮の矢が表示されず、テンキーが展開されない", async ({
   page,
 }) => {
   // Given
@@ -250,7 +247,7 @@ test("detail-20: 完了のラウンドで未入力のマスがあるとき、/ro
     name: "詳細テスト",
     roundDate: "2026-08-24",
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 3 }],
-    shots: [shot(0, 1, 1, "X")],
+    shots: [shot(0, 1, "X")],
   });
   await completeRound(roundId);
 
@@ -259,9 +256,8 @@ test("detail-20: 完了のラウンドで未入力のマスがあるとき、/ro
   await waitForHydration(page);
 
   // Then
-  await expect(page.getByTestId("shot-cell-1-1-2")).not.toHaveClass(
-    /ring-primary/,
-  );
+  await expect(page.getByTestId("end-row-1-1")).toBeVisible();
+  await expect(page.getByTestId("provisional-shot")).toHaveCount(0);
   await expect(page.getByTestId("score-button-X")).toBeHidden();
 });
 
@@ -398,7 +394,7 @@ async function expectRoundBasesFetched(page: Page) {
   );
 }
 
-test("detail-22: 他端末で作成し記録した入力中のラウンドを、この端末で一度も開かずにオンラインで取得を済ませ、オフラインで再起動したとき、/rounds/[id]を開くと、距離・記録済みの点数・的・合計が表示され、先頭の未入力のマスが選択され、テンキーが展開される", async ({
+test("detail-22: 他端末で作成し記録した入力中のラウンドを、この端末で一度も開かずにオンラインで取得を済ませ、オフラインで再起動したとき、/rounds/[id]を開くと、距離・記録済みの点数・的・合計が表示され、矢数に達していない最初のエンドに仮の矢が表示され、テンキーが展開される", async ({
   profile,
 }) => {
   // Given: 他端末で作成し記録した入力中のラウンドがあり、この端末でオンラインのまま取得を済ませてから、オフラインで再起動する
@@ -408,7 +404,7 @@ test("detail-22: 他端末で作成し記録した入力中のラウンドを、
     name: "他端末で記録",
     roundDate: "2026-08-24",
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 3 }],
-    shots: [shot(0, 1, 1, "X"), shot(0, 1, 2, "8")],
+    shots: [shot(0, 1, "X"), shot(0, 1, "8")],
   });
   const first = await profile.open();
   await signUpAndSignIn(first.page, {
@@ -425,11 +421,15 @@ test("detail-22: 他端末で作成し記録した入力中のラウンドを、
   await page.goto(`/rounds/${roundId}`);
   await waitForHydration(page);
 
-  // Then: 距離・記録済みの点数・的・合計が表示され、先頭の未入力のマスが選択されてテンキーが展開される
+  // Then: 距離・記録済みの点数・的・合計が表示され、エンド1に仮の矢が表示されてテンキーが展開される
   await expect(page.getByTestId("round-summary")).toContainText("合計18");
   await expect(page.getByTestId("distance-summary-1")).toContainText("18m");
-  await expect(page.getByTestId("shot-cell-1-1-1")).toContainText("X");
-  await expect(page.getByTestId("shot-cell-1-1-2")).toContainText("8");
+  await expect(
+    page.getByTestId("end-row-1-1").locator("[data-shot-id]"),
+  ).toHaveText(["X", "8"]);
+  await expect(
+    page.getByTestId("end-row-1-1").getByTestId("provisional-shot"),
+  ).toBeVisible();
   await expect(
     page.getByTestId("distance-summary-1").locator('[role="img"]').first(),
   ).toBeVisible();
@@ -437,7 +437,9 @@ test("detail-22: 他端末で作成し記録した入力中のラウンドを、
 
   // And: 続けて点数を記録でき、表示される
   await page.getByTestId("score-button-9").click();
-  await expect(page.getByTestId("shot-cell-1-1-3")).toContainText("9");
+  await expect(
+    page.getByTestId("end-row-1-1").locator("[data-shot-id]"),
+  ).toHaveText(["X", "9", "8"]);
   await expect(page.getByTestId("round-summary")).toContainText("合計27");
 });
 
@@ -456,7 +458,7 @@ test("detail-23: navigator.onLineがtrueのまま通信できず、端末が保�
     name: "通信できない",
     roundDate: "2026-08-24",
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
-    shots: [shot(0, 1, 1, "9")],
+    shots: [shot(0, 1, "9")],
   });
   await page.goto("/rounds");
   await expectRoundBasesFetched(page);
