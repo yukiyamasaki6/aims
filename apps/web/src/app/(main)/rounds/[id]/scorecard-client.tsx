@@ -461,8 +461,6 @@ function EndRow({
   );
 }
 
-const NO_TARGET_FACES: TargetFaceOption[] = [];
-
 export function ScorecardClient({
   roundId,
   loaded,
@@ -471,14 +469,12 @@ export function ScorecardClient({
 }: {
   roundId: string;
   loaded: Pick<LoadedRound, "base" | "group" | "source" | "pendingServer">;
-  // nullは的の一覧の取得中。
-  targetFaces: TargetFaceOption[] | null;
+  targetFaces: TargetFaceOption[];
   // 端末のベースで開いたラウンドが、取り直したサーバーに無いとき(削除済みなど)に呼ぶ。
   onGone?: () => void;
 }) {
   // 画面の状態は、ベースへ操作の列を重ねた導出だけから得る。
-  const faces = targetFaces ?? NO_TARGET_FACES;
-  const sync = useRoundOpStack(roundId, loaded, faces, onGone);
+  const sync = useRoundOpStack(roundId, loaded, targetFaces, onGone);
   const { roundConfig, distances, shots, status: roundStatus } = sync.state;
   const inProgress = isRoundInProgress(sync.state);
   const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
@@ -626,12 +622,12 @@ export function ScorecardClient({
     }
   }, [pointer, keypadHeight, isLandscape, distances]);
 
-  const roundSummary = summarizeRound(distances, faces, shots);
+  const roundSummary = summarizeRound(distances, targetFaces, shots);
 
   const distanceIdsWithShots = new Set(shots.map((s) => s.distance_id));
 
   function targetFaceOf(targetFaceId: string) {
-    return faces.find((f) => f.id === targetFaceId);
+    return targetFaces.find((f) => f.id === targetFaceId);
   }
 
   function toggleDistanceEditing(distanceId: string) {

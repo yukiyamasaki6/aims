@@ -180,7 +180,7 @@ function setup(
     initialRoundConfig?: RoundConfig;
     distances?: Distance[];
     initialShots?: Shot[];
-    targetFaces?: TargetFaceOption[] | null;
+    targetFaces?: TargetFaceOption[];
     status?: "in_progress" | "completed";
   } = {},
 ) {
@@ -410,20 +410,6 @@ describe("ScorecardClient 初期表示・集計", () => {
 
   describe("的の表示", () => {
     const shotOnA = shotRow("s-a", distanceA.id, 1, "9", 9);
-
-    it("的の一覧の取得中(null)は、距離の行に読み込み中を表示し、距離・本数・エンド数と記録済みの点数は維持する", () => {
-      // Given: 的の一覧が取得中で、1本記録済みの距離
-      setup({ targetFaces: null, initialShots: [shotOnA] });
-
-      // When: 表示する（初期表示）
-      // Then: 的は読み込み中で、距離・本数・エンド数と記録済みの点数が残り
-      const row = screen.getByTestId("distance-config-toggle-1");
-      expect(row.querySelector("[aria-busy='true']")).not.toBeNull();
-      expect(row).toHaveTextContent("70m");
-      expect(row).toHaveTextContent("2本×2エンド");
-      expect(screen.getByTestId("shot-ball-1-1-1")).toHaveTextContent("9");
-      expect(document.body).not.toHaveTextContent("的データを取得できません");
-    });
 
     it("的の一覧が空で取得が完了している場合は、「的データを取得できません」を表示し、距離・本数・エンド数と記録済みの点数は維持する", () => {
       setup({ targetFaces: [], initialShots: [shotOnA] });

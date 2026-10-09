@@ -4,13 +4,16 @@ import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getLocalIdentity } from "@/features/auth/local-identity";
 import type { Database } from "@/types/supabase";
+import { saveReferenceSnapshot } from "../_shared/reference-snapshot";
 import { roundStreamId } from "../_shared/round-op-log";
 import { roundOpStore } from "../_shared/round-op-store";
 import { roundCreated } from "../_shared/round-op-test-helpers";
 import type { SyncOperation } from "../_shared/sync-events";
+import type { TargetFaceOption } from "./distance-config-row";
 import type {
   FetchedRoundDetail,
   fetchRoundDetail,
+  fetchTargetFaces,
 } from "./fetch-round-detail";
 import { loadRoundDetail } from "./load-round-detail";
 import type { RoundBaseRecord } from "./round-base";
@@ -32,7 +35,10 @@ vi.mock("@/features/auth/local-identity", () => ({
 }));
 
 // サーバーからの取得は別のテストで確かめるため、取得関数を境界としてモックする。
-const fetcher = vi.hoisted(() => ({ fetchRoundDetail: vi.fn() }));
+const fetcher = vi.hoisted(() => ({
+  fetchRoundDetail: vi.fn(),
+  fetchTargetFaces: vi.fn(),
+}));
 vi.mock("./fetch-round-detail", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./fetch-round-detail")>()),
   ...fetcher,
@@ -40,6 +46,7 @@ vi.mock("./fetch-round-detail", async (importOriginal) => ({
 const fetchDetail = vi.mocked<typeof fetchRoundDetail>(
   fetcher.fetchRoundDetail,
 );
+const fetchFaces = vi.mocked<typeof fetchTargetFaces>(fetcher.fetchTargetFaces);
 
 // 列への入り口は境界としてモックし、読み込みは同じユーザーのIndexedDBから読む(ハブの起動を要さない)。
 vi.mock("../_shared/round-op-log", async (importOriginal) => ({
@@ -79,6 +86,16 @@ vi.mock("../_shared/round-op-log", async (importOriginal) => ({
 }));
 
 const supabase = {} as SupabaseClient<Database>;
+
+const faceOne: TargetFaceOption = {
+  id: "face-1",
+  name: "122cm",
+  size: 122,
+  format: "outdoor",
+  bow_type: ["recurve"],
+  target_face_spots: [],
+};
+const faceTwo: TargetFaceOption = { ...faceOne, id: "face-2", size: 80 };
 
 const distanceA = {
   id: "d-a",
@@ -147,8 +164,15 @@ beforeEach(async () => {
   vi.clearAllMocks();
   await roundOpStore.close();
   globalThis.indexedDB = new IDBFactory();
+  window.localStorage.clear();
   fetchDetail.mockResolvedValue({ status: "ok", data: server });
+  fetchFaces.mockResolvedValue({ status: "ok", data: [faceOne, faceTwo] });
 });
+
+// 最後に取得に成功した的の一覧を、端末に保存しておく。
+function saveTargetFaces(faces: TargetFaceOption[] = [faceTwo]) {
+  saveReferenceSnapshot("target-faces", "user-1", faces, 1);
+}
 
 function loaded(result: Awaited<ReturnType<typeof loadRoundDetail>>) {
   if (result.status !== "ok" || result.data.deleted) throw new Error("not ok");
@@ -290,7 +314,48 @@ describe("loadRoundDetail", () => {
         "e-round-created",
         "e2",
       ]);
-      expect(data.targetFaces).toEqual([]);
+    });
+
+    it("的の一覧を取得し、その一覧で開く", async () => {
+      // Given: 作成が確定していない
+      await save(roundCreated());
+
+      // When
+      const data = loaded(await loadRoundDetail(supabase, "round-1"));
+
+      // Then
+      expect(fetchFaces).toHaveBeenCalledWith(supabase);
+      expect(data.targetFaces).toEqual([faceOne, faceTwo]);
+    });
+
+    it.each([
+      ["offline", { status: "offline" }],
+      ["error", { status: "error", message: "読み込めませんでした。" }],
+    ] as const)(
+      "的の一覧の取得が%sなら、内容を返さず、その結果を返す",
+      async (_name, failure) => {
+        // Given: 作成が確定しておらず、的の一覧がそろわない
+        await save(roundCreated());
+        fetchFaces.mockResolvedValue(failure);
+
+        // When
+        const result = await loadRoundDetail(supabase, "round-1");
+
+        // Then
+        expect(result).toEqual(failure);
+      },
+    );
+
+    it("距離が無いラウンドでも、的の一覧がそろわなければ内容を返さない", async () => {
+      // Given: 距離の無い作成が確定しておらず、的の一覧はオフラインで取得できない
+      await save(roundCreated({ distances: [] }));
+      fetchFaces.mockResolvedValue({ status: "offline" });
+
+      // When
+      const result = await loadRoundDetail(supabase, "round-1");
+
+      // Then
+      expect(result).toEqual({ status: "offline" });
     });
 
     it("作成の後にラウンドの削除が列にあれば、取得せずに削除済みを返す", async () => {
@@ -454,6 +519,10 @@ describe("loadRoundDetail", () => {
   });
 
   describe("端末のベースで開く場合", () => {
+    beforeEach(() => {
+      saveTargetFaces();
+    });
+
     it.each([
       ["offline", { status: "offline" }],
       ["error", { status: "error", message: "読み込めませんでした。" }],
@@ -468,10 +537,11 @@ describe("loadRoundDetail", () => {
         // When
         const data = loaded(await loadRoundDetail(supabase, "round-1"));
 
-        // Then
+        // Then: 的は端末の保存分を使う
         expect(data).toMatchObject({
           source: "local",
           base: roundTablesFromServer(server),
+          targetFaces: [faceTwo],
           pendingCreationEventId: null,
         });
         expect(data.pendingServer).toBeUndefined();
@@ -536,8 +606,9 @@ describe("loadRoundDetail", () => {
         // When
         const data = loaded(await loadRoundDetail(supabase, "round-1"));
 
-        // Then: 端末のベースで開き、取得が済むと端末の組へ反映した結果になる
+        // Then: 端末のベースと的の保存分で開き、取得が済むと端末の組へ反映した結果になる
         expect(data.source).toBe("local");
+        expect(data.targetFaces).toEqual([faceTwo]);
         finish({ status: "ok", data: server });
         await expect(data.pendingServer).resolves.toMatchObject({
           status: "ok",
@@ -552,6 +623,67 @@ describe("loadRoundDetail", () => {
         const data = loaded(await loadRoundDetail(supabase, "round-1"));
 
         expect(data.source).toBe("server");
+      });
+    });
+
+    describe("的の一覧の保存分が無いとき", () => {
+      beforeEach(() => {
+        window.localStorage.clear();
+      });
+
+      it("サーバーの取得がokなら、取得の結果で開く", async () => {
+        // Given: 端末のベースはあるが、的の保存分が無い
+        await commitBase();
+        fetchDetail.mockResolvedValue({
+          status: "ok",
+          data: { ...server, targetFaces: [faceOne] },
+        });
+
+        // When
+        const data = loaded(await loadRoundDetail(supabase, "round-1"));
+
+        // Then
+        expect(data).toMatchObject({
+          source: "server",
+          targetFaces: [faceOne],
+        });
+      });
+
+      it.each([
+        ["offline", { status: "offline" }],
+        ["error", { status: "error", message: "読み込めませんでした。" }],
+      ] as const)(
+        "サーバーの取得が%sなら、端末のベースで開かず、そのまま返す",
+        async (_name, failure) => {
+          // Given: 端末のベースと未送信の操作はあるが、的の保存分が無い
+          await commitBase();
+          await save(shotRecorded("e1", "10"));
+          fetchDetail.mockResolvedValue(failure);
+
+          // When
+          const result = await loadRoundDetail(supabase, "round-1");
+
+          // Then
+          expect(result).toEqual(failure);
+        },
+      );
+
+      it("取得が待ちの上限を超えても、端末のベースで開かず、取得の完了を待つ", async () => {
+        // Given: 取得が上限(30ms)を超えて終わる
+        await commitBase();
+        fetchDetail.mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              setTimeout(() => resolve({ status: "ok", data: server }), 60);
+            }),
+        );
+
+        // When
+        const data = loaded(await loadRoundDetail(supabase, "round-1"));
+
+        // Then
+        expect(data.source).toBe("server");
+        expect(data.pendingServer).toBeUndefined();
       });
     });
   });

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "@/features/fetch-result/fetch-result";
-import { fetchTargetFaces } from "./fetch-round-detail";
+import type { TargetFaceOption } from "./distance-config-row";
 import type { LoadedRoundDetail } from "./load-round-detail";
 import { loadRoundDetail } from "./load-round-detail";
 import { RoundDetailClient } from "./round-detail-client";
@@ -22,8 +22,6 @@ vi.mock("next/navigation", () => ({
 // 取得とスコアカードは別のテストで確かめるため、境界としてモック・スタブにする。
 vi.mock("./load-round-detail", () => ({ loadRoundDetail: vi.fn() }));
 const load = vi.mocked(loadRoundDetail);
-vi.mock("./fetch-round-detail", () => ({ fetchTargetFaces: vi.fn() }));
-const fetchFaces = vi.mocked(fetchTargetFaces);
 vi.mock("./use-creation-gone", () => ({ useCreationGone: vi.fn() }));
 const creationGone = vi.mocked(useCreationGone);
 vi.mock("./scorecard-client", () => ({
@@ -35,17 +33,13 @@ vi.mock("./scorecard-client", () => ({
   }: {
     roundId: string;
     loaded: { base: { round: { config: { name: string } } } };
-    targetFaces: { id: string }[] | null;
+    targetFaces: { id: string }[];
     onGone?: () => void;
   }) => (
     <div
       data-testid="scorecard"
       data-round-id={roundId}
-      data-faces={
-        targetFaces === null
-          ? "loading"
-          : targetFaces.map((f) => f.id).join(",")
-      }
+      data-faces={targetFaces.map((f) => f.id).join(",")}
     >
       {loaded.base.round.config.name}
       <button type="button" onClick={onGone}>
@@ -56,10 +50,16 @@ vi.mock("./scorecard-client", () => ({
 }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 
+// スコアカードのスタブはidだけを読むため、的はidだけを持たせる。
+function faces(...ids: string[]): TargetFaceOption[] {
+  return ids.map((id) => ({ id })) as TargetFaceOption[];
+}
+
 function detail(
   name: string,
   pendingCreationEventId: string | null = null,
   source: "server" | "local" = "server",
+  targetFaces: TargetFaceOption[] = [],
 ): LoadedRoundDetail {
   return {
     deleted: false,
@@ -75,7 +75,7 @@ function detail(
       shots: [],
     }),
     group: { base: undefined, entries: [] },
-    targetFaces: [],
+    targetFaces,
     pendingCreationEventId,
     source,
   };
@@ -126,8 +126,11 @@ describe("RoundDetailClient", () => {
 
   describe("取得できた場合", () => {
     it("pathnameのIDで取得し、取得結果をスコアカードへ渡す", async () => {
-      // Given
-      resolves({ status: "ok", data: detail("午前練習") });
+      // Given: 読み込みの結果が的の一覧を持つ
+      resolves({
+        status: "ok",
+        data: detail("午前練習", null, "server", faces("face-1", "face-2")),
+      });
 
       // When
       render(<RoundDetailClient />);
@@ -136,6 +139,7 @@ describe("RoundDetailClient", () => {
       const scorecard = await screen.findByTestId("scorecard");
       expect(scorecard).toHaveTextContent("午前練習");
       expect(scorecard).toHaveAttribute("data-round-id", ID);
+      expect(scorecard).toHaveAttribute("data-faces", "face-1,face-2");
       expect(load).toHaveBeenCalledTimes(1);
       expect(load.mock.calls[0][1]).toBe(ID);
     });
@@ -250,20 +254,17 @@ describe("RoundDetailClient", () => {
   });
 
   describe("端末のベースで開いたラウンド", () => {
-    it("的を背景で取得してスコアカードへ渡し、サーバーにラウンドが無いと分かったら一覧へ置き換える", async () => {
-      // Given
-      resolves({ status: "ok", data: detail("入力中", null, "local") });
-      fetchFaces.mockResolvedValue({
+    it("読み込みの結果の的をスコアカードへ渡し、サーバーにラウンドが無いと分かったら一覧へ置き換える", async () => {
+      // Given: 端末のベースと的の保存分で開いた
+      resolves({
         status: "ok",
-        data: [{ id: "face-1" }] as never,
+        data: detail("入力中", null, "local", faces("face-1")),
       });
       const user = userEvent.setup();
       render(<RoundDetailClient />);
-      await waitFor(() =>
-        expect(screen.getByTestId("scorecard")).toHaveAttribute(
-          "data-faces",
-          "face-1",
-        ),
+      expect(await screen.findByTestId("scorecard")).toHaveAttribute(
+        "data-faces",
+        "face-1",
       );
 
       // When: スコアカードが、ラウンドが無いと知らせる
@@ -277,57 +278,25 @@ describe("RoundDetailClient", () => {
   describe("作成が未確定のラウンド", () => {
     const EVENT_ID = "event-1";
 
-    it("取得済みの的を使わず、背景で取得した的をスコアカードへ渡す", async () => {
-      resolves({ status: "ok", data: detail("作成中", EVENT_ID) });
-      fetchFaces.mockResolvedValue({
+    it("読み込みの結果の的をスコアカードへ渡す", async () => {
+      // Given: 作成が未確定で、読み込みが的の一覧を得た
+      resolves({
         status: "ok",
-        data: [{ id: "face-1" }, { id: "face-2" }] as never,
+        data: detail("作成中", EVENT_ID, "server", faces("face-1", "face-2")),
       });
 
+      // When
       render(<RoundDetailClient />);
 
-      await waitFor(() =>
-        expect(screen.getByTestId("scorecard")).toHaveAttribute(
-          "data-faces",
-          "face-1,face-2",
-        ),
+      // Then
+      expect(await screen.findByTestId("scorecard")).toHaveAttribute(
+        "data-faces",
+        "face-1,face-2",
       );
-    });
-
-    it("的の背景取得が終わるまでは、的の一覧をnull(取得中)として渡す", async () => {
-      resolves({ status: "ok", data: detail("作成中", EVENT_ID) });
-      fetchFaces.mockReturnValue(new Promise(() => {}));
-
-      render(<RoundDetailClient />);
-
-      const scorecard = await screen.findByTestId("scorecard");
-      await waitFor(() => expect(fetchFaces).toHaveBeenCalled());
-      expect(scorecard).toHaveAttribute("data-faces", "loading");
-    });
-
-    it("的の背景取得が失敗しても、詳細は表示し、的は空として渡す", async () => {
-      resolves({ status: "ok", data: detail("作成中", EVENT_ID) });
-      fetchFaces.mockResolvedValue({ status: "offline" });
-
-      render(<RoundDetailClient />);
-
-      const scorecard = await screen.findByTestId("scorecard");
-      await waitFor(() => expect(fetchFaces).toHaveBeenCalled());
-      expect(scorecard).toHaveAttribute("data-faces", "");
-    });
-
-    it("作成が確定していなければ、的を背景で取得しない", async () => {
-      resolves({ status: "ok", data: detail("午前練習") });
-
-      render(<RoundDetailClient />);
-
-      await screen.findByTestId("scorecard");
-      expect(fetchFaces).not.toHaveBeenCalled();
     });
 
     it("作成の消失の監視へラウンドIDと未確定のeventIdを渡し、検知したら取得し直す", async () => {
       resolves({ status: "ok", data: detail("作成中", EVENT_ID) });
-      fetchFaces.mockResolvedValue({ status: "ok", data: [] });
       render(<RoundDetailClient />);
       await screen.findByTestId("scorecard");
 

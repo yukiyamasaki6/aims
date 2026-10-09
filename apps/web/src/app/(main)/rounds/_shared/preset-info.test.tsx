@@ -82,7 +82,7 @@ describe("DistanceInfo", () => {
 });
 
 describe("DistanceInfo(的の状態)", () => {
-  function renderWith(face: "loading" | "missing") {
+  function renderWith(face: "missing") {
     return render(
       <DistanceInfo
         distance={70}
@@ -94,14 +94,6 @@ describe("DistanceInfo(的の状態)", () => {
       />,
     );
   }
-
-  it("的が読み込み中でも、距離・本数・エンド数を表示し、読み込み中の見た目を出す", () => {
-    const { container } = renderWith("loading");
-
-    expect(screen.getByText("70m")).toBeInTheDocument();
-    expect(container).toHaveTextContent("6本×6エンド");
-    expect(container.querySelector("[aria-busy='true']")).not.toBeNull();
-  });
 
   it("的が見つからないときも、距離・本数・エンド数を表示し、「的データを取得できません」を出す", () => {
     const { container } = renderWith("missing");

@@ -55,7 +55,7 @@ export function SavePresetDialog({
   format: string;
   bowType: string;
   distances: Distance[];
-  targetFaces: TargetFaceOption[] | null;
+  targetFaces: TargetFaceOption[];
 }) {
   const [state, setState] = useState(CLOSED_PRESET_DIALOG);
 

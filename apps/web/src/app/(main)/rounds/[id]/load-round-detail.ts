@@ -5,13 +5,14 @@ import {
   type FetchResult,
 } from "@/features/fetch-result/fetch-result";
 import type { Database } from "@/types/supabase";
+import { loadReferenceSnapshot } from "../_shared/reference-snapshot";
 import {
   hasRoundDeletion,
   type RoundGroup,
   roundOpLog,
 } from "../_shared/round-op-log";
 import type { TargetFaceOption } from "./distance-config-row";
-import { fetchRoundDetail } from "./fetch-round-detail";
+import { fetchRoundDetail, fetchTargetFaces } from "./fetch-round-detail";
 import { roundStreamRules } from "./round-base";
 import {
   type RoundTables,
@@ -25,10 +26,11 @@ export type LoadedRound = {
   base: RoundTables;
   // 取り込む組。取得したときは、取得のベースに反映済みと確かめた操作を含まない。
   group: RoundGroup;
+  // そろった的の一覧全体(取得に成功した一覧、または最後に取得に成功した一覧の保存分)。
   targetFaces: TargetFaceOption[];
-  // 確定していない作成のeventId。あるとき、基準は端末の作成の操作で、的は含まない(呼び出し側が取得する)。
+  // 確定していない作成のeventId。あるとき、基準は端末の作成の操作である。
   pendingCreationEventId: string | null;
-  // 取得できなかった(または`FALLBACK_WAIT_MS`内に終わらなかった)ため、端末のベースで開いたときは"local"。的は含まない。
+  // 取得できなかった(または`FALLBACK_WAIT_MS`内に終わらなかった)ため、端末のベースで開いたときは"local"。
   source: "server" | "local";
   // `source`が"local"で、取得が`FALLBACK_WAIT_MS`を超えて続いているとき、その完了(取得できたときは反映済み)で解決する。
   pendingServer?: Promise<FetchResult<LoadedRoundDetail>>;
@@ -101,14 +103,17 @@ async function withinWait<T>(
 }
 
 // 端末の組で開くかを決め、端末のベースがあるときは開くための材料を返す。
+// 的の一覧の保存分が無いときは開かない(サーバーの取得を待つ)。
 function localRound(group: RoundGroup): LoadedRound | null {
   const stored = group.base?.base;
   if (!stored) return null;
   if (!roundStreamRules.keeps(stored, group.entries)) return null;
+  const targetFaces = loadReferenceSnapshot<TargetFaceOption[]>("target-faces");
+  if (targetFaces === null) return null;
   return {
     base: stored.tables,
     group,
-    targetFaces: [],
+    targetFaces,
     pendingCreationEventId: null,
     source: "local",
   };
@@ -116,6 +121,7 @@ function localRound(group: RoundGroup): LoadedRound | null {
 
 // 表示の材料を返す。サーバーの状態は取得して端末の組へ反映し、画面はその組から状態を求める。
 // 通信できないとき(オフライン、取得の失敗、`FALLBACK_WAIT_MS`を超えた取得)は、端末が保持するラウンドを、端末のベースで開く。
+// 的の一覧がそろわないとき(取得できず、保存分も無い)は、内容を返さず、取得の結果(`offline`か`error`)を返す。
 export async function loadRoundDetail(
   supabase: SupabaseClient<Database>,
   roundId: string,
@@ -126,18 +132,20 @@ export async function loadRoundDetail(
   if (hasRoundDeletion(first.entries.map((entry) => entry.operation))) {
     return DELETED;
   }
-  // 確定していない作成があれば、取得せずに作成の操作を基準にする。作成の後続は確定まで送られないため、サーバーの状態は作成の操作と一致する。
+  // 確定していない作成があれば、ラウンドは取得せずに作成の操作を基準にする。作成の後続は確定まで送られないため、サーバーの状態は作成の操作と一致する。
   for (const entry of first.entries) {
     const { operation } = entry;
     if (operation.type !== "round.created") continue;
     if (entry.ackedRevision !== undefined) continue;
+    const faces = await fetchTargetFaces(supabase);
+    if (faces.status !== "ok") return faces;
     return {
       status: "ok",
       data: {
         deleted: false,
         base: roundTablesFromCreated(operation),
         group: first,
-        targetFaces: [],
+        targetFaces: faces.data,
         pendingCreationEventId: operation.eventId,
         source: "server",
       },

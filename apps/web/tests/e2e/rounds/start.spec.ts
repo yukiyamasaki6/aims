@@ -12,6 +12,7 @@ import {
 import { createPreset } from "../helpers/presets";
 import {
   openNewRoundThenGoOffline,
+  saveTargetFacesOnDevice,
   startRoundOffline,
 } from "../helpers/reference-data";
 import { signInAsTestUser } from "../helpers/rounds";
@@ -153,10 +154,11 @@ test("start-13: 未認証のとき、開始ボタンをクリックすると、�
   await expect(page).toHaveURL(/\/rounds\/new$/);
 });
 
-test("start-17: オフラインのラウンド作成画面のとき、開始ボタンをクリックすると、/rounds/[id]へ遷移し、ラウンドが表示され、「同期保留中」と表示される", async ({
+test("start-17: 的の一覧を端末に保存済みで、オフラインのラウンド作成画面のとき、開始ボタンをクリックすると、/rounds/[id]へ遷移し、ラウンドが表示され、「同期保留中」と表示される", async ({
   page,
 }) => {
-  // Given: オフラインのラウンド作成画面
+  // Given: 的の一覧を端末に保存済みで、オフラインのラウンド作成画面
+  await saveTargetFacesOnDevice(page);
   await openNewRound(page);
   await waitForServiceWorkerControl(page);
   await goOffline(page.context());
@@ -171,10 +173,11 @@ test("start-17: オフラインのラウンド作成画面のとき、開始ボ�
   await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
 });
 
-test("start-18: ラウンド作成画面で認証を確認できない(通信できない)とき、開始ボタンをクリックすると、/rounds/[id]へ遷移し、ラウンドが表示され、「同期中…」と表示される", async ({
+test("start-18: 的の一覧を端末に保存済みで、ラウンド作成画面で認証を確認できない(通信できない)とき、開始ボタンをクリックすると、/rounds/[id]へ遷移し、ラウンドが表示され、「同期中…」と表示される", async ({
   page,
 }) => {
-  // Given: アクセストークンが失効し、更新の通信ができない
+  // Given: 的の一覧を端末に保存済みで、アクセストークンが失効し、更新の通信ができない
+  await saveTargetFacesOnDevice(page);
   await page.clock.install();
   await openNewRound(page);
   await expect(presetButton(page, "WA 1440")).toBeVisible();

@@ -9,13 +9,16 @@ import {
 } from "../helpers/auth";
 import { openOtherDevice, updateRound } from "../helpers/other-device";
 import {
+  blockTargetFacesOnDevice,
   CREATE_ROUND_RPC,
   openNewRoundThenGoOffline,
   saveTargetFacesOnDevice,
   startRoundOffline,
+  TARGET_FACES_REST,
 } from "../helpers/reference-data";
 import { createRound, TRIPLE_SPOT_TARGET_FACE_ID } from "../helpers/rounds";
 import {
+  comeBackOnline,
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
@@ -333,6 +336,49 @@ test("detail-17: 取得がエラーになるとき、/rounds/[id]を開くと、
   ).toBeVisible();
 });
 
+// オフラインの/rounds/newで開始し、的の一覧の保存分が無い、作成が未確定のラウンド詳細を開く。
+// 内容を出さない間は水和の属性が付かないため、startRoundOfflineを使わない。
+async function startRoundOfflineWithoutTargetFaces(page: Page) {
+  await blockTargetFacesOnDevice(page);
+  await openNewRoundThenGoOffline(page);
+  await page.getByTestId("round-start-button").click();
+  await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+}
+
+test("detail-27: オフラインで、ラウンドは端末にあるが的の一覧を端末に保存していないとき、/rounds/[id]を開くと、ラウンドの内容が表示されず、「ネットワークに接続されていません」が表示される", async ({
+  page,
+}) => {
+  // Given: オフラインで、ラウンドは端末にあるが的の一覧を端末に保存していない
+  // When: /rounds/[id]を開く
+  await startRoundOfflineWithoutTargetFaces(page);
+
+  // Then: ラウンドの内容が表示されず、「ネットワークに接続されていません」が表示される
+  await expect(
+    page.getByText("ネットワークに接続されていません"),
+  ).toBeVisible();
+  await expect(page.getByTestId("round-summary")).toHaveCount(0);
+});
+
+test("detail-28: オフラインで、ラウンドは端末にあるが的の一覧を端末に保存しておらず、/rounds/[id]に「ネットワークに接続されていません」が表示されているとき、オンラインへ復帰すると、ラウンドの内容が表示され、「ネットワークに接続されていません」が表示されなくなる", async ({
+  page,
+}) => {
+  // Given: オフラインで、的の一覧の保存分が無く、/rounds/[id]に「ネットワークに接続されていません」が表示されている
+  await startRoundOfflineWithoutTargetFaces(page);
+  await expect(
+    page.getByText("ネットワークに接続されていません"),
+  ).toBeVisible();
+  await page.context().unroute(TARGET_FACES_REST);
+
+  // When: オンラインへ復帰する
+  await comeBackOnline(page.context(), page);
+
+  // Then: ラウンドの内容が表示され、「ネットワークに接続されていません」が表示されなくなる
+  await expect(page.getByTestId("round-summary")).toBeVisible();
+  await expect(page.getByText("ネットワークに接続されていません")).toHaveCount(
+    0,
+  );
+});
+
 test("detail-18: オフラインで的を端末に保存済み、作成が未確定で距離があるラウンドでテンキーを展開しているとき、点数ボタンをタップすると、的に応じた点数ボタンが表示され、ラウンド結果の合計が更新される", async ({
   page,
 }) => {
@@ -449,10 +495,10 @@ const FALLBACK_WAIT_MS = 1_000;
 // 待ちの後の描画とブラウザ・CIの揺れの余裕。
 const RENDER_MARGIN_MS = 500;
 
-test("detail-23: navigator.onLineがtrueのまま通信できず、端末が保持する入力中のラウンドのとき、/rounds/[id]を開くと、通信の開始から1秒以内に、ラウンドが表示される", async ({
+test("detail-23: navigator.onLineがtrueのまま通信できず、端末が保持する入力中のラウンドで、的の一覧を端末に保存済みのとき、/rounds/[id]を開くと、通信の開始から1秒以内に、ラウンドが表示される", async ({
   page,
 }) => {
-  // Given: 端末が入力中のラウンドを保持し、その後、通信が応答しなくなる
+  // Given: 端末が入力中のラウンドと的の一覧を保持し(どちらも一括の取得で保存される)、その後、通信が応答しなくなる
   const roundId = await createRound({
     email: getSharedEmail(),
     password: SHARED_PASSWORD,
@@ -576,10 +622,10 @@ test.describe("セッションの確認", () => {
     await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
   });
 
-  test("detail-25: 端末に表示できる内容がある入力中のラウンドで、セッションの更新が終わらないとき、/rounds/[id]を開くと、端末の内容でラウンドが表示され、エラーメッセージが表示されない", async ({
+  test("detail-25: 端末に表示できる内容がある入力中のラウンドで、的の一覧を端末に保存済みで、セッションの更新が終わらないとき、/rounds/[id]を開くと、端末の内容でラウンドが表示され、エラーメッセージが表示されない", async ({
     page,
   }) => {
-    // Given: 端末が入力中のラウンドを保持し、セッションの期限が来ていて、ブラウザの更新の通信が終わらない
+    // Given: 端末が入力中のラウンドと的の一覧を保持し(どちらも一括の取得で保存される)、セッションの期限が来ていて、ブラウザの更新の通信が終わらない
     const roundId = await signInWithRound(page, false);
     await openList(page, roundId);
     await expectRoundBasesFetched(page);

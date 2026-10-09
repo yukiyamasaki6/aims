@@ -120,21 +120,6 @@ describe("SavePresetDialog", () => {
         "アウトドア / リカーブ70m122cm6本×6エンド50m的データを取得できません3本×2エンド",
       );
     });
-
-    it("的の一覧の取得中は、全距離の的が読み込み中の表示になる", async () => {
-      // Given: 的の一覧が取得中(null)
-      const { user } = setup({ targetFaces: null });
-
-      // When: 開く
-      await user.click(screen.getByTestId("save-as-preset-trigger"));
-
-      // Then: 読み込み中の表示で、的データなしの表示は出ない
-      const dialog = screen.getByRole("dialog");
-      expect(dialog.querySelectorAll("[aria-busy='true']")).toHaveLength(2);
-      expect(dialog).toHaveTextContent("70m");
-      expect(dialog).toHaveTextContent("6本×6エンド");
-      expect(dialog).not.toHaveTextContent("的データを取得できません");
-    });
   });
 
   describe("閉じて再度開く", () => {

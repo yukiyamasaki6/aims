@@ -7,10 +7,9 @@ export const CREATE_ROUND_RPC = "**/rest/v1/rpc/create_round";
 // 取得のselectが`/`を含みglobの`*`に合わないため、正規表現で指定する。
 export const TARGET_FACES_REST = /\/rest\/v1\/target_faces\?/;
 
-// 的の一覧を端末に保存されていない状態にし、取得もできなくする。
-// 的は、ラウンド詳細の取得と、サインインしている間の一括の取得で保存されるため、どの画面を開いても保存される。
-// 共有ユーザーの認証状態にも、準備のときに保存された的が含まれる。
-export async function blockTargetFacesOnDevice(page: Page) {
+// 文書を読み込むたびに、端末に保存された的の一覧を消す。
+// 共有ユーザーの認証状態には、準備のときに保存された的が含まれる。
+export async function forgetTargetFacesOnDevice(page: Page) {
   await page.addInitScript(() => {
     for (const key of Object.keys(localStorage)) {
       if (key.startsWith("aims:reference:target-faces:")) {
@@ -18,6 +17,12 @@ export async function blockTargetFacesOnDevice(page: Page) {
       }
     }
   });
+}
+
+// 的の一覧を端末に保存されていない状態にし、取得もできなくする。
+// 的は、ラウンド詳細の取得と、サインインしている間の一括の取得で保存されるため、どの画面を開いても保存される。
+export async function blockTargetFacesOnDevice(page: Page) {
+  await forgetTargetFacesOnDevice(page);
   // Service Workerが制御する文書の通信も止めるため、contextで止める。
   await page
     .context()
