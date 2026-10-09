@@ -1,4 +1,7 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  AuthRetryableFetchError,
+  type SupabaseClient,
+} from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@/types/supabase";
 import type { FetchedRoundDetail } from "./fetch-round-detail";
@@ -29,6 +32,18 @@ function supabaseOf(userId: string | null) {
     auth: {
       getSession: async () => ({
         data: { session: userId ? { user: { id: userId } } : null },
+      }),
+    },
+  } as unknown as SupabaseClient<Database>;
+}
+
+// セッションの読み取りが通信失敗で、認証を確認できない。
+function supabaseWithFetchFailure() {
+  return {
+    auth: {
+      getSession: async () => ({
+        data: { session: null },
+        error: new AuthRetryableFetchError("Failed to fetch", 0),
       }),
     },
   } as unknown as SupabaseClient<Database>;
@@ -139,6 +154,18 @@ describe("refreshRoundBases", () => {
     await refreshing;
 
     expect(done).toBe(true);
+  });
+
+  it("セッションの確認が通信失敗で不明なときは、取得せずに失敗を返す", async () => {
+    // Given
+    const supabase = supabaseWithFetchFailure();
+
+    // When
+    const result = await refreshRoundBases(supabase);
+
+    // Then
+    expect(result).toBe(false);
+    expect(deps.fetchRoundDetails).not.toHaveBeenCalled();
   });
 
   it.each([

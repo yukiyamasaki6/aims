@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
 import {
   FALLBACK_WAIT_MS,
   FETCH_TIMEOUT_MS,
@@ -42,16 +41,8 @@ export async function fetchPresets(
   let queriedUserId: string | undefined;
   const result = await fetchContent(
     supabase as SupabaseClient,
-    async () => {
-      const { data } = await supabase.auth.getSession();
-      const userId = data.session?.user.id;
-      if (!userId) {
-        return {
-          data: null,
-          error: { code: "PGRST301", message: AUTH_REQUIRED_MESSAGE },
-          status: 401,
-        };
-      }
+    async (session) => {
+      const userId = session.user.id;
       queriedUserId = userId;
       return supabase
         .from("preset_rounds")

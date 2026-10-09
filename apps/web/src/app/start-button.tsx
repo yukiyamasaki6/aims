@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
-import { classifySession } from "@/features/auth/session-state";
+import { readSession } from "@/features/auth/session-state";
 import { createClient } from "@/lib/supabase/client";
 
 // 判定中は/signupへの有効なリンクとして表示する。判定中に認証済みの利用者が
@@ -13,10 +13,9 @@ export function StartButton() {
   const [decided, setDecided] = useState(false);
 
   useEffect(() => {
-    createClient()
-      .auth.getSession()
-      .then((result) => {
-        if (classifySession(result).status !== "unauthenticated") {
+    readSession(createClient())
+      .then((state) => {
+        if (state.status !== "unauthenticated") {
           setHref("/rounds");
         }
       })

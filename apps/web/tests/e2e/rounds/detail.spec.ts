@@ -19,6 +19,7 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
+import { holdNextRefresh } from "../helpers/session-overlap";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -507,4 +508,124 @@ test("detail-23: navigator.onLineがtrueのまま通信できず、端末が保�
   expect(shownAt - firstRequestAt).toBeLessThan(
     FALLBACK_WAIT_MS + RENDER_MARGIN_MS,
   );
+});
+
+// セッションの更新はリフレッシュトークンを入れ替え、共有のユーザーの他のテストのセッションを無効にし得るため、使い捨てのユーザーで行う。
+test.describe("セッションの確認", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  // 使い捨てのユーザーでサインインし、そのユーザーのラウンドを作る。completedなら端末に開けるベースを持たない完了のラウンドにする。
+  async function signInWithRound(page: Page, completed: boolean) {
+    const credentials = {
+      email: `e2e-detail-session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@aims.test`,
+      password: "password-e2e-detail",
+    };
+    await signUpAndSignIn(page, credentials);
+    const roundId = await createRound({
+      ...credentials,
+      name: "セッションの確認",
+      roundDate: "2026-08-24",
+      distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+      shots: [shot(0, 1, "9")],
+    });
+    if (completed) {
+      const { supabase } = await openOtherDevice(
+        credentials.email,
+        credentials.password,
+      );
+      await updateRound(supabase, roundId, { status: "completed" });
+    }
+    return roundId;
+  }
+
+  // 一覧を開き、ラウンドのカードが表示されるまで待つ。カードから開く遷移はページを読み込み直さず、ブラウザが自分でセッションを更新する。
+  async function openList(page: Page, roundId: string) {
+    await page.goto("/rounds");
+    await waitForHydration(page);
+    await expect(page.locator(`a[href="/rounds/${roundId}"]`)).toBeVisible();
+  }
+
+  test("detail-24: 端末に開けるベースがない完了のラウンドで、セッションの更新が別の書き手の更新と重なるとき、/rounds/[id]を開くと、更新が終わるまで読み込み中と表示され、エラーメッセージが表示されず、スコアカードが表示される", async ({
+    page,
+  }) => {
+    // Given: 完了のラウンドがあり、セッションの期限が来ていて、ブラウザの更新の通信を止める
+    const roundId = await signInWithRound(page, true);
+    await openList(page, roundId);
+    const refresh = await holdNextRefresh(page);
+
+    // When: 一覧のカードから/rounds/[id]を開く
+    await page.locator(`a[href="/rounds/${roundId}"]`).click();
+
+    // Then: 更新が終わるまで読み込み中と表示され、エラーメッセージが表示されない
+    // 確かめる時間は、取得全体の上限(10秒)より短くする。
+    await refresh.requested;
+    await expect(
+      page.getByRole("status").filter({ hasText: "読み込み中" }),
+    ).toBeVisible();
+    await page.waitForTimeout(2_000);
+    await expect(
+      page.getByRole("status").filter({ hasText: "読み込み中" }),
+    ).toBeVisible();
+    await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
+    await expect(page.getByText("読み込めませんでした。")).toHaveCount(0);
+
+    // Then: 別の書き手の更新と重なった更新が終わると、スコアカードが表示される
+    refresh.release();
+    await refresh.passed;
+    await expect(page.getByTestId("round-summary")).toContainText("合計9");
+    await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
+  });
+
+  test("detail-25: 端末に表示できる内容がある入力中のラウンドで、セッションの更新が終わらないとき、/rounds/[id]を開くと、端末の内容でラウンドが表示され、エラーメッセージが表示されない", async ({
+    page,
+  }) => {
+    // Given: 端末が入力中のラウンドを保持し、セッションの期限が来ていて、ブラウザの更新の通信が終わらない
+    const roundId = await signInWithRound(page, false);
+    await openList(page, roundId);
+    await expectRoundBasesFetched(page);
+    const refresh = await holdNextRefresh(page);
+
+    // When: 一覧のカードから/rounds/[id]を開く
+    await page.locator(`a[href="/rounds/${roundId}"]`).click();
+
+    // Then: 端末の内容でラウンドが表示され、エラーメッセージが表示されない
+    await refresh.requested;
+    await expect(page.getByTestId("round-summary")).toContainText("合計9");
+    await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
+    await expect(page.getByText("読み込めませんでした。")).toHaveCount(0);
+  });
+
+  test("detail-26: 端末にセッションがあり、ラウンドの取得が一度だけ認証の拒否で返るとき、/rounds/[id]を開くと、「サインインが必要です。」が表示されず、スコアカードが表示される", async ({
+    page,
+  }) => {
+    // Given: 端末にセッションがあり、ラウンドの取得が一度だけ認証の拒否(401)で返る
+    const roundId = await signInWithRound(page, true);
+    let rejected = 0;
+    // Service Workerが制御する文書の通信も対象にするため、contextで扱う。
+    await page.context().route(
+      ROUND_DETAIL_REST,
+      async (route) => {
+        rejected++;
+        await route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({
+            code: "PGRST301",
+            details: null,
+            hint: null,
+            message: "JWT expired",
+          }),
+        });
+      },
+      { times: 1 },
+    );
+
+    // When: /rounds/[id]を開く
+    await page.goto(`/rounds/${roundId}`);
+
+    // Then: 「サインインが必要です。」が表示されず、スコアカードが表示される
+    await expect(page.getByTestId("round-summary")).toContainText("合計9");
+    expect(rejected).toBe(1);
+    await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
+  });
 });

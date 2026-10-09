@@ -1,5 +1,5 @@
 import { sessionFailureMessage } from "@/features/auth/errors";
-import { classifySession } from "@/features/auth/session-state";
+import { readSession } from "@/features/auth/session-state";
 import { createClient } from "@/lib/supabase/client";
 
 // deleted: 削除できた。
@@ -21,7 +21,7 @@ export async function deletePersonalPreset({
 }): Promise<DeletePresetResult> {
   try {
     const supabase = createClient();
-    const state = classifySession(await supabase.auth.getSession());
+    const state = await readSession(supabase);
 
     if (!isMounted()) return { status: "discarded" };
 

@@ -19,6 +19,7 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
+import { overlapNextRefresh } from "../helpers/session-overlap";
 import { mockTurnstile } from "../helpers/turnstile";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
@@ -228,6 +229,34 @@ test("start-16: ラウンド作成画面でプリセットを端末に保存し�
   ).toBeVisible();
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+});
+
+// セッションの更新はリフレッシュトークンを入れ替え、共有のユーザーの他のテストのセッションを無効にし得るため、使い捨てのユーザーで行う。
+test.describe("セッションの更新の重なり", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("start-23: ラウンド作成画面で、セッションの更新が別の書き手の更新と重なるとき、開始ボタンをクリックすると、/rounds/[id]へ遷移し、ラウンドが表示される", async ({
+    page,
+  }) => {
+    // Given: ラウンド作成画面を開いた後で、セッションの期限が来ていて、ブラウザの更新が別の書き手の更新と重なる
+    await signUpAndSignIn(page, {
+      email: `e2e-start-overlap-${Date.now()}-${randomUUID().slice(0, 8)}@aims.test`,
+      password: "password-e2e-start",
+    });
+    await openNewRound(page);
+    // 取得の完了を待ち、セッションの更新が開始ボタンの操作だけに重なる状態にする。
+    await expect(presetButton(page, "WA 1440")).toBeVisible();
+    const { overlapped } = await overlapNextRefresh(page);
+
+    // When: 開始ボタンをクリックする
+    await page.getByTestId("round-start-button").click();
+
+    // Then: /rounds/[id]へ遷移し、ラウンドが表示される
+    await overlapped;
+    await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+    await expect(page.getByTestId("round-summary")).toContainText("合計0");
+    await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
+  });
 });
 
 // 共有ユーザーの個人プリセットは全テストで共有されるため、名前はテストごとに一意にする。

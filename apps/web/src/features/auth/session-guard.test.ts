@@ -1,4 +1,7 @@
-import type { AuthError, SupabaseClient } from "@supabase/supabase-js";
+import {
+  AuthRetryableFetchError,
+  type SupabaseClient,
+} from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const replace = vi.fn();
@@ -46,7 +49,7 @@ const authenticated = async () => ({
 const unauthenticated = async () => ({ data: { session: null }, error: null });
 const retryableFailure = async () => ({
   data: { session: null },
-  error: { name: "AuthRetryableFetchError" } as AuthError,
+  error: new AuthRetryableFetchError("Failed to fetch", 0),
 });
 
 async function flushToMacrotask() {

@@ -1,4 +1,4 @@
-import type { AuthError } from "@supabase/supabase-js";
+import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StartButton } from "./start-button";
@@ -46,7 +46,7 @@ describe("StartButton", () => {
     // Given
     supabase.getSession.mockResolvedValue({
       data: { session: null },
-      error: { name: "AuthRetryableFetchError" } as AuthError,
+      error: new AuthRetryableFetchError("Failed to fetch", 0),
     });
 
     // When

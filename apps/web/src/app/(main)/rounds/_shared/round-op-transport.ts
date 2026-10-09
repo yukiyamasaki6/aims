@@ -1,5 +1,5 @@
 import type { PostgrestError } from "@supabase/supabase-js";
-import { classifySession } from "@/features/auth/session-state";
+import { readSession } from "@/features/auth/session-state";
 import type {
   OpFlight,
   OpResult,
@@ -289,7 +289,7 @@ export async function sendRoundBatch(
   expectedUserId: string | null,
 ): Promise<SendOutcome> {
   const supabase = createClient();
-  const state = classifySession(await supabase.auth.getSession());
+  const state = await readSession(supabase);
   if (state.status !== "authenticated") {
     return { ok: false, failure: authFailureResult(state) };
   }
