@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readSession } from "@/features/auth/session-state";
 import type { Database } from "@/types/supabase";
 import { roundOpHub } from "../_shared/round-op-hub";
 import { roundOpLog } from "../_shared/round-op-log";
@@ -45,14 +46,18 @@ export async function commitRoundDetails(
 
 // 入力中のラウンドと、端末が保持するラウンドを、まとめて取得して端末の組へ反映する。
 // ラウンドごとの反映の後に、取得が返らなかった保持のラウンドは削除の印にする。的は取得の中で端末へ保存される。
-// 全ての反映を待って成功(true)とする。通信できない、セッションが無い、端末の識別と違うユーザーのときは、何もせずfalseを返す。
+// 全ての反映を待って成功(true)とする。通信できない、未認証、端末の識別と違うユーザーのときは、何もせずfalseを返す。
 export async function refreshRoundBases(
   supabase: SupabaseClient<Database>,
 ): Promise<boolean> {
   try {
-    const { data } = await supabase.auth.getSession();
-    const userId = data.session?.user.id;
-    if (!userId || userId !== roundOpHub.getUserId()) return false;
+    const state = await readSession(supabase);
+    if (
+      state.status !== "authenticated" ||
+      state.session.user.id !== roundOpHub.getUserId()
+    ) {
+      return false;
+    }
 
     const retained = await roundOpLog.retainedRoundIds();
     const fetched = await fetchRoundDetails(supabase, retained);

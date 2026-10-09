@@ -34,6 +34,7 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
+import { overlapNextRefresh } from "../helpers/session-overlap";
 import { mockTurnstile } from "../helpers/turnstile";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
@@ -1569,6 +1570,45 @@ test("sync-38: 未認証で送れない点数がある状態で、ラウンド�
   // Then: そのラウンドを開き直さなくても、点数が保存される
   await expect(page).toHaveURL(/\/rounds$/);
   await expectSavedShots(supabase, distanceIds[0], ["1:10"]);
+});
+
+// セッションの更新はリフレッシュトークンを入れ替え、共有のユーザーの他のテストのセッションを無効にし得るため、使い捨てのユーザーで行う。
+test.describe("セッションの更新の重なり", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("sync-59: 未送信の記録があるラウンド詳細画面で、セッションの更新が別の書き手の更新と重なるとき、点数を記録すると、「同期保留中」で止まらず、「同期済み」と表示される", async ({
+    page,
+  }) => {
+    // Given: ラウンド詳細画面で、セッションの期限が来ていて、送信の前の確認の更新が別の書き手の更新と重なる
+    const credentials = {
+      email: `e2e-sync-overlap-${Date.now()}-${randomUUID().slice(0, 8)}@aims.test`,
+      password: "password-e2e-sync",
+    };
+    await signUpAndSignIn(page, credentials);
+    const ownRoundId = await createRound({
+      ...credentials,
+      name: "重なりテスト",
+      roundDate: "2026-08-24",
+      distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+    });
+    const device = await openOtherDevice(
+      credentials.email,
+      credentials.password,
+    );
+    const [distanceId] = await getDistanceIds(device.supabase, ownRoundId);
+    await page.goto(`/rounds/${ownRoundId}`);
+    await waitForHydration(page);
+    await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+    const { overlapped } = await overlapNextRefresh(page);
+
+    // When: 点数を記録する
+    await page.getByTestId("score-button-10").click();
+
+    // Then: 「同期保留中」で止まらず、「同期済み」と表示される
+    await overlapped;
+    await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+    await expectSavedShots(device.supabase, distanceId, ["1:10"]);
+  });
 });
 
 test("sync-39: 別の利用者の未送信の点数が残る端末のとき、サインインして操作すると、別の利用者の点数は送られず、表示されず、その利用者が再びサインインすると保存される", async ({

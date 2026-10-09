@@ -25,6 +25,7 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
+import { holdNextRefresh } from "../helpers/session-overlap";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -688,5 +689,35 @@ test.describe("入力中の領域", () => {
     ).toBeVisible();
     await expect(others.getByText("読み込めませんでした。")).toBeVisible();
     await expect(others.getByRole("button", { name: "再試行" })).toBeVisible();
+  });
+
+  test("history-25: ラウンド一覧で、セッションの更新が別の書き手の更新と重なるとき、/roundsを開くと、「サインインが必要です。」が表示されず、ラウンドが表示される", async ({
+    page,
+  }) => {
+    // Given: 完了のラウンドがあり、セッションの期限が来ていて、ブラウザの更新の通信を止める
+    // セッションの更新はリフレッシュトークンを入れ替えるため、共有のユーザーでなく使い捨てのユーザーで行う。
+    const credentials = await signInFreshUser(page);
+    const name = `重なり-${Date.now()}`;
+    await addRound(credentials, name, "2026-03-01", { completed: true });
+    await page.goto("/rounds/new");
+    await waitForHydration(page);
+    const refresh = await holdNextRefresh(page);
+
+    // When: /roundsを開く
+    // ページを読み込み直すと、更新が初期化の中で済み、取得の確認と重ならないため、リンクで開く。
+    await page.getByRole("link", { name: "一覧へ戻る" }).click();
+    // 一覧の取得が止めた更新を待っている間に、別の書き手の更新と重ねて通す。
+    await refresh.requested;
+    await expect(
+      page.getByRole("status").filter({ hasText: "読み込み中" }),
+    ).toBeVisible();
+    refresh.release();
+    await refresh.passed;
+
+    // Then: 「サインインが必要です。」が表示されず、ラウンドが表示される
+    await expect(
+      page.getByRole("link", { name: new RegExp(name) }),
+    ).toBeVisible();
+    await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
   });
 });

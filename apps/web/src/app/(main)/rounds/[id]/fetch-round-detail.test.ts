@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { AuthApiError, type SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
 import {
@@ -65,7 +65,11 @@ function makeSupabase(
     return query;
   }
   const client = {
-    auth: { getSession: async () => ({ data: { session } }) },
+    auth: {
+      getSession: async () => ({ data: { session }, error: null }),
+      refreshSession: async () => ({ data: { session }, error: null }),
+      signOut: async () => ({ error: null }),
+    },
     from: createQuery,
   } as unknown as SupabaseClient<Database>;
   return { client, queries };
@@ -370,12 +374,18 @@ describe("fetchRoundDetail", () => {
       });
     });
 
-    it("どちらかが401なら、他のエラーより優先してサインインが必要なエラーとする", async () => {
+    it("どちらかが401なら、他のエラーより優先して認証の拒否とし、更新が拒否されればサインインが必要なエラーとする", async () => {
+      // Given: 的の取得が認証の拒否で返り、更新を強制するとサーバーが拒否する
       const { client } = makeSupabase({
         rounds: failed(500, { message: "boom" }),
         target_faces: failed(401, { message: "jwt" }),
       });
+      client.auth.refreshSession = (async () => ({
+        data: { user: null, session: null },
+        error: new AuthApiError("revoked", 400, "refresh_token_not_found"),
+      })) as typeof client.auth.refreshSession;
 
+      // When/Then
       await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
         status: "error",
         message: AUTH_REQUIRED_MESSAGE,
@@ -419,8 +429,8 @@ describe("fetchRoundDetail", () => {
       expect(queries).toEqual([]);
     });
 
-    it("取得中にセッションのユーザーIDが失われた場合は、クエリを発行せずサインインが必要なエラーとする", async () => {
-      // Given: fetchContentの確認は通り、クエリ直前のセッション取得では無い
+    it("確かめたセッションのユーザーで絞り、クエリの前にセッションを読み直さない", async () => {
+      // Given: 1回目の確認だけがセッションを返し、2回目以降の読み取りでは無い
       let calls = 0;
       const { client, queries } = makeSupabase({
         rounds: ok(round),
@@ -430,15 +440,19 @@ describe("fetchRoundDetail", () => {
         calls += 1;
         return {
           data: { session: calls === 1 ? { user: { id: "user-1" } } : null },
+          error: null,
         };
       }) as typeof client.auth.getSession;
 
-      // When/Then
-      await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
-        status: "error",
-        message: AUTH_REQUIRED_MESSAGE,
-      });
-      expect(queries).toEqual([]);
+      // When
+      const result = await fetchRoundDetail(client, "round-1");
+
+      // Then: 1回の確認のセッションで取得でき、的はそのユーザーで絞られる
+      expect(result.status).toBe("ok");
+      expect(calls).toBe(1);
+      expect(
+        queries.find((q) => q.table === "target_faces")?.calls,
+      ).toContainEqual(["or", ["owner_id.is.null,owner_id.eq.user-1"]]);
     });
   });
 });

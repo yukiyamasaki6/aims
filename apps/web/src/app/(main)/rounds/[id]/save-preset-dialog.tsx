@@ -6,7 +6,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { sessionFailureMessage } from "@/features/auth/errors";
-import { classifySession } from "@/features/auth/session-state";
+import { readSession } from "@/features/auth/session-state";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { PresetInfo } from "../_shared/preset-info";
@@ -29,7 +29,7 @@ async function saveRoundAsPreset(
 ): Promise<{ error: string } | undefined> {
   const supabase = createClient();
 
-  const state = classifySession(await supabase.auth.getSession());
+  const state = await readSession(supabase);
 
   if (state.status !== "authenticated") {
     return { error: sessionFailureMessage(state) };

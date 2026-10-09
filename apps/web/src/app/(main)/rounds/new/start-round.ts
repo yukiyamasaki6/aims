@@ -1,8 +1,5 @@
 import { sessionFailureMessage } from "@/features/auth/errors";
-import {
-  classifySession,
-  type SessionState,
-} from "@/features/auth/session-state";
+import { readSession, type SessionState } from "@/features/auth/session-state";
 import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
 import { createClient } from "@/lib/supabase/client";
 import { comparePositionKey } from "../_shared/position-key";
@@ -70,11 +67,8 @@ async function checkSession(): Promise<SessionState | { status: "unknown" }> {
     const timeout = new Promise<null>((resolve) => {
       timer = setTimeout(() => resolve(null), FALLBACK_WAIT_MS);
     });
-    const result = await Promise.race([
-      createClient().auth.getSession(),
-      timeout,
-    ]);
-    return result ? classifySession(result) : { status: "unknown" };
+    const result = await Promise.race([readSession(createClient()), timeout]);
+    return result ?? { status: "unknown" };
   } catch {
     return { status: "unknown" };
   } finally {

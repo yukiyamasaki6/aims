@@ -62,7 +62,7 @@ function makeSupabase(
     return query;
   }
   const client = {
-    auth: { getSession: async () => ({ data: { session } }) },
+    auth: { getSession: async () => ({ data: { session }, error: null }) },
     from: createQuery,
   } as unknown as SupabaseClient<Database>;
   return { client, queries };
@@ -194,23 +194,28 @@ describe("fetchPresets", () => {
       expect(queries).toEqual([]);
     });
 
-    it("取得中にセッションのユーザーIDが失われた場合は、クエリを発行せずサインインが必要なエラーとする", async () => {
-      // Given: fetchContentの確認は通り、クエリ直前のセッション取得では無い
+    it("確かめたセッションのユーザーで絞り、クエリの前にセッションを読み直さない", async () => {
+      // Given: 1回目の確認だけがセッションを返し、2回目以降の読み取りでは無い
       let calls = 0;
       const { client, queries } = makeSupabase(ok([]));
       client.auth.getSession = (async () => {
         calls += 1;
         return {
           data: { session: calls === 1 ? { user: { id: "user-1" } } : null },
+          error: null,
         };
       }) as typeof client.auth.getSession;
 
-      // When/Then
-      await expect(fetchPresets(client)).resolves.toEqual({
-        status: "error",
-        message: AUTH_REQUIRED_MESSAGE,
-      });
-      expect(queries).toEqual([]);
+      // When
+      const result = await fetchPresets(client);
+
+      // Then: 1回の確認のセッションで取得でき、そのユーザーで絞られる
+      expect(result.status).toBe("ok");
+      expect(calls).toBe(1);
+      expect(queries[0]?.calls).toContainEqual([
+        "or",
+        ["owner_id.is.null,owner_id.eq.user-1"],
+      ]);
     });
   });
 

@@ -1,13 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
 import {
   FALLBACK_WAIT_MS,
   FETCH_TIMEOUT_MS,
   fetchContent,
 } from "@/features/fetch-result/fetch-content";
-import type {
-  FetchResult,
-  ResponseLike,
+import {
+  type FetchResult,
+  isAuthRejected,
+  type ResponseLike,
 } from "@/features/fetch-result/fetch-result";
 import type { Database } from "@/types/supabase";
 import { TARGET_FACE_SELECT } from "../_shared/reference-query-constants";
@@ -92,7 +92,7 @@ function failureOf(responses: Response[]): Response | undefined {
   const failed = responses.filter((r) => r.status === 0 || r.error);
   return (
     failed.find((r) => r.status === 0) ??
-    failed.find((r) => r.status === 401 || r.error?.code === "PGRST301") ??
+    failed.find(isAuthRejected) ??
     failed[0]
   );
 }
@@ -130,16 +130,8 @@ export async function fetchTargetFaces(
   let queriedUserId: string | undefined;
   const result = await fetchContent<TargetFaceRow[]>(
     supabase as SupabaseClient,
-    async () => {
-      const { data } = await supabase.auth.getSession();
-      const userId = data.session?.user.id;
-      if (!userId) {
-        return {
-          data: null,
-          error: { code: "PGRST301", message: AUTH_REQUIRED_MESSAGE },
-          status: 401,
-        };
-      }
+    async (session) => {
+      const userId = session.user.id;
       queriedUserId = userId;
       const faces = await selectTargetFaces(supabase, userId);
       if (faces.status === 0 || faces.error) {
@@ -230,16 +222,8 @@ export async function fetchRoundDetail(
   const startedAt = Date.now();
   const result = await fetchContent<Fetched>(
     supabase as SupabaseClient,
-    async () => {
-      const { data } = await supabase.auth.getSession();
-      const userId = data.session?.user.id;
-      if (!userId) {
-        return {
-          data: null,
-          error: { code: "PGRST301", message: AUTH_REQUIRED_MESSAGE },
-          status: 401,
-        };
-      }
+    async (session) => {
+      const userId = session.user.id;
       const [round, faces] = await Promise.all([
         supabase
           .from("rounds")
@@ -292,16 +276,8 @@ export async function fetchRoundDetails(
   if (ids.length > 0) filter.push(`id.in.(${ids.join(",")})`);
   const result = await fetchContent<Fetched>(
     supabase as SupabaseClient,
-    async () => {
-      const { data } = await supabase.auth.getSession();
-      const userId = data.session?.user.id;
-      if (!userId) {
-        return {
-          data: null,
-          error: { code: "PGRST301", message: AUTH_REQUIRED_MESSAGE },
-          status: 401,
-        };
-      }
+    async (session) => {
+      const userId = session.user.id;
       const [rounds, faces] = await Promise.all([
         supabase
           .from("rounds")

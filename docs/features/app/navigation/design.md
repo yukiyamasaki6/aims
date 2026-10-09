@@ -39,7 +39,7 @@ AIMSロゴ・リンクは`/`へ戻る。
 | 判断 | 理由 | 見直す条件 |
 | :--- | :--- | :--- |
 | 入口のガードを `proxy.ts`、表示中の喪失の検知を `(main)` の `SessionGuard` に分ける | `proxy.ts` はリクエスト時しか働かず、サインアウト・更新拒否・他タブ・SWの枠を検知できないため。 | ガードを1か所にできる方式が出たとき。 |
-| 喪失を `SIGNED_OUT` と、オンラインでの `getSession()` の `unauthenticated` に限る | `INITIAL_SESSION` のnullと `AuthRetryableFetchError` は通信失敗でも起き、入力中の画面を誤って遷移させるため使わない。オフラインで `/signin` へ移ると行き止まりになるため保留する。 | supabase-jsのイベントの意味が変わったとき。 |
+| 喪失を `SIGNED_OUT` と、オンラインでの `readSession` の未認証（保存先が空、またはサーバーの拒否が確定）に限る | `INITIAL_SESSION` のnullと `AuthRetryableFetchError` は通信失敗でも起き、入力中の画面を誤って遷移させるため使わない。オフラインで `/signin` へ移ると行き止まりになるため保留する。 | supabase-jsのイベントの意味が変わったとき。 |
 | `SessionGuard` を `(main)` のレイアウトに置く | 認証が要る画面の集合をルートグループで表し、除外リストを持たないため。`/offline` はSWが元のURLのまま返すため、パスでの除外は画面と食い違う。 | `(main)` の外に認証が要る画面を置くとき。 |
 | `window.location.replace` で一度だけ遷移する | 前の利用者の画面の状態とRouter Cacheを捨てるため。`router.push` は捨てられないため採らない。 | Router Cacheを明示的に消せるようになったとき。 |
 | `/` は認証状態によらず紹介画面を表示し、開始ボタンだけをクライアントで判定する。判定中は `/signup` へのリンクにする | `/` を静的に保ちオフラインでも開けるようにするため。判定中に認証済みが押しても `/signup` のリダイレクトで `/rounds` へ着く。 | 紹介の内容を拡充するとき。 |

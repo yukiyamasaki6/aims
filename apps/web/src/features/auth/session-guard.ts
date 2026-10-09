@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { signInHref } from "@/features/auth/return-to";
 import { isOffline } from "@/features/fetch-result/network";
-import { classifySession } from "./session-state";
+import { readSession } from "./session-state";
 
 let redirected = false;
 let explicitSignOut = false;
@@ -27,9 +27,8 @@ export function redirectToSignIn(): void {
   );
 }
 
-// セッション喪失は、SIGNED_OUTと、オンラインでのgetSession()の
-// unauthenticatedに限る。INITIAL_SESSIONのnullと通信失敗
-// （AuthRetryableFetchError）は通信失敗でも起きるため使わない。
+// セッション喪失は、SIGNED_OUTと、オンラインでのreadSessionの未認証(確定)に限る。
+// INITIAL_SESSIONのnullと通信失敗（AuthRetryableFetchError）は通信失敗でも起きるため使わない。
 // オフラインで/signinへ移ると行き止まりになるため、判定はオンラインまで保留する。
 export function watchSessionLoss(
   supabase: SupabaseClient,
@@ -39,9 +38,9 @@ export function watchSessionLoss(
 
   async function check() {
     if (isOffline()) return;
-    const result = await supabase.auth.getSession();
+    const state = await readSession(supabase);
     if (disposed) return;
-    if (classifySession(result).status === "unauthenticated") onLost();
+    if (state.status === "unauthenticated") onLost();
   }
 
   const {

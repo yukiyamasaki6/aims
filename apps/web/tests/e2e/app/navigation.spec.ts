@@ -6,6 +6,8 @@ import {
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
+import { comeBackOnline, goOffline } from "../helpers/service-worker";
+import { overlapNextRefresh } from "../helpers/session-overlap";
 
 const MOBILE_VIEWPORT = { width: 375, height: 667 };
 // supabase/config.tomlのjwt_expiry（3600秒）を越える時間。
@@ -377,6 +379,37 @@ test.describe("セッション喪失", () => {
     await expect.poll(() => refreshAttempts).toBeGreaterThan(0);
     await page.waitForTimeout(1_000);
     await expect(page).toHaveURL(/\/rounds$/);
+    await expect(
+      page.getByRole("heading", { name: "ラウンド一覧" }),
+    ).toBeVisible();
+  });
+
+  test("navigation-21: メイン画面を開いていて、セッションの更新が別の書き手の更新と重なるとき、オンラインへ復帰すると、/signinへ遷移せず、画面に留まる", async ({
+    page,
+    context,
+  }) => {
+    // Given: オフラインのメイン画面で、セッションの期限が来ていて、次のブラウザの更新が別の書き手の更新と重なる
+    await signInAsDisposableUser(page, "nav-overlap");
+    await goOffline(context);
+    const { overlapped } = await overlapNextRefresh(page);
+    // /signinへ移っても、保存先に有効なセッションがあると/roundsへ戻されるため、画面を読み込み直していないことを印で確かめる。
+    await page.evaluate(() => {
+      (window as unknown as { __stayed: boolean }).__stayed = true;
+    });
+
+    // When: オンラインへ復帰する
+    await comeBackOnline(context, page);
+
+    // Then: /signinへ遷移せず、画面に留まる
+    // 更新が実際に別の書き手の更新と重なったことを確かめてから、遷移しないことを確かめる。
+    await overlapped;
+    await page.waitForTimeout(1_000);
+    await expect(page).toHaveURL(/\/rounds$/);
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __stayed?: boolean }).__stayed,
+      ),
+    ).toBe(true);
     await expect(
       page.getByRole("heading", { name: "ラウンド一覧" }),
     ).toBeVisible();

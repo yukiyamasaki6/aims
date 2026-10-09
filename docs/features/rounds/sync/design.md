@@ -39,7 +39,7 @@
 - `_shared/round-op-conflicts.ts`: 操作の衝突の表と、並べる単位(lane)。矢の操作どうしは、同じ矢(`shotId`)か同じエンドなら衝突とする。
 - `round-tables.ts`: サーバーのテーブルの行の形(`RoundTables`。ラウンド、距離、矢の行は削除済みの印`disabled`を持つ)と、画面の状態(`RoundState`)を導く`selectRoundState`。
 - `round-op-apply.ts`: 基準のテーブルへ操作を重ねる`applyOperations(base, 操作, 的)`。操作ごとの処理は、サーバーの対応するRPCと同じ判定の順序にする。未確定の操作は、サーバーと同じ規則で項目ごとに判定し、確定済みの操作はサーバーが効かせた項目だけを重ねる。構成の変更は矢を取り除かない(サーバーと同じ)。生きている矢を増やす記録(新しい矢、復活)は、確定の有無によらずエンドに空きがあるときだけ重ね、確定済みで重ねられなかったときは取り直す。射順(`shot_number`)が同じエンドの他の生きている矢と重なる項目は重ねず、復活で重なるときは射順をnullにして重ねる。
-- `_shared/round-op-transport.ts`: 操作の種類ごとにRPCを呼び、操作ごとの判定結果(`revision`、効いた項目、効かなかった項目と理由)を返す。送信前に`classifySession`で認証を確認する。
+- `_shared/round-op-transport.ts`: 操作の種類ごとにRPCを呼び、操作ごとの判定結果(`revision`、効いた項目、効かなかった項目と理由)を返す。送信前に`readSession`で認証を確認する。
 - `op-sync-hub.ts`: タブに常駐する送信器の集まり(ハブ)。列ごとに送信器を持ち、Web Locksで選ばれたタブだけが送り、変化をBroadcastChannelで他のタブへ知らせる。
   ハブは、起動時の読み込みの完了を待つ`ready`と、その後に現在のユーザーの組を読む`read`・`readStored`(IndexedDB)と`readAll`(メモリの全ての列)、取得したベースを反映する`commit`を持つ。購読は持たない。
 - `_shared/round-op-store.ts`、`_shared/round-op-hub.ts`: ラウンドの列の保存(`roundOpStore`)とハブ(`roundOpHub`)。
@@ -51,7 +51,7 @@
 - `round-base.ts`: 端末に持つベースの記録(`RoundBaseRecord`。サーバーの状態と対象ごとの`revision`)と、組の規則。入力中と見せる`isRoundInProgress`、保持する`shouldKeepRoundBase`、反映済みの判定`reflects`(確定の`revision`と取得の`revision`の比較1つ。効かなかった操作は反映済み、削除の印には確定済みの操作がすべて反映済み)、ベースと操作を重ねた状態の保持の判定`keeps`。
 - `refresh-round-bases.ts`、`round-base-refresher.tsx`: 入力中のラウンドと、端末が保持するラウンドの、一括の取得。ラウンドごとに`commit`し、返らなかった保持のラウンドは削除の印で`commit`する。契機は、認証イベント`INITIAL_SESSION`・`SIGNED_IN`でセッションがあるとき、`online`、見える状態になったとき。同時に1回までで、実行中の契機は完了後に1回だけやり直す。すべての`commit`と的の保存を待って成功とし、成功の回数を`data-refreshed-count`に出す。
 - `load-round-detail.ts`、`fetch-round-detail.ts`: 画面を開くときと再取得の取得。列は`roundOpLog.load`で読み、削除があれば取得せずに削除済みを返す。サーバーの状態は取得して`commit`し、結果の組を返す。通信できないとき(オフライン、取得の失敗、取得が`FALLBACK_WAIT_MS`を超えた)は、組が保持の規則に当たれば端末のベースで開く。端末の保存(`aims-sync`のversion 5)は、新しい形のデータだけを前提にする。
-- `apps/web/src/features/auth/session-state.ts`の`classifySession`: `getSession()`の結果を認証済み・未認証・不明に分ける。
+- `apps/web/src/features/auth/session-state.ts`の`readSession`: 保存先を読み直して、認証済み・未認証（確定）・不明に分ける。
 
 流れは次のとおりである。
 

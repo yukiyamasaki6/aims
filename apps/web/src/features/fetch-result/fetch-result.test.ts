@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
-import { classifyResponse, FETCH_ERROR_MESSAGE } from "./fetch-result";
+import {
+  classifyResponse,
+  FETCH_ERROR_MESSAGE,
+  isAuthRejected,
+} from "./fetch-result";
 
 describe("classifyResponse", () => {
   describe("正常系", () => {
@@ -86,19 +89,22 @@ describe("classifyResponse", () => {
     it.each([
       ["401", { code: undefined, status: 401 }],
       ["PGRST301", { code: "PGRST301", status: 400 }],
-    ])("%sは、サインインが必要なerrorにする", (_name, { code, status }) => {
-      // Given
-      const res = { data: null, error: { code }, status };
+    ])(
+      "%sは、取得の側で確かめ終えた後のため、サインインを求めず固定文のerrorにする",
+      (_name, { code, status }) => {
+        // Given
+        const res = { data: null, error: { code }, status };
 
-      // When
-      const result = classifyResponse(res);
+        // When
+        const result = classifyResponse(res);
 
-      // Then
-      expect(result).toEqual({
-        status: "error",
-        message: AUTH_REQUIRED_MESSAGE,
-      });
-    });
+        // Then
+        expect(result).toEqual({
+          status: "error",
+          message: FETCH_ERROR_MESSAGE,
+        });
+      },
+    );
 
     it.each([403, 408, 429, 500, 503])(
       "status %dは、DB内部の文言を出さず固定文のerrorにする",
@@ -120,5 +126,28 @@ describe("classifyResponse", () => {
         });
       },
     );
+  });
+});
+
+describe("isAuthRejected", () => {
+  it("401とPGRST301を認証の拒否とし、それ以外のエラーと成功は含めない", () => {
+    // Given
+    const rejected = [
+      { data: null, error: { code: undefined }, status: 401 },
+      { data: null, error: { code: "PGRST301" }, status: 400 },
+    ];
+    const others = [
+      { data: null, error: { code: "42501" }, status: 403 },
+      { data: null, error: { message: "Failed to fetch" }, status: 0 },
+      { data: { id: "a" }, error: null, status: 200 },
+    ];
+
+    // When
+    const rejectedResults = rejected.map(isAuthRejected);
+    const otherResults = others.map(isAuthRejected);
+
+    // Then
+    expect(rejectedResults).toEqual([true, true]);
+    expect(otherResults).toEqual([false, false, false]);
   });
 });

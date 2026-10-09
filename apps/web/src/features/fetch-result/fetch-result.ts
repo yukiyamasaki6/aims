@@ -1,5 +1,3 @@
-import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
-
 export type FetchResult<T> =
   | { status: "ok"; data: T }
   | { status: "not-found" }
@@ -17,7 +15,13 @@ export type ResponseLike<T> = {
   status: number;
 };
 
+// 認証の拒否。セッションの問題かは応答だけでは決まらないため、取得の側で更新を強制して確かめる(fetch-content.ts)。
+export function isAuthRejected(res: ResponseLike<unknown>): boolean {
+  return res.status === 401 || res.error?.code === "PGRST301";
+}
+
 // 通信失敗はpostgrest-jsが例外にせずstatus 0で返す。error.messageの文字列には依存しない。
+// 認証の拒否は取得の側でセッションを確かめ終えた後のため、ほかのエラーと同じくerrorにする。
 // 回線の断はnavigator.onLineがfalseのときだけofflineとし、status 0は原因を断定せずerrorにする。
 // not-foundは単一対象の取得だけで、配列の0件はokとする。
 export function classifyResponse<T>(
@@ -26,9 +30,6 @@ export function classifyResponse<T>(
 ): FetchResult<T> {
   if (res.status === 0)
     return { status: "error", message: FETCH_ERROR_MESSAGE };
-  if (res.status === 401 || res.error?.code === "PGRST301") {
-    return { status: "error", message: AUTH_REQUIRED_MESSAGE };
-  }
   if (res.error?.code === "PGRST116") return { status: "not-found" };
   if (res.error) return { status: "error", message: FETCH_ERROR_MESSAGE };
   if (res.data === null && opts.nullIsNotFound) return { status: "not-found" };

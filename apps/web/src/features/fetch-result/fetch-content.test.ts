@@ -1,4 +1,9 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  AuthApiError,
+  AuthRetryableFetchError,
+  createClient,
+  type SupabaseClient,
+} from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
 import {
@@ -18,22 +23,40 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const session = { user: { id: "u1" } };
+const session = { user: { id: "u1" }, refresh_token: "rt-1" };
 const okResponse = { data: { id: "a" }, error: null, status: 200 };
 
-function makeSupabase(getSession: () => Promise<unknown>) {
+const unauthorizedResponse = {
+  data: null,
+  error: { code: "PGRST301", message: "JWT expired" },
+  status: 401,
+};
+
+function makeSupabase(
+  getSession: () => Promise<unknown>,
+  refreshSession: () => Promise<unknown> = async () => ({
+    data: { session },
+    error: null,
+  }),
+) {
   const getSessionMock = vi.fn(getSession);
+  const refreshSessionMock = vi.fn(refreshSession);
   return {
     client: {
-      auth: { getSession: getSessionMock },
+      auth: {
+        getSession: getSessionMock,
+        refreshSession: refreshSessionMock,
+        signOut: async () => ({ error: null }),
+      },
     } as unknown as SupabaseClient,
     getSession: getSessionMock,
+    refreshSession: refreshSessionMock,
   };
 }
 
 describe("fetchContent", () => {
   describe("正常系", () => {
-    it("authenticatedのとき、クエリ結果を判定して返す", async () => {
+    it("authenticatedのとき、確かめたセッションでクエリし、結果を判定して返す", async () => {
       // Given
       const { client } = makeSupabase(async () => ({ data: { session } }));
       const run = vi.fn(async () => okResponse);
@@ -43,7 +66,28 @@ describe("fetchContent", () => {
 
       // Then
       expect(result).toEqual({ status: "ok", data: { id: "a" } });
-      expect(run).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenCalledExactlyOnceWith(session);
+    });
+
+    it("クエリが認証の拒否で返ると、更新を強制して確かめ、新しいセッションで取り直した結果を返す", async () => {
+      // Given: 1回目のクエリだけが認証の拒否で返り、更新で新しいセッションになる
+      const refreshed = { user: { id: "u1" }, refresh_token: "rt-2" };
+      const { client, refreshSession } = makeSupabase(
+        async () => ({ data: { session } }),
+        async () => ({ data: { session: refreshed }, error: null }),
+      );
+      const run = vi
+        .fn()
+        .mockResolvedValueOnce(unauthorizedResponse)
+        .mockResolvedValueOnce(okResponse);
+
+      // When
+      const result = await fetchContent(client, run);
+
+      // Then
+      expect(result).toEqual({ status: "ok", data: { id: "a" } });
+      expect(refreshSession).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenLastCalledWith(refreshed);
     });
 
     it("nullIsNotFoundを判定へ渡す", async () => {
@@ -130,30 +174,11 @@ describe("fetchContent", () => {
       expect(run).not.toHaveBeenCalled();
     });
 
-    it("更新を拒否された(AuthApiError)ときも、unauthenticatedとして扱う", async () => {
-      // Given
-      const { client } = makeSupabase(async () => ({
-        data: { session: null },
-        error: { name: "AuthApiError", message: "refresh token not found" },
-      }));
-      const run = vi.fn(async () => okResponse);
-
-      // When
-      const result = await fetchContent(client, run);
-
-      // Then
-      expect(result).toEqual({
-        status: "error",
-        message: AUTH_REQUIRED_MESSAGE,
-      });
-      expect(run).not.toHaveBeenCalled();
-    });
-
     it("getSessionがAuthRetryableFetchErrorのとき、クエリを実行せずerrorにする", async () => {
       // Given
       const { client } = makeSupabase(async () => ({
         data: { session: null },
-        error: { name: "AuthRetryableFetchError", message: "Failed to fetch" },
+        error: new AuthRetryableFetchError("Failed to fetch", 0),
       }));
       const run = vi.fn(async () => okResponse);
 
@@ -166,6 +191,60 @@ describe("fetchContent", () => {
         message: "読み込めませんでした。",
       });
       expect(run).not.toHaveBeenCalled();
+    });
+
+    it("クエリが認証の拒否で返り、更新が拒否されると、サインインが必要なerrorにする", async () => {
+      // Given
+      const { client } = makeSupabase(
+        async () => ({ data: { session } }),
+        async () => ({
+          data: { session: null },
+          error: new AuthApiError("revoked", 400, "refresh_token_not_found"),
+        }),
+      );
+      const run = vi.fn(async () => unauthorizedResponse);
+
+      // When
+      const result = await fetchContent(client, run);
+
+      // Then: 取り直さず、サインインを求める
+      expect(result).toEqual({
+        status: "error",
+        message: AUTH_REQUIRED_MESSAGE,
+      });
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+
+    it("クエリが認証の拒否で返り、更新の通信が失敗すると、errorにする", async () => {
+      // Given
+      const { client } = makeSupabase(
+        async () => ({ data: { session } }),
+        async () => ({
+          data: { session: null },
+          error: new AuthRetryableFetchError("Failed to fetch", 0),
+        }),
+      );
+      const run = vi.fn(async () => unauthorizedResponse);
+
+      // When
+      const result = await fetchContent(client, run);
+
+      // Then
+      expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+
+    it("更新で確かめた後の取り直しも認証の拒否で返ると、サインインを求めずerrorにする", async () => {
+      // Given
+      const { client } = makeSupabase(async () => ({ data: { session } }));
+      const run = vi.fn(async () => unauthorizedResponse);
+
+      // When
+      const result = await fetchContent(client, run);
+
+      // Then: 取り直しは1回だけで、ほかのエラーと同じ文面になる
+      expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+      expect(run).toHaveBeenCalledTimes(2);
     });
 
     it("getSessionが例外を投げると、errorにする", async () => {

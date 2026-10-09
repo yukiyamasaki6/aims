@@ -1,12 +1,9 @@
 import {
-  AuthApiError,
-  type AuthError,
   AuthRetryableFetchError,
   type PostgrestError,
 } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
-import { classifySession } from "@/features/auth/session-state";
 import {
   authFailureResult,
   classifyFailure,
@@ -14,14 +11,6 @@ import {
   rpcFailureResult,
   toSafeResult,
 } from "./sync-result";
-
-function unresolvedAuthState(error: AuthError | null) {
-  const state = classifySession({ data: { session: null }, error });
-  if (state.status === "authenticated") {
-    throw new Error("セッションなしで認証済みになった");
-  }
-  return state;
-}
 
 const NETWORK_FAILURE = {
   error: "通信エラー",
@@ -174,9 +163,9 @@ describe("decideSyncResult", () => {
 
 describe("authFailureResult", () => {
   describe("未認証の場合", () => {
-    it("セッションがなければ、サインインを求める未認証の失敗を返す", () => {
-      // Given: セッションがなく、未認証と分類された状態
-      const state = unresolvedAuthState(null);
+    it("サインインを求める未認証の失敗を返す", () => {
+      // Given: 未認証と判定された状態
+      const state = { status: "unauthenticated" } as const;
 
       // When: 失敗の結果に変換する
       const result = authFailureResult(state);
@@ -187,30 +176,15 @@ describe("authFailureResult", () => {
         cause: { type: "unauthenticated" },
       });
     });
-
-    it("更新の拒否による未認証も、同じ失敗にする", () => {
-      // Given: 更新が拒否され、未認証と分類された状態
-      const state = unresolvedAuthState(
-        new AuthApiError("denied", 401, "refresh_token_not_found"),
-      );
-
-      // When: 失敗の結果に変換する
-      const result = authFailureResult(state);
-
-      // Then: サインインを求める未認証の失敗になる
-      expect(result).toEqual({
-        error: AUTH_REQUIRED_MESSAGE,
-        cause: { type: "unauthenticated" },
-      });
-    });
   });
 
   describe("不明（通信失敗）の場合", () => {
     it("通信エラーの文言と、認証の不明の種類を返し、上限なく再試行する", () => {
       // Given: 更新が通信失敗になり、不明と分類された状態
-      const state = unresolvedAuthState(
-        new AuthRetryableFetchError("Failed to fetch", 0),
-      );
+      const state = {
+        status: "unknown",
+        error: new AuthRetryableFetchError("Failed to fetch", 0),
+      } as const;
 
       // When: 失敗の結果に変換し、初回と多数回の試行で判定する
       const result = authFailureResult(state);
