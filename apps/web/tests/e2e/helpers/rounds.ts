@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 const DEFAULT_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // 10点的（アウトドア・122cm）
@@ -103,4 +104,10 @@ export async function createRound(input: {
   }
 
   return roundId;
+}
+
+// 同期の状態(文言、アイコンを含む枠)を表示しないこと。画面の内容が表示された後に呼ぶ。
+export async function expectNoSyncStatus(page: Page) {
+  await expect(page.getByTestId("sync-status")).toHaveCount(0);
+  await expect(page.getByText(/同期済み|同期中…|同期保留中/)).toHaveCount(0);
 }

@@ -8,7 +8,6 @@ const hub = vi.hoisted(() => ({
   setUser: vi.fn(),
   resumeHeld: vi.fn(),
   handleOnline: vi.fn(),
-  handleOffline: vi.fn(),
   getUserId: vi.fn<() => string | null>(),
 }));
 vi.mock("./(main)/rounds/_shared/round-op-hub", () => ({ roundOpHub: hub }));
@@ -56,14 +55,12 @@ describe("OpSyncProvider", () => {
     expect(auth.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
-  it("onlineとofflineのイベントをハブへ渡す", () => {
+  it("onlineのイベントをハブへ渡す", () => {
     render(<OpSyncProvider />);
 
     window.dispatchEvent(new Event("online"));
-    window.dispatchEvent(new Event("offline"));
 
     expect(hub.handleOnline).toHaveBeenCalledTimes(1);
-    expect(hub.handleOffline).toHaveBeenCalledTimes(1);
   });
 
   it.each(["SIGNED_IN", "INITIAL_SESSION", "TOKEN_REFRESHED"])(

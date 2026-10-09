@@ -17,15 +17,19 @@ import {
   disableRound,
   forwardAs,
   getDistanceIds,
+  getLiveDistances,
   getLiveShots,
+  getRoundRow,
   goOnline,
   openOtherDevice,
   recordShot,
+  savedRoundCount,
   updateDistance,
   updateRound,
 } from "../helpers/other-device";
 import {
   createRound,
+  expectNoSyncStatus,
   SIX_RING_TARGET_FACE_ID,
   signInAsTestUser,
 } from "../helpers/rounds";
@@ -79,110 +83,86 @@ async function saveRoundName(page: Page, name: string) {
   await page.getByTestId("round-config-save").click();
 }
 
-test("sync-01: 未送信の操作がないとき、ラウンド詳細画面を開くと、「同期済み」と表示される", async ({
+test("sync-60: ラウンド詳細画面のとき、点数を記録すると、同期の状態が表示されない", async ({
   page,
 }) => {
-  // Given: 未送信の操作がない
-  // When: ラウンド詳細画面を開く
-  await openRound(page);
-
-  // Then: 「同期済み」と表示する
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
-});
-
-test("sync-02: オンラインで送信が完了していないとき、ラウンド設定を保存すると、「同期中…」と表示される", async ({
-  page,
-}) => {
-  // Given: オンラインで、update_roundの応答を保留して送信を完了させない
+  // Given: ラウンド詳細画面を開き、record_shotsの応答を保留して送信中の状態を観測できるようにする
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const [distanceId] = await getDistanceIds(device.supabase, roundId);
+  let requested = false;
   let releaseRequest: () => void = () => {};
   const requestGate = new Promise<void>((resolve) => {
     releaseRequest = resolve;
   });
-  await page.route(UPDATE_ROUND_RPC, async (route) => {
+  await page.route(RECORD_SHOTS_RPC, async (route) => {
+    requested = true;
     await requestGate;
     await route.continue();
   });
   await openRound(page);
+  await expect(page.getByTestId("round-summary")).toBeVisible();
+  // 未送信の操作がない間も表示しない
+  await expectNoSyncStatus(page);
 
-  // When: ラウンド設定を保存する
-  await saveRoundName(page, "同期中テスト");
+  // When: 点数を記録する
+  await page.getByTestId("score-button-10").click();
 
-  // Then: 「同期中…」と表示する
-  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
-
+  // Then: 送信中も、送信が終わった後も、同期の状態が表示されない
+  await expect.poll(() => requested).toBe(true);
+  await expect(endBalls(page, 1, 1)).toHaveText(["10"]);
+  await expectNoSyncStatus(page);
   releaseRequest();
+  await expectSavedShots(device.supabase, distanceId, ["1:10"]);
+  await expectNoSyncStatus(page);
 });
 
-test("sync-03: オンラインで送信が成功するとき、ラウンド設定を保存すると、「同期済み」と表示される", async ({
+test("sync-03: オンラインのラウンド詳細画面で送信が成功するとき、ラウンド設定を保存すると、名前が保存され、再読み込みしても表示される", async ({
   page,
 }) => {
   // Given: オンラインで送信が成功する
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
   await openRound(page);
   const response = page.waitForResponse(UPDATE_ROUND_RPC);
 
   // When: ラウンド設定を保存する
-  await saveRoundName(page, "同期済みテスト");
+  await saveRoundName(page, "送信成功テスト");
 
-  // Then: 送信が成功し、「同期済み」と表示する
+  // Then: 名前が保存され、再読み込みしても表示される
   expect((await response).ok()).toBe(true);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+  await expect
+    .poll(async () => (await getRoundRow(device.supabase, roundId)).name, {
+      timeout: 15_000,
+    })
+    .toBe("送信成功テスト");
+  await page.reload();
+  await waitForHydration(page);
+  await expect(page.getByTestId("round-config-summary")).toContainText(
+    "送信成功テスト",
+  );
 });
 
-test("sync-04: オフラインのとき、ラウンド設定を保存すると、「同期保留中」と表示される", async ({
+test("sync-05: オフラインでラウンド設定を保存したラウンド詳細画面のとき、オンラインへ復帰すると、操作なしで、名前が保存される", async ({
   page,
 }) => {
-  // Given: オフライン
-  await openRound(page);
-  await page.context().setOffline(true);
-
-  // When: ラウンド設定を保存する
-  await saveRoundName(page, "オフラインテスト");
-
-  // Then: 「同期保留中」と表示する
-  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
-});
-
-test("sync-05: 「同期保留中」のとき、オンラインへ復帰すると、自動で再送され、「同期済み」と表示される", async ({
-  page,
-}) => {
-  // Given: オフラインで保存し、「同期保留中」になっている
+  // Given: オフラインでラウンド設定を保存した
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
   await openRound(page);
   await page.context().setOffline(true);
   await saveRoundName(page, "オンライン復帰テスト");
-  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
+  await expect(page.getByTestId("round-config-summary")).toContainText(
+    "オンライン復帰テスト",
+  );
 
   // When: オンラインへ復帰する（ページの再読み込み・再訪問は行わず、オンライン復帰イベントのみ）
   await page.context().setOffline(false);
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
 
-  // Then: 自動で再送し、「同期済み」と表示する
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
-});
-
-test("sync-06: オンラインで送信が失敗しリトライ回数が残っているとき、ラウンド設定を保存すると、「同期中…」と表示され、「同期保留中」と表示されない", async ({
-  page,
-}) => {
-  // Given: オンラインで、初回の送信だけが一時的に失敗する（リトライ待機が終わらないよう、タイマーを止める）
-  let attempt = 0;
-  await page.route(UPDATE_ROUND_RPC, async (route) => {
-    attempt++;
-    if (attempt === 1) {
-      await route.fulfill({ status: 500, body: "temporary error" });
-      return;
-    }
-    await route.continue();
-  });
-  await openRound(page);
-  await page.clock.install();
-  await page.clock.pauseAt(new Date(Date.now() + 1_000));
-  const failedResponse = page.waitForResponse(UPDATE_ROUND_RPC);
-
-  // When: ラウンド設定を保存する
-  await saveRoundName(page, "リトライ待機テスト");
-
-  // Then: 失敗してリトライ待機に入っても「同期中…」と表示する（「同期保留中」はオフラインそのものを意味する別の状態）
-  expect((await failedResponse).status()).toBe(500);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
+  // Then: 操作なしで、名前が保存される
+  await expect
+    .poll(async () => (await getRoundRow(device.supabase, roundId)).name, {
+      timeout: 15_000,
+    })
+    .toBe("オンライン復帰テスト");
 });
 
 test("sync-07: リトライ待機中のとき、バックオフの待機時間が経過すると、同じ操作が再送される", async ({
@@ -225,6 +205,8 @@ test("sync-12: オフラインのラウンド詳細画面で、点数を記録�
   page,
 }) => {
   // Given: オフラインで、10を記録し、その矢をクリアし、9を記録した
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const [distanceId] = await getDistanceIds(device.supabase, roundId);
   await openRound(page);
   await page.context().setOffline(true);
   await page.getByTestId("score-button-10").click();
@@ -232,24 +214,25 @@ test("sync-12: オフラインのラウンド詳細画面で、点数を記録�
   await page.getByTestId("score-button-clear").click();
   await page.getByTestId("score-button-9").click();
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
 
   // When: オンラインへ復帰する
   await page.context().setOffline(false);
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
 
   // Then: 最後の点数の矢だけが保存され、再読み込みしても最後の点数だけが表示される
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+  await expectSavedShots(device.supabase, distanceId, ["1:9"]);
   await page.reload();
   await waitForHydration(page);
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
 });
 
-test("sync-11: 点数を記録したが送信に失敗して未送信のとき、通信が回復した状態で再読み込みすると、未送信の点数が失われず再送され、「同期済み」と表示される、記録した点数が保持される", async ({
+test("sync-11: 点数を記録したが送信に失敗して未送信のとき、通信が回復した状態で再読み込みすると、未送信の点数が失われず保存される、記録した点数が保持される", async ({
   page,
 }) => {
   // Given: 点数を記録したが、record_shotsの送信が失敗して未送信のまま残っている
   // オフラインのままの再読み込みはService Workerの/offlineへ遷移するため、通信の失敗はルートの中断で再現する。
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const [distanceId] = await getDistanceIds(device.supabase, roundId);
   let attempts = 0;
   await page.route(RECORD_SHOTS_RPC, async (route) => {
     attempts++;
@@ -258,7 +241,6 @@ test("sync-11: 点数を記録したが送信に失敗して未送信のとき�
   await openRound(page);
   await page.getByTestId("score-button-10").click();
   await expect.poll(() => attempts).toBeGreaterThan(0);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
 
   // When: 通信が回復した状態で再読み込みする
   await page.unroute(RECORD_SHOTS_RPC);
@@ -266,9 +248,9 @@ test("sync-11: 点数を記録したが送信に失敗して未送信のとき�
   await page.reload();
   await waitForHydration(page);
 
-  // Then: 未送信の点数が復元されて再送され、「同期済み」と表示され、点数が保持される
+  // Then: 未送信の点数が失われず保存され、点数が保持される
   expect((await sent).ok()).toBe(true);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+  await expectSavedShots(device.supabase, distanceId, ["1:10"]);
   await expect(endBalls(page, 1, 1)).toHaveText(["10"]);
   await page.reload();
   await waitForHydration(page);
@@ -279,6 +261,8 @@ test("sync-13: オンラインのラウンド詳細画面で、点数の送信�
   page,
 }) => {
   // Given: 10の送信が失敗してリトライ待機中で、同じ矢を9へ直した
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  const [distanceId] = await getDistanceIds(device.supabase, roundId);
   let attempts = 0;
   await page.route(RECORD_SHOTS_RPC, async (route) => {
     attempts++;
@@ -287,7 +271,6 @@ test("sync-13: オンラインのラウンド詳細画面で、点数の送信�
   await openRound(page);
   await page.getByTestId("score-button-10").click();
   await expect.poll(() => attempts).toBeGreaterThan(0);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
   await page.getByTestId("shot-ball-1-1-1").click();
   await page.getByTestId("score-button-9").click();
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
@@ -298,18 +281,19 @@ test("sync-13: オンラインのラウンド詳細画面で、点数の送信�
   await waitForHydration(page);
 
   // Then: 直した点数が保持され、先の点数に戻らない
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+  await expectSavedShots(device.supabase, distanceId, ["1:9"]);
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
   await page.reload();
   await waitForHydration(page);
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
 });
 
-test("sync-09: オンラインで送信の失敗が5回以上続くとき、送信が成功するようになると、自動で再送され、「同期済み」と表示される、それまで「同期失敗」と表示されない", async ({
+test("sync-09: オンラインで送信の失敗が5回以上続くとき、送信が成功するようになると、操作なしで、名前が保存される、それまで失敗を知らせる表示は出ない", async ({
   page,
 }) => {
   // Given: オンラインで、update_roundの送信が5回失敗し続ける
   // リトライ待機（3・6・12・24・48秒）の実待機を避けるため、1秒刻みでページのタイマーを進める。
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
   let attempts = 0;
   await page.route(UPDATE_ROUND_RPC, async (route) => {
     attempts++;
@@ -322,21 +306,30 @@ test("sync-09: オンラインで送信の失敗が5回以上続くとき、送�
   await openRound(page);
   await page.clock.install();
   await saveRoundName(page, "失敗が続いた後の再送");
+  // 保存で閉じた設定のダイアログを、失敗を知らせる表示と数えないよう、閉じ終わるのを待つ。
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 
   // When: 5回の失敗の後、送信が成功するようになる
-  const statuses = new Set<string>();
+  const notices: number[] = [];
   for (let i = 0; i < 150 && attempts < 6; i++) {
     await page.clock.runFor(1_000);
-    statuses.add((await page.getByTestId("sync-status").textContent()) ?? "");
+    notices.push(
+      (await page.getByRole("dialog").count()) +
+        (await page.getByText("同期失敗").count()),
+    );
   }
 
-  // Then: 自動で再送され「同期済み」と表示され、それまで「同期失敗」と表示されない
+  // Then: 操作なしで名前が保存され、それまで失敗を知らせる表示は出ない
   expect(attempts).toBe(6);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
-  expect(statuses.has("同期失敗")).toBe(false);
+  await expect
+    .poll(async () => (await getRoundRow(device.supabase, roundId)).name, {
+      timeout: 15_000,
+    })
+    .toBe("失敗が続いた後の再送");
+  expect(notices.every((count) => count === 0)).toBe(true);
 });
 
-test("sync-14: サーバーが契約の不一致として拒否する点数があるラウンド詳細画面のとき、同じエンドへ点数を記録し直し、別のエンドにも点数を記録して、再読み込みすると、記録し直した点数と別のエンドの点数が保存され、「同期済み」と表示される", async ({
+test("sync-14: サーバーが契約の不一致として拒否する点数があるラウンド詳細画面のとき、同じエンドへ点数を記録し直し、別のエンドにも点数を記録して、再読み込みすると、記録し直した点数と別のエンドの点数が保存される", async ({
   page,
 }) => {
   // Given: エンド1の10が、サーバーに契約の不一致（PT422）として拒否される
@@ -369,7 +362,6 @@ test("sync-14: サーバーが契約の不一致として拒否する点数が�
   await openRound(page);
   await page.getByTestId("score-button-10").click();
   await expect.poll(() => rejectedStatus).toBe(422);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
   await expect(endBalls(page, 1, 1)).toHaveCount(0);
 
   // When: エンド1へ9を記録し直し、別のエンド(エンド2)にも8を記録して、再読み込みする
@@ -387,8 +379,9 @@ test("sync-14: サーバーが契約の不一致として拒否する点数が�
   await page.reload();
   await waitForHydration(page);
 
-  // Then: 記録し直した点数と別のエンドの点数が保存され、「同期済み」と表示される
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+  // Then: 記録し直した点数と別のエンドの点数が保存される
+  const [distanceId] = await getDistanceIds(device.supabase, roundId);
+  await expectSavedShots(device.supabase, distanceId, ["1:9", "2:8"]);
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
   await expect(endBalls(page, 1, 2)).toHaveText(["8"]);
 });
@@ -462,18 +455,12 @@ async function editDistance(
   await expect(page.getByTestId(`distance-config-save-${n}`)).toBeHidden();
 }
 
-async function expectSynced(page: Page) {
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み", {
-    timeout: 15_000,
-  });
-}
-
 async function reloadRound(page: Page) {
   await page.reload();
   await waitForHydration(page);
 }
 
-test("sync-15: 他端末の矢がある距離で、オフラインで的を変え、両方の的にある点数を記録したとき、オンラインへ復帰すると、全ての点数が表示され、「同期済み」と表示される", async ({
+test("sync-15: 他端末の矢がある距離で、オフラインで的を変え、両方の的にある点数を記録したとき、オンラインへ復帰すると、全ての点数が保存され、再読み込みしても表示される", async ({
   page,
 }) => {
   // Given: 他端末がエンド1へ9を記録した距離で、オフラインで的を6点的へ変え、エンド1へ8を記録した
@@ -495,8 +482,8 @@ test("sync-15: 他端末の矢がある距離で、オフラインで的を変�
   // When: オンラインへ復帰する
   await goOnline(page);
 
-  // Then: 全ての点数が表示され、「同期済み」と表示される
-  await expectSynced(page);
+  // Then: 全ての点数が保存され、再読み込みしても表示される
+  await expectSavedShots(supabase, distanceIds[0], ["1:8", "1:9"]);
   await reloadRound(page);
   await expect(endBalls(page, 1, 1)).toHaveText(["9", "8"]);
 });
@@ -524,7 +511,11 @@ test("sync-16: 他端末の的にしか無い点数が先に確定した距離�
   await goOnline(page);
 
   // Then: 的は元のままで、先の点数と有効な点数だけが表示される
-  await expectSynced(page);
+  // 8の記録は的の変更と同じ距離で衝突し、その後に送られるため、保存された時点で的の変更の処理も済んでいる。
+  await expectSavedShots(supabase, distanceIds[0], ["1:3", "1:8"]);
+  expect((await getLiveDistances(supabase, roundId))[0]?.target_face_id).toBe(
+    OUTDOOR_TARGET_FACE_ID,
+  );
   await reloadRound(page);
   await expect(endBalls(page, 1, 1)).toHaveText(["8", "3"]);
   await page.getByTestId("distance-config-toggle-1").click();
@@ -554,10 +545,11 @@ test("sync-17: 5エンド目の点数が確定済みの距離で、オフライ�
   });
 
   // When: オンラインへ復帰する
+  const sent = page.waitForResponse("**/rest/v1/rpc/update_distance");
   await goOnline(page);
 
   // Then: エンド数は5のままで、5エンド目の点数が残る
-  await expectSynced(page);
+  await sent;
   await reloadRound(page);
   await expect(page.getByTestId("distance-summary-1")).toContainText(
     "1本×5エンド",
@@ -588,10 +580,11 @@ test("sync-57: 矢数6のエンドに5本が確定済みの距離で、オフラ
   }
 
   // When: オンラインへ復帰する
+  const sent = page.waitForResponse("**/rest/v1/rpc/update_distance");
   await goOnline(page);
 
   // Then: 矢数は6のままで、5本の点数が残る
-  await expectSynced(page);
+  await sent;
   await reloadRound(page);
   await expect(page.getByTestId("distance-summary-1")).toContainText(
     "6本×1エンド",
@@ -632,7 +625,23 @@ test("sync-18: 2端末が同じ距離を別の的・エンド数・矢数へ変�
   await goOnline(page);
 
   // Then: 後に確定したページ側の的・エンド数・矢数になり、2つが混ざらない
-  await expectSynced(page);
+  await expect
+    .poll(
+      async () => {
+        const [distance] = await getLiveDistances(supabase, roundId);
+        return {
+          total_ends: distance?.total_ends,
+          arrows_per_end: distance?.arrows_per_end,
+          target_face_id: distance?.target_face_id,
+        };
+      },
+      { timeout: 15_000 },
+    )
+    .toEqual({
+      total_ends: 4,
+      arrows_per_end: 3,
+      target_face_id: INDOOR_40CM_TARGET_FACE_ID,
+    });
   await reloadRound(page);
   await expect(page.getByTestId("distance-summary-1")).toContainText(
     "3本×4エンド",
@@ -681,16 +690,18 @@ test("sync-19: 他端末が種別をフィールド以外へ変えた後で、�
   await updateRound(supabase, roundId, { format: "outdoor" });
 
   // When: オンラインへ復帰する
+  // 点数の記録は、距離の作成の後に送られる最後の操作である。
+  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
   await goOnline(page);
 
   // Then: その距離と点数は表示されず、他の距離は変わらない
-  await expectSynced(page);
+  await sent;
   await reloadRound(page);
   await expect(page.getByTestId("distance-summary-3")).toBeHidden();
   await expect(page.getByTestId("distance-summary-1")).toContainText("30m");
 });
 
-test("sync-20: 他端末がラウンドを削除したとき、削除の前と後に届いた矢と構成の変更が送られると、どれも表示されず、「同期済み」と表示される", async ({
+test("sync-20: 他端末がラウンドを削除したとき、削除の前と後に届いた矢と構成の変更が送られると、どれも表示されない", async ({
   page,
 }) => {
   // Given: 他端末が矢を記録した後でラウンドを削除し、ページ側はオフラインで矢の記録とラウンド名の変更をした
@@ -711,13 +722,12 @@ test("sync-20: 他端末がラウンドを削除したとき、削除の前と�
 
   // When: オンラインへ復帰し、ページ側の操作が送られる
   const sent = page.waitForResponse(UPDATE_ROUND_RPC);
+  const shotsSent = page.waitForResponse(RECORD_SHOTS_RPC);
   await goOnline(page);
   await sent;
+  await shotsSent;
 
-  // Then: どれも表示されず、「同期済み」と表示される
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み", {
-    timeout: 15_000,
-  });
+  // Then: どれも表示されない
   await page.reload();
   await expect(page.getByText("ラウンドが見つかりません。")).toBeVisible();
 });
@@ -743,7 +753,7 @@ test("sync-21: 2端末が同じエンドへ、互いに知らずに矢を1本ず
   await goOnline(page);
 
   // Then: 両方の矢が別の矢として残り、両端末で表示される
-  await expectSynced(page);
+  await expectSavedShots(supabase, distanceIds[0], ["1:7", "1:9"]);
   await reloadRound(page);
   await expect(endBalls(page, 1, 1)).toHaveText(["9", "7"]);
   const saved = await getLiveShots(supabase, distanceIds[0]);
@@ -777,12 +787,21 @@ test("sync-52: 2端末がオフラインで、同じ矢数6のエンドへ4本�
     await expect(endBalls(second, 1, 1)).toHaveCount(4);
 
     // When: この端末が先に、もう1つの端末が後にオンラインへ復帰する
+    const pageSent = page.waitForResponse(RECORD_SHOTS_RPC);
     await goOnline(page);
-    await expectSynced(page);
+    await pageSent;
+    await expectSavedShots(supabase, distanceIds[0], [
+      "1:10",
+      "1:10",
+      "1:10",
+      "1:10",
+    ]);
+    // 4本は同じ距離の1つの要求にまとまる。
+    const secondSent = second.waitForResponse(RECORD_SHOTS_RPC);
     await goOnline(second);
 
     // Then: 先に確定した6本(この端末の4本と、もう1つの端末の先の2本)が残り、知らせる表示は出ない
-    await expectSynced(second);
+    await secondSent;
     await expect(endBalls(second, 1, 1)).toHaveText([
       "10",
       "10",
@@ -819,7 +838,7 @@ test("sync-53: 同じエンドに、この端末と他端末がそれぞれ矢�
   });
   await openRound(page);
   await page.getByTestId("score-button-9").click();
-  await expectSynced(page);
+  await expectSavedShots(supabase, distanceIds[0], ["1:9"]);
   const otherShotId = await recordShot(supabase, {
     distanceId: distanceIds[0],
     endNumber: 1,
@@ -833,7 +852,6 @@ test("sync-53: 同じエンドに、この端末と他端末がそれぞれ矢�
 
   // Then: この端末の矢だけが消え、他端末の矢は残る
   await sent;
-  await expectSynced(page);
   const live = await getLiveShots(supabase, distanceIds[0]);
   expect(live.map((shot) => shot.id)).toEqual([otherShotId]);
   await reloadRound(page);
@@ -860,13 +878,18 @@ test("sync-54: 同期済みの矢を、この端末が知らないうちに他�
   // When: この端末でその矢を9へ直し、後に確定する
   await page.getByTestId("shot-ball-1-1-1").click();
   await page.getByTestId("score-button-9").click();
-  await expectSynced(page);
 
   // Then: その矢が直した点数で再び表示される
-  const live = await getLiveShots(supabase, distanceIds[0]);
-  expect(live.map((shot) => [shot.id, shot.score_str])).toEqual([
-    [shotId, "9"],
-  ]);
+  await expect
+    .poll(
+      async () =>
+        (await getLiveShots(supabase, distanceIds[0])).map((shot) => [
+          shot.id,
+          shot.score_str,
+        ]),
+      { timeout: 15_000 },
+    )
+    .toEqual([[shotId, "9"]]);
   await reloadRound(page);
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
 });
@@ -887,7 +910,7 @@ test("sync-55: 同期済みの矢をこの端末で直したとき、他端末�
   await openRound(page);
   await page.getByTestId("shot-ball-1-1-1").click();
   await page.getByTestId("score-button-9").click();
-  await expectSynced(page);
+  await expectSavedShots(supabase, distanceIds[0], ["1:9"]);
 
   // When: 他端末がその矢を消し、後に確定する
   await clearShot(supabase, { shotId, distanceId: distanceIds[0] });
@@ -905,10 +928,12 @@ test("sync-56: この端末で矢を消した後、他端末が矢を記録し�
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
   });
   await openRound(page);
+  // 消去は記録と同じ矢の操作で、記録の後に送られる。
+  const cleared = page.waitForResponse(CLEAR_SHOTS_RPC);
   await page.getByTestId("score-button-9").click();
   await page.getByTestId("shot-ball-1-1-1").click();
   await page.getByTestId("score-button-clear").click();
-  await expectSynced(page);
+  await cleared;
   await recordShot(supabase, {
     distanceId: distanceIds[0],
     endNumber: 1,
@@ -922,18 +947,17 @@ test("sync-56: この端末で矢を消した後、他端末が矢を記録し�
 
   // Then: エンドの矢は矢数を超えず、消した矢は戻らない
   await sent;
-  await expectSynced(page);
   expect(await savedShots(supabase, distanceIds[0])).toEqual(["1:7"]);
   await expect(endBalls(page, 1, 1)).toHaveText(["7"]);
   await reloadRound(page);
   await expect(endBalls(page, 1, 1)).toHaveText(["7"]);
 });
 
-test("sync-22: 認可で拒否される操作があるとき、操作が送られると、その操作だけが消え、「同期済み」と表示される", async ({
+test("sync-22: 認可で拒否される操作があるとき、操作が送られると、その操作だけが消え、他の点数は保存される", async ({
   page,
 }) => {
   // Given: 10を記録する操作だけが、ラウンドの参加者でないユーザーとして実サーバーで拒否される
-  await createSyncRound({
+  const { supabase, distanceIds } = await createSyncRound({
     distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
   });
   const outsider = {
@@ -960,9 +984,9 @@ test("sync-22: 認可で拒否される操作があるとき、操作が送ら�
   await page.getByTestId("score-button-10").click();
   await page.getByTestId("score-button-9").click();
 
-  // Then: 拒否された操作だけが消え、「同期済み」と表示される
-  await expectSynced(page);
-  expect(status).toBe(403);
+  // Then: 拒否された操作だけが消え、他の点数は保存される
+  await expectSavedShots(supabase, distanceIds[0], ["1:9"]);
+  await expect.poll(() => status).toBe(403);
   await reloadRound(page);
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
 });
@@ -1000,10 +1024,11 @@ test("sync-23: 先に確定した点数がある矢へ、古い的の前提で�
   });
 
   // When: オンラインへ復帰する
+  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
   await goOnline(page);
 
   // Then: 先の点数が残る
-  await expectSynced(page);
+  await sent;
   await reloadRound(page);
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
 });
@@ -1030,7 +1055,23 @@ test("sync-24: 2端末がラウンドの別の項目と、同じ項目を変え�
   await goOnline(page);
 
   // Then: 同じ項目は後の値になり、別の項目は両方の値が残る
-  await expectSynced(page);
+  await expect
+    .poll(
+      async () => {
+        const row = await getRoundRow(supabase, roundId);
+        return {
+          name: row.name,
+          bow_type: row.bow_type,
+          round_date: row.round_date,
+        };
+      },
+      { timeout: 15_000 },
+    )
+    .toEqual({
+      name: "ページ側の名前",
+      bow_type: "compound",
+      round_date: "2026-08-25",
+    });
   await reloadRound(page);
   await page.getByTestId("round-config-summary").click();
   await expect(page.getByTestId("round-config-name")).toHaveValue(
@@ -1076,7 +1117,6 @@ test("sync-25: 削除された距離への点数の送信の応答が失われ�
 
   // When: 再送が届く
   await retried;
-  await expectSynced(page);
 
   // Then: 点数は表示されない
   await reloadRound(page);
@@ -1110,8 +1150,12 @@ test("sync-27: Unmarkedの距離の追加が先に確定した後に、他端末
   await page.getByTestId("score-button-5").click();
 
   // When: オンラインへ復帰し、他端末の種別の変更が届く
+  // 点数の記録は、距離の作成の後に送られる。
+  const sent = page.waitForResponse(
+    (r) => r.url().includes("/rpc/record_shots") && r.ok(),
+  );
   await goOnline(page);
-  await expectSynced(page);
+  await sent;
   await updateRound(supabase, roundId, { format: "outdoor" });
   await reloadRound(page);
 
@@ -1148,7 +1192,14 @@ test("sync-28: 他端末の矢がある距離で、オフラインで的と距�
   await goOnline(page);
 
   // Then: 的はそのままで、距離(m)は変わる
-  await expectSynced(page);
+  await expect
+    .poll(
+      async () => (await getLiveDistances(supabase, roundId))[0]?.distance,
+      {
+        timeout: 15_000,
+      },
+    )
+    .toBe(40);
   await reloadRound(page);
   await expect(page.getByTestId("distance-summary-1")).toContainText("40m");
   await page.getByTestId("distance-config-toggle-1").click();
@@ -1191,7 +1242,11 @@ test("sync-29: 他端末がUnmarkedの距離を追加した後に、オフライ
   await goOnline(page);
 
   // Then: 種別はそのままで、名前は変わる
-  await expectSynced(page);
+  await expect
+    .poll(async () => (await getRoundRow(supabase, roundId)).name, {
+      timeout: 15_000,
+    })
+    .toBe("種別と同時の名前");
   await reloadRound(page);
   await page.getByTestId("round-config-summary").click();
   await expect(page.getByTestId("round-config-name")).toHaveValue(
@@ -1224,30 +1279,17 @@ test("sync-30: 他端末が距離(m)を空にした後に、オフラインでMa
   await updateDistance(supabase, distanceIds[0], { distance: null });
 
   // When: オンラインへ復帰する
+  const sent = page.waitForResponse("**/rest/v1/rpc/update_distance");
   await goOnline(page);
 
   // Then: Unmarkedのままで、距離(m)は空のままである
-  await expectSynced(page);
+  await sent;
   await reloadRound(page);
   await page.getByTestId("distance-config-toggle-1").click();
   await expect(page.getByTestId("distance-config-unmarked-1")).toHaveClass(
     /bg-primary/,
   );
   await expect(page.getByTestId("distance-config-distance-1")).toHaveValue("");
-});
-
-test("sync-31: サインインが必要で送れないラウンド詳細画面のとき、ラウンド設定を保存すると、「同期保留中」と表示される", async ({
-  page,
-}) => {
-  // Given: サインインが切れて、送信が認証で拒否される状態
-  await openRound(page);
-  await page.context().clearCookies();
-
-  // When: ラウンド設定を保存する
-  await saveRoundName(page, "サインイン切れテスト");
-
-  // Then: 「同期保留中」と表示される
-  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
 });
 
 test("sync-32: Unmarkedで距離(m)が空の距離のラウンド詳細画面で、Markedにして距離(m)を入力し、1回で保存すると、Markedと距離(m)が両方反映され、再読み込みしても残る", async ({
@@ -1273,7 +1315,15 @@ test("sync-32: Unmarkedで距離(m)が空の距離のラウンド詳細画面で
   await editDistance(page, 1, { marked: true, distance: "60" });
 
   // Then: Markedと距離(m)が両方反映され、再読み込みしても残る
-  await expectSynced(page);
+  await expect
+    .poll(
+      async () => {
+        const [distance] = await getLiveDistances(supabase, roundId);
+        return { is_marked: distance?.is_marked, distance: distance?.distance };
+      },
+      { timeout: 15_000 },
+    )
+    .toEqual({ is_marked: true, distance: 60 });
   await reloadRound(page);
   await expect(page.getByTestId("distance-summary-1")).toContainText("60m");
   await page.getByTestId("distance-config-toggle-1").click();
@@ -1314,7 +1364,7 @@ async function backToList(page: Page) {
 
 async function openFromList(page: Page, name: string) {
   await page.getByRole("link", { name: new RegExp(name) }).click();
-  await expect(page.getByTestId("sync-status")).toBeVisible();
+  await expect(page.getByTestId("round-summary")).toBeVisible();
 }
 
 async function createNamedRound(email: string, password: string, name: string) {
@@ -1364,7 +1414,8 @@ test("sync-33: ラウンド詳細画面で点数を記録した後、オフラ�
   await waitForServiceWorkerControl(page);
   await page.context().setOffline(true);
   await page.getByTestId("score-button-10").click();
-  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
+  // 点数は保存の完了後に表示されるため、一覧へ移る前に端末へ保存済みである。
+  await expect(endBalls(page, 1, 1)).toHaveText(["10"]);
   await backToList(page);
 
   // When: オンラインへ復帰する
@@ -1576,7 +1627,7 @@ test("sync-38: 未認証で送れない点数がある状態で、ラウンド�
 test.describe("セッションの更新の重なり", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test("sync-59: 未送信の記録があるラウンド詳細画面で、セッションの更新が別の書き手の更新と重なるとき、点数を記録すると、「同期保留中」で止まらず、「同期済み」と表示される", async ({
+  test("sync-59: 未送信の記録があるラウンド詳細画面で、セッションの更新が別の書き手の更新と重なるとき、点数を記録すると、記録した点数が保存される", async ({
     page,
   }) => {
     // Given: ラウンド詳細画面で、セッションの期限が来ていて、送信の前の確認の更新が別の書き手の更新と重なる
@@ -1598,15 +1649,14 @@ test.describe("セッションの更新の重なり", () => {
     const [distanceId] = await getDistanceIds(device.supabase, ownRoundId);
     await page.goto(`/rounds/${ownRoundId}`);
     await waitForHydration(page);
-    await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+    await expect(page.getByTestId("score-button-10")).toBeVisible();
     const { overlapped } = await overlapNextRefresh(page);
 
     // When: 点数を記録する
     await page.getByTestId("score-button-10").click();
 
-    // Then: 「同期保留中」で止まらず、「同期済み」と表示される
+    // Then: 記録した点数が保存される
     await overlapped;
-    await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
     await expectSavedShots(device.supabase, distanceId, ["1:10"]);
   });
 });
@@ -1706,7 +1756,6 @@ test("sync-40: 2つのタブで、同期済みの同じ矢の点数の変更と�
   await other.getByTestId("shot-ball-1-1-1").click();
   await other.getByTestId("score-button-clear").click();
   await expect(endBalls(page, 1, 1)).toHaveCount(0);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
 
   // When: オンラインへ復帰する
   await context.setOffline(false);
@@ -1714,9 +1763,8 @@ test("sync-40: 2つのタブで、同期済みの同じ矢の点数の変更と�
   await goOnline(other);
 
   // Then: 後に行った操作の結果(消去)が保存される
-  await expectSynced(page);
-  await expectSynced(other);
-  expect(await savedShots(supabase, distanceIds[0])).toEqual([]);
+  // 初めは5が保存されているため、消去の確定で空になる。
+  await expectSavedShots(supabase, distanceIds[0], []);
   await reloadRound(page);
   await expect(endBalls(page, 1, 1)).toHaveCount(0);
 });
@@ -1757,21 +1805,21 @@ test("sync-58: 射手をこの端末の利用者として記録した矢があ�
   await expect(endBalls(page, 1, 1)).toHaveCount(0);
   await page.getByTestId("score-button-undo").click();
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
-  await expectSynced(page);
 
   // Then: 点数だけが変わり射手が残る
+  await expect
+    .poll(() => getLiveShots(supabase, distanceIds[0]), { timeout: 15_000 })
+    .toEqual([
+      {
+        id: shotId,
+        end_number: 1,
+        score_str: "9",
+        shooter_id: shooterId,
+        shot_number: null,
+      },
+    ]);
   expect(sentBodies.length).toBeGreaterThan(0);
   for (const body of sentBodies) expect(body).not.toContain("shooter_id");
-  const live = await getLiveShots(supabase, distanceIds[0]);
-  expect(live).toEqual([
-    {
-      id: shotId,
-      end_number: 1,
-      score_str: "9",
-      shooter_id: shooterId,
-      shot_number: null,
-    },
-  ]);
 });
 
 test("sync-41: 2つのタブに未送信の点数があるとき、一方のタブを閉じると、残ったタブで、両方の点数が保存される", async ({
@@ -1803,7 +1851,6 @@ test("sync-41: 2つのタブに未送信の点数があるとき、一方のタ�
   await other.getByTestId("end-blank-1-1").click();
   await other.getByTestId("score-button-9").click();
   await expect(endBalls(other, 1, 1)).toHaveText(["10", "9"]);
-  await expect(other.getByTestId("sync-status")).toHaveText("同期中…");
 
   // When: 一方のタブを閉じる
   failing = false;
@@ -1827,7 +1874,7 @@ async function startRoundFromUi(page: Page, presetName?: string) {
   }
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-  await expect(page.getByTestId("sync-status")).toBeVisible();
+  await expect(page.getByTestId("round-summary")).toBeVisible();
   return page.url().split("/").pop() as string;
 }
 
@@ -1836,17 +1883,7 @@ function roundLinks(page: Page, id: string) {
   return page.locator(`a[href="/rounds/${id}"]`);
 }
 
-async function savedRoundCount(supabase: SupabaseClient, id: string) {
-  const { data, error } = await supabase
-    .from("rounds")
-    .select("id")
-    .eq("id", id)
-    .is("disabled_at", null);
-  if (error) throw error;
-  return data.length;
-}
-
-test("sync-42: オフラインで開始したラウンド詳細画面のとき、オンラインへ復帰すると、「同期済み」と表示され、ラウンド一覧にそのラウンドが1件だけ表示される", async ({
+test("sync-42: オフラインで開始したラウンド詳細画面のとき、オンラインへ復帰すると、そのラウンドが保存される、ラウンド一覧にそのラウンドが1件だけ表示される", async ({
   page,
 }) => {
   // Given: オフラインで開始したラウンド詳細画面
@@ -1859,14 +1896,19 @@ test("sync-42: オフラインで開始したラウンド詳細画面のとき�
   await waitForHydration(page);
   // 距離がないラウンドはラウンド編集ダイアログが展開済みのため、閉じる。
   await page.keyboard.press("Escape");
-  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
   const id = page.url().split("/").pop() as string;
 
   // When: オンラインへ復帰する
   await comeBackOnline(page.context(), page);
 
-  // Then: 「同期済み」と表示され、ラウンド一覧にそのラウンドが1件だけ表示される
-  await expectSynced(page);
+  // Then: そのラウンドが保存され、ラウンド一覧にそのラウンドが1件だけ表示される
+  const { supabase } = await signInAsTestUser(
+    getSharedEmail(),
+    SHARED_PASSWORD,
+  );
+  await expect
+    .poll(() => savedRoundCount(supabase, id), { timeout: 15_000 })
+    .toBe(1);
   await backToList(page);
   await expect(roundLinks(page, id)).toHaveCount(1);
 });
@@ -1887,19 +1929,21 @@ test("sync-43: 作成の送信が失敗し、リトライ待機中に距離を�
   });
   const id = await startRoundFromUi(page, "WA 1440");
   await expect.poll(() => attempts).toBeGreaterThan(0);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
   await page.getByTestId("add-distance-button").click();
   await page.getByTestId("distance-config-save-5").click();
   await page.getByTestId("end-blank-5-1").click();
   await page.getByTestId("score-button-9").click();
   await expect(endBalls(page, 5, 1)).toHaveText(["9"]);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
 
   // When: 送信が回復する
+  // 点数の記録は、作成の確定の後に送られる。
+  const sent = page.waitForResponse(
+    (r) => r.url().includes("/rpc/record_shots") && r.ok(),
+  );
   failing = false;
 
   // Then: 再読み込みしても、ラウンド・距離・点数が表示される
-  await expectSynced(page);
+  await sent;
   await reloadRound(page);
   await expect(page.getByTestId("distance-summary-5")).toBeVisible();
   await expect(endBalls(page, 5, 1)).toHaveText(["9"]);
@@ -1921,11 +1965,9 @@ test("sync-44: 作成の送信が失敗し続けているラウンド詳細画�
   });
   const id = await startRoundFromUi(page, "WA 1440");
   await expect.poll(() => attempts).toBeGreaterThan(0);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
   // 開いた時点でエンド1の新しい矢を指してテンキーが開いているため、空白は押さずに入力する。
   await page.getByTestId("score-button-10").click();
   await expect(endBalls(page, 1, 1)).toHaveText(["10"]);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
 
   // When: 再読み込みする
   await reloadRound(page);
@@ -1954,7 +1996,6 @@ test("sync-45: オフラインでラウンドを開始し、ラウンド一覧�
   // 距離がないラウンドはラウンド編集ダイアログが展開済みのため、閉じる。
   await page.keyboard.press("Escape");
   const id = page.url().split("/").pop() as string;
-  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
   await backToList(page);
 
   // When: オンラインへ復帰する
@@ -1998,7 +2039,7 @@ test("sync-46: ラウンドを開始したとき、作成が契約の不一致�
   await expect(roundLinks(page, id)).toHaveCount(0);
 });
 
-test("sync-47: オフラインのラウンド詳細画面で入力を完了にしたとき、オンラインへ復帰すると、「同期済み」と表示され、別の端末でもそのラウンドは完了で表示される", async ({
+test("sync-47: オフラインのラウンド詳細画面で入力を完了にしたとき、オンラインへ復帰すると、別の端末でもそのラウンドは完了で表示される", async ({
   page,
 }) => {
   // Given: オフラインで、入力を完了にした
@@ -2009,19 +2050,16 @@ test("sync-47: オフラインのラウンド詳細画面で入力を完了に�
   await page.getByTestId("confirm-dialog-confirm").click();
   await expect(page).toHaveURL(/\/rounds$/);
 
-  // When: オンラインへ復帰し、詳細を開く
+  // When: オンラインへ復帰する
   await goOnline(page);
-  await openRound(page);
 
-  // Then: 「同期済み」と表示され、別の端末でも完了で表示される
-  await expectSynced(page);
+  // Then: 別の端末でも完了で表示される
   const { supabase } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
-  const { data } = await supabase
-    .from("rounds")
-    .select("status")
-    .eq("id", roundId)
-    .single();
-  expect(data?.status).toBe("completed");
+  await expect
+    .poll(async () => (await getRoundRow(supabase, roundId)).status, {
+      timeout: 15_000,
+    })
+    .toBe("completed");
 });
 
 test("sync-48: ページ側が状態を、他端末が名前を、それぞれ別に変えたとき、両方がオンラインへ復帰すると、状態の変更と名前の変更の両方が残る", async ({
@@ -2042,13 +2080,15 @@ test("sync-48: ページ側が状態を、他端末が名前を、それぞれ�
   await openRound(page);
 
   // Then: 完了が残り、他端末の名前も残る
-  await expectSynced(page);
-  const { data } = await supabase
-    .from("rounds")
-    .select("status, name")
-    .eq("id", roundId)
-    .single();
-  expect(data).toEqual({ status: "completed", name: "他端末の名前" });
+  await expect
+    .poll(
+      async () => {
+        const row = await getRoundRow(supabase, roundId);
+        return { status: row.status, name: row.name };
+      },
+      { timeout: 15_000 },
+    )
+    .toEqual({ status: "completed", name: "他端末の名前" });
   await reloadRound(page);
   await expect(page.getByTestId("complete-round-button")).toBeHidden();
 });
@@ -2057,6 +2097,7 @@ test("sync-49: オフラインで距離を追加し削除した後、「距離�
   page,
 }) => {
   // Given: オフラインで距離を追加して削除した
+  const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
   await openRound(page);
   await page.context().setOffline(true);
   await page.getByTestId("add-distance-button").click();
@@ -2069,7 +2110,11 @@ test("sync-49: オフラインで距離を追加し削除した後、「距離�
   await goOnline(page);
 
   // Then: 追加した距離が表示され、再読み込みしても残る
-  await expectSynced(page);
+  await expect
+    .poll(async () => (await getDistanceIds(device.supabase, roundId)).length, {
+      timeout: 15_000,
+    })
+    .toBe(2);
   await expect(page.getByTestId("distance-summary-2")).toBeVisible();
   await reloadRound(page);
   await expect(page.getByTestId("distance-summary-2")).toBeVisible();
@@ -2096,23 +2141,24 @@ test("sync-50: 2端末が同じ距離の列から同時に距離を追加し、�
   });
 
   // When: オンラインへ復帰する
+  // 得点の記録は、追加した距離の作成の後に送られる。
+  const sent = page.waitForResponse(
+    (r) => r.url().includes("/rpc/record_shots") && r.ok(),
+  );
   await goOnline(page);
 
   // Then: 距離が2件とも、位置キーとIDの順で並び、得点が保持される
-  await expectSynced(page);
+  await sent;
   await reloadRound(page);
-  const { data } = await supabase
-    .from("distances")
-    .select("id, distance, position_key")
-    .eq("round_id", roundId)
-    .order("position_key")
-    .order("id");
-  expect(data?.map((d) => d.position_key)).toEqual([
-    "000000000001",
-    "000000000002",
-    "000000000002",
-  ]);
-  for (const [i, d] of (data ?? []).entries()) {
+  await expect
+    .poll(
+      async () =>
+        (await getLiveDistances(supabase, roundId)).map((d) => d.position_key),
+      { timeout: 15_000 },
+    )
+    .toEqual(["000000000001", "000000000002", "000000000002"]);
+  const data = await getLiveDistances(supabase, roundId);
+  for (const [i, d] of data.entries()) {
     await expect(page.getByTestId(`distance-summary-${i + 1}`)).toContainText(
       `${d.distance}m`,
     );
@@ -2120,10 +2166,10 @@ test("sync-50: 2端末が同じ距離の列から同時に距離を追加し、�
   await expect(page.locator("[data-shot-id]", { hasText: "5" })).toHaveCount(1);
 });
 
-test("sync-51: オフラインで点数を記録した入力中のラウンドを、再起動してオフラインのまま開き、その間に他端末が別のエンドへ点数を記録したとき、オンラインへ復帰すると、操作なしで、他端末が記録した点数とオフラインで記録した点数の両方が表示され、「同期済み」と表示される", async ({
+test("sync-51: オフラインで点数を記録した入力中のラウンドを、再起動してオフラインのまま開き、その間に他端末が別のエンドへ点数を記録したとき、オンラインへ復帰すると、操作なしで、他端末が記録した点数とオフラインで記録した点数の両方が表示される、オフラインで記録した点数が保存される", async ({
   profile,
 }) => {
-  // Given: オンラインで端末への取得を済ませ、オフラインで点数を記録し、再起動してオフラインのまま開くと、点数と「同期保留中」が表示される。その間に、他端末が別のエンドへ点数を記録した
+  // Given: オンラインで端末への取得を済ませ、オフラインで点数を記録し、再起動してオフラインのまま開くと、点数が表示される。その間に、他端末が別のエンドへ点数を記録した
   const { supabase, distanceIds } = await createSyncRound({
     distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 3 }],
   });
@@ -2147,7 +2193,6 @@ test("sync-51: オフラインで点数を記録した入力中のラウンド�
   await page.goto(`/rounds/${roundId}`);
   await waitForHydration(page);
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
   await recordShot(supabase, {
     distanceId: distanceIds[0],
     endNumber: 2,
@@ -2158,8 +2203,8 @@ test("sync-51: オフラインで点数を記録した入力中のラウンド�
   // When: オンラインへ復帰する
   await comeBackOnline(context, page);
 
-  // Then: 操作なしで、他端末の点数とオフラインで記録した点数の両方が表示され、「同期済み」と表示される
+  // Then: 操作なしで、他端末の点数とオフラインで記録した点数の両方が表示され、オフラインで記録した点数が保存される
   await expect(endBalls(page, 1, 2)).toHaveText(["5"]);
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
-  await expectSynced(page);
+  await expectSavedShots(supabase, distanceIds[0], ["1:9", "2:5"]);
 });

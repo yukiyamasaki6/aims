@@ -5,7 +5,11 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
-import { openOtherDevice, updateRound } from "../helpers/other-device";
+import {
+  getRoundRow,
+  openOtherDevice,
+  updateRound,
+} from "../helpers/other-device";
 import { createRound } from "../helpers/rounds";
 import {
   comeBackOnline,
@@ -69,27 +73,25 @@ function completeButton(page: Page) {
   return page.getByTestId("complete-round-button");
 }
 
-async function expectSynced(page: Page) {
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み", {
-    timeout: 15_000,
-  });
-}
-
 async function reload(page: Page) {
-  await expectSynced(page);
   await page.reload();
   await waitForHydration(page);
 }
 
+// 他端末のクライアント。待ちの間に繰り返し読むため、サインインはワーカーで1回にする。
+let otherDevice: ReturnType<typeof openOtherDevice> | undefined;
+
+async function roundRow(roundId: string) {
+  otherDevice ??= openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  return getRoundRow((await otherDevice).supabase, roundId);
+}
+
 async function status(roundId: string) {
-  const { supabase } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
-  const { data, error } = await supabase
-    .from("rounds")
-    .select("status")
-    .eq("id", roundId)
-    .single();
-  if (error) throw error;
-  return data.status;
+  return (await roundRow(roundId)).status;
+}
+
+async function name(roundId: string) {
+  return (await roundRow(roundId)).name;
 }
 
 // 完了ボタンの中心で、最前面の要素がボタン自身かどうか。
@@ -176,9 +178,11 @@ test("completion-03: 全てのエンドが矢数に達したラウンド詳細�
   await waitForHydration(page);
   await expect(page.getByTestId("shot-ball-1-1-3")).toHaveText("5");
   await expect(completeButton(page)).toBeHidden();
+  await expect
+    .poll(() => status(roundId), { timeout: 15_000 })
+    .toBe("completed");
   await reload(page);
   await expect(completeButton(page)).toBeHidden();
-  expect(await status(roundId)).toBe("completed");
 });
 
 test("completion-04: 矢数に達していないエンドがあるラウンド詳細画面のとき、入力を完了するボタンをクリックし、確認ダイアログで完了するを選ぶと、完了になりボタンが消える", async ({
@@ -199,9 +203,11 @@ test("completion-04: 矢数に達していないエンドがあるラウンド�
   await page.goBack();
   await waitForHydration(page);
   await expect(completeButton(page)).toBeHidden();
+  await expect
+    .poll(() => status(roundId), { timeout: 15_000 })
+    .toBe("completed");
   await reload(page);
   await expect(completeButton(page)).toBeHidden();
-  expect(await status(roundId)).toBe("completed");
 });
 
 test("completion-05: 矢数に達していないエンドがあるラウンド詳細画面のとき、入力を完了するボタンをクリックし、確認ダイアログでキャンセルすると、入力中のままで、ボタンが表示され続ける", async ({
@@ -218,7 +224,6 @@ test("completion-05: 矢数に達していないエンドがあるラウンド�
   await expect(page.getByTestId("confirm-dialog-confirm")).toBeHidden();
   await expect(completeButton(page)).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
-  await expectSynced(page);
   expect(await status(roundId)).toBe("in_progress");
 });
 
@@ -236,9 +241,11 @@ test("completion-06: 完了にして一覧へ戻った後に開いたラウン�
 
   // Then
   await expect(completeButton(page)).toBeVisible();
+  await expect
+    .poll(() => status(roundId), { timeout: 15_000 })
+    .toBe("in_progress");
   await reload(page);
   await expect(completeButton(page)).toBeVisible();
-  expect(await status(roundId)).toBe("in_progress");
 });
 
 test("completion-07: 完了にしたラウンド詳細画面のとき、距離を追加すると、入力を完了するボタンが再び表示される", async ({
@@ -257,9 +264,11 @@ test("completion-07: 完了にしたラウンド詳細画面のとき、距離�
 
   // Then
   await expect(completeButton(page)).toBeVisible();
+  await expect
+    .poll(() => status(roundId), { timeout: 15_000 })
+    .toBe("in_progress");
   await reload(page);
   await expect(completeButton(page)).toBeVisible();
-  expect(await status(roundId)).toBe("in_progress");
 });
 
 test("completion-08: 完了にしたラウンド詳細画面のとき、ラウンドの名前を変えると、入力を完了するボタンは表示されない", async ({
@@ -277,7 +286,9 @@ test("completion-08: 完了にしたラウンド詳細画面のとき、ラウ�
   await expect(page.getByTestId("round-config-summary")).toContainText(
     "変更後の名前",
   );
-  await expectSynced(page);
+  await expect
+    .poll(() => name(roundId), { timeout: 15_000 })
+    .toBe("変更後の名前");
   await expect(completeButton(page)).toBeHidden();
   expect(await status(roundId)).toBe("completed");
 });
@@ -295,10 +306,11 @@ test("completion-09: 完了にして一覧へ戻った後に開いた、記録�
   await expect(page.getByTestId("score-button-5")).toBeVisible();
 
   // When
+  const sent = page.waitForResponse("**/rest/v1/rpc/record_shots");
   await page.getByTestId("score-button-5").click();
 
   // Then
-  await expectSynced(page);
+  await sent;
   await expect(page.getByTestId("shot-ball-1-1-1")).toHaveText("5");
   await expect(completeButton(page)).toBeHidden();
   expect(await status(roundId)).toBe("completed");

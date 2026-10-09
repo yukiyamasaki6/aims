@@ -9,6 +9,7 @@ import {
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
+import { savedRoundCount } from "../helpers/other-device";
 import { createPreset } from "../helpers/presets";
 import {
   openNewRoundThenGoOffline,
@@ -90,7 +91,7 @@ test("start-05: プリセットが未選択のとき、プリセットをクリ�
   await expect(card.locator('[role="img"]')).toHaveCount(4);
 });
 
-test("start-08: プリセットが未選択のとき、開始ボタンをクリックすると、空の距離構成のラウンドが作成され、「同期済み」と表示される", async ({
+test("start-08: プリセットが未選択のとき、開始ボタンをクリックすると、空の距離構成のラウンドが作成される、そのラウンドが保存される", async ({
   page,
 }) => {
   // Given: プリセットが未選択
@@ -99,11 +100,18 @@ test("start-08: プリセットが未選択のとき、開始ボタンをクリ�
   // When: 開始ボタンをクリックする
   await page.getByTestId("round-start-button").click();
 
-  // Then: 距離を持たないラウンドを作成する
+  // Then: 距離を持たないラウンドを作成し、保存する
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
   await expect(page.getByTestId("round-summary")).toContainText("合計0");
   await expect(page.getByTestId("distance-summary-1")).toHaveCount(0);
-  await expect(page.getByTestId("sync-status")).toHaveText("同期済み");
+  const id = page.url().split("/").pop() as string;
+  const { supabase } = await signInAsTestUser(
+    getSharedEmail(),
+    SHARED_PASSWORD,
+  );
+  await expect
+    .poll(() => savedRoundCount(supabase, id), { timeout: 15_000 })
+    .toBe(1);
 });
 
 test("start-09: プリセットが選択されているとき、開始ボタンをクリックすると、プリセットの距離構成のラウンドが作成される", async ({
@@ -154,7 +162,7 @@ test("start-13: 未認証のとき、開始ボタンをクリックすると、�
   await expect(page).toHaveURL(/\/rounds\/new$/);
 });
 
-test("start-17: 的の一覧を端末に保存済みで、オフラインのラウンド作成画面のとき、開始ボタンをクリックすると、/rounds/[id]へ遷移し、ラウンドが表示され、「同期保留中」と表示される", async ({
+test("start-17: 的の一覧を端末に保存済みで、オフラインのラウンド作成画面のとき、開始ボタンをクリックすると、/rounds/[id]へ遷移し、ラウンドが表示される", async ({
   page,
 }) => {
   // Given: 的の一覧を端末に保存済みで、オフラインのラウンド作成画面
@@ -166,14 +174,13 @@ test("start-17: 的の一覧を端末に保存済みで、オフラインのラ�
   // When: 開始ボタンをクリックする
   await page.getByTestId("round-start-button").click();
 
-  // Then: /rounds/[id]へ遷移し、ラウンドを表示して「同期保留中」と表示する
+  // Then: /rounds/[id]へ遷移し、ラウンドを表示する
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
   await waitForHydration(page);
   await expect(page.getByTestId("round-summary")).toContainText("合計0");
-  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
 });
 
-test("start-18: 的の一覧を端末に保存済みで、ラウンド作成画面で認証を確認できない(通信できない)とき、開始ボタンをクリックすると、/rounds/[id]へ遷移し、ラウンドが表示され、「同期中…」と表示される", async ({
+test("start-18: 的の一覧を端末に保存済みで、ラウンド作成画面で認証を確認できない(通信できない)とき、開始ボタンをクリックすると、/rounds/[id]へ遷移し、ラウンドが表示される", async ({
   page,
 }) => {
   // Given: 的の一覧を端末に保存済みで、アクセストークンが失効し、更新の通信ができない
@@ -187,10 +194,9 @@ test("start-18: 的の一覧を端末に保存済みで、ラウンド作成画�
   // When: 開始ボタンをクリックする
   await page.getByTestId("round-start-button").click();
 
-  // Then: /rounds/[id]へ遷移し、ラウンドを表示して「同期中…」と表示する
+  // Then: /rounds/[id]へ遷移し、ラウンドを表示する
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
   await expect(page.getByTestId("round-summary")).toContainText("合計0");
-  await expect(page.getByTestId("sync-status")).toHaveText("同期中…");
 });
 
 const PRESET_ROUNDS_REST = "**/rest/v1/preset_rounds?*";
@@ -318,7 +324,6 @@ test("start-20: /rounds/newをオンラインで一度表示した後にオフ�
   await expect(page.getByTestId("distance-summary-2")).toContainText("70m");
   await expect(page.getByTestId("distance-summary-3")).toContainText("50m");
   await expect(page.getByTestId("distance-summary-4")).toContainText("30m");
-  await expect(page.getByTestId("sync-status")).toHaveText("同期保留中");
 });
 
 test("start-21: 端末に保存済みのプリセットがサーバーで削除された後、オンラインのとき、/rounds/newを開くと、削除されたプリセットが表示されない", async ({

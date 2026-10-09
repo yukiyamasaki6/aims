@@ -8,7 +8,6 @@ import {
 } from "react";
 import { isOffline } from "@/features/fetch-result/network";
 import { retryDelayMs } from "@/features/op-log/sync-result";
-import type { SyncStatus } from "@/features/op-log/sync-types";
 import { createClient } from "@/lib/supabase/client";
 import { roundOpLog } from "../_shared/round-op-log";
 import type { SyncOperation } from "../_shared/sync-events";
@@ -21,7 +20,6 @@ import type { ScoringTargetFace } from "./scorecard-scoring";
 export type RoundOpStack = {
   // 端末の組(ベースに操作の列を重ねたもの)から求めた、画面の状態。
   state: RoundState;
-  status: SyncStatus;
   // 操作を列へ追記する。画面への反映と送信は保存の完了後で、送信の完了は待たない。
   append: (operation: SyncOperation) => Promise<void>;
 };
@@ -189,7 +187,6 @@ export function useRoundOpStack(
 
   return {
     state,
-    status: snapshot.status,
     append,
   };
 }

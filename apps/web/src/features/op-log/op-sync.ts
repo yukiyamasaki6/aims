@@ -15,8 +15,7 @@ import type {
 } from "./op-log-types";
 import { planFlights } from "./op-plan";
 import { classifyFailure, decideSyncResult, toSafeResult } from "./sync-result";
-import { deriveSyncStatus } from "./sync-status";
-import type { BatchResult, SyncStatus, SyncStatusCounts } from "./sync-types";
+import type { BatchResult } from "./sync-types";
 
 export type OpSyncStore<Op extends OpBase, Base> = {
   append: (
@@ -89,7 +88,6 @@ export type OpSyncSnapshot<Op extends OpBase, Base> = {
   items: OpSyncItem<Op>[];
   // 保存が完了した`items`の操作だけ。保存の完了、確定、読み込みのときだけ新しい配列になり、送信中などの状態の変化では変わらない。
   operations: OpSyncOperation<Op>[];
-  status: SyncStatus;
 };
 
 type Item<Op extends OpBase> = OpSyncItem<Op> & {
@@ -140,40 +138,6 @@ export function createOpSync<Op extends OpBase, Base>(
     return flight.eventIds.flatMap((id) => findItem(id) ?? []);
   }
 
-  function computeCounts(): SyncStatusCounts {
-    const offline = deps.isOffline();
-    // 保留された操作と、それに止められた後続は、送信中として数えない。
-    const stuck = new Set<string>();
-    items.forEach((item, index) => {
-      if (item.status === "acked") return;
-      for (const previous of items.slice(0, index)) {
-        if (previous.status === "acked") continue;
-        const blocked =
-          previous.status === "held" || stuck.has(previous.eventId);
-        if (blocked && deps.conflicts(previous.operation, item.operation)) {
-          stuck.add(item.eventId);
-          return;
-        }
-      }
-    });
-    const pending = items.filter(
-      (item) => item.status !== "acked" && item.status !== "held",
-    );
-    return {
-      offlinePending: offline ? pending.length : 0,
-      retrying:
-        !offline && items.some((item) => item.status === "backoff") ? 1 : 0,
-      sending: items.filter(
-        (item) =>
-          (item.status === "persisting" ||
-            item.status === "queued" ||
-            item.status === "inflight") &&
-          !stuck.has(item.eventId),
-      ).length,
-      held: items.filter((item) => item.status === "held").length,
-    };
-  }
-
   function persistedOperations(): OpSyncOperation<Op>[] {
     return items
       .filter((entry) => entry.status !== "persisting")
@@ -187,7 +151,6 @@ export function createOpSync<Op extends OpBase, Base>(
   }
 
   function computeSnapshot(): OpSyncSnapshot<Op, Base> {
-    const counts = computeCounts();
     return {
       base,
       operations,
@@ -197,7 +160,6 @@ export function createOpSync<Op extends OpBase, Base>(
         status,
         seq,
       })),
-      status: deriveSyncStatus(counts),
     };
   }
 
@@ -607,9 +569,6 @@ export function createOpSync<Op extends OpBase, Base>(
       };
     },
     getSnapshot: () => snapshot,
-    handleOffline() {
-      emit();
-    },
     // 通信の回復で、リトライ待機の要求をすぐに再送する（試行番号は消費しない）。
     handleOnline() {
       for (const flight of flights) flight.notBefore = now();

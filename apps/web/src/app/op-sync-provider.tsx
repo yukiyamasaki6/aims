@@ -10,9 +10,7 @@ export function OpSyncProvider() {
   useEffect(() => {
     roundOpHub.start(getLocalIdentity());
     const handleOnline = () => roundOpHub.handleOnline();
-    const handleOffline = () => roundOpHub.handleOffline();
     window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
 
     const { data } = createClient().auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT") {
@@ -35,7 +33,6 @@ export function OpSyncProvider() {
     return () => {
       data.subscription.unsubscribe();
       window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
       roundOpHub.stop();
     };
   }, []);

@@ -1,11 +1,3 @@
-export type SyncStatus =
-  | "synced"
-  | "sending"
-  | "retrying"
-  | "offline-pending"
-  // 未認証で送れずに残している状態。
-  | "unauthenticated-pending";
-
 // 送信側が返す失敗の種類。再試行するかどうかは`classifyFailure`が判定する。
 type FailureCause =
   | { type: "unauthenticated" }
@@ -27,11 +19,3 @@ export type SyncDisposition = "retry" | "hold" | "discard";
 export type SyncResultDecision =
   | { type: "retry"; delayMs: number }
   | { type: "settle"; removeFromOutbox: boolean };
-
-// 同期状態の導出に使う、処理中・保留中の件数。
-export type SyncStatusCounts = {
-  offlinePending: number;
-  retrying: number;
-  sending: number;
-  held: number;
-};
