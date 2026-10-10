@@ -1521,7 +1521,7 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
   });
 
   it("テンキーの実測の高さが変わり、選択中のマスがテンキーに隠れる場合は、隠れる分だけ下へスクロールする", () => {
-    // Given: 高さ800の領域の500〜540にマスがあり、テンキーの高さを測れていない（既定の220を見込む）ため隠れていない
+    // Given: 高さ800の領域の440〜480にマスがあり、テンキーの高さを測れていない（既定の220と、格納ボタンのはみ出し48を見込む。見える下端は800-268-16=516）ため隠れていない
     let reportKeypadHeight: (height: number) => void = () => {};
     vi.stubGlobal(
       "ResizeObserver",
@@ -1539,7 +1539,7 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
       },
     );
     stubLayout({
-      cell: { top: 500, bottom: 540 },
+      cell: { top: 440, bottom: 480 },
       container: { top: 0, bottom: 800 },
     });
     setup();
@@ -1548,10 +1548,10 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     // When: テンキーの高さが300と測れる
     act(() => reportKeypadHeight(300));
 
-    // Then: 見える下端（800-300-余白16=484）を超えた56だけ下へスクロールする
+    // Then: 見える下端（800-(300+格納ボタンのはみ出し48)-余白16=436）を超えた44だけ下へスクロールする
     expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
     expect(Element.prototype.scrollBy).toHaveBeenCalledWith({
-      top: 56,
+      top: 44,
       behavior: "smooth",
     });
   });

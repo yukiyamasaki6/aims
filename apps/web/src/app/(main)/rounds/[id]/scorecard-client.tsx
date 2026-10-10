@@ -67,8 +67,8 @@ import { useRoundOpStack } from "./use-round-op-stack";
 // テンキーは中身のキー数が距離の的ごとに変わるため実測高さを使う。この値は
 // ResizeObserverが初回計測を終えるまでの暫定値。
 const KEYPAD_HEIGHT_FALLBACK = 220;
-// 格納ボタンがテンキー本体の上にはみ出す高さ（-top-8 = 2rem = 32px）。
-const KEYPAD_TOGGLE_OVERHANG = 32;
+// 格納ボタンがテンキー本体の上にはみ出す高さ（-top-12 = 3rem = 48px。右端の点数キーと同じ高さ）。
+const KEYPAD_TOGGLE_OVERHANG = 48;
 
 function contrastText(hex: string): string {
   const r = Number.parseInt(hex.slice(1, 3), 16);
@@ -654,7 +654,7 @@ export function ScorecardClient({
   const pointerKey = pointer
     ? `${pointer.distanceId}:${pointer.endNumber}`
     : null;
-  const keypadInset = isLandscape ? 0 : keypadHeight;
+  const keypadInset = isLandscape ? 0 : keypadHeight + KEYPAD_TOGGLE_OVERHANG;
   const scrollTargetRef = useRef({ pointer, distances });
   scrollTargetRef.current = { pointer, distances };
   // biome-ignore lint/correctness/useExhaustiveDependencies: pointerKeyとkeypadInsetだけを契機にする
@@ -1182,7 +1182,7 @@ export function ScorecardClient({
             枠はoverflow-y-clipにする。格納中にスライドで下へ出たテンキーが
             <main>のスクロール領域を一時的に広げ、アンマウント時に一度に
             縮めて、スクロール領域の下側を急に変えるため。クリップで格納ボタン
-            （テンキーの上に2rem出ている）が切れないよう、枠の高さに含める。
+            （テンキーの上に3rem出ている）が切れないよう、枠の高さに含める。
             shrink-0は必須: <main>が横向き側パネルとの高さ調整のためflexアイテム
             （高さが固定）になったことで、枠がflexのデフォルトshrinkで潰される。 */}
         <div
@@ -1217,13 +1217,13 @@ export function ScorecardClient({
             <div
               ref={setKeypadNode}
               className={cn(
-                "pointer-events-auto absolute inset-x-0 bottom-0 z-30 border-t bg-card shadow-lg transition-transform duration-200",
-                // 格納ボタンが本体の上に2rem（-top-8）はみ出しているため、
+                "pointer-events-auto absolute inset-x-0 bottom-0 z-30 border-t-2 border-foreground/20 bg-card shadow-[0_-4px_6px_-1px_rgb(0_0_0/0.1),0_-2px_4px_-2px_rgb(0_0_0/0.1)] transition-transform duration-200",
+                // 格納ボタンが本体の上に3rem（-top-12）はみ出しているため、
                 // 100%移動だけではそのはみ出し分が画面下端に残って見えて
                 // しまう。はみ出し分を上乗せして完全に隠す。
                 keypadVisible
                   ? "translate-y-0"
-                  : "translate-y-[calc(100%+2rem)]",
+                  : "translate-y-[calc(100%+3rem)]",
               )}
             >
               <div className="relative mx-auto max-w-xl">
@@ -1232,9 +1232,9 @@ export function ScorecardClient({
                   data-testid="keypad-toggle"
                   onClick={closeKeypad}
                   aria-label="テンキーを閉じる"
-                  className="-top-8 absolute right-4 flex h-8 w-12 items-center justify-center rounded-t-lg border border-b-0 bg-card text-muted-foreground hover:text-foreground"
+                  className="-top-12 absolute right-4 flex h-12 w-[calc((100%-3.5rem)/4)] items-center justify-center rounded-t-lg border-2 border-b-0 border-foreground/20 bg-card text-muted-foreground shadow-[0_-4px_6px_-1px_rgb(0_0_0/0.1),0_-2px_4px_-2px_rgb(0_0_0/0.1)] hover:text-foreground active:bg-muted"
                 >
-                  <ChevronDown className="size-4" />
+                  <ChevronDown className="size-6" />
                 </button>
                 <div className="flex flex-col gap-2 p-4 pt-4">
                   {keypadButtons}
