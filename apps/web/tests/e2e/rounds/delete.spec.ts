@@ -7,6 +7,7 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
+import { expectNoPendingOps } from "../helpers/op-log";
 import { forwardAs, openOtherDevice } from "../helpers/other-device";
 import {
   openNewRoundThenGoOffline,
@@ -349,7 +350,7 @@ test("delete-17: 削除が認可で拒否されるとき、削除を確認し、
   page,
 }) => {
   // Given: 別のユーザーの権限で送られ、認可で拒否される
-  const { name } = await createNamedRound("認可で拒否");
+  const { name, roundId } = await createNamedRound("認可で拒否");
   const outsider = {
     email: `delete17-${randomUUID()}@example.com`,
     password: "password-e2e-outsider",
@@ -370,6 +371,8 @@ test("delete-17: 削除が認可で拒否されるとき、削除を確認し、
   // When
   await page.getByTestId("confirm-dialog-confirm").click();
   await expect.poll(() => rejectedStatus).toBe(403);
+  // 拒否の処理(操作の列からの破棄)が終わってから読み込み直す。
+  await expectNoPendingOps(page, roundId);
   await page.reload();
   await waitForHydration(page);
 

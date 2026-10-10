@@ -14,7 +14,7 @@ import { applyOperations } from "./round-op-apply";
 import { roundTablesFromServer, selectRoundState } from "./round-tables";
 import type { ScoringTargetFace } from "./scorecard-scoring";
 
-const { reflects, keeps } = roundStreamRules;
+const { reflects, keeps, isOlder } = roundStreamRules;
 
 function record(
   overrides: {
@@ -219,25 +219,79 @@ describe("keeps", () => {
     expect(keeps(record(), [])).toBe(true);
   });
 
-  it("完了のベースは、未送信の操作が残るときだけ保持する", () => {
+  it("完了のベースは、ベースに反映されていない操作が残るときだけ保持する", () => {
     const completed = record({ status: "completed" });
 
     expect(keeps(completed, [])).toBe(false);
-    expect(keeps(completed, [entry(roundUpdated, 4)])).toBe(false);
+    expect(keeps(completed, [entry(roundUpdated, 1)])).toBe(false);
     expect(keeps(completed, [entry(roundUpdated)])).toBe(true);
+    expect(keeps(completed, [entry(roundUpdated, 4)])).toBe(true);
+  });
+
+  it("確定済みで取得に未反映の完了の操作があるとき、入力中のベースは保持し、反映済みのベースは保持しない", () => {
+    const stale = record({ status: "in_progress", revisions: { round: 1 } });
+    const reflectedBase = record({
+      status: "completed",
+      revisions: { round: 2 },
+    });
+
+    expect(keeps(stale, [entry(completedOp, 2)])).toBe(true);
+    expect(keeps(reflectedBase, [entry(completedOp, 2)])).toBe(false);
+  });
+
+  it("効かなかった確定済みの操作は、保持の理由にしない", () => {
+    expect(
+      keeps(record({ status: "completed" }), [
+        entry(roundUpdated, 9, { ackedApplied: false }),
+      ]),
+    ).toBe(false);
   });
 
   it("操作を重ねた状態で判定する。未送信の完了は、確定済みの入力中への戻しを含め、重ねた状態が完了のとき、未送信があれば保持する", () => {
-    expect(keeps(record(), [entry(completedOp, 5)])).toBe(false);
+    expect(keeps(record(), [entry(completedOp, 1)])).toBe(false);
     expect(keeps(record(), [entry(completedOp)])).toBe(true);
     expect(keeps(record({ status: "completed" }), [entry(reopenedOp)])).toBe(
       true,
     );
   });
 
-  it("ラウンドの削除が重なっても、未送信なら保持し、確定済みなら保持しない", () => {
+  it("ラウンドの削除が重なっても、未送信なら保持し、確定済みでもベースがあるあいだは(反映済みでないため)保持する", () => {
     expect(keeps(record(), [entry(disabledOp)])).toBe(true);
-    expect(keeps(record(), [entry(disabledOp, 5)])).toBe(false);
+    expect(keeps(record(), [entry(disabledOp, 5)])).toBe(true);
+  });
+});
+
+describe("isOlder", () => {
+  it("ラウンドのrevisionが小さければ古く、同じか大きければ古くない", () => {
+    const current = record({ revisions: { round: 2 } });
+
+    expect(isOlder(current, record({ revisions: { round: 1 } }))).toBe(true);
+    expect(isOlder(current, record({ revisions: { round: 2 } }))).toBe(false);
+    expect(isOlder(current, record({ revisions: { round: 3 } }))).toBe(false);
+  });
+
+  it("両方にある距離や矢のrevisionが小さければ古く、片方にしか無いものは比べない", () => {
+    const current = record({
+      revisions: { round: 2, distances: { d1: 3 }, shots: { s1: 4 } },
+    });
+
+    expect(
+      isOlder(
+        current,
+        record({ revisions: { round: 2, distances: { d1: 2 } } }),
+      ),
+    ).toBe(true);
+    expect(
+      isOlder(current, record({ revisions: { round: 2, shots: { s1: 3 } } })),
+    ).toBe(true);
+    expect(
+      isOlder(
+        current,
+        record({
+          revisions: { round: 2, distances: { d2: 1 }, shots: { s2: 1 } },
+        }),
+      ),
+    ).toBe(false);
   });
 });
 

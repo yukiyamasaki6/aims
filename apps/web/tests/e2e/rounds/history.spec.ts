@@ -392,6 +392,8 @@ test.describe("入力中の領域", () => {
     await inProgressArea(page).getByText(name).click();
     await waitForHydration(page);
     await waitForServiceWorkerControl(page);
+    // 制御の待ちで読み込み直した場合は、内容が出てからオフラインにする。
+    await expect(page.getByTestId("score-button-9")).toBeVisible();
     await goOffline(context);
     await page.getByTestId("score-button-9").click();
     await expect(page.getByTestId("round-summary")).toContainText("合計9");

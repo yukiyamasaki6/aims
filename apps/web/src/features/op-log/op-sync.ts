@@ -2,6 +2,7 @@ import type {
   NewOpLogEntry,
   OpBase,
   OpFlight,
+  OpLogEntry,
   OpPlanPorts,
   OpResult,
   OpStatus,
@@ -38,7 +39,7 @@ export type OpSyncStore<Op extends OpBase, Base> = {
 };
 
 export type OpSyncDeps<Op extends OpBase, Base> = OpPlanPorts<Op> &
-  Pick<StreamRules<Op, Base>, "reflects"> & {
+  Pick<StreamRules<Op, Base>, "reflects" | "isOlder"> & {
     streamId: string;
     userId: string | null;
     store: OpSyncStore<Op, Base>;
@@ -169,6 +170,19 @@ export function createOpSync<Op extends OpBase, Base>(
       ackedRevision: item.ackedRevision,
       ackedApplied: item.ackedApplied,
     };
+  }
+
+  // このタブのメモリ上の操作を、端末の組の形にする。
+  function memoryEntries(): OpLogEntry<Op>[] {
+    return items.map((item) => ({
+      seq: item.seq ?? -1,
+      eventId: item.eventId,
+      streamId: deps.streamId,
+      userId: deps.userId,
+      operation: item.operation,
+      ackedRevision: item.ackedRevision,
+      ackedApplied: item.ackedApplied,
+    }));
   }
 
   // 取得したベースを組に入れたときに、そのベースに反映済みの確定済みの操作を外す。送信中の操作は外さない。
@@ -528,6 +542,18 @@ export function createOpSync<Op extends OpBase, Base>(
       const readAt = persistTick;
       const incoming: StreamBase<Base> = { startedAt, base: fetched };
       let group: StreamGroup<Op, Base> | undefined;
+      // 組が消えた後でも、最後に取り込んだベースより古い状態の取得は、保存も反映もしない。
+      const current = base?.base;
+      if (
+        current != null &&
+        fetched !== null &&
+        deps.isOlder(current, fetched)
+      ) {
+        return {
+          base,
+          entries: memoryEntries(),
+        };
+      }
       if (fetchedUserId === deps.userId) {
         try {
           group = await deps.store.commit(
@@ -550,15 +576,7 @@ export function createOpSync<Op extends OpBase, Base>(
       emit();
       return {
         base: incoming,
-        entries: items.map((item) => ({
-          seq: item.seq ?? -1,
-          eventId: item.eventId,
-          streamId: deps.streamId,
-          userId: deps.userId,
-          operation: item.operation,
-          ackedRevision: item.ackedRevision,
-          ackedApplied: item.ackedApplied,
-        })),
+        entries: memoryEntries(),
       };
     },
     // 効かなかった操作または項目がある結果を受けたときに知らせる。

@@ -27,13 +27,14 @@ export function isRoundInProgress(
   return !state.roundDisabled && state.status === "in_progress";
 }
 
-// オフラインで開けるよう端末に保持するか。入力中か、未送信の操作が残るものを保持する。
+// オフラインで開けるよう端末に保持するか。入力中か、ベースに反映されていない操作が残るものを保持する。
+// ベースが知らない確定済みの操作が残る間に組を消すと、後から届いた古い取得で古い状態に戻るため保持する。
 // 表示の規則(`isRoundInProgress`)とは別で、保持して入力中と見せないラウンドがある。
 export function shouldKeepRoundBase(
   state: Pick<RoundState, "status" | "roundDisabled">,
-  hasUnsent: boolean,
+  hasUnreflected: boolean,
 ): boolean {
-  return isRoundInProgress(state) || hasUnsent;
+  return isRoundInProgress(state) || hasUnreflected;
 }
 
 // 端末の組から、画面と同じ導出で状態を求める。ベースが無いときは作成の操作が表す状態を基準にする。
@@ -93,7 +94,7 @@ function reflects(
   return fetchedAt !== undefined && fetchedAt >= entry.ackedRevision;
 }
 
-// ベースに操作を重ねた状態で、保持の規則に当たるか。未確定の操作が「未送信の操作」。
+// ベースに操作を重ねた状態で、保持の規則に当たるか。ベースに反映されていない操作は、未確定(未送信)の操作と、確定済みで取得に未反映の操作。
 function keeps(
   base: RoundBaseRecord,
   entries: StreamOperationEntry[],
@@ -111,11 +112,30 @@ function keeps(
   const state = selectRoundState(applyOperations(base.tables, applied, []));
   return shouldKeepRoundBase(
     state,
-    entries.some((entry) => entry.ackedRevision === undefined),
+    entries.some((entry) => !reflects(base, entry)),
+  );
+}
+
+// 取り込もうとするベースが、今のベースより古い状態か。
+// 取得の開始時刻では、同時に始まった取得のどちらが新しい状態を返すかを決められないため、サーバーが付けたrevisionで比べる。
+// 両方にある対象(ラウンド、同じIDの距離、同じIDの矢)のどれかで、取り込むほうのrevisionが小さければ古い。片方にしか無い対象は比べない。
+function isOlder(current: RoundBaseRecord, incoming: RoundBaseRecord): boolean {
+  if (incoming.revisions.round < current.revisions.round) return true;
+  const older = (
+    now: Record<string, number>,
+    next: Record<string, number>,
+  ): boolean =>
+    Object.entries(next).some(
+      ([id, revision]) => id in now && revision < now[id],
+    );
+  return (
+    older(current.revisions.distances, incoming.revisions.distances) ||
+    older(current.revisions.shots, incoming.revisions.shots)
   );
 }
 
 export const roundStreamRules: StreamRules<SyncOperation, RoundBaseRecord> = {
   reflects,
   keeps,
+  isOlder,
 };

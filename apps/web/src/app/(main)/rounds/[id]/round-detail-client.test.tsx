@@ -86,6 +86,8 @@ function resolves(result: FetchResult<LoadedRoundDetail>) {
 }
 
 beforeEach(() => {
+  // offlineの結果が返る状況はnavigator.onLineがfalseである(trueのままだと、すぐ再取得する)。
+  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   vi.clearAllMocks();
   nav.pathname = `/rounds/${ID}`;
 });

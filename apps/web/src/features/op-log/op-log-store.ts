@@ -266,6 +266,14 @@ export function createOpLogStore<Op extends OpBase, Base>(
         if (stored !== undefined && stored.startedAt > startedAt) {
           return { base: toStreamBase(stored), entries };
         }
+        // 開始時刻が新しくても、保存済みのベースよりrevisionが古い状態を返した取得は、何も変えない。
+        if (
+          stored?.base != null &&
+          base !== null &&
+          rules.isOlder(stored.base, base)
+        ) {
+          return { base: toStreamBase(stored), entries };
+        }
         const incoming: StreamBase<Base> = { startedAt, base };
         const remaining = await pruneReflected(
           ops,

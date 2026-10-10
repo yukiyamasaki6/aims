@@ -1,4 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
+import { PROXY_PATH, settleInflight } from "./inflight";
 
 // セッションの更新の重なりを、決まった順序で起こすためのヘルパー。
 // ブラウザがセッションを更新している通信の間に、別の書き手(proxy.tsのサーバー側の更新)が保存先のCookieを書き換えると、
@@ -26,14 +27,13 @@ async function expireStoredSession(context: BrowserContext) {
   );
   session.expires_at = Math.floor(Date.now() / 1000) - 10;
   const expired = `base64-${Buffer.from(JSON.stringify(session)).toString("base64url")}`;
-  await context.addCookies([{ ...stored, value: expired }]);
-
+  // route以降に始まる要求はSet-Cookieを除かれるが、それより前に送った要求の応答には、有効なセッションのSet-Cookieが残っている。
+  // それらが期限の書き換えの後に届くと期限を元に戻し、ブラウザが更新を始めなくなるため、終わってから書き換える。
   // Service Workerを通る要求も対象にするため、contextで扱う。
   // route.continueではCookieの差し替えが効かず、route.fetchは応答のSet-Cookieを保存先へ書くため、Nodeから送って応答を返す。
   await context.route(
     (url) =>
-      /^\/(rounds|signin|signup|reset-password)(\/|$)/.test(url.pathname) &&
-      !url.searchParams.has(OVERLAP_MARK),
+      PROXY_PATH.test(url.pathname) && !url.searchParams.has(OVERLAP_MARK),
     async (route) => {
       const request = route.request();
       const headers = await request.allHeaders();
@@ -69,6 +69,8 @@ async function expireStoredSession(context: BrowserContext) {
         .catch(() => {});
     },
   );
+  await settleInflight(context);
+  await context.addCookies([{ ...stored, value: expired }]);
 }
 
 // 別の書き手としてproxy.tsにサーバー側でセッションを更新させ、Set-Cookieで保存先を書き換えさせる。

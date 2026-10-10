@@ -5,6 +5,7 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
+import { expectKeypadSettled } from "../helpers/keypad";
 import {
   getRoundRow,
   openOtherDevice,
@@ -237,6 +238,8 @@ test("completion-06: 完了にして一覧へ戻った後に開いたラウン�
 
   // When
   await page.getByTestId("end-blank-1-1").click();
+  // 閉じたテンキーを開き直す動きが終わってから押す。
+  await expectKeypadSettled(page);
   await page.getByTestId("score-button-X").click();
 
   // Then
@@ -304,6 +307,8 @@ test("completion-09: 完了にして一覧へ戻った後に開いた、記録�
   );
   await page.getByTestId("shot-ball-1-1-1").click();
   await expect(page.getByTestId("score-button-5")).toBeVisible();
+  // 閉じたテンキーを開き直す動きが終わってから押す。
+  await expectKeypadSettled(page);
 
   // When
   const sent = page.waitForResponse("**/rest/v1/rpc/record_shots");
@@ -379,7 +384,7 @@ test("completion-13: 入力中のラウンド詳細画面でモバイルのと�
   await expect(page.getByTestId("score-button-X")).toBeVisible();
   await page.waitForTimeout(500);
 
-  // When: 閉じる間のスクロール領域の高さと位置を毎フレーム記録する
+  // When: 閉じる間のスクロール領域の高さと位置を毎フレーム記録する(閉じる操作からの経過時間つき)
   const samples = await page.evaluate(async () => {
     const main = document.querySelector<HTMLElement>("main");
     const toggle = document.querySelector<HTMLElement>(
@@ -388,26 +393,45 @@ test("completion-13: 入力中のラウンド詳細画面でモバイルのと�
     if (!main || !toggle) throw new Error("no element");
     main.scrollTop = main.scrollHeight;
     await new Promise((r) => setTimeout(r, 600));
-    const rows: { height: number; top: number }[] = [];
-    toggle.click();
+    const rows: {
+      height: number;
+      top: number;
+      elapsed: number;
+      mounted: boolean;
+    }[] = [];
     const start = performance.now();
+    toggle.click();
     while (performance.now() - start < 700) {
-      rows.push({ height: main.scrollHeight, top: main.scrollTop });
+      rows.push({
+        height: main.scrollHeight,
+        top: main.scrollTop,
+        elapsed: performance.now() - start,
+        mounted:
+          document.querySelector('[data-testid="keypad-toggle"]') !== null,
+      });
       await new Promise((r) => requestAnimationFrame(r));
     }
     return rows;
   });
 
-  // Then: 高さは増えず、1フレームの変化は小さく(アンマウント時に一度に変わらない)、
-  // 位置も途中で跳ねない
-  const heightSteps = samples
-    .slice(1)
-    .map((s, i) => samples[i].height - s.height);
-  const topSteps = samples.slice(1).map((s, i) => samples[i].top - s.top);
-  expect(Math.min(...heightSteps)).toBeGreaterThanOrEqual(0);
-  expect(Math.max(...heightSteps)).toBeLessThan(120);
-  expect(Math.min(...topSteps)).toBeGreaterThanOrEqual(0);
-  expect(Math.max(...topSteps)).toBeLessThan(120);
+  // Then: 高さと位置は増えず、テンキーの要素が無くなる前後で一度に縮まず、動きが終わった後(450ms以降)は変わらない。
+  // 縮みが遅れてアンマウントのときに一度に起きる場合を検出する。1フレームの変化量は、負荷でフレームが落ちると、なめらかな動きでも大きくなるため使わない。
+  const steps = (value: (s: (typeof samples)[number]) => number) =>
+    samples.slice(1).map((s, i) => value(samples[i]) - value(s));
+  expect(Math.min(...steps((s) => s.height))).toBeGreaterThanOrEqual(0);
+  expect(Math.min(...steps((s) => s.top))).toBeGreaterThanOrEqual(0);
+  // テンキーの要素が無くなる(閉じてから200ms後)前後の記録で、高さと位置が一度に縮まない。
+  // 描画が200ms以上止まり、最初の記録の時点で要素が無い場合は、前後を比べる記録が無いため、この判定だけ行わない。
+  const unmountedAt = samples.findIndex((s) => !s.mounted);
+  if (unmountedAt > 0) {
+    const before = samples[unmountedAt - 1];
+    const after = samples[unmountedAt];
+    expect(before.height - after.height).toBeLessThan(120);
+    expect(before.top - after.top).toBeLessThan(120);
+  }
+  const settled = samples.filter((s) => s.elapsed >= 450);
+  expect(new Set(settled.map((s) => s.height)).size).toBe(1);
+  expect(new Set(settled.map((s) => s.top)).size).toBe(1);
 });
 
 test("completion-11: 距離がないラウンド詳細画面のとき、入力を完了するボタンをクリックすると、記録がない旨の確認ダイアログが表示される", async ({

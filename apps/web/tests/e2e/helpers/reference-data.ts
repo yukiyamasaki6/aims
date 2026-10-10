@@ -45,12 +45,25 @@ export async function saveTargetFacesOnDevice(page: Page) {
   await waitForServiceWorkerControl(page);
 }
 
+// 端末への取得の完了は、常駐の取得の部品が出す成功の回数で確かめる。
+export async function expectRoundBasesFetched(page: Page) {
+  await expect(page.getByTestId("round-base-refresher")).not.toHaveAttribute(
+    "data-refreshed-count",
+    "0",
+  );
+}
+
 // オンラインで/rounds/newを開いてプリセットを端末に保存させ、オフラインにする。
-export async function openNewRoundThenGoOffline(page: Page) {
+// 的の一覧は一括の取得で保存されるため、その完了を待ってからオフラインにする(的の一覧の取得を止めるテストは待たない)。
+export async function openNewRoundThenGoOffline(
+  page: Page,
+  { waitForTargetFaces = true }: { waitForTargetFaces?: boolean } = {},
+) {
   await page.goto("/rounds/new");
   await waitForHydration(page);
   await expect(page.getByTestId("round-preset-button").first()).toBeVisible();
   await waitForServiceWorkerControl(page);
+  if (waitForTargetFaces) await expectRoundBasesFetched(page);
   await goOffline(page.context());
 }
 

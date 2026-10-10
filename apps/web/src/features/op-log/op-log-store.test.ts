@@ -9,12 +9,16 @@ type Op = { eventId: string; value: string };
 // ベースは取得時点のrevisionと、保持の対象かだけを持つ。
 type Base = { revision: number; keep: boolean };
 
+const reflects = (base: Base | null, entry: StreamEntry<Op>) =>
+  entry.ackedRevision !== undefined &&
+  (base === null || entry.ackedRevision <= base.revision);
+
+// ベースに反映されていない操作(未送信、または確定済みで未反映)が残るあいだは保持する。
 const rules: StreamRules<Op, Base> = {
-  reflects: (base, entry: StreamEntry<Op>) =>
-    entry.ackedRevision !== undefined &&
-    (base === null || entry.ackedRevision <= base.revision),
+  reflects,
   keeps: (base, entries) =>
-    base.keep || entries.some((e) => e.ackedRevision === undefined),
+    base.keep || entries.some((e) => !reflects(base, e)),
+  isOlder: (current, incoming) => incoming.revision < current.revision,
 };
 
 const STREAM = "round:r1";
@@ -234,20 +238,56 @@ describe("op log store", () => {
       expect(await group(store)).toEqual(result);
     });
 
-    it("commitは、保持の規則に当たらなければ、ベースと確定済みの操作を反映済みかによらず消す", async () => {
+    it("commitは、保持の規則に当たらなければ、ベースと反映済みの操作を消す", async () => {
       const store = newStore();
       const reflected = entry("reflected");
-      const notReflected = entry("not-reflected");
       await store.append(reflected);
-      await store.append(notReflected);
       await store.commit(STREAM, "user-1", base(1), 10);
       await store.ack(reflected.eventId, 1, true, null);
-      await store.ack(notReflected.eventId, 9, true, null);
 
       const result = await store.commit(STREAM, "user-1", base(3, false), 20);
 
       expect(result).toEqual({ base: undefined, entries: [] });
       expect(await group(store)).toEqual({ base: undefined, entries: [] });
+    });
+
+    it("commitは、保存済みのベースより開始時刻が新しくても、revisionが古い取得では何も変えない", async () => {
+      const store = newStore();
+      await store.commit(STREAM, "user-1", base(2), 10);
+
+      const result = await store.commit(STREAM, "user-1", base(1), 20);
+
+      expect(result.base).toEqual({ startedAt: 10, base: base(2) });
+      expect(await group(store)).toEqual(result);
+    });
+
+    it("commitは、確定済みでベースに未反映の操作が残るあいだは、古いベースを受けても組を消さず、反映済みのベースを受けると消す", async () => {
+      // Given: revision 2で確定したが、取得には反映されていない操作
+      const store = newStore();
+      const confirmed = entry("confirmed");
+      await store.append(confirmed);
+      await store.ack(confirmed.eventId, 2, true, null);
+
+      // When: 反映前の古い取得(revision 1)を、保持の対象でないベースとして2回受ける
+      await store.commit(STREAM, "user-1", base(1, false), 10);
+      const stale = await store.commit(STREAM, "user-1", base(1, false), 11);
+
+      // Then: 組が残る
+      expect(stale.base).toEqual({ startedAt: 11, base: base(1, false) });
+      expect(stale.entries.map((e) => e.operation.value)).toEqual([
+        "confirmed",
+      ]);
+
+      // When: 反映済みの取得(revision 2)を受ける
+      const reflected = await store.commit(
+        STREAM,
+        "user-1",
+        base(2, false),
+        20,
+      );
+
+      // Then: 組が消える
+      expect(reflected).toEqual({ base: undefined, entries: [] });
     });
 
     it("commitは、古い取得で新しい保存済みのベースを上書きせず、削除の印は古い保存を拒む", async () => {

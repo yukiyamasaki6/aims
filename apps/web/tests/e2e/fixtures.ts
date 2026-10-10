@@ -8,6 +8,7 @@ import {
   devices,
   type Page,
 } from "@playwright/test";
+import { trackInflight } from "./helpers/inflight";
 import { mockTurnstile } from "./helpers/turnstile";
 
 // ブラウザのプロファイル(Cookie・localStorage・IndexedDB・Service Worker)を保ったまま閉じて開き直せる、アプリの再起動の再現。
@@ -22,6 +23,7 @@ export type RestartableProfile = {
 export const test = base.extend<{ profile: RestartableProfile }>({
   page: async ({ page }, use) => {
     await mockTurnstile(page);
+    trackInflight(page.context());
     await use(page);
   },
   profile: async ({ baseURL }, use) => {

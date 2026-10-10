@@ -16,5 +16,6 @@ export const roundOpHub = createOpSyncHub<SyncOperation, RoundBaseRecord>({
     laneOf,
     batchLimitOf,
     reflects: roundStreamRules.reflects,
+    isOlder: roundStreamRules.isOlder,
   }),
 });

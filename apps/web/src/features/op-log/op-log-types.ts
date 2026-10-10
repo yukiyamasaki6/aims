@@ -47,6 +47,8 @@ export type StreamRules<Op extends OpBase, Base> = {
   reflects: (base: Base | null, entry: StreamEntry<Op>) => boolean;
   // ベースに、反映済みでない操作を重ねた状態を端末に保持するか。未送信の操作が残るときは真を返す(保持しない組は丸ごと消すため)。
   keeps: (base: Base, entries: StreamEntry<Op>[]) => boolean;
+  // 取り込もうとするベースが、今のベースより古い状態か。取得の開始時刻では、同時に始まった取得のどちらが新しい状態を返すかを決められないため、サーバーが付けたrevisionで比べる。
+  isOlder: (current: Base, incoming: Base) => boolean;
 };
 
 // ineffectiveは効かなかった操作、discardedは認可・契約で拒否された操作。

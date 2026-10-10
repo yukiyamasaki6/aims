@@ -5,6 +5,7 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
+import { expectKeypadSettled } from "../helpers/keypad";
 import {
   getDistanceIds,
   openOtherDevice,
@@ -267,6 +268,8 @@ test("setup-09: 取り消し・やり直しの履歴があり、記録済みの�
   await expect(page.getByTestId("distance-summary-1")).toContainText("小計10");
   // 全エンドの入力が終わるとテンキーが閉じるため、記録した矢を指して開く。
   await page.getByTestId("shot-ball-1-1-1").click();
+  // 閉じたテンキーを開き直す動きが終わってから押す。
+  await expectKeypadSettled(page);
   await page.getByTestId("score-button-undo").click();
   await expect(page.getByTestId("distance-summary-1")).toContainText("小計0");
   await expect(page.getByTestId("score-button-redo")).toBeEnabled();

@@ -10,6 +10,7 @@ import {
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
+import { expectKeypadSettled } from "../helpers/keypad";
 import {
   clearShot,
   createDistance,
@@ -27,6 +28,7 @@ import {
   updateDistance,
   updateRound,
 } from "../helpers/other-device";
+import { expectRoundBasesFetched } from "../helpers/reference-data";
 import {
   createRound,
   expectNoSyncStatus,
@@ -211,6 +213,8 @@ test("sync-12: オフラインのラウンド詳細画面で、点数を記録�
   await page.context().setOffline(true);
   await page.getByTestId("score-button-10").click();
   await page.getByTestId("shot-ball-1-1-1").click();
+  // 閉じたテンキーを開き直す動きが終わってから押す。
+  await expectKeypadSettled(page);
   await page.getByTestId("score-button-clear").click();
   await page.getByTestId("score-button-9").click();
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
@@ -272,6 +276,8 @@ test("sync-13: オンラインのラウンド詳細画面で、点数の送信�
   await page.getByTestId("score-button-10").click();
   await expect.poll(() => attempts).toBeGreaterThan(0);
   await page.getByTestId("shot-ball-1-1-1").click();
+  // 閉じたテンキーを開き直す動きが終わってから押す。
+  await expectKeypadSettled(page);
   await page.getByTestId("score-button-9").click();
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
 
@@ -372,6 +378,8 @@ test("sync-14: サーバーが契約の不一致として拒否する点数が�
       (response.request().postData() ?? "").includes('"score_str":"8"'),
   );
   await page.getByTestId("end-blank-1-1").click();
+  // 閉じたテンキーを開き直す動きが終わってから押す。
+  await expectKeypadSettled(page);
   await page.getByTestId("score-button-9").click();
   // エンド1が矢数に達すると、エンド2の新しい矢を指す。
   await page.getByTestId("score-button-8").click();
@@ -932,6 +940,8 @@ test("sync-56: この端末で矢を消した後、他端末が矢を記録し�
   const cleared = page.waitForResponse(CLEAR_SHOTS_RPC);
   await page.getByTestId("score-button-9").click();
   await page.getByTestId("shot-ball-1-1-1").click();
+  // 閉じたテンキーを開き直す動きが終わってから押す。
+  await expectKeypadSettled(page);
   await page.getByTestId("score-button-clear").click();
   await cleared;
   await recordShot(supabase, {
@@ -1401,6 +1411,8 @@ async function signOutOnPage(page: Page) {
   await page.getByRole("button", { name: "サインアウト" }).click();
   await page.getByRole("button", { name: "サインアウトする" }).click();
   await expect(page).toHaveURL(/\/signin/);
+  // 水和の前に入力すると、メールアドレス欄が水和で空に戻るため、水和を待つ。
+  await waitForHydration(page);
 }
 
 test("sync-33: ラウンド詳細画面で点数を記録した後、オフラインになり、ラウンド一覧へ移ったとき、オンラインへ復帰すると、そのラウンドを開き直さなくても、点数が保存される", async ({
@@ -1576,6 +1588,8 @@ test("sync-37: 3つのラウンドに未送信の点数があり、1つが認可
 
   // When: 送信される
   blocked = false;
+  // 止めを解いた時点で、リトライ待機中の送信をすぐ試させる。
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
 
   // Then: 拒否された点数だけが消え、他の点数が保存される
   await expectSavedShots(first.supabase, first.distanceId, ["1:10"]);
@@ -1607,12 +1621,13 @@ test("sync-38: 未認証で送れない点数がある状態で、ラウンド�
   await backToList(page);
   await context.clearCookies();
   await page.unroute(RECORD_SHOTS_RPC);
-  // 再送は、サインインが切れているため、未認証で保留になる。
+  // 再送は、サインインが切れているため、未認証で保留になる。同じ契機で、セッションの喪失を検知した共通のガードがサインイン画面へ移す。
+  // テストからサインイン画面を開くと、ガードの遷移と競合して中断されるため、ガードの遷移を待つ。
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
-
-  // When: サインイン画面を開き、サインインし直す
-  await page.goto("/signin");
+  await expect(page).toHaveURL(/\/signin$/);
   await waitForHydration(page);
+
+  // When: サインインし直す
   await signInOnPage(page, {
     email: getSharedEmail(),
     password: SHARED_PASSWORD,
@@ -1750,6 +1765,8 @@ test("sync-40: 2つのタブで、同期済みの同じ矢の点数の変更と�
   // 背面のタブはアニメーションが進まず、操作の「安定」を待ち続けるため、操作するタブを前面にする。
   await page.bringToFront();
   await page.getByTestId("shot-ball-1-1-1").click();
+  // 閉じたテンキーを開き直す動きが終わってから押す。
+  await expectKeypadSettled(page);
   await page.getByTestId("score-button-10").click();
   await expect(endBalls(other, 1, 1)).toHaveText(["10"]);
   await other.bringToFront();
@@ -1890,6 +1907,7 @@ test("sync-42: オフラインで開始したラウンド詳細画面のとき�
   await page.goto("/rounds/new");
   await waitForHydration(page);
   await waitForServiceWorkerControl(page);
+  await expectRoundBasesFetched(page);
   await goOffline(page.context());
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
@@ -1989,6 +2007,7 @@ test("sync-45: オフラインでラウンドを開始し、ラウンド一覧�
   await page.goto("/rounds/new");
   await waitForHydration(page);
   await waitForServiceWorkerControl(page);
+  await expectRoundBasesFetched(page);
   await goOffline(page.context());
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
