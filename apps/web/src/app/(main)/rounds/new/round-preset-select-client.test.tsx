@@ -115,6 +115,8 @@ const otherPersonalPreset: Preset = {
 };
 
 beforeEach(() => {
+  // offlineの結果が返る状況はnavigator.onLineがfalseである(trueのままだと、すぐ再取得する)。
+  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   vi.clearAllMocks();
   supabase.getSession.mockResolvedValue({
     data: { session: { user: { id: "user-1" } } },

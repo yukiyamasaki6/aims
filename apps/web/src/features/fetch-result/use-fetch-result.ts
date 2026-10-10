@@ -6,6 +6,7 @@ import {
   type FetchResult,
   type FetchView,
 } from "./fetch-result";
+import { isOffline } from "./network";
 
 type Settled<T> = {
   key: readonly unknown[];
@@ -17,7 +18,7 @@ function sameKey(a: readonly unknown[], b: readonly unknown[]): boolean {
 }
 
 // 取得中の状態、アンマウント後の結果の破棄、再試行を扱う。
-// offline表示の間はonlineイベントでも再取得する。
+// offline表示の間はonlineイベントでも再取得する。offlineに決まった時点ですでにオンラインなら、すぐ再取得する。
 // depsが変わると取得し直す。fetcherはdepsに含めない。
 // 結果は取得時のdepsと対にして持ち、depsが変わった描画では前の結果を見せずloadingにする。
 export function useFetchResult<T>(
@@ -54,6 +55,12 @@ export function useFetchResult<T>(
     settled.result.status === "offline";
   useEffect(() => {
     if (!offline) return;
+    // offlineに決まる前にonlineが届いていた場合は、購読しても次のonlineが来ないため、その時点でオンラインならすぐ再取得する。
+    // オンラインでの再取得はofflineを返さないため、繰り返さない。
+    if (!isOffline()) {
+      retry();
+      return;
+    }
     const onOnline = () => retry();
     window.addEventListener("online", onOnline, { once: true });
     return () => window.removeEventListener("online", onOnline);

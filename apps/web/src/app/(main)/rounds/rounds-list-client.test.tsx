@@ -84,6 +84,8 @@ function offlineWithLocal(items: RoundListItem[] = inProgressRounds) {
 }
 
 beforeEach(() => {
+  // offlineの結果が返る状況はnavigator.onLineがfalseである(trueのままだと、すぐ再取得する)。
+  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   vi.clearAllMocks();
   localList.state = { local: null, waited: false };
   deletion.deleteRound.mockResolvedValue(undefined);

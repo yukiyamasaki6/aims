@@ -203,6 +203,10 @@ test("preset-07: 直前に距離を編集した直後のとき、保存ボタン
   await page.getByTestId("distance-config-toggle-1").click();
   await page.getByTestId("distance-config-unmarked-1").click();
   await page.getByTestId("distance-config-save-1").click();
+  // 編集は端末への保存の後に画面へ出る。前提の「画面に表示中の編集後」を作るため、表示を待ってから保存する。
+  await expect(page.getByTestId("distance-summary-1")).toContainText(
+    "Unmarked",
+  );
   await page.getByTestId("save-as-preset-trigger").click();
   await page.getByTestId("save-as-preset-name").fill(name);
 

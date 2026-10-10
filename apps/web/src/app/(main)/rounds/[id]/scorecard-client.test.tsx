@@ -1573,6 +1573,37 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     });
   });
 
+  it("指す位置とテンキーの高さが変わらないまま再描画されても、スクロールし直さない", () => {
+    // Given: マスが隠れていて、表示でスクロールした後、利用者が別の位置へスクロールした
+    stubLayout({
+      cell: { top: 760, bottom: 790 },
+      container: { top: 0, bottom: 800 },
+    });
+    const { rerender } = setup();
+    expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
+
+    // When: 同じ内容を作り直して再描画する(取得や再計算で、距離などが作り直される)
+    rerender(
+      <ScorecardClient
+        roundId="round-1"
+        loaded={{
+          base: roundTablesFromServer({
+            status: "in_progress",
+            roundConfig,
+            distances: [{ ...distanceA }],
+            shots: [],
+          }),
+          group: { base: undefined, entries: [] },
+          source: "server",
+        }}
+        targetFaces={[...targetFaces]}
+      />,
+    );
+
+    // Then: 利用者のスクロールを入力位置へ戻さない
+    expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
+  });
+
   it("選択中のマスが見えている場合は、スクロールしない", () => {
     // Given: マスが表示領域内の100〜140にある
     stubLayout({

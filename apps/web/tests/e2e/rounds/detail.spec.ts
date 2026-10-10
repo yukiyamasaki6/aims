@@ -11,6 +11,7 @@ import { openOtherDevice, updateRound } from "../helpers/other-device";
 import {
   blockTargetFacesOnDevice,
   CREATE_ROUND_RPC,
+  expectRoundBasesFetched,
   openNewRoundThenGoOffline,
   saveTargetFacesOnDevice,
   startRoundOffline,
@@ -340,7 +341,8 @@ test("detail-17: 取得がエラーになるとき、/rounds/[id]を開くと、
 // 内容を出さない間は水和の属性が付かないため、startRoundOfflineを使わない。
 async function startRoundOfflineWithoutTargetFaces(page: Page) {
   await blockTargetFacesOnDevice(page);
-  await openNewRoundThenGoOffline(page);
+  // 的の一覧の取得を止めているため、一括の取得の完了は待たない。
+  await openNewRoundThenGoOffline(page, { waitForTargetFaces: false });
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
 }
@@ -432,14 +434,6 @@ test("detail-19: オンラインでプリセットを選んで開始したラウ
   }
   await expect(page.getByText("的データを取得できません")).toHaveCount(0);
 });
-
-// 端末への取得の完了は、常駐の取得の部品が出す成功の回数で確かめる。
-async function expectRoundBasesFetched(page: Page) {
-  await expect(page.getByTestId("round-base-refresher")).not.toHaveAttribute(
-    "data-refreshed-count",
-    "0",
-  );
-}
 
 test("detail-22: 他端末で作成し記録した入力中のラウンドを、この端末で一度も開かずにオンラインで取得を済ませ、オフラインで再起動したとき、/rounds/[id]を開くと、距離・記録済みの点数・的・合計が表示され、矢数に達していない最初のエンドに仮の矢が表示され、テンキーが展開される", async ({
   profile,

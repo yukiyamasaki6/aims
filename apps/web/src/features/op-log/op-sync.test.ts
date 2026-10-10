@@ -89,6 +89,7 @@ function setup(
     reflects: (base, entry) =>
       entry.ackedRevision !== undefined &&
       (base === null || entry.ackedRevision <= base.revision),
+    isOlder: (current, incoming) => incoming.revision < current.revision,
     send,
     isOffline: () => state.offline,
     canSend: () => state.leader,
@@ -512,7 +513,24 @@ describe("createOpSync", () => {
       startedAt: 30,
       base: { revision: 9 },
     });
-    expect(store.commit).toHaveBeenCalledTimes(2);
+    expect(store.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("commitは、組が消えた後でも、開始時刻が新しくrevisionが古い取得を、保存せず反映しない", async () => {
+    // Given: revision 2の取得で組が消え(保存側の結果は組なし)、このタブは最後に取り込んだベースを持つ
+    const { sync, store } = setup();
+    await sync.commit({ revision: 2 }, 10, "user-1");
+
+    // When: 開始時刻は新しいが、反映前(revision 1)の状態を返した取得
+    const result = await sync.commit({ revision: 1 }, 11, "user-1");
+
+    // Then: 保存せず、ベースはrevision 2のまま
+    expect(store.commit).toHaveBeenCalledTimes(1);
+    expect(result.base).toEqual({ startedAt: 10, base: { revision: 2 } });
+    expect(sync.getSnapshot().base).toEqual({
+      startedAt: 10,
+      base: { revision: 2 },
+    });
   });
 
   it("commitは、保存に失敗しても、このタブのベースを取得したものにする", async () => {

@@ -581,7 +581,17 @@ export function ScorecardClient({
     return () => clearTimeout(timeout);
   }, [keypadShouldBeOpen]);
 
+  // pointerとdistancesは描画のたびに作り直されるため、依存に入れると、利用者がスクロールした位置を入力位置へ戻してしまう。
+  // 指す位置とテンキーの高さだけを契機にし、最新の値は参照から読む。
+  const pointerKey = pointer
+    ? `${pointer.distanceId}:${pointer.endNumber}`
+    : null;
+  const keypadInset = isLandscape ? 0 : keypadHeight;
+  const scrollTargetRef = useRef({ pointer, distances });
+  scrollTargetRef.current = { pointer, distances };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pointerKeyとkeypadInsetだけを契機にする
   useEffect(() => {
+    const { pointer, distances } = scrollTargetRef.current;
     if (!pointer) return;
     const testId = `end-row-${distanceNumber(distances, pointer.distanceId)}-${pointer.endNumber}`;
     const cell = document.querySelector(`[data-testid="${testId}"]`);
@@ -598,8 +608,7 @@ export function ScorecardClient({
     const margin = 16;
     const cellRect = cell.getBoundingClientRect();
     const containerRect = container.getBoundingClientRect();
-    const visibleBottom =
-      containerRect.bottom - (isLandscape ? 0 : keypadHeight) - margin;
+    const visibleBottom = containerRect.bottom - keypadInset - margin;
 
     let delta = 0;
     if (cellRect.bottom > visibleBottom) {
@@ -611,7 +620,7 @@ export function ScorecardClient({
     if (delta !== 0) {
       container.scrollBy({ top: delta, behavior: "smooth" });
     }
-  }, [pointer, keypadHeight, isLandscape, distances]);
+  }, [pointerKey, keypadInset]);
 
   const roundSummary = summarizeRound(distances, targetFaces, shots);
 

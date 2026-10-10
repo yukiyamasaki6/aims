@@ -191,6 +191,7 @@ function openTab(
       laneOf: () => "lane",
       batchLimitOf: () => 100,
       reflects,
+      isOlder: (current, incoming) => incoming.revision < current.revision,
     }),
     locks,
     createChannel: (name) =>

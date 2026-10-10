@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "./fetch-result";
 import { useFetchResult } from "./use-fetch-result";
 
@@ -11,7 +11,21 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+// offlineの結果が返る状況はnavigator.onLineがfalseなので、既定をfalseにする。
+let onLine = false;
+function comeOnline() {
+  onLine = true;
+}
+
 describe("useFetchResult", () => {
+  beforeEach(() => {
+    onLine = false;
+    vi.spyOn(navigator, "onLine", "get").mockImplementation(() => onLine);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe("正常系", () => {
     it("取得中はloading、完了すると結果を返す", async () => {
       // Given
@@ -57,6 +71,7 @@ describe("useFetchResult", () => {
 
       // When
       act(() => {
+        comeOnline();
         window.dispatchEvent(new Event("online"));
       });
 
@@ -103,6 +118,7 @@ describe("useFetchResult", () => {
 
       // When
       act(() => {
+        comeOnline();
         window.dispatchEvent(new Event("online"));
         window.dispatchEvent(new Event("online"));
       });
@@ -117,11 +133,15 @@ describe("useFetchResult", () => {
       const fetcher = vi
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValueOnce({ status: "offline" })
-        .mockResolvedValueOnce({ status: "offline" })
+        .mockImplementationOnce(async () => {
+          onLine = false;
+          return { status: "offline" };
+        })
         .mockResolvedValueOnce({ status: "ok", data: 3 });
       const { result } = renderHook(() => useFetchResult(fetcher, []));
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
       act(() => {
+        comeOnline();
         window.dispatchEvent(new Event("online"));
       });
       await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
@@ -129,6 +149,7 @@ describe("useFetchResult", () => {
 
       // When
       act(() => {
+        comeOnline();
         window.dispatchEvent(new Event("online"));
       });
 
@@ -137,6 +158,27 @@ describe("useFetchResult", () => {
         expect(result.current.view).toEqual({ status: "ok", data: 3 }),
       );
       expect(fetcher).toHaveBeenCalledTimes(3);
+    });
+
+    it("取得中にonlineイベントが届いた後にofflineで返ったとき、onlineを待たずに再取得する", async () => {
+      // Given
+      const fetcher = vi
+        .fn<() => Promise<FetchResult<number>>>()
+        .mockImplementationOnce(async () => {
+          comeOnline();
+          window.dispatchEvent(new Event("online"));
+          return { status: "offline" };
+        })
+        .mockResolvedValueOnce({ status: "ok", data: 4 });
+
+      // When
+      const { result } = renderHook(() => useFetchResult(fetcher, []));
+
+      // Then
+      await waitFor(() =>
+        expect(result.current.view).toEqual({ status: "ok", data: 4 }),
+      );
+      expect(fetcher).toHaveBeenCalledTimes(2);
     });
 
     it("再試行ボタンで先にloadingにした後のonlineでは、重複して取得しない", async () => {
@@ -152,6 +194,7 @@ describe("useFetchResult", () => {
 
       // When
       act(() => {
+        comeOnline();
         window.dispatchEvent(new Event("online"));
       });
 
@@ -193,6 +236,7 @@ describe("useFetchResult", () => {
 
       // When
       act(() => {
+        comeOnline();
         window.dispatchEvent(new Event("online"));
       });
 
