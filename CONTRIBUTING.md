@@ -107,6 +107,7 @@ gh auth login
     ```bash
     pnpm lint:fix
     ```
+    `pnpm lint` also limits the cognitive complexity of each function to 15 (Biome `noExcessiveCognitiveComplexity`). `pnpm lint:fix` cannot fix this; split the function by responsibility. Only when splitting would hurt readability, suppress it with `// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: <reason>`.
 5. Push your branch to GitHub:
     ```bash
     git push origin feat/my-feature-branch
