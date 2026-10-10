@@ -426,6 +426,45 @@ test("score-09: テンキーを展開したラウンド詳細画面でモバイ�
   await expect(page.getByTestId("provisional-shot")).toHaveCount(0);
 });
 
+// score-09の格納ボタンの大きさ。requirements.mdの行は増やさず、score-09の補足として置く。
+for (const viewport of [
+  { name: "モバイル", width: 375, height: 667 },
+  { name: "縦長のデスクトップ", width: 800, height: 1000 },
+]) {
+  test(`score-09の補足: テンキーを展開したラウンド詳細画面で${viewport.name}のとき、下矢印のタブは、高さが48px以上で、幅が右端の点数キーと同じで、右端の列の真上に重なり、中心でクリックを受ける`, async ({
+    page,
+  }) => {
+    // Given
+    await openRound(page, {}, viewport);
+    await expect(page.getByTestId("score-button-X")).toBeVisible();
+    // テンキーの展開のアニメーションが終わるまで待つ
+    await page.waitForTimeout(500);
+
+    // When
+    const toggle = await page.getByTestId("keypad-toggle").boundingBox();
+    // 右端の列のキー（クリア）
+    const key = await page.getByTestId("score-button-clear").boundingBox();
+
+    // Then
+    expect(toggle?.height).toBeGreaterThanOrEqual(48);
+    expect(Math.abs((toggle?.width ?? 0) - (key?.width ?? -1))).toBeLessThan(1);
+    expect(Math.abs((toggle?.x ?? 0) - (key?.x ?? -1))).toBeLessThan(1);
+    expect(toggle?.y).toBeLessThan(key?.y ?? Number.NEGATIVE_INFINITY);
+    const topTestId = await page.evaluate(
+      ([x, y]) =>
+        document
+          .elementFromPoint(x, y)
+          ?.closest("[data-testid]")
+          ?.getAttribute("data-testid"),
+      [
+        (toggle?.x ?? 0) + (toggle?.width ?? 0) / 2,
+        (toggle?.y ?? 0) + (toggle?.height ?? 0) / 2,
+      ],
+    );
+    expect(topTestId).toBe("keypad-toggle");
+  });
+}
+
 test("score-10: テンキーを展開したラウンド詳細画面でデスクトップのとき、閉じるボタンをタップすると、矢が指されなくなり、テンキーが格納される", async ({
   page,
 }) => {
