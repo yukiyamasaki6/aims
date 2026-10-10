@@ -122,6 +122,23 @@ test("offline-pwa-02: Manifestを満たしているとき、/を開くと、ブ�
   expect(installabilityErrors).toEqual([]);
 });
 
+test("offline-pwa-17: 未認証のとき、/を開くと、iOSのホーム画面に追加するアイコンの画像が取得できる", async ({
+  page,
+}) => {
+  // Given: 未認証
+  // When: /を開く
+  await page.goto("/");
+
+  // Then: apple-touch-iconのlinkが指す画像がPNGとして取得できる
+  const href = await page
+    .locator('link[rel="apple-touch-icon"]')
+    .getAttribute("href");
+  expect(href, "apple-touch-iconのlinkがあること").not.toBeNull();
+  const response = await page.request.get(href as string);
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toBe("image/png");
+});
+
 // 未認証のまま/roundsを開くと、水和後にセッション喪失の判定が/signinへハードナビゲーションし、
 // 取得済みのレスポンス本文が破棄されて読めなくなる。認証済みにして、/roundsに留まらせる。
 test.describe("認証済みでService Workerの更新", () => {

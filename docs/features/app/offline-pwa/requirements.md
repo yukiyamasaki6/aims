@@ -4,6 +4,7 @@
 | :--- | :--- | :--- | :--- |
 | offline-pwa-01 | 初回アクセス | /を開く | Service Workerが登録され、静的アセットと画面の枠がプリキャッシュされる |
 | offline-pwa-02 | Manifestを満たしている | /を開く | ブラウザからアプリとしてインストールできる |
+| offline-pwa-17 | 未認証 | /を開く | iOSのホーム画面に追加するアイコンの画像が取得できる |
 | offline-pwa-03 | Service Workerが登録済みで新しいビルドが存在する | Service Workerの更新を確認する | 新しいService Workerが待機せず即座に有効になり、新しいビルドが参照される |
 | offline-pwa-04 | Service Workerが登録済みでオフライン | /を開く | /offlineページが表示される |
 | offline-pwa-05 | 認証済み | manifestの`start_url`を開く | ラウンド一覧が表示される |
