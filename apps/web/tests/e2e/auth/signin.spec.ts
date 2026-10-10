@@ -37,6 +37,10 @@ test("signin-01: サインイン画面で確認済みアカウントのメール
   const signInButton = await openSignIn(page);
   await fillCredentials(page, email, password);
   await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  // 操作が不要なとき、チェックの枠は利用者に見えない(signup・reset-passwordは同じ部品のため単体テストを代表とする)。
+  await expect(page.locator("[data-turnstile-widget]")).not.toBeInViewport({
+    ratio: 0.5,
+  });
 
   // When
   await signInButton.click();
@@ -229,4 +233,32 @@ test("signin-10: サインイン画面で認証が失敗するとき、サイン
   ).toBeVisible();
   await expect(signInButton).toHaveAttribute("aria-disabled", "false");
   await expect(signInButton).toHaveAttribute("data-captcha-ready", "false");
+});
+
+test("signin-14: サインイン画面でセキュリティチェックの操作が求められるとき、/signinを開くと、チェックの枠が表示される、チェックを完了するとサインインボタンで送信できる", async ({
+  page,
+}) => {
+  // Given
+  const { email, password } = await createUniqueUser("signin-interactive");
+  await page.addInitScript(() => {
+    (
+      window as unknown as { __turnstileInteractive: boolean }
+    ).__turnstileInteractive = true;
+  });
+
+  // When
+  const signInButton = await openSignIn(page);
+
+  // Then
+  const widget = page.locator("[data-turnstile-widget]");
+  await expect(widget).toBeInViewport({ ratio: 1 });
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "false");
+  await fillCredentials(page, email, password);
+  await page.evaluate(() =>
+    (window as unknown as { __turnstileSolve: () => void }).__turnstileSolve(),
+  );
+  await expect(widget).not.toBeInViewport({ ratio: 0.5 });
+  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await signInButton.click();
+  await expect(page).toHaveURL(/\/rounds/);
 });
