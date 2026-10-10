@@ -105,7 +105,7 @@ gh auth login
     ```
     If lint/formatting errors occur, fix them automatically:
     ```bash
-    pnpm check:write
+    pnpm lint:fix
     ```
 5. Push your branch to GitHub:
     ```bash
