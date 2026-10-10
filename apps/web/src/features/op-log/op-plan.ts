@@ -31,41 +31,67 @@ export function planFlights<Op extends OpBase>(
   items: PlanItem<Op>[],
   ports: OpPlanPorts<Op>,
 ): OpFlight<Op>[] {
-  const busyLanes = new Set<string>();
-  for (const item of items) {
-    if (item.status === BUSY) busyLanes.add(ports.laneOf(item.operation));
+  const busy = busyLanes(items, ports);
+  const flights: OpFlight<Op>[] = [];
+  for (const lane of candidateLanes(items, busy, ports)) {
+    const entries = planLane(items, lane, ports);
+    if (entries.length > 0) flights.push({ lane, entries });
   }
+  return flights;
+}
 
+// 応答待ちの要求があるlane。
+function busyLanes<Op extends OpBase>(
+  items: PlanItem<Op>[],
+  ports: OpPlanPorts<Op>,
+): Set<string> {
+  const busy = new Set<string>();
+  for (const item of items) {
+    if (item.status === BUSY) busy.add(ports.laneOf(item.operation));
+  }
+  return busy;
+}
+
+// 応答待ちが無く、送ってよい`queued`の操作があるlane(出現順)。
+function candidateLanes<Op extends OpBase>(
+  items: PlanItem<Op>[],
+  busy: Set<string>,
+  ports: OpPlanPorts<Op>,
+): string[] {
   const lanes: string[] = [];
   for (const item of items) {
     if (item.status !== "queued" || !item.sendable) continue;
     const lane = ports.laneOf(item.operation);
-    if (!busyLanes.has(lane) && !lanes.includes(lane)) lanes.push(lane);
+    if (!busy.has(lane) && !lanes.includes(lane)) lanes.push(lane);
   }
+  return lanes;
+}
 
-  const flights: OpFlight<Op>[] = [];
-  for (const lane of lanes) {
-    const limit = Math.max(1, ports.batchLimitOf(lane));
-    const chosen = new Set<string>();
-    const entries: OpFlight<Op>["entries"] = [];
-    for (let index = 0; index < items.length; index++) {
-      const item = items[index];
-      if (
-        item.status !== "queued" ||
-        !item.sendable ||
-        ports.laneOf(item.operation) !== lane
-      ) {
-        continue;
-      }
-      if (entries.length >= limit) break;
-      // 単独にする操作は、ほかの操作と同じ要求に入れない。
-      if (item.solo && entries.length > 0) continue;
-      if (isBlocked(items, index, chosen, ports)) continue;
-      chosen.add(item.eventId);
-      entries.push({ eventId: item.eventId, operation: item.operation });
-      if (item.solo || limit === 1) break;
+// 1つのlaneの要求に入れる操作。
+function planLane<Op extends OpBase>(
+  items: PlanItem<Op>[],
+  lane: string,
+  ports: OpPlanPorts<Op>,
+): OpFlight<Op>["entries"] {
+  const limit = Math.max(1, ports.batchLimitOf(lane));
+  const chosen = new Set<string>();
+  const entries: OpFlight<Op>["entries"] = [];
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    if (
+      item.status !== "queued" ||
+      !item.sendable ||
+      ports.laneOf(item.operation) !== lane
+    ) {
+      continue;
     }
-    if (entries.length > 0) flights.push({ lane, entries });
+    if (entries.length >= limit) break;
+    // 単独にする操作は、ほかの操作と同じ要求に入れない。
+    if (item.solo && entries.length > 0) continue;
+    if (isBlocked(items, index, chosen, ports)) continue;
+    chosen.add(item.eventId);
+    entries.push({ eventId: item.eventId, operation: item.operation });
+    if (item.solo || limit === 1) break;
   }
-  return flights;
+  return entries;
 }

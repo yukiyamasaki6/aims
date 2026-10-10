@@ -217,6 +217,118 @@ function moveFrom(
   if (animation) moving.set(element, animation);
 }
 
+// 玉の並びの枠(親、幅、列)が変わったか。変わったときは、位置の差を動きにしない。
+function layoutChanged(before: BallPosition, position: BallPosition): boolean {
+  return (
+    before.parent !== position.parent ||
+    before.parentWidth !== position.parentWidth ||
+    before.parentColumns !== position.parentColumns
+  );
+}
+
+// 玉を前の位置から動かし、新しい位置を返す。
+function animateBalls(
+  root: HTMLElement,
+  previous: Map<string, BallPosition>,
+  moving: WeakMap<Element, Animation>,
+  reduced: boolean,
+): Map<string, BallPosition> {
+  const next = new Map<string, BallPosition>();
+  for (const element of root.querySelectorAll<HTMLElement>("[data-shot-id]")) {
+    const id = element.dataset.shotId as string;
+    const position: BallPosition = {
+      parent: element.parentElement,
+      parentWidth: element.parentElement?.clientWidth ?? 0,
+      parentColumns: element.parentElement?.style.gridTemplateColumns ?? "",
+      x: element.offsetLeft,
+      y: element.offsetTop,
+    };
+    next.set(id, position);
+    const before = previous.get(id);
+    if (!before || typeof element.animate !== "function") continue;
+    if (reduced || layoutChanged(before, position)) {
+      stopMoving(element, moving);
+      continue;
+    }
+    const dx = before.x - position.x;
+    const dy = before.y - position.y;
+    // 位置が変わらないものの動きは止めない。
+    if (dx === 0 && dy === 0) continue;
+    moveFrom(element, dx, dy, moving);
+  }
+  return next;
+}
+
+// 輪の、親の中での位置。
+function ringPositionOf(
+  element: HTMLElement,
+  parent: HTMLElement,
+): RingPosition {
+  return {
+    parentWidth: parent.clientWidth,
+    parentColumns: parent.style.gridTemplateColumns,
+    x: element.offsetLeft + element.offsetWidth / 2,
+    y: element.offsetTop + element.offsetHeight / 2,
+    shotId: element.dataset.shotId ?? null,
+  };
+}
+
+// 新しい矢の輪を、前の位置から動かす。ballsは玉の新しい位置。
+function animateNewRing(
+  element: HTMLElement,
+  ring: RingPosition,
+  before: RingPosition | undefined,
+  balls: Map<string, BallPosition>,
+  moving: WeakMap<Element, Animation>,
+  reduced: boolean,
+) {
+  // 押せる範囲を動かさないよう、空白のボタンでなく中の輪を動かす。
+  const mark = element.querySelector<HTMLElement>(
+    '[data-testid="provisional-shot"]',
+  );
+  if (!mark || !before || typeof mark.animate !== "function") return;
+  if (
+    reduced ||
+    before.parentWidth !== ring.parentWidth ||
+    before.parentColumns !== ring.parentColumns
+  ) {
+    stopMoving(mark, moving);
+    return;
+  }
+  if (before.shotId !== null && balls.has(before.shotId)) return;
+  const dx = before.x - ring.x;
+  const dy = before.y - ring.y;
+  if (dx === 0 && dy === 0) return;
+  moveFrom(mark, dx, dy, moving);
+}
+
+// 仮の矢の輪を前の位置から動かし、新しい位置を返す。
+function animateRings(
+  root: HTMLElement,
+  previousRings: Map<Element, RingPosition>,
+  balls: Map<string, BallPosition>,
+  moving: WeakMap<Element, Animation>,
+  reduced: boolean,
+): Map<Element, RingPosition> {
+  const nextRings = new Map<Element, RingPosition>();
+  for (const element of root.querySelectorAll<HTMLElement>("[data-ring]")) {
+    const parent = element.parentElement;
+    if (!parent) continue;
+    const ring = ringPositionOf(element, parent);
+    nextRings.set(parent, ring);
+    if (element.dataset.ring !== "new") continue;
+    animateNewRing(
+      element,
+      ring,
+      previousRings.get(parent),
+      balls,
+      moving,
+      reduced,
+    );
+  }
+  return nextRings;
+}
+
 function useReorderAnimation(rootRef: RefObject<HTMLElement | null>) {
   const previous = useRef(new Map<string, BallPosition>());
   const previousRings = useRef(new Map<Element, RingPosition>());
@@ -227,72 +339,15 @@ function useReorderAnimation(rootRef: RefObject<HTMLElement | null>) {
     const reduced = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
-    const next = new Map<string, BallPosition>();
-    for (const element of root.querySelectorAll<HTMLElement>(
-      "[data-shot-id]",
-    )) {
-      const id = element.dataset.shotId as string;
-      const position: BallPosition = {
-        parent: element.parentElement,
-        parentWidth: element.parentElement?.clientWidth ?? 0,
-        parentColumns: element.parentElement?.style.gridTemplateColumns ?? "",
-        x: element.offsetLeft,
-        y: element.offsetTop,
-      };
-      next.set(id, position);
-      const before = previous.current.get(id);
-      if (!before || typeof element.animate !== "function") continue;
-      if (
-        reduced ||
-        before.parent !== position.parent ||
-        before.parentWidth !== position.parentWidth ||
-        before.parentColumns !== position.parentColumns
-      ) {
-        stopMoving(element, moving.current);
-        continue;
-      }
-      const dx = before.x - position.x;
-      const dy = before.y - position.y;
-      // 位置が変わらないものの動きは止めない。
-      if (dx === 0 && dy === 0) continue;
-      moveFrom(element, dx, dy, moving.current);
-    }
+    const next = animateBalls(root, previous.current, moving.current, reduced);
     previous.current = next;
-
-    const nextRings = new Map<Element, RingPosition>();
-    for (const element of root.querySelectorAll<HTMLElement>("[data-ring]")) {
-      const parent = element.parentElement;
-      if (!parent) continue;
-      const ring: RingPosition = {
-        parentWidth: parent.clientWidth,
-        parentColumns: parent.style.gridTemplateColumns,
-        x: element.offsetLeft + element.offsetWidth / 2,
-        y: element.offsetTop + element.offsetHeight / 2,
-        shotId: element.dataset.shotId ?? null,
-      };
-      nextRings.set(parent, ring);
-      if (element.dataset.ring !== "new") continue;
-      // 押せる範囲を動かさないよう、空白のボタンでなく中の輪を動かす。
-      const mark = element.querySelector<HTMLElement>(
-        '[data-testid="provisional-shot"]',
-      );
-      const before = previousRings.current.get(parent);
-      if (!mark || !before || typeof mark.animate !== "function") continue;
-      if (
-        reduced ||
-        before.parentWidth !== ring.parentWidth ||
-        before.parentColumns !== ring.parentColumns
-      ) {
-        stopMoving(mark, moving.current);
-        continue;
-      }
-      if (before.shotId !== null && next.has(before.shotId)) continue;
-      const dx = before.x - ring.x;
-      const dy = before.y - ring.y;
-      if (dx === 0 && dy === 0) continue;
-      moveFrom(mark, dx, dy, moving.current);
-    }
-    previousRings.current = nextRings;
+    previousRings.current = animateRings(
+      root,
+      previousRings.current,
+      next,
+      moving.current,
+      reduced,
+    );
   });
 }
 
@@ -452,6 +507,60 @@ function EndRow({
   );
 }
 
+// 横向きではテンキーをスコア領域の隣に並ぶ側パネルとして<main>の外側に、
+// 縦向きでは<main>内蔵のボトムシートとして描画を完全に分ける（CSSの
+// 出し分けではなくJSで判定し、どちらか一方だけをマウントする）。これに
+// より、縦向きのボトムシートはposition:fixedにする必要が無くなり、常に
+// <main>の内側（＝レフトパネルより右のコンテンツ領域）に収まるため、
+// レフトパネルの実占有幅を気にする必要が一切無くなる。
+function useIsLandscape() {
+  const [isLandscape, setIsLandscape] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia("(orientation: landscape)");
+    const update = () => setIsLandscape(mql.matches);
+    update();
+    mql.addEventListener("change", update);
+    return () => mql.removeEventListener("change", update);
+  }, []);
+  return isLandscape;
+}
+
+// keypadOpen（=position有無）の変化をそのままアンマウントすると格納
+// アニメーションが再生できないため、トランジション終了後に実際に
+// アンマウントするまでの間だけmountedをtrueに保つ。
+function useKeypadPresence(open: boolean) {
+  const [keypadMounted, setKeypadMounted] = useState(open);
+  const [keypadVisible, setKeypadVisible] = useState(open);
+  const rafRef = useRef(0);
+  useEffect(() => {
+    if (open) {
+      setKeypadMounted(true);
+      // マウント直後の1フレーム目でtrueにするとブラウザがtranslate-y-fullを描画
+      // する前に遷移先の状態へ変わってしまいアニメーションしないため、
+      // 1フレーム待ってから変更する。
+      const raf1 = requestAnimationFrame(() => {
+        const raf2 = requestAnimationFrame(() => setKeypadVisible(true));
+        rafRef.current = raf2;
+      });
+      rafRef.current = raf1;
+      return () => cancelAnimationFrame(rafRef.current);
+    }
+
+    setKeypadVisible(false);
+    const timeout = setTimeout(() => setKeypadMounted(false), 200);
+    return () => clearTimeout(timeout);
+  }, [open]);
+  return { keypadMounted, keypadVisible, setKeypadMounted };
+}
+
+// 格納アニメーション中もテンキーの中身（点数ボタン）を表示し続けられる
+// よう、何も指さなくなった後も直近に指していた矢の距離を保持しておく。
+function useLastDistance(pointedDistance: Distance | null | undefined) {
+  const lastDistanceRef = useRef<Distance | null>(pointedDistance ?? null);
+  if (pointedDistance) lastDistanceRef.current = pointedDistance;
+  return pointedDistance ?? lastDistanceRef.current;
+}
+
 export function ScorecardClient({
   roundId,
   loaded,
@@ -494,36 +603,16 @@ export function ScorecardClient({
   // 指している矢が他端末で消えた、エンドが満杯になった、距離が無効になったときは、いまの状態に合わせる。
   const pointer = reconcilePointer(distances, liveShots, storedPointer);
   if (!isSamePointer(pointer, storedPointer)) setPointer(pointer);
-  // keypadOpen（=position有無）の変化をそのままアンマウントすると格納
-  // アニメーションが再生できないため、トランジション終了後に実際に
-  // アンマウントするまでの間だけmountedをtrueに保つ。
-  const [keypadMounted, setKeypadMounted] = useState(pointer !== null);
-  const [keypadVisible, setKeypadVisible] = useState(pointer !== null);
+  const keypadShouldBeOpen = pointer !== null;
+  const { keypadMounted, keypadVisible, setKeypadMounted } =
+    useKeypadPresence(keypadShouldBeOpen);
   const [keypadHeight, setKeypadHeight] = useState(KEYPAD_HEIGHT_FALLBACK);
   const keypadRef = useRef<HTMLDivElement>(null);
   const keypadResizeObserverRef = useRef<ResizeObserver | null>(null);
-  const rafRef = useRef(0);
-  // 横向きではテンキーをスコア領域の隣に並ぶ側パネルとして<main>の外側に、
-  // 縦向きでは<main>内蔵のボトムシートとして描画を完全に分ける（CSSの
-  // 出し分けではなくJSで判定し、どちらか一方だけをマウントする）。これに
-  // より、縦向きのボトムシートはposition:fixedにする必要が無くなり、常に
-  // <main>の内側（＝レフトパネルより右のコンテンツ領域）に収まるため、
-  // レフトパネルの実占有幅を気にする必要が一切無くなる。
-  const [isLandscape, setIsLandscape] = useState(false);
-  useEffect(() => {
-    const mql = window.matchMedia("(orientation: landscape)");
-    const update = () => setIsLandscape(mql.matches);
-    update();
-    mql.addEventListener("change", update);
-    return () => mql.removeEventListener("change", update);
-  }, []);
-  // 格納アニメーション中もテンキーの中身（点数ボタン）を表示し続けられる
-  // よう、何も指さなくなった後も直近に指していた矢の距離を保持しておく。
+  const isLandscape = useIsLandscape();
   const pointedDistance =
     pointer && distances.find((d) => d.id === pointer.distanceId);
-  const lastDistanceRef = useRef<Distance | null>(pointedDistance ?? null);
-  if (pointedDistance) lastDistanceRef.current = pointedDistance;
-  const keypadDistance = pointedDistance ?? lastDistanceRef.current;
+  const keypadDistance = useLastDistance(pointedDistance);
   const scorecardRef = useRef<HTMLDivElement>(null);
   useReorderAnimation(scorecardRef);
 
@@ -545,7 +634,7 @@ export function ScorecardClient({
     // 指している矢を残したままだと輪の表示が消えず、見た目上フォーカスが
     // 外れていないように見えるため外す。
     // これによりkeypadShouldBeOpen（=指している矢の有無）もfalseになり、
-    // 下の格納アニメーション用useEffectが発火する。
+    // useKeypadPresenceの格納アニメーション用useEffectが発火する。
     setPointer(null);
     // 玉と空白のボタンだけフォーカスを外す。無条件にblurすると、キーパッド外の
     // 他の入力欄（RoundConfigPanel等）へフォーカスした瞬間にも外れてしまう。
@@ -559,27 +648,6 @@ export function ScorecardClient({
       active?.blur();
     }
   }, []);
-
-  const keypadShouldBeOpen = pointer !== null;
-
-  useEffect(() => {
-    if (keypadShouldBeOpen) {
-      setKeypadMounted(true);
-      // マウント直後の1フレーム目でtrueにするとブラウザがtranslate-y-fullを描画
-      // する前に遷移先の状態へ変わってしまいアニメーションしないため、
-      // 1フレーム待ってから変更する。
-      const raf1 = requestAnimationFrame(() => {
-        const raf2 = requestAnimationFrame(() => setKeypadVisible(true));
-        rafRef.current = raf2;
-      });
-      rafRef.current = raf1;
-      return () => cancelAnimationFrame(rafRef.current);
-    }
-
-    setKeypadVisible(false);
-    const timeout = setTimeout(() => setKeypadMounted(false), 200);
-    return () => clearTimeout(timeout);
-  }, [keypadShouldBeOpen]);
 
   // pointerとdistancesは描画のたびに作り直されるため、依存に入れると、利用者がスクロールした位置を入力位置へ戻してしまう。
   // 指す位置とテンキーの高さだけを契機にし、最新の値は参照から読む。

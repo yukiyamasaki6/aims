@@ -94,12 +94,32 @@ export function createOpSyncHub<Op extends OpBase, Base>(
     return new Promise((resolve) => readyWaiters.push(resolve));
   }
 
-  // 現在のユーザーの全ての列を読み、送信器へ取り込んで送る。読み込みに失敗したときは何もしない。
-  async function reloadAll() {
-    const target = epoch;
+  // 読み込み前の、各列の位置を記録する。
+  function readMarks(): Map<string, number> {
     const marks = new Map<string, number>();
     for (const [streamId, sender] of senders)
       marks.set(streamId, sender.mark());
+    return marks;
+  }
+
+  // 読んだ組に無い列を、空で取り込む。
+  function clearMissingStreams(
+    streams: Map<string, StreamGroup<Op, Base>>,
+    marks: Map<string, number>,
+  ) {
+    for (const [streamId, sender] of senders) {
+      if (!streams.has(streamId))
+        sender.adopt(
+          { base: undefined, entries: [] },
+          { readAt: marks.get(streamId) ?? 0 },
+        );
+    }
+  }
+
+  // 現在のユーザーの全ての列を読み、送信器へ取り込んで送る。読み込みに失敗したときは何もしない。
+  async function reloadAll() {
+    const target = epoch;
+    const marks = readMarks();
     let streams: Map<string, StreamGroup<Op, Base>>;
     try {
       streams = await store.loadAll(userId);
@@ -113,13 +133,7 @@ export function createOpSyncHub<Op extends OpBase, Base>(
         readAt: marks.get(streamId) ?? 0,
       });
     }
-    for (const [streamId, sender] of senders) {
-      if (!streams.has(streamId))
-        sender.adopt(
-          { base: undefined, entries: [] },
-          { readAt: marks.get(streamId) ?? 0 },
-        );
-    }
+    clearMissingStreams(streams, marks);
     for (const sender of senders.values()) sender.wake();
     markLoaded(target);
   }

@@ -262,15 +262,9 @@ export function createOpLogStore<Op extends OpBase, Base>(
         const stored =
           userId === null ? undefined : await bases.get([userId, streamId]);
         const entries = await streamEntries(tx, streamId, userId);
-        // 保存済みより古い取得は、何も変えない。
-        if (stored !== undefined && stored.startedAt > startedAt) {
-          return { base: toStreamBase(stored), entries };
-        }
-        // 開始時刻が新しくても、保存済みのベースよりrevisionが古い状態を返した取得は、何も変えない。
         if (
-          stored?.base != null &&
-          base !== null &&
-          rules.isOlder(stored.base, base)
+          stored !== undefined &&
+          isStaleFetch(stored, startedAt, base, rules)
         ) {
           return { base: toStreamBase(stored), entries };
         }
@@ -287,9 +281,7 @@ export function createOpLogStore<Op extends OpBase, Base>(
             await bases.put({ userId, streamId, ...incoming });
           return { base: incoming, entries: remaining };
         }
-        // 保持の規則に当たらない組は、未送信の操作が無い(あれば必ず当たる)ため、ベースも操作も丸ごと消す。
-        for (const entry of remaining) await ops.delete(entry.seq);
-        if (userId !== null) await bases.delete([userId, streamId]);
+        await deleteStream(ops, bases, remaining, userId, streamId);
         return { base: undefined, entries: [] };
       });
     },
@@ -322,6 +314,33 @@ export function createOpLogStore<Op extends OpBase, Base>(
       (await closing).close();
     },
   };
+}
+
+// 保存済みより古い取得か。古ければ、何も変えない。
+function isStaleFetch<Op extends OpBase, Base>(
+  stored: StoredBase<Base>,
+  startedAt: number,
+  base: Base | null,
+  rules: StreamRules<Op, Base>,
+): boolean {
+  // 保存済みより古い取得。
+  if (stored.startedAt > startedAt) return true;
+  // 開始時刻が新しくても、保存済みのベースよりrevisionが古い状態を返した取得は、何も変えない。
+  return (
+    stored.base != null && base !== null && rules.isOlder(stored.base, base)
+  );
+}
+
+// 保持の規則に当たらない組は、未送信の操作が無い(あれば必ず当たる)ため、ベースも操作も丸ごと消す。
+async function deleteStream(
+  ops: { delete: (key: number) => Promise<void> },
+  bases: { delete: (key: [string, string]) => Promise<void> },
+  remaining: { seq: number }[],
+  userId: string | null,
+  streamId: string,
+) {
+  for (const entry of remaining) await ops.delete(entry.seq);
+  if (userId !== null) await bases.delete([userId, streamId]);
 }
 
 // ベースに反映済みの操作を消し、残りを返す。

@@ -262,68 +262,12 @@ export function createOpSync<Op extends OpBase, Base>(
     let diverged = false;
     let shared = false;
     if (!failure) {
-      flights.delete(flight);
       shared = true;
-      const ineffective = new Set<string>();
-      members.forEach((item, index) => {
-        const result = results[index];
-        if (!result.applied || result.rejectedFields.length > 0) {
-          diverged = true;
-        }
-        if (!result.applied) {
-          // 効かなかった操作はどこにも記録されないため、列から外す。
-          ineffective.add(item.eventId);
-          return;
-        }
-        item.status = "acked";
-        item.confirmedFields = result.appliedFields;
-        item.ackedRevision = result.revision ?? 0;
-        item.ackedApplied = true;
-        // DBへのackの保存に失敗しても、再送が冪等で同じ結果を返すため続ける。
-        writes.push(
-          deps.store
-            .ack(
-              item.eventId,
-              result.revision,
-              result.applied,
-              result.appliedFields,
-            )
-            .catch(() => {}),
-        );
-      });
-      if (ineffective.size > 0) {
-        const ids = [...ineffective];
-        items = items.filter((item) => !ineffective.has(item.eventId));
-        for (const id of ids) retired.add(id);
-        writes.push(deps.store.retire(ids, "ineffective").catch(() => {}));
-      }
-      operations = persistedOperations();
-      if (diverged) notifyDiverged();
+      diverged = settleAcked(flight, members, results, writes);
     } else if (decision.type === "retry") {
-      flight.attempt += 1;
-      flight.notBefore = now() + decision.delayMs;
-      for (const item of members) item.status = "backoff";
-      if (!disposed) scheduleTimer(decision.delayMs);
+      scheduleRetry(flight, members, decision.delayMs);
     } else {
-      flights.delete(flight);
-      const disposition = classifyFailure(failure.cause);
-      if (disposition === "discard" && members.length > 1) {
-        // 単独で拒否された操作だけを破棄するため、単独の要求へ切り分ける。試行は消費しない。
-        for (const item of members) {
-          item.solo = true;
-          item.status = "queued";
-        }
-      } else if (disposition === "discard") {
-        const ids = members.map((item) => item.eventId);
-        items = items.filter((item) => !ids.includes(item.eventId));
-        for (const id of ids) retired.add(id);
-        writes.push(deps.store.retire(ids, "discarded").catch(() => {}));
-        operations = persistedOperations();
-        shared = true;
-      } else {
-        for (const item of members) item.status = "held";
-        shared = true;
-      }
+      shared = settleRejected(flight, members, failure, writes);
     }
     emit();
     if (shared) {
@@ -331,6 +275,97 @@ export function createOpSync<Op extends OpBase, Base>(
       void Promise.allSettled(writes).then(() => notifyShared(diverged));
     }
     if (!disposed) pump();
+  }
+
+  // 列から外して、再び現れないよう記録し、保存先からも退かせる。
+  function retireItems(
+    ids: string[],
+    reason: "ineffective" | "discarded",
+    writes: Promise<void>[],
+  ) {
+    items = items.filter((item) => !ids.includes(item.eventId));
+    for (const id of ids) retired.add(id);
+    writes.push(deps.store.retire(ids, reason).catch(() => {}));
+  }
+
+  // 要求が成功した場合。結果を列と保存先へ反映し、ベースと異なる結果になったとき(diverged)は購読者へ知らせる。divergedを返す。
+  function settleAcked(
+    flight: Flight,
+    members: Item<Op>[],
+    results: OpResult[],
+    writes: Promise<void>[],
+  ): boolean {
+    flights.delete(flight);
+    let diverged = false;
+    const ineffective: string[] = [];
+    members.forEach((item, index) => {
+      const result = results[index];
+      if (!result.applied || result.rejectedFields.length > 0) {
+        diverged = true;
+      }
+      if (!result.applied) {
+        // 効かなかった操作はどこにも記録されないため、列から外す。
+        ineffective.push(item.eventId);
+        return;
+      }
+      item.status = "acked";
+      item.confirmedFields = result.appliedFields;
+      item.ackedRevision = result.revision ?? 0;
+      item.ackedApplied = true;
+      // DBへのackの保存に失敗しても、再送が冪等で同じ結果を返すため続ける。
+      writes.push(
+        deps.store
+          .ack(
+            item.eventId,
+            result.revision,
+            result.applied,
+            result.appliedFields,
+          )
+          .catch(() => {}),
+      );
+    });
+    if (ineffective.length > 0) retireItems(ineffective, "ineffective", writes);
+    operations = persistedOperations();
+    if (diverged) notifyDiverged();
+    return diverged;
+  }
+
+  // 再試行できる失敗の場合。同じ要求を、待ってから再送する。
+  function scheduleRetry(flight: Flight, members: Item<Op>[], delayMs: number) {
+    flight.attempt += 1;
+    flight.notBefore = now() + delayMs;
+    for (const item of members) item.status = "backoff";
+    if (!disposed) scheduleTimer(delayMs);
+  }
+
+  // 再試行できない失敗の場合。他のタブへ共有する状態が変わったか(shared)を返す。
+  function settleRejected(
+    flight: Flight,
+    members: Item<Op>[],
+    failure: NonNullable<BatchResult>,
+    writes: Promise<void>[],
+  ): boolean {
+    flights.delete(flight);
+    const disposition = classifyFailure(failure.cause);
+    if (disposition === "discard" && members.length > 1) {
+      // 単独で拒否された操作だけを破棄するため、単独の要求へ切り分ける。試行は消費しない。
+      for (const item of members) {
+        item.solo = true;
+        item.status = "queued";
+      }
+      return false;
+    }
+    if (disposition === "discard") {
+      retireItems(
+        members.map((item) => item.eventId),
+        "discarded",
+        writes,
+      );
+      operations = persistedOperations();
+      return true;
+    }
+    for (const item of members) item.status = "held";
+    return true;
   }
 
   function heldIds(): string[] {
@@ -383,6 +418,102 @@ export function createOpSync<Op extends OpBase, Base>(
     }
   }
 
+  // 別のタブが確定前に破棄した操作。確定済みの操作は、共有の組のベースを取ったときだけ、組から無くなったものを外す(そのベースとともに外れたもの)。
+  function isSettledElsewhere(
+    item: Item<Op>,
+    rowIds: Set<string>,
+    sharedBaseTaken: boolean,
+    readAt: number,
+  ): boolean {
+    return (
+      item.seq !== undefined &&
+      (item.persistedTick ?? 0) <= readAt &&
+      (item.status === "queued" ||
+        item.status === "held" ||
+        (sharedBaseTaken && item.status === "acked")) &&
+      !rowIds.has(item.eventId)
+    );
+  }
+
+  // 他のタブが確定した操作を外した列を返す。外した操作は`retired`に記録する。
+  function keepUnsettled(
+    rowIds: Set<string>,
+    sharedBaseTaken: boolean,
+    readAt: number,
+  ): Item<Op>[] {
+    const kept: Item<Op>[] = [];
+    for (const item of items) {
+      if (isSettledElsewhere(item, rowIds, sharedBaseTaken, readAt)) {
+        retired.add(item.eventId);
+        continue;
+      }
+      kept.push(item);
+    }
+    return kept;
+  }
+
+  // 列に無い操作を、組の行から作る。
+  function itemFromEntry(entry: OpLogEntry<Op>): Item<Op> {
+    const confirmed = entry.ackedRevision !== undefined;
+    return {
+      eventId: entry.eventId,
+      operation: entry.operation,
+      status: confirmed ? "acked" : "queued",
+      solo: false,
+      seq: entry.seq,
+      confirmedFields: confirmed ? (entry.ackedFields ?? null) : undefined,
+      ackedRevision: entry.ackedRevision,
+      ackedApplied: entry.ackedApplied,
+    };
+  }
+
+  // 列にある操作へ、組の行の`seq`と確定を補う。
+  function completeFromEntry(item: Item<Op>, entry: OpLogEntry<Op>) {
+    if (item.seq === undefined) item.seq = entry.seq;
+    const confirmed = entry.ackedRevision !== undefined;
+    if (confirmed && (item.status === "queued" || item.status === "held")) {
+      item.status = "acked";
+      item.confirmedFields = entry.ackedFields ?? null;
+      item.ackedRevision = entry.ackedRevision;
+      item.ackedApplied = entry.ackedApplied;
+    }
+  }
+
+  // 組の行を列へ取り込む。無い操作は足し、ある操作は補う。
+  function mergeRows(next: Item<Op>[], rows: OpLogEntry<Op>[]) {
+    const known = new Map(next.map((item) => [item.eventId, item]));
+    for (const entry of rows) {
+      const item = known.get(entry.eventId);
+      if (!item) {
+        const added = itemFromEntry(entry);
+        next.push(added);
+        known.set(added.eventId, added);
+        continue;
+      }
+      completeFromEntry(item, entry);
+    }
+  }
+
+  // 他のタブの保留の状態を反映する。
+  function applyHeld(next: Item<Op>[], heldIdList: string[]) {
+    const held = new Set(heldIdList);
+    for (const item of next) {
+      if (item.status === "queued" && held.has(item.eventId)) {
+        item.status = "held";
+      } else if (item.status === "held" && !held.has(item.eventId)) {
+        item.status = "queued";
+      }
+    }
+  }
+
+  // `seq`を持つ操作を`seq`の昇順に、その後ろに`seq`を持たない操作を元の順で並べる。
+  function orderBySeq(next: Item<Op>[]): Item<Op>[] {
+    const withSeq = next
+      .filter((item) => item.seq !== undefined)
+      .sort((first, second) => (first.seq ?? 0) - (second.seq ?? 0));
+    return [...withSeq, ...next.filter((item) => item.seq === undefined)];
+  }
+
   function adoptGroup(
     group: StreamGroup<Op, Base>,
     options: AdoptOptions<Base> = {},
@@ -394,64 +525,10 @@ export function createOpSync<Op extends OpBase, Base>(
     );
     const rowIds = new Set(rows.map((entry) => entry.eventId));
 
-    const next: Item<Op>[] = [];
-    for (const item of items) {
-      // 別のタブが確定前に破棄した操作。確定済みの操作は、共有の組のベースを取ったときだけ、組から無くなったものを外す(そのベースとともに外れたもの)。
-      const settledElsewhere =
-        item.seq !== undefined &&
-        (item.persistedTick ?? 0) <= (options.readAt ?? 0) &&
-        (item.status === "queued" ||
-          item.status === "held" ||
-          (sharedBaseTaken && item.status === "acked")) &&
-        !rowIds.has(item.eventId);
-      if (settledElsewhere) {
-        retired.add(item.eventId);
-        continue;
-      }
-      next.push(item);
-    }
-    const known = new Map(next.map((item) => [item.eventId, item]));
-    for (const entry of rows) {
-      const item = known.get(entry.eventId);
-      const confirmed = entry.ackedRevision !== undefined;
-      if (!item) {
-        const added: Item<Op> = {
-          eventId: entry.eventId,
-          operation: entry.operation,
-          status: confirmed ? "acked" : "queued",
-          solo: false,
-          seq: entry.seq,
-          confirmedFields: confirmed ? (entry.ackedFields ?? null) : undefined,
-          ackedRevision: entry.ackedRevision,
-          ackedApplied: entry.ackedApplied,
-        };
-        next.push(added);
-        known.set(added.eventId, added);
-        continue;
-      }
-      if (item.seq === undefined) item.seq = entry.seq;
-      if (confirmed && (item.status === "queued" || item.status === "held")) {
-        item.status = "acked";
-        item.confirmedFields = entry.ackedFields ?? null;
-        item.ackedRevision = entry.ackedRevision;
-        item.ackedApplied = entry.ackedApplied;
-      }
-    }
-    if (options.held) {
-      const held = new Set(options.held);
-      for (const item of next) {
-        if (item.status === "queued" && held.has(item.eventId)) {
-          item.status = "held";
-        } else if (item.status === "held" && !held.has(item.eventId)) {
-          item.status = "queued";
-        }
-      }
-    }
-    // `seq`を持つ操作を`seq`の昇順に、その後ろに`seq`を持たない操作を元の順で並べる。
-    const withSeq = next
-      .filter((item) => item.seq !== undefined)
-      .sort((first, second) => (first.seq ?? 0) - (second.seq ?? 0));
-    items = [...withSeq, ...next.filter((item) => item.seq === undefined)];
+    const next = keepUnsettled(rowIds, sharedBaseTaken, options.readAt ?? 0);
+    mergeRows(next, rows);
+    if (options.held) applyHeld(next, options.held);
+    items = orderBySeq(next);
     if (fetchedBaseTaken) dropReflected();
     operations = persistedOperations();
     emit();

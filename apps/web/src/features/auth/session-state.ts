@@ -39,25 +39,55 @@ export async function readSession(
   let previous: AuthError | null = null;
   let rejected = false;
   for (;;) {
-    const { session } = result.data;
-    const { error } = result;
-    if (session?.user) {
-      if (rejected && session.refresh_token === forced?.refresh_token) {
+    const verdict = judgeResult(result, { forced, rejected, previous });
+    switch (verdict.kind) {
+      case "authenticated":
+        return { status: "authenticated", session: verdict.session };
+      case "clear":
         await supabase.auth.signOut({ scope: "local" });
         return { status: "unauthenticated" };
-      }
-      return { status: "authenticated", session };
-    }
-    if (!error) return { status: "unauthenticated" };
-    if (isAuthRetryableFetchError(error)) return { status: "unknown", error };
-    if (!isAuthRefreshDiscardedError(error)) {
-      if (error === previous) {
-        await supabase.auth.signOut({ scope: "local" });
+      case "unauthenticated":
         return { status: "unauthenticated" };
-      }
-      if (forced) rejected = true;
+      case "unknown":
+        return { status: "unknown", error: verdict.error };
+      case "reread":
+        previous = verdict.previous;
+        rejected = verdict.rejected;
+        result = await supabase.auth.getSession();
     }
-    previous = error;
-    result = await supabase.auth.getSession();
   }
+}
+
+type Verdict =
+  | { kind: "authenticated"; session: Session }
+  | { kind: "clear" }
+  | { kind: "unauthenticated" }
+  | { kind: "unknown"; error: AuthError }
+  | { kind: "reread"; previous: AuthError; rejected: boolean };
+
+// 1回の結果の判定。I/Oは行わず、保存先を空にするか(clear)、読み直すか(reread)は呼び出し側が実行する。
+function judgeResult(
+  result: SessionResult,
+  ctx: {
+    forced: Session | null;
+    rejected: boolean;
+    previous: AuthError | null;
+  },
+): Verdict {
+  const { session } = result.data;
+  const { error } = result;
+  if (session?.user) {
+    if (ctx.rejected && session.refresh_token === ctx.forced?.refresh_token) {
+      return { kind: "clear" };
+    }
+    return { kind: "authenticated", session };
+  }
+  if (!error) return { kind: "unauthenticated" };
+  if (isAuthRetryableFetchError(error)) return { kind: "unknown", error };
+  let rejected = ctx.rejected;
+  if (!isAuthRefreshDiscardedError(error)) {
+    if (error === ctx.previous) return { kind: "clear" };
+    if (ctx.forced) rejected = true;
+  }
+  return { kind: "reread", previous: error, rejected };
 }

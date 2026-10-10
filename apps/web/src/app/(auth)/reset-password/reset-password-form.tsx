@@ -3,7 +3,14 @@
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
-import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type RefObject,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -15,6 +22,7 @@ import { AuthHeader } from "../_shared/auth-header";
 import { Turnstile } from "../_shared/turnstile";
 import {
   initialResetPasswordState,
+  type ResetPasswordState,
   resetPasswordReducer,
 } from "./reset-password-flow";
 import {
@@ -242,138 +250,246 @@ export function ResetPasswordForm() {
 
   if (step === "password") {
     return (
-      <>
-        <AuthHeader
-          title="新しいパスワードを設定"
-          description="このパスワードで次回からサインインします。"
-        />
-        <form
-          onSubmit={handleSetPassword}
-          noValidate
-          className="flex w-full flex-col gap-3"
-        >
-          <div className="flex flex-col gap-1">
-            <PasswordInput
-              placeholder="新しいパスワード（8文字以上・英数字を含む）"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              aria-invalid={Boolean(passwordFieldErrors.password)}
-              aria-describedby={
-                passwordFieldErrors.password
-                  ? "reset-password-password-error"
-                  : undefined
-              }
-            />
-            {passwordFieldErrors.password && (
-              <p
-                id="reset-password-password-error"
-                className="text-destructive text-sm"
-              >
-                {passwordFieldErrors.password}
-              </p>
-            )}
-          </div>
-          <Button
-            type="submit"
-            aria-disabled={primarySubmitting}
-            className={cn(
-              primarySubmitting && "pointer-events-none opacity-50",
-            )}
-          >
-            {primarySubmitting && <Loader2 className="size-3.5 animate-spin" />}
-            パスワードを変更
-          </Button>
-        </form>
-        {error && (
-          <p className="text-center text-destructive text-sm">{error}</p>
-        )}
-        <SignInLink />
-      </>
+      <PasswordStep
+        password={password}
+        setPassword={setPassword}
+        passwordFieldErrors={passwordFieldErrors}
+        primarySubmitting={primarySubmitting}
+        error={error}
+        handleSetPassword={handleSetPassword}
+      />
     );
   }
 
   if (step === "code") {
     return (
-      <>
-        <AuthHeader
-          title="認証コードを入力"
-          description={`${email} に送信されたコードを入力してください。`}
-          onBack={handleBack}
-          backDisabled={codeStepPending !== null}
-        />
-        <form
-          onSubmit={handleVerifyCode}
-          noValidate
-          className="flex w-full flex-col gap-3"
-        >
-          <div className="flex flex-col gap-1">
-            <Input
-              type="text"
-              inputMode="numeric"
-              placeholder="123456"
-              className="text-center tracking-widest"
-              maxLength={OTP_CODE_LENGTH}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              aria-invalid={Boolean(codeFieldErrors.code)}
-              aria-describedby={
-                codeFieldErrors.code ? "reset-password-code-error" : undefined
-              }
-            />
-            {codeFieldErrors.code && (
-              <p
-                id="reset-password-code-error"
-                className="text-destructive text-sm"
-              >
-                {codeFieldErrors.code}
-              </p>
-            )}
-          </div>
-          <Button
-            type="submit"
-            aria-disabled={codeStepPending !== null}
-            className={cn(
-              codeStepPending !== null && "pointer-events-none opacity-50",
-            )}
-          >
-            {codeStepPending === "verify" && (
-              <Loader2 className="size-3.5 animate-spin" />
-            )}
-            確認
-          </Button>
-        </form>
-        {error && (
-          <p className="text-center text-destructive text-sm">{error}</p>
-        )}
-        <p className="text-center text-muted-foreground text-sm">
-          メールが届かない場合は、迷惑メールフォルダをご確認ください。
-        </p>
-        <Turnstile ref={turnstileRef} onVerify={setCaptchaToken} />
-        <div className="flex w-full flex-col items-center gap-1">
-          <Button
-            type="button"
-            variant="outline"
-            className={cn(
-              "w-full",
-              codeStepPending !== null && "pointer-events-none opacity-50",
-            )}
-            aria-disabled={codeStepPending !== null}
-            data-captcha-ready={captchaToken !== null}
-            onClick={handleResend}
-          >
-            {codeStepPending === "resend" && (
-              <Loader2 className="size-3.5 animate-spin" />
-            )}
-            {resendCooldown > 0 ? `再送（${resendCooldown}秒）` : "再送"}
-          </Button>
-          {codeFieldErrors.resend && (
-            <p className="text-destructive text-sm">{codeFieldErrors.resend}</p>
-          )}
-        </div>
-      </>
+      <CodeStep
+        email={email}
+        code={code}
+        setCode={setCode}
+        codeFieldErrors={codeFieldErrors}
+        codeStepPending={codeStepPending}
+        error={error}
+        handleBack={handleBack}
+        handleVerifyCode={handleVerifyCode}
+        handleResend={handleResend}
+        turnstileRef={turnstileRef}
+        setCaptchaToken={setCaptchaToken}
+        captchaToken={captchaToken}
+        resendCooldown={resendCooldown}
+      />
     );
   }
 
+  return (
+    <EmailStep
+      email={email}
+      setEmail={setEmail}
+      emailFieldErrors={emailFieldErrors}
+      primarySubmitting={primarySubmitting}
+      error={error}
+      hydrated={hydrated}
+      handleSendCode={handleSendCode}
+      turnstileRef={turnstileRef}
+      setCaptchaToken={setCaptchaToken}
+      captchaToken={captchaToken}
+    />
+  );
+}
+
+function PasswordStep({
+  password,
+  setPassword,
+  passwordFieldErrors,
+  primarySubmitting,
+  error,
+  handleSetPassword,
+}: {
+  password: string;
+  setPassword: (value: string) => void;
+  passwordFieldErrors: ResetPasswordState["passwordFieldErrors"];
+  primarySubmitting: boolean;
+  error: string | null;
+  handleSetPassword: (e: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <>
+      <AuthHeader
+        title="新しいパスワードを設定"
+        description="このパスワードで次回からサインインします。"
+      />
+      <form
+        onSubmit={handleSetPassword}
+        noValidate
+        className="flex w-full flex-col gap-3"
+      >
+        <div className="flex flex-col gap-1">
+          <PasswordInput
+            placeholder="新しいパスワード（8文字以上・英数字を含む）"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            aria-invalid={Boolean(passwordFieldErrors.password)}
+            aria-describedby={
+              passwordFieldErrors.password
+                ? "reset-password-password-error"
+                : undefined
+            }
+          />
+          {passwordFieldErrors.password && (
+            <p
+              id="reset-password-password-error"
+              className="text-destructive text-sm"
+            >
+              {passwordFieldErrors.password}
+            </p>
+          )}
+        </div>
+        <Button
+          type="submit"
+          aria-disabled={primarySubmitting}
+          className={cn(primarySubmitting && "pointer-events-none opacity-50")}
+        >
+          {primarySubmitting && <Loader2 className="size-3.5 animate-spin" />}
+          パスワードを変更
+        </Button>
+      </form>
+      {error && <p className="text-center text-destructive text-sm">{error}</p>}
+      <SignInLink />
+    </>
+  );
+}
+
+function CodeStep({
+  email,
+  code,
+  setCode,
+  codeFieldErrors,
+  codeStepPending,
+  error,
+  handleBack,
+  handleVerifyCode,
+  handleResend,
+  turnstileRef,
+  setCaptchaToken,
+  captchaToken,
+  resendCooldown,
+}: {
+  email: string;
+  code: string;
+  setCode: (value: string) => void;
+  codeFieldErrors: ResetPasswordState["codeFieldErrors"];
+  codeStepPending: ResetPasswordState["codeStepPending"];
+  error: string | null;
+  handleBack: () => void;
+  handleVerifyCode: (e: FormEvent<HTMLFormElement>) => void;
+  handleResend: () => void;
+  turnstileRef: RefObject<TurnstileInstance | undefined>;
+  setCaptchaToken: (token: string | null) => void;
+  captchaToken: string | null;
+  resendCooldown: number;
+}) {
+  return (
+    <>
+      <AuthHeader
+        title="認証コードを入力"
+        description={`${email} に送信されたコードを入力してください。`}
+        onBack={handleBack}
+        backDisabled={codeStepPending !== null}
+      />
+      <form
+        onSubmit={handleVerifyCode}
+        noValidate
+        className="flex w-full flex-col gap-3"
+      >
+        <div className="flex flex-col gap-1">
+          <Input
+            type="text"
+            inputMode="numeric"
+            placeholder="123456"
+            className="text-center tracking-widest"
+            maxLength={OTP_CODE_LENGTH}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            aria-invalid={Boolean(codeFieldErrors.code)}
+            aria-describedby={
+              codeFieldErrors.code ? "reset-password-code-error" : undefined
+            }
+          />
+          {codeFieldErrors.code && (
+            <p
+              id="reset-password-code-error"
+              className="text-destructive text-sm"
+            >
+              {codeFieldErrors.code}
+            </p>
+          )}
+        </div>
+        <Button
+          type="submit"
+          aria-disabled={codeStepPending !== null}
+          className={cn(
+            codeStepPending !== null && "pointer-events-none opacity-50",
+          )}
+        >
+          {codeStepPending === "verify" && (
+            <Loader2 className="size-3.5 animate-spin" />
+          )}
+          確認
+        </Button>
+      </form>
+      {error && <p className="text-center text-destructive text-sm">{error}</p>}
+      <p className="text-center text-muted-foreground text-sm">
+        メールが届かない場合は、迷惑メールフォルダをご確認ください。
+      </p>
+      <Turnstile ref={turnstileRef} onVerify={setCaptchaToken} />
+      <div className="flex w-full flex-col items-center gap-1">
+        <Button
+          type="button"
+          variant="outline"
+          className={cn(
+            "w-full",
+            codeStepPending !== null && "pointer-events-none opacity-50",
+          )}
+          aria-disabled={codeStepPending !== null}
+          data-captcha-ready={captchaToken !== null}
+          onClick={handleResend}
+        >
+          {codeStepPending === "resend" && (
+            <Loader2 className="size-3.5 animate-spin" />
+          )}
+          {resendCooldown > 0 ? `再送（${resendCooldown}秒）` : "再送"}
+        </Button>
+        {codeFieldErrors.resend && (
+          <p className="text-destructive text-sm">{codeFieldErrors.resend}</p>
+        )}
+      </div>
+    </>
+  );
+}
+
+function EmailStep({
+  email,
+  setEmail,
+  emailFieldErrors,
+  primarySubmitting,
+  error,
+  hydrated,
+  handleSendCode,
+  turnstileRef,
+  setCaptchaToken,
+  captchaToken,
+}: {
+  email: string;
+  setEmail: (value: string) => void;
+  emailFieldErrors: ResetPasswordState["emailFieldErrors"];
+  primarySubmitting: boolean;
+  error: string | null;
+  hydrated: boolean;
+  handleSendCode: (e: FormEvent<HTMLFormElement>) => void;
+  turnstileRef: RefObject<TurnstileInstance | undefined>;
+  setCaptchaToken: (token: string | null) => void;
+  captchaToken: string | null;
+}) {
   return (
     <>
       <AuthHeader title="パスワードを再設定" />

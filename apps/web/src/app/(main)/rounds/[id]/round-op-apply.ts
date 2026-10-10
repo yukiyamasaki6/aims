@@ -276,6 +276,76 @@ function unchanged(tables: RoundTables): Step {
   return { tables, refetch: false };
 }
 
+type ShotTarget = Pick<ShotRow, "id" | "distance_id" | "end_number">;
+
+// record_shotsで効く項目。効かないときはnull。
+function effectiveShotFields(
+  tables: RoundTables,
+  distance: DistanceRow,
+  operation: Op<"shot.recorded">,
+  existing: ShotRow | undefined,
+  target: ShotTarget,
+  confirmedFields: Confirmed,
+  faces: ScoringTargetFace[],
+): Set<string> | null {
+  const keys = ["score"];
+  if (operation.shooterId !== undefined || !existing) keys.push("shooter_id");
+  if (operation.shotNumber !== undefined) keys.push("shot_number");
+  if (confirmedFields !== undefined)
+    return appliedFields(confirmedFields, keys);
+  // 決定1: 記録後の射順(キーが無ければ行の値)で、現在の構成で無効な矢は効かない。
+  const shotNumber =
+    operation.shotNumber !== undefined
+      ? operation.shotNumber
+      : (existing?.shot_number ?? null);
+  const fits = shotFitsDistance(
+    distance,
+    { endNumber: operation.endNumber, shotNumber },
+    { scoreStr: operation.scoreStr, scoreInt: operation.scoreInt },
+    faces,
+  );
+  if (!fits) return null;
+  const fields = new Set(keys);
+  // 同じエンドの他の生きている矢と重なる射順は、射順の項目だけ効かない。
+  if (
+    operation.shotNumber !== undefined &&
+    shotNumberTaken(tables, target, operation.shotNumber)
+  ) {
+    fields.delete("shot_number");
+  }
+  return fields;
+}
+
+// 効く項目だけを変えた、矢の行。
+function buildShotRow(
+  existing: ShotRow | undefined,
+  target: ShotTarget,
+  operation: Op<"shot.recorded">,
+  fields: Set<string>,
+  tables: RoundTables,
+): ShotRow {
+  const row: ShotRow = existing
+    ? { ...existing, disabled: false }
+    : {
+        ...target,
+        shot_number: null,
+        score_str: "",
+        score_int: 0,
+        disabled: false,
+      };
+  if (fields.has("score")) {
+    row.score_str = operation.scoreStr;
+    row.score_int = operation.scoreInt;
+  }
+  if (fields.has("shooter_id")) row.shooter_id = operation.shooterId;
+  if (fields.has("shot_number")) row.shot_number = operation.shotNumber ?? null;
+  // 復活で射順が同じエンドの他の生きている矢と重なるときは、射順を外して戻す。
+  if (existing?.disabled && shotNumberTaken(tables, row, row.shot_number)) {
+    row.shot_number = null;
+  }
+  return row;
+}
+
 // record_shots。要素に含まれる項目だけを変える。消した矢の行は、記録で復活させる。
 function recordShot(
   tables: RoundTables,
@@ -299,58 +369,22 @@ function recordShot(
     distance_id: operation.distanceId,
     end_number: operation.endNumber,
   };
-  const keys = ["score"];
-  if (operation.shooterId !== undefined || !existing) keys.push("shooter_id");
-  if (operation.shotNumber !== undefined) keys.push("shot_number");
-  let fields: Set<string>;
-  if (confirmedFields === undefined) {
-    // 決定1: 記録後の射順(キーが無ければ行の値)で、現在の構成で無効な矢は効かない。
-    const shotNumber =
-      operation.shotNumber !== undefined
-        ? operation.shotNumber
-        : (existing?.shot_number ?? null);
-    const fits = shotFitsDistance(
-      distance,
-      { endNumber: operation.endNumber, shotNumber },
-      { scoreStr: operation.scoreStr, scoreInt: operation.scoreInt },
-      faces,
-    );
-    if (!fits) return unchanged(tables);
-    fields = new Set(keys);
-    // 同じエンドの他の生きている矢と重なる射順は、射順の項目だけ効かない。
-    if (
-      operation.shotNumber !== undefined &&
-      shotNumberTaken(tables, target, operation.shotNumber)
-    ) {
-      fields.delete("shot_number");
-    }
-  } else {
-    fields = appliedFields(confirmedFields, keys);
-  }
+  const fields = effectiveShotFields(
+    tables,
+    distance,
+    operation,
+    existing,
+    target,
+    confirmedFields,
+    faces,
+  );
+  if (!fields) return unchanged(tables);
   // 生きている矢を増やす記録(新しい矢、復活)は、確定の有無によらず、エンドに空きがあるときだけ重ねる。
   const adds = !existing || existing.disabled;
   if (adds && !endHasRoom(distance, liveShots(tables), operation.endNumber)) {
     return { tables, refetch: confirmedFields !== undefined };
   }
-  const row: ShotRow = existing
-    ? { ...existing, disabled: false }
-    : {
-        ...target,
-        shot_number: null,
-        score_str: "",
-        score_int: 0,
-        disabled: false,
-      };
-  if (fields.has("score")) {
-    row.score_str = operation.scoreStr;
-    row.score_int = operation.scoreInt;
-  }
-  if (fields.has("shooter_id")) row.shooter_id = operation.shooterId;
-  if (fields.has("shot_number")) row.shot_number = operation.shotNumber ?? null;
-  // 復活で射順が同じエンドの他の生きている矢と重なるときは、射順を外して戻す。
-  if (existing?.disabled && shotNumberTaken(tables, row, row.shot_number)) {
-    row.shot_number = null;
-  }
+  const row = buildShotRow(existing, target, operation, fields, tables);
   return {
     tables: {
       ...tables,
