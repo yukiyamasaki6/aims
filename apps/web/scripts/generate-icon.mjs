@@ -5,20 +5,23 @@ import sharp from "sharp";
 
 // AIMS icon — the "aim ring" design: an archery sight's ring and pin.
 //
-// Shape: one black region made of a ring (constant width from
+// Shape: one mark region made of a ring (constant width from
 // RING_START_ANGLE_DEG to SWISH_START_ANGLE_DEG) whose outer edge stays a
 // plain circle of radius RING_OUTER_R all the way to the tip — only the
-// inner edge moves, sweeping from RING_INNER_R out to RING_OUTER_R as a
-// smoothstep-eased fraction of the sweep (no Bezier — always strictly
-// between the two radii, so it can never bulge past either), which is what
-// forms the tapered swish tip — plus a horizontal bar; and one red dot,
-// centered on the ring's own center, marking the aim point where the
-// ring's gap, the swish tip, and the bar all meet.
+// inner edge moves. The lower half keeps a constant width; the inner edge
+// starts closing in at the ring's left end and, over the upper half, sweeps
+// from RING_INNER_R out to RING_OUTER_R as the square of the fraction of the
+// sweep (no Bezier — always strictly between the two radii, so it can never
+// bulge past either), which forms the tapered swish tip — plus a horizontal
+// bar; and one red dot, centered on the ring's own center, marking the aim
+// point near where the swish tip and the bar meet.
 //
-// Only a handful of numbers are actually free (see each section below);
-// everything else — the ring's inner radius, and the bar's thickness,
-// length, and position — is derived from them, so there's nothing left
-// that could drift out of sync by hand-editing two numbers separately.
+// Only DOT_RADIUS is free (see each section below); everything else is
+// derived from it, so there's nothing left that could drift out of sync by
+// hand-editing two numbers separately. Measured from the center, the dot,
+// the gap, and the ring's band are three equal widths (outer : inner : dot
+// = 3 : 2 : 1), and the ring's outer edge is 80% of the icon's half-width;
+// the bar runs to the icon's right edge (100%).
 //
 // Every dimension below is a plain number in a unit space centered on the
 // ring, so the same shape reproduces exactly at 16px, 32px, app-icon, and
@@ -29,6 +32,7 @@ const FAVICON_SIZES = [16, 32, 48];
 const SHAPE_CENTER = { x: 0, y: 0 };
 
 const BLACK = "#231F20";
+const WHITE = "#FFFFFF";
 const RED = "#E4402C";
 
 // Angles: degrees, 0 = right, 90 = up, 180 = left, increasing
@@ -49,25 +53,32 @@ const DOT_CENTER = SHAPE_CENTER;
 const DOT_RADIUS = 27; // 中央の点のサイズ
 
 // --- Ring ---
-// Both radii follow DOT_RADIUS automatically: their mean is the dot's
-// *diameter* scaled by the golden ratio, split symmetrically around that
-// mean so the band's width (outer - inner) stays pinned to DOT_RADIUS.
-const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
-const RING_MEAN_R = DOT_RADIUS * 2 * GOLDEN_RATIO; // (RING_INNER_R + RING_OUTER_R) / 2
-const RING_INNER_R = RING_MEAN_R - DOT_RADIUS / 2; // inner radius of the ring's constant-width band
-const RING_OUTER_R = RING_MEAN_R + DOT_RADIUS / 2; // outer radius of the ring (stays circular the whole way round, including the swish)
+// From the center, the dot, the gap, and the ring's band are equal widths
+// of DOT_RADIUS each, so the band's width (outer - inner) equals DOT_RADIUS.
+const RING_INNER_R = DOT_RADIUS * 2; // inner radius of the ring's constant-width band
+const RING_OUTER_R = DOT_RADIUS * 3; // outer radius of the ring (stays circular the whole way round, including the swish)
+const BAND = RING_OUTER_R - RING_INNER_R;
 const RING_START_ANGLE_DEG = 0; // flat inner edge of the ring, hidden under the red dot
 
 // --- Swish (the tapered tail: same outer circle, inner edge curves out to meet it) ---
 const SWISH_START_ANGLE_DEG = 180; // where the constant-width band ends and thinning begins
-const SWISH_END_ANGLE_DEG = 30; // the tip — inner edge meets the outer circle here
+// The tip — inner edge meets the outer circle here. It sits where the arc
+// along the outer edge from the bar's top edge to the tip is 1.5 times the
+// band's width (independent of DOT_RADIUS).
+const BAR_THICKNESS = BAND;
+const BAR_TOP_ANGLE_DEG =
+  (Math.asin(BAR_THICKNESS / 2 / RING_OUTER_R) * 180) / Math.PI;
+const SWISH_END_ANGLE_DEG =
+  BAR_TOP_ANGLE_DEG + (((1.5 * BAND) / RING_OUTER_R) * 180) / Math.PI;
 const ARC_STEPS = 64; // sampling density per arc
 
 // --- Horizontal bar ---
 // Nothing free here — thickness, length, and position all auto-follow the
-// ring and dot (computed below): the bar is exactly as thick as the ring's
-// band, starts at the ring's own center, and its length is the ring's mean
-// radius scaled by the golden ratio.
+// ring and dot: the bar is exactly as thick as the ring's band, starts at
+// the ring's own center, and runs to the icon's right edge, which puts the
+// ring's outer edge at 80% of the half-width.
+const RING_OUTER_TO_HALF = 0.8;
+const BAR_LENGTH = RING_OUTER_R / RING_OUTER_TO_HALF;
 // =====================================================
 
 function toRad(deg) {
@@ -102,15 +113,11 @@ function sampleArc(center, r, fromDeg, toDeg, steps) {
   return points;
 }
 
-/** Eases 0..1 with zero slope at both ends, for a taper with no kink at either join. */
-function smoothstep(t) {
-  return t * t * (3 - 2 * t);
-}
-
 /**
  * Samples the swish's inner edge: angle interpolated linearly like any
- * other arc, but radius eased from fromR to toR as the *same* fraction of
- * that sweep — i.e. always some proportion between the inner and outer
+ * other arc, but radius moved from fromR to toR as the *square* of the
+ * fraction of that sweep measured from the thin tip's far end (so it closes
+ * in slowly at first and faster toward the tip) — i.e. always some proportion between the inner and outer
  * radius, never a control point that could overshoot past either.
  */
 function sampleTaperedArc(center, fromDeg, toDeg, fromR, toR, steps) {
@@ -118,7 +125,7 @@ function sampleTaperedArc(center, fromDeg, toDeg, fromR, toR, steps) {
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const deg = fromDeg + (toDeg - fromDeg) * t;
-    const r = fromR + (toR - fromR) * smoothstep(t);
+    const r = fromR + (toR - fromR) * (1 - (1 - t) * (1 - t));
     points.push(polar(center, r, deg));
   }
   return points;
@@ -133,7 +140,6 @@ const swishStartAngle = clockwiseTo(
 const swishEndAngle = clockwiseTo(swishStartAngle, SWISH_END_ANGLE_DEG);
 
 const outerStart = polar(O, RING_OUTER_R, RING_START_ANGLE_DEG);
-const tip = polar(O, RING_OUTER_R, swishEndAngle); // outer edge stays circular, so the tip sits on it too
 
 // Outer edge: one continuous circle arc from the flat start all the way to
 // the tip — the swish never leaves this circle.
@@ -152,8 +158,8 @@ const innerArcPoints = sampleArc(
   RING_START_ANGLE_DEG,
   ARC_STEPS,
 );
-// ...then, for the swish, eased from RING_INNER_R out to RING_OUTER_R as
-// the angle sweeps from the tip back to where the constant band starts.
+// ...then, for the swish, RING_INNER_R moves out to RING_OUTER_R with the
+// square of the sweep fraction, from where the constant band ends to the tip.
 const swishInnerPoints = sampleTaperedArc(
   O,
   swishEndAngle,
@@ -186,12 +192,7 @@ const ringPathD = [
 ].join(" ");
 
 // ==================== Bar + dot ====================
-// All three follow the ring (and the dot) automatically: same width as the
-// ring's band, starts at the ring's own center, and its length is the
-// ring's mean radius (inner and outer averaged to 1 "unit") scaled by the
-// golden ratio.
-const BAR_THICKNESS = RING_OUTER_R - RING_INNER_R;
-const BAR_LENGTH = RING_MEAN_R * GOLDEN_RATIO;
+// BAR_THICKNESS and BAR_LENGTH are defined with the parameters above.
 const barLeftX = SHAPE_CENTER.x;
 const barRightX = SHAPE_CENTER.x + BAR_LENGTH;
 const barTop = BAR_THICKNESS / 2;
@@ -205,41 +206,36 @@ const barD = [
 
 const dotSvgCenter = toSvg(DOT_CENTER);
 
-// ==================== ViewBox: square, centered on the shape's own bounds ====================
-const allPoints = [
-  ...outerArcPoints,
-  ...innerArcPoints,
-  tip,
-  { x: barRightX, y: barTop },
-  { x: barRightX, y: -barTop },
-  { x: DOT_CENTER.x - DOT_RADIUS, y: DOT_CENTER.y },
-  { x: DOT_CENTER.x + DOT_RADIUS, y: DOT_CENTER.y },
-  { x: DOT_CENTER.x, y: DOT_CENTER.y - DOT_RADIUS },
-  { x: DOT_CENTER.x, y: DOT_CENTER.y + DOT_RADIUS },
-].map(toSvg);
-const minX = Math.min(...allPoints.map((p) => p.x));
-const maxX = Math.max(...allPoints.map((p) => p.x));
-const minY = Math.min(...allPoints.map((p) => p.y));
-const maxY = Math.max(...allPoints.map((p) => p.y));
-const cx = (minX + maxX) / 2;
-const cy = (minY + maxY) / 2;
-const padding = 16;
-const size = Math.max(maxX - minX, maxY - minY) + padding * 2;
-const viewBox = { x: cx - size / 2, y: cy - size / 2, size };
-
-// Transparent background: icon.svg/favicon.ico are browser-tab favicons
-// (Next.js's app/icon.svg convention injects the same <link rel="icon">
-// as favicon.ico, just for SVG-capable browsers) and blend better with
-// whatever the tab's own background is. A PWA manifest's install icons,
-// whenever those are generated separately, would want a fixed backing
-// (e.g. "#231F20") the way this favicon doesn't.
-const iconSvg = `<svg width="1024" height="1024" viewBox="${fmt(viewBox.x)} ${fmt(viewBox.y)} ${fmt(viewBox.size)} ${fmt(viewBox.size)}" xmlns="http://www.w3.org/2000/svg">
-  <title>AIMS icon</title>
-  <path d="${barD}" fill="${BLACK}"/>
+// ==================== ViewBox: square, red dot at the center, bar tip on the right edge ====================
+// The dot sits at the origin, so a square of half-width BAR_LENGTH (the
+// bar's right end) puts the dot at the icon's center and the bar's tip on
+// the right edge. The ring (80% of the half-width) stays well inside.
+const half = BAR_LENGTH;
+const viewBox = { x: -half, y: -half, size: half * 2 };
+// 全アイコンは白地・黒の絵柄に統一し、明暗の切り替えはしない。
+// タブ用(icon.svg、favicon.ico)は、正方形に内接する丸の白地で、丸の外は透明。
+// このとき棒の右端は、丸の縁に沿った弧にする(直線の端のままだと、角が丸の外へ
+// はみ出す)。PWAは白の四角の地で、棒の右端は直線のまま(正方形の縁に接する)。
+function buildSvg({ plate }) {
+  const circle = plate === "circle";
+  const t = BAR_THICKNESS / 2;
+  const xc = Math.sqrt(half * half - t * t);
+  const bar = circle
+    ? `M ${fmt(barLeftX)} ${fmt(-t)} L ${fmt(xc)} ${fmt(-t)} A ${fmt(half)} ${fmt(half)} 0 0 1 ${fmt(xc)} ${fmt(t)} L ${fmt(barLeftX)} ${fmt(t)} Z`
+    : barD;
+  const plateShape = circle
+    ? `\n  <circle cx="0" cy="0" r="${fmt(half)}" fill="${WHITE}"/>`
+    : "";
+  const title = circle ? "\n  <title>AIMS icon</title>" : "";
+  return `<svg width="1024" height="1024" viewBox="${fmt(viewBox.x)} ${fmt(viewBox.y)} ${fmt(viewBox.size)} ${fmt(viewBox.size)}" xmlns="http://www.w3.org/2000/svg">${title}${plateShape}
+  <path d="${bar}" fill="${BLACK}"/>
   <path d="${ringPathD}" fill="${BLACK}"/>
   <circle cx="${fmt(dotSvgCenter.x)}" cy="${fmt(dotSvgCenter.y)}" r="${fmt(DOT_RADIUS)}" fill="${RED}"/>
 </svg>
 `;
+}
+
+const iconSvg = buildSvg({ plate: "circle" });
 const iconPath = fileURLToPath(new URL("../src/app/icon.svg", import.meta.url));
 writeFileSync(iconPath, iconSvg);
 console.log(`Wrote ${iconPath}`);
@@ -247,7 +243,7 @@ console.log(`Wrote ${iconPath}`);
 // ==================== favicon.ico: rasterize + pack ====================
 const pngBuffers = await Promise.all(
   FAVICON_SIZES.map((faviconSize) =>
-    sharp(Buffer.from(iconSvg))
+    sharp(Buffer.from(buildSvg({ plate: "circle" })))
       .resize(faviconSize, faviconSize)
       .png()
       .toBuffer(),
@@ -260,22 +256,19 @@ const icoPath = fileURLToPath(
 writeFileSync(icoPath, ico);
 console.log(`Wrote ${icoPath} (${FAVICON_SIZES.join("x, ")}x px)`);
 
-// ==================== Manifest install icons: solid background ====================
-// PWAインストールアイコンは透過背景ではなく単色背景が必要（favicon.icoとの違いは
-// icon.svgの230行目付近のコメント参照）。maskableは、OSがアイコンを丸型等に
-// トリミングしても図形が欠けないよう、中央のセーフゾーン内に収まる縮小率で描画する。
+// ==================== Manifest install icons: solid white background ====================
+// PWAインストールアイコンは、白の四角の地に黒の絵柄を描き込む。
+// any と maskable は同じ画像（縮小しない）。maskableで円形に切り抜かれても、
+// 環と赤い円は安全領域に収まる（棒の先だけが切り抜きに沿って欠ける）。
 const MANIFEST_ICON_SIZES = [192, 512];
-const STANDARD_CONTENT_SCALE = 0.8;
-const MASKABLE_CONTENT_SCALE = 0.6;
 
-async function renderManifestIcon(size, contentScale) {
-  const contentSize = Math.round(size * contentScale);
-  const content = await sharp(Buffer.from(iconSvg))
-    .resize(contentSize, contentSize)
+async function renderManifestIcon(size) {
+  const content = await sharp(Buffer.from(buildSvg({ plate: "none" })))
+    .resize(size, size)
     .png()
     .toBuffer();
   return sharp({
-    create: { width: size, height: size, channels: 4, background: BLACK },
+    create: { width: size, height: size, channels: 4, background: WHITE },
   })
     .composite([{ input: content, gravity: "center" }])
     .png()
@@ -286,14 +279,14 @@ const iconsDir = fileURLToPath(new URL("../public/icons", import.meta.url));
 mkdirSync(iconsDir, { recursive: true });
 
 for (const size of MANIFEST_ICON_SIZES) {
-  const standardIcon = await renderManifestIcon(size, STANDARD_CONTENT_SCALE);
+  const standardIcon = await renderManifestIcon(size);
   const standardPath = fileURLToPath(
     new URL(`../public/icons/icon-${size}.png`, import.meta.url),
   );
   writeFileSync(standardPath, standardIcon);
   console.log(`Wrote ${standardPath}`);
 
-  const maskableIcon = await renderManifestIcon(size, MASKABLE_CONTENT_SCALE);
+  const maskableIcon = await renderManifestIcon(size);
   const maskablePath = fileURLToPath(
     new URL(`../public/icons/icon-${size}-maskable.png`, import.meta.url),
   );

@@ -13,8 +13,8 @@ describe("manifest", () => {
       short_name: "AIMS",
       start_url: "/rounds",
       display: "standalone",
-      background_color: "#231F20",
-      theme_color: "#231F20",
+      background_color: "#FFFFFF",
+      theme_color: "#FFFFFF",
     });
   });
 
