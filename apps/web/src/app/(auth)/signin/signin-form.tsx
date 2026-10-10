@@ -144,19 +144,11 @@ export function SignInForm() {
             </p>
           )}
         </div>
-        <div className="flex flex-col items-center gap-1">
-          <div
-            className={cn(
-              "rounded-lg p-1",
-              fieldErrors.captcha && "ring-3 ring-destructive/50",
-            )}
-          >
-            <Turnstile ref={turnstileRef} onVerify={setCaptchaToken} />
-          </div>
-          {fieldErrors.captcha && (
-            <p className="text-destructive text-sm">{fieldErrors.captcha}</p>
-          )}
-        </div>
+        <Turnstile
+          ref={turnstileRef}
+          onVerify={setCaptchaToken}
+          error={fieldErrors.captcha}
+        />
         <Button
           type="submit"
           data-captcha-ready={captchaToken !== null}

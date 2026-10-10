@@ -9,6 +9,12 @@ import type { Page } from "@playwright/test";
 // 即座にcallbackへダミートークンを渡す。Supabase側はダミーのシークレット
 // キーによりトークンの値を問わず検証を常に成功させるため、実際の
 // signInWithOtp等のサーバー側フローには影響しない。
+// interaction-onlyで操作が必要なチャレンジは、テスト側がpage.addInitScript()で
+// window.__turnstileInteractiveを真にすると再現できる。render()はcallbackを
+// 呼ばずbefore-interactive-callbackだけを呼び、テスト側がwindow.__turnstileSolve()
+// を呼ぶとafter-interactive-callbackに続けてcallbackへトークンを渡す。
+// ウィジェットの枠の代わりに、300x65の目印の要素(data-turnstile-widget)を
+// コンテナへ挿入し、枠が利用者に見えているかをテストが確かめられるようにする。
 const DUMMY_TOKEN = "mock-turnstile-token";
 
 export async function mockTurnstile(page: Page): Promise<void> {
@@ -24,6 +30,23 @@ export async function mockTurnstile(page: Page): Promise<void> {
           window.turnstile = {
             render: function (container, options) {
               window.__turnstileRenderCount++;
+              var widget = document.createElement("div");
+              widget.setAttribute("data-turnstile-widget", "");
+              widget.style.width = "300px";
+              widget.style.height = "65px";
+              container.appendChild(widget);
+              if (window.__turnstileInteractive) {
+                if (options && typeof options["before-interactive-callback"] === "function") {
+                  options["before-interactive-callback"]();
+                }
+                window.__turnstileSolve = function () {
+                  if (typeof options["after-interactive-callback"] === "function") {
+                    options["after-interactive-callback"]();
+                  }
+                  options.callback("${DUMMY_TOKEN}");
+                };
+                return "mock-widget-id-" + window.__turnstileRenderCount;
+              }
               // window.__turnstileFailFromCallをテスト側がpage.addInitScript()で
               // 事前に設定しておくと、指定した呼び出し回数目以降のウィジェットだけ
               // callbackを発火させない（captcha未完了の状態を再現する）。それより

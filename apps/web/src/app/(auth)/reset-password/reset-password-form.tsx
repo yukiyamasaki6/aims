@@ -404,21 +404,11 @@ export function ResetPasswordForm() {
             </p>
           )}
         </div>
-        <div className="flex flex-col items-center gap-1">
-          <div
-            className={cn(
-              "rounded-lg p-1",
-              emailFieldErrors.captcha && "ring-3 ring-destructive/50",
-            )}
-          >
-            <Turnstile ref={turnstileRef} onVerify={setCaptchaToken} />
-          </div>
-          {emailFieldErrors.captcha && (
-            <p className="text-destructive text-sm">
-              {emailFieldErrors.captcha}
-            </p>
-          )}
-        </div>
+        <Turnstile
+          ref={turnstileRef}
+          onVerify={setCaptchaToken}
+          error={emailFieldErrors.captcha}
+        />
         <Button
           type="submit"
           data-captcha-ready={captchaToken !== null}

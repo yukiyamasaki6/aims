@@ -26,6 +26,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/app/(auth)/signin/signin-form.tsx`: フォーム本体と送信。
 - `src/app/(auth)/signin/signin-flow.ts`: 状態遷移のreducer。
 - `src/app/(auth)/signin/validate.ts`: 入力の検証。
+- `src/app/(auth)/_shared/turnstile.tsx`: Turnstileの共通部品。`interaction-only`で描画し、操作が必要な間だけ領域を出し、それ以外は畳む。未完了のエラー文言も表示する。
 - `src/features/auth/return-to.ts`: 遷移元の検証(`resolveReturnTo`)、クエリからの読み取り(`readReturnTo`)、遷移元付きの`/signin`のURL生成(`signInHref`)。純関数で、`proxy.ts`とクライアントの両方から使う。
 - `src/features/auth/errors.ts`: エラーコードを日本語にする。未知のコードは元のメッセージを使い、`AuthRetryableFetchError`は通信エラーの文言にする。
 - `src/lib/supabase/session.ts`: `proxy.ts`から呼ばれ、認証済みの`/signin`を、有効な遷移元があればそこへ、無ければ`/rounds`へ送る。
@@ -46,6 +47,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 | アンマウント後は状態を更新しない | 送信中に画面を離れた場合の不整合を防ぐため | 状態を画面の外で持つ方式にするとき |
 | サインインのパスワードに、サインアップのパスワード規則を適用しない | 規則の変更前に作った既存アカウントでも、サインインできるようにするため | 既存アカウントが規則を満たすことを確認できたとき |
 | Turnstileを使い、ローカル、CI、previewでは常に成功するテスト用キーを使う | ブルートフォースを抑えつつ、E2Eを外部に依存させないため | captchaの方式を変えるとき |
+| Turnstileはinteraction-onlyで描画し、操作が必要なときだけ領域を出す | 通常の利用者にチェックの枠を見せないため。Invisibleは操作が必要な利用者を救えないため採らない。 | Cloudflareが表示方式を変えたとき |
 | 遷移元を`/rounds`配下の許可リストで検証し、クエリ`returnTo`で渡す | 保護対象外の`/signin`へのループとオープンリダイレクトを同時に避け、保存を持たずURLだけで完結させるため | 保護対象の画面が`/rounds`の外にできたとき |
 | 認証済みのリダイレクトを`proxy.ts`へ集約し、画面ごとのE2Eは残す | 実装を一箇所にまとめつつ、各画面の挙動を保証するため | ガードの実装を変えるとき |
 | 状態遷移をreducerに分け、水和の完了を`data-hydrated`で示す | 遷移の規則を切り離し、水和前の操作によるE2Eの不安定さを避けるため | E2Eが水和を別の方法で待てるとき |

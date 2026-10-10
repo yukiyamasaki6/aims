@@ -29,19 +29,25 @@ vi.mock("@supabase/ssr", () => ({
   createBrowserClient: () => ({ auth }),
 }));
 
-// 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、onVerifyの発火とreset()の呼び出しを制御できるスタブで模す。
+// 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、onVerifyの発火とreset()の呼び出しを制御し、errorの表示を受け取れるスタブで模す。
 const turnstile = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
   reset: vi.fn(),
 }));
 vi.mock("../_shared/turnstile", () => ({
-  Turnstile: forwardRef<unknown, { onVerify: (token: string | null) => void }>(
-    function TurnstileStub(props, ref) {
-      turnstile.onVerify = props.onVerify;
-      useImperativeHandle(ref, () => ({ reset: turnstile.reset }));
-      return <div data-testid="turnstile-stub" />;
-    },
-  ),
+  Turnstile: forwardRef<
+    unknown,
+    { onVerify: (token: string | null) => void; error?: string }
+  >(function TurnstileStub(props, ref) {
+    turnstile.onVerify = props.onVerify;
+    useImperativeHandle(ref, () => ({ reset: turnstile.reset }));
+    return (
+      <>
+        <div data-testid="turnstile-stub" />
+        {props.error && <p>{props.error}</p>}
+      </>
+    );
+  }),
 }));
 
 function makeAuthError(code: string, message = "x"): AuthError {

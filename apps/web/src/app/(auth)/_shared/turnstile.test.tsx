@@ -1,33 +1,53 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Turnstile } from "./turnstile";
 
-const { onSuccess, onExpire, onError, siteKeyProp, optionsProp } = vi.hoisted(
-  () => ({
-    onSuccess: { current: undefined as ((token: string) => void) | undefined },
-    onExpire: { current: undefined as (() => void) | undefined },
-    onError: { current: undefined as (() => void) | undefined },
-    siteKeyProp: { current: undefined as string | undefined },
-    optionsProp: { current: undefined as { size?: string } | undefined },
-  }),
-);
+type Callbacks = {
+  onSuccess?: (token: string) => void;
+  onExpire?: () => void;
+  onError?: () => void;
+  onBeforeInteractive?: () => void;
+  onAfterInteractive?: () => void;
+};
+
+const { callbacks, siteKeyProp, optionsProp } = vi.hoisted(() => ({
+  callbacks: { current: {} as Callbacks },
+  siteKeyProp: { current: undefined as string | undefined },
+  optionsProp: {
+    current: undefined as { size?: string; appearance?: string } | undefined,
+  },
+}));
 
 vi.mock("@marsidev/react-turnstile", () => ({
-  Turnstile: (props: {
-    siteKey: string;
-    onSuccess?: (token: string) => void;
-    onExpire?: () => void;
-    onError?: () => void;
-    options?: { size?: string };
-  }) => {
+  Turnstile: (
+    props: Callbacks & {
+      siteKey: string;
+      options?: { size?: string; appearance?: string };
+    },
+  ) => {
     siteKeyProp.current = props.siteKey;
-    onSuccess.current = props.onSuccess;
-    onExpire.current = props.onExpire;
-    onError.current = props.onError;
     optionsProp.current = props.options;
+    callbacks.current = props;
     return <div data-testid="turnstile" />;
   },
 }));
+
+// ウィジェットを包む箱。畳み中はsr-only、操作が必要な間は300x65の領域になる。
+function widgetBox() {
+  const box = screen.getByTestId("turnstile").parentElement;
+  if (!box) throw new Error("widget box not found");
+  return box;
+}
+
+function expectCollapsed() {
+  expect(widgetBox()).toHaveClass("sr-only");
+  expect(widgetBox()).not.toHaveClass("h-[65px]");
+}
+
+function expectExpanded() {
+  expect(widgetBox()).toHaveClass("h-[65px]", "w-[300px]");
+  expect(widgetBox()).not.toHaveClass("sr-only");
+}
 
 describe("Turnstile", () => {
   beforeEach(() => {
@@ -38,45 +58,172 @@ describe("Turnstile", () => {
     vi.unstubAllEnvs();
   });
 
-  it("renders the underlying widget with the configured site key", () => {
-    render(<Turnstile onVerify={vi.fn()} />);
+  describe("描画", () => {
+    it("設定されたサイトキーと、操作が必要なときだけ表示するオプションでウィジェットを描画する", () => {
+      // When
+      render(<Turnstile onVerify={vi.fn()} />);
 
-    expect(screen.getByTestId("turnstile")).toBeInTheDocument();
-    expect(siteKeyProp.current).toBe("test-site-key");
-    expect(optionsProp.current).toEqual({ size: "normal" });
+      // Then
+      expect(screen.getByTestId("turnstile")).toBeInTheDocument();
+      expect(siteKeyProp.current).toBe("test-site-key");
+      expect(optionsProp.current).toEqual({
+        size: "normal",
+        appearance: "interaction-only",
+      });
+    });
+
+    it("初期状態では領域を取らないよう畳まれている(hiddenやdisplay:noneにはしない)", () => {
+      // When
+      render(<Turnstile onVerify={vi.fn()} />);
+
+      // Then
+      expectCollapsed();
+      expect(widgetBox()).not.toHaveClass("hidden");
+    });
+
+    it("サイトキーの環境変数が無い場合は例外を投げる", () => {
+      // Given
+      vi.unstubAllEnvs();
+
+      // When / Then
+      expect(() => render(<Turnstile onVerify={vi.fn()} />)).toThrow(
+        "Missing NEXT_PUBLIC_TURNSTILE_SITE_KEY environment variable.",
+      );
+    });
   });
 
-  it("calls onVerify with the token on success", async () => {
-    const handleVerify = vi.fn();
-    render(<Turnstile onVerify={handleVerify} />);
+  describe("操作が必要になったとき", () => {
+    it("操作が必要になる前のコールバックで300x65の領域に展開する", () => {
+      // Given
+      render(<Turnstile onVerify={vi.fn()} />);
 
-    onSuccess.current?.("token-123");
+      // When
+      act(() => callbacks.current.onBeforeInteractive?.());
 
-    expect(handleVerify).toHaveBeenCalledWith("token-123");
+      // Then
+      expectExpanded();
+    });
+
+    it("操作が終わったコールバックで再び畳まれる", () => {
+      // Given
+      render(<Turnstile onVerify={vi.fn()} />);
+      act(() => callbacks.current.onBeforeInteractive?.());
+
+      // When
+      act(() => callbacks.current.onAfterInteractive?.());
+
+      // Then
+      expectCollapsed();
+    });
+
+    it("成功すると畳まれ、トークンでonVerifyを呼ぶ", () => {
+      // Given
+      const handleVerify = vi.fn();
+      render(<Turnstile onVerify={handleVerify} />);
+      act(() => callbacks.current.onBeforeInteractive?.());
+
+      // When
+      act(() => callbacks.current.onSuccess?.("token-123"));
+
+      // Then
+      expectCollapsed();
+      expect(handleVerify).toHaveBeenCalledWith("token-123");
+    });
+
+    it("通常のチャレンジで成功しても、トークンでonVerifyを呼び、畳まれたままである", () => {
+      // Given
+      const handleVerify = vi.fn();
+      render(<Turnstile onVerify={handleVerify} />);
+
+      // When
+      act(() => callbacks.current.onSuccess?.("token-123"));
+
+      // Then
+      expectCollapsed();
+      expect(handleVerify).toHaveBeenCalledWith("token-123");
+    });
+
+    it("期限切れになると畳まれ、nullでonVerifyを呼ぶ", () => {
+      // Given
+      const handleVerify = vi.fn();
+      render(<Turnstile onVerify={handleVerify} />);
+      act(() => callbacks.current.onBeforeInteractive?.());
+
+      // When
+      act(() => callbacks.current.onExpire?.());
+
+      // Then
+      expectCollapsed();
+      expect(handleVerify).toHaveBeenCalledWith(null);
+    });
+
+    it("エラーになると失敗を見せるために展開し、nullでonVerifyを呼ぶ", () => {
+      // Given
+      const handleVerify = vi.fn();
+      render(<Turnstile onVerify={handleVerify} />);
+
+      // When
+      act(() => callbacks.current.onError?.());
+
+      // Then
+      expectExpanded();
+      expect(handleVerify).toHaveBeenCalledWith(null);
+    });
+
+    it("エラーで展開したあと、自動リトライが成功すると畳まれる", () => {
+      // Given
+      render(<Turnstile onVerify={vi.fn()} />);
+      act(() => callbacks.current.onError?.());
+
+      // When
+      act(() => callbacks.current.onSuccess?.("token-retry"));
+
+      // Then
+      expectCollapsed();
+    });
   });
 
-  it("calls onVerify with null when the challenge expires", () => {
-    const handleVerify = vi.fn();
-    render(<Turnstile onVerify={handleVerify} />);
+  describe("error prop", () => {
+    it("errorが無い場合は文言を描画しない", () => {
+      // When
+      render(<Turnstile onVerify={vi.fn()} />);
 
-    onExpire.current?.();
+      // Then
+      expect(document.querySelector("p")).toBeNull();
+    });
 
-    expect(handleVerify).toHaveBeenCalledWith(null);
-  });
+    it("畳まれていても文言を表示し、リングは付けない", () => {
+      // When
+      render(<Turnstile onVerify={vi.fn()} error="未完了です" />);
 
-  it("calls onVerify with null on error", () => {
-    const handleVerify = vi.fn();
-    render(<Turnstile onVerify={handleVerify} />);
+      // Then
+      expect(screen.getByText("未完了です")).toBeInTheDocument();
+      expectCollapsed();
+      expect(widgetBox().className).not.toContain("ring-3");
+    });
 
-    onError.current?.();
+    it("展開中は文言を表示し、箱にエラーのリングを付ける", () => {
+      // Given
+      render(<Turnstile onVerify={vi.fn()} error="未完了です" />);
 
-    expect(handleVerify).toHaveBeenCalledWith(null);
-  });
+      // When
+      act(() => callbacks.current.onBeforeInteractive?.());
 
-  it("throws when the site key environment variable is missing", () => {
-    vi.unstubAllEnvs();
-    expect(() => render(<Turnstile onVerify={vi.fn()} />)).toThrow(
-      "Missing NEXT_PUBLIC_TURNSTILE_SITE_KEY environment variable.",
-    );
+      // Then
+      expect(screen.getByText("未完了です")).toBeInTheDocument();
+      expect(widgetBox()).toHaveClass("ring-3", "ring-destructive/50");
+    });
+
+    it("展開中でもerrorが無ければリングを付けない", () => {
+      // Given
+      render(<Turnstile onVerify={vi.fn()} />);
+
+      // When
+      act(() => callbacks.current.onBeforeInteractive?.());
+
+      // Then
+      expectExpanded();
+      expect(widgetBox().className).not.toContain("ring-3");
+    });
   });
 });
