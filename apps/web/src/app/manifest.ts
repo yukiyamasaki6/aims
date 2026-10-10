@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "AIMS Web Application",
     start_url: "/rounds",
     display: "standalone",
-    background_color: "#231F20",
-    theme_color: "#231F20",
+    background_color: "#FFFFFF",
+    theme_color: "#FFFFFF",
     icons: [
       {
         src: "/icons/icon-192.png",
