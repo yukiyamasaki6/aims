@@ -65,6 +65,10 @@ export function SignInForm() {
       return;
     }
 
+    return submit(captchaToken);
+  }
+
+  async function submit(captchaToken: string) {
     dispatch({ type: "submit_started" });
     submittingRef.current = true;
     setSubmitting(true);
