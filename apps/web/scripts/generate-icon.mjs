@@ -293,3 +293,14 @@ for (const size of MANIFEST_ICON_SIZES) {
   writeFileSync(maskablePath, maskableIcon);
   console.log(`Wrote ${maskablePath}`);
 }
+
+// ==================== iOSホーム画面用アイコン ====================
+// 透明だとiOSが黒で塗るため、不透明の白地にする。角はiOSが丸めるため丸めない。
+// maskableの区別はない。src/app/apple-icon.png はNext.jsのファイル規約で
+// apple-touch-icon のlinkとして全ページに出力される。
+const APPLE_ICON_SIZE = 180;
+const applePath = fileURLToPath(
+  new URL("../src/app/apple-icon.png", import.meta.url),
+);
+writeFileSync(applePath, await renderManifestIcon(APPLE_ICON_SIZE));
+console.log(`Wrote ${applePath}`);
