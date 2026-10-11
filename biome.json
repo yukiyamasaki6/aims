@@ -27,6 +27,32 @@
           "level": "error",
           "options": { "maxLines": 50, "skipBlankLines": true }
         }
+      },
+      "style": {
+        "useNamingConvention": {
+          "level": "error",
+          "options": {
+            "conventions": [
+              {
+                "selector": { "kind": "objectLiteralProperty" },
+                "formats": [
+                  "camelCase",
+                  "snake_case",
+                  "PascalCase",
+                  "CONSTANT_CASE"
+                ]
+              },
+              {
+                "selector": { "kind": "typeProperty" },
+                "formats": ["camelCase", "snake_case"]
+              },
+              {
+                "selector": { "kind": "functionParameter" },
+                "formats": ["camelCase"]
+              }
+            ]
+          }
+        }
       }
     }
   },
@@ -42,6 +68,14 @@
       "linter": {
         "rules": {
           "complexity": { "noExcessiveLinesPerFunction": "off" }
+        }
+      }
+    },
+    {
+      "includes": ["apps/web/src/types/supabase.ts"],
+      "linter": {
+        "rules": {
+          "style": { "useNamingConvention": "off" }
         }
       }
     }

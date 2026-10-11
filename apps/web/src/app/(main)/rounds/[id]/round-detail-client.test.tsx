@@ -278,13 +278,18 @@ describe("RoundDetailClient", () => {
   });
 
   describe("作成が未確定のラウンド", () => {
-    const EVENT_ID = "event-1";
+    const pendingEventId = "event-1";
 
     it("読み込みの結果の的をスコアカードへ渡す", async () => {
       // Given: 作成が未確定で、読み込みが的の一覧を得た
       resolves({
         status: "ok",
-        data: detail("作成中", EVENT_ID, "server", faces("face-1", "face-2")),
+        data: detail(
+          "作成中",
+          pendingEventId,
+          "server",
+          faces("face-1", "face-2"),
+        ),
       });
 
       // When
@@ -298,13 +303,13 @@ describe("RoundDetailClient", () => {
     });
 
     it("作成の消失の監視へラウンドIDと未確定のeventIdを渡し、検知したら取得し直す", async () => {
-      resolves({ status: "ok", data: detail("作成中", EVENT_ID) });
+      resolves({ status: "ok", data: detail("作成中", pendingEventId) });
       render(<RoundDetailClient />);
       await screen.findByTestId("scorecard");
 
       const [roundId, eventId, onGone] = creationGone.mock.calls.at(-1) ?? [];
       expect(roundId).toBe(ID);
-      expect(eventId).toBe(EVENT_ID);
+      expect(eventId).toBe(pendingEventId);
       const before = load.mock.calls.length;
       await act(async () => {
         onGone?.();

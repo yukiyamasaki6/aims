@@ -381,11 +381,11 @@ describe("summarizeRound", () => {
         ring("X", 9, 2, "#FFF200"),
         ring("9", 9, 1, "#FFF200"),
       ]);
-      const noXWith4Next = face("face-no-x-4", [
+      const faceNoX4 = face("face-no-x-4", [
         ring("6", 6, 2, "#FFF200"),
         ring("4", 4, 1, "#231F20"),
       ]);
-      const faces = [faceX, faceNoX, xWith9Top, noXWith4Next];
+      const faces = [faceX, faceNoX, xWith9Top, faceNoX4];
       const cases = [
         ["face-x", "face-no-x"],
         ["face-x", "face-x9"],

@@ -32,7 +32,7 @@ type StoredBase<Base> = StreamBase<Base> & {
   streamId: string;
 };
 
-interface OpLogDB<Op extends OpBase, Base> extends DBSchema {
+interface OpLogDb<Op extends OpBase, Base> extends DBSchema {
   ops: {
     key: number;
     value: StoredEntry<Op>;
@@ -88,12 +88,12 @@ function dropLegacyStore(database: IDBDatabase) {
 
 // 他の接続がversionの更新を待っているとき(blocking)は閉じて譲り、次の呼び出しで開き直す。
 // 古い接続が閉じず更新が待たされているとき(blocked)は開けなかったものとして失敗にする。
-function openOpLogDB<Op extends OpBase, Base>(
+function openOpLogDb<Op extends OpBase, Base>(
   onBlocking: () => void,
-): Promise<IDBPDatabase<OpLogDB<Op, Base>>> {
+): Promise<IDBPDatabase<OpLogDb<Op, Base>>> {
   return new Promise((resolve, reject) => {
     let failed = false;
-    openDB<OpLogDB<Op, Base>>(DB_NAME, DB_VERSION, {
+    openDB<OpLogDb<Op, Base>>(DB_NAME, DB_VERSION, {
       upgrade(database, oldVersion) {
         if (oldVersion < 3) dropLegacyStore(unwrap(database));
         // version 5で矢の操作とベースの形が変わった。旧い形の内容は互換を持たないため、移行せずにstoreごと作り直す。
@@ -128,11 +128,11 @@ function openOpLogDB<Op extends OpBase, Base>(
 export function createOpLogStore<Op extends OpBase, Base>(
   rules: StreamRules<Op, Base>,
 ): OpLogStore<Op, Base> {
-  type DB = IDBPDatabase<OpLogDB<Op, Base>>;
-  let opened: Promise<DB> | undefined;
+  type Db = IDBPDatabase<OpLogDb<Op, Base>>;
+  let opened: Promise<Db> | undefined;
   const database = () => {
     if (!opened) {
-      const attempt = openOpLogDB<Op, Base>(() => {
+      const attempt = openOpLogDb<Op, Base>(() => {
         // 譲る相手の更新が終わるまで、この接続は使わない。
         if (opened === attempt) opened = undefined;
         void (async () => {
@@ -334,7 +334,7 @@ type OpLogTx<
   Op extends OpBase,
   Base,
   Mode extends IDBTransactionMode,
-> = IDBPTransaction<OpLogDB<Op, Base>, ["ops", "bases"], Mode>;
+> = IDBPTransaction<OpLogDb<Op, Base>, ["ops", "bases"], Mode>;
 
 async function streamEntries<Op extends OpBase, Base>(
   tx: OpLogTx<Op, Base, IDBTransactionMode>,

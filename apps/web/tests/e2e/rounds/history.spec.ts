@@ -180,7 +180,7 @@ test.describe("入力中の領域", () => {
 
   const inProgressArea = (page: Page) => page.getByTestId("in-progress-rounds");
   const otherArea = (page: Page) => page.getByTestId("other-rounds");
-  const OFFLINE_MESSAGE = "ネットワークに接続されていません";
+  const offlineMessage = "ネットワークに接続されていません";
 
   // 領域の中のカードの名前を、並びの順に返す。カードの文字は名前・実施日・合計点が続く。
   async function names(area: ReturnType<typeof inProgressArea>) {
@@ -210,7 +210,7 @@ test.describe("入力中の領域", () => {
     await waitForServiceWorkerControl(page);
     await goOffline(page.context());
     await page.goto("/rounds");
-    await expect(page.getByText(OFFLINE_MESSAGE)).toBeVisible();
+    await expect(page.getByText(offlineMessage)).toBeVisible();
     return {
       credentials,
       inProgressName,
@@ -307,7 +307,7 @@ test.describe("入力中の領域", () => {
     await expect(
       others.getByRole("heading", { name: "過去履歴" }),
     ).toBeVisible();
-    await expect(others.getByText(OFFLINE_MESSAGE)).toBeVisible();
+    await expect(others.getByText(offlineMessage)).toBeVisible();
   });
 
   test("history-09: オフラインのラウンド一覧に入力中のラウンドが表示されている、入力中のラウンドのカードをクリックすると、ラウンド詳細が表示される", async ({
@@ -359,7 +359,7 @@ test.describe("入力中の領域", () => {
 
     // Then
     await expect(otherArea(page).getByText(completedName)).toBeVisible();
-    await expect(page.getByText(OFFLINE_MESSAGE)).toHaveCount(0);
+    await expect(page.getByText(offlineMessage)).toHaveCount(0);
     await expect(page.getByText(inProgressName)).toHaveCount(1);
     await expect(page.getByText(completedName)).toHaveCount(1);
   });
@@ -525,7 +525,7 @@ test.describe("入力中の領域", () => {
     // Then
     await expect(inProgressArea(page).getByText(remainingName)).toBeVisible();
     await expect(page.getByText(completingName)).toHaveCount(0);
-    await expect(page.getByText(OFFLINE_MESSAGE)).toBeVisible();
+    await expect(page.getByText(offlineMessage)).toBeVisible();
   });
 
   test("history-17: オフラインで入力を完了した後のラウンド一覧、オンラインへ復帰すると、完了したラウンドが、入力中の領域でなくそれ以外のラウンドの並びに1件だけ表示される", async ({
@@ -564,15 +564,15 @@ test.describe("入力中の領域", () => {
     await page.goto("/rounds");
 
     // Then
-    await expect(page.getByText(OFFLINE_MESSAGE)).toBeVisible();
+    await expect(page.getByText(offlineMessage)).toBeVisible();
     await expect(page.getByText(name)).toHaveCount(0);
     await expect(inProgressArea(page)).toHaveCount(0);
   });
 
   // src/features/fetch-result/fetch-content.tsのFALLBACK_WAIT_MS。
-  const FALLBACK_WAIT_MS = 1_000;
+  const fallbackWaitMs = 1_000;
   // 待ちの後の描画とブラウザ・CIの揺れの余裕。
-  const RENDER_MARGIN_MS = 500;
+  const renderMarginMs = 500;
 
   test("history-19: navigator.onLineがtrueのまま一覧の取得が応答せず、入力中のラウンドがある、/roundsを開くと、通信の開始から1秒以内に、入力中のラウンドが表示される", async ({
     page,
@@ -586,21 +586,21 @@ test.describe("入力中の領域", () => {
     // 待ちと表示の時刻をページ内で測る(Node側の時刻はポーリングの間隔を含むため)。
     await page.addInitScript((roundName) => {
       const w = window as unknown as {
-        __firstRequestAt?: number;
-        __shownAt?: number;
+        e2eFirstRequestAt?: number;
+        e2eShownAt?: number;
       };
       const originalFetch = window.fetch.bind(window);
       window.fetch = (input, init) => {
         const url = input instanceof Request ? input.url : String(input);
         if (/\/(rest|auth)\/v1\//.test(url)) {
-          w.__firstRequestAt ??= performance.now();
+          w.e2eFirstRequestAt ??= performance.now();
         }
         return originalFetch(input, init);
       };
       new MutationObserver(() => {
         const el = document.querySelector('[data-testid="in-progress-rounds"]');
         if (el?.textContent?.includes(roundName))
-          w.__shownAt ??= performance.now();
+          w.e2eShownAt ??= performance.now();
       }).observe(document, {
         childList: true,
         subtree: true,
@@ -616,18 +616,18 @@ test.describe("入力中の領域", () => {
       timeout: 10_000,
     });
 
-    // Then: 通信の開始から、待ちの上限(FALLBACK_WAIT_MS)と描画の余裕のうちに表示されている
+    // Then: 通信の開始から、待ちの上限(fallbackWaitMs)と描画の余裕のうちに表示されている
     const { firstRequestAt, shownAt } = await page.evaluate(() => {
       const w = window as unknown as {
-        __firstRequestAt?: number;
-        __shownAt?: number;
+        e2eFirstRequestAt?: number;
+        e2eShownAt?: number;
       };
-      return { firstRequestAt: w.__firstRequestAt, shownAt: w.__shownAt };
+      return { firstRequestAt: w.e2eFirstRequestAt, shownAt: w.e2eShownAt };
     });
     if (firstRequestAt === undefined) throw new Error("通信を始めていない");
     if (shownAt === undefined) throw new Error("表示されていない");
     expect(shownAt - firstRequestAt).toBeLessThan(
-      FALLBACK_WAIT_MS + RENDER_MARGIN_MS,
+      fallbackWaitMs + renderMarginMs,
     );
   });
 

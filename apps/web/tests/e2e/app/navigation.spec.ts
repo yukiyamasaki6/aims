@@ -394,7 +394,7 @@ test.describe("セッション喪失", () => {
     const { overlapped } = await overlapNextRefresh(page);
     // /signinへ移っても、保存先に有効なセッションがあると/roundsへ戻されるため、画面を読み込み直していないことを印で確かめる。
     await page.evaluate(() => {
-      (window as unknown as { __stayed: boolean }).__stayed = true;
+      (window as unknown as { e2eStayed: boolean }).e2eStayed = true;
     });
 
     // When: オンラインへ復帰する
@@ -407,7 +407,7 @@ test.describe("セッション喪失", () => {
     await expect(page).toHaveURL(/\/rounds$/);
     expect(
       await page.evaluate(
-        () => (window as unknown as { __stayed?: boolean }).__stayed,
+        () => (window as unknown as { e2eStayed?: boolean }).e2eStayed,
       ),
     ).toBe(true);
     await expect(

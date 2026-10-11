@@ -16,6 +16,7 @@ import { frameUrlFor, SHELL_PREFIX } from "./sw-frames";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
+    // biome-ignore lint/style/useNamingConvention: Serwistがビルド時に埋め込む名前
     __SW_MANIFEST: (PrecacheEntry | string)[] | undefined;
   }
 }

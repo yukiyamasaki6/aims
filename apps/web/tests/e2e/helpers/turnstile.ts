@@ -10,8 +10,8 @@ import type { Page } from "@playwright/test";
 // キーによりトークンの値を問わず検証を常に成功させるため、実際の
 // signInWithOtp等のサーバー側フローには影響しない。
 // interaction-onlyで操作が必要なチャレンジは、テスト側がpage.addInitScript()で
-// window.__turnstileInteractiveを真にすると再現できる。render()はcallbackを
-// 呼ばずbefore-interactive-callbackだけを呼び、テスト側がwindow.__turnstileSolve()
+// window.e2eTurnstileInteractiveを真にすると再現できる。render()はcallbackを
+// 呼ばずbefore-interactive-callbackだけを呼び、テスト側がwindow.e2eTurnstileSolve()
 // を呼ぶとafter-interactive-callbackに続けてcallbackへトークンを渡す。
 // ウィジェットの枠の代わりに、300x65の目印の要素(data-turnstile-widget)を
 // コンテナへ挿入し、枠が利用者に見えているかをテストが確かめられるようにする。
@@ -26,38 +26,38 @@ export async function mockTurnstile(page: Page): Promise<void> {
         status: 200,
         contentType: "application/javascript",
         body: `
-          window.__turnstileRenderCount = 0;
+          window.e2eTurnstileRenderCount = 0;
           window.turnstile = {
             render: function (container, options) {
-              window.__turnstileRenderCount++;
+              window.e2eTurnstileRenderCount++;
               var widget = document.createElement("div");
               widget.setAttribute("data-turnstile-widget", "");
               widget.style.width = "300px";
               widget.style.height = "65px";
               container.appendChild(widget);
-              if (window.__turnstileInteractive) {
+              if (window.e2eTurnstileInteractive) {
                 if (options && typeof options["before-interactive-callback"] === "function") {
                   options["before-interactive-callback"]();
                 }
-                window.__turnstileSolve = function () {
+                window.e2eTurnstileSolve = function () {
                   if (typeof options["after-interactive-callback"] === "function") {
                     options["after-interactive-callback"]();
                   }
                   options.callback("${DUMMY_TOKEN}");
                 };
-                return "mock-widget-id-" + window.__turnstileRenderCount;
+                return "mock-widget-id-" + window.e2eTurnstileRenderCount;
               }
-              // window.__turnstileFailFromCallをテスト側がpage.addInitScript()で
+              // window.e2eTurnstileFailFromCallをテスト側がpage.addInitScript()で
               // 事前に設定しておくと、指定した呼び出し回数目以降のウィジェットだけ
               // callbackを発火させない（captcha未完了の状態を再現する）。それより
               // 前の呼び出し（例: メール入力ステップの1回目）は通常通り成功する。
               var shouldFail =
-                window.__turnstileFailFromCall &&
-                window.__turnstileRenderCount >= window.__turnstileFailFromCall;
+                window.e2eTurnstileFailFromCall &&
+                window.e2eTurnstileRenderCount >= window.e2eTurnstileFailFromCall;
               if (!shouldFail && options && typeof options.callback === "function") {
                 setTimeout(function () { options.callback("${DUMMY_TOKEN}"); }, 0);
               }
-              return "mock-widget-id-" + window.__turnstileRenderCount;
+              return "mock-widget-id-" + window.e2eTurnstileRenderCount;
             },
             reset: function () {},
             remove: function () {},

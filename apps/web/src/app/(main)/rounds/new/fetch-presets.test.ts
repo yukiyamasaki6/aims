@@ -70,13 +70,13 @@ function makeSupabase(
 
 const ok = (data: unknown): Response => ({ data, error: null, status: 200 });
 
-function row(id: string, owner_id: string | null, overrides = {}) {
+function row(id: string, ownerId: string | null, overrides = {}) {
   return {
     id,
     name: id,
     format: "outdoor",
     bow_type: "recurve",
-    owner_id,
+    owner_id: ownerId,
     created_at: "2026-09-01T00:00:00Z",
     preset_distances: [],
     ...overrides,
@@ -220,8 +220,8 @@ describe("fetchPresets", () => {
   });
 
   describe("端末への保存", () => {
-    const IDENTITY_KEY = "aims:local-user-id";
-    const SAVED = {
+    const identityKey = "aims:local-user-id";
+    const savedPresets = {
       personal: [row("saved-personal", "user-1")],
       global: [row("saved-global", null)],
     };
@@ -236,8 +236,8 @@ describe("fetchPresets", () => {
     }
 
     function saveBefore() {
-      localStorage.setItem(IDENTITY_KEY, "user-1");
-      saveReferenceSnapshot("presets", "user-1", SAVED, 1);
+      localStorage.setItem(identityKey, "user-1");
+      saveReferenceSnapshot("presets", "user-1", savedPresets, 1);
     }
 
     it("okの結果を、クエリのユーザーのキーへ保存する", async () => {
@@ -247,7 +247,7 @@ describe("fetchPresets", () => {
 
       await fetchPresets(client);
 
-      localStorage.setItem(IDENTITY_KEY, "user-1");
+      localStorage.setItem(identityKey, "user-1");
       const saved = loadReferenceSnapshot<{
         personal: { id: string }[];
         global: { id: string }[];
@@ -285,11 +285,11 @@ describe("fetchPresets", () => {
 
       const result = await fetchPresets(client);
 
-      expect(result).toEqual({ status: "ok", data: SAVED });
+      expect(result).toEqual({ status: "ok", data: savedPresets });
     });
 
     it("保存済みが無ければ、今の結果をそのまま返す", async () => {
-      localStorage.setItem(IDENTITY_KEY, "user-1");
+      localStorage.setItem(identityKey, "user-1");
       vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
       const { client } = makeSupabase(ok([]));
 
@@ -310,7 +310,10 @@ describe("fetchPresets", () => {
 
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
 
-      await expect(pending).resolves.toEqual({ status: "ok", data: SAVED });
+      await expect(pending).resolves.toEqual({
+        status: "ok",
+        data: savedPresets,
+      });
     });
 
     it("保存済みが無いと、FALLBACK_WAIT_MSでは返らず、FETCH_TIMEOUT_MSでerrorになる", async () => {
@@ -341,7 +344,10 @@ describe("fetchPresets", () => {
       );
       const pending = fetchPresets(client);
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
-      await expect(pending).resolves.toEqual({ status: "ok", data: SAVED });
+      await expect(pending).resolves.toEqual({
+        status: "ok",
+        data: savedPresets,
+      });
 
       await vi.advanceTimersByTimeAsync(3_000);
 
@@ -359,12 +365,12 @@ describe("fetchPresets", () => {
       const pending = fetchPresets(client);
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
       await pending;
-      localStorage.setItem(IDENTITY_KEY, "user-2");
+      localStorage.setItem(identityKey, "user-2");
 
       await vi.advanceTimersByTimeAsync(3_000);
 
       expect(loadReferenceSnapshot("presets")).toBeNull();
-      localStorage.setItem(IDENTITY_KEY, "user-1");
+      localStorage.setItem(identityKey, "user-1");
       expect(savedIds()).toEqual(["late"]);
     });
 
@@ -382,12 +388,12 @@ describe("fetchPresets", () => {
 
       await vi.advanceTimersByTimeAsync(3_000);
 
-      expect(loadReferenceSnapshot("presets")).toEqual(SAVED);
+      expect(loadReferenceSnapshot("presets")).toEqual(savedPresets);
     });
 
     it("deletePresetFromSnapshotで個人から除かれ、削除前に始まった取得の遅れた結果では戻らない", async () => {
       vi.useFakeTimers();
-      localStorage.setItem(IDENTITY_KEY, "user-1");
+      localStorage.setItem(identityKey, "user-1");
       saveReferenceSnapshot(
         "presets",
         "user-1",

@@ -9,6 +9,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: "html",
   use: {
+    // biome-ignore lint/style/useNamingConvention: Playwrightの設定の項目名
     baseURL: "http://localhost:3100",
     trace: "on-first-retry",
   },

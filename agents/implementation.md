@@ -13,6 +13,22 @@
 - テストのコード(`biome.json`の`overrides`に挙げたファイル)は長さの対象外とする。テストの長さの大半は`describe`の中身で、ケース数に比例し、処理の追いやすさを表さないためである。認知的複雑度の上限はテストにも掛かる。
 - 長さを超えるときの分け方は認知的複雑度と同じである。分けると読みにくくなる関数に限り、`// biome-ignore lint/complexity/noExcessiveLinesPerFunction: <理由>`で例外にする。例外の一覧は`git grep -n "biome-ignore lint/complexity/noExcessiveLinesPerFunction"`で出す。
 
+## 識別子の命名
+
+- 識別子の名前を、種類ごとに次の形にする。Biomeの`useNamingConvention`が`pnpm lint`とCIの`Lint`で検査する。
+    - 変数、関数、メソッド: camelCase。Reactの部品と、部品を受ける変数はPascalCaseでよい。
+    - 関数の引数: camelCase。部品を受けるときは分割代入で改名する(`({ icon: Icon })`)。
+    - 型、インタフェース、クラス、列挙: PascalCase。
+    - 定数: モジュールの直下はcamelCase、PascalCase、CONSTANT_CASEのどれでもよい。関数の中(`describe`の中を含む)ではCONSTANT_CASEにしない。
+    - 型のプロパティはcamelCaseかsnake_case、オブジェクトリテラルのプロパティはそれに加えてPascalCaseとCONSTANT_CASEも使える。
+    - 上にない種類はBiomeの既定に従う。
+- 略語は単語として書き、大文字を続けない(`Db`、`Url`、`Id`)。
+- 外部が決めた名前(DBの列、RPCの引数、外部サービスのAPIの項目、仕様の項目、環境変数、ライブラリの設定や差し替える部品の名前)は改名しない。
+- プロパティでsnake_caseを許すのは、DBの行の形をアプリの型で写している既存の作りのためである。アプリだけで使う名前を新たに決めるときはcamelCaseにする。
+- オブジェクトリテラルのプロパティでPascalCaseとCONSTANT_CASEを許すのは、テストの差し替えで部品名やモジュールの定数名を、設定で環境変数名を写すためである。
+- 規約の形にならない外部の名前に限り、`// biome-ignore lint/style/useNamingConvention: <理由>`で例外にする。理由には名前を決めた外部を書く。例外の一覧は`git grep -n "biome-ignore lint/style/useNamingConvention"`で出す。
+- 生成されたDBの型(`apps/web/src/types/supabase.ts`)は、生成器とDBが名前を決めるため検査の対象外とする(`biome.json`の`overrides`)。
+
 ## フロントエンド
 
 - `any` は使用しない。
