@@ -23,7 +23,9 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 
 ## 構成とデータの流れ
 
-- `src/app/(auth)/signup/signup-form.tsx`: 3つの状態のフォーム。
+- `src/app/(auth)/signup/signup-form.tsx`: 3つの状態のフォームの描画。
+- `src/app/(auth)/signup/use-signup-form.ts`: 入力値、reducerの状態、captcha、二重送信の防止、再送までの秒数を持つ。
+- `src/app/(auth)/signup/use-signup-handlers.ts`: コードの送信、確認、再送、パスワードの設定、戻るの送信と応答の処理。
 - `src/app/(auth)/signup/signup-flow.ts`: 状態遷移のreducer。確認・再送・戻るの排他を持つ。
 - `src/app/(auth)/signup/validate.ts`: メールアドレス、コード、パスワードの検証。
 - `src/app/(auth)/signup/actions.ts`: 登録済み判定のServer Action。

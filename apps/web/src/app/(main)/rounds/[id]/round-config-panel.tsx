@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -99,108 +99,137 @@ export function RoundConfigPanel({
         }}
       >
         <DialogContent>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <label
-                htmlFor="round-config-name"
-                className="text-muted-foreground text-xs"
-              >
-                ラウンド名
-              </label>
-              <Input
-                id="round-config-name"
-                data-testid="round-config-name"
-                value={draft.name}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, name: e.target.value }))
-                }
-                aria-invalid={Boolean(fieldErrors.name)}
-              />
-              {fieldErrors.name && (
-                <p className="text-destructive text-sm">{fieldErrors.name}</p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label
-                htmlFor="round-config-date"
-                className="text-muted-foreground text-xs"
-              >
-                実施日 <RequiredMark />
-              </label>
-              <Input
-                id="round-config-date"
-                type="date"
-                data-testid="round-config-date"
-                value={draft.roundDate}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, roundDate: e.target.value }))
-                }
-                aria-invalid={Boolean(fieldErrors.roundDate)}
-              />
-              {fieldErrors.roundDate && (
-                <p className="text-destructive text-sm">
-                  {fieldErrors.roundDate}
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <span className="text-muted-foreground text-xs">
-                種別 <RequiredMark />
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                {FORMAT_OPTIONS.map((o) => (
-                  <Button
-                    key={o.value}
-                    type="button"
-                    variant={draft.format === o.value ? "default" : "outline"}
-                    size="sm"
-                    data-testid={`round-config-format-${o.value}`}
-                    onClick={() => setDraft((d) => ({ ...d, format: o.value }))}
-                  >
-                    {o.label}
-                  </Button>
-                ))}
-              </div>
-              {fieldErrors.format && (
-                <p className="text-destructive text-sm">{fieldErrors.format}</p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <span className="text-muted-foreground text-xs">
-                弓種 <RequiredMark />
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                {BOW_TYPE_OPTIONS.map((o) => (
-                  <Button
-                    key={o.value}
-                    type="button"
-                    variant={draft.bowType === o.value ? "default" : "outline"}
-                    size="sm"
-                    data-testid={`round-config-bow-type-${o.value}`}
-                    onClick={() =>
-                      setDraft((d) => ({ ...d, bowType: o.value }))
-                    }
-                  >
-                    {o.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            <Button
-              type="button"
-              className="w-full"
-              data-testid="round-config-save"
-              onClick={handleSave}
-            >
-              保存
-            </Button>
-          </div>
+          <RoundConfigFields
+            draft={draft}
+            setDraft={setDraft}
+            fieldErrors={fieldErrors}
+            onSave={handleSave}
+          />
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function RoundConfigFields({
+  draft,
+  setDraft,
+  fieldErrors,
+  onSave,
+}: {
+  draft: RoundConfig;
+  setDraft: Dispatch<SetStateAction<RoundConfig>>;
+  fieldErrors: RoundConfigErrors;
+  onSave: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor="round-config-name"
+          className="text-muted-foreground text-xs"
+        >
+          ラウンド名
+        </label>
+        <Input
+          id="round-config-name"
+          data-testid="round-config-name"
+          value={draft.name}
+          onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+          aria-invalid={Boolean(fieldErrors.name)}
+        />
+        {fieldErrors.name && (
+          <p className="text-destructive text-sm">{fieldErrors.name}</p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor="round-config-date"
+          className="text-muted-foreground text-xs"
+        >
+          実施日 <RequiredMark />
+        </label>
+        <Input
+          id="round-config-date"
+          type="date"
+          data-testid="round-config-date"
+          value={draft.roundDate}
+          onChange={(e) =>
+            setDraft((d) => ({ ...d, roundDate: e.target.value }))
+          }
+          aria-invalid={Boolean(fieldErrors.roundDate)}
+        />
+        {fieldErrors.roundDate && (
+          <p className="text-destructive text-sm">{fieldErrors.roundDate}</p>
+        )}
+      </div>
+
+      <OptionGrid
+        label="種別"
+        options={FORMAT_OPTIONS}
+        current={draft.format}
+        testIdPrefix="round-config-format"
+        error={fieldErrors.format}
+        onChange={(format) => setDraft((d) => ({ ...d, format }))}
+      />
+
+      <OptionGrid
+        label="弓種"
+        options={BOW_TYPE_OPTIONS}
+        current={draft.bowType}
+        testIdPrefix="round-config-bow-type"
+        onChange={(bowType) => setDraft((d) => ({ ...d, bowType }))}
+      />
+
+      <Button
+        type="button"
+        className="w-full"
+        data-testid="round-config-save"
+        onClick={onSave}
+      >
+        保存
+      </Button>
+    </div>
+  );
+}
+
+// 必須の選択肢の組。
+function OptionGrid({
+  label,
+  options,
+  current,
+  testIdPrefix,
+  error,
+  onChange,
+}: {
+  label: string;
+  options: readonly { value: string; label: string }[];
+  current: string;
+  testIdPrefix: string;
+  error?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-muted-foreground text-xs">
+        {label} <RequiredMark />
+      </span>
+      <div className="grid grid-cols-3 gap-2">
+        {options.map((o) => (
+          <Button
+            key={o.value}
+            type="button"
+            variant={current === o.value ? "default" : "outline"}
+            size="sm"
+            data-testid={`${testIdPrefix}-${o.value}`}
+            onClick={() => onChange(o.value)}
+          >
+            {o.label}
+          </Button>
+        ))}
+      </div>
+      {error && <p className="text-destructive text-sm">{error}</p>}
+    </div>
   );
 }

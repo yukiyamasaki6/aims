@@ -24,7 +24,12 @@
 ## 構成とデータの流れ
 
 - `src/app/(auth)/reset-password/page.tsx`: サーバー側。レイアウトのみ。
-- `src/app/(auth)/reset-password/reset-password-form.tsx`: 段階ごとのフォームと送信。
+- `src/app/(auth)/reset-password/reset-password-form.tsx`: 段階ごとのフォームの描画。
+- `src/app/(auth)/reset-password/use-reset-password-form.ts`: 入力値、reducerの状態、captcha、二重送信の防止、再送までの秒数を持つ。
+- `src/app/(auth)/reset-password/use-reset-password-handlers.ts`: コードの送信、確認、再送、パスワードの設定、戻るの送信と応答の処理。
+- `src/app/(auth)/_shared/use-captcha.ts`: captchaのトークン。使用済みのトークンは消費して取り直す。
+- `src/app/(auth)/_shared/use-submit-guard.ts`: 送信中の表示と、二重送信の判定(同期のref)。
+- `src/app/(auth)/_shared/use-resend-countdown.ts`: 再送できるまでの秒数を1秒ごとに進める。
 - `src/app/(auth)/reset-password/reset-password-flow.ts`: 段階、エラー、コード入力の処理中を持つreducer。
 - `src/app/(auth)/reset-password/validate.ts`: メールアドレス、コード、パスワードの検証。
 - `src/features/auth/errors.ts`: エラーコードを日本語にする。

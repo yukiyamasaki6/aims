@@ -27,6 +27,7 @@ jobs:
           filters: |
             web:
               - 'apps/web/**'
+              - 'scripts/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'

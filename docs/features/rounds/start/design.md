@@ -34,7 +34,9 @@
 - `fetch-presets.ts`: 個人（`owner_id`が自分）と公式（`owner_id`が`null`）を1回の取得で得て、並べて振り分ける。通信失敗・認証切れ・エラーを`FetchResult`に分類する。成功した結果を保存し、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。削除したプリセットを保存済みから除く`deletePresetFromSnapshot`を持つ。
 - `_shared/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。例外は投げない。
 - `compare-presets.ts`: 並びの比較関数。
-- `round-preset-select-client.tsx`: 取得・選択・削除済みの除去・作成中・エラーの状態を持ち、開始後に`router.push`で遷移する。削除の成功時に保存済みからも除く。
+- `round-preset-select-client.tsx`: 取得と選択の状態を持ち、一覧、開始の帯、削除の確認を描く。
+- `use-start-round.ts`: 作成中とエラーの状態を持ち、開始後に`router.push`で遷移する。
+- `use-preset-delete.ts`: 削除を確認中のプリセットと、削除済みのIDを持つ。削除の成功時に、保存済みからも除く。
 - `start-round.ts`: 認証の確認、一覧の選択中プリセットからの距離の並べ替えと新ID付与、`round.created`の追記を行う。
 
 - 並びは、種別、弓種、距離の本数（多い方が先）、先頭の距離（大きい方が先）、作成日時（新しい方が先）の順である。

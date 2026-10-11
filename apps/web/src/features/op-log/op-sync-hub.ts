@@ -48,6 +48,7 @@ function defaultCreateChannel(name: string): BroadcastChannel | undefined {
 
 // タブに常駐する、操作の列の送信の集まり。Reactに依存しない。
 // 列ごとに送信器を1つ持ち、Web Locksで選ばれた1つのタブだけが送る。IndexedDBを共有の真実とし、変化はBroadcastChannelで知らせる。
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createOpSyncHub<Op extends OpBase, Base>(
   options: OpSyncHubOptions<Op, Base>,
 ) {

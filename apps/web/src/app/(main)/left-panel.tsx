@@ -2,9 +2,10 @@
 
 import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useMountedRef } from "@/hooks/use-mounted-ref";
 import { cn } from "@/lib/utils";
 import { signOut } from "./sign-out";
 
@@ -12,16 +13,7 @@ export function LeftPanel() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(true);
   const [signOutDialogOpen, setSignOutDialogOpen] = useState(false);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
-    // 対応するため、マウント時にも明示的にtrueへ戻す。
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const mountedRef = useMountedRef();
 
   async function handleSignOut(): Promise<{ error: string } | undefined> {
     const result = await signOut({ isMounted: () => mountedRef.current });
@@ -31,26 +23,11 @@ export function LeftPanel() {
 
   return (
     <>
-      <div className="flex shrink-0 items-center border-b p-3 md:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileOpen(true)}
-          aria-label="メニューを開く"
-          className="flex items-center gap-2 text-sm"
-        >
-          <Menu className="size-5" />
-          個人
-        </button>
-      </div>
-
-      {mobileOpen && (
-        <button
-          type="button"
-          aria-label="メニューを閉じる"
-          onClick={() => setMobileOpen(false)}
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
-        />
-      )}
+      <MobileMenuBar
+        open={mobileOpen}
+        onOpen={() => setMobileOpen(true)}
+        onClose={() => setMobileOpen(false)}
+      />
 
       <aside
         className={cn(
@@ -59,39 +36,11 @@ export function LeftPanel() {
           desktopOpen ? "md:w-56" : "md:w-14",
         )}
       >
-        <div
-          className={cn(
-            "flex items-center gap-2 p-4",
-            desktopOpen ? "justify-between" : "md:justify-center",
-          )}
-        >
-          <Link
-            href="/"
-            className={cn("truncate font-bold", !desktopOpen && "md:hidden")}
-          >
-            AIMS
-          </Link>
-          <button
-            type="button"
-            onClick={() => setMobileOpen(false)}
-            aria-label="メニューを閉じる"
-            className="md:hidden"
-          >
-            <X className="size-5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setDesktopOpen((v) => !v)}
-            aria-label={desktopOpen ? "パネルを格納する" : "パネルを開く"}
-            className="hidden shrink-0 md:block"
-          >
-            {desktopOpen ? (
-              <ChevronLeft className="size-5" />
-            ) : (
-              <ChevronRight className="size-5" />
-            )}
-          </button>
-        </div>
+        <PanelHeader
+          desktopOpen={desktopOpen}
+          onCloseMobile={() => setMobileOpen(false)}
+          onToggleDesktop={() => setDesktopOpen((v) => !v)}
+        />
 
         <nav
           className={cn(
@@ -127,5 +76,86 @@ export function LeftPanel() {
         onConfirm={handleSignOut}
       />
     </>
+  );
+}
+
+function MobileMenuBar({
+  open,
+  onOpen,
+  onClose,
+}: {
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <div className="flex shrink-0 items-center border-b p-3 md:hidden">
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label="メニューを開く"
+          className="flex items-center gap-2 text-sm"
+        >
+          <Menu className="size-5" />
+          個人
+        </button>
+      </div>
+
+      {open && (
+        <button
+          type="button"
+          aria-label="メニューを閉じる"
+          onClick={onClose}
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+        />
+      )}
+    </>
+  );
+}
+
+function PanelHeader({
+  desktopOpen,
+  onCloseMobile,
+  onToggleDesktop,
+}: {
+  desktopOpen: boolean;
+  onCloseMobile: () => void;
+  onToggleDesktop: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 p-4",
+        desktopOpen ? "justify-between" : "md:justify-center",
+      )}
+    >
+      <Link
+        href="/"
+        className={cn("truncate font-bold", !desktopOpen && "md:hidden")}
+      >
+        AIMS
+      </Link>
+      <button
+        type="button"
+        onClick={onCloseMobile}
+        aria-label="メニューを閉じる"
+        className="md:hidden"
+      >
+        <X className="size-5" />
+      </button>
+      <button
+        type="button"
+        onClick={onToggleDesktop}
+        aria-label={desktopOpen ? "パネルを格納する" : "パネルを開く"}
+        className="hidden shrink-0 md:block"
+      >
+        {desktopOpen ? (
+          <ChevronLeft className="size-5" />
+        ) : (
+          <ChevronRight className="size-5" />
+        )}
+      </button>
+    </div>
   );
 }

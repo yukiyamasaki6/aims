@@ -27,9 +27,9 @@ export const initialSignUpState: SignUpState = {
   codeStepPending: null,
 };
 
-export type SignUpAction =
-  | { type: "reset_to_email" }
-  | { type: "resend_tick" }
+type CommonAction = { type: "reset_to_email" } | { type: "resend_tick" };
+
+type SendCodeAction =
   | {
       type: "send_code_invalid";
       errors: SignUpEmailFieldErrors & { captcha?: string };
@@ -38,22 +38,36 @@ export type SignUpAction =
   | { type: "send_code_already_registered" }
   | { type: "send_code_succeeded" }
   | { type: "send_code_auth_error"; error: AuthError }
-  | { type: "send_code_network_error" }
+  | { type: "send_code_network_error" };
+
+type VerifyCodeAction =
   | { type: "verify_code_invalid"; errors: SignUpCodeFieldErrors }
   | { type: "verify_code_started" }
   | { type: "verify_code_succeeded" }
   | { type: "verify_code_auth_error"; error: AuthError }
-  | { type: "verify_code_network_error" }
+  | { type: "verify_code_network_error" };
+
+type ResendAction =
   | { type: "resend_invalid"; errors: SignUpCodeFieldErrors }
   | { type: "resend_started" }
   | { type: "resend_succeeded" }
   | { type: "resend_auth_error"; error: AuthError }
-  | { type: "resend_network_error" }
+  | { type: "resend_network_error" };
+
+type SetPasswordAction =
   | { type: "set_password_invalid"; errors: SignUpPasswordFieldErrors }
   | { type: "set_password_started" }
   | { type: "set_password_auth_error"; error: AuthError }
   | { type: "set_password_network_error" };
 
+export type SignUpAction =
+  | CommonAction
+  | SendCodeAction
+  | VerifyCodeAction
+  | ResendAction
+  | SetPasswordAction;
+
+// 画面の段階ごとの下位のreducerへ振り分ける。
 export function signupReducer(
   state: SignUpState,
   action: SignUpAction,
@@ -64,6 +78,41 @@ export function signupReducer(
     case "resend_tick":
       return { ...state, resendCooldown: state.resendCooldown - 1 };
 
+    case "send_code_invalid":
+    case "send_code_started":
+    case "send_code_already_registered":
+    case "send_code_succeeded":
+    case "send_code_auth_error":
+    case "send_code_network_error":
+      return sendCodeReducer(state, action);
+
+    case "verify_code_invalid":
+    case "verify_code_started":
+    case "verify_code_succeeded":
+    case "verify_code_auth_error":
+    case "verify_code_network_error":
+      return verifyCodeReducer(state, action);
+
+    case "resend_invalid":
+    case "resend_started":
+    case "resend_succeeded":
+    case "resend_auth_error":
+    case "resend_network_error":
+      return resendReducer(state, action);
+
+    case "set_password_invalid":
+    case "set_password_started":
+    case "set_password_auth_error":
+    case "set_password_network_error":
+      return setPasswordReducer(state, action);
+  }
+}
+
+function sendCodeReducer(
+  state: SignUpState,
+  action: SendCodeAction,
+): SignUpState {
+  switch (action.type) {
     case "send_code_invalid":
       return { ...state, error: null, emailFieldErrors: action.errors };
     case "send_code_started":
@@ -90,7 +139,14 @@ export function signupReducer(
       };
     case "send_code_network_error":
       return { ...state, error: NETWORK_ERROR_MESSAGE, emailFieldErrors: {} };
+  }
+}
 
+function verifyCodeReducer(
+  state: SignUpState,
+  action: VerifyCodeAction,
+): SignUpState {
+  switch (action.type) {
     case "verify_code_invalid":
       return { ...state, error: null, codeFieldErrors: action.errors };
     case "verify_code_started":
@@ -122,7 +178,11 @@ export function signupReducer(
         codeFieldErrors: {},
         codeStepPending: null,
       };
+  }
+}
 
+function resendReducer(state: SignUpState, action: ResendAction): SignUpState {
+  switch (action.type) {
     case "resend_invalid":
       return { ...state, error: null, codeFieldErrors: action.errors };
     case "resend_started":
@@ -143,7 +203,14 @@ export function signupReducer(
       };
     case "resend_network_error":
       return { ...state, error: NETWORK_ERROR_MESSAGE, codeStepPending: null };
+  }
+}
 
+function setPasswordReducer(
+  state: SignUpState,
+  action: SetPasswordAction,
+): SignUpState {
+  switch (action.type) {
     case "set_password_invalid":
       return { ...state, error: null, passwordFieldErrors: action.errors };
     case "set_password_started":

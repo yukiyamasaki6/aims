@@ -8,6 +8,10 @@
 - 15はBiomeとSonarQubeの既定値で、既存コードを責務の分割で収められる値である。
 - 超えるときは、責務、判断、段階の単位で分ける。数値を下げるためだけの分割(意味のない小関数、コンポーネント内の描画用の関数への移動、条件を名前に隠すだけの変更)はしない。
 - 分けると読みにくくなる関数に限り、`// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: <理由>`で例外にする。
+- テスト以外の関数の長さを50行以下にする。Biomeの`noExcessiveLinesPerFunction`(`skipBlankLines`)が`pnpm lint`とCIの`Lint`で検査する。数え方はBiomeに従い、空行、コメントだけの行、`{`か`}`で始まる行を数えず、内側の関数の行を外側にも数える。
+- 50はBiomeとESLint(`max-lines-per-function`)の既定値で、既存コードを責務の分割で収められる値である。
+- テストのコード(`biome.json`の`overrides`に挙げたファイル)は長さの対象外とする。テストの長さの大半は`describe`の中身で、ケース数に比例し、処理の追いやすさを表さないためである。認知的複雑度の上限はテストにも掛かる。
+- 長さを超えるときの分け方は認知的複雑度と同じである。分けると読みにくくなる関数に限り、`// biome-ignore lint/complexity/noExcessiveLinesPerFunction: <理由>`で例外にする。例外の一覧は`git grep -n "biome-ignore lint/complexity/noExcessiveLinesPerFunction"`で出す。
 
 ## フロントエンド
 

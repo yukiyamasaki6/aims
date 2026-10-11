@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
   changePresetDialogOpen,
   finishPresetSave,
   generatePresetName,
+  type PresetDialogState,
   type SaveRoundAsPresetArgs,
   startPresetSave,
 } from "./scorecard-preset";
@@ -85,58 +86,86 @@ export function SavePresetDialog({
         プリセット保存
       </DialogTrigger>
       <DialogContent>
-        <div className="flex flex-col gap-3">
-          <h2 className="font-medium text-sm">
-            現在の構成をプリセットとして保存しますか？
-          </h2>
-          <PresetInfo
-            format={format}
-            bowType={bowType}
-            distances={[...distances]
-              .sort(compareDistancePosition)
-              .map((d) => ({
-                key: d.id,
-                distance: d.distance,
-                isMarked: d.is_marked,
-                face: lookupTargetFace(targetFaces, d.target_face_id),
-                arrowsPerEnd: d.arrows_per_end,
-                totalEnds: d.total_ends,
-              }))}
-          />
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor="save-as-preset-name"
-              className="text-muted-foreground text-xs"
-            >
-              プリセット名
-            </label>
-            <Input
-              id="save-as-preset-name"
-              data-testid="save-as-preset-name"
-              placeholder={generatePresetName(distances)}
-              value={state.name}
-              onChange={(e) => {
-                const name = e.target.value;
-                setState((prev) => ({ ...prev, name }));
-              }}
-              aria-invalid={Boolean(state.error)}
-            />
-            {state.error && (
-              <p className="text-destructive text-sm">{state.error}</p>
-            )}
-          </div>
-          <Button
-            type="button"
-            aria-disabled={state.submitting}
-            className={cn(state.submitting && "pointer-events-none opacity-50")}
-            data-testid="save-as-preset-confirm"
-            onClick={handleSave}
-          >
-            {state.submitting && <Loader2 className="size-3.5 animate-spin" />}
-            保存
-          </Button>
-        </div>
+        <PresetDialogBody
+          state={state}
+          setState={setState}
+          format={format}
+          bowType={bowType}
+          distances={distances}
+          targetFaces={targetFaces}
+          onSave={handleSave}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PresetDialogBody({
+  state,
+  setState,
+  format,
+  bowType,
+  distances,
+  targetFaces,
+  onSave,
+}: {
+  state: PresetDialogState;
+  setState: Dispatch<SetStateAction<PresetDialogState>>;
+  format: string;
+  bowType: string;
+  distances: Distance[];
+  targetFaces: TargetFaceOption[];
+  onSave: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <h2 className="font-medium text-sm">
+        現在の構成をプリセットとして保存しますか？
+      </h2>
+      <PresetInfo
+        format={format}
+        bowType={bowType}
+        distances={[...distances].sort(compareDistancePosition).map((d) => ({
+          key: d.id,
+          distance: d.distance,
+          isMarked: d.is_marked,
+          face: lookupTargetFace(targetFaces, d.target_face_id),
+          arrowsPerEnd: d.arrows_per_end,
+          totalEnds: d.total_ends,
+        }))}
+      />
+      <div className="flex flex-col gap-1">
+        <label
+          htmlFor="save-as-preset-name"
+          className="text-muted-foreground text-xs"
+        >
+          プリセット名
+        </label>
+        <Input
+          id="save-as-preset-name"
+          data-testid="save-as-preset-name"
+          placeholder={generatePresetName(distances)}
+          value={state.name}
+          onChange={(e) => {
+            const name = e.target.value;
+            setState((prev) => ({ ...prev, name }));
+          }}
+          aria-invalid={Boolean(state.error)}
+        />
+        {state.error && (
+          <p className="text-destructive text-sm">{state.error}</p>
+        )}
+      </div>
+      <Button
+        type="button"
+        aria-disabled={state.submitting}
+        className={cn(state.submitting && "pointer-events-none opacity-50")}
+        data-testid="save-as-preset-confirm"
+        onClick={onSave}
+      >
+        {state.submitting && <Loader2 className="size-3.5 animate-spin" />}
+        保存
+      </Button>
+    </div>
   );
 }

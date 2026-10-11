@@ -55,6 +55,25 @@ export function TargetFaceIcon({
     );
   }
 
+  const viewExtent = spotsViewExtent(spots);
+
+  return (
+    <svg
+      viewBox={`${-viewExtent} ${-viewExtent} ${viewExtent * 2} ${viewExtent * 2}`}
+      width={size}
+      height={size}
+      className={cn("shrink-0", className)}
+      aria-hidden="true"
+    >
+      {spots.map((spot) => (
+        <TargetFaceSpot key={`${spot.center_x}-${spot.center_y}`} spot={spot} />
+      ))}
+    </svg>
+  );
+}
+
+// 全スポットを収める半分の幅。
+function spotsViewExtent(spots: TargetFaceSpotLayout[]): number {
   let extent = 0;
   for (const spot of spots) {
     const spotMaxRadius =
@@ -69,59 +88,53 @@ export function TargetFaceIcon({
   }
   // strokeはパス（リング半径）を中心に太さの半分ずつ内外に描かれるため、
   // 最外リングの境界線がviewBoxの端で見切れないよう半分だけ余白を確保する。
-  const viewExtent = extent + (extent * STROKE_WIDTH_RATIO) / 2;
+  return extent + (extent * STROKE_WIDTH_RATIO) / 2;
+}
 
+function TargetFaceSpot({ spot }: { spot: TargetFaceSpotLayout }) {
+  const sorted = [...spot.target_face_rings].sort(
+    (a, b) => b.radius - a.radius,
+  );
+  const spotMaxRadius = sorted.length > 0 ? sorted[0].radius : 0;
   return (
-    <svg
-      viewBox={`${-viewExtent} ${-viewExtent} ${viewExtent * 2} ${viewExtent * 2}`}
-      width={size}
-      height={size}
-      className={cn("shrink-0", className)}
-      aria-hidden="true"
-    >
-      {spots.map((spot) => {
-        const sorted = [...spot.target_face_rings].sort(
-          (a, b) => b.radius - a.radius,
-        );
-        const spotMaxRadius = sorted.length > 0 ? sorted[0].radius : 0;
-        return (
-          <g
-            key={`${spot.center_x}-${spot.center_y}`}
-            transform={`translate(${spot.center_x} ${-spot.center_y})`}
-          >
-            {sorted.map((r) => (
-              <circle
-                key={r.z_index}
-                cx={0}
-                cy={0}
-                r={r.radius}
-                fill={r.color}
-                stroke={r.line_color ?? "none"}
-                strokeWidth={
-                  r.line_color ? spotMaxRadius * STROKE_WIDTH_RATIO : 0
-                }
-              />
-            ))}
-            <line
-              x1={-CENTER_CROSS_ARM_LENGTH_CM}
-              y1={0}
-              x2={CENTER_CROSS_ARM_LENGTH_CM}
-              y2={0}
-              stroke="#231F20"
-              strokeWidth={CENTER_CROSS_STROKE_WIDTH_CM}
-            />
-            <line
-              x1={0}
-              y1={-CENTER_CROSS_ARM_LENGTH_CM}
-              x2={0}
-              y2={CENTER_CROSS_ARM_LENGTH_CM}
-              stroke="#231F20"
-              strokeWidth={CENTER_CROSS_STROKE_WIDTH_CM}
-            />
-          </g>
-        );
-      })}
-    </svg>
+    <g transform={`translate(${spot.center_x} ${-spot.center_y})`}>
+      {sorted.map((r) => (
+        <circle
+          key={r.z_index}
+          cx={0}
+          cy={0}
+          r={r.radius}
+          fill={r.color}
+          stroke={r.line_color ?? "none"}
+          strokeWidth={r.line_color ? spotMaxRadius * STROKE_WIDTH_RATIO : 0}
+        />
+      ))}
+      <CenterCross />
+    </g>
+  );
+}
+
+// 標的中心の「＋」。
+function CenterCross() {
+  return (
+    <>
+      <line
+        x1={-CENTER_CROSS_ARM_LENGTH_CM}
+        y1={0}
+        x2={CENTER_CROSS_ARM_LENGTH_CM}
+        y2={0}
+        stroke="#231F20"
+        strokeWidth={CENTER_CROSS_STROKE_WIDTH_CM}
+      />
+      <line
+        x1={0}
+        y1={-CENTER_CROSS_ARM_LENGTH_CM}
+        x2={0}
+        y2={CENTER_CROSS_ARM_LENGTH_CM}
+        stroke="#231F20"
+        strokeWidth={CENTER_CROSS_STROKE_WIDTH_CM}
+      />
+    </>
   );
 }
 
@@ -169,6 +182,50 @@ function TargetFaceCenterDetail({
   const clusterOuterRadius = cluster[cluster.length - 1].radius;
   const sorted = [...rings].sort((a, b) => a.radius - b.radius);
   const nextRing = sorted[cluster.length];
+  const g = centerDetailGeometry(clusterOuterRadius, nextRing, pixelWidth);
+
+  return (
+    <svg
+      viewBox={`${g.leftEdge} ${-g.bandHalfHeight} ${g.cropWidth} ${g.bandHalfHeight * 2}`}
+      width={pixelWidth}
+      height={g.pixelHeight}
+      className="shrink-0 rounded-md border overflow-hidden"
+      role="img"
+      aria-label={cluster.map((r) => r.score_str).join(", ")}
+    >
+      {nextRing && <RingCircle ring={nextRing} strokeWidth={g.strokeWidth} />}
+      {[...cluster].reverse().map((r) => (
+        <RingCircle key={r.z_index} ring={r} strokeWidth={g.strokeWidth} />
+      ))}
+      {cluster.map((r, i) => {
+        const innerEdge = i === 0 ? 0 : cluster[i - 1].radius;
+        const mid = (innerEdge + r.radius) / 2;
+        return (
+          <text
+            key={r.z_index}
+            x={mid}
+            y={0}
+            dy="-0.06em"
+            fontSize={g.fontSize}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill="#231F20"
+          >
+            {r.score_str}
+          </text>
+        );
+      })}
+      <CenterCross />
+    </svg>
+  );
+}
+
+// 中心拡大図の切り出しの寸法（viewBoxと同じcm単位。pixelHeightだけpx）。
+function centerDetailGeometry(
+  clusterOuterRadius: number,
+  nextRing: TargetFaceRing | undefined,
+  pixelWidth: number,
+) {
   const cropRadius = nextRing
     ? clusterOuterRadius +
       (nextRing.radius - clusterOuterRadius) * NEXT_RING_PEEK_RATIO
@@ -186,72 +243,32 @@ function TargetFaceCenterDetail({
   // フォントサイズはpixelWidthではなくviewBoxと同じcm単位のスケールで指定する
   // 必要がある（そうしないと極端に巨大な文字になる）。
   const fontSize = clusterOuterRadius / 6;
+  return {
+    strokeWidth,
+    bandHalfHeight,
+    leftEdge,
+    cropWidth,
+    pixelHeight,
+    fontSize,
+  };
+}
 
+function RingCircle({
+  ring,
+  strokeWidth,
+}: {
+  ring: TargetFaceRing;
+  strokeWidth: number;
+}) {
   return (
-    <svg
-      viewBox={`${leftEdge} ${-bandHalfHeight} ${cropWidth} ${bandHalfHeight * 2}`}
-      width={pixelWidth}
-      height={pixelHeight}
-      className="shrink-0 rounded-md border overflow-hidden"
-      role="img"
-      aria-label={cluster.map((r) => r.score_str).join(", ")}
-    >
-      {nextRing && (
-        <circle
-          cx={0}
-          cy={0}
-          r={nextRing.radius}
-          fill={nextRing.color}
-          stroke={nextRing.line_color ?? "none"}
-          strokeWidth={nextRing.line_color ? strokeWidth : 0}
-        />
-      )}
-      {[...cluster].reverse().map((r) => (
-        <circle
-          key={r.z_index}
-          cx={0}
-          cy={0}
-          r={r.radius}
-          fill={r.color}
-          stroke={r.line_color ?? "none"}
-          strokeWidth={r.line_color ? strokeWidth : 0}
-        />
-      ))}
-      {cluster.map((r, i) => {
-        const innerEdge = i === 0 ? 0 : cluster[i - 1].radius;
-        const mid = (innerEdge + r.radius) / 2;
-        return (
-          <text
-            key={r.z_index}
-            x={mid}
-            y={0}
-            dy="-0.06em"
-            fontSize={fontSize}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fill="#231F20"
-          >
-            {r.score_str}
-          </text>
-        );
-      })}
-      <line
-        x1={-CENTER_CROSS_ARM_LENGTH_CM}
-        y1={0}
-        x2={CENTER_CROSS_ARM_LENGTH_CM}
-        y2={0}
-        stroke="#231F20"
-        strokeWidth={CENTER_CROSS_STROKE_WIDTH_CM}
-      />
-      <line
-        x1={0}
-        y1={-CENTER_CROSS_ARM_LENGTH_CM}
-        x2={0}
-        y2={CENTER_CROSS_ARM_LENGTH_CM}
-        stroke="#231F20"
-        strokeWidth={CENTER_CROSS_STROKE_WIDTH_CM}
-      />
-    </svg>
+    <circle
+      cx={0}
+      cy={0}
+      r={ring.radius}
+      fill={ring.color}
+      stroke={ring.line_color ?? "none"}
+      strokeWidth={ring.line_color ? strokeWidth : 0}
+    />
   );
 }
 

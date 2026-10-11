@@ -61,48 +61,15 @@ export function RoundsListClient() {
     }
   }, [loaded]);
 
-  let below: ReactNode = null;
-  if (others && others.length > 0) {
-    below = <RoundCards rounds={others} onDelete={startDelete} />;
-  } else if (empty) {
-    below = (
-      <p className="text-muted-foreground text-sm">
-        まだラウンドがありません。
-      </p>
-    );
-  } else if (rest) {
-    below = (
-      <FetchState
-        view={rest}
-        onRetry={retry}
-        loading={<RoundCardsSkeleton />}
-      />
-    );
-  }
+  const below = belowSection({ others, empty, rest }, retry, startDelete);
 
   return (
     <>
-      {inProgress.length > 0 && (
-        <section
-          data-testid="in-progress-rounds"
-          className="flex flex-col gap-2"
-        >
-          <h2 className="text-sm font-medium">入力中</h2>
-          <RoundCards rounds={inProgress} onDelete={startDelete} />
-        </section>
-      )}
-
-      {inProgress.length > 0 && below !== null ? (
-        <section
-          data-testid="other-rounds"
-          className="flex flex-1 flex-col gap-2"
-        >
-          <h2 className="text-sm font-medium">過去履歴</h2>
-          {below}
-        </section>
-      ) : (
-        below
-      )}
+      <RoundsSections
+        inProgress={inProgress}
+        below={below}
+        onDelete={startDelete}
+      />
 
       <ConfirmDialog
         open={target !== null}
@@ -120,6 +87,75 @@ export function RoundsListClient() {
       >
         <Plus className="size-6" />
       </Link>
+    </>
+  );
+}
+
+// 進行中の区画の下に出す内容。何も出さないときはnull。
+function belowSection(
+  {
+    others,
+    empty,
+    rest,
+  }: Pick<ReturnType<typeof roundsListView>, "others" | "empty" | "rest">,
+  retry: () => void,
+  onDelete: (round: RoundListItem) => void,
+): ReactNode {
+  if (others && others.length > 0) {
+    return <RoundCards rounds={others} onDelete={onDelete} />;
+  }
+  if (empty) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        まだラウンドがありません。
+      </p>
+    );
+  }
+  if (rest) {
+    return (
+      <FetchState
+        view={rest}
+        onRetry={retry}
+        loading={<RoundCardsSkeleton />}
+      />
+    );
+  }
+  return null;
+}
+
+// 進行中の区画と、その下（過去履歴など）。進行中がなければ下だけを並べる。
+function RoundsSections({
+  inProgress,
+  below,
+  onDelete,
+}: {
+  inProgress: RoundListItem[];
+  below: ReactNode;
+  onDelete: (round: RoundListItem) => void;
+}) {
+  return (
+    <>
+      {inProgress.length > 0 && (
+        <section
+          data-testid="in-progress-rounds"
+          className="flex flex-col gap-2"
+        >
+          <h2 className="text-sm font-medium">入力中</h2>
+          <RoundCards rounds={inProgress} onDelete={onDelete} />
+        </section>
+      )}
+
+      {inProgress.length > 0 && below !== null ? (
+        <section
+          data-testid="other-rounds"
+          className="flex flex-1 flex-col gap-2"
+        >
+          <h2 className="text-sm font-medium">過去履歴</h2>
+          {below}
+        </section>
+      ) : (
+        below
+      )}
     </>
   );
 }

@@ -161,9 +161,38 @@ type ShotOperation = Extract<
   { type: "shot.recorded" | "shot.cleared" }
 >;
 
+type RoundOperation = Extract<
+  SyncOperation,
+  { type: "round.created" | "round.updated" | "round.disabled" }
+>;
+
+type DistanceOperation = Extract<
+  SyncOperation,
+  { type: "distance.created" | "distance.updated" | "distance.disabled" }
+>;
+
 async function sendSingle(
   supabase: Client,
   operation: SyncOperation,
+): Promise<SendOutcome> {
+  switch (operation.type) {
+    case "round.created":
+    case "round.updated":
+    case "round.disabled":
+      return sendRoundOperation(supabase, operation);
+    case "distance.created":
+    case "distance.updated":
+    case "distance.disabled":
+      return sendDistanceOperation(supabase, operation);
+    case "shot.recorded":
+    case "shot.cleared":
+      return sendShots(supabase, [operation]);
+  }
+}
+
+async function sendRoundOperation(
+  supabase: Client,
+  operation: RoundOperation,
 ): Promise<SendOutcome> {
   switch (operation.type) {
     case "round.created":
@@ -204,6 +233,14 @@ async function sendSingle(
         }),
         revisionOnly,
       );
+  }
+}
+
+async function sendDistanceOperation(
+  supabase: Client,
+  operation: DistanceOperation,
+): Promise<SendOutcome> {
+  switch (operation.type) {
     case "distance.created":
       return outcomeOf(
         await supabase.rpc("create_distance", {
@@ -234,9 +271,6 @@ async function sendSingle(
           p_distance_id: operation.distanceId,
         }),
       );
-    case "shot.recorded":
-    case "shot.cleared":
-      return sendShots(supabase, [operation]);
   }
 }
 

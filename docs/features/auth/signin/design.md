@@ -23,7 +23,10 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 
 ## 構成とデータの流れ
 
-- `src/app/(auth)/signin/signin-form.tsx`: フォーム本体と送信。
+- `src/app/(auth)/signin/signin-form.tsx`: フォームの描画。
+- `src/app/(auth)/signin/use-signin-form.ts`: 入力値、reducerの状態、送信。
+- `src/app/(auth)/_shared/use-captcha.ts`: captchaのトークン。使用済みのトークンは消費して取り直す。
+- `src/app/(auth)/_shared/use-submit-guard.ts`: 送信中の表示と、二重送信の判定(同期のref)。
 - `src/app/(auth)/signin/signin-flow.ts`: 状態遷移のreducer。
 - `src/app/(auth)/signin/validate.ts`: 入力の検証。
 - `src/app/(auth)/_shared/turnstile.tsx`: Turnstileの共通部品。`interaction-only`で描画し、操作が必要な間だけ領域を出し、それ以外は畳む。未完了のエラー文言も表示する。
