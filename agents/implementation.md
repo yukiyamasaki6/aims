@@ -30,6 +30,16 @@
 - 規約の形にならない外部の名前に限り、`// biome-ignore lint/style/useNamingConvention: <理由>`で例外にする。理由には名前を決めた外部を書く。例外の一覧は`git grep -n "biome-ignore lint/style/useNamingConvention"`で出す。
 - 生成されたDBの型(`apps/web/src/types/supabase.ts`)は、生成器とDBが名前を決めるため検査の対象外とする(`biome.json`の`overrides`)。
 
+## 書き方の規則
+
+- Biomeのstyleの次の規則は、`pnpm lint`とCIの`Lint`がerrorとして検査し、`pnpm lint:fix`で直らないため手で守る。
+    - `noDescendingSpecificity`(CSS): 同じ要素を指す、詳細度の高いセレクタの後に、低いセレクタを書かない。低いセレクタを高いセレクタより前へ移す。
+    - `noNonNullAssertion`: `!`で型検査を外さない。値がないときに早期returnか`throw`をする判定で型を絞るか、値が欠けない型にする。
+    - `useLiteralEnumMembers`: enumのメンバーの値をリテラル(文字列、数値、他のメンバーの参照)にし、計算した値にしない。
+    - `useNodejsImportProtocol`: Node.jsの組み込みモジュールを`node:`付きで読み込む(`fs`ではなく`node:fs`)。
+    - `useTemplate`: 文字列の連結を`+`ではなくテンプレートリテラルで書く。
+- `pnpm lint:fix`が直す規則(`useConst`、`useImportType`など)は書き方を覚えなくてよい。規則の採否と理由は`docs/lint-rules.md`にある。
+
 ## フロントエンド
 
 - `any` は使用しない。
