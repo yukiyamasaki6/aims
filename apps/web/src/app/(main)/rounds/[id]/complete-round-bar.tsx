@@ -20,8 +20,8 @@ export function CompleteRoundBar({
   const [confirming, setConfirming] = useState(false);
   if (status === "completed") return null;
   return (
-    <div className="border-t bg-card p-3">
-      <div className="mx-auto max-w-xl">
+    <div className="border-t bg-card">
+      <div className="mx-auto max-w-xl px-8 py-3">
         <Button
           type="button"
           size="lg"

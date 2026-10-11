@@ -470,3 +470,25 @@ test("completion-12: オフラインのラウンド詳細画面のとき、入�
     .poll(() => status(roundId), { timeout: 15_000 })
     .toBe("completed");
 });
+
+for (const [name, viewport] of [
+  ["モバイル", { width: 390, height: 844 }],
+  ["広い画面", { width: 1280, height: 800 }],
+  ["横向き", LANDSCAPE],
+] as const) {
+  test(`completion-14: 入力中のラウンド詳細画面(距離が1つ以上)を${name}で開くとき、画面を開くと、入力を完了するボタンの左右の端が、スコアシートのカードの左右の端と同じ位置にそろう`, async ({
+    page,
+  }) => {
+    // Given: 入力中のラウンド詳細画面
+    // When: 画面を開く
+    await openRound(page, {}, { viewport });
+    await expect(completeButton(page)).toBeVisible();
+    const card = await page.getByTestId("add-distance-button").boundingBox();
+    if (!card) throw new Error("no card box");
+
+    // Then: ボタンの左右の端は、カードの左右の端と同じ位置にある
+    const button = await barBox(page);
+    expect(button.x).toBeCloseTo(card.x, 0);
+    expect(button.x + button.width).toBeCloseTo(card.x + card.width, 0);
+  });
+}
