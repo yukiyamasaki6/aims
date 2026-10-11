@@ -8,6 +8,7 @@
 - テストケースは正常系→異常系の順に記述する。
 - テストコードも、`agents/implementation.md`の「コードの複雑さ」のうち認知的複雑度の上限に従う。
 - 関数の長さの上限は、テストのコードには掛からない(理由は`agents/implementation.md`)。
+- テストコードも、`agents/implementation.md`の「識別子の命名」に従う。
 
 ## フロントエンド単体テスト
 

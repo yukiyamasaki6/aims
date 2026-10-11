@@ -134,14 +134,14 @@ const round = {
   ],
 };
 
-function face(id: string, owner_id: string | null, overrides = {}) {
+function face(id: string, ownerId: string | null, overrides = {}) {
   return {
     id,
     name: id,
     size: 122,
     format: "outdoor",
     bow_type: ["recurve"],
-    owner_id,
+    owner_id: ownerId,
     target_face_spots: [],
     ...overrides,
   };
@@ -534,14 +534,14 @@ describe("fetchTargetFaces", () => {
 });
 
 describe("的の端末への保存", () => {
-  const IDENTITY_KEY = "aims:local-user-id";
-  const SAVED = [face("saved", null)];
+  const identityKey = "aims:local-user-id";
+  const savedFaces = [face("saved", null)];
   const idsOf = (faces: unknown) =>
     (faces as { id: string }[]).map((f) => f.id);
 
   function saveBefore() {
-    localStorage.setItem(IDENTITY_KEY, "user-1");
-    saveReferenceSnapshot("target-faces", "user-1", SAVED, 1);
+    localStorage.setItem(identityKey, "user-1");
+    saveReferenceSnapshot("target-faces", "user-1", savedFaces, 1);
   }
 
   describe("fetchTargetFaces", () => {
@@ -553,7 +553,7 @@ describe("的の端末への保存", () => {
 
       await fetchTargetFaces(client);
 
-      localStorage.setItem(IDENTITY_KEY, "user-1");
+      localStorage.setItem(identityKey, "user-1");
       expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual([
         "own",
         "common",
@@ -585,7 +585,7 @@ describe("的の端末への保存", () => {
 
       await expect(fetchTargetFaces(client)).resolves.toEqual({
         status: "ok",
-        data: SAVED,
+        data: savedFaces,
       });
     });
 
@@ -603,7 +603,7 @@ describe("的の端末への保存", () => {
 
       await expect(fetchTargetFaces(client)).resolves.toEqual({
         status: "ok",
-        data: SAVED,
+        data: savedFaces,
       });
     });
 
@@ -619,7 +619,10 @@ describe("的の端末への保存", () => {
 
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
 
-      await expect(pending).resolves.toEqual({ status: "ok", data: SAVED });
+      await expect(pending).resolves.toEqual({
+        status: "ok",
+        data: savedFaces,
+      });
     });
 
     it("保存済みが無いと、FALLBACK_WAIT_MSでは返らず、FETCH_TIMEOUT_MSでerrorになる", async () => {
@@ -654,12 +657,15 @@ describe("的の端末への保存", () => {
       );
       const pending = fetchTargetFaces(client);
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
-      await expect(pending).resolves.toEqual({ status: "ok", data: SAVED });
-      localStorage.setItem(IDENTITY_KEY, "user-2");
+      await expect(pending).resolves.toEqual({
+        status: "ok",
+        data: savedFaces,
+      });
+      localStorage.setItem(identityKey, "user-2");
 
       await vi.advanceTimersByTimeAsync(3_000);
 
-      localStorage.setItem(IDENTITY_KEY, "user-1");
+      localStorage.setItem(identityKey, "user-1");
       expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual(["late"]);
     });
 
@@ -677,7 +683,7 @@ describe("的の端末への保存", () => {
 
       await vi.advanceTimersByTimeAsync(3_000);
 
-      expect(loadReferenceSnapshot("target-faces")).toEqual(SAVED);
+      expect(loadReferenceSnapshot("target-faces")).toEqual(savedFaces);
     });
   });
 
@@ -690,7 +696,7 @@ describe("的の端末への保存", () => {
 
       await fetchRoundDetail(client, "round-1");
 
-      localStorage.setItem(IDENTITY_KEY, "user-1");
+      localStorage.setItem(identityKey, "user-1");
       expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual([
         "own",
         "common",
@@ -708,7 +714,7 @@ describe("的の端末への保存", () => {
       await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
         status: "offline",
       });
-      expect(loadReferenceSnapshot("target-faces")).toEqual(SAVED);
+      expect(loadReferenceSnapshot("target-faces")).toEqual(savedFaces);
     });
 
     it("待ちは10秒のままで、FALLBACK_WAIT_MSでは返らない", async () => {
@@ -737,32 +743,32 @@ describe("的の端末への保存", () => {
 });
 
 describe("fetchRoundDetails", () => {
-  const UUID_1 = "11111111-1111-4111-8111-111111111111";
-  const UUID_2 = "22222222-2222-4222-8222-222222222222";
+  const uuid1 = "11111111-1111-4111-8111-111111111111";
+  const uuid2 = "22222222-2222-4222-8222-222222222222";
 
   it("入力中のラウンドと指定したラウンドを1回の取得で得て、ラウンドIDごとの記録を返す", async () => {
     // Given: 2件のラウンドが返る
     const { client, queries } = makeSupabase({
       rounds: ok([
-        { ...round, id: UUID_1, status: "in_progress" },
-        { ...round, id: UUID_2 },
+        { ...round, id: uuid1, status: "in_progress" },
+        { ...round, id: uuid2 },
       ]),
       target_faces: ok([face("face-1", null)]),
     });
 
     // When
-    const result = await fetchRoundDetails(client, [UUID_2, "not-a-uuid"]);
+    const result = await fetchRoundDetails(client, [uuid2, "not-a-uuid"]);
 
     // Then: UUIDだけを絞りに使い、ラウンドごとに設定・revision・取得時刻を持つ
     const roundQuery = queries.find((q) => q.table === "rounds");
     expect(roundQuery?.calls).toContainEqual([
       "or",
-      [`status.eq.in_progress,id.in.(${UUID_2})`],
+      [`status.eq.in_progress,id.in.(${uuid2})`],
     ]);
     expect(roundQuery?.calls).toContainEqual(["is", ["disabled_at", null]]);
     if (result.status !== "ok") throw new Error("not ok");
-    expect([...result.data.rounds.keys()]).toEqual([UUID_1, UUID_2]);
-    expect(result.data.rounds.get(UUID_1)).toMatchObject({
+    expect([...result.data.rounds.keys()]).toEqual([uuid1, uuid2]);
+    expect(result.data.rounds.get(uuid1)).toMatchObject({
       status: "in_progress",
       revisions: { round: 3 },
       userId: "user-1",

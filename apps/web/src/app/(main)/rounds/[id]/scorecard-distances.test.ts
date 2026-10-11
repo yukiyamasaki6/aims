@@ -84,9 +84,9 @@ describe("distanceToAdd", () => {
 
     it("位置キーは、最後のキーの最後の文字を1つ進める。`z`以上なら`a`を足す", () => {
       // Given: 最後のキーが`b`、`z`、`az`の距離
-      const keyOf = (position_key: string) =>
-        distanceToAdd([{ ...distanceB, position_key }], ids).distance
-          .position_key;
+      const keyOf = (positionKey: string) =>
+        distanceToAdd([{ ...distanceB, position_key: positionKey }], ids)
+          .distance.position_key;
 
       // When/Then: 追加するキーが最後のキーより大きいキーになる
       expect(keyOf("b")).toBe("c");

@@ -242,8 +242,8 @@ test("signin-14: サインイン画面でセキュリティチェックの操作
   const { email, password } = await createUniqueUser("signin-interactive");
   await page.addInitScript(() => {
     (
-      window as unknown as { __turnstileInteractive: boolean }
-    ).__turnstileInteractive = true;
+      window as unknown as { e2eTurnstileInteractive: boolean }
+    ).e2eTurnstileInteractive = true;
   });
 
   // When
@@ -255,7 +255,9 @@ test("signin-14: サインイン画面でセキュリティチェックの操作
   await expect(signInButton).toHaveAttribute("data-captcha-ready", "false");
   await fillCredentials(page, email, password);
   await page.evaluate(() =>
-    (window as unknown as { __turnstileSolve: () => void }).__turnstileSolve(),
+    (
+      window as unknown as { e2eTurnstileSolve: () => void }
+    ).e2eTurnstileSolve(),
   );
   await expect(widget).not.toBeInViewport({ ratio: 0.5 });
   await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");

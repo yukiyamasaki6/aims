@@ -337,11 +337,11 @@ function collectHydrationErrors(page: Page): string[] {
 // init scriptはcontext全体に残るため、goOnline後に開く新規文書はonLine=falseに戻る(復帰後に遷移するテストでは注意)。
 async function goOffline(context: BrowserContext) {
   await context.addInitScript(() => {
-    const w = window as unknown as { __offline: boolean };
-    w.__offline = true;
+    const w = window as unknown as { e2eOffline: boolean };
+    w.e2eOffline = true;
     Object.defineProperty(navigator, "onLine", {
       configurable: true,
-      get: () => !w.__offline,
+      get: () => !w.e2eOffline,
     });
   });
   await context.setOffline(true);
@@ -350,7 +350,7 @@ async function goOffline(context: BrowserContext) {
 async function goOnline(context: BrowserContext, page: Page) {
   await context.setOffline(false);
   await page.evaluate(() => {
-    (window as unknown as { __offline: boolean }).__offline = false;
+    (window as unknown as { e2eOffline: boolean }).e2eOffline = false;
     window.dispatchEvent(new Event("online"));
   });
 }

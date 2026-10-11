@@ -237,10 +237,22 @@ describe("readSession", () => {
 
   describe("更新を強制する場合", () => {
     // 保存先のセッション(更新トークンRT1)と、別の書き手が書いたセッション(RT2)。
-    const STORED = { user: { id: "user-1" }, refresh_token: "rt-1" } as Session;
-    const OTHER = { user: { id: "user-1" }, refresh_token: "rt-2" } as Session;
-    const stored = (): Result => ({ data: { session: STORED }, error: null });
-    const other = (): Result => ({ data: { session: OTHER }, error: null });
+    const storedSession = {
+      user: { id: "user-1" },
+      refresh_token: "rt-1",
+    } as Session;
+    const otherSession = {
+      user: { id: "user-1" },
+      refresh_token: "rt-2",
+    } as Session;
+    const stored = (): Result => ({
+      data: { session: storedSession },
+      error: null,
+    });
+    const other = (): Result => ({
+      data: { session: otherSession },
+      error: null,
+    });
 
     it("更新できれば、保存先の更新トークンで更新した新しいセッションで認証済みにする", async () => {
       // Given: 保存先にセッションがあり、更新に成功する
@@ -253,7 +265,7 @@ describe("readSession", () => {
       const state = await readSession(supabase, { refresh: true });
 
       // Then: 保存先の更新トークンで更新し、新しいセッションで認証済みになる
-      expect(state).toEqual({ status: "authenticated", session: OTHER });
+      expect(state).toEqual({ status: "authenticated", session: otherSession });
       expect(auth.refreshSession).toHaveBeenCalledExactlyOnceWith({
         refresh_token: "rt-1",
       });
@@ -284,7 +296,7 @@ describe("readSession", () => {
       const state = await readSession(supabase, { refresh: true });
 
       // Then: 認証済みで、サインアウトしない
-      expect(state).toEqual({ status: "authenticated", session: OTHER });
+      expect(state).toEqual({ status: "authenticated", session: otherSession });
       expect(auth.signOut).not.toHaveBeenCalled();
     });
 
@@ -366,7 +378,10 @@ describe("readSession", () => {
         const state = await readSession(supabase, { refresh: true });
 
         // Then: 別の書き手のセッションで認証済みになり、サインアウトしない
-        expect(state).toEqual({ status: "authenticated", session: OTHER });
+        expect(state).toEqual({
+          status: "authenticated",
+          session: otherSession,
+        });
         expect(auth.signOut).not.toHaveBeenCalled();
       });
     });

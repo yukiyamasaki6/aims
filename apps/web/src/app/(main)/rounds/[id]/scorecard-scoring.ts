@@ -138,7 +138,7 @@ function uniqueRingsFor(targetFace: ScoringTargetFace | undefined) {
   return Array.from(new Map(allRings.map((r) => [r.score_str, r])).values());
 }
 
-function ringsByZIndexDesc(targetFace: ScoringTargetFace | undefined) {
+function ringsByZindexDesc(targetFace: ScoringTargetFace | undefined) {
   return uniqueRingsFor(targetFace).sort((a, b) => b.z_index - a.z_index);
 }
 
@@ -148,7 +148,7 @@ function ringsByZIndexDesc(targetFace: ScoringTargetFace | undefined) {
 function topScoreRuleFor(
   targetFace: ScoringTargetFace | undefined,
 ): TopScoreRule | null {
-  const rings = ringsByZIndexDesc(targetFace);
+  const rings = ringsByZindexDesc(targetFace);
   const top = rings[0];
   if (!top) return null;
 
@@ -217,7 +217,7 @@ function summarize(rule: TopScoreRule | null, shots: Shot[]): ScoreSummary {
 export function scoreKeysFor(
   targetFace: ScoringTargetFace | undefined,
 ): ScoreKey[] {
-  const scoreKeys = ringsByZIndexDesc(targetFace).map((r) => ({
+  const scoreKeys = ringsByZindexDesc(targetFace).map((r) => ({
     scoreStr: r.score_str,
     scoreInt: r.score_int,
     color: r.color,

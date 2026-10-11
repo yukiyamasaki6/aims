@@ -37,6 +37,7 @@ export const test = base.extend<{ profile: RestartableProfile }>({
       async open() {
         current = await chromium.launchPersistentContext(directory, {
           ...devices["Desktop Chrome"],
+          // biome-ignore lint/style/useNamingConvention: Playwrightの設定の項目名
           baseURL,
         });
         const page = current.pages()[0] ?? (await current.newPage());

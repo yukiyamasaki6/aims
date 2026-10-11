@@ -506,20 +506,21 @@ test("detail-23: navigator.onLineがtrueのまま通信できず、端末が保�
   // 待ちと表示の時刻をページ内で測る(Node側の時刻はポーリングの間隔を含むため)。
   await page.addInitScript(() => {
     const w = window as unknown as {
-      __firstRequestAt?: number;
-      __shownAt?: number;
+      e2eFirstRequestAt?: number;
+      e2eShownAt?: number;
     };
     const originalFetch = window.fetch.bind(window);
     window.fetch = (input, init) => {
       const url = input instanceof Request ? input.url : String(input);
       if (/\/(rest|auth)\/v1\//.test(url)) {
-        w.__firstRequestAt ??= performance.now();
+        w.e2eFirstRequestAt ??= performance.now();
       }
       return originalFetch(input, init);
     };
     new MutationObserver(() => {
       const el = document.querySelector('[data-testid="round-summary"]');
-      if (el?.textContent?.includes("合計9")) w.__shownAt ??= performance.now();
+      if (el?.textContent?.includes("合計9"))
+        w.e2eShownAt ??= performance.now();
     }).observe(document, {
       childList: true,
       subtree: true,
@@ -538,10 +539,10 @@ test("detail-23: navigator.onLineがtrueのまま通信できず、端末が保�
   // Then: 通信の開始から、待ちの上限(FALLBACK_WAIT_MS)と描画の余裕のうちに表示されている
   const { firstRequestAt, shownAt } = await page.evaluate(() => {
     const w = window as unknown as {
-      __firstRequestAt?: number;
-      __shownAt?: number;
+      e2eFirstRequestAt?: number;
+      e2eShownAt?: number;
     };
-    return { firstRequestAt: w.__firstRequestAt, shownAt: w.__shownAt };
+    return { firstRequestAt: w.e2eFirstRequestAt, shownAt: w.e2eShownAt };
   });
   if (firstRequestAt === undefined) throw new Error("通信を始めていない");
   if (shownAt === undefined) throw new Error("表示されていない");

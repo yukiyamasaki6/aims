@@ -1153,7 +1153,7 @@ describe("ScorecardClient 並び直りの動き", () => {
 
   describe("動いている途中の反映", () => {
     // 動きの途中の変形。動いている要素の見た目の位置は、レイアウト上の位置からこれだけずれている。
-    const OFFSET = { x: 10, y: 5 };
+    const offset = { x: 10, y: 5 };
     type FakeAnimation = { playState: string; cancel: () => void };
     let running: Map<Element, FakeAnimation>;
 
@@ -1176,8 +1176,8 @@ describe("ScorecardClient 並び直りの動き", () => {
         function (this: Element) {
           const moving = running.get(this)?.playState === "running";
           return {
-            left: moving ? OFFSET.x : 0,
-            top: moving ? OFFSET.y : 0,
+            left: moving ? offset.x : 0,
+            top: moving ? offset.y : 0,
           } as DOMRect;
         },
       );
@@ -1510,6 +1510,7 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
           right: 0,
           width: 0,
           height: rect.bottom - rect.top,
+          // biome-ignore lint/style/useNamingConvention: DOMRectの標準のメソッド名
           toJSON: () => ({}),
         };
       },

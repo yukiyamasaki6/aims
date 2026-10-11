@@ -24,11 +24,11 @@ export async function waitForServiceWorkerControl(page: Page) {
 // init scriptはcontext全体に残るため、復帰後に開く新規文書は`onLine`がfalseに戻る。
 export async function goOffline(context: BrowserContext) {
   await context.addInitScript(() => {
-    const w = window as unknown as { __offline: boolean };
-    w.__offline = true;
+    const w = window as unknown as { e2eOffline: boolean };
+    w.e2eOffline = true;
     Object.defineProperty(navigator, "onLine", {
       configurable: true,
-      get: () => !w.__offline,
+      get: () => !w.e2eOffline,
     });
   });
   await context.setOffline(true);
@@ -37,7 +37,7 @@ export async function goOffline(context: BrowserContext) {
 export async function comeBackOnline(context: BrowserContext, page: Page) {
   await context.setOffline(false);
   await page.evaluate(() => {
-    (window as unknown as { __offline: boolean }).__offline = false;
+    (window as unknown as { e2eOffline: boolean }).e2eOffline = false;
     window.dispatchEvent(new Event("online"));
   });
 }
