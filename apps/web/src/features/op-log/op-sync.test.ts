@@ -71,11 +71,12 @@ function setup(
 ) {
   const store = fakeStore();
   const sent: Deferred[] = [];
-  const send = vi.fn((flight: OpFlight<Op>) => {
-    return new Promise<SendOutcome>((resolve) => {
-      sent.push({ flight, resolve });
-    });
-  });
+  const send = vi.fn(
+    (flight: OpFlight<Op>) =>
+      new Promise<SendOutcome>((resolve) => {
+        sent.push({ flight, resolve });
+      }),
+  );
   const state = {
     offline: options.offline ?? false,
     leader: options.leader ?? true,
