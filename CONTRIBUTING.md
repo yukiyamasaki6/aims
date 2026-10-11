@@ -110,16 +110,6 @@ gh auth login
     `pnpm lint` also limits the cognitive complexity of each function to 15 (Biome `noExcessiveCognitiveComplexity`). `pnpm lint:fix` cannot fix this; split the function by responsibility. Only when splitting would hurt readability, suppress it with `// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: <reason>`.
     `pnpm lint` also limits the length of each non-test function to 50 lines (Biome `noExcessiveLinesPerFunction`; blank lines and comment-only lines are not counted). Test files are exempt. `pnpm lint:fix` cannot fix this; split the function by responsibility. Only when splitting would hurt readability, suppress it with `// biome-ignore lint/complexity/noExcessiveLinesPerFunction: <reason>`.
     `pnpm lint` also checks identifier names (Biome `useNamingConvention`): camelCase for variables, functions, and parameters; PascalCase for types, classes, and React components; CONSTANT_CASE only for module-level constants; abbreviations written as words (`Db`, not `DB`). Properties may also use snake_case so that names defined by the database or external APIs can be written as is, and object literal properties may also use PascalCase and CONSTANT_CASE so that mocked component names, module constant names, and environment variable names can be written as is. `pnpm lint:fix` cannot fix this; rename the identifier. Do not rename names defined externally; only when such a name cannot fit the convention, suppress it with `// biome-ignore lint/style/useNamingConvention: <reason>`.
-    `pnpm lint` also reports the following Biome style rules as errors, and `pnpm lint:fix` cannot fix them; fix them by hand:
-    - `noDescendingSpecificity` (CSS): a selector must not come after a more specific selector that targets the same element. Move the less specific selector above the more specific one.
-    - `noNonNullAssertion`: do not use the `!` non-null assertion. Narrow the type with a check (an early return or a `throw` when the value is missing) or change the type so the value cannot be missing.
-    - `useLiteralEnumMembers`: give each enum member a literal value (a string, a number, or a reference to another member), not a computed one.
-    - `useNodejsImportProtocol`: import Node.js built-in modules with the `node:` prefix (`node:fs`, not `fs`).
-    - `useTemplate`: build strings with template literals (`` `${a}b` ``), not with `+`.
-
-    `pnpm lint` also reports the following Biome style rules as errors. `pnpm lint:fix` fixes them, except when a comment sits between the nested `if` statements; then fix them by hand:
-    - `useCollapsedIf`: merge an `if` whose only statement is another `if` into one `if` with `&&`. Move the comment above the `if` statement or into its body.
-    - `useCollapsedElseIf`: write an `else` block whose only statement is an `if` as `else if`. Move the comment above the `if` statement or into its body.
 5. Push your branch to GitHub:
     ```bash
     git push origin feat/my-feature-branch

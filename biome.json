@@ -29,21 +29,6 @@
         }
       },
       "style": {
-        "noDescendingSpecificity": "error",
-        "noNegationElse": "error",
-        "noNonNullAssertion": "error",
-        "noUselessElse": "error",
-        "noYodaExpression": "error",
-        "useArrayLiterals": "error",
-        "useCollapsedElseIf": "error",
-        "useCollapsedIf": "error",
-        "useConsistentArrowReturn": "error",
-        "useConst": "error",
-        "useDeprecatedReason": "error",
-        "useExponentiationOperator": "error",
-        "useExportType": "error",
-        "useImportType": "error",
-        "useLiteralEnumMembers": "error",
         "useNamingConvention": {
           "level": "error",
           "options": {
@@ -67,10 +52,7 @@
               }
             ]
           }
-        },
-        "useNodejsImportProtocol": "error",
-        "useShorthandFunctionType": "error",
-        "useTemplate": "error"
+        }
       }
     }
   },
