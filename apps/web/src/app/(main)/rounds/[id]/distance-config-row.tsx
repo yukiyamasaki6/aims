@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
@@ -105,61 +105,92 @@ function TargetFacePicker({
         className="flex h-[70vh] flex-col overflow-y-hidden"
       >
         <div className="flex h-full flex-col gap-3">
-          <div className="grid grid-cols-4 gap-2">
-            {FORMAT_FILTER_OPTIONS.map((o) => (
-              <Button
-                key={o.value}
-                type="button"
-                variant={selectedFormat === o.value ? "default" : "outline"}
-                size="sm"
-                data-testid={`target-face-format-tab-${o.value}`}
-                onClick={() => setSelectedFormat(o.value)}
-              >
-                {o.label}
-              </Button>
-            ))}
-          </div>
-          <div className="grid grid-cols-4 gap-2">
-            {BOW_TYPE_FILTER_OPTIONS.map((o) => (
-              <Button
-                key={o.value}
-                type="button"
-                variant={selectedBowType === o.value ? "default" : "outline"}
-                size="sm"
-                data-testid={`target-face-bow-type-tab-${o.value}`}
-                onClick={() => setSelectedBowType(o.value)}
-              >
-                {o.label}
-              </Button>
-            ))}
-          </div>
-          {/* 選択中の項目に付くring（box-shadow）がコンテナの縁に接して
-              overflowで見切れないよう、-mx-1で横幅（上のタブ行との揃え）を
-              保ちつつ、内側に上下左右のpを取ってringの逃げ場を作る。 */}
-          <div className="-mx-1 flex flex-1 flex-col gap-2 overflow-y-auto p-1">
-            {visibleFaces.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                aria-label={f.name}
-                aria-pressed={f.id === selectedId}
-                data-testid={`target-face-option-${f.id}`}
-                onClick={() => {
-                  onSelect(f.id);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "flex shrink-0 items-center rounded-md p-2 transition-colors hover:bg-muted",
-                  f.id === selectedId && "bg-muted ring-1 ring-primary",
-                )}
-              >
-                <TargetFaceInfo face={f} />
-              </button>
-            ))}
-          </div>
+          <FilterTabs
+            options={FORMAT_FILTER_OPTIONS}
+            current={selectedFormat}
+            testIdPrefix="target-face-format-tab"
+            onChange={setSelectedFormat}
+          />
+          <FilterTabs
+            options={BOW_TYPE_FILTER_OPTIONS}
+            current={selectedBowType}
+            testIdPrefix="target-face-bow-type-tab"
+            onChange={setSelectedBowType}
+          />
+          <TargetFaceList
+            faces={visibleFaces}
+            selectedId={selectedId}
+            onSelect={(id) => {
+              onSelect(id);
+              setOpen(false);
+            }}
+          />
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function FilterTabs({
+  options,
+  current,
+  testIdPrefix,
+  onChange,
+}: {
+  options: { value: string; label: string }[];
+  current: string;
+  testIdPrefix: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {options.map((o) => (
+        <Button
+          key={o.value}
+          type="button"
+          variant={current === o.value ? "default" : "outline"}
+          size="sm"
+          data-testid={`${testIdPrefix}-${o.value}`}
+          onClick={() => onChange(o.value)}
+        >
+          {o.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+function TargetFaceList({
+  faces,
+  selectedId,
+  onSelect,
+}: {
+  faces: TargetFaceOption[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    // 選択中の項目に付くring（box-shadow）がコンテナの縁に接して
+    // overflowで見切れないよう、-mx-1で横幅（上のタブ行との揃え）を
+    // 保ちつつ、内側に上下左右のpを取ってringの逃げ場を作る。
+    <div className="-mx-1 flex flex-1 flex-col gap-2 overflow-y-auto p-1">
+      {faces.map((f) => (
+        <button
+          key={f.id}
+          type="button"
+          aria-label={f.name}
+          aria-pressed={f.id === selectedId}
+          data-testid={`target-face-option-${f.id}`}
+          onClick={() => onSelect(f.id)}
+          className={cn(
+            "flex shrink-0 items-center rounded-md p-2 transition-colors hover:bg-muted",
+            f.id === selectedId && "bg-muted ring-1 ring-primary",
+          )}
+        >
+          <TargetFaceInfo face={f} />
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -190,6 +221,105 @@ export function DistanceEditFields({
   onSaved: (updated: DistanceConfig) => void;
   onDeleted: () => void;
   onOpenChange: (open: boolean) => void;
+  enqueue: (operation: SyncOperation) => void;
+}) {
+  const {
+    draft,
+    setDraft,
+    fieldErrors,
+    confirmOpen,
+    setConfirmOpen,
+    handleSave,
+    handleDeleteClick,
+    performDelete,
+  } = useDistanceEdit({ distance, hasShots, onSaved, onDeleted, enqueue });
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent>
+        <div className="flex flex-col gap-3">
+          <DistanceFields
+            distanceNumber={distance.distanceNumber}
+            draft={draft}
+            setDraft={setDraft}
+            fieldErrors={fieldErrors}
+            targetFaces={targetFaces}
+            roundFormat={roundFormat}
+            roundBowType={roundBowType}
+            hasShots={hasShots}
+          />
+
+          <DistanceEditActions
+            distanceNumber={distance.distanceNumber}
+            onSave={handleSave}
+            onDelete={handleDeleteClick}
+          />
+        </div>
+      </DialogContent>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        description="この距離にはすでにスコアが記録されています。削除するとスコアも失われます。削除しますか？"
+        onConfirm={performDelete}
+        nested
+      />
+    </Dialog>
+  );
+}
+
+// 距離1件分の編集フォームの数値入力欄。空欄はnullとして扱う。
+function NumberField({
+  label,
+  slug,
+  distanceNumber,
+  value,
+  error,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  slug: string;
+  distanceNumber: number;
+  value: number | null;
+  error: string | undefined;
+  disabled?: boolean;
+  onChange: (value: number | null) => void;
+}) {
+  const id = `distance-config-${slug}-${distanceNumber}`;
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-muted-foreground text-xs">
+        {label}
+      </label>
+      <Input
+        id={id}
+        type="number"
+        disabled={disabled}
+        data-testid={id}
+        value={value ?? ""}
+        onChange={(e) =>
+          onChange(e.target.value === "" ? null : Number(e.target.value))
+        }
+        aria-invalid={Boolean(error)}
+      />
+      {error && <p className="text-destructive text-sm">{error}</p>}
+    </div>
+  );
+}
+
+// 距離1件分の編集フォームの状態と、保存、削除の処理。
+function useDistanceEdit({
+  distance,
+  hasShots,
+  onSaved,
+  onDeleted,
+  enqueue,
+}: {
+  distance: DistanceConfig;
+  hasShots: boolean;
+  onSaved: (updated: DistanceConfig) => void;
+  onDeleted: () => void;
   enqueue: (operation: SyncOperation) => void;
 }) {
   // 保存の差は、開いたときの値(起点)と比べる。開いている間に届いた他の端末の変更を、変えていない項目の古い値で戻さないため。
@@ -229,160 +359,152 @@ export function DistanceEditFields({
     performDelete();
   }
 
+  return {
+    draft,
+    setDraft,
+    fieldErrors,
+    confirmOpen,
+    setConfirmOpen,
+    handleSave,
+    handleDeleteClick,
+    performDelete,
+  };
+}
+
+function DistanceFields({
+  distanceNumber,
+  draft,
+  setDraft,
+  fieldErrors,
+  targetFaces,
+  roundFormat,
+  roundBowType,
+  hasShots,
+}: {
+  distanceNumber: number;
+  draft: DistanceDraft;
+  setDraft: Dispatch<SetStateAction<DistanceDraft>>;
+  fieldErrors: DistanceConfigErrors;
+  targetFaces: TargetFaceOption[];
+  roundFormat: string;
+  roundBowType: string;
+  hasShots: boolean;
+}) {
   return (
-    <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor={`distance-config-distance-${distance.distanceNumber}`}
-              className="text-muted-foreground text-xs"
-            >
-              距離（m）
-            </label>
-            <Input
-              id={`distance-config-distance-${distance.distanceNumber}`}
-              type="number"
-              data-testid={`distance-config-distance-${distance.distanceNumber}`}
-              value={draft.distance ?? ""}
-              onChange={(e) =>
-                setDraft((d) => ({
-                  ...d,
-                  distance:
-                    e.target.value === "" ? null : Number(e.target.value),
-                }))
-              }
-              aria-invalid={Boolean(fieldErrors.distance)}
-            />
-            {fieldErrors.distance && (
-              <p className="text-destructive text-sm">{fieldErrors.distance}</p>
-            )}
-          </div>
-
-          {roundFormat === "field" && (
-            <div className="flex flex-col gap-1">
-              <span className="text-muted-foreground text-xs">
-                Marked / Unmarked
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                {MARKED_OPTIONS.map((o) => (
-                  <Button
-                    key={String(o.value)}
-                    type="button"
-                    variant={draft.isMarked === o.value ? "default" : "outline"}
-                    size="sm"
-                    data-testid={`distance-config-${o.label.toLowerCase()}-${distance.distanceNumber}`}
-                    onClick={() =>
-                      setDraft((d) => ({ ...d, isMarked: o.value }))
-                    }
-                  >
-                    {o.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-1">
-            <span className="text-muted-foreground text-xs">的</span>
-            <TargetFacePicker
-              targetFaces={targetFaces}
-              selectedId={draft.targetFaceId}
-              roundFormat={roundFormat}
-              roundBowType={roundBowType}
-              onSelect={(id) => setDraft((d) => ({ ...d, targetFaceId: id }))}
-              disabled={hasShots}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor={`distance-config-arrows-${distance.distanceNumber}`}
-              className="text-muted-foreground text-xs"
-            >
-              エンドあたりの本数
-            </label>
-            <Input
-              id={`distance-config-arrows-${distance.distanceNumber}`}
-              type="number"
-              disabled={hasShots}
-              data-testid={`distance-config-arrows-${distance.distanceNumber}`}
-              value={draft.arrowsPerEnd ?? ""}
-              onChange={(e) =>
-                setDraft((d) => ({
-                  ...d,
-                  arrowsPerEnd:
-                    e.target.value === "" ? null : Number(e.target.value),
-                }))
-              }
-              aria-invalid={Boolean(fieldErrors.arrowsPerEnd)}
-            />
-            {fieldErrors.arrowsPerEnd && (
-              <p className="text-destructive text-sm">
-                {fieldErrors.arrowsPerEnd}
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor={`distance-config-total-ends-${distance.distanceNumber}`}
-              className="text-muted-foreground text-xs"
-            >
-              総エンド数
-            </label>
-            <Input
-              id={`distance-config-total-ends-${distance.distanceNumber}`}
-              type="number"
-              disabled={hasShots}
-              data-testid={`distance-config-total-ends-${distance.distanceNumber}`}
-              value={draft.totalEnds ?? ""}
-              onChange={(e) =>
-                setDraft((d) => ({
-                  ...d,
-                  totalEnds:
-                    e.target.value === "" ? null : Number(e.target.value),
-                }))
-              }
-              aria-invalid={Boolean(fieldErrors.totalEnds)}
-            />
-            {fieldErrors.totalEnds && (
-              <p className="text-destructive text-sm">
-                {fieldErrors.totalEnds}
-              </p>
-            )}
-          </div>
-
-          <Button
-            type="button"
-            className="w-full"
-            data-testid={`distance-config-save-${distance.distanceNumber}`}
-            onClick={handleSave}
-          >
-            保存
-          </Button>
-
-          <div className="flex flex-col gap-3 border-t pt-3">
-            <Button
-              type="button"
-              variant="destructive"
-              className="w-full"
-              data-testid={`distance-config-delete-${distance.distanceNumber}`}
-              onClick={handleDeleteClick}
-            >
-              距離を削除
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-
-      <ConfirmDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        description="この距離にはすでにスコアが記録されています。削除するとスコアも失われます。削除しますか？"
-        onConfirm={performDelete}
-        nested
+    <>
+      <NumberField
+        label="距離（m）"
+        slug="distance"
+        distanceNumber={distanceNumber}
+        value={draft.distance}
+        error={fieldErrors.distance}
+        onChange={(v) => setDraft((d) => ({ ...d, distance: v }))}
       />
-    </Dialog>
+
+      {roundFormat === "field" && (
+        <MarkedToggle
+          isMarked={draft.isMarked}
+          distanceNumber={distanceNumber}
+          onChange={(isMarked) => setDraft((d) => ({ ...d, isMarked }))}
+        />
+      )}
+
+      <div className="flex flex-col gap-1">
+        <span className="text-muted-foreground text-xs">的</span>
+        <TargetFacePicker
+          targetFaces={targetFaces}
+          selectedId={draft.targetFaceId}
+          roundFormat={roundFormat}
+          roundBowType={roundBowType}
+          onSelect={(id) => setDraft((d) => ({ ...d, targetFaceId: id }))}
+          disabled={hasShots}
+        />
+      </div>
+
+      <NumberField
+        label="エンドあたりの本数"
+        slug="arrows"
+        distanceNumber={distanceNumber}
+        value={draft.arrowsPerEnd}
+        error={fieldErrors.arrowsPerEnd}
+        disabled={hasShots}
+        onChange={(v) => setDraft((d) => ({ ...d, arrowsPerEnd: v }))}
+      />
+
+      <NumberField
+        label="総エンド数"
+        slug="total-ends"
+        distanceNumber={distanceNumber}
+        value={draft.totalEnds}
+        error={fieldErrors.totalEnds}
+        disabled={hasShots}
+        onChange={(v) => setDraft((d) => ({ ...d, totalEnds: v }))}
+      />
+    </>
+  );
+}
+
+function DistanceEditActions({
+  distanceNumber,
+  onSave,
+  onDelete,
+}: {
+  distanceNumber: number;
+  onSave: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <>
+      <Button
+        type="button"
+        className="w-full"
+        data-testid={`distance-config-save-${distanceNumber}`}
+        onClick={onSave}
+      >
+        保存
+      </Button>
+
+      <div className="flex flex-col gap-3 border-t pt-3">
+        <Button
+          type="button"
+          variant="destructive"
+          className="w-full"
+          data-testid={`distance-config-delete-${distanceNumber}`}
+          onClick={onDelete}
+        >
+          距離を削除
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function MarkedToggle({
+  isMarked,
+  distanceNumber,
+  onChange,
+}: {
+  isMarked: boolean;
+  distanceNumber: number;
+  onChange: (isMarked: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-muted-foreground text-xs">Marked / Unmarked</span>
+      <div className="grid grid-cols-2 gap-2">
+        {MARKED_OPTIONS.map((o) => (
+          <Button
+            key={String(o.value)}
+            type="button"
+            variant={isMarked === o.value ? "default" : "outline"}
+            size="sm"
+            data-testid={`distance-config-${o.label.toLowerCase()}-${distanceNumber}`}
+            onClick={() => onChange(o.value)}
+          >
+            {o.label}
+          </Button>
+        ))}
+      </div>
+    </div>
   );
 }

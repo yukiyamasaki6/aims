@@ -108,6 +108,7 @@ gh auth login
     pnpm lint:fix
     ```
     `pnpm lint` also limits the cognitive complexity of each function to 15 (Biome `noExcessiveCognitiveComplexity`). `pnpm lint:fix` cannot fix this; split the function by responsibility. Only when splitting would hurt readability, suppress it with `// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: <reason>`.
+    `pnpm lint` also limits the length of each non-test function to 50 lines (Biome `noExcessiveLinesPerFunction`; blank lines and comment-only lines are not counted). Test files are exempt. `pnpm lint:fix` cannot fix this; split the function by responsibility. Only when splitting would hurt readability, suppress it with `// biome-ignore lint/complexity/noExcessiveLinesPerFunction: <reason>`.
 5. Push your branch to GitHub:
     ```bash
     git push origin feat/my-feature-branch

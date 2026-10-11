@@ -124,6 +124,7 @@ function openOpLogDB<Op extends OpBase, Base>(
   });
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: 開いたDBと追記の順序を閉じ込めるファクトリで、閉じ込めた状態を使わない補助(列の読み出しと組み分け)はモジュールへ出した。残りは、内側の関数が個々に上限内で、外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createOpLogStore<Op extends OpBase, Base>(
   rules: StreamRules<Op, Base>,
 ): OpLogStore<Op, Base> {
@@ -152,23 +153,7 @@ export function createOpLogStore<Op extends OpBase, Base>(
   // 追記は1つの接続の上で、受け取った順に直列で発行する。
   let appendQueue: Promise<unknown> = Promise.resolve();
 
-  type Tx<Mode extends IDBTransactionMode> = IDBPTransaction<
-    OpLogDB<Op, Base>,
-    ["ops", "bases"],
-    Mode
-  >;
-
-  async function streamEntries(
-    tx: Tx<IDBTransactionMode>,
-    streamId: string,
-    userId: string | null,
-  ): Promise<OpLogEntry<Op>[]> {
-    const entries = await tx
-      .objectStore(STORE_NAME)
-      .index("by-stream")
-      .getAll(streamId);
-    return sortedEntries(entries, userId);
-  }
+  type Tx<Mode extends IDBTransactionMode> = OpLogTx<Op, Base, Mode>;
 
   // 1つのトランザクションで、書き込みの途中で失敗したときは全て取り消す。
   async function inTransaction<T>(
@@ -234,26 +219,7 @@ export function createOpLogStore<Op extends OpBase, Base>(
         tx.objectStore(BASE_STORE_NAME).getAll(),
       ]);
       await tx.done;
-      const groups = new Map<string, StreamGroup<Op, Base>>();
-      const group = (streamId: string) => {
-        let found = groups.get(streamId);
-        if (!found) {
-          found = { base: undefined, entries: [] };
-          groups.set(streamId, found);
-        }
-        return found;
-      };
-      // 主キー`seq`の昇順で返るため、並べ直さない。
-      for (const entry of all) {
-        if (entry.userId !== userId || entry.seq === undefined) continue;
-        group(entry.streamId).entries.push({ ...entry, seq: entry.seq });
-      }
-      for (const stored of bases) {
-        if (stored.userId === userId) {
-          group(stored.streamId).base = toStreamBase(stored);
-        }
-      }
-      return groups;
+      return groupByStream(all, bases, userId);
     },
     commit(streamId, userId, base, startedAt) {
       return inTransaction(async (tx) => {
@@ -362,6 +328,52 @@ function toStreamBase<Base>(
   stored: StoredBase<Base> | undefined,
 ): StreamBase<Base> | undefined {
   return stored && { startedAt: stored.startedAt, base: stored.base };
+}
+
+type OpLogTx<
+  Op extends OpBase,
+  Base,
+  Mode extends IDBTransactionMode,
+> = IDBPTransaction<OpLogDB<Op, Base>, ["ops", "bases"], Mode>;
+
+async function streamEntries<Op extends OpBase, Base>(
+  tx: OpLogTx<Op, Base, IDBTransactionMode>,
+  streamId: string,
+  userId: string | null,
+): Promise<OpLogEntry<Op>[]> {
+  const entries = await tx
+    .objectStore(STORE_NAME)
+    .index("by-stream")
+    .getAll(streamId);
+  return sortedEntries(entries, userId);
+}
+
+// 現在のユーザーの操作とベースを、列ごとの組にする。
+function groupByStream<Op extends OpBase, Base>(
+  all: StoredEntry<Op>[],
+  bases: StoredBase<Base>[],
+  userId: string | null,
+): Map<string, StreamGroup<Op, Base>> {
+  const groups = new Map<string, StreamGroup<Op, Base>>();
+  const group = (streamId: string) => {
+    let found = groups.get(streamId);
+    if (!found) {
+      found = { base: undefined, entries: [] };
+      groups.set(streamId, found);
+    }
+    return found;
+  };
+  // 主キー`seq`の昇順で返るため、並べ直さない。
+  for (const entry of all) {
+    if (entry.userId !== userId || entry.seq === undefined) continue;
+    group(entry.streamId).entries.push({ ...entry, seq: entry.seq });
+  }
+  for (const stored of bases) {
+    if (stored.userId === userId) {
+      group(stored.streamId).base = toStreamBase(stored);
+    }
+  }
+  return groups;
 }
 
 // 現在のユーザーの操作だけを`seq`順にする。

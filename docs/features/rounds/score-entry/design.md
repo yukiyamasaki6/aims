@@ -48,7 +48,15 @@
 
 ## 構成とデータの流れ
 
-- `rounds/[id]/scorecard-client.tsx`: エンドの行、矢数分の場所、玉、空白、仮の矢を描き、指している矢と取り消しの列をstateに持ち、操作を受ける。玉は矢のIDごとに、輪(指している玉か仮の矢)は玉の領域ごとに、前の描画の位置を覚えて動かす。動いている途中の位置は、動かすときに要素の見た目の位置(`getBoundingClientRect`)から求める。
+- `rounds/[id]/scorecard-client.tsx`: スコアカードの枠。`use-scorecard.ts`の状態と操作を、部品とテンキーへ渡す。
+- `rounds/[id]/use-shot-input.ts`: 指している矢と、画面へまだ反映されていない自分の矢の操作を持ち、点数の書き込み、クリア、戻る・進む、玉と空白の押下を受ける。
+- `rounds/[id]/use-score-history.ts`: 取り消しの列をstateに持つ。
+- `rounds/[id]/end-row.tsx`: エンドの行、矢数分の場所、玉、空白、仮の矢を描く。
+- `rounds/[id]/use-reorder-animation.ts`: 玉は矢のIDごとに、輪(指している玉か仮の矢)は玉の領域ごとに、前の描画の位置を覚えて動かす。動いている途中の位置は、動かすときに要素の見た目の位置(`getBoundingClientRect`)から求める。
+- `rounds/[id]/use-keypad.ts`: テンキーの開閉の表示、実測の高さ、指している矢へのスクロール。
+- `rounds/[id]/keypad-buttons.tsx`: テンキーの中身(戻る・進む・クリアの行と、的の点数のキー)。
+- `rounds/[id]/bottom-frame.tsx`: 縦向きのテンキーと完了の帯を入れる、下端の枠。
+- `rounds/[id]/scorecard-colors.ts`: 玉とキーの色を、的のリング色から求める。
 - `rounds/[id]/scorecard-input.ts`: 指している矢の遷移(開いたとき、書いた後、クリアの後、戻る・進むの後、他端末の変化)と、取り消しの列の規則を純粋関数にまとめる。
 - `rounds/[id]/scorecard-scoring.ts`: 的から点数キーと配色を求め、エンドの生きている矢の数、空きの有無、並べ方を求める。
 - `rounds/[id]/shot-id.ts`: 新しい矢のID(時刻順のUUID)を作る。

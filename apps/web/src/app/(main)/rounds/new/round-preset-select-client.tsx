@@ -2,8 +2,7 @@
 
 import { ChevronLeft, Loader2, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -12,17 +11,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { FetchView } from "@/features/fetch-result/fetch-result";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { useMountedRef } from "@/hooks/use-mounted-ref";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { comparePositionKey } from "../_shared/position-key";
 import { PresetInfo } from "../_shared/preset-info";
-import { deletePersonalPreset } from "./delete-preset";
-import { deletePresetFromSnapshot, fetchPresets } from "./fetch-presets";
+import { type FetchedPresets, fetchPresets } from "./fetch-presets";
 import type { Preset } from "./preset-types";
-import { startRound } from "./start-round";
+import { usePresetDelete } from "./use-preset-delete";
+import { useStartRound } from "./use-start-round";
 
 // 読み込み後の2つの節と同じ形にする（見出し20px、個人プリセットの案内1行20px、
 // 公式プリセット行50px、間隔gap-2/gap-4）。
@@ -127,87 +128,41 @@ function PresetRow({
   );
 }
 
+// 取得できたプリセットのうち、表示するもの。削除済みの個人プリセットは除く。
+function visiblePresets(view: FetchView<FetchedPresets>, removedIds: string[]) {
+  if (view.status !== "ok") return { personalPresets: [], globalPresets: [] };
+  return {
+    personalPresets: view.data.personal.filter(
+      (p) => !removedIds.includes(p.id),
+    ),
+    globalPresets: view.data.global,
+  };
+}
+
 export function RoundPresetSelect() {
-  const router = useRouter();
   const { view, retry } = useFetchResult(
     () => fetchPresets(createClient()),
     [],
   );
-  // 削除済みの個人プリセットは取得結果から除いて表示する。
-  const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const mountedRef = useRef(true);
-  // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
-  // 挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseの
-  // クロージャのまま実行されてしまうため、stateだけでは防げない。
-  const submittingRef = useRef(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [presetToDelete, setPresetToDelete] = useState<Preset | null>(null);
+  const mountedRef = useMountedRef();
   const hydrated = useHydrated();
+  const { removedIds, presetToDelete, setPresetToDelete, confirmDelete } =
+    usePresetDelete(mountedRef, (presetId) =>
+      setSelectedId((prev) => (prev === presetId ? null : prev)),
+    );
 
-  useEffect(() => {
-    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
-    // 対応するため、マウント時にも明示的にtrueへ戻す。
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  const personalPresets =
-    view.status === "ok"
-      ? view.data.personal.filter((p) => !removedIds.includes(p.id))
-      : [];
-  const globalPresets = view.status === "ok" ? view.data.global : [];
+  const { personalPresets, globalPresets } = visiblePresets(view, removedIds);
   const selectedPreset =
     [...personalPresets, ...globalPresets].find((p) => p.id === selectedId) ??
     null;
+  const { error, submitting, handleStart } = useStartRound(
+    selectedPreset,
+    mountedRef,
+  );
 
   function toggleSelect(id: string) {
     setSelectedId((prev) => (prev === id ? null : id));
-  }
-
-  async function performDeletePreset(
-    preset: Preset,
-  ): Promise<{ error: string } | undefined> {
-    const result = await deletePersonalPreset({
-      presetId: preset.id,
-      isMounted: () => mountedRef.current,
-    });
-    if (result.status === "discarded") return;
-    if (result.status === "failed") return { error: result.error };
-
-    deletePresetFromSnapshot(preset.id);
-    setRemovedIds((prev) => [...prev, preset.id]);
-    setSelectedId((prev) => (prev === preset.id ? null : prev));
-  }
-
-  async function handleStart() {
-    if (submittingRef.current) return;
-    submittingRef.current = true;
-    setError(null);
-    setSubmitting(true);
-
-    const result = await startRound({
-      preset: selectedPreset,
-      isMounted: () => mountedRef.current,
-      generateId: () => crypto.randomUUID(),
-      now: () => new Date(),
-    });
-    if (result.status === "discarded") return;
-
-    if (result.status === "failed") {
-      setError(result.error);
-      submittingRef.current = false;
-      setSubmitting(false);
-      return;
-    }
-
-    // 成功時はここでsubmittingを解除しない。router.push()は遷移先の取得中も
-    // このコンポーネントを保持し続けるため、ここで解除すると遷移完了前に
-    // ボタンが再度押せる状態に戻ってしまう。アンマウント時に自然に破棄される。
-    router.push(`/rounds/${result.roundId}`);
   }
 
   return (
@@ -215,60 +170,17 @@ export function RoundPresetSelect() {
       data-hydrated={hydrated}
       className="flex h-full flex-col overflow-hidden"
     >
-      <div className="mx-auto w-full max-w-xl px-8 pt-8">
-        <Link
-          href="/rounds"
-          className="mb-2 inline-flex items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
-        >
-          <ChevronLeft className="size-4" />
-          一覧へ戻る
-        </Link>
-        <h1 className="font-heading text-2xl leading-snug font-medium">
-          ラウンドを作成
-        </h1>
-      </div>
+      <PageHeader />
 
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 overflow-y-auto px-8 py-4">
         {view.status === "ok" ? (
-          <>
-            <div className="flex flex-col gap-2">
-              <span className="text-sm font-medium">個人プリセット</span>
-              {personalPresets.length === 0 ? (
-                <p
-                  data-testid="personal-preset-placeholder"
-                  className="text-muted-foreground text-sm"
-                >
-                  プリセットとして保存すると、ここに表示されます。
-                </p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {personalPresets.map((preset) => (
-                    <PresetRow
-                      key={preset.id}
-                      preset={preset}
-                      selected={selectedId === preset.id}
-                      onSelect={() => toggleSelect(preset.id)}
-                      onDelete={() => setPresetToDelete(preset)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <span className="text-sm font-medium">公式プリセット</span>
-              <div className="flex flex-col gap-2">
-                {globalPresets.map((preset) => (
-                  <PresetRow
-                    key={preset.id}
-                    preset={preset}
-                    selected={selectedId === preset.id}
-                    onSelect={() => toggleSelect(preset.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          </>
+          <PresetSections
+            personalPresets={personalPresets}
+            globalPresets={globalPresets}
+            selectedId={selectedId}
+            onToggle={toggleSelect}
+            onDelete={setPresetToDelete}
+          />
         ) : (
           <FetchState
             view={view}
@@ -278,38 +190,148 @@ export function RoundPresetSelect() {
         )}
       </div>
 
-      <div className="border-t bg-card shadow-lg">
-        <div className="mx-auto flex w-full max-w-xl flex-col gap-2 p-4">
-          {error && <p className="text-destructive text-sm">{error}</p>}
-          <p className="text-center font-medium text-sm">
-            種別・弓種・距離は開始後に変更可能です。
-          </p>
-          <Button
-            type="button"
-            aria-disabled={submitting}
-            data-testid="round-start-button"
-            className={cn(submitting && "pointer-events-none opacity-50")}
-            onClick={handleStart}
-          >
-            {submitting && <Loader2 className="size-3.5 animate-spin" />}
-            {selectedPreset
-              ? `「${selectedPreset.name}」で開始`
-              : "プリセット無しで開始"}
-          </Button>
-        </div>
-      </div>
+      <StartBar
+        error={error}
+        submitting={submitting}
+        selectedPreset={selectedPreset}
+        onStart={handleStart}
+      />
 
-      <BlockingConfirmDialog
-        open={presetToDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) setPresetToDelete(null);
-        }}
-        description={`「${presetToDelete?.name}」を削除しますか？`}
-        onConfirm={async () => {
-          if (!presetToDelete) return;
-          return performDeletePreset(presetToDelete);
-        }}
+      <DeletePresetDialog
+        preset={presetToDelete}
+        onClose={() => setPresetToDelete(null)}
+        onConfirm={confirmDelete}
       />
     </main>
+  );
+}
+
+// 個人プリセットと公式プリセットの2つの節。
+function PresetSections({
+  personalPresets,
+  globalPresets,
+  selectedId,
+  onToggle,
+  onDelete,
+}: {
+  personalPresets: Preset[];
+  globalPresets: Preset[];
+  selectedId: string | null;
+  onToggle: (id: string) => void;
+  onDelete: (preset: Preset) => void;
+}) {
+  return (
+    <>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-medium">個人プリセット</span>
+        {personalPresets.length === 0 ? (
+          <p
+            data-testid="personal-preset-placeholder"
+            className="text-muted-foreground text-sm"
+          >
+            プリセットとして保存すると、ここに表示されます。
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {personalPresets.map((preset) => (
+              <PresetRow
+                key={preset.id}
+                preset={preset}
+                selected={selectedId === preset.id}
+                onSelect={() => onToggle(preset.id)}
+                onDelete={() => onDelete(preset)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-medium">公式プリセット</span>
+        <div className="flex flex-col gap-2">
+          {globalPresets.map((preset) => (
+            <PresetRow
+              key={preset.id}
+              preset={preset}
+              selected={selectedId === preset.id}
+              onSelect={() => onToggle(preset.id)}
+            />
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function StartBar({
+  error,
+  submitting,
+  selectedPreset,
+  onStart,
+}: {
+  error: string | null;
+  submitting: boolean;
+  selectedPreset: Preset | null;
+  onStart: () => void;
+}) {
+  return (
+    <div className="border-t bg-card shadow-lg">
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-2 p-4">
+        {error && <p className="text-destructive text-sm">{error}</p>}
+        <p className="text-center font-medium text-sm">
+          種別・弓種・距離は開始後に変更可能です。
+        </p>
+        <Button
+          type="button"
+          aria-disabled={submitting}
+          data-testid="round-start-button"
+          className={cn(submitting && "pointer-events-none opacity-50")}
+          onClick={onStart}
+        >
+          {submitting && <Loader2 className="size-3.5 animate-spin" />}
+          {selectedPreset
+            ? `「${selectedPreset.name}」で開始`
+            : "プリセット無しで開始"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PageHeader() {
+  return (
+    <div className="mx-auto w-full max-w-xl px-8 pt-8">
+      <Link
+        href="/rounds"
+        className="mb-2 inline-flex items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
+      >
+        <ChevronLeft className="size-4" />
+        一覧へ戻る
+      </Link>
+      <h1 className="font-heading text-2xl leading-snug font-medium">
+        ラウンドを作成
+      </h1>
+    </div>
+  );
+}
+
+function DeletePresetDialog({
+  preset,
+  onClose,
+  onConfirm,
+}: {
+  preset: Preset | null;
+  onClose: () => void;
+  onConfirm: () => Promise<{ error: string } | undefined>;
+}) {
+  return (
+    <BlockingConfirmDialog
+      open={preset !== null}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      description={`「${preset?.name}」を削除しますか？`}
+      onConfirm={onConfirm}
+    />
   );
 }

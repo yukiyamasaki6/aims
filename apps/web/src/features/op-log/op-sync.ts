@@ -113,6 +113,7 @@ type Flight = {
 
 // 操作の列の送信器。Reactに依存せず、列の追記・衝突の規則に従った送信・再試行・保留を担う。
 // 認可・契約で拒否された操作は破棄し、効かなかった操作は列から外す。止めて残すのは未認証のときだけで、同じ対象の後続も止める（保留は、サインインし直したとき(`resumeHeld`)か再読み込みで再び送信を試みる）。
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createOpSync<Op extends OpBase, Base>(
   deps: OpSyncDeps<Op, Base>,
 ) {
