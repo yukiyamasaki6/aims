@@ -11,11 +11,10 @@ jobs:
   changes:
     name: Detect Changes
     runs-on: ubuntu-latest
+    # 分類は1つにし、すべての重いジョブが参照する。
+    # チェックごとに分類を分けると、チェックごとに「読まない場所」の一覧を保守することになり、判断の誤りが検査の抜けになるため分けない。
     outputs:
-      web: ${{ steps.filter.outputs.web }}
-      migrations: ${{ steps.filter.outputs.migrations }}
-      supabase: ${{ steps.filter.outputs.supabase }}
-      workflows: ${{ steps.filter.outputs.workflows }}
+      code: ${{ steps.filter.outputs.code }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,30 +23,26 @@ jobs:
         id: filter
         uses: dorny/paths-filter@v3
         with:
+          # everyは、ファイルが分類のすべてのパターンに当てはまるときだけ変更として数える。
+          # '**'で全体を対象にし、'!'でどの必須チェックも読まないファイルだけを除く。
+          # 除外に挙げていない場所(新しい場所とワークフローを含む)の変更は、すべての重いジョブを起動する。
+          predicate-quantifier: every
           filters: |
-            web:
-              - 'apps/web/**'
-              - 'scripts/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'biome.json'
-              - '.node-version'
-            migrations:
-              - 'supabase/migrations/**'
-            supabase:
-              - 'supabase/migrations/**'
-              - 'supabase/tests/**'
-              - 'supabase/seed.sql'
-              - 'supabase/config.toml'
-              - 'supabase/templates/**'
-            workflows:
-              - '.github/workflows/**'
+            code:
+              - '**'
+              # Markdown(文書、Agent向けの指示書、IssueとPRのテンプレート)。
+              # Biomeは処理せず、Type Check、Knip、Unit Test、Lint SQL、pgTAP and E2E Testのどれも読まない。
+              # .mdを読む必須チェック(Markdownのlint、MDXのページ、文書を読むテストなど)を足すと、.mdだけのPRでそのチェックがskipされ、黙って通過する。
+              # そのときは、この行を消すか、そのチェックが読む場所を除外の対象から外す。
+              - '!**/*.md'
+              # ライセンス(ルートのファイルだけに当たる)。どの必須チェックも読まない。
+              - '!LICENSE'
+              # 除外を足すときは、Lint、Type Check、Knip、Lint SQL、Unit Test、pgTAP and E2E Testのどれも読まないことを確かめる。迷うものは足さない。
 
   lint:
     name: Lint
     needs: changes
-    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.workflows == 'true'
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -71,7 +66,7 @@ jobs:
   typecheck:
     name: Type Check
     needs: changes
-    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.workflows == 'true'
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -95,7 +90,7 @@ jobs:
   knip:
     name: Knip
     needs: changes
-    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.workflows == 'true'
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -119,7 +114,7 @@ jobs:
   lint-sql:
     name: Lint SQL
     needs: changes
-    if: needs.changes.outputs.migrations == 'true' || needs.changes.outputs.workflows == 'true'
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -143,7 +138,7 @@ jobs:
   unit-test:
     name: Unit Test
     needs: changes
-    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.workflows == 'true'
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -175,7 +170,7 @@ jobs:
   e2e-test:
     name: pgTAP and E2E Test
     needs: changes
-    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.supabase == 'true' || needs.changes.outputs.workflows == 'true'
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
