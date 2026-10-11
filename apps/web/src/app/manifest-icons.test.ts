@@ -4,16 +4,17 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
 // 設計の寸法。画像の幅に対する割合。
-const RING_DIAMETER = 0.533;
-const DOT_DIAMETER = 0.1778;
-const BAR_THICKNESS = 0.0889;
-const BAR_RIGHT_END = 0.8333; // 中心から33.3%
-const BAR_MEASURE_COL = 0.3; // 環の外縁(26.65%)と棒の右端(33.3%)の間
-const MAX_BAR_OVERSHOOT = 0.03; // 追加の丸からのはみ出しの上限
+const RING_DIAMETER = 0.61;
+const DOT_DIAMETER = 0.2033;
+const BAR_THICKNESS = 0.1017;
+const BAR_RIGHT_END = 0.88125; // 中心から38.1%
+const BAR_MEASURE_COL = 0.34; // 環の外縁(30.5%)と棒の右端(38.1%)の間
 const TOLERANCE = 0.006;
-// 「ホーム画面に追加」の丸の半径(画像の幅に対する割合)と、必要な余裕。
-const ADD_CIRCLE_RADIUS = 0.31;
-const MIN_MARGIN = 0.03;
+// 余白のない経路の丸(中央66.7%。実測67から70%の下限)の半径と、必要な余裕。
+const NO_PADDING_CIRCLE_RADIUS = 0.3335;
+const MIN_MARGIN = 0.02;
+// 丸の中で、棒が環の外へ出て見える長さの下限(棒の太さに対する比。実測0.28)。
+const MIN_BAR_VISIBLE_RATIO = 0.25;
 // iOS用のapple-iconは縮小しない(環の直径が幅の80%、赤い円が26.67%)。
 const APPLE_SIZE = 180;
 const APPLE_RING_DIAMETER = 0.8;
@@ -117,7 +118,7 @@ describe.each(ICONS)("インストール用アイコン $file", ({ file, size })
     for (const c of corners) expect([c.r, c.g, c.b]).toEqual([255, 255, 255]);
   });
 
-  it("環の直径が画像の幅の53.3%(±0.6ポイント)である", async () => {
+  it("環の直径が画像の幅の61%(±0.6ポイント)である", async () => {
     // Given: 生成済みの画像
     const img = await load(file);
     const c = Math.floor(size / 2);
@@ -133,12 +134,12 @@ describe.each(ICONS)("インストール用アイコン $file", ({ file, size })
     }
     const diameter = bottom - top + 1;
 
-    // Then: 設計の53.3%に収まる
+    // Then: 設計の61%に収まる
     expect(diameter).toBeGreaterThanOrEqual(size * (RING_DIAMETER - TOLERANCE));
     expect(diameter).toBeLessThanOrEqual(size * (RING_DIAMETER + TOLERANCE));
   });
 
-  it("中心の赤い円の直径が画像の幅の17.8%(±0.6ポイント)である", async () => {
+  it("中心の赤い円の直径が画像の幅の20.3%(±0.6ポイント)である", async () => {
     // Given: 生成済みの画像
     const img = await load(file);
     const c = Math.floor(size / 2);
@@ -153,7 +154,7 @@ describe.each(ICONS)("インストール用アイコン $file", ({ file, size })
     expect(diameter).toBeLessThanOrEqual(size * (DOT_DIAMETER + TOLERANCE));
   });
 
-  it("棒の太さが画像の幅の8.9%(±0.6ポイント)である", async () => {
+  it("棒の太さが画像の幅の10.2%(±0.6ポイント)である", async () => {
     // Given: 生成済みの画像
     const img = await load(file);
     const c = Math.floor(size / 2);
@@ -171,7 +172,7 @@ describe.each(ICONS)("インストール用アイコン $file", ({ file, size })
     expect(thickness).toBeLessThanOrEqual(size * (BAR_THICKNESS + TOLERANCE));
   });
 
-  it("棒の右端が画像の幅の83.3%(±0.6ポイント)の位置にあり、画像の端に届かない", async () => {
+  it("棒の右端が画像の幅の88.1%(±0.6ポイント)の位置にあり、画像の端に届かない", async () => {
     // Given: 生成済みの画像
     const img = await load(file);
     const c = Math.floor(size / 2);
@@ -188,21 +189,27 @@ describe.each(ICONS)("インストール用アイコン $file", ({ file, size })
     expect([edge.r, edge.g, edge.b]).toEqual([255, 255, 255]);
   });
 
-  it("棒の右端の「ホーム画面に追加」の丸からのはみ出しが3ポイント以下である", async () => {
+  it("余白のない経路の丸の中で、棒が環の外へ棒の太さの25%以上出て見える", async () => {
     // Given: 生成済みの画像
     const img = await load(file);
     const c = Math.floor(size / 2);
 
-    // When: 棒の右端の、中心からの距離と丸の半径の差を測る
+    // When: 中心の行で、丸の半径までの暗い画素の右端と、環の外縁との差を測る
     let rightmost = -1;
     for (let x = 0; x < size; x++) if (isDark(px(img, x, c))) rightmost = x;
-    const overshoot = rightmost + 1 - c - size * ADD_CIRCLE_RADIUS;
+    const visibleEnd = Math.min(
+      rightmost + 1 - c,
+      size * NO_PADDING_CIRCLE_RADIUS,
+    );
+    const visible = visibleEnd - size * (RING_DIAMETER / 2);
 
-    // Then: 認める範囲(約2.3〜2.7ポイント)を超えない
-    expect(overshoot).toBeLessThanOrEqual(size * MAX_BAR_OVERSHOOT);
+    // Then: 棒の太さの25%以上が環の外に見える
+    expect(visible).toBeGreaterThanOrEqual(
+      size * BAR_THICKNESS * MIN_BAR_VISIBLE_RATIO,
+    );
   });
 
-  it("環が「ホーム画面に追加」の丸より3ポイント以上内側に収まる", async () => {
+  it("環が余白のない経路の丸より2ポイント以上内側に収まる", async () => {
     // Given: 生成済みの画像。棒の行は環の外へ伸びるため除く
     const img = await load(file);
     const c = size / 2;
@@ -219,7 +226,7 @@ describe.each(ICONS)("インストール用アイコン $file", ({ file, size })
     }
 
     // Then: 丸の半径との差が余裕以上
-    expect(size * ADD_CIRCLE_RADIUS - farthest).toBeGreaterThanOrEqual(
+    expect(size * NO_PADDING_CIRCLE_RADIUS - farthest).toBeGreaterThanOrEqual(
       size * MIN_MARGIN,
     );
   });
