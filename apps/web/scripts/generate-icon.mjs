@@ -21,7 +21,8 @@ import sharp from "sharp";
 // hand-editing two numbers separately. Measured from the center, the dot,
 // the gap, and the ring's band are three equal widths (outer : inner : dot
 // = 3 : 2 : 1), and the ring's outer edge is 80% of the icon's half-width;
-// the bar runs to the icon's right edge (100%).
+// the bar runs to the icon's right edge (100%). (icon.svgの場合。manifestのアイコン
+// (any/maskable)はINSTALL_ART_SCALEで絵柄全体を縮める。apple-iconは縮めない。)
 //
 // Every dimension below is a plain number in a unit space centered on the
 // ring, so the same shape reproduces exactly at 16px, 32px, app-icon, and
@@ -79,6 +80,18 @@ const ARC_STEPS = 64; // sampling density per arc
 // ring's outer edge at 80% of the half-width.
 const RING_OUTER_TO_HALF = 0.8;
 const BAR_LENGTH = RING_OUTER_R / RING_OUTER_TO_HALF;
+
+// --- Install icons (manifest any/maskable) ---
+// インストール用の絵柄の縮小率。絵柄全体(環、赤い円、棒の太さ、棒の長さ)を、
+// 中心を基準に元の比率のまま縮める。
+// 環の外縁は半幅の80%なので、環の直径は画像の幅の 0.8 * 2/3 = 53.3% になる。
+// 環は、Androidの標準の表示(中央72/108)では枠の80%、Smart Launcher(中央約86%)では
+// 約62%、「ホーム画面に追加」の丸(約62%)では約86%に見える。
+// 棒の右端は中心から33.3%で、Smart Launcherの角丸では欠けず、
+// 丸の切り抜きでは右端がわずかに欠ける(認める)。
+// apple-iconには適用しない(iOSは画像の全体を表示するため、縮小すると環が枠の
+// 約53%になる。ユーザーの指示でiOSは縮小しない)。
+const INSTALL_ART_SCALE = 2 / 3;
 // =====================================================
 
 function toRad(deg) {
@@ -216,18 +229,21 @@ const viewBox = { x: -half, y: -half, size: half * 2 };
 // タブ用(icon.svg、favicon.ico)は、正方形に内接する丸の白地で、丸の外は透明。
 // このとき棒の右端は、丸の縁に沿った弧にする(直線の端のままだと、角が丸の外へ
 // はみ出す)。PWAは白の四角の地で、棒の右端は直線のまま(正方形の縁に接する)。
-function buildSvg({ plate }) {
+// scale は plate が "none" のときだけ使う。viewBoxを1/scale倍に広げ、絵柄全体を
+// 中心を基準に元の比率のまま縮める。1のとき縮小しない。
+function buildSvg({ plate, scale = 1 }) {
   const circle = plate === "circle";
   const t = BAR_THICKNESS / 2;
   const xc = Math.sqrt(half * half - t * t);
   const bar = circle
     ? `M ${fmt(barLeftX)} ${fmt(-t)} L ${fmt(xc)} ${fmt(-t)} A ${fmt(half)} ${fmt(half)} 0 0 1 ${fmt(xc)} ${fmt(t)} L ${fmt(barLeftX)} ${fmt(t)} Z`
     : barD;
+  const span = circle ? viewBox.size : viewBox.size / scale;
   const plateShape = circle
     ? `\n  <circle cx="0" cy="0" r="${fmt(half)}" fill="${WHITE}"/>`
     : "";
   const title = circle ? "\n  <title>AIMS icon</title>" : "";
-  return `<svg width="1024" height="1024" viewBox="${fmt(viewBox.x)} ${fmt(viewBox.y)} ${fmt(viewBox.size)} ${fmt(viewBox.size)}" xmlns="http://www.w3.org/2000/svg">${title}${plateShape}
+  return `<svg width="1024" height="1024" viewBox="${fmt(-span / 2)} ${fmt(-span / 2)} ${fmt(span)} ${fmt(span)}" xmlns="http://www.w3.org/2000/svg">${title}${plateShape}
   <path d="${bar}" fill="${BLACK}"/>
   <path d="${ringPathD}" fill="${BLACK}"/>
   <circle cx="${fmt(dotSvgCenter.x)}" cy="${fmt(dotSvgCenter.y)}" r="${fmt(DOT_RADIUS)}" fill="${RED}"/>
@@ -258,12 +274,12 @@ console.log(`Wrote ${icoPath} (${FAVICON_SIZES.join("x, ")}x px)`);
 
 // ==================== Manifest install icons: solid white background ====================
 // PWAインストールアイコンは、白の四角の地に黒の絵柄を描き込む。
-// any と maskable は同じ画像（縮小しない）。maskableで円形に切り抜かれても、
-// 環と赤い円は安全領域に収まる（棒の先だけが切り抜きに沿って欠ける）。
+// any と maskable は同じ画像。絵柄全体を2/3に縮める。
+// 丸の切り抜きでは棒の右端がわずかに欠ける。
 const MANIFEST_ICON_SIZES = [192, 512];
 
-async function renderManifestIcon(size) {
-  const content = await sharp(Buffer.from(buildSvg({ plate: "none" })))
+async function renderIcon(size, scale) {
+  const content = await sharp(Buffer.from(buildSvg({ plate: "none", scale })))
     .resize(size, size)
     .png()
     .toBuffer();
@@ -279,14 +295,14 @@ const iconsDir = fileURLToPath(new URL("../public/icons", import.meta.url));
 mkdirSync(iconsDir, { recursive: true });
 
 for (const size of MANIFEST_ICON_SIZES) {
-  const standardIcon = await renderManifestIcon(size);
+  const standardIcon = await renderIcon(size, INSTALL_ART_SCALE);
   const standardPath = fileURLToPath(
     new URL(`../public/icons/icon-${size}.png`, import.meta.url),
   );
   writeFileSync(standardPath, standardIcon);
   console.log(`Wrote ${standardPath}`);
 
-  const maskableIcon = await renderManifestIcon(size);
+  const maskableIcon = await renderIcon(size, INSTALL_ART_SCALE);
   const maskablePath = fileURLToPath(
     new URL(`../public/icons/icon-${size}-maskable.png`, import.meta.url),
   );
@@ -296,11 +312,12 @@ for (const size of MANIFEST_ICON_SIZES) {
 
 // ==================== iOSホーム画面用アイコン ====================
 // 透明だとiOSが黒で塗るため、不透明の白地にする。角はiOSが丸めるため丸めない。
-// maskableの区別はない。src/app/apple-icon.png はNext.jsのファイル規約で
+// maskableの区別はない。縮小しない(scale=1)。環は枠の80%に見える。
+// src/app/apple-icon.png はNext.jsのファイル規約で
 // apple-touch-icon のlinkとして全ページに出力される。
 const APPLE_ICON_SIZE = 180;
 const applePath = fileURLToPath(
   new URL("../src/app/apple-icon.png", import.meta.url),
 );
-writeFileSync(applePath, await renderManifestIcon(APPLE_ICON_SIZE));
+writeFileSync(applePath, await renderIcon(APPLE_ICON_SIZE, 1));
 console.log(`Wrote ${applePath}`);
