@@ -7,13 +7,25 @@ import {
   waitForHydration,
 } from "../helpers/auth";
 import { createPreset } from "../helpers/presets";
-import { createRound } from "../helpers/rounds";
+import { createRound, TRIPLE_SPOT_TARGET_FACE_ID } from "../helpers/rounds";
 import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
+import {
+  expectGapBeforeTargetFaceInfo,
+  expectNoHorizontalOverflow,
+  expectPageNotScrollingHorizontally,
+  expectSameLeft,
+  expectTargetFaceInfoArranged,
+  stubMissingPresetTargetFaces,
+  stubMissingTargetFaces,
+} from "../helpers/target-face-layout";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
+
+const NARROW_VIEWPORT_HEIGHT = 812;
+const OUTDOOR_122CM_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // 10点的（アウトドア・122cm）
 
 const SAVE_PRESET_RPC = "**/rest/v1/rpc/save_round_as_preset";
 const PRESETS_TABLE = "**/rest/v1/preset_rounds*";
@@ -118,6 +130,130 @@ test("preset-03: 「プリセット保存」ボタンをクリックすると、
     "placeholder",
     "30-30",
   );
+});
+
+test("preset-23: 幅375pxでプリセットを展開しているとき、プリセットを選択して内容を展開すると、距離の行が枠から横にあふれず、的の情報が全体の図の右に表記と中心の拡大図を縦に並べて表示される", async ({
+  page,
+}) => {
+  // Given: 幅375px。サイズの桁数が違う的を持つ、フィールドのUnmarkedの距離が2件あるプリセット
+  await page.setViewportSize({ width: 375, height: NARROW_VIEWPORT_HEIGHT });
+  const name = uniqueName("横幅");
+  await createPreset({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name,
+    format: "field",
+    distances: [
+      {
+        distance: 90,
+        totalEnds: 12,
+        arrowsPerEnd: 3,
+        isMarked: false,
+        targetFaceId: OUTDOOR_122CM_TARGET_FACE_ID,
+      },
+      {
+        distance: 18,
+        totalEnds: 12,
+        arrowsPerEnd: 3,
+        isMarked: true,
+        targetFaceId: TRIPLE_SPOT_TARGET_FACE_ID,
+      },
+    ],
+  });
+  await openNewRound(page);
+
+  // When
+  await presetButton(page, name).click();
+
+  // Then
+  const expanded = presetButton(page, name)
+    .locator("../..")
+    .locator("> button");
+  await expect(expanded.getByText("90m / Unmarked")).toBeVisible();
+  await expectNoHorizontalOverflow(expanded);
+  expectSameLeft(await expectTargetFaceInfoArranged(expanded, 2));
+  for (const row of await expanded
+    .locator("div.flex.min-w-0.items-center")
+    .all()) {
+    await expectGapBeforeTargetFaceInfo(row);
+  }
+  for (const text of ["90m / Unmarked", "18m / Marked"]) {
+    const box = await expanded.getByText(text).boundingBox();
+    expect(box?.height, `${text}が1行`).toBeLessThanOrEqual(20);
+  }
+  await expectPageNotScrollingHorizontally(page);
+
+  // Then: 的データを取得できない表示も、横にあふれない
+  await stubMissingPresetTargetFaces(page);
+  await openNewRound(page);
+  await presetButton(page, name).click();
+  await expect(expanded).toContainText("的データを取得できません");
+  await expectNoHorizontalOverflow(expanded);
+  await expectPageNotScrollingHorizontally(page);
+});
+
+test("preset-24: 幅375pxで距離が複数あるプリセット保存ダイアログのとき、「プリセット保存」ボタンをクリックすると、距離の行が枠から横にあふれず、的の情報が全体の図の右に表記と中心の拡大図を縦に並べて表示される", async ({
+  page,
+}) => {
+  // Given: 幅375px。サイズの桁数が違う的を持つ、フィールドのUnmarkedの距離が2件あるスコアカード
+  await page.setViewportSize({ width: 375, height: NARROW_VIEWPORT_HEIGHT });
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "",
+    roundDate: "2026-08-24",
+    format: "field",
+    bowType: "recurve",
+    distances: [
+      {
+        distance: 90,
+        totalEnds: 12,
+        arrowsPerEnd: 3,
+        isMarked: false,
+        targetFaceId: OUTDOOR_122CM_TARGET_FACE_ID,
+      },
+      {
+        distance: 18,
+        totalEnds: 12,
+        arrowsPerEnd: 3,
+        isMarked: true,
+        targetFaceId: TRIPLE_SPOT_TARGET_FACE_ID,
+      },
+    ],
+  });
+  await page.goto(`/rounds/${roundId}`);
+  await waitForHydration(page);
+
+  // When
+  await page.getByTestId("save-as-preset-trigger").click();
+
+  // Then
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("90m / Unmarked")).toBeVisible();
+  const info = dialog.getByTestId("round-preset-format-bow-type").locator("..");
+  await expectNoHorizontalOverflow(info);
+  expectSameLeft(await expectTargetFaceInfoArranged(info, 2));
+  for (const row of await info.locator("div.flex.min-w-0.items-center").all()) {
+    await expectGapBeforeTargetFaceInfo(row);
+  }
+  for (const text of ["90m / Unmarked", "18m / Marked"]) {
+    const box = await dialog.getByText(text).boundingBox();
+    expect(box?.height, `${text}が1行`).toBeLessThanOrEqual(20);
+  }
+  await expectPageNotScrollingHorizontally(page);
+
+  // Then: 的データを取得できない表示も、横にあふれない
+  await stubMissingTargetFaces(page);
+  await page.reload();
+  await waitForHydration(page);
+  await page.getByTestId("save-as-preset-trigger").click();
+  const missingInfo = page
+    .getByRole("dialog")
+    .getByTestId("round-preset-format-bow-type")
+    .locator("..");
+  await expect(missingInfo).toContainText("的データを取得できません");
+  await expectNoHorizontalOverflow(missingInfo);
+  await expectPageNotScrollingHorizontally(page);
 });
 
 test("preset-04: 背景をクリックすると、ダイアログが閉じられる", async ({

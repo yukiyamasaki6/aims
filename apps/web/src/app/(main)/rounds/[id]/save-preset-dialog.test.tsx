@@ -117,7 +117,7 @@ describe("SavePresetDialog", () => {
 
       // Then: 種別・弓種と、並び順の距離（70m→50m）が表示され、50mの的は「的データを取得できません」になる
       expect(screen.getByRole("dialog")).toHaveTextContent(
-        "アウトドア / リカーブ70m122cm6本×6エンド50m的データを取得できません3本×2エンド",
+        "アウトドア / リカーブ70m6本×6エンド122cm50m3本×2エンド的データを取得できません",
       );
     });
   });

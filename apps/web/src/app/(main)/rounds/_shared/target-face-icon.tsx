@@ -154,10 +154,12 @@ function innerSameColorRings(rings: TargetFaceRing[]): TargetFaceRing[] {
 }
 
 // 全体の円の半径に対する、切り出す横長の帯の高さ（中心から片側）の比率。
-const CENTER_DETAIL_BAND_RATIO = 0.3;
-// 得点表記は中心から右方向にしか置かれないため、左側は中心点が見える最小限
-// （半径に対するこの比率）だけ残し、大部分を右側（表記がある側）に使う。
-const CENTER_DETAIL_LEFT_MARGIN_RATIO = 0.15;
+// 描く領域（枠線の内側）の幅73pxに対し高さ26px（枠線を足した外側は75×28px）で、
+// 表記16px＋拡大図28pxが全体の図48pxの中央に収まる高さにする。
+const CENTER_DETAIL_BAND_RATIO = 0.187;
+// 得点表記は中心から右方向にしか置かれないため、左側は中心の印が欠けない
+// 最小限（半径に対するこの比率）だけ残し、大部分を右側（表記がある側）に使う。
+const CENTER_DETAIL_LEFT_MARGIN_RATIO = 0.05;
 
 // 的中心部（同色の内側リング）を、扇形に切り出すのではなく円のまま横長の帯で
 // クロップした拡大図。円自体は変形せず、単純に上下を狭く切り取るだけなので、
@@ -189,7 +191,7 @@ function TargetFaceCenterDetail({
       viewBox={`${g.leftEdge} ${-g.bandHalfHeight} ${g.cropWidth} ${g.bandHalfHeight * 2}`}
       width={pixelWidth}
       height={g.pixelHeight}
-      className="shrink-0 rounded-md border overflow-hidden"
+      className="box-content shrink-0 rounded-md border overflow-hidden"
       role="img"
       aria-label={cluster.map((r) => r.score_str).join(", ")}
     >
@@ -287,32 +289,31 @@ export function lookupTargetFace<T extends { id: string }>(
   return faces.find((f) => f.id === id) ?? "missing";
 }
 
-// 的の情報表示（サイズ・全体像・中心拡大）。距離ごとの情報行（プリセット選択・
-// ラウンド詳細の距離一覧・的選択リスト）で共通して使う。サイズ表記を固定幅・
-// 右寄せにすることで、桁数（60cmと122cm等）によらずTargetFaceInfo全体の
-// 幅が常に一定になり、複数行に並べたときも画像の位置が自動的に揃う
-// （呼び出し側で列を分解する必要がない）。
-export function TargetFaceInfo({
-  face,
-  thumbnailSize = 48,
-  centerDetailWidth = 68,
-}: {
-  face: TargetFaceView;
-  thumbnailSize?: number;
-  centerDetailWidth?: number;
-}) {
+// 的の情報表示（全体像・サイズ・中心拡大）。距離ごとの情報行（プリセット選択・
+// ラウンド詳細の距離一覧・的選択リスト）で共通して使う。左に全体像、右に
+// 上からサイズ表記・中心拡大を縦に並べる。右の列の幅はサイズ表記の桁数によらず
+// 中心拡大の幅で決まるため、TargetFaceInfo全体の幅が常に一定になり、複数行に
+// 並べたときも画像の位置が自動的に揃う（呼び出し側で列を分解する必要がない）。
+// 幅375pxの画面でも距離の行が横にあふれないよう、寸法は箇所によらず固定する。
+const THUMBNAIL_SIZE = 48;
+// 拡大図の描く領域（枠線の内側）の幅。box-contentのため枠線2pxを足した外側は75px。
+const CENTER_DETAIL_WIDTH = 73;
+
+export function TargetFaceInfo({ face }: { face: TargetFaceView }) {
   if (face === "missing") {
-    return <span>的データを取得できません</span>;
+    return <span className="min-w-0">的データを取得できません</span>;
   }
 
   return (
     <span className="flex items-center justify-center gap-1">
-      <span className="inline-block w-12 text-right">{face.size}cm</span>
-      <TargetFaceIcon spots={face.target_face_spots} size={thumbnailSize} />
-      <TargetFaceCenterDetail
-        rings={face.target_face_spots[0]?.target_face_rings ?? []}
-        pixelWidth={centerDetailWidth}
-      />
+      <TargetFaceIcon spots={face.target_face_spots} size={THUMBNAIL_SIZE} />
+      <span className="flex flex-col items-start">
+        <span className="text-sm leading-4">{face.size}cm</span>
+        <TargetFaceCenterDetail
+          rings={face.target_face_spots[0]?.target_face_rings ?? []}
+          pixelWidth={CENTER_DETAIL_WIDTH}
+        />
+      </span>
     </span>
   );
 }

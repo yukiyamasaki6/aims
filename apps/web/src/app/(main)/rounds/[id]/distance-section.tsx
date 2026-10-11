@@ -154,7 +154,7 @@ function DistanceToggle({
       type="button"
       data-testid={`distance-config-toggle-${displayNumber}`}
       onClick={onToggle}
-      className="relative z-[15] grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm"
+      className="relative z-[15] flex w-full items-center gap-1 rounded-t-xl border-b bg-card px-3 py-2 text-left text-muted-foreground text-sm"
     >
       <DistanceInfo
         distance={d.distance}
@@ -163,8 +163,8 @@ function DistanceToggle({
         face={lookupTargetFace(targetFaces, d.target_face_id)}
         arrowsPerEnd={d.arrows_per_end}
         totalEnds={d.total_ends}
-        trailing={<ChevronRight className="size-4 shrink-0" />}
       />
+      <ChevronRight className="ml-auto size-4 shrink-0" />
     </button>
   );
 }

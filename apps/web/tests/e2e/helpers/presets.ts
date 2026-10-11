@@ -11,7 +11,13 @@ export async function createPreset(input: {
   name: string;
   format?: string;
   bowType?: string;
-  distances: { distance: number; totalEnds: number; arrowsPerEnd: number }[];
+  distances: {
+    distance: number;
+    totalEnds: number;
+    arrowsPerEnd: number;
+    targetFaceId?: string;
+    isMarked?: boolean;
+  }[];
 }): Promise<string> {
   const { supabase } = await signInAsTestUser(input.email, input.password);
 
@@ -24,8 +30,8 @@ export async function createPreset(input: {
       distance: d.distance,
       total_ends: d.totalEnds,
       arrows_per_end: d.arrowsPerEnd,
-      target_face_id: DEFAULT_TARGET_FACE_ID,
-      is_marked: true,
+      target_face_id: d.targetFaceId ?? DEFAULT_TARGET_FACE_ID,
+      is_marked: d.isMarked ?? true,
     })),
   });
 

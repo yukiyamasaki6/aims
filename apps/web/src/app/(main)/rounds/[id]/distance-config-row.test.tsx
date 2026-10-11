@@ -524,5 +524,37 @@ describe("DistanceEditFields", () => {
         );
       });
     });
+
+    describe("一覧の並べ方", () => {
+      it("項目は、最小幅から列の数を決める格子に、DOM順・属性を保って並び、項目の中身は左右中央に置かれる", async () => {
+        // Given: 的選択ポップアップで全件を表示した状態(選択中はアウトドアの的)
+        const user = userEvent.setup();
+        setup();
+        await user.click(screen.getByTestId("target-face-picker-trigger"));
+        await user.click(screen.getByTestId("target-face-format-tab-all"));
+        await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
+
+        // When
+        const items = screen.getAllByTestId(/^target-face-option-/);
+
+        // Then: 一覧は自動の列数の格子で、項目は中央寄せ。DOM順と属性は保たれる
+        const list = items[0].parentElement as HTMLElement;
+        expect(list).toHaveClass(
+          "grid",
+          "grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]",
+          "overflow-y-auto",
+        );
+        expect(items.map((i) => i.getAttribute("aria-label"))).toEqual(
+          targetFaces.map((f) => f.name),
+        );
+        for (const item of items) {
+          expect(item.tagName).toBe("BUTTON");
+          expect(item).toHaveClass("justify-center");
+        }
+        expect(items[0]).toHaveAttribute("aria-pressed", "true");
+        expect(items[1]).toHaveAttribute("aria-pressed", "false");
+        expect(items[0]).toHaveClass("bg-muted", "ring-1", "ring-primary");
+      });
+    });
   });
 });

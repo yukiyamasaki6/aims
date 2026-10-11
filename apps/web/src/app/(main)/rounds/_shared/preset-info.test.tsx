@@ -103,3 +103,88 @@ describe("DistanceInfo(的の状態)", () => {
     expect(container).toHaveTextContent("的データを取得できません");
   });
 });
+
+describe("DistanceInfo(配置)", () => {
+  it("距離の文言が上、本数×エンド数が下に縦に並ぶ", () => {
+    // Given
+    // When
+    render(
+      <DistanceInfo
+        distance={70}
+        isMarked={true}
+        format="field"
+        face="missing"
+        arrowsPerEnd={3}
+        totalEnds={12}
+      />,
+    );
+
+    // Then
+    const distance = screen.getByText("70m / Marked");
+    const ends = screen.getByText("3本×12エンド");
+    expect(distance.parentElement).toBe(ends.parentElement);
+    expect(distance.compareDocumentPosition(ends)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it("的の情報を左側のすぐ右に詰め、根は幅いっぱいに広がらず両端にも分けない", () => {
+    // Given
+    // When
+    render(
+      <DistanceInfo
+        distance={70}
+        isMarked={true}
+        format="field"
+        face="missing"
+        arrowsPerEnd={3}
+        totalEnds={12}
+      />,
+    );
+
+    // Then
+    const root = screen.getByText("70m / Marked").parentElement
+      ?.parentElement as HTMLElement;
+    expect(root).not.toHaveClass("w-full");
+    expect(root).not.toHaveClass("justify-between");
+  });
+
+  it.each([
+    {
+      format: "field",
+      minWidth: "min-w-[7.5rem]",
+      otherWidth: "min-w-[6.5rem]",
+    },
+    {
+      format: "outdoor",
+      minWidth: "min-w-[6.5rem]",
+      otherWidth: "min-w-[7.5rem]",
+    },
+    {
+      format: "indoor",
+      minWidth: "min-w-[6.5rem]",
+      otherWidth: "min-w-[7.5rem]",
+    },
+  ])(
+    "左側の最小の幅は、種別が$formatのとき$minWidthになる",
+    ({ format, minWidth, otherWidth }) => {
+      // Given
+      // When
+      render(
+        <DistanceInfo
+          distance={70}
+          isMarked={true}
+          format={format}
+          face="missing"
+          arrowsPerEnd={3}
+          totalEnds={12}
+        />,
+      );
+
+      // Then
+      const left = screen.getByText("3本×12エンド").parentElement;
+      expect(left).toHaveClass(minWidth);
+      expect(left).not.toHaveClass(otherWidth);
+    },
+  );
+});
