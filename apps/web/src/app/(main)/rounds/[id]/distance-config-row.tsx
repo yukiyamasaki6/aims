@@ -394,15 +394,6 @@ function DistanceFields({
 }) {
   return (
     <>
-      <NumberField
-        label="距離（m）"
-        slug="distance"
-        distanceNumber={distanceNumber}
-        value={draft.distance}
-        error={fieldErrors.distance}
-        onChange={(v) => setDraft((d) => ({ ...d, distance: v }))}
-      />
-
       {roundFormat === "field" && (
         <MarkedToggle
           isMarked={draft.isMarked}
@@ -411,17 +402,14 @@ function DistanceFields({
         />
       )}
 
-      <div className="flex flex-col gap-1">
-        <span className="text-muted-foreground text-xs">的</span>
-        <TargetFacePicker
-          targetFaces={targetFaces}
-          selectedId={draft.targetFaceId}
-          roundFormat={roundFormat}
-          roundBowType={roundBowType}
-          onSelect={(id) => setDraft((d) => ({ ...d, targetFaceId: id }))}
-          disabled={hasShots}
-        />
-      </div>
+      <NumberField
+        label="距離（m）"
+        slug="distance"
+        distanceNumber={distanceNumber}
+        value={draft.distance}
+        error={fieldErrors.distance}
+        onChange={(v) => setDraft((d) => ({ ...d, distance: v }))}
+      />
 
       <NumberField
         label="エンドあたりの本数"
@@ -442,6 +430,18 @@ function DistanceFields({
         disabled={hasShots}
         onChange={(v) => setDraft((d) => ({ ...d, totalEnds: v }))}
       />
+
+      <div className="flex flex-col gap-1">
+        <span className="text-muted-foreground text-xs">的</span>
+        <TargetFacePicker
+          targetFaces={targetFaces}
+          selectedId={draft.targetFaceId}
+          roundFormat={roundFormat}
+          roundBowType={roundBowType}
+          onSelect={(id) => setDraft((d) => ({ ...d, targetFaceId: id }))}
+          disabled={hasShots}
+        />
+      </div>
     </>
   );
 }

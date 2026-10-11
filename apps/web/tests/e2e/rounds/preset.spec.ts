@@ -169,7 +169,7 @@ test("preset-23: 幅375pxでプリセットを展開しているとき、プリ�
   const expanded = presetButton(page, name)
     .locator("../..")
     .locator("> button");
-  await expect(expanded.getByText("90m / Unmarked")).toBeVisible();
+  await expect(expanded.getByText("Unmarked (90m)")).toBeVisible();
   await expectNoHorizontalOverflow(expanded);
   expectSameLeft(await expectTargetFaceInfoArranged(expanded, 2));
   for (const row of await expanded
@@ -177,7 +177,7 @@ test("preset-23: 幅375pxでプリセットを展開しているとき、プリ�
     .all()) {
     await expectGapBeforeTargetFaceInfo(row);
   }
-  for (const text of ["90m / Unmarked", "18m / Marked"]) {
+  for (const text of ["Unmarked (90m)", "Marked (18m)"]) {
     const box = await expanded.getByText(text).boundingBox();
     expect(box?.height, `${text}が1行`).toBeLessThanOrEqual(20);
   }
@@ -229,14 +229,14 @@ test("preset-24: 幅375pxで距離が複数あるプリセット保存ダイア�
 
   // Then
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByText("90m / Unmarked")).toBeVisible();
+  await expect(dialog.getByText("Unmarked (90m)")).toBeVisible();
   const info = dialog.getByTestId("round-preset-format-bow-type").locator("..");
   await expectNoHorizontalOverflow(info);
   expectSameLeft(await expectTargetFaceInfoArranged(info, 2));
   for (const row of await info.locator("div.flex.min-w-0.items-center").all()) {
     await expectGapBeforeTargetFaceInfo(row);
   }
-  for (const text of ["90m / Unmarked", "18m / Marked"]) {
+  for (const text of ["Unmarked (90m)", "Marked (18m)"]) {
     const box = await dialog.getByText(text).boundingBox();
     expect(box?.height, `${text}が1行`).toBeLessThanOrEqual(20);
   }

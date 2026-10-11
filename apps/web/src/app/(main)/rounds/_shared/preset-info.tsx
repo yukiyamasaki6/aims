@@ -5,8 +5,20 @@ import { labelOf } from "./option-label";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "./round-constants";
 import { TargetFaceInfo, type TargetFaceView } from "./target-face-icon";
 
-// 距離1件分の情報表示（距離/Marked・的情報・エンド構成）。プリセット選択・
-// ラウンド詳細の距離一覧で共通して使う。左に距離/Markedとエンド構成を縦に、
+// 1行目の文字列。フィールドは区分を先に置き、距離を括弧で添える（例: `Marked (90m)`）。
+// 距離が無ければ区分のみ、フィールド以外は距離のみにする。
+function distanceLabel(
+  distance: number | null,
+  isMarked: boolean,
+  format: string,
+): string {
+  if (format !== "field") return distance !== null ? `${distance}m` : "";
+  const kind = isMarked ? "Marked" : "Unmarked";
+  return distance !== null ? `${kind} (${distance}m)` : kind;
+}
+
+// 距離1件分の情報表示（Marked/距離・的情報・エンド構成）。プリセット選択・
+// ラウンド詳細の距離一覧で共通して使う。左にMarked/距離とエンド構成を縦に、
 // 右に的情報を置く1行で、幅375pxでも横にあふれない。的情報は左側のすぐ右に
 // 詰め、左側の最小幅（種別ごと）で、行をまたいで的情報の左端をそろえる。
 export function DistanceInfo({
@@ -32,14 +44,7 @@ export function DistanceInfo({
           format === "field" ? "min-w-[7.5rem]" : "min-w-[6.5rem]",
         )}
       >
-        <span>
-          {[
-            distance !== null ? `${distance}m` : null,
-            format === "field" ? (isMarked ? "Marked" : "Unmarked") : null,
-          ]
-            .filter((part): part is string => part !== null)
-            .join(" / ")}
-        </span>
+        <span>{distanceLabel(distance, isMarked, format)}</span>
         <span>
           {arrowsPerEnd}本×{totalEnds}エンド
         </span>
