@@ -204,7 +204,7 @@ function judgeDistanceFields(
   if (changes.isMarked !== undefined) {
     // Markedへ変えるときは、同じ操作の距離(m)があればその値で判定する。
     const distance =
-      changes.distance !== undefined ? changes.distance : target.distance;
+      changes.distance === undefined ? target.distance : changes.distance;
     const blocked = changes.isMarked
       ? distance === null
       : tables.round.config.format !== "field";
@@ -295,9 +295,9 @@ function effectiveShotFields(
     return appliedFields(confirmedFields, keys);
   // 決定1: 記録後の射順(キーが無ければ行の値)で、現在の構成で無効な矢は効かない。
   const shotNumber =
-    operation.shotNumber !== undefined
-      ? operation.shotNumber
-      : (existing?.shot_number ?? null);
+    operation.shotNumber === undefined
+      ? (existing?.shot_number ?? null)
+      : operation.shotNumber;
   const fits = shotFitsDistance(
     distance,
     { endNumber: operation.endNumber, shotNumber },

@@ -28,8 +28,8 @@ export function CompleteRoundBar({
           className="w-full"
           data-testid="complete-round-button"
           onClick={() => {
-            if (confirmation !== null) setConfirming(true);
-            else onComplete();
+            if (confirmation === null) onComplete();
+            else setConfirming(true);
           }}
         >
           入力を完了する

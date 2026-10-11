@@ -116,6 +116,10 @@ gh auth login
     - `useLiteralEnumMembers`: give each enum member a literal value (a string, a number, or a reference to another member), not a computed one.
     - `useNodejsImportProtocol`: import Node.js built-in modules with the `node:` prefix (`node:fs`, not `fs`).
     - `useTemplate`: build strings with template literals (`` `${a}b` ``), not with `+`.
+
+    `pnpm lint` also reports the following Biome style rules as errors. `pnpm lint:fix` fixes them, except when a comment sits between the nested `if` statements; then fix them by hand:
+    - `useCollapsedIf`: merge an `if` whose only statement is another `if` into one `if` with `&&`. Move the comment above the `if` statement or into its body.
+    - `useCollapsedElseIf`: write an `else` block whose only statement is an `if` as `else if`. Move the comment above the `if` statement or into its body.
 5. Push your branch to GitHub:
     ```bash
     git push origin feat/my-feature-branch

@@ -51,7 +51,7 @@ export type PresetSaveStart =
 export function generatePresetName(distances: Distance[]): string {
   return [...distances]
     .sort(compareDistancePosition)
-    .map((d) => (d.distance !== null ? `${d.distance}` : "??"))
+    .map((d) => (d.distance === null ? "??" : `${d.distance}`))
     .join("-");
 }
 
@@ -93,7 +93,7 @@ export function startPresetSave(
   if (state.submitting) return { type: "busy" };
 
   const trimmed = state.name.trim();
-  const name = trimmed !== "" ? trimmed : generatePresetName(source.distances);
+  const name = trimmed === "" ? generatePresetName(source.distances) : trimmed;
   if (name.length > NAME_MAX_LENGTH) {
     return {
       type: "invalid",

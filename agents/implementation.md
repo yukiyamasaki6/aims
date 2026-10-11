@@ -38,6 +38,9 @@
     - `useLiteralEnumMembers`: enumのメンバーの値をリテラル(文字列、数値、他のメンバーの参照)にし、計算した値にしない。
     - `useNodejsImportProtocol`: Node.jsの組み込みモジュールを`node:`付きで読み込む(`fs`ではなく`node:fs`)。
     - `useTemplate`: 文字列の連結を`+`ではなくテンプレートリテラルで書く。
+- Biomeのstyleの次の規則は、`pnpm lint`とCIの`Lint`がerrorとして検査し、`pnpm lint:fix`が直す。ただし入れ子の`if`の間にコメントがあると直さないため、手で直す。
+    - `useCollapsedIf`: 本体が`if`だけの`if`を、`&&`で1つの`if`にまとめる。コメントは`if`文の前か本体の中へ移す。
+    - `useCollapsedElseIf`: 本体が`if`だけの`else`を`else if`にする。コメントは`if`文の前か本体の中へ移す。
 - `pnpm lint:fix`が直す規則(`useConst`、`useImportType`など)は書き方を覚えなくてよい。規則の採否と理由は`docs/lint-rules.md`にある。
 
 ## フロントエンド
