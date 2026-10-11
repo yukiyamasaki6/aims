@@ -20,7 +20,17 @@ import {
   startRoundOffline,
   TARGET_FACES_REST,
 } from "../helpers/reference-data";
-import { createRound } from "../helpers/rounds";
+import { createRound, TRIPLE_SPOT_TARGET_FACE_ID } from "../helpers/rounds";
+import {
+  expectExpandMarkerAtRightEdge,
+  expectGapBeforeTargetFaceInfo,
+  expectNoHorizontalOverflow,
+  expectOptionGrid,
+  expectPageNotScrollingHorizontally,
+  expectSameLeft,
+  expectTargetFaceInfoArranged,
+  stubMissingTargetFaces,
+} from "../helpers/target-face-layout";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -28,6 +38,10 @@ const FIELD_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000010"; // フィ�
 const OUTDOOR_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // 10点的（アウトドア・122cm）
 const INDOOR_40CM_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000007"; // 10点的（インドア・40cm）
 const INDOOR_40CM_TARGET_FACE_LABEL = "インドア・40cm";
+
+const NARROW_VIEWPORT_HEIGHT = 812;
+const ALL_TARGET_FACE_COUNT = 19;
+const MAX_DISTANCE_ROW_HEIGHT = 65;
 
 const UPDATE_ROUND_RPC = "**/rest/v1/rpc/update_round";
 const CREATE_DISTANCE_RPC = "**/rest/v1/rpc/create_distance";
@@ -110,6 +124,76 @@ test("setup-02: 距離が1件以上あるとき、/rounds/[id]を開くと、各
   const second = page.getByTestId("distance-summary-2");
   await expect(second).toContainText("30m");
   await expect(second).toContainText("5本×4エンド");
+});
+
+test("setup-33: 幅375pxで距離が1件以上あり、的が設定されているとき、/rounds/[id]を開くと、距離の行が枠から横にあふれず、的の情報が全体の図の右に表記と中心の拡大図を縦に並べて表示され、編集フォームの的の選択ボタンでも、同じ配置で横にあふれず、拡大図の得点の文字が環に収まり、変更前より大きく表示される", async ({
+  page,
+}) => {
+  // Given: 幅375px。サイズの桁数が違う的(122cmと40cm)を持つ、フィールドのUnmarkedの距離が2件
+  await page.setViewportSize({ width: 375, height: NARROW_VIEWPORT_HEIGHT });
+
+  // When
+  await openRound(page, {
+    format: "field",
+    distances: [
+      {
+        distance: 90,
+        totalEnds: 12,
+        arrowsPerEnd: 3,
+        isMarked: false,
+        targetFaceId: OUTDOOR_TARGET_FACE_ID,
+      },
+      {
+        distance: 18,
+        totalEnds: 12,
+        arrowsPerEnd: 3,
+        isMarked: true,
+        targetFaceId: TRIPLE_SPOT_TARGET_FACE_ID,
+      },
+    ],
+  });
+
+  // Then: 距離の行は横にあふれず、距離とエンド構成が各1行で、行の高さが従来以下
+  const lefts: number[] = [];
+  for (const number of [1, 2]) {
+    const toggle = page.getByTestId(`distance-config-toggle-${number}`);
+    await expectNoHorizontalOverflow(toggle);
+    lefts.push(...(await expectTargetFaceInfoArranged(toggle, 1)));
+    await expectGapBeforeTargetFaceInfo(toggle);
+    await expectExpandMarkerAtRightEdge(toggle);
+    const box = await toggle.boundingBox();
+    expect(box?.height, "距離の行の高さ").toBeLessThanOrEqual(
+      MAX_DISTANCE_ROW_HEIGHT,
+    );
+  }
+  expectSameLeft(lefts);
+  const firstRow = page.getByTestId("distance-config-toggle-1");
+  const distanceText = await firstRow.getByText("90m / Unmarked").boundingBox();
+  const endsText = await firstRow.getByText("3本×12エンド").boundingBox();
+  expect(distanceText?.height, "距離の文言が1行").toBeLessThanOrEqual(20);
+  expect(endsText?.height, "エンド構成が1行").toBeLessThanOrEqual(20);
+  await expectPageNotScrollingHorizontally(page);
+
+  // Then: 編集フォームの的の選択ボタンも、同じ配置で横にあふれない
+  await firstRow.click();
+  const trigger = page.getByTestId("target-face-picker-trigger");
+  await expect(trigger).toBeVisible();
+  await expectNoHorizontalOverflow(trigger);
+  await expectTargetFaceInfoArranged(trigger, 1);
+  await expectPageNotScrollingHorizontally(page);
+
+  // Then: 的データを取得できない表示も、行・選択ボタンで横にあふれない
+  await stubMissingTargetFaces(page);
+  await page.reload();
+  await waitForHydration(page);
+  const missingRow = page.getByTestId("distance-config-toggle-1");
+  await expect(missingRow).toContainText("的データを取得できません");
+  await expectNoHorizontalOverflow(missingRow);
+  await missingRow.click();
+  const missingTrigger = page.getByTestId("target-face-picker-trigger");
+  await expect(missingTrigger).toContainText("的データを取得できません");
+  await expectNoHorizontalOverflow(missingTrigger);
+  await expectPageNotScrollingHorizontally(page);
 });
 
 test("setup-03: ラウンド概要をクリックすると、ラウンド編集ダイアログが開く", async ({
@@ -331,6 +415,51 @@ test("setup-11: 的をクリックすると、ラウンド設定に一致する�
   const sizes = labels.map((label) => Number(/(\d+)cm/.exec(label)?.[1]));
   expect(sizes.length).toBeGreaterThan(1);
   expect(sizes).toEqual([...sizes].sort((a, b) => b - a));
+});
+
+test("setup-34: 距離編集ダイアログで幅375pxのとき、的の選択ダイアログを開くと、一覧が、幅に余裕があれば複数列、余裕がなければ1列で表示され、項目が横へ進む順に並び、各項目の枠の中で、的の情報が左右の中央に表示され、一覧が横にあふれない", async ({
+  page,
+}) => {
+  // Given: 幅375pxで、フィールドのラウンドの距離編集ダイアログを開いている
+  await page.setViewportSize({ width: 375, height: NARROW_VIEWPORT_HEIGHT });
+  await openRound(page, { format: "field" });
+  await page.getByTestId("distance-config-toggle-1").click();
+
+  // When
+  await page.getByTestId("target-face-picker-trigger").click();
+
+  // Then: 種別・弓種を「すべて」にした全種の的が、幅375pxで2列の格子に並ぶ
+  await page.getByTestId("target-face-format-tab-all").click();
+  await page.getByTestId("target-face-bow-type-tab-all").click();
+  const options = page.locator('[data-testid^="target-face-option-"]');
+  await expect(options.first()).toBeVisible();
+  const optionCount = await options.count();
+  expect(optionCount, "全種の的の数").toBe(ALL_TARGET_FACE_COUNT);
+  await expectOptionGrid(options, 2);
+  // 各項目の的の情報(全種の的の拡大図の得点の文字、十字を含む)が組み換えた配置で、項目から横にあふれない
+  for (let i = 0; i < optionCount; i++) {
+    await expectNoHorizontalOverflow(options.nth(i));
+    await expectTargetFaceInfoArranged(options.nth(i), 1);
+  }
+  const listBox = options.first().locator("..");
+  await expectNoHorizontalOverflow(listBox);
+  await expectPageNotScrollingHorizontally(page);
+  // ダイアログ全体はスクロールしない(一覧だけがスクロールする)
+  const dialogScrolls = await page
+    .getByRole("dialog")
+    .last()
+    .evaluate((el) => el.scrollHeight > el.clientHeight);
+  expect(dialogScrolls, "ダイアログ全体のスクロール").toBe(false);
+
+  // Then: 幅768pxでも2列で、あふれない
+  await page.setViewportSize({ width: 768, height: NARROW_VIEWPORT_HEIGHT });
+  await expectOptionGrid(options, 2);
+  await expectNoHorizontalOverflow(listBox);
+
+  // Then: 幅に余裕がない(260px)ときは1列で、あふれない
+  await page.setViewportSize({ width: 260, height: NARROW_VIEWPORT_HEIGHT });
+  await expectOptionGrid(options, 1);
+  await expectNoHorizontalOverflow(listBox);
 });
 
 test("setup-13: 的をクリックすると、その的が選択され、的選択ダイアログが閉じられる", async ({

@@ -1,15 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { labelOf } from "./option-label";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "./round-constants";
 import { TargetFaceInfo, type TargetFaceView } from "./target-face-icon";
 
 // 距離1件分の情報表示（距離/Marked・的情報・エンド構成）。プリセット選択・
-// ラウンド詳細の距離一覧で共通して使う。呼び出し側は
-// `grid grid-cols-[auto_1fr_auto]`のコンテナ内に直接並べる想定
-// （3つの要素がそれぞれ列になる）。
+// ラウンド詳細の距離一覧で共通して使う。左に距離/Markedとエンド構成を縦に、
+// 右に的情報を置く1行で、幅375pxでも横にあふれない。的情報は左側のすぐ右に
+// 詰め、左側の最小幅（種別ごと）で、行をまたいで的情報の左端をそろえる。
 export function DistanceInfo({
   distance,
   isMarked,
@@ -17,7 +16,6 @@ export function DistanceInfo({
   face,
   arrowsPerEnd,
   totalEnds,
-  trailing,
 }: {
   distance: number | null;
   isMarked: boolean;
@@ -25,24 +23,29 @@ export function DistanceInfo({
   face: TargetFaceView;
   arrowsPerEnd: number;
   totalEnds: number;
-  trailing?: ReactNode;
 }) {
   return (
-    <>
-      <span>
-        {[
-          distance !== null ? `${distance}m` : null,
-          format === "field" ? (isMarked ? "Marked" : "Unmarked") : null,
-        ]
-          .filter((part): part is string => part !== null)
-          .join(" / ")}
-      </span>
+    <div className="flex min-w-0 items-center gap-3">
+      <div
+        className={cn(
+          "flex shrink-0 flex-col whitespace-nowrap",
+          format === "field" ? "min-w-[7.5rem]" : "min-w-[6.5rem]",
+        )}
+      >
+        <span>
+          {[
+            distance !== null ? `${distance}m` : null,
+            format === "field" ? (isMarked ? "Marked" : "Unmarked") : null,
+          ]
+            .filter((part): part is string => part !== null)
+            .join(" / ")}
+        </span>
+        <span>
+          {arrowsPerEnd}本×{totalEnds}エンド
+        </span>
+      </div>
       <TargetFaceInfo face={face} />
-      <span className="flex items-center justify-self-end gap-2 whitespace-nowrap">
-        {arrowsPerEnd}本×{totalEnds}エンド
-        {trailing}
-      </span>
-    </>
+    </div>
   );
 }
 
@@ -53,12 +56,10 @@ export type DistanceInfoItem = {
   face: TargetFaceView;
   arrowsPerEnd: number;
   totalEnds: number;
-  trailing?: ReactNode;
 };
 
-// 複数の距離情報を1つの共通グリッドとしてまとめて描画する。TargetFaceInfo
-// 自体がサイズ表記を固定幅にして常に同じ幅になるため、DistanceInfoをそのまま
-// 各行に並べるだけで、行をまたいで的情報の画像位置が揃う。
+// 複数の距離情報を縦に並べて描画する。DistanceInfoが的情報を左側のすぐ右に置き、
+// 左側に最小幅を持たせるため、行をまたいで的情報の左端が揃う。
 function DistanceInfoList({
   items,
   format,
@@ -69,12 +70,7 @@ function DistanceInfoList({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "grid grid-cols-[auto_1fr_auto] items-center gap-x-1 gap-y-2",
-        className,
-      )}
-    >
+    <div className={cn("flex flex-col gap-2", className)}>
       {items.map(({ key, ...item }) => (
         <DistanceInfo key={key} format={format} {...item} />
       ))}

@@ -173,7 +173,9 @@ function TargetFaceList({
     // 選択中の項目に付くring（box-shadow）がコンテナの縁に接して
     // overflowで見切れないよう、-mx-1で横幅（上のタブ行との揃え）を
     // 保ちつつ、内側に上下左右のpを取ってringの逃げ場を作る。
-    <div className="-mx-1 flex flex-1 flex-col gap-2 overflow-y-auto p-1">
+    // 項目の最小幅から列の数を自動で決める格子にし、幅に余裕があれば複数列、
+    // なければ1列にする。各項目の中で的の情報は左右の中央に置く。
+    <div className="-mx-1 grid flex-1 grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] content-start gap-2 overflow-y-auto p-1">
       {faces.map((f) => (
         <button
           key={f.id}
@@ -183,7 +185,7 @@ function TargetFaceList({
           data-testid={`target-face-option-${f.id}`}
           onClick={() => onSelect(f.id)}
           className={cn(
-            "flex shrink-0 items-center rounded-md p-2 transition-colors hover:bg-muted",
+            "flex shrink-0 items-center justify-center rounded-md p-2 transition-colors hover:bg-muted",
             f.id === selectedId && "bg-muted ring-1 ring-primary",
           )}
         >
