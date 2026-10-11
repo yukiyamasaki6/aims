@@ -105,6 +105,49 @@ describe("DistanceEditFields", () => {
       });
     });
 
+    describe("入力欄の並び", () => {
+      function expectDomOrder(elements: HTMLElement[]) {
+        for (let i = 0; i < elements.length - 1; i++) {
+          expect(
+            elements[i].compareDocumentPosition(elements[i + 1]) &
+              Node.DOCUMENT_POSITION_FOLLOWING,
+          ).toBeTruthy();
+        }
+      }
+
+      it("フィールドでは、Marked切り替え、距離、本数、エンド数、的の順に並ぶ", () => {
+        // Given: フィールドのラウンド
+        // When: 表示する
+        setup({ roundFormat: "field" });
+
+        // Then: 上から順に並ぶ
+        expectDomOrder([
+          screen.getByTestId("distance-config-marked-1"),
+          screen.getByLabelText("距離（m）"),
+          screen.getByLabelText("エンドあたりの本数"),
+          screen.getByLabelText("総エンド数"),
+          screen.getByTestId("target-face-picker-trigger"),
+        ]);
+      });
+
+      it("フィールド以外では、切り替えが無く、距離、本数、エンド数、的の順に並ぶ", () => {
+        // Given: アウトドアのラウンド
+        // When: 表示する
+        setup({ roundFormat: "outdoor" });
+
+        // Then: 切り替えが無く、上から順に並ぶ
+        expect(
+          screen.queryByTestId("distance-config-marked-1"),
+        ).not.toBeInTheDocument();
+        expectDomOrder([
+          screen.getByLabelText("距離（m）"),
+          screen.getByLabelText("エンドあたりの本数"),
+          screen.getByLabelText("総エンド数"),
+          screen.getByTestId("target-face-picker-trigger"),
+        ]);
+      });
+    });
+
     describe("hasShotsがtrueの場合", () => {
       it("的・本数・エンド数の入力が無効化される（距離は編集可能）", () => {
         // Given: スコア記録済みの距離

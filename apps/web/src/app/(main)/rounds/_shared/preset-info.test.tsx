@@ -47,7 +47,8 @@ describe("DistanceInfo", () => {
       />,
     );
 
-    expect(screen.getByText("70m / Marked")).toBeInTheDocument();
+    expect(screen.getByText("Marked (70m)")).toBeInTheDocument();
+    expect(screen.queryByText("70m / Marked")).not.toBeInTheDocument();
   });
 
   it("フィールド種別かつUnmarkedで距離未設定の場合、Unmarkedのみ表示する", () => {
@@ -77,7 +78,8 @@ describe("DistanceInfo", () => {
       />,
     );
 
-    expect(screen.getByText("45m / Unmarked")).toBeInTheDocument();
+    expect(screen.getByText("Unmarked (45m)")).toBeInTheDocument();
+    expect(screen.queryByText("45m / Unmarked")).not.toBeInTheDocument();
   });
 });
 
@@ -120,7 +122,7 @@ describe("DistanceInfo(配置)", () => {
     );
 
     // Then
-    const distance = screen.getByText("70m / Marked");
+    const distance = screen.getByText("Marked (70m)");
     const ends = screen.getByText("3本×12エンド");
     expect(distance.parentElement).toBe(ends.parentElement);
     expect(distance.compareDocumentPosition(ends)).toBe(
@@ -143,7 +145,7 @@ describe("DistanceInfo(配置)", () => {
     );
 
     // Then
-    const root = screen.getByText("70m / Marked").parentElement
+    const root = screen.getByText("Marked (70m)").parentElement
       ?.parentElement as HTMLElement;
     expect(root).not.toHaveClass("w-full");
     expect(root).not.toHaveClass("justify-between");

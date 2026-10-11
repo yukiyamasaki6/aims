@@ -173,7 +173,7 @@ test("setup-33: 幅375pxで距離が1件以上あり、的が設定されてい�
   }
   expectSameLeft(lefts);
   const firstRow = page.getByTestId("distance-config-toggle-1");
-  const distanceText = await firstRow.getByText("90m / Unmarked").boundingBox();
+  const distanceText = await firstRow.getByText("Unmarked (90m)").boundingBox();
   const endsText = await firstRow.getByText("3本×12エンド").boundingBox();
   expect(distanceText?.height, "距離の文言が1行").toBeLessThanOrEqual(20);
   expect(endsText?.height, "エンド構成が1行").toBeLessThanOrEqual(20);
@@ -422,6 +422,13 @@ test("setup-10: 種別がフィールドで距離が1件以上あるとき、距
   // Then
   await expect(page.getByTestId("distance-config-marked-1")).toBeVisible();
   await expect(page.getByTestId("distance-config-unmarked-1")).toBeVisible();
+  const markedBox = await page
+    .getByTestId("distance-config-marked-1")
+    .boundingBox();
+  const distanceBox = await page.getByLabel("距離（m）").boundingBox();
+  expect(markedBox?.y, "切り替えが距離より上").toBeLessThan(
+    distanceBox?.y ?? 0,
+  );
 });
 
 test("setup-11: 的をクリックすると、ラウンド設定に一致するフィルタが選ばれた状態で的選択ダイアログが開き、フィルタに一致する的だけがサイズの大きい順に表示される", async ({
