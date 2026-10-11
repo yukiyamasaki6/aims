@@ -7,7 +7,6 @@
 - 関数の認知的複雑度を15以下にする。Biomeの`noExcessiveCognitiveComplexity`が`pnpm lint`とCIの`Lint`で検査する。
 - 15はBiomeとSonarQubeの既定値で、既存コードを責務の分割で収められる値である。
 - 超えるときは、責務、判断、段階の単位で分ける。数値を下げるためだけの分割(意味のない小関数、コンポーネント内の描画用の関数への移動、条件を名前に隠すだけの変更)はしない。
-- ループで処理しない要素は、先頭で`continue`して飛ばし、入れ子を深くしない。
 - 分けると読みにくくなる関数に限り、`// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: <理由>`で例外にする。
 - テスト以外の関数の長さを50行以下にする。Biomeの`noExcessiveLinesPerFunction`(`skipBlankLines`)が`pnpm lint`とCIの`Lint`で検査する。数え方はBiomeに従い、空行、コメントだけの行、`{`か`}`で始まる行を数えず、内側の関数の行を外側にも数える。
 - 50はBiomeとESLint(`max-lines-per-function`)の既定値で、既存コードを責務の分割で収められる値である。
@@ -29,19 +28,6 @@
 - オブジェクトリテラルのプロパティでPascalCaseとCONSTANT_CASEを許すのは、テストの差し替えで部品名やモジュールの定数名を、設定で環境変数名を写すためである。
 - 規約の形にならない外部の名前に限り、`// biome-ignore lint/style/useNamingConvention: <理由>`で例外にする。理由には名前を決めた外部を書く。例外の一覧は`git grep -n "biome-ignore lint/style/useNamingConvention"`で出す。
 - 生成されたDBの型(`apps/web/src/types/supabase.ts`)は、生成器とDBが名前を決めるため検査の対象外とする(`biome.json`の`overrides`)。
-
-## 書き方の規則
-
-- Biomeのstyleの次の規則は、`pnpm lint`とCIの`Lint`がerrorとして検査し、`pnpm lint:fix`で直らないため手で守る。
-    - `noDescendingSpecificity`(CSS): 同じ要素を指す、詳細度の高いセレクタの後に、低いセレクタを書かない。低いセレクタを高いセレクタより前へ移す。
-    - `noNonNullAssertion`: `!`で型検査を外さない。値がないときに早期returnか`throw`をする判定で型を絞るか、値が欠けない型にする。
-    - `useLiteralEnumMembers`: enumのメンバーの値をリテラル(文字列、数値、他のメンバーの参照)にし、計算した値にしない。
-    - `useNodejsImportProtocol`: Node.jsの組み込みモジュールを`node:`付きで読み込む(`fs`ではなく`node:fs`)。
-    - `useTemplate`: 文字列の連結を`+`ではなくテンプレートリテラルで書く。
-- Biomeのstyleの次の規則は、`pnpm lint`とCIの`Lint`がerrorとして検査し、`pnpm lint:fix`が直す。ただし入れ子の`if`の間にコメントがあると直さないため、手で直す。
-    - `useCollapsedIf`: 本体が`if`だけの`if`を、`&&`で1つの`if`にまとめる。コメントは`if`文の前か本体の中へ移す。
-    - `useCollapsedElseIf`: 本体が`if`だけの`else`を`else if`にする。コメントは`if`文の前か本体の中へ移す。
-- `pnpm lint:fix`が直す規則(`useConst`、`useImportType`など)は書き方を覚えなくてよい。規則の採否と理由は`docs/lint-rules.md`にある。
 
 ## フロントエンド
 

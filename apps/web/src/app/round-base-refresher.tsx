@@ -34,8 +34,9 @@ export function RoundBaseRefresher() {
     let active = true;
     const supabase = createClient();
     const trigger = createSingleFlight(async () => {
-      if ((await refreshRoundBases(supabase)) && active)
-        setRefreshed((count) => count + 1);
+      if (await refreshRoundBases(supabase)) {
+        if (active) setRefreshed((count) => count + 1);
+      }
     });
     const handleOnline = () => void trigger();
     const handleVisible = () => {

@@ -31,7 +31,7 @@ export function DistanceInfo({
     <>
       <span>
         {[
-          distance === null ? null : `${distance}m`,
+          distance !== null ? `${distance}m` : null,
           format === "field" ? (isMarked ? "Marked" : "Unmarked") : null,
         ]
           .filter((part): part is string => part !== null)
