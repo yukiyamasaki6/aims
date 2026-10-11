@@ -29,6 +29,15 @@
         }
       },
       "style": {
+        "noDescendingSpecificity": "error",
+        "noNonNullAssertion": "error",
+        "useArrayLiterals": "error",
+        "useConst": "error",
+        "useDeprecatedReason": "error",
+        "useExponentiationOperator": "error",
+        "useExportType": "error",
+        "useImportType": "error",
+        "useLiteralEnumMembers": "error",
         "useNamingConvention": {
           "level": "error",
           "options": {
@@ -52,7 +61,10 @@
               }
             ]
           }
-        }
+        },
+        "useNodejsImportProtocol": "error",
+        "useShorthandFunctionType": "error",
+        "useTemplate": "error"
       }
     }
   },
