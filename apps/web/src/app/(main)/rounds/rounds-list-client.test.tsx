@@ -1,6 +1,8 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FETCH_TIMEOUT_MS } from "@/features/fetch-result/fetch-content";
 import type { FetchResult } from "@/features/fetch-result/fetch-result";
 import type { RoundListItem } from "./fetch-rounds-list";
 import {
@@ -92,6 +94,11 @@ beforeEach(() => {
   log.commitDeleted.mockResolvedValue({ base: undefined, entries: [] });
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
 describe("RoundsListClient", () => {
   describe("一覧の表示", () => {
     it("取得中は、読み込み中の表示と新規作成ボタンを表示する", () => {
@@ -171,6 +178,33 @@ describe("RoundsListClient", () => {
       expect(
         screen.queryByText("まだラウンドがありません。"),
       ).not.toBeInTheDocument();
+    });
+
+    it("読み込みが終わらないときは、FETCH_TIMEOUT_MSの前は読み込み中で、FETCH_TIMEOUT_MSでエラーと再試行ボタンを表示し、読み込み中の表示を消す", async () => {
+      // Given: 端末の保存が塞がれ、読み込みが終わらない
+      vi.useFakeTimers();
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+      load.mockReturnValue(new Promise(() => {}));
+      render(<RoundsListClient />);
+
+      // When: 上限の1ms前
+      await act(() => vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - 1));
+
+      // Then: まだ読み込み中
+      expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+
+      // When: 上限
+      await act(() => vi.advanceTimersByTimeAsync(1));
+
+      // Then: エラーと再試行ボタンを表示し、読み込み中の表示は消える
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "読み込めませんでした。",
+      );
+      expect(
+        screen.getByRole("button", { name: "再試行" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
     });
 
     it("再試行すると取得し直し、取得できた一覧を表示する", async () => {

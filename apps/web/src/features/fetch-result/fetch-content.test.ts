@@ -10,8 +10,9 @@ import {
   FALLBACK_WAIT_MS,
   FETCH_TIMEOUT_MS,
   fetchContent,
+  withinFetchTimeout,
 } from "./fetch-content";
-import { FETCH_ERROR_MESSAGE } from "./fetch-result";
+import { FETCH_ERROR_MESSAGE, type FetchResult } from "./fetch-result";
 
 beforeEach(() => {
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
@@ -565,6 +566,125 @@ describe("fetchContent", () => {
       // Then
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(res.status).toBe(0);
+    });
+  });
+});
+
+describe("withinFetchTimeout", () => {
+  const ok: FetchResult<string> = { status: "ok", data: "done" };
+
+  // 終わるまでの時間をテストから決められる読み込みを模す。
+  function loadingAfter(delayMs: number, result: FetchResult<string> = ok) {
+    return new Promise<FetchResult<string>>((resolve) => {
+      setTimeout(() => resolve(result), delayMs);
+    });
+  }
+
+  describe("正常系", () => {
+    it("上限の前に終われば、その結果をそのまま返す", async () => {
+      // Given: 上限の前に終わる読み込み
+      vi.useFakeTimers();
+      const pending = withinFetchTimeout(loadingAfter(100));
+
+      // When
+      await vi.advanceTimersByTimeAsync(100);
+
+      // Then
+      await expect(pending).resolves.toEqual(ok);
+    });
+
+    it("上限の前に終わった後は、タイマーを残さない", async () => {
+      // Given
+      vi.useFakeTimers();
+      const pending = withinFetchTimeout(loadingAfter(100));
+      await vi.advanceTimersByTimeAsync(100);
+      await pending;
+
+      // When / Then: 上限のタイマーが残っていない
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("上限の前に終わった通信失敗などの結果も、そのまま返す", async () => {
+      // Given
+      vi.useFakeTimers();
+      const notFound: FetchResult<string> = { status: "not-found" };
+      const pending = withinFetchTimeout(loadingAfter(100, notFound));
+
+      // When
+      await vi.advanceTimersByTimeAsync(100);
+
+      // Then
+      await expect(pending).resolves.toEqual(notFound);
+    });
+  });
+
+  describe("異常系", () => {
+    it("終わらない読み込みは、FETCH_TIMEOUT_MS - 1では結果が出ず、FETCH_TIMEOUT_MSでerrorになる", async () => {
+      // Given: 終わらない読み込み
+      vi.useFakeTimers();
+      const settled = vi.fn();
+      withinFetchTimeout(new Promise<FetchResult<string>>(() => {})).then(
+        settled,
+      );
+
+      // When: 上限の1ms前
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - 1);
+
+      // Then: まだ結果が出ない
+      expect(settled).not.toHaveBeenCalled();
+
+      // When: 上限
+      await vi.advanceTimersByTimeAsync(1);
+
+      // Then: 取得の時間切れと同じerrorになる
+      expect(settled).toHaveBeenCalledWith({
+        status: "error",
+        message: FETCH_ERROR_MESSAGE,
+      });
+    });
+
+    it("上限の時点でonLineがfalseなら、offlineを返す", async () => {
+      // Given
+      vi.useFakeTimers();
+      const pending = withinFetchTimeout(
+        new Promise<FetchResult<string>>(() => {}),
+      );
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+
+      // When
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS);
+
+      // Then
+      await expect(pending).resolves.toEqual({ status: "offline" });
+    });
+
+    it("上限の後に終わった結果は返さず、errorのままにする", async () => {
+      // Given: 上限の後に終わる読み込み
+      vi.useFakeTimers();
+      const pending = withinFetchTimeout(
+        loadingAfter(FETCH_TIMEOUT_MS + 1_000),
+      );
+
+      // When
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 1_000);
+
+      // Then
+      await expect(pending).resolves.toEqual({
+        status: "error",
+        message: FETCH_ERROR_MESSAGE,
+      });
+    });
+
+    it("読み込みが拒否されたら、そのまま拒否する", async () => {
+      // Given
+      vi.useFakeTimers();
+      const failure = new Error("storage failed");
+
+      // When / Then
+      await expect(withinFetchTimeout(Promise.reject(failure))).rejects.toBe(
+        failure,
+      );
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 });

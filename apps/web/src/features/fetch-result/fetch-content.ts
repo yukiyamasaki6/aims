@@ -40,6 +40,24 @@ export const FALLBACK_WAIT_MS = 1_000;
 
 const TIMED_OUT = Symbol("timed-out");
 
+// 画面の読み込み(端末の保存の読み書きと取得)の全体を、開始からFETCH_TIMEOUT_MSで打ち切る。
+// 端末の保存(IndexedDB)の待ちは時間制限を持たず、他のタブが保存を塞ぐと「読み込み中」に固定されるため。
+// 超えたら取得の時間切れと同じ結果を返す。打ち切った後も読み込みは続き、その結果は捨てる。拒否はそのまま返す。
+export async function withinFetchTimeout<T>(
+  loading: Promise<FetchResult<T>>,
+): Promise<FetchResult<T>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), FETCH_TIMEOUT_MS);
+  });
+  try {
+    const raced = await Promise.race([loading, timeout]);
+    return raced === TIMED_OUT ? commFailure() : raced;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // runは、確かめたセッションを受け取り、呼び出し側が.retry(false)を付けたクエリを返す。
 // timeoutMsは結果を返すまでの上限。超えた後も取得の開始からFETCH_TIMEOUT_MSまでは結果を待ち、
 // 終われば一度だけonLateResultへ渡す（表示には使わず、保存などに使う）。
