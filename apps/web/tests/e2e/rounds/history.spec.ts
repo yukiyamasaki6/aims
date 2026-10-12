@@ -8,6 +8,7 @@ import {
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
+import { blockOpLogStore } from "../helpers/op-log";
 import {
   disableRound,
   getDistanceIds,
@@ -721,5 +722,30 @@ test.describe("入力中の領域", () => {
       page.getByRole("link", { name: new RegExp(name) }),
     ).toBeVisible();
     await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
+  });
+
+  test("history-26: ラウンド一覧で、他のタブが端末の保存の読み書きを続けているとき、/roundsを開くと、開いてから10秒後に「読み込めませんでした。」と再試行ボタンが表示される", async ({
+    page,
+  }) => {
+    // Given: 端末の保存を開いた後、他のタブが保存の読み書きを続けている
+    await signInFreshUser(page);
+    await page.goto("/rounds");
+    await waitForHydration(page);
+    const release = await blockOpLogStore(page);
+    await page.clock.install();
+
+    // When: /roundsを開く
+    await page.goto("/rounds");
+    await expect(
+      page.getByRole("status").filter({ hasText: "読み込み中" }),
+    ).toBeVisible();
+    await page.clock.runFor(10_000);
+
+    // Then: 「読み込めませんでした。」と再試行ボタンが表示される
+    await expect(
+      page.getByRole("alert").filter({ hasText: "読み込めませんでした。" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
+    await release();
   });
 });

@@ -1,7 +1,8 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FETCH_TIMEOUT_MS } from "@/features/fetch-result/fetch-content";
 import type { FetchResult } from "@/features/fetch-result/fetch-result";
 import type { TargetFaceOption } from "./distance-config-row";
 import type { LoadedRoundDetail } from "./load-round-detail";
@@ -90,6 +91,11 @@ beforeEach(() => {
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   vi.clearAllMocks();
   nav.pathname = `/rounds/${ID}`;
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe("RoundDetailClient", () => {
@@ -252,6 +258,36 @@ describe("RoundDetailClient", () => {
         "午前練習",
       );
       expect(load).toHaveBeenCalledTimes(2);
+    });
+
+    it("読み込みが終わらないときは、FETCH_TIMEOUT_MSの前は読み込み中で、FETCH_TIMEOUT_MSで一覧へ戻るリンクとエラーと再試行ボタンを表示し、読み込み中の表示を消す", async () => {
+      // Given: 端末の保存が塞がれ、読み込みが終わらない
+      vi.useFakeTimers();
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+      load.mockReturnValue(new Promise(() => {}));
+      render(<RoundDetailClient />);
+
+      // When: 上限の1ms前
+      await act(() => vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - 1));
+
+      // Then: まだ読み込み中
+      expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+
+      // When: 上限
+      await act(() => vi.advanceTimersByTimeAsync(1));
+
+      // Then: 枠とエラーと再試行ボタンを表示し、読み込み中の表示とスコアカードは出さない
+      expect(
+        screen.getByRole("link", { name: "一覧へ戻る" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "読み込めませんでした。",
+      );
+      expect(
+        screen.getByRole("button", { name: "再試行" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
     });
   });
 

@@ -7,6 +7,7 @@ import {
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
+import { blockOpLogStore } from "../helpers/op-log";
 import { openOtherDevice, updateRound } from "../helpers/other-device";
 import {
   blockTargetFacesOnDevice,
@@ -335,6 +336,39 @@ test("detail-17: 取得がエラーになるとき、/rounds/[id]を開くと、
   await expect(
     page.getByRole("alert").filter({ hasText: "読み込めませんでした。" }),
   ).toBeVisible();
+});
+
+test("detail-29: ラウンド詳細画面で、他のタブが端末の保存の読み書きを続けているとき、/rounds/[id]を開くと、開いてから10秒後に、枠(「一覧へ戻る」リンク)と「読み込めませんでした。」と再試行ボタンが表示される", async ({
+  page,
+}) => {
+  // Given: 端末にベースを持たない完了のラウンドがあり、他のタブが端末の保存の読み書きを続けている
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: "詳細テスト",
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+  });
+  await completeRound(roundId);
+  await page.goto("/rounds");
+  await waitForHydration(page);
+  const release = await blockOpLogStore(page);
+  await page.clock.install();
+
+  // When: /rounds/[id]を開く
+  await page.goto(`/rounds/${roundId}`);
+  await expect(
+    page.getByRole("status").filter({ hasText: "読み込み中" }),
+  ).toBeVisible();
+  await page.clock.runFor(10_000);
+
+  // Then: 枠と「読み込めませんでした。」と再試行ボタンが表示される
+  await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "読み込めませんでした。" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
+  await release();
 });
 
 // オフラインの/rounds/newで開始し、的の一覧の保存分が無い、作成が未確定のラウンド詳細を開く。

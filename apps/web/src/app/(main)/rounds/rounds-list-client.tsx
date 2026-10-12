@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { withinFetchTimeout } from "@/features/fetch-result/fetch-content";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -24,7 +25,7 @@ import { useLocalRoundsList } from "./use-local-rounds-list";
 export function RoundsListClient() {
   const hydrated = useHydrated();
   const { view, retry } = useFetchResult(
-    () => loadRoundsList(createClient()),
+    () => withinFetchTimeout(loadRoundsList(createClient())),
     [],
   );
   const { local, waited } = useLocalRoundsList();

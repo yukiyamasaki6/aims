@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { withinFetchTimeout } from "@/features/fetch-result/fetch-content";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
 import { createClient } from "@/lib/supabase/client";
@@ -39,7 +40,7 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
   const { view, retry } = useFetchResult(
     () =>
       roundId
-        ? loadRoundDetail(createClient(), roundId)
+        ? withinFetchTimeout(loadRoundDetail(createClient(), roundId))
         : Promise.resolve({ status: "not-found" as const }),
     [roundId],
   );
