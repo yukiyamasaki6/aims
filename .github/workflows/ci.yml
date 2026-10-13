@@ -246,4 +246,16 @@ jobs:
         run: pnpm test:db
 
       - name: Run E2E Tests
-        run: pnpm --filter web exec playwright test --workers=4
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: e2e-results.json
+        run: pnpm --filter web exec playwright test --workers=4 --reporter=list,json
+
+      # テストごとの所要時間の上位は、artifactのe2e-results.jsonから次で並べる。
+      # jq -r '[.. | objects | select(has("specs")) | .specs[] | {file, title, d: .tests[0].results[0].duration}] | sort_by(-.d) | .[] | "\(.d / 1000)\t\(.file)\t\(.title)"' e2e-results.json
+      - name: Upload E2E results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: apps/web/e2e-results.json
+          retention-days: 14
