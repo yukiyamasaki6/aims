@@ -1,5 +1,5 @@
 import type { AuthError } from "@supabase/supabase-js";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initLocalIdentity } from "@/features/auth/local-identity";
@@ -46,6 +46,18 @@ function makeAuthError(fields: Partial<AuthError>): AuthError {
 async function confirmSignOut(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "サインアウト" }));
   await user.click(screen.getByTestId("confirm-dialog-confirm"));
+}
+
+function wideToggle() {
+  return screen.getByTestId("left-panel-toggle-wide");
+}
+
+function compactToggle() {
+  return screen.getByTestId("left-panel-toggle-compact");
+}
+
+function panel() {
+  return screen.getByRole("complementary");
 }
 
 function closeMenuButtons() {
@@ -186,31 +198,151 @@ describe("LeftPanel", () => {
       render(<LeftPanel />);
 
       // When
-      await user.click(
-        screen.getByRole("button", { name: "パネルを格納する" }),
-      );
+      await user.click(wideToggle());
 
       // Then
-      expect(
-        screen.getByRole("button", { name: "パネルを開く" }),
-      ).toBeInTheDocument();
+      expect(wideToggle()).toHaveAccessibleName("パネルを開く");
     });
 
     it("格納後に開くボタンを押すと再び開く", async () => {
       // Given
       const user = userEvent.setup();
       render(<LeftPanel />);
-      await user.click(
-        screen.getByRole("button", { name: "パネルを格納する" }),
-      );
+      await user.click(wideToggle());
 
       // When
-      await user.click(screen.getByRole("button", { name: "パネルを開く" }));
+      await user.click(wideToggle());
 
       // Then
-      expect(
-        screen.getByRole("button", { name: "パネルを格納する" }),
-      ).toBeInTheDocument();
+      expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
+    });
+  });
+
+  // jsdomはCSSを評価しないため、表示の切替（向きと幅）はE2Eで確かめる。ここでは共有される開閉の状態と、2つの開閉ボタンの表示を確かめる。
+  describe("開閉の状態の共有", () => {
+    it("操作前は、広い用が格納する、横向きかつ狭い用が開くで、ドロワーの背景は出ない", () => {
+      // Given
+      // When
+      render(<LeftPanel />);
+
+      // Then
+      expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
+      expect(compactToggle()).toHaveAccessibleName("パネルを開く");
+      expect(closeMenuButtons()).toHaveLength(1);
+    });
+
+    it("広い用で格納すると、両方のボタンが開くになる。続けて展開すると両方が格納するになり、ドロワーが開く", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<LeftPanel />);
+
+      // When
+      await user.click(wideToggle());
+
+      // Then
+      expect(wideToggle()).toHaveAccessibleName("パネルを開く");
+      expect(compactToggle()).toHaveAccessibleName("パネルを開く");
+      expect(closeMenuButtons()).toHaveLength(1);
+
+      // When
+      await user.click(wideToggle());
+
+      // Then
+      expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
+      expect(compactToggle()).toHaveAccessibleName("パネルを格納する");
+      expect(closeMenuButtons()).toHaveLength(2);
+    });
+
+    it("横向きかつ狭い用で展開すると、広い用も格納するになる。背景を押すと両方が開くになる", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<LeftPanel />);
+
+      // When
+      await user.click(compactToggle());
+
+      // Then
+      expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
+      expect(closeMenuButtons()).toHaveLength(2);
+
+      // When
+      await user.click(closeMenuButtons()[0]);
+
+      // Then
+      expect(wideToggle()).toHaveAccessibleName("パネルを開く");
+      expect(compactToggle()).toHaveAccessibleName("パネルを開く");
+      expect(closeMenuButtons()).toHaveLength(1);
+    });
+
+    it("ハンバーガーでドロワーを開くと、両方のボタンが格納するになる", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<LeftPanel />);
+
+      // When
+      await user.click(screen.getByRole("button", { name: "メニューを開く" }));
+
+      // Then
+      expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
+      expect(compactToggle()).toHaveAccessibleName("パネルを格納する");
+    });
+  });
+
+  describe("開閉のtransition", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("初回表示ではtransitionが付かない", () => {
+      // Given
+      // When
+      render(<LeftPanel />);
+
+      // Then
+      expect(panel()).not.toHaveClass("duration-200");
+    });
+
+    it("操作の直後は付き、250ms後に外れる", async () => {
+      // Given
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LeftPanel />);
+
+      // When
+      await user.click(wideToggle());
+
+      // Then
+      expect(panel()).toHaveClass("duration-200");
+
+      // When
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+
+      // Then
+      expect(panel()).not.toHaveClass("duration-200");
+    });
+
+    it("100ms間隔の2回の操作では、最初の操作から200ms後もまだ付いている", async () => {
+      // Given
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LeftPanel />);
+      await user.click(wideToggle());
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      await user.click(wideToggle());
+
+      // When
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+
+      // Then
+      expect(panel()).toHaveClass("duration-200");
     });
   });
 });

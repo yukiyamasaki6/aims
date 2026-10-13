@@ -10,9 +10,91 @@ import { comeBackOnline, goOffline } from "../helpers/service-worker";
 import { overlapNextRefresh } from "../helpers/session-overlap";
 
 const MOBILE_VIEWPORT = { width: 375, height: 667 };
+const COMPACT_LANDSCAPE_VIEWPORT = { width: 667, height: 375 };
+// 幅の区分が回転で変わる組。800は768以上で広く、600は768未満で狭い。
+const LANDSCAPE_WIDE_VIEWPORT = { width: 800, height: 600 };
+const PORTRAIT_NARROW_VIEWPORT = { width: 600, height: 800 };
 // supabase/config.tomlのjwt_expiry（3600秒）を越える時間。
 const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
 const TOKEN_API = "**/auth/v1/token*";
+
+type RecordingWindow = Window & {
+  recordedTransitions: string[];
+  recordedToggleLabels: string[];
+};
+
+// asideのtransitionrunを記録する。環境の変化で補間が起きないことを確かめるため、ページの読み込み前に仕込む。
+async function recordTransitions(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as RecordingWindow;
+    w.recordedTransitions = [];
+    document.addEventListener(
+      "transitionrun",
+      (e) => {
+        if ((e.target as Element).tagName === "ASIDE") {
+          w.recordedTransitions.push(e.propertyName);
+        }
+      },
+      true,
+    );
+  });
+}
+
+// 毎フレーム、見えている開閉ボタンのラベルを集める。文言の切り替わりを検出するため、ページの読み込み前に仕込む。
+async function recordToggleLabels(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as RecordingWindow;
+    w.recordedToggleLabels = [];
+    const tick = () => {
+      for (const el of document.querySelectorAll<HTMLElement>(
+        '[data-testid^="left-panel-toggle"]',
+      )) {
+        const label = el.getAttribute("aria-label");
+        if (
+          el.offsetParent !== null &&
+          label &&
+          !w.recordedToggleLabels.includes(label)
+        ) {
+          w.recordedToggleLabels.push(label);
+        }
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+const readTransitions = (page: Page) =>
+  page.evaluate(
+    () => (window as unknown as RecordingWindow).recordedTransitions,
+  );
+
+const clearTransitions = (page: Page) =>
+  page.evaluate(() => {
+    (window as unknown as RecordingWindow).recordedTransitions.length = 0;
+  });
+
+const readLabels = (page: Page) =>
+  page.evaluate(
+    () => (window as unknown as RecordingWindow).recordedToggleLabels,
+  );
+
+const hamburger = (page: Page) =>
+  page.getByRole("button", { name: "メニューを開く" });
+
+const waitFrames = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+
+const asideWidth = (page: Page) =>
+  page.locator("aside").evaluate((el) => el.getBoundingClientRect().width);
+
+// 操作直後のtransitionは250msで外れるため、環境の変化の観測前にこれを越えて待つ。
+const TRANSITION_SETTLE_MS = 300;
 
 // 使い捨てユーザーでサインインし、メイン画面を開く。
 // 時計は画面遷移より前に差し替える必要があるため、サインインの前に呼ぶ。
@@ -285,6 +367,312 @@ test.describe("認証済み", () => {
 
     // Then: レフトパネルが展開される
     await expectDesktopPanelExpanded(page);
+  });
+
+  test.describe("横向きで狭い画面", () => {
+    test.use({ viewport: COMPACT_LANDSCAPE_VIEWPORT });
+
+    test("navigation-22: 横向きで狭いメイン画面のとき、/roundsを開くと、上端の帯が無く、レフトパネルが画面左側に格納された状態で表示される", async ({
+      page,
+    }) => {
+      // Given: 横向きで狭い画面
+      // When: /roundsを開く
+      await openRounds(page);
+
+      // Then: 上端の帯が無く、レフトパネルが画面左側に格納された状態で表示される
+      await expect(
+        page.getByRole("button", { name: "メニューを開く" }),
+      ).toBeHidden();
+      await expect(
+        page.getByRole("button", { name: "パネルを開く" }),
+      ).toBeInViewport();
+      await expectDesktopPanelCollapsed(page);
+    });
+
+    test("navigation-23: 横向きで狭い画面でレフトパネルが格納されているとき、開くボタンをクリックし、続けて格納ボタンをクリックすると、展開され中身が見え、続いて格納されて中身が見えなくなる", async ({
+      page,
+    }) => {
+      // Given: レフトパネルが格納されている
+      await openRounds(page);
+      await expectDesktopPanelCollapsed(page);
+
+      // When: 開くボタンをクリックし、続けて格納ボタンをクリックする
+      await page.getByRole("button", { name: "パネルを開く" }).click();
+      await expectDesktopPanelExpanded(page);
+      await page.getByRole("button", { name: "パネルを格納する" }).click();
+
+      // Then: 続いて格納されて中身が見えなくなる
+      await expectDesktopPanelCollapsed(page);
+    });
+  });
+
+  test.describe("向きや幅の切り替え", () => {
+    const toggleButton = (page: Page) =>
+      page.getByRole("button", { name: /^パネルを(開く|格納する)$/ });
+    const closeDrawer = (page: Page) =>
+      page.getByRole("button", { name: "メニューを閉じる" }).last().click();
+
+    test("navigation-24: 縦向きで狭い画面でレフトパネルが開いているとき、横向きで狭い画面へ切り替え、続けて縦向きで狭い画面へ戻すと、横向きではサイドが展開され、縦向きへ戻すとドロワーが開いた状態で表示される", async ({
+      page,
+    }) => {
+      // Given: 縦向きで狭い画面でレフトパネルが開いている
+      await page.setViewportSize(MOBILE_VIEWPORT);
+      await openRounds(page);
+      await hamburger(page).click();
+      await expectMobilePanelExpanded(page);
+
+      // When: 横向きで狭い画面へ切り替え、続けて縦向きで狭い画面へ戻す
+      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+
+      // Then: 横向きではサイドが展開される(開閉ボタンはちょうど1つ、帯は無い)
+      await expectDesktopPanelExpanded(page);
+      await expect(hamburger(page)).toBeHidden();
+      await expect(toggleButton(page).filter({ visible: true })).toHaveCount(1);
+      await page.setViewportSize(MOBILE_VIEWPORT);
+      await expectMobilePanelExpanded(page);
+      await expect(hamburger(page)).toBeVisible();
+      await expect(toggleButton(page).filter({ visible: true })).toHaveCount(0);
+    });
+
+    test("navigation-25: 縦向きで狭い画面で開閉を操作していないとき、横向きで狭い画面へ切り替え、続けて広い画面へ切り替えると、横向きで狭い画面では格納され、広い画面では展開されている", async ({
+      page,
+    }) => {
+      // Given: 縦向きで狭い画面で開閉を操作していない
+      await page.setViewportSize(MOBILE_VIEWPORT);
+      await openRounds(page);
+
+      // When: 横向きで狭い画面へ切り替え、続けて広い画面へ切り替える
+      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+
+      // Then: 横向きで狭い画面では格納され、広い画面では展開されている
+      await expectDesktopPanelCollapsed(page);
+      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
+      await expectDesktopPanelExpanded(page);
+    });
+
+    test("navigation-26: 横向きで狭い画面でレフトパネルを展開しているとき、縦向きで狭い画面へ切り替えて閉じ、横向きで狭い画面へ戻すと、縦向きでは展開された状態で表示され、戻すと格納されている", async ({
+      page,
+    }) => {
+      // Given: 横向きで狭い画面でレフトパネルを展開している
+      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+      await openRounds(page);
+      await page.getByRole("button", { name: "パネルを開く" }).click();
+      await expectDesktopPanelExpanded(page);
+
+      // When: 縦向きで狭い画面へ切り替えて閉じ、横向きで狭い画面へ戻す
+      await page.setViewportSize(MOBILE_VIEWPORT);
+
+      // Then: 縦向きでは展開された状態で表示され、閉じて戻すと格納されている
+      await expectMobilePanelExpanded(page);
+      await closeDrawer(page);
+      await expectMobilePanelCollapsed(page);
+      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+      await expectDesktopPanelCollapsed(page);
+    });
+
+    test("navigation-27: 広い画面でレフトパネルを格納しているとき、縦向きで狭い画面へ切り替えると、ドロワーは開かず、閉じた状態で表示される", async ({
+      page,
+    }) => {
+      // Given: 広い画面でレフトパネルを格納している
+      await openRounds(page);
+      await page.getByRole("button", { name: "パネルを格納する" }).click();
+      await expectDesktopPanelCollapsed(page);
+
+      // When: 縦向きで狭い画面へ切り替える
+      await page.setViewportSize(MOBILE_VIEWPORT);
+
+      // Then: ドロワーは開かず、閉じた状態で表示される
+      await expectMobilePanelCollapsed(page);
+    });
+
+    test("navigation-28: 広い画面でレフトパネルを格納し、続けて展開を操作したとき、縦向きで狭い画面、続けて横向きで狭い画面へ切り替えると、縦向きではドロワーが開き、横向きではサイドが展開される", async ({
+      page,
+    }) => {
+      // Given: 広い画面でレフトパネルを格納し、続けて展開を操作した
+      await openRounds(page);
+      await page.getByRole("button", { name: "パネルを格納する" }).click();
+      await page.getByRole("button", { name: "パネルを開く" }).click();
+      await expectDesktopPanelExpanded(page);
+
+      // When: 縦向きで狭い画面、続けて横向きで狭い画面へ切り替える
+      await page.setViewportSize(MOBILE_VIEWPORT);
+
+      // Then: 縦向きではドロワーが開き、横向きではサイドが展開される
+      await expectMobilePanelExpanded(page);
+      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+      await expectDesktopPanelExpanded(page);
+    });
+
+    test("navigation-29: 広い横向きの画面でレフトパネルを格納しているとき、縦向きで狭い画面へ切り替え、続けて広い横向きへ戻すと、縦向きでは閉じた状態、戻すと格納された状態で表示される", async ({
+      page,
+    }) => {
+      // Given: 広い横向きの画面でレフトパネルを格納している
+      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
+      await openRounds(page);
+      await page.getByRole("button", { name: "パネルを格納する" }).click();
+      await expectDesktopPanelCollapsed(page);
+
+      // When: 縦向きで狭い画面へ切り替え、続けて広い横向きへ戻す
+      await page.setViewportSize(PORTRAIT_NARROW_VIEWPORT);
+
+      // Then: 縦向きでは閉じた状態、戻すと格納された状態で表示される
+      await expectMobilePanelCollapsed(page);
+      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
+      await expectDesktopPanelCollapsed(page);
+    });
+
+    test("navigation-30: 縦向きで狭い画面でドロワーを開いたとき、広い横向きの画面へ切り替え、続けて縦向きで狭い画面へ戻すと、広い横向きでは展開され、戻すとドロワーが開いた状態で表示される", async ({
+      page,
+    }) => {
+      // Given: 縦向きで狭い画面でドロワーを開いた
+      await page.setViewportSize(PORTRAIT_NARROW_VIEWPORT);
+      await openRounds(page);
+      await hamburger(page).click();
+      await expectMobilePanelExpanded(page);
+
+      // When: 広い横向きの画面へ切り替え、続けて縦向きで狭い画面へ戻す
+      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
+
+      // Then: 広い横向きでは展開され、戻すとドロワーが開いた状態で表示される
+      await expectDesktopPanelExpanded(page);
+      await page.setViewportSize(PORTRAIT_NARROW_VIEWPORT);
+      await expectMobilePanelExpanded(page);
+    });
+  });
+
+  test.describe("開閉のアニメーション", () => {
+    test("navigation-31: 横向きで狭いメイン画面のとき、/roundsを開くと、レフトパネルは最初から格納された状態で、開閉ボタンの文言とアイコンも最初から正しく、開閉が動く様子は見えない", async ({
+      page,
+    }) => {
+      // Given: 横向きで狭い画面
+      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+      await recordTransitions(page);
+      await recordToggleLabels(page);
+
+      // When: /roundsを開く
+      await openRounds(page);
+
+      // Then: 最初から格納で、文言は「パネルを開く」の1種類だけ、transitionは起きない
+      await expectDesktopPanelCollapsed(page);
+      await waitFrames(page);
+      await page.waitForTimeout(TRANSITION_SETTLE_MS);
+      expect(await readLabels(page)).toEqual(["パネルを開く"]);
+      expect(await readTransitions(page)).toEqual([]);
+    });
+
+    test("navigation-32: 広いメイン画面のとき、/roundsを開くと、レフトパネルは最初から展開された状態で、開閉ボタンの文言とアイコンも最初から正しく、開閉が動く様子は見えない", async ({
+      page,
+    }) => {
+      // Given: 広い画面
+      await recordTransitions(page);
+      await recordToggleLabels(page);
+
+      // When: /roundsを開く
+      await openRounds(page);
+
+      // Then: 最初から展開で、文言は「パネルを格納する」の1種類だけ、transitionは起きない
+      await expectDesktopPanelExpanded(page);
+      await waitFrames(page);
+      await page.waitForTimeout(TRANSITION_SETTLE_MS);
+      expect(await readLabels(page)).toEqual(["パネルを格納する"]);
+      expect(await readTransitions(page)).toEqual([]);
+    });
+
+    test("navigation-33: 開閉を操作していない縦向きで狭い画面のとき、横向きで狭い画面へ切り替えると、切り替えの完了を待たずに、パネルの位置と幅は切り替え後の状態で、途中の状態は見えない", async ({
+      page,
+    }) => {
+      // Given: 開閉を操作していない縦向きで狭い画面
+      await page.setViewportSize(MOBILE_VIEWPORT);
+      await recordTransitions(page);
+      await openRounds(page);
+
+      // When: 横向きで狭い画面へ切り替える
+      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+      await waitFrames(page);
+
+      // Then: 2フレーム後に切り替え後の幅で、その後もtransitionは起きない
+      expect(await asideWidth(page)).toBe(56);
+      await page.waitForTimeout(TRANSITION_SETTLE_MS);
+      expect(await readTransitions(page)).toEqual([]);
+    });
+
+    test("navigation-34: 縦向きで狭い画面でドロワーを開いているとき、横向きで狭い画面へ切り替えると、切り替えの完了を待たずに、パネルは展開された幅で表示され、途中の状態は見えない", async ({
+      page,
+    }) => {
+      // Given: 縦向きで狭い画面でドロワーを開いている
+      await page.setViewportSize(MOBILE_VIEWPORT);
+      await recordTransitions(page);
+      await openRounds(page);
+      await hamburger(page).click();
+      await expectMobilePanelExpanded(page);
+      await page.waitForTimeout(TRANSITION_SETTLE_MS);
+      await clearTransitions(page);
+
+      // When: 横向きで狭い画面へ切り替える
+      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+      await waitFrames(page);
+
+      // Then: 2フレーム後に展開された幅で、transitionは起きない
+      expect(await asideWidth(page)).toBe(224);
+      await page.waitForTimeout(TRANSITION_SETTLE_MS);
+      expect(await readTransitions(page)).toEqual([]);
+    });
+
+    test("navigation-35: 広い横向きの画面のとき、縦向きで狭い画面へ切り替えると、切り替えの完了を待たずに、パネルは画面外へ格納され、途中の状態は見えない", async ({
+      page,
+    }) => {
+      // Given: 広い横向きの画面
+      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
+      await recordTransitions(page);
+      await openRounds(page);
+
+      // When: 縦向きで狭い画面へ切り替える
+      await page.setViewportSize(PORTRAIT_NARROW_VIEWPORT);
+
+      // Then: 画面外へ格納され、transitionは起きない
+      await expectMobilePanelCollapsed(page);
+      await page.waitForTimeout(TRANSITION_SETTLE_MS);
+      expect(await readTransitions(page)).toEqual([]);
+    });
+
+    test("navigation-36: 横向きで狭い画面でレフトパネルが格納されているとき、開くボタンをクリックすると、幅が滑らかに変化して展開される", async ({
+      page,
+    }) => {
+      // Given: 横向きで狭い画面でレフトパネルが格納されている
+      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+      await recordTransitions(page);
+      await openRounds(page);
+
+      // When: 開くボタンをクリックする
+      await page.getByRole("button", { name: "パネルを開く" }).click();
+
+      // Then: 幅のtransitionが起き、展開される
+      await expect.poll(() => readTransitions(page)).toContain("width");
+      await expectDesktopPanelExpanded(page);
+      await expect.poll(() => asideWidth(page)).toBe(224);
+    });
+
+    test("navigation-37: 縦向きで狭い画面でドロワーを開き、横向きで狭い画面へ回転した直後のとき、格納ボタンをクリックすると、幅が滑らかに変化して格納される", async ({
+      page,
+    }) => {
+      // Given: 縦向きで狭い画面でドロワーを開き、横向きで狭い画面へ回転した直後
+      await page.setViewportSize(MOBILE_VIEWPORT);
+      await recordTransitions(page);
+      await openRounds(page);
+      await hamburger(page).click();
+      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+      await expectDesktopPanelExpanded(page);
+      await page.waitForTimeout(TRANSITION_SETTLE_MS);
+      await clearTransitions(page);
+
+      // When: 格納ボタンをクリックする
+      await page.getByRole("button", { name: "パネルを格納する" }).click();
+
+      // Then: 幅のtransitionが起き、格納される
+      await expect.poll(() => readTransitions(page)).toContain("width");
+      await expectDesktopPanelCollapsed(page);
+      await expect.poll(() => asideWidth(page)).toBe(56);
+    });
   });
 });
 
