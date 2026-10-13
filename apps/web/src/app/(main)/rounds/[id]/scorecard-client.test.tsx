@@ -1487,21 +1487,35 @@ describe("ScorecardClient テンキーの開閉と配置", () => {
 describe("ScorecardClient 指している矢へのスクロール", () => {
   // jsdomはレイアウトを計算しないため、エンドの行とスクロール領域（<main>）の表示位置を境界として与える。
   // 未記録のラウンドはマウント時点でエンド1の新しい矢を指すため、エンド1の行の位置で検証する。
+  // 上側の固定表示（data-sticky-inset）は、自身のdata-testid（round-summary）か、属する距離のdata-testid（distance-summary-N、その小計）をキーにして与える。
+  // 戻り値のlayoutを書き換えると、以降の測定へ反映される。
+  type Box = { top: number; bottom: number };
+  function stickyKeyOf(el: Element): string {
+    if (!el.hasAttribute("data-sticky-inset")) return "";
+    const own = el.getAttribute("data-testid");
+    if (own) return own;
+    const distance = el.closest('[data-testid^="distance-summary-"]');
+    return distance?.getAttribute("data-testid") ?? "";
+  }
   function stubLayout({
     cell,
     container,
+    sticky = {},
   }: {
-    cell: { top: number; bottom: number };
-    container: { top: number; bottom: number };
+    cell: Box;
+    container: Box;
+    sticky?: Record<string, Box>;
   }) {
+    const layout = { cell, container, sticky };
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
       function (this: Element) {
+        const testId = this.getAttribute("data-testid");
         const rect =
           this.tagName === "MAIN"
-            ? container
-            : this.getAttribute("data-testid") === "end-row-1-1"
-              ? cell
-              : { top: 0, bottom: 0 };
+            ? layout.container
+            : testId === "end-row-1-1"
+              ? layout.cell
+              : (layout.sticky[stickyKeyOf(this)] ?? { top: 0, bottom: 0 });
         return {
           ...rect,
           x: 0,
@@ -1515,14 +1529,15 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
         };
       },
     );
+    return layout;
   }
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("テンキーの実測の高さが変わり、選択中のマスがテンキーに隠れる場合は、隠れる分だけ下へスクロールする", () => {
-    // Given: 高さ800の領域の440〜480にマスがあり、テンキーの高さを測れていない（既定の220と、格納ボタンのはみ出し48を見込む。見える下端は800-268-16=516）ため隠れていない
+  it("テンキーの高さが測れたとき、選択中のマスが領域の下端の格納ボタン（48px）に隠れる場合は、隠れる分だけ下へスクロールする", () => {
+    // Given: 高さ800の領域（テンキーの上端まで）の700〜740にマスがある。見える下端は800-格納ボタンのはみ出し48-余白16=736のため、4だけ隠れている（テンキーの高さが測れる前から隠れているので、初期表示でもスクロールする）
     let reportKeypadHeight: (height: number) => void = () => {};
     vi.stubGlobal(
       "ResizeObserver",
@@ -1540,19 +1555,19 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
       },
     );
     stubLayout({
-      cell: { top: 440, bottom: 480 },
+      cell: { top: 700, bottom: 740 },
       container: { top: 0, bottom: 800 },
     });
     setup();
-    expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+    vi.mocked(Element.prototype.scrollBy).mockClear();
 
     // When: テンキーの高さが300と測れる
     act(() => reportKeypadHeight(300));
 
-    // Then: 見える下端（800-(300+格納ボタンのはみ出し48)-余白16=436）を超えた44だけ下へスクロールする
+    // Then: 見える下端736を超えた4だけ下へスクロールする（テンキーの高さの値は計算に使わない）
     expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
     expect(Element.prototype.scrollBy).toHaveBeenCalledWith({
-      top: 44,
+      top: 4,
       behavior: "smooth",
     });
   });
@@ -1619,6 +1634,171 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
   });
 
+  it("選択中のマスが上側の固定表示の下に入る場合は、固定表示の下端の位置まで上へスクロールする", () => {
+    // Given: 領域の上端（0）より下の80〜120にマスがあるが、固定表示（ラウンドの合計）の下端が100まで掛かっている
+    stubLayout({
+      cell: { top: 80, bottom: 120 },
+      container: { top: 0, bottom: 800 },
+      sticky: { "round-summary": { top: 56, bottom: 100 } },
+    });
+
+    // When: 表示する（初期表示で最初のマスを選択する）
+    setup();
+
+    // Then: 固定表示の下端100の位置まで、20だけ上へスクロールする（固定表示には余白を付けない）
+    expect(Element.prototype.scrollBy).toHaveBeenLastCalledWith({
+      top: -20,
+      behavior: "smooth",
+    });
+  });
+
+  it("別の距離の小計は、選択中のマスの上側の固定表示として見込まない", () => {
+    // Given: 2つの距離があり、エンド1の行は300〜340にある。2つ目の距離の小計の下端が500にあるが、この小計は2つ目の距離の行より上で外れているため行を隠さない
+    stubLayout({
+      cell: { top: 300, bottom: 340 },
+      container: { top: 0, bottom: 800 },
+      sticky: { "distance-summary-2": { top: 460, bottom: 500 } },
+    });
+
+    // When: 表示する（初期表示で最初のマスを選択する）
+    setup({ distances: [distanceA, distanceB] });
+
+    // Then: スクロールしない
+    expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("選択中のマスの距離の小計が行に掛かる場合は、その下端の位置まで上へスクロールする", () => {
+    // Given: 1つ目の距離の小計の下端が150まで掛かり、エンド1の行は120〜160にある
+    stubLayout({
+      cell: { top: 120, bottom: 160 },
+      container: { top: 0, bottom: 800 },
+      sticky: { "distance-summary-1": { top: 110, bottom: 150 } },
+    });
+
+    // When: 表示する（初期表示で最初のマスを選択する）
+    setup({ distances: [distanceA, distanceB] });
+
+    // Then: 小計の下端150の位置まで、30だけ上へスクロールする
+    expect(Element.prototype.scrollBy).toHaveBeenLastCalledWith({
+      top: -30,
+      behavior: "smooth",
+    });
+  });
+
+  it("選択中のマスが上側の固定表示の下端にちょうど接する場合は、スクロールしない", () => {
+    // Given: 固定表示（ラウンドの合計）の下端が100で、マスの上端も100にある（見えている）
+    stubLayout({
+      cell: { top: 100, bottom: 140 },
+      container: { top: 0, bottom: 800 },
+      sticky: { "round-summary": { top: 56, bottom: 100 } },
+    });
+
+    // When: 表示する（初期表示で最初のマスを選択する）
+    setup();
+
+    // Then: スクロールしない
+    expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("固定されていない小計の直下のマスを指して点数を入力して指す矢が移っても、スクロールし続けない", async () => {
+    // Given: 1つ目の距離の小計の下端が、エンド1の行の上端（150）に接している（小計がまだ固定されていない）
+    const user = userEvent.setup();
+    stubLayout({
+      cell: { top: 150, bottom: 190 },
+      container: { top: 0, bottom: 800 },
+      sticky: { "distance-summary-1": { top: 110, bottom: 150 } },
+    });
+    setup({ distances: [distanceA, distanceB] });
+
+    // When: 点数を入力し、その矢を選び直す（指す矢が同じエンドの中で2回移る）
+    await user.click(screen.getByTestId("score-button-10"));
+    await user.click(screen.getByTestId("shot-ball-1-1-1"));
+
+    // Then: 一度もスクロールしない
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
+    expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+  });
+
+  describe("同じエンドの中で指す矢が移る操作", () => {
+    // 行が見える位置から、隠れる位置（見える下端736を超える）へ動かしてから操作する。
+    function hideCell(layout: { cell: Box }) {
+      layout.cell = { top: 760, bottom: 790 };
+      vi.mocked(Element.prototype.scrollBy).mockClear();
+    }
+
+    function visibleLayout() {
+      return stubLayout({
+        cell: { top: 100, bottom: 140 },
+        container: { top: 0, bottom: 800 },
+      });
+    }
+
+    it("点数を記録して次の矢へ移ると、行が隠れていればスクロールする", async () => {
+      // Given: エンド1の1本目を指していて、行が隠れる位置にある
+      const user = userEvent.setup();
+      const layout = visibleLayout();
+      setup();
+      expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+      hideCell(layout);
+
+      // When: 点数を記録する
+      await user.click(screen.getByTestId("score-button-10"));
+
+      // Then: 同じエンドのまま次の矢へ移り、下へスクロールする
+      await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
+      expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
+      expect(Element.prototype.scrollBy).toHaveBeenCalledWith({
+        top: 790 - (800 - 48 - 16),
+        behavior: "smooth",
+      });
+    });
+
+    it("記録済みの矢を選ぶと、行が隠れていればスクロールする", async () => {
+      // Given: エンド1の1本目を記録済みで、行が隠れる位置にある
+      const user = userEvent.setup();
+      const layout = visibleLayout();
+      setup({ initialShots: [shotRow("s-1", distanceA.id, 1, "10", 10)] });
+      hideCell(layout);
+
+      // When: 記録済みの矢を押す
+      await user.click(screen.getByTestId("shot-ball-1-1-1"));
+
+      // Then: 下へスクロールする
+      expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
+    });
+
+    it("一つ戻ると、行が隠れていればスクロールする", async () => {
+      // Given: 点数を記録した直後で、行が隠れる位置にある
+      const user = userEvent.setup();
+      const layout = visibleLayout();
+      setup();
+      await user.click(screen.getByTestId("score-button-10"));
+      await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
+      hideCell(layout);
+
+      // When: 一つ戻る
+      await user.click(screen.getByTestId("score-button-undo"));
+
+      // Then: 下へスクロールする
+      await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
+      expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
+    });
+
+    it("行が見えている場合は、矢が移ってもスクロールしない", async () => {
+      // Given: エンド1の1本目を指していて、行が見えている
+      const user = userEvent.setup();
+      visibleLayout();
+      setup();
+
+      // When: 点数を記録する
+      await user.click(screen.getByTestId("score-button-10"));
+
+      // Then: スクロールしない
+      await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
+      expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+    });
+  });
+
   it("横向きの場合は、テンキーの高さを見込まずにスクロールする", () => {
     // Given: 横向きの画面で、マスが表示領域の下端近くの760〜790にある
     vi.mocked(window.matchMedia).mockImplementation(
@@ -1643,6 +1823,60 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
       top: 6,
       behavior: "smooth",
     });
+  });
+});
+
+describe("ScorecardClient 固定表示の配置", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("下側の枠（完了の帯とテンキー）と一覧へ戻るリンクは、スクロール領域（main）の外に置く", () => {
+    // Given: 表示する
+    setup();
+
+    // When: スクロール領域を取る
+    const main = screen.getByRole("main");
+
+    // Then: 下側の枠と一覧へ戻るリンクはスクロール領域の中にない
+    expect(within(main).queryByTestId("bottom-frame")).not.toBeInTheDocument();
+    expect(screen.getByTestId("bottom-frame")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /一覧へ戻る/ }),
+    ).toBeInTheDocument();
+    expect(
+      within(main).queryByRole("link", { name: /一覧へ戻る/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("縦向きでテンキーを展開している間は、枠の高さをテンキーの高さ（測れる前の既定220px）にし、上マージンは付けない", () => {
+    // Given: 縦向きで、最初の矢を指してテンキーを展開している
+    // When: 表示する
+    setup();
+
+    // Then: 枠の最小の高さが220px、上マージンなし
+    const frame = screen.getByTestId("bottom-frame");
+    expect(frame.style.minHeight).toBe("220px");
+    expect(frame.style.marginTop).toBe("");
+  });
+
+  it("横向きでは、枠の高さをテンキー分に広げない", () => {
+    // Given: 横向きの画面
+    vi.mocked(window.matchMedia).mockImplementation(
+      (query: string) =>
+        ({
+          matches: query === "(orientation: landscape)",
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+
+    // When: 表示する
+    setup();
+
+    // Then: 枠の最小の高さは0
+    expect(screen.getByTestId("bottom-frame").style.minHeight).toBe("0px");
   });
 });
 

@@ -187,7 +187,10 @@ function DistanceSubtotalBar({
   summary: DistanceSummary;
 }) {
   return (
-    <div className="-mt-3.5 sticky top-[88px] z-10 flex items-baseline justify-end gap-2 border-b bg-card px-3 pt-6 pb-2 text-muted-foreground text-xs">
+    <div
+      data-sticky-inset
+      className="-mt-3.5 sticky top-8 z-10 flex items-baseline justify-end gap-2 border-b bg-card px-3 pt-6 pb-2 text-muted-foreground text-xs"
+    >
       {summary.topScores && (
         <span data-testid={`distance-top-scores-${displayNumber}`}>
           {summary.topScores.firstLabel}: {summary.topScores.firstCount} /{" "}

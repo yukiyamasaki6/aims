@@ -48,20 +48,24 @@ export function ScorecardClient({
     // モバイルヘッダー分を除いた高さ）に一致する。KeypadPanelはこの行の
     // flexアイテムとしてデフォルトのstretchで高さを得ており、この値が
     // 正しくないと横向き時にパネル下端が画面外へはみ出す（h-screen固定に
-    // していた際の不具合）。<main>自身がoverflow-y-autoで内部スクロール
-    // するため、この行自体は画面の高さを超えて伸びることがなく、
-    // KeypadPanelは（sticky等を使わずとも）常に画面内に留まる。
+    // していた際の不具合）。縦の列の中で、ヘッダーと完了の帯・テンキーは
+    // スクロール領域（<main>）の外に置き、<main>がその間の高さで内部スクロール
+    // する。<main>の矩形が、行が見える範囲そのものになる。
     <div data-hydrated={model.hydrated} className="flex h-full">
-      <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="mx-auto w-full max-w-xl shrink-0">
           <ScorecardHeaderBar
             roundId={roundId}
             roundConfig={roundConfig}
             distances={distances}
             targetFaces={targetFaces}
           />
-          <ScorecardBody model={model} />
         </div>
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
+            <ScorecardBody model={model} />
+          </div>
+        </main>
 
         <BottomFrame
           keypad={keypad}
@@ -75,7 +79,7 @@ export function ScorecardClient({
         >
           {keypadButtons}
         </BottomFrame>
-      </main>
+      </div>
       {keypad.isLandscape && (
         <KeypadPanel
           mounted={keypad.keypadMounted}

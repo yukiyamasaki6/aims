@@ -62,7 +62,7 @@ export function useScorecard({
     distances,
     liveShots: pending.liveShots,
     pointer,
-    setPointer,
+    setPointer: keypad.followPointer,
     setKeypadMounted: keypad.setKeypadMounted,
     appendShot: pending.appendShot,
     history,

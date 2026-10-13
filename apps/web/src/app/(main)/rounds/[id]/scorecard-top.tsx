@@ -9,9 +9,7 @@ import type { summarizeRound } from "./scorecard-scoring";
 import type { Distance } from "./scorecard-types";
 
 // 一覧へ戻る・プリセット保存・メニューは常時使えてほしい操作のため、
-// 合計バー（round-summary、top-14でこの下に続けてstickyさせている）
-// と同じくページスクロール中ずっと張り付かせる。高さはh-14固定にし、
-// round-summary側のtopオフセットと正確に合わせられるようにする。
+// スクロール領域（<main>）の外の上端に置く。stickyにせず、行がこの裏に入らない。
 export function ScorecardHeaderBar({
   roundId,
   roundConfig,
@@ -24,7 +22,7 @@ export function ScorecardHeaderBar({
   targetFaces: TargetFaceOption[];
 }) {
   return (
-    <div className="sticky top-0 z-30 grid h-14 grid-cols-[auto_1fr] items-center gap-2 bg-card px-8">
+    <div className="grid h-14 shrink-0 grid-cols-[auto_1fr] items-center gap-2 bg-card px-8">
       <BackToListLink />
       <div className="flex items-center justify-end gap-2">
         <SavePresetDialog
@@ -92,7 +90,8 @@ export function RoundSummaryBar({
   return (
     <div
       data-testid="round-summary"
-      className="-mt-6 sticky top-14 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
+      data-sticky-inset
+      className="-mt-6 sticky top-0 z-20 flex items-baseline justify-end gap-2 rounded-b-xl border bg-card px-3 py-2 shadow-sm [clip-path:inset(0_-8px_-8px_-8px)]"
     >
       <div className="flex items-baseline gap-2">
         {roundSummary.topScores && (

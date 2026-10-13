@@ -6,14 +6,18 @@ import { BackToListLink } from "./back-to-list-link";
 export function RoundDetailFrame({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full">
-      <main className="flex h-full min-w-0 flex-1 flex-col overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
-          <div className="sticky top-0 z-30 flex h-14 items-center bg-card px-8">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="mx-auto w-full max-w-xl shrink-0">
+          <div className="flex h-14 items-center bg-card px-8">
             <BackToListLink />
           </div>
-          <div className="flex flex-1 flex-col px-8 pb-8">{children}</div>
         </div>
-      </main>
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <div className="mx-auto flex w-full max-w-xl flex-1 flex-col px-8 pb-8">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
