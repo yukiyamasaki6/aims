@@ -34,14 +34,22 @@ type Call = [method: string, args: unknown[]];
 // Supabaseクライアントは外部サービスとの境界のため、テーブルごとの取得結果を返し、組み立てたクエリを記録するスタブで模す。
 // クエリビルダーはメソッドチェーンの後にawaitで結果を返すため、任意のメソッドを記録して自身を返し、thenで結果を返すProxyで表す。
 function makeSupabase(
-  responses: { rounds: Response; target_faces: Response },
+  responses: {
+    rounds: Response | ((roundsQueryIndex: number) => Response);
+    target_faces: Response;
+  },
   session: unknown = { user: { id: "user-1" } },
   delayMs = 0,
 ) {
   const queries: { table: string; calls: Call[] }[] = [];
+  let roundsQueryCount = 0;
   function createQuery(table: "rounds" | "target_faces"): unknown {
     const calls: Call[] = [];
     queries.push({ table, calls });
+    // roundsは関数で渡すと、組み立てた順(0始まり)ごとに応答を変えられる。
+    const source = responses[table];
+    const response =
+      typeof source === "function" ? source(roundsQueryCount++) : source;
     const query: unknown = new Proxy(
       {},
       {
@@ -49,9 +57,9 @@ function makeSupabase(
           if (method === "then") {
             return (resolve: (value: unknown) => void) => {
               if (delayMs > 0) {
-                setTimeout(() => resolve(responses[table]), delayMs);
+                setTimeout(() => resolve(response), delayMs);
               } else {
-                resolve(responses[table]);
+                resolve(response);
               }
             };
           }
@@ -812,5 +820,148 @@ describe("fetchRoundDetails", () => {
     const result = await fetchRoundDetails(client, []);
 
     expect(result.status).toBe("error");
+  });
+
+  describe("保持のIDが多いとき", () => {
+    const uuidAt = (n: number) =>
+      `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const uuids = (count: number) =>
+      Array.from({ length: count }, (_, i) => uuidAt(i + 1));
+    const roundQueries = (queries: { table: string; calls: Call[] }[]) =>
+      queries.filter((q) => q.table === "rounds");
+    const idsIn = (calls: Call[]) => {
+      const inCall = calls.find(([m]) => m === "in");
+      if (inCall) return inCall[1][1] as string[];
+      const orCall = calls.find(([m]) => m === "or");
+      const orFilter = String(orCall?.[1][0]);
+      const listed = orFilter.split("id.in.(")[1];
+      return listed ? listed.replace(")", "").split(",") : [];
+    };
+
+    it("50件までは1回の取得で、51件目から取得が増え、2回目以降は入力中を除く", async () => {
+      // Given/When/Then: 0件・50件・51件の境界を同じテストで確かめる
+      const counts: Record<number, number> = {};
+      for (const n of [0, 50, 51]) {
+        const { client, queries } = makeSupabase({
+          rounds: ok([]),
+          target_faces: ok([]),
+        });
+        await fetchRoundDetails(client, uuids(n));
+        counts[n] = roundQueries(queries).length;
+        if (n === 50) {
+          expect(roundQueries(queries)[0].calls).toContainEqual([
+            "or",
+            [`status.eq.in_progress,id.in.(${uuids(50).join(",")})`],
+          ]);
+        }
+        if (n === 51) {
+          const second = roundQueries(queries)[1].calls;
+          expect(second).toContainEqual(["neq", ["status", "in_progress"]]);
+          expect(second).toContainEqual(["in", ["id", [uuidAt(51)]]]);
+        }
+      }
+      expect(counts).toEqual({ 0: 1, 50: 1, 51: 2 });
+    });
+
+    it("300件では、取得が6回に分かれ、各取得のIDは50件以下で、全IDが重複なく1回ずつ含まれる", async () => {
+      // Given
+      const { client, queries } = makeSupabase({
+        rounds: ok([]),
+        target_faces: ok([]),
+      });
+      const all = uuids(300);
+
+      // When
+      const result = await fetchRoundDetails(client, all);
+
+      // Then
+      expect(result.status).toBe("ok");
+      const sent = roundQueries(queries).map((q) => idsIn(q.calls));
+      expect(sent).toHaveLength(6);
+      for (const ids of sent) expect(ids.length).toBeLessThanOrEqual(50);
+      expect(sent.flat()).toEqual(all);
+    });
+
+    it("各取得のIDの文字列は、確認済みの長さ(3755バイト)を下回る", async () => {
+      // Given
+      const { client, queries } = makeSupabase({
+        rounds: ok([]),
+        target_faces: ok([]),
+      });
+
+      // When
+      await fetchRoundDetails(client, uuids(300));
+
+      // Then: 符号化が最悪(区切りを%2Cにする)でも、IDの並びが収まる
+      for (const q of roundQueries(queries)) {
+        const encoded = encodeURIComponent(idsIn(q.calls).join(","));
+        expect(encoded.length).toBeLessThan(3755);
+      }
+    });
+
+    it("UUIDでないIDは件数に数えず、取得にも含めない", async () => {
+      // Given: 50件のUUIDと、それ以外の10件
+      const junk = Array.from({ length: 10 }, (_, i) => `bad-${i}`);
+      const { client, queries } = makeSupabase({
+        rounds: ok([]),
+        target_faces: ok([]),
+      });
+
+      // When
+      await fetchRoundDetails(client, [...junk, ...uuids(50)]);
+
+      // Then
+      expect(roundQueries(queries)).toHaveLength(1);
+    });
+
+    it("複数の取得の行を1つにまとめ、同じIDはrevisionが大きい行を使う", async () => {
+      // Given: 1回目と2回目の両方に同じIDが返り、2回目の方が新しい
+      const dup = uuidAt(51);
+      const { client } = makeSupabase({
+        rounds: (i) =>
+          i === 0
+            ? ok([
+                { ...round, id: uuidAt(1), status: "in_progress" },
+                { ...round, id: dup, revision: 3 },
+              ])
+            : ok([{ ...round, id: dup, revision: 9 }]),
+        target_faces: ok([]),
+      });
+
+      // When
+      const result = await fetchRoundDetails(client, uuids(51));
+
+      // Then
+      if (result.status !== "ok") throw new Error("not ok");
+      expect([...result.data.rounds.keys()].sort()).toEqual([uuidAt(1), dup]);
+      expect(result.data.rounds.get(dup)?.revisions.round).toBe(9);
+    });
+
+    it("2回目以降の取得だけが失敗したら、全体を失敗とし、的を保存しない", async () => {
+      // Given
+      localStorage.setItem("aims:local-user-id", "user-1");
+      const { client } = makeSupabase({
+        rounds: (i) => (i === 1 ? failed(0) : ok([])),
+        target_faces: ok([face("face-1", null)]),
+      });
+
+      // When
+      const result = await fetchRoundDetails(client, uuids(51));
+
+      // Then
+      expect(result.status).toBe("error");
+      expect(loadReferenceSnapshot("target-faces")).toBeNull();
+    });
+
+    it("取得の1つがerrorを返したら、全体を失敗とする", async () => {
+      const { client } = makeSupabase({
+        rounds: (i) => (i === 2 ? failed(500, { message: "x" }) : ok([])),
+        target_faces: ok([]),
+      });
+
+      const result = await fetchRoundDetails(client, uuids(120));
+
+      expect(result.status).toBe("error");
+    });
   });
 });
