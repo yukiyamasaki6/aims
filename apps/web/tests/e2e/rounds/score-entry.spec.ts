@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
@@ -644,3 +644,130 @@ test("score-26: テンキーを展開したラウンド詳細画面で新しい�
   await expect(page.getByTestId("score-button-clear")).toBeDisabled();
   await expectBalls(page, 1, 1, ["9"]);
 });
+
+test("score-27: テンキーを展開したモバイルのラウンド詳細画面で指している矢の行が上側の固定表示に隠れているとき、点数ボタンをクリックすると、次に指す矢の行が上側の固定表示の下に見える位置までスライドする", async ({
+  page,
+}) => {
+  // Given
+  await openRound(
+    page,
+    {
+      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 6 }],
+      shots: allShots(0, 12, 6),
+    },
+    MOBILE,
+  );
+  await ball(page, 1, 4, 1).click();
+  await expect(ball(page, 1, 4, 1)).toHaveAttribute("aria-pressed", "true");
+  // 玉を押した直後のスクロールが止まってから、行を固定表示の裏へ動かす。
+  await expect.poll(async () => settledBottom(endRow(page, 1, 4))).toBe(true);
+  const summaryBottom = await bottomOf(page.getByTestId("round-summary"));
+  const rowBottom = await bottomOf(endRow(page, 1, 4));
+  await page
+    .locator("main")
+    .evaluate(
+      (main, delta) => main.scrollBy({ top: delta, behavior: "instant" }),
+      rowBottom - summaryBottom,
+    );
+  expect(await bottomOf(endRow(page, 1, 4))).toBeLessThanOrEqual(summaryBottom);
+
+  // When
+  await page.getByTestId("score-button-9").click();
+
+  // Then
+  await expect(ball(page, 1, 4, 1)).toHaveText("9");
+  const keypadTop = (await page.getByTestId("keypad-toggle").boundingBox())?.y;
+  await expect
+    .poll(async () => (await endRow(page, 1, 4).boundingBox())?.y)
+    .toBeGreaterThanOrEqual(summaryBottom);
+  const row = await endRow(page, 1, 4).boundingBox();
+  expect((row?.y ?? 0) + (row?.height ?? 0)).toBeLessThan(
+    keypadTop ?? Number.POSITIVE_INFINITY,
+  );
+});
+
+test("score-28: テンキーを展開したモバイルのラウンド詳細画面で指している矢の行が固定表示に隠れずに見えているとき、点数ボタンをクリックすると、画面のスクロール位置が変わらない", async ({
+  page,
+}) => {
+  // Given
+  await openRound(
+    page,
+    {
+      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 6 }],
+      shots: allShots(0, 12, 6),
+    },
+    MOBILE,
+  );
+  await ball(page, 1, 1, 1).click();
+  await expect(ball(page, 1, 1, 1)).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => settledBottom(endRow(page, 1, 1))).toBe(true);
+  // 距離の小計がまだ固定されない、わずかにスクロールした位置にする。
+  await page
+    .locator("main")
+    .evaluate((main) => main.scrollTo({ top: 30, behavior: "instant" }));
+  const before = await scrollTopOf(page);
+  expect(before).toBeGreaterThan(0);
+
+  // When
+  await page.getByTestId("score-button-9").click();
+  await expectBalls(page, 1, 1, ["9", "5", "5", "5", "5", "5"]);
+  await page.getByTestId("score-button-8").click();
+  await expectBalls(page, 1, 1, ["8", "5", "5", "5", "5", "5"]);
+  await page.getByTestId("score-button-7").click();
+  await expectBalls(page, 1, 1, ["7", "5", "5", "5", "5", "5"]);
+
+  // Then
+  await expect.poll(async () => settledBottom(endRow(page, 1, 1))).toBe(true);
+  expect(await scrollTopOf(page)).toBe(before);
+});
+
+test("score-29: テンキーを展開したデスクトップのラウンド詳細画面で指している矢の行がスクロール領域の下端の外にあるとき、点数ボタンをクリックすると、次に指す矢の行が完了の帯の上に見える位置までスライドする", async ({
+  page,
+}) => {
+  // Given
+  await openRound(page, {
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 6 }],
+    shots: allShots(0, 12, 6),
+  });
+  await ball(page, 1, 12, 1).click();
+  await expect(ball(page, 1, 12, 1)).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => settledBottom(endRow(page, 1, 12))).toBe(true);
+  const frameTop =
+    (await page.getByTestId("bottom-frame").boundingBox())?.y ?? 0;
+  // スクロール領域（main）の下端は、完了の帯の枠の上端と一致する。
+  const mainBox = await page.locator("main").boundingBox();
+  expect((mainBox?.y ?? 0) + (mainBox?.height ?? 0)).toBeCloseTo(frameTop, 0);
+  // 最終エンドの行の下端が、領域の下端の外に出る位置までスクロールを戻す。
+  await page.locator("main").evaluate((main) =>
+    main.scrollTo({
+      top: main.scrollHeight - main.clientHeight - 130,
+      behavior: "instant",
+    }),
+  );
+  expect(await bottomOf(endRow(page, 1, 12))).toBeGreaterThan(frameTop);
+
+  // When
+  await page.getByTestId("score-button-9").click();
+
+  // Then
+  await expect(ball(page, 1, 12, 1)).toHaveText("9");
+  await expect
+    .poll(async () => bottomOf(endRow(page, 1, 12)))
+    .toBeLessThanOrEqual(frameTop);
+});
+
+async function scrollTopOf(page: Page) {
+  return page.locator("main").evaluate((main) => main.scrollTop);
+}
+
+async function bottomOf(locator: Locator) {
+  const box = await locator.boundingBox();
+  return (box?.y ?? 0) + (box?.height ?? 0);
+}
+
+// 2回の測定で下端が変わらなければ、スクロールが止まったとみなす。
+async function settledBottom(locator: Locator) {
+  const before = await bottomOf(locator);
+  await locator.page().waitForTimeout(150);
+  return before === (await bottomOf(locator));
+}

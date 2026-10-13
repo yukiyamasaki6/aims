@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Pointer } from "./scorecard-input";
 import { distanceNumber } from "./scorecard-scoring";
 import type { Distance } from "./scorecard-types";
+import { scrollPointerIntoView } from "./scroll-to-pointer";
 
 // テンキーは中身のキー数が距離の的ごとに変わるため実測高さを使う。この値は
 // ResizeObserverが初回計測を終えるまでの暫定値。
@@ -81,51 +82,32 @@ function useKeypadHeight() {
   return { keypadHeight, setKeypadNode };
 }
 
-// 指している矢を、テンキーに隠れない位置までスクロールして見せる。
+// 指している矢を、テンキーと固定表示に隠れない位置までスクロールして見せる。
+// <main>の矩形が帯・テンキーの上端までになる。格納ボタンは重なるため、その分をbottomOverlayで引く。
+// keypadInsetは計算に使わず、テンキーの高さの変化と向きの切り替えを契機にするためだけに受ける。
 function useScrollToPointer(
   pointer: Pointer,
   distances: Distance[],
+  bottomOverlay: number,
   keypadInset: number,
+  followKey: number,
 ) {
   // pointerとdistancesは描画のたびに作り直されるため、依存に入れると、利用者がスクロールした位置を入力位置へ戻してしまう。
-  // 指す位置とテンキーの高さだけを契機にし、最新の値は参照から読む。
+  // 指す位置、テンキーの高さ、利用者の操作ごとの追従の要求だけを契機にし、最新の値は参照から読む。
   const pointerKey = pointer
     ? `${pointer.distanceId}:${pointer.endNumber}`
     : null;
   const scrollTargetRef = useRef({ pointer, distances });
   scrollTargetRef.current = { pointer, distances };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: pointerKeyとkeypadInsetだけを契機にする
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pointerKey、keypadInset、followKeyだけを契機にする
   useEffect(() => {
     const { pointer, distances } = scrollTargetRef.current;
     if (!pointer) return;
-    const testId = `end-row-${distanceNumber(distances, pointer.distanceId)}-${pointer.endNumber}`;
-    const cell = document.querySelector(`[data-testid="${testId}"]`);
-    const container = cell?.closest<HTMLElement>(".overflow-y-auto");
-    if (!cell || !container) return;
-
-    // 矢を指せば必ずテンキーが開く前提のため、開閉状態に関わらず常に
-    // テンキー分の高さが隠れることを見込んでスクロール位置を計算する
-    // （高さ確保用の透明な枠は常にkeypadHeight分の領域を占有している）。
-    // 横向きではテンキーは横に並ぶ側パネルで、keypadHeightは列いっぱいに
-    // 伸びたパネル自身の高さ（コンテンツと無関係な値）になり、コンテンツを
-    // 覆い隠すことも無いため、この補正は縦向き（isLandscape=false、
-    // ボトムシート表示時）でのみ適用する。
-    const margin = 16;
-    const cellRect = cell.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-    const visibleBottom = containerRect.bottom - keypadInset - margin;
-
-    let delta = 0;
-    if (cellRect.bottom > visibleBottom) {
-      delta = cellRect.bottom - visibleBottom;
-    } else if (cellRect.top < containerRect.top + margin) {
-      delta = cellRect.top - (containerRect.top + margin);
-    }
-
-    if (delta !== 0) {
-      container.scrollBy({ top: delta, behavior: "smooth" });
-    }
-  }, [pointerKey, keypadInset]);
+    scrollPointerIntoView(
+      `end-row-${distanceNumber(distances, pointer.distanceId)}-${pointer.endNumber}`,
+      bottomOverlay,
+    );
+  }, [pointerKey, keypadInset, followKey]);
 }
 
 // 玉と空白のボタンだけフォーカスを外す。無条件にblurすると、キーパッド外の
@@ -160,10 +142,21 @@ export function useKeypad({
   const pointedDistance =
     pointer && distances.find((d) => d.id === pointer.distanceId);
   const keypadDistance = useLastDistance(pointedDistance);
+  // 利用者が指す矢を変えた操作ごとに増やし、同じエンド内の移動でもスクロールを促す。
+  const [followKey, setFollowKey] = useState(0);
   useScrollToPointer(
     pointer,
     distances,
+    isLandscape ? 0 : KEYPAD_TOGGLE_OVERHANG,
     isLandscape ? 0 : keypadHeight + KEYPAD_TOGGLE_OVERHANG,
+    followKey,
+  );
+  const followPointer = useCallback(
+    (next: Pointer) => {
+      setPointer(next);
+      setFollowKey((k) => k + 1);
+    },
+    [setPointer],
   );
 
   const closeKeypad = useCallback(() => {
@@ -183,5 +176,6 @@ export function useKeypad({
     isLandscape,
     keypadDistance,
     closeKeypad,
+    followPointer,
   };
 }

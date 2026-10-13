@@ -372,7 +372,7 @@ for (const [name, viewport] of [
   });
 }
 
-test("completion-13: 入力中のラウンド詳細画面でモバイルのとき、最下部までスクロールしてテンキーを閉じると、スクロール領域の下側がテンキーの動きと同期して縮み、後から急に変わらない", async ({
+test("completion-13: 入力中のラウンド詳細画面でモバイルのとき、最下部までスクロールしてテンキーを閉じると、スクロール領域の高さがテンキーの動きと同期して伸び、後から急に変わらない", async ({
   page,
 }) => {
   // Given: スクロールできる長さのラウンドで、テンキーを展開し最下部までスクロールした状態
@@ -384,7 +384,7 @@ test("completion-13: 入力中のラウンド詳細画面でモバイルのと�
   await expect(page.getByTestId("score-button-X")).toBeVisible();
   await page.waitForTimeout(500);
 
-  // When: 閉じる間のスクロール領域の高さと位置を毎フレーム記録する(閉じる操作からの経過時間つき)
+  // When: 閉じる間のスクロール領域の表示の高さ(clientHeight)と位置を毎フレーム記録する(閉じる操作からの経過時間つき)
   const samples = await page.evaluate(async () => {
     const main = document.querySelector<HTMLElement>("main");
     const toggle = document.querySelector<HTMLElement>(
@@ -403,7 +403,7 @@ test("completion-13: 入力中のラウンド詳細画面でモバイルのと�
     toggle.click();
     while (performance.now() - start < 700) {
       rows.push({
-        height: main.scrollHeight,
+        height: main.clientHeight,
         top: main.scrollTop,
         elapsed: performance.now() - start,
         mounted:
@@ -414,19 +414,19 @@ test("completion-13: 入力中のラウンド詳細画面でモバイルのと�
     return rows;
   });
 
-  // Then: 高さと位置は増えず、テンキーの要素が無くなる前後で一度に縮まず、動きが終わった後(450ms以降)は変わらない。
-  // 縮みが遅れてアンマウントのときに一度に起きる場合を検出する。1フレームの変化量は、負荷でフレームが落ちると、なめらかな動きでも大きくなるため使わない。
+  // Then: 表示の高さは縮まず、位置は増えず、テンキーの要素が無くなる前後で一度に変わらず、動きが終わった後(450ms以降)は変わらない。
+  // 伸びが遅れてアンマウントのときに一度に起きる場合を検出する。1フレームの変化量は、負荷でフレームが落ちると、なめらかな動きでも大きくなるため使わない。
   const steps = (value: (s: (typeof samples)[number]) => number) =>
     samples.slice(1).map((s, i) => value(samples[i]) - value(s));
-  expect(Math.min(...steps((s) => s.height))).toBeGreaterThanOrEqual(0);
+  expect(Math.max(...steps((s) => s.height))).toBeLessThanOrEqual(0);
   expect(Math.min(...steps((s) => s.top))).toBeGreaterThanOrEqual(0);
-  // テンキーの要素が無くなる(閉じてから200ms後)前後の記録で、高さと位置が一度に縮まない。
+  // テンキーの要素が無くなる(閉じてから200ms後)前後の記録で、高さと位置が一度に変わらない。
   // 描画が200ms以上止まり、最初の記録の時点で要素が無い場合は、前後を比べる記録が無いため、この判定だけ行わない。
   const unmountedAt = samples.findIndex((s) => !s.mounted);
   if (unmountedAt > 0) {
     const before = samples[unmountedAt - 1];
     const after = samples[unmountedAt];
-    expect(before.height - after.height).toBeLessThan(120);
+    expect(after.height - before.height).toBeLessThan(120);
     expect(before.top - after.top).toBeLessThan(120);
   }
   const settled = samples.filter((s) => s.elapsed >= 450);
