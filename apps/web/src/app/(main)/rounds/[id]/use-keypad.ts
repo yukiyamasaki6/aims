@@ -8,7 +8,7 @@ import { scrollPointerIntoView } from "./scroll-to-pointer";
 // ResizeObserverが初回計測を終えるまでの暫定値。
 const KEYPAD_HEIGHT_FALLBACK = 220;
 // 格納ボタンがテンキー本体の上にはみ出す高さ（-top-12 = 3rem = 48px。右端の点数キーと同じ高さ）。
-export const KEYPAD_TOGGLE_OVERHANG = 48;
+const KEYPAD_TOGGLE_OVERHANG = 48;
 
 // 横向きではテンキーをスコア領域の隣に並ぶ側パネルとして<main>の外側に、
 // 縦向きでは<main>内蔵のボトムシートとして描画を完全に分ける（CSSの
