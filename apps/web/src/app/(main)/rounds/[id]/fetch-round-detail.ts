@@ -264,7 +264,51 @@ export async function fetchRoundDetail(
   };
 }
 
-// 入力中のラウンドと、`roundIds`のラウンドを、的とともにまとめて取得する。端末の保持のための取得で、結果は表示に使わない。
+// 1回の取得に並べるラウンドIDの上限。IDはGETのURLに載るため、ゲートウェイが長いURLを414で拒まない件数に分ける。50件で約3KBで、ローカルで通ることを確かめた長さ(約3.7KB)に収まる。
+const roundIdsPerRequest = 50;
+
+function chunkIds(ids: readonly string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += roundIdsPerRequest) {
+    chunks.push(ids.slice(i, i + roundIdsPerRequest));
+  }
+  return chunks;
+}
+
+// 最初の取得は入力中のラウンドを含め、以降は入力中を除く(最初の取得で全件を得るため)。
+function selectRoundsChunk(
+  supabase: SupabaseClient<Database>,
+  chunk: readonly string[],
+  index: number,
+) {
+  const base = supabase
+    .from("rounds")
+    .select(ROUND_SELECT)
+    .is("disabled_at", null)
+    .order("position_key", { referencedTable: "distances" })
+    .order("id", { referencedTable: "distances" });
+  if (index > 0)
+    return base
+      .neq("status", "in_progress")
+      .in("id", [...chunk])
+      .retry(false);
+  const filter = ["status.eq.in_progress"];
+  if (chunk.length > 0) filter.push(`id.in.(${chunk.join(",")})`);
+  return base.or(filter.join(",")).retry(false);
+}
+
+// 取得の間に状態が変わって同じIDが重なったときは、revisionが大きい行を使い、同じなら先の行を使う。
+function mergeRounds(rows: readonly RoundRowWithId[]): RoundRowWithId[] {
+  const merged = new Map<string, RoundRowWithId>();
+  for (const row of rows) {
+    const current = merged.get(row.id);
+    if (!current || row.revision > current.revision) merged.set(row.id, row);
+  }
+  return [...merged.values()];
+}
+
+// 入力中のラウンドと、`roundIds`のラウンドを、IDを`roundIdsPerRequest`件ごとの取得に分けて並行に得て、的とともに返す。端末の保持のための取得で、結果は表示に使わない。
+// どれかの取得が失敗したら全体を失敗にする(一部の結果を反映すると、返らなかった保持のラウンドが削除の印になるため)。
 export async function fetchRoundDetails(
   supabase: SupabaseClient<Database>,
   roundIds: readonly string[],
@@ -272,28 +316,25 @@ export async function fetchRoundDetails(
   const startedAt = Date.now();
   // IDはフィルタの文字列に埋め込むため、UUIDの形だけを通す。
   const ids = roundIds.filter((id) => UUID_PATTERN.test(id));
-  const filter = ["status.eq.in_progress"];
-  if (ids.length > 0) filter.push(`id.in.(${ids.join(",")})`);
+  const chunks = ids.length > 0 ? chunkIds(ids) : [[]];
   const result = await fetchContent<Fetched>(
     supabase as SupabaseClient,
     async (session) => {
       const userId = session.user.id;
-      const [rounds, faces] = await Promise.all([
-        supabase
-          .from("rounds")
-          .select(ROUND_SELECT)
-          .is("disabled_at", null)
-          .or(filter.join(","))
-          .order("position_key", { referencedTable: "distances" })
-          .order("id", { referencedTable: "distances" })
-          .retry(false),
+      const [faces, ...responses] = await Promise.all([
         selectTargetFaces(supabase, userId),
+        ...chunks.map((chunk, index) =>
+          selectRoundsChunk(supabase, chunk, index),
+        ),
       ]);
-      const failure = failureOf([rounds, faces]);
+      const failure = failureOf([...responses, faces]);
       if (failure) return failure as ResponseLike<Fetched>;
+      const rows = responses.flatMap(
+        (r) => (r.data ?? []) as unknown as RoundRowWithId[],
+      );
       return {
         data: {
-          round: (rounds.data ?? []) as unknown as RoundRowWithId[],
+          round: mergeRounds(rows),
           targetFaces: (faces.data ?? []) as unknown as TargetFaceRow[],
           userId,
         },
