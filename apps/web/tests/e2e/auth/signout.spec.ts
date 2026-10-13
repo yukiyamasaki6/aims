@@ -184,8 +184,8 @@ test("signout-06: サインアウト確認ダイアログでサインアウト�
   await confirmButton.click();
 
   // Then
-  // auth-jsは更新の通信失敗を、待機（setTimeout）を挟んで再試行してから諦める。
-  // 時計を差し替えているため、エラーが表示されるまで1秒ずつ進める。
+  // auth-jsは更新の通信失敗を、待機（setTimeout）を挟んで約25秒まで再試行してから諦める。
+  // 時計を差し替えているため、エラーが表示されるまで1秒ずつ進める。既定の間隔(1秒)では実時間で約13秒かかるため、間隔を短くする。
   const errorMessage = page.getByText(
     "通信エラーが発生しました。しばらくしてから再度お試しください。",
   );
@@ -195,7 +195,7 @@ test("signout-06: サインアウト確認ダイアログでサインアウト�
         await page.clock.runFor(1_000);
         return await errorMessage.isVisible();
       },
-      { timeout: 15_000 },
+      { intervals: [100], timeout: 15_000 },
     )
     .toBe(true);
   await expect(confirmButton).toHaveAttribute("aria-disabled", "false");

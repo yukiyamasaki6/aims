@@ -1117,6 +1117,7 @@ test("sync-25: 削除された距離への点数の送信の応答が失われ�
     await route.continue();
   });
   await openRound(page);
+  await page.clock.install();
   await page.getByTestId("end-blank-2-1").click();
   await page.getByTestId("score-button-9").click();
   await expect.poll(() => lost).toBe(true);
@@ -1126,6 +1127,17 @@ test("sync-25: 削除された距離への点数の送信の応答が失われ�
   await disableDistance(supabase, distanceIds[1]);
 
   // When: 再送が届く
+  // リトライ待機（3秒）の実待機を避けるため、再送されるまでページのタイマーを1秒ずつ進める。
+  // 待機の開始より前に進めた時間は無効になるため、1秒ずつ進める。
+  await expect
+    .poll(
+      async () => {
+        await page.clock.runFor(1_000);
+        return calls;
+      },
+      { intervals: [200], timeout: 10_000 },
+    )
+    .toBeGreaterThan(1);
   await retried;
 
   // Then: 点数は表示されない
@@ -1945,6 +1957,7 @@ test("sync-43: 作成の送信が失敗し、リトライ待機中に距離を�
     }
     await route.continue();
   });
+  await page.clock.install();
   const id = await startRoundFromUi(page, "WA 1440");
   await expect.poll(() => attempts).toBeGreaterThan(0);
   await page.getByTestId("add-distance-button").click();
@@ -1958,7 +1971,18 @@ test("sync-43: 作成の送信が失敗し、リトライ待機中に距離を�
   const sent = page.waitForResponse(
     (r) => r.url().includes("/rpc/record_shots") && r.ok(),
   );
+  const attemptsBeforeRecovery = attempts;
   failing = false;
+  // リトライ待機（3秒から倍に伸びる）の実待機を避けるため、作成が再送されるまでページのタイマーを1秒ずつ進める。
+  await expect
+    .poll(
+      async () => {
+        await page.clock.runFor(1_000);
+        return attempts;
+      },
+      { intervals: [200], timeout: 15_000 },
+    )
+    .toBeGreaterThan(attemptsBeforeRecovery);
 
   // Then: 再読み込みしても、ラウンド・距離・点数が表示される
   await sent;
