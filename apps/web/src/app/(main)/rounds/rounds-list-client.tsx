@@ -84,7 +84,7 @@ export function RoundsListClient() {
         data-hydrated={hydrated}
         data-testid="new-round-fab"
         aria-label="ラウンドを新規作成"
-        className="fixed right-6 bottom-6 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-colors hover:bg-primary/80"
+        className="fixed right-safe-6 bottom-safe-6 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-colors hover:bg-primary/80"
       >
         <Plus className="size-6" />
       </Link>

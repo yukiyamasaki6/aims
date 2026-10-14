@@ -36,6 +36,7 @@
 - `src/app/manifest.ts` がManifestを返す。`start_url` と `id` は `/rounds` で、未認証の起動は `proxy.ts` が `/signin` へ移す。`scope`、`orientation`(横向きの側パネルのため `any`)、`lang`、`dir`、`categories`、`launch_handler`、`description` を持ち、アイコンは192、384、512、1024の各寸法でany/maskableを返す。
 - `src/app/apple-icon.png` はiOSホーム画面用アイコン(180x180、白の不透明な地)で、Next.jsのファイル規約により全ページに `apple-touch-icon` のlinkが出る。`scripts/generate-icon.mjs` が他のアイコンと一緒に生成する。`/apple-icon.png` は `proxy.ts` の対象外なので未認証でも取得できる。
 - manifestのアイコン(any/maskable)は、環の直径を画像の幅の61%(`INSTALL_ART_SCALE`=61/80)にして生成する。絵柄全体を元の比率のまま縮める。表示は2経路ある。余白のある経路(インストールしたホーム画面、アプリの一覧)では、Chromeがmaskableに約1.309倍の透明の余白を足すため、画像の中央87.3%が表示され、環は枠の約70%に見える。余白のない経路(「ホーム画面に追加」の丸、ショートカット)では、画像の中央66.7%から70%が丸に表示され、環は枠の約87%から91%に見える。この経路で棒の先が欠けることは認めるが、環の外に棒は見える。iOS用のapple-iconは縮小しない(iOSは画像の全体を表示するため、環は枠の80%に見える)。環の外縁が半幅の80%という割合はicon.svg(タブ用)とapple-iconの値である。
+- `viewport-fit=cover`で背景をバーとカットアウトの裏まで描き、端の余白(`env(safe-area-inset-*)`)は`globals.css`のユーティリティで、`<body>`、ダイアログの入れ物、`fixed`の要素(ロゴ、新規作成ボタン、レフトパネルのドロワー)に付ける。画面の高さは`<body>`の`h-dvh`だけが決め、子はflexで残りを受け取る。
 - `src/features/fetch-result/fetch-result.ts` が取得結果（ok / not-found / offline / error）と、レスポンスから結果を決める `classifyResponse` を持つ。通信失敗（`status: 0`）は原因を断定せず固定文の `error`、`PGRST116` は `not-found`、その他のエラーも固定文の `error` にする。`offline` は `fetchContent` が `navigator.onLine` の false と `offline` イベントで確定したときだけ返す。
 - `fetch-content.ts` の `fetchContent` が取得の入口である。`navigator.onLine` が false なら `readSession` もクエリも呼ばず `offline` を返す。それ以外は `readSession`（`features/auth/session-state.ts`）を `offline` イベントと競わせ、認証済みのときだけ、確かめたセッションでクエリを実行する。クエリが認証の拒否（401か`PGRST301`）で返ったら、更新を強制してセッションを確かめ、認証済みなら1回だけ取り直す。クエリには `.retry(false)` を付ける。全体は10秒の時間制限（`FETCH_TIMEOUT_MS`）とも競わせ、超えたら `error` にする。代わり（保存済み）がある取得は1秒（`FALLBACK_WAIT_MS`）で時間切れにし、その後も10秒までは結果を待って`onLateResult`へ渡す（表示しない）。`readSession` の例外・通信失敗も `error` にする。`withinFetchTimeout`が、端末の保存の待ちを含む画面の読み込みの全体を、開始から10秒で同じ`error`にする(一覧と詳細)。
 - `fetch-state.tsx` が取得中・見つからない・オフライン・エラーの枠内表示（取得中以外は枠の領域の中央。取得中の骨組みは画面ごとに渡し、読み込み後の形に揃える）を担い、`use-fetch-result.ts` が取得中の状態、アンマウント後の結果の破棄、取得関数の例外のerror化、再試行、offline表示の間だけ`online`イベントを購読する自動再取得を持つ(`offline`に決まった時点ですでにオンラインなら、購読せずすぐ再取得する)。depsが変わった描画では前の結果を見せずloadingにする。
@@ -54,11 +55,13 @@
 | `pnpm preview` で `serwist build` を実行する | プレビューとE2Eで古い、または存在しないService Workerが使われたため。 | Service Workerの生成手順を変えるとき。 |
 | 未認証を取得結果に含めず、取得前に `readSession` で確かめ、未認証ではクエリを実行しない。未認証は、保存先にセッションが無いときと、サーバーが更新を拒否したと確定したときに限る。auth-jsの更新の破棄と、別の書き手と重なった拒否は、保存先を読み直して判定する | 遷移を取得関数と `SessionGuard` の両方が行うと二重になるため、取得関数は遷移せず `error`（「サインインが必要です。」）を返す。セッションなしのクエリは匿名キーで送られ、RLSで0件になり、`not-found` と誤判定されるため、実行しない。更新の通信中に `proxy.ts` のSet-Cookieや別のタブが保存先を書き換えると、auth-jsは保存先に有効なセッションを残したままセッションなしを返すため。 | 取得関数が遷移を担う設計にするとき。クエリが認証なしの結果を区別して返すようになるとき。auth-jsが書き換えの重なりを自ら解決するようになったとき。 |
 | `navigator.onLine` が false のときと `offline` イベントだけを `offline` とし、通信の失敗と取得全体の10秒の時間切れは原因を断定せず `error`（「読み込めませんでした。」、再試行可能）にする。回線が接続中でも外に出られない場合は自動復帰せず、再試行で復帰する | CDPのオフライン化とPlaywrightのsetOfflineのエミュレーションでは、オフラインのまま開いた文書の `navigator.onLine` が true のままで、`online` も `offline` も `navigator.connection` の `change` も届かないため、通信の失敗を「接続されていません」と断定できない。時間制限は、`navigator.onLine` が true のまま通信できないとき、期限切れのトークンの更新の再試行で約30秒、通信が応答しないと数分、枠が取得中のまま固定されるため。上限に達したときの代わりがある待ち（保存済みがある読み取り、開始時の認証確認）は1秒、代わりが無い待ちは10秒にそろえる。端末の保存(IndexedDB)の待ちは時間制限を持たず、他のタブが旧versionの接続や読み書きのトランザクションを閉じないと止まるため、一覧と詳細の読み込みの全体にも同じ10秒を掛ける。保存の待ちごとに上限を置いて端末の保存なしで内容を出す案は、送信器と保存の状態の扱いが増えるため採らない。 | 通信の復帰を `online` 以外で確実に検知できるとき。取得が10秒を超えるのが通常の回線が生じたとき。 |
+| 端の余白を`<body>`に付け、`fixed`の要素だけが`globals.css`のユーティリティで足す | 今後足す流れの中の要素が自動で余白の内側に入り、要素に`env()`を書かないため。 | 端の要素の地の色を背景と変えるとき。 |
 
 ## 制約と未対応
 
 - `serwist.config.mjs` が `sw-frames.ts` をNodeの型除去で読むため、Node 22.18以上が前提（`.node-version` は24）で、ビルド時に `MODULE_TYPELESS_PACKAGE_JSON` の警告が出る。
 - iOSは起動画面を指定しないため、起動の一瞬に白い画面を出す。画面の向きと端の表示はE2Eで確かめられず、実機で確かめる。
+- 端の余白はE2Eで確かめられず、実機で確かめる。キーボードでは画面全体が縮む(`resizes-content`。iOSは対応しない)。
 - Service Workerが未登録、または制御していないタブのオフラインは、ブラウザ標準のエラーになる。iOS Safariのホーム画面アプリでの挙動は実機で確認していない。
 - 更新時の旧SWの停止とページのfetchが重なると、新SWが `waiting` のまま残ることがある（実ブラウザのChromiumで再現。数ms間隔でfetchを続けるページでのみ。10ms以上の間隔では再現しない）。この間も旧SWが枠とオフライン動作を提供し、ページ遷移は止まらない。`SwUpdateActivator` が通常は約100msで有効化し直す。この機構が入る前のビルドから更新する場合は、旧SWのアイドル停止（約30秒）まで有効化が遅れうる。
 - Service Workerの更新直後、開いたままの旧ドキュメントの遅延チャンクは取得できない。通常の遷移はハードナビゲーションで回復する。

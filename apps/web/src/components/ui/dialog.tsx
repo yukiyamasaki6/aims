@@ -26,16 +26,18 @@ function DialogContent({
         forceRender={nested}
         className="fixed inset-0 z-50 bg-black/40"
       />
-      <DialogPrimitive.Popup
-        data-slot="dialog-content"
-        className={cn(
-          "fixed top-1/2 left-1/2 z-50 max-h-[85vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border bg-card p-4 text-card-foreground shadow-lg",
-          className,
-        )}
-        {...props}
-      >
-        {children}
-      </DialogPrimitive.Popup>
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-safe">
+        <DialogPrimitive.Popup
+          data-slot="dialog-content"
+          className={cn(
+            "pointer-events-auto relative max-h-[85%] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-xl border bg-card p-4 text-card-foreground shadow-lg",
+            className,
+          )}
+          {...props}
+        >
+          {children}
+        </DialogPrimitive.Popup>
+      </div>
     </DialogPrimitive.Portal>
   );
 }

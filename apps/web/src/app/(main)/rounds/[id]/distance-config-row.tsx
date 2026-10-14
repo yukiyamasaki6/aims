@@ -100,10 +100,7 @@ function TargetFacePicker({
       {/* フィルタで絞り込んだ的の件数（3件〜19件）によってポップアップ自体の
           大きさが変わらないよう高さを固定し、フィルタ部分は常に見える位置に
           固定した上で、的の一覧部分だけをスクロールさせる。 */}
-      <DialogContent
-        nested
-        className="flex h-[70vh] flex-col overflow-y-hidden"
-      >
+      <DialogContent nested className="flex h-[70%] flex-col overflow-y-hidden">
         <div className="flex h-full flex-col gap-3">
           <FilterTabs
             options={FORMAT_FILTER_OPTIONS}

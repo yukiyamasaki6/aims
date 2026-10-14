@@ -150,26 +150,44 @@ describe("RootLayout", () => {
   });
 
   describe("viewportとmetadata", () => {
-    it("width=device-widthとinitial-scale=1を持ち、拡大を禁じず、viewport-fitは指定しない", () => {
+    it("width=device-width、initial-scale=1、viewport-fit=coverを持ち、interactive-widgetはresizes-contentのまま、拡大を禁じない", () => {
       // Given
       // When
       const result = viewport;
 
       // Then
-      expect(result).toMatchObject({ width: "device-width", initialScale: 1 });
+      expect(result).toMatchObject({
+        width: "device-width",
+        initialScale: 1,
+        viewportFit: "cover",
+        interactiveWidget: "resizes-content",
+      });
       expect(result).not.toHaveProperty("userScalable");
       expect(result).not.toHaveProperty("maximumScale");
-      expect(result).not.toHaveProperty("viewportFit");
     });
 
-    it("iOSの起動画面の指定を持たない", () => {
+    it("iOSの起動画面の指定（appleWebApp.startupImageと、起動画面のlink）を持たない", () => {
       // Given
+      // 起動画面のlinkは、appleWebApp.startupImageのほか、other（メタ名）とicons.other（rel）でも指定できる。
+      const appleWebApp =
+        typeof metadata.appleWebApp === "object" ? metadata.appleWebApp : null;
+      const otherNames = Object.keys(metadata.other ?? {});
+      const icons = metadata.icons;
+      const iconsOther = (
+        icons && typeof icons === "object" && "other" in icons
+          ? [icons.other ?? []].flat()
+          : []
+      ).map((icon) => icon.rel);
+
       // When
-      const result = metadata;
+      const found = [
+        appleWebApp?.startupImage,
+        ...otherNames.filter((name) => /startup/i.test(name)),
+        ...iconsOther.filter((rel) => /startup/i.test(rel ?? "")),
+      ].filter((value) => value !== undefined);
 
       // Then
-      expect(result).not.toHaveProperty("appleWebApp");
-      expect(result).not.toHaveProperty("other");
+      expect(found).toEqual([]);
     });
   });
 });

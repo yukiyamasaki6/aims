@@ -58,7 +58,7 @@ export function LeftPanel() {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 -translate-x-full flex-col overflow-y-auto border-r bg-card text-card-foreground side:static side:z-auto side:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-64 pt-safe pb-safe pl-safe side:p-0 shrink-0 -translate-x-full flex-col overflow-y-auto border-r bg-card text-card-foreground side:static side:z-auto side:translate-x-0",
           animate &&
             "transition-transform duration-200 side:transition-[width]",
           compactOpen && "translate-x-0",

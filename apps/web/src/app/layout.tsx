@@ -19,10 +19,13 @@ export const metadata: Metadata = {
 // position: fixedで中央寄せしているDialog等が、キーボードに隠れず
 // 可視領域の下端に合わせて縮む（対応ブラウザのみ。Android Chromeは対応、
 // iOS Safariは非対応のため実機確認が必要）。
+// viewportFit: "cover"は資料の基本の値で、背景をバーとカットアウトの裏まで描く。
+// 端の余白はglobals.cssのユーティリティで付ける。
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   interactiveWidget: "resizes-content",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -35,7 +38,8 @@ export default function RootLayout({
       {/* h-screen（100vh）はモバイルブラウザのアドレスバー等の出し入れによる
           実際の可視高さの変化に追従せず、下部要素が隠れることがある。
           h-dvh（動的ビューポート高さ）にすることで実際に見えている範囲に
-          常に一致させる。 */}
+          常に一致させる。画面の高さを決めるのはここだけで、子は<body>の残りを
+          flexで受け取る。 */}
       <body className="h-dvh overflow-hidden">
         <LocalIdentityProvider />
         <OpSyncProvider />

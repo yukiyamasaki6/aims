@@ -5,7 +5,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <AppLogo />
-      <main className="mx-auto mt-14 flex h-[calc(100dvh-3.5rem)] w-full max-w-sm flex-col items-center justify-center gap-4 overflow-y-auto p-8">
+      <main className="mx-auto mt-14 flex min-h-0 w-full flex-1 max-w-sm flex-col items-center justify-center gap-4 overflow-y-auto p-8">
         {children}
       </main>
     </>
