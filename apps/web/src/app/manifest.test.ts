@@ -18,37 +18,54 @@ describe("manifest", () => {
     });
   });
 
-  it("通常用とマスカブル用のアイコンを192pxと512pxで返す", () => {
+  it("アプリの識別子・範囲・向き・言語・分類・起動の扱い・説明を返す", () => {
     // Given
     // When
     const result = manifest();
 
     // Then
-    expect(result.icons).toEqual([
-      {
-        src: "/icons/icon-192.png",
-        sizes: "192x192",
-        type: "image/png",
-        purpose: "any",
-      },
-      {
-        src: "/icons/icon-512.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "any",
-      },
-      {
-        src: "/icons/icon-192-maskable.png",
-        sizes: "192x192",
-        type: "image/png",
-        purpose: "maskable",
-      },
-      {
-        src: "/icons/icon-512-maskable.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "maskable",
-      },
-    ]);
+    expect(result).toMatchObject({
+      id: "/rounds",
+      scope: "/",
+      orientation: "any",
+      lang: "ja",
+      dir: "ltr",
+      categories: ["sports"],
+      launch_handler: { client_mode: "focus-existing" },
+      description: "アーチェリー点数管理アプリ",
+    });
+  });
+
+  it("通常用とマスカブル用のアイコンを192・384・512・1024pxで返す", () => {
+    // Given
+    // When
+    const result = manifest();
+
+    // Then
+    expect(result.icons).toEqual(
+      [192, 384, 512, 1024].flatMap((size) => [
+        {
+          src: `/icons/icon-${size}.png`,
+          sizes: `${size}x${size}`,
+          type: "image/png",
+          purpose: "any",
+        },
+        {
+          src: `/icons/icon-${size}-maskable.png`,
+          sizes: `${size}x${size}`,
+          type: "image/png",
+          purpose: "maskable",
+        },
+      ]),
+    );
+  });
+
+  it("screenshotsを持たない", () => {
+    // Given
+    // When
+    const result = manifest();
+
+    // Then
+    expect(result).not.toHaveProperty("screenshots");
   });
 });

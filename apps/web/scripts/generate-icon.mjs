@@ -282,7 +282,7 @@ console.log(`Wrote ${icoPath} (${FAVICON_SIZES.join("x, ")}x px)`);
 // PWAインストールアイコンは、白の四角の地に黒の絵柄を描き込む。
 // any と maskable は同じ画像。絵柄全体をINSTALL_ART_SCALE倍に縮める。
 // 余白のない経路の丸では棒の先が欠ける(認める)。
-const MANIFEST_ICON_SIZES = [192, 512];
+const MANIFEST_ICON_SIZES = [192, 384, 512, 1024];
 
 async function renderIcon(size, scale) {
   const content = await sharp(Buffer.from(buildSvg({ plate: "none", scale })))

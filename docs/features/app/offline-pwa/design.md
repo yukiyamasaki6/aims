@@ -33,7 +33,7 @@
 - `serwist.config.mjs` が `public/sw.js` を生成し、`/offline` と枠3件（`/__shell/rounds`、`/__shell/rounds/new`、`/__shell/rounds/_`）をHTMLの内容ハッシュのリビジョンでプリキャッシュする。リビジョンはビルドごとに変わる。
 - `next.config.ts` が `/__shell/*` を実ルートへrewriteし（`beforeFiles`）、`/rounds/<ID>` を `/rounds/_` へrewriteする（`afterFiles`）。`/__shell/*` は `proxy.ts` の対象外なので、未認証の登録でも各画面の枠が保存される。オンラインの `/rounds/<ID>` も `/rounds/_` の枠だけが配信され、IDごとの生成物は作られない（`rounds/[id]/page.tsx` の `dynamicParams = false`）。
 - `src/app/sw-update-activator.tsx` の `SwUpdateActivator`（`layout.tsx` に配置）が、新しいService Workerが `waiting` のまま残っていれば `SKIP_WAITING` を送り、`sw.ts` が受けて `skipWaiting()` を呼ぶ。表示は行わない。
-- `src/app/manifest.ts` がManifestを返す。`start_url` は `/rounds` で、未認証の起動は `proxy.ts` が `/signin` へ移す。
+- `src/app/manifest.ts` がManifestを返す。`start_url` と `id` は `/rounds` で、未認証の起動は `proxy.ts` が `/signin` へ移す。`scope`、`orientation`(横向きの側パネルのため `any`)、`lang`、`dir`、`categories`、`launch_handler`、`description` を持ち、アイコンは192、384、512、1024の各寸法でany/maskableを返す。
 - `src/app/apple-icon.png` はiOSホーム画面用アイコン(180x180、白の不透明な地)で、Next.jsのファイル規約により全ページに `apple-touch-icon` のlinkが出る。`scripts/generate-icon.mjs` が他のアイコンと一緒に生成する。`/apple-icon.png` は `proxy.ts` の対象外なので未認証でも取得できる。
 - manifestのアイコン(any/maskable)は、環の直径を画像の幅の61%(`INSTALL_ART_SCALE`=61/80)にして生成する。絵柄全体を元の比率のまま縮める。表示は2経路ある。余白のある経路(インストールしたホーム画面、アプリの一覧)では、Chromeがmaskableに約1.309倍の透明の余白を足すため、画像の中央87.3%が表示され、環は枠の約70%に見える。余白のない経路(「ホーム画面に追加」の丸、ショートカット)では、画像の中央66.7%から70%が丸に表示され、環は枠の約87%から91%に見える。この経路で棒の先が欠けることは認めるが、環の外に棒は見える。iOS用のapple-iconは縮小しない(iOSは画像の全体を表示するため、環は枠の80%に見える)。環の外縁が半幅の80%という割合はicon.svg(タブ用)とapple-iconの値である。
 - `src/features/fetch-result/fetch-result.ts` が取得結果（ok / not-found / offline / error）と、レスポンスから結果を決める `classifyResponse` を持つ。通信失敗（`status: 0`）は原因を断定せず固定文の `error`、`PGRST116` は `not-found`、その他のエラーも固定文の `error` にする。`offline` は `fetchContent` が `navigator.onLine` の false と `offline` イベントで確定したときだけ返す。
@@ -58,6 +58,7 @@
 ## 制約と未対応
 
 - `serwist.config.mjs` が `sw-frames.ts` をNodeの型除去で読むため、Node 22.18以上が前提（`.node-version` は24）で、ビルド時に `MODULE_TYPELESS_PACKAGE_JSON` の警告が出る。
+- iOSは起動画面を指定しないため、起動の一瞬に白い画面を出す。画面の向きと端の表示はE2Eで確かめられず、実機で確かめる。
 - Service Workerが未登録、または制御していないタブのオフラインは、ブラウザ標準のエラーになる。iOS Safariのホーム画面アプリでの挙動は実機で確認していない。
 - 更新時の旧SWの停止とページのfetchが重なると、新SWが `waiting` のまま残ることがある（実ブラウザのChromiumで再現。数ms間隔でfetchを続けるページでのみ。10ms以上の間隔では再現しない）。この間も旧SWが枠とオフライン動作を提供し、ページ遷移は止まらない。`SwUpdateActivator` が通常は約100msで有効化し直す。この機構が入る前のビルドから更新する場合は、旧SWのアイドル停止（約30秒）まで有効化が遅れうる。
 - Service Workerの更新直後、開いたままの旧ドキュメントの遅延チャンクは取得できない。通常の遷移はハードナビゲーションで回復する。
