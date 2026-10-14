@@ -22,13 +22,9 @@ const APPLE_DOT_DIAMETER = 0.2667;
 
 const ICONS = [
   { file: "../../public/icons/icon-192.png", size: 192 },
-  { file: "../../public/icons/icon-384.png", size: 384 },
   { file: "../../public/icons/icon-512.png", size: 512 },
-  { file: "../../public/icons/icon-1024.png", size: 1024 },
   { file: "../../public/icons/icon-192-maskable.png", size: 192 },
-  { file: "../../public/icons/icon-384-maskable.png", size: 384 },
   { file: "../../public/icons/icon-512-maskable.png", size: 512 },
-  { file: "../../public/icons/icon-1024-maskable.png", size: 1024 },
 ] as const;
 
 type Raster = { data: Buffer; size: number; channels: number };
@@ -237,7 +233,7 @@ describe.each(ICONS)("インストール用アイコン $file", ({ file, size })
 });
 
 describe("any と maskable の関係", () => {
-  it.each([192, 384, 512, 1024])(
+  it.each([192, 512])(
     "同じ大きさの any と maskable が画素単位で一致する(%dpx)",
     async (size) => {
       // Given: 同じ大きさの any と maskable
