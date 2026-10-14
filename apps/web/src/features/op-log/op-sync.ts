@@ -123,6 +123,8 @@ export function createOpSync<Op extends OpBase, Base>(
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const listeners = new Set<() => void>();
   let disposed = false;
+  // 保存の途中の`append`。`whenPersisted`が終わりを待つ。
+  const persisting = new Set<Promise<void>>();
   // 列から外した操作。IndexedDBから読み直した行を、外した後に足し直さないために覚える。
   const retired = new Set<string>();
   let operations: OpSyncOperation<Op>[] = [];
@@ -548,7 +550,7 @@ export function createOpSync<Op extends OpBase, Base>(
       };
       items.push(item);
       emit();
-      return deps.store
+      const persisted = deps.store
         .append(
           {
             eventId: operation.eventId,
@@ -576,6 +578,13 @@ export function createOpSync<Op extends OpBase, Base>(
           if (deps.afterAppend) deps.afterAppend();
           else pump();
         });
+      persisting.add(persisted);
+      void persisted.finally(() => persisting.delete(persisted));
+      return persisted;
+    },
+    // 呼んだ時点で保存の途中の操作が全て終わる(失敗を含む)と解決し、拒否しない。再読み込みの前に呼び、保存の途中の操作を失わないため。
+    async whenPersisted(): Promise<void> {
+      await Promise.allSettled([...persisting]);
     },
     // IndexedDBから読んだ組(現在のユーザーの、その列の全件)をメモリの組へ合わせる。入出力を起こさず送信もしないため、描画中に呼んでよい。
     // ベースは新しい方を使う。確定済みの操作は、取得のベースをこのタブのベースにしたときはそのベースに反映済みのものを、共有の組のベースを取ったときは組から無くなったものを外す。それ以外では外さない。

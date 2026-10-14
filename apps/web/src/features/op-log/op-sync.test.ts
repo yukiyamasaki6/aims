@@ -193,6 +193,36 @@ describe("createOpSync", () => {
     await expect(sync.append(op("rec", "y"))).resolves.toBeUndefined();
   });
 
+  it("whenPersistedは、呼んだ時点で保存の途中の操作の完了(失敗を含む)まで解決しない", async () => {
+    const { sync, store } = setup();
+    let finish: (seq: number) => void = () => {};
+    store.append.mockReturnValueOnce(
+      new Promise<number>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    store.append.mockRejectedValueOnce(new Error("quota"));
+    sync.append(op("rec", "x"));
+    sync.append(op("rec", "y"));
+    let settled = false;
+
+    const persisted = sync.whenPersisted().then(() => {
+      settled = true;
+    });
+    await flushed();
+    expect(settled).toBe(false);
+    finish(1);
+    await persisted;
+
+    expect(settled).toBe(true);
+  });
+
+  it("whenPersistedは、保存の途中の操作が無ければすぐ解決する", async () => {
+    const { sync } = setup();
+
+    await expect(sync.whenPersisted()).resolves.toBeUndefined();
+  });
+
   it("成功すると確定したrevisionでackし、操作は列に残る", async () => {
     const { sync, sent, store } = setup();
     const first = op("rec", "x");
