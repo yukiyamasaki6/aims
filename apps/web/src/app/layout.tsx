@@ -4,12 +4,13 @@ import type { Metadata, Viewport } from "next";
 import { LocalIdentityProvider } from "@/features/auth/local-identity-provider";
 import "./globals.css";
 import { OpSyncProvider } from "./op-sync-provider";
+import { APP_DESCRIPTION } from "./pwa-constants";
 import { RoundBaseRefresher } from "./round-base-refresher";
 import { SwUpdateActivator } from "./sw-update-activator";
 
 export const metadata: Metadata = {
   title: "AIMS",
-  description: "AIMS Web Application",
+  description: APP_DESCRIPTION,
   manifest: "/manifest.webmanifest",
 };
 

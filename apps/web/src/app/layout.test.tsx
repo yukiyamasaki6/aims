@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { Children, isValidElement, type ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalIdentityProvider } from "@/features/auth/local-identity-provider";
-import RootLayout from "./layout";
+import RootLayout, { metadata, viewport } from "./layout";
 import { OpSyncProvider } from "./op-sync-provider";
 import { SwUpdateActivator } from "./sw-update-activator";
 
@@ -147,5 +147,29 @@ describe("RootLayout", () => {
         expect(props.disable).toBe(true);
       },
     );
+  });
+
+  describe("viewportとmetadata", () => {
+    it("width=device-widthとinitial-scale=1を持ち、拡大を禁じず、viewport-fitは指定しない", () => {
+      // Given
+      // When
+      const result = viewport;
+
+      // Then
+      expect(result).toMatchObject({ width: "device-width", initialScale: 1 });
+      expect(result).not.toHaveProperty("userScalable");
+      expect(result).not.toHaveProperty("maximumScale");
+      expect(result).not.toHaveProperty("viewportFit");
+    });
+
+    it("iOSの起動画面の指定を持たない", () => {
+      // Given
+      // When
+      const result = metadata;
+
+      // Then
+      expect(result).not.toHaveProperty("appleWebApp");
+      expect(result).not.toHaveProperty("other");
+    });
   });
 });
