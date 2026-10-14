@@ -87,26 +87,12 @@ beforeEach(() => {
   sw.matchPrecache.mockReset();
 });
 
-// sw.tsが登録するmessageリスナーと、self.skipWaiting()の呼び出し。
-const swScope = vi.hoisted(() => ({
-  messageListeners: [] as Array<(event: { data: unknown }) => void>,
-  skipWaiting: vi.fn(),
-}));
+// self.skipWaiting()の呼び出し。SKIP_WAITINGの待ち受けはSerwistが持つため、ここでは待機させる構成だけを確かめる。
+const swScope = vi.hoisted(() => ({ skipWaiting: vi.fn() }));
 
 beforeAll(async () => {
   vi.stubGlobal("__SW_MANIFEST", MANIFEST);
   vi.stubGlobal("skipWaiting", swScope.skipWaiting);
-  const add = self.addEventListener.bind(self);
-  vi.spyOn(self, "addEventListener").mockImplementation(
-    (type: string, listener: unknown, options?: unknown) => {
-      if (type === "message") {
-        swScope.messageListeners.push(
-          listener as (typeof swScope.messageListeners)[number],
-        );
-      }
-      add(type, listener as EventListener, options as boolean);
-    },
-  );
   await import("./sw");
 });
 
@@ -121,40 +107,28 @@ describe("sw", () => {
       expect(precacheEntries).toEqual(MANIFEST);
     });
 
+    it("新しいビルドを待機させる(skipWaitingを指定しない)", () => {
+      // Given
+      // When
+      const { skipWaiting } = config();
+
+      // Then
+      expect(skipWaiting).toBeFalsy();
+      expect(swScope.skipWaiting).not.toHaveBeenCalled();
+    });
+
+    it("初回の登録で最初の画面を制御する", () => {
+      // Given
+      // When
+      // Then
+      expect(config().clientsClaim).toBe(true);
+    });
+
     it("Service Workerのイベントリスナーを登録する", () => {
       // Given
       // When
       // Then
       expect(sw.addEventListeners).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe("有効化の再要求", () => {
-    it("SKIP_WAITINGメッセージを受けたらskipWaitingを呼ぶ", () => {
-      // Given
-      swScope.skipWaiting.mockClear();
-
-      // When
-      for (const listener of swScope.messageListeners) {
-        listener({ data: { type: "SKIP_WAITING" } });
-      }
-
-      // Then
-      expect(swScope.skipWaiting).toHaveBeenCalledTimes(1);
-    });
-
-    it("他のメッセージではskipWaitingを呼ばない", () => {
-      // Given
-      swScope.skipWaiting.mockClear();
-
-      // When
-      for (const listener of swScope.messageListeners) {
-        listener({ data: { type: "OTHER" } });
-        listener({ data: undefined });
-      }
-
-      // Then
-      expect(swScope.skipWaiting).not.toHaveBeenCalled();
     });
   });
 

@@ -268,6 +268,10 @@ export function createOpSyncHub<Op extends OpBase, Base>(
       for (const sender of senders.values()) sender.handleOnline();
     },
     getUserId: () => userId,
+    // 現在の全ての列で、呼んだ時点の保存の途中の操作が終わるまで解決しない。再読み込みの前に呼び、保存の途中の操作を失わないため。
+    async whenPersisted(): Promise<void> {
+      await Promise.all([...senders.values()].map((s) => s.whenPersisted()));
+    },
     // 現在の世代の読み込みが終わる(失敗を含む)まで解決しない。`start`前、`setUser`と`stop`の後は次の読み込みの完了まで待つ。
     ready,
     // 現在のユーザーの列の組を、返す。読み込みの完了後に読み、失敗は投げる。

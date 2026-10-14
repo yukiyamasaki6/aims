@@ -95,7 +95,7 @@ describe("RootLayout", () => {
       );
     });
 
-    it("waitingの新SWの有効化を再要求するSwUpdateActivatorを含める", () => {
+    it("画面の遷移で待機中の新SWを有効にするSwUpdateActivatorを含める", () => {
       // Given
       const children = <p>子要素</p>;
 

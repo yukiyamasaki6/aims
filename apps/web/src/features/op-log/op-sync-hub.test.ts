@@ -711,4 +711,37 @@ describe("readAll", () => {
 
     expect(all.get(STREAM)?.operations[0]?.confirmedFields).not.toBeUndefined();
   });
+
+  it("whenPersistedは、全ての列の保存の途中の操作が終わるまで解決しない", async () => {
+    const shared = sharedStore();
+    const tab = open(shared, undefined);
+    await flushed();
+    let finish: (seq: number) => void = () => {};
+    shared.store.append = vi.fn(
+      () =>
+        new Promise<number>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    tab.hub.acquire(STREAM).append(op("x"));
+    let settled = false;
+
+    const persisted = tab.hub.whenPersisted().then(() => {
+      settled = true;
+    });
+    await flushed();
+    expect(settled).toBe(false);
+    finish(1);
+    await persisted;
+
+    expect(settled).toBe(true);
+  });
+
+  it("whenPersistedは、保存の途中の操作が無ければすぐ解決する", async () => {
+    const shared = sharedStore();
+    const tab = open(shared, undefined);
+    await flushed();
+
+    await expect(tab.hub.whenPersisted()).resolves.toBeUndefined();
+  });
 });

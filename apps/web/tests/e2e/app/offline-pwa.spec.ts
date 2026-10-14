@@ -139,111 +139,280 @@ test("offline-pwa-17: 未認証のとき、/を開くと、iOSのホーム画面
   expect(response.headers()["content-type"]).toBe("image/png");
 });
 
+// 新しいビルドのService Workerが、プリキャッシュ対象の枠をこの目印付きで保存する。
+// 遷移先が新しいビルドの枠で表示されたかを、読み込んだ文書の本文で確かめるため。
+const NEW_BUILD_MARKER = '<meta name="e2e-build" content="2">';
+const NEW_REVISION = "e2e-new-build";
+
+// 新しいビルドを`NEW_SW_URL`の/sw.jsとして模す。
+// 新しいビルドは、プリキャッシュ対象のリビジョンが変わり、枠に目印が入った/sw.jsとして模す。
+// Playwrightは更新確認（registration.update()やナビゲーション時の確認）の取得を差し替えられないため、
+// サーバーに存在しない別URLとして登録して、新しいService Workerが現れる状況を作る。
+// 更新確認はサーバーへ届き404になって無視されるため、模擬の版が実際の/sw.jsに置き換わらない。
+const NEW_SW_URL = "/sw-e2e-new.js";
+
+async function routeNewBuild(page: Page, context: BrowserContext) {
+  const urls = await precachedUrls(page);
+  const revisions = ["/offline", ...FRAME_PATHS].map((path) => {
+    const revision = urls
+      .find((url) => url.includes(`${path}?__WB_REVISION__=`))
+      ?.split("__WB_REVISION__=")[1];
+    expect(revision, `${path}の旧リビジョン`).toBeDefined();
+    return revision as string;
+  });
+  const oldRevision = revisions[0];
+  const injectMarker = `
+const e2eFetch = self.fetch.bind(self);
+self.fetch = async (input, init) => {
+  const response = await e2eFetch(input, init);
+  const url = typeof input === "string" ? input : input.url;
+  if (!url.includes("/__shell/")) return response;
+  const html = (await response.text()).replace("<head>", "<head>" + ${JSON.stringify(NEW_BUILD_MARKER)});
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  headers.delete("content-encoding");
+  return new Response(html, { status: response.status, statusText: response.statusText, headers });
+};
+`;
+  // 読み込み直した文書で、SerwistProviderが/sw.jsを登録し直すと、登録のスクリプトのURLが
+  // 新しいビルドの模擬(NEW_SW_URL)から変わり、別の版として更新が始まる。
+  // 本番では登録のURLは変わらないため、模擬の登録の後は同じURLのまま登録させる。
+  await context.addInitScript((newSwUrl) => {
+    const register = ServiceWorkerContainer.prototype.register;
+    ServiceWorkerContainer.prototype.register = function (url, options) {
+      const useNew =
+        sessionStorage.getItem("e2eNewBuild") === "1" &&
+        String(url) === "/sw.js";
+      return register.call(this, useNew ? newSwUrl : url, options);
+    };
+  }, NEW_SW_URL);
+  await context.route(`**${NEW_SW_URL}`, async (route) => {
+    const response = await route.fetch({
+      url: new URL("/sw.js", route.request().url()).href,
+    });
+    let body = await response.text();
+    for (const revision of revisions) {
+      body = body.replaceAll(revision, NEW_REVISION);
+    }
+    await route.fulfill({ response, body: injectMarker + body });
+  });
+  return oldRevision;
+}
+
+// 新しいビルドのService Workerを登録し、待機するまで待つ。
+async function publishNewBuild(page: Page) {
+  await waitForQuietPage(page);
+  await page.evaluate(async (newSwUrl) => {
+    sessionStorage.setItem("e2eNewBuild", "1");
+    await navigator.serviceWorker.register(newSwUrl);
+  }, NEW_SW_URL);
+  await expect.poll(async () => (await workerState(page)).waiting).toBe(true);
+}
+
+type WorkerState = {
+  waiting: boolean;
+  activeNew: boolean;
+  controlledNew: boolean;
+};
+
+async function workerState(page: Page): Promise<WorkerState> {
+  return await page.evaluate(async (newSwUrl) => {
+    const registration = await navigator.serviceWorker.ready;
+    const isNew = (url: string | undefined) => url?.endsWith(newSwUrl) ?? false;
+    return {
+      waiting: isNew(registration.waiting?.scriptURL),
+      activeNew: isNew(registration.active?.scriptURL),
+      controlledNew: isNew(navigator.serviceWorker.controller?.scriptURL),
+    };
+  }, NEW_SW_URL);
+}
+
+// メインフレームが読み込んだ文書の本文を見て、新しいビルドの枠(目印付き)が表示されたかを返す。
+// 読み込みの途中で打ち切られた応答の本文は返らないことがあるため、解決した本文だけで判定する。
+function trackDocuments(page: Page): () => Promise<boolean> {
+  let shown = false;
+  page.on("response", (response) => {
+    if (
+      response.request().isNavigationRequest() &&
+      response.frame() === page.mainFrame()
+    ) {
+      void response
+        .text()
+        .then((body) => {
+          if (body.includes(NEW_BUILD_MARKER)) shown = true;
+        })
+        .catch(() => {});
+    }
+  });
+  return async () => shown;
+}
+
+// 再読み込みされていないことを確かめるため、文書に目印を置く。
+async function markDocument(page: Page) {
+  await page.evaluate(() => {
+    (window as unknown as { e2eDocument: boolean }).e2eDocument = true;
+  });
+}
+
+async function isSameDocument(page: Page) {
+  return await page.evaluate(
+    () => (window as unknown as { e2eDocument?: boolean }).e2eDocument === true,
+  );
+}
+
+// 認証済みで/roundsを開き、水和を待つ。
 // 未認証のまま/roundsを開くと、水和後にセッション喪失の判定が/signinへハードナビゲーションし、
-// 取得済みのレスポンス本文が破棄されて読めなくなる。認証済みにして、/roundsに留まらせる。
+// 取得済みのレスポンス本文が破棄されて読めなくなるため、認証済みにして/roundsに留まらせる。
+async function openRounds(page: Page) {
+  await openWithServiceWorker(page);
+  await page.goto("/rounds");
+  await waitForHydration(page);
+}
+
+// クライアント側の遷移(リンク)で/rounds/newへ移る。
+async function transitionByLink(page: Page) {
+  await page.getByTestId("new-round-fab").click();
+}
+
+// 遷移で切り替えを試み、新しいService Workerが有効になるまで待つ。
+// 旧Service Workerの停止と画面のfetchが重なると有効化が進まないことがあり(design.mdの制約)、
+// その遷移では切り替えず次の遷移で再び試みる。その動きに合わせ、有効にならなければ戻る遷移でもう一度試みる。
+async function transitionUntilSwitched(page: Page) {
+  await transitionByLink(page);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const switched = await expect
+      .poll(
+        async () => (await workerState(page).catch(() => null))?.activeNew,
+        {
+          timeout: 5_000,
+        },
+      )
+      .toBe(true)
+      .then(
+        () => true,
+        () => false,
+      );
+    if (switched) return;
+    await page.goBack();
+  }
+}
+
 test.describe("認証済みでService Workerの更新", () => {
   test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
-  test("offline-pwa-03: Service Workerが登録済みで新しいビルドが存在するとき、Service Workerの更新を確認すると、新しいService Workerが待機せず即座に有効になり、新しいビルドが参照される", async ({
+  test("offline-pwa-18: Service Workerが登録済みで新しいビルドが存在するとき、Service Workerの更新を確認すると、新しいService Workerが待機し、表示中の画面は旧ビルドのまま動く", async ({
     page,
     context,
   }) => {
     // Given: Service Workerが登録済みで、新しいビルドのService Workerが存在する
-    // 新しいビルドは、プリキャッシュ対象の/offlineのリビジョンが変わった/sw.jsとして模す。
-    // Playwrightは同じURLの更新確認（registration.update()）の取得を差し替えられないため、
-    // クエリ付きの別URLとして登録して、新しいService Workerが現れる状況を作る。
-    await openWithServiceWorker(page);
-    const oldRevision = (await precachedUrls(page))
-      .find((url) => url.includes("/offline?__WB_REVISION__="))
-      ?.split("__WB_REVISION__=")[1];
-    expect(oldRevision).toBeDefined();
-    const newRevision = "e2e-new-build";
-    // 枠3件のリビジョンも差し替える。
-    const oldFrameRevisions = new Map<string, string>();
-    for (const frame of FRAME_PATHS) {
-      const revision = (await precachedUrls(page))
-        .find((url) => url.includes(`${frame}?__WB_REVISION__=`))
-        ?.split("__WB_REVISION__=")[1];
-      expect(revision, `${frame}の旧リビジョン`).toBeDefined();
-      oldFrameRevisions.set(frame, revision as string);
-    }
-    await context.route("**/sw.js*", async (route) => {
-      const response = await route.fetch();
-      let body = (await response.text()).replaceAll(
-        oldRevision as string,
-        newRevision,
-      );
-      for (const revision of oldFrameRevisions.values()) {
-        body = body.replaceAll(revision, newRevision);
-      }
-      await route.fulfill({ response, body });
-    });
+    await openRounds(page);
+    await routeNewBuild(page, context);
+    await markDocument(page);
 
     // When: Service Workerの更新を確認する
-    await waitForQuietPage(page);
-    await page.evaluate(async () => {
-      await navigator.serviceWorker.register("/sw.js?build=2");
-    });
+    await publishNewBuild(page);
 
-    // Then: 新しいService Workerが待機せず即座に有効になり、新しいビルドが参照される
+    // Then: 新しいService Workerが待機し、旧ビルドが有効で制御したまま、画面は再読み込みされない
+    expect(await workerState(page)).toEqual({
+      waiting: true,
+      activeNew: false,
+      controlledNew: false,
+    });
+    await page.waitForTimeout(2_000);
+    expect((await workerState(page)).activeNew).toBe(false);
+    expect(await isSameDocument(page)).toBe(true);
+    await expect(
+      page.getByRole("heading", { name: "ラウンド一覧" }),
+    ).toBeVisible();
+  });
+
+  test("offline-pwa-20: Service Workerが登録済みで、画面を開いた後に新しいビルドが公開されたとき、他の画面へ遷移すると、新しいService Workerが待機する", async ({
+    page,
+    context,
+  }) => {
+    // Given: Service Workerが登録済みで、画面を開いた後に新しいビルドが公開された
+    // Playwrightは同じURLの更新確認の取得を差し替えられないため、遷移で呼ばれるupdate()を
+    // 新しいビルドの登録に置き換えて、公開を模す。
+    await context.addInitScript((newSwUrl) => {
+      ServiceWorkerRegistration.prototype.update = () => {
+        sessionStorage.setItem("e2eNewBuild", "1");
+        return navigator.serviceWorker.register(newSwUrl);
+      };
+    }, NEW_SW_URL);
+    await openRounds(page);
+    await routeNewBuild(page, context);
+    await markDocument(page);
+    await waitForQuietPage(page);
+
+    // When: 他の画面へ遷移する
+    await transitionByLink(page);
+    await expect(page).toHaveURL(/\/rounds\/new$/);
+
+    // Then: 新しいService Workerが待機する(遷移の時点では切り替えない)
+    await expect.poll(async () => (await workerState(page)).waiting).toBe(true);
+    expect((await workerState(page)).activeNew).toBe(false);
+    expect(await isSameDocument(page)).toBe(true);
+  });
+
+  test("offline-pwa-03: Service Workerが登録済みで新しいビルドのService Workerが待機しているとき、他の画面へ遷移すると、遷移先が新しいビルドで表示される", async ({
+    page,
+    context,
+  }) => {
+    // Given: Service Workerが登録済みで、新しいビルドのService Workerが待機している
+    await openRounds(page);
+    const oldRevision = await routeNewBuild(page, context);
+    const shownNewBuild = trackDocuments(page);
+    await publishNewBuild(page);
+
+    // When: 他の画面へ遷移する
+    await transitionUntilSwitched(page);
+
+    // Then: 遷移先が新しいビルドで表示される(新しい枠で読み込み直される)
+    await expect(page).toHaveURL(/\/rounds(\/new)?$/);
+    await expect.poll(shownNewBuild, { timeout: 15_000 }).toBe(true);
+    // 読み込み直した文書の登録の確認が、同じ模擬のURLの版を再び待機させることがあるため、待機の有無は問わない。
     await expect
       .poll(
-        async () =>
-          page.evaluate(async () => {
-            const registration = await navigator.serviceWorker.ready;
-            return {
-              waiting: registration.waiting?.scriptURL ?? null,
-              active: registration.active?.scriptURL.endsWith("/sw.js?build=2"),
-              activeState: registration.active?.state,
-              controlled:
-                navigator.serviceWorker.controller?.scriptURL.endsWith(
-                  "/sw.js?build=2",
-                ) ?? false,
-            };
-          }),
+        async () => {
+          const { activeNew, controlledNew } = await workerState(page);
+          return { activeNew, controlledNew };
+        },
         { timeout: 10_000 },
       )
-      .toEqual({
-        waiting: null,
-        active: true,
-        activeState: "activated",
-        controlled: true,
-      });
-    const urls = await precachedUrls(page);
-    expect(urls.some((url) => url.endsWith(`=${newRevision}`))).toBe(true);
-    expect(urls.some((url) => url.endsWith(`=${oldRevision}`))).toBe(false);
-    // 枠も新しいリビジョンに入れ替わり、旧リビジョンの枠は消える。
-    for (const [frame, revision] of oldFrameRevisions) {
-      expect(
-        urls.some((url) =>
-          url.endsWith(`${frame}?__WB_REVISION__=${newRevision}`),
-        ),
-        `${frame}が新リビジョンで入ること`,
-      ).toBe(true);
-      expect(
-        urls.some((url) => url.endsWith(`=${revision}`)),
-        `${frame}の旧リビジョンが消えること`,
-      ).toBe(false);
-    }
-    // 更新後の/roundsのナビゲーションが、新リビジョンの枠(キャッシュ内の本文)を返す。
-    // オフラインにして、キャッシュ以外から返せない状態で確かめる。
-    const cachedFrame = await page.evaluate(async (revision) => {
-      const cache = await caches.open(
-        (await caches.keys()).find((name) =>
-          name.startsWith("serwist-precache"),
-        ) as string,
-      );
-      const hit = await cache.match(
-        `/__shell/rounds?__WB_REVISION__=${revision}`,
-      );
-      return hit ? await hit.text() : null;
-    }, newRevision);
-    expect(cachedFrame, "新リビジョンの枠の本文").not.toBeNull();
-    await context.unroute("**/sw.js*");
-    await context.setOffline(true);
-    const response = await page.goto("/rounds");
-    expect(response?.fromServiceWorker()).toBe(true);
-    expect(await response?.text()).toBe(cachedFrame);
+      .toEqual({ activeNew: true, controlledNew: true });
+    // 旧リビジョンの削除は有効化の後に非同期で行われるため、待って確かめる。
+    await expect
+      .poll(async () => {
+        const urls = await precachedUrls(page);
+        return {
+          hasNew: urls.some((url) => url.endsWith(`=${NEW_REVISION}`)),
+          hasOld: urls.some((url) => url.endsWith(`=${oldRevision}`)),
+        };
+      })
+      .toEqual({ hasNew: true, hasOld: false });
+  });
+
+  test("offline-pwa-19: Service Workerが登録済みで認証済みでオフラインで、新しいビルドのService Workerが待機しているとき、他の画面へ遷移すると、遷移先が新しいビルドの枠で表示される", async ({
+    page,
+    context,
+  }) => {
+    // Given: Service Workerが登録済みで認証済みでオフラインで、新しいビルドのService Workerが待機している
+    await openRounds(page);
+    await routeNewBuild(page, context);
+    const shownNewBuild = trackDocuments(page);
+    await publishNewBuild(page);
+    await context.unroute(`**${NEW_SW_URL}`);
+    await goOffline(context);
+
+    // When: 他の画面へ遷移する
+    await transitionUntilSwitched(page);
+
+    // Then: 遷移先が新しいビルドの枠で表示される
+    await expect.poll(shownNewBuild, { timeout: 15_000 }).toBe(true);
+    await expect(page).toHaveURL(/\/rounds(\/new)?$/);
+    await expect(
+      page.getByText("ネットワークに接続されていません"),
+    ).toBeVisible();
   });
 });
 

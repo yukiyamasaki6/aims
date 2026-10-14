@@ -77,7 +77,9 @@ const runtimeCaching: RuntimeCaching[] = [
 
 const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
-  skipWaiting: true,
+  // 新しいビルドは待機させ、ページ(SwUpdateActivator)のSKIP_WAITINGで有効にする
+  // （Serwistが既定で待ち受ける）。clientsClaimは、初回の登録で最初の画面を
+  // 制御するために残す。
   clientsClaim: true,
   // 枠はキャッシュ優先で返すため、プリロードの取得は捨てられ無駄になる。
   navigationPreload: false,
@@ -113,13 +115,3 @@ const serwist = new Serwist({
 });
 
 serwist.addEventListeners();
-
-// skipWaiting: trueのSerwistはSKIP_WAITINGメッセージを待ち受けないため、ここで
-// 受ける。更新時に旧SWの停止と制御下のページのfetchが重なると、旧SWが再起動して
-// 新SWがwaitingのまま残る（旧SWのアイドル停止、最大約30秒まで）ことがあり、
-// ページ側（SwUpdateActivator）が検知してこのメッセージで有効化を再要求する。
-self.addEventListener("message", (event) => {
-  if (event.data?.type === "SKIP_WAITING") {
-    void self.skipWaiting();
-  }
-});
