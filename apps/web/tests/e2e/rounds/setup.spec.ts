@@ -624,9 +624,73 @@ test("setup-18: 距離に記録済みの得点があるとき、距離概要を�
   await page.getByTestId("distance-config-toggle-1").click();
 
   // Then
-  await expect(page.getByTestId("target-face-picker-trigger")).toBeDisabled();
-  await expect(page.getByTestId("distance-config-arrows-1")).toBeDisabled();
-  await expect(page.getByTestId("distance-config-total-ends-1")).toBeDisabled();
+  await expect(page.getByTestId("target-face-picker-trigger")).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  await expect(page.getByTestId("distance-config-arrows-1")).toHaveAttribute(
+    "readonly",
+    "",
+  );
+  await expect(
+    page.getByTestId("distance-config-total-ends-1"),
+  ).toHaveAttribute("readonly", "");
+});
+
+test("setup-39: ラウンド詳細画面で距離に記録済みの得点がある、距離編集ダイアログのとき、エンドあたりの本数をクリックすると、記録済みの得点があるため変更できないというメッセージが表示される。本数は変更されない", async ({
+  page,
+}) => {
+  // Given
+  await openRoundWithShot(page);
+  await page.getByTestId("distance-config-toggle-1").click();
+
+  // When
+  const input = page.getByTestId("distance-config-arrows-1");
+  const before = await input.inputValue();
+  await input.click();
+
+  // Then
+  await expect(
+    page.getByTestId("distance-config-arrows-1-locked-message"),
+  ).toBeVisible();
+  await expect(input).toHaveValue(before);
+});
+
+test("setup-40: ラウンド詳細画面で距離に記録済みの得点がある、距離編集ダイアログのとき、総エンド数をクリックすると、記録済みの得点があるため変更できないというメッセージが表示される。総エンド数は変更されない", async ({
+  page,
+}) => {
+  // Given
+  await openRoundWithShot(page);
+  await page.getByTestId("distance-config-toggle-1").click();
+
+  // When
+  const input = page.getByTestId("distance-config-total-ends-1");
+  const before = await input.inputValue();
+  await input.click();
+
+  // Then
+  await expect(
+    page.getByTestId("distance-config-total-ends-1-locked-message"),
+  ).toBeVisible();
+  await expect(input).toHaveValue(before);
+});
+
+test("setup-41: ラウンド詳細画面で距離に記録済みの得点がある、距離編集ダイアログのとき、的をクリックすると、記録済みの得点があるため変更できないというメッセージが表示される。的選択ダイアログが開かない", async ({
+  page,
+}) => {
+  // Given
+  await openRoundWithShot(page);
+  await page.getByTestId("distance-config-toggle-1").click();
+
+  // When
+  // aria-disabled="true"の要素はPlaywrightが操作可能と見なさないため、forceで押す
+  await page.getByTestId("target-face-picker-trigger").click({ force: true });
+
+  // Then
+  await expect(
+    page.getByTestId("distance-config-target-face-locked-message"),
+  ).toBeVisible();
+  await expect(page.getByTestId("target-face-format-tab-all")).toBeHidden();
 });
 
 test("setup-19: ラウンド編集ダイアログで内容を変更しているとき、背景をクリックすると、変更が破棄され、ダイアログが閉じられる", async ({

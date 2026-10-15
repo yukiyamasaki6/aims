@@ -149,22 +149,105 @@ describe("DistanceEditFields", () => {
     });
 
     describe("hasShotsがtrueの場合", () => {
-      it("的・本数・エンド数の入力が無効化される（距離は編集可能）", () => {
+      it("的・本数・エンド数が編集不可になる（距離は編集可能）", () => {
         // Given: スコア記録済みの距離
         const props = { hasShots: true };
 
         // When: 表示する
         setup(props);
 
-        // Then: 距離以外の入力が無効になる
-        expect(screen.getByTestId("target-face-picker-trigger")).toBeDisabled();
-        expect(screen.getByTestId("distance-config-arrows-1")).toBeDisabled();
+        // Then: 距離以外は読み取り専用、的は操作不可を示す
+        expect(
+          screen.getByTestId("target-face-picker-trigger"),
+        ).toHaveAttribute("aria-disabled", "true");
+        expect(screen.getByTestId("distance-config-arrows-1")).toHaveAttribute(
+          "readonly",
+        );
         expect(
           screen.getByTestId("distance-config-total-ends-1"),
-        ).toBeDisabled();
+        ).toHaveAttribute("readonly");
         expect(
           screen.getByTestId("distance-config-distance-1"),
-        ).not.toBeDisabled();
+        ).not.toHaveAttribute("readonly");
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      });
+
+      it.each([
+        ["distance-config-arrows-1", "本数"],
+        ["distance-config-total-ends-1", "総エンド数"],
+      ])(
+        "%sを押すとメッセージが表示され、値は変わらない（%s）",
+        async (testId) => {
+          // Given: スコア記録済みの距離
+          const user = userEvent.setup();
+          const { onSaved } = setup({ hasShots: true });
+          const input = screen.getByTestId(testId);
+          const before = (input as HTMLInputElement).value;
+
+          // When: 押して入力を試みる
+          await user.click(input);
+          await user.type(input, "9");
+
+          // Then: 理由が表示され、値は変わらない
+          expect(screen.getByRole("alert")).toHaveTextContent(
+            "スコアが記録済みのため変更できません",
+          );
+          expect(
+            screen.getByTestId(`${testId}-locked-message`),
+          ).toBeInTheDocument();
+          expect(input).toHaveAttribute("aria-describedby", `${testId}-locked`);
+          expect((input as HTMLInputElement).value).toBe(before);
+          expect(onSaved).not.toHaveBeenCalled();
+        },
+      );
+
+      it("的を押すとメッセージが表示され、的選択ダイアログは開かない", async () => {
+        // Given: スコア記録済みの距離
+        const user = userEvent.setup();
+        const { onSaved } = setup({ hasShots: true });
+
+        // When: 的を押す
+        await user.click(screen.getByTestId("target-face-picker-trigger"));
+
+        // Then: 理由が表示され、一覧は開かない
+        expect(
+          screen.getByTestId("distance-config-target-face-locked-message"),
+        ).toHaveTextContent("スコアが記録済みのため変更できません");
+        expect(
+          screen.queryByTestId(
+            `target-face-option-${targetFaceOutdoorRecurve.id}`,
+          ),
+        ).not.toBeInTheDocument();
+        expect(onSaved).not.toHaveBeenCalled();
+      });
+
+      it("別の項目を押すと、メッセージは押した項目に移る", async () => {
+        // Given: 本数を押してメッセージが出ている
+        const user = userEvent.setup();
+        setup({ hasShots: true });
+        await user.click(screen.getByTestId("distance-config-arrows-1"));
+
+        // When: 総エンド数を押す
+        await user.click(screen.getByTestId("distance-config-total-ends-1"));
+
+        // Then: メッセージは1つで、総エンド数の直下にある
+        expect(screen.getAllByRole("alert")).toHaveLength(1);
+        expect(
+          screen.getByTestId("distance-config-total-ends-1-locked-message"),
+        ).toBeInTheDocument();
+      });
+
+      it("距離とMarked/Unmarkedを押してもメッセージは表示されない", async () => {
+        // Given: スコア記録済みのフィールドの距離
+        const user = userEvent.setup();
+        setup({ hasShots: true, roundFormat: "field" });
+
+        // When: 距離とMarkedを押す
+        await user.click(screen.getByTestId("distance-config-distance-1"));
+        await user.click(screen.getByTestId("distance-config-marked-1"));
+
+        // Then: メッセージは出ない
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       });
 
       it("的選択トリガーのラベルに変更不可の理由を示す", () => {
@@ -214,7 +297,7 @@ describe("DistanceEditFields", () => {
           "的データを取得できません（タップで変更）",
         );
         expect(trigger).toHaveTextContent("的データを取得できません");
-        expect(trigger).not.toBeDisabled();
+        expect(trigger).not.toHaveAttribute("aria-disabled");
         await user.click(trigger);
 
         // Then: 一覧から的を選び直せる
@@ -225,12 +308,12 @@ describe("DistanceEditFields", () => {
         ).toBeInTheDocument();
       });
 
-      it("スコア記録済みなら、トリガーは無効になる", () => {
+      it("スコア記録済みなら、トリガーは操作不可になる", () => {
         setup({ ...props, hasShots: true });
 
         expect(
           screen.getByLabelText("的（スコア記録済みのため変更不可）"),
-        ).toBeDisabled();
+        ).toHaveAttribute("aria-disabled", "true");
       });
     });
   });

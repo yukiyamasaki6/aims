@@ -45,12 +45,30 @@ const BOW_TYPE_FILTER_OPTIONS = [
   ...BOW_TYPE_OPTIONS,
 ];
 
+const LOCKED_MESSAGE = "スコアが記録済みのため変更できません";
+
+type LockedField = "arrows" | "total-ends" | "target-face";
+
+// 編集不可の項目を押したときに、その項目の直下へ出す理由。
+function LockedMessage({ id, testId }: { id: string; testId: string }) {
+  return (
+    <p
+      id={id}
+      role="alert"
+      data-testid={testId}
+      className="text-muted-foreground text-sm"
+    >
+      {LOCKED_MESSAGE}
+    </p>
+  );
+}
+
 function triggerLabel(
   selected: TargetFaceOption | "missing",
-  disabled: boolean | undefined,
+  locked: boolean | undefined,
 ): string {
   const name = typeof selected === "string" ? "的" : selected.name;
-  if (disabled) return `${name}（スコア記録済みのため変更不可）`;
+  if (locked) return `${name}（スコア記録済みのため変更不可）`;
   if (selected === "missing") return "的データを取得できません（タップで変更）";
   return `${name}（タップで変更）`;
 }
@@ -65,14 +83,18 @@ function TargetFacePicker({
   roundFormat,
   roundBowType,
   onSelect,
-  disabled,
+  locked,
+  onLockedPress,
+  describedBy,
 }: {
   targetFaces: TargetFaceOption[];
   selectedId: string;
   roundFormat: string;
   roundBowType: string;
   onSelect: (id: string) => void;
-  disabled?: boolean;
+  locked?: boolean;
+  onLockedPress?: () => void;
+  describedBy?: string;
 }) {
   const [open, setOpen] = useState(false);
   // ラウンドの種別・弓種に対応するタブを既定にする。選び直した場合はダイアログを
@@ -88,12 +110,16 @@ function TargetFacePicker({
   );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => (locked ? onLockedPress?.() : setOpen(next))}
+    >
       <DialogTrigger
         data-testid="target-face-picker-trigger"
-        disabled={disabled}
-        aria-label={triggerLabel(selected, disabled)}
-        className="w-full disabled:cursor-not-allowed disabled:opacity-50"
+        aria-disabled={locked ? true : undefined}
+        aria-describedby={describedBy}
+        aria-label={triggerLabel(selected, locked)}
+        className={cn("w-full", locked && "cursor-not-allowed opacity-50")}
       >
         <TargetFaceInfo face={selected} />
       </DialogTrigger>
@@ -277,7 +303,9 @@ function NumberField({
   distanceNumber,
   value,
   error,
-  disabled,
+  locked,
+  lockedMessage,
+  onLockedPress,
   onChange,
 }: {
   label: string;
@@ -285,7 +313,9 @@ function NumberField({
   distanceNumber: number;
   value: number | null;
   error: string | undefined;
-  disabled?: boolean;
+  locked?: boolean;
+  lockedMessage?: boolean;
+  onLockedPress?: () => void;
   onChange: (value: number | null) => void;
 }) {
   const id = `distance-config-${slug}-${distanceNumber}`;
@@ -297,7 +327,11 @@ function NumberField({
       <Input
         id={id}
         type="number"
-        disabled={disabled}
+        readOnly={locked}
+        aria-readonly={locked ? true : undefined}
+        aria-describedby={lockedMessage ? `${id}-locked` : undefined}
+        onClick={locked ? onLockedPress : undefined}
+        className={cn(locked && "cursor-not-allowed opacity-50")}
         data-testid={id}
         value={value ?? ""}
         onChange={(e) =>
@@ -305,6 +339,9 @@ function NumberField({
         }
         aria-invalid={Boolean(error)}
       />
+      {lockedMessage && (
+        <LockedMessage id={`${id}-locked`} testId={`${id}-locked-message`} />
+      )}
       {error && <p className="text-destructive text-sm">{error}</p>}
     </div>
   );
@@ -373,6 +410,51 @@ function useDistanceEdit({
   };
 }
 
+function TargetFaceField({
+  distanceNumber,
+  targetFaces,
+  selectedId,
+  roundFormat,
+  roundBowType,
+  onSelect,
+  locked,
+  showLockedMessage,
+  onLockedPress,
+}: {
+  distanceNumber: number;
+  targetFaces: TargetFaceOption[];
+  selectedId: string;
+  roundFormat: string;
+  roundBowType: string;
+  onSelect: (id: string) => void;
+  locked: boolean;
+  showLockedMessage: boolean;
+  onLockedPress: () => void;
+}) {
+  const messageId = `distance-config-target-face-locked-${distanceNumber}`;
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-muted-foreground text-xs">的</span>
+      <TargetFacePicker
+        targetFaces={targetFaces}
+        selectedId={selectedId}
+        roundFormat={roundFormat}
+        roundBowType={roundBowType}
+        onSelect={onSelect}
+        locked={locked}
+        onLockedPress={onLockedPress}
+        describedBy={showLockedMessage ? messageId : undefined}
+      />
+      {showLockedMessage && (
+        <LockedMessage
+          id={messageId}
+          testId="distance-config-target-face-locked-message"
+        />
+      )}
+    </div>
+  );
+}
+
 function DistanceFields({
   distanceNumber,
   draft,
@@ -392,6 +474,8 @@ function DistanceFields({
   roundBowType: string;
   hasShots: boolean;
 }) {
+  // 押した編集不可の項目だけに理由を出す。別の項目を押すと移る。
+  const [pressedLocked, setPressedLocked] = useState<LockedField | null>(null);
   return (
     <>
       {roundFormat === "field" && (
@@ -417,7 +501,9 @@ function DistanceFields({
         distanceNumber={distanceNumber}
         value={draft.arrowsPerEnd}
         error={fieldErrors.arrowsPerEnd}
-        disabled={hasShots}
+        locked={hasShots}
+        lockedMessage={pressedLocked === "arrows"}
+        onLockedPress={() => setPressedLocked("arrows")}
         onChange={(v) => setDraft((d) => ({ ...d, arrowsPerEnd: v }))}
       />
 
@@ -427,21 +513,23 @@ function DistanceFields({
         distanceNumber={distanceNumber}
         value={draft.totalEnds}
         error={fieldErrors.totalEnds}
-        disabled={hasShots}
+        locked={hasShots}
+        lockedMessage={pressedLocked === "total-ends"}
+        onLockedPress={() => setPressedLocked("total-ends")}
         onChange={(v) => setDraft((d) => ({ ...d, totalEnds: v }))}
       />
 
-      <div className="flex flex-col gap-1">
-        <span className="text-muted-foreground text-xs">的</span>
-        <TargetFacePicker
-          targetFaces={targetFaces}
-          selectedId={draft.targetFaceId}
-          roundFormat={roundFormat}
-          roundBowType={roundBowType}
-          onSelect={(id) => setDraft((d) => ({ ...d, targetFaceId: id }))}
-          disabled={hasShots}
-        />
-      </div>
+      <TargetFaceField
+        distanceNumber={distanceNumber}
+        targetFaces={targetFaces}
+        selectedId={draft.targetFaceId}
+        roundFormat={roundFormat}
+        roundBowType={roundBowType}
+        onSelect={(id) => setDraft((d) => ({ ...d, targetFaceId: id }))}
+        locked={hasShots}
+        showLockedMessage={pressedLocked === "target-face"}
+        onLockedPress={() => setPressedLocked("target-face")}
+      />
     </>
   );
 }
