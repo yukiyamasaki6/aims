@@ -7,15 +7,18 @@ import {
   roundUpdated,
   shotCleared,
   shotRecorded,
-} from "../_shared/round-op-test-helpers";
-import type { SyncOperation } from "../_shared/sync-events";
+} from "@/features/rounds/round-op-test-helpers";
+import {
+  type RoundTables,
+  roundTablesFromServer,
+} from "@/features/rounds/round-tables";
+import type { ScoringTargetFace } from "@/features/rounds/scorecard-scoring";
+import type { SyncOperation } from "@/features/rounds/sync-events";
 import {
   completionConfirmation,
   reopenOperation,
   statusOperation,
 } from "./round-progress";
-import { type RoundTables, roundTablesFromServer } from "./round-tables";
-import type { ScoringTargetFace } from "./scorecard-scoring";
 
 const ring = (scoreStr: string, scoreInt: number, zIndex: number) => ({
   score_str: scoreStr,

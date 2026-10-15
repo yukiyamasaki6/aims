@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import type { RoundStatus } from "../_shared/sync-events";
+import type { RoundStatus } from "@/features/rounds/sync-events";
 
 // 入力中のラウンドの最下部に出す、入力を完了にする帯。完了のラウンドでは出さない。
 // 確認の文言があるときは、確認してから完了にする。

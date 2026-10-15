@@ -3,13 +3,16 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getLocalIdentity } from "@/features/auth/local-identity";
-import { roundOpHub } from "../_shared/round-op-hub";
-import { roundOpLog, roundStreamId } from "../_shared/round-op-log";
-import { roundOpStore } from "../_shared/round-op-store";
-import { roundUpdated, shotRecorded } from "../_shared/round-op-test-helpers";
-import { sendRoundBatch } from "../_shared/round-op-transport";
+import { roundOpHub } from "@/features/rounds/round-op-hub";
+import { roundOpLog, roundStreamId } from "@/features/rounds/round-op-log";
+import { roundOpStore } from "@/features/rounds/round-op-store";
+import {
+  roundUpdated,
+  shotRecorded,
+} from "@/features/rounds/round-op-test-helpers";
+import { sendRoundBatch } from "@/features/rounds/round-op-transport";
+import { roundTablesFromServer } from "@/features/rounds/round-tables";
 import { type LoadedRound, loadRoundDetail } from "./load-round-detail";
-import { roundTablesFromServer } from "./round-tables";
 import { useRoundOpStack } from "./use-round-op-stack";
 
 vi.mock("./load-round-detail", () => ({ loadRoundDetail: vi.fn() }));
@@ -19,7 +22,9 @@ vi.mock("@/features/op-log/sync-result", async (importOriginal) => ({
   retryDelayMs: vi.fn(() => 10),
 }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: vi.fn(() => ({})) }));
-vi.mock("../_shared/round-op-transport", () => ({ sendRoundBatch: vi.fn() }));
+vi.mock("@/features/rounds/round-op-transport", () => ({
+  sendRoundBatch: vi.fn(),
+}));
 const send = vi.mocked(sendRoundBatch);
 const reload = vi.mocked(loadRoundDetail);
 

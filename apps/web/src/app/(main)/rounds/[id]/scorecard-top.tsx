@@ -1,12 +1,12 @@
-import type { SyncOperation } from "../_shared/sync-events";
+import type { RoundConfig } from "@/features/rounds/round-config";
+import type { summarizeRound } from "@/features/rounds/scorecard-scoring";
+import type { Distance } from "@/features/rounds/scorecard-types";
+import type { SyncOperation } from "@/features/rounds/sync-events";
+import type { TargetFaceOption } from "@/features/rounds/target-face-types";
 import { BackToListLink } from "./back-to-list-link";
-import type { TargetFaceOption } from "./distance-config-row";
-import type { RoundConfig } from "./round-config";
 import { RoundConfigPanel } from "./round-config-panel";
 import { RoundMenu } from "./round-menu";
 import { SavePresetDialog } from "./save-preset-dialog";
-import type { summarizeRound } from "./scorecard-scoring";
-import type { Distance } from "./scorecard-types";
 
 // 一覧へ戻る・プリセット保存・メニューは常時使えてほしい操作のため、
 // スクロール領域（<main>）の外の上端に置く。stickyにせず、行がこの裏に入らない。

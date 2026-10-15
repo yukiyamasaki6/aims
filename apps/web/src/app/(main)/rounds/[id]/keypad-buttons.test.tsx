@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { Distance } from "@/features/rounds/scorecard-types";
 import { KeypadButtons } from "./keypad-buttons";
-import type { Distance } from "./scorecard-types";
 import type { ScoreHistory } from "./use-score-history";
 import type { ShotInput } from "./use-shot-input";
 

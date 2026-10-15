@@ -7,12 +7,14 @@ import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { sessionFailureMessage } from "@/features/auth/errors";
 import { readSession } from "@/features/auth/session-state";
+import { compareDistancePosition } from "@/features/rounds/scorecard-scoring";
+import type { Distance } from "@/features/rounds/scorecard-types";
+import type { TargetFaceOption } from "@/features/rounds/target-face-types";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { fetchPresets } from "../_shared/fetch-presets";
 import { PresetInfo } from "../_shared/preset-info";
 import { lookupTargetFace } from "../_shared/target-face-icon";
-import { fetchPresets } from "../new/fetch-presets";
-import type { TargetFaceOption } from "./distance-config-row";
 import {
   CLOSED_PRESET_DIALOG,
   changePresetDialogOpen,
@@ -22,8 +24,6 @@ import {
   type SaveRoundAsPresetArgs,
   startPresetSave,
 } from "./scorecard-preset";
-import { compareDistancePosition } from "./scorecard-scoring";
-import type { Distance } from "./scorecard-types";
 
 async function saveRoundAsPreset(
   args: SaveRoundAsPresetArgs,

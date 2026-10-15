@@ -7,16 +7,16 @@ import {
 } from "@/features/fetch-result/fetch-content";
 import { FETCH_ERROR_MESSAGE } from "@/features/fetch-result/fetch-result";
 import type { Database } from "@/types/supabase";
-import { TARGET_FACE_SELECT } from "../_shared/reference-query-constants";
-import {
-  loadReferenceSnapshot,
-  saveReferenceSnapshot,
-} from "../_shared/reference-snapshot";
 import {
   fetchRoundDetail,
   fetchRoundDetails,
   fetchTargetFaces,
 } from "./fetch-round-detail";
+import { TARGET_FACE_SELECT } from "./reference-query-constants";
+import {
+  loadReferenceSnapshot,
+  saveReferenceSnapshot,
+} from "./reference-snapshot";
 
 beforeEach(() => {
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);

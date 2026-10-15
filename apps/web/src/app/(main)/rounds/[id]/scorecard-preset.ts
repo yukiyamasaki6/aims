@@ -1,7 +1,7 @@
-import { NAME_MAX_LENGTH } from "../_shared/round-constants";
+import { NAME_MAX_LENGTH } from "@/features/rounds/round-constants";
+import { compareDistancePosition } from "@/features/rounds/scorecard-scoring";
+import type { Distance } from "@/features/rounds/scorecard-types";
 import { nextPositionKey } from "./scorecard-distances";
-import { compareDistancePosition } from "./scorecard-scoring";
-import type { Distance } from "./scorecard-types";
 
 // プリセット保存ダイアログの状態。
 export type PresetDialogState = {

@@ -1,12 +1,14 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { deletePresetFromSnapshot } from "../_shared/fetch-presets";
+import type { Preset } from "../_shared/preset-types";
 import { deletePersonalPreset } from "./delete-preset";
-import { deletePresetFromSnapshot } from "./fetch-presets";
-import type { Preset } from "./preset-types";
 import { usePresetDelete } from "./use-preset-delete";
 
 vi.mock("./delete-preset", () => ({ deletePersonalPreset: vi.fn() }));
-vi.mock("./fetch-presets", () => ({ deletePresetFromSnapshot: vi.fn() }));
+vi.mock("../_shared/fetch-presets", () => ({
+  deletePresetFromSnapshot: vi.fn(),
+}));
 
 const del = vi.mocked(deletePersonalPreset);
 const preset: Preset = {

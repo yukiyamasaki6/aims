@@ -1,8 +1,8 @@
 import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
-import { roundOpLog } from "../_shared/round-op-log";
-import type { Preset } from "./preset-types";
+import { roundOpLog } from "@/features/rounds/round-op-log";
+import type { Preset } from "../_shared/preset-types";
 import { startRound } from "./start-round";
 
 // SupabaseのSDKは外部サービスとの境界のため、セッションの確認結果を任意に制御できるスタブで模す。
@@ -13,7 +13,7 @@ vi.mock("@supabase/ssr", () => ({
 
 // 端末の操作の列(IndexedDBへの保存と常駐の送信)は別のテストで確かめるため、列への入り口を境界としてモックする。
 const hub = vi.hoisted(() => ({ acquire: vi.fn(), append: vi.fn() }));
-vi.mock("../_shared/round-op-log", () => ({
+vi.mock("@/features/rounds/round-op-log", () => ({
   roundOpLog: { round: hub.acquire },
 }));
 

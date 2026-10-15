@@ -6,12 +6,12 @@ import {
   FETCH_TIMEOUT_MS,
 } from "@/features/fetch-result/fetch-content";
 import { FETCH_ERROR_MESSAGE } from "@/features/fetch-result/fetch-result";
-import type { Database } from "@/types/supabase";
-import { ROUND_PRESET_SELECT } from "../_shared/reference-query-constants";
+import { ROUND_PRESET_SELECT } from "@/features/rounds/reference-query-constants";
 import {
   loadReferenceSnapshot,
   saveReferenceSnapshot,
-} from "../_shared/reference-snapshot";
+} from "@/features/rounds/reference-snapshot";
+import type { Database } from "@/types/supabase";
 import {
   deletePresetFromSnapshot,
   type FetchedPresets,

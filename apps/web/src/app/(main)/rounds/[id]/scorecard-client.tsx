@@ -2,15 +2,15 @@
 
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { summarizeRound } from "@/features/rounds/scorecard-scoring";
+import type { TargetFaceOption } from "@/features/rounds/target-face-types";
 import { BottomFrame } from "./bottom-frame";
 import { CompleteRoundBar } from "./complete-round-bar";
-import type { TargetFaceOption } from "./distance-config-row";
 import { DistanceSection } from "./distance-section";
 import { KeypadButtons } from "./keypad-buttons";
 import { KeypadPanel } from "./keypad-panel";
 import type { LoadedRound } from "./load-round-detail";
 import { completionConfirmation } from "./round-progress";
-import { summarizeRound } from "./scorecard-scoring";
 import {
   RoundConfigCard,
   RoundSummaryBar,

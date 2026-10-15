@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   whenPersisted: vi.fn<() => Promise<void>>(),
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
-vi.mock("@/app/(main)/rounds/_shared/round-op-hub", () => ({
+vi.mock("@/features/rounds/round-op-hub", () => ({
   roundOpHub: { whenPersisted: mocks.whenPersisted },
 }));
 

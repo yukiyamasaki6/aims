@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { Distance } from "@/features/rounds/scorecard-types";
 import type { DistanceConfig } from "./distance-config";
 import { changesDistanceStructure, distanceToAdd } from "./scorecard-distances";
-import type { Distance } from "./scorecard-types";
 
 const distanceA: Distance = {
   id: "d-a",

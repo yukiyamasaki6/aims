@@ -6,18 +6,18 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { type RoundOpSync, roundOpLog } from "../_shared/round-op-log";
-import type { SyncOperation } from "../_shared/sync-events";
-import { startBaseRefetch } from "./base-refetch";
-import type { LoadedRound } from "./load-round-detail";
-import { deriveTables } from "./round-op-apply";
-import { reopenOperation } from "./round-progress";
+import { deriveTables } from "@/features/rounds/round-op-apply";
+import { type RoundOpSync, roundOpLog } from "@/features/rounds/round-op-log";
 import {
   type RoundState,
   type RoundTables,
   selectRoundState,
-} from "./round-tables";
-import type { ScoringTargetFace } from "./scorecard-scoring";
+} from "@/features/rounds/round-tables";
+import type { ScoringTargetFace } from "@/features/rounds/scorecard-scoring";
+import type { SyncOperation } from "@/features/rounds/sync-events";
+import { startBaseRefetch } from "./base-refetch";
+import type { LoadedRound } from "./load-round-detail";
+import { reopenOperation } from "./round-progress";
 
 export type RoundOpStack = {
   // 端末の組(ベースに操作の列を重ねたもの)から求めた、画面の状態。

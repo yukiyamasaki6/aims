@@ -1,6 +1,6 @@
 import type { StreamBase, StreamGroup } from "@/features/op-log/op-log-types";
 import type { OpSyncOperation } from "@/features/op-log/op-sync";
-import type { RoundBaseRecord } from "../[id]/round-base";
+import type { RoundBaseRecord } from "./round-base";
 import { roundOpHub } from "./round-op-hub";
 import type { SyncOperation } from "./sync-events";
 

@@ -10,15 +10,15 @@ import {
   type ResponseLike,
 } from "@/features/fetch-result/fetch-result";
 import type { Database } from "@/types/supabase";
-import { TARGET_FACE_SELECT } from "../_shared/reference-query-constants";
+import { TARGET_FACE_SELECT } from "./reference-query-constants";
 import {
   loadReferenceSnapshot,
   saveReferenceSnapshot,
-} from "../_shared/reference-snapshot";
-import type { RoundStatus } from "../_shared/sync-events";
-import type { TargetFaceOption } from "./distance-config-row";
+} from "./reference-snapshot";
 import type { RoundConfig } from "./round-config";
 import type { Distance, Shot } from "./scorecard-types";
+import type { RoundStatus } from "./sync-events";
+import type { TargetFaceOption } from "./target-face-types";
 
 type RoundDetail = {
   roundConfig: RoundConfig;

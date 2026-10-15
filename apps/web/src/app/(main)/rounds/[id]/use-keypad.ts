@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { distanceNumber } from "@/features/rounds/scorecard-scoring";
+import type { Distance } from "@/features/rounds/scorecard-types";
 import type { Pointer } from "./scorecard-input";
-import { distanceNumber } from "./scorecard-scoring";
-import type { Distance } from "./scorecard-types";
 import { scrollPointerIntoView } from "./scroll-to-pointer";
 
 // テンキーは中身のキー数が距離の的ごとに変わるため実測高さを使う。この値は

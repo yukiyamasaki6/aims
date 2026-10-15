@@ -1,8 +1,11 @@
 "use client";
 
+import {
+  BOW_TYPE_OPTIONS,
+  FORMAT_OPTIONS,
+} from "@/features/rounds/round-constants";
 import { cn } from "@/lib/utils";
 import { labelOf } from "./option-label";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "./round-constants";
 import { TargetFaceInfo, type TargetFaceView } from "./target-face-icon";
 
 // 1行目の文字列。フィールドは区分を先に置き、距離を括弧で添える（例: `Marked (90m)`）。

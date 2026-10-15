@@ -1,7 +1,7 @@
-import type { SyncOperation } from "../_shared/sync-events";
+import { compareDistancePosition } from "@/features/rounds/scorecard-scoring";
+import type { Distance } from "@/features/rounds/scorecard-types";
+import type { SyncOperation } from "@/features/rounds/sync-events";
 import type { DistanceConfig } from "./distance-config";
-import { compareDistancePosition } from "./scorecard-scoring";
-import type { Distance } from "./scorecard-types";
 
 // 10点的（アウトドア・122cm）。
 // 距離が1件も無い状態で追加する距離の的として使う（e2eのcreate-round APIヘルパーが使う既定の的と同じもの）。

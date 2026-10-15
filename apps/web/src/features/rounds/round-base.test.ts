@@ -2,7 +2,6 @@ import "fake-indexeddb/auto";
 import { describe, expect, it } from "vitest";
 import { createOpLogStore } from "@/features/op-log/op-log-store";
 import type { StreamEntry } from "@/features/op-log/op-log-types";
-import type { SyncOperation } from "../_shared/sync-events";
 import {
   deriveRoundState,
   isRoundInProgress,
@@ -13,6 +12,7 @@ import {
 import { applyOperations } from "./round-op-apply";
 import { roundTablesFromServer, selectRoundState } from "./round-tables";
 import type { ScoringTargetFace } from "./scorecard-scoring";
+import type { SyncOperation } from "./sync-events";
 
 const { reflects, keeps, isOlder } = roundStreamRules;
 

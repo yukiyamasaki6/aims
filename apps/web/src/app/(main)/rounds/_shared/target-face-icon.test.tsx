@@ -1,11 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import type {
+  TargetFaceRing,
+  TargetFaceSpotLayout,
+} from "@/features/rounds/target-face-types";
 import {
   lookupTargetFace,
   TargetFaceIcon,
   TargetFaceInfo,
-  type TargetFaceRing,
-  type TargetFaceSpotLayout,
 } from "./target-face-icon";
 
 const yellowRing: TargetFaceRing = {

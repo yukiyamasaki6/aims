@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { RoundBaseRecord } from "@/features/rounds/round-base";
+import { roundTablesFromServer } from "@/features/rounds/round-tables";
+import type { SyncOperation } from "@/features/rounds/sync-events";
 import type { Database } from "@/types/supabase";
-import type { SyncOperation } from "./_shared/sync-events";
-import type { RoundBaseRecord } from "./[id]/round-base";
-import { roundTablesFromServer } from "./[id]/round-tables";
 import type { RoundListItem } from "./fetch-rounds-list";
 import { loadLocalRoundsList, loadRoundsList } from "./load-rounds-list";
 
@@ -14,18 +14,18 @@ const log = vi.hoisted(() => ({
   loadAll: vi.fn(),
   retainedRoundIds: vi.fn(),
 }));
-vi.mock("./_shared/round-op-log", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./_shared/round-op-log")>()),
+vi.mock("@/features/rounds/round-op-log", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/features/rounds/round-op-log")>()),
   roundOpLog: log,
 }));
 const fetcher = vi.hoisted(() => ({ fetchRoundsList: vi.fn() }));
 vi.mock("./fetch-rounds-list", () => fetcher);
 const details = vi.hoisted(() => ({ fetchRoundDetails: vi.fn() }));
-vi.mock("./[id]/fetch-round-detail", () => details);
+vi.mock("@/features/rounds/fetch-round-detail", () => details);
 const refresh = vi.hoisted(() => ({ commitRoundDetails: vi.fn() }));
-vi.mock("./[id]/refresh-round-bases", () => refresh);
+vi.mock("@/features/rounds/refresh-round-bases", () => refresh);
 const reference = vi.hoisted(() => ({ loadReferenceSnapshot: vi.fn() }));
-vi.mock("./_shared/reference-snapshot", () => reference);
+vi.mock("@/features/rounds/reference-snapshot", () => reference);
 
 const supabase = {} as SupabaseClient<Database>;
 const items: RoundListItem[] = [

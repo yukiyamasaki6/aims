@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { type RefObject, useRef, useState } from "react";
-import type { Preset } from "./preset-types";
+import type { Preset } from "../_shared/preset-types";
 import { startRound } from "./start-round";
 
 // 選択中のプリセット（なければプリセット無し）でラウンドを開始し、成功したら詳細画面へ遷移する。

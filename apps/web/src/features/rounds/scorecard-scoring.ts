@@ -1,4 +1,4 @@
-import { comparePositionKey } from "../_shared/position-key";
+import { comparePositionKey } from "./position-key";
 import type { Distance, Shot } from "./scorecard-types";
 
 // 採点・集計に使う的のリング（描画用の半径・境界線などは扱わない）。

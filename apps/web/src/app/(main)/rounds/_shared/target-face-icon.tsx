@@ -1,19 +1,8 @@
+import type {
+  TargetFaceRing,
+  TargetFaceSpotLayout,
+} from "@/features/rounds/target-face-types";
 import { cn } from "@/lib/utils";
-
-export type TargetFaceRing = {
-  radius: number;
-  color: string;
-  line_color: string | null;
-  z_index: number;
-  score_str: string;
-  score_int: number;
-};
-
-export type TargetFaceSpotLayout = {
-  center_x: number;
-  center_y: number;
-  target_face_rings: TargetFaceRing[];
-};
 
 // 的画像本体の境界線は、得点帯を区切る情報として最低限見えれば十分で、
 // 主役はあくまで色（得点帯）なので極力薄くする（拡大バッジの境界線はこれとは

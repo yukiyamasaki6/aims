@@ -1,7 +1,7 @@
 import { isOffline } from "@/features/fetch-result/network";
 import { retryDelayMs } from "@/features/op-log/sync-result";
+import type { RoundOpSync } from "@/features/rounds/round-op-log";
 import { createClient } from "@/lib/supabase/client";
-import type { RoundOpSync } from "../_shared/round-op-log";
 import { type LoadedRound, loadRoundDetail } from "./load-round-detail";
 
 type RefetchEnv = {

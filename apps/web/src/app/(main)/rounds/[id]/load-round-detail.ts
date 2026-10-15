@@ -4,21 +4,24 @@ import {
   FETCH_ERROR_MESSAGE,
   type FetchResult,
 } from "@/features/fetch-result/fetch-result";
-import type { Database } from "@/types/supabase";
-import { loadReferenceSnapshot } from "../_shared/reference-snapshot";
+import {
+  fetchRoundDetail,
+  fetchTargetFaces,
+} from "@/features/rounds/fetch-round-detail";
+import { loadReferenceSnapshot } from "@/features/rounds/reference-snapshot";
+import { roundStreamRules } from "@/features/rounds/round-base";
 import {
   hasRoundDeletion,
   type RoundGroup,
   roundOpLog,
-} from "../_shared/round-op-log";
-import type { TargetFaceOption } from "./distance-config-row";
-import { fetchRoundDetail, fetchTargetFaces } from "./fetch-round-detail";
-import { roundStreamRules } from "./round-base";
+} from "@/features/rounds/round-op-log";
 import {
   type RoundTables,
   roundTablesFromCreated,
   roundTablesFromServer,
-} from "./round-tables";
+} from "@/features/rounds/round-tables";
+import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+import type { Database } from "@/types/supabase";
 
 export type LoadedRound = {
   // 状態を求める最初のベース。取得した状態、端末のベース、または確定していない作成の操作が表す状態。

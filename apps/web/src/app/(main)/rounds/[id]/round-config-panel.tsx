@@ -5,15 +5,18 @@ import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { labelOf } from "../_shared/option-label";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../_shared/round-constants";
-import type { SyncOperation } from "../_shared/sync-events";
 import {
   buildRoundUpdatedOperation,
   type RoundConfig,
   type RoundConfigErrors,
   validateRoundConfig,
-} from "./round-config";
+} from "@/features/rounds/round-config";
+import {
+  BOW_TYPE_OPTIONS,
+  FORMAT_OPTIONS,
+} from "@/features/rounds/round-constants";
+import type { SyncOperation } from "@/features/rounds/sync-events";
+import { labelOf } from "../_shared/option-label";
 
 function RequiredMark() {
   return (

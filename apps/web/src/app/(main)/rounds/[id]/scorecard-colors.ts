@@ -1,4 +1,7 @@
-import { type ScoringTargetFace, scoreKeysFor } from "./scorecard-scoring";
+import {
+  type ScoringTargetFace,
+  scoreKeysFor,
+} from "@/features/rounds/scorecard-scoring";
 
 export function contrastText(hex: string): string {
   const r = Number.parseInt(hex.slice(1, 3), 16);
