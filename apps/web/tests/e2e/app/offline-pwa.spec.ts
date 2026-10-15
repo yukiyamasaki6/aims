@@ -297,6 +297,100 @@ async function transitionUntilSwitched(page: Page) {
   }
 }
 
+// 旧ビルドの枠(新しいビルドの目印が無い文書)が、`startWatchingOldFrame`の後に描かれたかを記録する。
+// 対象は、その時点より後の新しい文書と、パスが変わった後の表示で、操作前の画面は含めない。
+// 文書をまたいで残すため、sessionStorageに書く。描画のたびに確かめる。
+async function watchOldFrameShown(context: BrowserContext) {
+  await context.addInitScript((marker) => {
+    const check = () => {
+      const start = JSON.parse(
+        sessionStorage.getItem("e2eWatchStart") ?? "null",
+      ) as { origin: number; path: string } | null;
+      const isAfterStart =
+        start !== null &&
+        (start.origin !== performance.timeOrigin ||
+          start.path !== location.pathname);
+      if (document.body && isAfterStart && !document.querySelector(marker)) {
+        sessionStorage.setItem("e2eOldFrameShown", "1");
+      }
+      requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  }, 'meta[name="e2e-build"]');
+}
+
+// 以降に描かれる旧ビルドの枠の記録を始める。操作(When)の直前に呼ぶ。
+async function startWatchingOldFrame(page: Page) {
+  await page.evaluate(() => {
+    sessionStorage.removeItem("e2eOldFrameShown");
+    sessionStorage.setItem(
+      "e2eWatchStart",
+      JSON.stringify({
+        origin: performance.timeOrigin,
+        path: location.pathname,
+      }),
+    );
+  });
+}
+
+async function oldFrameShown(page: Page) {
+  return await page.evaluate(
+    () => sessionStorage.getItem("e2eOldFrameShown") === "1",
+  );
+}
+
+// 画面のフレームを連続して取得し、背景だけの空白のフレームがあったかを返す。
+// 空白のフレームは、画像が一様で圧縮後のサイズが小さくなることで判定する。
+async function recordFrames(page: Page, context: BrowserContext) {
+  const session = await context.newCDPSession(page);
+  const sizes: number[] = [];
+  session.on("Page.screencastFrame", (frame) => {
+    sizes.push(frame.data.length);
+    void session
+      .send("Page.screencastFrameAck", { sessionId: frame.sessionId })
+      .catch(() => {});
+  });
+  await session.send("Page.startScreencast", {
+    format: "png",
+    everyNthFrame: 1,
+  });
+  return {
+    stop: async () => {
+      await session.send("Page.stopScreencast").catch(() => {});
+      return sizes;
+    },
+  };
+}
+
+// 空白とみなす、PNG(base64)の大きさの上限。内容のある画面は、これより大きい。
+const BLANK_FRAME_MAX_LENGTH = 6_000;
+
+// 新しいビルドの版が待機していても、SKIP_WAITINGを無視する(切り替えが進まない状況)。
+// 送られた回数をsessionStorageに数える。
+async function swallowSkipWaiting(context: BrowserContext) {
+  await context.addInitScript(() => {
+    const postMessage = ServiceWorker.prototype.postMessage;
+    ServiceWorker.prototype.postMessage = function (
+      this: ServiceWorker,
+      ...args: unknown[]
+    ) {
+      const message = args[0] as { type?: string } | undefined;
+      if (message?.type === "SKIP_WAITING") {
+        const count = Number(sessionStorage.getItem("e2eSkipWaiting") ?? "0");
+        sessionStorage.setItem("e2eSkipWaiting", String(count + 1));
+        return;
+      }
+      return (postMessage as (...a: unknown[]) => void).apply(this, args);
+    };
+  });
+}
+
+async function skipWaitingCount(page: Page) {
+  return await page.evaluate(() =>
+    Number(sessionStorage.getItem("e2eSkipWaiting") ?? "0"),
+  );
+}
+
 test.describe("認証済みでService Workerの更新", () => {
   test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -354,7 +448,7 @@ test.describe("認証済みでService Workerの更新", () => {
     expect(await isSameDocument(page)).toBe(true);
   });
 
-  test("offline-pwa-03: Service Workerが登録済みで新しいビルドのService Workerが待機しているとき、他の画面へ遷移すると、遷移先が新しいビルドで表示される", async ({
+  test("offline-pwa-03: Service Workerが登録済みで新しいビルドのService Workerが待機しているとき、リンクを押して他の画面へ遷移すると、遷移先が新しいビルドで表示される", async ({
     page,
     context,
   }) => {
@@ -364,7 +458,7 @@ test.describe("認証済みでService Workerの更新", () => {
     const shownNewBuild = trackDocuments(page);
     await publishNewBuild(page);
 
-    // When: 他の画面へ遷移する
+    // When: リンクを押して他の画面へ遷移する
     await transitionUntilSwitched(page);
 
     // Then: 遷移先が新しいビルドで表示される(新しい枠で読み込み直される)
@@ -392,7 +486,7 @@ test.describe("認証済みでService Workerの更新", () => {
       .toEqual({ hasNew: true, hasOld: false });
   });
 
-  test("offline-pwa-19: Service Workerが登録済みで認証済みでオフラインで、新しいビルドのService Workerが待機しているとき、他の画面へ遷移すると、遷移先が新しいビルドの枠で表示される", async ({
+  test("offline-pwa-19: Service Workerが登録済みで認証済みでオフラインで、新しいビルドのService Workerが待機しているとき、リンクを押して他の画面へ遷移すると、遷移先が新しいビルドの枠で表示される", async ({
     page,
     context,
   }) => {
@@ -404,7 +498,7 @@ test.describe("認証済みでService Workerの更新", () => {
     await context.unroute(`**${NEW_SW_URL}`);
     await goOffline(context);
 
-    // When: 他の画面へ遷移する
+    // When: リンクを押して他の画面へ遷移する
     await transitionUntilSwitched(page);
 
     // Then: 遷移先が新しいビルドの枠で表示される
@@ -413,6 +507,67 @@ test.describe("認証済みでService Workerの更新", () => {
     await expect(
       page.getByText("ネットワークに接続されていません"),
     ).toBeVisible();
+  });
+
+  test("offline-pwa-21: 新しいビルドのService Workerが待機しているとき、リンクを押して他の画面へ遷移すると、旧ビルドの枠が表示されず、新しいビルドの枠が表示される", async ({
+    page,
+    context,
+  }) => {
+    // Given: 新しいビルドのService Workerが待機している
+    await watchOldFrameShown(context);
+    await openRounds(page);
+    await routeNewBuild(page, context);
+    const shownNewBuild = trackDocuments(page);
+    await publishNewBuild(page);
+    await startWatchingOldFrame(page);
+    const frames = await recordFrames(page, context);
+
+    // When: リンクを押して他の画面へ遷移する
+    await transitionByLink(page);
+
+    // Then: 旧ビルドの枠は描かれず、空白のフレームも無く、新しいビルドの枠が表示される
+    await expect.poll(shownNewBuild, { timeout: 15_000 }).toBe(true);
+    await expect(page.locator('meta[name="e2e-build"]')).toHaveCount(1);
+    await expect(page.getByTestId("round-start-button")).toBeVisible();
+    const sizes = await frames.stop();
+    expect(sizes.length).toBeGreaterThan(0);
+    expect(Math.min(...sizes)).toBeGreaterThan(BLANK_FRAME_MAX_LENGTH);
+    expect(await oldFrameShown(page)).toBe(false);
+    expect(
+      (await workerState(page)).activeNew,
+      "新しいService Workerが有効であること",
+    ).toBe(true);
+  });
+
+  test("offline-pwa-22: 新しいビルドのService Workerが待機していて切り替えが進まないとき、リンクを押して他の画面へ遷移すると、旧ビルドの枠が表示され、操作できる", async ({
+    page,
+    context,
+  }) => {
+    // Given: 新しいビルドのService Workerが待機していて、切り替えが進まない
+    await swallowSkipWaiting(context);
+    await openRounds(page);
+    await routeNewBuild(page, context);
+    await publishNewBuild(page);
+    const frames = await recordFrames(page, context);
+
+    // When: リンクを押して他の画面へ遷移する
+    await transitionByLink(page);
+
+    // Then: 旧ビルドの枠が表示され、空白のフレームが無く、操作でき、その遷移では合図を1回しか送らない
+    await expect(page).toHaveURL(/\/rounds\/new$/, { timeout: 10_000 });
+    await expect(page.getByTestId("round-start-button")).toBeVisible();
+    await expect(page.locator('meta[name="e2e-build"]')).toHaveCount(0);
+    const sizes = await frames.stop();
+    expect(Math.min(...sizes)).toBeGreaterThan(BLANK_FRAME_MAX_LENGTH);
+    expect(await skipWaitingCount(page)).toBe(1);
+    expect((await workerState(page)).waiting).toBe(true);
+
+    // 次の遷移では通常どおり判定し、再び合図を送る(その遷移を止めて1秒保留する)
+    await page.goBack();
+    await expect(page).toHaveURL(/\/rounds$/);
+    await page.getByTestId("new-round-fab").click();
+    await expect(page).toHaveURL(/\/rounds\/new$/, { timeout: 10_000 });
+    expect(await skipWaitingCount(page)).toBe(2);
   });
 });
 
