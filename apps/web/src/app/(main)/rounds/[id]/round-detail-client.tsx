@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { withinFetchTimeout } from "@/features/fetch-result/fetch-content";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
@@ -12,16 +13,14 @@ import { parseRoundId } from "./round-detail-id";
 import { ScorecardClient } from "./scorecard-client";
 import { useCreationGone } from "./use-creation-gone";
 
-// ScorecardClientの設定パネル（45px）、合計バー（46px、-mt-6で設定パネルと接する）、
-// 距離の一覧（gap-6/gap-4）と同じ形にする。
+// 設定カードと合計バー（45px+46px、-mt-6で接するため合わせて91px）を1枠で、
+// 距離の一覧は標準の1距離（6本×6エンド）のカードの高さの1枠で写す。
+// 区切り線や中の仕切りは写さない。
 function ScorecardSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <div className="h-[45px] animate-pulse rounded-t-xl bg-muted" />
-      <div className="-mt-6 h-[46px] animate-pulse rounded-b-xl bg-muted" />
-      <div className="flex flex-col gap-4">
-        <div className="h-12 animate-pulse rounded-xl bg-muted" />
-      </div>
+      <Skeleton className="h-[91px] rounded-xl" />
+      <Skeleton className="h-[351px] rounded-xl" />
     </div>
   );
 }

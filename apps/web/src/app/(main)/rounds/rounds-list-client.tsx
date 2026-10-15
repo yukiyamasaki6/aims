@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
 import { withinFetchTimeout } from "@/features/fetch-result/fetch-content";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
@@ -177,7 +178,7 @@ function RoundCardsSkeleton() {
   return (
     <div className="flex flex-col gap-3">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="h-[62px] animate-pulse rounded-xl bg-muted" />
+        <Skeleton key={i} className="h-[62px] rounded-xl" />
       ))}
     </div>
   );

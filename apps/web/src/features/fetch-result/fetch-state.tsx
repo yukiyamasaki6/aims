@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { FetchView } from "./fetch-result";
 
 type NotFoundMessage = { message: string };
@@ -29,8 +30,8 @@ export function FetchState({
           <span className="sr-only">読み込み中</span>
           {loading ?? (
             <>
-              <div className="h-6 w-1/2 animate-pulse rounded bg-muted" />
-              <div className="h-24 animate-pulse rounded bg-muted" />
+              <Skeleton className="h-6 w-1/2 rounded" />
+              <Skeleton className="h-24 rounded" />
             </>
           )}
         </div>

@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { FetchView } from "@/features/fetch-result/fetch-result";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
@@ -31,13 +32,13 @@ function PresetListSkeleton() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <div className="h-5 w-24 animate-pulse rounded bg-muted" />
-        <div className="h-5 w-3/4 animate-pulse rounded bg-muted" />
+        <Skeleton className="h-5 w-24 rounded" />
+        <Skeleton className="h-5 w-3/4 rounded" />
       </div>
       <div className="flex flex-col gap-2">
-        <div className="h-5 w-24 animate-pulse rounded bg-muted" />
+        <Skeleton className="h-5 w-24 rounded" />
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-[50px] animate-pulse rounded-xl bg-muted" />
+          <Skeleton key={i} className="h-[50px] rounded-xl" />
         ))}
       </div>
     </div>
