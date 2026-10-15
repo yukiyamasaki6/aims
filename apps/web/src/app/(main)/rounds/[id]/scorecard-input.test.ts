@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Distance, Shot } from "@/features/rounds/scorecard-types";
 import {
   buildShotOperation,
   clearHistoryEntry,
@@ -18,7 +19,6 @@ import {
   undoHistory,
   withPendingShots,
 } from "./scorecard-input";
-import type { Distance, Shot } from "./scorecard-types";
 
 function distance(
   id: string,

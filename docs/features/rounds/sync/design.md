@@ -28,29 +28,29 @@
 
 ## 構成とデータの流れ
 
-汎用の部分は`apps/web/src/features/op-log/`、ラウンドの列の基盤（store、ハブ、送信、衝突規則、操作の型、入り口）は`apps/web/src/app/(main)/rounds/_shared/`、画面の導出は`rounds/[id]/`に置く。
+汎用の部分は`apps/web/src/features/op-log/`、ラウンドの列の基盤（store、ハブ、送信、衝突規則、操作の型、入り口）と、ベースの規則、テーブルの形、操作の重ね合わせ、一括の取得は`apps/web/src/features/rounds/`、画面の導出（`use-round-op-stack.ts`、`load-round-detail.ts`、`base-refetch.ts`）は`rounds/[id]/`、ラウンドの削除は`rounds/_shared/`に置く。
 
 - `op-log-store.ts`: DB`aims-sync`のstore`ops`(`seq`が`autoIncrement`)と`bases`(キーは`[userId, streamId]`。取得の開始時刻`startedAt`と、ベースまたは削除の印`null`)。追記、`loadStream`・`loadAll`(現在のユーザーの組)、取得したベースを反映する`commit`、`ack`、`retire`。組を変える`commit`・`ack`・追記は`ops`と`bases`にまたがる1つのトランザクションで行い、途中で失敗すれば両方とも変えない。`commit`は、保存済みより`startedAt`が古い取得では何も変えない。保存済みのベース、または送信器が最後に取り込んだベースよりrevisionが古い取得も反映しない(`isOlder`)。新しければ、ベースに反映済みの操作を消し、保持の規則に当たればベースを保存し、当たらなければ組(ベースと操作)を丸ごと消す(ベースに反映されていない操作が残る組は必ず当たる。古い取得で新しい保存を上書き・削除しない)。`ack`は確定を記録するだけで、操作を消さない。versionの更新を待たれたとき(`blocking`)は接続を閉じて次の呼び出しで開き直し、古い接続が閉じず更新が待たされるとき(`blocked`)は開けなかったものとして、既存の保存失敗の扱い(メモリの列から送る)に落とす。
 - `op-plan.ts`: 送れる要求の計画。衝突する先行がある操作を含めない。
 - `op-sync.ts`: 送信器。スナップショットにタブのベースと列を一緒に載せる。取得したベースを反映する(`commit`。ストアの`commit`を待ち、結果でタブの組を1回の通知で変える)。他のタブが保存した組を取り込む(`adopt`。新しい方のベースを使い、共有の組のベースを取ったときだけ、組から無くなった確定済みの操作を外す)。保留をサインインし直したときに戻す(`resumeHeld`)。リトライ、オフライン中の保留、拒否した要求の切り分け、応答の項目ごとの反映。効かなかった操作・項目がある応答を、再取得の知らせ(`subscribeDiverged`)で通知する。
 - `sync-result.ts`: 送信結果を、再試行する(`retry`)・保留する(`hold`。未認証)・破棄する(`discard`。`PT403`と`PT422`)・成功の確定に分ける。認証を確認できない結果を、失敗の結果へ変換する。
 - `sync-types.ts`: 送信結果と、その扱いの型。
-- `_shared/round-op-conflicts.ts`: 操作の衝突の表と、並べる単位(lane)。矢の操作どうしは、同じ矢(`shotId`)か同じエンドなら衝突とする。
-- `round-tables.ts`: サーバーのテーブルの行の形(`RoundTables`。ラウンド、距離、矢の行は削除済みの印`disabled`を持つ)と、画面の状態(`RoundState`)を導く`selectRoundState`。
-- `round-op-apply.ts`: 基準のテーブルへ操作を重ねる`applyOperations(base, 操作, 的)`。操作ごとの処理は、サーバーの対応するRPCと同じ判定の順序にする。未確定の操作は、サーバーと同じ規則で項目ごとに判定し、確定済みの操作はサーバーが効かせた項目だけを重ねる。構成の変更は矢を取り除かない(サーバーと同じ)。生きている矢を増やす記録(新しい矢、復活)は、確定の有無によらずエンドに空きがあるときだけ重ね、確定済みで重ねられなかったときは取り直す。射順(`shot_number`)が同じエンドの他の生きている矢と重なる項目は重ねず、復活で重なるときは射順をnullにして重ねる。
-- `_shared/round-op-transport.ts`: 操作の種類ごとにRPCを呼び、操作ごとの判定結果(`revision`、効いた項目、効かなかった項目と理由)を返す。送信前に`readSession`で認証を確認する。
+- `features/rounds/round-op-conflicts.ts`: 操作の衝突の表と、並べる単位(lane)。矢の操作どうしは、同じ矢(`shotId`)か同じエンドなら衝突とする。
+- `features/rounds/round-tables.ts`: サーバーのテーブルの行の形(`RoundTables`。ラウンド、距離、矢の行は削除済みの印`disabled`を持つ)と、画面の状態(`RoundState`)を導く`selectRoundState`。
+- `features/rounds/round-op-apply.ts`: 基準のテーブルへ操作を重ねる`applyOperations(base, 操作, 的)`。操作ごとの処理は、サーバーの対応するRPCと同じ判定の順序にする。未確定の操作は、サーバーと同じ規則で項目ごとに判定し、確定済みの操作はサーバーが効かせた項目だけを重ねる。構成の変更は矢を取り除かない(サーバーと同じ)。生きている矢を増やす記録(新しい矢、復活)は、確定の有無によらずエンドに空きがあるときだけ重ね、確定済みで重ねられなかったときは取り直す。射順(`shot_number`)が同じエンドの他の生きている矢と重なる項目は重ねず、復活で重なるときは射順をnullにして重ねる。
+- `features/rounds/round-op-transport.ts`: 操作の種類ごとにRPCを呼び、操作ごとの判定結果(`revision`、効いた項目、効かなかった項目と理由)を返す。送信前に`readSession`で認証を確認する。
 - `op-sync-hub.ts`: タブに常駐する送信器の集まり(ハブ)。列ごとに送信器を持ち、Web Locksで選ばれたタブだけが送り、変化をBroadcastChannelで他のタブへ知らせる。
   ハブは、起動時の読み込みの完了を待つ`ready`と、その後に現在のユーザーの組を読む`read`・`readStored`(IndexedDB)と`readAll`(メモリの全ての列)、取得したベースを反映する`commit`を持つ。購読は持たない。
-- `_shared/round-op-store.ts`、`_shared/round-op-hub.ts`: ラウンドの列の保存(`roundOpStore`)とハブ(`roundOpHub`)。
-- `_shared/round-op-log.ts`: 画面とフックが列へアクセスする唯一の入り口(`roundOpLog`)。`load`(1つのラウンドのベースと列)、`loadAll`(全てのラウンドの列)、`commit`・`commitDeleted`(取得したベース、または削除の印の反映)、`retainedRoundIds`(端末が保持するラウンドのID)、`round`(1つのラウンドの送信器)と、削除済みの判定`hasRoundDeletion`を持つ。読み取りと追記は、ハブの現在のユーザーに限る。画面とフックは、`roundOpStore`と`roundOpHub`を直接使わない。
+- `features/rounds/round-op-store.ts`、`features/rounds/round-op-hub.ts`: ラウンドの列の保存(`roundOpStore`)とハブ(`roundOpHub`)。
+- `features/rounds/round-op-log.ts`: 画面とフックが列へアクセスする唯一の入り口(`roundOpLog`)。`load`(1つのラウンドのベースと列)、`loadAll`(全てのラウンドの列)、`commit`・`commitDeleted`(取得したベース、または削除の印の反映)、`retainedRoundIds`(端末が保持するラウンドのID)、`round`(1つのラウンドの送信器)と、削除済みの判定`hasRoundDeletion`を持つ。読み取りと追記は、ハブの現在のユーザーに限る。画面とフックは、`roundOpStore`と`roundOpHub`を直接使わない。
 - `_shared/delete-round.ts`: ラウンドの削除。`round.disabled`を列へ追記する。
 - `app/op-sync-provider.tsx`: ルートレイアウトに置き、ハブの起動と停止、`online`、認証イベントをハブへ渡す。
 - `use-round-op-stack.ts`: ハブの送信器を購読して追記するフック。`use-scorecard.ts`が、状態と操作の追記に使う。
 - `base-refetch.ts`: 端末のベースで開いたときに、取得の完了、`online`、見える状態になったとき、`retryDelayMs`の間隔で取り直す。
-- `_shared/sync-events.ts`: 操作の型。操作はクライアント生成のイベントIDを持つ。`round.updated`と`distance.updated`は、変えた項目だけの差分(`changes`)を持つ。矢の操作(`shot.recorded`・`shot.cleared`)は矢のID(`shotId`)で矢を指す。`shot.recorded`の射手(`shooterId`)と射順(`shotNumber`)は、変えるときだけ持つ。
-- `round-base.ts`: 端末に持つベースの記録(`RoundBaseRecord`。サーバーの状態と対象ごとの`revision`)と、組の規則。入力中と見せる`isRoundInProgress`、保持する`shouldKeepRoundBase`、反映済みの判定`reflects`(確定の`revision`と取得の`revision`の比較1つ。効かなかった操作は反映済み、削除の印には確定済みの操作がすべて反映済み)、ベースと操作を重ねた状態の保持の判定`keeps`。
-- `refresh-round-bases.ts`、`round-base-refresher.tsx`: 入力中のラウンドと、端末が保持するラウンドの、一括の取得。ラウンドごとに`commit`し、返らなかった保持のラウンドは削除の印で`commit`する。契機は、認証イベント`INITIAL_SESSION`・`SIGNED_IN`でセッションがあるとき、`online`、見える状態になったとき。同時に1回までで、実行中の契機は完了後に1回だけやり直す。すべての`commit`と的の保存を待って成功とし、成功の回数を`data-refreshed-count`に出す。
-- `load-round-detail.ts`、`fetch-round-detail.ts`: 画面を開くときと再取得の取得。列は`roundOpLog.load`で読み、削除があれば取得せずに削除済みを返す。サーバーの状態は取得して`commit`し、結果の組を返す。通信できないとき(オフライン、取得の失敗、取得が`FALLBACK_WAIT_MS`を超えた)は、組が保持の規則に当たれば端末のベースで開く。端末の保存(`aims-sync`のversion 5)は、新しい形のデータだけを前提にする。
+- `features/rounds/sync-events.ts`: 操作の型。操作はクライアント生成のイベントIDを持つ。`round.updated`と`distance.updated`は、変えた項目だけの差分(`changes`)を持つ。矢の操作(`shot.recorded`・`shot.cleared`)は矢のID(`shotId`)で矢を指す。`shot.recorded`の射手(`shooterId`)と射順(`shotNumber`)は、変えるときだけ持つ。
+- `features/rounds/round-base.ts`: 端末に持つベースの記録(`RoundBaseRecord`。サーバーの状態と対象ごとの`revision`)と、組の規則。入力中と見せる`isRoundInProgress`、保持する`shouldKeepRoundBase`、反映済みの判定`reflects`(確定の`revision`と取得の`revision`の比較1つ。効かなかった操作は反映済み、削除の印には確定済みの操作がすべて反映済み)、ベースと操作を重ねた状態の保持の判定`keeps`。
+- `features/rounds/refresh-round-bases.ts`、`app/round-base-refresher.tsx`: 入力中のラウンドと、端末が保持するラウンドの、一括の取得。ラウンドごとに`commit`し、返らなかった保持のラウンドは削除の印で`commit`する。契機は、認証イベント`INITIAL_SESSION`・`SIGNED_IN`でセッションがあるとき、`online`、見える状態になったとき。同時に1回までで、実行中の契機は完了後に1回だけやり直す。すべての`commit`と的の保存を待って成功とし、成功の回数を`data-refreshed-count`に出す。
+- `load-round-detail.ts`、`features/rounds/fetch-round-detail.ts`: 画面を開くときと再取得の取得。列は`roundOpLog.load`で読み、削除があれば取得せずに削除済みを返す。サーバーの状態は取得して`commit`し、結果の組を返す。通信できないとき(オフライン、取得の失敗、取得が`FALLBACK_WAIT_MS`を超えた)は、組が保持の規則に当たれば端末のベースで開く。端末の保存(`aims-sync`のversion 5)は、新しい形のデータだけを前提にする。
 - `apps/web/src/features/auth/session-state.ts`の`readSession`: 保存先を読み直して、認証済み・未認証（確定）・不明に分ける。
 
 流れは次のとおりである。

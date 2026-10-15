@@ -44,17 +44,17 @@
 - `rounds/[id]/page.tsx`: 静的な枠。`generateStaticParams`で`/rounds/_`だけをプリレンダーし（`dynamicParams = false`）、取得も`cookies()`も使わない。`/rounds/<ID>`はnext.configのrewriteで`/rounds/_`の枠へ向ける。
 - `rounds/[id]/round-detail-client.tsx`: `usePathname()`のIDで取得し、状態に応じて枠の内表示かスコアカードを出す。列に削除があれば`/rounds`へ置き換えて遷移する。的の一覧は読み込みの結果に含まれ、`ScorecardClient`へそのまま渡す。端末のベースで開いたラウンドが、取り直したサーバーに無いとき(削除済みなど)は`/rounds`へ置き換えて遷移する。作成が確定せずに消えたら取り直す(`use-creation-gone.ts`)。読み込みの全体を`withinFetchTimeout`で10秒に打ち切る(`app/offline-pwa`)。
 - `rounds/[id]/round-detail-id.ts`: pathnameからUUIDを取り出す。UUIDでなければ`null`で、問い合わせずに見つからないとする。
-- `rounds/[id]/fetch-round-detail.ts`: ラウンド・距離・矢を1回のネスト取得、的を1回の取得で得て、`FetchResult`に分類する。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。的の取得(`fetchTargetFaces`)は、作成が未確定のラウンドの読み込みが使う。成功した一覧を端末に保存し(`rounds/_shared/reference-snapshot.ts`)、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。`fetchRoundDetail`は的を保存するが、代わりは持たず待ちは10秒のままである。一括の取得(`fetchRoundDetails`)も、的を保存する。
+- `features/rounds/fetch-round-detail.ts`: ラウンド・距離・矢を1回のネスト取得、的を1回の取得で得て、`FetchResult`に分類する。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。的の取得(`fetchTargetFaces`)は、作成が未確定のラウンドの読み込みが使う。成功した一覧を端末に保存し(`features/rounds/reference-snapshot.ts`)、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。`fetchRoundDetail`は的を保存するが、代わりは持たず待ちは10秒のままである。一括の取得(`fetchRoundDetails`)も、的を保存する。
 - `rounds/[id]/load-round-detail.ts`: 取得して端末の組へ反映し、結果の組(ベースと、反映済みを除いた操作の列)を返す。列は`roundOpLog.load`で読み、最初の読み込みで列に削除があれば、取得せずに削除済みを返す(作成が未確定でも同じ)。反映した組の列に削除があるときも、削除済みを返す。作成が未確定のラウンドは、ラウンドを取得せず、作成の操作を基準にする。通信できないときは、端末の組が保持の規則に当たれば、端末のベースで返す(`source`が`local`)。取得が`FALLBACK_WAIT_MS`を超えたときは、その完了を`pendingServer`で渡す。`localFallback`の指定で、端末の組を使わない取り直しもできる。結果は常に、そろった的の一覧全体(取得に成功した一覧、または最後に取得に成功した一覧の保存分)を持つ。作成が未確定のラウンドは`fetchTargetFaces`で的を得る。端末のベースは的の保存分があるときだけ使い、無ければサーバーの取得を待つ。そろわなければ、取得の結果(`offline`か`error`)を返す。効かなかった操作または項目がある応答を受けたときは、`use-round-op-stack.ts`がこの関数で取り直す。
-- `rounds/[id]/round-base.ts`、`refresh-round-bases.ts`: 端末に持つベースの規則と、入力中のラウンドの一括の取得(`rounds/sync`)。`deriveRoundState`は、端末の組から画面と同じ導出で状態を求める関数で、一覧も使う(`rounds/history`)。`commitRoundDetails`は、一括の取得の結果を端末の組へ反映する関数で、一覧も使う。一括の取得は、`disabled_at is null`かつ`status = in_progress`、または端末にベースか操作があるラウンドを得て、ラウンドごとにベースを差し替える。端末のラウンドのIDは50件ごとの取得に分けて並行に得る(入力中の条件は最初の取得に含め、以降の取得は入力中を除く)。すべての取得が成功したときだけ成功とする。返らなかったラウンドは削除の印にする。
-- `rounds/[id]/round-tables.ts`、`round-op-apply.ts`、`use-round-op-stack.ts`: サーバーのテーブルの形のベース(`RoundTables`)、操作の列を重ねる導出(RPCごとの処理)、画面の状態を導く`selectRoundState`と、常駐のハブの送信器を購読するフック。画面の状態は、送信器の組のベースと操作の列から求める。`use-scorecard.ts`は`state`(保存が完了した操作から導いた値)を`useRoundOpStack`から受ける。
+- `features/rounds/round-base.ts`、`features/rounds/refresh-round-bases.ts`: 端末に持つベースの規則と、入力中のラウンドの一括の取得(`rounds/sync`)。`deriveRoundState`は、端末の組から画面と同じ導出で状態を求める関数で、一覧も使う(`rounds/history`)。`commitRoundDetails`は、一括の取得の結果を端末の組へ反映する関数で、一覧も使う。一括の取得は、`disabled_at is null`かつ`status = in_progress`、または端末にベースか操作があるラウンドを得て、ラウンドごとにベースを差し替える。端末のラウンドのIDは50件ごとの取得に分けて並行に得る(入力中の条件は最初の取得に含め、以降の取得は入力中を除く)。すべての取得が成功したときだけ成功とする。返らなかったラウンドは削除の印にする。
+- `features/rounds/round-tables.ts`、`features/rounds/round-op-apply.ts`、`rounds/[id]/use-round-op-stack.ts`: サーバーのテーブルの形のベース(`RoundTables`)、操作の列を重ねる導出(RPCごとの処理)、画面の状態を導く`selectRoundState`と、常駐のハブの送信器を購読するフック。画面の状態は、送信器の組のベースと操作の列から求める。`use-scorecard.ts`は`state`(保存が完了した操作から導いた値)を`useRoundOpStack`から受ける。
 - `rounds/[id]/base-refetch.ts`: 端末のベースで開いたときの取り直し。取得の完了、`online`、見える状態になったとき、既存の`retryDelayMs`(3秒から2倍で60秒まで)の間隔で取り直す(`navigator.onLine`が`true`のまま通信が戻る場合のため)。`offline`で止め、`online`で最初の間隔から始め直す。
 - `rounds/[id]/round-detail-frame.tsx`、`back-to-list-link.tsx`: 枠と「一覧へ戻る」リンク。
 - `rounds/[id]/scorecard-client.tsx`（Client Component）: スコアカードの枠を組み立てる。
 - `rounds/[id]/use-scorecard.ts`: `state`(保存が完了した操作から導いた`shots`と距離の構成)を`useRoundOpStack`から受け、画面のフック(指している矢、テンキー、取り消しの列、距離の編集)を束ねる。
 - `rounds/[id]/scorecard-top.tsx`: ヘッダーの帯(領域の外)、ラウンドの設定のカード、合計の帯(領域の中)。
 - `rounds/[id]/distance-section.tsx`: 距離ごとのカード(見出し、編集、小計、エンドの行)。
-- `rounds/[id]/scorecard-scoring.ts`: 距離とラウンドの集計、エンドの小計を求める純粋関数。
+- `features/rounds/scorecard-scoring.ts`: 距離とラウンドの集計、エンドの小計を求める純粋関数。
 - `rounds/[id]/round-summary.tsx`、`distance-summary.tsx`: ラウンドの結果、距離の結果。
 
 集計は、点数を入力するたびにクライアントで再計算し、サーバーへ問い合わせない。

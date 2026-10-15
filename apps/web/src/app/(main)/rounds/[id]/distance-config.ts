@@ -1,4 +1,7 @@
-import type { DistanceChanges, SyncOperation } from "../_shared/sync-events";
+import type {
+  DistanceChanges,
+  SyncOperation,
+} from "@/features/rounds/sync-events";
 import { FILTER_ALL } from "./distance-config-constants";
 
 export type DistanceConfig = {

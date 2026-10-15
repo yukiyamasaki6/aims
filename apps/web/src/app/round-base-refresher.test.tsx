@@ -4,7 +4,7 @@ import { createSingleFlight, RoundBaseRefresher } from "./round-base-refresher";
 
 // 取得は別のテストで確かめるため、境界としてモックする。
 const refresh = vi.hoisted(() => ({ refreshRoundBases: vi.fn() }));
-vi.mock("./(main)/rounds/[id]/refresh-round-bases", () => refresh);
+vi.mock("@/features/rounds/refresh-round-bases", () => refresh);
 
 const auth = vi.hoisted(() => ({
   listener: undefined as

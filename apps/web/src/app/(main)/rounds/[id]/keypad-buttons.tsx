@@ -1,9 +1,12 @@
 import { Redo, Undo } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  type ScoringTargetFace,
+  scoreKeysFor,
+} from "@/features/rounds/scorecard-scoring";
+import type { Distance } from "@/features/rounds/scorecard-types";
 import { contrastText } from "./scorecard-colors";
 import type { Pointer } from "./scorecard-input";
-import { type ScoringTargetFace, scoreKeysFor } from "./scorecard-scoring";
-import type { Distance } from "./scorecard-types";
 import type { ScoreHistory } from "./use-score-history";
 import type { ShotInput } from "./use-shot-input";
 

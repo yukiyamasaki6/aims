@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { readSession } from "@/features/auth/session-state";
 import type { Database } from "@/types/supabase";
-import { roundOpHub } from "../_shared/round-op-hub";
-import { roundOpLog } from "../_shared/round-op-log";
 import {
   type FetchedRoundDetails,
   fetchRoundDetails,
 } from "./fetch-round-detail";
+import { roundOpHub } from "./round-op-hub";
+import { roundOpLog } from "./round-op-log";
 import { roundTablesFromServer } from "./round-tables";
 
 // 取得の結果を端末の組へ反映する。返ったラウンドはベースにし、返らなかった保持のラウンドは削除の印にする。

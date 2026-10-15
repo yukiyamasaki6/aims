@@ -1,9 +1,12 @@
-import type { RoundStatus, SyncOperation } from "../_shared/sync-events";
-import { applyOperation } from "./round-op-apply";
-import { type RoundTables, selectRoundState } from "./round-tables";
+import { applyOperation } from "@/features/rounds/round-op-apply";
+import {
+  type RoundTables,
+  selectRoundState,
+} from "@/features/rounds/round-tables";
+import type { ScoringTargetFace } from "@/features/rounds/scorecard-scoring";
+import type { Distance, Shot } from "@/features/rounds/scorecard-types";
+import type { RoundStatus, SyncOperation } from "@/features/rounds/sync-events";
 import { firstOpenEnd } from "./scorecard-input";
-import type { ScoringTargetFace } from "./scorecard-scoring";
-import type { Distance, Shot } from "./scorecard-types";
 
 // 入力を完了にする前の確認の文言。確認が要らない(全てのエンドが矢数に達している)ときはnull。
 export function completionConfirmation(

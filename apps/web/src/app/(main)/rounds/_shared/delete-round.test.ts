@@ -6,7 +6,9 @@ const log = vi.hoisted(() => ({
   append: vi.fn(),
   round: vi.fn(),
 }));
-vi.mock("./round-op-log", () => ({ roundOpLog: { round: log.round } }));
+vi.mock("@/features/rounds/round-op-log", () => ({
+  roundOpLog: { round: log.round },
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();

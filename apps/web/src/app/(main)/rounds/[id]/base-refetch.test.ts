@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { RoundOpSync } from "../_shared/round-op-log";
+import type { RoundOpSync } from "@/features/rounds/round-op-log";
 import { startBaseRefetch } from "./base-refetch";
 import { type LoadedRound, loadRoundDetail } from "./load-round-detail";
 

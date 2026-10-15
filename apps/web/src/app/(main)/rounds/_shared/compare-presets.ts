@@ -1,5 +1,8 @@
-import { comparePositionKey } from "../_shared/position-key";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../_shared/round-constants";
+import { comparePositionKey } from "@/features/rounds/position-key";
+import {
+  BOW_TYPE_OPTIONS,
+  FORMAT_OPTIONS,
+} from "@/features/rounds/round-constants";
 import type { PresetWithMeta } from "./preset-types";
 
 // プリセット名は自由入力で内容を反映するとは限らないため、名前ではなく

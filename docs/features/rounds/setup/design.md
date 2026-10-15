@@ -38,7 +38,7 @@
 - `use-scorecard.ts`: ラウンド・距離・矢は、操作の列から導いた状態を使う。
 - `use-score-history.ts`: 取り消し/やり直しの履歴を状態に持つ。
 - `use-distance-editing.ts`: 距離の編集の開閉と、距離の追加、保存、削除。構成が変わる保存と削除で、その距離の履歴を捨てる。
-- `round-config-panel.tsx`: ラウンド概要と編集ダイアログ。`round-config.ts`の`validateRoundConfig`で検証する。
+- `round-config-panel.tsx`: ラウンド概要と編集ダイアログ。`features/rounds/round-config.ts`の`validateRoundConfig`で検証する。
 - `distance-config-row.tsx`: 距離編集と削除確認。`distance-config.ts`の`validateDistanceDraft`で検証する。
 - `TargetFacePicker`: 的選択。`filterTargetFaces`で絞り込む。
 - `scorecard-distances.ts`: 追加する距離の算出と、構成が変わるかの判定。

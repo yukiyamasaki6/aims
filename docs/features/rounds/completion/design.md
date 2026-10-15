@@ -29,7 +29,7 @@
 - `[id]/round-progress.ts`: 確認の要否と文言`completionConfirmation`(距離なし、矢数に達していないエンドあり、全てのエンドが矢数に達しているの3通り。文言は変えない)、状態の操作`statusOperation`、戻す操作の判定`reopenOperation`。
 - `[id]/use-round-op-stack.ts`: `append`を包み、積んだ直後に`reopenOperation`が返す操作を続けて積む。保存の完了で解決するPromiseを返す。呼び出し側は変えない。
 - `[id]/complete-round-bar.tsx`: 帯と、渡された文言(`confirmation`)があるときの確認(`ConfirmDialog`、`confirmVariant="default"`)。
-- `[id]/round-op-apply.ts`: `round.updated`の`status`は常に効く項目として`rounds.status`へ反映する。
+- `features/rounds/round-op-apply.ts`: `round.updated`の`status`は常に効く項目として`rounds.status`へ反映する。
 - DB: `rounds.status`(`NOT NULL`、既定`in_progress`、`CHECK`)と`round_events.status`。`update_round`は`status`を検証(`PT422`)し、効いたときだけイベントと`rounds`へ記録する。`create_round`は変えず、列の既定値で入力中になる。移行は既存のラウンドを完了にし、イベントは書かない。
 
 ## 設計判断

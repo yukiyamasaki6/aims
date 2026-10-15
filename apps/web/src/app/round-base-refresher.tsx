@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { refreshRoundBases } from "@/features/rounds/refresh-round-bases";
 import { createClient } from "@/lib/supabase/client";
-import { refreshRoundBases } from "./(main)/rounds/[id]/refresh-round-bases";
 
 // 取得を同時に1回までにする。実行中の契機は、完了後に1回だけやり直す。
 export function createSingleFlight(run: () => Promise<void>) {

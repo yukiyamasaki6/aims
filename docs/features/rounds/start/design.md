@@ -31,9 +31,9 @@
 ## 構成とデータの流れ
 
 - `page.tsx`: 静的な枠として`RoundPresetSelect`を返す。
-- `fetch-presets.ts`: 個人（`owner_id`が自分）と公式（`owner_id`が`null`）を1回の取得で得て、並べて振り分ける。通信失敗・認証切れ・エラーを`FetchResult`に分類する。成功した結果を保存し、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。削除したプリセットを保存済みから除く`deletePresetFromSnapshot`を持つ。
-- `_shared/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。例外は投げない。
-- `compare-presets.ts`: 並びの比較関数。
+- `_shared/fetch-presets.ts`: 個人（`owner_id`が自分）と公式（`owner_id`が`null`）を1回の取得で得て、並べて振り分ける。通信失敗・認証切れ・エラーを`FetchResult`に分類する。成功した結果を保存し、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。削除したプリセットを保存済みから除く`deletePresetFromSnapshot`を持つ。
+- `features/rounds/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。例外は投げない。
+- `_shared/compare-presets.ts`: 並びの比較関数。
 - `round-preset-select-client.tsx`: 取得と選択の状態を持ち、一覧、開始の帯、削除の確認を描く。
 - `use-start-round.ts`: 作成中とエラーの状態を持ち、開始後に`router.push`で遷移する。
 - `use-preset-delete.ts`: 削除を確認中のプリセットと、削除済みのIDを持つ。削除の成功時に、保存済みからも除く。

@@ -1,17 +1,18 @@
 import { ChevronRight } from "lucide-react";
+import {
+  distanceNumber,
+  summarizeDistance,
+} from "@/features/rounds/scorecard-scoring";
+import type { Distance, Shot } from "@/features/rounds/scorecard-types";
+import type { SyncOperation } from "@/features/rounds/sync-events";
+import type { TargetFaceOption } from "@/features/rounds/target-face-types";
 import { cn } from "@/lib/utils";
 import { DistanceInfo } from "../_shared/preset-info";
-import type { SyncOperation } from "../_shared/sync-events";
 import { lookupTargetFace } from "../_shared/target-face-icon";
 import type { DistanceConfig } from "./distance-config";
-import {
-  DistanceEditFields,
-  type TargetFaceOption,
-} from "./distance-config-row";
+import { DistanceEditFields } from "./distance-config-row";
 import { EndRow } from "./end-row";
 import type { Pointer } from "./scorecard-input";
-import { distanceNumber, summarizeDistance } from "./scorecard-scoring";
-import type { Distance, Shot } from "./scorecard-types";
 
 type DistanceSummary = ReturnType<typeof summarizeDistance>;
 

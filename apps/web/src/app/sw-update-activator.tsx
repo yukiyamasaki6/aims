@@ -2,8 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { roundOpHub } from "@/app/(main)/rounds/_shared/round-op-hub";
 import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
+import { roundOpHub } from "@/features/rounds/round-op-hub";
 
 type SwitchHandlers = {
   onSwitched: () => void;

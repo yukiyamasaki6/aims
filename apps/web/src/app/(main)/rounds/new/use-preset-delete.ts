@@ -1,9 +1,9 @@
 "use client";
 
 import { type RefObject, useState } from "react";
+import { deletePresetFromSnapshot } from "../_shared/fetch-presets";
+import type { Preset } from "../_shared/preset-types";
 import { deletePersonalPreset } from "./delete-preset";
-import { deletePresetFromSnapshot } from "./fetch-presets";
-import type { Preset } from "./preset-types";
 
 // 個人プリセットの削除。確認中のプリセットと、削除済みのIDを持つ。
 export function usePresetDelete(

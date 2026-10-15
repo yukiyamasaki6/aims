@@ -3,22 +3,25 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getLocalIdentity } from "@/features/auth/local-identity";
-import type { Database } from "@/types/supabase";
-import { saveReferenceSnapshot } from "../_shared/reference-snapshot";
-import { roundStreamId } from "../_shared/round-op-log";
-import { roundOpStore } from "../_shared/round-op-store";
-import { roundCreated } from "../_shared/round-op-test-helpers";
-import type { SyncOperation } from "../_shared/sync-events";
-import type { TargetFaceOption } from "./distance-config-row";
 import type {
   FetchedRoundDetail,
   fetchRoundDetail,
   fetchTargetFaces,
-} from "./fetch-round-detail";
+} from "@/features/rounds/fetch-round-detail";
+import { saveReferenceSnapshot } from "@/features/rounds/reference-snapshot";
+import type { RoundBaseRecord } from "@/features/rounds/round-base";
+import { applyOperations } from "@/features/rounds/round-op-apply";
+import { roundStreamId } from "@/features/rounds/round-op-log";
+import { roundOpStore } from "@/features/rounds/round-op-store";
+import { roundCreated } from "@/features/rounds/round-op-test-helpers";
+import {
+  roundTablesFromServer,
+  selectRoundState,
+} from "@/features/rounds/round-tables";
+import type { SyncOperation } from "@/features/rounds/sync-events";
+import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+import type { Database } from "@/types/supabase";
 import { loadRoundDetail } from "./load-round-detail";
-import type { RoundBaseRecord } from "./round-base";
-import { applyOperations } from "./round-op-apply";
-import { roundTablesFromServer, selectRoundState } from "./round-tables";
 import { firstOpenEnd } from "./scorecard-input";
 
 // 取得の待ちの上限を短くする。
@@ -39,8 +42,10 @@ const fetcher = vi.hoisted(() => ({
   fetchRoundDetail: vi.fn(),
   fetchTargetFaces: vi.fn(),
 }));
-vi.mock("./fetch-round-detail", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./fetch-round-detail")>()),
+vi.mock("@/features/rounds/fetch-round-detail", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/features/rounds/fetch-round-detail")
+  >()),
   ...fetcher,
 }));
 const fetchDetail = vi.mocked<typeof fetchRoundDetail>(
@@ -49,8 +54,8 @@ const fetchDetail = vi.mocked<typeof fetchRoundDetail>(
 const fetchFaces = vi.mocked<typeof fetchTargetFaces>(fetcher.fetchTargetFaces);
 
 // 列への入り口は境界としてモックし、読み込みは同じユーザーのIndexedDBから読む(ハブの起動を要さない)。
-vi.mock("../_shared/round-op-log", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../_shared/round-op-log")>()),
+vi.mock("@/features/rounds/round-op-log", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/features/rounds/round-op-log")>()),
   roundOpLog: {
     // 実物と同じく、読めないときは空にする。
     load: vi.fn(async (roundId: string) => {

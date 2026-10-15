@@ -17,13 +17,13 @@ const deps = vi.hoisted(() => ({
 vi.mock("./fetch-round-detail", () => ({
   fetchRoundDetails: deps.fetchRoundDetails,
 }));
-vi.mock("../_shared/round-op-log", () => ({
+vi.mock("./round-op-log", () => ({
   roundOpLog: {
     retainedRoundIds: deps.retainedRoundIds,
     commit: deps.commit,
   },
 }));
-vi.mock("../_shared/round-op-hub", () => ({
+vi.mock("./round-op-hub", () => ({
   roundOpHub: { getUserId: deps.getUserId },
 }));
 

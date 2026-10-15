@@ -6,8 +6,8 @@ import {
   deletePresetFromSnapshot,
   type FetchedPresets,
   fetchPresets,
-} from "./fetch-presets";
-import type { Preset } from "./preset-types";
+} from "../_shared/fetch-presets";
+import type { Preset } from "../_shared/preset-types";
 import { RoundPresetSelect } from "./round-preset-select-client";
 import { startRound } from "./start-round";
 
@@ -36,7 +36,7 @@ vi.mock("./start-round", () => ({ startRound: vi.fn() }));
 const startRoundMock = vi.mocked(startRound);
 
 // プリセットの取得は別のテストで確かめるため、取得関数を境界としてモックする。
-vi.mock("./fetch-presets", () => ({
+vi.mock("../_shared/fetch-presets", () => ({
   fetchPresets: vi.fn(),
   deletePresetFromSnapshot: vi.fn(),
 }));

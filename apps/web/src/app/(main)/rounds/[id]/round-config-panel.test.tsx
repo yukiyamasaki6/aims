@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RoundConfig } from "./round-config";
+import type { RoundConfig } from "@/features/rounds/round-config";
 import { RoundConfigPanel } from "./round-config-panel";
 
 const initial: RoundConfig = {

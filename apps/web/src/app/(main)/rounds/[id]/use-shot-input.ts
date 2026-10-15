@@ -1,5 +1,8 @@
 import { useState } from "react";
-import type { SyncOperation } from "../_shared/sync-events";
+import { endHasRoom } from "@/features/rounds/scorecard-scoring";
+import type { Distance, Shot } from "@/features/rounds/scorecard-types";
+import { newShotId } from "@/features/rounds/shot-id";
+import type { SyncOperation } from "@/features/rounds/sync-events";
 import {
   buildShotOperation,
   clearHistoryEntry,
@@ -15,9 +18,6 @@ import {
   shotPointer,
   withPendingShots,
 } from "./scorecard-input";
-import { endHasRoom } from "./scorecard-scoring";
-import type { Distance, Shot } from "./scorecard-types";
-import { newShotId } from "./shot-id";
 import type { ScoreHistory } from "./use-score-history";
 
 // 画面へまだ反映されていない(保存の完了を待つ)自分の矢の操作。空白・新しい矢・次のエンドの判定に数える。

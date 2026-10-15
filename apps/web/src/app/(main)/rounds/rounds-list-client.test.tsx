@@ -33,7 +33,7 @@ vi.mock("./_shared/delete-round", () => deletion);
 
 // 削除の確定は、削除の印として端末の組へ渡る。
 const log = vi.hoisted(() => ({ commitDeleted: vi.fn() }));
-vi.mock("./_shared/round-op-log", () => ({ roundOpLog: log }));
+vi.mock("@/features/rounds/round-op-log", () => ({ roundOpLog: log }));
 
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 

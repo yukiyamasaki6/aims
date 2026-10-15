@@ -1,13 +1,13 @@
 import { useCallback, useState } from "react";
-import { cn } from "@/lib/utils";
-import { paleTone, ringColorFor } from "./scorecard-colors";
-import type { Pointer } from "./scorecard-input";
 import {
   endSubtotal,
   type ScoringTargetFace,
   sortEndShots,
-} from "./scorecard-scoring";
-import type { Distance, Shot } from "./scorecard-types";
+} from "@/features/rounds/scorecard-scoring";
+import type { Distance, Shot } from "@/features/rounds/scorecard-types";
+import { cn } from "@/lib/utils";
+import { paleTone, ringColorFor } from "./scorecard-colors";
+import type { Pointer } from "./scorecard-input";
 
 // 場所の最小の幅(玉32px + 左右の余白2pxずつ、玉の間隔は最小4px)と、1段の高さ(行の高さ40px)。
 const BALL_SLOT_WIDTH = 36;

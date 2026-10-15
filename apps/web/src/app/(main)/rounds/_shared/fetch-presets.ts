@@ -5,13 +5,13 @@ import {
   fetchContent,
 } from "@/features/fetch-result/fetch-content";
 import type { FetchResult } from "@/features/fetch-result/fetch-result";
-import type { Database } from "@/types/supabase";
-import { ROUND_PRESET_SELECT } from "../_shared/reference-query-constants";
+import { ROUND_PRESET_SELECT } from "@/features/rounds/reference-query-constants";
 import {
   loadReferenceSnapshot,
   saveReferenceSnapshot,
   updateReferenceSnapshot,
-} from "../_shared/reference-snapshot";
+} from "@/features/rounds/reference-snapshot";
+import type { Database } from "@/types/supabase";
 import { comparePresets } from "./compare-presets";
 import type { Preset, PresetWithMeta } from "./preset-types";
 

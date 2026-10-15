@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 import { getLocalIdentity } from "@/features/auth/local-identity";
+import { roundOpHub } from "@/features/rounds/round-op-hub";
 import { createClient } from "@/lib/supabase/client";
-import { roundOpHub } from "./(main)/rounds/_shared/round-op-hub";
 
 // 操作の列の常駐の送信を、どの画面でも動かす。何も表示しない。
 export function OpSyncProvider() {

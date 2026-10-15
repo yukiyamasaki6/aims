@@ -1,10 +1,10 @@
 import { useRouter } from "next/navigation";
 import { useRef } from "react";
+import { isRoundInProgress } from "@/features/rounds/round-base";
+import type { SyncOperation } from "@/features/rounds/sync-events";
+import type { TargetFaceOption } from "@/features/rounds/target-face-types";
 import { useHydrated } from "@/hooks/use-hydrated";
-import type { SyncOperation } from "../_shared/sync-events";
-import type { TargetFaceOption } from "./distance-config-row";
 import type { LoadedRound } from "./load-round-detail";
-import { isRoundInProgress } from "./round-base";
 import { statusOperation } from "./round-progress";
 import { useDistanceEditing } from "./use-distance-editing";
 import { useKeypad } from "./use-keypad";

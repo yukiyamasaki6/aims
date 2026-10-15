@@ -4,11 +4,11 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FETCH_TIMEOUT_MS } from "@/features/fetch-result/fetch-content";
 import type { FetchResult } from "@/features/fetch-result/fetch-result";
-import type { TargetFaceOption } from "./distance-config-row";
+import { roundTablesFromServer } from "@/features/rounds/round-tables";
+import type { TargetFaceOption } from "@/features/rounds/target-face-types";
 import type { LoadedRoundDetail } from "./load-round-detail";
 import { loadRoundDetail } from "./load-round-detail";
 import { RoundDetailClient } from "./round-detail-client";
-import { roundTablesFromServer } from "./round-tables";
 import { useCreationGone } from "./use-creation-gone";
 
 const ID = "123e4567-e89b-12d3-a456-426614174000";

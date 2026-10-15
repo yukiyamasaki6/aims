@@ -1,9 +1,9 @@
 import { useState } from "react";
-import type { SyncOperation } from "../_shared/sync-events";
+import type { Distance } from "@/features/rounds/scorecard-types";
+import type { SyncOperation } from "@/features/rounds/sync-events";
 import type { DistanceConfig } from "./distance-config";
 import { changesDistanceStructure, distanceToAdd } from "./scorecard-distances";
 import type { Pointer } from "./scorecard-input";
-import type { Distance } from "./scorecard-types";
 
 // 距離の編集パネルの開閉と、距離の追加、保存、削除の後始末。
 export function useDistanceEditing({

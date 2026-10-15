@@ -13,14 +13,14 @@ import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getLocalIdentity } from "@/features/auth/local-identity";
 import { retryDelayMs } from "@/features/op-log/sync-result";
-import { roundOpHub } from "../_shared/round-op-hub";
-import { roundOpLog } from "../_shared/round-op-log";
-import { roundOpStore } from "../_shared/round-op-store";
-import type { TargetFaceOption } from "./distance-config-row";
-import type { RoundConfig } from "./round-config";
-import { roundTablesFromServer } from "./round-tables";
+import type { RoundConfig } from "@/features/rounds/round-config";
+import { roundOpHub } from "@/features/rounds/round-op-hub";
+import { roundOpLog } from "@/features/rounds/round-op-log";
+import { roundOpStore } from "@/features/rounds/round-op-store";
+import { roundTablesFromServer } from "@/features/rounds/round-tables";
+import type { Distance, Shot } from "@/features/rounds/scorecard-types";
+import type { TargetFaceOption } from "@/features/rounds/target-face-types";
 import { ScorecardClient } from "./scorecard-client";
-import type { Distance, Shot } from "./scorecard-types";
 
 const nav = vi.hoisted(() => ({
   push: vi.fn(),

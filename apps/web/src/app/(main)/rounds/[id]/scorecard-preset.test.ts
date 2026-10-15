@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Distance } from "@/features/rounds/scorecard-types";
 import {
   CLOSED_PRESET_DIALOG,
   changePresetDialogOpen,
@@ -8,7 +9,6 @@ import {
   type PresetSource,
   startPresetSave,
 } from "./scorecard-preset";
-import type { Distance } from "./scorecard-types";
 
 const distanceA: Distance = {
   id: "d-a",

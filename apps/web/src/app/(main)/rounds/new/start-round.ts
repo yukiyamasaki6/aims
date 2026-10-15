@@ -1,11 +1,11 @@
 import { sessionFailureMessage } from "@/features/auth/errors";
 import { readSession, type SessionState } from "@/features/auth/session-state";
 import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
+import { comparePositionKey } from "@/features/rounds/position-key";
+import { roundOpLog } from "@/features/rounds/round-op-log";
+import type { SyncOperation } from "@/features/rounds/sync-events";
 import { createClient } from "@/lib/supabase/client";
-import { comparePositionKey } from "../_shared/position-key";
-import { roundOpLog } from "../_shared/round-op-log";
-import type { SyncOperation } from "../_shared/sync-events";
-import type { Preset } from "./preset-types";
+import type { Preset } from "../_shared/preset-types";
 
 type CreatedOperation = Extract<SyncOperation, { type: "round.created" }>;
 

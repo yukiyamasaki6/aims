@@ -1,6 +1,6 @@
-import type { SyncOperation } from "../_shared/sync-events";
-import { endHasRoom } from "./scorecard-scoring";
-import type { Distance, Shot } from "./scorecard-types";
+import { endHasRoom } from "@/features/rounds/scorecard-scoring";
+import type { Distance, Shot } from "@/features/rounds/scorecard-types";
+import type { SyncOperation } from "@/features/rounds/sync-events";
 
 // 指している矢。まだ記録していない新しい矢(エンドで決まる)か、記録済みの矢。何も指していないときはnull。
 export type Pointer =

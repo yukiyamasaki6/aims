@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../_shared/round-constants";
-import type { SyncOperation } from "../_shared/sync-events";
 import {
-  lookupTargetFace,
-  TargetFaceInfo,
-  type TargetFaceSpotLayout,
-} from "../_shared/target-face-icon";
+  BOW_TYPE_OPTIONS,
+  FORMAT_OPTIONS,
+} from "@/features/rounds/round-constants";
+import type { SyncOperation } from "@/features/rounds/sync-events";
+import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+import { cn } from "@/lib/utils";
+import { lookupTargetFace, TargetFaceInfo } from "../_shared/target-face-icon";
 import {
   buildDistanceDisabledOperation,
   buildDistanceUpdatedOperation,
@@ -23,15 +23,6 @@ import {
   validateDistanceDraft,
 } from "./distance-config";
 import { FILTER_ALL } from "./distance-config-constants";
-
-export type TargetFaceOption = {
-  id: string;
-  name: string;
-  size: number;
-  format: string;
-  bow_type: string[];
-  target_face_spots: TargetFaceSpotLayout[];
-};
 
 // フィルタ（種別・弓種）は「すべて」も選択肢に含める。ラウンドの種別・弓種を
 // 既定にはするが、絞り込みが自由度を奪って目的の的を選べなくなることが

@@ -1,6 +1,6 @@
 import { isOffline } from "@/features/fetch-result/network";
 import { createOpSyncHub } from "@/features/op-log/op-sync-hub";
-import { type RoundBaseRecord, roundStreamRules } from "../[id]/round-base";
+import { type RoundBaseRecord, roundStreamRules } from "./round-base";
 import { batchLimitOf, conflicts, laneOf } from "./round-op-conflicts";
 import { roundOpStore } from "./round-op-store";
 import { sendRoundBatch } from "./round-op-transport";

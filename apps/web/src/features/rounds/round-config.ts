@@ -1,5 +1,5 @@
-import { NAME_MAX_LENGTH } from "../_shared/round-constants";
-import type { RoundChanges, SyncOperation } from "../_shared/sync-events";
+import { NAME_MAX_LENGTH } from "./round-constants";
+import type { RoundChanges, SyncOperation } from "./sync-events";
 
 export type RoundConfig = {
   name: string;

@@ -3,7 +3,6 @@ import type {
   StreamEntry,
   StreamRules,
 } from "@/features/op-log/op-log-types";
-import type { SyncOperation } from "../_shared/sync-events";
 import type { RoundRevisions } from "./fetch-round-detail";
 import { type AppliedOperation, applyOperations } from "./round-op-apply";
 import {
@@ -13,6 +12,7 @@ import {
   selectRoundState,
 } from "./round-tables";
 import type { ScoringTargetFace } from "./scorecard-scoring";
+import type { SyncOperation } from "./sync-events";
 
 // 取得して端末に持つ、ラウンドのベース。サーバーの状態と、その時点の対象ごとのrevision。
 export type RoundBaseRecord = {

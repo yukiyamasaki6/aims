@@ -2,10 +2,10 @@ import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchPresets } from "../new/fetch-presets";
-import type { TargetFaceOption } from "./distance-config-row";
+import type { Distance } from "@/features/rounds/scorecard-types";
+import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+import { fetchPresets } from "../_shared/fetch-presets";
 import { SavePresetDialog } from "./save-preset-dialog";
-import type { Distance } from "./scorecard-types";
 
 // SupabaseのSDKは外部サービスとの境界のため、セッションの取得結果とRPCの結果を任意に制御できるスタブで模す。
 // 保存の操作は、実物のSupabaseクライアントラッパーを通してこのスタブのrpcに届く。
@@ -21,7 +21,7 @@ vi.mock("@supabase/ssr", () => ({
 }));
 
 // 保存の成功後の背景の再取得は、取得の境界として呼ばれたことだけを確かめる。
-vi.mock("../new/fetch-presets", () => ({ fetchPresets: vi.fn() }));
+vi.mock("../_shared/fetch-presets", () => ({ fetchPresets: vi.fn() }));
 
 const targetFace: TargetFaceOption = {
   id: "face-x",
