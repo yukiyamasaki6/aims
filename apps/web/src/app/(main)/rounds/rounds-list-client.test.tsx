@@ -255,8 +255,10 @@ describe("RoundsListClient", () => {
       render(<RoundsListClient />);
       await screen.findByText("午後練習");
 
-      // Then
-      expect(log.commitDeleted).toHaveBeenCalledWith("round-1", 100);
+      // Then: 表示後の処理で呼ばれるため、呼び出しを待って確認する
+      await waitFor(() => {
+        expect(log.commitDeleted).toHaveBeenCalledWith("round-1", 100);
+      });
     });
   });
 
