@@ -135,3 +135,31 @@
     @apply font-sans;
   }
 }
+
+/* 取得中の枠。帯は縦から20度傾いた「/」(110deg)で、幅480pxのタイルを横に繰り返して動かし、
+   枠の幅によらず同じ速さにする。帯の定義は動きを減らさない設定のときだけ置き、
+   低減時は静的な枠にする。 */
+@utility skeleton {
+  background-color: var(--muted);
+
+  @media (prefers-reduced-motion: no-preference) {
+    background-image: linear-gradient(
+      110deg,
+      transparent calc(50% - 48px),
+      color-mix(in oklch, var(--foreground) 7%, transparent) 50%,
+      transparent calc(50% + 48px)
+    );
+    background-size: 480px 100%;
+    background-repeat: repeat-x;
+    animation: skeleton-wave 1.6s linear infinite;
+  }
+}
+
+@keyframes skeleton-wave {
+  from {
+    background-position-x: 0;
+  }
+  to {
+    background-position-x: 480px;
+  }
+}
