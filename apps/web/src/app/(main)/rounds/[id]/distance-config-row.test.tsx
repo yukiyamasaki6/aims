@@ -600,4 +600,23 @@ describe("DistanceEditFields", () => {
       });
     });
   });
+
+  describe("入力欄のEnterキー", () => {
+    it("距離の入力欄でフォーカスを外すだけで、保存も閉鎖もしない", async () => {
+      // Given: フォーカスのある距離の入力欄
+      const user = userEvent.setup();
+      const { onSaved, onOpenChange, enqueue } = setup();
+      const input = screen.getByTestId("distance-config-distance-1");
+      await user.click(input);
+
+      // When: Enterを押す
+      await user.keyboard("{Enter}");
+
+      // Then: フォーカスが外れ、保存も閉鎖も同期操作の登録もされない
+      expect(input).not.toHaveFocus();
+      expect(onSaved).not.toHaveBeenCalled();
+      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(enqueue).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -220,4 +220,25 @@ describe("RoundConfigPanel", () => {
       );
     });
   });
+
+  describe("入力欄のEnterキー", () => {
+    it("ラウンド名と実施日のどちらでも、フォーカスを外すだけで保存も閉鎖もしない", async () => {
+      // Given: 展開したパネル
+      const user = userEvent.setup();
+      const { enqueue } = setup();
+      await user.click(screen.getByTestId("round-config-summary"));
+
+      for (const testId of ["round-config-name", "round-config-date"]) {
+        // When: 入力欄でEnterを押す
+        const input = screen.getByTestId(testId);
+        await user.click(input);
+        await user.keyboard("{Enter}");
+
+        // Then: フォーカスが外れ、パネルは開いたまま、同期操作は登録されない
+        expect(input).not.toHaveFocus();
+        expect(screen.getByTestId("round-config-name")).toBeInTheDocument();
+        expect(enqueue).not.toHaveBeenCalled();
+      }
+    });
+  });
 });

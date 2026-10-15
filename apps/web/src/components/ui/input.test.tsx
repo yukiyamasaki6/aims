@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Input } from "./input";
 
@@ -65,6 +66,91 @@ describe("Input", () => {
       // Then
       expect(screen.getByPlaceholderText("入力")).toHaveValue("");
       expect(handleChange).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("Enterキー", () => {
+    describe("formに属さない場合", () => {
+      it("変換中でないEnterでフォーカスを外し、入力値は保持する", async () => {
+        // Given: フォーカスと入力のあるform外の入力欄
+        const user = userEvent.setup();
+        render(<Input placeholder="入力" />);
+        const input = screen.getByPlaceholderText("入力");
+        await user.type(input, "abc");
+
+        // When: Enterを押す
+        await user.keyboard("{Enter}");
+
+        // Then: フォーカスが外れ、値は残る
+        expect(input).not.toHaveFocus();
+        expect(input).toHaveValue("abc");
+      });
+
+      it("IME変換中のEnterではフォーカスを外さない", () => {
+        // Given: フォーカスのあるform外の入力欄
+        render(<Input placeholder="入力" />);
+        const input = screen.getByPlaceholderText("入力");
+        input.focus();
+
+        // When: 変換中のEnterを押す
+        fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+
+        // Then: フォーカスが残る
+        expect(input).toHaveFocus();
+      });
+
+      it("Enter以外のキーではフォーカスを外さない", async () => {
+        // Given: フォーカスのあるform外の入力欄
+        const user = userEvent.setup();
+        render(<Input placeholder="入力" />);
+        const input = screen.getByPlaceholderText("入力");
+        await user.click(input);
+
+        // When: Enter以外のキーを押す
+        await user.keyboard("a");
+
+        // Then: フォーカスが残る
+        expect(input).toHaveFocus();
+      });
+
+      it("呼び出し側のonKeyDownを呼び、そこでpreventDefaultするとフォーカスを外さない", () => {
+        // Given: preventDefaultするonKeyDownを持つ入力欄
+        const handleKeyDown = vi.fn((e: React.KeyboardEvent) =>
+          e.preventDefault(),
+        );
+        render(<Input placeholder="入力" onKeyDown={handleKeyDown} />);
+        const input = screen.getByPlaceholderText("入力");
+        input.focus();
+
+        // When: Enterを押す
+        fireEvent.keyDown(input, { key: "Enter" });
+
+        // Then: onKeyDownが呼ばれ、フォーカスが残る
+        expect(handleKeyDown).toHaveBeenCalled();
+        expect(input).toHaveFocus();
+      });
+    });
+
+    describe("form内の場合", () => {
+      it("フォーカスを外さず、Enterで送信される", async () => {
+        // Given: form内の入力欄
+        const user = userEvent.setup();
+        const handleSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+        render(
+          <form onSubmit={handleSubmit}>
+            <Input placeholder="入力" />
+          </form>,
+        );
+        const input = screen.getByPlaceholderText("入力");
+        await user.click(input);
+
+        // When: Enterを押す
+        await user.keyboard("{Enter}");
+
+        // Then: フォーカスが残り、送信される
+        expect(input).toHaveFocus();
+        expect(handleSubmit).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });

@@ -327,4 +327,22 @@ describe("SavePresetDialog", () => {
       expect(fetchPresets).not.toHaveBeenCalled();
     });
   });
+
+  describe("名前欄のEnterキー", () => {
+    it("フォーカスを外すだけで、保存せずダイアログも閉じない", async () => {
+      // Given: 開いたダイアログの名前欄
+      const { user } = setup();
+      await user.click(screen.getByTestId("save-as-preset-trigger"));
+      const name = screen.getByTestId("save-as-preset-name");
+      await user.click(name);
+
+      // When: Enterを押す
+      await user.keyboard("{Enter}");
+
+      // Then: フォーカスが外れ、RPCは呼ばれず、ダイアログは開いたまま
+      expect(name).not.toHaveFocus();
+      expect(supabase.rpc).not.toHaveBeenCalled();
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+  });
 });
