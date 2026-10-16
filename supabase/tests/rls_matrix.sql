@@ -67,8 +67,8 @@ values ('b0000000-0000-0000-0000-000000000030', 'b0000000-0000-0000-0000-0000000
 insert into public.distance_events (event_id, round_id, distance_id, type, author_id, revision, position_key, distance, is_marked, total_ends, arrows_per_end, target_face_id)
 values ('b0000000-0000-0000-0000-000000000031', 'b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000021', 'CREATED', 'b0000000-0000-0000-0000-000000000005', 1, 'a', 70, true, 6, 6, 'a1000000-0000-0000-0000-000000000001');
 
-insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int)
-values ('b0000000-0000-0000-0000-000000000032', 'b0000000-0000-0000-0000-000000000021', 'b0000000-0000-0000-0000-000000000024', 'RECORDED', 'b0000000-0000-0000-0000-000000000005', 1, 1, 'b0000000-0000-0000-0000-000000000005', 'X', 10);
+insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, set_fields)
+values ('b0000000-0000-0000-0000-000000000032', 'b0000000-0000-0000-0000-000000000021', 'b0000000-0000-0000-0000-000000000024', 'RECORDED', 'b0000000-0000-0000-0000-000000000005', 1, 1, 'b0000000-0000-0000-0000-000000000005', 'X', 10, array['score', 'shooter_id']);
 
 -- 検証対象のDBロール（target）と、権限を持っていてよい内部ロール（internal）。
 -- PUBLICの権限は、targetの各ロールへの実効権限として実測側に現れるため、内部ロールとして許容する。
@@ -164,17 +164,17 @@ insert into rls_stmt (tbl, op, stmt) values
   ('round_users', 'delete', $q$delete from public.round_users where id = 'b0000000-0000-0000-0000-000000000023'$q$),
 
   ('round_events', 'select', $q$select 1 from public.round_events where round_id = 'b0000000-0000-0000-0000-000000000020'$q$),
-  ('round_events', 'insert', $q$insert into public.round_events (event_id, round_id, type, author_id, revision, name, round_date, format, bow_type) values ('b0000000-0000-0000-0000-000000000098', 'b0000000-0000-0000-0000-000000000020', 'UPDATED', 'b0000000-0000-0000-0000-000000000005', 2, 'Matrix Round', current_date, 'outdoor', 'recurve')$q$),
+  ('round_events', 'insert', $q$insert into public.round_events (event_id, round_id, type, author_id, revision, name, round_date, format, bow_type, set_fields) values ('b0000000-0000-0000-0000-000000000098', 'b0000000-0000-0000-0000-000000000020', 'UPDATED', 'b0000000-0000-0000-0000-000000000005', 2, 'Matrix Round', current_date, 'outdoor', 'recurve', array['name', 'round_date', 'format', 'bow_type'])$q$),
   ('round_events', 'update', $q$update public.round_events set name = 'changed' where event_id = 'b0000000-0000-0000-0000-000000000030'$q$),
   ('round_events', 'delete', $q$delete from public.round_events where event_id = 'b0000000-0000-0000-0000-000000000030'$q$),
 
   ('distance_events', 'select', $q$select 1 from public.distance_events where round_id = 'b0000000-0000-0000-0000-000000000020'$q$),
-  ('distance_events', 'insert', $q$insert into public.distance_events (event_id, round_id, distance_id, type, author_id, revision, position_key, distance, is_marked, total_ends, arrows_per_end, target_face_id) values ('b0000000-0000-0000-0000-000000000099', 'b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000021', 'UPDATED', 'b0000000-0000-0000-0000-000000000005', 2, 'a', 50, true, 6, 6, 'a1000000-0000-0000-0000-000000000001')$q$),
+  ('distance_events', 'insert', $q$insert into public.distance_events (event_id, round_id, distance_id, type, author_id, revision, position_key, distance, is_marked, total_ends, arrows_per_end, target_face_id, set_fields) values ('b0000000-0000-0000-0000-000000000099', 'b0000000-0000-0000-0000-000000000020', 'b0000000-0000-0000-0000-000000000021', 'UPDATED', 'b0000000-0000-0000-0000-000000000005', 2, 'a', 50, true, 6, 6, 'a1000000-0000-0000-0000-000000000001', array['distance', 'is_marked', 'total_ends', 'arrows_per_end', 'target_face_id'])$q$),
   ('distance_events', 'update', $q$update public.distance_events set distance = 50 where event_id = 'b0000000-0000-0000-0000-000000000031'$q$),
   ('distance_events', 'delete', $q$delete from public.distance_events where event_id = 'b0000000-0000-0000-0000-000000000031'$q$),
 
   ('shot_events', 'select', $q$select 1 from public.shot_events where distance_id = 'b0000000-0000-0000-0000-000000000021'$q$),
-  ('shot_events', 'insert', $q$insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int) values ('b0000000-0000-0000-0000-00000000009a', 'b0000000-0000-0000-0000-000000000021', 'b0000000-0000-0000-0000-000000000024', 'RECORDED', 'b0000000-0000-0000-0000-000000000005', 2, 1, 'b0000000-0000-0000-0000-000000000005', '9', 9)$q$),
+  ('shot_events', 'insert', $q$insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, set_fields) values ('b0000000-0000-0000-0000-00000000009a', 'b0000000-0000-0000-0000-000000000021', 'b0000000-0000-0000-0000-000000000024', 'RECORDED', 'b0000000-0000-0000-0000-000000000005', 2, 1, 'b0000000-0000-0000-0000-000000000005', '9', 9, array['score', 'shooter_id'])$q$),
   ('shot_events', 'update', $q$update public.shot_events set score_int = 0 where event_id = 'b0000000-0000-0000-0000-000000000032'$q$),
   ('shot_events', 'delete', $q$delete from public.shot_events where event_id = 'b0000000-0000-0000-0000-000000000032'$q$);
 

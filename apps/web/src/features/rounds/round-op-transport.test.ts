@@ -85,27 +85,16 @@ describe("sendRoundBatch", () => {
   });
 
   describe("ラウンドの作成", () => {
-    it("create_roundへ距離を含めて送り、ラウンドIDの返りをrevision 1の適用済みとして返す", async () => {
+    it("create_roundへ距離を含めて送り、jsonbの返りを判定結果として返す", async () => {
       client.rpc.mockResolvedValue({
-        data: "round-1",
+        data: resultJson(1),
         error: null,
         status: 200,
       });
 
       const outcome = await sendRoundBatch(flight(roundCreated()));
 
-      expect(outcome).toEqual({
-        ok: true,
-        results: [
-          {
-            revision: 1,
-            applied: true,
-            appliedFields: null,
-            rejectedFields: [],
-            reason: null,
-          },
-        ],
-      });
+      expect(outcome).toEqual({ ok: true, results: [resultOf(1)] });
       expect(client.rpc).toHaveBeenCalledWith("create_round", {
         p_round_event_id: "e-round-created",
         p_id: "round-1",
@@ -128,8 +117,12 @@ describe("sendRoundBatch", () => {
       });
     });
 
-    it("ラウンドIDでない返りは、不正な応答として扱う", async () => {
-      client.rpc.mockResolvedValue({ data: null, error: null, status: 200 });
+    it("形の不正な返りは、不正な応答として扱う", async () => {
+      client.rpc.mockResolvedValue({
+        data: "round-1",
+        error: null,
+        status: 200,
+      });
 
       const outcome = await sendRoundBatch(flight(roundCreated()));
 

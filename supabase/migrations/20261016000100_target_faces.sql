@@ -72,34 +72,6 @@ ALTER TABLE ONLY "public"."target_faces"
     ADD CONSTRAINT "target_faces_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "public"."users"("id") ON DELETE CASCADE;
 
 
-CREATE POLICY "delete_if_owner" ON "public"."target_face_rings" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
-   FROM ("public"."target_face_spots" "s"
-     JOIN "public"."target_faces" "tf" ON (("tf"."id" = "s"."target_face_id")))
-  WHERE (("s"."id" = "target_face_rings"."spot_id") AND ("tf"."owner_id" = "auth"."uid"())))));
-
-
-CREATE POLICY "delete_if_owner" ON "public"."target_face_spots" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
-   FROM "public"."target_faces" "tf"
-  WHERE (("tf"."id" = "target_face_spots"."target_face_id") AND ("tf"."owner_id" = "auth"."uid"())))));
-
-
-CREATE POLICY "delete_own" ON "public"."target_faces" FOR DELETE TO "authenticated" USING (("owner_id" = "auth"."uid"()));
-
-
-CREATE POLICY "insert_if_owner" ON "public"."target_face_rings" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1
-   FROM ("public"."target_face_spots" "s"
-     JOIN "public"."target_faces" "tf" ON (("tf"."id" = "s"."target_face_id")))
-  WHERE (("s"."id" = "target_face_rings"."spot_id") AND ("tf"."owner_id" = "auth"."uid"())))));
-
-
-CREATE POLICY "insert_if_owner" ON "public"."target_face_spots" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1
-   FROM "public"."target_faces" "tf"
-  WHERE (("tf"."id" = "target_face_spots"."target_face_id") AND ("tf"."owner_id" = "auth"."uid"())))));
-
-
-CREATE POLICY "insert_own" ON "public"."target_faces" FOR INSERT TO "authenticated" WITH CHECK (("owner_id" = "auth"."uid"()));
-
-
 CREATE POLICY "select_all_authenticated" ON "public"."target_face_rings" FOR SELECT TO "authenticated" USING (true);
 
 
@@ -118,35 +90,22 @@ ALTER TABLE "public"."target_face_spots" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."target_faces" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "update_if_owner" ON "public"."target_face_rings" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
-   FROM ("public"."target_face_spots" "s"
-     JOIN "public"."target_faces" "tf" ON (("tf"."id" = "s"."target_face_id")))
-  WHERE (("s"."id" = "target_face_rings"."spot_id") AND ("tf"."owner_id" = "auth"."uid"()))))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM ("public"."target_face_spots" "s"
-     JOIN "public"."target_faces" "tf" ON (("tf"."id" = "s"."target_face_id")))
-  WHERE (("s"."id" = "target_face_rings"."spot_id") AND ("tf"."owner_id" = "auth"."uid"())))));
-
-
-CREATE POLICY "update_if_owner" ON "public"."target_face_spots" FOR UPDATE TO "authenticated" USING ((EXISTS ( SELECT 1
-   FROM "public"."target_faces" "tf"
-  WHERE (("tf"."id" = "target_face_spots"."target_face_id") AND ("tf"."owner_id" = "auth"."uid"()))))) WITH CHECK ((EXISTS ( SELECT 1
-   FROM "public"."target_faces" "tf"
-  WHERE (("tf"."id" = "target_face_spots"."target_face_id") AND ("tf"."owner_id" = "auth"."uid"())))));
-
-
-CREATE POLICY "update_own" ON "public"."target_faces" FOR UPDATE TO "authenticated" USING (("owner_id" = "auth"."uid"())) WITH CHECK (("owner_id" = "auth"."uid"()));
-
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "public"."target_face_rings" TO "authenticated";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."target_face_rings" TO "service_role";
 
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "public"."target_face_spots" TO "authenticated";
+GRANT SELECT ON TABLE "public"."target_face_rings" TO "authenticated";
+
+
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."target_face_spots" TO "service_role";
 
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "public"."target_faces" TO "authenticated";
+GRANT SELECT ON TABLE "public"."target_face_spots" TO "authenticated";
+
+
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."target_faces" TO "service_role";
+
+
+GRANT SELECT ON TABLE "public"."target_faces" TO "authenticated";
 
 
 --

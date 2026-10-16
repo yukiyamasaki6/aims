@@ -60,11 +60,12 @@ export async function createRound(input: {
 }): Promise<string> {
   const { supabase } = await signInAsTestUser(input.email, input.password);
 
+  const roundId = randomUUID();
   const distanceIds = input.distances.map(() => randomUUID());
 
-  const { data: roundId, error } = await supabase.rpc("create_round", {
+  const { error } = await supabase.rpc("create_round", {
     p_round_event_id: randomUUID(),
-    p_id: randomUUID(),
+    p_id: roundId,
     p_name: input.name,
     p_round_date: input.roundDate,
     p_format: input.format ?? "outdoor",
@@ -81,9 +82,7 @@ export async function createRound(input: {
     })),
   });
 
-  if (error || !roundId) {
-    throw error ?? new Error("ラウンドの作成に失敗しました。");
-  }
+  if (error) throw error;
 
   if (input.shots && input.shots.length > 0) {
     const { error: shotsError } = await supabase.rpc("record_shots", {

@@ -3,7 +3,6 @@ import {
   type IDBPDatabase,
   type IDBPTransaction,
   openDB,
-  unwrap,
 } from "idb";
 import type {
   NewOpLogEntry,
@@ -16,11 +15,10 @@ import type {
 } from "./op-log-types";
 
 const DB_NAME = "aims-sync";
+// 保存の形を変えたら上げる。更新では、以前の内容を移行せずに全てのstoreを作り直す。
 const DB_VERSION = 5;
 const STORE_NAME = "ops";
 const BASE_STORE_NAME = "bases";
-// version 2までのstore。利用者がいない段階のため、内容は移行せずに捨てる。
-const LEGACY_STORE_NAME = "round-outbox";
 
 // 保存前の値は`seq`を持たず、autoIncrementが保存時に付ける。
 type StoredEntry<Op extends OpBase> = Omit<OpLogEntry<Op>, "seq"> & {
@@ -80,12 +78,6 @@ export type OpLogStore<Op extends OpBase, Base> = {
   close: () => Promise<void>;
 };
 
-function dropLegacyStore(database: IDBDatabase) {
-  if (database.objectStoreNames.contains(LEGACY_STORE_NAME)) {
-    database.deleteObjectStore(LEGACY_STORE_NAME);
-  }
-}
-
 // 他の接続がversionの更新を待っているとき(blocking)は閉じて譲り、次の呼び出しで開き直す。
 // 古い接続が閉じず更新が待たされているとき(blocked)は開けなかったものとして失敗にする。
 function openOpLogDb<Op extends OpBase, Base>(
@@ -94,12 +86,9 @@ function openOpLogDb<Op extends OpBase, Base>(
   return new Promise((resolve, reject) => {
     let failed = false;
     openDB<OpLogDb<Op, Base>>(DB_NAME, DB_VERSION, {
-      upgrade(database, oldVersion) {
-        if (oldVersion < 3) dropLegacyStore(unwrap(database));
-        // version 5で矢の操作とベースの形が変わった。旧い形の内容は互換を持たないため、移行せずにstoreごと作り直す。
-        if (oldVersion >= 3) {
-          database.deleteObjectStore(STORE_NAME);
-          if (oldVersion >= 4) database.deleteObjectStore(BASE_STORE_NAME);
+      upgrade(database) {
+        for (const name of Array.from(database.objectStoreNames)) {
+          database.deleteObjectStore(name);
         }
         const store = database.createObjectStore(STORE_NAME, {
           keyPath: "seq",

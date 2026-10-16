@@ -51,7 +51,7 @@ describe("shotIdAfter", () => {
         "時計より先の時刻のID(時計の遅れた端末から見た他端末の矢)",
         "01990000-0005-7fff-bfff-ffffffffffff",
       ],
-      ["移行で付けたような無作為のID", "ffffffff-fff0-4fff-bfff-ffffffffffff"],
+      ["時刻順でない無作為のID", "ffffffff-fff0-4fff-bfff-ffffffffffff"],
     ])("%sより、文字列の比較で大きくする", (_name, existing) => {
       // Given / When
       const id = shotIdAfter(

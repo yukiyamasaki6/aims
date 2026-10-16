@@ -97,10 +97,10 @@ insert into public.shots (id, distance_id, end_number, shooter_id, score_str, sc
   (pg_temp.id('SB'), pg_temp.id('D2'), 1, pg_temp.id('E'), '9', 9),
   (pg_temp.id('SC'), pg_temp.id('D3'), 1, pg_temp.id('E'), '9', 9);
 
-insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int) values
-  ('c0000000-0000-0000-0000-00000000f021', pg_temp.id('D2'), pg_temp.id('SA'), 'RECORDED', pg_temp.id('E'), 1, 1, pg_temp.id('E'), 'X', 10),
-  ('c0000000-0000-0000-0000-00000000f022', pg_temp.id('D2'), pg_temp.id('SB'), 'RECORDED', pg_temp.id('E'), 1, 1, pg_temp.id('E'), '9', 9),
-  ('c0000000-0000-0000-0000-00000000f023', pg_temp.id('D3'), pg_temp.id('SC'), 'RECORDED', pg_temp.id('E'), 1, 1, pg_temp.id('E'), '9', 9);
+insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, set_fields) values
+  ('c0000000-0000-0000-0000-00000000f021', pg_temp.id('D2'), pg_temp.id('SA'), 'RECORDED', pg_temp.id('E'), 1, 1, pg_temp.id('E'), 'X', 10, array['score', 'shooter_id']),
+  ('c0000000-0000-0000-0000-00000000f022', pg_temp.id('D2'), pg_temp.id('SB'), 'RECORDED', pg_temp.id('E'), 1, 1, pg_temp.id('E'), '9', 9, array['score', 'shooter_id']),
+  ('c0000000-0000-0000-0000-00000000f023', pg_temp.id('D3'), pg_temp.id('SC'), 'RECORDED', pg_temp.id('E'), 1, 1, pg_temp.id('E'), '9', 9, array['score', 'shooter_id']);
 
 -- ============================================================
 -- 共通ヘルパー
@@ -217,13 +217,36 @@ as $$
   from distances d where d.id = pg_temp.id(p_alias)
 $$;
 
--- p_returned はRPCの戻り値。create_roundは、クライアントが生成したラウンドIDをそのまま返す。
+-- RPCの戻り値の要約。配列は要素ごとの理由（効いた要素はapplied）と、要素が持てば{効いた項目}と!効かなかった項目:理由を表す。
+-- オブジェクトは効いたか、効いた項目、効かなかった項目と理由を表す。
+create function pg_temp.res(p_returned text) returns text
+language sql stable
+as $$
+  select case
+    when p_returned is null then 'ret=-'
+    when jsonb_typeof(p_returned::jsonb) = 'array' then
+      'ret=[' || coalesce((
+        select string_agg(
+          coalesce(e ->> 'reason', case when (e ->> 'applied')::boolean then 'applied' else 'none' end)
+            || coalesce('{' || (select string_agg(f, ',') from jsonb_array_elements_text(case when jsonb_typeof(e -> 'applied_fields') = 'array' then e -> 'applied_fields' else '[]' end) f) || '}', '')
+            || coalesce('!' || (select string_agg((r ->> 'field') || ':' || (r ->> 'reason'), ',') from jsonb_array_elements(case when jsonb_typeof(e -> 'rejected_fields') = 'array' then e -> 'rejected_fields' else '[]' end) r), ''),
+          ',' order by o)
+        from jsonb_array_elements(p_returned::jsonb) with ordinality as t(e, o)
+      ), '') || ']'
+    else
+      'ret=' || coalesce(p_returned::jsonb ->> 'reason', case when (p_returned::jsonb ->> 'applied')::boolean then 'applied' else 'none' end)
+        || coalesce(' fields=' || (select string_agg(f, ',') from jsonb_array_elements_text(case when jsonb_typeof(p_returned::jsonb -> 'applied_fields') = 'array' then p_returned::jsonb -> 'applied_fields' else '[]' end) f), '')
+        || coalesce(' rejected=' || (select string_agg((r ->> 'field') || ':' || (r ->> 'reason'), ',') from jsonb_array_elements(p_returned::jsonb -> 'rejected_fields') r), '')
+  end
+$$;
+
+-- p_returned はRPCの戻り値。create_roundは、他の書き込みRPCと同じ形で判定結果を返す。
 -- 距離は 位置:距離:Marked:エンド数x矢数:的の末尾4桁:IDの末尾2桁 で表し、クライアント生成のIDが保存されることも見る。
 create function pg_temp.st_create_round(p_returned text) returns text
 language sql stable
 as $$
-  select format('returned=%s round=[%s] rounds=%s round_events=%s editors=%s distances=%s distance_events=%s list=[%s]',
-    coalesce(p_returned = pg_temp.id('RN')::text, false)::text,
+  select format('%s round=[%s] rounds=%s round_events=%s editors=%s distances=%s distance_events=%s list=[%s]',
+    pg_temp.res(p_returned),
     coalesce((select format('%s/%s/%s/%s', name, round_date, format, bow_type) from rounds where id = pg_temp.id('RN')), '-'),
     (select count(*) from rounds where id = pg_temp.id('RN')),
     (select count(*) from round_events where round_id = pg_temp.id('RN')),
@@ -278,29 +301,6 @@ as $$
   from preset_rounds p
   left join rpc_actor a on pg_temp.id(a.alias) = p.owner_id
   where p.name = p_name
-$$;
-
--- RPCの戻り値の要約。配列は要素ごとの理由（効いた要素はapplied）と、要素が持てば{効いた項目}と!効かなかった項目:理由を表す。
--- オブジェクトは効いたか、効いた項目、効かなかった項目と理由を表す。
-create function pg_temp.res(p_returned text) returns text
-language sql stable
-as $$
-  select case
-    when p_returned is null then 'ret=-'
-    when jsonb_typeof(p_returned::jsonb) = 'array' then
-      'ret=[' || coalesce((
-        select string_agg(
-          coalesce(e ->> 'reason', case when (e ->> 'applied')::boolean then 'applied' else 'none' end)
-            || coalesce('{' || (select string_agg(f, ',') from jsonb_array_elements_text(case when jsonb_typeof(e -> 'applied_fields') = 'array' then e -> 'applied_fields' else '[]' end) f) || '}', '')
-            || coalesce('!' || (select string_agg((r ->> 'field') || ':' || (r ->> 'reason'), ',') from jsonb_array_elements(case when jsonb_typeof(e -> 'rejected_fields') = 'array' then e -> 'rejected_fields' else '[]' end) r), ''),
-          ',' order by o)
-        from jsonb_array_elements(p_returned::jsonb) with ordinality as t(e, o)
-      ), '') || ']'
-    else
-      'ret=' || coalesce(p_returned::jsonb ->> 'reason', case when (p_returned::jsonb ->> 'applied')::boolean then 'applied' else 'none' end)
-        || coalesce(' fields=' || (select string_agg(f, ',') from jsonb_array_elements_text(case when jsonb_typeof(p_returned::jsonb -> 'applied_fields') = 'array' then p_returned::jsonb -> 'applied_fields' else '[]' end) f), '')
-        || coalesce(' rejected=' || (select string_agg((r ->> 'field') || ':' || (r ->> 'reason'), ',') from jsonb_array_elements(p_returned::jsonb -> 'rejected_fields') r), '')
-  end
 $$;
 
 -- 1ケースを指定アクターで実行し、'ok' か 'error:<メッセージ>' に正規化して、呼び出し後の状態と共に返す。
@@ -496,7 +496,6 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('record_shots', 'invalid', 'missing_end_number', null, pg_temp.q('record_shots', '{"p_shots":[{"end_number":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'missing_shot_id', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_id":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'missing_event_id', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_event_id":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
-  ('record_shots', 'invalid', 'legacy_arrow_number', null, pg_temp.q('record_shots', '{"p_shots":[{"arrow_number":1}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'null_shooter', null, pg_temp.q('record_shots', '{"p_shots":[{"shooter_id":null}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'invalid', 'fractional_shot_number', null, pg_temp.q('record_shots', '{"p_shots":[{"shot_number":1.5}]}'), 1, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
   ('record_shots', 'idempotent', 'replay', null, pg_temp.q('record_shots'), 2, $$select pg_temp.st_shots('D1') || ' ' || pg_temp.res($1)$$),
@@ -512,7 +511,6 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('clear_shots', 'invalid', 'shot_of_other_distance', null, pg_temp.q('clear_shots', '{"p_shots":[{"shot_id":"@SC"}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
   ('clear_shots', 'invalid', 'missing_shot_id', null, pg_temp.q('clear_shots', '{"p_shots":[{"shot_id":null}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
   ('clear_shots', 'invalid', 'missing_event_id', null, pg_temp.q('clear_shots', '{"p_shots":[{"shot_event_id":null}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
-  ('clear_shots', 'invalid', 'legacy_arrow_number', null, pg_temp.q('clear_shots', '{"p_shots":[{"end_number":1,"arrow_number":1}]}'), 1, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
   ('clear_shots', 'idempotent', 'replay', null, pg_temp.q('clear_shots'), 2, $$select pg_temp.st_shots('D2') || ' ' || pg_temp.res($1)$$),
 
   -- save_round_as_preset
@@ -599,38 +597,38 @@ create temp table rpc_expected (
 );
 
 insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
-  ('create_round', 'success', 'default', 'editor', 'ok', 'returned=true round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
-  ('create_round', 'success', 'field_unmarked', 'editor', 'ok', 'returned=true round=[Matrix New Round/2026-01-01/field/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:-:false:6x6:0001:40]'),
-  ('create_round', 'success', 'empty_distances', 'editor', 'ok', 'returned=true round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'success', 'multi_distances', 'editor', 'ok', 'returned=true round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=2 distance_events=2 list=[a:70:true:6x6:0001:40 b:50:true:6x6:0001:41]'),
-  ('create_round', 'success', 'name_50_chars', 'editor', 'ok', 'returned=true round=[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
-  ('create_round', 'invalid', 'missing_is_marked', 'editor', 'error:[PT422]距離の指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'unmarked_in_outdoor', 'editor', 'error:[PT422]Unmarkedの距離はフィールド種別でのみ使用できます。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'invalid_format', 'editor', 'error:[PT422]種別が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'invalid_bow_type', 'editor', 'error:[PT422]弓種が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'name_51_chars', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'missing_name', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'missing_round_date', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'missing_format', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'missing_bow_type', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'missing_target_face', 'editor', 'error:[PT422]距離の指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'missing_position_key', 'editor', 'error:[PT422]距離の指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'marked_without_distance', 'editor', 'error:[PT422]Markedの距離には距離(m)が必要です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'total_ends_zero', 'editor', 'error:[PT422]距離の指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'unknown_target_face', 'editor', 'error:[PT422]指定された的が存在しません。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'success', 'default', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
+  ('create_round', 'success', 'field_unmarked', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/field/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:-:false:6x6:0001:40]'),
+  ('create_round', 'success', 'empty_distances', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'success', 'multi_distances', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=2 distance_events=2 list=[a:70:true:6x6:0001:40 b:50:true:6x6:0001:41]'),
+  ('create_round', 'success', 'name_50_chars', 'editor', 'ok', 'ret=applied round=[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
+  ('create_round', 'invalid', 'missing_is_marked', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'unmarked_in_outdoor', 'editor', 'error:[PT422]Unmarkedの距離はフィールド種別でのみ使用できます。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'invalid_format', 'editor', 'error:[PT422]種別が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'invalid_bow_type', 'editor', 'error:[PT422]弓種が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'name_51_chars', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'missing_name', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'missing_round_date', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'missing_format', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'missing_bow_type', 'editor', 'error:[PT422]ラウンドの指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'missing_target_face', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'missing_position_key', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'marked_without_distance', 'editor', 'error:[PT422]Markedの距離には距離(m)が必要です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'total_ends_zero', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'unknown_target_face', 'editor', 'error:[PT422]指定された的が存在しません。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
   ('create_round', 'invalid', 'existing_round_id', 'editor', 'error:[PT422]既に存在するラウンドIDです。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false'),
-  ('create_round', 'unauthorized', 'replay_of_others_event', 'viewer', 'error:[PT403]このラウンドを作成した操作ではありません。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'unauthorized', 'replay_of_others_event', 'non_member', 'error:[PT403]このラウンドを作成した操作ではありません。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'event_id_of_update', 'editor', 'error:[PT422]イベントIDが作成以外の操作で使われています。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'duplicate_distance_id', 'editor', 'error:[PT422]距離のID・イベントIDが重複しています。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'duplicate_distance_event_id', 'editor', 'error:[PT422]距離のID・イベントIDが重複しています。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'success', 'duplicate_position_key', 'editor', 'ok', 'returned=true round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=2 distance_events=2 list=[a:70:true:6x6:0001:40 a:70:true:6x6:0001:41]'),
-  ('create_round', 'invalid', 'existing_distance_id', 'editor', 'error:[PT422]既に存在する距離IDです。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'existing_distance_event_id', 'editor', 'error:[PT422]既に使われている距離のイベントIDです。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'distances_not_array', 'editor', 'error:[PT422]距離の指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'invalid_distance_id', 'editor', 'error:[PT422]距離の指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'invalid', 'fractional_total_ends', 'editor', 'error:[PT422]距離の指定が不正です。', 'returned=false round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
-  ('create_round', 'idempotent', 'replay', 'editor', 'ok', 'returned=true round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
+  ('create_round', 'unauthorized', 'replay_of_others_event', 'viewer', 'error:[PT403]このラウンドを作成した操作ではありません。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'unauthorized', 'replay_of_others_event', 'non_member', 'error:[PT403]このラウンドを作成した操作ではありません。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'event_id_of_update', 'editor', 'error:[PT422]イベントIDが作成以外の操作で使われています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'duplicate_distance_id', 'editor', 'error:[PT422]距離のID・イベントIDが重複しています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'duplicate_distance_event_id', 'editor', 'error:[PT422]距離のID・イベントIDが重複しています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'success', 'duplicate_position_key', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=2 distance_events=2 list=[a:70:true:6x6:0001:40 a:70:true:6x6:0001:41]'),
+  ('create_round', 'invalid', 'existing_distance_id', 'editor', 'error:[PT422]既に存在する距離IDです。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'existing_distance_event_id', 'editor', 'error:[PT422]既に使われている距離のイベントIDです。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'distances_not_array', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'invalid_distance_id', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'fractional_total_ends', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'idempotent', 'replay', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
 
   ('update_round', 'success', 'default', 'editor', 'ok', 'events=2 revision=2 name=Renamed Round date=2026-02-02 format=indoor bow=compound disabled=false ret=applied fields=name,round_date,format,bow_type'),
   ('update_round', 'success', 'name_only', 'editor', 'ok', 'events=2 revision=2 name=Only Name date=2026-01-01 format=outdoor bow=recurve disabled=false ret=applied fields=name'),
@@ -737,7 +735,6 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('record_shots', 'invalid', 'missing_end_number', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
   ('record_shots', 'invalid', 'missing_shot_id', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
   ('record_shots', 'invalid', 'missing_event_id', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
-  ('record_shots', 'invalid', 'legacy_arrow_number', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
   ('record_shots', 'invalid', 'null_shooter', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
   ('record_shots', 'invalid', 'fractional_shot_number', 'editor', 'error:[PT422]矢の記録の指定が不正です。', 'events=0 shots=[] ret=-'),
   ('record_shots', 'idempotent', 'replay', 'editor', 'ok', 'events=1 shots=[1:SN:9/editor/r1] ret=[applied{score,shooter_id}]'),
@@ -753,7 +750,6 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('clear_shots', 'invalid', 'shot_of_other_distance', 'editor', 'error:[PT422]矢の距離が記録と一致しません。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
   ('clear_shots', 'invalid', 'missing_shot_id', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
   ('clear_shots', 'invalid', 'missing_event_id', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
-  ('clear_shots', 'invalid', 'legacy_arrow_number', 'editor', 'error:[PT422]矢の取り消しの指定が不正です。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
   ('clear_shots', 'idempotent', 'replay', 'editor', 'ok', 'events=3 shots=[1:SA:X/editor/r2/cleared 1:SB:9/editor/r1] ret=[applied]'),
 
   ('save_round_as_preset', 'success', 'default', 'editor', 'ok', 'presets=1 owner=editor format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),
