@@ -2,17 +2,17 @@ import type { AuthError } from "@supabase/supabase-js";
 import { translateAuthErrorMessage } from "@/features/auth/errors";
 import { NETWORK_ERROR_MESSAGE } from "../_shared/auth-constants";
 import type {
-  SignUpCodeFieldErrors,
-  SignUpEmailFieldErrors,
-  SignUpPasswordFieldErrors,
-} from "./validate";
+  CodeFieldErrors,
+  EmailFieldErrors,
+  PasswordFieldErrors,
+} from "../_shared/validate";
 
 export type SignUpState = {
   step: "email" | "code" | "password";
   error: string | null;
-  emailFieldErrors: SignUpEmailFieldErrors & { captcha?: string };
-  codeFieldErrors: SignUpCodeFieldErrors;
-  passwordFieldErrors: SignUpPasswordFieldErrors;
+  emailFieldErrors: EmailFieldErrors & { captcha?: string };
+  codeFieldErrors: CodeFieldErrors;
+  passwordFieldErrors: PasswordFieldErrors;
   resendCooldown: number;
   codeStepPending: "verify" | "resend" | null;
 };
@@ -32,7 +32,7 @@ type CommonAction = { type: "reset_to_email" } | { type: "resend_tick" };
 type SendCodeAction =
   | {
       type: "send_code_invalid";
-      errors: SignUpEmailFieldErrors & { captcha?: string };
+      errors: EmailFieldErrors & { captcha?: string };
     }
   | { type: "send_code_started" }
   | { type: "send_code_already_registered" }
@@ -41,21 +41,21 @@ type SendCodeAction =
   | { type: "send_code_network_error" };
 
 type VerifyCodeAction =
-  | { type: "verify_code_invalid"; errors: SignUpCodeFieldErrors }
+  | { type: "verify_code_invalid"; errors: CodeFieldErrors }
   | { type: "verify_code_started" }
   | { type: "verify_code_succeeded" }
   | { type: "verify_code_auth_error"; error: AuthError }
   | { type: "verify_code_network_error" };
 
 type ResendAction =
-  | { type: "resend_invalid"; errors: SignUpCodeFieldErrors }
+  | { type: "resend_invalid"; errors: CodeFieldErrors }
   | { type: "resend_started" }
   | { type: "resend_succeeded" }
   | { type: "resend_auth_error"; error: AuthError }
   | { type: "resend_network_error" };
 
 type SetPasswordAction =
-  | { type: "set_password_invalid"; errors: SignUpPasswordFieldErrors }
+  | { type: "set_password_invalid"; errors: PasswordFieldErrors }
   | { type: "set_password_started" }
   | { type: "set_password_auth_error"; error: AuthError }
   | { type: "set_password_network_error" };

@@ -3,13 +3,13 @@
 import { type Dispatch, type FormEvent, type RefObject, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SubmitGuard } from "../_shared/use-submit-guard";
-import type { ResetPasswordAction } from "./reset-password-flow";
 import {
   validateCodeField,
   validateEmailField,
   validatePasswordField,
   validateResendReady,
-} from "./validate";
+} from "../_shared/validate";
+import type { ResetPasswordAction } from "./reset-password-flow";
 
 type ResetPasswordContext = {
   email: string;

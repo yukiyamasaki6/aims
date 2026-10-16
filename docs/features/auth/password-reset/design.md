@@ -24,14 +24,16 @@
 ## 構成とデータの流れ
 
 - `src/app/(auth)/reset-password/page.tsx`: サーバー側。レイアウトのみ。
-- `src/app/(auth)/reset-password/reset-password-form.tsx`: 段階ごとのフォームの描画。
+- `src/app/(auth)/reset-password/reset-password-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。メール入力とコード入力は共通の部品へ見出しとリンクを渡す。
 - `src/app/(auth)/reset-password/use-reset-password-form.ts`: 入力値、reducerの状態、captcha、二重送信の防止、再送までの秒数を持つ。
 - `src/app/(auth)/reset-password/use-reset-password-handlers.ts`: コードの送信、確認、再送、パスワードの設定、戻るの送信と応答の処理。
 - `src/app/(auth)/_shared/use-captcha.ts`: captchaのトークン。使用済みのトークンは消費して取り直す。
 - `src/app/(auth)/_shared/use-submit-guard.ts`: 送信中の表示と、二重送信の判定(同期のref)。
 - `src/app/(auth)/_shared/use-resend-countdown.ts`: 再送できるまでの秒数を1秒ごとに進める。
 - `src/app/(auth)/reset-password/reset-password-flow.ts`: 段階、エラー、コード入力の処理中を持つreducer。
-- `src/app/(auth)/reset-password/validate.ts`: メールアドレス、コード、パスワードの検証。
+- `src/app/(auth)/_shared/email-step.tsx`: メール入力の段階の描画。
+- `src/app/(auth)/_shared/code-step.tsx`: コード入力の段階の描画。確認、再送、戻る。
+- `src/app/(auth)/_shared/validate.ts`: メールアドレス、コード、パスワード、再送の可否の検証。
 - `src/features/auth/errors.ts`: エラーコードを日本語にする。
 
 契約は次のとおりである。
@@ -59,3 +61,4 @@
 
 - 変更後の遷移には、`router.push`でなく`window.location.assign`によるハードナビゲーションを使う。
 - 再送のクールダウンは、再送の開始時に始まる。
+- 手順と状態遷移は、サインアップとパスワード再設定で同じ形のものを画面ごとに持つ。確認・再送・戻るの排他などの変更は、両画面に入れる必要がある(共通化するかは未決定)。

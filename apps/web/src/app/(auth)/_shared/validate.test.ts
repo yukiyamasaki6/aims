@@ -50,9 +50,14 @@ describe("validateEmailField", () => {
     });
   });
 
-  it("形式が不正な場合はメッセージを返す", () => {
-    // Given
-    const email = "not-an-email";
+  it.each([
+    ["not-an-email"],
+    ["example.com"], // @がない
+    ["a@example"], // ドメインに.がない
+    ["@example.com"], // ローカル部がない
+    ["a b@example.com"], // 空白を含む
+  ])("形式が不正な場合はメッセージを返す: %s", (email) => {
+    // Given: 引数emailが形式の不正な入力
 
     // When
     const result = validateEmailField(email);
