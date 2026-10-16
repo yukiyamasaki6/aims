@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { DistanceInfo } from "../_shared/preset-info";
 import { lookupTargetFace } from "../_shared/target-face-icon";
 import type { DistanceConfig } from "./distance-config";
-import { DistanceEditFields } from "./distance-config-row";
+import { DistanceEditFields } from "./distance-edit-fields";
 import { EndRow } from "./end-row";
 import type { Pointer } from "./scorecard-input";
 

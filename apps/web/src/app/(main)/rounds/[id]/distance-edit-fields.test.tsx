@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TargetFaceOption } from "@/features/rounds/target-face-types";
 import type { DistanceConfig } from "./distance-config";
-import { DistanceEditFields } from "./distance-config-row";
+import { DistanceEditFields } from "./distance-edit-fields";
 
 const targetFaceOutdoorRecurve: TargetFaceOption = {
   id: "face-outdoor-recurve",
