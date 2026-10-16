@@ -30,7 +30,7 @@
 - `[id]/use-round-op-stack.ts`: `append`を包み、積んだ直後に`reopenOperation`が返す操作を続けて積む。保存の完了で解決するPromiseを返す。呼び出し側は変えない。
 - `[id]/complete-round-bar.tsx`: 帯と、渡された文言(`confirmation`)があるときの確認(`ConfirmDialog`、`confirmVariant="default"`)。
 - `features/rounds/round-op-apply.ts`: `round.updated`の`status`は常に効く項目として`rounds.status`へ反映する。
-- DB: `rounds.status`(`NOT NULL`、既定`in_progress`、`CHECK`)と`round_events.status`。`update_round`は`status`を検証(`PT422`)し、効いたときだけイベントと`rounds`へ記録する。`create_round`は変えず、列の既定値で入力中になる。移行は既存のラウンドを完了にし、イベントは書かない。
+- DB: `rounds.status`(`NOT NULL`、既定`in_progress`、`CHECK`)と`round_events.status`。`update_round`は`status`を検証(`PT422`)し、効いたときだけイベントと`rounds`へ記録する。`create_round`は状態を受け取らず、列の既定値で入力中になる。
 
 ## 設計判断
 
@@ -39,7 +39,6 @@
 | 状態を`update_round`のキーとして送る | 後勝ち、削除済み、認可、冪等が既存のまま効く。新しいRPCは規則を2か所に分けるため採らない | 状態に固有の規則(遷移の制限など)が要るとき |
 | 入力中へ戻す操作を、端末が編集の直後に積む | 編集の入り口が`useRoundOpStack().append`の1か所で、全ての編集を取りこぼさない。サーバーで導出する案は全書き込みRPCの変更が要るため採らない | 端末を介さない書き込みの経路が増えたとき |
 | 戻す判定は、積む時点の画面の状態への重ね合わせの結果で行う | 効かない編集や変化のない編集で完了が外れないようにする | - |
-| 作成の操作に状態を持たせない | 旧いビルドの未送信の作成も入力中になる | - |
 
 ## 制約と未対応
 
@@ -47,5 +46,3 @@
 
 - 他端末の完了を知らない端末の編集では、入力中に戻らない。
 - 端末で効くと判定した編集がサーバーで効かなかったとき(他端末の先の変更など)も、入力中への変更は効く。
-- 更新前のビルドで開いたままのタブは、完了のラウンドを編集しても入力中に戻さない。
-- デプロイの間(新しい画面が旧いDBへ送る間)に完了にすると、その操作だけが`PT422`で破棄される。記録は失われず、押し直せば完了にできる。

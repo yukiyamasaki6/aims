@@ -7,8 +7,8 @@ begin;
 select plan(42);
 
 -- 既存の制約・権限テスト向けのfixture生成ヘルパー。プロダクションの
--- create_roundはid/position_keyを必須とするため、旧形式の簡潔なfixtureだけを
--- 新しい入力形式へ正規化する。create_roundの契約はrpc_matrix.sqlで検証する。
+-- create_roundはid/position_keyを必須とするため、簡潔なfixtureの入力を、
+-- create_roundの入力形式へ補う。create_roundの契約はrpc_matrix.sqlで検証する。
 -- このテスト用関数は最後のrollbackでDBに残らない。
 create function create_test_round(
   p_name text,
@@ -17,9 +17,13 @@ create function create_test_round(
   p_bow_type text,
   p_distances jsonb
 ) returns uuid
-language sql
+language plpgsql
 volatile
 as $$
+declare
+  v_round_id uuid := gen_random_uuid();
+  v_result jsonb;
+begin
   with normalized_distances as (
     select coalesce(
       jsonb_agg(
@@ -36,9 +40,12 @@ as $$
     from jsonb_array_elements(p_distances) with ordinality as items(distance, ordinality)
   )
   select create_round(
-    gen_random_uuid(), gen_random_uuid(), p_name, p_round_date, p_format, p_bow_type, distances
+    gen_random_uuid(), v_round_id, p_name, p_round_date, p_format, p_bow_type, distances
   )
+  into v_result
   from normalized_distances;
+  return v_round_id;
+end;
 $$;
 
 -- ============================================================

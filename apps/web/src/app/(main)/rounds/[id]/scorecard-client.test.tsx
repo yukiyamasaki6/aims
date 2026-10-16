@@ -919,7 +919,7 @@ describe("ScorecardClient 並び直りの動き", () => {
   });
 
   it("同点の矢を足すと、既にある同点の玉を動かさず、新しい玉をその後ろに出す", async () => {
-    // Given: 先頭の大きいUUID(移行で付けたような無作為のID)の9の矢があるエンド
+    // Given: 先頭の大きいUUID(時刻順でない無作為のID)の9の矢があるエンド
     const user = userEvent.setup();
     const existing = "ffffffff-fff0-4fff-bfff-ffffffffffff";
     setup({ initialShots: [shotRow(existing, distanceA.id, 1, "9", 9)] });

@@ -682,7 +682,7 @@ export type Database = {
           p_round_date: string;
           p_round_event_id: string;
         };
-        Returns: string;
+        Returns: Json;
       };
       disable_distance: {
         Args: { p_distance_event_id: string; p_distance_id: string };

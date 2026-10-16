@@ -164,29 +164,6 @@ describe("op log store", () => {
     ).toEqual(["b"]);
   });
 
-  it("version 2の旧storeは内容を読まずに捨てる", async () => {
-    const legacy = await openDB("aims-sync", 2, {
-      upgrade(database) {
-        database.createObjectStore("round-outbox", { keyPath: "eventId" });
-      },
-    });
-    await legacy.put("round-outbox", { eventId: "legacy" });
-    legacy.close();
-
-    const store = newStore();
-    await store.append(entry("a"));
-
-    const database = await openDB("aims-sync");
-    try {
-      expect(Array.from(database.objectStoreNames).sort()).toEqual([
-        "bases",
-        "ops",
-      ]);
-    } finally {
-      database.close();
-    }
-  });
-
   it("loadAllはユーザーで絞り、streamIdごとにseq順で返し、他のユーザーの行を残す", async () => {
     const store = newStore();
     await store.append(entry("a1", { streamId: "round:a" }));
@@ -420,9 +397,9 @@ describe("op log store", () => {
   });
 
   describe("保存形式の更新", () => {
-    it("version 4のopsとbasesは、内容を読まずに作り直す", async () => {
-      // Given: version 4のopsに操作、basesにベースが残っている
-      const legacy = await openDB("aims-sync", 4, {
+    it("前のversionで作られたDBは、内容を読まずに全てのstoreを作り直す", async () => {
+      // Given: 前のversionのDBに、別の名前のstoreとopsの内容が残っている
+      const previous = await openDB("aims-sync", 4, {
         upgrade(database) {
           const ops = database.createObjectStore("ops", {
             keyPath: "seq",
@@ -430,56 +407,33 @@ describe("op log store", () => {
           });
           ops.createIndex("by-event-id", "eventId", { unique: true });
           ops.createIndex("by-stream", "streamId");
-          database.createObjectStore("bases", {
-            keyPath: ["userId", "streamId"],
-          });
+          database.createObjectStore("other", { keyPath: "eventId" });
         },
       });
-      await legacy.add("ops", entry("legacy"));
-      await legacy.put("bases", {
-        userId: "user-1",
-        streamId: STREAM,
-        startedAt: 1,
-        base: { revision: 1, keep: true },
-      });
-      legacy.close();
+      await previous.add("ops", entry("previous"));
+      await previous.put("other", { eventId: "previous" });
+      previous.close();
 
       // When
       const store = newStore();
       const result = await store.loadStream(STREAM, "user-1");
 
-      // Then: 旧い内容は残らず、新しい操作とベースを保存できる
+      // Then: 前の内容は残らず、storeはbasesとopsだけで、保存できる
       expect(result).toEqual({ base: undefined, entries: [] });
       await store.append(entry("a"));
       await store.commit(STREAM, "user-1", { revision: 1, keep: true }, 10);
       const reloaded = await store.loadStream(STREAM, "user-1");
       expect(reloaded.entries.map((e) => e.operation.value)).toEqual(["a"]);
       expect(reloaded.base?.startedAt).toBe(10);
-    });
-
-    it("version 3のopsは、内容を読まずに作り直し、basesを足す", async () => {
-      // Given: version 3のopsに操作が残っている
-      const legacy = await openDB("aims-sync", 3, {
-        upgrade(database) {
-          const ops = database.createObjectStore("ops", {
-            keyPath: "seq",
-            autoIncrement: true,
-          });
-          ops.createIndex("by-event-id", "eventId", { unique: true });
-          ops.createIndex("by-stream", "streamId");
-        },
-      });
-      await legacy.add("ops", entry("legacy"));
-      legacy.close();
-
-      // When
-      const store = newStore();
-      const result = await store.loadStream(STREAM, "user-1");
-
-      // Then
-      expect(result.entries).toEqual([]);
-      await store.commit(STREAM, "user-1", { revision: 1, keep: true }, 10);
-      expect((await store.loadStream(STREAM, "user-1")).base).toBeDefined();
+      const database = await openDB("aims-sync");
+      try {
+        expect(Array.from(database.objectStoreNames).sort()).toEqual([
+          "bases",
+          "ops",
+        ]);
+      } finally {
+        database.close();
+      }
     });
 
     it("後のversionへの更新を待たれたら、接続を閉じて譲る", async () => {
@@ -497,7 +451,7 @@ describe("op log store", () => {
 
     it("古い接続が閉じず更新が待たされるときは、開けなかったものとして拒否し、閉じた後は開き直す", async () => {
       // Given: 更新を知らされても閉じない、version 3の接続が開いている
-      const legacy = await openDB("aims-sync", 3, {
+      const previous = await openDB("aims-sync", 3, {
         upgrade(database) {
           const ops = database.createObjectStore("ops", {
             keyPath: "seq",
@@ -511,7 +465,7 @@ describe("op log store", () => {
 
       // When/Then: 保存は失敗し、古い接続を閉じた後は成功する
       await expect(store.append(entry("a"))).rejects.toThrow();
-      legacy.close();
+      previous.close();
       await expect(store.append(entry("b"))).resolves.toBeGreaterThan(0);
     });
   });

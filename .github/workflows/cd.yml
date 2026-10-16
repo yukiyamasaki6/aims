@@ -33,11 +33,12 @@ jobs:
       - name: Link to Production Project
         run: supabase link --project-ref ${{ vars.SUPABASE_PROD_PROJECT_ID }}
 
-      - name: Dry-run migrations
-        run: supabase db push --dry-run
-
-      - name: Push migrations to Production DB
-        run: supabase db push
+      # NOTE: マイグレーションの作り直しに伴う一回限りの本番リセット。
+      # 作り直した履歴は本番の履歴と食い違い、db pushでは適用できないため、db resetで作り直す。
+      # seedは本番に適用しない。
+      # 本番リセットの完了を確認したら、このステップは元のdry-run+db pushに戻すこと（戻し忘れると以降のマージのたびに本番が全消去される）。
+      - name: Reset Production DB
+        run: supabase db reset --linked --yes --no-seed
 
       - name: Push config to Production Project
         run: supabase config push

@@ -7,7 +7,7 @@
 
 begin;
 
-select plan(32);
+select plan(35);
 
 create temp table rv_id (alias text primary key, id uuid not null);
 insert into rv_id (alias, id) values
@@ -15,6 +15,7 @@ insert into rv_id (alias, id) values
   ('N',   'd0000000-0000-0000-0000-000000000002'),
   ('R1',  'd0000000-0000-0000-0000-000000000010'),
   ('R2',  'd0000000-0000-0000-0000-000000000011'),
+  ('RN',  'd0000000-0000-0000-0000-000000000012'),
   ('D1',  'd0000000-0000-0000-0000-000000000021'),
   ('D2',  'd0000000-0000-0000-0000-000000000022'),
   ('D3',  'd0000000-0000-0000-0000-000000000023'),
@@ -81,6 +82,22 @@ select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
 -- ============================================================
 -- 返り値: ラウンド・距離
 -- ============================================================
+select is(
+  public.create_round(pg_temp.ev(35), pg_temp.id('RN'), 'Rev New', '2026-01-01', 'outdoor', 'recurve', '[]'::jsonb),
+  '{"revision":1,"applied":true,"reason":null}'::jsonb,
+  'create_roundは作成のrevision 1を返す'
+);
+select is(
+  public.create_round(pg_temp.ev(35), pg_temp.id('RN'), 'Rev New', '2026-01-01', 'outdoor', 'recurve', '[]'::jsonb),
+  '{"revision":1,"applied":true,"reason":null}'::jsonb,
+  'create_roundの同じevent_idの再送は、作成のrevision 1を返す'
+);
+select is(
+  (select revision from public.rounds where id = pg_temp.id('RN')) || '/' || (select count(*) from public.round_events where round_id = pg_temp.id('RN')),
+  '1/1',
+  'create_roundの再送は射影もイベントも増やさない'
+);
+
 select is(
   pg_temp.rev(public.update_round(pg_temp.ev(1), pg_temp.id('R1'), '{"name":"Rev Outdoor 2","round_date":"2026-01-02"}'::jsonb)),
   2::bigint,

@@ -76,8 +76,8 @@ values ('d0000000-0000-0000-0000-00000000000b', 'd0000000-0000-0000-0000-0000000
 
 select pg_sleep(0.01);
 
-insert into public.round_events (event_id, round_id, type, author_id, revision, name, round_date, format, bow_type)
-values ('d0000000-0000-0000-0000-00000000000c', 'd0000000-0000-0000-0000-000000000002', 'UPDATED', 'd0000000-0000-0000-0000-000000000001', 2, 'b', current_date, 'outdoor', 'recurve');
+insert into public.round_events (event_id, round_id, type, author_id, revision, name, round_date, format, bow_type, set_fields)
+values ('d0000000-0000-0000-0000-00000000000c', 'd0000000-0000-0000-0000-000000000002', 'UPDATED', 'd0000000-0000-0000-0000-000000000001', 2, 'b', current_date, 'outdoor', 'recurve', array['name', 'round_date', 'format', 'bow_type']);
 
 select ok(
   (select created_at from public.round_events where event_id = 'd0000000-0000-0000-0000-00000000000c')
@@ -112,8 +112,8 @@ select ok(
   'distance_eventsのupdated_atはUPDATEで更新される'
 );
 
-insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int)
-values ('d0000000-0000-0000-0000-00000000000e', 'd0000000-0000-0000-0000-000000000007', 'd0000000-0000-0000-0000-000000000008', 'RECORDED', 'd0000000-0000-0000-0000-000000000001', 1, 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10);
+insert into public.shot_events (event_id, distance_id, shot_id, type, author_id, revision, end_number, shooter_id, score_str, score_int, set_fields)
+values ('d0000000-0000-0000-0000-00000000000e', 'd0000000-0000-0000-0000-000000000007', 'd0000000-0000-0000-0000-000000000008', 'RECORDED', 'd0000000-0000-0000-0000-000000000001', 1, 1, 'd0000000-0000-0000-0000-000000000001', 'X', 10, array['score', 'shooter_id']);
 
 select ok(
   (select updated_at >= created_at from public.shot_events where event_id = 'd0000000-0000-0000-0000-00000000000e'),

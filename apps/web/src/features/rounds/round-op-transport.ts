@@ -95,24 +95,6 @@ function revisionOnly(data: unknown): SendOutcome {
     : INVALID_RESPONSE;
 }
 
-// `create_round`は旧版との互換のためラウンドIDを返す。作成のrevisionは常に1。
-function createdOnly(data: unknown): SendOutcome {
-  return typeof data === "string"
-    ? {
-        ok: true,
-        results: [
-          {
-            revision: 1,
-            applied: true,
-            appliedFields: null,
-            rejectedFields: [],
-            reason: null,
-          },
-        ],
-      }
-    : INVALID_RESPONSE;
-}
-
 type Client = ReturnType<typeof createClient>;
 
 type RpcResponse = {
@@ -215,7 +197,6 @@ async function sendRoundOperation(
             target_face_id: d.targetFaceId,
           })),
         }),
-        createdOnly,
       );
     case "round.updated":
       return outcomeOf(
