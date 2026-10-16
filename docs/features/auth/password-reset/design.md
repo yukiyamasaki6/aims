@@ -39,7 +39,8 @@
 契約は次のとおりである。
 
 - メールアドレスは254文字以内、コードは6桁、パスワードは半角英数字と記号で8〜72文字である。
-- パスワードが英字と数字を含む要件は、Supabaseの`password_requirements`とその翻訳が担う。
+- パスワードが英字と数字を含む要件は、`updateUser`の前に`validatePasswordField`で検証し、満たさなければ送信しない。
+- Supabaseが`password_requirements`(`supabase/config.toml`では`letters_digits`)で拒否した場合の`weak_password`は、`errors.ts`が翻訳する。
 - captchaトークンは再送のたびに消費されるため、毎回取り直す。
 - 再送の間隔は`max_frequency`で、productionとpreviewは60秒、ローカルとCIは1秒である。
 - パスワード変更後は`signOut()`し、`window.location.assign("/signin")`で遷移する。
