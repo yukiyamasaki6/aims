@@ -4,16 +4,14 @@ import {
   OTP_CODE_LENGTH,
   PASSWORD_ALLOWED_PATTERN,
   PASSWORD_MAX_LENGTH,
-} from "../_shared/auth-constants";
-import { CODE_PATTERN } from "../_shared/otp-code-pattern";
+} from "./auth-constants";
+import { CODE_PATTERN } from "./otp-code-pattern";
 
-export type ResetPasswordEmailFieldErrors = {
+export type EmailFieldErrors = {
   email?: string;
 };
 
-export function validateEmailField(
-  email: string,
-): ResetPasswordEmailFieldErrors {
+export function validateEmailField(email: string): EmailFieldErrors {
   if (!email) {
     return { email: "メールアドレスを入力してください。" };
   }
@@ -30,12 +28,12 @@ export function validateEmailField(
   return {};
 }
 
-export type ResetPasswordCodeFieldErrors = {
+export type CodeFieldErrors = {
   code?: string;
   resend?: string;
 };
 
-export function validateCodeField(code: string): ResetPasswordCodeFieldErrors {
+export function validateCodeField(code: string): CodeFieldErrors {
   if (!code) {
     return { code: "認証コードを入力してください。" };
   }
@@ -51,7 +49,7 @@ export function validateCodeField(code: string): ResetPasswordCodeFieldErrors {
 export function validateResendReady(
   resendCooldown: number,
   captchaToken: string | null,
-): ResetPasswordCodeFieldErrors {
+): CodeFieldErrors {
   if (resendCooldown > 0) {
     return {
       resend: "再送はクールダウン中です。しばらくしてから再度お試しください。",
@@ -64,13 +62,11 @@ export function validateResendReady(
   return {};
 }
 
-export type ResetPasswordPasswordFieldErrors = {
+export type PasswordFieldErrors = {
   password?: string;
 };
 
-export function validatePasswordField(
-  password: string,
-): ResetPasswordPasswordFieldErrors {
+export function validatePasswordField(password: string): PasswordFieldErrors {
   if (!password) {
     return { password: "パスワードを入力してください。" };
   }

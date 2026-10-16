@@ -4,14 +4,14 @@ import { useRouter } from "next/navigation";
 import { type Dispatch, type FormEvent, type RefObject, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { SubmitGuard } from "../_shared/use-submit-guard";
-import { isEmailRegistered } from "./actions";
-import type { SignUpAction } from "./signup-flow";
 import {
   validateCodeField,
   validateEmailField,
   validatePasswordField,
   validateResendReady,
-} from "./validate";
+} from "../_shared/validate";
+import { isEmailRegistered } from "./actions";
+import type { SignUpAction } from "./signup-flow";
 
 type SignUpContext = {
   email: string;

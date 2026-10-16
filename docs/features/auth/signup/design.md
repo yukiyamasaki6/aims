@@ -23,11 +23,13 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 
 ## 構成とデータの流れ
 
-- `src/app/(auth)/signup/signup-form.tsx`: 3つの状態のフォームの描画。
+- `src/app/(auth)/signup/signup-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。メール入力とコード入力は共通の部品へ見出しとリンクを渡す。
 - `src/app/(auth)/signup/use-signup-form.ts`: 入力値、reducerの状態、captcha、二重送信の防止、再送までの秒数を持つ。
 - `src/app/(auth)/signup/use-signup-handlers.ts`: コードの送信、確認、再送、パスワードの設定、戻るの送信と応答の処理。
 - `src/app/(auth)/signup/signup-flow.ts`: 状態遷移のreducer。確認・再送・戻るの排他を持つ。
-- `src/app/(auth)/signup/validate.ts`: メールアドレス、コード、パスワードの検証。
+- `src/app/(auth)/_shared/email-step.tsx`: メール入力の段階の描画。
+- `src/app/(auth)/_shared/code-step.tsx`: コード入力の段階の描画。確認、再送、戻る。
+- `src/app/(auth)/_shared/validate.ts`: メールアドレス、コード、パスワード、再送の可否の検証。
 - `src/app/(auth)/signup/actions.ts`: 登録済み判定のServer Action。
 - `src/app/(auth)/_shared`、`layout.tsx`、`auth-header.tsx`: 認証画面の共通部品と枠。
 - `supabase/migrations/20260915000000_users.sql`: `auth.users`のINSERTで`public.users`を作るトリガー。
@@ -62,3 +64,4 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 
 - 確認後はセッションが確立済みのため、パスワード設定の前に再読み込みすると、`/rounds`へリダイレクトされ、パスワードのないアカウントが残りうる。
 - 登録済みの検出により、メールアドレスの登録有無が利用者から分かる。
+- 手順と状態遷移は、サインアップとパスワード再設定で同じ形のものを画面ごとに持つ。確認・再送・戻るの排他などの変更は、両画面に入れる必要がある(共通化するかは未決定)。

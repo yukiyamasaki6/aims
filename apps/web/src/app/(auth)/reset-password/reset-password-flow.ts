@@ -2,17 +2,17 @@ import type { AuthError } from "@supabase/supabase-js";
 import { translateAuthErrorMessage } from "@/features/auth/errors";
 import { NETWORK_ERROR_MESSAGE } from "../_shared/auth-constants";
 import type {
-  ResetPasswordCodeFieldErrors,
-  ResetPasswordEmailFieldErrors,
-  ResetPasswordPasswordFieldErrors,
-} from "./validate";
+  CodeFieldErrors,
+  EmailFieldErrors,
+  PasswordFieldErrors,
+} from "../_shared/validate";
 
 export type ResetPasswordState = {
   step: "email" | "code" | "password";
   error: string | null;
-  emailFieldErrors: ResetPasswordEmailFieldErrors & { captcha?: string };
-  codeFieldErrors: ResetPasswordCodeFieldErrors;
-  passwordFieldErrors: ResetPasswordPasswordFieldErrors;
+  emailFieldErrors: EmailFieldErrors & { captcha?: string };
+  codeFieldErrors: CodeFieldErrors;
+  passwordFieldErrors: PasswordFieldErrors;
   resendCooldown: number;
   codeStepPending: "verify" | "resend" | null;
 };
@@ -32,7 +32,7 @@ type CommonAction = { type: "reset_to_email" } | { type: "resend_tick" };
 type SendCodeAction =
   | {
       type: "send_code_invalid";
-      errors: ResetPasswordEmailFieldErrors & { captcha?: string };
+      errors: EmailFieldErrors & { captcha?: string };
     }
   | { type: "send_code_started" }
   | { type: "send_code_succeeded" }
@@ -40,21 +40,21 @@ type SendCodeAction =
   | { type: "send_code_network_error" };
 
 type VerifyCodeAction =
-  | { type: "verify_code_invalid"; errors: ResetPasswordCodeFieldErrors }
+  | { type: "verify_code_invalid"; errors: CodeFieldErrors }
   | { type: "verify_code_started" }
   | { type: "verify_code_succeeded" }
   | { type: "verify_code_auth_error"; error: AuthError }
   | { type: "verify_code_network_error" };
 
 type ResendAction =
-  | { type: "resend_invalid"; errors: ResetPasswordCodeFieldErrors }
+  | { type: "resend_invalid"; errors: CodeFieldErrors }
   | { type: "resend_started" }
   | { type: "resend_succeeded" }
   | { type: "resend_auth_error"; error: AuthError }
   | { type: "resend_network_error" };
 
 type SetPasswordAction =
-  | { type: "set_password_invalid"; errors: ResetPasswordPasswordFieldErrors }
+  | { type: "set_password_invalid"; errors: PasswordFieldErrors }
   | { type: "set_password_started" }
   | { type: "set_password_auth_error"; error: AuthError }
   | { type: "set_password_network_error" };
