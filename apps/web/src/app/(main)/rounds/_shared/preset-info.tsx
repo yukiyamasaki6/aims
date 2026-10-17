@@ -23,7 +23,7 @@ function distanceLabel(
 // 距離1件分の情報表示（Marked/距離・的情報・エンド構成）。プリセット選択・
 // ラウンド詳細の距離一覧で共通して使う。左にMarked/距離とエンド構成を縦に、
 // 右に的情報を置く1行で、幅375pxでも横にあふれない。的情報は左側のすぐ右に
-// 詰め、左側の最小幅（種別ごと）で、行をまたいで的情報の左端をそろえる。
+// 詰め、左側の最小幅で、行をまたいで的情報の左端をそろえる。
 export function DistanceInfo({
   distance,
   isMarked,
@@ -41,12 +41,7 @@ export function DistanceInfo({
 }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <div
-        className={cn(
-          "flex shrink-0 flex-col whitespace-nowrap",
-          format === "field" ? "min-w-[7.5rem]" : "min-w-[6.5rem]",
-        )}
-      >
+      <div className="flex min-w-[7.5rem] shrink-0 flex-col whitespace-nowrap">
         <span>{distanceLabel(distance, isMarked, format)}</span>
         <span>
           {arrowsPerEnd}本×{totalEnds}エンド
