@@ -45,58 +45,84 @@ beforeEach(() => {
 });
 
 describe("OpSyncProvider", () => {
-  it("マウントで端末のユーザーを渡して起動し、アンマウントで停止する", () => {
-    const { unmount } = render(<OpSyncProvider />);
-    expect(hub.start).toHaveBeenCalledWith("user-1");
+  it("マウントで、端末のユーザーを渡してハブを起動する", () => {
+    // Given
+    // When
+    render(<OpSyncProvider />);
 
+    // Then
+    expect(hub.start).toHaveBeenCalledWith("user-1");
+  });
+
+  it("アンマウントで、ハブを停止し、認証イベントの購読を解除する", () => {
+    // Given
+    const { unmount } = render(<OpSyncProvider />);
+
+    // When
     unmount();
 
+    // Then
     expect(hub.stop).toHaveBeenCalledTimes(1);
     expect(auth.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it("onlineのイベントをハブへ渡す", () => {
+    // Given
     render(<OpSyncProvider />);
 
+    // When
     window.dispatchEvent(new Event("online"));
 
+    // Then
     expect(hub.handleOnline).toHaveBeenCalledTimes(1);
   });
 
   it.each(["SIGNED_IN", "INITIAL_SESSION", "TOKEN_REFRESHED"])(
     "%sで同じユーザーなら、保留を戻す",
     (event) => {
+      // Given
       render(<OpSyncProvider />);
 
+      // When
       emit(event, "user-1");
 
+      // Then
       expect(hub.resumeHeld).toHaveBeenCalledTimes(1);
       expect(hub.setUser).not.toHaveBeenCalled();
     },
   );
 
   it("違うユーザーのセッションなら、ユーザーを替える", () => {
+    // Given
     render(<OpSyncProvider />);
 
+    // When
     emit("SIGNED_IN", "user-2");
 
+    // Then
     expect(hub.setUser).toHaveBeenCalledWith("user-2");
     expect(hub.resumeHeld).not.toHaveBeenCalled();
   });
 
   it("SIGNED_OUTでユーザーをnullにする", () => {
+    // Given
     render(<OpSyncProvider />);
 
+    // When
     emit("SIGNED_OUT", null);
 
+    // Then
     expect(hub.setUser).toHaveBeenCalledWith(null);
   });
 
   it("セッションの無いINITIAL_SESSIONでは何もしない", () => {
+    // Given
     render(<OpSyncProvider />);
 
+    // When
     emit("INITIAL_SESSION", null);
 
+    // Then
     expect(hub.setUser).not.toHaveBeenCalled();
     expect(hub.resumeHeld).not.toHaveBeenCalled();
   });

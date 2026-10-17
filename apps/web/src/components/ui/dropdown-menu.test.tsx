@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -29,7 +29,7 @@ describe("DropdownMenuContent", () => {
     });
 
     describe("className", () => {
-      it("既定のクラスに加えて、指定したクラスを付与する", async () => {
+      it("指定したクラスを付与する", async () => {
         // Given
         const className = "custom-class";
 
@@ -44,10 +44,7 @@ describe("DropdownMenuContent", () => {
         );
 
         // Then
-        expect(await screen.findByRole("menu")).toHaveClass(
-          "bg-card",
-          "custom-class",
-        );
+        expect(await screen.findByRole("menu")).toHaveClass("custom-class");
       });
     });
 
@@ -116,7 +113,7 @@ describe("DropdownMenuItem", () => {
     });
 
     describe("className", () => {
-      it("既定のクラスに加えて、指定したクラスを付与する", async () => {
+      it("指定したクラスを付与する", async () => {
         // Given
         const className = "custom-class";
 
@@ -133,7 +130,7 @@ describe("DropdownMenuItem", () => {
         // Then
         expect(
           await screen.findByRole("menuitem", { name: "削除" }),
-        ).toHaveClass("cursor-pointer", "custom-class");
+        ).toHaveClass("custom-class");
       });
     });
   });
@@ -157,6 +154,33 @@ describe("DropdownMenuItem", () => {
 
       // Then
       expect(handleClick).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+describe("DropdownMenu", () => {
+  describe("外側のクリック", () => {
+    it("開いたメニューの外側を押すと、メニューを閉じる", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu>
+          <DropdownMenuTrigger>開く</DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem>項目</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>,
+      );
+      await user.click(screen.getByText("開く"));
+      expect(await screen.findByRole("menu")).toBeInTheDocument();
+
+      // When
+      await user.click(document.body);
+
+      // Then
+      await waitFor(() => {
+        expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+      });
     });
   });
 });

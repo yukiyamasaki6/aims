@@ -112,15 +112,18 @@ describe("SwUpdateActivator", () => {
       // When
       fireEvent.click(link);
       await vi.advanceTimersByTimeAsync(100);
-      expect(waiting.postMessage).not.toHaveBeenCalled();
+      const sentBeforePersisted = waiting.postMessage.mock.calls.length;
       finish();
       await settle();
-      expect(waiting.postMessage).toHaveBeenCalledTimes(1);
-      expect(assign).not.toHaveBeenCalled();
+      const sentAfterPersisted = waiting.postMessage.mock.calls.length;
+      const assignedBeforeChange = assign.mock.calls.length;
       emitControllerChange();
       await settle();
 
       // Then
+      expect(sentBeforePersisted).toBe(0);
+      expect(sentAfterPersisted).toBe(1);
+      expect(assignedBeforeChange).toBe(0);
       expect(passed).not.toHaveBeenCalled();
       expect(assign).toHaveBeenCalledWith("http://localhost/rounds/new");
     });
@@ -179,7 +182,7 @@ describe("SwUpdateActivator", () => {
       expect(passed).toHaveBeenCalledTimes(1);
     });
 
-    it("登録の保持の前の操作は止めず、遅れて登録が返っても切り替えも更新もしない", async () => {
+    it("登録の保持の前のclickは止めず、遅れて登録が返っても、合図を送らず保存の完了も待たない", async () => {
       // Given
       let resolveRegistration: (r: unknown) => void = () => {};
       vi.stubGlobal("navigator", {
@@ -194,7 +197,7 @@ describe("SwUpdateActivator", () => {
       });
       const waiting = fakeWorker();
       registration.waiting = waiting;
-      const view = await mount();
+      await mount();
       const link = addLink("http://localhost/rounds/new");
       const passed = vi.fn();
       document.addEventListener("click", passed);
@@ -203,19 +206,43 @@ describe("SwUpdateActivator", () => {
       fireEvent.click(link);
       resolveRegistration(registration);
       await settle();
-      await navigate(view, "/rounds/new");
 
       // Then
       expect(passed).toHaveBeenCalledTimes(1);
       expect(waiting.postMessage).not.toHaveBeenCalled();
+      expect(mocks.whenPersisted).not.toHaveBeenCalled();
+    });
+
+    it("登録の保持の前のclickで通した遷移では、更新を確認しない", async () => {
+      // Given
+      let resolveRegistration: (r: unknown) => void = () => {};
+      vi.stubGlobal("navigator", {
+        serviceWorker: {
+          getRegistration: () =>
+            new Promise((resolve) => {
+              resolveRegistration = resolve;
+            }),
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        },
+      });
+      const view = await mount();
+      fireEvent.click(addLink("http://localhost/rounds/new"));
+      resolveRegistration(registration);
+      await settle();
+
+      // When
+      await navigate(view, "/rounds/new");
+
+      // Then
       expect(registration.update).not.toHaveBeenCalled();
     });
 
-    it("controllerchangeが1秒来なければ、押し直して通常の遷移を進め、その遷移では更新しない", async () => {
+    it("controllerchangeが1秒来なければ、合図を1回だけ送り、押し直して通常の遷移を進める", async () => {
       // Given
       const waiting = fakeWorker();
       registration.waiting = waiting;
-      const view = await mount();
+      await mount();
       const link = addLink("http://localhost/rounds/new");
       const passed = vi.fn();
       document.addEventListener("click", passed);
@@ -223,13 +250,27 @@ describe("SwUpdateActivator", () => {
       // When
       fireEvent.click(link);
       await vi.advanceTimersByTimeAsync(1_000);
-      registration.waiting = null;
-      await navigate(view, "/rounds/new");
 
       // Then
       expect(waiting.postMessage).toHaveBeenCalledTimes(1);
       expect(passed).toHaveBeenCalledTimes(1);
       expect(assign).not.toHaveBeenCalled();
+      expect(mocks.whenPersisted).toHaveBeenCalledTimes(1);
+    });
+
+    it("切り替えを諦めて通した遷移では、更新を確認しない", async () => {
+      // Given
+      registration.waiting = fakeWorker();
+      const view = await mount();
+      fireEvent.click(addLink("http://localhost/rounds/new"));
+      await vi.advanceTimersByTimeAsync(1_000);
+      // 待機が無い遷移なら更新を確認する状態にし、諦めて通したことだけが更新を抑えることを確かめる。
+      registration.waiting = null;
+
+      // When
+      await navigate(view, "/rounds/new");
+
+      // Then
       expect(registration.update).not.toHaveBeenCalled();
     });
 
@@ -411,18 +452,6 @@ describe("SwUpdateActivator", () => {
       expect(mocks.whenPersisted).not.toHaveBeenCalled();
     });
 
-    it("待機が無い、保持の前、見送りの押し直しのいずれでもwhenPersistedを呼ばない(押し直し分を除く)", async () => {
-      // Given
-      const view = await mount();
-
-      // When
-      fireEvent.click(addLink("http://localhost/rounds/new"));
-      await navigate(view, "/rounds/new");
-
-      // Then
-      expect(mocks.whenPersisted).not.toHaveBeenCalled();
-    });
-
     it("アンマウントで中止し、購読を残さない", async () => {
       // Given
       registration.waiting = fakeWorker();
@@ -483,33 +512,41 @@ describe("SwUpdateActivator", () => {
       registration.update.mockRejectedValue(new Error("offline"));
 
       // When
+      const result = navigate(view, "/rounds/new");
+
       // Then
-      await expect(navigate(view, "/rounds/new")).resolves.toBeUndefined();
+      await expect(result).resolves.toBeUndefined();
     });
   });
 
   describe("環境", () => {
-    it("Service Workerに未対応でもエラーにならない", () => {
+    it("Service Workerに未対応でも、エラーにならず何も表示しない", () => {
       // Given
       vi.stubGlobal("navigator", {});
 
       // When
+      const { container } = render(<SwUpdateActivator />);
+
       // Then
-      expect(() => render(<SwUpdateActivator />)).not.toThrow();
+      expect(container).toBeEmptyDOMElement();
     });
 
-    it("登録が無ければ何もしない", async () => {
+    it("登録が無ければ、リンクの遷移を止めない", async () => {
       // Given
       vi.stubGlobal("navigator", {
         serviceWorker: { getRegistration: () => Promise.resolve(undefined) },
       });
+      await mount();
+      const link = addLink("http://localhost/rounds/new");
+      const passed = vi.fn();
+      document.addEventListener("click", passed);
 
       // When
-      const view = render(<SwUpdateActivator />);
+      fireEvent.click(link);
       await settle();
 
       // Then
-      expect(() => view.unmount()).not.toThrow();
+      expect(passed).toHaveBeenCalledTimes(1);
     });
   });
 });

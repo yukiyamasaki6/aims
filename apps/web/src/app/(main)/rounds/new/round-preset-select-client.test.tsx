@@ -131,7 +131,7 @@ beforeEach(() => {
 describe("RoundPresetSelect", () => {
   describe("取得の状態", () => {
     it("取得中は読み込み中の表示と、枠と、押せる開始ボタンを表示し、プリセットの見出しは出さない", () => {
-      // Given: 取得が完了しない
+      // Given
       fetchPresetsMock.mockReturnValue(new Promise(() => {}));
 
       // When
@@ -149,7 +149,7 @@ describe("RoundPresetSelect", () => {
     });
 
     it("取得が完了しない間も開始ボタンは押せ、押すとプリセット未選択で開始して遷移する", async () => {
-      // Given: 取得が完了しない
+      // Given
       fetchPresetsMock.mockReturnValue(new Promise(() => {}));
       const user = userEvent.setup();
       render(<RoundPresetSelect />);
@@ -168,10 +168,9 @@ describe("RoundPresetSelect", () => {
       );
     });
 
-    it("通信できない場合はネットワークに接続されていませんを表示し、プリセットの見出しは出さず、開始ボタンでラウンドを作成できる", async () => {
+    it("通信できない場合はネットワークに接続されていませんを表示し、プリセットの見出しは出さない", async () => {
       // Given
       fetchResolves({ status: "offline" });
-      const user = userEvent.setup();
 
       // When
       render(<RoundPresetSelect />);
@@ -182,18 +181,29 @@ describe("RoundPresetSelect", () => {
       ).toBeInTheDocument();
       expect(screen.queryByText("個人プリセット")).not.toBeInTheDocument();
       expect(screen.queryByText("公式プリセット")).not.toBeInTheDocument();
+    });
+
+    it("通信できない場合も、開始ボタンを押すとラウンドを作成して遷移する", async () => {
+      // Given
+      fetchResolves({ status: "offline" });
+      const user = userEvent.setup();
+      render(<RoundPresetSelect />);
+      await screen.findByText("ネットワークに接続されていません");
+
+      // When
       await user.click(
         screen.getByRole("button", { name: "プリセット無しで開始" }),
       );
+
+      // Then
       await waitFor(() => {
         expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
       });
     });
 
-    it("取得がエラーの場合はエラーメッセージを表示し、開始ボタンでラウンドを作成できる", async () => {
+    it("取得がエラーの場合はエラーメッセージを表示する", async () => {
       // Given
       fetchResolves({ status: "error", message: "読み込めませんでした。" });
-      const user = userEvent.setup();
 
       // When
       render(<RoundPresetSelect />);
@@ -202,16 +212,28 @@ describe("RoundPresetSelect", () => {
       expect(await screen.findByRole("alert")).toHaveTextContent(
         "読み込めませんでした。",
       );
+    });
+
+    it("取得がエラーの場合も、開始ボタンを押すとラウンドを作成して遷移する", async () => {
+      // Given
+      fetchResolves({ status: "error", message: "読み込めませんでした。" });
+      const user = userEvent.setup();
+      render(<RoundPresetSelect />);
+      await screen.findByRole("alert");
+
+      // When
       await user.click(
         screen.getByRole("button", { name: "プリセット無しで開始" }),
       );
+
+      // Then
       await waitFor(() => {
         expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
       });
     });
 
     it("再試行すると取得し直し、取得できたプリセットを表示する", async () => {
-      // Given: 1回目は通信できず、2回目は取得できる
+      // Given
       fetchPresetsMock
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({
@@ -234,51 +256,86 @@ describe("RoundPresetSelect", () => {
   });
 
   describe("プリセットの選択", () => {
-    it("未選択では「プリセット無しで開始」を表示し、個人プリセットが無ければ案内文を出す", async () => {
-      // Given/When: 個人プリセットが無い状態で表示する
-      await renderSelect([], [globalPreset]);
+    it("取得したプリセットを表示した直後は未選択で、開始ボタンに「プリセット無しで開始」を表示する", async () => {
+      // Given
+      fetchResolves({
+        status: "ok",
+        data: { personal: [], global: [globalPreset] },
+      });
 
-      // Then: 開始ボタンは「プリセット無しで開始」で、個人プリセットの案内文を表示する
+      // When
+      render(<RoundPresetSelect />);
+      await waitFor(() => {
+        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      });
+
+      // Then
       expect(
         screen.getByRole("button", { name: "プリセット無しで開始" }),
       ).toBeInTheDocument();
+    });
+
+    it("個人プリセットが無ければ、個人プリセット欄に案内文を表示する", async () => {
+      // Given
+      fetchResolves({
+        status: "ok",
+        data: { personal: [], global: [globalPreset] },
+      });
+
+      // When
+      render(<RoundPresetSelect />);
+      await waitFor(() => {
+        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      });
+
+      // Then
       expect(
         screen.getByText("プリセットとして保存すると、ここに表示されます。"),
       ).toBeInTheDocument();
     });
 
-    it("プリセットをクリックすると選択され、開始ボタンのラベルが変わる。再クリックで解除される", async () => {
-      // Given: 個人プリセットと公式プリセットを表示している
+    it("プリセットをクリックすると選択され、開始ボタンのラベルが選択したプリセット名になる", async () => {
+      // Given
       const user = userEvent.setup();
       await renderSelect([personalPreset], [globalPreset]);
 
-      // When: 個人プリセットをクリックする
+      // When
       await user.click(screen.getAllByTestId("round-preset-button")[0]);
 
-      // Then: 開始ボタンのラベルが選択したプリセット名になる
+      // Then
+      expect(
+        screen.getByRole("button", { name: "「個人練習セット」で開始" }),
+      ).toBeInTheDocument();
+    });
+
+    it("選択中のプリセットを再クリックすると選択が解除され、開始ボタンは「プリセット無しで開始」に戻る", async () => {
+      // Given
+      const user = userEvent.setup();
+      await renderSelect([personalPreset], [globalPreset]);
+      await user.click(screen.getAllByTestId("round-preset-button")[0]);
       expect(
         screen.getByRole("button", { name: "「個人練習セット」で開始" }),
       ).toBeInTheDocument();
 
-      // When: 同じプリセットを再クリックする
+      // When
       await user.click(screen.getAllByTestId("round-preset-button")[0]);
 
-      // Then: 選択が解除され、開始ボタンは既定表示に戻る
+      // Then
       expect(
         screen.getByRole("button", { name: "プリセット無しで開始" }),
       ).toBeInTheDocument();
     });
 
     it("選択中に別のプリセットをクリックすると、そのプリセットへ選択が移る", async () => {
-      // Given: 個人プリセットを選択している
+      // Given
       const user = userEvent.setup();
       await renderSelect([personalPreset, otherPersonalPreset], [globalPreset]);
       await user.click(screen.getAllByTestId("round-preset-button")[0]);
 
-      // When: 別の個人プリセットをクリックする
+      // When
       await user.click(screen.getAllByTestId("round-preset-button")[1]);
 
-      // Then: 開始ボタンのラベルがクリックしたプリセット名になり、元のプリセットの距離構成は閉じる
+      // Then
       expect(
         screen.getByRole("button", { name: "「別の個人セット」で開始" }),
       ).toBeInTheDocument();
@@ -286,15 +343,15 @@ describe("RoundPresetSelect", () => {
     });
 
     it("公式プリセットも選択でき、開始ボタンのラベルが変わる", async () => {
-      // Given: 個人プリセットと公式プリセットを表示している
+      // Given
       const user = userEvent.setup();
       await renderSelect([personalPreset], [globalPreset]);
 
-      // When: 公式プリセットをクリックする
+      // When
       const buttons = screen.getAllByTestId("round-preset-button");
       await user.click(buttons[buttons.length - 1]);
 
-      // Then: 開始ボタンのラベルが公式プリセット名になる
+      // Then
       expect(
         screen.getByRole("button", { name: "「公式720ラウンド」で開始" }),
       ).toBeInTheDocument();
@@ -303,10 +360,19 @@ describe("RoundPresetSelect", () => {
 
   describe("プリセットのメニュー", () => {
     it("個人プリセットにだけメニューボタンを表示し、公式プリセットには表示しない", async () => {
-      // Given/When: 個人プリセット1件と公式プリセット1件を表示する
-      await renderSelect([personalPreset], [globalPreset]);
+      // Given
+      fetchResolves({
+        status: "ok",
+        data: { personal: [personalPreset], global: [globalPreset] },
+      });
 
-      // Then: メニューボタンは個人プリセットの1件分だけで、公式プリセットの行には無い
+      // When
+      render(<RoundPresetSelect />);
+      await waitFor(() => {
+        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      });
+
+      // Then
       const triggers = screen.getAllByTestId("round-preset-menu-trigger");
       expect(triggers).toHaveLength(1);
       const globalRow = screen.getByText("公式720ラウンド").closest("div");
@@ -315,36 +381,18 @@ describe("RoundPresetSelect", () => {
         within(globalRow).queryByTestId("round-preset-menu-trigger"),
       ).not.toBeInTheDocument();
     });
-
-    it("メニューを開いて外側をクリックすると、メニューが閉じる", async () => {
-      // Given: 個人プリセットのメニューを開いている
-      const user = userEvent.setup();
-      await renderSelect([personalPreset], []);
-      await user.click(screen.getByTestId("round-preset-menu-trigger"));
-      expect(await screen.findByTestId("round-preset-delete")).toBeVisible();
-
-      // When: メニューの外側をクリックする
-      await user.click(document.body);
-
-      // Then: メニューが閉じる
-      await waitFor(() => {
-        expect(
-          screen.queryByTestId("round-preset-delete"),
-        ).not.toBeInTheDocument();
-      });
-    });
   });
 
   describe("選択中のプリセットの展開表示", () => {
     it("形式・弓種と、距離構成（距離・エンド構成）を展開表示する", async () => {
-      // Given: 個人プリセットを表示している
+      // Given
       const user = userEvent.setup();
       await renderSelect([personalPreset], [globalPreset]);
 
-      // When: 個人プリセットをクリックする
+      // When
       await user.click(screen.getAllByTestId("round-preset-button")[0]);
 
-      // Then: 形式・弓種と、各距離の距離とエンド構成を表示する
+      // Then
       expect(
         screen.getByTestId("round-preset-format-bow-type"),
       ).toHaveTextContent("アウトドア / リカーブ");
@@ -354,28 +402,28 @@ describe("RoundPresetSelect", () => {
     });
 
     it("プリセットに的が埋め込まれていない距離は「的データを取得できません」と表示する", async () => {
-      // Given: 距離の的がnullの個人プリセットを表示している
+      // Given
       const user = userEvent.setup();
       await renderSelect([personalPreset], []);
 
-      // When: 選択して展開する
+      // When
       await user.click(screen.getAllByTestId("round-preset-button")[0]);
 
-      // Then: 的の代わりに「的データを取得できません」を表示する
+      // Then
       expect(screen.getAllByText("的データを取得できません")).toHaveLength(2);
     });
 
     it("展開された距離構成の部分をクリックしても、選択が解除される", async () => {
-      // Given: 個人プリセットを選択して、距離構成を展開している
+      // Given
       const user = userEvent.setup();
       await renderSelect([personalPreset], [globalPreset]);
       await user.click(screen.getAllByTestId("round-preset-button")[0]);
       expect(screen.getByText("70m")).toBeInTheDocument();
 
-      // When: 展開された距離構成の部分をクリックする
+      // When
       await user.click(screen.getByText("70m"));
 
-      // Then: 選択が解除され、距離構成が閉じ、開始ボタンは既定表示に戻る
+      // Then
       expect(screen.queryByText("70m")).not.toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "プリセット無しで開始" }),
@@ -386,16 +434,16 @@ describe("RoundPresetSelect", () => {
   describe("開始ボタン", () => {
     describe("プリセット未選択で押した場合", () => {
       it("プリセット無しで開始し、作成したラウンドへ遷移する", async () => {
-        // Given: プリセットを選択していない
+        // Given
         const user = userEvent.setup();
         await renderSelect([], []);
 
-        // When: 開始ボタンを押す
+        // When
         await user.click(
           screen.getByRole("button", { name: "プリセット無しで開始" }),
         );
 
-        // Then: プリセット無しで開始し、作成したラウンドへ遷移する
+        // Then
         await waitFor(() => {
           expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
         });
@@ -407,17 +455,17 @@ describe("RoundPresetSelect", () => {
 
     describe("プリセットを選択して押した場合", () => {
       it("一覧の取得結果の選択中のプリセットで開始し、作成したラウンドへ遷移する", async () => {
-        // Given: 個人プリセットを選択している
+        // Given
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);
         await user.click(screen.getAllByTestId("round-preset-button")[0]);
 
-        // When: 開始ボタンを押す
+        // When
         await user.click(
           screen.getByRole("button", { name: "「個人練習セット」で開始" }),
         );
 
-        // Then: 一覧の取得結果の選択中のプリセットを渡して開始し、遷移する
+        // Then
         await waitFor(() => {
           expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
         });
@@ -427,19 +475,19 @@ describe("RoundPresetSelect", () => {
       });
 
       it("開始へ、マウント状態の判定と、ID生成、現在時刻の取得を渡す", async () => {
-        // Given: 個人プリセットを選択して開始する
+        // Given
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);
         await user.click(screen.getAllByTestId("round-preset-button")[0]);
+
+        // When
         await user.click(
           screen.getByRole("button", { name: "「個人練習セット」で開始" }),
         );
+
+        // Then
         await waitFor(() => expect(startRoundMock).toHaveBeenCalled());
-
-        // When: 渡された関数を呼ぶ
         const args = startRoundMock.mock.calls[0][0];
-
-        // Then: マウント中はtrue、IDはUUID、時刻はDateを返す
         expect(args.isMounted()).toBe(true);
         expect(args.generateId()).toMatch(/^[0-9a-f-]{36}$/);
         expect(args.now()).toBeInstanceOf(Date);
@@ -447,8 +495,8 @@ describe("RoundPresetSelect", () => {
     });
 
     describe("送信中に再度押した場合", () => {
-      it("開始を1回だけ行い、遷移後も押せない表示のままにする", async () => {
-        // Given: 開始の完了を保留にする
+      it("開始中に開始ボタンを再度押しても、開始を1回だけ行う", async () => {
+        // Given
         const deferred = createDeferred<{
           status: "created";
           roundId: string;
@@ -459,27 +507,50 @@ describe("RoundPresetSelect", () => {
         const button = screen.getByRole("button", {
           name: "プリセット無しで開始",
         });
+        await user.click(button);
+        await waitFor(() => {
+          expect(startRoundMock).toHaveBeenCalled();
+        });
 
-        // When: 開始中に開始ボタンを再度押し、その後開始が完了する
+        // When
+        await user.click(button);
+
+        // Then
+        expect(startRoundMock).toHaveBeenCalledTimes(1);
+      });
+
+      it("開始が完了して遷移した後も、開始ボタンを押せない表示のままにする", async () => {
+        // Given
+        const deferred = createDeferred<{
+          status: "created";
+          roundId: string;
+        }>();
+        startRoundMock.mockReturnValue(deferred.promise);
+        const user = userEvent.setup();
+        await renderSelect([], []);
+        const button = screen.getByRole("button", {
+          name: "プリセット無しで開始",
+        });
         await user.click(button);
         await waitFor(() => {
           expect(startRoundMock).toHaveBeenCalled();
         });
         await user.click(button);
+
+        // When
         deferred.resolve({ status: "created", roundId: "new-round-id" });
 
-        // Then: 開始は1回だけ呼ばれ、遷移後も開始ボタンは押せない表示のまま
+        // Then
         await waitFor(() => {
           expect(nav.push).toHaveBeenCalledTimes(1);
         });
-        expect(startRoundMock).toHaveBeenCalledTimes(1);
         expect(button).toHaveAttribute("aria-disabled", "true");
       });
     });
 
     describe("開始できなかった場合", () => {
       it("エラーを表示して遷移せず、開始ボタンを再度押せる表示に戻す", async () => {
-        // Given: 開始がエラーを返す
+        // Given
         startRoundMock.mockResolvedValue({
           status: "failed",
           error: "権限がありません。",
@@ -487,12 +558,12 @@ describe("RoundPresetSelect", () => {
         const user = userEvent.setup();
         await renderSelect([], []);
 
-        // When: 開始ボタンを押す
+        // When
         await user.click(
           screen.getByRole("button", { name: "プリセット無しで開始" }),
         );
 
-        // Then: エラーを表示し、遷移せず、開始ボタンを再度押せる表示に戻す
+        // Then
         expect(
           await screen.findByText("権限がありません。"),
         ).toBeInTheDocument();
@@ -505,7 +576,7 @@ describe("RoundPresetSelect", () => {
 
     describe("開始の完了を待つ間にアンマウントされた場合", () => {
       it("開始できても遷移しない", async () => {
-        // Given: 開始の完了を保留にして開始ボタンを押している。開始処理は完了後に、画面が残っているかを確かめる
+        // Given
         const deferred = createDeferred<void>();
         startRoundMock.mockImplementation(async ({ isMounted }) => {
           await deferred.promise;
@@ -521,13 +592,13 @@ describe("RoundPresetSelect", () => {
         await waitFor(() => {
           expect(startRoundMock).toHaveBeenCalled();
         });
-
-        // When: アンマウントした後に開始が完了する
         unmount();
+
+        // When
         deferred.resolve();
         await flushMacrotask();
 
-        // Then: 遷移しない
+        // Then
         expect(nav.push).not.toHaveBeenCalled();
       });
     });
@@ -546,16 +617,16 @@ describe("RoundPresetSelect", () => {
 
     describe("削除を確定した場合", () => {
       it("選択中のプリセットを削除すると、一覧から取り除き選択を解除する", async () => {
-        // Given: 個人プリセットを選択している
+        // Given
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);
         await user.click(screen.getAllByTestId("round-preset-button")[0]);
-
-        // When: 選択中のプリセットの削除を確定する
         await openDeleteDialog(user, "個人練習セット");
+
+        // When
         await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
-        // Then: そのプリセットを削除して一覧から取り除き、開始ボタンは既定表示に戻る
+        // Then
         await waitFor(() => {
           expect(screen.queryByText("個人練習セット")).not.toBeInTheDocument();
         });
@@ -569,16 +640,16 @@ describe("RoundPresetSelect", () => {
       });
 
       it("選択中とは別のプリセットを削除すると、一覧から取り除き選択は維持する", async () => {
-        // Given: 2つの個人プリセットのうち「個人練習セット」を選択している
+        // Given
         const user = userEvent.setup();
         await renderSelect([personalPreset, otherPersonalPreset], []);
         await user.click(screen.getAllByTestId("round-preset-button")[0]);
-
-        // When: 選択していない「別の個人セット」の削除を確定する
         await openDeleteDialog(user, "別の個人セット");
+
+        // When
         await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
-        // Then: 「別の個人セット」を一覧から取り除き、選択は維持する
+        // Then
         await waitFor(() => {
           expect(screen.queryByText("別の個人セット")).not.toBeInTheDocument();
         });
@@ -588,20 +659,36 @@ describe("RoundPresetSelect", () => {
       });
     });
 
+    describe("削除を取りやめた場合", () => {
+      it("確認ダイアログでキャンセルすると、削除せず、プリセットは一覧に残る", async () => {
+        // Given
+        const user = userEvent.setup();
+        await renderSelect([personalPreset], []);
+        await openDeleteDialog(user, "個人練習セット");
+
+        // When
+        await user.click(screen.getByTestId("confirm-dialog-cancel"));
+
+        // Then
+        expect(supabase.deleteEq).not.toHaveBeenCalled();
+        expect(screen.getByText("個人練習セット")).toBeInTheDocument();
+      });
+    });
+
     describe("削除に失敗した場合", () => {
       it("エラーを表示し、一覧から取り除かず、保存済みからも除かない", async () => {
-        // Given: 削除がエラーを返す
+        // Given
         supabase.deleteEq.mockResolvedValue({
           error: { message: "権限がありません。" },
         });
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);
-
-        // When: 削除を確定する
         await openDeleteDialog(user, "個人練習セット");
+
+        // When
         await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
-        // Then: エラーを表示し、プリセットは一覧に残る
+        // Then
         expect(
           await screen.findByText("権限がありません。"),
         ).toBeInTheDocument();
@@ -610,18 +697,18 @@ describe("RoundPresetSelect", () => {
       });
 
       it("削除確認ダイアログは開いたままで、確認ボタンを再度押せる", async () => {
-        // Given: 削除がエラーを返す
+        // Given
         supabase.deleteEq.mockResolvedValue({
           error: { message: "権限がありません。" },
         });
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);
-
-        // When: 削除を確定する
         await openDeleteDialog(user, "個人練習セット");
+
+        // When
         await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
-        // Then: エラーを表示したままダイアログが開いており、確認ボタンが再度有効になる
+        // Then
         expect(
           await screen.findByText("権限がありません。"),
         ).toBeInTheDocument();

@@ -105,38 +105,6 @@ export function disableRound(supabase: SupabaseClient, roundId: string) {
   });
 }
 
-export function disableDistance(supabase: SupabaseClient, distanceId: string) {
-  return call(supabase, "disable_distance", {
-    p_distance_event_id: randomUUID(),
-    p_distance_id: distanceId,
-  });
-}
-
-export function createDistance(
-  supabase: SupabaseClient,
-  roundId: string,
-  input: {
-    positionKey: string;
-    distance: number | null;
-    isMarked: boolean;
-    totalEnds: number;
-    arrowsPerEnd: number;
-    targetFaceId: string;
-  },
-) {
-  return call(supabase, "create_distance", {
-    p_distance_event_id: randomUUID(),
-    p_id: randomUUID(),
-    p_round_id: roundId,
-    p_position_key: input.positionKey,
-    p_distance: input.distance,
-    p_is_marked: input.isMarked,
-    p_total_ends: input.totalEnds,
-    p_arrows_per_end: input.arrowsPerEnd,
-    p_target_face_id: input.targetFaceId,
-  });
-}
-
 // 矢を記録する。shotIdを省くと無作為のUUIDで新しい矢を記録し、そのIDを返す。射手と射順は、指定したときだけ送る。
 export async function recordShot(
   supabase: SupabaseClient,
@@ -168,21 +136,6 @@ export async function recordShot(
     ],
   });
   return shotId;
-}
-
-export function clearShot(
-  supabase: SupabaseClient,
-  shot: { shotId: string; distanceId: string },
-) {
-  return call(supabase, "clear_shots", {
-    p_shots: [
-      {
-        shot_event_id: randomUUID(),
-        shot_id: shot.shotId,
-        distance_id: shot.distanceId,
-      },
-    ],
-  });
 }
 
 // 距離の生きている矢を、エンド、点数の順で返す。

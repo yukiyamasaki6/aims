@@ -56,9 +56,9 @@ describe("proxy", () => {
     it("セッションの更新結果をレスポンスとして返す", async () => {
       // Given
       db.getUser.mockResolvedValue({ data: { user: null } });
-      const request = new NextRequest("https://app.example.com/rounds/1");
 
       // When
+      const request = new NextRequest("https://app.example.com/rounds/1");
       const response = await proxy(request);
 
       // Then

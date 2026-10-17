@@ -9,11 +9,11 @@ vi.mock("./rounds-list-client", () => ({
 
 describe("RoundsPage", () => {
   it("取得を伴わず、見出しと一覧のクライアントコンポーネントだけを描画する", () => {
-    // Given: 同期のコンポーネントで、cookieやSupabaseを必要としない
-    // When: ページを描画する
+    // Given
+    // When
     render(<RoundsPage />);
 
-    // Then: 見出しと一覧のクライアントコンポーネントを表示する
+    // Then
     expect(
       screen.getByRole("heading", { name: "ラウンド一覧" }),
     ).toBeInTheDocument();

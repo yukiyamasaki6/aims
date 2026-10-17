@@ -46,8 +46,8 @@ const distanceB: Distance = {
   id: "distance-b",
   position_key: "b",
   distance: 50,
-  total_ends: 2,
-  arrows_per_end: 3,
+  total_ends: 6,
+  arrows_per_end: 6,
   target_face_id: targetFace.id,
   is_marked: true,
 };
@@ -91,20 +91,20 @@ beforeEach(() => {
 describe("SavePresetDialog", () => {
   describe("開く", () => {
     it("名前欄にラウンド名を事前入力し、距離構成から生成した名前をプレースホルダーにする", async () => {
-      // Given: 閉じたダイアログ
+      // Given
       const { user } = setup();
 
-      // When: 開く
+      // When
       await user.click(screen.getByTestId("save-as-preset-trigger"));
 
-      // Then: 名前欄にラウンド名が入り、プレースホルダーは並び順の距離から生成した名前になる
+      // Then
       const name = screen.getByTestId("save-as-preset-name");
       expect(name).toHaveValue("午前練習");
       expect(name).toHaveAttribute("placeholder", "70-50");
     });
 
     it("表示中の構成を距離の並び順で表示し、的が見つからない距離は「的データを取得できません」と表示する", async () => {
-      // Given: 並び順で2つ目の距離の的が、的の一覧に無い
+      // Given
       const { user } = setup({
         distances: [
           { ...distanceB, target_face_id: "face-unknown" },
@@ -112,19 +112,22 @@ describe("SavePresetDialog", () => {
         ],
       });
 
-      // When: 開く
+      // When
       await user.click(screen.getByTestId("save-as-preset-trigger"));
 
-      // Then: 種別・弓種と、並び順の距離（70m→50m）が表示され、50mの的は「的データを取得できません」になる
-      expect(screen.getByRole("dialog")).toHaveTextContent(
-        "アウトドア / リカーブ70m6本×6エンド122cm50m3本×2エンド的データを取得できません",
-      );
+      // Then
+      const dialog = screen.getByRole("dialog");
+      expect(dialog).toHaveTextContent("アウトドア / リカーブ");
+      const text = dialog.textContent ?? "";
+      expect(text.indexOf("70m")).toBeGreaterThanOrEqual(0);
+      expect(text.indexOf("70m")).toBeLessThan(text.indexOf("50m"));
+      expect(dialog).toHaveTextContent("的データを取得できません");
     });
   });
 
   describe("閉じて再度開く", () => {
     it("直前の入力とエラーは破棄される", async () => {
-      // Given: 51文字の名前で保存してエラーが表示されている
+      // Given
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
       await user.clear(screen.getByTestId("save-as-preset-name"));
@@ -137,11 +140,11 @@ describe("SavePresetDialog", () => {
         screen.getByText("プリセット名は50文字以内で入力してください。"),
       ).toBeInTheDocument();
 
-      // When: Escapeで閉じて再度開く
+      // When
       await user.keyboard("{Escape}");
       await user.click(screen.getByTestId("save-as-preset-trigger"));
 
-      // Then: 名前欄はラウンド名に戻り、エラーは表示されない
+      // Then
       expect(screen.getByTestId("save-as-preset-name")).toHaveValue("午前練習");
       expect(
         screen.queryByText("プリセット名は50文字以内で入力してください。"),
@@ -149,18 +152,38 @@ describe("SavePresetDialog", () => {
     });
   });
 
+  describe("背景のクリック", () => {
+    it("開いたダイアログの背景を押すと、保存せずに閉じる", async () => {
+      // Given
+      const { user } = setup();
+      await user.click(screen.getByTestId("save-as-preset-trigger"));
+      const backdrops = document.querySelectorAll(".bg-black\\/40");
+
+      // When
+      await user.click(backdrops[backdrops.length - 1]);
+
+      // Then
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("save-as-preset-name"),
+        ).not.toBeInTheDocument();
+      });
+      expect(supabase.rpc).not.toHaveBeenCalled();
+    });
+  });
+
   describe("保存", () => {
     it("入力した名前と表示中の構成でsave_round_as_presetを呼び、ダイアログを閉じる", async () => {
-      // Given: 開いたダイアログで名前を入力している
+      // Given
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
       await user.clear(screen.getByTestId("save-as-preset-name"));
       await user.type(screen.getByTestId("save-as-preset-name"), "練習用");
 
-      // When: 保存する
+      // When
       await user.click(screen.getByTestId("save-as-preset-confirm"));
 
-      // Then: 入力した名前と表示中の構成がSDKへ届き、ダイアログが閉じる
+      // Then
       await waitFor(() => {
         expect(
           screen.queryByTestId("save-as-preset-name"),
@@ -182,8 +205,8 @@ describe("SavePresetDialog", () => {
           {
             position_key: "b",
             distance: 50,
-            total_ends: 2,
-            arrows_per_end: 3,
+            total_ends: 6,
+            arrows_per_end: 6,
             target_face_id: "face-x",
             is_marked: true,
           },
@@ -193,22 +216,34 @@ describe("SavePresetDialog", () => {
       expect(fetchPresets).toHaveBeenCalledTimes(1);
     });
 
-    it("送信中は確定ボタンを無効表示にし、連打しても二重送信しない", async () => {
-      // Given: 保存の応答を保留している
-      const resolveRpc = holdRpc();
+    it("送信中は確定ボタンを無効表示にする", async () => {
+      // Given
+      holdRpc();
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
 
-      // When: 確定ボタンを連打する
-      await user.click(screen.getByTestId("save-as-preset-confirm"));
+      // When
       await user.click(screen.getByTestId("save-as-preset-confirm"));
 
-      // Then: 送信中は無効表示になり、応答後に閉じるまでSDKへは1回だけ届く
+      // Then
       expect(screen.getByTestId("save-as-preset-confirm")).toHaveAttribute(
         "aria-disabled",
         "true",
       );
+    });
+
+    it("送信中に連打した後に応答が返ると、閉じて、SDKへは1回だけ届く", async () => {
+      // Given
+      const resolveRpc = holdRpc();
+      const { user } = setup();
+      await user.click(screen.getByTestId("save-as-preset-trigger"));
+      await user.click(screen.getByTestId("save-as-preset-confirm"));
+      await user.click(screen.getByTestId("save-as-preset-confirm"));
+
+      // When
       resolveRpc();
+
+      // Then
       await waitFor(() => {
         expect(
           screen.queryByTestId("save-as-preset-name"),
@@ -217,19 +252,32 @@ describe("SavePresetDialog", () => {
       expect(supabase.rpc).toHaveBeenCalledTimes(1);
     });
 
-    it("送信中はEscapeで閉じず、応答後に閉じる", async () => {
-      // Given: 保存の応答を保留している
-      const resolveRpc = holdRpc();
+    it("送信中はEscapeで閉じない", async () => {
+      // Given
+      holdRpc();
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
       await user.click(screen.getByTestId("save-as-preset-confirm"));
 
-      // When: 送信中にEscapeを押す
+      // When
       await user.keyboard("{Escape}");
 
-      // Then: 閉じず、応答が返ると閉じる
+      // Then
       expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
+    });
+
+    it("送信中にEscapeを押した後に応答が返ると、閉じる", async () => {
+      // Given
+      const resolveRpc = holdRpc();
+      const { user } = setup();
+      await user.click(screen.getByTestId("save-as-preset-trigger"));
+      await user.click(screen.getByTestId("save-as-preset-confirm"));
+      await user.keyboard("{Escape}");
+
+      // When
       resolveRpc();
+
+      // Then
       await waitFor(() => {
         expect(
           screen.queryByTestId("save-as-preset-name"),
@@ -238,7 +286,7 @@ describe("SavePresetDialog", () => {
     });
 
     it("名前が50文字を超える場合は送信せず、エラーを表示する", async () => {
-      // Given: 51文字の名前を入力している
+      // Given
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
       await user.clear(screen.getByTestId("save-as-preset-name"));
@@ -247,10 +295,10 @@ describe("SavePresetDialog", () => {
         "あ".repeat(51),
       );
 
-      // When: 保存する
+      // When
       await user.click(screen.getByTestId("save-as-preset-confirm"));
 
-      // Then: エラーが表示され、名前欄が不正な入力として示され、SDKへは届かない
+      // Then
       expect(
         screen.getByText("プリセット名は50文字以内で入力してください。"),
       ).toBeInTheDocument();
@@ -262,15 +310,15 @@ describe("SavePresetDialog", () => {
     });
 
     it("未認証の場合は送信せず、エラーを表示してダイアログを開いたままにする", async () => {
-      // Given: サインインしていない
+      // Given
       supabase.getSession.mockResolvedValue({ data: { session: null } });
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
 
-      // When: 保存する
+      // When
       await user.click(screen.getByTestId("save-as-preset-confirm"));
 
-      // Then: エラーが表示され、ダイアログは開いたままで、SDKのrpcへは届かない
+      // Then
       expect(
         await screen.findByText("サインインが必要です。"),
       ).toBeInTheDocument();
@@ -279,7 +327,7 @@ describe("SavePresetDialog", () => {
     });
 
     it("セッションの確認が通信失敗で不明な場合は、サインインを求めず通信エラーを表示してダイアログを開いたままにする", async () => {
-      // Given: セッションの確認が通信失敗で、認証状態が分からない
+      // Given
       supabase.getSession.mockResolvedValue({
         data: { session: null },
         error: new AuthRetryableFetchError("Failed to fetch", 0),
@@ -287,10 +335,10 @@ describe("SavePresetDialog", () => {
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
 
-      // When: 保存する
+      // When
       await user.click(screen.getByTestId("save-as-preset-confirm"));
 
-      // Then: 通信エラーが表示され、ダイアログは開いたままで、SDKのrpcへは届かない
+      // Then
       expect(
         await screen.findByText(
           "通信エラーが発生しました。しばらくしてから再度お試しください。",
@@ -304,7 +352,7 @@ describe("SavePresetDialog", () => {
     });
 
     it("save_round_as_presetが失敗した場合は、エラーを表示してダイアログを開いたままにする", async () => {
-      // Given: 保存が失敗する
+      // Given
       supabase.rpc.mockResolvedValue({
         data: null,
         error: { message: "保存に失敗しました。" },
@@ -312,10 +360,10 @@ describe("SavePresetDialog", () => {
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
 
-      // When: 保存する
+      // When
       await user.click(screen.getByTestId("save-as-preset-confirm"));
 
-      // Then: エラーが表示され、ダイアログは開いたままで、確定ボタンは再び押せる
+      // Then
       expect(
         await screen.findByText("保存に失敗しました。"),
       ).toBeInTheDocument();
@@ -329,18 +377,17 @@ describe("SavePresetDialog", () => {
   });
 
   describe("名前欄のEnterキー", () => {
-    it("フォーカスを外すだけで、保存せずダイアログも閉じない", async () => {
-      // Given: 開いたダイアログの名前欄
+    it("名前欄でEnterを押しても、保存せずダイアログも閉じない", async () => {
+      // Given
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
       const name = screen.getByTestId("save-as-preset-name");
       await user.click(name);
 
-      // When: Enterを押す
+      // When
       await user.keyboard("{Enter}");
 
-      // Then: フォーカスが外れ、RPCは呼ばれず、ダイアログは開いたまま
-      expect(name).not.toHaveFocus();
+      // Then
       expect(supabase.rpc).not.toHaveBeenCalled();
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     });

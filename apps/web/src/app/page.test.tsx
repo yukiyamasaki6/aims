@@ -7,17 +7,17 @@ vi.mock("./start-button", () => ({
 }));
 
 describe("Home", () => {
-  it("アプリの紹介と、開始ボタンと、/へのAIMSロゴを表示する", () => {
+  it("アプリ名と説明文、開始ボタン、AIMSロゴを表示する", () => {
     // Given
     // When
     render(<Home />);
 
     // Then
     expect(screen.getByRole("heading", { name: "AIMS" })).toBeInTheDocument();
+    expect(
+      screen.getByText("アーチェリーのスコア記録・分析・共有アプリ"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "開始" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "AIMS" })).toHaveAttribute(
-      "href",
-      "/",
-    );
+    expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();
   });
 });

@@ -167,7 +167,8 @@ describe("fetchRoundDetail", () => {
       // When
       await fetchRoundDetail(client, "round-1");
 
-      // Then: 論理削除された距離・記録も取得し(revisionの判定に使う)、他人の個人の的を要求しない
+      // Then
+      // 論理削除された距離・記録は、revisionの判定に使うため取得する。
       expect(queries).toEqual([
         {
           table: "rounds",
@@ -233,7 +234,7 @@ describe("fetchRoundDetail", () => {
     });
 
     it("無効化された距離・記録は、表示に含めず、revisionだけを返す", async () => {
-      // Given: d-aの記録が無効化され、d-bが無効化されている
+      // Given
       const disabledAt = "2026-09-16T00:00:00Z";
       const { client } = makeSupabase({
         rounds: ok({
@@ -259,7 +260,7 @@ describe("fetchRoundDetail", () => {
       // When
       const result = await fetchRoundDetail(client, "round-1");
 
-      // Then: 表示は距離d-aだけで記録は無く、revisionは無効化された行の分も持つ
+      // Then
       expect(result).toMatchObject({
         status: "ok",
         data: {
@@ -274,13 +275,16 @@ describe("fetchRoundDetail", () => {
     });
 
     it("距離が無いラウンドは、距離と記録を空のokとする", async () => {
+      // Given
       const { client } = makeSupabase({
         rounds: ok({ ...round, distances: [] }),
         target_faces: ok([]),
       });
 
+      // When
       const result = await fetchRoundDetail(client, "round-1");
 
+      // Then
       expect(result).toMatchObject({
         status: "ok",
         data: { distances: [], shots: [] },
@@ -320,70 +324,89 @@ describe("fetchRoundDetail", () => {
     });
 
     it("的のデータがnullでも、的を空としてokとする", async () => {
+      // Given
       const { client } = makeSupabase({
         rounds: ok(round),
         target_faces: ok(null),
       });
 
+      // When
       const result = await fetchRoundDetail(client, "round-1");
 
+      // Then
       expect(result).toMatchObject({ status: "ok", data: { targetFaces: [] } });
     });
   });
 
   describe("見つからない場合", () => {
     it("ラウンドがnull（存在しない・権限なし・論理削除済み）なら、的の取得結果によらずnot-foundとする", async () => {
+      // Given
       const { client } = makeSupabase({
         rounds: ok(null),
         target_faces: ok([face("g", null)]),
       });
 
-      await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
-        status: "not-found",
-      });
+      // When
+      const result = await fetchRoundDetail(client, "round-1");
+
+      // Then
+      expect(result).toEqual({ status: "not-found" });
     });
   });
 
   describe("失敗の分類", () => {
     it("オフラインではクエリを発行せずofflineを返す", async () => {
+      // Given
       vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
       const { client, queries } = makeSupabase({
         rounds: ok(round),
         target_faces: ok([]),
       });
 
-      await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
-        status: "offline",
-      });
+      // When
+      const result = await fetchRoundDetail(client, "round-1");
+
+      // Then
+      expect(result).toEqual({ status: "offline" });
       expect(queries).toEqual([]);
     });
 
     it("どちらかの通信が失敗(status 0)したら、もう一方がエラーでも、原因を断定せずerrorとする", async () => {
+      // Given
       const { client } = makeSupabase({
         rounds: failed(500, { message: "boom" }),
         target_faces: failed(0),
       });
 
-      await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
+      // When
+      const result = await fetchRoundDetail(client, "round-1");
+
+      // Then
+      expect(result).toEqual({
         status: "error",
         message: "読み込めませんでした。",
       });
     });
 
     it("的の通信失敗は、ラウンドが見つからない場合もerrorとし、見つからないと誤判定しない", async () => {
+      // Given
       const { client } = makeSupabase({
         rounds: ok(null),
         target_faces: failed(0),
       });
 
-      await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
+      // When
+      const result = await fetchRoundDetail(client, "round-1");
+
+      // Then
+      expect(result).toEqual({
         status: "error",
         message: "読み込めませんでした。",
       });
     });
 
     it("どちらかが401なら、他のエラーより優先して認証の拒否とし、更新が拒否されればサインインが必要なエラーとする", async () => {
-      // Given: 的の取得が認証の拒否で返り、更新を強制するとサーバーが拒否する
+      // Given
       const { client } = makeSupabase({
         rounds: failed(500, { message: "boom" }),
         target_faces: failed(401, { message: "jwt" }),
@@ -393,44 +416,62 @@ describe("fetchRoundDetail", () => {
         error: new AuthApiError("revoked", 400, "refresh_token_not_found"),
       })) as typeof client.auth.refreshSession;
 
-      // When/Then
-      await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
+      // When
+      const result = await fetchRoundDetail(client, "round-1");
+
+      // Then
+      expect(result).toEqual({
         status: "error",
         message: AUTH_REQUIRED_MESSAGE,
       });
     });
 
     it("ラウンドのサーバーエラーは取得エラーとする", async () => {
+      // Given
       const { client } = makeSupabase({
         rounds: failed(500, { message: "boom" }),
         target_faces: ok([]),
       });
 
-      await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
+      // When
+      const result = await fetchRoundDetail(client, "round-1");
+
+      // Then
+      expect(result).toEqual({
         status: "error",
         message: FETCH_ERROR_MESSAGE,
       });
     });
 
     it("的のサーバーエラーは取得エラーとする", async () => {
+      // Given
       const { client } = makeSupabase({
         rounds: ok(round),
         target_faces: failed(500, { message: "boom" }),
       });
 
-      await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
+      // When
+      const result = await fetchRoundDetail(client, "round-1");
+
+      // Then
+      expect(result).toEqual({
         status: "error",
         message: FETCH_ERROR_MESSAGE,
       });
     });
 
     it("セッションが無い場合は、クエリを発行せずサインインが必要なエラーとする", async () => {
+      // Given
       const { client, queries } = makeSupabase(
         { rounds: ok(round), target_faces: ok([]) },
         null,
       );
 
-      await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
+      // When
+      const result = await fetchRoundDetail(client, "round-1");
+
+      // Then
+      expect(result).toEqual({
         status: "error",
         message: AUTH_REQUIRED_MESSAGE,
       });
@@ -438,7 +479,7 @@ describe("fetchRoundDetail", () => {
     });
 
     it("確かめたセッションのユーザーで絞り、クエリの前にセッションを読み直さない", async () => {
-      // Given: 1回目の確認だけがセッションを返し、2回目以降の読み取りでは無い
+      // Given
       let calls = 0;
       const { client, queries } = makeSupabase({
         rounds: ok(round),
@@ -455,7 +496,7 @@ describe("fetchRoundDetail", () => {
       // When
       const result = await fetchRoundDetail(client, "round-1");
 
-      // Then: 1回の確認のセッションで取得でき、的はそのユーザーで絞られる
+      // Then
       expect(result.status).toBe("ok");
       expect(calls).toBe(1);
       expect(
@@ -467,13 +508,16 @@ describe("fetchRoundDetail", () => {
 
 describe("fetchTargetFaces", () => {
   it("的だけを取得し、共通の的を先に並べて返す", async () => {
+    // Given
     const { client, queries } = makeSupabase({
       rounds: ok(null),
       target_faces: ok([face("own", "user-1"), face("common", null)]),
     });
 
+    // When
     const result = await fetchTargetFaces(client);
 
+    // Then
     expect(result.status).toBe("ok");
     if (result.status !== "ok") return;
     expect(result.data.map((f) => f.id).sort()).toEqual(["common", "own"]);
@@ -481,12 +525,17 @@ describe("fetchTargetFaces", () => {
   });
 
   it("サインインしていない場合は、クエリを発行せずサインインを求める", async () => {
+    // Given
     const { client, queries } = makeSupabase(
       { rounds: ok(null), target_faces: ok([]) },
       null,
     );
 
-    await expect(fetchTargetFaces(client)).resolves.toEqual({
+    // When
+    const result = await fetchTargetFaces(client);
+
+    // Then
+    expect(result).toEqual({
       status: "error",
       message: AUTH_REQUIRED_MESSAGE,
     });
@@ -494,50 +543,61 @@ describe("fetchTargetFaces", () => {
   });
 
   it("オフラインではクエリを発行せずofflineを返す", async () => {
+    // Given
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     const { client, queries } = makeSupabase({
       rounds: ok(null),
       target_faces: ok([]),
     });
 
-    await expect(fetchTargetFaces(client)).resolves.toEqual({
-      status: "offline",
-    });
+    // When
+    const result = await fetchTargetFaces(client);
+
+    // Then
+    expect(result).toEqual({ status: "offline" });
     expect(queries).toEqual([]);
   });
 
   it("通信が失敗(status 0)したら、そのレスポンスをそのまま返す", async () => {
+    // Given
     const { client } = makeSupabase({
       rounds: ok(null),
       target_faces: failed(0),
     });
 
+    // When
     const result = await fetchTargetFaces(client);
 
+    // Then
     expect(result.status).toBe("error");
   });
 
   it("エラーレスポンスはerrorとして返す", async () => {
+    // Given
     const { client } = makeSupabase({
       rounds: ok(null),
       target_faces: failed(500, { message: "boom" }),
     });
 
+    // When
     const result = await fetchTargetFaces(client);
 
+    // Then
     expect(result.status).toBe("error");
   });
 
   it("データがnullなら空の一覧として返す", async () => {
+    // Given
     const { client } = makeSupabase({
       rounds: ok(null),
       target_faces: ok(null),
     });
 
-    await expect(fetchTargetFaces(client)).resolves.toEqual({
-      status: "ok",
-      data: [],
-    });
+    // When
+    const result = await fetchTargetFaces(client);
+
+    // Then
+    expect(result).toEqual({ status: "ok", data: [] });
   });
 });
 
@@ -552,31 +612,41 @@ describe("的の端末への保存", () => {
     saveReferenceSnapshot("target-faces", "user-1", savedFaces, 1);
   }
 
+  // 端末の識別によらず、ユーザーのキーに保存された的のIDを読む。
+  function storedFaceIds(userId: string): string[] | null {
+    const raw = localStorage.getItem(`aims:reference:target-faces:${userId}`);
+    return raw === null
+      ? null
+      : idsOf((JSON.parse(raw) as { data: unknown }).data);
+  }
+
   describe("fetchTargetFaces", () => {
     it("okの結果を並べて、クエリのユーザーのキーへ保存する", async () => {
+      // Given
       const { client } = makeSupabase({
         rounds: ok(null),
         target_faces: ok([face("own", "user-1"), face("common", null)]),
       });
 
+      // When
       await fetchTargetFaces(client);
 
-      localStorage.setItem(identityKey, "user-1");
-      expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual([
-        "own",
-        "common",
-      ]);
+      // Then
+      expect(storedFaceIds("user-1")).toEqual(["own", "common"]);
     });
 
     it("取得できたときは、保存済みを最新で上書きして返す(サーバーでの変更・削除の反映)", async () => {
+      // Given
       saveBefore();
       const { client } = makeSupabase({
         rounds: ok(null),
         target_faces: ok([face("fresh", null)]),
       });
 
+      // When
       const result = await fetchTargetFaces(client);
 
+      // Then
       expect(result.status === "ok" && idsOf(result.data)).toEqual(["fresh"]);
       expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual(["fresh"]);
     });
@@ -585,37 +655,53 @@ describe("的の端末への保存", () => {
       ["通信失敗", { data: null, error: null, status: 0 }],
       ["サーバーエラー", { data: null, error: { message: "x" }, status: 500 }],
     ])("%sのとき、保存済みがあればそれを返す", async (_n, response) => {
+      // Given
       saveBefore();
       const { client } = makeSupabase({
         rounds: ok(null),
         target_faces: response as Response,
       });
 
-      await expect(fetchTargetFaces(client)).resolves.toEqual({
-        status: "ok",
-        data: savedFaces,
-      });
+      // When
+      const result = await fetchTargetFaces(client);
+
+      // Then
+      expect(result).toEqual({ status: "ok", data: savedFaces });
     });
 
-    it("オフラインのとき、保存済みがあればそれを返し、無ければofflineを返す", async () => {
+    it("オフラインで保存済みが無ければ、offlineを返す", async () => {
+      // Given
       vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
       const { client } = makeSupabase({
         rounds: ok(null),
         target_faces: ok([]),
       });
-      await expect(fetchTargetFaces(client)).resolves.toEqual({
-        status: "offline",
-      });
 
+      // When
+      const result = await fetchTargetFaces(client);
+
+      // Then
+      expect(result).toEqual({ status: "offline" });
+    });
+
+    it("オフラインで保存済みがあれば、それを返す", async () => {
+      // Given
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
       saveBefore();
-
-      await expect(fetchTargetFaces(client)).resolves.toEqual({
-        status: "ok",
-        data: savedFaces,
+      const { client } = makeSupabase({
+        rounds: ok(null),
+        target_faces: ok([]),
       });
+
+      // When
+      const result = await fetchTargetFaces(client);
+
+      // Then
+      expect(result).toEqual({ status: "ok", data: savedFaces });
     });
 
     it("保存済みがあると、FALLBACK_WAIT_MSで終わらない取得を待たず保存済みを返す", async () => {
+      // Given
       vi.useFakeTimers();
       saveBefore();
       const { client } = makeSupabase(
@@ -623,39 +709,45 @@ describe("的の端末への保存", () => {
         undefined,
         5_000,
       );
+
+      // When
       const pending = fetchTargetFaces(client);
-
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
+      const result = await pending;
 
-      await expect(pending).resolves.toEqual({
-        status: "ok",
-        data: savedFaces,
-      });
+      // Then
+      expect(result).toEqual({ status: "ok", data: savedFaces });
     });
 
     it("保存済みが無いと、FALLBACK_WAIT_MSでは返らず、FETCH_TIMEOUT_MSでerrorになる", async () => {
+      // Given
       vi.useFakeTimers();
       const { client } = makeSupabase(
         { rounds: ok(null), target_faces: ok([]) },
         undefined,
         FETCH_TIMEOUT_MS * 2,
       );
+
+      // When
       let settled = false;
       const pending = fetchTargetFaces(client).finally(() => {
         settled = true;
       });
-
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
-      expect(settled).toBe(false);
+      const settledAtFallback = settled;
       await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - FALLBACK_WAIT_MS);
+      const result = await pending;
 
-      await expect(pending).resolves.toEqual({
+      // Then
+      expect(settledAtFallback).toBe(false);
+      expect(result).toEqual({
         status: "error",
         message: FETCH_ERROR_MESSAGE,
       });
     });
 
     it("時間切れの後に届いたokは表示に使わず、開始時のユーザーのキーへ保存し、識別が変わっても新しいユーザーのキーへ書かない", async () => {
+      // Given
       vi.useFakeTimers();
       saveBefore();
       const { client } = makeSupabase(
@@ -663,21 +755,22 @@ describe("的の端末への保存", () => {
         undefined,
         3_000,
       );
+
+      // When
       const pending = fetchTargetFaces(client);
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
-      await expect(pending).resolves.toEqual({
-        status: "ok",
-        data: savedFaces,
-      });
+      const shown = await pending;
       localStorage.setItem(identityKey, "user-2");
-
       await vi.advanceTimersByTimeAsync(3_000);
 
-      localStorage.setItem(identityKey, "user-1");
-      expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual(["late"]);
+      // Then
+      expect(shown).toEqual({ status: "ok", data: savedFaces });
+      expect(storedFaceIds("user-1")).toEqual(["late"]);
+      expect(storedFaceIds("user-2")).toBeNull();
     });
 
     it("時間切れの後に届いた結果がok以外なら、保存済みは変わらない", async () => {
+      // Given
       vi.useFakeTimers();
       saveBefore();
       const { client } = makeSupabase(
@@ -689,29 +782,31 @@ describe("的の端末への保存", () => {
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
       await pending;
 
+      // When
       await vi.advanceTimersByTimeAsync(3_000);
 
+      // Then
       expect(loadReferenceSnapshot("target-faces")).toEqual(savedFaces);
     });
   });
 
   describe("fetchRoundDetail", () => {
     it("okのとき、並べた的をクエリのユーザーのキーへ保存する", async () => {
+      // Given
       const { client } = makeSupabase({
         rounds: ok(round),
         target_faces: ok([face("own", "user-1"), face("common", null)]),
       });
 
+      // When
       await fetchRoundDetail(client, "round-1");
 
-      localStorage.setItem(identityKey, "user-1");
-      expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual([
-        "own",
-        "common",
-      ]);
+      // Then
+      expect(storedFaceIds("user-1")).toEqual(["own", "common"]);
     });
 
     it("失敗のときは、保存済みがあっても代わりにせず、結果をそのまま返す", async () => {
+      // Given
       saveBefore();
       vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
       const { client } = makeSupabase({
@@ -719,13 +814,16 @@ describe("的の端末への保存", () => {
         target_faces: ok([]),
       });
 
-      await expect(fetchRoundDetail(client, "round-1")).resolves.toEqual({
-        status: "offline",
-      });
+      // When
+      const result = await fetchRoundDetail(client, "round-1");
+
+      // Then
+      expect(result).toEqual({ status: "offline" });
       expect(loadReferenceSnapshot("target-faces")).toEqual(savedFaces);
     });
 
     it("待ちは10秒のままで、FALLBACK_WAIT_MSでは返らない", async () => {
+      // Given
       vi.useFakeTimers();
       saveBefore();
       const { client } = makeSupabase(
@@ -733,16 +831,20 @@ describe("的の端末への保存", () => {
         undefined,
         FETCH_TIMEOUT_MS * 2,
       );
+
+      // When
       let settled = false;
       const pending = fetchRoundDetail(client, "round-1").finally(() => {
         settled = true;
       });
-
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
-      expect(settled).toBe(false);
+      const settledAtFallback = settled;
       await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - FALLBACK_WAIT_MS);
+      const result = await pending;
 
-      await expect(pending).resolves.toEqual({
+      // Then
+      expect(settledAtFallback).toBe(false);
+      expect(result).toEqual({
         status: "error",
         message: FETCH_ERROR_MESSAGE,
       });
@@ -755,7 +857,7 @@ describe("fetchRoundDetails", () => {
   const uuid2 = "22222222-2222-4222-8222-222222222222";
 
   it("入力中のラウンドと指定したラウンドを1回の取得で得て、ラウンドIDごとの記録を返す", async () => {
-    // Given: 2件のラウンドが返る
+    // Given
     const { client, queries } = makeSupabase({
       rounds: ok([
         { ...round, id: uuid1, status: "in_progress" },
@@ -767,7 +869,7 @@ describe("fetchRoundDetails", () => {
     // When
     const result = await fetchRoundDetails(client, [uuid2, "not-a-uuid"]);
 
-    // Then: UUIDだけを絞りに使い、ラウンドごとに設定・revision・取得時刻を持つ
+    // Then
     const roundQuery = queries.find((q) => q.table === "rounds");
     expect(roundQuery?.calls).toContainEqual([
       "or",
@@ -785,13 +887,16 @@ describe("fetchRoundDetails", () => {
   });
 
   it("指定したラウンドが無ければ、入力中のラウンドだけで絞る", async () => {
+    // Given
     const { client, queries } = makeSupabase({
       rounds: ok([]),
       target_faces: ok([]),
     });
 
+    // When
     const result = await fetchRoundDetails(client, []);
 
+    // Then
     expect(result).toMatchObject({ status: "ok" });
     expect(queries.find((q) => q.table === "rounds")?.calls).toContainEqual([
       "or",
@@ -800,25 +905,31 @@ describe("fetchRoundDetails", () => {
   });
 
   it("セッションが無いときは、取得せずに未認証のerrorを返す", async () => {
+    // Given
     const { client, queries } = makeSupabase(
       { rounds: ok([]), target_faces: ok([]) },
       null,
     );
 
+    // When
     const result = await fetchRoundDetails(client, []);
 
+    // Then
     expect(result).toEqual({ status: "error", message: AUTH_REQUIRED_MESSAGE });
     expect(queries).toEqual([]);
   });
 
   it("取得に失敗したときは、そのまま返す", async () => {
+    // Given
     const { client } = makeSupabase({
       rounds: failed(0),
       target_faces: ok([]),
     });
 
+    // When
     const result = await fetchRoundDetails(client, []);
 
+    // Then
     expect(result.status).toBe("error");
   });
 
@@ -839,28 +950,31 @@ describe("fetchRoundDetails", () => {
     };
 
     it("50件までは1回の取得で、51件目から取得が増え、2回目以降は入力中を除く", async () => {
-      // Given/When/Then: 0件・50件・51件の境界を同じテストで確かめる
-      const counts: Record<number, number> = {};
+      // Given
+      // When
+      const queriesOf: Record<number, { table: string; calls: Call[] }[]> = {};
       for (const n of [0, 50, 51]) {
         const { client, queries } = makeSupabase({
           rounds: ok([]),
           target_faces: ok([]),
         });
         await fetchRoundDetails(client, uuids(n));
-        counts[n] = roundQueries(queries).length;
-        if (n === 50) {
-          expect(roundQueries(queries)[0].calls).toContainEqual([
-            "or",
-            [`status.eq.in_progress,id.in.(${uuids(50).join(",")})`],
-          ]);
-        }
-        if (n === 51) {
-          const second = roundQueries(queries)[1].calls;
-          expect(second).toContainEqual(["neq", ["status", "in_progress"]]);
-          expect(second).toContainEqual(["in", ["id", [uuidAt(51)]]]);
-        }
+        queriesOf[n] = roundQueries(queries);
       }
-      expect(counts).toEqual({ 0: 1, 50: 1, 51: 2 });
+
+      // Then
+      expect(
+        Object.fromEntries(
+          Object.entries(queriesOf).map(([n, q]) => [n, q.length]),
+        ),
+      ).toEqual({ 0: 1, 50: 1, 51: 2 });
+      expect(queriesOf[50][0].calls).toContainEqual([
+        "or",
+        [`status.eq.in_progress,id.in.(${uuids(50).join(",")})`],
+      ]);
+      const second = queriesOf[51][1].calls;
+      expect(second).toContainEqual(["neq", ["status", "in_progress"]]);
+      expect(second).toContainEqual(["in", ["id", [uuidAt(51)]]]);
     });
 
     it("300件では、取得が6回に分かれ、各取得のIDは50件以下で、全IDが重複なく1回ずつ含まれる", async () => {
@@ -892,7 +1006,7 @@ describe("fetchRoundDetails", () => {
       // When
       await fetchRoundDetails(client, uuids(300));
 
-      // Then: 符号化が最悪(区切りを%2Cにする)でも、IDの並びが収まる
+      // Then
       for (const q of roundQueries(queries)) {
         const encoded = encodeURIComponent(idsIn(q.calls).join(","));
         expect(encoded.length).toBeLessThan(3755);
@@ -900,7 +1014,7 @@ describe("fetchRoundDetails", () => {
     });
 
     it("UUIDでないIDは件数に数えず、取得にも含めない", async () => {
-      // Given: 50件のUUIDと、それ以外の10件
+      // Given
       const junk = Array.from({ length: 10 }, (_, i) => `bad-${i}`);
       const { client, queries } = makeSupabase({
         rounds: ok([]),
@@ -915,7 +1029,7 @@ describe("fetchRoundDetails", () => {
     });
 
     it("複数の取得の行を1つにまとめ、同じIDはrevisionが大きい行を使う", async () => {
-      // Given: 1回目と2回目の両方に同じIDが返り、2回目の方が新しい
+      // Given
       const dup = uuidAt(51);
       const { client } = makeSupabase({
         rounds: (i) =>
@@ -954,13 +1068,16 @@ describe("fetchRoundDetails", () => {
     });
 
     it("取得の1つがerrorを返したら、全体を失敗とする", async () => {
+      // Given
       const { client } = makeSupabase({
         rounds: (i) => (i === 2 ? failed(500, { message: "x" }) : ok([])),
         target_faces: ok([]),
       });
 
+      // When
       const result = await fetchRoundDetails(client, uuids(120));
 
+      // Then
       expect(result.status).toBe("error");
     });
   });

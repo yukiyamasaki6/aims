@@ -3,15 +3,13 @@ import { describe, expect, it } from "vitest";
 import { AppLogo } from "./app-logo";
 
 describe("AppLogo", () => {
-  it("AIMSを/へのリンクとして表示する", () => {
+  // 遷移先は、押して確かめるE2E(navigation.spec.ts)に任せる。
+  it("AIMSのリンクを表示する", () => {
     // Given
     // When
     render(<AppLogo />);
 
     // Then
-    expect(screen.getByRole("link", { name: "AIMS" })).toHaveAttribute(
-      "href",
-      "/",
-    );
+    expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();
   });
 });

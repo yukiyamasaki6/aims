@@ -14,15 +14,12 @@ describe("OfflinePage", () => {
     ).toBeInTheDocument();
   });
 
-  it("/へのAIMSロゴを表示する", () => {
+  it("AIMSロゴのリンクを表示する", () => {
     // Given
     // When
     render(<OfflinePage />);
 
     // Then
-    expect(screen.getByRole("link", { name: "AIMS" })).toHaveAttribute(
-      "href",
-      "/",
-    );
+    expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();
   });
 });

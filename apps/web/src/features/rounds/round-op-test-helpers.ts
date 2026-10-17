@@ -48,7 +48,7 @@ export const distanceUpdated = (
   changes: {
     distance: 50,
     isMarked: false,
-    config: { totalEnds: 3, arrowsPerEnd: 3, targetFaceId: "face-2" },
+    config: { totalEnds: 12, arrowsPerEnd: 3, targetFaceId: "face-2" },
   },
   ...overrides,
 });

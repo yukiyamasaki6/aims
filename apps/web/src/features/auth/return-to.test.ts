@@ -14,6 +14,7 @@ describe("resolveReturnTo", () => {
       ["/rounds/new?x=1&y=%E3%81%82", "/rounds/new?x=1&y=%E3%81%82"],
     ])("%sを検証して%sを返す", (raw, expected) => {
       // Given
+
       // When
       const result = resolveReturnTo(raw);
 
@@ -23,9 +24,9 @@ describe("resolveReturnTo", () => {
 
     it("ハッシュを取り除いたパスとクエリを返す", () => {
       // Given
-      const raw = "/rounds/new?a=1#section";
 
       // When
+      const raw = "/rounds/new?a=1#section";
       const result = resolveReturnTo(raw);
 
       // Then
@@ -34,9 +35,9 @@ describe("resolveReturnTo", () => {
 
     it("解析後に/rounds配下へ正規化されるドットセグメントは、正規化後の値を返す", () => {
       // Given
-      const raw = "/rounds/x/../new";
 
       // When
+      const raw = "/rounds/x/../new";
       const result = resolveReturnTo(raw);
 
       // Then
@@ -75,6 +76,7 @@ describe("resolveReturnTo", () => {
       ["/roundsを装うクエリ", "/signin?next=/rounds"],
     ])("%sは拒否してnullを返す", (_name, raw) => {
       // Given
+
       // When
       const result = resolveReturnTo(raw);
 
@@ -84,10 +86,10 @@ describe("resolveReturnTo", () => {
 
     it("長さが2048を超える値を拒否し、2048までは受け入れる", () => {
       // Given
-      const atLimit = `/rounds/${"a".repeat(2048 - "/rounds/".length)}`;
-      const overLimit = `${atLimit}a`;
 
       // When
+      const atLimit = `/rounds/${"a".repeat(2048 - "/rounds/".length)}`;
+      const overLimit = `${atLimit}a`;
       const accepted = resolveReturnTo(atLimit);
       const rejected = resolveReturnTo(overLimit);
 
@@ -102,9 +104,9 @@ describe("resolveReturnTo", () => {
 describe("signInHref", () => {
   it("/rounds配下の遷移元を、エンコードしたreturnTo付きの/signinにする", () => {
     // Given
-    const from = "/rounds/new?x=1";
 
     // When
+    const from = "/rounds/new?x=1";
     const result = signInHref(from);
 
     // Then
@@ -114,8 +116,10 @@ describe("signInHref", () => {
 
   it("ハッシュは含めずに返す", () => {
     // Given
+
     // When
-    const result = signInHref("/rounds/new#top");
+    const from = "/rounds/new#top";
+    const result = signInHref(from);
 
     // Then
     expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew");
@@ -131,6 +135,7 @@ describe("signInHref", () => {
     ["空文字", ""],
   ])("%sはreturnTo無しの/signinにする", (_name, from) => {
     // Given
+
     // When
     const result = signInHref(from);
 
@@ -140,9 +145,9 @@ describe("signInHref", () => {
 
   it("作ったreturnTo付きの/signinから、同じ遷移元を読み戻せる", () => {
     // Given
-    const from = "/rounds/abc?a=1&b=%E3%81%82";
 
     // When
+    const from = "/rounds/abc?a=1&b=%E3%81%82";
     const href = signInHref(from);
     const result = readReturnTo(href.slice(href.indexOf("?")));
 
@@ -158,6 +163,7 @@ describe("readReturnTo", () => {
     ["?a=1&returnTo=%2Frounds%2Fx%3Fb%3D2", "/rounds/x?b=2"],
   ])("%sから遷移元を読む", (search, expected) => {
     // Given
+
     // When
     const result = readReturnTo(search);
 
@@ -175,6 +181,7 @@ describe("readReturnTo", () => {
     ["エンコードされた改行入りの値", "?returnTo=%2F%0A%2Fevil.com"],
   ])("%sの場合はnullを返す", (_name, search) => {
     // Given
+
     // When
     const result = readReturnTo(search);
 

@@ -166,21 +166,29 @@ beforeEach(() => {
 
 describe("loadRoundsList", () => {
   it("取得の前に、列を読む", async () => {
+    // Given
+
+    // When
     await loadRoundsList(supabase);
 
+    // Then
     expect(calls.order.slice(0, 2)).toEqual(["loadAll", "fetch"]);
   });
 
   it("一覧の取得と一括の取得を行い、一括の取得に保持するラウンドのIDを渡す", async () => {
+    // Given
     log.retainedRoundIds.mockResolvedValue(["r9"]);
 
+    // When
     await loadRoundsList(supabase);
 
+    // Then
     expect(fetcher.fetchRoundsList).toHaveBeenCalledWith(supabase);
     expect(details.fetchRoundDetails).toHaveBeenCalledWith(supabase, ["r9"]);
   });
 
   it("両方の取得が成功したら、反映の後に入力中のラウンドを求める", async () => {
+    // Given
     log.loadAll.mockImplementation(async () => {
       calls.order.push("loadAll");
       return snapshots(
@@ -190,8 +198,10 @@ describe("loadRoundsList", () => {
       );
     });
 
+    // When
     const result = await loadRoundsList(supabase);
 
+    // Then
     expect(calls.order.indexOf("commit")).toBeGreaterThan(
       calls.order.indexOf("details"),
     );
@@ -206,7 +216,13 @@ describe("loadRoundsList", () => {
   });
 
   it("列に削除が無ければ、取得結果と入力中のラウンドを返す", async () => {
-    expect(await loadRoundsList(supabase)).toEqual({
+    // Given
+
+    // When
+    const result = await loadRoundsList(supabase);
+
+    // Then
+    expect(result).toEqual({
       status: "ok",
       data: {
         items,
@@ -219,6 +235,7 @@ describe("loadRoundsList", () => {
   });
 
   it("確定済みの削除は、削除済みにし、削除の確定として返す(取得結果に含まれるかに依らない)", async () => {
+    // Given
     log.loadAll.mockResolvedValue(
       snapshots({
         r1: {
@@ -227,8 +244,10 @@ describe("loadRoundsList", () => {
       }),
     );
 
+    // When
     const result = await loadRoundsList(supabase);
 
+    // Then
     expect(result).toMatchObject({
       status: "ok",
       data: {
@@ -240,6 +259,7 @@ describe("loadRoundsList", () => {
   });
 
   it("未確定の削除は、削除済みにするが、削除の確定として返さない", async () => {
+    // Given
     log.loadAll.mockResolvedValue(
       snapshots({
         r1: {
@@ -248,8 +268,10 @@ describe("loadRoundsList", () => {
       }),
     );
 
+    // When
     const result = await loadRoundsList(supabase);
 
+    // Then
     expect(result).toMatchObject({
       status: "ok",
       data: { deleted: new Set(["r1"]), confirmedDeletions: [] },
@@ -257,34 +279,47 @@ describe("loadRoundsList", () => {
   });
 
   it("保存中の削除は、列に含まれないため、削除済みにしない", async () => {
+    // Given
     // 保存が完了した操作だけが入り口から返る。
     log.loadAll.mockResolvedValue(
       snapshots({ r1: { operations: [entry(createdOp("r1"))] } }),
     );
 
+    // When
     const result = await loadRoundsList(supabase);
 
+    // Then
     expect(result).toMatchObject({ data: { deleted: new Set() } });
   });
 
   it("一覧の取得に失敗したら、一括の取得の結果に依らず、一覧の取得の結果を返す", async () => {
+    // Given
     fetcher.fetchRoundsList.mockResolvedValue({ status: "offline" });
     details.fetchRoundDetails.mockResolvedValue({
       status: "error",
       message: "読み込めませんでした。",
     });
 
-    expect(await loadRoundsList(supabase)).toEqual({ status: "offline" });
+    // When
+    const result = await loadRoundsList(supabase);
+
+    // Then
+    expect(result).toEqual({ status: "offline" });
     expect(refresh.commitRoundDetails).not.toHaveBeenCalled();
   });
 
   it("一覧の取得が成功し、一括の取得に失敗したら、一括の取得の結果を返し、反映しない", async () => {
+    // Given
     details.fetchRoundDetails.mockResolvedValue({
       status: "error",
       message: "読み込めませんでした。",
     });
 
-    expect(await loadRoundsList(supabase)).toEqual({
+    // When
+    const result = await loadRoundsList(supabase);
+
+    // Then
+    expect(result).toEqual({
       status: "error",
       message: "読み込めませんでした。",
     });
@@ -294,6 +329,7 @@ describe("loadRoundsList", () => {
 
 describe("loadLocalRoundsList", () => {
   it("入力中のラウンドだけを、名前・実施日・合計点で返す", async () => {
+    // Given
     log.loadAll.mockResolvedValue(
       snapshots({
         a: { base: baseOf("in_progress", "入力中") },
@@ -301,14 +337,17 @@ describe("loadLocalRoundsList", () => {
       }),
     );
 
+    // When
     const local = await loadLocalRoundsList();
 
+    // Then
     expect(local.inProgress).toEqual([
       { id: "a", name: "入力中", roundDate: "2026-09-10", total: 0 },
     ]);
   });
 
   it("作成が未確定のラウンドと、未送信の点数を含む合計点で返す", async () => {
+    // Given
     log.loadAll.mockResolvedValue(
       snapshots({
         c: {
@@ -321,14 +360,17 @@ describe("loadLocalRoundsList", () => {
       }),
     );
 
+    // When
     const local = await loadLocalRoundsList();
 
+    // Then
     expect(local.inProgress).toEqual([
       { id: "c", name: "作成直後", roundDate: "2026-09-20", total: 19 },
     ]);
   });
 
   it("端末で完了にしたラウンドは、入力中に含めない", async () => {
+    // Given
     log.loadAll.mockResolvedValue(
       snapshots({
         a: {
@@ -345,10 +387,15 @@ describe("loadLocalRoundsList", () => {
       }),
     );
 
-    expect((await loadLocalRoundsList()).inProgress).toEqual([]);
+    // When
+    const local = await loadLocalRoundsList();
+
+    // Then
+    expect(local.inProgress).toEqual([]);
   });
 
   it("列に削除があるラウンドと、削除の印のラウンド、基準の無いラウンドは含めず、削除は削除済みに入れる", async () => {
+    // Given
     log.loadAll.mockResolvedValue(
       snapshots({
         d: { base: baseOf("in_progress"), operations: [disabled("d", false)] },
@@ -357,20 +404,27 @@ describe("loadLocalRoundsList", () => {
       }),
     );
 
+    // When
     const local = await loadLocalRoundsList();
 
+    // Then
     expect(local.inProgress).toEqual([]);
     expect(local.deleted).toEqual(new Set(["d"]));
   });
 
   it("保存済みの的で矢を判定し、的に無い点数は合計に含めない", async () => {
+    // Given
     log.loadAll.mockResolvedValue(
       snapshots({
         c: { operations: [entry(createdOp("c")), entry(shotOp("c", 1, 7))] },
       }),
     );
 
-    expect((await loadLocalRoundsList()).inProgress).toEqual([
+    // When
+    const local = await loadLocalRoundsList();
+
+    // Then
+    expect(local.inProgress).toEqual([
       expect.objectContaining({ id: "c", total: 0 }),
     ]);
     expect(reference.loadReferenceSnapshot).toHaveBeenCalledWith(
@@ -379,6 +433,7 @@ describe("loadLocalRoundsList", () => {
   });
 
   it("保存済みの的が無ければ、的なしで判定する", async () => {
+    // Given
     reference.loadReferenceSnapshot.mockReturnValue(null);
     log.loadAll.mockResolvedValue(
       snapshots({
@@ -386,7 +441,11 @@ describe("loadLocalRoundsList", () => {
       }),
     );
 
-    expect((await loadLocalRoundsList()).inProgress).toEqual([
+    // When
+    const local = await loadLocalRoundsList();
+
+    // Then
+    expect(local.inProgress).toEqual([
       expect.objectContaining({ id: "c", total: 7 }),
     ]);
   });

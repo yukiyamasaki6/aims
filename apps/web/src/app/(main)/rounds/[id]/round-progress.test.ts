@@ -39,21 +39,26 @@ const distance = {
   id: "d-1",
   position_key: "a",
   distance: 70,
-  total_ends: 1,
-  arrows_per_end: 2,
+  total_ends: 12,
+  arrows_per_end: 3,
   target_face_id: "face-1",
   is_marked: true,
 };
-const shot = (n: number, scoreStr = "10") => ({
+const shot = (n: number, scoreStr = "10", endNumber = 1) => ({
   id: `s-${n}`,
   distance_id: "d-1",
-  end_number: 1,
+  end_number: endNumber,
   shot_number: null,
   // 取得した行は、DBのNOT NULL列のため必ず射手のIDを持つ。
   shooter_id: "user-1",
   score_str: scoreStr,
   score_int: Number(scoreStr),
 });
+// 全てのエンドを矢数まで満たす記録。
+const allShots = () =>
+  Array.from({ length: 36 }, (_, i) =>
+    shot(i + 1, "10", Math.floor(i / 3) + 1),
+  );
 
 function tables(
   status: "in_progress" | "completed",
@@ -77,24 +82,40 @@ const reopen = (t: RoundTables, op: SyncOperation) =>
   reopenOperation("round-1", t, op, faces, "e-reopen");
 
 describe("completionConfirmation", () => {
-  it("距離が無ければ記録がない旨、矢数に達していないエンドがあれば未入力の旨、全てのエンドが矢数に達していればnullを返す", () => {
-    // Given
-    const full = tables("completed", [shot(1), shot(2)]);
-    const partial = tables("completed", [shot(1)]);
-    const none = tables("completed", [], []);
+  const confirmationOf = (t: RoundTables) =>
+    completionConfirmation(t.distances as never, t.shots as never);
 
-    // When / Then
-    const probe = (t: RoundTables) =>
-      completionConfirmation(t.distances as never, t.shots as never);
-    expect(probe(full)).toBeNull();
-    expect(probe(partial)).toBe("未入力のマスがあります。入力を完了しますか？");
-    expect(probe(none)).toBe("記録がありません。入力を完了しますか？");
+  it("矢数に達していないエンドがあれば未入力の旨を返し、全てのエンドが矢数に達していればnullを返す", () => {
+    // Given
+    // When
+    const partial = confirmationOf(
+      tables("completed", allShots().slice(0, -1)),
+    );
+    const full = confirmationOf(tables("completed", allShots()));
+
+    // Then
+    expect(partial).toBe("未入力のマスがあります。入力を完了しますか？");
+    expect(full).toBeNull();
+  });
+
+  it("距離が無ければ記録がない旨を返す", () => {
+    // Given
+    // When
+    const result = confirmationOf(tables("completed", [], []));
+
+    // Then
+    expect(result).toBe("記録がありません。入力を完了しますか？");
   });
 });
 
 describe("statusOperation", () => {
   it("状態だけを持つround.updatedを返す", () => {
-    expect(statusOperation("round-1", "completed", "e-1")).toEqual({
+    // Given
+    // When
+    const result = statusOperation("round-1", "completed", "e-1");
+
+    // Then
+    expect(result).toEqual({
       type: "round.updated",
       eventId: "e-1",
       roundId: "round-1",
@@ -166,30 +187,54 @@ describe("reopenOperation", () => {
       ["ラウンド設定の変更", roundUpdated({ changes: { name: "新" } })],
       ["ラウンドの削除", roundDisabled()],
     ])("%sは戻さない", (_name, op) => {
-      expect(reopen(tables("completed"), op)).toBeNull();
+      // Given
+      const t = tables("completed");
+
+      // When
+      const result = reopen(t, op);
+
+      // Then
+      expect(result).toBeNull();
     });
 
     it("入力中のラウンドへの編集は戻さない", () => {
-      expect(
-        reopen(
-          tables("in_progress"),
-          shotRecorded({ shotId: "s-2", scoreStr: "9", scoreInt: 9 }),
-        ),
-      ).toBeNull();
+      // Given
+      const t = tables("in_progress");
+
+      // When
+      const result = reopen(
+        t,
+        shotRecorded({ shotId: "s-2", scoreStr: "9", scoreInt: 9 }),
+      );
+
+      // Then
+      expect(result).toBeNull();
     });
 
     it("完了で、矢数に達したエンドへの新しい矢の記録は戻さない", () => {
-      const full = tables("completed", [shot(1), shot(2)]);
-      expect(reopen(full, shotRecorded({ shotId: "s-3" }))).toBeNull();
+      // Given
+      const full = tables("completed", [shot(1), shot(2), shot(3)]);
+
+      // When
+      const result = reopen(full, shotRecorded({ shotId: "s-4" }));
+
+      // Then
+      expect(result).toBeNull();
     });
 
     it("完了で、削除済みの距離への記録は戻さない", () => {
+      // Given
       const t = tables("completed", [], [distance]);
       const gone = {
         ...t,
         distances: t.distances.map((d) => ({ ...d, disabled: true })),
       };
-      expect(reopen(gone, shotRecorded())).toBeNull();
+
+      // When
+      const result = reopen(gone, shotRecorded());
+
+      // Then
+      expect(result).toBeNull();
     });
   });
 });

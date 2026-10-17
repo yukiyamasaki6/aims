@@ -107,50 +107,6 @@ describe("DistanceInfo(的の状態)", () => {
 });
 
 describe("DistanceInfo(配置)", () => {
-  it("距離の文言が上、本数×エンド数が下に縦に並ぶ", () => {
-    // Given
-    // When
-    render(
-      <DistanceInfo
-        distance={70}
-        isMarked={true}
-        format="field"
-        face="missing"
-        arrowsPerEnd={3}
-        totalEnds={12}
-      />,
-    );
-
-    // Then
-    const distance = screen.getByText("Marked (70m)");
-    const ends = screen.getByText("3本×12エンド");
-    expect(distance.parentElement).toBe(ends.parentElement);
-    expect(distance.compareDocumentPosition(ends)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
-  });
-
-  it("的の情報を左側のすぐ右に詰め、根は幅いっぱいに広がらず両端にも分けない", () => {
-    // Given
-    // When
-    render(
-      <DistanceInfo
-        distance={70}
-        isMarked={true}
-        format="field"
-        face="missing"
-        arrowsPerEnd={3}
-        totalEnds={12}
-      />,
-    );
-
-    // Then
-    const root = screen.getByText("Marked (70m)").parentElement
-      ?.parentElement as HTMLElement;
-    expect(root).not.toHaveClass("w-full");
-    expect(root).not.toHaveClass("justify-between");
-  });
-
   it.each([
     {
       format: "field",

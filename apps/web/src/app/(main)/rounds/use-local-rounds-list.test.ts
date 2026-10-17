@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe("useLocalRoundsList", () => {
   it("表示の開始時に1回読み、読み込みの前はnullを返す", async () => {
-    // Given: 読み込みが終わらない
+    // Given
     load.mockReturnValue(new Promise(() => {}));
 
     // When
@@ -36,30 +36,38 @@ describe("useLocalRoundsList", () => {
   });
 
   it("読み込みが終わったら、結果を返す", async () => {
+    // Given
     load.mockResolvedValue(loaded);
 
+    // When
     const { result } = renderHook(() => useLocalRoundsList());
     await act(async () => {});
 
+    // Then
     expect(result.current.local).toBe(loaded);
   });
 
   it("FALLBACK_WAIT_MSが過ぎるまでwaitedは偽で、過ぎたら真になる", async () => {
+    // Given
     load.mockResolvedValue(loaded);
     const { result } = renderHook(() => useLocalRoundsList());
 
+    // When
     await act(async () => {
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS - 1);
     });
-    expect(result.current.waited).toBe(false);
-
+    const waitedBeforeFallback = result.current.waited;
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
     });
+
+    // Then
+    expect(waitedBeforeFallback).toBe(false);
     expect(result.current.waited).toBe(true);
   });
 
   it("アンマウントの後に終わった読み込みは捨て、待ちのタイマーを止める", async () => {
+    // Given
     let resolve: (value: LocalRoundsList) => void = () => {};
     load.mockReturnValue(
       new Promise<LocalRoundsList>((r) => {
@@ -67,21 +75,26 @@ describe("useLocalRoundsList", () => {
       }),
     );
     const { result, unmount } = renderHook(() => useLocalRoundsList());
-
     unmount();
+
+    // When
     resolve(loaded);
     await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
 
+    // Then
     expect(result.current.local).toBeNull();
     expect(result.current.waited).toBe(false);
   });
 
   it("読み込みに失敗しても、nullのまま例外にしない", async () => {
+    // Given
     load.mockRejectedValue(new Error("idb"));
 
+    // When
     const { result } = renderHook(() => useLocalRoundsList());
     await act(async () => {});
 
+    // Then
     expect(result.current.local).toBeNull();
   });
 });

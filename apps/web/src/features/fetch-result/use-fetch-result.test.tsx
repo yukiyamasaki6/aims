@@ -33,10 +33,11 @@ describe("useFetchResult", () => {
 
       // When
       const { result } = renderHook(() => useFetchResult(() => d.promise, []));
+      const pending = result.current.view;
+      await act(async () => d.resolve({ status: "ok", data: 1 }));
 
       // Then
-      expect(result.current.view).toEqual({ status: "loading" });
-      await act(async () => d.resolve({ status: "ok", data: 1 }));
+      expect(pending).toEqual({ status: "loading" });
       expect(result.current.view).toEqual({ status: "ok", data: 1 });
     });
 
@@ -122,10 +123,12 @@ describe("useFetchResult", () => {
         window.dispatchEvent(new Event("online"));
         window.dispatchEvent(new Event("online"));
       });
+      const calls = fetcher.mock.calls.length;
+      // 保留した取得を終え、テストの後に状態の更新を残さない。
+      await act(async () => d.resolve({ status: "ok", data: 1 }));
 
       // Then
-      expect(fetcher).toHaveBeenCalledTimes(2);
-      await act(async () => d.resolve({ status: "ok", data: 1 }));
+      expect(calls).toBe(2);
     });
 
     it("復帰後の再取得が再びofflineなら繰り返さず、次のonlineで再取得する", async () => {
@@ -197,10 +200,12 @@ describe("useFetchResult", () => {
         comeOnline();
         window.dispatchEvent(new Event("online"));
       });
+      const calls = fetcher.mock.calls.length;
+      // 保留した取得を終え、テストの後に状態の更新を残さない。
+      await act(async () => d.resolve({ status: "ok", data: 1 }));
 
       // Then
-      expect(fetcher).toHaveBeenCalledTimes(2);
-      await act(async () => d.resolve({ status: "ok", data: 1 }));
+      expect(calls).toBe(2);
     });
 
     it.each([
@@ -240,9 +245,12 @@ describe("useFetchResult", () => {
         window.dispatchEvent(new Event("online"));
       });
 
-      // Then
-      expect(fetcher).toHaveBeenCalledTimes(1);
+      const calls = fetcher.mock.calls.length;
+      // 保留した取得を終え、テストの後に状態の更新を残さない。
       await act(async () => d.resolve({ status: "ok", data: 1 }));
+
+      // Then
+      expect(calls).toBe(1);
     });
   });
 

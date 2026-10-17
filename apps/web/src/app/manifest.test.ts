@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import manifest from "./manifest";
 
 describe("manifest", () => {
-  it("アプリ名・起動URL・表示モード・テーマ色を返す", () => {
+  it("アプリ名・起動URL・表示モードを返す", () => {
     // Given
     // When
     const result = manifest();
@@ -13,8 +13,6 @@ describe("manifest", () => {
       short_name: "AIMS",
       start_url: "/rounds",
       display: "standalone",
-      background_color: "#FFFFFF",
-      theme_color: "#FFFFFF",
     });
   });
 

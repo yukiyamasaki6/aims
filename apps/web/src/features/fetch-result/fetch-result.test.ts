@@ -9,9 +9,8 @@ describe("classifyResponse", () => {
   describe("正常系", () => {
     it("エラーがなければ、dataをokで返す", () => {
       // Given
-      const res = { data: { id: "a" }, error: null, status: 200 };
-
       // When
+      const res = { data: { id: "a" }, error: null, status: 200 };
       const result = classifyResponse(res);
 
       // Then
@@ -20,21 +19,24 @@ describe("classifyResponse", () => {
 
     it("配列の0件は、nullIsNotFoundの有無によらずokとする", () => {
       // Given
+      // When
       const res = { data: [], error: null, status: 200 };
+      const results = [
+        classifyResponse(res),
+        classifyResponse(res, { nullIsNotFound: true }),
+      ];
 
-      // When / Then
-      expect(classifyResponse(res)).toEqual({ status: "ok", data: [] });
-      expect(classifyResponse(res, { nullIsNotFound: true })).toEqual({
-        status: "ok",
-        data: [],
-      });
+      // Then
+      expect(results).toEqual([
+        { status: "ok", data: [] },
+        { status: "ok", data: [] },
+      ]);
     });
 
     it("nullIsNotFoundのとき、dataがnullならnot-foundにする", () => {
       // Given
-      const res = { data: null, error: null, status: 200 };
-
       // When
+      const res = { data: null, error: null, status: 200 };
       const result = classifyResponse(res, { nullIsNotFound: true });
 
       // Then
@@ -43,9 +45,8 @@ describe("classifyResponse", () => {
 
     it("nullIsNotFoundでないとき、dataのnullはそのままokで返す", () => {
       // Given
-      const res = { data: null, error: null, status: 200 };
-
       // When
+      const res = { data: null, error: null, status: 200 };
       const result = classifyResponse(res);
 
       // Then
@@ -54,9 +55,8 @@ describe("classifyResponse", () => {
 
     it("PGRST116(406)は、not-foundにする", () => {
       // Given
-      const res = { data: null, error: { code: "PGRST116" }, status: 406 };
-
       // When
+      const res = { data: null, error: { code: "PGRST116" }, status: 406 };
       const result = classifyResponse(res);
 
       // Then
@@ -73,9 +73,8 @@ describe("classifyResponse", () => {
       "status 0は、error.message(%j)によらず、原因を断定せずerrorにする",
       (message) => {
         // Given
-        const res = { data: null, error: { message }, status: 0 };
-
         // When
+        const res = { data: null, error: { message }, status: 0 };
         const result = classifyResponse(res);
 
         // Then
@@ -93,9 +92,8 @@ describe("classifyResponse", () => {
       "%sは、取得の側で確かめ終えた後のため、サインインを求めず固定文のerrorにする",
       (_name, { code, status }) => {
         // Given
-        const res = { data: null, error: { code }, status };
-
         // When
+        const res = { data: null, error: { code }, status };
         const result = classifyResponse(res);
 
         // Then
@@ -110,13 +108,12 @@ describe("classifyResponse", () => {
       "status %dは、DB内部の文言を出さず固定文のerrorにする",
       (status) => {
         // Given
+        // When
         const res = {
           data: null,
           error: { code: "42501", message: "permission denied for table x" },
           status,
         };
-
-        // When
         const result = classifyResponse(res);
 
         // Then
@@ -132,6 +129,7 @@ describe("classifyResponse", () => {
 describe("isAuthRejected", () => {
   it("401とPGRST301を認証の拒否とし、それ以外のエラーと成功は含めない", () => {
     // Given
+    // When
     const rejected = [
       { data: null, error: { code: undefined }, status: 401 },
       { data: null, error: { code: "PGRST301" }, status: 400 },
@@ -142,7 +140,6 @@ describe("isAuthRejected", () => {
       { data: { id: "a" }, error: null, status: 200 },
     ];
 
-    // When
     const rejectedResults = rejected.map(isAuthRejected);
     const otherResults = others.map(isAuthRejected);
 

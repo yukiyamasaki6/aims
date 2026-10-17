@@ -13,7 +13,8 @@ beforeEach(() => {
 });
 
 describe("StartButton", () => {
-  it("判定中は/signupへの開始リンクを表示し、data-hydratedは付けない", () => {
+  // 行き先の判定の出力はリンクの行き先だけで観測できる。押して移ることはE2E(navigation.spec.ts)が確かめる。
+  it("判定中は、開始リンクの行き先を/signupにし、判定済みの印(data-hydrated)を付けない", () => {
     // Given
     supabase.getSession.mockReturnValue(new Promise(() => {}));
 
@@ -26,7 +27,7 @@ describe("StartButton", () => {
     expect(link).not.toHaveAttribute("data-hydrated");
   });
 
-  it("認証済みなら/roundsへ替え、判定後にdata-hydratedを付ける", async () => {
+  it("認証済みと判定すると、行き先を/roundsに替え、判定済みの印を付ける", async () => {
     // Given
     supabase.getSession.mockResolvedValue({
       data: { session: { user: { id: "user-1" } } },
@@ -42,7 +43,7 @@ describe("StartButton", () => {
     expect(link).toHaveAttribute("data-hydrated", "true");
   });
 
-  it("通信失敗（unknown）なら/roundsへ替える", async () => {
+  it("確認が通信の失敗で不明(unknown)になると、行き先を/roundsに替える", async () => {
     // Given
     supabase.getSession.mockResolvedValue({
       data: { session: null },
@@ -57,7 +58,7 @@ describe("StartButton", () => {
     await vi.waitFor(() => expect(link).toHaveAttribute("href", "/rounds"));
   });
 
-  it("未認証なら/signupのまま、判定後にdata-hydratedを付ける", async () => {
+  it("未認証と判定すると、行き先を/signupのままにし、判定済みの印を付ける", async () => {
     // Given
     supabase.getSession.mockResolvedValue({
       data: { session: null },
@@ -75,7 +76,7 @@ describe("StartButton", () => {
     expect(link).toHaveAttribute("href", "/signup");
   });
 
-  it("判定に失敗しても/signupのまま、data-hydratedを付ける", async () => {
+  it("確認が例外で失敗すると、行き先を/signupのままにし、判定済みの印を付ける", async () => {
     // Given
     supabase.getSession.mockRejectedValue(new Error("failed"));
 

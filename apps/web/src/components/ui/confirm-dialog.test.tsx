@@ -17,6 +17,14 @@ function openStates(handleOpenChange: Mock) {
   return handleOpenChange.mock.calls.map(([open]) => open);
 }
 
+// 最前面のダイアログの背景（ダイアログ外のクリック先）。見た目のクラスでなく、base-uiのBackdropが付ける属性で探す。
+function backdrop() {
+  const backdrops = document.querySelectorAll(
+    '[role="presentation"][data-open]',
+  );
+  return backdrops[backdrops.length - 1];
+}
+
 // onConfirmの完了を任意のタイミングで制御するためのPromise。
 function deferred() {
   let resolve: (value: { error: string } | undefined) => void = () => {};
@@ -91,7 +99,9 @@ describe("ConfirmDialog", () => {
 
   describe("confirmVariant", () => {
     it("未指定の場合、確認ボタンは破壊的な見た目になる", () => {
-      // Given / When
+      // Given
+
+      // When
       render(
         <ConfirmDialog
           open
@@ -106,7 +116,9 @@ describe("ConfirmDialog", () => {
     });
 
     it("defaultを指定した場合、確認ボタンは破壊的な見た目にならない", () => {
-      // Given / When
+      // Given
+
+      // When
       render(
         <ConfirmDialog
           open
@@ -196,6 +208,30 @@ describe("ConfirmDialog", () => {
     });
   });
 
+  describe("ダイアログ外のクリック", () => {
+    it("ダイアログを閉じ、onConfirmを呼び出さない", async () => {
+      // Given
+      const handleOpenChange = vi.fn();
+      const handleConfirm = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <ConfirmDialog
+          open
+          onOpenChange={handleOpenChange}
+          description="説明"
+          onConfirm={handleConfirm}
+        />,
+      );
+
+      // When
+      await user.click(backdrop());
+
+      // Then
+      expect(openStates(handleOpenChange)).toEqual([false]);
+      expect(handleConfirm).not.toHaveBeenCalled();
+    });
+  });
+
   // 他のDialogの中から開かれた場合の、ダイアログ外のクリック。
   describe("ネストしたダイアログ外のクリック", () => {
     it("nestedがtrueの場合、ダイアログを閉じる", async () => {
@@ -231,9 +267,9 @@ describe("BlockingConfirmDialog", () => {
   describe("表示", () => {
     it("openがtrueの場合、説明文と操作可能なキャンセル・確認ボタンをダイアログに表示する", () => {
       // Given
-      const description = "このラウンドを削除しますか？";
 
       // When
+      const description = "このラウンドを削除しますか？";
       render(
         <BlockingConfirmDialog
           open
@@ -253,9 +289,9 @@ describe("BlockingConfirmDialog", () => {
 
     it("openがfalseの場合、ダイアログを表示しない", () => {
       // Given
-      const description = "このラウンドを削除しますか？";
 
       // When
+      const description = "このラウンドを削除しますか？";
       render(
         <BlockingConfirmDialog
           open={false}
@@ -272,9 +308,9 @@ describe("BlockingConfirmDialog", () => {
     describe("confirmLabel", () => {
       it("指定した場合、確認ボタンに指定した文言を表示する", () => {
         // Given
-        const confirmLabel = "破棄";
 
         // When
+        const confirmLabel = "破棄";
         render(
           <BlockingConfirmDialog
             open
@@ -390,7 +426,32 @@ describe("BlockingConfirmDialog", () => {
       // Then
       expect(handleConfirm).toHaveBeenCalledTimes(2);
       expect(screen.queryByText("削除に失敗しました")).not.toBeInTheDocument();
+    });
+
+    it("失敗後の再試行が成功した場合、ダイアログを閉じる", async () => {
+      // Given
+      const handleOpenChange = vi.fn();
+      const retry = deferred();
+      const handleConfirm = vi
+        .fn<() => Promise<{ error: string } | undefined>>()
+        .mockResolvedValueOnce({ error: "削除に失敗しました" })
+        .mockReturnValueOnce(retry.promise);
+      const user = userEvent.setup();
+      render(
+        <BlockingConfirmDialog
+          open
+          onOpenChange={handleOpenChange}
+          description="説明"
+          onConfirm={handleConfirm}
+        />,
+      );
+      await user.click(confirmButton());
+      await user.click(confirmButton());
+
+      // When
       await act(async () => retry.resolve(undefined));
+
+      // Then
       expect(handleOpenChange).toHaveBeenCalledExactlyOnceWith(false);
     });
 
@@ -453,6 +514,51 @@ describe("BlockingConfirmDialog", () => {
 
       // When
       fireEvent.click(cancelButton());
+
+      // Then
+      expect(handleOpenChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("ダイアログ外のクリック", () => {
+    it("ダイアログを閉じ、onConfirmを呼び出さない", async () => {
+      // Given
+      const handleOpenChange = vi.fn();
+      const handleConfirm = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <BlockingConfirmDialog
+          open
+          onOpenChange={handleOpenChange}
+          description="説明"
+          onConfirm={handleConfirm}
+        />,
+      );
+
+      // When
+      await user.click(backdrop());
+
+      // Then
+      expect(openStates(handleOpenChange)).toEqual([false]);
+      expect(handleConfirm).not.toHaveBeenCalled();
+    });
+
+    it("完了を待つ間は、ダイアログを閉じない", async () => {
+      // Given
+      const handleOpenChange = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <BlockingConfirmDialog
+          open
+          onOpenChange={handleOpenChange}
+          description="説明"
+          onConfirm={() => deferred().promise}
+        />,
+      );
+      fireEvent.click(confirmButton());
+
+      // When
+      await user.click(backdrop());
 
       // Then
       expect(handleOpenChange).not.toHaveBeenCalled();

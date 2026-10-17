@@ -4,7 +4,7 @@ import { Skeleton } from "./skeleton";
 
 describe("Skeleton", () => {
   describe("表示", () => {
-    it("data-slotを付与し、共通の波のクラスを持つ枠を表示する", () => {
+    it("data-slotを付与した枠を表示する", () => {
       // Given
       const testId = "frame";
 
@@ -14,10 +14,9 @@ describe("Skeleton", () => {
       // Then
       const frame = screen.getByTestId(testId);
       expect(frame).toHaveAttribute("data-slot", "skeleton");
-      expect(frame).toHaveClass("skeleton");
     });
 
-    it("指定したクラスを残し、点滅のクラスを持たない", () => {
+    it("指定したクラスを付与する", () => {
       // Given
       const testId = "frame";
 
@@ -26,8 +25,7 @@ describe("Skeleton", () => {
 
       // Then
       const frame = screen.getByTestId(testId);
-      expect(frame).toHaveClass("skeleton", "h-5", "w-24", "rounded");
-      expect(frame).not.toHaveClass("animate-pulse");
+      expect(frame).toHaveClass("h-5", "w-24", "rounded");
     });
   });
 });

@@ -10,6 +10,7 @@ vi.mock("../_shared/turnstile", () => ({
 describe("ResetPasswordPage", () => {
   it("パスワード再設定フォームを表示する", () => {
     // Given
+
     // When
     render(<ResetPasswordPage />);
 

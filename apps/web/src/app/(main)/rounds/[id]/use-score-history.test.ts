@@ -12,7 +12,7 @@ const entry: HistoryEntry = {
 };
 
 describe("useScoreHistory", () => {
-  it("書き込みを記録すると戻せ、戻すとやり直せる", () => {
+  it("書き込みを記録して戻すと、その書き込みを返し、やり直せるようになる", () => {
     // Given
     const { result } = renderHook(() => useScoreHistory());
     act(() => result.current.recordHistory(entry));
@@ -29,6 +29,17 @@ describe("useScoreHistory", () => {
     expect(undone).toEqual(entry);
     expect(result.current.canUndo).toBe(false);
     expect(result.current.canRedo).toBe(true);
+  });
+
+  it("戻した書き込みをやり直すと、その書き込みを返し、再び戻せるようになる", () => {
+    // Given
+    const { result } = renderHook(() => useScoreHistory());
+    act(() => result.current.recordHistory(entry));
+    expect(result.current.canUndo).toBe(true);
+    expect(result.current.canRedo).toBe(false);
+    act(() => {
+      result.current.undo();
+    });
 
     // When
     let redone: HistoryEntry | null = null;
@@ -53,20 +64,33 @@ describe("useScoreHistory", () => {
     expect(result.current.canUndo).toBe(false);
   });
 
-  it("記録が無いとき、戻す・やり直すはnullを返し、列を変えない", () => {
+  it("記録が無いとき、戻すはnullを返し、列を変えない", () => {
     // Given
     const { result } = renderHook(() => useScoreHistory());
 
     // When
     let undone: HistoryEntry | null = entry;
-    let redone: HistoryEntry | null = entry;
     act(() => {
       undone = result.current.undo();
-      redone = result.current.redo();
     });
 
     // Then
     expect(undone).toBeNull();
+    expect(result.current.canUndo).toBe(false);
+    expect(result.current.canRedo).toBe(false);
+  });
+
+  it("記録が無いとき、やり直すはnullを返し、列を変えない", () => {
+    // Given
+    const { result } = renderHook(() => useScoreHistory());
+
+    // When
+    let redone: HistoryEntry | null = entry;
+    act(() => {
+      redone = result.current.redo();
+    });
+
+    // Then
     expect(redone).toBeNull();
     expect(result.current.canUndo).toBe(false);
     expect(result.current.canRedo).toBe(false);

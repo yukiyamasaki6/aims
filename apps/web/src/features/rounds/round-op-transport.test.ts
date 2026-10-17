@@ -74,11 +74,15 @@ describe("sendRoundBatch", () => {
     ["update_distance", distanceUpdated()],
     ["disable_distance", distanceDisabled()],
   ])("単独の操作は%sで送り、判定結果を返す", async (rpc, operation) => {
+    // Given
     if (rpc === "disable_round") {
       client.rpc.mockResolvedValue({ data: 5, error: null, status: 200 });
     }
+
+    // When
     const outcome = await sendRoundBatch(flight(operation));
 
+    // Then
     expect(outcome).toEqual({ ok: true, results: [resultOf()] });
     expect(client.rpc).toHaveBeenCalledTimes(1);
     expect(client.rpc.mock.calls[0]?.[0]).toBe(rpc);
@@ -86,14 +90,17 @@ describe("sendRoundBatch", () => {
 
   describe("ラウンドの作成", () => {
     it("create_roundへ距離を含めて送り、jsonbの返りを判定結果として返す", async () => {
+      // Given
       client.rpc.mockResolvedValue({
         data: resultJson(1),
         error: null,
         status: 200,
       });
 
+      // When
       const outcome = await sendRoundBatch(flight(roundCreated()));
 
+      // Then
       expect(outcome).toEqual({ ok: true, results: [resultOf(1)] });
       expect(client.rpc).toHaveBeenCalledWith("create_round", {
         p_round_event_id: "e-round-created",
@@ -118,14 +125,17 @@ describe("sendRoundBatch", () => {
     });
 
     it("形の不正な返りは、不正な応答として扱う", async () => {
+      // Given
       client.rpc.mockResolvedValue({
         data: "round-1",
         error: null,
         status: 200,
       });
 
+      // When
       const outcome = await sendRoundBatch(flight(roundCreated()));
 
+      // Then
       expect(outcome.ok).toBe(false);
     });
   });
@@ -257,19 +267,23 @@ describe("sendRoundBatch", () => {
   });
 
   it("取り消し1件はclear_shotsへ送る", async () => {
+    // Given
     client.rpc.mockResolvedValue({
       data: [resultJson(4)],
       error: null,
       status: 200,
     });
 
+    // When
     await sendRoundBatch(flight(shotCleared()));
 
+    // Then
     expect(client.rpc.mock.calls[0]?.[0]).toBe("clear_shots");
   });
 
   it("update_roundへ、状態をp_changesのstatusで送り、他の項目は含めない", async () => {
-    // Given / When
+    // Given
+    // When
     await sendRoundBatch(
       flight(roundUpdated({ changes: { status: "completed" } })),
     );
@@ -281,7 +295,9 @@ describe("sendRoundBatch", () => {
     });
   });
 
-  it("update_roundとupdate_distanceへ、変えた項目だけをp_changesで送る", async () => {
+  it("update_roundへ、変えた項目だけをp_changesで送る", async () => {
+    // Given
+    // When
     await sendRoundBatch(
       flight(
         roundUpdated({
@@ -289,45 +305,56 @@ describe("sendRoundBatch", () => {
         }),
       ),
     );
+
+    // Then
+    expect(client.rpc.mock.calls[0]?.[1]).toMatchObject({
+      p_changes: { round_date: "2026-10-01", bow_type: "compound" },
+    });
+    expect(client.rpc.mock.calls[0]?.[1].p_changes).not.toHaveProperty("name");
+  });
+
+  it("update_distanceへ、変えた項目だけをp_changesで送る", async () => {
+    // Given
+    // When
     await sendRoundBatch(
       flight(
         distanceUpdated({
           changes: {
             distance: null,
             isMarked: false,
-            config: { totalEnds: 3, arrowsPerEnd: 4, targetFaceId: "f" },
+            config: { totalEnds: 12, arrowsPerEnd: 3, targetFaceId: "f" },
           },
         }),
       ),
     );
 
+    // Then
     expect(client.rpc.mock.calls[0]?.[1]).toMatchObject({
-      p_changes: { round_date: "2026-10-01", bow_type: "compound" },
-    });
-    expect(client.rpc.mock.calls[0]?.[1].p_changes).not.toHaveProperty("name");
-    expect(client.rpc.mock.calls[1]?.[1]).toMatchObject({
       p_changes: {
         distance: null,
         is_marked: false,
-        config: { total_ends: 3, arrows_per_end: 4, target_face_id: "f" },
+        config: { total_ends: 12, arrows_per_end: 3, target_face_id: "f" },
       },
     });
   });
 
   it("効かなかった操作は、revisionなしの判定結果として返す", async () => {
+    // Given
     client.rpc.mockResolvedValue({
       data: resultJson(null),
       error: null,
       status: 200,
     });
 
-    expect(await sendRoundBatch(flight(distanceUpdated()))).toEqual({
-      ok: true,
-      results: [resultOf(null)],
-    });
+    // When
+    const outcome = await sendRoundBatch(flight(distanceUpdated()));
+
+    // Then
+    expect(outcome).toEqual({ ok: true, results: [resultOf(null)] });
   });
 
   it("一部の項目だけが効いた操作は、効いた項目と拒否した項目を返す", async () => {
+    // Given
     client.rpc.mockResolvedValue({
       data: {
         revision: 3,
@@ -340,7 +367,11 @@ describe("sendRoundBatch", () => {
       status: 200,
     });
 
-    expect(await sendRoundBatch(flight(roundUpdated()))).toEqual({
+    // When
+    const outcome = await sendRoundBatch(flight(roundUpdated()));
+
+    // Then
+    expect(outcome).toEqual({
       ok: true,
       results: [
         {
@@ -355,36 +386,44 @@ describe("sendRoundBatch", () => {
   });
 
   it("判定結果の拒否した項目の形が不正なら、失敗として返す", async () => {
+    // Given
     client.rpc.mockResolvedValue({
       data: { ...resultJson(), rejected_fields: [{ field: 1 }] },
       error: null,
       status: 200,
     });
 
-    expect(await sendRoundBatch(flight(roundUpdated()))).toMatchObject({
-      ok: false,
-    });
+    // When
+    const outcome = await sendRoundBatch(flight(roundUpdated()));
+
+    // Then
+    expect(outcome).toMatchObject({ ok: false });
   });
 
   it("RPCがエラーを返せば、分類した失敗を返す", async () => {
+    // Given
     client.rpc.mockResolvedValue({
       data: null,
       error: { message: "拒否", code: "P0001" },
       status: 400,
     });
 
+    // When
     const outcome = await sendRoundBatch(flight(roundUpdated()));
 
+    // Then
     expect(outcome).toMatchObject({ ok: false, failure: { error: "拒否" } });
   });
 
   it("矢の束のRPCがエラーを返せば、失敗を返す", async () => {
+    // Given
     client.rpc.mockResolvedValue({
       data: null,
       error: { message: "拒否", code: "P0001" },
       status: 400,
     });
 
+    // When
     const outcome = await sendRoundBatch(
       flight(
         shotRecorded({ eventId: "a" }),
@@ -392,19 +431,23 @@ describe("sendRoundBatch", () => {
       ),
     );
 
+    // Then
     expect(outcome).toMatchObject({ ok: false });
   });
 
   it("矢1件のRPCがエラーを返せば、失敗を返す", async () => {
+    // Given
     client.rpc.mockResolvedValue({
       data: null,
       error: { message: "拒否", code: "P0001" },
       status: 400,
     });
 
-    expect(await sendRoundBatch(flight(shotCleared()))).toMatchObject({
-      ok: false,
-    });
+    // When
+    const outcome = await sendRoundBatch(flight(shotCleared()));
+
+    // Then
+    expect(outcome).toMatchObject({ ok: false });
   });
 
   it.each([
@@ -426,10 +469,13 @@ describe("sendRoundBatch", () => {
       [resultJson(1), "x"],
     ],
   ])("応答が不正なら、失敗として返す: %s", async (_name, request, data) => {
+    // Given
     client.rpc.mockResolvedValue({ data, error: null, status: 200 });
 
+    // When
     const outcome = await sendRoundBatch(request);
 
+    // Then
     expect(outcome).toMatchObject({
       ok: false,
       failure: { cause: { type: "exception" } },
@@ -437,10 +483,13 @@ describe("sendRoundBatch", () => {
   });
 
   it("未認証なら、RPCを呼ばずに認証の失敗を返す", async () => {
+    // Given
     client.getSession.mockResolvedValue({ data: { session: null } });
 
+    // When
     const outcome = await sendRoundBatch(flight(roundUpdated()));
 
+    // Then
     expect(outcome).toMatchObject({
       ok: false,
       failure: { cause: { type: "unauthenticated" } },
@@ -449,8 +498,11 @@ describe("sendRoundBatch", () => {
   });
 
   it("列のユーザーとセッションのユーザーが違えば、送らずに未認証の失敗を返す", async () => {
+    // Given
+    // When
     const outcome = await sendRoundBatch(flight(roundUpdated()), "user-2");
 
+    // Then
     expect(outcome).toMatchObject({
       ok: false,
       failure: { cause: { type: "unauthenticated" } },
@@ -459,8 +511,11 @@ describe("sendRoundBatch", () => {
   });
 
   it("列のユーザーがnullなら、照合せずに送る", async () => {
+    // Given
+    // When
     const outcome = await sendRoundBatch(flight(roundUpdated()), null);
 
+    // Then
     expect(outcome).toMatchObject({ ok: true });
     expect(client.rpc).toHaveBeenCalledTimes(1);
   });

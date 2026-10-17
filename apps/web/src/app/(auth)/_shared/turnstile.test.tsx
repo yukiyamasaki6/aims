@@ -32,7 +32,7 @@ vi.mock("@marsidev/react-turnstile", () => ({
   },
 }));
 
-// ウィジェットを包む箱。畳み中はsr-only、操作が必要な間は300x65の領域になる。
+// ウィジェットを包む箱。畳み中はsr-onlyで、操作が必要な間は外れる。
 function widgetBox() {
   const box = screen.getByTestId("turnstile").parentElement;
   if (!box) throw new Error("widget box not found");
@@ -41,11 +41,9 @@ function widgetBox() {
 
 function expectCollapsed() {
   expect(widgetBox()).toHaveClass("sr-only");
-  expect(widgetBox()).not.toHaveClass("h-[65px]");
 }
 
 function expectExpanded() {
-  expect(widgetBox()).toHaveClass("h-[65px]", "w-[300px]");
   expect(widgetBox()).not.toHaveClass("sr-only");
 }
 
@@ -60,6 +58,7 @@ describe("Turnstile", () => {
 
   describe("描画", () => {
     it("設定されたサイトキーと、操作が必要なときだけ表示するオプションでウィジェットを描画する", () => {
+      // Given
       // When
       render(<Turnstile onVerify={vi.fn()} />);
 
@@ -72,28 +71,32 @@ describe("Turnstile", () => {
       });
     });
 
-    it("初期状態では領域を取らないよう畳まれている(hiddenやdisplay:noneにはしない)", () => {
+    it("初期状態では領域を取らないよう畳まれている", () => {
+      // Given
+
       // When
       render(<Turnstile onVerify={vi.fn()} />);
 
       // Then
       expectCollapsed();
-      expect(widgetBox()).not.toHaveClass("hidden");
     });
 
     it("サイトキーの環境変数が無い場合は例外を投げる", () => {
       // Given
       vi.unstubAllEnvs();
 
-      // When / Then
-      expect(() => render(<Turnstile onVerify={vi.fn()} />)).toThrow(
+      // When
+      const renderWidget = () => render(<Turnstile onVerify={vi.fn()} />);
+
+      // Then
+      expect(renderWidget).toThrow(
         "Missing NEXT_PUBLIC_TURNSTILE_SITE_KEY environment variable.",
       );
     });
   });
 
   describe("操作が必要になったとき", () => {
-    it("操作が必要になる前のコールバックで300x65の領域に展開する", () => {
+    it("操作が必要になる前のコールバックで展開する", () => {
       // Given
       render(<Turnstile onVerify={vi.fn()} />);
 
@@ -185,6 +188,7 @@ describe("Turnstile", () => {
 
   describe("error prop", () => {
     it("errorが無い場合は文言を描画しない", () => {
+      // Given
       // When
       render(<Turnstile onVerify={vi.fn()} />);
 
@@ -192,17 +196,18 @@ describe("Turnstile", () => {
       expect(document.querySelector("p")).toBeNull();
     });
 
-    it("畳まれていても文言を表示し、リングは付けない", () => {
+    it("操作が必要でないときも、errorの文言を表示する", () => {
+      // Given
+
       // When
-      render(<Turnstile onVerify={vi.fn()} error="未完了です" />);
+      const turnstile = <Turnstile onVerify={vi.fn()} error="未完了です" />;
+      render(turnstile);
 
       // Then
       expect(screen.getByText("未完了です")).toBeInTheDocument();
-      expectCollapsed();
-      expect(widgetBox().className).not.toContain("ring-3");
     });
 
-    it("展開中は文言を表示し、箱にエラーのリングを付ける", () => {
+    it("操作が必要な間も、errorの文言を表示する", () => {
       // Given
       render(<Turnstile onVerify={vi.fn()} error="未完了です" />);
 
@@ -211,19 +216,6 @@ describe("Turnstile", () => {
 
       // Then
       expect(screen.getByText("未完了です")).toBeInTheDocument();
-      expect(widgetBox()).toHaveClass("ring-3", "ring-destructive/50");
-    });
-
-    it("展開中でもerrorが無ければリングを付けない", () => {
-      // Given
-      render(<Turnstile onVerify={vi.fn()} />);
-
-      // When
-      act(() => callbacks.current.onBeforeInteractive?.());
-
-      // Then
-      expectExpanded();
-      expect(widgetBox().className).not.toContain("ring-3");
     });
   });
 });

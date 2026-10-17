@@ -42,8 +42,8 @@ const preset: Preset = {
       position_key: "c",
       distance: 30,
       is_marked: false,
-      total_ends: 6,
-      arrows_per_end: 6,
+      total_ends: 10,
+      arrows_per_end: 3,
       target_face_id: "face-3",
       target_faces: null,
     },
@@ -83,6 +83,8 @@ afterEach(() => {
 describe("startRound", () => {
   describe("開始できる場合", () => {
     it("プリセット未選択では、屋外・リカーブの距離無しの作成を操作の列へ追記する", async () => {
+      // Given
+
       // When
       const result = await startWith(null);
 
@@ -101,6 +103,8 @@ describe("startRound", () => {
     });
 
     it("プリセット選択時は、渡されたプリセットの距離をposition_key順に並べ新しいIDで追記する", async () => {
+      // Given
+
       // When
       const result = await startWith(preset);
 
@@ -130,8 +134,8 @@ describe("startRound", () => {
             positionKey: "c",
             distance: 30,
             isMarked: false,
-            totalEnds: 6,
-            arrowsPerEnd: 6,
+            totalEnds: 10,
+            arrowsPerEnd: 3,
             targetFaceId: "face-3",
           },
         ],
@@ -140,6 +144,8 @@ describe("startRound", () => {
     });
 
     it("作成したラウンドのストリームの操作の列へ追記する", async () => {
+      // Given
+
       // When
       await startWith(null);
 
@@ -149,7 +155,7 @@ describe("startRound", () => {
     });
 
     it("端末への保存の完了を待ってから結果を返す", async () => {
-      // Given: 保存の完了を保留にする
+      // Given
       let finish: () => void = () => {};
       hub.append.mockReturnValue(
         new Promise<void>((resolve) => {
@@ -165,10 +171,11 @@ describe("startRound", () => {
       });
       await vi.waitFor(() => expect(hub.append).toHaveBeenCalled());
       await Promise.resolve();
-
-      // Then: 保存が終わるまで返らず、終わると返る
-      expect(settled).toBe(false);
+      const settledBeforeFinish = settled;
       finish();
+
+      // Then
+      expect(settledBeforeFinish).toBe(false);
       expect(await pending).toEqual({ status: "created", roundId: "id-2" });
     });
 
@@ -198,7 +205,7 @@ describe("startRound", () => {
     });
 
     it("セッションの確認が上限時間を過ぎても終わらない場合、時間切れとして開始する", async () => {
-      // Given: 確認が終わらない
+      // Given
       vi.useFakeTimers();
       supabase.getSession.mockReturnValue(new Promise(() => {}));
 

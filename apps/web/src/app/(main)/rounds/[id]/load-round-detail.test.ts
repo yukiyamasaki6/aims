@@ -200,8 +200,12 @@ async function commitBase(
 
 describe("loadRoundDetail", () => {
   it("操作の列が空なら、サーバーの状態を基準として、端末の組へ反映して返す", async () => {
+    // Given
+
+    // When
     const result = await loadRoundDetail(supabase, "round-1");
 
+    // Then
     expect(loaded(result)).toMatchObject({
       base: roundTablesFromServer(server),
       group: {
@@ -222,7 +226,7 @@ describe("loadRoundDetail", () => {
   });
 
   it("確定していない操作を、保存の順(seq)で返す", async () => {
-    // Given: ラウンド設定の更新と同じマスの記録2回が、確定しないまま残っている
+    // Given
     await save(roundUpdated("e1", "更新後"));
     await save(shotRecorded("e2", "8"));
     await save(shotRecorded("e3", "10"));
@@ -230,7 +234,7 @@ describe("loadRoundDetail", () => {
     // When
     const data = loaded(await loadRoundDetail(supabase, "round-1"));
 
-    // Then: 列にそのまま残り、重ねると最後の記録が残る
+    // Then
     expect(data.group.entries.map((e) => e.eventId)).toEqual([
       "e1",
       "e2",
@@ -254,7 +258,7 @@ describe("loadRoundDetail", () => {
 
   describe("確定済みの操作", () => {
     it("確定したrevisionを取得が持っていれば、反映済みとして組から外す", async () => {
-      // Given: revision 2で確定した設定の更新を、取得(revision 2)が反映している
+      // Given
       await save(roundUpdated("e1", "更新後"));
       await roundOpStore.ack("e1", 2, true, null);
       fetchDetail.mockResolvedValue({
@@ -270,7 +274,7 @@ describe("loadRoundDetail", () => {
     });
 
     it("確定したrevisionに取得が届いていなければ、組に残す", async () => {
-      // Given: revision 3で確定した操作を、revision 2の取得はまだ反映していない
+      // Given
       await save(roundUpdated("e1", "更新後"));
       await roundOpStore.ack("e1", 3, true, null);
       fetchDetail.mockResolvedValue({
@@ -286,11 +290,14 @@ describe("loadRoundDetail", () => {
     });
 
     it("確定済みのラウンドの削除が列にあれば、取得せずに削除済みを返す", async () => {
+      // Given
       await save({ type: "round.disabled", eventId: "e1", roundId: "round-1" });
       await roundOpStore.ack("e1", 5, true, null);
 
+      // When
       const result = await loadRoundDetail(supabase, "round-1");
 
+      // Then
       expect(result).toEqual({ status: "ok", data: { deleted: true } });
       expect(fetchDetail).not.toHaveBeenCalled();
     });
@@ -298,7 +305,7 @@ describe("loadRoundDetail", () => {
 
   describe("確定していない作成がある場合", () => {
     it("サーバーを取得せず、作成の操作を基準にして、作成のeventIdを返す", async () => {
-      // Given: 作成と、その後の操作が確定しないまま残っている
+      // Given
       await save(roundCreated());
       await save(roundUpdated("e2", "更新後"));
 
@@ -322,7 +329,7 @@ describe("loadRoundDetail", () => {
     });
 
     it("的の一覧を取得し、その一覧で開く", async () => {
-      // Given: 作成が確定していない
+      // Given
       await save(roundCreated());
 
       // When
@@ -339,7 +346,7 @@ describe("loadRoundDetail", () => {
     ] as const)(
       "的の一覧の取得が%sなら、内容を返さず、その結果を返す",
       async (_name, failure) => {
-        // Given: 作成が確定しておらず、的の一覧がそろわない
+        // Given
         await save(roundCreated());
         fetchFaces.mockResolvedValue(failure);
 
@@ -352,7 +359,7 @@ describe("loadRoundDetail", () => {
     );
 
     it("距離が無いラウンドでも、的の一覧がそろわなければ内容を返さない", async () => {
-      // Given: 距離の無い作成が確定しておらず、的の一覧はオフラインで取得できない
+      // Given
       await save(roundCreated({ distances: [] }));
       fetchFaces.mockResolvedValue({ status: "offline" });
 
@@ -364,17 +371,20 @@ describe("loadRoundDetail", () => {
     });
 
     it("作成の後にラウンドの削除が列にあれば、取得せずに削除済みを返す", async () => {
+      // Given
       await save(roundCreated());
       await save({ type: "round.disabled", eventId: "e2", roundId: "round-1" });
 
+      // When
       const result = await loadRoundDetail(supabase, "round-1");
 
+      // Then
       expect(result).toEqual({ status: "ok", data: { deleted: true } });
       expect(fetchDetail).not.toHaveBeenCalled();
     });
 
     it("作成が確定済みなら、サーバーを取得し、作成を反映済みとして組から外す", async () => {
-      // Given: 作成が確定し、取得はrevision 1以上を持つ
+      // Given
       await save(roundCreated());
       await roundOpStore.ack("e-round-created", 1, true, null);
 
@@ -390,23 +400,29 @@ describe("loadRoundDetail", () => {
   });
 
   it("未確定のラウンドの削除が列にあれば、取得せずに削除済みを返す", async () => {
+    // Given
     await save({ type: "round.disabled", eventId: "e1", roundId: "round-1" });
     await save({ type: "distance.disabled", eventId: "e2", distanceId: "d-a" });
 
+    // When
     const result = await loadRoundDetail(supabase, "round-1");
 
+    // Then
     expect(result).toEqual({ status: "ok", data: { deleted: true } });
     expect(fetchDetail).not.toHaveBeenCalled();
   });
 
   it("取得の間に削除が追記されたら、削除済みを返す", async () => {
+    // Given
     fetchDetail.mockImplementationOnce(async () => {
       await save({ type: "round.disabled", eventId: "e1", roundId: "round-1" });
       return { status: "ok", data: server };
     });
 
+    // When
     const result = await loadRoundDetail(supabase, "round-1");
 
+    // Then
     expect(result).toEqual({ status: "ok", data: { deleted: true } });
     const stored = await roundOpStore.loadStream(
       roundStreamId("round-1"),
@@ -417,37 +433,43 @@ describe("loadRoundDetail", () => {
   });
 
   it("別のユーザーのラウンドの削除は影響しない", async () => {
+    // Given
     await save(
       { type: "round.disabled", eventId: "e1", roundId: "round-1" },
       { userId: "other-user" },
     );
 
+    // When
     const result = await loadRoundDetail(supabase, "round-1");
 
+    // Then
     expect(result).toMatchObject({ status: "ok", data: { deleted: false } });
   });
 
   it("重ねた後の状態から、最初に指す新しい矢が決まる", async () => {
-    // Given: 1エンド2本の距離で、サーバーには1本目だけがあり、2本目が列に残っている
-    const oneEnd = { ...distanceA, total_ends: 1, arrows_per_end: 2 };
-    const firstArrow = {
-      id: "s-1",
-      distance_id: "d-a",
-      end_number: 1,
-      shot_number: null,
-      score_str: "10",
-      score_int: 10,
-    };
+    // Given
+    // エンド1だけが1本足りない記録。
+    const recorded = [1, 2, 3, 4, 5, 6].flatMap((end) =>
+      Array.from({ length: end === 1 ? 5 : 6 }, (_, i) => ({
+        id: `s-${end}-${i + 1}`,
+        distance_id: "d-a",
+        end_number: end,
+        shot_number: null,
+        score_str: "10",
+        score_int: 10,
+      })),
+    );
     fetchDetail.mockResolvedValue({
       status: "ok",
-      data: { ...server, distances: [oneEnd], shots: [firstArrow] },
+      data: { ...server, distances: [distanceA], shots: recorded },
     });
-    await save(shotRecorded("e1", "9", "s-2"));
+    await save(shotRecorded("e1", "9", "s-new"));
 
     // When
     const data = loaded(await loadRoundDetail(supabase, "round-1"));
 
-    // Then: 全てのエンドが矢数に達し、指す新しい矢は無い(重ねる前はエンド1の新しい矢を指す)
+    // Then
+    // 重ねる前はエンド1の新しい矢を指すため、重ねた結果で指す矢が無くなったことを確かめる。
     const state = applyOperations(
       data.base,
       data.group.entries.map((e) => ({
@@ -456,7 +478,7 @@ describe("loadRoundDetail", () => {
       })),
       [],
     );
-    expect(firstOpenEnd([oneEnd], [firstArrow])).toEqual({
+    expect(firstOpenEnd([distanceA], recorded)).toEqual({
       kind: "new",
       distanceId: "d-a",
       endNumber: 1,
@@ -465,16 +487,19 @@ describe("loadRoundDetail", () => {
   });
 
   it("別のラウンドと別のユーザーの操作は含めない", async () => {
+    // Given
     await save(shotRecorded("e1", "10"), { roundId: "round-2" });
     await save(shotRecorded("e2", "10"), { userId: "someone-else" });
 
+    // When
     const result = await loadRoundDetail(supabase, "round-1");
 
+    // Then
     expect(loaded(result).group.entries).toEqual([]);
   });
 
   it("取得の中で確定した操作は、取得のrevisionに届かなければ組に残し、取得の後に積まれた操作も含める", async () => {
-    // Given: 取得の間に、1件が確定(revision 2、取得はrevision 1)し、1件が積まれる
+    // Given
     await save(shotRecorded("e1", "10"));
     fetchDetail.mockImplementation(async () => {
       await roundOpStore.ack("e1", 2, true, null);
@@ -496,28 +521,39 @@ describe("loadRoundDetail", () => {
   ] as const)(
     "サーバーの取得が%sで、端末のベースが無ければ、そのまま返す",
     async (_name, failure) => {
+      // Given
       await save(shotRecorded("e1", "10"));
       fetchDetail.mockResolvedValue(failure);
 
-      await expect(loadRoundDetail(supabase, "round-1")).resolves.toEqual(
-        failure,
-      );
+      // When
+      const result = await loadRoundDetail(supabase, "round-1");
+
+      // Then
+      expect(result).toEqual(failure);
     },
   );
 
   it("取得が例外を投げても、「読み込み中」に固定せず、errorを返す", async () => {
+    // Given
     fetchDetail.mockRejectedValue(new Error("boom"));
 
-    await expect(loadRoundDetail(supabase, "round-1")).resolves.toMatchObject({
-      status: "error",
-    });
+    // When
+    const result = await loadRoundDetail(supabase, "round-1");
+
+    // Then
+    expect(result).toMatchObject({ status: "error" });
   });
 
   it("IndexedDBを読めなくても、サーバーの状態を返す", async () => {
+    // Given
     // biome-ignore lint/suspicious/noExplicitAny: IndexedDBの不在を再現する
     (globalThis as any).indexedDB = undefined;
 
-    await expect(loadRoundDetail(supabase, "round-1")).resolves.toMatchObject({
+    // When
+    const result = await loadRoundDetail(supabase, "round-1");
+
+    // Then
+    expect(result).toMatchObject({
       status: "ok",
       data: { deleted: false, source: "server" },
     });
@@ -534,7 +570,7 @@ describe("loadRoundDetail", () => {
     ] as const)(
       "入力中のラウンドは、サーバーの取得が%sなら、端末のベースと操作の列で開く",
       async (_name, failure) => {
-        // Given: 入力中のベースと、未送信の操作を端末が持つ
+        // Given
         await commitBase();
         await save(shotRecorded("e1", "10"));
         fetchDetail.mockResolvedValue(failure);
@@ -542,7 +578,7 @@ describe("loadRoundDetail", () => {
         // When
         const data = loaded(await loadRoundDetail(supabase, "round-1"));
 
-        // Then: 的は端末の保存分を使う
+        // Then
         expect(data).toMatchObject({
           source: "local",
           base: roundTablesFromServer(server),
@@ -555,50 +591,63 @@ describe("loadRoundDetail", () => {
     );
 
     it("完了で未送信の操作が無いベースは、保持の対象でないため、端末のベースで開かない", async () => {
+      // Given
       const completed = roundTablesFromServer(server);
       completed.round.status = "completed";
       await commitBase(completed);
       fetchDetail.mockResolvedValue({ status: "offline" });
 
-      await expect(loadRoundDetail(supabase, "round-1")).resolves.toEqual({
-        status: "offline",
-      });
+      // When
+      const result = await loadRoundDetail(supabase, "round-1");
+
+      // Then
+      expect(result).toEqual({ status: "offline" });
     });
 
     it("完了でも、未送信の操作が残れば、端末のベースで開く", async () => {
+      // Given
       const completed = roundTablesFromServer(server);
       completed.round.status = "completed";
       await save(shotRecorded("e1", "10"));
       await commitBase(completed);
       fetchDetail.mockResolvedValue({ status: "offline" });
 
-      expect(loaded(await loadRoundDetail(supabase, "round-1")).source).toBe(
-        "local",
-      );
+      // When
+      const data = loaded(await loadRoundDetail(supabase, "round-1"));
+
+      // Then
+      expect(data.source).toBe("local");
     });
 
     it("サーバーにラウンドが無ければ、端末のベースで開かず、そのまま返す", async () => {
+      // Given
       await commitBase();
       fetchDetail.mockResolvedValue({ status: "not-found" });
 
-      await expect(loadRoundDetail(supabase, "round-1")).resolves.toEqual({
-        status: "not-found",
-      });
+      // When
+      const result = await loadRoundDetail(supabase, "round-1");
+
+      // Then
+      expect(result).toEqual({ status: "not-found" });
     });
 
     it("localFallbackが偽なら、端末のベースで開かず、取得の結果をそのまま返す", async () => {
+      // Given
       await commitBase();
       fetchDetail.mockResolvedValue({ status: "offline" });
 
-      await expect(
-        loadRoundDetail(supabase, "round-1", { localFallback: false }),
-      ).resolves.toEqual({ status: "offline" });
+      // When
+      const result = await loadRoundDetail(supabase, "round-1", {
+        localFallback: false,
+      });
+
+      // Then
+      expect(result).toEqual({ status: "offline" });
     });
 
     describe("取得が待ちの上限(FALLBACK_WAIT_MS)を超えるとき", () => {
-      it("上限で端末のベースで開き、取得の完了をpendingServerで返す", async () => {
-        // Given: 取得が終わらない
-        await commitBase();
+      // 取得が終わらないようにし、終わらせる関数を持つ。
+      function pendingFetch() {
         let finish: (
           value: Awaited<ReturnType<typeof fetchRoundDetail>>,
         ) => void = () => {};
@@ -607,26 +656,49 @@ describe("loadRoundDetail", () => {
             finish = resolve;
           }),
         );
+        return (value: Awaited<ReturnType<typeof fetchRoundDetail>>) =>
+          finish(value);
+      }
+
+      it("上限で、端末のベースと的の保存分で開く", async () => {
+        // Given
+        await commitBase();
+        pendingFetch();
 
         // When
         const data = loaded(await loadRoundDetail(supabase, "round-1"));
 
-        // Then: 端末のベースと的の保存分で開き、取得が済むと端末の組へ反映した結果になる
+        // Then
         expect(data.source).toBe("local");
         expect(data.targetFaces).toEqual([faceTwo]);
+      });
+
+      it("上限で開いた後に取得が済むと、端末の組へ反映した取得の結果をpendingServerで返す", async () => {
+        // Given
+        await commitBase();
+        const finish = pendingFetch();
+        const data = loaded(await loadRoundDetail(supabase, "round-1"));
+
+        // When
         finish({ status: "ok", data: server });
-        await expect(data.pendingServer).resolves.toMatchObject({
+        const settled = await data.pendingServer;
+
+        // Then
+        expect(settled).toMatchObject({
           status: "ok",
           data: { source: "server" },
         });
       });
 
       it("上限の前に取得が済めば、取得の結果で開く", async () => {
+        // Given
         await commitBase();
         fetchDetail.mockResolvedValue({ status: "ok", data: server });
 
+        // When
         const data = loaded(await loadRoundDetail(supabase, "round-1"));
 
+        // Then
         expect(data.source).toBe("server");
       });
     });
@@ -637,7 +709,7 @@ describe("loadRoundDetail", () => {
       });
 
       it("サーバーの取得がokなら、取得の結果で開く", async () => {
-        // Given: 端末のベースはあるが、的の保存分が無い
+        // Given
         await commitBase();
         fetchDetail.mockResolvedValue({
           status: "ok",
@@ -660,7 +732,7 @@ describe("loadRoundDetail", () => {
       ] as const)(
         "サーバーの取得が%sなら、端末のベースで開かず、そのまま返す",
         async (_name, failure) => {
-          // Given: 端末のベースと未送信の操作はあるが、的の保存分が無い
+          // Given
           await commitBase();
           await save(shotRecorded("e1", "10"));
           fetchDetail.mockResolvedValue(failure);
@@ -674,8 +746,9 @@ describe("loadRoundDetail", () => {
       );
 
       it("取得が待ちの上限を超えても、端末のベースで開かず、取得の完了を待つ", async () => {
-        // Given: 取得が上限(30ms)を超えて終わる
+        // Given
         await commitBase();
+        // 取得は、上限(ファイル先頭のvi.mockの30ms)を超える60msで終わる。
         fetchDetail.mockImplementation(
           () =>
             new Promise((resolve) => {

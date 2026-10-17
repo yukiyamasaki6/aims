@@ -115,9 +115,9 @@ describe("signupReducer", () => {
     it("send_code_auth_errorは翻訳したメッセージをerrorに設定する", () => {
       // Given
       const state = initialSignUpState;
-      const error = makeAuthError("otp_expired");
 
       // When
+      const error = makeAuthError("otp_expired");
       const next = signupReducer(state, {
         type: "send_code_auth_error",
         error,
@@ -197,9 +197,9 @@ describe("signupReducer", () => {
     it("verify_code_auth_errorは翻訳したメッセージをerrorに設定する", () => {
       // Given
       const state = stateWith({ step: "code" });
-      const error = makeAuthError("otp_expired");
 
       // When
+      const error = makeAuthError("otp_expired");
       const next = signupReducer(state, {
         type: "verify_code_auth_error",
         error,
@@ -275,10 +275,10 @@ describe("signupReducer", () => {
     it("resend_invalidはerrorをクリアしcodeFieldErrorsに再送エラーを設定する", () => {
       // Given
       const state = stateWith({ step: "code", error: "前回のエラー" });
-      const cooldownMessage =
-        "再送はクールダウン中です。しばらくしてから再度お試しください。";
 
       // When
+      const cooldownMessage =
+        "再送はクールダウン中です。しばらくしてから再度お試しください。";
       const next = signupReducer(state, {
         type: "resend_invalid",
         errors: { resend: cooldownMessage },
@@ -293,9 +293,9 @@ describe("signupReducer", () => {
       // Given
       const codeFieldErrors = { code: "認証コードを入力してください。" };
       const state = stateWith({ step: "code", codeFieldErrors });
-      const error = makeAuthError("otp_expired");
 
       // When
+      const error = makeAuthError("otp_expired");
       const next = signupReducer(state, {
         type: "resend_auth_error",
         error,
@@ -423,9 +423,9 @@ describe("signupReducer", () => {
     it("set_password_auth_errorは翻訳したメッセージをerrorに設定する", () => {
       // Given
       const state = stateWith({ step: "password" });
-      const error = makeAuthError("weak_password");
 
       // When
+      const error = makeAuthError("weak_password");
       const next = signupReducer(state, {
         type: "set_password_auth_error",
         error,

@@ -60,7 +60,7 @@ afterEach(() => {
 
 describe("signOut とセッション喪失の遷移", () => {
   it("サインアウトが完了する場合、SIGNED_OUTを受けた遷移に遷移元を付けない", async () => {
-    // Given: ローカルセッションの削除でSIGNED_OUTが発火し、その遷移が走る
+    // Given
     const { redirectToSignIn, signOut } = await setup();
     supabase.signOut.mockImplementation(async () => {
       supabase.emit("SIGNED_OUT", null);
@@ -94,7 +94,7 @@ describe("signOut とセッション喪失の遷移", () => {
   });
 
   it("サインアウトが失敗した後にセッションを喪失した場合、遷移元を付けて遷移する", async () => {
-    // Given: ローカルセッションが残る失敗
+    // Given
     const { redirectToSignIn, signOut } = await setup();
     supabase.signOut.mockResolvedValue({
       error: { code: "over_request_rate_limit", message: "x" } as AuthError,
@@ -102,7 +102,7 @@ describe("signOut とセッション喪失の遷移", () => {
     const result = await signOut({ isMounted: () => true });
     expect(result.status).toBe("failed");
 
-    // When: その後に別の要因でセッション喪失の遷移が走る
+    // When
     redirectToSignIn();
 
     // Then

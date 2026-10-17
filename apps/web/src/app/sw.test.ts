@@ -120,15 +120,19 @@ describe("sw", () => {
     it("初回の登録で最初の画面を制御する", () => {
       // Given
       // When
+      const { clientsClaim } = config();
+
       // Then
-      expect(config().clientsClaim).toBe(true);
+      expect(clientsClaim).toBe(true);
     });
 
     it("Service Workerのイベントリスナーを登録する", () => {
       // Given
       // When
+      const { calls } = sw.addEventListeners.mock;
+
       // Then
-      expect(sw.addEventListeners).toHaveBeenCalledTimes(1);
+      expect(calls).toHaveLength(1);
     });
   });
 
@@ -152,9 +156,8 @@ describe("sw", () => {
 
       it("/_next/static配下のJavaScriptはCacheFirstでnext-static-js-assetsにキャッシュする", () => {
         // Given
-        const url = "/_next/static/chunks/main.js";
-
         // When
+        const url = "/_next/static/chunks/main.js";
         const handler = findHandler(url);
 
         // Then
@@ -327,9 +330,8 @@ describe("sw", () => {
 
     it("枠がリダイレクトされた応答は保存せずエラーにする", async () => {
       // Given
-      const params = updated("/__shell/rounds", true);
-
       // When
+      const params = updated("/__shell/rounds", true);
       const result = guard()(params);
 
       // Then
@@ -342,9 +344,8 @@ describe("sw", () => {
       ["/offline", true],
     ])("%s（redirected: %s）は保存する", async (url, redirected) => {
       // Given
-      const params = updated(url, redirected);
-
       // When
+      const params = updated(url, redirected);
       const result = await guard()(params);
 
       // Then
@@ -354,8 +355,10 @@ describe("sw", () => {
     it("ナビゲーションのプリロードは使わない", () => {
       // Given
       // When
+      const { navigationPreload } = config();
+
       // Then
-      expect(config().navigationPreload).toBe(false);
+      expect(navigationPreload).toBe(false);
     });
   });
 });

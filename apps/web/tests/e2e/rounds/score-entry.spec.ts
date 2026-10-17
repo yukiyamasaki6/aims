@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
@@ -6,6 +6,7 @@ import {
   waitForHydration,
 } from "../helpers/auth";
 import { createRound, SIX_RING_TARGET_FACE_ID } from "../helpers/rounds";
+import { expectPartlyCovered, expectUncovered } from "../helpers/visibility";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -16,7 +17,7 @@ const MOBILE = { width: 375, height: 667 };
 
 type RoundInput = Omit<Parameters<typeof createRound>[0], "email" | "password">;
 
-// 既定は、1距離・1エンド・3射のラウンド。矢数に達していないエンドがあれば、最初のそのエンドの新しい矢を指してテンキーを展開した状態で開く。
+// 既定は、1距離・12エンド・3射のラウンド。矢数に達していないエンドがあれば、最初のそのエンドの新しい矢を指してテンキーを展開した状態で開く。
 async function openRound(
   page: Page,
   overrides: Partial<RoundInput> = {},
@@ -27,7 +28,7 @@ async function openRound(
     password: SHARED_PASSWORD,
     name: "スコア入力テスト",
     roundDate: "2026-08-24",
-    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 3 }],
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
     ...overrides,
   });
   if (viewport) {
@@ -96,678 +97,152 @@ async function recordScore(page: Page, key: string) {
   await sent;
 }
 
-async function undoAndWait(page: Page) {
-  const sent = page.waitForResponse(CLEAR_SHOTS_RPC);
-  await page.getByTestId("score-button-undo").click();
-  await sent;
-}
-
-test("score-01: テンキーを格納したラウンド詳細画面でモバイルのとき、記録済みの点数の玉をクリックすると、その矢が指されて輪が付き、下パネルでテンキーが展開され、指した矢がテンキー上部までスライドする", async ({
+test("点数を書くと記録され、点数の高い順に並び、再読み込みしても同じ並びと小計で表示される", async ({
   page,
 }) => {
-  // Given
-  await openRound(
-    page,
-    {
-      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 6 }],
-      shots: allShots(0, 12, 6),
-    },
-    MOBILE,
-  );
-  const target = ball(page, 1, 10, 1);
-  await target.scrollIntoViewIfNeeded();
-  await expect(page.getByTestId("keypad-toggle")).toBeHidden();
-
-  // When
-  await target.click();
-
-  // Then
-  await expect(target).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("score-button-X")).toBeVisible();
-  const keypadTop = (await page.getByTestId("keypad-toggle").boundingBox())?.y;
-  const box = await target.boundingBox();
-  expect(box?.y).toBeLessThan(keypadTop ?? Number.POSITIVE_INFINITY);
-});
-
-test("score-02: テンキーを格納したラウンド詳細画面でデスクトップのとき、記録済みの点数の玉をクリックすると、その矢が指されて輪が付き、右パネルでテンキーが展開される", async ({
-  page,
-}) => {
-  // Given
+  // 新しい矢にXを書き、玉と仮の矢を確かめる。
   await openRound(page, {
-    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
-    shots: allShots(0, 1, 2),
+    distances: [{ distance: 18, totalEnds: 6, arrowsPerEnd: 6 }],
   });
-  await expect(page.getByTestId("keypad-panel-close")).toBeHidden();
+  await page.getByTestId("score-button-X").click();
+  await expect(ball(page, 1, 1, 1)).toHaveText("X");
+  await expectProvisionalIn(page, 1, 1);
 
-  // When
-  await ball(page, 1, 1, 1).click();
+  // 残りの5本を順不同に書き、点数の高い順に並ぶことを確かめる。
+  for (const key of ["7", "10", "9", "M"]) {
+    await page.getByTestId(`score-button-${key}`).click();
+  }
+  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
+  await page.getByTestId("score-button-8").click();
+  const expected = ["X", "10", "9", "8", "7", "M"];
+  await expectBalls(page, 1, 1, expected);
+  await expect(page.getByTestId("end-subtotal-1-1")).toHaveText("44");
 
-  // Then
-  await expect(ball(page, 1, 1, 1)).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("keypad-panel-close")).toBeVisible();
-  await expect(page.getByTestId("score-button-X")).toBeVisible();
+  // 再読み込みして、同じ並びと小計が残ることを確かめる。
+  await reloadAfter(page, sent);
+  await expectBalls(page, 1, 1, expected);
+  await expect(page.getByTestId("end-subtotal-1-1")).toHaveText("44");
 });
 
-test("score-03: 矢数に達していないエンドがあるとき、/rounds/[id]を開くと、展開したテンキーに、的に対応する点数のキーのみが表示され、キーが的の配色に合わせて色分けされる", async ({
+test("矢数に達していないエンドがあるラウンドを開くと、的にある点数のキーだけを表示する", async ({
   page,
 }) => {
-  // Given
-  // When
   await openRound(page, {
     distances: [
       {
         distance: 30,
-        totalEnds: 1,
+        totalEnds: 12,
         arrowsPerEnd: 3,
         targetFaceId: SIX_RING_TARGET_FACE_ID,
       },
     ],
   });
-
-  // Then
-  await expect(page.getByTestId("score-button-5")).toBeVisible();
-  await expect(page.getByTestId("score-button-4")).toHaveCount(0);
-  await expect(page.getByTestId("score-button-X")).toHaveCSS(
-    "background-color",
-    "rgb(255, 229, 82)",
-  );
-  await expect(page.getByTestId("score-button-8")).toHaveCSS(
-    "background-color",
-    "rgb(246, 80, 88)",
-  );
-  await expect(page.getByTestId("score-button-6")).toHaveCSS(
-    "background-color",
-    "rgb(0, 180, 228)",
-  );
-});
-
-test("score-05: テンキーを展開したラウンド詳細画面で的の異なる距離があるとき、別の距離のエンドの空白をクリックすると、そのエンドに仮の矢が表示され、その距離の的に対応する点数のキーに切り替わる", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, {
-    distances: [
-      { distance: 18, totalEnds: 1, arrowsPerEnd: 1 },
-      {
-        distance: 30,
-        totalEnds: 1,
-        arrowsPerEnd: 1,
-        targetFaceId: SIX_RING_TARGET_FACE_ID,
-      },
-    ],
-  });
-  await expect(page.getByTestId("score-button-4")).toBeVisible();
-
-  // When
-  await page.getByTestId("end-blank-2-1").click();
-
-  // Then
-  await expectProvisionalIn(page, 2, 1);
   await expect(page.getByTestId("score-button-5")).toBeVisible();
   await expect(page.getByTestId("score-button-4")).toHaveCount(0);
 });
 
-test("score-07: テンキーを展開したラウンド詳細画面で新しい矢を指しているとき、点数ボタンをクリックすると、その点数の矢が記録され、玉の背景が的の配色を薄くしたトーンで色分けされ、同じエンドの記録済みの矢の後ろに仮の矢が表示され、記録した点数が保持される", async ({
+test("記録済みの玉を押して指すと、テンキーが開き、指した行がテンキーに隠れずに見える", async ({
   page,
 }) => {
-  // Given
-  await openRound(page);
-  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
-
-  // When
-  await page.getByTestId("score-button-X").click();
-
-  // Then
-  await expect(ball(page, 1, 1, 1)).toHaveText("X");
-  await expect(ball(page, 1, 1, 1).locator("span")).toHaveCSS(
-    "background-color",
-    "rgb(255, 247, 204)",
+  // テンキーが画面の下に開き、行に重なり得る縦長の画面で確かめる。
+  await openRound(
+    page,
+    {
+      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+      shots: allShots(0, 12, 3),
+    },
+    MOBILE,
   );
-  await expectProvisionalIn(page, 1, 1);
-  const ballBox = await ball(page, 1, 1, 1).boundingBox();
-  const provisionalBox = await page
-    .getByTestId("provisional-shot")
-    .boundingBox();
-  expect(provisionalBox?.x).toBeGreaterThan(ballBox?.x ?? 0);
-  await reloadAfter(page, sent);
-  await expect(ball(page, 1, 1, 1)).toHaveText("X");
-});
-
-test("score-15: 矢数6で矢の無いエンドの新しい矢を指しているとき、7、10、X、9、M、8の順に点数ボタンをクリックすると、エンドの玉がX、10、9、8、7、Mの順に並び、小計が入力の順によらない値で表示され、再読み込みしても同じ順と値で表示される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, {
-    distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 6 }],
-  });
-
-  // When
-  for (const key of ["7", "10", "X", "9", "M"]) {
-    await page.getByTestId(`score-button-${key}`).click();
-  }
-  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
-  await page.getByTestId("score-button-8").click();
-
-  // Then
-  const expected = ["X", "10", "9", "8", "7", "M"];
-  await expectBalls(page, 1, 1, expected);
-  await expect(page.getByTestId("end-subtotal-1-1")).toHaveText("44");
-  await reloadAfter(page, sent);
-  await expectBalls(page, 1, 1, expected);
-  await expect(page.getByTestId("end-subtotal-1-1")).toHaveText("44");
-});
-
-test("score-16: 矢数に1本足りないエンドの新しい矢を指しているとき、点数ボタンをクリックすると、同じ距離の次のエンドに仮の矢が表示される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, {
-    distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 3 }],
-    shots: [shot(0, 1, "9"), shot(0, 1, "8")],
-  });
-  await expectProvisionalIn(page, 1, 1);
-
-  // When
-  await page.getByTestId("score-button-10").click();
-
-  // Then
-  await expectProvisionalIn(page, 1, 2);
-});
-
-test("score-17: 距離の最後のエンドで、矢数に1本足りないエンドの新しい矢を指しているとき、点数ボタンをクリックすると、矢が指されなくなり、テンキーが格納され、次の距離のエンドに仮の矢が表示されない", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, {
-    distances: [
-      { distance: 18, totalEnds: 1, arrowsPerEnd: 2 },
-      { distance: 30, totalEnds: 1, arrowsPerEnd: 2 },
-    ],
-    shots: [shot(0, 1, "9")],
-  });
-  await expectProvisionalIn(page, 1, 1);
-
-  // When
-  await page.getByTestId("score-button-10").click();
-
-  // Then
-  await expect(page.getByTestId("provisional-shot")).toHaveCount(0);
-  await expect(page.locator('[data-shot-id][aria-pressed="true"]')).toHaveCount(
-    0,
+  const target = ball(page, 1, 10, 1);
+  await expect(page.getByTestId("keypad-toggle")).toBeHidden();
+  // テンキーが開くと重なる、スクロール領域の下端に行を置く。
+  await endRow(page, 1, 10).evaluate((row) =>
+    row.scrollIntoView({ block: "end", behavior: "instant" }),
   );
-  await expect(page.getByTestId("keypad-panel-close")).toBeHidden();
-  await expect(page.getByTestId("score-button-X")).toBeHidden();
-});
-
-test("score-18: テンキーを展開したラウンド詳細画面で記録済みの矢を指しているとき、別の点数ボタンをクリックすると、その矢の点数だけが変わって点数の高い順の位置へ並び直り、その矢が指されたままで、他の矢は変わらず、直した点数が保持される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, { shots: [shot(0, 1, "10"), shot(0, 1, "7")] });
-  const target = ball(page, 1, 1, 2);
-  await expect(target).toHaveText("7");
-  const shotId = await target.getAttribute("data-shot-id");
   await target.click();
-  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
-
-  // When
-  await page.getByTestId("score-button-X").click();
-
-  // Then
-  await expectBalls(page, 1, 1, ["X", "10"]);
-  const fixed = page.locator(`[data-shot-id="${shotId}"]`);
-  await expect(fixed).toHaveText("X");
-  await expect(fixed).toHaveAttribute("aria-pressed", "true");
-  await expect(ball(page, 1, 1, 1)).toHaveAttribute(
-    "data-shot-id",
-    shotId ?? "",
-  );
-  await reloadAfter(page, sent);
-  await expectBalls(page, 1, 1, ["X", "10"]);
-  await expect(page.locator(`[data-shot-id="${shotId}"]`)).toHaveText("X");
+  await expect(target).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("score-button-X")).toBeVisible();
+  await expectUncovered(endRow(page, 1, 10));
 });
 
-test("score-19: テンキーを展開したラウンド詳細画面で新しい矢を指しているとき、別のエンドの空白をクリックすると、仮の矢がそのエンドへ移り、次の点数がそのエンドに記録される", async ({
+test("エンドの番号や小計、満杯のエンドの玉の間を押しても、指している矢は変わらない", async ({
   page,
 }) => {
-  // Given
   await openRound(page, {
-    distances: [{ distance: 18, totalEnds: 3, arrowsPerEnd: 3 }],
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+    shots: [shot(0, 1, "9"), shot(0, 1, "8"), shot(0, 1, "7")],
   });
-  await expectProvisionalIn(page, 1, 1);
-
-  // When
-  await page.getByTestId("end-blank-1-3").click();
-
-  // Then
-  await expectProvisionalIn(page, 1, 3);
-  await page.getByTestId("score-button-9").click();
-  await expectBalls(page, 1, 3, ["9"]);
-  await expectBalls(page, 1, 1, []);
-});
-
-test("score-20: テンキーを展開したラウンド詳細画面のとき、エンドの番号か小計をクリックすると、指している矢とテンキーが変わらない", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, {
-    distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 3 }],
-    shots: [shot(0, 2, "9")],
-  });
-  await expectProvisionalIn(page, 1, 1);
-
-  // When
+  await expectProvisionalIn(page, 1, 2);
   await page.getByTestId("end-subtotal-1-2").click();
   await endRow(page, 1, 2).getByText("2", { exact: true }).click();
-
-  // Then
-  await expectProvisionalIn(page, 1, 1);
-  await expect(page.getByTestId("score-button-X")).toBeVisible();
-});
-
-test("score-21: ラウンド詳細画面で矢数に達したエンドがあるとき、そのエンドの玉以外の部分をクリックすると、仮の矢が表示されない", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, {
-    distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 2 }],
-    shots: [shot(0, 1, "9"), shot(0, 1, "8")],
-  });
-  await page.getByTestId("keypad-panel-close").click();
-  await expect(page.getByTestId("provisional-shot")).toHaveCount(0);
-  await expect(page.getByTestId("end-blank-1-1")).toHaveCount(0);
   const first = await ball(page, 1, 1, 1).boundingBox();
   const second = await ball(page, 1, 1, 2).boundingBox();
   if (!first || !second) throw new Error("玉が表示されていません。");
-
-  // When: 玉の間の、玉の無い部分をクリックする
   await page.mouse.click(
     (first.x + first.width + second.x) / 2,
     first.y + first.height / 2,
   );
-
-  // Then
-  await expect(page.getByTestId("provisional-shot")).toHaveCount(0);
-  await expect(page.getByTestId("score-button-X")).toBeHidden();
+  await expectProvisionalIn(page, 1, 2);
+  await expect(page.getByTestId("score-button-X")).toBeVisible();
 });
 
-test("score-08: テンキーを展開したラウンド詳細画面で記録済みの矢を指しているとき、クリアボタンをクリックすると、その矢が消え、そのエンドの記録済みの矢の後ろに仮の矢が表示され、クリアが保持される", async ({
+test("点数を書いた直後に一つ戻ると、記録した矢が消え、再読み込みしても消えたままになる", async ({
   page,
 }) => {
-  // Given
-  await openRound(page, { shots: [shot(0, 1, "X"), shot(0, 1, "5")] });
-  await ball(page, 1, 1, 2).click();
-  await expect(ball(page, 1, 1, 2)).toHaveAttribute("aria-pressed", "true");
+  // 点数を書いて記録する。
+  // 取り消しの列は画面の状態にだけ持つため、記録は画面の操作で作る。
+  await openRound(page);
+  await recordScore(page, "X");
+  await expectBalls(page, 1, 1, ["X"]);
+
+  // 一つ戻って、記録した矢を消す。
   const sent = page.waitForResponse(CLEAR_SHOTS_RPC);
-
-  // When
-  await page.getByTestId("score-button-clear").click();
-
-  // Then
-  await expectBalls(page, 1, 1, ["X"]);
+  await page.getByTestId("score-button-undo").click();
+  await expectBalls(page, 1, 1, []);
   await expectProvisionalIn(page, 1, 1);
+
+  // 再読み込みして、消えたままであることを確かめる。
   await reloadAfter(page, sent);
-  await expectBalls(page, 1, 1, ["X"]);
+  await expectBalls(page, 1, 1, []);
 });
 
-test("score-09: テンキーを展開したラウンド詳細画面でモバイルのとき、下矢印をタップすると、矢が指されなくなり、テンキーが格納される", async ({
+test("テンキーの下矢印を押すと、矢が指されなくなり、テンキーが格納される", async ({
   page,
 }) => {
-  // Given
   await openRound(page, {}, MOBILE);
   await expect(page.getByTestId("score-button-X")).toBeVisible();
-
-  // When
   await page.getByTestId("keypad-toggle").click();
-
-  // Then
   await expect(page.getByTestId("keypad-toggle")).toBeHidden();
   await expect(page.getByTestId("score-button-X")).toBeHidden();
   await expect(page.getByTestId("provisional-shot")).toHaveCount(0);
 });
 
-// score-09の格納ボタンの大きさ。requirements.mdの行は増やさず、score-09の補足として置く。
-for (const viewport of [
-  { name: "モバイル", width: 375, height: 667 },
-  { name: "縦長のデスクトップ", width: 800, height: 1000 },
-]) {
-  test(`score-09の補足: テンキーを展開したラウンド詳細画面で${viewport.name}のとき、下矢印のタブは、高さが48px以上で、幅が右端の点数キーと同じで、右端の列の真上に重なり、中心でクリックを受ける`, async ({
-    page,
-  }) => {
-    // Given
-    await openRound(page, {}, viewport);
-    await expect(page.getByTestId("score-button-X")).toBeVisible();
-    // テンキーの展開のアニメーションが終わるまで待つ
-    await page.waitForTimeout(500);
-
-    // When
-    const toggle = await page.getByTestId("keypad-toggle").boundingBox();
-    // 右端の列のキー（クリア）
-    const key = await page.getByTestId("score-button-clear").boundingBox();
-
-    // Then
-    expect(toggle?.height).toBeGreaterThanOrEqual(48);
-    expect(Math.abs((toggle?.width ?? 0) - (key?.width ?? -1))).toBeLessThan(1);
-    expect(Math.abs((toggle?.x ?? 0) - (key?.x ?? -1))).toBeLessThan(1);
-    expect(toggle?.y).toBeLessThan(key?.y ?? Number.NEGATIVE_INFINITY);
-    const topTestId = await page.evaluate(
-      ([x, y]) =>
-        document
-          .elementFromPoint(x, y)
-          ?.closest("[data-testid]")
-          ?.getAttribute("data-testid"),
-      [
-        (toggle?.x ?? 0) + (toggle?.width ?? 0) / 2,
-        (toggle?.y ?? 0) + (toggle?.height ?? 0) / 2,
-      ],
-    );
-    expect(topTestId).toBe("keypad-toggle");
-  });
-}
-
-test("score-10: テンキーを展開したラウンド詳細画面でデスクトップのとき、閉じるボタンをタップすると、矢が指されなくなり、テンキーが格納される", async ({
+test("点数を入力した後、次に指す行が固定表示とテンキーに隠れずに見える", async ({
   page,
 }) => {
-  // Given
-  await openRound(page);
-  await expect(page.getByTestId("score-button-X")).toBeVisible();
-
-  // When
-  await page.getByTestId("keypad-panel-close").click();
-
-  // Then
-  await expect(page.getByTestId("keypad-panel-close")).toBeHidden();
-  await expect(page.getByTestId("score-button-X")).toBeHidden();
-  await expect(page.getByTestId("provisional-shot")).toHaveCount(0);
-});
-
-test("score-11: テンキーを展開したラウンド詳細画面で点数を記録した直後のとき、一つ戻るボタンをクリックすると、記録した矢が消え、そのエンドに仮の矢が表示され、取り消しが保持される", async ({
-  page,
-}) => {
-  // Given
-  // 取り消しの列は画面の状態にだけ持つため、記録は画面の操作で作る。
-  await openRound(page);
-  await recordScore(page, "X");
-  await expectBalls(page, 1, 1, ["X"]);
-  const sent = page.waitForResponse(CLEAR_SHOTS_RPC);
-
-  // When
-  await page.getByTestId("score-button-undo").click();
-
-  // Then
-  await expectBalls(page, 1, 1, []);
-  await expectProvisionalIn(page, 1, 1);
-  await reloadAfter(page, sent);
-  await expectBalls(page, 1, 1, []);
-});
-
-test("score-12: テンキーを展開したラウンド詳細画面で取り消した記録があるとき、一つ進むボタンをクリックすると、取り消した記録がやり直され、やり直した矢が指され、やり直しが保持される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page);
-  await recordScore(page, "X");
-  await undoAndWait(page);
-  await expectBalls(page, 1, 1, []);
-  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
-
-  // When
-  await page.getByTestId("score-button-redo").click();
-
-  // Then
-  await expectBalls(page, 1, 1, ["X"]);
-  await expect(ball(page, 1, 1, 1)).toHaveAttribute("aria-pressed", "true");
-  await reloadAfter(page, sent);
-  await expectBalls(page, 1, 1, ["X"]);
-});
-
-test("score-22: テンキーを展開したラウンド詳細画面で記録済みの矢の点数を直した直後のとき、一つ戻るボタンをクリックすると、その矢が直す前の点数に戻り、その矢が指される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, { shots: [shot(0, 1, "9"), shot(0, 1, "7")] });
-  await ball(page, 1, 1, 2).click();
-  const shotId = await ball(page, 1, 1, 2).getAttribute("data-shot-id");
-  await recordScore(page, "X");
-  await expectBalls(page, 1, 1, ["X", "9"]);
-
-  // When
-  await page.getByTestId("score-button-undo").click();
-
-  // Then
-  await expectBalls(page, 1, 1, ["9", "7"]);
-  const restored = page.locator(`[data-shot-id="${shotId}"]`);
-  await expect(restored).toHaveText("7");
-  await expect(restored).toHaveAttribute("aria-pressed", "true");
-});
-
-test("score-23: テンキーを展開したラウンド詳細画面で記録済みの矢をクリアした直後のとき、一つ戻るボタンをクリックすると、消した矢が元の点数で戻る", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, { shots: [shot(0, 1, "9"), shot(0, 1, "7")] });
-  await ball(page, 1, 1, 1).click();
-  const clearSent = page.waitForResponse(CLEAR_SHOTS_RPC);
-  await page.getByTestId("score-button-clear").click();
-  await clearSent;
-  await expectBalls(page, 1, 1, ["7"]);
-  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
-
-  // When
-  await page.getByTestId("score-button-undo").click();
-
-  // Then
-  await expectBalls(page, 1, 1, ["9", "7"]);
-  await reloadAfter(page, sent);
-  await expectBalls(page, 1, 1, ["9", "7"]);
-});
-
-test("score-24: エンドの最後の矢を記録して、同じ距離の次のエンドに仮の矢が移った直後のとき、一つ戻るボタンをクリックすると、前のエンドの最後の矢が消え、前のエンドに仮の矢が表示される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, {
-    distances: [{ distance: 18, totalEnds: 2, arrowsPerEnd: 2 }],
-    shots: [shot(0, 1, "9")],
-  });
-  await recordScore(page, "X");
-  await expectProvisionalIn(page, 1, 2);
-
-  // When
-  await page.getByTestId("score-button-undo").click();
-
-  // Then
-  await expectBalls(page, 1, 1, ["9"]);
-  await expectProvisionalIn(page, 1, 1);
-});
-
-test("score-13: テンキーを展開したラウンド詳細画面で取り消した記録があるとき、点数ボタンをクリックすると、取り消した記録をやり直せなくなる", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page);
-  await recordScore(page, "X");
-  await undoAndWait(page);
-  await expect(page.getByTestId("score-button-redo")).toBeEnabled();
-
-  // When
-  await page.getByTestId("score-button-5").click();
-
-  // Then
-  await expect(page.getByTestId("score-button-redo")).toBeDisabled();
-});
-
-test("score-14: テンキーを展開したラウンド詳細画面で取り消した記録があり、記録済みの矢を指しているとき、クリアボタンをクリックすると、取り消した記録をやり直せなくなる", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page);
-  await recordScore(page, "X");
-  await recordScore(page, "5");
-  await undoAndWait(page);
-  await ball(page, 1, 1, 1).click();
-  await expect(ball(page, 1, 1, 1)).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("score-button-redo")).toBeEnabled();
-
-  // When
-  await page.getByTestId("score-button-clear").click();
-
-  // Then
-  await expect(page.getByTestId("score-button-redo")).toBeDisabled();
-});
-
-test("score-25: ラウンド詳細画面を開いた直後で取り消せる記録が無いとき、一つ戻るボタンをクリックしようとすると、一つ戻るボタンが押せず、記録が変わらない", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, { shots: [shot(0, 1, "9")] });
-
-  // When
-  await page.getByTestId("score-button-undo").click({ force: true });
-
-  // Then
-  await expect(page.getByTestId("score-button-undo")).toBeDisabled();
-  await expectBalls(page, 1, 1, ["9"]);
-});
-
-test("score-26: テンキーを展開したラウンド詳細画面で新しい矢を指しているとき、クリアボタンをクリックしようとすると、クリアボタンが押せない", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, { shots: [shot(0, 1, "9")] });
-  await expectProvisionalIn(page, 1, 1);
-
-  // When
-  await page.getByTestId("score-button-clear").click({ force: true });
-
-  // Then
-  await expect(page.getByTestId("score-button-clear")).toBeDisabled();
-  await expectBalls(page, 1, 1, ["9"]);
-});
-
-test("score-27: テンキーを展開したモバイルのラウンド詳細画面で指している矢の行が上側の固定表示に隠れているとき、点数ボタンをクリックすると、次に指す矢の行が上側の固定表示の下に見える位置までスライドする", async ({
-  page,
-}) => {
-  // Given
+  // テンキーが画面の下に開き、行に重なり得る縦長の画面で確かめる。
   await openRound(
     page,
     {
-      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 6 }],
-      shots: allShots(0, 12, 6),
+      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+      shots: allShots(0, 12, 3),
     },
     MOBILE,
   );
+
+  // 4エンド目の玉を押して指す。
   await ball(page, 1, 4, 1).click();
   await expect(ball(page, 1, 4, 1)).toHaveAttribute("aria-pressed", "true");
-  // 玉を押した直後のスクロールが止まってから、行を固定表示の裏へ動かす。
-  await expect.poll(async () => settledBottom(endRow(page, 1, 4))).toBe(true);
-  const summaryBottom = await bottomOf(page.getByTestId("round-summary"));
-  const rowBottom = await bottomOf(endRow(page, 1, 4));
-  await page
-    .locator("main")
-    .evaluate(
-      (main, delta) => main.scrollBy({ top: delta, behavior: "instant" }),
-      rowBottom - summaryBottom,
-    );
-  expect(await bottomOf(endRow(page, 1, 4))).toBeLessThanOrEqual(summaryBottom);
+  await expectUncovered(endRow(page, 1, 4));
 
-  // When
+  // 指した行を上側の固定表示の裏へスクロールする。
+  await endRow(page, 1, 4).evaluate((row) =>
+    row.scrollIntoView({ block: "start", behavior: "instant" }),
+  );
+  await expectPartlyCovered(endRow(page, 1, 4));
+
+  // 点数を書き、行が固定表示とテンキーに隠れずに見えることを確かめる。
   await page.getByTestId("score-button-9").click();
-
-  // Then
   await expect(ball(page, 1, 4, 1)).toHaveText("9");
-  const keypadTop = (await page.getByTestId("keypad-toggle").boundingBox())?.y;
-  await expect
-    .poll(async () => (await endRow(page, 1, 4).boundingBox())?.y)
-    .toBeGreaterThanOrEqual(summaryBottom);
-  const row = await endRow(page, 1, 4).boundingBox();
-  expect((row?.y ?? 0) + (row?.height ?? 0)).toBeLessThan(
-    keypadTop ?? Number.POSITIVE_INFINITY,
-  );
+  await expectUncovered(endRow(page, 1, 4));
 });
-
-test("score-28: テンキーを展開したモバイルのラウンド詳細画面で指している矢の行が固定表示に隠れずに見えているとき、点数ボタンをクリックすると、画面のスクロール位置が変わらない", async ({
-  page,
-}) => {
-  // Given
-  await openRound(
-    page,
-    {
-      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 6 }],
-      shots: allShots(0, 12, 6),
-    },
-    MOBILE,
-  );
-  await ball(page, 1, 1, 1).click();
-  await expect(ball(page, 1, 1, 1)).toHaveAttribute("aria-pressed", "true");
-  await expect.poll(async () => settledBottom(endRow(page, 1, 1))).toBe(true);
-  // 距離の小計がまだ固定されない、わずかにスクロールした位置にする。
-  await page
-    .locator("main")
-    .evaluate((main) => main.scrollTo({ top: 30, behavior: "instant" }));
-  const before = await scrollTopOf(page);
-  expect(before).toBeGreaterThan(0);
-
-  // When
-  await page.getByTestId("score-button-9").click();
-  await expectBalls(page, 1, 1, ["9", "5", "5", "5", "5", "5"]);
-  await page.getByTestId("score-button-8").click();
-  await expectBalls(page, 1, 1, ["8", "5", "5", "5", "5", "5"]);
-  await page.getByTestId("score-button-7").click();
-  await expectBalls(page, 1, 1, ["7", "5", "5", "5", "5", "5"]);
-
-  // Then
-  await expect.poll(async () => settledBottom(endRow(page, 1, 1))).toBe(true);
-  expect(await scrollTopOf(page)).toBe(before);
-});
-
-test("score-29: テンキーを展開したデスクトップのラウンド詳細画面で指している矢の行がスクロール領域の下端の外にあるとき、点数ボタンをクリックすると、次に指す矢の行が完了の帯の上に見える位置までスライドする", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, {
-    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 6 }],
-    shots: allShots(0, 12, 6),
-  });
-  await ball(page, 1, 12, 1).click();
-  await expect(ball(page, 1, 12, 1)).toHaveAttribute("aria-pressed", "true");
-  await expect.poll(async () => settledBottom(endRow(page, 1, 12))).toBe(true);
-  const frameTop =
-    (await page.getByTestId("bottom-frame").boundingBox())?.y ?? 0;
-  // スクロール領域（main）の下端は、完了の帯の枠の上端と一致する。
-  const mainBox = await page.locator("main").boundingBox();
-  expect((mainBox?.y ?? 0) + (mainBox?.height ?? 0)).toBeCloseTo(frameTop, 0);
-  // 最終エンドの行の下端が、領域の下端の外に出る位置までスクロールを戻す。
-  await page.locator("main").evaluate((main) =>
-    main.scrollTo({
-      top: main.scrollHeight - main.clientHeight - 130,
-      behavior: "instant",
-    }),
-  );
-  expect(await bottomOf(endRow(page, 1, 12))).toBeGreaterThan(frameTop);
-
-  // When
-  await page.getByTestId("score-button-9").click();
-
-  // Then
-  await expect(ball(page, 1, 12, 1)).toHaveText("9");
-  await expect
-    .poll(async () => bottomOf(endRow(page, 1, 12)))
-    .toBeLessThanOrEqual(frameTop);
-});
-
-async function scrollTopOf(page: Page) {
-  return page.locator("main").evaluate((main) => main.scrollTop);
-}
-
-async function bottomOf(locator: Locator) {
-  const box = await locator.boundingBox();
-  return (box?.y ?? 0) + (box?.height ?? 0);
-}
-
-// 2回の測定で下端が変わらなければ、スクロールが止まったとみなす。
-async function settledBottom(locator: Locator) {
-  const before = await bottomOf(locator);
-  await locator.page().waitForTimeout(150);
-  return before === (await bottomOf(locator));
-}

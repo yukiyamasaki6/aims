@@ -76,7 +76,7 @@ beforeEach(() => {
 
 describe("refreshRoundBases", () => {
   it("保持するラウンドの取得に、端末が保持するラウンドのIDを渡し、取得したラウンドごとにベースを反映して成功を返す", async () => {
-    // Given: 端末が2件を保持し、取得は1件(入力中のラウンド)と、保持の1件を返す
+    // Given
     deps.retainedRoundIds.mockResolvedValue(["kept"]);
     deps.fetchRoundDetails.mockResolvedValue({
       status: "ok",
@@ -113,6 +113,7 @@ describe("refreshRoundBases", () => {
   });
 
   it("取得が返さなかった保持のラウンドは、削除の印として反映する", async () => {
+    // Given
     deps.retainedRoundIds.mockResolvedValue(["gone", "kept"]);
     deps.fetchRoundDetails.mockResolvedValue({
       status: "ok",
@@ -123,12 +124,15 @@ describe("refreshRoundBases", () => {
       },
     });
 
+    // When
     await refreshRoundBases(supabaseOf("user-1"));
 
+    // Then
     expect(deps.commit).toHaveBeenCalledWith("gone", null, 100, "user-1");
   });
 
   it("全ての反映を待ってから成功を返す", async () => {
+    // Given
     deps.fetchRoundDetails.mockResolvedValue({
       status: "ok",
       data: {
@@ -145,14 +149,17 @@ describe("refreshRoundBases", () => {
     );
     let done = false;
 
+    // When
     const refreshing = refreshRoundBases(supabaseOf("user-1")).then(() => {
       done = true;
     });
     await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(done).toBe(false);
+    const doneBeforeFinish = done;
     finish();
     await refreshing;
 
+    // Then
+    expect(doneBeforeFinish).toBe(false);
     expect(done).toBe(true);
   });
 
@@ -172,9 +179,14 @@ describe("refreshRoundBases", () => {
     ["セッションが無い", null, "user-1"],
     ["端末の識別と違うユーザー", "user-2", "user-1"],
   ])("%sときは、取得せずに失敗を返す", async (_name, sessionUser, hubUser) => {
+    // Given
     deps.getUserId.mockReturnValue(hubUser);
 
-    expect(await refreshRoundBases(supabaseOf(sessionUser))).toBe(false);
+    // When
+    const result = await refreshRoundBases(supabaseOf(sessionUser));
+
+    // Then
+    expect(result).toBe(false);
     expect(deps.fetchRoundDetails).not.toHaveBeenCalled();
   });
 
@@ -182,16 +194,22 @@ describe("refreshRoundBases", () => {
     ["offline", { status: "offline" }],
     ["error", { status: "error", message: "x" }],
   ])("取得が%sのときは、何も反映せずに失敗を返す", async (_name, failure) => {
+    // Given
     deps.retainedRoundIds.mockResolvedValue(["kept"]);
     deps.fetchRoundDetails.mockResolvedValue(failure);
 
-    expect(await refreshRoundBases(supabaseOf("user-1"))).toBe(false);
+    // When
+    const result = await refreshRoundBases(supabaseOf("user-1"));
+
+    // Then
+    expect(result).toBe(false);
     expect(deps.commit).not.toHaveBeenCalled();
   });
 });
 
 describe("commitRoundDetails", () => {
   it("返ったラウンドはベースとして、返らなかった保持のラウンドは削除の印として反映し、全て待つ", async () => {
+    // Given
     let release: () => void = () => {};
     deps.commit.mockImplementation(
       (roundId: string) =>
@@ -202,6 +220,7 @@ describe("commitRoundDetails", () => {
     );
     let done = false;
 
+    // When
     const pending = commitRoundDetails(
       {
         rounds: new Map([["kept", detail("in_progress")]]),
@@ -214,10 +233,12 @@ describe("commitRoundDetails", () => {
     });
     await Promise.resolve();
     await Promise.resolve();
-
-    expect(done).toBe(false);
+    const doneBeforeRelease = done;
     release();
     await pending;
+
+    // Then
+    expect(doneBeforeRelease).toBe(false);
     expect(done).toBe(true);
     expect(deps.commit).toHaveBeenCalledWith("gone", null, 100, "user-1");
     expect(deps.commit).toHaveBeenCalledWith(

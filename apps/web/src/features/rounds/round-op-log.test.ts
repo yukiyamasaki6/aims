@@ -30,37 +30,50 @@ const disabledDistance: SyncOperation = {
 
 describe("roundOpLog", () => {
   it("loadは、ラウンドIDを列IDへ写して読む", async () => {
+    // Given
     const group = { base: undefined, entries: [{ eventId: "e1" }] };
     hub.read.mockResolvedValue(group);
 
-    expect(await roundOpLog.load("r1")).toBe(group);
+    // When
+    const loaded = await roundOpLog.load("r1");
+
+    // Then
+    expect(loaded).toBe(group);
     expect(hub.read).toHaveBeenCalledWith(roundStreamId("r1"));
   });
 
   it("loadは、読み込みに失敗したら空の組を返す", async () => {
+    // Given
     hub.read.mockRejectedValue(new Error("idb"));
 
-    expect(await roundOpLog.load("r1")).toEqual({
-      base: undefined,
-      entries: [],
-    });
+    // When
+    const loaded = await roundOpLog.load("r1");
+
+    // Then
+    expect(loaded).toEqual({ base: undefined, entries: [] });
   });
 
   it("commitは、ラウンドIDを列IDへ写して取得したベースを反映する", async () => {
+    // Given
     hub.commit.mockResolvedValue({ base: undefined, entries: [] });
     const record = { tables: {}, revisions: {} } as never;
 
+    // When
     await roundOpLog.commit("r1", record, 10, "user-1");
 
+    // Then
     expect(hub.commit).toHaveBeenCalledWith("round:r1", record, 10, "user-1");
   });
 
   it("commitDeletedは、現在のユーザーで削除の印を反映する", async () => {
+    // Given
     hub.getUserId.mockReturnValue("user-1");
     hub.commit.mockResolvedValue({ base: undefined, entries: [] });
 
+    // When
     await roundOpLog.commitDeleted("r1", 10);
 
+    // Then
     expect(hub.commit).toHaveBeenCalledWith("round:r1", null, 10, "user-1");
   });
 
@@ -81,6 +94,7 @@ describe("roundOpLog", () => {
     };
 
     it("ベースか操作を持つ、削除されておらず作成が確定しているラウンドのIDを返す", async () => {
+      // Given
       hub.readStored.mockResolvedValue(
         new Map([
           [
@@ -99,21 +113,27 @@ describe("roundOpLog", () => {
         ]),
       );
 
-      expect(await roundOpLog.retainedRoundIds()).toEqual([
-        "with-base",
-        "with-ops",
-        "created",
-      ]);
+      // When
+      const ids = await roundOpLog.retainedRoundIds();
+
+      // Then
+      expect(ids).toEqual(["with-base", "with-ops", "created"]);
     });
 
     it("読み込みに失敗したら空を返す", async () => {
+      // Given
       hub.readStored.mockRejectedValue(new Error("idb"));
 
-      expect(await roundOpLog.retainedRoundIds()).toEqual([]);
+      // When
+      const ids = await roundOpLog.retainedRoundIds();
+
+      // Then
+      expect(ids).toEqual([]);
     });
   });
 
   it("loadAllは、列IDをラウンドIDへ写し、ラウンドの列でないものを除く", async () => {
+    // Given
     const snapshot = {
       base: { startedAt: 1, base: null },
       operations: [{ operation: disabled, confirmedFields: undefined }],
@@ -125,34 +145,57 @@ describe("roundOpLog", () => {
       ]),
     );
 
+    // When
     const all = await roundOpLog.loadAll();
 
+    // Then
     expect([...all.keys()]).toEqual(["r1"]);
     expect(all.get("r1")).toBe(snapshot);
   });
 
   it("loadAllは、読み込みに失敗したら空を返す", async () => {
+    // Given
     hub.readAll.mockRejectedValue(new Error("idb"));
 
-    expect((await roundOpLog.loadAll()).size).toBe(0);
+    // When
+    const all = await roundOpLog.loadAll();
+
+    // Then
+    expect(all.size).toBe(0);
   });
 
   it("roundは、そのラウンドの列の送信器を返す", () => {
+    // Given
     const sync = {};
     hub.acquire.mockReturnValue(sync);
 
-    expect(roundOpLog.round("r1")).toBe(sync);
+    // When
+    const result = roundOpLog.round("r1");
+
+    // Then
+    expect(result).toBe(sync);
     expect(hub.acquire).toHaveBeenCalledWith("round:r1");
   });
 });
 
 describe("hasRoundDeletion", () => {
   it("round.disabledを含めば真", () => {
-    expect(hasRoundDeletion([disabledDistance, disabled])).toBe(true);
+    // Given
+    // When
+    const result = hasRoundDeletion([disabledDistance, disabled]);
+
+    // Then
+    expect(result).toBe(true);
   });
 
   it("含まなければ偽", () => {
-    expect(hasRoundDeletion([disabledDistance])).toBe(false);
-    expect(hasRoundDeletion([])).toBe(false);
+    // Given
+    // When
+    const withoutDeletion = hasRoundDeletion([disabledDistance]);
+    const empty = hasRoundDeletion([]);
+
+    // Then
+    expect(withoutDeletion).toBe(false);
+    expect(empty).toBe(false);
   });
 });

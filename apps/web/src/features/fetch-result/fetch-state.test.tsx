@@ -49,13 +49,24 @@ describe("FetchState", () => {
       expect(screen.queryByRole("link")).not.toBeInTheDocument();
     });
 
-    it("offlineのとき、ネットワークに接続されていませんと再試行ボタンを表示し、押すとonRetryを呼ぶ", async () => {
+    it("offlineのとき、「ネットワークに接続されていません」と再試行ボタンを表示する", () => {
       // Given
-      const onRetry = vi.fn();
-      render(<FetchState view={{ status: "offline" }} onRetry={onRetry} />);
+      // When
+      render(<FetchState view={{ status: "offline" }} onRetry={vi.fn()} />);
+
+      // Then
       expect(
         screen.getByText("ネットワークに接続されていません"),
       ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "再試行" }),
+      ).toBeInTheDocument();
+    });
+
+    it("offlineのとき、再試行を押すとonRetryを呼ぶ", async () => {
+      // Given
+      const onRetry = vi.fn();
+      render(<FetchState view={{ status: "offline" }} onRetry={onRetry} />);
 
       // When
       await userEvent.click(screen.getByRole("button", { name: "再試行" }));
@@ -64,7 +75,26 @@ describe("FetchState", () => {
       expect(onRetry).toHaveBeenCalledTimes(1);
     });
 
-    it("errorのとき、messageをalertで表示し、再試行を押すとonRetryを呼ぶ", async () => {
+    it("errorのとき、messageをalertで表示し、再試行ボタンを表示する", () => {
+      // Given
+      // When
+      render(
+        <FetchState
+          view={{ status: "error", message: "読み込めませんでした。" }}
+          onRetry={vi.fn()}
+        />,
+      );
+
+      // Then
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "読み込めませんでした。",
+      );
+      expect(
+        screen.getByRole("button", { name: "再試行" }),
+      ).toBeInTheDocument();
+    });
+
+    it("errorのとき、再試行を押すとonRetryを呼ぶ", async () => {
       // Given
       const onRetry = vi.fn();
       render(
@@ -72,9 +102,6 @@ describe("FetchState", () => {
           view={{ status: "error", message: "読み込めませんでした。" }}
           onRetry={onRetry}
         />,
-      );
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "読み込めませんでした。",
       );
 
       // When

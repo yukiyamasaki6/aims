@@ -38,9 +38,9 @@ describe("OtpCodeStep", () => {
   describe("表示", () => {
     it("見出しと、メールアドレスを含む説明と迷惑メールの案内を描く", () => {
       // Given
-      const form = createForm({ email: "me@example.com" });
 
       // When
+      const form = createForm({ email: "me@example.com" });
       renderStep(form);
 
       // Then
@@ -75,9 +75,9 @@ describe("OtpCodeStep", () => {
 
     it("errorがあれば全体のエラーを描く", () => {
       // Given
-      const form = createForm({ error: "全体のエラー" });
 
       // When
+      const form = createForm({ error: "全体のエラー" });
       renderStep(form);
 
       // Then
@@ -88,9 +88,9 @@ describe("OtpCodeStep", () => {
   describe("エラー文の結びつき", () => {
     it("コードのエラー文の要素のidをidPrefixから作り、入力欄と結びつける", () => {
       // Given
-      const form = createForm({ codeFieldErrors: { code: "コードのエラー" } });
 
       // When
+      const form = createForm({ codeFieldErrors: { code: "コードのエラー" } });
       renderStep(form, "reset-password");
 
       // Then
@@ -108,9 +108,9 @@ describe("OtpCodeStep", () => {
 
     it("コードのエラーがないとき、入力欄を結びつけない", () => {
       // Given
-      const form = createForm();
 
       // When
+      const form = createForm();
       renderStep(form);
 
       // Then
@@ -121,9 +121,9 @@ describe("OtpCodeStep", () => {
 
     it("再送のエラーを再送の欄に表示する", () => {
       // Given
-      const form = createForm({ codeFieldErrors: { resend: "再送のエラー" } });
 
       // When
+      const form = createForm({ codeFieldErrors: { resend: "再送のエラー" } });
       renderStep(form);
 
       // Then
@@ -172,9 +172,9 @@ describe("OtpCodeStep", () => {
   describe("処理中の表示", () => {
     it("処理中でないとき、3つのボタンはaria-disabledでなくスピナーも出ない", () => {
       // Given
-      const form = createForm({ codeStepPending: null });
 
       // When
+      const form = createForm({ codeStepPending: null });
       renderStep(form);
 
       // Then
@@ -192,9 +192,9 @@ describe("OtpCodeStep", () => {
 
     it("確認の処理中は、3つのボタンをaria-disabledにし、確認だけにスピナーを出す", () => {
       // Given
-      const form = createForm({ codeStepPending: "verify" });
 
       // When
+      const form = createForm({ codeStepPending: "verify" });
       renderStep(form);
 
       // Then
@@ -214,9 +214,9 @@ describe("OtpCodeStep", () => {
 
     it("再送の処理中は、3つのボタンをaria-disabledにし、再送だけにスピナーを出す", () => {
       // Given
-      const form = createForm({ codeStepPending: "resend" });
 
       // When
+      const form = createForm({ codeStepPending: "resend" });
       renderStep(form);
 
       // Then
@@ -238,10 +238,10 @@ describe("OtpCodeStep", () => {
   describe("再送ボタンの表示", () => {
     it("クールダウンの境界（0/1秒）で、1秒のみ残り秒数を表示する", () => {
       // Given
-      const zero = createForm({ resendCooldown: 0 });
-      const one = createForm({ resendCooldown: 1 });
 
       // When
+      const zero = createForm({ resendCooldown: 0 });
+      const one = createForm({ resendCooldown: 1 });
       const { unmount } = renderStep(zero);
       const zeroLabel = screen.getByRole("button", {
         name: /^再送/,
@@ -259,10 +259,10 @@ describe("OtpCodeStep", () => {
 
     it("captchaTokenの有無をdata-captcha-readyに反映する", () => {
       // Given
-      const ready = createForm({ captchaToken: "token" });
-      const notReady = createForm({ captchaToken: null });
 
       // When
+      const ready = createForm({ captchaToken: "token" });
+      const notReady = createForm({ captchaToken: null });
       const { unmount } = renderStep(ready);
       const readyValue = screen
         .getByRole("button", { name: "再送" })

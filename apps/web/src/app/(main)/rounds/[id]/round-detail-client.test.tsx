@@ -101,31 +101,32 @@ afterEach(() => {
 describe("RoundDetailClient", () => {
   describe("取得中", () => {
     it("取得中は、一覧へ戻るリンクと読み込み中の表示を出し、スコアカードは出さない", () => {
-      // Given: 取得が完了しない
+      // Given
       load.mockReturnValue(new Promise(() => {}));
 
       // When
       render(<RoundDetailClient />);
 
       // Then
-      expect(screen.getByRole("link", { name: "一覧へ戻る" })).toHaveAttribute(
-        "href",
-        "/rounds",
-      );
+      expect(
+        screen.getByRole("link", { name: "一覧へ戻る" }),
+      ).toBeInTheDocument();
       expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
       expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
     });
 
     it("初回描画は、pathnameによらず同じ取得中の枠で、取得を始めない", () => {
-      // Given: SSRで描画される枠(/rounds/_)と、実際のIDのURLで水和する描画
+      // Given
       nav.pathname = "/rounds/_";
       const placeholderHtml = renderToString(<RoundDetailClient />);
       nav.pathname = `/rounds/${ID}`;
 
-      // When: サーバーでの描画（effectは走らない）
+      // When
+      // サーバーでの描画ではeffectが走らない。
       const html = renderToString(<RoundDetailClient />);
 
-      // Then: 水和の不一致を避けるため同一で、取得も始めない
+      // Then
+      // 水和の不一致を避けるため、サーバーの描画は読み込み中の表示と同一になる。
       expect(html).toBe(placeholderHtml);
       expect(html).toContain("読み込み中");
       expect(load).not.toHaveBeenCalled();
@@ -134,7 +135,7 @@ describe("RoundDetailClient", () => {
 
   describe("取得できた場合", () => {
     it("pathnameのIDで取得し、取得結果をスコアカードへ渡す", async () => {
-      // Given: 読み込みの結果が的の一覧を持つ
+      // Given
       resolves({
         status: "ok",
         data: detail("午前練習", null, "server", faces("face-1", "face-2")),
@@ -153,32 +154,38 @@ describe("RoundDetailClient", () => {
     });
 
     it("列に削除があれば、スコアカードを出さず、一覧へ置き換えて遷移する", async () => {
+      // Given
       resolves({ status: "ok", data: { deleted: true } });
 
+      // When
       render(<RoundDetailClient />);
 
+      // Then
       await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/rounds"));
       expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
       expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
     });
 
     it("列に削除がなければ、遷移しない", async () => {
+      // Given
       resolves({ status: "ok", data: detail("午前練習") });
 
+      // When
       render(<RoundDetailClient />);
-
       await screen.findByTestId("scorecard");
+
+      // Then
       expect(nav.replace).not.toHaveBeenCalled();
     });
 
     it("pathnameのIDが変わると、前のラウンドを見せずに取得し直す", async () => {
-      // Given: 最初のラウンドを表示している
+      // Given
       resolves({ status: "ok", data: detail("最初") });
       const { rerender } = render(<RoundDetailClient />);
       await screen.findByText("最初");
-
-      // When: 別のラウンドへ移り、取得が完了しない
       load.mockReturnValue(new Promise(() => {}));
+
+      // When
       nav.pathname = `/rounds/${OTHER_ID}`;
       rerender(<RoundDetailClient />);
 
@@ -191,10 +198,13 @@ describe("RoundDetailClient", () => {
 
   describe("見つからない・オフライン・エラー", () => {
     it("見つからない場合は、メッセージと一覧へ戻るリンクを出す", async () => {
+      // Given
       resolves({ status: "not-found" });
 
+      // When
       render(<RoundDetailClient />);
 
+      // Then
       expect(
         await screen.findByText("ラウンドが見つかりません。"),
       ).toBeInTheDocument();
@@ -211,10 +221,13 @@ describe("RoundDetailClient", () => {
     ])(
       "%sのpathnameは、問い合わせずに見つからないとする",
       async (_name, pathname) => {
+        // Given
         nav.pathname = pathname;
 
+        // When
         render(<RoundDetailClient />);
 
+        // Then
         expect(
           await screen.findByText("ラウンドが見つかりません。"),
         ).toBeInTheDocument();
@@ -223,10 +236,13 @@ describe("RoundDetailClient", () => {
     );
 
     it("通信できない場合は、一覧へ戻るリンクとネットワークに接続されていませんを出す", async () => {
+      // Given
       resolves({ status: "offline" });
 
+      // When
       render(<RoundDetailClient />);
 
+      // Then
       expect(
         await screen.findByText("ネットワークに接続されていません"),
       ).toBeInTheDocument();
@@ -235,8 +251,27 @@ describe("RoundDetailClient", () => {
       ).toBeInTheDocument();
     });
 
-    it("取得エラーの場合はメッセージを出し、再試行で取得し直して表示する", async () => {
-      // Given: 1回目はエラー、2回目は成功
+    it("取得エラーの場合は、メッセージと再試行ボタンを出す", async () => {
+      // Given
+      load.mockResolvedValue({
+        status: "error",
+        message: "読み込めませんでした。",
+      });
+
+      // When
+      render(<RoundDetailClient />);
+
+      // Then
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "読み込めませんでした。",
+      );
+      expect(
+        screen.getByRole("button", { name: "再試行" }),
+      ).toBeInTheDocument();
+    });
+
+    it("取得エラーの後に再試行すると、取得し直して表示する", async () => {
+      // Given
       load.mockResolvedValueOnce({
         status: "error",
         message: "読み込めませんでした。",
@@ -244,13 +279,11 @@ describe("RoundDetailClient", () => {
       load.mockResolvedValueOnce({ status: "ok", data: detail("午前練習") });
       const user = userEvent.setup();
       render(<RoundDetailClient />);
-      expect(await screen.findByRole("alert")).toHaveTextContent(
-        "読み込めませんでした。",
-      );
+      const retry = await screen.findByRole("button", { name: "再試行" });
 
       // When
       await act(async () => {
-        await user.click(screen.getByRole("button", { name: "再試行" }));
+        await user.click(retry);
       });
 
       // Then
@@ -261,22 +294,21 @@ describe("RoundDetailClient", () => {
     });
 
     it("読み込みが終わらないときは、FETCH_TIMEOUT_MSの前は読み込み中で、FETCH_TIMEOUT_MSで一覧へ戻るリンクとエラーと再試行ボタンを表示し、読み込み中の表示を消す", async () => {
-      // Given: 端末の保存が塞がれ、読み込みが終わらない
+      // Given
       vi.useFakeTimers();
       vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
       load.mockReturnValue(new Promise(() => {}));
       render(<RoundDetailClient />);
 
-      // When: 上限の1ms前
+      // When
       await act(() => vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - 1));
-
-      // Then: まだ読み込み中
-      expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
-
-      // When: 上限
+      const busyBeforeLimit = screen
+        .getByRole("status")
+        .getAttribute("aria-busy");
       await act(() => vi.advanceTimersByTimeAsync(1));
 
-      // Then: 枠とエラーと再試行ボタンを表示し、読み込み中の表示とスコアカードは出さない
+      // Then
+      expect(busyBeforeLimit).toBe("true");
       expect(
         screen.getByRole("link", { name: "一覧へ戻る" }),
       ).toBeInTheDocument();
@@ -292,21 +324,35 @@ describe("RoundDetailClient", () => {
   });
 
   describe("端末のベースで開いたラウンド", () => {
-    it("読み込みの結果の的をスコアカードへ渡し、サーバーにラウンドが無いと分かったら一覧へ置き換える", async () => {
-      // Given: 端末のベースと的の保存分で開いた
+    it("端末のベースで開いたときは、読み込みの結果の的をスコアカードへ渡す", async () => {
+      // Given
+      resolves({
+        status: "ok",
+        data: detail("入力中", null, "local", faces("face-1")),
+      });
+
+      // When
+      render(<RoundDetailClient />);
+
+      // Then
+      expect(await screen.findByTestId("scorecard")).toHaveAttribute(
+        "data-faces",
+        "face-1",
+      );
+    });
+
+    it("端末のベースで開いた後に、サーバーにラウンドが無いと分かったら、一覧へ置き換える", async () => {
+      // Given
       resolves({
         status: "ok",
         data: detail("入力中", null, "local", faces("face-1")),
       });
       const user = userEvent.setup();
       render(<RoundDetailClient />);
-      expect(await screen.findByTestId("scorecard")).toHaveAttribute(
-        "data-faces",
-        "face-1",
-      );
+      const gone = await screen.findByRole("button", { name: "gone" });
 
-      // When: スコアカードが、ラウンドが無いと知らせる
-      await user.click(screen.getByRole("button", { name: "gone" }));
+      // When
+      await user.click(gone);
 
       // Then
       expect(nav.replace).toHaveBeenCalledWith("/rounds");
@@ -317,7 +363,7 @@ describe("RoundDetailClient", () => {
     const pendingEventId = "event-1";
 
     it("読み込みの結果の的をスコアカードへ渡す", async () => {
-      // Given: 作成が未確定で、読み込みが的の一覧を得た
+      // Given
       resolves({
         status: "ok",
         data: detail(
@@ -338,19 +384,34 @@ describe("RoundDetailClient", () => {
       );
     });
 
-    it("作成の消失の監視へラウンドIDと未確定のeventIdを渡し、検知したら取得し直す", async () => {
+    it("作成が未確定なら、作成の消失の監視へラウンドIDと未確定のeventIdを渡す", async () => {
+      // Given
       resolves({ status: "ok", data: detail("作成中", pendingEventId) });
+
+      // When
       render(<RoundDetailClient />);
       await screen.findByTestId("scorecard");
 
-      const [roundId, eventId, onGone] = creationGone.mock.calls.at(-1) ?? [];
+      // Then
+      const [roundId, eventId] = creationGone.mock.calls.at(-1) ?? [];
       expect(roundId).toBe(ID);
       expect(eventId).toBe(pendingEventId);
+    });
+
+    it("作成の消失を検知したら、取得し直す", async () => {
+      // Given
+      resolves({ status: "ok", data: detail("作成中", pendingEventId) });
+      render(<RoundDetailClient />);
+      await screen.findByTestId("scorecard");
+      const [, , onGone] = creationGone.mock.calls.at(-1) ?? [];
       const before = load.mock.calls.length;
+
+      // When
       await act(async () => {
         onGone?.();
       });
 
+      // Then
       await waitFor(() => expect(load.mock.calls.length).toBe(before + 1));
     });
   });

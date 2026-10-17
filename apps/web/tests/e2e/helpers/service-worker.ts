@@ -12,15 +12,15 @@ export async function waitForServiceWorkerControl(page: Page) {
   if (!(await controlled())) {
     await page.reload();
     await waitForHydration(page);
-    // 一覧の取得など、水和の描画で始まる取得が終わる前に、オフラインにされないようにする(待たないとdelete-14などが失敗する)。
-    // 詳細の取得は始まる前に待ちが終わることがあるため、内容を前提にするテストは自分で内容の表示を待つ(history-13)。
+    // 一覧の取得など、水和の描画で始まる取得が終わる前に、オフラインにされないようにする(待たないと、オフラインで削除して復帰を確かめるテストなどが失敗する)。
+    // 詳細の取得は始まる前に待ちが終わることがあるため、内容を前提にするテストは自分で内容の表示を待つ。
     await page.waitForLoadState("networkidle");
     expect(await controlled()).toBe(true);
   }
 }
 
 // Playwrightの`setOffline`は、オフラインのまま開いた新しい文書で`navigator.onLine`をtrueのままにする。
-// 実機の回線断のように、通信の遮断に加えて`onLine`をfalseにする(`app/offline-pwa.spec.ts`と同じ手当て)。
+// 実機の回線断のように、通信の遮断に加えて`onLine`をfalseにする。
 // init scriptはcontext全体に残るため、復帰後に開く新規文書は`onLine`がfalseに戻る。
 export async function goOffline(context: BrowserContext) {
   await context.addInitScript(() => {

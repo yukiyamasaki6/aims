@@ -9,11 +9,11 @@ vi.mock("./round-preset-select-client", () => ({
 
 describe("NewRoundPage", () => {
   it("取得を伴わず、プリセット選択のクライアントコンポーネントだけを描画する", () => {
-    // Given: 同期のコンポーネントで、cookieやSupabaseを必要としない
-    // When: ページを描画する
+    // Given
+    // When
     render(<NewRoundPage />);
 
-    // Then: プリセット選択のクライアントコンポーネントを表示する
+    // Then
     expect(screen.getByTestId("round-preset-select")).toBeInTheDocument();
   });
 });

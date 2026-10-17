@@ -123,6 +123,7 @@ describe("SignInForm", () => {
   describe("初期表示", () => {
     it("サインインの見出しを表示し、各欄をエラー状態にしない", () => {
       // Given
+
       // When
       render(<SignInForm />);
 
@@ -245,10 +246,10 @@ describe("SignInForm", () => {
           ),
         ).toBeInTheDocument();
         expect(nav.push).not.toHaveBeenCalled();
-
-        // When
         auth.signInWithPassword.mockResolvedValue({ error: null });
         completeCaptcha("captcha-token-2");
+
+        // When
         await user.click(submitButton());
 
         // Then
