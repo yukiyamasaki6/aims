@@ -8,9 +8,9 @@ describe("AuthHeader", () => {
     describe("title", () => {
       it("指定した値を見出しとして表示する", () => {
         // Given
-        const title = "サインイン";
 
         // When
+        const title = "サインイン";
         render(<AuthHeader title={title} />);
 
         // Then
@@ -23,9 +23,9 @@ describe("AuthHeader", () => {
     describe("description", () => {
       it("指定した場合、説明文を表示する", () => {
         // Given
-        const description = "説明文";
 
         // When
+        const description = "説明文";
         render(<AuthHeader title="サインイン" description={description} />);
 
         // Then
@@ -34,9 +34,9 @@ describe("AuthHeader", () => {
 
       it("指定しない場合、説明文を表示しない", () => {
         // Given
-        const title = "サインイン";
 
         // When
+        const title = "サインイン";
         const { container } = render(<AuthHeader title={title} />);
 
         // Then
@@ -47,9 +47,9 @@ describe("AuthHeader", () => {
     describe("onBack", () => {
       it("指定した場合、戻るボタンを表示する", () => {
         // Given
-        const handleBack = vi.fn();
 
         // When
+        const handleBack = vi.fn();
         render(<AuthHeader title="サインイン" onBack={handleBack} />);
 
         // Then
@@ -60,9 +60,9 @@ describe("AuthHeader", () => {
 
       it("指定しない場合、戻るボタンを表示しない", () => {
         // Given
-        const title = "サインイン";
 
         // When
+        const title = "サインイン";
         render(<AuthHeader title={title} />);
 
         // Then
@@ -75,9 +75,9 @@ describe("AuthHeader", () => {
     describe("backDisabled", () => {
       it("trueの場合、戻るボタンをaria-disabledにする", () => {
         // Given
-        const handleBack = vi.fn();
 
         // When
+        const handleBack = vi.fn();
         render(
           <AuthHeader title="サインイン" onBack={handleBack} backDisabled />,
         );
@@ -96,9 +96,9 @@ describe("AuthHeader", () => {
         "$labelの場合、戻るボタンをaria-disabledにしない",
         ({ backDisabled }) => {
           // Given
-          const handleBack = vi.fn();
 
           // When
+          const handleBack = vi.fn();
           render(
             <AuthHeader
               title="サインイン"

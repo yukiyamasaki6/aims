@@ -50,7 +50,12 @@ describe("conflicts", () => {
     ["作成の後のラウンドの削除", roundCreated(), roundDisabled()],
     ["矢の後の作成", shotRecorded(), roundCreated()],
   ])("衝突する: %s", (_name, previous, next) => {
-    expect(conflicts(previous, next)).toBe(true);
+    // Given
+    // When
+    const result = conflicts(previous, next);
+
+    // Then
+    expect(result).toBe(true);
   });
 
   it.each([
@@ -83,25 +88,51 @@ describe("conflicts", () => {
     ],
     ["別の距離の更新の後の削除", distanceUpdated(), distanceDisabled("d-2")],
   ])("衝突しない: %s", (_name, previous, next) => {
-    expect(conflicts(previous, next)).toBe(false);
+    // Given
+    // When
+    const result = conflicts(previous, next);
+
+    // Then
+    expect(result).toBe(false);
   });
 });
 
 describe("laneOf", () => {
   it("矢の記録と取り消しは、距離ごとに別のlane、それ以外は直列のlaneにする", () => {
-    expect(laneOf(shotRecorded({ distanceId: "d-1" }))).toBe("record:d-1");
-    expect(laneOf(shotCleared({ distanceId: "d-1" }))).toBe("clear:d-1");
-    expect(laneOf(shotRecorded({ distanceId: "d-2" }))).toBe("record:d-2");
-    expect(laneOf(roundUpdated())).toBe(SERIAL_LANE);
-    expect(laneOf(distanceCreated())).toBe(SERIAL_LANE);
-    expect(laneOf(roundCreated())).toBe(SERIAL_LANE);
+    // Given
+    const operations = [
+      shotRecorded({ distanceId: "d-1" }),
+      shotCleared({ distanceId: "d-1" }),
+      shotRecorded({ distanceId: "d-2" }),
+      roundUpdated(),
+      distanceCreated(),
+      roundCreated(),
+    ];
+
+    // When
+    const lanes = operations.map(laneOf);
+
+    // Then
+    expect(lanes).toEqual([
+      "record:d-1",
+      "clear:d-1",
+      "record:d-2",
+      SERIAL_LANE,
+      SERIAL_LANE,
+      SERIAL_LANE,
+    ]);
   });
 });
 
 describe("batchLimitOf", () => {
   it("矢のlaneは100件、直列のlaneは1件にする", () => {
-    expect(batchLimitOf("record:d-1")).toBe(100);
-    expect(batchLimitOf("clear:d-1")).toBe(100);
-    expect(batchLimitOf(SERIAL_LANE)).toBe(1);
+    // Given
+    const lanes = ["record:d-1", "clear:d-1", SERIAL_LANE];
+
+    // When
+    const limits = lanes.map(batchLimitOf);
+
+    // Then
+    expect(limits).toEqual([100, 100, 1]);
   });
 });

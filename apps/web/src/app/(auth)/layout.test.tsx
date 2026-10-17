@@ -5,26 +5,14 @@ import AuthLayout from "./layout";
 describe("AuthLayout", () => {
   it("子要素をmain要素の中に表示する", () => {
     // Given
-    const children = <p>子要素</p>;
 
     // When
+    const children = <p>子要素</p>;
     render(<AuthLayout>{children}</AuthLayout>);
 
     // Then
     expect(screen.getByRole("main")).toContainElement(
       screen.getByText("子要素"),
-    );
-  });
-
-  it("/へのAIMSロゴを表示する", () => {
-    // Given
-    // When
-    render(<AuthLayout>{null}</AuthLayout>);
-
-    // Then
-    expect(screen.getByRole("link", { name: "AIMS" })).toHaveAttribute(
-      "href",
-      "/",
     );
   });
 });

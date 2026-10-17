@@ -44,14 +44,18 @@ const tables: RoundTables = {
 
 describe("roundTablesFromServer", () => {
   it("取得した行を、全て削除済みでない行にする", () => {
-    expect(
-      roundTablesFromServer({
-        status: "in_progress",
-        roundConfig: config,
-        distances: [distance("d-1", "a")],
-        shots: [shot("d-1", 1)],
-      }),
-    ).toEqual({
+    // Given
+
+    // When
+    const result = roundTablesFromServer({
+      status: "in_progress",
+      roundConfig: config,
+      distances: [distance("d-1", "a")],
+      shots: [shot("d-1", 1)],
+    });
+
+    // Then
+    expect(result).toEqual({
       round: { config, status: "in_progress", disabled: false },
       distances: [{ ...distance("d-1", "a"), disabled: false }],
       shots: [{ ...shot("d-1", 1), disabled: false }],
@@ -61,20 +65,30 @@ describe("roundTablesFromServer", () => {
 
 describe("roundTablesFromServer: 状態", () => {
   it("取得した完了の状態を、そのままラウンドの状態にする", () => {
-    expect(
-      roundTablesFromServer({
-        status: "completed",
-        roundConfig: config,
-        distances: [],
-        shots: [],
-      }).round.status,
-    ).toBe("completed");
+    // Given
+
+    // When
+    const result = roundTablesFromServer({
+      status: "completed",
+      roundConfig: config,
+      distances: [],
+      shots: [],
+    });
+
+    // Then
+    expect(result.round.status).toBe("completed");
   });
 });
 
 describe("selectRoundState", () => {
   it("削除済みの距離、取り消した矢、削除した距離の矢を除き、disabledの列を落とす", () => {
-    expect(selectRoundState(tables)).toEqual({
+    // Given
+
+    // When
+    const state = selectRoundState(tables);
+
+    // Then
+    expect(state).toEqual({
       status: "in_progress",
       roundConfig: config,
       distances: [distance("d-1", "a")],
@@ -84,20 +98,28 @@ describe("selectRoundState", () => {
   });
 
   it("ラウンドの状態を、statusで表す", () => {
-    expect(
-      selectRoundState({
-        ...tables,
-        round: { config, status: "completed", disabled: false },
-      }).status,
-    ).toBe("completed");
+    // Given
+
+    // When
+    const state = selectRoundState({
+      ...tables,
+      round: { config, status: "completed", disabled: false },
+    });
+
+    // Then
+    expect(state.status).toBe("completed");
   });
 
   it("削除済みのラウンドは、roundDisabledで表す", () => {
-    expect(
-      selectRoundState({
-        ...tables,
-        round: { config, status: "in_progress", disabled: true },
-      }).roundDisabled,
-    ).toBe(true);
+    // Given
+
+    // When
+    const state = selectRoundState({
+      ...tables,
+      round: { config, status: "in_progress", disabled: true },
+    });
+
+    // Then
+    expect(state.roundDisabled).toBe(true);
   });
 });

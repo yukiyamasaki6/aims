@@ -8,7 +8,9 @@ import {
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
+import { expectRoundBasesFetched } from "../helpers/reference-data";
 import { createRound } from "../helpers/rounds";
+import { comeBackOnline, goOffline } from "../helpers/service-worker";
 
 // 認証に依存しない/を使い、Service Workerが有効になるまで待つ。
 async function openWithServiceWorker(page: Page) {
@@ -77,67 +79,6 @@ const FRAME_PATHS = [
   "/__shell/rounds/new",
   "/__shell/rounds/_",
 ];
-
-test("offline-pwa-01: 初回アクセスのとき、/を開くと、Service Workerが登録され、静的アセットと画面の枠がプリキャッシュされる", async ({
-  page,
-}) => {
-  // Given: 初回アクセス（Service Workerが未登録）
-  // When: /を開く
-  await openWithServiceWorker(page);
-
-  // Then: Service Workerが登録され、静的アセットと画面の枠がプリキャッシュされる
-  const registered = await page.evaluate(async () => {
-    const registration = await navigator.serviceWorker.ready;
-    return registration.active?.state;
-  });
-  expect(registered).toBe("activated");
-  const urls = await precachedUrls(page);
-  expect(urls.some((url) => url.includes("/_next/static/"))).toBe(true);
-  expect(urls.some((url) => url.includes("/offline"))).toBe(true);
-  for (const frame of FRAME_PATHS) {
-    expect(
-      urls.some((url) => url.includes(`${frame}?__WB_REVISION__=`)),
-      `${frame}がプリキャッシュにあること`,
-    ).toBe(true);
-  }
-});
-
-test("offline-pwa-02: Manifestを満たしているとき、/を開くと、ブラウザからアプリとしてインストールできる", async ({
-  page,
-  context,
-}) => {
-  // Given: Manifestを満たしている
-  // When: /を開く
-  await page.goto("/");
-
-  // Then: ブラウザがアプリとして認識し、インストールできない理由を報告しない
-  // ブラウザのインストール操作そのものは自動化できないため、
-  // Chromiumがアプリとして認識するか（インストール可否の判定結果）で確かめる。
-  const session = await context.newCDPSession(page);
-  const manifest = await session.send("Page.getAppManifest");
-  expect(manifest.url).toMatch(/\/manifest\.webmanifest$/);
-  const { installabilityErrors } = await session.send(
-    "Page.getInstallabilityErrors",
-  );
-  expect(installabilityErrors).toEqual([]);
-});
-
-test("offline-pwa-17: 未認証のとき、/を開くと、iOSのホーム画面に追加するアイコンの画像が取得できる", async ({
-  page,
-}) => {
-  // Given: 未認証
-  // When: /を開く
-  await page.goto("/");
-
-  // Then: apple-touch-iconのlinkが指す画像がPNGとして取得できる
-  const href = await page
-    .locator('link[rel="apple-touch-icon"]')
-    .getAttribute("href");
-  expect(href, "apple-touch-iconのlinkがあること").not.toBeNull();
-  const response = await page.request.get(href as string);
-  expect(response.status()).toBe(200);
-  expect(response.headers()["content-type"]).toBe("image/png");
-});
 
 // 新しいビルドのService Workerが、プリキャッシュ対象の枠をこの目印付きで保存する。
 // 遷移先が新しいビルドの枠で表示されたかを、読み込んだ文書の本文で確かめるため。
@@ -319,7 +260,7 @@ async function watchOldFrameShown(context: BrowserContext) {
   }, 'meta[name="e2e-build"]');
 }
 
-// 以降に描かれる旧ビルドの枠の記録を始める。操作(When)の直前に呼ぶ。
+// 以降に描かれる旧ビルドの枠の記録を始める。リンクを押す直前に呼ぶ。
 async function startWatchingOldFrame(page: Page) {
   await page.evaluate(() => {
     sessionStorage.removeItem("e2eOldFrameShown");
@@ -338,32 +279,6 @@ async function oldFrameShown(page: Page) {
     () => sessionStorage.getItem("e2eOldFrameShown") === "1",
   );
 }
-
-// 画面のフレームを連続して取得し、背景だけの空白のフレームがあったかを返す。
-// 空白のフレームは、画像が一様で圧縮後のサイズが小さくなることで判定する。
-async function recordFrames(page: Page, context: BrowserContext) {
-  const session = await context.newCDPSession(page);
-  const sizes: number[] = [];
-  session.on("Page.screencastFrame", (frame) => {
-    sizes.push(frame.data.length);
-    void session
-      .send("Page.screencastFrameAck", { sessionId: frame.sessionId })
-      .catch(() => {});
-  });
-  await session.send("Page.startScreencast", {
-    format: "png",
-    everyNthFrame: 1,
-  });
-  return {
-    stop: async () => {
-      await session.send("Page.stopScreencast").catch(() => {});
-      return sizes;
-    },
-  };
-}
-
-// 空白とみなす、PNG(base64)の大きさの上限。内容のある画面は、これより大きい。
-const BLANK_FRAME_MAX_LENGTH = 6_000;
 
 // 新しいビルドの版が待機していても、SKIP_WAITINGを無視する(切り替えが進まない状況)。
 // 送られた回数をsessionStorageに数える。
@@ -391,256 +306,6 @@ async function skipWaitingCount(page: Page) {
   );
 }
 
-test.describe("認証済みでService Workerの更新", () => {
-  test.use({ storageState: SHARED_AUTH_STATE_PATH });
-
-  test("offline-pwa-18: Service Workerが登録済みで新しいビルドが存在するとき、Service Workerの更新を確認すると、新しいService Workerが待機し、表示中の画面は旧ビルドのまま動く", async ({
-    page,
-    context,
-  }) => {
-    // Given: Service Workerが登録済みで、新しいビルドのService Workerが存在する
-    await openRounds(page);
-    await routeNewBuild(page, context);
-    await markDocument(page);
-
-    // When: Service Workerの更新を確認する
-    await publishNewBuild(page);
-
-    // Then: 新しいService Workerが待機し、旧ビルドが有効で制御したまま、画面は再読み込みされない
-    expect(await workerState(page)).toEqual({
-      waiting: true,
-      activeNew: false,
-      controlledNew: false,
-    });
-    await page.waitForTimeout(2_000);
-    expect((await workerState(page)).activeNew).toBe(false);
-    expect(await isSameDocument(page)).toBe(true);
-    await expect(
-      page.getByRole("heading", { name: "ラウンド一覧" }),
-    ).toBeVisible();
-  });
-
-  test("offline-pwa-20: Service Workerが登録済みで、画面を開いた後に新しいビルドが公開されたとき、他の画面へ遷移すると、新しいService Workerが待機する", async ({
-    page,
-    context,
-  }) => {
-    // Given: Service Workerが登録済みで、画面を開いた後に新しいビルドが公開された
-    // Playwrightは同じURLの更新確認の取得を差し替えられないため、遷移で呼ばれるupdate()を
-    // 新しいビルドの登録に置き換えて、公開を模す。
-    await context.addInitScript((newSwUrl) => {
-      ServiceWorkerRegistration.prototype.update = () => {
-        sessionStorage.setItem("e2eNewBuild", "1");
-        return navigator.serviceWorker.register(newSwUrl);
-      };
-    }, NEW_SW_URL);
-    await openRounds(page);
-    await routeNewBuild(page, context);
-    await markDocument(page);
-    await waitForQuietPage(page);
-
-    // When: 他の画面へ遷移する
-    await transitionByLink(page);
-    await expect(page).toHaveURL(/\/rounds\/new$/);
-
-    // Then: 新しいService Workerが待機する(遷移の時点では切り替えない)
-    await expect.poll(async () => (await workerState(page)).waiting).toBe(true);
-    expect((await workerState(page)).activeNew).toBe(false);
-    expect(await isSameDocument(page)).toBe(true);
-  });
-
-  test("offline-pwa-03: Service Workerが登録済みで新しいビルドのService Workerが待機しているとき、リンクを押して他の画面へ遷移すると、遷移先が新しいビルドで表示される", async ({
-    page,
-    context,
-  }) => {
-    // Given: Service Workerが登録済みで、新しいビルドのService Workerが待機している
-    await openRounds(page);
-    const oldRevision = await routeNewBuild(page, context);
-    const shownNewBuild = trackDocuments(page);
-    await publishNewBuild(page);
-
-    // When: リンクを押して他の画面へ遷移する
-    await transitionUntilSwitched(page);
-
-    // Then: 遷移先が新しいビルドで表示される(新しい枠で読み込み直される)
-    await expect(page).toHaveURL(/\/rounds(\/new)?$/);
-    await expect.poll(shownNewBuild, { timeout: 15_000 }).toBe(true);
-    // 読み込み直した文書の登録の確認が、同じ模擬のURLの版を再び待機させることがあるため、待機の有無は問わない。
-    await expect
-      .poll(
-        async () => {
-          const { activeNew, controlledNew } = await workerState(page);
-          return { activeNew, controlledNew };
-        },
-        { timeout: 10_000 },
-      )
-      .toEqual({ activeNew: true, controlledNew: true });
-    // 旧リビジョンの削除は有効化の後に非同期で行われるため、待って確かめる。
-    await expect
-      .poll(async () => {
-        const urls = await precachedUrls(page);
-        return {
-          hasNew: urls.some((url) => url.endsWith(`=${NEW_REVISION}`)),
-          hasOld: urls.some((url) => url.endsWith(`=${oldRevision}`)),
-        };
-      })
-      .toEqual({ hasNew: true, hasOld: false });
-  });
-
-  test("offline-pwa-19: Service Workerが登録済みで認証済みでオフラインで、新しいビルドのService Workerが待機しているとき、リンクを押して他の画面へ遷移すると、遷移先が新しいビルドの枠で表示される", async ({
-    page,
-    context,
-  }) => {
-    // Given: Service Workerが登録済みで認証済みでオフラインで、新しいビルドのService Workerが待機している
-    await openRounds(page);
-    await routeNewBuild(page, context);
-    const shownNewBuild = trackDocuments(page);
-    await publishNewBuild(page);
-    await context.unroute(`**${NEW_SW_URL}`);
-    await goOffline(context);
-
-    // When: リンクを押して他の画面へ遷移する
-    await transitionUntilSwitched(page);
-
-    // Then: 遷移先が新しいビルドの枠で表示される
-    await expect.poll(shownNewBuild, { timeout: 15_000 }).toBe(true);
-    await expect(page).toHaveURL(/\/rounds(\/new)?$/);
-    await expect(
-      page.getByText("ネットワークに接続されていません"),
-    ).toBeVisible();
-  });
-
-  test("offline-pwa-21: 新しいビルドのService Workerが待機しているとき、リンクを押して他の画面へ遷移すると、旧ビルドの枠が表示されず、新しいビルドの枠が表示される", async ({
-    page,
-    context,
-  }) => {
-    // Given: 新しいビルドのService Workerが待機している
-    await watchOldFrameShown(context);
-    await openRounds(page);
-    await routeNewBuild(page, context);
-    const shownNewBuild = trackDocuments(page);
-    await publishNewBuild(page);
-    await startWatchingOldFrame(page);
-    const frames = await recordFrames(page, context);
-
-    // When: リンクを押して他の画面へ遷移する
-    await transitionByLink(page);
-
-    // Then: 旧ビルドの枠は描かれず、空白のフレームも無く、新しいビルドの枠が表示される
-    await expect.poll(shownNewBuild, { timeout: 15_000 }).toBe(true);
-    await expect(page.locator('meta[name="e2e-build"]')).toHaveCount(1);
-    await expect(page.getByTestId("round-start-button")).toBeVisible();
-    const sizes = await frames.stop();
-    expect(sizes.length).toBeGreaterThan(0);
-    expect(Math.min(...sizes)).toBeGreaterThan(BLANK_FRAME_MAX_LENGTH);
-    expect(await oldFrameShown(page)).toBe(false);
-    expect(
-      (await workerState(page)).activeNew,
-      "新しいService Workerが有効であること",
-    ).toBe(true);
-  });
-
-  test("offline-pwa-22: 新しいビルドのService Workerが待機していて切り替えが進まないとき、リンクを押して他の画面へ遷移すると、旧ビルドの枠が表示され、操作できる", async ({
-    page,
-    context,
-  }) => {
-    // Given: 新しいビルドのService Workerが待機していて、切り替えが進まない
-    await swallowSkipWaiting(context);
-    await openRounds(page);
-    await routeNewBuild(page, context);
-    await publishNewBuild(page);
-    const frames = await recordFrames(page, context);
-
-    // When: リンクを押して他の画面へ遷移する
-    await transitionByLink(page);
-
-    // Then: 旧ビルドの枠が表示され、空白のフレームが無く、操作でき、その遷移では合図を1回しか送らない
-    await expect(page).toHaveURL(/\/rounds\/new$/, { timeout: 10_000 });
-    await expect(page.getByTestId("round-start-button")).toBeVisible();
-    await expect(page.locator('meta[name="e2e-build"]')).toHaveCount(0);
-    const sizes = await frames.stop();
-    expect(Math.min(...sizes)).toBeGreaterThan(BLANK_FRAME_MAX_LENGTH);
-    expect(await skipWaitingCount(page)).toBe(1);
-    expect((await workerState(page)).waiting).toBe(true);
-
-    // 次の遷移では通常どおり判定し、再び合図を送る(その遷移を止めて1秒保留する)
-    await page.goBack();
-    await expect(page).toHaveURL(/\/rounds$/);
-    await page.getByTestId("new-round-fab").click();
-    await expect(page).toHaveURL(/\/rounds\/new$/, { timeout: 10_000 });
-    expect(await skipWaitingCount(page)).toBe(2);
-  });
-});
-
-test("offline-pwa-04: Service Workerが登録済みでオフラインのとき、/を開くと、/offlineページが表示される", async ({
-  page,
-  context,
-}) => {
-  // Given: Service Workerが登録済みで、オフライン
-  // /はプリキャッシュ対象外のため、
-  // ナビゲーションの失敗を認証に依存しない静的な/offlineで受け止める。
-  await openWithServiceWorker(page);
-  await context.setOffline(true);
-
-  // When: /を開く
-  await page.goto("/");
-
-  // Then: /offlineページが表示される
-  await expect(
-    page.getByRole("heading", { name: "オフラインです" }),
-  ).toBeVisible();
-  await expect(
-    page.getByText(
-      "インターネットに接続されていません。接続を確認してから、もう一度お試しください。",
-    ),
-  ).toBeVisible();
-});
-
-// アプリの起動そのものは自動化できないため、Manifestのstart_urlを読み、
-// 起動時に開かれるURLをそのまま開くことで確かめる（offline-pwa-02と同じ方針）。
-async function openStartUrl(page: Page, context: BrowserContext) {
-  await page.goto("/");
-  const session = await context.newCDPSession(page);
-  const manifest = await session.send("Page.getAppManifest");
-  expect(manifest.data, "manifestの本文を取得できること").toBeDefined();
-  const { start_url } = JSON.parse(manifest.data as string) as {
-    start_url?: string;
-  };
-  expect(start_url, "manifestにstart_urlがあること").toBeDefined();
-  await page.goto(new URL(start_url as string, manifest.url).toString());
-}
-
-test.describe("認証済み", () => {
-  test.use({ storageState: SHARED_AUTH_STATE_PATH });
-
-  test("offline-pwa-05: 認証済みのとき、manifestのstart_urlを開くと、ラウンド一覧が表示される", async ({
-    page,
-    context,
-  }) => {
-    // Given: 認証済み
-    // When: manifestのstart_urlを開く
-    await openStartUrl(page, context);
-
-    // Then: ラウンド一覧が表示される
-    await expect(page).toHaveURL(/\/rounds$/);
-    await waitForHydration(page);
-    await expect(
-      page.getByRole("heading", { name: "ラウンド一覧" }),
-    ).toBeVisible();
-  });
-});
-
-test("offline-pwa-06: 未認証のとき、manifestのstart_urlを開くと、/signinへ遷移する", async ({
-  page,
-  context,
-}) => {
-  // Given: 未認証
-  // When: manifestのstart_urlを開く
-  await openStartUrl(page, context);
-
-  // Then: /signinへ遷移する
-  await expect(page).toHaveURL(/\/signin$/);
-});
-
 // ハイドレーション不一致(#418)などのページエラーを集める。本番ビルドで動くため、
 // 枠のHTMLとクライアントの初回描画のずれはここで現れる。
 function collectHydrationErrors(page: Page): string[] {
@@ -655,169 +320,57 @@ function collectHydrationErrors(page: Page): string[] {
   return errors;
 }
 
-// CDPのオフライン化とPlaywrightのsetOfflineのエミュレーションでは、オフラインのまま開いた文書の
-// navigator.onLineがtrueのままになる(OSの回線断の実機ではない)。OSの回線断のようにonLine=falseで
-// 文書が開く状態を再現するため、通信の遮断に加えてonLineをfalseにし、復帰ではonLineをtrueに戻してonlineイベントを発火する。
-// init scriptはcontext全体に残るため、goOnline後に開く新規文書はonLine=falseに戻る(復帰後に遷移するテストでは注意)。
-async function goOffline(context: BrowserContext) {
-  await context.addInitScript(() => {
-    const w = window as unknown as { e2eOffline: boolean };
-    w.e2eOffline = true;
-    Object.defineProperty(navigator, "onLine", {
-      configurable: true,
-      get: () => !w.e2eOffline,
-    });
-  });
-  await context.setOffline(true);
-}
-
-async function goOnline(context: BrowserContext, page: Page) {
-  await context.setOffline(false);
-  await page.evaluate(() => {
-    (window as unknown as { e2eOffline: boolean }).e2eOffline = false;
-    window.dispatchEvent(new Event("online"));
-  });
-}
-
 // ビルド時に存在しないIDとして、ランダムなUUIDを使う(任意IDの枠を共有する証明)。
 function unknownRoundPath(): string {
   return `/rounds/${randomUUID()}`;
 }
 
-test.describe("認証済みでService Workerが登録済み", () => {
-  test.use({ storageState: SHARED_AUTH_STATE_PATH });
-
-  test("offline-pwa-07: Service Workerが登録済みで認証済みのとき、/rounds/[id]を開くと、ラウンド詳細の枠が表示された後、内容が表示される", async ({
-    page,
-    context,
-  }) => {
-    // Given: Service Workerが登録済みで認証済み。内容の取得を保留できるようにする。
-    const roundId = await createRound({
-      email: getSharedEmail(),
-      password: SHARED_PASSWORD,
-      name: "枠の確認",
-      roundDate: "2026-08-24",
-      distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
-    });
-    const errors = collectHydrationErrors(page);
-    await openWithServiceWorker(page);
-    let release: () => void = () => {};
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    await context.route("**/rest/v1/rounds?*", async (route) => {
-      await gate;
-      await route.continue();
-    });
-
-    // When: /rounds/[id]を開く
-    const response = await page.goto(`/rounds/${roundId}`, {
-      waitUntil: "commit",
-    });
-
-    // Then: 枠(Service Worker由来)が表示され、取得中が先に出てから内容が表示される
-    expect(response?.fromServiceWorker()).toBe(true);
-    await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
-    await expect(page.getByRole("status")).toBeVisible();
-    await expect(page.getByTestId("round-config-summary")).toHaveCount(0);
-    release();
-    await expect(page.getByTestId("round-config-summary")).toBeVisible();
-    expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
-  });
-
-  test.describe("オフライン", () => {
-    test("offline-pwa-09: Service Workerが登録済みで認証済みでオフラインで、プリセットを端末に保存していないとき、/rounds/newを開くと、ラウンド開始の枠と「ネットワークに接続されていません」が表示される", async ({
-      page,
-      context,
-    }) => {
-      // Given: Service Workerが登録済みで認証済みでオフラインで、プリセットを端末に保存していない
-      const errors = collectHydrationErrors(page);
-      await openWithServiceWorker(page);
-      await goOffline(context);
-
-      // When: /rounds/newを開く
-      const response = await page.goto("/rounds/new");
-
-      // Then: ラウンド開始の枠と「ネットワークに接続されていません」が表示される
-      expect(response?.fromServiceWorker()).toBe(true);
-      await expect(
-        page.getByRole("heading", { name: "ラウンドを作成" }),
-      ).toBeVisible();
-      await expect(
-        page.getByText("ネットワークに接続されていません"),
-      ).toBeVisible();
-      expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
-    });
-
-    test("offline-pwa-10: Service Workerが登録済みで認証済みでオフラインで、端末がオフラインで開けるベースを持たないラウンドのとき、/rounds/[id]を開くと、ラウンド詳細の枠と「ネットワークに接続されていません」が表示される", async ({
-      page,
-      context,
-    }) => {
-      // Given: Service Workerが登録済みで認証済みでオフラインで、端末がオフラインで開けるベースを持たない(ビルド時に存在しないID)
-      const errors = collectHydrationErrors(page);
-      await openWithServiceWorker(page);
-      await goOffline(context);
-
-      // When: /rounds/[id]を開く
-      const response = await page.goto(unknownRoundPath());
-
-      // Then: ラウンド詳細の枠と「ネットワークに接続されていません」が表示される
-      expect(response?.fromServiceWorker()).toBe(true);
-      await expect(
-        page.getByRole("link", { name: "一覧へ戻る" }),
-      ).toBeVisible();
-      await expect(
-        page.getByText("ネットワークに接続されていません"),
-      ).toBeVisible();
-      expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
-    });
-  });
-});
-
-test("offline-pwa-08: Service Workerが登録済みで認証済みでオフラインで、入力中のラウンドが無いとき、/roundsを開くと、ラウンド一覧の枠と「ネットワークに接続されていません」が表示される、「まだラウンドがありません。」は表示されない、入力中と「過去履歴」の見出しは表示されない", async ({
+test("紹介画面を開くと、ブラウザがアプリとしてインストールでき、iOSのホーム画面に追加するアイコンの画像が取得できる", async ({
   page,
   context,
 }) => {
-  // Given: 入力中のラウンドが端末に入らないよう、使い捨てのユーザーでサインインし、オフラインにする
+  await page.goto("/");
+
+  // ブラウザのインストール操作そのものは自動化できないため、
+  // Chromiumがアプリとして認識するか（インストール可否の判定結果）で確かめる。
+  const session = await context.newCDPSession(page);
+  const manifest = await session.send("Page.getAppManifest");
+  expect(manifest.url).toMatch(/\/manifest\.webmanifest$/);
+  const { installabilityErrors } = await session.send(
+    "Page.getInstallabilityErrors",
+  );
+  expect(installabilityErrors).toEqual([]);
+  const href = await page
+    .locator('link[rel="apple-touch-icon"]')
+    .getAttribute("href");
+  expect(href, "apple-touch-iconのlinkがあること").not.toBeNull();
+  const response = await page.request.get(href as string);
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toBe("image/png");
+});
+
+test("未認証で紹介画面を開くと画面の枠が保存され、サインインした後にオフラインでラウンド一覧を開くと、サインイン画面ではなく一覧の枠と「ネットワークに接続されていません」が表示され、オンラインに戻ると一覧の内容が表示される", async ({
+  page,
+  context,
+}) => {
+  // 未認証で紹介画面を開き、Service Workerが静的アセットと/offlineと画面の枠を保存したことを確かめる。
   const errors = collectHydrationErrors(page);
   await openWithServiceWorker(page);
-  await signUpAndSignIn(page, {
-    email: `e2e-offline-pwa-08-${Date.now()}-${randomUUID().slice(0, 8)}@example.com`,
-    password: "password-e2e-offline-pwa-08",
+  const registered = await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.ready;
+    return registration.active?.state;
   });
-  await goOffline(context);
-
-  // When: /roundsを開く
-  const response = await page.goto("/rounds");
-
-  // Then: ラウンド一覧の枠と「ネットワークに接続されていません」が表示される
-  expect(response?.fromServiceWorker()).toBe(true);
-  await expect(
-    page.getByRole("heading", { name: "ラウンド一覧" }),
-  ).toBeVisible();
-  await expect(page.getByTestId("new-round-fab")).toBeVisible();
-  await expect(
-    page.getByText("ネットワークに接続されていません"),
-  ).toBeVisible();
-  await expect(page.getByText("まだラウンドがありません。")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "入力中" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "過去履歴" })).toHaveCount(0);
-  expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
-});
-
-test("offline-pwa-11: 未認証でService Workerが登録された後にサインインしてオフラインのとき、/roundsを開くと、ラウンド一覧の枠と「ネットワークに接続されていません」が表示される(サインイン画面は表示されない)", async ({
-  page,
-  context,
-}) => {
-  // Given: 未認証でService Workerを登録し、その後にサインインしてオフラインにする
-  await openWithServiceWorker(page);
+  expect(registered).toBe("activated");
   const urls = await precachedUrls(page);
+  expect(urls.some((url) => url.includes("/_next/static/"))).toBe(true);
+  expect(urls.some((url) => url.includes("/offline"))).toBe(true);
   for (const frame of FRAME_PATHS) {
     expect(
       urls.some((url) => url.includes(`${frame}?__WB_REVISION__=`)),
-      `未認証の登録でも${frame}がプリキャッシュされること`,
+      `${frame}がプリキャッシュにあること`,
     ).toBe(true);
   }
+
   // 保存された枠の本文に、サインイン画面にだけある入力欄がないこと(/signinのHTMLが枠として保存されていないこと)。
   const frameBodies = await page.evaluate(async (frames) => {
     const name = (await caches.keys()).find((n) =>
@@ -847,109 +400,177 @@ test("offline-pwa-11: 未認証でService Workerが登録された後にサイ�
   expect(frameBodies["/__shell/rounds"], "一覧の枠の本文").toContain(
     "ラウンド一覧",
   );
+
+  // 入力中のラウンドが端末に無い使い捨てのユーザーでサインインし、ラウンド一覧へ進む。
   await signUpAndSignIn(page, {
-    email: `e2e-offline-pwa-11-${Date.now()}-${randomUUID().slice(0, 8)}@example.com`,
-    password: "password-e2e-offline-pwa-11",
+    email: `e2e-offline-list-${Date.now()}-${randomUUID().slice(0, 8)}@example.com`,
+    password: "password-e2e-offline-list",
   });
+
+  // オフラインでラウンド一覧を開き、Service Workerが返した一覧の枠と「ネットワークに接続されていません」が表示され、サインイン画面とラウンドの無い表示が出ないことを確かめる。
   await goOffline(context);
-
-  // When: /roundsを開く
   const response = await page.goto("/rounds");
-
-  // Then: ラウンド一覧の枠と「ネットワークに接続されていません」が表示され、サインイン画面は表示されない
   expect(response?.fromServiceWorker()).toBe(true);
+  await expect(page).toHaveURL(/\/rounds$/);
   await expect(
     page.getByRole("heading", { name: "ラウンド一覧" }),
   ).toBeVisible();
+  await expect(page.getByTestId("new-round-fab")).toBeVisible();
   await expect(
     page.getByText("ネットワークに接続されていません"),
   ).toBeVisible();
   await expect(page.getByPlaceholder("you@example.com")).toHaveCount(0);
   await expect(page.getByPlaceholder("パスワード")).toHaveCount(0);
-  await expect(page).toHaveURL(/\/rounds$/);
+  await expect(page.getByText("まだラウンドがありません。")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "入力中" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "過去履歴" })).toHaveCount(0);
+  expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
+
+  // オンラインに戻り、一覧の内容(ラウンドが無い表示)が表示されることを確かめる。
+  await comeBackOnline(context, page);
+  await expect(page.getByText("まだラウンドがありません。")).toBeVisible();
+  await expect(page.getByText("ネットワークに接続されていません")).toHaveCount(
+    0,
+  );
 });
 
-test.describe("オフラインの枠からのオンライン復帰", () => {
+test("Service Workerが登録済みでオフラインのとき、紹介画面を開くと、オフラインのページが表示される", async ({
+  page,
+  context,
+}) => {
+  // /はプリキャッシュ対象外のため、
+  // ナビゲーションの失敗を認証に依存しない静的な/offlineで受け止める。
+  await openWithServiceWorker(page);
+  await context.setOffline(true);
+
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("heading", { name: "オフラインです" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "インターネットに接続されていません。接続を確認してから、もう一度お試しください。",
+    ),
+  ).toBeVisible();
+});
+
+test("オフラインのページでAIMSロゴを押すと、紹介画面へ移動する", async ({
+  page,
+}) => {
+  // ロゴのリンクは通信の有無によらず同じため、オンラインで/offlineを直接開いて押す。
+  // オフラインで紹介画面を開いて表示したページはURLが/のままで、押しても遷移先のURLを確かめられないため。
+  await page.goto("/offline");
+
+  await page.getByRole("link", { name: "AIMS" }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "AIMS" })).toBeVisible();
+});
+
+test("Service Workerが登録済みで未認証のとき、ラウンドの詳細を開くと、Service Workerが返した枠からサインイン画面へ移動する", async ({
+  page,
+}) => {
+  await openWithServiceWorker(page);
+
+  const response = await page.goto(unknownRoundPath());
+
+  expect(response?.fromServiceWorker()).toBe(true);
+  await expect(page).toHaveURL(/\/signin(\?|$)/);
+});
+
+test.describe("認証済みで開く", () => {
   test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
-  test("offline-pwa-14: Service Workerが登録済みで認証済みでオフラインの/roundsの枠に「ネットワークに接続されていません」が表示されているとき、オンラインへ復帰すると、ラウンド一覧の内容が表示される、「ネットワークに接続されていません」が表示されなくなる", async ({
+  test("ラウンドの詳細を開くと、Service Workerが返した枠に読み込み中が表示された後に、ラウンドの内容が表示される", async ({
     page,
     context,
   }) => {
-    // Given: オフラインの/roundsの枠に「ネットワークに接続されていません」が表示されている
     const roundId = await createRound({
       email: getSharedEmail(),
       password: SHARED_PASSWORD,
-      name: "復帰の確認一覧",
+      name: "枠の確認",
       roundDate: "2026-08-24",
-      distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
     });
+    const errors = collectHydrationErrors(page);
     await openWithServiceWorker(page);
-    await goOffline(context);
-    await page.goto("/rounds");
-    await expect(
-      page.getByText("ネットワークに接続されていません"),
-    ).toBeVisible();
+    // 枠が内容より先に表示されることを確かめるため、ラウンドの取得を保留する。
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await context.route("**/rest/v1/rounds?*", async (route) => {
+      await gate;
+      await route.continue();
+    });
 
-    // When: オンラインへ復帰する
-    await goOnline(context, page);
+    const response = await page.goto(`/rounds/${roundId}`, {
+      waitUntil: "commit",
+    });
 
-    // Then: ラウンド一覧の内容が表示され、「ネットワークに接続されていません」が表示されなくなる
-    await expect(page.locator(`a[href="/rounds/${roundId}"]`)).toBeVisible();
-    await expect(
-      page.getByText("ネットワークに接続されていません"),
-    ).toHaveCount(0);
+    expect(response?.fromServiceWorker()).toBe(true);
+    await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
+    await expect(page.getByRole("status")).toBeVisible();
+    await expect(page.getByTestId("round-config-summary")).toHaveCount(0);
+    release();
+    await expect(page.getByTestId("round-config-summary")).toBeVisible();
+    expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
   });
 
-  test("offline-pwa-15: Service Workerが登録済みで認証済みで、プリセットを端末に保存していないオフラインの/rounds/newの枠に「ネットワークに接続されていません」が表示されているとき、オンラインへ復帰すると、プリセット一覧が表示される、「ネットワークに接続されていません」が表示されなくなる", async ({
+  test("プリセットを端末に保存していないとき、オフラインでラウンドの作成を開くと、枠と「ネットワークに接続されていません」が表示され、オンラインに戻るとプリセット一覧が表示される", async ({
     page,
     context,
   }) => {
-    // Given: プリセットを端末に保存していないオフラインの/rounds/newの枠に「ネットワークに接続されていません」が表示されている
+    // オフラインでラウンドの作成を開き、Service Workerが返した枠と「ネットワークに接続されていません」を確かめる。
+    const errors = collectHydrationErrors(page);
     await openWithServiceWorker(page);
     await goOffline(context);
-    await page.goto("/rounds/new");
+    const response = await page.goto("/rounds/new");
+    expect(response?.fromServiceWorker()).toBe(true);
+    await expect(
+      page.getByRole("heading", { name: "ラウンドを作成" }),
+    ).toBeVisible();
     await expect(
       page.getByText("ネットワークに接続されていません"),
     ).toBeVisible();
+    expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
 
-    // When: オンラインへ復帰する
-    await goOnline(context, page);
-
-    // Then: プリセット一覧が表示され、「ネットワークに接続されていません」が表示されなくなる
+    // オンラインに戻り、プリセット一覧が表示されることを確かめる。
+    await comeBackOnline(context, page);
     await expect(page.getByTestId("round-preset-button").first()).toBeVisible();
     await expect(
       page.getByText("ネットワークに接続されていません"),
     ).toHaveCount(0);
   });
 
-  test("offline-pwa-16: Service Workerが登録済みで認証済みでオフラインで、端末がオフラインで開けるベースを持たないラウンドの/rounds/[id]の枠に「ネットワークに接続されていません」が表示されているとき、オンラインへ復帰すると、ラウンド詳細の内容が表示される、「ネットワークに接続されていません」が表示されなくなる", async ({
+  test("端末にオフラインで開ける内容がないラウンドを、オフラインで開くと、詳細の枠と「ネットワークに接続されていません」が表示され、オンラインに戻るとラウンドの内容が表示される", async ({
     page,
     context,
   }) => {
-    // Given: 端末が最後に取得した後に作られ、オフラインで開けるベースを持たないラウンドの、オフラインの/rounds/[id]の枠に「ネットワークに接続されていません」が表示されている
+    // 端末が最後に取得した後に作ったラウンドを、オフラインで開き、Service Workerが返した詳細の枠と「ネットワークに接続されていません」を確かめる。
+    const errors = collectHydrationErrors(page);
     await openWithServiceWorker(page);
-    await expect(page.getByTestId("round-base-refresher")).not.toHaveAttribute(
-      "data-refreshed-count",
-      "0",
-    );
+    // 作るラウンドが端末の一括の取得に入らないよう、最初の一括の取得が済んでから作る。
+    await expectRoundBasesFetched(page);
     const roundId = await createRound({
       email: getSharedEmail(),
       password: SHARED_PASSWORD,
       name: "復帰の確認詳細",
       roundDate: "2026-08-24",
-      distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 2 }],
+      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
     });
     await goOffline(context);
-    await page.goto(`/rounds/${roundId}`);
+    const response = await page.goto(`/rounds/${roundId}`);
+    expect(response?.fromServiceWorker()).toBe(true);
+    await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
     await expect(
       page.getByText("ネットワークに接続されていません"),
     ).toBeVisible();
+    expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
 
-    // When: オンラインへ復帰する
-    await goOnline(context, page);
-
-    // Then: ラウンド詳細の内容が表示され、「ネットワークに接続されていません」が表示されなくなる
+    // オンラインに戻り、ラウンドの内容が表示されることを確かめる。
+    await comeBackOnline(context, page);
     await expect(page.getByTestId("round-config-summary")).toBeVisible();
     await expect(
       page.getByText("ネットワークに接続されていません"),
@@ -957,71 +578,105 @@ test.describe("オフラインの枠からのオンライン復帰", () => {
   });
 });
 
-test("offline-pwa-12: Service Workerが登録済みで未認証のとき、/rounds/[id]を開くと、/signinへ遷移する", async ({
-  page,
-}) => {
-  // Given: Service Workerが登録済みで未認証
-  await openWithServiceWorker(page);
-
-  // When: /rounds/[id]を開く
-  const response = await page.goto(unknownRoundPath());
-
-  // Then: 枠から/signinへ遷移する
-  expect(response?.fromServiceWorker()).toBe(true);
-  await expect(page).toHaveURL(/\/signin(\?|$)/);
-});
-
-test.describe("セッションが期限切れ", () => {
+test.describe("新しいビルドへの更新", () => {
   test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
-  test("offline-pwa-13: Service Workerが登録済みでセッションが期限切れのとき、/roundsを開くと、/signinへ遷移する", async ({
+  test("新しいビルドが公開されると、新しいService Workerが待機して表示中の画面は読み込み直されず、リンクを押して他の画面へ移ると、旧ビルドの枠を挟まずに新しいビルドの枠で表示される", async ({
     page,
     context,
   }) => {
-    // Given: Service Workerが登録済みで、セッションCookieのリフレッシュトークンが無効で期限切れ
-    await openWithServiceWorker(page);
-    const cookies = (await context.cookies()).filter((cookie) =>
-      /^sb-.*-auth-token(\.\d+)?$/.test(cookie.name),
-    );
-    expect(cookies.length, "セッションCookieがあること").toBeGreaterThan(0);
-    cookies.sort((a, b) =>
-      a.name.localeCompare(b.name, "en", { numeric: true }),
-    );
-    const chunked = cookies.length > 1 || /\.\d+$/.test(cookies[0].name);
-    const baseName = cookies[0].name.replace(/\.\d+$/, "");
-    const raw = cookies.map((cookie) => cookie.value).join("");
-    const prefix = "base64-";
-    const json = raw.startsWith(prefix)
-      ? Buffer.from(raw.slice(prefix.length), "base64url").toString("utf-8")
-      : decodeURIComponent(raw);
-    const session = JSON.parse(json);
-    session.expires_at = Math.floor(Date.now() / 1000) - 3600;
-    session.refresh_token = "invalid-refresh-token";
-    const encoded = raw.startsWith(prefix)
-      ? prefix + Buffer.from(JSON.stringify(session)).toString("base64url")
-      : encodeURIComponent(JSON.stringify(session));
-    const template = cookies[0];
-    const rewritten: typeof cookies = [];
-    if (chunked) {
-      const size = 3180;
-      for (let i = 0, n = 0; i < encoded.length; i += size, n++) {
-        rewritten.push({
-          ...template,
-          name: `${baseName}.${n}`,
-          value: encoded.slice(i, i + size),
-        });
-      }
-    } else {
-      rewritten.push({ ...template, name: baseName, value: encoded });
-    }
-    await context.clearCookies({ name: /^sb-.*-auth-token/ });
-    await context.addCookies(rewritten);
+    await watchOldFrameShown(context);
+    await openRounds(page);
+    const oldRevision = await routeNewBuild(page, context);
+    const shownNewBuild = trackDocuments(page);
+    await markDocument(page);
+    await publishNewBuild(page);
+    expect(await workerState(page)).toEqual({
+      waiting: true,
+      activeNew: false,
+      controlledNew: false,
+    });
+    // 待機した版がひとりでに有効にならないことを確かめるため、時間を置く。
+    await page.waitForTimeout(2_000);
+    expect((await workerState(page)).activeNew).toBe(false);
+    expect(await isSameDocument(page)).toBe(true);
+    await expect(
+      page.getByRole("heading", { name: "ラウンド一覧" }),
+    ).toBeVisible();
 
-    // When: /roundsを開く
-    const response = await page.goto("/rounds");
+    // リンクを押してラウンド作成画面へ移り、旧ビルドの枠を挟まずに新しいビルドの枠で表示されることを確かめる。
+    await startWatchingOldFrame(page);
+    await transitionByLink(page);
+    await expect.poll(shownNewBuild, { timeout: 15_000 }).toBe(true);
+    await expect(page.locator('meta[name="e2e-build"]')).toHaveCount(1);
+    await expect(page.getByTestId("round-start-button")).toBeVisible();
+    expect(await oldFrameShown(page)).toBe(false);
+    // 読み込み直した文書の登録の確認が、同じ模擬のURLの版を再び待機させることがあるため、待機の有無は問わない。
+    await expect
+      .poll(
+        async () => {
+          const { activeNew, controlledNew } = await workerState(page);
+          return { activeNew, controlledNew };
+        },
+        { timeout: 10_000 },
+      )
+      .toEqual({ activeNew: true, controlledNew: true });
+    // 旧リビジョンの削除は有効化の後に非同期で行われるため、待って確かめる。
+    await expect
+      .poll(async () => {
+        const urls = await precachedUrls(page);
+        return {
+          hasNew: urls.some((url) => url.endsWith(`=${NEW_REVISION}`)),
+          hasOld: urls.some((url) => url.endsWith(`=${oldRevision}`)),
+        };
+      })
+      .toEqual({ hasNew: true, hasOld: false });
+  });
 
-    // Then: 枠(Service Worker由来)から/signinへ遷移する
-    expect(response?.fromServiceWorker()).toBe(true);
-    await expect(page).toHaveURL(/\/signin$/);
+  test("オフラインのとき、新しいService Workerが待機している状態でリンクを押して他の画面へ移ると、新しいビルドの枠で表示される", async ({
+    page,
+    context,
+  }) => {
+    await openRounds(page);
+    await routeNewBuild(page, context);
+    const shownNewBuild = trackDocuments(page);
+    await publishNewBuild(page);
+
+    // オフラインにしてリンクを押し、移った先の画面が新しいビルドの枠で表示されることを確かめる。
+    await context.unroute(`**${NEW_SW_URL}`);
+    await goOffline(context);
+    await transitionUntilSwitched(page);
+    await expect.poll(shownNewBuild, { timeout: 15_000 }).toBe(true);
+    await expect(page).toHaveURL(/\/rounds(\/new)?$/);
+    await expect(
+      page.getByText("ネットワークに接続されていません"),
+    ).toBeVisible();
+  });
+
+  test("新しいService Workerへの切り替えが進まないとき、リンクを押して他の画面へ移ると、旧ビルドの枠で表示されて操作でき、次にリンクを押したときに改めて切り替えを試みる", async ({
+    page,
+    context,
+  }) => {
+    await swallowSkipWaiting(context);
+    await openRounds(page);
+    await routeNewBuild(page, context);
+    await publishNewBuild(page);
+
+    // リンクを押してラウンド作成画面へ移り、旧ビルドの枠で表示されて操作でき、切り替えの合図が1回だけ送られたことを確かめる。
+    await transitionByLink(page);
+    await expect(page).toHaveURL(/\/rounds\/new$/, { timeout: 10_000 });
+    await expect(page.getByTestId("round-start-button")).toBeVisible();
+    await expect(page.locator('meta[name="e2e-build"]')).toHaveCount(0);
+    expect(await skipWaitingCount(page)).toBe(1);
+    expect((await workerState(page)).waiting).toBe(true);
+
+    // ブラウザの戻るで、ラウンド一覧へ戻る。
+    await page.goBack();
+    await expect(page).toHaveURL(/\/rounds$/);
+
+    // もう一度リンクを押してラウンド作成画面へ移り、その移動で再び切り替えの合図が送られることを確かめる。
+    await transitionByLink(page);
+    await expect(page).toHaveURL(/\/rounds\/new$/, { timeout: 10_000 });
+    expect(await skipWaitingCount(page)).toBe(2);
   });
 });

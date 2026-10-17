@@ -14,7 +14,8 @@ function timeOf(id: string): number {
 describe("shotIdAfter", () => {
   describe("形式", () => {
     it("乱数によらず、版7・変種10の小文字36文字のUUIDにする", () => {
-      // Given: 全ビット0と全ビット1の乱数
+      // Given
+
       // When
       const ids = [ZEROS, ONES].map((random) => shotIdAfter([], NOW, random));
 
@@ -27,7 +28,9 @@ describe("shotIdAfter", () => {
 
   describe("先頭48ビット", () => {
     it("エンドに矢が無いときは時計の値にする", () => {
-      // Given / When
+      // Given
+
+      // When
       const id = shotIdAfter([], NOW, ZEROS);
 
       // Then
@@ -35,10 +38,10 @@ describe("shotIdAfter", () => {
     });
 
     it("既にある矢がどれも時計より前なら時計の値にする", () => {
-      // Given: 時計の1ミリ秒前に作った矢
-      const earlier = shotIdAfter([], NOW - 1, ONES);
+      // Given
 
       // When
+      const earlier = shotIdAfter([], NOW - 1, ONES);
       const id = shotIdAfter([earlier], NOW, ZEROS);
 
       // Then
@@ -53,7 +56,9 @@ describe("shotIdAfter", () => {
       ],
       ["時刻順でない無作為のID", "ffffffff-fff0-4fff-bfff-ffffffffffff"],
     ])("%sより、文字列の比較で大きくする", (_name, existing) => {
-      // Given / When
+      // Given
+
+      // When
       const id = shotIdAfter(
         ["01990000-0000-7000-8000-000000000000", existing],
         NOW,
@@ -66,10 +71,10 @@ describe("shotIdAfter", () => {
     });
 
     it("同じ時計の値で続けて作っても、直前のIDより大きくする", () => {
-      // Given: 同じミリ秒に、大きい乱数で作った直前の矢
-      const first = shotIdAfter([], NOW, ONES);
+      // Given
 
-      // When: 小さい乱数で次の矢を作る
+      // When
+      const first = shotIdAfter([], NOW, ONES);
       const second = shotIdAfter([first], NOW, ZEROS);
       const third = shotIdAfter([first, second], NOW, ZEROS);
 
@@ -79,7 +84,9 @@ describe("shotIdAfter", () => {
     });
 
     it("UUIDの形でないIDは数えない", () => {
-      // Given / When
+      // Given
+
+      // When
       const id = shotIdAfter(["s-9", "ffffffff"], NOW, ZEROS);
 
       // Then
@@ -87,11 +94,11 @@ describe("shotIdAfter", () => {
     });
 
     it("最大+1が48ビットを超えるときは時計の値にし、最大の1つ前は+1にする", () => {
-      // Given: 先頭48ビットが最大値のIDと、その1つ前のID
-      const atMax = "ffffffff-ffff-4fff-bfff-ffffffffffff";
-      const belowMax = "ffffffff-fffe-4fff-bfff-ffffffffffff";
+      // Given
 
       // When
+      const atMax = "ffffffff-ffff-4fff-bfff-ffffffffffff";
+      const belowMax = "ffffffff-fffe-4fff-bfff-ffffffffffff";
       const afterMax = shotIdAfter([atMax], NOW, ZEROS);
       const afterBelowMax = shotIdAfter([belowMax], NOW, ZEROS);
 
@@ -104,10 +111,10 @@ describe("shotIdAfter", () => {
 
 describe("newShotId", () => {
   it("端末の時計と乱数で、既にある矢より大きい版7のUUIDを作る", () => {
-    // Given: 先頭の大きい既存の矢
-    const existing = "ffffffff-fff0-4fff-bfff-ffffffffffff";
+    // Given
 
     // When
+    const existing = "ffffffff-fff0-4fff-bfff-ffffffffffff";
     const id = newShotId([existing]);
 
     // Then

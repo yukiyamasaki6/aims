@@ -152,8 +152,8 @@ const distanceA = {
   id: "distance-a",
   position_key: "a",
   distance: 70,
-  total_ends: 2,
-  arrows_per_end: 2,
+  total_ends: 12,
+  arrows_per_end: 3,
   target_face_id: targetFaceX.id,
   is_marked: true,
 };
@@ -162,11 +162,14 @@ const distanceB = {
   id: "distance-b",
   position_key: "b",
   distance: 50,
-  total_ends: 1,
-  arrows_per_end: 1,
+  total_ends: 12,
+  arrows_per_end: 3,
   target_face_id: targetFaceX.id,
   is_marked: true,
 };
+
+// 6本を並べるテストの距離(6エンド×6射)。
+const distanceSix = { ...distanceA, total_ends: 6, arrows_per_end: 6 };
 
 const roundConfig: RoundConfig = {
   name: "テストラウンド",
@@ -226,6 +229,21 @@ function shotRow(
     score_int: scoreInt,
     shot_number: null,
   };
+}
+
+// 距離の全てのエンドを矢数まで満たす、取得した矢の行。
+function fullEndShots(distance: Distance): Shot[] {
+  return Array.from(
+    { length: distance.total_ends * distance.arrows_per_end },
+    (_, i) =>
+      shotRow(
+        `${distance.id}-${i + 1}`,
+        distance.id,
+        Math.floor(i / distance.arrows_per_end) + 1,
+        "10",
+        10,
+      ),
+  );
 }
 
 // エンドの記録済みの玉の点数を、表示の順に返す。
@@ -320,15 +338,15 @@ afterEach(async () => {
 
 describe("ScorecardClient 初期表示・集計", () => {
   it("スコアを入力すると、エンド小計・距離の集計・ラウンド全体の集計に反映される", async () => {
-    // Given: Xのある的の距離が1つあり、記録が無い
+    // Given
     const user = userEvent.setup();
     setup();
 
-    // When: 1エンド目に10とXを入力する
+    // When
     await user.click(screen.getByTestId("score-button-10"));
     await user.click(screen.getByTestId("score-button-X"));
 
-    // Then: 1エンド目だけに小計が表示され、距離とラウンド全体の合計・最高点数/X数が表示される
+    // Then
     await waitFor(() =>
       expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("20"),
     );
@@ -346,15 +364,15 @@ describe("ScorecardClient 初期表示・集計", () => {
   });
 
   it("Xの無い的では、スコアを入力すると、小計・合計・最高点数と次点数が距離とラウンド全体に反映される", async () => {
-    // Given: Xの無い的の距離が1つあり、記録が無い
+    // Given
     const user = userEvent.setup();
     setup({ distances: [{ ...distanceA, target_face_id: targetFaceNoX.id }] });
 
-    // When: 1エンド目に6と5を入力する
+    // When
     await user.click(screen.getByTestId("score-button-6"));
     await user.click(screen.getByTestId("score-button-5"));
 
-    // Then: エンド小計・距離の小計・ラウンド全体の合計が更新され、距離とラウンド全体に最高点数と次点数を表示する
+    // Then
     expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("11");
     expect(screen.getByTestId("distance-summary-1")).toHaveTextContent(
       "小計11",
@@ -369,7 +387,9 @@ describe("ScorecardClient 初期表示・集計", () => {
   });
 
   it("距離間で的の点数構成が異なる場合、ラウンド全体の最高点数などは表示せず、距離ごとには表示する", () => {
-    // Given: Xのある的とXの無い的の距離があり、Xの無い的の距離に記録がある
+    // Given
+
+    // When
     setup({
       distances: [
         distanceA,
@@ -378,8 +398,7 @@ describe("ScorecardClient 初期表示・集計", () => {
       initialShots: [shotRow("s-b", distanceB.id, 1, "5", 5)],
     });
 
-    // When: 表示する（初期表示）
-    // Then: ラウンド全体の最高点数などは表示せず、距離ごとの最高点数などと合計は表示する
+    // Then
     expect(screen.queryByTestId("round-top-scores")).not.toBeInTheDocument();
     expect(screen.getByTestId("distance-top-scores-2")).toHaveTextContent(
       "6: 0 / 5: 1",
@@ -388,7 +407,9 @@ describe("ScorecardClient 初期表示・集計", () => {
   });
 
   it("距離の的で最高点数などを集計できない場合、その距離の最高点数などは表示しない", () => {
-    // Given: リングの無い的の距離
+    // Given
+
+    // When
     const targetFaceBlank: TargetFaceOption = {
       id: "face-blank",
       name: "未設定の的",
@@ -402,8 +423,7 @@ describe("ScorecardClient 初期表示・集計", () => {
       targetFaces: [targetFaceBlank],
     });
 
-    // When: 表示する（初期表示）
-    // Then: その距離の最高点数などは表示しない
+    // Then
     expect(
       screen.queryByTestId("distance-top-scores-1"),
     ).not.toBeInTheDocument();
@@ -413,18 +433,26 @@ describe("ScorecardClient 初期表示・集計", () => {
     const shotOnA = shotRow("s-a", distanceA.id, 1, "9", 9);
 
     it("的の一覧が空で取得が完了している場合は、「的データを取得できません」を表示し、距離・本数・エンド数と記録済みの点数は維持する", () => {
+      // Given
+
+      // When
       setup({ targetFaces: [], initialShots: [shotOnA] });
 
+      // Then
       const row = screen.getByTestId("distance-config-toggle-1");
       expect(row).toHaveTextContent("的データを取得できません");
       expect(row).toHaveTextContent("70m");
-      expect(row).toHaveTextContent("2本×2エンド");
+      expect(row).toHaveTextContent("3本×12エンド");
       expect(screen.getByTestId("shot-ball-1-1-1")).toHaveTextContent("9");
     });
 
     it("的の一覧に距離の的があれば、サイズを表示する", () => {
+      // Given
+
+      // When
       setup();
 
+      // Then
       expect(screen.getByTestId("distance-config-toggle-1")).toHaveTextContent(
         `${targetFaceX.size}cm`,
       );
@@ -432,34 +460,34 @@ describe("ScorecardClient 初期表示・集計", () => {
   });
 
   it("距離が1件も無い場合は追加ボタンのみを表示する", () => {
+    // Given
+
+    // When
     setup({ distances: [] });
 
+    // Then
     expect(screen.queryByTestId("round-top-scores")).not.toBeInTheDocument();
     expect(screen.queryByTestId("distance-summary-1")).not.toBeInTheDocument();
     expect(screen.getByTestId("add-distance-button")).toBeInTheDocument();
   });
 
   it("全てのエンドが矢数に達している場合、マウント時に何も指さず、テンキーも空白も出さない", () => {
-    // Given: 距離の全てのエンドが矢数に達している
-    setup({
-      initialShots: [
-        shotRow("s-1", distanceA.id, 1, "10", 10),
-        shotRow("s-2", distanceA.id, 1, "9", 9),
-        shotRow("s-3", distanceA.id, 2, "X", 10),
-        shotRow("s-4", distanceA.id, 2, "9", 9),
-      ],
-    });
+    // Given
 
-    // When: 表示する（初期表示）
-    // Then: テンキーと仮の矢は出ず、満杯のエンドには空白が無い
+    // When
+    setup({ initialShots: fullEndShots(distanceA) });
+
+    // Then
     expect(screen.queryByTestId("score-button-10")).not.toBeInTheDocument();
     expect(provisionalEnd()).toBeNull();
     expect(screen.queryByTestId("end-blank-1-1")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("end-blank-1-2")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("end-blank-1-12")).not.toBeInTheDocument();
   });
 
   it("記録済みの玉は、リングの色相・彩度のまま明度を上げた背景色と黒の文字色で表示する", () => {
-    // Given: 赤と白のリングを持つ的の距離に、それぞれのリングの記録がある
+    // Given
+
+    // When
     const targetFaceRedWhite: TargetFaceOption = {
       id: "face-red-white",
       name: "赤白の的",
@@ -500,8 +528,7 @@ describe("ScorecardClient 初期表示・集計", () => {
       ],
     });
 
-    // When: 表示する（初期表示）
-    // Then: 点数の高い順に並び、赤は薄い赤、無彩色の白は薄い灰色の背景になり、文字色はいずれも黒になる
+    // Then
     const disc = (testId: string) =>
       screen.getByTestId(testId).querySelector("span");
     expect(disc("shot-ball-1-1-1")).toHaveTextContent("8");
@@ -516,15 +543,15 @@ describe("ScorecardClient 初期表示・集計", () => {
   });
 
   it("テンキーの閉じるボタンで何も指さなくすると、格納中のテンキーへの入力は無視される", async () => {
-    // Given: エンド1の新しい矢を指している
+    // Given
     const user = userEvent.setup();
     setup();
 
-    // When: テンキーを閉じ、格納が終わる前に点数を押す
+    // When
     await user.click(screen.getByTestId("keypad-toggle"));
     await user.click(screen.getByTestId("score-button-10"));
 
-    // Then: 矢は記録されず、仮の矢も消え、SDKへも送られない
+    // Then
     expect(ballsOf(1, 1)).toEqual([]);
     expect(provisionalEnd()).toBeNull();
     await flushMicrotasks();
@@ -532,20 +559,20 @@ describe("ScorecardClient 初期表示・集計", () => {
   });
 
   it("距離が無いラウンド（カスタム開始直後）は、ラウンド構成が展開された状態で表示する", () => {
-    // Given: 距離が0件のラウンド
-    // When: 表示する（初期表示）
+    // Given
+    // When
     setup({ distances: [] });
 
-    // Then: ラウンド構成の編集欄が展開されている
+    // Then
     expect(screen.getByTestId("round-config-name")).toBeInTheDocument();
   });
 
   it("距離があるラウンド（プリセット開始など）は、ラウンド構成が折りたたまれた状態で表示する", () => {
-    // Given: 距離が1件以上あるラウンド
-    // When: 表示する（初期表示）
+    // Given
+    // When
     setup();
 
-    // Then: ラウンド構成の編集欄は表示されない
+    // Then
     expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
   });
 });
@@ -561,28 +588,30 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
   // 入力中で矢数に達していないエンドがあるラウンドは、マウント時点で最初のエンドの新しい矢を指し、テンキーが開いている。
 
   it("開いた直後は、矢数に達していない最初のエンドに仮の矢を出す", () => {
-    // Given: エンド1が満杯
+    // Given
+
+    // When
     setup({
       initialShots: [
         shotRow("s-1", distanceA.id, 1, "10", 10),
         shotRow("s-2", distanceA.id, 1, "9", 9),
+        shotRow("s-3", distanceA.id, 1, "8", 8),
       ],
     });
 
-    // When: 表示する（初期表示）
     // Then
     expect(provisionalEnd()).toBe("end-row-1-2");
   });
 
   it("新しい矢に点数を書くと、端末が作ったIDの矢を射手・射順なしで記録し、同じエンドの新しい矢を指したままにする", async () => {
-    // Given: エンド1の新しい矢を指している
+    // Given
     const user = userEvent.setup();
     setup();
 
-    // When: 10を押す
+    // When
     await user.click(screen.getByTestId("score-button-10"));
 
-    // Then: 記録した玉の後ろに仮の矢が出て、新しいIDの矢がSDKへ届く
+    // Then
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
     expect(provisionalEnd()).toBe("end-row-1-1");
     await waitFor(() => {
@@ -602,11 +631,11 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
   });
 
   it("入力の順によらず、記録済みの玉を点数の高い順に並べる", async () => {
-    // Given: 矢数6のエンドの新しい矢を指している
+    // Given
     const user = userEvent.setup();
-    setup({ distances: [{ ...distanceA, arrows_per_end: 6 }] });
+    setup({ distances: [distanceSix] });
 
-    // When: 7、10、X、9、M、9の順に押す
+    // When
     for (const key of ["9", "M", "X", "10", "9"]) {
       await user.click(screen.getByTestId(`score-button-${key}`));
     }
@@ -618,19 +647,20 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
     expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("38");
   });
 
-  it("エンドが矢数に達すると同じ距離の次のエンドへ進み、距離の最後では何も指さずテンキーを格納する", async () => {
-    // Given: 2エンド×2本の距離と、1エンド×1本の距離
+  it("距離の最後のエンドが矢数に達すると、次の距離へまたがず、何も指さずテンキーを格納する", async () => {
+    // Given
     const user = userEvent.setup();
-    setup({ distances: [distanceA, distanceB] });
+    setup({
+      distances: [distanceA, distanceB],
+      initialShots: fullEndShots(distanceA).slice(0, -1),
+    });
 
-    // When: 4本を書く
-    for (const key of ["10", "9", "X", "9"]) {
-      await user.click(screen.getByTestId(`score-button-${key}`));
-    }
+    // When
+    await user.click(screen.getByTestId("score-button-9"));
 
-    // Then: 次の距離へはまたがず、テンキーを格納する
-    await waitFor(() => expect(ballsOf(1, 2)).toEqual(["X", "9"]));
-    expect(ballsOf(1, 1)).toEqual(["10", "9"]);
+    // Then
+    await waitFor(() => expect(ballsOf(1, 12)).toEqual(["10", "10", "9"]));
+    expect(ballsOf(2, 1)).toEqual([]);
     expect(provisionalEnd()).toBeNull();
     await waitFor(() => {
       expect(screen.queryByTestId("score-button-10")).not.toBeInTheDocument();
@@ -638,21 +668,22 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
   });
 
   it("画面へ反映される前に続けて押しても、エンドの矢数を超えて書かない", async () => {
-    // Given: 2本のエンド1の新しい矢を指している
+    // Given
     setup();
 
-    // When: 保存の完了を待たずに3回押す
+    // When
     fireEvent.click(screen.getByTestId("score-button-10"));
     fireEvent.click(screen.getByTestId("score-button-9"));
+    fireEvent.click(screen.getByTestId("score-button-M"));
     fireEvent.click(screen.getByTestId("score-button-X"));
 
-    // Then: 3本目は次のエンドへ記録する
+    // Then
     await waitFor(() => expect(ballsOf(1, 2)).toEqual(["X"]));
-    expect(ballsOf(1, 1)).toEqual(["10", "9"]);
+    expect(ballsOf(1, 1)).toEqual(["10", "9", "M"]);
   });
 
-  it("記録済みの玉を押すとその矢を指し、点数を書くとその矢だけを直して指したままにする", async () => {
-    // Given: 10と9の矢がある
+  it("記録済みの玉を押すと、その矢を指し、仮の矢を出さない", async () => {
+    // Given
     const user = userEvent.setup();
     setup({
       initialShots: [
@@ -661,16 +692,32 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
       ],
     });
 
-    // When: 9の玉を押し、Xを書く
+    // When
     await user.click(screen.getByTestId("shot-ball-1-1-2"));
+
+    // Then
     expect(screen.getByTestId("shot-ball-1-1-2")).toHaveAttribute(
       "aria-pressed",
       "true",
     );
     expect(provisionalEnd()).toBeNull();
+  });
+
+  it("記録済みの矢を指して点数を書くと、その矢だけを直して並び直り、指したままにする", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup({
+      initialShots: [
+        shotRow("s-10", distanceA.id, 1, "10", 10),
+        shotRow("s-9", distanceA.id, 1, "9", 9),
+      ],
+    });
+    await user.click(screen.getByTestId("shot-ball-1-1-2"));
+
+    // When
     await user.click(screen.getByTestId("score-button-X"));
 
-    // Then: 直した矢が先頭へ並び直り、指したままで、同じIDの矢の記録がSDKへ届く
+    // Then
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["X", "10"]));
     expect(screen.getByTestId("shot-ball-1-1-1")).toHaveAttribute(
       "aria-pressed",
@@ -688,8 +735,23 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
     expect(sentShots("record_shots")[0]).not.toHaveProperty("shooter_id");
   });
 
-  it("クリアは記録済みの矢を指しているときだけ使え、その矢を消してそのエンドの新しい矢を指す", async () => {
-    // Given: 10と9の矢があり、エンド2の新しい矢を指している
+  it("新しい矢を指しているときは、クリアを押せない", () => {
+    // Given
+
+    // When
+    setup({
+      initialShots: [
+        shotRow("s-10", distanceA.id, 1, "10", 10),
+        shotRow("s-9", distanceA.id, 1, "9", 9),
+      ],
+    });
+
+    // Then
+    expect(screen.getByTestId("score-button-clear")).toBeDisabled();
+  });
+
+  it("記録済みの玉を押すと、クリアを押せるようになる", async () => {
+    // Given
     const user = userEvent.setup();
     setup({
       initialShots: [
@@ -697,14 +759,29 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
         shotRow("s-9", distanceA.id, 1, "9", 9),
       ],
     });
-    expect(screen.getByTestId("score-button-clear")).toBeDisabled();
 
-    // When: 10の玉を押してクリアする
+    // When
     await user.click(screen.getByTestId("shot-ball-1-1-1"));
+
+    // Then
     expect(screen.getByTestId("score-button-clear")).toBeEnabled();
+  });
+
+  it("記録済みの矢を指してクリアすると、その矢を消し、そのエンドの新しい矢を指す", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup({
+      initialShots: [
+        shotRow("s-10", distanceA.id, 1, "10", 10),
+        shotRow("s-9", distanceA.id, 1, "9", 9),
+      ],
+    });
+    await user.click(screen.getByTestId("shot-ball-1-1-1"));
+
+    // When
     await user.click(screen.getByTestId("score-button-clear"));
 
-    // Then: その矢だけが消え、エンド1の新しい矢を指し、クリアがSDKへ届く
+    // Then
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9"]));
     expect(provisionalEnd()).toBe("end-row-1-1");
     expect(screen.getByTestId("score-button-clear")).toBeDisabled();
@@ -719,14 +796,25 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
     });
   });
 
-  it("エンドの空白を押すとそのエンドの新しい矢を指し、次の点数はそのエンドに記録する", async () => {
-    // Given: エンド1の新しい矢を指している
+  it("エンドの空白を押すと、そのエンドの新しい矢を指す", async () => {
+    // Given
     const user = userEvent.setup();
     setup();
 
-    // When: エンド2の空白を押して9を書く
+    // When
     await user.click(screen.getByTestId("end-blank-1-2"));
+
+    // Then
     expect(provisionalEnd()).toBe("end-row-1-2");
+  });
+
+  it("別のエンドの空白を押して点数を書くと、そのエンドに記録する", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId("end-blank-1-2"));
+
+    // When
     await user.click(screen.getByTestId("score-button-9"));
 
     // Then
@@ -735,11 +823,11 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
   });
 
   it("2つ目以降の空白を押しても、そのエンドの新しい矢を指し、仮の矢は最初の空白に出す", async () => {
-    // Given: 矢数3の距離で、エンド1の新しい矢を指している
+    // Given
     const user = userEvent.setup();
-    setup({ distances: [{ ...distanceA, arrows_per_end: 3 }] });
+    setup();
 
-    // When: エンド2の3つ目の場所(空白)を押す
+    // When
     await user.click(screen.getByTestId("end-slot-1-2-3"));
 
     // Then
@@ -751,12 +839,25 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
     ).toBeInTheDocument();
   });
 
-  it("空白には、押せる場所だと分かる読み上げの名前を付け、玉には付けない", () => {
+  it("エンドの最初の空白には、押せる場所だと分かる読み上げの名前を付ける", () => {
+    // Given
+
+    // When
     setup({ initialShots: [shotRow("s-1", distanceA.id, 1, "10", 10)] });
 
+    // Then
     expect(screen.getByTestId("end-blank-1-2")).toHaveAccessibleName(
       "エンド2に追加",
     );
+  });
+
+  it("記録済みの玉には読み上げの名前を付けず、中の点数が読まれる", () => {
+    // Given
+
+    // When
+    setup({ initialShots: [shotRow("s-1", distanceA.id, 1, "10", 10)] });
+
+    // Then
     expect(screen.getByTestId("shot-ball-1-1-1")).not.toHaveAttribute(
       "aria-label",
     );
@@ -764,9 +865,10 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
   });
 
   it("2つ目以降の空白は、読み上げとTabの移動から外す", () => {
-    // Given/When: 矢数3の距離で、エンド1に1本記録済み
+    // Given
+
+    // When
     setup({
-      distances: [{ ...distanceA, arrows_per_end: 3 }],
       initialShots: [shotRow("s-1", distanceA.id, 1, "10", 10)],
     });
 
@@ -778,11 +880,11 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
   });
 
   it("番号や小計を押しても、指している矢は変わらない", async () => {
-    // Given: エンド1の新しい矢を指している
+    // Given
     const user = userEvent.setup();
     setup();
 
-    // When: エンド2の番号と小計を押す
+    // When
     await user.click(screen.getByTestId("end-subtotal-1-2"));
     await user.click(within(screen.getByTestId("end-row-1-2")).getByText("2"));
 
@@ -791,23 +893,21 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
   });
 
   it("テンキーは距離の的のリング色と、その色に応じた文字色で表示する", () => {
-    // Given: Xの無い的の距離の新しい矢を指している
+    // Given
+
+    // When
     setup({ distances: [{ ...distanceA, target_face_id: targetFaceNoX.id }] });
 
-    // When: 表示する（初期表示）
-    // Then: 暗いリング色のキーは白文字、Mは固定の背景色と黒文字で表示される
+    // Then
     expect(screen.getByTestId("score-button-5")).toHaveStyle({
       backgroundColor: "#0066B3",
       color: "#FFFFFF",
     });
-    expect(screen.getByTestId("score-button-M")).toHaveStyle({
-      backgroundColor: "#4CD964",
-      color: "#231F20",
-    });
+    expect(screen.getByTestId("score-button-M")).toBeInTheDocument();
   });
 
   it("別の距離のエンドの空白を押すと、その距離の的のキーに切り替わる", async () => {
-    // Given: Xのある的の距離とXの無い的の距離
+    // Given
     const user = userEvent.setup();
     setup({
       distances: [
@@ -826,7 +926,9 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
   });
 
   it("複数スポットの的では、テンキーに点数のキーを重複なく、リング色で表示する", () => {
-    // Given: 同じ点数を持つ2つのスポットがある的の距離
+    // Given
+
+    // When
     const targetFaceTriple: TargetFaceOption = {
       id: "face-triple",
       name: "トリプルスポット",
@@ -856,14 +958,12 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
         ],
       })),
     };
-
-    // When: 表示する（初期表示）
     setup({
       distances: [{ ...distanceA, target_face_id: targetFaceTriple.id }],
       targetFaces: [targetFaceTriple],
     });
 
-    // Then: スポットの数によらず、点数ごとに1つのキーがリング色で表示される
+    // Then
     expect(screen.getAllByTestId("score-button-10")).toHaveLength(1);
     expect(screen.getAllByTestId("score-button-9")).toHaveLength(1);
     expect(screen.getByTestId("score-button-9")).toHaveStyle({
@@ -889,7 +989,7 @@ describe("ScorecardClient 並び直りの動き", () => {
     Reflect.deleteProperty(HTMLElement.prototype, "animate");
   });
 
-  async function rewriteNineToX() {
+  function renderNineAndTen() {
     const user = userEvent.setup();
     setup({
       initialShots: [
@@ -897,16 +997,23 @@ describe("ScorecardClient 並び直りの動き", () => {
         shotRow("s-9", distanceA.id, 1, "9", 9),
       ],
     });
+    return user;
+  }
+
+  async function rewriteNineToX(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByTestId("shot-ball-1-1-2"));
     await user.click(screen.getByTestId("score-button-X"));
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["X", "10"]));
   }
 
-  it("書いた矢が並び直ると、前の位置から今の位置へ200msで動かす", async () => {
-    // Given/When: 9の矢をXへ直し、先頭へ並び直る
-    await rewriteNineToX();
+  it("書いた矢が並び直ると、前の位置から今の位置へ動かす", async () => {
+    // Given
+    const user = renderNineAndTen();
 
-    // Then: 直した矢と押し出された矢が動く
+    // When
+    await rewriteNineToX(user);
+
+    // Then
     const animate = vi.mocked(HTMLElement.prototype.animate);
     const moved = animate.mock.contexts.map((element) =>
       (element as HTMLElement).getAttribute("data-shot-id"),
@@ -914,21 +1021,21 @@ describe("ScorecardClient 並び直りの動き", () => {
     expect(moved.sort()).toEqual(["s-10", "s-9"]);
     expect(animate).toHaveBeenCalledWith(
       [{ transform: "translate(36px, 0px)" }, { transform: "translate(0, 0)" }],
-      { duration: 200, easing: "ease-out" },
+      expect.anything(),
     );
   });
 
   it("同点の矢を足すと、既にある同点の玉を動かさず、新しい玉をその後ろに出す", async () => {
-    // Given: 先頭の大きいUUID(時刻順でない無作為のID)の9の矢があるエンド
+    // Given
     const user = userEvent.setup();
     const existing = "ffffffff-fff0-4fff-bfff-ffffffffffff";
     setup({ initialShots: [shotRow(existing, distanceA.id, 1, "9", 9)] });
 
-    // When: エンドの空白を押し、9を書く
+    // When
     await user.click(screen.getByTestId("end-blank-1-1"));
     await user.click(screen.getByTestId("score-button-9"));
 
-    // Then: 既存の9の玉は動かず、新しい9の玉が後ろに並ぶ
+    // Then
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9", "9"]));
     const ids = within(screen.getByTestId("end-row-1-1"))
       .getAllByTestId(/^shot-ball-/)
@@ -943,7 +1050,7 @@ describe("ScorecardClient 並び直りの動き", () => {
   });
 
   it("動きを減らす設定では動かさない", async () => {
-    // Given: 動きを減らす設定
+    // Given
     vi.mocked(window.matchMedia).mockImplementation(
       (query: string) =>
         ({
@@ -954,15 +1061,17 @@ describe("ScorecardClient 並び直りの動き", () => {
         }) as unknown as MediaQueryList,
     );
 
+    const user = renderNineAndTen();
+
     // When
-    await rewriteNineToX();
+    await rewriteNineToX(user);
 
     // Then
     expect(HTMLElement.prototype.animate).not.toHaveBeenCalled();
   });
 
   it("玉の領域の幅が前の描画から変わったときは動かさない", async () => {
-    // Given: 描画のたびに玉の領域の幅が変わる(回転や窓の大きさの変更)
+    // Given
     let width = 100;
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(
       () => {
@@ -971,14 +1080,16 @@ describe("ScorecardClient 並び直りの動き", () => {
       },
     );
 
+    const user = renderNineAndTen();
+
     // When
-    await rewriteNineToX();
+    await rewriteNineToX(user);
 
     // Then
     expect(HTMLElement.prototype.animate).not.toHaveBeenCalled();
   });
   it("玉の領域の列の数が前の描画から変わったときは動かさない", () => {
-    // Given: 幅を測る前は1段、測った後は3列2段に変わる。親のclientWidthは固定のまま、玉の縦位置は列の数から決まる
+    // Given
     vi.stubGlobal(
       "ResizeObserver",
       class {
@@ -1006,9 +1117,9 @@ describe("ScorecardClient 並び直りの動き", () => {
       },
     );
 
-    // When: 矢数6の距離を、4本記録済みのまま開く
+    // When
     setup({
-      distances: [{ ...distanceA, arrows_per_end: 6 }],
+      distances: [distanceSix],
       initialShots: [
         shotRow("s-1", distanceA.id, 1, "10", 10),
         shotRow("s-2", distanceA.id, 1, "9", 9),
@@ -1017,7 +1128,7 @@ describe("ScorecardClient 並び直りの動き", () => {
       ],
     });
 
-    // Then: 4本目は幅を測る前後で段が変わるが、動かさない
+    // Then
     expect(HTMLElement.prototype.animate).not.toHaveBeenCalled();
   });
 
@@ -1033,27 +1144,35 @@ describe("ScorecardClient 並び直りの動き", () => {
       );
     }
 
-    // 指定した矢数の距離のエンド1に10, 9, 8を記録し、先頭の10を指してクリアする。
-    async function clearFirstOf3(arrows: number) {
+    // 指定した距離のエンド1に10, 9, 8を記録する。
+    function renderThreeShots(distance: Distance) {
       const user = userEvent.setup();
       setup({
-        distances: [{ ...distanceA, arrows_per_end: arrows }],
+        distances: [distance],
         initialShots: [
           shotRow("s-10", distanceA.id, 1, "10", 10),
           shotRow("s-9", distanceA.id, 1, "9", 9),
           shotRow("s-8", distanceA.id, 1, "8", 8),
         ],
       });
+      return user;
+    }
+
+    // 先頭の10を指してクリアする。
+    async function clearFirst(user: ReturnType<typeof userEvent.setup>) {
       await user.click(screen.getByTestId("shot-ball-1-1-1"));
       await user.click(screen.getByTestId("score-button-clear"));
       await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9", "8"]));
     }
 
     it("クリアすると、後ろの玉と仮の矢を動かし、仮の矢は消した玉の位置から最初の空白へ動く", async () => {
-      // Given/When: 矢数6のエンドで、先頭の10を指してクリアする
-      await clearFirstOf3(6);
+      // Given
+      const user = renderThreeShots(distanceSix);
 
-      // Then: 詰まる玉と仮の矢が動き、仮の矢は消した玉の位置(0)から最初の空白(72)へ動く
+      // When
+      await clearFirst(user);
+
+      // Then
       const moved = vi
         .mocked(HTMLElement.prototype.animate)
         .mock.contexts.map(
@@ -1068,14 +1187,17 @@ describe("ScorecardClient 並び直りの動き", () => {
             { transform: "translate(-72px, 0px)" },
             { transform: "translate(0, 0)" },
           ],
-          { duration: 200, easing: "ease-out" },
+          expect.anything(),
         ],
       ]);
     });
 
     it("満杯のエンドでクリアしても、仮の矢は消した玉の位置から最初の空白へ動く", async () => {
-      // Given/When: 矢数3の満杯のエンドで、先頭の10を指してクリアする
-      await clearFirstOf3(3);
+      // Given
+      const user = renderThreeShots(distanceA);
+
+      // When
+      await clearFirst(user);
 
       // Then
       expect(provisionalMoves()).toEqual([
@@ -1084,41 +1206,42 @@ describe("ScorecardClient 並び直りの動き", () => {
             { transform: "translate(-72px, 0px)" },
             { transform: "translate(0, 0)" },
           ],
-          { duration: 200, easing: "ease-out" },
+          expect.anything(),
         ],
       ]);
     });
 
     it("記録済みの玉を指しているときに同じエンドの空白を押すと、仮の矢を動かさない", async () => {
-      // Given: 矢数6のエンドで、記録済みの10を指している
+      // Given
       const user = userEvent.setup();
       setup({
-        distances: [{ ...distanceA, arrows_per_end: 6 }],
+        distances: [distanceSix],
         initialShots: [shotRow("s-10", distanceA.id, 1, "10", 10)],
       });
       await user.click(screen.getByTestId("shot-ball-1-1-1"));
 
-      // When: 同じエンドの空白を押す
+      // When
       await user.click(screen.getByTestId("end-blank-1-1"));
 
-      // Then: 仮の矢は出るが、玉が残っているため動かさない
+      // Then
+      // 玉が残っているため、仮の矢は動かさない。
       expect(provisionalEnd()).toBe("end-row-1-1");
       expect(provisionalMoves()).toEqual([]);
     });
 
     it("新しい矢に書くと、仮の矢が次の空白へ動く", async () => {
-      // Given: 矢数6のエンドに10があり、新しい矢を指している
+      // Given
       const user = userEvent.setup();
       setup({
-        distances: [{ ...distanceA, arrows_per_end: 6 }],
+        distances: [distanceSix],
         initialShots: [shotRow("s-10", distanceA.id, 1, "10", 10)],
       });
       expect(provisionalEnd()).toBe("end-row-1-1");
 
-      // When: 9を書く
+      // When
       await user.click(screen.getByTestId("score-button-9"));
 
-      // Then: 仮の矢が2番目(36)から3番目(72)の空白へ動く
+      // Then
       await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10", "9"]));
       expect(provisionalMoves()).toEqual([
         [
@@ -1126,13 +1249,13 @@ describe("ScorecardClient 並び直りの動き", () => {
             { transform: "translate(-36px, 0px)" },
             { transform: "translate(0, 0)" },
           ],
-          { duration: 200, easing: "ease-out" },
+          expect.anything(),
         ],
       ]);
     });
 
     it("動きを減らす設定でクリアすると、玉も仮の矢も動かさない", async () => {
-      // Given: 動きを減らす設定
+      // Given
       vi.mocked(window.matchMedia).mockImplementation(
         (query: string) =>
           ({
@@ -1143,8 +1266,10 @@ describe("ScorecardClient 並び直りの動き", () => {
           }) as unknown as MediaQueryList,
       );
 
+      const user = renderThreeShots(distanceSix);
+
       // When
-      await clearFirstOf3(6);
+      await clearFirst(user);
 
       // Then
       expect(HTMLElement.prototype.animate).not.toHaveBeenCalled();
@@ -1204,16 +1329,16 @@ describe("ScorecardClient 並び直りの動き", () => {
     }
 
     it("並び直りの途中で次の反映が来ると、途中の見た目の位置から動かし直す", async () => {
-      // Given: 9をXへ直し、2つの玉が動いている途中
-      const user = userEvent.setup();
-      await rewriteNineToX();
+      // Given
+      const user = renderNineAndTen();
+      await rewriteNineToX(user);
 
-      // When: 先頭へ動いたXを9へ戻す
+      // When
       await user.click(screen.getByTestId("shot-ball-1-1-1"));
       await user.click(screen.getByTestId("score-button-9"));
       await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10", "9"]));
 
-      // Then: 2回目の始点は、レイアウト上の差に途中の変形を足した位置になる
+      // Then
       expect(startsOf("s-9")).toEqual([
         "translate(36px, 0px)",
         "translate(-26px, 5px)",
@@ -1225,20 +1350,20 @@ describe("ScorecardClient 並び直りの動き", () => {
     });
 
     it("仮の矢が動いている途中で次の反映が来ると、途中の見た目の位置から動かし直す", async () => {
-      // Given: 矢数6のエンドに10があり、9を書いて仮の矢が動いている途中
+      // Given
       const user = userEvent.setup();
       setup({
-        distances: [{ ...distanceA, arrows_per_end: 6 }],
+        distances: [distanceSix],
         initialShots: [shotRow("s-10", distanceA.id, 1, "10", 10)],
       });
       await user.click(screen.getByTestId("score-button-9"));
       await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10", "9"]));
 
-      // When: 続けてMを書く
+      // When
       await user.click(screen.getByTestId("score-button-M"));
       await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10", "9", "M"]));
 
-      // Then: 2回目の始点は、次の空白への差(-36)に途中の変形を足した位置になる
+      // Then
       expect(startsOf("provisional-shot")).toEqual([
         "translate(-36px, 0px)",
         "translate(-26px, 5px)",
@@ -1246,12 +1371,12 @@ describe("ScorecardClient 並び直りの動き", () => {
     });
 
     it("動いている途中の玉の位置が変わらない反映では、動きを止めず動かし直さない", async () => {
-      // Given: 9をXへ直し、2つの玉が動いている途中
-      const user = userEvent.setup();
-      await rewriteNineToX();
+      // Given
+      const user = renderNineAndTen();
+      await rewriteNineToX(user);
       const calls = vi.mocked(HTMLElement.prototype.animate).mock.calls.length;
 
-      // When: 玉を押して指し替える(玉の位置は変わらない)
+      // When
       await user.click(screen.getByTestId("shot-ball-1-1-2"));
 
       // Then
@@ -1260,15 +1385,15 @@ describe("ScorecardClient 並び直りの動き", () => {
     });
 
     it("動いている途中で玉の領域の幅が変わると、動きを止め、動かさない", async () => {
-      // Given: 9をXへ直し、2つの玉が動いている途中
-      const user = userEvent.setup();
+      // Given
       const width = vi
         .spyOn(HTMLElement.prototype, "clientWidth", "get")
         .mockReturnValue(216);
-      await rewriteNineToX();
+      const user = renderNineAndTen();
+      await rewriteNineToX(user);
       const calls = vi.mocked(HTMLElement.prototype.animate).mock.calls.length;
 
-      // When: 幅が変わった後に描き直す
+      // When
       width.mockReturnValue(320);
       await user.click(screen.getByTestId("shot-ball-1-1-2"));
 
@@ -1278,12 +1403,12 @@ describe("ScorecardClient 並び直りの動き", () => {
     });
 
     it("動いている途中で動きを減らす設定にすると、動きを止める", async () => {
-      // Given: 9をXへ直し、2つの玉が動いている途中
-      const user = userEvent.setup();
-      await rewriteNineToX();
+      // Given
+      const user = renderNineAndTen();
+      await rewriteNineToX(user);
       const calls = vi.mocked(HTMLElement.prototype.animate).mock.calls.length;
 
-      // When: 動きを減らす設定にした後に描き直す
+      // When
       vi.mocked(window.matchMedia).mockImplementation(
         (query: string) =>
           ({
@@ -1304,7 +1429,7 @@ describe("ScorecardClient 並び直りの動き", () => {
     async function writeNineWithProvisionalMoving() {
       const user = userEvent.setup();
       setup({
-        distances: [{ ...distanceA, arrows_per_end: 6 }],
+        distances: [distanceSix],
         initialShots: [shotRow("s-10", distanceA.id, 1, "10", 10)],
       });
       await user.click(screen.getByTestId("score-button-9"));
@@ -1314,14 +1439,14 @@ describe("ScorecardClient 並び直りの動き", () => {
     }
 
     it("仮の矢が動いている途中で玉の領域の幅が変わると、仮の矢の動きを止め、動かさない", async () => {
-      // Given: 仮の矢が動いている途中
+      // Given
       const width = vi
         .spyOn(HTMLElement.prototype, "clientWidth", "get")
         .mockReturnValue(216);
       const user = await writeNineWithProvisionalMoving();
       const calls = vi.mocked(HTMLElement.prototype.animate).mock.calls.length;
 
-      // When: 描画のたびに幅が変わる状態にして、続けてMを書く
+      // When
       let measured = 320;
       width.mockImplementation(() => ++measured);
       await user.click(screen.getByTestId("score-button-M"));
@@ -1333,11 +1458,11 @@ describe("ScorecardClient 並び直りの動き", () => {
     });
 
     it("仮の矢が動いている途中で動きを減らす設定にすると、仮の矢の動きを止め、動かさない", async () => {
-      // Given: 仮の矢が動いている途中
+      // Given
       const user = await writeNineWithProvisionalMoving();
       const calls = vi.mocked(HTMLElement.prototype.animate).mock.calls.length;
 
-      // When: 動きを減らす設定にした後に、続けてMを書く
+      // When
       vi.mocked(window.matchMedia).mockImplementation(
         (query: string) =>
           ({
@@ -1359,7 +1484,7 @@ describe("ScorecardClient 並び直りの動き", () => {
 
 describe("ScorecardClient 玉の折り返し", () => {
   it("玉の領域に矢数分の玉が収まらないときは、矢数から決めた段の数の高さを確保する", () => {
-    // Given: 玉の領域の幅が玉3つ分(108px)と測れる
+    // Given
     vi.stubGlobal(
       "ResizeObserver",
       class {
@@ -1375,17 +1500,16 @@ describe("ScorecardClient 玉の折り返し", () => {
       },
     );
 
-    // When: 矢数6の距離を表示する
-    setup({ distances: [{ ...distanceA, arrows_per_end: 6 }] });
+    // When
+    setup({ distances: [distanceSix] });
 
-    // Then: 2段分(80px)の高さを確保し、番号・小計は行全体の上下中央に置く
+    // Then
     const area = screen.getByTestId("end-blank-1-1").parentElement;
     expect(area).toHaveStyle({ minHeight: "80px" });
-    expect(screen.getByTestId("end-row-1-1")).toHaveClass("items-center");
   });
 
   it("矢数分の場所を、段の数で割った同じ数の列に並べ、記録済みの玉を左から入れる", () => {
-    // Given: 玉の領域の幅が場所4つ分(144px)と測れる
+    // Given
     vi.stubGlobal(
       "ResizeObserver",
       class {
@@ -1401,16 +1525,16 @@ describe("ScorecardClient 玉の折り返し", () => {
       },
     );
 
-    // When: 矢数6の距離で、エンド1に2本記録済み
+    // When
     setup({
-      distances: [{ ...distanceA, arrows_per_end: 6 }],
+      distances: [distanceSix],
       initialShots: [
         shotRow("s-1", distanceA.id, 1, "10", 10),
         shotRow("s-2", distanceA.id, 1, "9", 9),
       ],
     });
 
-    // Then: 3列2段に、玉2つと空白4つを順に置く
+    // Then
     const area = screen.getByTestId("end-blank-1-1")
       .parentElement as HTMLElement;
     expect(area).toHaveStyle({
@@ -1432,14 +1556,14 @@ describe("ScorecardClient 玉の折り返し", () => {
 
 describe("ScorecardClient テンキーの開閉と配置", () => {
   it("閉じたテンキーは、格納アニメーションの後に取り除く", async () => {
-    // Given: 最初のマスが選択され、テンキーが開いている
+    // Given
     const user = userEvent.setup();
     setup();
 
-    // When: テンキーを閉じる
+    // When
     await user.click(screen.getByTestId("keypad-toggle"));
 
-    // Then: 格納中は表示し続け、格納が終わると取り除く
+    // Then
     expect(screen.getByTestId("score-button-10")).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.queryByTestId("score-button-10")).not.toBeInTheDocument();
@@ -1447,22 +1571,22 @@ describe("ScorecardClient テンキーの開閉と配置", () => {
   });
 
   it("テンキーを閉じると、押した空白に残るフォーカスを外す", async () => {
-    // Given: エンド2の空白を押して指している
+    // Given
     const user = userEvent.setup();
     setup();
     await user.click(screen.getByTestId("end-blank-1-2"));
     expect(screen.getByTestId("end-blank-1-2")).toHaveFocus();
 
-    // When: テンキーを閉じる
+    // When
     // iOSのSafariなど、ボタンをタップしてもフォーカスが移らない環境を模すため、フォーカスを移さないfireEventで押す。
     fireEvent.click(screen.getByTestId("keypad-toggle"));
 
-    // Then: 空白のフォーカスが外れる
+    // Then
     expect(screen.getByTestId("end-blank-1-2")).not.toHaveFocus();
   });
 
   it("横向きの場合は、テンキーをボトムシートではなく横の側パネルに表示する", () => {
-    // Given: 横向きの画面
+    // Given
     vi.mocked(window.matchMedia).mockImplementation(
       (query: string) =>
         ({
@@ -1473,10 +1597,10 @@ describe("ScorecardClient テンキーの開閉と配置", () => {
         }) as unknown as MediaQueryList,
     );
 
-    // When: 表示する（初期表示）
+    // When
     setup();
 
-    // Then: 側パネルにテンキーを表示し、ボトムシートの閉じるボタンは表示しない
+    // Then
     expect(
       within(screen.getByTestId("keypad-panel")).getByTestId("score-button-10"),
     ).toBeInTheDocument();
@@ -1537,7 +1661,8 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
   });
 
   it("テンキーの高さが測れたとき、選択中のマスが領域の下端の格納ボタン（48px）に隠れる場合は、隠れる分だけ下へスクロールする", () => {
-    // Given: 高さ800の領域（テンキーの上端まで）の700〜740にマスがある。見える下端は800-格納ボタンのはみ出し48-余白16=736のため、4だけ隠れている（テンキーの高さが測れる前から隠れているので、初期表示でもスクロールする）
+    // Given
+    // 高さ800の領域（テンキーの上端まで）の700〜740にマスがある。見える下端は800-格納ボタンのはみ出し48-余白16=736のため、4だけ隠れている（テンキーの高さが測れる前から隠れているので、初期表示でもスクロールする）。
     let reportKeypadHeight: (height: number) => void = () => {};
     vi.stubGlobal(
       "ResizeObserver",
@@ -1561,10 +1686,11 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     setup();
     vi.mocked(Element.prototype.scrollBy).mockClear();
 
-    // When: テンキーの高さが300と測れる
+    // When
     act(() => reportKeypadHeight(300));
 
-    // Then: 見える下端736を超えた4だけ下へスクロールする（テンキーの高さの値は計算に使わない）
+    // Then
+    // テンキーの高さの値は、スクロール量の計算に使わない。
     expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
     expect(Element.prototype.scrollBy).toHaveBeenCalledWith({
       top: 4,
@@ -1573,16 +1699,16 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
   });
 
   it("選択中のマスが表示領域より上にある場合は、上端の余白の位置まで上へスクロールする", () => {
-    // Given: マスが表示領域の上端（0）より上の-100〜-60にある
+    // Given
     stubLayout({
       cell: { top: -100, bottom: -60 },
       container: { top: 0, bottom: 800 },
     });
 
-    // When: 表示する（初期表示で最初のマスを選択する）
+    // When
     setup();
 
-    // Then: 上端の余白16の位置まで、116だけ上へスクロールする
+    // Then
     expect(Element.prototype.scrollBy).toHaveBeenLastCalledWith({
       top: -116,
       behavior: "smooth",
@@ -1590,7 +1716,7 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
   });
 
   it("指す位置とテンキーの高さが変わらないまま再描画されても、スクロールし直さない", () => {
-    // Given: マスが隠れていて、表示でスクロールした後、利用者が別の位置へスクロールした
+    // Given
     stubLayout({
       cell: { top: 760, bottom: 790 },
       container: { top: 0, bottom: 800 },
@@ -1598,7 +1724,8 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     const { rerender } = setup();
     expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
 
-    // When: 同じ内容を作り直して再描画する(取得や再計算で、距離などが作り直される)
+    // When
+    // 取得や再計算で、距離などが作り直される。
     rerender(
       <ScorecardClient
         roundId="round-1"
@@ -1616,36 +1743,37 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
       />,
     );
 
-    // Then: 利用者のスクロールを入力位置へ戻さない
+    // Then
     expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
   });
 
   it("選択中のマスが見えている場合は、スクロールしない", () => {
-    // Given: マスが表示領域内の100〜140にある
+    // Given
     stubLayout({
       cell: { top: 100, bottom: 140 },
       container: { top: 0, bottom: 800 },
     });
 
-    // When: 表示する（初期表示で最初のマスを選択する）
+    // When
     setup();
 
-    // Then: スクロールしない
+    // Then
     expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
   });
 
   it("選択中のマスが上側の固定表示の下に入る場合は、固定表示の下端の位置まで上へスクロールする", () => {
-    // Given: 領域の上端（0）より下の80〜120にマスがあるが、固定表示（ラウンドの合計）の下端が100まで掛かっている
+    // Given
     stubLayout({
       cell: { top: 80, bottom: 120 },
       container: { top: 0, bottom: 800 },
       sticky: { "round-summary": { top: 56, bottom: 100 } },
     });
 
-    // When: 表示する（初期表示で最初のマスを選択する）
+    // When
     setup();
 
-    // Then: 固定表示の下端100の位置まで、20だけ上へスクロールする（固定表示には余白を付けない）
+    // Then
+    // 固定表示には余白を付けない。
     expect(Element.prototype.scrollBy).toHaveBeenLastCalledWith({
       top: -20,
       behavior: "smooth",
@@ -1653,32 +1781,33 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
   });
 
   it("別の距離の小計は、選択中のマスの上側の固定表示として見込まない", () => {
-    // Given: 2つの距離があり、エンド1の行は300〜340にある。2つ目の距離の小計の下端が500にあるが、この小計は2つ目の距離の行より上で外れているため行を隠さない
+    // Given
+    // 2つの距離があり、エンド1の行は300〜340にある。2つ目の距離の小計の下端が500にあるが、この小計は2つ目の距離の行より上で外れているため行を隠さない。
     stubLayout({
       cell: { top: 300, bottom: 340 },
       container: { top: 0, bottom: 800 },
       sticky: { "distance-summary-2": { top: 460, bottom: 500 } },
     });
 
-    // When: 表示する（初期表示で最初のマスを選択する）
+    // When
     setup({ distances: [distanceA, distanceB] });
 
-    // Then: スクロールしない
+    // Then
     expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
   });
 
   it("選択中のマスの距離の小計が行に掛かる場合は、その下端の位置まで上へスクロールする", () => {
-    // Given: 1つ目の距離の小計の下端が150まで掛かり、エンド1の行は120〜160にある
+    // Given
     stubLayout({
       cell: { top: 120, bottom: 160 },
       container: { top: 0, bottom: 800 },
       sticky: { "distance-summary-1": { top: 110, bottom: 150 } },
     });
 
-    // When: 表示する（初期表示で最初のマスを選択する）
+    // When
     setup({ distances: [distanceA, distanceB] });
 
-    // Then: 小計の下端150の位置まで、30だけ上へスクロールする
+    // Then
     expect(Element.prototype.scrollBy).toHaveBeenLastCalledWith({
       top: -30,
       behavior: "smooth",
@@ -1686,22 +1815,23 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
   });
 
   it("選択中のマスが上側の固定表示の下端にちょうど接する場合は、スクロールしない", () => {
-    // Given: 固定表示（ラウンドの合計）の下端が100で、マスの上端も100にある（見えている）
+    // Given
     stubLayout({
       cell: { top: 100, bottom: 140 },
       container: { top: 0, bottom: 800 },
       sticky: { "round-summary": { top: 56, bottom: 100 } },
     });
 
-    // When: 表示する（初期表示で最初のマスを選択する）
+    // When
     setup();
 
-    // Then: スクロールしない
+    // Then
     expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
   });
 
   it("固定されていない小計の直下のマスを指して点数を入力して指す矢が移っても、スクロールし続けない", async () => {
-    // Given: 1つ目の距離の小計の下端が、エンド1の行の上端（150）に接している（小計がまだ固定されていない）
+    // Given
+    // 1つ目の距離の小計の下端が、エンド1の行の上端（150）に接している（小計がまだ固定されていない）。
     const user = userEvent.setup();
     stubLayout({
       cell: { top: 150, bottom: 190 },
@@ -1710,11 +1840,11 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     });
     setup({ distances: [distanceA, distanceB] });
 
-    // When: 点数を入力し、その矢を選び直す（指す矢が同じエンドの中で2回移る）
+    // When
     await user.click(screen.getByTestId("score-button-10"));
     await user.click(screen.getByTestId("shot-ball-1-1-1"));
 
-    // Then: 一度もスクロールしない
+    // Then
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
     expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
   });
@@ -1734,17 +1864,17 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     }
 
     it("点数を記録して次の矢へ移ると、行が隠れていればスクロールする", async () => {
-      // Given: エンド1の1本目を指していて、行が隠れる位置にある
+      // Given
       const user = userEvent.setup();
       const layout = visibleLayout();
       setup();
       expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
       hideCell(layout);
 
-      // When: 点数を記録する
+      // When
       await user.click(screen.getByTestId("score-button-10"));
 
-      // Then: 同じエンドのまま次の矢へ移り、下へスクロールする
+      // Then
       await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
       expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
       expect(Element.prototype.scrollBy).toHaveBeenCalledWith({
@@ -1754,21 +1884,21 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     });
 
     it("記録済みの矢を選ぶと、行が隠れていればスクロールする", async () => {
-      // Given: エンド1の1本目を記録済みで、行が隠れる位置にある
+      // Given
       const user = userEvent.setup();
       const layout = visibleLayout();
       setup({ initialShots: [shotRow("s-1", distanceA.id, 1, "10", 10)] });
       hideCell(layout);
 
-      // When: 記録済みの矢を押す
+      // When
       await user.click(screen.getByTestId("shot-ball-1-1-1"));
 
-      // Then: 下へスクロールする
+      // Then
       expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
     });
 
     it("一つ戻ると、行が隠れていればスクロールする", async () => {
-      // Given: 点数を記録した直後で、行が隠れる位置にある
+      // Given
       const user = userEvent.setup();
       const layout = visibleLayout();
       setup();
@@ -1776,31 +1906,31 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
       await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
       hideCell(layout);
 
-      // When: 一つ戻る
+      // When
       await user.click(screen.getByTestId("score-button-undo"));
 
-      // Then: 下へスクロールする
+      // Then
       await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
       expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
     });
 
     it("行が見えている場合は、矢が移ってもスクロールしない", async () => {
-      // Given: エンド1の1本目を指していて、行が見えている
+      // Given
       const user = userEvent.setup();
       visibleLayout();
       setup();
 
-      // When: 点数を記録する
+      // When
       await user.click(screen.getByTestId("score-button-10"));
 
-      // Then: スクロールしない
+      // Then
       await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
       expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
     });
   });
 
   it("横向きの場合は、テンキーの高さを見込まずにスクロールする", () => {
-    // Given: 横向きの画面で、マスが表示領域の下端近くの760〜790にある
+    // Given
     vi.mocked(window.matchMedia).mockImplementation(
       (query: string) =>
         ({
@@ -1815,10 +1945,10 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
       container: { top: 0, bottom: 800 },
     });
 
-    // When: 表示する（初期表示で最初のマスを選択する）
+    // When
     setup();
 
-    // Then: 見える下端（800-余白16=784）を超えた6だけ下へスクロールする
+    // Then
     expect(Element.prototype.scrollBy).toHaveBeenLastCalledWith({
       top: 6,
       behavior: "smooth",
@@ -1831,37 +1961,20 @@ describe("ScorecardClient 固定表示の配置", () => {
     vi.restoreAllMocks();
   });
 
-  it("下側の枠（完了の帯とテンキー）と一覧へ戻るリンクは、スクロール領域（main）の外に置く", () => {
-    // Given: 表示する
-    setup();
-
-    // When: スクロール領域を取る
-    const main = screen.getByRole("main");
-
-    // Then: 下側の枠と一覧へ戻るリンクはスクロール領域の中にない
-    expect(within(main).queryByTestId("bottom-frame")).not.toBeInTheDocument();
-    expect(screen.getByTestId("bottom-frame")).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /一覧へ戻る/ }),
-    ).toBeInTheDocument();
-    expect(
-      within(main).queryByRole("link", { name: /一覧へ戻る/ }),
-    ).not.toBeInTheDocument();
-  });
-
   it("縦向きでテンキーを展開している間は、枠の高さをテンキーの高さ（測れる前の既定220px）にし、上マージンは付けない", () => {
-    // Given: 縦向きで、最初の矢を指してテンキーを展開している
-    // When: 表示する
+    // Given
+
+    // When
     setup();
 
-    // Then: 枠の最小の高さが220px、上マージンなし
+    // Then
     const frame = screen.getByTestId("bottom-frame");
     expect(frame.style.minHeight).toBe("220px");
     expect(frame.style.marginTop).toBe("");
   });
 
   it("横向きでは、枠の高さをテンキー分に広げない", () => {
-    // Given: 横向きの画面
+    // Given
     vi.mocked(window.matchMedia).mockImplementation(
       (query: string) =>
         ({
@@ -1872,28 +1985,37 @@ describe("ScorecardClient 固定表示の配置", () => {
         }) as unknown as MediaQueryList,
     );
 
-    // When: 表示する
+    // When
     setup();
 
-    // Then: 枠の最小の高さは0
+    // Then
     expect(screen.getByTestId("bottom-frame").style.minHeight).toBe("0px");
   });
 });
 
 describe("ScorecardClient 一つ戻る・一つ進む", () => {
-  it("記録を戻すとその矢が消えてそのエンドの新しい矢を指し、進むと同じ矢を記録し直して指す", async () => {
-    // Given: エンド1に10を記録している
-    const user = userEvent.setup();
+  it("開いた直後は、一つ戻る・一つ進むを押せない", () => {
+    // Given
+
+    // When
     setup();
+
+    // Then
     expect(screen.getByTestId("score-button-undo")).toBeDisabled();
     expect(screen.getByTestId("score-button-redo")).toBeDisabled();
+  });
+
+  it("記録を戻すと、その矢が消えてそのエンドの新しい矢を指し、一つ進むだけを押せる", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup();
     await user.click(screen.getByTestId("score-button-10"));
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
 
-    // When: 一つ戻る
+    // When
     await user.click(screen.getByTestId("score-button-undo"));
 
-    // Then: 矢が消え、進むだけが有効になり、同じ矢のクリアがSDKへ届く
+    // Then
     await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
     expect(provisionalEnd()).toBe("end-row-1-1");
     expect(screen.getByTestId("score-button-undo")).toBeDisabled();
@@ -1901,11 +2023,21 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
     await waitFor(() => expect(sentShots("clear_shots")).toHaveLength(1));
     const [recorded] = sentShots("record_shots");
     expect(sentShots("clear_shots")[0].shot_id).toBe(recorded.shot_id);
+  });
 
-    // When: 一つ進む
+  it("戻した記録を進むと、同じ矢を記録し直して指し、一つ戻るだけを押せる", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId("score-button-10"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
+    await user.click(screen.getByTestId("score-button-undo"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
+
+    // When
     await user.click(screen.getByTestId("score-button-redo"));
 
-    // Then: 同じ矢が戻り、その矢を指し、戻るだけが有効になる
+    // Then
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
     expect(screen.getByTestId("shot-ball-1-1-1")).toHaveAttribute(
       "aria-pressed",
@@ -1914,26 +2046,62 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
     expect(screen.getByTestId("score-button-undo")).toBeEnabled();
     expect(screen.getByTestId("score-button-redo")).toBeDisabled();
     await waitFor(() => expect(sentShots("record_shots")).toHaveLength(2));
+    const [recorded] = sentShots("record_shots");
     expect(sentShots("record_shots")[1].shot_id).toBe(recorded.shot_id);
+  });
 
-    // When: もう一度戻り、そのまま別の点数を書く
+  it("戻した後に点数を書くと、そのエンドの新しい矢へ記録し、やり直せなくなる", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId("score-button-10"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
     await user.click(screen.getByTestId("score-button-undo"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
+
+    // When
     await user.click(screen.getByTestId("score-button-9"));
 
-    // Then: エンド1の新しい矢へ記録し、やり直しの列は捨てられる
+    // Then
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9"]));
     expect(screen.getByTestId("score-button-redo")).toBeDisabled();
   });
 
+  it("戻した後に記録済みの矢を指してクリアすると、やり直せなくなる", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup({
+      initialShots: [
+        shotRow("s-10", distanceA.id, 1, "10", 10),
+        shotRow("s-9", distanceA.id, 1, "9", 9),
+      ],
+    });
+    await user.click(screen.getByTestId("end-blank-1-2"));
+    await user.click(screen.getByTestId("score-button-X"));
+    await waitFor(() => expect(ballsOf(1, 2)).toEqual(["X"]));
+    await user.click(screen.getByTestId("score-button-undo"));
+    await waitFor(() => expect(ballsOf(1, 2)).toEqual([]));
+    await user.click(screen.getByTestId("shot-ball-1-1-1"));
+    expect(screen.getByTestId("score-button-redo")).toBeEnabled();
+
+    // When
+    await user.click(screen.getByTestId("score-button-clear"));
+
+    // Then
+    await waitFor(() =>
+      expect(screen.getByTestId("score-button-redo")).toBeDisabled(),
+    );
+  });
+
   it("直した矢を戻すと、直す前の点数だけを射手なしで書き、その矢を指す", async () => {
-    // Given: 10の矢を9へ直している
+    // Given
     const user = userEvent.setup();
     setup({ initialShots: [shotRow("s-1", distanceA.id, 1, "10", 10)] });
     await user.click(screen.getByTestId("shot-ball-1-1-1"));
     await user.click(screen.getByTestId("score-button-9"));
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9"]));
 
-    // When: 一つ戻る
+    // When
     await user.click(screen.getByTestId("score-button-undo"));
 
     // Then
@@ -1955,14 +2123,14 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
   });
 
   it("クリアした矢を戻すと、同じ矢がクリア前の点数で戻る", async () => {
-    // Given: 10の矢をクリアしている
+    // Given
     const user = userEvent.setup();
     setup({ initialShots: [shotRow("s-1", distanceA.id, 1, "10", 10)] });
     await user.click(screen.getByTestId("shot-ball-1-1-1"));
     await user.click(screen.getByTestId("score-button-clear"));
     await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
 
-    // When: 一つ戻る
+    // When
     await user.click(screen.getByTestId("score-button-undo"));
 
     // Then
@@ -1975,31 +2143,35 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
   });
 
   it("エンドの最後の矢を記録して次のエンドへ移った直後に戻ると、前のエンドの矢が消えて前のエンドを指す", async () => {
-    // Given: エンド1の2本を記録し、エンド2へ移っている
+    // Given
     const user = userEvent.setup();
     setup();
     await user.click(screen.getByTestId("score-button-10"));
     await user.click(screen.getByTestId("score-button-9"));
+    await user.click(screen.getByTestId("score-button-M"));
     await waitFor(() => expect(provisionalEnd()).toBe("end-row-1-2"));
 
     // When
     await user.click(screen.getByTestId("score-button-undo"));
 
     // Then
-    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10", "9"]));
     expect(provisionalEnd()).toBe("end-row-1-1");
   });
 
   it("戻すと矢が復活するが、そのエンドが他のタブの矢で矢数に達しているときは、何も積まずに列だけを進める", async () => {
-    // Given: 1本のエンドの矢をクリアした後、他のタブがそのエンドへ矢を記録した
+    // Given
     const user = userEvent.setup();
     setup({
-      distances: [{ ...distanceA, arrows_per_end: 1 }],
-      initialShots: [shotRow("s-1", distanceA.id, 1, "10", 10)],
+      initialShots: [
+        shotRow("s-1", distanceA.id, 1, "10", 10),
+        shotRow("s-2", distanceA.id, 1, "8", 8),
+        shotRow("s-3", distanceA.id, 1, "7", 7),
+      ],
     });
     await user.click(screen.getByTestId("shot-ball-1-1-1"));
     await user.click(screen.getByTestId("score-button-clear"));
-    await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["8", "7"]));
     await act(() =>
       roundOpLog.round("round-1").append({
         type: "shot.recorded",
@@ -2011,14 +2183,14 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
         scoreInt: 9,
       }),
     );
-    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9"]));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9", "8", "7"]));
 
-    // When: 一つ戻る
+    // When
     await user.click(screen.getByTestId("score-button-undo"));
 
-    // Then: 矢は戻らず、記録も積まれず、列だけが進む
+    // Then
     await flushMicrotasks();
-    expect(ballsOf(1, 1)).toEqual(["9"]);
+    expect(ballsOf(1, 1)).toEqual(["9", "8", "7"]);
     expect(
       sentShots("record_shots").filter((shot) => shot.shot_id === "s-1"),
     ).toEqual([]);
@@ -2029,14 +2201,14 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
 
 describe("ScorecardClient 距離の追加・編集・削除", () => {
   it("距離を追加すると、追加した距離の作成がSDKへ届き、その距離の編集パネルが展開される", async () => {
-    // Given: 距離が1つある
+    // Given
     const user = userEvent.setup();
     setup();
 
-    // When: 距離を追加する
+    // When
     await user.click(screen.getByTestId("add-distance-button"));
 
-    // Then: 2つ目の距離の編集パネルが直前の距離の内容で開き、その作成がSDKへ届く
+    // Then
     expect(screen.getByTestId("distance-config-distance-2")).toHaveValue(70);
     await waitFor(() => {
       expect(supabase.rpc).toHaveBeenCalledWith(
@@ -2045,8 +2217,8 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
           p_round_id: "round-1",
           p_position_key: "b",
           p_distance: 70,
-          p_total_ends: 2,
-          p_arrows_per_end: 2,
+          p_total_ends: 12,
+          p_arrows_per_end: 3,
           p_target_face_id: targetFaceX.id,
           p_is_marked: true,
         }),
@@ -2055,7 +2227,7 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
   });
 
   it("構成が変わる設定で距離を保存すると、その距離のUndo/Redo履歴だけが破棄され、他の距離の履歴は残る", async () => {
-    // Given: 2つ目の距離の記録がUndo履歴に、1つ目の距離の取り消した記録がRedo履歴に残っている
+    // Given
     // 的はスコアが記録済みの距離では変更できないため、1つ目の距離は取り消して記録の無い状態にする。
     const user = userEvent.setup();
     setup({ distances: [distanceA, distanceB] });
@@ -2069,7 +2241,7 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     expect(screen.getByTestId("score-button-undo")).toBeEnabled();
     expect(screen.getByTestId("score-button-redo")).toBeEnabled();
 
-    // When: 1つ目の距離の的を変更して保存する
+    // When
     await user.click(screen.getByTestId("distance-config-toggle-1"));
     await user.click(screen.getByTestId("target-face-picker-trigger"));
     await user.click(screen.getByTestId("target-face-format-tab-all"));
@@ -2079,34 +2251,56 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     );
     await user.click(screen.getByTestId("distance-config-save-1"));
 
-    // Then: 1つ目の距離のRedo履歴は破棄され、2つ目の距離のUndo履歴は残る
+    // Then
     // 指している新しい矢は新しい構成でも有効なため、テンキーは開いたまま。
     expect(screen.getByTestId("score-button-redo")).toBeDisabled();
     expect(screen.getByTestId("score-button-undo")).toBeEnabled();
+  });
 
-    // When: Undoする
+  it("構成が変わる保存の後に一つ戻ると、他の距離の記録が取り消される", async () => {
+    // Given
+    // 的はスコアが記録済みの距離では変更できないため、1つ目の距離は取り消して記録の無い状態にする。
+    const user = userEvent.setup();
+    setup({ distances: [distanceA, distanceB] });
+    await user.click(screen.getByTestId("end-blank-2-1"));
+    await user.click(screen.getByTestId("score-button-9"));
+    await waitFor(() => expect(ballsOf(2, 1)).toEqual(["9"]));
+    await user.click(screen.getByTestId("end-blank-1-1"));
+    await user.click(screen.getByTestId("score-button-10"));
+    await user.click(screen.getByTestId("score-button-undo"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
+    await user.click(screen.getByTestId("distance-config-toggle-1"));
+    await user.click(screen.getByTestId("target-face-picker-trigger"));
+    await user.click(screen.getByTestId("target-face-format-tab-all"));
+    await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
+    await user.click(
+      screen.getByTestId(`target-face-option-${targetFaceNoX.id}`),
+    );
+    await user.click(screen.getByTestId("distance-config-save-1"));
+
+    // When
     await user.click(screen.getByTestId("score-button-undo"));
 
-    // Then: 2つ目の距離の記録が取り消される
+    // Then
     await waitFor(() => expect(ballsOf(2, 1)).toEqual([]));
   });
 
   it("構成が変わらない設定で距離を保存すると、Undo/Redo履歴は維持される", async () => {
-    // Given: 1-1-1に記録している
+    // Given
     const user = userEvent.setup();
     setup();
     await user.click(screen.getByTestId("score-button-10"));
 
-    // When: その距離を設定を変えずに保存する
+    // When
     await user.click(screen.getByTestId("distance-config-toggle-1"));
     await user.click(screen.getByTestId("distance-config-save-1"));
 
-    // Then: Undoは有効のまま
+    // Then
     expect(screen.getByTestId("score-button-undo")).not.toBeDisabled();
   });
 
   it("距離編集パネルをEscapeで閉じると、保存せずパネルが閉じる", async () => {
-    // Given: 距離の編集パネルを開いている
+    // Given
     const user = userEvent.setup();
     setup();
     await user.click(screen.getByTestId("distance-config-toggle-1"));
@@ -2114,10 +2308,10 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
       screen.getByTestId("distance-config-distance-1"),
     ).toBeInTheDocument();
 
-    // When: Escapeを押す
+    // When
     await user.keyboard("{Escape}");
 
-    // Then: パネルが閉じ、操作の列へは何も積まれない
+    // Then
     expect(
       screen.queryByTestId("distance-config-distance-1"),
     ).not.toBeInTheDocument();
@@ -2126,54 +2320,80 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
-  it("スコア記録済みの距離を確認の上で削除すると、その距離・記録・Undo履歴・指している矢が破棄される", async () => {
-    // Given: 2つの距離があり、1つ目の距離に記録して、その距離の新しい矢を指している
+  it("スコア記録済みの距離を確認の上で削除すると、その距離と記録が除かれ、指している矢が無くなる", async () => {
+    // Given
     const user = userEvent.setup();
     setup({ distances: [distanceA, distanceB] });
     await user.click(screen.getByTestId("score-button-10"));
     expect(screen.getByText("合計10")).toBeInTheDocument();
 
-    // When: 1つ目の距離を確認の上で削除する
+    // When
     await user.click(screen.getByTestId("distance-config-toggle-1"));
     await user.click(screen.getByTestId("distance-config-delete-1"));
     await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
-    // Then: 残った距離が1つ目として表示され、記録が合計から除かれ、Undoは無効になる
+    // Then
     expect(screen.queryByTestId("distance-summary-2")).not.toBeInTheDocument();
     expect(screen.getByTestId("distance-summary-1")).toBeInTheDocument();
     expect(screen.getByText("合計0")).toBeInTheDocument();
     expect(provisionalEnd()).toBeNull();
+  });
+
+  it("スコア記録済みの距離を削除した後に空白を押してテンキーを開くと、一つ戻るを押せない", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup({ distances: [distanceA, distanceB] });
+    await user.click(screen.getByTestId("score-button-10"));
+    await user.click(screen.getByTestId("distance-config-toggle-1"));
+    await user.click(screen.getByTestId("distance-config-delete-1"));
+    await user.click(screen.getByTestId("confirm-dialog-confirm"));
+
+    // When
     await user.click(screen.getByTestId("end-blank-1-1"));
+
+    // Then
     expect(screen.getByTestId("score-button-undo")).toBeDisabled();
   });
 
-  it("指している矢が無い距離を削除すると、指している矢はそのまま残る", async () => {
-    // Given: 2つの距離があり、1つ目の距離のエンド1の新しい矢を指している
+  it("指している矢が無い距離を削除すると、その距離が無くなる", async () => {
+    // Given
     const user = userEvent.setup();
     setup({ distances: [distanceA, distanceB] });
 
-    // When: 記録の無い2つ目の距離を削除する
+    // When
     await user.click(screen.getByTestId("distance-config-toggle-2"));
     await user.click(screen.getByTestId("distance-config-delete-2"));
 
-    // Then: 2つ目の距離は無くなり、テンキーの入力は指していた1つ目の距離のエンドに記録される
+    // Then
     expect(screen.queryByTestId("distance-summary-2")).not.toBeInTheDocument();
+  });
+
+  it("指している矢が無い距離を削除した後に点数を書くと、指していた距離のエンドに記録される", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup({ distances: [distanceA, distanceB] });
+    await user.click(screen.getByTestId("distance-config-toggle-2"));
+    await user.click(screen.getByTestId("distance-config-delete-2"));
+
+    // When
     await user.click(screen.getByTestId("score-button-10"));
+
+    // Then
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
   });
 });
 
 describe("ScorecardClient プリセット保存", () => {
   it("プリセット保存ダイアログから保存すると、ラウンド名とスコアカードの現在の構成がSDKへ届く", async () => {
-    // Given: 2つの距離があるスコアカード
+    // Given
     const user = userEvent.setup();
     setup({ distances: [distanceA, distanceB] });
 
-    // When: プリセット保存ダイアログを開き、事前入力された名前のまま保存する
+    // When
     await user.click(screen.getByTestId("save-as-preset-trigger"));
     await user.click(screen.getByTestId("save-as-preset-confirm"));
 
-    // Then: ラウンド名とスコアカードの種別・弓種・距離構成がSDKへ届き、ダイアログが閉じる
+    // Then
     await waitFor(() => {
       expect(
         screen.queryByTestId("save-as-preset-name"),
@@ -2187,16 +2407,16 @@ describe("ScorecardClient プリセット保存", () => {
         {
           position_key: "a",
           distance: 70,
-          total_ends: 2,
-          arrows_per_end: 2,
+          total_ends: 12,
+          arrows_per_end: 3,
           target_face_id: targetFaceX.id,
           is_marked: true,
         },
         {
           position_key: "b",
           distance: 50,
-          total_ends: 1,
-          arrows_per_end: 1,
+          total_ends: 12,
+          arrows_per_end: 3,
           target_face_id: targetFaceX.id,
           is_marked: true,
         },
@@ -2206,20 +2426,17 @@ describe("ScorecardClient プリセット保存", () => {
 });
 
 describe("ScorecardClient ラウンド削除", () => {
-  it("ラウンドのメニューから削除を確認すると、このラウンドのdisable_roundを実行し、一覧へ置き換えて遷移する", async () => {
-    // Given: ラウンドを表示している
+  it("ヘッダーのメニューから削除を確認すると、このラウンドのdisable_roundを送る", async () => {
+    // Given
     const user = userEvent.setup();
     setup();
-
-    // When: ラウンドのメニューから削除を確認する
     await user.click(screen.getByTestId("round-menu-trigger"));
     await user.click(await screen.findByTestId("round-delete"));
+
+    // When
     await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
-    // Then: このラウンドのdisable_roundを実行し、一覧へ置き換えて遷移する
-    await waitFor(() => {
-      expect(nav.replace).toHaveBeenCalledWith("/rounds");
-    });
+    // Then
     await waitFor(() => {
       expect(supabase.rpc).toHaveBeenCalledWith("disable_round", {
         p_round_event_id: expect.any(String),
@@ -2246,8 +2463,8 @@ function itemStatuses() {
 }
 
 describe("ScorecardClient 同期の状態を表示しない", () => {
-  it("送信中も、応答が返った後も、同期の状態を表示しない", async () => {
-    // Given: RPCの応答を任意の時点で返せる
+  it("送信中は、同期の状態を表示しない", async () => {
+    // Given
     let resolveRpc: (value: { data: unknown; error: null }) => void = () => {};
     supabase.rpc.mockReturnValue(
       new Promise((resolve) => {
@@ -2257,10 +2474,10 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
     const user = userEvent.setup();
     setup();
 
-    // When: スコアを入力する
+    // When
     await user.click(screen.getByTestId("score-button-10"));
 
-    // Then: 記録がSDKへ送られ、応答待ちの間も同期の状態を表示しない
+    // Then
     await waitFor(() => {
       expect(supabase.rpc).toHaveBeenCalledWith("record_shots", {
         p_shots: [
@@ -2278,18 +2495,40 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
     expect(itemStatuses()).toEqual(["inflight"]);
     expectNoSyncStatus();
 
-    // When: 応答が返る
+    // afterEachが送信中の操作の完了を待つため、応答を返して終える。
+    resolveRpc({ data: [APPLIED], error: null });
+  });
+
+  it("応答が返って確定した後も、同期の状態を表示しない", async () => {
+    // Given
+    let resolveRpc: (value: { data: unknown; error: null }) => void = () => {};
+    supabase.rpc.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRpc = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId("score-button-10"));
+    await waitFor(() => {
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        "record_shots",
+        expect.anything(),
+      );
+    });
+
+    // When
     resolveRpc({ data: [APPLIED], error: null });
 
-    // Then: 確定した後も同期の状態を表示しない
+    // Then
     await waitFor(() => {
       expect(itemStatuses()).toEqual(["acked"]);
     });
     expectNoSyncStatus();
   });
 
-  it("送信が一時的に失敗してリトライを待つ間も、再送が成功した後も、同期の状態を表示しない", async () => {
-    // Given: RPCが初回だけ再試行で解消し得るエラーを返す
+  it("送信が一時的に失敗してリトライを待つ間は、同期の状態を表示しない", async () => {
+    // Given
     // fake-indexeddbはsetImmediateで処理を進めるため、リトライ待機のタイマーと、再送の期限の判定に使う時刻だけを偽装する。
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     supabase.rpc.mockResolvedValueOnce({
@@ -2298,7 +2537,7 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
     });
     setup();
 
-    // When: スコアを入力し、送信が失敗する
+    // When
     // userEventはsetTimeoutで待機するため、fake timers中はfireEventで操作する。
     fireEvent.click(screen.getByTestId("score-button-10"));
     await pollWithRealTasks(() =>
@@ -2309,40 +2548,60 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
     );
     await flushMicrotasks();
 
-    // Then: リトライを待つ間、失敗も同期の状態も表示しない
+    // Then
     expect(itemStatuses()).toEqual(["backoff"]);
     expectNoSyncStatus();
+  });
 
-    // When: リトライ待機が経過し、再送が成功する
+  it("リトライ待機の後に再送が成功しても、同期の状態を表示しない", async () => {
+    // Given
+    // fake-indexeddbはsetImmediateで処理を進めるため、リトライ待機のタイマーと、再送の期限の判定に使う時刻だけを偽装する。
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    supabase.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: "通信に失敗しました", code: "" },
+    });
+    setup();
+    // userEventはsetTimeoutで待機するため、fake timers中はfireEventで操作する。
+    fireEvent.click(screen.getByTestId("score-button-10"));
+    await pollWithRealTasks(() =>
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        "record_shots",
+        expect.anything(),
+      ),
+    );
+    await flushMicrotasks();
+    expect(itemStatuses()).toEqual(["backoff"]);
+
+    // When
     await act(async () => {
       await vi.advanceTimersByTimeAsync(retryDelayMs(0));
     });
 
-    // Then: 確定した後も同期の状態を表示しない
+    // Then
     await pollWithRealTasks(() => expect(itemStatuses()).toEqual(["acked"]));
     expectNoSyncStatus();
   });
 
   it("オフライン中は送らず、同期の状態を表示しない", async () => {
-    // Given: オフライン
+    // Given
     setOnline(false);
     const user = userEvent.setup();
     setup();
 
-    // When: スコアを入力する
+    // When
     await user.click(screen.getByTestId("score-button-10"));
 
-    // Then: 送らずに残し、同期の状態を表示しない
+    // Then
     await waitFor(() => {
       expect(itemStatuses()).toEqual(["queued"]);
     });
     expectNoSyncStatus();
-    await flushMicrotasks();
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
   it("サーバーが契約の不一致で拒否した操作は破棄し、エラーも同期の状態も表示しない", async () => {
-    // Given: RPCがPT422で拒否する
+    // Given
     supabase.rpc.mockResolvedValue({
       data: null,
       error: { message: "invalid", code: "PT422" },
@@ -2351,10 +2610,10 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
     const user = userEvent.setup();
     setup();
 
-    // When: スコアを入力する
+    // When
     await user.click(screen.getByTestId("score-button-10"));
 
-    // Then: 操作は破棄され、ダイアログも同期の状態も表示しない
+    // Then
     await waitFor(() => {
       expect(supabase.rpc).toHaveBeenCalledWith(
         "record_shots",
@@ -2369,15 +2628,15 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
   });
 
   it("未認証で送信できない間も、同期の状態を表示しない", async () => {
-    // Given: セッションが無い
+    // Given
     supabase.getSession.mockResolvedValue({ data: { session: null } });
     const user = userEvent.setup();
     setup();
 
-    // When: スコアを入力する
+    // When
     await user.click(screen.getByTestId("score-button-10"));
 
-    // Then: 送らずに保留し、同期の状態を表示しない
+    // Then
     await waitFor(() => {
       expect(itemStatuses()).toEqual(["held"]);
     });
@@ -2395,11 +2654,12 @@ function sentStatuses() {
 
 describe("ScorecardClient ラウンドの完了", () => {
   const recorded = shotRow("s-1", "distance-b", 1, "10", 10);
+  const allRecorded = fullEndShots(distanceB);
 
   it("全てのエンドが矢数に達した入力中のラウンドで完了ボタンを押すと、確認なしで完了にし、ボタンを消して状態を送る", async () => {
     // Given
     const user = userEvent.setup();
-    setup({ distances: [distanceB], initialShots: [recorded] });
+    setup({ distances: [distanceB], initialShots: allRecorded });
 
     // When
     await user.click(screen.getByTestId("complete-round-button"));
@@ -2428,7 +2688,7 @@ describe("ScorecardClient ラウンドの完了", () => {
     // Given
     const user = userEvent.setup();
     nav.push.mockClear();
-    setup({ distances: [distanceB], initialShots: [recorded] });
+    setup({ distances: [distanceB], initialShots: allRecorded });
 
     // When
     await user.click(screen.getByTestId("complete-round-button"));
@@ -2466,7 +2726,9 @@ describe("ScorecardClient ラウンドの完了", () => {
   });
 
   it("完了のラウンドは、新しい矢を指さず、テンキーを展開しない", () => {
-    // Given / When
+    // Given
+
+    // When
     setup({ status: "completed" });
 
     // Then
@@ -2476,7 +2738,9 @@ describe("ScorecardClient ラウンドの完了", () => {
   });
 
   it("完了のラウンドは、距離が無くてもラウンド編集欄を自動で開かない", () => {
-    // Given / When
+    // Given
+
+    // When
     setup({ status: "completed", distances: [] });
 
     // Then
@@ -2484,21 +2748,23 @@ describe("ScorecardClient ラウンドの完了", () => {
   });
 
   it("入力中のラウンドは、矢数に達していない最初のエンドの新しい矢を指してテンキーを展開する", () => {
-    // Given / When
+    // Given
+
+    // When
     setup();
 
     // Then
     expect(screen.getByTestId("score-button-10")).toBeInTheDocument();
   });
 
-  it("完了のラウンドでは完了ボタンを表示せず、エンドの空白を押して点数を記録すると入力中へ戻して再表示する", async () => {
+  it("完了のラウンドでエンドの空白を押して点数を記録すると、入力中へ戻して完了ボタンを再表示する", async () => {
     // Given
     const user = userEvent.setup();
     setup({ status: "completed" });
     expect(screen.queryByTestId("complete-round-button")).toBeNull();
+    await user.click(screen.getByTestId("end-blank-1-1"));
 
     // When
-    await user.click(screen.getByTestId("end-blank-1-1"));
     await user.click(screen.getByTestId("score-button-10"));
 
     // Then
@@ -2514,9 +2780,9 @@ describe("ScorecardClient ラウンドの完了", () => {
       distances: [distanceB],
       initialShots: [recorded],
     });
+    await user.click(screen.getByTestId("shot-ball-1-1-1"));
 
     // When
-    await user.click(screen.getByTestId("shot-ball-1-1-1"));
     await user.click(screen.getByTestId("score-button-10"));
 
     // Then

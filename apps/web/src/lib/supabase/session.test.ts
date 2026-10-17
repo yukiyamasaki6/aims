@@ -24,20 +24,28 @@ beforeEach(() => {
 
 describe("updateSession", () => {
   it("Supabaseの環境変数が無い場合はエラーを投げる", async () => {
+    // Given
     process.env.NEXT_PUBLIC_SUPABASE_URL = "";
-    const request = new NextRequest("https://app.example.com/rounds");
 
-    await expect(updateSession(request)).rejects.toThrow(
+    // When
+    const request = new NextRequest("https://app.example.com/rounds");
+    const result = updateSession(request);
+
+    // Then
+    await expect(result).rejects.toThrow(
       "Missing Supabase environment variables in middleware.",
     );
   });
 
   it("未認証で/roundsにアクセスすると、遷移元を付けずに/signinへリダイレクトする", async () => {
+    // Given
     mockUser(null);
-    const request = new NextRequest("https://app.example.com/rounds");
 
+    // When
+    const request = new NextRequest("https://app.example.com/rounds");
     const res = await updateSession(request);
 
+    // Then
     expect(res.headers.get("location")).toBe("https://app.example.com/signin");
   });
 
@@ -50,11 +58,14 @@ describe("updateSession", () => {
   ])(
     "未認証で%sにアクセスすると、遷移元付きの/signinへリダイレクトする",
     async (path, encoded) => {
+      // Given
       mockUser(null);
-      const request = new NextRequest(`https://app.example.com${path}`);
 
+      // When
+      const request = new NextRequest(`https://app.example.com${path}`);
       const res = await updateSession(request);
 
+      // Then
       expect(res.headers.get("location")).toBe(
         `https://app.example.com/signin?returnTo=${encoded}`,
       );
@@ -62,33 +73,42 @@ describe("updateSession", () => {
   );
 
   it("未認証でもServer Action呼び出しは/rounds配下でリダイレクトしない", async () => {
+    // Given
     mockUser(null);
+
+    // When
     const request = new NextRequest("https://app.example.com/rounds/1", {
       headers: { "next-action": "abc123" },
     });
-
     const res = await updateSession(request);
 
+    // Then
     expect(res.headers.get("location")).toBeNull();
   });
 
   it("未認証で/rounds以外のパスはリダイレクトしない", async () => {
+    // Given
     mockUser(null);
-    const request = new NextRequest("https://app.example.com/offline");
 
+    // When
+    const request = new NextRequest("https://app.example.com/offline");
     const res = await updateSession(request);
 
+    // Then
     expect(res.headers.get("location")).toBeNull();
   });
 
   it.each(["/signin", "/signup", "/reset-password"])(
     "認証済みで%sにアクセスすると/roundsへリダイレクトする",
     async (path) => {
+      // Given
       mockUser({ id: "user-1" });
-      const request = new NextRequest(`https://app.example.com${path}`);
 
+      // When
+      const request = new NextRequest(`https://app.example.com${path}`);
       const res = await updateSession(request);
 
+      // Then
       expect(res.headers.get("location")).toBe(
         "https://app.example.com/rounds",
       );
@@ -96,13 +116,16 @@ describe("updateSession", () => {
   );
 
   it("認証済みで有効な遷移元付きの/signinにアクセスすると、遷移元へリダイレクトする", async () => {
+    // Given
     mockUser({ id: "user-1" });
+
+    // When
     const request = new NextRequest(
       "https://app.example.com/signin?returnTo=%2Frounds%2Fnew%3Fa%3D1",
     );
-
     const res = await updateSession(request);
 
+    // Then
     expect(res.headers.get("location")).toBe(
       "https://app.example.com/rounds/new?a=1",
     );
@@ -116,13 +139,16 @@ describe("updateSession", () => {
   ])(
     "認証済みで不正な遷移元(%s)付きの/signinにアクセスすると、遷移元を引き継がず/roundsへリダイレクトする",
     async (_name, returnTo) => {
+      // Given
       mockUser({ id: "user-1" });
+
+      // When
       const request = new NextRequest(
         `https://app.example.com/signin?returnTo=${returnTo}`,
       );
-
       const res = await updateSession(request);
 
+      // Then
       expect(res.headers.get("location")).toBe(
         "https://app.example.com/rounds",
       );
@@ -132,13 +158,16 @@ describe("updateSession", () => {
   it.each(["/signup", "/reset-password"])(
     "認証済みで有効な遷移元付きの%sにアクセスしても、遷移元を使わず/roundsへリダイレクトする",
     async (path) => {
+      // Given
       mockUser({ id: "user-1" });
+
+      // When
       const request = new NextRequest(
         `https://app.example.com${path}?returnTo=%2Frounds%2Fnew`,
       );
-
       const res = await updateSession(request);
 
+      // Then
       expect(res.headers.get("location")).toBe(
         "https://app.example.com/rounds",
       );
@@ -146,41 +175,51 @@ describe("updateSession", () => {
   );
 
   it("認証済みでもServer Action呼び出しはサインイン専用パスでリダイレクトしない", async () => {
+    // Given
     mockUser({ id: "user-1" });
+
+    // When
     const request = new NextRequest("https://app.example.com/signin", {
       headers: { "next-action": "abc123" },
     });
-
     const res = await updateSession(request);
 
+    // Then
     expect(res.headers.get("location")).toBeNull();
   });
 
   it.each(["/", "/rounds/1"])(
     "認証済みで未認証専用でない%sはリダイレクトしない",
     async (path) => {
+      // Given
       mockUser({ id: "user-1" });
-      const request = new NextRequest(`https://app.example.com${path}`);
 
+      // When
+      const request = new NextRequest(`https://app.example.com${path}`);
       const res = await updateSession(request);
 
+      // Then
       expect(res.headers.get("location")).toBeNull();
     },
   );
 
   it("cookiesのgetAllはrequestのcookieをそのまま返す", async () => {
+    // Given
     mockUser({ id: "user-1" });
+
+    // When
     const request = new NextRequest("https://app.example.com/rounds/1", {
       headers: { cookie: "existing=1" },
     });
-
     await updateSession(request);
 
+    // Then
     const [, , options] = db.createServerClient.mock.calls[0];
     expect(options.cookies.getAll()).toEqual(request.cookies.getAll());
   });
 
   it("cookiesのsetAllで書き込まれた値をrequestとレスポンス双方に反映する", async () => {
+    // Given
     // 実際のSDKはセッションリフレッシュ時にgetUser内部からcookies.setAllを
     // 呼び出す。ここではその呼び出しをgetUserのモック内で再現する。
     db.createServerClient.mockImplementation((_url, _key, options) => ({
@@ -193,10 +232,12 @@ describe("updateSession", () => {
         }),
       },
     }));
-    const request = new NextRequest("https://app.example.com/rounds/1");
 
+    // When
+    const request = new NextRequest("https://app.example.com/rounds/1");
     const res = await updateSession(request);
 
+    // Then
     expect(request.cookies.get("sb-token")?.value).toBe("new-value");
     expect(res.cookies.get("sb-token")?.value).toBe("new-value");
   });

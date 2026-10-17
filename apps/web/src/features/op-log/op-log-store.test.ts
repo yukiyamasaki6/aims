@@ -51,13 +51,16 @@ afterEach(async () => {
 
 describe("op log store", () => {
   it("同じマスの記録・取り消し・記録が、追記した順に3件残る", async () => {
+    // Given
     const store = newStore();
+
+    // When
     await store.append(entry("record-1"));
     await store.append(entry("clear"));
     await store.append(entry("record-2"));
-
     const { entries } = await store.loadStream(STREAM, "user-1");
 
+    // Then
     expect(entries.map((e) => e.operation.value)).toEqual([
       "record-1",
       "clear",
@@ -66,36 +69,47 @@ describe("op log store", () => {
   });
 
   it("追記を並べて呼んでも、呼び出した順にseqが増える", async () => {
+    // Given
     const store = newStore();
+
+    // When
     const seqs = await Promise.all(
       ["a", "b", "c", "d"].map((v) => store.append(entry(v))),
     );
-
-    expect([...seqs].sort((a, b) => a - b)).toEqual(seqs);
     const { entries } = await store.loadStream(STREAM, "user-1");
+
+    // Then
+    expect([...seqs].sort((a, b) => a - b)).toEqual(seqs);
     expect(entries.map((e) => e.seq)).toEqual(seqs);
     expect(entries.map((e) => e.operation.value)).toEqual(["a", "b", "c", "d"]);
   });
 
   it("追記が失敗しても、後続の追記は続けて保存する", async () => {
-    // Given: 同じeventIdの2回目の追記が、一意制約で失敗する
+    // Given
+    // 同じeventIdの2回目の追記は、一意制約で失敗する。
     const store = newStore();
     const first = entry("first");
     await store.append(first);
+
+    // When
     const duplicate = store.append({ ...entry("dup"), eventId: first.eventId });
     const next = store.append(entry("next"));
+    await Promise.allSettled([duplicate, next]);
+    const { entries } = await store.loadStream(STREAM, "user-1");
 
-    // When/Then: 失敗は呼び出し元へ返り、後続は保存される
+    // Then
     await expect(duplicate).rejects.toThrow();
     await expect(next).resolves.toBeGreaterThan(0);
-    const { entries } = await store.loadStream(STREAM, "user-1");
     expect(entries.map((e) => e.operation.value)).toEqual(["first", "next"]);
   });
 
   it("時計を戻しても同時刻でも、seqは追記順になる", async () => {
+    // Given
     const store = newStore();
     const times = [3000, 1000, 1000];
     const originalNow = Date.now;
+
+    // When
     try {
       for (const [i, time] of times.entries()) {
         Date.now = () => time;
@@ -104,9 +118,9 @@ describe("op log store", () => {
     } finally {
       Date.now = originalNow;
     }
-
     const { entries } = await store.loadStream(STREAM, "user-1");
 
+    // Then
     expect(entries.map((e) => e.operation.value)).toEqual([
       "op-0",
       "op-1",
@@ -115,33 +129,36 @@ describe("op log store", () => {
   });
 
   it("他のstreamと他ユーザーの操作は読まず、保存したまま残す", async () => {
+    // Given
     const store = newStore();
     await store.append(entry("mine"));
     await store.append(entry("other-user", { userId: "user-2" }));
     await store.append(entry("other-stream", { streamId: "round:r2" }));
 
-    expect(
-      (await store.loadStream(STREAM, "user-1")).entries.map(
-        (e) => e.operation.value,
-      ),
-    ).toEqual(["mine"]);
-    expect(
-      (await store.loadStream(STREAM, "user-2")).entries.map(
-        (e) => e.operation.value,
-      ),
-    ).toEqual(["other-user"]);
+    // When
+    const mine = await store.loadStream(STREAM, "user-1");
+    const otherUser = await store.loadStream(STREAM, "user-2");
+
+    // Then
+    expect(mine.entries.map((e) => e.operation.value)).toEqual(["mine"]);
+    expect(otherUser.entries.map((e) => e.operation.value)).toEqual([
+      "other-user",
+    ]);
   });
 
   it("ackは確定の結果を1度だけ付け、操作は列に残る", async () => {
+    // Given
     const store = newStore();
     const first = entry("a");
     await store.append(first);
 
+    // When
     await store.ack(first.eventId, 4, true, ["name"]);
     await store.ack(first.eventId, 9, true, null);
     await store.ack(crypto.randomUUID(), 1, true, null);
-
     const [stored] = (await store.loadStream(STREAM, "user-1")).entries;
+
+    // Then
     expect(stored.ackedRevision).toBe(4);
     expect(stored.ackedApplied).toBe(true);
     expect(stored.ackedFields).toEqual(["name"]);
@@ -149,30 +166,34 @@ describe("op log store", () => {
   });
 
   it("retireは指定した操作だけを列から外す", async () => {
+    // Given
     const store = newStore();
     const first = entry("a");
     const second = entry("b");
     await store.append(first);
     await store.append(second);
 
+    // When
     await store.retire([first.eventId, crypto.randomUUID()], "reflected");
+    const { entries } = await store.loadStream(STREAM, "user-1");
 
-    expect(
-      (await store.loadStream(STREAM, "user-1")).entries.map(
-        (e) => e.operation.value,
-      ),
-    ).toEqual(["b"]);
+    // Then
+    expect(entries.map((e) => e.operation.value)).toEqual(["b"]);
   });
 
   it("loadAllはユーザーで絞り、streamIdごとにseq順で返し、他のユーザーの行を残す", async () => {
+    // Given
     const store = newStore();
     await store.append(entry("a1", { streamId: "round:a" }));
     await store.append(entry("b1", { streamId: "round:b" }));
     await store.append(entry("other", { userId: "user-2" }));
     await store.append(entry("a2", { streamId: "round:a" }));
 
+    // When
     const all = await store.loadAll("user-1");
+    const others = await store.loadAll("user-2");
 
+    // Then
     expect([...all.keys()].sort()).toEqual(["round:a", "round:b"]);
     expect(all.get("round:a")?.entries.map((e) => e.operation.value)).toEqual([
       "a1",
@@ -181,7 +202,6 @@ describe("op log store", () => {
     expect(all.get("round:b")?.entries.map((e) => e.operation.value)).toEqual([
       "b1",
     ]);
-    const others = await store.loadAll("user-2");
     expect(
       [...others.values()]
         .flatMap((g) => g.entries)
@@ -198,7 +218,7 @@ describe("op log store", () => {
       store.loadStream(STREAM, "user-1");
 
     it("commitは、ベースの保存と、反映済みの操作の削除を、1つのトランザクションで行う", async () => {
-      // Given: revision 2で確定した操作と、未確定の操作
+      // Given
       const store = newStore();
       const confirmed = entry("confirmed");
       const unsent = entry("unsent");
@@ -208,54 +228,73 @@ describe("op log store", () => {
 
       // When
       const result = await store.commit(STREAM, "user-1", base(2), 10);
+      const stored = await group(store);
 
-      // Then: 結果と保存済みの組の両方で、ベースは保存され、反映済みの操作だけが消える
+      // Then
       expect(result.base).toEqual({ startedAt: 10, base: base(2) });
       expect(result.entries.map((e) => e.operation.value)).toEqual(["unsent"]);
-      expect(await group(store)).toEqual(result);
+      expect(stored).toEqual(result);
     });
 
     it("commitは、保持の規則に当たらなければ、ベースと反映済みの操作を消す", async () => {
+      // Given
       const store = newStore();
       const reflected = entry("reflected");
       await store.append(reflected);
       await store.commit(STREAM, "user-1", base(1), 10);
       await store.ack(reflected.eventId, 1, true, null);
 
+      // When
       const result = await store.commit(STREAM, "user-1", base(3, false), 20);
+      const stored = await group(store);
 
+      // Then
       expect(result).toEqual({ base: undefined, entries: [] });
-      expect(await group(store)).toEqual({ base: undefined, entries: [] });
+      expect(stored).toEqual({ base: undefined, entries: [] });
     });
 
     it("commitは、保存済みのベースより開始時刻が新しくても、revisionが古い取得では何も変えない", async () => {
+      // Given
       const store = newStore();
       await store.commit(STREAM, "user-1", base(2), 10);
 
+      // When
       const result = await store.commit(STREAM, "user-1", base(1), 20);
+      const stored = await group(store);
 
+      // Then
       expect(result.base).toEqual({ startedAt: 10, base: base(2) });
-      expect(await group(store)).toEqual(result);
+      expect(stored).toEqual(result);
     });
 
-    it("commitは、確定済みでベースに未反映の操作が残るあいだは、古いベースを受けても組を消さず、反映済みのベースを受けると消す", async () => {
-      // Given: revision 2で確定したが、取得には反映されていない操作
+    it("commitは、確定済みでベースに未反映の操作が残るあいだは、古いベースを2回受けても組を消さない", async () => {
+      // Given
       const store = newStore();
       const confirmed = entry("confirmed");
       await store.append(confirmed);
       await store.ack(confirmed.eventId, 2, true, null);
 
-      // When: 反映前の古い取得(revision 1)を、保持の対象でないベースとして2回受ける
+      // When
       await store.commit(STREAM, "user-1", base(1, false), 10);
       const stale = await store.commit(STREAM, "user-1", base(1, false), 11);
 
-      // Then: 組が残る
+      // Then
       expect(stale.base).toEqual({ startedAt: 11, base: base(1, false) });
       expect(stale.entries.map((e) => e.operation.value)).toEqual([
         "confirmed",
       ]);
+    });
 
-      // When: 反映済みの取得(revision 2)を受ける
+    it("commitは、確定済みの操作が反映された取得を受けると、組を消す", async () => {
+      // Given
+      const store = newStore();
+      const confirmed = entry("confirmed");
+      await store.append(confirmed);
+      await store.ack(confirmed.eventId, 2, true, null);
+      await store.commit(STREAM, "user-1", base(1, false), 10);
+      await store.commit(STREAM, "user-1", base(1, false), 11);
+
+      // When
       const reflected = await store.commit(
         STREAM,
         "user-1",
@@ -263,44 +302,59 @@ describe("op log store", () => {
         20,
       );
 
-      // Then: 組が消える
+      // Then
       expect(reflected).toEqual({ base: undefined, entries: [] });
     });
 
-    it("commitは、古い取得で新しい保存済みのベースを上書きせず、削除の印は古い保存を拒む", async () => {
+    it("commitは、古い取得で新しい保存済みのベースを上書きせず、確定済みの操作を残す", async () => {
+      // Given
       const store = newStore();
       await store.commit(STREAM, "user-1", base(5), 20);
-
       const confirmed = entry("confirmed");
       await store.append(confirmed);
       await store.ack(confirmed.eventId, 1, true, null);
 
+      // When
       const older = await store.commit(STREAM, "user-1", base(1), 10);
+
+      // Then
       expect(older.base).toEqual({ startedAt: 20, base: base(5) });
       expect(older.entries.map((e) => e.operation.value)).toEqual([
         "confirmed",
       ]);
+    });
 
+    it("削除の印を保存した後は、開始時刻が古い取得のベースを保存しない", async () => {
+      // Given
+      const store = newStore();
+      await store.commit(STREAM, "user-1", base(5), 20);
       await store.commit(STREAM, "user-1", null, 30);
+
+      // When
       const stale = await store.commit(STREAM, "user-1", base(9), 25);
+
+      // Then
       expect(stale.base).toEqual({ startedAt: 30, base: null });
     });
 
     it("削除の印は、確定済みの操作を全て外し、未確定の操作は残す", async () => {
+      // Given
       const store = newStore();
       const confirmed = entry("confirmed");
       await store.append(confirmed);
       await store.append(entry("unsent"));
       await store.ack(confirmed.eventId, 99, true, null);
 
+      // When
       const result = await store.commit(STREAM, "user-1", null, 10);
 
+      // Then
       expect(result.base).toEqual({ startedAt: 10, base: null });
       expect(result.entries.map((e) => e.operation.value)).toEqual(["unsent"]);
     });
 
     it("commitの途中で失敗したら、ベースも操作も変えない", async () => {
-      // Given: 反映済みの操作とベースがあり、保持の判定が失敗する
+      // Given
       const store = newStore();
       const confirmed = entry("confirmed");
       await store.append(confirmed);
@@ -315,14 +369,20 @@ describe("op log store", () => {
       });
       stores.push(failing);
 
-      // When/Then
-      await expect(
-        failing.commit(STREAM, "user-1", base(5), 20),
-      ).rejects.toThrow("keeps");
-      expect(await group(store)).toEqual(before);
+      // When
+      const error = await failing
+        .commit(STREAM, "user-1", base(5), 20)
+        .catch((e: unknown) => e);
+      const after = await group(store);
+
+      // Then
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("keeps");
+      expect(after).toEqual(before);
     });
 
-    it("ackは確定を記録するだけで、操作を消さない。反映済みの操作は、次の取得のベースとともに消える", async () => {
+    it("ackは確定を記録するだけで、操作を消さない", async () => {
+      // Given
       const store = newStore();
       const reflected = entry("reflected");
       const later = entry("later");
@@ -330,75 +390,109 @@ describe("op log store", () => {
       await store.append(later);
       await store.commit(STREAM, "user-1", base(3), 10);
 
+      // When
       await store.ack(reflected.eventId, 3, true, null);
       await store.ack(later.eventId, 4, true, null);
-      expect(
-        (await group(store)).entries.map((e) => [
-          e.operation.value,
-          e.ackedRevision,
-        ]),
-      ).toEqual([
+      const { entries } = await group(store);
+
+      // Then
+      expect(entries.map((e) => [e.operation.value, e.ackedRevision])).toEqual([
         ["reflected", 3],
         ["later", 4],
       ]);
+    });
 
-      // 後の操作が未反映でも、前の反映済みの操作は消える
+    it("反映済みの操作は、後の操作が未反映でも、次の取得のベースとともに消える", async () => {
+      // Given
+      const store = newStore();
+      const reflected = entry("reflected");
+      const later = entry("later");
+      await store.append(reflected);
+      await store.append(later);
+      await store.commit(STREAM, "user-1", base(3), 10);
+      await store.ack(reflected.eventId, 3, true, null);
+      await store.ack(later.eventId, 4, true, null);
+
+      // When
       const result = await store.commit(STREAM, "user-1", base(3), 11);
+
+      // Then
       expect(result.entries.map((e) => e.operation.value)).toEqual(["later"]);
     });
 
-    it("appendは、タブのベースが保存済みより新しく保持の規則に当たるときだけ、ベースも保存する", async () => {
+    it("appendは、タブのベースが保存済みより新しく、保持の規則に当たるとき、ベースも保存する", async () => {
+      // Given
       const store = newStore();
 
+      // When
       await store.append(entry("a"), { startedAt: 10, base: base(1) });
-      expect((await group(store)).base).toEqual({
-        startedAt: 10,
-        base: base(1),
-      });
+      const stored = await group(store);
 
+      // Then
+      expect(stored.base).toEqual({ startedAt: 10, base: base(1) });
+    });
+
+    it("appendは、タブのベースが保存済みより古いとき、ベースを保存しない", async () => {
+      // Given
+      const store = newStore();
+      await store.append(entry("a"), { startedAt: 10, base: base(1) });
+
+      // When
       await store.append(entry("b"), { startedAt: 5, base: base(0) });
-      expect((await group(store)).base?.startedAt).toBe(10);
+      const stored = await group(store);
 
-      // 完了で未送信の操作も無いベースは、操作を足せば未送信が残るため保存する。保持しないベースは、操作が無ければ保存しない。
+      // Then
+      expect(stored.base?.startedAt).toBe(10);
+    });
+
+    it("appendは、保持の規則に当たらないベースでも、操作を足すと未送信が残るため、ベースを保存する", async () => {
+      // Given
+      const store = newStore();
       const other = "round:r2";
+
+      // When
       await store.append(entry("c", { streamId: other }), {
         startedAt: 1,
         base: base(0, false),
       });
-      expect((await store.loadStream(other, "user-1")).base).toEqual({
-        startedAt: 1,
-        base: base(0, false),
-      });
+      const stored = await store.loadStream(other, "user-1");
+
+      // Then
+      expect(stored.base).toEqual({ startedAt: 1, base: base(0, false) });
     });
 
     it("loadAllは、ベースだけを持つ列と、他のユーザーのベースを分けて返す", async () => {
+      // Given
       const store = newStore();
       await store.commit("round:a", "user-1", base(1), 10);
       await store.commit("round:b", "user-2", base(1), 10);
       await store.append(entry("x", { streamId: "round:c" }));
 
+      // When
       const all = await store.loadAll("user-1");
 
+      // Then
       expect([...all.keys()].sort()).toEqual(["round:a", "round:c"]);
       expect(all.get("round:a")?.base?.base).toEqual(base(1));
     });
 
     it("ユーザーが無いときは、ベースを保存しない", async () => {
+      // Given
       const store = newStore();
 
+      // When
       const result = await store.commit(STREAM, null, base(1), 10);
+      const stored = await store.loadStream(STREAM, null);
 
+      // Then
       expect(result.base).toEqual({ startedAt: 10, base: base(1) });
-      expect(await store.loadStream(STREAM, null)).toEqual({
-        base: undefined,
-        entries: [],
-      });
+      expect(stored).toEqual({ base: undefined, entries: [] });
     });
   });
 
   describe("保存形式の更新", () => {
-    it("前のversionで作られたDBは、内容を読まずに全てのstoreを作り直す", async () => {
-      // Given: 前のversionのDBに、別の名前のstoreとopsの内容が残っている
+    // 前のversionのDBに、別の名前のstoreとopsの内容が残っている状態を作る。
+    async function createPreviousVersion() {
       const previous = await openDB("aims-sync", 4, {
         upgrade(database) {
           const ops = database.createObjectStore("ops", {
@@ -413,44 +507,56 @@ describe("op log store", () => {
       await previous.add("ops", entry("previous"));
       await previous.put("other", { eventId: "previous" });
       previous.close();
+    }
+
+    it("前のversionで作られたDBは、内容を読まずに作り直し、前の内容を返さない", async () => {
+      // Given
+      await createPreviousVersion();
 
       // When
       const store = newStore();
       const result = await store.loadStream(STREAM, "user-1");
 
-      // Then: 前の内容は残らず、storeはbasesとopsだけで、保存できる
+      // Then
       expect(result).toEqual({ base: undefined, entries: [] });
+    });
+
+    it("作り直したDBは、basesとopsのstoreだけを持ち、保存できる", async () => {
+      // Given
+      await createPreviousVersion();
+
+      // When
+      const store = newStore();
       await store.append(entry("a"));
       await store.commit(STREAM, "user-1", { revision: 1, keep: true }, 10);
       const reloaded = await store.loadStream(STREAM, "user-1");
+      const database = await openDB("aims-sync");
+      const names = Array.from(database.objectStoreNames).sort();
+      database.close();
+
+      // Then
       expect(reloaded.entries.map((e) => e.operation.value)).toEqual(["a"]);
       expect(reloaded.base?.startedAt).toBe(10);
-      const database = await openDB("aims-sync");
-      try {
-        expect(Array.from(database.objectStoreNames).sort()).toEqual([
-          "bases",
-          "ops",
-        ]);
-      } finally {
-        database.close();
-      }
+      expect(names).toEqual(["bases", "ops"]);
     });
 
     it("後のversionへの更新を待たれたら、接続を閉じて譲る", async () => {
-      // Given: 開いている接続がある
+      // Given
       const store = newStore();
       await store.append(entry("a"));
 
-      // When: 後のversionが更新を待つ
+      // When
       const next = await openDB("aims-sync", 6);
-
-      // Then: 譲って更新が済む
-      expect(next.version).toBe(6);
+      const version = next.version;
       next.close();
+
+      // Then
+      expect(version).toBe(6);
     });
 
     it("古い接続が閉じず更新が待たされるときは、開けなかったものとして拒否し、閉じた後は開き直す", async () => {
-      // Given: 更新を知らされても閉じない、version 3の接続が開いている
+      // Given
+      // 更新を知らされても閉じない、version 3の接続を開いておく。
       const previous = await openDB("aims-sync", 3, {
         upgrade(database) {
           const ops = database.createObjectStore("ops", {
@@ -463,10 +569,17 @@ describe("op log store", () => {
       });
       const store = newStore();
 
-      // When/Then: 保存は失敗し、古い接続を閉じた後は成功する
-      await expect(store.append(entry("a"))).rejects.toThrow();
+      // When
+      const whileBlocked = await store.append(entry("a")).then(
+        () => "saved",
+        () => "rejected",
+      );
       previous.close();
-      await expect(store.append(entry("b"))).resolves.toBeGreaterThan(0);
+      const afterClose = await store.append(entry("b"));
+
+      // Then
+      expect(whileBlocked).toBe("rejected");
+      expect(afterClose).toBeGreaterThan(0);
     });
   });
 });

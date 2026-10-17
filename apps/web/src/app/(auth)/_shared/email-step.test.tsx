@@ -52,9 +52,9 @@ describe("OtpEmailStep", () => {
   describe("画面の違いを受け取る表示", () => {
     it("titleを見出しに、footerを全体のエラーの下に描く", () => {
       // Given
-      const form = createForm({ error: "全体のエラー" });
 
       // When
+      const form = createForm({ error: "全体のエラー" });
       renderStep(form, { title: "パスワードを再設定", footer: "戻るリンク" });
 
       // Then
@@ -71,11 +71,11 @@ describe("OtpEmailStep", () => {
 
     it("メールのエラー文の要素のidをidPrefixから作り、入力欄と結びつける", () => {
       // Given
+
+      // When
       const form = createForm({
         emailFieldErrors: { email: "メールのエラー" },
       });
-
-      // When
       renderStep(form, { idPrefix: "reset-password" });
 
       // Then
@@ -121,9 +121,9 @@ describe("OtpEmailStep", () => {
   describe("状態に応じた表示", () => {
     it("メールのエラーがないとき、入力欄を結びつけず有効な状態にする", () => {
       // Given
-      const form = createForm();
 
       // When
+      const form = createForm();
       renderStep(form);
 
       // Then
@@ -134,11 +134,11 @@ describe("OtpEmailStep", () => {
 
     it("captchaのエラーをTurnstileへ渡す", () => {
       // Given
+
+      // When
       const form = createForm({
         emailFieldErrors: { captcha: "captchaのエラー" },
       });
-
-      // When
       renderStep(form);
 
       // Then
@@ -147,9 +147,9 @@ describe("OtpEmailStep", () => {
 
     it("primarySubmittingのとき、送信ボタンをaria-disabledにしスピナーを出す", () => {
       // Given
-      const form = createForm({ primarySubmitting: true });
 
       // When
+      const form = createForm({ primarySubmitting: true });
       renderStep(form);
 
       // Then
@@ -160,9 +160,9 @@ describe("OtpEmailStep", () => {
 
     it("primarySubmittingでないとき、送信ボタンは有効でスピナーを出さない", () => {
       // Given
-      const form = createForm({ primarySubmitting: false });
 
       // When
+      const form = createForm({ primarySubmitting: false });
       renderStep(form);
 
       // Then
@@ -171,40 +171,53 @@ describe("OtpEmailStep", () => {
       expect(button.querySelector("svg")).toBeNull();
     });
 
-    it("hydratedとcaptchaTokenの有無をdata属性に反映する", () => {
+    it("hydratedの有無をフォームのdata-hydratedに反映する", () => {
       // Given
-      const ready = createForm({ hydrated: true, captchaToken: "token" });
-      const notReady = createForm({ hydrated: false, captchaToken: null });
 
       // When
+      const ready = createForm({ hydrated: true });
+      const notReady = createForm({ hydrated: false });
       const { container, unmount } = renderStep(ready);
-      const readyForm = container.querySelector("form");
-      const readyButton = screen.getByRole("button", {
-        name: "認証コードを送信",
-      });
-      const readyAttributes = [
-        readyForm?.getAttribute("data-hydrated"),
-        readyButton.getAttribute("data-captcha-ready"),
-      ];
+      const readyValue = container
+        .querySelector("form")
+        ?.getAttribute("data-hydrated");
       unmount();
       const second = renderStep(notReady);
-      const notReadyAttributes = [
-        second.container.querySelector("form")?.getAttribute("data-hydrated"),
-        screen
-          .getByRole("button", { name: "認証コードを送信" })
-          .getAttribute("data-captcha-ready"),
-      ];
+      const notReadyValue = second.container
+        .querySelector("form")
+        ?.getAttribute("data-hydrated");
 
       // Then
-      expect(readyAttributes).toEqual(["true", "true"]);
-      expect(notReadyAttributes).toEqual(["false", "false"]);
+      expect(readyValue).toBe("true");
+      expect(notReadyValue).toBe("false");
+    });
+
+    it("captchaTokenの有無を送信ボタンのdata-captcha-readyに反映する", () => {
+      // Given
+
+      // When
+      const ready = createForm({ captchaToken: "token" });
+      const notReady = createForm({ captchaToken: null });
+      const { unmount } = renderStep(ready);
+      const readyValue = screen
+        .getByRole("button", { name: "認証コードを送信" })
+        .getAttribute("data-captcha-ready");
+      unmount();
+      renderStep(notReady);
+      const notReadyValue = screen
+        .getByRole("button", { name: "認証コードを送信" })
+        .getAttribute("data-captcha-ready");
+
+      // Then
+      expect(readyValue).toBe("true");
+      expect(notReadyValue).toBe("false");
     });
 
     it("errorがないとき全体のエラーを描かない", () => {
       // Given
-      const form = createForm({ error: null });
 
       // When
+      const form = createForm({ error: null });
       const { container } = renderStep(form);
 
       // Then

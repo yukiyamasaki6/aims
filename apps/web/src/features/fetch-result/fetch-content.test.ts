@@ -19,6 +19,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  localStorage.clear();
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -71,7 +72,7 @@ describe("fetchContent", () => {
     });
 
     it("クエリが認証の拒否で返ると、更新を強制して確かめ、新しいセッションで取り直した結果を返す", async () => {
-      // Given: 1回目のクエリだけが認証の拒否で返り、更新で新しいセッションになる
+      // Given
       const refreshed = { user: { id: "u1" }, refresh_token: "rt-2" };
       const { client, refreshSession } = makeSupabase(
         async () => ({ data: { session } }),
@@ -134,7 +135,6 @@ describe("fetchContent", () => {
 
       // Then
       expect(withIdentity).toEqual(without);
-      localStorage.clear();
     });
   });
 
@@ -208,7 +208,7 @@ describe("fetchContent", () => {
       // When
       const result = await fetchContent(client, run);
 
-      // Then: 取り直さず、サインインを求める
+      // Then
       expect(result).toEqual({
         status: "error",
         message: AUTH_REQUIRED_MESSAGE,
@@ -243,7 +243,7 @@ describe("fetchContent", () => {
       // When
       const result = await fetchContent(client, run);
 
-      // Then: 取り直しは1回だけで、ほかのエラーと同じ文面になる
+      // Then
       expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
       expect(run).toHaveBeenCalledTimes(2);
     });
@@ -296,7 +296,6 @@ describe("fetchContent", () => {
         message: "読み込めませんでした。",
       });
       expect(run).not.toHaveBeenCalled();
-      vi.useRealTimers();
     });
 
     it("クエリが時間内に終わらないときも、errorにする", async () => {
@@ -316,7 +315,6 @@ describe("fetchContent", () => {
         status: "error",
         message: "読み込めませんでした。",
       });
-      vi.useRealTimers();
     });
 
     it.each([
@@ -333,7 +331,7 @@ describe("fetchContent", () => {
     ])(
       "取得中に回線が落ちてonLineがfalseになり、%sと、offlineにする",
       async (_name, query) => {
-        // Given: クエリの実行中にonLineがfalseになる
+        // Given
         const { client } = makeSupabase(async () => ({ data: { session } }));
         const run = async () => {
           vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
@@ -362,7 +360,6 @@ describe("fetchContent", () => {
 
       // Then
       await expect(pending).resolves.toEqual({ status: "offline" });
-      vi.useRealTimers();
     });
 
     it("getSessionの失敗の時点でonLineがfalseなら、offlineにする", async () => {
@@ -408,7 +405,6 @@ describe("fetchContent", () => {
       // Then
       expect(result).toEqual({ status: "ok", data: { id: "a" } });
       expect(vi.getTimerCount()).toBe(0);
-      vi.useRealTimers();
     });
 
     it("完了後に、offlineイベントのリスナーを解除する", async () => {
@@ -537,13 +533,11 @@ describe("fetchContent", () => {
         onLateResult,
       });
       await vi.advanceTimersByTimeAsync(0);
+      const result = await pending;
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS);
 
       // Then
-      await expect(pending).resolves.toEqual({
-        status: "ok",
-        data: { id: "a" },
-      });
-      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS);
+      expect(result).toEqual({ status: "ok", data: { id: "a" } });
       expect(onLateResult).not.toHaveBeenCalled();
       expect(vi.getTimerCount()).toBe(0);
     });
@@ -581,26 +575,17 @@ describe("withinFetchTimeout", () => {
   }
 
   describe("正常系", () => {
-    it("上限の前に終われば、その結果をそのまま返す", async () => {
-      // Given: 上限の前に終わる読み込み
+    it("上限の前に終われば、その結果をそのまま返し、タイマーを残さない", async () => {
+      // Given
       vi.useFakeTimers();
       const pending = withinFetchTimeout(loadingAfter(100));
 
       // When
       await vi.advanceTimersByTimeAsync(100);
+      const result = await pending;
 
       // Then
-      await expect(pending).resolves.toEqual(ok);
-    });
-
-    it("上限の前に終わった後は、タイマーを残さない", async () => {
-      // Given
-      vi.useFakeTimers();
-      const pending = withinFetchTimeout(loadingAfter(100));
-      await vi.advanceTimersByTimeAsync(100);
-      await pending;
-
-      // When / Then: 上限のタイマーが残っていない
+      expect(result).toEqual(ok);
       expect(vi.getTimerCount()).toBe(0);
     });
 
@@ -620,23 +605,20 @@ describe("withinFetchTimeout", () => {
 
   describe("異常系", () => {
     it("終わらない読み込みは、FETCH_TIMEOUT_MS - 1では結果が出ず、FETCH_TIMEOUT_MSでerrorになる", async () => {
-      // Given: 終わらない読み込み
+      // Given
       vi.useFakeTimers();
       const settled = vi.fn();
       withinFetchTimeout(new Promise<FetchResult<string>>(() => {})).then(
         settled,
       );
 
-      // When: 上限の1ms前
+      // When
       await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - 1);
-
-      // Then: まだ結果が出ない
-      expect(settled).not.toHaveBeenCalled();
-
-      // When: 上限
+      const beforeLimit = settled.mock.calls.length;
       await vi.advanceTimersByTimeAsync(1);
 
-      // Then: 取得の時間切れと同じerrorになる
+      // Then
+      expect(beforeLimit).toBe(0);
       expect(settled).toHaveBeenCalledWith({
         status: "error",
         message: FETCH_ERROR_MESSAGE,
@@ -659,7 +641,7 @@ describe("withinFetchTimeout", () => {
     });
 
     it("上限の後に終わった結果は返さず、errorのままにする", async () => {
-      // Given: 上限の後に終わる読み込み
+      // Given
       vi.useFakeTimers();
       const pending = withinFetchTimeout(
         loadingAfter(FETCH_TIMEOUT_MS + 1_000),
@@ -678,12 +660,13 @@ describe("withinFetchTimeout", () => {
     it("読み込みが拒否されたら、そのまま拒否する", async () => {
       // Given
       vi.useFakeTimers();
-      const failure = new Error("storage failed");
 
-      // When / Then
-      await expect(withinFetchTimeout(Promise.reject(failure))).rejects.toBe(
-        failure,
-      );
+      // When
+      const failure = new Error("storage failed");
+      const pending = withinFetchTimeout(Promise.reject(failure));
+
+      // Then
+      await expect(pending).rejects.toBe(failure);
       expect(vi.getTimerCount()).toBe(0);
     });
   });

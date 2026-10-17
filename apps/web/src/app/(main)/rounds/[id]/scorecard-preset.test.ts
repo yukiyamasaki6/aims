@@ -24,8 +24,8 @@ const distanceB: Distance = {
   id: "d-b",
   position_key: "b",
   distance: 30,
-  total_ends: 2,
-  arrows_per_end: 3,
+  total_ends: 6,
+  arrows_per_end: 6,
   target_face_id: "face-2",
   is_marked: false,
 };
@@ -61,23 +61,25 @@ function distancesOf(values: number[]): Distance[] {
 
 describe("generatePresetName", () => {
   it("距離を並び順に「-」で連結する", () => {
-    // Given: 並び順とは逆の順の距離
-    // When: 名前を生成する
+    // Given
+
+    // When
     const name = generatePresetName([distanceB, distanceA]);
 
-    // Then: 並び順（70m→30m）で連結される
+    // Then
     expect(name).toBe("70-30");
   });
 
   it("距離が未設定の場合は「??」とする", () => {
-    // Given: 2つ目の距離が未設定
-    // When: 名前を生成する
+    // Given
+
+    // When
     const name = generatePresetName([
       distanceA,
       { ...distanceB, distance: null },
     ]);
 
-    // Then: 未設定の距離は「??」になる
+    // Then
     expect(name).toBe("70-??");
   });
 });
@@ -85,15 +87,16 @@ describe("generatePresetName", () => {
 describe("changePresetDialogOpen", () => {
   describe("開く場合", () => {
     it("ラウンド名を名前欄に事前入力する", () => {
-      // Given: 閉じたダイアログ
-      // When: 開く
+      // Given
+
+      // When
       const state = changePresetDialogOpen(
         CLOSED_PRESET_DIALOG,
         true,
         "午前練習",
       );
 
-      // Then: 名前欄にラウンド名が入る
+      // Then
       expect(state).toEqual({
         open: true,
         name: "午前練習",
@@ -105,24 +108,24 @@ describe("changePresetDialogOpen", () => {
 
   describe("閉じる場合", () => {
     it("送信中でなければ、名前欄とエラーを破棄して閉じる", () => {
-      // Given: 入力とエラーが残っている、送信中でないダイアログ
+      // Given
       const current = openDialog({ name: "入力中", error: "エラー" });
 
-      // When: 閉じる
+      // When
       const state = changePresetDialogOpen(current, false, "午前練習");
 
-      // Then: 名前欄とエラーが空になって閉じる
+      // Then
       expect(state).toEqual(CLOSED_PRESET_DIALOG);
     });
 
     it("送信中は閉じない", () => {
-      // Given: 送信中のダイアログ
+      // Given
       const current = openDialog({ submitting: true });
 
-      // When: 閉じる
+      // When
       const state = changePresetDialogOpen(current, false, "午前練習");
 
-      // Then: 状態は変わらない
+      // Then
       expect(state).toBe(current);
     });
   });
@@ -140,17 +143,17 @@ describe("startPresetSave", () => {
     };
 
     it("同じ位置キーの距離は(位置キー、ID)の順に並べ、連番の一意なキーを振り直す", () => {
-      // Given: 同じキーの2件(配列の順はIDの順と逆)と、その後ろの1件
+      // Given
+
+      // When
       const distances: Distance[] = [
         { ...distanceB, id: "d-3", position_key: "b", distance: 20 },
         { ...distanceA, id: "d-2", position_key: "a", distance: 30 },
         { ...distanceA, id: "d-1", position_key: "a", distance: 70 },
       ];
-
-      // When: 保存を始める
       const sent = submitted(distances);
 
-      // Then: IDの小さい順に並び、キーはa, b, cになる
+      // Then
       expect(sent.map((d) => [d.position_key, d.distance])).toEqual([
         ["a", 70],
         ["b", 30],
@@ -159,17 +162,17 @@ describe("startPresetSave", () => {
     });
 
     it("26件を超えても、振り直したキーは辞書順で増加する", () => {
-      // Given: 28件の距離
+      // Given
+
+      // When
       const distances: Distance[] = Array.from({ length: 28 }, (_, i) => ({
         ...distanceA,
         id: `d-${String(i).padStart(2, "0")}`,
         position_key: "a",
       }));
-
-      // When: 保存を始める
       const keys = submitted(distances).map((d) => d.position_key);
 
-      // Then: zの次はzaで、全体が厳密に増加する
+      // Then
       expect(keys[25]).toBe("z");
       expect(keys[26]).toBe("za");
       expect(keys[27]).toBe("zb");
@@ -180,13 +183,13 @@ describe("startPresetSave", () => {
 
   describe("名前が入力されている場合", () => {
     it("前後の空白を除いた名前と表示中の構成で送信し、直前のエラーを消して送信中にする", () => {
-      // Given: 前後に空白のある名前と、直前のエラーが残っているダイアログ
+      // Given
       const current = openDialog({ name: "  午前練習  ", error: "エラー" });
 
-      // When: 保存を始める
+      // When
       const start = startPresetSave(current, source);
 
-      // Then: 送信する内容と送信中の状態が返る
+      // Then
       expect(start).toEqual({
         type: "submit",
         state: {
@@ -211,8 +214,8 @@ describe("startPresetSave", () => {
             {
               position_key: "b",
               distance: 30,
-              total_ends: 2,
-              arrows_per_end: 3,
+              total_ends: 6,
+              arrows_per_end: 6,
               target_face_id: "face-2",
               is_marked: false,
             },
@@ -222,17 +225,17 @@ describe("startPresetSave", () => {
     });
 
     it("前後の空白を除いて49文字・50文字は送信し、51文字はエラーにして送信しない", () => {
-      // Given: 49文字の名前と、前後の空白を除くと50文字の名前と、51文字の名前
+      // Given
       const below = openDialog({ name: "あ".repeat(49) });
       const within = openDialog({ name: ` ${"あ".repeat(50)} ` });
       const over = openDialog({ name: "あ".repeat(51) });
 
-      // When: 保存を始める
+      // When
       const belowStart = startPresetSave(below, source);
       const withinStart = startPresetSave(within, source);
       const overStart = startPresetSave(over, source);
 
-      // Then: 49文字・50文字は送信し、51文字はエラーを表示して送信しない
+      // Then
       expect(belowStart).toMatchObject({
         type: "submit",
         args: { p_name: "あ".repeat(49) },
@@ -255,13 +258,13 @@ describe("startPresetSave", () => {
 
   describe("名前が空白のみの場合", () => {
     it("距離構成から生成した名前で送信する", () => {
-      // Given: 空白のみの名前
+      // Given
       const current = openDialog({ name: "   " });
 
-      // When: 保存を始める
+      // When
       const start = startPresetSave(current, source);
 
-      // Then: 並び順の距離から生成した名前で送信する
+      // Then
       expect(start).toMatchObject({
         type: "submit",
         args: { p_name: "70-30" },
@@ -269,13 +272,13 @@ describe("startPresetSave", () => {
     });
 
     it("生成した名前が49文字・50文字は送信し、51文字はエラーにして送信しない", () => {
-      // Given: 生成すると49文字（70m×14と100m×2）、50文字（70m×17）、51文字（70m×16と100m）になる距離構成
+      // Given
+      const current = openDialog({ name: "" });
+
+      // When
       const below = distancesOf([...Array(14).fill(70), 100, 100]);
       const within = distancesOf(Array(17).fill(70));
       const over = distancesOf([...Array(16).fill(70), 100]);
-      const current = openDialog({ name: "" });
-
-      // When: 保存を始める
       const belowStart = startPresetSave(current, {
         ...source,
         distances: below,
@@ -289,7 +292,7 @@ describe("startPresetSave", () => {
         distances: over,
       });
 
-      // Then: 49文字・50文字は送信し、51文字はエラーを表示して送信しない
+      // Then
       expect(belowStart).toMatchObject({
         type: "submit",
         args: {
@@ -316,13 +319,13 @@ describe("startPresetSave", () => {
 
   describe("送信中の場合", () => {
     it("重ねて送信しない", () => {
-      // Given: 送信中のダイアログ
+      // Given
       const current = openDialog({ submitting: true });
 
-      // When: 保存を始める
+      // When
       const start = startPresetSave(current, source);
 
-      // Then: 何もしない
+      // Then
       expect(start).toEqual({ type: "busy" });
     });
   });
@@ -330,24 +333,24 @@ describe("startPresetSave", () => {
 
 describe("finishPresetSave", () => {
   it("成功した場合は、名前欄を空にして閉じる", () => {
-    // Given: 送信中のダイアログ
+    // Given
     const current = openDialog({ submitting: true });
 
-    // When: 保存が成功する
+    // When
     const state = finishPresetSave(current, undefined);
 
-    // Then: 名前欄が空になって閉じる
+    // Then
     expect(state).toEqual(CLOSED_PRESET_DIALOG);
   });
 
   it("失敗した場合は、名前欄を残したまま開いた状態でエラーを表示する", () => {
-    // Given: 送信中のダイアログ
+    // Given
     const current = openDialog({ submitting: true });
 
-    // When: 保存が失敗する
+    // When
     const state = finishPresetSave(current, { error: "保存に失敗しました。" });
 
-    // Then: 開いたまま、エラーが表示される
+    // Then
     expect(state).toEqual({
       open: true,
       name: "午前練習",

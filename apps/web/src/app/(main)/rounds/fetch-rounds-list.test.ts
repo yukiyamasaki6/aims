@@ -164,7 +164,8 @@ describe("fetchRoundsList", () => {
     });
 
     it("通信できないとき、原因を断定せずerrorを返す", async () => {
-      // Given: 通信失敗はstatus 0で返る
+      // Given
+      // 通信失敗はstatus 0で返る。
       const { client } = makeSupabase({ data: null, error: null, status: 0 });
 
       // When

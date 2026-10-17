@@ -36,7 +36,7 @@ export async function saveTargetFacesOnDevice(page: Page) {
     password: SHARED_PASSWORD,
     name: "的の保存",
     roundDate: "2026-08-24",
-    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
   });
   await page.goto(`/rounds/${roundId}`);
   await waitForHydration(page);
@@ -78,4 +78,17 @@ export async function startRoundOffline(page: Page, presetName?: string) {
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
   await waitForHydration(page);
+}
+
+// 的の一覧の取得を空にして、的データを取得できない表示を再現する。ページを開く前に呼ぶ。
+export async function stubMissingTargetFaces(page: Page) {
+  await forgetTargetFacesOnDevice(page);
+  // Service Workerが制御する文書の通信も置き換えるため、contextで置き換える。
+  await page.context().route(TARGET_FACES_REST, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: "[]",
+    }),
+  );
 }

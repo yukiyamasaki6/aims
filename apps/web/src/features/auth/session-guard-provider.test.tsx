@@ -19,17 +19,35 @@ beforeEach(() => {
 });
 
 describe("SessionGuard", () => {
-  it("マウントで喪失の監視を始め、喪失時に/signinへの遷移を呼び、アンマウントで解除する", () => {
+  it("マウントすると、喪失の監視を1回始める", () => {
     // Given
     // When
-    const { unmount } = render(<SessionGuard />);
+    render(<SessionGuard />);
 
     // Then
     expect(mocks.watchSessionLoss).toHaveBeenCalledTimes(1);
+  });
+
+  it("監視が喪失を知らせると、/signinへの遷移を呼ぶ", () => {
+    // Given
+    render(<SessionGuard />);
     const [, options] = mocks.watchSessionLoss.mock.calls[0];
+
+    // When
     options.onLost();
+
+    // Then
     expect(mocks.redirectToSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  it("アンマウントすると、監視を解除する", () => {
+    // Given
+    const { unmount } = render(<SessionGuard />);
+
+    // When
     unmount();
+
+    // Then
     expect(mocks.dispose).toHaveBeenCalledTimes(1);
   });
 });

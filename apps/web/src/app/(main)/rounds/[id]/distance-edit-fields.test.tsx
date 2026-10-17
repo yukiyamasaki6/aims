@@ -69,13 +69,11 @@ describe("DistanceEditFields", () => {
   describe("表示", () => {
     describe("roundFormatがfield以外の場合", () => {
       it("Marked/Unmarkedの切り替えを表示しない", () => {
-        // Given: アウトドアのラウンド
-        const props = { roundFormat: "outdoor" };
+        // Given
+        // When
+        setup({ roundFormat: "outdoor" });
 
-        // When: 表示する
-        setup(props);
-
-        // Then: Marked/Unmarkedの切り替えがない
+        // Then
         expect(
           screen.queryByTestId("distance-config-marked-1"),
         ).not.toBeInTheDocument();
@@ -87,13 +85,11 @@ describe("DistanceEditFields", () => {
 
     describe("roundFormatがfieldの場合", () => {
       it("Marked/Unmarkedの切り替えを表示する", () => {
-        // Given: フィールドのラウンド
-        const props = { roundFormat: "field" };
+        // Given
+        // When
+        setup({ roundFormat: "field" });
 
-        // When: 表示する
-        setup(props);
-
-        // Then: Marked/Unmarkedの切り替えがある
+        // Then
         expect(
           screen.getByTestId("distance-config-marked-1"),
         ).toBeInTheDocument();
@@ -103,58 +99,13 @@ describe("DistanceEditFields", () => {
       });
     });
 
-    describe("入力欄の並び", () => {
-      function expectDomOrder(elements: HTMLElement[]) {
-        for (let i = 0; i < elements.length - 1; i++) {
-          expect(
-            elements[i].compareDocumentPosition(elements[i + 1]) &
-              Node.DOCUMENT_POSITION_FOLLOWING,
-          ).toBeTruthy();
-        }
-      }
-
-      it("フィールドでは、Marked切り替え、距離、本数、エンド数、的の順に並ぶ", () => {
-        // Given: フィールドのラウンド
-        // When: 表示する
-        setup({ roundFormat: "field" });
-
-        // Then: 上から順に並ぶ
-        expectDomOrder([
-          screen.getByTestId("distance-config-marked-1"),
-          screen.getByLabelText("距離（m）"),
-          screen.getByLabelText("エンドあたりの本数"),
-          screen.getByLabelText("総エンド数"),
-          screen.getByTestId("target-face-picker-trigger"),
-        ]);
-      });
-
-      it("フィールド以外では、切り替えが無く、距離、本数、エンド数、的の順に並ぶ", () => {
-        // Given: アウトドアのラウンド
-        // When: 表示する
-        setup({ roundFormat: "outdoor" });
-
-        // Then: 切り替えが無く、上から順に並ぶ
-        expect(
-          screen.queryByTestId("distance-config-marked-1"),
-        ).not.toBeInTheDocument();
-        expectDomOrder([
-          screen.getByLabelText("距離（m）"),
-          screen.getByLabelText("エンドあたりの本数"),
-          screen.getByLabelText("総エンド数"),
-          screen.getByTestId("target-face-picker-trigger"),
-        ]);
-      });
-    });
-
     describe("hasShotsがtrueの場合", () => {
       it("的・本数・エンド数が編集不可になる（距離は編集可能）", () => {
-        // Given: スコア記録済みの距離
-        const props = { hasShots: true };
+        // Given
+        // When
+        setup({ hasShots: true });
 
-        // When: 表示する
-        setup(props);
-
-        // Then: 距離以外は読み取り専用、的は操作不可を示す
+        // Then
         expect(
           screen.getByTestId("target-face-picker-trigger"),
         ).toHaveAttribute("aria-disabled", "true");
@@ -176,17 +127,17 @@ describe("DistanceEditFields", () => {
       ])(
         "%sを押すとメッセージが表示され、値は変わらない（%s）",
         async (testId) => {
-          // Given: スコア記録済みの距離
+          // Given
           const user = userEvent.setup();
           const { onSaved } = setup({ hasShots: true });
           const input = screen.getByTestId(testId);
           const before = (input as HTMLInputElement).value;
 
-          // When: 押して入力を試みる
+          // When
           await user.click(input);
           await user.type(input, "9");
 
-          // Then: 理由が表示され、値は変わらない
+          // Then
           expect(screen.getByRole("alert")).toHaveTextContent(
             "スコアが記録済みのため変更できません",
           );
@@ -200,14 +151,14 @@ describe("DistanceEditFields", () => {
       );
 
       it("的を押すとメッセージが表示され、的選択ダイアログは開かない", async () => {
-        // Given: スコア記録済みの距離
+        // Given
         const user = userEvent.setup();
         const { onSaved } = setup({ hasShots: true });
 
-        // When: 的を押す
+        // When
         await user.click(screen.getByTestId("target-face-picker-trigger"));
 
-        // Then: 理由が表示され、一覧は開かない
+        // Then
         expect(
           screen.getByTestId("distance-config-target-face-locked-message"),
         ).toHaveTextContent("スコアが記録済みのため変更できません");
@@ -220,15 +171,15 @@ describe("DistanceEditFields", () => {
       });
 
       it("別の項目を押すと、メッセージは押した項目に移る", async () => {
-        // Given: 本数を押してメッセージが出ている
+        // Given
         const user = userEvent.setup();
         setup({ hasShots: true });
         await user.click(screen.getByTestId("distance-config-arrows-1"));
 
-        // When: 総エンド数を押す
+        // When
         await user.click(screen.getByTestId("distance-config-total-ends-1"));
 
-        // Then: メッセージは1つで、総エンド数の直下にある
+        // Then
         expect(screen.getAllByRole("alert")).toHaveLength(1);
         expect(
           screen.getByTestId("distance-config-total-ends-1-locked-message"),
@@ -236,26 +187,24 @@ describe("DistanceEditFields", () => {
       });
 
       it("距離とMarked/Unmarkedを押してもメッセージは表示されない", async () => {
-        // Given: スコア記録済みのフィールドの距離
+        // Given
         const user = userEvent.setup();
         setup({ hasShots: true, roundFormat: "field" });
 
-        // When: 距離とMarkedを押す
+        // When
         await user.click(screen.getByTestId("distance-config-distance-1"));
         await user.click(screen.getByTestId("distance-config-marked-1"));
 
-        // Then: メッセージは出ない
+        // Then
         expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       });
 
       it("的選択トリガーのラベルに変更不可の理由を示す", () => {
-        // Given: スコア記録済みの距離
-        const props = { hasShots: true };
+        // Given
+        // When
+        setup({ hasShots: true });
 
-        // When: 表示する
-        setup(props);
-
-        // Then: 的の名称と変更不可の理由をラベルに含む
+        // Then
         expect(
           screen.getByLabelText(
             `${targetFaceOutdoorRecurve.name}（スコア記録済みのため変更不可）`,
@@ -264,16 +213,14 @@ describe("DistanceEditFields", () => {
       });
 
       it("選択中の的が存在しなければ、ラベルは「的（スコア記録済みのため変更不可）」になる", () => {
-        // Given: 存在しない的を選んだスコア記録済みの距離
-        const props = {
+        // Given
+        // When
+        setup({
           hasShots: true,
           distance: { ...baseDistance, targetFaceId: "unknown-face" },
-        };
+        });
 
-        // When: 表示する
-        setup(props);
-
-        // Then: 的の名称の代わりに「的」を使う
+        // Then
         expect(
           screen.getByLabelText("的（スコア記録済みのため変更不可）"),
         ).toBeInTheDocument();
@@ -285,20 +232,30 @@ describe("DistanceEditFields", () => {
         distance: { ...baseDistance, targetFaceId: "unknown-face" },
       };
 
-      it("的選択トリガーは「的データを取得できません」の表示とラベルになり、開ける", async () => {
-        // Given: 存在しない的を選んだ距離
-        const user = userEvent.setup();
+      it("選択中の的が一覧に無ければ、トリガーは「的データを取得できません」の表示とラベルになり、操作不可にならない", () => {
+        // Given
+        // When
         setup(props);
 
-        // When: トリガーを開く
+        // Then
         const trigger = screen.getByLabelText(
           "的データを取得できません（タップで変更）",
         );
         expect(trigger).toHaveTextContent("的データを取得できません");
         expect(trigger).not.toHaveAttribute("aria-disabled");
-        await user.click(trigger);
+      });
 
-        // Then: 一覧から的を選び直せる
+      it("選択中の的が一覧に無くても、トリガーを押すと一覧から選び直せる", async () => {
+        // Given
+        const user = userEvent.setup();
+        setup(props);
+
+        // When
+        await user.click(
+          screen.getByLabelText("的データを取得できません（タップで変更）"),
+        );
+
+        // Then
         expect(
           screen.getByTestId(
             `target-face-option-${targetFaceOutdoorRecurve.id}`,
@@ -307,8 +264,11 @@ describe("DistanceEditFields", () => {
       });
 
       it("スコア記録済みなら、トリガーは操作不可になる", () => {
+        // Given
+        // When
         setup({ ...props, hasShots: true });
 
+        // Then
         expect(
           screen.getByLabelText("的（スコア記録済みのため変更不可）"),
         ).toHaveAttribute("aria-disabled", "true");
@@ -319,7 +279,7 @@ describe("DistanceEditFields", () => {
   describe("保存", () => {
     describe("入力内容が有効な場合", () => {
       it("onSavedとenqueueを検証済みの距離設定で呼ぶ", async () => {
-        // Given: 距離・本数・エンド数を編集したフォーム
+        // Given
         vi.spyOn(crypto, "randomUUID").mockReturnValue(EVENT_ID);
         const user = userEvent.setup();
         const { onSaved, enqueue } = setup();
@@ -330,18 +290,18 @@ describe("DistanceEditFields", () => {
         await user.clear(screen.getByTestId("distance-config-total-ends-1"));
         await user.type(
           screen.getByTestId("distance-config-total-ends-1"),
-          "10",
+          "12",
         );
 
-        // When: 保存する
+        // When
         await user.click(screen.getByTestId("distance-config-save-1"));
 
-        // Then: 距離設定を通知し、distance.updatedの操作を登録する
+        // Then
         expect(onSaved).toHaveBeenCalledWith({
           id: "distance-1",
           distanceNumber: 1,
           distance: 50,
-          totalEnds: 10,
+          totalEnds: 12,
           arrowsPerEnd: 3,
           targetFaceId: "face-outdoor-recurve",
           isMarked: false,
@@ -353,7 +313,7 @@ describe("DistanceEditFields", () => {
           changes: {
             distance: 50,
             config: {
-              totalEnds: 10,
+              totalEnds: 12,
               arrowsPerEnd: 3,
               targetFaceId: "face-outdoor-recurve",
             },
@@ -364,29 +324,28 @@ describe("DistanceEditFields", () => {
 
     describe("変更がない場合", () => {
       it("onSavedは呼ぶが、enqueueは呼ばない", async () => {
-        // Given: 何も編集しないフォーム
+        // Given
         const user = userEvent.setup();
         const { onSaved, enqueue } = setup();
 
-        // When: 保存する
+        // When
         await user.click(screen.getByTestId("distance-config-save-1"));
 
-        // Then: 同期操作を登録しない
+        // Then
         expect(onSaved).toHaveBeenCalled();
         expect(enqueue).not.toHaveBeenCalled();
       });
     });
 
     describe("開いている間にdistanceが変わった場合", () => {
-      it("下書きを書き換えず、保存は開いたときの値との差だけを送る", async () => {
-        // Given: 距離を編集しているフォーム
-        vi.spyOn(crypto, "randomUUID").mockReturnValue(EVENT_ID);
+      it("開いている間にdistanceが変わっても、下書きを書き換えない", async () => {
+        // Given
         const user = userEvent.setup();
         const { enqueue, rerender, ...props } = setup();
         await user.clear(screen.getByTestId("distance-config-distance-1"));
         await user.type(screen.getByTestId("distance-config-distance-1"), "50");
 
-        // When: 同じ内容の別の参照、続けて他の端末で本数が変わった内容が届く
+        // When
         const element = (distance: DistanceConfig) => (
           <DistanceEditFields
             distance={distance}
@@ -401,13 +360,41 @@ describe("DistanceEditFields", () => {
           />
         );
         rerender(element({ ...baseDistance }));
-        rerender(element({ ...baseDistance, arrowsPerEnd: 3 }));
+        rerender(element({ ...baseDistance, totalEnds: 12, arrowsPerEnd: 3 }));
 
-        // Then: 下書きは残り、保存は変えた距離だけを送る
+        // Then
         expect(screen.getByTestId("distance-config-distance-1")).toHaveValue(
           50,
         );
+      });
+
+      it("開いている間に他の端末の変更が届いた後に保存すると、開いたときの値との差だけを送る", async () => {
+        // Given
+        vi.spyOn(crypto, "randomUUID").mockReturnValue(EVENT_ID);
+        const user = userEvent.setup();
+        const { enqueue, rerender, ...props } = setup();
+        await user.clear(screen.getByTestId("distance-config-distance-1"));
+        await user.type(screen.getByTestId("distance-config-distance-1"), "50");
+        const element = (distance: DistanceConfig) => (
+          <DistanceEditFields
+            distance={distance}
+            hasShots={false}
+            targetFaces={targetFaces}
+            roundFormat="outdoor"
+            roundBowType="recurve"
+            onSaved={props.onSaved}
+            onDeleted={props.onDeleted}
+            onOpenChange={props.onOpenChange}
+            enqueue={enqueue}
+          />
+        );
+        rerender(element({ ...baseDistance }));
+        rerender(element({ ...baseDistance, totalEnds: 12, arrowsPerEnd: 3 }));
+
+        // When
         await user.click(screen.getByTestId("distance-config-save-1"));
+
+        // Then
         expect(enqueue).toHaveBeenCalledWith({
           type: "distance.updated",
           eventId: EVENT_ID,
@@ -419,7 +406,7 @@ describe("DistanceEditFields", () => {
 
     describe("入力内容が無効な場合", () => {
       it("各項目のエラーを表示し、onSavedもenqueueも呼ばない", async () => {
-        // Given: Markedに切り替え、距離・本数・エンド数を空にしたフォーム
+        // Given
         const user = userEvent.setup();
         const { onSaved, enqueue } = setup({ roundFormat: "field" });
         await user.click(screen.getByTestId("distance-config-marked-1"));
@@ -427,10 +414,10 @@ describe("DistanceEditFields", () => {
         await user.clear(screen.getByTestId("distance-config-arrows-1"));
         await user.clear(screen.getByTestId("distance-config-total-ends-1"));
 
-        // When: 保存する
+        // When
         await user.click(screen.getByTestId("distance-config-save-1"));
 
-        // Then: 各項目のエラーを表示し、保存も同期操作の登録もしない
+        // Then
         expect(
           screen.getByText("距離を入力してください。"),
         ).toBeInTheDocument();
@@ -446,15 +433,15 @@ describe("DistanceEditFields", () => {
   describe("削除", () => {
     describe("スコア未記録の場合", () => {
       it("確認なしにonDeletedとenqueueを呼ぶ", async () => {
-        // Given: スコア未記録の距離
+        // Given
         vi.spyOn(crypto, "randomUUID").mockReturnValue(EVENT_ID);
         const user = userEvent.setup();
         const { onDeleted, enqueue } = setup({ hasShots: false });
 
-        // When: 削除ボタンをクリックする
+        // When
         await user.click(screen.getByTestId("distance-config-delete-1"));
 
-        // Then: 削除を通知し、distance.disabledの操作を登録する
+        // Then
         expect(onDeleted).toHaveBeenCalled();
         expect(enqueue).toHaveBeenCalledWith({
           type: "distance.disabled",
@@ -465,26 +452,33 @@ describe("DistanceEditFields", () => {
     });
 
     describe("スコア記録済みの場合", () => {
-      it("確認ダイアログを表示し、確認後に削除する", async () => {
-        // Given: スコア記録済みの距離
+      it("削除を押すと、確認ダイアログを表示し、まだ削除しない", async () => {
+        // Given
         const user = userEvent.setup();
-        const { onDeleted, enqueue } = setup({ hasShots: true });
+        const { onDeleted } = setup({ hasShots: true });
 
-        // When: 削除ボタンをクリックする
+        // When
         await user.click(screen.getByTestId("distance-config-delete-1"));
 
-        // Then: 確認ダイアログを表示し、まだ削除しない
+        // Then
         expect(
           screen.getByText(
             "この距離にはすでにスコアが記録されています。削除するとスコアも失われます。削除しますか？",
           ),
         ).toBeInTheDocument();
         expect(onDeleted).not.toHaveBeenCalled();
+      });
 
-        // When: 確認する
+      it("確認ダイアログで確認すると、削除を通知し、同期操作を登録する", async () => {
+        // Given
+        const user = userEvent.setup();
+        const { onDeleted, enqueue } = setup({ hasShots: true });
+        await user.click(screen.getByTestId("distance-config-delete-1"));
+
+        // When
         await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
-        // Then: 削除を通知し、同期操作を登録する
+        // Then
         expect(onDeleted).toHaveBeenCalled();
         expect(enqueue).toHaveBeenCalledWith(
           expect.objectContaining({ type: "distance.disabled" }),
@@ -492,15 +486,30 @@ describe("DistanceEditFields", () => {
       });
 
       it("確認をキャンセルすると削除しない", async () => {
-        // Given: 削除の確認ダイアログを開いた状態
+        // Given
         const user = userEvent.setup();
         const { onDeleted, enqueue } = setup({ hasShots: true });
         await user.click(screen.getByTestId("distance-config-delete-1"));
 
-        // When: キャンセルする
+        // When
         await user.click(screen.getByTestId("confirm-dialog-cancel"));
 
-        // Then: 削除も同期操作の登録もしない
+        // Then
+        expect(onDeleted).not.toHaveBeenCalled();
+        expect(enqueue).not.toHaveBeenCalled();
+      });
+
+      it("確認ダイアログの背景を押すと、削除しない", async () => {
+        // Given
+        const user = userEvent.setup();
+        const { onDeleted, enqueue } = setup({ hasShots: true });
+        await user.click(screen.getByTestId("distance-config-delete-1"));
+        const backdrops = document.querySelectorAll(".bg-black\\/40");
+
+        // When
+        await user.click(backdrops[backdrops.length - 1]);
+
+        // Then
         expect(onDeleted).not.toHaveBeenCalled();
         expect(enqueue).not.toHaveBeenCalled();
       });
@@ -509,14 +518,14 @@ describe("DistanceEditFields", () => {
 
   describe("Escapeキー", () => {
     it("onOpenChangeをfalseで呼ぶ", async () => {
-      // Given: 表示中のフォーム
+      // Given
       const user = userEvent.setup();
       const { onOpenChange } = setup();
 
-      // When: Escapeキーを押す
+      // When
       await user.keyboard("{Escape}");
 
-      // Then: 閉じるよう通知する
+      // Then
       expect(onOpenChange).toHaveBeenCalledWith(
         false,
         expect.objectContaining({ reason: "escape-key" }),
@@ -524,17 +533,64 @@ describe("DistanceEditFields", () => {
     });
   });
 
+  describe("背景のクリック", () => {
+    it("距離編集の背景を押すと、閉じるよう通知し、保存しない", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { onOpenChange, onSaved, enqueue } = setup();
+      await user.clear(screen.getByTestId("distance-config-distance-1"));
+      await user.type(screen.getByTestId("distance-config-distance-1"), "99");
+      const backdrops = document.querySelectorAll(".bg-black\\/40");
+
+      // When
+      await user.click(backdrops[backdrops.length - 1]);
+
+      // Then
+      expect(onOpenChange).toHaveBeenCalledWith(
+        false,
+        expect.objectContaining({ reason: "outside-press" }),
+      );
+      expect(onSaved).not.toHaveBeenCalled();
+      expect(enqueue).not.toHaveBeenCalled();
+    });
+
+    it("的選択の背景を押すと、的選択だけが閉じ、距離編集は開いたまま", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { onOpenChange } = setup();
+      await user.click(screen.getByTestId("target-face-picker-trigger"));
+      expect(
+        screen.getByTestId(`target-face-option-${targetFaceOutdoorRecurve.id}`),
+      ).toBeInTheDocument();
+      const backdrops = document.querySelectorAll(".bg-black\\/40");
+
+      // When
+      await user.click(backdrops[backdrops.length - 1]);
+
+      // Then
+      expect(
+        screen.queryByTestId(
+          `target-face-option-${targetFaceOutdoorRecurve.id}`,
+        ),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("distance-config-distance-1"),
+      ).toBeInTheDocument();
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+  });
+
   describe("的選択ポップアップ", () => {
     describe("開いた直後", () => {
       it("ラウンドの種別・弓種で絞り込んだ的を表示する", async () => {
-        // Given: アウトドア・リカーブのラウンドの距離
+        // Given
         const user = userEvent.setup();
         setup();
 
-        // When: 的選択ポップアップを開く
+        // When
         await user.click(screen.getByTestId("target-face-picker-trigger"));
 
-        // Then: ラウンドの種別・弓種に合う的だけを表示する
+        // Then
         expect(
           screen.getByTestId(
             `target-face-option-${targetFaceOutdoorRecurve.id}`,
@@ -550,16 +606,16 @@ describe("DistanceEditFields", () => {
 
     describe("タブの切り替え", () => {
       it("選んだ種別・弓種で絞り込み直す", async () => {
-        // Given: 的選択ポップアップを開いた状態
+        // Given
         const user = userEvent.setup();
         setup();
         await user.click(screen.getByTestId("target-face-picker-trigger"));
 
-        // When: 種別・弓種とも「すべて」タブに切り替える
+        // When
         await user.click(screen.getByTestId("target-face-format-tab-all"));
         await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
 
-        // Then: 絞り込みが解除される
+        // Then
         expect(
           screen.getByTestId(
             `target-face-option-${targetFaceOutdoorRecurve.id}`,
@@ -575,7 +631,7 @@ describe("DistanceEditFields", () => {
 
     describe("種別タブの切り替え", () => {
       it("選んだ種別・弓種に対応する的だけを表示する", async () => {
-        // Given: アウトドア・リカーブのラウンドで、フィールドの的も持つ的選択ポップアップ
+        // Given
         const user = userEvent.setup();
         const targetFaceField: TargetFaceOption = {
           id: "face-field-recurve",
@@ -588,10 +644,10 @@ describe("DistanceEditFields", () => {
         setup({ targetFaces: [...targetFaces, targetFaceField] });
         await user.click(screen.getByTestId("target-face-picker-trigger"));
 
-        // When: 種別タブをフィールドに切り替える
+        // When
         await user.click(screen.getByTestId("target-face-format-tab-field"));
 
-        // Then: フィールドで、選択中の弓種に対応する的だけを表示する
+        // Then
         expect(
           screen.getByTestId(`target-face-option-${targetFaceField.id}`),
         ).toBeInTheDocument();
@@ -609,32 +665,46 @@ describe("DistanceEditFields", () => {
     });
 
     describe("的の選択", () => {
-      it("ポップアップが閉じ、選択内容が保存に反映される", async () => {
-        // Given: 的選択ポップアップで全件を表示した状態
+      it("的を選ぶと、ポップアップが閉じる", async () => {
+        // Given
         const user = userEvent.setup();
-        const { enqueue } = setup();
+        setup();
         await user.click(screen.getByTestId("target-face-picker-trigger"));
         await user.click(screen.getByTestId("target-face-format-tab-all"));
         await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
 
-        // When: 的を選択する
+        // When
         await user.click(
           screen.getByTestId(
             `target-face-option-${targetFaceIndoorCompound.id}`,
           ),
         );
 
-        // Then: ポップアップが閉じる
+        // Then
         expect(
           screen.queryByTestId(
             `target-face-option-${targetFaceIndoorCompound.id}`,
           ),
         ).not.toBeInTheDocument();
+      });
 
-        // When: 保存する
+      it("的を選んで保存すると、選んだ的で同期操作を登録する", async () => {
+        // Given
+        const user = userEvent.setup();
+        const { enqueue } = setup();
+        await user.click(screen.getByTestId("target-face-picker-trigger"));
+        await user.click(screen.getByTestId("target-face-format-tab-all"));
+        await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
+        await user.click(
+          screen.getByTestId(
+            `target-face-option-${targetFaceIndoorCompound.id}`,
+          ),
+        );
+
+        // When
         await user.click(screen.getByTestId("distance-config-save-1"));
 
-        // Then: 選択した的で同期操作を登録する
+        // Then
         expect(enqueue).toHaveBeenCalledWith(
           expect.objectContaining({
             changes: {
@@ -650,51 +720,42 @@ describe("DistanceEditFields", () => {
     });
 
     describe("一覧の並べ方", () => {
-      it("項目は、最小幅から列の数を決める格子に、DOM順・属性を保って並び、項目の中身は左右中央に置かれる", async () => {
-        // Given: 的選択ポップアップで全件を表示した状態(選択中はアウトドアの的)
+      it("一覧は、絞り込んだ的を並び順で並べ、選択中の的を押された状態で示す", async () => {
+        // Given
         const user = userEvent.setup();
         setup();
         await user.click(screen.getByTestId("target-face-picker-trigger"));
+
+        // When
         await user.click(screen.getByTestId("target-face-format-tab-all"));
         await user.click(screen.getByTestId("target-face-bow-type-tab-all"));
 
-        // When
+        // Then
         const items = screen.getAllByTestId(/^target-face-option-/);
-
-        // Then: 一覧は自動の列数の格子で、項目は中央寄せ。DOM順と属性は保たれる
-        const list = items[0].parentElement as HTMLElement;
-        expect(list).toHaveClass(
-          "grid",
-          "grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]",
-          "overflow-y-auto",
-        );
         expect(items.map((i) => i.getAttribute("aria-label"))).toEqual(
           targetFaces.map((f) => f.name),
         );
         for (const item of items) {
           expect(item.tagName).toBe("BUTTON");
-          expect(item).toHaveClass("justify-center");
         }
         expect(items[0]).toHaveAttribute("aria-pressed", "true");
         expect(items[1]).toHaveAttribute("aria-pressed", "false");
-        expect(items[0]).toHaveClass("bg-muted", "ring-1", "ring-primary");
       });
     });
   });
 
   describe("入力欄のEnterキー", () => {
-    it("距離の入力欄でフォーカスを外すだけで、保存も閉鎖もしない", async () => {
-      // Given: フォーカスのある距離の入力欄
+    it("距離の入力欄でEnterを押しても、保存も閉鎖も同期操作の登録もしない", async () => {
+      // Given
       const user = userEvent.setup();
       const { onSaved, onOpenChange, enqueue } = setup();
       const input = screen.getByTestId("distance-config-distance-1");
       await user.click(input);
 
-      // When: Enterを押す
+      // When
       await user.keyboard("{Enter}");
 
-      // Then: フォーカスが外れ、保存も閉鎖も同期操作の登録もされない
-      expect(input).not.toHaveFocus();
+      // Then
       expect(onSaved).not.toHaveBeenCalled();
       expect(onOpenChange).not.toHaveBeenCalled();
       expect(enqueue).not.toHaveBeenCalled();

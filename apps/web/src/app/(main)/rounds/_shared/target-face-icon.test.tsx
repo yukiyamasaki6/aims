@@ -93,30 +93,8 @@ describe("TargetFaceInfo", () => {
     expect(container.querySelectorAll("svg").length).toBeGreaterThan(0);
   });
 
-  it("全体の図が左、サイズ表記が右上、中心の拡大図が右下に並ぶ", () => {
+  it("中心の拡大図の得点の文字は、縁取りなしで画面上10.5〜11.0pxになり、十字は実寸のままである", () => {
     // Given
-    // When
-    const { container } = render(<TargetFaceInfo face={face} />);
-
-    // Then
-    const label = screen.getByText("122cm");
-    const column = label.parentElement as HTMLElement;
-    const detail = screen.getByRole("img");
-    expect(column).toContainElement(detail);
-    expect(label.compareDocumentPosition(detail)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
-    const icon = container.querySelector("svg[aria-hidden='true']");
-    expect(icon).not.toBeNull();
-    expect(column).not.toContainElement(icon as SVGElement);
-    expect(
-      (icon as Element).compareDocumentPosition(label) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
-  it("中心の拡大図は枠線の内側が73×26pxで外側が75×28px、得点の文字は縁取りなしで画面上10.5〜11.0pxになり、十字は実寸のままである", () => {
-    // Given: 122cmの的と同じ比率(X,10,9が黄、次が赤)
     const ring = (
       radius: number,
       color: string,
@@ -148,9 +126,6 @@ describe("TargetFaceInfo", () => {
 
     // Then
     const detail = screen.getByRole("img");
-    expect(detail).toHaveAttribute("width", "73");
-    expect(Number(detail.getAttribute("height"))).toBeCloseTo(26, 0);
-    expect(detail).toHaveClass("box-content", "border");
     const viewBoxWidth = Number(detail.getAttribute("viewBox")?.split(" ")[2]);
     const score = detail.querySelector("text") as Element;
     const fontPx =

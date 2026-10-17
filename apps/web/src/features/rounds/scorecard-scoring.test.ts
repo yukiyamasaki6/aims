@@ -79,47 +79,47 @@ function shot(
 
 describe("compareDistancePosition", () => {
   it("position_keyの順に並べ、同じposition_keyではidの順に並べる", () => {
-    // Given: position_keyとidの順が入り混じった距離
+    // Given
+
+    // When
     const distances = [
       distance("d-2", "b", "face-x"),
       distance("d-3", "a", "face-x"),
       distance("d-1", "b", "face-x"),
     ];
-
-    // When: 並べ替える
     const ids = [...distances].sort(compareDistancePosition).map((d) => d.id);
 
-    // Then: position_key、idの順に並ぶ
+    // Then
     expect(ids).toEqual(["d-3", "d-1", "d-2"]);
   });
 });
 
 describe("distanceNumber", () => {
   it("配列の順ではなく並び順での番号を1始まりで返す", () => {
-    // Given: 配列の順とposition_keyの順が異なる距離
+    // Given
+
+    // When
     const distances = [
       distance("d-c", "c", "face-x"),
       distance("d-a", "a", "face-x"),
       distance("d-b", "b", "face-x"),
     ];
-
-    // When: 各距離の番号を求める
     const numbers = ["d-a", "d-b", "d-c"].map((id) =>
       distanceNumber(distances, id),
     );
 
-    // Then: position_keyの順で1から番号が振られる
+    // Then
     expect(numbers).toEqual([1, 2, 3]);
   });
 
   it("存在しない距離は0を返す", () => {
-    // Given: 距離の一覧
-    const distances = [distance("d-a", "a", "face-x")];
+    // Given
 
-    // When: 一覧に無い距離の番号を求める
+    // When
+    const distances = [distance("d-a", "a", "face-x")];
     const result = distanceNumber(distances, "d-unknown");
 
-    // Then: 0になる
+    // Then
     expect(result).toBe(0);
   });
 });
@@ -127,11 +127,12 @@ describe("distanceNumber", () => {
 describe("scoreKeysFor", () => {
   describe("的にリングがある場合", () => {
     it("中心側のリングから並べ、末尾にMを加える", () => {
-      // Given: リングが中心側から並んでいない的
-      // When: キー構成を求める
+      // Given
+
+      // When
       const keys = scoreKeysFor(faceX);
 
-      // Then: z_indexの大きい順に並び、末尾が固定のMになる
+      // Then
       expect(keys).toEqual([
         { scoreStr: "X", scoreInt: 10, color: "#FFF201" },
         { scoreStr: "10", scoreInt: 10, color: "#FFF202" },
@@ -142,7 +143,9 @@ describe("scoreKeysFor", () => {
     });
 
     it("複数スポットの的では、全スポットの点数を点数ごとに1つにまとめる", () => {
-      // Given: 同じ点数と、片方のスポットにだけある点数を持つ3つ目の的
+      // Given
+
+      // When
       const tripleFace: ScoringTargetFace = {
         id: "face-triple",
         target_face_spots: [
@@ -155,11 +158,9 @@ describe("scoreKeysFor", () => {
           },
         ],
       };
-
-      // When: キー構成を求める
       const keys = scoreKeysFor(tripleFace);
 
-      // Then: 重複のない点数とMだけになる
+      // Then
       expect(keys).toEqual([
         { scoreStr: "10", scoreInt: 10, color: "#FFF200" },
         { scoreStr: "9", scoreInt: 9, color: "#FFF200" },
@@ -170,13 +171,13 @@ describe("scoreKeysFor", () => {
 
   describe("的にリングが無い場合", () => {
     it("的が見つからない・スポットが無い場合はMだけを返す", () => {
-      // Given: 見つからない的と、スポットの無い的
-      const faces = [undefined, { id: "face-blank", target_face_spots: [] }];
+      // Given
 
-      // When: それぞれのキー構成を求める
+      // When
+      const faces = [undefined, { id: "face-blank", target_face_spots: [] }];
       const results = faces.map((f) => scoreKeysFor(f));
 
-      // Then: どちらもMだけになる
+      // Then
       expect(results).toEqual([
         [{ scoreStr: "M", scoreInt: 0, color: "#4CD964" }],
         [{ scoreStr: "M", scoreInt: 0, color: "#4CD964" }],
@@ -188,7 +189,9 @@ describe("scoreKeysFor", () => {
 describe("summarizeDistance", () => {
   describe("Xのある的の場合", () => {
     it("最高点数はXを含む実点数で、X数は種別で数え、合計にはその距離の記録だけを含める", () => {
-      // Given: X・10・9・Mの記録と、別の距離の記録
+      // Given
+
+      // When
       const shots = [
         shot("d-1", "X", 10),
         shot("d-1", "10", 10),
@@ -196,11 +199,9 @@ describe("summarizeDistance", () => {
         shot("d-1", "M", 0),
         shot("d-2", "X", 10),
       ];
-
-      // When: 距離d-1を集計する
       const summary = summarizeDistance("d-1", faceX, shots);
 
-      // Then: 最高点数「10」はXを含めて2本、X数は1本、合計は29になる
+      // Then
       expect(summary).toEqual({
         total: 29,
         topScores: {
@@ -213,19 +214,19 @@ describe("summarizeDistance", () => {
     });
 
     it("Xでないリングが1つあれば集計し、Xだけの的では集計しない", () => {
-      // Given: Xと10だけの的と、Xだけの的
+      // Given
+
+      // When
       const xAnd10 = face("face-x10", [
         ring("X", 10, 2, "#FFF200"),
         ring("10", 10, 1, "#FFF200"),
       ]);
       const xOnly = face("face-x-only", [ring("X", 10, 1, "#FFF200")]);
-
-      // When: それぞれの的で集計する
       const results = [xAnd10, xOnly].map(
         (f) => summarizeDistance("d-1", f, []).topScores,
       );
 
-      // Then: Xだけの的では集計欄を持たない
+      // Then
       expect(results).toEqual([
         { firstLabel: "10", firstCount: 0, secondLabel: "X", secondCount: 0 },
         null,
@@ -235,7 +236,9 @@ describe("summarizeDistance", () => {
 
   describe("Xの無い的の場合", () => {
     it("最高点数と次点数を実点数で数える", () => {
-      // Given: 6・5・5・4・Mの記録
+      // Given
+
+      // When
       const shots = [
         shot("d-1", "6", 6),
         shot("d-1", "5", 5),
@@ -243,11 +246,9 @@ describe("summarizeDistance", () => {
         shot("d-1", "4", 4),
         shot("d-1", "M", 0),
       ];
-
-      // When: 集計する
       const summary = summarizeDistance("d-1", faceNoX, shots);
 
-      // Then: 最高点数「6」は1本、次点数「5」は2本、合計は20になる
+      // Then
       expect(summary).toEqual({
         total: 20,
         topScores: {
@@ -260,19 +261,19 @@ describe("summarizeDistance", () => {
     });
 
     it("リングが2つあれば集計し、1つだけの的では集計しない", () => {
-      // Given: リングが2つの的と1つの的
+      // Given
+
+      // When
       const twoRings = face("face-two", [
         ring("6", 6, 2, "#FFF200"),
         ring("5", 5, 1, "#0066B3"),
       ]);
       const oneRing = face("face-one", [ring("6", 6, 1, "#FFF200")]);
-
-      // When: それぞれの的で集計する
       const results = [twoRings, oneRing].map(
         (f) => summarizeDistance("d-1", f, []).topScores,
       );
 
-      // Then: リングが1つの的では集計欄を持たない
+      // Then
       expect(results).toEqual([
         { firstLabel: "6", firstCount: 0, secondLabel: "5", secondCount: 0 },
         null,
@@ -282,11 +283,12 @@ describe("summarizeDistance", () => {
 
   describe("記録が無い場合", () => {
     it("合計・本数はいずれも0になる", () => {
-      // Given: 記録の無い距離
-      // When: 集計する
+      // Given
+
+      // When
       const summary = summarizeDistance("d-1", faceX, []);
 
-      // Then: すべて0になる
+      // Then
       expect(summary).toEqual({
         total: 0,
         topScores: {
@@ -301,14 +303,14 @@ describe("summarizeDistance", () => {
 
   describe("的にリングが無い場合", () => {
     it("合計だけを求め、最高点数などは集計しない", () => {
-      // Given: 見つからない的と、スポットの無い的
+      // Given
+
+      // When
       const shots = [shot("d-1", "10", 10)];
       const faces = [undefined, { id: "face-blank", target_face_spots: [] }];
-
-      // When: それぞれ集計する
       const results = faces.map((f) => summarizeDistance("d-1", f, shots));
 
-      // Then: 合計だけを持つ
+      // Then
       expect(results).toEqual([
         { total: 10, topScores: null },
         { total: 10, topScores: null },
@@ -320,7 +322,9 @@ describe("summarizeDistance", () => {
 describe("summarizeRound", () => {
   describe("全ての距離で的の点数構成が一致する場合", () => {
     it("全ての距離の記録をまとめて集計する", () => {
-      // Given: 同じ的の2つの距離の記録
+      // Given
+
+      // When
       const distances = [
         distance("d-1", "a", "face-x"),
         distance("d-2", "b", "face-x"),
@@ -330,11 +334,9 @@ describe("summarizeRound", () => {
         shot("d-2", "10", 10),
         shot("d-2", "9", 9),
       ];
-
-      // When: ラウンド全体を集計する
       const summary = summarizeRound(distances, [faceX, faceNoX], shots);
 
-      // Then: 両方の距離の記録を合わせた合計・本数になる
+      // Then
       expect(summary).toEqual({
         total: 29,
         topScores: {
@@ -347,7 +349,9 @@ describe("summarizeRound", () => {
     });
 
     it("的が異なっていても、X有無・最高点数・次点数が一致すれば集計する", () => {
-      // Given: 色だけが異なる別の6点的の距離
+      // Given
+
+      // When
       const otherNoX = face("face-no-x-2", [
         ring("6", 6, 2, "#000000"),
         ring("5", 5, 1, "#000000"),
@@ -356,15 +360,13 @@ describe("summarizeRound", () => {
         distance("d-1", "a", "face-no-x"),
         distance("d-2", "b", "face-no-x-2"),
       ];
-
-      // When: ラウンド全体を集計する
       const summary = summarizeRound(
         distances,
         [faceNoX, otherNoX],
         [shot("d-2", "6", 6)],
       );
 
-      // Then: 最高点数・次点数で集計する
+      // Then
       expect(summary.topScores).toEqual({
         firstLabel: "6",
         firstCount: 1,
@@ -376,7 +378,9 @@ describe("summarizeRound", () => {
 
   describe("距離間で的の点数構成が異なる場合", () => {
     it("X有無・最高点数・次点数のいずれかが異なれば、合計だけを求める", () => {
-      // Given: 先頭の10点的に対し、Xの無い的・最高点数が異なる的・次点数が異なる的
+      // Given
+
+      // When
       const xWith9Top = face("face-x9", [
         ring("X", 9, 2, "#FFF200"),
         ring("9", 9, 1, "#FFF200"),
@@ -392,8 +396,6 @@ describe("summarizeRound", () => {
         ["face-no-x", "face-no-x-4"],
       ];
       const shots = [shot("d-1", "X", 10)];
-
-      // When: それぞれの組み合わせでラウンド全体を集計する
       const results = cases.map(([first, second]) =>
         summarizeRound(
           [distance("d-1", "a", first), distance("d-2", "b", second)],
@@ -402,7 +404,7 @@ describe("summarizeRound", () => {
         ),
       );
 
-      // Then: いずれも合計だけを持つ
+      // Then
       expect(results).toEqual([
         { total: 10, topScores: null },
         { total: 10, topScores: null },
@@ -411,13 +413,13 @@ describe("summarizeRound", () => {
     });
 
     it("集計できない的の距離が含まれる場合は、合計だけを求める", () => {
-      // Given: 先頭の距離の的が見つからない場合と、2つ目の距離の的が見つからない場合
+      // Given
+
+      // When
       const cases = [
         ["face-unknown", "face-x"],
         ["face-x", "face-unknown"],
       ];
-
-      // When: それぞれラウンド全体を集計する
       const results = cases.map(([first, second]) =>
         summarizeRound(
           [distance("d-1", "a", first), distance("d-2", "b", second)],
@@ -426,7 +428,7 @@ describe("summarizeRound", () => {
         ),
       );
 
-      // Then: いずれも合計だけを持つ
+      // Then
       expect(results).toEqual([
         { total: 10, topScores: null },
         { total: 10, topScores: null },
@@ -436,11 +438,12 @@ describe("summarizeRound", () => {
 
   describe("距離が無い場合", () => {
     it("合計0で、最高点数などは集計しない", () => {
-      // Given: 距離も記録も無いラウンド
-      // When: ラウンド全体を集計する
+      // Given
+
+      // When
       const summary = summarizeRound([], [faceX], []);
 
-      // Then: 合計0だけを持つ
+      // Then
       expect(summary).toEqual({ total: 0, topScores: null });
     });
   });
@@ -448,104 +451,131 @@ describe("summarizeRound", () => {
 
 describe("endSubtotal", () => {
   it("エンドの記録の点数を合計し、Mは0点として数える", () => {
-    // Given: X・9・Mの記録
+    // Given
+
+    // When
     const endShots = [
       shot("d-1", "X", 10),
       shot("d-1", "9", 9),
       shot("d-1", "M", 0),
     ];
-
-    // When: 小計を求める
     const subtotal = endSubtotal(endShots);
 
-    // Then: 19になる
+    // Then
     expect(subtotal).toBe(19);
   });
 
   it("1本以上記録があれば全てMでも0を返し、記録が無ければ小計を持たない", () => {
-    // Given: Mだけのエンドと、記録の無いエンド
-    // When: それぞれの小計を求める
+    // Given
+
+    // When
     const results = [[shot("d-1", "M", 0)], []].map((s) => endSubtotal(s));
 
-    // Then: Mだけなら0、記録が無ければnullになる
+    // Then
     expect(results).toEqual([0, null]);
   });
 });
 
 describe("shotFitsDistance", () => {
-  const config = { total_ends: 6, arrows_per_end: 3, target_face_id: "face-x" };
+  const config = {
+    total_ends: 12,
+    arrows_per_end: 3,
+    target_face_id: "face-x",
+  };
   const faces = [faceX, face("face-empty", [])];
   const score = { scoreStr: "9", scoreInt: 9 };
   const unknownOrder = { endNumber: 1, shotNumber: null };
 
   it("構成の範囲内で、的に実在する点数なら、射順が無くても有効", () => {
-    expect(
-      shotFitsDistance(
-        config,
-        { endNumber: 6, shotNumber: null },
-        score,
-        faces,
-      ),
-    ).toBe(true);
+    // Given
+    // When
+    const fits = shotFitsDistance(
+      config,
+      { endNumber: 12, shotNumber: null },
+      score,
+      faces,
+    );
+
+    // Then
+    expect(fits).toBe(true);
   });
 
   it("エンド番号が範囲外なら無効", () => {
-    expect(
-      shotFitsDistance(
-        config,
-        { endNumber: 7, shotNumber: null },
-        score,
-        faces,
-      ),
-    ).toBe(false);
-    expect(
-      shotFitsDistance(
-        config,
-        { endNumber: 0, shotNumber: null },
-        score,
-        faces,
-      ),
-    ).toBe(false);
+    // Given
+    // When
+    const overMax = shotFitsDistance(
+      config,
+      { endNumber: 13, shotNumber: null },
+      score,
+      faces,
+    );
+    const underMin = shotFitsDistance(
+      config,
+      { endNumber: 0, shotNumber: null },
+      score,
+      faces,
+    );
+
+    // Then
+    expect(overMax).toBe(false);
+    expect(underMin).toBe(false);
   });
 
   it("射順は1〜矢数なら有効で、範囲外なら無効", () => {
+    // Given
     const fits = (shotNumber: number) =>
       shotFitsDistance(config, { endNumber: 1, shotNumber }, score, faces);
-    expect([0, 1, 3, 4].map(fits)).toEqual([false, true, true, false]);
+
+    // When
+    const results = [0, 1, 3, 4].map(fits);
+
+    // Then
+    expect(results).toEqual([false, true, true, false]);
   });
 
   it("的に無い点数は無効で、Mは的によらず有効", () => {
-    expect(
-      shotFitsDistance(
-        config,
-        unknownOrder,
-        { scoreStr: "5", scoreInt: 5 },
-        faces,
-      ),
-    ).toBe(false);
-    expect(
-      shotFitsDistance(
-        config,
-        unknownOrder,
-        { scoreStr: "M", scoreInt: 0 },
-        faces,
-      ),
-    ).toBe(true);
+    // Given
+    // When
+    const notOnFace = shotFitsDistance(
+      config,
+      unknownOrder,
+      { scoreStr: "5", scoreInt: 5 },
+      faces,
+    );
+    const miss = shotFitsDistance(
+      config,
+      unknownOrder,
+      { scoreStr: "M", scoreInt: 0 },
+      faces,
+    );
+
+    // Then
+    expect(notOnFace).toBe(false);
+    expect(miss).toBe(true);
   });
 
   it("的のリングが手元に無ければ点数を判定しない", () => {
+    // Given
     const unknown = { ...config, target_face_id: "unknown" };
-    expect(shotFitsDistance(unknown, unknownOrder, score, faces)).toBe(true);
     const empty = { ...config, target_face_id: "face-empty" };
-    expect(shotFitsDistance(empty, unknownOrder, score, faces)).toBe(true);
+
+    // When
+    const unknownFace = shotFitsDistance(unknown, unknownOrder, score, faces);
+    const emptyFace = shotFitsDistance(empty, unknownOrder, score, faces);
+
+    // Then
+    expect(unknownFace).toBe(true);
+    expect(emptyFace).toBe(true);
   });
 });
 
 describe("liveCountOf・endHasRoom", () => {
-  const distance = { id: "d-1", arrows_per_end: 2 };
+  const distance = { id: "d-1", arrows_per_end: 3 };
 
-  it("同じ距離の同じエンドの矢だけを数え、矢数に達していなければ空きがある", () => {
-    // Given: エンド1に1本、エンド2に2本、別の距離のエンド1に1本
+  it("同じ距離の同じエンドの矢だけを数える", () => {
+    // Given
+
+    // When
     const shots = [
       shot("d-1", "10", 10, { id: "a" }),
       shot("d-1", "9", 9, { id: "b", end_number: 2 }),
@@ -553,9 +583,24 @@ describe("liveCountOf・endHasRoom", () => {
       shot("d-2", "7", 7, { id: "d" }),
     ];
 
-    // When/Then: 矢数の前後(1本、2本、0本)で判定する
+    // Then
     expect(liveCountOf(shots, "d-1", 1)).toBe(1);
     expect(liveCountOf(shots, "d-1", 2)).toBe(2);
+  });
+
+  it("矢数に達していないエンドには空きがある", () => {
+    // Given
+
+    // When
+    const shots = [
+      shot("d-1", "10", 10, { id: "a" }),
+      shot("d-1", "9", 9, { id: "b", end_number: 2 }),
+      shot("d-1", "8", 8, { id: "c", end_number: 2 }),
+      shot("d-1", "7", 7, { id: "e", end_number: 2 }),
+      shot("d-2", "7", 7, { id: "d" }),
+    ];
+
+    // Then
     expect([1, 2, 3].map((end) => endHasRoom(distance, shots, end))).toEqual([
       true,
       false,
@@ -566,7 +611,9 @@ describe("liveCountOf・endHasRoom", () => {
 
 describe("sortEndShots", () => {
   it("点数の高い順(X、10、9、…、1、M)に並べ、同点はIDの昇順にする", () => {
-    // Given: 7、10、X、9、M、8の順に入れた矢と、同点の矢
+    // Given
+
+    // When
     const shots = [
       shot("d-1", "7", 7, { id: "s1" }),
       shot("d-1", "10", 10, { id: "s2" }),
@@ -576,8 +623,6 @@ describe("sortEndShots", () => {
       shot("d-1", "8", 8, { id: "s7" }),
       shot("d-1", "9", 9, { id: "s4" }),
     ];
-
-    // When
     const sorted = sortEndShots(shots);
 
     // Then
@@ -593,7 +638,9 @@ describe("sortEndShots", () => {
   });
 
   it("新しい矢のIDで作った同点の矢は、既にある同点の矢の後ろに並ぶ", () => {
-    // Given: IDの大小がまちまちな既存の9の矢と、それらの後に作った9の矢
+    // Given
+
+    // When
     const existing = [
       shot("d-1", "9", 9, { id: "ffffffff-fff0-4fff-bfff-ffffffffffff" }),
       shot("d-1", "9", 9, { id: "01990000-0000-7fff-bfff-ffffffffffff" }),
@@ -606,8 +653,6 @@ describe("sortEndShots", () => {
         new Uint8Array(10),
       ),
     });
-
-    // When
     const sorted = sortEndShots([added, ...existing]);
 
     // Then

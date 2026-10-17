@@ -6,7 +6,8 @@ import { CompleteRoundBar } from "./complete-round-bar";
 describe("CompleteRoundBar", () => {
   describe("表示", () => {
     it("入力中は入力を完了するボタンを表示する", () => {
-      // Given / When
+      // Given
+      // When
       render(
         <CompleteRoundBar
           status="in_progress"
@@ -22,7 +23,8 @@ describe("CompleteRoundBar", () => {
     });
 
     it("完了のときは何も表示しない", () => {
-      // Given / When
+      // Given
+      // When
       const { container } = render(
         <CompleteRoundBar
           status="completed"
@@ -56,7 +58,7 @@ describe("CompleteRoundBar", () => {
       expect(screen.queryByTestId("confirm-dialog-confirm")).toBeNull();
     });
 
-    it("確認の文言があれば、確認を出し、確認するまで完了にしない", async () => {
+    it("確認の文言があれば、押すと確認を出し、まだ完了にしない", async () => {
       // Given
       const onComplete = vi.fn();
       render(
@@ -75,6 +77,19 @@ describe("CompleteRoundBar", () => {
         screen.getByText("未入力のマスがあります。入力を完了しますか？"),
       ).toBeInTheDocument();
       expect(onComplete).not.toHaveBeenCalled();
+    });
+
+    it("確認で完了するを選ぶと完了にする", async () => {
+      // Given
+      const onComplete = vi.fn();
+      render(
+        <CompleteRoundBar
+          status="in_progress"
+          confirmation="未入力のマスがあります。入力を完了しますか？"
+          onComplete={onComplete}
+        />,
+      );
+      await userEvent.click(screen.getByTestId("complete-round-button"));
 
       // When
       await userEvent.click(screen.getByTestId("confirm-dialog-confirm"));

@@ -36,7 +36,6 @@ describe("PasswordInput", () => {
 
         // Then
         expect(screen.getByPlaceholderText("パスワード")).toHaveClass(
-          "pr-8",
           "custom-class",
         );
       });

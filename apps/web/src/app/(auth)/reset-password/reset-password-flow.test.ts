@@ -101,9 +101,9 @@ describe("resetPasswordReducer", () => {
     it("send_code_auth_errorは翻訳したメッセージをerrorに設定する", () => {
       // Given
       const state = initialResetPasswordState;
-      const error = makeAuthError("otp_expired");
 
       // When
+      const error = makeAuthError("otp_expired");
       const next = resetPasswordReducer(state, {
         type: "send_code_auth_error",
         error,
@@ -187,9 +187,9 @@ describe("resetPasswordReducer", () => {
     it("verify_code_auth_errorは翻訳したメッセージをerrorに設定する", () => {
       // Given
       const state = stateWith({ step: "code" });
-      const error = makeAuthError("otp_expired");
 
       // When
+      const error = makeAuthError("otp_expired");
       const next = resetPasswordReducer(state, {
         type: "verify_code_auth_error",
         error,
@@ -265,10 +265,10 @@ describe("resetPasswordReducer", () => {
     it("resend_invalidはerrorをクリアしcodeFieldErrorsに再送エラーを設定する", () => {
       // Given
       const state = stateWith({ step: "code", error: "前回のエラー" });
-      const cooldownMessage =
-        "再送はクールダウン中です。しばらくしてから再度お試しください。";
 
       // When
+      const cooldownMessage =
+        "再送はクールダウン中です。しばらくしてから再度お試しください。";
       const next = resetPasswordReducer(state, {
         type: "resend_invalid",
         errors: { resend: cooldownMessage },
@@ -283,9 +283,9 @@ describe("resetPasswordReducer", () => {
       // Given
       const codeFieldErrors = { code: "認証コードを入力してください。" };
       const state = stateWith({ step: "code", codeFieldErrors });
-      const error = makeAuthError("otp_expired");
 
       // When
+      const error = makeAuthError("otp_expired");
       const next = resetPasswordReducer(state, {
         type: "resend_auth_error",
         error,
@@ -417,9 +417,9 @@ describe("resetPasswordReducer", () => {
     it("set_password_auth_errorは翻訳したメッセージをerrorに設定する", () => {
       // Given
       const state = stateWith({ step: "password" });
-      const error = makeAuthError("weak_password");
 
       // When
+      const error = makeAuthError("weak_password");
       const next = resetPasswordReducer(state, {
         type: "set_password_auth_error",
         error,

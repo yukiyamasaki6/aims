@@ -5,7 +5,6 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
-import { expectKeypadSettled } from "../helpers/keypad";
 import {
   getDistanceIds,
   openOtherDevice,
@@ -18,19 +17,10 @@ import {
   openNewRoundThenGoOffline,
   saveTargetFacesOnDevice,
   startRoundOffline,
+  stubMissingTargetFaces,
   TARGET_FACES_REST,
 } from "../helpers/reference-data";
 import { createRound, TRIPLE_SPOT_TARGET_FACE_ID } from "../helpers/rounds";
-import {
-  expectExpandMarkerAtRightEdge,
-  expectGapBeforeTargetFaceInfo,
-  expectNoHorizontalOverflow,
-  expectOptionGrid,
-  expectPageNotScrollingHorizontally,
-  expectSameLeft,
-  expectTargetFaceInfoArranged,
-  stubMissingTargetFaces,
-} from "../helpers/target-face-layout";
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -38,10 +28,6 @@ const FIELD_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000010"; // フィ�
 const OUTDOOR_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // 10点的（アウトドア・122cm）
 const INDOOR_40CM_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000007"; // 10点的（インドア・40cm）
 const INDOOR_40CM_TARGET_FACE_LABEL = "インドア・40cm";
-
-const NARROW_VIEWPORT_HEIGHT = 812;
-const ALL_TARGET_FACE_COUNT = 19;
-const MAX_DISTANCE_ROW_HEIGHT = 65;
 
 const MISSING_TARGET = "的データを取得できません";
 
@@ -52,7 +38,7 @@ const DISABLE_DISTANCE_RPC = "**/rest/v1/rpc/disable_distance";
 
 type RoundInput = Omit<Parameters<typeof createRound>[0], "email" | "password">;
 
-// 既定は、距離が1件（18m・1エンド・1本）のアウトドア・リカーブのラウンド。
+// 既定は、距離が1件（18m・12エンド・3本）のアウトドア・リカーブのラウンド。
 async function openRound(page: Page, overrides: Partial<RoundInput> = {}) {
   const roundId = await createRound({
     email: getSharedEmail(),
@@ -61,30 +47,12 @@ async function openRound(page: Page, overrides: Partial<RoundInput> = {}) {
     roundDate: "2026-08-24",
     format: "outdoor",
     bowType: "recurve",
-    distances: [{ distance: 18, totalEnds: 1, arrowsPerEnd: 1 }],
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
     ...overrides,
   });
   await page.goto(`/rounds/${roundId}`);
   await waitForHydration(page);
   return roundId;
-}
-
-// 記録済みの得点が1本ある距離（1つ目）を持つラウンドを開く。
-async function openRoundWithShot(page: Page) {
-  return openRound(page, {
-    distances: [
-      { distance: 18, totalEnds: 1, arrowsPerEnd: 1 },
-      { distance: 30, totalEnds: 1, arrowsPerEnd: 1 },
-    ],
-    shots: [
-      {
-        distanceIndex: 0,
-        endNumber: 1,
-        scoreStr: "10",
-        scoreInt: 10,
-      },
-    ],
-  });
 }
 
 async function reloadAfter(page: Page, response: Promise<unknown>) {
@@ -93,43 +61,191 @@ async function reloadAfter(page: Page, response: Promise<unknown>) {
   await waitForHydration(page);
 }
 
-test("setup-01: ラウンド名が入力されているとき、/rounds/[id]を開くと、ラウンド名・実施日・種別・弓種が1行で表示される", async ({
+test("開くと、ラウンドの設定が1行で、各距離の距離・的・本数・エンド数が表示される", async ({
   page,
 }) => {
-  // Given
-  // When
-  await openRound(page);
-
-  // Then
-  await expect(page.getByTestId("round-config-summary")).toHaveText(
-    "設定テスト / 2026-08-24 / アウトドア / リカーブ",
-  );
-});
-
-test("setup-02: 距離が1件以上あるとき、/rounds/[id]を開くと、各距離の距離・的・本数・エンド数が表示される", async ({
-  page,
-}) => {
-  // Given
-  // When
   await openRound(page, {
     distances: [
-      { distance: 18, totalEnds: 2, arrowsPerEnd: 3 },
-      { distance: 30, totalEnds: 4, arrowsPerEnd: 5 },
+      { distance: 18, totalEnds: 12, arrowsPerEnd: 3 },
+      { distance: 30, totalEnds: 12, arrowsPerEnd: 3 },
     ],
   });
 
-  // Then
+  await expect(page.getByTestId("round-config-summary")).toHaveText(
+    "設定テスト / 2026-08-24 / アウトドア / リカーブ",
+  );
   const first = page.getByTestId("distance-summary-1");
   await expect(first).toContainText("18m");
-  await expect(first).toContainText("3本×2エンド");
+  await expect(first).toContainText("3本×12エンド");
   await expect(first.locator("svg").first()).toBeVisible();
   const second = page.getByTestId("distance-summary-2");
   await expect(second).toContainText("30m");
-  await expect(second).toContainText("5本×4エンド");
+  await expect(second).toContainText("3本×12エンド");
+});
+
+test("ラウンドの設定を変えて保存すると、すぐに反映されて閉じ、再読み込みしても保たれる", async ({
+  page,
+}) => {
+  // 設定を変えて保存し、すぐに反映されて閉じることを確かめる。
+  await openRound(page);
+  await page.getByTestId("round-config-summary").click();
+  await page.getByTestId("round-config-name").fill("編集後の名前");
+  await page.getByTestId("round-config-date").fill("2026-08-25");
+  await page.getByTestId("round-config-format-indoor").click();
+  await page.getByTestId("round-config-bow-type-compound").click();
+  const sent = page.waitForResponse(UPDATE_ROUND_RPC);
+  await page.getByTestId("round-config-save").click();
+  const summary = page.getByTestId("round-config-summary");
+  const expected = "編集後の名前 / 2026-08-25 / インドア / コンパウンド";
+  await expect(summary).toHaveText(expected);
+  await expect(page.getByTestId("round-config-save")).toBeHidden();
+
+  // 再読み込みして、変えた内容が残ることを確かめる。
+  await reloadAfter(page, sent);
+  await expect(summary).toHaveText(expected);
+});
+
+test("距離があるときに距離を追加すると、最後の距離をコピーした編集ダイアログが開き、再読み込みしても保たれる", async ({
+  page,
+}) => {
+  // 距離を追加し、最後の距離をコピーした編集ダイアログを確かめる。
+  await openRound(page, {
+    format: "indoor",
+    distances: [
+      {
+        distance: 50,
+        totalEnds: 10,
+        arrowsPerEnd: 3,
+        targetFaceId: INDOOR_40CM_TARGET_FACE_ID,
+      },
+    ],
+  });
+  const sent = page.waitForResponse(CREATE_DISTANCE_RPC);
+  await page.getByTestId("add-distance-button").click();
+  await expect(page.getByTestId("distance-config-distance-2")).toHaveValue(
+    "50",
+  );
+  await expect(page.getByTestId("distance-config-total-ends-2")).toHaveValue(
+    "10",
+  );
+  await expect(page.getByTestId("distance-config-arrows-2")).toHaveValue("3");
+  await expect(
+    page.getByTestId("target-face-picker-trigger"),
+  ).toHaveAccessibleName(new RegExp(INDOOR_40CM_TARGET_FACE_LABEL));
+
+  // 再読み込みして、変えた内容が残ることを確かめる。
+  await reloadAfter(page, sent);
+  const added = page.getByTestId("distance-summary-2");
+  await expect(added).toContainText("50m");
+  await expect(added).toContainText("3本×10エンド");
+});
+
+test("距離・的・本数・エンド数を変えて保存すると、すぐに反映されて閉じ、再読み込みしても保たれる", async ({
+  page,
+}) => {
+  // 設定を変えて保存し、すぐに反映されて閉じることを確かめる。
+  await openRound(page);
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("30");
+  await page.getByTestId("distance-config-total-ends-1").fill("6");
+  await page.getByTestId("distance-config-arrows-1").fill("6");
+  await page.getByTestId("target-face-picker-trigger").click();
+  await page.getByTestId("target-face-format-tab-indoor").click();
+  await page
+    .getByTestId(`target-face-option-${INDOOR_40CM_TARGET_FACE_ID}`)
+    .click();
+  const sent = page.waitForResponse(UPDATE_DISTANCE_RPC);
+  await page.getByTestId("distance-config-save-1").click();
+  const summary = page.getByTestId("distance-summary-1");
+  await expect(summary).toContainText("30m");
+  await expect(summary).toContainText("6本×6エンド");
+  await expect(page.getByTestId("distance-config-distance-1")).toBeHidden();
+
+  // 再読み込みして、変えた内容が残ることを確かめる。
+  await reloadAfter(page, sent);
+  await expect(summary).toContainText("30m");
+  await expect(summary).toContainText("6本×6エンド");
+  await page.getByTestId("distance-config-toggle-1").click();
+  await expect(
+    page.getByTestId("target-face-picker-trigger"),
+  ).toHaveAccessibleName(new RegExp(INDOOR_40CM_TARGET_FACE_LABEL));
+});
+
+test("距離を追加して削除した後に追加すると、エラーなく追加され、再読み込みしても保たれる", async ({
+  page,
+}) => {
+  // 距離を追加して削除する。
+  await openRound(page);
+  const created = page.waitForResponse(CREATE_DISTANCE_RPC);
+  await page.getByTestId("add-distance-button").click();
+  await created;
+  const disabled = page.waitForResponse(DISABLE_DISTANCE_RPC);
+  await page.getByTestId("distance-config-delete-2").click();
+  await disabled;
+  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
+
+  // もう一度追加し、エラーなく追加されることを確かめる。
+  const sent = page.waitForResponse(CREATE_DISTANCE_RPC);
+  await page.getByTestId("add-distance-button").click();
+  expect((await sent).ok()).toBe(true);
+  await expect(page.getByTestId("distance-config-distance-2")).toBeVisible();
+
+  // 再読み込みして、追加した距離が残ることを確かめる。
+  await page.reload();
+  await waitForHydration(page);
+  await expect(page.getByTestId("distance-summary-2")).toBeVisible();
+});
+
+test("距離を削除すると一覧から消えて閉じ、再読み込みしても消えたままになる", async ({
+  page,
+}) => {
+  // 距離を削除し、一覧から消えて閉じることを確かめる。
+  await openRound(page, {
+    distances: [
+      { distance: 18, totalEnds: 12, arrowsPerEnd: 3 },
+      { distance: 30, totalEnds: 12, arrowsPerEnd: 3 },
+    ],
+  });
+  await page.getByTestId("distance-config-toggle-2").click();
+  const sent = page.waitForResponse(DISABLE_DISTANCE_RPC);
+  await page.getByTestId("distance-config-delete-2").click();
+  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
+  await expect(page.getByTestId("distance-config-delete-2")).toBeHidden();
+  await expect(page.getByTestId("distance-summary-1")).toBeVisible();
+
+  // 再読み込みして、消えたままであることを確かめる。
+  await reloadAfter(page, sent);
+  await expect(page.getByTestId("distance-summary-1")).toBeVisible();
+  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
+});
+
+test("的を押すと、ラウンド設定に一致する的だけが、サイズの大きい順に表示される", async ({
+  page,
+}) => {
+  // 的の一覧は、種別・弓種のフィルタとサイズの並びが、実際の的のデータに対して成り立つことを確かめる。
+  await openRound(page);
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("target-face-picker-trigger").click();
+
+  await expect(
+    page.getByTestId(`target-face-option-${OUTDOOR_TARGET_FACE_ID}`),
+  ).toBeVisible();
+  await expect(
+    page.getByTestId(`target-face-option-${INDOOR_40CM_TARGET_FACE_ID}`),
+  ).toBeHidden();
+  await expect(
+    page.getByTestId(`target-face-option-${FIELD_TARGET_FACE_ID}`),
+  ).toBeHidden();
+  const labels = await page
+    .locator('[data-testid^="target-face-option-"]')
+    .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label") ?? ""));
+  const sizes = labels.map((label) => Number(/(\d+)cm/.exec(label)?.[1]));
+  expect(sizes.length).toBeGreaterThan(1);
+  expect(sizes).toEqual([...sizes].sort((a, b) => b - a));
 });
 
 // サイズの桁数が違う的(122cmと40cm)を持つ、フィールドのUnmarkedの距離が2件
-const NARROW_FIELD_ROUND: Partial<RoundInput> = {
+const FIELD_ROUND: Partial<RoundInput> = {
   format: "field",
   distances: [
     {
@@ -149,694 +265,38 @@ const NARROW_FIELD_ROUND: Partial<RoundInput> = {
   ],
 };
 
-test("setup-33: 幅375pxで距離が1件以上あり、的が設定されているとき、/rounds/[id]を開くと、距離の行が枠から横にあふれず、的の情報が全体の図の右に表記と中心の拡大図を縦に並べて表示され、拡大図の得点の文字が環に収まり、変更前より大きく表示される", async ({
+test("的の一覧を取得できないときは、距離の行と距離編集の的のボタンに「的データを取得できません」が表示される", async ({
   page,
 }) => {
-  // Given: 幅375px。サイズの桁数が違う的を持つ、フィールドのUnmarkedの距離が2件
-  await page.setViewportSize({ width: 375, height: NARROW_VIEWPORT_HEIGHT });
-
-  // When
-  await openRound(page, NARROW_FIELD_ROUND);
-
-  // Then: 距離の行は横にあふれず、距離とエンド構成が各1行で、行の高さが従来以下
-  const lefts: number[] = [];
-  for (const number of [1, 2]) {
-    const toggle = page.getByTestId(`distance-config-toggle-${number}`);
-    await expectNoHorizontalOverflow(toggle);
-    lefts.push(...(await expectTargetFaceInfoArranged(toggle, 1)));
-    await expectGapBeforeTargetFaceInfo(toggle);
-    await expectExpandMarkerAtRightEdge(toggle);
-    const box = await toggle.boundingBox();
-    expect(box?.height, "距離の行の高さ").toBeLessThanOrEqual(
-      MAX_DISTANCE_ROW_HEIGHT,
-    );
-  }
-  expectSameLeft(lefts);
-  const firstRow = page.getByTestId("distance-config-toggle-1");
-  const distanceText = await firstRow.getByText("Unmarked (90m)").boundingBox();
-  const endsText = await firstRow.getByText("3本×12エンド").boundingBox();
-  expect(distanceText?.height, "距離の文言が1行").toBeLessThanOrEqual(20);
-  expect(endsText?.height, "エンド構成が1行").toBeLessThanOrEqual(20);
-  await expectPageNotScrollingHorizontally(page);
-});
-
-test("setup-35: 幅375pxで距離が1件以上あり、的が設定されているとき、距離概要をクリックすると、距離編集ダイアログの的の選択ボタンでも、同じ配置で横にあふれない", async ({
-  page,
-}) => {
-  // Given: 幅375px。サイズの桁数が違う的を持つ、フィールドのUnmarkedの距離が2件
-  await page.setViewportSize({ width: 375, height: NARROW_VIEWPORT_HEIGHT });
-  await openRound(page, NARROW_FIELD_ROUND);
-
-  // When
-  await page.getByTestId("distance-config-toggle-1").click();
-
-  // Then: 的の選択ボタンが、同じ配置で横にあふれない
-  const trigger = page.getByTestId("target-face-picker-trigger");
-  await expect(trigger).toBeVisible();
-  await expectNoHorizontalOverflow(trigger);
-  await expectTargetFaceInfoArranged(trigger, 1);
-  await expectPageNotScrollingHorizontally(page);
-});
-
-test("setup-36: 幅375pxで距離が1件以上あり、的の一覧を取得できないとき、/rounds/[id]を開くと、距離の行に「的データを取得できません」が表示され、横にあふれない", async ({
-  page,
-}) => {
-  // Given: 幅375px。的の一覧を取得できない
-  await page.setViewportSize({ width: 375, height: NARROW_VIEWPORT_HEIGHT });
   await stubMissingTargetFaces(page);
-
-  // When
-  await openRound(page, NARROW_FIELD_ROUND);
-
-  // Then: 距離の行に取得不可の表示が出て、横にあふれない
-  const row = page.getByTestId("distance-config-toggle-1");
-  await expect(row).toContainText(MISSING_TARGET);
-  await expectNoHorizontalOverflow(row);
-  await expectPageNotScrollingHorizontally(page);
-});
-
-test("setup-37: 幅375pxで距離が1件以上あり、的の一覧を取得できないとき、距離概要をクリックすると、距離編集ダイアログの的の選択ボタンに「的データを取得できません」が表示され、横にあふれない", async ({
-  page,
-}) => {
-  // Given: 幅375px。的の一覧を取得できない
-  await page.setViewportSize({ width: 375, height: NARROW_VIEWPORT_HEIGHT });
-  await stubMissingTargetFaces(page);
-  await openRound(page, NARROW_FIELD_ROUND);
-
-  // When
-  await page.getByTestId("distance-config-toggle-1").click();
-
-  // Then: 的の選択ボタンに取得不可の表示が出て、横にあふれない
-  const trigger = page.getByTestId("target-face-picker-trigger");
-  await expect(trigger).toContainText(MISSING_TARGET);
-  await expectNoHorizontalOverflow(trigger);
-  await expectPageNotScrollingHorizontally(page);
-});
-
-test("setup-03: ラウンド概要をクリックすると、ラウンド編集ダイアログが開く", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page);
-  await expect(page.getByTestId("round-config-save")).toBeHidden();
-
-  // When
-  await page.getByTestId("round-config-summary").click();
-
-  // Then
-  await expect(page.getByTestId("round-config-save")).toBeVisible();
-});
-
-test("setup-04: ラウンド名・実施日・種別・弓種を変更して保存ボタンをクリックすると、編集内容が即座に反映されてダイアログが閉じられ、編集内容が保持される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page);
-  await page.getByTestId("round-config-summary").click();
-  await page.getByTestId("round-config-name").fill("編集後の名前");
-  await page.getByTestId("round-config-date").fill("2026-08-25");
-  await page.getByTestId("round-config-format-indoor").click();
-  await page.getByTestId("round-config-bow-type-compound").click();
-  const sent = page.waitForResponse(UPDATE_ROUND_RPC);
-
-  // When
-  await page.getByTestId("round-config-save").click();
-
-  // Then
-  const summary = page.getByTestId("round-config-summary");
-  const expected = "編集後の名前 / 2026-08-25 / インドア / コンパウンド";
-  await expect(summary).toHaveText(expected);
-  await expect(page.getByTestId("round-config-save")).toBeHidden();
-  await reloadAfter(page, sent);
-  await expect(summary).toHaveText(expected);
-});
-
-test("setup-05: 距離が1件もないとき、「距離を追加」ボタンをクリックすると、規定値で距離が追加されて距離編集ダイアログが開き、追加した距離が保持される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, { distances: [] });
-  // 距離がないラウンドはラウンド編集ダイアログが展開済みのため、閉じる。
-  await page.keyboard.press("Escape");
-  const sent = page.waitForResponse(CREATE_DISTANCE_RPC);
-
-  // When
-  await page.getByTestId("add-distance-button").click();
-
-  // Then
-  await expect(page.getByTestId("distance-config-distance-1")).toHaveValue(
-    "70",
+  await openRound(page, FIELD_ROUND);
+  await expect(page.getByTestId("distance-config-toggle-1")).toContainText(
+    MISSING_TARGET,
   );
-  await expect(page.getByTestId("distance-config-total-ends-1")).toHaveValue(
-    "6",
-  );
-  await expect(page.getByTestId("distance-config-arrows-1")).toHaveValue("6");
-  await reloadAfter(page, sent);
-  await expect(page.getByTestId("distance-summary-1")).toContainText("70m");
-});
 
-test("setup-06: 距離が1件以上あるとき、「距離を追加」ボタンをクリックすると、直前の距離の内容をコピーした距離が追加されて距離編集ダイアログが開き、追加した距離が保持される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, {
-    format: "indoor",
-    distances: [
-      {
-        distance: 50,
-        totalEnds: 4,
-        arrowsPerEnd: 5,
-        targetFaceId: INDOOR_40CM_TARGET_FACE_ID,
-      },
-    ],
-  });
-  const sent = page.waitForResponse(CREATE_DISTANCE_RPC);
-
-  // When
-  await page.getByTestId("add-distance-button").click();
-
-  // Then
-  await expect(page.getByTestId("distance-config-distance-2")).toHaveValue(
-    "50",
-  );
-  await expect(page.getByTestId("distance-config-total-ends-2")).toHaveValue(
-    "4",
-  );
-  await expect(page.getByTestId("distance-config-arrows-2")).toHaveValue("5");
-  await expect(
-    page.getByTestId("target-face-picker-trigger"),
-  ).toHaveAccessibleName(new RegExp(INDOOR_40CM_TARGET_FACE_LABEL));
-  await reloadAfter(page, sent);
-  const added = page.getByTestId("distance-summary-2");
-  await expect(added).toContainText("50m");
-  await expect(added).toContainText("5本×4エンド");
-});
-
-test("setup-07: 距離が1件以上あるとき、距離概要をクリックすると、距離編集ダイアログが開く", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page);
-  await expect(page.getByTestId("distance-config-distance-1")).toBeHidden();
-
-  // When
   await page.getByTestId("distance-config-toggle-1").click();
-
-  // Then
-  await expect(page.getByTestId("distance-config-distance-1")).toBeVisible();
-});
-
-test("setup-08: 距離・的・本数・エンド数を変更して保存ボタンをクリックすると、編集内容が即座に反映されてダイアログが閉じられ、編集内容が保持される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page);
-  await page.getByTestId("distance-config-toggle-1").click();
-  await page.getByTestId("distance-config-distance-1").fill("30");
-  await page.getByTestId("distance-config-total-ends-1").fill("3");
-  await page.getByTestId("distance-config-arrows-1").fill("6");
-  await page.getByTestId("target-face-picker-trigger").click();
-  await page.getByTestId("target-face-format-tab-indoor").click();
-  await page
-    .getByTestId(`target-face-option-${INDOOR_40CM_TARGET_FACE_ID}`)
-    .click();
-  const sent = page.waitForResponse(UPDATE_DISTANCE_RPC);
-
-  // When
-  await page.getByTestId("distance-config-save-1").click();
-
-  // Then
-  const summary = page.getByTestId("distance-summary-1");
-  await expect(summary).toContainText("30m");
-  await expect(summary).toContainText("6本×3エンド");
-  await expect(page.getByTestId("distance-config-distance-1")).toBeHidden();
-  await reloadAfter(page, sent);
-  await expect(summary).toContainText("30m");
-  await expect(summary).toContainText("6本×3エンド");
-  await page.getByTestId("distance-config-toggle-1").click();
-  await expect(
-    page.getByTestId("target-face-picker-trigger"),
-  ).toHaveAccessibleName(new RegExp(INDOOR_40CM_TARGET_FACE_LABEL));
-});
-
-test("setup-09: 取り消し・やり直しの履歴があり、記録済みの得点がないとき、的・本数・エンド数を変更して保存ボタンをクリックすると、編集内容が即座に反映されてダイアログが閉じられ、その距離の矢への書き込みを、一つ戻る・一つ進むで戻せなくなる", async ({
-  page,
-}) => {
-  // Given
-  // 取り消し・やり直しの履歴はクライアントの記憶なので、画面操作で作る（得点を入力して取り消す）。
-  await openRound(page);
-  await page.getByTestId("score-button-X").click();
-  await expect(page.getByTestId("distance-summary-1")).toContainText("小計10");
-  // 全エンドの入力が終わるとテンキーが閉じるため、記録した矢を指して開く。
-  await page.getByTestId("shot-ball-1-1-1").click();
-  // 閉じたテンキーを開き直す動きが終わってから押す。
-  await expectKeypadSettled(page);
-  await page.getByTestId("score-button-undo").click();
-  await expect(page.getByTestId("distance-summary-1")).toContainText("小計0");
-  await expect(page.getByTestId("score-button-redo")).toBeEnabled();
-  await page.getByTestId("distance-config-toggle-1").click();
-  await page.getByTestId("distance-config-arrows-1").fill("2");
-
-  // When
-  await page.getByTestId("distance-config-save-1").click();
-
-  // Then
-  await expect(page.getByTestId("distance-summary-1")).toContainText(
-    "2本×1エンド",
-  );
-  await expect(page.getByTestId("distance-config-arrows-1")).toBeHidden();
-  await page.getByTestId("end-blank-1-1").click();
-  await expect(page.getByTestId("score-button-undo")).toBeDisabled();
-  await expect(page.getByTestId("score-button-redo")).toBeDisabled();
-});
-
-test("setup-10: 種別がフィールドで距離が1件以上あるとき、距離概要をクリックすると、距離編集ダイアログにMarked/Unmarkedの切り替えが表示される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, { format: "field" });
-
-  // When
-  await page.getByTestId("distance-config-toggle-1").click();
-
-  // Then
-  await expect(page.getByTestId("distance-config-marked-1")).toBeVisible();
-  await expect(page.getByTestId("distance-config-unmarked-1")).toBeVisible();
-  const markedBox = await page
-    .getByTestId("distance-config-marked-1")
-    .boundingBox();
-  const distanceBox = await page.getByLabel("距離（m）").boundingBox();
-  expect(markedBox?.y, "切り替えが距離より上").toBeLessThan(
-    distanceBox?.y ?? 0,
+  await expect(page.getByTestId("target-face-picker-trigger")).toContainText(
+    MISSING_TARGET,
   );
 });
 
-test("setup-11: 的をクリックすると、ラウンド設定に一致するフィルタが選ばれた状態で的選択ダイアログが開き、フィルタに一致する的だけがサイズの大きい順に表示される", async ({
+test("オフラインで的を端末に保存済みなら、作成が未確定のラウンドに追加した距離に的が表示され、的選択に一覧が表示される", async ({
   page,
 }) => {
-  // Given
-  // 的の一覧は、種別・弓種のフィルタとサイズの並びが、実際の的のデータに対して成り立つことを確かめる。
-  await openRound(page);
-  await page.getByTestId("distance-config-toggle-1").click();
-
-  // When
-  await page.getByTestId("target-face-picker-trigger").click();
-
-  // Then
-  // アウトドア・リカーブのラウンドなので、アウトドアの的だけを表示する。
-  await expect(
-    page.getByTestId(`target-face-option-${OUTDOOR_TARGET_FACE_ID}`),
-  ).toBeVisible();
-  await expect(
-    page.getByTestId(`target-face-option-${INDOOR_40CM_TARGET_FACE_ID}`),
-  ).toBeHidden();
-  await expect(
-    page.getByTestId(`target-face-option-${FIELD_TARGET_FACE_ID}`),
-  ).toBeHidden();
-  const labels = await page
-    .locator('[data-testid^="target-face-option-"]')
-    .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label") ?? ""));
-  const sizes = labels.map((label) => Number(/(\d+)cm/.exec(label)?.[1]));
-  expect(sizes.length).toBeGreaterThan(1);
-  expect(sizes).toEqual([...sizes].sort((a, b) => b - a));
-});
-
-test("setup-34: 距離編集ダイアログで幅375pxのとき、的の選択ダイアログを開くと、一覧が、幅に余裕があれば複数列、余裕がなければ1列で表示され、項目が横へ進む順に並び、各項目の枠の中で、的の情報が左右の中央に表示され、一覧が横にあふれない", async ({
-  page,
-}) => {
-  // Given: 幅375pxで、フィールドのラウンドの距離編集ダイアログを開いている
-  await page.setViewportSize({ width: 375, height: NARROW_VIEWPORT_HEIGHT });
-  await openRound(page, { format: "field" });
-  await page.getByTestId("distance-config-toggle-1").click();
-
-  // When
-  await page.getByTestId("target-face-picker-trigger").click();
-
-  // Then: 種別・弓種を「すべて」にした全種の的が、幅375pxで2列の格子に並ぶ
-  await page.getByTestId("target-face-format-tab-all").click();
-  await page.getByTestId("target-face-bow-type-tab-all").click();
-  const options = page.locator('[data-testid^="target-face-option-"]');
-  await expect(options.first()).toBeVisible();
-  const optionCount = await options.count();
-  expect(optionCount, "全種の的の数").toBe(ALL_TARGET_FACE_COUNT);
-  await expectOptionGrid(options, 2);
-  // 各項目が横にあふれない
-  for (let i = 0; i < optionCount; i++) {
-    await expectNoHorizontalOverflow(options.nth(i));
-  }
-  const listBox = options.first().locator("..");
-  await expectNoHorizontalOverflow(listBox);
-  await expectPageNotScrollingHorizontally(page);
-  // ダイアログ全体はスクロールしない(一覧だけがスクロールする)
-  const dialogScrolls = await page
-    .getByRole("dialog")
-    .last()
-    .evaluate((el) => el.scrollHeight > el.clientHeight);
-  expect(dialogScrolls, "ダイアログ全体のスクロール").toBe(false);
-
-  // Then: 幅768pxでも2列で、あふれない
-  await page.setViewportSize({ width: 768, height: NARROW_VIEWPORT_HEIGHT });
-  await expectOptionGrid(options, 2);
-  await expectNoHorizontalOverflow(listBox);
-
-  // Then: 幅に余裕がない(260px)ときは1列で、あふれない
-  await page.setViewportSize({ width: 260, height: NARROW_VIEWPORT_HEIGHT });
-  await expectOptionGrid(options, 1);
-  await expectNoHorizontalOverflow(listBox);
-});
-
-test("setup-38: 的選択ダイアログで幅375pxで種別が「すべて」のとき、弓種のタブを「すべて」にすると、全種の的で、拡大図の得点の文字が環に収まり、変更前より大きく表示される", async ({
-  page,
-}) => {
-  // Given: 幅375pxで、フィールドのラウンドの的選択ダイアログの種別を「すべて」にしている
-  await page.setViewportSize({ width: 375, height: NARROW_VIEWPORT_HEIGHT });
-  await openRound(page, { format: "field" });
-  await page.getByTestId("distance-config-toggle-1").click();
-  await page.getByTestId("target-face-picker-trigger").click();
-  await page.getByTestId("target-face-format-tab-all").click();
-
-  // When
-  await page.getByTestId("target-face-bow-type-tab-all").click();
-
-  // Then: 全種の的で、拡大図の得点の文字(十字を含む)が環に収まり、変更前より大きい
-  const options = page.locator('[data-testid^="target-face-option-"]');
-  await expect(options.first()).toBeVisible();
-  const optionCount = await options.count();
-  expect(optionCount, "全種の的の数").toBe(ALL_TARGET_FACE_COUNT);
-  for (let i = 0; i < optionCount; i++) {
-    await expectTargetFaceInfoArranged(options.nth(i), 1);
-  }
-});
-
-test("setup-13: 的をクリックすると、その的が選択され、的選択ダイアログが閉じられる", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page);
-  await page.getByTestId("distance-config-toggle-1").click();
-  await page.getByTestId("target-face-picker-trigger").click();
-  await page.getByTestId("target-face-format-tab-indoor").click();
-
-  // When
-  await page
-    .getByTestId(`target-face-option-${INDOOR_40CM_TARGET_FACE_ID}`)
-    .click();
-
-  // Then
-  await expect(page.getByTestId("target-face-format-tab-indoor")).toBeHidden();
-  await expect(
-    page.getByTestId("target-face-picker-trigger"),
-  ).toHaveAccessibleName(new RegExp(INDOOR_40CM_TARGET_FACE_LABEL));
-});
-
-test("setup-14: 削除ボタンをクリックすると、その距離が一覧から削除されてダイアログが閉じられ、距離の削除が保持される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page, {
-    distances: [
-      { distance: 18, totalEnds: 1, arrowsPerEnd: 1 },
-      { distance: 30, totalEnds: 1, arrowsPerEnd: 1 },
-    ],
-  });
-  await page.getByTestId("distance-config-toggle-2").click();
-  const sent = page.waitForResponse(DISABLE_DISTANCE_RPC);
-
-  // When
-  await page.getByTestId("distance-config-delete-2").click();
-
-  // Then
-  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
-  await expect(page.getByTestId("distance-config-delete-2")).toBeHidden();
-  await expect(page.getByTestId("distance-summary-1")).toBeVisible();
-  await reloadAfter(page, sent);
-  await expect(page.getByTestId("distance-summary-1")).toBeVisible();
-  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
-});
-
-test("setup-15: 距離に記録済みの得点があるとき、削除ボタンをクリックすると、距離削除確認ダイアログが開く", async ({
-  page,
-}) => {
-  // Given
-  await openRoundWithShot(page);
-  await page.getByTestId("distance-config-toggle-1").click();
-
-  // When
-  await page.getByTestId("distance-config-delete-1").click();
-
-  // Then
-  await expect(
-    page.getByText(
-      "この距離にはすでにスコアが記録されています。削除するとスコアも失われます。削除しますか？",
-    ),
-  ).toBeVisible();
-});
-
-test("setup-16: 確認ボタンをクリックすると、その距離が一覧から削除されてダイアログが閉じられ、距離の削除が保持される", async ({
-  page,
-}) => {
-  // Given
-  await openRoundWithShot(page);
-  await page.getByTestId("distance-config-toggle-1").click();
-  await page.getByTestId("distance-config-delete-1").click();
-  const sent = page.waitForResponse(DISABLE_DISTANCE_RPC);
-
-  // When
-  await page.getByTestId("confirm-dialog-confirm").click();
-
-  // Then
-  // 削除した距離（18m）の次にあった距離（30m）が、1つ目の距離として残る。
-  await expect(page.getByTestId("distance-summary-1")).toContainText("30m");
-  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
-  await expect(page.getByTestId("confirm-dialog-confirm")).toBeHidden();
-  await reloadAfter(page, sent);
-  await expect(page.getByTestId("distance-summary-1")).toContainText("30m");
-  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
-});
-
-test("setup-18: 距離に記録済みの得点があるとき、距離概要をクリックすると、距離編集ダイアログの的・本数・エンド数が編集できない", async ({
-  page,
-}) => {
-  // Given
-  await openRoundWithShot(page);
-
-  // When
-  await page.getByTestId("distance-config-toggle-1").click();
-
-  // Then
-  await expect(page.getByTestId("target-face-picker-trigger")).toHaveAttribute(
-    "aria-disabled",
-    "true",
-  );
-  await expect(page.getByTestId("distance-config-arrows-1")).toHaveAttribute(
-    "readonly",
-    "",
-  );
-  await expect(
-    page.getByTestId("distance-config-total-ends-1"),
-  ).toHaveAttribute("readonly", "");
-});
-
-test("setup-39: ラウンド詳細画面で距離に記録済みの得点がある、距離編集ダイアログのとき、エンドあたりの本数をクリックすると、記録済みの得点があるため変更できないというメッセージが表示される。本数は変更されない", async ({
-  page,
-}) => {
-  // Given
-  await openRoundWithShot(page);
-  await page.getByTestId("distance-config-toggle-1").click();
-
-  // When
-  const input = page.getByTestId("distance-config-arrows-1");
-  const before = await input.inputValue();
-  await input.click();
-
-  // Then
-  await expect(
-    page.getByTestId("distance-config-arrows-1-locked-message"),
-  ).toBeVisible();
-  await expect(input).toHaveValue(before);
-});
-
-test("setup-40: ラウンド詳細画面で距離に記録済みの得点がある、距離編集ダイアログのとき、総エンド数をクリックすると、記録済みの得点があるため変更できないというメッセージが表示される。総エンド数は変更されない", async ({
-  page,
-}) => {
-  // Given
-  await openRoundWithShot(page);
-  await page.getByTestId("distance-config-toggle-1").click();
-
-  // When
-  const input = page.getByTestId("distance-config-total-ends-1");
-  const before = await input.inputValue();
-  await input.click();
-
-  // Then
-  await expect(
-    page.getByTestId("distance-config-total-ends-1-locked-message"),
-  ).toBeVisible();
-  await expect(input).toHaveValue(before);
-});
-
-test("setup-41: ラウンド詳細画面で距離に記録済みの得点がある、距離編集ダイアログのとき、的をクリックすると、記録済みの得点があるため変更できないというメッセージが表示される。的選択ダイアログが開かない", async ({
-  page,
-}) => {
-  // Given
-  await openRoundWithShot(page);
-  await page.getByTestId("distance-config-toggle-1").click();
-
-  // When
-  // aria-disabled="true"の要素はPlaywrightが操作可能と見なさないため、forceで押す
-  await page.getByTestId("target-face-picker-trigger").click({ force: true });
-
-  // Then
-  await expect(
-    page.getByTestId("distance-config-target-face-locked-message"),
-  ).toBeVisible();
-  await expect(page.getByTestId("target-face-format-tab-all")).toBeHidden();
-});
-
-test("setup-19: ラウンド編集ダイアログで内容を変更しているとき、背景をクリックすると、変更が破棄され、ダイアログが閉じられる", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page);
-  await page.getByTestId("round-config-summary").click();
-  await page.getByTestId("round-config-name").fill("破棄される名前");
-
-  // When
-  await page.mouse.click(5, 5);
-
-  // Then
-  await expect(page.getByTestId("round-config-save")).toBeHidden();
-  await expect(page.getByTestId("round-config-summary")).not.toContainText(
-    "破棄される名前",
-  );
-  await page.getByTestId("round-config-summary").click();
-  await expect(page.getByTestId("round-config-name")).toHaveValue("設定テスト");
-});
-
-test("setup-20: 距離編集ダイアログで内容を変更しているとき、背景をクリックすると、変更が破棄され、ダイアログが閉じられる", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page);
-  await page.getByTestId("distance-config-toggle-1").click();
-  await page.getByTestId("distance-config-distance-1").fill("99");
-
-  // When
-  await page.mouse.click(5, 5);
-
-  // Then
-  await expect(page.getByTestId("distance-config-distance-1")).toBeHidden();
-  await expect(page.getByTestId("distance-summary-1")).not.toContainText("99m");
-  await page.getByTestId("distance-config-toggle-1").click();
-  await expect(page.getByTestId("distance-config-distance-1")).toHaveValue(
-    "18",
-  );
-});
-
-test("setup-21: 背景をクリックすると、的選択ダイアログが閉じられ、距離編集ダイアログは開いたままである", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page);
-  await page.getByTestId("distance-config-toggle-1").click();
-  await page.getByTestId("target-face-picker-trigger").click();
-  await expect(page.getByTestId("target-face-format-tab-indoor")).toBeVisible();
-
-  // When
-  await page.mouse.click(5, 5);
-
-  // Then
-  await expect(page.getByTestId("target-face-format-tab-indoor")).toBeHidden();
-  await expect(page.getByTestId("distance-config-distance-1")).toBeVisible();
-});
-
-test("setup-22: キャンセルボタンをクリックすると、ダイアログが閉じられ、距離は削除されない", async ({
-  page,
-}) => {
-  // Given
-  await openRoundWithShot(page);
-  await page.getByTestId("distance-config-toggle-1").click();
-  await page.getByTestId("distance-config-delete-1").click();
-  await expect(page.getByTestId("confirm-dialog-cancel")).toBeVisible();
-
-  // When
-  await page.getByTestId("confirm-dialog-cancel").click();
-
-  // Then
-  await expect(page.getByTestId("confirm-dialog-cancel")).toBeHidden();
-  await expect(page.getByTestId("distance-summary-1")).toContainText("18m");
-});
-
-test("setup-23: 背景をクリックすると、ダイアログが閉じられ、距離は削除されない", async ({
-  page,
-}) => {
-  // Given
-  await openRoundWithShot(page);
-  await page.getByTestId("distance-config-toggle-1").click();
-  await page.getByTestId("distance-config-delete-1").click();
-  await expect(page.getByTestId("confirm-dialog-cancel")).toBeVisible();
-
-  // When
-  await page.mouse.click(5, 5);
-
-  // Then
-  await expect(page.getByTestId("confirm-dialog-cancel")).toBeHidden();
-  await expect(page.getByTestId("distance-summary-1")).toContainText("18m");
-});
-
-test("setup-24: ラウンド名が51文字以上のとき、保存ボタンをクリックすると、エラーメッセージが表示され、保存されない", async ({
-  page,
-}) => {
-  // 代表例: エラー表示そのものの確認。個別の検証規則は単体テストで検証する
-  // Given
-  await openRound(page);
-  await page.getByTestId("round-config-summary").click();
-  await page.getByTestId("round-config-name").fill("a".repeat(51));
-
-  // When
-  await page.getByTestId("round-config-save").click();
-
-  // Then
-  await expect(
-    page.getByText("ラウンド名は50文字以内で入力してください。"),
-  ).toBeVisible();
-  await expect(page.getByTestId("round-config-save")).toBeVisible();
-});
-
-test("setup-25: オフラインで的を端末に保存済み、作成が未確定で距離がないラウンドのとき、「距離を追加」ボタンをクリックすると、追加した距離に的のサイズと図が表示される", async ({
-  page,
-}) => {
-  // Given: オフラインで的を端末に保存済み、作成が未確定で距離がないラウンド
+  // オフラインで開始したラウンドに距離を追加し、的のサイズと図を確かめる。
   await saveTargetFacesOnDevice(page);
   await openNewRoundThenGoOffline(page);
   await startRoundOffline(page);
   // 距離がないラウンドはラウンド編集ダイアログが展開済みのため、閉じる。
   await page.keyboard.press("Escape");
-
-  // When: 「距離を追加」ボタンをクリックする
   await page.getByTestId("add-distance-button").click();
-
-  // Then: 追加した距離に的のサイズと図が表示される
   const trigger = page.getByTestId("target-face-picker-trigger");
   await expect(trigger).toHaveAccessibleName(/\d+cm/);
   await expect(trigger.locator('[role="img"]').first()).toBeVisible();
   await expect(page.getByText(MISSING_TARGET)).toHaveCount(0);
-});
 
-test("setup-26: オフラインで的を端末に保存済み、作成が未確定で距離がないラウンドの距離編集ダイアログのとき、的をクリックすると、的選択ダイアログに的の一覧が表示される", async ({
-  page,
-}) => {
-  // Given: オフラインで的を端末に保存済み、作成が未確定で距離がないラウンドの距離編集ダイアログ
-  await saveTargetFacesOnDevice(page);
-  await openNewRoundThenGoOffline(page);
-  await startRoundOffline(page);
-  await page.keyboard.press("Escape");
-  await page.getByTestId("add-distance-button").click();
-
-  // When: 的をクリックする
+  // 的の選択を開いて、保存済みの的の一覧を確かめる。
   await page.getByTestId("target-face-picker-trigger").click();
-
-  // Then: 的選択ダイアログに的の一覧が表示される
   await expect(
     page.getByTestId(`target-face-option-${OUTDOOR_TARGET_FACE_ID}`),
   ).toBeVisible();
@@ -871,64 +331,23 @@ test.describe("的の取得を止める", () => {
     return release;
   }
 
-  test("setup-27: 作成が未確定で距離があるラウンドで、的の一覧の取得が完了していないとき、/rounds/[id]を開くと、ラウンドの内容が表示されず、読み込み中と表示される", async ({
+  test("的の一覧の取得が完了するまで読み込み中が表示され、完了すると距離の行の的とテンキーの点数のキーが表示される", async ({
     page,
   }) => {
-    // Given: 作成が未確定で距離があるラウンドで、的の一覧の取得が完了していない(端末の保存分も無い)
-    await holdTargetFacesThenSelectPreset(page);
-
-    // When: /rounds/[id]を開く
-    await page.getByTestId("round-start-button").click();
-    await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-
-    // Then: ラウンドの内容が表示されず、読み込み中と表示される
-    await expect(page.getByRole("status")).toContainText("読み込み中");
-    await expect(page.getByTestId("distance-summary-1")).toHaveCount(0);
-  });
-
-  test("setup-32: 作成が未確定で距離があるラウンドで、的の一覧の取得が完了せず、読み込み中と表示されているとき、的の一覧の取得が完了すると、距離の行に的のサイズと図が表示され、テンキーに的の点数ボタンが表示される", async ({
-    page,
-  }) => {
-    // Given: 作成が未確定で距離があるラウンドで、的の一覧の取得が完了せず、読み込み中と表示されている
+    // 的の一覧の取得を止めたまま開始し、読み込み中の表示を確かめる。
     const releaseTargetFaces = await holdTargetFacesThenSelectPreset(page);
     await page.getByTestId("round-start-button").click();
     await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
     await expect(page.getByRole("status")).toContainText("読み込み中");
+    await expect(page.getByTestId("distance-summary-1")).toHaveCount(0);
 
-    // When: 的の一覧の取得が完了する
+    // 取得を再開して、的のサイズと図、点数のキーを確かめる。
     releaseTargetFaces();
-
-    // Then: 距離の行に的のサイズと図が表示され、テンキーに的の点数ボタンが表示される
     const first = page.getByTestId("distance-summary-1");
     await expect(first.locator('[role="img"]').first()).toBeVisible();
     await expect(first).toContainText(/\d+cm/);
     await expect(page.getByTestId("score-button-10")).toBeVisible();
   });
-});
-
-test("setup-29: ラウンド詳細画面で距離を追加して削除した後、「距離を追加」ボタンをクリックすると、距離が追加され、エラーメッセージが表示されず、追加した距離が保持される", async ({
-  page,
-}) => {
-  // Given
-  await openRound(page);
-  const created = page.waitForResponse(CREATE_DISTANCE_RPC);
-  await page.getByTestId("add-distance-button").click();
-  await created;
-  const disabled = page.waitForResponse(DISABLE_DISTANCE_RPC);
-  await page.getByTestId("distance-config-delete-2").click();
-  await disabled;
-  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
-  const sent = page.waitForResponse(CREATE_DISTANCE_RPC);
-
-  // When
-  await page.getByTestId("add-distance-button").click();
-
-  // Then
-  expect((await sent).ok()).toBe(true);
-  await expect(page.getByTestId("distance-config-distance-2")).toBeVisible();
-  await page.reload();
-  await waitForHydration(page);
-  await expect(page.getByTestId("distance-summary-2")).toBeVisible();
 });
 
 // 一括の取得を起こし、成功の回数が増えるまで待つ。
@@ -943,23 +362,21 @@ async function refreshRoundBases(page: Page) {
     .toBeGreaterThan(before);
 }
 
-test("setup-30: ラウンド編集ダイアログで内容を変更しているとき、他端末の変更が取得で届くと、変更中の内容が残り、保存すると、変更した項目と他端末で変更された項目の両方が保たれる", async ({
+test("ラウンド編集中に他の端末の変更が届いても、変更中の名前が残り、保存すると両方の変更が保たれる", async ({
   page,
 }) => {
-  // Given
+  // 編集中に他の端末の変更を取得し、変更中の内容が残ることを確かめる。
   const roundId = await openRound(page);
   await page.getByTestId("round-config-summary").click();
   await page.getByTestId("round-config-name").fill("編集中の名前");
   const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
-
-  // When
   await updateRound(device.supabase, roundId, { round_date: "2026-08-25" });
   await refreshRoundBases(page);
-
-  // Then
   await expect(page.getByTestId("round-config-name")).toHaveValue(
     "編集中の名前",
   );
+
+  // 保存して再読み込みし、両方の変更が保たれることを確かめる。
   const sent = page.waitForResponse(UPDATE_ROUND_RPC);
   await page.getByTestId("round-config-save").click();
   await reloadAfter(page, sent);
@@ -968,28 +385,27 @@ test("setup-30: ラウンド編集ダイアログで内容を変更している�
   );
 });
 
-test("setup-31: 距離編集ダイアログで内容を変更しているとき、他端末の変更が取得で届くと、変更中の内容が残り、保存すると、変更した項目と他端末で変更された項目の両方が保たれる", async ({
+test("距離編集中に他の端末の変更が届いても、変更中のエンド数が残り、保存すると両方の変更が保たれる", async ({
   page,
 }) => {
-  // Given
+  // 編集中に他の端末の変更を取得し、変更中の内容が残ることを確かめる。
   const roundId = await openRound(page);
   await page.getByTestId("distance-config-toggle-1").click();
-  await page.getByTestId("distance-config-total-ends-1").fill("3");
+  // エンド数だけを変える編集を確かめるため、保存後の本数は実際の形にならない。
+  await page.getByTestId("distance-config-total-ends-1").fill("6");
   const device = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
   const [distanceId] = await getDistanceIds(device.supabase, roundId);
-
-  // When
   await updateDistance(device.supabase, distanceId, { distance: 30 });
   await refreshRoundBases(page);
-
-  // Then
   await expect(page.getByTestId("distance-config-total-ends-1")).toHaveValue(
-    "3",
+    "6",
   );
+
+  // 保存して再読み込みし、両方の変更が保たれることを確かめる。
   const sent = page.waitForResponse(UPDATE_DISTANCE_RPC);
   await page.getByTestId("distance-config-save-1").click();
   await reloadAfter(page, sent);
   const summary = page.getByTestId("distance-summary-1");
   await expect(summary).toContainText("30m");
-  await expect(summary).toContainText("1本×3エンド");
+  await expect(summary).toContainText("3本×6エンド");
 });

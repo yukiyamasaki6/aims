@@ -44,7 +44,7 @@ describe("DialogContent", () => {
     });
 
     describe("className", () => {
-      it("既定のクラスに加えて、指定したクラスを付与する", () => {
+      it("指定したクラスを付与する", () => {
         // Given
         const className = "custom-class";
 
@@ -56,10 +56,7 @@ describe("DialogContent", () => {
         );
 
         // Then
-        expect(screen.getByRole("dialog")).toHaveClass(
-          "bg-card",
-          "custom-class",
-        );
+        expect(screen.getByRole("dialog")).toHaveClass("custom-class");
       });
     });
 

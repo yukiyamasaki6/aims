@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import type { RoundOpSync } from "@/features/rounds/round-op-log";
 import { startBaseRefetch } from "./base-refetch";
 import { type LoadedRound, loadRoundDetail } from "./load-round-detail";
@@ -55,7 +63,7 @@ afterEach(() => {
 describe("startBaseRefetch", () => {
   describe("後片付けの後", () => {
     it("取り直しの要求は何も取得しない", async () => {
-      // Given: 開始して後片付けを済ませた
+      // Given
       const { env, stop } = setup();
       stop();
 
@@ -68,7 +76,7 @@ describe("startBaseRefetch", () => {
     });
 
     it("後片付けの後に届いた取得済みの結果で、onGoneを呼ばない", async () => {
-      // Given: 結果が後片付けの後に届く
+      // Given
       let resolve: (value: { status: "not-found" }) => void = () => {};
       const pendingServer = new Promise<{ status: "not-found" }>((r) => {
         resolve = r;
@@ -91,23 +99,20 @@ describe("startBaseRefetch", () => {
     it("表示されたときは取り直し、隠れたときは取り直さない", async () => {
       // Given
       const { stop } = setup();
+      onTestFinished(stop);
       reload.mockClear();
 
-      // When: 隠れる
+      // When
       setVisibility("hidden");
       document.dispatchEvent(new Event("visibilitychange"));
       await Promise.resolve();
-
-      // Then
-      expect(reload).not.toHaveBeenCalled();
-
-      // When: 表示される
+      const callsWhileHidden = reload.mock.calls.length;
       setVisibility("visible");
       document.dispatchEvent(new Event("visibilitychange"));
 
       // Then
+      expect(callsWhileHidden).toBe(0);
       expect(reload).toHaveBeenCalledTimes(1);
-      stop();
     });
   });
 });

@@ -45,11 +45,11 @@ describe("RoundConfigPanel", () => {
 
   describe("初期表示", () => {
     it("折りたたまれており、保存済みの値を要約表示する", () => {
-      // Given: 保存済みの値（initial）
-      // When: パネルを表示する
+      // Given
+      // When
       setup();
 
-      // Then: 要約だけが表示され、編集欄は表示されない
+      // Then
       expect(
         screen.getByText("午前練習 / 2026-09-15 / アウトドア / リカーブ"),
       ).toBeInTheDocument();
@@ -59,11 +59,11 @@ describe("RoundConfigPanel", () => {
 
   describe("ラウンド名が空の場合", () => {
     it("名前の区切りを表示せず、実施日・種別・弓種だけを要約表示する", () => {
-      // Given: ラウンド名が空の保存済みの値
-      // When: パネルを表示する
+      // Given
+      // When
       setup({ initial: { ...initial, name: "" } });
 
-      // Then: 先頭に区切りを付けず、実施日・種別・弓種を表示する
+      // Then
       expect(screen.getByTestId("round-config-summary")).toHaveTextContent(
         /^2026-09-15 \/ アウトドア \/ リカーブ$/,
       );
@@ -71,26 +71,33 @@ describe("RoundConfigPanel", () => {
   });
 
   describe("要約のクリック", () => {
-    it("展開し、再度クリックすると閉じる", async () => {
-      // Given: 折りたたまれたパネル
+    it("要約を押すと、編集欄を展開する", async () => {
+      // Given
       const user = userEvent.setup();
       setup();
 
-      // When: 要約をクリックする
+      // When
       await user.click(screen.getByTestId("round-config-summary"));
 
-      // Then: 編集欄が表示される
+      // Then
       expect(screen.getByTestId("round-config-name")).toBeInTheDocument();
+    });
 
-      // When: 再度クリックする
+    it("展開中に要約を再度押すと、編集欄を閉じる", async () => {
+      // Given
+      const user = userEvent.setup();
+      setup();
       await user.click(screen.getByTestId("round-config-summary"));
 
-      // Then: 編集欄が閉じる
+      // When
+      await user.click(screen.getByTestId("round-config-summary"));
+
+      // Then
       expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
     });
 
     it("閉じて再展開すると、未保存の編集は破棄され、その時点の値から作り直す", async () => {
-      // Given: 展開してラウンド名を編集し、保存せず閉じたパネルで、閉じている間にinitialが変わった
+      // Given
       const user = userEvent.setup();
       const { rerender } = setup();
       await user.click(screen.getByTestId("round-config-summary"));
@@ -99,10 +106,10 @@ describe("RoundConfigPanel", () => {
       await user.click(screen.getByTestId("round-config-summary"));
       rerender(panel({ ...initial, name: "他の端末の名前" }));
 
-      // When: 再展開する
+      // When
       await user.click(screen.getByTestId("round-config-summary"));
 
-      // Then: その時点のinitialの値になっている
+      // Then
       expect(screen.getByTestId("round-config-name")).toHaveValue(
         "他の端末の名前",
       );
@@ -112,7 +119,7 @@ describe("RoundConfigPanel", () => {
   describe("保存", () => {
     describe("入力内容が有効な場合", () => {
       it("enqueueを検証済みの設定で呼び、折りたたむ", async () => {
-        // Given: ラウンド名と弓種を編集したパネル
+        // Given
         vi.spyOn(crypto, "randomUUID").mockReturnValue(
           "00000000-0000-4000-8000-000000000001",
         );
@@ -123,10 +130,10 @@ describe("RoundConfigPanel", () => {
         await user.type(screen.getByTestId("round-config-name"), "午後練習");
         await user.click(screen.getByTestId("round-config-bow-type-compound"));
 
-        // When: 保存する
+        // When
         await user.click(screen.getByTestId("round-config-save"));
 
-        // Then: round.updatedの操作を登録して折りたたむ
+        // Then
         expect(enqueue).toHaveBeenCalledWith({
           type: "round.updated",
           eventId: "00000000-0000-4000-8000-000000000001",
@@ -141,7 +148,7 @@ describe("RoundConfigPanel", () => {
 
     describe("入力内容が無効な場合", () => {
       it("各項目のエラーを表示し、enqueueを呼ばない", async () => {
-        // Given: Unmarkedの距離が残っている状態で、ラウンド名・実施日・種別をいずれも無効にしたパネル
+        // Given
         const user = userEvent.setup();
         const { enqueue } = setup({ hasUnmarkedDistances: true });
         await user.click(screen.getByTestId("round-config-summary"));
@@ -153,10 +160,10 @@ describe("RoundConfigPanel", () => {
         await user.clear(screen.getByTestId("round-config-date"));
         await user.click(screen.getByTestId("round-config-format-indoor"));
 
-        // When: 保存する
+        // When
         await user.click(screen.getByTestId("round-config-save"));
 
-        // Then: 各項目のエラーを表示し、保存も同期操作の登録もしない
+        // Then
         expect(
           screen.getByText("ラウンド名は50文字以内で入力してください。"),
         ).toBeInTheDocument();
@@ -175,15 +182,37 @@ describe("RoundConfigPanel", () => {
 
   describe("Escapeキー", () => {
     it("保存せずに閉じる", async () => {
-      // Given: 展開したパネル
+      // Given
       const user = userEvent.setup();
       const { enqueue } = setup();
       await user.click(screen.getByTestId("round-config-summary"));
 
-      // When: Escapeキーを押す
+      // When
       await user.keyboard("{Escape}");
 
-      // Then: 閉じるだけで、保存も同期操作の登録もしない
+      // Then
+      expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
+      expect(enqueue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("背景のクリック", () => {
+    it("変更中に背景を押すと、保存せずに閉じる", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { enqueue } = setup();
+      await user.click(screen.getByTestId("round-config-summary"));
+      await user.clear(screen.getByTestId("round-config-name"));
+      await user.type(
+        screen.getByTestId("round-config-name"),
+        "破棄される名前",
+      );
+      const backdrops = document.querySelectorAll(".bg-black\\/40");
+
+      // When
+      await user.click(backdrops[backdrops.length - 1]);
+
+      // Then
       expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
       expect(enqueue).not.toHaveBeenCalled();
     });
@@ -191,30 +220,48 @@ describe("RoundConfigPanel", () => {
 
   describe("initialの更新", () => {
     it("閉じているときは、要約が追従する", () => {
+      // Given
       const { rerender } = setup();
 
+      // When
       rerender(panel({ ...initial, name: "更新後" }));
 
+      // Then
       expect(
         screen.getByText("更新後 / 2026-09-15 / アウトドア / リカーブ"),
       ).toBeInTheDocument();
     });
 
-    it("開いている間は、参照や内容が変わっても下書きを書き換えず、保存は開いたときの値との差だけを送る", async () => {
-      // Given: 展開してラウンド名を編集している
+    it("開いている間に参照や内容が変わっても、下書きを書き換えない", async () => {
+      // Given
       const user = userEvent.setup();
       const { enqueue, rerender } = setup();
       await user.click(screen.getByTestId("round-config-summary"));
       await user.clear(screen.getByTestId("round-config-name"));
       await user.type(screen.getByTestId("round-config-name"), "編集中");
 
-      // When: 同じ内容の別の参照、続けて他の端末で変わった内容が届く
+      // When
       rerender(panel({ ...initial }, enqueue));
       rerender(panel({ ...initial, bowType: "compound" }, enqueue));
 
-      // Then: 下書きは残り、保存はユーザーが変えた項目だけを送る
+      // Then
       expect(screen.getByTestId("round-config-name")).toHaveValue("編集中");
+    });
+
+    it("開いている間に他の端末の変更が届いた後に保存すると、開いたときの値との差だけを送る", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { enqueue, rerender } = setup();
+      await user.click(screen.getByTestId("round-config-summary"));
+      await user.clear(screen.getByTestId("round-config-name"));
+      await user.type(screen.getByTestId("round-config-name"), "編集中");
+      rerender(panel({ ...initial }, enqueue));
+      rerender(panel({ ...initial, bowType: "compound" }, enqueue));
+
+      // When
       await user.click(screen.getByTestId("round-config-save"));
+
+      // Then
       expect(enqueue).toHaveBeenCalledWith(
         expect.objectContaining({ changes: { name: "編集中" } }),
       );
@@ -222,23 +269,26 @@ describe("RoundConfigPanel", () => {
   });
 
   describe("入力欄のEnterキー", () => {
-    it("ラウンド名と実施日のどちらでも、フォーカスを外すだけで保存も閉鎖もしない", async () => {
-      // Given: 展開したパネル
-      const user = userEvent.setup();
-      const { enqueue } = setup();
-      await user.click(screen.getByTestId("round-config-summary"));
-
-      for (const testId of ["round-config-name", "round-config-date"]) {
-        // When: 入力欄でEnterを押す
+    it.each([
+      ["ラウンド名", "round-config-name"],
+      ["実施日", "round-config-date"],
+    ])(
+      "%sの入力欄でEnterを押しても、保存もダイアログの閉鎖もしない",
+      async (_label, testId) => {
+        // Given
+        const user = userEvent.setup();
+        const { enqueue } = setup();
+        await user.click(screen.getByTestId("round-config-summary"));
         const input = screen.getByTestId(testId);
         await user.click(input);
+
+        // When
         await user.keyboard("{Enter}");
 
-        // Then: フォーカスが外れ、パネルは開いたまま、同期操作は登録されない
-        expect(input).not.toHaveFocus();
+        // Then
         expect(screen.getByTestId("round-config-name")).toBeInTheDocument();
         expect(enqueue).not.toHaveBeenCalled();
-      }
-    });
+      },
+    );
   });
 });

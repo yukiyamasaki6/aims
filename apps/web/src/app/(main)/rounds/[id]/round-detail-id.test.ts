@@ -5,12 +5,33 @@ const ID = "123e4567-e89b-12d3-a456-426614174000";
 
 describe("parseRoundId", () => {
   it("/rounds/<UUID>からIDを取り出す", () => {
-    expect(parseRoundId(`/rounds/${ID}`)).toBe(ID);
+    // Given
+
+    // When
+    const id = parseRoundId(`/rounds/${ID}`);
+
+    // Then
+    expect(id).toBe(ID);
   });
 
-  it("末尾のスラッシュを許し、大文字のUUIDも受け付ける", () => {
-    expect(parseRoundId(`/rounds/${ID}/`)).toBe(ID);
-    expect(parseRoundId(`/rounds/${ID.toUpperCase()}`)).toBe(ID.toUpperCase());
+  it("末尾のスラッシュを許す", () => {
+    // Given
+
+    // When
+    const id = parseRoundId(`/rounds/${ID}/`);
+
+    // Then
+    expect(id).toBe(ID);
+  });
+
+  it("大文字のUUIDも受け付ける", () => {
+    // Given
+
+    // When
+    const id = parseRoundId(`/rounds/${ID.toUpperCase()}`);
+
+    // Then
+    expect(id).toBe(ID.toUpperCase());
   });
 
   it.each([
@@ -21,6 +42,12 @@ describe("parseRoundId", () => {
     ["別のパス", `/other/${ID}`],
     ["空", ""],
   ])("%sはnullを返す", (_name, pathname) => {
-    expect(parseRoundId(pathname)).toBeNull();
+    // Given
+
+    // When
+    const id = parseRoundId(pathname);
+
+    // Then
+    expect(id).toBeNull();
   });
 });

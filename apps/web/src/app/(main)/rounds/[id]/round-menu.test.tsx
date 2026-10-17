@@ -22,21 +22,33 @@ beforeEach(() => {
 
 describe("RoundMenu", () => {
   describe("ラウンドの削除", () => {
-    it("確認すると、そのラウンドを削除し、ダイアログを閉じ、一覧へ置き換えて遷移する", async () => {
-      // Given: 削除確認を開いている
+    it("削除を選ぶと、ラウンドの名前を引用せず、記録したスコアがすべて失われることを示す確認ダイアログを開く", async () => {
+      // Given
       const user = userEvent.setup();
       render(<RoundMenu roundId="round-1" />);
-      await openDeleteConfirm(user);
+      await user.click(screen.getByTestId("round-menu-trigger"));
+
+      // When
+      await user.click(await screen.findByTestId("round-delete"));
+
+      // Then
       expect(
         screen.getByText(
           "このラウンドを削除しますか？記録したスコアもすべて失われます。",
         ),
       ).toBeInTheDocument();
+    });
 
-      // When: 削除を確認する
+    it("確認すると、そのラウンドを削除し、ダイアログを閉じ、一覧へ置き換えて遷移する", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<RoundMenu roundId="round-1" />);
+      await openDeleteConfirm(user);
+
+      // When
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
-      // Then: そのラウンドを削除し、ダイアログが閉じ、一覧へ置き換えて遷移する
+      // Then
       expect(deletion.deleteRound).toHaveBeenCalledWith("round-1");
       await waitFor(() => {
         expect(nav.replace).toHaveBeenCalledWith("/rounds");
@@ -45,27 +57,19 @@ describe("RoundMenu", () => {
     });
 
     it("削除の保存が終わるまでは遷移しないが、ダイアログはすぐ閉じる", async () => {
-      // Given: 保存が終わらない削除
-      let finish: () => void = () => {};
-      deletion.deleteRound.mockReturnValue(
-        new Promise<void>((resolve) => {
-          finish = resolve;
-        }),
-      );
+      // Given
+      // 保存が終わる前の状態を確かめるため、削除の保存を終わらせない。
+      deletion.deleteRound.mockReturnValue(new Promise(() => {}));
       const user = userEvent.setup();
       render(<RoundMenu roundId="round-1" />);
       await openDeleteConfirm(user);
 
-      // When: 削除を確認する
+      // When
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
-      // Then: ダイアログは閉じ、遷移はまだしない。保存が終わると遷移する
+      // Then
       expect(screen.queryByTestId("confirm-dialog-confirm")).toBeNull();
       expect(nav.replace).not.toHaveBeenCalled();
-      finish();
-      await waitFor(() => {
-        expect(nav.replace).toHaveBeenCalledWith("/rounds");
-      });
     });
   });
 });

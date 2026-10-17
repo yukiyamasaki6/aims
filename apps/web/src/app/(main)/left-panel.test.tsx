@@ -83,6 +83,7 @@ describe("LeftPanel", () => {
   describe("サインアウトボタン", () => {
     it("表示する", () => {
       // Given
+
       // When
       render(<LeftPanel />);
 
@@ -94,20 +95,34 @@ describe("LeftPanel", () => {
   });
 
   describe("リンク", () => {
-    it("AIMSリンクは/へ、個人リンクは/roundsへのリンクである", () => {
+    // 遷移先は、押して確かめるE2E（navigation.spec.ts）に任せる。
+    it("AIMSリンクと個人リンクを表示する", () => {
       // Given
       // When
       render(<LeftPanel />);
 
       // Then
-      expect(screen.getByRole("link", { name: "AIMS" })).toHaveAttribute(
-        "href",
-        "/",
-      );
-      expect(screen.getByRole("link", { name: "個人" })).toHaveAttribute(
-        "href",
-        "/rounds",
-      );
+      expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "個人" })).toBeInTheDocument();
+    });
+  });
+
+  describe("サインアウトの確認を開く", () => {
+    it("サインアウトボタンを押すと、サインアウトの確認ダイアログを表示する", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<LeftPanel />);
+
+      // When
+      await user.click(screen.getByRole("button", { name: "サインアウト" }));
+
+      // Then
+      expect(
+        await screen.findByText("サインアウトしますか？"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "サインアウトする" }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -149,7 +164,7 @@ describe("LeftPanel", () => {
     });
   });
 
-  describe("モバイルメニュー", () => {
+  describe("縦向きで狭い画面のメニュー", () => {
     // 閉じるボタン（X）は常時DOM上に存在するため、開いている間だけ表示される背景の閉じるボタンの分だけ件数が増えることで開閉を判定する。
     it("開くボタンを押すと、背景を含めて開く", async () => {
       // Given
@@ -191,7 +206,7 @@ describe("LeftPanel", () => {
     });
   });
 
-  describe("デスクトップパネル", () => {
+  describe("広い画面のパネル", () => {
     it("格納ボタンを押すと格納する", async () => {
       // Given
       const user = userEvent.setup();
@@ -231,7 +246,7 @@ describe("LeftPanel", () => {
       expect(closeMenuButtons()).toHaveLength(1);
     });
 
-    it("広い用で格納すると、両方のボタンが開くになる。続けて展開すると両方が格納するになり、ドロワーが開く", async () => {
+    it("広い用で格納すると、両方のボタンが開くになり、ドロワーは開かない", async () => {
       // Given
       const user = userEvent.setup();
       render(<LeftPanel />);
@@ -243,6 +258,13 @@ describe("LeftPanel", () => {
       expect(wideToggle()).toHaveAccessibleName("パネルを開く");
       expect(compactToggle()).toHaveAccessibleName("パネルを開く");
       expect(closeMenuButtons()).toHaveLength(1);
+    });
+
+    it("広い用で格納した後に展開すると、両方のボタンが格納するになり、ドロワーが開く", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<LeftPanel />);
+      await user.click(wideToggle());
 
       // When
       await user.click(wideToggle());
@@ -253,7 +275,7 @@ describe("LeftPanel", () => {
       expect(closeMenuButtons()).toHaveLength(2);
     });
 
-    it("横向きかつ狭い用で展開すると、広い用も格納するになる。背景を押すと両方が開くになる", async () => {
+    it("横向きかつ狭い用で展開すると、広い用も格納するになり、ドロワーが開く", async () => {
       // Given
       const user = userEvent.setup();
       render(<LeftPanel />);
@@ -264,8 +286,16 @@ describe("LeftPanel", () => {
       // Then
       expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
       expect(closeMenuButtons()).toHaveLength(2);
+    });
+
+    it("横向きかつ狭い用で展開した後に背景を押すと、両方のボタンが開くになり、ドロワーが閉じる", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<LeftPanel />);
+      await user.click(compactToggle());
 
       // When
+      // 背景はパネルより前にDOMへ配置される。
       await user.click(closeMenuButtons()[0]);
 
       // Then
@@ -306,7 +336,7 @@ describe("LeftPanel", () => {
       expect(panel()).not.toHaveClass("duration-200");
     });
 
-    it("操作の直後は付き、250ms後に外れる", async () => {
+    it("操作の直後はtransitionが付く", async () => {
       // Given
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       render(<LeftPanel />);
@@ -316,6 +346,13 @@ describe("LeftPanel", () => {
 
       // Then
       expect(panel()).toHaveClass("duration-200");
+    });
+
+    it("操作から250ms経つと、transitionが外れる", async () => {
+      // Given
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LeftPanel />);
+      await user.click(wideToggle());
 
       // When
       act(() => {

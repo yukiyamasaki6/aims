@@ -153,7 +153,23 @@ describe("watchSessionLoss", () => {
       expect(onLost).not.toHaveBeenCalled();
     });
 
-    it("オフラインならgetSessionを呼ばず、onlineで再判定して通知する", async () => {
+    it("オフラインでは、マウント時に判定せず、通知しない", async () => {
+      // Given
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+      const { watchSessionLoss } = await load();
+      const supabase = makeSupabase(unauthenticated);
+      const onLost = vi.fn();
+
+      // When
+      watchSessionLoss(supabase.client, { onLost });
+
+      // Then
+      await flushToMacrotask();
+      expect(supabase.getSession).not.toHaveBeenCalled();
+      expect(onLost).not.toHaveBeenCalled();
+    });
+
+    it("オフラインで監視を始めた後にonlineになると、再判定して通知する", async () => {
       // Given
       const onLine = vi.spyOn(navigator, "onLine", "get");
       onLine.mockReturnValue(false);
@@ -161,8 +177,6 @@ describe("watchSessionLoss", () => {
       const supabase = makeSupabase(unauthenticated);
       const onLost = vi.fn();
       watchSessionLoss(supabase.client, { onLost });
-      expect(supabase.getSession).not.toHaveBeenCalled();
-      expect(onLost).not.toHaveBeenCalled();
 
       // When
       onLine.mockReturnValue(true);
@@ -174,7 +188,20 @@ describe("watchSessionLoss", () => {
   });
 
   describe("解除", () => {
-    it("購読とonlineの監視を外し、遅れて返ったgetSessionでは通知しない", async () => {
+    it("解除すると、認証状態の購読を外す", async () => {
+      // Given
+      const { watchSessionLoss } = await load();
+      const supabase = makeSupabase(authenticated);
+      const dispose = watchSessionLoss(supabase.client, { onLost: vi.fn() });
+
+      // When
+      dispose();
+
+      // Then
+      expect(supabase.unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it("解除の後に判定が未認証で返っても、通知しない", async () => {
       // Given
       const { watchSessionLoss } = await load();
       let resolveSession: (value: unknown) => void = () => {};
@@ -183,17 +210,29 @@ describe("watchSessionLoss", () => {
       );
       const onLost = vi.fn();
       const dispose = watchSessionLoss(supabase.client, { onLost });
+      dispose();
 
       // When
-      dispose();
       resolveSession(await unauthenticated());
       await flushToMacrotask();
+
+      // Then
+      expect(onLost).not.toHaveBeenCalled();
+    });
+
+    it("解除の後にonlineになっても、再判定しない", async () => {
+      // Given
+      const { watchSessionLoss } = await load();
+      const supabase = makeSupabase(() => new Promise(() => {}));
+      const dispose = watchSessionLoss(supabase.client, { onLost: vi.fn() });
+      dispose();
+
+      // When
       window.dispatchEvent(new Event("online"));
 
       // Then
-      expect(supabase.unsubscribe).toHaveBeenCalledTimes(1);
+      // マウント時の判定の1回だけで、onlineの後に判定が増えない。
       expect(supabase.getSession).toHaveBeenCalledTimes(1);
-      expect(onLost).not.toHaveBeenCalled();
     });
   });
 });

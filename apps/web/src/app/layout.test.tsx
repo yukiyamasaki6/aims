@@ -97,9 +97,8 @@ describe("RootLayout", () => {
 
     it("画面の遷移で待機中の新SWを有効にするSwUpdateActivatorを含める", () => {
       // Given
-      const children = <p>子要素</p>;
-
       // When
+      const children = <p>子要素</p>;
       const contents = bodyContents(children);
 
       // Then
@@ -112,9 +111,8 @@ describe("RootLayout", () => {
   describe("Service Worker", () => {
     it("/sw.jsを登録し、オンライン復帰時の再読み込みとナビゲーション時のキャッシュを行わない", () => {
       // Given
-      const children = <p>子要素</p>;
-
       // When
+      const children = <p>子要素</p>;
       const props = findSerwistProvider(children);
 
       // Then

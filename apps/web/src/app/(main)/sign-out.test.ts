@@ -65,13 +65,13 @@ describe("signOut", () => {
   describe("マウント中に完了した場合", () => {
     describe("ローカルの識別情報が消えた場合", () => {
       it("サーバー通信が成功すると、この端末のセッションのみをサインアウトし、完了したことを返す", async () => {
-        // Given: サーバー通信が成功し、ローカルセッションが削除される
+        // Given
         signOutRemovingLocalSession(async () => ({ error: null }));
 
-        // When: サインアウトする
+        // When
         const result = await signOut({ isMounted: () => true });
 
-        // Then: scopeをlocalとしてサインアウトし、ローカルの識別情報が消えて完了したことを返す
+        // Then
         expect(result).toEqual({ status: "signed-out" });
         expect(supabase.signOut).toHaveBeenCalledTimes(1);
         expect(supabase.signOut).toHaveBeenCalledWith({ scope: "local" });
@@ -79,7 +79,7 @@ describe("signOut", () => {
       });
 
       it("サーバー通信がエラーを返しても、完了したことを返す", async () => {
-        // Given: サーバー通信はエラーを返すが、ローカルセッションは削除される
+        // Given
         signOutRemovingLocalSession(async () => ({
           error: makeAuthError({
             name: "AuthRetryableFetchError",
@@ -87,38 +87,38 @@ describe("signOut", () => {
           }),
         }));
 
-        // When: サインアウトする
+        // When
         const result = await signOut({ isMounted: () => true });
 
-        // Then: エラーではなく完了したことを返す
+        // Then
         expect(result).toEqual({ status: "signed-out" });
       });
 
       it("サーバー通信が例外を投げても、完了したことを返す", async () => {
-        // Given: サーバー通信は例外を投げるが、ローカルセッションは削除される
+        // Given
         signOutRemovingLocalSession(async () => {
           throw new TypeError("Failed to fetch");
         });
 
-        // When: サインアウトする
+        // When
         const result = await signOut({ isMounted: () => true });
 
-        // Then: 例外を外へ伝えず、完了したことを返す
+        // Then
         expect(result).toEqual({ status: "signed-out" });
       });
     });
 
     describe("ローカルの識別情報が残った場合", () => {
       it("エラーが返されると、翻訳したエラーメッセージを返す", async () => {
-        // Given: ローカルセッションは削除されず、レート制限のエラーが返される
+        // Given
         supabase.signOut.mockResolvedValue({
           error: makeAuthError({ code: "over_request_rate_limit" }),
         });
 
-        // When: サインアウトする
+        // When
         const result = await signOut({ isMounted: () => true });
 
-        // Then: 翻訳したエラーメッセージを返し、ローカルの識別情報は残る
+        // Then
         expect(result).toEqual({
           status: "failed",
           error:
@@ -128,13 +128,13 @@ describe("signOut", () => {
       });
 
       it("例外が投げられると、通信エラーを返す", async () => {
-        // Given: ローカルセッションは削除されず、例外が投げられる
+        // Given
         supabase.signOut.mockRejectedValue(new TypeError("Failed to fetch"));
 
-        // When: サインアウトする
+        // When
         const result = await signOut({ isMounted: () => true });
 
-        // Then: 通信エラーを返す
+        // Then
         expect(result).toEqual({
           status: "failed",
           error:
@@ -146,32 +146,32 @@ describe("signOut", () => {
 
   describe("完了を待つ間にアンマウントされた場合", () => {
     it("ローカルの識別情報が消えても、結果を破棄する", async () => {
-      // Given: ローカルセッションは削除されるが、サインアウトの完了を待つ間にアンマウントされる
+      // Given
       let mounted = true;
       signOutRemovingLocalSession(async () => {
         mounted = false;
         return { error: null };
       });
 
-      // When: サインアウトする
+      // When
       const result = await signOut({ isMounted: () => mounted });
 
-      // Then: 完了ではなく、結果を破棄したことを返す
+      // Then
       expect(result).toEqual({ status: "discarded" });
     });
 
     it("ローカルの識別情報が残りエラーが返されても、結果を破棄する", async () => {
-      // Given: ローカルセッションは削除されずエラーが返されるが、その完了を待つ間にアンマウントされる
+      // Given
       let mounted = true;
       supabase.signOut.mockImplementation(async () => {
         mounted = false;
         return { error: makeAuthError({ code: "over_request_rate_limit" }) };
       });
 
-      // When: サインアウトする
+      // When
       const result = await signOut({ isMounted: () => mounted });
 
-      // Then: エラーメッセージではなく、結果を破棄したことを返す
+      // Then
       expect(result).toEqual({ status: "discarded" });
     });
   });

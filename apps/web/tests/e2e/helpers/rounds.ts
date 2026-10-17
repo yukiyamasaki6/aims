@@ -30,7 +30,7 @@ export async function signInAsTestUser(email: string, password: string) {
 }
 
 // スコア入力等のUI検証には/rounds/newのプリセット選択では用意できない任意の
-// 距離構成（少エンド・少射数）が必要なため、本番アプリにテスト専用のAPIを持たせず、
+// 距離構成（的、Marked/Unmarked）と記録済みの得点を自由に用意する必要があるため、本番アプリにテスト専用のAPIを持たせず、
 // supabase-jsから対象ユーザーでサインインしてcreate_round RPCを直接呼ぶ。
 export async function createRound(input: {
   email: string;

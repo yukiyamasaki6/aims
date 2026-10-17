@@ -12,60 +12,98 @@ function makeAuthError(code: string, message: string): AuthError {
 
 describe("translateAuthErrorMessage", () => {
   it("translates invalid_credentials", () => {
-    expect(
-      translateAuthErrorMessage(makeAuthError("invalid_credentials", "x")),
-    ).toBe("メールアドレスまたはパスワードが間違っています。");
+    // Given
+
+    // When
+    const error = makeAuthError("invalid_credentials", "x");
+    const message = translateAuthErrorMessage(error);
+
+    // Then
+    expect(message).toBe("メールアドレスまたはパスワードが間違っています。");
   });
 
   it("translates otp_expired", () => {
-    expect(translateAuthErrorMessage(makeAuthError("otp_expired", "x"))).toBe(
-      "認証コードが正しくないか、有効期限が切れています。",
-    );
+    // Given
+
+    // When
+    const error = makeAuthError("otp_expired", "x");
+    const message = translateAuthErrorMessage(error);
+
+    // Then
+    expect(message).toBe("認証コードが正しくないか、有効期限が切れています。");
   });
 
   it("translates over_email_send_rate_limit", () => {
-    expect(
-      translateAuthErrorMessage(
-        makeAuthError("over_email_send_rate_limit", "x"),
-      ),
-    ).toBe(
+    // Given
+
+    // When
+    const error = makeAuthError("over_email_send_rate_limit", "x");
+    const message = translateAuthErrorMessage(error);
+
+    // Then
+    expect(message).toBe(
       "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
     );
   });
 
   it("translates over_request_rate_limit", () => {
-    expect(
-      translateAuthErrorMessage(makeAuthError("over_request_rate_limit", "x")),
-    ).toBe(
+    // Given
+
+    // When
+    const error = makeAuthError("over_request_rate_limit", "x");
+    const message = translateAuthErrorMessage(error);
+
+    // Then
+    expect(message).toBe(
       "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
     );
   });
 
   it("translates captcha_failed", () => {
-    expect(
-      translateAuthErrorMessage(makeAuthError("captcha_failed", "x")),
-    ).toBe("認証に失敗しました。もう一度お試しください。");
+    // Given
+
+    // When
+    const error = makeAuthError("captcha_failed", "x");
+    const message = translateAuthErrorMessage(error);
+
+    // Then
+    expect(message).toBe("認証に失敗しました。もう一度お試しください。");
   });
 
   it("falls back to the original message for an unmapped code", () => {
-    expect(
-      translateAuthErrorMessage(
-        makeAuthError("some_unmapped_code", "original message"),
-      ),
-    ).toBe("original message");
+    // Given
+
+    // When
+    const error = makeAuthError("some_unmapped_code", "original message");
+    const message = translateAuthErrorMessage(error);
+
+    // Then
+    expect(message).toBe("original message");
   });
 
   it("falls back to the original message when code is undefined", () => {
+    // Given
+
+    // When
     const error = { message: "original message" } as AuthError;
-    expect(translateAuthErrorMessage(error)).toBe("original message");
+    const message = translateAuthErrorMessage(error);
+
+    // Then
+    expect(message).toBe("original message");
   });
 
   it("translates AuthRetryableFetchError regardless of message content", () => {
+    // Given
+
+    // When
     const error = {
       name: "AuthRetryableFetchError",
       message: "Failed to fetch",
     } as AuthError;
-    expect(translateAuthErrorMessage(error)).toBe(
+    const message = translateAuthErrorMessage(error);
+
+    // Then
+    expect(message).toBe(
       "通信エラーが発生しました。しばらくしてから再度お試しください。",
     );
   });
@@ -73,22 +111,23 @@ describe("translateAuthErrorMessage", () => {
 
 describe("sessionFailureMessage", () => {
   it("未認証のときは、サインインを求める文言を返す", () => {
-    // Given: 未認証の状態
-    // When: 失敗の文言を求める
+    // Given
+
+    // When
     const message = sessionFailureMessage({ status: "unauthenticated" });
 
-    // Then: サインインを求める文言になる
+    // Then
     expect(message).toBe(AUTH_REQUIRED_MESSAGE);
   });
 
   it("不明（通信失敗）のときは、通信エラーの文言を返す", () => {
-    // Given: 通信失敗で認証状態が分からない状態
-    const error = new AuthRetryableFetchError("Failed to fetch", 0);
+    // Given
 
-    // When: 失敗の文言を求める
+    // When
+    const error = new AuthRetryableFetchError("Failed to fetch", 0);
     const message = sessionFailureMessage({ status: "unknown", error });
 
-    // Then: サインインを求めず、通信エラーの文言になる
+    // Then
     expect(message).toBe(
       "通信エラーが発生しました。しばらくしてから再度お試しください。",
     );

@@ -18,7 +18,9 @@ const input = {
 
 describe("KeypadButtons", () => {
   it("指している距離が無いとき、何も表示しない", () => {
-    // Given / When
+    // Given
+
+    // When
     const { container } = render(
       <KeypadButtons
         keypadDistance={null}
@@ -35,9 +37,9 @@ describe("KeypadButtons", () => {
 
   it("距離を指しているとき、戻す・進む・クリアのボタンを表示する", () => {
     // Given
-    const distance = { id: "d1", target_face_id: "f1" } as Distance;
 
     // When
+    const distance = { id: "d1", target_face_id: "f1" } as Distance;
     render(
       <KeypadButtons
         keypadDistance={distance}

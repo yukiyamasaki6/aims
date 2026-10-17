@@ -9,8 +9,9 @@ vi.mock("./round-detail-client", () => ({
 
 describe("RoundPage", () => {
   it("取得を伴わず、ラウンド詳細のクライアントコンポーネントだけを描画する", () => {
-    // Given: 同期のコンポーネントで、paramsやcookieやSupabaseを必要としない
-    // When: ページを描画する
+    // Given
+
+    // When
     render(<RoundPage />);
 
     // Then
@@ -18,6 +19,12 @@ describe("RoundPage", () => {
   });
 
   it("静的な枠にするため、プレースホルダーのIDだけをプリレンダー対象にする", () => {
-    expect(generateStaticParams()).toEqual([{ id: "_" }]);
+    // Given
+
+    // When
+    const params = generateStaticParams();
+
+    // Then
+    expect(params).toEqual([{ id: "_" }]);
   });
 });

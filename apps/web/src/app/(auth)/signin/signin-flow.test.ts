@@ -75,9 +75,9 @@ describe("signinReducer", () => {
   it("submit_auth_errorは翻訳したメッセージをerrorに設定しfieldErrorsをクリアする", () => {
     // Given
     const state = stateWith({ fieldErrors: { email: "stale" } });
-    const error = makeAuthError("invalid_credentials");
 
     // When
+    const error = makeAuthError("invalid_credentials");
     const next = signinReducer(state, { type: "submit_auth_error", error });
 
     // Then
