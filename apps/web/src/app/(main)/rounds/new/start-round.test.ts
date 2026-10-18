@@ -34,7 +34,7 @@ const now = () => new Date("2026-09-29T12:00:00.000Z");
 const preset: Preset = {
   id: "preset-1",
   name: "プリセット",
-  format: "indoor",
+  format: "field",
   bow_type: "compound",
   preset_distances: [
     {
@@ -115,7 +115,7 @@ describe("startRound", () => {
         roundId: "id-6",
         name: "",
         roundDate: "2026-09-29",
-        format: "indoor",
+        format: "field",
         bowType: "compound",
         distances: [
           {

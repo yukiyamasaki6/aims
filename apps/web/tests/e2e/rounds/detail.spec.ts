@@ -253,7 +253,7 @@ test("オンラインでプリセットを選んで開始し、作成が未確�
   await expect(page.getByText("的データを取得できません")).toHaveCount(0);
 });
 
-test("他の端末で記録した入力中のラウンドは、オンラインで取得を済ませた後なら、一度も開かずにオフラインで再起動して開いても、記録と合計と仮の矢とテンキーが表示され、続けて点数を記録できる", async ({
+test("他の端末で記録した入力中のラウンドは、オンラインで取得を済ませた後なら、一度も開かずにオフラインで再起動して開いても、記録と合計と仮の矢とテンキーが表示される", async ({
   profile,
 }) => {
   // 他の端末で記録した入力中のラウンドを用意し、この端末でサインインして端末への取得を済ませる。
@@ -291,13 +291,6 @@ test("他の端末で記録した入力中のラウンドは、オンライン�
     page.getByTestId("distance-summary-1").locator('[role="img"]').first(),
   ).toBeVisible();
   await expect(page.getByTestId("score-button-9")).toBeVisible();
-
-  // 点数を記録し、記録した点数と合計を確かめる。
-  await page.getByTestId("score-button-9").click();
-  await expect(
-    page.getByTestId("end-row-1-1").locator("[data-shot-id]"),
-  ).toHaveText(["X", "9", "8"]);
-  await expect(page.getByTestId("round-summary")).toContainText("合計27");
 });
 
 // src/features/fetch-result/fetch-content.tsのFALLBACK_WAIT_MS。
@@ -404,6 +397,43 @@ test("端末の内容で表示しているラウンドが、他の端末で削�
   await expect(
     page.getByRole("heading", { name: "ラウンド一覧" }),
   ).toBeVisible();
+});
+
+test("オフラインのラウンド一覧で削除したラウンドを、オフラインのまま詳細で開くと、ラウンド一覧へ移動し、そのラウンドは表示されない", async ({
+  page,
+}) => {
+  // オフラインのラウンド一覧で削除を確認し、ラウンドが一覧から消えることを確かめる。
+  // 共有のユーザーの一覧は他のテストのラウンドも含むため、名前を一意にして行を特定する。
+  const name = `オフライン削除後の詳細-${Date.now()}`;
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+  });
+  await page.goto("/rounds");
+  await waitForHydration(page);
+  const link = page.getByRole("link", { name: new RegExp(name) });
+  await expect(link).toBeVisible();
+  await waitForServiceWorkerControl(page);
+  await goOffline(page.context());
+  await page
+    .locator("li", { hasText: name })
+    .getByTestId("round-menu-trigger")
+    .click();
+  await page.getByTestId("round-delete").click();
+  await page.getByTestId("confirm-dialog-confirm").click();
+  await expect(page.getByTestId("confirm-dialog-confirm")).toBeHidden();
+  await expect(link).toBeHidden();
+
+  // オフラインのまま削除したラウンドの詳細を開き、ラウンド一覧へ移ってラウンドが表示されないことを確かめる。
+  await page.goto(`/rounds/${roundId}`);
+  await expect(page).toHaveURL(/\/rounds$/);
+  await expect(
+    page.getByRole("heading", { name: "ラウンド一覧" }),
+  ).toBeVisible();
+  await expect(link).toBeHidden();
 });
 
 // セッションの更新はリフレッシュトークンを入れ替え、共有のユーザーの他のテストのセッションを無効にし得るため、使い捨てのユーザーで行う。

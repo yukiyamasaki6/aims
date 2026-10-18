@@ -2122,7 +2122,38 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
     });
   });
 
-  it("クリアした矢を戻すと、同じ矢がクリア前の点数で戻る", async () => {
+  it("直した矢を戻して進むと、直した点数だけを射手なしで書き、その矢を指す", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup({ initialShots: [shotRow("s-1", distanceA.id, 1, "10", 10)] });
+    await user.click(screen.getByTestId("shot-ball-1-1-1"));
+    await user.click(screen.getByTestId("score-button-9"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9"]));
+    await user.click(screen.getByTestId("score-button-undo"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
+
+    // When
+    await user.click(screen.getByTestId("score-button-redo"));
+
+    // Then
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9"]));
+    expect(screen.getByTestId("shot-ball-1-1-1")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await waitFor(() => {
+      expect(sentShots("record_shots").at(-1)).toEqual({
+        shot_event_id: expect.any(String),
+        shot_id: "s-1",
+        distance_id: distanceA.id,
+        end_number: 1,
+        score_str: "9",
+        score_int: 9,
+      });
+    });
+  });
+
+  it("クリアした矢を戻すと、同じ矢がクリア前の点数だけで射手なしで戻る", async () => {
     // Given
     const user = userEvent.setup();
     setup({ initialShots: [shotRow("s-1", distanceA.id, 1, "10", 10)] });
@@ -2136,9 +2167,14 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
     // Then
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
     await waitFor(() => {
-      expect(sentShots("record_shots").at(-1)).toEqual(
-        expect.objectContaining({ shot_id: "s-1", score_str: "10" }),
-      );
+      expect(sentShots("record_shots").at(-1)).toEqual({
+        shot_event_id: expect.any(String),
+        shot_id: "s-1",
+        distance_id: distanceA.id,
+        end_number: 1,
+        score_str: "10",
+        score_int: 10,
+      });
     });
   });
 

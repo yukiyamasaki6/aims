@@ -32,7 +32,7 @@ const baseDistance: DistanceConfig = {
   totalEnds: 6,
   arrowsPerEnd: 6,
   targetFaceId: targetFaceOutdoorRecurve.id,
-  isMarked: false,
+  isMarked: true,
 };
 
 const EVENT_ID = "00000000-0000-4000-8000-000000000001";
@@ -304,7 +304,7 @@ describe("DistanceEditFields", () => {
           totalEnds: 12,
           arrowsPerEnd: 3,
           targetFaceId: "face-outdoor-recurve",
-          isMarked: false,
+          isMarked: true,
         });
         expect(enqueue).toHaveBeenCalledWith({
           type: "distance.updated",
