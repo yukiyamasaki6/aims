@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { LogoImage } from "@/components/logo-image";
 import { Button } from "@/components/ui/button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useMountedRef } from "@/hooks/use-mounted-ref";
@@ -197,12 +198,12 @@ function PanelHeader({
       <Link
         href="/"
         className={cn(
-          "truncate font-bold",
+          "shrink-0",
           !wideOpen && "md:hidden",
           !compactOpen && "max-md:landscape:hidden",
         )}
       >
-        AIMS
+        <LogoImage />
       </Link>
       <button
         type="button"

@@ -1,6 +1,6 @@
-<img src="apps/web/src/app/icon.svg" width="90" alt="AIMS icon" />
+<img src="apps/web/public/logo.svg" height="90" alt="AIMS" />
 
-# AIMS (Archery Integrated Management System)
+# Archery Integrated Management System
 
 ## Purpose
 
