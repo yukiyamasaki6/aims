@@ -162,7 +162,7 @@ test.describe("認証済み", () => {
     ).toBeVisible();
   });
 
-  test("ラウンド作成画面でレフトパネルのAIMSリンクを押すと、紹介画面へ移動する", async ({
+  test("ラウンド作成画面でレフトパネルのAIMSロゴを押すと、紹介画面へ移動する", async ({
     page,
   }) => {
     await page.goto("/rounds/new");

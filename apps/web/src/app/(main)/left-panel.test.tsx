@@ -96,7 +96,7 @@ describe("LeftPanel", () => {
 
   describe("リンク", () => {
     // 遷移先は、押して確かめるE2E（navigation.spec.ts）に任せる。
-    it("AIMSリンクと個人リンクを表示する", () => {
+    it("AIMSロゴと個人リンクを表示する", () => {
       // Given
       // When
       render(<LeftPanel />);

@@ -1,5 +1,6 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import opentype from "opentype.js";
 import pngToIco from "png-to-ico";
 import sharp from "sharp";
 
@@ -23,6 +24,9 @@ import sharp from "sharp";
 // = 3 : 2 : 1), and the ring's outer edge is 80% of the icon's half-width;
 // the bar runs to the icon's right edge (100%). (icon.svgの場合。manifestのアイコン
 // (any/maskable)はINSTALL_ART_SCALEで絵柄全体を縮める。apple-iconは縮めない。)
+//
+// public/logo.svg（文字付きロゴ）も同じ値から生成する。マークの右に、Geist Sans
+// のBoldの字形を図形にした「AIMS」を並べた横組みで、白い丸角の地を持つ。
 //
 // Every dimension below is a plain number in a unit space centered on the
 // ring, so the same shape reproduces exactly at 16px, 32px, app-icon, and
@@ -98,6 +102,13 @@ const BAR_LENGTH = RING_OUTER_R / RING_OUTER_TO_HALF;
 // apple-iconには適用しない(iOSは画像の全体を表示するため、縮小すると環が枠の
 // 約61%になる。ユーザーの指示でiOSは縮小しない)。
 const INSTALL_ART_SCALE = 61 / 80;
+
+// --- Logo with text (public/logo.svg) ---
+const LOGO_TEXT = "AIMS"; // ロゴの文字
+const LOGO_CAP_HEIGHT = RING_INNER_R + RING_OUTER_R; // 文字の大文字の高さ(環の内径と外径の中間。DOT_RADIUSの5倍)
+const LOGO_EDGE_PAD = RING_OUTER_R / RING_OUTER_TO_HALF - RING_OUTER_R; // 地の縁から絵柄までの余白(左端の地の縁から環までと同じ。右端は文字の輪郭に対して同じ余白を取る)
+const TEXT_GAP = LOGO_EDGE_PAD; // 棒の右端から文字の左端までの間隔(地の縁から絵柄までの余白と同じ)
+const LETTER_SPACING_EM = 0; // 字間の追加(フォントサイズに対する比。カーニングに足す)
 // =====================================================
 
 function toRad(deg) {
@@ -237,30 +248,136 @@ const viewBox = { x: -half, y: -half, size: half * 2 };
 // はみ出す)。PWAは白の四角の地で、棒の右端は直線のまま(正方形の縁に接する)。
 // scale は plate が "none" のときだけ使う。viewBoxを1/scale倍に広げ、絵柄全体を
 // 中心を基準に元の比率のまま縮める。1のとき縮小しない。
-function buildSvg({ plate, scale = 1 }) {
-  const circle = plate === "circle";
+function markElements({ circleBar }) {
   const t = BAR_THICKNESS / 2;
   const xc = Math.sqrt(half * half - t * t);
-  const bar = circle
+  const bar = circleBar
     ? `M ${fmt(barLeftX)} ${fmt(-t)} L ${fmt(xc)} ${fmt(-t)} A ${fmt(half)} ${fmt(half)} 0 0 1 ${fmt(xc)} ${fmt(t)} L ${fmt(barLeftX)} ${fmt(t)} Z`
     : barD;
+  return `<path d="${bar}" fill="${BLACK}"/>
+  <path d="${ringPathD}" fill="${BLACK}"/>
+  <circle cx="${fmt(dotSvgCenter.x)}" cy="${fmt(dotSvgCenter.y)}" r="${fmt(DOT_RADIUS)}" fill="${RED}"/>`;
+}
+
+function buildSvg({ plate, scale = 1 }) {
+  const circle = plate === "circle";
   const span = circle ? viewBox.size : viewBox.size / scale;
   const plateShape = circle
     ? `\n  <circle cx="0" cy="0" r="${fmt(half)}" fill="${WHITE}"/>`
     : "";
   const title = circle ? "\n  <title>AIMS icon</title>" : "";
   return `<svg width="1024" height="1024" viewBox="${fmt(-span / 2)} ${fmt(-span / 2)} ${fmt(span)} ${fmt(span)}" xmlns="http://www.w3.org/2000/svg">${title}${plateShape}
-  <path d="${bar}" fill="${BLACK}"/>
-  <path d="${ringPathD}" fill="${BLACK}"/>
-  <circle cx="${fmt(dotSvgCenter.x)}" cy="${fmt(dotSvgCenter.y)}" r="${fmt(DOT_RADIUS)}" fill="${RED}"/>
+  ${markElements({ circleBar: circle })}
 </svg>
 `;
+}
+
+// ==================== Logo with text ====================
+// 「AIMS」をGeist SansのBold(アプリのfont-boldと同じ太さ)の字形から図形にする。
+// 文字は大文字の高さの中央を環の中心(y=0)にそろえ、字形の左端を棒の右端から
+// TEXT_GAPだけ離す。フォントの参照は残さない。
+function loadFont() {
+  const fontUrl = new URL(
+    "./fonts/geist-sans/Geist-Bold.ttf",
+    import.meta.resolve("geist/font/sans"),
+  );
+  const data = readFileSync(fileURLToPath(fontUrl));
+  return opentype.parse(
+    data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
+  );
+}
+
+function layoutGlyphs(font, startX, fontSize, baselineY) {
+  const scale = fontSize / font.unitsPerEm;
+  const glyphs = font.stringToGlyphs(LOGO_TEXT);
+  const paths = [];
+  let x = startX;
+  glyphs.forEach((glyph, i) => {
+    paths.push(glyph.getPath(x, baselineY, fontSize));
+    const next = glyphs[i + 1];
+    const kerning = next ? font.getKerningValue(glyph, next) * scale : 0;
+    x += glyph.advanceWidth * scale + kerning + LETTER_SPACING_EM * fontSize;
+  });
+  return paths;
+}
+
+// 2次曲線を折れ線の点に直す。
+function sampleQuad(prev, c) {
+  const points = [];
+  for (let i = 1; i <= 8; i++) {
+    const t = i / 8;
+    const u = 1 - t;
+    points.push({
+      x: u * u * prev.x + 2 * u * t * c.x1 + t * t * c.x,
+      y: u * u * prev.y + 2 * u * t * c.y1 + t * t * c.y,
+    });
+  }
+  return points;
+}
+
+// 字形の輪郭の点(曲線は折れ線に直す)。
+function outlinePoints(paths) {
+  const points = [];
+  for (const path of paths) {
+    let prev = { x: 0, y: 0 };
+    for (const c of path.commands) {
+      if (c.type === "Q") points.push(...sampleQuad(prev, c));
+      else if (c.type !== "Z") points.push({ x: c.x, y: c.y });
+      if (c.type !== "Z") prev = { x: c.x, y: c.y };
+    }
+  }
+  return points;
+}
+
+// 右端の半円の中心。左端と同じく、地の縁から絵柄まで LOGO_EDGE_PAD を保つため、
+// 文字の輪郭がすべて、この中心から半径 half - LOGO_EDGE_PAD の円の内側に入る位置にする。
+function plateEndCenterX(paths) {
+  const r = half - LOGO_EDGE_PAD;
+  return Math.max(
+    ...outlinePoints(paths).map((pt) => pt.x - Math.sqrt(r * r - pt.y * pt.y)),
+  );
+}
+
+function buildTextPath() {
+  const font = loadFont();
+  const fontSize =
+    (LOGO_CAP_HEIGHT * font.unitsPerEm) / font.tables.os2.sCapHeight;
+  const baselineY = LOGO_CAP_HEIGHT / 2;
+  const measured = layoutGlyphs(font, 0, fontSize, baselineY);
+  const left = Math.min(...measured.map((p) => p.getBoundingBox().x1));
+  const paths = layoutGlyphs(font, half + TEXT_GAP - left, fontSize, baselineY);
+  const d = paths.map((p) => p.toPathData(3)).join(" ");
+  return { d, endCenterX: plateEndCenterX(paths) };
+}
+
+function buildLogoSvg() {
+  const { d, endCenterX } = buildTextPath();
+  const width = endCenterX + half + half;
+  const height = half * 2;
+  const w = fmt(width);
+  const h = fmt(height);
+  return {
+    width: w,
+    height: h,
+    svg: `<svg width="${w}" height="${h}" viewBox="${fmt(-half)} ${fmt(-half)} ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+  <title>AIMS logo</title>
+  <rect x="${fmt(-half)}" y="${fmt(-half)}" width="${w}" height="${h}" rx="${fmt(half)}" ry="${fmt(half)}" fill="${WHITE}"/>
+  ${markElements({ circleBar: true })}
+  <path d="${d}" fill="${BLACK}"/>
+</svg>
+`,
+  };
 }
 
 const iconSvg = buildSvg({ plate: "circle" });
 const iconPath = fileURLToPath(new URL("../src/app/icon.svg", import.meta.url));
 writeFileSync(iconPath, iconSvg);
 console.log(`Wrote ${iconPath}`);
+
+const logo = buildLogoSvg();
+const logoPath = fileURLToPath(new URL("../public/logo.svg", import.meta.url));
+writeFileSync(logoPath, logo.svg);
+console.log(`Wrote ${logoPath} (viewBox ${logo.width} x ${logo.height})`);
 
 // ==================== favicon.ico: rasterize + pack ====================
 const pngBuffers = await Promise.all(

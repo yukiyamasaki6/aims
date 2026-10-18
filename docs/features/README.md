@@ -122,7 +122,7 @@ flowchart TD
     RoundDetail -->|入力を完了する| Rounds
     RoundDetail -->|「一覧へ戻る」リンク| Rounds
     RoundDetail -->|ラウンド削除成功| Rounds
-    LeftPanel -->|AIMSリンク| Landing
+    LeftPanel -->|AIMSロゴ| Landing
     LeftPanel -->|個人リンク| Rounds
     LeftPanel -->|サインアウト成功| SignIn
 ```
