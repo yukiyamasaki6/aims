@@ -691,9 +691,9 @@ describe("update_distance(distance.updated)", () => {
       const op = update({ distance: 50, isMarked: false, config: cfg });
 
       // When
-      const onlyDistance = applyConfirmed(base, op, ["distance"]);
-      const onlyConfig = applyConfirmed(base, op, ["config"]);
-      const onlyMarked = applyConfirmed(base, op, ["is_marked"]);
+      const onlyDistance = applyConfirmed(field, op, ["distance"]);
+      const onlyConfig = applyConfirmed(field, op, ["config"]);
+      const onlyMarked = applyConfirmed(field, op, ["is_marked"]);
 
       // Then
       expect(onlyDistance.distances[0]).toMatchObject({

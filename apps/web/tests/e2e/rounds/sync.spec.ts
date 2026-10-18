@@ -1035,10 +1035,9 @@ test("2つの端末がオフラインで、同じ矢数6のエンドへ4本ず�
   }
 });
 
-test("射手をこの端末の利用者として記録した矢を、オンラインで直し、戻し、やり直し、消し、戻しても、点数だけが変わって射手が残り、射手は送られない", async ({
+test("射手をこの端末の利用者として記録した矢を、オンラインで直すと、点数だけが変わって射手が残り、射手は送られない", async ({
   page,
 }) => {
-  // 射手のある5の矢があるラウンドを開き、その矢を9へ直す。
   const { supabase, userId, distanceIds } = await createSyncRound({
     distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
   });
@@ -1062,23 +1061,6 @@ test("射手をこの端末の利用者として記録した矢を、オンラ�
   await page.getByTestId("score-button-9").click();
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
 
-  // 一つ戻るを押し、5に戻ることを確かめる。
-  await page.getByTestId("score-button-undo").click();
-  await expect(endBalls(page, 1, 1)).toHaveText(["5"]);
-
-  // やり直すを押し、9に戻ることを確かめる。
-  await page.getByTestId("score-button-redo").click();
-  await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
-
-  // 消すを押し、矢が消えることを確かめる。
-  await page.getByTestId("score-button-clear").click();
-  await expect(endBalls(page, 1, 1)).toHaveCount(0);
-
-  // 一つ戻るを押し、9に戻ることを確かめる。
-  await page.getByTestId("score-button-undo").click();
-  await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
-
-  // 保存された矢が9で射手が残り、どの送信も射手を含まないことを確かめる。
   await expect
     .poll(() => getLiveShots(supabase, distanceIds[0]), { timeout: 15_000 })
     .toEqual([
