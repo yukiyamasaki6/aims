@@ -1,11 +1,11 @@
 import type { AuthError } from "@supabase/supabase-js";
-import { NETWORK_ERROR_MESSAGE } from "@/features/auth";
-import { authErrorMessage } from "@/features/auth/infrastructure/supabase-auth-failure";
+import { NETWORK_ERROR_MESSAGE } from "../domain/auth-failure";
+import { authErrorMessage } from "../infrastructure/supabase-auth-failure";
 import type {
   CodeFieldErrors,
   EmailFieldErrors,
   PasswordFieldErrors,
-} from "../_shared/validate";
+} from "./validate";
 
 export type ResetPasswordState = {
   step: "email" | "code" | "password";

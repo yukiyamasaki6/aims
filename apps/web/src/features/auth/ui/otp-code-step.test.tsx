@@ -2,7 +2,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { OtpCodeStep, type OtpCodeStepModel } from "./code-step";
+import { AUTH_CODE_LENGTH } from "../domain/auth-code";
+import { OtpCodeStep, type OtpCodeStepModel } from "./otp-code-step";
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックする。
 vi.mock("@/components/turnstile", () => ({
@@ -82,6 +83,19 @@ describe("OtpCodeStep", () => {
 
       // Then
       expect(screen.getByText("全体のエラー")).toBeInTheDocument();
+    });
+  });
+
+  describe("入力欄", () => {
+    it("コードの入力欄の最大長は、ドメインの認証コードの桁数である", () => {
+      // Given
+
+      // When
+      renderStep(createForm());
+
+      // Then
+      const input = screen.getByPlaceholderText("123456");
+      expect(input).toHaveAttribute("maxlength", String(AUTH_CODE_LENGTH));
     });
   });
 

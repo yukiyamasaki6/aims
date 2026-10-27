@@ -2,7 +2,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { OtpEmailStep, type OtpEmailStepModel } from "./email-step";
+import { EMAIL_MAX_LENGTH } from "../domain/email-address";
+import { OtpEmailStep, type OtpEmailStepModel } from "./otp-email-step";
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、errorの受け渡しを確かめられるスタブで模す。
 vi.mock("@/components/turnstile", () => ({
@@ -87,6 +88,19 @@ describe("OtpEmailStep", () => {
         "reset-password-email-error",
       );
       expect(input).toHaveAttribute("aria-invalid", "true");
+    });
+  });
+
+  describe("入力欄", () => {
+    it("メールアドレスの入力欄の最大長は、ドメインのメールアドレスの上限である", () => {
+      // Given
+
+      // When
+      renderStep(createForm());
+
+      // Then
+      const input = screen.getByPlaceholderText("you@example.com");
+      expect(input).toHaveAttribute("maxlength", String(EMAIL_MAX_LENGTH));
     });
   });
 

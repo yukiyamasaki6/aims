@@ -7,15 +7,14 @@ import { AuthHeader } from "@/components/auth-header";
 import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { EMAIL_MAX_LENGTH } from "@/features/auth";
 import { cn } from "@/lib/utils";
-import type { EmailFieldErrors } from "./validate";
+import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 
 // 部品が使う項目だけを構造で定める。各画面のフォームの状態はこの形を満たす。
 export type OtpEmailStepModel = {
   email: string;
   setEmail: (value: string) => void;
-  emailFieldErrors: EmailFieldErrors & { captcha?: string };
+  emailFieldErrors: { email?: string; captcha?: string };
   primarySubmitting: boolean;
   error: string | null;
   hydrated: boolean;

@@ -87,4 +87,41 @@ describe("useScreenView", () => {
     expect(isMounted).toHaveBeenCalledOnce();
     expect(mounted).toBe(false);
   });
+
+  // 段階の遷移を持つ状態でも、出来事の積み重ねと同期した読み出しが保たれる(画面の最新の値が描画の遅れに依らない)。
+  it("段階をまたぐ出来事が、再描画を待たずに積み重なり、viewは同じ参照のまま", () => {
+    // Given
+    type Flow = { step: "a" | "b" | "c"; log: string[] };
+    const advance = (flow: Flow, event: "next" | "back"): Flow => {
+      const order = ["a", "b", "c"] as const;
+      const index = order.indexOf(flow.step);
+      const step = order[Math.max(0, index + (event === "next" ? 1 : -1))];
+      return {
+        step: step ?? flow.step,
+        log: [...flow.log, `${flow.step}>${step}`],
+      };
+    };
+    const { result } = renderHook(() =>
+      useScreenView(advance, { step: "a", log: [] } as Flow, {
+        isMounted: () => true,
+        resetCheck: vi.fn(),
+      }),
+    );
+    const view = result.current.view;
+
+    // When
+    let seen: Flow | undefined;
+    act(() => {
+      view.dispatch("next");
+      view.dispatch("next");
+      view.dispatch("back");
+      seen = view.state;
+    });
+
+    // Then
+    expect(seen?.step).toBe("b");
+    expect(seen?.log).toEqual(["a>b", "b>c", "c>b"]);
+    expect(result.current.state.step).toBe("b");
+    expect(result.current.view).toBe(view);
+  });
 });

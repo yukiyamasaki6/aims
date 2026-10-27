@@ -1,6 +1,9 @@
 import { type AuthFailure, failureMessage } from "../domain/auth-failure";
 
-type RejectionKind = Exclude<AuthFailure["kind"], "other" | "unreachable">;
+type RejectionKind = Exclude<
+  AuthFailure["kind"],
+  "other" | "unreachable" | "already_registered"
+>;
 
 // 認証サービスが拒否したときの、エラーコードと失敗の種類の対応。認証サービスのコードを知るのは、ここだけである。
 const REJECTION_KINDS = new Map<string, RejectionKind>([

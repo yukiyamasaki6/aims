@@ -1,31 +1,29 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { type Dispatch, type FormEvent, type RefObject, useRef } from "react";
+import { createClient } from "@/lib/supabase/client";
 import {
   CAPTCHA_INCOMPLETE_MESSAGE,
   isCaptchaCompleted,
-} from "@/features/auth";
-import { createClient } from "@/lib/supabase/client";
-import type { SubmitGuard } from "../_shared/use-submit-guard";
+} from "../domain/captcha-token";
+import type { ResetPasswordAction } from "./reset-password-flow";
+import type { SubmitGuard } from "./use-submit-guard";
 import {
   validateCodeField,
   validateEmailField,
   validatePasswordField,
   validateResendReady,
-} from "../_shared/validate";
-import { isEmailRegistered } from "./actions";
-import type { SignUpAction } from "./signup-flow";
+} from "./validate";
 
-type SignUpContext = {
+type ResetPasswordContext = {
   email: string;
   code: string;
   password: string;
   resendCooldown: number;
   captchaToken: string | null;
-  dispatch: Dispatch<SignUpAction>;
+  dispatch: Dispatch<ResetPasswordAction>;
   mountedRef: RefObject<boolean>;
-  // 送信・登録の二重送信防止。
+  // 送信・変更の二重送信防止。
   primary: SubmitGuard;
   // コード入力画面の確認・再送・戻るは排他にする。
   // 確認・再送の応答待ちに他の操作を許すと、後から届いた応答が別の画面（メールアドレス入力やパスワード設定）へ反映されてしまうため。
@@ -33,17 +31,16 @@ type SignUpContext = {
   consumeCaptchaToken: () => void;
   setCaptchaToken: (token: string | null) => void;
   setCode: (code: string) => void;
-  goToApp: () => void;
 };
 
-function back(ctx: SignUpContext) {
+function back(ctx: ResetPasswordContext) {
   if (ctx.codeStepBusyRef.current) return;
   ctx.dispatch({ type: "reset_to_email" });
   ctx.setCode("");
   ctx.setCaptchaToken(null);
 }
 
-async function resend(ctx: SignUpContext) {
+async function resend(ctx: ResetPasswordContext) {
   const { dispatch, mountedRef, codeStepBusyRef, email, captchaToken } = ctx;
   if (codeStepBusyRef.current) return;
 
@@ -58,9 +55,8 @@ async function resend(ctx: SignUpContext) {
 
   try {
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { captchaToken },
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      captchaToken,
     });
 
     // mountedRefの確認より前にturnstileRefへ触れない。
@@ -82,7 +78,7 @@ async function resend(ctx: SignUpContext) {
   }
 }
 
-async function sendCode(ctx: SignUpContext) {
+async function sendCode(ctx: ResetPasswordContext) {
   if (ctx.primary.isLocked()) return;
 
   const errors = validateEmailField(ctx.email);
@@ -101,23 +97,14 @@ async function sendCode(ctx: SignUpContext) {
   return submitSendCode(ctx, ctx.captchaToken);
 }
 
-async function submitSendCode(ctx: SignUpContext, captchaToken: string) {
+async function submitSendCode(ctx: ResetPasswordContext, captchaToken: string) {
   const { dispatch, mountedRef, primary, email } = ctx;
   dispatch({ type: "send_code_started" });
   primary.lock();
   try {
-    if (await isEmailRegistered(email)) {
-      // このチェックはcaptchaTokenを使わないため、まだ消費されていないトークンをここでリセットする必要はない（次の送信でそのまま使える）。
-      if (!mountedRef.current) return;
-      dispatch({ type: "send_code_already_registered" });
-      primary.unlock();
-      return;
-    }
-
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { captchaToken },
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      captchaToken,
     });
 
     if (!mountedRef.current) return;
@@ -137,7 +124,7 @@ async function submitSendCode(ctx: SignUpContext, captchaToken: string) {
   }
 }
 
-async function verifyCode(ctx: SignUpContext) {
+async function verifyCode(ctx: ResetPasswordContext) {
   const { dispatch, mountedRef, codeStepBusyRef } = ctx;
   if (codeStepBusyRef.current) return;
 
@@ -154,7 +141,7 @@ async function verifyCode(ctx: SignUpContext) {
     const { error } = await supabase.auth.verifyOtp({
       email: ctx.email,
       token: ctx.code,
-      type: "email",
+      type: "recovery",
     });
 
     if (!mountedRef.current) return;
@@ -172,7 +159,7 @@ async function verifyCode(ctx: SignUpContext) {
   }
 }
 
-async function setPassword(ctx: SignUpContext) {
+async function setPassword(ctx: ResetPasswordContext) {
   const { dispatch, mountedRef, primary, password } = ctx;
   if (primary.isLocked()) return;
 
@@ -196,10 +183,8 @@ async function setPassword(ctx: SignUpContext) {
       return;
     }
 
-    // 成功時はここでsubmittingを解除しない。
-    // router.push()は遷移先の取得中もこのコンポーネントを保持し続けるため、ここで解除すると遷移完了前にボタンが再度押せる状態に戻ってしまう。
-    // アンマウント時に自然に破棄される。
-    ctx.goToApp();
+    await supabase.auth.signOut();
+    window.location.assign("/signin");
   } catch {
     if (!mountedRef.current) return;
     dispatch({ type: "set_password_network_error" });
@@ -207,16 +192,14 @@ async function setPassword(ctx: SignUpContext) {
   }
 }
 
-// サインアップの各画面の操作。入力値と画面の状態はフォームが持ち、ここでは送信と応答の処理を行う。
-export function useSignUpHandlers(
-  deps: Omit<SignUpContext, "codeStepBusyRef" | "goToApp">,
+// パスワード再設定の各画面の操作。入力値と画面の状態はフォームが持ち、ここでは送信と応答の処理を行う。
+export function useResetPasswordHandlers(
+  deps: Omit<ResetPasswordContext, "codeStepBusyRef">,
 ) {
-  const router = useRouter();
   const codeStepBusyRef = useRef(false);
-  const ctx: SignUpContext = {
+  const ctx: ResetPasswordContext = {
     ...deps,
     codeStepBusyRef,
-    goToApp: () => router.push("/rounds"),
   };
 
   return {

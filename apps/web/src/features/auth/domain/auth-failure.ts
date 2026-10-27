@@ -12,9 +12,10 @@ const MESSAGES = {
     "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
   captcha_failed: "認証に失敗しました。もう一度お試しください。",
   weak_password: "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+  already_registered: "このメールアドレスは既に登録されています。",
 } as const;
 
-// 認証サービスに届かなかった、認識している理由で拒否された、それ以外(認証サービスの文言をそのまま使う)のどれか。
+// 認証サービスに届かなかった、認識している理由で拒否された、登録済みだった、それ以外(認証サービスの文言をそのまま使う)のどれか。
 export type AuthFailure =
   | { readonly kind: keyof typeof MESSAGES }
   | { readonly kind: "other"; readonly message: string };

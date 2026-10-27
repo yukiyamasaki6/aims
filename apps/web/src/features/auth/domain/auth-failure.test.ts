@@ -18,6 +18,7 @@ describe("failureMessage", () => {
       "weak_password",
       "パスワードは8文字以上で、英字と数字の両方を含めてください。",
     ],
+    ["already_registered", "このメールアドレスは既に登録されています。"],
   ] as const)("失敗の種類%sを利用者向けの文言にする", (kind, expected) => {
     // Given
 

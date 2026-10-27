@@ -8,15 +8,14 @@ import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { OTP_CODE_LENGTH } from "./auth-constants";
-import type { CodeFieldErrors } from "./validate";
+import { AUTH_CODE_LENGTH } from "../domain/auth-code";
 
 // 部品が使う項目だけを構造で定める。各画面のフォームの状態はこの形を満たす。
 export type OtpCodeStepModel = {
   email: string;
   code: string;
   setCode: (value: string) => void;
-  codeFieldErrors: CodeFieldErrors;
+  codeFieldErrors: { code?: string; resend?: string };
   codeStepPending: "verify" | "resend" | null;
   error: string | null;
   handleBack: () => void;
@@ -106,7 +105,7 @@ function CodeEntryForm({
           inputMode="numeric"
           placeholder="123456"
           className="text-center tracking-widest"
-          maxLength={OTP_CODE_LENGTH}
+          maxLength={AUTH_CODE_LENGTH}
           value={code}
           onChange={(e) => setCode(e.target.value)}
           aria-invalid={Boolean(codeFieldErrors.code)}
