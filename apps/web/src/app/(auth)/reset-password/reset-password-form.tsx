@@ -2,10 +2,10 @@
 
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
+import { AuthHeader } from "@/components/auth-header";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { cn } from "@/lib/utils";
-import { AuthHeader } from "../_shared/auth-header";
 import { OtpCodeStep } from "../_shared/code-step";
 import { OtpEmailStep } from "../_shared/email-step";
 import {

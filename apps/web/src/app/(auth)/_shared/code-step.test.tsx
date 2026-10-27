@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OtpCodeStep, type OtpCodeStepModel } from "./code-step";
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックする。
-vi.mock("./turnstile", () => ({
+vi.mock("@/components/turnstile", () => ({
   Turnstile: forwardRef(function TurnstileStub() {
     return <div data-testid="turnstile-stub" />;
   }),

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import ResetPasswordPage from "./page";
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックする。
-vi.mock("../_shared/turnstile", () => ({
+vi.mock("@/components/turnstile", () => ({
   Turnstile: () => <div data-testid="turnstile-stub" />,
 }));
 

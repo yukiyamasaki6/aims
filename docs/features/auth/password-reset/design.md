@@ -35,13 +35,13 @@
 - `src/app/(auth)/_shared/email-step.tsx`: メール入力の段階の描画。
 - `src/app/(auth)/_shared/code-step.tsx`: コード入力の段階の描画。確認、再送、戻る。
 - `src/app/(auth)/_shared/validate.ts`: メールアドレス、コード、パスワード、再送の可否の検証。
-- `src/features/auth/errors.ts`: エラーコードを日本語にする。
+- `src/features/auth/infrastructure/supabase-auth-failure.ts`の`authErrorMessage`: エラーコードを日本語にする。
 
 契約は次のとおりである。
 
 - メールアドレスは254文字以内、コードは6桁、パスワードは半角英数字と記号で8〜72文字である。
 - パスワードが英字と数字を含む要件は、`updateUser`の前に`validatePasswordField`で検証し、満たさなければ送信しない。
-- Supabaseが`password_requirements`(`supabase/config.toml`では`letters_digits`)で拒否した場合の`weak_password`は、`errors.ts`が翻訳する。
+- Supabaseが`password_requirements`(`supabase/config.toml`では`letters_digits`)で拒否した場合の`weak_password`は、`authErrorMessage`が翻訳する。
 - captchaトークンは再送のたびに消費されるため、毎回取り直す。
 - 再送の間隔は`max_frequency`で、productionとpreviewは60秒、ローカルとCIは1秒である。
 - パスワード変更後は`signOut()`し、`window.location.assign("/signin")`で遷移する。

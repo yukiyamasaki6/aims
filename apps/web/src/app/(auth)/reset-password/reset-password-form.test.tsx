@@ -36,7 +36,7 @@ const turnstile = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
   reset: vi.fn(),
 }));
-vi.mock("../_shared/turnstile", () => ({
+vi.mock("@/components/turnstile", () => ({
   Turnstile: forwardRef<
     unknown,
     { onVerify: (token: string | null) => void; error?: string }

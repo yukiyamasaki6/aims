@@ -2,30 +2,43 @@
 
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
+import { type ComponentRef, type FormEvent, useRef, useState } from "react";
+import { AuthHeader } from "@/components/auth-header";
+import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { useHydrated } from "@/hooks/use-hydrated";
+import { useMountedRef } from "@/hooks/use-mounted-ref";
 import { cn } from "@/lib/utils";
-import { EMAIL_MAX_LENGTH } from "../_shared/auth-constants";
-import { AuthHeader } from "../_shared/auth-header";
-import { Turnstile } from "../_shared/turnstile";
-import { type SignInFormModel, useSignInForm } from "./use-signin-form";
+import type { SignIn } from "../application/sign-in";
+import { EMAIL_MAX_LENGTH } from "../domain/email-address";
+import {
+  type FieldErrors,
+  initialAttempt,
+  signInReducer,
+} from "../domain/sign-in-attempt";
+import { useScreenView } from "./use-screen-view";
 
-export function SignInForm() {
-  const {
-    email,
-    setEmail,
-    password,
-    setPassword,
-    error,
-    fieldErrors,
-    captchaToken,
-    setCaptchaToken,
-    turnstileRef,
-    submitting,
-    hydrated,
-    onSubmit,
-  } = useSignInForm();
+export function SignInForm({ signIn }: { signIn: SignIn }) {
+  const mounted = useMountedRef();
+  const check = useRef<ComponentRef<typeof Turnstile>>(undefined);
+  const { state: attempt, view } = useScreenView(
+    signInReducer,
+    initialAttempt,
+    {
+      isMounted: () => mounted.current,
+      resetCheck: () => check.current?.reset(),
+    },
+  );
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const hydrated = useHydrated();
+
+  function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    void signIn.submit({ email, password }, view);
+  }
 
   return (
     <>
@@ -41,24 +54,26 @@ export function SignInForm() {
           setEmail={setEmail}
           password={password}
           setPassword={setPassword}
-          fieldErrors={fieldErrors}
+          fieldErrors={attempt.fieldErrors}
         />
         <Turnstile
-          ref={turnstileRef}
-          onVerify={setCaptchaToken}
-          error={fieldErrors.captcha}
+          ref={check}
+          onVerify={(token) => view.dispatch({ type: "verified", token })}
+          error={attempt.fieldErrors.captcha}
         />
         <Button
           type="submit"
-          data-captcha-ready={captchaToken !== null}
-          aria-disabled={submitting}
-          className={cn(submitting && "pointer-events-none opacity-50")}
+          data-captcha-ready={attempt.captchaToken !== null}
+          aria-disabled={attempt.submitting}
+          className={cn(attempt.submitting && "pointer-events-none opacity-50")}
         >
-          {submitting && <Loader2 className="size-3.5 animate-spin" />}
+          {attempt.submitting && <Loader2 className="size-3.5 animate-spin" />}
           サインイン
         </Button>
       </form>
-      {error && <p className="text-center text-destructive text-sm">{error}</p>}
+      {attempt.error && (
+        <p className="text-center text-destructive text-sm">{attempt.error}</p>
+      )}
       <p className="text-muted-foreground text-sm">
         <Link href="/reset-password" className="underline">
           パスワードをお忘れですか
@@ -85,7 +100,7 @@ function SignInFields({
   setEmail: (value: string) => void;
   password: string;
   setPassword: (value: string) => void;
-  fieldErrors: SignInFormModel["fieldErrors"];
+  fieldErrors: FieldErrors;
 }) {
   return (
     <>
@@ -93,9 +108,9 @@ function SignInFields({
         <Input
           type="email"
           placeholder="you@example.com"
-          maxLength={EMAIL_MAX_LENGTH}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          maxLength={EMAIL_MAX_LENGTH}
           aria-invalid={Boolean(fieldErrors.email)}
           aria-describedby={
             fieldErrors.email ? "signin-email-error" : undefined

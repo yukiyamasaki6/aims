@@ -31,7 +31,7 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 - `src/app/(auth)/_shared/code-step.tsx`: コード入力の段階の描画。確認、再送、戻る。
 - `src/app/(auth)/_shared/validate.ts`: メールアドレス、コード、パスワード、再送の可否の検証。
 - `src/app/(auth)/signup/actions.ts`: 登録済み判定のServer Action。
-- `src/app/(auth)/_shared`、`layout.tsx`、`auth-header.tsx`: 認証画面の共通部品と枠。
+- `src/app/(auth)/_shared`、`layout.tsx`、`src/components/auth-header.tsx`、`src/components/turnstile.tsx`: 認証画面の共通部品と枠。
 - `supabase/migrations/20261016000000_users.sql`: `auth.users`のINSERTで`public.users`を作るトリガー。
 
 契約は次のとおりである。

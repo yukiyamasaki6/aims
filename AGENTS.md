@@ -18,4 +18,5 @@
     - 統合: `agents/integration.md`
     - レビュー: `agents/review.md`
     - PR作成: `agents/pull-request.md`
+- コードの構造の方針は `docs/architecture.md` に従う。
 - テストと実装は、合意済みの設計を共通の基準とする独立した責務として扱う。

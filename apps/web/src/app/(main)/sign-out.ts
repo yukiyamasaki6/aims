@@ -1,5 +1,6 @@
 import type { AuthError } from "@supabase/supabase-js";
-import { translateAuthErrorMessage } from "@/features/auth/errors";
+import { NETWORK_ERROR_MESSAGE } from "@/features/auth";
+import { authErrorMessage } from "@/features/auth/infrastructure/supabase-auth-failure";
 import { getLocalIdentity } from "@/features/auth/local-identity";
 import {
   clearExplicitSignOut,
@@ -47,7 +48,7 @@ export async function signOut({
   return {
     status: "failed",
     error: signOutError
-      ? translateAuthErrorMessage(signOutError)
-      : "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      ? authErrorMessage(signOutError)
+      : NETWORK_ERROR_MESSAGE,
   };
 }

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { readReturnTo, resolveReturnTo, signInHref } from "./return-to";
+import {
+  allowedReturnTo,
+  destinationOf,
+  readReturnTo,
+  signInHref,
+} from "./return-to";
 
-describe("resolveReturnTo", () => {
+describe("allowedReturnTo", () => {
   describe("/rounds配下の相対パスの場合", () => {
     it.each([
       ["/rounds", "/rounds"],
@@ -16,7 +21,7 @@ describe("resolveReturnTo", () => {
       // Given
 
       // When
-      const result = resolveReturnTo(raw);
+      const result = allowedReturnTo(raw);
 
       // Then
       expect(result).toBe(expected);
@@ -27,7 +32,7 @@ describe("resolveReturnTo", () => {
 
       // When
       const raw = "/rounds/new?a=1#section";
-      const result = resolveReturnTo(raw);
+      const result = allowedReturnTo(raw);
 
       // Then
       expect(result).toBe("/rounds/new?a=1");
@@ -38,7 +43,7 @@ describe("resolveReturnTo", () => {
 
       // When
       const raw = "/rounds/x/../new";
-      const result = resolveReturnTo(raw);
+      const result = allowedReturnTo(raw);
 
       // Then
       expect(result).toBe("/rounds/new");
@@ -78,7 +83,7 @@ describe("resolveReturnTo", () => {
       // Given
 
       // When
-      const result = resolveReturnTo(raw);
+      const result = allowedReturnTo(raw);
 
       // Then
       expect(result).toBeNull();
@@ -90,14 +95,38 @@ describe("resolveReturnTo", () => {
       // When
       const atLimit = `/rounds/${"a".repeat(2048 - "/rounds/".length)}`;
       const overLimit = `${atLimit}a`;
-      const accepted = resolveReturnTo(atLimit);
-      const rejected = resolveReturnTo(overLimit);
+      const accepted = allowedReturnTo(atLimit);
+      const rejected = allowedReturnTo(overLimit);
 
       // Then
       expect(atLimit).toHaveLength(2048);
       expect(accepted).toBe(atLimit);
       expect(rejected).toBeNull();
     });
+  });
+});
+
+describe("destinationOf", () => {
+  it("許可された遷移元を返す", () => {
+    // Given
+
+    // When
+    const result = destinationOf("/rounds/new?a=1");
+
+    // Then
+    expect(result).toBe("/rounds/new?a=1");
+  });
+
+  it("遷移元が無いか許可されない場合は一覧を返す", () => {
+    // Given
+
+    // When
+    const missing = destinationOf(null);
+    const external = destinationOf("https://evil.com/rounds");
+
+    // Then
+    expect(missing).toBe("/rounds");
+    expect(external).toBe("/rounds");
   });
 });
 

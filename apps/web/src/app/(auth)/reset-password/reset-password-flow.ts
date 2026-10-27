@@ -1,6 +1,6 @@
 import type { AuthError } from "@supabase/supabase-js";
-import { translateAuthErrorMessage } from "@/features/auth/errors";
-import { NETWORK_ERROR_MESSAGE } from "../_shared/auth-constants";
+import { NETWORK_ERROR_MESSAGE } from "@/features/auth";
+import { authErrorMessage } from "@/features/auth/infrastructure/supabase-auth-failure";
 import type {
   CodeFieldErrors,
   EmailFieldErrors,
@@ -126,7 +126,7 @@ function sendCodeReducer(
     case "send_code_auth_error":
       return {
         ...state,
-        error: translateAuthErrorMessage(action.error),
+        error: authErrorMessage(action.error),
         emailFieldErrors: {},
       };
     case "send_code_network_error":
@@ -159,7 +159,7 @@ function verifyCodeReducer(
     case "verify_code_auth_error":
       return {
         ...state,
-        error: translateAuthErrorMessage(action.error),
+        error: authErrorMessage(action.error),
         codeFieldErrors: {},
         codeStepPending: null,
       };
@@ -193,7 +193,7 @@ function resendReducer(
     case "resend_auth_error":
       return {
         ...state,
-        error: translateAuthErrorMessage(action.error),
+        error: authErrorMessage(action.error),
         codeStepPending: null,
       };
     case "resend_network_error":
@@ -213,7 +213,7 @@ function setPasswordReducer(
     case "set_password_auth_error":
       return {
         ...state,
-        error: translateAuthErrorMessage(action.error),
+        error: authErrorMessage(action.error),
         passwordFieldErrors: {},
       };
     case "set_password_network_error":

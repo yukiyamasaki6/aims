@@ -1,6 +1,10 @@
 "use client";
 
 import { type Dispatch, type FormEvent, type RefObject, useRef } from "react";
+import {
+  CAPTCHA_INCOMPLETE_MESSAGE,
+  isCaptchaCompleted,
+} from "@/features/auth";
 import { createClient } from "@/lib/supabase/client";
 import type { SubmitGuard } from "../_shared/use-submit-guard";
 import {
@@ -82,10 +86,10 @@ async function sendCode(ctx: ResetPasswordContext) {
     ctx.dispatch({ type: "send_code_invalid", errors });
     return;
   }
-  if (!ctx.captchaToken) {
+  if (!isCaptchaCompleted(ctx.captchaToken)) {
     ctx.dispatch({
       type: "send_code_invalid",
-      errors: { captcha: "セキュリティチェックが完了していません。" },
+      errors: { captcha: CAPTCHA_INCOMPLETE_MESSAGE },
     });
     return;
   }

@@ -1,6 +1,10 @@
 import {
-  EMAIL_MAX_LENGTH,
-  EMAIL_PATTERN,
+  CAPTCHA_INCOMPLETE_MESSAGE,
+  isCaptchaCompleted,
+  validateEmail,
+  validatePasswordPresent,
+} from "@/features/auth";
+import {
   OTP_CODE_LENGTH,
   PASSWORD_ALLOWED_PATTERN,
   PASSWORD_MAX_LENGTH,
@@ -12,20 +16,8 @@ export type EmailFieldErrors = {
 };
 
 export function validateEmailField(email: string): EmailFieldErrors {
-  if (!email) {
-    return { email: "メールアドレスを入力してください。" };
-  }
-  // UIのmaxLength属性はブラウザ側の制限に過ぎず、devtools操作等で回避され得るため、アプリケーション層でも上限を検証する。
-  if (email.length > EMAIL_MAX_LENGTH) {
-    return {
-      email: `メールアドレスは${EMAIL_MAX_LENGTH}文字以内で入力してください。`,
-    };
-  }
-  if (!EMAIL_PATTERN.test(email)) {
-    return { email: "メールアドレスの形式が正しくありません。" };
-  }
-
-  return {};
+  const message = validateEmail(email);
+  return message ? { email: message } : {};
 }
 
 export type CodeFieldErrors = {
@@ -55,8 +47,8 @@ export function validateResendReady(
       resend: "再送はクールダウン中です。しばらくしてから再度お試しください。",
     };
   }
-  if (!captchaToken) {
-    return { resend: "セキュリティチェックが完了していません。" };
+  if (!isCaptchaCompleted(captchaToken)) {
+    return { resend: CAPTCHA_INCOMPLETE_MESSAGE };
   }
 
   return {};
@@ -67,8 +59,9 @@ export type PasswordFieldErrors = {
 };
 
 export function validatePasswordField(password: string): PasswordFieldErrors {
-  if (!password) {
-    return { password: "パスワードを入力してください。" };
+  const missing = validatePasswordPresent(password);
+  if (missing) {
+    return { password: missing };
   }
   if (
     password.length < 8 ||

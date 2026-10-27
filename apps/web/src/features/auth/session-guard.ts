@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { signInHref } from "@/features/auth/return-to";
 import { isOffline } from "@/features/fetch-result/network";
+import { signInHref } from "./domain/return-to";
 import { readSession } from "./session-state";
 
 let redirected = false;

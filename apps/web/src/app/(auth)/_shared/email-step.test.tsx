@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { OtpEmailStep, type OtpEmailStepModel } from "./email-step";
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、errorの受け渡しを確かめられるスタブで模す。
-vi.mock("./turnstile", () => ({
+vi.mock("@/components/turnstile", () => ({
   Turnstile: forwardRef<unknown, { error?: string }>(
     function TurnstileStub(props) {
       return (

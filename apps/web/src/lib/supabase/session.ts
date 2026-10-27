@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import { readReturnTo, signInHref } from "@/features/auth/return-to";
+import { readReturnTo, signInHref } from "@/features/auth";
 import type { Database } from "@/types/supabase";
 
 export async function updateSession(request: NextRequest) {

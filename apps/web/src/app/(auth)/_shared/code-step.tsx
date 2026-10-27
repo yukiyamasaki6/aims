@@ -3,12 +3,12 @@
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { Loader2 } from "lucide-react";
 import type { FormEvent, RefObject } from "react";
+import { AuthHeader } from "@/components/auth-header";
+import { Turnstile } from "@/components/turnstile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { OTP_CODE_LENGTH } from "./auth-constants";
-import { AuthHeader } from "./auth-header";
-import { Turnstile } from "./turnstile";
 import type { CodeFieldErrors } from "./validate";
 
 // 部品が使う項目だけを構造で定める。各画面のフォームの状態はこの形を満たす。
