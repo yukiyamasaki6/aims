@@ -40,6 +40,7 @@ describe("validateEmail", () => {
   it.each([
     ["@がない", "userexample.com"],
     ["ドメインに.がない", "user@example"],
+    ["ローカル部が空の", "@example.com"],
     ["空白を含む", "us er@example.com"],
     ["@が2つある", "a@b@example.com"],
   ])("%s場合は形式の文言を返す", (_name, email) => {

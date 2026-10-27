@@ -10,51 +10,46 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 
-// 部品が使う項目だけを構造で定める。各画面のフォームの状態はこの形を満たす。
-export type OtpEmailStepModel = {
-  email: string;
-  setEmail: (value: string) => void;
-  emailFieldErrors: { email?: string; captcha?: string };
-  primarySubmitting: boolean;
-  error: string | null;
-  hydrated: boolean;
-  handleSendCode: (e: FormEvent<HTMLFormElement>) => void;
-  turnstileRef: RefObject<TurnstileInstance | undefined>;
-  setCaptchaToken: (token: string | null) => void;
-  captchaToken: string | null;
-};
-
-export function OtpEmailStep({
-  form,
-  idPrefix,
-  title,
-  footer,
-}: {
-  form: OtpEmailStepModel;
+type OtpEmailStepProps = {
   // エラー文の要素のidの接頭辞(`${idPrefix}-email-error`)。
   idPrefix: string;
   title: string;
   // 全体のエラーの下に置く、サインインへのリンクなど。
   footer: ReactNode;
-}) {
-  const {
-    email,
-    setEmail,
-    emailFieldErrors,
-    primarySubmitting,
-    error,
-    hydrated,
-    handleSendCode,
-    turnstileRef,
-    setCaptchaToken,
-    captchaToken,
-  } = form;
+  email: string;
+  onEmailChange: (value: string) => void;
+  fieldErrors: { email?: string; captcha?: string };
+  submitting: boolean;
+  error: string | null;
+  hydrated: boolean;
+  onSubmit: (e: FormEvent<HTMLFormElement>) => void;
+  checkRef: RefObject<TurnstileInstance | undefined>;
+  onCheck: (token: string | null) => void;
+  // セキュリティチェックが完了している(トークンがある)か。
+  checked: boolean;
+};
+
+export function OtpEmailStep({
+  idPrefix,
+  title,
+  footer,
+  email,
+  onEmailChange,
+  fieldErrors,
+  submitting,
+  error,
+  hydrated,
+  onSubmit,
+  checkRef,
+  onCheck,
+  checked,
+}: OtpEmailStepProps) {
   const errorId = `${idPrefix}-email-error`;
   return (
     <>
       <AuthHeader title={title} />
       <form
-        onSubmit={handleSendCode}
+        onSubmit={onSubmit}
         noValidate
         data-hydrated={hydrated}
         className="flex w-full flex-col gap-3"
@@ -65,28 +60,28 @@ export function OtpEmailStep({
             placeholder="you@example.com"
             maxLength={EMAIL_MAX_LENGTH}
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            aria-invalid={Boolean(emailFieldErrors.email)}
-            aria-describedby={emailFieldErrors.email ? errorId : undefined}
+            onChange={(e) => onEmailChange(e.target.value)}
+            aria-invalid={Boolean(fieldErrors.email)}
+            aria-describedby={fieldErrors.email ? errorId : undefined}
           />
-          {emailFieldErrors.email && (
+          {fieldErrors.email && (
             <p id={errorId} className="text-destructive text-sm">
-              {emailFieldErrors.email}
+              {fieldErrors.email}
             </p>
           )}
         </div>
         <Turnstile
-          ref={turnstileRef}
-          onVerify={setCaptchaToken}
-          error={emailFieldErrors.captcha}
+          ref={checkRef}
+          onVerify={onCheck}
+          error={fieldErrors.captcha}
         />
         <Button
           type="submit"
-          data-captcha-ready={captchaToken !== null}
-          aria-disabled={primarySubmitting}
-          className={cn(primarySubmitting && "pointer-events-none opacity-50")}
+          data-captcha-ready={checked}
+          aria-disabled={submitting}
+          className={cn(submitting && "pointer-events-none opacity-50")}
         >
-          {primarySubmitting && <Loader2 className="size-3.5 animate-spin" />}
+          {submitting && <Loader2 className="size-3.5 animate-spin" />}
           認証コードを送信
         </Button>
       </form>

@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { forwardRef } from "react";
+import { type ComponentProps, forwardRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { AUTH_CODE_LENGTH } from "../domain/auth-code";
-import { OtpCodeStep, type OtpCodeStepModel } from "./otp-code-step";
+import { OtpCodeStep } from "./otp-code-step";
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックする。
 vi.mock("@/components/turnstile", () => ({
@@ -12,27 +12,30 @@ vi.mock("@/components/turnstile", () => ({
   }),
 }));
 
-function createForm(overrides: Partial<OtpCodeStepModel> = {}) {
+type Props = ComponentProps<typeof OtpCodeStep>;
+
+function createForm(overrides: Partial<Props> = {}) {
   return {
     email: "user@example.com",
     code: "",
-    setCode: vi.fn(),
-    codeFieldErrors: {},
-    codeStepPending: null,
+    onCodeChange: vi.fn(),
+    fieldErrors: {},
+    pending: null,
     error: null,
-    handleBack: vi.fn(),
-    handleVerifyCode: vi.fn((e) => e.preventDefault()),
-    handleResend: vi.fn(),
-    turnstileRef: { current: undefined },
-    setCaptchaToken: vi.fn(),
-    captchaToken: null,
+    onBack: vi.fn(),
+    onVerify: vi.fn((e) => e.preventDefault()),
+    onResend: vi.fn(),
+    checkRef: { current: undefined },
+    onCheck: vi.fn(),
+    checked: false,
     resendCooldown: 0,
+    idPrefix: "test",
     ...overrides,
-  } satisfies OtpCodeStepModel;
+  } satisfies Props;
 }
 
-function renderStep(form: OtpCodeStepModel, idPrefix = "test") {
-  return render(<OtpCodeStep form={form} idPrefix={idPrefix} />);
+function renderStep(form: Props, idPrefix = form.idPrefix) {
+  return render(<OtpCodeStep {...form} idPrefix={idPrefix} />);
 }
 
 describe("OtpCodeStep", () => {
@@ -60,7 +63,7 @@ describe("OtpCodeStep", () => {
       ).toBeInTheDocument();
     });
 
-    it("codeの値を表示し、入力でsetCodeを呼ぶ", async () => {
+    it("codeの値を表示し、入力でonCodeChangeを呼ぶ", async () => {
       // Given
       const form = createForm({ code: "12" });
       renderStep(form);
@@ -71,7 +74,7 @@ describe("OtpCodeStep", () => {
 
       // Then
       expect(input).toHaveValue("12");
-      expect(form.setCode).toHaveBeenCalledWith("123");
+      expect(form.onCodeChange).toHaveBeenCalledWith("123");
     });
 
     it("errorがあれば全体のエラーを描く", () => {
@@ -104,7 +107,7 @@ describe("OtpCodeStep", () => {
       // Given
 
       // When
-      const form = createForm({ codeFieldErrors: { code: "コードのエラー" } });
+      const form = createForm({ fieldErrors: { code: "コードのエラー" } });
       renderStep(form, "reset-password");
 
       // Then
@@ -137,7 +140,7 @@ describe("OtpCodeStep", () => {
       // Given
 
       // When
-      const form = createForm({ codeFieldErrors: { resend: "再送のエラー" } });
+      const form = createForm({ fieldErrors: { resend: "再送のエラー" } });
       renderStep(form);
 
       // Then
@@ -146,7 +149,7 @@ describe("OtpCodeStep", () => {
   });
 
   describe("操作", () => {
-    it("確認の送信でhandleVerifyCodeを呼ぶ", () => {
+    it("確認の送信でonVerifyを呼ぶ", () => {
       // Given
       const form = createForm();
       renderStep(form);
@@ -155,10 +158,10 @@ describe("OtpCodeStep", () => {
       fireEvent.submit(screen.getByPlaceholderText("123456"));
 
       // Then
-      expect(form.handleVerifyCode).toHaveBeenCalledTimes(1);
+      expect(form.onVerify).toHaveBeenCalledTimes(1);
     });
 
-    it("再送を押すとhandleResendを呼ぶ", async () => {
+    it("再送を押すとonResendを呼ぶ", async () => {
       // Given
       const form = createForm();
       renderStep(form);
@@ -167,10 +170,10 @@ describe("OtpCodeStep", () => {
       await userEvent.click(screen.getByRole("button", { name: "再送" }));
 
       // Then
-      expect(form.handleResend).toHaveBeenCalledTimes(1);
+      expect(form.onResend).toHaveBeenCalledTimes(1);
     });
 
-    it("戻るを押すとhandleBackを呼ぶ", async () => {
+    it("戻るを押すとonBackを呼ぶ", async () => {
       // Given
       const form = createForm();
       renderStep(form);
@@ -179,7 +182,7 @@ describe("OtpCodeStep", () => {
       await userEvent.click(screen.getByRole("button", { name: "戻る" }));
 
       // Then
-      expect(form.handleBack).toHaveBeenCalledTimes(1);
+      expect(form.onBack).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -188,7 +191,7 @@ describe("OtpCodeStep", () => {
       // Given
 
       // When
-      const form = createForm({ codeStepPending: null });
+      const form = createForm({ pending: null });
       renderStep(form);
 
       // Then
@@ -208,7 +211,7 @@ describe("OtpCodeStep", () => {
       // Given
 
       // When
-      const form = createForm({ codeStepPending: "verify" });
+      const form = createForm({ pending: "verify" });
       renderStep(form);
 
       // Then
@@ -230,7 +233,7 @@ describe("OtpCodeStep", () => {
       // Given
 
       // When
-      const form = createForm({ codeStepPending: "resend" });
+      const form = createForm({ pending: "resend" });
       renderStep(form);
 
       // Then
@@ -271,12 +274,12 @@ describe("OtpCodeStep", () => {
       expect(oneLabel).toBe("再送（1秒）");
     });
 
-    it("captchaTokenの有無をdata-captcha-readyに反映する", () => {
+    it("セキュリティチェックの完了をdata-captcha-readyに反映する", () => {
       // Given
 
       // When
-      const ready = createForm({ captchaToken: "token" });
-      const notReady = createForm({ captchaToken: null });
+      const ready = createForm({ checked: true });
+      const notReady = createForm({ checked: false });
       const { unmount } = renderStep(ready);
       const readyValue = screen
         .getByRole("button", { name: "再送" })

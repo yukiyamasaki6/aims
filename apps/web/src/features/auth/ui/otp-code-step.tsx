@@ -10,73 +10,72 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { AUTH_CODE_LENGTH } from "../domain/auth-code";
 
-// 部品が使う項目だけを構造で定める。各画面のフォームの状態はこの形を満たす。
-export type OtpCodeStepModel = {
+type Pending = "verify" | "resend" | null;
+type FieldErrors = { code?: string; resend?: string };
+
+type OtpCodeStepProps = {
+  // エラー文の要素のidの接頭辞(`${idPrefix}-code-error`)。
+  idPrefix: string;
   email: string;
   code: string;
-  setCode: (value: string) => void;
-  codeFieldErrors: { code?: string; resend?: string };
-  codeStepPending: "verify" | "resend" | null;
+  onCodeChange: (value: string) => void;
+  fieldErrors: FieldErrors;
+  // 実行中の確認か再送。どちらかが実行中の間は、3つのボタンを無効にする。
+  pending: Pending;
   error: string | null;
-  handleBack: () => void;
-  handleVerifyCode: (e: FormEvent<HTMLFormElement>) => void;
-  handleResend: () => void;
-  turnstileRef: RefObject<TurnstileInstance | undefined>;
-  setCaptchaToken: (token: string | null) => void;
-  captchaToken: string | null;
+  onBack: () => void;
+  onVerify: (e: FormEvent<HTMLFormElement>) => void;
+  onResend: () => void;
+  checkRef: RefObject<TurnstileInstance | undefined>;
+  onCheck: (token: string | null) => void;
+  // セキュリティチェックが完了している(トークンがある)か。
+  checked: boolean;
   resendCooldown: number;
 };
 
 export function OtpCodeStep({
-  form,
   idPrefix,
-}: {
-  form: OtpCodeStepModel;
-  // エラー文の要素のidの接頭辞(`${idPrefix}-code-error`)。
-  idPrefix: string;
-}) {
-  const {
-    email,
-    code,
-    setCode,
-    codeFieldErrors,
-    codeStepPending,
-    error,
-    handleBack,
-    handleVerifyCode,
-    handleResend,
-    turnstileRef,
-    setCaptchaToken,
-    captchaToken,
-    resendCooldown,
-  } = form;
+  email,
+  code,
+  onCodeChange,
+  fieldErrors,
+  pending,
+  error,
+  onBack,
+  onVerify,
+  onResend,
+  checkRef,
+  onCheck,
+  checked,
+  resendCooldown,
+}: OtpCodeStepProps) {
   return (
     <>
       <AuthHeader
         title="認証コードを入力"
         description={`${email} に送信されたコードを入力してください。`}
-        onBack={handleBack}
-        backDisabled={codeStepPending !== null}
+        onBack={onBack}
+        backDisabled={pending !== null}
       />
       <CodeEntryForm
         code={code}
-        setCode={setCode}
-        codeFieldErrors={codeFieldErrors}
-        codeStepPending={codeStepPending}
+        onCodeChange={onCodeChange}
+        fieldErrors={fieldErrors}
+        pending={pending}
         errorId={`${idPrefix}-code-error`}
-        onSubmit={handleVerifyCode}
+        onSubmit={onVerify}
       />
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
       <p className="text-center text-muted-foreground text-sm">
         メールが届かない場合は、迷惑メールフォルダをご確認ください。
       </p>
-      <Turnstile ref={turnstileRef} onVerify={setCaptchaToken} />
+      <Turnstile ref={checkRef} onVerify={onCheck} />
       <ResendSection
-        codeStepPending={codeStepPending}
-        captchaToken={captchaToken}
+        pending={pending}
+        checked={checked}
         resendCooldown={resendCooldown}
-        resendError={codeFieldErrors.resend}
-        onResend={handleResend}
+        resendError={fieldErrors.resend}
+        onResend={onResend}
       />
     </>
   );
@@ -84,16 +83,16 @@ export function OtpCodeStep({
 
 function CodeEntryForm({
   code,
-  setCode,
-  codeFieldErrors,
-  codeStepPending,
+  onCodeChange,
+  fieldErrors,
+  pending,
   errorId,
   onSubmit,
 }: {
   code: string;
-  setCode: (value: string) => void;
-  codeFieldErrors: OtpCodeStepModel["codeFieldErrors"];
-  codeStepPending: OtpCodeStepModel["codeStepPending"];
+  onCodeChange: (value: string) => void;
+  fieldErrors: FieldErrors;
+  pending: Pending;
   errorId: string;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }) {
@@ -107,26 +106,22 @@ function CodeEntryForm({
           className="text-center tracking-widest"
           maxLength={AUTH_CODE_LENGTH}
           value={code}
-          onChange={(e) => setCode(e.target.value)}
-          aria-invalid={Boolean(codeFieldErrors.code)}
-          aria-describedby={codeFieldErrors.code ? errorId : undefined}
+          onChange={(e) => onCodeChange(e.target.value)}
+          aria-invalid={Boolean(fieldErrors.code)}
+          aria-describedby={fieldErrors.code ? errorId : undefined}
         />
-        {codeFieldErrors.code && (
+        {fieldErrors.code && (
           <p id={errorId} className="text-destructive text-sm">
-            {codeFieldErrors.code}
+            {fieldErrors.code}
           </p>
         )}
       </div>
       <Button
         type="submit"
-        aria-disabled={codeStepPending !== null}
-        className={cn(
-          codeStepPending !== null && "pointer-events-none opacity-50",
-        )}
+        aria-disabled={pending !== null}
+        className={cn(pending !== null && "pointer-events-none opacity-50")}
       >
-        {codeStepPending === "verify" && (
-          <Loader2 className="size-3.5 animate-spin" />
-        )}
+        {pending === "verify" && <Loader2 className="size-3.5 animate-spin" />}
         確認
       </Button>
     </form>
@@ -134,14 +129,14 @@ function CodeEntryForm({
 }
 
 function ResendSection({
-  codeStepPending,
-  captchaToken,
+  pending,
+  checked,
   resendCooldown,
   resendError,
   onResend,
 }: {
-  codeStepPending: OtpCodeStepModel["codeStepPending"];
-  captchaToken: string | null;
+  pending: Pending;
+  checked: boolean;
   resendCooldown: number;
   resendError: string | undefined;
   onResend: () => void;
@@ -153,15 +148,13 @@ function ResendSection({
         variant="outline"
         className={cn(
           "w-full",
-          codeStepPending !== null && "pointer-events-none opacity-50",
+          pending !== null && "pointer-events-none opacity-50",
         )}
-        aria-disabled={codeStepPending !== null}
-        data-captcha-ready={captchaToken !== null}
+        aria-disabled={pending !== null}
+        data-captcha-ready={checked}
         onClick={onResend}
       >
-        {codeStepPending === "resend" && (
-          <Loader2 className="size-3.5 animate-spin" />
-        )}
+        {pending === "resend" && <Loader2 className="size-3.5 animate-spin" />}
         {resendCooldown > 0 ? `再送（${resendCooldown}秒）` : "再送"}
       </Button>
       {resendError && <p className="text-destructive text-sm">{resendError}</p>}

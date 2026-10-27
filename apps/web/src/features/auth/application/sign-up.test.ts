@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AuthFailure } from "../domain/auth-failure";
 import {
-  initialSignUpFlow,
-  type SignUpEvent,
-  type SignUpFlow,
-  signUpReducer,
-} from "../domain/sign-up-flow";
+  initialPasswordSetupFlow,
+  type PasswordSetupEvent,
+  type PasswordSetupFlow,
+  passwordSetupReducer,
+} from "../domain/password-setup-flow";
+import type { Delivery } from "./password-setup-authenticator";
 import type { ScreenView } from "./screen-view";
 import {
   createSignUp,
-  type Delivery,
   type Registration,
   type SignUpAuthenticator,
 } from "./sign-up";
@@ -28,14 +28,16 @@ function setup() {
   } satisfies SignUpAuthenticator;
   const navigation = { go: vi.fn() };
   const signUp = createSignUp({ authenticator, navigation });
-  const events: SignUpEvent[] = [];
+  const events: PasswordSetupEvent[] = [];
   const order: string[] = [];
   const resetCheck = vi.fn(() => order.push("resetCheck"));
   // 画面の約束の偽。出来事を実物のreducerで適用し、stateは送った直後の値を返す。表示中かどうかは、テストが切り替える。
   const screen = { mounted: true };
   const viewOf = (
-    initial: SignUpFlow,
-  ): ScreenView<SignUpFlow, SignUpEvent> & { latest: () => SignUpFlow } => {
+    initial: PasswordSetupFlow,
+  ): ScreenView<PasswordSetupFlow, PasswordSetupEvent> & {
+    latest: () => PasswordSetupFlow;
+  } => {
     let current = initial;
     return {
       get state() {
@@ -45,7 +47,7 @@ function setup() {
       dispatch: (event) => {
         events.push(event);
         order.push(event.type);
-        current = signUpReducer(current, event);
+        current = passwordSetupReducer(current, event);
       },
       resetCheck,
       isMounted: () => screen.mounted,
@@ -63,24 +65,26 @@ function setup() {
   };
 }
 
-function types(events: SignUpEvent[]) {
+function types(events: PasswordSetupEvent[]) {
   return events.map((event) => event.type);
 }
 
-const checked = signUpReducer(initialSignUpFlow, {
+const checked = passwordSetupReducer(initialPasswordSetupFlow, {
   type: "checked",
   token: "first-token",
 });
-const onCodeStep = signUpReducer(
-  signUpReducer(checked, { type: "started", operation: "send" }),
+const onCodeStep = passwordSetupReducer(
+  passwordSetupReducer(checked, { type: "started", operation: "send" }),
   { type: "codeSent" },
 );
-const resendable = signUpReducer(
-  signUpReducer(onCodeStep, { type: "checked", token: "resend-token" }),
+const resendable = passwordSetupReducer(
+  passwordSetupReducer(onCodeStep, { type: "checked", token: "resend-token" }),
   { type: "ticked" },
 );
 const readyToResend = { ...resendable, resendCooldown: 0 };
-const onPasswordStep = signUpReducer(onCodeStep, { type: "codeConfirmed" });
+const onPasswordStep = passwordSetupReducer(onCodeStep, {
+  type: "codeConfirmed",
+});
 
 describe("サインアップの手続き", () => {
   describe("コードの送信", () => {
@@ -127,7 +131,7 @@ describe("サインアップの手続き", () => {
       const { signUp, authenticator, events, viewOf } = setup();
 
       // When
-      await signUp.sendCode({ email }, viewOf(initialSignUpFlow));
+      await signUp.sendCode({ email }, viewOf(initialPasswordSetupFlow));
 
       // Then
       expect(events).toEqual([
@@ -142,7 +146,7 @@ describe("サインアップの手続き", () => {
     it("実行中なら、何も送らず、認証サービスを呼ばない", async () => {
       // Given
       const { signUp, authenticator, events, viewOf } = setup();
-      const running = signUpReducer(checked, {
+      const running = passwordSetupReducer(checked, {
         type: "started",
         operation: "send",
       });
@@ -171,31 +175,31 @@ describe("サインアップの手続き", () => {
       expect(types(events)).toEqual(["started", "codeSent"]);
     });
 
-    it.each<[string, Registration, Delivery, SignUpEvent["type"], AuthFailure]>(
+    it.each<
+      [string, Registration, Delivery, PasswordSetupEvent["type"], AuthFailure]
+    >([
       [
-        [
-          "登録済み",
-          { kind: "registered" },
-          sent,
-          "failed",
-          { kind: "already_registered" },
-        ],
-        [
-          "登録の判定が届かない",
-          { kind: "unreached" },
-          sent,
-          "failed",
-          unreachable,
-        ],
-        [
-          "送信が届かない",
-          unregistered,
-          { kind: "unreached" },
-          "failed",
-          unreachable,
-        ],
+        "登録済み",
+        { kind: "registered" },
+        sent,
+        "failed",
+        { kind: "already_registered" },
       ],
-    )(
+      [
+        "登録の判定が届かない",
+        { kind: "unreached" },
+        sent,
+        "failed",
+        unreachable,
+      ],
+      [
+        "送信が届かない",
+        unregistered,
+        { kind: "unreached" },
+        "failed",
+        unreachable,
+      ],
+    ])(
       "%sなら、失敗を示し、トークンを使っていないのでチェックをやり直させず保つ",
       async (_name, registration, delivery, type, failure) => {
         // Given
@@ -246,14 +250,9 @@ describe("サインアップの手続き", () => {
     });
   });
 
+  // コードの確認、再送、パスワードの設定の段階外の呼び出しは、共通の手続きのテストが担う。
   describe("段階外の呼び出し", () => {
     it.each([
-      ["コードの確認", "email", "verifyCode"],
-      ["コードの確認", "password", "verifyCode"],
-      ["コードの再送", "email", "resend"],
-      ["コードの再送", "password", "resend"],
-      ["パスワードの設定", "email", "setPassword"],
-      ["パスワードの設定", "code", "setPassword"],
       ["コードの送信", "code", "sendCode"],
       ["コードの送信", "password", "sendCode"],
     ] as const)(
@@ -289,164 +288,6 @@ describe("サインアップの手続き", () => {
     );
   });
 
-  describe("コードの再送", () => {
-    it("待ち時間が明けてトークンがあれば、送って成功を示し、チェックをやり直させる", async () => {
-      // Given
-      const { signUp, authenticator, order, viewOf } = setup();
-      const view = viewOf(readyToResend);
-
-      // When
-      await signUp.resend({ email }, view);
-
-      // Then
-      expect(authenticator.isRegistered).not.toHaveBeenCalled();
-      expect(authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
-        email,
-        captchaToken: "resend-token",
-      });
-      expect(order).toEqual(["started", "codeResent", "resetCheck"]);
-      expect(view.latest().captchaToken).toBeNull();
-      expect(view.latest().resendCooldown).toBe(60);
-    });
-
-    it("待ち時間が残っていれば、再送の不備だけを示し、送らない", async () => {
-      // Given
-      const { signUp, authenticator, events, viewOf } = setup();
-
-      // When
-      await signUp.resend({ email }, viewOf(resendable));
-
-      // Then
-      expect(events).toEqual([
-        {
-          type: "invalid",
-          fieldErrors: {
-            resend:
-              "再送はクールダウン中です。しばらくしてから再度お試しください。",
-          },
-        },
-      ]);
-      expect(authenticator.sendCode).not.toHaveBeenCalled();
-    });
-
-    it("実行中なら、何も送らず、認証サービスを呼ばない", async () => {
-      // Given
-      const { signUp, authenticator, events, viewOf } = setup();
-      const running = signUpReducer(readyToResend, {
-        type: "started",
-        operation: "verify",
-      });
-
-      // When
-      await signUp.resend({ email }, viewOf(running));
-
-      // Then
-      expect(events).toEqual([]);
-      expect(authenticator.sendCode).not.toHaveBeenCalled();
-    });
-
-    it("送信が届かなければ、通信エラーを示し、トークンを使っていないのでチェックをやり直させず保つ", async () => {
-      // Given
-      const { signUp, authenticator, resetCheck, viewOf } = setup();
-      authenticator.sendCode.mockResolvedValue({ kind: "unreached" });
-      const view = viewOf(readyToResend);
-
-      // When
-      await signUp.resend({ email }, view);
-
-      // Then
-      expect(view.latest().error).toBe(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
-      expect(view.latest().captchaToken).toBe("resend-token");
-      expect(view.latest().pending).toBeNull();
-      expect(resetCheck).not.toHaveBeenCalled();
-    });
-
-    it("認証サービスが拒否したなら、拒否を示し、トークンを消費してチェックをやり直させる", async () => {
-      // Given
-      const { signUp, authenticator, order, viewOf } = setup();
-      authenticator.sendCode.mockResolvedValue({
-        kind: "refused",
-        failure: { kind: "captcha_failed" },
-      });
-      const view = viewOf(readyToResend);
-
-      // When
-      await signUp.resend({ email }, view);
-
-      // Then
-      expect(order).toEqual(["started", "refused", "resetCheck"]);
-      expect(view.latest().captchaToken).toBeNull();
-      expect(view.latest().error).toBe(
-        "認証に失敗しました。もう一度お試しください。",
-      );
-    });
-  });
-
-  describe("コードの確認", () => {
-    it("認証が通れば、パスワード設定の段階へ進む", async () => {
-      // Given
-      const { signUp, authenticator, events, viewOf } = setup();
-      const view = viewOf(onCodeStep);
-
-      // When
-      await signUp.verifyCode({ email, code: "123456" }, view);
-
-      // Then
-      expect(authenticator.verifyCode).toHaveBeenCalledExactlyOnceWith({
-        email,
-        code: "123456",
-      });
-      expect(types(events)).toEqual(["started", "codeConfirmed"]);
-      expect(view.latest().step).toBe("password");
-    });
-
-    it("認証に失敗すれば、失敗を示してコード入力の段階に留まる", async () => {
-      // Given
-      const { signUp, authenticator, events, viewOf } = setup();
-      const failure: AuthFailure = { kind: "code_expired" };
-      authenticator.verifyCode.mockResolvedValue(failure);
-      const view = viewOf(onCodeStep);
-
-      // When
-      await signUp.verifyCode({ email, code: "123456" }, view);
-
-      // Then
-      expect(events.at(-1)).toEqual({ type: "failed", failure });
-      expect(view.latest().step).toBe("code");
-      expect(view.latest().pending).toBeNull();
-    });
-
-    it("コードに不備があれば、不備だけを示し、認証しない", async () => {
-      // Given
-      const { signUp, authenticator, events, viewOf } = setup();
-
-      // When
-      await signUp.verifyCode({ email, code: "12a" }, viewOf(onCodeStep));
-
-      // Then
-      expect(types(events)).toEqual(["invalid"]);
-      expect(authenticator.verifyCode).not.toHaveBeenCalled();
-    });
-
-    it("実行中なら、何も送らず、認証しない", async () => {
-      // Given
-      const { signUp, authenticator, events, viewOf } = setup();
-      const running = signUpReducer(onCodeStep, {
-        type: "started",
-        operation: "resend",
-      });
-
-      // When
-      await signUp.verifyCode({ email, code: "123456" }, viewOf(running));
-
-      // Then
-      expect(events).toEqual([]);
-      expect(authenticator.verifyCode).not.toHaveBeenCalled();
-    });
-  });
-
   describe("パスワードの設定", () => {
     it("設定できれば、ラウンド一覧へ遷移し、実行中を解除しない", async () => {
       // Given
@@ -463,23 +304,6 @@ describe("サインアップの手続き", () => {
       expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds");
       expect(types(events)).toEqual(["started"]);
       expect(view.latest().pending).toBe("setPassword");
-    });
-
-    it("設定に失敗すれば、失敗を示し、遷移せず、実行中を解除する", async () => {
-      // Given
-      const { signUp, authenticator, navigation, viewOf } = setup();
-      authenticator.setPassword.mockResolvedValue({ kind: "weak_password" });
-      const view = viewOf(onPasswordStep);
-
-      // When
-      await signUp.setPassword({ password: "password1" }, view);
-
-      // Then
-      expect(view.latest().error).toBe(
-        "パスワードは8文字以上で、英字と数字の両方を含めてください。",
-      );
-      expect(view.latest().pending).toBeNull();
-      expect(navigation.go).not.toHaveBeenCalled();
     });
 
     it("遷移が投げたら、通信エラーとして失敗にし、実行中のまま止めない", async () => {
@@ -500,18 +324,6 @@ describe("サインアップの手続き", () => {
       expect(view.latest().pending).toBeNull();
     });
 
-    it("パスワードに不備があれば、不備だけを示し、設定しない", async () => {
-      // Given
-      const { signUp, authenticator, events, viewOf } = setup();
-
-      // When
-      await signUp.setPassword({ password: "" }, viewOf(onPasswordStep));
-
-      // Then
-      expect(types(events)).toEqual(["invalid"]);
-      expect(authenticator.setPassword).not.toHaveBeenCalled();
-    });
-
     it("同じタスクで続けて2回呼んでも、2回目は実行中を見て拒否され、設定と遷移は1回になる", async () => {
       // Given
       const { signUp, authenticator, navigation, viewOf } = setup();
@@ -526,21 +338,40 @@ describe("サインアップの手続き", () => {
       expect(authenticator.setPassword).toHaveBeenCalledOnce();
       expect(navigation.go).toHaveBeenCalledOnce();
     });
+  });
 
-    it("実行中なら、何も送らず、設定しない", async () => {
+  describe("共通の手続きへの接続", () => {
+    it("コードの再送は、登録の判定を持たず、共通の順序で送る", async () => {
       // Given
-      const { signUp, authenticator, events, viewOf } = setup();
-      const running = signUpReducer(onPasswordStep, {
-        type: "started",
-        operation: "setPassword",
-      });
+      const { signUp, authenticator, order, viewOf } = setup();
+      const view = viewOf(readyToResend);
 
       // When
-      await signUp.setPassword({ password: "password1" }, viewOf(running));
+      await signUp.resend({ email }, view);
 
       // Then
-      expect(events).toEqual([]);
-      expect(authenticator.setPassword).not.toHaveBeenCalled();
+      expect(authenticator.isRegistered).not.toHaveBeenCalled();
+      expect(authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
+        email,
+        captchaToken: "resend-token",
+      });
+      expect(order).toEqual(["started", "codeResent", "resetCheck"]);
+    });
+
+    it("コードの確認は、共通の順序で認証し、パスワード設定の段階へ進む", async () => {
+      // Given
+      const { signUp, authenticator, viewOf } = setup();
+      const view = viewOf(onCodeStep);
+
+      // When
+      await signUp.verifyCode({ email, code: "123456" }, view);
+
+      // Then
+      expect(authenticator.verifyCode).toHaveBeenCalledExactlyOnceWith({
+        email,
+        code: "123456",
+      });
+      expect(view.latest().step).toBe("password");
     });
   });
 
@@ -582,43 +413,6 @@ describe("サインアップの手続き", () => {
       // Then
       expect(types(events)).toEqual(["started"]);
       expect(resetCheck).not.toHaveBeenCalled();
-    });
-
-    it("コードの再送の待ちで離れたら、拒否を反映せず、チェックをやり直させない", async () => {
-      // Given
-      const { signUp, authenticator, events, screen, resetCheck, viewOf } =
-        setup();
-      const response = Promise.withResolvers<Delivery>();
-      authenticator.sendCode.mockReturnValue(response.promise);
-      const running = signUp.resend({ email }, viewOf(readyToResend));
-
-      // When
-      screen.mounted = false;
-      response.resolve({ kind: "refused", failure: { kind: "rate_limited" } });
-      await running;
-
-      // Then
-      expect(types(events)).toEqual(["started"]);
-      expect(resetCheck).not.toHaveBeenCalled();
-    });
-
-    it("コードの確認の待ちで離れたら、結果を反映しない", async () => {
-      // Given
-      const { signUp, authenticator, events, screen, viewOf } = setup();
-      const response = Promise.withResolvers<AuthFailure | null>();
-      authenticator.verifyCode.mockReturnValue(response.promise);
-      const running = signUp.verifyCode(
-        { email, code: "123456" },
-        viewOf(onCodeStep),
-      );
-
-      // When
-      screen.mounted = false;
-      response.resolve(null);
-      await running;
-
-      // Then
-      expect(types(events)).toEqual(["started"]);
     });
 
     it("パスワードの設定の待ちで離れたら、結果を反映せず、遷移しない", async () => {

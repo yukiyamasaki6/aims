@@ -7,6 +7,7 @@
 Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこの順にブラウザから呼ぶ。
 登録済みのメールアドレスは、コードを送る前にServer Actionで検出して拒否する。
 認証済みの`/signup`のリダイレクトは`proxy.ts`が担う。
+集約、手続きの共通の順序、画面の骨組みは、パスワード再設定と共有する。
 
 ## 画面と状態
 
@@ -27,14 +28,17 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 
 - `src/app/(auth)/signup/page.tsx`: 画面の入口。認証の実装(接続を作る関数`createClient`と、登録済み判定の関数を渡す)、遷移の実装、手続きを生成し、手続きを画面へ渡す。
 - `src/app/(auth)/signup/actions.ts`: 要求の入口。登録済み判定のServer Action。管理者の接続を渡して判定の実装を生成し、呼ぶ。
-- `src/features/auth/ui/signup-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。状態を`useScreenView`で持ち、操作のたびに入力と画面の約束(`ScreenView`)を手続きへ渡す。メール入力とコード入力は共有の段階の部品へ渡す。
-- `src/features/auth/application/sign-up.ts`: 手続き。状態を持たず、コードの送信、再送、確認、パスワードの設定の順序(可否と検証の判定、送信、離脱の判定、結果の出来事、チェックのやり直し、遷移)と、認証サービスへ頼むことの約束(`SignUpAuthenticator`)を持つ。
-- `src/features/auth/domain/sign-up-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、出来事の遷移(`signUpReducer`)と、操作の可否と入力の検証の順序(`checkSendCode`ほか)、確認・再送・戻るの排他、トークンの消費を守る。
-- `src/features/auth/domain/new-password.ts`、`auth-code.ts`、`resend-wait.ts`: 登録時のパスワードの強さ、認証コード、再送の待ち時間の規則と文言(値オブジェクト)。パスワード再設定(`features/auth/reset-password/`)も、同じ機能の中から相対パスで使う。
+- `src/features/auth/ui/signup-form.tsx`: サインアップの画面の文言とリンク(見出し、サインインへのリンク、パスワード設定の段階の文言)。パスワード再設定と共有の骨組みへ渡す。
+- `src/features/auth/ui/password-setup-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。状態を`useScreenView`で持ち、操作のたびに入力と画面の約束(`ScreenView`)を手続きへ渡す。メール入力とコード入力は段階の部品へ渡す。パスワード再設定と共有する。
+- `src/features/auth/application/sign-up.ts`: 手続き。コードの送信(登録済みの判定を含む)と、パスワード設定の後の遷移(`/rounds`)を持つ。再送、確認と、操作の開始、コードの送信の依頼、パスワード設定の依頼は、共通の順序を使う。認証サービスへ頼むことの約束は、共通の約束に、登録済みの判定を足して持つ(`SignUpAuthenticator`)。
+- `src/features/auth/application/password-setup.ts`、`password-setup-authenticator.ts`: パスワード再設定と共有する、手続きの共通の順序(操作の開始、コードの送信の依頼、再送、確認、パスワード設定の依頼)と、認証サービスへ頼むこと(コードの送信、確認、パスワードの設定)の約束。
+- `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、出来事の遷移(`passwordSetupReducer`)と、操作の可否と入力の検証の順序(`checkSendCode`ほか)、確認・再送・戻るの排他、トークンの消費を守る。パスワード再設定と共有する。
+- `src/features/auth/domain/new-password.ts`、`auth-code.ts`、`resend-wait.ts`: パスワードの強さ、認証コード、再送の待ち時間の規則と文言(値オブジェクト)。パスワード再設定も使う。
 - `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(登録済みを含む)と利用者向けの文言。
-- `src/features/auth/infrastructure/supabase-sign-up-authenticator.ts`: `signInWithOtp`、`verifyOtp`、`updateUser`の呼び出し。エラーは`toAuthFailure`で失敗の種類に写す。応答が無かった場合(接続を作れない、呼び出しが投げた、判定の関数が失敗した)は、応答が無かったこととして返す。
+- `src/features/auth/infrastructure/supabase-sign-up-authenticator.ts`: `signInWithOtp`、`verifyOtp`、`updateUser`の呼び出しと、登録済みの判定(サーバーの関数を受け取って呼ぶ)。呼び出しの結果は、`supabase-auth-call.ts`の変換で値にする。応答が無かった場合(接続を作れない、呼び出しが投げた、判定の関数が失敗した)は、応答が無かったこととして返す。
+- `src/features/auth/infrastructure/supabase-auth-call.ts`: 認証サービスの呼び出しを、例外を投げずに値で返す変換。サインイン、サインアップ、パスワード再設定の認証の実装が使う。
 - `src/features/auth/infrastructure/supabase-registration-check.ts`: 管理者キーで確認済みかを調べる登録済み判定。
-- `src/features/auth/ui/otp-email-step.tsx`、`otp-code-step.tsx`: メール入力とコード入力の段階の描画。パスワード再設定(`features/auth/reset-password/`)も相対パスで参照する。
+- `src/features/auth/ui/otp-email-step.tsx`、`otp-code-step.tsx`: メール入力とコード入力の段階の描画。パスワード再設定も使う。
 - `src/hooks/use-countdown.ts`: 再送できるまでの秒数を1秒ごとに進める。
 - `src/app/(auth)/layout.tsx`、`src/components/auth-header.tsx`、`src/components/turnstile.tsx`: 認証画面の共通部品と枠。
 - `supabase/migrations/20261016000000_users.sql`: `auth.users`のINSERTで`public.users`を作るトリガー。
@@ -59,7 +63,7 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 | --- | --- | --- |
 | マジックリンクでなくOTPで本人確認する | PKCE、`redirect_to`の許可リスト、ホスト名の不一致の問題が連鎖したため、マジックリンクは採らない。詳細: #90 | SupabaseのマジックリンクのPKCE対応が安定したとき |
 | 登録済みのメールアドレスには、コードを送らずエラーにする | 登録済みのアドレスでOTPを確認すると、既存アカウントのパスワードを上書きできるため。ユーザー列挙のリスクは受け入れた | 列挙対策が必要になったとき |
-| 4つの操作を1つの手続きと1つの集約で持つ | 約束と集約と再送の順序を共有し、同じ理由で変わるため。段階ごとに集約を分けると、1つの出来事が2つの集約を同時に変える | 段階が互いに独立して変わるようになったとき |
+| 4つの操作を1つの手続きと1つの集約で持ち、集約、手続きの共通の順序、画面の骨組みはパスワード再設定と共有する。サインアップだけの動作(登録済みの判定、`/rounds`への遷移)は`sign-up.ts`に置く | 約束と集約と再送の順序を共有し、同じ理由で変わるため。段階ごとに集約を分けると、1つの出来事が2つの集約を同時に変える。サインアップと再設定は、認証コードでの本人確認とパスワード設定の規則が変わる理由が同じで、複製を残す理由が無い | 段階が互いに独立して変わるようになったとき、または登録と再設定の規則が分かれるとき |
 | 確認・再送・戻るを排他にし、実行中の操作を集約の1つの値で守る | 遅れて届いた応答が別の状態へ反映される不整合が起きたため、独立した操作をやめた | 非同期の応答を世代管理する方式にするとき |
 | 応答があった送信と再送だけトークンを消費し、応答が無かった失敗は保持する | 使っていないトークンの取り直しを強いないため。認証サービスが通信の失敗を値で返す場合は応答があったとして消費する(変更前と同じ) | 認証サービスの通信の失敗の扱いが変わるとき |
 | ネイティブの`disabled`を使わず、`aria-disabled`と検証メッセージで表す | 空入力、captcha未完了、クールダウン中の理由を利用者へ伝えるため | 理由を別の方法で利用者へ伝えるとき |
@@ -70,4 +74,4 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 
 - 確認後はセッションが確立済みのため、パスワード設定の前に再読み込みすると、`/rounds`へリダイレクトされ、パスワードのないアカウントが残りうる。
 - 登録済みの検出により、メールアドレスの登録有無が利用者から分かる。
-- パスワード再設定は従来の形(`reducer`とハンドラー)のままで、サインアップとは別の構成が併存する。確認・再送・戻るの排他などの変更は、再設定の画面にも入れる必要がある。
+- 集約、手続きの共通の順序、画面の骨組みは、パスワード再設定と共有する。これらを変えるときは、サインアップと再設定の両方の振る舞いを確かめる。

@@ -34,7 +34,8 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/domain/captcha-token.ts`、`password-input.ts`: セキュリティチェックのトークンと、パスワードの入力の規則と文言(値オブジェクト)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
 - `src/features/auth/domain/return-to.ts`: 遷移元の規則(値オブジェクト)。許可するのは`/rounds`配下の同一オリジンのパスだけ。遷移元付きの`/signin`のURL生成(`signInHref`)と、クエリからの読み取り(`readReturnTo`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
 - `src/features/auth/index.ts`: 認証の機能の入口。ドメイン層の関数と定数(`NETWORK_ERROR_MESSAGE`、`readReturnTo`、`signInHref`)を、別名なしで再公開する。
-- `src/features/auth/infrastructure/supabase-authenticator.ts`: `signInWithPassword`の呼び出し。接続は、渡された関数で照合のたびに取得する。エラーは`toAuthFailure`で失敗の種類に写し、例外(接続を作れない場合を含む)は届かない失敗に変える。
+- `src/features/auth/infrastructure/supabase-authenticator.ts`: `signInWithPassword`の呼び出し。接続は、渡された関数で照合のたびに取得する。エラーを失敗の種類に写し、例外(接続を作れない場合を含む)を届かない失敗に変える変換は、`supabase-auth-call.ts`の`toFailure`に委ねる。
+- `src/features/auth/infrastructure/supabase-auth-call.ts`: 認証サービスの呼び出しを、例外を投げずに値で返す変換(`toFailure`、`toDelivery`)。エラーは`toAuthFailure`で失敗の種類に写す。サインイン、サインアップ、パスワード再設定の認証の実装が使う。
 - `src/features/auth/infrastructure/supabase-auth-failure.ts`: 認証サービスのエラー(通信の断を含む)を失敗の種類に写す(`toAuthFailure`。通信の断は名前で先に判定する)。エラーから直接文言を得る`authErrorMessage`も持つ。
 - `src/features/auth/infrastructure/browser-navigation.ts`: 現在のURLからの許可された遷移元の読み出し(`readReturnTo`)と、routerによる遷移。
 - `src/features/auth/ui/use-screen-view.ts`: 画面の状態を持つ汎用のフック。`reducer`で遷移させる状態を、最新の値の`ref`と描画用の`useState`で持ち、画面の約束`ScreenView`を作る。
@@ -76,5 +77,5 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 
 - 再試行の回数制限は、captcha以外に設けていない。
 - signup・reset-passwordを経由すると遷移元は引き継がない。
-- 認証の機能が他の機能へ公開する名前は、入口の`NETWORK_ERROR_MESSAGE`、`readReturnTo`、`signInHref`だけである。他の機能のファイルは、認証の機能の内部を参照せず、入口だけを参照する。同じ機能の中の未適用のファイル(`errors.ts`、`session-guard.ts`、`features/auth/reset-password/`のファイル)は、入口を経由せず、`domain/`のファイルを相対パスで参照する。
+- 認証の機能が他の機能へ公開する名前は、入口の`NETWORK_ERROR_MESSAGE`、`readReturnTo`、`signInHref`だけである。他の機能のファイルは、認証の機能の内部を参照せず、入口だけを参照する。同じ機能の中の未適用のファイル(`errors.ts`、`session-guard.ts`、`session-state.ts`、`local-identity.ts`)は、入口を経由せず、`domain/`のファイルを相対パスで参照する。
 - `sign-out.ts`は、入口に出せない外部のエラーの変換`authErrorMessage`を、`infrastructure/supabase-auth-failure`から層までのパスで参照する(`docs/architecture.md`第16節)。

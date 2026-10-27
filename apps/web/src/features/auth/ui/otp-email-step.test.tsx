@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { forwardRef } from "react";
+import { type ComponentProps, forwardRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { EMAIL_MAX_LENGTH } from "../domain/email-address";
-import { OtpEmailStep, type OtpEmailStepModel } from "./otp-email-step";
+import { OtpEmailStep } from "./otp-email-step";
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、errorの受け渡しを確かめられるスタブで模す。
 vi.mock("@/components/turnstile", () => ({
@@ -19,32 +19,37 @@ vi.mock("@/components/turnstile", () => ({
   ),
 }));
 
-function createForm(overrides: Partial<OtpEmailStepModel> = {}) {
+type Props = ComponentProps<typeof OtpEmailStep>;
+
+function createForm(overrides: Partial<Props> = {}) {
   return {
+    idPrefix: "test",
+    title: "タイトル",
+    footer: <p>フッター</p>,
     email: "",
-    setEmail: vi.fn(),
-    emailFieldErrors: {},
-    primarySubmitting: false,
+    onEmailChange: vi.fn(),
+    fieldErrors: {},
+    submitting: false,
     error: null,
     hydrated: true,
-    handleSendCode: vi.fn((e) => e.preventDefault()),
-    turnstileRef: { current: undefined },
-    setCaptchaToken: vi.fn(),
-    captchaToken: null,
+    onSubmit: vi.fn((e) => e.preventDefault()),
+    checkRef: { current: undefined },
+    onCheck: vi.fn(),
+    checked: false,
     ...overrides,
-  } satisfies OtpEmailStepModel;
+  } satisfies Props;
 }
 
 function renderStep(
-  form: OtpEmailStepModel,
+  form: Props,
   props: { idPrefix?: string; title?: string; footer?: string } = {},
 ) {
   return render(
     <OtpEmailStep
-      form={form}
-      idPrefix={props.idPrefix ?? "test"}
-      title={props.title ?? "タイトル"}
-      footer={<p>{props.footer ?? "フッター"}</p>}
+      {...form}
+      idPrefix={props.idPrefix ?? form.idPrefix}
+      title={props.title ?? form.title}
+      footer={props.footer ? <p>{props.footer}</p> : form.footer}
     />,
   );
 }
@@ -75,7 +80,7 @@ describe("OtpEmailStep", () => {
 
       // When
       const form = createForm({
-        emailFieldErrors: { email: "メールのエラー" },
+        fieldErrors: { email: "メールのエラー" },
       });
       renderStep(form, { idPrefix: "reset-password" });
 
@@ -116,7 +121,7 @@ describe("OtpEmailStep", () => {
 
       // Then
       expect(input).toHaveValue("a@example.com");
-      expect(form.setEmail).toHaveBeenCalledWith("a@example.comb");
+      expect(form.onEmailChange).toHaveBeenCalledWith("a@example.comb");
     });
 
     it("送信でhandleSendCodeを呼ぶ", () => {
@@ -128,7 +133,7 @@ describe("OtpEmailStep", () => {
       fireEvent.submit(screen.getByPlaceholderText("you@example.com"));
 
       // Then
-      expect(form.handleSendCode).toHaveBeenCalledTimes(1);
+      expect(form.onSubmit).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -151,7 +156,7 @@ describe("OtpEmailStep", () => {
 
       // When
       const form = createForm({
-        emailFieldErrors: { captcha: "captchaのエラー" },
+        fieldErrors: { captcha: "captchaのエラー" },
       });
       renderStep(form);
 
@@ -159,11 +164,11 @@ describe("OtpEmailStep", () => {
       expect(screen.getByText("captchaのエラー")).toBeInTheDocument();
     });
 
-    it("primarySubmittingのとき、送信ボタンをaria-disabledにしスピナーを出す", () => {
+    it("submittingのとき、送信ボタンをaria-disabledにしスピナーを出す", () => {
       // Given
 
       // When
-      const form = createForm({ primarySubmitting: true });
+      const form = createForm({ submitting: true });
       renderStep(form);
 
       // Then
@@ -176,7 +181,7 @@ describe("OtpEmailStep", () => {
       // Given
 
       // When
-      const form = createForm({ primarySubmitting: false });
+      const form = createForm({ submitting: false });
       renderStep(form);
 
       // Then
@@ -206,12 +211,12 @@ describe("OtpEmailStep", () => {
       expect(notReadyValue).toBe("false");
     });
 
-    it("captchaTokenの有無を送信ボタンのdata-captcha-readyに反映する", () => {
+    it("セキュリティチェックの完了を送信ボタンのdata-captcha-readyに反映する", () => {
       // Given
 
       // When
-      const ready = createForm({ captchaToken: "token" });
-      const notReady = createForm({ captchaToken: null });
+      const ready = createForm({ checked: true });
+      const notReady = createForm({ checked: false });
       const { unmount } = renderStep(ready);
       const readyValue = screen
         .getByRole("button", { name: "認証コードを送信" })

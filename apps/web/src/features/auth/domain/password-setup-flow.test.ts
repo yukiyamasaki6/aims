@@ -5,11 +5,11 @@ import {
   checkSendCode,
   checkSetPassword,
   checkVerifyCode,
-  initialSignUpFlow,
-  type SignUpEvent,
-  type SignUpFlow,
-  signUpReducer,
-} from "./sign-up-flow";
+  initialPasswordSetupFlow,
+  type PasswordSetupEvent,
+  type PasswordSetupFlow,
+  passwordSetupReducer,
+} from "./password-setup-flow";
 
 const NETWORK_ERROR_MESSAGE =
   "通信エラーが発生しました。しばらくしてから再度お試しください。";
@@ -17,19 +17,19 @@ const CAPTCHA_MESSAGE = "セキュリティチェックが完了していませ�
 const WAIT_MESSAGE =
   "再送はクールダウン中です。しばらくしてから再度お試しください。";
 
-type Operation = NonNullable<SignUpFlow["pending"]>;
+type Operation = NonNullable<PasswordSetupFlow["pending"]>;
 const OPERATIONS: Operation[] = ["send", "verify", "resend", "setPassword"];
-const PENDING_VALUES: SignUpFlow["pending"][] = [null, ...OPERATIONS];
+const PENDING_VALUES: PasswordSetupFlow["pending"][] = [null, ...OPERATIONS];
 
-function flowWith(overrides: Partial<SignUpFlow>): SignUpFlow {
-  return { ...initialSignUpFlow, ...overrides };
+function flowWith(overrides: Partial<PasswordSetupFlow>): PasswordSetupFlow {
+  return { ...initialPasswordSetupFlow, ...overrides };
 }
 
-describe("サインアップの試みの遷移", () => {
+describe("パスワード設定の流れの遷移", () => {
   describe("初期の状態", () => {
     it("実行中の操作が無く、メールアドレスの段階で、トークンと待ち時間を持たない", () => {
       // Given
-      const flow = initialSignUpFlow;
+      const flow = initialPasswordSetupFlow;
 
       // When
       const { step, pending, captchaToken, resendCooldown, error } = flow;
@@ -49,7 +49,10 @@ describe("サインアップの試みの遷移", () => {
       const flow = flowWith({ pending: "resend", resendCooldown: 5 });
 
       // When
-      const next = signUpReducer(flow, { type: "checked", token: "token" });
+      const next = passwordSetupReducer(flow, {
+        type: "checked",
+        token: "token",
+      });
 
       // Then
       expect(next).toEqual({ ...flow, captchaToken: "token" });
@@ -60,7 +63,7 @@ describe("サインアップの試みの遷移", () => {
       const flow = flowWith({ captchaToken: "token" });
 
       // When
-      const next = signUpReducer(flow, { type: "checked", token: null });
+      const next = passwordSetupReducer(flow, { type: "checked", token: null });
 
       // Then
       expect(next.captchaToken).toBeNull();
@@ -78,7 +81,7 @@ describe("サインアップの試みの遷移", () => {
         });
 
         // When
-        const next = signUpReducer(flow, { type: "started", operation });
+        const next = passwordSetupReducer(flow, { type: "started", operation });
 
         // Then
         expect(next.error).toBeNull();
@@ -90,10 +93,10 @@ describe("サインアップの試みの遷移", () => {
       "%sの開始は、実行中の操作をその操作にする",
       (operation) => {
         // Given
-        const flow = initialSignUpFlow;
+        const flow = initialPasswordSetupFlow;
 
         // When
-        const next = signUpReducer(flow, { type: "started", operation });
+        const next = passwordSetupReducer(flow, { type: "started", operation });
 
         // Then
         expect(next.pending).toBe(operation);
@@ -105,7 +108,7 @@ describe("サインアップの試みの遷移", () => {
       const flow = flowWith({ step: "code", resendCooldown: 0 });
 
       // When
-      const next = signUpReducer(flow, {
+      const next = passwordSetupReducer(flow, {
         type: "started",
         operation: "resend",
       });
@@ -121,7 +124,7 @@ describe("サインアップの試みの遷移", () => {
         const flow = flowWith({ step: "code", resendCooldown: 17 });
 
         // When
-        const next = signUpReducer(flow, { type: "started", operation });
+        const next = passwordSetupReducer(flow, { type: "started", operation });
 
         // Then
         expect(next.resendCooldown).toBe(17);
@@ -146,7 +149,10 @@ describe("サインアップの試みの遷移", () => {
         });
 
         // When
-        const next = signUpReducer(flow, { type: "invalid", fieldErrors });
+        const next = passwordSetupReducer(flow, {
+          type: "invalid",
+          fieldErrors,
+        });
 
         // Then
         expect(next.error).toBeNull();
@@ -166,7 +172,7 @@ describe("サインアップの試みの遷移", () => {
       });
 
       // When
-      const next = signUpReducer(flow, { type: "codeSent" });
+      const next = passwordSetupReducer(flow, { type: "codeSent" });
 
       // Then
       expect(next.step).toBe("code");
@@ -191,7 +197,7 @@ describe("サインアップの試みの遷移", () => {
       });
 
       // When
-      const next = signUpReducer(flow, { type: "codeResent" });
+      const next = passwordSetupReducer(flow, { type: "codeResent" });
 
       // Then
       expect(next).toEqual({ ...flow, captchaToken: null, pending: null });
@@ -210,7 +216,7 @@ describe("サインアップの試みの遷移", () => {
       });
 
       // When
-      const next = signUpReducer(flow, { type: "codeConfirmed" });
+      const next = passwordSetupReducer(flow, { type: "codeConfirmed" });
 
       // Then
       expect(next.step).toBe("password");
@@ -254,7 +260,7 @@ describe("サインアップの試みの遷移", () => {
         });
 
         // When
-        const next = signUpReducer(flow, { type: "failed", failure });
+        const next = passwordSetupReducer(flow, { type: "failed", failure });
 
         // Then
         expect(next.error).toBe(message);
@@ -273,7 +279,7 @@ describe("サインアップの試みの遷移", () => {
       });
 
       // When
-      const next = signUpReducer(flow, {
+      const next = passwordSetupReducer(flow, {
         type: "failed",
         failure: { kind: "unreachable" },
       });
@@ -295,7 +301,7 @@ describe("サインアップの試みの遷移", () => {
       });
 
       // When
-      const next = signUpReducer(flow, {
+      const next = passwordSetupReducer(flow, {
         type: "refused",
         failure: { kind: "rate_limited" },
       });
@@ -314,7 +320,7 @@ describe("サインアップの試みの遷移", () => {
       const flow = flowWith({ captchaToken: "used", pending: "send" });
 
       // When
-      const next = signUpReducer(flow, {
+      const next = passwordSetupReducer(flow, {
         type: "refused",
         failure: { kind: "captcha_failed" },
       });
@@ -330,7 +336,7 @@ describe("サインアップの試みの遷移", () => {
       const flow = flowWith({ resendCooldown: 5 });
 
       // When
-      const next = signUpReducer(flow, { type: "ticked" });
+      const next = passwordSetupReducer(flow, { type: "ticked" });
 
       // Then
       expect(next.resendCooldown).toBe(4);
@@ -341,7 +347,7 @@ describe("サインアップの試みの遷移", () => {
       const flow = flowWith({ resendCooldown: 1 });
 
       // When
-      const next = signUpReducer(flow, { type: "ticked" });
+      const next = passwordSetupReducer(flow, { type: "ticked" });
 
       // Then
       expect(next.resendCooldown).toBe(0);
@@ -360,7 +366,7 @@ describe("サインアップの試みの遷移", () => {
       });
 
       // When
-      const next = signUpReducer(flow, { type: "backed" });
+      const next = passwordSetupReducer(flow, { type: "backed" });
 
       // Then
       expect(next.step).toBe("email");
@@ -382,7 +388,7 @@ describe("サインアップの試みの遷移", () => {
         });
 
         // When
-        const next = signUpReducer(flow, { type: "backed" });
+        const next = passwordSetupReducer(flow, { type: "backed" });
 
         // Then
         expect(next).toBe(flow);
@@ -392,7 +398,7 @@ describe("サインアップの試みの遷移", () => {
 
   // 実行中の解除は結果の出来事だけが行う。他の出来事が実行中を変えると、操作の排他が崩れる。
   describe("実行中の操作を変えない出来事", () => {
-    const events: SignUpEvent[] = [
+    const events: PasswordSetupEvent[] = [
       { type: "backed" },
       { type: "ticked" },
       { type: "invalid", fieldErrors: { email: "x" } },
@@ -405,7 +411,7 @@ describe("サインアップの試みの遷移", () => {
         const flow = flowWith({ step: "code", resendCooldown: 5, pending });
 
         // When
-        const next = signUpReducer(flow, event);
+        const next = passwordSetupReducer(flow, event);
 
         // Then
         expect(next.pending).toBe(pending);
@@ -414,7 +420,7 @@ describe("サインアップの試みの遷移", () => {
   });
 
   describe("実行中を解除する出来事", () => {
-    const results: SignUpEvent[] = [
+    const results: PasswordSetupEvent[] = [
       { type: "codeSent" },
       { type: "codeResent" },
       { type: "codeConfirmed" },
@@ -429,7 +435,7 @@ describe("サインアップの試みの遷移", () => {
         const flow = flowWith({ step: "code", pending });
 
         // When
-        const next = signUpReducer(flow, event);
+        const next = passwordSetupReducer(flow, event);
 
         // Then
         expect(next.pending).toBeNull();
@@ -444,7 +450,7 @@ describe("操作の可否と入力の検証", () => {
   const onCodeFlow = flowWith({ step: "code" });
   const onPasswordFlow = flowWith({ step: "password" });
 
-  type Step = SignUpFlow["step"];
+  type Step = PasswordSetupFlow["step"];
   const Steps: Step[] = ["email", "code", "password"];
 
   describe.each([
@@ -463,8 +469,8 @@ describe("操作の可否と入力の検証", () => {
       "password",
     ],
   ] as const)("%s", (_name, check, validInput, ownStep) => {
-    const run = (flow: SignUpFlow, input: unknown) =>
-      (check as (f: SignUpFlow, i: unknown) => unknown)(flow, input);
+    const run = (flow: PasswordSetupFlow, input: unknown) =>
+      (check as (f: PasswordSetupFlow, i: unknown) => unknown)(flow, input);
 
     it.each(OPERATIONS)(
       "実行中が%sなら、入力が正しくても実行中と返す",

@@ -4,56 +4,58 @@
 
 `/reset-password`でメールアドレス、認証コード(OTP)、新しいパスワードの3段階を進める。
 `resetPasswordForEmail`でコードを送り、`verifyOtp`(type: recovery)で確認し、`updateUser`でパスワードを変える。
-変更後はサインアウトして`/signin`へ移り、自動ではサインインしない。
+変更後はその利用者の全ての端末のサインインを終え、ページ全体を読み込み直して`/signin`へ移り、自動ではサインインしない。
 送信と再送にはTurnstileを使い、`verifyOtp`には使わない。
-認証コードの入力の段階は、サインアップと同じ部品(`features/auth/ui/`)を使う。手順と状態遷移は従来の形である。
+手順と状態の規則は、サインアップと共有する(集約、手続きの共通の順序、画面の骨組み)。再設定だけが持つのは、登録の有無を判定しないこと、コードの種類、変更後のサインインの終了と遷移である。
 認証済みで`/reset-password`を開くと、共通の認証ガードが`/rounds`へ送る。
 
 ## 画面と状態
 
-状態は`reset-password-flow.ts`のreducerが持つ。
-
 | 状態 | 表示 | 次の状態 |
 | --- | --- | --- |
-| メール入力 | メールアドレス、captcha、送信、サインインへのリンク | 送信成功でコード入力、リンクで`/signin`、検証・送信失敗はエラー表示、送信中は送信ボタンを無効にする |
-| コード入力 | 認証コード、確認、再送、戻る。迷惑メールの確認を案内する | 確認成功でパスワード設定、戻るでメール入力、再送、確認・再送の失敗はエラー表示、処理中は3つのボタンを無効にする |
-| パスワード設定 | 新しいパスワード(表示切替つき)、変更 | 成功でサインアウトして`/signin`、検証・変更失敗はエラー表示、処理中は変更ボタンを無効にする |
+| メール入力 | メールアドレス、captcha、送信、サインインへのリンク | 送信成功でコード入力、リンクで`/signin`、検証・送信失敗はエラー表示、送信中は送信ボタンを`aria-disabled`にする |
+| コード入力 | 認証コード、確認、再送、戻る。迷惑メールの確認を案内する | 確認成功でパスワード設定、戻るでメール入力、再送、確認・再送の失敗はエラー表示、処理中は3つのボタンを`aria-disabled`にする |
+| パスワード設定 | 新しいパスワード(表示切替つき)、変更 | 成功でサインインを終えて`/signin`、検証・変更失敗はエラー表示、処理中は変更ボタンを`aria-disabled`にする |
 
-- コード入力では、確認・再送・戻るが互いに排他である。
+- コード入力では、確認・再送・戻るが互いに排他である。段階の操作は、その段階でだけ受け付ける。
 - 再送にはクールダウンがあり、中の再送はエラーを表示する。
 
 ## 構成とデータの流れ
 
-- `src/app/(auth)/reset-password/page.tsx`: サーバー側。レイアウトのみ。
-- `src/features/auth/reset-password/reset-password-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。メール入力とコード入力は共通の部品へ見出しとリンクを渡す。
-- `src/features/auth/reset-password/use-reset-password-form.ts`: 入力値、reducerの状態、captcha、二重送信の防止、再送までの秒数を持つ。
-- `src/features/auth/reset-password/use-reset-password-handlers.ts`: コードの送信、確認、再送、パスワードの設定、戻るの送信と応答の処理。
-- `src/features/auth/reset-password/use-captcha.ts`: captchaのトークン。使用済みのトークンは消費して取り直す。
-- `src/features/auth/reset-password/use-submit-guard.ts`: 送信中の表示と、二重送信の判定(同期のref)。
+構造の方針は`docs/architecture.md`に従う。
+
+- `src/app/(auth)/reset-password/page.tsx`: 画面の入口。認証の実装(接続を作る関数`createClient`を渡す)、ページ全体の読み込みの実装、手続きを生成し、手続きを画面へ渡す。
+- `src/features/auth/ui/reset-password-form.tsx`: 再設定の画面の文言とリンク(見出し、サインインへのリンク、パスワード設定の段階の文言)。サインアップと共有の骨組みへ渡す。
+- `src/features/auth/ui/password-setup-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。状態を`useScreenView`で持ち、操作のたびに入力と画面の約束(`ScreenView`)を手続きへ渡す。サインアップと共有する。
+- `src/features/auth/ui/otp-email-step.tsx`、`otp-code-step.tsx`: メール入力とコード入力の段階の描画。サインアップと共有する。
+- `src/features/auth/application/reset-password.ts`: 手続き。状態を持たず、コードの送信、再送、確認、パスワードの設定の順序と、パスワード設定の後のサインインの終了とページ全体の読み込みを持つ。認証サービスへ頼むこと(`ResetPasswordAuthenticator`。共通の約束に、サインインの終了を足す)と、ページ全体の読み込みの約束(`PageLoad`)を持つ。
+- `src/features/auth/application/password-setup.ts`、`password-setup-authenticator.ts`: サインアップと共有する、手続きの共通の順序(操作の開始、コードの送信の依頼、再送、確認、パスワード設定の依頼)と、認証サービスへ頼むことの約束。
+- `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、出来事の遷移と、操作の可否と入力の検証の順序、確認・再送・戻るの排他、トークンの消費を守る。サインアップと共有する。
+- `src/features/auth/domain/new-password.ts`、`auth-code.ts`、`resend-wait.ts`、`email-address.ts`、`captcha-token.ts`、`auth-failure.ts`、`return-to.ts`: 新しいパスワードの強さ、認証コード、再送の待ち時間、メールアドレス、セキュリティチェック、失敗の種類、遷移先の規則と文言(値オブジェクト)。
+- `src/features/auth/infrastructure/supabase-reset-password-authenticator.ts`: `resetPasswordForEmail`、`verifyOtp`、`updateUser`と、`signOut`(範囲を指定せず、全ての端末)の呼び出し。エラーは`toAuthFailure`で失敗の種類に写す。応答が無かった場合(接続を作れない、呼び出しが投げた)は、応答が無かったこととして返す。
+- `src/features/auth/infrastructure/supabase-auth-call.ts`: 認証サービスの呼び出しを、例外を投げずに値で返す変換。
+- `src/features/auth/infrastructure/browser-page-load.ts`: `window.location.assign`によるページ全体の読み込み。
 - `src/hooks/use-countdown.ts`: 再送できるまでの秒数を1秒ごとに進める。
-- `src/features/auth/reset-password/reset-password-flow.ts`: 段階、エラー、コード入力の処理中を持つreducer。
-- `src/features/auth/ui/otp-email-step.tsx`: メール入力の段階の描画。
-- `src/features/auth/ui/otp-code-step.tsx`: コード入力の段階の描画。確認、再送、戻る。
-- `src/features/auth/reset-password/validate.ts`: メールアドレス、コード、パスワード、再送の可否の、欄ごとのエラーの形。規則と文言はドメイン層の関数に委ねる。
-- `src/features/auth/infrastructure/supabase-auth-failure.ts`の`authErrorMessage`: エラーコードを日本語にする。
+- `src/app/(auth)/layout.tsx`、`src/components/auth-header.tsx`、`src/components/turnstile.tsx`: 認証画面の共通部品と枠。
 
 契約は次のとおりである。
 
-- メールアドレスは254文字以内、コードは6桁、パスワードは半角英数字と記号で8〜72文字である。
-- パスワードが英字と数字を含む要件は、`updateUser`の前に`validatePasswordField`で検証し、満たさなければ送信しない。
-- Supabaseが`password_requirements`(`supabase/config.toml`では`letters_digits`)で拒否した場合の`weak_password`は、`authErrorMessage`が翻訳する。
-- captchaトークンは再送のたびに消費されるため、毎回取り直す。
-- 再送の間隔は`max_frequency`で、productionとpreviewは60秒、ローカルとCIは1秒である。
-- パスワード変更後は`signOut()`し、`window.location.assign("/signin")`で遷移する。
+- メールアドレスは254文字以内、コードは6桁、パスワードは半角英数字と記号で8〜72文字で、英字と数字を含む。送信前に検証し、満たさなければ送信しない。
+- Supabaseが`password_requirements`(`supabase/config.toml`では`letters_digits`)で拒否した場合の`weak_password`は、失敗の種類の文言で示す。
+- captchaトークンは、認証サービスが応答した送信と再送(成功も拒否も)で消費し、取り直させる。送信と再送が例外で終わった場合は、使っていないので消費せず、同じトークンで再試行できる。確認とパスワード設定には使わない。
+- 再送の間隔は`max_frequency`で、productionとpreviewは60秒、ローカルとCIは1秒である。クールダウンは、再送の開始時に始まる。
+- パスワード変更の成功後は、送信中を解除せず、サインインを終え(`signOut()`)、ページ全体を読み込んで`/signin`へ遷移する。
 
 ## 設計判断
 
 | 判断 | 理由 | 見直す条件 |
 | --- | --- | --- |
 | マジックリンクでなくOTPを使い、メールのテンプレートを差し替える | 同じ画面の中でコードを入力して完結できるため | メール到達の問題が解消されたとき |
-| 変更後はサインアウトして`/signin`へ移り、自動サインインしない | 再設定後に改めて本人確認できるため | 再設定後の自動サインインを要求に加えるとき |
-| 確認・再送・戻るを排他にする | 並行操作で状態が壊れたため、確認中と再送中を独立させる方式をやめた。詳細: #545 | 応答を世代管理する方式にするとき |
-| ネイティブの`disabled`、`required`、`minLength`を使わず、クライアント検証と`aria-disabled`と同期refを使う | 理由を利用者へ伝え、E2Eでの二重送信を防ぐため | 検証の理由を別の方法で利用者へ伝えるとき |
+| 変更後はサインインを終えて`/signin`へ移り、自動サインインしない | 再設定後に改めて本人確認できるため | 再設定後の自動サインインを要求に加えるとき |
+| 集約、手続きの共通の順序、画面の骨組みをサインアップと共有し、再設定だけの動作は再設定の手続きと実装に置く | 認証コードでの本人確認とパスワード設定の規則が変わる理由が同じで、複製を残す理由が無いため。登録の判定の有無、コードの種類、設定後の動作は、共有の部品に分岐として入れない | 再設定とサインアップの規則が分かれるとき |
+| 確認・再送・戻るを排他にし、実行中の操作を集約の1つの値で守る | 並行操作で状態が壊れたため、確認中と再送中を独立させる方式をやめた。詳細: #545 | 応答を世代管理する方式にするとき |
+| ページ全体の読み込みを再設定の手続きの約束にし、`Navigation`に足さない | 再設定だけが使う操作を、サインインの汎用の約束に集めないため。前の画面の状態とクライアントのキャッシュを捨てるため、routerの遷移は使わない | サインアウトがページ全体の読み込みを使うとき |
+| ネイティブの`disabled`、`required`、`minLength`を使わず、クライアント検証と`aria-disabled`を使う | 理由を利用者へ伝え、E2Eでの二重送信を防ぐため | 検証の理由を別の方法で利用者へ伝えるとき |
 | パスワードの長さを`maxLength`でなく送信時に検証する。メールアドレスとコードは、入力欄の`maxLength`で入力時に制限し、送信時にも検証する | Playwrightの`fill()`が`maxLength`で切り詰めるため。サインインのパスワード欄には適用しない | パスワード規則を変えるとき |
 | 認証済みのリダイレクトを`proxy.ts`へ集約し、画面ごとのE2Eは残す | 実装を一箇所にまとめつつ、各画面の挙動を保証するため | ガードの実装を変えるとき |
 | captchaは送信と再送に適用し、`verifyOtp`には適用しない | ボットによるメール送信の濫用を防ぐため。テスト用キーは、previewのドメインを事前登録できないため | captchaの方式を変えるとき |
@@ -61,6 +63,8 @@
 
 ## 制約と未対応
 
-- 変更後の遷移には、`router.push`でなく`window.location.assign`によるハードナビゲーションを使う。
-- 再送のクールダウンは、再送の開始時に始まる。
-- 手順と状態遷移は、サインアップは構造方針の構成(集約と手続き)に、パスワード再設定は従来の形(`reducer`とハンドラー。認証の機能の未適用のファイルとして `features/auth/reset-password/` にある)にある。確認・再送・戻るの排他などの変更は、再設定の画面にも入れる必要がある(再設定の組み直しは別の作業)。
+- 画面を離れたとき、状態は更新せず、チェックのやり直しもしない。パスワードの変更の応答前に離れると、変更が成功していても、サインインの終了も遷移も行わず、セッションが残る。変更の応答後、サインインの終了の応答待ちに離れたときは、終了が投げなければ応答後に遷移し、投げたときは何もしない。
+- 変更の成功後にサインインの終了が投げたとき、パスワードは変更済みなのに通信エラーを示し、送信中を解除する。
+- 確認の成功後、パスワード設定の前に画面を閉じるか再読み込みすると、認証済みのセッションが残り、`/rounds`へリダイレクトされる。
+- 認証サービスの文言をそのまま使う失敗(失敗の種類が`other`)は、認証サービスの言語の文言のまま表示される。
+- 再設定が行うサインインの終了(全ての端末)と、レフトパネルのサインアウト(この端末だけ。`app/(main)/sign-out.ts`)は別の手続きで、サインアウトの適用時に持ち主を決める。

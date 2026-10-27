@@ -1,17 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type {
-  Delivery,
-  Registration,
-  SignUpAuthenticator,
-} from "../application/sign-up";
-import { toAuthFailure } from "./supabase-auth-failure";
-
-const UNREACHED = { kind: "unreached" } as const;
-const UNREACHABLE = { kind: "unreachable" } as const;
+import type { Registration, SignUpAuthenticator } from "../application/sign-up";
+import { toDelivery, toFailure } from "./supabase-auth-call";
 
 // 接続は、作る関数を受け取り、操作のたびにtryの中で取得する(環境変数の欠落は届かない失敗になる)。
 // 登録済みの判定は、サーバーの関数を受け取って呼ぶ。
-// 認証サービスのエラーは値で返ることがあり(応答があった)、呼び出しが投げたときは応答が無かったとして区別する。
 export function createSupabaseSignUpAuthenticator({
   getClient,
   isEmailRegistered,
@@ -26,41 +18,18 @@ export function createSupabaseSignUpAuthenticator({
           ? { kind: "registered" }
           : { kind: "unregistered" };
       } catch {
-        return UNREACHED;
+        return { kind: "unreached" };
       }
     },
-    async sendCode({ email, captchaToken }): Promise<Delivery> {
-      try {
-        const { error } = await getClient().auth.signInWithOtp({
-          email,
-          options: { captchaToken },
-        });
-        return error
-          ? { kind: "refused", failure: toAuthFailure(error) }
-          : { kind: "sent" };
-      } catch {
-        return UNREACHED;
-      }
-    },
-    async verifyCode({ email, code }) {
-      try {
-        const { error } = await getClient().auth.verifyOtp({
-          email,
-          token: code,
-          type: "email",
-        });
-        return error ? toAuthFailure(error) : null;
-      } catch {
-        return UNREACHABLE;
-      }
-    },
-    async setPassword(password) {
-      try {
-        const { error } = await getClient().auth.updateUser({ password });
-        return error ? toAuthFailure(error) : null;
-      } catch {
-        return UNREACHABLE;
-      }
-    },
+    sendCode: ({ email, captchaToken }) =>
+      toDelivery(() =>
+        getClient().auth.signInWithOtp({ email, options: { captchaToken } }),
+      ),
+    verifyCode: ({ email, code }) =>
+      toFailure(() =>
+        getClient().auth.verifyOtp({ email, token: code, type: "email" }),
+      ),
+    setPassword: (password) =>
+      toFailure(() => getClient().auth.updateUser({ password })),
   };
 }

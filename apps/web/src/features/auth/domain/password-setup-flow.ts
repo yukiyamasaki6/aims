@@ -8,7 +8,8 @@ import { validateEmail } from "./email-address";
 import { validateNewPassword } from "./new-password";
 import { RESEND_COOLDOWN_SECONDS, validateResendWait } from "./resend-wait";
 
-// サインアップの試み。段階、実行中の操作、再送の待ち時間、セキュリティチェックのトークンと、
+// 認証コードで本人確認をして、パスワードを設定する流れ(登録時と再設定時で同じ規則)。
+// 段階、実行中の操作、再送の待ち時間、セキュリティチェックのトークンと、
 // 操作の可否と入力の検証の順序、失敗の後の状態、トークンの消費を守る集約。
 
 type Operation = "send" | "verify" | "resend" | "setPassword";
@@ -21,7 +22,7 @@ type FieldErrors = {
   readonly password?: string;
 };
 
-export type SignUpFlow = {
+export type PasswordSetupFlow = {
   readonly step: "email" | "code" | "password";
   readonly captchaToken: string | null;
   readonly pending: Operation | null;
@@ -30,7 +31,7 @@ export type SignUpFlow = {
   readonly error: string | null;
 };
 
-export const initialSignUpFlow: SignUpFlow = {
+export const initialPasswordSetupFlow: PasswordSetupFlow = {
   step: "email",
   captchaToken: null,
   pending: null,
@@ -39,7 +40,7 @@ export const initialSignUpFlow: SignUpFlow = {
   error: null,
 };
 
-export type SignUpEvent =
+export type PasswordSetupEvent =
   | { type: "checked"; token: string | null }
   | { type: "ticked" }
   | { type: "backed" }
@@ -51,10 +52,10 @@ export type SignUpEvent =
   | { type: "failed"; failure: AuthFailure }
   | { type: "refused"; failure: AuthFailure };
 
-export function signUpReducer(
-  flow: SignUpFlow,
-  event: SignUpEvent,
-): SignUpFlow {
+export function passwordSetupReducer(
+  flow: PasswordSetupFlow,
+  event: PasswordSetupEvent,
+): PasswordSetupFlow {
   switch (event.type) {
     case "checked":
       return { ...flow, captchaToken: event.token };
@@ -90,13 +91,13 @@ export function signUpReducer(
 }
 
 type Settlement = Extract<
-  SignUpEvent,
+  PasswordSetupEvent,
   { type: "codeSent" | "codeResent" | "codeConfirmed" | "failed" | "refused" }
 >;
 
 // 操作の結果。実行中を解除し、結果を反映する。
 // コードの送信と再送は、認証サービスが応答すれば(成功も、拒否も)使ったトークンを消費する。応答が無かった失敗は、使っていないので消費しない。
-function settle(flow: SignUpFlow, event: Settlement): SignUpFlow {
+function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
   switch (event.type) {
     case "codeSent":
       return {
@@ -146,7 +147,7 @@ function invalid(fieldErrors: FieldErrors) {
 
 // コードの送信。実行中の操作が無く、メールアドレス、セキュリティチェックの順に不備が無ければ送れる。
 export function checkSendCode(
-  flow: SignUpFlow,
+  flow: PasswordSetupFlow,
   input: { email: string },
 ): Check<{ email: string; captchaToken: string }> {
   if (flow.pending !== null || flow.step !== "email") return BUSY;
@@ -159,7 +160,7 @@ export function checkSendCode(
 }
 
 export function checkVerifyCode(
-  flow: SignUpFlow,
+  flow: PasswordSetupFlow,
   input: { email: string; code: string },
 ): Check<{ email: string; code: string }> {
   if (flow.pending !== null || flow.step !== "code") return BUSY;
@@ -170,7 +171,7 @@ export function checkVerifyCode(
 
 // コードの再送。待ち時間、セキュリティチェックの順に不備が無ければ送れる。
 export function checkResend(
-  flow: SignUpFlow,
+  flow: PasswordSetupFlow,
   input: { email: string },
 ): Check<{ email: string; captchaToken: string }> {
   if (flow.pending !== null || flow.step !== "code") return BUSY;
@@ -183,7 +184,7 @@ export function checkResend(
 }
 
 export function checkSetPassword(
-  flow: SignUpFlow,
+  flow: PasswordSetupFlow,
   input: { password: string },
 ): Check<{ password: string }> {
   if (flow.pending !== null || flow.step !== "password") return BUSY;
