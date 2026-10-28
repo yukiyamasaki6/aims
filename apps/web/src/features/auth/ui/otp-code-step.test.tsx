@@ -19,7 +19,8 @@ function createForm(overrides: Partial<Props> = {}) {
     email: "user@example.com",
     code: "",
     onCodeChange: vi.fn(),
-    fieldErrors: {},
+    codeError: undefined,
+    resendError: undefined,
     pending: null,
     error: null,
     onBack: vi.fn(),
@@ -107,7 +108,7 @@ describe("OtpCodeStep", () => {
       // Given
 
       // When
-      const form = createForm({ fieldErrors: { code: "コードのエラー" } });
+      const form = createForm({ codeError: "コードのエラー" });
       renderStep(form, "reset-password");
 
       // Then
@@ -140,7 +141,7 @@ describe("OtpCodeStep", () => {
       // Given
 
       // When
-      const form = createForm({ fieldErrors: { resend: "再送のエラー" } });
+      const form = createForm({ resendError: "再送のエラー" });
       renderStep(form);
 
       // Then

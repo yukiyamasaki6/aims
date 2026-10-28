@@ -30,13 +30,12 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 - `src/app/(auth)/signup/actions.ts`: 要求の入口。登録済み判定のServer Action。管理者の接続を渡して判定の実装を生成し、呼ぶ。
 - `src/features/auth/ui/signup-form.tsx`: サインアップの画面の文言とリンク(見出し、サインインへのリンク、パスワード設定の段階の文言)。パスワード再設定と共有の骨組みへ渡す。
 - `src/features/auth/ui/password-setup-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。状態を`useScreenView`で持ち、操作のたびに入力と画面の約束(`ScreenView`)を手続きへ渡す。メール入力とコード入力は段階の部品へ渡す。パスワード再設定と共有する。
-- `src/features/auth/application/sign-up.ts`: 手続き。コードの送信(登録済みの判定を含む)と、パスワード設定の後の遷移(`/rounds`)を持つ。再送、確認と、操作の開始、コードの送信の依頼、パスワード設定の依頼は、共通の順序を使う。認証サービスへ頼むことの約束は、共通の約束に、登録済みの判定を足して持つ(`SignUpAuthenticator`)。
+- `src/features/auth/application/sign-up.ts`: 手続き。コードの送信(登録済みの判定を含む)と、パスワード設定の後の遷移(`/rounds`)を持つ。再送、確認と、操作の開始、コードの送信の依頼、パスワード設定の依頼は、共通の順序を使う。登録済みの判定は、手続きの約束`RegistrationLookup`(真偽値。投げることがあり、届かなかった失敗として扱う)で受け、入口がServer Actionを渡す。
 - `src/features/auth/application/password-setup.ts`、`password-setup-authenticator.ts`: パスワード再設定と共有する、手続きの共通の順序(操作の開始、コードの送信の依頼、再送、確認、パスワード設定の依頼)と、認証サービスへ頼むこと(コードの送信、確認、パスワードの設定)の約束。
-- `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、出来事の遷移(`passwordSetupReducer`)と、操作の可否と入力の検証の順序(`checkSendCode`ほか)、確認・再送・戻るの排他、トークンの消費を守る。パスワード再設定と共有する。
-- `src/features/auth/domain/new-password.ts`、`auth-code.ts`、`resend-wait.ts`: パスワードの強さ、認証コード、再送の待ち時間の規則と文言(値オブジェクト)。パスワード再設定も使う。
+- `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、開始の命令(`beginSendCode`ほか)が、操作の可否と入力の検証の順序、確認・再送・戻るの排他を守って`Start`を返す。事実の遷移(`passwordSetupReducer`)で、トークンの消費を守る。パスワード再設定と共有する。
+- `src/features/auth/domain/password.ts`、`auth-code.ts`: パスワードの強さ、認証コードと再送の待ち時間の規則と文言(値オブジェクト)。パスワード再設定も使う。
 - `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(登録済みを含む)と利用者向けの文言。
-- `src/features/auth/infrastructure/supabase-sign-up-authenticator.ts`: `signInWithOtp`、`verifyOtp`、`updateUser`の呼び出しと、登録済みの判定(サーバーの関数を受け取って呼ぶ)。呼び出しの結果は、`supabase-auth-call.ts`の変換で値にする。応答が無かった場合(接続を作れない、呼び出しが投げた、判定の関数が失敗した)は、応答が無かったこととして返す。
-- `src/features/auth/infrastructure/supabase-auth-call.ts`: 認証サービスの呼び出しを、例外を投げずに値で返す変換。サインイン、サインアップ、パスワード再設定の認証の実装が使う。
+- `src/features/auth/infrastructure/supabase-auth.ts`: ブラウザから認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。コードの目的`sign-up`の`signInWithOtp`、`verifyOtp`、`updateUser`の呼び出しを含む。呼び出しの結果は`CallResult`の値で返し、応答が無かった場合(接続を作れない、呼び出しが投げた)は`unreachable`にする。
 - `src/features/auth/infrastructure/supabase-registration-check.ts`: 管理者キーで確認済みかを調べる登録済み判定。
 - `src/features/auth/ui/otp-email-step.tsx`、`otp-code-step.tsx`: メール入力とコード入力の段階の描画。パスワード再設定も使う。
 - `src/hooks/use-countdown.ts`: 再送できるまでの秒数を1秒ごとに進める。

@@ -1,9 +1,20 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import { readReturnTo, signInHref } from "@/features/auth";
 import type { Database } from "@/types/supabase";
 
-export async function updateSession(request: NextRequest) {
+// 要求に対するリダイレクト先(パスとクエリ)を決める。リダイレクトしないときはnull。
+// 保護対象の画面などの経路の規則は、呼び出し側が持つ(この関数は規則を持たない)。
+export type RedirectRule = (request: {
+  signedIn: boolean;
+  pathname: string;
+  search: string;
+  isServerAction: boolean;
+}) => string | null;
+
+export async function updateSession(
+  request: NextRequest,
+  redirectFor: RedirectRule,
+) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -37,44 +48,17 @@ export async function updateSession(request: NextRequest) {
   // Server Action呼び出し（Next-Actionヘッダー付きのPOST）はページ遷移では
   // ないため、ここでリダイレクトしてしまうとNext.jsが期待するアクションの
   // レスポンス形式と一致せず「An unexpected response was received from the
-  // server.」という分かりにくいエラーになる。未サインイン時の扱いは各
-  // Server Action自身のガード（"サインインが必要です。"）に任せる。
-  const isServerAction = request.headers.has("next-action");
-
-  if (
-    !user &&
-    request.nextUrl.pathname.startsWith("/rounds") &&
-    !isServerAction
-  ) {
-    return NextResponse.redirect(
-      new URL(
-        signInHref(request.nextUrl.pathname + request.nextUrl.search),
-        request.url,
-      ),
-    );
-  }
-
-  // 未認証専用の入口。認証済みなら/roundsへ戻す。
-  if (
-    user &&
-    GUEST_ONLY_PATHS.includes(request.nextUrl.pathname) &&
-    !isServerAction
-  ) {
-    // 認証済みの/signinは、有効な遷移元があればそこへ送る。
-    const destination =
-      request.nextUrl.pathname === "/signin"
-        ? readReturnTo(request.nextUrl.search)
-        : null;
-    if (destination) {
-      return NextResponse.redirect(new URL(destination, request.url));
-    }
-    const url = request.nextUrl.clone();
-    url.pathname = "/rounds";
-    url.search = "";
-    return NextResponse.redirect(url);
+  // server.」という分かりにくいエラーになる。リダイレクトの規則は
+  // isServerActionを受け取って判断する。
+  const destination = redirectFor({
+    signedIn: user !== null,
+    pathname: request.nextUrl.pathname,
+    search: request.nextUrl.search,
+    isServerAction: request.headers.has("next-action"),
+  });
+  if (destination !== null) {
+    return NextResponse.redirect(new URL(destination, request.url));
   }
 
   return supabaseResponse;
 }
-
-const GUEST_ONLY_PATHS = ["/signin", "/signup", "/reset-password"];

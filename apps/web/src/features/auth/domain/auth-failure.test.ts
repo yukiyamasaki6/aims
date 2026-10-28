@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { failureMessage, NETWORK_ERROR_MESSAGE } from "./auth-failure";
+import {
+  failureMessage,
+  NETWORK_ERROR_MESSAGE,
+  UNREACHABLE,
+  unconfirmedMessage,
+} from "./auth-failure";
+import { PASSWORD_MIN_LENGTH } from "./password";
 
 const RATE_LIMIT =
   "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。";
@@ -55,5 +61,45 @@ describe("NETWORK_ERROR_MESSAGE", () => {
       "通信エラーが発生しました。しばらくしてから再度お試しください。",
     );
     expect(result).toBe(NETWORK_ERROR_MESSAGE);
+  });
+});
+
+describe("UNREACHABLE", () => {
+  it("届かなかった失敗の値で、通信エラーの文言になる", () => {
+    // Given
+
+    // When
+    const result = failureMessage(UNREACHABLE);
+
+    // Then
+    expect(UNREACHABLE).toEqual({ kind: "unreachable" });
+    expect(result).toBe(NETWORK_ERROR_MESSAGE);
+  });
+});
+
+describe("weak_password の文言", () => {
+  it("パスワードの最小の長さの規則と同じ数値を示す", () => {
+    // Given
+
+    // When
+    const result = failureMessage({ kind: "weak_password" });
+
+    // Then
+    expect(result).toContain(`${PASSWORD_MIN_LENGTH}文字以上`);
+  });
+});
+
+describe("unconfirmedMessage", () => {
+  it("未認証はサインインを促し、不明は届かなかったときと同じ文言を返す", () => {
+    // Given
+
+    // When
+    const unauthenticated = unconfirmedMessage("unauthenticated");
+    const unknown = unconfirmedMessage("unknown");
+
+    // Then
+    expect(unauthenticated).toBe("サインインが必要です。");
+    expect(unknown).toBe(NETWORK_ERROR_MESSAGE);
+    expect(unknown).toBe(failureMessage(UNREACHABLE));
   });
 });

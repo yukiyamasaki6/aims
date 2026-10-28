@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
-import { getLocalIdentity } from "@/features/auth/infrastructure/browser-identity-store";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { roundOpHub } from "@/features/rounds/round-op-hub";
 import { createClient } from "@/lib/supabase/client";
 
 // 操作の列の常駐の送信を、どの画面でも動かす。何も表示しない。
 export function OpSyncProvider() {
   useEffect(() => {
-    roundOpHub.start(getLocalIdentity());
+    roundOpHub.start(createBrowserIdentityStore().read());
     const handleOnline = () => roundOpHub.handleOnline();
     window.addEventListener("online", handleOnline);
 

@@ -28,12 +28,11 @@
 - `src/features/auth/ui/reset-password-form.tsx`: 再設定の画面の文言とリンク(見出し、サインインへのリンク、パスワード設定の段階の文言)。サインアップと共有の骨組みへ渡す。
 - `src/features/auth/ui/password-setup-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。状態を`useScreenView`で持ち、操作のたびに入力と画面の約束(`ScreenView`)を手続きへ渡す。サインアップと共有する。
 - `src/features/auth/ui/otp-email-step.tsx`、`otp-code-step.tsx`: メール入力とコード入力の段階の描画。サインアップと共有する。
-- `src/features/auth/application/reset-password.ts`: 手続き。状態を持たず、コードの送信、再送、確認、パスワードの設定の順序と、パスワード設定の後のサインインの終了とページ全体の読み込みを持つ。認証サービスへ頼むこと(`ResetPasswordAuthenticator`。共通の約束に、サインインの終了を足す)と、ページ全体の読み込みの約束(`PageLoad`)を持つ。
+- `src/features/auth/application/reset-password.ts`: 手続き。状態を持たず、コードの送信、再送、確認、パスワードの設定の順序と、パスワード設定の後のサインインの終了とページ全体の読み込みを持つ。認証サービスへ頼むこと(共通の約束`PasswordSetupAuthenticator`に、全端末のサインインの終了`SignOutEverywhere`を足す)と、ページ全体の読み込みの約束(`PageLoad`)を持つ。
 - `src/features/auth/application/password-setup.ts`、`password-setup-authenticator.ts`: サインアップと共有する、手続きの共通の順序(操作の開始、コードの送信の依頼、再送、確認、パスワード設定の依頼)と、認証サービスへ頼むことの約束。
-- `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、出来事の遷移と、操作の可否と入力の検証の順序、確認・再送・戻るの排他、トークンの消費を守る。サインアップと共有する。
-- `src/features/auth/domain/new-password.ts`、`auth-code.ts`、`resend-wait.ts`、`email-address.ts`、`captcha-token.ts`、`auth-failure.ts`、`return-to.ts`: 新しいパスワードの強さ、認証コード、再送の待ち時間、メールアドレス、セキュリティチェック、失敗の種類、遷移先の規則と文言(値オブジェクト)。
-- `src/features/auth/infrastructure/supabase-reset-password-authenticator.ts`: `resetPasswordForEmail`、`verifyOtp`、`updateUser`と、`signOut`(範囲を指定せず、全ての端末)の呼び出し。エラーは`toAuthFailure`で失敗の種類に写す。応答が無かった場合(接続を作れない、呼び出しが投げた)は、応答が無かったこととして返す。
-- `src/features/auth/infrastructure/supabase-auth-call.ts`: 認証サービスの呼び出しを、例外を投げずに値で返す変換。
+- `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、開始の命令(`beginSendCode`ほか)が、操作の可否と入力の検証の順序、確認・再送・戻るの排他を守って`Start`を返す。事実の遷移でトークンの消費を守る。サインアップと共有する。
+- `src/features/auth/domain/password.ts`、`auth-code.ts`、`email-address.ts`、`captcha-token.ts`、`auth-failure.ts`、`routes.ts`: パスワードの強さ、認証コードと再送の待ち時間、メールアドレス、セキュリティチェック、失敗の種類、遷移先の規則と文言(値オブジェクト)。
+- `src/features/auth/infrastructure/supabase-auth.ts`: ブラウザから認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。コードの目的`password-reset`の`resetPasswordForEmail`、`verifyOtp`、`updateUser`と、`signOut`(範囲`global`、全ての端末)の呼び出しを含む。応答が無かった場合(接続を作れない、呼び出しが投げた)は、`unreachable`として返す。
 - `src/features/auth/infrastructure/browser-page-load.ts`: `window.location.assign`によるページ全体の読み込み。サインアウトのセッション喪失の遷移（置き換え、今の場所）も同じ実装が満たす。
 - `src/hooks/use-countdown.ts`: 再送できるまでの秒数を1秒ごとに進める。
 - `src/app/(auth)/layout.tsx`、`src/components/auth-header.tsx`、`src/components/turnstile.tsx`: 認証画面の共通部品と枠。
@@ -54,7 +53,7 @@
 | 変更後はサインインを終えて`/signin`へ移り、自動サインインしない | 再設定後に改めて本人確認できるため | 再設定後の自動サインインを要求に加えるとき |
 | 集約、手続きの共通の順序、画面の骨組みをサインアップと共有し、再設定だけの動作は再設定の手続きと実装に置く | 認証コードでの本人確認とパスワード設定の規則が変わる理由が同じで、複製を残す理由が無いため。登録の判定の有無、コードの種類、設定後の動作は、共有の部品に分岐として入れない | 再設定とサインアップの規則が分かれるとき |
 | 確認・再送・戻るを排他にし、実行中の操作を集約の1つの値で守る | 並行操作で状態が壊れたため、確認中と再送中を独立させる方式をやめた。詳細: #545 | 応答を世代管理する方式にするとき |
-| ページ全体の読み込みを再設定の手続きの約束にし、`Navigation`に足さない | 再設定だけが使う操作を、サインインの汎用の約束に集めないため。前の画面の状態とクライアントのキャッシュを捨てるため、routerの遷移は使わない。セッション喪失の遷移（`replace`、今の場所）は別の約束`PageReplace`にし、実装だけを共有する | `Navigation`の`go`をページ全体の読み込みにするとき |
+| ページ全体の読み込みを再設定の手続きの約束にし、`Navigation`に足さない | 再設定だけが使う操作を、サインインの汎用の約束に集めないため。前の画面の状態とクライアントのキャッシュを捨てるため、routerの遷移は使わない。セッション喪失の遷移（`replace`、今の場所）は別の約束`PageReplace`にし、実装だけを共有する。約束の置き場は、方針のR02の読み（使い手の手続きの数。`Navigation`は2つの手続きが使い、`PageLoad`と`PageReplace`は使い手が1つ）で決める | `Navigation`の`go`をページ全体の読み込みにするとき |
 | ネイティブの`disabled`、`required`、`minLength`を使わず、クライアント検証と`aria-disabled`を使う | 理由を利用者へ伝え、E2Eでの二重送信を防ぐため | 検証の理由を別の方法で利用者へ伝えるとき |
 | パスワードの長さを`maxLength`でなく送信時に検証する。メールアドレスとコードは、入力欄の`maxLength`で入力時に制限し、送信時にも検証する | Playwrightの`fill()`が`maxLength`で切り詰めるため。サインインのパスワード欄には適用しない | パスワード規則を変えるとき |
 | 認証済みのリダイレクトを`proxy.ts`へ集約し、画面ごとのE2Eは残す | 実装を一箇所にまとめつつ、各画面の挙動を保証するため | ガードの実装を変えるとき |

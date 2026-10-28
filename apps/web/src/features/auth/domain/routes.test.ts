@@ -3,8 +3,9 @@ import {
   allowedReturnTo,
   destinationOf,
   readReturnTo,
+  redirectFor,
   signInHref,
-} from "./return-to";
+} from "./routes";
 
 describe("allowedReturnTo", () => {
   describe("/rounds配下の相対パスの場合", () => {
@@ -213,6 +214,228 @@ describe("readReturnTo", () => {
 
     // When
     const result = readReturnTo(search);
+
+    // Then
+    expect(result).toBeNull();
+  });
+});
+
+describe("redirectFor", () => {
+  const request = {
+    signedIn: false,
+    pathname: "/",
+    search: "",
+    isServerAction: false,
+  };
+
+  it.each([
+    [
+      "未認証で/roundsを開くと、遷移元の無いサインイン",
+      { pathname: "/rounds" },
+      "/signin",
+    ],
+    [
+      "未認証で/rounds配下を開くと、クエリ付きの遷移元つきのサインイン",
+      { pathname: "/rounds/x", search: "?a=1" },
+      "/signin?returnTo=%2Frounds%2Fx%3Fa%3D1",
+    ],
+    [
+      "認証済みでサインインを開くと、有効な遷移元",
+      {
+        signedIn: true,
+        pathname: "/signin",
+        search: "?returnTo=%2Frounds%2Fx",
+      },
+      "/rounds/x",
+    ],
+    [
+      "認証済みでサインインを遷移元なしで開くと、ラウンド一覧",
+      { signedIn: true, pathname: "/signin" },
+      "/rounds",
+    ],
+    [
+      "認証済みでサインインを無効な遷移元で開くと、ラウンド一覧",
+      { signedIn: true, pathname: "/signin", search: "?returnTo=%2Fsignup" },
+      "/rounds",
+    ],
+    [
+      "認証済みでサインアップを開くと、遷移元を使わずラウンド一覧",
+      {
+        signedIn: true,
+        pathname: "/signup",
+        search: "?returnTo=%2Frounds%2Fx",
+      },
+      "/rounds",
+    ],
+    [
+      "認証済みでパスワード再設定を開くと、ラウンド一覧",
+      { signedIn: true, pathname: "/reset-password" },
+      "/rounds",
+    ],
+  ])("%s", (_name, override, expected) => {
+    // Given
+
+    // When
+    const result = redirectFor({ ...request, ...override });
+
+    // Then
+    expect(result).toBe(expected);
+  });
+
+  it.each([
+    ["未認証でサインインを開く", { pathname: "/signin" }],
+    ["未認証でサインアップを開く", { pathname: "/signup" }],
+    ["未認証でパスワード再設定を開く", { pathname: "/reset-password" }],
+    ["未認証でトップを開く", { pathname: "/" }],
+    ["未認証で/roundsで始まる別のパスを開く", { pathname: "/roundsx" }],
+    ["認証済みで/roundsを開く", { signedIn: true, pathname: "/rounds" }],
+    ["認証済みで/rounds配下を開く", { signedIn: true, pathname: "/rounds/1" }],
+    ["認証済みでトップを開く", { signedIn: true, pathname: "/" }],
+  ])("%sと、リダイレクトしない", (_name, override) => {
+    // Given
+
+    // When
+    const result = redirectFor({ ...request, ...override });
+
+    // Then
+    expect(result).toBeNull();
+  });
+
+  it("Server Action呼び出しは、未認証でも認証済みでもリダイレクトしない", () => {
+    // Given
+
+    // When
+    const signedOut = redirectFor({
+      ...request,
+      pathname: "/rounds/1",
+      isServerAction: true,
+    });
+    const signedIn = redirectFor({
+      ...request,
+      signedIn: true,
+      pathname: "/signin",
+      isServerAction: true,
+    });
+
+    // Then
+    expect(signedOut).toBeNull();
+    expect(signedIn).toBeNull();
+  });
+});
+
+// 経路の規則は、セッションの更新(lib/supabase/session)から引数で渡されるため、ここで要求ごとの行き先を確かめる。
+describe("redirectFor: 要求ごとの行き先", () => {
+  const request = {
+    signedIn: false,
+    pathname: "/",
+    search: "",
+    isServerAction: false,
+  };
+
+  it("未認証で/roundsにアクセスすると、遷移元を付けずに/signinへリダイレクトする", () => {
+    // Given
+
+    // When
+    const result = redirectFor({ ...request, pathname: "/rounds" });
+
+    // Then
+    expect(result).toBe("/signin");
+  });
+
+  it.each([
+    ["/rounds/new", "", "%2Frounds%2Fnew"],
+    [
+      "/rounds/00000000-0000-0000-0000-000000000000",
+      "?a=1",
+      "%2Frounds%2F00000000-0000-0000-0000-000000000000%3Fa%3D1",
+    ],
+  ])(
+    "未認証で%s%sにアクセスすると、遷移元付きの/signinへリダイレクトする",
+    (pathname, search, encoded) => {
+      // Given
+
+      // When
+      const result = redirectFor({ ...request, pathname, search });
+
+      // Then
+      expect(result).toBe(`/signin?returnTo=${encoded}`);
+    },
+  );
+
+  it.each(["/signin", "/signup", "/reset-password"])(
+    "認証済みで%sにアクセスすると/roundsへリダイレクトする",
+    (pathname) => {
+      // Given
+
+      // When
+      const result = redirectFor({ ...request, signedIn: true, pathname });
+
+      // Then
+      expect(result).toBe("/rounds");
+    },
+  );
+
+  it("認証済みで有効な遷移元付きの/signinにアクセスすると、遷移元へリダイレクトする", () => {
+    // Given
+
+    // When
+    const result = redirectFor({
+      ...request,
+      signedIn: true,
+      pathname: "/signin",
+      search: "?returnTo=%2Frounds%2Fnew%3Fa%3D1",
+    });
+
+    // Then
+    expect(result).toBe("/rounds/new?a=1");
+  });
+
+  it.each([
+    ["外部URL", encodeURIComponent("https://evil.com")],
+    ["//で始まる値", encodeURIComponent("//evil.com")],
+    ["/signin", encodeURIComponent("/signin")],
+    ["/rounds配下から抜けるドットセグメント", "%2Frounds%2F..%2Fsignin"],
+  ])(
+    "認証済みで不正な遷移元(%s)付きの/signinにアクセスすると、遷移元を引き継がず/roundsへリダイレクトする",
+    (_name, returnTo) => {
+      // Given
+
+      // When
+      const result = redirectFor({
+        ...request,
+        signedIn: true,
+        pathname: "/signin",
+        search: `?returnTo=${returnTo}`,
+      });
+
+      // Then
+      expect(result).toBe("/rounds");
+    },
+  );
+
+  it.each(["/signup", "/reset-password"])(
+    "認証済みで有効な遷移元付きの%sにアクセスしても、遷移元を使わず/roundsへリダイレクトする",
+    (pathname) => {
+      // Given
+
+      // When
+      const result = redirectFor({
+        ...request,
+        signedIn: true,
+        pathname,
+        search: "?returnTo=%2Frounds%2Fnew",
+      });
+
+      // Then
+      expect(result).toBe("/rounds");
+    },
+  );
+
+  it("未認証で/rounds以外のパスはリダイレクトしない", () => {
+    // Given
+
+    // When
+    const result = redirectFor({ ...request, pathname: "/offline" });
 
     // Then
     expect(result).toBeNull();

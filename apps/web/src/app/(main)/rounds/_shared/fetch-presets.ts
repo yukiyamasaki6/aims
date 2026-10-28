@@ -42,7 +42,7 @@ export async function fetchPresets(
   const result = await fetchContent(
     supabase as SupabaseClient,
     async (session) => {
-      const userId = session.user.id;
+      const userId = session.userId;
       queriedUserId = userId;
       return supabase
         .from("preset_rounds")

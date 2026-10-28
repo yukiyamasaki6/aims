@@ -1,56 +1,44 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AuthFailure } from "../domain/auth-failure";
+import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import {
-  initialAttempt,
-  type SignInAction,
-  type SignInAttempt,
+  beginSignIn,
+  initialSignInFlow,
   signInReducer,
-} from "../domain/sign-in-attempt";
-import type { ScreenView } from "./screen-view";
+} from "../domain/sign-in-flow";
+import type { CallResult } from "./call-result";
+import { screenHarness } from "./screen-view-test-helpers";
 import { createSignIn } from "./sign-in";
 
 const input = { email: "user@example.com", password: "password1" };
-const verified = signInReducer(initialAttempt, {
-  type: "verified",
+const verified = signInReducer(initialSignInFlow, {
+  type: "captchaChecked",
   token: "first-token",
 });
 
+const accepted: CallResult = { kind: "accepted" };
+
 function setup(returnTo: string | null = null) {
   const authenticator = {
-    signIn: vi.fn(async (): Promise<AuthFailure | null> => null),
+    signIn: vi.fn(async (): Promise<CallResult> => accepted),
   };
   const navigation = { returnTo: vi.fn(() => returnTo), go: vi.fn() };
   const signIn = createSignIn({ authenticator, navigation });
-  const actions: SignInAction[] = [];
-  const resetCheck = vi.fn();
-  // 画面の約束の偽。出来事を実物のreducerで適用し、stateは送った直後の値を返す。表示中かどうかは、テストが切り替える。
-  const screen = { mounted: true };
-  const viewOf = (
-    initial: SignInAttempt,
-  ): ScreenView<SignInAttempt, SignInAction> => {
-    let current = initial;
-    return {
-      get state() {
-        return current;
-      },
-      dispatch: (action) => {
-        actions.push(action);
-        current = signInReducer(current, action);
-      },
-      resetCheck,
-      isMounted: () => screen.mounted,
-    };
-  };
+  const { events, resetCheck, viewOf, screen } = screenHarness(signInReducer);
   return {
     signIn,
     authenticator,
     navigation,
-    actions,
+    actions: events,
     resetCheck,
     viewOf,
     state: screen,
   };
 }
+
+const refused = (failure: AuthFailure): CallResult => ({
+  kind: "refused",
+  failure,
+});
 
 const failure401: AuthFailure = { kind: "invalid_credentials" };
 
@@ -75,7 +63,7 @@ describe("サインインの手続き", () => {
         captchaToken: "first-token",
       });
       expect(navigation.go).toHaveBeenCalledExactlyOnceWith(expected);
-      expect(actions.map((a) => a.type)).toEqual(["submitted"]);
+      expect(actions).toEqual([]);
       expect(resetCheck).not.toHaveBeenCalled();
     },
   );
@@ -83,7 +71,7 @@ describe("サインインの手続き", () => {
   it("渡された状態が送信中なら、何も送らず、照合も遷移もしない", async () => {
     // Given
     const { signIn, authenticator, navigation, actions, viewOf } = setup();
-    const started = signInReducer(verified, { type: "submitted" });
+    const started = beginSignIn(verified, input).state;
 
     // When
     await signIn.submit(input, viewOf(started));
@@ -106,7 +94,7 @@ describe("サインインの手続き", () => {
 
     // Then
     expect(authenticator.signIn).toHaveBeenCalledOnce();
-    expect(actions.map((a) => a.type)).toEqual(["submitted"]);
+    expect(actions).toEqual([]);
     expect(navigation.go).toHaveBeenCalledOnce();
   });
 
@@ -115,41 +103,42 @@ describe("サインインの手続き", () => {
     ["user@example.com", "", "first-token"],
     ["user@example.com", "password1", null],
   ])(
-    "不備がある入力では認証を呼ばず、invalidだけを送る",
+    "不備がある入力では認証を呼ばず、不備を状態に示すだけで、出来事を送らない",
     async (email, password, token) => {
       // Given
       const { signIn, authenticator, actions, resetCheck, viewOf } = setup();
-      const attempt = signInReducer(initialAttempt, {
-        type: "verified",
-        token,
-      });
+      const view = viewOf(
+        signInReducer(initialSignInFlow, { type: "captchaChecked", token }),
+      );
 
       // When
-      await signIn.submit({ email, password }, viewOf(attempt));
+      await signIn.submit({ email, password }, view);
 
       // Then
       expect(authenticator.signIn).not.toHaveBeenCalled();
-      expect(actions.map((a) => a.type)).toEqual(["invalid"]);
+      expect(Object.keys(view.state.fieldErrors)).toHaveLength(1);
+      expect(view.state.submitting).toBe(false);
+      expect(actions).toEqual([]);
       expect(resetCheck).not.toHaveBeenCalled();
     },
   );
 
-  it.each([[failure401], [{ kind: "unreachable" } as const]])(
-    "失敗時はsubmittedの次にfailedを送り、チェックを1回やり直させ、遷移しない",
-    async (failure) => {
+  it.each([
+    [refused(failure401), failure401],
+    [UNREACHABLE, UNREACHABLE],
+  ])(
+    "失敗時はfailedを送り、チェックを1回やり直させ、遷移しない",
+    async (result, failure) => {
       // Given
       const { signIn, authenticator, navigation, actions, resetCheck, viewOf } =
         setup();
-      authenticator.signIn.mockResolvedValue(failure);
+      authenticator.signIn.mockResolvedValue(result);
 
       // When
       await signIn.submit(input, viewOf(verified));
 
       // Then
-      expect(actions).toEqual([
-        { type: "submitted" },
-        { type: "failed", failure },
-      ]);
+      expect(actions).toEqual([{ type: "failed", failure }]);
       expect(resetCheck).toHaveBeenCalledOnce();
       expect(navigation.go).not.toHaveBeenCalled();
     },
@@ -158,12 +147,12 @@ describe("サインインの手続き", () => {
   it("失敗後の新しいトークンで再送信すると元の遷移先へ進む", async () => {
     // Given
     const { signIn, authenticator, navigation, viewOf } = setup("/rounds/new");
-    authenticator.signIn.mockResolvedValueOnce(failure401);
+    authenticator.signIn.mockResolvedValueOnce(refused(failure401));
     const view = viewOf(verified);
     await signIn.submit(input, view);
 
     // When
-    view.dispatch({ type: "verified", token: "second-token" });
+    view.dispatch({ type: "captchaChecked", token: "second-token" });
     await signIn.submit(input, view);
 
     // Then
@@ -177,13 +166,13 @@ describe("サインインの手続き", () => {
   it("照合の後に画面が離れていれば、成功でも遷移しない", async () => {
     // Given
     const { signIn, authenticator, navigation, viewOf, state } = setup();
-    const deferred = Promise.withResolvers<AuthFailure | null>();
+    const deferred = Promise.withResolvers<CallResult>();
     authenticator.signIn.mockReturnValue(deferred.promise);
     const pending = signIn.submit(input, viewOf(verified));
 
     // When
     state.mounted = false;
-    deferred.resolve(null);
+    deferred.resolve(accepted);
     await pending;
 
     // Then
@@ -194,17 +183,17 @@ describe("サインインの手続き", () => {
     // Given
     const { signIn, authenticator, actions, resetCheck, viewOf, state } =
       setup();
-    const deferred = Promise.withResolvers<AuthFailure | null>();
+    const deferred = Promise.withResolvers<CallResult>();
     authenticator.signIn.mockReturnValue(deferred.promise);
     const pending = signIn.submit(input, viewOf(verified));
 
     // When
     state.mounted = false;
-    deferred.resolve({ kind: "unreachable" });
+    deferred.resolve(UNREACHABLE);
     await pending;
 
     // Then
-    expect(actions.map((a) => a.type)).toEqual(["submitted"]);
+    expect(actions).toEqual([]);
     expect(resetCheck).not.toHaveBeenCalled();
   });
 
@@ -224,10 +213,7 @@ describe("サインインの手続き", () => {
       await signIn.submit(input, viewOf(verified));
 
       // Then
-      expect(actions).toEqual([
-        { type: "submitted" },
-        { type: "failed", failure: { kind: "unreachable" } },
-      ]);
+      expect(actions).toEqual([{ type: "failed", failure: UNREACHABLE }]);
       expect(resetCheck).toHaveBeenCalledOnce();
     },
   );

@@ -1,38 +1,43 @@
 "use client";
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
-import { Loader2 } from "lucide-react";
-import { type ReactNode, type RefObject, useRef, useState } from "react";
+import Link from "next/link";
+import { type RefObject, useState } from "react";
 import { AuthHeader } from "@/components/auth-header";
-import { Button } from "@/components/ui/button";
+import { BusyButton } from "@/components/ui/busy-button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useCountdown } from "@/hooks/use-countdown";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { useMountedRef } from "@/hooks/use-mounted-ref";
-import { cn } from "@/lib/utils";
 import type { PasswordSetup } from "../application/password-setup";
 import type { ScreenView } from "../application/screen-view";
+import { PASSWORD_MIN_LENGTH } from "../domain/password";
 import {
   initialPasswordSetupFlow,
   type PasswordSetupEvent,
   type PasswordSetupFlow,
   passwordSetupReducer,
 } from "../domain/password-setup-flow";
+import { SIGN_IN_PATH } from "../domain/routes";
+import { AuthField } from "./auth-field";
 import { OtpCodeStep } from "./otp-code-step";
 import { OtpEmailStep } from "./otp-email-step";
 import { useScreenView } from "./use-screen-view";
+
+// サインインへのリンクの文言。リンク先は経路の規則が持つ。
+type SignInLinkCopy = { lead?: string; label: string };
 
 // 画面ごとに違う文言とリンク。画面の配置にだけ関わるため、画面の部品が持つ。
 export type PasswordSetupCopy = {
   // エラー文の要素のidの接頭辞。
   idPrefix: string;
   emailTitle: string;
-  emailFooter: ReactNode;
+  emailFooter: SignInLinkCopy;
   passwordTitle: string;
   passwordDescription: string;
-  passwordPlaceholder: string;
+  // パスワード欄の見出し。説明(最小文字数など)は規則の持ち主から得て足す。
+  passwordLabel: string;
   passwordSubmit: string;
-  passwordFooter: ReactNode;
+  passwordFooter: SignInLinkCopy | null;
 };
 
 type StepProps = {
@@ -50,19 +55,16 @@ export function PasswordSetupForm({
   procedure: PasswordSetup;
   copy: PasswordSetupCopy;
 }) {
-  const mounted = useMountedRef();
-  const check = useRef<TurnstileInstance>(undefined);
-  const { state: flow, view } = useScreenView(
-    passwordSetupReducer,
-    initialPasswordSetupFlow,
-    {
-      isMounted: () => mounted.current,
-      resetCheck: () => check.current?.reset(),
-    },
-  );
+  const {
+    state: flow,
+    view,
+    checkRef: check,
+  } = useScreenView(passwordSetupReducer, initialPasswordSetupFlow);
   const [email, setEmail] = useState("");
   const hydrated = useHydrated();
-  useCountdown(flow.resendCooldown, () => view.dispatch({ type: "ticked" }));
+  useCountdown(flow.resendCooldown, () =>
+    view.dispatch({ type: "cooldownTicked" }),
+  );
   const step = { procedure, copy, flow, view };
 
   if (flow.step === "password") return <PasswordStep {...step} />;
@@ -72,10 +74,11 @@ export function PasswordSetupForm({
     <OtpEmailStep
       idPrefix={copy.idPrefix}
       title={copy.emailTitle}
-      footer={copy.emailFooter}
+      footer={<SignInLink copy={copy.emailFooter} />}
       email={email}
       onEmailChange={setEmail}
-      fieldErrors={flow.fieldErrors}
+      emailError={flow.fieldErrors.email}
+      captchaError={flow.fieldErrors.captcha}
       submitting={flow.pending === "send"}
       error={flow.error}
       hydrated={hydrated}
@@ -84,7 +87,7 @@ export function PasswordSetupForm({
         void procedure.sendCode({ email }, view);
       }}
       checkRef={check}
-      onCheck={(token) => view.dispatch({ type: "checked", token })}
+      onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
       checked={flow.captchaToken !== null}
     />
   );
@@ -113,17 +116,18 @@ function CodeStep({
       email={email}
       code={code}
       onCodeChange={setCode}
-      fieldErrors={flow.fieldErrors}
+      codeError={flow.fieldErrors.code}
+      resendError={flow.fieldErrors.resend}
       pending={pending}
       error={flow.error}
-      onBack={() => view.dispatch({ type: "backed" })}
+      onBack={() => view.dispatch({ type: "emailStepReturned" })}
       onVerify={(e) => {
         e.preventDefault();
         void procedure.verifyCode({ email, code }, view);
       }}
       onResend={() => void procedure.resend({ email }, view)}
       checkRef={check}
-      onCheck={(token) => view.dispatch({ type: "checked", token })}
+      onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
       checked={flow.captchaToken !== null}
       resendCooldown={flow.resendCooldown}
     />
@@ -148,33 +152,35 @@ function PasswordStep({ procedure, copy, flow, view }: StepProps) {
         noValidate
         className="flex w-full flex-col gap-3"
       >
-        <div className="flex flex-col gap-1">
-          <PasswordInput
-            placeholder={copy.passwordPlaceholder}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            aria-invalid={Boolean(flow.fieldErrors.password)}
-            aria-describedby={flow.fieldErrors.password ? errorId : undefined}
-          />
-          {flow.fieldErrors.password && (
-            <p id={errorId} className="text-destructive text-sm">
-              {flow.fieldErrors.password}
-            </p>
+        <AuthField errorId={errorId} error={flow.fieldErrors.password}>
+          {(aria) => (
+            <PasswordInput
+              placeholder={`${copy.passwordLabel}（${PASSWORD_MIN_LENGTH}文字以上・英数字を含む）`}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              {...aria}
+            />
           )}
-        </div>
-        <Button
-          type="submit"
-          aria-disabled={submitting}
-          className={cn(submitting && "pointer-events-none opacity-50")}
-        >
-          {submitting && <Loader2 className="size-3.5 animate-spin" />}
+        </AuthField>
+        <BusyButton type="submit" busy={submitting}>
           {copy.passwordSubmit}
-        </Button>
+        </BusyButton>
       </form>
       {flow.error && (
         <p className="text-center text-destructive text-sm">{flow.error}</p>
       )}
-      {copy.passwordFooter}
+      {copy.passwordFooter && <SignInLink copy={copy.passwordFooter} />}
     </>
+  );
+}
+
+function SignInLink({ copy }: { copy: SignInLinkCopy }) {
+  return (
+    <p className="text-muted-foreground text-sm">
+      {copy.lead && <>{copy.lead} </>}
+      <Link href={SIGN_IN_PATH} className="underline">
+        {copy.label}
+      </Link>
+    </p>
   );
 }

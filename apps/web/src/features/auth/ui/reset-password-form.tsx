@@ -1,16 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import type { PasswordSetup } from "../application/password-setup";
 import { PasswordSetupForm } from "./password-setup-form";
 
-const SIGN_IN_LINK = (
-  <p className="text-muted-foreground text-sm">
-    <Link href="/signin" className="underline">
-      サインインに戻る
-    </Link>
-  </p>
-);
+const SIGN_IN_LINK = { label: "サインインに戻る" };
 
 const COPY = {
   idPrefix: "reset-password",
@@ -18,7 +11,7 @@ const COPY = {
   emailFooter: SIGN_IN_LINK,
   passwordTitle: "新しいパスワードを設定",
   passwordDescription: "このパスワードで次回からサインインします。",
-  passwordPlaceholder: "新しいパスワード（8文字以上・英数字を含む）",
+  passwordLabel: "新しいパスワード",
   passwordSubmit: "パスワードを変更",
   passwordFooter: SIGN_IN_LINK,
 };

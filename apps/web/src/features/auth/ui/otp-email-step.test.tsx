@@ -28,7 +28,8 @@ function createForm(overrides: Partial<Props> = {}) {
     footer: <p>フッター</p>,
     email: "",
     onEmailChange: vi.fn(),
-    fieldErrors: {},
+    emailError: undefined,
+    captchaError: undefined,
     submitting: false,
     error: null,
     hydrated: true,
@@ -80,7 +81,7 @@ describe("OtpEmailStep", () => {
 
       // When
       const form = createForm({
-        fieldErrors: { email: "メールのエラー" },
+        emailError: "メールのエラー",
       });
       renderStep(form, { idPrefix: "reset-password" });
 
@@ -156,7 +157,7 @@ describe("OtpEmailStep", () => {
 
       // When
       const form = createForm({
-        fieldErrors: { captcha: "captchaのエラー" },
+        captchaError: "captchaのエラー",
       });
       renderStep(form);
 

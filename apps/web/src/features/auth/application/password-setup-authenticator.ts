@@ -1,19 +1,20 @@
-import type { AuthFailure } from "../domain/auth-failure";
+import type { CallResult } from "./call-result";
 
-// 認証サービスが応答しなかった(接続を得られない、呼び出しが投げた)こと。送ったセキュリティチェックのトークンは使われていない。
-type Unreached = { readonly kind: "unreached" };
-export type Delivery =
-  | { readonly kind: "sent" }
-  | { readonly kind: "refused"; readonly failure: AuthFailure }
-  | Unreached;
+// 認証コードの目的。コードを送る呼び出しと確認する呼び出しの、認証サービスでの種別を決める。
+export type CodePurpose = "sign-up" | "password-reset";
 
 // 認証コードで本人確認をして、パスワードを設定する手続き(サインアップとパスワード再設定)が、認証サービスに頼むこと。
-// どれも例外を投げず、失敗は値で返す。手続きごとに頼むことが増えるときは、この約束に足して拡張する。
+// 例外は投げず、結果は値で返す。
 export type PasswordSetupAuthenticator = {
-  sendCode(request: { email: string; captchaToken: string }): Promise<Delivery>;
+  sendCode(request: {
+    purpose: CodePurpose;
+    email: string;
+    captchaToken: string;
+  }): Promise<CallResult>;
   verifyCode(request: {
+    purpose: CodePurpose;
     email: string;
     code: string;
-  }): Promise<AuthFailure | null>;
-  setPassword(password: string): Promise<AuthFailure | null>;
+  }): Promise<CallResult>;
+  setPassword(password: string): Promise<CallResult>;
 };

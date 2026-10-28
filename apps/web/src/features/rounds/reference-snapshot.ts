@@ -1,4 +1,4 @@
-import { getLocalIdentity } from "@/features/auth/infrastructure/browser-identity-store";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import {
   ROUND_PRESET_SELECT,
   TARGET_FACE_SELECT,
@@ -71,7 +71,7 @@ export function saveReferenceSnapshot<T>(
 
 // オフラインではセッションを検証できないため、操作の列と同じ基準（端末の識別）で読む。
 export function loadReferenceSnapshot<T>(kind: ReferenceKind): T | null {
-  const userId = getLocalIdentity();
+  const userId = createBrowserIdentityStore().read();
   if (!userId) return null;
   return read<T>(kind, userId)?.data ?? null;
 }
@@ -82,7 +82,7 @@ export function updateReferenceSnapshot<T>(
   kind: ReferenceKind,
   update: (data: T) => T,
 ): void {
-  const userId = getLocalIdentity();
+  const userId = createBrowserIdentityStore().read();
   if (!userId) return;
   const current = read<T>(kind, userId);
   if (!current) return;

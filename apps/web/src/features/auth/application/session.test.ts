@@ -1,7 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AuthFailure } from "../domain/auth-failure";
-import type { SessionEvent, SessionStatus } from "../domain/session-event";
-import { createSession } from "./session";
+import type { AuthChange, SessionStatus } from "../domain/auth-change";
+import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
+import type { CallResult } from "./call-result";
+import { createSession, type SessionReading } from "./session";
+
+const accepted: CallResult = { kind: "accepted" };
+
+// 失敗の値(なければnull)を、認証サービスの頼みごとの結果へ写す。
+function resultOf(failure: AuthFailure | null): CallResult {
+  if (failure === null) return accepted;
+  return failure.kind === "unreachable"
+    ? UNREACHABLE
+    : { kind: "refused", failure };
+}
+
+function readingOf(status: SessionStatus): SessionReading {
+  return status === "authenticated" ? { status, userId: "user-1" } : { status };
+}
 
 // 偽の部品。認証サービス、端末の識別情報、通信の可否、ページ遷移の境界だけを差し替える。
 function setup(
@@ -13,7 +28,7 @@ function setup(
     here?: string;
   } = {},
 ) {
-  const listeners: Array<(event: SessionEvent) => void> = [];
+  const listeners: Array<(event: AuthChange) => void> = [];
   const onlineListeners: Array<() => void> = [];
   const unsubscribe = vi.fn();
   const stopOnline = vi.fn();
@@ -21,10 +36,12 @@ function setup(
     identity: options.identity === undefined ? "user-1" : options.identity,
     offline: options.offline ?? false,
   };
+  const check = options.check ?? (async () => "authenticated" as const);
+  const signOutHere = options.signOutHere ?? (async () => null);
   const authority = {
-    signOutHere: vi.fn(options.signOutHere ?? (async () => null)),
-    check: vi.fn(options.check ?? (async () => "authenticated" as const)),
-    subscribe: vi.fn((listener: (event: SessionEvent) => void) => {
+    signOutHere: vi.fn(async () => resultOf(await signOutHere())),
+    readSession: vi.fn(async () => readingOf(await check())),
+    subscribe: vi.fn((listener: (event: AuthChange) => void) => {
       listeners.push(listener);
       // 解除すると、実際にこのリスナーへ以降の出来事が届かなくなる。
       return () => {
@@ -38,7 +55,7 @@ function setup(
     replace: vi.fn(),
   };
   const session = createSession({
-    authority,
+    authenticator: authority,
     identity: { read: () => state.identity },
     connectivity: {
       isOffline: () => state.offline,
@@ -50,7 +67,7 @@ function setup(
         };
       },
     },
-    page,
+    pageReplace: page,
   });
   return {
     session,
@@ -59,7 +76,7 @@ function setup(
     state,
     unsubscribe,
     stopOnline,
-    emit(event: SessionEvent) {
+    emit(event: AuthChange) {
       for (const listener of listeners) listener(event);
     },
     goOnline() {
@@ -70,7 +87,7 @@ function setup(
 }
 
 const mounted = { isMounted: () => true };
-const signedOut: SessionEvent = { kind: "signed-out" };
+const signedOut: AuthChange = { kind: "signed-out" };
 
 async function flush() {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -84,7 +101,7 @@ describe("サインアウト", () => {
         const { session, authority, state } = setup();
         authority.signOutHere.mockImplementation(async () => {
           state.identity = null;
-          return null;
+          return accepted;
         });
 
         // When
@@ -175,14 +192,14 @@ describe("サインアウト", () => {
       // Given
       const read = vi.fn(() => "user-1");
       const session = createSession({
-        authority: {
-          signOutHere: async () => null,
-          check: async () => "authenticated",
+        authenticator: {
+          signOutHere: async () => accepted,
+          readSession: async () => readingOf("authenticated"),
           subscribe: () => () => {},
         },
         identity: { read },
         connectivity: { isOffline: () => false, onOnline: () => () => {} },
-        page: { here: () => "/rounds", replace: () => {} },
+        pageReplace: { here: () => "/rounds", replace: () => {} },
       });
 
       // When
@@ -190,6 +207,57 @@ describe("サインアウト", () => {
 
       // Then
       expect(read).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("実行中の拒否", () => {
+    it("同じタスクでの2回のサインアウトで、認証サービスへの依頼は1回で、2回目は実行中として始めない", async () => {
+      // Given
+      const { session, authority, state } = setup();
+      authority.signOutHere.mockImplementation(async () => {
+        state.identity = null;
+        return accepted;
+      });
+
+      // When
+      const [first, second] = await Promise.all([
+        session.signOut(mounted),
+        session.signOut(mounted),
+      ]);
+
+      // Then
+      expect(authority.signOutHere).toHaveBeenCalledTimes(1);
+      expect(first).toEqual({ kind: "completed" });
+      expect(second).toEqual({ kind: "busy" });
+    });
+
+    it("失敗の後は、実行中が解かれて、再び開始できる", async () => {
+      // Given
+      const { session, authority } = setup({
+        signOutHere: async () => ({ kind: "rate_limited" }),
+      });
+      await session.signOut(mounted);
+
+      // When
+      const result = await session.signOut(mounted);
+
+      // Then
+      expect(result.kind).toBe("failed");
+      expect(authority.signOutHere).toHaveBeenCalledTimes(2);
+    });
+
+    it("離れて結果を破棄した後は、実行中が解かれて、再び開始できる", async () => {
+      // Given
+      const { session, state } = setup();
+      const discarded = await session.signOut({ isMounted: () => false });
+      state.identity = null;
+
+      // When
+      const result = await session.signOut(mounted);
+
+      // Then
+      expect(discarded).toEqual({ kind: "discarded" });
+      expect(result).toEqual({ kind: "completed" });
     });
   });
 
@@ -203,7 +271,7 @@ describe("サインアウト", () => {
       authority.signOutHere.mockImplementation(async () => {
         state.identity = null;
         emit(signedOut);
-        return null;
+        return accepted;
       });
 
       // When
@@ -220,7 +288,7 @@ describe("サインアウト", () => {
       authority.signOutHere.mockImplementation(async () => {
         state.identity = null;
         emit(signedOut);
-        return { kind: "unreachable" };
+        return UNREACHABLE;
       });
 
       // When
@@ -387,7 +455,7 @@ describe("セッション喪失の見張り", () => {
       await flush();
 
       // Then
-      expect(authority.check).not.toHaveBeenCalled();
+      expect(authority.readSession).not.toHaveBeenCalled();
       expect(page.replace).not.toHaveBeenCalled();
     });
 
@@ -464,7 +532,7 @@ describe("セッション喪失の見張り", () => {
       await flush();
 
       // Then
-      expect(authority.check).not.toHaveBeenCalled();
+      expect(authority.readSession).not.toHaveBeenCalled();
     });
   });
 });

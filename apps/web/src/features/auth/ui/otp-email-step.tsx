@@ -1,14 +1,13 @@
 "use client";
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
-import { Loader2 } from "lucide-react";
 import type { FormEvent, ReactNode, RefObject } from "react";
 import { AuthHeader } from "@/components/auth-header";
 import { Turnstile } from "@/components/turnstile";
-import { Button } from "@/components/ui/button";
+import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { EMAIL_MAX_LENGTH } from "../domain/email-address";
+import { AuthField } from "./auth-field";
 
 type OtpEmailStepProps = {
   // エラー文の要素のidの接頭辞(`${idPrefix}-email-error`)。
@@ -18,7 +17,8 @@ type OtpEmailStepProps = {
   footer: ReactNode;
   email: string;
   onEmailChange: (value: string) => void;
-  fieldErrors: { email?: string; captcha?: string };
+  emailError: string | undefined;
+  captchaError: string | undefined;
   submitting: boolean;
   error: string | null;
   hydrated: boolean;
@@ -35,7 +35,8 @@ export function OtpEmailStep({
   footer,
   email,
   onEmailChange,
-  fieldErrors,
+  emailError,
+  captchaError,
   submitting,
   error,
   hydrated,
@@ -54,36 +55,26 @@ export function OtpEmailStep({
         data-hydrated={hydrated}
         className="flex w-full flex-col gap-3"
       >
-        <div className="flex flex-col gap-1">
-          <Input
-            type="email"
-            placeholder="you@example.com"
-            maxLength={EMAIL_MAX_LENGTH}
-            value={email}
-            onChange={(e) => onEmailChange(e.target.value)}
-            aria-invalid={Boolean(fieldErrors.email)}
-            aria-describedby={fieldErrors.email ? errorId : undefined}
-          />
-          {fieldErrors.email && (
-            <p id={errorId} className="text-destructive text-sm">
-              {fieldErrors.email}
-            </p>
+        <AuthField errorId={errorId} error={emailError}>
+          {(aria) => (
+            <Input
+              type="email"
+              placeholder="you@example.com"
+              maxLength={EMAIL_MAX_LENGTH}
+              value={email}
+              onChange={(e) => onEmailChange(e.target.value)}
+              {...aria}
+            />
           )}
-        </div>
-        <Turnstile
-          ref={checkRef}
-          onVerify={onCheck}
-          error={fieldErrors.captcha}
-        />
-        <Button
+        </AuthField>
+        <Turnstile ref={checkRef} onVerify={onCheck} error={captchaError} />
+        <BusyButton
           type="submit"
           data-captcha-ready={checked}
-          aria-disabled={submitting}
-          className={cn(submitting && "pointer-events-none opacity-50")}
+          busy={submitting}
         >
-          {submitting && <Loader2 className="size-3.5 animate-spin" />}
           認証コードを送信
-        </Button>
+        </BusyButton>
       </form>
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
       {footer}

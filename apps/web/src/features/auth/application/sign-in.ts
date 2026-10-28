@@ -1,23 +1,24 @@
-import type { AuthFailure } from "../domain/auth-failure";
-import { destinationOf } from "../domain/return-to";
+import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
+import { destinationOf } from "../domain/routes";
 import {
+  beginSignIn,
   type Credentials,
-  checkSignIn,
-  type SignInAction,
-  type SignInAttempt,
-} from "../domain/sign-in-attempt";
+  type SignInEvent,
+  type SignInFlow,
+} from "../domain/sign-in-flow";
+import { type CallResult, failureOf } from "./call-result";
 import type { Navigation } from "./navigation";
 import type { ScreenView } from "./screen-view";
 
-// 認証サービスに資格情報を照合させる。成功ならnull、失敗なら失敗の種類を返し、例外を投げない。
+// 認証サービスに資格情報を照合させる。例外は投げず、結果は値で返す。
 export type SignInAuthenticator = {
-  signIn(credentials: Credentials): Promise<AuthFailure | null>;
+  signIn(credentials: Credentials): Promise<CallResult>;
 };
 
 export type SignIn = {
   submit(
     input: { email: string; password: string },
-    view: ScreenView<SignInAttempt, SignInAction>,
+    view: ScreenView<SignInFlow, SignInEvent>,
   ): Promise<void>;
 };
 
@@ -30,21 +31,17 @@ export function createSignIn({
 }): SignIn {
   return {
     async submit(input, view) {
-      const check = checkSignIn(view.state, input);
-      if (check.kind === "busy") return;
-      if (check.kind === "invalid") {
-        view.dispatch({ type: "invalid", fieldErrors: check.fieldErrors });
-        return;
-      }
+      const credentials = view.begin((flow) => beginSignIn(flow, input));
+      if (!credentials) return;
       // 失敗は、状態を失敗にし、使ったトークンを消費済みにしたうえで、チェックをやり直させる。
       const fail = (failure: AuthFailure) => {
         view.dispatch({ type: "failed", failure });
         view.resetCheck();
       };
-      view.dispatch({ type: "submitted" });
-      const failure = await authenticator.signIn(check.credentials);
+      const result = await authenticator.signIn(credentials);
       // 送信中に画面を離れたときは、状態を変えず、遷移もしない。
       if (!view.isMounted()) return;
+      const failure = failureOf(result);
       if (failure) {
         fail(failure);
         return;
@@ -54,7 +51,7 @@ export function createSignIn({
       try {
         navigation.go(destinationOf(navigation.returnTo()));
       } catch {
-        fail({ kind: "unreachable" });
+        fail(UNREACHABLE);
       }
     },
   };

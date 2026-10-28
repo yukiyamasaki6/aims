@@ -1,9 +1,5 @@
-import {
-  AuthRetryableFetchError,
-  type PostgrestError,
-} from "@supabase/supabase-js";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
-import { AUTH_REQUIRED_MESSAGE } from "@/features/auth";
 import {
   authFailureResult,
   classifyFailure,
@@ -11,6 +7,8 @@ import {
   rpcFailureResult,
   toSafeResult,
 } from "./sync-result";
+
+const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
 
 const NETWORK_FAILURE = {
   error: "通信エラー",
@@ -178,10 +176,7 @@ describe("authFailureResult", () => {
     it("通信エラーの文言と、認証の不明の種類を返し、上限なく再試行する", () => {
       // Given
       // When
-      const result = authFailureResult({
-        status: "unknown",
-        error: new AuthRetryableFetchError("Failed to fetch", 0),
-      });
+      const result = authFailureResult({ status: "unknown" });
 
       // Then
       expect(result).toEqual({
@@ -192,10 +187,7 @@ describe("authFailureResult", () => {
 
     it("不明の失敗は、初回も多数回の後も再試行する", () => {
       // Given
-      const result = authFailureResult({
-        status: "unknown",
-        error: new AuthRetryableFetchError("Failed to fetch", 0),
-      });
+      const result = authFailureResult({ status: "unknown" });
 
       // When
       const first = decideSyncResult(result, 0);

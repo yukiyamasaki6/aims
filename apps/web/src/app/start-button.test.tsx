@@ -76,7 +76,7 @@ describe("StartButton", () => {
     expect(link).toHaveAttribute("href", "/signup");
   });
 
-  it("確認が例外で失敗すると、行き先を/signupのままにし、判定済みの印を付ける", async () => {
+  it("確認が例外で失敗すると、確かめられなかった(不明)として、行き先を/roundsに替え、判定済みの印を付ける", async () => {
     // Given
     supabase.getSession.mockRejectedValue(new Error("failed"));
 
@@ -88,6 +88,6 @@ describe("StartButton", () => {
     await vi.waitFor(() =>
       expect(link).toHaveAttribute("data-hydrated", "true"),
     );
-    expect(link).toHaveAttribute("href", "/signup");
+    expect(link).toHaveAttribute("href", "/rounds");
   });
 });

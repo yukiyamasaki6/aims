@@ -1,5 +1,5 @@
 import type { PostgrestError } from "@supabase/supabase-js";
-import { readSession } from "@/features/auth/infrastructure/supabase-session-state";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import type {
   OpFlight,
   OpResult,
@@ -304,11 +304,11 @@ export async function sendRoundBatch(
   expectedUserId: string | null,
 ): Promise<SendOutcome> {
   const supabase = createClient();
-  const state = await readSession(supabase);
-  if (state.status !== "authenticated") {
-    return { ok: false, failure: authFailureResult(state) };
+  const reading = await createSupabaseAuth(() => supabase).readSession();
+  if (reading.status !== "authenticated") {
+    return { ok: false, failure: authFailureResult(reading) };
   }
-  if (expectedUserId !== null && state.session.user.id !== expectedUserId) {
+  if (expectedUserId !== null && reading.userId !== expectedUserId) {
     return {
       ok: false,
       failure: authFailureResult({ status: "unauthenticated" }),

@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createBrowserIdentityStore,
-  getLocalIdentity,
-} from "./browser-identity-store";
+import { createBrowserIdentityStore } from "./browser-identity-store";
 
 beforeEach(() => {
   localStorage.clear();
@@ -18,7 +15,7 @@ describe("ブラウザの端末の識別情報", () => {
     // Given
 
     // When
-    const identity = getLocalIdentity();
+    const identity = createBrowserIdentityStore().read();
 
     // Then
     expect(identity).toBeNull();
@@ -33,7 +30,7 @@ describe("ブラウザの端末の識別情報", () => {
 
     // Then
     expect(store.read()).toBe("user-1");
-    expect(getLocalIdentity()).toBe("user-1");
+    expect(createBrowserIdentityStore().read()).toBe("user-1");
   });
 
   it("nullを書くと消える", () => {
@@ -67,7 +64,7 @@ describe("ブラウザの端末の識別情報", () => {
       });
 
       // When
-      const identity = getLocalIdentity();
+      const identity = createBrowserIdentityStore().read();
 
       // Then
       expect(identity).toBeNull();

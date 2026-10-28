@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateNewPassword } from "./new-password";
+import { validateNewPassword, validatePasswordPresent } from "./password";
 
 const requirementMessage =
   "パスワードは8文字以上72文字以内の半角英数記号で、英字と数字の両方を含めてください。";
@@ -74,5 +74,30 @@ describe("新しいパスワードの検証", () => {
 
     // Then
     expect(result).toBe(requirementMessage);
+  });
+});
+
+describe("validatePasswordPresent", () => {
+  it.each(["a", "password1", "パスワード", "a".repeat(100)])(
+    "入力されたパスワード %s は強さを問わずundefinedを返す",
+    (password) => {
+      // Given
+
+      // When
+      const result = validatePasswordPresent(password);
+
+      // Then
+      expect(result).toBeUndefined();
+    },
+  );
+
+  it("空なら入力を促す文言を返す", () => {
+    // Given
+
+    // When
+    const result = validatePasswordPresent("");
+
+    // Then
+    expect(result).toBe("パスワードを入力してください。");
   });
 });

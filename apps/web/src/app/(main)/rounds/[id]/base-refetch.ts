@@ -1,8 +1,11 @@
 import { retryDelayMs } from "@/features/op-log/sync-result";
 import type { RoundOpSync } from "@/features/rounds/round-op-log";
-import { isOffline } from "@/lib/connectivity/infrastructure/browser-connectivity";
+import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createClient } from "@/lib/supabase/client";
 import { type LoadedRound, loadRoundDetail } from "./load-round-detail";
+
+// 通信の可否。
+const connectivity = createBrowserConnectivity();
 
 type RefetchEnv = {
   roundId: string;
@@ -43,7 +46,7 @@ async function refetch(env: RefetchEnv, loop: RefetchLoop) {
     return;
   }
   // オフラインと取得の失敗では何もしない(次の知らせ、または再読み込みで取り直す)。
-  if (isOffline()) return;
+  if (connectivity.isOffline()) return;
   loop.fetching = true;
   try {
     // 取得は端末の組へ反映する。画面は組から状態を求めるため、結果は使わない。
@@ -68,7 +71,7 @@ async function refetch(env: RefetchEnv, loop: RefetchLoop) {
 // 端末のベースで表示している間、`navigator.onLine`がtrueのまま通信が戻る場合のために、間隔を置いて取り直す。
 function schedule(env: RefetchEnv, loop: RefetchLoop) {
   clearTimeout(loop.timer);
-  if (!loop.active || !env.stale.current || isOffline()) return;
+  if (!loop.active || !env.stale.current || connectivity.isOffline()) return;
   loop.timer = setTimeout(async () => {
     await refetch(env, loop);
     loop.attempt += 1;

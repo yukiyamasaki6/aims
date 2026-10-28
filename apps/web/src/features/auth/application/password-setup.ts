@@ -1,17 +1,19 @@
-import type { AuthFailure } from "../domain/auth-failure";
 import {
-  type Check,
-  checkResend,
-  checkSetPassword,
-  checkVerifyCode,
+  beginResend,
+  beginSetPassword,
+  beginVerifyCode,
   type PasswordSetupEvent,
   type PasswordSetupFlow,
 } from "../domain/password-setup-flow";
-import type { PasswordSetupAuthenticator } from "./password-setup-authenticator";
+import { failureOf } from "./call-result";
+import type {
+  CodePurpose,
+  PasswordSetupAuthenticator,
+} from "./password-setup-authenticator";
 import type { ScreenView } from "./screen-view";
 
 // 認証コードで本人確認をして、パスワードを設定する手続き(サインアップとパスワード再設定)が共有する順序。
-// 手続きごとに違うのは、コードの送信の前の確認と、パスワード設定の後の動作だけで、それぞれの手続きのファイルが持つ。
+// 手続きごとに違うのは、コードの目的、コードの送信の前の確認、パスワード設定の後の動作で、それぞれの手続きのファイルが持つ。
 
 export type PasswordSetupView = ScreenView<
   PasswordSetupFlow,
@@ -32,68 +34,55 @@ export type PasswordSetup = {
   ): Promise<void>;
 };
 
-export const UNREACHABLE: AuthFailure = { kind: "unreachable" };
-
-// 操作を始められるかを判定し、始められるなら実行中にして、判定の結果を返す。
-// 実行中なら何もせず、入力の不備なら示して、nullを返す。
-export function begin<Ready extends object>(
-  check: Check<Ready>,
-  view: PasswordSetupView,
-  operation: Extract<PasswordSetupEvent, { type: "started" }>["operation"],
-): Ready | null {
-  if (check.kind === "busy") return null;
-  if (check.kind === "invalid") {
-    view.dispatch({ type: "invalid", fieldErrors: check.fieldErrors });
-    return null;
-  }
-  view.dispatch({ type: "started", operation });
-  return check;
-}
+// 共有の順序が使う、認証サービスと、手続きごとのコードの目的。
+export type PasswordSetupContext = {
+  authenticator: PasswordSetupAuthenticator;
+  purpose: CodePurpose;
+};
 
 // コードの送信の依頼。応答があれば、成功でも拒否でも、使ったトークンは消費し、チェックをやり直させる。
+// 応答が無かった(unreachable)ときは、トークンを使っていないので消費せず、チェックもやり直さない。
 // 送信中に画面を離れたときは、状態を変えず、チェックのやり直しもしない。
 export async function deliver(
-  authenticator: PasswordSetupAuthenticator,
+  { authenticator, purpose }: PasswordSetupContext,
   { email, captchaToken }: { email: string; captchaToken: string },
   view: PasswordSetupView,
   sent: Extract<PasswordSetupEvent, { type: "codeSent" | "codeResent" }>,
 ) {
-  const delivery = await authenticator.sendCode({ email, captchaToken });
+  const result = await authenticator.sendCode({ purpose, email, captchaToken });
   if (!view.isMounted()) return;
-  if (delivery.kind === "unreached") {
-    view.dispatch({ type: "failed", failure: UNREACHABLE });
+  if (result.kind === "unreachable") {
+    view.dispatch({ type: "failed", failure: result });
     return;
   }
   view.dispatch(
-    delivery.kind === "sent"
+    result.kind === "accepted"
       ? sent
-      : { type: "refused", failure: delivery.failure },
+      : { type: "refused", failure: result.failure },
   );
   view.resetCheck();
 }
 
 export async function resend(
-  authenticator: PasswordSetupAuthenticator,
+  context: PasswordSetupContext,
   input: { email: string },
   view: PasswordSetupView,
 ) {
-  const ready = begin(checkResend(view.state, input), view, "resend");
-  if (!ready) return;
-  await deliver(authenticator, ready, view, { type: "codeResent" });
+  const request = view.begin((flow) => beginResend(flow, input));
+  if (!request) return;
+  await deliver(context, request, view, { type: "codeResent" });
 }
 
 export async function verifyCode(
-  authenticator: PasswordSetupAuthenticator,
+  { authenticator, purpose }: PasswordSetupContext,
   input: { email: string; code: string },
   view: PasswordSetupView,
 ) {
-  const ready = begin(checkVerifyCode(view.state, input), view, "verify");
-  if (!ready) return;
-  const failure = await authenticator.verifyCode({
-    email: ready.email,
-    code: ready.code,
-  });
+  const request = view.begin((flow) => beginVerifyCode(flow, input));
+  if (!request) return;
+  const result = await authenticator.verifyCode({ purpose, ...request });
   if (!view.isMounted()) return;
+  const failure = failureOf(result);
   view.dispatch(
     failure ? { type: "failed", failure } : { type: "codeConfirmed" },
   );
@@ -103,14 +92,15 @@ export async function verifyCode(
 // 失敗は示してfalseを返す。送信中に画面を離れたときは、状態を変えずにfalseを返す。
 // 成功時は実行中を解除しない。続きの動作が終わる前に再び押され、二重に設定されるのを防ぐため。
 export async function applyPassword(
-  authenticator: PasswordSetupAuthenticator,
+  { authenticator }: PasswordSetupContext,
   input: { password: string },
   view: PasswordSetupView,
 ): Promise<boolean> {
-  const ready = begin(checkSetPassword(view.state, input), view, "setPassword");
-  if (!ready) return false;
-  const failure = await authenticator.setPassword(ready.password);
+  const request = view.begin((flow) => beginSetPassword(flow, input));
+  if (!request) return false;
+  const result = await authenticator.setPassword(request.password);
   if (!view.isMounted()) return false;
+  const failure = failureOf(result);
   if (failure) {
     view.dispatch({ type: "failed", failure });
     return false;

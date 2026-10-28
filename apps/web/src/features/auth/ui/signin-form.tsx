@@ -1,36 +1,33 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
 import Link from "next/link";
-import { type ComponentRef, type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { AuthHeader } from "@/components/auth-header";
 import { Turnstile } from "@/components/turnstile";
-import { Button } from "@/components/ui/button";
+import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { useMountedRef } from "@/hooks/use-mounted-ref";
-import { cn } from "@/lib/utils";
 import type { SignIn } from "../application/sign-in";
 import { EMAIL_MAX_LENGTH } from "../domain/email-address";
+import { RESET_PASSWORD_PATH, SIGN_UP_PATH } from "../domain/routes";
 import {
-  type FieldErrors,
-  initialAttempt,
+  initialSignInFlow,
+  type SignInFlow,
   signInReducer,
-} from "../domain/sign-in-attempt";
+} from "../domain/sign-in-flow";
+import { AuthField } from "./auth-field";
 import { useScreenView } from "./use-screen-view";
 
+// エラー文の要素のidの接頭辞(`${ID_PREFIX}-email-error`)。
+const ID_PREFIX = "signin";
+
 export function SignInForm({ signIn }: { signIn: SignIn }) {
-  const mounted = useMountedRef();
-  const check = useRef<ComponentRef<typeof Turnstile>>(undefined);
-  const { state: attempt, view } = useScreenView(
-    signInReducer,
-    initialAttempt,
-    {
-      isMounted: () => mounted.current,
-      resetCheck: () => check.current?.reset(),
-    },
-  );
+  const {
+    state: flow,
+    view,
+    checkRef,
+  } = useScreenView(signInReducer, initialSignInFlow);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const hydrated = useHydrated();
@@ -54,34 +51,32 @@ export function SignInForm({ signIn }: { signIn: SignIn }) {
           setEmail={setEmail}
           password={password}
           setPassword={setPassword}
-          fieldErrors={attempt.fieldErrors}
+          fieldErrors={flow.fieldErrors}
         />
         <Turnstile
-          ref={check}
-          onVerify={(token) => view.dispatch({ type: "verified", token })}
-          error={attempt.fieldErrors.captcha}
+          ref={checkRef}
+          onVerify={(token) => view.dispatch({ type: "captchaChecked", token })}
+          error={flow.fieldErrors.captcha}
         />
-        <Button
+        <BusyButton
           type="submit"
-          data-captcha-ready={attempt.captchaToken !== null}
-          aria-disabled={attempt.submitting}
-          className={cn(attempt.submitting && "pointer-events-none opacity-50")}
+          data-captcha-ready={flow.captchaToken !== null}
+          busy={flow.submitting}
         >
-          {attempt.submitting && <Loader2 className="size-3.5 animate-spin" />}
           サインイン
-        </Button>
+        </BusyButton>
       </form>
-      {attempt.error && (
-        <p className="text-center text-destructive text-sm">{attempt.error}</p>
+      {flow.error && (
+        <p className="text-center text-destructive text-sm">{flow.error}</p>
       )}
       <p className="text-muted-foreground text-sm">
-        <Link href="/reset-password" className="underline">
+        <Link href={RESET_PASSWORD_PATH} className="underline">
           パスワードをお忘れですか
         </Link>
       </p>
       <p className="text-muted-foreground text-sm">
         アカウントをお持ちでない方は{" "}
-        <Link href="/signup" className="underline">
+        <Link href={SIGN_UP_PATH} className="underline">
           サインアップ
         </Link>
       </p>
@@ -100,44 +95,35 @@ function SignInFields({
   setEmail: (value: string) => void;
   password: string;
   setPassword: (value: string) => void;
-  fieldErrors: FieldErrors;
+  fieldErrors: SignInFlow["fieldErrors"];
 }) {
   return (
     <>
-      <div className="flex flex-col gap-1">
-        <Input
-          type="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          maxLength={EMAIL_MAX_LENGTH}
-          aria-invalid={Boolean(fieldErrors.email)}
-          aria-describedby={
-            fieldErrors.email ? "signin-email-error" : undefined
-          }
-        />
-        {fieldErrors.email && (
-          <p id="signin-email-error" className="text-destructive text-sm">
-            {fieldErrors.email}
-          </p>
+      <AuthField errorId={`${ID_PREFIX}-email-error`} error={fieldErrors.email}>
+        {(aria) => (
+          <Input
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            maxLength={EMAIL_MAX_LENGTH}
+            {...aria}
+          />
         )}
-      </div>
-      <div className="flex flex-col gap-1">
-        <PasswordInput
-          placeholder="パスワード"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          aria-invalid={Boolean(fieldErrors.password)}
-          aria-describedby={
-            fieldErrors.password ? "signin-password-error" : undefined
-          }
-        />
-        {fieldErrors.password && (
-          <p id="signin-password-error" className="text-destructive text-sm">
-            {fieldErrors.password}
-          </p>
+      </AuthField>
+      <AuthField
+        errorId={`${ID_PREFIX}-password-error`}
+        error={fieldErrors.password}
+      >
+        {(aria) => (
+          <PasswordInput
+            placeholder="パスワード"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            {...aria}
+          />
         )}
-      </div>
+      </AuthField>
     </>
   );
 }

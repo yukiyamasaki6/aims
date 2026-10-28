@@ -24,13 +24,14 @@ const supabase = vi.hoisted(() => {
     unsubscribe,
     signOut: vi.fn(),
     getSession: vi.fn(),
+    createBrowserClient: vi.fn(),
     emit(event: string, session: { user: { id: string } } | null) {
       for (const listener of listeners) listener(event, session);
     },
   };
 });
 vi.mock("@supabase/ssr", () => ({
-  createBrowserClient: () => ({
+  createBrowserClient: supabase.createBrowserClient.mockImplementation(() => ({
     auth: {
       signOut: supabase.signOut,
       getSession: supabase.getSession,
@@ -44,7 +45,7 @@ vi.mock("@supabase/ssr", () => ({
         return { data: { subscription: { unsubscribe } } };
       },
     },
-  }),
+  })),
 }));
 
 const replace = vi.fn();
@@ -160,6 +161,73 @@ describe("MainLayout", () => {
     });
   });
 
+  // 環境変数の欠落は、起きる時点で保証が違う。事前描画は「表示」、依頼時の欠落は下、起動時の欠落は購読が同期に投げる(扱わない)。
+  describe("環境変数の欠落", () => {
+    function loseEnv() {
+      vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+      vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
+    }
+
+    it("マウントの後、確認の前に環境変数が失われたときは、通信エラーを示してダイアログを開いたままボタンを戻す", async () => {
+      // Given
+      const user = userEvent.setup();
+      renderLayoutWithIdentity();
+      loseEnv();
+
+      // When
+      await confirmSignOut(user);
+
+      // Then
+      expect(await screen.findByText(NETWORK_ERROR)).toBeInTheDocument();
+      expect(screen.getByText("サインアウトしますか？")).toBeInTheDocument();
+      expect(screen.getByTestId("confirm-dialog-confirm")).toHaveAttribute(
+        "aria-disabled",
+        "false",
+      );
+      expect(supabase.signOut).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
+    });
+
+    it("環境変数が失われた確認の後、環境変数を戻して再度確認すると、接続を取得し直して完了し、遷移元を付けずに移る", async () => {
+      // Given
+      const user = userEvent.setup();
+      renderLayoutWithIdentity();
+      loseEnv();
+      await confirmSignOut(user);
+      await screen.findByText(NETWORK_ERROR);
+      const connectionsWhileLost =
+        supabase.createBrowserClient.mock.calls.length;
+      vi.unstubAllEnvs();
+      signOutEmittingSignedOut(async () => ({ error: null }));
+
+      // When
+      await user.click(screen.getByTestId("confirm-dialog-confirm"));
+
+      // Then
+      expect(supabase.signOut).toHaveBeenCalledExactlyOnceWith({
+        scope: "local",
+      });
+      expect(supabase.createBrowserClient.mock.calls.length).toBeGreaterThan(
+        connectionsWhileLost,
+      );
+      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
+    });
+
+    it("環境変数が無いままマウントすると、見張りの購読が同期に投げ、マウントが例外で終わる", () => {
+      // Given
+      loseEnv();
+      vi.spyOn(console, "error").mockImplementation(() => {});
+
+      // When
+      const mount = () => renderLayout();
+
+      // Then
+      expect(mount).toThrow(
+        "Missing Supabase environment variables in client.",
+      );
+    });
+  });
+
   describe("セッション喪失の見張り", () => {
     it("表示すると、認証状態の変化の購読を1回始める", () => {
       // Given
@@ -223,6 +291,22 @@ describe("MainLayout", () => {
       expect(replace).toHaveBeenCalledExactlyOnceWith(
         "/signin?returnTo=%2Frounds%2Fnew",
       );
+    });
+
+    it("表示した時の確認が通信の失敗で確かめられない(不明)ときは、移らない", async () => {
+      // Given
+      supabase.getSession.mockResolvedValue({
+        data: { session: null },
+        error: new AuthRetryableFetchError("Failed to fetch", 0),
+      });
+
+      // When
+      renderLayout();
+      await flush();
+
+      // Then
+      expect(supabase.getSession).toHaveBeenCalledTimes(1);
+      expect(replace).not.toHaveBeenCalled();
     });
 
     it("オフラインで未認証と判っても、移動せず留まる", async () => {

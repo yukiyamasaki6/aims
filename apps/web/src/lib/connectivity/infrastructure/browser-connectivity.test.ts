@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createBrowserConnectivity, isOffline } from "./browser-connectivity";
+import { createBrowserConnectivity } from "./browser-connectivity";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -14,7 +14,7 @@ describe("isOffline", () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(onLine);
 
     // When
-    const result = isOffline();
+    const result = createBrowserConnectivity().isOffline();
 
     // Then
     expect(result).toBe(expected);

@@ -1,18 +1,13 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { Start } from "../domain/flow";
 import { useScreenView } from "./use-screen-view";
 
 // サインインでない汎用のreducer(加算)で、フックが特定の画面に依らないことを示す。
 const add = (state: number, amount: number) => state + amount;
 
-function setup({
-  isMounted = () => true,
-  resetCheck = vi.fn(),
-}: {
-  isMounted?: () => boolean;
-  resetCheck?: () => void;
-} = {}) {
-  return renderHook(() => useScreenView(add, 10, { isMounted, resetCheck }));
+function setup() {
+  return renderHook(() => useScreenView(add, 10));
 }
 
 describe("useScreenView", () => {
@@ -72,20 +67,107 @@ describe("useScreenView", () => {
     expect(result.current.view).toBe(before);
   });
 
-  it("resetCheckとisMountedは、渡された関数を呼ぶ", () => {
+  it("resetCheckは、セキュリティチェックのウィジェットをやり直す", () => {
     // Given
-    const resetCheck = vi.fn();
-    const isMounted = vi.fn(() => false);
-    const { result } = setup({ isMounted, resetCheck });
+    const { result } = setup();
+    const reset = vi.fn();
+    result.current.checkRef.current = { reset } as never;
 
     // When
     result.current.view.resetCheck();
-    const mounted = result.current.view.isMounted();
 
     // Then
-    expect(resetCheck).toHaveBeenCalledOnce();
-    expect(isMounted).toHaveBeenCalledOnce();
-    expect(mounted).toBe(false);
+    expect(reset).toHaveBeenCalledOnce();
+  });
+
+  it("ウィジェットが無いときのresetCheckは、何もしない", () => {
+    // Given
+    const { result } = setup();
+
+    // When
+    const run = () => result.current.view.resetCheck();
+
+    // Then
+    expect(run).not.toThrow();
+  });
+
+  it("表示中の判定は、アンマウントで偽になる", () => {
+    // Given
+    const { result, unmount } = setup();
+    const { view } = result.current;
+    const before = view.isMounted();
+
+    // When
+    unmount();
+
+    // Then
+    expect(before).toBe(true);
+    expect(view.isMounted()).toBe(false);
+  });
+
+  describe("begin", () => {
+    const start = (state: number, amount: number): Start<number, number> =>
+      state + amount > 100
+        ? ({ kind: "busy", state } as const)
+        : ({
+            kind: "started",
+            state: state + amount,
+            request: amount,
+          } as const);
+
+    it("開始できれば、結果の状態を反映し、頼む内容を返す", () => {
+      // Given
+      const { result } = setup();
+
+      // When
+      let request: number | null | undefined = null;
+      act(() => {
+        request = result.current.view.begin((state) => start(state, 5));
+      });
+
+      // Then
+      expect(request).toBe(5);
+      expect(result.current.state).toBe(15);
+    });
+
+    it("同じタスクの2回の開始で、2回目は1回目の結果の状態を見て開始しない", () => {
+      // Given
+      const { result } = setup();
+      const startOnce = (state: number): Start<number, string> =>
+        state > 10
+          ? ({ kind: "busy", state } as const)
+          : ({ kind: "started", state: state + 1, request: "go" } as const);
+
+      // When
+      let first: string | null | undefined = null;
+      let second: string | null | undefined = null;
+      act(() => {
+        first = result.current.view.begin(startOnce);
+        second = result.current.view.begin(startOnce);
+      });
+
+      // Then
+      expect(first).toBe("go");
+      expect(second).toBeNull();
+      expect(result.current.state).toBe(11);
+    });
+
+    it("開始できなくても、結果の状態は反映する(不備を示す)", () => {
+      // Given
+      const { result } = setup();
+      const invalid = (state: number): Start<number, string> =>
+        ({ kind: "invalid", state: state - 1 }) as const;
+
+      // When
+      let request: unknown = "unset";
+      act(() => {
+        request = result.current.view.begin(invalid);
+      });
+
+      // Then
+      expect(request).toBeNull();
+      expect(result.current.state).toBe(9);
+    });
   });
 
   // 段階の遷移を持つ状態でも、出来事の積み重ねと同期した読み出しが保たれる(画面の最新の値が描画の遅れに依らない)。
@@ -102,10 +184,7 @@ describe("useScreenView", () => {
       };
     };
     const { result } = renderHook(() =>
-      useScreenView(advance, { step: "a", log: [] } as Flow, {
-        isMounted: () => true,
-        resetCheck: vi.fn(),
-      }),
+      useScreenView(advance, { step: "a", log: [] } as Flow),
     );
     const view = result.current.view;
 

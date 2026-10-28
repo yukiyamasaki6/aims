@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getLocalIdentity } from "@/features/auth/infrastructure/browser-identity-store";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { LocalIdentityProvider } from "./local-identity-provider";
 
 // Supabaseクライアントは外部サービスとの境界のため、認証状態の変化を任意に発火できるスタブで模す。
@@ -61,7 +61,7 @@ describe("LocalIdentityProvider", () => {
       supabase.emit("SIGNED_IN", { user: { id: "user-1" } });
 
       // Then
-      expect(getLocalIdentity()).toBe("user-1");
+      expect(createBrowserIdentityStore().read()).toBe("user-1");
     });
 
     it("サインアウトすると、記録を消す", () => {
@@ -73,7 +73,7 @@ describe("LocalIdentityProvider", () => {
       supabase.emit("SIGNED_OUT", null);
 
       // Then
-      expect(getLocalIdentity()).toBeNull();
+      expect(createBrowserIdentityStore().read()).toBeNull();
     });
 
     it("復元されたセッション(INITIAL_SESSION)でも記録し、セッションが無いときは既存の記録を消さない", () => {
@@ -85,7 +85,7 @@ describe("LocalIdentityProvider", () => {
       supabase.emit("INITIAL_SESSION", null);
 
       // Then
-      expect(getLocalIdentity()).toBe("user-1");
+      expect(createBrowserIdentityStore().read()).toBe("user-1");
     });
   });
 
@@ -112,7 +112,7 @@ describe("LocalIdentityProvider", () => {
       supabase.emit("SIGNED_OUT", null);
 
       // Then
-      expect(getLocalIdentity()).toBe("user-1");
+      expect(createBrowserIdentityStore().read()).toBe("user-1");
     });
   });
 });

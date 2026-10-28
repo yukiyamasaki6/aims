@@ -1,17 +1,15 @@
 "use client";
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
-import { Loader2 } from "lucide-react";
 import type { FormEvent, RefObject } from "react";
 import { AuthHeader } from "@/components/auth-header";
 import { Turnstile } from "@/components/turnstile";
-import { Button } from "@/components/ui/button";
+import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { AUTH_CODE_LENGTH } from "../domain/auth-code";
+import { AuthField } from "./auth-field";
 
 type Pending = "verify" | "resend" | null;
-type FieldErrors = { code?: string; resend?: string };
 
 type OtpCodeStepProps = {
   // エラー文の要素のidの接頭辞(`${idPrefix}-code-error`)。
@@ -19,7 +17,8 @@ type OtpCodeStepProps = {
   email: string;
   code: string;
   onCodeChange: (value: string) => void;
-  fieldErrors: FieldErrors;
+  codeError: string | undefined;
+  resendError: string | undefined;
   // 実行中の確認か再送。どちらかが実行中の間は、3つのボタンを無効にする。
   pending: Pending;
   error: string | null;
@@ -38,7 +37,8 @@ export function OtpCodeStep({
   email,
   code,
   onCodeChange,
-  fieldErrors,
+  codeError,
+  resendError,
   pending,
   error,
   onBack,
@@ -60,7 +60,7 @@ export function OtpCodeStep({
       <CodeEntryForm
         code={code}
         onCodeChange={onCodeChange}
-        fieldErrors={fieldErrors}
+        error={codeError}
         pending={pending}
         errorId={`${idPrefix}-code-error`}
         onSubmit={onVerify}
@@ -74,7 +74,7 @@ export function OtpCodeStep({
         pending={pending}
         checked={checked}
         resendCooldown={resendCooldown}
-        resendError={fieldErrors.resend}
+        resendError={resendError}
         onResend={onResend}
       />
     </>
@@ -84,46 +84,41 @@ export function OtpCodeStep({
 function CodeEntryForm({
   code,
   onCodeChange,
-  fieldErrors,
+  error,
   pending,
   errorId,
   onSubmit,
 }: {
   code: string;
   onCodeChange: (value: string) => void;
-  fieldErrors: FieldErrors;
+  error: string | undefined;
   pending: Pending;
   errorId: string;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
     <form onSubmit={onSubmit} noValidate className="flex w-full flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <Input
-          type="text"
-          inputMode="numeric"
-          placeholder="123456"
-          className="text-center tracking-widest"
-          maxLength={AUTH_CODE_LENGTH}
-          value={code}
-          onChange={(e) => onCodeChange(e.target.value)}
-          aria-invalid={Boolean(fieldErrors.code)}
-          aria-describedby={fieldErrors.code ? errorId : undefined}
-        />
-        {fieldErrors.code && (
-          <p id={errorId} className="text-destructive text-sm">
-            {fieldErrors.code}
-          </p>
+      <AuthField errorId={errorId} error={error}>
+        {(aria) => (
+          <Input
+            type="text"
+            inputMode="numeric"
+            placeholder="123456"
+            className="text-center tracking-widest"
+            maxLength={AUTH_CODE_LENGTH}
+            value={code}
+            onChange={(e) => onCodeChange(e.target.value)}
+            {...aria}
+          />
         )}
-      </div>
-      <Button
+      </AuthField>
+      <BusyButton
         type="submit"
-        aria-disabled={pending !== null}
-        className={cn(pending !== null && "pointer-events-none opacity-50")}
+        busy={pending !== null}
+        spinner={pending === "verify"}
       >
-        {pending === "verify" && <Loader2 className="size-3.5 animate-spin" />}
         確認
-      </Button>
+      </BusyButton>
     </form>
   );
 }
@@ -143,20 +138,17 @@ function ResendSection({
 }) {
   return (
     <div className="flex w-full flex-col items-center gap-1">
-      <Button
+      <BusyButton
         type="button"
         variant="outline"
-        className={cn(
-          "w-full",
-          pending !== null && "pointer-events-none opacity-50",
-        )}
-        aria-disabled={pending !== null}
+        className="w-full"
+        busy={pending !== null}
+        spinner={pending === "resend"}
         data-captcha-ready={checked}
         onClick={onResend}
       >
-        {pending === "resend" && <Loader2 className="size-3.5 animate-spin" />}
         {resendCooldown > 0 ? `再送（${resendCooldown}秒）` : "再送"}
-      </Button>
+      </BusyButton>
       {resendError && <p className="text-destructive text-sm">{resendError}</p>}
     </div>
   );

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
-import { createSupabaseSession } from "@/features/auth/infrastructure/supabase-session";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { createClient } from "@/lib/supabase/client";
 
 // サインイン、サインアップを含む全ページで有効にする必要があるため、ルートレイアウトにマウントする。
@@ -12,7 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 export function LocalIdentityProvider() {
   const [localIdentity] = useState(() =>
     createLocalIdentity({
-      events: createSupabaseSession({ getClient: createClient }),
+      changes: createSupabaseAuth(createClient),
       writer: createBrowserIdentityStore(),
     }),
   );

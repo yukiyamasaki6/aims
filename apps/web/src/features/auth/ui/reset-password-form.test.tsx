@@ -3,12 +3,13 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Delivery } from "../application/password-setup-authenticator";
+import type { CallResult } from "../application/call-result";
+import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import {
   createResetPassword,
-  type ResetPasswordAuthenticator,
+  type SignOutEverywhere,
 } from "../application/reset-password";
-import type { AuthFailure } from "../domain/auth-failure";
+import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import { ResetPasswordForm } from "./reset-password-form";
 
 const NETWORK_ERROR_MESSAGE =
@@ -16,7 +17,12 @@ const NETWORK_ERROR_MESSAGE =
 const WEAK_PASSWORD_MESSAGE =
   "パスワードは8文字以上で、英字と数字の両方を含めてください。";
 const PASSWORD_PLACEHOLDER = "新しいパスワード（8文字以上・英数字を含む）";
-const SENT: Delivery = { kind: "sent" };
+const ACCEPTED: CallResult = { kind: "accepted" };
+
+// 認証サービスが拒否した結果。
+function refusedWith(failure: AuthFailure): CallResult {
+  return { kind: "refused", failure };
+}
 
 // 認証とページ全体の読み込みは、手続きの外側の境界のため偽に替える。手続き(createResetPassword)は実物を通す。
 const pageLoad = { load: vi.fn() };
@@ -25,7 +31,7 @@ const auth = {
   verifyCode: vi.fn(),
   setPassword: vi.fn(),
   signOutEverywhere: vi.fn(),
-} satisfies ResetPasswordAuthenticator;
+} satisfies PasswordSetupAuthenticator & SignOutEverywhere;
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、onVerifyの発火を制御する。
 const turnstile = vi.hoisted(() => ({
@@ -71,8 +77,8 @@ async function settle() {
 
 // 前提となる画面まで進める。検証対象の操作ではなく、fireEventで操作する。
 async function advanceToPasswordStep() {
-  auth.sendCode.mockResolvedValue(SENT);
-  auth.verifyCode.mockResolvedValue(null);
+  auth.sendCode.mockResolvedValue(ACCEPTED);
+  auth.verifyCode.mockResolvedValue(ACCEPTED);
   fireEvent.change(screen.getByPlaceholderText("you@example.com"), {
     target: { value: "user@example.com" },
   });
@@ -90,20 +96,20 @@ async function advanceToPasswordStep() {
     screen.getByRole("heading", { name: "新しいパスワードを設定" }),
   ).toBeInTheDocument();
   vi.clearAllMocks();
-  auth.signOutEverywhere.mockResolvedValue(null);
+  auth.signOutEverywhere.mockResolvedValue(ACCEPTED);
 }
 
 describe("ResetPasswordForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    auth.signOutEverywhere.mockResolvedValue(null);
+    auth.signOutEverywhere.mockResolvedValue(ACCEPTED);
   });
 
   describe("パスワード変更", () => {
     describe("変更に成功した場合", () => {
       it("サインインを終えさせ(引数なし)、その後に/signinへページ全体の読み込みで遷移する", async () => {
         // Given
-        auth.setPassword.mockResolvedValue(null);
+        auth.setPassword.mockResolvedValue(ACCEPTED);
         const user = userEvent.setup();
         renderForm();
         await advanceToPasswordStep();
@@ -125,7 +131,7 @@ describe("ResetPasswordForm", () => {
 
       it("送信中を解除せず、遷移の前に再び押しても再送信しない", async () => {
         // Given
-        auth.setPassword.mockResolvedValue(null);
+        auth.setPassword.mockResolvedValue(ACCEPTED);
         const user = userEvent.setup();
         renderForm();
         await advanceToPasswordStep();
@@ -148,7 +154,9 @@ describe("ResetPasswordForm", () => {
 
     it("認証エラーの場合、翻訳したメッセージを表示し、サインアウトも遷移もしない", async () => {
       // Given
-      auth.setPassword.mockResolvedValue({ kind: "weak_password" });
+      auth.setPassword.mockResolvedValue(
+        refusedWith({ kind: "weak_password" }),
+      );
       const user = userEvent.setup();
       renderForm();
       await advanceToPasswordStep();
@@ -169,8 +177,10 @@ describe("ResetPasswordForm", () => {
 
     it("認証エラーの後に再び送信するとサインインへ移る", async () => {
       // Given
-      auth.setPassword.mockResolvedValueOnce({ kind: "weak_password" });
-      auth.setPassword.mockResolvedValue(null);
+      auth.setPassword.mockResolvedValueOnce(
+        refusedWith({ kind: "weak_password" }),
+      );
+      auth.setPassword.mockResolvedValue(ACCEPTED);
       const user = userEvent.setup();
       renderForm();
       await advanceToPasswordStep();
@@ -190,7 +200,7 @@ describe("ResetPasswordForm", () => {
 
     it("通信エラーの場合、通信エラーのメッセージを表示し、サインアウトも遷移もしない", async () => {
       // Given
-      auth.setPassword.mockResolvedValue({ kind: "unreachable" });
+      auth.setPassword.mockResolvedValue(UNREACHABLE);
       const user = userEvent.setup();
       renderForm();
       await advanceToPasswordStep();
@@ -211,8 +221,8 @@ describe("ResetPasswordForm", () => {
 
     it("通信エラーの後に再び送信するとサインインへ移る", async () => {
       // Given
-      auth.setPassword.mockResolvedValueOnce({ kind: "unreachable" });
-      auth.setPassword.mockResolvedValue(null);
+      auth.setPassword.mockResolvedValueOnce(UNREACHABLE);
+      auth.setPassword.mockResolvedValue(ACCEPTED);
       const user = userEvent.setup();
       renderForm();
       await advanceToPasswordStep();
@@ -232,7 +242,7 @@ describe("ResetPasswordForm", () => {
 
     it("送信中にアンマウントされた場合、成功応答の後にサインアウトも画面遷移も行わない", async () => {
       // Given
-      const deferred = Promise.withResolvers<AuthFailure | null>();
+      const deferred = Promise.withResolvers<CallResult>();
       auth.setPassword.mockReturnValue(deferred.promise);
       const user = userEvent.setup();
       const { unmount } = renderForm();
@@ -242,7 +252,7 @@ describe("ResetPasswordForm", () => {
 
       // When
       unmount();
-      deferred.resolve(null);
+      deferred.resolve(ACCEPTED);
       await settle();
 
       // Then

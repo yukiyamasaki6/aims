@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SessionEvent } from "../domain/session-event";
+import type { AuthChange } from "../domain/auth-change";
 import { createLocalIdentity } from "./local-identity";
 
 function setup() {
-  const listeners: Array<(event: SessionEvent) => void> = [];
+  const listeners: Array<(event: AuthChange) => void> = [];
   const unsubscribe = vi.fn();
   const writer = { write: vi.fn() };
   const events = {
-    subscribe: vi.fn((listener: (event: SessionEvent) => void) => {
+    subscribe: vi.fn((listener: (event: AuthChange) => void) => {
       listeners.push(listener);
       // 解除すると、実際にこのリスナーへ以降の出来事が届かなくなる。
       return () => {
@@ -16,13 +16,13 @@ function setup() {
       };
     }),
   };
-  const localIdentity = createLocalIdentity({ events, writer });
+  const localIdentity = createLocalIdentity({ changes: events, writer });
   return {
     localIdentity,
     writer,
     events,
     unsubscribe,
-    emit(event: SessionEvent) {
+    emit(event: AuthChange) {
       for (const listener of listeners) listener(event);
     },
   };

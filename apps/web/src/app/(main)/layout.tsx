@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createSession } from "@/features/auth/application/session";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
-import { createSupabaseSession } from "@/features/auth/infrastructure/supabase-session";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SignOutButton } from "@/features/auth/ui/sign-out-button";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createClient } from "@/lib/supabase/client";
@@ -15,13 +15,13 @@ export default function MainLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // 画面を開いている間、同じ手続きを保つ。接続は、認証の実装が使うたびに取得する(描画時には作らない)。
+  // 画面を開いている間、同じ手続きを保つ。
   const [session] = useState(() =>
     createSession({
-      authority: createSupabaseSession({ getClient: createClient }),
+      authenticator: createSupabaseAuth(createClient),
       identity: createBrowserIdentityStore(),
       connectivity: createBrowserConnectivity(),
-      page: createBrowserPageLoad(),
+      pageReplace: createBrowserPageLoad(),
     }),
   );
   // セッションを失ったら/signinへ移す。認証が要る画面の集合(このレイアウトの下)の間、見張る。

@@ -214,7 +214,7 @@ describe("パスワード再設定画面の入口", () => {
     expect(auth.updateUser).toHaveBeenCalledExactlyOnceWith({
       password: "password123",
     });
-    expect(auth.signOut).toHaveBeenCalledExactlyOnceWith();
+    expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "global" });
     expect(locationAssign).toHaveBeenCalledExactlyOnceWith("/signin");
     expect(auth.signOut.mock.invocationCallOrder[0]).toBeLessThan(
       locationAssign.mock.invocationCallOrder[0] ?? 0,

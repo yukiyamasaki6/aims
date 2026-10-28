@@ -1,68 +1,44 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AuthFailure } from "../domain/auth-failure";
+import {
+  type AuthFailure,
+  NETWORK_ERROR_MESSAGE,
+  UNREACHABLE,
+} from "../domain/auth-failure";
 import {
   initialPasswordSetupFlow,
   type PasswordSetupEvent,
   type PasswordSetupFlow,
   passwordSetupReducer,
 } from "../domain/password-setup-flow";
-import type { Delivery } from "./password-setup-authenticator";
-import {
-  createResetPassword,
-  type ResetPasswordAuthenticator,
-} from "./reset-password";
-import type { ScreenView } from "./screen-view";
+import type { CallResult } from "./call-result";
+import type { PasswordSetupAuthenticator } from "./password-setup-authenticator";
+import { createResetPassword, type SignOutEverywhere } from "./reset-password";
+import { screenHarness } from "./screen-view-test-helpers";
 
 const email = "user@example.com";
 const password = "password123";
-const sent: Delivery = { kind: "sent" };
-const unreachable: AuthFailure = { kind: "unreachable" };
-const NETWORK_ERROR_MESSAGE =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
+const accepted: CallResult = { kind: "accepted" };
+const refused = (failure: AuthFailure): CallResult => ({
+  kind: "refused",
+  failure,
+});
 
 function setup() {
   const authenticator = {
-    sendCode: vi.fn(async (): Promise<Delivery> => sent),
-    verifyCode: vi.fn(async (): Promise<AuthFailure | null> => null),
-    setPassword: vi.fn(async (): Promise<AuthFailure | null> => null),
-    signOutEverywhere: vi.fn(async (): Promise<AuthFailure | null> => null),
-  } satisfies ResetPasswordAuthenticator;
+    sendCode: vi.fn(async (): Promise<CallResult> => accepted),
+    verifyCode: vi.fn(async (): Promise<CallResult> => accepted),
+    setPassword: vi.fn(async (): Promise<CallResult> => accepted),
+    signOutEverywhere: vi.fn(async (): Promise<CallResult> => accepted),
+  } satisfies PasswordSetupAuthenticator & SignOutEverywhere;
   const pageLoad = { load: vi.fn() };
   const procedure = createResetPassword({ authenticator, pageLoad });
-  const events: PasswordSetupEvent[] = [];
-  const order: string[] = [];
-  const resetCheck = vi.fn(() => order.push("resetCheck"));
-  // 画面の約束の偽。出来事を実物のreducerで適用し、stateは送った直後の値を返す。表示中かどうかは、テストが切り替える。
-  const screen = { mounted: true };
-  const viewOf = (
-    initial: PasswordSetupFlow,
-  ): ScreenView<PasswordSetupFlow, PasswordSetupEvent> & {
-    latest: () => PasswordSetupFlow;
-  } => {
-    let current = initial;
-    return {
-      get state() {
-        return current;
-      },
-      latest: () => current,
-      dispatch: (event) => {
-        events.push(event);
-        order.push(event.type);
-        current = passwordSetupReducer(current, event);
-      },
-      resetCheck,
-      isMounted: () => screen.mounted,
-    };
-  };
   return {
     procedure,
     authenticator,
     pageLoad,
-    events,
-    order,
-    resetCheck,
-    screen,
-    viewOf,
+    ...screenHarness<PasswordSetupFlow, PasswordSetupEvent>(
+      passwordSetupReducer,
+    ),
   };
 }
 
@@ -78,18 +54,17 @@ function after(
 }
 
 const checked = after(initialPasswordSetupFlow, {
-  type: "checked",
+  type: "captchaChecked",
   token: "first-token",
 });
 const onCodeStep = after(
-  checked,
-  { type: "started", operation: "send" },
+  { ...checked, pending: "send" as const },
   { type: "codeSent" },
 );
 const resendable = after(
   onCodeStep,
-  { type: "checked", token: "resend-token" },
-  { type: "ticked" },
+  { type: "captchaChecked", token: "resend-token" },
+  { type: "cooldownTicked" },
 );
 const readyToResend = { ...resendable, resendCooldown: 0 };
 const onPasswordStep = after(onCodeStep, { type: "codeConfirmed" });
@@ -106,28 +81,29 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
+        purpose: "password-reset",
         email,
         captchaToken: "first-token",
       });
-      expect(order).toEqual(["started", "codeSent", "resetCheck"]);
-      expect(view.latest().step).toBe("code");
-      expect(view.latest().captchaToken).toBeNull();
+      expect(order).toEqual(["codeSent", "resetCheck"]);
+      expect(view.state.step).toBe("code");
+      expect(view.state.captchaToken).toBeNull();
     });
 
     it("入力に不備があれば、不備だけを示し、認証サービスを呼ばない", async () => {
       // Given
       const { procedure, authenticator, events, resetCheck, viewOf } = setup();
 
+      const view = viewOf(checked);
+
       // When
-      await procedure.sendCode({ email: "invalid-email" }, viewOf(checked));
+      await procedure.sendCode({ email: "invalid-email" }, view);
 
       // Then
-      expect(events).toEqual([
-        {
-          type: "invalid",
-          fieldErrors: { email: "メールアドレスの形式が正しくありません。" },
-        },
-      ]);
+      expect(view.state.fieldErrors).toEqual({
+        email: "メールアドレスの形式が正しくありません。",
+      });
+      expect(events).toEqual([]);
       expect(authenticator.sendCode).not.toHaveBeenCalled();
       expect(resetCheck).not.toHaveBeenCalled();
     });
@@ -136,23 +112,23 @@ describe("パスワード再設定の手続き", () => {
       // Given
       const { procedure, authenticator, events, viewOf } = setup();
 
+      const view = viewOf(initialPasswordSetupFlow);
+
       // When
-      await procedure.sendCode({ email }, viewOf(initialPasswordSetupFlow));
+      await procedure.sendCode({ email }, view);
 
       // Then
-      expect(events).toEqual([
-        {
-          type: "invalid",
-          fieldErrors: { captcha: "セキュリティチェックが完了していません。" },
-        },
-      ]);
+      expect(view.state.fieldErrors).toEqual({
+        captcha: "セキュリティチェックが完了していません。",
+      });
+      expect(events).toEqual([]);
       expect(authenticator.sendCode).not.toHaveBeenCalled();
     });
 
     it("実行中なら、何も送らず、認証サービスを呼ばない", async () => {
       // Given
       const { procedure, authenticator, events, viewOf } = setup();
-      const running = after(checked, { type: "started", operation: "send" });
+      const running = { ...checked, pending: "send" as const };
 
       // When
       await procedure.sendCode({ email }, viewOf(running));
@@ -175,22 +151,22 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(authenticator.sendCode).toHaveBeenCalledOnce();
-      expect(types(events)).toEqual(["started", "codeSent"]);
+      expect(types(events)).toEqual(["codeSent"]);
     });
 
     it("送信が届かなければ、通信エラーを示し、トークンを使っていないのでチェックをやり直させず保つ", async () => {
       // Given
       const { procedure, authenticator, resetCheck, viewOf } = setup();
-      authenticator.sendCode.mockResolvedValue({ kind: "unreached" });
+      authenticator.sendCode.mockResolvedValue(UNREACHABLE);
       const view = viewOf(checked);
 
       // When
       await procedure.sendCode({ email }, view);
 
       // Then
-      expect(view.latest().error).toBe(NETWORK_ERROR_MESSAGE);
-      expect(view.latest().captchaToken).toBe("first-token");
-      expect(view.latest().pending).toBeNull();
+      expect(view.state.error).toBe(NETWORK_ERROR_MESSAGE);
+      expect(view.state.captchaToken).toBe("first-token");
+      expect(view.state.pending).toBeNull();
       expect(resetCheck).not.toHaveBeenCalled();
     });
 
@@ -207,9 +183,9 @@ describe("パスワード再設定の手続き", () => {
       // Then
       expect(events.at(-1)).toEqual({ type: "refused", failure });
       expect(order.at(-1)).toBe("resetCheck");
-      expect(view.latest().captchaToken).toBeNull();
-      expect(view.latest().step).toBe("email");
-      expect(view.latest().pending).toBeNull();
+      expect(view.state.captchaToken).toBeNull();
+      expect(view.state.step).toBe("email");
+      expect(view.state.pending).toBeNull();
     });
 
     it.each([
@@ -235,17 +211,17 @@ describe("パスワード再設定の手続き", () => {
       // Given
       const { procedure, authenticator, events, screen, resetCheck, viewOf } =
         setup();
-      const response = Promise.withResolvers<Delivery>();
+      const response = Promise.withResolvers<CallResult>();
       authenticator.sendCode.mockReturnValue(response.promise);
       const running = procedure.sendCode({ email }, viewOf(checked));
 
       // When
       screen.mounted = false;
-      response.resolve(sent);
+      response.resolve(accepted);
       await running;
 
       // Then
-      expect(types(events)).toEqual(["started"]);
+      expect(events).toEqual([]);
       expect(resetCheck).not.toHaveBeenCalled();
     });
   });
@@ -273,36 +249,41 @@ describe("パスワード再設定の手続き", () => {
       expect(
         authenticator.signOutEverywhere.mock.invocationCallOrder[0],
       ).toBeLessThan(pageLoad.load.mock.invocationCallOrder[0] ?? 0);
-      expect(view.latest().pending).toBe("setPassword");
+      expect(view.state.pending).toBe("setPassword");
     });
 
     it("設定に失敗すれば、失敗を示し、サインインの終了も遷移もせず、実行中を解除する", async () => {
       // Given
       const { procedure, authenticator, pageLoad, viewOf } = setup();
-      authenticator.setPassword.mockResolvedValue({ kind: "weak_password" });
+      authenticator.setPassword.mockResolvedValue(
+        refused({ kind: "weak_password" }),
+      );
       const view = viewOf(onPasswordStep);
 
       // When
       await procedure.setPassword({ password }, view);
 
       // Then
-      expect(view.latest().error).toBe(
+      expect(view.state.error).toBe(
         "パスワードは8文字以上で、英字と数字の両方を含めてください。",
       );
       expect(authenticator.signOutEverywhere).not.toHaveBeenCalled();
       expect(pageLoad.load).not.toHaveBeenCalled();
-      expect(view.latest().pending).toBeNull();
+      expect(view.state.pending).toBeNull();
     });
 
     it("パスワードに不備があれば、不備だけを示し、設定しない", async () => {
       // Given
       const { procedure, authenticator, events, viewOf } = setup();
 
+      const view = viewOf(onPasswordStep);
+
       // When
-      await procedure.setPassword({ password: "" }, viewOf(onPasswordStep));
+      await procedure.setPassword({ password: "" }, view);
 
       // Then
-      expect(types(events)).toEqual(["invalid"]);
+      expect(events).toEqual([]);
+      expect(view.state.fieldErrors.password).toBeDefined();
       expect(authenticator.setPassword).not.toHaveBeenCalled();
     });
 
@@ -326,10 +307,7 @@ describe("パスワード再設定の手続き", () => {
     it("実行中なら、何も送らず、設定しない", async () => {
       // Given
       const { procedure, authenticator, events, viewOf } = setup();
-      const running = after(onPasswordStep, {
-        type: "started",
-        operation: "setPassword",
-      });
+      const running = { ...onPasswordStep, pending: "setPassword" as const };
 
       // When
       await procedure.setPassword({ password }, viewOf(running));
@@ -367,17 +345,16 @@ describe("パスワード再設定の手続き", () => {
       // Given
       const { procedure, authenticator, pageLoad, events, screen, viewOf } =
         setup();
-      const response = Promise.withResolvers<AuthFailure | null>();
+      const response = Promise.withResolvers<CallResult>();
       authenticator.setPassword.mockReturnValue(response.promise);
       const running = procedure.setPassword(
         { password },
         viewOf(onPasswordStep),
       );
-      events.length = 0;
 
       // When
       screen.mounted = false;
-      response.resolve(null);
+      response.resolve(accepted);
       await running;
 
       // Then
@@ -390,7 +367,7 @@ describe("パスワード再設定の手続き", () => {
       // Given
       const { procedure, authenticator, pageLoad, events, screen, viewOf } =
         setup();
-      const response = Promise.withResolvers<AuthFailure | null>();
+      const response = Promise.withResolvers<CallResult>();
       authenticator.signOutEverywhere.mockReturnValue(response.promise);
       const running = procedure.setPassword(
         { password },
@@ -399,11 +376,10 @@ describe("パスワード再設定の手続き", () => {
       await vi.waitFor(() =>
         expect(authenticator.signOutEverywhere).toHaveBeenCalled(),
       );
-      events.length = 0;
 
       // When
       screen.mounted = false;
-      response.resolve(null);
+      response.resolve(accepted);
       await running;
 
       // Then
@@ -415,7 +391,7 @@ describe("パスワード再設定の手続き", () => {
       // Given
       const { procedure, authenticator, pageLoad, events, screen, viewOf } =
         setup();
-      const response = Promise.withResolvers<AuthFailure | null>();
+      const response = Promise.withResolvers<CallResult>();
       authenticator.signOutEverywhere.mockReturnValue(response.promise);
       const running = procedure.setPassword(
         { password },
@@ -424,11 +400,10 @@ describe("パスワード再設定の手続き", () => {
       await vi.waitFor(() =>
         expect(authenticator.signOutEverywhere).toHaveBeenCalled(),
       );
-      events.length = 0;
 
       // When
       screen.mounted = false;
-      response.resolve(unreachable);
+      response.resolve(UNREACHABLE);
       await running;
 
       // Then
@@ -436,10 +411,26 @@ describe("パスワード再設定の手続き", () => {
       expect(events).toEqual([]);
     });
 
+    it("サインインの終了が拒否されても、応答があれば終了を依頼できたとして、サインインへ遷移する", async () => {
+      // Given
+      const { procedure, authenticator, pageLoad, viewOf } = setup();
+      authenticator.signOutEverywhere.mockResolvedValue(
+        refused({ kind: "other", message: "拒否" }),
+      );
+      const view = viewOf(onPasswordStep);
+
+      // When
+      await procedure.setPassword({ password }, view);
+
+      // Then
+      expect(pageLoad.load).toHaveBeenCalledExactlyOnceWith("/signin");
+      expect(view.state.error).toBeNull();
+    });
+
     it("表示中にサインインの終了が失敗したら、通信エラーを示して実行中を解除し、遷移しない", async () => {
       // Given
       const { procedure, authenticator, pageLoad, viewOf } = setup();
-      authenticator.signOutEverywhere.mockResolvedValue(unreachable);
+      authenticator.signOutEverywhere.mockResolvedValue(UNREACHABLE);
       const view = viewOf(onPasswordStep);
 
       // When
@@ -447,8 +438,8 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(pageLoad.load).not.toHaveBeenCalled();
-      expect(view.latest().pending).toBeNull();
-      expect(view.latest().error).toBe(NETWORK_ERROR_MESSAGE);
+      expect(view.state.pending).toBeNull();
+      expect(view.state.error).toBe(NETWORK_ERROR_MESSAGE);
     });
 
     it("表示中に遷移が投げたら、通信エラーを示して実行中を解除する", async () => {
@@ -463,8 +454,8 @@ describe("パスワード再設定の手続き", () => {
       await procedure.setPassword({ password }, view);
 
       // Then
-      expect(view.latest().pending).toBeNull();
-      expect(view.latest().error).toBe(NETWORK_ERROR_MESSAGE);
+      expect(view.state.pending).toBeNull();
+      expect(view.state.error).toBe(NETWORK_ERROR_MESSAGE);
     });
 
     it("離れた後に遷移が投げたら、何もしない", async () => {
@@ -480,7 +471,7 @@ describe("パスワード再設定の手続き", () => {
       await procedure.setPassword({ password }, view);
 
       // Then
-      expect(types(events)).toEqual(["started"]);
+      expect(events).toEqual([]);
     });
   });
 
@@ -495,10 +486,11 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
+        purpose: "password-reset",
         email,
         captchaToken: "resend-token",
       });
-      expect(order).toEqual(["started", "codeResent", "resetCheck"]);
+      expect(order).toEqual(["codeResent", "resetCheck"]);
     });
 
     it("コードの確認は、共通の順序で認証し、パスワード設定の段階へ進む", async () => {
@@ -511,10 +503,11 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(authenticator.verifyCode).toHaveBeenCalledExactlyOnceWith({
+        purpose: "password-reset",
         email,
         code: "123456",
       });
-      expect(view.latest().step).toBe("password");
+      expect(view.state.step).toBe("password");
     });
   });
 
@@ -529,37 +522,38 @@ describe("パスワード再設定の手続き", () => {
           kind: "refused",
           failure: { kind: "rate_limited" },
         })
-        .mockResolvedValue(sent);
+        .mockResolvedValue(accepted);
       authenticator.verifyCode
-        .mockResolvedValueOnce({ kind: "code_expired" })
-        .mockResolvedValue(null);
+        .mockResolvedValueOnce(refused({ kind: "code_expired" }))
+        .mockResolvedValue(accepted);
       authenticator.setPassword
-        .mockResolvedValueOnce({ kind: "weak_password" })
-        .mockResolvedValue(null);
+        .mockResolvedValueOnce(refused({ kind: "weak_password" }))
+        .mockResolvedValue(accepted);
 
       // When
       await procedure.sendCode({ email }, view);
-      const afterRefused = view.latest();
-      view.dispatch({ type: "checked", token: "second-token" });
+      const afterRefused = view.state;
+      view.dispatch({ type: "captchaChecked", token: "second-token" });
       await procedure.sendCode({ email: "new@example.com" }, view);
-      const afterSent = view.latest();
+      const afterSent = view.state;
       await procedure.verifyCode(
         { email: "new@example.com", code: "123456" },
         view,
       );
-      const afterExpired = view.latest();
+      const afterExpired = view.state;
       await procedure.verifyCode(
         { email: "new@example.com", code: "123456" },
         view,
       );
       await procedure.setPassword({ password }, view);
-      const afterWeak = view.latest();
+      const afterWeak = view.state;
       await procedure.setPassword({ password }, view);
 
       // Then
       expect(afterRefused.captchaToken).toBeNull();
       expect(afterRefused.step).toBe("email");
       expect(authenticator.sendCode).toHaveBeenLastCalledWith({
+        purpose: "password-reset",
         email: "new@example.com",
         captchaToken: "second-token",
       });

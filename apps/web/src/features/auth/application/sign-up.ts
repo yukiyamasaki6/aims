@@ -1,79 +1,79 @@
-import type { AuthFailure } from "../domain/auth-failure";
-import { checkSendCode } from "../domain/password-setup-flow";
-import { destinationOf } from "../domain/return-to";
+import { ALREADY_REGISTERED, UNREACHABLE } from "../domain/auth-failure";
+import { beginSendCode } from "../domain/password-setup-flow";
+import { destinationOf } from "../domain/routes";
 import type { Navigation } from "./navigation";
 import {
   applyPassword,
-  begin,
   deliver,
   type PasswordSetup,
+  type PasswordSetupContext,
   type PasswordSetupView,
   resend,
-  UNREACHABLE,
   verifyCode,
 } from "./password-setup";
 import type { PasswordSetupAuthenticator } from "./password-setup-authenticator";
 
-type Unreached = { readonly kind: "unreached" };
-export type Registration =
-  | { readonly kind: "registered" }
-  | { readonly kind: "unregistered" }
-  | Unreached;
-
-// サインアップが認証サービスに頼むこと。共通の約束に、登録済みの判定を足す。
-export type SignUpAuthenticator = PasswordSetupAuthenticator & {
-  isRegistered(email: string): Promise<Registration>;
+// メールアドレスが登録済みかの判定。
+// 例外: 投げることがあり、手続きが通信エラーの失敗として扱う。
+type RegistrationLookup = {
+  isRegistered(email: string): Promise<boolean>;
 };
 
 type Dependencies = {
-  authenticator: SignUpAuthenticator;
+  authenticator: PasswordSetupAuthenticator;
+  registration: RegistrationLookup;
   navigation: Pick<Navigation, "go">;
 };
 
 export function createSignUp({
   authenticator,
+  registration,
   navigation,
 }: Dependencies): PasswordSetup {
+  const context: PasswordSetupContext = { authenticator, purpose: "sign-up" };
   return {
-    sendCode: (input, view) => sendCode(authenticator, input, view),
-    resend: (input, view) => resend(authenticator, input, view),
-    verifyCode: (input, view) => verifyCode(authenticator, input, view),
-    setPassword: (input, view) =>
-      setPassword(authenticator, navigation, input, view),
+    sendCode: (input, view) => sendCode(context, registration, input, view),
+    resend: (input, view) => resend(context, input, view),
+    verifyCode: (input, view) => verifyCode(context, input, view),
+    setPassword: (input, view) => setPassword(context, navigation, input, view),
   };
 }
 
 // 登録済みのメールアドレスには、コードを送らない。
 async function sendCode(
-  authenticator: SignUpAuthenticator,
+  context: PasswordSetupContext,
+  registration: RegistrationLookup,
   input: { email: string },
   view: PasswordSetupView,
 ) {
-  const ready = begin(checkSendCode(view.state, input), view, "send");
-  if (!ready) return;
-  const registration = await authenticator.isRegistered(ready.email);
+  const request = view.begin((flow) => beginSendCode(flow, input));
+  if (!request) return;
+  let failure: typeof ALREADY_REGISTERED | typeof UNREACHABLE | null;
+  try {
+    failure = (await registration.isRegistered(request.email))
+      ? ALREADY_REGISTERED
+      : null;
+  } catch {
+    failure = UNREACHABLE;
+  }
   // 送信中に画面を離れたときは、状態を変えず、チェックのやり直しもしない。
   if (!view.isMounted()) return;
   // 登録済みの判定と、判定の失敗は、トークンを使っていないので消費しない。
-  if (registration.kind !== "unregistered") {
-    const failure: AuthFailure =
-      registration.kind === "registered"
-        ? { kind: "already_registered" }
-        : UNREACHABLE;
+  if (failure) {
     view.dispatch({ type: "failed", failure });
     return;
   }
-  await deliver(authenticator, ready, view, { type: "codeSent" });
+  await deliver(context, request, view, { type: "codeSent" });
 }
 
 // 設定に成功したら、ラウンド一覧へ遷移する。遷移が投げたときは、通信エラーとして失敗にし、実行中のまま止めない。
 async function setPassword(
-  authenticator: SignUpAuthenticator,
+  context: PasswordSetupContext,
   navigation: Pick<Navigation, "go">,
   input: { password: string },
   view: PasswordSetupView,
 ) {
-  if (!(await applyPassword(authenticator, input, view))) return;
+  if (!(await applyPassword(context, input, view))) return;
   try {
     navigation.go(destinationOf(null));
   } catch {

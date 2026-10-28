@@ -1,5 +1,5 @@
 import type { Navigation } from "../application/navigation";
-import { readReturnTo } from "../domain/return-to";
+import { readReturnTo } from "../domain/routes";
 
 // routerは画面のパッケージの遷移の部品で、入口が渡す。
 export function createBrowserNavigation(router: {

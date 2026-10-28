@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  type AuthChange,
   identityChange,
-  lostByEvent,
+  lostByChange,
   lostByStatus,
-  type SessionEvent,
-} from "./session-event";
+} from "./auth-change";
 
 describe("identityChange", () => {
   it.each([
@@ -41,19 +41,19 @@ describe("identityChange", () => {
   });
 });
 
-describe("lostByEvent", () => {
+describe("lostByChange", () => {
   it.each([
     ["signed-out", { kind: "signed-out" }, true],
     ["signed-in", { kind: "signed-in", userId: "user-1" }, false],
     ["initial(セッションが無い)", { kind: "initial", userId: null }, false],
     ["それ以外の変化", { kind: "other" }, false],
-  ] as const satisfies readonly (readonly [string, SessionEvent, boolean])[])(
+  ] as const satisfies readonly (readonly [string, AuthChange, boolean])[])(
     "%sのとき、喪失かを決める",
     (_name, event, expected) => {
       // Given
 
       // When
-      const result = lostByEvent(event);
+      const result = lostByChange(event);
 
       // Then
       expect(result).toBe(expected);

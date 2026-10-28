@@ -3,19 +3,14 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, StrictMode, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Delivery } from "../application/password-setup-authenticator";
-import {
-  createSignUp,
-  type Registration,
-  type SignUpAuthenticator,
-} from "../application/sign-up";
+import type { CallResult } from "../application/call-result";
+import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
+import { createSignUp } from "../application/sign-up";
 import { SignUpForm } from "./signup-form";
 
 const NETWORK_ERROR_MESSAGE =
   "通信エラーが発生しました。しばらくしてから再度お試しください。";
-const UNREGISTERED: Registration = { kind: "unregistered" };
-const REGISTERED: Registration = { kind: "registered" };
-const SENT: Delivery = { kind: "sent" };
+const ACCEPTED: CallResult = { kind: "accepted" };
 
 // 認証と遷移は、手続きの外側の境界のため偽に替える。手続き(createSignUp)は実物を通す。
 const nav = { go: vi.fn() };
@@ -24,7 +19,9 @@ const auth = {
   sendCode: vi.fn(),
   verifyCode: vi.fn(),
   setPassword: vi.fn(),
-} satisfies SignUpAuthenticator;
+} satisfies PasswordSetupAuthenticator & {
+  isRegistered: (email: string) => Promise<boolean>;
+};
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、onVerifyの発火とreset()の呼び出しを制御し、errorの表示を受け取れるスタブで模す。
 const turnstile = vi.hoisted(() => ({
@@ -50,7 +47,11 @@ vi.mock("@/components/turnstile", () => ({
 type User = ReturnType<typeof userEvent.setup>;
 
 function renderForm(options?: { strict?: boolean }) {
-  const signUp = createSignUp({ authenticator: auth, navigation: nav });
+  const signUp = createSignUp({
+    authenticator: auth,
+    registration: auth,
+    navigation: nav,
+  });
   const form = <SignUpForm signUp={signUp} />;
   return render(options?.strict ? <StrictMode>{form}</StrictMode> : form);
 }
@@ -99,9 +100,9 @@ function spinnerIn(button: HTMLElement) {
 
 // パスワード設定の段階まで進める。検証対象の操作ではなく、前提の画面を作る。
 async function renderPasswordStep() {
-  auth.isRegistered.mockResolvedValue(UNREGISTERED);
-  auth.sendCode.mockResolvedValue(SENT);
-  auth.verifyCode.mockResolvedValue(null);
+  auth.isRegistered.mockResolvedValue(false);
+  auth.sendCode.mockResolvedValue(ACCEPTED);
+  auth.verifyCode.mockResolvedValue(ACCEPTED);
   renderForm();
   changeValue(emailInput(), "user@example.com");
   completeCaptcha();
@@ -120,7 +121,7 @@ describe("SignUpForm", () => {
   describe("登録済みの判定", () => {
     it("登録済みのメールアドレスの場合、登録済みのメッセージを表示し、認証コードを送信せずcaptchaも消費しない", async () => {
       // Given
-      auth.isRegistered.mockResolvedValue(REGISTERED);
+      auth.isRegistered.mockResolvedValue(true);
       const user = userEvent.setup();
       renderForm();
 
@@ -139,13 +140,13 @@ describe("SignUpForm", () => {
 
     it("登録済みのメッセージの後にメールアドレスを直して送信すると、同じcaptchaトークンでコード入力画面へ進む", async () => {
       // Given
-      auth.isRegistered.mockResolvedValue(REGISTERED);
+      auth.isRegistered.mockResolvedValue(true);
       const user = userEvent.setup();
       renderForm();
       await submitEmailStep(user);
       await screen.findByText("このメールアドレスは既に登録されています。");
-      auth.isRegistered.mockResolvedValue(UNREGISTERED);
-      auth.sendCode.mockResolvedValue(SENT);
+      auth.isRegistered.mockResolvedValue(false);
+      auth.sendCode.mockResolvedValue(ACCEPTED);
 
       // When
       await user.clear(emailInput());
@@ -157,6 +158,7 @@ describe("SignUpForm", () => {
         await screen.findByRole("heading", { name: "認証コードを入力" }),
       ).toBeInTheDocument();
       expect(auth.sendCode).toHaveBeenCalledWith({
+        purpose: "sign-up",
         email: "new@example.com",
         captchaToken: "captcha-token",
       });
@@ -164,7 +166,7 @@ describe("SignUpForm", () => {
 
     it("登録確認で通信エラーの場合、通信エラーのメッセージを表示し、認証コードを送信せずcaptchaも消費しない", async () => {
       // Given
-      auth.isRegistered.mockResolvedValue({ kind: "unreached" });
+      auth.isRegistered.mockRejectedValue(new Error("lookup failed"));
       const user = userEvent.setup();
       renderForm();
 
@@ -184,9 +186,9 @@ describe("SignUpForm", () => {
 
     it("通信エラーの後は使っていないトークンを保ち、同じトークンで再試行して進める", async () => {
       // Given
-      auth.isRegistered.mockResolvedValueOnce({ kind: "unreached" });
-      auth.isRegistered.mockResolvedValue(UNREGISTERED);
-      auth.sendCode.mockResolvedValue(SENT);
+      auth.isRegistered.mockRejectedValueOnce(new Error("lookup failed"));
+      auth.isRegistered.mockResolvedValue(false);
+      auth.sendCode.mockResolvedValue(ACCEPTED);
       const user = userEvent.setup();
       renderForm();
       await submitEmailStep(user);
@@ -200,6 +202,7 @@ describe("SignUpForm", () => {
         await screen.findByRole("heading", { name: "認証コードを入力" }),
       ).toBeInTheDocument();
       expect(auth.sendCode).toHaveBeenCalledExactlyOnceWith({
+        purpose: "sign-up",
         email: "user@example.com",
         captchaToken: "captcha-token",
       });
@@ -207,7 +210,7 @@ describe("SignUpForm", () => {
 
     it("再描画を挟まず同じタスクで2回押しても、登録の判定は1回だけになる", async () => {
       // Given
-      const deferred = Promise.withResolvers<Registration>();
+      const deferred = Promise.withResolvers<boolean>();
       auth.isRegistered.mockReturnValue(deferred.promise);
       renderForm();
       changeValue(emailInput(), "user@example.com");
@@ -222,7 +225,7 @@ describe("SignUpForm", () => {
       // Then
       expect(auth.isRegistered).toHaveBeenCalledOnce();
       await act(async () => {
-        deferred.resolve(REGISTERED);
+        deferred.resolve(true);
       });
     });
   });

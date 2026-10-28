@@ -1,7 +1,5 @@
-import {
-  readSession,
-  sessionFailureMessage,
-} from "@/features/auth/infrastructure/supabase-session-state";
+import { NETWORK_ERROR_MESSAGE, unconfirmedMessage } from "@/features/auth";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { createClient } from "@/lib/supabase/client";
 
 // deleted: 削除できた。
@@ -23,12 +21,12 @@ export async function deletePersonalPreset({
 }): Promise<DeletePresetResult> {
   try {
     const supabase = createClient();
-    const state = await readSession(supabase);
+    const reading = await createSupabaseAuth(() => supabase).readSession();
 
     if (!isMounted()) return { status: "discarded" };
 
-    if (state.status !== "authenticated") {
-      return { status: "failed", error: sessionFailureMessage(state) };
+    if (reading.status !== "authenticated") {
+      return { status: "failed", error: unconfirmedMessage(reading.status) };
     }
 
     const { error } = await supabase
@@ -45,9 +43,6 @@ export async function deletePersonalPreset({
     return { status: "deleted" };
   } catch {
     if (!isMounted()) return { status: "discarded" };
-    return {
-      status: "failed",
-      error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
-    };
+    return { status: "failed", error: NETWORK_ERROR_MESSAGE };
   }
 }

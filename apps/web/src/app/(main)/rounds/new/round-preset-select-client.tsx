@@ -148,10 +148,10 @@ export function RoundPresetSelect() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const mountedRef = useMountedRef();
   const hydrated = useHydrated();
-  const { removedIds, presetToDelete, setPresetToDelete, confirmDelete } =
-    usePresetDelete(mountedRef, (presetId) =>
-      setSelectedId((prev) => (prev === presetId ? null : prev)),
-    );
+  const { removedIds, setPresetToDelete, dialog } = usePresetDelete(
+    mountedRef,
+    (presetId) => setSelectedId((prev) => (prev === presetId ? null : prev)),
+  );
 
   const { personalPresets, globalPresets } = visiblePresets(view, removedIds);
   const selectedPreset =
@@ -198,11 +198,7 @@ export function RoundPresetSelect() {
         onStart={handleStart}
       />
 
-      <DeletePresetDialog
-        preset={presetToDelete}
-        onClose={() => setPresetToDelete(null)}
-        onConfirm={confirmDelete}
-      />
+      <DeletePresetDialog {...dialog} />
     </main>
   );
 }
@@ -320,10 +316,14 @@ function DeletePresetDialog({
   preset,
   onClose,
   onConfirm,
+  busy,
+  error,
 }: {
   preset: Preset | null;
   onClose: () => void;
-  onConfirm: () => Promise<{ error: string } | undefined>;
+  onConfirm: () => void;
+  busy: boolean;
+  error: string | null;
 }) {
   return (
     <BlockingConfirmDialog
@@ -333,6 +333,8 @@ function DeletePresetDialog({
       }}
       description={`「${preset?.name}」を削除しますか？`}
       onConfirm={onConfirm}
+      busy={busy}
+      error={error}
     />
   );
 }

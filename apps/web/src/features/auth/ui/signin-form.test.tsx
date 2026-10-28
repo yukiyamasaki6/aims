@@ -2,9 +2,19 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, StrictMode, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { CallResult } from "../application/call-result";
 import { createSignIn } from "../application/sign-in";
-import type { AuthFailure } from "../domain/auth-failure";
+import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import { SignInForm } from "./signin-form";
+
+const accepted: CallResult = { kind: "accepted" };
+
+// 失敗の値を、認証サービスへの頼みごとの結果に写す。
+function resultOf(failure: AuthFailure): CallResult {
+  return failure.kind === "unreachable"
+    ? UNREACHABLE
+    : { kind: "refused", failure };
+}
 
 const widget = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
@@ -35,7 +45,7 @@ function setup({
   returnTo?: string | null;
 } = {}) {
   const authenticator = {
-    signIn: vi.fn(async (): Promise<AuthFailure | null> => null),
+    signIn: vi.fn(async (): Promise<CallResult> => accepted),
   };
   const navigation = { returnTo: vi.fn(() => returnTo), go: vi.fn() };
   const signIn = createSignIn({ authenticator, navigation });
@@ -143,7 +153,7 @@ describe("サインイン画面の部品", () => {
   it("送信中はボタンの状態とスピナーを更新する", async () => {
     // Given
     const { authenticator } = setup();
-    const deferred = Promise.withResolvers<AuthFailure | null>();
+    const deferred = Promise.withResolvers<CallResult>();
     authenticator.signIn.mockReturnValue(deferred.promise);
     const user = userEvent.setup();
     await fillCredentials(user);
@@ -155,7 +165,7 @@ describe("サインイン画面の部品", () => {
     // Then
     expect(submitButton()).toHaveAttribute("aria-disabled", "true");
     expect(submitButton().querySelector(".animate-spin")).not.toBeNull();
-    await act(async () => deferred.resolve(null));
+    await act(async () => deferred.resolve(accepted));
   });
 
   it.each([
@@ -212,7 +222,9 @@ describe("サインイン画面の部品", () => {
   it("認証失敗の文言を表示し、回の前進でチェックを1回リセットする", async () => {
     // Given
     const { authenticator } = setup();
-    authenticator.signIn.mockResolvedValue({ kind: "invalid_credentials" });
+    authenticator.signIn.mockResolvedValue(
+      resultOf({ kind: "invalid_credentials" }),
+    );
     const user = userEvent.setup();
     await fillCredentials(user);
     verify("captcha-token");
@@ -265,7 +277,7 @@ describe("サインイン画面の部品", () => {
     (_name, failure, message, returnTo, destination) => {
       async function failFirstAttempt() {
         const rendered = setup({ returnTo });
-        rendered.authenticator.signIn.mockResolvedValueOnce(failure);
+        rendered.authenticator.signIn.mockResolvedValueOnce(resultOf(failure));
         const user = userEvent.setup();
         await fillCredentials(user);
         verify("token-1");
@@ -277,7 +289,7 @@ describe("サインイン画面の部品", () => {
       it("失敗の文言を表示し、チェックを1回リセットして、ボタンを再び押せるようにする", async () => {
         // Given
         const { authenticator } = setup({ returnTo });
-        authenticator.signIn.mockResolvedValueOnce(failure);
+        authenticator.signIn.mockResolvedValueOnce(resultOf(failure));
         const user = userEvent.setup();
         await fillCredentials(user);
         verify("token-1");
@@ -328,7 +340,7 @@ describe("サインイン画面の部品", () => {
   it("アンマウント後の認証失敗ではチェックをリセットしない", async () => {
     // Given
     const { authenticator, unmount } = setup();
-    const deferred = Promise.withResolvers<AuthFailure | null>();
+    const deferred = Promise.withResolvers<CallResult>();
     authenticator.signIn.mockReturnValue(deferred.promise);
     const user = userEvent.setup();
     await fillCredentials(user);
@@ -337,7 +349,7 @@ describe("サインイン画面の部品", () => {
 
     // When
     unmount();
-    await act(async () => deferred.resolve({ kind: "unreachable" }));
+    await act(async () => deferred.resolve(UNREACHABLE));
 
     // Then
     expect(widget.reset).not.toHaveBeenCalled();
@@ -346,7 +358,7 @@ describe("サインイン画面の部品", () => {
   it("送信中に画面を離れ、その後に成功が戻っても、遷移しない", async () => {
     // Given
     const { authenticator, navigation, unmount } = setup();
-    const deferred = Promise.withResolvers<AuthFailure | null>();
+    const deferred = Promise.withResolvers<CallResult>();
     authenticator.signIn.mockReturnValue(deferred.promise);
     const user = userEvent.setup();
     await fillCredentials(user);
@@ -355,7 +367,7 @@ describe("サインイン画面の部品", () => {
 
     // When
     unmount();
-    await act(async () => deferred.resolve(null));
+    await act(async () => deferred.resolve(accepted));
 
     // Then
     expect(authenticator.signIn).toHaveBeenCalledOnce();
@@ -365,7 +377,7 @@ describe("サインイン画面の部品", () => {
   it("連打しても認証は1回だけ行い、結果の後に1回だけ遷移する", async () => {
     // Given
     const { authenticator, navigation } = setup();
-    const deferred = Promise.withResolvers<AuthFailure | null>();
+    const deferred = Promise.withResolvers<CallResult>();
     authenticator.signIn.mockReturnValue(deferred.promise);
     const user = userEvent.setup();
     await fillCredentials(user);
@@ -373,7 +385,7 @@ describe("サインイン画面の部品", () => {
 
     // When
     await user.dblClick(submitButton());
-    await act(async () => deferred.resolve(null));
+    await act(async () => deferred.resolve(accepted));
 
     // Then
     expect(authenticator.signIn).toHaveBeenCalledOnce();
@@ -383,7 +395,7 @@ describe("サインイン画面の部品", () => {
   it("Enterで送信した直後にボタンを押しても、認証は1回だけ行う", async () => {
     // Given
     const { authenticator } = setup();
-    const deferred = Promise.withResolvers<AuthFailure | null>();
+    const deferred = Promise.withResolvers<CallResult>();
     authenticator.signIn.mockReturnValue(deferred.promise);
     const user = userEvent.setup();
     await fillCredentials(user);
@@ -392,7 +404,7 @@ describe("サインイン画面の部品", () => {
     // When
     await user.type(passwordInput(), "{Enter}");
     await user.click(submitButton());
-    await act(async () => deferred.resolve(null));
+    await act(async () => deferred.resolve(accepted));
 
     // Then
     expect(authenticator.signIn).toHaveBeenCalledOnce();
@@ -416,7 +428,7 @@ describe("サインイン画面の部品", () => {
   it("再描画を挟まず同じタスクで2回送信しても、認証は1回だけ行う", async () => {
     // Given
     const { authenticator } = setup();
-    const deferred = Promise.withResolvers<AuthFailure | null>();
+    const deferred = Promise.withResolvers<CallResult>();
     authenticator.signIn.mockReturnValue(deferred.promise);
     const user = userEvent.setup();
     await fillCredentials(user);
@@ -428,7 +440,7 @@ describe("サインイン画面の部品", () => {
       fireEvent.submit(form);
       fireEvent.submit(form);
     });
-    await act(async () => deferred.resolve(null));
+    await act(async () => deferred.resolve(accepted));
 
     // Then
     expect(authenticator.signIn).toHaveBeenCalledOnce();

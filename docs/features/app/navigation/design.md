@@ -11,7 +11,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 
 | 画面・状態 | 内容 |
 | :--- | :--- |
-| `/` | 未認証・認証済みとも、アプリ名、説明文、開始ボタンを持つ紹介画面を表示する。開始ボタンは判定中と未認証は `/signup`、認証状態の確認が通信の失敗などで不明（`unknown`）になったときは `/rounds` へのリンクである。確認が例外で失敗したときは `/signup` のままにする。 |
+| `/` | 未認証・認証済みとも、アプリ名、説明文、開始ボタンを持つ紹介画面を表示する。開始ボタンは判定中と未認証は `/signup`、認証状態の確認が通信の失敗などで不明（`unknown`）になったときは `/rounds` へのリンクである。確認が不明のときは `/rounds` へのリンクである(読み取りは投げない)。 |
 | `/rounds` 配下（未認証） | 遷移元のパス付きで `/signin` へリダイレクトする（`/rounds` のみは付けない）。`/rounds/new`、`/rounds/[id]` も対象である。 |
 | ロゴ | レフトパネルのAIMSロゴと、認証画面・`/`・`/offline` の左上のロゴは `/` へ遷移する。 |
 | セッション喪失 | `SIGNED_OUT`（自タブ・他タブ）と、マウント時・`online` 時の `unauthenticated` で、遷移元のパス付き（`/rounds` のみは付けない）で `/signin` へ遷移する。同一タブの明示サインアウトは遷移元を付けない（`auth/signout`）。`unknown` とオフラインの `unauthenticated` では留まる。 |
@@ -27,11 +27,11 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 ## 構成とデータの流れ
 
 - `src/proxy.ts` は `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に `updateSession` を呼ぶ。`/` は対象外である。
-- `src/lib/supabase/session.ts` の `updateSession` が、認証状態で分岐する。
+- `src/lib/supabase/session.ts` の `updateSession` が、認証状態を判定し、経路の規則は引数で受ける。規則は認証の機能の `redirectFor` が持ち、`proxy.ts` が渡す。
   - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
   - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。`/signin` は有効な遷移元があればそこへ送る（`auth/signin`）。
   - Server Action呼び出しはどちらも対象外とする。
-- `src/features/auth/application/session.ts` の手続き`createSession`の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、オンラインでの`unauthenticated`）と、一度だけの`/signin`への遷移（`replace`。今の場所を遷移元に付ける）を持つ。喪失の定義は`domain/session-event.ts`、遷移の規則（1回、遷移元）は`domain/session-end.ts`。`(main)`のレイアウトが、手続きと実装を生成して見張りを始める。
+- `src/features/auth/application/session.ts` の手続き`createSession`の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、オンラインでの`unauthenticated`）と、一度だけの`/signin`への遷移（`replace`。今の場所を遷移元に付ける）を持つ。喪失の定義は`domain/auth-change.ts`、遷移の規則（1回、遷移元）は`domain/session-end-flow.ts`。`(main)`のレイアウトが、手続きと実装を生成して見張りを始める。
 - `src/app/page.tsx` が静的な紹介画面で、`src/app/start-button.tsx` が開始ボタンの行き先をクライアントで決める。
 - `src/components/app-logo.tsx` が、認証画面・`/`・`/offline` の左上のロゴである。
 - `src/components/logo-image.tsx` が、文字付きロゴの画像（`public/logo.svg`）を表示する。代替テキスト「AIMS」がロゴのリンクの名前になる。`app-logo.tsx` と `left-panel.tsx` が使う。
