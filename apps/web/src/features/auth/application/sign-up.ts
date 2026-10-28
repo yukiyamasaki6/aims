@@ -35,11 +35,12 @@ export function createSignUp({
     sendCode: (input, view) => sendCode(context, registration, input, view),
     resend: (input, view) => resend(context, input, view),
     verifyCode: (input, view) => verifyCode(context, input, view),
-    setPassword: (input, view) => setPassword(context, navigation, input, view),
+    setPassword: (input, view) =>
+      setPassword(authenticator, navigation, input, view),
   };
 }
 
-// 登録済みのメールアドレスには、コードを送らない。
+// 登録済みのメールアドレスには、コードを送らない。登録の有無を確かめられないときと、確認の待ちで画面を離れたときも、送らない。
 async function sendCode(
   context: PasswordSetupContext,
   registration: RegistrationLookup,
@@ -68,12 +69,23 @@ async function sendCode(
 
 // 設定に成功したら、ラウンド一覧へ遷移する。遷移が投げたときは、通信エラーとして失敗にし、実行中のまま止めない。
 async function setPassword(
-  context: PasswordSetupContext,
+  authenticator: Pick<PasswordSetupAuthenticator, "setPassword">,
   navigation: Pick<Navigation, "go">,
   input: { password: string },
   view: PasswordSetupView,
 ) {
-  if (!(await applyPassword(context, input, view))) return;
+  if (
+    !(await applyPassword(
+      (password) => authenticator.setPassword(password),
+      input,
+      view,
+    ))
+  ) {
+    return;
+  }
+  // 遷移の直前に、画面が表示中かを確かめ直す(再設定と同じ理由。離脱の原則)。
+  if (!view.isMounted()) return;
+  view.dispatch({ type: "passwordSet" });
   try {
     navigation.go(destinationOf(null));
   } catch {

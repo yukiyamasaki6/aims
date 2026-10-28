@@ -8,8 +8,8 @@ import {
 } from "@supabase/supabase-js";
 import type { AuthChanges } from "../application/auth-changes";
 import type { CallResult } from "../application/call-result";
+import type { SignOutEverywhere } from "../application/password-change";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
-import type { SignOutEverywhere } from "../application/reset-password";
 import type {
   SessionAuthenticator,
   SessionReading,
@@ -21,7 +21,7 @@ import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 // 認証サービスの語彙(エラーのクラス名とコード、イベントの名前、セッションの形)を知るのは、このファイルだけである。
 // 応答を内側の形に写す変換は、この実装の中だけで使うため、同じファイルに置く。
 
-// ブラウザから認証サービスに触る、唯一の実装。各手続きは、使う頼みごとだけの約束の型で受け取る。
+// 利用者のセッションで認証サービスに触る、唯一の実装。画面ではブラウザの接続を、再設定の要求の入口ではサーバーの接続を渡す。各手続きは、使う頼みごとだけの約束の型で受け取る。
 // 接続は、作る関数を受け取り、頼みごとのたびに取得する(環境変数の欠落は届かない失敗になる)。ブラウザでは同じ接続が返る。
 export type SupabaseAuth = SignInAuthenticator &
   PasswordSetupAuthenticator &
@@ -61,7 +61,7 @@ export function createSupabaseAuth(
       ),
     setPassword: (password) =>
       toCallResult(() => auth().updateUser({ password })),
-    // scope!=="others"のsignOutは、サーバーへの通信が失敗してもローカルのセッションの削除は必ず行う。完了の判断は、呼び出し側が端末の識別情報で行う。
+    // この端末のサインインだけを終える。終えられたかは、呼び出し側が、この後のサインインの状態の読み取りで決める。
     signOutHere: () => toCallResult(() => signOut(auth(), "local")),
     // その利用者の全ての端末のサインインが終わる。
     signOutEverywhere: () => toCallResult(() => signOut(auth(), "global")),
@@ -140,7 +140,7 @@ const REJECTION_KINDS = new Map<string, RejectionKind>([
   ["weak_password", "weak_password"],
 ]);
 
-type AuthServiceError = { name?: string; code?: string; message: string };
+type AuthServiceError = { name?: string; code?: string };
 
 // 認証サービスのエラー(通信の断を含む)を、失敗の種類に写す。
 // 通信の断はerror.codeの無いAuthRetryableFetchErrorになるため、コードより先に名前で見る。
@@ -148,7 +148,7 @@ function toAuthFailure(error: AuthServiceError): AuthFailure {
   if (error.name === "AuthRetryableFetchError") return UNREACHABLE;
   const kind =
     error.code === undefined ? undefined : REJECTION_KINDS.get(error.code);
-  return kind ? { kind } : { kind: "other", message: error.message };
+  return { kind: kind ?? "other" };
 }
 
 // 認証サービスの呼び出しを、例外を投げずに結果の値にする。

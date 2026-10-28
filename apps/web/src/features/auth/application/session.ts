@@ -38,13 +38,8 @@ export type SessionAuthenticator = AuthChanges &
     signOutHere(): Promise<CallResult>;
   };
 
-// 端末の識別情報の読み出し。この端末に最後にサインインした利用者(いなければnull)。保存先が使えないときもnull。例外は投げない。
-export type IdentityReader = {
-  read(): string | null;
-};
-
 // ページ全体を読み込んで、今の場所をサインインに置き換える遷移。履歴を残さず、前の利用者の画面の状態とクライアントのキャッシュを捨てる。
-// 例外: replaceは投げることがある。手続きは扱わない(扱いの追加は、振る舞いを変える別作業)。hereは投げない。
+// 例外: replaceは投げることがある。手続きは扱わず、以後の遷移も行わない(稀な経路。見張りでもサインアウトでも同じ)。hereは投げない。
 export type PageReplace = {
   // 今の場所(パスとクエリ)。
   here(): string;
@@ -56,24 +51,22 @@ export type SignOutResult = SignOutVerdict | { readonly kind: "busy" };
 
 type Dependencies = {
   authenticator: SessionAuthenticator;
-  identity: IdentityReader;
   connectivity: Connectivity;
   pageReplace: PageReplace;
 };
 
 export type Session = {
-  // サインアウトを始める。実行中の判定は集約が持ち、実行中に呼ぶとbusyを返して何もしない。
+  // サインアウトを始める。実行中の判定は集約が持ち、実行中に呼ぶとbusyを返して何もしない。終えられたら、遷移元を付けずにサインインへ移す。
   signOut(view: ViewLifetime): Promise<SignOutResult>;
   // セッションの喪失を見張り、失ったらサインインへ移す。見張りをやめる関数を返す。
   watch(): () => void;
 };
 
-// 遷移はセッション喪失の検知の1経路に集める。サインアウトは遷移せず、始める前に遷移元を付けない合図を立て、
-// 完了したら、認証状態の変化(signed-out)を受けた検知が、その合図に従ってサインインへ移す。
-// 合図と遷移の状態(SessionEndFlow)は、この手続きが1つ持ち、サインアウトと見張りの両方が使う。
+// サインアウトは、この端末のサインインの終了を頼んだ後、サインインの状態を読み、未認証なら終えられたとしてサインインへ移す。
+// セッションの喪失(他のタブのサインアウト、更新の拒否、確認の結果の未認証)は見張りが検知して移す。サインアウトの実行中の喪失は、サインアウトの判定に委ねる。
+// 遷移の状態(SessionEndFlow)は、この手続きが1つ持ち、サインアウトと見張りの両方が使う。
 export function createSession({
   authenticator,
-  identity,
   connectivity,
   pageReplace,
 }: Dependencies): Session {
@@ -84,21 +77,33 @@ export function createSession({
     flow = start.state;
     if (start.kind !== "started") return { kind: "busy" };
     const failure = failureOf(await authenticator.signOutHere());
-    // 離れた後は、結果を破棄し、合図は変えない。
+    // 離れた後は、読まずに結果を破棄する。終了の依頼は取り消さない。
+    const reading = view.isMounted() ? await authenticator.readSession() : null;
     const ended = endSignOut(
       flow,
-      view.isMounted()
-        ? { kind: "observed", identity: identity.read(), failure }
+      reading !== null && view.isMounted()
+        ? { kind: "observed", status: reading.status, failure }
         : { kind: "discarded" },
     );
     flow = ended.state;
+    if (ended.result.kind === "completed") {
+      try {
+        go(null);
+      } catch {
+        // 遷移が投げたときは扱わない(稀な経路)。遷移は始めた扱いのため、以後の遷移も行わない。
+      }
+    }
     return ended.result;
   }
 
-  function lose() {
-    const left = leave(flow, pageReplace.here());
+  function go(from: string | null) {
+    const left = leave(flow, from);
     flow = left.state;
     if (left.result !== null) pageReplace.replace(left.result);
+  }
+
+  function lose() {
+    go(pageReplace.here());
   }
 
   // オフラインで/signinへ移ると行き止まりになるため、確認はオンラインまで保留し、戻ったら確かめる。

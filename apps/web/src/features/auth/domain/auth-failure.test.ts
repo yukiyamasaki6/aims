@@ -5,7 +5,7 @@ import {
   UNREACHABLE,
   unconfirmedMessage,
 } from "./auth-failure";
-import { PASSWORD_MIN_LENGTH } from "./password";
+import { validateNewPassword } from "./password";
 
 const RATE_LIMIT =
   "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。";
@@ -22,9 +22,10 @@ describe("failureMessage", () => {
     ["captcha_failed", "認証に失敗しました。もう一度お試しください。"],
     [
       "weak_password",
-      "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+      "8〜72文字の半角英数記号で、英字と数字を含めてください。",
     ],
     ["already_registered", "このメールアドレスは既に登録されています。"],
+    ["other", "エラーが発生しました。しばらくしてから再度お試しください。"],
   ] as const)("失敗の種類%sを利用者向けの文言にする", (kind, expected) => {
     // Given
 
@@ -33,19 +34,6 @@ describe("failureMessage", () => {
 
     // Then
     expect(result).toBe(expected);
-  });
-
-  it("otherは認証サービスの文言をそのまま返す", () => {
-    // Given
-
-    // When
-    const result = failureMessage({
-      kind: "other",
-      message: "認証サービスの文言",
-    });
-
-    // Then
-    expect(result).toBe("認証サービスの文言");
   });
 });
 
@@ -78,14 +66,14 @@ describe("UNREACHABLE", () => {
 });
 
 describe("weak_password の文言", () => {
-  it("パスワードの最小の長さの規則と同じ数値を示す", () => {
+  it("入力が規則に合わないときの検証の文面と同じ文面を示す", () => {
     // Given
 
     // When
     const result = failureMessage({ kind: "weak_password" });
 
     // Then
-    expect(result).toContain(`${PASSWORD_MIN_LENGTH}文字以上`);
+    expect(result).toBe(validateNewPassword("short"));
   });
 });
 

@@ -16,5 +16,6 @@ export type PasswordSetupAuthenticator = {
     email: string;
     code: string;
   }): Promise<CallResult>;
+  // パスワードを設定する。サインアップはブラウザの接続で、再設定はサーバーの接続で頼む。
   setPassword(password: string): Promise<CallResult>;
 };

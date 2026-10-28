@@ -15,7 +15,10 @@ export function createSupabaseRegistrationCheck(
     });
 
     if (error) {
-      return false;
+      // 利用者が見つからないときだけ、未登録とする。
+      // それ以外(管理側を使えない、届かない)は確かめられなかったため投げる。手続きが通信エラーとして扱い、コードを送らない。
+      if (error.code === "user_not_found") return false;
+      throw error;
     }
 
     return Boolean(data.user?.email_confirmed_at);

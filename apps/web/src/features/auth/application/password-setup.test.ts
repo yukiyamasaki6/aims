@@ -242,7 +242,11 @@ describe("パスワード設定の共通の手続き", () => {
             verifyCode(context, { email, code: "123456" }, view),
           resend: () => resend(context, { email }, view),
           applyPassword: () =>
-            applyPassword(context, { password: "password1" }, view),
+            applyPassword(
+              authenticator.setPassword,
+              { password: "password1" },
+              view,
+            ),
         };
 
         // When
@@ -258,14 +262,14 @@ describe("パスワード設定の共通の手続き", () => {
   });
 
   describe("パスワードの設定", () => {
-    it("設定できて表示中なら、続きを行ってよいと返し、実行中を解除しない", async () => {
+    it("設定できて表示中なら、渡された設定の依頼で入力したパスワードを頼み、続きを行ってよいと返し、実行中を解除しない", async () => {
       // Given
-      const { authenticator, context, events, viewOf } = setup();
+      const { authenticator, events, viewOf } = setup();
       const view = viewOf(onPasswordStep);
 
       // When
       const proceed = await applyPassword(
-        context,
+        authenticator.setPassword,
         { password: "password1" },
         view,
       );
@@ -281,7 +285,7 @@ describe("パスワード設定の共通の手続き", () => {
 
     it("設定に失敗すれば、失敗を示し、続きを行わず、実行中を解除する", async () => {
       // Given
-      const { authenticator, context, viewOf } = setup();
+      const { authenticator, viewOf } = setup();
       authenticator.setPassword.mockResolvedValue({
         kind: "refused",
         failure: { kind: "weak_password" },
@@ -290,7 +294,7 @@ describe("パスワード設定の共通の手続き", () => {
 
       // When
       const proceed = await applyPassword(
-        context,
+        authenticator.setPassword,
         { password: "password1" },
         view,
       );
@@ -298,19 +302,23 @@ describe("パスワード設定の共通の手続き", () => {
       // Then
       expect(proceed).toBe(false);
       expect(view.state.error).toBe(
-        "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+        "8〜72文字の半角英数記号で、英字と数字を含めてください。",
       );
       expect(view.state.pending).toBeNull();
     });
 
     it("パスワードに不備があれば、不備だけを示し、設定しない", async () => {
       // Given
-      const { authenticator, context, events, viewOf } = setup();
+      const { authenticator, events, viewOf } = setup();
 
       const view = viewOf(onPasswordStep);
 
       // When
-      const proceed = await applyPassword(context, { password: "" }, view);
+      const proceed = await applyPassword(
+        authenticator.setPassword,
+        { password: "" },
+        view,
+      );
 
       // Then
       expect(proceed).toBe(false);
@@ -321,12 +329,12 @@ describe("パスワード設定の共通の手続き", () => {
 
     it("実行中なら、何も送らず、設定しない", async () => {
       // Given
-      const { authenticator, context, events, viewOf } = setup();
+      const { authenticator, events, viewOf } = setup();
       const running = { ...onPasswordStep, pending: "setPassword" as const };
 
       // When
       const proceed = await applyPassword(
-        context,
+        authenticator.setPassword,
         { password: "password1" },
         viewOf(running),
       );
@@ -380,11 +388,11 @@ describe("パスワード設定の共通の手続き", () => {
 
     it("パスワードの設定の待ちで離れたら、結果を反映せず、続きを行わない", async () => {
       // Given
-      const { authenticator, context, events, screen, viewOf } = setup();
+      const { authenticator, events, screen, viewOf } = setup();
       const response = Promise.withResolvers<CallResult>();
       authenticator.setPassword.mockReturnValue(response.promise);
       const running = applyPassword(
-        context,
+        authenticator.setPassword,
         { password: "password1" },
         viewOf(onPasswordStep),
       );

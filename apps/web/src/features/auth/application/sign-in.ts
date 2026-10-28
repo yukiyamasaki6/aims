@@ -33,25 +33,31 @@ export function createSignIn({
     async submit(input, view) {
       const credentials = view.begin((flow) => beginSignIn(flow, input));
       if (!credentials) return;
-      // 失敗は、状態を失敗にし、使ったトークンを消費済みにしたうえで、チェックをやり直させる。
-      const fail = (failure: AuthFailure) => {
-        view.dispatch({ type: "failed", failure });
+      // 届いた後の失敗は、使ったトークンを消費済みにしたうえで、チェックをやり直させる。
+      const refuse = (failure: AuthFailure) => {
+        view.dispatch({ type: "refused", failure });
         view.resetCheck();
       };
       const result = await authenticator.signIn(credentials);
       // 送信中に画面を離れたときは、状態を変えず、遷移もしない。
       if (!view.isMounted()) return;
       const failure = failureOf(result);
-      if (failure) {
-        fail(failure);
+      // 照合が届かなかったとき(呼び出しが投げた、通信の断を値で返した)は、トークンを使っていないので保持し、チェックをやり直さない。
+      if (failure?.kind === "unreachable") {
+        view.dispatch({ type: "failed", failure });
         return;
       }
-      // 成功時は送信中を解除しない。遷移が終わる前に再び押され、使用済みのトークンで二重に送信されるのを防ぐため。
-      // 遷移元の読み出しと遷移が投げたときは、通信エラーとして失敗にし、送信中のまま止めない。
+      if (failure) {
+        refuse(failure);
+        return;
+      }
+      // 成功時は以前のエラーを消し、送信中は解除しない。遷移が終わる前に再び押され、使用済みのトークンで二重に送信されるのを防ぐため。
+      view.dispatch({ type: "signedIn" });
+      // 遷移元の読み出しと遷移が投げたときは、トークンは使用済みのため、通信エラーとして消費し、送信中のまま止めない。
       try {
         navigation.go(destinationOf(navigation.returnTo()));
       } catch {
-        fail(UNREACHABLE);
+        refuse(UNREACHABLE);
       }
     },
   };

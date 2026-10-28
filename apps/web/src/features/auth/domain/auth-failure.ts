@@ -1,4 +1,4 @@
-import { PASSWORD_MIN_LENGTH } from "./password";
+import { PASSWORD_RULE_MESSAGE } from "./password";
 
 // 認証の失敗の種類と、利用者向けの文言。サインイン、サインアップ、パスワード再設定、サインアウト、他の機能が使う。
 // 利用者向けの文言は、この表だけが持つ。種類を作るのは、認証サービスのエラーを写すインフラ層(拒否の種類、other)と、手続きが判定して加える箇所(unauthenticated、already_registered)である。
@@ -14,14 +14,13 @@ const MESSAGES = {
   rate_limited:
     "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
   captcha_failed: "認証に失敗しました。もう一度お試しください。",
-  weak_password: `パスワードは${PASSWORD_MIN_LENGTH}文字以上で、英字と数字の両方を含めてください。`,
+  weak_password: PASSWORD_RULE_MESSAGE,
   already_registered: "このメールアドレスは既に登録されています。",
+  other: "エラーが発生しました。しばらくしてから再度お試しください。",
 } as const;
 
-// 届かなかった、サインインしていない、認識している理由で拒否された、登録済みだった、それ以外(認証サービスの文言をそのまま使う)のどれか。
-export type AuthFailure =
-  | { readonly kind: keyof typeof MESSAGES }
-  | { readonly kind: "other"; readonly message: string };
+// 届かなかった、サインインしていない、認識している理由で拒否された、登録済みだった、それ以外(固定の文言。認証サービスの文言は出さない)のどれか。
+export type AuthFailure = { readonly kind: keyof typeof MESSAGES };
 
 // 種類の値。失敗値を作る箇所は、ここだけである。
 export const UNREACHABLE = { kind: "unreachable" } as const;
@@ -29,7 +28,7 @@ const UNAUTHENTICATED = { kind: "unauthenticated" } as const;
 export const ALREADY_REGISTERED = { kind: "already_registered" } as const;
 
 export function failureMessage(failure: AuthFailure): string {
-  return failure.kind === "other" ? failure.message : MESSAGES[failure.kind];
+  return MESSAGES[failure.kind];
 }
 
 // サインインの状態を確かめられなかったときに、他の機能が利用者に示す文言。

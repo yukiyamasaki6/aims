@@ -41,11 +41,16 @@ describe("isEmailRegistered", () => {
     });
   });
 
-  it("生成に失敗した場合は未登録として扱う", async () => {
+  it("利用者が見つからない(user_not_found)場合は未登録として扱う", async () => {
     // Given
     db.generateLink.mockResolvedValue({
       data: { user: null },
-      error: { message: "User not found" },
+      error: {
+        name: "AuthApiError",
+        code: "user_not_found",
+        status: 404,
+        message: "User not found",
+      },
     });
 
     // When
@@ -53,6 +58,23 @@ describe("isEmailRegistered", () => {
 
     // Then
     expect(result).toBe(false);
+  });
+
+  it("管理側を使えないエラーが返った場合は、未登録とせず投げる", async () => {
+    // Given
+    const error = {
+      name: "AuthApiError",
+      code: "not_admin",
+      status: 403,
+      message: "User not allowed",
+    };
+    db.generateLink.mockResolvedValue({ data: { user: null }, error });
+
+    // When
+    const result = isEmailRegistered("user@example.com");
+
+    // Then
+    await expect(result).rejects.toBe(error);
   });
 
   it("管理者の秘密鍵で、セッションを保たない接続を作る", async () => {

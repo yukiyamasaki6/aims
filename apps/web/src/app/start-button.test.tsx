@@ -76,7 +76,7 @@ describe("StartButton", () => {
     expect(link).toHaveAttribute("href", "/signup");
   });
 
-  it("確認が例外で失敗すると、確かめられなかった(不明)として、行き先を/roundsに替え、判定済みの印を付ける", async () => {
+  it("サインインの状態を確かめられないとき(確認の処理が投げた場合を含む)は、未認証ならサーバーの保護がサインインへ送る一覧を行き先にし、判定済みの印を付ける", async () => {
     // Given
     supabase.getSession.mockRejectedValue(new Error("failed"));
 

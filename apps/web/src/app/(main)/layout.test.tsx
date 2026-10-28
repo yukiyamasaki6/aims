@@ -70,10 +70,14 @@ function setLocation(pathname: string, search = "") {
   });
 }
 
-// SDKのsignOut({ scope: "local" })は、通信の成否に関わらずローカルのセッションを削除できた場合にSIGNED_OUTを発火する。
+// SDKのsignOut({ scope: "local" })は、通信の成否に関わらずローカルのセッションを削除できた場合にSIGNED_OUTを発火し、以後のgetSessionはセッションを返さない。
 // 端末の識別情報は直接消さず、ルートの購読(LocalIdentityProvider。renderLayoutWithIdentityで実物を描く)がこの出来事で消す。
-function signOutEmittingSignedOut(result: () => Promise<unknown>) {
+function signOutClearingSession(result: () => Promise<unknown>) {
   supabase.signOut.mockImplementation(async () => {
+    supabase.getSession.mockResolvedValue({
+      data: { session: null },
+      error: null,
+    });
     supabase.emit("SIGNED_OUT", null);
     return result();
   });
@@ -198,7 +202,7 @@ describe("MainLayout", () => {
       const connectionsWhileLost =
         supabase.createBrowserClient.mock.calls.length;
       vi.unstubAllEnvs();
-      signOutEmittingSignedOut(async () => ({ error: null }));
+      signOutClearingSession(async () => ({ error: null }));
 
       // When
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
@@ -326,6 +330,28 @@ describe("MainLayout", () => {
       expect(supabase.getSession).not.toHaveBeenCalled();
     });
 
+    it("パスワードの再設定から離れた先のラウンド作成画面では、通信の回復の確認で未認証と判れば、開いている画面を遷移元に付けてサインインへ移る", async () => {
+      // Given
+      renderLayout();
+      await flush();
+      supabase.getSession.mockResolvedValue({
+        data: { session: null },
+        error: null,
+      });
+
+      // When
+      act(() => {
+        window.dispatchEvent(new Event("online"));
+      });
+      await flush();
+
+      // Then
+      expect(replace).toHaveBeenCalledExactlyOnceWith(
+        "/signin?returnTo=%2Frounds%2Fnew",
+      );
+      expect(assign).not.toHaveBeenCalled();
+    });
+
     it("離れると、購読を解除し、それ以降のsigned-outでは移らない", () => {
       // Given
       const { unmount } = renderLayout();
@@ -356,7 +382,7 @@ describe("MainLayout", () => {
     it("確認すると、この端末のセッションだけを終え、遷移元を付けずにサインインへ移る", async () => {
       // Given
       const user = userEvent.setup();
-      signOutEmittingSignedOut(async () => ({ error: null }));
+      signOutClearingSession(async () => ({ error: null }));
       renderLayoutWithIdentity();
 
       // When
@@ -377,7 +403,7 @@ describe("MainLayout", () => {
     it("認証サービスが通信の失敗を返してもローカルのセッションが消えていれば、完了として移る", async () => {
       // Given
       const user = userEvent.setup();
-      signOutEmittingSignedOut(async () => ({
+      signOutClearingSession(async () => ({
         error: new AuthRetryableFetchError("Failed to fetch", 0),
       }));
       renderLayoutWithIdentity();
@@ -399,7 +425,7 @@ describe("MainLayout", () => {
     it("通信が例外になってもローカルのセッションが消えていれば、完了として移る", async () => {
       // Given
       const user = userEvent.setup();
-      signOutEmittingSignedOut(async () => {
+      signOutClearingSession(async () => {
         throw new TypeError("Failed to fetch");
       });
       renderLayoutWithIdentity();
@@ -421,10 +447,7 @@ describe("MainLayout", () => {
     it("ルートの識別情報の記録と合わせて、サインアウトで端末の識別情報が消え、完了として移る", async () => {
       // Given
       const user = userEvent.setup();
-      supabase.signOut.mockImplementation(async () => {
-        supabase.emit("SIGNED_OUT", null);
-        return { error: null };
-      });
+      signOutClearingSession(async () => ({ error: null }));
       renderLayoutWithIdentity();
 
       // When
@@ -440,7 +463,30 @@ describe("MainLayout", () => {
       });
     });
 
-    it("認証サービスが拒否して端末の識別情報が残ったときは、理由を示し、閉じずに移らない", async () => {
+    it("認証サービスが拒否しても、その後の読み取りが未認証なら、エラーを示さず、完了として遷移元を付けずに移る", async () => {
+      // Given
+      const user = userEvent.setup();
+      signOutClearingSession(async () => ({ error: RATE_LIMIT_ERROR }));
+      renderLayoutWithIdentity();
+
+      // When
+      await confirmSignOut(user);
+
+      // Then
+      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
+      await waitFor(() => {
+        expect(
+          screen.queryByText("サインアウトしますか？"),
+        ).not.toBeInTheDocument();
+      });
+      expect(
+        screen.queryByText(
+          "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it("認証サービスが拒否して読み取りが認証済みのままのときは、理由を示し、閉じずに移らない", async () => {
       // Given
       const user = userEvent.setup();
       supabase.signOut.mockResolvedValue({ error: RATE_LIMIT_ERROR });
@@ -459,29 +505,7 @@ describe("MainLayout", () => {
       expect(replace).not.toHaveBeenCalled();
     });
 
-    // 現行の挙動(要件の既知の論点1)。保存先が使えない環境では識別情報が常に空として読まれるため、実際には失敗していても完了と判定する。構造の組み直しでは変えない。
-    it("保存先が使えず識別情報が読めない環境では、サインアウトが失敗しても完了と判定し、ダイアログを閉じる", async () => {
-      // Given
-      const user = userEvent.setup();
-      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-        throw new Error("denied");
-      });
-      supabase.signOut.mockResolvedValue({ error: RATE_LIMIT_ERROR });
-      renderLayout();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      await waitFor(() => {
-        expect(
-          screen.queryByText("サインアウトしますか？"),
-        ).not.toBeInTheDocument();
-      });
-      expect(replace).not.toHaveBeenCalled();
-    });
-
-    it("例外で端末の識別情報が残ったときは、通信エラーを示す", async () => {
+    it("例外で終えられず読み取りが認証済みのままのときは、通信エラーを示し、閉じずに移らない", async () => {
       // Given
       const user = userEvent.setup();
       supabase.signOut.mockRejectedValue(new TypeError("Failed to fetch"));
@@ -496,6 +520,34 @@ describe("MainLayout", () => {
           "通信エラーが発生しました。しばらくしてから再度お試しください。",
         ),
       ).toBeInTheDocument();
+      expect(screen.getByText("サインアウトしますか？")).toBeInTheDocument();
+      expect(replace).not.toHaveBeenCalled();
+    });
+
+    it("認証サービスが未知のエラーを返して終えられないときは、固定の文言を示し、認証サービスの文言を出さない", async () => {
+      // Given
+      const user = userEvent.setup();
+      supabase.signOut.mockResolvedValue({
+        error: new AuthApiError(
+          "Service detail: session store exploded",
+          500,
+          "unexpected_failure",
+        ),
+      });
+      renderLayout();
+
+      // When
+      await confirmSignOut(user);
+
+      // Then
+      expect(
+        await screen.findByText(
+          "エラーが発生しました。しばらくしてから再度お試しください。",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/session store exploded/),
+      ).not.toBeInTheDocument();
       expect(replace).not.toHaveBeenCalled();
     });
 
@@ -527,7 +579,7 @@ describe("MainLayout", () => {
       await screen.findByText(
         "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
       );
-      signOutEmittingSignedOut(async () => ({ error: null }));
+      signOutClearingSession(async () => ({ error: null }));
 
       // When
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
@@ -554,7 +606,7 @@ describe("MainLayout", () => {
       expect(supabase.signOut).toHaveBeenCalledTimes(1);
     });
 
-    it("完了を待つ間に画面が離れたときは、端末の識別情報を読まず、結果を破棄する", async () => {
+    it("完了を待つ間に画面が離れたときは、サインインの状態を読まず、結果を破棄して移らない", async () => {
       // Given
       const user = userEvent.setup();
       let finish: (value: unknown) => void = () => {};
@@ -565,14 +617,14 @@ describe("MainLayout", () => {
       );
       const { unmount } = renderLayout();
       await confirmSignOut(user);
-      const getItem = vi.spyOn(Storage.prototype, "getItem");
+      const readsBeforeLeaving = supabase.getSession.mock.calls.length;
       unmount();
 
       // When
-      await act(async () => finish({ error: RATE_LIMIT_ERROR }));
+      await act(async () => finish({ error: null }));
 
       // Then
-      expect(getItem).not.toHaveBeenCalled();
+      expect(supabase.getSession).toHaveBeenCalledTimes(readsBeforeLeaving);
       expect(replace).not.toHaveBeenCalled();
     });
   });

@@ -195,10 +195,18 @@ describe("サインアップの手続き", () => {
       },
     );
 
-    it("登録済みなら、コードを送らない", async () => {
+    it.each<[string, () => Promise<boolean>]>([
+      ["登録済み", async () => true],
+      [
+        "登録の判定が投げた(確かめられない)",
+        async () => {
+          throw new Error("lookup failed");
+        },
+      ],
+    ])("%sなら、コードを送らない", async (_name, lookup) => {
       // Given
       const { signUp, authenticator, registration, viewOf } = setup();
-      registration.isRegistered.mockResolvedValue(true);
+      registration.isRegistered.mockImplementation(lookup);
 
       // When
       await signUp.sendCode({ email }, viewOf(checked));
@@ -272,7 +280,7 @@ describe("サインアップの手続き", () => {
   });
 
   describe("パスワードの設定", () => {
-    it("設定できれば、ラウンド一覧へ遷移し、実行中を解除しない", async () => {
+    it("設定できれば、passwordSetを送ってラウンド一覧へ遷移し、実行中を解除しない", async () => {
       // Given
       const { signUp, authenticator, navigation, events, viewOf } = setup();
       const view = viewOf(onPasswordStep);
@@ -285,13 +293,48 @@ describe("サインアップの手続き", () => {
         "password1",
       );
       expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds");
-      expect(events).toEqual([]);
+      expect(events).toEqual([{ type: "passwordSet" }]);
       expect(view.state.pending).toBe("setPassword");
     });
 
-    it("遷移が投げたら、通信エラーとして失敗にし、実行中のまま止めない", async () => {
+    it("弱いパスワードで拒否された後の成功では、遷移の前にpasswordSetを送り、遷移の中ではエラーが消えて実行中のままである", async () => {
       // Given
-      const { signUp, navigation, viewOf } = setup();
+      const { signUp, authenticator, navigation, events, viewOf } = setup();
+      authenticator.setPassword.mockResolvedValueOnce({
+        kind: "refused",
+        failure: { kind: "weak_password" },
+      });
+      const view = viewOf(onPasswordStep);
+      await signUp.setPassword({ password: "password1" }, view);
+      const seen: {
+        events: string[];
+        error: string | null;
+        pending: string | null;
+      }[] = [];
+      navigation.go.mockImplementation(() => {
+        seen.push({
+          events: types(events),
+          error: view.state.error,
+          pending: view.state.pending,
+        });
+      });
+
+      // When
+      await signUp.setPassword({ password: "password1" }, view);
+
+      // Then
+      expect(seen).toEqual([
+        {
+          events: ["failed", "passwordSet"],
+          error: null,
+          pending: "setPassword",
+        },
+      ]);
+    });
+
+    it("遷移が投げたら、passwordSetの後に通信エラーとして失敗にし、実行中のまま止めない", async () => {
+      // Given
+      const { signUp, navigation, events, viewOf } = setup();
       navigation.go.mockImplementation(() => {
         throw new Error("push failed");
       });
@@ -301,6 +344,7 @@ describe("サインアップの手続き", () => {
       await signUp.setPassword({ password: "password1" }, view);
 
       // Then
+      expect(types(events)).toEqual(["passwordSet", "failed"]);
       expect(view.state.error).toBe(
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
       );
@@ -388,6 +432,32 @@ describe("サインアップの手続き", () => {
       expect(resetCheck).not.toHaveBeenCalled();
     });
 
+    it("登録の判定の待ちで離れたら、未登録の応答でも、コードを送らず、出来事を送らず、チェックをやり直させない", async () => {
+      // Given
+      const {
+        signUp,
+        authenticator,
+        registration,
+        events,
+        screen,
+        resetCheck,
+        viewOf,
+      } = setup();
+      const response = Promise.withResolvers<boolean>();
+      registration.isRegistered.mockReturnValue(response.promise);
+      const running = signUp.sendCode({ email }, viewOf(checked));
+
+      // When
+      screen.mounted = false;
+      response.resolve(false);
+      await running;
+
+      // Then
+      expect(authenticator.sendCode).not.toHaveBeenCalled();
+      expect(events).toEqual([]);
+      expect(resetCheck).not.toHaveBeenCalled();
+    });
+
     it("コードの送信の待ちで離れたら、成功を反映せず、チェックをやり直させない", async () => {
       // Given
       const { signUp, authenticator, events, screen, resetCheck, viewOf } =
@@ -426,6 +496,27 @@ describe("サインアップの手続き", () => {
       // Then
       expect(events).toEqual([]);
       expect(navigation.go).not.toHaveBeenCalled();
+    });
+    it("共通の順序の中では表示中でも、呼び出し元の再開時に離れていれば、遷移せず、出来事を送らない", async () => {
+      // Given
+      const { signUp, navigation, events, screen, viewOf } = setup();
+      // 共通の順序(applyPassword)の確かめでは表示中、その後の呼び出し元の確かめでは離脱済みという順序を再現する。
+      let observed = false;
+      Object.defineProperty(screen, "mounted", {
+        get: () => {
+          const mounted = !observed;
+          observed = true;
+          return mounted;
+        },
+      });
+      const view = viewOf(onPasswordStep);
+
+      // When
+      await signUp.setPassword({ password: "password1" }, view);
+
+      // Then
+      expect(navigation.go).not.toHaveBeenCalled();
+      expect(events).toEqual([]);
     });
   });
 

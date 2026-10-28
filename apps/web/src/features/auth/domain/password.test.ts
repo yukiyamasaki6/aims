@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validateNewPassword, validatePasswordPresent } from "./password";
 
 const requirementMessage =
-  "パスワードは8文字以上72文字以内の半角英数記号で、英字と数字の両方を含めてください。";
+  "8〜72文字の半角英数記号で、英字と数字を含めてください。";
 
 describe("新しいパスワードの検証", () => {
   it("8文字以上で英数字を含む場合はエラーなし", () => {

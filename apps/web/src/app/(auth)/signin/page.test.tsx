@@ -226,38 +226,22 @@ describe("サインイン画面の入口", () => {
   );
 
   it.each([
-    ...[
-      [
-        "認証の拒否",
-        new AuthApiError(
-          "Invalid login credentials",
-          400,
-          "invalid_credentials",
-        ),
-        "メールアドレスまたはパスワードが間違っています。",
-      ],
-      [
-        "通信の断",
-        new AuthRetryableFetchError("Failed to fetch", 0),
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      ],
-    ].flatMap(([name, error, message]) => [
-      [name, error, message, "", "/rounds"],
-      [
-        `${name}(遷移元付き)`,
-        error,
-        message,
-        "?returnTo=%2Frounds%2Fnew",
-        "/rounds/new",
-      ],
-    ]),
-  ] as [string, Error, string, string, string][])(
-    "認証サービスが%sを返しても、文言を示し、使用済みのトークンでの再送を拒み、新しいトークンで再送信して遷移できる",
-    async (_name, error, message, query, destination) => {
+    ["遷移元なし", "", "/rounds"],
+    ["遷移元付き", "?returnTo=%2Frounds%2Fnew", "/rounds/new"],
+  ])(
+    "認証サービスが認証の拒否を返しても(%s)、文言を示し、使用済みのトークンでの再送を拒み、新しいトークンで再送信して遷移できる",
+    async (_name, query, destination) => {
       // Given
+      const message = "メールアドレスまたはパスワードが間違っています。";
       window.history.replaceState(null, "", `/signin${query}`);
       auth.signInWithPassword
-        .mockResolvedValueOnce({ error })
+        .mockResolvedValueOnce({
+          error: new AuthApiError(
+            "Invalid login credentials",
+            400,
+            "invalid_credentials",
+          ),
+        })
         .mockResolvedValue({ error: null });
       const user = userEvent.setup();
       render(<SignInPage />);
@@ -282,6 +266,69 @@ describe("サインイン画面の入口", () => {
       expect(screen.queryByText(message)).not.toBeInTheDocument();
     },
   );
+
+  it.each([
+    ["遷移元なし", "", "/rounds"],
+    ["遷移元付き", "?returnTo=%2Frounds%2Fnew", "/rounds/new"],
+  ])(
+    "認証サービスが通信の断を値で返したときは(%s)、文言を示し、チェックをやり直さずに同じトークンで再送信して遷移できる",
+    async (_name, query, destination) => {
+      // Given
+      const message =
+        "通信エラーが発生しました。しばらくしてから再度お試しください。";
+      window.history.replaceState(null, "", `/signin${query}`);
+      auth.signInWithPassword
+        .mockResolvedValueOnce({
+          error: new AuthRetryableFetchError("Failed to fetch", 0),
+        })
+        .mockResolvedValue({ error: null });
+      const user = userEvent.setup();
+      render(<SignInPage />);
+      await fillAndVerify(user);
+      await user.click(submitButton());
+      expect(await screen.findByText(message)).toBeInTheDocument();
+
+      // When
+      await user.click(submitButton());
+
+      // Then
+      expect(auth.signInWithPassword).toHaveBeenCalledTimes(2);
+      expect(auth.signInWithPassword).toHaveBeenLastCalledWith({
+        email: "user@example.com",
+        password: "password1",
+        options: { captchaToken: "captcha-token" },
+      });
+      expect(navigation.push).toHaveBeenCalledExactlyOnceWith(destination);
+      expect(screen.queryByText(message)).not.toBeInTheDocument();
+    },
+  );
+
+  it("認証サービスが未知のエラーを返したときは、固定の文言を示し、認証サービスの文言を出さない", async () => {
+    // Given
+    auth.signInWithPassword.mockResolvedValue({
+      error: new AuthApiError(
+        "Service detail: password hash backend down",
+        500,
+        "unexpected_failure",
+      ),
+    });
+    const user = userEvent.setup();
+    render(<SignInPage />);
+    await fillAndVerify(user);
+
+    // When
+    await user.click(submitButton());
+
+    // Then
+    expect(
+      await screen.findByText(
+        "エラーが発生しました。しばらくしてから再度お試しください。",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/password hash backend down/),
+    ).not.toBeInTheDocument();
+  });
 
   it("認証サービスへの送信が失敗しても、通信エラーを示し、新しいトークンで再送信して遷移できる", async () => {
     // Given

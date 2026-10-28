@@ -213,23 +213,27 @@ describe("認証サービスのエラーの失敗の種類への変換", () => {
   });
 
   it.each([
-    ["未知のコード", "unknown_code"],
-    ["コードが無い場合", undefined],
-    ["継承されたプロパティ名のコード", "toString"],
-    ["継承されたconstructorのコード", "constructor"],
-  ])("%sは認証サービスの文言を持つotherにする", async (_name, code) => {
-    // Given
-    const error = new AuthApiError("認証サービスの文言", 400, code);
+    ["未知のコード", "unknown_code", "Unknown failure from service"],
+    ["コードが無い場合", undefined, "Service error without code"],
+    ["継承されたプロパティ名のコード", "toString", "Inherited name code"],
+    ["継承されたconstructorのコード", "constructor", "Constructor code"],
+  ])(
+    "%sは、認証サービスの文言を残さず、その他の失敗にする",
+    async (_name, code, message) => {
+      // Given
+      const error = new AuthApiError(message, 400, code);
 
-    // When
-    const result = await refusedWith(error);
+      // When
+      const result = await refusedWith(error);
 
-    // Then
-    expect(result).toEqual({
-      kind: "refused",
-      failure: { kind: "other", message: "認証サービスの文言" },
-    });
-  });
+      // Then
+      expect(result).toStrictEqual({
+        kind: "refused",
+        failure: { kind: "other" },
+      });
+      expect(JSON.stringify(result)).not.toContain(message);
+    },
+  );
 });
 
 describe("サインイン(signIn)", () => {
@@ -683,7 +687,7 @@ describe("この端末のサインアウト(signOutHere)", () => {
     [
       "文言の表が無い拒否",
       new AuthApiError("unknown failure", 400, "some_unknown_code"),
-      { kind: "other", message: "unknown failure" },
+      { kind: "other" },
     ],
   ] as const)(
     "%sが値で返ったときは、拒否された失敗の種類にして返す",

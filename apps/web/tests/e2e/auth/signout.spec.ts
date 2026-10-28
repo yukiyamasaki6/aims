@@ -38,8 +38,11 @@ test("別の画面でサインアウトを確認すると、この端末のセ�
     path: "/rounds/new",
   });
 
-  // サインアウトを確認して、サインイン画面へ移る。
+  // サインアウトを確認して、サインイン画面へ移り、ラウンド一覧へ戻されずにとどまる。
   await confirmButton.click();
+  await expect(page).toHaveURL(/\/signin$/);
+  await waitForHydration(page);
+  await expect(page.getByRole("heading", { name: "サインイン" })).toBeVisible();
   await expect(page).toHaveURL(/\/signin$/);
 
   // ラウンド一覧を開き直して、この端末のセッションが終了したことを確かめる。

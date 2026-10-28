@@ -8,7 +8,7 @@ import {
 } from "./session-end-flow";
 
 describe("beginSignOut", () => {
-  it("遷移元を付けない合図を立てる", () => {
+  it("実行中にして、サインアウトを始める", () => {
     // Given
     const state = initialSessionEndFlow;
 
@@ -18,7 +18,7 @@ describe("beginSignOut", () => {
     // Then
     expect(result).toEqual({
       kind: "started",
-      state: { running: true, signingOut: true, left: false },
+      state: { running: true, left: false },
       request: undefined,
     });
   });
@@ -38,7 +38,7 @@ describe("beginSignOut", () => {
     // Given
     const failed = endSignOut(beginSignOut(initialSessionEndFlow).state, {
       kind: "observed",
-      identity: "user-1",
+      status: "authenticated",
       failure: null,
     }).state;
 
@@ -51,67 +51,60 @@ describe("beginSignOut", () => {
 });
 
 describe("endSignOut", () => {
-  describe("端末の識別情報が消えている場合", () => {
+  describe("呼び出しの後の読み取りが未認証の場合", () => {
     it.each([
       ["呼び出しの失敗が無い", null],
       ["通信の失敗", UNREACHABLE],
       ["認証サービスの拒否", { kind: "rate_limited" }],
-    ] as const)(
-      "%sでも、完了とし、合図を残して実行中を解く",
-      (_name, failure) => {
-        // Given
-        const state = beginSignOut(initialSessionEndFlow).state;
-
-        // When
-        const result = endSignOut(state, {
-          kind: "observed",
-          identity: null,
-          failure,
-        });
-
-        // Then
-        expect(result.result).toEqual({ kind: "completed" });
-        expect(result.state).toEqual({
-          running: false,
-          signingOut: true,
-          left: false,
-        });
-      },
-    );
-  });
-
-  describe("端末の識別情報が残っている場合", () => {
-    it("認証サービスの失敗があれば、その失敗として失敗にし、合図を解除して実行中を解く", () => {
+    ] as const)("%sでも、完了とし、実行中を解く", (_name, failure) => {
       // Given
       const state = beginSignOut(initialSessionEndFlow).state;
 
       // When
       const result = endSignOut(state, {
         kind: "observed",
-        identity: "user-1",
+        status: "unauthenticated",
+        failure,
+      });
+
+      // Then
+      expect(result).toEqual({
+        state: { running: false, left: false },
+        result: { kind: "completed" },
+      });
+    });
+  });
+
+  describe.each([
+    ["認証済み", "authenticated"],
+    ["不明", "unknown"],
+  ] as const)("呼び出しの後の読み取りが%sの場合", (_name, status) => {
+    it("呼び出しの失敗があれば、その失敗として失敗にし、実行中を解く", () => {
+      // Given
+      const state = beginSignOut(initialSessionEndFlow).state;
+
+      // When
+      const result = endSignOut(state, {
+        kind: "observed",
+        status,
         failure: { kind: "rate_limited" },
       });
 
       // Then
-      expect(result.result).toEqual({
-        kind: "failed",
-        failure: { kind: "rate_limited" },
-      });
-      expect(result.state).toEqual({
-        running: false,
-        signingOut: false,
-        left: false,
+      expect(result).toEqual({
+        state: { running: false, left: false },
+        result: { kind: "failed", failure: { kind: "rate_limited" } },
       });
     });
 
-    it("失敗の値が無ければ、通信エラーとして失敗にする", () => {
+    it("呼び出しの失敗が無ければ、通信エラーとして失敗にする", () => {
       // Given
       const state = beginSignOut(initialSessionEndFlow).state;
 
       // When
       const result = endSignOut(state, {
         kind: "observed",
-        identity: "user-1",
+        status,
         failure: null,
       });
 
@@ -121,7 +114,7 @@ describe("endSignOut", () => {
   });
 
   describe("画面が離れて結果を観測しなかった場合", () => {
-    it("結果を破棄し、合図は変えずに実行中を解く", () => {
+    it("結果を破棄し、実行中を解く", () => {
       // Given
       const state = beginSignOut(initialSessionEndFlow).state;
 
@@ -130,7 +123,7 @@ describe("endSignOut", () => {
 
       // Then
       expect(result).toEqual({
-        state: { running: false, signingOut: true, left: false },
+        state: { running: false, left: false },
         result: { kind: "discarded" },
       });
     });
@@ -138,7 +131,7 @@ describe("endSignOut", () => {
 });
 
 describe("leave", () => {
-  it("/rounds配下の画面では、今の場所を遷移元としてサインインへ移る", () => {
+  it("/rounds配下の画面を遷移元にすると、その場所を遷移元としてサインインへ移る", () => {
     // Given
     const state = initialSessionEndFlow;
 
@@ -146,7 +139,10 @@ describe("leave", () => {
     const result = leave(state, "/rounds/new?from=a");
 
     // Then
-    expect(result.result).toBe("/signin?returnTo=%2Frounds%2Fnew%3Ffrom%3Da");
+    expect(result).toEqual({
+      state: { running: false, left: true },
+      result: "/signin?returnTo=%2Frounds%2Fnew%3Ffrom%3Da",
+    });
   });
 
   it.each(["/rounds", "/other"])(
@@ -163,41 +159,71 @@ describe("leave", () => {
     },
   );
 
-  it("明示のサインアウトの合図が立っている間は、遷移元を付けない", () => {
+  it("遷移元を明示しない(サインアウトを終えられた)ときは、遷移元を付けずにサインインへ移る", () => {
     // Given
-    const state = beginSignOut(initialSessionEndFlow).state;
-
-    // When
-    const result = leave(state, "/rounds/new");
-
-    // Then
-    expect(result.result).toBe("/signin");
-  });
-
-  it("サインアウトが失敗して合図が解除された後は、遷移元を付ける", () => {
-    // Given
-    const failed = endSignOut(beginSignOut(initialSessionEndFlow).state, {
+    const completed = endSignOut(beginSignOut(initialSessionEndFlow).state, {
       kind: "observed",
-      identity: "user-1",
+      status: "unauthenticated",
       failure: null,
     }).state;
 
     // When
-    const result = leave(failed, "/rounds/new");
+    const result = leave(completed, null);
 
     // Then
-    expect(result.result).toBe("/signin?returnTo=%2Frounds%2Fnew");
+    expect(result).toEqual({
+      state: { running: false, left: true },
+      result: "/signin",
+    });
   });
+
+  it("サインアウトの実行中は、遷移元があっても移らず、状態を変えない", () => {
+    // Given
+    const running = beginSignOut(initialSessionEndFlow).state;
+
+    // When
+    const result = leave(running, "/rounds/new");
+
+    // Then
+    expect(result).toEqual({ state: running, result: null });
+  });
+
+  it.each([
+    [
+      "失敗",
+      {
+        kind: "observed",
+        status: "authenticated",
+        failure: null,
+      } as const,
+    ],
+    ["破棄", { kind: "discarded" } as const],
+  ])(
+    "サインアウトの%sで実行中が解かれた後は、今の場所を遷移元として移る",
+    (_name, observation) => {
+      // Given
+      const settled = endSignOut(
+        beginSignOut(initialSessionEndFlow).state,
+        observation,
+      ).state;
+
+      // When
+      const result = leave(settled, "/rounds/new");
+
+      // Then
+      expect(result.result).toBe("/signin?returnTo=%2Frounds%2Fnew");
+    },
+  );
 
   it("移った後に重ねて呼んでも、遷移は1回である", () => {
     // Given
     const first = leave(initialSessionEndFlow, "/rounds/new");
 
     // When
-    const second = leave(first.state, "/rounds/new");
+    const second = leave(first.state, null);
 
     // Then
     expect(first.result).not.toBeNull();
-    expect(second.result).toBeNull();
+    expect(second).toEqual({ state: first.state, result: null });
   });
 });

@@ -12,7 +12,7 @@ const CAPTCHA_ERROR_MESSAGE = "セキュリティチェックが完了してい�
 const OTP_EXPIRED_MESSAGE =
   "認証コードが正しくないか、有効期限が切れています。";
 const WEAK_PASSWORD_MESSAGE =
-  "パスワードは8文字以上で、英字と数字の両方を含めてください。";
+  "8〜72文字の半角英数記号で、英字と数字を含めてください。";
 const REGISTERED_MESSAGE = "このメールアドレスは既に登録されています。";
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
@@ -326,6 +326,46 @@ describe("サインアップ画面の入口", () => {
       });
     },
   );
+
+  it("コードの送信でSDKが未知のエラーを返したときは、固定の文言を示し、認証サービスの文言を出さない", async () => {
+    // Given
+    server.isEmailRegistered.mockResolvedValue(false);
+    auth.signInWithOtp.mockResolvedValue({
+      error: new AuthApiError(
+        "Service detail: otp mailer exploded",
+        500,
+        "unexpected_failure",
+      ),
+    });
+    const user = userEvent.setup();
+    render(<SignUpPage />);
+
+    // When
+    await submitEmailStep(user);
+
+    // Then
+    expect(
+      await screen.findByText(
+        "エラーが発生しました。しばらくしてから再度お試しください。",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/otp mailer exploded/)).not.toBeInTheDocument();
+  });
+
+  it("規則に合わないパスワードは、認証サービスが弱いパスワードとして拒否したときと同じ規則の文面で示し、設定しない", async () => {
+    // Given
+    const user = userEvent.setup();
+    render(<SignUpPage />);
+    await advanceToPasswordStep(user);
+    await user.type(passwordInput(), "onlyletters");
+
+    // When
+    await user.click(setPasswordButton());
+
+    // Then
+    expect(screen.getByText(WEAK_PASSWORD_MESSAGE)).toBeInTheDocument();
+    expect(auth.updateUser).not.toHaveBeenCalled();
+  });
 
   it("登録済みの拒否、メールの修正、確認の期限切れ、再試行、弱いパスワード、再試行の順に、同じ画面で進めて遷移できる", async () => {
     // Given

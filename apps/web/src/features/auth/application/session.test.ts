@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthChange, SessionStatus } from "../domain/auth-change";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import type { CallResult } from "./call-result";
@@ -18,12 +18,12 @@ function readingOf(status: SessionStatus): SessionReading {
   return status === "authenticated" ? { status, userId: "user-1" } : { status };
 }
 
-// 偽の部品。認証サービス、端末の識別情報、通信の可否、ページ遷移の境界だけを差し替える。
+// 偽の部品。認証サービス、通信の可否、ページ遷移の境界だけを差し替える。
+// サインインの状態の読み取りは、checkがあればその結果を、無ければstate.statusを返す。
 function setup(
   options: {
     signOutHere?: () => Promise<AuthFailure | null>;
     check?: () => Promise<SessionStatus>;
-    identity?: string | null;
     offline?: boolean;
     here?: string;
   } = {},
@@ -32,11 +32,11 @@ function setup(
   const onlineListeners: Array<() => void> = [];
   const unsubscribe = vi.fn();
   const stopOnline = vi.fn();
-  const state = {
-    identity: options.identity === undefined ? "user-1" : options.identity,
+  const state: { status: SessionStatus; offline: boolean } = {
+    status: "authenticated",
     offline: options.offline ?? false,
   };
-  const check = options.check ?? (async () => "authenticated" as const);
+  const check = options.check ?? (async () => state.status);
   const signOutHere = options.signOutHere ?? (async () => null);
   const authority = {
     signOutHere: vi.fn(async () => resultOf(await signOutHere())),
@@ -56,7 +56,6 @@ function setup(
   };
   const session = createSession({
     authenticator: authority,
-    identity: { read: () => state.identity },
     connectivity: {
       isOffline: () => state.offline,
       onOnline: (listener) => {
@@ -86,6 +85,8 @@ function setup(
   };
 }
 
+type Authority = ReturnType<typeof setup>["authority"];
+
 const mounted = { isMounted: () => true };
 const signedOut: AuthChange = { kind: "signed-out" };
 
@@ -94,91 +95,120 @@ async function flush() {
 }
 
 describe("サインアウト", () => {
-  describe("マウント中に完了した場合", () => {
-    describe("端末の識別情報が消えた場合", () => {
-      it("認証サービスへこの端末のサインアウトを1回頼み、完了したことを返す", async () => {
+  describe("表示中に終了の後の読み取りが未認証の場合", () => {
+    it("この端末の終了を1回頼んだ後に状態を読み、完了を返し、遷移元の無いサインインへ1回置き換える", async () => {
+      // Given
+      const { session, authority, page, state } = setup({
+        here: "/rounds/new",
+      });
+      authority.signOutHere.mockImplementation(async () => {
+        state.status = "unauthenticated";
+        return accepted;
+      });
+
+      // When
+      const result = await session.signOut(mounted);
+
+      // Then
+      expect(result).toEqual({ kind: "completed" });
+      expect(authority.signOutHere).toHaveBeenCalledOnce();
+      expect(authority.readSession).toHaveBeenCalledOnce();
+      expect(authority.signOutHere.mock.invocationCallOrder[0]).toBeLessThan(
+        authority.readSession.mock.invocationCallOrder[0] ?? 0,
+      );
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+    });
+
+    it.each([
+      ["認証サービスが拒否を返しても", { kind: "rate_limited" }],
+      ["呼び出しが届かなくても", { kind: "unreachable" }],
+    ] as const)(
+      "%s、失敗を返さず、完了して遷移元の無いサインインへ移る",
+      async (_name, failure) => {
         // Given
-        const { session, authority, state } = setup();
-        authority.signOutHere.mockImplementation(async () => {
-          state.identity = null;
-          return accepted;
+        const { session, page, state } = setup({
+          signOutHere: async () => failure,
+          here: "/rounds/new",
         });
+        state.status = "unauthenticated";
 
         // When
         const result = await session.signOut(mounted);
 
         // Then
         expect(result).toEqual({ kind: "completed" });
-        expect(authority.signOutHere).toHaveBeenCalledTimes(1);
-      });
+        expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+      },
+    );
+  });
 
-      it.each([
-        ["認証サービスが拒否を返しても", { kind: "rate_limited" }],
-        ["呼び出しが届かなくても", { kind: "unreachable" }],
-      ] as const)("%s、完了したことを返す", async (_name, failure) => {
+  describe("表示中に終了の後の読み取りが未認証でない場合", () => {
+    it.each([
+      [
+        "読み取りが認証済みで、終了が拒否を返した",
+        "authenticated",
+        { kind: "rate_limited" },
+        { kind: "rate_limited" },
+      ],
+      [
+        "読み取りが不明で、終了が届かなかった",
+        "unknown",
+        { kind: "unreachable" },
+        { kind: "unreachable" },
+      ],
+      [
+        "読み取りが認証済みで、終了の失敗の値が無い",
+        "authenticated",
+        null,
+        { kind: "unreachable" },
+      ],
+    ] as const)(
+      "%sときは、終了の失敗を理由として(値が無ければ通信エラーを補って)返し、遷移しない",
+      async (_name, status, failure, expected) => {
         // Given
-        const { session, state } = setup({
+        const { session, page, state } = setup({
           signOutHere: async () => failure,
         });
-        state.identity = null;
+        state.status = status;
 
         // When
         const result = await session.signOut(mounted);
 
         // Then
-        expect(result).toEqual({ kind: "completed" });
-      });
-    });
-
-    describe("端末の識別情報が残った場合", () => {
-      it("認証サービスの拒否は、その失敗として返す", async () => {
-        // Given
-        const { session } = setup({
-          signOutHere: async () => ({ kind: "rate_limited" }),
-        });
-
-        // When
-        const result = await session.signOut(mounted);
-
-        // Then
-        expect(result).toEqual({
-          kind: "failed",
-          failure: { kind: "rate_limited" },
-        });
-      });
-
-      it.each([
-        ["呼び出しが届かなかった", { kind: "unreachable" }],
-        ["失敗の値が無い", null],
-      ] as const)("%sときは、通信エラーとして返す", async (_name, failure) => {
-        // Given
-        const { session } = setup({ signOutHere: async () => failure });
-
-        // When
-        const result = await session.signOut(mounted);
-
-        // Then
-        expect(result).toEqual({
-          kind: "failed",
-          failure: { kind: "unreachable" },
-        });
-      });
-    });
+        expect(result).toEqual({ kind: "failed", failure: expected });
+        expect(page.replace).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe("完了を待つ間に離れた場合", () => {
-    it.each([
-      ["端末の識別情報が消えても", null],
-      ["端末の識別情報が残り拒否が返されても", "user-1"],
-    ] as const)("%s、結果を破棄する", async (_name, identity) => {
+    it("終了の応答の前に離れたら、状態を読まずに結果を破棄し、遷移しない", async () => {
       // Given
       let isMounted = true;
-      const { session } = setup({
-        identity,
+      const { session, authority, page, state } = setup({
         signOutHere: async () => {
           isMounted = false;
-          return { kind: "rate_limited" };
+          return null;
         },
+      });
+      state.status = "unauthenticated";
+
+      // When
+      const result = await session.signOut({ isMounted: () => isMounted });
+
+      // Then
+      expect(result).toEqual({ kind: "discarded" });
+      expect(authority.readSession).not.toHaveBeenCalled();
+      expect(page.replace).not.toHaveBeenCalled();
+    });
+
+    it("読み取りの応答の前に離れたら、未認証でも結果を破棄し、遷移しない", async () => {
+      // Given
+      let isMounted = true;
+      const { session, authority, page } = setup();
+      authority.readSession.mockImplementation(async () => {
+        isMounted = false;
+        return readingOf("unauthenticated");
       });
 
       // When
@@ -186,27 +216,37 @@ describe("サインアウト", () => {
 
       // Then
       expect(result).toEqual({ kind: "discarded" });
+      expect(page.replace).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("保存先が使えない環境", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
     });
 
-    it("端末の識別情報を読まない", async () => {
+    it("終了が拒否され読み取りが認証済みなら、保存先を読まずに理由つきの失敗を返し、遷移しない", async () => {
       // Given
-      const read = vi.fn(() => "user-1");
-      const session = createSession({
-        authenticator: {
-          signOutHere: async () => accepted,
-          readSession: async () => readingOf("authenticated"),
-          subscribe: () => () => {},
-        },
-        identity: { read },
-        connectivity: { isOffline: () => false, onOnline: () => () => {} },
-        pageReplace: { here: () => "/rounds", replace: () => {} },
+      const getItem = vi
+        .spyOn(Storage.prototype, "getItem")
+        .mockImplementation(() => {
+          throw new Error("denied");
+        });
+      const { session, page, state } = setup({
+        signOutHere: async () => ({ kind: "rate_limited" }),
       });
+      state.status = "authenticated";
 
       // When
-      await session.signOut({ isMounted: () => false });
+      const result = await session.signOut(mounted);
 
       // Then
-      expect(read).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        kind: "failed",
+        failure: { kind: "rate_limited" },
+      });
+      expect(page.replace).not.toHaveBeenCalled();
+      expect(getItem).not.toHaveBeenCalled();
     });
   });
 
@@ -215,7 +255,7 @@ describe("サインアウト", () => {
       // Given
       const { session, authority, state } = setup();
       authority.signOutHere.mockImplementation(async () => {
-        state.identity = null;
+        state.status = "unauthenticated";
         return accepted;
       });
 
@@ -229,6 +269,29 @@ describe("サインアウト", () => {
       expect(authority.signOutHere).toHaveBeenCalledTimes(1);
       expect(first).toEqual({ kind: "completed" });
       expect(second).toEqual({ kind: "busy" });
+    });
+
+    it("最初の終了が届かず読み取りが不明で失敗した後に再び頼み、読み取りが未認証なら、完了して遷移元の無いサインインへ1回移る", async () => {
+      // Given
+      const { session, authority, page, state } = setup({
+        here: "/rounds/new",
+      });
+      authority.signOutHere.mockResolvedValueOnce(UNREACHABLE);
+      state.status = "unknown";
+      const first = await session.signOut(mounted);
+      authority.signOutHere.mockImplementationOnce(async () => {
+        state.status = "unauthenticated";
+        return accepted;
+      });
+
+      // When
+      const result = await session.signOut(mounted);
+
+      // Then
+      expect(first).toEqual({ kind: "failed", failure: UNREACHABLE });
+      expect(result).toEqual({ kind: "completed" });
+      expect(authority.signOutHere).toHaveBeenCalledTimes(2);
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
     });
 
     it("失敗の後は、実行中が解かれて、再び開始できる", async () => {
@@ -250,7 +313,7 @@ describe("サインアウト", () => {
       // Given
       const { session, state } = setup();
       const discarded = await session.signOut({ isMounted: () => false });
-      state.identity = null;
+      state.status = "unauthenticated";
 
       // When
       const result = await session.signOut(mounted);
@@ -262,14 +325,62 @@ describe("サインアウト", () => {
   });
 
   describe("セッション喪失の遷移との関係", () => {
-    it("サインアウトが完了するとき、signed-outを受けた遷移に遷移元を付けない", async () => {
+    it.each([
+      [
+        "終了の応答待ち",
+        (authority: Authority, response: Promise<void>) => {
+          authority.signOutHere.mockImplementationOnce(async () => {
+            await response;
+            return accepted;
+          });
+          return authority.signOutHere;
+        },
+      ],
+      [
+        "読み取りの応答待ち",
+        (authority: Authority, response: Promise<void>) => {
+          authority.readSession.mockImplementationOnce(async () => {
+            await response;
+            return readingOf("authenticated");
+          });
+          return authority.readSession;
+        },
+      ],
+    ])(
+      "%sに喪失の出来事が来ても、読み取りで判定するまでは遷移しない",
+      async (_name, hold) => {
+        // Given
+        const { session, authority, page, emit } = setup({
+          here: "/rounds/new",
+        });
+        session.watch();
+        const response = Promise.withResolvers<void>();
+        const waiting = hold(authority, response.promise);
+        const running = session.signOut(mounted);
+        await vi.waitFor(() => expect(waiting).toHaveBeenCalledOnce());
+
+        // When
+        emit(signedOut);
+        response.resolve();
+        const result = await running;
+
+        // Then
+        expect(result).toEqual({
+          kind: "failed",
+          failure: { kind: "unreachable" },
+        });
+        expect(page.replace).not.toHaveBeenCalled();
+      },
+    );
+
+    it("実行中に喪失の出来事が来て、その後の読み取りが未認証なら、遷移元の無いサインインへ1回だけ移る", async () => {
       // Given
       const { session, authority, page, state, emit } = setup({
         here: "/rounds/new",
       });
       session.watch();
       authority.signOutHere.mockImplementation(async () => {
-        state.identity = null;
+        state.status = "unauthenticated";
         emit(signedOut);
         return accepted;
       });
@@ -281,42 +392,57 @@ describe("サインアウト", () => {
       expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
     });
 
-    it("通信が例外になってもローカルのセッションが消えたときは、遷移元を付けない", async () => {
+    it("実行中に見張りの確認が未認証を返しても、遷移はサインアウトの判定に委ね、遷移元を付けずに1回だけ移る", async () => {
       // Given
-      const { session, authority, page, state, emit } = setup();
-      session.watch();
-      authority.signOutHere.mockImplementation(async () => {
-        state.identity = null;
-        emit(signedOut);
-        return UNREACHABLE;
-      });
-
-      // When
-      const result = await session.signOut(mounted);
-
-      // Then
-      expect(result).toEqual({ kind: "completed" });
-      expect(page.replace).toHaveBeenCalledWith("/signin");
-    });
-
-    it("サインアウトが失敗した後にセッションを失ったときは、遷移元を付けて遷移する", async () => {
-      // Given
-      const { session, page, emit } = setup({
-        signOutHere: async () => ({ kind: "rate_limited" }),
+      const { session, authority, page, state, goOnline } = setup({
+        offline: true,
         here: "/rounds/new",
       });
       session.watch();
-      const result = await session.signOut(mounted);
-      expect(result.kind).toBe("failed");
+      const response = Promise.withResolvers<CallResult>();
+      authority.signOutHere.mockReturnValue(response.promise);
+      const running = session.signOut(mounted);
+      state.status = "unauthenticated";
+      goOnline();
+      await flush();
+      const beforeVerdict = page.replace.mock.calls.length;
 
       // When
-      emit(signedOut);
+      response.resolve(accepted);
+      await running;
 
       // Then
-      expect(page.replace).toHaveBeenCalledWith(
-        "/signin?returnTo=%2Frounds%2Fnew",
-      );
+      expect(beforeVerdict).toBe(0);
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
     });
+
+    it.each([
+      ["失敗", false],
+      ["破棄", true],
+    ] as const)(
+      "サインアウトの%sの後に見張りが喪失を検知したときは、遷移元を付けて遷移する",
+      async (_name, leaves) => {
+        // Given
+        let isMounted = true;
+        const { session, page, emit } = setup({
+          signOutHere: async () => {
+            if (leaves) isMounted = false;
+            return { kind: "rate_limited" };
+          },
+          here: "/rounds/new",
+        });
+        session.watch();
+        await session.signOut({ isMounted: () => isMounted });
+
+        // When
+        emit(signedOut);
+
+        // Then
+        expect(page.replace).toHaveBeenCalledExactlyOnceWith(
+          "/signin?returnTo=%2Frounds%2Fnew",
+        );
+      },
+    );
 
     it("ラウンド一覧でサインアウトが失敗した後にセッションを失ったときは、遷移元を付けない", async () => {
       // Given
@@ -334,25 +460,37 @@ describe("サインアウト", () => {
       expect(page.replace).toHaveBeenCalledWith("/signin");
     });
 
-    // 現行の挙動(要件の既知の論点2)。離れて破棄した結果では、合図を解除しない。構造の組み直しでは変えない。
-    it("離れて結果を破棄したとき、合図は解除されないまま残る", async () => {
+    it("完了の遷移が投げても、完了を返す", async () => {
       // Given
-      let isMounted = true;
-      const { session, page, emit } = setup({
-        here: "/rounds/new",
-        signOutHere: async () => {
-          isMounted = false;
-          return { kind: "rate_limited" };
-        },
+      const { session, page, state } = setup();
+      state.status = "unauthenticated";
+      page.replace.mockImplementationOnce(() => {
+        throw new Error("replace failed");
       });
+
+      // When
+      const result = await session.signOut(mounted);
+
+      // Then
+      expect(result).toEqual({ kind: "completed" });
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+    });
+
+    it("完了の遷移が投げた後に喪失が来ても、再び遷移しない", async () => {
+      // Given
+      const { session, page, state, emit } = setup();
       session.watch();
-      await session.signOut({ isMounted: () => isMounted });
+      state.status = "unauthenticated";
+      page.replace.mockImplementationOnce(() => {
+        throw new Error("replace failed");
+      });
+      await session.signOut(mounted);
 
       // When
       emit(signedOut);
 
       // Then
-      expect(page.replace).toHaveBeenCalledWith("/signin");
+      expect(page.replace).toHaveBeenCalledOnce();
     });
   });
 });

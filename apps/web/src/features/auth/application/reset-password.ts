@@ -13,9 +13,12 @@ import {
 } from "./password-setup";
 import type { PasswordSetupAuthenticator } from "./password-setup-authenticator";
 
-// 全ての端末のサインインを終えさせる。応答があれば(拒否を含む)終了を依頼できたとして扱い、応答が無かったとき(unreachable)だけ失敗にする。
-export type SignOutEverywhere = {
-  signOutEverywhere(): Promise<CallResult>;
+// パスワードを変え、変えられたら全ての端末のサインインを終えさせる、サーバーへの1回の要求。結果はパスワードの変更の結果である。
+// 要求がサーバーに届いた後は、画面を離れても閉じても、変更と終了の両方が行われる。
+// 例外: 投げることがある(要求が届かない、応答を受け取れない)。手続きが通信エラーの失敗として扱う。
+// サーバーの手続き(password-change.ts)がこの約束を満たし、要求の入口の関数として画面の入口が渡す。
+export type PasswordChange = {
+  change(password: string): Promise<CallResult>;
 };
 
 // ページ全体を読み込み直して進む遷移。履歴に残し、前の画面の状態とクライアントのキャッシュを捨てる(ルーターで進む遷移はNavigation)。
@@ -23,12 +26,14 @@ export type SignOutEverywhere = {
 export type PageLoad = { load(path: string): void };
 
 type Dependencies = {
-  authenticator: PasswordSetupAuthenticator & SignOutEverywhere;
+  authenticator: Omit<PasswordSetupAuthenticator, "setPassword">;
+  passwordChange: PasswordChange;
   pageLoad: PageLoad;
 };
 
 export function createResetPassword({
   authenticator,
+  passwordChange,
   pageLoad,
 }: Dependencies): PasswordSetup {
   const context: PasswordSetupContext = {
@@ -40,7 +45,7 @@ export function createResetPassword({
     resend: (input, view) => resend(context, input, view),
     verifyCode: (input, view) => verifyCode(context, input, view),
     setPassword: (input, view) =>
-      setPassword(context, authenticator, pageLoad, input, view),
+      setPassword(passwordChange, pageLoad, input, view),
   };
 }
 
@@ -55,23 +60,27 @@ async function sendCode(
   await deliver(context, request, view, { type: "codeSent" });
 }
 
-// 設定に成功したら、その利用者の全ての端末のサインインを終えさせ、サインインの画面へ移る(自動ではサインインしない)。
-// 設定の応答前に画面を離れたときは、終了も遷移も行わない(applyPassword)。
-// 終了の応答待ちに画面を離れたときは、終了が届かなかったのでなければ、応答後に遷移する(状態は更新しない)。
-// 終了か遷移が投げたときは、表示中なら通信エラーとして失敗にし、実行中を解除する。
+// パスワードの変更をサーバーへ頼む(全ての端末のサインインの終了も、同じ要求でサーバーが行う)。
+// 変更に成功し、画面が表示中なら、終了の結果によらず、サインインの画面へ移る(自動ではサインインしない)。
+// 応答待ちに画面を離れたときは、表示も遷移もしない(変更と終了はサーバーで完了する)。
+// 遷移が投げたときは、通信エラーとして失敗にし、実行中を解除する。
 async function setPassword(
-  context: PasswordSetupContext,
-  signOut: SignOutEverywhere,
+  passwordChange: PasswordChange,
   pageLoad: PageLoad,
   input: { password: string },
   view: PasswordSetupView,
 ) {
-  if (!(await applyPassword(context, input, view))) return;
-  const result = await signOut.signOutEverywhere();
-  if (result.kind === "unreachable") {
-    if (view.isMounted()) view.dispatch({ type: "failed", failure: result });
-    return;
-  }
+  const change = async (password: string): Promise<CallResult> => {
+    try {
+      return await passwordChange.change(password);
+    } catch {
+      return UNREACHABLE;
+    }
+  };
+  if (!(await applyPassword(change, input, view))) return;
+  // applyPasswordの中の確かめの後、ここで再開するまでの間にも画面は離れうるため、遷移の直前に確かめ直す(離脱の原則)。
+  if (!view.isMounted()) return;
+  view.dispatch({ type: "passwordSet" });
   try {
     pageLoad.load(signInHref(null));
   } catch {

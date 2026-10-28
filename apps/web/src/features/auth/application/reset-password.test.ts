@@ -12,7 +12,7 @@ import {
 } from "../domain/password-setup-flow";
 import type { CallResult } from "./call-result";
 import type { PasswordSetupAuthenticator } from "./password-setup-authenticator";
-import { createResetPassword, type SignOutEverywhere } from "./reset-password";
+import { createResetPassword } from "./reset-password";
 import { screenHarness } from "./screen-view-test-helpers";
 
 const email = "user@example.com";
@@ -27,14 +27,20 @@ function setup() {
   const authenticator = {
     sendCode: vi.fn(async (): Promise<CallResult> => accepted),
     verifyCode: vi.fn(async (): Promise<CallResult> => accepted),
-    setPassword: vi.fn(async (): Promise<CallResult> => accepted),
-    signOutEverywhere: vi.fn(async (): Promise<CallResult> => accepted),
-  } satisfies PasswordSetupAuthenticator & SignOutEverywhere;
+  } satisfies Omit<PasswordSetupAuthenticator, "setPassword">;
+  const passwordChange = {
+    change: vi.fn(async (_password: string): Promise<CallResult> => accepted),
+  };
   const pageLoad = { load: vi.fn() };
-  const procedure = createResetPassword({ authenticator, pageLoad });
+  const procedure = createResetPassword({
+    authenticator,
+    passwordChange,
+    pageLoad,
+  });
   return {
     procedure,
     authenticator,
+    passwordChange,
     pageLoad,
     ...screenHarness<PasswordSetupFlow, PasswordSetupEvent>(
       passwordSetupReducer,
@@ -227,54 +233,126 @@ describe("パスワード再設定の手続き", () => {
   });
 
   describe("パスワードの設定", () => {
-    it("設定できれば、全ての端末のサインインを終えさせ、その後にサインインへ遷移し、実行中を解除しない", async () => {
+    it("変更の要求が成功し、表示中なら、入力したパスワードで1回頼み、passwordSetを送ってサインインをページ全体で読み込み、実行中を解除しない", async () => {
       // Given
-      const { procedure, authenticator, pageLoad, viewOf } = setup();
+      const { procedure, passwordChange, pageLoad, events, viewOf } = setup();
       const view = viewOf(onPasswordStep);
 
       // When
       await procedure.setPassword({ password }, view);
 
       // Then
-      expect(authenticator.setPassword).toHaveBeenCalledExactlyOnceWith(
-        password,
-      );
-      expect(authenticator.signOutEverywhere).toHaveBeenCalledExactlyOnceWith();
+      expect(passwordChange.change).toHaveBeenCalledExactlyOnceWith(password);
       expect(pageLoad.load).toHaveBeenCalledExactlyOnceWith("/signin");
-      expect(
-        authenticator.setPassword.mock.invocationCallOrder[0],
-      ).toBeLessThan(
-        authenticator.signOutEverywhere.mock.invocationCallOrder[0] ?? 0,
-      );
-      expect(
-        authenticator.signOutEverywhere.mock.invocationCallOrder[0],
-      ).toBeLessThan(pageLoad.load.mock.invocationCallOrder[0] ?? 0);
+      expect(events).toEqual([{ type: "passwordSet" }]);
       expect(view.state.pending).toBe("setPassword");
     });
 
-    it("設定に失敗すれば、失敗を示し、サインインの終了も遷移もせず、実行中を解除する", async () => {
+    it("弱いパスワードで拒否された後の成功では、遷移の前にpasswordSetを送り、遷移の中ではエラーが消えて実行中のままである", async () => {
       // Given
-      const { procedure, authenticator, pageLoad, viewOf } = setup();
-      authenticator.setPassword.mockResolvedValue(
+      const { procedure, passwordChange, pageLoad, events, viewOf } = setup();
+      passwordChange.change.mockResolvedValueOnce(
         refused({ kind: "weak_password" }),
       );
       const view = viewOf(onPasswordStep);
+      await procedure.setPassword({ password }, view);
+      const seen: {
+        events: string[];
+        error: string | null;
+        pending: string | null;
+      }[] = [];
+      pageLoad.load.mockImplementation(() => {
+        seen.push({
+          events: types(events),
+          error: view.state.error,
+          pending: view.state.pending,
+        });
+      });
 
       // When
       await procedure.setPassword({ password }, view);
 
       // Then
-      expect(view.state.error).toBe(
-        "パスワードは8文字以上で、英字と数字の両方を含めてください。",
-      );
-      expect(authenticator.signOutEverywhere).not.toHaveBeenCalled();
-      expect(pageLoad.load).not.toHaveBeenCalled();
-      expect(view.state.pending).toBeNull();
+      expect(seen).toEqual([
+        {
+          events: ["failed", "passwordSet"],
+          error: null,
+          pending: "setPassword",
+        },
+      ]);
     });
 
-    it("パスワードに不備があれば、不備だけを示し、設定しない", async () => {
+    it.each([
+      [
+        "拒否を返した",
+        async () => refused({ kind: "weak_password" }),
+        "8〜72文字の半角英数記号で、英字と数字を含めてください。",
+      ],
+      [
+        "通信の断の値を返した",
+        async () => refused(UNREACHABLE),
+        NETWORK_ERROR_MESSAGE,
+      ],
+      [
+        "未到達を返した",
+        async (): Promise<CallResult> => UNREACHABLE,
+        NETWORK_ERROR_MESSAGE,
+      ],
+      [
+        "投げた",
+        async (): Promise<CallResult> => {
+          throw new Error("Failed to fetch");
+        },
+        NETWORK_ERROR_MESSAGE,
+      ],
+    ])(
+      "変更の要求が%sときは、理由を示し、実行中を解除し、遷移しない",
+      async (_name, change, message) => {
+        // Given
+        const { procedure, passwordChange, pageLoad, viewOf } = setup();
+        passwordChange.change.mockImplementation(change);
+        const view = viewOf(onPasswordStep);
+
+        // When
+        await procedure.setPassword({ password }, view);
+
+        // Then
+        expect(view.state.error).toBe(message);
+        expect(view.state.pending).toBeNull();
+        expect(view.state.step).toBe("password");
+        expect(pageLoad.load).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      ["拒否を返した", async () => refused({ kind: "weak_password" })],
+      [
+        "投げた",
+        async (): Promise<CallResult> => {
+          throw new Error("Failed to fetch");
+        },
+      ],
+    ])(
+      "変更の要求が%s後は、同じ段階から再び頼み、成功すればサインインへ移る",
+      async (_name, change) => {
+        // Given
+        const { procedure, passwordChange, pageLoad, viewOf } = setup();
+        passwordChange.change.mockImplementationOnce(change);
+        const view = viewOf(onPasswordStep);
+        await procedure.setPassword({ password }, view);
+
+        // When
+        await procedure.setPassword({ password }, view);
+
+        // Then
+        expect(passwordChange.change).toHaveBeenCalledTimes(2);
+        expect(pageLoad.load).toHaveBeenCalledExactlyOnceWith("/signin");
+      },
+    );
+
+    it("パスワードに不備があれば、不備だけを示し、変更を頼まない", async () => {
       // Given
-      const { procedure, authenticator, events, viewOf } = setup();
+      const { procedure, passwordChange, events, viewOf } = setup();
 
       const view = viewOf(onPasswordStep);
 
@@ -284,12 +362,12 @@ describe("パスワード再設定の手続き", () => {
       // Then
       expect(events).toEqual([]);
       expect(view.state.fieldErrors.password).toBeDefined();
-      expect(authenticator.setPassword).not.toHaveBeenCalled();
+      expect(passwordChange.change).not.toHaveBeenCalled();
     });
 
-    it("同じタスクで続けて2回呼んでも、設定、サインインの終了、遷移は1回になる", async () => {
+    it("同じタスクで続けて2回呼んでも、変更の要求と遷移は1回になる", async () => {
       // Given
-      const { procedure, authenticator, pageLoad, viewOf } = setup();
+      const { procedure, passwordChange, pageLoad, viewOf } = setup();
       const view = viewOf(onPasswordStep);
 
       // When
@@ -299,14 +377,13 @@ describe("パスワード再設定の手続き", () => {
       ]);
 
       // Then
-      expect(authenticator.setPassword).toHaveBeenCalledOnce();
-      expect(authenticator.signOutEverywhere).toHaveBeenCalledOnce();
+      expect(passwordChange.change).toHaveBeenCalledOnce();
       expect(pageLoad.load).toHaveBeenCalledOnce();
     });
 
-    it("実行中なら、何も送らず、設定しない", async () => {
+    it("実行中なら、何も送らず、変更を頼まない", async () => {
       // Given
-      const { procedure, authenticator, events, viewOf } = setup();
+      const { procedure, passwordChange, events, viewOf } = setup();
       const running = { ...onPasswordStep, pending: "setPassword" as const };
 
       // When
@@ -314,17 +391,17 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(events).toEqual([]);
-      expect(authenticator.setPassword).not.toHaveBeenCalled();
+      expect(passwordChange.change).not.toHaveBeenCalled();
     });
 
     it.each([
       ["メール", "email"],
       ["コード", "code"],
     ] as const)(
-      "段階が%sのときに呼んでも、認証サービスを呼ばず、出来事も送らない",
+      "段階が%sのときに呼んでも、変更を頼まず、出来事も送らない",
       async (_label, step) => {
         // Given
-        const { procedure, authenticator, pageLoad, events, viewOf } = setup();
+        const { procedure, passwordChange, pageLoad, events, viewOf } = setup();
         const view = viewOf({ ...onPasswordStep, step });
 
         // When
@@ -332,105 +409,71 @@ describe("パスワード再設定の手続き", () => {
 
         // Then
         expect(events).toEqual([]);
-        expect(authenticator.setPassword).not.toHaveBeenCalled();
-        expect(authenticator.signOutEverywhere).not.toHaveBeenCalled();
+        expect(passwordChange.change).not.toHaveBeenCalled();
         expect(pageLoad.load).not.toHaveBeenCalled();
       },
     );
   });
 
-  // 離れた後は、状態を更新しない。離れる時点は、応答を待つごとに1つずつ試す。
-  describe("画面を離れたときの3経路と、終了や遷移の失敗", () => {
-    it("経路1: 設定の応答待ちで離れたら、設定が成功しても、サインインの終了も遷移もせず、出来事も送らない", async () => {
+  // 離れた後は、表示も遷移もしない(変更と全端末の終了は、要求が届いていればサーバーで完了する)。
+  describe("画面を離れたときと、遷移の失敗", () => {
+    it.each([
+      ["成功", async (): Promise<CallResult> => accepted],
+      ["拒否", async () => refused({ kind: "weak_password" })],
+      ["未到達", async (): Promise<CallResult> => UNREACHABLE],
+      [
+        "例外",
+        async (): Promise<CallResult> => {
+          throw new Error("Failed to fetch");
+        },
+      ],
+    ])(
+      "変更の要求の応答待ちで離れ、%sになっても、出来事を送らず、チェックをやり直させず、遷移しない",
+      async (_name, outcome) => {
+        // Given
+        const {
+          procedure,
+          passwordChange,
+          pageLoad,
+          events,
+          resetCheck,
+          screen,
+          viewOf,
+        } = setup();
+        const response = Promise.withResolvers<void>();
+        passwordChange.change.mockImplementation(async () => {
+          await response.promise;
+          return outcome();
+        });
+        const running = procedure.setPassword(
+          { password },
+          viewOf(onPasswordStep),
+        );
+
+        // When
+        screen.mounted = false;
+        response.resolve();
+        await running;
+
+        // Then
+        expect(events).toEqual([]);
+        expect(resetCheck).not.toHaveBeenCalled();
+        expect(pageLoad.load).not.toHaveBeenCalled();
+      },
+    );
+
+    it("共通の順序の中では表示中でも、呼び出し元の再開時に離れていれば、遷移せず、出来事を送らない", async () => {
       // Given
-      const { procedure, authenticator, pageLoad, events, screen, viewOf } =
-        setup();
-      const response = Promise.withResolvers<CallResult>();
-      authenticator.setPassword.mockReturnValue(response.promise);
-      const running = procedure.setPassword(
-        { password },
-        viewOf(onPasswordStep),
-      );
-
-      // When
-      screen.mounted = false;
-      response.resolve(accepted);
-      await running;
-
-      // Then
-      expect(authenticator.signOutEverywhere).not.toHaveBeenCalled();
-      expect(pageLoad.load).not.toHaveBeenCalled();
-      expect(events).toEqual([]);
-    });
-
-    it("経路2: サインインの終了の応答待ちで離れ、終了が完了したら、応答の後に遷移し、出来事は送らない", async () => {
-      // Given
-      const { procedure, authenticator, pageLoad, events, screen, viewOf } =
-        setup();
-      const response = Promise.withResolvers<CallResult>();
-      authenticator.signOutEverywhere.mockReturnValue(response.promise);
-      const running = procedure.setPassword(
-        { password },
-        viewOf(onPasswordStep),
-      );
-      await vi.waitFor(() =>
-        expect(authenticator.signOutEverywhere).toHaveBeenCalled(),
-      );
-
-      // When
-      screen.mounted = false;
-      response.resolve(accepted);
-      await running;
-
-      // Then
-      expect(pageLoad.load).toHaveBeenCalledExactlyOnceWith("/signin");
-      expect(events).toEqual([]);
-    });
-
-    it("経路3: サインインの終了の応答待ちで離れ、終了が失敗したら、遷移も出来事の送信もしない", async () => {
-      // Given
-      const { procedure, authenticator, pageLoad, events, screen, viewOf } =
-        setup();
-      const response = Promise.withResolvers<CallResult>();
-      authenticator.signOutEverywhere.mockReturnValue(response.promise);
-      const running = procedure.setPassword(
-        { password },
-        viewOf(onPasswordStep),
-      );
-      await vi.waitFor(() =>
-        expect(authenticator.signOutEverywhere).toHaveBeenCalled(),
-      );
-
-      // When
-      screen.mounted = false;
-      response.resolve(UNREACHABLE);
-      await running;
-
-      // Then
-      expect(pageLoad.load).not.toHaveBeenCalled();
-      expect(events).toEqual([]);
-    });
-
-    it("サインインの終了が拒否されても、応答があれば終了を依頼できたとして、サインインへ遷移する", async () => {
-      // Given
-      const { procedure, authenticator, pageLoad, viewOf } = setup();
-      authenticator.signOutEverywhere.mockResolvedValue(
-        refused({ kind: "other", message: "拒否" }),
-      );
-      const view = viewOf(onPasswordStep);
-
-      // When
-      await procedure.setPassword({ password }, view);
-
-      // Then
-      expect(pageLoad.load).toHaveBeenCalledExactlyOnceWith("/signin");
-      expect(view.state.error).toBeNull();
-    });
-
-    it("表示中にサインインの終了が失敗したら、通信エラーを示して実行中を解除し、遷移しない", async () => {
-      // Given
-      const { procedure, authenticator, pageLoad, viewOf } = setup();
-      authenticator.signOutEverywhere.mockResolvedValue(UNREACHABLE);
+      const { procedure, pageLoad, events, screen, viewOf } = setup();
+      // 共通の順序(applyPassword)の確かめでは表示中、その後の呼び出し元の確かめでは離脱済みという順序を再現する。
+      let observed = false;
+      Object.defineProperty(screen, "mounted", {
+        get: () => {
+          const mounted = !observed;
+          observed = true;
+          return mounted;
+        },
+      });
       const view = viewOf(onPasswordStep);
 
       // When
@@ -438,13 +481,12 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(pageLoad.load).not.toHaveBeenCalled();
-      expect(view.state.pending).toBeNull();
-      expect(view.state.error).toBe(NETWORK_ERROR_MESSAGE);
+      expect(events).toEqual([]);
     });
 
-    it("表示中に遷移が投げたら、通信エラーを示して実行中を解除する", async () => {
+    it("表示中に遷移が投げたら、passwordSetの後に通信エラーを示して実行中を解除する", async () => {
       // Given
-      const { procedure, pageLoad, viewOf } = setup();
+      const { procedure, pageLoad, events, viewOf } = setup();
       pageLoad.load.mockImplementation(() => {
         throw new Error("assign failed");
       });
@@ -454,11 +496,12 @@ describe("パスワード再設定の手続き", () => {
       await procedure.setPassword({ password }, view);
 
       // Then
+      expect(types(events)).toEqual(["passwordSet", "failed"]);
       expect(view.state.pending).toBeNull();
       expect(view.state.error).toBe(NETWORK_ERROR_MESSAGE);
     });
 
-    it("離れた後に遷移が投げたら、何もしない", async () => {
+    it("遷移を呼んだ中で離れ、その遷移が投げたら、遷移の前のpasswordSetのほかに出来事を送らない", async () => {
       // Given
       const { procedure, pageLoad, events, screen, viewOf } = setup();
       pageLoad.load.mockImplementation(() => {
@@ -471,7 +514,7 @@ describe("パスワード再設定の手続き", () => {
       await procedure.setPassword({ password }, view);
 
       // Then
-      expect(events).toEqual([]);
+      expect(events).toEqual([{ type: "passwordSet" }]);
     });
   });
 
@@ -514,8 +557,14 @@ describe("パスワード再設定の手続き", () => {
   describe("通しの経路", () => {
     it("送信、拒否、確認の期限切れ、再試行、弱いパスワード、再試行の順に、同じ画面の状態で進められる", async () => {
       // Given
-      const { procedure, authenticator, pageLoad, resetCheck, viewOf } =
-        setup();
+      const {
+        procedure,
+        authenticator,
+        passwordChange,
+        pageLoad,
+        resetCheck,
+        viewOf,
+      } = setup();
       const view = viewOf(checked);
       authenticator.sendCode
         .mockResolvedValueOnce({
@@ -526,7 +575,7 @@ describe("パスワード再設定の手続き", () => {
       authenticator.verifyCode
         .mockResolvedValueOnce(refused({ kind: "code_expired" }))
         .mockResolvedValue(accepted);
-      authenticator.setPassword
+      passwordChange.change
         .mockResolvedValueOnce(refused({ kind: "weak_password" }))
         .mockResolvedValue(accepted);
 
@@ -565,7 +614,7 @@ describe("パスワード再設定の手続き", () => {
       expect(afterWeak.step).toBe("password");
       expect(afterWeak.pending).toBeNull();
       expect(resetCheck).toHaveBeenCalledTimes(2);
-      expect(authenticator.signOutEverywhere).toHaveBeenCalledOnce();
+      expect(passwordChange.change).toHaveBeenCalledTimes(2);
       expect(pageLoad.load).toHaveBeenCalledExactlyOnceWith("/signin");
     });
   });

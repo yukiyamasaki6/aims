@@ -1,5 +1,4 @@
 import type { IdentityWriter } from "../application/local-identity";
-import type { IdentityReader } from "../application/session";
 
 const STORAGE_KEY = "aims:local-user-id";
 
@@ -7,8 +6,11 @@ const STORAGE_KEY = "aims:local-user-id";
 // 「この端末に最後にサインインしていたのは誰か」を保持する。
 // オフライン中にアクセストークンが失効しても、それだけで自分のローカルデータ(未同期の入力など)にアクセスできなくなってはならない。
 // 他の機能(ラウンドの参照データ、同期の開始)も、この読み出しを使う。
-export function createBrowserIdentityStore(): IdentityReader & IdentityWriter {
+export function createBrowserIdentityStore(): IdentityWriter & {
+  read(): string | null;
+} {
   return {
+    // この端末に最後にサインインした利用者(いなければnull)。保存先が使えないときもnull。例外は投げない。
     read: () => {
       // サーバーでの描画中に誤って呼ばれた場合の防御。
       if (typeof window === "undefined") return null;

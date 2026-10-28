@@ -8,7 +8,7 @@ import type { Session } from "../application/session";
 import { failureMessage } from "../domain/auth-failure";
 
 // サインアウトのボタンと確認ダイアログ。実行中の判定(二重実行の拒否)は手続きの集約が持ち、ここは実行中の表示と、失敗の表示と再試行を担う。
-// 完了後の遷移は行わない(セッション喪失の検知が行う)。
+// 完了後の遷移は行わない(手続きが行う)。
 export function SignOutButton({ signOut }: { signOut: Session["signOut"] }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);

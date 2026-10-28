@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { createSession } from "@/features/auth/application/session";
-import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SignOutButton } from "@/features/auth/ui/sign-out-button";
@@ -19,7 +18,6 @@ export default function MainLayout({
   const [session] = useState(() =>
     createSession({
       authenticator: createSupabaseAuth(createClient),
-      identity: createBrowserIdentityStore(),
       connectivity: createBrowserConnectivity(),
       pageReplace: createBrowserPageLoad(),
     }),

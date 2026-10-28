@@ -13,7 +13,7 @@ import type {
 import type { ScreenView } from "./screen-view";
 
 // 認証コードで本人確認をして、パスワードを設定する手続き(サインアップとパスワード再設定)が共有する順序。
-// 手続きごとに違うのは、コードの目的、コードの送信の前の確認、パスワード設定の後の動作で、それぞれの手続きのファイルが持つ。
+// 手続きごとに違うのは、コードの目的、コードの送信の前の確認、パスワードの設定を頼む先、パスワード設定の後の動作で、それぞれの手続きのファイルが持つ。
 
 export type PasswordSetupView = ScreenView<
   PasswordSetupFlow,
@@ -36,7 +36,7 @@ export type PasswordSetup = {
 
 // 共有の順序が使う、認証サービスと、手続きごとのコードの目的。
 export type PasswordSetupContext = {
-  authenticator: PasswordSetupAuthenticator;
+  authenticator: Omit<PasswordSetupAuthenticator, "setPassword">;
   purpose: CodePurpose;
 };
 
@@ -88,17 +88,18 @@ export async function verifyCode(
   );
 }
 
-// パスワードの設定の依頼。設定に成功し、画面がまだ表示中のときだけ、trueを返す(続きを行ってよい)。
+// パスワードの設定の依頼。頼む先は手続きが渡す(サインアップはブラウザから、再設定はサーバーの1回の要求で全端末のサインインの終了と合わせて)。
+// 設定に成功し、画面がまだ表示中のときだけ、trueを返す(続きを行ってよい)。
 // 失敗は示してfalseを返す。送信中に画面を離れたときは、状態を変えずにfalseを返す。
 // 成功時は実行中を解除しない。続きの動作が終わる前に再び押され、二重に設定されるのを防ぐため。
 export async function applyPassword(
-  { authenticator }: PasswordSetupContext,
+  setPassword: PasswordSetupAuthenticator["setPassword"],
   input: { password: string },
   view: PasswordSetupView,
 ): Promise<boolean> {
   const request = view.begin((flow) => beginSetPassword(flow, input));
   if (!request) return false;
-  const result = await authenticator.setPassword(request.password);
+  const result = await setPassword(request.password);
   if (!view.isMounted()) return false;
   const failure = failureOf(result);
   if (failure) {

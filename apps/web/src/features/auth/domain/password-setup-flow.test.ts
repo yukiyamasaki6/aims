@@ -97,7 +97,7 @@ describe("パスワード設定の流れの遷移", () => {
   });
 
   describe("codeResent", () => {
-    it("実行中の解除とトークンの消費だけを行い、それ以外を変えない", () => {
+    it("実行中を解除して使ったトークンを消費し、上部と欄のエラーを消し、段階と待ち時間を変えない", () => {
       // Given
       const flow = flowWith({
         step: "code",
@@ -112,7 +112,13 @@ describe("パスワード設定の流れの遷移", () => {
       const next = passwordSetupReducer(flow, { type: "codeResent" });
 
       // Then
-      expect(next).toEqual({ ...flow, captchaToken: null, pending: null });
+      expect(next).toEqual({
+        ...flow,
+        captchaToken: null,
+        pending: null,
+        error: null,
+        fieldErrors: {},
+      });
     });
   });
 
@@ -139,7 +145,64 @@ describe("パスワード設定の流れの遷移", () => {
     });
   });
 
+  describe("passwordSet", () => {
+    it.each([
+      [
+        "拒否の理由",
+        {
+          error: "8〜72文字の半角英数記号で、英字と数字を含めてください。",
+          fieldErrors: {},
+        },
+      ],
+      [
+        "欄のエラー",
+        {
+          error: null,
+          fieldErrors: { password: "パスワードを入力してください。" },
+        },
+      ],
+    ] as const)(
+      "以前の%sを消し、パスワード設定を実行中のままにする",
+      (_name, errors) => {
+        // Given
+        const flow = flowWith({
+          step: "password",
+          pending: "setPassword",
+          captchaToken: "kept",
+          ...errors,
+        });
+
+        // When
+        const next = passwordSetupReducer(flow, { type: "passwordSet" });
+
+        // Then
+        expect(next).toEqual({ ...flow, error: null, fieldErrors: {} });
+      },
+    );
+  });
+
   describe("failed", () => {
+    it("前と同じ失敗が続いたら、同じ理由を示したまま実行中を解除する", () => {
+      // Given
+      const failure = { kind: "code_expired" } as const;
+      const first = passwordSetupReducer(
+        flowWith({ step: "code", pending: "verify" }),
+        { type: "failed", failure },
+      );
+      const retrying = beginVerifyCode(first, {
+        email: "user@example.com",
+        code: "123456",
+      }).state;
+
+      // When
+      const next = passwordSetupReducer(retrying, { type: "failed", failure });
+
+      // Then
+      expect(retrying.error).toBe(first.error);
+      expect(next.error).toBe(first.error);
+      expect(next.pending).toBeNull();
+    });
+
     it.each<[string, AuthFailure, string]>([
       [
         "already_registered",
@@ -155,12 +218,12 @@ describe("パスワード設定の流れの遷移", () => {
       [
         "weak_password",
         { kind: "weak_password" },
-        "パスワードは8文字以上で、英字と数字の両方を含めてください。",
+        "8〜72文字の半角英数記号で、英字と数字を含めてください。",
       ],
       [
         "other",
-        { kind: "other", message: "認証サービスの文言" },
-        "認証サービスの文言",
+        { kind: "other" },
+        "エラーが発生しました。しばらくしてから再度お試しください。",
       ],
     ])(
       "%sは、文言をエラーに設定し、欄のエラーをクリアして実行中を解除する",
@@ -500,24 +563,49 @@ describe("操作の開始の可否と入力の検証", () => {
       expect(result.state.fieldErrors).not.toEqual(flow.fieldErrors);
     });
 
-    it("開始できるなら、前回のエラーと欄のエラーを消し、その操作を実行中にする", () => {
+    it("前の失敗の理由が表示されていても、開始できるなら、その理由を残したまま操作を実行中にする", () => {
       // Given
-      const flow = {
-        ...readyFlow(),
-        error: "前回のエラー",
-        fieldErrors: { email: "stale", code: "stale", password: "stale" },
+      const started = c.begin(readyFlow()).state;
+      // 再送は開始で待ち時間が始まるため、待ち時間が明けた後の再試行として扱う。
+      const failed = {
+        ...passwordSetupReducer(started, {
+          type: "failed",
+          failure: { kind: "rate_limited" },
+        }),
+        resendCooldown: readyFlow().resendCooldown,
       };
 
       // When
-      const result = c.begin(flow);
+      const result = c.begin(failed);
 
       // Then
       expect(result.kind).toBe("started");
       expect(result.state).toMatchObject({
         pending: c.operation,
-        error: null,
+        error: failed.error,
         fieldErrors: {},
       });
+      expect(failed.error).toBe(
+        "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
+      );
+    });
+
+    it("入力の不備を直して開始しても、送信中は直した欄の以前のエラーを残す", () => {
+      // Given
+      const invalid = c.invalidBegin({
+        ...readyFlow(),
+        ...c.invalidFlow,
+      }).state;
+      const fixed = { ...invalid, resendCooldown: readyFlow().resendCooldown };
+
+      // When
+      const result = c.begin(fixed);
+
+      // Then
+      expect(result.kind).toBe("started");
+      expect(result.state.pending).toBe(c.operation);
+      expect(result.state.fieldErrors).toEqual(invalid.fieldErrors);
+      expect(Object.keys(invalid.fieldErrors)).toHaveLength(1);
     });
   });
 

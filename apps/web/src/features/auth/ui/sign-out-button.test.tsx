@@ -95,13 +95,13 @@ describe("SignOutButton", () => {
     );
   });
 
-  it("文言の表が無い失敗は、認証サービスの文言のまま表示する", async () => {
+  it("その他の失敗は、固定の文言を表示する", async () => {
     // Given
     const user = userEvent.setup();
     const signOut = vi.fn(
       async (): Promise<SignOutResult> => ({
         kind: "failed",
-        failure: { kind: "other", message: "unknown failure" },
+        failure: { kind: "other" },
       }),
     );
     render(<SignOutButton signOut={signOut} />);
@@ -110,7 +110,11 @@ describe("SignOutButton", () => {
     await confirmSignOut(user);
 
     // Then
-    expect(await screen.findByText("unknown failure")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "エラーが発生しました。しばらくしてから再度お試しください。",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("実行を頼むとき、画面が表示中かを渡し、離れた後は偽になる", async () => {
@@ -144,10 +148,11 @@ describe("SignOutButton", () => {
     const session = createSession({
       authenticator: {
         signOutHere,
-        readSession: vi.fn(),
+        readSession: vi.fn(async () => ({
+          status: "unauthenticated" as const,
+        })),
         subscribe: vi.fn(() => () => {}),
       },
-      identity: { read: () => null },
       connectivity: { isOffline: () => false, onOnline: () => () => {} },
       pageReplace: { here: () => "/rounds", replace: vi.fn() },
     });
@@ -184,9 +189,13 @@ describe("SignOutButton", () => {
     render(<SignOutButton signOut={signOut} />);
     await confirmSignOut(user);
     await screen.findByText(NETWORK_ERROR_MESSAGE);
+    const confirm = screen.getByTestId("confirm-dialog-confirm");
+    await waitFor(() =>
+      expect(confirm).toHaveAttribute("aria-disabled", "false"),
+    );
 
     // When
-    await user.click(screen.getByTestId("confirm-dialog-confirm"));
+    await user.click(confirm);
 
     // Then
     await waitFor(() => {

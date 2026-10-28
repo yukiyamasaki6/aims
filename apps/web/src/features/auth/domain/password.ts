@@ -5,6 +5,9 @@ const PASSWORD_MAX_LENGTH = 72;
 // bcryptは72バイトを超えた部分を無視する。許す文字は半角英数記号だけなので、文字数をバイト数として扱える。
 const ALLOWED_PATTERN = /^[!-~]*$/;
 
+// パスワードの規則の文面。入力が規則に合わないときと、認証サービスが弱いパスワードとして拒否したときに示す。
+export const PASSWORD_RULE_MESSAGE = `${PASSWORD_MIN_LENGTH}〜${PASSWORD_MAX_LENGTH}文字の半角英数記号で、英字と数字を含めてください。`;
+
 // 入力されたパスワードが空でないかだけを見る。
 // 入力されていればundefined、空なら利用者向けの文言を返す。
 export function validatePasswordPresent(password: string): string | undefined {
@@ -21,7 +24,5 @@ export function validateNewPassword(password: string): string | undefined {
     ALLOWED_PATTERN.test(password) &&
     /[a-zA-Z]/.test(password) &&
     /[0-9]/.test(password);
-  return valid
-    ? undefined
-    : `パスワードは${PASSWORD_MIN_LENGTH}文字以上${PASSWORD_MAX_LENGTH}文字以内の半角英数記号で、英字と数字の両方を含めてください。`;
+  return valid ? undefined : PASSWORD_RULE_MESSAGE;
 }

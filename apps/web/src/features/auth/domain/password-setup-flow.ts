@@ -47,6 +47,7 @@ type Checked<Request> =
 
 // 開始の命令。実行中の操作が無く、操作の段階にあるときだけ開始できる(busy)。
 // 入力の不備は、操作ごとの順序で最初の1件を示す(invalid)。開始できるなら、その操作を実行中にする(started)。
+// 開始では以前のエラーを消さない。エラーは次の結果で変わる(4操作で同じ)。
 function begin<Request>(
   flow: PasswordSetupFlow,
   operation: Operation,
@@ -68,8 +69,6 @@ function begin<Request>(
     state: {
       ...flow,
       pending: operation,
-      error: null,
-      fieldErrors: {},
       resendCooldown:
         operation === "resend" ? RESEND_COOLDOWN_SECONDS : flow.resendCooldown,
     },
@@ -146,6 +145,7 @@ export type PasswordSetupEvent =
   | { type: "codeSent" }
   | { type: "codeResent" }
   | { type: "codeConfirmed" }
+  | { type: "passwordSet" }
   | { type: "failed"; failure: AuthFailure }
   | { type: "refused"; failure: AuthFailure };
 
@@ -169,6 +169,9 @@ export function passwordSetupReducer(
             error: null,
             fieldErrors: {},
           };
+    // パスワード設定の成功。遷移の前に以前のエラーを消す。実行中は解除しない(遷移までの二重設定を防ぐ)。
+    case "passwordSet":
+      return { ...flow, error: null, fieldErrors: {} };
     default:
       return settle(flow, event);
   }
@@ -179,7 +182,7 @@ type Settlement = Extract<
   { type: "codeSent" | "codeResent" | "codeConfirmed" | "failed" | "refused" }
 >;
 
-// 操作の結果。実行中を解除し、結果を反映する。
+// 操作の結果。実行中を解除し、結果を反映する。成功は以前のエラーを消し、失敗は理由に差し替える。
 // セキュリティチェックのトークンは、認証サービスが応答すれば(コードの送信と再送の成功も、拒否も)使ったため消費する。応答が無かった失敗(failed)は、使っていないので消費しない。
 function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
   switch (event.type) {
@@ -194,7 +197,13 @@ function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
         resendCooldown: RESEND_COOLDOWN_SECONDS,
       };
     case "codeResent":
-      return { ...flow, captchaToken: null, pending: null };
+      return {
+        ...flow,
+        captchaToken: null,
+        pending: null,
+        error: null,
+        fieldErrors: {},
+      };
     case "codeConfirmed":
       return {
         ...flow,
