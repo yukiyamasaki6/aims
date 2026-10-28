@@ -131,7 +131,7 @@ export async function fetchTargetFaces(
   const result = await fetchContent<TargetFaceRow[]>(
     supabase as SupabaseClient,
     async (session) => {
-      const userId = session.user.id;
+      const userId = session.userId;
       queriedUserId = userId;
       const faces = await selectTargetFaces(supabase, userId);
       if (faces.status === 0 || faces.error) {
@@ -223,7 +223,7 @@ export async function fetchRoundDetail(
   const result = await fetchContent<Fetched>(
     supabase as SupabaseClient,
     async (session) => {
-      const userId = session.user.id;
+      const userId = session.userId;
       const [round, faces] = await Promise.all([
         supabase
           .from("rounds")
@@ -320,7 +320,7 @@ export async function fetchRoundDetails(
   const result = await fetchContent<Fetched>(
     supabase as SupabaseClient,
     async (session) => {
-      const userId = session.user.id;
+      const userId = session.userId;
       const [faces, ...responses] = await Promise.all([
         selectTargetFaces(supabase, userId),
         ...chunks.map((chunk, index) =>

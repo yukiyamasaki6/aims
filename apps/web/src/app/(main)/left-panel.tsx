@@ -2,13 +2,9 @@
 
 import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { LogoImage } from "@/components/logo-image";
-import { Button } from "@/components/ui/button";
-import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
-import { useMountedRef } from "@/hooks/use-mounted-ref";
 import { cn } from "@/lib/utils";
-import { signOut } from "./sign-out";
 
 // 操作の直後だけ開閉のtransitionを有効にする時間。transitionの200msより少し長い。
 const ANIMATE_MS = 250;
@@ -38,16 +34,9 @@ function useOpenState() {
   };
 }
 
-export function LeftPanel() {
+// signOut: 下端に置くサインアウトの操作。入口が渡す。
+export function LeftPanel({ signOut }: { signOut: ReactNode }) {
   const { wideOpen, compactOpen, animate, operate } = useOpenState();
-  const [signOutDialogOpen, setSignOutDialogOpen] = useState(false);
-  const mountedRef = useMountedRef();
-
-  async function handleSignOut(): Promise<{ error: string } | undefined> {
-    const result = await signOut({ isMounted: () => mountedRef.current });
-
-    if (result.status === "failed") return { error: result.error };
-  }
 
   return (
     <>
@@ -78,17 +67,9 @@ export function LeftPanel() {
         <PanelBody
           wideOpen={wideOpen}
           compactOpen={compactOpen}
-          onSignOut={() => setSignOutDialogOpen(true)}
+          signOut={signOut}
         />
       </aside>
-
-      <BlockingConfirmDialog
-        open={signOutDialogOpen}
-        onOpenChange={setSignOutDialogOpen}
-        description="サインアウトしますか？"
-        confirmLabel="サインアウトする"
-        onConfirm={handleSignOut}
-      />
     </>
   );
 }
@@ -96,11 +77,11 @@ export function LeftPanel() {
 function PanelBody({
   wideOpen,
   compactOpen,
-  onSignOut,
+  signOut,
 }: {
   wideOpen: boolean;
   compactOpen: boolean;
-  onSignOut: () => void;
+  signOut: ReactNode;
 }) {
   return (
     <>
@@ -126,14 +107,7 @@ function PanelBody({
           !compactOpen && "max-md:landscape:hidden",
         )}
       >
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={() => onSignOut()}
-        >
-          サインアウト
-        </Button>
+        {signOut}
       </div>
     </>
   );

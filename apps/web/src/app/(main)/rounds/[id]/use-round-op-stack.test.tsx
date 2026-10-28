@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getLocalIdentity } from "@/features/auth/local-identity";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { roundOpHub } from "@/features/rounds/round-op-hub";
 import { roundOpLog, roundStreamId } from "@/features/rounds/round-op-log";
 import { roundOpStore } from "@/features/rounds/round-op-store";
@@ -87,7 +87,7 @@ beforeEach(async () => {
   globalThis.indexedDB = new IDBFactory();
   setOnline(true);
   send.mockResolvedValue({ ok: true, results: [applied] });
-  roundOpHub.start(getLocalIdentity());
+  roundOpHub.start(createBrowserIdentityStore().read());
 });
 
 afterEach(() => {
@@ -128,12 +128,12 @@ describe("useRoundOpStack", () => {
     await roundOpStore.append({
       eventId: operation.eventId,
       streamId: roundStreamId("round-1"),
-      userId: getLocalIdentity(),
+      userId: createBrowserIdentityStore().read(),
       operation,
     });
     const group = await roundOpStore.loadStream(
       roundStreamId("round-1"),
-      getLocalIdentity(),
+      createBrowserIdentityStore().read(),
     );
 
     // When
@@ -386,8 +386,18 @@ describe("useRoundOpStack", () => {
 
       // When
       await act(async () => {
-        await roundOpLog.commit("round-1", null, 10, getLocalIdentity());
-        await roundOpLog.commit("round-2", null, 10, getLocalIdentity());
+        await roundOpLog.commit(
+          "round-1",
+          null,
+          10,
+          createBrowserIdentityStore().read(),
+        );
+        await roundOpLog.commit(
+          "round-2",
+          null,
+          10,
+          createBrowserIdentityStore().read(),
+        );
       });
 
       // Then
@@ -403,7 +413,12 @@ describe("useRoundOpStack", () => {
 
       // When
       await act(async () => {
-        await roundOpLog.commit("round-1", null, 10, getLocalIdentity());
+        await roundOpLog.commit(
+          "round-1",
+          null,
+          10,
+          createBrowserIdentityStore().read(),
+        );
       });
 
       // Then
@@ -446,7 +461,7 @@ describe("useRoundOpStack", () => {
             revisions: { round: 2, distances: {}, shots: {} },
           },
           10,
-          getLocalIdentity(),
+          createBrowserIdentityStore().read(),
         );
         return { status: "offline" };
       });
@@ -557,13 +572,13 @@ describe("useRoundOpStack", () => {
       await roundOpStore.append({
         eventId: operation.eventId,
         streamId: roundStreamId("round-1"),
-        userId: getLocalIdentity(),
+        userId: createBrowserIdentityStore().read(),
         operation,
       });
       await roundOpStore.ack(operation.eventId, 1, true, null);
       return roundOpStore.loadStream(
         roundStreamId("round-1"),
-        getLocalIdentity(),
+        createBrowserIdentityStore().read(),
       );
     }
 

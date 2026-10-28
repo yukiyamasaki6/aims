@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { readSession } from "@/features/auth/session-state";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import type { Database } from "@/types/supabase";
 import {
   type FetchedRoundDetails,
@@ -51,10 +51,10 @@ export async function refreshRoundBases(
   supabase: SupabaseClient<Database>,
 ): Promise<boolean> {
   try {
-    const state = await readSession(supabase);
+    const reading = await createSupabaseAuth(() => supabase).readSession();
     if (
-      state.status !== "authenticated" ||
-      state.session.user.id !== roundOpHub.getUserId()
+      reading.status !== "authenticated" ||
+      reading.userId !== roundOpHub.getUserId()
     ) {
       return false;
     }

@@ -1,6 +1,12 @@
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  RESET_PASSWORD_PATH,
+  redirectFor,
+  SIGN_IN_PATH,
+  SIGN_UP_PATH,
+} from "@/features/auth/domain/routes";
 import { config, proxy } from "./proxy";
 
 // Supabaseクライアントは外部サービスとの境界のため、getUserの結果を制御できるスタブで模す。
@@ -50,6 +56,46 @@ describe("proxy", () => {
       // Then
       expect(matched).toBe(false);
     });
+  });
+
+  // matcherはNext.jsの静的な設定で経路を文字列で再掲するため、経路の規則(redirectFor)と食い違わないことを、規則が動く経路で確かめる。
+  describe("対象パスと経路の規則の一致", () => {
+    const probes = [
+      SIGN_IN_PATH,
+      SIGN_UP_PATH,
+      RESET_PASSWORD_PATH,
+      "/rounds",
+      "/rounds/1",
+      "/rounds/1/edit",
+      "/rounds/new",
+      "/",
+      "/offline",
+      "/roundsx",
+      "/signin/extra",
+      "/__shell/rounds",
+    ];
+
+    it.each(probes)(
+      "%sは、規則がリダイレクトする状態があるときだけ、実行の対象になる",
+      (pathname) => {
+        // Given
+        const redirects = [false, true].some(
+          (signedIn) =>
+            redirectFor({
+              signedIn,
+              pathname,
+              search: "",
+              isServerAction: false,
+            }) !== null,
+        );
+
+        // When
+        const matched = unstable_doesMiddlewareMatch({ config, url: pathname });
+
+        // Then
+        expect(matched).toBe(redirects);
+      },
+    );
   });
 
   describe("リクエストを受け取る", () => {

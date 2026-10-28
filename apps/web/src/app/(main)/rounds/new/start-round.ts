@@ -1,5 +1,5 @@
-import { sessionFailureMessage } from "@/features/auth/errors";
-import { readSession, type SessionState } from "@/features/auth/session-state";
+import { type SessionReading, unconfirmedMessage } from "@/features/auth";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
 import { comparePositionKey } from "@/features/rounds/position-key";
 import { roundOpLog } from "@/features/rounds/round-op-log";
@@ -60,17 +60,18 @@ function buildCreatedOperation(
   };
 }
 
-// 認証を確認する。アクセストークンが有効なら通信しないため、待つのは失効時だけで、上限はFALLBACK_WAIT_MS。時間切れと例外は、認証を確認できない(unknown)として扱う。
-async function checkSession(): Promise<SessionState | { status: "unknown" }> {
+// 認証を確認する。アクセストークンが有効なら通信しないため、待つのは失効時だけで、上限はFALLBACK_WAIT_MS。時間切れは、認証を確認できない(unknown)として扱う。
+async function checkSession(): Promise<SessionReading> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const timeout = new Promise<null>((resolve) => {
       timer = setTimeout(() => resolve(null), FALLBACK_WAIT_MS);
     });
-    const result = await Promise.race([readSession(createClient()), timeout]);
+    const result = await Promise.race([
+      createSupabaseAuth(createClient).readSession(),
+      timeout,
+    ]);
     return result ?? { status: "unknown" };
-  } catch {
-    return { status: "unknown" };
   } finally {
     clearTimeout(timer);
   }
@@ -90,11 +91,11 @@ export async function startRound({
   generateId: () => string;
   now: () => Date;
 }): Promise<StartRoundResult> {
-  const state = await checkSession();
+  const reading = await checkSession();
   if (!isMounted()) return { status: "discarded" };
   // 未認証と確認できたときだけ止める。認証を確認できないときは開始する(送信は認証が回復するまで待つ)。
-  if (state.status === "unauthenticated") {
-    return { status: "failed", error: sessionFailureMessage(state) };
+  if (reading.status === "unauthenticated") {
+    return { status: "failed", error: unconfirmedMessage(reading.status) };
   }
 
   const operation = buildCreatedOperation(preset, generateId, now());

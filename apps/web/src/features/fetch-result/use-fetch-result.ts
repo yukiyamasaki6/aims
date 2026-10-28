@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import {
   FETCH_ERROR_MESSAGE,
   type FetchResult,
   type FetchView,
 } from "./fetch-result";
-import { isOffline } from "./network";
+
+// 通信の可否。
+const connectivity = createBrowserConnectivity();
 
 type Settled<T> = {
   key: readonly unknown[];
@@ -57,7 +60,7 @@ export function useFetchResult<T>(
     if (!offline) return;
     // offlineに決まる前にonlineが届いていた場合は、購読しても次のonlineが来ないため、その時点でオンラインならすぐ再取得する。
     // オンラインでの再取得はofflineを返さないため、繰り返さない。
-    if (!isOffline()) {
+    if (!connectivity.isOffline()) {
       retry();
       return;
     }

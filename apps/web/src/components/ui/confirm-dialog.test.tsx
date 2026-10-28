@@ -1,5 +1,6 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { describe, expect, it, type Mock, vi } from "vitest";
 import { BlockingConfirmDialog, ConfirmDialog } from "./confirm-dialog";
 import { Dialog, DialogContent } from "./dialog";
@@ -23,15 +24,6 @@ function backdrop() {
     '[role="presentation"][data-open]',
   );
   return backdrops[backdrops.length - 1];
-}
-
-// onConfirmの完了を任意のタイミングで制御するためのPromise。
-function deferred() {
-  let resolve: (value: { error: string } | undefined) => void = () => {};
-  const promise = new Promise<{ error: string } | undefined>((r) => {
-    resolve = r;
-  });
-  return { promise, resolve };
 }
 
 describe("ConfirmDialog", () => {
@@ -263,21 +255,32 @@ describe("ConfirmDialog", () => {
   });
 });
 
+// 実行中とエラーは呼び出し側が持つため、この部品には状態として渡す。
+function renderBlocking({
+  busy = false,
+  error = null,
+  ...props
+}: Partial<ComponentProps<typeof BlockingConfirmDialog>> = {}) {
+  return render(
+    <BlockingConfirmDialog
+      open
+      onOpenChange={vi.fn()}
+      description="説明"
+      onConfirm={vi.fn()}
+      busy={busy}
+      error={error}
+      {...props}
+    />,
+  );
+}
+
 describe("BlockingConfirmDialog", () => {
   describe("表示", () => {
     it("openがtrueの場合、説明文と操作可能なキャンセル・確認ボタンをダイアログに表示する", () => {
       // Given
 
       // When
-      const description = "このラウンドを削除しますか？";
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={vi.fn()}
-          description={description}
-          onConfirm={vi.fn()}
-        />,
-      );
+      renderBlocking({ description: "このラウンドを削除しますか？" });
 
       // Then
       expect(screen.getByRole("dialog")).toHaveTextContent(
@@ -291,15 +294,7 @@ describe("BlockingConfirmDialog", () => {
       // Given
 
       // When
-      const description = "このラウンドを削除しますか？";
-      render(
-        <BlockingConfirmDialog
-          open={false}
-          onOpenChange={vi.fn()}
-          description={description}
-          onConfirm={vi.fn()}
-        />,
-      );
+      renderBlocking({ open: false });
 
       // Then
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -310,169 +305,84 @@ describe("BlockingConfirmDialog", () => {
         // Given
 
         // When
-        const confirmLabel = "破棄";
-        render(
-          <BlockingConfirmDialog
-            open
-            onOpenChange={vi.fn()}
-            description="説明"
-            confirmLabel={confirmLabel}
-            onConfirm={vi.fn()}
-          />,
-        );
+        renderBlocking({ confirmLabel: "破棄" });
 
         // Then
         expect(confirmButton("破棄")).toBeInTheDocument();
       });
     });
-  });
 
-  describe("確認ボタンのクリック", () => {
-    it("完了を待つ間、ダイアログを開いたままボタンを操作不可として表示する", () => {
+    it("errorがあれば、ダイアログ内にエラーを表示する", () => {
       // Given
-      const handleOpenChange = vi.fn();
-      const request = deferred();
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={handleOpenChange}
-          description="説明"
-          onConfirm={() => request.promise}
-        />,
-      );
 
       // When
-      fireEvent.click(confirmButton());
-
-      // Then
-      expect(handleOpenChange).not.toHaveBeenCalled();
-      expect(screen.getByRole("dialog")).toBeInTheDocument();
-      expect(cancelButton()).toHaveAttribute("aria-disabled", "true");
-      expect(confirmButton()).toHaveAttribute("aria-disabled", "true");
-      expect(confirmButton().querySelector("svg")).not.toBeNull();
-    });
-
-    it("成功した場合、ダイアログを閉じる", async () => {
-      // Given
-      const handleOpenChange = vi.fn();
-      const handleConfirm = vi.fn(async () => undefined);
-      const user = userEvent.setup();
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={handleOpenChange}
-          description="説明"
-          onConfirm={handleConfirm}
-        />,
-      );
-
-      // When
-      await user.click(confirmButton());
-
-      // Then
-      expect(handleConfirm).toHaveBeenCalledTimes(1);
-      expect(handleOpenChange).toHaveBeenCalledExactlyOnceWith(false);
-      expect(confirmButton()).toHaveAttribute("aria-disabled", "false");
-    });
-
-    it("失敗した場合、ダイアログを開いたままエラーを表示し、ボタンを操作可能に戻す", async () => {
-      // Given
-      const handleOpenChange = vi.fn();
-      const user = userEvent.setup();
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={handleOpenChange}
-          description="説明"
-          onConfirm={async () => ({ error: "削除に失敗しました" })}
-        />,
-      );
-
-      // When
-      await user.click(confirmButton());
+      renderBlocking({ error: "削除に失敗しました" });
 
       // Then
       expect(screen.getByRole("dialog")).toHaveTextContent(
         "削除に失敗しました",
       );
-      expect(handleOpenChange).not.toHaveBeenCalled();
+    });
+
+    it("errorがnullなら、エラーを表示しない", () => {
+      // Given
+
+      // When
+      renderBlocking({ error: null });
+
+      // Then
+      expect(screen.getByRole("dialog")).not.toHaveTextContent(
+        "削除に失敗しました",
+      );
+    });
+  });
+
+  describe("実行中(busy)の表示", () => {
+    it("ダイアログを開いたままボタンを操作不可として表示し、確認ボタンにスピナーを出す", () => {
+      // Given
+
+      // When
+      renderBlocking({ busy: true });
+
+      // Then
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(cancelButton()).toHaveAttribute("aria-disabled", "true");
+      expect(confirmButton()).toHaveAttribute("aria-disabled", "true");
+      expect(confirmButton().querySelector("svg")).not.toBeNull();
+      expect(cancelButton().querySelector("svg")).toBeNull();
+    });
+
+    it("実行中でなければ、ボタンを操作可能に表示し、スピナーを出さない", () => {
+      // Given
+
+      // When
+      renderBlocking({ busy: false, error: "削除に失敗しました" });
+
+      // Then
       expect(cancelButton()).toHaveAttribute("aria-disabled", "false");
       expect(confirmButton()).toHaveAttribute("aria-disabled", "false");
       expect(confirmButton().querySelector("svg")).toBeNull();
     });
+  });
 
-    it("失敗後に再試行した場合、エラーを消して再度onConfirmを呼び出す", async () => {
+  describe("確認ボタンのクリック", () => {
+    it("onConfirmを押下のたびにそのまま呼び出し、ダイアログの開閉は知らせない", async () => {
       // Given
       const handleOpenChange = vi.fn();
-      const retry = deferred();
-      const handleConfirm = vi
-        .fn<() => Promise<{ error: string } | undefined>>()
-        .mockResolvedValueOnce({ error: "削除に失敗しました" })
-        .mockReturnValueOnce(retry.promise);
+      const handleConfirm = vi.fn();
       const user = userEvent.setup();
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={handleOpenChange}
-          description="説明"
-          onConfirm={handleConfirm}
-        />,
-      );
-      await user.click(confirmButton());
+      renderBlocking({
+        onOpenChange: handleOpenChange,
+        onConfirm: handleConfirm,
+      });
 
       // When
+      await user.click(confirmButton());
       await user.click(confirmButton());
 
       // Then
       expect(handleConfirm).toHaveBeenCalledTimes(2);
-      expect(screen.queryByText("削除に失敗しました")).not.toBeInTheDocument();
-    });
-
-    it("失敗後の再試行が成功した場合、ダイアログを閉じる", async () => {
-      // Given
-      const handleOpenChange = vi.fn();
-      const retry = deferred();
-      const handleConfirm = vi
-        .fn<() => Promise<{ error: string } | undefined>>()
-        .mockResolvedValueOnce({ error: "削除に失敗しました" })
-        .mockReturnValueOnce(retry.promise);
-      const user = userEvent.setup();
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={handleOpenChange}
-          description="説明"
-          onConfirm={handleConfirm}
-        />,
-      );
-      await user.click(confirmButton());
-      await user.click(confirmButton());
-
-      // When
-      await act(async () => retry.resolve(undefined));
-
-      // Then
-      expect(handleOpenChange).toHaveBeenCalledExactlyOnceWith(false);
-    });
-
-    it("完了前に連続で押した場合、onConfirmを1回だけ呼び出す", () => {
-      // Given
-      const handleConfirm = vi.fn(() => deferred().promise);
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={vi.fn()}
-          description="説明"
-          onConfirm={handleConfirm}
-        />,
-      );
-
-      // When
-      fireEvent.click(confirmButton());
-      fireEvent.click(confirmButton());
-
-      // Then
-      expect(handleConfirm).toHaveBeenCalledTimes(1);
+      expect(handleOpenChange).not.toHaveBeenCalled();
     });
   });
 
@@ -482,14 +392,10 @@ describe("BlockingConfirmDialog", () => {
       const handleOpenChange = vi.fn();
       const handleConfirm = vi.fn();
       const user = userEvent.setup();
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={handleOpenChange}
-          description="説明"
-          onConfirm={handleConfirm}
-        />,
-      );
+      renderBlocking({
+        onOpenChange: handleOpenChange,
+        onConfirm: handleConfirm,
+      });
 
       // When
       await user.click(cancelButton());
@@ -499,21 +405,14 @@ describe("BlockingConfirmDialog", () => {
       expect(handleConfirm).not.toHaveBeenCalled();
     });
 
-    it("完了を待つ間は、ダイアログを閉じない", () => {
+    it("完了を待つ間は、ダイアログを閉じない", async () => {
       // Given
       const handleOpenChange = vi.fn();
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={handleOpenChange}
-          description="説明"
-          onConfirm={() => deferred().promise}
-        />,
-      );
-      fireEvent.click(confirmButton());
+      const user = userEvent.setup();
+      renderBlocking({ busy: true, onOpenChange: handleOpenChange });
 
       // When
-      fireEvent.click(cancelButton());
+      await user.click(cancelButton());
 
       // Then
       expect(handleOpenChange).not.toHaveBeenCalled();
@@ -526,14 +425,10 @@ describe("BlockingConfirmDialog", () => {
       const handleOpenChange = vi.fn();
       const handleConfirm = vi.fn();
       const user = userEvent.setup();
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={handleOpenChange}
-          description="説明"
-          onConfirm={handleConfirm}
-        />,
-      );
+      renderBlocking({
+        onOpenChange: handleOpenChange,
+        onConfirm: handleConfirm,
+      });
 
       // When
       await user.click(backdrop());
@@ -547,15 +442,7 @@ describe("BlockingConfirmDialog", () => {
       // Given
       const handleOpenChange = vi.fn();
       const user = userEvent.setup();
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={handleOpenChange}
-          description="説明"
-          onConfirm={() => deferred().promise}
-        />,
-      );
-      fireEvent.click(confirmButton());
+      renderBlocking({ busy: true, onOpenChange: handleOpenChange });
 
       // When
       await user.click(backdrop());
@@ -566,41 +453,24 @@ describe("BlockingConfirmDialog", () => {
   });
 
   describe("Escキー", () => {
-    it("ダイアログを閉じ、表示中のエラーを消す", async () => {
+    it("ダイアログを閉じる", async () => {
       // Given
       const handleOpenChange = vi.fn();
       const user = userEvent.setup();
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={handleOpenChange}
-          description="説明"
-          onConfirm={async () => ({ error: "削除に失敗しました" })}
-        />,
-      );
-      await user.click(confirmButton());
+      renderBlocking({ onOpenChange: handleOpenChange });
 
       // When
       await user.keyboard("{Escape}");
 
       // Then
       expect(openStates(handleOpenChange)).toEqual([false]);
-      expect(screen.queryByText("削除に失敗しました")).not.toBeInTheDocument();
     });
 
     it("完了を待つ間は、ダイアログを閉じない", async () => {
       // Given
       const handleOpenChange = vi.fn();
       const user = userEvent.setup();
-      render(
-        <BlockingConfirmDialog
-          open
-          onOpenChange={handleOpenChange}
-          description="説明"
-          onConfirm={() => deferred().promise}
-        />,
-      );
-      fireEvent.click(confirmButton());
+      renderBlocking({ busy: true, onOpenChange: handleOpenChange });
 
       // When
       await user.keyboard("{Escape}");

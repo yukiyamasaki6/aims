@@ -5,8 +5,8 @@ import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { sessionFailureMessage } from "@/features/auth/errors";
-import { readSession } from "@/features/auth/session-state";
+import { unconfirmedMessage } from "@/features/auth";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { compareDistancePosition } from "@/features/rounds/scorecard-scoring";
 import type { Distance } from "@/features/rounds/scorecard-types";
 import type { TargetFaceOption } from "@/features/rounds/target-face-types";
@@ -30,10 +30,10 @@ async function saveRoundAsPreset(
 ): Promise<{ error: string } | undefined> {
   const supabase = createClient();
 
-  const state = await readSession(supabase);
+  const reading = await createSupabaseAuth(() => supabase).readSession();
 
-  if (state.status !== "authenticated") {
-    return { error: sessionFailureMessage(state) };
+  if (reading.status !== "authenticated") {
+    return { error: unconfirmedMessage(reading.status) };
   }
 
   // プリセット作成・距離複製は、Postgres関数（save_round_as_preset）内で1つのトランザクションとして行う。

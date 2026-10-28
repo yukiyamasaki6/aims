@@ -5,7 +5,6 @@ import {
   type SupabaseClient,
 } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
 import {
   FALLBACK_WAIT_MS,
   FETCH_TIMEOUT_MS,
@@ -13,6 +12,8 @@ import {
   withinFetchTimeout,
 } from "./fetch-content";
 import { FETCH_ERROR_MESSAGE, type FetchResult } from "./fetch-result";
+
+const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
 
 beforeEach(() => {
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
@@ -68,7 +69,7 @@ describe("fetchContent", () => {
 
       // Then
       expect(result).toEqual({ status: "ok", data: { id: "a" } });
-      expect(run).toHaveBeenCalledExactlyOnceWith(session);
+      expect(run).toHaveBeenCalledExactlyOnceWith({ userId: "u1" });
     });
 
     it("クエリが認証の拒否で返ると、更新を強制して確かめ、新しいセッションで取り直した結果を返す", async () => {
@@ -89,7 +90,7 @@ describe("fetchContent", () => {
       // Then
       expect(result).toEqual({ status: "ok", data: { id: "a" } });
       expect(refreshSession).toHaveBeenCalledTimes(1);
-      expect(run).toHaveBeenLastCalledWith(refreshed);
+      expect(run).toHaveBeenLastCalledWith({ userId: "u1" });
     });
 
     it("nullIsNotFoundを判定へ渡す", async () => {

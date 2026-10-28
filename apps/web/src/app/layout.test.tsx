@@ -2,8 +2,8 @@ import { SerwistProvider } from "@serwist/next/react";
 import { render, screen } from "@testing-library/react";
 import { Children, isValidElement, type ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LocalIdentityProvider } from "@/features/auth/local-identity-provider";
 import RootLayout from "./layout";
+import { LocalIdentityProvider } from "./local-identity-provider";
 import { OpSyncProvider } from "./op-sync-provider";
 import { SwUpdateActivator } from "./sw-update-activator";
 

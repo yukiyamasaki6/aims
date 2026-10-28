@@ -11,6 +11,7 @@
 合意した設計を、その内容に応じて `docs/` 配下の該当ドキュメントへ反映する。
 
 - 要求・設計: `docs/features/<対象>/<機能>/{requirements,design}.md`（書式と、新機能か修正かの基準は `docs/features/README.md`）
+- 構造の方針: `docs/architecture.md`
 - データモデル: `docs/erd.md`
 - セキュリティ: `docs/security.md`
 - ロードマップ: `docs/roadmap.md`

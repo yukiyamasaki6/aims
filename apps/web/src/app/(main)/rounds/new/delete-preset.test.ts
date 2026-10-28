@@ -1,5 +1,5 @@
 import { AuthRetryableFetchError } from "@supabase/supabase-js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deletePersonalPreset } from "./delete-preset";
 
 // SupabaseのSDKは外部サービスとの境界のため、セッションの取得結果と削除の結果を任意に制御できるスタブで模す。
@@ -25,6 +25,10 @@ beforeEach(() => {
   supabase.from.mockReturnValue({ delete: supabase.delete });
   supabase.delete.mockReturnValue({ eq: supabase.eq });
   supabase.eq.mockResolvedValue({ error: null });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("deletePersonalPreset", () => {
@@ -119,6 +123,43 @@ describe("deletePersonalPreset", () => {
     });
   });
 
+  describe("読み取り以外の通信が失敗した場合", () => {
+    it("削除の呼び出しが例外を投げた場合、通信エラーを返す", async () => {
+      // Given
+      supabase.eq.mockRejectedValue(new Error("network down"));
+
+      // When
+      const result = await deletePersonalPreset({
+        presetId: "preset-1",
+        isMounted: () => true,
+      });
+
+      // Then
+      expect(result).toEqual({
+        status: "failed",
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      });
+    });
+
+    it("接続を得られない(環境変数が無い)場合、削除せず通信エラーを返す", async () => {
+      // Given
+      vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+
+      // When
+      const result = await deletePersonalPreset({
+        presetId: "preset-1",
+        isMounted: () => true,
+      });
+
+      // Then
+      expect(result).toEqual({
+        status: "failed",
+        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      });
+      expect(supabase.from).not.toHaveBeenCalled();
+    });
+  });
+
   describe("完了を待つ間にアンマウントされた場合", () => {
     it("セッションの確認中にアンマウントされると、削除せず結果を破棄する", async () => {
       // Given
@@ -156,6 +197,24 @@ describe("deletePersonalPreset", () => {
       // Then
       expect(result).toEqual({ status: "discarded" });
       expect(supabase.eq).toHaveBeenCalledTimes(1);
+    });
+
+    it("削除の呼び出しが例外を投げる前にアンマウントされると、通信エラーを返さず結果を破棄する", async () => {
+      // Given
+      let mounted = true;
+      supabase.eq.mockImplementation(async () => {
+        mounted = false;
+        throw new Error("network down");
+      });
+
+      // When
+      const result = await deletePersonalPreset({
+        presetId: "preset-1",
+        isMounted: () => mounted,
+      });
+
+      // Then
+      expect(result).toEqual({ status: "discarded" });
     });
 
     it("例外の発生までにアンマウントされると、通信エラーを返さず結果を破棄する", async () => {

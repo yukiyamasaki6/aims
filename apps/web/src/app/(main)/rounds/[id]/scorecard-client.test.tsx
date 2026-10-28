@@ -11,7 +11,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getLocalIdentity } from "@/features/auth/local-identity";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { retryDelayMs } from "@/features/op-log/sync-result";
 import type { RoundConfig } from "@/features/rounds/round-config";
 import { roundOpHub } from "@/features/rounds/round-op-hub";
@@ -288,9 +288,9 @@ beforeEach(async () => {
   globalThis.indexedDB = new IDBFactory();
   setOnline(true);
   // アプリでは、ルートレイアウトのOpSyncProviderがハブを起動する。
-  roundOpHub.start(getLocalIdentity());
+  roundOpHub.start(createBrowserIdentityStore().read());
   // 起動時の全列の読み込み(DBの初回の作成を含む)がテストの操作と重ならないよう、完了を待つ。同じDBへの読み込みは起動時の読み込みより後に完了する。
-  await roundOpStore.loadAll(getLocalIdentity());
+  await roundOpStore.loadAll(createBrowserIdentityStore().read());
   supabase.getSession.mockResolvedValue({
     data: { session: { user: { id: "user-1" } } },
   });

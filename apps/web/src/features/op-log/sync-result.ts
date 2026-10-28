@@ -1,6 +1,5 @@
 import type { PostgrestError } from "@supabase/supabase-js";
-import { sessionFailureMessage } from "@/features/auth/errors";
-import type { SessionState } from "@/features/auth/session-state";
+import { type SessionReading, unconfirmedMessage } from "@/features/auth";
 import type {
   BatchResult,
   SyncDisposition,
@@ -16,13 +15,15 @@ const DISCARD_CODES = ["PT403", "PT422"];
 
 // 未認証はサインインが要るため再試行せず、不明（通信失敗）は通信の回復を待つ。
 export function authFailureResult(
-  state: Exclude<SessionState, { status: "authenticated" }>,
+  reading: Exclude<SessionReading, { status: "authenticated" }>,
 ): SyncFailure {
   return {
-    error: sessionFailureMessage(state),
+    error: unconfirmedMessage(reading.status),
     cause: {
       type:
-        state.status === "unauthenticated" ? "unauthenticated" : "auth-unknown",
+        reading.status === "unauthenticated"
+          ? "unauthenticated"
+          : "auth-unknown",
     },
   };
 }

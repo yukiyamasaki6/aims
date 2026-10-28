@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getLocalIdentity } from "@/features/auth/local-identity";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import type {
   FetchedRoundDetail,
   fetchRoundDetail,
@@ -33,8 +33,8 @@ vi.mock("@/features/fetch-result/fetch-content", async (importOriginal) => ({
 }));
 
 // 端末の保存はユーザーごとに持つため、サインイン済みの端末にする。
-vi.mock("@/features/auth/local-identity", () => ({
-  getLocalIdentity: () => "user-1",
+vi.mock("@/features/auth/infrastructure/browser-identity-store", () => ({
+  createBrowserIdentityStore: () => ({ read: () => "user-1" }),
 }));
 
 // サーバーからの取得は別のテストで確かめるため、取得関数を境界としてモックする。
@@ -62,7 +62,7 @@ vi.mock("@/features/rounds/round-op-log", async (importOriginal) => ({
       try {
         return await roundOpStore.loadStream(
           roundStreamId(roundId),
-          getLocalIdentity(),
+          createBrowserIdentityStore().read(),
         );
       } catch {
         return { base: undefined, entries: [] };
@@ -78,7 +78,7 @@ vi.mock("@/features/rounds/round-op-log", async (importOriginal) => ({
         try {
           return await roundOpStore.commit(
             roundStreamId(roundId),
-            getLocalIdentity(),
+            createBrowserIdentityStore().read(),
             base,
             startedAt,
           );
@@ -160,7 +160,10 @@ async function save(
   return roundOpStore.append({
     eventId: operation.eventId,
     streamId: roundStreamId(options.roundId ?? "round-1"),
-    userId: options.userId === undefined ? getLocalIdentity() : options.userId,
+    userId:
+      options.userId === undefined
+        ? createBrowserIdentityStore().read()
+        : options.userId,
     operation,
   });
 }
@@ -192,7 +195,7 @@ async function commitBase(
 ) {
   await roundOpStore.commit(
     roundStreamId("round-1"),
-    getLocalIdentity(),
+    createBrowserIdentityStore().read(),
     { tables, revisions },
     startedAt,
   );

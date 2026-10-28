@@ -1,6 +1,7 @@
-import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { sessionFailureMessage } from "@/features/auth/errors";
-import { readSession, type SessionState } from "@/features/auth/session-state";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { type SessionReading, unconfirmedMessage } from "@/features/auth";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import {
   classifyResponse,
   FETCH_ERROR_MESSAGE,
@@ -8,7 +9,6 @@ import {
   isAuthRejected,
   type ResponseLike,
 } from "./fetch-result";
-import { isOffline } from "./network";
 
 // 取得が終わらないまま枠が「読み込み中」に固定されないよう、全体に時間制限を設ける。
 // navigator.onLineがtrueのまま通信できない場合、アクセストークンが期限切れだと
@@ -16,8 +16,11 @@ import { isOffline } from "./network";
 // 超えたら原因を断定せずerrorとして再試行できるようにする（遅れて届いた結果は捨てる）。
 export const FETCH_TIMEOUT_MS = 10_000;
 
+// 通信の可否。
+const connectivity = createBrowserConnectivity();
+
 // readSessionは、offlineイベントと競わせる。
-// 遷移はSessionGuardが担い、ここでは行わない。
+// 遷移は見張りが担い、ここでは行わない。
 function waitOffline(): { promise: Promise<"offline">; stop: () => void } {
   const { promise, resolve } = Promise.withResolvers<"offline">();
   const onOffline = () => resolve("offline");
@@ -31,7 +34,7 @@ function waitOffline(): { promise: Promise<"offline">; stop: () => void } {
 // 通信失敗由来の結果。取得中に回線が落ちてnavigator.onLineがfalseになっていればofflineにし、
 // 復帰のonlineイベントで再取得できるようにする。それ以外は原因を断定せずerrorにする。
 function commFailure<T>(): FetchResult<T> {
-  if (isOffline()) return { status: "offline" };
+  if (connectivity.isOffline()) return { status: "offline" };
   return { status: "error", message: FETCH_ERROR_MESSAGE };
 }
 
@@ -63,7 +66,7 @@ export async function withinFetchTimeout<T>(
 // 終われば一度だけonLateResultへ渡す（表示には使わず、保存などに使う）。
 export async function fetchContent<T>(
   supabase: SupabaseClient,
-  run: (session: Session) => PromiseLike<ResponseLike<T>>,
+  run: (session: { userId: string }) => PromiseLike<ResponseLike<T>>,
   opts: {
     nullIsNotFound?: boolean;
     timeoutMs?: number;
@@ -113,38 +116,39 @@ async function deliverLateResult<T>(
 async function confirmSession<T>(
   supabase: SupabaseClient,
   opts: { refresh?: boolean } = {},
-): Promise<{ session: Session } | { failure: FetchResult<T> }> {
+): Promise<{ session: { userId: string } } | { failure: FetchResult<T> }> {
   const offline = waitOffline();
-  let state: SessionState;
+  let reading: SessionReading;
   try {
     const raced = await Promise.race([
-      readSession(supabase, opts),
+      createSupabaseAuth(() => supabase).readSession(opts),
       offline.promise,
     ]);
     if (raced === "offline") return { failure: { status: "offline" } };
-    state = raced;
-  } catch {
-    return { failure: commFailure() };
+    reading = raced;
   } finally {
     offline.stop();
   }
-  if (state.status === "unknown") return { failure: commFailure() };
-  if (state.status === "unauthenticated") {
+  if (reading.status === "unknown") return { failure: commFailure() };
+  if (reading.status === "unauthenticated") {
     return {
-      failure: { status: "error", message: sessionFailureMessage(state) },
+      failure: {
+        status: "error",
+        message: unconfirmedMessage(reading.status),
+      },
     };
   }
-  return { session: state.session };
+  return { session: { userId: reading.userId } };
 }
 
 // 確かめたセッションでクエリし、runの中では読み直さない。
 // 認証の拒否が返ったら、更新を強制してセッションを確かめ、認証済みなら新しいセッションで1回だけ取り直す。
 async function load<T>(
   supabase: SupabaseClient,
-  run: (session: Session) => PromiseLike<ResponseLike<T>>,
+  run: (session: { userId: string }) => PromiseLike<ResponseLike<T>>,
   opts: { nullIsNotFound?: boolean } = {},
 ): Promise<FetchResult<T>> {
-  if (isOffline()) return { status: "offline" };
+  if (connectivity.isOffline()) return { status: "offline" };
 
   const confirmed = await confirmSession<T>(supabase);
   if ("failure" in confirmed) return confirmed.failure;
