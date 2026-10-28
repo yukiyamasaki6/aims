@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getLocalIdentity } from "@/features/auth/local-identity";
+import { getLocalIdentity } from "@/features/auth/infrastructure/browser-identity-store";
 import { roundOpHub } from "@/features/rounds/round-op-hub";
 import { roundOpLog, roundStreamId } from "@/features/rounds/round-op-log";
 import { roundOpStore } from "@/features/rounds/round-op-store";

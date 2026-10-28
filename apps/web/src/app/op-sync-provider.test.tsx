@@ -11,7 +11,7 @@ const hub = vi.hoisted(() => ({
   getUserId: vi.fn<() => string | null>(),
 }));
 vi.mock("@/features/rounds/round-op-hub", () => ({ roundOpHub: hub }));
-vi.mock("@/features/auth/local-identity", () => ({
+vi.mock("@/features/auth/infrastructure/browser-identity-store", () => ({
   getLocalIdentity: () => "user-1",
 }));
 

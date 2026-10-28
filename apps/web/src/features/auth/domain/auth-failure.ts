@@ -3,6 +3,9 @@
 export const NETWORK_ERROR_MESSAGE =
   "通信エラーが発生しました。しばらくしてから再度お試しください。";
 
+// サインインしていないために、他の機能の操作が進められないときの文言。
+export const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
+
 // 種類ごとの文言。画面ごとに、返る種類が違う。
 const MESSAGES = {
   unreachable: NETWORK_ERROR_MESSAGE,

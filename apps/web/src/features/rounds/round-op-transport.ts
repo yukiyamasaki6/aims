@@ -1,5 +1,5 @@
 import type { PostgrestError } from "@supabase/supabase-js";
-import { readSession } from "@/features/auth/session-state";
+import { readSession } from "@/features/auth/infrastructure/supabase-session-state";
 import type {
   OpFlight,
   OpResult,

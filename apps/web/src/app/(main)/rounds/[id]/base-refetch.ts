@@ -1,6 +1,6 @@
-import { isOffline } from "@/features/fetch-result/network";
 import { retryDelayMs } from "@/features/op-log/sync-result";
 import type { RoundOpSync } from "@/features/rounds/round-op-log";
+import { isOffline } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createClient } from "@/lib/supabase/client";
 import { type LoadedRound, loadRoundDetail } from "./load-round-detail";
 

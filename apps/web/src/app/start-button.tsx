@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
-import { readSession } from "@/features/auth/session-state";
+import { readSession } from "@/features/auth/infrastructure/supabase-session-state";
 import { createClient } from "@/lib/supabase/client";
 
 // 判定中は/signupへの有効なリンクとして表示する。判定中に認証済みの利用者が

@@ -1,5 +1,8 @@
-import { sessionFailureMessage } from "@/features/auth/errors";
-import { readSession, type SessionState } from "@/features/auth/session-state";
+import {
+  readSession,
+  type SessionState,
+  sessionFailureMessage,
+} from "@/features/auth/infrastructure/supabase-session-state";
 import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
 import { comparePositionKey } from "@/features/rounds/position-key";
 import { roundOpLog } from "@/features/rounds/round-op-log";

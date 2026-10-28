@@ -1,4 +1,4 @@
-import { getLocalIdentity } from "@/features/auth/local-identity";
+import { getLocalIdentity } from "@/features/auth/infrastructure/browser-identity-store";
 import {
   ROUND_PRESET_SELECT,
   TARGET_FACE_SELECT,

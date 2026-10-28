@@ -3,7 +3,7 @@ import {
   type PostgrestError,
 } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
-import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
+import { AUTH_REQUIRED_MESSAGE } from "@/features/auth";
 import {
   authFailureResult,
   classifyFailure,

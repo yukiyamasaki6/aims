@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { isOffline } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import {
   FETCH_ERROR_MESSAGE,
   type FetchResult,
   type FetchView,
 } from "./fetch-result";
-import { isOffline } from "./network";
 
 type Settled<T> = {
   key: readonly unknown[];

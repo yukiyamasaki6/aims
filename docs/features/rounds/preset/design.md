@@ -37,7 +37,7 @@
 - `rounds/new/use-preset-delete.ts`: 削除を確認中のプリセットと、削除済みのIDを持つ。削除の成功時に、保存済みからも除く。
 - `rounds/_shared/fetch-presets.ts`の`deletePresetFromSnapshot`: 削除したプリセットを保存済みから除く。
 - `rounds/[id]/scorecard-client.tsx`: 保存ダイアログへ、ラウンド名と画面に表示中の構成(操作の列から導いた距離)を渡す。
-- `features/auth/errors.ts`の`sessionFailureMessage`: 保存と削除のセッション確認が、`readSession`で未認証と不明（通信失敗）に分けて返す文言。
+- `features/auth/infrastructure/supabase-session-state.ts`の`sessionFailureMessage`: 保存と削除のセッション確認が、`readSession`で未認証と不明（通信失敗）に分けて返す文言。
 
 - 名前が空白のみなら、距離を位置順に`-`でつないだ名前（未入力の距離は`??`）で保存する。
 - 名前は50文字以内とし、クライアントの検証とDBのCHECK制約の両方で守る。

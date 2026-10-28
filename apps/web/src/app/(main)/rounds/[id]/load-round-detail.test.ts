@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getLocalIdentity } from "@/features/auth/local-identity";
+import { getLocalIdentity } from "@/features/auth/infrastructure/browser-identity-store";
 import type {
   FetchedRoundDetail,
   fetchRoundDetail,
@@ -33,7 +33,7 @@ vi.mock("@/features/fetch-result/fetch-content", async (importOriginal) => ({
 }));
 
 // 端末の保存はユーザーごとに持つため、サインイン済みの端末にする。
-vi.mock("@/features/auth/local-identity", () => ({
+vi.mock("@/features/auth/infrastructure/browser-identity-store", () => ({
   getLocalIdentity: () => "user-1",
 }));
 

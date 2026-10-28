@@ -1,5 +1,5 @@
-import { isOffline } from "@/features/fetch-result/network";
 import { createOpSyncHub } from "@/features/op-log/op-sync-hub";
+import { isOffline } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { type RoundBaseRecord, roundStreamRules } from "./round-base";
 import { batchLimitOf, conflicts, laneOf } from "./round-op-conflicts";
 import { roundOpStore } from "./round-op-store";

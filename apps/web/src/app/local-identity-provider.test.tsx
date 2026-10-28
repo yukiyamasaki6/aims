@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getLocalIdentity } from "./local-identity";
+import { getLocalIdentity } from "@/features/auth/infrastructure/browser-identity-store";
 import { LocalIdentityProvider } from "./local-identity-provider";
 
 // Supabaseクライアントは外部サービスとの境界のため、認証状態の変化を任意に発火できるスタブで模す。
@@ -16,7 +16,12 @@ const supabase = vi.hoisted(() => {
       auth: {
         onAuthStateChange: (listener: (typeof listeners)[number]) => {
           listeners.push(listener);
-          return { data: { subscription: { unsubscribe } } };
+          // 解除すると、実際にこのリスナーへ以降の出来事が届かなくなる。
+          const stop = () => {
+            unsubscribe();
+            listeners.splice(listeners.indexOf(listener), 1);
+          };
+          return { data: { subscription: { unsubscribe: stop } } };
         },
       },
     })),
@@ -58,6 +63,30 @@ describe("LocalIdentityProvider", () => {
       // Then
       expect(getLocalIdentity()).toBe("user-1");
     });
+
+    it("サインアウトすると、記録を消す", () => {
+      // Given
+      render(<LocalIdentityProvider />);
+      supabase.emit("SIGNED_IN", { user: { id: "user-1" } });
+
+      // When
+      supabase.emit("SIGNED_OUT", null);
+
+      // Then
+      expect(getLocalIdentity()).toBeNull();
+    });
+
+    it("復元されたセッション(INITIAL_SESSION)でも記録し、セッションが無いときは既存の記録を消さない", () => {
+      // Given
+      render(<LocalIdentityProvider />);
+      supabase.emit("INITIAL_SESSION", { user: { id: "user-1" } });
+
+      // When
+      supabase.emit("INITIAL_SESSION", null);
+
+      // Then
+      expect(getLocalIdentity()).toBe("user-1");
+    });
   });
 
   describe("アンマウント", () => {
@@ -70,6 +99,20 @@ describe("LocalIdentityProvider", () => {
 
       // Then
       expect(supabase.unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it("解除した後にサインインやサインアウトが来ても、識別情報を記録も消去もしない", () => {
+      // Given
+      localStorage.setItem("aims:local-user-id", "user-1");
+      const { unmount } = render(<LocalIdentityProvider />);
+      unmount();
+
+      // When
+      supabase.emit("SIGNED_IN", { user: { id: "user-2" } });
+      supabase.emit("SIGNED_OUT", null);
+
+      // Then
+      expect(getLocalIdentity()).toBe("user-1");
     });
   });
 });

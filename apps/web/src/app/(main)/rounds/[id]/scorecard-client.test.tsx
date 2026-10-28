@@ -11,7 +11,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getLocalIdentity } from "@/features/auth/local-identity";
+import { getLocalIdentity } from "@/features/auth/infrastructure/browser-identity-store";
 import { retryDelayMs } from "@/features/op-log/sync-result";
 import type { RoundConfig } from "@/features/rounds/round-config";
 import { roundOpHub } from "@/features/rounds/round-op-hub";

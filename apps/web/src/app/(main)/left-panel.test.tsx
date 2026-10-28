@@ -1,52 +1,7 @@
-import type { AuthError } from "@supabase/supabase-js";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { initLocalIdentity } from "@/features/auth/local-identity";
-import { createClient } from "@/lib/supabase/client";
 import { LeftPanel } from "./left-panel";
-
-// SupabaseのSDKは外部サービスとの境界のため、signOutの結果と認証状態の変化（onAuthStateChange）を任意に制御できるスタブで模す。
-const supabase = vi.hoisted(() => {
-  const listeners: Array<
-    (event: string, session: { user: { id: string } } | null) => void
-  > = [];
-  return {
-    listeners,
-    signOut: vi.fn(),
-    emit(event: string, session: { user: { id: string } } | null) {
-      for (const listener of listeners) listener(event, session);
-    },
-  };
-});
-vi.mock("@supabase/ssr", () => ({
-  createBrowserClient: () => ({
-    auth: {
-      signOut: supabase.signOut,
-      onAuthStateChange: (listener: (typeof supabase.listeners)[number]) => {
-        supabase.listeners.push(listener);
-        return { data: { subscription: { unsubscribe: () => {} } } };
-      },
-    },
-  }),
-}));
-
-// SDKのsignOut({ scope: "local" })は、サーバー通信の成否に関わらずローカルセッションを削除できた場合にSIGNED_OUTを発火する。その挙動をスタブで再現する。
-function signOutRemovingLocalSession(result: () => Promise<unknown>) {
-  supabase.signOut.mockImplementation(async () => {
-    supabase.emit("SIGNED_OUT", null);
-    return result();
-  });
-}
-
-function makeAuthError(fields: Partial<AuthError>): AuthError {
-  return { message: "x", ...fields } as AuthError;
-}
-
-async function confirmSignOut(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: "サインアウト" }));
-  await user.click(screen.getByTestId("confirm-dialog-confirm"));
-}
 
 function wideToggle() {
   return screen.getByTestId("left-panel-toggle-wide");
@@ -64,28 +19,14 @@ function closeMenuButtons() {
   return screen.getAllByRole("button", { name: "メニューを閉じる" });
 }
 
-let disposeLocalIdentity: () => void;
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  supabase.listeners.length = 0;
-  localStorage.clear();
-  // 端末ローカルの識別情報はルートレイアウトと同様にinitLocalIdentityで認証状態の変化へ追従させ、この端末にuser-1がサインイン済みの状態から始める。
-  disposeLocalIdentity = initLocalIdentity(createClient());
-  supabase.emit("SIGNED_IN", { user: { id: "user-1" } });
-});
-
-afterEach(() => {
-  disposeLocalIdentity();
-});
-
 describe("LeftPanel", () => {
-  describe("サインアウトボタン", () => {
-    it("表示する", () => {
+  describe("サインアウトの操作", () => {
+    it("入口が渡した操作を、下端の領域に表示する", () => {
       // Given
+      const signOut = <button type="button">サインアウト</button>;
 
       // When
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={signOut} />);
 
       // Then
       expect(
@@ -99,68 +40,11 @@ describe("LeftPanel", () => {
     it("AIMSロゴと個人リンクを表示する", () => {
       // Given
       // When
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
 
       // Then
       expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "個人" })).toBeInTheDocument();
-    });
-  });
-
-  describe("サインアウトの確認を開く", () => {
-    it("サインアウトボタンを押すと、サインアウトの確認ダイアログを表示する", async () => {
-      // Given
-      const user = userEvent.setup();
-      render(<LeftPanel />);
-
-      // When
-      await user.click(screen.getByRole("button", { name: "サインアウト" }));
-
-      // Then
-      expect(
-        await screen.findByText("サインアウトしますか？"),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "サインアウトする" }),
-      ).toBeInTheDocument();
-    });
-  });
-
-  describe("サインアウトを確認する", () => {
-    it("サインアウトが完了した場合は、確認ダイアログを閉じる", async () => {
-      // Given
-      const user = userEvent.setup();
-      signOutRemovingLocalSession(async () => ({ error: null }));
-      render(<LeftPanel />);
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      await waitFor(() => {
-        expect(
-          screen.queryByTestId("confirm-dialog-confirm"),
-        ).not.toBeInTheDocument();
-      });
-    });
-
-    it("サインアウトに失敗した場合は、エラーを表示する", async () => {
-      // Given
-      const user = userEvent.setup();
-      supabase.signOut.mockResolvedValue({
-        error: makeAuthError({ code: "over_request_rate_limit" }),
-      });
-      render(<LeftPanel />);
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(
-        await screen.findByText(
-          "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
-        ),
-      ).toBeInTheDocument();
     });
   });
 
@@ -169,7 +53,7 @@ describe("LeftPanel", () => {
     it("開くボタンを押すと、背景を含めて開く", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
 
       // When
       await user.click(screen.getByRole("button", { name: "メニューを開く" }));
@@ -181,7 +65,7 @@ describe("LeftPanel", () => {
     it("背景を押すと閉じる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
       await user.click(screen.getByRole("button", { name: "メニューを開く" }));
 
       // When
@@ -195,7 +79,7 @@ describe("LeftPanel", () => {
     it("パネル内の閉じるボタンを押すと閉じる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
       await user.click(screen.getByRole("button", { name: "メニューを開く" }));
 
       // When
@@ -210,7 +94,7 @@ describe("LeftPanel", () => {
     it("格納ボタンを押すと格納する", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
 
       // When
       await user.click(wideToggle());
@@ -222,7 +106,7 @@ describe("LeftPanel", () => {
     it("格納後に開くボタンを押すと再び開く", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
       await user.click(wideToggle());
 
       // When
@@ -238,7 +122,7 @@ describe("LeftPanel", () => {
     it("操作前は、広い用が格納する、横向きかつ狭い用が開くで、ドロワーの背景は出ない", () => {
       // Given
       // When
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
 
       // Then
       expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
@@ -249,7 +133,7 @@ describe("LeftPanel", () => {
     it("広い用で格納すると、両方のボタンが開くになり、ドロワーは開かない", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
 
       // When
       await user.click(wideToggle());
@@ -263,7 +147,7 @@ describe("LeftPanel", () => {
     it("広い用で格納した後に展開すると、両方のボタンが格納するになり、ドロワーが開く", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
       await user.click(wideToggle());
 
       // When
@@ -278,7 +162,7 @@ describe("LeftPanel", () => {
     it("横向きかつ狭い用で展開すると、広い用も格納するになり、ドロワーが開く", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
 
       // When
       await user.click(compactToggle());
@@ -291,7 +175,7 @@ describe("LeftPanel", () => {
     it("横向きかつ狭い用で展開した後に背景を押すと、両方のボタンが開くになり、ドロワーが閉じる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
       await user.click(compactToggle());
 
       // When
@@ -307,7 +191,7 @@ describe("LeftPanel", () => {
     it("ハンバーガーでドロワーを開くと、両方のボタンが格納するになる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
 
       // When
       await user.click(screen.getByRole("button", { name: "メニューを開く" }));
@@ -330,7 +214,7 @@ describe("LeftPanel", () => {
     it("初回表示ではtransitionが付かない", () => {
       // Given
       // When
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
 
       // Then
       expect(panel()).not.toHaveClass("duration-200");
@@ -339,7 +223,7 @@ describe("LeftPanel", () => {
     it("操作の直後はtransitionが付く", async () => {
       // Given
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
 
       // When
       await user.click(wideToggle());
@@ -351,7 +235,7 @@ describe("LeftPanel", () => {
     it("操作から250ms経つと、transitionが外れる", async () => {
       // Given
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
       await user.click(wideToggle());
 
       // When
@@ -366,7 +250,7 @@ describe("LeftPanel", () => {
     it("100ms間隔の2回の操作では、最初の操作から200ms後もまだ付いている", async () => {
       // Given
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<LeftPanel />);
+      render(<LeftPanel signOut={null} />);
       await user.click(wideToggle());
       act(() => {
         vi.advanceTimersByTime(100);

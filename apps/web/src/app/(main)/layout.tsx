@@ -1,4 +1,13 @@
-import { SessionGuard } from "@/features/auth/session-guard-provider";
+"use client";
+
+import { useEffect, useState } from "react";
+import { createSession } from "@/features/auth/application/session";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
+import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
+import { createSupabaseSession } from "@/features/auth/infrastructure/supabase-session";
+import { SignOutButton } from "@/features/auth/ui/sign-out-button";
+import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
+import { createClient } from "@/lib/supabase/client";
 import { LeftPanel } from "./left-panel";
 
 export default function MainLayout({
@@ -6,10 +15,21 @@ export default function MainLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // 画面を開いている間、同じ手続きを保つ。接続は、認証の実装が使うたびに取得する(描画時には作らない)。
+  const [session] = useState(() =>
+    createSession({
+      authority: createSupabaseSession({ getClient: createClient }),
+      identity: createBrowserIdentityStore(),
+      connectivity: createBrowserConnectivity(),
+      page: createBrowserPageLoad(),
+    }),
+  );
+  // セッションを失ったら/signinへ移す。認証が要る画面の集合(このレイアウトの下)の間、見張る。
+  useEffect(() => session.watch(), [session]);
+
   return (
     <div className="flex h-dvh flex-col overflow-hidden side:flex-row">
-      <SessionGuard />
-      <LeftPanel />
+      <LeftPanel signOut={<SignOutButton signOut={session.signOut} />} />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</div>
     </div>
   );

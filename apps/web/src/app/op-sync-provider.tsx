@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { getLocalIdentity } from "@/features/auth/local-identity";
+import { getLocalIdentity } from "@/features/auth/infrastructure/browser-identity-store";
 import { roundOpHub } from "@/features/rounds/round-op-hub";
 import { createClient } from "@/lib/supabase/client";
 

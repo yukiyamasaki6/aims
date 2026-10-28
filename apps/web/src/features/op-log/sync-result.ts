@@ -1,6 +1,8 @@
 import type { PostgrestError } from "@supabase/supabase-js";
-import { sessionFailureMessage } from "@/features/auth/errors";
-import type { SessionState } from "@/features/auth/session-state";
+import {
+  type SessionState,
+  sessionFailureMessage,
+} from "@/features/auth/infrastructure/supabase-session-state";
 import type {
   BatchResult,
   SyncDisposition,

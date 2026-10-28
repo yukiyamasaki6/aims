@@ -5,8 +5,10 @@ import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { sessionFailureMessage } from "@/features/auth/errors";
-import { readSession } from "@/features/auth/session-state";
+import {
+  readSession,
+  sessionFailureMessage,
+} from "@/features/auth/infrastructure/supabase-session-state";
 import { compareDistancePosition } from "@/features/rounds/scorecard-scoring";
 import type { Distance } from "@/features/rounds/scorecard-types";
 import type { TargetFaceOption } from "@/features/rounds/target-face-types";

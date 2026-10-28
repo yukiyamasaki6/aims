@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AUTH_REQUIRED_MESSAGE } from "@/features/auth/errors";
+import { AUTH_REQUIRED_MESSAGE } from "@/features/auth";
 import {
   FALLBACK_WAIT_MS,
   FETCH_TIMEOUT_MS,

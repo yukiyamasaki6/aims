@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { readSession } from "@/features/auth/session-state";
+import { readSession } from "@/features/auth/infrastructure/supabase-session-state";
 import type { Database } from "@/types/supabase";
 import {
   type FetchedRoundDetails,

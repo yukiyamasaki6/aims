@@ -51,7 +51,7 @@
 - `features/rounds/round-base.ts`: 端末に持つベースの記録(`RoundBaseRecord`。サーバーの状態と対象ごとの`revision`)と、組の規則。入力中と見せる`isRoundInProgress`、保持する`shouldKeepRoundBase`、反映済みの判定`reflects`(確定の`revision`と取得の`revision`の比較1つ。効かなかった操作は反映済み、削除の印には確定済みの操作がすべて反映済み)、ベースと操作を重ねた状態の保持の判定`keeps`。
 - `features/rounds/refresh-round-bases.ts`、`app/round-base-refresher.tsx`: 入力中のラウンドと、端末が保持するラウンドの、一括の取得。ラウンドごとに`commit`し、返らなかった保持のラウンドは削除の印で`commit`する。契機は、認証イベント`INITIAL_SESSION`・`SIGNED_IN`でセッションがあるとき、`online`、見える状態になったとき。同時に1回までで、実行中の契機は完了後に1回だけやり直す。すべての`commit`と的の保存を待って成功とし、成功の回数を`data-refreshed-count`に出す。
 - `load-round-detail.ts`、`features/rounds/fetch-round-detail.ts`: 画面を開くときと再取得の取得。列は`roundOpLog.load`で読み、削除があれば取得せずに削除済みを返す。サーバーの状態は取得して`commit`し、結果の組を返す。通信できないとき(オフライン、取得の失敗、取得が`FALLBACK_WAIT_MS`を超えた)は、組が保持の規則に当たれば端末のベースで開く。端末の保存(`aims-sync`)は、現在の形のデータだけを前提にする。
-- `apps/web/src/features/auth/session-state.ts`の`readSession`: 保存先を読み直して、認証済み・未認証（確定）・不明に分ける。
+- `apps/web/src/features/auth/infrastructure/supabase-session-state.ts`の`readSession`: 保存先を読み直して、認証済み・未認証（確定）・不明に分ける。
 
 流れは次のとおりである。
 

@@ -5,6 +5,8 @@ import {
   type Session,
   type SupabaseClient,
 } from "@supabase/supabase-js";
+import { AUTH_REQUIRED_MESSAGE } from "../domain/auth-failure";
+import { authErrorMessage } from "./supabase-auth-failure";
 
 export type SessionState =
   | { status: "authenticated"; session: Session }
@@ -90,4 +92,14 @@ function judgeResult(
     if (ctx.forced) rejected = true;
   }
   return { kind: "reread", previous: error, rejected };
+}
+
+// 他の機能が、セッションを確認できなかった理由を利用者に示すときの文言。
+// 未認証はサインインを促し、不明(通信失敗)は通信できないことを示す。
+export function sessionFailureMessage(
+  state: Exclude<SessionState, { status: "authenticated" }>,
+): string {
+  return state.status === "unauthenticated"
+    ? AUTH_REQUIRED_MESSAGE
+    : authErrorMessage(state.error);
 }

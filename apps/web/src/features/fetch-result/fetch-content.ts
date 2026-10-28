@@ -1,6 +1,10 @@
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { sessionFailureMessage } from "@/features/auth/errors";
-import { readSession, type SessionState } from "@/features/auth/session-state";
+import {
+  readSession,
+  type SessionState,
+  sessionFailureMessage,
+} from "@/features/auth/infrastructure/supabase-session-state";
+import { isOffline } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import {
   classifyResponse,
   FETCH_ERROR_MESSAGE,
@@ -8,7 +12,6 @@ import {
   isAuthRejected,
   type ResponseLike,
 } from "./fetch-result";
-import { isOffline } from "./network";
 
 // 取得が終わらないまま枠が「読み込み中」に固定されないよう、全体に時間制限を設ける。
 // navigator.onLineがtrueのまま通信できない場合、アクセストークンが期限切れだと
@@ -17,7 +20,7 @@ import { isOffline } from "./network";
 export const FETCH_TIMEOUT_MS = 10_000;
 
 // readSessionは、offlineイベントと競わせる。
-// 遷移はSessionGuardが担い、ここでは行わない。
+// 遷移は見張りが担い、ここでは行わない。
 function waitOffline(): { promise: Promise<"offline">; stop: () => void } {
   const { promise, resolve } = Promise.withResolvers<"offline">();
   const onOffline = () => resolve("offline");

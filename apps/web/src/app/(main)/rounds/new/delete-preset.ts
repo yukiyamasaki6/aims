@@ -1,5 +1,7 @@
-import { sessionFailureMessage } from "@/features/auth/errors";
-import { readSession } from "@/features/auth/session-state";
+import {
+  readSession,
+  sessionFailureMessage,
+} from "@/features/auth/infrastructure/supabase-session-state";
 import { createClient } from "@/lib/supabase/client";
 
 // deleted: 削除できた。

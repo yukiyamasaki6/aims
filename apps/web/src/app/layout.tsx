@@ -1,8 +1,8 @@
 import { SerwistProvider } from "@serwist/next/react";
 import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
-import { LocalIdentityProvider } from "@/features/auth/local-identity-provider";
 import "./globals.css";
+import { LocalIdentityProvider } from "./local-identity-provider";
 import { OpSyncProvider } from "./op-sync-provider";
 import { RoundBaseRefresher } from "./round-base-refresher";
 import { SwUpdateActivator } from "./sw-update-activator";
