@@ -1,15 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SessionReader } from "@/features/auth";
-import { fetchContent } from "@/features/fetch-result/fetch-content";
-import type { FetchResult } from "@/features/fetch-result/fetch-result";
+import { createContentFetcher } from "@/features/rounds/application/fetch-content";
+import type { FetchResult } from "@/features/rounds/domain/fetch-result";
+import type { RoundListItem } from "@/features/rounds/domain/round-list";
+import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
+import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
+import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import type { Database } from "@/types/supabase";
 
-export type RoundListItem = {
-  id: string;
-  name: string;
-  roundDate: string;
-  total: number;
-};
+export type { RoundListItem };
 
 type RoundRow = {
   id: string;
@@ -39,7 +38,13 @@ export async function fetchRoundsList(
   supabase: SupabaseClient<Database>,
   sessionReader: SessionReader,
 ): Promise<FetchResult<RoundListItem[]>> {
-  const result = await fetchContent(sessionReader, () =>
+  // 呼び出しのたびに取得の部品を作る(未適用の領域で振る舞いを保つため)。
+  const { fetchContent } = createContentFetcher({
+    signIn: createAuthSignInReader(sessionReader),
+    connectivity: createBrowserConnectivity(),
+    clock: createBrowserClock(),
+  });
+  const result = await fetchContent(() =>
     supabase
       .from("rounds")
       .select(

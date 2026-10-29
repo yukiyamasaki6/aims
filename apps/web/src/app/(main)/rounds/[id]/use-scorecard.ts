@@ -1,11 +1,10 @@
 import { useRouter } from "next/navigation";
 import { useRef } from "react";
-import type { IdentityReader, SessionReader } from "@/features/auth";
-import { isRoundInProgress } from "@/features/rounds/round-base";
-import type { SyncOperation } from "@/features/rounds/sync-events";
-import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+import type { LoadedRound } from "@/features/rounds/application/rounds-store";
+import { isRoundInProgress } from "@/features/rounds/domain/round-retention";
+import type { SyncOperation } from "@/features/rounds/domain/sync-events";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
 import { useHydrated } from "@/hooks/use-hydrated";
-import type { LoadedRound } from "./load-round-detail";
 import { statusOperation } from "./round-progress";
 import { useDistanceEditing } from "./use-distance-editing";
 import { useKeypad } from "./use-keypad";
@@ -59,10 +58,8 @@ function useScorecardInput(
 }
 
 type ScorecardOptions = {
-  sessionReader: SessionReader;
-  identityReader: IdentityReader;
   roundId: string;
-  loaded: Pick<LoadedRound, "base" | "group" | "source" | "pendingServer">;
+  loaded: LoadedRound;
   targetFaces: TargetFaceOption[];
   onGone?: () => void;
 };
@@ -71,14 +68,7 @@ type ScorecardOptions = {
 export function useScorecard(options: ScorecardOptions) {
   const { roundId, loaded, targetFaces } = options;
   // 画面の状態は、ベースへ操作の列を重ねた導出だけから得る。
-  const sync = useRoundOpStack(
-    options.sessionReader,
-    options.identityReader,
-    roundId,
-    loaded,
-    targetFaces,
-    options.onGone,
-  );
+  const sync = useRoundOpStack(roundId, loaded, options.onGone);
   const { distances } = sync.state;
   const inProgress = isRoundInProgress(sync.state);
   const scorecardRef = useRef<HTMLDivElement>(null);

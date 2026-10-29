@@ -3,14 +3,14 @@
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { IdentityReader, SessionReader } from "@/features/auth";
-import { summarizeRound } from "@/features/rounds/scorecard-scoring";
-import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+import type { LoadedRound } from "@/features/rounds/application/rounds-store";
+import { summarizeRound } from "@/features/rounds/domain/scorecard-scoring";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
 import { BottomFrame } from "./bottom-frame";
 import { CompleteRoundBar } from "./complete-round-bar";
 import { DistanceSection } from "./distance-section";
 import { KeypadButtons } from "./keypad-buttons";
 import { KeypadPanel } from "./keypad-panel";
-import type { LoadedRound } from "./load-round-detail";
 import { completionConfirmation } from "./round-progress";
 import {
   RoundConfigCard,
@@ -30,14 +30,12 @@ export function ScorecardClient({
   sessionReader: SessionReader;
   identityReader: IdentityReader;
   roundId: string;
-  loaded: Pick<LoadedRound, "base" | "group" | "source" | "pendingServer">;
+  loaded: LoadedRound;
   targetFaces: TargetFaceOption[];
   // 端末のベースで開いたラウンドが、取り直したサーバーに無いとき(削除済みなど)に呼ぶ。
   onGone?: () => void;
 }) {
   const model = useScorecard({
-    sessionReader,
-    identityReader,
     roundId,
     loaded,
     targetFaces,

@@ -10,16 +10,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
 import { deleteRound } from "../_shared/delete-round";
 
 // スコアカードのラウンドのメニューと、そこから開くラウンド削除の確認。
 // 確認すると、操作の列への保存の後に、送信の完了を待たず一覧へ置き換えて遷移する。
 export function RoundMenu({ roundId }: { roundId: string }) {
   const router = useRouter();
+  const store = useRoundsStore();
   const [deleteRoundConfirmOpen, setDeleteRoundConfirmOpen] = useState(false);
 
   function handleDeleteRound() {
-    void deleteRound(roundId).then(() => router.replace("/rounds"));
+    void deleteRound(store, roundId).then(() => router.replace("/rounds"));
   }
 
   return (

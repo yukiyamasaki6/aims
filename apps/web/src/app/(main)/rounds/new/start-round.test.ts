@@ -1,8 +1,8 @@
 import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
-import { roundOpLog } from "@/features/rounds/round-op-log";
+import type { RoundsStore } from "@/features/rounds/application/rounds-store";
+import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-result";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import type { Preset } from "../_shared/preset-types";
 import { startRound } from "./start-round";
@@ -13,11 +13,9 @@ vi.mock("@supabase/ssr", () => ({
   createBrowserClient: () => ({ auth: { getSession: supabase.getSession } }),
 }));
 
-// 端末の操作の列(IndexedDBへの保存と常駐の送信)は別のテストで確かめるため、列への入り口を境界としてモックする。
-const hub = vi.hoisted(() => ({ acquire: vi.fn(), append: vi.fn() }));
-vi.mock("@/features/rounds/round-op-log", () => ({
-  roundOpLog: { round: hub.acquire },
-}));
+// 端末の記録(保存と送信)は別のテストで確かめるため、ラウンドの変更の方法は追記だけを記録する偽の約束で模す。
+const hub = { append: vi.fn() };
+const store = { append: hub.append } as unknown as RoundsStore;
 
 const signedInSession = { data: { session: { user: { id: "user-1" } } } };
 
@@ -66,6 +64,7 @@ const sessionReader = createSupabaseAuth(createClient);
 
 function startWith(p: Preset | null, isMounted: () => boolean = () => true) {
   return startRound({
+    store,
     sessionReader,
     preset: p,
     isMounted,
@@ -77,7 +76,6 @@ function startWith(p: Preset | null, isMounted: () => boolean = () => true) {
 beforeEach(() => {
   vi.clearAllMocks();
   supabase.getSession.mockResolvedValue(signedInSession);
-  hub.acquire.mockReturnValue({ append: hub.append });
   hub.append.mockResolvedValue(undefined);
 });
 
@@ -94,7 +92,7 @@ describe("startRound", () => {
       const result = await startWith(null);
 
       // Then
-      expect(hub.append).toHaveBeenCalledWith({
+      expect(hub.append).toHaveBeenCalledWith("id-2", {
         type: "round.created",
         eventId: "id-1",
         roundId: "id-2",
@@ -114,7 +112,7 @@ describe("startRound", () => {
       const result = await startWith(preset);
 
       // Then
-      expect(hub.append).toHaveBeenCalledWith({
+      expect(hub.append).toHaveBeenCalledWith("id-6", {
         type: "round.created",
         eventId: "id-5",
         roundId: "id-6",
@@ -148,15 +146,17 @@ describe("startRound", () => {
       expect(result).toEqual({ status: "created", roundId: "id-6" });
     });
 
-    it("作成したラウンドのストリームの操作の列へ追記する", async () => {
+    it("作成したラウンドのIDを指定して、1回だけ追記する", async () => {
       // Given
 
       // When
-      await startWith(null);
+      const result = await startWith(null);
 
       // Then
-      expect(hub.acquire).toHaveBeenCalledTimes(1);
-      expect(roundOpLog.round).toBe(hub.acquire);
+      expect(hub.append).toHaveBeenCalledTimes(1);
+      expect(hub.append.mock.calls[0][0]).toBe(
+        result.status === "created" ? result.roundId : "",
+      );
     });
 
     it("端末への保存の完了を待ってから結果を返す", async () => {

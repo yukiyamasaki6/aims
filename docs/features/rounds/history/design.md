@@ -32,12 +32,12 @@
 
 - `rounds/page.tsx`（Client Component）: 画面の入口。枠（見出し）を描画し、サインインの状態と端末の識別情報の読み出しを生成して一覧へ渡す。取得せず、`cookies()`も読まない。
 - `rounds/fetch-rounds-list.ts`: ラウンド・距離・矢を1回で取得し、合計点を求めて`RoundListItem[]`にする。入力中のラウンドも含めて返す。
-- `rounds/load-rounds-list.ts`: 取得の前に端末のベースと列(`roundOpLog.loadAll`)を読み、列で削除済みのラウンドを求める。続けて一覧の取得(`fetchRoundsList`)と、入力中と端末が保持するラウンドの一括の取得(`fetchRoundDetails`)を並行に行い、両方が成功したときだけ成功とする。どちらかが失敗したときは、一覧の取得の結果、なければ一括の取得の結果を返す。成功したら一括の取得を端末の組へ反映し(`features/rounds/refresh-round-bases.ts`の`commitRoundDetails`)、反映の後に`loadLocalRoundsList`で入力中のラウンドを求めて返す。削除が確定済みのラウンドは、取得の内容とは照合せず、確定済みの操作を反映済みとして列から外す(削除の確定の後に始めた取得には、どのページ・フィルタでも現れないため)。`loadLocalRoundsList`は、端末の各組を`features/rounds/round-base.ts`の`deriveRoundState`(保存済みの的を使う)で状態にし、`isRoundInProgress`が真のものを名前・実施日・合計点にする。ユーザーの突き合わせは行わない。ベースと操作の列は端末でユーザーごとに隔離され、ハブは現在のユーザーの組だけを読み書きする。
+- `rounds/load-rounds-list.ts`: `RoundsStore`の`loadList`に、一覧の取得(`fetchRoundsList`)の関数を渡して返す。`loadList`(`features/rounds/application/rounds-store.ts`)は、取得の前に端末の記録(`readAll`)を読み、列で削除済みのラウンドを求める。続けて一覧の取得と、入力中と端末が保持するラウンドの一括の取得の依頼を並行に行い、両方が成功したときだけ成功とする。どちらかが失敗したときは、一覧の取得の結果、なければ一括の取得の結果を返す。一括の取得は同期が行い、一覧の取得が成功したときだけ端末の記録へ反映する(`features/round-sync/application/round-sync.ts`、`features/rounds/application/refresh-round-bases.ts`)。両方が成功したら、削除が確定済みのラウンドを削除の印として反映し(取得の内容とは照合せず、確定済みの操作を反映済みとして列から外す。削除の確定の後に始めた取得には、どのページ・フィルタでも現れないため)、その後に入力中のラウンドを求めて返す。入力中のラウンドは、端末の各組を`features/rounds/domain/round-view.ts`の`deriveRoundState`(保存済みの的を使う)で状態にし、`features/rounds/domain/round-retention.ts`の`isRoundInProgress`が真のものを名前・実施日・合計点にする(`features/rounds/domain/round-list.ts`)。ユーザーの突き合わせは行わない。ベースと操作の列は端末でユーザーごとに隔離され、取得の利用者と記録の利用者が`same`でない反映は端末へ保存されない。
 - `rounds/overlay-rounds-list.ts`: 取得結果を、入力中の領域とそれ以外の並びに分ける(`overlayRoundsList`)。それ以外 = 取得 − 入力中の領域のID − 削除済みで、値は取得の値のまま(完了で未送信の変更が残るラウンドを端末の値で出さない)。どちらも実施日の新しい順に安定ソートし、同じ実施日は取得の順、取得に無い入力中のラウンドはその後に置く。`roundsListView`は、取得の状態と端末の入力中のラウンドと待ちの経過から、画面に出す内容を決める純粋関数である。
 - `rounds/use-local-rounds-list.ts`: 表示の開始時に`loadLocalRoundsList`を1回読み、`FALLBACK_WAIT_MS`が過ぎたことを返す。購読しない。
 - `rounds/rounds-list-client.tsx`（Client Component）: `roundsListView`の結果に応じて、領域・カード・削除メニュー、または取得中・オフライン・エラーの表示を描画する。新規作成ボタンは全状態で描画する。自分の削除は、この画面の削除済みの集合へ足して除き、取得の状態が変わっても失わない。読み込みの全体を`withinFetchTimeout`で10秒に打ち切る(`app/offline-pwa`)。
 
-一覧の取得は`fetchContent`（`features/fetch-result`）経由で、`.retry(false)`を付ける。`rounds`から`distances(disabled_at, shots(score_int, disabled_at))`までのネストで1回行う。
+一覧の取得は`fetchContent`（`features/rounds/application/fetch-content.ts`）経由で、`.retry(false)`を付ける。`rounds`から`distances(disabled_at, shots(score_int, disabled_at))`までのネストで1回行う。
 - 対象は`rounds.disabled_at is null`で、並びは`round_date`の降順である。同じ実施日の並びは定めない。
 - 合計点は、無効でない距離の、無効でない矢の`score_int`の総和を、クライアントで計算する。端末から導く入力中のラウンドも、状態の距離・矢から同じ規則で求める。
 - 取得できる行は、RLSの`select_if_member`により、ユーザーが`round_users`で属するラウンドに限る。

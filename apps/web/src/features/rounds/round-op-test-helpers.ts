@@ -1,4 +1,7 @@
-import type { SyncOperation } from "./sync-events";
+import type { RoundBaseRecord, RoundRevisions } from "./domain/round-base";
+import { roundTablesFromServer } from "./domain/round-tables";
+import type { Distance, Shot } from "./domain/scorecard-types";
+import type { SyncOperation } from "./domain/sync-events";
 
 type Op<T extends SyncOperation["type"]> = Extract<SyncOperation, { type: T }>;
 
@@ -106,3 +109,29 @@ export const roundCreated = (
   ],
   ...overrides,
 });
+
+// 取得したベース。ラウンドの状態と、対象ごとのrevision。
+export function roundBase(
+  overrides: {
+    status?: "in_progress" | "completed";
+    name?: string;
+    distances?: Distance[];
+    shots?: Shot[];
+    revisions?: Partial<RoundRevisions>;
+  } = {},
+): RoundBaseRecord {
+  return {
+    tables: roundTablesFromServer({
+      status: overrides.status ?? "in_progress",
+      roundConfig: {
+        name: overrides.name ?? "午前練習",
+        roundDate: "2026-09-15",
+        format: "outdoor",
+        bowType: "recurve",
+      },
+      distances: overrides.distances ?? [],
+      shots: overrides.shots ?? [],
+    }),
+    revisions: { round: 1, distances: {}, shots: {}, ...overrides.revisions },
+  };
+}

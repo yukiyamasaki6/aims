@@ -1,22 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { IdentityReader } from "@/features/auth";
-import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
-import { type LocalRoundsList, loadLocalRoundsList } from "./load-rounds-list";
+import { FALLBACK_WAIT_MS } from "@/features/rounds";
+import type { LocalRoundsList } from "@/features/rounds/application/rounds-store";
+import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
 
 // 端末の入力中のラウンドを、表示の開始時に1回読む。購読しない。
 // `waited`は、開始から`FALLBACK_WAIT_MS`が過ぎたら真になり、戻らない。
-export function useLocalRoundsList(identityReader: IdentityReader): {
+export function useLocalRoundsList(): {
   local: LocalRoundsList | null;
   waited: boolean;
 } {
+  const store = useRoundsStore();
   const [local, setLocal] = useState<LocalRoundsList | null>(null);
   const [waited, setWaited] = useState(false);
 
   useEffect(() => {
     let active = true;
-    loadLocalRoundsList(identityReader).then(
+    store.loadLocalList().then(
       (loaded) => {
         if (active) setLocal(loaded);
       },
@@ -27,7 +28,7 @@ export function useLocalRoundsList(identityReader: IdentityReader): {
       active = false;
       clearTimeout(timer);
     };
-  }, [identityReader]);
+  }, [store]);
 
   return { local, waited };
 }

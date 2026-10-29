@@ -4,7 +4,6 @@ import { Children, isValidElement, type ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import RootLayout from "./layout";
 import { RootClientEntry } from "./root-client-entry";
-import { SwUpdateActivator } from "./sw-update-activator";
 
 // next/font/localはNext.jsのコンパイラによる変換を前提とし、Vitest上では実行できないため境界としてモックする。
 vi.mock("geist/font/sans", () => ({
@@ -32,10 +31,16 @@ function bodyContents(children: React.ReactNode): ReactElement[] {
   return Children.toArray(body.props.children).filter(isValidElement);
 }
 
+// 起動地点の入口が、アプリの全体(Service Workerの登録を含む)を包む。
 function findSerwistProvider(children: React.ReactNode) {
-  const provider = bodyContents(children).find(
-    (element) => element.type === SerwistProvider,
+  const entry = bodyContents(children).find(
+    (element) => element.type === RootClientEntry,
   );
+  const provider = Children.toArray(
+    (entry?.props as { children?: React.ReactNode } | undefined)?.children,
+  )
+    .filter(isValidElement)
+    .find((element) => element.type === SerwistProvider);
   if (!provider) throw new Error("SerwistProviderが含まれていません。");
   return provider.props as Record<string, unknown>;
 }
@@ -79,18 +84,6 @@ describe("RootLayout", () => {
       expect(contents.some((element) => element.type === RootClientEntry)).toBe(
         true,
       );
-    });
-
-    it("画面の遷移で待機中の新SWを有効にするSwUpdateActivatorを含める", () => {
-      // Given
-      // When
-      const children = <p>子要素</p>;
-      const contents = bodyContents(children);
-
-      // Then
-      expect(
-        contents.some((element) => element.type === SwUpdateActivator),
-      ).toBe(true);
     });
   });
 

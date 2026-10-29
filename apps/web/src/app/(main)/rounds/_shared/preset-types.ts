@@ -1,4 +1,4 @@
-import type { TargetFaceRing } from "@/features/rounds/target-face-types";
+import type { TargetFaceRing } from "@/features/rounds/domain/target-face-types";
 
 type PresetDistance = {
   id: string;

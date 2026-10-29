@@ -1,7 +1,7 @@
 import type {
   TargetFaceRing,
   TargetFaceSpotLayout,
-} from "@/features/rounds/target-face-types";
+} from "@/features/rounds/domain/target-face-types";
 import { cn } from "@/lib/utils";
 
 // 的画像本体の境界線は、得点帯を区切る情報として最低限見えれば十分で、

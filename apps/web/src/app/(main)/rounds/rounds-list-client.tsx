@@ -2,7 +2,7 @@
 
 import { MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
@@ -11,35 +11,34 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { IdentityReader, SessionReader } from "@/features/auth";
-import { withinFetchTimeout } from "@/features/fetch-result/fetch-content";
+import type { SessionReader } from "@/features/auth";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
-import { roundOpLog } from "@/features/rounds/round-op-log";
+import type { LoadedRoundsList } from "@/features/rounds/application/rounds-store";
+import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import { deleteRound } from "./_shared/delete-round";
-import type { RoundListItem } from "./fetch-rounds-list";
+import { fetchRoundsList, type RoundListItem } from "./fetch-rounds-list";
 import { loadRoundsList } from "./load-rounds-list";
 import { roundsListView } from "./overlay-rounds-list";
 import { useLocalRoundsList } from "./use-local-rounds-list";
 
 export function RoundsListClient({
   sessionReader,
-  identityReader,
 }: {
   sessionReader: SessionReader;
-  identityReader: IdentityReader;
 }) {
   const hydrated = useHydrated();
-  const { view, retry } = useFetchResult(
+  const store = useRoundsStore();
+  const { view, retry } = useFetchResult<LoadedRoundsList>(
     () =>
-      withinFetchTimeout(
-        loadRoundsList(createClient(), sessionReader, identityReader),
+      loadRoundsList(store, () =>
+        fetchRoundsList(createClient(), sessionReader),
       ),
     [],
   );
-  const { local, waited } = useLocalRoundsList(identityReader);
+  const { local, waited } = useLocalRoundsList();
   // この画面で削除したラウンドのID。取得の状態が変わっても失わない。
   const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
   // 確認中のラウンド。確認の処理は、描画時のラウンドに束ねる。
@@ -58,20 +57,11 @@ export function RoundsListClient({
     setTarget({
       name: round.name,
       confirm: () => {
-        void deleteRound(round.id);
+        void deleteRound(store, round.id);
         setRemoved((prev) => new Set(prev).add(round.id));
       },
     });
   }
-
-  // 削除が確定していたラウンドは、取得の完了時に1回、削除の印として端末の組へ反映する。列は購読しない。
-  const loaded = view.status === "ok" ? view.data : null;
-  useEffect(() => {
-    if (!loaded) return;
-    for (const roundId of loaded.confirmedDeletions) {
-      void roundOpLog.commitDeleted(roundId, loaded.startedAt);
-    }
-  }, [loaded]);
 
   const below = belowSection({ others, empty, rest }, retry, startDelete);
 

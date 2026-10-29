@@ -4,11 +4,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { IdentityReader, SessionReader } from "@/features/auth";
-import { withinFetchTimeout } from "@/features/fetch-result/fetch-content";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
-import { createClient } from "@/lib/supabase/infrastructure/client";
-import { loadRoundDetail } from "./load-round-detail";
+import type { LoadedRoundDetail } from "@/features/rounds/application/rounds-store";
+import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
 import { RoundDetailFrame } from "./round-detail-frame";
 import { parseRoundId } from "./round-detail-id";
 import { ScorecardClient } from "./scorecard-client";
@@ -58,26 +57,16 @@ function RoundDetailLoader({
   identityReader: IdentityReader;
 }) {
   const router = useRouter();
-  const { view, retry } = useFetchResult(
+  const store = useRoundsStore();
+  const { view, retry } = useFetchResult<LoadedRoundDetail>(
     () =>
       roundId
-        ? withinFetchTimeout(
-            loadRoundDetail(
-              createClient(),
-              sessionReader,
-              identityReader,
-              roundId,
-            ),
-          )
+        ? store.load(roundId)
         : Promise.resolve({ status: "not-found" as const }),
     [roundId],
   );
   const deleted = view.status === "ok" && view.data.deleted;
-  const pending =
-    view.status === "ok" && !view.data.deleted
-      ? view.data.pendingCreationEventId
-      : null;
-  useCreationGone(roundId, pending, retry);
+  useCreationGone(roundId, retry);
 
   useEffect(() => {
     if (deleted) router.replace("/rounds");

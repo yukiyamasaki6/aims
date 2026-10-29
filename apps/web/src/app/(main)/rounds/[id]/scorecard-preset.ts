@@ -1,6 +1,6 @@
-import { NAME_MAX_LENGTH } from "@/features/rounds/round-constants";
-import { compareDistancePosition } from "@/features/rounds/scorecard-scoring";
-import type { Distance } from "@/features/rounds/scorecard-types";
+import { NAME_MAX_LENGTH } from "@/features/rounds/domain/round-constants";
+import { compareDistancePosition } from "@/features/rounds/domain/scorecard-scoring";
+import type { Distance } from "@/features/rounds/domain/scorecard-types";
 import { nextPositionKey } from "./scorecard-distances";
 
 // プリセット保存ダイアログの状態。

@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FetchResult } from "./fetch-result";
+import type { FetchResult } from "@/features/rounds/domain/fetch-result";
 import { useFetchResult } from "./use-fetch-result";
 
 function deferred<T>() {

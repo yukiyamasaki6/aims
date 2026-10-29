@@ -783,8 +783,14 @@ describe("認証状態の購読(subscribe)", () => {
       { kind: "initial", userId: "user-1" },
     ],
     ["INITIAL_SESSION", null, { kind: "initial", userId: null }],
-    ["SIGNED_OUT", null, { kind: "signed-out" }],
-    ["TOKEN_REFRESHED", { user: { id: "user-1" } }, { kind: "other" }],
+    ["SIGNED_OUT", null, { kind: "signed-out", userId: null }],
+    [
+      "TOKEN_REFRESHED",
+      { user: { id: "user-1" } },
+      { kind: "token-refreshed", userId: "user-1" },
+    ],
+    ["TOKEN_REFRESHED", null, { kind: "token-refreshed", userId: null }],
+    ["PASSWORD_RECOVERY", null, { kind: "other", userId: null }],
   ] as const)(
     "%sを内側の出来事に写して知らせる",
     (event, session, expected) => {

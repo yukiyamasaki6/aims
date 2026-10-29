@@ -2,12 +2,14 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FETCH_TIMEOUT_MS } from "@/features/fetch-result/fetch-content";
-import type { FetchResult } from "@/features/fetch-result/fetch-result";
-import { roundTablesFromServer } from "@/features/rounds/round-tables";
-import type { TargetFaceOption } from "@/features/rounds/target-face-types";
-import type { LoadedRoundDetail } from "./load-round-detail";
-import { loadRoundDetail } from "./load-round-detail";
+import type {
+  LoadedRoundDetail,
+  RoundsStore,
+} from "@/features/rounds/application/rounds-store";
+import type { FetchResult } from "@/features/rounds/domain/fetch-result";
+import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
+import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { RoundDetailClient } from "./round-detail-client";
 import { useCreationGone } from "./use-creation-gone";
 
@@ -20,9 +22,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: nav.replace }),
 }));
 
-// 取得とスコアカードは別のテストで確かめるため、境界としてモック・スタブにする。
-vi.mock("./load-round-detail", () => ({ loadRoundDetail: vi.fn() }));
-const load = vi.mocked(loadRoundDetail);
+// 取得とスコアカードは別のテストで確かめるため、ラウンドの状態は読み込みだけを返す偽の約束に、スコアカードはスタブにする。
+const load = vi.fn<RoundsStore["load"]>();
+const store = { load } as unknown as RoundsStore;
 vi.mock("./use-creation-gone", () => ({ useCreationGone: vi.fn() }));
 const creationGone = vi.mocked(useCreationGone);
 vi.mock("./scorecard-client", () => ({
@@ -80,11 +82,32 @@ function detail(
       distances: [],
       shots: [],
     }),
-    group: { base: undefined, entries: [] },
     targetFaces,
     pendingCreationEventId,
     source,
   };
+}
+
+function renderDetail() {
+  return render(
+    <RoundsStoreProvider store={store}>
+      <RoundDetailClient
+        sessionReader={sessionReader}
+        identityReader={identityReader}
+      />
+    </RoundsStoreProvider>,
+  );
+}
+
+function renderDetailToString() {
+  return renderToString(
+    <RoundsStoreProvider store={store}>
+      <RoundDetailClient
+        sessionReader={sessionReader}
+        identityReader={identityReader}
+      />
+    </RoundsStoreProvider>,
+  );
 }
 
 function resolves(result: FetchResult<LoadedRoundDetail>) {
@@ -110,12 +133,7 @@ describe("RoundDetailClient", () => {
       load.mockReturnValue(new Promise(() => {}));
 
       // When
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
 
       // Then
       expect(
@@ -128,22 +146,12 @@ describe("RoundDetailClient", () => {
     it("初回描画は、pathnameによらず同じ取得中の枠で、取得を始めない", () => {
       // Given
       nav.pathname = "/rounds/_";
-      const placeholderHtml = renderToString(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      const placeholderHtml = renderDetailToString();
       nav.pathname = `/rounds/${ID}`;
 
       // When
       // サーバーでの描画ではeffectが走らない。
-      const html = renderToString(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      const html = renderDetailToString();
 
       // Then
       // 水和の不一致を避けるため、サーバーの描画は読み込み中の表示と同一になる。
@@ -162,12 +170,7 @@ describe("RoundDetailClient", () => {
       });
 
       // When
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
 
       // Then
       const scorecard = await screen.findByTestId("scorecard");
@@ -175,9 +178,7 @@ describe("RoundDetailClient", () => {
       expect(scorecard).toHaveAttribute("data-round-id", ID);
       expect(scorecard).toHaveAttribute("data-faces", "face-1,face-2");
       expect(load).toHaveBeenCalledTimes(1);
-      expect(load.mock.calls[0][1]).toBe(sessionReader);
-      expect(load.mock.calls[0][2]).toBe(identityReader);
-      expect(load.mock.calls[0][3]).toBe(ID);
+      expect(load).toHaveBeenCalledWith(ID);
     });
 
     it("列に削除があれば、スコアカードを出さず、一覧へ置き換えて遷移する", async () => {
@@ -185,12 +186,7 @@ describe("RoundDetailClient", () => {
       resolves({ status: "ok", data: { deleted: true } });
 
       // When
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
 
       // Then
       await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/rounds"));
@@ -203,12 +199,7 @@ describe("RoundDetailClient", () => {
       resolves({ status: "ok", data: detail("午前練習") });
 
       // When
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
       await screen.findByTestId("scorecard");
 
       // Then
@@ -218,28 +209,25 @@ describe("RoundDetailClient", () => {
     it("pathnameのIDが変わると、前のラウンドを見せずに取得し直す", async () => {
       // Given
       resolves({ status: "ok", data: detail("最初") });
-      const { rerender } = render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      const { rerender } = renderDetail();
       await screen.findByText("最初");
       load.mockReturnValue(new Promise(() => {}));
 
       // When
       nav.pathname = `/rounds/${OTHER_ID}`;
       rerender(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
+        <RoundsStoreProvider store={store}>
+          <RoundDetailClient
+            sessionReader={sessionReader}
+            identityReader={identityReader}
+          />
+        </RoundsStoreProvider>,
       );
 
       // Then
       expect(screen.queryByText("最初")).not.toBeInTheDocument();
       expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
-      expect(load.mock.calls.at(-1)?.[3]).toBe(OTHER_ID);
+      expect(load).toHaveBeenLastCalledWith(OTHER_ID);
     });
   });
 
@@ -249,12 +237,7 @@ describe("RoundDetailClient", () => {
       resolves({ status: "not-found" });
 
       // When
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
 
       // Then
       expect(
@@ -277,12 +260,7 @@ describe("RoundDetailClient", () => {
         nav.pathname = pathname;
 
         // When
-        render(
-          <RoundDetailClient
-            sessionReader={sessionReader}
-            identityReader={identityReader}
-          />,
-        );
+        renderDetail();
 
         // Then
         expect(
@@ -297,12 +275,7 @@ describe("RoundDetailClient", () => {
       resolves({ status: "offline" });
 
       // When
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
 
       // Then
       expect(
@@ -321,12 +294,7 @@ describe("RoundDetailClient", () => {
       });
 
       // When
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
 
       // Then
       expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -345,12 +313,7 @@ describe("RoundDetailClient", () => {
       });
       load.mockResolvedValueOnce({ status: "ok", data: detail("午前練習") });
       const user = userEvent.setup();
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
       const retry = await screen.findByRole("button", { name: "再試行" });
 
       // When
@@ -365,42 +328,6 @@ describe("RoundDetailClient", () => {
       expect(load).toHaveBeenCalledTimes(2);
     });
 
-    it("読み込みが終わらないときは、FETCH_TIMEOUT_MSの前は読み込み中で、FETCH_TIMEOUT_MSで一覧へ戻るリンクとエラーと再試行ボタンを表示し、読み込み中の表示を消す", async () => {
-      // Given
-      vi.useFakeTimers();
-      vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
-      load.mockReturnValue(new Promise(() => {}));
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
-
-      // When
-      await act(() => vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - 1));
-      const busyBeforeLimit = screen
-        .getByRole("status")
-        .getAttribute("aria-busy");
-      await act(() => vi.advanceTimersByTimeAsync(1));
-
-      // Then
-      expect(busyBeforeLimit).toBe("true");
-      expect(
-        screen.getByRole("link", { name: "一覧へ戻る" }),
-      ).toBeInTheDocument();
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "読み込めませんでした。",
-      );
-      expect(
-        screen.getByRole("button", { name: "再試行" }),
-      ).toBeInTheDocument();
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
-    });
-  });
-
-  describe("端末のベースで開いたラウンド", () => {
     it("端末のベースで開いたときは、読み込みの結果の的をスコアカードへ渡す", async () => {
       // Given
       resolves({
@@ -409,12 +336,7 @@ describe("RoundDetailClient", () => {
       });
 
       // When
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
 
       // Then
       expect(await screen.findByTestId("scorecard")).toHaveAttribute(
@@ -430,12 +352,7 @@ describe("RoundDetailClient", () => {
         data: detail("入力中", null, "local", faces("face-1")),
       });
       const user = userEvent.setup();
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
       const gone = await screen.findByRole("button", { name: "gone" });
 
       // When
@@ -462,12 +379,7 @@ describe("RoundDetailClient", () => {
       });
 
       // When
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
 
       // Then
       expect(await screen.findByTestId("scorecard")).toHaveAttribute(
@@ -476,36 +388,25 @@ describe("RoundDetailClient", () => {
       );
     });
 
-    it("作成が未確定なら、作成の消失の監視へラウンドIDと未確定のeventIdを渡す", async () => {
+    it("作成の消失の監視へラウンドIDを渡す", async () => {
       // Given
       resolves({ status: "ok", data: detail("作成中", pendingEventId) });
 
       // When
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
       await screen.findByTestId("scorecard");
 
       // Then
-      const [roundId, eventId] = creationGone.mock.calls.at(-1) ?? [];
+      const [roundId] = creationGone.mock.calls.at(-1) ?? [];
       expect(roundId).toBe(ID);
-      expect(eventId).toBe(pendingEventId);
     });
 
     it("作成の消失を検知したら、取得し直す", async () => {
       // Given
       resolves({ status: "ok", data: detail("作成中", pendingEventId) });
-      render(
-        <RoundDetailClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderDetail();
       await screen.findByTestId("scorecard");
-      const [, , onGone] = creationGone.mock.calls.at(-1) ?? [];
+      const [, onGone] = creationGone.mock.calls.at(-1) ?? [];
       const before = load.mock.calls.length;
 
       // When

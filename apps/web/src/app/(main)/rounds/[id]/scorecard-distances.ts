@@ -1,6 +1,6 @@
-import { compareDistancePosition } from "@/features/rounds/scorecard-scoring";
-import type { Distance } from "@/features/rounds/scorecard-types";
-import type { SyncOperation } from "@/features/rounds/sync-events";
+import { compareDistancePosition } from "@/features/rounds/domain/scorecard-scoring";
+import type { Distance } from "@/features/rounds/domain/scorecard-types";
+import type { SyncOperation } from "@/features/rounds/domain/sync-events";
 import type { DistanceConfig } from "./distance-config";
 
 // 10点的（アウトドア・122cm）。

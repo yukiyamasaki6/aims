@@ -7,9 +7,6 @@ const mocks = vi.hoisted(() => ({
   whenPersisted: vi.fn<() => Promise<void>>(),
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
-vi.mock("@/features/rounds/round-op-hub", () => ({
-  roundOpHub: { whenPersisted: mocks.whenPersisted },
-}));
 
 // ブラウザのService Worker APIは境界のため、登録とwaitingのワーカー、controllerchangeを任意に操作できるスタブで模す。
 function fakeWorker() {
@@ -68,14 +65,16 @@ async function settle() {
 }
 
 async function mount() {
-  const view = render(<SwUpdateActivator />);
+  const view = render(
+    <SwUpdateActivator whenPersisted={mocks.whenPersisted} />,
+  );
   await settle();
   return view;
 }
 
 async function navigate(view: Awaited<ReturnType<typeof mount>>, to: string) {
   mocks.pathname = to;
-  view.rerender(<SwUpdateActivator />);
+  view.rerender(<SwUpdateActivator whenPersisted={mocks.whenPersisted} />);
   await settle();
 }
 
@@ -525,7 +524,9 @@ describe("SwUpdateActivator", () => {
       vi.stubGlobal("navigator", {});
 
       // When
-      const { container } = render(<SwUpdateActivator />);
+      const { container } = render(
+        <SwUpdateActivator whenPersisted={mocks.whenPersisted} />,
+      );
 
       // Then
       expect(container).toBeEmptyDOMElement();

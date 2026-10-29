@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  type RoundTables,
+  roundTablesFromServer,
+} from "@/features/rounds/domain/round-tables";
+import type { ScoringTargetFace } from "@/features/rounds/domain/scorecard-scoring";
+import type { SyncOperation } from "@/features/rounds/domain/sync-events";
+import {
   distanceCreated,
   distanceDisabled,
   distanceUpdated,
@@ -8,12 +14,6 @@ import {
   shotCleared,
   shotRecorded,
 } from "@/features/rounds/round-op-test-helpers";
-import {
-  type RoundTables,
-  roundTablesFromServer,
-} from "@/features/rounds/round-tables";
-import type { ScoringTargetFace } from "@/features/rounds/scorecard-scoring";
-import type { SyncOperation } from "@/features/rounds/sync-events";
 import {
   completionConfirmation,
   reopenOperation,

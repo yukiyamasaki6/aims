@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { Distance } from "@/features/rounds/scorecard-types";
-import type { SyncOperation } from "@/features/rounds/sync-events";
+import type { Distance } from "@/features/rounds/domain/scorecard-types";
+import type { SyncOperation } from "@/features/rounds/domain/sync-events";
 import type { DistanceConfig } from "./distance-config";
 import { changesDistanceStructure, distanceToAdd } from "./scorecard-distances";
 import type { Pointer } from "./scorecard-input";

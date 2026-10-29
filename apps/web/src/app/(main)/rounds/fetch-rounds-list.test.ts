@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import { FETCH_ERROR_MESSAGE } from "@/features/fetch-result/fetch-result";
+import { FETCH_ERROR_MESSAGE } from "@/features/rounds/domain/fetch-result";
 import type { Database } from "@/types/supabase";
 import { fetchRoundsList } from "./fetch-rounds-list";
 

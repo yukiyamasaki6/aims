@@ -1,9 +1,17 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  render as renderWithoutStore,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import type { FetchResult } from "@/features/fetch-result/fetch-result";
+import type { RoundsStore } from "@/features/rounds/application/rounds-store";
+import type { FetchResult } from "@/features/rounds/domain/fetch-result";
+import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import {
   deletePresetFromSnapshot,
@@ -35,6 +43,15 @@ vi.mock("@supabase/ssr", () => ({
 }));
 
 const sessionReader = createSupabaseAuth(createClient);
+
+// ラウンドの開始は境界としてモックするため、ラウンドの状態と変更の方法は中身を使わない偽の約束で渡す。
+const store = {} as RoundsStore;
+
+function render(ui: ReactElement) {
+  return renderWithoutStore(
+    <RoundsStoreProvider store={store}>{ui}</RoundsStoreProvider>,
+  );
+}
 const identityReader = createBrowserIdentityStore();
 
 // ラウンドの開始(作成の操作の列への追記)は別のテストで確かめるため、開始関数を境界としてモックする。

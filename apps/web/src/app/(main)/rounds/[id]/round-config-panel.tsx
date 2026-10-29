@@ -10,12 +10,12 @@ import {
   type RoundConfig,
   type RoundConfigErrors,
   validateRoundConfig,
-} from "@/features/rounds/round-config";
+} from "@/features/rounds/domain/round-config";
 import {
   BOW_TYPE_OPTIONS,
   FORMAT_OPTIONS,
-} from "@/features/rounds/round-constants";
-import type { SyncOperation } from "@/features/rounds/sync-events";
+} from "@/features/rounds/domain/round-constants";
+import type { SyncOperation } from "@/features/rounds/domain/sync-events";
 import { labelOf } from "../_shared/option-label";
 
 function RequiredMark() {

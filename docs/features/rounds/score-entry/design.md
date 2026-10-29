@@ -59,7 +59,7 @@
 - `rounds/[id]/bottom-frame.tsx`: 縦向きのテンキーと完了の帯を入れる、下端の枠。
 - `rounds/[id]/scorecard-colors.ts`: 玉とキーの色を、的のリング色から求める。
 - `rounds/[id]/scorecard-input.ts`: 指している矢の遷移(開いたとき、書いた後、クリアの後、戻る・進むの後、他端末の変化)と、取り消しの列の規則を純粋関数にまとめる。
-- `features/rounds/scorecard-scoring.ts`: 的から点数キーと配色を求め、エンドの生きている矢の数、空きの有無、並べ方を求める。
+- `features/rounds/domain/scorecard-scoring.ts`: 的から点数キーと配色を求め、エンドの生きている矢の数、空きの有無、並べ方を求める。
 - `features/rounds/shot-id.ts`: 新しい矢のID(時刻順のUUID)を作る。
 - `rounds/[id]/keypad-panel.tsx`: 横向きの右側パネル。
 

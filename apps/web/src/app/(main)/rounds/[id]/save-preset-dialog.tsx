@@ -10,9 +10,9 @@ import {
   type SessionReader,
   unconfirmedMessage,
 } from "@/features/auth";
-import { compareDistancePosition } from "@/features/rounds/scorecard-scoring";
-import type { Distance } from "@/features/rounds/scorecard-types";
-import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+import { compareDistancePosition } from "@/features/rounds/domain/scorecard-scoring";
+import type { Distance } from "@/features/rounds/domain/scorecard-types";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import { cn } from "@/lib/utils";
 import { fetchPresets } from "../_shared/fetch-presets";

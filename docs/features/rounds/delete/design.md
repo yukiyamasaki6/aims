@@ -25,7 +25,7 @@
 - `rounds/_shared/delete-round.ts`: `round.disabled`を新しい`eventId`で列へ追記する。保存の試みの完了で解決し、拒否しない。
 - `components/ui/confirm-dialog.tsx`の`ConfirmDialog`: 確認後すぐ閉じる。
 - `rounds/overlay-rounds-list.ts`、`rounds/load-rounds-list.ts`: 一覧の取得結果と端末の入力中のラウンドから、列で削除済みのラウンドを除く（`rounds/history`）。
-- `rounds/[id]/load-round-detail.ts`: 列に削除があれば、取得せずに削除済みを返す（`rounds/detail`）。
+- `features/rounds/application/rounds-store.ts`の`load`: 列に削除があれば、取得せずに削除済みを返す（`rounds/detail`）。
 
 流れは、メニューから確認ダイアログを開き、確認で`deleteRound`を呼ぶ。
 一覧は、そのラウンドを削除済みの集合へ足して除く。詳細は、保存の完了後に`/rounds`へ置き換える。

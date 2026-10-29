@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { distanceNumber } from "@/features/rounds/scorecard-scoring";
-import type { Distance } from "@/features/rounds/scorecard-types";
+import { distanceNumber } from "@/features/rounds/domain/scorecard-scoring";
+import type { Distance } from "@/features/rounds/domain/scorecard-types";
 import type { Pointer } from "./scorecard-input";
 import { scrollPointerIntoView } from "./scroll-to-pointer";
 

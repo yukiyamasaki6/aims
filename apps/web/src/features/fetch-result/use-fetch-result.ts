@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import {
   FETCH_ERROR_MESSAGE,
   type FetchResult,
   type FetchView,
-} from "./fetch-result";
+} from "@/features/rounds/domain/fetch-result";
+import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 
 // 通信の可否。
 const connectivity = createBrowserConnectivity();

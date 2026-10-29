@@ -4,14 +4,14 @@ import { createBrowserIdentityStore } from "@/features/auth/infrastructure/brows
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import {
   FALLBACK_WAIT_MS,
+  FETCH_ERROR_MESSAGE,
   FETCH_TIMEOUT_MS,
-} from "@/features/fetch-result/fetch-content";
-import { FETCH_ERROR_MESSAGE } from "@/features/fetch-result/fetch-result";
-import { ROUND_PRESET_SELECT } from "@/features/rounds/reference-query-constants";
+} from "@/features/rounds/domain/fetch-result";
+import { ROUND_PRESET_SELECT } from "@/features/rounds/infrastructure/reference-query-constants";
 import {
   loadReferenceSnapshot,
   saveReferenceSnapshot,
-} from "@/features/rounds/reference-snapshot";
+} from "@/features/rounds/infrastructure/reference-snapshot";
 import type { Database } from "@/types/supabase";
 import {
   deletePresetFromSnapshot,

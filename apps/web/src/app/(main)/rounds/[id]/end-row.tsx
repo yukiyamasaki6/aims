@@ -3,8 +3,8 @@ import {
   endSubtotal,
   type ScoringTargetFace,
   sortEndShots,
-} from "@/features/rounds/scorecard-scoring";
-import type { Distance, Shot } from "@/features/rounds/scorecard-types";
+} from "@/features/rounds/domain/scorecard-scoring";
+import type { Distance, Shot } from "@/features/rounds/domain/scorecard-types";
 import { cn } from "@/lib/utils";
 import { paleTone, ringColorFor } from "./scorecard-colors";
 import type { Pointer } from "./scorecard-input";

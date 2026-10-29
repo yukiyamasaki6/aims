@@ -4,8 +4,8 @@ import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import {
   BOW_TYPE_OPTIONS,
   FORMAT_OPTIONS,
-} from "@/features/rounds/round-constants";
-import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+} from "@/features/rounds/domain/round-constants";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
 import { cn } from "@/lib/utils";
 import { lookupTargetFace, TargetFaceInfo } from "../_shared/target-face-icon";
 import { filterTargetFaces } from "./distance-config";

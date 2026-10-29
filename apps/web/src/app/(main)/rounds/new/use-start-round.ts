@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { type RefObject, useRef, useState } from "react";
 import type { SessionReader } from "@/features/auth";
+import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
 import type { Preset } from "../_shared/preset-types";
 import { startRound } from "./start-round";
 
@@ -13,6 +14,7 @@ export function useStartRound(
   mountedRef: RefObject<boolean>,
 ) {
   const router = useRouter();
+  const store = useRoundsStore();
   const [error, setError] = useState<string | null>(null);
   // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
   // 挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseの
@@ -27,6 +29,7 @@ export function useStartRound(
     setSubmitting(true);
 
     const result = await startRound({
+      store,
       sessionReader,
       preset: selectedPreset,
       isMounted: () => mountedRef.current,

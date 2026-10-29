@@ -10,19 +10,31 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { IDBFactory } from "fake-indexeddb";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { RootClientEntry } from "@/app/root-client-entry";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import { retryDelayMs } from "@/features/op-log/sync-result";
-import type { RoundConfig } from "@/features/rounds/round-config";
-import { roundOpHub } from "@/features/rounds/round-op-hub";
-import { roundOpLog } from "@/features/rounds/round-op-log";
-import { roundOpStore } from "@/features/rounds/round-op-store";
-import { roundTablesFromServer } from "@/features/rounds/round-tables";
-import type { Distance, Shot } from "@/features/rounds/scorecard-types";
-import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+import { retryDelayMs } from "@/features/round-sync/domain/sync-failure";
+import type { RoundsStore } from "@/features/rounds/application/rounds-store";
+import type { RoundConfig } from "@/features/rounds/domain/round-config";
+import { roundStreamRules } from "@/features/rounds/domain/round-retention";
+import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
+import type { Distance, Shot } from "@/features/rounds/domain/scorecard-types";
+import {
+  roundStreamId,
+  type SyncOperation,
+} from "@/features/rounds/domain/sync-events";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
+import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
+import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import { ScorecardClient } from "./scorecard-client";
+
+// 更新の案内は別のテストで確かめるため、何も描かない代役に差し替える。
+vi.mock("@/app/sw-update-activator", () => ({
+  SwUpdateActivator: () => null,
+}));
 
 const nav = vi.hoisted(() => ({
   push: vi.fn(),
@@ -39,7 +51,13 @@ const supabase = vi.hoisted(() => ({
 }));
 vi.mock("@supabase/ssr", () => ({
   createBrowserClient: () => ({
-    auth: { getSession: supabase.getSession },
+    auth: {
+      getSession: supabase.getSession,
+      // 認証状態の変化は起こさない。購読と解除だけを受ける。
+      onAuthStateChange: () => ({
+        data: { subscription: { unsubscribe: () => {} } },
+      }),
+    },
     rpc: supabase.rpc,
   }),
 }));
@@ -55,12 +73,15 @@ async function flushMicrotasks() {
 
 // fake timers中はwaitFor・findByがタイマーに依存して進まないため、実際のマクロタスクを1つずつ進めながら、期待する状態になるまで検証を繰り返す。
 // 上限に達した場合は、最後の検証の失敗をそのまま投げる。
-async function pollWithRealTasks(assertion: () => void, maxTasks = 200) {
+async function pollWithRealTasks(
+  assertion: () => void | Promise<void>,
+  maxTasks = 200,
+) {
   let lastError: unknown;
   for (let i = 0; i < maxTasks; i += 1) {
     await flushMicrotasks();
     try {
-      assertion();
+      await assertion();
       return;
     } catch (error) {
       lastError = error;
@@ -208,11 +229,13 @@ function setup(
           distances,
           shots: initialShots,
         }),
-        group: { base: undefined, entries: [] },
+        targetFaces: faces,
+        pendingCreationEventId: null,
         source: "server",
       }}
       targetFaces={faces}
     />,
+    { wrapper: AppWrapper },
   );
 }
 
@@ -285,19 +308,59 @@ function rpcSucceeds(name: string, args?: { p_shots?: unknown[] }) {
   return Promise.resolve({ data, error: null });
 }
 
+// 記録は端末への保存の完了後に画面へ反映される。保存先(fake-indexeddb)の初回の接続は、負荷が高いと操作の間隔を超えるため、操作の間隔を広げて、反映を待たずに次の操作や検証へ進まないようにする。
+const userEventSetup = userEvent.setup.bind(userEvent);
+
+// 画面は、アプリの起動地点(実物)が渡すラウンドの状態と変更の方法を使う。他のタブの操作を模す追記のために、受け取った入口を覚える。
+let appStore: RoundsStore | undefined;
+
+function StoreProbe() {
+  appStore = useRoundsStore();
+  return null;
+}
+
+function AppWrapper({ children }: { children: ReactNode }) {
+  return (
+    <RootClientEntry>
+      <StoreProbe />
+      {children}
+    </RootClientEntry>
+  );
+}
+
+// 他のタブの追記を模す。
+function appendFromOtherTab(operation: SyncOperation) {
+  return appStore?.append("round-1", operation);
+}
+
+// 端末に保存されたround-1の操作の、確定の有無。送信の状態は画面に出ず、内部の状態は観測できないため、保存と確定の有無で確かめる。
+async function ackedStates(): Promise<("acked" | "unacked")[]> {
+  const store = createIndexedDbOpLogStore(roundStreamRules);
+  try {
+    const group = await store.loadStream(
+      roundStreamId("round-1"),
+      createBrowserIdentityStore().read(),
+    );
+    return group.entries.map((entry) =>
+      entry.ackedRevision === undefined ? "unacked" : "acked",
+    );
+  } finally {
+    await store.close();
+  }
+}
+
 const sessionReader = createSupabaseAuth(createClient);
 const identityReader = createBrowserIdentityStore();
 
-beforeEach(async () => {
+beforeEach(() => {
   vi.clearAllMocks();
-  // IndexedDBはfake-indexeddbで代替し、テストごとに空のDBから始める。常駐の送信が前のテストのDBを読まないよう、接続を閉じてから替える。
-  await roundOpStore.close();
+  vi.spyOn(userEvent, "setup").mockImplementation((options) =>
+    userEventSetup({ delay: 10, ...options }),
+  );
+  // IndexedDBはfake-indexeddbで代替し、テストごとに空のDBから始める。
   globalThis.indexedDB = new IDBFactory();
+  appStore = undefined;
   setOnline(true);
-  // アプリでは、ルートレイアウトのOpSyncProviderがハブを起動する。
-  roundOpHub.start(identityReader.read(), sessionReader);
-  // 起動時の全列の読み込み(DBの初回の作成を含む)がテストの操作と重ならないよう、完了を待つ。同じDBへの読み込みは起動時の読み込みより後に完了する。
-  await roundOpStore.loadAll(createBrowserIdentityStore().read());
   supabase.getSession.mockResolvedValue({
     data: { session: { user: { id: "user-1" } } },
   });
@@ -322,25 +385,9 @@ beforeEach(async () => {
   Element.prototype.scrollBy = vi.fn();
 });
 
-afterEach(async () => {
+afterEach(() => {
   vi.useRealTimers();
   setOnline(true);
-  // 操作の列はアンマウント後も送信を続けるため、送信中の操作が次のテストのスタブに届かないよう、マウント中に送信を終わらせる。
-  // オフラインで保留中の操作はonlineイベントで再開させ、全ての操作が確定済みか保留の最終状態になるまで待つ。
-  // Testing Libraryのcleanup（アンマウント）より先に実行される。
-  try {
-    const sender = roundOpLog.round("round-1");
-    act(() => {
-      roundOpHub.handleOnline();
-    });
-    await waitFor(() => {
-      for (const item of sender.getSnapshot().items) {
-        expect(["acked", "held"]).toContain(item.status);
-      }
-    });
-  } finally {
-    roundOpHub.stop();
-  }
 });
 
 describe("ScorecardClient 初期表示・集計", () => {
@@ -1745,7 +1792,8 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
             distances: [{ ...distanceA }],
             shots: [],
           }),
-          group: { base: undefined, entries: [] },
+          targetFaces: [...targetFaces],
+          pendingCreationEventId: null,
           source: "server",
         }}
         targetFaces={[...targetFaces]}
@@ -1851,7 +1899,8 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
 
     // When
     await user.click(screen.getByTestId("score-button-10"));
-    await user.click(screen.getByTestId("shot-ball-1-1-1"));
+    // 記録は保存の完了後に画面へ反映されるため、反映を待ってから押す。
+    await user.click(await screen.findByTestId("shot-ball-1-1-1"));
 
     // Then
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
@@ -2218,7 +2267,7 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
     await user.click(screen.getByTestId("score-button-clear"));
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["8", "7"]));
     await act(() =>
-      roundOpLog.round("round-1").append({
+      appendFromOtherTab({
         type: "shot.recorded",
         eventId: "e-other-tab",
         shotId: "s-other",
@@ -2254,7 +2303,10 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     await user.click(screen.getByTestId("add-distance-button"));
 
     // Then
-    expect(screen.getByTestId("distance-config-distance-2")).toHaveValue(70);
+    // 距離の追加は保存の完了後に画面へ反映されるため、反映を待つ。
+    expect(await screen.findByTestId("distance-config-distance-2")).toHaveValue(
+      70,
+    );
     await waitFor(() => {
       expect(supabase.rpc).toHaveBeenCalledWith(
         "create_distance",
@@ -2360,7 +2412,7 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     expect(
       screen.queryByTestId("distance-config-distance-1"),
     ).not.toBeInTheDocument();
-    expect(roundOpLog.round("round-1").getSnapshot().items).toEqual([]);
+    expect(await ackedStates()).toEqual([]);
     await flushMicrotasks();
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
@@ -2499,14 +2551,6 @@ function expectNoSyncStatus() {
   ).not.toBeInTheDocument();
 }
 
-// round-1の列の操作の状態。
-function itemStatuses() {
-  return roundOpLog
-    .round("round-1")
-    .getSnapshot()
-    .items.map((item) => item.status);
-}
-
 describe("ScorecardClient 同期の状態を表示しない", () => {
   it("送信中は、同期の状態を表示しない", async () => {
     // Given
@@ -2537,7 +2581,7 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
         ],
       });
     });
-    expect(itemStatuses()).toEqual(["inflight"]);
+    expect(await ackedStates()).toEqual(["unacked"]);
     expectNoSyncStatus();
 
     // afterEachが送信中の操作の完了を待つため、応答を返して終える。
@@ -2566,8 +2610,8 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
     resolveRpc({ data: [APPLIED], error: null });
 
     // Then
-    await waitFor(() => {
-      expect(itemStatuses()).toEqual(["acked"]);
+    await waitFor(async () => {
+      expect(await ackedStates()).toEqual(["acked"]);
     });
     expectNoSyncStatus();
   });
@@ -2594,7 +2638,9 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
     await flushMicrotasks();
 
     // Then
-    expect(itemStatuses()).toEqual(["backoff"]);
+    // リトライ待機の間は、再送せず、確定もしない。
+    expect(await ackedStates()).toEqual(["unacked"]);
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
     expectNoSyncStatus();
   });
 
@@ -2616,7 +2662,8 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
       ),
     );
     await flushMicrotasks();
-    expect(itemStatuses()).toEqual(["backoff"]);
+    expect(await ackedStates()).toEqual(["unacked"]);
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
 
     // When
     await act(async () => {
@@ -2624,7 +2671,9 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
     });
 
     // Then
-    await pollWithRealTasks(() => expect(itemStatuses()).toEqual(["acked"]));
+    await pollWithRealTasks(async () =>
+      expect(await ackedStates()).toEqual(["acked"]),
+    );
     expectNoSyncStatus();
   });
 
@@ -2638,8 +2687,8 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
     await user.click(screen.getByTestId("score-button-10"));
 
     // Then
-    await waitFor(() => {
-      expect(itemStatuses()).toEqual(["queued"]);
+    await waitFor(async () => {
+      expect(await ackedStates()).toEqual(["unacked"]);
     });
     expectNoSyncStatus();
     expect(supabase.rpc).not.toHaveBeenCalled();
@@ -2665,8 +2714,8 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
         expect.anything(),
       );
     });
-    await waitFor(() => {
-      expect(itemStatuses()).toEqual([]);
+    await waitFor(async () => {
+      expect(await ackedStates()).toEqual([]);
     });
     expectNoSyncStatus();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -2682,8 +2731,8 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
     await user.click(screen.getByTestId("score-button-10"));
 
     // Then
-    await waitFor(() => {
-      expect(itemStatuses()).toEqual(["held"]);
+    await waitFor(async () => {
+      expect(await ackedStates()).toEqual(["unacked"]);
     });
     expectNoSyncStatus();
     expect(supabase.rpc).not.toHaveBeenCalled();

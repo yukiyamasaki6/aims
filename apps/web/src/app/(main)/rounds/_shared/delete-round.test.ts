@@ -1,31 +1,22 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { RoundsStore } from "@/features/rounds/application/rounds-store";
 import { deleteRound } from "./delete-round";
 
-// 列への入り口を境界としてモックし、積まれる操作と、どのラウンドの送信器へ積むかを確かめる。
-const log = vi.hoisted(() => ({
-  append: vi.fn(),
-  round: vi.fn(),
-}));
-vi.mock("@/features/rounds/round-op-log", () => ({
-  roundOpLog: { round: log.round },
-}));
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  log.append.mockResolvedValue(undefined);
-  log.round.mockReturnValue({ append: log.append });
-});
+// ラウンドの状態と変更の方法は、画面の境界のため、追記だけを記録する偽の約束で模す。
+function storeWith(append: RoundsStore["append"]) {
+  return { append } as unknown as RoundsStore;
+}
 
 describe("deleteRound", () => {
-  it("そのラウンドの送信器へ、round.disabledを積む", async () => {
+  it("そのラウンドへ、round.disabledを積む", async () => {
     // Given
+    const append = vi.fn<RoundsStore["append"]>().mockResolvedValue(undefined);
 
     // When
-    await deleteRound("round-1");
+    await deleteRound(storeWith(append), "round-1");
 
     // Then
-    expect(log.round).toHaveBeenCalledWith("round-1");
-    expect(log.append).toHaveBeenCalledWith({
+    expect(append).toHaveBeenCalledExactlyOnceWith("round-1", {
       type: "round.disabled",
       eventId: expect.any(String),
       roundId: "round-1",
@@ -34,20 +25,22 @@ describe("deleteRound", () => {
 
   it("削除のたびに新しいeventIdを使う", async () => {
     // Given
+    const append = vi.fn<RoundsStore["append"]>().mockResolvedValue(undefined);
+    const store = storeWith(append);
 
     // When
-    await deleteRound("round-1");
-    await deleteRound("round-1");
+    await deleteRound(store, "round-1");
+    await deleteRound(store, "round-1");
 
     // Then
-    const [first, second] = log.append.mock.calls.map(([op]) => op.eventId);
+    const [first, second] = append.mock.calls.map(([, op]) => op.eventId);
     expect(first).not.toBe(second);
   });
 
   it("保存の試みが終わるまで解決しない", async () => {
     // Given
     let finish: () => void = () => {};
-    log.append.mockReturnValue(
+    const append = vi.fn<RoundsStore["append"]>().mockReturnValue(
       new Promise<void>((resolve) => {
         finish = resolve;
       }),
@@ -55,7 +48,7 @@ describe("deleteRound", () => {
 
     // When
     let resolved = false;
-    const promise = deleteRound("round-1").then(() => {
+    const promise = deleteRound(storeWith(append), "round-1").then(() => {
       resolved = true;
     });
     await new Promise((resolve) => setTimeout(resolve, 0));

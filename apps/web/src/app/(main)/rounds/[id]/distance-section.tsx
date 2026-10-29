@@ -2,10 +2,10 @@ import { ChevronRight } from "lucide-react";
 import {
   distanceNumber,
   summarizeDistance,
-} from "@/features/rounds/scorecard-scoring";
-import type { Distance, Shot } from "@/features/rounds/scorecard-types";
-import type { SyncOperation } from "@/features/rounds/sync-events";
-import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+} from "@/features/rounds/domain/scorecard-scoring";
+import type { Distance, Shot } from "@/features/rounds/domain/scorecard-types";
+import type { SyncOperation } from "@/features/rounds/domain/sync-events";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
 import { cn } from "@/lib/utils";
 import { DistanceInfo } from "../_shared/preset-info";
 import { lookupTargetFace } from "../_shared/target-face-icon";

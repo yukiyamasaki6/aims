@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { FetchView } from "@/features/fetch-result/fetch-result";
+import type {
+  LoadedRoundsList,
+  LocalRoundsList,
+} from "@/features/rounds/application/rounds-store";
+import type { FetchView } from "@/features/rounds/domain/fetch-result";
 import type { RoundListItem } from "./fetch-rounds-list";
-import type { LoadedRoundsList, LocalRoundsList } from "./load-rounds-list";
 import { overlayRoundsList, roundsListView } from "./overlay-rounds-list";
 
 function item(id: string, roundDate = "2026-09-15", total = 0): RoundListItem {
@@ -108,8 +111,6 @@ describe("roundsListView", () => {
       items: [],
       inProgress: [],
       deleted: new Set(),
-      confirmedDeletions: [],
-      startedAt: 1,
       ...overrides,
     },
   });

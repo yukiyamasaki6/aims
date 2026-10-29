@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { endHasRoom } from "@/features/rounds/scorecard-scoring";
-import type { Distance, Shot } from "@/features/rounds/scorecard-types";
+import { endHasRoom } from "@/features/rounds/domain/scorecard-scoring";
+import type { Distance, Shot } from "@/features/rounds/domain/scorecard-types";
+import type { SyncOperation } from "@/features/rounds/domain/sync-events";
 import { newShotId } from "@/features/rounds/shot-id";
-import type { SyncOperation } from "@/features/rounds/sync-events";
 import {
   buildShotOperation,
   clearHistoryEntry,

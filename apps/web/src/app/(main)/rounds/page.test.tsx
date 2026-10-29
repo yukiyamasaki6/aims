@@ -7,7 +7,6 @@ const received = vi.hoisted(() => ({
   props: undefined as
     | {
         sessionReader?: { readSession?: unknown };
-        identityReader?: { read?: unknown };
       }
     | undefined,
 }));
@@ -31,13 +30,12 @@ describe("RoundsPage", () => {
     expect(screen.getByTestId("rounds-list-client")).toBeInTheDocument();
   });
 
-  it("サインインの状態と端末の識別情報の読み手を、子へ渡す", () => {
+  it("サインインの状態の読み手を、子へ渡す", () => {
     // Given
     // When
     render(<RoundsPage />);
 
     // Then
     expect(received.props?.sessionReader?.readSession).toBeTypeOf("function");
-    expect(received.props?.identityReader?.read).toBeTypeOf("function");
   });
 });

@@ -1,0 +1,312 @@
+import type {
+  DatabaseGateway,
+  DbResponse,
+} from "@/lib/supabase/contract/database";
+import type {
+  OpResult,
+  RoundTransport,
+  SendOutcome,
+} from "../application/send-operations";
+import type {
+  DistanceChanges,
+  RoundChanges,
+  SyncOperation,
+} from "../domain/sync-events";
+
+type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
+
+const INVALID_RESPONSE: SendOutcome = {
+  ok: false,
+  cause: { type: "exception" },
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// RPCの結果(jsonb)を、操作ごとの判定結果へ写す。形が不正ならundefined。
+function parseResult(data: unknown): OpResult | undefined {
+  if (!isRecord(data) || typeof data.applied !== "boolean") return undefined;
+  const { revision, applied_fields, rejected_fields, reason } = data;
+  if (revision !== null && typeof revision !== "number") return undefined;
+  const appliedFields =
+    Array.isArray(applied_fields) &&
+    applied_fields.every((f) => typeof f === "string")
+      ? applied_fields
+      : null;
+  const rejectedFields: OpResult["rejectedFields"] = [];
+  if (Array.isArray(rejected_fields)) {
+    for (const item of rejected_fields) {
+      if (
+        !isRecord(item) ||
+        typeof item.field !== "string" ||
+        typeof item.reason !== "string"
+      ) {
+        return undefined;
+      }
+      rejectedFields.push({ field: item.field, reason: item.reason });
+    }
+  }
+  return {
+    revision: revision ?? null,
+    applied: data.applied,
+    appliedFields,
+    rejectedFields,
+    reason: typeof reason === "string" ? reason : null,
+  };
+}
+
+function single(data: unknown): SendOutcome {
+  const result = parseResult(data);
+  return result ? { ok: true, results: [result] } : INVALID_RESPONSE;
+}
+
+function many(data: unknown, count: number): SendOutcome {
+  if (!Array.isArray(data) || data.length !== count) return INVALID_RESPONSE;
+  const results: OpResult[] = [];
+  for (const item of data) {
+    const result = parseResult(item);
+    if (!result) return INVALID_RESPONSE;
+    results.push(result);
+  }
+  return { ok: true, results };
+}
+
+// 数値(revision)だけを返すRPC。効かせる条件が無く、常に効く。
+function revisionOnly(data: unknown): SendOutcome {
+  return typeof data === "number"
+    ? {
+        ok: true,
+        results: [
+          {
+            revision: data,
+            applied: true,
+            appliedFields: null,
+            rejectedFields: [],
+            reason: null,
+          },
+        ],
+      }
+    : INVALID_RESPONSE;
+}
+
+function outcomeOf(
+  response: DbResponse,
+  parse: (data: unknown) => SendOutcome = single,
+): SendOutcome {
+  const { data, error, status } = response;
+  if (error) {
+    return { ok: false, cause: { type: "rpc", status, code: error.code } };
+  }
+  return parse(data);
+}
+
+// 差分を、RPCのキー名(snake_case)の`p_changes`へ写す。値がundefinedの項目は送らない。
+function roundChangesToJson(changes: RoundChanges): Json {
+  const json: { [key: string]: Json } = {};
+  if (changes.name !== undefined) json.name = changes.name;
+  if (changes.roundDate !== undefined) json.round_date = changes.roundDate;
+  if (changes.format !== undefined) json.format = changes.format;
+  if (changes.bowType !== undefined) json.bow_type = changes.bowType;
+  if (changes.status !== undefined) json.status = changes.status;
+  return json;
+}
+
+function distanceChangesToJson(changes: DistanceChanges): Json {
+  const json: { [key: string]: Json } = {};
+  // 距離(m)の未設定は、キーを送ってnullにする。
+  if (changes.distance !== undefined) json.distance = changes.distance;
+  if (changes.isMarked !== undefined) json.is_marked = changes.isMarked;
+  if (changes.config) {
+    json.config = {
+      total_ends: changes.config.totalEnds,
+      arrows_per_end: changes.config.arrowsPerEnd,
+      target_face_id: changes.config.targetFaceId,
+    };
+  }
+  return json;
+}
+
+type ShotOperation = Extract<
+  SyncOperation,
+  { type: "shot.recorded" | "shot.cleared" }
+>;
+
+type RoundOperation = Extract<
+  SyncOperation,
+  { type: "round.created" | "round.updated" | "round.disabled" }
+>;
+
+type DistanceOperation = Extract<
+  SyncOperation,
+  { type: "distance.created" | "distance.updated" | "distance.disabled" }
+>;
+
+async function sendSingle(
+  database: DatabaseGateway,
+  operation: SyncOperation,
+): Promise<SendOutcome> {
+  switch (operation.type) {
+    case "round.created":
+    case "round.updated":
+    case "round.disabled":
+      return sendRoundOperation(database, operation);
+    case "distance.created":
+    case "distance.updated":
+    case "distance.disabled":
+      return sendDistanceOperation(database, operation);
+    case "shot.recorded":
+    case "shot.cleared":
+      return sendShots(database, [operation]);
+  }
+}
+
+async function sendRoundOperation(
+  database: DatabaseGateway,
+  operation: RoundOperation,
+): Promise<SendOutcome> {
+  switch (operation.type) {
+    case "round.created":
+      return outcomeOf(
+        await database.rpc("create_round", {
+          p_round_event_id: operation.eventId,
+          p_id: operation.roundId,
+          p_name: operation.name,
+          p_round_date: operation.roundDate,
+          p_format: operation.format,
+          p_bow_type: operation.bowType,
+          p_distances: operation.distances.map((d) => ({
+            distance_event_id: d.eventId,
+            id: d.id,
+            position_key: d.positionKey,
+            distance: d.distance,
+            is_marked: d.isMarked,
+            total_ends: d.totalEnds,
+            arrows_per_end: d.arrowsPerEnd,
+            target_face_id: d.targetFaceId,
+          })),
+        }),
+      );
+    case "round.updated":
+      return outcomeOf(
+        await database.rpc("update_round", {
+          p_round_event_id: operation.eventId,
+          p_round_id: operation.roundId,
+          p_changes: roundChangesToJson(operation.changes),
+        }),
+      );
+    case "round.disabled":
+      return outcomeOf(
+        await database.rpc("disable_round", {
+          p_round_event_id: operation.eventId,
+          p_round_id: operation.roundId,
+        }),
+        revisionOnly,
+      );
+  }
+}
+
+async function sendDistanceOperation(
+  database: DatabaseGateway,
+  operation: DistanceOperation,
+): Promise<SendOutcome> {
+  switch (operation.type) {
+    case "distance.created":
+      return outcomeOf(
+        await database.rpc("create_distance", {
+          p_distance_event_id: operation.eventId,
+          p_id: operation.id,
+          p_round_id: operation.roundId,
+          p_position_key: operation.positionKey,
+          // distanceはSQL側でnullを受け付ける。
+          p_distance: operation.distance,
+          p_total_ends: operation.totalEnds,
+          p_arrows_per_end: operation.arrowsPerEnd,
+          p_target_face_id: operation.targetFaceId,
+          p_is_marked: operation.isMarked,
+        }),
+      );
+    case "distance.updated":
+      return outcomeOf(
+        await database.rpc("update_distance", {
+          p_distance_event_id: operation.eventId,
+          p_distance_id: operation.distanceId,
+          p_changes: distanceChangesToJson(operation.changes),
+        }),
+      );
+    case "distance.disabled":
+      return outcomeOf(
+        await database.rpc("disable_distance", {
+          p_distance_event_id: operation.eventId,
+          p_distance_id: operation.distanceId,
+        }),
+      );
+  }
+}
+
+// 矢の記録の要素。射手と射順は、値があるときだけキーを送る(キーの無い項目はサーバーが変えない)。
+function recordedShotToJson(
+  operation: Extract<SyncOperation, { type: "shot.recorded" }>,
+): Json {
+  const json: { [key: string]: Json } = {
+    shot_event_id: operation.eventId,
+    shot_id: operation.shotId,
+    distance_id: operation.distanceId,
+    end_number: operation.endNumber,
+    score_str: operation.scoreStr,
+    score_int: operation.scoreInt,
+  };
+  if (operation.shooterId !== undefined) json.shooter_id = operation.shooterId;
+  if (operation.shotNumber !== undefined)
+    json.shot_number = operation.shotNumber;
+  return json;
+}
+
+// 矢の記録と取り消しの束は、列の順で1本のRPCへ詰める。planFlightsは、記録と取り消しを同じ要求に混ぜない。
+async function sendShots(
+  database: DatabaseGateway,
+  operations: ShotOperation[],
+): Promise<SendOutcome> {
+  const recorded = operations.filter((op) => op.type === "shot.recorded");
+  if (recorded.length === operations.length) {
+    return outcomeOf(
+      await database.rpc("record_shots", {
+        p_shots: recorded.map(recordedShotToJson),
+      }),
+      (data) => many(data, recorded.length),
+    );
+  }
+  return outcomeOf(
+    await database.rpc("clear_shots", {
+      p_shots: operations.map((operation) => ({
+        shot_event_id: operation.eventId,
+        shot_id: operation.shotId,
+        distance_id: operation.distanceId,
+      })),
+    }),
+    (data) => many(data, operations.length),
+  );
+}
+
+// 要求の操作を、種類ごとのRPCで送る。サーバーの判定結果を、要求の操作と同じ順で返す。
+// サインインの状態の確認と、利用者の照合は、送る前に同期の手続きが行う。
+export function createRoundOpTransport(
+  database: DatabaseGateway,
+): RoundTransport {
+  return {
+    send(entries) {
+      const shots: ShotOperation[] = [];
+      for (const { operation } of entries) {
+        if (
+          operation.type === "shot.recorded" ||
+          operation.type === "shot.cleared"
+        ) {
+          shots.push(operation);
+        }
+      }
+      if (shots.length > 1) return sendShots(database, shots);
+      // 矢の束以外は、計画が1件ずつの要求にする。
+      return sendSingle(database, entries[0].operation);
+    },
+  };
+}

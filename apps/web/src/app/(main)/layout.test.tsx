@@ -102,12 +102,11 @@ function renderLayout() {
 // ルートの識別情報の記録(実物)と合わせて描く。識別情報の消去は、この購読が担う。
 function renderLayoutWithIdentity() {
   return render(
-    <>
-      <RootClientEntry />
+    <RootClientEntry>
       <MainLayout>
         <p>子要素</p>
       </MainLayout>
-    </>,
+    </RootClientEntry>,
   );
 }
 

@@ -27,7 +27,7 @@
 | 開始の命令 | `begin<操作>(流れ, 入力)`が`Start<流れ, 依頼>`を返す | `beginSignIn`、`beginSignOut` |
 | 結果つきの命令 | `<動詞><操作>(流れ, 入力)`が`Step<流れ, 結果>`を返す | `endSignOut`、`leave` |
 | 画面から送る事実 | 過去形の出来事。reducerは`<操作>Reducer` | `captchaChecked`、`failed` |
-| 認証サービスの状態変化 | `AuthChange`(ドメイン)、`AuthChanges`(約束) | |
+| 認証サービスの状態変化 | `AuthChange`(ドメイン)、`AuthChanges`(約束)。他の機能へ公開する平らな値の通知は`SignInChange`、`SignInChanges`(約束) | |
 | 認証サービスに頼む約束 | `<手続き>Authenticator` | `SignInAuthenticator`、`SessionAuthenticator` |
 | 手続きの依存の引数名 | 約束の型名の先頭を小文字にした名前 | `navigation`、`pageLoad`、`pageReplace` |
 | 「セッション」を含む名前 | `Session`(手続き)、`SessionEndFlow`(集約)、`SessionStatus`(分類)、`SessionReading`(読み取り結果)。SDKの`Session`はこのアプリの名前に使わない | |
@@ -69,10 +69,16 @@
 3. 接続を作る関数は、同じ画面では同じ接続を返す(ブラウザ)。サーバーの要求の入口は、1回の要求で1つの接続を作って渡す。
 4. 読み取りが投げた場合を、利用側が個別に受けない。
 
+## 認証の変化の出来事
+
+認証の変化の出来事(`AuthChange`)は、`signed-in`、`initial`、`token-refreshed`(トークンの更新)、`signed-out`、`other`と、変化の時点の利用者(`userId`。サインアウトとその他はnull)を持つ。
+端末の識別情報の記録はトークンの更新で記録を変えず、サインインの喪失の見張りはトークンの更新を喪失としない(既存の使い手の振る舞いを保つ契約)。
+他の機能へは、同じ形の平らな値の通知(`SignInChange`、`SignInChanges`)を入口で公開する。
+
 ## 約束の例外の契約
 
 投げない: 認証サービスへの頼みごと(`CallResult`で返す)、サインインの状態の読み取り、端末の識別情報の書き込み、画面の約束、通信の可否。
-投げることがある: `Navigation`、`PageLoad`(手続きが通信エラーの失敗として扱う)、`RegistrationLookup`(届かなかった失敗として扱う)、`PasswordChange`(通信エラーの失敗として扱う)、`PageReplace.replace`(見張りもサインアウトも扱わない。以後の遷移も行わない)、`AuthChanges.subscribe`(接続を得られないとき同期に投げる。手続きは扱わない)。
+投げることがある: `Navigation`、`PageLoad`(手続きが通信エラーの失敗として扱う)、`RegistrationLookup`(届かなかった失敗として扱う)、`PasswordChange`(通信エラーの失敗として扱う)、`PageReplace.replace`(見張りもサインアウトも扱わない。以後の遷移も行わない)、`AuthChanges.subscribe`と`SignInChanges.subscribe`(どちらも接続を得られないとき同期に投げる。手続きは扱わない)。
 
 ## 設計判断
 
@@ -91,6 +97,6 @@
 
 ## 制約と未対応
 
-- 利用側の機能(取得、同期、ラウンド)は、通信の可否の実装を層のパスで参照し、自分で生成している。約束の型で受け取る注入は別作業である。
+- 同期とラウンドの取得の手続きは、起動地点が生成した通信の可否を約束(`Connectivity`)で受け取る。未適用の画面の取得(`use-fetch-result.ts`、`fetch-rounds-list.ts`、`_shared/fetch-presets.ts`)は、まだ実装を自分で生成している。
 - `src/proxy.ts`の`config.matcher`は、経路を文字列で再掲する(Next.jsの静的な設定のため)。`proxy.test.ts`が一致を確かめる。
 - 遷移が投げたときの扱い(再設定、サインイン、サインアップ)は未決定で、現行のまま(通信エラーを示す)。

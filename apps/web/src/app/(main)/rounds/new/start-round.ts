@@ -3,15 +3,15 @@ import {
   type SessionReading,
   unconfirmedMessage,
 } from "@/features/auth";
-import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
-import { comparePositionKey } from "@/features/rounds/position-key";
-import { roundOpLog } from "@/features/rounds/round-op-log";
-import type { SyncOperation } from "@/features/rounds/sync-events";
+import { FALLBACK_WAIT_MS } from "@/features/rounds";
+import type { RoundsStore } from "@/features/rounds/application/rounds-store";
+import { comparePositionKey } from "@/features/rounds/domain/position-key";
+import type { SyncOperation } from "@/features/rounds/domain/sync-events";
 import type { Preset } from "../_shared/preset-types";
 
 type CreatedOperation = Extract<SyncOperation, { type: "round.created" }>;
 
-// created: ラウンドの作成を端末の操作の列へ保存した。送信は常駐の送信器が行う。
+// created: ラウンドの作成を端末の操作の列へ保存した。送信は同期が行う。
 // failed: 開始できず、画面に表示するエラーメッセージがある。
 // discarded: 認証の確認を待つ間に画面がアンマウントされたため、結果を破棄した。
 type StartRoundResult =
@@ -82,12 +82,14 @@ async function checkSession(
 // 端末への保存の完了だけを待ち、サーバーへの送信は待たない。
 // 作成後の遷移と、送信中の状態の管理は呼び出し元の画面が担う。
 export async function startRound({
+  store,
   sessionReader,
   preset,
   isMounted,
   generateId,
   now,
 }: {
+  store: RoundsStore;
   sessionReader: SessionReader;
   preset: Preset | null;
   isMounted: () => boolean;
@@ -102,6 +104,6 @@ export async function startRound({
   }
 
   const operation = buildCreatedOperation(preset, generateId, now());
-  await roundOpLog.round(operation.roundId).append(operation);
+  await store.append(operation.roundId, operation);
   return { status: "created", roundId: operation.roundId };
 }

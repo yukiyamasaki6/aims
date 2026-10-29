@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { SyncOperation } from "@/features/rounds/sync-events";
-import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+import type { SyncOperation } from "@/features/rounds/domain/sync-events";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
 import { cn } from "@/lib/utils";
 import {
   buildDistanceDisabledOperation,

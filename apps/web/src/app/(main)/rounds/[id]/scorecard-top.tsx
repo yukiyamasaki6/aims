@@ -1,9 +1,9 @@
 import type { IdentityReader, SessionReader } from "@/features/auth";
-import type { RoundConfig } from "@/features/rounds/round-config";
-import type { summarizeRound } from "@/features/rounds/scorecard-scoring";
-import type { Distance } from "@/features/rounds/scorecard-types";
-import type { SyncOperation } from "@/features/rounds/sync-events";
-import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+import type { RoundConfig } from "@/features/rounds/domain/round-config";
+import type { summarizeRound } from "@/features/rounds/domain/scorecard-scoring";
+import type { Distance } from "@/features/rounds/domain/scorecard-types";
+import type { SyncOperation } from "@/features/rounds/domain/sync-events";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
 import { BackToListLink } from "./back-to-list-link";
 import { RoundConfigPanel } from "./round-config-panel";
 import { RoundMenu } from "./round-menu";

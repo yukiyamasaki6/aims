@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Distance } from "@/features/rounds/scorecard-types";
+import type { Distance } from "@/features/rounds/domain/scorecard-types";
 import {
   CLOSED_PRESET_DIALOG,
   changePresetDialogOpen,

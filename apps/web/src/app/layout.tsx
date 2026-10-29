@@ -3,7 +3,6 @@ import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { RootClientEntry } from "./root-client-entry";
-import { SwUpdateActivator } from "./sw-update-activator";
 
 export const metadata: Metadata = {
   title: "AIMS",
@@ -34,27 +33,27 @@ export default function RootLayout({
           h-dvh（動的ビューポート高さ）にすることで実際に見えている範囲に
           常に一致させる。 */}
       <body className="h-dvh overflow-hidden">
-        <RootClientEntry />
-        <SwUpdateActivator />
-        <SerwistProvider
-          swUrl="/sw.js"
-          disable={process.env.NODE_ENV !== "production"}
-          // sw.tsはページ内容をキャッシュしない（枠はプリキャッシュで配り、
-          // 内容は枠内で取得する）ため、reloadOnOnlineの本来の目的（古い
-          // キャッシュ済みページの最新化）はそもそも発生しない。
-          // さらに操作の列の常駐の送信（op-sync-provider）が`online`イベント検知で
-          // 既にリロード無しの再送を行っているため、trueのままだと目的の
-          // 重複に加え、展開中のパネルや入力中の下書きを毎回失わせる
-          // だけの余計な副作用になる。
-          reloadOnOnline={false}
-          // ページ（HTML/RSC）はランタイムキャッシュの対象外（枠はプリ
-          // キャッシュ、それ以外はNetworkOnly）のため、デフォルトのtrueの
-          // ままだとナビゲーションのたびに何もキャッシュしない無駄な
-          // リクエストが余計に発生してしまう。
-          cacheOnNavigation={false}
-        >
-          {children}
-        </SerwistProvider>
+        <RootClientEntry>
+          <SerwistProvider
+            swUrl="/sw.js"
+            disable={process.env.NODE_ENV !== "production"}
+            // sw.tsはページ内容をキャッシュしない（枠はプリキャッシュで配り、
+            // 内容は枠内で取得する）ため、reloadOnOnlineの本来の目的（古い
+            // キャッシュ済みページの最新化）はそもそも発生しない。
+            // さらに操作の列の常駐の送信（同期の契機の受け取り）が`online`イベント検知で
+            // 既にリロード無しの再送を行っているため、trueのままだと目的の
+            // 重複に加え、展開中のパネルや入力中の下書きを毎回失わせる
+            // だけの余計な副作用になる。
+            reloadOnOnline={false}
+            // ページ（HTML/RSC）はランタイムキャッシュの対象外（枠はプリ
+            // キャッシュ、それ以外はNetworkOnly）のため、デフォルトのtrueの
+            // ままだとナビゲーションのたびに何もキャッシュしない無駄な
+            // リクエストが余計に発生してしまう。
+            cacheOnNavigation={false}
+          >
+            {children}
+          </SerwistProvider>
+        </RootClientEntry>
       </body>
     </html>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Distance, Shot } from "@/features/rounds/scorecard-types";
+import type { Distance, Shot } from "@/features/rounds/domain/scorecard-types";
 import {
   buildShotOperation,
   clearHistoryEntry,

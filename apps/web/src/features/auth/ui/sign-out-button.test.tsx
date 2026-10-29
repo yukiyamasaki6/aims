@@ -153,7 +153,11 @@ describe("SignOutButton", () => {
         })),
         subscribe: vi.fn(() => () => {}),
       },
-      connectivity: { isOffline: () => false, onOnline: () => () => {} },
+      connectivity: {
+        isOffline: () => false,
+        onOnline: () => () => {},
+        onOffline: () => () => {},
+      },
       pageReplace: { here: () => "/rounds", replace: vi.fn() },
     });
     render(<SignOutButton signOut={session.signOut} />);

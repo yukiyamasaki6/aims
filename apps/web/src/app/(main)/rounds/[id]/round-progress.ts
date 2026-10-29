@@ -1,11 +1,14 @@
-import { applyOperation } from "@/features/rounds/round-op-apply";
+import { applyOperation } from "@/features/rounds/domain/round-op-apply";
 import {
   type RoundTables,
   selectRoundState,
-} from "@/features/rounds/round-tables";
-import type { ScoringTargetFace } from "@/features/rounds/scorecard-scoring";
-import type { Distance, Shot } from "@/features/rounds/scorecard-types";
-import type { RoundStatus, SyncOperation } from "@/features/rounds/sync-events";
+} from "@/features/rounds/domain/round-tables";
+import type { ScoringTargetFace } from "@/features/rounds/domain/scorecard-scoring";
+import type { Distance, Shot } from "@/features/rounds/domain/scorecard-types";
+import type {
+  RoundStatus,
+  SyncOperation,
+} from "@/features/rounds/domain/sync-events";
 import { firstOpenEnd } from "./scorecard-input";
 
 // 入力を完了にする前の確認の文言。確認が要らない(全てのエンドが矢数に達している)ときはnull。

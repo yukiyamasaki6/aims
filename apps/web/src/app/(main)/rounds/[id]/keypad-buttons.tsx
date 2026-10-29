@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import {
   type ScoringTargetFace,
   scoreKeysFor,
-} from "@/features/rounds/scorecard-scoring";
-import type { Distance } from "@/features/rounds/scorecard-types";
+} from "@/features/rounds/domain/scorecard-scoring";
+import type { Distance } from "@/features/rounds/domain/scorecard-types";
 import { contrastText } from "./scorecard-colors";
 import type { Pointer } from "./scorecard-input";
 import type { ScoreHistory } from "./use-score-history";

@@ -32,7 +32,7 @@
 
 - `page.tsx`: 画面の入口。サインインの状態と端末の識別情報の読み出しを生成し、`RoundPresetSelect`へ渡す。取得は行わない。
 - `_shared/fetch-presets.ts`: 個人（`owner_id`が自分）と公式（`owner_id`が`null`）を1回の取得で得て、並べて振り分ける。通信失敗・認証切れ・エラーを`FetchResult`に分類する。成功した結果を保存し、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。
-- `features/rounds/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。例外は投げない。識別情報は呼び出し側から`IdentityReader`で受け取り、読むたびにその時点で読む。
+- `features/rounds/infrastructure/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。例外は投げない。識別情報は呼び出し側から`IdentityReader`で受け取り、読むたびにその時点で読む。
 - `_shared/compare-presets.ts`: 並びの比較関数。
 - `round-preset-select-client.tsx`: 取得と選択の状態を持ち、一覧、開始の帯、削除の確認を描く。削除の部品は`rounds/preset`が扱う。
 - `use-start-round.ts`: 作成中とエラーの状態を持ち、開始後に`router.push`で遷移する。

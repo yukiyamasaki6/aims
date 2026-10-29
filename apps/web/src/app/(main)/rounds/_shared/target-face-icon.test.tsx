@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   TargetFaceRing,
   TargetFaceSpotLayout,
-} from "@/features/rounds/target-face-types";
+} from "@/features/rounds/domain/target-face-types";
 import {
   lookupTargetFace,
   TargetFaceIcon,

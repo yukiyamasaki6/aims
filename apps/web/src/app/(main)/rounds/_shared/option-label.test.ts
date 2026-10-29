@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { FORMAT_OPTIONS } from "@/features/rounds/round-constants";
+import { FORMAT_OPTIONS } from "@/features/rounds/domain/round-constants";
 import { labelOf } from "./option-label";
 
 it("該当するvalueのlabelを返す", () => {

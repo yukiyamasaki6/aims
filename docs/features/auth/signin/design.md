@@ -75,4 +75,4 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 
 - 再試行の回数制限は、captcha以外に設けていない。
 - signup・reset-passwordを経由すると遷移元は引き継がない。
-- 認証の機能が他の機能へ公開する名前は、入口の`SessionReading`、`SessionReader`、`IdentityReader`、`unconfirmedMessage`、`NETWORK_ERROR_MESSAGE`、`DEFAULT_DESTINATION`、`SIGN_UP_PATH`だけである。他の機能のファイルは、認証の機能の内部を参照せず、入口だけを参照する。サインインの状態の読み出しと端末の識別情報の読み出しは、入口(組み立て層)が`infrastructure/supabase-auth.ts`と`infrastructure/browser-identity-store.ts`から生成し、他の機能へ`SessionReader`と`IdentityReader`の型で注入する。
+- 認証の機能が他の機能へ公開する名前は、入口の`SessionReading`、`SessionReader`、`IdentityReader`、`SignInChange`、`SignInChanges`、`unconfirmedMessage`、`NETWORK_ERROR_MESSAGE`、`DEFAULT_DESTINATION`、`SIGN_UP_PATH`だけである。他の機能のファイルは、認証の機能の内部を参照せず、入口だけを参照する。サインインの状態の読み出しと端末の識別情報の読み出しは、入口(組み立て層)が`infrastructure/supabase-auth.ts`と`infrastructure/browser-identity-store.ts`から生成し、他の機能へ`SessionReader`と`IdentityReader`の型で注入する。サインインの状態の変化は、同期の機能のインフラ層が`SignInChanges`の型で受け取る。

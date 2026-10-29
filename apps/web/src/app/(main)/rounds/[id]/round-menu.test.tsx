@@ -1,7 +1,23 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  render as renderWithoutStore,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { RoundsStore } from "@/features/rounds/application/rounds-store";
+import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { RoundMenu } from "./round-menu";
+
+// 削除は境界としてモックするため、ラウンドの状態と変更の方法は中身を使わない偽の約束で渡す。
+const store = {} as RoundsStore;
+
+function render(ui: ReactElement) {
+  return renderWithoutStore(
+    <RoundsStoreProvider store={store}>{ui}</RoundsStoreProvider>,
+  );
+}
 
 const nav = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => nav }));
@@ -49,7 +65,7 @@ describe("RoundMenu", () => {
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
       // Then
-      expect(deletion.deleteRound).toHaveBeenCalledWith("round-1");
+      expect(deletion.deleteRound).toHaveBeenCalledWith(store, "round-1");
       await waitFor(() => {
         expect(nav.replace).toHaveBeenCalledWith("/rounds");
       });

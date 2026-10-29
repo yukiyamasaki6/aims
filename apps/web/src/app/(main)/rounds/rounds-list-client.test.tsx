@@ -1,15 +1,15 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FETCH_TIMEOUT_MS } from "@/features/fetch-result/fetch-content";
-import type { FetchResult } from "@/features/fetch-result/fetch-result";
-import type { RoundListItem } from "./fetch-rounds-list";
-import {
-  type LoadedRoundsList,
-  type LocalRoundsList,
-  loadRoundsList,
-} from "./load-rounds-list";
+import type {
+  LoadedRoundsList,
+  LocalRoundsList,
+  RoundsStore,
+} from "@/features/rounds/application/rounds-store";
+import type { FetchResult } from "@/features/rounds/domain/fetch-result";
+import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
+import { fetchRoundsList, type RoundListItem } from "./fetch-rounds-list";
+import { loadRoundsList } from "./load-rounds-list";
 import { RoundsListClient } from "./rounds-list-client";
 
 // 一覧の読み込みは別のテストで確かめるため、境界としてモックする。
@@ -31,16 +31,18 @@ vi.mock("./use-local-rounds-list", () => ({
 const deletion = vi.hoisted(() => ({ deleteRound: vi.fn() }));
 vi.mock("./_shared/delete-round", () => deletion);
 
-// 削除の確定は、削除の印として端末の組へ渡る。
-const log = vi.hoisted(() => ({ commitDeleted: vi.fn() }));
-vi.mock("@/features/rounds/round-op-log", () => ({ roundOpLog: log }));
+// 一覧の読み込みと削除は境界としてモックしたため、ラウンドの状態と変更の方法は中身を使わない偽の約束で渡す。
+const store = {} as RoundsStore;
+
+// サーバーの一覧の取得は別のテストで確かめるため、境界としてモックする。
+vi.mock("./fetch-rounds-list", () => ({ fetchRoundsList: vi.fn() }));
+const fetchList = vi.mocked(fetchRoundsList);
 
 vi.mock("@/lib/supabase/infrastructure/client", () => ({
   createClient: () => ({}),
 }));
 
 const sessionReader = { readSession: vi.fn() };
-const identityReader = { read: vi.fn() };
 
 function loaded(
   items: RoundListItem[],
@@ -50,10 +52,16 @@ function loaded(
     items,
     inProgress: [],
     deleted: new Set(),
-    confirmedDeletions: [],
-    startedAt: 100,
     ...overrides,
   };
+}
+
+function renderList() {
+  return render(
+    <RoundsStoreProvider store={store}>
+      <RoundsListClient sessionReader={sessionReader} />
+    </RoundsStoreProvider>,
+  );
 }
 
 function fetchResolves(result: FetchResult<RoundListItem[]>) {
@@ -110,7 +118,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   localList.state = { local: null, waited: false };
   deletion.deleteRound.mockResolvedValue(undefined);
-  log.commitDeleted.mockResolvedValue({ base: undefined, entries: [] });
 });
 
 afterEach(() => {
@@ -125,12 +132,7 @@ describe("RoundsListClient", () => {
       load.mockReturnValue(new Promise(() => {}));
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
 
       // Then
       expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
@@ -145,12 +147,7 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "ok", data: rounds });
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
 
       // Then
       expect(await screen.findByText("午前練習")).toBeInTheDocument();
@@ -166,12 +163,7 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "ok", data: [] });
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
 
       // Then
       expect(
@@ -185,12 +177,7 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "offline" });
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
 
       // Then
       expect(
@@ -207,12 +194,7 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "error", message: "読み込めませんでした。" });
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
 
       // Then
       expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -224,35 +206,22 @@ describe("RoundsListClient", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("読み込みが終わらないときは、FETCH_TIMEOUT_MSの前は読み込み中で、FETCH_TIMEOUT_MSでエラーと再試行ボタンを表示し、読み込み中の表示を消す", async () => {
+    it("一覧の読み込みへ、この画面のサーバーの一覧の取得を渡す", async () => {
       // Given
-      vi.useFakeTimers();
-      vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
-      load.mockReturnValue(new Promise(() => {}));
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      fetchList.mockResolvedValue({ status: "ok", data: rounds });
+      load.mockImplementation(async (_store, fetchServerList) => {
+        const items = await fetchServerList();
+        return items.status === "ok"
+          ? { status: "ok", data: loaded(items.data) }
+          : items;
+      });
 
       // When
-      await act(() => vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - 1));
-      const busyBeforeLimit = screen
-        .getByRole("status")
-        .getAttribute("aria-busy");
-      await act(() => vi.advanceTimersByTimeAsync(1));
+      renderList();
 
       // Then
-      expect(busyBeforeLimit).toBe("true");
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "読み込めませんでした。",
-      );
-      expect(
-        screen.getByRole("button", { name: "再試行" }),
-      ).toBeInTheDocument();
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
-      expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
+      expect(await screen.findByText("午前練習")).toBeInTheDocument();
+      expect(fetchList).toHaveBeenCalledExactlyOnceWith({}, sessionReader);
     });
 
     it("再試行すると取得し直し、取得できた一覧を表示する", async () => {
@@ -261,12 +230,7 @@ describe("RoundsListClient", () => {
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({ status: "ok", data: loaded(rounds) });
       const user = userEvent.setup();
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
       const retry = await screen.findByRole("button", { name: "再試行" });
 
       // When
@@ -290,42 +254,11 @@ describe("RoundsListClient", () => {
       });
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
 
       // Then
       expect(await screen.findByText("午後練習")).toBeInTheDocument();
       expect(screen.queryByText("午前練習")).not.toBeInTheDocument();
-    });
-
-    it("取得の前に削除が確定していたラウンドを、削除の印として端末の組へ反映する", async () => {
-      // Given
-      load.mockResolvedValue({
-        status: "ok",
-        data: loaded(rounds, {
-          deleted: new Set(["round-1"]),
-          confirmedDeletions: ["round-1"],
-        }),
-      });
-
-      // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
-      await screen.findByText("午後練習");
-
-      // Then
-      // 表示後の処理で呼ばれるため、呼び出しを待って確認する。
-      await waitFor(() => {
-        expect(log.commitDeleted).toHaveBeenCalledWith("round-1", 100);
-      });
     });
   });
 
@@ -336,12 +269,7 @@ describe("RoundsListClient", () => {
       deletion.deleteRound.mockReturnValue(new Promise(() => {}));
       const user = userEvent.setup();
       fetchResolves({ status: "ok", data: rounds });
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
       await screen.findByText("午前練習");
       await openDeleteDialog(user, "午前練習");
       expect(
@@ -354,7 +282,7 @@ describe("RoundsListClient", () => {
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
       // Then
-      expect(deletion.deleteRound).toHaveBeenCalledWith("round-1");
+      expect(deletion.deleteRound).toHaveBeenCalledWith(store, "round-1");
       await waitFor(() => {
         expect(screen.queryByText("午前練習")).not.toBeInTheDocument();
       });
@@ -367,12 +295,7 @@ describe("RoundsListClient", () => {
       // Given
       const user = userEvent.setup();
       fetchResolves({ status: "ok", data: rounds });
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
       await screen.findByText("午前練習");
       await openDeleteDialog(user, "午前練習");
 
@@ -392,12 +315,7 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "ok", data: roundsWithUnnamed });
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
       await screen.findByText("2026-09-17");
 
       // Then
@@ -413,12 +331,7 @@ describe("RoundsListClient", () => {
       // Given
       const user = userEvent.setup();
       fetchResolves({ status: "ok", data: roundsWithUnnamed });
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
       await screen.findByText("2026-09-17");
       await openMenu(user, "2026-09-17");
 
@@ -438,12 +351,7 @@ describe("RoundsListClient", () => {
       // Given
       const user = userEvent.setup();
       fetchResolves({ status: "ok", data: roundsWithUnnamed });
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
       await screen.findByText("2026-09-17");
       await openMenu(user, "2026-09-17");
       await user.click(await screen.findByTestId("round-delete"));
@@ -452,7 +360,7 @@ describe("RoundsListClient", () => {
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
       // Then
-      expect(deletion.deleteRound).toHaveBeenCalledWith("round-9");
+      expect(deletion.deleteRound).toHaveBeenCalledWith(store, "round-9");
       await waitFor(() => {
         expect(screen.queryByText("2026-09-17")).not.toBeInTheDocument();
       });
@@ -471,12 +379,7 @@ describe("RoundsListClient", () => {
       });
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
 
       // Then
       const area = await screen.findByTestId("in-progress-rounds");
@@ -503,12 +406,7 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "ok", data: rounds });
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
       await screen.findByText("午前練習");
 
       // Then
@@ -526,12 +424,7 @@ describe("RoundsListClient", () => {
       });
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
       await screen.findByTestId("in-progress-rounds");
 
       // Then
@@ -545,12 +438,7 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "offline" });
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
 
       // Then
       const area = await screen.findByTestId("in-progress-rounds");
@@ -571,12 +459,7 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "error", message: "読み込めませんでした。" });
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
       await screen.findByTestId("in-progress-rounds");
 
       // Then
@@ -595,22 +478,16 @@ describe("RoundsListClient", () => {
       offlineWithLocal();
 
       // When
-      const { rerender } = render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      const { rerender } = renderList();
       const shownBeforeWait =
         screen.queryByTestId("in-progress-rounds") !== null;
       const loadingBeforeWait = screen.queryByRole("status") !== null;
       // 待ちの経過は、useLocalRoundsListのwaitedが真になることで表す。
       localList.state = { ...localList.state, waited: true };
       rerender(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
+        <RoundsStoreProvider store={store}>
+          <RoundsListClient sessionReader={sessionReader} />
+        </RoundsStoreProvider>,
       );
 
       // Then
@@ -632,12 +509,7 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "offline" });
 
       // When
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
       await screen.findByText("ネットワークに接続されていません");
 
       // Then
@@ -651,12 +523,7 @@ describe("RoundsListClient", () => {
       offlineWithLocal();
       fetchResolves({ status: "offline" });
       const user = userEvent.setup();
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
       await screen.findByText("入力中の練習");
       await openDeleteDialog(user, "入力中の練習");
 
@@ -664,7 +531,7 @@ describe("RoundsListClient", () => {
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
       // Then
-      expect(deletion.deleteRound).toHaveBeenCalledWith("round-3");
+      expect(deletion.deleteRound).toHaveBeenCalledWith(store, "round-3");
       await waitFor(() => {
         expect(screen.queryByTestId("in-progress-rounds")).toBeNull();
       });
@@ -682,12 +549,7 @@ describe("RoundsListClient", () => {
         }),
       });
       const user = userEvent.setup();
-      render(
-        <RoundsListClient
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      renderList();
       await screen.findByText("入力中の練習");
       await openDeleteDialog(user, "入力中の練習");
       await user.click(screen.getByTestId("confirm-dialog-confirm"));

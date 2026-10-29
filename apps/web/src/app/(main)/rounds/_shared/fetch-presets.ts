@@ -1,17 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IdentityReader, SessionReader } from "@/features/auth";
+import { createContentFetcher } from "@/features/rounds/application/fetch-content";
 import {
   FALLBACK_WAIT_MS,
   FETCH_TIMEOUT_MS,
-  fetchContent,
-} from "@/features/fetch-result/fetch-content";
-import type { FetchResult } from "@/features/fetch-result/fetch-result";
-import { ROUND_PRESET_SELECT } from "@/features/rounds/reference-query-constants";
+  type FetchResult,
+} from "@/features/rounds/domain/fetch-result";
+import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
+import { ROUND_PRESET_SELECT } from "@/features/rounds/infrastructure/reference-query-constants";
 import {
   loadReferenceSnapshot,
   saveReferenceSnapshot,
   updateReferenceSnapshot,
-} from "@/features/rounds/reference-snapshot";
+} from "@/features/rounds/infrastructure/reference-snapshot";
+import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
+import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import type { Database } from "@/types/supabase";
 import { comparePresets } from "./compare-presets";
 import type { Preset, PresetWithMeta } from "./preset-types";
@@ -45,8 +48,13 @@ export async function fetchPresets(
     "presets",
   );
   let queriedUserId: string | undefined;
+  // 呼び出しのたびに取得の部品を作る(未適用の領域で振る舞いを保つため)。
+  const { fetchContent } = createContentFetcher({
+    signIn: createAuthSignInReader(sessionReader),
+    connectivity: createBrowserConnectivity(),
+    clock: createBrowserClock(),
+  });
   const result = await fetchContent(
-    sessionReader,
     async (session) => {
       const userId = session.userId;
       queriedUserId = userId;

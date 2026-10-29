@@ -2,12 +2,13 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
-import { roundOpHub } from "@/features/rounds/round-op-hub";
+import { FALLBACK_WAIT_MS } from "@/features/rounds";
 
 type SwitchHandlers = {
   onSwitched: () => void;
   onGiveUp: () => void;
+  // 保存の途中の操作が全て終わるまで解決しない。
+  whenPersisted: () => Promise<void>;
 };
 
 // 待機中のSWを有効にしてから、遷移先の文書を取得させる。リンクの操作を止めている間の処理で、クリックから1つの期限(FALLBACK_WAIT_MS)を共有する。
@@ -16,7 +17,7 @@ type SwitchHandlers = {
 // 期限までに終わらないときは`onGiveUp`、済めば`onSwitched`を呼ぶ。返す関数で、購読とタイマーを外して中止する(どちらも呼ばない)。
 function switchToWaiting(
   registration: ServiceWorkerRegistration,
-  { onSwitched, onGiveUp }: SwitchHandlers,
+  { onSwitched, onGiveUp, whenPersisted }: SwitchHandlers,
 ): () => void {
   const container = navigator.serviceWorker;
   let cancelled = false;
@@ -26,7 +27,7 @@ function switchToWaiting(
     timer = setTimeout(() => resolve(false), FALLBACK_WAIT_MS);
   });
   const persisted = () =>
-    Promise.race([roundOpHub.whenPersisted().then(() => true), deadline]);
+    Promise.race([whenPersisted().then(() => true), deadline]);
 
   const cleanup = () => {
     clearTimeout(timer);
@@ -89,6 +90,7 @@ type ActivatorState = {
   attempted: boolean;
   // 諦めた後にアンカーを押し直しているときだけtrue。止めずに通す。
   reinjecting: boolean;
+  whenPersisted: () => Promise<void>;
 };
 
 // 登録を未保持なら取得して保持する。保持だけを行い、切り替えも更新もしない。
@@ -129,6 +131,7 @@ function handleClick(state: ActivatorState, event: MouseEvent) {
       location.assign(anchor.href);
     },
     onGiveUp: () => giveUp(state, anchor),
+    whenPersisted: state.whenPersisted,
   });
 }
 
@@ -151,7 +154,11 @@ function checkUpdateAfterNavigation(state: ActivatorState) {
 // 遷移の文書取得を旧SWが返すと旧ビルドの枠が出るため、取得の前に切り替える。待機の判定は、保持した登録のwaitingの同期の読み取りだけで行う。
 // 待機が無い遷移では更新を確認し、見つかった版は次のリンク操作で切り替える。
 // 保持の前の操作、切り替えの失敗、リンク以外の経路(router.push、戻る・進む)では切り替えず、その遷移では更新も試みない。次の遷移で通常どおり判定する。
-export function SwUpdateActivator() {
+export function SwUpdateActivator({
+  whenPersisted,
+}: {
+  whenPersisted: () => Promise<void>;
+}) {
   const pathname = usePathname();
   const stateRef = useRef<ActivatorState>({
     mounted: false,
@@ -160,7 +167,9 @@ export function SwUpdateActivator() {
     cancel: undefined,
     attempted: false,
     reinjecting: false,
+    whenPersisted,
   });
+  stateRef.current.whenPersisted = whenPersisted;
 
   useEffect(() => {
     const state = stateRef.current;

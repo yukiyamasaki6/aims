@@ -3,7 +3,7 @@
 import {
   BOW_TYPE_OPTIONS,
   FORMAT_OPTIONS,
-} from "@/features/rounds/round-constants";
+} from "@/features/rounds/domain/round-constants";
 import { cn } from "@/lib/utils";
 import { labelOf } from "./option-label";
 import { TargetFaceInfo, type TargetFaceView } from "./target-face-icon";
