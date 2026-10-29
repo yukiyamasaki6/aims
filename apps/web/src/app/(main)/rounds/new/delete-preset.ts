@@ -1,5 +1,8 @@
-import { NETWORK_ERROR_MESSAGE, unconfirmedMessage } from "@/features/auth";
-import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import {
+  NETWORK_ERROR_MESSAGE,
+  type SessionReader,
+  unconfirmedMessage,
+} from "@/features/auth";
 import { createClient } from "@/lib/supabase/client";
 
 // deleted: 削除できた。
@@ -13,15 +16,17 @@ type DeletePresetResult =
 // BlockingConfirmDialogの確認後に呼ぶ個人プリセットの削除。
 // 削除成功後の一覧と選択状態の更新は、呼び出し元の画面が担う。
 export async function deletePersonalPreset({
+  sessionReader,
   presetId,
   isMounted,
 }: {
+  sessionReader: SessionReader;
   presetId: string;
   isMounted: () => boolean;
 }): Promise<DeletePresetResult> {
   try {
     const supabase = createClient();
-    const reading = await createSupabaseAuth(() => supabase).readSession();
+    const reading = await sessionReader.readSession();
 
     if (!isMounted()) return { status: "discarded" };
 

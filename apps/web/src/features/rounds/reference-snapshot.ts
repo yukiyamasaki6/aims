@@ -1,4 +1,4 @@
-import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
+import type { IdentityReader } from "@/features/auth";
 import {
   ROUND_PRESET_SELECT,
   TARGET_FACE_SELECT,
@@ -70,8 +70,11 @@ export function saveReferenceSnapshot<T>(
 }
 
 // オフラインではセッションを検証できないため、操作の列と同じ基準（端末の識別）で読む。
-export function loadReferenceSnapshot<T>(kind: ReferenceKind): T | null {
-  const userId = createBrowserIdentityStore().read();
+export function loadReferenceSnapshot<T>(
+  identityReader: IdentityReader,
+  kind: ReferenceKind,
+): T | null {
+  const userId = identityReader.read();
   if (!userId) return null;
   return read<T>(kind, userId)?.data ?? null;
 }
@@ -79,10 +82,11 @@ export function loadReferenceSnapshot<T>(kind: ReferenceKind): T | null {
 // 保存済みがあるときだけ書き換える。startedAtを現在にし、書き換え前に始まった取得の
 // 遅れた結果で、書き換えが戻らないようにする。
 export function updateReferenceSnapshot<T>(
+  identityReader: IdentityReader,
   kind: ReferenceKind,
   update: (data: T) => T,
 ): void {
-  const userId = createBrowserIdentityStore().read();
+  const userId = identityReader.read();
   if (!userId) return;
   const current = read<T>(kind, userId);
   if (!current) return;

@@ -1,10 +1,12 @@
-import { type SessionReading, unconfirmedMessage } from "@/features/auth";
-import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import {
+  type SessionReader,
+  type SessionReading,
+  unconfirmedMessage,
+} from "@/features/auth";
 import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
 import { comparePositionKey } from "@/features/rounds/position-key";
 import { roundOpLog } from "@/features/rounds/round-op-log";
 import type { SyncOperation } from "@/features/rounds/sync-events";
-import { createClient } from "@/lib/supabase/client";
 import type { Preset } from "../_shared/preset-types";
 
 type CreatedOperation = Extract<SyncOperation, { type: "round.created" }>;
@@ -61,16 +63,15 @@ function buildCreatedOperation(
 }
 
 // 認証を確認する。アクセストークンが有効なら通信しないため、待つのは失効時だけで、上限はFALLBACK_WAIT_MS。時間切れは、認証を確認できない(unknown)として扱う。
-async function checkSession(): Promise<SessionReading> {
+async function checkSession(
+  sessionReader: SessionReader,
+): Promise<SessionReading> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const timeout = new Promise<null>((resolve) => {
       timer = setTimeout(() => resolve(null), FALLBACK_WAIT_MS);
     });
-    const result = await Promise.race([
-      createSupabaseAuth(createClient).readSession(),
-      timeout,
-    ]);
+    const result = await Promise.race([sessionReader.readSession(), timeout]);
     return result ?? { status: "unknown" };
   } finally {
     clearTimeout(timer);
@@ -81,17 +82,19 @@ async function checkSession(): Promise<SessionReading> {
 // 端末への保存の完了だけを待ち、サーバーへの送信は待たない。
 // 作成後の遷移と、送信中の状態の管理は呼び出し元の画面が担う。
 export async function startRound({
+  sessionReader,
   preset,
   isMounted,
   generateId,
   now,
 }: {
+  sessionReader: SessionReader;
   preset: Preset | null;
   isMounted: () => boolean;
   generateId: () => string;
   now: () => Date;
 }): Promise<StartRoundResult> {
-  const reading = await checkSession();
+  const reading = await checkSession(sessionReader);
   if (!isMounted()) return { status: "discarded" };
   // 未認証と確認できたときだけ止める。認証を確認できないときは開始する(送信は認証が回復するまで待つ)。
   if (reading.status === "unauthenticated") {

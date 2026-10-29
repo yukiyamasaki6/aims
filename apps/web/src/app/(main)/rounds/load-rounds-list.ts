@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { IdentityReader, SessionReader } from "@/features/auth";
 import type { FetchResult } from "@/features/fetch-result/fetch-result";
 import { fetchRoundDetails } from "@/features/rounds/fetch-round-detail";
 import { loadReferenceSnapshot } from "@/features/rounds/reference-snapshot";
@@ -33,9 +34,13 @@ export type LocalRoundsList = {
 
 // 端末の各組から、詳細と同じ導出(`deriveRoundState`)と表示の規則(`isRoundInProgress`)で入力中のラウンドを求める。
 // 的は保存済みの的を使う(詳細のオフラインの表示と同じ的で判定するため)。
-export async function loadLocalRoundsList(): Promise<LocalRoundsList> {
+export async function loadLocalRoundsList(
+  identityReader: IdentityReader,
+): Promise<LocalRoundsList> {
   const log = await roundOpLog.loadAll();
-  const faces = loadReferenceSnapshot<TargetFaceOption[]>("target-faces") ?? [];
+  const faces =
+    loadReferenceSnapshot<TargetFaceOption[]>(identityReader, "target-faces") ??
+    [];
   const inProgress: RoundListItem[] = [];
   const deleted = new Set<string>();
   for (const [roundId, { base, operations }] of log) {
@@ -63,6 +68,8 @@ export async function loadLocalRoundsList(): Promise<LocalRoundsList> {
 // ページ・フィルタ・ソートの条件は、この関数の引数と`fetchRoundsList`のクエリに足す。
 export async function loadRoundsList(
   supabase: SupabaseClient<Database>,
+  sessionReader: SessionReader,
+  identityReader: IdentityReader,
 ): Promise<FetchResult<LoadedRoundsList>> {
   const startedAt = Date.now();
   const log = await roundOpLog.loadAll();
@@ -81,14 +88,14 @@ export async function loadRoundsList(
 
   const retained = await roundOpLog.retainedRoundIds();
   const [list, details] = await Promise.all([
-    fetchRoundsList(supabase),
-    fetchRoundDetails(supabase, retained),
+    fetchRoundsList(supabase, sessionReader),
+    fetchRoundDetails(supabase, sessionReader, retained),
   ]);
   if (list.status !== "ok") return list;
   if (details.status !== "ok") return details;
 
   await commitRoundDetails(details.data, retained);
-  const local = await loadLocalRoundsList();
+  const local = await loadLocalRoundsList(identityReader);
   return {
     status: "ok",
     data: {

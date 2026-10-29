@@ -8,6 +8,8 @@ import { useLocalRoundsList } from "./use-local-rounds-list";
 vi.mock("./load-rounds-list", () => ({ loadLocalRoundsList: vi.fn() }));
 const load = vi.mocked(loadLocalRoundsList);
 
+const identityReader = { read: vi.fn() };
+
 const loaded: LocalRoundsList = {
   inProgress: [{ id: "r1", name: "入力中", roundDate: "2026-09-15", total: 3 }],
   deleted: new Set(),
@@ -28,11 +30,11 @@ describe("useLocalRoundsList", () => {
     load.mockReturnValue(new Promise(() => {}));
 
     // When
-    const { result } = renderHook(() => useLocalRoundsList());
+    const { result } = renderHook(() => useLocalRoundsList(identityReader));
 
     // Then
     expect(result.current.local).toBeNull();
-    expect(load).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledExactlyOnceWith(identityReader);
   });
 
   it("読み込みが終わったら、結果を返す", async () => {
@@ -40,7 +42,7 @@ describe("useLocalRoundsList", () => {
     load.mockResolvedValue(loaded);
 
     // When
-    const { result } = renderHook(() => useLocalRoundsList());
+    const { result } = renderHook(() => useLocalRoundsList(identityReader));
     await act(async () => {});
 
     // Then
@@ -50,7 +52,7 @@ describe("useLocalRoundsList", () => {
   it("FALLBACK_WAIT_MSが過ぎるまでwaitedは偽で、過ぎたら真になる", async () => {
     // Given
     load.mockResolvedValue(loaded);
-    const { result } = renderHook(() => useLocalRoundsList());
+    const { result } = renderHook(() => useLocalRoundsList(identityReader));
 
     // When
     await act(async () => {
@@ -74,7 +76,9 @@ describe("useLocalRoundsList", () => {
         resolve = r;
       }),
     );
-    const { result, unmount } = renderHook(() => useLocalRoundsList());
+    const { result, unmount } = renderHook(() =>
+      useLocalRoundsList(identityReader),
+    );
     unmount();
 
     // When
@@ -91,7 +95,7 @@ describe("useLocalRoundsList", () => {
     load.mockRejectedValue(new Error("idb"));
 
     // When
-    const { result } = renderHook(() => useLocalRoundsList());
+    const { result } = renderHook(() => useLocalRoundsList(identityReader));
     await act(async () => {});
 
     // Then

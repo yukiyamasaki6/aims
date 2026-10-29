@@ -12,6 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { retryDelayMs } from "@/features/op-log/sync-result";
 import type { RoundConfig } from "@/features/rounds/round-config";
 import { roundOpHub } from "@/features/rounds/round-op-hub";
@@ -20,6 +21,7 @@ import { roundOpStore } from "@/features/rounds/round-op-store";
 import { roundTablesFromServer } from "@/features/rounds/round-tables";
 import type { Distance, Shot } from "@/features/rounds/scorecard-types";
 import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+import { createClient } from "@/lib/supabase/client";
 import { ScorecardClient } from "./scorecard-client";
 
 const nav = vi.hoisted(() => ({
@@ -196,6 +198,8 @@ function setup(
   } = overrides;
   return render(
     <ScorecardClient
+      sessionReader={sessionReader}
+      identityReader={identityReader}
       roundId="round-1"
       loaded={{
         base: roundTablesFromServer({
@@ -281,6 +285,9 @@ function rpcSucceeds(name: string, args?: { p_shots?: unknown[] }) {
   return Promise.resolve({ data, error: null });
 }
 
+const sessionReader = createSupabaseAuth(createClient);
+const identityReader = createBrowserIdentityStore();
+
 beforeEach(async () => {
   vi.clearAllMocks();
   // IndexedDBはfake-indexeddbで代替し、テストごとに空のDBから始める。常駐の送信が前のテストのDBを読まないよう、接続を閉じてから替える。
@@ -288,7 +295,7 @@ beforeEach(async () => {
   globalThis.indexedDB = new IDBFactory();
   setOnline(true);
   // アプリでは、ルートレイアウトのOpSyncProviderがハブを起動する。
-  roundOpHub.start(createBrowserIdentityStore().read());
+  roundOpHub.start(identityReader.read(), sessionReader);
   // 起動時の全列の読み込み(DBの初回の作成を含む)がテストの操作と重ならないよう、完了を待つ。同じDBへの読み込みは起動時の読み込みより後に完了する。
   await roundOpStore.loadAll(createBrowserIdentityStore().read());
   supabase.getSession.mockResolvedValue({
@@ -1728,6 +1735,8 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     // 取得や再計算で、距離などが作り直される。
     rerender(
       <ScorecardClient
+        sessionReader={sessionReader}
+        identityReader={identityReader}
         roundId="round-1"
         loaded={{
           base: roundTablesFromServer({

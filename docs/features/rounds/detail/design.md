@@ -42,6 +42,7 @@
 ## 構成とデータの流れ
 
 - `rounds/[id]/page.tsx`: 静的な枠。`generateStaticParams`で`/rounds/_`だけをプリレンダーし（`dynamicParams = false`）、取得も`cookies()`も使わない。`/rounds/<ID>`はnext.configのrewriteで`/rounds/_`の枠へ向ける。
+- `rounds/[id]/round-detail-entry.tsx`: 画面の入口の一部。サインインの状態と端末の識別情報の読み出しを生成し、`RoundDetailClient`へ渡す。
 - `rounds/[id]/round-detail-client.tsx`: `usePathname()`のIDで取得し、状態に応じて枠の内表示かスコアカードを出す。列に削除があれば`/rounds`へ置き換えて遷移する。的の一覧は読み込みの結果に含まれ、`ScorecardClient`へそのまま渡す。端末のベースで開いたラウンドが、取り直したサーバーに無いとき(削除済みなど)は`/rounds`へ置き換えて遷移する。作成が確定せずに消えたら取り直す(`use-creation-gone.ts`)。読み込みの全体を`withinFetchTimeout`で10秒に打ち切る(`app/offline-pwa`)。
 - `rounds/[id]/round-detail-id.ts`: pathnameからUUIDを取り出す。UUIDでなければ`null`で、問い合わせずに見つからないとする。
 - `features/rounds/fetch-round-detail.ts`: ラウンド・距離・矢を1回のネスト取得、的を1回の取得で得て、`FetchResult`に分類する。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。的の取得(`fetchTargetFaces`)は、作成が未確定のラウンドの読み込みが使う。成功した一覧を端末に保存し(`features/rounds/reference-snapshot.ts`)、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。`fetchRoundDetail`は的を保存するが、代わりは持たず待ちは10秒のままである。一括の取得(`fetchRoundDetails`)も、的を保存する。

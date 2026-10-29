@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { IdentityReader, SessionReader } from "@/features/auth";
 import type { FetchView } from "@/features/fetch-result/fetch-result";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
@@ -140,15 +141,23 @@ function visiblePresets(view: FetchView<FetchedPresets>, removedIds: string[]) {
   };
 }
 
-export function RoundPresetSelect() {
+export function RoundPresetSelect({
+  sessionReader,
+  identityReader,
+}: {
+  sessionReader: SessionReader;
+  identityReader: IdentityReader;
+}) {
   const { view, retry } = useFetchResult(
-    () => fetchPresets(createClient()),
+    () => fetchPresets(createClient(), sessionReader, identityReader),
     [],
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const mountedRef = useMountedRef();
   const hydrated = useHydrated();
   const { removedIds, setPresetToDelete, dialog } = usePresetDelete(
+    sessionReader,
+    identityReader,
     mountedRef,
     (presetId) => setSelectedId((prev) => (prev === presetId ? null : prev)),
   );
@@ -158,6 +167,7 @@ export function RoundPresetSelect() {
     [...personalPresets, ...globalPresets].find((p) => p.id === selectedId) ??
     null;
   const { error, submitting, handleStart } = useStartRound(
+    sessionReader,
     selectedPreset,
     mountedRef,
   );

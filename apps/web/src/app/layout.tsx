@@ -2,9 +2,7 @@ import { SerwistProvider } from "@serwist/next/react";
 import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { LocalIdentityProvider } from "./local-identity-provider";
-import { OpSyncProvider } from "./op-sync-provider";
-import { RoundBaseRefresher } from "./round-base-refresher";
+import { RootClientEntry } from "./root-client-entry";
 import { SwUpdateActivator } from "./sw-update-activator";
 
 export const metadata: Metadata = {
@@ -36,9 +34,7 @@ export default function RootLayout({
           h-dvh（動的ビューポート高さ）にすることで実際に見えている範囲に
           常に一致させる。 */}
       <body className="h-dvh overflow-hidden">
-        <LocalIdentityProvider />
-        <OpSyncProvider />
-        <RoundBaseRefresher />
+        <RootClientEntry />
         <SwUpdateActivator />
         <SerwistProvider
           swUrl="/sw.js"

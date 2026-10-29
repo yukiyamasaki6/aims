@@ -5,8 +5,11 @@ import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { unconfirmedMessage } from "@/features/auth";
-import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import {
+  type IdentityReader,
+  type SessionReader,
+  unconfirmedMessage,
+} from "@/features/auth";
 import { compareDistancePosition } from "@/features/rounds/scorecard-scoring";
 import type { Distance } from "@/features/rounds/scorecard-types";
 import type { TargetFaceOption } from "@/features/rounds/target-face-types";
@@ -26,11 +29,12 @@ import {
 } from "./scorecard-preset";
 
 async function saveRoundAsPreset(
+  sessionReader: SessionReader,
   args: SaveRoundAsPresetArgs,
 ): Promise<{ error: string } | undefined> {
   const supabase = createClient();
 
-  const reading = await createSupabaseAuth(() => supabase).readSession();
+  const reading = await sessionReader.readSession();
 
   if (reading.status !== "authenticated") {
     return { error: unconfirmedMessage(reading.status) };
@@ -46,12 +50,16 @@ async function saveRoundAsPreset(
 }
 
 export function SavePresetDialog({
+  sessionReader,
+  identityReader,
   roundName,
   format,
   bowType,
   distances,
   targetFaces,
 }: {
+  sessionReader: SessionReader;
+  identityReader: IdentityReader;
   roundName: string;
   format: string;
   bowType: string;
@@ -66,9 +74,10 @@ export function SavePresetDialog({
     setState(start.state);
     if (start.type === "invalid") return;
 
-    const result = await saveRoundAsPreset(start.args);
+    const result = await saveRoundAsPreset(sessionReader, start.args);
     // 保存できたら、プリセット一覧を背景で再取得して保存済みを更新する（結果は使わない）。
-    if (!result) void fetchPresets(createClient());
+    if (!result)
+      void fetchPresets(createClient(), sessionReader, identityReader);
     setState((prev) => finishPresetSave(prev, result));
   }
 

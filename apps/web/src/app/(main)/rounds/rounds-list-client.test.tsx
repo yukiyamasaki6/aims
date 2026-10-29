@@ -37,6 +37,9 @@ vi.mock("@/features/rounds/round-op-log", () => ({ roundOpLog: log }));
 
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 
+const sessionReader = { readSession: vi.fn() };
+const identityReader = { read: vi.fn() };
+
 function loaded(
   items: RoundListItem[],
   overrides: Partial<LoadedRoundsList> = {},
@@ -120,7 +123,12 @@ describe("RoundsListClient", () => {
       load.mockReturnValue(new Promise(() => {}));
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
@@ -135,7 +143,12 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "ok", data: rounds });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(await screen.findByText("午前練習")).toBeInTheDocument();
@@ -151,7 +164,12 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "ok", data: [] });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(
@@ -165,7 +183,12 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "offline" });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(
@@ -182,7 +205,12 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "error", message: "読み込めませんでした。" });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -199,7 +227,12 @@ describe("RoundsListClient", () => {
       vi.useFakeTimers();
       vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
       load.mockReturnValue(new Promise(() => {}));
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // When
       await act(() => vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - 1));
@@ -226,7 +259,12 @@ describe("RoundsListClient", () => {
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({ status: "ok", data: loaded(rounds) });
       const user = userEvent.setup();
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       const retry = await screen.findByRole("button", { name: "再試行" });
 
       // When
@@ -250,7 +288,12 @@ describe("RoundsListClient", () => {
       });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(await screen.findByText("午後練習")).toBeInTheDocument();
@@ -268,7 +311,12 @@ describe("RoundsListClient", () => {
       });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByText("午後練習");
 
       // Then
@@ -286,7 +334,12 @@ describe("RoundsListClient", () => {
       deletion.deleteRound.mockReturnValue(new Promise(() => {}));
       const user = userEvent.setup();
       fetchResolves({ status: "ok", data: rounds });
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByText("午前練習");
       await openDeleteDialog(user, "午前練習");
       expect(
@@ -312,7 +365,12 @@ describe("RoundsListClient", () => {
       // Given
       const user = userEvent.setup();
       fetchResolves({ status: "ok", data: rounds });
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByText("午前練習");
       await openDeleteDialog(user, "午前練習");
 
@@ -332,7 +390,12 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "ok", data: roundsWithUnnamed });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByText("2026-09-17");
 
       // Then
@@ -348,7 +411,12 @@ describe("RoundsListClient", () => {
       // Given
       const user = userEvent.setup();
       fetchResolves({ status: "ok", data: roundsWithUnnamed });
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByText("2026-09-17");
       await openMenu(user, "2026-09-17");
 
@@ -368,7 +436,12 @@ describe("RoundsListClient", () => {
       // Given
       const user = userEvent.setup();
       fetchResolves({ status: "ok", data: roundsWithUnnamed });
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByText("2026-09-17");
       await openMenu(user, "2026-09-17");
       await user.click(await screen.findByTestId("round-delete"));
@@ -396,7 +469,12 @@ describe("RoundsListClient", () => {
       });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       const area = await screen.findByTestId("in-progress-rounds");
@@ -423,7 +501,12 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "ok", data: rounds });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByText("午前練習");
 
       // Then
@@ -441,7 +524,12 @@ describe("RoundsListClient", () => {
       });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByTestId("in-progress-rounds");
 
       // Then
@@ -455,7 +543,12 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "offline" });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       const area = await screen.findByTestId("in-progress-rounds");
@@ -476,7 +569,12 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "error", message: "読み込めませんでした。" });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByTestId("in-progress-rounds");
 
       // Then
@@ -495,13 +593,23 @@ describe("RoundsListClient", () => {
       offlineWithLocal();
 
       // When
-      const { rerender } = render(<RoundsListClient />);
+      const { rerender } = render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       const shownBeforeWait =
         screen.queryByTestId("in-progress-rounds") !== null;
       const loadingBeforeWait = screen.queryByRole("status") !== null;
       // 待ちの経過は、useLocalRoundsListのwaitedが真になることで表す。
       localList.state = { ...localList.state, waited: true };
-      rerender(<RoundsListClient />);
+      rerender(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(shownBeforeWait).toBe(false);
@@ -522,7 +630,12 @@ describe("RoundsListClient", () => {
       fetchResolves({ status: "offline" });
 
       // When
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByText("ネットワークに接続されていません");
 
       // Then
@@ -536,7 +649,12 @@ describe("RoundsListClient", () => {
       offlineWithLocal();
       fetchResolves({ status: "offline" });
       const user = userEvent.setup();
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByText("入力中の練習");
       await openDeleteDialog(user, "入力中の練習");
 
@@ -562,7 +680,12 @@ describe("RoundsListClient", () => {
         }),
       });
       const user = userEvent.setup();
-      render(<RoundsListClient />);
+      render(
+        <RoundsListClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByText("入力中の練習");
       await openDeleteDialog(user, "入力中の練習");
       await user.click(screen.getByTestId("confirm-dialog-confirm"));

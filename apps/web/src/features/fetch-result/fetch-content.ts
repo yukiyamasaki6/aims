@@ -1,6 +1,8 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { type SessionReading, unconfirmedMessage } from "@/features/auth";
-import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import {
+  type SessionReader,
+  type SessionReading,
+  unconfirmedMessage,
+} from "@/features/auth";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import {
   classifyResponse,
@@ -65,7 +67,7 @@ export async function withinFetchTimeout<T>(
 // timeoutMsは結果を返すまでの上限。超えた後も取得の開始からFETCH_TIMEOUT_MSまでは結果を待ち、
 // 終われば一度だけonLateResultへ渡す（表示には使わず、保存などに使う）。
 export async function fetchContent<T>(
-  supabase: SupabaseClient,
+  sessionReader: SessionReader,
   run: (session: { userId: string }) => PromiseLike<ResponseLike<T>>,
   opts: {
     nullIsNotFound?: boolean;
@@ -74,7 +76,7 @@ export async function fetchContent<T>(
   } = {},
 ): Promise<FetchResult<T>> {
   const { timeoutMs = FETCH_TIMEOUT_MS, onLateResult, ...loadOpts } = opts;
-  const loading = load(supabase, run, loadOpts);
+  const loading = load(sessionReader, run, loadOpts);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
     timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
@@ -114,14 +116,14 @@ async function deliverLateResult<T>(
 
 // セッションをofflineイベントと競わせて確かめる。認証済みでなければ、取得の結果をfailureで返す。
 async function confirmSession<T>(
-  supabase: SupabaseClient,
+  sessionReader: SessionReader,
   opts: { refresh?: boolean } = {},
 ): Promise<{ session: { userId: string } } | { failure: FetchResult<T> }> {
   const offline = waitOffline();
   let reading: SessionReading;
   try {
     const raced = await Promise.race([
-      createSupabaseAuth(() => supabase).readSession(opts),
+      sessionReader.readSession(opts),
       offline.promise,
     ]);
     if (raced === "offline") return { failure: { status: "offline" } };
@@ -144,20 +146,22 @@ async function confirmSession<T>(
 // 確かめたセッションでクエリし、runの中では読み直さない。
 // 認証の拒否が返ったら、更新を強制してセッションを確かめ、認証済みなら新しいセッションで1回だけ取り直す。
 async function load<T>(
-  supabase: SupabaseClient,
+  sessionReader: SessionReader,
   run: (session: { userId: string }) => PromiseLike<ResponseLike<T>>,
   opts: { nullIsNotFound?: boolean } = {},
 ): Promise<FetchResult<T>> {
   if (connectivity.isOffline()) return { status: "offline" };
 
-  const confirmed = await confirmSession<T>(supabase);
+  const confirmed = await confirmSession<T>(sessionReader);
   if ("failure" in confirmed) return confirmed.failure;
 
   try {
     let res = await run(confirmed.session);
     if (res.status === 0) return commFailure();
     if (isAuthRejected(res)) {
-      const refreshed = await confirmSession<T>(supabase, { refresh: true });
+      const refreshed = await confirmSession<T>(sessionReader, {
+        refresh: true,
+      });
       if ("failure" in refreshed) return refreshed.failure;
       res = await run(refreshed.session);
       if (res.status === 0) return commFailure();

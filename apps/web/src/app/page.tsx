@@ -1,7 +1,15 @@
+"use client";
+
+import { useState } from "react";
 import { AppLogo } from "@/components/app-logo";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { createClient } from "@/lib/supabase/client";
 import { StartButton } from "./start-button";
 
 export default function Home() {
+  // 画面を開いている間、同じ実装を保つ。
+  const [sessionReader] = useState(() => createSupabaseAuth(createClient));
+
   return (
     <>
       <AppLogo />
@@ -14,7 +22,7 @@ export default function Home() {
             アーチェリーのスコア記録・分析・共有アプリ
           </p>
         </div>
-        <StartButton />
+        <StartButton sessionReader={sessionReader} />
       </main>
     </>
   );

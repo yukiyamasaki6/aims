@@ -9,7 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LocalIdentityProvider } from "../local-identity-provider";
+import { RootClientEntry } from "../root-client-entry";
 import MainLayout from "./layout";
 
 // 入口のテスト。SDK(@supabase/ssr)と、ブラウザの保存先(localStorage)・場所(location)・通信の可否(navigator.onLine)の境界だけを差し替え、
@@ -30,6 +30,9 @@ const supabase = vi.hoisted(() => {
     },
   };
 });
+// 常駐の同期と取得の部品は、この入口の関心の外のため、何も描画しない代役に差し替える。
+vi.mock("../op-sync-provider", () => ({ OpSyncProvider: () => null }));
+vi.mock("../round-base-refresher", () => ({ RoundBaseRefresher: () => null }));
 vi.mock("@supabase/ssr", () => ({
   createBrowserClient: supabase.createBrowserClient.mockImplementation(() => ({
     auth: {
@@ -71,7 +74,7 @@ function setLocation(pathname: string, search = "") {
 }
 
 // SDKのsignOut({ scope: "local" })は、通信の成否に関わらずローカルのセッションを削除できた場合にSIGNED_OUTを発火し、以後のgetSessionはセッションを返さない。
-// 端末の識別情報は直接消さず、ルートの購読(LocalIdentityProvider。renderLayoutWithIdentityで実物を描く)がこの出来事で消す。
+// 端末の識別情報は直接消さず、ルートの購読(RootClientEntry。renderLayoutWithIdentityで実物を描く)がこの出来事で消す。
 function signOutClearingSession(result: () => Promise<unknown>) {
   supabase.signOut.mockImplementation(async () => {
     supabase.getSession.mockResolvedValue({
@@ -100,7 +103,7 @@ function renderLayout() {
 function renderLayoutWithIdentity() {
   return render(
     <>
-      <LocalIdentityProvider />
+      <RootClientEntry />
       <MainLayout>
         <p>子要素</p>
       </MainLayout>

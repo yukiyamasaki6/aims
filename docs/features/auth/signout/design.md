@@ -30,7 +30,7 @@
 - `src/features/auth/domain/auth-change.ts`: 認証状態の変化とサインインの状態の分類の規則。識別情報の更新と、セッション喪失の定義。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装（`docs/features/auth/design.md`）。この端末のサインアウト（範囲`local`）、サインインの状態の読み取り、認証状態の変化の購読を含む。接続は、渡された関数で使うたびに取得する。
 - `src/features/auth/infrastructure/browser-page-load.ts`: ページ全体の読み込みと置き換え、今の場所の読み出し。
-- `src/features/auth/application/local-identity.ts`、`src/app/local-identity-provider.tsx`、`src/features/auth/infrastructure/browser-identity-store.ts`: 端末の識別情報の記録。ルートの入口が生成して始め、認証状態の変化に追従する。読み出しは他の機能（ラウンドの参照データ、同期の開始）が使い、サインアウトの判定には使わない。
+- `src/features/auth/application/local-identity.ts`、`src/features/auth/application/identity-reader.ts`、`src/app/root-client-entry.tsx`、`src/features/auth/infrastructure/browser-identity-store.ts`: 端末の識別情報の記録と読み出し。ルートのクライアントの入口が保存先と認証の実装を1度だけ生成し、記録を始め、認証状態の変化に追従する。読み出しは他の機能（ラウンドの参照データ、同期の開始）が入口から`IdentityReader`の型で受け取って使い、サインアウトの判定には使わない。
 - `src/lib/connectivity/`: 通信の可否の約束と実装。見張りがオフラインの確認を保留するために使う。
 
 契約は次のとおりである。

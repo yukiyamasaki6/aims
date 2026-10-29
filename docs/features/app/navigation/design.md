@@ -32,7 +32,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
   - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。`/signin` は有効な遷移元があればそこへ送る（`auth/signin`）。
   - Server Action呼び出しはどちらも対象外とする。
 - `src/features/auth/application/session.ts` の手続き`createSession`の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、オンラインでの`unauthenticated`）と、一度だけの`/signin`への遷移（`replace`。今の場所を遷移元に付ける）を持つ。喪失の定義は`domain/auth-change.ts`、遷移の規則（1回、遷移元、サインアウトの実行中は委ねる）は`domain/session-end-flow.ts`。`(main)`のレイアウトが、手続きと実装を生成して見張りを始める。
-- `src/app/page.tsx` が静的な紹介画面で、`src/app/start-button.tsx` が開始ボタンの行き先をクライアントで決める。
+- `src/app/page.tsx` が静的な紹介画面の入口で、サインインの状態の読み出しを生成して`src/app/start-button.tsx`へ渡す。開始ボタンが行き先をクライアントで決める。
 - `src/components/app-logo.tsx` が、認証画面・`/`・`/offline` の左上のロゴである。
 - `src/components/logo-image.tsx` が、文字付きロゴの画像（`public/logo.svg`）を表示する。代替テキスト「AIMS」がロゴのリンクの名前になる。`app-logo.tsx` と `left-panel.tsx` が使う。
 - `public/logo.svg` は、`scripts/generate-icon.mjs` が、マークと同じ値と、`geist` のGeist SansのBoldの字形から生成する。文字は図形にし、フォントを参照しない。READMEの冒頭も同じファイルを表示する。

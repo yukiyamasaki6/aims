@@ -1,3 +1,4 @@
+import type { IdentityReader, SessionReader } from "@/features/auth";
 import { retryDelayMs } from "@/features/op-log/sync-result";
 import type { RoundOpSync } from "@/features/rounds/round-op-log";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
@@ -8,6 +9,8 @@ import { type LoadedRound, loadRoundDetail } from "./load-round-detail";
 const connectivity = createBrowserConnectivity();
 
 type RefetchEnv = {
+  sessionReader: SessionReader;
+  identityReader: IdentityReader;
   roundId: string;
   sync: RoundOpSync;
   // 取得できたら偽になる。端末のベースで開いたときだけ真で始まる。
@@ -53,9 +56,13 @@ async function refetch(env: RefetchEnv, loop: RefetchLoop) {
     handleResult(
       env,
       loop,
-      await loadRoundDetail(createClient(), env.roundId, {
-        localFallback: false,
-      }),
+      await loadRoundDetail(
+        createClient(),
+        env.sessionReader,
+        env.identityReader,
+        env.roundId,
+        { localFallback: false },
+      ),
     );
   } catch {
     // 取得の失敗は何もしない。

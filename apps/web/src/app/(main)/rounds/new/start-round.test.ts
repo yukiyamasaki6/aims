@@ -1,7 +1,9 @@
 import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
 import { roundOpLog } from "@/features/rounds/round-op-log";
+import { createClient } from "@/lib/supabase/client";
 import type { Preset } from "../_shared/preset-types";
 import { startRound } from "./start-round";
 
@@ -60,8 +62,11 @@ const preset: Preset = {
   ],
 } as unknown as Preset;
 
+const sessionReader = createSupabaseAuth(createClient);
+
 function startWith(p: Preset | null, isMounted: () => boolean = () => true) {
   return startRound({
+    sessionReader,
     preset: p,
     isMounted,
     generateId: createIdGenerator(),
@@ -232,6 +237,23 @@ describe("startRound", () => {
         error: "サインインが必要です。",
       });
       expect(hub.append).not.toHaveBeenCalled();
+    });
+
+    it("同じ読み手で続けて開始し、2回目に未認証になると、2回目は操作の列へ追記せずサインインを求めるエラーを返す", async () => {
+      // Given
+      const first = await startWith(null);
+      supabase.getSession.mockResolvedValue({ data: { session: null } });
+
+      // When
+      const second = await startWith(null);
+
+      // Then
+      expect(first.status).toBe("created");
+      expect(second).toEqual({
+        status: "failed",
+        error: "サインインが必要です。",
+      });
+      expect(hub.append).toHaveBeenCalledTimes(1);
     });
   });
 

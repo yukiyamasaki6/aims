@@ -1,5 +1,6 @@
 import { useRouter } from "next/navigation";
 import { useRef } from "react";
+import type { IdentityReader, SessionReader } from "@/features/auth";
 import { isRoundInProgress } from "@/features/rounds/round-base";
 import type { SyncOperation } from "@/features/rounds/sync-events";
 import type { TargetFaceOption } from "@/features/rounds/target-face-types";
@@ -30,25 +31,12 @@ function useCompleteRound(
   };
 }
 
-// スコアカード画面の状態と操作。
-export function useScorecard({
-  roundId,
-  loaded,
-  targetFaces,
-  onGone,
-}: {
-  roundId: string;
-  loaded: Pick<LoadedRound, "base" | "group" | "source" | "pendingServer">;
-  targetFaces: TargetFaceOption[];
-  onGone?: () => void;
-}) {
-  // 画面の状態は、ベースへ操作の列を重ねた導出だけから得る。
-  const sync = useRoundOpStack(roundId, loaded, targetFaces, onGone);
+// 矢の入力に関わる状態(未確定の矢、ポインタ、テンキー、履歴、入力)。
+function useScorecardInput(
+  sync: ReturnType<typeof useRoundOpStack>,
+  inProgress: boolean,
+) {
   const { distances, shots } = sync.state;
-  const inProgress = isRoundInProgress(sync.state);
-  const scorecardRef = useRef<HTMLDivElement>(null);
-  useReorderAnimation(scorecardRef);
-
   const pending = usePendingShots(sync.append, shots);
   const [pointer, setPointer] = useReconciledPointer(
     inProgress,
@@ -67,6 +55,37 @@ export function useScorecard({
     appendShot: pending.appendShot,
     history,
   });
+  return { pending, pointer, setPointer, keypad, history, input };
+}
+
+type ScorecardOptions = {
+  sessionReader: SessionReader;
+  identityReader: IdentityReader;
+  roundId: string;
+  loaded: Pick<LoadedRound, "base" | "group" | "source" | "pendingServer">;
+  targetFaces: TargetFaceOption[];
+  onGone?: () => void;
+};
+
+// スコアカード画面の状態と操作。
+export function useScorecard(options: ScorecardOptions) {
+  const { roundId, loaded, targetFaces } = options;
+  // 画面の状態は、ベースへ操作の列を重ねた導出だけから得る。
+  const sync = useRoundOpStack(
+    options.sessionReader,
+    options.identityReader,
+    roundId,
+    loaded,
+    targetFaces,
+    options.onGone,
+  );
+  const { distances } = sync.state;
+  const inProgress = isRoundInProgress(sync.state);
+  const scorecardRef = useRef<HTMLDivElement>(null);
+  useReorderAnimation(scorecardRef);
+
+  const { pending, pointer, setPointer, keypad, history, input } =
+    useScorecardInput(sync, inProgress);
   const editing = useDistanceEditing({
     roundId,
     distances,

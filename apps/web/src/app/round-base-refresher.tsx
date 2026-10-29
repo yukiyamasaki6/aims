@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { SessionReader } from "@/features/auth";
 import { refreshRoundBases } from "@/features/rounds/refresh-round-bases";
 import { createClient } from "@/lib/supabase/client";
 
@@ -27,14 +28,18 @@ export function createSingleFlight(run: () => Promise<void>) {
 
 // 端末が、入力中のラウンドをオフラインで開けるよう、取得を契機ごとに行う。何も表示しない。
 // 契機は、サインインの確認、通信の復帰、画面が見える状態になったとき。成功の回数は、取得の完了を確かめる手段として出す。
-export function RoundBaseRefresher() {
+export function RoundBaseRefresher({
+  sessionReader,
+}: {
+  sessionReader: SessionReader;
+}) {
   const [refreshed, setRefreshed] = useState(0);
 
   useEffect(() => {
     let active = true;
     const supabase = createClient();
     const trigger = createSingleFlight(async () => {
-      if (await refreshRoundBases(supabase)) {
+      if (await refreshRoundBases(supabase, sessionReader)) {
         if (active) setRefreshed((count) => count + 1);
       }
     });
@@ -55,7 +60,7 @@ export function RoundBaseRefresher() {
       window.removeEventListener("online", handleOnline);
       document.removeEventListener("visibilitychange", handleVisible);
     };
-  }, []);
+  }, [sessionReader]);
 
   return (
     <span

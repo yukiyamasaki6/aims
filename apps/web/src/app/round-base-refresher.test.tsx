@@ -28,6 +28,8 @@ const count = () =>
     .getByTestId("round-base-refresher")
     .getAttribute("data-refreshed-count");
 
+const sessionReader = { readSession: vi.fn() };
+
 beforeEach(() => {
   vi.clearAllMocks();
   refresh.refreshRoundBases.mockResolvedValue(true);
@@ -68,7 +70,7 @@ describe("createSingleFlight", () => {
 describe("RoundBaseRefresher", () => {
   it("セッションがあるサインインの確認で取得し、成功の回数を出す", async () => {
     // Given
-    render(<RoundBaseRefresher />);
+    render(<RoundBaseRefresher sessionReader={sessionReader} />);
     expect(count()).toBe("0");
 
     // When
@@ -80,7 +82,7 @@ describe("RoundBaseRefresher", () => {
 
   it("セッションが無いサインインの確認では、取得しない", () => {
     // Given
-    render(<RoundBaseRefresher />);
+    render(<RoundBaseRefresher sessionReader={sessionReader} />);
 
     // When
     act(() => auth.listener?.("INITIAL_SESSION", null));
@@ -92,7 +94,7 @@ describe("RoundBaseRefresher", () => {
   it("失敗した取得は、成功の回数に数えない", async () => {
     // Given
     refresh.refreshRoundBases.mockResolvedValue(false);
-    render(<RoundBaseRefresher />);
+    render(<RoundBaseRefresher sessionReader={sessionReader} />);
 
     // When
     act(() => auth.listener?.("SIGNED_IN", { user: { id: "u" } }));
@@ -104,7 +106,7 @@ describe("RoundBaseRefresher", () => {
 
   it("通信の復帰で取得する", async () => {
     // Given
-    render(<RoundBaseRefresher />);
+    render(<RoundBaseRefresher sessionReader={sessionReader} />);
 
     // When
     act(() => {
@@ -117,7 +119,7 @@ describe("RoundBaseRefresher", () => {
 
   it("画面が見える状態になったときに取得する", async () => {
     // Given
-    render(<RoundBaseRefresher />);
+    render(<RoundBaseRefresher sessionReader={sessionReader} />);
 
     // When
     act(() => {
@@ -131,7 +133,7 @@ describe("RoundBaseRefresher", () => {
   it("画面が隠れるときは取得しない", () => {
     // Given
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
-    render(<RoundBaseRefresher />);
+    render(<RoundBaseRefresher sessionReader={sessionReader} />);
 
     // When
     act(() => {
@@ -150,7 +152,9 @@ describe("RoundBaseRefresher", () => {
         finish = resolve;
       }),
     );
-    const { unmount } = render(<RoundBaseRefresher />);
+    const { unmount } = render(
+      <RoundBaseRefresher sessionReader={sessionReader} />,
+    );
     act(() => auth.listener?.("SIGNED_IN", { user: { id: "u" } }));
     unmount();
 
@@ -163,7 +167,9 @@ describe("RoundBaseRefresher", () => {
 
   it("アンマウントで購読を解除する", () => {
     // Given
-    const { unmount } = render(<RoundBaseRefresher />);
+    const { unmount } = render(
+      <RoundBaseRefresher sessionReader={sessionReader} />,
+    );
 
     // When
     unmount();
