@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { ROUND_PRESET_SELECT } from "./reference-query-constants";
 import {
   loadReferenceSnapshot,
@@ -7,6 +8,8 @@ import {
 } from "./reference-snapshot";
 
 const IDENTITY_KEY = "aims:local-user-id";
+
+const identityReader = createBrowserIdentityStore();
 
 beforeEach(() => {
   localStorage.setItem(IDENTITY_KEY, "user-1");
@@ -29,7 +32,7 @@ describe("reference-snapshot", () => {
     saveReferenceSnapshot("presets", "user-1", { a: 1 }, 100);
 
     // When
-    const loaded = loadReferenceSnapshot("presets");
+    const loaded = loadReferenceSnapshot(identityReader, "presets");
 
     // Then
     expect(loaded).toEqual({ a: 1 });
@@ -40,7 +43,7 @@ describe("reference-snapshot", () => {
     saveReferenceSnapshot("presets", "user-1", { a: 1 }, 100);
 
     // When
-    const loaded = loadReferenceSnapshot("target-faces");
+    const loaded = loadReferenceSnapshot(identityReader, "target-faces");
 
     // Then
     expect(loaded).toBeNull();
@@ -52,10 +55,26 @@ describe("reference-snapshot", () => {
     localStorage.setItem(IDENTITY_KEY, "user-2");
 
     // When
-    const loaded = loadReferenceSnapshot("presets");
+    const loaded = loadReferenceSnapshot(identityReader, "presets");
 
     // Then
     expect(loaded).toBeNull();
+  });
+
+  it("同じ読み手で、識別が変わる前後に続けて読むと、そのときの識別の保存済みを読む", () => {
+    // Given
+    saveReferenceSnapshot("presets", "user-a", { owner: "a" }, 100);
+    saveReferenceSnapshot("presets", "user-b", { owner: "b" }, 100);
+    localStorage.setItem(IDENTITY_KEY, "user-a");
+
+    // When
+    const beforeChange = loadReferenceSnapshot(identityReader, "presets");
+    localStorage.setItem(IDENTITY_KEY, "user-b");
+    const afterChange = loadReferenceSnapshot(identityReader, "presets");
+
+    // Then
+    expect(beforeChange).toEqual({ owner: "a" });
+    expect(afterChange).toEqual({ owner: "b" });
   });
 
   it("識別が無いときは読めない", () => {
@@ -64,7 +83,7 @@ describe("reference-snapshot", () => {
     localStorage.removeItem(IDENTITY_KEY);
 
     // When
-    const loaded = loadReferenceSnapshot("presets");
+    const loaded = loadReferenceSnapshot(identityReader, "presets");
 
     // Then
     expect(loaded).toBeNull();
@@ -78,7 +97,7 @@ describe("reference-snapshot", () => {
     );
 
     // When
-    const loaded = loadReferenceSnapshot("presets");
+    const loaded = loadReferenceSnapshot(identityReader, "presets");
 
     // Then
     expect(loaded).toBeNull();
@@ -96,7 +115,7 @@ describe("reference-snapshot", () => {
     );
 
     // When
-    const loaded = loadReferenceSnapshot("presets");
+    const loaded = loadReferenceSnapshot(identityReader, "presets");
 
     // Then
     expect(loaded).toEqual({ a: 1 });
@@ -112,7 +131,7 @@ describe("reference-snapshot", () => {
     localStorage.setItem("aims:reference:presets:user-1", raw);
 
     // When
-    const loaded = loadReferenceSnapshot("presets");
+    const loaded = loadReferenceSnapshot(identityReader, "presets");
 
     // Then
     expect(loaded).toBeNull();
@@ -143,7 +162,7 @@ describe("reference-snapshot", () => {
       // Given
 
       // When
-      const loaded = loadReferenceSnapshot("presets");
+      const loaded = loadReferenceSnapshot(identityReader, "presets");
 
       // Then
       expect(loaded).toBeNull();
@@ -153,7 +172,8 @@ describe("reference-snapshot", () => {
       // Given
 
       // When
-      const update = () => updateReferenceSnapshot("presets", (d) => d);
+      const update = () =>
+        updateReferenceSnapshot(identityReader, "presets", (d) => d);
 
       // Then
       expect(update).not.toThrow();
@@ -166,9 +186,9 @@ describe("reference-snapshot", () => {
 
     // When
     saveReferenceSnapshot("presets", "user-1", { v: "old" }, 100);
-    const afterOlder = loadReferenceSnapshot("presets");
+    const afterOlder = loadReferenceSnapshot(identityReader, "presets");
     saveReferenceSnapshot("presets", "user-1", { v: "newer" }, 300);
-    const afterNewer = loadReferenceSnapshot("presets");
+    const afterNewer = loadReferenceSnapshot(identityReader, "presets");
 
     // Then
     expect(afterOlder).toEqual({ v: "new" });
@@ -180,12 +200,16 @@ describe("reference-snapshot", () => {
       // Given
 
       // When
-      updateReferenceSnapshot<{ n: number }>("presets", (d) => ({
-        n: d.n + 1,
-      }));
+      updateReferenceSnapshot<{ n: number }>(
+        identityReader,
+        "presets",
+        (d) => ({
+          n: d.n + 1,
+        }),
+      );
 
       // Then
-      expect(loadReferenceSnapshot("presets")).toBeNull();
+      expect(loadReferenceSnapshot(identityReader, "presets")).toBeNull();
     });
 
     it("保存済みがあるときは書き換える", () => {
@@ -193,12 +217,45 @@ describe("reference-snapshot", () => {
       saveReferenceSnapshot("presets", "user-1", { n: 1 }, 100);
 
       // When
-      updateReferenceSnapshot<{ n: number }>("presets", (d) => ({
-        n: d.n + 1,
-      }));
+      updateReferenceSnapshot<{ n: number }>(
+        identityReader,
+        "presets",
+        (d) => ({
+          n: d.n + 1,
+        }),
+      );
 
       // Then
-      expect(loadReferenceSnapshot("presets")).toEqual({ n: 2 });
+      expect(loadReferenceSnapshot(identityReader, "presets")).toEqual({
+        n: 2,
+      });
+    });
+
+    it("同じ読み手で、識別が変わる前後に続けて書き換えると、そのときの識別の保存済みだけを書き換える", () => {
+      // Given
+      saveReferenceSnapshot("presets", "user-a", { n: 1 }, 100);
+      saveReferenceSnapshot("presets", "user-b", { n: 10 }, 100);
+      localStorage.setItem(IDENTITY_KEY, "user-a");
+      const increment = (d: { n: number }) => ({ n: d.n + 1 });
+
+      // When
+      updateReferenceSnapshot<{ n: number }>(
+        identityReader,
+        "presets",
+        increment,
+      );
+      const afterFirst = [storedData("user-a"), storedData("user-b")];
+      localStorage.setItem(IDENTITY_KEY, "user-b");
+      updateReferenceSnapshot<{ n: number }>(
+        identityReader,
+        "presets",
+        increment,
+      );
+
+      // Then
+      expect(afterFirst).toEqual([{ n: 2 }, { n: 10 }]);
+      expect(storedData("user-a")).toEqual({ n: 2 });
+      expect(storedData("user-b")).toEqual({ n: 11 });
     });
 
     it("識別が無いときは何もしない", () => {
@@ -207,7 +264,9 @@ describe("reference-snapshot", () => {
       localStorage.removeItem(IDENTITY_KEY);
 
       // When
-      updateReferenceSnapshot<{ n: number }>("presets", () => ({ n: 9 }));
+      updateReferenceSnapshot<{ n: number }>(identityReader, "presets", () => ({
+        n: 9,
+      }));
 
       // Then
       expect(storedData("user-1")).toEqual({ n: 1 });
@@ -216,13 +275,17 @@ describe("reference-snapshot", () => {
     it("書き換えの後に、書き換え前に始まった取得の保存をしても、戻らない", () => {
       // Given
       saveReferenceSnapshot("presets", "user-1", { n: 1 }, 100);
-      updateReferenceSnapshot<{ n: number }>("presets", () => ({ n: 2 }));
+      updateReferenceSnapshot<{ n: number }>(identityReader, "presets", () => ({
+        n: 2,
+      }));
 
       // When
       saveReferenceSnapshot("presets", "user-1", { n: 1 }, 100);
 
       // Then
-      expect(loadReferenceSnapshot("presets")).toEqual({ n: 2 });
+      expect(loadReferenceSnapshot(identityReader, "presets")).toEqual({
+        n: 2,
+      });
     });
 
     it("書き換えの関数が例外を投げても、保存済みを変えず、投げない", () => {
@@ -231,13 +294,15 @@ describe("reference-snapshot", () => {
 
       // When
       const update = () =>
-        updateReferenceSnapshot("presets", () => {
+        updateReferenceSnapshot(identityReader, "presets", () => {
           throw new Error("boom");
         });
 
       // Then
       expect(update).not.toThrow();
-      expect(loadReferenceSnapshot("presets")).toEqual({ n: 1 });
+      expect(loadReferenceSnapshot(identityReader, "presets")).toEqual({
+        n: 1,
+      });
     });
   });
 });

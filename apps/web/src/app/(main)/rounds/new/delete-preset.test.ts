@@ -1,5 +1,7 @@
 import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { createClient } from "@/lib/supabase/client";
 import { deletePersonalPreset } from "./delete-preset";
 
 // SupabaseのSDKは外部サービスとの境界のため、セッションの取得結果と削除の結果を任意に制御できるスタブで模す。
@@ -16,6 +18,8 @@ vi.mock("@supabase/ssr", () => ({
     from: supabase.from,
   }),
 }));
+
+const sessionReader = createSupabaseAuth(createClient);
 
 const signedInSession = { data: { session: { user: { id: "user-1" } } } };
 
@@ -38,6 +42,7 @@ describe("deletePersonalPreset", () => {
 
       // When
       const result = await deletePersonalPreset({
+        sessionReader,
         presetId: "preset-1",
         isMounted: () => true,
       });
@@ -55,6 +60,7 @@ describe("deletePersonalPreset", () => {
 
       // When
       const result = await deletePersonalPreset({
+        sessionReader,
         presetId: "preset-1",
         isMounted: () => true,
       });
@@ -67,6 +73,28 @@ describe("deletePersonalPreset", () => {
       expect(supabase.from).not.toHaveBeenCalled();
     });
 
+    it("同じ読み手で続けて削除し、2回目に未認証になると、2回目は削除せずサインインを求めるエラーを返す", async () => {
+      // Given
+      const request = {
+        sessionReader,
+        presetId: "preset-1",
+        isMounted: () => true,
+      };
+      const first = await deletePersonalPreset(request);
+      supabase.getSession.mockResolvedValue({ data: { session: null } });
+
+      // When
+      const second = await deletePersonalPreset(request);
+
+      // Then
+      expect(first).toEqual({ status: "deleted" });
+      expect(second).toEqual({
+        status: "failed",
+        error: "サインインが必要です。",
+      });
+      expect(supabase.eq).toHaveBeenCalledTimes(1);
+    });
+
     it("セッションの確認が通信失敗で不明な場合、削除せず通信エラーを返す", async () => {
       // Given
       supabase.getSession.mockResolvedValue({
@@ -76,6 +104,7 @@ describe("deletePersonalPreset", () => {
 
       // When
       const result = await deletePersonalPreset({
+        sessionReader,
         presetId: "preset-1",
         isMounted: () => true,
       });
@@ -96,6 +125,7 @@ describe("deletePersonalPreset", () => {
 
       // When
       const result = await deletePersonalPreset({
+        sessionReader,
         presetId: "preset-1",
         isMounted: () => true,
       });
@@ -110,6 +140,7 @@ describe("deletePersonalPreset", () => {
 
       // When
       const result = await deletePersonalPreset({
+        sessionReader,
         presetId: "preset-1",
         isMounted: () => true,
       });
@@ -130,6 +161,7 @@ describe("deletePersonalPreset", () => {
 
       // When
       const result = await deletePersonalPreset({
+        sessionReader,
         presetId: "preset-1",
         isMounted: () => true,
       });
@@ -147,6 +179,7 @@ describe("deletePersonalPreset", () => {
 
       // When
       const result = await deletePersonalPreset({
+        sessionReader,
         presetId: "preset-1",
         isMounted: () => true,
       });
@@ -171,6 +204,7 @@ describe("deletePersonalPreset", () => {
 
       // When
       const result = await deletePersonalPreset({
+        sessionReader,
         presetId: "preset-1",
         isMounted: () => mounted,
       });
@@ -190,6 +224,7 @@ describe("deletePersonalPreset", () => {
 
       // When
       const result = await deletePersonalPreset({
+        sessionReader,
         presetId: "preset-1",
         isMounted: () => mounted,
       });
@@ -209,6 +244,7 @@ describe("deletePersonalPreset", () => {
 
       // When
       const result = await deletePersonalPreset({
+        sessionReader,
         presetId: "preset-1",
         isMounted: () => mounted,
       });
@@ -227,6 +263,7 @@ describe("deletePersonalPreset", () => {
 
       // When
       const result = await deletePersonalPreset({
+        sessionReader,
         presetId: "preset-1",
         isMounted: () => mounted,
       });

@@ -2,7 +2,6 @@ import "fake-indexeddb/auto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import type {
   FetchedRoundDetail,
   fetchRoundDetail,
@@ -33,9 +32,8 @@ vi.mock("@/features/fetch-result/fetch-content", async (importOriginal) => ({
 }));
 
 // 端末の保存はユーザーごとに持つため、サインイン済みの端末にする。
-vi.mock("@/features/auth/infrastructure/browser-identity-store", () => ({
-  createBrowserIdentityStore: () => ({ read: () => "user-1" }),
-}));
+const identityReader = { read: () => "user-1" };
+const sessionReader = { readSession: vi.fn() };
 
 // サーバーからの取得は別のテストで確かめるため、取得関数を境界としてモックする。
 const fetcher = vi.hoisted(() => ({
@@ -62,7 +60,7 @@ vi.mock("@/features/rounds/round-op-log", async (importOriginal) => ({
       try {
         return await roundOpStore.loadStream(
           roundStreamId(roundId),
-          createBrowserIdentityStore().read(),
+          identityReader.read(),
         );
       } catch {
         return { base: undefined, entries: [] };
@@ -78,7 +76,7 @@ vi.mock("@/features/rounds/round-op-log", async (importOriginal) => ({
         try {
           return await roundOpStore.commit(
             roundStreamId(roundId),
-            createBrowserIdentityStore().read(),
+            identityReader.read(),
             base,
             startedAt,
           );
@@ -161,9 +159,7 @@ async function save(
     eventId: operation.eventId,
     streamId: roundStreamId(options.roundId ?? "round-1"),
     userId:
-      options.userId === undefined
-        ? createBrowserIdentityStore().read()
-        : options.userId,
+      options.userId === undefined ? identityReader.read() : options.userId,
     operation,
   });
 }
@@ -195,7 +191,7 @@ async function commitBase(
 ) {
   await roundOpStore.commit(
     roundStreamId("round-1"),
-    createBrowserIdentityStore().read(),
+    identityReader.read(),
     { tables, revisions },
     startedAt,
   );
@@ -206,7 +202,12 @@ describe("loadRoundDetail", () => {
     // Given
 
     // When
-    const result = await loadRoundDetail(supabase, "round-1");
+    const result = await loadRoundDetail(
+      supabase,
+      sessionReader,
+      identityReader,
+      "round-1",
+    );
 
     // Then
     expect(loaded(result)).toMatchObject({
@@ -225,7 +226,11 @@ describe("loadRoundDetail", () => {
       pendingCreationEventId: null,
       source: "server",
     });
-    expect(fetchDetail).toHaveBeenCalledWith(supabase, "round-1");
+    expect(fetchDetail).toHaveBeenCalledWith(
+      supabase,
+      sessionReader,
+      "round-1",
+    );
   });
 
   it("確定していない操作を、保存の順(seq)で返す", async () => {
@@ -235,7 +240,9 @@ describe("loadRoundDetail", () => {
     await save(shotRecorded("e3", "10"));
 
     // When
-    const data = loaded(await loadRoundDetail(supabase, "round-1"));
+    const data = loaded(
+      await loadRoundDetail(supabase, sessionReader, identityReader, "round-1"),
+    );
 
     // Then
     expect(data.group.entries.map((e) => e.eventId)).toEqual([
@@ -270,7 +277,14 @@ describe("loadRoundDetail", () => {
       });
 
       // When
-      const data = loaded(await loadRoundDetail(supabase, "round-1"));
+      const data = loaded(
+        await loadRoundDetail(
+          supabase,
+          sessionReader,
+          identityReader,
+          "round-1",
+        ),
+      );
 
       // Then
       expect(data.group.entries).toEqual([]);
@@ -286,7 +300,14 @@ describe("loadRoundDetail", () => {
       });
 
       // When
-      const data = loaded(await loadRoundDetail(supabase, "round-1"));
+      const data = loaded(
+        await loadRoundDetail(
+          supabase,
+          sessionReader,
+          identityReader,
+          "round-1",
+        ),
+      );
 
       // Then
       expect(data.group.entries.map((e) => e.eventId)).toEqual(["e1"]);
@@ -298,7 +319,12 @@ describe("loadRoundDetail", () => {
       await roundOpStore.ack("e1", 5, true, null);
 
       // When
-      const result = await loadRoundDetail(supabase, "round-1");
+      const result = await loadRoundDetail(
+        supabase,
+        sessionReader,
+        identityReader,
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({ status: "ok", data: { deleted: true } });
@@ -313,7 +339,14 @@ describe("loadRoundDetail", () => {
       await save(roundUpdated("e2", "更新後"));
 
       // When
-      const data = loaded(await loadRoundDetail(supabase, "round-1"));
+      const data = loaded(
+        await loadRoundDetail(
+          supabase,
+          sessionReader,
+          identityReader,
+          "round-1",
+        ),
+      );
 
       // Then
       expect(fetchDetail).not.toHaveBeenCalled();
@@ -336,10 +369,21 @@ describe("loadRoundDetail", () => {
       await save(roundCreated());
 
       // When
-      const data = loaded(await loadRoundDetail(supabase, "round-1"));
+      const data = loaded(
+        await loadRoundDetail(
+          supabase,
+          sessionReader,
+          identityReader,
+          "round-1",
+        ),
+      );
 
       // Then
-      expect(fetchFaces).toHaveBeenCalledWith(supabase);
+      expect(fetchFaces).toHaveBeenCalledWith(
+        supabase,
+        sessionReader,
+        identityReader,
+      );
       expect(data.targetFaces).toEqual([faceOne, faceTwo]);
     });
 
@@ -354,7 +398,12 @@ describe("loadRoundDetail", () => {
         fetchFaces.mockResolvedValue(failure);
 
         // When
-        const result = await loadRoundDetail(supabase, "round-1");
+        const result = await loadRoundDetail(
+          supabase,
+          sessionReader,
+          identityReader,
+          "round-1",
+        );
 
         // Then
         expect(result).toEqual(failure);
@@ -367,7 +416,12 @@ describe("loadRoundDetail", () => {
       fetchFaces.mockResolvedValue({ status: "offline" });
 
       // When
-      const result = await loadRoundDetail(supabase, "round-1");
+      const result = await loadRoundDetail(
+        supabase,
+        sessionReader,
+        identityReader,
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({ status: "offline" });
@@ -379,7 +433,12 @@ describe("loadRoundDetail", () => {
       await save({ type: "round.disabled", eventId: "e2", roundId: "round-1" });
 
       // When
-      const result = await loadRoundDetail(supabase, "round-1");
+      const result = await loadRoundDetail(
+        supabase,
+        sessionReader,
+        identityReader,
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({ status: "ok", data: { deleted: true } });
@@ -392,10 +451,21 @@ describe("loadRoundDetail", () => {
       await roundOpStore.ack("e-round-created", 1, true, null);
 
       // When
-      const data = loaded(await loadRoundDetail(supabase, "round-1"));
+      const data = loaded(
+        await loadRoundDetail(
+          supabase,
+          sessionReader,
+          identityReader,
+          "round-1",
+        ),
+      );
 
       // Then
-      expect(fetchDetail).toHaveBeenCalledWith(supabase, "round-1");
+      expect(fetchDetail).toHaveBeenCalledWith(
+        supabase,
+        sessionReader,
+        "round-1",
+      );
       expect(data.pendingCreationEventId).toBeNull();
       expect(data.group.entries).toEqual([]);
       expect(data.base.round.config).toEqual(server.roundConfig);
@@ -408,7 +478,12 @@ describe("loadRoundDetail", () => {
     await save({ type: "distance.disabled", eventId: "e2", distanceId: "d-a" });
 
     // When
-    const result = await loadRoundDetail(supabase, "round-1");
+    const result = await loadRoundDetail(
+      supabase,
+      sessionReader,
+      identityReader,
+      "round-1",
+    );
 
     // Then
     expect(result).toEqual({ status: "ok", data: { deleted: true } });
@@ -423,7 +498,12 @@ describe("loadRoundDetail", () => {
     });
 
     // When
-    const result = await loadRoundDetail(supabase, "round-1");
+    const result = await loadRoundDetail(
+      supabase,
+      sessionReader,
+      identityReader,
+      "round-1",
+    );
 
     // Then
     expect(result).toEqual({ status: "ok", data: { deleted: true } });
@@ -443,7 +523,12 @@ describe("loadRoundDetail", () => {
     );
 
     // When
-    const result = await loadRoundDetail(supabase, "round-1");
+    const result = await loadRoundDetail(
+      supabase,
+      sessionReader,
+      identityReader,
+      "round-1",
+    );
 
     // Then
     expect(result).toMatchObject({ status: "ok", data: { deleted: false } });
@@ -469,7 +554,9 @@ describe("loadRoundDetail", () => {
     await save(shotRecorded("e1", "9", "s-new"));
 
     // When
-    const data = loaded(await loadRoundDetail(supabase, "round-1"));
+    const data = loaded(
+      await loadRoundDetail(supabase, sessionReader, identityReader, "round-1"),
+    );
 
     // Then
     // 重ねる前はエンド1の新しい矢を指すため、重ねた結果で指す矢が無くなったことを確かめる。
@@ -495,7 +582,12 @@ describe("loadRoundDetail", () => {
     await save(shotRecorded("e2", "10"), { userId: "someone-else" });
 
     // When
-    const result = await loadRoundDetail(supabase, "round-1");
+    const result = await loadRoundDetail(
+      supabase,
+      sessionReader,
+      identityReader,
+      "round-1",
+    );
 
     // Then
     expect(loaded(result).group.entries).toEqual([]);
@@ -511,7 +603,9 @@ describe("loadRoundDetail", () => {
     });
 
     // When
-    const data = loaded(await loadRoundDetail(supabase, "round-1"));
+    const data = loaded(
+      await loadRoundDetail(supabase, sessionReader, identityReader, "round-1"),
+    );
 
     // Then
     expect(data.group.entries.map((e) => e.eventId)).toEqual(["e1", "e2"]);
@@ -529,7 +623,12 @@ describe("loadRoundDetail", () => {
       fetchDetail.mockResolvedValue(failure);
 
       // When
-      const result = await loadRoundDetail(supabase, "round-1");
+      const result = await loadRoundDetail(
+        supabase,
+        sessionReader,
+        identityReader,
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual(failure);
@@ -541,7 +640,12 @@ describe("loadRoundDetail", () => {
     fetchDetail.mockRejectedValue(new Error("boom"));
 
     // When
-    const result = await loadRoundDetail(supabase, "round-1");
+    const result = await loadRoundDetail(
+      supabase,
+      sessionReader,
+      identityReader,
+      "round-1",
+    );
 
     // Then
     expect(result).toMatchObject({ status: "error" });
@@ -553,7 +657,12 @@ describe("loadRoundDetail", () => {
     (globalThis as any).indexedDB = undefined;
 
     // When
-    const result = await loadRoundDetail(supabase, "round-1");
+    const result = await loadRoundDetail(
+      supabase,
+      sessionReader,
+      identityReader,
+      "round-1",
+    );
 
     // Then
     expect(result).toMatchObject({
@@ -579,7 +688,14 @@ describe("loadRoundDetail", () => {
         fetchDetail.mockResolvedValue(failure);
 
         // When
-        const data = loaded(await loadRoundDetail(supabase, "round-1"));
+        const data = loaded(
+          await loadRoundDetail(
+            supabase,
+            sessionReader,
+            identityReader,
+            "round-1",
+          ),
+        );
 
         // Then
         expect(data).toMatchObject({
@@ -601,7 +717,12 @@ describe("loadRoundDetail", () => {
       fetchDetail.mockResolvedValue({ status: "offline" });
 
       // When
-      const result = await loadRoundDetail(supabase, "round-1");
+      const result = await loadRoundDetail(
+        supabase,
+        sessionReader,
+        identityReader,
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({ status: "offline" });
@@ -616,7 +737,14 @@ describe("loadRoundDetail", () => {
       fetchDetail.mockResolvedValue({ status: "offline" });
 
       // When
-      const data = loaded(await loadRoundDetail(supabase, "round-1"));
+      const data = loaded(
+        await loadRoundDetail(
+          supabase,
+          sessionReader,
+          identityReader,
+          "round-1",
+        ),
+      );
 
       // Then
       expect(data.source).toBe("local");
@@ -628,7 +756,12 @@ describe("loadRoundDetail", () => {
       fetchDetail.mockResolvedValue({ status: "not-found" });
 
       // When
-      const result = await loadRoundDetail(supabase, "round-1");
+      const result = await loadRoundDetail(
+        supabase,
+        sessionReader,
+        identityReader,
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({ status: "not-found" });
@@ -640,9 +773,15 @@ describe("loadRoundDetail", () => {
       fetchDetail.mockResolvedValue({ status: "offline" });
 
       // When
-      const result = await loadRoundDetail(supabase, "round-1", {
-        localFallback: false,
-      });
+      const result = await loadRoundDetail(
+        supabase,
+        sessionReader,
+        identityReader,
+        "round-1",
+        {
+          localFallback: false,
+        },
+      );
 
       // Then
       expect(result).toEqual({ status: "offline" });
@@ -669,7 +808,14 @@ describe("loadRoundDetail", () => {
         pendingFetch();
 
         // When
-        const data = loaded(await loadRoundDetail(supabase, "round-1"));
+        const data = loaded(
+          await loadRoundDetail(
+            supabase,
+            sessionReader,
+            identityReader,
+            "round-1",
+          ),
+        );
 
         // Then
         expect(data.source).toBe("local");
@@ -680,7 +826,14 @@ describe("loadRoundDetail", () => {
         // Given
         await commitBase();
         const finish = pendingFetch();
-        const data = loaded(await loadRoundDetail(supabase, "round-1"));
+        const data = loaded(
+          await loadRoundDetail(
+            supabase,
+            sessionReader,
+            identityReader,
+            "round-1",
+          ),
+        );
 
         // When
         finish({ status: "ok", data: server });
@@ -699,7 +852,14 @@ describe("loadRoundDetail", () => {
         fetchDetail.mockResolvedValue({ status: "ok", data: server });
 
         // When
-        const data = loaded(await loadRoundDetail(supabase, "round-1"));
+        const data = loaded(
+          await loadRoundDetail(
+            supabase,
+            sessionReader,
+            identityReader,
+            "round-1",
+          ),
+        );
 
         // Then
         expect(data.source).toBe("server");
@@ -720,7 +880,14 @@ describe("loadRoundDetail", () => {
         });
 
         // When
-        const data = loaded(await loadRoundDetail(supabase, "round-1"));
+        const data = loaded(
+          await loadRoundDetail(
+            supabase,
+            sessionReader,
+            identityReader,
+            "round-1",
+          ),
+        );
 
         // Then
         expect(data).toMatchObject({
@@ -741,7 +908,12 @@ describe("loadRoundDetail", () => {
           fetchDetail.mockResolvedValue(failure);
 
           // When
-          const result = await loadRoundDetail(supabase, "round-1");
+          const result = await loadRoundDetail(
+            supabase,
+            sessionReader,
+            identityReader,
+            "round-1",
+          );
 
           // Then
           expect(result).toEqual(failure);
@@ -760,7 +932,14 @@ describe("loadRoundDetail", () => {
         );
 
         // When
-        const data = loaded(await loadRoundDetail(supabase, "round-1"));
+        const data = loaded(
+          await loadRoundDetail(
+            supabase,
+            sessionReader,
+            identityReader,
+            "round-1",
+          ),
+        );
 
         // Then
         expect(data.source).toBe("server");

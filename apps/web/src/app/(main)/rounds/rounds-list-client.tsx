@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { IdentityReader, SessionReader } from "@/features/auth";
 import { withinFetchTimeout } from "@/features/fetch-result/fetch-content";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
@@ -23,13 +24,22 @@ import { loadRoundsList } from "./load-rounds-list";
 import { roundsListView } from "./overlay-rounds-list";
 import { useLocalRoundsList } from "./use-local-rounds-list";
 
-export function RoundsListClient() {
+export function RoundsListClient({
+  sessionReader,
+  identityReader,
+}: {
+  sessionReader: SessionReader;
+  identityReader: IdentityReader;
+}) {
   const hydrated = useHydrated();
   const { view, retry } = useFetchResult(
-    () => withinFetchTimeout(loadRoundsList(createClient())),
+    () =>
+      withinFetchTimeout(
+        loadRoundsList(createClient(), sessionReader, identityReader),
+      ),
     [],
   );
-  const { local, waited } = useLocalRoundsList();
+  const { local, waited } = useLocalRoundsList(identityReader);
   // この画面で削除したラウンドのID。取得の状態が変わっても失わない。
   const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
   // 確認中のラウンド。確認の処理は、描画時のラウンドに束ねる。

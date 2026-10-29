@@ -3,8 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { Children, isValidElement, type ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import RootLayout from "./layout";
-import { LocalIdentityProvider } from "./local-identity-provider";
-import { OpSyncProvider } from "./op-sync-provider";
+import { RootClientEntry } from "./root-client-entry";
 import { SwUpdateActivator } from "./sw-update-activator";
 
 // next/font/localはNext.jsのコンパイラによる変換を前提とし、Vitest上では実行できないため境界としてモックする。
@@ -12,7 +11,7 @@ vi.mock("geist/font/sans", () => ({
   GeistSans: { variable: "geist-sans-variable" },
 }));
 
-// SupabaseのSDKは外部サービスとの境界のため、描画時にLocalIdentityProviderが購読できるだけのスタブで模す。
+// SupabaseのSDKは外部サービスとの境界のため、描画時にRootClientEntryが購読できるだけのスタブで模す。
 vi.mock("@supabase/ssr", () => ({
   createBrowserClient: () => ({
     auth: {
@@ -69,7 +68,7 @@ describe("RootLayout", () => {
       expect(screen.getByText("子要素")).toBeInTheDocument();
     });
 
-    it("端末ローカルの識別情報を追従させるLocalIdentityProviderを含める", () => {
+    it("アプリで1度だけ動く常駐の部品を始めるRootClientEntryを含める", () => {
       // Given
       const children = <p>子要素</p>;
 
@@ -77,20 +76,7 @@ describe("RootLayout", () => {
       const contents = bodyContents(children);
 
       // Then
-      expect(
-        contents.some((element) => element.type === LocalIdentityProvider),
-      ).toBe(true);
-    });
-
-    it("どの画面でも操作の列を送るOpSyncProviderを含める", () => {
-      // Given
-      const children = <p>子要素</p>;
-
-      // When
-      const contents = bodyContents(children);
-
-      // Then
-      expect(contents.some((element) => element.type === OpSyncProvider)).toBe(
+      expect(contents.some((element) => element.type === RootClientEntry)).toBe(
         true,
       );
     });

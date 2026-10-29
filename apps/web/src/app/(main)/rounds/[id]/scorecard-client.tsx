@@ -2,6 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { IdentityReader, SessionReader } from "@/features/auth";
 import { summarizeRound } from "@/features/rounds/scorecard-scoring";
 import type { TargetFaceOption } from "@/features/rounds/target-face-types";
 import { BottomFrame } from "./bottom-frame";
@@ -19,18 +20,29 @@ import {
 import { type ScorecardModel, useScorecard } from "./use-scorecard";
 
 export function ScorecardClient({
+  sessionReader,
+  identityReader,
   roundId,
   loaded,
   targetFaces,
   onGone,
 }: {
+  sessionReader: SessionReader;
+  identityReader: IdentityReader;
   roundId: string;
   loaded: Pick<LoadedRound, "base" | "group" | "source" | "pendingServer">;
   targetFaces: TargetFaceOption[];
   // 端末のベースで開いたラウンドが、取り直したサーバーに無いとき(削除済みなど)に呼ぶ。
   onGone?: () => void;
 }) {
-  const model = useScorecard({ roundId, loaded, targetFaces, onGone });
+  const model = useScorecard({
+    sessionReader,
+    identityReader,
+    roundId,
+    loaded,
+    targetFaces,
+    onGone,
+  });
   const { sync, keypad } = model;
   const { roundConfig, distances, shots, status } = sync.state;
   const keypadButtons = (
@@ -55,6 +67,8 @@ export function ScorecardClient({
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="mx-auto w-full max-w-xl shrink-0">
           <ScorecardHeaderBar
+            sessionReader={sessionReader}
+            identityReader={identityReader}
             roundId={roundId}
             roundConfig={roundConfig}
             distances={distances}

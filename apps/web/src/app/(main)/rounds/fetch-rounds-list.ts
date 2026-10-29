@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SessionReader } from "@/features/auth";
 import { fetchContent } from "@/features/fetch-result/fetch-content";
 import type { FetchResult } from "@/features/fetch-result/fetch-result";
 import type { Database } from "@/types/supabase";
@@ -36,8 +37,9 @@ function toRoundListItems(rounds: RoundRow[]): RoundListItem[] {
 
 export async function fetchRoundsList(
   supabase: SupabaseClient<Database>,
+  sessionReader: SessionReader,
 ): Promise<FetchResult<RoundListItem[]>> {
-  const result = await fetchContent(supabase as SupabaseClient, () =>
+  const result = await fetchContent(sessionReader, () =>
     supabase
       .from("rounds")
       .select(

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { IdentityReader, SessionReader } from "@/features/auth";
 import {
   FALLBACK_WAIT_MS,
   FETCH_TIMEOUT_MS,
@@ -35,12 +36,17 @@ function toFetchedPresets(rows: unknown[] | null): FetchedPresets {
 // preset_roundsのRLSは認証済みの全員に全行を見せるため、他人の個人プリセットを除くクエリの絞りが必須である。
 export async function fetchPresets(
   supabase: SupabaseClient<Database>,
+  sessionReader: SessionReader,
+  identityReader: IdentityReader,
 ): Promise<FetchResult<FetchedPresets>> {
   const startedAt = Date.now();
-  const saved = loadReferenceSnapshot<FetchedPresets>("presets");
+  const saved = loadReferenceSnapshot<FetchedPresets>(
+    identityReader,
+    "presets",
+  );
   let queriedUserId: string | undefined;
   const result = await fetchContent(
-    supabase as SupabaseClient,
+    sessionReader,
     async (session) => {
       const userId = session.userId;
       queriedUserId = userId;
@@ -75,8 +81,11 @@ export async function fetchPresets(
 }
 
 // 個人プリセットの削除が成功したら、保存済みからも除く。
-export function deletePresetFromSnapshot(presetId: string): void {
-  updateReferenceSnapshot<FetchedPresets>("presets", (d) => ({
+export function deletePresetFromSnapshot(
+  identityReader: IdentityReader,
+  presetId: string,
+): void {
+  updateReferenceSnapshot<FetchedPresets>(identityReader, "presets", (d) => ({
     ...d,
     personal: d.personal.filter((p) => p.id !== presetId),
   }));

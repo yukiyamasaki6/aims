@@ -5,6 +5,7 @@ import {
   type SupabaseClient,
 } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import {
   FALLBACK_WAIT_MS,
   FETCH_TIMEOUT_MS,
@@ -57,6 +58,10 @@ function makeSupabase(
   };
 }
 
+function readerOf(client: SupabaseClient) {
+  return createSupabaseAuth(() => client);
+}
+
 describe("fetchContent", () => {
   describe("正常系", () => {
     it("authenticatedのとき、確かめたセッションでクエリし、結果を判定して返す", async () => {
@@ -65,7 +70,7 @@ describe("fetchContent", () => {
       const run = vi.fn(async () => okResponse);
 
       // When
-      const result = await fetchContent(client, run);
+      const result = await fetchContent(readerOf(client), run);
 
       // Then
       expect(result).toEqual({ status: "ok", data: { id: "a" } });
@@ -85,7 +90,7 @@ describe("fetchContent", () => {
         .mockResolvedValueOnce(okResponse);
 
       // When
-      const result = await fetchContent(client, run);
+      const result = await fetchContent(readerOf(client), run);
 
       // Then
       expect(result).toEqual({ status: "ok", data: { id: "a" } });
@@ -99,7 +104,9 @@ describe("fetchContent", () => {
       const run = async () => ({ data: null, error: null, status: 200 });
 
       // When
-      const result = await fetchContent(client, run, { nullIsNotFound: true });
+      const result = await fetchContent(readerOf(client), run, {
+        nullIsNotFound: true,
+      });
 
       // Then
       expect(result).toEqual({ status: "not-found" });
@@ -115,7 +122,7 @@ describe("fetchContent", () => {
       });
 
       // When
-      const result = await fetchContent(client, run);
+      const result = await fetchContent(readerOf(client), run);
 
       // Then
       expect(result).toEqual({
@@ -128,14 +135,36 @@ describe("fetchContent", () => {
       // Given
       const { client } = makeSupabase(async () => ({ data: { session } }));
       const run = async () => okResponse;
-      const without = await fetchContent(client, run);
+      const without = await fetchContent(readerOf(client), run);
       localStorage.setItem("aims-local-identity", JSON.stringify({ id: "u1" }));
 
       // When
-      const withIdentity = await fetchContent(client, run);
+      const withIdentity = await fetchContent(readerOf(client), run);
 
       // Then
       expect(withIdentity).toEqual(without);
+    });
+
+    it("同じ読み手で続けて取得すると、取得のたびにサインインしている利用者を読み直す", async () => {
+      // Given
+      let current: typeof session | null = {
+        user: { id: "user-a" },
+        refresh_token: "rt-a",
+      };
+      const { client } = makeSupabase(async () => ({
+        data: { session: current },
+      }));
+      const reader = readerOf(client);
+      const run = vi.fn(async () => okResponse);
+
+      // When
+      await fetchContent(reader, run);
+      current = { user: { id: "user-b" }, refresh_token: "rt-b" };
+      await fetchContent(reader, run);
+
+      // Then
+      expect(run).toHaveBeenNthCalledWith(1, { userId: "user-a" });
+      expect(run).toHaveBeenNthCalledWith(2, { userId: "user-b" });
     });
   });
 
@@ -149,7 +178,7 @@ describe("fetchContent", () => {
       const run = vi.fn(async () => okResponse);
 
       // When
-      const result = await fetchContent(client, run);
+      const result = await fetchContent(readerOf(client), run);
 
       // Then
       expect(result).toEqual({ status: "offline" });
@@ -166,7 +195,7 @@ describe("fetchContent", () => {
       const run = vi.fn(async () => okResponse);
 
       // When
-      const result = await fetchContent(client, run);
+      const result = await fetchContent(readerOf(client), run);
 
       // Then
       expect(result).toEqual({
@@ -174,6 +203,30 @@ describe("fetchContent", () => {
         message: AUTH_REQUIRED_MESSAGE,
       });
       expect(run).not.toHaveBeenCalled();
+    });
+
+    it("同じ読み手で続けて取得し、2回目に未認証になると、2回目はクエリを実行せずサインインが必要なerrorにする", async () => {
+      // Given
+      let current: typeof session | null = session;
+      const { client } = makeSupabase(async () => ({
+        data: { session: current },
+        error: null,
+      }));
+      const reader = readerOf(client);
+      const run = vi.fn(async () => okResponse);
+
+      // When
+      const first = await fetchContent(reader, run);
+      current = null;
+      const second = await fetchContent(reader, run);
+
+      // Then
+      expect(first).toEqual({ status: "ok", data: { id: "a" } });
+      expect(second).toEqual({
+        status: "error",
+        message: AUTH_REQUIRED_MESSAGE,
+      });
+      expect(run).toHaveBeenCalledTimes(1);
     });
 
     it("getSessionがAuthRetryableFetchErrorのとき、クエリを実行せずerrorにする", async () => {
@@ -185,7 +238,7 @@ describe("fetchContent", () => {
       const run = vi.fn(async () => okResponse);
 
       // When
-      const result = await fetchContent(client, run);
+      const result = await fetchContent(readerOf(client), run);
 
       // Then
       expect(result).toEqual({
@@ -207,7 +260,7 @@ describe("fetchContent", () => {
       const run = vi.fn(async () => unauthorizedResponse);
 
       // When
-      const result = await fetchContent(client, run);
+      const result = await fetchContent(readerOf(client), run);
 
       // Then
       expect(result).toEqual({
@@ -229,7 +282,7 @@ describe("fetchContent", () => {
       const run = vi.fn(async () => unauthorizedResponse);
 
       // When
-      const result = await fetchContent(client, run);
+      const result = await fetchContent(readerOf(client), run);
 
       // Then
       expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
@@ -242,7 +295,7 @@ describe("fetchContent", () => {
       const run = vi.fn(async () => unauthorizedResponse);
 
       // When
-      const result = await fetchContent(client, run);
+      const result = await fetchContent(readerOf(client), run);
 
       // Then
       expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
@@ -257,7 +310,7 @@ describe("fetchContent", () => {
       const run = vi.fn(async () => okResponse);
 
       // When
-      const result = await fetchContent(client, run);
+      const result = await fetchContent(readerOf(client), run);
 
       // Then
       expect(result).toEqual({
@@ -271,7 +324,7 @@ describe("fetchContent", () => {
       // Given
       const { client } = makeSupabase(() => new Promise(() => {}));
       const run = vi.fn(async () => okResponse);
-      const pending = fetchContent(client, run);
+      const pending = fetchContent(readerOf(client), run);
 
       // When
       window.dispatchEvent(new Event("offline"));
@@ -286,7 +339,7 @@ describe("fetchContent", () => {
       vi.useFakeTimers();
       const { client } = makeSupabase(() => new Promise(() => {}));
       const run = vi.fn(async () => okResponse);
-      const pending = fetchContent(client, run);
+      const pending = fetchContent(readerOf(client), run);
 
       // When
       await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS);
@@ -304,7 +357,7 @@ describe("fetchContent", () => {
       vi.useFakeTimers();
       const { client } = makeSupabase(async () => ({ data: { session } }));
       const pending = fetchContent(
-        client,
+        readerOf(client),
         () => new Promise<typeof okResponse>(() => {}),
       );
 
@@ -340,7 +393,7 @@ describe("fetchContent", () => {
         };
 
         // When
-        const result = await fetchContent(client, run);
+        const result = await fetchContent(readerOf(client), run);
 
         // Then
         expect(result).toEqual({ status: "offline" });
@@ -351,7 +404,7 @@ describe("fetchContent", () => {
       // Given
       vi.useFakeTimers();
       const { client } = makeSupabase(async () => ({ data: { session } }));
-      const pending = fetchContent(client, () => {
+      const pending = fetchContent(readerOf(client), () => {
         vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
         return new Promise<typeof okResponse>(() => {});
       });
@@ -371,7 +424,10 @@ describe("fetchContent", () => {
       });
 
       // When
-      const result = await fetchContent(client, async () => okResponse);
+      const result = await fetchContent(
+        readerOf(client),
+        async () => okResponse,
+      );
 
       // Then
       expect(result).toEqual({ status: "offline" });
@@ -386,7 +442,7 @@ describe("fetchContent", () => {
       };
 
       // When
-      const result = await fetchContent(client, run);
+      const result = await fetchContent(readerOf(client), run);
 
       // Then
       expect(result).toEqual({
@@ -401,7 +457,10 @@ describe("fetchContent", () => {
       const { client } = makeSupabase(async () => ({ data: { session } }));
 
       // When
-      const result = await fetchContent(client, async () => okResponse);
+      const result = await fetchContent(
+        readerOf(client),
+        async () => okResponse,
+      );
 
       // Then
       expect(result).toEqual({ status: "ok", data: { id: "a" } });
@@ -414,7 +473,7 @@ describe("fetchContent", () => {
       const { client } = makeSupabase(async () => ({ data: { session } }));
 
       // When
-      await fetchContent(client, async () => okResponse);
+      await fetchContent(readerOf(client), async () => okResponse);
 
       // Then
       expect(removeSpy).toHaveBeenCalledWith("offline", expect.any(Function));
@@ -428,7 +487,7 @@ describe("fetchContent", () => {
       };
 
       // When
-      const result = await fetchContent(client, run);
+      const result = await fetchContent(readerOf(client), run);
 
       // Then
       expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
@@ -448,7 +507,7 @@ describe("fetchContent", () => {
       // Given
       vi.useFakeTimers();
       const { client } = makeSupabase(async () => ({ data: { session } }));
-      const pending = fetchContent(client, slowQuery(5_000), {
+      const pending = fetchContent(readerOf(client), slowQuery(5_000), {
         timeoutMs: FALLBACK_WAIT_MS,
       });
 
@@ -466,7 +525,7 @@ describe("fetchContent", () => {
       // Given
       vi.useFakeTimers();
       const { client } = makeSupabase(async () => ({ data: { session } }));
-      const pending = fetchContent(client, slowQuery(5_000), {
+      const pending = fetchContent(readerOf(client), slowQuery(5_000), {
         timeoutMs: FALLBACK_WAIT_MS,
       });
       vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
@@ -483,7 +542,7 @@ describe("fetchContent", () => {
       vi.useFakeTimers();
       const { client } = makeSupabase(async () => ({ data: { session } }));
       const onLateResult = vi.fn();
-      const pending = fetchContent(client, slowQuery(5_000), {
+      const pending = fetchContent(readerOf(client), slowQuery(5_000), {
         timeoutMs: FALLBACK_WAIT_MS,
         onLateResult,
       });
@@ -508,10 +567,14 @@ describe("fetchContent", () => {
       vi.useFakeTimers();
       const { client } = makeSupabase(async () => ({ data: { session } }));
       const onLateResult = vi.fn();
-      const pending = fetchContent(client, slowQuery(FETCH_TIMEOUT_MS + 1), {
-        timeoutMs: FALLBACK_WAIT_MS,
-        onLateResult,
-      });
+      const pending = fetchContent(
+        readerOf(client),
+        slowQuery(FETCH_TIMEOUT_MS + 1),
+        {
+          timeoutMs: FALLBACK_WAIT_MS,
+          onLateResult,
+        },
+      );
 
       // When
       await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 2);
@@ -529,7 +592,7 @@ describe("fetchContent", () => {
       const onLateResult = vi.fn();
 
       // When
-      const pending = fetchContent(client, async () => okResponse, {
+      const pending = fetchContent(readerOf(client), async () => okResponse, {
         timeoutMs: FALLBACK_WAIT_MS,
         onLateResult,
       });

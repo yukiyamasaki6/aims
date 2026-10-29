@@ -1,5 +1,7 @@
 import { AuthApiError, type SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import {
   FALLBACK_WAIT_MS,
   FETCH_TIMEOUT_MS,
@@ -18,6 +20,12 @@ import {
 } from "./reference-snapshot";
 
 const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
+
+const identityReader = createBrowserIdentityStore();
+
+function readerOf(client: SupabaseClient<Database>) {
+  return createSupabaseAuth(() => client);
+}
 
 beforeEach(() => {
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
@@ -166,7 +174,7 @@ describe("fetchRoundDetail", () => {
       });
 
       // When
-      await fetchRoundDetail(client, "round-1");
+      await fetchRoundDetail(client, readerOf(client), "round-1");
 
       // Then
       // 論理削除された距離・記録は、revisionの判定に使うため取得する。
@@ -207,7 +215,11 @@ describe("fetchRoundDetail", () => {
       });
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({
@@ -259,7 +271,11 @@ describe("fetchRoundDetail", () => {
       });
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toMatchObject({
@@ -283,7 +299,11 @@ describe("fetchRoundDetail", () => {
       });
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toMatchObject({
@@ -308,7 +328,11 @@ describe("fetchRoundDetail", () => {
       });
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result.status).toBe("ok");
@@ -332,7 +356,11 @@ describe("fetchRoundDetail", () => {
       });
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toMatchObject({ status: "ok", data: { targetFaces: [] } });
@@ -348,7 +376,11 @@ describe("fetchRoundDetail", () => {
       });
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({ status: "not-found" });
@@ -365,7 +397,11 @@ describe("fetchRoundDetail", () => {
       });
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({ status: "offline" });
@@ -380,7 +416,11 @@ describe("fetchRoundDetail", () => {
       });
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({
@@ -397,7 +437,11 @@ describe("fetchRoundDetail", () => {
       });
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({
@@ -418,7 +462,11 @@ describe("fetchRoundDetail", () => {
       })) as typeof client.auth.refreshSession;
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({
@@ -435,7 +483,11 @@ describe("fetchRoundDetail", () => {
       });
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({
@@ -452,7 +504,11 @@ describe("fetchRoundDetail", () => {
       });
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({
@@ -469,7 +525,11 @@ describe("fetchRoundDetail", () => {
       );
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({
@@ -495,7 +555,11 @@ describe("fetchRoundDetail", () => {
       }) as typeof client.auth.getSession;
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result.status).toBe("ok");
@@ -516,7 +580,11 @@ describe("fetchTargetFaces", () => {
     });
 
     // When
-    const result = await fetchTargetFaces(client);
+    const result = await fetchTargetFaces(
+      client,
+      readerOf(client),
+      identityReader,
+    );
 
     // Then
     expect(result.status).toBe("ok");
@@ -533,7 +601,11 @@ describe("fetchTargetFaces", () => {
     );
 
     // When
-    const result = await fetchTargetFaces(client);
+    const result = await fetchTargetFaces(
+      client,
+      readerOf(client),
+      identityReader,
+    );
 
     // Then
     expect(result).toEqual({
@@ -552,7 +624,11 @@ describe("fetchTargetFaces", () => {
     });
 
     // When
-    const result = await fetchTargetFaces(client);
+    const result = await fetchTargetFaces(
+      client,
+      readerOf(client),
+      identityReader,
+    );
 
     // Then
     expect(result).toEqual({ status: "offline" });
@@ -567,7 +643,11 @@ describe("fetchTargetFaces", () => {
     });
 
     // When
-    const result = await fetchTargetFaces(client);
+    const result = await fetchTargetFaces(
+      client,
+      readerOf(client),
+      identityReader,
+    );
 
     // Then
     expect(result.status).toBe("error");
@@ -581,7 +661,11 @@ describe("fetchTargetFaces", () => {
     });
 
     // When
-    const result = await fetchTargetFaces(client);
+    const result = await fetchTargetFaces(
+      client,
+      readerOf(client),
+      identityReader,
+    );
 
     // Then
     expect(result.status).toBe("error");
@@ -595,7 +679,11 @@ describe("fetchTargetFaces", () => {
     });
 
     // When
-    const result = await fetchTargetFaces(client);
+    const result = await fetchTargetFaces(
+      client,
+      readerOf(client),
+      identityReader,
+    );
 
     // Then
     expect(result).toEqual({ status: "ok", data: [] });
@@ -630,7 +718,7 @@ describe("的の端末への保存", () => {
       });
 
       // When
-      await fetchTargetFaces(client);
+      await fetchTargetFaces(client, readerOf(client), identityReader);
 
       // Then
       expect(storedFaceIds("user-1")).toEqual(["own", "common"]);
@@ -645,11 +733,17 @@ describe("的の端末への保存", () => {
       });
 
       // When
-      const result = await fetchTargetFaces(client);
+      const result = await fetchTargetFaces(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result.status === "ok" && idsOf(result.data)).toEqual(["fresh"]);
-      expect(idsOf(loadReferenceSnapshot("target-faces"))).toEqual(["fresh"]);
+      expect(
+        idsOf(loadReferenceSnapshot(identityReader, "target-faces")),
+      ).toEqual(["fresh"]);
     });
 
     it.each([
@@ -664,7 +758,11 @@ describe("的の端末への保存", () => {
       });
 
       // When
-      const result = await fetchTargetFaces(client);
+      const result = await fetchTargetFaces(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result).toEqual({ status: "ok", data: savedFaces });
@@ -679,7 +777,11 @@ describe("的の端末への保存", () => {
       });
 
       // When
-      const result = await fetchTargetFaces(client);
+      const result = await fetchTargetFaces(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result).toEqual({ status: "offline" });
@@ -695,7 +797,11 @@ describe("的の端末への保存", () => {
       });
 
       // When
-      const result = await fetchTargetFaces(client);
+      const result = await fetchTargetFaces(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result).toEqual({ status: "ok", data: savedFaces });
@@ -712,7 +818,11 @@ describe("的の端末への保存", () => {
       );
 
       // When
-      const pending = fetchTargetFaces(client);
+      const pending = fetchTargetFaces(
+        client,
+        readerOf(client),
+        identityReader,
+      );
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
       const result = await pending;
 
@@ -731,7 +841,11 @@ describe("的の端末への保存", () => {
 
       // When
       let settled = false;
-      const pending = fetchTargetFaces(client).finally(() => {
+      const pending = fetchTargetFaces(
+        client,
+        readerOf(client),
+        identityReader,
+      ).finally(() => {
         settled = true;
       });
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
@@ -758,7 +872,11 @@ describe("的の端末への保存", () => {
       );
 
       // When
-      const pending = fetchTargetFaces(client);
+      const pending = fetchTargetFaces(
+        client,
+        readerOf(client),
+        identityReader,
+      );
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
       const shown = await pending;
       localStorage.setItem(identityKey, "user-2");
@@ -779,7 +897,11 @@ describe("的の端末への保存", () => {
         undefined,
         3_000,
       );
-      const pending = fetchTargetFaces(client);
+      const pending = fetchTargetFaces(
+        client,
+        readerOf(client),
+        identityReader,
+      );
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
       await pending;
 
@@ -787,7 +909,9 @@ describe("的の端末への保存", () => {
       await vi.advanceTimersByTimeAsync(3_000);
 
       // Then
-      expect(loadReferenceSnapshot("target-faces")).toEqual(savedFaces);
+      expect(loadReferenceSnapshot(identityReader, "target-faces")).toEqual(
+        savedFaces,
+      );
     });
   });
 
@@ -800,7 +924,7 @@ describe("的の端末への保存", () => {
       });
 
       // When
-      await fetchRoundDetail(client, "round-1");
+      await fetchRoundDetail(client, readerOf(client), "round-1");
 
       // Then
       expect(storedFaceIds("user-1")).toEqual(["own", "common"]);
@@ -816,11 +940,17 @@ describe("的の端末への保存", () => {
       });
 
       // When
-      const result = await fetchRoundDetail(client, "round-1");
+      const result = await fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      );
 
       // Then
       expect(result).toEqual({ status: "offline" });
-      expect(loadReferenceSnapshot("target-faces")).toEqual(savedFaces);
+      expect(loadReferenceSnapshot(identityReader, "target-faces")).toEqual(
+        savedFaces,
+      );
     });
 
     it("待ちは10秒のままで、FALLBACK_WAIT_MSでは返らない", async () => {
@@ -835,7 +965,11 @@ describe("的の端末への保存", () => {
 
       // When
       let settled = false;
-      const pending = fetchRoundDetail(client, "round-1").finally(() => {
+      const pending = fetchRoundDetail(
+        client,
+        readerOf(client),
+        "round-1",
+      ).finally(() => {
         settled = true;
       });
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
@@ -868,7 +1002,10 @@ describe("fetchRoundDetails", () => {
     });
 
     // When
-    const result = await fetchRoundDetails(client, [uuid2, "not-a-uuid"]);
+    const result = await fetchRoundDetails(client, readerOf(client), [
+      uuid2,
+      "not-a-uuid",
+    ]);
 
     // Then
     const roundQuery = queries.find((q) => q.table === "rounds");
@@ -895,7 +1032,7 @@ describe("fetchRoundDetails", () => {
     });
 
     // When
-    const result = await fetchRoundDetails(client, []);
+    const result = await fetchRoundDetails(client, readerOf(client), []);
 
     // Then
     expect(result).toMatchObject({ status: "ok" });
@@ -913,7 +1050,7 @@ describe("fetchRoundDetails", () => {
     );
 
     // When
-    const result = await fetchRoundDetails(client, []);
+    const result = await fetchRoundDetails(client, readerOf(client), []);
 
     // Then
     expect(result).toEqual({ status: "error", message: AUTH_REQUIRED_MESSAGE });
@@ -928,7 +1065,7 @@ describe("fetchRoundDetails", () => {
     });
 
     // When
-    const result = await fetchRoundDetails(client, []);
+    const result = await fetchRoundDetails(client, readerOf(client), []);
 
     // Then
     expect(result.status).toBe("error");
@@ -959,7 +1096,7 @@ describe("fetchRoundDetails", () => {
           rounds: ok([]),
           target_faces: ok([]),
         });
-        await fetchRoundDetails(client, uuids(n));
+        await fetchRoundDetails(client, readerOf(client), uuids(n));
         queriesOf[n] = roundQueries(queries);
       }
 
@@ -987,7 +1124,7 @@ describe("fetchRoundDetails", () => {
       const all = uuids(300);
 
       // When
-      const result = await fetchRoundDetails(client, all);
+      const result = await fetchRoundDetails(client, readerOf(client), all);
 
       // Then
       expect(result.status).toBe("ok");
@@ -1005,7 +1142,7 @@ describe("fetchRoundDetails", () => {
       });
 
       // When
-      await fetchRoundDetails(client, uuids(300));
+      await fetchRoundDetails(client, readerOf(client), uuids(300));
 
       // Then
       for (const q of roundQueries(queries)) {
@@ -1023,7 +1160,10 @@ describe("fetchRoundDetails", () => {
       });
 
       // When
-      await fetchRoundDetails(client, [...junk, ...uuids(50)]);
+      await fetchRoundDetails(client, readerOf(client), [
+        ...junk,
+        ...uuids(50),
+      ]);
 
       // Then
       expect(roundQueries(queries)).toHaveLength(1);
@@ -1044,7 +1184,11 @@ describe("fetchRoundDetails", () => {
       });
 
       // When
-      const result = await fetchRoundDetails(client, uuids(51));
+      const result = await fetchRoundDetails(
+        client,
+        readerOf(client),
+        uuids(51),
+      );
 
       // Then
       if (result.status !== "ok") throw new Error("not ok");
@@ -1061,11 +1205,15 @@ describe("fetchRoundDetails", () => {
       });
 
       // When
-      const result = await fetchRoundDetails(client, uuids(51));
+      const result = await fetchRoundDetails(
+        client,
+        readerOf(client),
+        uuids(51),
+      );
 
       // Then
       expect(result.status).toBe("error");
-      expect(loadReferenceSnapshot("target-faces")).toBeNull();
+      expect(loadReferenceSnapshot(identityReader, "target-faces")).toBeNull();
     });
 
     it("取得の1つがerrorを返したら、全体を失敗とする", async () => {
@@ -1076,7 +1224,11 @@ describe("fetchRoundDetails", () => {
       });
 
       // When
-      const result = await fetchRoundDetails(client, uuids(120));
+      const result = await fetchRoundDetails(
+        client,
+        readerOf(client),
+        uuids(120),
+      );
 
       // Then
       expect(result.status).toBe("error");

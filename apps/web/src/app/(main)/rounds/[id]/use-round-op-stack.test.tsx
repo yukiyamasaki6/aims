@@ -25,6 +25,8 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: vi.fn(() => ({})) }));
 vi.mock("@/features/rounds/round-op-transport", () => ({
   sendRoundBatch: vi.fn(),
 }));
+const sessionReader = { readSession: vi.fn() };
+const identityReader = createBrowserIdentityStore();
 const send = vi.mocked(sendRoundBatch);
 const reload = vi.mocked(loadRoundDetail);
 
@@ -87,7 +89,7 @@ beforeEach(async () => {
   globalThis.indexedDB = new IDBFactory();
   setOnline(true);
   send.mockResolvedValue({ ok: true, results: [applied] });
-  roundOpHub.start(createBrowserIdentityStore().read());
+  roundOpHub.start(identityReader.read(), sessionReader);
 });
 
 afterEach(() => {
@@ -113,7 +115,7 @@ describe("useRoundOpStack", () => {
 
     // When
     const { result } = renderHook(() =>
-      useRoundOpStack("round-1", loaded(), []),
+      useRoundOpStack(sessionReader, identityReader, "round-1", loaded(), []),
     );
 
     // Then
@@ -138,7 +140,13 @@ describe("useRoundOpStack", () => {
 
     // When
     const { result } = renderHook(() =>
-      useRoundOpStack("round-1", loaded(base, group), []),
+      useRoundOpStack(
+        sessionReader,
+        identityReader,
+        "round-1",
+        loaded(base, group),
+        [],
+      ),
     );
 
     // Then
@@ -150,7 +158,7 @@ describe("useRoundOpStack", () => {
   it("操作を追記すると、保存の完了後に画面の状態へ反映し、送信の完了は待たない", async () => {
     // Given
     const { result } = renderHook(() =>
-      useRoundOpStack("round-1", loaded(), []),
+      useRoundOpStack(sessionReader, identityReader, "round-1", loaded(), []),
     );
 
     // When
@@ -167,7 +175,7 @@ describe("useRoundOpStack", () => {
   it("appendは、保存の完了で解決し、解決の時点で画面の状態へ反映済みである", async () => {
     // Given
     const { result } = renderHook(() =>
-      useRoundOpStack("round-1", loaded(), []),
+      useRoundOpStack(sessionReader, identityReader, "round-1", loaded(), []),
     );
 
     // When
@@ -182,7 +190,7 @@ describe("useRoundOpStack", () => {
   it("オフラインの間に追記した操作は、送らずに保留する", async () => {
     // Given
     const { result } = renderHook(() =>
-      useRoundOpStack("round-1", loaded(), []),
+      useRoundOpStack(sessionReader, identityReader, "round-1", loaded(), []),
     );
     setOnline(false);
 
@@ -199,7 +207,7 @@ describe("useRoundOpStack", () => {
   it("オフラインで保留した操作は、オンラインに戻ると送信する", async () => {
     // Given
     const { result } = renderHook(() =>
-      useRoundOpStack("round-1", loaded(), []),
+      useRoundOpStack(sessionReader, identityReader, "round-1", loaded(), []),
     );
     setOnline(false);
     act(() => {
@@ -220,7 +228,9 @@ describe("useRoundOpStack", () => {
 
   it("画面を閉じた後にオンラインへ戻っても、送信する", async () => {
     // Given
-    const first = renderHook(() => useRoundOpStack("round-1", loaded(), []));
+    const first = renderHook(() =>
+      useRoundOpStack(sessionReader, identityReader, "round-1", loaded(), []),
+    );
     setOnline(false);
     act(() => {
       first.result.current.append(shotRecorded());
@@ -242,7 +252,9 @@ describe("useRoundOpStack", () => {
 
   it("画面を閉じて送信した後に開き直すと、同じ送信器の状態を得て、二重に送らない", async () => {
     // Given
-    const first = renderHook(() => useRoundOpStack("round-1", loaded(), []));
+    const first = renderHook(() =>
+      useRoundOpStack(sessionReader, identityReader, "round-1", loaded(), []),
+    );
     setOnline(false);
     act(() => {
       first.result.current.append(shotRecorded());
@@ -258,7 +270,9 @@ describe("useRoundOpStack", () => {
     await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
 
     // When
-    const second = renderHook(() => useRoundOpStack("round-1", loaded(), []));
+    const second = renderHook(() =>
+      useRoundOpStack(sessionReader, identityReader, "round-1", loaded(), []),
+    );
 
     // Then
     expect(roundOpLog.round("round-1")).toBe(roundOpLog.round("round-1"));
@@ -282,7 +296,13 @@ describe("useRoundOpStack", () => {
 
       // When
       renderHook(() =>
-        useRoundOpStack("round-1", loaded(base, undefined, local), []),
+        useRoundOpStack(
+          sessionReader,
+          identityReader,
+          "round-1",
+          loaded(base, undefined, local),
+          [],
+        ),
       );
       // 2回目の取得を待ち、止まったことを確かめるために、取り直しの間隔より長く待つ。
       await waitFor(() => expect(reload).toHaveBeenCalledTimes(2));
@@ -290,9 +310,15 @@ describe("useRoundOpStack", () => {
 
       // Then
       expect(reload).toHaveBeenCalledTimes(2);
-      expect(reload).toHaveBeenCalledWith({}, "round-1", {
-        localFallback: false,
-      });
+      expect(reload).toHaveBeenCalledWith(
+        {},
+        sessionReader,
+        identityReader,
+        "round-1",
+        {
+          localFallback: false,
+        },
+      );
     });
 
     it("オフラインの間は取り直さず、onlineで取り直す", async () => {
@@ -300,7 +326,13 @@ describe("useRoundOpStack", () => {
       reload.mockResolvedValue({ status: "error", message: "x" });
       setOnline(false);
       renderHook(() =>
-        useRoundOpStack("round-1", loaded(base, undefined, local), []),
+        useRoundOpStack(
+          sessionReader,
+          identityReader,
+          "round-1",
+          loaded(base, undefined, local),
+          [],
+        ),
       );
 
       // When
@@ -326,7 +358,14 @@ describe("useRoundOpStack", () => {
 
       // When
       renderHook(() =>
-        useRoundOpStack("round-1", loaded(base, undefined, local), [], onGone),
+        useRoundOpStack(
+          sessionReader,
+          identityReader,
+          "round-1",
+          loaded(base, undefined, local),
+          [],
+          onGone,
+        ),
       );
 
       // Then
@@ -341,6 +380,8 @@ describe("useRoundOpStack", () => {
       // When
       renderHook(() =>
         useRoundOpStack(
+          sessionReader,
+          identityReader,
           "round-1",
           loaded(base, undefined, {
             ...local,
@@ -359,7 +400,13 @@ describe("useRoundOpStack", () => {
       // Given
       reload.mockResolvedValue({ status: "error", message: "x" });
       renderHook(() =>
-        useRoundOpStack("round-1", loaded(base, undefined, local), []),
+        useRoundOpStack(
+          sessionReader,
+          identityReader,
+          "round-1",
+          loaded(base, undefined, local),
+          [],
+        ),
       );
       await waitFor(() => expect(reload).toHaveBeenCalled());
       const before = reload.mock.calls.length;
@@ -380,9 +427,18 @@ describe("useRoundOpStack", () => {
       const onGone = vi.fn();
       reload.mockResolvedValue({ status: "error", message: "x" });
       renderHook(() =>
-        useRoundOpStack("round-1", loaded(base, undefined, local), [], onGone),
+        useRoundOpStack(
+          sessionReader,
+          identityReader,
+          "round-1",
+          loaded(base, undefined, local),
+          [],
+          onGone,
+        ),
       );
-      renderHook(() => useRoundOpStack("round-2", loaded(), []));
+      renderHook(() =>
+        useRoundOpStack(sessionReader, identityReader, "round-2", loaded(), []),
+      );
 
       // When
       await act(async () => {
@@ -408,7 +464,13 @@ describe("useRoundOpStack", () => {
       // Given
       reload.mockResolvedValue({ status: "error", message: "x" });
       const { result } = renderHook(() =>
-        useRoundOpStack("round-1", loaded(base, undefined, local), []),
+        useRoundOpStack(
+          sessionReader,
+          identityReader,
+          "round-1",
+          loaded(base, undefined, local),
+          [],
+        ),
       );
 
       // When
@@ -431,7 +493,16 @@ describe("useRoundOpStack", () => {
       reload.mockResolvedValue({ status: "not-found" });
 
       // When
-      renderHook(() => useRoundOpStack("round-1", loaded(), [], onGone));
+      renderHook(() =>
+        useRoundOpStack(
+          sessionReader,
+          identityReader,
+          "round-1",
+          loaded(),
+          [],
+          onGone,
+        ),
+      );
       await wait(50);
 
       // Then
@@ -466,7 +537,7 @@ describe("useRoundOpStack", () => {
         return { status: "offline" };
       });
       const { result } = renderHook(() =>
-        useRoundOpStack("round-1", loaded(), []),
+        useRoundOpStack(sessionReader, identityReader, "round-1", loaded(), []),
       );
 
       // When
@@ -484,7 +555,7 @@ describe("useRoundOpStack", () => {
     it("効いた応答だけなら、取り直さない", async () => {
       // Given
       const { result } = renderHook(() =>
-        useRoundOpStack("round-1", loaded(), []),
+        useRoundOpStack(sessionReader, identityReader, "round-1", loaded(), []),
       );
 
       // When
@@ -502,7 +573,7 @@ describe("useRoundOpStack", () => {
       send.mockResolvedValue({ ok: true, results: [ineffective] });
       reload.mockRejectedValue(new Error("fail"));
       const { result } = renderHook(() =>
-        useRoundOpStack("round-1", loaded(), []),
+        useRoundOpStack(sessionReader, identityReader, "round-1", loaded(), []),
       );
 
       // When
@@ -518,7 +589,7 @@ describe("useRoundOpStack", () => {
     it("取得中に別の知らせが届いたら、完了後にもう1度取得する", async () => {
       // Given
       // 2件の追記は1つの要求にまとまるため、操作ごとの結果を返す。
-      send.mockImplementation(async (flight) => ({
+      send.mockImplementation(async (_reader, flight) => ({
         ok: true,
         results: flight.entries.map(() => ineffective),
       }));
@@ -531,7 +602,7 @@ describe("useRoundOpStack", () => {
       );
       reload.mockResolvedValue({ status: "offline" });
       const { result } = renderHook(() =>
-        useRoundOpStack("round-1", loaded(), []),
+        useRoundOpStack(sessionReader, identityReader, "round-1", loaded(), []),
       );
       act(() => {
         result.current.append(shotRecorded());
@@ -589,7 +660,15 @@ describe("useRoundOpStack", () => {
       const group = await confirmedGroup();
 
       // When
-      renderHook(() => useRoundOpStack("round-1", loaded(full, group), []));
+      renderHook(() =>
+        useRoundOpStack(
+          sessionReader,
+          identityReader,
+          "round-1",
+          loaded(full, group),
+          [],
+        ),
+      );
 
       // Then
       await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
@@ -602,7 +681,13 @@ describe("useRoundOpStack", () => {
 
       // When
       const { result } = renderHook(() =>
-        useRoundOpStack("round-1", loaded(full, group), []),
+        useRoundOpStack(
+          sessionReader,
+          identityReader,
+          "round-1",
+          loaded(full, group),
+          [],
+        ),
       );
       await new Promise((resolve) => setTimeout(resolve, 20));
 
@@ -637,7 +722,13 @@ describe("useRoundOpStack", () => {
     it("表示が変わる記録を積むと、続けて入力中へ戻す操作も積み、状態が入力中になる", async () => {
       // Given
       const { result } = renderHook(() =>
-        useRoundOpStack("round-1", loaded(completed), faces),
+        useRoundOpStack(
+          sessionReader,
+          identityReader,
+          "round-1",
+          loaded(completed),
+          faces,
+        ),
       );
       expect(result.current.state.status).toBe("completed");
 
@@ -660,7 +751,13 @@ describe("useRoundOpStack", () => {
     it("ラウンド設定の変更では、完了のまま戻さない", async () => {
       // Given
       const { result } = renderHook(() =>
-        useRoundOpStack("round-1", loaded(completed), faces),
+        useRoundOpStack(
+          sessionReader,
+          identityReader,
+          "round-1",
+          loaded(completed),
+          faces,
+        ),
       );
 
       // When
@@ -680,7 +777,13 @@ describe("useRoundOpStack", () => {
     it("入力中のラウンドへの記録では、状態を変える操作を積まない", async () => {
       // Given
       const { result } = renderHook(() =>
-        useRoundOpStack("round-1", loaded(), faces),
+        useRoundOpStack(
+          sessionReader,
+          identityReader,
+          "round-1",
+          loaded(),
+          faces,
+        ),
       );
 
       // When

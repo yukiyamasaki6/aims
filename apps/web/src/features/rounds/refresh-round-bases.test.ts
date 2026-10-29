@@ -3,6 +3,7 @@ import {
   type SupabaseClient,
 } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import type { Database } from "@/types/supabase";
 import type { FetchedRoundDetail } from "./fetch-round-detail";
 import { commitRoundDetails, refreshRoundBases } from "./refresh-round-bases";
@@ -26,6 +27,13 @@ vi.mock("./round-op-log", () => ({
 vi.mock("./round-op-hub", () => ({
   roundOpHub: { getUserId: deps.getUserId },
 }));
+
+function refreshWith(supabase: SupabaseClient<Database>) {
+  return refreshRoundBases(
+    supabase,
+    createSupabaseAuth(() => supabase),
+  );
+}
 
 function supabaseOf(userId: string | null) {
   return {
@@ -91,13 +99,15 @@ describe("refreshRoundBases", () => {
     });
 
     // When
-    const result = await refreshRoundBases(supabaseOf("user-1"));
+    const result = await refreshWith(supabaseOf("user-1"));
 
     // Then
     expect(result).toBe(true);
-    expect(deps.fetchRoundDetails).toHaveBeenCalledWith(expect.anything(), [
-      "kept",
-    ]);
+    expect(deps.fetchRoundDetails).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      ["kept"],
+    );
     expect(deps.commit).toHaveBeenCalledTimes(2);
     expect(deps.commit).toHaveBeenCalledWith(
       "in-progress",
@@ -125,7 +135,7 @@ describe("refreshRoundBases", () => {
     });
 
     // When
-    await refreshRoundBases(supabaseOf("user-1"));
+    await refreshWith(supabaseOf("user-1"));
 
     // Then
     expect(deps.commit).toHaveBeenCalledWith("gone", null, 100, "user-1");
@@ -150,7 +160,7 @@ describe("refreshRoundBases", () => {
     let done = false;
 
     // When
-    const refreshing = refreshRoundBases(supabaseOf("user-1")).then(() => {
+    const refreshing = refreshWith(supabaseOf("user-1")).then(() => {
       done = true;
     });
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -168,7 +178,7 @@ describe("refreshRoundBases", () => {
     const supabase = supabaseWithFetchFailure();
 
     // When
-    const result = await refreshRoundBases(supabase);
+    const result = await refreshWith(supabase);
 
     // Then
     expect(result).toBe(false);
@@ -183,11 +193,38 @@ describe("refreshRoundBases", () => {
     deps.getUserId.mockReturnValue(hubUser);
 
     // When
-    const result = await refreshRoundBases(supabaseOf(sessionUser));
+    const result = await refreshWith(supabaseOf(sessionUser));
 
     // Then
     expect(result).toBe(false);
     expect(deps.fetchRoundDetails).not.toHaveBeenCalled();
+  });
+
+  it("同じ読み手で続けて更新し、2回目に未認証になると、2回目は取得せずに失敗を返す", async () => {
+    // Given
+    let sessionUser: string | null = "user-1";
+    const supabase = {
+      auth: {
+        getSession: async () => ({
+          data: { session: sessionUser ? { user: { id: sessionUser } } : null },
+        }),
+      },
+    } as unknown as SupabaseClient<Database>;
+    const reader = createSupabaseAuth(() => supabase);
+    deps.fetchRoundDetails.mockResolvedValue({
+      status: "ok",
+      data: { rounds: new Map(), startedAt: 100, userId: "user-1" },
+    });
+
+    // When
+    const first = await refreshRoundBases(supabase, reader);
+    sessionUser = null;
+    const second = await refreshRoundBases(supabase, reader);
+
+    // Then
+    expect(first).toBe(true);
+    expect(second).toBe(false);
+    expect(deps.fetchRoundDetails).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -199,7 +236,7 @@ describe("refreshRoundBases", () => {
     deps.fetchRoundDetails.mockResolvedValue(failure);
 
     // When
-    const result = await refreshRoundBases(supabaseOf("user-1"));
+    const result = await refreshWith(supabaseOf("user-1"));
 
     // Then
     expect(result).toBe(false);

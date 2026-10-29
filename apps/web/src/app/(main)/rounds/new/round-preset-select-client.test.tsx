@@ -1,7 +1,10 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import type { FetchResult } from "@/features/fetch-result/fetch-result";
+import { createClient } from "@/lib/supabase/client";
 import {
   deletePresetFromSnapshot,
   type FetchedPresets,
@@ -31,6 +34,9 @@ vi.mock("@supabase/ssr", () => ({
   }),
 }));
 
+const sessionReader = createSupabaseAuth(createClient);
+const identityReader = createBrowserIdentityStore();
+
 // ラウンドの開始(作成の操作の列への追記)は別のテストで確かめるため、開始関数を境界としてモックする。
 vi.mock("./start-round", () => ({ startRound: vi.fn() }));
 const startRoundMock = vi.mocked(startRound);
@@ -49,7 +55,12 @@ function fetchResolves(result: FetchResult<FetchedPresets>) {
 // 取得結果の一覧が出るまで待ってから返す。
 async function renderSelect(personal: Preset[], global: Preset[]) {
   fetchResolves({ status: "ok", data: { personal, global } });
-  const view = render(<RoundPresetSelect />);
+  const view = render(
+    <RoundPresetSelect
+      sessionReader={sessionReader}
+      identityReader={identityReader}
+    />,
+  );
   await waitFor(() => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
@@ -135,7 +146,12 @@ describe("RoundPresetSelect", () => {
       fetchPresetsMock.mockReturnValue(new Promise(() => {}));
 
       // When
-      render(<RoundPresetSelect />);
+      render(
+        <RoundPresetSelect
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
@@ -152,7 +168,12 @@ describe("RoundPresetSelect", () => {
       // Given
       fetchPresetsMock.mockReturnValue(new Promise(() => {}));
       const user = userEvent.setup();
-      render(<RoundPresetSelect />);
+      render(
+        <RoundPresetSelect
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // When
       await user.click(
@@ -173,7 +194,12 @@ describe("RoundPresetSelect", () => {
       fetchResolves({ status: "offline" });
 
       // When
-      render(<RoundPresetSelect />);
+      render(
+        <RoundPresetSelect
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(
@@ -187,7 +213,12 @@ describe("RoundPresetSelect", () => {
       // Given
       fetchResolves({ status: "offline" });
       const user = userEvent.setup();
-      render(<RoundPresetSelect />);
+      render(
+        <RoundPresetSelect
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByText("ネットワークに接続されていません");
 
       // When
@@ -206,7 +237,12 @@ describe("RoundPresetSelect", () => {
       fetchResolves({ status: "error", message: "読み込めませんでした。" });
 
       // When
-      render(<RoundPresetSelect />);
+      render(
+        <RoundPresetSelect
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -218,7 +254,12 @@ describe("RoundPresetSelect", () => {
       // Given
       fetchResolves({ status: "error", message: "読み込めませんでした。" });
       const user = userEvent.setup();
-      render(<RoundPresetSelect />);
+      render(
+        <RoundPresetSelect
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByRole("alert");
 
       // When
@@ -241,7 +282,12 @@ describe("RoundPresetSelect", () => {
           data: { personal: [], global: [globalPreset] },
         });
       const user = userEvent.setup();
-      render(<RoundPresetSelect />);
+      render(
+        <RoundPresetSelect
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // When
       await user.click(await screen.findByRole("button", { name: "再試行" }));
@@ -264,7 +310,12 @@ describe("RoundPresetSelect", () => {
       });
 
       // When
-      render(<RoundPresetSelect />);
+      render(
+        <RoundPresetSelect
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await waitFor(() => {
         expect(screen.queryByRole("status")).not.toBeInTheDocument();
       });
@@ -283,7 +334,12 @@ describe("RoundPresetSelect", () => {
       });
 
       // When
-      render(<RoundPresetSelect />);
+      render(
+        <RoundPresetSelect
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await waitFor(() => {
         expect(screen.queryByRole("status")).not.toBeInTheDocument();
       });
@@ -367,7 +423,12 @@ describe("RoundPresetSelect", () => {
       });
 
       // When
-      render(<RoundPresetSelect />);
+      render(
+        <RoundPresetSelect
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await waitFor(() => {
         expect(screen.queryByRole("status")).not.toBeInTheDocument();
       });
@@ -632,6 +693,7 @@ describe("RoundPresetSelect", () => {
         });
         expect(supabase.deleteEq).toHaveBeenCalledWith("id", "preset-personal");
         expect(deletePresetFromSnapshot).toHaveBeenCalledWith(
+          identityReader,
           "preset-personal",
         );
         expect(

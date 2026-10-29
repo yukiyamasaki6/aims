@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { createClient } from "@/lib/supabase/client";
 import {
   distanceCreated,
   distanceDisabled,
@@ -20,12 +22,14 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }));
 
+const sessionReader = createSupabaseAuth(createClient);
+
 // 既定では、列のユーザーはセッションのユーザーと同じ。
 function sendRoundBatch(
-  request: Parameters<typeof sendToUser>[0],
+  request: Parameters<typeof sendToUser>[1],
   expectedUserId: string | null = "user-1",
 ) {
-  return sendToUser(request, expectedUserId);
+  return sendToUser(sessionReader, request, expectedUserId);
 }
 
 function flight(...operations: SyncOperation[]) {
@@ -495,6 +499,24 @@ describe("sendRoundBatch", () => {
       failure: { cause: { type: "unauthenticated" } },
     });
     expect(client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("同じ読み手で続けて送り、2回目に未認証になると、2回目はRPCを呼ばずに認証の失敗を返す", async () => {
+    // Given
+    const reader = createSupabaseAuth(createClient);
+
+    // When
+    const first = await sendToUser(reader, flight(roundUpdated()), "user-1");
+    client.getSession.mockResolvedValue({ data: { session: null } });
+    const second = await sendToUser(reader, flight(roundUpdated()), "user-1");
+
+    // Then
+    expect(first).toMatchObject({ ok: true });
+    expect(second).toMatchObject({
+      ok: false,
+      failure: { cause: { type: "unauthenticated" } },
+    });
+    expect(client.rpc).toHaveBeenCalledTimes(1);
   });
 
   it("列のユーザーとセッションのユーザーが違えば、送らずに未認証の失敗を返す", async () => {

@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import {
   FALLBACK_WAIT_MS,
   FETCH_TIMEOUT_MS,
@@ -34,6 +36,12 @@ type Call = [method: string, args: unknown[]];
 
 // Supabaseクライアントは外部サービスとの境界のため、取得結果を返し、組み立てたクエリを記録するスタブで模す。
 // クエリビルダーはメソッドチェーンの後にawaitで結果を返すため、任意のメソッドを記録して自身を返し、thenで結果を返すProxyで表す。
+const identityReader = createBrowserIdentityStore();
+
+function readerOf(client: SupabaseClient<Database>) {
+  return createSupabaseAuth(() => client);
+}
+
 function makeSupabase(
   response: Response,
   session: unknown = { user: { id: "user-1" } },
@@ -91,7 +99,7 @@ describe("fetchPresets", () => {
       const { client, queries } = makeSupabase(ok([]));
 
       // When
-      await fetchPresets(client);
+      await fetchPresets(client, readerOf(client), identityReader);
 
       // Then
       // RLSが全行を返すことに頼らないため、他人の個人プリセットを要求しないことを確かめる。
@@ -119,7 +127,11 @@ describe("fetchPresets", () => {
       );
 
       // When
-      const result = await fetchPresets(client);
+      const result = await fetchPresets(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result.status).toBe("ok");
@@ -139,7 +151,11 @@ describe("fetchPresets", () => {
       const { client } = makeSupabase(ok([]));
 
       // When
-      const result = await fetchPresets(client);
+      const result = await fetchPresets(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result).toEqual({
@@ -153,7 +169,11 @@ describe("fetchPresets", () => {
       const { client } = makeSupabase(ok(null));
 
       // When
-      const result = await fetchPresets(client);
+      const result = await fetchPresets(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result).toEqual({
@@ -170,7 +190,11 @@ describe("fetchPresets", () => {
       const { client, queries } = makeSupabase(ok([]));
 
       // When
-      const result = await fetchPresets(client);
+      const result = await fetchPresets(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result).toEqual({ status: "offline" });
@@ -182,7 +206,11 @@ describe("fetchPresets", () => {
       const { client } = makeSupabase({ data: null, error: null, status: 0 });
 
       // When
-      const result = await fetchPresets(client);
+      const result = await fetchPresets(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result).toEqual({
@@ -200,7 +228,11 @@ describe("fetchPresets", () => {
       });
 
       // When
-      const result = await fetchPresets(client);
+      const result = await fetchPresets(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result).toEqual({
@@ -214,7 +246,11 @@ describe("fetchPresets", () => {
       const { client, queries } = makeSupabase(ok([]), null);
 
       // When
-      const result = await fetchPresets(client);
+      const result = await fetchPresets(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result).toEqual({
@@ -237,7 +273,11 @@ describe("fetchPresets", () => {
       }) as typeof client.auth.getSession;
 
       // When
-      const result = await fetchPresets(client);
+      const result = await fetchPresets(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result.status).toBe("ok");
@@ -261,7 +301,10 @@ describe("fetchPresets", () => {
         : r.status;
 
     function savedIds() {
-      const saved = loadReferenceSnapshot<FetchedPresets>("presets");
+      const saved = loadReferenceSnapshot<FetchedPresets>(
+        identityReader,
+        "presets",
+      );
       return saved ? [...saved.personal, ...saved.global].map((p) => p.id) : [];
     }
 
@@ -285,7 +328,7 @@ describe("fetchPresets", () => {
       );
 
       // When
-      await fetchPresets(client);
+      await fetchPresets(client, readerOf(client), identityReader);
 
       // Then
       const saved = savedOf("user-1");
@@ -299,7 +342,11 @@ describe("fetchPresets", () => {
       const { client } = makeSupabase(ok([row("fresh", null)]));
 
       // When
-      const result = await fetchPresets(client);
+      const result = await fetchPresets(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(ids(result)).toEqual(["fresh"]);
@@ -325,7 +372,11 @@ describe("fetchPresets", () => {
       const { client } = makeSupabase(response as Response);
 
       // When
-      const result = await fetchPresets(client);
+      const result = await fetchPresets(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result).toEqual({ status: "ok", data: savedPresets });
@@ -338,7 +389,11 @@ describe("fetchPresets", () => {
       const { client } = makeSupabase(ok([]));
 
       // When
-      const result = await fetchPresets(client);
+      const result = await fetchPresets(
+        client,
+        readerOf(client),
+        identityReader,
+      );
 
       // Then
       expect(result).toEqual({ status: "offline" });
@@ -355,7 +410,7 @@ describe("fetchPresets", () => {
       );
 
       // When
-      const pending = fetchPresets(client);
+      const pending = fetchPresets(client, readerOf(client), identityReader);
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
 
       // Then
@@ -372,7 +427,11 @@ describe("fetchPresets", () => {
       let settled = false;
 
       // When
-      const pending = fetchPresets(client).finally(() => {
+      const pending = fetchPresets(
+        client,
+        readerOf(client),
+        identityReader,
+      ).finally(() => {
         settled = true;
       });
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
@@ -396,7 +455,7 @@ describe("fetchPresets", () => {
         undefined,
         3_000,
       );
-      const pending = fetchPresets(client);
+      const pending = fetchPresets(client, readerOf(client), identityReader);
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
       await expect(pending).resolves.toEqual({
         status: "ok",
@@ -419,7 +478,7 @@ describe("fetchPresets", () => {
         undefined,
         3_000,
       );
-      const pending = fetchPresets(client);
+      const pending = fetchPresets(client, readerOf(client), identityReader);
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
       await pending;
       localStorage.setItem(identityKey, "user-2");
@@ -444,7 +503,7 @@ describe("fetchPresets", () => {
         undefined,
         3_000,
       );
-      const pending = fetchPresets(client);
+      const pending = fetchPresets(client, readerOf(client), identityReader);
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
       await pending;
 
@@ -452,7 +511,9 @@ describe("fetchPresets", () => {
       await vi.advanceTimersByTimeAsync(3_000);
 
       // Then
-      expect(loadReferenceSnapshot("presets")).toEqual(savedPresets);
+      expect(loadReferenceSnapshot(identityReader, "presets")).toEqual(
+        savedPresets,
+      );
     });
 
     it("deletePresetFromSnapshotで個人から除かれ、削除前に始まった取得の遅れた結果では戻らない", async () => {
@@ -474,16 +535,17 @@ describe("fetchPresets", () => {
         undefined,
         3_000,
       );
-      const pending = fetchPresets(client);
+      const pending = fetchPresets(client, readerOf(client), identityReader);
       await vi.advanceTimersByTimeAsync(FALLBACK_WAIT_MS);
       await pending;
-      deletePresetFromSnapshot("mine");
+      deletePresetFromSnapshot(identityReader, "mine");
 
       // When
       await vi.advanceTimersByTimeAsync(3_000);
 
       // Then
       const saved = loadReferenceSnapshot<{ personal: { id: string }[] }>(
+        identityReader,
         "presets",
       );
       expect(saved?.personal.map((p) => p.id)).toEqual(["keep"]);

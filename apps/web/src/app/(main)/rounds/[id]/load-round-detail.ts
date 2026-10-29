@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { IdentityReader, SessionReader } from "@/features/auth";
 import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
 import {
   FETCH_ERROR_MESSAGE,
@@ -58,9 +59,10 @@ const DELETED: FetchResult<LoadedRoundDetail> = {
 // 反映済みの判定は、確定のrevisionと取得のrevisionの比較(round-base.ts)で、取得を端末の組へ反映する中で行う。
 async function loadFromServer(
   supabase: SupabaseClient<Database>,
+  sessionReader: SessionReader,
   roundId: string,
 ): Promise<FetchResult<LoadedRoundDetail>> {
-  const fetched = await fetchRoundDetail(supabase, roundId);
+  const fetched = await fetchRoundDetail(supabase, sessionReader, roundId);
   if (fetched.status !== "ok") return fetched;
 
   const { revisions, roundConfig, status, distances, shots, targetFaces } =
@@ -107,11 +109,17 @@ async function withinWait<T>(
 
 // 端末の組で開くかを決め、端末のベースがあるときは開くための材料を返す。
 // 的の一覧の保存分が無いときは開かない(サーバーの取得を待つ)。
-function localRound(group: RoundGroup): LoadedRound | null {
+function localRound(
+  group: RoundGroup,
+  identityReader: IdentityReader,
+): LoadedRound | null {
   const stored = group.base?.base;
   if (!stored) return null;
   if (!roundStreamRules.keeps(stored, group.entries)) return null;
-  const targetFaces = loadReferenceSnapshot<TargetFaceOption[]>("target-faces");
+  const targetFaces = loadReferenceSnapshot<TargetFaceOption[]>(
+    identityReader,
+    "target-faces",
+  );
   if (targetFaces === null) return null;
   return {
     base: stored.tables,
@@ -127,6 +135,8 @@ function localRound(group: RoundGroup): LoadedRound | null {
 // 的の一覧がそろわないとき(取得できず、保存分も無い)は、内容を返さず、取得の結果(`offline`か`error`)を返す。
 export async function loadRoundDetail(
   supabase: SupabaseClient<Database>,
+  sessionReader: SessionReader,
+  identityReader: IdentityReader,
   roundId: string,
   { localFallback = true }: LoadOptions = {},
 ): Promise<FetchResult<LoadedRoundDetail>> {
@@ -140,7 +150,11 @@ export async function loadRoundDetail(
     const { operation } = entry;
     if (operation.type !== "round.created") continue;
     if (entry.ackedRevision !== undefined) continue;
-    const faces = await fetchTargetFaces(supabase);
+    const faces = await fetchTargetFaces(
+      supabase,
+      sessionReader,
+      identityReader,
+    );
     if (faces.status !== "ok") return faces;
     return {
       status: "ok",
@@ -156,13 +170,13 @@ export async function loadRoundDetail(
   }
 
   // 取得は拒否しない。画面が「読み込み中」に固定されないよう、失敗はerrorにする。
-  const server = loadFromServer(supabase, roundId).catch(
+  const server = loadFromServer(supabase, sessionReader, roundId).catch(
     (): FetchResult<LoadedRoundDetail> => ({
       status: "error",
       message: FETCH_ERROR_MESSAGE,
     }),
   );
-  const local = localFallback ? localRound(first) : null;
+  const local = localFallback ? localRound(first, identityReader) : null;
   if (!local) return server;
 
   const raced = await withinWait(server, FALLBACK_WAIT_MS);

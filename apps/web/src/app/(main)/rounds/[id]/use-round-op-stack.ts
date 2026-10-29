@@ -6,6 +6,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import type { IdentityReader, SessionReader } from "@/features/auth";
 import { deriveTables } from "@/features/rounds/round-op-apply";
 import { type RoundOpSync, roundOpLog } from "@/features/rounds/round-op-log";
 import {
@@ -32,6 +33,8 @@ export type RoundOpStack = {
 // 端末のベースで開いたときは、取得が済む(`pendingServer`)、通信が戻る、画面が見える状態になる、または`retryDelayMs`の間隔が過ぎるたびに取り直す。
 // 取り直したサーバーにラウンドが無いとき(削除済みなど)は、`onGone`を呼ぶ。
 export function useRoundOpStack(
+  sessionReader: SessionReader,
+  identityReader: IdentityReader,
   roundId: string,
   loaded: Pick<LoadedRound, "base" | "group" | "source" | "pendingServer">,
   targetFaces: ScoringTargetFace[],
@@ -60,6 +63,8 @@ export function useRoundOpStack(
   useEffect(
     () =>
       startBaseRefetch({
+        sessionReader,
+        identityReader,
         roundId,
         sync,
         stale,
@@ -67,7 +72,7 @@ export function useRoundOpStack(
         pendingServer: pendingServerRef.current,
         requestRefetch,
       }),
-    [sync, roundId],
+    [sync, roundId, sessionReader, identityReader],
   );
 
   useEffect(() => {

@@ -26,7 +26,7 @@ type ReadingOf<Status extends SessionStatus> = Status extends "authenticated"
 // サインインの状態を読む。保存先のセッションを確かめ、必要なら認証サービスで更新する。
 // 確かめられないとき(通信失敗、接続を得られない、呼び出しが投げた)はunknownを返す。例外は投げない。
 // refreshが真なら、保存先のセッションの更新を強制して確かめる(取得が認証の拒否で返ったとき)。
-type SessionReader = {
+export type SessionReader = {
   readSession(options?: { refresh?: boolean }): Promise<SessionReading>;
 };
 

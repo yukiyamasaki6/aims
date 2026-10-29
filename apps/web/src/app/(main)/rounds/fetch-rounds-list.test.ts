@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { FETCH_ERROR_MESSAGE } from "@/features/fetch-result/fetch-result";
 import type { Database } from "@/types/supabase";
 import { fetchRoundsList } from "./fetch-rounds-list";
@@ -59,7 +60,10 @@ describe("fetchRoundsList", () => {
       const { client, queries } = makeSupabase(ok([]));
 
       // When
-      await fetchRoundsList(client);
+      await fetchRoundsList(
+        client,
+        createSupabaseAuth(() => client),
+      );
 
       // Then
       expect(queries).toEqual([
@@ -116,7 +120,10 @@ describe("fetchRoundsList", () => {
       );
 
       // When
-      const result = await fetchRoundsList(client);
+      const result = await fetchRoundsList(
+        client,
+        createSupabaseAuth(() => client),
+      );
 
       // Then
       expect(result).toEqual({
@@ -145,7 +152,10 @@ describe("fetchRoundsList", () => {
       const { client } = makeSupabase(ok([]));
 
       // When
-      const result = await fetchRoundsList(client);
+      const result = await fetchRoundsList(
+        client,
+        createSupabaseAuth(() => client),
+      );
 
       // Then
       expect(result).toEqual({ status: "ok", data: [] });
@@ -158,7 +168,10 @@ describe("fetchRoundsList", () => {
       const { client } = makeSupabase(ok(null));
 
       // When
-      const result = await fetchRoundsList(client);
+      const result = await fetchRoundsList(
+        client,
+        createSupabaseAuth(() => client),
+      );
 
       // Then
       expect(result).toEqual({ status: "ok", data: [] });
@@ -170,7 +183,10 @@ describe("fetchRoundsList", () => {
       const { client } = makeSupabase({ data: null, error: null, status: 0 });
 
       // When
-      const result = await fetchRoundsList(client);
+      const result = await fetchRoundsList(
+        client,
+        createSupabaseAuth(() => client),
+      );
 
       // Then
       expect(result).toEqual({
@@ -188,7 +204,10 @@ describe("fetchRoundsList", () => {
       });
 
       // When
-      const result = await fetchRoundsList(client);
+      const result = await fetchRoundsList(
+        client,
+        createSupabaseAuth(() => client),
+      );
 
       // Then
       expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
@@ -199,7 +218,10 @@ describe("fetchRoundsList", () => {
       const { client, queries } = makeSupabase(ok([]), null);
 
       // When
-      const result = await fetchRoundsList(client);
+      const result = await fetchRoundsList(
+        client,
+        createSupabaseAuth(() => client),
+      );
 
       // Then
       expect(result).toEqual({

@@ -2,8 +2,11 @@ import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import type { Distance } from "@/features/rounds/scorecard-types";
 import type { TargetFaceOption } from "@/features/rounds/target-face-types";
+import { createClient } from "@/lib/supabase/client";
 import { fetchPresets } from "../_shared/fetch-presets";
 import { SavePresetDialog } from "./save-preset-dialog";
 
@@ -52,6 +55,9 @@ const distanceB: Distance = {
   is_marked: true,
 };
 
+const sessionReader = createSupabaseAuth(createClient);
+const identityReader = createBrowserIdentityStore();
+
 // 応答を返すまでRPCを保留し、送信中の状態を検証できるようにする。
 function holdRpc() {
   let resolveRpc: (value: { error: null }) => void = () => {};
@@ -69,6 +75,8 @@ function setup(
   const user = userEvent.setup();
   render(
     <SavePresetDialog
+      sessionReader={sessionReader}
+      identityReader={identityReader}
       roundName="午前練習"
       format="outdoor"
       bowType="recurve"
@@ -324,6 +332,30 @@ describe("SavePresetDialog", () => {
       ).toBeInTheDocument();
       expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
       expect(supabase.rpc).not.toHaveBeenCalled();
+    });
+
+    it("同じ読み手で続けて保存し、2回目に未認証になると、2回目は送信せず、エラーを表示してダイアログを開いたままにする", async () => {
+      // Given
+      const { user } = setup();
+      await user.click(screen.getByTestId("save-as-preset-trigger"));
+      await user.click(screen.getByTestId("save-as-preset-confirm"));
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("save-as-preset-name"),
+        ).not.toBeInTheDocument();
+      });
+      supabase.getSession.mockResolvedValue({ data: { session: null } });
+      await user.click(screen.getByTestId("save-as-preset-trigger"));
+
+      // When
+      await user.click(screen.getByTestId("save-as-preset-confirm"));
+
+      // Then
+      expect(
+        await screen.findByText("サインインが必要です。"),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
+      expect(supabase.rpc).toHaveBeenCalledTimes(1);
     });
 
     it("セッションの確認が通信失敗で不明な場合は、サインインを求めず通信エラーを表示してダイアログを開いたままにする", async () => {

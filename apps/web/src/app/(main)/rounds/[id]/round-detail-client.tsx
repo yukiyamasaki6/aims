@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { IdentityReader, SessionReader } from "@/features/auth";
 import { withinFetchTimeout } from "@/features/fetch-result/fetch-content";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
@@ -29,17 +30,45 @@ const NOT_FOUND = { message: "ラウンドが見つかりません。" };
 
 // pathnameは取得のkeyにだけ使い、初回描画は取得中の枠になる。
 // SSRのHTMLと、Service Workerが別URLへ返す枠のHTMLが同一になり、水和が一致する。
-export function RoundDetailClient() {
+export function RoundDetailClient({
+  sessionReader,
+  identityReader,
+}: {
+  sessionReader: SessionReader;
+  identityReader: IdentityReader;
+}) {
   const roundId = parseRoundId(usePathname());
-  return <RoundDetailLoader key={roundId ?? "invalid"} roundId={roundId} />;
+  return (
+    <RoundDetailLoader
+      key={roundId ?? "invalid"}
+      roundId={roundId}
+      sessionReader={sessionReader}
+      identityReader={identityReader}
+    />
+  );
 }
 
-function RoundDetailLoader({ roundId }: { roundId: string | null }) {
+function RoundDetailLoader({
+  roundId,
+  sessionReader,
+  identityReader,
+}: {
+  roundId: string | null;
+  sessionReader: SessionReader;
+  identityReader: IdentityReader;
+}) {
   const router = useRouter();
   const { view, retry } = useFetchResult(
     () =>
       roundId
-        ? withinFetchTimeout(loadRoundDetail(createClient(), roundId))
+        ? withinFetchTimeout(
+            loadRoundDetail(
+              createClient(),
+              sessionReader,
+              identityReader,
+              roundId,
+            ),
+          )
         : Promise.resolve({ status: "not-found" as const }),
     [roundId],
   );
@@ -57,6 +86,8 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
   if (roundId && view.status === "ok" && !view.data.deleted) {
     return (
       <ScorecardClient
+        sessionReader={sessionReader}
+        identityReader={identityReader}
         roundId={roundId}
         loaded={view.data}
         onGone={() => router.replace("/rounds")}

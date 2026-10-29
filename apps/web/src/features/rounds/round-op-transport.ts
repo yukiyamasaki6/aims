@@ -1,5 +1,5 @@
 import type { PostgrestError } from "@supabase/supabase-js";
-import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import type { SessionReader } from "@/features/auth";
 import type {
   OpFlight,
   OpResult,
@@ -300,11 +300,12 @@ async function sendShots(
 // 要求の操作を、種類ごとのRPCで送る。サーバーの判定結果を、要求の操作と同じ順で返す。
 // `expectedUserId`は列のユーザー。セッションのユーザーと違うときは未認証として保留する(別のユーザーの認証で送らないため)。nullの列は照合しない。
 export async function sendRoundBatch(
+  sessionReader: SessionReader,
   flight: OpFlight<SyncOperation>,
   expectedUserId: string | null,
 ): Promise<SendOutcome> {
   const supabase = createClient();
-  const reading = await createSupabaseAuth(() => supabase).readSession();
+  const reading = await sessionReader.readSession();
   if (reading.status !== "authenticated") {
     return { ok: false, failure: authFailureResult(reading) };
   }

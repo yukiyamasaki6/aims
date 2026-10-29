@@ -11,9 +11,9 @@ const hub = vi.hoisted(() => ({
   getUserId: vi.fn<() => string | null>(),
 }));
 vi.mock("@/features/rounds/round-op-hub", () => ({ roundOpHub: hub }));
-vi.mock("@/features/auth/infrastructure/browser-identity-store", () => ({
-  createBrowserIdentityStore: () => ({ read: () => "user-1" }),
-}));
+
+const identityReader = { read: () => "user-1" };
+const sessionReader = { readSession: vi.fn() };
 
 type AuthListener = (
   event: string,
@@ -48,15 +48,25 @@ describe("OpSyncProvider", () => {
   it("マウントで、端末のユーザーを渡してハブを起動する", () => {
     // Given
     // When
-    render(<OpSyncProvider />);
+    render(
+      <OpSyncProvider
+        identityReader={identityReader}
+        sessionReader={sessionReader}
+      />,
+    );
 
     // Then
-    expect(hub.start).toHaveBeenCalledWith("user-1");
+    expect(hub.start).toHaveBeenCalledWith("user-1", sessionReader);
   });
 
   it("アンマウントで、ハブを停止し、認証イベントの購読を解除する", () => {
     // Given
-    const { unmount } = render(<OpSyncProvider />);
+    const { unmount } = render(
+      <OpSyncProvider
+        identityReader={identityReader}
+        sessionReader={sessionReader}
+      />,
+    );
 
     // When
     unmount();
@@ -68,7 +78,12 @@ describe("OpSyncProvider", () => {
 
   it("onlineのイベントをハブへ渡す", () => {
     // Given
-    render(<OpSyncProvider />);
+    render(
+      <OpSyncProvider
+        identityReader={identityReader}
+        sessionReader={sessionReader}
+      />,
+    );
 
     // When
     window.dispatchEvent(new Event("online"));
@@ -81,7 +96,12 @@ describe("OpSyncProvider", () => {
     "%sで同じユーザーなら、保留を戻す",
     (event) => {
       // Given
-      render(<OpSyncProvider />);
+      render(
+        <OpSyncProvider
+          identityReader={identityReader}
+          sessionReader={sessionReader}
+        />,
+      );
 
       // When
       emit(event, "user-1");
@@ -94,7 +114,12 @@ describe("OpSyncProvider", () => {
 
   it("違うユーザーのセッションなら、ユーザーを替える", () => {
     // Given
-    render(<OpSyncProvider />);
+    render(
+      <OpSyncProvider
+        identityReader={identityReader}
+        sessionReader={sessionReader}
+      />,
+    );
 
     // When
     emit("SIGNED_IN", "user-2");
@@ -106,7 +131,12 @@ describe("OpSyncProvider", () => {
 
   it("SIGNED_OUTでユーザーをnullにする", () => {
     // Given
-    render(<OpSyncProvider />);
+    render(
+      <OpSyncProvider
+        identityReader={identityReader}
+        sessionReader={sessionReader}
+      />,
+    );
 
     // When
     emit("SIGNED_OUT", null);
@@ -117,7 +147,12 @@ describe("OpSyncProvider", () => {
 
   it("セッションの無いINITIAL_SESSIONでは何もしない", () => {
     // Given
-    render(<OpSyncProvider />);
+    render(
+      <OpSyncProvider
+        identityReader={identityReader}
+        sessionReader={sessionReader}
+      />,
+    );
 
     // When
     emit("INITIAL_SESSION", null);

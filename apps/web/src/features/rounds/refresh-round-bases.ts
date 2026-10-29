@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import type { SessionReader } from "@/features/auth";
 import type { Database } from "@/types/supabase";
 import {
   type FetchedRoundDetails,
@@ -49,9 +49,10 @@ export async function commitRoundDetails(
 // 全ての反映を待って成功(true)とする。通信できない、未認証、端末の識別と違うユーザーのときは、何もせずfalseを返す。
 export async function refreshRoundBases(
   supabase: SupabaseClient<Database>,
+  sessionReader: SessionReader,
 ): Promise<boolean> {
   try {
-    const reading = await createSupabaseAuth(() => supabase).readSession();
+    const reading = await sessionReader.readSession();
     if (
       reading.status !== "authenticated" ||
       reading.userId !== roundOpHub.getUserId()
@@ -60,7 +61,7 @@ export async function refreshRoundBases(
     }
 
     const retained = await roundOpLog.retainedRoundIds();
-    const fetched = await fetchRoundDetails(supabase, retained);
+    const fetched = await fetchRoundDetails(supabase, sessionReader, retained);
     if (fetched.status !== "ok") return false;
 
     await commitRoundDetails(fetched.data, retained);

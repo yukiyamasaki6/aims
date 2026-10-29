@@ -1,12 +1,10 @@
-import { AuthRetryableFetchError } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { StartButton } from "./start-button";
 
-const supabase = vi.hoisted(() => ({ getSession: vi.fn() }));
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({ auth: { getSession: supabase.getSession } }),
-}));
+const sessionReader = { readSession: vi.fn() };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -16,10 +14,10 @@ describe("StartButton", () => {
   // 行き先の判定の出力はリンクの行き先だけで観測できる。押して移ることはE2E(navigation.spec.ts)が確かめる。
   it("判定中は、開始リンクの行き先を/signupにし、判定済みの印(data-hydrated)を付けない", () => {
     // Given
-    supabase.getSession.mockReturnValue(new Promise(() => {}));
+    sessionReader.readSession.mockReturnValue(new Promise(() => {}));
 
     // When
-    render(<StartButton />);
+    render(<StartButton sessionReader={sessionReader} />);
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -29,13 +27,13 @@ describe("StartButton", () => {
 
   it("認証済みと判定すると、行き先を/roundsに替え、判定済みの印を付ける", async () => {
     // Given
-    supabase.getSession.mockResolvedValue({
-      data: { session: { user: { id: "user-1" } } },
-      error: null,
+    sessionReader.readSession.mockResolvedValue({
+      status: "authenticated",
+      userId: "user-1",
     });
 
     // When
-    render(<StartButton />);
+    render(<StartButton sessionReader={sessionReader} />);
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -45,13 +43,10 @@ describe("StartButton", () => {
 
   it("確認が通信の失敗で不明(unknown)になると、行き先を/roundsに替える", async () => {
     // Given
-    supabase.getSession.mockResolvedValue({
-      data: { session: null },
-      error: new AuthRetryableFetchError("Failed to fetch", 0),
-    });
+    sessionReader.readSession.mockResolvedValue({ status: "unknown" });
 
     // When
-    render(<StartButton />);
+    render(<StartButton sessionReader={sessionReader} />);
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -60,13 +55,12 @@ describe("StartButton", () => {
 
   it("未認証と判定すると、行き先を/signupのままにし、判定済みの印を付ける", async () => {
     // Given
-    supabase.getSession.mockResolvedValue({
-      data: { session: null },
-      error: null,
+    sessionReader.readSession.mockResolvedValue({
+      status: "unauthenticated",
     });
 
     // When
-    render(<StartButton />);
+    render(<StartButton sessionReader={sessionReader} />);
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -78,10 +72,19 @@ describe("StartButton", () => {
 
   it("サインインの状態を確かめられないとき(確認の処理が投げた場合を含む)は、未認証ならサーバーの保護がサインインへ送る一覧を行き先にし、判定済みの印を付ける", async () => {
     // Given
-    supabase.getSession.mockRejectedValue(new Error("failed"));
+    const throwingReader = createSupabaseAuth(
+      () =>
+        ({
+          auth: {
+            getSession: async () => {
+              throw new Error("failed");
+            },
+          },
+        }) as unknown as SupabaseClient,
+    );
 
     // When
-    render(<StartButton />);
+    render(<StartButton sessionReader={throwingReader} />);
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });

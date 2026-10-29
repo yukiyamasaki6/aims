@@ -36,6 +36,8 @@ function setup({
     subscribeDiverged: vi.fn(() => vi.fn()),
   } as unknown as RoundOpSync;
   const env = {
+    sessionReader: { readSession: vi.fn() },
+    identityReader: { read: vi.fn() },
     roundId: "round-1",
     sync,
     stale: { current: stale },

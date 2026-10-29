@@ -2,11 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { type RefObject, useRef, useState } from "react";
+import type { SessionReader } from "@/features/auth";
 import type { Preset } from "../_shared/preset-types";
 import { startRound } from "./start-round";
 
 // 選択中のプリセット（なければプリセット無し）でラウンドを開始し、成功したら詳細画面へ遷移する。
 export function useStartRound(
+  sessionReader: SessionReader,
   selectedPreset: Preset | null,
   mountedRef: RefObject<boolean>,
 ) {
@@ -25,6 +27,7 @@ export function useStartRound(
     setSubmitting(true);
 
     const result = await startRound({
+      sessionReader,
       preset: selectedPreset,
       isMounted: () => mountedRef.current,
       generateId: () => crypto.randomUUID(),

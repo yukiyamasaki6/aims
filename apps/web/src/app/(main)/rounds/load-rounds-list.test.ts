@@ -28,6 +28,8 @@ const reference = vi.hoisted(() => ({ loadReferenceSnapshot: vi.fn() }));
 vi.mock("@/features/rounds/reference-snapshot", () => reference);
 
 const supabase = {} as SupabaseClient<Database>;
+const sessionReader = { readSession: vi.fn() };
+const identityReader = { read: vi.fn() };
 const items: RoundListItem[] = [
   { id: "r1", name: "午前", roundDate: "2026-09-15", total: 0 },
 ];
@@ -169,7 +171,7 @@ describe("loadRoundsList", () => {
     // Given
 
     // When
-    await loadRoundsList(supabase);
+    await loadRoundsList(supabase, sessionReader, identityReader);
 
     // Then
     expect(calls.order.slice(0, 2)).toEqual(["loadAll", "fetch"]);
@@ -180,11 +182,18 @@ describe("loadRoundsList", () => {
     log.retainedRoundIds.mockResolvedValue(["r9"]);
 
     // When
-    await loadRoundsList(supabase);
+    await loadRoundsList(supabase, sessionReader, identityReader);
 
     // Then
-    expect(fetcher.fetchRoundsList).toHaveBeenCalledWith(supabase);
-    expect(details.fetchRoundDetails).toHaveBeenCalledWith(supabase, ["r9"]);
+    expect(fetcher.fetchRoundsList).toHaveBeenCalledWith(
+      supabase,
+      sessionReader,
+    );
+    expect(details.fetchRoundDetails).toHaveBeenCalledWith(
+      supabase,
+      sessionReader,
+      ["r9"],
+    );
   });
 
   it("両方の取得が成功したら、反映の後に入力中のラウンドを求める", async () => {
@@ -199,7 +208,11 @@ describe("loadRoundsList", () => {
     });
 
     // When
-    const result = await loadRoundsList(supabase);
+    const result = await loadRoundsList(
+      supabase,
+      sessionReader,
+      identityReader,
+    );
 
     // Then
     expect(calls.order.indexOf("commit")).toBeGreaterThan(
@@ -219,7 +232,11 @@ describe("loadRoundsList", () => {
     // Given
 
     // When
-    const result = await loadRoundsList(supabase);
+    const result = await loadRoundsList(
+      supabase,
+      sessionReader,
+      identityReader,
+    );
 
     // Then
     expect(result).toEqual({
@@ -245,7 +262,11 @@ describe("loadRoundsList", () => {
     );
 
     // When
-    const result = await loadRoundsList(supabase);
+    const result = await loadRoundsList(
+      supabase,
+      sessionReader,
+      identityReader,
+    );
 
     // Then
     expect(result).toMatchObject({
@@ -269,7 +290,11 @@ describe("loadRoundsList", () => {
     );
 
     // When
-    const result = await loadRoundsList(supabase);
+    const result = await loadRoundsList(
+      supabase,
+      sessionReader,
+      identityReader,
+    );
 
     // Then
     expect(result).toMatchObject({
@@ -286,7 +311,11 @@ describe("loadRoundsList", () => {
     );
 
     // When
-    const result = await loadRoundsList(supabase);
+    const result = await loadRoundsList(
+      supabase,
+      sessionReader,
+      identityReader,
+    );
 
     // Then
     expect(result).toMatchObject({ data: { deleted: new Set() } });
@@ -301,7 +330,11 @@ describe("loadRoundsList", () => {
     });
 
     // When
-    const result = await loadRoundsList(supabase);
+    const result = await loadRoundsList(
+      supabase,
+      sessionReader,
+      identityReader,
+    );
 
     // Then
     expect(result).toEqual({ status: "offline" });
@@ -316,7 +349,11 @@ describe("loadRoundsList", () => {
     });
 
     // When
-    const result = await loadRoundsList(supabase);
+    const result = await loadRoundsList(
+      supabase,
+      sessionReader,
+      identityReader,
+    );
 
     // Then
     expect(result).toEqual({
@@ -338,7 +375,7 @@ describe("loadLocalRoundsList", () => {
     );
 
     // When
-    const local = await loadLocalRoundsList();
+    const local = await loadLocalRoundsList(identityReader);
 
     // Then
     expect(local.inProgress).toEqual([
@@ -361,7 +398,7 @@ describe("loadLocalRoundsList", () => {
     );
 
     // When
-    const local = await loadLocalRoundsList();
+    const local = await loadLocalRoundsList(identityReader);
 
     // Then
     expect(local.inProgress).toEqual([
@@ -388,7 +425,7 @@ describe("loadLocalRoundsList", () => {
     );
 
     // When
-    const local = await loadLocalRoundsList();
+    const local = await loadLocalRoundsList(identityReader);
 
     // Then
     expect(local.inProgress).toEqual([]);
@@ -405,7 +442,7 @@ describe("loadLocalRoundsList", () => {
     );
 
     // When
-    const local = await loadLocalRoundsList();
+    const local = await loadLocalRoundsList(identityReader);
 
     // Then
     expect(local.inProgress).toEqual([]);
@@ -421,13 +458,14 @@ describe("loadLocalRoundsList", () => {
     );
 
     // When
-    const local = await loadLocalRoundsList();
+    const local = await loadLocalRoundsList(identityReader);
 
     // Then
     expect(local.inProgress).toEqual([
       expect.objectContaining({ id: "c", total: 0 }),
     ]);
     expect(reference.loadReferenceSnapshot).toHaveBeenCalledWith(
+      identityReader,
       "target-faces",
     );
   });
@@ -442,7 +480,7 @@ describe("loadLocalRoundsList", () => {
     );
 
     // When
-    const local = await loadLocalRoundsList();
+    const local = await loadLocalRoundsList(identityReader);
 
     // Then
     expect(local.inProgress).toEqual([

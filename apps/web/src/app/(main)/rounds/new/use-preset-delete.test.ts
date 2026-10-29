@@ -10,6 +10,8 @@ vi.mock("../_shared/fetch-presets", () => ({
   deletePresetFromSnapshot: vi.fn(),
 }));
 
+const sessionReader = { readSession: vi.fn() };
+const identityReader = { read: vi.fn() };
 const del = vi.mocked(deletePersonalPreset);
 const preset: Preset = {
   id: "p1",
@@ -21,7 +23,14 @@ const preset: Preset = {
 
 function setup() {
   const onDeleted = vi.fn();
-  const hook = renderHook(() => usePresetDelete({ current: true }, onDeleted));
+  const hook = renderHook(() =>
+    usePresetDelete(
+      sessionReader,
+      identityReader,
+      { current: true },
+      onDeleted,
+    ),
+  );
   return { ...hook, onDeleted };
 }
 
@@ -43,7 +52,7 @@ describe("usePresetDelete.dialog.onConfirm", () => {
 
     // Then
     expect(result.current.removedIds).toEqual(["p1"]);
-    expect(deletePresetFromSnapshot).toHaveBeenCalledWith("p1");
+    expect(deletePresetFromSnapshot).toHaveBeenCalledWith(identityReader, "p1");
     expect(onDeleted).toHaveBeenCalledWith("p1");
   });
 

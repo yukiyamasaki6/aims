@@ -51,6 +51,9 @@ vi.mock("./scorecard-client", () => ({
 }));
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
 
+const sessionReader = { readSession: vi.fn() };
+const identityReader = { read: vi.fn() };
+
 // スコアカードのスタブはidだけを読むため、的はidだけを持たせる。
 function faces(...ids: string[]): TargetFaceOption[] {
   return ids.map((id) => ({ id })) as TargetFaceOption[];
@@ -105,7 +108,12 @@ describe("RoundDetailClient", () => {
       load.mockReturnValue(new Promise(() => {}));
 
       // When
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(
@@ -118,12 +126,22 @@ describe("RoundDetailClient", () => {
     it("初回描画は、pathnameによらず同じ取得中の枠で、取得を始めない", () => {
       // Given
       nav.pathname = "/rounds/_";
-      const placeholderHtml = renderToString(<RoundDetailClient />);
+      const placeholderHtml = renderToString(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       nav.pathname = `/rounds/${ID}`;
 
       // When
       // サーバーでの描画ではeffectが走らない。
-      const html = renderToString(<RoundDetailClient />);
+      const html = renderToString(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       // 水和の不一致を避けるため、サーバーの描画は読み込み中の表示と同一になる。
@@ -142,7 +160,12 @@ describe("RoundDetailClient", () => {
       });
 
       // When
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       const scorecard = await screen.findByTestId("scorecard");
@@ -150,7 +173,9 @@ describe("RoundDetailClient", () => {
       expect(scorecard).toHaveAttribute("data-round-id", ID);
       expect(scorecard).toHaveAttribute("data-faces", "face-1,face-2");
       expect(load).toHaveBeenCalledTimes(1);
-      expect(load.mock.calls[0][1]).toBe(ID);
+      expect(load.mock.calls[0][1]).toBe(sessionReader);
+      expect(load.mock.calls[0][2]).toBe(identityReader);
+      expect(load.mock.calls[0][3]).toBe(ID);
     });
 
     it("列に削除があれば、スコアカードを出さず、一覧へ置き換えて遷移する", async () => {
@@ -158,7 +183,12 @@ describe("RoundDetailClient", () => {
       resolves({ status: "ok", data: { deleted: true } });
 
       // When
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/rounds"));
@@ -171,7 +201,12 @@ describe("RoundDetailClient", () => {
       resolves({ status: "ok", data: detail("午前練習") });
 
       // When
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByTestId("scorecard");
 
       // Then
@@ -181,18 +216,28 @@ describe("RoundDetailClient", () => {
     it("pathnameのIDが変わると、前のラウンドを見せずに取得し直す", async () => {
       // Given
       resolves({ status: "ok", data: detail("最初") });
-      const { rerender } = render(<RoundDetailClient />);
+      const { rerender } = render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByText("最初");
       load.mockReturnValue(new Promise(() => {}));
 
       // When
       nav.pathname = `/rounds/${OTHER_ID}`;
-      rerender(<RoundDetailClient />);
+      rerender(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(screen.queryByText("最初")).not.toBeInTheDocument();
       expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
-      expect(load.mock.calls.at(-1)?.[1]).toBe(OTHER_ID);
+      expect(load.mock.calls.at(-1)?.[3]).toBe(OTHER_ID);
     });
   });
 
@@ -202,7 +247,12 @@ describe("RoundDetailClient", () => {
       resolves({ status: "not-found" });
 
       // When
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(
@@ -225,7 +275,12 @@ describe("RoundDetailClient", () => {
         nav.pathname = pathname;
 
         // When
-        render(<RoundDetailClient />);
+        render(
+          <RoundDetailClient
+            sessionReader={sessionReader}
+            identityReader={identityReader}
+          />,
+        );
 
         // Then
         expect(
@@ -240,7 +295,12 @@ describe("RoundDetailClient", () => {
       resolves({ status: "offline" });
 
       // When
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(
@@ -259,7 +319,12 @@ describe("RoundDetailClient", () => {
       });
 
       // When
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -278,7 +343,12 @@ describe("RoundDetailClient", () => {
       });
       load.mockResolvedValueOnce({ status: "ok", data: detail("午前練習") });
       const user = userEvent.setup();
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       const retry = await screen.findByRole("button", { name: "再試行" });
 
       // When
@@ -298,7 +368,12 @@ describe("RoundDetailClient", () => {
       vi.useFakeTimers();
       vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
       load.mockReturnValue(new Promise(() => {}));
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // When
       await act(() => vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS - 1));
@@ -332,7 +407,12 @@ describe("RoundDetailClient", () => {
       });
 
       // When
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(await screen.findByTestId("scorecard")).toHaveAttribute(
@@ -348,7 +428,12 @@ describe("RoundDetailClient", () => {
         data: detail("入力中", null, "local", faces("face-1")),
       });
       const user = userEvent.setup();
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       const gone = await screen.findByRole("button", { name: "gone" });
 
       // When
@@ -375,7 +460,12 @@ describe("RoundDetailClient", () => {
       });
 
       // When
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
 
       // Then
       expect(await screen.findByTestId("scorecard")).toHaveAttribute(
@@ -389,7 +479,12 @@ describe("RoundDetailClient", () => {
       resolves({ status: "ok", data: detail("作成中", pendingEventId) });
 
       // When
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByTestId("scorecard");
 
       // Then
@@ -401,7 +496,12 @@ describe("RoundDetailClient", () => {
     it("作成の消失を検知したら、取得し直す", async () => {
       // Given
       resolves({ status: "ok", data: detail("作成中", pendingEventId) });
-      render(<RoundDetailClient />);
+      render(
+        <RoundDetailClient
+          sessionReader={sessionReader}
+          identityReader={identityReader}
+        />,
+      );
       await screen.findByTestId("scorecard");
       const [, , onGone] = creationGone.mock.calls.at(-1) ?? [];
       const before = load.mock.calls.length;

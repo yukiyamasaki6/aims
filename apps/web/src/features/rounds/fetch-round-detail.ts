@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { IdentityReader, SessionReader } from "@/features/auth";
 import {
   FALLBACK_WAIT_MS,
   FETCH_TIMEOUT_MS,
@@ -124,12 +125,17 @@ function sortedTargetFaces(rows: TargetFaceRow[]): TargetFaceOption[] {
 // 保存済みがあればそれを返し、時間切れの後に届いた結果は表示せず保存だけする。
 export async function fetchTargetFaces(
   supabase: SupabaseClient<Database>,
+  sessionReader: SessionReader,
+  identityReader: IdentityReader,
 ): Promise<FetchResult<TargetFaceOption[]>> {
   const startedAt = Date.now();
-  const saved = loadReferenceSnapshot<TargetFaceOption[]>("target-faces");
+  const saved = loadReferenceSnapshot<TargetFaceOption[]>(
+    identityReader,
+    "target-faces",
+  );
   let queriedUserId: string | undefined;
   const result = await fetchContent<TargetFaceRow[]>(
-    supabase as SupabaseClient,
+    sessionReader,
     async (session) => {
       const userId = session.userId;
       queriedUserId = userId;
@@ -217,11 +223,12 @@ function toRoundDetail(
 // 存在しない・権限なし・論理削除済みのラウンドは、いずれもroundがnullになり、区別しない。
 export async function fetchRoundDetail(
   supabase: SupabaseClient<Database>,
+  sessionReader: SessionReader,
   roundId: string,
 ): Promise<FetchResult<FetchedRoundDetail>> {
   const startedAt = Date.now();
   const result = await fetchContent<Fetched>(
-    supabase as SupabaseClient,
+    sessionReader,
     async (session) => {
       const userId = session.userId;
       const [round, faces] = await Promise.all([
@@ -311,38 +318,36 @@ function mergeRounds(rows: readonly RoundRowWithId[]): RoundRowWithId[] {
 // どれかの取得が失敗したら全体を失敗にする(一部の結果を反映すると、返らなかった保持のラウンドが削除の印になるため)。
 export async function fetchRoundDetails(
   supabase: SupabaseClient<Database>,
+  sessionReader: SessionReader,
   roundIds: readonly string[],
 ): Promise<FetchResult<FetchedRoundDetails>> {
   const startedAt = Date.now();
   // IDはフィルタの文字列に埋め込むため、UUIDの形だけを通す。
   const ids = roundIds.filter((id) => UUID_PATTERN.test(id));
   const chunks = ids.length > 0 ? chunkIds(ids) : [[]];
-  const result = await fetchContent<Fetched>(
-    supabase as SupabaseClient,
-    async (session) => {
-      const userId = session.userId;
-      const [faces, ...responses] = await Promise.all([
-        selectTargetFaces(supabase, userId),
-        ...chunks.map((chunk, index) =>
-          selectRoundsChunk(supabase, chunk, index),
-        ),
-      ]);
-      const failure = failureOf([...responses, faces]);
-      if (failure) return failure as ResponseLike<Fetched>;
-      const rows = responses.flatMap(
-        (r) => (r.data ?? []) as unknown as RoundRowWithId[],
-      );
-      return {
-        data: {
-          round: mergeRounds(rows),
-          targetFaces: (faces.data ?? []) as unknown as TargetFaceRow[],
-          userId,
-        },
-        error: null,
-        status: 200,
-      };
-    },
-  );
+  const result = await fetchContent<Fetched>(sessionReader, async (session) => {
+    const userId = session.userId;
+    const [faces, ...responses] = await Promise.all([
+      selectTargetFaces(supabase, userId),
+      ...chunks.map((chunk, index) =>
+        selectRoundsChunk(supabase, chunk, index),
+      ),
+    ]);
+    const failure = failureOf([...responses, faces]);
+    if (failure) return failure as ResponseLike<Fetched>;
+    const rows = responses.flatMap(
+      (r) => (r.data ?? []) as unknown as RoundRowWithId[],
+    );
+    return {
+      data: {
+        round: mergeRounds(rows),
+        targetFaces: (faces.data ?? []) as unknown as TargetFaceRow[],
+        userId,
+      },
+      error: null,
+      status: 200,
+    };
+  });
   if (result.status !== "ok") return result;
 
   const { userId } = result.data;
