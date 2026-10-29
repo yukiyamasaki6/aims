@@ -11,11 +11,11 @@
 
 - `src/features/auth/domain/flow.ts`: 命令の結果の型(`Start`、`Step`)と欄ごとのエラーの型(`FieldErrors`)。
 - `src/features/auth/domain/auth-failure.ts`: 失敗の種類と利用者向けの文言の表。失敗値の作成(`UNREACHABLE`など)と、確かめられなかったときの文言(`unconfirmedMessage`)も持つ。
-- `src/features/auth/domain/routes.ts`: 保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則と、要求のリダイレクト先(`redirectFor`)。`src/proxy.ts`が`lib/supabase/session.ts`へ関数として渡す。
+- `src/features/auth/domain/routes.ts`: 保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則と、要求のリダイレクト先(`redirectFor`)。`src/proxy.ts`が`lib/supabase/infrastructure/session.ts`へ関数として渡す。サインインの後の既定の行き先(`DEFAULT_DESTINATION`)は、入口から公開し、ナビゲーションの開始の行き先が使う。
 - `src/features/auth/domain/password.ts`: パスワードの入力と強さの規則。最小長と最大長の数値は、ここだけが持つ。規則の文面(`PASSWORD_RULE_MESSAGE`)も持ち、入力の検証と弱いパスワードの拒否が使う。
 - `src/features/auth/application/call-result.ts`: 認証サービスへの頼みごとの結果(`CallResult`)。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装。画面はブラウザの接続を、再設定の要求の入口はサーバーの接続を渡す。応答の変換(エラーのクラス名とコード、イベント名、セッションの形)も、このファイルだけが知る。
-- `src/lib/supabase/server.ts`: サーバーでの接続。管理者の接続と、要求の利用者のセッションの接続。
+- `src/lib/supabase/infrastructure/server.ts`: サーバーでの接続。管理者の接続と、要求の利用者のセッションの接続。
 - `src/features/auth/ui/use-screen-view.ts`: 画面の状態、表示中の判定、チェックのウィジェットの参照を持ち、手続きへ渡す画面の約束を作る。
 - `src/features/auth/ui/auth-field.tsx`、`src/components/ui/busy-button.tsx`: 入力欄とエラー文の結び付け、処理中のボタンの表現。
 

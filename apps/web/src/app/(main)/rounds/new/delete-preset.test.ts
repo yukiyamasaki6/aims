@@ -1,7 +1,7 @@
 import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import { deletePersonalPreset } from "./delete-preset";
 
 // SupabaseのSDKは外部サービスとの境界のため、セッションの取得結果と削除の結果を任意に制御できるスタブで模す。

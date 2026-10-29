@@ -34,7 +34,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(登録済み(`already_registered`)を含む)と利用者向けの文言(値オブジェクト)。認証サービスの語彙は持たない。
 - `src/features/auth/domain/captcha-token.ts`、`password.ts`: セキュリティチェックのトークンと、パスワードの入力と強さの規則と文言(値オブジェクト)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
 - `src/features/auth/domain/routes.ts`: 経路の規則(値オブジェクト)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは`/rounds`配下の同一オリジンのパスだけ)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`)、クエリからの読み取り(`readReturnTo`)、要求のリダイレクト先(`redirectFor`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
-- `src/features/auth/index.ts`: 認証の機能の入口。他の機能が使う型と文言と経路(`SessionReading`、`unconfirmedMessage`、`NETWORK_ERROR_MESSAGE`、`redirectFor`、`SIGN_UP_PATH`)を、別名なしで再公開する。
+- `src/features/auth/index.ts`: 認証の機能の入口。他の機能が使う型と文言と経路(`SessionReading`、`unconfirmedMessage`、`NETWORK_ERROR_MESSAGE`、`DEFAULT_DESTINATION`、`SIGN_UP_PATH`)を、別名なしで再公開する。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。`signInWithPassword`の呼び出しと、エラーを失敗の種類に写す変換(通信の断は名前で先に判定する)、例外(接続を作れない場合を含む)を届かない結果に変える変換を含む。接続は、渡された関数で照合のたびに取得する。
 - `src/features/auth/infrastructure/browser-navigation.ts`: 現在のURLからの許可された遷移元の読み出し(`readReturnTo`)と、routerによる遷移。
 - `src/features/auth/ui/use-screen-view.ts`: 画面の状態を持つ汎用のフック。`reducer`で遷移させる状態を、最新の値の`ref`と描画用の`useState`で持ち、画面の約束`ScreenView`を作る。
@@ -42,9 +42,9 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/application/screen-view.ts`: 手続きが画面に頼む約束。開始の命令の適用(`begin`)、事実の送信、出来事を送った直後の最新の状態を返す契約をここに書く。
 - `src/components/turnstile.tsx`: Turnstileの共通部品。`interaction-only`で描画し、操作が必要な間だけ領域を出し、それ以外は畳む。未完了のエラー文言も表示する。サイトキー(環境変数`NEXT_PUBLIC_TURNSTILE_SITE_KEY`)は自分で読む。
 - `src/components/auth-header.tsx`: 認証画面の見出し。
-- `src/lib/supabase/client.ts`: ブラウザの接続。
+- `src/lib/supabase/infrastructure/client.ts`: ブラウザの接続。
 - `src/hooks/use-mounted-ref.ts`: 画面がマウント中かどうかの参照。画面が`isMounted`として手続きへ渡し、手続きが照合の後に確かめる。
-- `src/lib/supabase/session.ts`: `proxy.ts`から呼ばれ、要求ごとにセッションを更新して、サインインの有無を判定する。経路の規則は持たず、`proxy.ts`が認証の機能の入口の`redirectFor`を関数として渡す。認証済みの`/signin`は、有効な遷移元があればそこへ、無ければ`/rounds`へ送られる。
+- `src/lib/supabase/infrastructure/session.ts`: `proxy.ts`から呼ばれ、要求ごとにセッションを更新して、サインインの有無を判定する。経路の規則は持たず、`proxy.ts`が認証の機能の`redirectFor`(`domain/routes.ts`)を関数として渡す。認証済みの`/signin`は、有効な遷移元があればそこへ、無ければ`/rounds`へ送られる。
 
 流れは次のとおりである。
 
@@ -75,4 +75,4 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 
 - 再試行の回数制限は、captcha以外に設けていない。
 - signup・reset-passwordを経由すると遷移元は引き継がない。
-- 認証の機能が他の機能へ公開する名前は、入口の`SessionReading`、`SessionReader`、`IdentityReader`、`unconfirmedMessage`、`NETWORK_ERROR_MESSAGE`、`redirectFor`、`SIGN_UP_PATH`だけである。他の機能のファイルは、認証の機能の内部を参照せず、入口だけを参照する。サインインの状態の読み出しと端末の識別情報の読み出しは、入口(組み立て層)が`infrastructure/supabase-auth.ts`と`infrastructure/browser-identity-store.ts`から生成し、他の機能へ`SessionReader`と`IdentityReader`の型で注入する。
+- 認証の機能が他の機能へ公開する名前は、入口の`SessionReading`、`SessionReader`、`IdentityReader`、`unconfirmedMessage`、`NETWORK_ERROR_MESSAGE`、`DEFAULT_DESTINATION`、`SIGN_UP_PATH`だけである。他の機能のファイルは、認証の機能の内部を参照せず、入口だけを参照する。サインインの状態の読み出しと端末の識別情報の読み出しは、入口(組み立て層)が`infrastructure/supabase-auth.ts`と`infrastructure/browser-identity-store.ts`から生成し、他の機能へ`SessionReader`と`IdentityReader`の型で注入する。

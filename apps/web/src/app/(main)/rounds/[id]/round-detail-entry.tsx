@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import { RoundDetailClient } from "./round-detail-client";
 
 // page.tsxはサーバー専用のexport(dynamicParams、generateStaticParams)を持ち、クライアントの処理を持てないため、この入口が画面の入口の一部として生成して渡す。

@@ -3,7 +3,7 @@ import {
   type SessionReader,
   unconfirmedMessage,
 } from "@/features/auth";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 
 // deleted: 削除できた。
 // failed: 削除できず、画面に表示するエラーメッセージがある。

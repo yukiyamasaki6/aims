@@ -6,7 +6,7 @@ import { createBrowserIdentityStore } from "@/features/auth/infrastructure/brows
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import type { Distance } from "@/features/rounds/scorecard-types";
 import type { TargetFaceOption } from "@/features/rounds/target-face-types";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import { fetchPresets } from "../_shared/fetch-presets";
 import { SavePresetDialog } from "./save-preset-dialog";
 

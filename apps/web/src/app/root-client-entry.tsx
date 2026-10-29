@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import { OpSyncProvider } from "./op-sync-provider";
 import { RoundBaseRefresher } from "./round-base-refresher";
 

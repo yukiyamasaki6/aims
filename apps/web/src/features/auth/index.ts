@@ -4,4 +4,4 @@ export {
   NETWORK_ERROR_MESSAGE,
   unconfirmedMessage,
 } from "./domain/auth-failure";
-export { redirectFor, SIGN_UP_PATH } from "./domain/routes";
+export { DEFAULT_DESTINATION, SIGN_UP_PATH } from "./domain/routes";

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import {
   distanceCreated,
   distanceDisabled,
@@ -15,7 +15,7 @@ import { sendRoundBatch as sendToUser } from "./round-op-transport";
 import type { SyncOperation } from "./sync-events";
 
 const client = vi.hoisted(() => ({ getSession: vi.fn(), rpc: vi.fn() }));
-vi.mock("@/lib/supabase/client", () => ({
+vi.mock("@/lib/supabase/infrastructure/client", () => ({
   createClient: () => ({
     auth: { getSession: client.getSession },
     rpc: client.rpc,

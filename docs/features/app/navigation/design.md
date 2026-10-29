@@ -26,17 +26,26 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 
 ## 構成とデータの流れ
 
-- `src/proxy.ts` は `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に `updateSession` を呼ぶ。`/` は対象外である。
-- `src/lib/supabase/session.ts` の `updateSession` が、認証状態を判定し、経路の規則は引数で受ける。規則は認証の機能の `redirectFor` が持ち、`proxy.ts` が渡す。
+- `src/proxy.ts`(要求の入口): `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に、認証の機能の経路の規則(`features/auth/domain/routes.ts` の `redirectFor`)を `updateSession` へ渡す。`/` は対象外である。
+- `src/lib/supabase/infrastructure/session.ts`(共有の技術の実装): `updateSession` が要求ごとにセッションを更新して認証状態を判定し、経路の規則は引数で受ける。規則は認証の機能の `redirectFor` が持ち、`proxy.ts` が渡す。
   - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
   - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。`/signin` は有効な遷移元があればそこへ送る（`auth/signin`）。
   - Server Action呼び出しはどちらも対象外とする。
 - `src/features/auth/application/session.ts` の手続き`createSession`の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、オンラインでの`unauthenticated`）と、一度だけの`/signin`への遷移（`replace`。今の場所を遷移元に付ける）を持つ。喪失の定義は`domain/auth-change.ts`、遷移の規則（1回、遷移元、サインアウトの実行中は委ねる）は`domain/session-end-flow.ts`。`(main)`のレイアウトが、手続きと実装を生成して見張りを始める。
-- `src/app/page.tsx` が静的な紹介画面の入口で、サインインの状態の読み出しを生成して`src/app/start-button.tsx`へ渡す。開始ボタンが行き先をクライアントで決める。
-- `src/components/app-logo.tsx` が、認証画面・`/`・`/offline` の左上のロゴである。
-- `src/components/logo-image.tsx` が、文字付きロゴの画像（`public/logo.svg`）を表示する。代替テキスト「AIMS」がロゴのリンクの名前になる。`app-logo.tsx` と `left-panel.tsx` が使う。
+- `src/app/page.tsx`(画面の入口): 静的な紹介画面の入口。認証の読み取りの実装、それを開始の約束に変える実装、開始の手続きを生成し、紹介画面へ渡す。
+- `src/features/navigation/ui/intro-screen.tsx`(UI層): 紹介画面。アプリ名、説明文、左上のロゴ、開始ボタンを表示し、受け取った手続きを開始ボタンへ渡す。
+- `src/features/navigation/ui/start-button.tsx`(UI層): 開始ボタン。画面を開いたときに1回だけ手続きに行き先を決めさせ、判定中は判定中の行き先を表示する。
+- `src/features/navigation/application/start.ts`(手続きと約束): サインインの状態を読み、行き先の規則で開始の行き先を決める。認証の機能に頼むこと(サインインの状態の読み取りとサインアップのパス)の約束 `SignInCheck` を持つ。
+- `src/features/navigation/infrastructure/auth-sign-in-check.ts`(インフラ層): `SignInCheck` を、認証の機能の入口の `SessionReader`、`SIGN_UP_PATH`、`DEFAULT_DESTINATION` で満たす。
+- `src/features/navigation/domain/start-destination.ts`(ドメイン層): 開始の行き先の規則。判定中と未認証はサインアップ、認証済みと確かめられないときはサインインの後の既定の行き先(今は `/rounds`)。経路はどちらも認証から受け取る。
+- `src/app/(main)/layout.tsx`(画面の入口): 認証が要る画面の集合の枠。セッションの手続きと実装を生成して見張りを始め、レフトパネルと、サインアウトの部品(`features/auth/ui/sign-out-button.tsx`)を描く。
+- `src/components/app-logo.tsx`(共有の画面部品)が、認証画面・`/`・`/offline` の左上のロゴである。
+- `src/components/logo-image.tsx`(共有の画面部品)が、文字付きロゴの画像（`public/logo.svg`）を表示する。代替テキスト「AIMS」がロゴのリンクの名前になる。`app-logo.tsx` と `left-panel.tsx` が使う。
 - `public/logo.svg` は、`scripts/generate-icon.mjs` が、マークと同じ値と、`geist` のGeist SansのBoldの字形から生成する。文字は図形にし、フォントを参照しない。READMEの冒頭も同じファイルを表示する。
-- `src/app/(main)/left-panel.tsx` が開閉（帯とサイドで共有する1つの状態）とリンクを持ち、下端に、入口が渡すサインアウトの部品（`features/auth/ui/sign-out-button.tsx`）を描く。認証状態は持たず、常に全内容を表示する。配置と開閉ボタンの表示はCSSだけで決める（`side`variant=幅が広い または 横向き、`max-md:landscape:`=横向きかつ狭い）。開閉ボタンは広い用と横向きかつ狭い用の2つを置き、CSSで出し分ける。操作の直後だけtransitionを有効にする`animate`状態を持つ。入口のガードは `proxy.ts`、表示中の喪失は`(main)`のレイアウトが始める見張りが担う。
+- `src/features/navigation/ui/left-panel.tsx`(UI層)が開閉（帯とサイドで共有する1つの状態）とリンクを持ち、下端に、入口が渡すサインアウトの部品（`features/auth/ui/sign-out-button.tsx`）を描く。認証状態は持たず、常に全内容を表示する。配置と開閉ボタンの表示はCSSだけで決める（`side`variant=幅が広い または 横向き、`max-md:landscape:`=横向きかつ狭い）。開閉ボタンは広い用と横向きかつ狭い用の2つを置き、CSSで出し分ける。操作の直後だけtransitionを有効にする`animate`状態を持つ。入口のガードは `proxy.ts`、表示中の喪失は`(main)`のレイアウトが始める見張りが担う。
+- `src/lib/supabase/infrastructure/client.ts`(共有の技術の実装): ブラウザの接続。入口が、接続を作る関数として認証の実装へ渡す。
+- `src/lib/utils.ts`(共有の画面部品): クラス名の結合。
+- 各ファイルの用語は方針(`docs/architecture.md`)の既定の置き場に従う。画面のパッケージは `react`、`next/link`、`next/image`、`lucide-react`、`clsx`、`tailwind-merge`、`class-variance-authority`、`@base-ui/react`、その他のパッケージは `@supabase/ssr`、`@supabase/supabase-js`、`next/server` である。
 
 ## 設計判断
 
@@ -49,6 +58,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 | `/` は認証状態によらず紹介画面を表示し、開始ボタンだけをクライアントで判定する。判定中は `/signup` へのリンクにする | `/` を静的に保ちオフラインでも開けるようにするため。判定中に認証済みが押しても `/signup` のリダイレクトで `/rounds` へ着く。 | 紹介の内容を拡充するとき。 |
 | 文字付きロゴは、文字を図形にしたSVGの画像で表示し、HTMLの文字で組まない | 表示する環境のフォントによらず同じ形にし、READMEと同じ画像にするため。マークだけを別の生成で作ると、マークを変えたときにロゴのマークが古い形で残るため、アイコンと同じスクリプトと値で作る。 | ダークモードを入れるとき。マークを別の方法で作るとき。 |
 | 文字付きロゴに白い丸角の地を付け、明るい表示用の1種類にする | GitHubの暗い表示で黒い絵柄が見えなくならないため。アプリは白地なので地は見えない。暗い表示用の画像を分けると、画面とREADMEで同じ画像でなくなるため採らない。 | ダークモードを入れるとき。 |
+| 開始の行き先の材料(サインインの状態、サインアップのパス、サインインの後の既定の行き先)を、ナビゲーションの約束で受け取り、インフラ層が認証の機能の入口で満たす | 画面の部品は他の機能の入口を参照できず、インフラ層の部品を画面へ渡せないため(方針のF02、A06)。行き先の経路は認証の規則が持つ値で、ナビゲーションに書き写すと持ち主が2つになるため受け取る。認証の実装を手続きへ直接渡す形は、他の機能の部品をインフラ層の外で受け取るため採らない | 認証の機能の入口が公開する読み取りの形が変わったとき |
 | AIMSロゴ・リンクの遷移先を全画面で `/` にする | 認証画面を含め、どの画面からもアプリの入口へ戻れるようにするため。`/rounds` へは個人リンクと開始ボタンで移る。 | ロゴに別の役割を持たせるとき。 |
 | 明示のサインアウトの実行中は、見張りの遷移を行わず、サインアウトの判定に委ねる | 終えられたかと遷移の有無を1つの判定にするため。終えられたら、サインアウトの手続きが遷移元を付けずに移る | サインアウトの遷移を見張りに戻すとき |
 | Server Action呼び出しをリダイレクトの対象外にする | リダイレクトするとNext.jsが期待する応答形式と合わず、分かりにくいエラーになるため。未サインイン時は各Server Actionのガードが扱う。 | Server Actionの認証を共通化するとき。 |

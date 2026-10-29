@@ -27,7 +27,7 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 構造の方針は`docs/architecture.md`に従う。
 
 - `src/app/(auth)/signup/page.tsx`: 画面の入口。認証の実装(接続を作る関数`createClient`と、登録済み判定の関数を渡す)、遷移の実装、手続きを生成し、手続きを画面へ渡す。
-- `src/app/(auth)/signup/actions.ts`: 要求の入口。登録済み判定のServer Action。管理者の接続(`lib/supabase/server.ts`の`createAdminClient`)を渡して判定の実装を生成し、呼ぶ。
+- `src/app/(auth)/signup/actions.ts`: 要求の入口。登録済み判定のServer Action。管理者の接続(`lib/supabase/infrastructure/server.ts`の`createAdminClient`)を渡して判定の実装を生成し、呼ぶ。
 - `src/features/auth/ui/signup-form.tsx`: サインアップの画面の文言とリンク(見出し、サインインへのリンク、パスワード設定の段階の文言)。パスワード再設定と共有の骨組みへ渡す。
 - `src/features/auth/ui/password-setup-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。状態を`useScreenView`で持ち、操作のたびに入力と画面の約束(`ScreenView`)を手続きへ渡す。メール入力とコード入力は段階の部品へ渡す。パスワード再設定と共有する。
 - `src/features/auth/application/sign-up.ts`: 手続き。コードの送信(登録済みの判定を含む)と、パスワード設定の後の遷移(`/rounds`)を持つ。再送、確認と、操作の開始、コードの送信の依頼、パスワード設定の依頼は、共通の順序を使う。登録済みの判定は、手続きの約束`RegistrationLookup`(真偽値。投げることがあり、届かなかった失敗として扱う)で受け、入口がServer Actionを渡す。

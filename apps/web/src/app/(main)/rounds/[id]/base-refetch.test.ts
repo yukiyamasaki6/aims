@@ -13,7 +13,9 @@ import { type LoadedRound, loadRoundDetail } from "./load-round-detail";
 
 vi.mock("./load-round-detail", () => ({ loadRoundDetail: vi.fn() }));
 vi.mock("@/features/op-log/sync-result", () => ({ retryDelayMs: () => 10 }));
-vi.mock("@/lib/supabase/client", () => ({ createClient: vi.fn(() => ({})) }));
+vi.mock("@/lib/supabase/infrastructure/client", () => ({
+  createClient: vi.fn(() => ({})),
+}));
 
 const reload = vi.mocked(loadRoundDetail);
 

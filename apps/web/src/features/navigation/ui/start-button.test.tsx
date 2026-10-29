@@ -1,10 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { createStart } from "../application/start";
+import { createAuthSignInCheck } from "../infrastructure/auth-sign-in-check";
 import { StartButton } from "./start-button";
 
 const sessionReader = { readSession: vi.fn() };
+
+// 認証の読み手だけを偽にし、変換の実装と手続きは実物を通す。
+function createStartWith(reader: Parameters<typeof createAuthSignInCheck>[0]) {
+  return createStart({ signInCheck: createAuthSignInCheck(reader) });
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -17,7 +24,7 @@ describe("StartButton", () => {
     sessionReader.readSession.mockReturnValue(new Promise(() => {}));
 
     // When
-    render(<StartButton sessionReader={sessionReader} />);
+    render(<StartButton start={createStartWith(sessionReader)} />);
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -33,7 +40,7 @@ describe("StartButton", () => {
     });
 
     // When
-    render(<StartButton sessionReader={sessionReader} />);
+    render(<StartButton start={createStartWith(sessionReader)} />);
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -46,7 +53,7 @@ describe("StartButton", () => {
     sessionReader.readSession.mockResolvedValue({ status: "unknown" });
 
     // When
-    render(<StartButton sessionReader={sessionReader} />);
+    render(<StartButton start={createStartWith(sessionReader)} />);
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -60,7 +67,7 @@ describe("StartButton", () => {
     });
 
     // When
-    render(<StartButton sessionReader={sessionReader} />);
+    render(<StartButton start={createStartWith(sessionReader)} />);
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -84,7 +91,7 @@ describe("StartButton", () => {
     );
 
     // When
-    render(<StartButton sessionReader={throwingReader} />);
+    render(<StartButton start={createStartWith(throwingReader)} />);
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -92,5 +99,64 @@ describe("StartButton", () => {
       expect(link).toHaveAttribute("data-hydrated", "true"),
     );
     expect(link).toHaveAttribute("href", "/rounds");
+  });
+
+  describe("サインインの状態の読み取りは、画面を開いたときの1回だけである", () => {
+    beforeEach(() => {
+      sessionReader.readSession.mockResolvedValue({
+        status: "authenticated",
+        userId: "user-1",
+      });
+    });
+
+    it("描画して判定が済むと、読み取りは1回である", async () => {
+      // Given
+      // When
+      render(<StartButton start={createStartWith(sessionReader)} />);
+
+      // Then
+      await vi.waitFor(() =>
+        expect(screen.getByRole("link", { name: "開始" })).toHaveAttribute(
+          "data-hydrated",
+          "true",
+        ),
+      );
+      expect(sessionReader.readSession).toHaveBeenCalledTimes(1);
+    });
+
+    it("判定済みの開始リンクを押しても、読み直さない", async () => {
+      // Given
+      render(<StartButton start={createStartWith(sessionReader)} />);
+      const link = screen.getByRole("link", { name: "開始" });
+      await vi.waitFor(() =>
+        expect(link).toHaveAttribute("data-hydrated", "true"),
+      );
+
+      // When
+      // jsdomは画面遷移を再現しないため、既定の動作を止めて押す。
+      link.addEventListener("click", (event) => event.preventDefault());
+      fireEvent.click(link);
+
+      // Then
+      expect(sessionReader.readSession).toHaveBeenCalledTimes(1);
+    });
+
+    it("同じ手続きで再描画しても、読み直さない", async () => {
+      // Given
+      const start = createStartWith(sessionReader);
+      const { rerender } = render(<StartButton start={start} />);
+      await vi.waitFor(() =>
+        expect(screen.getByRole("link", { name: "開始" })).toHaveAttribute(
+          "data-hydrated",
+          "true",
+        ),
+      );
+
+      // When
+      rerender(<StartButton start={start} />);
+
+      // Then
+      expect(sessionReader.readSession).toHaveBeenCalledTimes(1);
+    });
   });
 });

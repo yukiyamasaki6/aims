@@ -49,7 +49,9 @@ vi.mock("./scorecard-client", () => ({
     </div>
   ),
 }));
-vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
+vi.mock("@/lib/supabase/infrastructure/client", () => ({
+  createClient: () => ({}),
+}));
 
 const sessionReader = { readSession: vi.fn() };
 const identityReader = { read: vi.fn() };
