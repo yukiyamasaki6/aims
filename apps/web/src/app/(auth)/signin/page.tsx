@@ -6,7 +6,7 @@ import { createSignIn } from "@/features/auth/application/sign-in";
 import { createBrowserNavigation } from "@/features/auth/infrastructure/browser-navigation";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SignInForm } from "@/features/auth/ui/signin-form";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 
 export default function SignInPage() {
   const router = useRouter();

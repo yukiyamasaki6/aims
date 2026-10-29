@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { FALLBACK_WAIT_MS } from "@/features/fetch-result/fetch-content";
 import { roundOpLog } from "@/features/rounds/round-op-log";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import type { Preset } from "../_shared/preset-types";
 import { startRound } from "./start-round";
 

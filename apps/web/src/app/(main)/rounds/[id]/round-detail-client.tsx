@@ -7,7 +7,7 @@ import type { IdentityReader, SessionReader } from "@/features/auth";
 import { withinFetchTimeout } from "@/features/fetch-result/fetch-content";
 import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import { loadRoundDetail } from "./load-round-detail";
 import { RoundDetailFrame } from "./round-detail-frame";
 import { parseRoundId } from "./round-detail-id";

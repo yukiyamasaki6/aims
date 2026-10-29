@@ -3,28 +3,20 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
-import { type SessionReader, SIGN_UP_PATH } from "@/features/auth";
+import type { Start } from "../application/start";
 
-// 判定中は/signupへの有効なリンクとして表示する。判定中に認証済みの利用者が
+// 判定中はサインアップへの有効なリンクとして表示する。判定中に認証済みの利用者が
 // 押しても、/signupの認証済みリダイレクトで/roundsへ着く。
-export function StartButton({
-  sessionReader,
-}: {
-  sessionReader: SessionReader;
-}) {
-  const [href, setHref] = useState<string>(SIGN_UP_PATH);
+export function StartButton({ start }: { start: Start }) {
+  const [href, setHref] = useState(start.pendingHref);
   const [decided, setDecided] = useState(false);
 
   useEffect(() => {
-    sessionReader
-      .readSession()
-      .then((reading) => {
-        if (reading.status !== "unauthenticated") {
-          setHref("/rounds");
-        }
-      })
+    start
+      .decideHref()
+      .then(setHref)
       .finally(() => setDecided(true));
-  }, [sessionReader]);
+  }, [start]);
 
   return (
     <Link

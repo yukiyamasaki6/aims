@@ -35,7 +35,7 @@
 - `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、開始の命令(`beginSendCode`ほか)が、操作の可否と入力の検証の順序、確認・再送・戻るの排他を守って`Start`を返す。事実の遷移でトークンの消費を守る。サインアップと共有する。
 - `src/features/auth/domain/password.ts`、`auth-code.ts`、`email-address.ts`、`captcha-token.ts`、`auth-failure.ts`、`routes.ts`: パスワードの強さ、認証コードと再送の待ち時間、メールアドレス、セキュリティチェック、失敗の種類、遷移先の規則と文言(値オブジェクト)。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。画面はブラウザの接続で`resetPasswordForEmail`、`verifyOtp`を、要求の入口はサーバーの接続で`updateUser`と`signOut`(範囲`global`)を使う。応答が無かった場合(接続を作れない、呼び出しが投げた)は、`unreachable`として返す。
-- `src/lib/supabase/server.ts`: サーバーでの接続(要求の利用者のセッション)。
+- `src/lib/supabase/infrastructure/server.ts`: サーバーでの接続(要求の利用者のセッション)。
 - `src/features/auth/infrastructure/browser-page-load.ts`: `window.location.assign`によるページ全体の読み込み。サインアウトのセッション喪失の遷移（置き換え、今の場所）も同じ実装が満たす。
 - `src/hooks/use-countdown.ts`: 再送できるまでの秒数を1秒ごとに進める。
 - `src/app/(auth)/layout.tsx`、`src/components/auth-header.tsx`、`src/components/turnstile.tsx`: 認証画面の共通部品と枠。

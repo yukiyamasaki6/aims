@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import { RoundsListClient } from "./rounds-list-client";
 
 export default function RoundsPage() {

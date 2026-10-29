@@ -1,29 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { AppLogo } from "@/components/app-logo";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import { createClient } from "@/lib/supabase/client";
-import { StartButton } from "./start-button";
+import { createStart } from "@/features/navigation/application/start";
+import { createAuthSignInCheck } from "@/features/navigation/infrastructure/auth-sign-in-check";
+import { IntroScreen } from "@/features/navigation/ui/intro-screen";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 
 export default function Home() {
-  // 画面を開いている間、同じ実装を保つ。
-  const [sessionReader] = useState(() => createSupabaseAuth(createClient));
-
-  return (
-    <>
-      <AppLogo />
-      <main className="mx-auto mt-14 flex h-[calc(100dvh-3.5rem)] w-full max-w-sm flex-col items-center justify-center gap-4 overflow-y-auto p-8">
-        <div className="flex flex-col gap-1 text-center">
-          <h1 className="font-heading text-2xl leading-snug font-medium">
-            AIMS
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            アーチェリーのスコア記録・分析・共有アプリ
-          </p>
-        </div>
-        <StartButton sessionReader={sessionReader} />
-      </main>
-    </>
+  // 画面を開いている間、同じ手続きを保つ。
+  const [start] = useState(() =>
+    createStart({
+      signInCheck: createAuthSignInCheck(createSupabaseAuth(createClient)),
+    }),
   );
+
+  return <IntroScreen start={start} />;
 }

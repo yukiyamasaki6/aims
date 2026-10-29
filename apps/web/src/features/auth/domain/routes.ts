@@ -9,7 +9,7 @@ const GUEST_ONLY_PATHS: readonly string[] = [
   RESET_PASSWORD_PATH,
 ];
 const PROTECTED_PATH = "/rounds";
-const DEFAULT_DESTINATION = PROTECTED_PATH;
+export const DEFAULT_DESTINATION = PROTECTED_PATH;
 const RETURN_TO_PARAM = "returnTo";
 const MAX_LENGTH = 2048;
 const BASE = "http://localhost";

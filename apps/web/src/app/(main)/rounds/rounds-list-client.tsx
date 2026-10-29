@@ -17,7 +17,7 @@ import { FetchState } from "@/features/fetch-result/fetch-state";
 import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
 import { roundOpLog } from "@/features/rounds/round-op-log";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import { deleteRound } from "./_shared/delete-round";
 import type { RoundListItem } from "./fetch-rounds-list";
 import { loadRoundsList } from "./load-rounds-list";

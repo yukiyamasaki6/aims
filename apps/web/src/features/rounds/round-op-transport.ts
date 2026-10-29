@@ -9,7 +9,7 @@ import {
   authFailureResult,
   rpcFailureResult,
 } from "@/features/op-log/sync-result";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import type { Json } from "@/types/supabase";
 import type {
   DistanceChanges,

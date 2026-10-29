@@ -21,7 +21,9 @@ vi.mock("@/features/op-log/sync-result", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/features/op-log/sync-result")>()),
   retryDelayMs: vi.fn(() => 10),
 }));
-vi.mock("@/lib/supabase/client", () => ({ createClient: vi.fn(() => ({})) }));
+vi.mock("@/lib/supabase/infrastructure/client", () => ({
+  createClient: vi.fn(() => ({})),
+}));
 vi.mock("@/features/rounds/round-op-transport", () => ({
   sendRoundBatch: vi.fn(),
 }));

@@ -35,7 +35,9 @@ vi.mock("./_shared/delete-round", () => deletion);
 const log = vi.hoisted(() => ({ commitDeleted: vi.fn() }));
 vi.mock("@/features/rounds/round-op-log", () => ({ roundOpLog: log }));
 
-vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({}) }));
+vi.mock("@/lib/supabase/infrastructure/client", () => ({
+  createClient: () => ({}),
+}));
 
 const sessionReader = { readSession: vi.fn() };
 const identityReader = { read: vi.fn() };

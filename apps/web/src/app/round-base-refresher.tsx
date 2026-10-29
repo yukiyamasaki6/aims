@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { SessionReader } from "@/features/auth";
 import { refreshRoundBases } from "@/features/rounds/refresh-round-bases";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 
 // 取得を同時に1回までにする。実行中の契機は、完了後に1回だけやり直す。
 export function createSingleFlight(run: () => Promise<void>) {

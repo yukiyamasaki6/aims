@@ -19,7 +19,7 @@ import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
 import { comparePositionKey } from "@/features/rounds/position-key";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useMountedRef } from "@/hooks/use-mounted-ref";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import { cn } from "@/lib/utils";
 import { type FetchedPresets, fetchPresets } from "../_shared/fetch-presets";
 import { PresetInfo } from "../_shared/preset-info";

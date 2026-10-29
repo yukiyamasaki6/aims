@@ -5,9 +5,9 @@ import { createSession } from "@/features/auth/application/session";
 import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SignOutButton } from "@/features/auth/ui/sign-out-button";
+import { LeftPanel } from "@/features/navigation/ui/left-panel";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
-import { createClient } from "@/lib/supabase/client";
-import { LeftPanel } from "./left-panel";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 
 export default function MainLayout({
   children,

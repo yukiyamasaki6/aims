@@ -2,7 +2,7 @@ import type { IdentityReader, SessionReader } from "@/features/auth";
 import { retryDelayMs } from "@/features/op-log/sync-result";
 import type { RoundOpSync } from "@/features/rounds/round-op-log";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import { type LoadedRound, loadRoundDetail } from "./load-round-detail";
 
 // 通信の可否。

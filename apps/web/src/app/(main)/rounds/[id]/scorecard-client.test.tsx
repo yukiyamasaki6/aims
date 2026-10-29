@@ -21,7 +21,7 @@ import { roundOpStore } from "@/features/rounds/round-op-store";
 import { roundTablesFromServer } from "@/features/rounds/round-tables";
 import type { Distance, Shot } from "@/features/rounds/scorecard-types";
 import type { TargetFaceOption } from "@/features/rounds/target-face-types";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import { ScorecardClient } from "./scorecard-client";
 
 const nav = vi.hoisted(() => ({

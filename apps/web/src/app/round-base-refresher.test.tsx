@@ -12,7 +12,7 @@ const auth = vi.hoisted(() => ({
     | undefined,
   unsubscribe: vi.fn(),
 }));
-vi.mock("@/lib/supabase/client", () => ({
+vi.mock("@/lib/supabase/infrastructure/client", () => ({
   createClient: () => ({
     auth: {
       onAuthStateChange: (listener: typeof auth.listener) => {

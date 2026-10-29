@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import type { IdentityReader, SessionReader } from "@/features/auth";
 import { roundOpHub } from "@/features/rounds/round-op-hub";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 
 // 操作の列の常駐の送信を、どの画面でも動かす。何も表示しない。
 export function OpSyncProvider({

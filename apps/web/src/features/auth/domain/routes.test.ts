@@ -323,7 +323,7 @@ describe("redirectFor", () => {
   });
 });
 
-// 経路の規則は、セッションの更新(lib/supabase/session)から引数で渡されるため、ここで要求ごとの行き先を確かめる。
+// 経路の規則は、セッションの更新(lib/supabase/infrastructure/session)から引数で渡されるため、ここで要求ごとの行き先を確かめる。
 describe("redirectFor: 要求ごとの行き先", () => {
   const request = {
     signedIn: false,

@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { createPasswordChange } from "@/features/auth/application/password-change";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient } from "@/lib/supabase/infrastructure/server";
 
 // パスワードの変更と全ての端末のサインインの終了を、要求の利用者のセッションで1回の要求として行う。
 export async function changePassword(password: string) {
