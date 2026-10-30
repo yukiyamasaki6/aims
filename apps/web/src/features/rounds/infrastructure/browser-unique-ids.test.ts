@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createBrowserEventIds } from "./browser-event-ids";
+import { createBrowserUniqueIds } from "./browser-unique-ids";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -7,10 +7,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("createBrowserEventIds", () => {
+describe("createBrowserUniqueIds", () => {
   it("next()は呼ぶたびに異なる、UUIDの形の文字列を返す", () => {
     // Given
-    const ids = createBrowserEventIds();
+    const ids = createBrowserUniqueIds();
 
     // When
     const first = ids.next();
@@ -27,7 +27,7 @@ describe("createBrowserEventIds", () => {
     const randomUuid = vi.spyOn(crypto, "randomUUID");
 
     // When
-    const ids = createBrowserEventIds();
+    const ids = createBrowserUniqueIds();
     const touchedByCreate = randomUuid.mock.calls.length;
     ids.next();
 

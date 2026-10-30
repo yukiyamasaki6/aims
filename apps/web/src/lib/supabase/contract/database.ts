@@ -5,7 +5,7 @@ export type DbSchema = {
   Tables: Record<string, { Row: object }>;
 };
 
-// データベースへの問い合わせと手続きの呼び出し。応答は外部の型を含まない、平らな形で返す。
+// データベースへの問い合わせ、削除、手続きの呼び出し。応答は外部の型を含まない、平らな形で返す。
 // 例外: 投げることがある(接続を得られない、呼び出しが投げた)。使う側は通信の失敗と同じに扱う。
 export type DbResponse<T = unknown> = {
   data: T | null;
@@ -50,9 +50,16 @@ export type DbSelect<S extends DbSchema, T extends TableOf<S>> = {
   single?: "maybe";
 };
 
+// 1行以上を絞る削除。絞りの無い削除は型で書けない。
+type DbDelete<S extends DbSchema, T extends TableOf<S>> = {
+  table: T;
+  filters: readonly [DbFilter<S, T>, ...DbFilter<S, T>[]];
+};
+
 export type DatabaseGateway<S extends DbSchema> = {
   // 問い合わせは、取得の側が再試行を持つため、パッケージの再試行を使わない。
   select<T extends TableOf<S>>(query: DbSelect<S, T>): Promise<DbResponse>;
+  delete<T extends TableOf<S>>(command: DbDelete<S, T>): Promise<DbResponse>;
   rpc<N extends keyof S["Functions"] & string>(
     name: N,
     args: S["Functions"][N]["Args"],

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import { RoundDetailClient } from "./round-detail-client";
@@ -10,12 +9,6 @@ import { RoundDetailClient } from "./round-detail-client";
 export function RoundDetailEntry() {
   // 画面を開いている間、同じ実装を保つ。
   const [sessionReader] = useState(() => createSupabaseAuth(createClient));
-  const [identityReader] = useState(() => createBrowserIdentityStore());
 
-  return (
-    <RoundDetailClient
-      sessionReader={sessionReader}
-      identityReader={identityReader}
-    />
-  );
+  return <RoundDetailClient sessionReader={sessionReader} />;
 }

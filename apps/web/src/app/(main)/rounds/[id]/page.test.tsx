@@ -7,7 +7,7 @@ const received = vi.hoisted(() => ({
   props: undefined as
     | {
         sessionReader?: { readSession?: unknown };
-        identityReader?: { read?: unknown };
+        identityReader?: unknown;
       }
     | undefined,
 }));
@@ -29,14 +29,14 @@ describe("RoundPage", () => {
     expect(screen.getByTestId("round-detail-client")).toBeInTheDocument();
   });
 
-  it("サインインの状態と端末の識別情報の読み手を、子へ渡す", () => {
+  it("サインインの状態の読み手を子へ渡し、端末の識別情報の読み手は渡さない", () => {
     // Given
     // When
     render(<RoundPage />);
 
     // Then
     expect(received.props?.sessionReader?.readSession).toBeTypeOf("function");
-    expect(received.props?.identityReader?.read).toBeTypeOf("function");
+    expect(received.props).not.toHaveProperty("identityReader");
   });
 
   it("静的な枠にするため、プレースホルダーのIDだけをプリレンダー対象にする", () => {

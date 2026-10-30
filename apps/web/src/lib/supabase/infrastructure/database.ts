@@ -8,22 +8,32 @@ import type {
 } from "../contract/database";
 
 // 問い合わせの組み立てで使う、ビルダーの形。生成した型は表の名前と列の名前を固定するが、ここは呼び出し側が文字列で指定する。
-type QueryBuilder = {
-  eq(column: string, value: unknown): QueryBuilder;
-  neq(column: string, value: unknown): QueryBuilder;
-  is(column: string, value: unknown): QueryBuilder;
-  in(column: string, values: readonly string[]): QueryBuilder;
-  or(expression: string): QueryBuilder;
+type FilterBuilder<B> = {
+  eq(column: string, value: unknown): B;
+  neq(column: string, value: unknown): B;
+  is(column: string, value: unknown): B;
+  in(column: string, values: readonly string[]): B;
+  or(expression: string): B;
+};
+
+interface QueryBuilder extends FilterBuilder<QueryBuilder> {
   order(
     column: string,
     options?: { referencedTable?: string; ascending?: boolean },
   ): QueryBuilder;
   maybeSingle(): QueryBuilder;
   retry(enabled: boolean): PromiseLike<DbResponse>;
-};
+}
+
+interface DeleteBuilder extends FilterBuilder<DeleteBuilder> {
+  retry(enabled: boolean): PromiseLike<DbResponse>;
+}
 
 type UntypedClient = {
-  from(table: string): { select(columns: string): QueryBuilder };
+  from(table: string): {
+    select(columns: string): QueryBuilder;
+    delete(): DeleteBuilder;
+  };
   rpc(name: string, args: Record<string, unknown>): PromiseLike<DbResponse>;
 };
 
@@ -49,7 +59,10 @@ type LooseSelect = {
   single?: "maybe";
 };
 
-function applyFilter(builder: QueryBuilder, filter: LooseFilter): QueryBuilder {
+function applyFilter<B extends FilterBuilder<B>>(
+  builder: B,
+  filter: LooseFilter,
+): B {
   switch (filter.op) {
     case "eq":
       return builder.eq(filter.column, filter.value);
@@ -102,6 +115,13 @@ export function createSupabaseDatabase(
         builder = applyOrder(builder, order);
       }
       if (query.single === "maybe") builder = builder.maybeSingle();
+      return toResponse(await builder.retry(false));
+    },
+    async delete(command: { table: string; filters: readonly LooseFilter[] }) {
+      let builder = client().from(command.table).delete();
+      for (const filter of command.filters) {
+        builder = applyFilter(builder, filter);
+      }
       return toResponse(await builder.retry(false));
     },
     // 戻り値の型は、生成した型の宣言どおりに返ることを前提にする(実行時の写しは変えない)。

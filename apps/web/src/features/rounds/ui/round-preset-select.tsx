@@ -12,18 +12,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { IdentityReader, SessionReader } from "@/features/auth";
-import type { FetchView } from "@/features/rounds/domain/fetch-result";
-import { comparePositionKey } from "@/features/rounds/domain/position-key";
-import { FetchState } from "@/features/rounds/ui/fetch-state";
-import { useFetchResult } from "@/features/rounds/ui/use-fetch-result";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useMountedRef } from "@/hooks/use-mounted-ref";
-import { createClient } from "@/lib/supabase/infrastructure/client";
 import { cn } from "@/lib/utils";
-import { type FetchedPresets, fetchPresets } from "../_shared/fetch-presets";
-import { PresetInfo } from "../_shared/preset-info";
-import type { Preset } from "../_shared/preset-types";
+import { type Preset, presetDistancesInOrder } from "../domain/preset";
+import { presetListView } from "../domain/preset-list-view";
+import { ROUNDS_PATH } from "../domain/round-routes";
+import { FetchState } from "./fetch-state";
+import { PresetInfo } from "./preset-info";
+import { useRoundsStore } from "./rounds-context";
+import { useFetchResult } from "./use-fetch-result";
 import { usePresetDelete } from "./use-preset-delete";
 import { useStartRound } from "./use-start-round";
 
@@ -57,9 +55,7 @@ function PresetRow({
   onSelect: () => void;
   onDelete?: () => void;
 }) {
-  const distances = [...preset.preset_distances].sort((a, b) =>
-    comparePositionKey(a.position_key, a.id, b.position_key, b.id),
-  );
+  const distances = presetDistancesInOrder(preset);
 
   return (
     <div
@@ -130,44 +126,23 @@ function PresetRow({
   );
 }
 
-// 取得できたプリセットのうち、表示するもの。削除済みの個人プリセットは除く。
-function visiblePresets(view: FetchView<FetchedPresets>, removedIds: string[]) {
-  if (view.status !== "ok") return { personalPresets: [], globalPresets: [] };
-  return {
-    personalPresets: view.data.personal.filter(
-      (p) => !removedIds.includes(p.id),
-    ),
-    globalPresets: view.data.global,
-  };
-}
-
-export function RoundPresetSelect({
-  sessionReader,
-  identityReader,
-}: {
-  sessionReader: SessionReader;
-  identityReader: IdentityReader;
-}) {
-  const { view, retry } = useFetchResult(
-    () => fetchPresets(createClient(), sessionReader, identityReader),
-    [],
-  );
+export function RoundPresetSelect() {
+  const store = useRoundsStore();
+  const { view, retry } = useFetchResult(() => store.loadPresets(), []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const mountedRef = useMountedRef();
   const hydrated = useHydrated();
   const { removedIds, setPresetToDelete, dialog } = usePresetDelete(
-    sessionReader,
-    identityReader,
     mountedRef,
     (presetId) => setSelectedId((prev) => (prev === presetId ? null : prev)),
   );
 
-  const { personalPresets, globalPresets } = visiblePresets(view, removedIds);
-  const selectedPreset =
-    [...personalPresets, ...globalPresets].find((p) => p.id === selectedId) ??
-    null;
+  const {
+    personal: personalPresets,
+    global: globalPresets,
+    selected: selectedPreset,
+  } = presetListView(view, removedIds, selectedId);
   const { error, submitting, handleStart } = useStartRound(
-    sessionReader,
     selectedPreset,
     mountedRef,
   );
@@ -309,7 +284,7 @@ function PageHeader() {
   return (
     <div className="mx-auto w-full max-w-xl px-8 pt-8">
       <Link
-        href="/rounds"
+        href={ROUNDS_PATH}
         className="mb-2 inline-flex items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
       >
         <ChevronLeft className="size-4" />

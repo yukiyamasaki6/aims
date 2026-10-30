@@ -22,6 +22,9 @@ const database: DatabaseGateway<RoundsDbSchema> = {
   select: async () => {
     throw new Error("書き込みは問い合わせを使わない");
   },
+  delete: async () => {
+    throw new Error("書き込みは削除を使わない");
+  },
   rpc: client.rpc,
 };
 

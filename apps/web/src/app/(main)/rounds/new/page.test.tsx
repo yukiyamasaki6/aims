@@ -4,15 +4,10 @@ import NewRoundPage from "./page";
 
 // 取得と表示は別のテストで確かめるため、クライアントコンポーネントは目印だけを描画するスタブにする。
 const received = vi.hoisted(() => ({
-  props: undefined as
-    | {
-        sessionReader?: { readSession?: unknown };
-        identityReader?: { read?: unknown };
-      }
-    | undefined,
+  props: undefined as Record<string, unknown> | undefined,
 }));
-vi.mock("./round-preset-select-client", () => ({
-  RoundPresetSelect: (props: NonNullable<typeof received.props>) => {
+vi.mock("@/features/rounds/ui/round-preset-select", () => ({
+  RoundPresetSelect: (props: Record<string, unknown>) => {
     received.props = props;
     return <div data-testid="round-preset-select" />;
   },
@@ -28,13 +23,12 @@ describe("NewRoundPage", () => {
     expect(screen.getByTestId("round-preset-select")).toBeInTheDocument();
   });
 
-  it("サインインの状態と端末の識別情報の読み手を、子へ渡す", () => {
+  it("入口は何も生成せず、子に何も渡さない", () => {
     // Given
     // When
     render(<NewRoundPage />);
 
     // Then
-    expect(received.props?.sessionReader?.readSession).toBeTypeOf("function");
-    expect(received.props?.identityReader?.read).toBeTypeOf("function");
+    expect(received.props).toEqual({});
   });
 });

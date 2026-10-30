@@ -4,12 +4,18 @@ import type {
   DbResponse,
   DbSelect,
 } from "@/lib/supabase/contract/database";
-import { TARGET_FACE_SELECT } from "./reference-query-constants";
+import {
+  ROUND_PRESET_SELECT,
+  TARGET_FACE_SELECT,
+} from "./reference-query-constants";
 import { createRoundQueries } from "./round-queries";
 import type { RoundsDbSchema } from "./rounds-db-schema";
 
 // 問い合わせの値が検証対象で、表の名前の型引数は区別しない。
-type Query = DbSelect<RoundsDbSchema, "rounds" | "distances" | "target_faces">;
+type Query = DbSelect<
+  RoundsDbSchema,
+  "rounds" | "distances" | "target_faces" | "preset_rounds"
+>;
 
 const ok = (data: unknown): DbResponse => ({ data, error: null, status: 200 });
 const failed = (
@@ -24,6 +30,7 @@ const failed = (
 type Responses = {
   rounds: DbResponse | ((roundsQueryIndex: number) => DbResponse);
   target_faces: DbResponse;
+  preset_rounds?: DbResponse;
 };
 
 // データベースの境界を、表ごとの応答を返し、受けた問い合わせを記録するゲートウェイで模す。
@@ -34,8 +41,14 @@ function makeDatabase(responses: Responses) {
     async select(query) {
       queries.push(query as unknown as Query);
       if (query.table === "target_faces") return responses.target_faces;
+      if (query.table === "preset_rounds") {
+        return responses.preset_rounds ?? ok(null);
+      }
       const source = responses.rounds;
       return typeof source === "function" ? source(roundsCount++) : source;
+    },
+    async delete() {
+      throw new Error("取得は削除を使わない");
     },
     async rpc() {
       throw new Error("取得はRPCを使わない");
@@ -574,6 +587,132 @@ describe("roundsList", () => {
     // When
     const first = await comm.createQueries().roundsList();
     const second = await errored.createQueries().roundsList();
+
+    // Then
+    expect(first).toEqual(failed(0));
+    expect(second).toEqual(failed(500, { message: "x" }));
+  });
+});
+
+describe("presets", () => {
+  const noFaces = ok(null);
+  const presetRow = {
+    id: "preset-1",
+    name: "70m",
+    format: "outdoor",
+    bow_type: "recurve",
+    owner_id: "user-1",
+    created_at: "2026-09-01T00:00:00Z",
+    preset_distances: [
+      {
+        id: "pd-1",
+        position_key: "1-1",
+        distance: 70,
+        is_marked: true,
+        total_ends: 6,
+        arrows_per_end: 6,
+        target_face_id: "face-1",
+        target_faces: { size: 122, target_face_spots: [] },
+      },
+    ],
+  };
+
+  it("自分の個人プリセットと公式プリセットだけを要求する1回の問い合わせを発行する", async () => {
+    // Given
+    const database = makeDatabase({
+      rounds: ok(null),
+      target_faces: noFaces,
+      preset_rounds: ok([]),
+    });
+
+    // When
+    await database.createQueries().presets("user-1");
+
+    // Then
+    expect(database.queries).toEqual([
+      {
+        table: "preset_rounds",
+        columns: ROUND_PRESET_SELECT,
+        filters: [
+          { op: "or", expression: "owner_id.is.null,owner_id.eq.user-1" },
+        ],
+      },
+    ]);
+  });
+
+  it("応答の行を、列名のまま、入れ子の距離と的を含めて返す", async () => {
+    // Given
+    const database = makeDatabase({
+      rounds: ok(null),
+      target_faces: noFaces,
+      preset_rounds: ok([presetRow]),
+    });
+
+    // When
+    const response = await database.createQueries().presets("user-1");
+
+    // Then
+    expect(response).toEqual({ data: [presetRow], error: null, status: 200 });
+  });
+
+  it("距離の的が、1つのオブジェクトまたはnullのまま返る", async () => {
+    // Given
+    const withoutFace = {
+      ...presetRow,
+      id: "preset-2",
+      preset_distances: [
+        { ...presetRow.preset_distances[0], target_faces: null },
+      ],
+    };
+    const database = makeDatabase({
+      rounds: ok(null),
+      target_faces: noFaces,
+      preset_rounds: ok([presetRow, withoutFace]),
+    });
+
+    // When
+    const response = await database.createQueries().presets("user-1");
+
+    // Then
+    const [first, second] = response.data ?? [];
+    expect(first.preset_distances[0].target_faces).toEqual({
+      size: 122,
+      target_face_spots: [],
+    });
+    expect(second.preset_distances[0].target_faces).toBeNull();
+  });
+
+  it("データがnullなら空の配列を返す", async () => {
+    // Given
+    const database = makeDatabase({
+      rounds: ok(null),
+      target_faces: noFaces,
+      preset_rounds: ok(null),
+    });
+
+    // When
+    const response = await database.createQueries().presets("user-1");
+
+    // Then
+    expect(response).toEqual({ data: [], error: null, status: 200 });
+  });
+
+  it("通信失敗(status 0)とエラー応答は、その応答をそのまま返す", async () => {
+    // Given
+    const comm = makeDatabase({
+      rounds: ok(null),
+      target_faces: noFaces,
+      preset_rounds: failed(0),
+    });
+    const errored = makeDatabase({
+      rounds: ok(null),
+      target_faces: noFaces,
+      preset_rounds: failed(500, { message: "x" }),
+    });
+
+    // When
+    const first = await comm.createQueries().presets("user-1");
+    const second = await errored.createQueries().presets("user-1");
 
     // Then
     expect(first).toEqual(failed(0));

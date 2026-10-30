@@ -7,6 +7,7 @@ import {
   FETCH_TIMEOUT_MS,
   type FetchResult,
 } from "../domain/fetch-result";
+import type { Preset, Presets } from "../domain/preset";
 import {
   deletionsOf,
   type LoadedRoundsList,
@@ -38,6 +39,7 @@ import {
   type SyncOperation,
 } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face-types";
+import type { DeletePresetResult, PresetDeletion } from "./delete-preset";
 import type { RoundFetching } from "./fetch-round-detail";
 import type { OpenedRound, RefreshRequests } from "./refresh-requests";
 import type {
@@ -45,10 +47,9 @@ import type {
   RoundRecordHub,
   RoundStoreGroup,
 } from "./round-record-hub";
+import type { RoundStart, StartRoundResult } from "./start-round";
 import { TIMED_OUT, withinTime } from "./time-limit";
-
-// 操作のイベントIDの払い出し。例外: 投げない。
-export type EventIds = { next(): string };
+import type { UniqueIds } from "./unique-ids";
 
 // 開いた詳細の材料。
 export type LoadedRound = {
@@ -107,6 +108,18 @@ export type RoundsStore = {
   whenOnline(listener: () => void): () => void;
   // FALLBACK_WAIT_MSの後に1回listenerを呼ぶ。返す関数で取り消す。
   afterFallbackWait(listener: () => void): () => void;
+  // プリセットの一覧(個人と公式)。取得できれば保存し、取得できなければ保存済み。
+  loadPresets(): Promise<FetchResult<Presets>>;
+  // 個人プリセットの削除。成功で保存済みからも除く。`isCurrent`は、結果を受け取る画面がまだあるかを返す。
+  deletePreset(
+    presetId: string,
+    isCurrent: () => boolean,
+  ): Promise<DeletePresetResult>;
+  // 開始。保存の完了の後に詳細へ進む。送信の完了は待たない。遷移が投げたときは拒否する。
+  startRound(
+    preset: Preset | null,
+    isCurrent: () => boolean,
+  ): Promise<StartRoundResult>;
 };
 
 const UNOPENED: RoundScreenSnapshot = {
@@ -129,9 +142,20 @@ export function createRoundsStore(deps: {
   fetching: RoundFetching;
   clock: Clock;
   connectivity: Connectivity;
-  ids: EventIds;
+  ids: UniqueIds;
+  roundStart: RoundStart;
+  presetDeletion: PresetDeletion;
 }): RoundsStore {
-  const { hub, requests, fetching, clock, connectivity, ids } = deps;
+  const {
+    hub,
+    requests,
+    fetching,
+    clock,
+    connectivity,
+    ids,
+    roundStart,
+    presetDeletion,
+  } = deps;
   const handles = new Map<string, RoundHandle>();
 
   // 画面の読み込み(端末の保存の読み書きと取得)の全体を、開始からFETCH_TIMEOUT_MSで打ち切る。
@@ -481,5 +505,9 @@ export function createRoundsStore(deps: {
       };
     },
     afterFallbackWait: (listener) => clock.after(FALLBACK_WAIT_MS, listener),
+    loadPresets: () => fetching.fetchPresets(),
+    deletePreset: (presetId, isCurrent) =>
+      presetDeletion.deletePreset(presetId, isCurrent),
+    startRound: (preset, isCurrent) => roundStart.startRound(preset, isCurrent),
   };
 }

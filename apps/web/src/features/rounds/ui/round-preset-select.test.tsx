@@ -1,4 +1,5 @@
 import {
+  act,
   render as renderWithoutStore,
   screen,
   waitFor,
@@ -6,81 +7,38 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
-import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import type { FetchResult } from "@/features/rounds/domain/fetch-result";
-import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
-import { createFakeRoundsStore } from "@/features/rounds/ui/rounds-store-test-helpers";
-import { createClient } from "@/lib/supabase/infrastructure/client";
-import {
-  deletePresetFromSnapshot,
-  type FetchedPresets,
-  fetchPresets,
-} from "../_shared/fetch-presets";
-import type { Preset } from "../_shared/preset-types";
-import { RoundPresetSelect } from "./round-preset-select-client";
-import { startRound } from "./start-round";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { FetchResult } from "../domain/fetch-result";
+import type { Preset, Presets } from "../domain/preset";
+import { RoundPresetSelect } from "./round-preset-select";
+import { RoundsStoreProvider } from "./rounds-context";
+import { createFakeRoundsStore } from "./rounds-store-test-helpers";
 
-const nav = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock("next/navigation", () => ({
-  useRouter: () => nav,
-}));
-
-// SupabaseのSDKは外部サービスとの境界のため、セッションとプリセット削除の結果を任意に制御できるスタブで模す。
-// プリセット削除の処理は、実物の処理とSupabaseクライアントラッパーを通してこのスタブに届く。
-const supabase = vi.hoisted(() => ({
-  getSession: vi.fn(),
-  deleteEq: vi.fn(),
-}));
-vi.mock("@supabase/ssr", () => ({
-  createBrowserClient: () => ({
-    auth: { getSession: supabase.getSession },
-    from: () => ({
-      delete: () => ({ eq: supabase.deleteEq }),
-    }),
-  }),
-}));
-
-const sessionReader = createSupabaseAuth(createClient);
-
-// ラウンドの開始は境界としてモックするため、ラウンドの状態と変更の方法は通信の復帰の合図だけを持つ偽の約束で渡す。
+// 取得、削除、開始の手続きは、それぞれのテストで確かめるため、ラウンドの状態と変更の方法は偽の約束で渡す。
 // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
-const fake = createFakeRoundsStore();
-fake.goOffline();
-const store = fake.store;
+let fake: ReturnType<typeof createFakeRoundsStore>;
+let loadPresets: ReturnType<
+  typeof createFakeRoundsStore
+>["store"]["loadPresets"];
+let startRound: ReturnType<typeof createFakeRoundsStore>["store"]["startRound"];
+let deletePreset: ReturnType<
+  typeof createFakeRoundsStore
+>["store"]["deletePreset"];
 
 function render(ui: ReactElement) {
   return renderWithoutStore(
-    <RoundsStoreProvider store={store}>{ui}</RoundsStoreProvider>,
+    <RoundsStoreProvider store={fake.store}>{ui}</RoundsStoreProvider>,
   );
 }
-const identityReader = createBrowserIdentityStore();
 
-// ラウンドの開始(作成の操作の列への追記)は別のテストで確かめるため、開始関数を境界としてモックする。
-vi.mock("./start-round", () => ({ startRound: vi.fn() }));
-const startRoundMock = vi.mocked(startRound);
-
-// プリセットの取得は別のテストで確かめるため、取得関数を境界としてモックする。
-vi.mock("../_shared/fetch-presets", () => ({
-  fetchPresets: vi.fn(),
-  deletePresetFromSnapshot: vi.fn(),
-}));
-const fetchPresetsMock = vi.mocked(fetchPresets);
-
-function fetchResolves(result: FetchResult<FetchedPresets>) {
-  fetchPresetsMock.mockResolvedValue(result);
+function fetchResolves(result: FetchResult<Presets>) {
+  loadPresets.mockResolvedValue(result);
 }
 
 // 取得結果の一覧が出るまで待ってから返す。
 async function renderSelect(personal: Preset[], global: Preset[]) {
   fetchResolves({ status: "ok", data: { personal, global } });
-  const view = render(
-    <RoundPresetSelect
-      sessionReader={sessionReader}
-      identityReader={identityReader}
-    />,
-  );
+  const view = render(<RoundPresetSelect />);
   await waitFor(() => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
@@ -146,30 +104,23 @@ const otherPersonalPreset: Preset = {
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  supabase.getSession.mockResolvedValue({
-    data: { session: { user: { id: "user-1" } } },
-  });
-  startRoundMock.mockResolvedValue({
-    status: "created",
-    roundId: "new-round-id",
-  });
-  supabase.deleteEq.mockResolvedValue({ error: null });
+  fake = createFakeRoundsStore();
+  fake.goOffline();
+  loadPresets = fake.store.loadPresets;
+  startRound = fake.store.startRound;
+  deletePreset = fake.store.deletePreset;
+  startRound.mockResolvedValue({ status: "created", roundId: "new-round-id" });
+  deletePreset.mockResolvedValue({ status: "deleted" });
 });
 
 describe("RoundPresetSelect", () => {
   describe("取得の状態", () => {
     it("取得中は読み込み中の表示と、枠と、押せる開始ボタンを表示し、プリセットの見出しは出さない", () => {
       // Given
-      fetchPresetsMock.mockReturnValue(new Promise(() => {}));
+      loadPresets.mockReturnValue(new Promise(() => {}));
 
       // When
-      render(
-        <RoundPresetSelect
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      render(<RoundPresetSelect />);
 
       // Then
       expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
@@ -182,16 +133,11 @@ describe("RoundPresetSelect", () => {
       expect(screen.queryByText("個人プリセット")).not.toBeInTheDocument();
     });
 
-    it("取得が完了しない間も開始ボタンは押せ、押すとプリセット未選択で開始して遷移する", async () => {
+    it("取得が完了しない間も開始ボタンは押せ、押すとプリセット未選択で開始を依頼する", async () => {
       // Given
-      fetchPresetsMock.mockReturnValue(new Promise(() => {}));
+      loadPresets.mockReturnValue(new Promise(() => {}));
       const user = userEvent.setup();
-      render(
-        <RoundPresetSelect
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      render(<RoundPresetSelect />);
 
       // When
       await user.click(
@@ -200,11 +146,9 @@ describe("RoundPresetSelect", () => {
 
       // Then
       await waitFor(() => {
-        expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
+        expect(startRound).toHaveBeenCalledTimes(1);
       });
-      expect(startRoundMock).toHaveBeenCalledWith(
-        expect.objectContaining({ preset: null }),
-      );
+      expect(startRound).toHaveBeenCalledWith(null, expect.any(Function));
     });
 
     it("通信できない場合はネットワークに接続されていませんを表示し、プリセットの見出しは出さない", async () => {
@@ -212,12 +156,7 @@ describe("RoundPresetSelect", () => {
       fetchResolves({ status: "offline" });
 
       // When
-      render(
-        <RoundPresetSelect
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      render(<RoundPresetSelect />);
 
       // Then
       expect(
@@ -227,16 +166,11 @@ describe("RoundPresetSelect", () => {
       expect(screen.queryByText("公式プリセット")).not.toBeInTheDocument();
     });
 
-    it("通信できない場合も、開始ボタンを押すとラウンドを作成して遷移する", async () => {
+    it("通信できない場合も、開始ボタンを押すとラウンドの開始を依頼する", async () => {
       // Given
       fetchResolves({ status: "offline" });
       const user = userEvent.setup();
-      render(
-        <RoundPresetSelect
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      render(<RoundPresetSelect />);
       await screen.findByText("ネットワークに接続されていません");
 
       // When
@@ -246,7 +180,7 @@ describe("RoundPresetSelect", () => {
 
       // Then
       await waitFor(() => {
-        expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
+        expect(startRound).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -255,12 +189,7 @@ describe("RoundPresetSelect", () => {
       fetchResolves({ status: "error", message: "読み込めませんでした。" });
 
       // When
-      render(
-        <RoundPresetSelect
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      render(<RoundPresetSelect />);
 
       // Then
       expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -268,16 +197,11 @@ describe("RoundPresetSelect", () => {
       );
     });
 
-    it("取得がエラーの場合も、開始ボタンを押すとラウンドを作成して遷移する", async () => {
+    it("取得がエラーの場合も、開始ボタンを押すとラウンドの開始を依頼する", async () => {
       // Given
       fetchResolves({ status: "error", message: "読み込めませんでした。" });
       const user = userEvent.setup();
-      render(
-        <RoundPresetSelect
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      render(<RoundPresetSelect />);
       await screen.findByRole("alert");
 
       // When
@@ -287,25 +211,20 @@ describe("RoundPresetSelect", () => {
 
       // Then
       await waitFor(() => {
-        expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
+        expect(startRound).toHaveBeenCalledTimes(1);
       });
     });
 
     it("再試行すると取得し直し、取得できたプリセットを表示する", async () => {
       // Given
-      fetchPresetsMock
+      loadPresets
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({
           status: "ok",
           data: { personal: [], global: [globalPreset] },
         });
       const user = userEvent.setup();
-      render(
-        <RoundPresetSelect
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      render(<RoundPresetSelect />);
 
       // When
       await user.click(await screen.findByRole("button", { name: "再試行" }));
@@ -315,7 +234,43 @@ describe("RoundPresetSelect", () => {
       expect(
         screen.queryByText("ネットワークに接続されていません"),
       ).not.toBeInTheDocument();
-      expect(fetchPresetsMock).toHaveBeenCalledTimes(2);
+      expect(loadPresets).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("取得の接続", () => {
+    it("表示の開始時にストアのloadPresetsを1回呼び、その結果を表示する", async () => {
+      // Given
+      fetchResolves({
+        status: "ok",
+        data: { personal: [], global: [globalPreset] },
+      });
+
+      // When
+      render(<RoundPresetSelect />);
+
+      // Then
+      expect(await screen.findByText("公式720ラウンド")).toBeInTheDocument();
+      expect(loadPresets).toHaveBeenCalledTimes(1);
+    });
+
+    it("通信できない結果の後に通信が戻ると、取得し直す", async () => {
+      // Given
+      loadPresets
+        .mockResolvedValueOnce({ status: "offline" })
+        .mockResolvedValueOnce({
+          status: "ok",
+          data: { personal: [], global: [globalPreset] },
+        });
+      render(<RoundPresetSelect />);
+      await screen.findByText("ネットワークに接続されていません");
+
+      // When
+      await act(async () => fake.returnOnline());
+
+      // Then
+      expect(await screen.findByText("公式720ラウンド")).toBeInTheDocument();
+      expect(loadPresets).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -328,12 +283,7 @@ describe("RoundPresetSelect", () => {
       });
 
       // When
-      render(
-        <RoundPresetSelect
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      render(<RoundPresetSelect />);
       await waitFor(() => {
         expect(screen.queryByRole("status")).not.toBeInTheDocument();
       });
@@ -352,12 +302,7 @@ describe("RoundPresetSelect", () => {
       });
 
       // When
-      render(
-        <RoundPresetSelect
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      render(<RoundPresetSelect />);
       await waitFor(() => {
         expect(screen.queryByRole("status")).not.toBeInTheDocument();
       });
@@ -441,12 +386,7 @@ describe("RoundPresetSelect", () => {
       });
 
       // When
-      render(
-        <RoundPresetSelect
-          sessionReader={sessionReader}
-          identityReader={identityReader}
-        />,
-      );
+      render(<RoundPresetSelect />);
       await waitFor(() => {
         expect(screen.queryByRole("status")).not.toBeInTheDocument();
       });
@@ -512,7 +452,7 @@ describe("RoundPresetSelect", () => {
 
   describe("開始ボタン", () => {
     describe("プリセット未選択で押した場合", () => {
-      it("プリセット無しで開始し、作成したラウンドへ遷移する", async () => {
+      it("プリセット無しで開始を依頼する", async () => {
         // Given
         const user = userEvent.setup();
         await renderSelect([], []);
@@ -524,16 +464,14 @@ describe("RoundPresetSelect", () => {
 
         // Then
         await waitFor(() => {
-          expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
+          expect(startRound).toHaveBeenCalledTimes(1);
         });
-        expect(startRoundMock).toHaveBeenCalledWith(
-          expect.objectContaining({ preset: null }),
-        );
+        expect(startRound).toHaveBeenCalledWith(null, expect.any(Function));
       });
     });
 
     describe("プリセットを選択して押した場合", () => {
-      it("一覧の取得結果の選択中のプリセットで開始し、作成したラウンドへ遷移する", async () => {
+      it("一覧の取得結果の選択中のプリセットで開始を依頼する", async () => {
         // Given
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);
@@ -546,17 +484,18 @@ describe("RoundPresetSelect", () => {
 
         // Then
         await waitFor(() => {
-          expect(nav.push).toHaveBeenCalledWith("/rounds/new-round-id");
+          expect(startRound).toHaveBeenCalledTimes(1);
         });
-        expect(startRoundMock).toHaveBeenCalledWith(
-          expect.objectContaining({ preset: personalPreset }),
+        expect(startRound).toHaveBeenCalledWith(
+          personalPreset,
+          expect.any(Function),
         );
       });
 
-      it("開始へ、マウント状態の判定と、ID生成、現在時刻の取得を渡す", async () => {
+      it("開始へ、マウント中は真を返す判定を渡し、アンマウント後は偽を返す", async () => {
         // Given
         const user = userEvent.setup();
-        await renderSelect([personalPreset], []);
+        const { unmount } = await renderSelect([personalPreset], []);
         await user.click(screen.getAllByTestId("round-preset-button")[0]);
 
         // When
@@ -565,11 +504,12 @@ describe("RoundPresetSelect", () => {
         );
 
         // Then
-        await waitFor(() => expect(startRoundMock).toHaveBeenCalled());
-        const args = startRoundMock.mock.calls[0][0];
-        expect(args.isMounted()).toBe(true);
-        expect(args.generateId()).toMatch(/^[0-9a-f-]{36}$/);
-        expect(args.now()).toBeInstanceOf(Date);
+        await waitFor(() => expect(startRound).toHaveBeenCalled());
+        const isCurrent = startRound.mock.calls[0][1] as () => boolean;
+        const whileMounted = isCurrent();
+        unmount();
+        expect(whileMounted).toBe(true);
+        expect(isCurrent()).toBe(false);
       });
     });
 
@@ -580,7 +520,7 @@ describe("RoundPresetSelect", () => {
           status: "created";
           roundId: string;
         }>();
-        startRoundMock.mockReturnValue(deferred.promise);
+        startRound.mockReturnValue(deferred.promise);
         const user = userEvent.setup();
         await renderSelect([], []);
         const button = screen.getByRole("button", {
@@ -588,23 +528,23 @@ describe("RoundPresetSelect", () => {
         });
         await user.click(button);
         await waitFor(() => {
-          expect(startRoundMock).toHaveBeenCalled();
+          expect(startRound).toHaveBeenCalled();
         });
 
         // When
         await user.click(button);
 
         // Then
-        expect(startRoundMock).toHaveBeenCalledTimes(1);
+        expect(startRound).toHaveBeenCalledTimes(1);
       });
 
-      it("開始が完了して遷移した後も、開始ボタンを押せない表示のままにする", async () => {
+      it("開始が完了した後も、開始ボタンを押せない表示のままにする", async () => {
         // Given
         const deferred = createDeferred<{
           status: "created";
           roundId: string;
         }>();
-        startRoundMock.mockReturnValue(deferred.promise);
+        startRound.mockReturnValue(deferred.promise);
         const user = userEvent.setup();
         await renderSelect([], []);
         const button = screen.getByRole("button", {
@@ -612,25 +552,24 @@ describe("RoundPresetSelect", () => {
         });
         await user.click(button);
         await waitFor(() => {
-          expect(startRoundMock).toHaveBeenCalled();
+          expect(startRound).toHaveBeenCalled();
         });
         await user.click(button);
 
         // When
         deferred.resolve({ status: "created", roundId: "new-round-id" });
 
+        await flushMacrotask();
+
         // Then
-        await waitFor(() => {
-          expect(nav.push).toHaveBeenCalledTimes(1);
-        });
         expect(button).toHaveAttribute("aria-disabled", "true");
       });
     });
 
     describe("開始できなかった場合", () => {
-      it("エラーを表示して遷移せず、開始ボタンを再度押せる表示に戻す", async () => {
+      it("エラーを表示し、開始ボタンを再度押せる表示に戻す", async () => {
         // Given
-        startRoundMock.mockResolvedValue({
+        startRound.mockResolvedValue({
           status: "failed",
           error: "権限がありません。",
         });
@@ -646,39 +585,9 @@ describe("RoundPresetSelect", () => {
         expect(
           await screen.findByText("権限がありません。"),
         ).toBeInTheDocument();
-        expect(nav.push).not.toHaveBeenCalled();
         expect(
           screen.getByRole("button", { name: "プリセット無しで開始" }),
         ).toHaveAttribute("aria-disabled", "false");
-      });
-    });
-
-    describe("開始の完了を待つ間にアンマウントされた場合", () => {
-      it("開始できても遷移しない", async () => {
-        // Given
-        const deferred = createDeferred<void>();
-        startRoundMock.mockImplementation(async ({ isMounted }) => {
-          await deferred.promise;
-          return isMounted()
-            ? { status: "created", roundId: "new-round-id" }
-            : { status: "discarded" };
-        });
-        const user = userEvent.setup();
-        const { unmount } = await renderSelect([], []);
-        await user.click(
-          screen.getByRole("button", { name: "プリセット無しで開始" }),
-        );
-        await waitFor(() => {
-          expect(startRoundMock).toHaveBeenCalled();
-        });
-        unmount();
-
-        // When
-        deferred.resolve();
-        await flushMacrotask();
-
-        // Then
-        expect(nav.push).not.toHaveBeenCalled();
       });
     });
   });
@@ -709,10 +618,9 @@ describe("RoundPresetSelect", () => {
         await waitFor(() => {
           expect(screen.queryByText("個人練習セット")).not.toBeInTheDocument();
         });
-        expect(supabase.deleteEq).toHaveBeenCalledWith("id", "preset-personal");
-        expect(deletePresetFromSnapshot).toHaveBeenCalledWith(
-          identityReader,
+        expect(deletePreset).toHaveBeenCalledWith(
           "preset-personal",
+          expect.any(Function),
         );
         expect(
           screen.getByRole("button", { name: "プリセット無しで開始" }),
@@ -750,16 +658,17 @@ describe("RoundPresetSelect", () => {
         await user.click(screen.getByTestId("confirm-dialog-cancel"));
 
         // Then
-        expect(supabase.deleteEq).not.toHaveBeenCalled();
+        expect(deletePreset).not.toHaveBeenCalled();
         expect(screen.getByText("個人練習セット")).toBeInTheDocument();
       });
     });
 
     describe("削除に失敗した場合", () => {
-      it("エラーを表示し、一覧から取り除かず、保存済みからも除かない", async () => {
+      it("エラーを表示し、一覧から取り除かない", async () => {
         // Given
-        supabase.deleteEq.mockResolvedValue({
-          error: { message: "権限がありません。" },
+        deletePreset.mockResolvedValue({
+          status: "failed",
+          error: "削除できませんでした。",
         });
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);
@@ -770,16 +679,16 @@ describe("RoundPresetSelect", () => {
 
         // Then
         expect(
-          await screen.findByText("権限がありません。"),
+          await screen.findByText("削除できませんでした。"),
         ).toBeInTheDocument();
         expect(screen.getByText("個人練習セット")).toBeInTheDocument();
-        expect(deletePresetFromSnapshot).not.toHaveBeenCalled();
       });
 
       it("削除確認ダイアログは開いたままで、確認ボタンを再度押せる", async () => {
         // Given
-        supabase.deleteEq.mockResolvedValue({
-          error: { message: "権限がありません。" },
+        deletePreset.mockResolvedValue({
+          status: "failed",
+          error: "削除できませんでした。",
         });
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);
@@ -790,7 +699,7 @@ describe("RoundPresetSelect", () => {
 
         // Then
         expect(
-          await screen.findByText("権限がありません。"),
+          await screen.findByText("削除できませんでした。"),
         ).toBeInTheDocument();
         expect(screen.getByTestId("confirm-dialog-confirm")).toBeEnabled();
         expect(

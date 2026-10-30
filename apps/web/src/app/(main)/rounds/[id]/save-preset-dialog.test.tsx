@@ -2,12 +2,12 @@ import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import type { Distance } from "@/features/rounds/domain/scorecard-types";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
+import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
+import { createFakeRoundsStore } from "@/features/rounds/ui/rounds-store-test-helpers";
 import { createClient } from "@/lib/supabase/infrastructure/client";
-import { fetchPresets } from "../_shared/fetch-presets";
 import { SavePresetDialog } from "./save-preset-dialog";
 
 // SupabaseのSDKは外部サービスとの境界のため、セッションの取得結果とRPCの結果を任意に制御できるスタブで模す。
@@ -23,8 +23,9 @@ vi.mock("@supabase/ssr", () => ({
   }),
 }));
 
-// 保存の成功後の背景の再取得は、取得の境界として呼ばれたことだけを確かめる。
-vi.mock("../_shared/fetch-presets", () => ({ fetchPresets: vi.fn() }));
+// 保存の成功後の背景の再取得は、ラウンドの状態と変更の方法の偽でloadPresetsが呼ばれたことだけを確かめる。
+const fake = createFakeRoundsStore();
+const loadPresets = fake.store.loadPresets;
 
 const targetFace: TargetFaceOption = {
   id: "face-x",
@@ -56,7 +57,6 @@ const distanceB: Distance = {
 };
 
 const sessionReader = createSupabaseAuth(createClient);
-const identityReader = createBrowserIdentityStore();
 
 // 応答を返すまでRPCを保留し、送信中の状態を検証できるようにする。
 function holdRpc() {
@@ -74,16 +74,17 @@ function setup(
 ) {
   const user = userEvent.setup();
   render(
-    <SavePresetDialog
-      sessionReader={sessionReader}
-      identityReader={identityReader}
-      roundName="午前練習"
-      format="outdoor"
-      bowType="recurve"
-      distances={[distanceB, distanceA]}
-      targetFaces={[targetFace]}
-      {...overrides}
-    />,
+    <RoundsStoreProvider store={fake.store}>
+      <SavePresetDialog
+        sessionReader={sessionReader}
+        roundName="午前練習"
+        format="outdoor"
+        bowType="recurve"
+        distances={[distanceB, distanceA]}
+        targetFaces={[targetFace]}
+        {...overrides}
+      />
+    </RoundsStoreProvider>,
   );
   return { user };
 }
@@ -221,7 +222,7 @@ describe("SavePresetDialog", () => {
         ],
       });
       // 成功したので、プリセット一覧を背景で再取得して保存済みを更新する
-      expect(fetchPresets).toHaveBeenCalledTimes(1);
+      expect(loadPresets).toHaveBeenCalledTimes(1);
     });
 
     it("送信中は確定ボタンを無効表示にする", async () => {
@@ -404,7 +405,7 @@ describe("SavePresetDialog", () => {
         "aria-disabled",
         "false",
       );
-      expect(fetchPresets).not.toHaveBeenCalled();
+      expect(loadPresets).not.toHaveBeenCalled();
     });
   });
 

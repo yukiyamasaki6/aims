@@ -30,19 +30,52 @@
 
 ## 構成とデータの流れ
 
-- `page.tsx`: 画面の入口。サインインの状態と端末の識別情報の読み出しを生成し、`RoundPresetSelect`へ渡す。取得は行わない。
-- `_shared/fetch-presets.ts`: 個人（`owner_id`が自分）と公式（`owner_id`が`null`）を1回の取得で得て、並べて振り分ける。通信失敗・認証切れ・エラーを`FetchResult`に分類する。成功した結果を保存し、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。
-- `features/rounds/infrastructure/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。例外は投げない。識別情報は呼び出し側から`IdentityReader`で受け取り、読むたびにその時点で読む。
-- `_shared/compare-presets.ts`: 並びの比較関数。
-- `round-preset-select-client.tsx`: 取得と選択の状態を持ち、一覧、開始の帯、削除の確認を描く。削除の部品は`rounds/preset`が扱う。
-- `use-start-round.ts`: 作成中とエラーの状態を持ち、開始後に`router.push`で遷移する。
-- `start-round.ts`: 認証の確認、一覧の選択中プリセットからの距離の並べ替えと新ID付与、`round.created`の追記を行う。
+- `app/(main)/rounds/new/page.tsx`: 画面の入口(用語)。何も生成せず、`RoundPresetSelect`を描くだけである。
+- `features/rounds/ui/round-preset-select.tsx`: UI層。取得と選択の状態を持ち、一覧、開始の帯、削除の確認を描く。`RoundsStore`を文脈で受け取り、`store.loadPresets()`で一覧を得る。「一覧へ戻る」は`ROUNDS_PATH`を使う。削除の部品は`rounds/preset`が扱う。
+- `features/rounds/ui/use-start-round.ts`: UI層。作成中とエラーの状態を持ち、二重の開始を防いで`store.startRound`を呼ぶ。
+- `features/rounds/ui/preset-info.tsx`、`target-face-info.tsx`: UI層。プリセットと距離、的の情報の表示。
+- `RoundsStore.loadPresets`と`features/rounds/application/fetch-round-detail.ts`の`RoundFetching.fetchPresets`: 取得の順序(手続き)。成功した結果を保存し、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず、取得に使った利用者のキーへ保存する。
+- `features/rounds/infrastructure/round-queries.ts`の`RoundQueries.presets`: 個人（`owner_id`が自分）と公式（`owner_id`が`null`）を1回の取得で得る。`DatabaseGateway`の`select`で行い、状態0かエラーはそのまま返す。
+- `features/rounds/domain/preset.ts`: ドメイン層。プリセットの値、並びの比較`comparePresets`、並べて個人と公式に振り分ける`presetsOf`、距離の並び、個人プリセットの除去。
+- `features/rounds/domain/preset-list-view.ts`: ドメイン層。取得結果から、削除済みを除いた表示と選択中のプリセットを決める`presetListView`。
+- `features/rounds/infrastructure/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。例外は投げない。識別情報は起動地点から`IdentityReader`で受け取り、読むたびにその時点で読む。
+- `RoundsStore.startRound`と開始の手続き(`features/rounds/application/start-round.ts`): サインインの状態の確認、選択中プリセットからの作成の操作の組み立て(`features/rounds/domain/round-start.ts`の`roundCreatedDraftOf`がIDを除いた内容を作り、手続きが各要素にIDを振る)、`round.created`の追記を行う。追記の完了の後に、約束`Navigation`(`go(path)`)で`roundPath(roundId)`へ進む。実装は`features/rounds/infrastructure/router-navigation.ts`で、起動地点が画面のパッケージの遷移の部品から生成する。
 
 - 並びは、種別、弓種、距離の本数（多い方が先）、先頭の距離（大きい方が先）、作成日時（新しい方が先）の順である。
 - 開始は一覧の取得結果の構成で作る。一覧の表示後に削除されたプリセットでも、表示していた構成で開始する。
 - ラウンドと距離のIDはクライアントで生成して渡す。
 - 送信される`create_round`は、`round_users`・`rounds`・`distances`を1トランザクションで作る。`rounds`の直接INSERTはRLSで拒否する。
 - 画面がアンマウントされた後の結果は破棄する。
+
+## 対応表
+
+この作業で方針を適用したファイルと用語である。
+
+| ファイル | 用語 |
+| :--- | :--- |
+| `app/(main)/rounds/new/page.tsx` | 画面の入口 |
+| `app/root-client-entry.tsx` | アプリの起動地点(開始と削除の手続き、遷移、プリセットの書き込みの生成を足す) |
+| `features/rounds/ui/round-preset-select.tsx` | UI層(作成の画面の描画、選択の状態) |
+| `features/rounds/ui/use-start-round.ts` | UI層(開始の実行中とエラーの状態、二重の開始の防止) |
+| `features/rounds/ui/use-preset-delete.ts` | UI層(確認中のプリセット、削除済みのID、実行中とエラーの状態) |
+| `features/rounds/ui/preset-info.tsx`、`target-face-info.tsx` | UI層(プリセットと距離、的の情報の表示) |
+| `features/rounds/domain/preset.ts` | ドメイン層(値オブジェクト: プリセットの型、距離の並び、プリセットの並びと振り分け、除去) |
+| `features/rounds/domain/preset-list-view.ts` | ドメイン層(ドメインサービス: 取得結果からの表示の内容の決定) |
+| `features/rounds/domain/round-start.ts` | ドメイン層(ドメインサービス: プリセットの構成からの、IDを除いたラウンドの作成の内容の組み立て) |
+| `features/rounds/domain/write-result.ts` | ドメイン層(値オブジェクト: 書き込みの結果の種類と文言) |
+| `features/rounds/domain/option-label.ts` | ドメイン層(値オブジェクト: 選択肢の値の表示名`labelOf`) |
+| `features/rounds/domain/target-face-types.ts` | ドメイン層(値オブジェクト。的を引く`lookupTargetFace`を足す) |
+| `features/rounds/application/start-round.ts` | 手続き(開始)と約束(`Navigation`) |
+| `features/rounds/application/delete-preset.ts` | 手続き(個人プリセットの削除)と約束(`PresetCommands`) |
+| `features/rounds/application/sign-in-reader.ts`、`reference-snapshots.ts`、`unique-ids.ts` | 手続きの約束(`SignInReader`、`ReferenceSnapshots`、`UniqueIds`。使い手が2つ以上) |
+| `features/rounds/application/rounds-store.ts` | 手続き(画面に渡す状態と変更の方法。プリセットの取得、削除、開始を足す) |
+| `features/rounds/application/fetch-round-detail.ts` | 手続き(取得の順序。プリセットの取得を足す)と約束(`RoundQueries`) |
+| `features/rounds/infrastructure/preset-commands.ts` | インフラ層(プリセットの書き込みと、結果の種類への写し) |
+| `features/rounds/infrastructure/router-navigation.ts` | インフラ層(画面のパッケージの遷移で進む) |
+| `features/rounds/infrastructure/browser-unique-ids.ts` | インフラ層(新しいIDの払い出し) |
+| `features/rounds/infrastructure/round-queries.ts`、`reference-snapshot.ts`、`auth-sign-in-reader.ts`、`rounds-db-schema.ts` | インフラ層(プリセットの問い合わせ、保存済みの書き換え、不明の文言、プリセットの表を足す) |
+| `hooks/use-mounted-ref.ts`、`hooks/use-hydrated.ts`、`components/ui/{button,confirm-dialog,dropdown-menu,skeleton}.tsx`、`lib/utils.ts` | 共有の画面部品 |
+| `lib/supabase/contract/database.ts`、`lib/supabase/infrastructure/database.ts` | 共有の技術の約束と実装(削除`delete`を足す) |
 
 ## 設計判断
 
@@ -51,19 +84,22 @@
 | 入口を選択だけにし、入力は`/rounds/[id]`の編集に一本化する | 入力の重複を持たないため | 作成時に入力が必要な要求が出たとき |
 | 作成は`create_round`に一本化する | `INSERT ... RETURNING`は、同一文内のトリガー副作用をSELECTポリシーが参照できず失敗するため。詳細: #99 | RLSの評価方式が変わったとき |
 | サーバーの完了を待たず操作の列に積む | オフラインでも開始し記録を失わないため。Server Actionは`redirect()`の競合のためやめた | - |
-| 成功後も開始ボタンを無効のままにする | `router.push`は遷移先取得中も本コンポーネントを保持し、解除すると遷移前に再び押せるため | 遷移方式を変えたとき |
+| 成功後も開始ボタンを無効のままにする | 開始の手続きが遷移を進め、遷移先の取得中も本コンポーネントが残るため、解除すると遷移前に再び押せるため | 遷移方式を変えたとき |
 | 二重送信を同期的なref（`submittingRef`）で判定する | stateは再描画まで更新されず、連打で2回目が通るため | stateの更新が同期的になる方式に変えたとき |
 | 個人と公式を1回の取得で得て、`owner_id`を自分か`null`に絞る | 失敗の分類を1系統にするため。`preset_rounds`のRLSは認証済みの全員に全行を見せ、絞らないと他人の個人プリセットが返るため | RLSで個人プリセットを所有者だけに絞るとき |
 | 開始ボタンを取得に依存させず、取得中も押せる | 取得が遅い・失敗する状況でも、唯一の操作を遅らせないため。取得結果が無ければ未選択なので、誤ったプリセットで作らない | 取得を待つ必要がある入力を開始前に加えるとき |
 | 保存済みをユーザーごとのキーで`localStorage`に持ち、ネットワーク優先で、失敗または1秒の時間切れのときだけ使う。時間切れ後に届いた結果は表示せず保存する | オフラインで開始でき、オンラインの表示を入れ替えないため。保存済み優先は表示の入れ替わりと選択中のプリセットが消える扱いが要るため採らない。SWの実行時キャッシュはクロスオリジンを通さず認証に依存するため採らない | 保存量が`localStorage`の容量に近づいたとき。1秒を超える取得が通常になったとき |
 | 保存のキーは取得の開始時のクエリのユーザーIDにし、取得の開始時刻が新しいときだけ書く | 遅れて届いた結果や、サインインし直しの前後で、別のユーザーのキーへ書かず、古い結果で新しい保存済みを戻さないため | - |
+| プリセットをラウンドの機能の中に置く | プリセットを使う画面はどれもラウンドの画面で、構成と一緒に変わり、別の機能にすると開始と保存で機能の間が循環するため(M02、D06) | ラウンドの画面の外でプリセットを扱うとき |
+| 開始の後の遷移を開始の手続きの約束(`Navigation`)で表し、取得と削除と開始を`RoundsStore`に持たせる | 保存の後に進む順序を手続きに置き、画面に渡す形を1つにするため(L01、R01) | 画面ごとに異なる遷移の方法が要るとき |
 | 並びを名前でなく構成で決める | 名前は自由入力で内容を反映せず、自然順ソートは漢字の読みで曖昧になるため | プリセットの種類が増えたとき |
-| クライアントの認証確認は画面の入口が生成して渡す`SessionReader`の`readSession`で判定し、未認証と確定したときだけ止めて「サインインが必要です。」を表示する。不明（通信失敗）と`FALLBACK_WAIT_MS`（1秒。代わりがある待ちの上限、`app/offline-pwa`）の時間切れは開始する | `getUser()`はサーバー再検証を伴い、認可の実体はRPCにあるため。オフラインで開始でき、未認証の確認を保つため。待つのはトークンの失効時だけ | 開始の待ちが知覚されたとき |
+| クライアントの認証確認は起動地点が生成した`SignInReader`の`read`で判定し、未認証と確定したときだけ止めて「サインインが必要です。」を表示する。不明（通信失敗）と`FALLBACK_WAIT_MS`（1秒。代わりがある待ちの上限、`app/offline-pwa`）の時間切れは開始する | `getUser()`はサーバー再検証を伴い、認可の実体はRPCにあるため。オフラインで開始でき、未認証の確認を保つため。待つのはトークンの失効時だけ | 開始の待ちが知覚されたとき |
 
 ## 制約と未対応
 
-- オフライン表示のときは、オンライン復帰（`online`イベント）で自動再取得する。通信失敗（`navigator.onLine`が`true`のまま）を含むエラーは、再試行ボタンで取得し直す。
+- オフライン表示のときは、通信の復帰（`RoundsStore.whenOnline`）で自動再取得する。通信失敗（`navigator.onLine`が`true`のまま）を含むエラーは、再試行ボタンで取得し直す。
 - 一度もオンラインで表示していない端末ではオフラインで使えない（的の一覧は、オンラインでラウンド詳細を開いたときと、サインインしている間の一括の取得(`rounds/sync`)で保存される）。
 - 的の一覧を保存していない端末で、通信できないまま開始したラウンドの詳細は、ラウンドの内容を出さず、オフラインまたはエラーの表示にする(`rounds/detail`)。
-- 保存済みの表示中は、オンライン復帰で自動再取得しない。
+- 保存済みの表示中は、通信の復帰で自動再取得しない。
 - `main`の`data-hydrated`を、E2Eがハイドレーションを待つ目印に使う。
+- 開始の遷移が投げたときは表示せず、開始ボタンを押せないまま残す(作成済みのため戻すと二重に作成できる。渡す経路は内部の経路だけで、実際には投げない)。

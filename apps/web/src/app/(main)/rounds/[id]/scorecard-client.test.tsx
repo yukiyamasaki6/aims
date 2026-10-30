@@ -220,7 +220,6 @@ function setup(
   return render(
     <ScorecardClient
       sessionReader={sessionReader}
-      identityReader={identityReader}
       roundId="round-1"
       loaded={{
         base: roundTablesFromServer({
@@ -350,7 +349,6 @@ async function ackedStates(): Promise<("acked" | "unacked")[]> {
 }
 
 const sessionReader = createSupabaseAuth(createClient);
-const identityReader = createBrowserIdentityStore();
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -1783,7 +1781,6 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     rerender(
       <ScorecardClient
         sessionReader={sessionReader}
-        identityReader={identityReader}
         roundId="round-1"
         loaded={{
           base: roundTablesFromServer({

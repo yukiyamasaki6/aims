@@ -6,10 +6,18 @@ import { createBrowserIdentityStore } from "@/features/auth/infrastructure/brows
 import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
+import { createPresetDeletion } from "@/features/rounds/application/delete-preset";
+import { createContentFetcher } from "@/features/rounds/application/fetch-content";
+import { createRoundFetching } from "@/features/rounds/application/fetch-round-detail";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
 import { createRoundsStore } from "@/features/rounds/application/rounds-store";
+import { createRoundStart } from "@/features/rounds/application/start-round";
 import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
-import { createBrowserEventIds } from "@/features/rounds/infrastructure/browser-event-ids";
+import { createBrowserUniqueIds } from "@/features/rounds/infrastructure/browser-unique-ids";
+import { createPresetCommands } from "@/features/rounds/infrastructure/preset-commands";
+import { createReferenceSnapshots } from "@/features/rounds/infrastructure/reference-snapshot";
+import { createRoundQueries } from "@/features/rounds/infrastructure/round-queries";
+import { createRouterNavigation } from "@/features/rounds/infrastructure/router-navigation";
 import { roundCreated } from "@/features/rounds/round-op-test-helpers";
 import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
 import { RootClientEntry } from "./root-client-entry";
@@ -80,6 +88,10 @@ vi.mock(
   },
 );
 
+// 画面のパッケージの遷移の部品は外部の境界のため、pushを持つ1つの偽の部品に差し替える。
+const nav = vi.hoisted(() => ({ router: { push: vi.fn() } }));
+vi.mock("next/navigation", () => ({ useRouter: () => nav.router }));
+
 // 再読み込みを担う別の入口は別のテストで確かめるため、受け取ったpropsを記録する代役に差し替える。
 const activator = vi.hoisted(() => ({
   props: [] as { whenPersisted: () => Promise<void> }[],
@@ -137,14 +149,110 @@ vi.mock(
   },
 );
 vi.mock(
-  "@/features/rounds/infrastructure/browser-event-ids",
+  "@/features/rounds/infrastructure/browser-unique-ids",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/rounds/infrastructure/browser-event-ids")
+        typeof import("@/features/rounds/infrastructure/browser-unique-ids")
       >();
     return {
-      createBrowserEventIds: vi.fn(actual.createBrowserEventIds),
+      ...actual,
+      createBrowserUniqueIds: vi.fn(actual.createBrowserUniqueIds),
+    };
+  },
+);
+vi.mock(
+  "@/features/rounds/infrastructure/router-navigation",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/infrastructure/router-navigation")
+      >();
+    return {
+      ...actual,
+      createRouterNavigation: vi.fn(actual.createRouterNavigation),
+    };
+  },
+);
+vi.mock(
+  "@/features/rounds/infrastructure/preset-commands",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/infrastructure/preset-commands")
+      >();
+    return {
+      ...actual,
+      createPresetCommands: vi.fn(actual.createPresetCommands),
+    };
+  },
+);
+vi.mock(
+  "@/features/rounds/infrastructure/reference-snapshot",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/infrastructure/reference-snapshot")
+      >();
+    return {
+      ...actual,
+      createReferenceSnapshots: vi.fn(actual.createReferenceSnapshots),
+    };
+  },
+);
+vi.mock(
+  "@/features/rounds/infrastructure/round-queries",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/infrastructure/round-queries")
+      >();
+    return { ...actual, createRoundQueries: vi.fn(actual.createRoundQueries) };
+  },
+);
+vi.mock("@/features/rounds/application/start-round", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("@/features/rounds/application/start-round")
+    >();
+  return { ...actual, createRoundStart: vi.fn(actual.createRoundStart) };
+});
+vi.mock(
+  "@/features/rounds/application/delete-preset",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/delete-preset")
+      >();
+    return {
+      ...actual,
+      createPresetDeletion: vi.fn(actual.createPresetDeletion),
+    };
+  },
+);
+vi.mock(
+  "@/features/rounds/application/fetch-content",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/fetch-content")
+      >();
+    return {
+      ...actual,
+      createContentFetcher: vi.fn(actual.createContentFetcher),
+    };
+  },
+);
+vi.mock(
+  "@/features/rounds/application/fetch-round-detail",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/fetch-round-detail")
+      >();
+    return {
+      ...actual,
+      createRoundFetching: vi.fn(actual.createRoundFetching),
     };
   },
 );
@@ -319,7 +427,7 @@ describe("RootClientEntry", () => {
       expect(triggers.identityReader).toBe(writer);
     });
 
-    it("操作のイベントIDの払い出しは1度だけ生成し、ラウンドの状態と変更の方法へ渡して、再描画で作り直さない", () => {
+    it("新しいIDの払い出しは1度だけ生成し、ラウンドの状態と変更の方法へ渡して、再描画で作り直さない", () => {
       // Given
       const { rerender } = render(<RootClientEntry>{null}</RootClientEntry>);
 
@@ -327,10 +435,131 @@ describe("RootClientEntry", () => {
       rerender(<RootClientEntry>{null}</RootClientEntry>);
 
       // Then
-      expect(createBrowserEventIds).toHaveBeenCalledTimes(1);
+      expect(createBrowserUniqueIds).toHaveBeenCalledTimes(1);
       expect(createRoundsStore).toHaveBeenCalledTimes(1);
       expect(vi.mocked(createRoundsStore).mock.calls[0][0].ids).toBe(
-        vi.mocked(createBrowserEventIds).mock.results[0].value,
+        vi.mocked(createBrowserUniqueIds).mock.results[0].value,
+      );
+    });
+
+    it("遷移の実装は、useRouter()が返した遷移の部品で1度だけ生成し、再描画で作り直さない", () => {
+      // Given
+      const { rerender } = render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // When
+      rerender(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      expect(createRouterNavigation).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(createRouterNavigation).mock.calls[0][0]).toBe(
+        nav.router,
+      );
+    });
+
+    it("開始の手続きは1度だけ生成し、遷移、IDの実装、サインインの読み取りを受ける", () => {
+      // Given
+      const { rerender } = render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // When
+      rerender(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      expect(createRoundStart).toHaveBeenCalledTimes(1);
+      const deps = vi.mocked(createRoundStart).mock.calls[0][0];
+      expect(deps.navigation).toBe(
+        vi.mocked(createRouterNavigation).mock.results[0].value,
+      );
+      expect(deps.ids).toBe(
+        vi.mocked(createBrowserUniqueIds).mock.results[0].value,
+      );
+      expect(deps.signIn).toBe(
+        vi.mocked(createAuthSignInReader).mock.results[0].value,
+      );
+    });
+
+    it("削除の手続きは1度だけ生成し、プリセットの書き込み、サインインの読み取り、保存済みを受ける", () => {
+      // Given
+      const { rerender } = render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // When
+      rerender(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      expect(createPresetDeletion).toHaveBeenCalledTimes(1);
+      const deps = vi.mocked(createPresetDeletion).mock.calls[0][0];
+      expect(deps.commands).toBe(
+        vi.mocked(createPresetCommands).mock.results[0].value,
+      );
+      expect(deps.signIn).toBe(
+        vi.mocked(createAuthSignInReader).mock.results[0].value,
+      );
+      expect(deps.snapshots).toBe(
+        vi.mocked(createReferenceSnapshots).mock.results[0].value,
+      );
+    });
+
+    it("取得と開始と削除が、同じサインインの読み取りを共有する", () => {
+      // Given
+      // When
+      render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      const fetcher = vi.mocked(createContentFetcher).mock.calls[0][0].signIn;
+      const start = vi.mocked(createRoundStart).mock.calls[0][0].signIn;
+      const deletion = vi.mocked(createPresetDeletion).mock.calls[0][0].signIn;
+      expect(start).toBe(fetcher);
+      expect(deletion).toBe(fetcher);
+    });
+
+    it("取得と削除が、同じ保存済みを共有する", () => {
+      // Given
+      // When
+      render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      const fetching =
+        vi.mocked(createRoundFetching).mock.calls[0][0].snapshots;
+      const deletion =
+        vi.mocked(createPresetDeletion).mock.calls[0][0].snapshots;
+      expect(deletion).toBe(fetching);
+    });
+
+    it("画面の状態と開始の手続きが、同じIDの実装を受ける", () => {
+      // Given
+      const { rerender } = render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // When
+      rerender(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      const storeIds = vi.mocked(createRoundsStore).mock.calls[0][0].ids;
+      const startIds = vi.mocked(createRoundStart).mock.calls[0][0].ids;
+      expect(startIds).toBe(storeIds);
+    });
+
+    it("画面の状態へ、生成した開始の手続きと削除の手続きを渡す", () => {
+      // Given
+      // When
+      render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      const deps = vi.mocked(createRoundsStore).mock.calls[0][0];
+      expect(deps.roundStart).toBe(
+        vi.mocked(createRoundStart).mock.results[0].value,
+      );
+      expect(deps.presetDeletion).toBe(
+        vi.mocked(createPresetDeletion).mock.results[0].value,
+      );
+    });
+
+    it("プリセットの書き込みは、他の問い合わせの実装と同じデータベースの約束から作る", () => {
+      // Given
+      // When
+      render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      expect(vi.mocked(createPresetCommands).mock.calls[0][0]).toBe(
+        vi.mocked(createRoundQueries).mock.calls[0][0],
       );
     });
 
@@ -412,6 +641,7 @@ describe("RootClientEntry", () => {
       expect(channel).not.toHaveBeenCalled();
       expect(addWindow).not.toHaveBeenCalled();
       expect(addDocument).not.toHaveBeenCalled();
+      expect(nav.router.push).not.toHaveBeenCalled();
       vi.unstubAllGlobals();
     });
   });

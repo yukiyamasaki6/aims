@@ -1,8 +1,9 @@
+import { cn } from "@/lib/utils";
 import type {
   TargetFaceRing,
   TargetFaceSpotLayout,
-} from "@/features/rounds/domain/target-face-types";
-import { cn } from "@/lib/utils";
+  TargetFaceView,
+} from "../domain/target-face-types";
 
 // 的画像本体の境界線は、得点帯を区切る情報として最低限見えれば十分で、
 // 主役はあくまで色（得点帯）なので極力薄くする（拡大バッジの境界線はこれとは
@@ -261,21 +262,6 @@ function RingCircle({
       strokeWidth={ring.line_color ? strokeWidth : 0}
     />
   );
-}
-
-type TargetFaceLayout = {
-  size: number;
-  target_face_spots: TargetFaceSpotLayout[];
-};
-
-// 的の一覧に見つからなければ"missing"。
-export type TargetFaceView = TargetFaceLayout | "missing";
-
-export function lookupTargetFace<T extends { id: string }>(
-  faces: T[],
-  id: string,
-): T | "missing" {
-  return faces.find((f) => f.id === id) ?? "missing";
 }
 
 // 的の情報表示（全体像・サイズ・中心拡大）。距離ごとの情報行（プリセット選択・

@@ -225,6 +225,132 @@ describe("select", () => {
   });
 });
 
+describe("delete", () => {
+  it("表を指定して削除を始め、絞りを当て、最後に再試行なしを指定する", async () => {
+    // Given
+    const { client, calls } = fakeClient({
+      data: null,
+      error: null,
+      status: 204,
+    });
+    const database = createSupabaseDatabase(() => client);
+
+    // When
+    await database.delete({
+      table: "preset_rounds",
+      filters: [{ op: "eq", column: "id", value: "p1" }],
+    });
+
+    // Then
+    expect(calls).toEqual([
+      ["from", ["preset_rounds"]],
+      ["delete", []],
+      ["eq", ["id", "p1"]],
+      ["retry", [false]],
+    ]);
+  });
+
+  it("複数の絞りを、渡した順にすべて当てる", async () => {
+    // Given
+    const { client, calls } = fakeClient({
+      data: null,
+      error: null,
+      status: 204,
+    });
+    const database = createSupabaseDatabase(() => client);
+
+    // When
+    await database.delete({
+      table: "preset_rounds",
+      filters: [
+        { op: "eq", column: "id", value: "p1" },
+        { op: "is", column: "owner_id", value: null },
+      ],
+    });
+
+    // Then
+    expect(calls.map(([method, args]) => [method, ...args])).toEqual([
+      ["from", "preset_rounds"],
+      ["delete"],
+      ["eq", "id", "p1"],
+      ["is", "owner_id", null],
+      ["retry", false],
+    ]);
+  });
+
+  it("応答を、データ・エラーの符号と文言・HTTPの状態だけの平らな形で返す", async () => {
+    // Given
+    const { client } = fakeClient({
+      data: null,
+      error: { code: "42501", message: "forbidden", details: "x", hint: "y" },
+      status: 403,
+    });
+    const database = createSupabaseDatabase(() => client);
+
+    // When
+    const response = await database.delete({
+      table: "preset_rounds",
+      filters: [{ op: "eq", column: "id", value: "p1" }],
+    });
+
+    // Then
+    expect(response).toEqual({
+      data: null,
+      error: { code: "42501", message: "forbidden" },
+      status: 403,
+    });
+  });
+
+  it("通信が失敗したとき、投げずに、再試行せず1回の呼び出しでstatus 0の応答にする", async () => {
+    // Given
+    // 偽のビルダーの素通しでは「投げない」を観測できないため、実際のクライアントに失敗するfetchを渡す。
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const client = createClient<Database>(
+      "https://example.supabase.co",
+      "anon-key",
+      {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { fetch: fetchMock as unknown as typeof fetch },
+      },
+    );
+    const database = createSupabaseDatabase(() => client);
+
+    // When
+    const response = await database.delete({
+      table: "preset_rounds",
+      filters: [{ op: "eq", column: "id", value: "p1" }],
+    });
+
+    // Then
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(0);
+  });
+
+  it("呼ぶたびに接続を得る。接続を得られないときは投げる", async () => {
+    // Given
+    const { client } = fakeClient({ data: null, error: null, status: 204 });
+    const getClient = vi.fn(() => client);
+    const database = createSupabaseDatabase(getClient);
+    const failing = createSupabaseDatabase(() => {
+      throw new Error("環境変数が無い");
+    });
+    const command = {
+      table: "preset_rounds",
+      filters: [{ op: "eq", column: "id", value: "p1" }],
+    } as const;
+
+    // When
+    await database.delete(command);
+    await database.delete(command);
+
+    // Then
+    expect(getClient).toHaveBeenCalledTimes(2);
+    await expect(failing.delete(command)).rejects.toThrow("環境変数が無い");
+  });
+});
+
 describe("rpc", () => {
   it("再試行の指定なしで、名前と引数を渡し、応答を平らな形で返す", async () => {
     // Given
@@ -371,6 +497,22 @@ describe("narrowDatabase", () => {
         Functions: Record<never, never>;
         Tables: { rounds: { Row: { statuss: string } } };
       }>(gateway);
+      // 削除の絞りは、1つ以上の宣言した列に限る。
+      const narrowed = narrowDatabase<MatchingSchema>(gateway);
+      // @ts-expect-error 絞りが空の配列の削除は書けない。
+      narrowed.delete({ table: "rounds", filters: [] });
+      // @ts-expect-error 絞りを省略した削除は書けない。
+      narrowed.delete({ table: "rounds" });
+      narrowed.delete({
+        table: "rounds",
+        // @ts-expect-error name は rounds の宣言した列に無い。
+        filters: [{ op: "eq", column: "name", value: "x" }],
+      });
+      narrowed.delete({
+        // @ts-expect-error distances は宣言した表に無い。
+        table: "distances",
+        filters: [{ op: "eq", column: "id", value: "x" }],
+      });
       // 並びで宣言していない列を指定する。
       const order: DbOrder<MatchingSchema, "rounds"> = { column: "status" };
       // @ts-expect-error name は rounds の宣言した列に無い。

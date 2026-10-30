@@ -5,10 +5,12 @@ import {
 } from "@/features/rounds/domain/scorecard-scoring";
 import type { Distance, Shot } from "@/features/rounds/domain/scorecard-types";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
-import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
+import {
+  lookupTargetFace,
+  type TargetFaceOption,
+} from "@/features/rounds/domain/target-face-types";
+import { DistanceInfo } from "@/features/rounds/ui/preset-info";
 import { cn } from "@/lib/utils";
-import { DistanceInfo } from "../_shared/preset-info";
-import { lookupTargetFace } from "../_shared/target-face-icon";
 import type { DistanceConfig } from "./distance-config";
 import { DistanceEditFields } from "./distance-edit-fields";
 import { EndRow } from "./end-row";

@@ -5,6 +5,7 @@ import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { labelOf } from "@/features/rounds/domain/option-label";
 import {
   buildRoundUpdatedOperation,
   type RoundConfig,
@@ -16,7 +17,6 @@ import {
   FORMAT_OPTIONS,
 } from "@/features/rounds/domain/round-constants";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
-import { labelOf } from "../_shared/option-label";
 
 function RequiredMark() {
   return (

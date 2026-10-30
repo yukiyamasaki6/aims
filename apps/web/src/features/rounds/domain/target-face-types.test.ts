@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { orderTargetFaces, type TargetFaceRecord } from "./target-face-types";
+import {
+  lookupTargetFace,
+  orderTargetFaces,
+  type TargetFaceRecord,
+} from "./target-face-types";
 
 function face(
   id: string,
@@ -93,5 +97,18 @@ describe("orderTargetFaces", () => {
       "p-outdoor-small",
       "p-indoor",
     ]);
+  });
+});
+
+describe("lookupTargetFace", () => {
+  const faces = [{ id: "a" }, { id: "b" }];
+
+  it('一覧にidが無ければ"missing"を返す(空の一覧を含む)', () => {
+    expect(lookupTargetFace(faces, "x")).toBe("missing");
+    expect(lookupTargetFace([], "a")).toBe("missing");
+  });
+
+  it("一覧にidがあれば、その的を返す", () => {
+    expect(lookupTargetFace(faces, "b")).toBe(faces[1]);
   });
 });

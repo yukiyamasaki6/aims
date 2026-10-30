@@ -13,6 +13,21 @@ export type TargetFaceSpotLayout = {
   target_face_rings: TargetFaceRing[];
 };
 
+export type TargetFaceLayout = {
+  size: number;
+  target_face_spots: TargetFaceSpotLayout[];
+};
+
+// 的の一覧に見つからなければ"missing"。
+export type TargetFaceView = TargetFaceLayout | "missing";
+
+export function lookupTargetFace<T extends { id: string }>(
+  faces: T[],
+  id: string,
+): T | "missing" {
+  return faces.find((f) => f.id === id) ?? "missing";
+}
+
 export type TargetFaceOption = {
   id: string;
   name: string;

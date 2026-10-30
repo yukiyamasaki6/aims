@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { IdentityReader, SessionReader } from "@/features/auth";
+import type { SessionReader } from "@/features/auth";
 import type { LoadedRound } from "@/features/rounds/application/rounds-store";
 import { summarizeRound } from "@/features/rounds/domain/scorecard-scoring";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
@@ -21,14 +21,12 @@ import { type ScorecardModel, useScorecard } from "./use-scorecard";
 
 export function ScorecardClient({
   sessionReader,
-  identityReader,
   roundId,
   loaded,
   targetFaces,
   onGone,
 }: {
   sessionReader: SessionReader;
-  identityReader: IdentityReader;
   roundId: string;
   loaded: LoadedRound;
   targetFaces: TargetFaceOption[];
@@ -66,7 +64,6 @@ export function ScorecardClient({
         <div className="mx-auto w-full max-w-xl shrink-0">
           <ScorecardHeaderBar
             sessionReader={sessionReader}
-            identityReader={identityReader}
             roundId={roundId}
             roundConfig={roundConfig}
             distances={distances}

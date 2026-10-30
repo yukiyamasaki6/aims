@@ -5,19 +5,17 @@ import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  type IdentityReader,
-  type SessionReader,
-  unconfirmedMessage,
-} from "@/features/auth";
+import { type SessionReader, unconfirmedMessage } from "@/features/auth";
 import { compareDistancePosition } from "@/features/rounds/domain/scorecard-scoring";
 import type { Distance } from "@/features/rounds/domain/scorecard-types";
-import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
+import {
+  lookupTargetFace,
+  type TargetFaceOption,
+} from "@/features/rounds/domain/target-face-types";
+import { PresetInfo } from "@/features/rounds/ui/preset-info";
+import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import { cn } from "@/lib/utils";
-import { fetchPresets } from "../_shared/fetch-presets";
-import { PresetInfo } from "../_shared/preset-info";
-import { lookupTargetFace } from "../_shared/target-face-icon";
 import {
   CLOSED_PRESET_DIALOG,
   changePresetDialogOpen,
@@ -51,7 +49,6 @@ async function saveRoundAsPreset(
 
 export function SavePresetDialog({
   sessionReader,
-  identityReader,
   roundName,
   format,
   bowType,
@@ -59,13 +56,13 @@ export function SavePresetDialog({
   targetFaces,
 }: {
   sessionReader: SessionReader;
-  identityReader: IdentityReader;
   roundName: string;
   format: string;
   bowType: string;
   distances: Distance[];
   targetFaces: TargetFaceOption[];
 }) {
+  const store = useRoundsStore();
   const [state, setState] = useState(CLOSED_PRESET_DIALOG);
 
   async function handleSave() {
@@ -76,8 +73,7 @@ export function SavePresetDialog({
 
     const result = await saveRoundAsPreset(sessionReader, start.args);
     // 保存できたら、プリセット一覧を背景で再取得して保存済みを更新する（結果は使わない）。
-    if (!result)
-      void fetchPresets(createClient(), sessionReader, identityReader);
+    if (!result) void store.loadPresets();
     setState((prev) => finishPresetSave(prev, result));
   }
 

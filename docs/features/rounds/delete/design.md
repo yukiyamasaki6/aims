@@ -22,7 +22,7 @@
 
 - `apps/web/src/features/rounds/ui/rounds-list.tsx`: 一覧のカードのメニューと、削除済みの集合によるカードの除去。
 - `rounds/[id]/round-menu.tsx`: 詳細のヘッダーのメニュー。保存の後に`/rounds`へ置き換えて遷移する。
-- `apps/web/src/features/rounds/application/rounds-store.ts`の`RoundsStore.deleteRound`: `round.disabled`を新しい`eventId`(約束`EventIds`、実装は`features/rounds/infrastructure/browser-event-ids.ts`)で列へ追記する。保存の試みの完了で解決し、拒否しない。
+- `apps/web/src/features/rounds/application/rounds-store.ts`の`RoundsStore.deleteRound`: `round.disabled`を新しい`eventId`(約束`UniqueIds`、実装は`features/rounds/infrastructure/browser-unique-ids.ts`)で列へ追記する。保存の試みの完了で解決し、拒否しない。
 - `components/ui/confirm-dialog.tsx`の`ConfirmDialog`: 確認後すぐ閉じる。
 - `apps/web/src/features/rounds/domain/rounds-list-view.ts`: 一覧の取得結果と端末の入力中のラウンドから、列で削除済みのラウンドを除く（`rounds/history`）。
 - `features/rounds/application/rounds-store.ts`の`load`: 列に削除があれば、取得せずに削除済みを返す（`rounds/detail`）。

@@ -5,9 +5,12 @@ import {
   BOW_TYPE_OPTIONS,
   FORMAT_OPTIONS,
 } from "@/features/rounds/domain/round-constants";
-import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
+import {
+  lookupTargetFace,
+  type TargetFaceOption,
+} from "@/features/rounds/domain/target-face-types";
+import { TargetFaceInfo } from "@/features/rounds/ui/target-face-info";
 import { cn } from "@/lib/utils";
-import { lookupTargetFace, TargetFaceInfo } from "../_shared/target-face-icon";
 import { filterTargetFaces } from "./distance-config";
 import { FILTER_ALL } from "./distance-config-constants";
 

@@ -3,12 +3,8 @@ import { describe, expect, it } from "vitest";
 import type {
   TargetFaceRing,
   TargetFaceSpotLayout,
-} from "@/features/rounds/domain/target-face-types";
-import {
-  lookupTargetFace,
-  TargetFaceIcon,
-  TargetFaceInfo,
-} from "./target-face-icon";
+} from "../domain/target-face-types";
+import { TargetFaceIcon, TargetFaceInfo } from "./target-face-info";
 
 const yellowRing: TargetFaceRing = {
   radius: 8,
@@ -62,19 +58,6 @@ describe("TargetFaceIcon", () => {
       `translate(${filledSpot.center_x} ${-filledSpot.center_y})`,
     );
     expect(filledGroup.querySelectorAll("circle")).toHaveLength(2);
-  });
-});
-
-describe("lookupTargetFace", () => {
-  const faces = [{ id: "a" }, { id: "b" }];
-
-  it('一覧にidが無ければ"missing"を返す(空の一覧を含む)', () => {
-    expect(lookupTargetFace(faces, "x")).toBe("missing");
-    expect(lookupTargetFace([], "a")).toBe("missing");
-  });
-
-  it("一覧にidがあれば、その的を返す", () => {
-    expect(lookupTargetFace(faces, "b")).toBe(faces[1]);
   });
 });
 

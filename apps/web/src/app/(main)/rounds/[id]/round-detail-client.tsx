@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { IdentityReader, SessionReader } from "@/features/auth";
+import type { SessionReader } from "@/features/auth";
 import type { LoadedRoundDetail } from "@/features/rounds/application/rounds-store";
 import { FetchState } from "@/features/rounds/ui/fetch-state";
 import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
@@ -31,10 +31,8 @@ const NOT_FOUND = { message: "ラウンドが見つかりません。" };
 // SSRのHTMLと、Service Workerが別URLへ返す枠のHTMLが同一になり、水和が一致する。
 export function RoundDetailClient({
   sessionReader,
-  identityReader,
 }: {
   sessionReader: SessionReader;
-  identityReader: IdentityReader;
 }) {
   const roundId = parseRoundId(usePathname());
   return (
@@ -42,7 +40,6 @@ export function RoundDetailClient({
       key={roundId ?? "invalid"}
       roundId={roundId}
       sessionReader={sessionReader}
-      identityReader={identityReader}
     />
   );
 }
@@ -50,11 +47,9 @@ export function RoundDetailClient({
 function RoundDetailLoader({
   roundId,
   sessionReader,
-  identityReader,
 }: {
   roundId: string | null;
   sessionReader: SessionReader;
-  identityReader: IdentityReader;
 }) {
   const router = useRouter();
   const store = useRoundsStore();
@@ -76,7 +71,6 @@ function RoundDetailLoader({
     return (
       <ScorecardClient
         sessionReader={sessionReader}
-        identityReader={identityReader}
         roundId={roundId}
         loaded={view.data}
         onGone={() => router.replace("/rounds")}

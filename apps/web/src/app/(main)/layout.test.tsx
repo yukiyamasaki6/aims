@@ -31,6 +31,12 @@ const supabase = vi.hoisted(() => {
     },
   };
 });
+// 画面のパッケージの遷移の部品は、アプリの外では得られないため、RootClientEntryが受け取れる偽に差し替える。
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 // 常駐の同期と取得の部品は、この入口の関心の外のため、何も描画しない代役に差し替える。
 vi.mock("../op-sync-provider", () => ({ OpSyncProvider: () => null }));
 vi.mock("../round-base-refresher", () => ({ RoundBaseRefresher: () => null }));

@@ -39,7 +39,7 @@ describe("createAuthSignInReader", () => {
     });
   });
 
-  it("不明は、そのまま不明で返す", async () => {
+  it("不明は、通信エラーを知らせる認証の入口の文言を添えて返す", async () => {
     // Given
     const { sessionReader } = readerOf({ status: "unknown" });
 
@@ -47,7 +47,10 @@ describe("createAuthSignInReader", () => {
     const reading = await createAuthSignInReader(sessionReader).read();
 
     // Then
-    expect(reading).toEqual({ status: "unknown" });
+    expect(reading).toEqual({
+      status: "unknown",
+      message: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+    });
   });
 
   it("更新の指定を、認証の読み取りへ引き渡す", async () => {

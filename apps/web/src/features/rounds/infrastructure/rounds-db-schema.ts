@@ -72,5 +72,6 @@ export type RoundsDbSchema = {
     };
     distances: { Row: { position_key: string; id: string } };
     target_faces: { Row: Record<never, never> };
+    preset_rounds: { Row: { id: string } };
   };
 };

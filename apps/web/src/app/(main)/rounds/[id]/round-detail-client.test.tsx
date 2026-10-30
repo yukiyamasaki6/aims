@@ -60,7 +60,6 @@ vi.mock("@/lib/supabase/infrastructure/client", () => ({
 }));
 
 const sessionReader = { readSession: vi.fn() };
-const identityReader = { read: vi.fn() };
 
 // スコアカードのスタブはidだけを読むため、的はidだけを持たせる。
 function faces(...ids: string[]): TargetFaceOption[] {
@@ -95,10 +94,7 @@ function detail(
 function renderDetail() {
   return render(
     <RoundsStoreProvider store={store}>
-      <RoundDetailClient
-        sessionReader={sessionReader}
-        identityReader={identityReader}
-      />
+      <RoundDetailClient sessionReader={sessionReader} />
     </RoundsStoreProvider>,
   );
 }
@@ -106,10 +102,7 @@ function renderDetail() {
 function renderDetailToString() {
   return renderToString(
     <RoundsStoreProvider store={store}>
-      <RoundDetailClient
-        sessionReader={sessionReader}
-        identityReader={identityReader}
-      />
+      <RoundDetailClient sessionReader={sessionReader} />
     </RoundsStoreProvider>,
   );
 }
@@ -219,10 +212,7 @@ describe("RoundDetailClient", () => {
       nav.pathname = `/rounds/${OTHER_ID}`;
       rerender(
         <RoundsStoreProvider store={store}>
-          <RoundDetailClient
-            sessionReader={sessionReader}
-            identityReader={identityReader}
-          />
+          <RoundDetailClient sessionReader={sessionReader} />
         </RoundsStoreProvider>,
       );
 

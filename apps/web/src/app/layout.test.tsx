@@ -10,6 +10,12 @@ vi.mock("geist/font/sans", () => ({
   GeistSans: { variable: "geist-sans-variable" },
 }));
 
+// 画面のパッケージの遷移の部品は、アプリの外では得られないため、RootClientEntryが受け取れる偽に差し替える。
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 // SupabaseのSDKは外部サービスとの境界のため、描画時にRootClientEntryが購読できるだけのスタブで模す。
 vi.mock("@supabase/ssr", () => ({
   createBrowserClient: () => ({

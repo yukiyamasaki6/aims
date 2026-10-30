@@ -8,17 +8,8 @@ import {
   isAuthRejected,
   type ResponseLike,
 } from "../domain/fetch-result";
+import type { SignInReader } from "./sign-in-reader";
 import { TIMED_OUT, withinTime } from "./time-limit";
-
-type SignInReading =
-  | { status: "authenticated"; userId: string }
-  | { status: "unauthenticated"; message: string }
-  | { status: "unknown" };
-
-// サインインの状態の読み取り。例外: 投げない。未認証の文言は約束の値で受ける。
-export type SignInReader = {
-  read(options?: { refresh?: boolean }): Promise<SignInReading>;
-};
 
 type FetchOptions<T> = {
   nullIsNotFound?: boolean;
@@ -52,7 +43,7 @@ export function createContentFetcher(deps: {
   ): Promise<{ session: { userId: string } } | { failure: FetchResult<T> }> {
     const { promise, resolve } = Promise.withResolvers<"offline">();
     const stop = connectivity.onOffline(() => resolve("offline"));
-    let reading: SignInReading;
+    let reading: Awaited<ReturnType<SignInReader["read"]>>;
     try {
       const raced = await Promise.race([signIn.read(opts), promise]);
       if (raced === "offline") return { failure: { status: "offline" } };

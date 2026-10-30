@@ -6,7 +6,8 @@ import {
   FETCH_ERROR_MESSAGE,
   FETCH_TIMEOUT_MS,
 } from "../domain/fetch-result";
-import { createContentFetcher, type SignInReader } from "./fetch-content";
+import { createContentFetcher } from "./fetch-content";
+import type { SignInReader } from "./sign-in-reader";
 
 const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
 
@@ -16,6 +17,9 @@ const unauthorizedResponse = {
   error: { code: "PGRST301", message: "JWT expired" },
   status: 401,
 };
+const UNREACHABLE_MESSAGE =
+  "通信エラーが発生しました。しばらくしてから再度お試しください。";
+const unknown = { status: "unknown", message: UNREACHABLE_MESSAGE } as const;
 const authenticated = { status: "authenticated", userId: "u1" } as const;
 const unauthenticated = {
   status: "unauthenticated",
@@ -211,7 +215,7 @@ describe("fetchContent", () => {
 
     it("サインインの状態を確かめられないとき、クエリを実行せずerrorにする", async () => {
       // Given
-      const { fetcher } = setup({ readings: [{ status: "unknown" }] });
+      const { fetcher } = setup({ readings: [unknown] });
       const run = vi.fn(async () => okResponse);
 
       // When
@@ -241,7 +245,7 @@ describe("fetchContent", () => {
     it("クエリが認証の拒否で返り、更新で確かめられないと、errorにする", async () => {
       // Given
       const { fetcher } = setup({
-        readings: [authenticated, { status: "unknown" }],
+        readings: [authenticated, unknown],
       });
       const run = vi.fn(async () => unauthorizedResponse);
 
@@ -384,7 +388,7 @@ describe("fetchContent", () => {
         signIn: {
           read: async () => {
             network.state.offline = true;
-            return { status: "unknown" };
+            return unknown;
           },
         },
         connectivity: network.connectivity,

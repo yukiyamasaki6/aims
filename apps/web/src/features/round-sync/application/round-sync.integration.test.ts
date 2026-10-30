@@ -12,8 +12,10 @@ import {
   createTestRoundHub,
 } from "@/features/rounds/application/round-record-test-helpers";
 import { createRoundsStore } from "@/features/rounds/application/rounds-store";
-import type { SendOutcome } from "@/features/rounds/application/send-operations";
-import { createSendOperations } from "@/features/rounds/application/send-operations";
+import {
+  createSendOperations,
+  type SendOutcome,
+} from "@/features/rounds/application/send-operations";
 import type { FetchResult } from "@/features/rounds/domain/fetch-result";
 import { roundStreamId } from "@/features/rounds/domain/sync-events";
 import {
@@ -97,6 +99,8 @@ function rig() {
     clock,
     connectivity,
     ids: { next: () => `event-${++issued}` },
+    roundStart: { startRound: vi.fn() },
+    presetDeletion: { deletePreset: vi.fn() },
   });
   sync.start("user-1");
   return { sync, store, requests, fetching, clock };

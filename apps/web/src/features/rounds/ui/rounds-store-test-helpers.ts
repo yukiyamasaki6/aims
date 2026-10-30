@@ -32,6 +32,11 @@ export function createFakeRoundsStore(overrides: Partial<RoundsStore> = {}) {
         if (waitingForFallback.delete(listener)) cancelled.fallback += 1;
       };
     }),
+    loadPresets: vi.fn(() => new Promise<never>(() => {})),
+    deletePreset: vi.fn().mockResolvedValue({ status: "deleted" }),
+    startRound: vi
+      .fn()
+      .mockResolvedValue({ status: "created", roundId: "r-1" }),
     ...overrides,
   } as unknown as RoundsStore & {
     loadList: ReturnType<typeof vi.fn>;
@@ -39,6 +44,9 @@ export function createFakeRoundsStore(overrides: Partial<RoundsStore> = {}) {
     deleteRound: ReturnType<typeof vi.fn>;
     whenOnline: ReturnType<typeof vi.fn>;
     afterFallbackWait: ReturnType<typeof vi.fn>;
+    loadPresets: ReturnType<typeof vi.fn>;
+    deletePreset: ReturnType<typeof vi.fn>;
+    startRound: ReturnType<typeof vi.fn>;
   };
 
   return {

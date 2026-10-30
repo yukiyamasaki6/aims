@@ -11,18 +11,17 @@ import {
   FETCH_TIMEOUT_MS,
   type ResponseLike,
 } from "../domain/fetch-result";
+import type { PresetRecord, Presets } from "../domain/preset";
 import type { ServerRoundSummary } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
 import type { TargetFaceRecord } from "../domain/target-face-types";
 import { createRoundQueries } from "../infrastructure/round-queries";
 import type { RoundsDbSchema } from "../infrastructure/rounds-db-schema";
 
-import { createContentFetcher, type SignInReader } from "./fetch-content";
-import {
-  createRoundFetching,
-  type ReferenceSnapshots,
-  type RoundQueries,
-} from "./fetch-round-detail";
+import { createContentFetcher } from "./fetch-content";
+import { createRoundFetching, type RoundQueries } from "./fetch-round-detail";
+import type { ReferenceKind, ReferenceSnapshots } from "./reference-snapshots";
+import type { SignInReader } from "./sign-in-reader";
 
 const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
 
@@ -88,23 +87,50 @@ const okResponse = <T>(data: T): ResponseLike<T> => ({
   status: 200,
 });
 
-// 参照データの保存は端末の境界のため、利用者ごとのメモリで模す。読む利用者は、テストが切り替える。
-function memorySnapshots(initial: TargetFaceRecord[] | null = null) {
-  const saved = new Map<string, { startedAt: number; data: unknown }>();
+// 参照データの保存は端末の境界のため、種類と利用者ごとのメモリで模す。読む利用者は、テストが切り替える。
+// savedは的の保存、savedPresetsはプリセットの保存(どちらも利用者のIDがキー)。
+function memorySnapshots(
+  initial: {
+    targetFaces?: TargetFaceRecord[] | null;
+    presets?: Presets | null;
+  } = {},
+) {
+  type Entry = { startedAt: number; data: unknown };
+  const saved = new Map<string, Entry>();
+  const savedPresets = new Map<string, Entry>();
+  const stores: Record<ReferenceKind, Map<string, Entry>> = {
+    "target-faces": saved,
+    presets: savedPresets,
+  };
   const identity = { userId: "user-1" };
-  if (initial) saved.set("user-1", { startedAt: 1, data: initial });
+  if (initial.targetFaces) {
+    saved.set("user-1", { startedAt: 1, data: initial.targetFaces });
+  }
+  if (initial.presets) {
+    savedPresets.set("user-1", { startedAt: 1, data: initial.presets });
+  }
   const save = vi.fn<ReferenceSnapshots["save"]>(
-    (_kind, userId, data, startedAt) => {
-      const current = saved.get(userId);
+    (kind, userId, data, startedAt) => {
+      const current = stores[kind].get(userId);
       if (current && current.startedAt > startedAt) return;
-      saved.set(userId, { startedAt, data });
+      stores[kind].set(userId, { startedAt, data });
     },
   );
   const snapshots: ReferenceSnapshots = {
-    load: <T>() => (saved.get(identity.userId)?.data ?? null) as T | null,
+    load: <T>(kind: ReferenceKind) =>
+      (stores[kind].get(identity.userId)?.data ?? null) as T | null,
     save,
+    update: <T>(kind: ReferenceKind, change: (data: T) => T) => {
+      const current = stores[kind].get(identity.userId);
+      if (current) {
+        stores[kind].set(identity.userId, {
+          ...current,
+          data: change(current.data as T),
+        });
+      }
+    },
   };
-  return { snapshots, saved, identity, save };
+  return { snapshots, saved, savedPresets, identity, save };
 }
 
 type Readings = Parameters<typeof makeSignIn>[0];
@@ -117,6 +143,7 @@ function setup(
   options: {
     queries?: Partial<RoundQueries>;
     saved?: TargetFaceRecord[] | null;
+    presets?: Presets | null;
     offline?: boolean;
     signIn?: Readings;
   } = {},
@@ -132,7 +159,10 @@ function setup(
     options.signIn ?? { status: "authenticated", userId: "user-1" },
   );
   const content = createContentFetcher({ signIn, connectivity, clock });
-  const memory = memorySnapshots(options.saved);
+  const memory = memorySnapshots({
+    targetFaces: options.saved,
+    presets: options.presets,
+  });
   const queries: RoundQueries = {
     roundDetail: vi.fn(async () =>
       okResponse({ round: serverRound, targetFaces: [] }),
@@ -141,6 +171,7 @@ function setup(
       okResponse({ rounds: [serverRound], targetFaces: [] }),
     ),
     targetFaces: vi.fn(async () => okResponse<TargetFaceRecord[]>([])),
+    presets: vi.fn(async () => okResponse<PresetRecord[]>([])),
     roundsList: vi.fn(async () => okResponse<ServerRoundSummary[]>([])),
     ...options.queries,
   };
@@ -349,6 +380,9 @@ describe("fetchRoundDetail", () => {
     };
     const database: DatabaseGateway<RoundsDbSchema> = {
       select: async (query) => rows[query.table],
+      delete: async () => {
+        throw new Error("使わない");
+      },
       rpc: async () => {
         throw new Error("使わない");
       },
@@ -519,6 +553,340 @@ describe("fetchTargetFaces", () => {
 
     // Then
     expect(saved.get("user-1")?.data).toEqual(savedFaces);
+  });
+});
+
+function presetRecord(
+  id: string,
+  ownerId: string | null,
+  overrides: Partial<PresetRecord> = {},
+): PresetRecord {
+  return {
+    id,
+    name: id,
+    format: "outdoor",
+    bow_type: "recurve",
+    owner_id: ownerId,
+    created_at: "2026-09-01T00:00:00Z",
+    preset_distances: [],
+    ...overrides,
+  };
+}
+
+describe("fetchPresets", () => {
+  const savedPresets: Presets = {
+    personal: [presetRecord("saved-personal", "user-1")],
+    global: [presetRecord("saved-global", null)],
+  };
+  const presetIds = (data: Presets) =>
+    [...data.personal, ...data.global].map((p) => p.id);
+
+  it("取得できたら、個人と公式に振り分けて構成の順に並べたokを返す", async () => {
+    // Given
+    const { fetching } = setup({
+      queries: {
+        presets: vi.fn(async () =>
+          okResponse([
+            presetRecord("global-field", null, { format: "field" }),
+            presetRecord("personal-indoor", "user-1", { format: "indoor" }),
+            presetRecord("global-outdoor", null),
+            presetRecord("personal-outdoor", "user-1"),
+          ]),
+        ),
+      },
+    });
+
+    // When
+    const result = await fetching.fetchPresets();
+
+    // Then
+    expect(
+      result.status === "ok" && result.data.personal.map((p) => p.id),
+    ).toEqual(["personal-outdoor", "personal-indoor"]);
+    expect(
+      result.status === "ok" && result.data.global.map((p) => p.id),
+    ).toEqual(["global-outdoor", "global-field"]);
+  });
+
+  it("0件でも、個人・公式ともに空のokを返す", async () => {
+    // Given
+    const { fetching } = setup();
+
+    // When
+    const result = await fetching.fetchPresets();
+
+    // Then
+    expect(result).toEqual({
+      status: "ok",
+      data: { personal: [], global: [] },
+    });
+  });
+
+  it("確かめた利用者のIDで問い合わせ、問い合わせの前に認証を読み直さない", async () => {
+    // Given
+    const { fetching, queries, signIn } = setup();
+
+    // When
+    const result = await fetching.fetchPresets();
+
+    // Then
+    expect(result.status).toBe("ok");
+    expect(queries.presets).toHaveBeenCalledExactlyOnceWith("user-1");
+    expect(signIn.read).toHaveBeenCalledTimes(1);
+  });
+
+  it("okの結果を、問い合わせに使った利用者のキーへ、取得の開始時刻で保存する", async () => {
+    // Given
+    const { fetching, save } = setup({
+      queries: {
+        presets: vi.fn(async () =>
+          okResponse([presetRecord("p1", "user-1"), presetRecord("g1", null)]),
+        ),
+      },
+    });
+
+    // When
+    await fetching.fetchPresets();
+
+    // Then
+    expect(save).toHaveBeenCalledWith(
+      "presets",
+      "user-1",
+      {
+        personal: [expect.objectContaining({ id: "p1" })],
+        global: [expect.objectContaining({ id: "g1" })],
+      },
+      1000,
+    );
+  });
+
+  it("取得できたときは、保存済みがあっても最新で上書きして返す", async () => {
+    // Given
+    const { fetching, savedPresets: saved } = setup({
+      presets: savedPresets,
+      queries: {
+        presets: vi.fn(async () => okResponse([presetRecord("fresh", null)])),
+      },
+    });
+
+    // When
+    const result = await fetching.fetchPresets();
+
+    // Then
+    expect(result.status === "ok" && presetIds(result.data)).toEqual(["fresh"]);
+    expect(presetIds(saved.get("user-1")?.data as Presets)).toEqual(["fresh"]);
+  });
+
+  it.each<[string, { offline: boolean }, ResponseLike<PresetRecord[]>, number]>(
+    [
+      [
+        "オフライン",
+        { offline: true },
+        { data: null, error: null, status: 0 },
+        0,
+      ],
+      [
+        "通信失敗",
+        { offline: false },
+        { data: null, error: null, status: 0 },
+        1,
+      ],
+      [
+        "サーバーエラー",
+        { offline: false },
+        { data: null, error: { message: "x" }, status: 500 },
+        1,
+      ],
+    ],
+  )(
+    "%sのとき、保存済みのプリセットがあればその値のokを返す(的の保存済みだけでは返さない)",
+    async (_name, conditions, response, queried) => {
+      // Given
+      const withSaved = setup({
+        ...conditions,
+        presets: savedPresets,
+        queries: { presets: vi.fn(async () => response) },
+      });
+      const onlyFaces = setup({
+        ...conditions,
+        saved: [face("saved", null)],
+        queries: { presets: vi.fn(async () => response) },
+      });
+
+      // When
+      const result = await withSaved.fetching.fetchPresets();
+      const withoutPresets = await onlyFaces.fetching.fetchPresets();
+
+      // Then
+      expect(result).toEqual({ status: "ok", data: savedPresets });
+      expect(withoutPresets.status).not.toBe("ok");
+      expect(withSaved.queries.presets).toHaveBeenCalledTimes(queried);
+    },
+  );
+
+  it("通信できないとき、保存済みが無ければ、問い合わせずにofflineを返す", async () => {
+    // Given
+    const { fetching, queries } = setup({ offline: true });
+
+    // When
+    const result = await fetching.fetchPresets();
+
+    // Then
+    expect(result).toEqual({ status: "offline" });
+    expect(queries.presets).not.toHaveBeenCalled();
+  });
+
+  it("通信失敗(状態0)は、保存済みが無ければ、原因を断定せずerrorを返す", async () => {
+    // Given
+    const { fetching } = setup({
+      queries: {
+        presets: vi.fn(async () => ({ data: null, error: null, status: 0 })),
+      },
+    });
+
+    // When
+    const result = await fetching.fetchPresets();
+
+    // Then
+    expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+  });
+
+  it("サーバーエラーは、保存済みが無ければerrorを返す", async () => {
+    // Given
+    const { fetching } = setup({
+      queries: {
+        presets: vi.fn(async () => ({
+          data: null,
+          error: { message: "boom" },
+          status: 500,
+        })),
+      },
+    });
+
+    // When
+    const result = await fetching.fetchPresets();
+
+    // Then
+    expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+  });
+
+  it("サインインしていないとき、問い合わせずに、読み取りの文言でerrorを返す", async () => {
+    // Given
+    const { fetching, queries } = setup({
+      signIn: { status: "unauthenticated", message: AUTH_REQUIRED_MESSAGE },
+    });
+
+    // When
+    const result = await fetching.fetchPresets();
+
+    // Then
+    expect(result).toEqual({ status: "error", message: AUTH_REQUIRED_MESSAGE });
+    expect(queries.presets).not.toHaveBeenCalled();
+  });
+
+  it("保存済みがあると、FALLBACK_WAIT_MSで終わらない取得を待たず保存済みを返す", async () => {
+    // Given
+    const { fetching, clock } = setup({
+      presets: savedPresets,
+      queries: { presets: () => new Promise<never>(() => {}) },
+    });
+    const pending = fetching.fetchPresets();
+
+    // When
+    await clock.advanceAsync(FALLBACK_WAIT_MS);
+
+    // Then
+    await expect(pending).resolves.toEqual({
+      status: "ok",
+      data: savedPresets,
+    });
+  });
+
+  it("保存済みが無いと、FALLBACK_WAIT_MSでは返らず、FETCH_TIMEOUT_MSでerrorになる", async () => {
+    // Given
+    const { fetching, clock } = setup({
+      queries: { presets: () => new Promise<never>(() => {}) },
+    });
+    let settled = false;
+    const pending = fetching.fetchPresets().finally(() => {
+      settled = true;
+    });
+
+    // When
+    await clock.advanceAsync(FALLBACK_WAIT_MS);
+    const settledAtFallback = settled;
+    await clock.advanceAsync(FETCH_TIMEOUT_MS - FALLBACK_WAIT_MS);
+
+    // Then
+    expect(settledAtFallback).toBe(false);
+    await expect(pending).resolves.toEqual({
+      status: "error",
+      message: FETCH_ERROR_MESSAGE,
+    });
+  });
+
+  it("時間切れの後に届いたokは表示に使わず、開始時の利用者のキーへ保存し、読む利用者が変わっても新しい利用者のキーへは書かない", async () => {
+    // Given
+    const {
+      fetching,
+      clock,
+      savedPresets: saved,
+      identity,
+    } = setup({
+      presets: savedPresets,
+      queries: {
+        presets: vi.fn(
+          () =>
+            new Promise<ResponseLike<PresetRecord[]>>((resolve) => {
+              clock.after(3000, () =>
+                resolve(okResponse([presetRecord("late", null)])),
+              );
+            }),
+        ),
+      },
+    });
+    const pending = fetching.fetchPresets();
+    await clock.advanceAsync(FALLBACK_WAIT_MS);
+    const shown = await pending;
+    identity.userId = "user-2";
+
+    // When
+    await clock.advanceAsync(3000);
+
+    // Then
+    expect(shown).toEqual({ status: "ok", data: savedPresets });
+    expect(presetIds(saved.get("user-1")?.data as Presets)).toEqual(["late"]);
+    expect(saved.has("user-2")).toBe(false);
+  });
+
+  it("時間切れの後に届いた結果がok以外なら、保存済みは変わらない", async () => {
+    // Given
+    const {
+      fetching,
+      clock,
+      savedPresets: saved,
+    } = setup({
+      presets: savedPresets,
+      queries: {
+        presets: vi.fn(
+          () =>
+            new Promise<ResponseLike<PresetRecord[]>>((resolve) => {
+              clock.after(3000, () =>
+                resolve({ data: null, error: { message: "x" }, status: 500 }),
+              );
+            }),
+        ),
+      },
+    });
+    const pending = fetching.fetchPresets();
+    await clock.advanceAsync(FALLBACK_WAIT_MS);
+    await pending;
+
+    // When
+    await clock.advanceAsync(3000);
+
+    // Then
+    expect(saved.get("user-1")?.data).toEqual(savedPresets);
   });
 });
 

@@ -9,12 +9,16 @@ import type {
   RoundQueries,
 } from "../application/fetch-round-detail";
 import { foldFailures, type ResponseLike } from "../domain/fetch-result";
+import type { PresetRecord } from "../domain/preset";
 import { newestById } from "../domain/round-base";
 import type { ServerRoundSummary } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
 import type { RoundStatus } from "../domain/sync-events";
 import type { TargetFaceRecord } from "../domain/target-face-types";
-import { TARGET_FACE_SELECT } from "./reference-query-constants";
+import {
+  ROUND_PRESET_SELECT,
+  TARGET_FACE_SELECT,
+} from "./reference-query-constants";
 import type { RoundsDbSchema } from "./rounds-db-schema";
 
 // 無効化した距離と取り消した矢の行も取得し、表示にはdisabled_atが無い行だけを使う。
@@ -124,6 +128,12 @@ function toServerRoundSummary(row: RoundSummaryRow): ServerRoundSummary {
 
 function toTargetFaces(rows: unknown): TargetFaceRecord[] {
   return (rows ?? []) as TargetFaceRecord[];
+}
+
+// preset_distances.target_facesはFKの多重度（多対1）上つねに単一のオブジェクトだが、
+// 生成型は入れ子embedのカーディナリティを配列として広く推論するため、実体に合わせてキャストする。
+function toPresets(rows: unknown): PresetRecord[] {
+  return (rows ?? []) as PresetRecord[];
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 問い合わせの組み立てを閉じ込めるファクトリで、内側の関数は個々に上限内である。
@@ -254,6 +264,20 @@ export function createRoundQueries(
         return faces as ResponseLike<TargetFaceRecord[]>;
       }
       return { data: toTargetFaces(faces.data), error: null, status: 200 };
+    },
+    // preset_roundsのRLSは認証済みの全員に全行を見せるため、他人の個人プリセットを除くクエリの絞りが必須である。
+    async presets(userId) {
+      const presets = await database.select({
+        table: "preset_rounds",
+        columns: ROUND_PRESET_SELECT,
+        filters: [
+          { op: "or", expression: `owner_id.is.null,owner_id.eq.${userId}` },
+        ],
+      });
+      if (presets.status === 0 || presets.error) {
+        return presets as ResponseLike<PresetRecord[]>;
+      }
+      return { data: toPresets(presets.data), error: null, status: 200 };
     },
   };
 }

@@ -85,8 +85,11 @@ export function createTestRoundsStore(
     fetchRoundDetail: vi.fn(),
     fetchRoundDetails: vi.fn(),
     fetchRoundsList: vi.fn(),
+    fetchPresets: vi.fn(),
     savedTargetFaces: vi.fn(() => options.savedFaces ?? null),
   };
+  const roundStart = { startRound: vi.fn() };
+  const presetDeletion = { deletePreset: vi.fn() };
   let issued = 0;
   const store = createRoundsStore({
     hub,
@@ -95,9 +98,22 @@ export function createTestRoundsStore(
     clock,
     connectivity,
     ids: { next: () => `event-${++issued}` },
+    roundStart,
+    presetDeletion,
   });
   hub.start(options.userId === undefined ? "user-1" : options.userId);
-  return { store, hub, opLog, bus, requests, clock, connectivity, fetching };
+  return {
+    store,
+    hub,
+    opLog,
+    bus,
+    requests,
+    clock,
+    connectivity,
+    fetching,
+    roundStart,
+    presetDeletion,
+  };
 }
 
 // 手動で結果を返せる、書き込みの転送。送った要求が`sent`に並び、テストが結果を返す。

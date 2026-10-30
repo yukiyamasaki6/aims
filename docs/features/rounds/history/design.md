@@ -62,10 +62,10 @@
 | `features/rounds/domain/rounds-list-view.ts` | ドメイン層(ドメインサービス: 取得結果と入力中のラウンドの重ね合わせと、表示の内容の決定) |
 | `features/rounds/domain/round-list.ts` | ドメイン層(ドメインサービス: 削除済みと入力中と合計点の導出、一覧の材料の型) |
 | `features/rounds/domain/round-routes.ts` | ドメイン層(値オブジェクト: ラウンドの画面の経路) |
-| `features/rounds/application/rounds-store.ts` | 手続き(画面に渡す状態と変更の方法)と約束(`EventIds`) |
-| `features/rounds/application/fetch-round-detail.ts` | 手続き(取得の順序)と約束(`RoundQueries`、`ReferenceSnapshots`) |
+| `features/rounds/application/rounds-store.ts` | 手続き(画面に渡す状態と変更の方法) |
+| `features/rounds/application/fetch-round-detail.ts` | 手続き(取得の順序)と約束(`RoundQueries`) |
 | `features/rounds/infrastructure/round-queries.ts` | インフラ層(一覧の問い合わせと行の写し) |
-| `features/rounds/infrastructure/browser-event-ids.ts` | インフラ層(イベントIDの払い出し) |
+| `features/rounds/infrastructure/browser-unique-ids.ts` | インフラ層(新しいIDの払い出し。段階3で`browser-event-ids.ts`から改めた) |
 | `features/rounds/infrastructure/rounds-db-schema.ts` | インフラ層(ラウンドが使うスキーマの部分の型) |
 | `features/rounds/index.ts` | 機能の入口(`ROUNDS_PATH`を公開) |
 | `hooks/use-hydrated.ts`、`components/ui/{confirm-dialog,busy-button,dialog,dropdown-menu,skeleton,button}.tsx`、`lib/utils.ts` | 共有の画面部品 |

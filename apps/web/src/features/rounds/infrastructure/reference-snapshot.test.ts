@@ -1,16 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { ROUND_PRESET_SELECT } from "./reference-query-constants";
-import {
-  createReferenceSnapshots,
-  loadReferenceSnapshot,
-  saveReferenceSnapshot,
-  updateReferenceSnapshot,
-} from "./reference-snapshot";
+import { createReferenceSnapshots } from "./reference-snapshot";
 
 const IDENTITY_KEY = "aims:local-user-id";
 
 const identityReader = createBrowserIdentityStore();
+const snapshots = createReferenceSnapshots(identityReader);
 
 beforeEach(() => {
   localStorage.setItem(IDENTITY_KEY, "user-1");
@@ -30,10 +26,10 @@ function storedData(userId: string): unknown {
 describe("reference-snapshot", () => {
   it("保存したユーザーの識別で読める", () => {
     // Given
-    saveReferenceSnapshot("presets", "user-1", { a: 1 }, 100);
+    snapshots.save("presets", "user-1", { a: 1 }, 100);
 
     // When
-    const loaded = loadReferenceSnapshot(identityReader, "presets");
+    const loaded = snapshots.load("presets");
 
     // Then
     expect(loaded).toEqual({ a: 1 });
@@ -41,10 +37,10 @@ describe("reference-snapshot", () => {
 
   it("種類が違うものは読めない", () => {
     // Given
-    saveReferenceSnapshot("presets", "user-1", { a: 1 }, 100);
+    snapshots.save("presets", "user-1", { a: 1 }, 100);
 
     // When
-    const loaded = loadReferenceSnapshot(identityReader, "target-faces");
+    const loaded = snapshots.load("target-faces");
 
     // Then
     expect(loaded).toBeNull();
@@ -52,11 +48,11 @@ describe("reference-snapshot", () => {
 
   it("別のユーザーの識別では、前のユーザーの保存済みを読めない", () => {
     // Given
-    saveReferenceSnapshot("presets", "user-1", { a: 1 }, 100);
+    snapshots.save("presets", "user-1", { a: 1 }, 100);
     localStorage.setItem(IDENTITY_KEY, "user-2");
 
     // When
-    const loaded = loadReferenceSnapshot(identityReader, "presets");
+    const loaded = snapshots.load("presets");
 
     // Then
     expect(loaded).toBeNull();
@@ -64,14 +60,14 @@ describe("reference-snapshot", () => {
 
   it("同じ読み手で、識別が変わる前後に続けて読むと、そのときの識別の保存済みを読む", () => {
     // Given
-    saveReferenceSnapshot("presets", "user-a", { owner: "a" }, 100);
-    saveReferenceSnapshot("presets", "user-b", { owner: "b" }, 100);
+    snapshots.save("presets", "user-a", { owner: "a" }, 100);
+    snapshots.save("presets", "user-b", { owner: "b" }, 100);
     localStorage.setItem(IDENTITY_KEY, "user-a");
 
     // When
-    const beforeChange = loadReferenceSnapshot(identityReader, "presets");
+    const beforeChange = snapshots.load("presets");
     localStorage.setItem(IDENTITY_KEY, "user-b");
-    const afterChange = loadReferenceSnapshot(identityReader, "presets");
+    const afterChange = snapshots.load("presets");
 
     // Then
     expect(beforeChange).toEqual({ owner: "a" });
@@ -80,11 +76,11 @@ describe("reference-snapshot", () => {
 
   it("識別が無いときは読めない", () => {
     // Given
-    saveReferenceSnapshot("presets", "user-1", { a: 1 }, 100);
+    snapshots.save("presets", "user-1", { a: 1 }, 100);
     localStorage.removeItem(IDENTITY_KEY);
 
     // When
-    const loaded = loadReferenceSnapshot(identityReader, "presets");
+    const loaded = snapshots.load("presets");
 
     // Then
     expect(loaded).toBeNull();
@@ -98,7 +94,7 @@ describe("reference-snapshot", () => {
     );
 
     // When
-    const loaded = loadReferenceSnapshot(identityReader, "presets");
+    const loaded = snapshots.load("presets");
 
     // Then
     expect(loaded).toBeNull();
@@ -116,7 +112,7 @@ describe("reference-snapshot", () => {
     );
 
     // When
-    const loaded = loadReferenceSnapshot(identityReader, "presets");
+    const loaded = snapshots.load("presets");
 
     // Then
     expect(loaded).toEqual({ a: 1 });
@@ -132,7 +128,7 @@ describe("reference-snapshot", () => {
     localStorage.setItem("aims:reference:presets:user-1", raw);
 
     // When
-    const loaded = loadReferenceSnapshot(identityReader, "presets");
+    const loaded = snapshots.load("presets");
 
     // Then
     expect(loaded).toBeNull();
@@ -152,8 +148,7 @@ describe("reference-snapshot", () => {
       // Given
 
       // When
-      const save = () =>
-        saveReferenceSnapshot("presets", "user-1", { a: 1 }, 100);
+      const save = () => snapshots.save("presets", "user-1", { a: 1 }, 100);
 
       // Then
       expect(save).not.toThrow();
@@ -163,7 +158,7 @@ describe("reference-snapshot", () => {
       // Given
 
       // When
-      const loaded = loadReferenceSnapshot(identityReader, "presets");
+      const loaded = snapshots.load("presets");
 
       // Then
       expect(loaded).toBeNull();
@@ -173,8 +168,7 @@ describe("reference-snapshot", () => {
       // Given
 
       // When
-      const update = () =>
-        updateReferenceSnapshot(identityReader, "presets", (d) => d);
+      const update = () => snapshots.update("presets", (d) => d);
 
       // Then
       expect(update).not.toThrow();
@@ -183,75 +177,59 @@ describe("reference-snapshot", () => {
 
   it("保存済みより古いstartedAtの保存は書かれず、新しい方は書かれる", () => {
     // Given
-    saveReferenceSnapshot("presets", "user-1", { v: "new" }, 200);
+    snapshots.save("presets", "user-1", { v: "new" }, 200);
 
     // When
-    saveReferenceSnapshot("presets", "user-1", { v: "old" }, 100);
-    const afterOlder = loadReferenceSnapshot(identityReader, "presets");
-    saveReferenceSnapshot("presets", "user-1", { v: "newer" }, 300);
-    const afterNewer = loadReferenceSnapshot(identityReader, "presets");
+    snapshots.save("presets", "user-1", { v: "old" }, 100);
+    const afterOlder = snapshots.load("presets");
+    snapshots.save("presets", "user-1", { v: "newer" }, 300);
+    const afterNewer = snapshots.load("presets");
 
     // Then
     expect(afterOlder).toEqual({ v: "new" });
     expect(afterNewer).toEqual({ v: "newer" });
   });
 
-  describe("updateReferenceSnapshot", () => {
+  describe("update", () => {
     it("保存済みが無いときは、書き換えず保存済みも作らない", () => {
       // Given
 
       // When
-      updateReferenceSnapshot<{ n: number }>(
-        identityReader,
-        "presets",
-        (d) => ({
-          n: d.n + 1,
-        }),
-      );
+      snapshots.update<{ n: number }>("presets", (d) => ({
+        n: d.n + 1,
+      }));
 
       // Then
-      expect(loadReferenceSnapshot(identityReader, "presets")).toBeNull();
+      expect(snapshots.load("presets")).toBeNull();
     });
 
     it("保存済みがあるときは書き換える", () => {
       // Given
-      saveReferenceSnapshot("presets", "user-1", { n: 1 }, 100);
+      snapshots.save("presets", "user-1", { n: 1 }, 100);
 
       // When
-      updateReferenceSnapshot<{ n: number }>(
-        identityReader,
-        "presets",
-        (d) => ({
-          n: d.n + 1,
-        }),
-      );
+      snapshots.update<{ n: number }>("presets", (d) => ({
+        n: d.n + 1,
+      }));
 
       // Then
-      expect(loadReferenceSnapshot(identityReader, "presets")).toEqual({
+      expect(snapshots.load("presets")).toEqual({
         n: 2,
       });
     });
 
     it("同じ読み手で、識別が変わる前後に続けて書き換えると、そのときの識別の保存済みだけを書き換える", () => {
       // Given
-      saveReferenceSnapshot("presets", "user-a", { n: 1 }, 100);
-      saveReferenceSnapshot("presets", "user-b", { n: 10 }, 100);
+      snapshots.save("presets", "user-a", { n: 1 }, 100);
+      snapshots.save("presets", "user-b", { n: 10 }, 100);
       localStorage.setItem(IDENTITY_KEY, "user-a");
       const increment = (d: { n: number }) => ({ n: d.n + 1 });
 
       // When
-      updateReferenceSnapshot<{ n: number }>(
-        identityReader,
-        "presets",
-        increment,
-      );
+      snapshots.update<{ n: number }>("presets", increment);
       const afterFirst = [storedData("user-a"), storedData("user-b")];
       localStorage.setItem(IDENTITY_KEY, "user-b");
-      updateReferenceSnapshot<{ n: number }>(
-        identityReader,
-        "presets",
-        increment,
-      );
+      snapshots.update<{ n: number }>("presets", increment);
 
       // Then
       expect(afterFirst).toEqual([{ n: 2 }, { n: 10 }]);
@@ -261,11 +239,11 @@ describe("reference-snapshot", () => {
 
     it("識別が無いときは何もしない", () => {
       // Given
-      saveReferenceSnapshot("presets", "user-1", { n: 1 }, 100);
+      snapshots.save("presets", "user-1", { n: 1 }, 100);
       localStorage.removeItem(IDENTITY_KEY);
 
       // When
-      updateReferenceSnapshot<{ n: number }>(identityReader, "presets", () => ({
+      snapshots.update<{ n: number }>("presets", () => ({
         n: 9,
       }));
 
@@ -275,33 +253,33 @@ describe("reference-snapshot", () => {
 
     it("書き換えの後に、書き換え前に始まった取得の保存をしても、戻らない", () => {
       // Given
-      saveReferenceSnapshot("presets", "user-1", { n: 1 }, 100);
-      updateReferenceSnapshot<{ n: number }>(identityReader, "presets", () => ({
+      snapshots.save("presets", "user-1", { n: 1 }, 100);
+      snapshots.update<{ n: number }>("presets", () => ({
         n: 2,
       }));
 
       // When
-      saveReferenceSnapshot("presets", "user-1", { n: 1 }, 100);
+      snapshots.save("presets", "user-1", { n: 1 }, 100);
 
       // Then
-      expect(loadReferenceSnapshot(identityReader, "presets")).toEqual({
+      expect(snapshots.load("presets")).toEqual({
         n: 2,
       });
     });
 
     it("書き換えの関数が例外を投げても、保存済みを変えず、投げない", () => {
       // Given
-      saveReferenceSnapshot("presets", "user-1", { n: 1 }, 100);
+      snapshots.save("presets", "user-1", { n: 1 }, 100);
 
       // When
       const update = () =>
-        updateReferenceSnapshot(identityReader, "presets", () => {
+        snapshots.update("presets", () => {
           throw new Error("boom");
         });
 
       // Then
       expect(update).not.toThrow();
-      expect(loadReferenceSnapshot(identityReader, "presets")).toEqual({
+      expect(snapshots.load("presets")).toEqual({
         n: 1,
       });
     });
@@ -312,7 +290,6 @@ describe("createReferenceSnapshots", () => {
   it("読み込みは端末の識別情報の利用者のキーで、保存は渡した利用者のキーで行う", () => {
     // Given
     localStorage.setItem(IDENTITY_KEY, "user-a");
-    const snapshots = createReferenceSnapshots(identityReader);
 
     // When
     snapshots.save("target-faces", "user-a", [{ id: "face-1" }], 100);
@@ -325,7 +302,6 @@ describe("createReferenceSnapshots", () => {
 
   it("端末の識別情報が無いときは、保存済みがあっても読めない", () => {
     // Given
-    const snapshots = createReferenceSnapshots(identityReader);
     snapshots.save("target-faces", "user-1", [{ id: "face-1" }], 100);
     localStorage.removeItem(IDENTITY_KEY);
 

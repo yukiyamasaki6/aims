@@ -1,4 +1,4 @@
-import type { IdentityReader, SessionReader } from "@/features/auth";
+import type { SessionReader } from "@/features/auth";
 import type { RoundConfig } from "@/features/rounds/domain/round-config";
 import type { summarizeRound } from "@/features/rounds/domain/scorecard-scoring";
 import type { Distance } from "@/features/rounds/domain/scorecard-types";
@@ -13,14 +13,12 @@ import { SavePresetDialog } from "./save-preset-dialog";
 // スクロール領域（<main>）の外の上端に置く。stickyにせず、行がこの裏に入らない。
 export function ScorecardHeaderBar({
   sessionReader,
-  identityReader,
   roundId,
   roundConfig,
   distances,
   targetFaces,
 }: {
   sessionReader: SessionReader;
-  identityReader: IdentityReader;
   roundId: string;
   roundConfig: RoundConfig;
   distances: Distance[];
@@ -32,7 +30,6 @@ export function ScorecardHeaderBar({
       <div className="flex items-center justify-end gap-2">
         <SavePresetDialog
           sessionReader={sessionReader}
-          identityReader={identityReader}
           roundName={roundConfig.name}
           format={roundConfig.format}
           bowType={roundConfig.bowType}

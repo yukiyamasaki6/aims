@@ -1,18 +1,13 @@
 import { act, renderHook } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { deletePresetFromSnapshot } from "../_shared/fetch-presets";
-import type { Preset } from "../_shared/preset-types";
-import { deletePersonalPreset } from "./delete-preset";
+import type { Preset } from "../domain/preset";
+import { RoundsStoreProvider } from "./rounds-context";
+import { createFakeRoundsStore } from "./rounds-store-test-helpers";
 import { usePresetDelete } from "./use-preset-delete";
 
-vi.mock("./delete-preset", () => ({ deletePersonalPreset: vi.fn() }));
-vi.mock("../_shared/fetch-presets", () => ({
-  deletePresetFromSnapshot: vi.fn(),
-}));
-
-const sessionReader = { readSession: vi.fn() };
-const identityReader = { read: vi.fn() };
-const del = vi.mocked(deletePersonalPreset);
+const fake = createFakeRoundsStore();
+const del = fake.store.deletePreset;
 const preset: Preset = {
   id: "p1",
   name: "70m",
@@ -21,16 +16,12 @@ const preset: Preset = {
   preset_distances: [],
 };
 
-function setup() {
+function setup(mounted = { current: true }) {
   const onDeleted = vi.fn();
-  const hook = renderHook(() =>
-    usePresetDelete(
-      sessionReader,
-      identityReader,
-      { current: true },
-      onDeleted,
-    ),
-  );
+  const hook = renderHook(() => usePresetDelete(mounted, onDeleted), {
+    wrapper: ({ children }: { children: ReactNode }) =>
+      createElement(RoundsStoreProvider, { store: fake.store, children }),
+  });
   return { ...hook, onDeleted };
 }
 
@@ -52,8 +43,28 @@ describe("usePresetDelete.dialog.onConfirm", () => {
 
     // Then
     expect(result.current.removedIds).toEqual(["p1"]);
-    expect(deletePresetFromSnapshot).toHaveBeenCalledWith(identityReader, "p1");
     expect(onDeleted).toHaveBeenCalledWith("p1");
+  });
+
+  it("削除へ、確認中のプリセットのIDと、マウント中は真を返し、アンマウントを表す値に変わると偽を返す判定を渡す", async () => {
+    // Given
+    del.mockResolvedValue({ status: "deleted" });
+    const mounted = { current: true };
+    const { result } = setup(mounted);
+    act(() => result.current.setPresetToDelete(preset));
+
+    // When
+    await act(async () => {
+      await result.current.dialog.onConfirm();
+    });
+    const isCurrent = del.mock.calls[0][1] as () => boolean;
+    const whileMounted = isCurrent();
+    mounted.current = false;
+
+    // Then
+    expect(del.mock.calls[0][0]).toBe("p1");
+    expect(whileMounted).toBe(true);
+    expect(isCurrent()).toBe(false);
   });
 
   it("確認中のプリセットが無ければ、何も削除しない", async () => {
@@ -100,7 +111,6 @@ describe("usePresetDelete.dialog.onConfirm", () => {
 
     // Then
     expect(result.current.removedIds).toEqual([]);
-    expect(deletePresetFromSnapshot).not.toHaveBeenCalled();
     expect(onDeleted).not.toHaveBeenCalled();
   });
 });
