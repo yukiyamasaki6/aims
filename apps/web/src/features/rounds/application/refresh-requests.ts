@@ -1,4 +1,25 @@
 import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-result";
+import {
+  beginListRun,
+  decideList,
+  EMPTY_LIST_REQUESTS,
+  type ListRequests,
+  type ListRun,
+  listVerdict,
+  requestList,
+  settleListRun,
+  stopLists,
+} from "../domain/list-requests";
+import {
+  beginOpenRun,
+  EMPTY_OPEN_REQUESTS,
+  type OpenRequests,
+  type OpenRun,
+  type RoundOutcome,
+  requestOpen,
+  settleOpenRun,
+  stopOpens,
+} from "../domain/open-requests";
 import type { RoundTables } from "../domain/round-tables";
 import type { TargetFaceOption } from "../domain/target-face-types";
 
@@ -10,99 +31,88 @@ export type OpenedRound = {
 };
 
 // 取り直しの結果の分類。
-export type RoundOutcome = "ok" | "gone" | "failed";
-
-type ListRequest = {
-  id: number;
-  // 一覧の取得の成否。決まるまでnull。
-  allowed: boolean | null;
-  resolve: (result: FetchResult<null>) => void;
-};
-
-// 取り直しの依頼の記録。画面は「開いた」「一覧を開いた」と依頼するだけで、取得と反映の時点は同期が決める。
-// 依頼を待つ側へ結果を返すのは`settleRound`、`settleAll`である。
-// 取り直しの結果の分類。
 function outcomeOfResult(result: FetchResult<OpenedRound>): RoundOutcome {
   if (result.status === "ok") return result.data.deleted ? "gone" : "ok";
   return result.status === "not-found" ? "gone" : "failed";
 }
 
-type OpenWaiter = { resolve: (result: FetchResult<OpenedRound>) => void };
-
-// 取り直しの開始時に、その取り直しが答える依頼を控えたもの。
-export type RoundRun = {
-  roundId: string;
-  waiters: OpenWaiter[];
-  seq: number;
-  // 取り直しを始めた時点の世代。停止で進み、古い取り直しの結果は捨てられる。
-  generation: number;
+const STOPPED: FetchResult<never> = {
+  status: "error",
+  message: FETCH_ERROR_MESSAGE,
 };
 
+// 取り直しの依頼の記録。画面は「開いた」「一覧を開いた」と依頼するだけで、取得と反映の時点はこの記録では決めない。
+// 規則は集約(開く依頼 `open-requests.ts`、一覧の依頼 `list-requests.ts`)が持ち、ここは状態を保ち、依頼の番号ごとの結果を渡す先を呼ぶ。
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createRefreshRequests() {
-  const opens = new Map<string, OpenWaiter[]>();
-  // 開く依頼を出すたびに進める。古い取り直しの結果で、新しい依頼の結果の記録を上書きしないため。
-  const openSeq = new Map<string, number>();
-  const outcomes = new Map<string, RoundOutcome>();
+  let opens: OpenRequests = EMPTY_OPEN_REQUESTS;
+  let lists: ListRequests = EMPTY_LIST_REQUESTS;
+  // 依頼の番号ごとの、結果を渡す先。
+  const openResolvers = new Map<
+    string,
+    Map<number, (result: FetchResult<OpenedRound>) => void>
+  >();
+  const listResolvers = new Map<number, (result: FetchResult<null>) => void>();
   const watching = new Map<string, { count: number; local: boolean }>();
   // 確定済みの操作をベースに重ねられなかった(取り直しが要る)開いた詳細。
   const overlay = new Set<string>();
-  let pendingLists: ListRequest[] = [];
-  // 実行ごとに、その実行に含めた一覧の依頼を持つ。許可の判定と完了は、その実行の依頼だけに適用する(停止をまたぐ古い実行が、新しい実行の依頼に触れないため)。
-  const runs = new Map<number, ListRequest[]>();
-  const live = new Map<number, ListRequest>();
-  let nextRun = 1;
-  // 停止のたびに進める。停止前に始まった取り直しの完了が、現在の結果・待ち・通知に触れないため。
-  let generation = 0;
-  let nextId = 1;
-  const decisionWaiters = new Set<() => void>();
+  // 反映の許可の待ち。判定の関数と、待ち(`whenListAllows` の約束)を解決する関数の組で持つ。停止で全て解決する。
+  const decisionWaiters = new Map<() => void, (allowed: boolean) => void>();
   const listeners = new Set<() => void>();
 
   function changed() {
     for (const listener of [...listeners]) listener();
   }
 
+  function resolveOpen(
+    roundId: string,
+    request: number,
+    result: FetchResult<OpenedRound>,
+  ) {
+    const resolvers = openResolvers.get(roundId);
+    const resolve = resolvers?.get(request);
+    resolvers?.delete(request);
+    resolve?.(result);
+  }
+
   return {
-    // 詳細を開く依頼。同期が取得して結果を返すまで解決しない。
+    // 詳細を開く依頼。取り直しの実行が結果を返すまで解決しない。
     open(roundId: string): Promise<FetchResult<OpenedRound>> {
-      outcomes.delete(roundId);
-      openSeq.set(roundId, (openSeq.get(roundId) ?? 0) + 1);
+      const next = requestOpen(opens, roundId);
+      opens = next.state;
       return new Promise((resolve) => {
-        const waiters = opens.get(roundId) ?? [];
-        waiters.push({ resolve });
-        opens.set(roundId, waiters);
+        const resolvers = openResolvers.get(roundId) ?? new Map();
+        resolvers.set(next.request, resolve);
+        openResolvers.set(roundId, resolvers);
         changed();
       });
     },
-    pendingOpens: (): string[] => [...opens.keys()],
-    // 取り直しを始める。その時点で記録にある開く依頼だけが、この取り直しの結果を受ける。
-    beginRound(roundId: string): RoundRun {
-      return {
-        roundId,
-        waiters: [...(opens.get(roundId) ?? [])],
-        seq: openSeq.get(roundId) ?? 0,
-        generation,
-      };
+    // 最後に受けた一覧の依頼の番号。依頼が無ければ0。アプリの寿命の間増え続け、停止でも数え直さない。
+    latestListRequest: (): number => lists.latest,
+    // そのラウンドの最後の開く依頼の番号。依頼が無ければ0。アプリの寿命の間増え続け、停止でも数え直さない。
+    latestOpenRequest: (roundId: string): number =>
+      opens.get(roundId)?.latest ?? 0,
+    pendingOpens: (): string[] =>
+      [...opens]
+        .filter(([, round]) => round.waiting.length > 0)
+        .map(([roundId]) => roundId),
+    // 取り直しを始める。その時点で待っている開く依頼だけが、この取り直しの結果を受ける。結果の記録の権利は、この取り直しへ移る。
+    beginRound(roundId: string): OpenRun {
+      const next = beginOpenRun(opens, roundId);
+      opens = next.state;
+      return next.run;
     },
-    // 取り直しの結果を、その取り直しが始まった時点の依頼へ返す。始めた後に出された依頼には返さない。
-    settleRound(run: RoundRun, result: FetchResult<OpenedRound>) {
-      // 停止をまたいだ古い取り直しの結果は、記録も待ちも通知も変えない。
-      if (run.generation !== generation) return;
-      const { roundId } = run;
-      const outcome = outcomeOfResult(result);
-      // 始めた後に新しい依頼が出ているときは、その依頼の結果の記録を上書きしない。
-      if ((openSeq.get(roundId) ?? 0) === run.seq)
-        outcomes.set(roundId, outcome);
-      const remaining = (opens.get(roundId) ?? []).filter(
-        (waiter) => !run.waiters.includes(waiter),
-      );
-      if (remaining.length > 0) opens.set(roundId, remaining);
-      else opens.delete(roundId);
-      for (const waiter of run.waiters) waiter.resolve(result);
-      changed();
+    // 取り直しの結果を、その取り直しが始まった時点の依頼へ返す。記録の権利を持つ取り直しだけが、結果を記録する。
+    settleRound(run: OpenRun, result: FetchResult<OpenedRound>) {
+      const next = settleOpenRun(opens, run, outcomeOfResult(result));
+      opens = next.state;
+      for (const request of next.answered) {
+        resolveOpen(run.roundId, request, result);
+      }
+      if (next.changed) changed();
     },
     outcomeOf: (roundId: string): RoundOutcome | undefined =>
-      outcomes.get(roundId),
+      opens.get(roundId)?.outcome,
     // 開いている間の印。localは、端末のベースで開いたこと(取得できるまで古い)。
     watch(roundId: string, local: boolean): () => void {
       const current = watching.get(roundId);
@@ -137,77 +147,68 @@ export function createRefreshRequests() {
     overlayNeeded: (roundId: string): boolean => overlay.has(roundId),
     // 一覧を開いた依頼。一括の取得の結果は、返すPromiseで待つ。
     requestAll(): { id: number; result: Promise<FetchResult<null>> } {
-      const id = nextId;
-      nextId += 1;
+      const next = requestList(lists);
+      lists = next.state;
       const result = new Promise<FetchResult<null>>((resolve) => {
-        const request: ListRequest = { id, allowed: null, resolve };
-        pendingLists.push(request);
-        live.set(id, request);
+        listResolvers.set(next.request, resolve);
       });
       changed();
-      return { id, result };
+      return { id: next.request, result };
     },
     // 一覧の取得の成否。成功のときだけ、一括の取得の結果を反映してよい。
     allowCommit(id: number, ok: boolean) {
-      const request = live.get(id);
-      if (request) request.allowed = ok;
-      for (const waiter of [...decisionWaiters]) waiter();
+      lists = decideList(lists, id, ok);
+      for (const check of [...decisionWaiters.keys()]) check();
     },
-    // 実行を始めた時点で記録にある一覧の依頼を、この実行に含める。実行中に届いた依頼は、次の実行に含める。実行の識別子を返す。
-    beginAll(): number {
-      const run = nextRun;
-      nextRun += 1;
-      runs.set(run, pendingLists);
-      pendingLists = [];
+    // 実行を始めた時点で記録にある一覧の依頼を、この実行に含める。実行中に届いた依頼は、次の実行に含める。
+    beginAll(): ListRun {
+      const next = beginListRun(lists);
+      lists = next.state;
       changed();
-      return run;
+      return next.run;
     },
-    hasListRequests: (): boolean => pendingLists.length > 0,
+    hasListRequests: (): boolean => lists.pending.length > 0,
     // その実行に含まれる一覧の依頼のどれかの一覧の取得が成功なら真、全てが失敗なら偽。含まれる依頼が無ければ待たずに偽。
-    whenListAllows(run: number): Promise<boolean> {
-      const targets = runs.get(run) ?? [];
-      if (targets.length === 0) return Promise.resolve(false);
+    whenListAllows(run: ListRun): Promise<boolean> {
+      const first = listVerdict(lists, run);
+      if (first !== "undecided") return Promise.resolve(first === "allowed");
       return new Promise((resolve) => {
         const check = () => {
-          const anyAllowed = targets.some(
-            (request) => request.allowed === true,
-          );
-          const allDecided = targets.every(
-            (request) => request.allowed !== null,
-          );
-          if (!anyAllowed && !allDecided) return;
+          const verdict = listVerdict(lists, run);
+          if (verdict === "undecided") return;
           decisionWaiters.delete(check);
-          resolve(anyAllowed);
+          resolve(verdict === "allowed");
         };
-        decisionWaiters.add(check);
-        check();
+        decisionWaiters.set(check, resolve);
       });
     },
     // 一括の取得の結果を、その実行に含まれる依頼へ返す。
-    settleAll(run: number, result: FetchResult<null>) {
-      const done = runs.get(run) ?? [];
-      runs.delete(run);
-      for (const request of done) {
-        live.delete(request.id);
-        request.resolve(result);
+    settleAll(run: ListRun, result: FetchResult<null>) {
+      const next = settleListRun(lists, run);
+      lists = next.state;
+      for (const request of next.answered) {
+        listResolvers.get(request)?.(result);
+        listResolvers.delete(request);
       }
       changed();
     },
-    // 停止。待っている全ての依頼をエラーで終え、以後、停止前に始まった取り直しの結果は捨てる。
+    // 停止。待っている全ての依頼をエラーで終え、記録の権利を空にする。以後、停止前に始まった取り直しは、記録も解決もしない。
     reset() {
-      generation += 1;
-      const error: FetchResult<never> = {
-        status: "error",
-        message: FETCH_ERROR_MESSAGE,
-      };
-      const waiting = [...opens.values()].flat();
-      opens.clear();
-      for (const waiter of waiting) waiter.resolve(error);
-      const lists = [...pendingLists, ...[...runs.values()].flat()];
-      pendingLists = [];
-      runs.clear();
-      live.clear();
-      for (const request of lists) request.resolve(error);
+      const stoppedOpens = stopOpens(opens);
+      opens = stoppedOpens.state;
+      for (const { roundId, request } of stoppedOpens.answered) {
+        resolveOpen(roundId, request, STOPPED);
+      }
+      const stoppedLists = stopLists(lists);
+      lists = stoppedLists.state;
+      for (const request of stoppedLists.answered) {
+        listResolvers.get(request)?.(STOPPED);
+        listResolvers.delete(request);
+      }
+      // 反映の許可を待つ実行は、反映しないで終える。
+      const allowWaiters = [...decisionWaiters.values()];
+      decisionWaiters.clear();
+      for (const resolve of allowWaiters) resolve(false);
       changed();
     },
     subscribe(listener: () => void) {

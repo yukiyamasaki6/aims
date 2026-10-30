@@ -72,7 +72,7 @@ async function withLocalBase(savedFaces: TargetFaceOption[] | null = [face]) {
   return tab;
 }
 
-// 同期が一括の取得を終えた。
+// 一括の取得が終わった。
 function syncFinishesAll(
   requests: ReturnType<typeof createTestRoundsStore>["requests"],
   result: FetchResult<null> = { status: "ok", data: null },
@@ -136,7 +136,7 @@ describe("load", () => {
     expect(result).toEqual({ status: "offline" });
   });
 
-  it("取得の依頼を記録し、同期が行った結果を待って返す。結果のsourceはserver", async () => {
+  it("取得の依頼を記録し、取り直しの結果を待って返す。結果のsourceはserver", async () => {
     // Given
     const tab = createTestRoundsStore();
     const loading = tab.store.load("round-1");
@@ -883,6 +883,55 @@ describe("round(...)", () => {
     unwatchServer();
   });
 
+  it("後に始めた取り直しが成功した後に、先に始めた取り直しがサーバーにラウンドが無いと終わっても、削除扱いにならない", () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const local = tab.store.round("local");
+    const unwatch = local.watch(loadedOf({ source: "local" }));
+    const earlier = tab.requests.beginRound("local");
+    const later = tab.requests.beginRound("local");
+
+    // When
+    tab.requests.settleRound(later, { status: "ok", data: opened() });
+    tab.requests.settleRound(earlier, { status: "not-found" });
+
+    // Then
+    expect(local.getSnapshot().gone).toBe(false);
+    unwatch();
+  });
+
+  it.each([
+    ["新しい取り直しが先に終わり、古い取り直しが後に成功で終わる", "新しい"],
+    ["古い取り直しが先に成功で終わり、新しい取り直しが後に終わる", "古い"],
+  ] as const)(
+    "後に始めた取り直しがサーバーにラウンドが無いと終わったときは、%s場合でも削除扱い(gone)になる",
+    (_name, first) => {
+      // Given
+      const tab = createTestRoundsStore();
+      const local = tab.store.round("local");
+      const unwatch = local.watch(loadedOf({ source: "local" }));
+      const earlier = tab.requests.beginRound("local");
+      const later = tab.requests.beginRound("local");
+      const settleEarlier = () =>
+        tab.requests.settleRound(earlier, { status: "ok", data: opened() });
+      const settleLater = () =>
+        tab.requests.settleRound(later, { status: "not-found" });
+
+      // When
+      if (first === "新しい") {
+        settleLater();
+        settleEarlier();
+      } else {
+        settleEarlier();
+        settleLater();
+      }
+
+      // Then
+      expect(local.getSnapshot().gone).toBe(true);
+      unwatch();
+    },
+  );
+
   describe("確定していない作成", () => {
     const created = roundCreated();
     const opening = (): LoadedRound =>
@@ -981,6 +1030,262 @@ describe("round(...)", () => {
     expect(marked).toBe(true);
     expect(tab.requests.overlayNeeded("round-1")).toBe(false);
   });
+  describe("画面用の操作が変わったときだけ作り直す", () => {
+    // 保存の完了を、テストが解放するまで止める。
+    function holdSaving(tab: ReturnType<typeof createTestRoundsStore>) {
+      const saving = Promise.withResolvers<void>();
+      const save = tab.opLog.append.bind(tab.opLog);
+      vi.spyOn(tab.opLog, "append").mockImplementationOnce(async (...args) => {
+        await saving.promise;
+        return save(...args);
+      });
+      return saving;
+    }
+
+    // 取得したベースがエンドの空きを使い切り、確定済みの操作を重ねられない状態を作る。
+    async function overlayCase() {
+      const tab = createTestRoundsStore();
+      const handle = tab.store.round("round-1");
+      const base = roundBase({
+        distances: [
+          {
+            id: "d-1",
+            position_key: "a",
+            distance: 70,
+            total_ends: 1,
+            arrows_per_end: 1,
+            target_face_id: "face-1",
+            is_marked: true,
+          },
+        ],
+        shots: [
+          {
+            id: "s-0",
+            distance_id: "d-1",
+            end_number: 1,
+            score_str: "10",
+            score_int: 10,
+            shot_number: null,
+          },
+        ],
+      });
+      await tab.hub.commit(STREAM, base, 10, "user-1");
+      const confirmed = shotRecorded({ shotId: "s-1" });
+      await handle.append(confirmed);
+      tab.hub.applySendResults(
+        STREAM,
+        [confirmed.eventId],
+        [
+          {
+            revision: 9,
+            applied: true,
+            appliedFields: null,
+            rejectedFields: [],
+          },
+        ],
+      );
+      return { tab, handle, base };
+    }
+
+    it("保存の前の追記では、画面の値を作り直さず、聞き手も呼ばない。保存の完了で新しい値になり、1回呼ばれる", async () => {
+      // Given
+      const tab = createTestRoundsStore();
+      const handle = tab.store.round("round-1");
+      const unwatch = handle.watch(loadedOf());
+      const listener = vi.fn();
+      handle.subscribe(listener);
+      const first = handle.getSnapshot();
+      const saving = holdSaving(tab);
+
+      // When
+      const appending = handle.append(shotRecorded());
+      await flush();
+      const duringSave = {
+        snapshot: handle.getSnapshot(),
+        calls: listener.mock.calls.length,
+      };
+      saving.resolve();
+      await appending;
+
+      // Then
+      expect(duringSave.snapshot).toBe(first);
+      expect(duringSave.calls).toBe(0);
+      expect(handle.getSnapshot()).not.toBe(first);
+      expect(handle.getSnapshot().state?.shots).toHaveLength(1);
+      expect(listener).toHaveBeenCalledTimes(1);
+      unwatch();
+    });
+
+    it("作成が未確定の詳細では、保存の前の追記でも作成の消失の判定が働く", async () => {
+      // Given
+      const created = roundCreated();
+      const opening = (): LoadedRound => ({
+        base: roundBase().tables,
+        targetFaces: [face],
+        pendingCreationEventId: created.eventId,
+        source: "server",
+      });
+      const tab = createTestRoundsStore();
+      const handle = tab.store.round("round-1");
+      const unwatch = handle.watch(opening());
+      const listener = vi.fn();
+      handle.subscribe(listener);
+      const saving = holdSaving(tab);
+
+      // When
+      const appending = handle.append(created);
+      await flush();
+      const beforeGone = handle.getSnapshot().creationGone;
+      await tab.hub.discard(STREAM, [created.eventId]);
+      saving.resolve();
+      await appending;
+
+      // Then
+      expect(beforeGone).toBe(false);
+      expect(handle.getSnapshot().creationGone).toBe(true);
+      expect(listener).toHaveBeenCalled();
+      unwatch();
+    });
+
+    it("取り直しの印が付くとき、聞き手は1回だけ呼ばれ、値は1回だけ変わる(入れ子の再計算が起きない)", async () => {
+      // Given
+      const { tab, handle, base } = await overlayCase();
+      const listener = vi.fn();
+      const delivered: unknown[] = [];
+      handle.subscribe(() => {
+        listener();
+        delivered.push(handle.getSnapshot());
+      });
+      const initial = handle.getSnapshot();
+
+      // When
+      const unwatch = handle.watch(loadedOf({ base: base.tables }));
+
+      // Then
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(new Set(delivered).size).toBe(1);
+      expect(handle.getSnapshot()).not.toBe(initial);
+      expect(handle.getSnapshot()).toBe(delivered[0]);
+      expect(tab.requests.overlayNeeded("round-1")).toBe(true);
+      unwatch();
+    });
+
+    it("取り直しの印が外れるとき、聞き手は1回だけ呼ばれ、値は変わる", async () => {
+      // Given
+      const { tab, handle, base } = await overlayCase();
+      const listener = vi.fn();
+      handle.subscribe(listener);
+      const unwatch = handle.watch(loadedOf({ base: base.tables }));
+      listener.mockClear();
+      const withMark = handle.getSnapshot();
+      const wider = roundBase({
+        distances: [
+          {
+            id: "d-1",
+            position_key: "a",
+            distance: 70,
+            total_ends: 6,
+            arrows_per_end: 6,
+            target_face_id: "face-1",
+            is_marked: true,
+          },
+        ],
+        shots: [
+          {
+            id: "s-0",
+            distance_id: "d-1",
+            end_number: 1,
+            score_str: "10",
+            score_int: 10,
+            shot_number: null,
+          },
+        ],
+        revisions: { round: 2 },
+      });
+
+      // When
+      await tab.hub.commit(STREAM, wider, 20, "user-1");
+
+      // Then
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(handle.getSnapshot()).not.toBe(withMark);
+      expect(tab.requests.overlayNeeded("round-1")).toBe(false);
+      unwatch();
+    });
+
+    it("入れ子の途中で記録が変わったとき、外側が古い値で上書きしない", async () => {
+      // Given
+      const { tab, handle, base } = await overlayCase();
+      const rename = roundUpdated({
+        eventId: "rename",
+        changes: { name: "改名" },
+      });
+      await handle.append(rename);
+      let discarded = false;
+      tab.requests.subscribe(() => {
+        if (!discarded && tab.requests.overlayNeeded("round-1")) {
+          discarded = true;
+          void tab.hub.discard(STREAM, [rename.eventId]);
+        }
+      });
+
+      // When
+      const unwatch = handle.watch(loadedOf({ base: base.tables }));
+      await flush();
+
+      // Then
+      expect(handle.getSnapshot().state?.roundConfig.name).toBe("午前練習");
+      expect(tab.requests.overlayNeeded("round-1")).toBe(true);
+      unwatch();
+    });
+
+    it("取り直しの結果だけが変わるとき、画面の状態は作り直さず、goneが変わったときだけ知らせる", () => {
+      // Given
+      const tab = createTestRoundsStore();
+      const handle = tab.store.round("round-1");
+      const unwatch = handle.watch(loadedOf({ source: "local" }));
+      const listener = vi.fn();
+      handle.subscribe(listener);
+      const before = handle.getSnapshot();
+
+      // When
+      settleRoundNow(tab.requests, "round-1", { status: "ok", data: opened() });
+      const afterOk = {
+        snapshot: handle.getSnapshot(),
+        calls: listener.mock.calls.length,
+      };
+      settleRoundNow(tab.requests, "round-1", { status: "not-found" });
+
+      // Then
+      expect(afterOk.snapshot).toBe(before);
+      expect(afterOk.calls).toBe(0);
+      expect(handle.getSnapshot().gone).toBe(true);
+      expect(handle.getSnapshot().state).toBe(before.state);
+      expect(listener).toHaveBeenCalledTimes(1);
+      unwatch();
+    });
+
+    it("開き直しでは前回の値を使わず、新しい開いたときの材料から作り直す", () => {
+      // Given
+      const tab = createTestRoundsStore();
+      const handle = tab.store.round("round-1");
+      const first = handle.watch(loadedOf());
+      const firstSnapshot = handle.getSnapshot();
+      first();
+
+      // When
+      const second = handle.watch(
+        loadedOf({
+          base: roundBase({ name: "別のラウンド", distances: [] }).tables,
+        }),
+      );
+
+      // Then
+      expect(handle.getSnapshot().state?.roundConfig.name).toBe("別のラウンド");
+      expect(handle.getSnapshot()).not.toBe(firstSnapshot);
+      second();
+    });
+  });
 });
 
 describe("append", () => {
@@ -1000,7 +1305,7 @@ describe("append", () => {
 });
 
 describe("再読み込み", () => {
-  it("「もう一度読む」でloadを呼び直すと、依頼の記録が増え、取得と反映は行わない(同期が行う)", async () => {
+  it("「もう一度読む」でloadを呼び直すと、依頼の記録が増え、取得と反映は行わない(依頼を記録するだけ)", async () => {
     // Given
     const tab = createTestRoundsStore();
     void tab.store.load("round-1");

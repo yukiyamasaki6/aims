@@ -355,7 +355,7 @@ export function createRoundRecordHub(deps: {
         results,
       );
       if (current) {
-        // 印を先に付ける(通知を受けた同期が、印を読めるようにするため)。
+        // 印を先に付ける(変化の通知を受けた側が、印を読めるようにするため)。
         if (applied.diverged) diverged.add(streamId);
         put(streamId, applied.record, "changed");
       }

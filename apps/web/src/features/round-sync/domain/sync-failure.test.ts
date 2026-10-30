@@ -6,15 +6,15 @@ import {
   sessionFailure,
 } from "./sync-failure";
 
-const NETWORK_FAILURE = { cause: { type: "rpc", status: 0 } } as const;
+const NETWORK_FAILURE = { cause: "rpc", status: 0 } as const;
 
 describe("classifyFailure", () => {
   describe("認証の状態による失敗の場合", () => {
     it("未認証は止めて残し、認証の不明は再試行する", () => {
       // Given
       // When
-      const unauthenticated = classifyFailure({ type: "unauthenticated" });
-      const unknown = classifyFailure({ type: "auth-unknown" });
+      const unauthenticated = classifyFailure({ cause: "unauthenticated" });
+      const unknown = classifyFailure({ cause: "auth-unknown" });
 
       // Then
       expect(unauthenticated).toBe("hold");
@@ -26,7 +26,7 @@ describe("classifyFailure", () => {
     it("回復し得ないと判断できないため再試行する", () => {
       // Given
       // When
-      const disposition = classifyFailure({ type: "exception" });
+      const disposition = classifyFailure({ cause: "exception" });
 
       // Then
       expect(disposition).toBe("retry");
@@ -38,7 +38,7 @@ describe("classifyFailure", () => {
       // Given
       // When
       const dispositions = ["PT403", "PT422"].map((code) =>
-        classifyFailure({ type: "rpc", status: 400, code }),
+        classifyFailure({ cause: "rpc", status: 400, code }),
       );
 
       // Then
@@ -50,10 +50,10 @@ describe("classifyFailure", () => {
       // When
       const causes = [
         ...[408, 429, 400, 401, 403, 404, 409, 499, 500, 503, 0, undefined].map(
-          (status) => ({ type: "rpc", status }) as const,
+          (status) => ({ cause: "rpc", status }) as const,
         ),
-        { type: "rpc", status: 404, code: "PGRST202" } as const,
-        { type: "rpc", status: 400, code: "23505" } as const,
+        { cause: "rpc", status: 404, code: "PGRST202" } as const,
+        { cause: "rpc", status: 400, code: "23505" } as const,
       ];
       const dispositions = causes.map(classifyFailure);
 
@@ -71,8 +71,8 @@ describe("sessionFailure", () => {
     const unknown = sessionFailure({ status: "unknown" });
 
     // Then
-    expect(unauthenticated).toEqual({ cause: { type: "unauthenticated" } });
-    expect(unknown).toEqual({ cause: { type: "auth-unknown" } });
+    expect(unauthenticated).toEqual({ cause: "unauthenticated" });
+    expect(unknown).toEqual({ cause: "auth-unknown" });
     expect(decideSyncResult(unauthenticated, 0, 1)).toEqual({ type: "hold" });
     expect(decideSyncResult(unknown, 10, 1)).toEqual({
       type: "retry",
@@ -144,7 +144,9 @@ describe("decideSyncResult", () => {
       // Given
       // When
       const failure = {
-        cause: { type: "rpc", status: 403, code: "PT403" },
+        cause: "rpc",
+        status: 403,
+        code: "PT403",
       } as const;
       const first = decideSyncResult(failure, 0, 1);
       const afterRetries = decideSyncResult(failure, 5, 1);
@@ -158,7 +160,9 @@ describe("decideSyncResult", () => {
       // Given
       // When
       const failure = {
-        cause: { type: "rpc", status: 422, code: "PT422" },
+        cause: "rpc",
+        status: 422,
+        code: "PT422",
       } as const;
       const decision = decideSyncResult(failure, 0, 3);
 
@@ -171,7 +175,7 @@ describe("decideSyncResult", () => {
     it("未認証は再試行せず、要求の操作の数によらず保留にする", () => {
       // Given
       // When
-      const failure = { cause: { type: "unauthenticated" } } as const;
+      const failure = { cause: "unauthenticated" } as const;
       const single = decideSyncResult(failure, 0, 1);
       const batch = decideSyncResult(failure, 3, 4);
 

@@ -8,6 +8,7 @@ import {
   isAuthRejected,
   type ResponseLike,
 } from "../domain/fetch-result";
+import { TIMED_OUT, withinTime } from "./time-limit";
 
 type SignInReading =
   | { status: "authenticated"; userId: string }
@@ -32,8 +33,6 @@ export type ContentFetcher = {
   ): Promise<FetchResult<T>>;
 };
 
-const TIMED_OUT = Symbol("timed-out");
-
 // 認証を確かめた取得と取り直し、時間制限。
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createContentFetcher(deps: {
@@ -45,22 +44,6 @@ export function createContentFetcher(deps: {
 
   function failureOfComm<T>(): FetchResult<T> {
     return commFailure(connectivity.isOffline());
-  }
-
-  // `ms`の間に終わらなければTIMED_OUTを返す。
-  async function within<T>(
-    promise: Promise<T>,
-    ms: number,
-  ): Promise<T | typeof TIMED_OUT> {
-    let cancel: (() => void) | undefined;
-    const expired = new Promise<typeof TIMED_OUT>((resolve) => {
-      cancel = clock.after(ms, () => resolve(TIMED_OUT));
-    });
-    try {
-      return await Promise.race([promise, expired]);
-    } finally {
-      cancel?.();
-    }
   }
 
   // サインインの状態を、切断と競わせて確かめる。認証済みでなければ、取得の結果をfailureで返す。
@@ -114,7 +97,7 @@ export function createContentFetcher(deps: {
     remainingMs: number,
     onLateResult: (result: FetchResult<T>) => void,
   ): Promise<void> {
-    const raced = await within(loading, remainingMs);
+    const raced = await withinTime(clock, loading, remainingMs);
     if (raced !== TIMED_OUT) onLateResult(raced);
   }
 
@@ -126,7 +109,7 @@ export function createContentFetcher(deps: {
   ): Promise<FetchResult<T>> {
     const { timeoutMs = FETCH_TIMEOUT_MS, onLateResult, ...loadOpts } = opts;
     const loading = load(run, loadOpts);
-    const raced = await within(loading, timeoutMs);
+    const raced = await withinTime(clock, loading, timeoutMs);
     if (raced !== TIMED_OUT) return raced;
     if (onLateResult && timeoutMs < FETCH_TIMEOUT_MS) {
       void deliverLateResult(

@@ -1,29 +1,30 @@
 import { describe, expect, it, vi } from "vitest";
+import type {
+  SignInChange as AuthSignInChange,
+  IdentityReader,
+  SignInChanges,
+} from "@/features/auth";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { SignInChange } from "../domain/sync-trigger";
 import type { RoundSync } from "./round-sync";
-import {
-  createSyncTriggers,
-  type SignInSignals,
-  type Visibility,
-} from "./sync-triggers";
+import { createSyncTriggers, type Visibility } from "./sync-triggers";
 
 type Match = "same" | "other" | "unowned";
 
 // 契機の受け取りは、受けた契機を同期の手続きの操作に変える。通知の源、同期の手続きは約束で差し替える。
 function setup(initialUserId: string | null = "user-1") {
-  const signIn = new Set<(change: SignInChange) => void>();
+  const signIn = new Set<(change: AuthSignInChange) => void>();
   const online = new Set<() => void>();
   const offline = new Set<() => void>();
   const visible = new Set<() => void>();
   const match = { current: "same" as Match };
-  const signals: SignInSignals = {
-    initialUserId: () => initialUserId,
+  const changes: SignInChanges = {
     subscribe: vi.fn((listener) => {
       signIn.add(listener);
       return () => signIn.delete(listener);
     }),
   };
+  const identityReader: IdentityReader = { read: () => initialUserId };
   const visibility: Visibility = {
     onVisible: vi.fn((listener) => {
       visible.add(listener);
@@ -53,7 +54,8 @@ function setup(initialUserId: string | null = "user-1") {
     matchUser: vi.fn(() => match.current),
   };
   const triggers = createSyncTriggers({
-    signals,
+    identityReader,
+    changes,
     visibility,
     connectivity,
     sync: sync as unknown as RoundSync,
@@ -62,9 +64,9 @@ function setup(initialUserId: string | null = "user-1") {
     triggers,
     sync,
     match,
-    signals,
+    changes,
     connectivity,
-    emitSignIn: (change: SignInChange) => {
+    emitSignIn: (change: AuthSignInChange) => {
       for (const listener of [...signIn]) listener(change);
     },
     fire: {
@@ -167,6 +169,17 @@ describe("通信と画面の状態", () => {
     expect(t.sync.start).toHaveBeenCalledExactlyOnceWith("user-7");
   });
 
+  it("端末の識別情報が無いとき、開始は利用者をnullにして同期を始める", () => {
+    // Given
+    const t = setup(null);
+
+    // When
+    t.triggers.start();
+
+    // Then
+    expect(t.sync.start).toHaveBeenCalledExactlyOnceWith(null);
+  });
+
   it("通信の復帰はonline、切断はoffline、見える状態はvisibleにする", () => {
     // Given
     const t = setup();
@@ -194,7 +207,7 @@ describe("通信と画面の状態", () => {
     // 購読の本数は、要求である「1か所で受ける」を観測するため、例外的に回数で確かめる。
     expect(t.connectivity.onOnline).toHaveBeenCalledTimes(1);
     expect(t.connectivity.onOffline).toHaveBeenCalledTimes(1);
-    expect(t.signals.subscribe).toHaveBeenCalledTimes(1);
+    expect(t.changes.subscribe).toHaveBeenCalledTimes(1);
     expect(t.counts()).toEqual({
       signIn: 1,
       online: 1,

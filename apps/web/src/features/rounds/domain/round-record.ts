@@ -7,7 +7,7 @@ import {
 import type { SyncOperation } from "./sync-events";
 
 // 1つのラウンドの端末の記録。ベースと操作の列のうち、画面が読む部分を、変更しない値と関数にしたもの。
-// 送信の状態(送信中、リトライ待機、保留)は持たない(同期の送信の状態が持つ)。
+// 送信の状態(送信中、リトライ待機、保留)は持たない(送る側が持つ)。
 type RecordItem = {
   readonly eventId: string;
   readonly operation: SyncOperation;
@@ -377,4 +377,18 @@ export function memoryEntries(
     ackedRevision: item.ackedRevision,
     ackedApplied: item.ackedApplied,
   }));
+}
+
+// 2つの画面用の操作の列が、同じ操作を同じ順に、同じ確定の項目で並べているか。
+// 操作と確定の項目は参照で比べる(記録の集約は、保存の完了や確定で操作の参照を変えない)。
+export function sameRecordedOperations(
+  a: readonly RecordedOperation[],
+  b: readonly RecordedOperation[],
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].operation !== b[i].operation) return false;
+    if (a[i].confirmedFields !== b[i].confirmedFields) return false;
+  }
+  return true;
 }

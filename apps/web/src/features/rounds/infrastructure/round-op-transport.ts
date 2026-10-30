@@ -12,8 +12,7 @@ import type {
   RoundChanges,
   SyncOperation,
 } from "../domain/sync-events";
-
-type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
+import type { Json, RoundsDbSchema } from "./rounds-db-schema";
 
 const INVALID_RESPONSE: SendOutcome = {
   ok: false,
@@ -143,7 +142,7 @@ type DistanceOperation = Extract<
 >;
 
 async function sendSingle(
-  database: DatabaseGateway,
+  database: DatabaseGateway<RoundsDbSchema>,
   operation: SyncOperation,
 ): Promise<SendOutcome> {
   switch (operation.type) {
@@ -162,7 +161,7 @@ async function sendSingle(
 }
 
 async function sendRoundOperation(
-  database: DatabaseGateway,
+  database: DatabaseGateway<RoundsDbSchema>,
   operation: RoundOperation,
 ): Promise<SendOutcome> {
   switch (operation.type) {
@@ -207,7 +206,7 @@ async function sendRoundOperation(
 }
 
 async function sendDistanceOperation(
-  database: DatabaseGateway,
+  database: DatabaseGateway<RoundsDbSchema>,
   operation: DistanceOperation,
 ): Promise<SendOutcome> {
   switch (operation.type) {
@@ -219,7 +218,8 @@ async function sendDistanceOperation(
           p_round_id: operation.roundId,
           p_position_key: operation.positionKey,
           // distanceはSQL側でnullを受け付ける。
-          p_distance: operation.distance,
+          // distanceはSQL側でnullを受け付けるが、生成した型は数値で出力する。
+          p_distance: operation.distance as number,
           p_total_ends: operation.totalEnds,
           p_arrows_per_end: operation.arrowsPerEnd,
           p_target_face_id: operation.targetFaceId,
@@ -264,7 +264,7 @@ function recordedShotToJson(
 
 // 矢の記録と取り消しの束は、列の順で1本のRPCへ詰める。planFlightsは、記録と取り消しを同じ要求に混ぜない。
 async function sendShots(
-  database: DatabaseGateway,
+  database: DatabaseGateway<RoundsDbSchema>,
   operations: ShotOperation[],
 ): Promise<SendOutcome> {
   const recorded = operations.filter((op) => op.type === "shot.recorded");
@@ -289,9 +289,9 @@ async function sendShots(
 }
 
 // 要求の操作を、種類ごとのRPCで送る。サーバーの判定結果を、要求の操作と同じ順で返す。
-// サインインの状態の確認と、利用者の照合は、送る前に同期の手続きが行う。
+// サインインの状態の確認と、利用者の照合は、送る前に呼ぶ側が行う。
 export function createRoundOpTransport(
-  database: DatabaseGateway,
+  database: DatabaseGateway<RoundsDbSchema>,
 ): RoundTransport {
   return {
     send(entries) {

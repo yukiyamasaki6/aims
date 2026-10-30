@@ -12,7 +12,11 @@ import {
   localRoundsList,
   type RoundListItem,
 } from "../domain/round-list";
-import { operationsOf } from "../domain/round-record";
+import {
+  operationsOf,
+  type RecordedOperation,
+  sameRecordedOperations,
+} from "../domain/round-record";
 import {
   type RoundState,
   type RoundTables,
@@ -39,6 +43,7 @@ import type {
   RoundRecordHub,
   RoundStoreGroup,
 } from "./round-record-hub";
+import { TIMED_OUT, withinTime } from "./time-limit";
 
 export type { RoundListItem };
 
@@ -119,14 +124,12 @@ const UNOPENED: RoundScreenSnapshot = {
   creationGone: false,
 };
 
-const TIMED_OUT = Symbol("timed-out");
-
 const ERROR_RESULT = {
   status: "error",
   message: FETCH_ERROR_MESSAGE,
 } as const;
 
-// 画面に渡す、正しい状態と変更の方法。取得と反映の時点は同期が決め、ここは依頼を記録するだけである。
+// 画面に渡す、正しい状態と変更の方法。取得と反映の時点はここでは決めず、依頼を記録するだけである。
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createRoundsStore(deps: {
   hub: RoundRecordHub;
@@ -138,29 +141,13 @@ export function createRoundsStore(deps: {
   const { hub, requests, fetching, clock, connectivity } = deps;
   const handles = new Map<string, RoundHandle>();
 
-  // `ms`の間に`promise`が終わらなければTIMED_OUTを返す。
-  async function within<T>(
-    promise: Promise<T>,
-    ms: number,
-  ): Promise<T | typeof TIMED_OUT> {
-    let cancel: (() => void) | undefined;
-    const expired = new Promise<typeof TIMED_OUT>((resolve) => {
-      cancel = clock.after(ms, () => resolve(TIMED_OUT));
-    });
-    try {
-      return await Promise.race([promise, expired]);
-    } finally {
-      cancel?.();
-    }
-  }
-
   // 画面の読み込み(端末の保存の読み書きと取得)の全体を、開始からFETCH_TIMEOUT_MSで打ち切る。
   // 端末の保存(IndexedDB)の待ちは時間制限を持たず、他のタブが保存を塞ぐと「読み込み中」に固定されるため。
   // 打ち切った時点の通信の可否で、offlineかerrorを返す。打ち切った後も読み込みは続き、その結果は捨てる。
   async function withinFetchTimeout<T>(
     loading: Promise<FetchResult<T>>,
   ): Promise<FetchResult<T>> {
-    const raced = await within(loading, FETCH_TIMEOUT_MS);
+    const raced = await withinTime(clock, loading, FETCH_TIMEOUT_MS);
     return raced === TIMED_OUT ? commFailure(connectivity.isOffline()) : raced;
   }
 
@@ -215,11 +202,11 @@ export function createRoundsStore(deps: {
         },
       };
     }
-    // 取得は同期が行う。依頼の結果は拒否しない。
+    // 取得はここでは行わず、依頼の結果を待つ。依頼の結果は拒否しない。
     const server = requests.open(roundId).then(toDetail);
     const local = localOpening(first, fetching.savedTargetFaces());
     if (!local) return server;
-    const raced = await within(server, FALLBACK_WAIT_MS);
+    const raced = await withinTime(clock, server, FALLBACK_WAIT_MS);
     if (raced === TIMED_OUT) return localDetail(local);
     if (raced.status === "ok" || raced.status === "not-found") return raced;
     return localDetail(local);
@@ -263,7 +250,7 @@ export function createRoundsStore(deps: {
   }
 
   // 一覧の材料。一覧の取得(画面の関数)と、一括の取得の依頼を並行に行い、両方が成功したときだけ成功とする。
-  // 一括の取得は、一覧の取得が成功したときだけ反映される(同期が決める)。
+  // 一括の取得は、一覧の取得が成功したときだけ反映される(`refreshAll` の契約)。
   async function listDetail(
     fetchServerList: () => Promise<FetchResult<RoundListItem[]>>,
   ): Promise<FetchResult<LoadedRoundsList>> {
@@ -316,9 +303,16 @@ export function createRoundsStore(deps: {
     let watchers = 0;
     let snapshot = UNOPENED;
     let creation: CreationProgress = INITIAL_CREATION;
-    let seen: { items: unknown; base: unknown; outcome: unknown } | null = null;
+    let seen: {
+      items: unknown;
+      base: unknown;
+      outcome: unknown;
+      operations: RecordedOperation[];
+      screen: ReturnType<typeof roundScreenState>;
+    } | null = null;
     let stopObserving: (() => void) | undefined;
 
+    // 画面用の操作が変わったときだけ、重ね合わせを作り直す。スナップショットは中身が変わったときだけ作り直して知らせる。
     function recompute() {
       if (!opening) return;
       const record = hub.record(streamId);
@@ -330,12 +324,18 @@ export function createRoundsStore(deps: {
       ) {
         return;
       }
-      seen = { items: record.items, base: record.base, outcome };
-      const screen = roundScreenState(
-        { base: record.base, operations: operationsOf(record) },
-        opening.base,
-        opening.targetFaces,
-      );
+      const operations = operationsOf(record);
+      const screen =
+        seen &&
+        seen.base === record.base &&
+        sameRecordedOperations(seen.operations, operations)
+          ? seen.screen
+          : roundScreenState(
+              { base: record.base, operations },
+              opening.base,
+              opening.targetFaces,
+            );
+      // 作成の消失の判定は、保存の前の操作を含む items で行うため、作り直しを省いても省かない。
       if (opening.pendingCreationEventId) {
         creation = creationProgress(
           creation,
@@ -343,11 +343,37 @@ export function createRoundsStore(deps: {
           opening.pendingCreationEventId,
         );
       }
+      seen = {
+        items: record.items,
+        base: record.base,
+        outcome,
+        operations,
+        screen,
+      };
+      publish(screen, outcome);
+      // 印が変わると依頼の記録の購読者を同期で呼ぶ(この recompute 自身を含む)ため、最後に呼ぶ。
       requests.setOverlay(roundId, screen.needsRefetch);
+    }
+
+    // 新しい画面の値が今と違うときだけ、スナップショットを変えて聞き手へ知らせる。
+    function publish(
+      screen: ReturnType<typeof roundScreenState>,
+      outcome: unknown,
+    ) {
+      if (!opening) return;
+      const gone = isGone(screen.deletedElsewhere, opening, outcome);
+      if (
+        snapshot.state === screen.state &&
+        snapshot.tables === screen.tables &&
+        snapshot.gone === gone &&
+        snapshot.creationGone === creation.gone
+      ) {
+        return;
+      }
       snapshot = {
         state: screen.state,
         tables: screen.tables,
-        gone: isGone(screen.deletedElsewhere, opening, outcome),
+        gone,
         creationGone: creation.gone,
       };
       for (const listener of [...listeners]) listener();

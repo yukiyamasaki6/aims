@@ -21,7 +21,7 @@ const opened = (deleted = false): OpenedRound => ({
 });
 
 describe("詳細を開く依頼", () => {
-  it("同期が結果を返すまで解決せず、返すと待つ全ての依頼へ同じ結果を返す", async () => {
+  it("取り直しが結果を返すまで解決せず、返すと待つ全ての依頼へ同じ結果を返す", async () => {
     // Given
     const requests = createRefreshRequests();
     const first = requests.open("r-1");
@@ -131,6 +131,41 @@ describe("開いている詳細の印", () => {
   });
 });
 
+describe("依頼の番号", () => {
+  it("latestListRequestとlatestOpenRequestは、依頼が届くたびに増え、停止でも数え直さない", () => {
+    // Given
+    const requests = createRefreshRequests();
+    const numbers = () => [
+      requests.latestListRequest(),
+      requests.latestOpenRequest("r-1"),
+      requests.latestOpenRequest("r-2"),
+    ];
+
+    // When
+    const initial = [
+      requests.latestListRequest(),
+      requests.latestOpenRequest("r-1"),
+    ];
+    requests.requestAll();
+    requests.requestAll();
+    void requests.open("r-1");
+    void requests.open("r-1");
+    void requests.open("r-2");
+    const beforeReset = numbers();
+    requests.reset();
+    const afterReset = numbers();
+    requests.requestAll();
+    void requests.open("r-1");
+    const afterNext = numbers();
+
+    // Then
+    expect(initial).toEqual([0, 0]);
+    expect(beforeReset).toEqual([2, 2, 1]);
+    expect(afterReset).toEqual([2, 2, 1]);
+    expect(afterNext).toEqual([3, 3, 1]);
+  });
+});
+
 describe("一覧の依頼と whenListAllows", () => {
   it("含まれる依頼が無ければ、待たずに偽を返す", async () => {
     // Given
@@ -220,6 +255,160 @@ describe("一覧の依頼と whenListAllows", () => {
   });
 });
 
+describe("並行する実行の結果の記録", () => {
+  const results = {
+    ok: { status: "ok", data: opened() },
+    failed: { status: "offline" },
+    gone: { status: "not-found" },
+  } as const;
+  type Kind = keyof typeof results;
+
+  // 同じ開く依頼を2つの実行が取り込み、完了の順を変える。
+  it.each<[Kind, Kind, "古い" | "新しい"]>([
+    ["ok", "failed", "古い"],
+    ["ok", "failed", "新しい"],
+    ["failed", "ok", "古い"],
+    ["failed", "ok", "新しい"],
+    ["ok", "gone", "古い"],
+    ["ok", "gone", "新しい"],
+    ["gone", "ok", "古い"],
+    ["gone", "ok", "新しい"],
+    ["failed", "gone", "古い"],
+    ["failed", "gone", "新しい"],
+    ["gone", "failed", "古い"],
+    ["gone", "failed", "新しい"],
+  ])(
+    "古い実行が%s、新しい実行が%sで、%sが先に終わっても、開く依頼は先に終わった実行の結果で1回だけ解決し、後に始めた実行の結果を先に始めた実行の結果で上書きしない",
+    async (olderKind, newerKind, first) => {
+      // Given
+      const requests = createRefreshRequests();
+      const request = requests.open("r-1");
+      const older = requests.beginRound("r-1");
+      const newer = requests.beginRound("r-1");
+      const resolved: unknown[] = [];
+      void request.then((result) => resolved.push(result));
+      const settle = (which: "古い" | "新しい") =>
+        which === "古い"
+          ? requests.settleRound(older, results[olderKind])
+          : requests.settleRound(newer, results[newerKind]);
+
+      // When
+      settle(first);
+      settle(first === "古い" ? "新しい" : "古い");
+      await flush();
+
+      // Then
+      const firstKind = first === "古い" ? olderKind : newerKind;
+      expect(resolved).toEqual([results[firstKind]]);
+      const expected = { ok: "ok", failed: "failed", gone: "gone" } as const;
+      expect(requests.outcomeOf("r-1")).toBe(expected[newerKind]);
+    },
+  );
+
+  it("別のラウンドは、実行の番号を共有しない", () => {
+    // Given
+    const requests = createRefreshRequests();
+    void requests.open("r-1");
+    void requests.open("r-2");
+    const first = requests.beginRound("r-1");
+    const second = requests.beginRound("r-1");
+    requests.settleRound(second, results.ok);
+    requests.settleRound(first, results.ok);
+    const other = requests.beginRound("r-2");
+
+    // When
+    requests.settleRound(other, results.gone);
+
+    // Then
+    expect(requests.outcomeOf("r-2")).toBe("gone");
+  });
+
+  it("先に始めた実行が先に終わると、結果は記録せず依頼を解決し、後に始めた実行が終わると記録する", async () => {
+    // Given
+    const requests = createRefreshRequests();
+    const request = requests.open("r-1");
+    const earlier = requests.beginRound("r-1");
+    const later = requests.beginRound("r-1");
+    const resolved: unknown[] = [];
+    void request.then((result) => resolved.push(result));
+
+    // When
+    requests.settleRound(earlier, results.gone);
+    await flush();
+    const afterEarlier = requests.outcomeOf("r-1");
+    requests.settleRound(later, results.ok);
+    await flush();
+
+    // Then
+    expect(afterEarlier).toBeUndefined();
+    expect(resolved).toEqual([results.gone]);
+    expect(requests.outcomeOf("r-1")).toBe("ok");
+  });
+
+  it("結果の記録か待ちの解決があったときだけ変化を知らせる。先に始めた実行が先に終わると1回、後に始めた実行が終わると2回目", () => {
+    // Given
+    const requests = createRefreshRequests();
+    void requests.open("r-1");
+    const earlier = requests.beginRound("r-1");
+    const later = requests.beginRound("r-1");
+    const listener = vi.fn();
+    requests.subscribe(listener);
+
+    // When
+    requests.settleRound(earlier, results.gone);
+    const afterEarlier = listener.mock.calls.length;
+    requests.settleRound(later, results.ok);
+
+    // Then
+    expect(afterEarlier).toBe(1);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it("後に始めた実行が記録した後の、先に始めた実行の終わりは、何も変えず変化を知らせない", async () => {
+    // Given
+    const requests = createRefreshRequests();
+    const request = requests.open("r-1");
+    const earlier = requests.beginRound("r-1");
+    const later = requests.beginRound("r-1");
+    const resolved: unknown[] = [];
+    void request.then((result) => resolved.push(result));
+    requests.settleRound(later, results.ok);
+    await flush();
+    const listener = vi.fn();
+    requests.subscribe(listener);
+
+    // When
+    requests.settleRound(earlier, results.gone);
+    await flush();
+
+    // Then
+    expect(listener).not.toHaveBeenCalled();
+    expect(requests.outcomeOf("r-1")).toBe("ok");
+    expect(resolved).toEqual([results.ok]);
+  });
+
+  it("停止の後は、停止前の実行の番号に妨げられず、再開後の結果が記録される", () => {
+    // Given
+    const requests = createRefreshRequests();
+    void requests.open("r-1");
+    const earlier = requests.beginRound("r-1");
+    const later = requests.beginRound("r-1");
+    requests.settleRound(later, results.ok);
+    requests.settleRound(earlier, results.ok);
+    const before = requests.outcomeOf("r-1");
+    requests.reset();
+
+    // When
+    void requests.open("r-1");
+    const run = requests.beginRound("r-1");
+    requests.settleRound(run, results.gone);
+
+    // Then
+    expect(before).toBe("ok");
+    expect(requests.outcomeOf("r-1")).toBe("gone");
+  });
+});
+
 describe("依頼の状態の遷移", () => {
   const ok = { status: "ok", data: opened() } as const;
 
@@ -273,6 +462,60 @@ describe("依頼の状態の遷移", () => {
     expect(requests.hasListRequests()).toBe(false);
   });
 
+  it("一覧の成否を待つ間に停止すると、反映の許可の待ちは偽で解決し、一覧の依頼はエラーで終わる", async () => {
+    // Given
+    const requests = createRefreshRequests();
+    const list = requests.requestAll();
+    const run = requests.beginAll();
+    const waiting = requests.whenListAllows(run);
+    const beforeReset = await settled(waiting);
+
+    // When
+    requests.reset();
+
+    // Then
+    expect(beforeReset).toBe(false);
+    expect(await waiting).toBe(false);
+    expect(await list.result).toEqual({
+      status: "error",
+      message: "読み込めませんでした。",
+    });
+  });
+
+  it("停止の後のallowCommitは何も起こさず、解決済みの待ちの値は変わらない", async () => {
+    // Given
+    const requests = createRefreshRequests();
+    const list = requests.requestAll();
+    const run = requests.beginAll();
+    const waiting = requests.whenListAllows(run);
+    requests.reset();
+
+    // When
+    const allowing = () => requests.allowCommit(list.id, true);
+
+    // Then
+    expect(allowing).not.toThrow();
+    expect(await waiting).toBe(false);
+    expect(requests.hasListRequests()).toBe(false);
+  });
+
+  it("含まれる依頼が複数のときも、停止で登録された全ての待ちが偽で解決する", async () => {
+    // Given
+    const requests = createRefreshRequests();
+    requests.requestAll();
+    requests.requestAll();
+    const run = requests.beginAll();
+    const first = requests.whenListAllows(run);
+    const second = requests.whenListAllows(run);
+
+    // When
+    requests.reset();
+
+    // Then
+    expect(await first).toBe(false);
+    expect(await second).toBe(false);
+  });
+
   it("停止前に始まった取り直しの完了は、結果の記録・待ち・通知のどれも変えない", async () => {
     // Given
     const requests = createRefreshRequests();
@@ -316,7 +559,7 @@ describe("依頼の状態の遷移", () => {
 
     // When
     requests.allowCommit(999, true);
-    const unknownRun = await requests.whenListAllows(999);
+    const unknownRun = await requests.whenListAllows({ requests: [] });
 
     // Then
     expect(second.id).toBeGreaterThan(first.id);

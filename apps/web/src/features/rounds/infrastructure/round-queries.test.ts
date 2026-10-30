@@ -6,6 +6,10 @@ import type {
 } from "@/lib/supabase/contract/database";
 import { TARGET_FACE_SELECT } from "./reference-query-constants";
 import { createRoundQueries } from "./round-queries";
+import type { RoundsDbSchema } from "./rounds-db-schema";
+
+// 問い合わせの値が検証対象で、表の名前の型引数は区別しない。
+type Query = DbSelect<RoundsDbSchema, "rounds" | "distances" | "target_faces">;
 
 const ok = (data: unknown): DbResponse => ({ data, error: null, status: 200 });
 const failed = (
@@ -24,11 +28,11 @@ type Responses = {
 
 // データベースの境界を、表ごとの応答を返し、受けた問い合わせを記録するゲートウェイで模す。
 function makeDatabase(responses: Responses) {
-  const queries: DbSelect[] = [];
+  const queries: Query[] = [];
   let roundsCount = 0;
-  const database: DatabaseGateway = {
+  const database: DatabaseGateway<RoundsDbSchema> = {
     async select(query) {
-      queries.push(query);
+      queries.push(query as unknown as Query);
       if (query.table === "target_faces") return responses.target_faces;
       const source = responses.rounds;
       return typeof source === "function" ? source(roundsCount++) : source;
@@ -315,7 +319,7 @@ describe("roundDetails", () => {
     Array.from({ length: count }, (_, i) => uuidAt(i + 1));
 
   // 取得に並べたIDを、絞りの種類によらず取り出す。
-  function idsOf(query: DbSelect): string[] {
+  function idsOf(query: Query): string[] {
     const inFilter = query.filters?.find((f) => f.op === "in");
     if (inFilter?.op === "in") return [...inFilter.values];
     const orFilter = query.filters?.find((f) => f.op === "or");
@@ -367,7 +371,7 @@ describe("roundDetails", () => {
 
   it("50件までは1回の取得で、51件目から取得が増え、2回目以降は入力中を除く", async () => {
     // Given
-    const counts: Record<number, DbSelect[]> = {};
+    const counts: Record<number, Query[]> = {};
 
     // When
     for (const n of [0, 50, 51]) {

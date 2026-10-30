@@ -1,16 +1,15 @@
 import { vi } from "vitest";
+import type { SessionReader } from "@/features/auth";
 import { createTestReconciliation } from "@/features/rounds/application/round-record-test-helpers";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import { createRoundsRecords } from "../infrastructure/rounds-records";
 import {
   createOpSender,
   type SenderLock,
   type SenderMessage,
 } from "./op-sender";
-import type { SessionCheck } from "./session-check";
 
-type Reading = Awaited<ReturnType<SessionCheck["read"]>>;
+type Reading = Awaited<ReturnType<SessionReader["readSession"]>>;
 
 // 送る役の選出とタブの間の知らせを、メモリで再現する。先に求めたタブが役を持ち、手放すと次のタブが引き継ぐ。
 // `solo`は、Web Locksが無い環境(求めた全員が単独の送り手)。
@@ -91,13 +90,13 @@ export function createSenderRig(
   });
   const clock = createManualClock(1000);
   const connectivity = createFakeConnectivity(options.offline);
-  const session: SessionCheck & { reading: Reading } = {
+  const session: Pick<SessionReader, "readSession"> & { reading: Reading } = {
     reading:
       options.reading ??
       ({ status: "authenticated", userId: "user-1" } as Reading),
-    read: vi.fn(async (): Promise<Reading> => session.reading),
+    readSession: vi.fn(async (): Promise<Reading> => session.reading),
   };
-  const records = createRoundsRecords(base.reconciliation);
+  const records = base.reconciliation;
   const bus = options.bus ?? createSenderLockBus();
   const sender = createOpSender({
     records,

@@ -1,32 +1,55 @@
+// biome-ignore-all lint/style/useNamingConvention: 生成した型(types/supabase.ts)のスキーマの形(Functions、Tables、Args、Returns、Row)と同じ名前で宣言するため。
+// データベースのスキーマの形。技術の型を含まない。関数ごとの引数と戻り値、表ごとの行。
+export type DbSchema = {
+  Functions: Record<string, { Args: object; Returns: unknown }>;
+  Tables: Record<string, { Row: object }>;
+};
+
 // データベースへの問い合わせと手続きの呼び出し。応答は外部の型を含まない、平らな形で返す。
 // 例外: 投げることがある(接続を得られない、呼び出しが投げた)。使う側は通信の失敗と同じに扱う。
-export type DbResponse = {
-  data: unknown;
+export type DbResponse<T = unknown> = {
+  data: T | null;
   error: { code?: string; message?: string } | null;
   // HTTPの状態。通信の失敗は0。
   status: number;
 };
 
-export type DbFilter =
+type TableOf<S extends DbSchema> = keyof S["Tables"] & string;
+type ColumnOf<
+  S extends DbSchema,
+  T extends TableOf<S>,
+> = keyof S["Tables"][T]["Row"] & string;
+
+type DbFilter<S extends DbSchema, T extends TableOf<S>> =
   | {
       op: "eq" | "neq" | "is";
-      column: string;
+      column: ColumnOf<S, T>;
       value: string | number | boolean | null;
     }
-  | { op: "in"; column: string; values: readonly string[] }
+  | { op: "in"; column: ColumnOf<S, T>; values: readonly string[] }
   | { op: "or"; expression: string };
 
-export type DbSelect = {
-  table: string;
+export type DbOrder<S extends DbSchema, T extends TableOf<S>> =
+  | { column: ColumnOf<S, T> }
+  | {
+      [R in TableOf<S>]: { column: ColumnOf<S, R>; referencedTable: R };
+    }[TableOf<S>];
+
+export type DbSelect<S extends DbSchema, T extends TableOf<S>> = {
+  table: T;
+  // 列の文字列と`or`の式は、文字列で、型では確かめない。
   columns: string;
-  filters?: readonly DbFilter[];
-  orders?: readonly { column: string; referencedTable?: string }[];
+  filters?: readonly DbFilter<S, T>[];
+  orders?: readonly DbOrder<S, T>[];
   // 1行を返す問い合わせ。無ければdataがnull。
   single?: "maybe";
 };
 
-export type DatabaseGateway = {
+export type DatabaseGateway<S extends DbSchema> = {
   // 問い合わせは、取得の側が再試行を持つため、パッケージの再試行を使わない。
-  select(query: DbSelect): Promise<DbResponse>;
-  rpc(name: string, args: Record<string, unknown>): Promise<DbResponse>;
+  select<T extends TableOf<S>>(query: DbSelect<S, T>): Promise<DbResponse>;
+  rpc<N extends keyof S["Functions"] & string>(
+    name: N,
+    args: S["Functions"][N]["Args"],
+  ): Promise<DbResponse<S["Functions"][N]["Returns"]>>;
 };

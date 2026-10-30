@@ -354,6 +354,68 @@ describe("保留", () => {
     // Then
     expect(statuses(applied, "a")).toEqual(["backoff"]);
   });
+
+  describe("applyHeld の状態の混在", () => {
+    // 状態を持たない、待ち(単独の印あり・なし)、リトライ待機の操作が混ざった列。
+    function mixedQueue() {
+      const isolated = (() => {
+        const { queue, flight } = started(["s", "s2"]);
+        return settleFailed(queue, flight, { type: "isolate" }, 200);
+      })();
+      const withHeld = applyHeld(isolated, ["r", "s2"], new Set(["r", "s2"]));
+      const mixed = (() => {
+        const { queue, flight } = started(["c"], "record", 100, withHeld);
+        return settleFailed(
+          queue,
+          flight,
+          { type: "retry", delayMs: 3000 },
+          200,
+        );
+      })();
+      const ids = ["hold-me", "keep", "r", "s", "s2", "c"];
+      return { mixed, ids };
+    }
+
+    it("保留へ移す、保留から戻す、変えない、単独の印を持つ操作が混ざった列で、結果が規則どおりになる", () => {
+      // Given
+      const { mixed, ids } = mixedQueue();
+
+      // When
+      const next = applyHeld(mixed, ids, new Set(["hold-me", "s", "c"]));
+
+      // Then
+      expect(statuses(next, ...ids)).toEqual([
+        "held",
+        "queued",
+        "queued",
+        "held",
+        "queued",
+        "backoff",
+      ]);
+      expect(isSolo(next, "s")).toBe(true);
+      expect(isSolo(next, "s2")).toBe(true);
+      expect(isSolo(next, "hold-me")).toBe(false);
+      expect(isSolo(next, "r")).toBe(false);
+      expect(next.states.has("r")).toBe(false);
+      expect(next.states.has("s2")).toBe(true);
+      expect(next.states.has("keep")).toBe(false);
+    });
+
+    it("引数の列と状態の表を書き換えない", () => {
+      // Given
+      const { mixed, ids } = mixedQueue();
+      const statesBefore = [...mixed.states];
+      const flightsBefore = [...mixed.flights];
+
+      // When
+      const next = applyHeld(mixed, ids, new Set(["hold-me", "s", "c"]));
+
+      // Then
+      expect([...mixed.states]).toEqual(statesBefore);
+      expect([...mixed.flights]).toEqual(flightsBefore);
+      expect(next.states).not.toBe(mixed.states);
+    });
+  });
 });
 
 describe("syncOutbox", () => {

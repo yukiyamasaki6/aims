@@ -423,12 +423,14 @@ describe("creationProgress", () => {
 
 describe("freshBaseNeeds", () => {
   const flags = new Map([
+    ["r-stale-all", { diverged: true, overlay: true }],
+    ["r-open-all", { diverged: true, overlay: true }],
     ["r-diverged", { diverged: true, overlay: false }],
     ["r-overlay", { diverged: false, overlay: true }],
     ["r-both", { diverged: true, overlay: true }],
   ]);
 
-  it("開いた直後、古い、効かなかった、重ねられなかったの順に当たる理由を1つ返す", () => {
+  it("開いた直後、古い、効かなかった、重ねられなかったの順に先に当たる理由をreasonとして返す", () => {
     // Given
     const watches = [
       { roundId: "r-open", opening: true, stale: true },
@@ -443,11 +445,40 @@ describe("freshBaseNeeds", () => {
 
     // Then
     expect(needs).toEqual([
-      { roundId: "r-open", reason: "open" },
-      { roundId: "r-stale", reason: "stale" },
-      { roundId: "r-diverged", reason: "diverged" },
-      { roundId: "r-overlay", reason: "overlay" },
-      { roundId: "r-both", reason: "diverged" },
+      { roundId: "r-open", reason: "open", reasons: ["open", "stale"] },
+      { roundId: "r-stale", reason: "stale", reasons: ["stale"] },
+      { roundId: "r-diverged", reason: "diverged", reasons: ["diverged"] },
+      { roundId: "r-overlay", reason: "overlay", reasons: ["overlay"] },
+      {
+        roundId: "r-both",
+        reason: "diverged",
+        reasons: ["diverged", "overlay"],
+      },
+    ]);
+  });
+
+  it("当たる全ての理由を、開く依頼、古い、効かなかった、重ねられなかったの順に並べ、主の理由は先頭にする", () => {
+    // Given
+    const watches = [
+      { roundId: "r-open-all", opening: true, stale: true },
+      { roundId: "r-stale-all", opening: false, stale: true },
+    ];
+
+    // When
+    const needs = freshBaseNeeds(watches, flags);
+
+    // Then
+    expect(needs).toEqual([
+      {
+        roundId: "r-open-all",
+        reason: "open",
+        reasons: ["open", "stale", "diverged", "overlay"],
+      },
+      {
+        roundId: "r-stale-all",
+        reason: "stale",
+        reasons: ["stale", "diverged", "overlay"],
+      },
     ]);
   });
 

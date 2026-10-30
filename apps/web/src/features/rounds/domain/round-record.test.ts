@@ -15,11 +15,12 @@ import {
   type RecordRow,
   type RoundRecord,
   retireItems,
+  sameRecordedOperations,
   setInFlight,
 } from "./round-record";
 import type { SyncOperation } from "./sync-events";
 
-// 反映済みの判定は、ラウンドのrevisionと確定のrevisionの比較で決まる。同期の規則(集約の値の入出力)が検証対象で、操作の中身は問わないため、名前だけの更新を使う。
+// 反映済みの判定は、ラウンドのrevisionと確定のrevisionの比較で決まる。記録の集約の規則(値の入出力)が検証対象で、操作の中身は問わないため、名前だけの更新を使う。
 function op(id: string): SyncOperation {
   return roundUpdated({ eventId: id, changes: { name: id } });
 }
@@ -92,6 +93,46 @@ describe("appendPending と markPersisted", () => {
 
     // Then
     expect(persisted.items[0]).toMatchObject({ saved: true, seq: undefined });
+  });
+});
+
+describe("sameRecordedOperations", () => {
+  it("同じ操作を同じ順に、同じ確定の項目で並べているときだけ真になる。長さ、順、操作の参照、確定の項目の参照が違えば偽になる", () => {
+    // Given
+    const [a, b] = [op("a"), op("b")];
+    const base = savedRecord(a, b);
+    const reversed = operationsOf(savedRecord(b, a));
+    const confirmed = (fields: string[] | null) =>
+      operationsOf(applySendResults(base, ["a"], [applied(5, fields)]).record);
+    const confirmedNull = confirmed(null);
+    const confirmedFields1 = confirmed(["name"]);
+    const confirmedFields2 = confirmed(["name"]);
+
+    // When
+    const results = [
+      [operationsOf(base), operationsOf(base)],
+      [[], []],
+      [operationsOf(base), operationsOf(savedRecord(a))],
+      [operationsOf(base), reversed],
+      [operationsOf(base), operationsOf(savedRecord(op("a"), b))],
+      [operationsOf(base), confirmedNull],
+      [confirmedNull, confirmedFields1],
+      [confirmedFields1, confirmedFields2],
+      [confirmedFields1, confirmedFields1],
+    ].map(([x, y]) => sameRecordedOperations(x, y));
+
+    // Then
+    expect(results).toEqual([
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+    ]);
   });
 });
 

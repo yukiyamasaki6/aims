@@ -1,5 +1,6 @@
 import type {
   DatabaseGateway,
+  DbOrder,
   DbResponse,
 } from "@/lib/supabase/contract/database";
 import type {
@@ -13,6 +14,7 @@ import type { ServerRound } from "../domain/round-tables";
 import type { RoundStatus } from "../domain/sync-events";
 import type { TargetFaceRecord } from "../domain/target-face-types";
 import { TARGET_FACE_SELECT } from "./reference-query-constants";
+import type { RoundsDbSchema } from "./rounds-db-schema";
 
 // 無効化した距離と取り消した矢の行も取得し、表示にはdisabled_atが無い行だけを使う。
 const ROUND_SELECT =
@@ -95,7 +97,9 @@ function toTargetFaces(rows: unknown): TargetFaceRecord[] {
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 問い合わせの組み立てを閉じ込めるファクトリで、内側の関数は個々に上限内である。
-export function createRoundQueries(database: DatabaseGateway): RoundQueries {
+export function createRoundQueries(
+  database: DatabaseGateway<RoundsDbSchema>,
+): RoundQueries {
   // target_facesのRLSは認証済みの全員に全行を見せるため、他人の個人の的を除くクエリの絞りが必須である。
   const selectTargetFaces = (userId: string) =>
     database.select({
@@ -106,7 +110,7 @@ export function createRoundQueries(database: DatabaseGateway): RoundQueries {
       ],
     });
 
-  const roundOrders = [
+  const roundOrders: readonly DbOrder<RoundsDbSchema, "rounds">[] = [
     { column: "position_key", referencedTable: "distances" },
     { column: "id", referencedTable: "distances" },
   ];

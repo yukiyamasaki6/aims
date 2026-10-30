@@ -127,26 +127,36 @@ describe("shouldRefetch", () => {
 });
 
 describe("refreshDecision", () => {
-  // 取得するか、反映を一覧の成否に掛けるか。全組合せ。
-  it.each([
-    [false, false, false, false, false],
-    [false, true, false, false, false],
-    [true, false, false, false, false],
-    [true, true, false, true, false],
-    [false, false, true, true, true],
-    [false, true, true, true, true],
-    [true, false, true, true, true],
-    [true, true, true, true, false],
-  ] as const)(
-    "常駐%s・常駐の前段%s・一覧の依頼%sなら、取得は%s、一覧の成否待ちは%sになる",
-    (resident, residentAllowed, list, fetch, waitForList) => {
-      // Given
+  it("常駐の前段を通らなければ取得しない", () => {
+    // Given
+    // When
+    const decision = refreshDecision({
+      kind: "resident",
+      residentAllowed: false,
+    });
 
-      // When
-      const decision = refreshDecision({ resident, residentAllowed, list });
+    // Then
+    expect(decision).toEqual({ fetch: false, waitForList: false });
+  });
 
-      // Then
-      expect(decision).toEqual({ fetch, waitForList });
-    },
-  );
+  it("常駐の前段を通れば、一覧の成否を待たずに取得する", () => {
+    // Given
+    // When
+    const decision = refreshDecision({
+      kind: "resident",
+      residentAllowed: true,
+    });
+
+    // Then
+    expect(decision).toEqual({ fetch: true, waitForList: false });
+  });
+
+  it("一覧の依頼は常に取得し、一覧の成否を待つ", () => {
+    // Given
+    // When
+    const decision = refreshDecision({ kind: "list" });
+
+    // Then
+    expect(decision).toEqual({ fetch: true, waitForList: true });
+  });
 });

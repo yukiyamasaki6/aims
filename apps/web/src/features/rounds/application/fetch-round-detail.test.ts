@@ -14,6 +14,8 @@ import {
 import type { ServerRound } from "../domain/round-tables";
 import type { TargetFaceRecord } from "../domain/target-face-types";
 import { createRoundQueries } from "../infrastructure/round-queries";
+import type { RoundsDbSchema } from "../infrastructure/rounds-db-schema";
+
 import { createContentFetcher, type SignInReader } from "./fetch-content";
 import {
   createRoundFetching,
@@ -343,7 +345,7 @@ describe("fetchRoundDetail", () => {
         status: 200,
       },
     };
-    const database: DatabaseGateway = {
+    const database: DatabaseGateway<RoundsDbSchema> = {
       select: async (query) => rows[query.table],
       rpc: async () => {
         throw new Error("使わない");

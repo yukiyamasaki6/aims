@@ -5,7 +5,7 @@ import { createLocalIdentity } from "@/features/auth/application/local-identity"
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
-import { createAuthSignInSignals } from "@/features/round-sync/infrastructure/auth-sign-in-signals";
+import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
 import { roundCreated } from "@/features/rounds/round-op-test-helpers";
 import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
@@ -140,13 +140,13 @@ vi.mock(
   },
 );
 vi.mock(
-  "@/features/round-sync/infrastructure/auth-sign-in-signals",
+  "@/features/round-sync/application/sync-triggers",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/round-sync/infrastructure/auth-sign-in-signals")
+        typeof import("@/features/round-sync/application/sync-triggers")
       >();
-    return { createAuthSignInSignals: vi.fn(actual.createAuthSignInSignals) };
+    return { createSyncTriggers: vi.fn(actual.createSyncTriggers) };
   },
 );
 
@@ -277,9 +277,9 @@ describe("RootClientEntry", () => {
       // Then
       const { changes, writer } =
         vi.mocked(createLocalIdentity).mock.calls[0][0];
-      const signals = vi.mocked(createAuthSignInSignals).mock.calls[0][0];
-      expect(signals.changes).toBe(changes);
-      expect(signals.identityReader).toBe(writer);
+      const triggers = vi.mocked(createSyncTriggers).mock.calls[0][0];
+      expect(triggers.changes).toBe(changes);
+      expect(triggers.identityReader).toBe(writer);
     });
 
     it("画面の追記、再読み込みの前の保存の待ち、同期が、同じ記録のハブを使う", async () => {
@@ -292,7 +292,7 @@ describe("RootClientEntry", () => {
       );
       storage.hold = true;
       const created = roundCreated();
-      const records = vi.mocked(createRoundSync).mock.calls[0][0].records;
+      const records = vi.mocked(createOpSender).mock.calls[0][0].records;
 
       // When
       const appending = store?.append("round-1", created);

@@ -159,7 +159,7 @@ describe("送信の順序", () => {
     await flush();
 
     // Then
-    expect(rig.session.read).toHaveBeenCalledTimes(2);
+    expect(rig.session.readSession).toHaveBeenCalledTimes(2);
     expect(sentIds(rig)).toEqual([["a"]]);
   });
 
@@ -193,6 +193,70 @@ describe("送信の順序", () => {
     // Then
     expect(rig.sent).toHaveLength(1);
   });
+});
+
+describe("記録が返す平らな失敗", () => {
+  type Report = Awaited<ReturnType<Rig["records"]["send"]>>;
+  type Row = [string, Report | Error, "破棄" | "再送"];
+  const rows: Row[] = [
+    [
+      "rpc 403 PT403",
+      { ok: false, cause: "rpc", status: 403, code: "PT403" },
+      "破棄",
+    ],
+    [
+      "rpc 422 PT422",
+      { ok: false, cause: "rpc", status: 422, code: "PT422" },
+      "破棄",
+    ],
+    [
+      "rpc 500 XX000",
+      { ok: false, cause: "rpc", status: 500, code: "XX000" },
+      "再送",
+    ],
+    [
+      "rpc 404 PGRST202",
+      { ok: false, cause: "rpc", status: 404, code: "PGRST202" },
+      "再送",
+    ],
+    ["rpc 状態もコードも無い", { ok: false, cause: "rpc" }, "再送"],
+    ["exception", { ok: false, cause: "exception" }, "再送"],
+    ["sendが例外を投げる", new Error("boom"), "再送"],
+  ];
+
+  it.each(rows)(
+    "記録の送信が%sを返すと、操作を%sする",
+    async (_name, returned, expected) => {
+      // Given
+      const rig = await started();
+      const send = vi
+        .spyOn(rig.records, "send")
+        .mockImplementation(async () => {
+          if (returned instanceof Error) throw returned;
+          return returned;
+        });
+      await rig.hub.append(STREAM, shot("a", 1));
+      await flush();
+      const afterFirst = send.mock.calls.length;
+
+      // When
+      await rig.clock.advanceAsync(2999);
+      const beforeDelay = send.mock.calls.length;
+      await rig.clock.advanceAsync(1);
+      await flush();
+
+      // Then
+      expect(afterFirst).toBe(1);
+      expect(beforeDelay).toBe(1);
+      if (expected === "破棄") {
+        expect(send).toHaveBeenCalledTimes(1);
+        expect(itemIds(rig)).toEqual([]);
+      } else {
+        expect(send).toHaveBeenCalledTimes(2);
+        expect(itemIds(rig)).toEqual(["a"]);
+      }
+    },
+  );
 });
 
 describe("失敗の扱い", () => {
@@ -438,7 +502,7 @@ describe("送る役の選出", () => {
     await rig.hub.append(STREAM, shot("a"));
     const first = Promise.withResolvers<void>();
     const second = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "reloadStream")
+    vi.spyOn(rig.records, "reloadAll")
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     rig.sender.start();
@@ -457,6 +521,112 @@ describe("送る役の選出", () => {
     second.resolve();
     await flush();
     expect(outbox).toHaveBeenCalled();
+  });
+  it("送る役になる前に、別のタブが知らせなしに新しい列へ保存していた操作も、送る役になると読み直して送る", async () => {
+    // Given
+    const store = createMemoryRoundStore();
+    const follower = createSenderRig({ shared: { store } });
+    await follower.hub.ready();
+    // 記録の知らせを共有しない別のタブが、新しい列へ保存する。
+    const writer = createSenderRig({ shared: { store } });
+    await writer.hub.ready();
+    await writer.hub.append(STREAM, shot("a"));
+    const known = follower.hub.record(STREAM).items;
+
+    // When
+    follower.sender.start();
+    await flush();
+
+    // Then
+    expect(known).toEqual([]);
+    expect(sentIds(follower)).toEqual([["a"]]);
+  });
+
+  // 保存済みの操作と、保存に失敗した操作(別の距離)を持ち、読み直しが保留中の状態。
+  async function reloadingRig(withUnsaved: boolean) {
+    const rig = createSenderRig();
+    await rig.hub.ready();
+    await rig.hub.append(STREAM, shot("saved"));
+    if (withUnsaved) {
+      vi.spyOn(rig.store, "append").mockRejectedValueOnce(new Error("quota"));
+      await rig.hub.append(STREAM, shot("unsaved", 1, "d-2"));
+    }
+    const kinds: string[] = [];
+    rig.hub.subscribe((change) => kinds.push(change.kind));
+    return { rig, kinds };
+  }
+
+  it("読み直しが終わるまで、既知の列の保存済みの操作を送らない。保存に失敗した操作は送る。終わると保存済みの操作を送る", async () => {
+    // Given
+    const { rig, kinds } = await reloadingRig(true);
+    const reload = Promise.withResolvers<void>();
+    vi.spyOn(rig.records, "reloadAll").mockReturnValueOnce(reload.promise);
+    rig.sender.start();
+    await flush();
+
+    // When
+    rig.sender.online();
+    await rig.hub.append(STREAM, shot("later", 3));
+    await rig.hub.reloadAll();
+    await flush();
+    const whileReloading = sentIds(rig).flat().sort();
+    reload.resolve();
+    await flush();
+
+    // Then
+    expect(kinds).toEqual(expect.arrayContaining(["appended", "loaded"]));
+    expect(whileReloading).toEqual(["unsaved"]);
+    expect(sentIds(rig).flat().sort()).toEqual(["later", "saved", "unsaved"]);
+  });
+
+  it("読み直しを終える前に止めると、その後に読み直しが終わって通信の復帰があっても、何も送らない", async () => {
+    // Given
+    const { rig } = await reloadingRig(false);
+    const reload = Promise.withResolvers<void>();
+    vi.spyOn(rig.records, "reloadAll").mockReturnValueOnce(reload.promise);
+    rig.sender.start();
+    await flush();
+
+    // When
+    rig.sender.stop();
+    reload.resolve();
+    await flush();
+    rig.sender.online();
+    await flush();
+
+    // Then
+    expect(rig.sent).toHaveLength(0);
+  });
+
+  it("止めて始め直した後、古い選出の読み直しだけが終わっても、通信の復帰と記録の知らせでは保存済みの操作を送らない。今の選出の読み直しが終わると送る", async () => {
+    // Given
+    const { rig, kinds } = await reloadingRig(false);
+    const first = Promise.withResolvers<void>();
+    const second = Promise.withResolvers<void>();
+    vi.spyOn(rig.records, "reloadAll")
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    rig.sender.start();
+    await flush();
+    rig.sender.stop();
+    rig.sender.start();
+    await flush();
+
+    // When
+    first.resolve();
+    await flush();
+    rig.sender.online();
+    await rig.hub.reloadAll();
+    await rig.hub.append(STREAM, shot("later", 3));
+    await flush();
+    const afterOld = rig.sent.length;
+    second.resolve();
+    await flush();
+
+    // Then
+    expect(kinds).toEqual(expect.arrayContaining(["appended", "loaded"]));
+    expect(afterOld).toBe(0);
+    expect(sentIds(rig).flat().sort()).toEqual(["later", "saved"]);
   });
 });
 

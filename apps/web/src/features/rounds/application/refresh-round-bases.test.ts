@@ -238,21 +238,75 @@ describe("refreshAll", () => {
     expect(tab.hub.record(roundStreamId("kept")).base?.startedAt).toBe(50);
   });
 
-  it("一覧の成否を待たない指定では、一覧の成否の判定を呼ばずに反映する", async () => {
+  it("一括の取得が成功し、一覧の成否を待つ間に停止すると、反映せずに解決し、停止後に一覧が成功で終わっても端末の記録は変わらない", async () => {
+    // Given
+    const tab = await setup();
+    await storeBase(tab, "kept");
+    tab.fetching.fetchRoundDetails.mockResolvedValue(
+      fetchedOf([["r-1", detail("in_progress")]]),
+    );
+    const list = tab.requests.requestAll();
+    const running = tab.refresh.refreshAll({ waitForList: true });
+    await flush();
+
+    // When
+    tab.requests.reset();
+    const outcome = await running;
+    tab.requests.allowCommit(list.id, true);
+    await flush();
+
+    // Then
+    expect(outcome).toEqual({
+      result: { status: "ok", data: null },
+      committed: false,
+    });
+    expect(tab.hub.record(roundStreamId("kept")).base?.startedAt).toBe(50);
+    expect(tab.hub.record(roundStreamId("r-1")).base).toBeUndefined();
+  });
+
+  it("一覧の成否を待たない指定では、一覧の成否の判定を呼ばずに反映し、一覧の依頼は解決しない", async () => {
     // Given
     const tab = await setup();
     tab.fetching.fetchRoundDetails.mockResolvedValue(
       fetchedOf([["r-1", detail("in_progress")]]),
     );
     const whenListAllows = vi.spyOn(tab.requests, "whenListAllows");
-    tab.requests.requestAll();
+    const list = tab.requests.requestAll();
+    let listSettled = false;
+    void list.result.then(() => {
+      listSettled = true;
+    });
 
     // When
     const outcome = await tab.refresh.refreshAll({ waitForList: false });
+    await flush();
 
     // Then
     expect(outcome.committed).toBe(true);
     expect(whenListAllows).not.toHaveBeenCalled();
+    expect(listSettled).toBe(false);
+  });
+
+  it("一覧の成否を待たない実行は一覧の依頼を取り込まず、続けて待つ実行を行うと、その依頼を取り込んで解決する", async () => {
+    // Given
+    const tab = await setup();
+    tab.fetching.fetchRoundDetails.mockResolvedValue(fetchedOf([]));
+    const list = tab.requests.requestAll();
+    tab.requests.allowCommit(list.id, true);
+    let listSettled = false;
+    void list.result.then(() => {
+      listSettled = true;
+    });
+
+    // When
+    await tab.refresh.refreshAll({ waitForList: false });
+    await flush();
+    const afterResident = listSettled;
+    await tab.refresh.refreshAll({ waitForList: true });
+
+    // Then
+    expect(afterResident).toBe(false);
+    expect(await list.result).toEqual({ status: "ok", data: null });
   });
 
   it("取得が失敗したときは、待つ指定の真偽によらず反映せず、失敗を返す", async () => {
@@ -275,14 +329,14 @@ describe("refreshAll", () => {
     expect(notWaiting).toEqual({ result: failure, committed: false });
   });
 
-  it("取得が例外を投げたときは、固定文のerrorを返し、依頼を待つ側にも返す", async () => {
+  it("一覧の成否を待つ取得が例外を投げたときは、固定文のerrorを返し、一覧の依頼にも返す", async () => {
     // Given
     const tab = await setup();
     tab.fetching.fetchRoundDetails.mockRejectedValue(new Error("boom"));
     const list = tab.requests.requestAll();
 
     // When
-    const outcome = await tab.refresh.refreshAll({ waitForList: false });
+    const outcome = await tab.refresh.refreshAll({ waitForList: true });
 
     // Then
     expect(outcome.committed).toBe(false);
@@ -290,6 +344,29 @@ describe("refreshAll", () => {
       status: "error",
       message: FETCH_ERROR_MESSAGE,
     });
+  });
+
+  it("常駐の取得が例外を投げたときは、固定文のerrorを返し、一覧の依頼には触れず未解決のままにする", async () => {
+    // Given
+    const tab = await setup();
+    tab.fetching.fetchRoundDetails.mockRejectedValue(new Error("boom"));
+    const list = tab.requests.requestAll();
+    let listSettled = false;
+    void list.result.then(() => {
+      listSettled = true;
+    });
+
+    // When
+    const outcome = await tab.refresh.refreshAll({ waitForList: false });
+    await flush();
+
+    // Then
+    expect(outcome.committed).toBe(false);
+    expect(outcome.result).toEqual({
+      status: "error",
+      message: FETCH_ERROR_MESSAGE,
+    });
+    expect(listSettled).toBe(false);
   });
 
   it("他の利用者の取得は、このタブのメモリだけに反映する", async () => {

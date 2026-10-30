@@ -7,11 +7,8 @@ import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth
 import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
-import { createAuthSessionCheck } from "@/features/round-sync/infrastructure/auth-session-check";
-import { createAuthSignInSignals } from "@/features/round-sync/infrastructure/auth-sign-in-signals";
 import { createBrowserSenderLock } from "@/features/round-sync/infrastructure/browser-sender-lock";
 import { createBrowserVisibility } from "@/features/round-sync/infrastructure/browser-visibility";
-import { createRoundsRecords } from "@/features/round-sync/infrastructure/rounds-records";
 import { RoundBaseRefresher } from "@/features/round-sync/ui/round-base-refresher";
 import { createContentFetcher } from "@/features/rounds/application/fetch-content";
 import { createRoundFetching } from "@/features/rounds/application/fetch-round-detail";
@@ -29,12 +26,16 @@ import { createBrowserRecordChannel } from "@/features/rounds/infrastructure/bro
 import { createReferenceSnapshots } from "@/features/rounds/infrastructure/reference-snapshot";
 import { createRoundOpTransport } from "@/features/rounds/infrastructure/round-op-transport";
 import { createRoundQueries } from "@/features/rounds/infrastructure/round-queries";
+import type { RoundsDbSchema } from "@/features/rounds/infrastructure/rounds-db-schema";
 import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
 import { createClient } from "@/lib/supabase/infrastructure/client";
-import { createSupabaseDatabase } from "@/lib/supabase/infrastructure/database";
+import {
+  createSupabaseDatabase,
+  narrowDatabase,
+} from "@/lib/supabase/infrastructure/database";
 import { SwUpdateActivator } from "./sw-update-activator";
 
 // アプリで1つの部品を、1度だけ生成して結ぶ。実行環境の大域の名前に触る実装は、開始の後に初めて触る(事前描画でも生成できる)。
@@ -54,7 +55,9 @@ function composeApp() {
     ),
     channel: createBrowserRecordChannel(),
   });
-  const database = createSupabaseDatabase(createClient);
+  const database = narrowDatabase<RoundsDbSchema>(
+    createSupabaseDatabase(createClient),
+  );
   const requests = createRefreshRequests();
   const fetching = createRoundFetching({
     content: createContentFetcher({
@@ -82,26 +85,22 @@ function composeApp() {
     clock,
     connectivity,
   });
-  const records = createRoundsRecords(reconciliation);
-  const session = createAuthSessionCheck(authenticator);
   const sync = createRoundSync({
-    records,
+    records: reconciliation,
     sender: createOpSender({
-      records,
-      session,
+      records: reconciliation,
+      session: authenticator,
       lock: createBrowserSenderLock(),
       clock,
       connectivity,
     }),
-    session,
+    session: authenticator,
     clock,
     connectivity,
   });
   const triggers = createSyncTriggers({
-    signals: createAuthSignInSignals({
-      changes: authenticator,
-      identityReader: identityStore,
-    }),
+    identityReader: identityStore,
+    changes: authenticator,
     visibility: createBrowserVisibility(),
     connectivity,
     sync,

@@ -1,10 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
-import { createSupabaseDatabase } from "@/lib/supabase/infrastructure/database";
+import {
+  createSupabaseDatabase,
+  narrowDatabase,
+} from "@/lib/supabase/infrastructure/database";
 import type { Database } from "@/types/supabase";
 import { roundUpdated, shotRecorded } from "../round-op-test-helpers";
 import { createRoundOpTransport } from "./round-op-transport";
 import { createRoundQueries } from "./round-queries";
+import type { RoundsDbSchema } from "./rounds-db-schema";
 
 // 外部SDKの呼び方が検証対象。実物のゲートウェイを通して、SDKへの呼び出しが変更前と同じ形になることを確かめる。
 // SDKの接続は、呼ばれたメソッドを記録し、応答を返す偽で模す。
@@ -31,7 +35,13 @@ function fakeSdk(response: { data: unknown; error: unknown; status: number }) {
     },
     rpc,
   } as unknown as SupabaseClient<Database>;
-  return { database: createSupabaseDatabase(() => client), calls, rpc };
+  return {
+    database: narrowDatabase<RoundsDbSchema>(
+      createSupabaseDatabase(() => client),
+    ),
+    calls,
+    rpc,
+  };
 }
 
 describe("書き込みのRPC", () => {

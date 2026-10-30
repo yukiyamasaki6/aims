@@ -1,7 +1,8 @@
+// biome-ignore-all lint/style/useNamingConvention: 生成した型(types/supabase.ts)のスキーマの形(Functions、Tables、Args、Returns、Row)と同じ名前で宣言するため。
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
-import type { Database } from "@/types/supabase";
-import { createSupabaseDatabase } from "./database";
+import type { Database, Json } from "@/types/supabase";
+import { createSupabaseDatabase, narrowDatabase } from "./database";
 
 type Call = [method: string, args: unknown[]];
 
@@ -163,11 +164,11 @@ describe("rpc", () => {
     const database = createSupabaseDatabase(() => client);
 
     // When
-    const response = await database.rpc("record_shots", { p_round_id: "r-1" });
+    const response = await database.rpc("record_shots", { p_shots: [] });
 
     // Then
     expect(rpc).toHaveBeenCalledExactlyOnceWith("record_shots", {
-      p_round_id: "r-1",
+      p_shots: [],
     });
     expect(response).toEqual({
       data: [1],
@@ -190,10 +191,134 @@ describe("rpc", () => {
     );
 
     // When
-    const response = await ok.rpc("x", {});
+    const response = await ok.rpc("is_round_member", {
+      target_round_id: "r-1",
+    });
 
     // Then
     expect(response).toEqual({ data: 1, error: null, status: 200 });
-    await expect(throwing.rpc("x", {})).rejects.toThrow("boom");
+    await expect(
+      throwing.rpc("is_round_member", { target_round_id: "r-1" }),
+    ).rejects.toThrow("boom");
+  });
+});
+
+// narrowDatabaseは、使う側が宣言した部分のスキーマを、生成した型と照合する。照合は型だけで、実行時は受け取ったものを返す。
+// 型の誤りがなくなると、@ts-expect-errorが誤りになり、型の検査(pnpm typecheck)が落ちる。
+type MatchingSchema = {
+  Functions: {
+    clear_shots: { Args: { p_shots: Json }; Returns: Json };
+    is_round_member: { Args: { target_round_id: string }; Returns: boolean };
+  };
+  Tables: { rounds: { Row: { id: string; status: string } } };
+};
+
+describe("narrowDatabase", () => {
+  it("受け取ったものを、そのまま(同じ参照で)返す", () => {
+    // Given
+    const { client } = fakeClient(ok);
+    const gateway = createSupabaseDatabase(() => client);
+
+    // When
+    const narrowed = narrowDatabase<MatchingSchema>(gateway);
+
+    // Then
+    expect(narrowed).toBe(gateway);
+  });
+
+  it("生成した型と一致する部分のスキーマだけを通し、一致しないものは型の誤りにする", () => {
+    // Given
+    const { client } = fakeClient(ok);
+    const gateway = createSupabaseDatabase(() => client);
+
+    // When
+    const check = () => {
+      // 一致する場合は、型の誤りにならない。
+      narrowDatabase<MatchingSchema>(gateway);
+      // 関数の名前の誤記。
+      // @ts-expect-error clear_shot は生成した型に無い。
+      narrowDatabase<{
+        Functions: { clear_shot: { Args: { p_shots: Json }; Returns: Json } };
+        Tables: Record<never, never>;
+      }>(gateway);
+      // 必須の引数の欠落。
+      // @ts-expect-error 必須の p_shots が無い。
+      narrowDatabase<{
+        Functions: {
+          clear_shots: { Args: Record<never, never>; Returns: Json };
+        };
+        Tables: Record<never, never>;
+      }>(gateway);
+      // 引数の一部の欠落(複数の必須の引数のうち一部だけを宣言する)。生成した型の公開の関数に、省略可能な引数を持つものは無く、省略可能な引数の欠落は、この型では確かめられない。
+      // @ts-expect-error shot_fits の必須の引数のうち、p_end_number 以外が無く、p_end_number は生成した型に無い。
+      narrowDatabase<{
+        Functions: {
+          shot_fits: { Args: { p_end_number: number }; Returns: boolean };
+        };
+        Tables: Record<never, never>;
+      }>(gateway);
+      // 引数の型の違い。
+      // @ts-expect-error p_shots は Json で、number ではない。
+      narrowDatabase<{
+        Functions: {
+          clear_shots: { Args: { p_shots: number }; Returns: Json };
+        };
+        Tables: Record<never, never>;
+      }>(gateway);
+      // 余分な必須の引数。
+      // @ts-expect-error p_typo は生成した型に無い。
+      narrowDatabase<{
+        Functions: {
+          clear_shots: {
+            Args: { p_shots: Json; p_typo: string };
+            Returns: Json;
+          };
+        };
+        Tables: Record<never, never>;
+      }>(gateway);
+      // 余分な省略可能な引数。
+      // @ts-expect-error p_typo は生成した型に無い(省略可能でも)。
+      narrowDatabase<{
+        Functions: {
+          clear_shots: {
+            Args: { p_shots: Json; p_typo?: string };
+            Returns: Json;
+          };
+        };
+        Tables: Record<never, never>;
+      }>(gateway);
+      // 必須と省略可能の取り違え。
+      // @ts-expect-error p_shots は必須で、省略可能ではない。
+      narrowDatabase<{
+        Functions: { clear_shots: { Args: { p_shots?: Json }; Returns: Json } };
+        Tables: Record<never, never>;
+      }>(gateway);
+      // 列の名前の誤り。
+      // @ts-expect-error statuss は rounds の列に無い。
+      narrowDatabase<{
+        Functions: Record<never, never>;
+        Tables: { rounds: { Row: { statuss: string } } };
+      }>(gateway);
+      // 列の型の違い。
+      // @ts-expect-error status は string で、number ではない。
+      narrowDatabase<{
+        Functions: Record<never, never>;
+        Tables: { rounds: { Row: { status: number } } };
+      }>(gateway);
+      // 戻り値の違い。
+      // @ts-expect-error is_round_member の戻り値は boolean で、string ではない。
+      narrowDatabase<{
+        Functions: {
+          is_round_member: {
+            Args: { target_round_id: string };
+            Returns: string;
+          };
+        };
+        Tables: Record<never, never>;
+      }>(gateway);
+    };
+
+    // Then
+    expect(check).toBeTypeOf("function");
   });
 });

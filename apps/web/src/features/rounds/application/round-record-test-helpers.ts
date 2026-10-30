@@ -131,7 +131,7 @@ export function appliedOutcome(count: number, firstRevision = 1): SendOutcome {
   };
 }
 
-// 同期へ公開する突き合わせ。記録のハブ、依頼の記録、送信は実物で、転送と取得を差し替える。
+// 他の機能へ公開する突き合わせ。記録のハブ、依頼の記録、送信は実物で、転送と取得を差し替える。
 export function createTestReconciliation(
   options: {
     shared?: Parameters<typeof createTestRoundHub>[0];
@@ -168,7 +168,7 @@ export function createTestReconciliation(
   };
 }
 
-// 同期が取り直しを始めて、結果を返した。始めた時点の開く依頼にだけ結果が返る。
+// 取り直しを始めて、結果を返した。始めた時点の開く依頼にだけ結果が返る。
 export function settleRoundNow(
   requests: ReturnType<typeof createRefreshRequests>,
   roundId: string,

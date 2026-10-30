@@ -6,16 +6,14 @@ const MAX_DELAY_MS = 60000;
 // 破棄する失敗のSQLSTATE。認可の拒否と、契約の不一致だけが対象になる。
 const DISCARD_CODES = ["PT403", "PT422"];
 
-// 送信側が返す失敗の種類。再試行するかどうかは`classifyFailure`が判定する。
-export type FailureCause =
-  | { type: "unauthenticated" }
-  | { type: "auth-unknown" }
-  // statusはHTTPステータス。fetchの失敗は0、取得できなければ未定義。
-  // codeはPostgRESTが返すSQLSTATE。
-  | { type: "rpc"; status?: number; code?: string }
-  | { type: "exception" };
-
-export type SyncFailure = { cause: FailureCause };
+// 送信の失敗。再試行するかどうかは`classifyFailure`が判定する。ラウンドが公開する送信の結果の失敗と同じ平らな形である。
+// unauthenticatedとauth-unknownは同期が確認で決める種類、rpcとexceptionは送信の結果の種類。
+// statusはHTTPステータス(fetchの失敗は0)、codeはSQLSTATEで、rpcのときだけ持つ。
+export type SyncFailure = {
+  readonly cause: "unauthenticated" | "auth-unknown" | "rpc" | "exception";
+  readonly status?: number;
+  readonly code?: string;
+};
 
 // retryは成功するまで再試行して残す。holdは再試行せずに残す。discardは操作を破棄する。
 export type SyncDisposition = "retry" | "hold" | "discard";
@@ -25,26 +23,22 @@ export function sessionFailure(reading: {
   status: "unauthenticated" | "unknown";
 }): SyncFailure {
   return {
-    cause: {
-      type:
-        reading.status === "unauthenticated"
-          ? "unauthenticated"
-          : "auth-unknown",
-    },
+    cause:
+      reading.status === "unauthenticated" ? "unauthenticated" : "auth-unknown",
   };
 }
 
 // 認可の拒否(PT403)と契約の不一致(PT422)だけが、再送しても結果が変わらないため破棄する。
 // 未認証はサインインまで止めて残し、それ以外は全て再試行する。
-export function classifyFailure(cause: FailureCause): SyncDisposition {
-  switch (cause.type) {
+export function classifyFailure(failure: SyncFailure): SyncDisposition {
+  switch (failure.cause) {
     case "unauthenticated":
       return "hold";
     case "auth-unknown":
     case "exception":
       return "retry";
     case "rpc":
-      return cause.code !== undefined && DISCARD_CODES.includes(cause.code)
+      return failure.code !== undefined && DISCARD_CODES.includes(failure.code)
         ? "discard"
         : "retry";
   }
@@ -62,7 +56,7 @@ export function decideSyncResult(
   attemptIndex: number,
   batchSize: number,
 ): SyncResultDecision {
-  const disposition = classifyFailure(failure.cause);
+  const disposition = classifyFailure(failure);
   if (disposition === "retry") {
     return { type: "retry", delayMs: retryDelayMs(attemptIndex) };
   }

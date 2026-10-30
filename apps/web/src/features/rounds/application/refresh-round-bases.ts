@@ -66,7 +66,7 @@ async function retainedRoundIds(hub: RoundRecordHub): Promise<string[]> {
 
 export type RoundRefreshResult = "ok" | "gone" | "failed";
 
-// ベースの取得と反映。呼ぶのは同期の手続きだけ。
+// ベースの取得と反映。公開する突き合わせの操作(`round-reconciliation.ts`)から呼ばれる。
 export function createRefreshRoundBases(deps: {
   hub: RoundRecordHub;
   fetching: RoundFetching;
@@ -75,18 +75,19 @@ export function createRefreshRoundBases(deps: {
   const { hub, fetching, requests } = deps;
 
   // 入力中のラウンドと、端末が保持するラウンドを、まとめて取得して端末の記録へ反映する。
-  // `waitForList`が真なら、一覧の取得が成功したときだけ反映する。`committed`は、反映したか。
+  // `waitForList`が真なら、一覧の依頼を実行に取り込み、一覧の取得が成功したときだけ反映して、依頼を解決する。
+  // 偽のときは、一覧の依頼に触れない(実行に取り込まず、解決もしない)。`committed`は、反映したか。
   async function refreshAll(options: {
     waitForList: boolean;
   }): Promise<{ result: FetchResult<null>; committed: boolean }> {
-    const run = requests.beginAll();
+    const run = options.waitForList ? requests.beginAll() : null;
     let outcome: { result: FetchResult<null>; committed: boolean };
     try {
       const retained = await retainedRoundIds(hub);
       const fetched = await fetching.fetchRoundDetails(retained);
       if (fetched.status !== "ok") {
         outcome = { result: fetched, committed: false };
-      } else if (options.waitForList && !(await requests.whenListAllows(run))) {
+      } else if (run !== null && !(await requests.whenListAllows(run))) {
         outcome = { result: { status: "ok", data: null }, committed: false };
       } else {
         await commitRoundDetails(hub, fetched.data, retained);
@@ -98,7 +99,7 @@ export function createRefreshRoundBases(deps: {
         committed: false,
       };
     }
-    requests.settleAll(run, outcome.result);
+    if (run !== null) requests.settleAll(run, outcome.result);
     return outcome;
   }
 

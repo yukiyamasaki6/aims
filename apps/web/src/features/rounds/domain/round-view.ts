@@ -149,16 +149,23 @@ export function freshBaseNeeds(
     stale: boolean;
   }[],
   flags: ReadonlyMap<string, { diverged: boolean; overlay: boolean }>,
-): { roundId: string; reason: RefreshReason }[] {
-  const needs: { roundId: string; reason: RefreshReason }[] = [];
+): { roundId: string; reason: RefreshReason; reasons: RefreshReason[] }[] {
+  const needs: {
+    roundId: string;
+    reason: RefreshReason;
+    reasons: RefreshReason[];
+  }[] = [];
   for (const watch of watches) {
     const flag = flags.get(watch.roundId);
-    let reason: RefreshReason | null = null;
-    if (watch.opening) reason = "open";
-    else if (watch.stale) reason = "stale";
-    else if (flag?.diverged) reason = "diverged";
-    else if (flag?.overlay) reason = "overlay";
-    if (reason) needs.push({ roundId: watch.roundId, reason });
+    // 当たる全ての理由を、open、stale、diverged、overlay の順に並べる。主の理由は先頭。
+    const reasons: RefreshReason[] = [];
+    if (watch.opening) reasons.push("open");
+    if (watch.stale) reasons.push("stale");
+    if (flag?.diverged) reasons.push("diverged");
+    if (flag?.overlay) reasons.push("overlay");
+    if (reasons.length > 0) {
+      needs.push({ roundId: watch.roundId, reason: reasons[0], reasons });
+    }
   }
   return needs;
 }

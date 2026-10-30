@@ -13,11 +13,12 @@ import {
   shotRecorded,
 } from "../round-op-test-helpers";
 import { createRoundOpTransport } from "./round-op-transport";
+import type { RoundsDbSchema } from "./rounds-db-schema";
 
 // 書き込みのRPCの境界を、呼び出しを記録して応答を返すゲートウェイで模す。
 const client = vi.hoisted(() => ({ rpc: vi.fn() }));
 
-const database: DatabaseGateway = {
+const database: DatabaseGateway<RoundsDbSchema> = {
   select: async () => {
     throw new Error("書き込みは問い合わせを使わない");
   },
@@ -489,5 +490,20 @@ describe("createRoundOpTransport", () => {
 
     // Then
     await expect(sending).rejects.toThrow("接続できない");
+  });
+
+  it("宣言していないRPCの名前と、必須の引数が欠けた呼び出しは、型の誤りになる", () => {
+    // Given
+    // 型の誤りがなくなると、@ts-expect-errorが誤りになり、型の検査(pnpm typecheck)が落ちる。
+    // When
+    const misuse = () => {
+      // @ts-expect-error clear_shot は RoundsDbSchema に無い(名前の誤記)。
+      database.rpc("clear_shot", { p_shots: [] });
+      // @ts-expect-error clear_shots の必須の引数 p_shots が無い。
+      database.rpc("clear_shots", {});
+    };
+
+    // Then
+    expect(misuse).toBeTypeOf("function");
   });
 });
