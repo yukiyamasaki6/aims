@@ -26,6 +26,7 @@ function setup(
     check?: () => Promise<SessionStatus>;
     offline?: boolean;
     here?: string;
+    protectedPath?: string;
   } = {},
 ) {
   const listeners: Array<(event: AuthChange) => void> = [];
@@ -68,6 +69,7 @@ function setup(
       onOffline: () => () => {},
     },
     pageReplace: page,
+    protectedPath: options.protectedPath ?? "/rounds",
   });
   return {
     session,
@@ -444,6 +446,34 @@ describe("サインアウト", () => {
         );
       },
     );
+
+    it("保護の範囲の根が異なる場合、遷移元の検証が根に従う", async () => {
+      // Given
+      const inside = setup({
+        signOutHere: async () => ({ kind: "rate_limited" }),
+        here: "/elsewhere/x",
+        protectedPath: "/elsewhere",
+      });
+      const outside = setup({
+        signOutHere: async () => ({ kind: "rate_limited" }),
+        here: "/rounds/x",
+        protectedPath: "/elsewhere",
+      });
+      for (const { session } of [inside, outside]) {
+        session.watch();
+        await session.signOut(mounted);
+      }
+
+      // When
+      inside.emit(signedOut);
+      outside.emit(signedOut);
+
+      // Then
+      expect(inside.page.replace).toHaveBeenCalledWith(
+        "/signin?returnTo=%2Felsewhere%2Fx",
+      );
+      expect(outside.page.replace).toHaveBeenCalledWith("/signin");
+    });
 
     it("ラウンド一覧でサインアウトが失敗した後にセッションを失ったときは、遷移元を付けない", async () => {
       // Given

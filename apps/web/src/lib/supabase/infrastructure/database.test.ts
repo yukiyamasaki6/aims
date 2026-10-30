@@ -2,6 +2,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import type { Database, Json } from "@/types/supabase";
+import type { DbOrder } from "../contract/database";
 import { createSupabaseDatabase, narrowDatabase } from "./database";
 
 type Call = [method: string, args: unknown[]];
@@ -70,6 +71,77 @@ describe("select", () => {
       ["retry", [false]],
     ]);
     expect(response).toEqual(ok);
+  });
+
+  it("並びの向きを渡すと、パッケージのorderにascendingが渡る", async () => {
+    // Given
+    const { client, calls } = fakeClient(ok);
+    const database = createSupabaseDatabase(() => client);
+
+    // When
+    await database.select({
+      table: "rounds",
+      columns: "id",
+      orders: [
+        { column: "round_date", ascending: false },
+        { column: "id", ascending: true },
+      ],
+    });
+
+    // Then
+    const orders = calls.filter(([method]) => method === "order");
+    expect(orders).toEqual([
+      ["order", ["round_date", { ascending: false }]],
+      ["order", ["id", { ascending: true }]],
+    ]);
+  });
+
+  it("参照する表の並びでは、referencedTableとascendingが一緒に渡る", async () => {
+    // Given
+    const { client, calls } = fakeClient(ok);
+    const database = createSupabaseDatabase(() => client);
+
+    // When
+    await database.select({
+      table: "rounds",
+      columns: "id",
+      orders: [
+        {
+          column: "position_key",
+          referencedTable: "distances",
+          ascending: false,
+        },
+      ],
+    });
+
+    // Then
+    expect(calls).toContainEqual([
+      "order",
+      ["position_key", { referencedTable: "distances", ascending: false }],
+    ]);
+  });
+
+  it("向きを省略すると、ascendingを渡さない呼び方のままである", async () => {
+    // Given
+    const { client, calls } = fakeClient(ok);
+    const database = createSupabaseDatabase(() => client);
+
+    // When
+    await database.select({
+      table: "rounds",
+      columns: "id",
+      orders: [
+        { column: "id" },
+        { column: "position_key", referencedTable: "distances" },
+      ],
+    });
+
+    // Then
+    const orders = calls.filter(([method]) => method === "order");
+    expect(orders).toEqual([
+      ["order", ["id"]],
+      ["order", ["position_key", { referencedTable: "distances" }]],
+    ]);
   });
 
   it("1行を返す指定では、並びの後に最大1行の指定を付けてから再試行なしを指定する", async () => {
@@ -299,6 +371,11 @@ describe("narrowDatabase", () => {
         Functions: Record<never, never>;
         Tables: { rounds: { Row: { statuss: string } } };
       }>(gateway);
+      // 並びで宣言していない列を指定する。
+      const order: DbOrder<MatchingSchema, "rounds"> = { column: "status" };
+      // @ts-expect-error name は rounds の宣言した列に無い。
+      const undeclared: DbOrder<MatchingSchema, "rounds"> = { column: "name" };
+      void [order, undeclared];
       // 列の型の違い。
       // @ts-expect-error status は string で、number ではない。
       narrowDatabase<{

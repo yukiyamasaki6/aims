@@ -5,7 +5,12 @@ import {
   roundDisabled,
   shotRecorded,
 } from "../round-op-test-helpers";
-import { deletionsOf, localRoundsList } from "./round-list";
+import {
+  deletionsOf,
+  localRoundsList,
+  roundListItemOf,
+  type ServerRoundSummary,
+} from "./round-list";
 import type { ScoringTargetFace } from "./scorecard-scoring";
 
 const faces: ScoringTargetFace[] = [
@@ -121,5 +126,69 @@ describe("localRoundsList", () => {
     expect(inProgress).toEqual([
       { id: "round-1", name: "新規", roundDate: "2026-09-29", total: 19 },
     ]);
+  });
+});
+
+// 実際の屋外ラウンドの形(各距離12エンド×3射)は、合計の算術を見るには冗長になる。値そのものが検証の対象のため、少数の矢で確かめる。
+describe("roundListItemOf", () => {
+  const summary = (
+    distances: ServerRoundSummary["distances"],
+  ): ServerRoundSummary => ({
+    id: "round-2",
+    name: "午後練習",
+    roundDate: "2026-09-16",
+    distances,
+  });
+  const shot = (scoreInt: number, disabled = false) => ({
+    score_int: scoreInt,
+    disabled,
+  });
+
+  it("削除されていない距離の、削除されていない矢の点の和を合計点にし、id、name、roundDateをそのまま返す", () => {
+    // Given
+    const input = summary([
+      { disabled: false, shots: [shot(10), shot(9), shot(8)] },
+      { disabled: false, shots: [shot(7), shot(6)] },
+    ]);
+
+    // When
+    const result = roundListItemOf(input);
+
+    // Then
+    expect(result).toEqual({
+      id: "round-2",
+      name: "午後練習",
+      roundDate: "2026-09-16",
+      total: 40,
+    });
+  });
+
+  it("削除された距離の矢と、削除された矢を合計に含めない", () => {
+    // Given
+    const input = summary([
+      { disabled: false, shots: [shot(10), shot(9, true)] },
+      { disabled: true, shots: [shot(8)] },
+      { disabled: false, shots: [shot(7)] },
+    ]);
+
+    // When
+    const result = roundListItemOf(input);
+
+    // Then
+    expect(result.total).toBe(17);
+  });
+
+  it("距離が0件のときも、矢が0件のときも、合計点は0", () => {
+    // Given
+    const withoutDistances = summary([]);
+    const withoutShots = summary([{ disabled: false, shots: [] }]);
+
+    // When
+    const noDistances = roundListItemOf(withoutDistances);
+    const noShots = roundListItemOf(withoutShots);
+
+    // Then
+    expect(noDistances.total).toBe(0);
+    expect(noShots.total).toBe(0);
   });
 });

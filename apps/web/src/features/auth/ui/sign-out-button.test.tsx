@@ -159,6 +159,7 @@ describe("SignOutButton", () => {
         onOffline: () => () => {},
       },
       pageReplace: { here: () => "/rounds", replace: vi.fn() },
+      protectedPath: "/rounds",
     });
     render(<SignOutButton signOut={session.signOut} />);
     await user.click(screen.getByRole("button", { name: "サインアウト" }));

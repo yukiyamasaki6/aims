@@ -11,7 +11,7 @@
 
 - `src/features/auth/domain/flow.ts`: 命令の結果の型(`Start`、`Step`)と欄ごとのエラーの型(`FieldErrors`)。
 - `src/features/auth/domain/auth-failure.ts`: 失敗の種類と利用者向けの文言の表。失敗値の作成(`UNREACHABLE`など)と、確かめられなかったときの文言(`unconfirmedMessage`)も持つ。
-- `src/features/auth/domain/routes.ts`: 保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則と、要求のリダイレクト先(`redirectFor`)。`src/proxy.ts`が`lib/supabase/infrastructure/session.ts`へ関数として渡す。サインインの後の既定の行き先(`DEFAULT_DESTINATION`)は、入口から公開し、ナビゲーションの開始の行き先が使う。
+- `src/features/auth/domain/routes.ts`: 保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則と、要求のリダイレクト先(`redirectFor`)。保護の範囲の根の経路(`protectedPath`)は引数で受け、入口(`src/proxy.ts`、サインインとサインアップの画面、`(main)`のレイアウト)がラウンドの入口の`ROUNDS_PATH`を値として渡す。根はサインインの後の既定の行き先でもある。`src/proxy.ts`が`lib/supabase/infrastructure/session.ts`へ関数として渡す。既定の行き先の規則(`destinationOf`)は、入口から公開し、ナビゲーションの開始の行き先が使う。
 - `src/features/auth/domain/password.ts`: パスワードの入力と強さの規則。最小長と最大長の数値は、ここだけが持つ。規則の文面(`PASSWORD_RULE_MESSAGE`)も持ち、入力の検証と弱いパスワードの拒否が使う。
 - `src/features/auth/application/call-result.ts`: 認証サービスへの頼みごとの結果(`CallResult`)。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装。画面はブラウザの接続を、再設定の要求の入口はサーバーの接続を渡す。応答の変換(エラーのクラス名とコード、イベント名、セッションの形)も、このファイルだけが知る。
@@ -97,6 +97,6 @@
 
 ## 制約と未対応
 
-- 同期とラウンドの取得の手続きは、起動地点が生成した通信の可否を約束(`Connectivity`)で受け取る。未適用の画面の取得(`use-fetch-result.ts`、`fetch-rounds-list.ts`、`_shared/fetch-presets.ts`)は、まだ実装を自分で生成している。
-- `src/proxy.ts`の`config.matcher`は、経路を文字列で再掲する(Next.jsの静的な設定のため)。`proxy.test.ts`が一致を確かめる。
+- 同期とラウンドの取得の手続きは、起動地点が生成した通信の可否を約束(`Connectivity`)で受け取る。未適用の画面の取得(`_shared/fetch-presets.ts`)は、まだ実装を自分で生成している。
+- `src/proxy.ts`の`config.matcher`は、経路を文字列で再掲する(Next.jsの静的な設定のため)。`proxy.test.ts`が、`ROUNDS_PATH`とその下で一致することを確かめる。
 - 遷移が投げたときの扱い(再設定、サインイン、サインアップ)は未決定で、現行のまま(通信エラーを示す)。

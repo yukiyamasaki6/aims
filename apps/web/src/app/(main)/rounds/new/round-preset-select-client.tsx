@@ -13,10 +13,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { IdentityReader, SessionReader } from "@/features/auth";
-import { FetchState } from "@/features/fetch-result/fetch-state";
-import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
 import type { FetchView } from "@/features/rounds/domain/fetch-result";
 import { comparePositionKey } from "@/features/rounds/domain/position-key";
+import { FetchState } from "@/features/rounds/ui/fetch-state";
+import { useFetchResult } from "@/features/rounds/ui/use-fetch-result";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useMountedRef } from "@/hooks/use-mounted-ref";
 import { createClient } from "@/lib/supabase/infrastructure/client";

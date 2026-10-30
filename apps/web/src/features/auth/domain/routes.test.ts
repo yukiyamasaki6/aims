@@ -7,6 +7,9 @@ import {
   signInHref,
 } from "./routes";
 
+// 保護の範囲の根は使う側が渡す引数のため、既存の件は一覧の経路で確かめる。
+const ROUNDS = "/rounds";
+
 describe("allowedReturnTo", () => {
   describe("/rounds配下の相対パスの場合", () => {
     it.each([
@@ -22,7 +25,7 @@ describe("allowedReturnTo", () => {
       // Given
 
       // When
-      const result = allowedReturnTo(raw);
+      const result = allowedReturnTo(raw, ROUNDS);
 
       // Then
       expect(result).toBe(expected);
@@ -33,7 +36,7 @@ describe("allowedReturnTo", () => {
 
       // When
       const raw = "/rounds/new?a=1#section";
-      const result = allowedReturnTo(raw);
+      const result = allowedReturnTo(raw, ROUNDS);
 
       // Then
       expect(result).toBe("/rounds/new?a=1");
@@ -44,7 +47,7 @@ describe("allowedReturnTo", () => {
 
       // When
       const raw = "/rounds/x/../new";
-      const result = allowedReturnTo(raw);
+      const result = allowedReturnTo(raw, ROUNDS);
 
       // Then
       expect(result).toBe("/rounds/new");
@@ -84,7 +87,7 @@ describe("allowedReturnTo", () => {
       // Given
 
       // When
-      const result = allowedReturnTo(raw);
+      const result = allowedReturnTo(raw, ROUNDS);
 
       // Then
       expect(result).toBeNull();
@@ -96,8 +99,8 @@ describe("allowedReturnTo", () => {
       // When
       const atLimit = `/rounds/${"a".repeat(2048 - "/rounds/".length)}`;
       const overLimit = `${atLimit}a`;
-      const accepted = allowedReturnTo(atLimit);
-      const rejected = allowedReturnTo(overLimit);
+      const accepted = allowedReturnTo(atLimit, ROUNDS);
+      const rejected = allowedReturnTo(overLimit, ROUNDS);
 
       // Then
       expect(atLimit).toHaveLength(2048);
@@ -112,7 +115,7 @@ describe("destinationOf", () => {
     // Given
 
     // When
-    const result = destinationOf("/rounds/new?a=1");
+    const result = destinationOf("/rounds/new?a=1", ROUNDS);
 
     // Then
     expect(result).toBe("/rounds/new?a=1");
@@ -122,8 +125,8 @@ describe("destinationOf", () => {
     // Given
 
     // When
-    const missing = destinationOf(null);
-    const external = destinationOf("https://evil.com/rounds");
+    const missing = destinationOf(null, ROUNDS);
+    const external = destinationOf("https://evil.com/rounds", ROUNDS);
 
     // Then
     expect(missing).toBe("/rounds");
@@ -137,7 +140,7 @@ describe("signInHref", () => {
 
     // When
     const from = "/rounds/new?x=1";
-    const result = signInHref(from);
+    const result = signInHref(from, ROUNDS);
 
     // Then
     expect(result).toBe(`/signin?returnTo=${encodeURIComponent(from)}`);
@@ -149,7 +152,7 @@ describe("signInHref", () => {
 
     // When
     const from = "/rounds/new#top";
-    const result = signInHref(from);
+    const result = signInHref(from, ROUNDS);
 
     // Then
     expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew");
@@ -167,7 +170,7 @@ describe("signInHref", () => {
     // Given
 
     // When
-    const result = signInHref(from);
+    const result = signInHref(from, ROUNDS);
 
     // Then
     expect(result).toBe("/signin");
@@ -178,8 +181,8 @@ describe("signInHref", () => {
 
     // When
     const from = "/rounds/abc?a=1&b=%E3%81%82";
-    const href = signInHref(from);
-    const result = readReturnTo(href.slice(href.indexOf("?")));
+    const href = signInHref(from, ROUNDS);
+    const result = readReturnTo(href.slice(href.indexOf("?")), ROUNDS);
 
     // Then
     expect(result).toBe(from);
@@ -195,7 +198,7 @@ describe("readReturnTo", () => {
     // Given
 
     // When
-    const result = readReturnTo(search);
+    const result = readReturnTo(search, ROUNDS);
 
     // Then
     expect(result).toBe(expected);
@@ -213,7 +216,7 @@ describe("readReturnTo", () => {
     // Given
 
     // When
-    const result = readReturnTo(search);
+    const result = readReturnTo(search, ROUNDS);
 
     // Then
     expect(result).toBeNull();
@@ -276,7 +279,7 @@ describe("redirectFor", () => {
     // Given
 
     // When
-    const result = redirectFor({ ...request, ...override });
+    const result = redirectFor({ ...request, ...override }, ROUNDS);
 
     // Then
     expect(result).toBe(expected);
@@ -295,7 +298,7 @@ describe("redirectFor", () => {
     // Given
 
     // When
-    const result = redirectFor({ ...request, ...override });
+    const result = redirectFor({ ...request, ...override }, ROUNDS);
 
     // Then
     expect(result).toBeNull();
@@ -305,17 +308,23 @@ describe("redirectFor", () => {
     // Given
 
     // When
-    const signedOut = redirectFor({
-      ...request,
-      pathname: "/rounds/1",
-      isServerAction: true,
-    });
-    const signedIn = redirectFor({
-      ...request,
-      signedIn: true,
-      pathname: "/signin",
-      isServerAction: true,
-    });
+    const signedOut = redirectFor(
+      {
+        ...request,
+        pathname: "/rounds/1",
+        isServerAction: true,
+      },
+      ROUNDS,
+    );
+    const signedIn = redirectFor(
+      {
+        ...request,
+        signedIn: true,
+        pathname: "/signin",
+        isServerAction: true,
+      },
+      ROUNDS,
+    );
 
     // Then
     expect(signedOut).toBeNull();
@@ -336,7 +345,7 @@ describe("redirectFor: 要求ごとの行き先", () => {
     // Given
 
     // When
-    const result = redirectFor({ ...request, pathname: "/rounds" });
+    const result = redirectFor({ ...request, pathname: "/rounds" }, ROUNDS);
 
     // Then
     expect(result).toBe("/signin");
@@ -355,7 +364,7 @@ describe("redirectFor: 要求ごとの行き先", () => {
       // Given
 
       // When
-      const result = redirectFor({ ...request, pathname, search });
+      const result = redirectFor({ ...request, pathname, search }, ROUNDS);
 
       // Then
       expect(result).toBe(`/signin?returnTo=${encoded}`);
@@ -368,7 +377,10 @@ describe("redirectFor: 要求ごとの行き先", () => {
       // Given
 
       // When
-      const result = redirectFor({ ...request, signedIn: true, pathname });
+      const result = redirectFor(
+        { ...request, signedIn: true, pathname },
+        ROUNDS,
+      );
 
       // Then
       expect(result).toBe("/rounds");
@@ -379,12 +391,15 @@ describe("redirectFor: 要求ごとの行き先", () => {
     // Given
 
     // When
-    const result = redirectFor({
-      ...request,
-      signedIn: true,
-      pathname: "/signin",
-      search: "?returnTo=%2Frounds%2Fnew%3Fa%3D1",
-    });
+    const result = redirectFor(
+      {
+        ...request,
+        signedIn: true,
+        pathname: "/signin",
+        search: "?returnTo=%2Frounds%2Fnew%3Fa%3D1",
+      },
+      ROUNDS,
+    );
 
     // Then
     expect(result).toBe("/rounds/new?a=1");
@@ -401,12 +416,15 @@ describe("redirectFor: 要求ごとの行き先", () => {
       // Given
 
       // When
-      const result = redirectFor({
-        ...request,
-        signedIn: true,
-        pathname: "/signin",
-        search: `?returnTo=${returnTo}`,
-      });
+      const result = redirectFor(
+        {
+          ...request,
+          signedIn: true,
+          pathname: "/signin",
+          search: `?returnTo=${returnTo}`,
+        },
+        ROUNDS,
+      );
 
       // Then
       expect(result).toBe("/rounds");
@@ -419,12 +437,15 @@ describe("redirectFor: 要求ごとの行き先", () => {
       // Given
 
       // When
-      const result = redirectFor({
-        ...request,
-        signedIn: true,
-        pathname,
-        search: "?returnTo=%2Frounds%2Fnew",
-      });
+      const result = redirectFor(
+        {
+          ...request,
+          signedIn: true,
+          pathname,
+          search: "?returnTo=%2Frounds%2Fnew",
+        },
+        ROUNDS,
+      );
 
       // Then
       expect(result).toBe("/rounds");
@@ -435,9 +456,91 @@ describe("redirectFor: 要求ごとの行き先", () => {
     // Given
 
     // When
-    const result = redirectFor({ ...request, pathname: "/offline" });
+    const result = redirectFor({ ...request, pathname: "/offline" }, ROUNDS);
 
     // Then
     expect(result).toBeNull();
+  });
+});
+
+// 保護の範囲の根は引数で渡る。実在する経路でない値で、規則が根に従うことを確かめる(値そのものが検証の対象)。
+describe("保護の範囲の根を差し替えたとき", () => {
+  const Elsewhere = "/elsewhere";
+  const request = {
+    signedIn: false,
+    pathname: "/",
+    search: "",
+    isServerAction: false,
+  };
+
+  it("根とその下だけを保護の範囲にし、/roundsと根で始まる別のパスは保護しない", () => {
+    // Given
+
+    // When
+    const root = redirectFor({ ...request, pathname: "/elsewhere" }, Elsewhere);
+    const below = redirectFor(
+      { ...request, pathname: "/elsewhere/1" },
+      Elsewhere,
+    );
+    const rounds = redirectFor({ ...request, pathname: "/rounds" }, Elsewhere);
+    const prefixOnly = redirectFor(
+      { ...request, pathname: "/elsewherex" },
+      Elsewhere,
+    );
+
+    // Then
+    expect(root).toBe("/signin");
+    expect(below).toBe("/signin?returnTo=%2Felsewhere%2F1");
+    expect(rounds).toBeNull();
+    expect(prefixOnly).toBeNull();
+  });
+
+  it("遷移元に許すのは根とその下だけで、/rounds配下は拒否する", () => {
+    // Given
+
+    // When
+    const below = allowedReturnTo("/elsewhere/1", Elsewhere);
+    const rounds = allowedReturnTo("/rounds/1", Elsewhere);
+
+    // Then
+    expect(below).toBe("/elsewhere/1");
+    expect(rounds).toBeNull();
+  });
+
+  it("既定の行き先は根で、無効な遷移元でも根になる", () => {
+    // Given
+
+    // When
+    const missing = destinationOf(null, Elsewhere);
+    const outside = destinationOf("/rounds/1", Elsewhere);
+
+    // Then
+    expect(missing).toBe("/elsewhere");
+    expect(outside).toBe("/elsewhere");
+  });
+
+  it("認証済みで未認証専用の画面を開くと、根へ送る", () => {
+    // Given
+
+    // When
+    const result = redirectFor(
+      { ...request, signedIn: true, pathname: "/signin" },
+      Elsewhere,
+    );
+
+    // Then
+    expect(result).toBe("/elsewhere");
+  });
+
+  it("根の下の遷移元をreturnToに付けたサインインにし、/rounds配下の遷移元は付けない", () => {
+    // Given
+
+    // When
+    const below = signInHref("/elsewhere/1", Elsewhere);
+    const rounds = signInHref("/rounds/1", Elsewhere);
+
+    // Then
+    expect(below).toBe("/signin?returnTo=%2Felsewhere%2F1");
+    expect(rounds).toBe("/signin");
   });
 });

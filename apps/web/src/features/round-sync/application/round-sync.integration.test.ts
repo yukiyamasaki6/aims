@@ -50,11 +50,13 @@ function rig() {
   const requests = createRefreshRequests();
   const clock = createManualClock();
   const connectivity = createFakeConnectivity();
+  let issued = 0;
   const fetching = {
     fetchRoundDetail:
       vi.fn<(roundId: string) => Promise<FetchResult<FetchedRoundDetail>>>(),
     fetchRoundDetails: vi.fn(),
     fetchTargetFaces: vi.fn(),
+    fetchRoundsList: vi.fn(async () => ({ status: "ok", data: [] }) as const),
     savedTargetFaces: () => null,
   };
   const reconciliation = createRoundReconciliation({
@@ -94,6 +96,7 @@ function rig() {
     fetching: fetching as unknown as RoundFetching,
     clock,
     connectivity,
+    ids: { next: () => `event-${++issued}` },
   });
   sync.start("user-1");
   return { sync, store, requests, fetching, clock };
@@ -165,10 +168,7 @@ describe("詳細を開く依頼と同期", () => {
     const t = rig();
     t.fetching.fetchRoundDetail.mockReturnValue(new Promise(() => {}));
     const detailLoading = t.store.load("r1");
-    const listLoading = t.store.loadList(async () => ({
-      status: "ok",
-      data: [],
-    }));
+    const listLoading = t.store.loadList();
     await flush();
 
     // When
@@ -244,7 +244,7 @@ describe("一覧と常駐の取得", () => {
     await flush();
 
     // When
-    const loading = t.store.loadList(async () => ({ status: "ok", data: [] }));
+    const loading = t.store.loadList();
     await flush();
 
     // Then

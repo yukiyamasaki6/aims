@@ -3,6 +3,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import SignInPage from "./page";
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
@@ -104,7 +105,7 @@ describe("サインイン画面の入口", () => {
       password: "password1",
       options: { captchaToken: "captcha-token" },
     });
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith("/rounds");
+    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
   });
 
   it("入口から通して連打しても、認証サービスへの送信は1回だけで、遷移も1回になる", async () => {
@@ -121,7 +122,7 @@ describe("サインイン画面の入口", () => {
 
     // Then
     expect(auth.signInWithPassword).toHaveBeenCalledOnce();
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith("/rounds");
+    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
   });
 
   it("Supabaseの環境変数が無くても描画でき、接続を作らない", () => {
@@ -221,12 +222,12 @@ describe("サインイン画面の入口", () => {
       await user.click(submitButton());
 
       // Then
-      expect(navigation.push).toHaveBeenCalledExactlyOnceWith("/rounds");
+      expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
     },
   );
 
   it.each([
-    ["遷移元なし", "", "/rounds"],
+    ["遷移元なし", "", ROUNDS_PATH],
     ["遷移元付き", "?returnTo=%2Frounds%2Fnew", "/rounds/new"],
   ])(
     "認証サービスが認証の拒否を返しても(%s)、文言を示し、使用済みのトークンでの再送を拒み、新しいトークンで再送信して遷移できる",
@@ -268,7 +269,7 @@ describe("サインイン画面の入口", () => {
   );
 
   it.each([
-    ["遷移元なし", "", "/rounds"],
+    ["遷移元なし", "", ROUNDS_PATH],
     ["遷移元付き", "?returnTo=%2Frounds%2Fnew", "/rounds/new"],
   ])(
     "認証サービスが通信の断を値で返したときは(%s)、文言を示し、チェックをやり直さずに同じトークンで再送信して遷移できる",
@@ -354,6 +355,6 @@ describe("サインイン画面の入口", () => {
       password: "password1",
       options: { captchaToken: "captcha-token-2" },
     });
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith("/rounds");
+    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
   });
 });

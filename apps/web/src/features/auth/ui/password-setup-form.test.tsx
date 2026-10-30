@@ -69,6 +69,7 @@ const subjects: {
         authenticator: auth,
         registration: auth,
         navigation: { go: leave },
+        protectedPath: "/rounds",
       }),
     form: (procedure) => <SignUpForm signUp={procedure} />,
     emailHeading: "サインアップ",

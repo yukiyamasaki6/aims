@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { FetchView } from "./fetch-result";
 import type {
   LoadedRoundsList,
   LocalRoundsList,
-} from "@/features/rounds/application/rounds-store";
-import type { FetchView } from "@/features/rounds/domain/fetch-result";
-import type { RoundListItem } from "./fetch-rounds-list";
-import { overlayRoundsList, roundsListView } from "./overlay-rounds-list";
+  RoundListItem,
+} from "./round-list";
+import { overlayRoundsList, roundsListView } from "./rounds-list-view";
 
 function item(id: string, roundDate = "2026-09-15", total = 0): RoundListItem {
   return { id, name: id, roundDate, total };

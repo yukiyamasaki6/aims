@@ -10,6 +10,7 @@ import type { FetchResult } from "@/features/rounds/domain/fetch-result";
 import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
 import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
+import { createFakeRoundsStore } from "@/features/rounds/ui/rounds-store-test-helpers";
 import { RoundDetailClient } from "./round-detail-client";
 import { useCreationGone } from "./use-creation-gone";
 
@@ -24,7 +25,10 @@ vi.mock("next/navigation", () => ({
 
 // 取得とスコアカードは別のテストで確かめるため、ラウンドの状態は読み込みだけを返す偽の約束に、スコアカードはスタブにする。
 const load = vi.fn<RoundsStore["load"]>();
-const store = { load } as unknown as RoundsStore;
+// offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
+const fake = createFakeRoundsStore({ load });
+fake.goOffline();
+const store = fake.store;
 vi.mock("./use-creation-gone", () => ({ useCreationGone: vi.fn() }));
 const creationGone = vi.mocked(useCreationGone);
 vi.mock("./scorecard-client", () => ({
@@ -115,8 +119,6 @@ function resolves(result: FetchResult<LoadedRoundDetail>) {
 }
 
 beforeEach(() => {
-  // offlineの結果が返る状況はnavigator.onLineがfalseである(trueのままだと、すぐ再取得する)。
-  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   vi.clearAllMocks();
   nav.pathname = `/rounds/${ID}`;
 });

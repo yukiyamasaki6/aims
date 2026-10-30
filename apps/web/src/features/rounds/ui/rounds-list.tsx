@@ -11,31 +11,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { SessionReader } from "@/features/auth";
-import { FetchState } from "@/features/fetch-result/fetch-state";
-import { useFetchResult } from "@/features/fetch-result/use-fetch-result";
-import type { LoadedRoundsList } from "@/features/rounds/application/rounds-store";
-import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
 import { useHydrated } from "@/hooks/use-hydrated";
-import { createClient } from "@/lib/supabase/infrastructure/client";
-import { deleteRound } from "./_shared/delete-round";
-import { fetchRoundsList, type RoundListItem } from "./fetch-rounds-list";
-import { loadRoundsList } from "./load-rounds-list";
-import { roundsListView } from "./overlay-rounds-list";
+import type { LoadedRoundsList, RoundListItem } from "../domain/round-list";
+import { NEW_ROUND_PATH, roundPath } from "../domain/round-routes";
+import {
+  type RoundsListView,
+  roundsListView,
+} from "../domain/rounds-list-view";
+import { FetchState } from "./fetch-state";
+import { useRoundsStore } from "./rounds-context";
+import { useFetchResult } from "./use-fetch-result";
 import { useLocalRoundsList } from "./use-local-rounds-list";
 
-export function RoundsListClient({
-  sessionReader,
-}: {
-  sessionReader: SessionReader;
-}) {
+export function RoundsList() {
   const hydrated = useHydrated();
   const store = useRoundsStore();
   const { view, retry } = useFetchResult<LoadedRoundsList>(
-    () =>
-      loadRoundsList(store, () =>
-        fetchRoundsList(createClient(), sessionReader),
-      ),
+    () => store.loadList(),
     [],
   );
   const { local, waited } = useLocalRoundsList();
@@ -57,7 +49,7 @@ export function RoundsListClient({
     setTarget({
       name: round.name,
       confirm: () => {
-        void deleteRound(store, round.id);
+        void store.deleteRound(round.id);
         setRemoved((prev) => new Set(prev).add(round.id));
       },
     });
@@ -81,7 +73,7 @@ export function RoundsListClient({
       />
 
       <Link
-        href="/rounds/new"
+        href={NEW_ROUND_PATH}
         data-hydrated={hydrated}
         data-testid="new-round-fab"
         aria-label="ラウンドを新規作成"
@@ -95,11 +87,7 @@ export function RoundsListClient({
 
 // 進行中の区画の下に出す内容。何も出さないときはnull。
 function belowSection(
-  {
-    others,
-    empty,
-    rest,
-  }: Pick<ReturnType<typeof roundsListView>, "others" | "empty" | "rest">,
+  { others, empty, rest }: Pick<RoundsListView, "others" | "empty" | "rest">,
   retry: () => void,
   onDelete: (round: RoundListItem) => void,
 ): ReactNode {
@@ -196,7 +184,7 @@ function RoundCards({
       {rounds.map((round) => (
         <li key={round.id} className="relative">
           <Link
-            href={`/rounds/${round.id}`}
+            href={roundPath(round.id)}
             className="flex items-center justify-between rounded-xl border bg-card p-4 pr-12 text-card-foreground shadow-sm transition-colors hover:bg-muted/60"
           >
             <span className="flex flex-col gap-0.5">

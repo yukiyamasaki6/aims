@@ -34,8 +34,15 @@ function useOpenState() {
   };
 }
 
+// personalHref: 個人リンクの行き先。入口が渡す。
 // signOut: 下端に置くサインアウトの操作。入口が渡す。
-export function LeftPanel({ signOut }: { signOut: ReactNode }) {
+export function LeftPanel({
+  personalHref,
+  signOut,
+}: {
+  personalHref: string;
+  signOut: ReactNode;
+}) {
   const { wideOpen, compactOpen, animate, operate } = useOpenState();
 
   return (
@@ -67,6 +74,7 @@ export function LeftPanel({ signOut }: { signOut: ReactNode }) {
         <PanelBody
           wideOpen={wideOpen}
           compactOpen={compactOpen}
+          personalHref={personalHref}
           signOut={signOut}
         />
       </aside>
@@ -77,10 +85,12 @@ export function LeftPanel({ signOut }: { signOut: ReactNode }) {
 function PanelBody({
   wideOpen,
   compactOpen,
+  personalHref,
   signOut,
 }: {
   wideOpen: boolean;
   compactOpen: boolean;
+  personalHref: string;
   signOut: ReactNode;
 }) {
   return (
@@ -93,7 +103,7 @@ function PanelBody({
         )}
       >
         <Link
-          href="/rounds"
+          href={personalHref}
           className="rounded-lg bg-muted px-3 py-2 text-sm font-medium"
         >
           個人

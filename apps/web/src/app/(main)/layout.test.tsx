@@ -9,6 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import { RootClientEntry } from "../root-client-entry";
 import MainLayout from "./layout";
 
@@ -147,6 +148,18 @@ describe("MainLayout", () => {
         screen.getByRole("button", { name: "サインアウト" }),
       );
       expect(screen.getByText("子要素")).toBeInTheDocument();
+    });
+
+    it("左パネルの個人リンクは、一覧の経路を向く", () => {
+      // Given
+      // When
+      renderLayout();
+
+      // Then
+      expect(screen.getByRole("link", { name: "個人" })).toHaveAttribute(
+        "href",
+        ROUNDS_PATH,
+      );
     });
 
     it("Supabaseの環境変数が無くても、描画時に接続を作らず描画できる", () => {

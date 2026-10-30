@@ -45,16 +45,19 @@
 | `features/rounds/domain/record-user.ts` | ドメイン層(ドメインサービス) | 記録の利用者の照合`matchRecordUser`(`same`、`other`、`unowned`。認証の通知への反応、送る前、常駐の一括の取得の前段、取得の反映が使う) |
 | `features/rounds/domain/round-base.ts`、`round-tables.ts` | ドメイン層(値オブジェクト) | 端末に持つベースの記録(`RoundBaseRecord`。サーバーの状態と対象ごとの`revision`)と、反映済みの判定`reflectsBase`(確定の`revision`と取得の`revision`の比較1つ。効かなかった操作は反映済み、削除の印には確定済みの操作がすべて反映済み)・ベースの新旧`isOlderBase`。サーバーのテーブルの行の形(`RoundTables`。行は削除済みの印`disabled`を持つ)と、画面の状態(`RoundState`)を導く`selectRoundState`、取得した行を表示の状態に直す`fromServerRound` |
 | `features/rounds/domain/round-op-apply.ts`、`round-retention.ts` | ドメイン層(ドメインサービス) | 基準のテーブルへ操作を重ねる`applyOperations(base, 操作, 的)`。操作ごとの処理は、サーバーの対応するRPCと同じ判定の順序にする。未確定の操作は、サーバーと同じ規則で項目ごとに判定し、確定済みの操作はサーバーが効かせた項目だけを重ねる。構成の変更は矢を取り除かない(サーバーと同じ)。生きている矢を増やす記録(新しい矢、復活)は、確定の有無によらずエンドに空きがあるときだけ重ね、確定済みで重ねられなかったときは取り直す。射順(`shot_number`)が同じエンドの他の生きている矢と重なる項目は重ねず、復活で重なるときは射順をnullにして重ねる。端末に保持するかの規則(`isRoundInProgress`、`shouldKeepRoundBase`、`keepsRoundBase`、`isRetainedForRefresh`) |
-| `features/rounds/domain/round-view.ts`、`round-list.ts` | ドメイン層(ドメインサービス) | 開くときの判断(`openPlan`、`localOpening`)、画面の状態の導出、作成が確定せずに消えたかの判定、取り直しの要否`freshBaseNeeds`。一覧の削除済みと入力中の導出 |
+| `features/rounds/domain/round-view.ts`、`round-list.ts` | ドメイン層(ドメインサービス) | 開くときの判断(`openPlan`、`localOpening`)、画面の状態の導出、作成が確定せずに消えたかの判定、取り直しの要否`freshBaseNeeds`。一覧の削除済みと入力中と合計点の導出、一覧の材料の型 |
+| `features/rounds/domain/rounds-list-view.ts` | ドメイン層(ドメインサービス) | 一覧の重ね合わせと表示の内容の決定 |
+| `features/rounds/domain/round-routes.ts` | ドメイン層(値オブジェクト) | ラウンドの画面の経路(`ROUNDS_PATH`、`NEW_ROUND_PATH`、`roundPath`) |
 | `features/rounds/domain/open-requests.ts`、`list-requests.ts` | ドメイン層(集約) | 取り直しの依頼の規則。開く依頼は、ラウンドごとの依頼の番号、待っている依頼、記録の権利、結果の分類を持つ。一覧の依頼は、依頼の番号、成否、実行に含めた依頼を持つ |
 | `features/rounds/domain/fetch-result.ts` ほか | ドメイン層(値オブジェクト) | 取得の結果の分類と文言、時間制限の値(`FETCH_TIMEOUT_MS`、`FALLBACK_WAIT_MS`)、複数の応答を畳む優先順。`round-config.ts`、`round-constants.ts`、`scorecard-types.ts`、`target-face-types.ts`、`position-key.ts`、`scorecard-scoring.ts` |
 | `features/rounds/application/round-record-hub.ts` | 手続き | アプリで1つの端末の記録。列ごとの記録を集約の値として保ち、保存の完了を待って変化を知らせる。起動時の読み込みの完了を待つ`ready`、保存先を読む`read`・`readStored`、メモリの`readAll`、取得したベースを反映する`commit`。手続きの約束`RecordChannel`(記録の変化を他のタブへ知らせる) |
-| `features/rounds/application/refresh-requests.ts`、`rounds-store.ts` | 手続き | 取り直しの依頼の記録と、画面に渡す状態と変更の方法(`RoundsStore`)・見え方の型 |
-| `features/rounds/application/refresh-round-bases.ts`、`fetch-round-detail.ts`、`fetch-content.ts`、`time-limit.ts` | 手続き | ベースの取得と反映(`refreshAll`、`refreshRound`)、取得の順序(的の保存、遅れた結果の保存だけ)、認証を確かめた取得と取り直し・時間制限。約束`RoundQueries`、`ReferenceSnapshots`、`SignInReader`。時間制限の補助(`withinTime`)は、取得と画面の状態の2つの手続きが使う |
+| `features/rounds/application/refresh-requests.ts`、`rounds-store.ts` | 手続き | 取り直しの依頼の記録と、画面に渡す状態と変更の方法(`RoundsStore`。削除`deleteRound`と合図`whenOnline`、`afterFallbackWait`を含む)・見え方の型。約束`EventIds`(操作のイベントIDの払い出し) |
+| `features/rounds/application/refresh-round-bases.ts`、`fetch-round-detail.ts`、`fetch-content.ts`、`time-limit.ts` | 手続き | ベースの取得と反映(`refreshAll`、`refreshRound`)、取得の順序(的の保存、遅れた結果の保存だけ、一覧の取得`fetchRoundsList`)、認証を確かめた取得と取り直し・時間制限。約束`RoundQueries`、`ReferenceSnapshots`、`SignInReader`。時間制限の補助(`withinTime`)は、取得と画面の状態の2つの手続きが使う |
 | `features/rounds/application/send-operations.ts`、`round-reconciliation.ts` | 手続き | 操作の送信と確定の記録(約束`RoundTransport`)、同期へ公開する突き合わせの操作`RoundReconciliation` |
-| `features/rounds/index.ts` | 機能の入口 | `RoundReconciliation`と`FALLBACK_WAIT_MS`を公開する |
-| `features/rounds/infrastructure/` | インフラ層 | `round-op-transport.ts`(操作の種類ごとにRPCを呼び、操作ごとの判定結果を返す)、`round-queries.ts`(取得の問い合わせと行の写し)、`rounds-db-schema.ts`(ラウンドが使うスキーマの部分の型)、`reference-snapshot.ts`、`reference-query-constants.ts`、`browser-record-channel.ts`(チャネル`aims-sync`)、`auth-sign-in-reader.ts`(認証の入口を自分の約束で包む) |
+| `features/rounds/index.ts` | 機能の入口 | `RoundReconciliation`、`FALLBACK_WAIT_MS`、`ROUNDS_PATH`を公開する |
+| `features/rounds/infrastructure/` | インフラ層 | `round-op-transport.ts`(操作の種類ごとにRPCを呼び、操作ごとの判定結果を返す)、`round-queries.ts`(取得の問い合わせ、一覧の問い合わせと行の写し)、`browser-event-ids.ts`(イベントIDの払い出し)、`rounds-db-schema.ts`(ラウンドが使うスキーマの部分の型。一覧が並べる列を含む)、`reference-snapshot.ts`、`reference-query-constants.ts`、`browser-record-channel.ts`(チャネル`aims-sync`)、`auth-sign-in-reader.ts`(認証の入口を自分の約束で包む) |
 | `features/rounds/ui/rounds-context.tsx` | UI層 | `RoundsStoreProvider`と`useRoundsStore` |
+| `features/rounds/ui/rounds-list.tsx`、`use-local-rounds-list.ts`、`use-fetch-result.ts`、`fetch-state.tsx` | UI層 | 一覧の描画と削除のメニュー、端末の入力中のラウンドの読み込みと待ちの経過、画面の取得の状態と再取得、取得の状態の表示。オフライン表示の間の読み直しは`RoundsStore.whenOnline`で受ける |
 | `features/round-sync/domain/send-queue.ts`、`flight-gate.ts` | ドメイン層(集約) | 1つの列の送信の状態(待ち、送信中、リトライ待機、保留、単独の印、要求)と、同時に1回までの実行の制御 |
 | `features/round-sync/domain/op-plan.ts`、`sync-failure.ts`、`sync-trigger.ts` | ドメイン層(ドメインサービス) | 送れる要求の計画(衝突する先行がある操作を含めない)。送信の失敗を、再試行する(`retry`)・保留する(`hold`。未認証)・破棄する(`discard`。`PT403`と`PT422`)・切り分けるに分ける判定と再試行の間隔`retryDelayMs`。契機への反応の規則 |
 | `features/round-sync/application/` | 手続き | `op-sender.ts`(送信器。約束`SenderLock`)、`round-sync.ts`(いつ送り、いつ取り直すかを決める唯一の手続き)、`sync-triggers.ts`(契機の受け取り。約束`Visibility`) |
@@ -62,8 +65,7 @@
 | `features/round-sync/ui/round-base-refresher.tsx` | UI層 | 常駐の一括の取得の成功の回数を`data-refreshed-count`に出す |
 | `lib/local-op-log/` | 共有の技術(操作の列の端末の保存) | 約束`contract/op-log-store.ts`と、IndexedDBの実装`infrastructure/indexeddb-op-log-store.ts`。DB`aims-sync`のstore`ops`(`seq`が`autoIncrement`)と`bases`(キーは`[userId, streamId]`。取得の開始時刻`startedAt`と、ベースまたは削除の印`null`)。追記、`loadStream`・`loadAll`(現在のユーザーの組)、取得したベースを反映する`commit`、`ack`、`retire`。組を変える`commit`・`ack`・追記は`ops`と`bases`にまたがる1つのトランザクションで行い、途中で失敗すれば両方とも変えない。`commit`は、保存済みより`startedAt`が古い取得では何も変えない。保存済みのベース、または記録が最後に取り込んだベースよりrevisionが古い取得も反映しない(`isOlder`)。新しければ、ベースに反映済みの操作を消し、保持の規則に当たればベースを保存し、当たらなければ組(ベースと操作)を丸ごと消す(ベースに反映されていない操作が残る組は必ず当たる。古い取得で新しい保存を上書き・削除しない)。`ack`は確定を記録するだけで、操作を消さない。versionの更新を待たれたとき(`blocking`)は接続を閉じて次の呼び出しで開き直し、古い接続が閉じず更新が待たされるとき(`blocked`)は開けなかったものとして、既存の保存失敗の扱い(メモリの記録から送る)に落とす。versionの更新では、全てのstoreを内容を移行せずに作り直す |
 | `lib/clock/`、`lib/connectivity/`、`lib/supabase/` | 共有の技術 | 時刻(`Clock`)、通信の可否(`Connectivity`。復帰と切断の通知を持つ)、データベースへの問い合わせと手続きの呼び出し(スキーマの形を型引数で受ける`DatabaseGateway<S>`と実装。ラウンドは使う部分の型`RoundsDbSchema`を宣言し、起動地点が`narrowDatabase`で生成した型と照合して受け取る) |
-| `app/(main)/rounds/` | 未適用の画面 | `use-round-op-stack.ts`は`RoundsStore`の`round(...)`を購読して追記するフック(`use-scorecard.ts`が使う)、`use-creation-gone.ts`は作成が確定せずに消えたときに知らせる。`_shared/delete-round.ts`はラウンドの削除(`round.disabled`の追記)。取得の関数(`fetch-rounds-list.ts`、`_shared/fetch-presets.ts`)は呼び出しのたびに取得の部品を作る |
-| `features/fetch-result/use-fetch-result.ts`、`fetch-state.tsx` | ラウンドの未適用のファイル | 画面の再取得の汎用の部品。使い手がラウンドの画面だけのため、置き場は動かさない。オフライン表示の間の`online`での読み直しは表示の読み直しの契機で、同期の経路ではない |
+| `app/(main)/rounds/` | 未適用の画面 | `use-round-op-stack.ts`は`RoundsStore`の`round(...)`を購読して追記するフック(`use-scorecard.ts`が使う)、`use-creation-gone.ts`は作成が確定せずに消えたときに知らせる。取得の関数(`_shared/fetch-presets.ts`)は呼び出しのたびに取得の部品を作る |
 | `SessionReader`の`readSession`(認証の機能の入口が公開する型。実装は`features/auth/infrastructure/supabase-auth.ts`) | 認証の入口 | 保存先を読み直して、認証済み・未認証（確定）・不明に分ける。同期は`SessionReader`の型で直接、取得の手続きは`SignInReader`の型で、送信と取得のたびに読む。認証の変化は`SignInChanges`の型で同期の契機の受け取りが1本だけ受ける |
 
 契機の受け取り(`sync-triggers.ts`)は、規則(`sync-trigger.ts`)で同期の手続きの操作に変える。
@@ -83,7 +85,7 @@
 一括の取得は、常駐の契機(サインイン、開いたときの確認、通信の復帰、見える状態)と、一覧を開いたときの依頼で行う。常駐の取得と一覧の取得は別々に走り、一覧は常駐の取得の終わりを待たない。常駐の契機では、サインイン済みで記録の利用者と同じときだけ取得と反映を行い、一覧の依頼だけの実行は、一覧の取得が成功したときだけ反映する。成功の回数は、常駐の前段を通って反映した実行だけを数える。
 1つのラウンドの取り直しは、開いたときの依頼を常に行い(開いたときの依頼は、取り直しの実行中でもすぐに始める)、端末のベースで開いた後の取り直し、効かなかった結果、重ねられなかった確定済みの操作は、オフラインでは行わない。端末のベースで開いている間は、`retryDelayMs`の間隔で取り直し、通信の復帰と見える状態で試行を0から数え直し、切断で時計を止める。
 
-画面に渡す状態と変更の方法(`RoundsStore`)は、詳細を開く`load`、一覧を開く`loadList`、端末だけの一覧`loadLocalList`、開いた詳細の購読と追記`round`、追記`append`を持つ。詳細は、端末の記録を読み、削除があれば取得せずに削除済みを返し、確定していない作成があれば取得せずに作成の操作を基準にする。サーバーの状態は同期が取得して反映した結果を待ち、通信できないとき(オフライン、取得の失敗、取得が`FALLBACK_WAIT_MS`を超えた)は、端末の記録が保持の規則に当たれば端末のベースで開く。全体を`FETCH_TIMEOUT_MS`で打ち切り、打ち切った時点の通信の可否でofflineかerrorを返す。端末の保存(`aims-sync`)は、現在の形のデータだけを前提にする。
+画面に渡す状態と変更の方法(`RoundsStore`)は、詳細を開く`load`、一覧を開く`loadList`、端末だけの一覧`loadLocalList`、開いた詳細の購読と追記`round`、追記`append`、ラウンドの削除`deleteRound`、通信の復帰の合図`whenOnline`、待ちの経過の合図`afterFallbackWait`を持つ。`loadList`は一覧の取得を自分で行う。合図は表示の読み直しと切り替えの合図で、同期の経路ではない。詳細は、端末の記録を読み、削除があれば取得せずに削除済みを返し、確定していない作成があれば取得せずに作成の操作を基準にする。サーバーの状態は同期が取得して反映した結果を待ち、通信できないとき(オフライン、取得の失敗、取得が`FALLBACK_WAIT_MS`を超えた)は、端末の記録が保持の規則に当たれば端末のベースで開く。全体を`FETCH_TIMEOUT_MS`で打ち切り、打ち切った時点の通信の可否でofflineかerrorを返す。端末の保存(`aims-sync`)は、現在の形のデータだけを前提にする。
 
 流れは次のとおりである。
 

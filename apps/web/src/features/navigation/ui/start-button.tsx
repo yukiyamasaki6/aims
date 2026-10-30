@@ -6,7 +6,7 @@ import { buttonVariants } from "@/components/ui/button";
 import type { Start } from "../application/start";
 
 // 判定中はサインアップへの有効なリンクとして表示する。判定中に認証済みの利用者が
-// 押しても、/signupの認証済みリダイレクトで/roundsへ着く。
+// 押しても、/signupの認証済みリダイレクトで、サインインの後の既定の行き先へ着く。
 export function StartButton({ start }: { start: Start }) {
   const [href, setHref] = useState(start.pendingHref);
   const [decided, setDecided] = useState(false);

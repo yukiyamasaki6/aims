@@ -7,6 +7,9 @@ import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
+import { createRoundsStore } from "@/features/rounds/application/rounds-store";
+import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
+import { createBrowserEventIds } from "@/features/rounds/infrastructure/browser-event-ids";
 import { roundCreated } from "@/features/rounds/round-op-test-helpers";
 import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
 import { RootClientEntry } from "./root-client-entry";
@@ -109,6 +112,40 @@ vi.mock(
         typeof import("@/features/rounds/application/round-record-hub")
       >();
     return { createRoundRecordHub: vi.fn(actual.createRoundRecordHub) };
+  },
+);
+vi.mock(
+  "@/features/rounds/application/rounds-store",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/rounds-store")
+      >();
+    return { ...actual, createRoundsStore: vi.fn(actual.createRoundsStore) };
+  },
+);
+vi.mock(
+  "@/features/rounds/infrastructure/auth-sign-in-reader",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/infrastructure/auth-sign-in-reader")
+      >();
+    return {
+      createAuthSignInReader: vi.fn(actual.createAuthSignInReader),
+    };
+  },
+);
+vi.mock(
+  "@/features/rounds/infrastructure/browser-event-ids",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/infrastructure/browser-event-ids")
+      >();
+    return {
+      createBrowserEventIds: vi.fn(actual.createBrowserEventIds),
+    };
   },
 );
 vi.mock(
@@ -280,6 +317,32 @@ describe("RootClientEntry", () => {
       const triggers = vi.mocked(createSyncTriggers).mock.calls[0][0];
       expect(triggers.changes).toBe(changes);
       expect(triggers.identityReader).toBe(writer);
+    });
+
+    it("操作のイベントIDの払い出しは1度だけ生成し、ラウンドの状態と変更の方法へ渡して、再描画で作り直さない", () => {
+      // Given
+      const { rerender } = render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // When
+      rerender(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      expect(createBrowserEventIds).toHaveBeenCalledTimes(1);
+      expect(createRoundsStore).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(createRoundsStore).mock.calls[0][0].ids).toBe(
+        vi.mocked(createBrowserEventIds).mock.results[0].value,
+      );
+    });
+
+    it("一覧の取得に使うサインインの読み取りが、記録の手続きと共有する認証の実装を使う", () => {
+      // Given
+      // When
+      render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      const { changes } = vi.mocked(createLocalIdentity).mock.calls[0][0];
+      expect(createAuthSignInReader).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(createAuthSignInReader).mock.calls[0][0]).toBe(changes);
     });
 
     it("画面の追記、再読み込みの前の保存の待ち、同期が、同じ記録のハブを使う", async () => {

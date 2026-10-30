@@ -20,14 +20,14 @@
 
 ## 構成とデータの流れ
 
-- `rounds/rounds-list-client.tsx`: 一覧のカードのメニューと、削除済みの集合によるカードの除去。
+- `apps/web/src/features/rounds/ui/rounds-list.tsx`: 一覧のカードのメニューと、削除済みの集合によるカードの除去。
 - `rounds/[id]/round-menu.tsx`: 詳細のヘッダーのメニュー。保存の後に`/rounds`へ置き換えて遷移する。
-- `rounds/_shared/delete-round.ts`: `round.disabled`を新しい`eventId`で列へ追記する。保存の試みの完了で解決し、拒否しない。
+- `apps/web/src/features/rounds/application/rounds-store.ts`の`RoundsStore.deleteRound`: `round.disabled`を新しい`eventId`(約束`EventIds`、実装は`features/rounds/infrastructure/browser-event-ids.ts`)で列へ追記する。保存の試みの完了で解決し、拒否しない。
 - `components/ui/confirm-dialog.tsx`の`ConfirmDialog`: 確認後すぐ閉じる。
-- `rounds/overlay-rounds-list.ts`、`rounds/load-rounds-list.ts`: 一覧の取得結果と端末の入力中のラウンドから、列で削除済みのラウンドを除く（`rounds/history`）。
+- `apps/web/src/features/rounds/domain/rounds-list-view.ts`: 一覧の取得結果と端末の入力中のラウンドから、列で削除済みのラウンドを除く（`rounds/history`）。
 - `features/rounds/application/rounds-store.ts`の`load`: 列に削除があれば、取得せずに削除済みを返す（`rounds/detail`）。
 
-流れは、メニューから確認ダイアログを開き、確認で`deleteRound`を呼ぶ。
+流れは、メニューから確認ダイアログを開き、確認で`store.deleteRound`を呼ぶ。
 一覧は、そのラウンドを削除済みの集合へ足して除く。詳細は、保存の完了後に`/rounds`へ置き換える。
 送信は常駐の送信器が行い、画面が閉じても続く。未確定の作成のラウンドは、既存の衝突規則で作成の確定を待って削除が送られる。
 認可の拒否と契約の不一致は破棄され、一覧を取得し直すとラウンドが再表示される。
@@ -49,7 +49,7 @@
 | 削除を、`disabled_at`による論理削除にする | 追記専用のイベントログと射影を用いるため。再送しても二重に適用されない | 保持期間や物理削除の運用を決めるとき |
 | 認可を、RPC内の`round_users.role = 'editor'`の確認で行う | 書き込みを権限確認するRPCの境界へ統一したため。クライアントのセッション確認は予防にすぎず、画面の入口が生成して渡す`SessionReader`の`readSession`で未認証と不明（通信失敗）を区別し（ラウンド削除とプリセット削除で同じ判定）、`getUser()`でなく`getSession()`を使う | 認可の方式を変えるとき |
 | 詳細のメニューを、`RoundConfigPanel`でなくページのヘッダーに置く | 将来の印刷・共有などラウンド全体の操作の置き場も兼ねるため | ラウンド全体の操作を別の場所へ集めるとき |
-| 列への追記を`_shared/delete-round.ts`で共通にし、画面からの除去は各画面が行う | 一覧と詳細で処理が重複していたため | 画面ごとの成功後の処理が揃うとき |
+| 列への追記を`RoundsStore.deleteRound`で共通にし、画面からの除去は各画面が行う | 一覧と詳細で処理が重複していたため | 画面ごとの成功後の処理が揃うとき |
 
 ## 制約と未対応
 

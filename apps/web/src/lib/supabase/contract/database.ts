@@ -29,10 +29,15 @@ type DbFilter<S extends DbSchema, T extends TableOf<S>> =
   | { op: "in"; column: ColumnOf<S, T>; values: readonly string[] }
   | { op: "or"; expression: string };
 
+// ascendingの既定は昇順。
 export type DbOrder<S extends DbSchema, T extends TableOf<S>> =
-  | { column: ColumnOf<S, T> }
+  | { column: ColumnOf<S, T>; ascending?: boolean }
   | {
-      [R in TableOf<S>]: { column: ColumnOf<S, R>; referencedTable: R };
+      [R in TableOf<S>]: {
+        column: ColumnOf<S, R>;
+        referencedTable: R;
+        ascending?: boolean;
+      };
     }[TableOf<S>];
 
 export type DbSelect<S extends DbSchema, T extends TableOf<S>> = {

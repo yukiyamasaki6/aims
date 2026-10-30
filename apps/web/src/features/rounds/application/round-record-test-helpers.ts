@@ -84,14 +84,17 @@ export function createTestRoundsStore(
     fetchTargetFaces: vi.fn(),
     fetchRoundDetail: vi.fn(),
     fetchRoundDetails: vi.fn(),
+    fetchRoundsList: vi.fn(),
     savedTargetFaces: vi.fn(() => options.savedFaces ?? null),
   };
+  let issued = 0;
   const store = createRoundsStore({
     hub,
     requests,
     fetching: fetching as unknown as RoundFetching,
     clock,
     connectivity,
+    ids: { next: () => `event-${++issued}` },
   });
   hub.start(options.userId === undefined ? "user-1" : options.userId);
   return { store, hub, opLog, bus, requests, clock, connectivity, fetching };

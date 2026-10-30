@@ -51,6 +51,7 @@ function renderForm(options?: { strict?: boolean }) {
     authenticator: auth,
     registration: auth,
     navigation: nav,
+    protectedPath: "/rounds",
   });
   const form = <SignUpForm signUp={signUp} />;
   return render(options?.strict ? <StrictMode>{form}</StrictMode> : form);

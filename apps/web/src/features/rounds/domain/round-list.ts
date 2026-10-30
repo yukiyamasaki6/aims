@@ -12,6 +12,40 @@ export type RoundListItem = {
   total: number;
 };
 
+// 一覧の1件のサーバーの状態。合計点を求めるための、距離と矢の削除の印と点だけを持つ。
+export type ServerRoundSummary = {
+  id: string;
+  name: string;
+  roundDate: string;
+  distances: {
+    disabled: boolean;
+    shots: { score_int: number; disabled: boolean }[];
+  }[];
+};
+
+// 端末の記録だけから求めた、入力中のラウンドと削除済みのラウンドのID。
+export type LocalRoundsList = {
+  inProgress: RoundListItem[];
+  deleted: ReadonlySet<string>;
+};
+
+// 一覧の材料。items はサーバーの一覧(端末の列は重ねていない。入力中も含む)、inProgress は取得を端末の記録へ反映した後に求めた入力中、deleted は端末の列で削除済みのID。
+export type LoadedRoundsList = LocalRoundsList & { items: RoundListItem[] };
+
+// 合計点は、削除されていない距離の削除されていない矢の点の和で求める。
+export function roundListItemOf(summary: ServerRoundSummary): RoundListItem {
+  return {
+    id: summary.id,
+    name: summary.name,
+    roundDate: summary.roundDate,
+    total: summary.distances
+      .filter((d) => !d.disabled)
+      .flatMap((d) => d.shots)
+      .filter((s) => !s.disabled)
+      .reduce((sum, s) => sum + s.score_int, 0),
+  };
+}
+
 type ListSnapshot = {
   base: RecordBase | undefined;
   operations: readonly AppliedOperation[];
@@ -42,7 +76,7 @@ export function deletionsOf(snapshots: ReadonlyMap<string, ListSnapshot>): {
 export function localRoundsList(
   snapshots: ReadonlyMap<string, ListSnapshot>,
   faces: ScoringTargetFace[],
-): { inProgress: RoundListItem[]; deleted: Set<string> } {
+): LocalRoundsList {
   const inProgress: RoundListItem[] = [];
   const deleted = new Set<string>();
   for (const [roundId, { base, operations }] of snapshots) {

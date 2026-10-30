@@ -10,6 +10,7 @@ import type {
 } from "../application/fetch-round-detail";
 import { foldFailures, type ResponseLike } from "../domain/fetch-result";
 import { newestById } from "../domain/round-base";
+import type { ServerRoundSummary } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
 import type { RoundStatus } from "../domain/sync-events";
 import type { TargetFaceRecord } from "../domain/target-face-types";
@@ -43,6 +44,20 @@ type DistanceRow = {
   revision: number;
   disabled_at: string | null;
   shots: ShotRow[];
+};
+
+// 一覧は合計点を求めるため、距離と矢の削除の印と点だけを取得する。
+const ROUNDS_LIST_SELECT =
+  "id, name, round_date, distances(disabled_at, shots(score_int, disabled_at))";
+
+type RoundSummaryRow = {
+  id: string;
+  name: string;
+  round_date: string;
+  distances: {
+    disabled_at: string | null;
+    shots: { score_int: number; disabled_at: string | null }[];
+  }[];
 };
 
 type RoundRow = {
@@ -92,6 +107,21 @@ function toServerRound(row: RoundRow): ServerRound {
   };
 }
 
+function toServerRoundSummary(row: RoundSummaryRow): ServerRoundSummary {
+  return {
+    id: row.id,
+    name: row.name,
+    roundDate: row.round_date,
+    distances: row.distances.map((distance) => ({
+      disabled: distance.disabled_at !== null,
+      shots: distance.shots.map((shot) => ({
+        score_int: shot.score_int,
+        disabled: shot.disabled_at !== null,
+      })),
+    })),
+  };
+}
+
 function toTargetFaces(rows: unknown): TargetFaceRecord[] {
   return (rows ?? []) as TargetFaceRecord[];
 }
@@ -113,6 +143,10 @@ export function createRoundQueries(
   const roundOrders: readonly DbOrder<RoundsDbSchema, "rounds">[] = [
     { column: "position_key", referencedTable: "distances" },
     { column: "id", referencedTable: "distances" },
+  ];
+
+  const listOrders: readonly DbOrder<RoundsDbSchema, "rounds">[] = [
+    { column: "round_date", ascending: false },
   ];
 
   // 最初の取得は入力中のラウンドを含め、以降は入力中を除く(最初の取得で全件を得るため)。
@@ -193,6 +227,25 @@ export function createRoundQueries(
         },
         error: null,
         status: 200,
+      };
+    },
+    // 取得できる行はRLSでユーザーが属するラウンドに限るため、利用者で絞らない。
+    async roundsList() {
+      const response = await database.select({
+        table: "rounds",
+        columns: ROUNDS_LIST_SELECT,
+        filters: [{ op: "is", column: "disabled_at", value: null }],
+        orders: listOrders,
+      });
+      if (response.status === 0 || response.error) {
+        return response as ResponseLike<ServerRoundSummary[]>;
+      }
+      return {
+        data: ((response.data ?? []) as RoundSummaryRow[]).map(
+          toServerRoundSummary,
+        ),
+        error: null,
+        status: response.status,
       };
     },
     async targetFaces(userId) {

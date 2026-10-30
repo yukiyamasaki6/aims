@@ -9,6 +9,8 @@ import {
 } from "../domain/fetch-result";
 import {
   deletionsOf,
+  type LoadedRoundsList,
+  type LocalRoundsList,
   localRoundsList,
   type RoundListItem,
 } from "../domain/round-list";
@@ -45,7 +47,8 @@ import type {
 } from "./round-record-hub";
 import { TIMED_OUT, withinTime } from "./time-limit";
 
-export type { RoundListItem };
+// 操作のイベントIDの払い出し。例外: 投げない。
+export type EventIds = { next(): string };
 
 // 開いた詳細の材料。
 export type LoadedRound = {
@@ -64,21 +67,6 @@ export type LoadedRound = {
 export type LoadedRoundDetail =
   | { deleted: true }
   | ({ deleted: false } & LoadedRound);
-
-export type LoadedRoundsList = {
-  // サーバーの一覧。端末の列は重ねていない。入力中のラウンドも含む。
-  items: RoundListItem[];
-  // 取得を端末の記録へ反映した後に求めた、入力中のラウンド。
-  inProgress: RoundListItem[];
-  // 端末の列で削除済みのラウンドのID。
-  deleted: ReadonlySet<string>;
-};
-
-// 端末の記録だけから求めた、入力中のラウンドと削除済みのラウンドのID。
-export type LocalRoundsList = {
-  inProgress: RoundListItem[];
-  deleted: ReadonlySet<string>;
-};
 
 // 開いた詳細の状態。`watch`で開いている印を付けるまで、stateはnull。
 type RoundScreenSnapshot = {
@@ -109,12 +97,16 @@ export type RoundHandle = {
 
 export type RoundsStore = {
   load(roundId: string): Promise<FetchResult<LoadedRoundDetail>>;
-  loadList(
-    fetchServerList: () => Promise<FetchResult<RoundListItem[]>>,
-  ): Promise<FetchResult<LoadedRoundsList>>;
+  loadList(): Promise<FetchResult<LoadedRoundsList>>;
   loadLocalList(): Promise<LocalRoundsList>;
   round(roundId: string): RoundHandle;
   append(roundId: string, operation: SyncOperation): Promise<void>;
+  // 一覧と詳細の確認の後に呼ぶ削除。操作の列へround.disabledを積む。保存の試みが終わると解決し、拒否しない。送信の完了は待たない。
+  deleteRound(roundId: string): Promise<void>;
+  // 今オンラインなら直ちに、オフラインなら次に通信が戻ったときに、1回だけlistenerを呼ぶ。返す関数で取り消す。表示の読み直しの合図で、取得と反映の時点は決めない。
+  whenOnline(listener: () => void): () => void;
+  // FALLBACK_WAIT_MSの後に1回listenerを呼ぶ。返す関数で取り消す。
+  afterFallbackWait(listener: () => void): () => void;
 };
 
 const UNOPENED: RoundScreenSnapshot = {
@@ -137,8 +129,9 @@ export function createRoundsStore(deps: {
   fetching: RoundFetching;
   clock: Clock;
   connectivity: Connectivity;
+  ids: EventIds;
 }): RoundsStore {
-  const { hub, requests, fetching, clock, connectivity } = deps;
+  const { hub, requests, fetching, clock, connectivity, ids } = deps;
   const handles = new Map<string, RoundHandle>();
 
   // 画面の読み込み(端末の保存の読み書きと取得)の全体を、開始からFETCH_TIMEOUT_MSで打ち切る。
@@ -249,16 +242,14 @@ export function createRoundsStore(deps: {
     return localRoundsList(snapshots, faces);
   }
 
-  // 一覧の材料。一覧の取得(画面の関数)と、一括の取得の依頼を並行に行い、両方が成功したときだけ成功とする。
+  // 一覧の材料。一覧の取得と、一括の取得の依頼を並行に行い、両方が成功したときだけ成功とする。
   // 一括の取得は、一覧の取得が成功したときだけ反映される(`refreshAll` の契約)。
-  async function listDetail(
-    fetchServerList: () => Promise<FetchResult<RoundListItem[]>>,
-  ): Promise<FetchResult<LoadedRoundsList>> {
+  async function listDetail(): Promise<FetchResult<LoadedRoundsList>> {
     const startedAt = clock.now();
     const generation = hub.generation();
     const { deleted, confirmed } = deletionsOf(await readSnapshots());
     const request = requests.requestAll();
-    const listing = fetchServerList().then(
+    const listing = fetching.fetchRoundsList().then(
       (result) => {
         requests.allowCommit(request.id, result.status === "ok");
         return result;
@@ -456,8 +447,7 @@ export function createRoundsStore(deps: {
 
   return {
     load: (roundId) => withinFetchTimeout(openDetail(roundId)),
-    loadList: (fetchServerList) =>
-      withinFetchTimeout(listDetail(fetchServerList)),
+    loadList: () => withinFetchTimeout(listDetail()),
     loadLocalList: localList,
     round(roundId) {
       let handle = handles.get(roundId);
@@ -469,5 +459,27 @@ export function createRoundsStore(deps: {
     },
     append: (roundId, operation) =>
       hub.append(roundStreamId(roundId), operation),
+    deleteRound: (roundId) =>
+      hub.append(roundStreamId(roundId), {
+        type: "round.disabled",
+        eventId: ids.next(),
+        roundId,
+      }),
+    whenOnline(listener) {
+      if (!connectivity.isOffline()) {
+        listener();
+        return () => {};
+      }
+      let stop: (() => void) | undefined = connectivity.onOnline(() => {
+        stop?.();
+        stop = undefined;
+        listener();
+      });
+      return () => {
+        stop?.();
+        stop = undefined;
+      };
+    },
+    afterFallbackWait: (listener) => clock.after(FALLBACK_WAIT_MS, listener),
   };
 }

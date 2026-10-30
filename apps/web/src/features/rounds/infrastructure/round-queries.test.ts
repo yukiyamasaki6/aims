@@ -472,3 +472,111 @@ describe("roundDetails", () => {
     expect(second).toMatchObject({ status: 500, error: { message: "x" } });
   });
 });
+
+describe("roundsList", () => {
+  const noFaces = ok(null);
+
+  it("削除されていないラウンドを、利用者で絞らず、日付の新しい順に1回の問い合わせで得る", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+
+    // When
+    await database.createQueries().roundsList();
+
+    // Then
+    expect(database.queries).toEqual([
+      {
+        table: "rounds",
+        columns:
+          "id, name, round_date, distances(disabled_at, shots(score_int, disabled_at))",
+        filters: [{ op: "is", column: "disabled_at", value: null }],
+        orders: [{ column: "round_date", ascending: false }],
+      },
+    ]);
+  });
+
+  it("行の名前を内側の形に写し、削除の印を距離と矢の両方で真偽にする", async () => {
+    // Given
+    const database = makeDatabase({
+      rounds: {
+        data: [
+          {
+            id: "round-1",
+            name: "午前練習",
+            round_date: "2026-09-15",
+            distances: [
+              {
+                disabled_at: null,
+                shots: [
+                  { score_int: 10, disabled_at: null },
+                  { score_int: 9, disabled_at: "2026-09-15T10:00:00Z" },
+                ],
+              },
+              {
+                disabled_at: "2026-09-15T11:00:00Z",
+                shots: [{ score_int: 8, disabled_at: null }],
+              },
+            ],
+          },
+        ],
+        error: null,
+        status: 206,
+      },
+      target_faces: noFaces,
+    });
+
+    // When
+    const response = await database.createQueries().roundsList();
+
+    // Then
+    expect(response).toEqual({
+      data: [
+        {
+          id: "round-1",
+          name: "午前練習",
+          roundDate: "2026-09-15",
+          distances: [
+            {
+              disabled: false,
+              shots: [
+                { score_int: 10, disabled: false },
+                { score_int: 9, disabled: true },
+              ],
+            },
+            { disabled: true, shots: [{ score_int: 8, disabled: false }] },
+          ],
+        },
+      ],
+      error: null,
+      status: 206,
+    });
+  });
+
+  it("データがnullなら空の配列を返す", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok(null), target_faces: noFaces });
+
+    // When
+    const response = await database.createQueries().roundsList();
+
+    // Then
+    expect(response).toEqual({ data: [], error: null, status: 200 });
+  });
+
+  it("通信失敗(status 0)とエラー応答は、その応答をそのまま返す", async () => {
+    // Given
+    const comm = makeDatabase({ rounds: failed(0), target_faces: noFaces });
+    const errored = makeDatabase({
+      rounds: failed(500, { message: "x" }),
+      target_faces: noFaces,
+    });
+
+    // When
+    const first = await comm.createQueries().roundsList();
+    const second = await errored.createQueries().roundsList();
+
+    // Then
+    expect(first).toEqual(failed(0));
+    expect(second).toEqual(failed(500, { message: "x" }));
+  });
+});

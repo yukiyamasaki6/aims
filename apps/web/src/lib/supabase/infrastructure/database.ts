@@ -14,7 +14,10 @@ type QueryBuilder = {
   is(column: string, value: unknown): QueryBuilder;
   in(column: string, values: readonly string[]): QueryBuilder;
   or(expression: string): QueryBuilder;
-  order(column: string, options?: { referencedTable: string }): QueryBuilder;
+  order(
+    column: string,
+    options?: { referencedTable?: string; ascending?: boolean },
+  ): QueryBuilder;
   maybeSingle(): QueryBuilder;
   retry(enabled: boolean): PromiseLike<DbResponse>;
 };
@@ -38,7 +41,11 @@ type LooseSelect = {
   table: string;
   columns: string;
   filters?: readonly LooseFilter[];
-  orders?: readonly { column: string; referencedTable?: string }[];
+  orders?: readonly {
+    column: string;
+    referencedTable?: string;
+    ascending?: boolean;
+  }[];
   single?: "maybe";
 };
 
@@ -55,6 +62,21 @@ function applyFilter(builder: QueryBuilder, filter: LooseFilter): QueryBuilder {
     case "or":
       return builder.or(filter.expression);
   }
+}
+
+type LooseOrder = NonNullable<LooseSelect["orders"]>[number];
+
+// 値のある選択肢だけを渡す(無ければ列だけで呼ぶ)。
+function applyOrder(builder: QueryBuilder, order: LooseOrder): QueryBuilder {
+  const options = {
+    ...(order.referencedTable
+      ? { referencedTable: order.referencedTable }
+      : {}),
+    ...(order.ascending === undefined ? {} : { ascending: order.ascending }),
+  };
+  return Object.keys(options).length > 0
+    ? builder.order(order.column, options)
+    : builder.order(order.column);
 }
 
 function toResponse({ data, error, status }: DbResponse): DbResponse {
@@ -76,10 +98,8 @@ export function createSupabaseDatabase(
       for (const filter of query.filters ?? []) {
         builder = applyFilter(builder, filter);
       }
-      for (const { column, referencedTable } of query.orders ?? []) {
-        builder = referencedTable
-          ? builder.order(column, { referencedTable })
-          : builder.order(column);
+      for (const order of query.orders ?? []) {
+        builder = applyOrder(builder, order);
       }
       if (query.single === "maybe") builder = builder.maybeSingle();
       return toResponse(await builder.retry(false));

@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FALLBACK_WAIT_MS } from "@/features/rounds";
-import type { LocalRoundsList } from "@/features/rounds/application/rounds-store";
-import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
+import type { LocalRoundsList } from "../domain/round-list";
+import { useRoundsStore } from "./rounds-context";
 
 // 端末の入力中のラウンドを、表示の開始時に1回読む。購読しない。
 // `waited`は、開始から`FALLBACK_WAIT_MS`が過ぎたら真になり、戻らない。
@@ -23,10 +22,10 @@ export function useLocalRoundsList(): {
       },
       () => {},
     );
-    const timer = setTimeout(() => setWaited(true), FALLBACK_WAIT_MS);
+    const cancel = store.afterFallbackWait(() => setWaited(true));
     return () => {
       active = false;
-      clearTimeout(timer);
+      cancel();
     };
   }, [store]);
 

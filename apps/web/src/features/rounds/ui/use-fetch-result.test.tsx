@@ -1,6 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FetchResult } from "@/features/rounds/domain/fetch-result";
+import type { ReactNode } from "react";
+import { describe, expect, it, vi } from "vitest";
+import type { FetchResult } from "../domain/fetch-result";
+import { RoundsStoreProvider } from "./rounds-context";
+import { createFakeRoundsStore } from "./rounds-store-test-helpers";
 import { useFetchResult } from "./use-fetch-result";
 
 function deferred<T>() {
@@ -11,28 +14,29 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-// offlineの結果が返る状況はnavigator.onLineがfalseなので、既定をfalseにする。
-let onLine = false;
-function comeOnline() {
-  onLine = true;
+// 通信の復帰の合図はラウンドの状態の約束(whenOnline)で受けるため、偽の約束で復帰を起こす。
+// offlineの結果が返る状況は、通信が切れているので、offlineの結果を扱うテストはgoOfflineで始める。
+function setup() {
+  const fake = createFakeRoundsStore();
+  function wrapper({ children }: { children: ReactNode }) {
+    return (
+      <RoundsStoreProvider store={fake.store}>{children}</RoundsStoreProvider>
+    );
+  }
+  return { fake, wrapper };
 }
 
 describe("useFetchResult", () => {
-  beforeEach(() => {
-    onLine = false;
-    vi.spyOn(navigator, "onLine", "get").mockImplementation(() => onLine);
-  });
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   describe("正常系", () => {
     it("取得中はloading、完了すると結果を返す", async () => {
       // Given
+      const { wrapper } = setup();
       const d = deferred<FetchResult<number>>();
 
       // When
-      const { result } = renderHook(() => useFetchResult(() => d.promise, []));
+      const { result } = renderHook(() => useFetchResult(() => d.promise, []), {
+        wrapper,
+      });
       const pending = result.current.view;
       await act(async () => d.resolve({ status: "ok", data: 1 }));
 
@@ -43,11 +47,15 @@ describe("useFetchResult", () => {
 
     it("retryで、loadingに戻って再取得する", async () => {
       // Given
+      const { fake, wrapper } = setup();
+      fake.goOffline();
       const fetcher = vi
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({ status: "ok", data: 2 });
-      const { result } = renderHook(() => useFetchResult(fetcher, []));
+      const { result } = renderHook(() => useFetchResult(fetcher, []), {
+        wrapper,
+      });
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
 
       // When
@@ -61,20 +69,21 @@ describe("useFetchResult", () => {
       expect(fetcher).toHaveBeenCalledTimes(2);
     });
 
-    it("offlineのとき、onlineイベントで、loadingに戻って再取得する", async () => {
+    it("offlineのとき、通信が戻ると、loadingに戻って再取得する", async () => {
       // Given
+      const { fake, wrapper } = setup();
+      fake.goOffline();
       const fetcher = vi
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({ status: "ok", data: 2 });
-      const { result } = renderHook(() => useFetchResult(fetcher, []));
+      const { result } = renderHook(() => useFetchResult(fetcher, []), {
+        wrapper,
+      });
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
 
       // When
-      act(() => {
-        comeOnline();
-        window.dispatchEvent(new Event("online"));
-      });
+      act(() => fake.returnOnline());
 
       // Then
       expect(result.current.view).toEqual({ status: "loading" });
@@ -86,6 +95,7 @@ describe("useFetchResult", () => {
 
     it("depsが変わると、再取得する", async () => {
       // Given
+      const { wrapper } = setup();
       const fetcher = vi.fn(
         async (): Promise<FetchResult<number>> => ({
           status: "ok",
@@ -94,7 +104,7 @@ describe("useFetchResult", () => {
       );
       const { result, rerender } = renderHook(
         ({ id }) => useFetchResult(fetcher, [id]),
-        { initialProps: { id: "a" } },
+        { initialProps: { id: "a" }, wrapper },
       );
       await waitFor(() => expect(result.current.view.status).toBe("ok"));
 
@@ -107,21 +117,24 @@ describe("useFetchResult", () => {
   });
 
   describe("境界", () => {
-    it("onlineイベントが続けて届いても、再取得は1回だけ", async () => {
+    it("通信の復帰が続けて起きても、再取得は1回だけ", async () => {
       // Given
+      const { fake, wrapper } = setup();
+      fake.goOffline();
       const d = deferred<FetchResult<number>>();
       const fetcher = vi
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValueOnce({ status: "offline" })
         .mockReturnValueOnce(d.promise);
-      const { result } = renderHook(() => useFetchResult(fetcher, []));
+      const { result } = renderHook(() => useFetchResult(fetcher, []), {
+        wrapper,
+      });
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
 
       // When
       act(() => {
-        comeOnline();
-        window.dispatchEvent(new Event("online"));
-        window.dispatchEvent(new Event("online"));
+        fake.returnOnline();
+        fake.returnOnline();
       });
       const calls = fetcher.mock.calls.length;
       // 保留した取得を終え、テストの後に状態の更新を残さない。
@@ -131,51 +144,51 @@ describe("useFetchResult", () => {
       expect(calls).toBe(2);
     });
 
-    it("復帰後の再取得が再びofflineなら繰り返さず、次のonlineで再取得する", async () => {
+    it("復帰後の再取得が再びofflineなら繰り返さず、次の復帰で再取得する", async () => {
       // Given
+      const { fake, wrapper } = setup();
+      fake.goOffline();
       const fetcher = vi
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValueOnce({ status: "offline" })
         .mockImplementationOnce(async () => {
-          onLine = false;
+          fake.goOffline();
           return { status: "offline" };
         })
         .mockResolvedValueOnce({ status: "ok", data: 3 });
-      const { result } = renderHook(() => useFetchResult(fetcher, []));
-      await waitFor(() => expect(result.current.view.status).toBe("offline"));
-      act(() => {
-        comeOnline();
-        window.dispatchEvent(new Event("online"));
+      const { result } = renderHook(() => useFetchResult(fetcher, []), {
+        wrapper,
       });
+      await waitFor(() => expect(result.current.view.status).toBe("offline"));
+      act(() => fake.returnOnline());
       await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
+      const callsBeforeNextReturn = fetcher.mock.calls.length;
 
       // When
-      act(() => {
-        comeOnline();
-        window.dispatchEvent(new Event("online"));
-      });
+      act(() => fake.returnOnline());
 
       // Then
       await waitFor(() =>
         expect(result.current.view).toEqual({ status: "ok", data: 3 }),
       );
+      expect(callsBeforeNextReturn).toBe(2);
       expect(fetcher).toHaveBeenCalledTimes(3);
     });
 
-    it("取得中にonlineイベントが届いた後にofflineで返ったとき、onlineを待たずに再取得する", async () => {
+    it("取得中に通信が戻った後にofflineで返ったとき、復帰を待たずに再取得する", async () => {
       // Given
+      const { wrapper } = setup();
+      // 偽の約束は既にオンラインで、offlineの結果が出た時点でwhenOnlineが直ちに呼ぶ。
       const fetcher = vi
         .fn<() => Promise<FetchResult<number>>>()
-        .mockImplementationOnce(async () => {
-          comeOnline();
-          window.dispatchEvent(new Event("online"));
-          return { status: "offline" };
-        })
+        .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({ status: "ok", data: 4 });
 
       // When
-      const { result } = renderHook(() => useFetchResult(fetcher, []));
+      const { result } = renderHook(() => useFetchResult(fetcher, []), {
+        wrapper,
+      });
 
       // Then
       await waitFor(() =>
@@ -184,28 +197,30 @@ describe("useFetchResult", () => {
       expect(fetcher).toHaveBeenCalledTimes(2);
     });
 
-    it("再試行ボタンで先にloadingにした後のonlineでは、重複して取得しない", async () => {
+    it("再試行ボタンで先にloadingにした後の復帰では、古い購読を取り消してあり、重複して取得しない", async () => {
       // Given
+      const { fake, wrapper } = setup();
+      fake.goOffline();
       const d = deferred<FetchResult<number>>();
       const fetcher = vi
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValueOnce({ status: "offline" })
         .mockReturnValueOnce(d.promise);
-      const { result } = renderHook(() => useFetchResult(fetcher, []));
+      const { result } = renderHook(() => useFetchResult(fetcher, []), {
+        wrapper,
+      });
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
       act(() => result.current.retry());
 
       // When
-      act(() => {
-        comeOnline();
-        window.dispatchEvent(new Event("online"));
-      });
+      act(() => fake.returnOnline());
       const calls = fetcher.mock.calls.length;
       // 保留した取得を終え、テストの後に状態の更新を残さない。
       await act(async () => d.resolve({ status: "ok", data: 1 }));
 
       // Then
       expect(calls).toBe(2);
+      expect(fake.online.cancelled()).toBe(1);
     });
 
     it.each([
@@ -213,54 +228,58 @@ describe("useFetchResult", () => {
       ["not-found", { status: "not-found" }],
       ["ok", { status: "ok", data: 1 }],
     ] satisfies [string, FetchResult<number>][])(
-      "%sのとき、onlineイベントでは再取得しない",
+      "%sのとき、通信の復帰を待たず、復帰しても再取得しない",
       async (status, settled) => {
         // Given
+        const { fake, wrapper } = setup();
+        fake.goOffline();
         const fetcher = vi.fn(
           async (): Promise<FetchResult<number>> => settled,
         );
-        const { result } = renderHook(() => useFetchResult(fetcher, []));
+        const { result } = renderHook(() => useFetchResult(fetcher, []), {
+          wrapper,
+        });
         await waitFor(() => expect(result.current.view.status).toBe(status));
 
         // When
-        act(() => {
-          window.dispatchEvent(new Event("online"));
-        });
+        act(() => fake.returnOnline());
 
         // Then
+        expect(fake.store.whenOnline).not.toHaveBeenCalled();
         expect(fetcher).toHaveBeenCalledTimes(1);
         expect(result.current.view.status).toBe(status);
       },
     );
 
-    it("取得中にonlineイベントが届いても、再取得しない", async () => {
+    it("取得中は通信の復帰を待たず、復帰しても再取得しない", async () => {
       // Given
+      const { fake, wrapper } = setup();
+      fake.goOffline();
       const d = deferred<FetchResult<number>>();
       const fetcher = vi.fn(() => d.promise);
-      renderHook(() => useFetchResult(fetcher, []));
+      renderHook(() => useFetchResult(fetcher, []), { wrapper });
 
       // When
-      act(() => {
-        comeOnline();
-        window.dispatchEvent(new Event("online"));
-      });
-
+      act(() => fake.returnOnline());
       const calls = fetcher.mock.calls.length;
       // 保留した取得を終え、テストの後に状態の更新を残さない。
       await act(async () => d.resolve({ status: "ok", data: 1 }));
 
       // Then
       expect(calls).toBe(1);
+      expect(fake.store.whenOnline).not.toHaveBeenCalled();
     });
   });
 
   describe("異常系", () => {
     it("アンマウント後に届いた結果は破棄する", async () => {
       // Given
+      const { wrapper } = setup();
       const d = deferred<FetchResult<number>>();
       const errorSpy = vi.spyOn(console, "error");
-      const { result, unmount } = renderHook(() =>
-        useFetchResult(() => d.promise, []),
+      const { result, unmount } = renderHook(
+        () => useFetchResult(() => d.promise, []),
+        { wrapper },
       );
       unmount();
 
@@ -270,26 +289,34 @@ describe("useFetchResult", () => {
       // Then
       expect(result.current.view).toEqual({ status: "loading" });
       expect(errorSpy).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
     });
 
-    it("offlineのままアンマウントした後のonlineイベントでは、取得しない", async () => {
+    it("offlineのままアンマウントすると購読を取り消し、その後の復帰では取得しない", async () => {
       // Given
+      const { fake, wrapper } = setup();
+      fake.goOffline();
       const fetcher = vi
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValue({ status: "offline" });
-      const { result, unmount } = renderHook(() => useFetchResult(fetcher, []));
+      const { result, unmount } = renderHook(
+        () => useFetchResult(fetcher, []),
+        { wrapper },
+      );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
       unmount();
 
       // When
-      window.dispatchEvent(new Event("online"));
+      fake.returnOnline();
 
       // Then
+      expect(fake.online.cancelled()).toBe(1);
       expect(fetcher).toHaveBeenCalledTimes(1);
     });
 
     it("depsが変わったあと、古い取得の結果は破棄する", async () => {
       // Given
+      const { wrapper } = setup();
       const first = deferred<FetchResult<string>>();
       const second = deferred<FetchResult<string>>();
       const fetcher = vi
@@ -298,7 +325,7 @@ describe("useFetchResult", () => {
         .mockReturnValueOnce(second.promise);
       const { result, rerender } = renderHook(
         ({ id }) => useFetchResult(fetcher, [id]),
-        { initialProps: { id: "a" } },
+        { initialProps: { id: "a" }, wrapper },
       );
       rerender({ id: "b" });
 
@@ -312,6 +339,7 @@ describe("useFetchResult", () => {
 
     it("depsが変わった最初の描画では、前のdepsのokデータを見せずloadingにする", async () => {
       // Given
+      const { wrapper } = setup();
       const fetcher = vi.fn(
         async (): Promise<FetchResult<string>> => ({ status: "ok", data: "a" }),
       );
@@ -322,7 +350,7 @@ describe("useFetchResult", () => {
           seen.push(`${id}:${r.view.status}`);
           return r;
         },
-        { initialProps: { id: "a" } },
+        { initialProps: { id: "a" }, wrapper },
       );
       await waitFor(() => expect(result.current.view.status).toBe("ok"));
 
@@ -337,12 +365,15 @@ describe("useFetchResult", () => {
 
     it("fetcherがrejectすると、loadingに固定せずerrorにする", async () => {
       // Given
+      const { wrapper } = setup();
       const fetcher = vi.fn(async (): Promise<FetchResult<number>> => {
         throw new Error("boom");
       });
 
       // When
-      const { result } = renderHook(() => useFetchResult(fetcher, []));
+      const { result } = renderHook(() => useFetchResult(fetcher, []), {
+        wrapper,
+      });
 
       // Then
       await waitFor(() =>

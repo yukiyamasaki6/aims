@@ -18,7 +18,7 @@ import { createSignUp } from "./sign-up";
 const email = "user@example.com";
 const accepted: CallResult = { kind: "accepted" };
 
-function setup() {
+function setup(protectedPath = "/rounds") {
   const authenticator = {
     sendCode: vi.fn(async (): Promise<CallResult> => accepted),
     verifyCode: vi.fn(async (): Promise<CallResult> => accepted),
@@ -26,7 +26,12 @@ function setup() {
   } satisfies PasswordSetupAuthenticator;
   const registration = { isRegistered: vi.fn(async () => false) };
   const navigation = { go: vi.fn() };
-  const signUp = createSignUp({ authenticator, registration, navigation });
+  const signUp = createSignUp({
+    authenticator,
+    registration,
+    navigation,
+    protectedPath,
+  });
   return {
     signUp,
     authenticator,
@@ -280,6 +285,18 @@ describe("サインアップの手続き", () => {
   });
 
   describe("パスワードの設定", () => {
+    it("保護の範囲の根が異なる場合、設定できれば根へ遷移する", async () => {
+      // Given
+      const { signUp, navigation, viewOf } = setup("/elsewhere");
+      const view = viewOf(onPasswordStep);
+
+      // When
+      await signUp.setPassword({ password: "password1" }, view);
+
+      // Then
+      expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/elsewhere");
+    });
+
     it("設定できれば、passwordSetを送ってラウンド一覧へ遷移し、実行中を解除しない", async () => {
       // Given
       const { signUp, authenticator, navigation, events, viewOf } = setup();

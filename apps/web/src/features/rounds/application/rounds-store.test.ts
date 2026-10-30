@@ -5,6 +5,7 @@ import {
   FETCH_TIMEOUT_MS,
   type FetchResult,
 } from "../domain/fetch-result";
+import type { RoundListItem } from "../domain/round-list";
 import { roundStreamId } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face-types";
 import {
@@ -19,7 +20,7 @@ import {
   createTestRoundsStore,
   settleRoundNow,
 } from "./round-record-test-helpers";
-import type { LoadedRound, RoundListItem } from "./rounds-store";
+import type { LoadedRound } from "./rounds-store";
 
 const STREAM = roundStreamId("round-1");
 
@@ -46,6 +47,15 @@ const face: TargetFaceOption = {
     },
   ],
 };
+
+// 一覧の取得(ラウンドの取得の手続きの差し込み口)を差し替えて、一覧を読み込む。
+function loadListWith(
+  tab: ReturnType<typeof createTestRoundsStore>,
+  fetchList: () => Promise<FetchResult<RoundListItem[]>>,
+) {
+  tab.fetching.fetchRoundsList.mockImplementation(fetchList);
+  return tab.store.loadList();
+}
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -385,7 +395,7 @@ describe("load", () => {
       vi.spyOn(tab.hub, "read").mockReturnValue(new Promise(() => {}));
       vi.spyOn(tab.hub, "readAll").mockReturnValue(new Promise(() => {}));
       const detail = tab.store.load("round-1");
-      const list = tab.store.loadList(async () => ({ status: "ok", data: [] }));
+      const list = loadListWith(tab, async () => ({ status: "ok", data: [] }));
       tab.connectivity.goOffline();
 
       // When
@@ -399,7 +409,7 @@ describe("load", () => {
     it("一覧の読み込みも、終わらないままFETCH_TIMEOUT_MSでerrorにする", async () => {
       // Given
       const tab = createTestRoundsStore();
-      const loading = tab.store.loadList(async () => ({
+      const loading = loadListWith(tab, async () => ({
         status: "ok",
         data: [],
       }));
@@ -441,7 +451,7 @@ describe("loadList", () => {
     const tab = createTestRoundsStore({ savedFaces: [face] });
     await tab.hub.ready();
     await tab.hub.commit(STREAM, roundBase({ name: "端末" }), 10, "user-1");
-    const loading = tab.store.loadList(ok);
+    const loading = loadListWith(tab, ok);
     await flush();
 
     // When
@@ -464,7 +474,7 @@ describe("loadList", () => {
   it("一覧の取得が終わったとき、成否を一覧の依頼に残す(成功なら一括の取得の反映を許す)", async () => {
     // Given
     const tab = createTestRoundsStore();
-    const success = tab.store.loadList(ok);
+    const success = loadListWith(tab, ok);
     await flush();
     const run2 = tab.requests.beginAll();
 
@@ -481,7 +491,7 @@ describe("loadList", () => {
     // Given
     const tab = createTestRoundsStore();
     const failure = { status: "error", message: "一覧" } as const;
-    const loading = tab.store.loadList(async () => failure);
+    const loading = loadListWith(tab, async () => failure);
     await flush();
     const run3 = tab.requests.beginAll();
 
@@ -497,7 +507,7 @@ describe("loadList", () => {
   it("一覧の取得が例外を投げたときも、固定文のerrorを返し、反映を許さない", async () => {
     // Given
     const tab = createTestRoundsStore();
-    const loading = tab.store.loadList(async () => {
+    const loading = loadListWith(tab, async () => {
       throw new Error("boom");
     });
     await flush();
@@ -525,7 +535,7 @@ describe("loadList", () => {
       [roundDisabled().eventId],
       [{ revision: 2, applied: true, appliedFields: null, rejectedFields: [] }],
     );
-    const loading = tab.store.loadList(ok);
+    const loading = loadListWith(tab, ok);
     await flush();
     const failure = { status: "offline" } as const;
 
@@ -542,7 +552,7 @@ describe("loadList", () => {
     // Given
     const tab = createTestRoundsStore();
     const listFailure = { status: "error", message: "一覧" } as const;
-    const loading = tab.store.loadList(async () => listFailure);
+    const loading = loadListWith(tab, async () => listFailure);
     await flush();
 
     // When
@@ -573,7 +583,7 @@ describe("loadList", () => {
       eventId: "e-unsent",
       roundId: "unsent",
     });
-    const loading = tab.store.loadList(ok);
+    const loading = loadListWith(tab, ok);
     await flush();
 
     // When
@@ -615,7 +625,7 @@ describe("loadList: 取得の間の利用者の切り替え", () => {
     const tab = createTestRoundsStore({ savedFaces: [face] });
     const stream = await confirmedDeletionIn(tab);
     const listing = Promise.withResolvers<FetchResult<RoundListItem[]>>();
-    const loading = tab.store.loadList(() => listing.promise);
+    const loading = loadListWith(tab, () => listing.promise);
     await flush();
     tab.hub.setUser("user-2");
     await tab.hub.ready();
@@ -654,7 +664,7 @@ describe("loadList: 取得の間の利用者の切り替え", () => {
     });
     await tab.hub.ready();
     const listing = Promise.withResolvers<FetchResult<RoundListItem[]>>();
-    const loading = tab.store.loadList(() => listing.promise);
+    const loading = loadListWith(tab, () => listing.promise);
     await flush();
     tab.hub.setUser("user-1");
     await tab.hub.ready();
@@ -1321,5 +1331,162 @@ describe("再読み込み", () => {
     expect(tab.requests.pendingOpens()).toEqual(["round-1"]);
     expect(tab.fetching.fetchRoundDetail).not.toHaveBeenCalled();
     expect(tab.fetching.fetchRoundDetails).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteRound", () => {
+  it("そのラウンドの列へ、払い出されたイベントIDのround.disabledを積む", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+
+    // When
+    await tab.store.deleteRound("round-1");
+
+    // Then
+    expect(tab.hub.record(STREAM).items.map((item) => item.operation)).toEqual([
+      { type: "round.disabled", eventId: "event-1", roundId: "round-1" },
+    ]);
+  });
+
+  it("削除のたびに新しいイベントIDを使う", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+
+    // When
+    await tab.store.deleteRound("round-1");
+    await tab.store.deleteRound("round-2");
+
+    // Then
+    const eventIdOf = (roundId: string) =>
+      tab.hub.record(roundStreamId(roundId)).items[0]?.operation.eventId;
+    expect(eventIdOf("round-1")).toBe("event-1");
+    expect(eventIdOf("round-2")).toBe("event-2");
+  });
+
+  it("保存の試みが終わるまで解決しない", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const saving = Promise.withResolvers<number>();
+    vi.spyOn(tab.opLog, "append").mockReturnValue(saving.promise);
+    const deleting = tab.store.deleteRound("round-1");
+
+    // When
+    const resolvedBeforeSave = await settled(deleting);
+    saving.resolve(1);
+
+    // Then
+    expect(resolvedBeforeSave).toBe(false);
+    await expect(deleting).resolves.toBeUndefined();
+  });
+
+  it("保存が失敗しても拒否せず、メモリの記録には削除を残す", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    vi.spyOn(tab.opLog, "append").mockRejectedValue(new Error("保存できない"));
+
+    // When
+    const deleting = tab.store.deleteRound("round-1");
+
+    // Then
+    await expect(deleting).resolves.toBeUndefined();
+    expect(
+      tab.hub.record(STREAM).items.map((item) => item.operation.type),
+    ).toEqual(["round.disabled"]);
+  });
+});
+
+describe("whenOnline", () => {
+  it("今オンラインなら、直ちに1回呼び、購読を張らない", () => {
+    // Given
+    const tab = createTestRoundsStore({ offline: false });
+    const listener = vi.fn();
+
+    // When
+    tab.store.whenOnline(listener);
+    tab.connectivity.goOffline();
+    tab.connectivity.goOnline();
+
+    // Then
+    expect(listener).toHaveBeenCalledOnce();
+    expect(tab.connectivity.subscribers().online).toBe(0);
+  });
+
+  it("オフラインなら呼ばずに待ち、次に通信が戻ったときに1回だけ呼ぶ", () => {
+    // Given
+    const tab = createTestRoundsStore({ offline: true });
+    const listener = vi.fn();
+    tab.store.whenOnline(listener);
+    const calledBeforeReturn = listener.mock.calls.length;
+
+    // When
+    tab.connectivity.goOnline();
+    tab.connectivity.goOffline();
+    tab.connectivity.goOnline();
+
+    // Then
+    expect(calledBeforeReturn).toBe(0);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(tab.connectivity.subscribers().online).toBe(0);
+  });
+
+  it("返す関数で取り消すと、通信が戻っても呼ばない", () => {
+    // Given
+    const tab = createTestRoundsStore({ offline: true });
+    const listener = vi.fn();
+    const cancel = tab.store.whenOnline(listener);
+
+    // When
+    cancel();
+    tab.connectivity.goOnline();
+
+    // Then
+    expect(listener).not.toHaveBeenCalled();
+    expect(tab.connectivity.subscribers().online).toBe(0);
+  });
+
+  it("オンラインで直ちに呼んだ後に、返す関数を呼んでも何も起きない", () => {
+    // Given
+    const tab = createTestRoundsStore({ offline: false });
+    const listener = vi.fn();
+    const cancel = tab.store.whenOnline(listener);
+
+    // When
+    const act = () => cancel();
+
+    // Then
+    expect(act).not.toThrow();
+    expect(listener).toHaveBeenCalledOnce();
+  });
+});
+
+describe("afterFallbackWait", () => {
+  it("FALLBACK_WAIT_MSの前では呼ばず、FALLBACK_WAIT_MSで1回呼ぶ", () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const listener = vi.fn();
+    tab.store.afterFallbackWait(listener);
+
+    // When
+    tab.clock.advance(FALLBACK_WAIT_MS - 1);
+    const calledBefore = listener.mock.calls.length;
+    tab.clock.advance(1);
+
+    // Then
+    expect(calledBefore).toBe(0);
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it("返す関数で取り消すと、時計が進んでも呼ばない", () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const listener = vi.fn();
+    const cancel = tab.store.afterFallbackWait(listener);
+
+    // When
+    cancel();
+    tab.clock.advance(FETCH_TIMEOUT_MS);
+
+    // Then
+    expect(listener).not.toHaveBeenCalled();
   });
 });

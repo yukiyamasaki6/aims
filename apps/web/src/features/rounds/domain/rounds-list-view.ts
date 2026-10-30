@@ -1,9 +1,9 @@
+import type { FetchView } from "./fetch-result";
 import type {
   LoadedRoundsList,
   LocalRoundsList,
   RoundListItem,
-} from "@/features/rounds/application/rounds-store";
-import type { FetchView } from "@/features/rounds/domain/fetch-result";
+} from "./round-list";
 
 // 実施日の新しい順に並べる。同じ実施日は元の順を保つ。
 function byRoundDateDesc(rounds: RoundListItem[]): RoundListItem[] {

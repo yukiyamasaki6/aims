@@ -22,6 +22,7 @@ import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
 import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
+import { createBrowserEventIds } from "@/features/rounds/infrastructure/browser-event-ids";
 import { createBrowserRecordChannel } from "@/features/rounds/infrastructure/browser-record-channel";
 import { createReferenceSnapshots } from "@/features/rounds/infrastructure/reference-snapshot";
 import { createRoundOpTransport } from "@/features/rounds/infrastructure/round-op-transport";
@@ -84,6 +85,7 @@ function composeApp() {
     fetching,
     clock,
     connectivity,
+    ids: createBrowserEventIds(),
   });
   const sync = createRoundSync({
     records: reconciliation,

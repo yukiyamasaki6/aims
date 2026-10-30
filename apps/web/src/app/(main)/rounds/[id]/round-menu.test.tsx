@@ -6,25 +6,21 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RoundsStore } from "@/features/rounds/application/rounds-store";
 import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
+import { createFakeRoundsStore } from "@/features/rounds/ui/rounds-store-test-helpers";
 import { RoundMenu } from "./round-menu";
 
-// 削除は境界としてモックするため、ラウンドの状態と変更の方法は中身を使わない偽の約束で渡す。
-const store = {} as RoundsStore;
+// 削除は境界として偽の約束(ラウンドの状態と変更の方法)のdeleteRoundで受ける。
+let fake: ReturnType<typeof createFakeRoundsStore>;
 
 function render(ui: ReactElement) {
   return renderWithoutStore(
-    <RoundsStoreProvider store={store}>{ui}</RoundsStoreProvider>,
+    <RoundsStoreProvider store={fake.store}>{ui}</RoundsStoreProvider>,
   );
 }
 
 const nav = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => nav }));
-
-// 削除は列への入り口の先で行うため、deleteRoundを境界としてモックする。
-const deletion = vi.hoisted(() => ({ deleteRound: vi.fn() }));
-vi.mock("../_shared/delete-round", () => deletion);
 
 async function openDeleteConfirm(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId("round-menu-trigger"));
@@ -33,7 +29,7 @@ async function openDeleteConfirm(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  deletion.deleteRound.mockResolvedValue(undefined);
+  fake = createFakeRoundsStore();
 });
 
 describe("RoundMenu", () => {
@@ -65,27 +61,32 @@ describe("RoundMenu", () => {
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
       // Then
-      expect(deletion.deleteRound).toHaveBeenCalledWith(store, "round-1");
+      expect(fake.store.deleteRound).toHaveBeenCalledExactlyOnceWith("round-1");
       await waitFor(() => {
         expect(nav.replace).toHaveBeenCalledWith("/rounds");
       });
       expect(screen.queryByTestId("confirm-dialog-confirm")).toBeNull();
     });
 
-    it("削除の保存が終わるまでは遷移しないが、ダイアログはすぐ閉じる", async () => {
+    it("削除の保存が終わるまでは遷移しないが、ダイアログはすぐ閉じ、終わると一覧へ置き換える", async () => {
       // Given
-      // 保存が終わる前の状態を確かめるため、削除の保存を終わらせない。
-      deletion.deleteRound.mockReturnValue(new Promise(() => {}));
+      const saving = Promise.withResolvers<void>();
+      fake.store.deleteRound.mockReturnValue(saving.promise);
       const user = userEvent.setup();
       render(<RoundMenu roundId="round-1" />);
       await openDeleteConfirm(user);
 
       // When
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
+      const replacedBeforeSave = nav.replace.mock.calls.length;
+      saving.resolve();
 
       // Then
       expect(screen.queryByTestId("confirm-dialog-confirm")).toBeNull();
-      expect(nav.replace).not.toHaveBeenCalled();
+      expect(replacedBeforeSave).toBe(0);
+      await waitFor(() => {
+        expect(nav.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
+      });
     });
   });
 });

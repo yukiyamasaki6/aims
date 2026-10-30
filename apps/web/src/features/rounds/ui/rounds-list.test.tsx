@@ -1,48 +1,24 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { FetchResult } from "../domain/fetch-result";
 import type {
   LoadedRoundsList,
   LocalRoundsList,
-  RoundsStore,
-} from "@/features/rounds/application/rounds-store";
-import type { FetchResult } from "@/features/rounds/domain/fetch-result";
-import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
-import { fetchRoundsList, type RoundListItem } from "./fetch-rounds-list";
-import { loadRoundsList } from "./load-rounds-list";
-import { RoundsListClient } from "./rounds-list-client";
+  RoundListItem,
+} from "../domain/round-list";
+import { NEW_ROUND_PATH, roundPath } from "../domain/round-routes";
+import { RoundsStoreProvider } from "./rounds-context";
+import { RoundsList } from "./rounds-list";
+import { createFakeRoundsStore } from "./rounds-store-test-helpers";
 
-// 一覧の読み込みは別のテストで確かめるため、境界としてモックする。
-vi.mock("./load-rounds-list", () => ({ loadRoundsList: vi.fn() }));
-const load = vi.mocked(loadRoundsList);
-
-// 端末の入力中のラウンドの読み込みと待ちは別のテストで確かめるため、境界としてモックする。
-const localList = vi.hoisted(() => ({
-  state: {
-    local: null as LocalRoundsList | null,
-    waited: false,
-  },
-}));
-vi.mock("./use-local-rounds-list", () => ({
-  useLocalRoundsList: () => localList.state,
-}));
-
-// 削除は列への入り口の先で行うため、境界としてモックする。
-const deletion = vi.hoisted(() => ({ deleteRound: vi.fn() }));
-vi.mock("./_shared/delete-round", () => deletion);
-
-// 一覧の読み込みと削除は境界としてモックしたため、ラウンドの状態と変更の方法は中身を使わない偽の約束で渡す。
-const store = {} as RoundsStore;
-
-// サーバーの一覧の取得は別のテストで確かめるため、境界としてモックする。
-vi.mock("./fetch-rounds-list", () => ({ fetchRoundsList: vi.fn() }));
-const fetchList = vi.mocked(fetchRoundsList);
-
-vi.mock("@/lib/supabase/infrastructure/client", () => ({
-  createClient: () => ({}),
-}));
-
-const sessionReader = { readSession: vi.fn() };
+// ラウンドの状態と変更の方法は、一覧の読み込み、削除、端末の列、待ちの合図だけを持つ偽の約束で渡す。
+// 取得、端末の列、削除の実物はそれぞれのテストで確かめる。
+let fake: ReturnType<typeof createFakeRoundsStore>;
+let load: ReturnType<typeof createFakeRoundsStore>["store"]["loadList"];
+let deleteRound: ReturnType<
+  typeof createFakeRoundsStore
+>["store"]["deleteRound"];
 
 function loaded(
   items: RoundListItem[],
@@ -58,10 +34,15 @@ function loaded(
 
 function renderList() {
   return render(
-    <RoundsStoreProvider store={store}>
-      <RoundsListClient sessionReader={sessionReader} />
+    <RoundsStoreProvider store={fake.store}>
+      <RoundsList />
     </RoundsStoreProvider>,
   );
+}
+
+// 端末の入力中のラウンドの読み込み結果を設定する。
+function setLocal(local: LocalRoundsList) {
+  fake.store.loadLocalList.mockResolvedValue(local);
 }
 
 function fetchResolves(result: FetchResult<RoundListItem[]>) {
@@ -106,26 +87,25 @@ const inProgressRounds: RoundListItem[] = [
 ];
 
 function offlineWithLocal(items: RoundListItem[] = inProgressRounds) {
-  localList.state = {
-    local: { inProgress: items, deleted: new Set() },
-    waited: false,
-  };
+  setLocal({ inProgress: items, deleted: new Set() });
 }
 
 beforeEach(() => {
-  // offlineの結果が返る状況はnavigator.onLineがfalseである(trueのままだと、すぐ再取得する)。
-  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-  vi.clearAllMocks();
-  localList.state = { local: null, waited: false };
-  deletion.deleteRound.mockResolvedValue(undefined);
+  fake = createFakeRoundsStore();
+  // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
+  fake.goOffline();
+  // 端末の列は、既定では読み込みが終わらない。
+  fake.store.loadLocalList.mockReturnValue(new Promise(() => {}));
+  load = fake.store.loadList;
+  deleteRound = fake.store.deleteRound;
 });
 
-afterEach(() => {
-  vi.useRealTimers();
-  vi.restoreAllMocks();
-});
+// 待ちの経過の合図を起こす。
+async function elapseWait() {
+  await act(async () => fake.elapseFallbackWait());
+}
 
-describe("RoundsListClient", () => {
+describe("RoundsList", () => {
   describe("一覧の表示", () => {
     it("取得中は、読み込み中の表示と新規作成ボタンを表示する", () => {
       // Given
@@ -151,6 +131,7 @@ describe("RoundsListClient", () => {
 
       // Then
       expect(await screen.findByText("午前練習")).toBeInTheDocument();
+      expect(load).toHaveBeenCalledExactlyOnceWith();
       expect(screen.getByText("2026-09-15")).toBeInTheDocument();
       expect(screen.getByText("300点")).toBeInTheDocument();
       expect(screen.getByText("午後練習")).toBeInTheDocument();
@@ -206,22 +187,43 @@ describe("RoundsListClient", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("一覧の読み込みへ、この画面のサーバーの一覧の取得を渡す", async () => {
+    it("新規作成ボタンは新規作成の経路へ向き、各ラウンドのカードはそのラウンドの詳細の経路へ向く", async () => {
       // Given
-      fetchList.mockResolvedValue({ status: "ok", data: rounds });
-      load.mockImplementation(async (_store, fetchServerList) => {
-        const items = await fetchServerList();
-        return items.status === "ok"
-          ? { status: "ok", data: loaded(items.data) }
-          : items;
-      });
+      fetchResolves({ status: "ok", data: rounds });
 
       // When
       renderList();
+      await screen.findByText("午前練習");
+
+      // Then
+      expect(screen.getByTestId("new-round-fab")).toHaveAttribute(
+        "href",
+        NEW_ROUND_PATH,
+      );
+      expect(screen.getByText("午前練習").closest("a")).toHaveAttribute(
+        "href",
+        roundPath("round-1"),
+      );
+      expect(screen.getByText("午後練習").closest("a")).toHaveAttribute(
+        "href",
+        roundPath("round-2"),
+      );
+    });
+
+    it("オフラインの結果の後に通信が戻ると、取得し直し、取得できた一覧を表示する", async () => {
+      // Given
+      load
+        .mockResolvedValueOnce({ status: "offline" })
+        .mockResolvedValueOnce({ status: "ok", data: loaded(rounds) });
+      renderList();
+      await screen.findByText("ネットワークに接続されていません");
+
+      // When
+      await act(async () => fake.returnOnline());
 
       // Then
       expect(await screen.findByText("午前練習")).toBeInTheDocument();
-      expect(fetchList).toHaveBeenCalledExactlyOnceWith({}, sessionReader);
+      expect(load).toHaveBeenCalledTimes(2);
     });
 
     it("再試行すると取得し直し、取得できた一覧を表示する", async () => {
@@ -266,7 +268,7 @@ describe("RoundsListClient", () => {
     it("確認すると、そのラウンドを削除し、ダイアログがすぐ閉じ、一覧から取り除く", async () => {
       // Given
       // 削除の保存は終わらない。
-      deletion.deleteRound.mockReturnValue(new Promise(() => {}));
+      deleteRound.mockReturnValue(new Promise(() => {}));
       const user = userEvent.setup();
       fetchResolves({ status: "ok", data: rounds });
       renderList();
@@ -282,7 +284,7 @@ describe("RoundsListClient", () => {
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
       // Then
-      expect(deletion.deleteRound).toHaveBeenCalledWith(store, "round-1");
+      expect(deleteRound).toHaveBeenCalledExactlyOnceWith("round-1");
       await waitFor(() => {
         expect(screen.queryByText("午前練習")).not.toBeInTheDocument();
       });
@@ -306,7 +308,7 @@ describe("RoundsListClient", () => {
       await waitFor(() => {
         expect(screen.queryByTestId("confirm-dialog-cancel")).toBeNull();
       });
-      expect(deletion.deleteRound).not.toHaveBeenCalled();
+      expect(deleteRound).not.toHaveBeenCalled();
       expect(screen.getByText("午前練習")).toBeInTheDocument();
     });
 
@@ -360,7 +362,7 @@ describe("RoundsListClient", () => {
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
       // Then
-      expect(deletion.deleteRound).toHaveBeenCalledWith(store, "round-9");
+      expect(deleteRound).toHaveBeenCalledExactlyOnceWith("round-9");
       await waitFor(() => {
         expect(screen.queryByText("2026-09-17")).not.toBeInTheDocument();
       });
@@ -472,23 +474,18 @@ describe("RoundsListClient", () => {
       ).toBeInTheDocument();
     });
 
-    it("取得中は、待つ間は入力中の領域を表示せず、待った後は入力中の領域と「過去履歴」の下のスケルトンを表示する", () => {
+    it("取得中は、待つ間は入力中の領域を表示せず、待ちが経過した後は入力中の領域と「過去履歴」の下のスケルトンを表示する", async () => {
       // Given
       load.mockReturnValue(new Promise(() => {}));
       offlineWithLocal();
 
       // When
-      const { rerender } = renderList();
+      renderList();
+      await act(async () => {});
       const shownBeforeWait =
         screen.queryByTestId("in-progress-rounds") !== null;
       const loadingBeforeWait = screen.queryByRole("status") !== null;
-      // 待ちの経過は、useLocalRoundsListのwaitedが真になることで表す。
-      localList.state = { ...localList.state, waited: true };
-      rerender(
-        <RoundsStoreProvider store={store}>
-          <RoundsListClient sessionReader={sessionReader} />
-        </RoundsStoreProvider>,
-      );
+      await elapseWait();
 
       // Then
       expect(shownBeforeWait).toBe(false);
@@ -502,14 +499,12 @@ describe("RoundsListClient", () => {
 
     it("入力中がなく取得できないときは、今と同じ表示で、見出しも「まだラウンドがありません。」も表示しない", async () => {
       // Given
-      localList.state = {
-        local: { inProgress: [], deleted: new Set() },
-        waited: true,
-      };
+      setLocal({ inProgress: [], deleted: new Set() });
       fetchResolves({ status: "offline" });
 
       // When
       renderList();
+      await elapseWait();
       await screen.findByText("ネットワークに接続されていません");
 
       // Then
@@ -531,7 +526,7 @@ describe("RoundsListClient", () => {
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
       // Then
-      expect(deletion.deleteRound).toHaveBeenCalledWith(store, "round-3");
+      expect(deleteRound).toHaveBeenCalledExactlyOnceWith("round-3");
       await waitFor(() => {
         expect(screen.queryByTestId("in-progress-rounds")).toBeNull();
       });

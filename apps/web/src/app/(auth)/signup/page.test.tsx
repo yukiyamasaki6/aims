@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import SignUpPage from "./page";
 
 const NETWORK_ERROR_MESSAGE =
@@ -217,7 +218,7 @@ describe("サインアップ画面の入口", () => {
     expect(auth.updateUser).toHaveBeenCalledExactlyOnceWith({
       password: "password123",
     });
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith("/rounds");
+    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
     expect(widget.resets).toBe(1);
   });
 
@@ -407,7 +408,7 @@ describe("サインアップ画面の入口", () => {
     });
     expect(auth.verifyOtp).toHaveBeenCalledTimes(2);
     expect(auth.updateUser).toHaveBeenCalledTimes(2);
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith("/rounds");
+    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
   });
 
   it("確認の通信エラーを値で返した場合も、通信エラーを示し、再度確認できる", async () => {
@@ -451,7 +452,7 @@ describe("サインアップ画面の入口", () => {
 
     // Then
     expect(navigation.push).toHaveBeenCalledTimes(2);
-    expect(navigation.push).toHaveBeenLastCalledWith("/rounds");
+    expect(navigation.push).toHaveBeenLastCalledWith(ROUNDS_PATH);
   });
 
   it("入口から通して連打しても、パスワードの設定は1回だけで、遷移も1回になる", async () => {
@@ -469,7 +470,7 @@ describe("サインアップ画面の入口", () => {
 
     // Then
     expect(auth.updateUser).toHaveBeenCalledOnce();
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith("/rounds");
+    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
   });
 
   it("再描画を挟まず同じタスクで2回押しても、パスワードの設定は1回だけになる", async () => {
@@ -490,7 +491,7 @@ describe("サインアップ画面の入口", () => {
 
     // Then
     expect(auth.updateUser).toHaveBeenCalledOnce();
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith("/rounds");
+    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
   });
 
   it("パスワードの設定に成功して遷移を始めた後に再度押しても、再送信しない", async () => {

@@ -63,7 +63,12 @@ export type RoundsDbSchema = {
   };
   Tables: {
     rounds: {
-      Row: { id: string; disabled_at: string | null; status: string };
+      Row: {
+        id: string;
+        disabled_at: string | null;
+        status: string;
+        round_date: string;
+      };
     };
     distances: { Row: { position_key: string; id: string } };
     target_faces: { Row: Record<never, never> };

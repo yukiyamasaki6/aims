@@ -9,9 +9,9 @@ import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import type { RoundsStore } from "@/features/rounds/application/rounds-store";
 import type { FetchResult } from "@/features/rounds/domain/fetch-result";
 import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
+import { createFakeRoundsStore } from "@/features/rounds/ui/rounds-store-test-helpers";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import {
   deletePresetFromSnapshot,
@@ -44,8 +44,11 @@ vi.mock("@supabase/ssr", () => ({
 
 const sessionReader = createSupabaseAuth(createClient);
 
-// ラウンドの開始は境界としてモックするため、ラウンドの状態と変更の方法は中身を使わない偽の約束で渡す。
-const store = {} as RoundsStore;
+// ラウンドの開始は境界としてモックするため、ラウンドの状態と変更の方法は通信の復帰の合図だけを持つ偽の約束で渡す。
+// offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
+const fake = createFakeRoundsStore();
+fake.goOffline();
+const store = fake.store;
 
 function render(ui: ReactElement) {
   return renderWithoutStore(
@@ -143,8 +146,6 @@ const otherPersonalPreset: Preset = {
 };
 
 beforeEach(() => {
-  // offlineの結果が返る状況はnavigator.onLineがfalseである(trueのままだと、すぐ再取得する)。
-  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   vi.clearAllMocks();
   supabase.getSession.mockResolvedValue({
     data: { session: { user: { id: "user-1" } } },

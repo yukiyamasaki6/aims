@@ -11,6 +11,7 @@ import {
   FETCH_TIMEOUT_MS,
   type ResponseLike,
 } from "../domain/fetch-result";
+import type { ServerRoundSummary } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
 import type { TargetFaceRecord } from "../domain/target-face-types";
 import { createRoundQueries } from "../infrastructure/round-queries";
@@ -140,6 +141,7 @@ function setup(
       okResponse({ rounds: [serverRound], targetFaces: [] }),
     ),
     targetFaces: vi.fn(async () => okResponse<TargetFaceRecord[]>([])),
+    roundsList: vi.fn(async () => okResponse<ServerRoundSummary[]>([])),
     ...options.queries,
   };
   const fetching = createRoundFetching({
@@ -606,5 +608,145 @@ describe("savedTargetFaces", () => {
     // Then
     expect(first).toEqual([face("saved", null)]);
     expect(second).toBeNull();
+  });
+});
+
+describe("fetchRoundsList", () => {
+  const summary = (
+    id: string,
+    shots: { score_int: number; disabled: boolean }[],
+  ): ServerRoundSummary => ({
+    id,
+    name: `ラウンド${id}`,
+    roundDate: "2026-09-15",
+    distances: [{ disabled: false, shots }],
+  });
+
+  it("取得できたら、各行を合計点を含む一覧の1件にして、問い合わせの返した順のまま返す", async () => {
+    // Given
+    const { fetching } = setup({
+      queries: {
+        roundsList: async () =>
+          okResponse([
+            summary("round-2", [{ score_int: 10, disabled: false }]),
+            summary("round-1", [
+              { score_int: 9, disabled: false },
+              { score_int: 8, disabled: true },
+            ]),
+          ]),
+      },
+    });
+
+    // When
+    const result = await fetching.fetchRoundsList();
+
+    // Then
+    expect(result).toEqual({
+      status: "ok",
+      data: [
+        {
+          id: "round-2",
+          name: "ラウンドround-2",
+          roundDate: "2026-09-15",
+          total: 10,
+        },
+        {
+          id: "round-1",
+          name: "ラウンドround-1",
+          roundDate: "2026-09-15",
+          total: 9,
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ["0件", okResponse<ServerRoundSummary[]>([])],
+    ["応答のdataがnull", okResponse(null as unknown as ServerRoundSummary[])],
+  ])("%sのとき、not-foundではなく空配列のokを返す", async (_name, response) => {
+    // Given
+    const { fetching } = setup({
+      queries: { roundsList: async () => response },
+    });
+
+    // When
+    const result = await fetching.fetchRoundsList();
+
+    // Then
+    expect(result).toEqual({ status: "ok", data: [] });
+  });
+
+  it("通信できないとき、原因を断定せずerrorを返す", async () => {
+    // Given
+    const { fetching } = setup({
+      queries: {
+        roundsList: async () => ({ data: null, error: null, status: 0 }),
+      },
+    });
+
+    // When
+    const result = await fetching.fetchRoundsList();
+
+    // Then
+    expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+  });
+
+  it("取得がエラーのとき、errorを返し、一覧は返さない", async () => {
+    // Given
+    const { fetching } = setup({
+      queries: {
+        roundsList: async () => ({
+          data: null,
+          error: { message: "query failed" },
+          status: 500,
+        }),
+      },
+    });
+
+    // When
+    const result = await fetching.fetchRoundsList();
+
+    // Then
+    expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+  });
+
+  it("サインインしていないとき、roundsListを呼ばず、サインインが必要なerrorを返す", async () => {
+    // Given
+    const { fetching, queries } = setup({
+      signIn: { status: "unauthenticated", message: AUTH_REQUIRED_MESSAGE },
+    });
+
+    // When
+    const result = await fetching.fetchRoundsList();
+
+    // Then
+    expect(result).toEqual({
+      status: "error",
+      message: AUTH_REQUIRED_MESSAGE,
+    });
+    expect(queries.roundsList).not.toHaveBeenCalled();
+  });
+
+  it("終わらない取得は、FETCH_TIMEOUT_MSでerrorにし、FALLBACK_WAIT_MSでは返らない", async () => {
+    // Given
+    const { fetching, clock } = setup({
+      queries: { roundsList: () => new Promise<never>(() => {}) },
+    });
+    let settled = false;
+    const pending = fetching.fetchRoundsList().finally(() => {
+      settled = true;
+    });
+
+    // When
+    await clock.advanceAsync(FALLBACK_WAIT_MS);
+    const settledAtFallback = settled;
+    await clock.advanceAsync(FETCH_TIMEOUT_MS - FALLBACK_WAIT_MS);
+
+    // Then
+    expect(settledAtFallback).toBe(false);
+    await expect(pending).resolves.toEqual({
+      status: "error",
+      message: FETCH_ERROR_MESSAGE,
+    });
   });
 });

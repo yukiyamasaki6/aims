@@ -5,11 +5,8 @@ import {
   FETCH_ERROR_MESSAGE,
   type FetchResult,
   type FetchView,
-} from "@/features/rounds/domain/fetch-result";
-import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
-
-// 通信の可否。
-const connectivity = createBrowserConnectivity();
+} from "../domain/fetch-result";
+import { useRoundsStore } from "./rounds-context";
 
 type Settled<T> = {
   key: readonly unknown[];
@@ -28,6 +25,7 @@ export function useFetchResult<T>(
   fetcher: () => Promise<FetchResult<T>>,
   deps: readonly unknown[],
 ): { view: FetchView<T>; retry: () => void } {
+  const store = useRoundsStore();
   const [settled, setSettled] = useState<Settled<T> | null>(null);
   const [attempt, setAttempt] = useState(0);
   const key = [...deps, attempt];
@@ -58,16 +56,10 @@ export function useFetchResult<T>(
     settled.result.status === "offline";
   useEffect(() => {
     if (!offline) return;
-    // offlineに決まる前にonlineが届いていた場合は、購読しても次のonlineが来ないため、その時点でオンラインならすぐ再取得する。
+    // offlineに決まる前にonlineが届いていた場合は、次のonlineが来ないため、その時点でオンラインならすぐ再取得する(whenOnlineが直ちに呼ぶ)。
     // オンラインでの再取得はofflineを返さないため、繰り返さない。
-    if (!connectivity.isOffline()) {
-      retry();
-      return;
-    }
-    const onOnline = () => retry();
-    window.addEventListener("online", onOnline, { once: true });
-    return () => window.removeEventListener("online", onOnline);
-  }, [offline, retry]);
+    return store.whenOnline(retry);
+  }, [offline, retry, store]);
   const view: FetchView<T> =
     settled && sameKey(settled.key, key)
       ? settled.result

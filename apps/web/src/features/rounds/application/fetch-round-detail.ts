@@ -7,6 +7,11 @@ import {
 } from "../domain/fetch-result";
 import type { RoundRevisions } from "../domain/round-base";
 import type { RoundConfig } from "../domain/round-config";
+import {
+  type RoundListItem,
+  roundListItemOf,
+  type ServerRoundSummary,
+} from "../domain/round-list";
 import { fromServerRound, type ServerRound } from "../domain/round-tables";
 import type { Distance, Shot } from "../domain/scorecard-types";
 import type { RoundStatus } from "../domain/sync-events";
@@ -51,6 +56,8 @@ export type RoundQueries = {
     roundIds: readonly string[],
   ): Promise<ResponseLike<RoundDetailsData>>;
   targetFaces(userId: string): Promise<ResponseLike<TargetFaceRecord[]>>;
+  // 削除されていないラウンドを、実施日の新しい順に得る。入力中のラウンドも含む。ページ、絞り込み、並びの条件はここに足す。
+  roundsList(): Promise<ResponseLike<ServerRoundSummary[]>>;
 };
 
 type RoundDetail = {
@@ -174,8 +181,19 @@ export function createRoundFetching(deps: {
     return { status: "ok", data: { rounds, startedAt, userId } };
   }
 
+  // 一覧のラウンドを取得する。代わりは持たない。
+  async function fetchRoundsList(): Promise<FetchResult<RoundListItem[]>> {
+    const result = await content.fetchContent(() => queries.roundsList());
+    if (result.status !== "ok") return result;
+    return {
+      status: "ok",
+      data: (result.data ?? []).map(roundListItemOf),
+    };
+  }
+
   return {
     fetchTargetFaces,
+    fetchRoundsList,
     fetchRoundDetail,
     fetchRoundDetails,
     // 端末に保存した的の一覧。無ければnull。

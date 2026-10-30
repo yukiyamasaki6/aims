@@ -136,7 +136,7 @@ describe("leave", () => {
     const state = initialSessionEndFlow;
 
     // When
-    const result = leave(state, "/rounds/new?from=a");
+    const result = leave(state, "/rounds/new?from=a", "/rounds");
 
     // Then
     expect(result).toEqual({
@@ -152,12 +152,25 @@ describe("leave", () => {
       const state = initialSessionEndFlow;
 
       // When
-      const result = leave(state, here);
+      const result = leave(state, here, "/rounds");
 
       // Then
       expect(result.result).toBe("/signin");
     },
   );
+
+  it("保護の範囲の根が異なる場合、根の下の場所だけを遷移元にする", () => {
+    // Given
+    const state = initialSessionEndFlow;
+
+    // When
+    const inside = leave(state, "/elsewhere/x", "/elsewhere");
+    const outside = leave(state, "/rounds/x", "/elsewhere");
+
+    // Then
+    expect(inside.result).toBe("/signin?returnTo=%2Felsewhere%2Fx");
+    expect(outside.result).toBe("/signin");
+  });
 
   it("遷移元を明示しない(サインアウトを終えられた)ときは、遷移元を付けずにサインインへ移る", () => {
     // Given
@@ -168,7 +181,7 @@ describe("leave", () => {
     }).state;
 
     // When
-    const result = leave(completed, null);
+    const result = leave(completed, null, "/rounds");
 
     // Then
     expect(result).toEqual({
@@ -182,7 +195,7 @@ describe("leave", () => {
     const running = beginSignOut(initialSessionEndFlow).state;
 
     // When
-    const result = leave(running, "/rounds/new");
+    const result = leave(running, "/rounds/new", "/rounds");
 
     // Then
     expect(result).toEqual({ state: running, result: null });
@@ -208,7 +221,7 @@ describe("leave", () => {
       ).state;
 
       // When
-      const result = leave(settled, "/rounds/new");
+      const result = leave(settled, "/rounds/new", "/rounds");
 
       // Then
       expect(result.result).toBe("/signin?returnTo=%2Frounds%2Fnew");
@@ -217,10 +230,10 @@ describe("leave", () => {
 
   it("移った後に重ねて呼んでも、遷移は1回である", () => {
     // Given
-    const first = leave(initialSessionEndFlow, "/rounds/new");
+    const first = leave(initialSessionEndFlow, "/rounds/new", "/rounds");
 
     // When
-    const second = leave(first.state, null);
+    const second = leave(first.state, null, "/rounds");
 
     // Then
     expect(first.result).not.toBeNull();
