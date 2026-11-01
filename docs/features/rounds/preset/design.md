@@ -31,14 +31,17 @@
 
 ## 構成とデータの流れ
 
-- `save-preset-dialog.tsx`: 保存ダイアログの状態を持ち、`save_round_as_preset`を呼ぶ。保存の成功後に、`RoundsStore.loadPresets`でプリセット一覧を背景で再取得して端末の保存済みを更新する。
-- `scorecard-preset.ts`: 開閉時の事前入力と破棄、名前の決定と長さ検証、RPC引数の生成、結果の反映を純関数で行う。
+- `features/rounds/ui/save-preset-dialog.tsx`: 保存ダイアログの描画。`RoundsStore.savePreset`を呼び、結果を状態へ反映する。
+- `features/rounds/ui/save-preset-dialog-state.ts`: 開閉時の事前入力と破棄、二重の実行の防止、結果の反映を純関数で行う。
+- `features/rounds/domain/preset-save.ts`: 保存するプリセットの内容(外部の引数名を持たない)、名前の決定と長さ検証、距離の位置キーの連番の振り直しを行う。
+- `RoundsStore.savePreset`と保存の手続き(`features/rounds/application/save-preset.ts`): 起動地点の`SignInReader`でサインインの状態を確かめ、書き込みを実行し、成功の後にプリセット一覧を背景で再取得して端末の保存済みを更新する。
 - `features/rounds/ui/use-preset-delete.ts`: 削除を確認中のプリセットと、削除済みのID、実行中とエラーを持ち、`RoundsStore.deletePreset`を呼ぶ。
 - `RoundsStore.deletePreset`と削除の手続き(`features/rounds/application/delete-preset.ts`): サインインの状態を確かめ、削除を実行する。書き込みに成功したら、削除の応答を待つ間に画面を離れていても保存済みから除く(画面への結果だけを破棄する)。届かなかったときと拒否されたときは保存済みを変えない。
-- `features/rounds/infrastructure/preset-commands.ts`: `DatabaseGateway.delete`で`preset_rounds`を`id`で消し、結果を種類(届いた、届かなかった、拒否された)に写す。文言は作らない。
-- `rounds/[id]/scorecard-client.tsx`: 保存ダイアログへ、ラウンド名と画面に表示中の構成(操作の列から導いた距離)を渡す。
-- `features/auth`の入口の`unconfirmedMessage`: 保存のセッション確認が、`readSession`で未認証と不明（通信失敗）に分けて返す文言。削除は、起動地点が生成した`SignInReader`の文言で受ける。
+- `features/rounds/infrastructure/preset-commands.ts`: 削除は`DatabaseGateway.delete`で`preset_rounds`を`id`で消す。保存は`DatabaseGateway.rpc("save_round_as_preset")`を呼び、外部の引数名`p_*`はここだけが知る。どちらも結果を種類(届いた、届かなかった、拒否された)に写す。文言は作らない。
+- `features/rounds/ui/scorecard-client.tsx`: 保存ダイアログへ、ラウンド名と画面に表示中の構成(操作の列から導いた距離)を渡す。
+- サインインの確認の文言: 保存も削除も、起動地点が生成した`SignInReader`の`read`が返す文言(未認証と不明（通信失敗）。`features/auth`の入口の`unconfirmedMessage`から作る)で受ける。
 - 削除の失敗の文言は、ラウンドのドメイン(`features/rounds/domain/write-result.ts`の定数`PRESET_DELETE_ERROR_MESSAGE`)が持つ。届かなかったときも拒否されたときも「削除できませんでした。」で、サーバーとパッケージの文言は出さない。
+- 保存の失敗の文言も同じ場所の定数`PRESET_SAVE_ERROR_MESSAGE`が持つ。サインインの確認以外の失敗は、種類によらず「保存できませんでした。」で、サーバーとパッケージの文言は出さない。
 
 - 名前が空白のみなら、距離を位置順に`-`でつないだ名前（未入力の距離は`??`）で保存する。
 - 名前は50文字以内とし、クライアントの検証とDBのCHECK制約の両方で守る。
@@ -58,6 +61,7 @@
 | 名前の上限を50文字にする | 一覧と要約行が折り返しと省略に対応していないため | 一覧が折り返しに対応したとき |
 | 削除の確認に完了を待つ`BlockingConfirmDialog`を使い、実行中の状態は削除側のフックが持つ | 破壊的な操作で、完了前に閉じると結果を確認できないため。実行中の状態は削除の状態(確認中のプリセット、削除済みのID)を持つ場所に置き、ダイアログは表現だけにする | 削除を取り消せるようにしたとき |
 | 削除の失敗の文言を種類から固定の文言にする | 外部のエラーから文言を作らないため(I01)。認証の`other`と同じ | 失敗の種類ごとに利用者の行動を変える必要が出たとき |
+| 保存の失敗の文言を種類から固定の文言にする | 外部のエラーから文言を作らないため(I01)。削除と同じ | 失敗の種類ごとに利用者の行動を変える必要が出たとき |
 | 削除メニューは、名前ボタンとメニューボタンだけを囲む`relative`ラッパー内で中央寄せする | カード全体を基準にすると、距離構成の展開時にメニューボタンが名前の行からずれるため | カードの構造を変えたとき |
 
 ## 制約と未対応

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { shotIdAfter } from "../shot-id";
 import {
   compareDistancePosition,
   distanceNumber,
@@ -15,6 +14,7 @@ import {
   summarizeRound,
 } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
+import { shotIdAfter } from "./shot-id";
 
 function ring(
   scoreStr: string,

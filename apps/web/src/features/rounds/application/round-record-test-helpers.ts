@@ -6,6 +6,7 @@ import type { RoundBaseRecord } from "../domain/round-base";
 import { roundStreamRules } from "../domain/round-retention";
 import type { SyncOperation } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face-types";
+import { createRoundEditing } from "./edit-round";
 import type { RoundFetching } from "./fetch-round-detail";
 import { createRefreshRequests } from "./refresh-requests";
 import { createRefreshRoundBases } from "./refresh-round-bases";
@@ -74,11 +75,13 @@ export function createTestRoundsStore(
     userId?: string | null;
     offline?: boolean;
     savedFaces?: TargetFaceOption[] | null;
+    clockStart?: number;
+    randomBytes?: (length: number) => Uint8Array;
   } = {},
 ) {
   const { hub, store: opLog, bus } = createTestRoundHub(options.shared);
   const requests = createRefreshRequests();
-  const clock = createManualClock();
+  const clock = createManualClock(options.clockStart);
   const connectivity = createFakeConnectivity(options.offline);
   const fetching = {
     fetchTargetFaces: vi.fn(),
@@ -90,16 +93,32 @@ export function createTestRoundsStore(
   };
   const roundStart = { startRound: vi.fn() };
   const presetDeletion = { deletePreset: vi.fn() };
+  const leaving = {
+    completeRound: vi.fn(),
+    deleteRound: vi.fn(),
+    deleteRoundAndLeave: vi.fn(),
+    leaveRound: vi.fn(),
+  };
+  const presetSaving = { savePreset: vi.fn() };
   let issued = 0;
+  const ids = {
+    next: () => `event-${++issued}`,
+    randomBytes: (length: number) => {
+      return options.randomBytes?.(length) ?? new Uint8Array(length);
+    },
+  };
   const store = createRoundsStore({
     hub,
     requests,
     fetching: fetching as unknown as RoundFetching,
     clock,
     connectivity,
-    ids: { next: () => `event-${++issued}` },
+    ids,
     roundStart,
     presetDeletion,
+    leaving,
+    editing: createRoundEditing({ hub, ids }),
+    presetSaving,
   });
   hub.start(options.userId === undefined ? "user-1" : options.userId);
   return {
@@ -113,6 +132,8 @@ export function createTestRoundsStore(
     fetching,
     roundStart,
     presetDeletion,
+    leaving,
+    presetSaving,
   };
 }
 

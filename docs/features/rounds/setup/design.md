@@ -35,13 +35,13 @@
 ## 構成とデータの流れ
 
 - `page.tsx`: 静的な枠。ラウンド・距離・的の取得は`rounds/detail`が扱う。
-- `use-scorecard.ts`: ラウンド・距離・矢は、操作の列から導いた状態を使う。
-- `use-score-history.ts`: 取り消し/やり直しの履歴を状態に持つ。
-- `use-distance-editing.ts`: 距離の編集の開閉と、距離の追加、保存、削除。構成が変わる保存と削除で、その距離の履歴を捨てる。
-- `round-config-panel.tsx`: ラウンド概要と編集ダイアログ。`features/rounds/domain/round-config.ts`の`validateRoundConfig`で検証する。
-- `distance-edit-fields.tsx`: 距離編集と削除確認。`distance-config.ts`の`validateDistanceDraft`で検証する。
-- `target-face-picker.tsx`: 的選択。`filterTargetFaces`で絞り込む。
-- `scorecard-distances.ts`: 追加する距離の算出と、構成が変わるかの判定。
+- `features/rounds/ui/use-scorecard.ts`: ラウンド・距離・矢は、操作の列から導いた状態を使う。
+- `features/rounds/ui/use-score-history.ts`: 取り消し/やり直しの履歴を状態に持つ。
+- `features/rounds/ui/use-distance-editing.ts`: 距離の編集の開閉と、距離の追加、保存、削除。構成が変わる保存と削除で、その距離の履歴を捨てる。距離のIDとイベントIDは窓口の`newId`から受ける。
+- `features/rounds/ui/round-config-panel.tsx`: ラウンド概要と編集ダイアログ。`features/rounds/domain/round-config.ts`の`validateRoundConfig`で検証し、イベントIDは窓口の`newId`から受ける。
+- `features/rounds/ui/distance-edit-fields.tsx`: 距離編集と削除確認。`features/rounds/domain/distance-config.ts`の`validateDistanceDraft`で検証し、操作は`distance-operations.ts`で組み立て、イベントIDは窓口の`newId`から受ける。
+- `features/rounds/ui/target-face-picker.tsx`: 的選択。`features/rounds/domain/target-face-filter.ts`の`filterTargetFaces`で絞り込む。
+- `features/rounds/domain/distance-operations.ts`: 追加する距離の算出と、構成が変わるかの判定、距離の更新と無効化の操作。
 
 保存の流れ: 検証、状態の楽観的更新、ダイアログを閉じる、操作の列へ追記する、の順である。
 保存は、保存した設定との差分(変えた項目だけ)を1つの操作として積み、何も変わらない保存は操作を積まない。サーバーが項目ごとに判定する。構成(的・エンド数・矢数)は1組で、どれかが変われば3項目をまとめて積む。

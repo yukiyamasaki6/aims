@@ -65,13 +65,14 @@
 | `features/rounds/domain/write-result.ts` | ドメイン層(値オブジェクト: 書き込みの結果の種類と文言) |
 | `features/rounds/domain/option-label.ts` | ドメイン層(値オブジェクト: 選択肢の値の表示名`labelOf`) |
 | `features/rounds/domain/target-face-types.ts` | ドメイン層(値オブジェクト。的を引く`lookupTargetFace`を足す) |
-| `features/rounds/application/start-round.ts` | 手続き(開始)と約束(`Navigation`) |
-| `features/rounds/application/delete-preset.ts` | 手続き(個人プリセットの削除)と約束(`PresetCommands`) |
+| `features/rounds/application/start-round.ts` | 手続き(開始) |
+| `features/rounds/application/delete-preset.ts` | 手続き(個人プリセットの削除) |
+| `features/rounds/application/navigation.ts`、`preset-commands.ts` | 手続きの約束(`Navigation`、`PresetCommands`)。使い手が複数になったため、手続きから移した(段階4) |
 | `features/rounds/application/sign-in-reader.ts`、`reference-snapshots.ts`、`unique-ids.ts` | 手続きの約束(`SignInReader`、`ReferenceSnapshots`、`UniqueIds`。使い手が2つ以上) |
 | `features/rounds/application/rounds-store.ts` | 手続き(画面に渡す状態と変更の方法。プリセットの取得、削除、開始を足す) |
 | `features/rounds/application/fetch-round-detail.ts` | 手続き(取得の順序。プリセットの取得を足す)と約束(`RoundQueries`) |
 | `features/rounds/infrastructure/preset-commands.ts` | インフラ層(プリセットの書き込みと、結果の種類への写し) |
-| `features/rounds/infrastructure/router-navigation.ts` | インフラ層(画面のパッケージの遷移で進む) |
+| `features/rounds/infrastructure/router-navigation.ts` | インフラ層(画面のパッケージの遷移で進む、置き換える。`replace`は段階4で足した) |
 | `features/rounds/infrastructure/browser-unique-ids.ts` | インフラ層(新しいIDの払い出し) |
 | `features/rounds/infrastructure/round-queries.ts`、`reference-snapshot.ts`、`auth-sign-in-reader.ts`、`rounds-db-schema.ts` | インフラ層(プリセットの問い合わせ、保存済みの書き換え、不明の文言、プリセットの表を足す) |
 | `hooks/use-mounted-ref.ts`、`hooks/use-hydrated.ts`、`components/ui/{button,confirm-dialog,dropdown-menu,skeleton}.tsx`、`lib/utils.ts` | 共有の画面部品 |
@@ -91,7 +92,7 @@
 | 保存済みをユーザーごとのキーで`localStorage`に持ち、ネットワーク優先で、失敗または1秒の時間切れのときだけ使う。時間切れ後に届いた結果は表示せず保存する | オフラインで開始でき、オンラインの表示を入れ替えないため。保存済み優先は表示の入れ替わりと選択中のプリセットが消える扱いが要るため採らない。SWの実行時キャッシュはクロスオリジンを通さず認証に依存するため採らない | 保存量が`localStorage`の容量に近づいたとき。1秒を超える取得が通常になったとき |
 | 保存のキーは取得の開始時のクエリのユーザーIDにし、取得の開始時刻が新しいときだけ書く | 遅れて届いた結果や、サインインし直しの前後で、別のユーザーのキーへ書かず、古い結果で新しい保存済みを戻さないため | - |
 | プリセットをラウンドの機能の中に置く | プリセットを使う画面はどれもラウンドの画面で、構成と一緒に変わり、別の機能にすると開始と保存で機能の間が循環するため(M02、D06) | ラウンドの画面の外でプリセットを扱うとき |
-| 開始の後の遷移を開始の手続きの約束(`Navigation`)で表し、取得と削除と開始を`RoundsStore`に持たせる | 保存の後に進む順序を手続きに置き、画面に渡す形を1つにするため(L01、R01) | 画面ごとに異なる遷移の方法が要るとき |
+| 開始の後の遷移を手続きの約束(`Navigation`。`application/navigation.ts`)で表し、取得と削除と開始を`RoundsStore`に持たせる。使い手は開始と、詳細の完了、削除して離れる、一覧へ戻るである | 保存の後に進む順序を手続きに置き、画面に渡す形を1つにするため(L01、R01) | 画面ごとに異なる遷移の方法が要るとき |
 | 並びを名前でなく構成で決める | 名前は自由入力で内容を反映せず、自然順ソートは漢字の読みで曖昧になるため | プリセットの種類が増えたとき |
 | クライアントの認証確認は起動地点が生成した`SignInReader`の`read`で判定し、未認証と確定したときだけ止めて「サインインが必要です。」を表示する。不明（通信失敗）と`FALLBACK_WAIT_MS`（1秒。代わりがある待ちの上限、`app/offline-pwa`）の時間切れは開始する | `getUser()`はサーバー再検証を伴い、認可の実体はRPCにあるため。オフラインで開始でき、未認証の確認を保つため。待つのはトークンの失効時だけ | 開始の待ちが知覚されたとき |
 

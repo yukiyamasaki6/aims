@@ -4,13 +4,11 @@ import type { Preset } from "../domain/preset";
 import { roundPath } from "../domain/round-routes";
 import { type RoundCreated, roundCreatedDraftOf } from "../domain/round-start";
 import { roundStreamId } from "../domain/sync-events";
+import type { Navigation } from "./navigation";
 import type { RoundRecordHub } from "./round-record-hub";
 import type { SignInReader } from "./sign-in-reader";
 import { TIMED_OUT, withinTime } from "./time-limit";
 import type { UniqueIds } from "./unique-ids";
-
-// 画面の遷移。例外: 投げることがある(画面のパッケージが経路を受け付けないとき)。開始の手続きは扱わない。作成の保存の後のため、失敗として戻すと再び開始でき、成功として返すと遷移の失敗を隠すため、拒否として呼び出し元へ伝える。
-export type Navigation = { go(path: string): void };
 
 // created: 作成を端末の操作の列へ保存し、詳細の画面へ進んだ。
 // failed: 開始できず、画面に出す文言がある。
@@ -33,9 +31,9 @@ export type RoundStart = {
 export function createRoundStart(deps: {
   hub: Pick<RoundRecordHub, "append">;
   signIn: SignInReader;
-  ids: UniqueIds;
+  ids: Pick<UniqueIds, "next">;
   clock: Clock;
-  navigation: Navigation;
+  navigation: Pick<Navigation, "go">;
 }): RoundStart {
   const { hub, signIn, ids, clock, navigation } = deps;
 

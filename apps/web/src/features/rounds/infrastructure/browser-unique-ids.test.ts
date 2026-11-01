@@ -35,4 +35,45 @@ describe("createBrowserUniqueIds", () => {
     expect(touchedByCreate).toBe(0);
     expect(randomUuid).toHaveBeenCalled();
   });
+
+  it.each([1, 10, 16])(
+    "randomBytes(%i)は、その長さのバイト列を返す",
+    (length) => {
+      // Given
+      const ids = createBrowserUniqueIds();
+
+      // When
+      const bytes = ids.randomBytes(length);
+
+      // Then
+      expect(bytes).toBeInstanceOf(Uint8Array);
+      expect(bytes).toHaveLength(length);
+    },
+  );
+
+  it("randomBytesは、呼ぶたびに異なる値を返す", () => {
+    // Given
+    const ids = createBrowserUniqueIds();
+
+    // When
+    const first = ids.randomBytes(10);
+    const second = ids.randomBytes(10);
+
+    // Then
+    expect(Array.from(second)).not.toEqual(Array.from(first));
+  });
+
+  it("生成の時点では乱数のバイト列に触れず、randomBytesで初めて触れる", () => {
+    // Given
+    const getRandomValues = vi.spyOn(crypto, "getRandomValues");
+
+    // When
+    const ids = createBrowserUniqueIds();
+    const touchedByCreate = getRandomValues.mock.calls.length;
+    ids.randomBytes(10);
+
+    // Then
+    expect(touchedByCreate).toBe(0);
+    expect(getRandomValues).toHaveBeenCalled();
+  });
 });

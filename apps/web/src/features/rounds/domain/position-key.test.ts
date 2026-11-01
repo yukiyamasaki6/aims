@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comparePositionKey } from "./position-key";
+import { comparePositionKey, nextPositionKey } from "./position-key";
 
 describe("comparePositionKey", () => {
   it("position_keyの辞書順で並べる", () => {
@@ -20,5 +20,17 @@ describe("comparePositionKey", () => {
 
   it("position_key・ID共に同じ場合は0を返す", () => {
     expect(comparePositionKey("a", "1", "a", "1")).toBe(0);
+  });
+});
+
+describe("nextPositionKey", () => {
+  it("最後の文字を1つ進める", () => {
+    expect(nextPositionKey("a")).toBe("b");
+    expect(nextPositionKey("ay")).toBe("az");
+  });
+
+  it("最後の文字がzなら、aを足す", () => {
+    expect(nextPositionKey("z")).toBe("za");
+    expect(nextPositionKey("az")).toBe("aza");
   });
 });

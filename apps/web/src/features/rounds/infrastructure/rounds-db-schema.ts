@@ -58,6 +58,15 @@ export type RoundsDbSchema = {
       Args: { p_distance_event_id: string; p_distance_id: string };
       Returns: Json;
     };
+    save_round_as_preset: {
+      Args: {
+        p_bow_type: string;
+        p_distances: Json;
+        p_format: string;
+        p_name: string;
+      };
+      Returns: string;
+    };
     record_shots: { Args: { p_shots: Json }; Returns: Json };
     clear_shots: { Args: { p_shots: Json }; Returns: Json };
   };

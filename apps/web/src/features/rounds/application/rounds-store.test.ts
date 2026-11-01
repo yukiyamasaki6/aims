@@ -9,6 +9,7 @@ import type { RoundListItem } from "../domain/round-list";
 import { roundStreamId } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face-types";
 import {
+  distanceCreated,
   roundBase,
   roundCreated,
   roundDisabled,
@@ -1335,63 +1336,21 @@ describe("再読み込み", () => {
 });
 
 describe("deleteRound", () => {
-  it("そのラウンドの列へ、払い出されたイベントIDのround.disabledを積む", async () => {
+  it("手続きのdeleteRoundへ同じ引数を渡し、その保存の完了まで解決しない", async () => {
     // Given
     const tab = createTestRoundsStore();
-
-    // When
-    await tab.store.deleteRound("round-1");
-
-    // Then
-    expect(tab.hub.record(STREAM).items.map((item) => item.operation)).toEqual([
-      { type: "round.disabled", eventId: "event-1", roundId: "round-1" },
-    ]);
-  });
-
-  it("削除のたびに新しいイベントIDを使う", async () => {
-    // Given
-    const tab = createTestRoundsStore();
-
-    // When
-    await tab.store.deleteRound("round-1");
-    await tab.store.deleteRound("round-2");
-
-    // Then
-    const eventIdOf = (roundId: string) =>
-      tab.hub.record(roundStreamId(roundId)).items[0]?.operation.eventId;
-    expect(eventIdOf("round-1")).toBe("event-1");
-    expect(eventIdOf("round-2")).toBe("event-2");
-  });
-
-  it("保存の試みが終わるまで解決しない", async () => {
-    // Given
-    const tab = createTestRoundsStore();
-    const saving = Promise.withResolvers<number>();
-    vi.spyOn(tab.opLog, "append").mockReturnValue(saving.promise);
-    const deleting = tab.store.deleteRound("round-1");
-
-    // When
-    const resolvedBeforeSave = await settled(deleting);
-    saving.resolve(1);
-
-    // Then
-    expect(resolvedBeforeSave).toBe(false);
-    await expect(deleting).resolves.toBeUndefined();
-  });
-
-  it("保存が失敗しても拒否せず、メモリの記録には削除を残す", async () => {
-    // Given
-    const tab = createTestRoundsStore();
-    vi.spyOn(tab.opLog, "append").mockRejectedValue(new Error("保存できない"));
+    const pending = Promise.withResolvers<void>();
+    tab.leaving.deleteRound.mockReturnValue(pending.promise);
 
     // When
     const deleting = tab.store.deleteRound("round-1");
+    const resolvedBeforeRelease = await settled(deleting);
+    pending.resolve();
 
     // Then
+    expect(tab.leaving.deleteRound).toHaveBeenCalledExactlyOnceWith("round-1");
+    expect(resolvedBeforeRelease).toBe(false);
     await expect(deleting).resolves.toBeUndefined();
-    expect(
-      tab.hub.record(STREAM).items.map((item) => item.operation.type),
-    ).toEqual(["round.disabled"]);
   });
 });
 
@@ -1575,5 +1534,417 @@ describe("startRound", () => {
 
     // Then
     await expect(outcome).rejects.toBe(failure);
+  });
+});
+
+describe("completeRound", () => {
+  it("手続きのcompleteRoundへ同じ引数を渡し、その完了まで解決しない", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const pending = Promise.withResolvers<void>();
+    tab.leaving.completeRound.mockReturnValue(pending.promise);
+
+    // When
+    const running = tab.store.completeRound("round-1");
+    const resolvedBeforeRelease = await settled(running);
+    pending.resolve();
+
+    // Then
+    expect(tab.leaving.completeRound).toHaveBeenCalledExactlyOnceWith(
+      "round-1",
+    );
+    expect(resolvedBeforeRelease).toBe(false);
+    await expect(running).resolves.toBeUndefined();
+  });
+});
+
+describe("deleteRoundAndLeave", () => {
+  it("手続きのdeleteRoundAndLeaveへ同じ引数を渡し、その完了まで解決しない", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const pending = Promise.withResolvers<void>();
+    tab.leaving.deleteRoundAndLeave.mockReturnValue(pending.promise);
+
+    // When
+    const running = tab.store.deleteRoundAndLeave("round-1");
+    const resolvedBeforeRelease = await settled(running);
+    pending.resolve();
+
+    // Then
+    expect(tab.leaving.deleteRoundAndLeave).toHaveBeenCalledExactlyOnceWith(
+      "round-1",
+    );
+    expect(resolvedBeforeRelease).toBe(false);
+    await expect(running).resolves.toBeUndefined();
+  });
+});
+
+describe("leaveRound", () => {
+  it("一覧へ戻る手続きを呼ぶ", () => {
+    // Given
+    const tab = createTestRoundsStore();
+
+    // When
+    tab.store.leaveRound();
+
+    // Then
+    expect(tab.leaving.leaveRound).toHaveBeenCalledTimes(1);
+  });
+
+  it("一覧へ戻る手続きが投げたときは、その例外を伝える", () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const failure = new Error("go failed");
+    tab.leaving.leaveRound.mockImplementation(() => {
+      throw failure;
+    });
+
+    // When
+    const leave = () => tab.store.leaveRound();
+
+    // Then
+    expect(leave).toThrow(failure);
+  });
+});
+
+describe("savePreset", () => {
+  const preset = {
+    name: "練習用",
+    format: "outdoor",
+    bowType: "recurve",
+    distances: [
+      {
+        positionKey: "a",
+        distance: 70,
+        totalEnds: 6,
+        arrowsPerEnd: 6,
+        targetFaceId: "face-1",
+        isMarked: true,
+      },
+    ],
+  };
+
+  it.each([
+    ["saved", { status: "saved" }],
+    ["failed", { status: "failed", error: "保存できませんでした。" }],
+  ] as const)(
+    "保存の手続きへ同じプリセットを渡し、結果(%s)をそのまま返す",
+    async (_name, result) => {
+      // Given
+      const tab = createTestRoundsStore();
+      tab.presetSaving.savePreset.mockResolvedValue(result);
+
+      // When
+      const saved = await tab.store.savePreset(preset);
+
+      // Then
+      expect(tab.presetSaving.savePreset).toHaveBeenCalledWith(preset);
+      expect(saved).toEqual(result);
+    },
+  );
+});
+
+describe("newId", () => {
+  it("払い出しの約束の値を、呼ぶたびに返す", () => {
+    // Given
+    const tab = createTestRoundsStore();
+
+    // When
+    const first = tab.store.newId();
+    const second = tab.store.newId();
+
+    // Then
+    expect(first).toBe("event-1");
+    expect(second).toBe("event-2");
+  });
+});
+
+describe("newShotId", () => {
+  const UuidV7 =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const startMs = 0x0199_0000_0000;
+  const timeOf = (id: string) =>
+    Number.parseInt(id.slice(0, 8) + id.slice(9, 13), 16);
+  const bytesFrom = (seed: number) => (length: number) =>
+    Uint8Array.from({ length }, (_, i) => (seed + i) & 0xff);
+
+  it("エンドに矢が無いときは、時計の現在時刻を先頭とする版7のUUIDを返す", () => {
+    // Given
+    const tab = createTestRoundsStore({
+      clockStart: startMs,
+      randomBytes: bytesFrom(1),
+    });
+
+    // When
+    const id = tab.store.newShotId([]);
+
+    // Then
+    expect(id).toMatch(UuidV7);
+    expect(timeOf(id)).toBe(startMs);
+  });
+
+  it("既にある矢のIDより、文字列として大きいIDを返す", () => {
+    // Given
+    const tab = createTestRoundsStore({
+      clockStart: startMs,
+      randomBytes: bytesFrom(1),
+    });
+    const existing = "ffffffff-fff0-4fff-bfff-ffffffffffff";
+
+    // When
+    const id = tab.store.newShotId([existing]);
+
+    // Then
+    expect(id).toMatch(UuidV7);
+    expect(id > existing).toBe(true);
+  });
+
+  it("乱数は10バイトを払い出しの約束から取り、乱数が変わるとIDも変わる", () => {
+    // Given
+    const firstBytes = vi.fn(bytesFrom(1));
+    const first = createTestRoundsStore({
+      clockStart: startMs,
+      randomBytes: firstBytes,
+    });
+    const second = createTestRoundsStore({
+      clockStart: startMs,
+      randomBytes: bytesFrom(50),
+    });
+
+    // When
+    const firstId = first.store.newShotId([]);
+    const secondId = second.store.newShotId([]);
+
+    // Then
+    expect(firstBytes.mock.calls).toEqual([[10]]);
+    expect(firstId).not.toBe(secondId);
+    expect(timeOf(firstId)).toBe(timeOf(secondId));
+  });
+
+  it("時計が遅れていて、既にある矢の時刻が時計より先でも、既にある矢より大きいIDを返す", () => {
+    // Given
+    const tab = createTestRoundsStore({
+      clockStart: startMs,
+      randomBytes: bytesFrom(1),
+    });
+    const ahead = (startMs + 60_000).toString(16).padStart(12, "0");
+    const existing = `${ahead.slice(0, 8)}-${ahead.slice(8)}-7000-8000-000000000000`;
+
+    // When
+    const id = tab.store.newShotId([existing]);
+
+    // Then
+    expect(id > existing).toBe(true);
+  });
+});
+
+describe("round(...).append: 完了のラウンドへの編集", () => {
+  const distance = {
+    id: "d-1",
+    position_key: "a",
+    distance: 70,
+    total_ends: 6,
+    arrows_per_end: 6,
+    target_face_id: "face-1",
+    is_marked: true,
+  };
+  const recordedShot = {
+    id: "s-1",
+    distance_id: "d-1",
+    end_number: 1,
+    score_str: "10",
+    score_int: 10,
+    shot_number: null,
+    shooter_id: "user-1",
+  };
+
+  function loadedOf(
+    status: "in_progress" | "completed",
+    shots: (typeof recordedShot)[] = [],
+  ): LoadedRound {
+    return {
+      base: roundBase({ status, name: "元", distances: [distance], shots })
+        .tables,
+      targetFaces: [face],
+      pendingCreationEventId: null,
+      source: "server",
+    };
+  }
+
+  const typesOf = (tab: ReturnType<typeof createTestRoundsStore>) =>
+    tab.hub.record(STREAM).items.map((item) => item.operation.type);
+
+  it("表示が変わる矢の記録を追記すると、続けて状態を入力中に戻す操作も同じ列に積み、その操作のイベントIDは払い出された値である", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const handle = tab.store.round("round-1");
+    handle.watch(loadedOf("completed"));
+    expect(handle.getSnapshot().state?.status).toBe("completed");
+
+    // When
+    await handle.append(shotRecorded());
+    await flush();
+
+    // Then
+    const items = tab.hub.record(STREAM).items;
+    expect(items.map((item) => item.operation.type)).toEqual([
+      "shot.recorded",
+      "round.updated",
+    ]);
+    expect(items[1].operation.eventId).toBe("event-1");
+    expect(handle.getSnapshot().state?.status).toBe("in_progress");
+  });
+
+  it("完了のラウンドの距離の編集(距離の追加)でも、続けて入力中へ戻す操作が積まれる", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const handle = tab.store.round("round-1");
+    handle.watch(loadedOf("completed"));
+
+    // When
+    await handle.append(distanceCreated({ id: "d-2", positionKey: "b" }));
+    await flush();
+
+    // Then
+    expect(typesOf(tab)).toEqual(["distance.created", "round.updated"]);
+    expect(handle.getSnapshot().state?.status).toBe("in_progress");
+  });
+
+  it("ラウンド設定の変更では、完了のまま戻さない", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const handle = tab.store.round("round-1");
+    handle.watch(loadedOf("completed"));
+
+    // When
+    await handle.append(roundUpdated({ changes: { name: "新" } }));
+    await flush();
+
+    // Then
+    expect(typesOf(tab)).toEqual(["round.updated"]);
+    expect(handle.getSnapshot().state?.status).toBe("completed");
+    expect(handle.getSnapshot().state?.roundConfig.name).toBe("新");
+  });
+
+  it("入力中のラウンドへの記録では、状態を変える操作を積まない", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const handle = tab.store.round("round-1");
+    handle.watch(loadedOf("in_progress"));
+
+    // When
+    await handle.append(shotRecorded());
+    await flush();
+
+    // Then
+    expect(typesOf(tab)).toEqual(["shot.recorded"]);
+    expect(handle.getSnapshot().state?.status).toBe("in_progress");
+  });
+
+  it("完了のラウンドで、変化の無い記録(記録済みの矢に同じ点数を書く)では積まない", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const handle = tab.store.round("round-1");
+    handle.watch(loadedOf("completed", [recordedShot]));
+
+    // When
+    await handle.append(
+      shotRecorded({ shotId: "s-1", scoreStr: "10", scoreInt: 10 }),
+    );
+    await flush();
+
+    // Then
+    expect(typesOf(tab)).toEqual(["shot.recorded"]);
+    expect(handle.getSnapshot().state?.status).toBe("completed");
+  });
+
+  it("入力中に戻った後に続けて記録しても、戻す操作を重ねて積まない", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const handle = tab.store.round("round-1");
+    handle.watch(loadedOf("completed"));
+    await handle.append(shotRecorded());
+    await flush();
+    expect(handle.getSnapshot().state?.status).toBe("in_progress");
+
+    // When
+    await handle.append(
+      shotRecorded({ eventId: "e-shot-2", shotId: "s-2", endNumber: 2 }),
+    );
+    await flush();
+
+    // Then
+    expect(typesOf(tab)).toEqual([
+      "shot.recorded",
+      "round.updated",
+      "shot.recorded",
+    ]);
+  });
+
+  it("未反映のまま連続して2件を追記しても、最終の状態は入力中である", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const handle = tab.store.round("round-1");
+    handle.watch(loadedOf("completed"));
+
+    // When
+    const first = handle.append(shotRecorded());
+    const second = handle.append(
+      shotRecorded({ eventId: "e-shot-2", shotId: "s-2", endNumber: 2 }),
+    );
+    await Promise.all([first, second]);
+    await flush();
+
+    // Then
+    expect(handle.getSnapshot().state?.status).toBe("in_progress");
+  });
+
+  it("画面を開く前(印を付ける前)の追記では、元の操作だけを積む", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const handle = tab.store.round("round-1");
+
+    // When
+    await handle.append(shotRecorded());
+    await flush();
+
+    // Then
+    expect(typesOf(tab)).toEqual(["shot.recorded"]);
+  });
+
+  it("印を外した後の追記では、元の操作だけを積む", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const handle = tab.store.round("round-1");
+    const unwatch = handle.watch(loadedOf("completed"));
+    unwatch();
+
+    // When
+    await handle.append(shotRecorded());
+    await flush();
+
+    // Then
+    expect(typesOf(tab)).toEqual(["shot.recorded"]);
+  });
+
+  it("追記の戻り値は、保存の完了で解決し、解決の時点で画面の状態へ反映済みである", async () => {
+    // Given
+    const tab = createTestRoundsStore();
+    const handle = tab.store.round("round-1");
+    handle.watch(loadedOf("in_progress"));
+    const saving = Promise.withResolvers<number>();
+    vi.spyOn(tab.opLog, "append").mockReturnValue(saving.promise);
+
+    // When
+    const appended = handle.append(shotRecorded());
+    const resolvedBeforeSave = await settled(appended);
+    const shotsBeforeSave = handle.getSnapshot().state?.shots.length;
+    saving.resolve(1);
+    await appended;
+
+    // Then
+    expect(resolvedBeforeSave).toBe(false);
+    expect(shotsBeforeSave).toBe(0);
+    expect(handle.getSnapshot().state?.shots).toHaveLength(1);
   });
 });

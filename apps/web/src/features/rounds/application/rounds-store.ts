@@ -8,6 +8,7 @@ import {
   type FetchResult,
 } from "../domain/fetch-result";
 import type { Preset, Presets } from "../domain/preset";
+import type { PresetToSave } from "../domain/preset-save";
 import {
   deletionsOf,
   type LoadedRoundsList,
@@ -33,6 +34,7 @@ import {
   openPlan,
   roundScreenState,
 } from "../domain/round-view";
+import { shotIdAfter } from "../domain/shot-id";
 import {
   roundIdOfStream,
   roundStreamId,
@@ -40,13 +42,16 @@ import {
 } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face-types";
 import type { DeletePresetResult, PresetDeletion } from "./delete-preset";
+import type { RoundEditing } from "./edit-round";
 import type { RoundFetching } from "./fetch-round-detail";
+import type { RoundLeaving } from "./leave-round";
 import type { OpenedRound, RefreshRequests } from "./refresh-requests";
 import type {
   HubSnapshot,
   RoundRecordHub,
   RoundStoreGroup,
 } from "./round-record-hub";
+import type { PresetSaving, SavePresetResult } from "./save-preset";
 import type { RoundStart, StartRoundResult } from "./start-round";
 import { TIMED_OUT, withinTime } from "./time-limit";
 import type { UniqueIds } from "./unique-ids";
@@ -93,6 +98,7 @@ export type RoundHandle = {
   // 印を付けずに、開いた材料から今の状態を求める(最初の描画で、印を付ける前に状態を得るため)。副作用を持たない。
   peek(opening: LoadedRound): PeekedSnapshot;
   // 操作を追記する。画面への反映と送信は保存の完了後で、送信の完了は待たない。
+  // 完了のラウンドの表示中の距離か矢を変える編集は、続けて入力中へ戻す操作を積む。判定は追記の前の画面の状態で行う(追記の結果の反映後では、変化が無いと判定して積まないため)。画面を開いていない(watchの前)ときは積まない。
   append(operation: SyncOperation): Promise<void>;
 };
 
@@ -102,7 +108,19 @@ export type RoundsStore = {
   loadLocalList(): Promise<LocalRoundsList>;
   round(roundId: string): RoundHandle;
   append(roundId: string, operation: SyncOperation): Promise<void>;
-  // 一覧と詳細の確認の後に呼ぶ削除。操作の列へround.disabledを積む。保存の試みが終わると解決し、拒否しない。送信の完了は待たない。
+  // 入力の完了。完了の操作を積み、保存の完了の後に一覧へ進む。送信の完了は待たない。遷移が投げたときは拒否する。
+  completeRound(roundId: string): Promise<void>;
+  // 詳細の確認の後に呼ぶ削除。round.disabledを積み、保存の完了の後に一覧へ置き換えて移る。送信の完了は待たない。遷移が投げたときは拒否する。
+  deleteRoundAndLeave(roundId: string): Promise<void>;
+  // 一覧へ置き換えて移る(削除済み、作成が確定せずに消えたとき)。
+  leaveRound(): void;
+  // 現在の構成のプリセットとしての保存。サインインの確認、書き込み、成功の後の保存済みの再取得を行う。
+  savePreset(preset: PresetToSave): Promise<SavePresetResult>;
+  // 新しいID(操作のイベントID、距離のID)の払い出し。
+  newId(): string;
+  // そのエンドの既にある矢のIDより後ろに並ぶ、時刻順の矢のIDの払い出し。
+  newShotId(endShotIds: readonly string[]): string;
+  // 一覧の削除。操作の列へround.disabledを積み、画面に残る。保存の試みが終わると解決し、拒否しない。送信の完了は待たない。詳細は`deleteRoundAndLeave`。
   deleteRound(roundId: string): Promise<void>;
   // 今オンラインなら直ちに、オフラインなら次に通信が戻ったときに、1回だけlistenerを呼ぶ。返す関数で取り消す。表示の読み直しの合図で、取得と反映の時点は決めない。
   whenOnline(listener: () => void): () => void;
@@ -145,6 +163,9 @@ export function createRoundsStore(deps: {
   ids: UniqueIds;
   roundStart: RoundStart;
   presetDeletion: PresetDeletion;
+  leaving: RoundLeaving;
+  editing: RoundEditing;
+  presetSaving: PresetSaving;
 }): RoundsStore {
   const {
     hub,
@@ -155,6 +176,9 @@ export function createRoundsStore(deps: {
     ids,
     roundStart,
     presetDeletion,
+    leaving,
+    editing,
+    presetSaving,
   } = deps;
   const handles = new Map<string, RoundHandle>();
 
@@ -465,7 +489,12 @@ export function createRoundsStore(deps: {
           snapshot = UNOPENED;
         };
       },
-      append: (operation) => hub.append(streamId, operation),
+      append: (operation) =>
+        editing.append(roundId, operation, () =>
+          opening && snapshot.tables
+            ? { tables: snapshot.tables, targetFaces: opening.targetFaces }
+            : null,
+        ),
     };
   }
 
@@ -483,12 +512,14 @@ export function createRoundsStore(deps: {
     },
     append: (roundId, operation) =>
       hub.append(roundStreamId(roundId), operation),
-    deleteRound: (roundId) =>
-      hub.append(roundStreamId(roundId), {
-        type: "round.disabled",
-        eventId: ids.next(),
-        roundId,
-      }),
+    completeRound: (roundId) => leaving.completeRound(roundId),
+    deleteRoundAndLeave: (roundId) => leaving.deleteRoundAndLeave(roundId),
+    leaveRound: () => leaving.leaveRound(),
+    savePreset: (preset) => presetSaving.savePreset(preset),
+    newId: () => ids.next(),
+    newShotId: (endShotIds) =>
+      shotIdAfter(endShotIds, clock.now(), ids.randomBytes(10)),
+    deleteRound: (roundId) => leaving.deleteRound(roundId),
     whenOnline(listener) {
       if (!connectivity.isOffline()) {
         listener();

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createRoundEditing } from "@/features/rounds/application/edit-round";
 import type {
   FetchedRoundDetail,
   RoundFetching,
@@ -92,15 +93,27 @@ function rig() {
     clock,
     connectivity,
   });
+  const ids = {
+    next: () => `event-${++issued}`,
+    randomBytes: (length: number) => new Uint8Array(length),
+  };
   const store = createRoundsStore({
     hub,
     requests,
     fetching: fetching as unknown as RoundFetching,
     clock,
     connectivity,
-    ids: { next: () => `event-${++issued}` },
+    ids,
     roundStart: { startRound: vi.fn() },
     presetDeletion: { deletePreset: vi.fn() },
+    leaving: {
+      completeRound: vi.fn(),
+      deleteRound: vi.fn(),
+      deleteRoundAndLeave: vi.fn(),
+      leaveRound: vi.fn(),
+    },
+    editing: createRoundEditing({ hub, ids }),
+    presetSaving: { savePreset: vi.fn() },
   });
   sync.start("user-1");
   return { sync, store, requests, fetching, clock };

@@ -1,15 +1,8 @@
 import { type Presets, withoutPreset } from "../domain/preset";
-import {
-  PRESET_DELETE_ERROR_MESSAGE,
-  type WriteResult,
-} from "../domain/write-result";
+import { PRESET_DELETE_ERROR_MESSAGE } from "../domain/write-result";
+import type { PresetCommands } from "./preset-commands";
 import type { ReferenceSnapshots } from "./reference-snapshots";
 import type { SignInReader } from "./sign-in-reader";
-
-// プリセットの書き込み。例外: 投げない(失敗は種類で返す)。
-export type PresetCommands = {
-  deletePreset(presetId: string): Promise<WriteResult>;
-};
 
 // deleted: 削除した。
 // failed: 削除できず、画面に出す文言がある。
@@ -29,7 +22,7 @@ export type PresetDeletion = {
 // 確認の後に呼ぶ個人プリセットの削除。成功したら保存済みからも除く。
 export function createPresetDeletion(deps: {
   signIn: SignInReader;
-  commands: PresetCommands;
+  commands: Pick<PresetCommands, "deletePreset">;
   snapshots: ReferenceSnapshots;
 }): PresetDeletion {
   const { signIn, commands, snapshots } = deps;

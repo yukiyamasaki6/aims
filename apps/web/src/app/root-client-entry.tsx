@@ -12,13 +12,16 @@ import { createBrowserSenderLock } from "@/features/round-sync/infrastructure/br
 import { createBrowserVisibility } from "@/features/round-sync/infrastructure/browser-visibility";
 import { RoundBaseRefresher } from "@/features/round-sync/ui/round-base-refresher";
 import { createPresetDeletion } from "@/features/rounds/application/delete-preset";
+import { createRoundEditing } from "@/features/rounds/application/edit-round";
 import { createContentFetcher } from "@/features/rounds/application/fetch-content";
 import { createRoundFetching } from "@/features/rounds/application/fetch-round-detail";
+import { createRoundLeaving } from "@/features/rounds/application/leave-round";
 import { createRefreshRequests } from "@/features/rounds/application/refresh-requests";
 import { createRefreshRoundBases } from "@/features/rounds/application/refresh-round-bases";
 import { createRoundReconciliation } from "@/features/rounds/application/round-reconciliation";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
 import { createRoundsStore } from "@/features/rounds/application/rounds-store";
+import { createPresetSaving } from "@/features/rounds/application/save-preset";
 import { createSendOperations } from "@/features/rounds/application/send-operations";
 import { createRoundStart } from "@/features/rounds/application/start-round";
 import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
@@ -91,6 +94,8 @@ function composeApp(router: PageRouter) {
     }),
     refresh: createRefreshRoundBases({ hub, fetching, requests }),
   });
+  const navigation = createRouterNavigation(router);
+  const commands = createPresetCommands(database);
   const store = createRoundsStore({
     hub,
     requests,
@@ -103,13 +108,16 @@ function composeApp(router: PageRouter) {
       signIn,
       ids,
       clock,
-      navigation: createRouterNavigation(router),
+      navigation,
     }),
     presetDeletion: createPresetDeletion({
       signIn,
-      commands: createPresetCommands(database),
+      commands,
       snapshots,
     }),
+    leaving: createRoundLeaving({ hub, ids, navigation }),
+    editing: createRoundEditing({ hub, ids }),
+    presetSaving: createPresetSaving({ signIn, commands, fetching }),
   });
   const sync = createRoundSync({
     records: reconciliation,

@@ -4,7 +4,8 @@ import {
   PRESET_DELETE_ERROR_MESSAGE,
   type WriteResult,
 } from "../domain/write-result";
-import { createPresetDeletion, type PresetCommands } from "./delete-preset";
+import { createPresetDeletion } from "./delete-preset";
+import type { PresetCommands } from "./preset-commands";
 import type { ReferenceSnapshots } from "./reference-snapshots";
 import type { SignInReader } from "./sign-in-reader";
 
