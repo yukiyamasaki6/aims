@@ -48,14 +48,14 @@
 | `features/rounds/domain/round-view.ts`、`round-list.ts` | ドメイン層(ドメインサービス) | 開くときの判断(`openPlan`、`localOpening`)、画面の状態の導出、作成が確定せずに消えたかの判定、取り直しの要否`freshBaseNeeds`。一覧の削除済みと入力中と合計点の導出、一覧の材料の型 |
 | `features/rounds/domain/rounds-list-view.ts` | ドメイン層(ドメインサービス) | 一覧の重ね合わせと表示の内容の決定 |
 | `features/rounds/domain/preset.ts`、`preset-list-view.ts`、`round-start.ts`、`write-result.ts` | ドメイン層 | プリセットの値と並び・振り分け・除去、作成の画面の表示の決定、プリセットの構成からの、IDを除いた作成の内容の組み立て、書き込みの結果の種類と削除、保存の失敗の文言 |
-| `features/rounds/domain/shot-pointer.ts`、`score-history.ts`、`shot-operations.ts`、`round-progress.ts`、`distance-config.ts`、`distance-operations.ts`、`target-face-filter.ts`、`preset-save.ts`、`ring-color.ts`、`shot-id.ts` | ドメイン層 | 詳細の画面の規則(段階4)。指している矢の遷移、取り消しの列、矢の操作の組み立て、完了の確認と状態を変える操作、距離の設定の検証と距離の操作、的の絞り込み、保存するプリセットの内容、リング色、時刻順の矢のID(時刻と乱数は引数) |
+| `features/rounds/domain/shot-pointer.ts`、`score-history.ts`、`shot-operations.ts`、`round-progress.ts`、`distance-config.ts`、`distance-operations.ts`、`target-face-filter.ts`、`preset-save.ts`、`ring-color.ts`、`shot-id.ts` | ドメイン層 | 詳細の画面の規則。指している矢の遷移、取り消しの列、矢の操作の組み立て、完了の確認と状態を変える操作、距離の設定の検証と距離の操作、的の絞り込み、保存するプリセットの内容、リング色、時刻順の矢のID(時刻と乱数は引数) |
 | `features/rounds/domain/round-routes.ts` | ドメイン層(値オブジェクト) | ラウンドの画面の経路(`ROUNDS_PATH`、`NEW_ROUND_PATH`、`roundPath`、経路からIDを読む`roundIdOfPath`) |
 | `features/rounds/domain/open-requests.ts`、`list-requests.ts` | ドメイン層(集約) | 取り直しの依頼の規則。開く依頼は、ラウンドごとの依頼の番号、待っている依頼、記録の権利、結果の分類を持つ。一覧の依頼は、依頼の番号、成否、実行に含めた依頼を持つ |
 | `features/rounds/domain/fetch-result.ts` ほか | ドメイン層(値オブジェクト) | 取得の結果の分類と文言、時間制限の値(`FETCH_TIMEOUT_MS`、`FALLBACK_WAIT_MS`)、複数の応答を畳む優先順。`round-config.ts`、`round-constants.ts`、`option-label.ts`(選択肢の表示名)、`scorecard-types.ts`、`target-face-types.ts`(的を引く関数)、`position-key.ts`、`scorecard-scoring.ts` |
 | `features/rounds/application/round-record-hub.ts` | 手続き | アプリで1つの端末の記録。列ごとの記録を集約の値として保ち、保存の完了を待って変化を知らせる。起動時の読み込みの完了を待つ`ready`、保存先を読む`read`・`readStored`、メモリの`readAll`、取得したベースを反映する`commit`。手続きの約束`RecordChannel`(記録の変化を他のタブへ知らせる) |
 | `features/rounds/application/refresh-requests.ts`、`rounds-store.ts` | 手続き | 取り直しの依頼の記録と、画面に渡す状態と変更の方法(`RoundsStore`。削除`deleteRound`、プリセットの取得`loadPresets`・削除`deletePreset`、開始`startRound`、完了`completeRound`・削除して離れる`deleteRoundAndLeave`・一覧へ戻る`leaveRound`、保存`savePreset`、IDの払い出し`newId`・`newShotId`と、合図`whenOnline`、`afterFallbackWait`を含む。追記`handle.append`は手続き`edit-round.ts`を通して、完了のラウンドの編集で入力中へ戻す操作を続けて積む)・見え方の型。約束`UniqueIds`(新しいIDと乱数の払い出し。`unique-ids.ts`) |
 | `features/rounds/application/refresh-round-bases.ts`、`fetch-round-detail.ts`、`fetch-content.ts`、`time-limit.ts` | 手続き | ベースの取得と反映(`refreshAll`、`refreshRound`)、取得の順序(的とプリセットの取得`fetchPresets`の保存、遅れた結果の保存だけ、一覧の取得`fetchRoundsList`)、認証を確かめた取得と取り直し・時間制限。約束`RoundQueries`、`SignInReader`(`sign-in-reader.ts`)、`ReferenceSnapshots`(`reference-snapshots.ts`。取得と削除の手続きが使う)。時間制限の補助(`withinTime`)は、取得と画面の状態の2つの手続きが使う |
-| `features/rounds/application/start-round.ts`、`delete-preset.ts` | 手続き | 開始(認証の確認、作成の追記、保存の完了の後に`Navigation`で詳細へ進む)と、個人プリセットの削除(保存済みからの除去を含む)。約束`Navigation`は`navigation.ts`、`PresetCommands`は`preset-commands.ts`に置く(使い手が増えたため段階4で移した) |
+| `features/rounds/application/start-round.ts`、`delete-preset.ts` | 手続き | 開始(認証の確認、作成の追記、保存の完了の後に`Navigation`で詳細へ進む)と、個人プリセットの削除(保存済みからの除去を含む)。約束`Navigation`は`navigation.ts`、`PresetCommands`は`preset-commands.ts`に置く(約束は使い手が複数のため別ファイルに置く) |
 | `features/rounds/application/edit-round.ts` | 手続き | 追記と再開(完了のラウンドの編集で表示中の距離か矢が変わるとき、追記の前の状態で判定し、続けて入力中へ戻す操作を積む。窓口の`handle.append`が今の状態の読み手を渡して呼ぶ) |
 | `features/rounds/application/leave-round.ts`、`save-preset.ts` | 手続き | 完了、削除(一覧用。離れない)、削除して離れる、一覧へ戻る(保存の完了の後に`Navigation`で進む、または置き換える)と、プリセットの保存(サインインの確認、書き込み、成功の後の保存済みの再取得) |
 | `features/rounds/application/send-operations.ts`、`round-reconciliation.ts` | 手続き | 操作の送信と確定の記録(約束`RoundTransport`)、同期へ公開する突き合わせの操作`RoundReconciliation` |
@@ -175,7 +175,7 @@
 | 構成の変更は、表示中の矢が全て有効なときだけ効かせる | 先に確定した矢を、後から届いた構成の変更で失わないため。構成は的・エンド数・矢数の1組で、一部だけ効かせない | 矢を新しい構成へ移す要求が出たとき |
 | 不変条件を破る後の項目は効かせ、補正しない(Unmarkedはフィールドだけ、Markedは距離(m)必須) | サーバーが利用者の指定していない値を変えないため。クライアントは保存前に知らせる | 他端末との競合を自動で解く要求が出たとき |
 | 構成ごとに新しい距離を作る方式を採らない | 距離の同一性、プリセット、履歴、集計に影響が広がるため | 構成の履歴を持つ要求が出たとき |
-| 効かなかった項目がある応答のときに、ラウンド全体を取り直す。イベントの増分は取らない | イベントの版は対象ごとで、ラウンドを通した順序が無く、効かなかった操作は記録されないため。1ラウンドの取得は小さい | ラウンドを通した版が要る段階(3)やRealtimeを扱うとき |
+| 効かなかった項目がある応答のときに、ラウンド全体を取り直す。イベントの増分は取らない | イベントの版は対象ごとで、ラウンドを通した順序が無く、効かなかった操作は記録されないため。1ラウンドの取得は小さい | ラウンドを通した版(イベントの増分の取得)が要る場合やRealtimeを扱うとき |
 | 複数タブのうち、Web Locksで得た1つのタブだけが送る | 効かなかった操作は記録されず、遅れて届けば届いた時点で判定されるため、2つのタブが同じ操作を送ると、衝突する操作の確定の順が逆転する。SharedWorkerはAndroid Chromeに無く、Service Workerはセッションを持たず内容を扱わない設計のため採らない | 端末をまたいで順序を決めるとき |
 | 送るタブは、自分の追記を保存した後にも、列をIndexedDBから読み直してから送る | 他のタブの先の追記を知らずに後の操作を送ると逆転するため。`seq`の小さい操作は保存が先に完了している | 追記ごとの読み直しが入力の遅れとして知覚されたとき |
 | 送信の直前に、セッションのユーザーと列のユーザーを照合する | 常駐の送信はサインインし直しをまたいで動くので、イベントの順序だけでは、別のユーザーの認証で送らないことを保証できないため | 共有端末で秘匿が必要になったとき |

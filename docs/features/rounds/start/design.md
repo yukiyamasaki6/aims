@@ -67,12 +67,12 @@
 | `features/rounds/domain/target-face-types.ts` | ドメイン層(値オブジェクト。的を引く`lookupTargetFace`を足す) |
 | `features/rounds/application/start-round.ts` | 手続き(開始) |
 | `features/rounds/application/delete-preset.ts` | 手続き(個人プリセットの削除) |
-| `features/rounds/application/navigation.ts`、`preset-commands.ts` | 手続きの約束(`Navigation`、`PresetCommands`)。使い手が複数になったため、手続きから移した(段階4) |
+| `features/rounds/application/navigation.ts`、`preset-commands.ts` | 手続きの約束(`Navigation`、`PresetCommands`)。使い手が複数の手続きになるため、手続きのファイルから分けて置く |
 | `features/rounds/application/sign-in-reader.ts`、`reference-snapshots.ts`、`unique-ids.ts` | 手続きの約束(`SignInReader`、`ReferenceSnapshots`、`UniqueIds`。使い手が2つ以上) |
 | `features/rounds/application/rounds-store.ts` | 手続き(画面に渡す状態と変更の方法。プリセットの取得、削除、開始を足す) |
 | `features/rounds/application/fetch-round-detail.ts` | 手続き(取得の順序。プリセットの取得を足す)と約束(`RoundQueries`) |
 | `features/rounds/infrastructure/preset-commands.ts` | インフラ層(プリセットの書き込みと、結果の種類への写し) |
-| `features/rounds/infrastructure/router-navigation.ts` | インフラ層(画面のパッケージの遷移で進む、置き換える。`replace`は段階4で足した) |
+| `features/rounds/infrastructure/router-navigation.ts` | インフラ層(画面のパッケージの遷移で進む、置き換える。置き換え(`replace`)と進む(`go`)を持つ) |
 | `features/rounds/infrastructure/browser-unique-ids.ts` | インフラ層(新しいIDの払い出し) |
 | `features/rounds/infrastructure/round-queries.ts`、`reference-snapshot.ts`、`auth-sign-in-reader.ts`、`rounds-db-schema.ts` | インフラ層(プリセットの問い合わせ、保存済みの書き換え、不明の文言、プリセットの表を足す) |
 | `hooks/use-mounted-ref.ts`、`hooks/use-hydrated.ts`、`components/ui/{button,confirm-dialog,dropdown-menu,skeleton}.tsx`、`lib/utils.ts` | 共有の画面部品 |
