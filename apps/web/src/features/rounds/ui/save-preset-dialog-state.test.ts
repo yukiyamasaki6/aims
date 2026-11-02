@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PresetSource } from "../domain/preset-save";
-import { presetToSave } from "../domain/preset-save";
+import { type PresetSource, presetToSave } from "../domain/preset-save";
 import type { Distance } from "../domain/scorecard-types";
 import {
   CLOSED_PRESET_DIALOG,

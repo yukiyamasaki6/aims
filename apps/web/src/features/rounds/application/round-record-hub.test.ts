@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SyncOperation } from "../domain/sync-events";
-import { roundStreamId } from "../domain/sync-events";
+import { roundStreamId, type SyncOperation } from "../domain/sync-events";
 import {
   roundBase,
   roundUpdated,

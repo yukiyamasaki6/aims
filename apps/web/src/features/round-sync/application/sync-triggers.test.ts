@@ -5,7 +5,6 @@ import type {
   SignInChanges,
 } from "@/features/auth";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import type { SignInChange } from "../domain/sync-trigger";
 import type { RoundSync } from "./round-sync";
 import { createSyncTriggers, type Visibility } from "./sync-triggers";
 
