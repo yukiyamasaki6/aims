@@ -15,23 +15,10 @@ import {
   type RoundListItem,
 } from "../domain/round-list";
 import {
-  operationsOf,
-  type RecordedOperation,
-  sameRecordedOperations,
-} from "../domain/round-record";
-import {
-  type RoundState,
   type RoundTables,
   roundTablesFromCreated,
 } from "../domain/round-tables";
-import {
-  type CreationProgress,
-  creationProgress,
-  INITIAL_CREATION,
-  localOpening,
-  openPlan,
-  roundScreenState,
-} from "../domain/round-view";
+import { localOpening, openPlan } from "../domain/round-view";
 import { shotIdAfter } from "../domain/shot-id";
 import {
   roundIdOfStream,
@@ -45,6 +32,11 @@ import type { RoundEditing } from "./edit-round";
 import type { RoundFetching } from "./fetch-round-detail";
 import type { RoundLeaving } from "./leave-round";
 import type { OpenedRound, RefreshRequests } from "./refresh-requests";
+import {
+  createRoundHandle,
+  type LoadedRound,
+  type RoundHandle,
+} from "./round-handle";
 import type {
   HubSnapshot,
   RoundRecordHub,
@@ -60,51 +52,10 @@ import {
 import type { UniqueIds } from "./unique-ids";
 import { type WhenOnline, whenOnline } from "./when-online";
 
-// 開いた詳細の材料。
-export type LoadedRound = {
-  // 状態を求める最初のベース。取得した状態、端末のベース、または確定していない作成の操作が表す状態。
-  // 画面の状態は、端末の記録のベースと操作の列から求める(これは記録にベースが無い間だけ使う)。
-  base: RoundTables;
-  // そろった的の一覧全体(取得に成功した一覧、または最後に取得に成功した一覧の保存分)。
-  targetFaces: TargetFaceOption[];
-  // 確定していない作成のeventId。あるとき、基準は端末の作成の操作である。
-  pendingCreationEventId: string | null;
-  // 取得できなかった(または`FALLBACK_WAIT_MS`内に終わらなかった)ため、端末のベースで開いたときは"local"。
-  source: "server" | "local";
-};
-
 // deleted: ラウンドの削除が列にあるため、取得した状態を表示せず一覧へ戻る。
 export type LoadedRoundDetail =
   | { deleted: true }
   | ({ deleted: false } & LoadedRound);
-
-// 開いた詳細の状態。`watch`で開いている印を付けるまで、stateはnull。
-type RoundScreenSnapshot = {
-  state: RoundState | null;
-  tables: RoundTables | null;
-  // 削除されて離れるべきか。
-  gone: boolean;
-  // 確定していない作成の操作が、確定を見ずに消えたか。
-  creationGone: boolean;
-};
-
-// 開いた材料から求めた、状態を持つスナップショット。
-type PeekedSnapshot = RoundScreenSnapshot & {
-  state: RoundState;
-  tables: RoundTables;
-};
-
-export type RoundHandle = {
-  subscribe(listener: () => void): () => void;
-  getSnapshot(): RoundScreenSnapshot;
-  // 開いている間の印を付ける。返す関数で外す。開いた材料から、状態を求める。
-  watch(opening: LoadedRound): () => void;
-  // 印を付けずに、開いた材料から今の状態を求める(最初の描画で、印を付ける前に状態を得るため)。副作用を持たない。
-  peek(opening: LoadedRound): PeekedSnapshot;
-  // 操作を追記する。画面への反映と送信は保存の完了後で、送信の完了は待たない。
-  // 完了のラウンドの表示中の距離か矢を変える編集は、続けて入力中へ戻す操作を積む。判定は追記の前の画面の状態で行う(追記の結果の反映後では、変化が無いと判定して積まないため)。画面を開いていない(watchの前)ときは積まない。
-  append(operation: SyncOperation): Promise<void>;
-};
 
 export type RoundsStore = {
   load(roundId: string): Promise<FetchResult<LoadedRoundDetail>>;
@@ -142,13 +93,6 @@ export type RoundsStore = {
     preset: Preset | null,
     isCurrent: () => boolean,
   ): Promise<StartRoundResult>;
-};
-
-const UNOPENED: RoundScreenSnapshot = {
-  state: null,
-  tables: null,
-  gone: false,
-  creationGone: false,
 };
 
 const ERROR_RESULT = {
@@ -333,170 +277,6 @@ export function createRoundsStore(deps: {
     };
   }
 
-  // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
-  function createHandle(roundId: string): RoundHandle {
-    const streamId = roundStreamId(roundId);
-    const listeners = new Set<() => void>();
-    let opening: LoadedRound | null = null;
-    let watchers = 0;
-    let snapshot = UNOPENED;
-    let creation: CreationProgress = INITIAL_CREATION;
-    let seen: {
-      items: unknown;
-      base: unknown;
-      outcome: unknown;
-      operations: RecordedOperation[];
-      screen: ReturnType<typeof roundScreenState>;
-    } | null = null;
-    let stopObserving: (() => void) | undefined;
-
-    // 画面用の操作が変わったときだけ、重ね合わせを作り直す。スナップショットは中身が変わったときだけ作り直して知らせる。
-    function recompute() {
-      if (!opening) return;
-      const record = hub.record(streamId);
-      const outcome = requests.outcomeOf(roundId);
-      if (
-        seen?.items === record.items &&
-        seen.base === record.base &&
-        seen.outcome === outcome
-      ) {
-        return;
-      }
-      const operations = operationsOf(record);
-      const screen =
-        seen &&
-        seen.base === record.base &&
-        sameRecordedOperations(seen.operations, operations)
-          ? seen.screen
-          : roundScreenState(
-              { base: record.base, operations },
-              opening.base,
-              opening.targetFaces,
-            );
-      // 作成の消失の判定は、保存の前の操作を含む items で行うため、作り直しを省いても省かない。
-      if (opening.pendingCreationEventId) {
-        creation = creationProgress(
-          creation,
-          record.items,
-          opening.pendingCreationEventId,
-        );
-      }
-      seen = {
-        items: record.items,
-        base: record.base,
-        outcome,
-        operations,
-        screen,
-      };
-      publish(screen, outcome);
-      // 印が変わると依頼の記録の購読者を同期で呼ぶ(この recompute 自身を含む)ため、最後に呼ぶ。
-      requests.setOverlay(roundId, screen.needsRefetch);
-    }
-
-    // 新しい画面の値が今と違うときだけ、スナップショットを変えて聞き手へ知らせる。
-    function publish(
-      screen: ReturnType<typeof roundScreenState>,
-      outcome: unknown,
-    ) {
-      if (!opening) return;
-      const gone = isGone(screen.deletedElsewhere, opening, outcome);
-      if (
-        snapshot.state === screen.state &&
-        snapshot.tables === screen.tables &&
-        snapshot.gone === gone &&
-        snapshot.creationGone === creation.gone
-      ) {
-        return;
-      }
-      snapshot = {
-        state: screen.state,
-        tables: screen.tables,
-        gone,
-        creationGone: creation.gone,
-      };
-      for (const listener of [...listeners]) listener();
-    }
-
-    function isGone(
-      deletedElsewhere: boolean,
-      from: LoadedRound,
-      outcome: unknown,
-    ): boolean {
-      return (
-        deletedElsewhere || (from.source === "local" && outcome === "gone")
-      );
-    }
-
-    function observe() {
-      const stopHub = hub.subscribe((change) => {
-        if (change.streamId === streamId) recompute();
-      });
-      const stopRequests = requests.subscribe(recompute);
-      return () => {
-        stopHub();
-        stopRequests();
-      };
-    }
-
-    return {
-      subscribe(listener) {
-        listeners.add(listener);
-        return () => {
-          listeners.delete(listener);
-        };
-      },
-      getSnapshot: () => snapshot,
-      peek(from) {
-        const record = hub.record(streamId);
-        const screen = roundScreenState(
-          { base: record.base, operations: operationsOf(record) },
-          from.base,
-          from.targetFaces,
-        );
-        return {
-          state: screen.state,
-          tables: screen.tables,
-          gone: isGone(
-            screen.deletedElsewhere,
-            from,
-            requests.outcomeOf(roundId),
-          ),
-          creationGone: false,
-        };
-      },
-      watch(next) {
-        if (watchers === 0) creation = INITIAL_CREATION;
-        opening = next;
-        seen = null;
-        watchers += 1;
-        const unmark = requests.watch(roundId, next.source === "local");
-        stopObserving ??= observe();
-        recompute();
-        let released = false;
-        return () => {
-          if (released) return;
-          released = true;
-          unmark();
-          watchers -= 1;
-          if (watchers > 0) return;
-          stopObserving?.();
-          stopObserving = undefined;
-          requests.setOverlay(roundId, false);
-          // 閉じた詳細の状態を残さない(開き直したとき、前の状態を見せないため)。
-          opening = null;
-          seen = null;
-          snapshot = UNOPENED;
-        };
-      },
-      append: (operation) =>
-        editing.append(roundId, operation, () =>
-          opening && snapshot.tables
-            ? { tables: snapshot.tables, targetFaces: opening.targetFaces }
-            : null,
-        ),
-    };
-  }
-
   return {
     load: (roundId) => withinFetchTimeout(openDetail(roundId)),
     loadList: () => withinFetchTimeout(listDetail()),
@@ -504,7 +284,7 @@ export function createRoundsStore(deps: {
     round(roundId) {
       let handle = handles.get(roundId);
       if (!handle) {
-        handle = createHandle(roundId);
+        handle = createRoundHandle({ hub, requests, editing }, roundId);
         handles.set(roundId, handle);
       }
       return handle;

@@ -105,6 +105,7 @@ export function createTestRoundsStore(
     prefix: "event",
     randomBytes: options.randomBytes,
   });
+  const editing = createRoundEditing({ hub, ids });
   const store = createRoundsStore({
     hub,
     requests,
@@ -116,7 +117,7 @@ export function createTestRoundsStore(
     presetDeletion,
     leaving,
     deletion,
-    editing: createRoundEditing({ hub, ids }),
+    editing,
     presetSaving,
   });
   hub.start(options.userId === undefined ? "user-1" : options.userId);
@@ -133,6 +134,7 @@ export function createTestRoundsStore(
     presetDeletion,
     leaving,
     deletion,
+    editing,
     presetSaving,
   };
 }

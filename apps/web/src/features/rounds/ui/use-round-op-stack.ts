@@ -5,7 +5,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { LoadedRound } from "../application/rounds-store";
+import type { LoadedRound } from "../application/round-handle";
 import type { RoundState } from "../domain/round-tables";
 import type { SyncOperation } from "../domain/sync-events";
 import { useRoundsStore } from "./rounds-context";

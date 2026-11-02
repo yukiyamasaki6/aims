@@ -2,10 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  RoundHandle,
-  RoundsStore,
-} from "@/features/rounds/application/rounds-store";
+import type { RoundHandle } from "@/features/rounds/application/round-handle";
+import type { RoundsStore } from "@/features/rounds/application/rounds-store";
 import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { useCreationGone } from "./use-creation-gone";
 

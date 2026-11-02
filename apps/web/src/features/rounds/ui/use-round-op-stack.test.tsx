@@ -1,11 +1,11 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import type { LoadedRound } from "@/features/rounds/application/round-handle";
 import {
   createTestRoundsStore,
   settleRoundNow,
 } from "@/features/rounds/application/round-record-test-helpers";
-import type { LoadedRound } from "@/features/rounds/application/rounds-store";
 import {
   roundBase,
   roundUpdated,

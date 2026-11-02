@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useHydrated } from "@/hooks/use-hydrated";
-import type { LoadedRound } from "../application/rounds-store";
+import type { LoadedRound } from "../application/round-handle";
 import { isRoundInProgress } from "../domain/round-retention";
 import type { TargetFaceOption } from "../domain/target-face";
 import { useRoundsStore } from "./rounds-context";

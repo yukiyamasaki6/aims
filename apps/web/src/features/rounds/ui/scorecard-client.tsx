@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { LoadedRound } from "../application/rounds-store";
+import type { LoadedRound } from "../application/round-handle";
 import { completionConfirmation } from "../domain/round-progress";
 import { summarizeRound } from "../domain/scorecard-scoring";
 import type { TargetFaceOption } from "../domain/target-face";
