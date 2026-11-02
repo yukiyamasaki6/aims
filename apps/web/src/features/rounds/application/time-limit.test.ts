@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
-import { TIMED_OUT, withinTime } from "./time-limit";
+import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
+import { FETCH_TIMEOUT_MS } from "../domain/fetch-result";
+import { TIMED_OUT, withinFetchTimeout, withinTime } from "./time-limit";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -57,5 +59,46 @@ describe("withinTime", () => {
     // Then
     await expect(outcome).rejects.toBe(failure);
     expect(clock.pendingCount()).toBe(0);
+  });
+});
+
+describe("withinFetchTimeout", () => {
+  it("FETCH_TIMEOUT_MSで終わらなければ、その時点の通信の可否で、切断ならoffline、そうでなければerrorにする", async () => {
+    // Given
+    const clock = createManualClock();
+    const connectivity = createFakeConnectivity(true);
+    const online = createFakeConnectivity(false);
+    const offlineLoading = withinFetchTimeout(
+      clock,
+      connectivity,
+      new Promise<never>(() => {}),
+    );
+    const onlineLoading = withinFetchTimeout(
+      clock,
+      online,
+      new Promise<never>(() => {}),
+    );
+
+    // When
+    await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+    // Then
+    expect(await offlineLoading).toEqual({ status: "offline" });
+    expect(await onlineLoading).toMatchObject({ status: "error" });
+  });
+
+  it("時間内に終われば、その結果を返す", async () => {
+    // Given
+    const clock = createManualClock();
+
+    // When
+    const result = await withinFetchTimeout(
+      clock,
+      createFakeConnectivity(),
+      Promise.resolve({ status: "ok", data: 1 } as const),
+    );
+
+    // Then
+    expect(result).toEqual({ status: "ok", data: 1 });
   });
 });

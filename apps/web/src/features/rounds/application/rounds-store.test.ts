@@ -1355,21 +1355,6 @@ describe("deleteRound", () => {
 });
 
 describe("whenOnline", () => {
-  it("今オンラインなら、直ちに1回呼び、購読を張らない", () => {
-    // Given
-    const tab = createTestRoundsStore({ offline: false });
-    const listener = vi.fn();
-
-    // When
-    tab.store.whenOnline(listener);
-    tab.connectivity.goOffline();
-    tab.connectivity.goOnline();
-
-    // Then
-    expect(listener).toHaveBeenCalledOnce();
-    expect(tab.connectivity.subscribers().online).toBe(0);
-  });
-
   it("オフラインなら呼ばずに待ち、次に通信が戻ったときに1回だけ呼ぶ", () => {
     // Given
     const tab = createTestRoundsStore({ offline: true });
@@ -1379,41 +1364,9 @@ describe("whenOnline", () => {
 
     // When
     tab.connectivity.goOnline();
-    tab.connectivity.goOffline();
-    tab.connectivity.goOnline();
 
     // Then
     expect(calledBeforeReturn).toBe(0);
-    expect(listener).toHaveBeenCalledOnce();
-    expect(tab.connectivity.subscribers().online).toBe(0);
-  });
-
-  it("返す関数で取り消すと、通信が戻っても呼ばない", () => {
-    // Given
-    const tab = createTestRoundsStore({ offline: true });
-    const listener = vi.fn();
-    const cancel = tab.store.whenOnline(listener);
-
-    // When
-    cancel();
-    tab.connectivity.goOnline();
-
-    // Then
-    expect(listener).not.toHaveBeenCalled();
-    expect(tab.connectivity.subscribers().online).toBe(0);
-  });
-
-  it("オンラインで直ちに呼んだ後に、返す関数を呼んでも何も起きない", () => {
-    // Given
-    const tab = createTestRoundsStore({ offline: false });
-    const listener = vi.fn();
-    const cancel = tab.store.whenOnline(listener);
-
-    // When
-    const act = () => cancel();
-
-    // Then
-    expect(act).not.toThrow();
     expect(listener).toHaveBeenCalledOnce();
   });
 });

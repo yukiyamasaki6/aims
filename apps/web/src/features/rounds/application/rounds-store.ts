@@ -1,10 +1,8 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import {
-  commFailure,
   FALLBACK_WAIT_MS,
   FETCH_ERROR_MESSAGE,
-  FETCH_TIMEOUT_MS,
   type FetchResult,
 } from "../domain/fetch-result";
 import type { Preset, Presets } from "../domain/preset";
@@ -53,8 +51,13 @@ import type {
 } from "./round-record-hub";
 import type { PresetSaving, SavePresetResult } from "./save-preset";
 import type { RoundStart, StartRoundResult } from "./start-round";
-import { TIMED_OUT, withinTime } from "./time-limit";
+import {
+  TIMED_OUT,
+  withinFetchTimeout as withinFetchTimeoutOf,
+  withinTime,
+} from "./time-limit";
 import type { UniqueIds } from "./unique-ids";
+import { type WhenOnline, whenOnline } from "./when-online";
 
 // 開いた詳細の材料。
 export type LoadedRound = {
@@ -123,7 +126,7 @@ export type RoundsStore = {
   // 一覧の削除。操作の列へround.disabledを積み、画面に残る。保存の試みが終わると解決し、拒否しない。送信の完了は待たない。詳細は`deleteRoundAndLeave`。
   deleteRound(roundId: string): Promise<void>;
   // 今オンラインなら直ちに、オフラインなら次に通信が戻ったときに、1回だけlistenerを呼ぶ。返す関数で取り消す。表示の読み直しの合図で、取得と反映の時点は決めない。
-  whenOnline(listener: () => void): () => void;
+  whenOnline: WhenOnline;
   // FALLBACK_WAIT_MSの後に1回listenerを呼ぶ。返す関数で取り消す。
   afterFallbackWait(listener: () => void): () => void;
   // プリセットの一覧(個人と公式)。取得できれば保存し、取得できなければ保存済み。
@@ -182,15 +185,8 @@ export function createRoundsStore(deps: {
   } = deps;
   const handles = new Map<string, RoundHandle>();
 
-  // 画面の読み込み(端末の保存の読み書きと取得)の全体を、開始からFETCH_TIMEOUT_MSで打ち切る。
-  // 端末の保存(IndexedDB)の待ちは時間制限を持たず、他のタブが保存を塞ぐと「読み込み中」に固定されるため。
-  // 打ち切った時点の通信の可否で、offlineかerrorを返す。打ち切った後も読み込みは続き、その結果は捨てる。
-  async function withinFetchTimeout<T>(
-    loading: Promise<FetchResult<T>>,
-  ): Promise<FetchResult<T>> {
-    const raced = await withinTime(clock, loading, FETCH_TIMEOUT_MS);
-    return raced === TIMED_OUT ? commFailure(connectivity.isOffline()) : raced;
-  }
+  const withinFetchTimeout = <T>(loading: Promise<FetchResult<T>>) =>
+    withinFetchTimeoutOf(clock, connectivity, loading);
 
   async function readGroup(streamId: string): Promise<RoundStoreGroup> {
     try {
@@ -520,21 +516,7 @@ export function createRoundsStore(deps: {
     newShotId: (endShotIds) =>
       shotIdAfter(endShotIds, clock.now(), ids.randomBytes(10)),
     deleteRound: (roundId) => leaving.deleteRound(roundId),
-    whenOnline(listener) {
-      if (!connectivity.isOffline()) {
-        listener();
-        return () => {};
-      }
-      let stop: (() => void) | undefined = connectivity.onOnline(() => {
-        stop?.();
-        stop = undefined;
-        listener();
-      });
-      return () => {
-        stop?.();
-        stop = undefined;
-      };
-    },
+    whenOnline: (listener) => whenOnline(connectivity, listener),
     afterFallbackWait: (listener) => clock.after(FALLBACK_WAIT_MS, listener),
     loadPresets: () => fetching.fetchPresets(),
     deletePreset: (presetId, isCurrent) =>
