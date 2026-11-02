@@ -14,7 +14,7 @@ import {
 } from "../domain/round-config";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../domain/round-constants";
 import type { SyncOperation } from "../domain/sync-events";
-import { useRoundsStore } from "./rounds-context";
+import { useRoundDetailStore } from "./rounds-context";
 
 function RequiredMark() {
   return (
@@ -37,7 +37,7 @@ export function RoundConfigPanel({
   hasUnmarkedDistances: boolean;
   enqueue: (operation: SyncOperation) => void;
 }) {
-  const store = useRoundsStore();
+  const store = useRoundDetailStore();
   const [expanded, setExpanded] = useState(defaultExpanded);
   // 下書きと起点(開いたときの値)は、開いたときに作り、閉じるまで`initial`の変化で書き換えない。
   const [origin, setOrigin] = useState(initial);

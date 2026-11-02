@@ -3,11 +3,11 @@
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { LoadedRoundDetail } from "../application/rounds-store";
+import type { LoadedRoundDetail } from "../application/round-detail-store";
 import { roundIdOfPath } from "../domain/round-routes";
 import { FetchState } from "./fetch-state";
 import { RoundDetailFrame } from "./round-detail-frame";
-import { useRoundsStore } from "./rounds-context";
+import { useRoundDetailStore } from "./rounds-context";
 import { ScorecardClient } from "./scorecard-client";
 import { useCreationGone } from "./use-creation-gone";
 import { useFetchResult } from "./use-fetch-result";
@@ -34,7 +34,7 @@ export function RoundDetailClient() {
 }
 
 function RoundDetailLoader({ roundId }: { roundId: string | null }) {
-  const store = useRoundsStore();
+  const store = useRoundDetailStore();
   const { view, retry } = useFetchResult<LoadedRoundDetail>(
     () =>
       roundId

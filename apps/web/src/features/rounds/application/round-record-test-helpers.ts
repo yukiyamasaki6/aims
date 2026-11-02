@@ -12,6 +12,7 @@ import type { RoundFetching } from "./fetch-round-detail";
 import { createNewRoundStore } from "./new-round-store";
 import { createRefreshRequests } from "./refresh-requests";
 import { createRefreshRoundBases } from "./refresh-round-bases";
+import { createRoundDetailStore } from "./round-detail-store";
 import { createRoundReconciliation } from "./round-reconciliation";
 import {
   createRoundRecordHub,
@@ -19,7 +20,6 @@ import {
   type RecordMessage,
 } from "./round-record-hub";
 import { createRoundsListStore } from "./rounds-list-store";
-import { createRoundsStore } from "./rounds-store";
 import {
   createSendOperations,
   type RoundTransport,
@@ -72,7 +72,7 @@ export function createTestRoundHub(
 
 // ラウンドの状態と変更の方法。記録のハブと依頼の記録は実物(メモリの保存先)で、取得の順序は差し替える。
 // 画面のテストと、ラウンドの状態のテストが使う。
-export function createTestRoundsStore(
+export function createTestRounds(
   options: {
     shared?: Parameters<typeof createTestRoundHub>[0];
     userId?: string | null;
@@ -108,7 +108,7 @@ export function createTestRoundsStore(
     randomBytes: options.randomBytes,
   });
   const editing = createRoundEditing({ hub, ids });
-  const store = createRoundsStore({
+  const detail = createRoundDetailStore({
     hub,
     requests,
     fetching: fetching as unknown as RoundFetching,
@@ -135,7 +135,7 @@ export function createTestRoundsStore(
   });
   hub.start(options.userId === undefined ? "user-1" : options.userId);
   return {
-    store,
+    detail,
     list,
     newRound,
     hub,

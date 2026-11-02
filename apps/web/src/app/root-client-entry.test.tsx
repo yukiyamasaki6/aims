@@ -12,8 +12,8 @@ import { createContentFetcher } from "@/features/rounds/application/fetch-conten
 import { createRoundFetching } from "@/features/rounds/application/fetch-round-detail";
 import { createRoundLeaving } from "@/features/rounds/application/leave-round";
 import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
+import { createRoundDetailStore } from "@/features/rounds/application/round-detail-store";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
-import { createRoundsStore } from "@/features/rounds/application/rounds-store";
 import { createPresetSaving } from "@/features/rounds/application/save-preset";
 import { createRoundStart } from "@/features/rounds/application/start-round";
 import { roundCreated } from "@/features/rounds/domain/round-op-test-helpers";
@@ -23,7 +23,7 @@ import { createPresetCommands } from "@/features/rounds/infrastructure/preset-co
 import { createReferenceSnapshots } from "@/features/rounds/infrastructure/reference-snapshot";
 import { createRoundQueries } from "@/features/rounds/infrastructure/round-queries";
 import { createRouterNavigation } from "@/features/rounds/infrastructure/router-navigation";
-import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
+import { useRoundDetailStore } from "@/features/rounds/ui/rounds-context";
 import { RootClientEntry } from "./root-client-entry";
 
 // Supabaseクライアントは外部サービスとの境界のため、認証状態の変化を任意に発火できるスタブで模す。
@@ -133,13 +133,16 @@ vi.mock(
   },
 );
 vi.mock(
-  "@/features/rounds/application/rounds-store",
+  "@/features/rounds/application/round-detail-store",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/rounds/application/rounds-store")
+        typeof import("@/features/rounds/application/round-detail-store")
       >();
-    return { ...actual, createRoundsStore: vi.fn(actual.createRoundsStore) };
+    return {
+      ...actual,
+      createRoundDetailStore: vi.fn(actual.createRoundDetailStore),
+    };
   },
 );
 vi.mock(
@@ -358,9 +361,9 @@ const lastSync = () => built.syncs.at(-1) as RoundSyncInstance;
 function Appender({
   onStore,
 }: {
-  onStore: (store: ReturnType<typeof useRoundsStore>) => void;
+  onStore: (store: ReturnType<typeof useRoundDetailStore>) => void;
 }) {
-  onStore(useRoundsStore());
+  onStore(useRoundDetailStore());
   return <p>子要素</p>;
 }
 
@@ -479,8 +482,8 @@ describe("RootClientEntry", () => {
 
       // Then
       expect(createBrowserUniqueIds).toHaveBeenCalledTimes(1);
-      expect(createRoundsStore).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(createRoundsStore).mock.calls[0][0].ids).toBe(
+      expect(createRoundDetailStore).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(createRoundDetailStore).mock.calls[0][0].ids).toBe(
         vi.mocked(createBrowserUniqueIds).mock.results[0].value,
       );
     });
@@ -575,7 +578,7 @@ describe("RootClientEntry", () => {
       const leaving = vi.mocked(createRoundLeaving).mock.calls[0][0];
       expect(deps.hub).toBe(leaving.hub);
       expect(deps.ids).toBe(leaving.ids);
-      expect(vi.mocked(createRoundsStore).mock.calls[0][0].editing).toBe(
+      expect(vi.mocked(createRoundDetailStore).mock.calls[0][0].editing).toBe(
         vi.mocked(createRoundEditing).mock.results[0].value,
       );
     });
@@ -660,7 +663,7 @@ describe("RootClientEntry", () => {
       rerender(<RootClientEntry>{null}</RootClientEntry>);
 
       // Then
-      const storeIds = vi.mocked(createRoundsStore).mock.calls[0][0].ids;
+      const storeIds = vi.mocked(createRoundDetailStore).mock.calls[0][0].ids;
       const startIds = vi.mocked(createRoundStart).mock.calls[0][0].ids;
       expect(startIds).toBe(storeIds);
     });
@@ -686,7 +689,7 @@ describe("RootClientEntry", () => {
       render(<RootClientEntry>{null}</RootClientEntry>);
 
       // Then
-      const deps = vi.mocked(createRoundsStore).mock.calls[0][0];
+      const deps = vi.mocked(createRoundDetailStore).mock.calls[0][0];
       expect(deps.leaving).toBe(
         vi.mocked(createRoundLeaving).mock.results[0].value,
       );
@@ -719,7 +722,7 @@ describe("RootClientEntry", () => {
 
     it("画面の追記、再読み込みの前の保存の待ち、同期が、同じ記録のハブを使う", async () => {
       // Given
-      let store: ReturnType<typeof useRoundsStore> | undefined;
+      let store: ReturnType<typeof useRoundDetailStore> | undefined;
       render(
         <RootClientEntry>
           <Appender onStore={(value) => (store = value)} />
@@ -730,7 +733,7 @@ describe("RootClientEntry", () => {
       const records = vi.mocked(createOpSender).mock.calls[0][0].records;
 
       // When
-      const appending = store?.append("round-1", created);
+      const appending = store?.round("round-1").append(created);
       await Promise.resolve();
       const outboxWhileSaving = records.outbox("round:round-1");
       let persisted = false;

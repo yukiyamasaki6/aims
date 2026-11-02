@@ -8,7 +8,7 @@ import {
 import type { LoadedRound } from "../application/round-handle";
 import type { RoundState } from "../domain/round-tables";
 import type { SyncOperation } from "../domain/sync-events";
-import { useRoundsStore } from "./rounds-context";
+import { useRoundDetailStore } from "./rounds-context";
 
 export type RoundOpStack = {
   // 端末の記録(ベースに操作の列を重ねたもの)から求めた、画面の状態。
@@ -17,7 +17,7 @@ export type RoundOpStack = {
   append: (operation: SyncOperation) => Promise<void>;
 };
 
-// 画面の状態は、ラウンドの状態と変更の方法(`RoundsStore`)から受け取る。取得と反映、取り直し、送信の時点は同期が決める。
+// 画面の状態は、ラウンドの状態と変更の方法(`RoundDetailStore`)から受け取る。取得と反映、取り直し、送信の時点は同期が決める。
 // 開いている間は、開いた材料を渡して印を付ける。画面を閉じても送信は続く。
 // 取り直したサーバーにラウンドが無いとき(削除済みなど)は、`onGone`を呼ぶ。
 export function useRoundOpStack(
@@ -25,7 +25,7 @@ export function useRoundOpStack(
   loaded: LoadedRound,
   onGone: () => void = noop,
 ): RoundOpStack {
-  const store = useRoundsStore();
+  const store = useRoundDetailStore();
   const [handle] = useState(() => store.round(roundId));
   // 開いている間の印は、効果で付けて外す。
   // biome-ignore lint/correctness/useExhaustiveDependencies: 開いた材料は表示の開始時のものだけを使う

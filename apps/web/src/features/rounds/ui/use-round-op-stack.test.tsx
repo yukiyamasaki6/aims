@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { LoadedRound } from "@/features/rounds/application/round-handle";
 import {
-  createTestRoundsStore,
+  createTestRounds,
   settleRoundNow,
 } from "@/features/rounds/application/round-record-test-helpers";
 import {
@@ -12,7 +12,7 @@ import {
   shotRecorded,
 } from "@/features/rounds/domain/round-op-test-helpers";
 import { roundStreamId } from "@/features/rounds/domain/sync-events";
-import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
+import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { useRoundOpStack } from "./use-round-op-stack";
 
 const STREAM = roundStreamId("round-1");
@@ -55,9 +55,11 @@ function loaded(
 }
 
 function setup() {
-  const tab = createTestRoundsStore();
+  const tab = createTestRounds();
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <RoundsStoreProvider store={tab.store}>{children}</RoundsStoreProvider>
+    <RoundDetailStoreProvider store={tab.detail}>
+      {children}
+    </RoundDetailStoreProvider>
   );
   return { tab, wrapper };
 }

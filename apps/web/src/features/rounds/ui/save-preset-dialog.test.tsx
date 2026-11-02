@@ -4,12 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PresetToSave } from "@/features/rounds/domain/preset-save";
 import type { Distance } from "@/features/rounds/domain/scorecard-types";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
-import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
-import { createFakeRoundsStore } from "@/features/rounds/ui/rounds-store-test-helpers";
+import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
+import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { SavePresetDialog } from "./save-preset-dialog";
 
 // 保存の手続き(サインインの確認、書き込み、再取得)は、ラウンドの状態と変更の方法の偽のsavePresetで受ける。手続きの規則は手続きのテスト、実物の結線はスコアカードのテストが確かめる。
-const fake = createFakeRoundsStore();
+const fake = createFakeRoundDetailStore();
 const savePreset = fake.store.savePreset;
 
 const targetFace: TargetFaceOption = {
@@ -57,7 +57,7 @@ function setup(
 ) {
   const user = userEvent.setup();
   render(
-    <RoundsStoreProvider store={fake.store}>
+    <RoundDetailStoreProvider store={fake.store}>
       <SavePresetDialog
         roundName="午前練習"
         format="outdoor"
@@ -66,7 +66,7 @@ function setup(
         targetFaces={[targetFace]}
         {...overrides}
       />
-    </RoundsStoreProvider>,
+    </RoundDetailStoreProvider>,
   );
   return { user };
 }

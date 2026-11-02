@@ -6,16 +6,18 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
-import { createFakeRoundsStore } from "@/features/rounds/ui/rounds-store-test-helpers";
+import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
+import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { RoundMenu } from "./round-menu";
 
 // 削除して離れる手続きは境界として偽の約束(ラウンドの状態と変更の方法)のdeleteRoundAndLeaveで受ける。遷移の順序は手続きのテストが確かめる。
-let fake: ReturnType<typeof createFakeRoundsStore>;
+let fake: ReturnType<typeof createFakeRoundDetailStore>;
 
 function render(ui: ReactElement) {
   return renderWithoutStore(
-    <RoundsStoreProvider store={fake.store}>{ui}</RoundsStoreProvider>,
+    <RoundDetailStoreProvider store={fake.store}>
+      {ui}
+    </RoundDetailStoreProvider>,
   );
 }
 
@@ -26,7 +28,7 @@ async function openDeleteConfirm(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  fake = createFakeRoundsStore();
+  fake = createFakeRoundDetailStore();
 });
 
 describe("RoundMenu", () => {

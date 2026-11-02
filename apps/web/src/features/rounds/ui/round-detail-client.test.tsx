@@ -4,13 +4,13 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   LoadedRoundDetail,
-  RoundsStore,
-} from "@/features/rounds/application/rounds-store";
+  RoundDetailStore,
+} from "@/features/rounds/application/round-detail-store";
 import type { FetchResult } from "@/features/rounds/domain/fetch-result";
 import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
-import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
-import { createFakeRoundsStore } from "@/features/rounds/ui/rounds-store-test-helpers";
+import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
+import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { RoundDetailClient } from "./round-detail-client";
 import { useCreationGone } from "./use-creation-gone";
 
@@ -21,9 +21,9 @@ const nav = vi.hoisted(() => ({ pathname: "" }));
 vi.mock("next/navigation", () => ({ usePathname: () => nav.pathname }));
 
 // 取得とスコアカードは別のテストで確かめるため、ラウンドの状態は読み込みだけを返す偽の約束に、スコアカードはスタブにする。
-const load = vi.fn<RoundsStore["load"]>();
+const load = vi.fn<RoundDetailStore["load"]>();
 // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
-const fake = createFakeRoundsStore({ load });
+const fake = createFakeRoundDetailStore({ load });
 fake.goOffline();
 const store = fake.store;
 vi.mock("./use-creation-gone", () => ({ useCreationGone: vi.fn() }));
@@ -85,17 +85,17 @@ function detail(
 
 function renderDetail() {
   return render(
-    <RoundsStoreProvider store={store}>
+    <RoundDetailStoreProvider store={store}>
       <RoundDetailClient />
-    </RoundsStoreProvider>,
+    </RoundDetailStoreProvider>,
   );
 }
 
 function renderDetailToString() {
   return renderToString(
-    <RoundsStoreProvider store={store}>
+    <RoundDetailStoreProvider store={store}>
       <RoundDetailClient />
-    </RoundsStoreProvider>,
+    </RoundDetailStoreProvider>,
   );
 }
 
@@ -203,9 +203,9 @@ describe("RoundDetailClient", () => {
       // When
       nav.pathname = `/rounds/${OTHER_ID}`;
       rerender(
-        <RoundsStoreProvider store={store}>
+        <RoundDetailStoreProvider store={store}>
           <RoundDetailClient />
-        </RoundsStoreProvider>,
+        </RoundDetailStoreProvider>,
       );
 
       // Then

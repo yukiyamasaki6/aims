@@ -7,7 +7,7 @@ import {
 import type { Distance } from "../domain/scorecard-types";
 import type { Pointer } from "../domain/shot-pointer";
 import type { SyncOperation } from "../domain/sync-events";
-import { useRoundsStore } from "./rounds-context";
+import { useRoundDetailStore } from "./rounds-context";
 
 // 距離の編集パネルの開閉と、距離の追加、保存、削除の後始末。
 export function useDistanceEditing({
@@ -26,7 +26,7 @@ export function useDistanceEditing({
   // 距離の書き込みを、戻す・やり直しの列から捨てる。
   discardHistory: (distanceId: string) => void;
 }) {
-  const store = useRoundsStore();
+  const store = useRoundDetailStore();
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
     new Set(),
   );

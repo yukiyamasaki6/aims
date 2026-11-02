@@ -18,7 +18,7 @@ import {
 } from "../domain/distance-operations";
 import type { SyncOperation } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
-import { useRoundsStore } from "./rounds-context";
+import { useRoundDetailStore } from "./rounds-context";
 import { TargetFacePicker } from "./target-face-picker";
 
 const LOCKED_MESSAGE = "スコアが記録済みのため変更できません";
@@ -178,7 +178,7 @@ function useDistanceEdit({
   onDeleted: () => void;
   enqueue: (operation: SyncOperation) => void;
 }) {
-  const store = useRoundsStore();
+  const store = useRoundDetailStore();
   // 保存の差は、開いたときの値(起点)と比べる。開いている間に届いた他の端末の変更を、変えていない項目の古い値で戻さないため。
   const [origin] = useState(distance);
   const [draft, setDraft] = useState<DistanceDraft>(distance);

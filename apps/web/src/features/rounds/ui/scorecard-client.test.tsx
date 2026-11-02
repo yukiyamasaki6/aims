@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RootClientEntry } from "@/app/root-client-entry";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { retryDelayMs } from "@/features/round-sync/domain/sync-failure";
-import type { RoundsStore } from "@/features/rounds/application/rounds-store";
+import type { RoundDetailStore } from "@/features/rounds/application/round-detail-store";
 import type { RoundConfig } from "@/features/rounds/domain/round-config";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
 import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
@@ -26,7 +26,7 @@ import {
   type SyncOperation,
 } from "@/features/rounds/domain/sync-events";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
-import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
+import { useRoundDetailStore } from "@/features/rounds/ui/rounds-context";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
 import { ScorecardClient } from "./scorecard-client";
 
@@ -309,10 +309,10 @@ function rpcSucceeds(name: string, args?: { p_shots?: unknown[] }) {
 const userEventSetup = userEvent.setup.bind(userEvent);
 
 // 画面は、アプリの起動地点(実物)が渡すラウンドの状態と変更の方法を使う。他のタブの操作を模す追記のために、受け取った入口を覚える。
-let appStore: RoundsStore | undefined;
+let appStore: RoundDetailStore | undefined;
 
 function StoreProbe() {
-  appStore = useRoundsStore();
+  appStore = useRoundDetailStore();
   return null;
 }
 
@@ -327,7 +327,7 @@ function AppWrapper({ children }: { children: ReactNode }) {
 
 // 他のタブの追記を模す。
 function appendFromOtherTab(operation: SyncOperation) {
-  return appStore?.append("round-1", operation);
+  return appStore?.round("round-1").append(operation);
 }
 
 // 端末に保存されたround-1の操作の、確定の有無。送信の状態は画面に出ず、内部の状態は観測できないため、保存と確定の有無で確かめる。

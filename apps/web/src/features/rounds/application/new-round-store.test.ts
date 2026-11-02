@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createTestRoundsStore } from "./round-record-test-helpers";
+import { createTestRounds } from "./round-record-test-helpers";
 
 describe("loadPresets", () => {
   it.each([
@@ -13,7 +13,7 @@ describe("loadPresets", () => {
     ["offline", { status: "offline" }],
   ] as const)("取得の手続きの結果(%s)をそのまま返す", async (_name, result) => {
     // Given
-    const tab = createTestRoundsStore();
+    const tab = createTestRounds();
     tab.fetching.fetchPresets.mockResolvedValue(result);
 
     // When
@@ -27,7 +27,7 @@ describe("loadPresets", () => {
 describe("deletePreset", () => {
   it("削除の手続きへ同じ引数を渡し、結果をそのまま返す", async () => {
     // Given
-    const tab = createTestRoundsStore();
+    const tab = createTestRounds();
     const isCurrent = () => true;
     tab.presetDeletion.deletePreset.mockResolvedValue({
       status: "failed",
@@ -52,7 +52,7 @@ describe("deletePreset", () => {
 describe("startRound", () => {
   it("開始の手続きへ同じ引数を渡し、結果をそのまま返す", async () => {
     // Given
-    const tab = createTestRoundsStore();
+    const tab = createTestRounds();
     const isCurrent = () => true;
     tab.roundStart.startRound.mockResolvedValue({
       status: "created",
@@ -76,7 +76,7 @@ describe("startRound", () => {
 
   it("開始の手続きが拒否したとき(遷移が投げた)は、その拒否を伝える", async () => {
     // Given
-    const tab = createTestRoundsStore();
+    const tab = createTestRounds();
     const failure = new Error("rejected path");
     tab.roundStart.startRound.mockRejectedValue(failure);
 
@@ -91,7 +91,7 @@ describe("startRound", () => {
 describe("whenOnline", () => {
   it("オフラインなら呼ばずに待ち、次に通信が戻ったときに1回だけ呼ぶ", () => {
     // Given
-    const tab = createTestRoundsStore({ offline: true });
+    const tab = createTestRounds({ offline: true });
     const listener = vi.fn();
     tab.newRound.whenOnline(listener);
     const calledBeforeReturn = listener.mock.calls.length;

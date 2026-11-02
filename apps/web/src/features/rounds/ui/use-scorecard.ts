@@ -3,7 +3,7 @@ import { useHydrated } from "@/hooks/use-hydrated";
 import type { LoadedRound } from "../application/round-handle";
 import { isRoundInProgress } from "../domain/round-retention";
 import type { TargetFaceOption } from "../domain/target-face";
-import { useRoundsStore } from "./rounds-context";
+import { useRoundDetailStore } from "./rounds-context";
 import { useDistanceEditing } from "./use-distance-editing";
 import { useKeypad } from "./use-keypad";
 import { usePendingShots } from "./use-pending-shots";
@@ -50,7 +50,7 @@ type ScorecardOptions = {
 // スコアカード画面の状態と操作。
 export function useScorecard(options: ScorecardOptions) {
   const { roundId, loaded, targetFaces } = options;
-  const store = useRoundsStore();
+  const store = useRoundDetailStore();
   // 画面の状態は、ベースへ操作の列を重ねた導出だけから得る。
   const sync = useRoundOpStack(roundId, loaded, options.onGone);
   const { distances } = sync.state;

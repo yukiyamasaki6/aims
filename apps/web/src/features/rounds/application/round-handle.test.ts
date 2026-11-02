@@ -14,10 +14,7 @@ import {
   type LoadedRound,
   type RoundHandle,
 } from "./round-handle";
-import {
-  createTestRoundsStore,
-  settleRoundNow,
-} from "./round-record-test-helpers";
+import { createTestRounds, settleRoundNow } from "./round-record-test-helpers";
 
 const STREAM = roundStreamId("round-1");
 
@@ -46,8 +43,8 @@ const face: TargetFaceOption = {
 };
 
 // 実物のハブ・依頼の記録・編集の手続きで、ラウンドごとに1つの handle を作る(窓口が行う再利用の代わり)。
-function createTab(options: Parameters<typeof createTestRoundsStore>[0] = {}) {
-  const tab = createTestRoundsStore(options);
+function createTab(options: Parameters<typeof createTestRounds>[0] = {}) {
+  const tab = createTestRounds(options);
   const handles = new Map<string, RoundHandle>();
   return {
     ...tab,

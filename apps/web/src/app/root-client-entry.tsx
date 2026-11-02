@@ -20,10 +20,10 @@ import { createRoundLeaving } from "@/features/rounds/application/leave-round";
 import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
 import { createRefreshRequests } from "@/features/rounds/application/refresh-requests";
 import { createRefreshRoundBases } from "@/features/rounds/application/refresh-round-bases";
+import { createRoundDetailStore } from "@/features/rounds/application/round-detail-store";
 import { createRoundReconciliation } from "@/features/rounds/application/round-reconciliation";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
-import { createRoundsStore } from "@/features/rounds/application/rounds-store";
 import { createPresetSaving } from "@/features/rounds/application/save-preset";
 import { createSendOperations } from "@/features/rounds/application/send-operations";
 import { createRoundStart } from "@/features/rounds/application/start-round";
@@ -44,8 +44,8 @@ import {
 } from "@/features/rounds/infrastructure/router-navigation";
 import {
   NewRoundStoreProvider,
+  RoundDetailStoreProvider,
   RoundsListStoreProvider,
-  RoundsStoreProvider,
 } from "@/features/rounds/ui/rounds-context";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
@@ -106,7 +106,7 @@ function composeApp(router: PageRouter) {
   const deletion = createRoundDeletion({ hub, ids });
   const roundStart = createRoundStart({ hub, signIn, ids, clock, navigation });
   const presetDeletion = createPresetDeletion({ signIn, commands, snapshots });
-  const store = createRoundsStore({
+  const detailStore = createRoundDetailStore({
     hub,
     requests,
     fetching,
@@ -154,7 +154,7 @@ function composeApp(router: PageRouter) {
   return {
     localIdentity,
     hub,
-    store,
+    detailStore,
     listStore,
     newRoundStore,
     sync,
@@ -173,11 +173,11 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
   return (
     <RoundsListStoreProvider store={app.listStore}>
       <NewRoundStoreProvider store={app.newRoundStore}>
-        <RoundsStoreProvider store={app.store}>
+        <RoundDetailStoreProvider store={app.detailStore}>
           <RoundBaseRefresher sync={app.sync} />
           <SwUpdateActivator whenPersisted={app.hub.whenPersisted} />
           {children}
-        </RoundsStoreProvider>
+        </RoundDetailStoreProvider>
       </NewRoundStoreProvider>
     </RoundsListStoreProvider>
   );

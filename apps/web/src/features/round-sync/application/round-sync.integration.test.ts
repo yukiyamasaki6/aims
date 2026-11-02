@@ -7,6 +7,7 @@ import type {
 } from "@/features/rounds/application/fetch-round-detail";
 import { createRefreshRequests } from "@/features/rounds/application/refresh-requests";
 import { createRefreshRoundBases } from "@/features/rounds/application/refresh-round-bases";
+import { createRoundDetailStore } from "@/features/rounds/application/round-detail-store";
 import { createRoundReconciliation } from "@/features/rounds/application/round-reconciliation";
 import {
   appliedOutcome,
@@ -14,7 +15,6 @@ import {
   createTestRoundHub,
 } from "@/features/rounds/application/round-record-test-helpers";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
-import { createRoundsStore } from "@/features/rounds/application/rounds-store";
 import {
   createSendOperations,
   type SendOutcome,
@@ -95,7 +95,7 @@ function rig() {
     connectivity,
   });
   const { ids } = createFakeUniqueIds({ prefix: "event" });
-  const store = createRoundsStore({
+  const detail = createRoundDetailStore({
     hub,
     requests,
     fetching: fetching as unknown as RoundFetching,
@@ -119,7 +119,7 @@ function rig() {
     deletion: { deleteRound: vi.fn() },
   });
   sync.start("user-1");
-  return { sync, store, list, requests, fetching, clock };
+  return { sync, detail, list, requests, fetching, clock };
 }
 
 const deferredDetail = () =>
@@ -134,9 +134,9 @@ describe("詳細を開く依頼と同期", () => {
     t.fetching.fetchRoundDetail
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
-    const loadFirst = t.store.load("r1");
+    const loadFirst = t.detail.load("r1");
     await flush();
-    const loadSecond = t.store.load("r1");
+    const loadSecond = t.detail.load("r1");
     await flush();
 
     // When
@@ -162,11 +162,11 @@ describe("詳細を開く依頼と同期", () => {
     t.fetching.fetchRoundDetail
       .mockReturnValueOnce(before.promise)
       .mockReturnValueOnce(after.promise);
-    const loadBefore = t.store.load("r1");
+    const loadBefore = t.detail.load("r1");
     await flush();
     t.sync.stop();
     t.sync.start("user-1");
-    const loadAfter = t.store.load("r1");
+    const loadAfter = t.detail.load("r1");
     await flush();
 
     // When
@@ -187,7 +187,7 @@ describe("詳細を開く依頼と同期", () => {
     // Given
     const t = rig();
     t.fetching.fetchRoundDetail.mockReturnValue(new Promise(() => {}));
-    const detailLoading = t.store.load("r1");
+    const detailLoading = t.detail.load("r1");
     const listLoading = t.list.loadList();
     await flush();
 
@@ -209,11 +209,11 @@ describe("先に始めた実行の終わり", () => {
     t.fetching.fetchRoundDetail
       .mockReturnValueOnce(runA.promise)
       .mockReturnValueOnce(runB.promise);
-    const loadA = t.store.load("r1");
+    const loadA = t.detail.load("r1");
     await flush();
-    const loadB = t.store.load("r1");
+    const loadB = t.detail.load("r1");
     await flush();
-    const handle = t.store.round("r1");
+    const handle = t.detail.round("r1");
     handle.watch({
       base: roundBase().tables,
       targetFaces: [],

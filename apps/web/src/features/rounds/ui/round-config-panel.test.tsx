@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RoundConfig } from "@/features/rounds/domain/round-config";
 import { RoundConfigPanel } from "./round-config-panel";
-import { RoundsStoreProvider } from "./rounds-context";
-import { createFakeRoundsStore } from "./rounds-store-test-helpers";
+import { createFakeRoundDetailStore } from "./round-stores-test-helpers";
+import { RoundDetailStoreProvider } from "./rounds-context";
 
 const initial: RoundConfig = {
   name: "午前練習",
@@ -29,9 +29,11 @@ function setup(
   overrides: Partial<Parameters<typeof RoundConfigPanel>[0]> = {},
 ) {
   const enqueue = vi.fn();
-  const { store } = createFakeRoundsStore();
+  const { store } = createFakeRoundDetailStore();
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <RoundsStoreProvider store={store}>{children}</RoundsStoreProvider>
+    <RoundDetailStoreProvider store={store}>
+      {children}
+    </RoundDetailStoreProvider>
   );
   const utils = render(
     <RoundConfigPanel

@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import type { DistanceConfig } from "../domain/distance-config";
 import { DistanceEditFields } from "./distance-edit-fields";
-import { RoundsStoreProvider } from "./rounds-context";
-import { createFakeRoundsStore } from "./rounds-store-test-helpers";
+import { createFakeRoundDetailStore } from "./round-stores-test-helpers";
+import { RoundDetailStoreProvider } from "./rounds-context";
 
 const targetFaceOutdoorRecurve: TargetFaceOption = {
   id: "face-outdoor-recurve",
@@ -47,9 +47,11 @@ function setup(
   const onDeleted = vi.fn();
   const onOpenChange = vi.fn();
   const enqueue = vi.fn();
-  const { store } = createFakeRoundsStore();
+  const { store } = createFakeRoundDetailStore();
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <RoundsStoreProvider store={store}>{children}</RoundsStoreProvider>
+    <RoundDetailStoreProvider store={store}>
+      {children}
+    </RoundDetailStoreProvider>
   );
   const utils = render(
     <DistanceEditFields

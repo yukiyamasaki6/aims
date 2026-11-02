@@ -2,31 +2,31 @@
 
 import { createContext, type ReactNode, useContext } from "react";
 import type { NewRoundStore } from "../application/new-round-store";
+import type { RoundDetailStore } from "../application/round-detail-store";
 import type { RoundsListStore } from "../application/rounds-list-store";
-import type { RoundsStore } from "../application/rounds-store";
 
-const RoundsStoreContext = createContext<RoundsStore | null>(null);
+const RoundDetailStoreContext = createContext<RoundDetailStore | null>(null);
 const RoundsListStoreContext = createContext<RoundsListStore | null>(null);
 const NewRoundStoreContext = createContext<NewRoundStore | null>(null);
 
-// 画面へ、ラウンドの状態と変更の方法を渡す。
-export function RoundsStoreProvider({
+// 詳細の画面へ、状態と変更の方法を渡す。
+export function RoundDetailStoreProvider({
   store,
   children,
 }: {
-  store: RoundsStore;
+  store: RoundDetailStore;
   children: ReactNode;
 }) {
   return (
-    <RoundsStoreContext.Provider value={store}>
+    <RoundDetailStoreContext.Provider value={store}>
       {children}
-    </RoundsStoreContext.Provider>
+    </RoundDetailStoreContext.Provider>
   );
 }
 
-export function useRoundsStore(): RoundsStore {
-  const store = useContext(RoundsStoreContext);
-  if (!store) throw new Error("RoundsStoreProvider がありません。");
+export function useRoundDetailStore(): RoundDetailStore {
+  const store = useContext(RoundDetailStoreContext);
+  if (!store) throw new Error("RoundDetailStoreProvider がありません。");
   return store;
 }
 

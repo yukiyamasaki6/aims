@@ -2,9 +2,9 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { RoundDetailStore } from "@/features/rounds/application/round-detail-store";
 import type { RoundHandle } from "@/features/rounds/application/round-handle";
-import type { RoundsStore } from "@/features/rounds/application/rounds-store";
-import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
+import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { useCreationGone } from "./use-creation-gone";
 
 // ラウンドの状態は別のテストで確かめるため、作成が消えたかの印を任意に変えられる偽の入口で模す。
@@ -22,10 +22,14 @@ const handle = {
   },
   getSnapshot: () => ({ creationGone: fake.creationGone }),
 } as unknown as RoundHandle;
-const store = { round: () => handle } as unknown as RoundsStore;
+const store = { round: () => handle } as unknown as RoundDetailStore;
 
 function wrapper({ children }: { children: ReactNode }) {
-  return <RoundsStoreProvider store={store}>{children}</RoundsStoreProvider>;
+  return (
+    <RoundDetailStoreProvider store={store}>
+      {children}
+    </RoundDetailStoreProvider>
+  );
 }
 
 function change(creationGone: boolean) {
@@ -117,9 +121,9 @@ describe("useCreationGone", () => {
 
     // When
     const html = renderToString(
-      <RoundsStoreProvider store={store}>
+      <RoundDetailStoreProvider store={store}>
         <Probe />
-      </RoundsStoreProvider>,
+      </RoundDetailStoreProvider>,
     );
 
     // Then

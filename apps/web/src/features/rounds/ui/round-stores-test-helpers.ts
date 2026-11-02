@@ -1,10 +1,11 @@
 import { vi } from "vitest";
 import type { NewRoundStore } from "../application/new-round-store";
+import type { RoundDetailStore } from "../application/round-detail-store";
 import type { RoundsListStore } from "../application/rounds-list-store";
 
 // 通信の復帰と待ちの経過の合図を、テストが起こす。
 // 契約(whenOnline: 今オンラインなら直ちに1回、オフラインなら次の復帰で1回。afterFallbackWait: 経過で1回。どちらも返す関数で取り消せる)は、実物と同じにする。
-export function createFakeWaiting() {
+function createFakeWaiting() {
   const state = { offline: false };
   const waitingForOnline = new Set<() => void>();
   const waitingForFallback = new Set<() => void>();
@@ -98,5 +99,44 @@ export function createFakeNewRoundStore(
     startRound: ReturnType<typeof vi.fn>;
     whenOnline: ReturnType<typeof vi.fn>;
   };
+  return { store, ...waiting };
+}
+
+// 画面のテストが使う、偽のラウンドの状態と変更の方法(詳細の画面の分)。
+export function createFakeRoundDetailStore(
+  overrides: Partial<RoundDetailStore> = {},
+) {
+  const {
+    whenOnline,
+    afterFallbackWait: _afterFallbackWait,
+    ...waiting
+  } = createFakeWaiting();
+  const issued = { ids: 0, shots: 0 };
+
+  const store = {
+    load: vi.fn(),
+    round: vi.fn(),
+    append: vi.fn().mockResolvedValue(undefined),
+    whenOnline,
+    completeRound: vi.fn().mockResolvedValue(undefined),
+    deleteRoundAndLeave: vi.fn().mockResolvedValue(undefined),
+    leaveRound: vi.fn(),
+    savePreset: vi.fn().mockResolvedValue({ status: "saved" }),
+    newId: vi.fn(() => `id-${++issued.ids}`),
+    newShotId: vi.fn(
+      () =>
+        `00000000-0000-7000-8000-${String(++issued.shots).padStart(12, "0")}`,
+    ),
+    ...overrides,
+  } as unknown as RoundDetailStore & {
+    whenOnline: ReturnType<typeof vi.fn>;
+    completeRound: ReturnType<typeof vi.fn>;
+    deleteRoundAndLeave: ReturnType<typeof vi.fn>;
+    leaveRound: ReturnType<typeof vi.fn>;
+    savePreset: ReturnType<typeof vi.fn>;
+    newId: ReturnType<typeof vi.fn>;
+    newShotId: ReturnType<typeof vi.fn>;
+  };
+
   return { store, ...waiting };
 }
