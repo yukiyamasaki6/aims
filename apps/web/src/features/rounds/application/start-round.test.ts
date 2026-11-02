@@ -5,6 +5,9 @@ import type { Preset } from "../domain/preset";
 import { roundPath } from "../domain/round-routes";
 import { roundCreatedDraftOf } from "../domain/round-start";
 import { roundStreamId } from "../domain/sync-events";
+import { createFakeNavigation } from "./fake-navigation-test-helpers";
+import { createFakeSignInReader } from "./fake-sign-in-reader-test-helpers";
+import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 import type { SignInReader } from "./sign-in-reader";
 import { createRoundStart } from "./start-round";
 
@@ -57,11 +60,13 @@ function setup(
 ) {
   const calls: string[] = [];
   const clock = createManualClock(NOW);
-  const readings = [...(options.readings ?? [])];
-  const read = vi.fn<SignInReader["read"]>(
-    options.read ??
-      (async () =>
-        readings.shift() ?? { status: "authenticated", userId: "user-1" }),
+  const { signIn } = createFakeSignInReader(
+    options.read
+      ? [options.read]
+      : [
+          ...(options.readings ?? []),
+          { status: "authenticated", userId: "user-1" },
+        ],
   );
   let finishAppend: () => void = () => {};
   const append = vi.fn(async (_streamId: string, _operation: unknown) => {
@@ -72,24 +77,17 @@ function setup(
     }
     calls.push("append:done");
   });
-  const go = vi.fn((path: string) => {
-    calls.push(`go:${path}`);
-    options.go?.(path);
+  const { navigation, go } = createFakeNavigation({
+    log: calls,
+    onGo: options.go,
   });
-  const issuedIds: string[] = [];
-  const ids = {
-    next: () => {
-      const id = `id-${issuedIds.length + 1}`;
-      issuedIds.push(id);
-      return id;
-    },
-  };
+  const { ids, issued } = createFakeUniqueIds();
   const roundStart = createRoundStart({
     hub: { append },
-    signIn: { read },
+    signIn,
     ids,
     clock,
-    navigation: { go },
+    navigation,
   });
   return {
     roundStart,
@@ -97,7 +95,7 @@ function setup(
     append,
     go,
     calls,
-    issued: () => issuedIds,
+    issued,
     finishAppend: () => finishAppend(),
   };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRoundEditing } from "@/features/rounds/application/edit-round";
+import { createFakeUniqueIds } from "@/features/rounds/application/fake-unique-ids-test-helpers";
 import type {
   FetchedRoundDetail,
   RoundFetching,
@@ -53,7 +54,6 @@ function rig() {
   const requests = createRefreshRequests();
   const clock = createManualClock();
   const connectivity = createFakeConnectivity();
-  let issued = 0;
   const fetching = {
     fetchRoundDetail:
       vi.fn<(roundId: string) => Promise<FetchResult<FetchedRoundDetail>>>(),
@@ -93,10 +93,7 @@ function rig() {
     clock,
     connectivity,
   });
-  const ids = {
-    next: () => `event-${++issued}`,
-    randomBytes: (length: number) => new Uint8Array(length),
-  };
+  const { ids } = createFakeUniqueIds({ prefix: "event" });
   const store = createRoundsStore({
     hub,
     requests,

@@ -6,8 +6,11 @@ import {
   FETCH_ERROR_MESSAGE,
   FETCH_TIMEOUT_MS,
 } from "../domain/fetch-result";
+import {
+  createFakeSignInReader,
+  type SignInReading,
+} from "./fake-sign-in-reader-test-helpers";
 import { createContentFetcher } from "./fetch-content";
-import type { SignInReader } from "./sign-in-reader";
 
 const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
 
@@ -26,9 +29,12 @@ const unauthenticated = {
   message: AUTH_REQUIRED_MESSAGE,
 } as const;
 
-type Reading = Awaited<ReturnType<SignInReader["read"]>>;
+type Reading = SignInReading;
 
 // 切断の状態と通知を、テストから動かせる通信の可否。
+// lib の createFakeConnectivity に置き換えない理由: 取得の途中で、購読者へ知らせずに切断の状態だけを替える検証
+// (HTTP応答のあるエラーはerrorのまま、時間切れはofflineを返す、など)があり、
+// lib の fake は状態を替えると必ず購読者へ知らせるため、同じ検証にならない。
 function makeConnectivity(offline = false) {
   const state = { offline };
   const offlineListeners = new Set<() => void>();
@@ -51,17 +57,6 @@ function makeConnectivity(offline = false) {
   };
 }
 
-// 呼ばれるたびに、渡した読み取りを順に返すサインインの読み手。
-function makeSignIn(...readings: (Reading | (() => Promise<Reading>))[]) {
-  let index = 0;
-  const read = vi.fn(async (_options?: { refresh?: boolean }) => {
-    const next = readings[Math.min(index, readings.length - 1)];
-    index += 1;
-    return typeof next === "function" ? next() : next;
-  });
-  return { signIn: { read } satisfies SignInReader, read };
-}
-
 function setup(
   options: {
     readings?: (Reading | (() => Promise<Reading>))[];
@@ -70,7 +65,9 @@ function setup(
 ) {
   const clock = createManualClock();
   const network = makeConnectivity(options.offline);
-  const { signIn, read } = makeSignIn(...(options.readings ?? [authenticated]));
+  const { signIn, read } = createFakeSignInReader(
+    options.readings ?? [authenticated],
+  );
   const fetcher = createContentFetcher({
     signIn,
     connectivity: network.connectivity,

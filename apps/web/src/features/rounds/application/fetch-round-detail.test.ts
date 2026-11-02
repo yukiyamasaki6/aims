@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
-import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
+import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import type {
   DatabaseGateway,
   DbResponse,
@@ -17,7 +17,7 @@ import type { ServerRound } from "../domain/round-tables";
 import type { TargetFaceRecord } from "../domain/target-face";
 import { createRoundQueries } from "../infrastructure/round-queries";
 import type { RoundsDbSchema } from "../infrastructure/rounds-db-schema";
-
+import { createFakeSignInReader } from "./fake-sign-in-reader-test-helpers";
 import { createContentFetcher } from "./fetch-content";
 import { createRoundFetching, type RoundQueries } from "./fetch-round-detail";
 import type { ReferenceKind, ReferenceSnapshots } from "./reference-snapshots";
@@ -133,11 +133,7 @@ function memorySnapshots(
   return { snapshots, saved, savedPresets, identity, save };
 }
 
-type Readings = Parameters<typeof makeSignIn>[0];
-
-function makeSignIn(reading: Awaited<ReturnType<SignInReader["read"]>>) {
-  return { read: vi.fn(async () => reading) } satisfies SignInReader;
-}
+type Readings = Awaited<ReturnType<SignInReader["read"]>>;
 
 function setup(
   options: {
@@ -149,15 +145,8 @@ function setup(
   } = {},
 ) {
   const clock = createManualClock(1000);
-  const state = { offline: options.offline ?? false };
-  const connectivity: Connectivity = {
-    isOffline: () => state.offline,
-    onOnline: () => () => {},
-    onOffline: () => () => {},
-  };
-  const signIn = makeSignIn(
-    options.signIn ?? { status: "authenticated", userId: "user-1" },
-  );
+  const connectivity = createFakeConnectivity(options.offline);
+  const { signIn } = createFakeSignInReader(options.signIn && [options.signIn]);
   const content = createContentFetcher({ signIn, connectivity, clock });
   const memory = memorySnapshots({
     targetFaces: options.saved,
@@ -181,7 +170,7 @@ function setup(
     snapshots: memory.snapshots,
     clock,
   });
-  return { fetching, queries, clock, state, signIn, ...memory };
+  return { fetching, queries, clock, signIn, ...memory };
 }
 
 const idsOf = (faces: unknown) => (faces as { id: string }[]).map((f) => f.id);

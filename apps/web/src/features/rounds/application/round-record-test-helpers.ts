@@ -7,6 +7,7 @@ import { roundStreamRules } from "../domain/round-retention";
 import type { SyncOperation } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
 import { createRoundEditing } from "./edit-round";
+import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 import type { RoundFetching } from "./fetch-round-detail";
 import { createRefreshRequests } from "./refresh-requests";
 import { createRefreshRoundBases } from "./refresh-round-bases";
@@ -100,13 +101,10 @@ export function createTestRoundsStore(
     leaveRound: vi.fn(),
   };
   const presetSaving = { savePreset: vi.fn() };
-  let issued = 0;
-  const ids = {
-    next: () => `event-${++issued}`,
-    randomBytes: (length: number) => {
-      return options.randomBytes?.(length) ?? new Uint8Array(length);
-    },
-  };
+  const { ids } = createFakeUniqueIds({
+    prefix: "event",
+    randomBytes: options.randomBytes,
+  });
   const store = createRoundsStore({
     hub,
     requests,

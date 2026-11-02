@@ -5,6 +5,8 @@ import {
 } from "../domain/round-progress";
 import { ROUNDS_PATH } from "../domain/round-routes";
 import { roundStreamId } from "../domain/sync-events";
+import { createFakeNavigation } from "./fake-navigation-test-helpers";
+import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 import { createRoundLeaving } from "./leave-round";
 import { createTestRoundHub } from "./round-record-test-helpers";
 
@@ -22,27 +24,12 @@ function setup(
     }
     calls.push("append:done");
   });
-  const go = vi.fn((path: string) => {
-    calls.push(`go:${path}`);
-    if (options.navigationFailure) throw options.navigationFailure;
+  const { navigation, go, replace } = createFakeNavigation({
+    log: calls,
+    failure: options.navigationFailure,
   });
-  const replace = vi.fn((path: string) => {
-    calls.push(`replace:${path}`);
-    if (options.navigationFailure) throw options.navigationFailure;
-  });
-  const issued: string[] = [];
-  const ids = {
-    next: () => {
-      const id = `id-${issued.length + 1}`;
-      issued.push(id);
-      return id;
-    },
-  };
-  const leaving = createRoundLeaving({
-    hub: { append },
-    ids,
-    navigation: { go, replace },
-  });
+  const { ids, issued } = createFakeUniqueIds();
+  const leaving = createRoundLeaving({ hub: { append }, ids, navigation });
   return {
     leaving,
     append,
@@ -84,7 +71,7 @@ describe("createRoundLeaving", () => {
       expect(append).toHaveBeenCalledTimes(1);
       expect(append).toHaveBeenCalledWith(
         roundStreamId("round-1"),
-        statusOperation("round-1", "completed", issued[0]),
+        statusOperation("round-1", "completed", issued()[0]),
       );
       expect(calls).toEqual(["append:done", `go:${ROUNDS_PATH}`]);
       expect(go).toHaveBeenCalledTimes(1);
@@ -117,7 +104,7 @@ describe("createRoundLeaving", () => {
       expect(append).toHaveBeenCalledTimes(1);
       expect(append).toHaveBeenCalledWith(
         roundStreamId("round-1"),
-        roundDisabledOperation("round-1", issued[0]),
+        roundDisabledOperation("round-1", issued()[0]),
       );
       expect(go).not.toHaveBeenCalled();
       expect(replace).not.toHaveBeenCalled();
@@ -136,7 +123,7 @@ describe("createRoundLeaving", () => {
         ([, operation]) => (operation as { eventId: string }).eventId,
       );
       expect(new Set(eventIds).size).toBe(2);
-      expect(eventIds).toEqual(issued);
+      expect(eventIds).toEqual(issued());
     });
 
     it("保存の試みが終わるまで解決しない", async () => {
@@ -159,8 +146,8 @@ describe("createRoundLeaving", () => {
       vi.spyOn(store, "append").mockRejectedValue(new Error("保存できない"));
       const leaving = createRoundLeaving({
         hub,
-        ids: { next: () => "id-1" },
-        navigation: { go: vi.fn(), replace: vi.fn() },
+        ids: createFakeUniqueIds().ids,
+        navigation: createFakeNavigation().navigation,
       });
 
       // When
@@ -191,7 +178,7 @@ describe("createRoundLeaving", () => {
       expect(beforeFinish).toEqual([]);
       expect(append).toHaveBeenCalledWith(
         roundStreamId("round-1"),
-        roundDisabledOperation("round-1", issued[0]),
+        roundDisabledOperation("round-1", issued()[0]),
       );
       expect(calls).toEqual(["append:done", `replace:${ROUNDS_PATH}`]);
       expect(replace).toHaveBeenCalledTimes(1);
@@ -255,7 +242,7 @@ describe("createRoundLeaving", () => {
         ([, operation]) => (operation as { eventId: string }).eventId,
       );
       expect(new Set(eventIds).size).toBe(2);
-      expect(eventIds).toEqual(issued);
+      expect(eventIds).toEqual(issued());
     },
   );
 });

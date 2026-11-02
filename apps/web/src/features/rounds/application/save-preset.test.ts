@@ -4,6 +4,7 @@ import {
   PRESET_SAVE_ERROR_MESSAGE,
   type WriteResult,
 } from "../domain/write-result";
+import { createFakeSignInReader } from "./fake-sign-in-reader-test-helpers";
 import type { RoundFetching } from "./fetch-round-detail";
 import type { PresetCommands } from "./preset-commands";
 import { createPresetSaving } from "./save-preset";
@@ -49,11 +50,13 @@ function setup(
   } = {},
 ) {
   const calls: string[] = [];
-  const readings = [...(options.readings ?? [])];
-  const read = vi.fn<SignInReader["read"]>(
-    options.read ??
-      (async () =>
-        readings.shift() ?? { status: "authenticated", userId: "user-1" }),
+  const { read } = createFakeSignInReader(
+    options.read
+      ? [options.read]
+      : [
+          ...(options.readings ?? []),
+          { status: "authenticated", userId: "user-1" },
+        ],
   );
   const order: SignInReader["read"] = async (...args) => {
     calls.push("sign-in");
@@ -75,7 +78,7 @@ function setup(
       "fetchPresets"
     >,
   });
-  return { saving, savePreset, fetchPresets, calls, readings };
+  return { saving, savePreset, fetchPresets, calls };
 }
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));

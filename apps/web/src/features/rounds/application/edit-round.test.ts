@@ -8,6 +8,7 @@ import {
 import type { ScoringTargetFace } from "../domain/scorecard-scoring";
 import { roundStreamId, type SyncOperation } from "../domain/sync-events";
 import { createRoundEditing } from "./edit-round";
+import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 
 const faces: ScoringTargetFace[] = [
   {
@@ -70,8 +71,7 @@ function setup(
       await new Promise<void>((resolve) => finishers.push(resolve));
     }
   });
-  let issued = 0;
-  const next = vi.fn(() => `id-${++issued}`);
+  const { ids, issued } = createFakeUniqueIds();
   const state = options.state === undefined ? "completed" : options.state;
   const current = vi.fn(() => {
     calls.push("read");
@@ -79,8 +79,8 @@ function setup(
       ? null
       : { tables: tables(state), targetFaces: faces };
   });
-  const editing = createRoundEditing({ hub: { append }, ids: { next } });
-  return { editing, append, appended, next, current, calls, finishers };
+  const editing = createRoundEditing({ hub: { append }, ids });
+  return { editing, append, appended, issued, current, calls, finishers };
 }
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -102,7 +102,7 @@ describe("createRoundEditing", () => {
 
   it("再開が要るとき、元の操作の追記の後に、そのラウンドの列へ入力中に戻す操作を続けて追記し、保存は2回になる", async () => {
     // Given
-    const { editing, current, appended, next } = setup();
+    const { editing, current, appended, issued } = setup();
 
     // When
     await editing.append("round-1", displayChanging, current);
@@ -113,24 +113,20 @@ describe("createRoundEditing", () => {
       { streamId: roundStreamId("round-1"), operation: displayChanging },
       {
         streamId: roundStreamId("round-1"),
-        operation: statusOperation(
-          "round-1",
-          "in_progress",
-          next.mock.results[0].value,
-        ),
+        operation: statusOperation("round-1", "in_progress", issued()[0]),
       },
     ]);
   });
 
   it("再開が要るとき、ids.next()を1回消費する", async () => {
     // Given
-    const { editing, current, next } = setup();
+    const { editing, current, issued } = setup();
 
     // When
     await editing.append("round-1", displayChanging, current);
 
     // Then
-    expect(next).toHaveBeenCalledTimes(1);
+    expect(issued()).toHaveLength(1);
   });
 
   it.each<[string, "completed" | "in_progress", SyncOperation]>([
@@ -149,7 +145,7 @@ describe("createRoundEditing", () => {
     "再開が要らないとき(%s)は、元の操作だけを追記し、ids.next()を消費しない",
     async (_name, state, operation) => {
       // Given
-      const { editing, current, appended, next } = setup({ state });
+      const { editing, current, appended, issued } = setup({ state });
 
       // When
       await editing.append("round-1", operation, current);
@@ -157,13 +153,13 @@ describe("createRoundEditing", () => {
 
       // Then
       expect(appended.map((item) => item.operation)).toEqual([operation]);
-      expect(next).not.toHaveBeenCalled();
+      expect(issued()).toEqual([]);
     },
   );
 
   it("読み手がnull(画面を開いていない)のときは、元の操作だけを追記し、IDも消費しない", async () => {
     // Given
-    const { editing, current, appended, next } = setup({ state: null });
+    const { editing, current, appended, issued } = setup({ state: null });
 
     // When
     await editing.append("round-1", displayChanging, current);
@@ -171,7 +167,7 @@ describe("createRoundEditing", () => {
 
     // Then
     expect(appended.map((item) => item.operation)).toEqual([displayChanging]);
-    expect(next).not.toHaveBeenCalled();
+    expect(issued()).toEqual([]);
   });
 
   it("戻り値は、元の操作の保存の完了まで解決しない", async () => {
