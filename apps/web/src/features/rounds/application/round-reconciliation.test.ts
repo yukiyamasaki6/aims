@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "../domain/fetch-result";
-import { roundStreamId } from "../domain/sync-events";
 import {
   distanceCreated,
   roundBase,
   roundUpdated,
   shotCleared,
   shotRecorded,
-} from "../round-op-test-helpers";
+} from "../domain/round-op-test-helpers";
+import { roundStreamId } from "../domain/sync-events";
 import type { FetchedRoundDetail, RoundFetching } from "./fetch-round-detail";
 import { createRefreshRequests } from "./refresh-requests";
 import { createRefreshRoundBases } from "./refresh-round-bases";

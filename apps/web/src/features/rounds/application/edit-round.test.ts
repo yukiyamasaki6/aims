@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { roundUpdated, shotRecorded } from "../domain/round-op-test-helpers";
 import { statusOperation } from "../domain/round-progress";
 import {
   type RoundTables,
@@ -6,7 +7,6 @@ import {
 } from "../domain/round-tables";
 import type { ScoringTargetFace } from "../domain/scorecard-scoring";
 import { roundStreamId, type SyncOperation } from "../domain/sync-events";
-import { roundUpdated, shotRecorded } from "../round-op-test-helpers";
 import { createRoundEditing } from "./edit-round";
 
 const faces: ScoringTargetFace[] = [

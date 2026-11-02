@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-result";
-import { roundStreamId } from "../domain/sync-events";
 import {
   roundCreated,
   roundDisabled,
   roundUpdated,
-} from "../round-op-test-helpers";
+} from "../domain/round-op-test-helpers";
+import { roundStreamId } from "../domain/sync-events";
 import type {
   FetchedRoundDetail,
   FetchedRoundDetails,

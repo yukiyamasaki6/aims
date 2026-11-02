@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { roundUpdated } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
-import { roundUpdated } from "../round-op-test-helpers";
 import type { RecordMessage } from "./round-record-hub";
 import {
   createRecordBus,

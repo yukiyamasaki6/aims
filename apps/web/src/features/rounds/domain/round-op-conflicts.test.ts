@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  batchLimitOf,
+  conflicts,
+  laneOf,
+  SERIAL_LANE,
+} from "./round-op-conflicts";
+import {
   distanceCreated,
   distanceDisabled,
   distanceUpdated,
@@ -8,13 +14,7 @@ import {
   roundUpdated,
   shotCleared,
   shotRecorded,
-} from "../round-op-test-helpers";
-import {
-  batchLimitOf,
-  conflicts,
-  laneOf,
-  SERIAL_LANE,
-} from "./round-op-conflicts";
+} from "./round-op-test-helpers";
 
 describe("conflicts", () => {
   it.each([

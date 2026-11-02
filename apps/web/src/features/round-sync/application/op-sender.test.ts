@@ -10,7 +10,7 @@ import {
   roundUpdated,
   shotCleared,
   shotRecorded,
-} from "@/features/rounds/round-op-test-helpers";
+} from "@/features/rounds/domain/round-op-test-helpers";
 import type { SenderMessage } from "./op-sender";
 import {
   createSenderLockBus,

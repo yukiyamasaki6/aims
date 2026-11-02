@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DatabaseGateway } from "@/lib/supabase/contract/database";
 import type { SendOutcome } from "../application/send-operations";
-import type { SyncOperation } from "../domain/sync-events";
 import {
   distanceCreated,
   distanceDisabled,
@@ -11,7 +10,8 @@ import {
   roundUpdated,
   shotCleared,
   shotRecorded,
-} from "../round-op-test-helpers";
+} from "../domain/round-op-test-helpers";
+import type { SyncOperation } from "../domain/sync-events";
 import { createRoundOpTransport } from "./round-op-transport";
 import type { RoundsDbSchema } from "./rounds-db-schema";
 

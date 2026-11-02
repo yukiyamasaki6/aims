@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  type AppliedOperation,
+  applyOperation,
+  applyOperations,
+  deriveTables,
+} from "./round-op-apply";
+import { conflicts } from "./round-op-conflicts";
+import {
   distanceCreated,
   distanceDisabled,
   distanceUpdated,
@@ -8,14 +15,7 @@ import {
   roundUpdated,
   shotCleared,
   shotRecorded,
-} from "../round-op-test-helpers";
-import {
-  type AppliedOperation,
-  applyOperation,
-  applyOperations,
-  deriveTables,
-} from "./round-op-apply";
-import { conflicts } from "./round-op-conflicts";
+} from "./round-op-test-helpers";
 import {
   type RoundTables,
   roundTablesFromCreated,

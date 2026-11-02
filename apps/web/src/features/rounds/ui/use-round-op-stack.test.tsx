@@ -6,12 +6,12 @@ import {
   settleRoundNow,
 } from "@/features/rounds/application/round-record-test-helpers";
 import type { LoadedRound } from "@/features/rounds/application/rounds-store";
-import { roundStreamId } from "@/features/rounds/domain/sync-events";
 import {
   roundBase,
   roundUpdated,
   shotRecorded,
-} from "@/features/rounds/round-op-test-helpers";
+} from "@/features/rounds/domain/round-op-test-helpers";
+import { roundStreamId } from "@/features/rounds/domain/sync-events";
 import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { useRoundOpStack } from "./use-round-op-stack";
 

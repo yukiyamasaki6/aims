@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  distanceCreated,
+  distanceDisabled,
+  distanceUpdated,
+  roundDisabled,
+  roundUpdated,
+  shotCleared,
+  shotRecorded,
+} from "@/features/rounds/domain/round-op-test-helpers";
+import {
   completionConfirmation,
   reopeningRequired,
   roundDisabledOperation,
@@ -11,15 +20,6 @@ import {
 } from "@/features/rounds/domain/round-tables";
 import type { ScoringTargetFace } from "@/features/rounds/domain/scorecard-scoring";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
-import {
-  distanceCreated,
-  distanceDisabled,
-  distanceUpdated,
-  roundDisabled,
-  roundUpdated,
-  shotCleared,
-  shotRecorded,
-} from "@/features/rounds/round-op-test-helpers";
 
 const ring = (scoreStr: string, scoreInt: number, zIndex: number) => ({
   score_str: scoreStr,

@@ -5,7 +5,7 @@ import {
   narrowDatabase,
 } from "@/lib/supabase/infrastructure/database";
 import type { Database } from "@/types/supabase";
-import { roundUpdated, shotRecorded } from "../round-op-test-helpers";
+import { roundUpdated, shotRecorded } from "../domain/round-op-test-helpers";
 import { createRoundOpTransport } from "./round-op-transport";
 import { createRoundQueries } from "./round-queries";
 import type { RoundsDbSchema } from "./rounds-db-schema";

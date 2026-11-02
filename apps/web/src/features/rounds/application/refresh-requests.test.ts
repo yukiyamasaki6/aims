@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { roundBase } from "../round-op-test-helpers";
+import { roundBase } from "../domain/round-op-test-helpers";
 import { createRefreshRequests, type OpenedRound } from "./refresh-requests";
 import { settleRoundNow } from "./round-record-test-helpers";
 

@@ -1,7 +1,7 @@
-import type { RoundBaseRecord, RoundRevisions } from "./domain/round-base";
-import { roundTablesFromServer } from "./domain/round-tables";
-import type { Distance, Shot } from "./domain/scorecard-types";
-import type { SyncOperation } from "./domain/sync-events";
+import type { RoundBaseRecord, RoundRevisions } from "./round-base";
+import { roundTablesFromServer } from "./round-tables";
+import type { Distance, Shot } from "./scorecard-types";
+import type { SyncOperation } from "./sync-events";
 
 type Op<T extends SyncOperation["type"]> = Extract<SyncOperation, { type: T }>;
 

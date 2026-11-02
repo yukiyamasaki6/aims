@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  roundBase,
-  roundCreated,
-  roundDisabled,
-  shotRecorded,
-} from "../round-op-test-helpers";
-import {
   deletionsOf,
   localRoundsList,
   roundListItemOf,
   type ServerRoundSummary,
 } from "./round-list";
+import {
+  roundBase,
+  roundCreated,
+  roundDisabled,
+  shotRecorded,
+} from "./round-op-test-helpers";
 import type { ScoringTargetFace } from "./scorecard-scoring";
 
 const faces: ScoringTargetFace[] = [

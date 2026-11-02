@@ -6,8 +6,6 @@ import {
   type FetchResult,
 } from "../domain/fetch-result";
 import type { RoundListItem } from "../domain/round-list";
-import { roundStreamId } from "../domain/sync-events";
-import type { TargetFaceOption } from "../domain/target-face";
 import {
   distanceCreated,
   roundBase,
@@ -15,7 +13,9 @@ import {
   roundDisabled,
   roundUpdated,
   shotRecorded,
-} from "../round-op-test-helpers";
+} from "../domain/round-op-test-helpers";
+import { roundStreamId } from "../domain/sync-events";
+import type { TargetFaceOption } from "../domain/target-face";
 import type { OpenedRound } from "./refresh-requests";
 import {
   createTestRoundsStore,

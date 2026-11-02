@@ -18,11 +18,11 @@ import {
   type SendOutcome,
 } from "@/features/rounds/application/send-operations";
 import type { FetchResult } from "@/features/rounds/domain/fetch-result";
-import { roundStreamId } from "@/features/rounds/domain/sync-events";
 import {
   roundBase,
   roundUpdated,
-} from "@/features/rounds/round-op-test-helpers";
+} from "@/features/rounds/domain/round-op-test-helpers";
+import { roundStreamId } from "@/features/rounds/domain/sync-events";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import { createOpSender } from "./op-sender";

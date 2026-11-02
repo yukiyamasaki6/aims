@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { roundStreamId, type SyncOperation } from "../domain/sync-events";
 import {
   roundBase,
   roundUpdated,
   shotRecorded,
-} from "../round-op-test-helpers";
+} from "../domain/round-op-test-helpers";
+import { roundStreamId, type SyncOperation } from "../domain/sync-events";
 import type { RecordChange, RecordMessage } from "./round-record-hub";
 import {
   createRecordBus,

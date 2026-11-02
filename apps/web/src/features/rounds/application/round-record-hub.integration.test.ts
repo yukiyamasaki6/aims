@@ -5,15 +5,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
 import type { RoundBaseRecord } from "../domain/round-base";
 import { applyOperations } from "../domain/round-op-apply";
-import { operationsOf } from "../domain/round-record";
-import { roundStreamRules } from "../domain/round-retention";
-import { roundStreamId, type SyncOperation } from "../domain/sync-events";
 import {
   roundBase,
   roundUpdated,
   shotCleared,
   shotRecorded,
-} from "../round-op-test-helpers";
+} from "../domain/round-op-test-helpers";
+import { operationsOf } from "../domain/round-record";
+import { roundStreamRules } from "../domain/round-retention";
+import { roundStreamId, type SyncOperation } from "../domain/sync-events";
 import { createRoundRecordHub } from "./round-record-hub";
 import { createRecordBus } from "./round-record-test-helpers";
 
