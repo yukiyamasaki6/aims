@@ -57,37 +57,43 @@ import {
 } from "@/lib/supabase/infrastructure/database";
 import { SwUpdateActivator } from "./sw-update-activator";
 
-// アプリで1つの部品を、1度だけ生成して結ぶ。実行環境の大域の名前に触る実装は、開始の後に初めて触る(事前描画でも生成できる)。
+// 入力(認証、識別情報の保存、接続、時計、データベース、遷移)。実行環境の大域の名前に触る実装は、開始の後に初めて触る(事前描画でも生成できる)。
 // routerは画面のパッケージの遷移の部品で、アプリで1つ。
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: アプリで1つの部品を生成して結ぶ線で、分けても生成の順序が追いにくくなるだけである。
-function composeApp(router: PageRouter) {
+function composeInputs(router: PageRouter) {
   const authenticator = createSupabaseAuth(createClient);
   const identityStore = createBrowserIdentityStore();
-  const localIdentity = createLocalIdentity({
-    changes: authenticator,
-    writer: identityStore,
-  });
-  const connectivity = createBrowserConnectivity();
-  const clock = createBrowserClock();
+  return {
+    authenticator,
+    identityStore,
+    localIdentity: createLocalIdentity({
+      changes: authenticator,
+      writer: identityStore,
+    }),
+    signIn: createAuthSignInReader(authenticator),
+    connectivity: createBrowserConnectivity(),
+    clock: createBrowserClock(),
+    database: narrowDatabase<RoundsDbSchema>(
+      createSupabaseDatabase(createClient),
+    ),
+    navigation: createRouterNavigation(router),
+  };
+}
+
+type Inputs = ReturnType<typeof composeInputs>;
+
+// 記録と取得(記録のハブ、取り直しの依頼、取得、突き合わせ)。
+function composeRecords(inputs: Inputs) {
+  const { identityStore, signIn, connectivity, clock, database } = inputs;
   const hub = createRoundRecordHub({
     store: createIndexedDbOpLogStore<SyncOperation, RoundBaseRecord>(
       roundStreamRules,
     ),
     channel: createBrowserRecordChannel(),
   });
-  const database = narrowDatabase<RoundsDbSchema>(
-    createSupabaseDatabase(createClient),
-  );
   const requests = createRefreshRequests();
-  const signIn = createAuthSignInReader(authenticator);
   const snapshots = createReferenceSnapshots(identityStore);
-  const ids = createBrowserUniqueIds();
   const fetching = createRoundFetching({
-    content: createContentFetcher({
-      signIn,
-      connectivity,
-      clock,
-    }),
+    content: createContentFetcher({ signIn, connectivity, clock }),
     queries: createRoundQueries(database),
     snapshots,
     clock,
@@ -101,40 +107,54 @@ function composeApp(router: PageRouter) {
     }),
     refresh: createRefreshRoundBases({ hub, fetching, requests }),
   });
-  const navigation = createRouterNavigation(router);
+  return { hub, requests, snapshots, fetching, reconciliation };
+}
+
+type Records = ReturnType<typeof composeRecords>;
+
+// 窓口(手続きと、一覧、作成、詳細の窓口)。
+function composeStores(inputs: Inputs, records: Records) {
+  const { signIn, connectivity, clock, database, navigation } = inputs;
+  const { hub, requests, snapshots, fetching } = records;
+  const ids = createBrowserUniqueIds();
   const commands = createPresetCommands(database);
   const deletion = createRoundDeletion({ hub, ids });
-  const roundStart = createRoundStart({ hub, signIn, ids, clock, navigation });
-  const presetDeletion = createPresetDeletion({ signIn, commands, snapshots });
-  const detailStore = createRoundDetailStore({
-    hub,
-    requests,
-    fetching,
-    clock,
-    connectivity,
-    ids,
-    leaving: createRoundLeaving({ hub, ids, navigation, deletion }),
-    editing: createRoundEditing({ hub, ids }),
-    presetSaving: createPresetSaving({ signIn, commands, fetching }),
-  });
-  const newRoundStore = createNewRoundStore({
-    fetching,
-    roundStart,
-    presetDeletion,
-    connectivity,
-  });
-  const listStore = createRoundsListStore({
-    hub,
-    requests,
-    fetching,
-    clock,
-    connectivity,
-    deletion,
-  });
+  return {
+    detailStore: createRoundDetailStore({
+      hub,
+      requests,
+      fetching,
+      clock,
+      connectivity,
+      ids,
+      leaving: createRoundLeaving({ hub, ids, navigation, deletion }),
+      editing: createRoundEditing({ hub, ids }),
+      presetSaving: createPresetSaving({ signIn, commands, fetching }),
+    }),
+    newRoundStore: createNewRoundStore({
+      fetching,
+      roundStart: createRoundStart({ hub, signIn, ids, clock, navigation }),
+      presetDeletion: createPresetDeletion({ signIn, commands, snapshots }),
+      connectivity,
+    }),
+    listStore: createRoundsListStore({
+      hub,
+      requests,
+      fetching,
+      clock,
+      connectivity,
+      deletion,
+    }),
+  };
+}
+
+// 同期(同期と、その契機)。
+function composeSync(inputs: Inputs, records: Records) {
+  const { authenticator, identityStore, connectivity, clock } = inputs;
   const sync = createRoundSync({
-    records: reconciliation,
+    records: records.reconciliation,
     sender: createOpSender({
-      records: reconciliation,
+      records: records.reconciliation,
       session: authenticator,
       lock: createBrowserSenderLock(),
       clock,
@@ -151,14 +171,18 @@ function composeApp(router: PageRouter) {
     connectivity,
     sync,
   });
+  return { sync, triggers };
+}
+
+// アプリで1つの部品を、1度だけ生成して結ぶ。
+function composeApp(router: PageRouter) {
+  const inputs = composeInputs(router);
+  const records = composeRecords(inputs);
   return {
-    localIdentity,
-    hub,
-    detailStore,
-    listStore,
-    newRoundStore,
-    sync,
-    triggers,
+    localIdentity: inputs.localIdentity,
+    hub: records.hub,
+    ...composeStores(inputs, records),
+    ...composeSync(inputs, records),
   };
 }
 
