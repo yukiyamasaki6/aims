@@ -13,6 +13,7 @@ import {
   createMemoryRoundStore,
   createTestRoundHub,
 } from "@/features/rounds/application/round-record-test-helpers";
+import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
 import { createRoundsStore } from "@/features/rounds/application/rounds-store";
 import {
   createSendOperations,
@@ -108,12 +109,19 @@ function rig() {
       deleteRoundAndLeave: vi.fn(),
       leaveRound: vi.fn(),
     },
-    deletion: { deleteRound: vi.fn() },
     editing: createRoundEditing({ hub, ids }),
     presetSaving: { savePreset: vi.fn() },
   });
+  const list = createRoundsListStore({
+    hub,
+    requests,
+    fetching: fetching as unknown as RoundFetching,
+    clock,
+    connectivity,
+    deletion: { deleteRound: vi.fn() },
+  });
   sync.start("user-1");
-  return { sync, store, requests, fetching, clock };
+  return { sync, store, list, requests, fetching, clock };
 }
 
 const deferredDetail = () =>
@@ -182,7 +190,7 @@ describe("詳細を開く依頼と同期", () => {
     const t = rig();
     t.fetching.fetchRoundDetail.mockReturnValue(new Promise(() => {}));
     const detailLoading = t.store.load("r1");
-    const listLoading = t.store.loadList();
+    const listLoading = t.list.loadList();
     await flush();
 
     // When
@@ -258,7 +266,7 @@ describe("一覧と常駐の取得", () => {
     await flush();
 
     // When
-    const loading = t.store.loadList();
+    const loading = t.list.loadList();
     await flush();
 
     // Then

@@ -19,13 +19,13 @@ import {
   roundsListView,
 } from "../domain/rounds-list-view";
 import { FetchState } from "./fetch-state";
-import { useRoundsStore } from "./rounds-context";
+import { useRoundsListStore } from "./rounds-context";
 import { useFetchResult } from "./use-fetch-result";
 import { useLocalRoundsList } from "./use-local-rounds-list";
 
 export function RoundsList() {
   const hydrated = useHydrated();
-  const store = useRoundsStore();
+  const store = useRoundsListStore();
   const { view, retry } = useFetchResult<LoadedRoundsList>(
     () => store.loadList(),
     [],

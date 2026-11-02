@@ -17,6 +17,7 @@ import {
   type RecordChannel,
   type RecordMessage,
 } from "./round-record-hub";
+import { createRoundsListStore } from "./rounds-list-store";
 import { createRoundsStore } from "./rounds-store";
 import {
   createSendOperations,
@@ -116,13 +117,21 @@ export function createTestRoundsStore(
     roundStart,
     presetDeletion,
     leaving,
-    deletion,
     editing,
     presetSaving,
+  });
+  const list = createRoundsListStore({
+    hub,
+    requests,
+    fetching: fetching as unknown as RoundFetching,
+    clock,
+    connectivity,
+    deletion,
   });
   hub.start(options.userId === undefined ? "user-1" : options.userId);
   return {
     store,
+    list,
     hub,
     opLog,
     bus,

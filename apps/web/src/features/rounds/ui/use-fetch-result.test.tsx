@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "../domain/fetch-result";
-import { createFakeRoundsStore } from "./rounds-store-test-helpers";
+import { createFakeRoundsListStore } from "./round-stores-test-helpers";
 import { useFetchResult } from "./use-fetch-result";
 
 function deferred<T>() {
@@ -15,7 +15,7 @@ function deferred<T>() {
 // 通信の復帰の合図はラウンドの状態の約束(whenOnline)で受けるため、偽の約束で復帰を起こす。
 // offlineの結果が返る状況は、通信が切れているので、offlineの結果を扱うテストはgoOfflineで始める。
 function setup() {
-  return { fake: createFakeRoundsStore() };
+  return { fake: createFakeRoundsListStore() };
 }
 
 describe("useFetchResult", () => {

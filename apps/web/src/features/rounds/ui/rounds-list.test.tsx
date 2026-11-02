@@ -8,16 +8,16 @@ import type {
   RoundListItem,
 } from "../domain/round-list";
 import { NEW_ROUND_PATH, roundPath } from "../domain/round-routes";
-import { RoundsStoreProvider } from "./rounds-context";
+import { createFakeRoundsListStore } from "./round-stores-test-helpers";
+import { RoundsListStoreProvider } from "./rounds-context";
 import { RoundsList } from "./rounds-list";
-import { createFakeRoundsStore } from "./rounds-store-test-helpers";
 
 // ラウンドの状態と変更の方法は、一覧の読み込み、削除、端末の列、待ちの合図だけを持つ偽の約束で渡す。
 // 取得、端末の列、削除の実物はそれぞれのテストで確かめる。
-let fake: ReturnType<typeof createFakeRoundsStore>;
-let load: ReturnType<typeof createFakeRoundsStore>["store"]["loadList"];
+let fake: ReturnType<typeof createFakeRoundsListStore>;
+let load: ReturnType<typeof createFakeRoundsListStore>["store"]["loadList"];
 let deleteRound: ReturnType<
-  typeof createFakeRoundsStore
+  typeof createFakeRoundsListStore
 >["store"]["deleteRound"];
 
 function loaded(
@@ -34,9 +34,9 @@ function loaded(
 
 function renderList() {
   return render(
-    <RoundsStoreProvider store={fake.store}>
+    <RoundsListStoreProvider store={fake.store}>
       <RoundsList />
-    </RoundsStoreProvider>,
+    </RoundsListStoreProvider>,
   );
 }
 
@@ -91,7 +91,7 @@ function offlineWithLocal(items: RoundListItem[] = inProgressRounds) {
 }
 
 beforeEach(() => {
-  fake = createFakeRoundsStore();
+  fake = createFakeRoundsListStore();
   // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
   fake.goOffline();
   // 端末の列は、既定では読み込みが終わらない。

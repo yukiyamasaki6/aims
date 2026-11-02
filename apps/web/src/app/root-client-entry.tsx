@@ -21,6 +21,7 @@ import { createRefreshRequests } from "@/features/rounds/application/refresh-req
 import { createRefreshRoundBases } from "@/features/rounds/application/refresh-round-bases";
 import { createRoundReconciliation } from "@/features/rounds/application/round-reconciliation";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
+import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
 import { createRoundsStore } from "@/features/rounds/application/rounds-store";
 import { createPresetSaving } from "@/features/rounds/application/save-preset";
 import { createSendOperations } from "@/features/rounds/application/send-operations";
@@ -40,7 +41,10 @@ import {
   createRouterNavigation,
   type PageRouter,
 } from "@/features/rounds/infrastructure/router-navigation";
-import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
+import {
+  RoundsListStoreProvider,
+  RoundsStoreProvider,
+} from "@/features/rounds/ui/rounds-context";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
@@ -118,9 +122,16 @@ function composeApp(router: PageRouter) {
       snapshots,
     }),
     leaving: createRoundLeaving({ hub, ids, navigation, deletion }),
-    deletion,
     editing: createRoundEditing({ hub, ids }),
     presetSaving: createPresetSaving({ signIn, commands, fetching }),
+  });
+  const listStore = createRoundsListStore({
+    hub,
+    requests,
+    fetching,
+    clock,
+    connectivity,
+    deletion,
   });
   const sync = createRoundSync({
     records: reconciliation,
@@ -142,7 +153,7 @@ function composeApp(router: PageRouter) {
     connectivity,
     sync,
   });
-  return { localIdentity, hub, store, sync, triggers };
+  return { localIdentity, hub, store, listStore, sync, triggers };
 }
 
 // ルートレイアウトはサーバー専用のexport(メタデータ)を持ち、クライアントの処理を持てないため、この入口が起動地点の代わりに、アプリで1度だけ動く部品を生成して始め、アプリの全体を包んで、画面へ状態と変更の方法を渡す。
@@ -154,10 +165,12 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
   useEffect(() => app.triggers.start(), [app]);
 
   return (
-    <RoundsStoreProvider store={app.store}>
-      <RoundBaseRefresher sync={app.sync} />
-      <SwUpdateActivator whenPersisted={app.hub.whenPersisted} />
-      {children}
-    </RoundsStoreProvider>
+    <RoundsListStoreProvider store={app.listStore}>
+      <RoundsStoreProvider store={app.store}>
+        <RoundBaseRefresher sync={app.sync} />
+        <SwUpdateActivator whenPersisted={app.hub.whenPersisted} />
+        {children}
+      </RoundsStoreProvider>
+    </RoundsListStoreProvider>
   );
 }

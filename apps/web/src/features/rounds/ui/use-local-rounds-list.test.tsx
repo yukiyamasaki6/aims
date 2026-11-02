@@ -2,16 +2,18 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LocalRoundsList } from "../domain/round-list";
-import { RoundsStoreProvider } from "./rounds-context";
-import { createFakeRoundsStore } from "./rounds-store-test-helpers";
+import { createFakeRoundsListStore } from "./round-stores-test-helpers";
+import { RoundsListStoreProvider } from "./rounds-context";
 import { useLocalRoundsList } from "./use-local-rounds-list";
 
 // 端末の記録からの導出は別のテストで確かめるため、ラウンドの状態は端末の一覧と待ちの合図だけを返す偽の約束で模す。
 function setup() {
-  const fake = createFakeRoundsStore();
+  const fake = createFakeRoundsListStore();
   function wrapper({ children }: { children: ReactNode }) {
     return (
-      <RoundsStoreProvider store={fake.store}>{children}</RoundsStoreProvider>
+      <RoundsListStoreProvider store={fake.store}>
+        {children}
+      </RoundsListStoreProvider>
     );
   }
   return { fake, wrapper };
