@@ -26,6 +26,7 @@ function setup(
     check?: () => Promise<SessionStatus>;
     offline?: boolean;
     here?: string;
+    protectedPath?: string;
   } = {},
 ) {
   const listeners: Array<(event: AuthChange) => void> = [];
@@ -65,8 +66,10 @@ function setup(
           stopOnline();
         };
       },
+      onOffline: () => () => {},
     },
     pageReplace: page,
+    protectedPath: options.protectedPath ?? "/rounds",
   });
   return {
     session,
@@ -88,7 +91,7 @@ function setup(
 type Authority = ReturnType<typeof setup>["authority"];
 
 const mounted = { isMounted: () => true };
-const signedOut: AuthChange = { kind: "signed-out" };
+const signedOut: AuthChange = { kind: "signed-out", userId: null };
 
 async function flush() {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -444,6 +447,34 @@ describe("サインアウト", () => {
       },
     );
 
+    it("保護の範囲の根が異なる場合、遷移元の検証が根に従う", async () => {
+      // Given
+      const inside = setup({
+        signOutHere: async () => ({ kind: "rate_limited" }),
+        here: "/elsewhere/x",
+        protectedPath: "/elsewhere",
+      });
+      const outside = setup({
+        signOutHere: async () => ({ kind: "rate_limited" }),
+        here: "/rounds/x",
+        protectedPath: "/elsewhere",
+      });
+      for (const { session } of [inside, outside]) {
+        session.watch();
+        await session.signOut(mounted);
+      }
+
+      // When
+      inside.emit(signedOut);
+      outside.emit(signedOut);
+
+      // Then
+      expect(inside.page.replace).toHaveBeenCalledWith(
+        "/signin?returnTo=%2Felsewhere%2Fx",
+      );
+      expect(outside.page.replace).toHaveBeenCalledWith("/signin");
+    });
+
     it("ラウンド一覧でサインアウトが失敗した後にセッションを失ったときは、遷移元を付けない", async () => {
       // Given
       const { session, page, emit } = setup({
@@ -526,7 +557,8 @@ describe("セッション喪失の見張り", () => {
     it.each([
       ["signed-in", { kind: "signed-in", userId: "user-1" }],
       ["セッションが無いinitial", { kind: "initial", userId: null }],
-      ["それ以外の変化", { kind: "other" }],
+      ["トークンの更新", { kind: "token-refreshed", userId: "user-1" }],
+      ["それ以外の変化", { kind: "other", userId: null }],
     ] as const)("%sでは、移らない", (_name, event) => {
       // Given
       const { session, page, emit } = setup();

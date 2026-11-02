@@ -7,6 +7,7 @@ import {
   SIGN_IN_PATH,
   SIGN_UP_PATH,
 } from "@/features/auth/domain/routes";
+import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import { config, proxy } from "./proxy";
 
 // Supabaseクライアントは外部サービスとの境界のため、getUserの結果を制御できるスタブで模す。
@@ -28,6 +29,8 @@ describe("proxy", () => {
       "/rounds",
       "/rounds/1",
       "/rounds/1/edit",
+      ROUNDS_PATH,
+      `${ROUNDS_PATH}/1`,
     ])("%sで実行する", (url) => {
       // Given
       // When
@@ -68,6 +71,8 @@ describe("proxy", () => {
       "/rounds/1",
       "/rounds/1/edit",
       "/rounds/new",
+      ROUNDS_PATH,
+      `${ROUNDS_PATH}/1`,
       "/",
       "/offline",
       "/roundsx",
@@ -81,12 +86,15 @@ describe("proxy", () => {
         // Given
         const redirects = [false, true].some(
           (signedIn) =>
-            redirectFor({
-              signedIn,
-              pathname,
-              search: "",
-              isServerAction: false,
-            }) !== null,
+            redirectFor(
+              {
+                signedIn,
+                pathname,
+                search: "",
+                isServerAction: false,
+              },
+              ROUNDS_PATH,
+            ) !== null,
         );
 
         // When
@@ -99,6 +107,20 @@ describe("proxy", () => {
   });
 
   describe("リクエストを受け取る", () => {
+    it("未認証で一覧の経路を開くと、遷移元を付けずにサインインへリダイレクトする", async () => {
+      // Given
+      db.getUser.mockResolvedValue({ data: { user: null } });
+
+      // When
+      const request = new NextRequest(`https://app.example.com${ROUNDS_PATH}`);
+      const response = await proxy(request);
+
+      // Then
+      expect(response.headers.get("location")).toBe(
+        "https://app.example.com/signin",
+      );
+    });
+
     it("セッションの更新結果をレスポンスとして返す", async () => {
       // Given
       db.getUser.mockResolvedValue({ data: { user: null } });

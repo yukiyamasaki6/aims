@@ -1,6 +1,6 @@
 import { UNREACHABLE } from "../domain/auth-failure";
 import { beginSendCode } from "../domain/password-setup-flow";
-import { signInHref } from "../domain/routes";
+import { SIGN_IN_PATH } from "../domain/routes";
 import type { CallResult } from "./call-result";
 import {
   applyPassword,
@@ -82,7 +82,7 @@ async function setPassword(
   if (!view.isMounted()) return;
   view.dispatch({ type: "passwordSet" });
   try {
-    pageLoad.load(signInHref(null));
+    pageLoad.load(SIGN_IN_PATH);
   } catch {
     if (view.isMounted()) {
       view.dispatch({ type: "failed", failure: UNREACHABLE });

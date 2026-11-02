@@ -23,12 +23,15 @@ type Dependencies = {
   authenticator: PasswordSetupAuthenticator;
   registration: RegistrationLookup;
   navigation: Pick<Navigation, "go">;
+  // 保護対象の画面の範囲の根の経路。サインインの後の既定の行き先になる。
+  protectedPath: string;
 };
 
 export function createSignUp({
   authenticator,
   registration,
   navigation,
+  protectedPath,
 }: Dependencies): PasswordSetup {
   const context: PasswordSetupContext = { authenticator, purpose: "sign-up" };
   return {
@@ -36,7 +39,7 @@ export function createSignUp({
     resend: (input, view) => resend(context, input, view),
     verifyCode: (input, view) => verifyCode(context, input, view),
     setPassword: (input, view) =>
-      setPassword(authenticator, navigation, input, view),
+      setPassword(authenticator, navigation, protectedPath, input, view),
   };
 }
 
@@ -67,10 +70,11 @@ async function sendCode(
   await deliver(context, request, view, { type: "codeSent" });
 }
 
-// 設定に成功したら、ラウンド一覧へ遷移する。遷移が投げたときは、通信エラーとして失敗にし、実行中のまま止めない。
+// 設定に成功したら、サインインの後の既定の行き先へ遷移する。遷移が投げたときは、通信エラーとして失敗にし、実行中のまま止めない。
 async function setPassword(
   authenticator: Pick<PasswordSetupAuthenticator, "setPassword">,
   navigation: Pick<Navigation, "go">,
+  protectedPath: string,
   input: { password: string },
   view: PasswordSetupView,
 ) {
@@ -87,7 +91,7 @@ async function setPassword(
   if (!view.isMounted()) return;
   view.dispatch({ type: "passwordSet" });
   try {
-    navigation.go(destinationOf(null));
+    navigation.go(destinationOf(null, protectedPath));
   } catch {
     view.dispatch({ type: "failed", failure: UNREACHABLE });
   }

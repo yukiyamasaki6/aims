@@ -1,4 +1,4 @@
-import { RoundDetailEntry } from "./round-detail-entry";
+import { RoundDetailClient } from "@/features/rounds/ui/round-detail-client";
 
 // /rounds/[id]を静的な枠にするため、プレースホルダーだけをプリレンダーする。実際のIDはクライアントがpathnameから得る。
 // /rounds/<ID>はnext.configのrewriteで/rounds/_の枠へ向けるため、未知のIDは動的ルートに届かない。
@@ -10,5 +10,5 @@ export function generateStaticParams() {
 }
 
 export default function RoundPage() {
-  return <RoundDetailEntry />;
+  return <RoundDetailClient />;
 }

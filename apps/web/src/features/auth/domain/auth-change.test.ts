@@ -28,8 +28,13 @@ describe("identityChange", () => {
       { kind: "initial", userId: null },
       { kind: "keep" },
     ],
-    ["signed-out", { kind: "signed-out" }, { kind: "clear" }],
-    ["それ以外の変化", { kind: "other" }, { kind: "keep" }],
+    [
+      "トークンの更新(識別情報を変えない)",
+      { kind: "token-refreshed", userId: "user-1" },
+      { kind: "keep" },
+    ],
+    ["signed-out", { kind: "signed-out", userId: null }, { kind: "clear" }],
+    ["それ以外の変化", { kind: "other", userId: null }, { kind: "keep" }],
   ] as const)("%sでは、識別情報の変更を決める", (_name, event, expected) => {
     // Given
 
@@ -43,10 +48,11 @@ describe("identityChange", () => {
 
 describe("lostByChange", () => {
   it.each([
-    ["signed-out", { kind: "signed-out" }, true],
+    ["signed-out", { kind: "signed-out", userId: null }, true],
     ["signed-in", { kind: "signed-in", userId: "user-1" }, false],
+    ["token-refreshed", { kind: "token-refreshed", userId: "user-1" }, false],
     ["initial(セッションが無い)", { kind: "initial", userId: null }, false],
-    ["それ以外の変化", { kind: "other" }, false],
+    ["それ以外の変化", { kind: "other", userId: null }, false],
   ] as const satisfies readonly (readonly [string, AuthChange, boolean])[])(
     "%sのとき、喪失かを決める",
     (_name, event, expected) => {

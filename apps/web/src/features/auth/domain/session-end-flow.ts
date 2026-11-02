@@ -71,10 +71,11 @@ export function endSignOut(
 export function leave(
   flow: SessionEndFlow,
   from: string | null,
+  protectedPath: string,
 ): Step<SessionEndFlow, string | null> {
   if (flow.left || flow.running) return { state: flow, result: null };
   return {
     state: { ...flow, left: true },
-    result: signInHref(from),
+    result: signInHref(from, protectedPath),
   };
 }

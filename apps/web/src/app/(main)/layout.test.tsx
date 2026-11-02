@@ -9,6 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import { RootClientEntry } from "../root-client-entry";
 import MainLayout from "./layout";
 
@@ -30,6 +31,12 @@ const supabase = vi.hoisted(() => {
     },
   };
 });
+// 画面のパッケージの遷移の部品は、アプリの外では得られないため、RootClientEntryが受け取れる偽に差し替える。
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 // 常駐の同期と取得の部品は、この入口の関心の外のため、何も描画しない代役に差し替える。
 vi.mock("../op-sync-provider", () => ({ OpSyncProvider: () => null }));
 vi.mock("../round-base-refresher", () => ({ RoundBaseRefresher: () => null }));
@@ -102,12 +109,11 @@ function renderLayout() {
 // ルートの識別情報の記録(実物)と合わせて描く。識別情報の消去は、この購読が担う。
 function renderLayoutWithIdentity() {
   return render(
-    <>
-      <RootClientEntry />
+    <RootClientEntry>
       <MainLayout>
         <p>子要素</p>
       </MainLayout>
-    </>,
+    </RootClientEntry>,
   );
 }
 
@@ -148,6 +154,18 @@ describe("MainLayout", () => {
         screen.getByRole("button", { name: "サインアウト" }),
       );
       expect(screen.getByText("子要素")).toBeInTheDocument();
+    });
+
+    it("左パネルの個人リンクは、一覧の経路を向く", () => {
+      // Given
+      // When
+      renderLayout();
+
+      // Then
+      expect(screen.getByRole("link", { name: "個人" })).toHaveAttribute(
+        "href",
+        ROUNDS_PATH,
+      );
     });
 
     it("Supabaseの環境変数が無くても、描画時に接続を作らず描画できる", () => {

@@ -1,8 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { destinationOf } from "@/features/auth";
+import { ROUNDS_PATH } from "@/features/rounds";
 import { createAuthSignInCheck } from "./auth-sign-in-check";
 
+afterEach(() => {
+  vi.doUnmock("@/features/rounds");
+  vi.resetModules();
+});
+
 describe("createAuthSignInCheck", () => {
-  it("行き先の経路は、認証の入口の定数(サインアップは/signup、サインインの後は/rounds)と一致する", () => {
+  it("行き先の経路は、サインアップは認証の入口の定数、サインインの後はラウンド一覧を保護の範囲の根にした既定の行き先と一致する", () => {
     // Given
     const sessionReader = { readSession: vi.fn() };
 
@@ -11,7 +18,23 @@ describe("createAuthSignInCheck", () => {
 
     // Then
     expect(signInCheck.signUpPath).toBe("/signup");
-    expect(signInCheck.signedInPath).toBe("/rounds");
+    expect(signInCheck.signedInPath).toBe(destinationOf(null, ROUNDS_PATH));
+  });
+
+  // 差し替える値そのものが検証の対象のため、実在しない経路を使う。
+  it("サインインの後の行き先は、ラウンドの機能が公開する一覧の経路に従う", async () => {
+    // Given
+    vi.resetModules();
+    vi.doMock("@/features/rounds", () => ({ ROUNDS_PATH: "/elsewhere" }));
+    const { createAuthSignInCheck: createWithReplaced } = await import(
+      "./auth-sign-in-check"
+    );
+
+    // When
+    const signInCheck = createWithReplaced({ readSession: vi.fn() });
+
+    // Then
+    expect(signInCheck.signedInPath).toBe("/elsewhere");
   });
 
   it.each([

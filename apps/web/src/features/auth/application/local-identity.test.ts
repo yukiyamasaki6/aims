@@ -47,7 +47,7 @@ describe("端末の識別情報の記録", () => {
     localIdentity.start();
 
     // When
-    emit({ kind: "signed-out" });
+    emit({ kind: "signed-out", userId: null });
 
     // Then
     expect(writer.write).toHaveBeenCalledExactlyOnceWith(null);
@@ -59,8 +59,9 @@ describe("端末の識別情報の記録", () => {
     localIdentity.start();
 
     // When
-    emit({ kind: "other" });
+    emit({ kind: "other", userId: null });
     emit({ kind: "initial", userId: null });
+    emit({ kind: "token-refreshed", userId: "user-1" });
 
     // Then
     expect(writer.write).not.toHaveBeenCalled();
@@ -87,7 +88,7 @@ describe("端末の識別情報の記録", () => {
 
     // When
     emit({ kind: "signed-in", userId: "user-1" });
-    emit({ kind: "signed-out" });
+    emit({ kind: "signed-out", userId: null });
 
     // Then
     expect(writer.write).not.toHaveBeenCalled();

@@ -25,9 +25,12 @@ export type SignIn = {
 export function createSignIn({
   authenticator,
   navigation,
+  protectedPath,
 }: {
   authenticator: SignInAuthenticator;
   navigation: Navigation;
+  // 保護対象の画面の範囲の根の経路。遷移元の検証と、既定の行き先に使う。
+  protectedPath: string;
 }): SignIn {
   return {
     async submit(input, view) {
@@ -55,7 +58,7 @@ export function createSignIn({
       view.dispatch({ type: "signedIn" });
       // 遷移元の読み出しと遷移が投げたときは、トークンは使用済みのため、通信エラーとして消費し、送信中のまま止めない。
       try {
-        navigation.go(destinationOf(navigation.returnTo()));
+        navigation.go(destinationOf(navigation.returnTo(), protectedPath));
       } catch {
         refuse(UNREACHABLE);
       }

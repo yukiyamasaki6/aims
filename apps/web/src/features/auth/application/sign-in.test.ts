@@ -17,12 +17,12 @@ const verified = signInReducer(initialSignInFlow, {
 
 const accepted: CallResult = { kind: "accepted" };
 
-function setup(returnTo: string | null = null) {
+function setup(returnTo: string | null = null, protectedPath = "/rounds") {
   const authenticator = {
     signIn: vi.fn(async (): Promise<CallResult> => accepted),
   };
   const navigation = { returnTo: vi.fn(() => returnTo), go: vi.fn() };
-  const signIn = createSignIn({ authenticator, navigation });
+  const signIn = createSignIn({ authenticator, navigation, protectedPath });
   const { events, resetCheck, viewOf, screen } = screenHarness(signInReducer);
   return {
     signIn,
@@ -47,6 +47,9 @@ describe("サインインの手続き", () => {
     [null, "/rounds"],
     ["/rounds/new?a=1", "/rounds/new?a=1"],
     ["https://evil.com/rounds", "/rounds"],
+    ["//evil.com", "/rounds"],
+    ["/signin", "/rounds"],
+    ["/rounds/../signin", "/rounds"],
   ])(
     "成功時にsignedInだけを送って許可された遷移先 %s へ進み、失敗とチェックのやり直しを起こさない",
     async (returnTo, expected) => {
@@ -67,6 +70,32 @@ describe("サインインの手続き", () => {
       expect(resetCheck).not.toHaveBeenCalled();
     },
   );
+
+  it("保護の範囲の根が異なる場合、既定の行き先は根になり、根の下の遷移元だけを許す", async () => {
+    // Given
+    const withoutReturnTo = setup(null, "/elsewhere");
+    const insideRoot = setup("/elsewhere/x?a=1", "/elsewhere");
+    const outsideRoot = setup("/rounds/new", "/elsewhere");
+
+    // When
+    await withoutReturnTo.signIn.submit(
+      input,
+      withoutReturnTo.viewOf(verified),
+    );
+    await insideRoot.signIn.submit(input, insideRoot.viewOf(verified));
+    await outsideRoot.signIn.submit(input, outsideRoot.viewOf(verified));
+
+    // Then
+    expect(withoutReturnTo.navigation.go).toHaveBeenCalledExactlyOnceWith(
+      "/elsewhere",
+    );
+    expect(insideRoot.navigation.go).toHaveBeenCalledExactlyOnceWith(
+      "/elsewhere/x?a=1",
+    );
+    expect(outsideRoot.navigation.go).toHaveBeenCalledExactlyOnceWith(
+      "/elsewhere",
+    );
+  });
 
   it("前の失敗の後の成功では、遷移元の読み出しと遷移の前にsignedInを送り、遷移の中ではエラーが消えて送信中のままである", async () => {
     // Given

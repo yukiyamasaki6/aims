@@ -36,6 +36,33 @@ describe("ブラウザの通信の可否", () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it("通信が切れたとき(offlineイベント)に知らせ、返す関数で解除する", () => {
+    // Given
+    const listener = vi.fn();
+    const stop = createBrowserConnectivity().onOffline(listener);
+
+    // When
+    window.dispatchEvent(new Event("offline"));
+    stop();
+    window.dispatchEvent(new Event("offline"));
+
+    // Then
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("onlineの購読は、offlineイベントでは呼ばれない", () => {
+    // Given
+    const listener = vi.fn();
+    const stop = createBrowserConnectivity().onOnline(listener);
+
+    // When
+    window.dispatchEvent(new Event("offline"));
+    stop();
+
+    // Then
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it("オフラインかを、navigator.onLineで返す", () => {
     // Given
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);

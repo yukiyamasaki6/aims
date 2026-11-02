@@ -2,10 +2,16 @@
 // 認証サービスの語彙(イベントの名前)を知るのは、インフラ層の変換だけである。
 
 // 認証状態の変化。userIdは、変化の時点でサインインしている利用者(いなければnull)。
-export type AuthChange =
-  | { readonly kind: "signed-in" | "initial"; readonly userId: string | null }
-  | { readonly kind: "signed-out" }
-  | { readonly kind: "other" };
+// userIdは、signed-out、otherでは常にnull。token-refreshedはトークンの更新で、その利用者を持つ。
+export type AuthChange = {
+  readonly kind:
+    | "signed-in"
+    | "initial"
+    | "token-refreshed"
+    | "signed-out"
+    | "other";
+  readonly userId: string | null;
+};
 
 export type IdentityChange =
   | { readonly kind: "record"; readonly userId: string }
@@ -19,7 +25,11 @@ export type IdentityChange =
 // initialでセッションが無いのは、「未サインイン」ではなく「オフラインなどで確かめられなかった」可能性があるため、既存の記録は消さない。
 export function identityChange(change: AuthChange): IdentityChange {
   if (change.kind === "signed-out") return { kind: "clear" };
-  if (change.kind === "other" || !change.userId) return { kind: "keep" };
+  // token-refreshedは、利用者が変わらない更新のため、記録を変えない。
+  if (change.kind !== "signed-in" && change.kind !== "initial") {
+    return { kind: "keep" };
+  }
+  if (!change.userId) return { kind: "keep" };
   return { kind: "record", userId: change.userId };
 }
 

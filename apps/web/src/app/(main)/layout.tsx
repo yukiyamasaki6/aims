@@ -6,6 +6,7 @@ import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-pa
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SignOutButton } from "@/features/auth/ui/sign-out-button";
 import { LeftPanel } from "@/features/navigation/ui/left-panel";
+import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 
@@ -20,6 +21,7 @@ export default function MainLayout({
       authenticator: createSupabaseAuth(createClient),
       connectivity: createBrowserConnectivity(),
       pageReplace: createBrowserPageLoad(),
+      protectedPath: ROUNDS_PATH,
     }),
   );
   // セッションを失ったら/signinへ移す。認証が要る画面の集合(このレイアウトの下)の間、見張る。
@@ -27,7 +29,10 @@ export default function MainLayout({
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden side:flex-row">
-      <LeftPanel signOut={<SignOutButton signOut={session.signOut} />} />
+      <LeftPanel
+        personalHref={ROUNDS_PATH}
+        signOut={<SignOutButton signOut={session.signOut} />}
+      />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</div>
     </div>
   );

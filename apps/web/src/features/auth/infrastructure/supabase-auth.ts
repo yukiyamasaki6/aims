@@ -177,10 +177,12 @@ function toAuthChange(
       return { kind: "signed-in", userId };
     case "INITIAL_SESSION":
       return { kind: "initial", userId };
+    case "TOKEN_REFRESHED":
+      return { kind: "token-refreshed", userId };
     case "SIGNED_OUT":
-      return { kind: "signed-out" };
+      return { kind: "signed-out", userId: null };
     default:
-      return { kind: "other" };
+      return { kind: "other", userId: null };
   }
 }
 

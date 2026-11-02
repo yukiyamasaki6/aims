@@ -48,7 +48,11 @@ function setup({
     signIn: vi.fn(async (): Promise<CallResult> => accepted),
   };
   const navigation = { returnTo: vi.fn(() => returnTo), go: vi.fn() };
-  const signIn = createSignIn({ authenticator, navigation });
+  const signIn = createSignIn({
+    authenticator,
+    navigation,
+    protectedPath: "/rounds",
+  });
   const form = <SignInForm signIn={signIn} />;
   const rendered = render(strict ? <StrictMode>{form}</StrictMode> : form);
   return { signIn, authenticator, navigation, ...rendered };

@@ -1,0 +1,116 @@
+import type { Clock } from "@/lib/clock/contract/clock";
+import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
+import {
+  classifyResponse,
+  commFailure,
+  FETCH_TIMEOUT_MS,
+  type FetchResult,
+  isAuthRejected,
+  type ResponseLike,
+} from "../domain/fetch-result";
+import type { SignInReader } from "./sign-in-reader";
+import { TIMED_OUT, withinTime } from "./time-limit";
+
+type FetchOptions<T> = {
+  nullIsNotFound?: boolean;
+  timeoutMs?: number;
+  onLateResult?: (result: FetchResult<T>) => void;
+};
+
+export type ContentFetcher = {
+  fetchContent<T>(
+    run: (session: { userId: string }) => PromiseLike<ResponseLike<T>>,
+    opts?: FetchOptions<T>,
+  ): Promise<FetchResult<T>>;
+};
+
+// 認証を確かめた取得と取り直し、時間制限。
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
+export function createContentFetcher(deps: {
+  signIn: SignInReader;
+  connectivity: Connectivity;
+  clock: Clock;
+}): ContentFetcher {
+  const { signIn, connectivity, clock } = deps;
+
+  function failureOfComm<T>(): FetchResult<T> {
+    return commFailure(connectivity.isOffline());
+  }
+
+  // サインインの状態を、切断と競わせて確かめる。認証済みでなければ、取得の結果をfailureで返す。
+  async function confirmSession<T>(
+    opts: { refresh?: boolean } = {},
+  ): Promise<{ session: { userId: string } } | { failure: FetchResult<T> }> {
+    const { promise, resolve } = Promise.withResolvers<"offline">();
+    const stop = connectivity.onOffline(() => resolve("offline"));
+    let reading: Awaited<ReturnType<SignInReader["read"]>>;
+    try {
+      const raced = await Promise.race([signIn.read(opts), promise]);
+      if (raced === "offline") return { failure: { status: "offline" } };
+      reading = raced;
+    } finally {
+      stop();
+    }
+    if (reading.status === "unknown") return { failure: failureOfComm() };
+    if (reading.status === "unauthenticated") {
+      return { failure: { status: "error", message: reading.message } };
+    }
+    return { session: { userId: reading.userId } };
+  }
+
+  // 確かめたセッションでクエリし、runの中では読み直さない。
+  // 認証の拒否が返ったら、更新を強制してセッションを確かめ、認証済みなら新しいセッションで1回だけ取り直す。
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 認証の確認、取り直し、通信失敗の分類を、取得の1つの手順として順に書いている。分けると手順が追いにくくなる。
+  async function load<T>(
+    run: (session: { userId: string }) => PromiseLike<ResponseLike<T>>,
+    opts: { nullIsNotFound?: boolean },
+  ): Promise<FetchResult<T>> {
+    if (connectivity.isOffline()) return { status: "offline" };
+    const confirmed = await confirmSession<T>();
+    if ("failure" in confirmed) return confirmed.failure;
+    try {
+      let res = await run(confirmed.session);
+      if (res.status === 0) return failureOfComm();
+      if (isAuthRejected(res)) {
+        const refreshed = await confirmSession<T>({ refresh: true });
+        if ("failure" in refreshed) return refreshed.failure;
+        res = await run(refreshed.session);
+        if (res.status === 0) return failureOfComm();
+      }
+      return classifyResponse(res, opts);
+    } catch {
+      return failureOfComm();
+    }
+  }
+
+  async function deliverLateResult<T>(
+    loading: Promise<FetchResult<T>>,
+    remainingMs: number,
+    onLateResult: (result: FetchResult<T>) => void,
+  ): Promise<void> {
+    const raced = await withinTime(clock, loading, remainingMs);
+    if (raced !== TIMED_OUT) onLateResult(raced);
+  }
+
+  // timeoutMsは結果を返すまでの上限。超えた後も取得の開始からFETCH_TIMEOUT_MSまでは結果を待ち、
+  // 終われば一度だけonLateResultへ渡す（表示には使わず、保存などに使う）。
+  async function fetchContent<T>(
+    run: (session: { userId: string }) => PromiseLike<ResponseLike<T>>,
+    opts: FetchOptions<T> = {},
+  ): Promise<FetchResult<T>> {
+    const { timeoutMs = FETCH_TIMEOUT_MS, onLateResult, ...loadOpts } = opts;
+    const loading = load(run, loadOpts);
+    const raced = await withinTime(clock, loading, timeoutMs);
+    if (raced !== TIMED_OUT) return raced;
+    if (onLateResult && timeoutMs < FETCH_TIMEOUT_MS) {
+      void deliverLateResult(
+        loading,
+        FETCH_TIMEOUT_MS - timeoutMs,
+        onLateResult,
+      );
+    }
+    return failureOfComm();
+  }
+
+  return { fetchContent };
+}

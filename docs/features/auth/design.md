@@ -11,7 +11,7 @@
 
 - `src/features/auth/domain/flow.ts`: 命令の結果の型(`Start`、`Step`)と欄ごとのエラーの型(`FieldErrors`)。
 - `src/features/auth/domain/auth-failure.ts`: 失敗の種類と利用者向けの文言の表。失敗値の作成(`UNREACHABLE`など)と、確かめられなかったときの文言(`unconfirmedMessage`)も持つ。
-- `src/features/auth/domain/routes.ts`: 保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則と、要求のリダイレクト先(`redirectFor`)。`src/proxy.ts`が`lib/supabase/infrastructure/session.ts`へ関数として渡す。サインインの後の既定の行き先(`DEFAULT_DESTINATION`)は、入口から公開し、ナビゲーションの開始の行き先が使う。
+- `src/features/auth/domain/routes.ts`: 保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則と、要求のリダイレクト先(`redirectFor`)。保護の範囲の根の経路(`protectedPath`)は引数で受け、入口(`src/proxy.ts`、サインインとサインアップの画面、`(main)`のレイアウト)がラウンドの入口の`ROUNDS_PATH`を値として渡す。根はサインインの後の既定の行き先でもある。`src/proxy.ts`が`lib/supabase/infrastructure/session.ts`へ関数として渡す。既定の行き先の規則(`destinationOf`)は、入口から公開し、ナビゲーションの開始の行き先が使う。
 - `src/features/auth/domain/password.ts`: パスワードの入力と強さの規則。最小長と最大長の数値は、ここだけが持つ。規則の文面(`PASSWORD_RULE_MESSAGE`)も持ち、入力の検証と弱いパスワードの拒否が使う。
 - `src/features/auth/application/call-result.ts`: 認証サービスへの頼みごとの結果(`CallResult`)。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装。画面はブラウザの接続を、再設定の要求の入口はサーバーの接続を渡す。応答の変換(エラーのクラス名とコード、イベント名、セッションの形)も、このファイルだけが知る。
@@ -27,7 +27,7 @@
 | 開始の命令 | `begin<操作>(流れ, 入力)`が`Start<流れ, 依頼>`を返す | `beginSignIn`、`beginSignOut` |
 | 結果つきの命令 | `<動詞><操作>(流れ, 入力)`が`Step<流れ, 結果>`を返す | `endSignOut`、`leave` |
 | 画面から送る事実 | 過去形の出来事。reducerは`<操作>Reducer` | `captchaChecked`、`failed` |
-| 認証サービスの状態変化 | `AuthChange`(ドメイン)、`AuthChanges`(約束) | |
+| 認証サービスの状態変化 | `AuthChange`(ドメイン)、`AuthChanges`(約束)。他の機能へ公開する平らな値の通知は`SignInChange`、`SignInChanges`(約束) | |
 | 認証サービスに頼む約束 | `<手続き>Authenticator` | `SignInAuthenticator`、`SessionAuthenticator` |
 | 手続きの依存の引数名 | 約束の型名の先頭を小文字にした名前 | `navigation`、`pageLoad`、`pageReplace` |
 | 「セッション」を含む名前 | `Session`(手続き)、`SessionEndFlow`(集約)、`SessionStatus`(分類)、`SessionReading`(読み取り結果)。SDKの`Session`はこのアプリの名前に使わない | |
@@ -69,10 +69,16 @@
 3. 接続を作る関数は、同じ画面では同じ接続を返す(ブラウザ)。サーバーの要求の入口は、1回の要求で1つの接続を作って渡す。
 4. 読み取りが投げた場合を、利用側が個別に受けない。
 
+## 認証の変化の出来事
+
+認証の変化の出来事(`AuthChange`)は、`signed-in`、`initial`、`token-refreshed`(トークンの更新)、`signed-out`、`other`と、変化の時点の利用者(`userId`。サインアウトとその他はnull)を持つ。
+端末の識別情報の記録はトークンの更新で記録を変えず、サインインの喪失の見張りはトークンの更新を喪失としない(既存の使い手の振る舞いを保つ契約)。
+他の機能へは、同じ形の平らな値の通知(`SignInChange`、`SignInChanges`)を入口で公開する。
+
 ## 約束の例外の契約
 
 投げない: 認証サービスへの頼みごと(`CallResult`で返す)、サインインの状態の読み取り、端末の識別情報の書き込み、画面の約束、通信の可否。
-投げることがある: `Navigation`、`PageLoad`(手続きが通信エラーの失敗として扱う)、`RegistrationLookup`(届かなかった失敗として扱う)、`PasswordChange`(通信エラーの失敗として扱う)、`PageReplace.replace`(見張りもサインアウトも扱わない。以後の遷移も行わない)、`AuthChanges.subscribe`(接続を得られないとき同期に投げる。手続きは扱わない)。
+投げることがある: `Navigation`、`PageLoad`(手続きが通信エラーの失敗として扱う)、`RegistrationLookup`(届かなかった失敗として扱う)、`PasswordChange`(通信エラーの失敗として扱う)、`PageReplace.replace`(見張りもサインアウトも扱わない。以後の遷移も行わない)、`AuthChanges.subscribe`と`SignInChanges.subscribe`(どちらも接続を得られないとき同期に投げる。手続きは扱わない)。
 
 ## 設計判断
 
@@ -91,6 +97,6 @@
 
 ## 制約と未対応
 
-- 利用側の機能(取得、同期、ラウンド)は、通信の可否の実装を層のパスで参照し、自分で生成している。約束の型で受け取る注入は別作業である。
-- `src/proxy.ts`の`config.matcher`は、経路を文字列で再掲する(Next.jsの静的な設定のため)。`proxy.test.ts`が一致を確かめる。
+- 同期とラウンドの取得の手続きは、起動地点が生成した通信の可否を約束(`Connectivity`)で受け取る。
+- `src/proxy.ts`の`config.matcher`は、経路を文字列で再掲する(Next.jsの静的な設定のため)。`proxy.test.ts`が、`ROUNDS_PATH`とその下で一致することを確かめる。
 - 遷移が投げたときの扱い(再設定、サインイン、サインアップ)は未決定で、現行のまま(通信エラーを示す)。
