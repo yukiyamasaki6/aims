@@ -382,12 +382,12 @@ describe("fetchContent", () => {
       // Given
       const network = makeConnectivity();
       const fetcher = createContentFetcher({
-        signIn: {
-          read: async () => {
+        signIn: createFakeSignInReader([
+          async () => {
             network.state.offline = true;
             return unknown;
           },
-        },
+        ]).signIn,
         connectivity: network.connectivity,
         clock: createManualClock(),
       });

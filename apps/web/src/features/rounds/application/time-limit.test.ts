@@ -63,19 +63,35 @@ describe("withinTime", () => {
 });
 
 describe("withinFetchTimeout", () => {
-  it("FETCH_TIMEOUT_MSで終わらなければ、その時点の通信の可否で、切断ならoffline、そうでなければerrorにする", async () => {
+  it("取得が終わらないまま、FETCH_TIMEOUT_MSの1ms前は結果を返さず、FETCH_TIMEOUT_MSでerrorを返す", async () => {
     // Given
     const clock = createManualClock();
-    const connectivity = createFakeConnectivity(true);
-    const online = createFakeConnectivity(false);
-    const offlineLoading = withinFetchTimeout(
+    const loading = withinFetchTimeout(
       clock,
-      connectivity,
+      createFakeConnectivity(false),
       new Promise<never>(() => {}),
     );
-    const onlineLoading = withinFetchTimeout(
+    let settled = false;
+    void loading.then(() => {
+      settled = true;
+    });
+
+    // When
+    await clock.advanceAsync(FETCH_TIMEOUT_MS - 1);
+    const settledBefore = settled;
+    await clock.advanceAsync(1);
+
+    // Then
+    expect(settledBefore).toBe(false);
+    expect(await loading).toMatchObject({ status: "error" });
+  });
+
+  it("打ち切りの時点で接続が切れていれば、offlineを返す", async () => {
+    // Given
+    const clock = createManualClock();
+    const loading = withinFetchTimeout(
       clock,
-      online,
+      createFakeConnectivity(true),
       new Promise<never>(() => {}),
     );
 
@@ -83,8 +99,7 @@ describe("withinFetchTimeout", () => {
     await clock.advanceAsync(FETCH_TIMEOUT_MS);
 
     // Then
-    expect(await offlineLoading).toEqual({ status: "offline" });
-    expect(await onlineLoading).toMatchObject({ status: "error" });
+    expect(await loading).toEqual({ status: "offline" });
   });
 
   it("時間内に終われば、その結果を返す", async () => {

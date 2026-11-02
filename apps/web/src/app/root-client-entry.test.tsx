@@ -7,6 +7,7 @@ import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
 import { createPresetDeletion } from "@/features/rounds/application/delete-preset";
+import { createRoundDeletion } from "@/features/rounds/application/delete-round";
 import { createRoundEditing } from "@/features/rounds/application/edit-round";
 import { createContentFetcher } from "@/features/rounds/application/fetch-content";
 import { createRoundFetching } from "@/features/rounds/application/fetch-round-detail";
@@ -14,6 +15,7 @@ import { createRoundLeaving } from "@/features/rounds/application/leave-round";
 import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
 import { createRoundDetailStore } from "@/features/rounds/application/round-detail-store";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
+import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
 import { createPresetSaving } from "@/features/rounds/application/save-preset";
 import { createRoundStart } from "@/features/rounds/application/start-round";
 import { roundCreated } from "@/features/rounds/domain/round-op-test-helpers";
@@ -142,6 +144,32 @@ vi.mock(
     return {
       ...actual,
       createRoundDetailStore: vi.fn(actual.createRoundDetailStore),
+    };
+  },
+);
+vi.mock(
+  "@/features/rounds/application/rounds-list-store",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/rounds-list-store")
+      >();
+    return {
+      ...actual,
+      createRoundsListStore: vi.fn(actual.createRoundsListStore),
+    };
+  },
+);
+vi.mock(
+  "@/features/rounds/application/delete-round",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/delete-round")
+      >();
+    return {
+      ...actual,
+      createRoundDeletion: vi.fn(actual.createRoundDeletion),
     };
   },
 );
@@ -696,6 +724,53 @@ describe("RootClientEntry", () => {
       expect(deps.presetSaving).toBe(
         vi.mocked(createPresetSaving).mock.results[0].value,
       );
+    });
+
+    it("削除の手続きは1度だけ生成し、記録のハブとIDの実装を受け、一覧の窓口と完了・削除・一覧へ戻る手続きが同じものを使う", () => {
+      // Given
+      const { rerender } = render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // When
+      rerender(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      expect(createRoundDeletion).toHaveBeenCalledTimes(1);
+      const deps = vi.mocked(createRoundDeletion).mock.calls[0][0];
+      const deletion = vi.mocked(createRoundDeletion).mock.results[0].value;
+      expect(deps.hub).toBe(
+        vi.mocked(createRoundRecordHub).mock.results[0].value,
+      );
+      expect(deps.ids).toBe(
+        vi.mocked(createBrowserUniqueIds).mock.results[0].value,
+      );
+      expect(vi.mocked(createRoundsListStore).mock.calls[0][0].deletion).toBe(
+        deletion,
+      );
+      expect(vi.mocked(createRoundLeaving).mock.calls[0][0].deletion).toBe(
+        deletion,
+      );
+    });
+
+    it("一覧と詳細の窓口が、同じ記録のハブ、取り直しの依頼、取得、時計、接続を受ける", () => {
+      // Given
+      // When
+      render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      expect(createRoundsListStore).toHaveBeenCalledTimes(1);
+      const list = vi.mocked(createRoundsListStore).mock.calls[0][0];
+      const detail = vi.mocked(createRoundDetailStore).mock.calls[0][0];
+      expect(list.hub).toBe(
+        vi.mocked(createRoundRecordHub).mock.results[0].value,
+      );
+      expect(list.fetching).toBe(
+        vi.mocked(createRoundFetching).mock.results[0].value,
+      );
+      expect(detail.hub).toBe(list.hub);
+      expect(detail.requests).toBe(list.requests);
+      expect(detail.fetching).toBe(list.fetching);
+      expect(detail.clock).toBe(list.clock);
+      expect(detail.connectivity).toBe(list.connectivity);
     });
 
     it("プリセットの書き込みは、他の問い合わせの実装と同じデータベースの約束から作る", () => {

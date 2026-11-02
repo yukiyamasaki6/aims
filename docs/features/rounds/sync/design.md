@@ -32,13 +32,13 @@
 
 - ラウンド(`features/rounds/`): 業務の規則、端末の記録、画面に渡す正しい状態と変更の方法、突き合わせの一歩(操作の送信と確定の記録、ベースの取得と反映)を持つ。
 - 同期(`features/round-sync/`): いつ送り、いつ取り直すかを決める唯一の手続きと、契機の受け取りを持つ。他の機能へ公開する名前が無いため、入口を置かない。
-- 画面は、文脈から受け取る状態と変更の方法(`RoundsStore`)だけを使う。取得の状態(読み込み中、オフライン、見つからない、エラー)は、画面に渡す見え方の型に持たせる。画面は「開いた」「もう一度読む」を依頼するだけで、取得と反映の時点は同期が決める。
+- 画面は、画面ごとの文脈から受け取る状態と変更の方法(一覧は`RoundsListStore`、作成は`NewRoundStore`、詳細は`RoundDetailStore`)だけを使う。共通の構造は[`rounds/design.md`](../design.md)に従う。取得の状態(読み込み中、オフライン、見つからない、エラー)は、画面に渡す見え方の型に持たせる。画面は「開いた」「もう一度読む」を依頼するだけで、取得と反映の時点は同期が決める。
 - パッケージ: 画面は`react`、端末の保存は`idb`(`lib/local-op-log/`だけ)、データベースは`@supabase/supabase-js`(機能では認証のインフラ層だけ。他は`lib/supabase/`)を使う。ラウンドと同期は、非画面のパッケージを直接参照しない。
 
 | ファイル | 用語 | 内容 |
 | :--- | :--- | :--- |
 | `app/layout.tsx` | アプリの起動地点 | ルートレイアウト。`<RootClientEntry>`で`SerwistProvider`と`children`を包む |
-| `app/root-client-entry.tsx` | アプリの起動地点(クライアントの処理の部分) | 部品を`useState`の初期化で1度だけ生成して結び、効果で識別情報の記録と契機の手続きを始める。`RoundsStoreProvider`で画面へ`RoundsStore`を渡し、`RoundBaseRefresher`と`SwUpdateActivator`(保存の完了を待つ関数を受ける)を描く |
+| `app/root-client-entry.tsx` | アプリの起動地点(クライアントの処理の部分) | 部品を`useState`の初期化で1度だけ生成して結び、効果で識別情報の記録と契機の手続きを始める。3つの窓口をそれぞれの文脈(`RoundsListStoreProvider`、`NewRoundStoreProvider`、`RoundDetailStoreProvider`)で画面へ渡し、`RoundBaseRefresher`と`SwUpdateActivator`(保存の完了を待つ関数を受ける)を描く |
 | `features/rounds/domain/sync-events.ts` | ドメイン層(出来事) | 操作の型。操作はクライアント生成のイベントIDを持つ。`round.updated`と`distance.updated`は、変えた項目だけの差分(`changes`)を持つ。矢の操作(`shot.recorded`・`shot.cleared`)は矢のID(`shotId`)で矢を指し、`shot.recorded`の射手(`shooterId`)と射順(`shotNumber`)は、変えるときだけ持つ。列の削除の有無`hasRoundDeletion`と、列のID(`round:<roundId>`)の変換 |
 | `features/rounds/domain/round-op-conflicts.ts` | ドメイン層(ドメインサービス) | 操作の衝突の表と、並べる単位(lane)・送る単位の上限。矢の操作どうしは、同じ矢(`shotId`)か同じエンドなら衝突とする |
 | `features/rounds/domain/round-record.ts` | ドメイン層(集約) | 1つのラウンドの端末の記録(ベース、操作の列、外した操作、保存の目印、送信中の印)を、変更しない値と関数にしたもの。取り込み(新しい方のベース、共有の組のベースを取ったときだけ組から無くなった確定済みの操作を外す)、確定の反映、効かなかった操作の除去 |
@@ -53,17 +53,17 @@
 | `features/rounds/domain/open-requests.ts`、`list-requests.ts` | ドメイン層(集約) | 取り直しの依頼の規則。開く依頼は、ラウンドごとの依頼の番号、待っている依頼、記録の権利、結果の分類を持つ。一覧の依頼は、依頼の番号、成否、実行に含めた依頼を持つ |
 | `features/rounds/domain/fetch-result.ts` ほか | ドメイン層(値オブジェクト) | 取得の結果の分類と文言、時間制限の値(`FETCH_TIMEOUT_MS`、`FALLBACK_WAIT_MS`)、複数の応答を畳む優先順。`round-config.ts`、`round-constants.ts`、`option-label.ts`(選択肢の表示名)、`scorecard-types.ts`、`target-face.ts`(的を引く関数)、`position-key.ts`、`scorecard-scoring.ts` |
 | `features/rounds/application/round-record-hub.ts` | 手続き | アプリで1つの端末の記録。列ごとの記録を集約の値として保ち、保存の完了を待って変化を知らせる。起動時の読み込みの完了を待つ`ready`、保存先を読む`read`・`readStored`、メモリの`readAll`、取得したベースを反映する`commit`。手続きの約束`RecordChannel`(記録の変化を他のタブへ知らせる) |
-| `features/rounds/application/refresh-requests.ts`、`rounds-store.ts` | 手続き | 取り直しの依頼の記録と、画面に渡す状態と変更の方法(`RoundsStore`。削除`deleteRound`、プリセットの取得`loadPresets`・削除`deletePreset`、開始`startRound`、完了`completeRound`・削除して離れる`deleteRoundAndLeave`・一覧へ戻る`leaveRound`、保存`savePreset`、IDの払い出し`newId`・`newShotId`と、合図`whenOnline`、`afterFallbackWait`を含む。追記`handle.append`は手続き`edit-round.ts`を通して、完了のラウンドの編集で入力中へ戻す操作を続けて積む)・見え方の型。約束`UniqueIds`(新しいIDと乱数の払い出し。`unique-ids.ts`) |
+| `features/rounds/application/refresh-requests.ts`、`rounds-list-store.ts`、`new-round-store.ts`、`round-detail-store.ts`、`round-handle.ts`、`when-online.ts` | 手続き | 取り直しの依頼の記録と、画面ごとに渡す状態と変更の方法(`RoundsListStore`、`NewRoundStore`、`RoundDetailStore`。メンバーは`rounds/design.md`の表)。開いた詳細の購読と追記(`round(...)`が返す`RoundHandle`)は`round-handle.ts`で、追記は手続き`edit-round.ts`を通して、完了のラウンドの編集で入力中へ戻す操作を続けて積む。約束`UniqueIds`(新しいIDと乱数の払い出し。`unique-ids.ts`) |
 | `features/rounds/application/refresh-round-bases.ts`、`fetch-round-detail.ts`、`fetch-content.ts`、`time-limit.ts` | 手続き | ベースの取得と反映(`refreshAll`、`refreshRound`)、取得の順序(的とプリセットの取得`fetchPresets`の保存、遅れた結果の保存だけ、一覧の取得`fetchRoundsList`)、認証を確かめた取得と取り直し・時間制限。約束`RoundQueries`、`SignInReader`(`sign-in-reader.ts`)、`ReferenceSnapshots`(`reference-snapshots.ts`。取得と削除の手続きが使う)。時間制限の補助(`withinTime`)は、取得と画面の状態の2つの手続きが使う |
 | `features/rounds/application/start-round.ts`、`delete-preset.ts` | 手続き | 開始(認証の確認、作成の追記、保存の完了の後に`Navigation`で詳細へ進む)と、個人プリセットの削除(保存済みからの除去を含む)。約束`Navigation`は`navigation.ts`、`PresetCommands`は`preset-commands.ts`に置く(約束は使い手が複数のため別ファイルに置く) |
 | `features/rounds/application/edit-round.ts` | 手続き | 追記と再開(完了のラウンドの編集で表示中の距離か矢が変わるとき、追記の前の状態で判定し、続けて入力中へ戻す操作を積む。窓口の`handle.append`が今の状態の読み手を渡して呼ぶ) |
-| `features/rounds/application/leave-round.ts`、`save-preset.ts` | 手続き | 完了、削除(一覧用。離れない)、削除して離れる、一覧へ戻る(保存の完了の後に`Navigation`で進む、または置き換える)と、プリセットの保存(サインインの確認、書き込み、成功の後の保存済みの再取得) |
+| `features/rounds/application/delete-round.ts`、`leave-round.ts`、`save-preset.ts` | 手続き | 削除(一覧用。離れない。`delete-round.ts`)、完了、削除して離れる(`delete-round.ts`の後に遷移)、一覧へ戻る(保存の完了の後に`Navigation`で進む、または置き換える。`leave-round.ts`)と、プリセットの保存(サインインの確認、書き込み、成功の後の保存済みの再取得) |
 | `features/rounds/application/send-operations.ts`、`round-reconciliation.ts` | 手続き | 操作の送信と確定の記録(約束`RoundTransport`)、同期へ公開する突き合わせの操作`RoundReconciliation` |
 | `features/rounds/index.ts` | 機能の入口 | `RoundReconciliation`、`FALLBACK_WAIT_MS`、`ROUNDS_PATH`を公開する |
 | `features/rounds/infrastructure/` | インフラ層 | `round-op-transport.ts`(操作の種類ごとにRPCを呼び、操作ごとの判定結果を返す)、`round-queries.ts`(取得の問い合わせ、プリセットと一覧の問い合わせと行の写し)、`browser-unique-ids.ts`(新しいIDと乱数の払い出し)、`preset-commands.ts`(プリセットの削除と保存の書き込みと結果の種類への写し)、`router-navigation.ts`(画面のパッケージの遷移で進む、置き換える)、`rounds-db-schema.ts`(ラウンドが使うスキーマの部分の型。一覧が並べる列とプリセットの表、保存の関数を含む)、`reference-snapshot.ts`(保存済みの書き換えを含む)、`reference-query-constants.ts`、`browser-record-channel.ts`(チャネル`aims-sync`)、`auth-sign-in-reader.ts`(認証の入口を自分の約束で包む) |
-| `features/rounds/ui/rounds-context.tsx` | UI層 | `RoundsStoreProvider`と`useRoundsStore` |
-| `features/rounds/ui/rounds-list.tsx`、`use-local-rounds-list.ts`、`use-fetch-result.ts`、`fetch-state.tsx` | UI層 | 一覧の描画と削除のメニュー、端末の入力中のラウンドの読み込みと待ちの経過、画面の取得の状態と再取得、取得の状態の表示。オフライン表示の間の読み直しは`RoundsStore.whenOnline`で受ける |
-| `features/rounds/ui/`の詳細の画面の部品 | UI層 | `round-detail-client.tsx`、`scorecard-client.tsx`、`use-round-op-stack.ts`(`RoundsStore`の`round(...)`を購読して追記するフック)、`use-creation-gone.ts`(作成が確定せずに消えたときに知らせる)ほか。一覧は`rounds/detail`の対応表 |
+| `features/rounds/ui/rounds-context.tsx` | UI層 | 画面ごとの文脈(`RoundsListStoreProvider`と`useRoundsListStore`、`NewRoundStoreProvider`と`useNewRoundStore`、`RoundDetailStoreProvider`と`useRoundDetailStore`) |
+| `features/rounds/ui/rounds-list.tsx`、`use-local-rounds-list.ts`、`use-fetch-result.ts`、`fetch-state.tsx` | UI層 | 一覧の描画と削除のメニュー、端末の入力中のラウンドの読み込みと待ちの経過、画面の取得の状態と再取得、取得の状態の表示。オフライン表示の間の読み直しは、`use-fetch-result.ts`が画面の窓口から受けた`whenOnline`で行う |
+| `features/rounds/ui/`の詳細の画面の部品 | UI層 | `round-detail-client.tsx`、`scorecard-client.tsx`、`use-round-op-stack.ts`(`RoundDetailStore`の`round(...)`を購読して追記するフック)、`use-creation-gone.ts`(作成が確定せずに消えたときに知らせる)ほか。一覧は`rounds/detail`の対応表 |
 | `features/rounds/ui/round-preset-select.tsx`、`use-start-round.ts`、`use-preset-delete.ts`、`preset-info.tsx`、`target-face-info.tsx` | UI層 | 作成の画面の描画と選択、開始と削除の実行中とエラーの状態、プリセットと的の情報の表示 |
 | `features/round-sync/domain/send-queue.ts`、`flight-gate.ts` | ドメイン層(集約) | 1つの列の送信の状態(待ち、送信中、リトライ待機、保留、単独の印、要求)と、同時に1回までの実行の制御 |
 | `features/round-sync/domain/op-plan.ts`、`sync-failure.ts`、`sync-trigger.ts` | ドメイン層(ドメインサービス) | 送れる要求の計画(衝突する先行がある操作を含めない)。送信の失敗を、再試行する(`retry`)・保留する(`hold`。未認証)・破棄する(`discard`。`PT403`と`PT422`)・切り分けるに分ける判定と再試行の間隔`retryDelayMs`。契機への反応の規則 |
@@ -91,7 +91,7 @@
 一括の取得は、常駐の契機(サインイン、開いたときの確認、通信の復帰、見える状態)と、一覧を開いたときの依頼で行う。常駐の取得と一覧の取得は別々に走り、一覧は常駐の取得の終わりを待たない。常駐の契機では、サインイン済みで記録の利用者と同じときだけ取得と反映を行い、一覧の依頼だけの実行は、一覧の取得が成功したときだけ反映する。成功の回数は、常駐の前段を通って反映した実行だけを数える。
 1つのラウンドの取り直しは、開いたときの依頼を常に行い(開いたときの依頼は、取り直しの実行中でもすぐに始める)、端末のベースで開いた後の取り直し、効かなかった結果、重ねられなかった確定済みの操作は、オフラインでは行わない。端末のベースで開いている間は、`retryDelayMs`の間隔で取り直し、通信の復帰と見える状態で試行を0から数え直し、切断で時計を止める。
 
-画面に渡す状態と変更の方法(`RoundsStore`)は、詳細を開く`load`、一覧を開く`loadList`、端末だけの一覧`loadLocalList`、開いた詳細の購読と追記`round`、追記`append`、ラウンドの削除`deleteRound`、プリセットの取得`loadPresets`・個人プリセットの削除`deletePreset`、ラウンドの開始`startRound`、完了`completeRound`・削除して離れる`deleteRoundAndLeave`・一覧へ戻る`leaveRound`、プリセットの保存`savePreset`、IDの払い出し`newId`・`newShotId`、通信の復帰の合図`whenOnline`、待ちの経過の合図`afterFallbackWait`を持つ。`loadList`は一覧の取得を自分で行う。合図は表示の読み直しと切り替えの合図で、同期の経路ではない。詳細は、端末の記録を読み、削除があれば取得せずに削除済みを返し、確定していない作成があれば取得せずに作成の操作を基準にする。サーバーの状態は同期が取得して反映した結果を待ち、通信できないとき(オフライン、取得の失敗、取得が`FALLBACK_WAIT_MS`を超えた)は、端末の記録が保持の規則に当たれば端末のベースで開く。全体を`FETCH_TIMEOUT_MS`で打ち切り、打ち切った時点の通信の可否でofflineかerrorを返す。端末の保存(`aims-sync`)は、現在の形のデータだけを前提にする。
+画面に渡す状態と変更の方法は画面ごとの3つの窓口で、詳細(`RoundDetailStore`)は詳細を開く`load`、開いた詳細の購読と追記`round`、完了`completeRound`・削除して離れる`deleteRoundAndLeave`・一覧へ戻る`leaveRound`、プリセットの保存`savePreset`、IDの払い出し`newId`・`newShotId`、一覧(`RoundsListStore`)は一覧を開く`loadList`、端末だけの一覧`loadLocalList`、ラウンドの削除`deleteRound`、待ちの経過の合図`afterFallbackWait`、作成(`NewRoundStore`)はプリセットの取得`loadPresets`・個人プリセットの削除`deletePreset`、ラウンドの開始`startRound`を持つ。通信の復帰の合図`whenOnline`は3つが同じ契約で持つ。`loadList`は一覧の取得を自分で行う。合図は表示の読み直しと切り替えの合図で、同期の経路ではない。詳細は、端末の記録を読み、削除があれば取得せずに削除済みを返し、確定していない作成があれば取得せずに作成の操作を基準にする。サーバーの状態は同期が取得して反映した結果を待ち、通信できないとき(オフライン、取得の失敗、取得が`FALLBACK_WAIT_MS`を超えた)は、端末の記録が保持の規則に当たれば端末のベースで開く。全体を`FETCH_TIMEOUT_MS`で打ち切り、打ち切った時点の通信の可否でofflineかerrorを返す。端末の保存(`aims-sync`)は、現在の形のデータだけを前提にする。
 
 流れは次のとおりである。
 
@@ -166,7 +166,7 @@
 | プリセット削除、サインアウトを操作の列に載せない | 破壊的で低頻度であり、オフライン対応が不要なため。完了までダイアログで待ち、失敗時は再試行できる | オフラインでの削除を認めるとき |
 | 同時に1回までの扉は常駐の取得と取り直しにだけ置き、一覧と開く依頼は依頼ごとに並行して実行する | 一覧と開く依頼が、同じ種類の先の実行も含めて他の実行を待たずに、自分の取得の時間で返るため(変更前の並行の関係)。並行する結果は、開始の新しい実行の結果を正とし、端末の記録への反映は開始時刻とrevisionで古い取得を退けるため、整合は保たれる | 同じ取得の結果を分け合う必要が出たとき |
 | データベースの約束はスキーマの形を型引数で受け、起動地点で生成した型と照合する | 約束に技術の型を含めずに、RPCの名前と引数、表と列の誤りをコンパイルで検出するため | 生成した型の形(`Functions`、`Tables`)が変わったとき |
-| 画面は`RoundsStore`だけから列へアクセスし、ユーザーは記録のハブで解決する | 入り口が複数あると、一覧・詳細・作成・削除の読み書きがユーザーや削除済みの規則で食い違うため | 列の種類が増えるとき |
+| 画面は自分の窓口(`RoundsListStore`、`NewRoundStore`、`RoundDetailStore`)だけから列へアクセスし、ユーザーは記録のハブで解決する | 入り口が複数あると、一覧・詳細・作成・削除の読み書きがユーザーや削除済みの規則で食い違うため | 列の種類が増えるとき |
 | プリセットの保存を、保留中の書き込みの完了を待たないローカル起点にする | 完了を待つと、操作の列のリトライ中にダイアログが閉じられず固まるため、待つ方式をやめた。DBから読み直すサーバー起点は採らない | 保存直後にサーバーの値との一致が要る要求が出たとき。詳細: #472 |
 | 破棄は`PT403`と`PT422`だけにする。区別できない失敗は残して再試行する | `PGRST202`はデプロイ直後のスキーマキャッシュの遅れでも同じ応答になり、`P0001`は業務ルール違反と対象なしを区別できない。判定を1か所(`sync-result.ts`)に集め、区別できない失敗は残す側に倒す | 失敗の種類をコードで区別できるようになったとき。詳細: #650 |
 | 同じ項目は、確定の順の後勝ちにする。操作に前提の版を持たせない | 前提を持たせると、他端末の変更を知らずに保存した操作が効かなくなり、利用者の保存が消えるため。収束先は確定の順だけで決まる | 利用者が競合を見て選ぶ要求が出たとき |

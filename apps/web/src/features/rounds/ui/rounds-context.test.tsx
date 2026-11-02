@@ -12,7 +12,7 @@ import {
   useRoundsListStore,
 } from "./rounds-context";
 
-describe("rounds-context", () => {
+describe("rounds-context(詳細)", () => {
   it("提供されたラウンドの状態と変更の方法を、子の部品に返す", () => {
     // Given
     const store = {} as RoundDetailStore;
