@@ -9,10 +9,7 @@ import { cn } from "@/lib/utils";
 import { generatePresetName } from "../domain/preset-save";
 import { compareDistancePosition } from "../domain/scorecard-scoring";
 import type { Distance } from "../domain/scorecard-types";
-import {
-  lookupTargetFace,
-  type TargetFaceOption,
-} from "../domain/target-face-types";
+import { lookupTargetFace, type TargetFaceOption } from "../domain/target-face";
 import { PresetInfo } from "./preset-info";
 import { useRoundsStore } from "./rounds-context";
 import {

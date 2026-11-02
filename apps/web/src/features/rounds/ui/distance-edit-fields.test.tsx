@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import type { DistanceConfig } from "../domain/distance-config";
 import { DistanceEditFields } from "./distance-edit-fields";
 import { RoundsStoreProvider } from "./rounds-context";

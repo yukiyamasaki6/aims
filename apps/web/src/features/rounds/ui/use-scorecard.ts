@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { LoadedRound } from "../application/rounds-store";
 import { isRoundInProgress } from "../domain/round-retention";
-import type { TargetFaceOption } from "../domain/target-face-types";
+import type { TargetFaceOption } from "../domain/target-face";
 import { useRoundsStore } from "./rounds-context";
 import { useDistanceEditing } from "./use-distance-editing";
 import { useKeypad } from "./use-keypad";

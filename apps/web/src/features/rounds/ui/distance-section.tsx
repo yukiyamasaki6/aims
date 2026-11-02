@@ -5,10 +5,7 @@ import { distanceNumber, summarizeDistance } from "../domain/scorecard-scoring";
 import type { Distance, Shot } from "../domain/scorecard-types";
 import type { Pointer } from "../domain/shot-pointer";
 import type { SyncOperation } from "../domain/sync-events";
-import {
-  lookupTargetFace,
-  type TargetFaceOption,
-} from "../domain/target-face-types";
+import { lookupTargetFace, type TargetFaceOption } from "../domain/target-face";
 import { DistanceEditFields } from "./distance-edit-fields";
 import { EndRow } from "./end-row";
 import { DistanceInfo } from "./preset-info";

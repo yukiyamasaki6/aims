@@ -7,7 +7,7 @@ import {
 } from "../domain/fetch-result";
 import type { RoundListItem } from "../domain/round-list";
 import { roundStreamId } from "../domain/sync-events";
-import type { TargetFaceOption } from "../domain/target-face-types";
+import type { TargetFaceOption } from "../domain/target-face";
 import {
   distanceCreated,
   roundBase,

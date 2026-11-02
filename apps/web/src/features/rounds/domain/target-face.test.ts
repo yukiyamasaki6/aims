@@ -3,7 +3,7 @@ import {
   lookupTargetFace,
   orderTargetFaces,
   type TargetFaceRecord,
-} from "./target-face-types";
+} from "./target-face";
 
 function face(
   id: string,

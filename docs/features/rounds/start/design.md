@@ -64,7 +64,7 @@
 | `features/rounds/domain/round-start.ts` | ドメイン層(ドメインサービス: プリセットの構成からの、IDを除いたラウンドの作成の内容の組み立て) |
 | `features/rounds/domain/write-result.ts` | ドメイン層(値オブジェクト: 書き込みの結果の種類と文言) |
 | `features/rounds/domain/option-label.ts` | ドメイン層(値オブジェクト: 選択肢の値の表示名`labelOf`) |
-| `features/rounds/domain/target-face-types.ts` | ドメイン層(値オブジェクト。的を引く`lookupTargetFace`を足す) |
+| `features/rounds/domain/target-face.ts` | ドメイン層(値オブジェクト。的を引く`lookupTargetFace`を足す) |
 | `features/rounds/application/start-round.ts` | 手続き(開始) |
 | `features/rounds/application/delete-preset.ts` | 手続き(個人プリセットの削除) |
 | `features/rounds/application/navigation.ts`、`preset-commands.ts` | 手続きの約束(`Navigation`、`PresetCommands`)。使い手が複数の手続きになるため、手続きのファイルから分けて置く |

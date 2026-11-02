@@ -25,7 +25,7 @@ import {
   roundStreamId,
   type SyncOperation,
 } from "@/features/rounds/domain/sync-events";
-import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { useRoundsStore } from "@/features/rounds/ui/rounds-context";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
 import { ScorecardClient } from "./scorecard-client";

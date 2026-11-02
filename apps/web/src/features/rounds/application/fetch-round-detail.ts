@@ -20,7 +20,7 @@ import {
   orderTargetFaces,
   type TargetFaceOption,
   type TargetFaceRecord,
-} from "../domain/target-face-types";
+} from "../domain/target-face";
 import type { ContentFetcher } from "./fetch-content";
 import type { ReferenceKind, ReferenceSnapshots } from "./reference-snapshots";
 

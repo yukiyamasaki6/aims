@@ -13,7 +13,7 @@ import {
 } from "./round-tables";
 import type { ScoringTargetFace } from "./scorecard-scoring";
 import { hasRoundDeletion, type SyncOperation } from "./sync-events";
-import type { TargetFaceOption } from "./target-face-types";
+import type { TargetFaceOption } from "./target-face";
 
 type CreatedOperation = Extract<SyncOperation, { type: "round.created" }>;
 

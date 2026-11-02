@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { LoadedRound } from "../application/rounds-store";
 import { completionConfirmation } from "../domain/round-progress";
 import { summarizeRound } from "../domain/scorecard-scoring";
-import type { TargetFaceOption } from "../domain/target-face-types";
+import type { TargetFaceOption } from "../domain/target-face";
 import { BottomFrame } from "./bottom-frame";
 import { CompleteRoundBar } from "./complete-round-bar";
 import { DistanceSection } from "./distance-section";

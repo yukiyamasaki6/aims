@@ -14,7 +14,7 @@ import {
 import type { PresetRecord, Presets } from "../domain/preset";
 import type { ServerRoundSummary } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
-import type { TargetFaceRecord } from "../domain/target-face-types";
+import type { TargetFaceRecord } from "../domain/target-face";
 import { createRoundQueries } from "../infrastructure/round-queries";
 import type { RoundsDbSchema } from "../infrastructure/rounds-db-schema";
 

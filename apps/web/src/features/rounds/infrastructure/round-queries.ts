@@ -14,7 +14,7 @@ import { newestById } from "../domain/round-base";
 import type { ServerRoundSummary } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
 import type { RoundStatus } from "../domain/sync-events";
-import type { TargetFaceRecord } from "../domain/target-face-types";
+import type { TargetFaceRecord } from "../domain/target-face";
 import {
   ROUND_PRESET_SELECT,
   TARGET_FACE_SELECT,

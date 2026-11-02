@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 import { labelOf } from "../domain/option-label";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../domain/round-constants";
-import type { TargetFaceView } from "../domain/target-face-types";
+import type { TargetFaceView } from "../domain/target-face";
 import { TargetFaceInfo } from "./target-face-info";
 
 // 1行目の文字列。フィールドは区分を先に置き、距離を括弧で添える（例: `Marked (90m)`）。

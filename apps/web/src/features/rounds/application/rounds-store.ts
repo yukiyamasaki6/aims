@@ -40,7 +40,7 @@ import {
   roundStreamId,
   type SyncOperation,
 } from "../domain/sync-events";
-import type { TargetFaceOption } from "../domain/target-face-types";
+import type { TargetFaceOption } from "../domain/target-face";
 import type { DeletePresetResult, PresetDeletion } from "./delete-preset";
 import type { RoundEditing } from "./edit-round";
 import type { RoundFetching } from "./fetch-round-detail";

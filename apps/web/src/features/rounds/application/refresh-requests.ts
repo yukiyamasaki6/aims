@@ -21,7 +21,7 @@ import {
   stopOpens,
 } from "../domain/open-requests";
 import type { RoundTables } from "../domain/round-tables";
-import type { TargetFaceOption } from "../domain/target-face-types";
+import type { TargetFaceOption } from "../domain/target-face";
 
 // サーバーから取得した、開いた詳細の材料。deletedは、取得の間に削除が追記されたため、取得した状態を表示せず離れる。
 export type OpenedRound = {

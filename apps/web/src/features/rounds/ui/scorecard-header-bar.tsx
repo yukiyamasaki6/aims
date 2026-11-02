@@ -1,6 +1,6 @@
 import type { RoundConfig } from "../domain/round-config";
 import type { Distance } from "../domain/scorecard-types";
-import type { TargetFaceOption } from "../domain/target-face-types";
+import type { TargetFaceOption } from "../domain/target-face";
 import { BackToListLink } from "./back-to-list-link";
 import { RoundMenu } from "./round-menu";
 import { SavePresetDialog } from "./save-preset-dialog";

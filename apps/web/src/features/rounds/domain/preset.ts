@@ -1,6 +1,6 @@
 import { comparePositionKey } from "./position-key";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "./round-constants";
-import type { TargetFaceLayout } from "./target-face-types";
+import type { TargetFaceLayout } from "./target-face";
 
 // プリセットの値。取得の行の列名のまま持つ(端末へ保存する値も変えない)。
 export type PresetDistance = {

@@ -3,7 +3,7 @@ import type {
   TargetFaceRing,
   TargetFaceSpotLayout,
   TargetFaceView,
-} from "../domain/target-face-types";
+} from "../domain/target-face";
 
 // 的画像本体の境界線は、得点帯を区切る情報として最低限見えれば十分で、
 // 主役はあくまで色（得点帯）なので極力薄くする（拡大バッジの境界線はこれとは

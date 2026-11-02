@@ -19,7 +19,7 @@ import {
 } from "./round-view";
 import type { ScoringTargetFace } from "./scorecard-scoring";
 import type { SyncOperation } from "./sync-events";
-import type { TargetFaceOption } from "./target-face-types";
+import type { TargetFaceOption } from "./target-face";
 
 const roundUpdated: SyncOperation = {
   type: "round.updated",

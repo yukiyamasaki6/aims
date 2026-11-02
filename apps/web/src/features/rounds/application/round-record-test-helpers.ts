@@ -5,7 +5,7 @@ import { createMemoryOpLogStore } from "@/lib/local-op-log/memory-op-log-store-t
 import type { RoundBaseRecord } from "../domain/round-base";
 import { roundStreamRules } from "../domain/round-retention";
 import type { SyncOperation } from "../domain/sync-events";
-import type { TargetFaceOption } from "../domain/target-face-types";
+import type { TargetFaceOption } from "../domain/target-face";
 import { createRoundEditing } from "./edit-round";
 import type { RoundFetching } from "./fetch-round-detail";
 import { createRefreshRequests } from "./refresh-requests";

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PresetToSave } from "@/features/rounds/domain/preset-save";
 import type { Distance } from "@/features/rounds/domain/scorecard-types";
-import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { createFakeRoundsStore } from "@/features/rounds/ui/rounds-store-test-helpers";
 import { SavePresetDialog } from "./save-preset-dialog";

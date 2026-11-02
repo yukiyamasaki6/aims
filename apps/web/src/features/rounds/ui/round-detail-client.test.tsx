@@ -8,7 +8,7 @@ import type {
 } from "@/features/rounds/application/rounds-store";
 import type { FetchResult } from "@/features/rounds/domain/fetch-result";
 import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
-import type { TargetFaceOption } from "@/features/rounds/domain/target-face-types";
+import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { RoundsStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { createFakeRoundsStore } from "@/features/rounds/ui/rounds-store-test-helpers";
 import { RoundDetailClient } from "./round-detail-client";

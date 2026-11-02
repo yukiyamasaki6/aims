@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   TargetFaceRing,
   TargetFaceSpotLayout,
-} from "../domain/target-face-types";
+} from "../domain/target-face";
 import { TargetFaceIcon, TargetFaceInfo } from "./target-face-info";
 
 const yellowRing: TargetFaceRing = {

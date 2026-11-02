@@ -3,11 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../domain/round-constants";
+import { lookupTargetFace, type TargetFaceOption } from "../domain/target-face";
 import { FILTER_ALL, filterTargetFaces } from "../domain/target-face-filter";
-import {
-  lookupTargetFace,
-  type TargetFaceOption,
-} from "../domain/target-face-types";
 import { TargetFaceInfo } from "./target-face-info";
 
 // フィルタ（種別・弓種）は「すべて」も選択肢に含める。ラウンドの種別・弓種を

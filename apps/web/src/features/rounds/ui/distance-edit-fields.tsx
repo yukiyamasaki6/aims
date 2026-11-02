@@ -17,7 +17,7 @@ import {
   buildDistanceUpdatedOperation,
 } from "../domain/distance-operations";
 import type { SyncOperation } from "../domain/sync-events";
-import type { TargetFaceOption } from "../domain/target-face-types";
+import type { TargetFaceOption } from "../domain/target-face";
 import { useRoundsStore } from "./rounds-context";
 import { TargetFacePicker } from "./target-face-picker";
 
