@@ -128,7 +128,11 @@ function PresetRow({
 
 export function RoundPresetSelect() {
   const store = useRoundsStore();
-  const { view, retry } = useFetchResult(() => store.loadPresets(), []);
+  const { view, retry } = useFetchResult(
+    () => store.loadPresets(),
+    [],
+    store.whenOnline,
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const mountedRef = useMountedRef();
   const hydrated = useHydrated();

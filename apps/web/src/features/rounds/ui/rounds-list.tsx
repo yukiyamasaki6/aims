@@ -29,6 +29,7 @@ export function RoundsList() {
   const { view, retry } = useFetchResult<LoadedRoundsList>(
     () => store.loadList(),
     [],
+    store.whenOnline,
   );
   const { local, waited } = useLocalRoundsList();
   // この画面で削除したラウンドのID。取得の状態が変わっても失わない。
