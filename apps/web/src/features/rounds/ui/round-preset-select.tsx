@@ -20,7 +20,7 @@ import { presetListView } from "../domain/preset-list-view";
 import { ROUNDS_PATH } from "../domain/round-routes";
 import { FetchState } from "./fetch-state";
 import { PresetInfo } from "./preset-info";
-import { useRoundsStore } from "./rounds-context";
+import { useNewRoundStore } from "./rounds-context";
 import { useFetchResult } from "./use-fetch-result";
 import { usePresetDelete } from "./use-preset-delete";
 import { useStartRound } from "./use-start-round";
@@ -127,7 +127,7 @@ function PresetRow({
 }
 
 export function RoundPresetSelect() {
-  const store = useRoundsStore();
+  const store = useNewRoundStore();
   const { view, retry } = useFetchResult(
     () => store.loadPresets(),
     [],

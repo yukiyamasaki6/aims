@@ -9,6 +9,7 @@ import type { TargetFaceOption } from "../domain/target-face";
 import { createRoundEditing } from "./edit-round";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 import type { RoundFetching } from "./fetch-round-detail";
+import { createNewRoundStore } from "./new-round-store";
 import { createRefreshRequests } from "./refresh-requests";
 import { createRefreshRoundBases } from "./refresh-round-bases";
 import { createRoundReconciliation } from "./round-reconciliation";
@@ -114,11 +115,15 @@ export function createTestRoundsStore(
     clock,
     connectivity,
     ids,
-    roundStart,
-    presetDeletion,
     leaving,
     editing,
     presetSaving,
+  });
+  const newRound = createNewRoundStore({
+    fetching: fetching as unknown as RoundFetching,
+    roundStart,
+    presetDeletion,
+    connectivity,
   });
   const list = createRoundsListStore({
     hub,
@@ -132,6 +137,7 @@ export function createTestRoundsStore(
   return {
     store,
     list,
+    newRound,
     hub,
     opLog,
     bus,

@@ -2,14 +2,14 @@
 
 import { type RefObject, useRef, useState } from "react";
 import type { Preset } from "../domain/preset";
-import { useRoundsStore } from "./rounds-context";
+import { useNewRoundStore } from "./rounds-context";
 
 // 選択中のプリセット（なければプリセット無し）でラウンドを開始する。成功したら開始の手続きが詳細画面へ遷移する。
 export function useStartRound(
   selectedPreset: Preset | null,
   mountedRef: RefObject<boolean>,
 ) {
-  const store = useRoundsStore();
+  const store = useNewRoundStore();
   const [error, setError] = useState<string | null>(null);
   // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
   // 挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseの

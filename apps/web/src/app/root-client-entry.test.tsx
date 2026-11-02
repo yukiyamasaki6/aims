@@ -11,6 +11,7 @@ import { createRoundEditing } from "@/features/rounds/application/edit-round";
 import { createContentFetcher } from "@/features/rounds/application/fetch-content";
 import { createRoundFetching } from "@/features/rounds/application/fetch-round-detail";
 import { createRoundLeaving } from "@/features/rounds/application/leave-round";
+import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
 import { createRoundsStore } from "@/features/rounds/application/rounds-store";
 import { createPresetSaving } from "@/features/rounds/application/save-preset";
@@ -139,6 +140,19 @@ vi.mock(
         typeof import("@/features/rounds/application/rounds-store")
       >();
     return { ...actual, createRoundsStore: vi.fn(actual.createRoundsStore) };
+  },
+);
+vi.mock(
+  "@/features/rounds/application/new-round-store",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/new-round-store")
+      >();
+    return {
+      ...actual,
+      createNewRoundStore: vi.fn(actual.createNewRoundStore),
+    };
   },
 );
 vi.mock(
@@ -651,13 +665,13 @@ describe("RootClientEntry", () => {
       expect(startIds).toBe(storeIds);
     });
 
-    it("画面の状態へ、生成した開始の手続きと削除の手続きを渡す", () => {
+    it("作成の画面の状態へ、生成した開始の手続きと削除の手続きを渡す", () => {
       // Given
       // When
       render(<RootClientEntry>{null}</RootClientEntry>);
 
       // Then
-      const deps = vi.mocked(createRoundsStore).mock.calls[0][0];
+      const deps = vi.mocked(createNewRoundStore).mock.calls[0][0];
       expect(deps.roundStart).toBe(
         vi.mocked(createRoundStart).mock.results[0].value,
       );

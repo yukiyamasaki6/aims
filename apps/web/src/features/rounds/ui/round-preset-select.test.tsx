@@ -11,23 +11,25 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { FetchResult } from "../domain/fetch-result";
 import type { Preset, Presets } from "../domain/preset";
 import { RoundPresetSelect } from "./round-preset-select";
-import { RoundsStoreProvider } from "./rounds-context";
-import { createFakeRoundsStore } from "./rounds-store-test-helpers";
+import { createFakeNewRoundStore } from "./round-stores-test-helpers";
+import { NewRoundStoreProvider } from "./rounds-context";
 
 // 取得、削除、開始の手続きは、それぞれのテストで確かめるため、ラウンドの状態と変更の方法は偽の約束で渡す。
 // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
-let fake: ReturnType<typeof createFakeRoundsStore>;
+let fake: ReturnType<typeof createFakeNewRoundStore>;
 let loadPresets: ReturnType<
-  typeof createFakeRoundsStore
+  typeof createFakeNewRoundStore
 >["store"]["loadPresets"];
-let startRound: ReturnType<typeof createFakeRoundsStore>["store"]["startRound"];
+let startRound: ReturnType<
+  typeof createFakeNewRoundStore
+>["store"]["startRound"];
 let deletePreset: ReturnType<
-  typeof createFakeRoundsStore
+  typeof createFakeNewRoundStore
 >["store"]["deletePreset"];
 
 function render(ui: ReactElement) {
   return renderWithoutStore(
-    <RoundsStoreProvider store={fake.store}>{ui}</RoundsStoreProvider>,
+    <NewRoundStoreProvider store={fake.store}>{ui}</NewRoundStoreProvider>,
   );
 }
 
@@ -104,7 +106,7 @@ const otherPersonalPreset: Preset = {
 };
 
 beforeEach(() => {
-  fake = createFakeRoundsStore();
+  fake = createFakeNewRoundStore();
   fake.goOffline();
   loadPresets = fake.store.loadPresets;
   startRound = fake.store.startRound;

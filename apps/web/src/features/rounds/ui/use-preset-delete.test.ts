@@ -2,11 +2,11 @@ import { act, renderHook } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Preset } from "../domain/preset";
-import { RoundsStoreProvider } from "./rounds-context";
-import { createFakeRoundsStore } from "./rounds-store-test-helpers";
+import { createFakeNewRoundStore } from "./round-stores-test-helpers";
+import { NewRoundStoreProvider } from "./rounds-context";
 import { usePresetDelete } from "./use-preset-delete";
 
-const fake = createFakeRoundsStore();
+const fake = createFakeNewRoundStore();
 const del = fake.store.deletePreset;
 const preset: Preset = {
   id: "p1",
@@ -20,7 +20,7 @@ function setup(mounted = { current: true }) {
   const onDeleted = vi.fn();
   const hook = renderHook(() => usePresetDelete(mounted, onDeleted), {
     wrapper: ({ children }: { children: ReactNode }) =>
-      createElement(RoundsStoreProvider, { store: fake.store, children }),
+      createElement(NewRoundStoreProvider, { store: fake.store, children }),
   });
   return { ...hook, onDeleted };
 }

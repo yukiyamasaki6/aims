@@ -17,6 +17,7 @@ import { createRoundEditing } from "@/features/rounds/application/edit-round";
 import { createContentFetcher } from "@/features/rounds/application/fetch-content";
 import { createRoundFetching } from "@/features/rounds/application/fetch-round-detail";
 import { createRoundLeaving } from "@/features/rounds/application/leave-round";
+import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
 import { createRefreshRequests } from "@/features/rounds/application/refresh-requests";
 import { createRefreshRoundBases } from "@/features/rounds/application/refresh-round-bases";
 import { createRoundReconciliation } from "@/features/rounds/application/round-reconciliation";
@@ -42,6 +43,7 @@ import {
   type PageRouter,
 } from "@/features/rounds/infrastructure/router-navigation";
 import {
+  NewRoundStoreProvider,
   RoundsListStoreProvider,
   RoundsStoreProvider,
 } from "@/features/rounds/ui/rounds-context";
@@ -102,6 +104,8 @@ function composeApp(router: PageRouter) {
   const navigation = createRouterNavigation(router);
   const commands = createPresetCommands(database);
   const deletion = createRoundDeletion({ hub, ids });
+  const roundStart = createRoundStart({ hub, signIn, ids, clock, navigation });
+  const presetDeletion = createPresetDeletion({ signIn, commands, snapshots });
   const store = createRoundsStore({
     hub,
     requests,
@@ -109,21 +113,15 @@ function composeApp(router: PageRouter) {
     clock,
     connectivity,
     ids,
-    roundStart: createRoundStart({
-      hub,
-      signIn,
-      ids,
-      clock,
-      navigation,
-    }),
-    presetDeletion: createPresetDeletion({
-      signIn,
-      commands,
-      snapshots,
-    }),
     leaving: createRoundLeaving({ hub, ids, navigation, deletion }),
     editing: createRoundEditing({ hub, ids }),
     presetSaving: createPresetSaving({ signIn, commands, fetching }),
+  });
+  const newRoundStore = createNewRoundStore({
+    fetching,
+    roundStart,
+    presetDeletion,
+    connectivity,
   });
   const listStore = createRoundsListStore({
     hub,
@@ -153,7 +151,15 @@ function composeApp(router: PageRouter) {
     connectivity,
     sync,
   });
-  return { localIdentity, hub, store, listStore, sync, triggers };
+  return {
+    localIdentity,
+    hub,
+    store,
+    listStore,
+    newRoundStore,
+    sync,
+    triggers,
+  };
 }
 
 // ルートレイアウトはサーバー専用のexport(メタデータ)を持ち、クライアントの処理を持てないため、この入口が起動地点の代わりに、アプリで1度だけ動く部品を生成して始め、アプリの全体を包んで、画面へ状態と変更の方法を渡す。
@@ -166,11 +172,13 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
 
   return (
     <RoundsListStoreProvider store={app.listStore}>
-      <RoundsStoreProvider store={app.store}>
-        <RoundBaseRefresher sync={app.sync} />
-        <SwUpdateActivator whenPersisted={app.hub.whenPersisted} />
-        {children}
-      </RoundsStoreProvider>
+      <NewRoundStoreProvider store={app.newRoundStore}>
+        <RoundsStoreProvider store={app.store}>
+          <RoundBaseRefresher sync={app.sync} />
+          <SwUpdateActivator whenPersisted={app.hub.whenPersisted} />
+          {children}
+        </RoundsStoreProvider>
+      </NewRoundStoreProvider>
     </RoundsListStoreProvider>
   );
 }

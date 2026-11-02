@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import type { NewRoundStore } from "../application/new-round-store";
 import type { RoundsListStore } from "../application/rounds-list-store";
 
 // 通信の復帰と待ちの経過の合図を、テストが起こす。
@@ -69,6 +70,33 @@ export function createFakeRoundsListStore(
     deleteRound: ReturnType<typeof vi.fn>;
     whenOnline: ReturnType<typeof vi.fn>;
     afterFallbackWait: ReturnType<typeof vi.fn>;
+  };
+  return { store, ...waiting };
+}
+
+// 作成の画面のテストが使う、偽の窓口。
+export function createFakeNewRoundStore(
+  overrides: Partial<NewRoundStore> = {},
+) {
+  const {
+    whenOnline,
+    afterFallbackWait: _afterFallbackWait,
+    ...waiting
+  } = createFakeWaiting();
+  const store = {
+    // 既定は永遠に未解決の1個のPromiseを返す。呼び手の無い既定の関数がファイルごとの関数カバレッジ閾値(95%)を割るため、関数ではなく戻り値で指定する。
+    loadPresets: vi.fn().mockReturnValue(new Promise<never>(() => {})),
+    deletePreset: vi.fn().mockResolvedValue({ status: "deleted" }),
+    startRound: vi
+      .fn()
+      .mockResolvedValue({ status: "created", roundId: "r-1" }),
+    whenOnline,
+    ...overrides,
+  } as unknown as NewRoundStore & {
+    loadPresets: ReturnType<typeof vi.fn>;
+    deletePreset: ReturnType<typeof vi.fn>;
+    startRound: ReturnType<typeof vi.fn>;
+    whenOnline: ReturnType<typeof vi.fn>;
   };
   return { store, ...waiting };
 }

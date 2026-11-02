@@ -1,7 +1,6 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import { FALLBACK_WAIT_MS, type FetchResult } from "../domain/fetch-result";
-import type { Preset, Presets } from "../domain/preset";
 import type { PresetToSave } from "../domain/preset-save";
 import {
   type RoundTables,
@@ -11,7 +10,6 @@ import { localOpening, openPlan } from "../domain/round-view";
 import { shotIdAfter } from "../domain/shot-id";
 import { roundStreamId, type SyncOperation } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
-import type { DeletePresetResult, PresetDeletion } from "./delete-preset";
 import type { RoundEditing } from "./edit-round";
 import type { RoundFetching } from "./fetch-round-detail";
 import type { RoundLeaving } from "./leave-round";
@@ -23,7 +21,6 @@ import {
 } from "./round-handle";
 import type { RoundRecordHub, RoundStoreGroup } from "./round-record-hub";
 import type { PresetSaving, SavePresetResult } from "./save-preset";
-import type { RoundStart, StartRoundResult } from "./start-round";
 import {
   TIMED_OUT,
   withinFetchTimeout as withinFetchTimeoutOf,
@@ -55,18 +52,6 @@ export type RoundsStore = {
   newShotId(endShotIds: readonly string[]): string;
   // 今オンラインなら直ちに、オフラインなら次に通信が戻ったときに、1回だけlistenerを呼ぶ。返す関数で取り消す。表示の読み直しの合図で、取得と反映の時点は決めない。
   whenOnline: WhenOnline;
-  // プリセットの一覧(個人と公式)。取得できれば保存し、取得できなければ保存済み。
-  loadPresets(): Promise<FetchResult<Presets>>;
-  // 個人プリセットの削除。成功で保存済みからも除く。`isCurrent`は、結果を受け取る画面がまだあるかを返す。
-  deletePreset(
-    presetId: string,
-    isCurrent: () => boolean,
-  ): Promise<DeletePresetResult>;
-  // 開始。保存の完了の後に詳細へ進む。送信の完了は待たない。遷移が投げたときは拒否する。
-  startRound(
-    preset: Preset | null,
-    isCurrent: () => boolean,
-  ): Promise<StartRoundResult>;
 };
 
 // 画面に渡す、正しい状態と変更の方法。取得と反映の時点はここでは決めず、依頼を記録するだけである。
@@ -78,8 +63,6 @@ export function createRoundsStore(deps: {
   clock: Clock;
   connectivity: Connectivity;
   ids: UniqueIds;
-  roundStart: RoundStart;
-  presetDeletion: PresetDeletion;
   leaving: RoundLeaving;
   editing: RoundEditing;
   presetSaving: PresetSaving;
@@ -91,8 +74,6 @@ export function createRoundsStore(deps: {
     clock,
     connectivity,
     ids,
-    roundStart,
-    presetDeletion,
     leaving,
     editing,
     presetSaving,
@@ -199,9 +180,5 @@ export function createRoundsStore(deps: {
     newShotId: (endShotIds) =>
       shotIdAfter(endShotIds, clock.now(), ids.randomBytes(10)),
     whenOnline: (listener) => whenOnline(connectivity, listener),
-    loadPresets: () => fetching.fetchPresets(),
-    deletePreset: (presetId, isCurrent) =>
-      presetDeletion.deletePreset(presetId, isCurrent),
-    startRound: (preset, isCurrent) => roundStart.startRound(preset, isCurrent),
   };
 }

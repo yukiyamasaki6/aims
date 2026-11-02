@@ -102,8 +102,6 @@ function rig() {
     clock,
     connectivity,
     ids,
-    roundStart: { startRound: vi.fn() },
-    presetDeletion: { deletePreset: vi.fn() },
     leaving: {
       completeRound: vi.fn(),
       deleteRoundAndLeave: vi.fn(),

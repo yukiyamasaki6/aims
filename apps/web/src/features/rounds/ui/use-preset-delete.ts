@@ -2,14 +2,14 @@
 
 import { type RefObject, useRef, useState } from "react";
 import type { Preset } from "../domain/preset";
-import { useRoundsStore } from "./rounds-context";
+import { useNewRoundStore } from "./rounds-context";
 
 // 個人プリセットの削除。確認中のプリセットと、削除済みのIDと、削除の実行中の状態を持つ。
 export function usePresetDelete(
   mountedRef: RefObject<boolean>,
   onDeleted: (presetId: string) => void,
 ) {
-  const store = useRoundsStore();
+  const store = useNewRoundStore();
   // 削除済みの個人プリセットは取得結果から除いて表示する。
   const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [presetToDelete, setPresetToDeleteState] = useState<Preset | null>(

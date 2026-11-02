@@ -16,12 +16,6 @@ export function createFakeRoundsStore(overrides: Partial<RoundsStore> = {}) {
     round: vi.fn(),
     append: vi.fn().mockResolvedValue(undefined),
     whenOnline,
-    // 既定は永遠に未解決の1個のPromiseを返す。呼び手の無い既定の関数がファイルごとの関数カバレッジ閾値(95%)を割るため、関数ではなく戻り値で指定する(保存ダイアログは再取得を手続きへ移し、loadPresetsを呼ばなくなった)。
-    loadPresets: vi.fn().mockReturnValue(new Promise<never>(() => {})),
-    deletePreset: vi.fn().mockResolvedValue({ status: "deleted" }),
-    startRound: vi
-      .fn()
-      .mockResolvedValue({ status: "created", roundId: "r-1" }),
     completeRound: vi.fn().mockResolvedValue(undefined),
     deleteRoundAndLeave: vi.fn().mockResolvedValue(undefined),
     leaveRound: vi.fn(),
@@ -34,9 +28,6 @@ export function createFakeRoundsStore(overrides: Partial<RoundsStore> = {}) {
     ...overrides,
   } as unknown as RoundsStore & {
     whenOnline: ReturnType<typeof vi.fn>;
-    loadPresets: ReturnType<typeof vi.fn>;
-    deletePreset: ReturnType<typeof vi.fn>;
-    startRound: ReturnType<typeof vi.fn>;
     completeRound: ReturnType<typeof vi.fn>;
     deleteRoundAndLeave: ReturnType<typeof vi.fn>;
     leaveRound: ReturnType<typeof vi.fn>;
