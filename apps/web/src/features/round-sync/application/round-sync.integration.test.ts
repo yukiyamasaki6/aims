@@ -105,10 +105,10 @@ function rig() {
     presetDeletion: { deletePreset: vi.fn() },
     leaving: {
       completeRound: vi.fn(),
-      deleteRound: vi.fn(),
       deleteRoundAndLeave: vi.fn(),
       leaveRound: vi.fn(),
     },
+    deletion: { deleteRound: vi.fn() },
     editing: createRoundEditing({ hub, ids }),
     presetSaving: { savePreset: vi.fn() },
   });

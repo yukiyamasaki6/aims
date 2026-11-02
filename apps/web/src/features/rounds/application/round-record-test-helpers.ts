@@ -96,10 +96,10 @@ export function createTestRoundsStore(
   const presetDeletion = { deletePreset: vi.fn() };
   const leaving = {
     completeRound: vi.fn(),
-    deleteRound: vi.fn(),
     deleteRoundAndLeave: vi.fn(),
     leaveRound: vi.fn(),
   };
+  const deletion = { deleteRound: vi.fn() };
   const presetSaving = { savePreset: vi.fn() };
   const { ids } = createFakeUniqueIds({
     prefix: "event",
@@ -115,6 +115,7 @@ export function createTestRoundsStore(
     roundStart,
     presetDeletion,
     leaving,
+    deletion,
     editing: createRoundEditing({ hub, ids }),
     presetSaving,
   });
@@ -131,6 +132,7 @@ export function createTestRoundsStore(
     roundStart,
     presetDeletion,
     leaving,
+    deletion,
     presetSaving,
   };
 }

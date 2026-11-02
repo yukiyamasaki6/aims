@@ -1340,7 +1340,7 @@ describe("deleteRound", () => {
     // Given
     const tab = createTestRoundsStore();
     const pending = Promise.withResolvers<void>();
-    tab.leaving.deleteRound.mockReturnValue(pending.promise);
+    tab.deletion.deleteRound.mockReturnValue(pending.promise);
 
     // When
     const deleting = tab.store.deleteRound("round-1");
@@ -1348,7 +1348,7 @@ describe("deleteRound", () => {
     pending.resolve();
 
     // Then
-    expect(tab.leaving.deleteRound).toHaveBeenCalledExactlyOnceWith("round-1");
+    expect(tab.deletion.deleteRound).toHaveBeenCalledExactlyOnceWith("round-1");
     expect(resolvedBeforeRelease).toBe(false);
     await expect(deleting).resolves.toBeUndefined();
   });

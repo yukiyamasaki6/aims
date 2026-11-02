@@ -40,6 +40,7 @@ import {
 } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
 import type { DeletePresetResult, PresetDeletion } from "./delete-preset";
+import type { RoundDeletion } from "./delete-round";
 import type { RoundEditing } from "./edit-round";
 import type { RoundFetching } from "./fetch-round-detail";
 import type { RoundLeaving } from "./leave-round";
@@ -167,6 +168,7 @@ export function createRoundsStore(deps: {
   roundStart: RoundStart;
   presetDeletion: PresetDeletion;
   leaving: RoundLeaving;
+  deletion: RoundDeletion;
   editing: RoundEditing;
   presetSaving: PresetSaving;
 }): RoundsStore {
@@ -180,6 +182,7 @@ export function createRoundsStore(deps: {
     roundStart,
     presetDeletion,
     leaving,
+    deletion,
     editing,
     presetSaving,
   } = deps;
@@ -515,7 +518,7 @@ export function createRoundsStore(deps: {
     newId: () => ids.next(),
     newShotId: (endShotIds) =>
       shotIdAfter(endShotIds, clock.now(), ids.randomBytes(10)),
-    deleteRound: (roundId) => leaving.deleteRound(roundId),
+    deleteRound: (roundId) => deletion.deleteRound(roundId),
     whenOnline: (listener) => whenOnline(connectivity, listener),
     afterFallbackWait: (listener) => clock.after(FALLBACK_WAIT_MS, listener),
     loadPresets: () => fetching.fetchPresets(),

@@ -1,9 +1,7 @@
-import {
-  roundDisabledOperation,
-  statusOperation,
-} from "../domain/round-progress";
+import { statusOperation } from "../domain/round-progress";
 import { ROUNDS_PATH } from "../domain/round-routes";
 import { roundStreamId } from "../domain/sync-events";
+import type { RoundDeletion } from "./delete-round";
 import type { Navigation } from "./navigation";
 import type { RoundRecordHub } from "./round-record-hub";
 import type { UniqueIds } from "./unique-ids";
@@ -11,9 +9,7 @@ import type { UniqueIds } from "./unique-ids";
 export type RoundLeaving = {
   // 入力を完了にする。保存の完了の後に一覧へ進む。送信の完了は待たない。
   completeRound(roundId: string): Promise<void>;
-  // 削除を積む(離れない。画面に残る)。保存の試みが終わると解決し、保存に失敗しても拒否しない。送信の完了は待たない。
-  deleteRound(roundId: string): Promise<void>;
-  // 削除を積み(deleteRound)、その完了の後に一覧へ置き換えて移る。送信の完了は待たない。
+  // 削除を積み(RoundDeletion.deleteRound)、その完了の後に一覧へ置き換えて移る。送信の完了は待たない。
   deleteRoundAndLeave(roundId: string): Promise<void>;
   // 一覧へ置き換えて移る。
   leaveRound(): void;
@@ -25,15 +21,9 @@ export function createRoundLeaving(deps: {
   hub: Pick<RoundRecordHub, "append">;
   ids: Pick<UniqueIds, "next">;
   navigation: Navigation;
+  deletion: RoundDeletion;
 }): RoundLeaving {
-  const { hub, ids, navigation } = deps;
-
-  function deleteRound(roundId: string): Promise<void> {
-    return hub.append(
-      roundStreamId(roundId),
-      roundDisabledOperation(roundId, ids.next()),
-    );
-  }
+  const { hub, ids, navigation, deletion } = deps;
 
   return {
     async completeRound(roundId) {
@@ -43,9 +33,8 @@ export function createRoundLeaving(deps: {
       );
       navigation.go(ROUNDS_PATH);
     },
-    deleteRound,
     async deleteRoundAndLeave(roundId) {
-      await deleteRound(roundId);
+      await deletion.deleteRound(roundId);
       navigation.replace(ROUNDS_PATH);
     },
     leaveRound() {

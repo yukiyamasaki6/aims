@@ -12,6 +12,7 @@ import { createBrowserSenderLock } from "@/features/round-sync/infrastructure/br
 import { createBrowserVisibility } from "@/features/round-sync/infrastructure/browser-visibility";
 import { RoundBaseRefresher } from "@/features/round-sync/ui/round-base-refresher";
 import { createPresetDeletion } from "@/features/rounds/application/delete-preset";
+import { createRoundDeletion } from "@/features/rounds/application/delete-round";
 import { createRoundEditing } from "@/features/rounds/application/edit-round";
 import { createContentFetcher } from "@/features/rounds/application/fetch-content";
 import { createRoundFetching } from "@/features/rounds/application/fetch-round-detail";
@@ -96,6 +97,7 @@ function composeApp(router: PageRouter) {
   });
   const navigation = createRouterNavigation(router);
   const commands = createPresetCommands(database);
+  const deletion = createRoundDeletion({ hub, ids });
   const store = createRoundsStore({
     hub,
     requests,
@@ -115,7 +117,8 @@ function composeApp(router: PageRouter) {
       commands,
       snapshots,
     }),
-    leaving: createRoundLeaving({ hub, ids, navigation }),
+    leaving: createRoundLeaving({ hub, ids, navigation, deletion }),
+    deletion,
     editing: createRoundEditing({ hub, ids }),
     presetSaving: createPresetSaving({ signIn, commands, fetching }),
   });
