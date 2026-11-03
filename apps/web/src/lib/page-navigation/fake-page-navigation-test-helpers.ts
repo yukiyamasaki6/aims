@@ -1,10 +1,10 @@
 import { vi } from "vitest";
-import type { Navigation } from "./navigation";
+import type { PageNavigation } from "./contract/page-navigation";
 
 // 遷移の呼び出しを観測できる画面の遷移。
 // log: 渡すと`go:<path>`、`replace:<path>`を追記する(保存との順序の検証に使う)。
 // failure: 渡すと、遷移で投げる。onGo: goのときに挙動を足す。
-export function createFakeNavigation(
+export function createFakePageNavigation(
   options: {
     log?: string[];
     failure?: Error;
@@ -20,6 +20,6 @@ export function createFakeNavigation(
     options.log?.push(`replace:${path}`);
     if (options.failure) throw options.failure;
   });
-  const navigation: Navigation = { go, replace };
-  return { navigation, go, replace };
+  const pageNavigation: PageNavigation = { go, replace };
+  return { pageNavigation, go, replace };
 }

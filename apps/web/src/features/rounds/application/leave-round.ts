@@ -1,8 +1,8 @@
+import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { statusOperation } from "../domain/round-progress";
 import { ROUNDS_PATH } from "../domain/round-routes";
 import { roundStreamId } from "../domain/sync-events";
 import type { RoundDeletion } from "./delete-round";
-import type { Navigation } from "./navigation";
 import type { RoundRecordHub } from "./round-record-hub";
 import type { UniqueIds } from "./unique-ids";
 
@@ -16,14 +16,14 @@ export type RoundLeaving = {
 };
 
 // 詳細の画面から離れる手続き。保存の後に遷移する順序をここに置き、画面は遷移の実装を持たない。
-// 例外: hub.appendは保存の試みが終われば解決し拒否しない。遷移が投げたときだけ、その例外で拒否する(Navigationの注記)。
+// 例外: hub.appendは保存の試みが終われば解決し拒否しない。遷移が投げたときだけ、その例外で拒否する。完了と削除の後の遷移は、保存が済んでいて、失敗を隠さないため拒否として伝える。一覧へ戻るだけの遷移は、例外をそのまま投げる。
 export function createRoundLeaving(deps: {
   hub: Pick<RoundRecordHub, "append">;
   ids: Pick<UniqueIds, "next">;
-  navigation: Navigation;
+  pageNavigation: PageNavigation;
   deletion: RoundDeletion;
 }): RoundLeaving {
-  const { hub, ids, navigation, deletion } = deps;
+  const { hub, ids, pageNavigation, deletion } = deps;
 
   return {
     async completeRound(roundId) {
@@ -31,14 +31,14 @@ export function createRoundLeaving(deps: {
         roundStreamId(roundId),
         statusOperation(roundId, "completed", ids.next()),
       );
-      navigation.go(ROUNDS_PATH);
+      pageNavigation.go(ROUNDS_PATH);
     },
     async deleteRoundAndLeave(roundId) {
       await deletion.deleteRound(roundId);
-      navigation.replace(ROUNDS_PATH);
+      pageNavigation.replace(ROUNDS_PATH);
     },
     leaveRound() {
-      navigation.replace(ROUNDS_PATH);
+      pageNavigation.replace(ROUNDS_PATH);
     },
   };
 }

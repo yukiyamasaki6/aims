@@ -28,7 +28,7 @@
 - `features/rounds/application/round-detail-store.ts`の`load`: 列に削除があれば、取得せずに削除済みを返す（`rounds/detail`）。
 
 流れは、メニューから確認ダイアログを開き、確認で、一覧は`RoundsListStore.deleteRound`、詳細は`RoundDetailStore.deleteRoundAndLeave`を呼ぶ(詳細の手続き`leave-round.ts`は、一覧と同じ`delete-round.ts`の`deleteRound`の完了の後に遷移する)。
-一覧は、そのラウンドを削除済みの集合へ足して除く。詳細は、窓口の`deleteRoundAndLeave`(手続き`features/rounds/application/leave-round.ts`が`delete-round.ts`の削除の保存の完了の後に`Navigation.replace(ROUNDS_PATH)`を呼ぶ)で一覧へ置き換える。
+一覧は、そのラウンドを削除済みの集合へ足して除く。詳細は、窓口の`deleteRoundAndLeave`(手続き`features/rounds/application/leave-round.ts`が`delete-round.ts`の削除の保存の完了の後に`PageNavigation.replace(ROUNDS_PATH)`を呼ぶ)で一覧へ置き換える。
 送信は常駐の送信器が行い、画面が閉じても続く。未確定の作成のラウンドは、既存の衝突規則で作成の確定を待って削除が送られる。
 認可の拒否と契約の不一致は破棄され、一覧を取得し直すとラウンドが再表示される。
 

@@ -1,10 +1,10 @@
 import type { Clock } from "@/lib/clock/contract/clock";
+import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { FALLBACK_WAIT_MS } from "../domain/fetch-result";
 import type { Preset } from "../domain/preset";
 import { roundPath } from "../domain/round-routes";
 import { type RoundCreated, roundCreatedDraftOf } from "../domain/round-start";
 import { roundStreamId } from "../domain/sync-events";
-import type { Navigation } from "./navigation";
 import type { RoundRecordHub } from "./round-record-hub";
 import type { SignInReader } from "./sign-in-reader";
 import { TIMED_OUT, withinTime } from "./time-limit";
@@ -27,15 +27,15 @@ export type RoundStart = {
 
 // 選択したプリセット(無ければnull)でラウンドを開始する。端末への保存の完了だけを待ち、送信を待たずに詳細の画面へ進む。
 // 認証の確認で待つのは失効時だけで、上限はFALLBACK_WAIT_MS。時間切れは、確認できない(不明)として扱う。未認証と確認できたときだけ止め、不明のときは開始する(送信は認証が回復するまで待つ)。
-// 例外: 遷移が投げたときだけ、その例外で拒否する(Navigationの注記)。認証の読み取りと保存の試みは拒否しない。
+// 例外: 遷移が投げたときだけ、その例外で拒否する。保存が済んでいて、失敗として戻すと再び実行でき、成功として返すと遷移の失敗を隠すため、拒否として伝える。認証の読み取りと保存の試みは拒否しない。
 export function createRoundStart(deps: {
   hub: Pick<RoundRecordHub, "append">;
   signIn: SignInReader;
   ids: Pick<UniqueIds, "next">;
   clock: Clock;
-  navigation: Pick<Navigation, "go">;
+  pageNavigation: Pick<PageNavigation, "go">;
 }): RoundStart {
-  const { hub, signIn, ids, clock, navigation } = deps;
+  const { hub, signIn, ids, clock, pageNavigation } = deps;
 
   return {
     async startRound(preset, isCurrent) {
@@ -58,7 +58,7 @@ export function createRoundStart(deps: {
         })),
       };
       await hub.append(roundStreamId(operation.roundId), operation);
-      navigation.go(roundPath(operation.roundId));
+      pageNavigation.go(roundPath(operation.roundId));
       return { status: "created", roundId: operation.roundId };
     },
   };

@@ -42,7 +42,7 @@
 ## 構成とデータの流れ
 
 - `app/(main)/rounds/[id]/page.tsx`: 静的な枠の画面の入口。`generateStaticParams`で`/rounds/_`だけをプリレンダーし（`dynamicParams = false`）、取得も`cookies()`も使わない。`/rounds/<ID>`はnext.configのrewriteで`/rounds/_`の枠へ向ける。何も生成せず、`RoundDetailClient`を描くだけである。
-- `features/rounds/ui/round-detail-client.tsx`: `usePathname()`のIDで取得し、状態に応じて枠の内表示かスコアカードを出す。列に削除があれば`RoundDetailStore.leaveRound`で一覧へ置き換えて遷移する(手続き`application/leave-round.ts`が`Navigation.replace(ROUNDS_PATH)`を呼ぶ)。的の一覧は読み込みの結果に含まれ、`ScorecardClient`へそのまま渡す。端末のベースで開いたラウンドが、取り直したサーバーに無いとき(削除済みなど)も`leaveRound`で移る。作成が確定せずに消えたら取り直す(`features/rounds/ui/use-creation-gone.ts`)。読み込みの全体を`withinFetchTimeout`で10秒に打ち切る(`app/offline-pwa`)。
+- `features/rounds/ui/round-detail-client.tsx`: `usePathname()`のIDで取得し、状態に応じて枠の内表示かスコアカードを出す。列に削除があれば`RoundDetailStore.leaveRound`で一覧へ置き換えて遷移する(手続き`application/leave-round.ts`が`PageNavigation.replace(ROUNDS_PATH)`を呼ぶ)。的の一覧は読み込みの結果に含まれ、`ScorecardClient`へそのまま渡す。端末のベースで開いたラウンドが、取り直したサーバーに無いとき(削除済みなど)も`leaveRound`で移る。作成が確定せずに消えたら取り直す(`features/rounds/ui/use-creation-gone.ts`)。読み込みの全体を`withinFetchTimeout`で10秒に打ち切る(`app/offline-pwa`)。
 - `features/rounds/domain/round-routes.ts`の`roundIdOfPath`: pathnameからUUIDを取り出す経路の持ち主の関数。UUIDでなければ`null`で、問い合わせずに見つからないとする。
 - `features/rounds/infrastructure/round-queries.ts`、`features/rounds/application/fetch-round-detail.ts`: 問い合わせの組み立てと行の写しはインフラ層、取得の順序は手続きが持つ。ラウンド・距離・矢を1回のネスト取得、的を1回の取得で得て、`FetchResult`に分類する。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。的の取得(`fetchTargetFaces`)は、作成が未確定のラウンドの読み込みが使う。成功した一覧を端末に保存し(`features/rounds/infrastructure/reference-snapshot.ts`)、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。`fetchRoundDetail`は的を保存するが、代わりは持たず待ちは10秒のままである。一括の取得(`fetchRoundDetails`)も、的を保存する。
 - `features/rounds/application/round-detail-store.ts`の`load`: 開く材料(ベースと的)を返す。サーバーの取得と端末の記録への反映は同期が行い(`refresh-round-bases.ts`の`refreshRound`)、`load`はその結果を待つ。列は記録のハブの`read`で読み、最初の読み込みで列に削除があれば、取得せずに削除済みを返す(作成が未確定でも同じ)。反映した組の列に削除があるときも、削除済みを返す。作成が未確定のラウンドは、ラウンドを取得せず、作成の操作を基準にする。通信できないときは、端末の組が保持の規則に当たれば、端末のベースで返す(`source`が`local`)。取得が`FALLBACK_WAIT_MS`を超えたときは、その完了を待たず、同期が取得を続けて結果を反映する。結果は常に、そろった的の一覧全体(取得に成功した一覧、または最後に取得に成功した一覧の保存分)を持つ。作成が未確定のラウンドは`fetchTargetFaces`で的を得る。端末のベースは的の保存分があるときだけ使い、無ければサーバーの取得を待つ。そろわなければ、取得の結果(`offline`か`error`)を返す。効かなかった操作または項目がある応答を受けたときの取り直しは、同期が決める(`features/round-sync/application/round-sync.ts`)。
@@ -77,9 +77,9 @@
 | `features/rounds/domain/distance-config.ts`、`distance-operations.ts`、`target-face-filter.ts`、`position-key.ts` | ドメイン層(距離の設定の検証、距離の操作、的の絞り込み、位置キー) |
 | `features/rounds/domain/preset-save.ts`、`ring-color.ts`、`shot-id.ts`、`round-routes.ts`、`write-result.ts` | ドメイン層(保存するプリセットの内容、リング色、時刻順の矢のID、経路、書き込みの文言) |
 | `features/rounds/application/leave-round.ts`、`save-preset.ts` | 手続き(完了、削除、削除して離れる、一覧へ戻る。プリセットの保存) |
-| `features/rounds/application/navigation.ts`、`preset-commands.ts`、`unique-ids.ts` | 手続きの約束(`Navigation`、`PresetCommands`、`UniqueIds`) |
+| `features/rounds/application/preset-commands.ts`、`unique-ids.ts` | 手続きの約束(`PresetCommands`、`UniqueIds`) |
 | `features/rounds/application/round-detail-store.ts`、`round-handle.ts` | 手続き(詳細の画面に渡す状態と変更の方法、開いた詳細の購読の状態) |
-| `features/rounds/infrastructure/router-navigation.ts`、`preset-commands.ts`、`browser-unique-ids.ts`、`rounds-db-schema.ts` | インフラ層(遷移、保存の書き込み、乱数の払い出し、保存の関数) |
+| `preset-commands.ts`、`browser-unique-ids.ts`、`rounds-db-schema.ts` | インフラ層(遷移、保存の書き込み、乱数の払い出し、保存の関数) |
 
 集計は、点数を入力するたびにクライアントで再計算し、サーバーへ問い合わせない。
 取得の結果は`ScorecardClient`へ渡し、以降の更新は楽観的UIと操作の列で行って、再取得を待たない。
@@ -104,7 +104,7 @@
 | 一括の取得の対象を、入力中のラウンドと、端末に保持するラウンドにする。契機は、認証イベント(`INITIAL_SESSION`・`SIGNED_IN`でセッションがあるとき)、`online`、見える状態になったときで、時間の値は使わない | 他端末で作成し記録したラウンドを、この端末で一度も開かなくても、オフラインで開けるようにするため。完了で送信済みのラウンドは対象にしないため、端末の保存量が入力中の数で抑えられる | 放置された入力中のラウンドの保持の上限が要るとき |
 | 一括の取得で、端末のラウンドのIDを50件ごとの取得に分け、どれかが失敗すれば全体を失敗とする | IDはGETのURLに載るため、全件を1回に並べると保持の件数に比例して伸び、ゲートウェイが414で拒むため。一部の成功を反映すると、返らなかった保持のラウンドが削除の印になるため。POSTのRPCへ移す案は、ネスト取得と認可をDBの関数で作り直す必要があるため採らない | 保持の件数に上限を設けるとき、またはゲートウェイのURL長の上限が分かったとき |
 | 的の一覧がそろうまで、ラウンドの内容を出さない。そろうとは、取得に成功した一覧か、最後に取得に成功した一覧の保存分があることとする | 的の無い間は、テンキーがMだけ、玉がMの色になり、未確定の操作も的で判定できない。このため、内容を先に出して的を背景で取得するのをやめた。的は配布でしか変わらないため、件数や版で最新性を確かめない | 利用者が的を作れるようにするとき |
-| 完了、削除、一覧へ戻る遷移を手続きの約束(`Navigation`)で表し、窓口に持たせる | 保存の後に進む順序を手続きに置き、画面が遷移の実装を持たないため(L01、R01) | 画面ごとに異なる遷移の方法が要るとき |
+| 完了、削除、一覧へ戻る遷移を共有の技術の約束(`PageNavigation`。`lib/page-navigation`)で表し、窓口に持たせる | 保存の後に進む順序を手続きに置き、画面が遷移の実装を持たないため(L01、R01) | 画面ごとに異なる遷移の方法が要るとき |
 | IDの払い出しを窓口(`newId`、`newShotId`)から受ける | 乱数と時刻を画面が直接読まず、手続きが約束から読むため(X01、R01)。操作の組み立てを全て手続きへ移す案は、`SyncOperation`(同期の契約の型。`eventId`が必須)のほかに下書きの型を足し、同じ操作を表す型が2つになるため採らない | 操作の組み立てを手続きへ移すとき |
 | 導出の初期値を取得の中で求め、`ScorecardClient`のマウント後には行わない | サーバーの値が一瞬見えるちらつきを避け、最初に指す新しい矢が未送信の矢を含む状態で決まるようにするため | 取得と重ね合わせを分ける必要が出たとき |
 

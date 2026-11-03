@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import {
   ALREADY_REGISTERED,
   type AuthFailure,
@@ -25,11 +26,12 @@ function setup(protectedPath = "/rounds") {
     setPassword: vi.fn(async (): Promise<CallResult> => accepted),
   } satisfies PasswordSetupAuthenticator;
   const registration = { isRegistered: vi.fn(async () => false) };
-  const navigation = { go: vi.fn() };
+  const { pageNavigation, go } = createFakePageNavigation();
+  const navigation = { go };
   const signUp = createSignUp({
     authenticator,
     registration,
-    navigation,
+    pageNavigation,
     protectedPath,
   });
   return {

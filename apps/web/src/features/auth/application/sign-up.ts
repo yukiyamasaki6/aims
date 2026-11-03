@@ -1,7 +1,7 @@
+import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { ALREADY_REGISTERED, UNREACHABLE } from "../domain/auth-failure";
 import { beginSendCode } from "../domain/password-setup-flow";
 import { destinationOf } from "../domain/routes";
-import type { Navigation } from "./navigation";
 import {
   applyPassword,
   deliver,
@@ -22,7 +22,7 @@ type RegistrationLookup = {
 type Dependencies = {
   authenticator: PasswordSetupAuthenticator;
   registration: RegistrationLookup;
-  navigation: Pick<Navigation, "go">;
+  pageNavigation: Pick<PageNavigation, "go">;
   // 保護対象の画面の範囲の根の経路。サインインの後の既定の行き先になる。
   protectedPath: string;
 };
@@ -30,7 +30,7 @@ type Dependencies = {
 export function createSignUp({
   authenticator,
   registration,
-  navigation,
+  pageNavigation,
   protectedPath,
 }: Dependencies): PasswordSetup {
   const context: PasswordSetupContext = { authenticator, purpose: "sign-up" };
@@ -39,7 +39,7 @@ export function createSignUp({
     resend: (input, view) => resend(context, input, view),
     verifyCode: (input, view) => verifyCode(context, input, view),
     setPassword: (input, view) =>
-      setPassword(authenticator, navigation, protectedPath, input, view),
+      setPassword(authenticator, pageNavigation, protectedPath, input, view),
   };
 }
 
@@ -73,7 +73,7 @@ async function sendCode(
 // 設定に成功したら、サインインの後の既定の行き先へ遷移する。遷移が投げたときは、通信エラーとして失敗にし、実行中のまま止めない。
 async function setPassword(
   authenticator: Pick<PasswordSetupAuthenticator, "setPassword">,
-  navigation: Pick<Navigation, "go">,
+  pageNavigation: Pick<PageNavigation, "go">,
   protectedPath: string,
   input: { password: string },
   view: PasswordSetupView,
@@ -91,7 +91,7 @@ async function setPassword(
   if (!view.isMounted()) return;
   view.dispatch({ type: "passwordSet" });
   try {
-    navigation.go(destinationOf(null, protectedPath));
+    pageNavigation.go(destinationOf(null, protectedPath));
   } catch {
     view.dispatch({ type: "failed", failure: UNREACHABLE });
   }

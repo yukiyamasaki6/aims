@@ -1,14 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRouterNavigation } from "./router-navigation";
+import { createRouterPageNavigation } from "./router-page-navigation";
 
-describe("createRouterNavigation", () => {
+describe("createRouterPageNavigation", () => {
   it("goは、遷移の部品のpushをその経路で呼ぶ", () => {
     // Given
     const push = vi.fn();
-    const navigation = createRouterNavigation({ push, replace: vi.fn() });
+    const pageNavigation = createRouterPageNavigation({
+      push,
+      replace: vi.fn(),
+    });
 
     // When
-    navigation.go("/rounds/abc");
+    pageNavigation.go("/rounds/abc");
 
     // Then
     expect(push).toHaveBeenCalledTimes(1);
@@ -18,7 +21,7 @@ describe("createRouterNavigation", () => {
   it("pushが投げた例外は、変換されずにそのままgoから出る", () => {
     // Given
     const failure = new Error("rejected path");
-    const navigation = createRouterNavigation({
+    const pageNavigation = createRouterPageNavigation({
       push: () => {
         throw failure;
       },
@@ -28,7 +31,7 @@ describe("createRouterNavigation", () => {
     // When
     let thrown: unknown;
     try {
-      navigation.go("/rounds/abc");
+      pageNavigation.go("/rounds/abc");
     } catch (error) {
       thrown = error;
     }
@@ -41,10 +44,10 @@ describe("createRouterNavigation", () => {
     // Given
     const push = vi.fn();
     const replace = vi.fn();
-    const navigation = createRouterNavigation({ push, replace });
+    const pageNavigation = createRouterPageNavigation({ push, replace });
 
     // When
-    navigation.replace("/rounds");
+    pageNavigation.replace("/rounds");
 
     // Then
     expect(replace).toHaveBeenCalledTimes(1);
@@ -55,7 +58,7 @@ describe("createRouterNavigation", () => {
   it("replaceが投げた例外は、変換されずにそのままreplaceから出る", () => {
     // Given
     const failure = new Error("rejected path");
-    const navigation = createRouterNavigation({
+    const pageNavigation = createRouterPageNavigation({
       push: vi.fn(),
       replace: () => {
         throw failure;
@@ -65,7 +68,7 @@ describe("createRouterNavigation", () => {
     // When
     let thrown: unknown;
     try {
-      navigation.replace("/rounds");
+      pageNavigation.replace("/rounds");
     } catch (error) {
       thrown = error;
     }

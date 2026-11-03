@@ -1,3 +1,4 @@
+import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import { destinationOf } from "../domain/routes";
 import {
@@ -7,12 +8,17 @@ import {
   type SignInFlow,
 } from "../domain/sign-in-flow";
 import { type CallResult, failureOf } from "./call-result";
-import type { Navigation } from "./navigation";
 import type { ScreenView } from "./screen-view";
 
 // 認証サービスに資格情報を照合させる。例外は投げず、結果は値で返す。
 export type SignInAuthenticator = {
   signIn(credentials: Credentials): Promise<CallResult>;
+};
+
+// 今の画面の遷移元の値の読み出し。検証していない値で、無ければnull。検証は手続きが経路の規則で行う。
+// 例外: 投げることがあり、手続きが通信エラーの失敗として扱う。
+export type ReturnToReader = {
+  read(): string | null;
 };
 
 export type SignIn = {
@@ -24,11 +30,13 @@ export type SignIn = {
 
 export function createSignIn({
   authenticator,
-  navigation,
+  pageNavigation,
+  returnToReader,
   protectedPath,
 }: {
   authenticator: SignInAuthenticator;
-  navigation: Navigation;
+  pageNavigation: PageNavigation;
+  returnToReader: ReturnToReader;
   // 保護対象の画面の範囲の根の経路。遷移元の検証と、既定の行き先に使う。
   protectedPath: string;
 }): SignIn {
@@ -58,7 +66,7 @@ export function createSignIn({
       view.dispatch({ type: "signedIn" });
       // 遷移元の読み出しと遷移が投げたときは、トークンは使用済みのため、通信エラーとして消費し、送信中のまま止めない。
       try {
-        navigation.go(destinationOf(navigation.returnTo(), protectedPath));
+        pageNavigation.go(destinationOf(returnToReader.read(), protectedPath));
       } catch {
         refuse(UNREACHABLE);
       }

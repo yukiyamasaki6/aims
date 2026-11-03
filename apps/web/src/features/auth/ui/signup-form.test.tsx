@@ -50,7 +50,7 @@ function renderForm(options?: { strict?: boolean }) {
   const signUp = createSignUp({
     authenticator: auth,
     registration: auth,
-    navigation: nav,
+    pageNavigation: { go: nav.go },
     protectedPath: "/rounds",
   });
   const form = <SignUpForm signUp={signUp} />;

@@ -68,7 +68,7 @@ const subjects: {
       createSignUp({
         authenticator: auth,
         registration: auth,
-        navigation: { go: leave },
+        pageNavigation: { go: leave },
         protectedPath: "/rounds",
       }),
     form: (procedure) => <SignUpForm signUp={procedure} />,

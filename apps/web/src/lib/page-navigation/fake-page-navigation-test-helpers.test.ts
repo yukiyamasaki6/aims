@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { createFakeNavigation } from "./fake-navigation-test-helpers";
+import { createFakePageNavigation } from "./fake-page-navigation-test-helpers";
 
-describe("createFakeNavigation", () => {
+describe("createFakePageNavigation", () => {
   it("goとreplaceの呼び出しを観測でき、logへ順に追記する", () => {
     // Given
     const log: string[] = ["append:done"];
-    const { navigation, go, replace } = createFakeNavigation({ log });
+    const { pageNavigation, go, replace } = createFakePageNavigation({ log });
 
     // When
-    navigation.go("/a");
-    navigation.replace("/b");
+    pageNavigation.go("/a");
+    pageNavigation.replace("/b");
 
     // Then
     expect(go).toHaveBeenCalledWith("/a");
@@ -19,10 +19,10 @@ describe("createFakeNavigation", () => {
 
   it("logを渡さなくても、呼び出しを観測できる", () => {
     // Given
-    const { navigation, go } = createFakeNavigation();
+    const { pageNavigation, go } = createFakePageNavigation();
 
     // When
-    navigation.go("/a");
+    pageNavigation.go("/a");
 
     // Then
     expect(go).toHaveBeenCalledTimes(1);
@@ -32,11 +32,11 @@ describe("createFakeNavigation", () => {
     // Given
     const failure = new Error("failed");
     const log: string[] = [];
-    const { navigation } = createFakeNavigation({ log, failure });
+    const { pageNavigation } = createFakePageNavigation({ log, failure });
 
     // When
-    const go = () => navigation.go("/a");
-    const replace = () => navigation.replace("/b");
+    const go = () => pageNavigation.go("/a");
+    const replace = () => pageNavigation.replace("/b");
 
     // Then
     expect(go).toThrow(failure);
@@ -47,13 +47,13 @@ describe("createFakeNavigation", () => {
   it("onGoは、goのときだけ呼ばれる", () => {
     // Given
     const gone: string[] = [];
-    const { navigation } = createFakeNavigation({
+    const { pageNavigation } = createFakePageNavigation({
       onGo: (path) => gone.push(path),
     });
 
     // When
-    navigation.go("/a");
-    navigation.replace("/b");
+    pageNavigation.go("/a");
+    pageNavigation.replace("/b");
 
     // Then
     expect(gone).toEqual(["/a"]);

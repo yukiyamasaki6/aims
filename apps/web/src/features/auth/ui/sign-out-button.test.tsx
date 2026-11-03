@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import type { CallResult } from "../application/call-result";
 import { createSession, type SignOutResult } from "../application/session";
 import { NETWORK_ERROR_MESSAGE, UNREACHABLE } from "../domain/auth-failure";
@@ -153,11 +154,7 @@ describe("SignOutButton", () => {
         })),
         subscribe: vi.fn(() => () => {}),
       },
-      connectivity: {
-        isOffline: () => false,
-        onOnline: () => () => {},
-        onOffline: () => () => {},
-      },
+      connectivity: createFakeConnectivity(),
       pageReplace: { here: () => "/rounds", replace: vi.fn() },
       protectedPath: "/rounds",
     });

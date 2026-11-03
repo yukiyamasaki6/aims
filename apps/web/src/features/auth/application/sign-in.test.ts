@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import {
   beginSignIn,
@@ -21,8 +22,15 @@ function setup(returnTo: string | null = null, protectedPath = "/rounds") {
   const authenticator = {
     signIn: vi.fn(async (): Promise<CallResult> => accepted),
   };
-  const navigation = { returnTo: vi.fn(() => returnTo), go: vi.fn() };
-  const signIn = createSignIn({ authenticator, navigation, protectedPath });
+  const fake = createFakePageNavigation();
+  const returnToReader = { read: vi.fn(() => returnTo) };
+  const navigation = { returnTo: returnToReader.read, go: fake.go };
+  const signIn = createSignIn({
+    authenticator,
+    pageNavigation: fake.pageNavigation,
+    returnToReader,
+    protectedPath,
+  });
   const { events, resetCheck, viewOf, screen } = screenHarness(signInReducer);
   return {
     signIn,

@@ -24,8 +24,8 @@ import { createBrowserUniqueIds } from "@/features/rounds/infrastructure/browser
 import { createPresetCommands } from "@/features/rounds/infrastructure/preset-commands";
 import { createReferenceSnapshots } from "@/features/rounds/infrastructure/reference-snapshot";
 import { createRoundQueries } from "@/features/rounds/infrastructure/round-queries";
-import { createRouterNavigation } from "@/features/rounds/infrastructure/router-navigation";
 import { useRoundDetailStore } from "@/features/rounds/ui/rounds-context";
+import { createRouterPageNavigation } from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { RootClientEntry } from "./root-client-entry";
 
 // Supabaseクライアントは外部サービスとの境界のため、認証状態の変化を任意に発火できるスタブで模す。
@@ -212,15 +212,15 @@ vi.mock(
   },
 );
 vi.mock(
-  "@/features/rounds/infrastructure/router-navigation",
+  "@/lib/page-navigation/infrastructure/router-page-navigation",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/rounds/infrastructure/router-navigation")
+        typeof import("@/lib/page-navigation/infrastructure/router-page-navigation")
       >();
     return {
       ...actual,
-      createRouterNavigation: vi.fn(actual.createRouterNavigation),
+      createRouterPageNavigation: vi.fn(actual.createRouterPageNavigation),
     };
   },
 );
@@ -524,8 +524,8 @@ describe("RootClientEntry", () => {
       rerender(<RootClientEntry>{null}</RootClientEntry>);
 
       // Then
-      expect(createRouterNavigation).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(createRouterNavigation).mock.calls[0][0]).toBe(
+      expect(createRouterPageNavigation).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(createRouterPageNavigation).mock.calls[0][0]).toBe(
         nav.router,
       );
     });
@@ -540,8 +540,8 @@ describe("RootClientEntry", () => {
       // Then
       expect(createRoundStart).toHaveBeenCalledTimes(1);
       const deps = vi.mocked(createRoundStart).mock.calls[0][0];
-      expect(deps.navigation).toBe(
-        vi.mocked(createRouterNavigation).mock.results[0].value,
+      expect(deps.pageNavigation).toBe(
+        vi.mocked(createRouterPageNavigation).mock.results[0].value,
       );
       expect(deps.ids).toBe(
         vi.mocked(createBrowserUniqueIds).mock.results[0].value,
@@ -588,8 +588,8 @@ describe("RootClientEntry", () => {
       expect(deps.ids).toBe(
         vi.mocked(createBrowserUniqueIds).mock.results[0].value,
       );
-      expect(deps.navigation).toBe(
-        vi.mocked(createRouterNavigation).mock.results[0].value,
+      expect(deps.pageNavigation).toBe(
+        vi.mocked(createRouterPageNavigation).mock.results[0].value,
       );
     });
 
@@ -617,9 +617,10 @@ describe("RootClientEntry", () => {
       render(<RootClientEntry>{null}</RootClientEntry>);
 
       // Then
-      expect(createRouterNavigation).toHaveBeenCalledTimes(1);
-      const start = vi.mocked(createRoundStart).mock.calls[0][0].navigation;
-      const leaving = vi.mocked(createRoundLeaving).mock.calls[0][0].navigation;
+      expect(createRouterPageNavigation).toHaveBeenCalledTimes(1);
+      const start = vi.mocked(createRoundStart).mock.calls[0][0].pageNavigation;
+      const leaving =
+        vi.mocked(createRoundLeaving).mock.calls[0][0].pageNavigation;
       expect(leaving).toBe(start);
     });
 

@@ -151,39 +151,20 @@ flowchart LR
 ## 命名の規則
 
 1. ファイル名の`-types`は、型だけを持つファイルに限る。`-constants`は、定数だけを持つファイルに限る。関数(規則)を持つファイルには付けず、概念の名前にする(`preset.ts`、`round-config.ts`、`target-face.ts`)。
-2. 手続きの約束・ドメインの約束のファイルは、約束の名前で呼ぶ(`navigation.ts`、`unique-ids.ts`)。型だけでも`-types`を付けない。
+2. 手続きの約束・ドメインの約束のファイルは、約束の名前で呼ぶ(`unique-ids.ts`、`sign-in-reader.ts`)。型だけでも`-types`を付けない。
 
 該当ファイルの検査: `features/rounds`と`features/round-sync`の全層から`*types*`、`*constants*`、`*-type.ts`を探すと、`domain/scorecard-types.ts`、`domain/round-constants.ts`、`infrastructure/reference-query-constants.ts`が該当し、いずれも型だけ、定数だけで適合する。型と関数を持つ`domain/target-face.ts`は、概念の名前で呼ぶ。アプリケーション層、UI層、`round-sync`に該当する名前のファイルは無い。
 
 ## テスト補助の置き場の規則
 
-1. 名前は`<対象>-test-helpers.ts`。補助自体が論理を持つなら同名の`.test.ts`を置く(ファイルごとの網羅閾値のため)。
-2. 業務の言葉を持たない技術の約束の偽物(時刻、通信の可否、端末の保存)は、`lib/<能力>/`に置き、機能が共有する。
-3. 業務の言葉を持つ補助は、その業務を持つ機能の中に置く。置く層は、使うテストの層のうち最も内側の層(1つの層だけが使うならその層、複数の層が使うなら最も内側の層。機能の直下には置かない)。
-4. 他の機能のテストが、持ち主の機能の補助を使ってよい(`round-sync`のテストが`rounds`の補助を使う)。補助を機能の入口(`index.ts`)へ出さない。
-5. 同じ契約の偽物を複数のテストが別々に定義しない。契約ごとに1つを、規則2または3の置き場に置く。置き換えない場合は、挙動の差を理由に記す。
+規則と共有の偽物の表は`agents/testing.md`の「テスト補助の置き場」に持つ。ラウンドで共有の偽物を使わない箇所は、次の2つである。
 
-| ファイル | 使い手の層 | 規則 |
-| --- | --- | --- |
-| `lib/clock/manual-clock-test-helpers.ts`、`lib/connectivity/fake-connectivity-test-helpers.ts`、`lib/local-op-log/memory-op-log-store-test-helpers.ts` | 共有 | 2 |
-| `rounds/domain/round-op-test-helpers.ts` | domain、application、infrastructure、ui、app、round-sync | 3(最も内側=domain) |
-| `rounds/application/round-record-test-helpers.ts`、`fake-sign-in-reader-test-helpers.ts`、`fake-navigation-test-helpers.ts`、`fake-unique-ids-test-helpers.ts` | application、ui、round-sync/application | 3(最も内側=application) |
-| `rounds/ui/round-stores-test-helpers.ts` | ui | 3 |
-| `round-sync/application/op-sender-test-helpers.ts` | round-sync/application | 3 |
-
-重複していた偽物の扱い
-
-| 契約 | 扱い |
+| 置き換えない箇所 | 理由 |
 | --- | --- |
-| `SignInReader` | `fake-sign-in-reader-test-helpers.ts`へ置き換える(`fetch-content`、`fetch-round-detail`、`start-round`、`save-preset`、`delete-preset`) |
-| `Navigation` | `fake-navigation-test-helpers.ts`へ置き換える(`leave-round`、`start-round`) |
-| `UniqueIds` | `fake-unique-ids-test-helpers.ts`へ置き換える(`leave-round`、`start-round`、`edit-round`、`delete-round`、`round-record-test-helpers.ts`、`round-sync.integration.test.ts`) |
-| `Connectivity` | `lib`の`createFakeConnectivity`へ置き換える(`fetch-round-detail`)。置き換えない箇所は次の2つ |
-| 置き換えない: `fetch-content.test.ts` | 取得の途中で購読者へ知らせずに切断の状態だけを替える検証(HTTP応答のあるエラーはerrorのまま、時間切れはofflineを返す、など)があり、`createFakeConnectivity`は状態を替えると必ず購読者へ知らせるため、同じ検証にならない |
-| 置き換えない: `sync-triggers.test.ts` | `onOnline`と`onOffline`を購読した依頼の回数と、解除後の購読数を別々に検証する。`createFakeConnectivity`は有効な購読数だけを持ち、依頼した回数は持たない |
-| `Clock` | 独自の定義は無い(全テストが`createManualClock`) |
+| `fetch-content.test.ts`の`Connectivity` | 取得の途中で購読者へ知らせずに切断の状態だけを替える検証(HTTP応答のあるエラーはerrorのまま、時間切れはofflineを返す、など)があり、`createFakeConnectivity`は状態を替えると必ず購読者へ知らせるため、同じ検証にならない |
+| `sync-triggers.test.ts`の`Connectivity` | `onOnline`と`onOffline`を購読した依頼の回数と、解除後の購読数を別々に検証する。`createFakeConnectivity`は有効な購読数だけを持ち、依頼した回数は持たない |
 
-`ui/scorecard-client.test.tsx`のルーターの差し替えは`next/navigation`の差し替えで、`Navigation`を満たす値ではないため対象外である。
+`ui/scorecard-client.test.tsx`のルーターの差し替えは`next/navigation`の差し替えで、`PageNavigation`を満たす値ではないため対象外である。
 
 ## 設計判断
 

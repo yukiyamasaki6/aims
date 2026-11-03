@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import {
   roundDisabledOperation,
   statusOperation,
@@ -6,7 +7,6 @@ import {
 import { ROUNDS_PATH } from "../domain/round-routes";
 import { roundStreamId } from "../domain/sync-events";
 import { createRoundDeletion } from "./delete-round";
-import { createFakeNavigation } from "./fake-navigation-test-helpers";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 import { createRoundLeaving } from "./leave-round";
 
@@ -24,7 +24,7 @@ function setup(
     }
     calls.push("append:done");
   });
-  const { navigation, go, replace } = createFakeNavigation({
+  const { pageNavigation, go, replace } = createFakePageNavigation({
     log: calls,
     failure: options.navigationFailure,
   });
@@ -33,7 +33,7 @@ function setup(
   const leaving = createRoundLeaving({
     hub: { append },
     ids,
-    navigation,
+    pageNavigation,
     deletion,
   });
   return {

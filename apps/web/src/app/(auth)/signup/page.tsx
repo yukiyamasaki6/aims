@@ -3,10 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createSignUp } from "@/features/auth/application/sign-up";
-import { createBrowserNavigation } from "@/features/auth/infrastructure/browser-navigation";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SignUpForm } from "@/features/auth/ui/signup-form";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
+import { createRouterPageNavigation } from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import { isEmailRegistered } from "./actions";
 
@@ -17,7 +17,7 @@ export default function SignUpPage() {
     createSignUp({
       authenticator: createSupabaseAuth(createClient),
       registration: { isRegistered: isEmailRegistered },
-      navigation: createBrowserNavigation(router),
+      pageNavigation: createRouterPageNavigation(router),
       protectedPath: ROUNDS_PATH,
     }),
   );

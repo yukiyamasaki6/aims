@@ -117,3 +117,23 @@ Playwrightを使用する。
 ### 成果物
 
 - Playwrightテストコード
+
+## テスト補助の置き場
+
+1. 名前は`<対象>-test-helpers.ts`。補助自体が論理を持つなら同名の`.test.ts`を置く(ファイルごとの網羅閾値のため)。
+2. 業務の言葉を持たない技術の約束の偽物(時刻、通信の可否、画面の遷移、端末の保存)は、`lib/<能力>/`の直下に置き、機能が共有する。
+3. 業務の言葉を持つ補助は、その業務を持つ機能の中に置く。置く層は、使うテストの層のうち最も内側の層(1つの層だけが使うならその層、複数の層が使うなら最も内側の層。機能の直下には置かない)。
+4. 他の機能のテストが、持ち主の機能の補助を使ってよい。補助を機能の入口(`index.ts`)へ出さない。
+5. 次の表の約束は、全てのテストが共有の偽物を使い、別に定義しない。意図的に別物にするときは、理由をテストに書く。呼び出しを数えるだけの`vi.fn()`の差し込みは、約束を満たす偽物ではなく、表の対象外とする(例: 手続きの約束`PageLoad`、`ReturnToReader`)。
+
+| 約束 | 共有の偽物 | 置き場の規則 |
+| --- | --- | --- |
+| `Clock` | `lib/clock/manual-clock-test-helpers.ts` | 2 |
+| `Connectivity` | `lib/connectivity/fake-connectivity-test-helpers.ts` | 2 |
+| `PageNavigation` | `lib/page-navigation/fake-page-navigation-test-helpers.ts` | 2 |
+| `SignInReader` | `features/rounds/application/fake-sign-in-reader-test-helpers.ts` | 3 |
+| `UniqueIds` | `features/rounds/application/fake-unique-ids-test-helpers.ts` | 3 |
+
+`Connectivity`で共有の偽物にしない例外は、購読者へ知らせずに状態だけを替える検証と、購読の依頼の回数を数える検証である(`rounds`の`fetch-content.test.ts`、`round-sync`の`sync-triggers.test.ts`)。
+
+その他の補助は、規則2または3に従う(`lib/local-op-log/memory-op-log-store-test-helpers.ts`、`rounds/domain/round-op-test-helpers.ts`、`rounds/application/round-record-test-helpers.ts`、`rounds/ui/round-stores-test-helpers.ts`、`round-sync/application/op-sender-test-helpers.ts`、`auth/application/screen-view-test-helpers.ts`)。

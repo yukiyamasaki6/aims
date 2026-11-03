@@ -39,10 +39,6 @@ import { createRoundOpTransport } from "@/features/rounds/infrastructure/round-o
 import { createRoundQueries } from "@/features/rounds/infrastructure/round-queries";
 import type { RoundsDbSchema } from "@/features/rounds/infrastructure/rounds-db-schema";
 import {
-  createRouterNavigation,
-  type PageRouter,
-} from "@/features/rounds/infrastructure/router-navigation";
-import {
   NewRoundStoreProvider,
   RoundDetailStoreProvider,
   RoundsListStoreProvider,
@@ -50,6 +46,10 @@ import {
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
+import {
+  createRouterPageNavigation,
+  type PageRouter,
+} from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import {
   createSupabaseDatabase,
@@ -75,7 +75,7 @@ function composeInputs(router: PageRouter) {
     database: narrowDatabase<RoundsDbSchema>(
       createSupabaseDatabase(createClient),
     ),
-    navigation: createRouterNavigation(router),
+    pageNavigation: createRouterPageNavigation(router),
   };
 }
 
@@ -114,7 +114,7 @@ type Records = ReturnType<typeof composeRecords>;
 
 // 窓口(手続きと、一覧、作成、詳細の窓口)。
 function composeStores(inputs: Inputs, records: Records) {
-  const { signIn, connectivity, clock, database, navigation } = inputs;
+  const { signIn, connectivity, clock, database, pageNavigation } = inputs;
   const { hub, requests, snapshots, fetching } = records;
   const ids = createBrowserUniqueIds();
   const commands = createPresetCommands(database);
@@ -127,13 +127,19 @@ function composeStores(inputs: Inputs, records: Records) {
       clock,
       connectivity,
       ids,
-      leaving: createRoundLeaving({ hub, ids, navigation, deletion }),
+      leaving: createRoundLeaving({ hub, ids, pageNavigation, deletion }),
       editing: createRoundEditing({ hub, ids }),
       presetSaving: createPresetSaving({ signIn, commands, fetching }),
     }),
     newRoundStore: createNewRoundStore({
       fetching,
-      roundStart: createRoundStart({ hub, signIn, ids, clock, navigation }),
+      roundStart: createRoundStart({
+        hub,
+        signIn,
+        ids,
+        clock,
+        pageNavigation,
+      }),
       presetDeletion: createPresetDeletion({ signIn, commands, snapshots }),
       connectivity,
     }),

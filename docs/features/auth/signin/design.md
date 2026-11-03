@@ -36,9 +36,9 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/domain/routes.ts`: 経路の規則(値オブジェクト)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは保護の範囲の根(今はラウンド一覧の経路)の配下の同一オリジンのパスだけ。根は`protectedPath`として受け取る)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`)、クエリからの読み取り(`readReturnTo`)、要求のリダイレクト先(`redirectFor`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
 - `src/features/auth/index.ts`: 認証の機能の入口。他の機能が使う型と文言と経路(`unconfirmedMessage`、`destinationOf`、`SIGN_UP_PATH`)を、別名なしで再公開する。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。`signInWithPassword`の呼び出しと、エラーを失敗の種類に写す変換(通信の断は名前で先に判定する)、例外(接続を作れない場合を含む)を届かない結果に変える変換を含む。接続は、渡された関数で照合のたびに取得する。
-- `src/features/auth/infrastructure/browser-navigation.ts`: 現在のURLのクエリの遷移元の値の読み出し(検証せずに返し、検証は手続きの`destinationOf`が行う)と、routerによる遷移。
+- `src/features/auth/infrastructure/browser-return-to.ts`: 現在のURLのクエリの遷移元の値の読み出し(検証せずに返し、検証は手続きの`destinationOf`が行う)。routerによる遷移は共有の技術 `src/lib/page-navigation/infrastructure/router-page-navigation.ts` が持つ。
 - `src/features/auth/ui/use-screen-view.ts`: 画面の状態を持つ汎用のフック。`reducer`で遷移させる状態を、最新の値の`ref`と描画用の`useState`で持ち、画面の約束`ScreenView`を作る。
-- `src/features/auth/application/navigation.ts`: 画面の遷移と遷移元の読み出しの約束。サインインとサインアップの2つの手続きが使う。
+- `src/lib/page-navigation/contract/page-navigation.ts`: 画面の遷移の約束(`PageNavigation`)。サインイン、サインアップが使う。遷移元の読み出しの約束(`ReturnToReader`)は使い手がサインインだけのため、`application/sign-in.ts`に置く。
 - `src/features/auth/application/screen-view.ts`: 手続きが画面に頼む約束。開始の命令の適用(`begin`)、事実の送信、出来事を送った直後の最新の状態を返す契約をここに書く。
 - `src/components/turnstile.tsx`: Turnstileの共通部品。`interaction-only`で描画し、操作が必要な間だけ領域を出し、それ以外は畳む。未完了のエラー文言も表示する。サイトキー(環境変数`NEXT_PUBLIC_TURNSTILE_SITE_KEY`)は自分で読む。
 - `src/components/auth-header.tsx`: 認証画面の見出し。

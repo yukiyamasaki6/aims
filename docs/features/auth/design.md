@@ -29,7 +29,7 @@
 | 画面から送る事実 | 過去形の出来事。reducerは`<操作>Reducer` | `captchaChecked`、`failed` |
 | 認証サービスの状態変化 | `AuthChange`(ドメイン)、`AuthChanges`(約束)。他の機能へ公開する平らな値の通知は`SignInChange`、`SignInChanges`(約束) | |
 | 認証サービスに頼む約束 | `<手続き>Authenticator` | `SignInAuthenticator`、`SessionAuthenticator` |
-| 手続きの依存の引数名 | 約束の型名の先頭を小文字にした名前 | `navigation`、`pageLoad`、`pageReplace` |
+| 手続きの依存の引数名 | 約束の型名の先頭を小文字にした名前 | `pageNavigation`、`returnToReader`、`pageLoad`、`pageReplace` |
 | 「セッション」を含む名前 | `Session`(手続き)、`SessionEndFlow`(集約)、`SessionStatus`(分類)、`SessionReading`(読み取り結果)。SDKの`Session`はこのアプリの名前に使わない | |
 | 「届かなかった」 | `unreachable`だけ。「拒否された」は`refused` | |
 
@@ -78,7 +78,7 @@
 ## 約束の例外の契約
 
 投げない: 認証サービスへの頼みごと(`CallResult`で返す)、サインインの状態の読み取り、端末の識別情報の書き込み、画面の約束、通信の可否。
-投げることがある: `Navigation`、`PageLoad`(手続きが通信エラーの失敗として扱う)、`RegistrationLookup`(届かなかった失敗として扱う)、`PasswordChange`(通信エラーの失敗として扱う)、`PageReplace.replace`(見張りもサインアウトも扱わない。以後の遷移も行わない)、`AuthChanges.subscribe`と`SignInChanges.subscribe`(どちらも接続を得られないとき同期に投げる。手続きは扱わない)。
+投げることがある: `PageNavigation`、`ReturnToReader`、`PageLoad`(手続きが通信エラーの失敗として扱う)、`RegistrationLookup`(届かなかった失敗として扱う)、`PasswordChange`(通信エラーの失敗として扱う)、`PageReplace.replace`(見張りもサインアウトも扱わない。以後の遷移も行わない)、`AuthChanges.subscribe`と`SignInChanges.subscribe`(どちらも接続を得られないとき同期に投げる。手続きは扱わない)。
 
 ## 設計判断
 

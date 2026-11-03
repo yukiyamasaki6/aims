@@ -3,10 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createSignIn } from "@/features/auth/application/sign-in";
-import { createBrowserNavigation } from "@/features/auth/infrastructure/browser-navigation";
+import { createBrowserReturnTo } from "@/features/auth/infrastructure/browser-return-to";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SignInForm } from "@/features/auth/ui/signin-form";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
+import { createRouterPageNavigation } from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 
 export default function SignInPage() {
@@ -15,7 +16,8 @@ export default function SignInPage() {
   const [signIn] = useState(() =>
     createSignIn({
       authenticator: createSupabaseAuth(createClient),
-      navigation: createBrowserNavigation(router),
+      pageNavigation: createRouterPageNavigation(router),
+      returnToReader: createBrowserReturnTo(),
       protectedPath: ROUNDS_PATH,
     }),
   );

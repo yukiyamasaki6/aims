@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
+import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import { FALLBACK_WAIT_MS } from "../domain/fetch-result";
 import type { Preset } from "../domain/preset";
 import { roundPath } from "../domain/round-routes";
 import { roundCreatedDraftOf } from "../domain/round-start";
 import { roundStreamId } from "../domain/sync-events";
-import { createFakeNavigation } from "./fake-navigation-test-helpers";
 import { createFakeSignInReader } from "./fake-sign-in-reader-test-helpers";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 import type { SignInReader } from "./sign-in-reader";
@@ -77,7 +77,7 @@ function setup(
     }
     calls.push("append:done");
   });
-  const { navigation, go } = createFakeNavigation({
+  const { pageNavigation, go } = createFakePageNavigation({
     log: calls,
     onGo: options.go,
   });
@@ -87,7 +87,7 @@ function setup(
     signIn,
     ids,
     clock,
-    navigation,
+    pageNavigation,
   });
   return {
     roundStart,

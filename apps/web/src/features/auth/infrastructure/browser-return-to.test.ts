@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { createBrowserNavigation } from "./browser-navigation";
+import { afterEach, describe, expect, it } from "vitest";
+import { createBrowserReturnTo } from "./browser-return-to";
 
 afterEach(() => {
   window.history.replaceState(null, "", "/");
@@ -13,10 +13,10 @@ describe("ブラウザ遷移の実装", () => {
       "",
       "/signin?returnTo=%2Frounds%2Fnew%3Fa%3D1",
     );
-    const navigation = createBrowserNavigation({ push: vi.fn() });
+    const returnTo = createBrowserReturnTo();
 
     // When
-    const result = navigation.returnTo();
+    const result = returnTo.read();
 
     // Then
     expect(result).toBe("/rounds/new?a=1");
@@ -38,10 +38,10 @@ describe("ブラウザ遷移の実装", () => {
     (_name, search, expected) => {
       // Given
       window.history.replaceState(null, "", `/signin${search}`);
-      const navigation = createBrowserNavigation({ push: vi.fn() });
+      const returnTo = createBrowserReturnTo();
 
       // When
-      const result = navigation.returnTo();
+      const result = returnTo.read();
 
       // Then
       expect(result).toBe(expected);
@@ -51,24 +51,12 @@ describe("ブラウザ遷移の実装", () => {
   it("遷移元がないときはnullを返す", () => {
     // Given
     window.history.replaceState(null, "", "/signin");
-    const navigation = createBrowserNavigation({ push: vi.fn() });
+    const returnTo = createBrowserReturnTo();
 
     // When
-    const result = navigation.returnTo();
+    const result = returnTo.read();
 
     // Then
     expect(result).toBeNull();
-  });
-
-  it("行き先をルーターへ渡す", () => {
-    // Given
-    const push = vi.fn();
-    const navigation = createBrowserNavigation({ push });
-
-    // When
-    navigation.go("/rounds/new");
-
-    // Then
-    expect(push).toHaveBeenCalledExactlyOnceWith("/rounds/new");
   });
 });
