@@ -14,9 +14,9 @@ import {
   type RecordGroup,
   type RecordRow,
   type RoundRecord,
+  replaceInFlight,
   retireItems,
   sameRecordedOperations,
-  setInFlight,
 } from "./round-record";
 import type { SyncOperation } from "./sync-events";
 
@@ -276,7 +276,7 @@ describe("adoptGroup", () => {
 
   it("送信中の操作は、組に映らなくても外さない", () => {
     // Given
-    const record = setInFlight(savedRecord(op("a")), ["a"], true);
+    const record = replaceInFlight(savedRecord(op("a")), ["a"]);
 
     // When
     const adopted = adoptGroup(record, group([]), {
@@ -526,7 +526,7 @@ describe("applySendResults", () => {
   });
 });
 
-describe("retireItems と setInFlight", () => {
+describe("retireItems と replaceInFlight", () => {
   it("外した操作は覚え、組に再び現れても足し直さない。外す対象が無ければ記録を変えない", () => {
     // Given
     const [a, b] = [op("a"), op("b")];
@@ -551,13 +551,29 @@ describe("retireItems と setInFlight", () => {
     const options = { readAt: record.persistTick };
 
     // When
-    const marked = setInFlight(record, ["a"], true);
+    const marked = replaceInFlight(record, ["a"]);
     const keptWhileSending = adoptGroup(marked, group([]), options);
-    const unmarked = setInFlight(marked, ["a"], false);
+    const unmarked = replaceInFlight(marked, []);
     const removedAfterSending = adoptGroup(unmarked, group([]), options);
 
     // Then
     expect(ids(keptWhileSending)).toEqual(["a"]);
     expect(ids(removedAfterSending)).toEqual([]);
+  });
+
+  it("印の集合が変わらないときは、同じ記録を返し、変わるときは新しい記録を返す", () => {
+    // Given
+    const record = savedRecord(op("a"));
+    const marked = replaceInFlight(record, ["a"]);
+
+    // When
+    const sameEmpty = replaceInFlight(record, []);
+    const sameMarked = replaceInFlight(marked, ["a"]);
+    const changed = replaceInFlight(marked, []);
+
+    // Then
+    expect(sameEmpty).toBe(record);
+    expect(sameMarked).toBe(marked);
+    expect(changed).not.toBe(marked);
   });
 });

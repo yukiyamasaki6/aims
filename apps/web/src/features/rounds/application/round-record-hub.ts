@@ -18,8 +18,8 @@ import {
   type RecordGroup,
   type RecordSendResult,
   type RoundRecord,
+  replaceInFlight,
   retireItems,
-  setInFlight,
 } from "../domain/round-record";
 import type { SyncOperation } from "../domain/sync-events";
 
@@ -391,13 +391,12 @@ export function createRoundRecordHub(deps: {
         markWriteFailed(streamId, target);
       });
     },
-    setInFlight(
-      streamId: string,
-      eventIds: readonly string[],
-      inFlight: boolean,
-    ) {
-      const current = record(streamId);
-      records.set(streamId, setInFlight(current, eventIds, inFlight));
+    // 送信中の印を、このタブの要求が持つ操作の集合に置き換える。記録が無い列と、集合が変わらない列では、何も書かない。
+    replaceInFlight(streamId: string, eventIds: readonly string[]) {
+      const current = records.get(streamId);
+      if (!current) return;
+      const next = replaceInFlight(current, eventIds);
+      if (next !== current) records.set(streamId, next);
     },
     divergedStreams: (): ReadonlySet<string> => diverged,
     // 取り直しを始める時点で、効かなかった結果の印を消す。取り直しの途中に届いた次の印は残り、完了後にもう1度取り直す。

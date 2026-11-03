@@ -32,7 +32,7 @@ export type SendReport =
 
 // 操作の送信と、確定の記録。
 export function createOperationSending(deps: {
-  hub: RoundRecordHub;
+  hub: Pick<RoundRecordHub, "record" | "generation" | "applySendResults">;
   transport: RoundTransport;
 }) {
   const { hub, transport } = deps;

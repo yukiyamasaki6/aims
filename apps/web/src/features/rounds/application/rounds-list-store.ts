@@ -30,9 +30,9 @@ export type RoundsListStore = {
 };
 
 type Deps = {
-  hub: RoundRecordHub;
-  requests: RefreshRequests;
-  fetching: RoundFetching;
+  hub: Pick<RoundRecordHub, "commit" | "generation" | "readList" | "userId">;
+  requests: Pick<RefreshRequests, "requestAll" | "allowCommit">;
+  fetching: Pick<RoundFetching, "fetchRoundsList" | "savedTargetFaces">;
   clock: Clock;
   connectivity: Connectivity;
   deletion: RoundDeletion;
@@ -43,7 +43,7 @@ const ERROR_RESULT = {
   message: FETCH_ERROR_MESSAGE,
 } as const;
 
-async function readSnapshots(hub: RoundRecordHub) {
+async function readSnapshots(hub: Pick<RoundRecordHub, "readList">) {
   try {
     const all = await hub.readList();
     // 列のIDをラウンドIDに写す。ラウンドの列でないものは除く。

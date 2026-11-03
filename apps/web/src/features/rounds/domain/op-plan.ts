@@ -1,14 +1,15 @@
 import type { PlanItem, PlannedFlight } from "./send-queue";
+import type { SyncOperation } from "./sync-events";
 
-// 計画が問う、操作の関係。操作の意味はラウンドが持ち、同期は操作のIDで問う。
+// 計画が問う、操作の関係。操作の意味はラウンドが持ち、計画は操作そのもので問う。
 export type OpPlanPorts = {
   // 前の操作と後の操作が、適用順で結果が変わる、または検証が順序に依存するとき真。
-  conflicts: (previousEventId: string, nextEventId: string) => boolean;
+  conflicts: (previous: SyncOperation, next: SyncOperation) => boolean;
   // 1つの要求にまとめてよいlaneと、その上限。無ければ1件だけの要求にする。
   batchLimitOf: (lane: string) => number;
 };
 
-// 衝突する前の操作が`acked`か、すでに同じ要求に入っているときだけ、操作を要求へ入れてよい。
+// 衝突する前の操作が、すでに同じ要求に入っているときだけ、操作を要求へ入れてよい。確定済みの操作は計画の入力に無い。
 function isBlocked(
   items: readonly PlanItem[],
   index: number,
@@ -18,9 +19,8 @@ function isBlocked(
   const next = items[index];
   for (let i = 0; i < index; i++) {
     const previous = items[i];
-    if (previous.status === "acked") continue;
     if (chosen.has(previous.eventId)) continue;
-    if (ports.conflicts(previous.eventId, next.eventId)) return true;
+    if (ports.conflicts(previous.operation, next.operation)) return true;
   }
   return false;
 }

@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import { roundStreamId } from "@/features/rounds/application/../domain/sync-events";
-import type { SendOutcome } from "@/features/rounds/application/operation-sending";
-import {
-  appliedOutcome,
-  createMemoryRoundStore,
-} from "@/features/rounds/application/round-record-test-helpers";
 import {
   roundUpdated,
   shotCleared,
   shotRecorded,
-} from "@/features/rounds/domain/round-op-test-helpers";
+} from "../domain/round-op-test-helpers";
+import { roundStreamId } from "../domain/sync-events";
 import { createSenderRig, flush } from "./op-sender-test-helpers";
+import type { SendOutcome } from "./operation-sending";
+import {
+  appliedOutcome,
+  createMemoryRoundStore,
+} from "./round-record-test-helpers";
 
 const STREAM = roundStreamId("round-1");
 
@@ -146,14 +146,14 @@ describe("送信の順序", () => {
     await rig.hub.append(STREAM, shot("a", 1));
     await flush();
     await respond(rig, 0, appliedOutcome(1));
-    rig.session.reading = { status: "unauthenticated" };
+    rig.signIn.reading = { status: "unauthenticated", message: "未認証" };
 
     // When
     await rig.hub.append(STREAM, shot("b", 2));
     await flush();
 
     // Then
-    expect(rig.session.readSession).toHaveBeenCalledTimes(2);
+    expect(rig.signIn.read).toHaveBeenCalledTimes(2);
     expect(sentIds(rig)).toEqual([["a"]]);
   });
 
@@ -189,32 +189,85 @@ describe("送信の順序", () => {
   });
 });
 
+describe("送る候補と衝突の判定", () => {
+  it("確定済みの操作は送らず、確定していない操作だけを送る", async () => {
+    // Given
+    const rig = createSenderRig();
+    await rig.hub.ready();
+    await rig.hub.append(STREAM, roundUpdated({ eventId: "confirmed" }));
+    rig.hub.applySendResults(
+      STREAM,
+      ["confirmed"],
+      [{ revision: 1, applied: true, appliedFields: null, rejectedFields: [] }],
+    );
+    await rig.hub.append(STREAM, shotRecorded({ eventId: "shot" }));
+
+    // When
+    rig.sender.start();
+    await flush();
+
+    // Then
+    expect(sentIds(rig)).toEqual([["shot"]]);
+  });
+
+  it("同じ矢の記録と取り消しは衝突として、記録の送信が終わるまで取り消しを送らない", async () => {
+    // Given
+    const rig = await started();
+    await rig.hub.append(STREAM, shotRecorded({ eventId: "rec" }));
+    await rig.hub.append(STREAM, shotCleared({ eventId: "clr" }));
+    await flush();
+    const whileSending = sentIds(rig);
+
+    // When
+    await respond(rig, 0, appliedOutcome(1));
+
+    // Then
+    expect(whileSending).toEqual([["rec"]]);
+    expect(sentIds(rig)).toEqual([["rec"], ["clr"]]);
+  });
+
+  it("記録が変わった後に追記した操作も、送信中の操作との衝突を判定する", async () => {
+    // Given
+    const rig = await started();
+    await rig.hub.append(STREAM, shotRecorded({ eventId: "rec" }));
+    await rig.hub.append(STREAM, shotCleared({ eventId: "clr" }));
+    await flush();
+
+    // When
+    await rig.hub.append(STREAM, shotCleared({ eventId: "clr2" }));
+    await flush();
+
+    // Then
+    expect(sentIds(rig)).toEqual([["rec"]]);
+  });
+});
+
 describe("記録が返す平らな失敗", () => {
-  type Report = Awaited<ReturnType<Rig["records"]["send"]>>;
+  type Report = Awaited<ReturnType<Rig["sending"]["send"]>>;
   type Row = [string, Report | Error, "破棄" | "再送"];
   const rows: Row[] = [
     [
       "rpc 403 PT403",
-      { ok: false, cause: "rpc", status: 403, code: "PT403" },
+      { ok: false, cause: { type: "rpc", status: 403, code: "PT403" } },
       "破棄",
     ],
     [
       "rpc 422 PT422",
-      { ok: false, cause: "rpc", status: 422, code: "PT422" },
+      { ok: false, cause: { type: "rpc", status: 422, code: "PT422" } },
       "破棄",
     ],
     [
       "rpc 500 XX000",
-      { ok: false, cause: "rpc", status: 500, code: "XX000" },
+      { ok: false, cause: { type: "rpc", status: 500, code: "XX000" } },
       "再送",
     ],
     [
       "rpc 404 PGRST202",
-      { ok: false, cause: "rpc", status: 404, code: "PGRST202" },
+      { ok: false, cause: { type: "rpc", status: 404, code: "PGRST202" } },
       "再送",
     ],
-    ["rpc 状態もコードも無い", { ok: false, cause: "rpc" }, "再送"],
-    ["exception", { ok: false, cause: "exception" }, "再送"],
+    ["rpc 状態もコードも無い", { ok: false, cause: { type: "rpc" } }, "再送"],
+    ["exception", { ok: false, cause: { type: "exception" } }, "再送"],
     ["sendが例外を投げる", new Error("boom"), "再送"],
   ];
 
@@ -224,7 +277,7 @@ describe("記録が返す平らな失敗", () => {
       // Given
       const rig = await started();
       const send = vi
-        .spyOn(rig.records, "send")
+        .spyOn(rig.sending, "send")
         .mockImplementation(async () => {
           if (returned instanceof Error) throw returned;
           return returned;
@@ -431,14 +484,16 @@ describe("失敗の扱い", () => {
 describe("サインインの状態", () => {
   it("未認証なら送らずに保留し、衝突する後続も止める。サインインし直して再開すると送る", async () => {
     // Given
-    const rig = await started({ reading: { status: "unauthenticated" } });
+    const rig = await started({
+      reading: { status: "unauthenticated", message: "未認証" },
+    });
     await rig.hub.append(STREAM, shot("a", 1));
     await rig.hub.append(STREAM, shot("follower", 1));
     await flush();
     const whileHeld = rig.sent.length;
 
     // When
-    rig.session.reading = { status: "authenticated", userId: "user-1" };
+    rig.signIn.reading = { status: "authenticated", userId: "user-1" };
     rig.sender.resumeHeld();
     await flush();
 
@@ -449,10 +504,12 @@ describe("サインインの状態", () => {
 
   it("サインインの状態が不明(通信失敗)なら送らずに再試行し、確認できるようになると送る", async () => {
     // Given
-    const rig = await started({ reading: { status: "unknown" } });
+    const rig = await started({
+      reading: { status: "unknown", message: "確認できない" },
+    });
     await rig.hub.append(STREAM, shot("a"));
     await flush();
-    rig.session.reading = { status: "authenticated", userId: "user-1" };
+    rig.signIn.reading = { status: "authenticated", userId: "user-1" };
 
     // When
     await rig.clock.advanceAsync(3000);
@@ -496,7 +553,7 @@ describe("保存の読み込みの待ち", () => {
     await rig.hub.append(STREAM, shot("a"));
     const first = Promise.withResolvers<void>();
     const second = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "ready")
+    vi.spyOn(rig.hub, "ready")
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     rig.sender.start();
@@ -504,7 +561,7 @@ describe("保存の読み込みの待ち", () => {
     rig.sender.stop();
     rig.sender.start();
     await flush();
-    const outbox = vi.spyOn(rig.records, "outbox");
+    const outbox = vi.spyOn(rig.hub, "record");
 
     // When
     first.resolve();
@@ -551,12 +608,12 @@ describe("保存の読み込みの待ち", () => {
     // Given
     const { rig, kinds } = await reloadingRig(true);
     const reload = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "ready").mockReturnValueOnce(reload.promise);
+    vi.spyOn(rig.hub, "ready").mockReturnValueOnce(reload.promise);
     rig.sender.start();
     await flush();
 
     // When
-    rig.sender.online();
+    rig.connectivity.goOnline();
     await rig.hub.append(STREAM, shot("later", 3));
     await rig.hub.reloadAll();
     await flush();
@@ -574,7 +631,7 @@ describe("保存の読み込みの待ち", () => {
     // Given
     const { rig } = await reloadingRig(false);
     const reload = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "ready").mockReturnValueOnce(reload.promise);
+    vi.spyOn(rig.hub, "ready").mockReturnValueOnce(reload.promise);
     rig.sender.start();
     await flush();
 
@@ -582,7 +639,7 @@ describe("保存の読み込みの待ち", () => {
     rig.sender.stop();
     reload.resolve();
     await flush();
-    rig.sender.online();
+    rig.connectivity.goOnline();
     await flush();
 
     // Then
@@ -594,7 +651,7 @@ describe("保存の読み込みの待ち", () => {
     const { rig, kinds } = await reloadingRig(false);
     const first = Promise.withResolvers<void>();
     const second = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "ready")
+    vi.spyOn(rig.hub, "ready")
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     rig.sender.start();
@@ -606,7 +663,7 @@ describe("保存の読み込みの待ち", () => {
     // When
     first.resolve();
     await flush();
-    rig.sender.online();
+    rig.connectivity.goOnline();
     await rig.hub.reloadAll();
     await rig.hub.append(STREAM, shot("later", 3));
     await flush();
@@ -624,7 +681,9 @@ describe("保存の読み込みの待ち", () => {
 describe("利用者の切り替え", () => {
   it("利用者を替えると、前の利用者の保留の操作を送らず、保存したまま残す", async () => {
     // Given
-    const rig = await started({ reading: { status: "unauthenticated" } });
+    const rig = await started({
+      reading: { status: "unauthenticated", message: "未認証" },
+    });
     await rig.hub.append(STREAM, shot("a"));
     await flush();
 
@@ -632,7 +691,7 @@ describe("利用者の切り替え", () => {
     rig.sender.reset();
     rig.hub.setUser("user-2");
     await rig.hub.ready();
-    rig.session.reading = { status: "authenticated", userId: "user-2" };
+    rig.signIn.reading = { status: "authenticated", userId: "user-2" };
     rig.sender.resumeHeld();
     await flush();
 
@@ -669,7 +728,6 @@ describe("通信の可否", () => {
 
     // When
     rig.connectivity.goOnline();
-    rig.sender.online();
     await flush();
 
     // Then
@@ -686,11 +744,160 @@ describe("通信の可否", () => {
     await rig.clock.advanceAsync(1000);
 
     // When
-    rig.sender.online();
+    rig.connectivity.goOnline();
     await flush();
 
     // Then
     expect(sentIds(rig)).toEqual([["a"], ["a"]]);
+  });
+
+  it("通信の復帰の購読は、起動で1つ、停止で解除し、再起動しても重ならない", async () => {
+    // Given
+    const rig = createSenderRig();
+    const initial = rig.connectivity.subscribers().online;
+
+    // When
+    rig.sender.start();
+    const started = rig.connectivity.subscribers().online;
+    rig.sender.stop();
+    const stopped = rig.connectivity.subscribers().online;
+    rig.sender.start();
+    rig.sender.start();
+    const restarted = rig.connectivity.subscribers().online;
+
+    // Then
+    expect([initial, started, stopped, restarted]).toEqual([0, 1, 0, 1]);
+  });
+});
+
+describe("送信中の印", () => {
+  const marked = (rig: Rig) => [...rig.hub.record(STREAM).inFlight];
+
+  it("要求を始めると印が付き、成功すると外れる", async () => {
+    // Given
+    const rig = await started();
+    await rig.hub.append(STREAM, shot("a"));
+    await flush();
+    const whileSending = marked(rig);
+
+    // When
+    await respond(rig, 0, appliedOutcome(1));
+
+    // Then
+    expect(whileSending).toEqual(["a"]);
+    expect(marked(rig)).toEqual([]);
+  });
+
+  it("再試行する失敗の間は印が残り、破棄する失敗と未認証の保留では外れる", async () => {
+    // Given
+    const retrying = await started();
+    await retrying.hub.append(STREAM, shot("a"));
+    await flush();
+    const discarding = await started();
+    await discarding.hub.append(STREAM, shot("a"));
+    await flush();
+    const holding = await started({
+      reading: { status: "unauthenticated", message: "未認証" },
+    });
+
+    // When
+    await respond(retrying, 0, rpcFailure(500));
+    await respond(discarding, 0, rpcFailure(403, "PT403"));
+    await holding.hub.append(STREAM, shot("a"));
+    await flush();
+
+    // Then
+    expect(marked(retrying)).toEqual(["a"]);
+    expect(marked(discarding)).toEqual([]);
+    expect(marked(holding)).toEqual([]);
+  });
+
+  it("サインインし直して保留を戻すと、再び送るときに印が付き直る", async () => {
+    // Given
+    const rig = await started({
+      reading: { status: "unauthenticated", message: "未認証" },
+    });
+    await rig.hub.append(STREAM, shot("a"));
+    await flush();
+    const whileHeld = marked(rig);
+    rig.signIn.reading = { status: "authenticated", userId: "user-1" };
+
+    // When
+    rig.sender.resumeHeld();
+    await flush();
+
+    // Then
+    expect(whileHeld).toEqual([]);
+    expect(marked(rig)).toEqual(["a"]);
+  });
+
+  it("通信の復帰の前後で、リトライ待機の印は保たれる", async () => {
+    // Given
+    const rig = await started();
+    await rig.hub.append(STREAM, shot("a"));
+    await flush();
+    await respond(rig, 0, rpcFailure(500));
+    const beforeOnline = marked(rig);
+
+    // When
+    rig.connectivity.goOnline();
+    await flush();
+
+    // Then
+    expect(beforeOnline).toEqual(["a"]);
+    expect(marked(rig)).toEqual(["a"]);
+    expect(rig.sent).toHaveLength(2);
+  });
+
+  it("記録から外れた操作の印は、列の状態から外れるのと同時に消える", async () => {
+    // Given
+    const rig = await started();
+    await rig.hub.append(STREAM, shot("a"));
+    await flush();
+    await respond(rig, 0, rpcFailure(500));
+
+    // When
+    await rig.hub.discard(STREAM, ["a"]);
+    await flush();
+
+    // Then
+    expect(rig.hub.record(STREAM).items).toEqual([]);
+    expect(marked(rig)).toEqual([]);
+  });
+
+  it("利用者を替えるときに送信の状態を捨てると、記録を替える前に印が外れる", async () => {
+    // Given
+    const rig = await started();
+    await rig.hub.append(STREAM, shot("a"));
+    await flush();
+    const whileSending = marked(rig);
+
+    // When
+    rig.sender.reset();
+
+    // Then
+    expect(whileSending).toEqual(["a"]);
+    expect(marked(rig)).toEqual([]);
+  });
+
+  it("停止すると、全ての列の印が外れる", async () => {
+    // Given
+    const rig = await started();
+    await rig.hub.append(STREAM, shot("a"));
+    await rig.hub.append(roundStreamId("round-2"), shot("b"));
+    await flush();
+    const whileSending = [
+      ...rig.hub.record(STREAM).inFlight,
+      ...rig.hub.record(roundStreamId("round-2")).inFlight,
+    ];
+
+    // When
+    rig.sender.stop();
+
+    // Then
+    expect(whileSending.sort()).toEqual(["a", "b"]);
+    expect(marked(rig)).toEqual([]);
+    expect([...rig.hub.record(roundStreamId("round-2")).inFlight]).toEqual([]);
   });
 });
 

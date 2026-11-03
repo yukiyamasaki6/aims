@@ -1,17 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SessionReader } from "@/features/auth";
-import type { RoundReconciliation } from "@/features/rounds";
+import type {
+  RoundRecordControl,
+  RoundRefreshControl,
+} from "@/features/rounds";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import type { RefreshReason } from "../domain/sync-trigger";
-import type { OpSender } from "./op-sender";
-import { flush } from "./op-sender-test-helpers";
 import { createRoundSync } from "./round-sync";
 
-type Needs = ReturnType<RoundReconciliation["refreshNeeds"]>;
+type Needs = ReturnType<RoundRefreshControl["refreshNeeds"]>;
+type RefreshReason = Needs["rounds"][number]["reason"];
+
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 type Reading = Awaited<ReturnType<SessionReader["readSession"]>>;
 
-// 同期の手続きは、いつ取得して反映し、いつ取り直すかを決める。記録、送信器、サインインの確認、時計、通信の可否は約束で差し替える。
+// 同期の手続きは、いつ取得して反映し、いつ取り直すかを決める。記録の制御、取り直しの制御、サインインの確認、時計、通信の可否は約束で差し替える。
 function setup(
   options: { reading?: Reading; match?: "same" | "other" | "unowned" } = {},
 ) {
@@ -35,11 +38,19 @@ function setup(
   const state = {
     match: options.match ?? ("same" as "same" | "other" | "unowned"),
   };
-  const records = {
-    start: vi.fn(),
-    stop: vi.fn(),
-    setUser: vi.fn(),
+  // 制御の窓口と取り直しの窓口の呼び出しを、1つの並びへ名前で積む。順序を確かめるため。
+  const calls: string[] = [];
+  const control = {
+    start: vi.fn((_userId: string | null) => {
+      calls.push("control.start");
+    }),
+    stop: vi.fn(() => {
+      calls.push("control.stop");
+    }),
     matchUser: vi.fn(() => state.match),
+    signInChanged: vi.fn(),
+  } satisfies RoundRecordControl;
+  const refresh = {
     refreshNeeds: () => needs.current,
     onRefreshNeeds: vi.fn((listener: () => void) => {
       notifyNeeds = listener;
@@ -49,14 +60,10 @@ function setup(
     }),
     refreshAll,
     refreshRound,
-  } as unknown as RoundReconciliation;
-  const sender = {
-    start: vi.fn(),
-    stop: vi.fn(),
-    reset: vi.fn(),
-    resumeHeld: vi.fn(),
-    online: vi.fn(),
-  } satisfies OpSender;
+    reset: vi.fn(() => {
+      calls.push("refresh.reset");
+    }),
+  } satisfies RoundRefreshControl;
   const session: Pick<SessionReader, "readSession"> & { reading: Reading } = {
     reading:
       options.reading ??
@@ -64,8 +71,8 @@ function setup(
     readSession: vi.fn(async (): Promise<Reading> => session.reading),
   };
   const sync = createRoundSync({
-    records,
-    sender: sender as unknown as OpSender,
+    control,
+    refresh,
     session,
     clock,
     connectivity,
@@ -78,8 +85,9 @@ function setup(
     network,
     needs,
     state,
-    records,
-    sender,
+    control,
+    refresh,
+    calls,
     session,
     refreshAll,
     refreshRound,
@@ -117,7 +125,7 @@ const roundNeedWith = (
 ) => roundNeed(roundId, reasons[0], openRequest, reasons);
 
 describe("開始と停止", () => {
-  it("開始で記録と送信器を始め、2回目の開始は何もしない。停止で購読と時計を止め、送信器と記録を止める", async () => {
+  it("開始で記録の制御を始め、2回目の開始は何もしない。停止で購読と時計を止め、記録の制御を止めて取り直しの依頼を初期化する", async () => {
     // Given
     const t = setup();
     t.sync.start("user-1");
@@ -127,27 +135,33 @@ describe("開始と停止", () => {
     t.sync.stop();
 
     // Then
-    expect(t.records.start).toHaveBeenCalledExactlyOnceWith("user-1");
-    expect(t.sender.start).toHaveBeenCalledTimes(1);
-    expect(t.sender.stop).toHaveBeenCalledTimes(1);
-    expect(t.records.stop).toHaveBeenCalledTimes(1);
+    expect(t.control.start).toHaveBeenCalledExactlyOnceWith("user-1");
+    expect(t.control.stop).toHaveBeenCalledTimes(1);
+    expect(t.refresh.reset).toHaveBeenCalledTimes(1);
   });
 
-  it("利用者の切り替えは送信の状態を捨てて記録の利用者を替え、再開は保留を戻し、通信の復帰は送信器へ伝える", () => {
+  it("停止は、記録の制御を止めた後に取り直しの依頼を初期化する", () => {
     // Given
     const t = setup();
+    t.sync.start("user-1");
 
     // When
-    t.sync.switchUser("user-2");
-    t.sync.resume();
-    t.sync.online();
+    t.sync.stop();
 
     // Then
-    expect(t.sender.reset).toHaveBeenCalledTimes(1);
-    expect(t.records.setUser).toHaveBeenCalledWith("user-2");
-    expect(t.sender.resumeHeld).toHaveBeenCalledTimes(1);
-    expect(t.sender.online).toHaveBeenCalledTimes(1);
-    expect(t.sync.matchUser("user-1")).toBe("same");
+    expect(t.calls).toEqual(["control.start", "control.stop", "refresh.reset"]);
+  });
+
+  it("サインインの変化は、そのまま記録の制御へ渡す", () => {
+    // Given
+    const t = setup();
+    const change = { kind: "signed-in", userId: "user-2" } as const;
+
+    // When
+    t.sync.signInChanged(change);
+
+    // Then
+    expect(t.control.signInChanged).toHaveBeenCalledExactlyOnceWith(change);
   });
 });
 

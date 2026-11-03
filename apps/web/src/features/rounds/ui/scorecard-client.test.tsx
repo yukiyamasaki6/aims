@@ -15,7 +15,6 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RootClientEntry } from "@/app/root-client-entry";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
-import { retryDelayMs } from "@/features/round-sync/domain/sync-failure";
 import type { RoundDetailStore } from "@/features/rounds/application/round-detail-store";
 import type { RoundConfig } from "@/features/rounds/domain/round-config";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
@@ -28,6 +27,7 @@ import {
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { useRoundDetailStore } from "@/features/rounds/ui/rounds-context";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
+import { retryDelayMs } from "../domain/sync-failure";
 import { ScorecardClient } from "./scorecard-client";
 
 // 更新の案内は別のテストで確かめるため、何も描かない代役に差し替える(起動地点のRootClientEntryが描く)。

@@ -1,5 +1,8 @@
 import type { SessionReader } from "@/features/auth";
-import type { RoundReconciliation } from "@/features/rounds";
+import type {
+  RoundRecordControl,
+  RoundRefreshControl,
+} from "@/features/rounds";
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import {
@@ -8,13 +11,17 @@ import {
   type FlightGate,
   IDLE_GATE,
 } from "../domain/flight-gate";
-import { retryDelayMs } from "../domain/sync-failure";
 import {
-  type RefreshReason,
   refreshDecision,
+  type SignInChange,
   shouldRefetch,
 } from "../domain/sync-trigger";
-import type { OpSender } from "./op-sender";
+import { createStaleClock } from "./stale-clock";
+
+// 取り直しの理由。取り直しの制御が返す理由の型から導く。
+type RefreshReason = ReturnType<
+  RoundRefreshControl["refreshNeeds"]
+>["rounds"][number]["reason"];
 
 // ラウンドごとの扉と、完了後にやり直す予約。
 type RoundLane = {
@@ -22,34 +29,24 @@ type RoundLane = {
   reruns: Map<string, RefreshReason>;
 };
 
+// `shouldRefetch`へ渡す、開く依頼ではない理由(diverged、overlay)の印。
+const NOT_OPEN_REQUEST = false;
+
 export type RoundSync = ReturnType<typeof createRoundSync>;
 
-// いつ送り、いつ取り直すかを決める唯一の手続き。契機(認証の通知、通信の復帰と切断、見える状態)と、画面の依頼を受けて、送信器と、ベースの取得と反映を動かす。
+// いつ送り、いつ取り直すかを決める唯一の手続き。契機(認証の通知、通信の復帰と切断、見える状態)と、画面の依頼を受けて、記録の制御と取り直しの制御を動かす。
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createRoundSync(deps: {
-  records: Pick<
-    RoundReconciliation,
-    | "start"
-    | "stop"
-    | "setUser"
-    | "matchUser"
-    | "refreshNeeds"
-    | "onRefreshNeeds"
-    | "refreshAll"
-    | "refreshRound"
-  >;
-  sender: OpSender;
+  control: RoundRecordControl;
+  refresh: RoundRefreshControl;
   session: Pick<SessionReader, "readSession">;
   clock: Clock;
   connectivity: Connectivity;
 }) {
-  const { records, sender, session, clock, connectivity } = deps;
+  const { control, refresh, session, clock, connectivity } = deps;
   let active = false;
   // 開始と停止のたびに進める。停止をまたぐ古い処理が、新しい状態を変えないため。
   let epoch = 0;
-  let staleSeq = 0;
-  // 端末のベースの取り直しの時計ごとの印。時計を作り直した(閉じた、開き直した)とき、古い処理の続きを捨てるため。
-  const staleTokens = new Map<string, number>();
   // 同時に1回までの扉は、常駐の一括の取得と、ラウンドごとの取り直しの2種類だけに置く。一覧の一括の取得とラウンドごとの開く依頼は、依頼の番号ごとに扉なしで並行して実行する。
   let residentGate: FlightGate = IDLE_GATE;
   // 最後に実行を始めた一覧の依頼の番号と、ラウンドごとの開く依頼の番号。同じ番号のあいだは、記録の知らせが何度届いても、実行を重ねない。
@@ -58,9 +55,14 @@ export function createRoundSync(deps: {
   let refreshed = 0;
   const refreshedListeners = new Set<(count: number) => void>();
   const refetchLane: RoundLane = { gates: new Map(), reruns: new Map() };
-  // 端末のベースで開いている間の取り直しの、試行の番号と時計。
-  const attempts = new Map<string, number>();
-  const staleTimers = new Map<string, () => void>();
+  // 端末のベースで開いている間の取り直しの時計。
+  const staleClock = createStaleClock({
+    clock,
+    connectivity,
+    isActive: () => active,
+    refetch: (roundId) => refetchRound(roundId, "stale"),
+    stillStale: (roundId) => needOf(roundId)?.reason === "stale",
+  });
   // 前回の見直しで要ると判断した理由。新しく要る(または理由が変わった)ときだけ取り直しを始める。
   const lastReasons = new Map<string, RefreshReason>();
   // 前回の見直しで、主の理由が stale のときに添えられていた diverged と overlay。overlay が新しく当たったかを知るため。
@@ -73,7 +75,7 @@ export function createRoundSync(deps: {
       const reading = await session.readSession();
       return (
         reading.status === "authenticated" &&
-        records.matchUser(reading.userId) === "same"
+        control.matchUser(reading.userId) === "same"
       );
     } catch {
       return false;
@@ -86,7 +88,7 @@ export function createRoundSync(deps: {
     if (epoch !== target) return;
     const decision = refreshDecision({ kind: "resident", residentAllowed });
     if (!decision.fetch) return;
-    const committed = await records.refreshAll({
+    const committed = await refresh.refreshAll({
       waitForList: decision.waitForList,
     });
     // 停止をまたいだ結果は数えない。
@@ -99,9 +101,9 @@ export function createRoundSync(deps: {
   // 一覧の依頼ごとの実行。一覧の依頼があるときだけ、一覧の取得が成功したときに反映する取得を行う。成功の回数は数えない。
   async function listRun() {
     try {
-      if (!records.refreshNeeds().list) return;
+      if (!refresh.refreshNeeds().list) return;
       const decision = refreshDecision({ kind: "list" });
-      await records.refreshAll({ waitForList: decision.waitForList });
+      await refresh.refreshAll({ waitForList: decision.waitForList });
     } catch {
       // 取得の失敗は何もしない(依頼は取得の結果で終わる)。
     }
@@ -110,7 +112,7 @@ export function createRoundSync(deps: {
   // 開く依頼ごとの実行。
   async function openRun(roundId: string) {
     try {
-      await records.refreshRound(roundId);
+      await refresh.refreshRound(roundId);
     } catch {
       // 取得の失敗は何もしない(依頼は取得の結果で終わる)。
     }
@@ -152,7 +154,7 @@ export function createRoundSync(deps: {
   }
 
   function needOf(roundId: string) {
-    return records
+    return refresh
       .refreshNeeds()
       .rounds.find((need) => need.roundId === roundId);
   }
@@ -164,7 +166,8 @@ export function createRoundSync(deps: {
     const need = needOf(roundId);
     if (!active || rerun === undefined || need === undefined) return false;
     return (
-      need.reason !== "open" && shouldRefetch(rerun, connectivity.isOffline())
+      need.reason !== "open" &&
+      shouldRefetch(rerun === "open", connectivity.isOffline())
     );
   }
 
@@ -193,7 +196,7 @@ export function createRoundSync(deps: {
     while (again) {
       lane.reruns.delete(roundId);
       try {
-        await records.refreshRound(roundId);
+        await refresh.refreshRound(roundId);
       } catch {
         // 取得の失敗は何もしない。
       }
@@ -201,31 +204,6 @@ export function createRoundSync(deps: {
       if (epoch !== target) return;
       again = finishRun(roundId);
     }
-  }
-
-  function cancelStale(roundId: string) {
-    staleTimers.get(roundId)?.();
-    staleTimers.delete(roundId);
-  }
-
-  // 端末のベースで開いている間、`navigator.onLine`がtrueのまま通信が戻る場合のために、間隔を置いて取り直す。
-  function scheduleStale(roundId: string) {
-    cancelStale(roundId);
-    if (!active || connectivity.isOffline()) return;
-    staleSeq += 1;
-    const token = staleSeq;
-    staleTokens.set(roundId, token);
-    const cancel = clock.after(retryDelayMs(attempts.get(roundId) ?? 0), () => {
-      staleTimers.delete(roundId);
-      void (async () => {
-        await refetchRound(roundId, "stale");
-        // 取り直しの間に時計を作り直した(閉じた、開き直した)ときは、新しい時計の試行番号を進めない。
-        if (staleTokens.get(roundId) !== token) return;
-        attempts.set(roundId, (attempts.get(roundId) ?? 0) + 1);
-        if (needOf(roundId)?.reason === "stale") scheduleStale(roundId);
-      })();
-    });
-    staleTimers.set(roundId, cancel);
   }
 
   // 開く依頼は、依頼の番号が増えたときだけ、依頼ごとにすぐ実行を始める(取り直しの実行中でも、前の開く依頼の実行中でも並行して始める)。
@@ -269,7 +247,7 @@ export function createRoundSync(deps: {
   ) {
     if (need.reason !== "stale") return;
     if (need.reasons.includes("diverged")) {
-      if (shouldRefetch("diverged", offline)) {
+      if (shouldRefetch(NOT_OPEN_REQUEST, offline)) {
         void refetchRound(need.roundId, "diverged");
       }
       return;
@@ -277,7 +255,7 @@ export function createRoundSync(deps: {
     const isNewOverlay =
       need.reasons.includes("overlay") &&
       !lastExtras.get(need.roundId)?.has("overlay");
-    if (isNewOverlay && shouldRefetch("overlay", offline)) {
+    if (isNewOverlay && shouldRefetch(NOT_OPEN_REQUEST, offline)) {
       void refetchRound(need.roundId, "overlay");
     }
   }
@@ -285,7 +263,7 @@ export function createRoundSync(deps: {
   // 依頼と記録の変化から、取り直しの要否を見直す。
   function evaluate() {
     if (!active) return;
-    const needs = records.refreshNeeds();
+    const needs = refresh.refreshNeeds();
     if (needs.list && needs.listRequest > startedList) {
       startedList = needs.listRequest;
       void listRun();
@@ -304,7 +282,7 @@ export function createRoundSync(deps: {
       lastReasons.set(need.roundId, need.reason);
       lastExtras.set(need.roundId, extrasOf(need));
     }
-    cancelStaleExcept(
+    staleClock.keepOnly(
       new Set(
         needs.rounds
           .filter((need) => need.reason === "stale")
@@ -331,33 +309,19 @@ export function createRoundSync(deps: {
   ) {
     if (need.reason === "open") return;
     if (need.reason === "stale") {
-      if (!staleTimers.has(need.roundId)) scheduleStale(need.roundId);
-    } else if (shouldRefetch(need.reason, offline)) {
+      if (!staleClock.has(need.roundId)) staleClock.schedule(need.roundId);
+    } else if (shouldRefetch(NOT_OPEN_REQUEST, offline)) {
       void refetchRound(need.roundId, need.reason);
-    }
-  }
-
-  // 取り直しが要らなくなったラウンドの時計を止める。
-  function cancelStaleExcept(keep: ReadonlySet<string>) {
-    for (const roundId of new Set([
-      ...staleTimers.keys(),
-      ...attempts.keys(),
-    ])) {
-      if (keep.has(roundId)) continue;
-      // 取り直しが要らなくなった詳細は、時計と試行番号を捨てる(開き直したときは0から数える)。
-      cancelStale(roundId);
-      attempts.delete(roundId);
-      staleTokens.delete(roundId);
     }
   }
 
   // 通信の復帰と見える状態で、端末のベースで開いている詳細の取り直しを、試行を0から数え直して始める。
   function restartStale() {
-    for (const need of records.refreshNeeds().rounds) {
+    for (const need of refresh.refreshNeeds().rounds) {
       if (need.reason !== "stale") continue;
-      attempts.set(need.roundId, 0);
+      staleClock.resetAttempts(need.roundId);
       void refetchRound(need.roundId, "stale");
-      scheduleStale(need.roundId);
+      staleClock.schedule(need.roundId);
     }
   }
 
@@ -366,9 +330,8 @@ export function createRoundSync(deps: {
       if (active) return;
       active = true;
       epoch += 1;
-      records.start(userId);
-      sender.start();
-      stopNeeds = records.onRefreshNeeds(evaluate);
+      control.start(userId);
+      stopNeeds = refresh.onRefreshNeeds(evaluate);
       evaluate();
     },
     stop() {
@@ -376,39 +339,30 @@ export function createRoundSync(deps: {
       epoch += 1;
       stopNeeds?.();
       stopNeeds = undefined;
-      for (const roundId of [...staleTimers.keys()]) cancelStale(roundId);
+      staleClock.dispose();
       residentGate = IDLE_GATE;
       startedList = 0;
       startedOpen.clear();
-      attempts.clear();
-      staleTokens.clear();
       refetchLane.gates.clear();
       refetchLane.reruns.clear();
       lastReasons.clear();
       lastExtras.clear();
-      sender.stop();
-      records.stop();
+      control.stop();
+      refresh.reset();
     },
-    // 利用者を切り替える。送信の状態を捨て、新しい利用者の記録を読み直す。
-    switchUser(userId: string | null) {
-      sender.reset();
-      records.setUser(userId);
-    },
-    matchUser: (userId: string | null) => records.matchUser(userId),
-    // 保留を戻して送る。
-    resume() {
-      sender.resumeHeld();
+    // サインインの変化を、記録の制御へ渡す。反応(利用者の切り替え、保留の再開)はラウンドが決める。
+    signInChanged(change: SignInChange) {
+      control.signInChanged(change);
     },
     refreshAll(_cause: "resident") {
       requestResident();
     },
     online() {
-      sender.online();
       requestResident();
       restartStale();
     },
     offline() {
-      for (const roundId of [...staleTimers.keys()]) cancelStale(roundId);
+      staleClock.pause();
     },
     visible() {
       requestResident();

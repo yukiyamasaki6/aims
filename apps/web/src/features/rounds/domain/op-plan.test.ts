@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { type OpPlanPorts, planFlights } from "./op-plan";
+import { roundUpdated } from "./round-op-test-helpers";
 import type { PlanItem, SendStatus } from "./send-queue";
 
 // 計画の規則(衝突、lane、上限、単独)が検証対象で、操作の中身は問わないため、操作は種類と対象だけで表す。
@@ -23,9 +24,10 @@ const distanceLane = (op: Op) =>
 
 const ports: OpPlanPorts = {
   conflicts: (previous, next) =>
-    operations.get(previous)?.target === operations.get(next)?.target ||
-    operations.get(previous)?.kind === "s" ||
-    operations.get(next)?.kind === "s",
+    operations.get(previous.eventId)?.target ===
+      operations.get(next.eventId)?.target ||
+    operations.get(previous.eventId)?.kind === "s" ||
+    operations.get(next.eventId)?.kind === "s",
   batchLimitOf: (lane) => (lane === "serial" ? 1 : 3),
 };
 
@@ -41,6 +43,7 @@ function itemWith(laneOf: (op: Op) => string) {
     operations.set(eventId, { kind, target });
     return {
       eventId,
+      operation: roundUpdated({ eventId }),
       lane: laneOf({ kind, target }),
       status,
       solo,
@@ -107,18 +110,6 @@ describe("planFlights", () => {
       expect(ids(flights)).toEqual([["3"]]);
     },
   );
-
-  it("前の操作が確定済みなら、後続を止めない", () => {
-    // Given
-    // When
-    const flights = planFlights(
-      [item("1", "b", "x", "acked"), item("2", "a", "x")],
-      ports,
-    );
-
-    // Then
-    expect(ids(flights)).toEqual([["2"]]);
-  });
 
   it("応答待ちの要求があるlaneには新しい要求を出さない", () => {
     // Given
@@ -200,7 +191,8 @@ describe("planFlights", () => {
     // targetの先頭2文字を距離として、"a"は"record:<距離>"、"b"は"clear:<距離>"のlaneにする。
     const perDistance: OpPlanPorts = {
       conflicts: (previous, next) =>
-        operations.get(previous)?.target === operations.get(next)?.target,
+        operations.get(previous.eventId)?.target ===
+        operations.get(next.eventId)?.target,
       batchLimitOf: (lane) => (lane === "serial" ? 1 : 2),
     };
 

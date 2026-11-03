@@ -6,8 +6,8 @@ const MAX_DELAY_MS = 60000;
 // 破棄する失敗のSQLSTATE。認可の拒否と、契約の不一致だけが対象になる。
 const DISCARD_CODES = ["PT403", "PT422"];
 
-// 送信の失敗。再試行するかどうかは`classifyFailure`が判定する。ラウンドが公開する送信の結果の失敗と同じ平らな形である。
-// unauthenticatedとauth-unknownは同期が確認で決める種類、rpcとexceptionは送信の結果の種類。
+// 送信の失敗。再試行するかどうかは`classifyFailure`が判定する。送信の結果の失敗と同じ平らな形である。
+// unauthenticatedとauth-unknownはサインインの確認で決める種類、rpcとexceptionは送信の結果の種類。
 // statusはHTTPステータス(fetchの失敗は0)、codeはSQLSTATEで、rpcのときだけ持つ。
 export type SyncFailure = {
   readonly cause: "unauthenticated" | "auth-unknown" | "rpc" | "exception";

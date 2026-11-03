@@ -1,10 +1,6 @@
 import type { IdentityReader, SignInChanges } from "@/features/auth";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import {
-  reactionTo,
-  type SignInChange,
-  startsRefresh,
-} from "../domain/sync-trigger";
+import { type SignInChange, startsRefresh } from "../domain/sync-trigger";
 import type { RoundSync } from "./round-sync";
 
 // 画面が見える状態になったことの通知。
@@ -28,9 +24,7 @@ export function createSyncTriggers(deps: {
   const { identityReader, changes, visibility, connectivity, sync } = deps;
 
   function handleSignIn(change: SignInChange) {
-    const reaction = reactionTo(change, (id) => sync.matchUser(id));
-    if (reaction.type === "switch-user") sync.switchUser(reaction.userId);
-    if (reaction.type === "resume") sync.resume();
+    sync.signInChanged(change);
     if (startsRefresh(change)) sync.refreshAll("resident");
   }
 

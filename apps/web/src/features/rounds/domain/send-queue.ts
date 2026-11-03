@@ -1,19 +1,22 @@
+import type { SyncOperation } from "./sync-events";
+
 // 1つの列の送信の状態。操作ごとの状態(待ち、送信中、リトライ待機、保留)と、単独にする印、要求を、変更しない値と関数にしたもの。
 // 送れる要求の計画と、送信の失敗の扱いの判定は、呼び出し側が求めて値として渡す。
 
-// 操作の送信の状態。persistingは保存の途中、ackedは確定済み(記録が持つ)。
+// 操作の送信の状態。persistingは保存の途中。確定済みの操作は記録から外れるため、状態を持たない。
 export type SendStatus =
   | "persisting"
   | "queued"
   | "inflight"
   | "backoff"
-  | "held"
-  | "acked";
+  | "held";
 
 // 送信の計画に渡す、列の順に並んだ操作の状態。
 export type PlanItem = {
   eventId: string;
   lane: string;
+  // 衝突の判定に使う、操作そのもの。
+  operation: SyncOperation;
   status: SendStatus;
   // 拒否の切り分けで、単独の要求にする操作。
   solo: boolean;
@@ -65,6 +68,15 @@ export function statusOf(
 ): SendStatus {
   if (!item.saved) return "persisting";
   return queue.states.get(item.eventId)?.status ?? "queued";
+}
+
+// このタブの要求が持つ操作のID(送信中かリトライ待機)。記録の送信中の印は、これを射影して書く。
+export function inFlightEventIds(queue: SendQueue): string[] {
+  return [...queue.states]
+    .filter(
+      ([, state]) => state.status === "inflight" || state.status === "backoff",
+    )
+    .map(([id]) => id);
 }
 
 export function isSolo(queue: SendQueue, eventId: string): boolean {

@@ -136,4 +136,4 @@ Playwrightを使用する。
 
 `Connectivity`で共有の偽物にしない例外は、購読者へ知らせずに状態だけを替える検証と、購読の依頼の回数を数える検証である(`rounds`の`content-fetcher.test.ts`、`round-sync`の`sync-triggers.test.ts`)。
 
-その他の補助は、規則2または3に従う(`lib/local-op-log/memory-op-log-store-test-helpers.ts`、`rounds/domain/round-op-test-helpers.ts`、`rounds/application/round-record-test-helpers.ts`、`rounds/ui/round-stores-test-helpers.ts`、`round-sync/application/op-sender-test-helpers.ts`、`auth/application/screen-view-test-helpers.ts`)。
+その他の補助は、規則2または3に従う(`lib/local-op-log/memory-op-log-store-test-helpers.ts`、`rounds/domain/round-op-test-helpers.ts`、`rounds/application/round-record-test-helpers.ts`、`rounds/ui/round-stores-test-helpers.ts`、`rounds/application/op-sender-test-helpers.ts`、`auth/application/screen-view-test-helpers.ts`)。

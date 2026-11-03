@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import { createRoundSync } from "@/features/round-sync/application/round-sync";
+import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
 import { createFakeUniqueIds } from "@/features/rounds/application/fake-unique-ids-test-helpers";
+import { createOpSender } from "@/features/rounds/application/op-sender";
 import {
   createOperationSending,
   type SendOutcome,
@@ -12,12 +15,13 @@ import type {
   FetchedRoundDetail,
   RoundFetching,
 } from "@/features/rounds/application/round-fetching";
-import { createRoundReconciliation } from "@/features/rounds/application/round-reconciliation";
+import { createRoundRecordControl } from "@/features/rounds/application/round-record-control";
 import {
   appliedOutcome,
   createMemoryRoundStore,
   createTestRoundHub,
 } from "@/features/rounds/application/round-record-test-helpers";
+import { createRoundRefreshControl } from "@/features/rounds/application/round-refresh-control";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
 import type { FetchResult } from "@/features/rounds/domain/fetch-status";
 import {
@@ -27,9 +31,8 @@ import {
 import { roundStreamId } from "@/features/rounds/domain/sync-events";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import { createOpSender } from "./op-sender";
-import { flush } from "./op-sender-test-helpers";
-import { createRoundSync } from "./round-sync";
+
+const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 // 実物の依頼の記録、取得と反映、画面の状態、同期の手続きを接続する。取得(サーバー)、送信、時計だけを差し替える。
 function detail(name: string): FetchedRoundDetail {
@@ -63,31 +66,33 @@ function rig() {
     fetchRoundsList: vi.fn(async () => ({ status: "ok", data: [] }) as const),
     savedTargetFaces: () => null,
   };
-  const reconciliation = createRoundReconciliation({
-    hub,
-    requests,
-    send: createOperationSending({
-      hub,
-      transport: { send: vi.fn(() => new Promise<never>(() => {})) },
-    }),
-    refresh: createRoundBaseRefreshing({
-      hub,
-      requests,
-      fetching: fetching as unknown as RoundFetching,
-    }),
-  });
-  const records = reconciliation;
   const session = {
     readSession: async () =>
       ({ status: "authenticated", userId: "user-1" }) as const,
   };
+  const signIn = {
+    read: async () => ({ status: "authenticated", userId: "user-1" }) as const,
+  };
+  const sender = createOpSender({
+    hub,
+    sending: createOperationSending({
+      hub,
+      transport: { send: vi.fn(() => new Promise<never>(() => {})) },
+    }),
+    signIn,
+    clock,
+    connectivity,
+  });
   const sync = createRoundSync({
-    records,
-    sender: createOpSender({
-      records,
-      session,
-      clock,
-      connectivity,
+    control: createRoundRecordControl({ hub, sender }),
+    refresh: createRoundRefreshControl({
+      hub,
+      requests,
+      refresh: createRoundBaseRefreshing({
+        hub,
+        requests,
+        fetching: fetching as unknown as RoundFetching,
+      }),
     }),
     session,
     clock,
@@ -287,28 +292,14 @@ describe("同じ保存を共有する複数のタブ", () => {
     const { hub } = createTestRoundHub({ store });
     hub.start("user-1");
     await hub.ready();
-    const requests = createRefreshRequests();
     const transport = { send: vi.fn(send) };
-    const records = createRoundReconciliation({
-      hub,
-      requests,
-      send: createOperationSending({ hub, transport }),
-      refresh: createRoundBaseRefreshing({
-        hub,
-        requests,
-        fetching: {
-          fetchRoundDetail: vi.fn(),
-          fetchRoundDetails: vi.fn(),
-        } as unknown as RoundFetching,
-      }),
-    });
-    const session = {
-      readSession: async () =>
-        ({ status: "authenticated", userId: "user-1" }) as const,
-    };
     const sender = createOpSender({
-      records,
-      session,
+      hub,
+      sending: createOperationSending({ hub, transport }),
+      signIn: {
+        read: async () =>
+          ({ status: "authenticated", userId: "user-1" }) as const,
+      },
       clock: createManualClock(1000),
       connectivity: createFakeConnectivity(),
     });
@@ -400,5 +391,128 @@ describe("同じ保存を共有する複数のタブ", () => {
 
     // Then
     expect(sentEventIds(running)).toEqual(["own-op"]);
+  });
+});
+
+describe("通信の回復の購読の順序", () => {
+  // 契機の受け取りまで実物で組む。送信器と同期の契機が同じ通信の偽を購読し、送信と取得の呼び出しを、1つの並びへ名前で積む。
+  async function triggersRig() {
+    const calls: string[] = [];
+    const { hub } = createTestRoundHub();
+    const requests = createRefreshRequests();
+    const clock = createManualClock();
+    const connectivity = createFakeConnectivity();
+    const fetching = {
+      fetchRoundDetail: vi.fn(),
+      fetchRoundDetails: vi.fn(async () => {
+        calls.push("fetch");
+        return {
+          status: "ok",
+          data: { rounds: new Map(), startedAt: 1, userId: "user-1" },
+        } as const;
+      }),
+    };
+    const sends: ((outcome: SendOutcome) => void)[] = [];
+    const transport = {
+      send: vi.fn(
+        () =>
+          new Promise<SendOutcome>((resolve) => {
+            calls.push("send");
+            sends.push(resolve);
+          }),
+      ),
+    };
+    const signIn = {
+      read: async () =>
+        ({ status: "authenticated", userId: "user-1" }) as const,
+    };
+    // 通信の復帰の知らせを受けた直後の同期の処理(購読の順序)を、呼び出しの時点で観測する。
+    const listeners: string[] = [];
+    const session = {
+      readSession: async () => {
+        listeners.push("sync");
+        return { status: "authenticated", userId: "user-1" } as const;
+      },
+    };
+    const replaceInFlight = hub.replaceInFlight.bind(hub);
+    hub.replaceInFlight = (streamId, eventIds) => {
+      listeners.push("sender");
+      replaceInFlight(streamId, eventIds);
+    };
+    const sender = createOpSender({
+      hub,
+      sending: createOperationSending({ hub, transport }),
+      signIn,
+      clock,
+      connectivity,
+    });
+    const sync = createRoundSync({
+      control: createRoundRecordControl({ hub, sender }),
+      refresh: createRoundRefreshControl({
+        hub,
+        requests,
+        refresh: createRoundBaseRefreshing({
+          hub,
+          requests,
+          fetching: fetching as unknown as RoundFetching,
+        }),
+      }),
+      session,
+      clock,
+      connectivity,
+    });
+    const triggers = createSyncTriggers({
+      identityReader: { read: () => "user-1" },
+      changes: { subscribe: () => () => {} },
+      visibility: { onVisible: () => () => {} },
+      connectivity,
+      sync,
+    });
+    return { calls, listeners, hub, connectivity, sends, triggers };
+  }
+
+  it("通信の復帰で、送信器のリトライ待機の再送が、同期の常駐の取得より先に動く", async () => {
+    // Given
+    const t = await triggersRig();
+    t.triggers.start();
+    await t.hub.ready();
+    await t.hub.append(
+      roundStreamId("round-1"),
+      roundUpdated({ eventId: "pending-op" }),
+    );
+    await flush();
+    t.sends[0]({ ok: false, cause: { type: "rpc", status: 500 } });
+    await flush();
+    t.calls.length = 0;
+
+    // When
+    t.connectivity.goOnline();
+    await flush();
+
+    // Then
+    expect(t.calls).toEqual(["send", "fetch"]);
+  });
+
+  it("開始すると、送信器の通信の購読が、同期の契機の購読より先に登録され、復帰の知らせを先に受ける", async () => {
+    // Given
+    const t = await triggersRig();
+    t.triggers.start();
+    await t.hub.ready();
+    await t.hub.append(
+      roundStreamId("round-1"),
+      roundUpdated({ eventId: "pending-op" }),
+    );
+    await flush();
+    t.sends[0]({ ok: false, cause: { type: "rpc", status: 500 } });
+    await flush();
+    t.listeners.length = 0;
+
+    // When
+    t.connectivity.goOnline();
+
+    // Then
+    expect(t.connectivity.subscribers().online).toBe(2);
+    // 送信器は復帰の知らせで列ごとに印を書くため、並びは重複しうる。先に現れる名前の順を見る。
+    expect([...new Set(t.listeners)]).toEqual(["sender", "sync"]);
   });
 });

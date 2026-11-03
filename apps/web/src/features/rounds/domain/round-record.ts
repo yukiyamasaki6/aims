@@ -320,17 +320,16 @@ export function retireItems(
   };
 }
 
-export function setInFlight(
+// 送信中の印を、このタブの要求が持つ操作の集合に置き換える。集合が変わらないときは、同じ値を返す。
+export function replaceInFlight(
   record: RoundRecord,
   eventIds: readonly string[],
-  inFlight: boolean,
 ): RoundRecord {
-  const marks = new Set(record.inFlight);
-  for (const id of eventIds) {
-    if (inFlight) marks.add(id);
-    else marks.delete(id);
-  }
-  return { ...record, inFlight: marks };
+  const marks = new Set(eventIds);
+  const unchanged =
+    marks.size === record.inFlight.size &&
+    [...marks].every((id) => record.inFlight.has(id));
+  return unchanged ? record : { ...record, inFlight: marks };
 }
 
 // 送る候補になる、確定していない操作(列の順)。確定済みの操作は他の操作を止めないため含めない。

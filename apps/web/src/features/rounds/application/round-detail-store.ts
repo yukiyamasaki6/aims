@@ -3,11 +3,11 @@ import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { FetchResult } from "../domain/fetch-status";
 import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
 import type { PresetToSave } from "../domain/preset-save";
+import { localOpening, openPlan } from "../domain/round-opening";
 import {
   type RoundTables,
   roundTablesFromCreated,
 } from "../domain/round-tables";
-import { localOpening, openPlan } from "../domain/round-view";
 import { shotIdAfter } from "../domain/shot-id";
 import { roundStreamId } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
@@ -52,9 +52,15 @@ export type RoundDetailStore = {
 };
 
 type Deps = {
-  hub: RoundRecordHub;
-  requests: RefreshRequests;
-  fetching: RoundFetching;
+  hub: Pick<
+    RoundRecordHub,
+    "adopt" | "read" | keyof Parameters<typeof createRoundHandle>[0]["hub"]
+  >;
+  requests: Pick<
+    RefreshRequests,
+    "open" | keyof Parameters<typeof createRoundHandle>[0]["requests"]
+  >;
+  fetching: Pick<RoundFetching, "fetchTargetFaces" | "savedTargetFaces">;
   clock: Clock;
   connectivity: Connectivity;
   ids: UniqueIds;
@@ -64,7 +70,7 @@ type Deps = {
 };
 
 async function readGroup(
-  hub: RoundRecordHub,
+  hub: Pick<RoundRecordHub, "read">,
   streamId: string,
 ): Promise<RoundStoreGroup> {
   try {

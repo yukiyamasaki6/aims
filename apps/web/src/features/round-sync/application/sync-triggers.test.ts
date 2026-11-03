@@ -8,15 +8,12 @@ import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { RoundSync } from "./round-sync";
 import { createSyncTriggers, type Visibility } from "./sync-triggers";
 
-type Match = "same" | "other" | "unowned";
-
 // 契機の受け取りは、受けた契機を同期の手続きの操作に変える。通知の源、同期の手続きは約束で差し替える。
 function setup(initialUserId: string | null = "user-1") {
   const signIn = new Set<(change: AuthSignInChange) => void>();
   const online = new Set<() => void>();
   const offline = new Set<() => void>();
   const visible = new Set<() => void>();
-  const match = { current: "same" as Match };
   const changes: SignInChanges = {
     subscribe: vi.fn((listener) => {
       signIn.add(listener);
@@ -44,13 +41,11 @@ function setup(initialUserId: string | null = "user-1") {
   const sync = {
     start: vi.fn(),
     stop: vi.fn(),
-    switchUser: vi.fn(),
-    resume: vi.fn(),
+    signInChanged: vi.fn(),
     refreshAll: vi.fn(),
     online: vi.fn(),
     offline: vi.fn(),
     visible: vi.fn(),
-    matchUser: vi.fn(() => match.current),
   };
   const triggers = createSyncTriggers({
     identityReader,
@@ -62,7 +57,6 @@ function setup(initialUserId: string | null = "user-1") {
   return {
     triggers,
     sync,
-    match,
     changes,
     connectivity,
     emitSignIn: (change: AuthSignInChange) => {
@@ -89,71 +83,34 @@ function setup(initialUserId: string | null = "user-1") {
 }
 
 describe("認証の通知", () => {
-  // 通知の種類と照合の結果ごとの反応(要求の表)。反応と、一括の取得を始めるかを、同期の操作で観測する。
+  // 通知の種類ごとに、サインインの変化をそのまま同期へ渡し、一括の取得を始めるかを、同期の操作で観測する。反応の規則はラウンド側が持つ。
   it.each([
-    ["signed-in", "same", "resume", true],
-    ["signed-in", "other", "switchUser", true],
-    ["signed-in", "unowned", "switchUser", true],
-    ["initial", "same", "resume", true],
-    ["initial", "other", "switchUser", true],
-    ["initial", "unowned", "switchUser", true],
-    ["token-refreshed", "same", "resume", false],
-    ["token-refreshed", "other", "switchUser", false],
-    ["token-refreshed", "unowned", "switchUser", false],
+    ["signed-in", "user-9", true],
+    ["initial", "user-9", true],
+    ["token-refreshed", "user-9", false],
+    ["other", "user-9", false],
+    ["signed-out", null, false],
+    ["initial", null, false],
+    ["token-refreshed", null, false],
+    ["other", null, false],
   ] as const)(
-    "利用者のある%sの通知で照合が%sなら、%sに反応し、一括の取得の開始は%sになる",
-    (kind, match, reaction, starts) => {
+    "%sの通知(利用者%s)は、そのまま同期へ渡し、一括の取得の開始は%sになる",
+    (kind, userId, starts) => {
       // Given
       const t = setup();
       t.triggers.start();
-      t.match.current = match;
 
       // When
-      t.emitSignIn({ kind, userId: "user-9" });
+      t.emitSignIn({ kind, userId });
 
       // Then
-      expect(t.sync.resume).toHaveBeenCalledTimes(
-        reaction === "resume" ? 1 : 0,
-      );
-      expect(t.sync.switchUser).toHaveBeenCalledTimes(
-        reaction === "switchUser" ? 1 : 0,
-      );
-      if (reaction === "switchUser") {
-        expect(t.sync.switchUser).toHaveBeenCalledWith("user-9");
-      }
+      expect(t.sync.signInChanged).toHaveBeenCalledExactlyOnceWith({
+        kind,
+        userId,
+      });
       expect(t.sync.refreshAll).toHaveBeenCalledTimes(starts ? 1 : 0);
-      expect(t.sync.matchUser).toHaveBeenCalledWith("user-9");
     },
   );
-
-  it("signed-outは、利用者を外し、一括の取得は始めない", () => {
-    // Given
-    const t = setup();
-    t.triggers.start();
-
-    // When
-    t.emitSignIn({ kind: "signed-out", userId: null });
-
-    // Then
-    expect(t.sync.switchUser).toHaveBeenCalledExactlyOnceWith(null);
-    expect(t.sync.refreshAll).not.toHaveBeenCalled();
-  });
-
-  it("利用者のないinitialと、利用者のないtoken-refreshed、otherは、何もしない", () => {
-    // Given
-    const t = setup();
-    t.triggers.start();
-
-    // When
-    t.emitSignIn({ kind: "initial", userId: null });
-    t.emitSignIn({ kind: "token-refreshed", userId: null });
-    t.emitSignIn({ kind: "other", userId: null });
-
-    // Then
-    expect(t.sync.switchUser).not.toHaveBeenCalled();
-    expect(t.sync.resume).not.toHaveBeenCalled();
-    expect(t.sync.refreshAll).not.toHaveBeenCalled();
-  });
 });
 
 describe("通信と画面の状態", () => {

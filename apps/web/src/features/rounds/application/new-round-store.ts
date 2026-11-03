@@ -24,7 +24,7 @@ export type NewRoundStore = {
 
 // 作成の画面へ渡す、状態と変更の方法。手続きへの委譲だけを持つ。
 export function createNewRoundStore(deps: {
-  fetching: RoundFetching;
+  fetching: Pick<RoundFetching, "fetchPresets">;
   roundStart: RoundStart;
   presetDeletion: PresetDeletion;
   connectivity: Connectivity;

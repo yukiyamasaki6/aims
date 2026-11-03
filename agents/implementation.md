@@ -52,7 +52,7 @@
 
 | 型 | 持ち主 | 形 | 使い手 | 並存の理由 |
 | --- | --- | --- | --- | --- |
-| `SessionReader` | 認証(入口が型を公開) | `readSession(options?)`が`{status, userId?}`を返す | 同期の手続き(`round-sync.ts`、`op-sender.ts`)が型だけで直接受ける | 形を変えずに使える |
+| `SessionReader` | 認証(入口が型を公開) | `readSession(options?)`が`{status, userId?}`を返す | 同期の手続き(`round-sync.ts`)が型だけで直接受ける | 形を変えずに使える |
 | `IdentityReader` | 認証(入口が型を公開) | `read()`が端末に記録された最後の利用者を返す(同期、通信なし) | `sync-triggers.ts`(型だけ)、`reference-snapshot.ts`(インフラ層) | サインインの状態ではなく、端末の記録の読み出しで、別の概念 |
 | `SignInReader` | ラウンド(手続きの約束) | `read(options?)`が、未認証と不明に利用者向けの文言を足した形を返す | 取得、開始、プリセットの手続き | 認証の文言(`unconfirmedMessage`、ドメインの関数)を使う変換があり、手続きは他の機能の関数を参照できない |
 | `SignInCheck` | ナビゲーション(手続きの約束) | `readStatus()`と、サインアップの経路、サインインの後の既定の行き先 | 開始の手続き | 認証の経路の関数・定数(`SIGN_UP_PATH`、`destinationOf`)とラウンドの定数を、ナビゲーションの言葉に変える。同上 |

@@ -9,13 +9,13 @@ import { createUpdateActivation } from "@/features/offline-pwa/application/updat
 import { createBrowserLinkClicks } from "@/features/offline-pwa/infrastructure/browser-link-clicks";
 import { createBrowserServiceWorker } from "@/features/offline-pwa/infrastructure/browser-service-worker";
 import { SwUpdateActivator } from "@/features/offline-pwa/ui/sw-update-activator";
-import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
 import { createBrowserVisibility } from "@/features/round-sync/infrastructure/browser-visibility";
 import { RoundBaseRefresher } from "@/features/round-sync/ui/round-base-refresher";
 import { createContentFetcher } from "@/features/rounds/application/content-fetcher";
 import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
+import { createOpSender } from "@/features/rounds/application/op-sender";
 import { createOperationSending } from "@/features/rounds/application/operation-sending";
 import { createPresetDeletion } from "@/features/rounds/application/preset-deletion";
 import { createPresetSaving } from "@/features/rounds/application/preset-saving";
@@ -26,8 +26,9 @@ import { createRoundDetailStore } from "@/features/rounds/application/round-deta
 import { createRoundEditing } from "@/features/rounds/application/round-editing";
 import { createRoundFetching } from "@/features/rounds/application/round-fetching";
 import { createRoundLeaving } from "@/features/rounds/application/round-leaving";
-import { createRoundReconciliation } from "@/features/rounds/application/round-reconciliation";
+import { createRoundRecordControl } from "@/features/rounds/application/round-record-control";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
+import { createRoundRefreshControl } from "@/features/rounds/application/round-refresh-control";
 import { createRoundStart } from "@/features/rounds/application/round-start";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
 import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
@@ -83,7 +84,7 @@ function composeInputs(router: PageRouter) {
 
 type Inputs = ReturnType<typeof composeInputs>;
 
-// 記録と取得(記録のハブ、取り直しの依頼、取得、突き合わせ)。
+// 記録と取得(記録のハブ、取り直しの依頼、取得、送信、記録の制御、取り直しの制御)。
 function composeRecords(inputs: Inputs) {
   const { identityStore, signIn, connectivity, clock, database } = inputs;
   const hub = createRoundRecordHub({
@@ -99,16 +100,23 @@ function composeRecords(inputs: Inputs) {
     snapshots,
     clock,
   });
-  const reconciliation = createRoundReconciliation({
+  const sender = createOpSender({
     hub,
-    requests,
-    send: createOperationSending({
+    sending: createOperationSending({
       hub,
       transport: createRoundOpTransport(database),
     }),
+    signIn,
+    clock,
+    connectivity,
+  });
+  const control = createRoundRecordControl({ hub, sender });
+  const refresh = createRoundRefreshControl({
+    hub,
+    requests,
     refresh: createRoundBaseRefreshing({ hub, fetching, requests }),
   });
-  return { hub, requests, snapshots, fetching, reconciliation };
+  return { hub, requests, snapshots, fetching, control, refresh };
 }
 
 type Records = ReturnType<typeof composeRecords>;
@@ -159,13 +167,8 @@ function composeStores(inputs: Inputs, records: Records) {
 function composeSync(inputs: Inputs, records: Records) {
   const { authenticator, identityStore, connectivity, clock } = inputs;
   const sync = createRoundSync({
-    records: records.reconciliation,
-    sender: createOpSender({
-      records: records.reconciliation,
-      session: authenticator,
-      clock,
-      connectivity,
-    }),
+    control: records.control,
+    refresh: records.refresh,
     session: authenticator,
     clock,
     connectivity,
