@@ -84,8 +84,32 @@ export type RoundReconciliation = {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 公開する操作を1つの値に並べる結線で、各操作は1行で委譲するだけである。
 export function createRoundReconciliation(deps: {
-  hub: RoundRecordHub;
-  requests: RefreshRequests;
+  hub: Pick<
+    RoundRecordHub,
+    | "start"
+    | "stop"
+    | "setUser"
+    | "userId"
+    | "ready"
+    | "streams"
+    | "record"
+    | "subscribe"
+    | "divergedStreams"
+    | "setInFlight"
+    | "discard"
+  >;
+  requests: Pick<
+    RefreshRequests,
+    | "pendingOpens"
+    | "watched"
+    | "outcomeOf"
+    | "overlayNeeded"
+    | "hasListRequests"
+    | "latestListRequest"
+    | "latestOpenRequest"
+    | "reset"
+    | "subscribe"
+  >;
   send: OperationSending;
   refresh: RoundBaseRefreshing;
 }): RoundReconciliation {
