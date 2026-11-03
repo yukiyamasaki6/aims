@@ -67,7 +67,7 @@
 | `features/rounds/ui/round-detail-client.tsx`、`round-detail-frame.tsx`、`back-to-list-link.tsx` | UI層(取得の表示の切り替え、取得中などの枠、一覧へ戻るリンク) |
 | `features/rounds/ui/scorecard-client.tsx`、`scorecard-header-bar.tsx`、`round-config-card.tsx`、`round-summary-bar.tsx` | UI層(スコアカードの組み立て、上端の帯、設定のカード、合計の帯) |
 | `features/rounds/ui/round-config-panel.tsx`、`round-menu.tsx`、`save-preset-dialog.tsx`、`save-preset-dialog-state.ts` | UI層(設定のパネルと編集のダイアログ、メニューと削除の確認、保存のダイアログの描画と状態) |
-| `features/rounds/ui/distance-section.tsx`、`distance-edit-fields.tsx`、`target-face-picker.tsx`、`end-row.tsx` | UI層(距離のカード、距離の編集フォーム、的の選択、エンドの行) |
+| `features/rounds/ui/distance-section.tsx`、`distance-edit-fields.tsx`、`distance-fields.tsx`、`use-distance-draft.ts`、`target-face-picker.tsx`、`end-row.tsx` | UI層(距離のカード、距離の編集のダイアログと操作、編集フォームの欄の描画、編集フォームの下書きと検証・保存・削除、的の選択、エンドの行) |
 | `features/rounds/ui/keypad-buttons.tsx`、`keypad-panel.tsx`、`bottom-frame.tsx`、`complete-round-bar.tsx` | UI層(テンキー、横向きのパネル、縦向きの下端の枠、完了の帯と確認) |
 | `features/rounds/ui/use-scorecard.ts`、`use-round-op-stack.ts`、`use-score-history.ts`、`use-shot-input.ts`、`use-pending-shots.ts`、`use-reconciled-pointer.ts`、`use-distance-editing.ts`、`use-keypad.ts`、`use-reorder-animation.ts`、`use-creation-gone.ts`、`scroll-to-pointer.ts` | UI層(画面の状態と操作) |
 | `features/rounds/ui/color-tone.ts` | UI層(16進の色から文字色と薄い色を求める計算。使い手はラウンドの機能だけ) |

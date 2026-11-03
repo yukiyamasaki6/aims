@@ -55,7 +55,7 @@
 | :--- | :--- |
 | `app/(main)/rounds/new/page.tsx` | 画面の入口 |
 | `app/root-client-entry.tsx` | アプリの起動地点(開始と削除の手続き、遷移、プリセットの書き込みを生成する) |
-| `features/rounds/ui/round-preset-select.tsx` | UI層(作成の画面の描画、選択の状態) |
+| `features/rounds/ui/round-preset-select.tsx`、`preset-list.tsx` | UI層(作成の画面の組み立てと、開始と削除。プリセット一覧の描画) |
 | `features/rounds/ui/use-start-round.ts` | UI層(開始の実行中とエラーの状態、二重の開始の防止) |
 | `features/rounds/ui/use-preset-delete.ts` | UI層(確認中のプリセット、削除済みのID、実行中とエラーの状態) |
 | `features/rounds/ui/preset-info.tsx`、`target-face-info.tsx` | UI層(プリセットと距離、的の情報の表示) |
