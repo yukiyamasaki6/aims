@@ -1,3 +1,4 @@
+import { ROUND_FRAME_ID } from "@/features/rounds/domain/round-routes";
 import { RoundDetailClient } from "@/features/rounds/ui/round-detail-client";
 
 // /rounds/[id]を静的な枠にするため、プレースホルダーだけをプリレンダーする。実際のIDはクライアントがpathnameから得る。
@@ -6,7 +7,7 @@ import { RoundDetailClient } from "@/features/rounds/ui/round-detail-client";
 export const dynamicParams = false;
 
 export function generateStaticParams() {
-  return [{ id: "_" }];
+  return [{ id: ROUND_FRAME_ID }];
 }
 
 export default function RoundPage() {

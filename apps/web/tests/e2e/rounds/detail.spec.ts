@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { roundPath } from "@/features/rounds/domain/round-routes";
 import { expect, test } from "../fixtures";
 import {
   getSharedEmail,
@@ -120,7 +121,7 @@ async function completeRound(roundId: string) {
   await updateRound(supabase, roundId, { status: "completed" });
 }
 
-const MISSING_ROUND_PATH = "/rounds/00000000-0000-0000-0000-000000000000";
+const MISSING_ROUND_PATH = roundPath("00000000-0000-0000-0000-000000000000");
 const ROUND_DETAIL_REST = "**/rest/v1/rounds?*";
 
 test("存在しないラウンドを開くと、枠内に「ラウンドが見つかりません。」と「一覧へ戻る」リンクが表示される", async ({

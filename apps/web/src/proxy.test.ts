@@ -7,7 +7,14 @@ import {
   SIGN_IN_PATH,
   SIGN_UP_PATH,
 } from "@/features/auth/domain/routes";
-import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
+import {
+  OFFLINE_PATH,
+  shellUrlOf,
+} from "@/features/offline-pwa/domain/offline-routes";
+import {
+  ROUND_FRAME_PATHS,
+  ROUNDS_PATH,
+} from "@/features/rounds/domain/round-routes";
 import { config, proxy } from "./proxy";
 
 // Supabaseクライアントは外部サービスとの境界のため、getUserの結果を制御できるスタブで模す。
@@ -42,15 +49,13 @@ describe("proxy", () => {
 
     it.each([
       "/",
-      "/offline",
+      OFFLINE_PATH,
       "/sw.js",
       "/manifest.webmanifest",
       "/_next/static/chunks/main.js",
       "/signin/extra",
       "/roundsx",
-      "/__shell/rounds",
-      "/__shell/rounds/new",
-      "/__shell/rounds/_",
+      ...ROUND_FRAME_PATHS.map(shellUrlOf),
     ])("%sでは実行しない", (url) => {
       // Given
       // When
@@ -74,10 +79,10 @@ describe("proxy", () => {
       ROUNDS_PATH,
       `${ROUNDS_PATH}/1`,
       "/",
-      "/offline",
+      OFFLINE_PATH,
       "/roundsx",
       "/signin/extra",
-      "/__shell/rounds",
+      ...ROUND_FRAME_PATHS.map(shellUrlOf),
     ];
 
     it.each(probes)(

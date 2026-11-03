@@ -1,5 +1,11 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import { shellUrlOf } from "./src/features/offline-pwa/domain/offline-routes";
+import {
+  ROUND_FRAME_PATH,
+  ROUND_FRAME_PATHS,
+  ROUNDS_PATH,
+} from "./src/features/rounds/domain/round-routes";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 // ローカルSupabase CLIは常に127.0.0.1で公開される。
@@ -27,15 +33,14 @@ const nextConfig: NextConfig = {
       // Service Workerのプリキャッシュ用に、proxy.tsのmatcher外の
       // /__shell/*で実ルートの枠を配る。プリキャッシュの取得が未認証でも
       // /signinへリダイレクトされず、各画面の枠が保存される。
-      beforeFiles: [
-        { source: "/__shell/rounds", destination: "/rounds" },
-        { source: "/__shell/rounds/new", destination: "/rounds/new" },
-        { source: "/__shell/rounds/_", destination: "/rounds/_" },
-      ],
+      beforeFiles: ROUND_FRAME_PATHS.map((framePath) => ({
+        source: shellUrlOf(framePath),
+        destination: framePath,
+      })),
       afterFiles: [
         // /rounds/<ID>は全IDで同一の静的な枠なので、プレースホルダーの/rounds/_
         // へ向け、IDごとのHTMLが生成・永続化されないようにする。
-        { source: "/rounds/:id", destination: "/rounds/_" },
+        { source: `${ROUNDS_PATH}/:id`, destination: ROUND_FRAME_PATH },
         ...(isLocalSupabase && supabaseUrl
           ? [
               {

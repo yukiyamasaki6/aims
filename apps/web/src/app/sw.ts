@@ -12,7 +12,12 @@ import {
   Strategy,
   type StrategyHandler,
 } from "serwist";
-import { frameUrlFor, SHELL_PREFIX } from "./sw-frames";
+import {
+  frameUrlFor,
+  isShellUrl,
+  OFFLINE_PATH,
+} from "@/features/offline-pwa/domain/offline-routes";
+import { roundFramePathOf } from "@/features/rounds/domain/round-routes";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -30,7 +35,10 @@ declare const self: ServiceWorkerGlobalScope;
 // インスタンスのハンドラにしか付かないため、Strategyを継承する。
 class PrecachedFrame extends Strategy {
   async _handle(request: Request, handler: StrategyHandler) {
-    const frameUrl = frameUrlFor(new URL(request.url).pathname);
+    const frameUrl = frameUrlFor(
+      new URL(request.url).pathname,
+      roundFramePathOf,
+    );
     const frame = frameUrl ? await serwist.matchPrecache(frameUrl) : undefined;
     return frame ?? handler.fetch(request);
   }
@@ -46,7 +54,7 @@ const runtimeCaching: RuntimeCaching[] = [
     matcher: ({ request, url, sameOrigin }) =>
       sameOrigin &&
       request.mode === "navigate" &&
-      frameUrlFor(url.pathname) !== null,
+      frameUrlFor(url.pathname, roundFramePathOf) !== null,
     handler: new PrecachedFrame(),
   },
   {
@@ -91,7 +99,7 @@ const serwist = new Serwist({
         cacheWillUpdate: async ({ request, response }) => {
           if (
             response.redirected &&
-            new URL(request.url).pathname.startsWith(`${SHELL_PREFIX}/`)
+            isShellUrl(new URL(request.url).pathname)
           ) {
             throw new Error(`${request.url}がリダイレクトされました。`);
           }
@@ -107,7 +115,7 @@ const serwist = new Serwist({
   fallbacks: {
     entries: [
       {
-        url: "/offline",
+        url: OFFLINE_PATH,
         matcher: ({ request }) => request.mode === "navigate",
       },
     ],

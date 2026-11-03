@@ -29,11 +29,11 @@
   - 同一オリジンのその他のリクエスト（RSCを含む）はNetworkOnlyにする。クロスオリジンは経由させない。
   - 枠のないパスのナビゲーションの失敗時は `/offline` を返す。`navigationPreload` は使わない。
   - `/__shell/` 配下のプリキャッシュ応答がリダイレクトされたら、インストールを失敗させる。
-- `src/app/sw-frames.ts` が枠の定義（パスに対応する枠のURL、プリキャッシュ対象）を持ち、`sw.ts` と `serwist.config.mjs` が共有する。
+- 経路の持ち主は2つである。枠の経路(`ROUND_FRAME_PATHS`、`roundFramePathOf`、`ROUND_FRAME_ID`)は `src/features/rounds/domain/round-routes.ts`、`/offline` と枠の配布URL(`OFFLINE_PATH`、`SHELL_PREFIX`、`shellUrlOf`、`frameHtmlOf`、`isShellUrl`、`frameUrlFor`)は `src/features/offline-pwa/domain/offline-routes.ts` が持つ。`sw.ts`、`serwist.config.mjs`、`next.config.ts`、`manifest.ts` はここから導く。`proxy.ts` の `matcher` だけは、Next.jsが静的に読むため文字列で再掲し、`proxy.test.ts` が一致を確かめる。
 - `serwist.config.mjs` が `public/sw.js` を生成し、`/offline` と枠3件（`/__shell/rounds`、`/__shell/rounds/new`、`/__shell/rounds/_`）をHTMLの内容ハッシュのリビジョンでプリキャッシュする。リビジョンはビルドごとに変わる。
 - `next.config.ts` が `/__shell/*` を実ルートへrewriteし（`beforeFiles`）、`/rounds/<ID>` を `/rounds/_` へrewriteする（`afterFiles`）。`/__shell/*` は `proxy.ts` の対象外なので、未認証の登録でも各画面の枠が保存される。オンラインの `/rounds/<ID>` も `/rounds/_` の枠だけが配信され、IDごとの生成物は作られない（`rounds/[id]/page.tsx` の `dynamicParams = false`）。
 - `src/app/sw-update-activator.tsx`の`SwUpdateActivator`(`root-client-entry.tsx`が描く)が、登録を保持し、`document`のcapture段階の`click`で、待機中の版があるときの内部リンク(修飾キー、`target`、`download`、外部、ハッシュのみを除く)の遷移を止める。端末の保存の完了(記録のハブの`whenPersisted`(起動地点が引数で渡す))を待ち、`SKIP_WAITING`を1回送り、`controllerchange`の後、文書を読み直す直前に保存を再確認して、`location.assign`で遷移する。これらの待ちは、クリックからの合計で上限1秒を共有する。切り替えをしない経路は`whenPersisted`を呼ばない。待機の判定は保持した登録の`waiting`の同期の読み取りだけで行い、登録の保持の前の操作は止めない。待機が無いパスの変化では`registration.update()`を呼ぶ。読み込み時には切り替えない。表示は行わない。
-- `src/app/manifest.ts` がManifestを返す。`start_url` は `/rounds` で、未認証の起動は `proxy.ts` が `/signin` へ移す。
+- `src/app/manifest.ts` がManifestを返す。`start_url` は `ROUNDS_PATH`(`/rounds`)で、未認証の起動は `proxy.ts` が `/signin` へ移す。
 - `src/app/apple-icon.png` はiOSホーム画面用アイコン(180x180、白の不透明な地)で、Next.jsのファイル規約により全ページに `apple-touch-icon` のlinkが出る。`scripts/generate-icon.mjs` が他のアイコンと一緒に生成する。`/apple-icon.png` は `proxy.ts` の対象外なので未認証でも取得できる。
 - manifestのアイコン(any/maskable)は、環の直径を画像の幅の61%(`INSTALL_ART_SCALE`=61/80)にして生成する。絵柄全体を元の比率のまま縮める。表示は2経路ある。余白のある経路(インストールしたホーム画面、アプリの一覧)では、Chromeがmaskableに約1.309倍の透明の余白を足すため、画像の中央87.3%が表示され、環は枠の約70%に見える。余白のない経路(「ホーム画面に追加」の丸、ショートカット)では、画像の中央66.7%から70%が丸に表示され、環は枠の約87%から91%に見える。この経路で棒の先が欠けることは認めるが、環の外に棒は見える。iOS用のapple-iconは縮小しない(iOSは画像の全体を表示するため、環は枠の80%に見える)。環の外縁が半幅の80%という割合はicon.svg(タブ用)とapple-iconの値である。
 - `src/features/rounds/domain/fetch-result.ts` が取得結果（ok / not-found / offline / error）と、レスポンスから結果を決める `classifyResponse` を持つ。通信失敗（`status: 0`）は原因を断定せず固定文の `error`、`PGRST116` は `not-found`、その他のエラーも固定文の `error` にする。`offline` は `fetchContent` が `navigator.onLine` の false と `offline` イベントで確定したときだけ返す。
@@ -57,7 +57,7 @@
 
 ## 制約と未対応
 
-- `serwist.config.mjs` が `sw-frames.ts` をNodeの型除去で読むため、Node 22.18以上が前提（`.node-version` は24）で、ビルド時に `MODULE_TYPELESS_PACKAGE_JSON` の警告が出る。
+- `serwist.config.mjs` が `round-routes.ts` と `offline-routes.ts` をNodeの型除去で読むため、Node 22.18以上が前提（`.node-version` は24）で、ビルド時に `MODULE_TYPELESS_PACKAGE_JSON` の警告が出る。
 - Service Workerが未登録、または制御していないタブのオフラインは、ブラウザ標準のエラーになる。iOS Safariのホーム画面アプリでの挙動は実機で確認していない。
 - 切り替えが1秒で進まない(`controllerchange`が来ない)ときと、保存が上限(1秒)までに終わらないときは、切り替えずに旧版のまま遷移し、その遷移では再び試みない。次の遷移で通常どおり判定する。登録の保持の前の操作も同じである。
 - 複数のウィンドウを開いているとき、1つの遷移で切り替えると、他のウィンドウの旧ドキュメントを新しいService Workerが制御し、その遅延チャンクは取得できないことがある。そのウィンドウの通常の遷移(ハードナビゲーション)で回復する。
