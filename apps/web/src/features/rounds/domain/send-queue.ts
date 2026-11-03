@@ -70,6 +70,15 @@ export function statusOf(
   return queue.states.get(item.eventId)?.status ?? "queued";
 }
 
+// このタブの要求が持つ操作のID(送信中かリトライ待機)。記録の送信中の印は、これを射影して書く。
+export function inFlightEventIds(queue: SendQueue): string[] {
+  return [...queue.states]
+    .filter(
+      ([, state]) => state.status === "inflight" || state.status === "backoff",
+    )
+    .map(([id]) => id);
+}
+
 export function isSolo(queue: SendQueue, eventId: string): boolean {
   return queue.states.get(eventId)?.solo ?? false;
 }

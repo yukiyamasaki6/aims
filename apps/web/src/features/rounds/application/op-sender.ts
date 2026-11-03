@@ -9,6 +9,7 @@ import {
   EMPTY_QUEUE,
   type Flight,
   handleOnline,
+  inFlightEventIds,
   isSolo,
   type PlanItem,
   resumeFlight,
@@ -50,7 +51,7 @@ export function createOpSender(deps: {
     | "userId"
     | "ready"
     | "subscribe"
-    | "setInFlight"
+    | "replaceInFlight"
     | "discard"
   >;
   sending: Pick<OperationSending, "send">;
@@ -69,6 +70,12 @@ export function createOpSender(deps: {
   let queues = new Map<string, SendQueue>();
   const timers = new Set<() => void>();
   let stopListening: (() => void)[] = [];
+
+  // 列の状態の書き込みは全てここを通す。記録の送信中の印は、列の状態(送信中かリトライ待機)の射影として、ここだけが書く。
+  function writeQueue(streamId: string, queue: SendQueue) {
+    queues.set(streamId, queue);
+    hub.replaceInFlight(streamId, inFlightEventIds(queue));
+  }
 
   const queueOf = (streamId: string) => queues.get(streamId) ?? EMPTY_QUEUE;
 
@@ -100,7 +107,6 @@ export function createOpSender(deps: {
 
   async function run(streamId: string, flight: Flight) {
     const target = generation;
-    hub.setInFlight(streamId, flight.eventIds, true);
     const failure = await attempt(streamId, flight);
     if (generation !== target) return;
     settle(streamId, flight, failure);
@@ -112,8 +118,7 @@ export function createOpSender(deps: {
     failure: SyncFailure | undefined,
   ) {
     if (!failure) {
-      queues.set(streamId, settleSent(queueOf(streamId), flight));
-      hub.setInFlight(streamId, flight.eventIds, false);
+      writeQueue(streamId, settleSent(queueOf(streamId), flight));
       pump(streamId);
       return;
     }
@@ -122,14 +127,12 @@ export function createOpSender(deps: {
       flight.attempt,
       flight.eventIds.length,
     );
-    queues.set(
+    writeQueue(
       streamId,
       settleFailed(queueOf(streamId), flight, decision, clock.now()),
     );
     if (decision.type === "retry") {
       scheduleTimer(streamId, decision.delayMs);
-    } else {
-      hub.setInFlight(streamId, flight.eventIds, false);
     }
     if (decision.type === "discard") {
       void hub.discard(streamId, flight.eventIds);
@@ -169,7 +172,7 @@ export function createOpSender(deps: {
       batchLimitOf,
     });
     const next = startFlights(queue, planned, now);
-    queues.set(streamId, next.queue);
+    writeQueue(streamId, next.queue);
     for (const flight of [...due, ...next.started]) void run(streamId, flight);
   }
 
@@ -196,6 +199,8 @@ export function createOpSender(deps: {
     generation += 1;
     for (const cancel of timers) cancel();
     timers.clear();
+    for (const streamId of [...queues.keys()])
+      writeQueue(streamId, EMPTY_QUEUE);
     queues = new Map();
   }
 
@@ -227,7 +232,7 @@ export function createOpSender(deps: {
       for (const [streamId, queue] of [...queues]) {
         const resumed = resumeHeld(queue);
         if (!resumed.resumed) continue;
-        queues.set(streamId, resumed.queue);
+        writeQueue(streamId, resumed.queue);
       }
       pumpAll();
     },
@@ -235,7 +240,7 @@ export function createOpSender(deps: {
     online() {
       const now = clock.now();
       for (const [streamId, queue] of [...queues]) {
-        queues.set(streamId, handleOnline(queue, now));
+        writeQueue(streamId, handleOnline(queue, now));
       }
       pumpAll();
     },
