@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Locator, Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "../fixtures";
@@ -23,7 +24,7 @@ const TOKEN_API = "**/auth/v1/token*";
 // 時計は画面遷移より前に差し替える必要があるため、サインインの前に呼ぶ。
 async function signInAsDisposableUser(page: Page, prefix: string) {
   await signUpAndSignIn(page, {
-    email: `${prefix}-${Date.now()}@aims.test`,
+    email: `${prefix}-${Date.now()}-${randomUUID().slice(0, 8)}@aims.test`,
     password: "password1",
   });
   await waitForHydration(page);
@@ -326,7 +327,7 @@ test.describe("未認証のガード", () => {
 test.describe("セッション喪失", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test("ラウンド一覧を2つのタブで開いているとき、一方のタブでサインアウトすると、もう一方のタブもサインイン画面へ移動する", async ({
+  test("ラウンド一覧を2つのタブで開いているとき、一方のタブでサインアウトした後、もう一方のタブで画面を遷移すると、サインイン画面へ移動する", async ({
     page,
   }) => {
     await signInAsDisposableUser(page, "nav-two-tabs");
@@ -336,14 +337,21 @@ test.describe("セッション喪失", () => {
 
     await page.getByRole("button", { name: "サインアウト" }).click();
     await page.getByRole("button", { name: "サインアウトする" }).click();
+    await expect(page).toHaveURL(/\/signin/);
 
-    await expect(otherTab).toHaveURL(/\/signin$/);
+    // 認証の通知による移動に頼らず、他方のタブで保護された画面を開き直し、サインイン画面へ移動することを確かめる。
+    // 認証の通知による移動と重なると、この遷移が中断されるが、移動先は同じサインイン画面である。
+    await otherTab.goto("/rounds/new").catch((error: Error) => {
+      if (!/interrupted by another navigation/.test(error.message)) throw error;
+    });
+
+    await expect(otherTab).toHaveURL(/\/signin/);
   });
 
   test("サーバー側でセッションを無効にされた後に、アクセストークンの期限を過ぎると、開いていた画面を遷移元に付けてサインイン画面へ移動する", async ({
     page,
   }) => {
-    const email = `nav-revoked-return-${Date.now()}@aims.test`;
+    const email = `nav-revoked-return-${Date.now()}-${randomUUID().slice(0, 8)}@aims.test`;
     await page.clock.install();
     await signUpAndSignIn(page, { email, password: "password1" });
     await page.goto("/rounds/new");

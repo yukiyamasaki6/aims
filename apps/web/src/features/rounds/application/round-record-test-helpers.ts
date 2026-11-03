@@ -19,55 +19,23 @@ import { createRoundDetailStore } from "./round-detail-store";
 import { createRoundEditing } from "./round-editing";
 import type { RoundFetching } from "./round-fetching";
 import { createRoundReconciliation } from "./round-reconciliation";
-import {
-  createRoundRecordHub,
-  type RecordChannel,
-  type RecordMessage,
-} from "./round-record-hub";
+import { createRoundRecordHub } from "./round-record-hub";
 import { createRoundsListStore } from "./rounds-list-store";
 
-// 端末の保存の、ラウンドの規則を使うメモリの実装。複数のタブで共有できる。
+// 端末の保存の、ラウンドの規則を使うメモリの実装。2つのハブで共有できる。
 export function createMemoryRoundStore() {
   return createMemoryOpLogStore<SyncOperation, RoundBaseRecord>(
     roundStreamRules,
   );
 }
 
-// タブの間の知らせ。自分以外の開いているタブへ配る。
-export function createRecordBus() {
-  const tabs = new Set<(message: RecordMessage) => void>();
-  return {
-    // タブごとの記録の知らせを作る。
-    channel(): RecordChannel {
-      let mine: ((message: RecordMessage) => void) | undefined;
-      return {
-        open(listener) {
-          mine = listener;
-          tabs.add(listener);
-          return () => {
-            tabs.delete(listener);
-            mine = undefined;
-          };
-        },
-        post(message) {
-          for (const tab of [...tabs]) if (tab !== mine) tab(message);
-        },
-      };
-    },
-  };
-}
-
-// 保存先と知らせを共有できる、ラウンドの端末の記録。
+// 保存先を共有できる、ラウンドの端末の記録。同じ保存先で2つ作ると、2つのタブを表す。
 export function createTestRoundHub(
-  shared: {
-    store?: ReturnType<typeof createMemoryRoundStore>;
-    bus?: ReturnType<typeof createRecordBus>;
-  } = {},
+  shared: { store?: ReturnType<typeof createMemoryRoundStore> } = {},
 ) {
   const store = shared.store ?? createMemoryRoundStore();
-  const bus = shared.bus ?? createRecordBus();
-  const hub = createRoundRecordHub({ store, channel: bus.channel() });
-  return { hub, store, bus };
+  const hub = createRoundRecordHub({ store });
+  return { hub, store };
 }
 
 // ラウンドの状態と変更の方法。記録のハブと依頼の記録は実物(メモリの保存先)で、取得の順序は差し替える。
@@ -82,7 +50,7 @@ export function createTestRounds(
     randomBytes?: (length: number) => Uint8Array;
   } = {},
 ) {
-  const { hub, store: opLog, bus } = createTestRoundHub(options.shared);
+  const { hub, store: opLog } = createTestRoundHub(options.shared);
   const requests = createRefreshRequests();
   const clock = createManualClock(options.clockStart);
   const connectivity = createFakeConnectivity(options.offline);
@@ -140,7 +108,6 @@ export function createTestRounds(
     newRound,
     hub,
     opLog,
-    bus,
     requests,
     clock,
     connectivity,
@@ -195,7 +162,7 @@ export function createTestReconciliation(
     userId?: string | null;
   } = {},
 ) {
-  const { hub, store, bus } = createTestRoundHub(options.shared);
+  const { hub, store } = createTestRoundHub(options.shared);
   hub.start(options.userId === undefined ? "user-1" : options.userId);
   const requests = createRefreshRequests();
   const { transport, sent } = createManualTransport();
@@ -217,7 +184,6 @@ export function createTestReconciliation(
     reconciliation,
     hub,
     store,
-    bus,
     requests,
     fetching,
     transport,

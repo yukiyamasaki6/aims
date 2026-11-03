@@ -249,40 +249,7 @@ export function resumeHeld(queue: SendQueue): {
   };
 }
 
-// 他のタブの保留の状態に合わせた、次の状態。変わらないときはnull。
-function heldTransition(
-  status: ItemState["status"],
-  isHeld: boolean,
-): "held" | "queued" | null {
-  if (status === "queued" && isHeld) return "held";
-  if (status === "held" && !isHeld) return "queued";
-  return null;
-}
-
-// 他のタブ(送る役)の保留の状態を反映する。`eventIds`はこのタブの記録にある未確定の操作。
-export function applyHeld(
-  queue: SendQueue,
-  eventIds: readonly string[],
-  held: ReadonlySet<string>,
-): SendQueue {
-  // 状態の表を1度だけ写して書き換え、最後に1度だけ新しい値を返す。
-  const states = new Map(queue.states);
-  let changed = false;
-  for (const id of eventIds) {
-    const state = states.get(id);
-    const status = state?.status ?? "queued";
-    const solo = state?.solo ?? false;
-    const next = heldTransition(status, held.has(id));
-    if (next === null) continue;
-    changed = true;
-    if (next === "queued" && !solo) states.delete(id);
-    else states.set(id, { status: next, solo });
-  }
-  if (!changed) return queue;
-  return { ...queue, states };
-}
-
-export function heldIds(queue: SendQueue): string[] {
+function heldIds(queue: SendQueue): string[] {
   return [...queue.states]
     .filter(([, state]) => state.status === "held")
     .map(([id]) => id);

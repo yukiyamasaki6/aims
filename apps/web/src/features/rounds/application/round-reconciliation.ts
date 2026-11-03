@@ -48,9 +48,8 @@ export type RoundReconciliation = {
       }
   >;
   discard(streamId: string, eventIds: readonly string[]): Promise<void>;
-  // 現在の利用者の、端末に保存された全ての列を記録へ読み直す。記録に無い列も加わる。読み込みに失敗しても投げない。
-  reloadAll(): Promise<void>;
-  reloadStream(streamId: string): Promise<void>;
+  // 現在の世代の読み込みが終わる(失敗を含む)まで解決しない。
+  ready(): Promise<void>;
   onChange(listener: (change: RecordChange) => void): () => void;
   // 取り直しが要るかを、一覧の依頼の有無と、ラウンドごとの理由で返す。理由は次の契約に従う。
   // - 理由はラウンドごとに1つで、当たるもののうち open、stale、diverged、overlay の順に先のものを返す。
@@ -174,8 +173,7 @@ export function createRoundReconciliation(deps: {
         : { ok: false, cause: "exception" };
     },
     discard: (streamId, eventIds) => hub.discard(streamId, eventIds),
-    reloadAll: () => hub.reloadAll(),
-    reloadStream: (streamId) => hub.reloadStream(streamId),
+    ready: () => hub.ready(),
     onChange: (listener) => hub.subscribe(listener),
     refreshNeeds,
     onRefreshNeeds(listener) {

@@ -4,12 +4,10 @@ import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import { planFlights } from "../domain/op-plan";
 import {
-  applyHeld,
   dueFlights,
   EMPTY_QUEUE,
   type Flight,
   handleOnline,
-  heldIds,
   isSolo,
   type PlanItem,
   resumeFlight,
@@ -27,20 +25,6 @@ import {
   sessionFailure,
 } from "../domain/sync-failure";
 
-// 他のタブへ知らせるメッセージ。`held`は、送る役のタブだけが付ける。
-export type SenderMessage =
-  | { type: "held"; streamId: string; held: string[] }
-  | { type: "sync-request" };
-
-// 送る役の選出と、タブの間の知らせ。Web Locksが無い環境では、単独の送り手として動く。
-// 例外: 投げない。
-export type SenderLock = {
-  // 送る役を求める。選ばれたら`onElected`を呼び、返す関数を呼ぶまで役を保つ。
-  request(onElected: () => Promise<void>): () => void;
-  open(listener: (message: SenderMessage) => void): () => void;
-  post(message: SenderMessage): void;
-};
-
 export type OpSender = ReturnType<typeof createOpSender>;
 
 // 操作の列の送信器。列ごとの送信の状態(集約の値)を保ち、計画と失敗の判定を求めて、集約の命令へ渡す。
@@ -56,38 +40,27 @@ export function createOpSender(deps: {
     | "markInFlight"
     | "send"
     | "discard"
-    | "reloadStream"
-    | "reloadAll"
+    | "ready"
     | "onChange"
     | "matchUser"
   >;
   session: Pick<SessionReader, "readSession">;
-  lock: SenderLock;
   clock: Clock;
   connectivity: Connectivity;
 }) {
-  const { records, session, lock, clock, connectivity } = deps;
+  const { records, session, clock, connectivity } = deps;
   let started = false;
-  let leader = false;
-  // 送る役で、今の開始の全ての列の読み直しを終え、保存済みの操作を送れる状態。
+  // 今の開始の保存の読み込みを終え、保存済みの操作を送れる状態。
   let ready = false;
-  // 開始と停止のたびに進める。古い選出の続きが、新しい開始の状態を変えないため。
+  // 開始と停止のたびに進める。古い読み込みの続きが、新しい開始の状態を変えないため。
   let startSeq = 0;
   // 開始、停止、利用者の切り替えのたびに進める。古い送信の結果を捨てるため。
   let generation = 0;
   let queues = new Map<string, SendQueue>();
-  // 送る役のタブが知らせた、保留の操作。
-  let remoteHeld = new Map<string, Set<string>>();
   const timers = new Set<() => void>();
   let stopListening: (() => void)[] = [];
 
   const queueOf = (streamId: string) => queues.get(streamId) ?? EMPTY_QUEUE;
-
-  function postHeld(streamId: string) {
-    if (leader) {
-      lock.post({ type: "held", streamId, held: heldIds(queueOf(streamId)) });
-    }
-  }
 
   function scheduleTimer(streamId: string, delayMs: number) {
     const cancel = clock.after(delayMs, () => {
@@ -151,7 +124,6 @@ export function createOpSender(deps: {
     if (decision.type === "discard") {
       void records.discard(streamId, flight.eventIds);
     }
-    if (decision.type === "hold") postHeld(streamId);
     pump(streamId);
   }
 
@@ -161,7 +133,7 @@ export function createOpSender(deps: {
       lane: item.lane,
       status: statusOf(queue, item),
       solo: isSolo(queue, item.eventId),
-      // 保存に失敗して`seq`を持たない操作は、他のタブから見えないため、持っているタブが送る。
+      // 保存の読み込みの前は、保存に失敗して`seq`を持たない操作だけを送る(保存から読む操作より後の順序を守るため)。
       sendable: ready || !item.hasSeq,
     }));
   }
@@ -171,9 +143,6 @@ export function createOpSender(deps: {
     const outbox = records.outbox(streamId);
     const ids = outbox.map((item) => item.eventId);
     let queue = syncOutbox(queueOf(streamId), ids);
-    if (!leader) {
-      queue = applyHeld(queue, ids, remoteHeld.get(streamId) ?? new Set());
-    }
     const now = clock.now();
     // 期限の来たリトライ待機の要求を、新しい要求より先に再送する。
     const due = dueFlights(queue, now);
@@ -194,35 +163,14 @@ export function createOpSender(deps: {
     }
   }
 
-  function handleChange(change: { streamId: string; kind: string }) {
-    if (change.kind === "appended" && leader) {
-      // 送る役は、列を読み直してから計画する(他のタブの追記と順序を揃えるため)。
-      void records
-        .reloadStream(change.streamId)
-        .then(() => pump(change.streamId));
-      return;
-    }
+  function handleChange(change: { streamId: string }) {
     pump(change.streamId);
   }
 
-  function handleMessage(message: SenderMessage) {
-    if (message.type === "held") {
-      remoteHeld.set(message.streamId, new Set(message.held));
-      if (!leader) pump(message.streamId);
-      return;
-    }
-    if (!leader) return;
-    for (const streamId of queues.keys()) {
-      if (heldIds(queueOf(streamId)).length > 0) postHeld(streamId);
-    }
-  }
-
-  async function elected(mine: number) {
-    if (startSeq !== mine) return;
-    leader = true;
-    ready = false;
-    await records.reloadAll();
-    // 停止や再開の後に終わった古い読み直しでは、送れる状態にしない。
+  // 保存の読み込みが終わってから、保存済みの操作を送る。
+  async function whenLoaded(mine: number) {
+    await records.ready();
+    // 停止や再開の後に終わった古い読み込みでは、送れる状態にしない。
     if (startSeq !== mine) return;
     ready = true;
     pumpAll();
@@ -233,7 +181,6 @@ export function createOpSender(deps: {
     for (const cancel of timers) cancel();
     timers.clear();
     queues = new Map();
-    remoteHeld = new Map();
   }
 
   return {
@@ -243,18 +190,13 @@ export function createOpSender(deps: {
       started = true;
       startSeq += 1;
       const mine = startSeq;
-      stopListening = [
-        records.onChange(handleChange),
-        lock.open(handleMessage),
-        lock.request(() => elected(mine)),
-      ];
-      lock.post({ type: "sync-request" });
+      stopListening = [records.onChange(handleChange)];
+      void whenLoaded(mine);
       pumpAll();
     },
     stop() {
       started = false;
       startSeq += 1;
-      leader = false;
       ready = false;
       for (const stop of stopListening) stop();
       stopListening = [];
@@ -270,7 +212,6 @@ export function createOpSender(deps: {
         const resumed = resumeHeld(queue);
         if (!resumed.resumed) continue;
         queues.set(streamId, resumed.queue);
-        postHeld(streamId);
       }
       pumpAll();
     },

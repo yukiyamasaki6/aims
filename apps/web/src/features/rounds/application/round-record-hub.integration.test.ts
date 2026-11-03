@@ -15,7 +15,6 @@ import { operationsOf } from "../domain/round-record";
 import { roundStreamRules } from "../domain/round-retention";
 import { roundStreamId, type SyncOperation } from "../domain/sync-events";
 import { createRoundRecordHub } from "./round-record-hub";
-import { createRecordBus } from "./round-record-test-helpers";
 
 // 端末の保存(IndexedDB)の実物を通した、記録のハブの結合。fake-indexeddbで代替し、テストごとに空のDBから始める。
 const STREAM = roundStreamId("round-1");
@@ -31,10 +30,7 @@ function newStore() {
 async function startedHub(userId: string | null = "user-1") {
   const store = newStore();
   stores.push(store);
-  const hub = createRoundRecordHub({
-    store,
-    channel: createRecordBus().channel(),
-  });
+  const hub = createRoundRecordHub({ store });
   hub.start(userId);
   await hub.ready();
   return { hub, store };
@@ -158,6 +154,26 @@ describe("端末の保存を通した記録のハブ", () => {
       base: undefined,
       entries: [],
     });
+  });
+
+  it("別のハブが完了して保存の組が消えたラウンドは、入力中で持つハブの一覧の材料に載らない", async () => {
+    // Given
+    const completing = await startedHub();
+    await completing.hub.commit(STREAM, roundBase(), 10, "user-1");
+    const viewing = await startedHub();
+    await completing.hub.commit(
+      STREAM,
+      roundBase({ status: "completed" }),
+      20,
+      "user-1",
+    );
+
+    // When
+    const list = await viewing.hub.readList();
+
+    // Then
+    expect(viewing.hub.record(STREAM).base?.startedAt).toBe(10);
+    expect([...list.keys()]).toEqual([]);
   });
 
   it("新しい矢を記録してから消し、両方が確定した後、矢の行が無い古いベースが入っても、その矢は表示されない", async () => {

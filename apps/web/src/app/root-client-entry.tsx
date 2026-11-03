@@ -12,7 +12,6 @@ import { SwUpdateActivator } from "@/features/offline-pwa/ui/sw-update-activator
 import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
-import { createBrowserSenderLock } from "@/features/round-sync/infrastructure/browser-sender-lock";
 import { createBrowserVisibility } from "@/features/round-sync/infrastructure/browser-visibility";
 import { RoundBaseRefresher } from "@/features/round-sync/ui/round-base-refresher";
 import { createContentFetcher } from "@/features/rounds/application/content-fetcher";
@@ -36,7 +35,6 @@ import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
 import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
-import { createBrowserRecordChannel } from "@/features/rounds/infrastructure/browser-record-channel";
 import { createBrowserUniqueIds } from "@/features/rounds/infrastructure/browser-unique-ids";
 import { createPresetCommands } from "@/features/rounds/infrastructure/preset-commands";
 import { createReferenceSnapshots } from "@/features/rounds/infrastructure/reference-snapshot";
@@ -92,7 +90,6 @@ function composeRecords(inputs: Inputs) {
     store: createIndexedDbOpLogStore<SyncOperation, RoundBaseRecord>(
       roundStreamRules,
     ),
-    channel: createBrowserRecordChannel(),
   });
   const requests = createRefreshRequests();
   const snapshots = createReferenceSnapshots(identityStore);
@@ -166,7 +163,6 @@ function composeSync(inputs: Inputs, records: Records) {
     sender: createOpSender({
       records: records.reconciliation,
       session: authenticator,
-      lock: createBrowserSenderLock(),
       clock,
       connectivity,
     }),

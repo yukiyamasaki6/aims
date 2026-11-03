@@ -7,11 +7,7 @@ import {
   type RoundTransport,
   type SendOutcome,
 } from "./operation-sending";
-import type { RecordMessage } from "./round-record-hub";
-import {
-  createRecordBus,
-  createTestRoundHub,
-} from "./round-record-test-helpers";
+import { createTestRoundHub } from "./round-record-test-helpers";
 
 const STREAM = roundStreamId("round-1");
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -26,8 +22,7 @@ const result = (overrides: Partial<OpResult> = {}): OpResult => ({
 });
 
 async function setup(outcome: SendOutcome | (() => Promise<SendOutcome>)) {
-  const bus = createRecordBus();
-  const { hub, store } = createTestRoundHub({ bus });
+  const { hub, store } = createTestRoundHub();
   hub.start("user-1");
   await hub.ready();
   const send = vi.fn(async () =>
@@ -35,9 +30,7 @@ async function setup(outcome: SendOutcome | (() => Promise<SendOutcome>)) {
   );
   const transport: RoundTransport = { send };
   const sending = createOperationSending({ hub, transport });
-  const posted: RecordMessage[] = [];
-  bus.channel().open((message) => posted.push(message));
-  return { hub, store, sending, send, posted };
+  return { hub, store, sending, send };
 }
 
 const operation = (id: string) =>
@@ -63,22 +56,6 @@ describe("send", () => {
       ackedApplied: true,
     });
     expect(tab.store.rows[0].ackedRevision).toBe(7);
-  });
-
-  it("書き込みの後に他のタブへ知らせる", async () => {
-    // Given
-    const tab = await setup({ ok: true, results: [result()] });
-    await tab.hub.append(STREAM, operation("a"));
-    tab.posted.length = 0;
-
-    // When
-    await tab.sending.send(STREAM, ["a"]);
-    await flush();
-
-    // Then
-    expect(tab.posted).toEqual([
-      { type: "changed", streamId: STREAM, diverged: false },
-    ]);
   });
 
   it("効かなかった操作は記録と保存先から外し、divergedを返す", async () => {

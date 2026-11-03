@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
 import { roundPath } from "@/features/rounds/domain/round-routes";
 import { expect, test } from "../fixtures";
@@ -8,7 +9,7 @@ import {
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
-import { blockOpLogStore } from "../helpers/op-log";
+import { blockOpLogStore, holdOldOpLogConnection } from "../helpers/op-log";
 import {
   disableRound,
   openOtherDevice,
@@ -145,10 +146,10 @@ test("端末にオフラインで開ける内容がないラウンドを開い�
   await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
 });
 
-test("他のタブが端末の保存の読み書きを続けているとき、ラウンドを開くと、10秒後に「一覧へ戻る」リンクと「読み込めませんでした。」と再試行ボタンが表示される", async ({
+test("端末の保存の読み書きが続いているとき、ラウンドを開くと、10秒後に「一覧へ戻る」リンクと「読み込めませんでした。」と再試行ボタンが表示される", async ({
   page,
 }) => {
-  // 端末に内容を持たない完了のラウンドを、他のタブが端末の保存を使い続ける状態で開き、読み込み中を確かめる。
+  // 端末に内容を持たない完了のラウンドを、端末の保存の読み書きが続く状態で開き、読み込み中を確かめる。
   const roundId = await createRound({
     email: getSharedEmail(),
     password: SHARED_PASSWORD,
@@ -175,6 +176,82 @@ test("他のタブが端末の保存の読み書きを続けているとき、�
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
   await release();
+});
+
+// 読み込みの開始から10秒で失敗に変わることを確かめる。時計は合計でも10秒強までしか進めず、10秒を大きく超えてからの失敗は通さない。
+async function expectLoadFailsAtTenSeconds(page: Page) {
+  const failure = page
+    .getByRole("alert")
+    .filter({ hasText: "読み込めませんでした。" });
+  await expect(
+    page.getByRole("status").filter({ hasText: "読み込み中" }),
+  ).toBeVisible();
+  // 読み込みの時計が仕掛けられる前に進めて空振りしないよう、実時間で少し待つ。待った分も偽の時計は進む。
+  await page.waitForTimeout(300);
+  await page.clock.runFor(9_000);
+  await expect(failure).toHaveCount(0);
+  await page.clock.runFor(1_700);
+  await expect(failure).toBeVisible();
+}
+
+// 端末に内容を持たない完了のラウンド。
+async function createCompletedRound(name: string) {
+  const roundId = await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+  });
+  await completeRound(roundId);
+  return roundId;
+}
+
+test("古い版の端末の保存の接続が閉じられていないとき、ラウンド一覧とラウンドの詳細は、それぞれ読み込みの開始から10秒後に「読み込めませんでした。」と再試行ボタンが表示される", async ({
+  page,
+}) => {
+  // 古い版の接続を保持したまま一覧を開き、読み込み中を確かめる。
+  const roundId = await createCompletedRound("版更新の塞がれ");
+  const release = await holdOldOpLogConnection(page.context());
+  await page.clock.install();
+  await page.goto("/rounds");
+  await expect(
+    page.getByRole("status").filter({ hasText: "読み込み中" }),
+  ).toBeVisible();
+
+  // 10秒進め、一覧のエラーと再試行ボタンを確かめる。
+  await expectLoadFailsAtTenSeconds(page);
+  await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
+
+  // 詳細を開き、読み込み中から10秒後に枠とエラーと再試行ボタンが表示されることを確かめる。
+  await page.goto(`/rounds/${roundId}`);
+  await expectLoadFailsAtTenSeconds(page);
+  await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
+  await release();
+});
+
+test("古い版の端末の保存の接続が閉じられて再読み込みすると、ラウンド一覧とラウンドの詳細のどちらも読み込みが再開し、内容が表示される", async ({
+  page,
+}) => {
+  // 古い版の接続を保持したまま一覧を開き、10秒後のエラーを確かめる。
+  const name = `版更新の復旧-${randomUUID()}`;
+  const roundId = await createCompletedRound(name);
+  const release = await holdOldOpLogConnection(page.context());
+  await page.clock.install();
+  await page.goto("/rounds");
+  await expectLoadFailsAtTenSeconds(page);
+
+  // 古い接続を閉じて再読み込みし、更新後の保存に基づく一覧が表示されることを確かめる。
+  await release();
+  await page.reload();
+  await expect(
+    page.getByRole("link", { name: new RegExp(name) }),
+  ).toBeVisible();
+
+  // 詳細を開き直し、端末に内容を持たないラウンドの内容が表示されることを確かめる。
+  await page.goto(`/rounds/${roundId}`);
+  await expect(page.getByTestId("round-summary")).toBeVisible();
 });
 
 // オフラインの/rounds/newで開始し、的の一覧の保存分が無い、作成が未確定のラウンド詳細を開く。

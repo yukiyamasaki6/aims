@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyHeld,
   dueFlights,
   EMPTY_QUEUE,
   type Flight,
   handleOnline,
-  heldIds,
   isSolo,
   resumeFlight,
   resumeHeld,
@@ -129,7 +127,7 @@ describe("settleFailed", () => {
     ]);
   });
 
-  it("保留は要求を外して操作を保留にし、保留の操作の一覧に出す", () => {
+  it("保留は要求を外して操作を保留にする", () => {
     // Given
     const { queue, flight } = started(["a", "b"]);
 
@@ -139,7 +137,6 @@ describe("settleFailed", () => {
     // Then
     expect(statuses(failed, "a", "b")).toEqual(["held", "held"]);
     expect(failed.flights).toEqual([]);
-    expect(heldIds(failed)).toEqual(["a", "b"]);
   });
 
   it("破棄は要求と状態を外す。破棄する操作の記録からの除去は呼び出し側が行う", () => {
@@ -321,100 +318,7 @@ describe("保留", () => {
     // Then
     expect(resumed.resumed).toBe(true);
     expect(statuses(resumed.queue, "a")).toEqual(["queued"]);
-    expect(heldIds(resumed.queue)).toEqual([]);
     expect(nothing).toEqual({ queue: EMPTY_QUEUE, resumed: false });
-  });
-
-  it("他のタブの保留を、待ちの操作へ反映し、保留でなくなった操作は待ちに戻す", () => {
-    // Given
-    const outbox = ["a", "b"];
-
-    // When
-    const applied = applyHeld(EMPTY_QUEUE, outbox, new Set(["a"]));
-    const released = applyHeld(applied, outbox, new Set());
-
-    // Then
-    expect(statuses(applied, "a", "b")).toEqual(["held", "queued"]);
-    expect(statuses(released, "a", "b")).toEqual(["queued", "queued"]);
-  });
-
-  it("このタブで送信中やリトライ待機の操作は、他のタブの保留で変えない", () => {
-    // Given
-    const { queue, flight } = started(["a"]);
-    const backoff = settleFailed(
-      queue,
-      flight,
-      { type: "retry", delayMs: 3000 },
-      200,
-    );
-
-    // When
-    const applied = applyHeld(backoff, ["a"], new Set(["a"]));
-
-    // Then
-    expect(statuses(applied, "a")).toEqual(["backoff"]);
-  });
-
-  describe("applyHeld の状態の混在", () => {
-    // 状態を持たない、待ち(単独の印あり・なし)、リトライ待機の操作が混ざった列。
-    function mixedQueue() {
-      const isolated = (() => {
-        const { queue, flight } = started(["s", "s2"]);
-        return settleFailed(queue, flight, { type: "isolate" }, 200);
-      })();
-      const withHeld = applyHeld(isolated, ["r", "s2"], new Set(["r", "s2"]));
-      const mixed = (() => {
-        const { queue, flight } = started(["c"], "record", 100, withHeld);
-        return settleFailed(
-          queue,
-          flight,
-          { type: "retry", delayMs: 3000 },
-          200,
-        );
-      })();
-      const ids = ["hold-me", "keep", "r", "s", "s2", "c"];
-      return { mixed, ids };
-    }
-
-    it("保留へ移す、保留から戻す、変えない、単独の印を持つ操作が混ざった列で、結果が規則どおりになる", () => {
-      // Given
-      const { mixed, ids } = mixedQueue();
-
-      // When
-      const next = applyHeld(mixed, ids, new Set(["hold-me", "s", "c"]));
-
-      // Then
-      expect(statuses(next, ...ids)).toEqual([
-        "held",
-        "queued",
-        "queued",
-        "held",
-        "queued",
-        "backoff",
-      ]);
-      expect(isSolo(next, "s")).toBe(true);
-      expect(isSolo(next, "s2")).toBe(true);
-      expect(isSolo(next, "hold-me")).toBe(false);
-      expect(isSolo(next, "r")).toBe(false);
-      expect(next.states.has("r")).toBe(false);
-      expect(next.states.has("s2")).toBe(true);
-      expect(next.states.has("keep")).toBe(false);
-    });
-
-    it("引数の列と状態の表を書き換えない", () => {
-      // Given
-      const { mixed, ids } = mixedQueue();
-      const statesBefore = [...mixed.states];
-      const flightsBefore = [...mixed.flights];
-
-      // When
-      const next = applyHeld(mixed, ids, new Set(["hold-me", "s", "c"]));
-
-      // Then
-      expect([...mixed.states]).toEqual(statesBefore);
-      expect([...mixed.flights]).toEqual(flightsBefore);
-      expect(next.states).not.toBe(mixed.states);
-    });
   });
 });
 

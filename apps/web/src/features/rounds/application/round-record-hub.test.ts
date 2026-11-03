@@ -5,11 +5,8 @@ import {
   shotRecorded,
 } from "../domain/round-op-test-helpers";
 import { roundStreamId, type SyncOperation } from "../domain/sync-events";
-import type { RecordChange, RecordMessage } from "./round-record-hub";
-import {
-  createRecordBus,
-  createTestRoundHub,
-} from "./round-record-test-helpers";
+import type { RecordChange } from "./round-record-hub";
+import { createTestRoundHub } from "./round-record-test-helpers";
 
 const STREAM = roundStreamId("round-1");
 
@@ -235,24 +232,8 @@ describe("append", () => {
     await expect(appended).resolves.toBeUndefined();
     const [item] = hub.record(STREAM).items;
     expect(item).toMatchObject({ saved: true, seq: undefined });
-    expect((await hub.readAll()).get(STREAM)?.operations).toHaveLength(1);
+    expect((await hub.readList()).get(STREAM)?.operations).toHaveLength(1);
     expect((await hub.readStored()).size).toBe(0);
-  });
-
-  it("追記を保存の完了後に、他のタブへ知らせる", async () => {
-    // Given
-    const bus = createRecordBus();
-    const { hub } = await startedHub("user-1", { bus });
-    const received: RecordMessage[] = [];
-    bus.channel().open((message) => received.push(message));
-
-    // When
-    await hub.append(STREAM, op("a"));
-
-    // Then
-    expect(received).toEqual([
-      { type: "changed", streamId: STREAM, diverged: false },
-    ]);
   });
 });
 
@@ -287,80 +268,6 @@ describe("whenPersisted", () => {
 
     // Then
     await expect(persisted).resolves.toBeUndefined();
-  });
-});
-
-describe("他のタブの変化", () => {
-  it("他のタブの追記の知らせで、その列を保存先から読み直し、追記された操作を取り込む", async () => {
-    // Given
-    const bus = createRecordBus();
-    const first = await startedHub("user-1", { bus });
-    const second = await startedHub("user-1", { bus, store: first.store });
-
-    // When
-    await first.hub.append(STREAM, op("a"));
-    await flush();
-
-    // Then
-    expect(second.hub.record(STREAM).items.map((item) => item.eventId)).toEqual(
-      ["a"],
-    );
-    expect(second.changes.at(-1)).toEqual({
-      streamId: STREAM,
-      kind: "changed",
-    });
-  });
-
-  it("効かなかった結果の知らせを受けると、その列を再取得が要る印にする", async () => {
-    // Given
-    const bus = createRecordBus();
-    const first = await startedHub("user-1", { bus });
-    const second = await startedHub("user-1", { bus, store: first.store });
-    await first.hub.append(STREAM, op("a"));
-    await flush();
-
-    // When
-    first.hub.applySendResults(
-      STREAM,
-      ["a"],
-      [
-        {
-          revision: null,
-          applied: false,
-          appliedFields: null,
-          rejectedFields: [],
-        },
-      ],
-    );
-    await flush();
-
-    // Then
-    expect(second.hub.divergedStreams().has(STREAM)).toBe(true);
-    expect(second.hub.record(STREAM).items).toEqual([]);
-  });
-
-  it("確定の書き込みが終わってから、他のタブへ1回だけ知らせる", async () => {
-    // Given
-    const bus = createRecordBus();
-    const first = await startedHub("user-1", { bus });
-    await first.hub.append(STREAM, op("a"));
-    const received: RecordMessage[] = [];
-    bus.channel().open((message) => received.push(message));
-    const acking = deferred<void>();
-    vi.spyOn(first.store, "ack").mockReturnValueOnce(acking.promise);
-
-    // When
-    first.hub.applySendResults(STREAM, ["a"], [applied(4)]);
-    await flush();
-    const beforeWrite = received.length;
-    acking.resolve();
-    await flush();
-
-    // Then
-    expect(beforeWrite).toBe(0);
-    expect(received).toEqual([
-      { type: "changed", streamId: STREAM, diverged: false },
-    ]);
   });
 });
 
@@ -456,13 +363,10 @@ describe("applySendResults と discard", () => {
     expect(hub.record(STREAM).items[0].ackedRevision).toBe(1);
   });
 
-  it("認可・契約で拒否された操作は、記録から外して保存先からも退かせ、再取得の印は付けずに知らせる", async () => {
+  it("認可・契約で拒否された操作は、記録から外して保存先からも退かせ、再取得の印は付けない", async () => {
     // Given
-    const bus = createRecordBus();
-    const { hub, store } = await startedHub("user-1", { bus });
+    const { hub, store } = await startedHub();
     await hub.append(STREAM, op("a"));
-    const received: RecordMessage[] = [];
-    bus.channel().open((message) => received.push(message));
 
     // When
     await hub.discard(STREAM, ["a"]);
@@ -470,9 +374,6 @@ describe("applySendResults と discard", () => {
     // Then
     expect(hub.record(STREAM).items).toEqual([]);
     expect(store.rows).toEqual([]);
-    expect(received).toEqual([
-      { type: "changed", streamId: STREAM, diverged: false },
-    ]);
     expect(hub.divergedStreams().size).toBe(0);
   });
 
@@ -484,10 +385,10 @@ describe("applySendResults と discard", () => {
     hub.setInFlight(STREAM, ["a"], true);
 
     // When
-    await hub.reloadStream(STREAM);
+    await hub.reloadAll();
     const whileSending = hub.record(STREAM).items.length;
     hub.setInFlight(STREAM, ["a"], false);
-    await hub.reloadStream(STREAM);
+    await hub.reloadAll();
 
     // Then
     expect(whileSending).toBe(1);
@@ -712,24 +613,388 @@ describe("読み出し", () => {
     // Then
     expect([...stored.keys()]).toEqual([STREAM]);
   });
+});
 
-  it("readAllは、メモリの記録のベースと保存が完了した操作を列IDごとに返す。保存に失敗した操作も含む", async () => {
-    // Given
-    const { hub, store } = await startedHub();
-    await hub.append(STREAM, op("saved"));
-    vi.spyOn(store, "append").mockRejectedValueOnce(new Error("quota"));
-    await hub.append(STREAM, op("unsaved"));
-    await hub.commit(STREAM, roundBase(), 10, "user-1");
+const STREAM_2 = roundStreamId("round-2");
 
-    // When
-    const all = await hub.readAll();
+// 保存先を共有する2つのタブ。通知の経路は無く、保存先だけで繋がる。保存先の組の消失(完了)は、メモリの保存が保持の規則を持たないため、行を消して表す。
+async function sharedTabs(userId = "user-1") {
+  const first = await startedHub(userId);
+  const second = () => startedHub(userId, { store: first.store });
+  return { first, second };
+}
 
-    // Then
-    expect([...all.keys()]).toEqual([STREAM]);
-    expect(all.get(STREAM)?.base?.startedAt).toBe(10);
-    expect(
-      all.get(STREAM)?.operations.map((entry) => entry.operation.eventId),
-    ).toEqual(["saved", "unsaved"]);
+const ineffective = {
+  revision: null,
+  applied: false,
+  appliedFields: null,
+  rejectedFields: [],
+};
+
+// 一覧の材料で、列ごとの操作のIDを見る。
+function operationIds(
+  list: Awaited<
+    ReturnType<ReturnType<typeof createTestRoundHub>["hub"]["readList"]>
+  >,
+  streamId: string,
+) {
+  return list.get(streamId)?.operations.map((entry) => entry.operation.eventId);
+}
+
+describe("readList", () => {
+  describe("保存を基準にした一覧の材料", () => {
+    it("保存の組から画面用の形を作り、確定の反映が済んでいない行は除き、確定した行には確定した項目を付ける", async () => {
+      // Given
+      const { hub, store } = await startedHub();
+      await hub.append(STREAM, op("pending"));
+      await hub.append(STREAM, op("confirmed"));
+      await hub.append(STREAM, op("unfit"));
+      await store.ack("confirmed", 3, true, ["name"]);
+      await store.ack("unfit", null, false, null);
+      await hub.commit(STREAM, roundBase(), 10, "user-1");
+
+      // When
+      const list = await hub.readList();
+
+      // Then
+      expect(list.get(STREAM)?.base?.startedAt).toBe(10);
+      expect(list.get(STREAM)?.operations).toEqual([
+        { operation: op("pending"), confirmedFields: undefined },
+        { operation: op("confirmed"), confirmedFields: ["name"] },
+      ]);
+    });
+
+    it("別のタブの追記と削除の印が、通知なしで材料に載る", async () => {
+      // Given
+      const { first, second } = await sharedTabs();
+      const other = await second();
+
+      // When
+      await first.hub.append(STREAM, op("a"));
+      await first.hub.commit(STREAM_2, null, 10, "user-1");
+      const list = await other.hub.readList();
+
+      // Then
+      expect(operationIds(list, STREAM)).toEqual(["a"]);
+      expect(list.get(STREAM_2)?.base).toEqual({ startedAt: 10, base: null });
+    });
+
+    it("別のタブが完了して保存の組が消えた列は、メモリに入力中で持っていても載らず、再読み込み後の材料と一致する", async () => {
+      // Given
+      const { first, second } = await sharedTabs();
+      await first.hub.append(STREAM, op("a"));
+      const other = await second();
+      first.store.rows.length = 0;
+
+      // When
+      const list = await other.hub.readList();
+      const reloaded = await (await second()).hub.readList();
+
+      // Then
+      expect(other.hub.record(STREAM).items).toHaveLength(1);
+      expect([...list.keys()]).toEqual([]);
+      expect(list).toEqual(reloaded);
+    });
+
+    it("保存に無く書き込み失敗の列にも無い列は、確定済みの操作だけがメモリに残っていても載らない", async () => {
+      // Given
+      const { hub, store } = await startedHub();
+      await hub.append(STREAM, op("confirmed"));
+      hub.applySendResults(STREAM, ["confirmed"], [applied(4)]);
+      await flush();
+      store.rows.length = 0;
+
+      // When
+      const list = await hub.readList();
+
+      // Then
+      expect(hub.record(STREAM).items).toHaveLength(1);
+      expect([...list.keys()]).toEqual([]);
+    });
+  });
+
+  describe("保存先の読み取りの失敗", () => {
+    it("読み取りが失敗しても拒否せず、全ての列をメモリから作り、復旧後の次の呼び出しでは保存を基準に戻る", async () => {
+      // Given
+      const { hub, store } = await startedHub();
+      await hub.append(STREAM, op("a"));
+      vi.spyOn(store, "loadAll").mockRejectedValueOnce(new Error("idb"));
+
+      // When
+      const duringFailure = await hub.readList();
+      store.rows.length = 0;
+      const afterRecovery = await hub.readList();
+
+      // Then
+      expect(operationIds(duringFailure, STREAM)).toEqual(["a"]);
+      expect([...afterRecovery.keys()]).toEqual([]);
+    });
+
+    it("書き込みに失敗した列は、読み取りの復旧後もメモリから作る", async () => {
+      // Given
+      const { hub, store } = await startedHub();
+      vi.spyOn(store, "append").mockRejectedValueOnce(new Error("quota"));
+      await hub.append(STREAM, op("a"));
+      vi.spyOn(store, "loadAll").mockRejectedValueOnce(new Error("idb"));
+      await hub.readList();
+
+      // When
+      const afterRecovery = await hub.readList();
+
+      // Then
+      expect(operationIds(afterRecovery, STREAM)).toEqual(["a"]);
+    });
+  });
+
+  describe("書き込みの1種類の失敗", () => {
+    it("追記だけが失敗した列は、保存に無い操作がメモリにだけある入力中として載る", async () => {
+      // Given
+      const { hub, store } = await startedHub();
+      await hub.append(STREAM, op("saved"));
+      vi.spyOn(store, "append").mockRejectedValueOnce(new Error("quota"));
+      await hub.append(STREAM, op("memory-only"));
+
+      // When
+      const list = await hub.readList();
+
+      // Then
+      expect(operationIds(list, STREAM)).toEqual(["saved", "memory-only"]);
+    });
+
+    it("commitだけが失敗した列は、メモリのベースが一覧から落ちず載る", async () => {
+      // Given
+      const { hub, store } = await startedHub();
+      vi.spyOn(store, "commit").mockRejectedValueOnce(new Error("idb"));
+      await hub.commit(STREAM, roundBase(), 10, "user-1");
+
+      // When
+      const list = await hub.readList();
+
+      // Then
+      expect(list.get(STREAM)?.base?.startedAt).toBe(10);
+    });
+
+    it("ackだけが失敗した列は、保存の未確定の行で上書きされず、メモリの確定した内容で載る", async () => {
+      // Given
+      const { hub, store } = await startedHub();
+      await hub.append(STREAM, op("a"));
+      vi.spyOn(store, "ack").mockRejectedValue(new Error("idb"));
+      hub.applySendResults(STREAM, ["a"], [applied(4, ["name"])]);
+      await flush();
+
+      // When
+      const list = await hub.readList();
+
+      // Then
+      expect(store.rows[0].ackedRevision).toBeUndefined();
+      expect(list.get(STREAM)?.operations).toEqual([
+        { operation: op("a"), confirmedFields: ["name"] },
+      ]);
+    });
+
+    it("discardのretireだけが失敗した列は、拒否された操作が保存に残った行から戻らない", async () => {
+      // Given
+      const { hub, store } = await startedHub();
+      await hub.append(STREAM, op("rejected"));
+      vi.spyOn(store, "retire").mockRejectedValueOnce(new Error("idb"));
+      await hub.discard(STREAM, ["rejected"]);
+
+      // When
+      const list = await hub.readList();
+
+      // Then
+      expect(store.rows).toHaveLength(1);
+      expect(operationIds(list, STREAM)).toEqual([]);
+    });
+
+    it("効かなかった操作の除去のretireだけが失敗した列は、除去済みの操作が保存に残った行から戻らない", async () => {
+      // Given
+      const { hub, store } = await startedHub();
+      await hub.append(STREAM, op("unfit"));
+      vi.spyOn(store, "retire").mockRejectedValueOnce(new Error("idb"));
+      hub.applySendResults(STREAM, ["unfit"], [ineffective]);
+      await flush();
+
+      // When
+      const list = await hub.readList();
+
+      // Then
+      expect(store.rows).toHaveLength(1);
+      expect(operationIds(list, STREAM)).toEqual([]);
+    });
+  });
+
+  describe("書き込みの失敗を経た列", () => {
+    // 失敗した追記の後に保存が復旧し、続く追記は保存に成功した状態にする。
+    async function failedThenRecovered() {
+      const { first, second } = await sharedTabs();
+      const failing = first;
+      vi.spyOn(failing.store, "append").mockRejectedValueOnce(
+        new Error("quota"),
+      );
+      await failing.hub.append(STREAM, op("memory-only"));
+      await failing.hub.append(STREAM, op("saved"));
+      await failing.hub.append(STREAM_2, op("healthy"));
+      return { failing, second };
+    }
+
+    it("別のタブが完了しても再読み込みまで入力中として残り、新しく起動したハブでは完了した状態になる。保存に成功した操作は失われない", async () => {
+      // Given
+      const { failing, second } = await failedThenRecovered();
+      const beforeCompletion = await (await second()).hub.readList();
+      failing.store.rows.length = 0;
+
+      // When
+      const list = await failing.hub.readList();
+      const reloaded = await (await second()).hub.readList();
+
+      // Then
+      expect(operationIds(beforeCompletion, STREAM)).toEqual(["saved"]);
+      expect(operationIds(list, STREAM)).toEqual(["memory-only", "saved"]);
+      expect([...reloaded.keys()]).toEqual([]);
+    });
+
+    it("失敗を経ていない別の列は、同じ操作で保存を基準になる", async () => {
+      // Given
+      const { failing } = await failedThenRecovered();
+      failing.store.rows.length = 0;
+
+      // When
+      const list = await failing.hub.readList();
+
+      // Then
+      expect([...list.keys()]).toEqual([STREAM]);
+    });
+
+    it.each([
+      [
+        "停止して起動し直した",
+        async (hub: ReturnType<typeof createTestRoundHub>["hub"]) => {
+          hub.stop();
+          hub.start("user-1");
+          await hub.ready();
+        },
+      ],
+      [
+        "利用者を替えて戻した",
+        async (hub: ReturnType<typeof createTestRoundHub>["hub"]) => {
+          hub.setUser("user-2");
+          hub.setUser("user-1");
+          await hub.ready();
+        },
+      ],
+    ])(
+      "%s後は失敗の記録が空になり、材料は保存を基準にする",
+      async (_name, restart) => {
+        // Given
+        const { failing } = await failedThenRecovered();
+        await restart(failing.hub);
+        failing.store.rows.length = 0;
+
+        // When
+        const list = await failing.hub.readList();
+
+        // Then
+        expect([...list.keys()]).toEqual([]);
+      },
+    );
+
+    it("詳細を開く読み取りは保存の内容を返し、別のタブが完了した後は完了した状態を返す", async () => {
+      // Given
+      const { failing } = await failedThenRecovered();
+      const beforeCompletion = await failing.hub.read(STREAM);
+      failing.store.rows.length = 0;
+
+      // When
+      const afterCompletion = await failing.hub.read(STREAM);
+
+      // Then
+      expect(beforeCompletion.entries.map((row) => row.eventId)).toEqual([
+        "saved",
+      ]);
+      expect(afterCompletion.entries).toEqual([]);
+    });
+
+    it("送信と確定の判定は失敗の記録に影響されず、失敗を経た列の送信が続く", async () => {
+      // Given
+      const { failing } = await failedThenRecovered();
+
+      // When
+      failing.hub.applySendResults(STREAM, ["memory-only"], [applied(7)]);
+      await flush();
+
+      // Then
+      expect(
+        failing.hub.record(STREAM).items.map((item) => item.ackedRevision),
+      ).toEqual([7, undefined]);
+    });
+  });
+
+  describe("競合で効かなかった記録の別のタブでの表示", () => {
+    it("保存の内容が確定した後は、別のタブの材料と読み取りが効かなかった値を含まず、取り直しの印は記録したタブだけに付く", async () => {
+      // Given
+      const { first, second } = await sharedTabs();
+      await first.hub.commit(STREAM, roundBase({ name: "古い" }), 5, "user-1");
+      const other = await second();
+      await first.hub.append(STREAM, op("conflicted"));
+
+      // When
+      first.hub.applySendResults(STREAM, ["conflicted"], [ineffective]);
+      await flush();
+      await first.hub.commit(
+        STREAM,
+        roundBase({ name: "他端末" }),
+        20,
+        "user-1",
+      );
+      const list = await other.hub.readList();
+      const stored = await other.hub.read(STREAM);
+
+      // Then
+      expect(list.get(STREAM)?.base?.startedAt).toBe(20);
+      expect(operationIds(list, STREAM)).toEqual([]);
+      expect(stored.entries).toEqual([]);
+      expect(first.hub.divergedStreams().has(STREAM)).toBe(true);
+      expect(other.hub.divergedStreams().has(STREAM)).toBe(false);
+    });
+  });
+
+  describe("利用者の切り替え", () => {
+    it("読み込みの間に利用者が替わったら、その結果を返さず現在の利用者で読み直す", async () => {
+      // Given
+      const { hub, store } = await startedHub("user-1");
+      const old = deferred<Awaited<ReturnType<typeof store.loadAll>>>();
+      const load = vi.spyOn(store, "loadAll").mockReturnValueOnce(old.promise);
+      const reading = hub.readList();
+      await flush();
+      hub.setUser("user-2");
+
+      // When
+      old.resolve(
+        new Map([
+          [
+            STREAM,
+            {
+              base: undefined,
+              entries: [
+                {
+                  seq: 1,
+                  eventId: "old",
+                  streamId: STREAM,
+                  userId: "user-1",
+                  operation: op("old"),
+                },
+              ],
+            },
+          ],
+        ]),
+      );
+      const list = await reading;
+
+      // Then
+      expect(list.size).toBe(0);
+      expect(load).toHaveBeenLastCalledWith("user-2");
+    });
   });
 });
 

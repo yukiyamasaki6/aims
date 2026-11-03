@@ -919,6 +919,59 @@ test("他の端末の矢がある距離で、オフラインで距離(m)とエ�
   await expect(endBalls(page, 1, 1)).toHaveText(["10", "9", "8", "7", "6"]);
 });
 
+test("2つのタブで開いたラウンドの一方のタブの変更が他の端末の矢との競合で効かず保存の内容が確定した後、もう一方のタブで、オフラインのままアプリ内で一覧へ離れて詳細を開き直すと、保存の内容が表示され、再読み込みしても同じである", async ({
+  page,
+  context,
+}) => {
+  // 6エンド×6射の距離を2つのタブで開き、一方のタブで40m・12エンド×3射へ変えて保存する。
+  const { supabase, distanceIds } = await createSyncRound({
+    distances: [{ distance: 18, totalEnds: 6, arrowsPerEnd: 6 }],
+  });
+  const stale = await context.newPage();
+  await openRound(page);
+  await stale.goto(`/rounds/${roundId}`);
+  await waitForHydration(stale);
+  await page.bringToFront();
+  await context.setOffline(true);
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-distance-1").fill("40");
+  await page.getByTestId("distance-config-total-ends-1").fill("12");
+  await page.getByTestId("distance-config-arrows-1").fill("3");
+  await page.getByTestId("distance-config-save-1").click();
+  await expect(page.getByTestId("distance-config-save-1")).toBeHidden();
+
+  // 他の端末がエンド1へ5本を記録した後でオンラインに戻り、変更が競合して距離(m)だけが保存され、変更したタブの表示が保存の内容に戻るのを確かめる。
+  for (const score of [10, 9, 8, 7, 6]) {
+    await recordShot(supabase, {
+      distanceId: distanceIds[0],
+      endNumber: 1,
+      scoreStr: String(score),
+      scoreInt: score,
+    });
+  }
+  await goOnline(page);
+  await expect(page.getByTestId("distance-summary-1")).toContainText("40m");
+  await expect(page.getByTestId("distance-summary-1")).toContainText(
+    "6本×6エンド",
+  );
+  await expect(endBalls(page, 1, 1)).toHaveText(["10", "9", "8", "7", "6"]);
+
+  // もう一方のタブで、オフラインのままアプリ内で一覧へ離れて詳細を開き直し、保存の内容が表示されるのを確かめる。
+  await stale.bringToFront();
+  await goOffline(context);
+  await backToList(stale);
+  await roundLinks(stale, roundId).click();
+  await expect(stale.getByTestId("round-summary")).toBeVisible();
+  await expect(stale.getByTestId("distance-summary-1")).toContainText("40m");
+  await expect(endBalls(stale, 1, 1)).toHaveText(["10", "9", "8", "7", "6"]);
+
+  // オンラインに戻って再読み込みしても、同じ内容が表示されることを確かめる。
+  await comeBackOnline(context, stale);
+  await reloadRound(stale);
+  await expect(stale.getByTestId("distance-summary-1")).toContainText("40m");
+  await expect(endBalls(stale, 1, 1)).toHaveText(["10", "9", "8", "7", "6"]);
+});
+
 test("他の端末がラウンドの名前と日付を、この端末がオフラインで名前と弓種を変えると、オンラインに戻った後、名前は後に保存されたこの端末の値になり、日付と弓種は両方の変更が残る", async ({
   page,
 }) => {
@@ -1108,54 +1161,11 @@ test("他の端末がラウンドを削除した後に、この端末がオフ�
   await expect(page.getByText("ラウンドが見つかりません。")).toBeVisible();
 });
 
-test("2つのタブで、同期済みの同じ矢を、オフラインで一方のタブが直し、他方のタブが後に消すと、オンラインに戻った後、後に行った消去の結果が保存される", async ({
+test("送信に失敗して2つのタブに未送信の点数があるとき、一方のタブを閉じてから残ったタブを再読み込みすると、両方の点数が保存される", async ({
   page,
   context,
 }) => {
-  // 同期済みの5の矢があるラウンドを2つのタブで開き、オフラインで一方のタブでその矢を10へ直し、他方のタブに反映されるのを確かめる。
-  const { supabase, distanceIds } = await createSyncRound({
-    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
-  });
-  await recordShot(supabase, {
-    distanceId: distanceIds[0],
-    endNumber: 1,
-    scoreStr: "5",
-    scoreInt: 5,
-  });
-  const other = await context.newPage();
-  await openRound(page);
-  await other.goto(`/rounds/${roundId}`);
-  await waitForHydration(other);
-  await context.setOffline(true);
-  // 背面のタブはアニメーションが進まず、操作の「安定」を待ち続けるため、操作するタブを前面にする。
-  await page.bringToFront();
-  await page.getByTestId("shot-ball-1-1-1").click();
-  // 閉じたテンキーを開き直す動きが終わってから押す。
-  await expectKeypadSettled(page);
-  await page.getByTestId("score-button-10").click();
-  await expect(endBalls(other, 1, 1)).toHaveText(["10"]);
-
-  // 他方のタブでその矢を消し、一方のタブからも消えるのを確かめる。
-  await other.bringToFront();
-  await other.getByTestId("shot-ball-1-1-1").click();
-  await other.getByTestId("score-button-clear").click();
-  await expect(endBalls(page, 1, 1)).toHaveCount(0);
-
-  // オンラインに戻り、消去の結果が保存され、再読み込みしても表示されないことを確かめる。
-  await context.setOffline(false);
-  await goOnline(page);
-  await goOnline(other);
-  // 初めは5が保存されているため、消去の確定で空になる。
-  await expectSavedShots(supabase, distanceIds[0], []);
-  await reloadRound(page);
-  await expect(endBalls(page, 1, 1)).toHaveCount(0);
-});
-
-test("送信に失敗して2つのタブに未送信の点数があるとき、一方のタブを閉じると、残ったタブで両方の点数が保存される", async ({
-  page,
-  context,
-}) => {
-  // 送信が失敗する状態で、2つのタブで同じエンドへ10と9を記録する。
+  // 送信が失敗する状態で、2つのタブで別のエンドへ10と9を記録する。
   const { supabase, distanceIds } = await createSyncRound({
     distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
   });
@@ -1177,14 +1187,44 @@ test("送信に失敗して2つのタブに未送信の点数があるとき、�
   await page.getByTestId("score-button-10").click();
   await expect.poll(() => attempts).toBeGreaterThan(0);
   await other.bringToFront();
-  await other.getByTestId("end-blank-1-1").click();
+  await other.getByTestId("end-blank-1-2").click();
+  await expectKeypadSettled(other);
   await other.getByTestId("score-button-9").click();
-  await expect(endBalls(other, 1, 1)).toHaveText(["10", "9"]);
+  await expect(endBalls(other, 1, 2)).toHaveText(["9"]);
 
-  // 送信の失敗を解いて一方のタブを閉じ、残ったタブで両方の点数が保存されることを確かめる。
+  // 送信の失敗を解いて一方のタブを閉じ、残ったタブを再読み込みして、両方の点数が保存されることを確かめる。
   failing = false;
   await page.close();
-  await expectSavedShots(supabase, distanceIds[0], ["1:10", "1:9"]);
+  await reloadRound(other);
+  await expectSavedShots(supabase, distanceIds[0], ["1:10", "2:9"]);
+});
+
+test("2つのタブで別のエンドへ点数を記録すると、どちらも保存され、再読み込みしても両方が表示される", async ({
+  page,
+  context,
+}) => {
+  // 同じラウンドを2つのタブで開き、別のエンドへ10と9を記録する。
+  const { supabase, distanceIds } = await createSyncRound({
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+  });
+  const other = await context.newPage();
+  await openRound(page);
+  await other.goto(`/rounds/${roundId}`);
+  await waitForHydration(other);
+  await page.bringToFront();
+  await page.getByTestId("score-button-10").click();
+  await expect(endBalls(page, 1, 1)).toHaveText(["10"]);
+  await other.bringToFront();
+  await other.getByTestId("end-blank-1-2").click();
+  await expectKeypadSettled(other);
+  await other.getByTestId("score-button-9").click();
+  await expect(endBalls(other, 1, 2)).toHaveText(["9"]);
+
+  // 両方の点数が保存され、再読み込みしたタブに両方が表示されることを確かめる。
+  await expectSavedShots(supabase, distanceIds[0], ["1:10", "2:9"]);
+  await reloadRound(page);
+  await expect(endBalls(page, 1, 1)).toHaveText(["10"]);
+  await expect(endBalls(page, 1, 2)).toHaveText(["9"]);
 });
 
 test("オフラインで点数を記録した入力中のラウンドを、アプリを開き直してオフラインのまま開き、その間に他の端末が別のエンドへ点数を記録すると、オンラインに戻った後、操作なしで両方の点数が表示され、オフラインで記録した点数が保存される", async ({
