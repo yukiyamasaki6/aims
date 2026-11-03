@@ -3,6 +3,7 @@ import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import { FETCH_ERROR_MESSAGE } from "../domain/fetch-status";
 import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
+import type { QueryOutcome } from "../domain/query-outcome";
 import { createContentFetcher } from "./content-fetcher";
 import {
   createFakeSignInReader,
@@ -11,12 +12,12 @@ import {
 
 const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
 
-const okResponse = { data: { id: "a" }, error: null, status: 200 };
-const unauthorizedResponse = {
-  data: null,
-  error: { code: "PGRST301", message: "JWT expired" },
-  status: 401,
+const okResponse: QueryOutcome<{ id: string }> = {
+  status: "ok",
+  data: { id: "a" },
 };
+const authRejected: QueryOutcome<{ id: string }> = { status: "auth-rejected" };
+const commFailure: QueryOutcome<{ id: string }> = { status: "comm-failure" };
 const UNREACHABLE_MESSAGE =
   "通信エラーが発生しました。しばらくしてから再度お試しください。";
 const unknown = { status: "unknown", message: UNREACHABLE_MESSAGE } as const;
@@ -30,7 +31,7 @@ type Reading = SignInReading;
 
 // 切断の状態と通知を、テストから動かせる通信の可否。
 // lib の createFakeConnectivity に置き換えない理由: 取得の途中で、購読者へ知らせずに切断の状態だけを替える検証
-// (HTTP応答のあるエラーはerrorのまま、時間切れはofflineを返す、など)があり、
+// (HTTP応答のあるエラー(failed)はerrorのまま、時間切れはofflineを返す、など)があり、
 // lib の fake は状態を替えると必ず購読者へ知らせるため、同じ検証にならない。
 function makeConnectivity(offline = false) {
   const state = { offline };
@@ -98,7 +99,7 @@ describe("fetchContent", () => {
       });
       const run = vi
         .fn()
-        .mockResolvedValueOnce(unauthorizedResponse)
+        .mockResolvedValueOnce(authRejected)
         .mockResolvedValueOnce(okResponse);
 
       // When
@@ -110,26 +111,24 @@ describe("fetchContent", () => {
       expect(run).toHaveBeenLastCalledWith({ userId: "u1-refreshed" });
     });
 
-    it("nullIsNotFoundを判定へ渡す", async () => {
+    it("クエリがnot-foundで返ると、not-foundを返す", async () => {
       // Given
       const { fetcher } = setup();
-      const run = async () => ({ data: null, error: null, status: 200 });
+      const run = async (): Promise<QueryOutcome<{ id: string }>> => ({
+        status: "not-found",
+      });
 
       // When
-      const result = await fetcher.fetchContent(run, { nullIsNotFound: true });
+      const result = await fetcher.fetchContent(run);
 
       // Then
       expect(result).toEqual({ status: "not-found" });
     });
 
-    it("クエリが通信失敗(status 0)を返すと、原因を断定せずerrorにする", async () => {
+    it("クエリがcomm-failureを返すと、オンラインなら原因を断定せずerrorにする", async () => {
       // Given
       const { fetcher } = setup();
-      const run = async () => ({
-        data: null,
-        error: { message: "TypeError: Failed to fetch" },
-        status: 0,
-      });
+      const run = async () => commFailure;
 
       // When
       const result = await fetcher.fetchContent(run);
@@ -220,10 +219,10 @@ describe("fetchContent", () => {
       expect(run).not.toHaveBeenCalled();
     });
 
-    it("クエリが認証の拒否で返り、更新で未認証と分かると、サインインが必要なerrorにする", async () => {
+    it("クエリがauth-rejectedで返り、更新で未認証と分かると、サインインが必要なerrorにする", async () => {
       // Given
       const { fetcher } = setup({ readings: [authenticated, unauthenticated] });
-      const run = vi.fn(async () => unauthorizedResponse);
+      const run = vi.fn(async () => authRejected);
 
       // When
       const result = await fetcher.fetchContent(run);
@@ -236,12 +235,12 @@ describe("fetchContent", () => {
       expect(run).toHaveBeenCalledTimes(1);
     });
 
-    it("クエリが認証の拒否で返り、更新で確かめられないと、errorにする", async () => {
+    it("クエリがauth-rejectedで返り、更新で確かめられないと、errorにする", async () => {
       // Given
       const { fetcher } = setup({
         readings: [authenticated, unknown],
       });
-      const run = vi.fn(async () => unauthorizedResponse);
+      const run = vi.fn(async () => authRejected);
 
       // When
       const result = await fetcher.fetchContent(run);
@@ -254,7 +253,7 @@ describe("fetchContent", () => {
     it("更新で確かめた後の取り直しも認証の拒否で返ると、サインインを求めずerrorにし、3回目は取り直さない", async () => {
       // Given
       const { fetcher, read } = setup();
-      const run = vi.fn(async () => unauthorizedResponse);
+      const run = vi.fn(async () => authRejected);
 
       // When
       const result = await fetcher.fetchContent(run);
@@ -265,13 +264,13 @@ describe("fetchContent", () => {
       expect(read).toHaveBeenCalledTimes(2);
     });
 
-    it("更新後の取り直しが通信失敗(status 0)のとき、errorにする", async () => {
+    it("更新後の取り直しがcomm-failureのとき、errorにする", async () => {
       // Given
       const { fetcher } = setup();
       const run = vi
         .fn()
-        .mockResolvedValueOnce(unauthorizedResponse)
-        .mockResolvedValueOnce({ data: null, error: null, status: 0 });
+        .mockResolvedValueOnce(authRejected)
+        .mockResolvedValueOnce(commFailure);
 
       // When
       const result = await fetcher.fetchContent(run);
@@ -332,10 +331,7 @@ describe("fetchContent", () => {
     });
 
     it.each([
-      [
-        "クエリがstatus 0を返す",
-        async () => ({ data: null, error: null, status: 0 }),
-      ],
+      ["クエリがcomm-failureを返す", async () => commFailure],
       [
         "クエリが例外を投げる",
         async () => {
@@ -396,12 +392,12 @@ describe("fetchContent", () => {
       expect(result).toEqual({ status: "offline" });
     });
 
-    it("切断でも、HTTP応答のあるエラーはerrorのままにする", async () => {
+    it("切断でも、HTTP応答のあるエラー(failed)はerrorのままにする", async () => {
       // Given
       const { fetcher, network } = setup();
-      const run = async () => {
+      const run = async (): Promise<QueryOutcome<{ id: string }>> => {
         network.state.offline = true;
-        return { data: null, error: { message: "boom" }, status: 500 };
+        return { status: "failed" } as const;
       };
 
       // When
@@ -456,7 +452,7 @@ describe("fetchContent", () => {
       delayMs: number,
     ) {
       return () =>
-        new Promise<typeof okResponse>((resolve) => {
+        new Promise<QueryOutcome<{ id: string }>>((resolve) => {
           clock.after(delayMs, () => resolve(okResponse));
         });
     }
