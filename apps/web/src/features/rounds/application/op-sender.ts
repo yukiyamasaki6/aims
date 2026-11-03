@@ -195,6 +195,15 @@ export function createOpSender(deps: {
     pumpAll();
   }
 
+  // 通信の回復で、リトライ待機の要求をすぐに再送する(試行番号は消費しない)。
+  function recoverOnline() {
+    const now = clock.now();
+    for (const [streamId, queue] of [...queues]) {
+      writeQueue(streamId, handleOnline(queue, now));
+    }
+    pumpAll();
+  }
+
   function clearState() {
     generation += 1;
     for (const cancel of timers) cancel();
@@ -211,7 +220,11 @@ export function createOpSender(deps: {
       started = true;
       startSeq += 1;
       const mine = startSeq;
-      stopListening = [hub.subscribe(handleChange)];
+      // 通信の回復の購読は、同期の契機の受け取りの購読(取り直しの再開)より先に登録され、再送が先に動く。
+      stopListening = [
+        hub.subscribe(handleChange),
+        connectivity.onOnline(recoverOnline),
+      ];
       void whenLoaded(mine);
       pumpAll();
     },
@@ -233,14 +246,6 @@ export function createOpSender(deps: {
         const resumed = resumeHeld(queue);
         if (!resumed.resumed) continue;
         writeQueue(streamId, resumed.queue);
-      }
-      pumpAll();
-    },
-    // 通信の回復で、リトライ待機の要求をすぐに再送する（試行番号は消費しない）。
-    online() {
-      const now = clock.now();
-      for (const [streamId, queue] of [...queues]) {
-        writeQueue(streamId, handleOnline(queue, now));
       }
       pumpAll();
     },

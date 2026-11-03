@@ -12,7 +12,11 @@ import {
   IDLE_GATE,
 } from "../domain/flight-gate";
 import { staleRetryDelayMs } from "../domain/stale-retry";
-import { refreshDecision, shouldRefetch } from "../domain/sync-trigger";
+import {
+  refreshDecision,
+  type SignInChange,
+  shouldRefetch,
+} from "../domain/sync-trigger";
 
 // 取り直しの理由。取り直しの制御が返す理由の型から導く。
 type RefreshReason = ReturnType<
@@ -388,20 +392,14 @@ export function createRoundSync(deps: {
       control.stop();
       refresh.reset();
     },
-    // 利用者を切り替える。送信の状態を捨て、新しい利用者の記録を読み直す。
-    switchUser(userId: string | null) {
-      control.setUser(userId);
-    },
-    matchUser: (userId: string | null) => control.matchUser(userId),
-    // 保留を戻して送る。
-    resume() {
-      control.resumeSending();
+    // サインインの変化を、記録の制御へ渡す。反応(利用者の切り替え、保留の再開)はラウンドが決める。
+    signInChanged(change: SignInChange) {
+      control.signInChanged(change);
     },
     refreshAll(_cause: "resident") {
       requestResident();
     },
     online() {
-      control.recoverOnline();
       requestResident();
       restartStale();
     },
