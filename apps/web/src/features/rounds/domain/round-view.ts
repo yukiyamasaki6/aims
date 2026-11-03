@@ -138,34 +138,3 @@ export const INITIAL_CREATION: CreationProgress = {
   confirmed: false,
   gone: false,
 };
-
-export type RefreshReason = "open" | "stale" | "diverged" | "overlay";
-
-// 開いている詳細ごとの、ベースを取り直す要否と理由。先に当たる理由を1つ返す。
-export function freshBaseNeeds(
-  watches: readonly {
-    roundId: string;
-    opening: boolean;
-    stale: boolean;
-  }[],
-  flags: ReadonlyMap<string, { diverged: boolean; overlay: boolean }>,
-): { roundId: string; reason: RefreshReason; reasons: RefreshReason[] }[] {
-  const needs: {
-    roundId: string;
-    reason: RefreshReason;
-    reasons: RefreshReason[];
-  }[] = [];
-  for (const watch of watches) {
-    const flag = flags.get(watch.roundId);
-    // 当たる全ての理由を、open、stale、diverged、overlay の順に並べる。主の理由は先頭。
-    const reasons: RefreshReason[] = [];
-    if (watch.opening) reasons.push("open");
-    if (watch.stale) reasons.push("stale");
-    if (flag?.diverged) reasons.push("diverged");
-    if (flag?.overlay) reasons.push("overlay");
-    if (reasons.length > 0) {
-      needs.push({ roundId: watch.roundId, reason: reasons[0], reasons });
-    }
-  }
-  return needs;
-}

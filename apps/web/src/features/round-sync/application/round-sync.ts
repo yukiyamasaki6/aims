@@ -12,11 +12,12 @@ import {
   IDLE_GATE,
 } from "../domain/flight-gate";
 import { staleRetryDelayMs } from "../domain/stale-retry";
-import {
-  type RefreshReason,
-  refreshDecision,
-  shouldRefetch,
-} from "../domain/sync-trigger";
+import { refreshDecision, shouldRefetch } from "../domain/sync-trigger";
+
+// 取り直しの理由。取り直しの制御が返す理由の型から導く。
+type RefreshReason = ReturnType<
+  RoundRefreshControl["refreshNeeds"]
+>["rounds"][number]["reason"];
 
 // ラウンドごとの扉と、完了後にやり直す予約。
 type RoundLane = {
@@ -156,7 +157,8 @@ export function createRoundSync(deps: {
     const need = needOf(roundId);
     if (!active || rerun === undefined || need === undefined) return false;
     return (
-      need.reason !== "open" && shouldRefetch(rerun, connectivity.isOffline())
+      need.reason !== "open" &&
+      shouldRefetch(rerun === "open", connectivity.isOffline())
     );
   }
 
@@ -264,7 +266,7 @@ export function createRoundSync(deps: {
   ) {
     if (need.reason !== "stale") return;
     if (need.reasons.includes("diverged")) {
-      if (shouldRefetch("diverged", offline)) {
+      if (shouldRefetch(false, offline)) {
         void refetchRound(need.roundId, "diverged");
       }
       return;
@@ -272,7 +274,7 @@ export function createRoundSync(deps: {
     const isNewOverlay =
       need.reasons.includes("overlay") &&
       !lastExtras.get(need.roundId)?.has("overlay");
-    if (isNewOverlay && shouldRefetch("overlay", offline)) {
+    if (isNewOverlay && shouldRefetch(false, offline)) {
       void refetchRound(need.roundId, "overlay");
     }
   }
@@ -327,7 +329,7 @@ export function createRoundSync(deps: {
     if (need.reason === "open") return;
     if (need.reason === "stale") {
       if (!staleTimers.has(need.roundId)) scheduleStale(need.roundId);
-    } else if (shouldRefetch(need.reason, offline)) {
+    } else if (shouldRefetch(false, offline)) {
       void refetchRound(need.roundId, need.reason);
     }
   }

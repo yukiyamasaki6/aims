@@ -1,4 +1,3 @@
-import { freshBaseNeeds } from "../domain/round-view";
 import { roundStreamId } from "../domain/sync-events";
 import type { RefreshRequests } from "./refresh-requests";
 import type { RoundBaseRefreshing } from "./round-base-refreshing";
@@ -42,6 +41,21 @@ export type RoundRefreshControl = {
   reset(): void;
 };
 
+// 当たる全ての理由を、open、stale、diverged、overlay の順に並べる。主の理由は先頭。
+function reasonsOf(state: {
+  opening: boolean;
+  stale: boolean;
+  diverged: boolean;
+  overlay: boolean;
+}): RefreshNeedReason[] {
+  const reasons: RefreshNeedReason[] = [];
+  if (state.opening) reasons.push("open");
+  if (state.stale) reasons.push("stale");
+  if (state.diverged) reasons.push("diverged");
+  if (state.overlay) reasons.push("overlay");
+  return reasons;
+}
+
 export function createRoundRefreshControl(deps: {
   hub: Pick<RoundRecordHub, "divergedStreams" | "subscribe">;
   requests: Pick<
@@ -65,30 +79,32 @@ export function createRoundRefreshControl(deps: {
     const watched = new Map(
       requests.watched().map((entry) => [entry.roundId, entry.local]),
     );
-    const roundIds = new Set([...pending, ...watched.keys()]);
-    const watches = [...roundIds].map((roundId) => ({
-      roundId,
-      opening: pending.has(roundId),
-      stale:
-        watched.get(roundId) === true && requests.outcomeOf(roundId) !== "ok",
-    }));
-    const flags = new Map(
-      [...roundIds].map((roundId) => [
-        roundId,
-        {
-          diverged: hub.divergedStreams().has(roundStreamId(roundId)),
-          overlay: requests.overlayNeeded(roundId),
-        },
-      ]),
-    );
+    const rounds: {
+      roundId: string;
+      reason: RefreshNeedReason;
+      reasons: RefreshNeedReason[];
+      openRequest?: number;
+    }[] = [];
+    for (const roundId of new Set([...pending, ...watched.keys()])) {
+      const reasons = reasonsOf({
+        opening: pending.has(roundId),
+        stale:
+          watched.get(roundId) === true && requests.outcomeOf(roundId) !== "ok",
+        diverged: hub.divergedStreams().has(roundStreamId(roundId)),
+        overlay: requests.overlayNeeded(roundId),
+      });
+      if (reasons.length === 0) continue;
+      const need = { roundId, reason: reasons[0], reasons };
+      rounds.push(
+        need.reason === "open"
+          ? { ...need, openRequest: requests.latestOpenRequest(roundId) }
+          : need,
+      );
+    }
     return {
       list: requests.hasListRequests(),
       listRequest: requests.latestListRequest(),
-      rounds: freshBaseNeeds(watches, flags).map((need) =>
-        need.reason === "open"
-          ? { ...need, openRequest: requests.latestOpenRequest(need.roundId) }
-          : need,
-      ),
+      rounds,
     };
   }
 

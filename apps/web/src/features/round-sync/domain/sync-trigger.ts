@@ -1,6 +1,3 @@
-// 取り直しの理由。open: 開いたとき、stale: 端末のベースで開いたまま、diverged: 効かなかった結果を受けた、overlay: 確定済みの操作をベースに重ねられなかった。
-export type RefreshReason = "open" | "stale" | "diverged" | "overlay";
-
 // 認証の通知。他の機能の公開の型と同じ平らな形。
 type SignInChangeKind =
   | "signed-in"
@@ -42,10 +39,10 @@ export function startsRefresh(change: SignInChange): boolean {
 
 // 取り直しを行うか。開いたときの依頼は常に行い、他の理由はオフラインでは行わない。
 export function shouldRefetch(
-  reason: RefreshReason,
+  isOpenRequest: boolean,
   offline: boolean,
 ): boolean {
-  return reason === "open" || !offline;
+  return isOpenRequest || !offline;
 }
 
 // 一括の取得の扱い。常駐の契機は、前段を通ったときだけ取得して無条件に反映する。
