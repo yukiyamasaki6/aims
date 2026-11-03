@@ -9,8 +9,13 @@ import {
   waitForHydration,
 } from "../helpers/auth";
 import { blockOpLogStore } from "../helpers/op-log";
-import { openOtherDevice, updateRound } from "../helpers/other-device";
 import {
+  getRoundRow,
+  openOtherDevice,
+  updateRound,
+} from "../helpers/other-device";
+import {
+  expectRoundBasesFetched,
   openNewRoundThenGoOffline,
   startRoundOffline,
 } from "../helpers/reference-data";
@@ -447,10 +452,121 @@ test.describe("入力中の領域", () => {
     await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
   });
 
-  test("他のタブが端末の保存の読み書きを続けているとき、一覧を開くと、10秒後に「読み込めませんでした。」と再試行ボタンが表示される", async ({
+  // 一覧からラウンド作成画面へ移り、内容と端末への取得が済んだ状態にする。後で一覧へ戻る先のタブとして使う。
+  async function leaveListForNewRound(page: Page) {
+    await page.goto("/rounds");
+    await waitForHydration(page);
+    await page.getByTestId("new-round-fab").click();
+    await expect(page).toHaveURL(/\/rounds\/new/);
+    await expect(page.getByTestId("round-preset-button").first()).toBeVisible();
+    await waitForServiceWorkerControl(page);
+    await expectRoundBasesFetched(page);
+  }
+
+  test("別のタブでラウンドを作成して点数を記録し、別のラウンドを削除した後、先に開いていたタブでオフラインのまま一覧へ移ると、記録したラウンドが入力中に表示され、削除したラウンドは表示されず、詳細を開くと点数が表示され、再読み込みしても同じである", async ({
+    page,
+    context,
+  }) => {
+    // 先に開くタブで、削除されるラウンドを含む一覧を表示してから、ラウンド作成画面へ移る。
+    const credentials = await signInFreshUser(page);
+    const deletedName = `別タブで削除-${Date.now()}`;
+    await addRound(credentials, deletedName, "2026-03-01", {
+      shots: [{ scoreStr: "7", scoreInt: 7 }],
+    });
+    await page.goto("/rounds");
+    await expect(inProgressArea(page).getByText(deletedName)).toBeVisible();
+    await leaveListForNewRound(page);
+
+    // 別のタブでラウンドを削除し、オフラインでラウンドを作成して点数を記録する。
+    const other = await context.newPage();
+    await other.goto("/rounds");
+    await waitForHydration(other);
+    const card = other.locator("li", { hasText: deletedName });
+    await card.getByTestId("round-menu-trigger").click();
+    await other.getByTestId("round-delete").click();
+    const deleted = other.waitForResponse(
+      (response) =>
+        response.url().includes("/rpc/disable_round") && response.ok(),
+    );
+    await other.getByTestId("confirm-dialog-confirm").click();
+    await deleted;
+    await expect(card).toBeHidden();
+    await openNewRoundThenGoOffline(other);
+    await startRoundOffline(other, "WA 1440");
+    const createdId = other.url().split("/").pop();
+    await other.getByTestId("score-button-9").click();
+    await expect(other.getByTestId("round-summary")).toContainText("合計9");
+
+    // 先に開いていたタブで一覧へ戻り、記録したラウンドだけが入力中に表示されることを確かめる。
+    await page.bringToFront();
+    await page.getByRole("link", { name: "一覧へ戻る" }).click();
+    await expect(page).toHaveURL(/\/rounds$/);
+    const created = inProgressArea(page).locator(
+      `a[href="/rounds/${createdId}"]`,
+    );
+    await expect(created).toContainText("9点");
+    await expect(page.getByText(deletedName)).toHaveCount(0);
+
+    // 詳細を開いて点数が表示され、再読み込みした一覧も同じであることを確かめる。
+    await created.click();
+    await expect(page.getByTestId("round-summary")).toContainText("合計9");
+    await page.goto("/rounds");
+    await expect(created).toContainText("9点");
+    await expect(page.getByText(deletedName)).toHaveCount(0);
+  });
+
+  test("別のタブで入力中のラウンドを完了した後、先に開いていたタブでオフラインのまま一覧へ移ると、そのラウンドは入力中に表示されない", async ({
+    page,
+    context,
+  }) => {
+    // 先に開くタブで、入力中のラウンドを含む一覧を表示してから、ラウンド作成画面へ移る。
+    const credentials = await signInFreshUser(page);
+    const name = `別タブで完了-${Date.now()}`;
+    const roundId = await createRound({
+      ...credentials,
+      name,
+      roundDate: "2026-03-01",
+      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+      shots: Array.from({ length: 36 }, (_, index) => ({
+        distanceIndex: 0,
+        endNumber: Math.floor(index / 3) + 1,
+        scoreStr: "5",
+        scoreInt: 5,
+      })),
+    });
+    await page.goto("/rounds");
+    await expect(inProgressArea(page).getByText(name)).toBeVisible();
+    await leaveListForNewRound(page);
+
+    // 別のタブでそのラウンドの入力を完了する。
+    const other = await context.newPage();
+    await other.goto("/rounds");
+    await inProgressArea(other).getByText(name).click();
+    await waitForHydration(other);
+    await other.getByTestId("complete-round-button").click();
+    await expect(other).toHaveURL(/\/rounds$/);
+    const { supabase } = await openOtherDevice(
+      credentials.email,
+      credentials.password,
+    );
+    await expect
+      .poll(async () => (await getRoundRow(supabase, roundId)).status, {
+        timeout: 15_000,
+      })
+      .toBe("completed");
+
+    // 先に開いていたタブでオフラインのまま一覧へ戻り、そのラウンドが表示されないことを確かめる。
+    await goOffline(context);
+    await page.bringToFront();
+    await page.getByRole("link", { name: "一覧へ戻る" }).click();
+    await expect(page.getByText(offlineMessage)).toBeVisible();
+    await expect(page.getByText(name)).toHaveCount(0);
+  });
+
+  test("端末の保存の読み書きが続いているとき、一覧を開くと、10秒後に「読み込めませんでした。」と再試行ボタンが表示される", async ({
     page,
   }) => {
-    // 他のタブが端末の保存を使い続ける状態で一覧を開き、読み込み中を確かめる。
+    // 端末の保存の読み書きが続く状態で一覧を開き、読み込み中を確かめる。
     await signInFreshUser(page);
     await page.goto("/rounds");
     await waitForHydration(page);
