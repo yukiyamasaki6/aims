@@ -25,9 +25,12 @@ type RoundLane = {
   reruns: Map<string, RefreshReason>;
 };
 
+// `shouldRefetch`へ渡す、開く依頼ではない理由(diverged、overlay)の印。
+const NOT_OPEN_REQUEST = false;
+
 export type RoundSync = ReturnType<typeof createRoundSync>;
 
-// いつ送り、いつ取り直すかを決める唯一の手続き。契機(認証の通知、通信の復帰と切断、見える状態)と、画面の依頼を受けて、送信器と、ベースの取得と反映を動かす。
+// いつ送り、いつ取り直すかを決める唯一の手続き。契機(認証の通知、通信の復帰と切断、見える状態)と、画面の依頼を受けて、記録の制御と取り直しの制御を動かす。
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createRoundSync(deps: {
   control: RoundRecordControl;
@@ -266,7 +269,7 @@ export function createRoundSync(deps: {
   ) {
     if (need.reason !== "stale") return;
     if (need.reasons.includes("diverged")) {
-      if (shouldRefetch(false, offline)) {
+      if (shouldRefetch(NOT_OPEN_REQUEST, offline)) {
         void refetchRound(need.roundId, "diverged");
       }
       return;
@@ -274,7 +277,7 @@ export function createRoundSync(deps: {
     const isNewOverlay =
       need.reasons.includes("overlay") &&
       !lastExtras.get(need.roundId)?.has("overlay");
-    if (isNewOverlay && shouldRefetch(false, offline)) {
+    if (isNewOverlay && shouldRefetch(NOT_OPEN_REQUEST, offline)) {
       void refetchRound(need.roundId, "overlay");
     }
   }
@@ -329,7 +332,7 @@ export function createRoundSync(deps: {
     if (need.reason === "open") return;
     if (need.reason === "stale") {
       if (!staleTimers.has(need.roundId)) scheduleStale(need.roundId);
-    } else if (shouldRefetch(false, offline)) {
+    } else if (shouldRefetch(NOT_OPEN_REQUEST, offline)) {
       void refetchRound(need.roundId, need.reason);
     }
   }

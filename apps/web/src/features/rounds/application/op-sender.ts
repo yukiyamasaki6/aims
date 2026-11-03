@@ -95,6 +95,7 @@ export function createOpSender(deps: {
     }));
   }
 
+  // 計画が渡すIDは、同じ記録の送れる操作の一覧から来るため、通常は索引に有る。記録が変わって索引に無いIDは、衝突しないものとして扱う。
   function conflictsIn(streamId: string, previousId: string, nextId: string) {
     const previous = operationOf(streamId, previousId);
     const next = operationOf(streamId, nextId);
