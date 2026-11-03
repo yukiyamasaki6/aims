@@ -14,10 +14,11 @@ aims/
 ├── apps/
 │   └── web/           # Next.js frontend
 │       ├── src/
-│       │   ├── app/           # App Router pages
-│       │   ├── components/    # UI components (shadcn/ui)
-│       │   │   └── *.test.tsx     # Unit tests
-│       │   ├── lib/           # Client-side utilities
+│       │   ├── app/           # Entry points (App Router pages, Service Worker)
+│       │   ├── features/      # Features, each split into domain / application / infrastructure / ui
+│       │   ├── components/    # Shared UI components (shadcn/ui)
+│       │   ├── hooks/         # Shared UI hooks
+│       │   ├── lib/           # Shared technical capabilities and utilities
 │       │   └── types/         # Type definitions
 │       └── tests/
 │           └── e2e/           # E2E tests

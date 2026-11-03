@@ -10,7 +10,7 @@ export type SwRegistration = {
 };
 
 // Service Workerの提供元。未対応の環境では、登録が無い(undefined)として扱う。
-// 例外: どれも投げない。
+// 例外: getRegistrationは拒否することがある。手続きは扱わない(変更前から)。onControllerChangeは投げない。
 export type SwHost = {
   getRegistration(): Promise<SwRegistration | undefined>;
   // 制御するService Workerが替わる通知の購読。解除する関数を返す。
@@ -57,7 +57,7 @@ type Dependencies = {
 // 待機中の版を有効にしてから遷移先の文書を取得させる。リンクの操作を止めている間の処理で、クリックから1つの期限を共有する。
 // 順序は、保存の完了待ち、SKIP_WAITINGの送信(1回)、controllerchangeの待ち、文書を読み直す直前の保存の再確認。
 // 保存の途中の操作を失わないため、文書を読み直す経路だけで保存を待つ。保存が終わらないときは、有効にせずに諦める。
-// 期限までに終わらないときはonGiveUp、済めばonSwitchedを呼ぶ。返す関数で、購読と期限の予約を外して中止する(どちらも呼ばない)。
+// 期限までに終わらないときはonGiveUp、済めばonSwitchedを呼ぶ。返す関数で、購読と期限の予約を外して中止する(通知は呼ばない)。保存の完了待ちの途中で止めた場合は、保存の完了後に購読と合図の送信まで進む(変更前から)。
 function switchToWaiting(
   { host, persistence, clock, deadlineMs }: Dependencies,
   registration: SwRegistration,
