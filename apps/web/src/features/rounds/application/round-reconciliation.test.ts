@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { FetchResult } from "../domain/fetch-result";
+import type { FetchResult } from "../domain/fetch-status";
 import {
   distanceCreated,
   roundBase,

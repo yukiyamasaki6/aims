@@ -1,10 +1,7 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import {
-  FALLBACK_WAIT_MS,
-  FETCH_ERROR_MESSAGE,
-  type FetchResult,
-} from "../domain/fetch-result";
+import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-status";
+import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
 import {
   deletionsOf,
   type LoadedRoundsList,

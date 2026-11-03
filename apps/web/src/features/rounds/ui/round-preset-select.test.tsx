@@ -8,7 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { FetchResult } from "../domain/fetch-result";
+import type { FetchResult } from "../domain/fetch-status";
 import type { Preset, Presets } from "../domain/preset";
 import { RoundPresetSelect } from "./round-preset-select";
 import { createFakeNewRoundStore } from "./round-stores-test-helpers";

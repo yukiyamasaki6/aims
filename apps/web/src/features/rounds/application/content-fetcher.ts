@@ -2,12 +2,11 @@ import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import {
   classifyResponse,
-  commFailure,
-  FETCH_TIMEOUT_MS,
-  type FetchResult,
   isAuthRejected,
   type ResponseLike,
 } from "../domain/fetch-result";
+import { commFailure, type FetchResult } from "../domain/fetch-status";
+import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { SignInReader } from "./sign-in-reader";
 import { TIMED_OUT, withinTime } from "./time-limit";
 

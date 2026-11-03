@@ -1,10 +1,7 @@
 import type { Clock } from "@/lib/clock/contract/clock";
-import {
-  type FetchResult,
-  type ResponseLike,
-  waitLimitMs,
-  withFallback,
-} from "../domain/fetch-result";
+import type { ResponseLike } from "../domain/fetch-result";
+import type { FetchResult } from "../domain/fetch-status";
+import { waitLimitMs, withFallback } from "../domain/fetch-wait";
 import { type PresetRecord, type Presets, presetsOf } from "../domain/preset";
 import type { RoundRevisions } from "../domain/round-base";
 import type { RoundConfig } from "../domain/round-config";

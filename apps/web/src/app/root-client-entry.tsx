@@ -30,7 +30,7 @@ import { createRoundReconciliation } from "@/features/rounds/application/round-r
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
 import { createRoundStart } from "@/features/rounds/application/round-start";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
-import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-result";
+import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
 import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";

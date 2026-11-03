@@ -19,7 +19,7 @@ import {
   createTestRoundHub,
 } from "@/features/rounds/application/round-record-test-helpers";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
-import type { FetchResult } from "@/features/rounds/domain/fetch-result";
+import type { FetchResult } from "@/features/rounds/domain/fetch-status";
 import {
   roundBase,
   roundUpdated,

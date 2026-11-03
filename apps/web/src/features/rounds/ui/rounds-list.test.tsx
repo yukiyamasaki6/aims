@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { FetchResult } from "../domain/fetch-result";
+import type { FetchResult } from "../domain/fetch-status";
 import type {
   LoadedRoundsList,
   LocalRoundsList,

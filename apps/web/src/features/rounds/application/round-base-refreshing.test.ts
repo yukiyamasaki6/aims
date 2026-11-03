@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-result";
+import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-status";
 import {
   roundCreated,
   roundDisabled,

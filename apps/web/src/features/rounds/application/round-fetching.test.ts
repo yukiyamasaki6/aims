@@ -5,12 +5,9 @@ import type {
   DatabaseGateway,
   DbResponse,
 } from "@/lib/supabase/contract/database";
-import {
-  FALLBACK_WAIT_MS,
-  FETCH_ERROR_MESSAGE,
-  FETCH_TIMEOUT_MS,
-  type ResponseLike,
-} from "../domain/fetch-result";
+import type { ResponseLike } from "../domain/fetch-result";
+import { FETCH_ERROR_MESSAGE } from "../domain/fetch-status";
+import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { PresetRecord, Presets } from "../domain/preset";
 import type { ServerRoundSummary } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";

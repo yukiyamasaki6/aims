@@ -1,10 +1,7 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import {
-  commFailure,
-  FETCH_TIMEOUT_MS,
-  type FetchResult,
-} from "../domain/fetch-result";
+import { commFailure, type FetchResult } from "../domain/fetch-status";
+import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 
 // 時間切れを表す値。
 export const TIMED_OUT: unique symbol = Symbol("timed-out");

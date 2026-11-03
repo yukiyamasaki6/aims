@@ -1,15 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  classifyResponse,
-  commFailure,
-  FALLBACK_WAIT_MS,
-  FETCH_ERROR_MESSAGE,
-  FETCH_TIMEOUT_MS,
-  foldFailures,
-  isAuthRejected,
-  waitLimitMs,
-  withFallback,
-} from "./fetch-result";
+import { classifyResponse, foldFailures, isAuthRejected } from "./fetch-result";
+import { FETCH_ERROR_MESSAGE } from "./fetch-status";
 
 describe("classifyResponse", () => {
   describe("正常系", () => {
@@ -183,51 +174,5 @@ describe("foldFailures", () => {
 
     // Then
     expect(result).toBeUndefined();
-  });
-});
-
-describe("waitLimitMs", () => {
-  it("代わりがあれば短い上限、無ければ全体の上限にする", () => {
-    // Given
-
-    // When
-    const withFallbackLimit = waitLimitMs(true);
-    const withoutFallbackLimit = waitLimitMs(false);
-
-    // Then
-    expect(withFallbackLimit).toBe(FALLBACK_WAIT_MS);
-    expect(withoutFallbackLimit).toBe(FETCH_TIMEOUT_MS);
-  });
-});
-
-describe("withFallback", () => {
-  it("okはそのまま返し、okでないときは代わりがあれば代わりをokで返し、無ければ元の結果を返す", () => {
-    // Given
-    const ok = { status: "ok", data: "取得" } as const;
-    const offline = { status: "offline" } as const;
-
-    // When
-    const kept = withFallback(ok, "代わり");
-    const replaced = withFallback(offline, "代わり");
-    const unchanged = withFallback(offline, null);
-
-    // Then
-    expect(kept).toBe(ok);
-    expect(replaced).toEqual({ status: "ok", data: "代わり" });
-    expect(unchanged).toBe(offline);
-  });
-});
-
-describe("commFailure", () => {
-  it("オフラインならoffline、そうでなければ原因を断定しないerrorにする", () => {
-    // Given
-
-    // When
-    const offline = commFailure(true);
-    const error = commFailure(false);
-
-    // Then
-    expect(offline).toEqual({ status: "offline" });
-    expect(error).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
   });
 });

@@ -1,4 +1,4 @@
-import type { FetchView } from "./fetch-result";
+import type { FetchView } from "./fetch-status";
 import type { Preset, Presets } from "./preset";
 
 export type PresetListView = {

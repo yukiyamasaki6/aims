@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import type { FetchView } from "../domain/fetch-result";
+import type { FetchView } from "../domain/fetch-status";
 import { Skeleton } from "./skeleton";
 
 type NotFoundMessage = { message: string };

@@ -1,11 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import {
-  FALLBACK_WAIT_MS,
-  FETCH_ERROR_MESSAGE,
-  FETCH_TIMEOUT_MS,
-} from "../domain/fetch-result";
+import { FETCH_ERROR_MESSAGE } from "../domain/fetch-status";
+import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import { createContentFetcher } from "./content-fetcher";
 import {
   createFakeSignInReader,
