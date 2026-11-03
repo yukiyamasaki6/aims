@@ -52,7 +52,10 @@ export type RoundDetailStore = {
 };
 
 type Deps = {
-  hub: RoundRecordHub;
+  hub: Pick<
+    RoundRecordHub,
+    "adopt" | "read" | keyof Parameters<typeof createRoundHandle>[0]["hub"]
+  >;
   requests: Pick<
     RefreshRequests,
     "open" | keyof Parameters<typeof createRoundHandle>[0]["requests"]
@@ -67,7 +70,7 @@ type Deps = {
 };
 
 async function readGroup(
-  hub: RoundRecordHub,
+  hub: Pick<RoundRecordHub, "read">,
   streamId: string,
 ): Promise<RoundStoreGroup> {
   try {

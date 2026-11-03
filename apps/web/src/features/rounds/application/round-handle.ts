@@ -68,7 +68,7 @@ const UNOPENED: RoundScreenSnapshot = {
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createRoundHandle(
   deps: {
-    hub: RoundRecordHub;
+    hub: Pick<RoundRecordHub, "record" | "subscribe">;
     requests: Pick<
       RefreshRequests,
       "outcomeOf" | "setOverlay" | "subscribe" | "watch"

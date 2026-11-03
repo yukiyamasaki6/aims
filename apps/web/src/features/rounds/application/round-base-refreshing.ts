@@ -25,7 +25,7 @@ function baseOf(detail: FetchedRoundDetail) {
 // 取得の結果を端末の記録へ反映する。返ったラウンドはベースにし、返らなかった保持のラウンドは削除の印にする。
 // 全ての反映を待って解決する。利用者の照合は記録のハブが行う(取得の利用者と違えば、端末へ保存しない)。
 async function commitRoundDetails(
-  hub: RoundRecordHub,
+  hub: Pick<RoundRecordHub, "commit">,
   fetched: FetchedRoundDetails,
   retained: readonly string[],
 ): Promise<void> {
@@ -50,7 +50,9 @@ async function commitRoundDetails(
 }
 
 // 端末が保持するラウンドのID(削除されておらず作成が確定しているもの)。失敗時は空。
-async function retainedRoundIds(hub: RoundRecordHub): Promise<string[]> {
+async function retainedRoundIds(
+  hub: Pick<RoundRecordHub, "readStored">,
+): Promise<string[]> {
   try {
     const stored = await hub.readStored();
     const ids: string[] = [];
@@ -68,7 +70,7 @@ export type RoundBaseRefreshResult = "ok" | "gone" | "failed";
 
 // ベースの取得と反映。公開する突き合わせの操作(`round-reconciliation.ts`)から呼ばれる。
 export function createRoundBaseRefreshing(deps: {
-  hub: RoundRecordHub;
+  hub: Pick<RoundRecordHub, "commit" | "readStored" | "clearDiverged">;
   fetching: Pick<RoundFetching, "fetchRoundDetail" | "fetchRoundDetails">;
   requests: Pick<
     RefreshRequests,
