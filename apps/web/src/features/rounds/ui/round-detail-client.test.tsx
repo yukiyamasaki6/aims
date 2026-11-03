@@ -6,7 +6,7 @@ import type {
   LoadedRoundDetail,
   RoundDetailStore,
 } from "@/features/rounds/application/round-detail-store";
-import type { FetchResult } from "@/features/rounds/domain/fetch-result";
+import type { FetchResult } from "@/features/rounds/domain/fetch-status";
 import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";

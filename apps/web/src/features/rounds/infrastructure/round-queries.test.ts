@@ -4,6 +4,7 @@ import type {
   DbResponse,
   DbSelect,
 } from "@/lib/supabase/contract/database";
+import type { QueryOutcome } from "../domain/query-outcome";
 import {
   ROUND_PRESET_SELECT,
   TARGET_FACE_SELECT,
@@ -26,6 +27,11 @@ const failed = (
   error,
   status,
 });
+
+// 成功した結果のデータ。成功でなければundefined。
+function dataOf<T>(outcome: QueryOutcome<T>): T | undefined {
+  return outcome.status === "ok" ? outcome.data : undefined;
+}
 
 type Responses = {
   rounds: DbResponse | ((roundsQueryIndex: number) => DbResponse);
@@ -168,8 +174,7 @@ describe("roundDetail", () => {
 
     // Then
     expect(response).toEqual({
-      status: 200,
-      error: null,
+      status: "ok",
       data: {
         round: {
           id: "round-1",
@@ -195,7 +200,7 @@ describe("roundDetail", () => {
     });
   });
 
-  it("ラウンドがnullなら的の結果によらずdataをnullにし、的のデータがnullなら的を空にする", async () => {
+  it("ラウンドがnullなら的の結果によらずnot-foundにし、的のデータがnullなら的を空にする", async () => {
     // Given
     const missing = makeDatabase({
       rounds: ok(null),
@@ -211,11 +216,11 @@ describe("roundDetail", () => {
     const found = await nullFaces.createQueries().roundDetail("user-1", "r");
 
     // Then
-    expect(notFound).toEqual({ data: null, error: null, status: 200 });
-    expect(found.data?.targetFaces).toEqual([]);
+    expect(notFound).toEqual({ status: "not-found" });
+    expect(dataOf(found)?.targetFaces).toEqual([]);
   });
 
-  it("どちらかが通信失敗(status 0)なら、もう一方がエラーでも、通信失敗を返す", async () => {
+  it("どちらかが通信失敗(status 0)なら、もう一方がエラーでも、comm-failureにする", async () => {
     // Given
     const database = makeDatabase({
       rounds: failed(500, { message: "boom" }),
@@ -226,10 +231,10 @@ describe("roundDetail", () => {
     const response = await database.createQueries().roundDetail("u", "r");
 
     // Then
-    expect(response.status).toBe(0);
+    expect(response).toEqual({ status: "comm-failure" });
   });
 
-  it("的の通信失敗は、ラウンドが見つからない場合も失敗として返す", async () => {
+  it("的の通信失敗は、ラウンドが見つからない場合もnot-foundより優先してcomm-failureにする", async () => {
     // Given
     const database = makeDatabase({
       rounds: ok(null),
@@ -240,10 +245,10 @@ describe("roundDetail", () => {
     const response = await database.createQueries().roundDetail("u", "r");
 
     // Then
-    expect(response.status).toBe(0);
+    expect(response).toEqual({ status: "comm-failure" });
   });
 
-  it("どちらかが401なら、他のエラーより優先して認証の拒否を返す", async () => {
+  it("どちらかが401なら、他のエラーより優先してauth-rejectedにする", async () => {
     // Given
     const jwt = { code: "PGRST301", message: "jwt" };
     const database = makeDatabase({
@@ -255,10 +260,10 @@ describe("roundDetail", () => {
     const response = await database.createQueries().roundDetail("u", "r");
 
     // Then
-    expect(response).toMatchObject({ status: 401, error: jwt });
+    expect(response).toEqual({ status: "auth-rejected" });
   });
 
-  it("ラウンドか的のサーバーエラーは、そのエラーを返す", async () => {
+  it("ラウンドか的のサーバーエラーは、failedにする", async () => {
     // Given
     const roundError = makeDatabase({
       rounds: failed(500, { message: "round" }),
@@ -274,8 +279,8 @@ describe("roundDetail", () => {
     const second = await faceError.createQueries().roundDetail("u", "r");
 
     // Then
-    expect(first.error?.message).toBe("round");
-    expect(second.error?.message).toBe("faces");
+    expect(first).toEqual({ status: "failed" });
+    expect(second).toEqual({ status: "failed" });
   });
 });
 
@@ -293,19 +298,15 @@ describe("targetFaces", () => {
     const emptyResponse = await empty.createQueries().targetFaces("user-1");
 
     // Then
-    expect(response).toEqual({
-      data: [face("g", null)],
-      error: null,
-      status: 200,
-    });
+    expect(response).toEqual({ status: "ok", data: [face("g", null)] });
     expect(database.queries).toHaveLength(1);
     expect(database.queries[0].filters).toEqual([
       { op: "or", expression: "owner_id.is.null,owner_id.eq.user-1" },
     ]);
-    expect(emptyResponse.data).toEqual([]);
+    expect(emptyResponse).toEqual({ status: "ok", data: [] });
   });
 
-  it("通信が失敗(status 0)したら、その応答をそのまま返し、エラー応答もそのまま返す", async () => {
+  it("通信が失敗(status 0)したらcomm-failure、エラー応答はfailedの種類で返す", async () => {
     // Given
     const comm = makeDatabase({ rounds: ok(null), target_faces: failed(0) });
     const errored = makeDatabase({
@@ -318,8 +319,8 @@ describe("targetFaces", () => {
     const second = await errored.createQueries().targetFaces("u");
 
     // Then
-    expect(first.status).toBe(0);
-    expect(second).toMatchObject({ status: 500, error: { message: "x" } });
+    expect(first).toEqual({ status: "comm-failure" });
+    expect(second).toEqual({ status: "failed" });
   });
 });
 
@@ -364,8 +365,8 @@ describe("roundDetails", () => {
       { op: "is", column: "disabled_at", value: null },
       { op: "or", expression: `status.eq.in_progress,id.in.(${uuid2})` },
     ]);
-    expect(response.data?.rounds.map((r) => r.id)).toEqual([uuid1, uuid2]);
-    expect(response.data?.targetFaces).toEqual([face("face-1", null)]);
+    expect(dataOf(response)?.rounds.map((r) => r.id)).toEqual([uuid1, uuid2]);
+    expect(dataOf(response)?.targetFaces).toEqual([face("face-1", null)]);
   });
 
   it("指定したラウンドが無ければ、入力中のラウンドだけで絞る", async () => {
@@ -459,7 +460,7 @@ describe("roundDetails", () => {
       .roundDetails("user-1", uuids(51));
 
     // Then
-    expect(response.data?.rounds.map((r) => [r.id, r.revision])).toEqual([
+    expect(dataOf(response)?.rounds.map((r) => [r.id, r.revision])).toEqual([
       [uuidAt(1), 3],
       [dup, 9],
     ]);
@@ -481,8 +482,8 @@ describe("roundDetails", () => {
     const second = await server.createQueries().roundDetails("u", uuids(120));
 
     // Then
-    expect(first.status).toBe(0);
-    expect(second).toMatchObject({ status: 500, error: { message: "x" } });
+    expect(first).toEqual({ status: "comm-failure" });
+    expect(second).toEqual({ status: "failed" });
   });
 });
 
@@ -543,6 +544,7 @@ describe("roundsList", () => {
 
     // Then
     expect(response).toEqual({
+      status: "ok",
       data: [
         {
           id: "round-1",
@@ -560,8 +562,6 @@ describe("roundsList", () => {
           ],
         },
       ],
-      error: null,
-      status: 206,
     });
   });
 
@@ -573,10 +573,10 @@ describe("roundsList", () => {
     const response = await database.createQueries().roundsList();
 
     // Then
-    expect(response).toEqual({ data: [], error: null, status: 200 });
+    expect(response).toEqual({ status: "ok", data: [] });
   });
 
-  it("通信失敗(status 0)とエラー応答は、その応答をそのまま返す", async () => {
+  it("通信失敗(status 0)はcomm-failure、エラー応答はfailedの種類で返す", async () => {
     // Given
     const comm = makeDatabase({ rounds: failed(0), target_faces: noFaces });
     const errored = makeDatabase({
@@ -589,8 +589,8 @@ describe("roundsList", () => {
     const second = await errored.createQueries().roundsList();
 
     // Then
-    expect(first).toEqual(failed(0));
-    expect(second).toEqual(failed(500, { message: "x" }));
+    expect(first).toEqual({ status: "comm-failure" });
+    expect(second).toEqual({ status: "failed" });
   });
 });
 
@@ -652,7 +652,7 @@ describe("presets", () => {
     const response = await database.createQueries().presets("user-1");
 
     // Then
-    expect(response).toEqual({ data: [presetRow], error: null, status: 200 });
+    expect(response).toEqual({ status: "ok", data: [presetRow] });
   });
 
   it("距離の的が、1つのオブジェクトまたはnullのまま返る", async () => {
@@ -674,7 +674,7 @@ describe("presets", () => {
     const response = await database.createQueries().presets("user-1");
 
     // Then
-    const [first, second] = response.data ?? [];
+    const [first, second] = dataOf(response) ?? [];
     expect(first.preset_distances[0].target_faces).toEqual({
       size: 122,
       target_face_spots: [],
@@ -694,10 +694,10 @@ describe("presets", () => {
     const response = await database.createQueries().presets("user-1");
 
     // Then
-    expect(response).toEqual({ data: [], error: null, status: 200 });
+    expect(response).toEqual({ status: "ok", data: [] });
   });
 
-  it("通信失敗(status 0)とエラー応答は、その応答をそのまま返す", async () => {
+  it("通信失敗(status 0)はcomm-failure、エラー応答はfailedの種類で返す", async () => {
     // Given
     const comm = makeDatabase({
       rounds: ok(null),
@@ -715,7 +715,7 @@ describe("presets", () => {
     const second = await errored.createQueries().presets("user-1");
 
     // Then
-    expect(first).toEqual(failed(0));
-    expect(second).toEqual(failed(500, { message: "x" }));
+    expect(first).toEqual({ status: "comm-failure" });
+    expect(second).toEqual({ status: "failed" });
   });
 });

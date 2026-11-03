@@ -1,5 +1,5 @@
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import type { FetchResult } from "../domain/fetch-result";
+import type { FetchResult } from "../domain/fetch-status";
 import type { Preset, Presets } from "../domain/preset";
 import type { PresetDeletion, PresetDeletionResult } from "./preset-deletion";
 import type { RoundFetching } from "./round-fetching";

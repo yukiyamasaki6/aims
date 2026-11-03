@@ -22,7 +22,7 @@ import { createRoundLeaving } from "@/features/rounds/application/round-leaving"
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
 import { createRoundStart } from "@/features/rounds/application/round-start";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
-import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-result";
+import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
 import { roundCreated } from "@/features/rounds/domain/round-op-test-helpers";
 import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
 import { createBrowserUniqueIds } from "@/features/rounds/infrastructure/browser-unique-ids";

@@ -5,13 +5,10 @@ import type {
   DatabaseGateway,
   DbResponse,
 } from "@/lib/supabase/contract/database";
-import {
-  FALLBACK_WAIT_MS,
-  FETCH_ERROR_MESSAGE,
-  FETCH_TIMEOUT_MS,
-  type ResponseLike,
-} from "../domain/fetch-result";
+import { FETCH_ERROR_MESSAGE } from "../domain/fetch-status";
+import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { PresetRecord, Presets } from "../domain/preset";
+import type { QueryFailure, QueryOutcome } from "../domain/query-outcome";
 import type { ServerRoundSummary } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
 import type { TargetFaceRecord } from "../domain/target-face";
@@ -81,11 +78,10 @@ const serverRound: ServerRound = {
   ],
 };
 
-const okResponse = <T>(data: T): ResponseLike<T> => ({
-  data,
-  error: null,
-  status: 200,
-});
+const okResponse = <T>(data: T): QueryOutcome<T> => ({ status: "ok", data });
+const commFailure: QueryFailure = { status: "comm-failure" };
+const failed: QueryFailure = { status: "failed" };
+const notFound: QueryFailure = { status: "not-found" };
 
 // 参照データの保存は端末の境界のため、種類と利用者ごとのメモリで模す。読む利用者は、テストが切り替える。
 // savedは的の保存、savedPresetsはプリセットの保存(どちらも利用者のIDがキー)。
@@ -238,11 +234,7 @@ describe("fetchRoundDetail", () => {
     // Given
     const { fetching, save } = setup({
       queries: {
-        roundDetail: vi.fn(async () => ({
-          data: null,
-          error: null,
-          status: 200,
-        })),
+        roundDetail: vi.fn(async () => notFound),
       },
     });
 
@@ -287,20 +279,12 @@ describe("fetchRoundDetail", () => {
     // Given
     const serverError = setup({
       queries: {
-        roundDetail: vi.fn(async () => ({
-          data: null,
-          error: { message: "boom" },
-          status: 500,
-        })),
+        roundDetail: vi.fn(async () => failed),
       },
     });
     const commError = setup({
       queries: {
-        roundDetail: vi.fn(async () => ({
-          data: null,
-          error: null,
-          status: 0,
-        })),
+        roundDetail: vi.fn(async () => commFailure),
       },
     });
 
@@ -421,8 +405,8 @@ describe("fetchTargetFaces", () => {
   });
 
   it.each([
-    ["通信失敗", { data: null, error: null, status: 0 }],
-    ["サーバーエラー", { data: null, error: { message: "x" }, status: 500 }],
+    ["通信失敗", commFailure],
+    ["サーバーエラー", failed],
   ])("%sのとき、保存済みがあれば保存済みを返す", async (_name, response) => {
     // Given
     const { fetching } = setup({
@@ -496,7 +480,7 @@ describe("fetchTargetFaces", () => {
       queries: {
         targetFaces: vi.fn(
           () =>
-            new Promise<ResponseLike<TargetFaceRecord[]>>((resolve) => {
+            new Promise<QueryOutcome<TargetFaceRecord[]>>((resolve) => {
               clock.after(3000, () =>
                 resolve(okResponse([face("late", null)])),
               );
@@ -525,10 +509,8 @@ describe("fetchTargetFaces", () => {
       queries: {
         targetFaces: vi.fn(
           () =>
-            new Promise<ResponseLike<TargetFaceRecord[]>>((resolve) => {
-              clock.after(3000, () =>
-                resolve({ data: null, error: { message: "x" }, status: 500 }),
-              );
+            new Promise<QueryOutcome<TargetFaceRecord[]>>((resolve) => {
+              clock.after(3000, () => resolve(failed));
             }),
         ),
       },
@@ -666,26 +648,11 @@ describe("fetchPresets", () => {
     expect(presetIds(saved.get("user-1")?.data as Presets)).toEqual(["fresh"]);
   });
 
-  it.each<[string, { offline: boolean }, ResponseLike<PresetRecord[]>, number]>(
+  it.each<[string, { offline: boolean }, QueryOutcome<PresetRecord[]>, number]>(
     [
-      [
-        "オフライン",
-        { offline: true },
-        { data: null, error: null, status: 0 },
-        0,
-      ],
-      [
-        "通信失敗",
-        { offline: false },
-        { data: null, error: null, status: 0 },
-        1,
-      ],
-      [
-        "サーバーエラー",
-        { offline: false },
-        { data: null, error: { message: "x" }, status: 500 },
-        1,
-      ],
+      ["オフライン", { offline: true }, commFailure, 0],
+      ["通信失敗", { offline: false }, commFailure, 1],
+      ["サーバーエラー", { offline: false }, failed, 1],
     ],
   )(
     "%sのとき、保存済みのプリセットがあればその値のokを返す(的の保存済みだけでは返さない)",
@@ -729,7 +696,7 @@ describe("fetchPresets", () => {
     // Given
     const { fetching } = setup({
       queries: {
-        presets: vi.fn(async () => ({ data: null, error: null, status: 0 })),
+        presets: vi.fn(async () => commFailure),
       },
     });
 
@@ -744,11 +711,7 @@ describe("fetchPresets", () => {
     // Given
     const { fetching } = setup({
       queries: {
-        presets: vi.fn(async () => ({
-          data: null,
-          error: { message: "boom" },
-          status: 500,
-        })),
+        presets: vi.fn(async () => failed),
       },
     });
 
@@ -826,7 +789,7 @@ describe("fetchPresets", () => {
       queries: {
         presets: vi.fn(
           () =>
-            new Promise<ResponseLike<PresetRecord[]>>((resolve) => {
+            new Promise<QueryOutcome<PresetRecord[]>>((resolve) => {
               clock.after(3000, () =>
                 resolve(okResponse([presetRecord("late", null)])),
               );
@@ -859,10 +822,8 @@ describe("fetchPresets", () => {
       queries: {
         presets: vi.fn(
           () =>
-            new Promise<ResponseLike<PresetRecord[]>>((resolve) => {
-              clock.after(3000, () =>
-                resolve({ data: null, error: { message: "x" }, status: 500 }),
-              );
+            new Promise<QueryOutcome<PresetRecord[]>>((resolve) => {
+              clock.after(3000, () => resolve(failed));
             }),
         ),
       },
@@ -935,11 +896,7 @@ describe("fetchRoundDetails", () => {
     // Given
     const { fetching, save } = setup({
       queries: {
-        roundDetails: vi.fn(async () => ({
-          data: null,
-          error: null,
-          status: 0,
-        })),
+        roundDetails: vi.fn(async () => commFailure),
       },
     });
 
@@ -1037,7 +994,7 @@ describe("fetchRoundsList", () => {
     // Given
     const { fetching } = setup({
       queries: {
-        roundsList: async () => ({ data: null, error: null, status: 0 }),
+        roundsList: async () => commFailure,
       },
     });
 
@@ -1052,11 +1009,7 @@ describe("fetchRoundsList", () => {
     // Given
     const { fetching } = setup({
       queries: {
-        roundsList: async () => ({
-          data: null,
-          error: { message: "query failed" },
-          status: 500,
-        }),
+        roundsList: async () => failed,
       },
     });
 

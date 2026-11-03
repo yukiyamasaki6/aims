@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  FALLBACK_WAIT_MS,
-  FETCH_ERROR_MESSAGE,
-  FETCH_TIMEOUT_MS,
-  type FetchResult,
-} from "../domain/fetch-result";
+import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-status";
+import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { RoundListItem } from "../domain/round-list";
 import { roundBase, roundDisabled } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";

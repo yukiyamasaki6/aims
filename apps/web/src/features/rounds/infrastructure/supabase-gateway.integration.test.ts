@@ -139,4 +139,15 @@ describe("取得の問い合わせ", () => {
       ["retry", [false]],
     ]);
   });
+
+  it("SDKの応答は、okの種類とデータになって返る", async () => {
+    // Given
+    const { database } = fakeSdk({ data: [], error: null, status: 200 });
+
+    // When
+    const result = await createRoundQueries(database).roundsList();
+
+    // Then
+    expect(result).toEqual({ status: "ok", data: [] });
+  });
 });

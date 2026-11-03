@@ -6,7 +6,7 @@ import {
   FETCH_ERROR_MESSAGE,
   type FetchResult,
   type FetchView,
-} from "../domain/fetch-result";
+} from "../domain/fetch-status";
 
 type Settled<T> = {
   key: readonly unknown[];

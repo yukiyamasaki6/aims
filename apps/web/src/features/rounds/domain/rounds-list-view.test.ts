@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FetchView } from "./fetch-result";
+import type { FetchView } from "./fetch-status";
 import type {
   LoadedRoundsList,
   LocalRoundsList,

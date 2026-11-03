@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
-import { FALLBACK_WAIT_MS } from "../domain/fetch-result";
+import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
 import type { Preset } from "../domain/preset";
 import { roundPath } from "../domain/round-routes";
 import { roundCreatedDraftOf } from "../domain/round-start";

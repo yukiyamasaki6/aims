@@ -35,7 +35,7 @@
 - `features/rounds/ui/use-start-round.ts`: UI層。作成中とエラーの状態を持ち、二重の開始を防いで`NewRoundStore.startRound`を呼ぶ。
 - `features/rounds/ui/preset-info.tsx`、`target-face-info.tsx`: UI層。プリセットと距離、的の情報の表示。
 - `NewRoundStore.loadPresets`と`features/rounds/application/round-fetching.ts`の`RoundFetching.fetchPresets`: 取得の順序(手続き)。成功した結果を保存し、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず、取得に使った利用者のキーへ保存する。
-- `features/rounds/infrastructure/round-queries.ts`の`RoundQueries.presets`: 個人（`owner_id`が自分）と公式（`owner_id`が`null`）を1回の取得で得る。`DatabaseGateway`の`select`で行い、状態0かエラーはそのまま返す。
+- `features/rounds/infrastructure/round-queries.ts`の`RoundQueries.presets`: 個人（`owner_id`が自分）と公式（`owner_id`が`null`）を1回の取得で得る。`DatabaseGateway`の`select`で行い、`QueryOutcome`(`domain/query-outcome.ts`)を返す。応答を種類へ写すのはインフラ層の`db-response-outcome.ts`である。
 - `features/rounds/domain/preset.ts`: ドメイン層。プリセットの値、並びの比較`comparePresets`、並べて個人と公式に振り分ける`presetsOf`、距離の並び、個人プリセットの除去。
 - `features/rounds/domain/preset-list-view.ts`: ドメイン層。取得結果から、削除済みを除いた表示と選択中のプリセットを決める`presetListView`。
 - `features/rounds/infrastructure/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。例外は投げない。識別情報は起動地点から`IdentityReader`で受け取り、読むたびにその時点で読む。

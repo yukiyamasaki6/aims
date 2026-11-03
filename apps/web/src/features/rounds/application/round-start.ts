@@ -1,6 +1,6 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
-import { FALLBACK_WAIT_MS } from "../domain/fetch-result";
+import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
 import type { Preset } from "../domain/preset";
 import { roundPath } from "../domain/round-routes";
 import { type RoundCreated, roundCreatedDraftOf } from "../domain/round-start";

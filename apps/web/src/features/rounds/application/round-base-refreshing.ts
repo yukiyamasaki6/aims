@@ -1,4 +1,4 @@
-import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-result";
+import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-status";
 import { isRetainedForRefresh } from "../domain/round-retention";
 import { roundTablesFromServer } from "../domain/round-tables";
 import {

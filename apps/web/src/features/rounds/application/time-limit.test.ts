@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import { FETCH_TIMEOUT_MS } from "../domain/fetch-result";
+import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import { TIMED_OUT, withinFetchTimeout, withinTime } from "./time-limit";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
