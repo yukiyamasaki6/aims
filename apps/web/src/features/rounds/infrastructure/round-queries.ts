@@ -3,18 +3,14 @@ import type {
   DbOrder,
   DbResponse,
 } from "@/lib/supabase/contract/database";
-import type {
-  RoundDetailData,
-  RoundDetailsData,
-  RoundQueries,
-} from "../application/round-fetching";
-import { foldFailures, type ResponseLike } from "../domain/fetch-result";
+import type { RoundQueries } from "../application/round-fetching";
 import type { PresetRecord } from "../domain/preset";
 import { newestById } from "../domain/round-base";
 import type { ServerRoundSummary } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
 import type { RoundStatus } from "../domain/sync-events";
 import type { TargetFaceRecord } from "../domain/target-face";
+import { failureOfResponses } from "./db-response-outcome";
 import {
   ROUND_PRESET_SELECT,
   TARGET_FACE_SELECT,
@@ -206,17 +202,15 @@ export function createRoundQueries(
         }),
         selectTargetFaces(userId),
       ]);
-      const failure = foldFailures([round, faces]);
-      if (failure) return failure as ResponseLike<RoundDetailData>;
+      const failure = failureOfResponses([round, faces]);
+      if (failure) return failure;
+      if (!round.data) return { status: "not-found" };
       return {
-        data: round.data
-          ? {
-              round: toServerRound(round.data as RoundRow),
-              targetFaces: toTargetFaces(faces.data),
-            }
-          : null,
-        error: null,
-        status: 200,
+        status: "ok",
+        data: {
+          round: toServerRound(round.data as RoundRow),
+          targetFaces: toTargetFaces(faces.data),
+        },
       };
     },
     async roundDetails(userId, roundIds) {
@@ -227,16 +221,15 @@ export function createRoundQueries(
         selectTargetFaces(userId),
         ...chunks.map((chunk, index) => selectRoundsChunk(chunk, index)),
       ]);
-      const failure = foldFailures([...responses, faces]);
-      if (failure) return failure as ResponseLike<RoundDetailsData>;
+      const failure = failureOfResponses([...responses, faces]);
+      if (failure) return failure;
       const rows = responses.flatMap((r) => (r.data ?? []) as RoundRow[]);
       return {
+        status: "ok",
         data: {
           rounds: newestById(rows).map(toServerRound),
           targetFaces: toTargetFaces(faces.data),
         },
-        error: null,
-        status: 200,
       };
     },
     // 取得できる行はRLSでユーザーが属するラウンドに限るため、利用者で絞らない。
@@ -247,23 +240,20 @@ export function createRoundQueries(
         filters: [{ op: "is", column: "disabled_at", value: null }],
         orders: listOrders,
       });
-      if (response.status === 0 || response.error) {
-        return response as ResponseLike<ServerRoundSummary[]>;
-      }
+      const failure = failureOfResponses([response]);
+      if (failure) return failure;
       return {
+        status: "ok",
         data: ((response.data ?? []) as RoundSummaryRow[]).map(
           toServerRoundSummary,
         ),
-        error: null,
-        status: response.status,
       };
     },
     async targetFaces(userId) {
       const faces = await selectTargetFaces(userId);
-      if (faces.status === 0 || faces.error) {
-        return faces as ResponseLike<TargetFaceRecord[]>;
-      }
-      return { data: toTargetFaces(faces.data), error: null, status: 200 };
+      const failure = failureOfResponses([faces]);
+      if (failure) return failure;
+      return { status: "ok", data: toTargetFaces(faces.data) };
     },
     // preset_roundsのRLSは認証済みの全員に全行を見せるため、他人の個人プリセットを除くクエリの絞りが必須である。
     async presets(userId) {
@@ -274,10 +264,9 @@ export function createRoundQueries(
           { op: "or", expression: `owner_id.is.null,owner_id.eq.${userId}` },
         ],
       });
-      if (presets.status === 0 || presets.error) {
-        return presets as ResponseLike<PresetRecord[]>;
-      }
-      return { data: toPresets(presets.data), error: null, status: 200 };
+      const failure = failureOfResponses([presets]);
+      if (failure) return failure;
+      return { status: "ok", data: toPresets(presets.data) };
     },
   };
 }

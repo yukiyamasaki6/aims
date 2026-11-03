@@ -1,24 +1,23 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import {
-  classifyResponse,
-  isAuthRejected,
-  type ResponseLike,
-} from "../domain/fetch-result";
-import { commFailure, type FetchResult } from "../domain/fetch-status";
+  commFailure,
+  type FetchResult,
+  fetchResultOf,
+} from "../domain/fetch-status";
 import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
+import type { QueryOutcome } from "../domain/query-outcome";
 import type { SignInReader } from "./sign-in-reader";
 import { TIMED_OUT, withinTime } from "./time-limit";
 
 type FetchOptions<T> = {
-  nullIsNotFound?: boolean;
   timeoutMs?: number;
   onLateResult?: (result: FetchResult<T>) => void;
 };
 
 export type ContentFetcher = {
   fetchContent<T>(
-    run: (session: { userId: string }) => PromiseLike<ResponseLike<T>>,
+    run: (session: { userId: string }) => PromiseLike<QueryOutcome<T>>,
     opts?: FetchOptions<T>,
   ): Promise<FetchResult<T>>;
 };
@@ -59,24 +58,20 @@ export function createContentFetcher(deps: {
 
   // 確かめたセッションでクエリし、runの中では読み直さない。
   // 認証の拒否が返ったら、更新を強制してセッションを確かめ、認証済みなら新しいセッションで1回だけ取り直す。
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: 認証の確認、取り直し、通信失敗の分類を、取得の1つの手順として順に書いている。分けると手順が追いにくくなる。
   async function load<T>(
-    run: (session: { userId: string }) => PromiseLike<ResponseLike<T>>,
-    opts: { nullIsNotFound?: boolean },
+    run: (session: { userId: string }) => PromiseLike<QueryOutcome<T>>,
   ): Promise<FetchResult<T>> {
     if (connectivity.isOffline()) return { status: "offline" };
     const confirmed = await confirmSession<T>();
     if ("failure" in confirmed) return confirmed.failure;
     try {
-      let res = await run(confirmed.session);
-      if (res.status === 0) return failureOfComm();
-      if (isAuthRejected(res)) {
+      let outcome = await run(confirmed.session);
+      if (outcome.status === "auth-rejected") {
         const refreshed = await confirmSession<T>({ refresh: true });
         if ("failure" in refreshed) return refreshed.failure;
-        res = await run(refreshed.session);
-        if (res.status === 0) return failureOfComm();
+        outcome = await run(refreshed.session);
       }
-      return classifyResponse(res, opts);
+      return fetchResultOf(outcome, connectivity.isOffline());
     } catch {
       return failureOfComm();
     }
@@ -94,11 +89,11 @@ export function createContentFetcher(deps: {
   // timeoutMsは結果を返すまでの上限。超えた後も取得の開始からFETCH_TIMEOUT_MSまでは結果を待ち、
   // 終われば一度だけonLateResultへ渡す（表示には使わず、保存などに使う）。
   async function fetchContent<T>(
-    run: (session: { userId: string }) => PromiseLike<ResponseLike<T>>,
+    run: (session: { userId: string }) => PromiseLike<QueryOutcome<T>>,
     opts: FetchOptions<T> = {},
   ): Promise<FetchResult<T>> {
-    const { timeoutMs = FETCH_TIMEOUT_MS, onLateResult, ...loadOpts } = opts;
-    const loading = load(run, loadOpts);
+    const { timeoutMs = FETCH_TIMEOUT_MS, onLateResult } = opts;
+    const loading = load(run);
     const raced = await withinTime(clock, loading, timeoutMs);
     if (raced !== TIMED_OUT) return raced;
     if (onLateResult && timeoutMs < FETCH_TIMEOUT_MS) {

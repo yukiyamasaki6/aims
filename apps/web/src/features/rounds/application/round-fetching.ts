@@ -1,8 +1,8 @@
 import type { Clock } from "@/lib/clock/contract/clock";
-import type { ResponseLike } from "../domain/fetch-result";
 import type { FetchResult } from "../domain/fetch-status";
 import { waitLimitMs, withFallback } from "../domain/fetch-wait";
 import { type PresetRecord, type Presets, presetsOf } from "../domain/preset";
+import type { QueryOutcome } from "../domain/query-outcome";
 import type { RoundRevisions } from "../domain/round-base";
 import type { RoundConfig } from "../domain/round-config";
 import {
@@ -33,21 +33,21 @@ export type RoundDetailsData = {
 
 // 取得の問い合わせの約束。応答はドメインの形に写して返す。
 export type RoundQueries = {
-  // 存在しない・権限なし・論理削除済みのラウンドは、dataがnull。
+  // 存在しない・権限なし・論理削除済みのラウンドは、not-found。
   roundDetail(
     userId: string,
     roundId: string,
-  ): Promise<ResponseLike<RoundDetailData>>;
+  ): Promise<QueryOutcome<RoundDetailData>>;
   // 入力中のラウンドと、`roundIds`のラウンドをまとめて得る。1つでも失敗したら全体を失敗にする。
   roundDetails(
     userId: string,
     roundIds: readonly string[],
-  ): Promise<ResponseLike<RoundDetailsData>>;
-  targetFaces(userId: string): Promise<ResponseLike<TargetFaceRecord[]>>;
+  ): Promise<QueryOutcome<RoundDetailsData>>;
+  targetFaces(userId: string): Promise<QueryOutcome<TargetFaceRecord[]>>;
   // 個人(owner_idが自分)と公式(owner_idがnull)を1回で得る。
-  presets(userId: string): Promise<ResponseLike<PresetRecord[]>>;
+  presets(userId: string): Promise<QueryOutcome<PresetRecord[]>>;
   // 削除されていないラウンドを、実施日の新しい順に得る。入力中のラウンドも含む。ページ、絞り込み、並びの条件はここに足す。
-  roundsList(): Promise<ResponseLike<ServerRoundSummary[]>>;
+  roundsList(): Promise<QueryOutcome<ServerRoundSummary[]>>;
 };
 
 type RoundDetail = {
@@ -97,7 +97,7 @@ export function createRoundFetching(deps: {
   // 保存済みがあればそれを返し、時間切れの後に届いた結果は表示せず保存だけする。保存は取得に使った利用者のキーへ行う。
   async function fetchReference<R, T>(
     kind: ReferenceKind,
-    query: (userId: string) => Promise<ResponseLike<R>>,
+    query: (userId: string) => Promise<QueryOutcome<R>>,
     order: (rows: R) => T,
   ): Promise<FetchResult<T>> {
     const startedAt = clock.now();
@@ -145,13 +145,10 @@ export function createRoundFetching(deps: {
   ): Promise<FetchResult<FetchedRoundDetail>> {
     const startedAt = clock.now();
     let userId = "";
-    const result = await content.fetchContent<RoundDetailData>(
-      (session) => {
-        userId = session.userId;
-        return queries.roundDetail(session.userId, roundId);
-      },
-      { nullIsNotFound: true },
-    );
+    const result = await content.fetchContent<RoundDetailData>((session) => {
+      userId = session.userId;
+      return queries.roundDetail(session.userId, roundId);
+    });
     if (result.status !== "ok") return result;
     const faces = orderTargetFaces(result.data.targetFaces);
     // 確定済みのラウンドの表示は代わりを持たないが、的の保存済みを最新にする機会として使う。
