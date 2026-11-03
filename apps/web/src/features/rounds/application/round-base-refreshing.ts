@@ -68,7 +68,7 @@ async function retainedRoundIds(
 
 export type RoundBaseRefreshResult = "ok" | "gone" | "failed";
 
-// ベースの取得と反映。公開する突き合わせの操作(`round-reconciliation.ts`)から呼ばれる。
+// ベースの取得と反映。取り直しの制御(`round-refresh-control.ts`)から呼ばれる。
 export function createRoundBaseRefreshing(deps: {
   hub: Pick<RoundRecordHub, "commit" | "readStored" | "clearDiverged">;
   fetching: Pick<RoundFetching, "fetchRoundDetail" | "fetchRoundDetails">;
