@@ -4,13 +4,6 @@ import { MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { LoadedRoundsList, RoundListItem } from "../domain/round-list";
 import { NEW_ROUND_PATH, roundPath } from "../domain/round-routes";
@@ -18,8 +11,15 @@ import {
   type RoundsListView,
   roundsListView,
 } from "../domain/rounds-list-view";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./dropdown-menu";
 import { FetchState } from "./fetch-state";
 import { useRoundsListStore } from "./rounds-context";
+import { Skeleton } from "./skeleton";
 import { useFetchResult } from "./use-fetch-result";
 import { useLocalRoundsList } from "./use-local-rounds-list";
 

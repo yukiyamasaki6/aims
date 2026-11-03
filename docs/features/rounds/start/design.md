@@ -74,7 +74,7 @@
 | `features/rounds/infrastructure/preset-commands.ts` | インフラ層(プリセットの書き込みと、結果の種類への写し) |
 | `features/rounds/infrastructure/browser-unique-ids.ts` | インフラ層(新しいIDの払い出し) |
 | `features/rounds/infrastructure/round-queries.ts`、`reference-snapshot.ts`、`auth-sign-in-reader.ts`、`rounds-db-schema.ts` | インフラ層(プリセットの問い合わせ、保存済みの書き換え、不明の文言、プリセットの表を持つ) |
-| `hooks/use-mounted-ref.ts`、`hooks/use-hydrated.ts`、`components/ui/{button,confirm-dialog,dropdown-menu,skeleton}.tsx`、`lib/utils.ts` | 共有の画面部品 |
+| `hooks/use-mounted-ref.ts`、`hooks/use-hydrated.ts`、`components/ui/{button,confirm-dialog}.tsx`、`lib/utils.ts` | 共有の画面部品 |
 | `lib/supabase/contract/database.ts`、`lib/supabase/infrastructure/database.ts` | 共有の技術の約束と実装(削除`delete`を持つ) |
 
 ## 設計判断

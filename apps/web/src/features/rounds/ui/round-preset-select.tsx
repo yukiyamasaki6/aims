@@ -5,22 +5,22 @@ import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useMountedRef } from "@/hooks/use-mounted-ref";
 import { cn } from "@/lib/utils";
 import { type Preset, presetDistancesInOrder } from "../domain/preset";
 import { presetListView } from "../domain/preset-list-view";
 import { ROUNDS_PATH } from "../domain/round-routes";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./dropdown-menu";
 import { FetchState } from "./fetch-state";
 import { PresetInfo } from "./preset-info";
 import { useNewRoundStore } from "./rounds-context";
+import { Skeleton } from "./skeleton";
 import { useFetchResult } from "./use-fetch-result";
 import { usePresetDelete } from "./use-preset-delete";
 import { useStartRound } from "./use-start-round";

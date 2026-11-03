@@ -4,7 +4,6 @@ import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
-import { PasswordInput } from "@/components/ui/password-input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { SignIn } from "../application/sign-in";
 import { EMAIL_MAX_LENGTH } from "../domain/email-address";
@@ -16,6 +15,7 @@ import {
 } from "../domain/sign-in-flow";
 import { AuthField } from "./auth-field";
 import { AuthHeader } from "./auth-header";
+import { PasswordInput } from "./password-input";
 import { Turnstile } from "./turnstile";
 import { useScreenView } from "./use-screen-view";
 

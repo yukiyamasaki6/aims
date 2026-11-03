@@ -4,7 +4,6 @@ import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import Link from "next/link";
 import { type RefObject, useEffect, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
-import { PasswordInput } from "@/components/ui/password-input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { PasswordSetup } from "../application/password-setup";
 import type { ScreenView } from "../application/screen-view";
@@ -20,6 +19,7 @@ import { AuthField } from "./auth-field";
 import { AuthHeader } from "./auth-header";
 import { OtpCodeStep } from "./otp-code-step";
 import { OtpEmailStep } from "./otp-email-step";
+import { PasswordInput } from "./password-input";
 import { useScreenView } from "./use-screen-view";
 
 // サインインへのリンクの文言。リンク先は経路の規則が持つ。
