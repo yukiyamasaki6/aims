@@ -1,25 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "../domain/fetch-status";
-import {
-  distanceCreated,
-  roundBase,
-  roundUpdated,
-  shotCleared,
-  shotRecorded,
-} from "../domain/round-op-test-helpers";
+import { roundBase, roundUpdated } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
-import {
-  createOperationSending,
-  type RoundTransport,
-} from "./operation-sending";
 import { createRefreshRequests } from "./refresh-requests";
 import { createRoundBaseRefreshing } from "./round-base-refreshing";
 import type { FetchedRoundDetail, RoundFetching } from "./round-fetching";
-import { createRoundReconciliation } from "./round-reconciliation";
 import {
   createTestRoundHub,
   settleRoundNow,
 } from "./round-record-test-helpers";
+import { createRoundRefreshControl } from "./round-refresh-control";
 
 const STREAM = roundStreamId("round-1");
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -50,244 +40,128 @@ const unfitResult = {
   rejectedFields: [],
 };
 
-// 結線(他の機能へ公開する平らな値への写し)が検証対象。取得と送信の中身は別のテストで確かめるため、約束を差し替える。
+// 結線(他の機能へ公開する平らな値への写し)が検証対象。取得の中身は別のテストで確かめるため、取得の約束を差し替える。
 async function setup() {
   const { hub, store } = createTestRoundHub();
   hub.start("user-1");
   await hub.ready();
   const requests = createRefreshRequests();
-  const transport = { send: vi.fn() } satisfies RoundTransport;
   const fetching = {
     fetchRoundDetails: vi.fn(),
     fetchRoundDetail: vi.fn(),
   };
-  const reconciliation = createRoundReconciliation({
+  const control = createRoundRefreshControl({
     hub,
     requests,
-    send: createOperationSending({ hub, transport }),
     refresh: createRoundBaseRefreshing({
       hub,
       requests,
       fetching: fetching as unknown as RoundFetching,
     }),
   });
-  return { hub, store, requests, transport, fetching, reconciliation };
+  return { hub, store, requests, fetching, control };
 }
 
-describe("記録の公開", () => {
-  it("送る候補を、操作のID、送る単位、保存の有無、seqの有無だけの平らな値で返し、確定済みの操作は含めない", async () => {
+// 効かなかった結果の印を、そのラウンドの列に付ける。
+async function markDiverged(
+  hub: Awaited<ReturnType<typeof setup>>["hub"],
+  roundId: string,
+) {
+  const stream = roundStreamId(roundId);
+  await hub.append(stream, roundUpdated({ eventId: `d-${roundId}` }));
+  hub.applySendResults(stream, [`d-${roundId}`], [unfitResult]);
+}
+
+describe("理由の導出", () => {
+  it("開いた直後、古い、効かなかった、重ねられなかったの順に先に当たる理由をreasonとして返す", async () => {
     // Given
-    const { hub, reconciliation } = await setup();
-    const confirmed = roundUpdated({ eventId: "confirmed" });
-    await hub.append(STREAM, confirmed);
-    hub.applySendResults(
-      STREAM,
-      ["confirmed"],
-      [{ revision: 1, applied: true, appliedFields: null, rejectedFields: [] }],
-    );
-    await hub.append(STREAM, shotRecorded({ eventId: "shot" }));
+    const { hub, requests, control } = await setup();
+    void requests.open("r-open");
+    requests.watch("r-open", true);
+    requests.watch("r-stale", true);
+    await markDiverged(hub, "r-diverged");
+    requests.watch("r-diverged", false);
+    requests.setOverlay("r-overlay", true);
+    requests.watch("r-overlay", false);
+    await markDiverged(hub, "r-both");
+    requests.setOverlay("r-both", true);
+    requests.watch("r-both", false);
 
     // When
-    const outbox = reconciliation.outbox(STREAM);
+    const { rounds } = control.refreshNeeds();
 
     // Then
-    expect(outbox).toEqual([
-      { eventId: "shot", lane: expect.any(String), saved: true, hasSeq: true },
-    ]);
-  });
-
-  it("操作の衝突を、記録にある操作のIDで問える。記録に無いIDの問いは衝突なしにする", async () => {
-    // Given
-    const { hub, reconciliation } = await setup();
-    await hub.append(STREAM, shotRecorded({ eventId: "rec" }));
-    await hub.append(STREAM, shotCleared({ eventId: "clr" }));
-    await hub.append(
-      STREAM,
-      distanceCreated({ eventId: "dist", id: "d-9", roundId: "round-1" }),
-    );
-
-    // When
-    const sameShot = reconciliation.conflicts(STREAM, "rec", "clr");
-    const unknown = reconciliation.conflicts(STREAM, "rec", "missing");
-
-    // Then
-    expect(sameShot).toBe(true);
-    expect(unknown).toBe(false);
-  });
-
-  it("記録が変わった後は、追記した操作で衝突を判定する(古い値の索引を使わない)", async () => {
-    // Given
-    const { hub, reconciliation } = await setup();
-    await hub.append(STREAM, shotRecorded({ eventId: "rec" }));
-    await hub.append(STREAM, shotCleared({ eventId: "clr" }));
-    const before = reconciliation.conflicts(STREAM, "rec", "clr");
-
-    // When
-    await hub.append(STREAM, shotCleared({ eventId: "clr2" }));
-    const afterAppend = reconciliation.conflicts(STREAM, "rec", "clr2");
-
-    // Then
-    expect(before).toBe(true);
-    expect(afterAppend).toBe(true);
-  });
-
-  it("利用者の照合、列の一覧、送る単位の上限を公開する", async () => {
-    // Given
-    const { hub, reconciliation } = await setup();
-    await hub.append(STREAM, roundUpdated());
-
-    // When
-    const matches = [
-      reconciliation.matchUser("user-1"),
-      reconciliation.matchUser("user-2"),
-    ];
-
-    // Then
-    expect(matches).toEqual(["same", "other"]);
-    expect(reconciliation.streams()).toEqual([STREAM]);
-    expect(reconciliation.batchLimitOf("lane")).toBeGreaterThanOrEqual(1);
-  });
-
-  it("readyは、記録の読み込みが終わるまで解決せず、終わると解決する", async () => {
-    // Given
-    // 起動前のハブを使うため、setupは使わない。
-    const { hub } = createTestRoundHub();
-    const reconciliation = createRoundReconciliation({
-      hub,
-      requests: createRefreshRequests(),
-      send: createOperationSending({ hub, transport: { send: vi.fn() } }),
-      refresh: createRoundBaseRefreshing({
-        hub,
-        requests: createRefreshRequests(),
-        fetching: {} as RoundFetching,
-      }),
-    });
-    let settled = false;
-
-    // When
-    const waiting = reconciliation.ready().then(() => {
-      settled = true;
-    });
-    await flush();
-    const beforeStart = settled;
-    hub.start("user-1");
-    await waiting;
-
-    // Then
-    expect(beforeStart).toBe(false);
-    expect(settled).toBe(true);
-  });
-
-  it("利用者を替え、送信中の目印を付けて、読み直しと変化の購読を行える", async () => {
-    // Given
-    const { hub, reconciliation } = await setup();
-    await hub.append(STREAM, roundUpdated({ eventId: "a" }));
-    const changes: string[] = [];
-    const stop = reconciliation.onChange((change) => changes.push(change.kind));
-
-    // When
-    reconciliation.markInFlight(STREAM, ["a"], true);
-    const keptWhileSending = hub.record(STREAM).items.length;
-    reconciliation.setUser("user-2");
-    const afterSwitch = [
-      reconciliation.matchUser("user-2"),
-      reconciliation.matchUser("user-1"),
-    ];
-    stop();
-
-    // Then
-    expect(keptWhileSending).toBe(1);
-    expect(afterSwitch).toEqual(["same", "other"]);
-    expect(changes.length).toBeGreaterThan(0);
-  });
-
-  it("始めと止めは、記録の始めと止めに委譲する", async () => {
-    // Given
-    const { hub, reconciliation } = await setup();
-    await hub.append(STREAM, roundUpdated());
-
-    // When
-    reconciliation.stop();
-    const afterStop = reconciliation.streams();
-    reconciliation.start("user-1");
-    await hub.ready();
-    const afterStart = [
-      reconciliation.matchUser("user-1"),
-      reconciliation.matchUser("user-2"),
-    ];
-
-    // Then
-    expect(afterStop).toEqual([]);
-    expect(afterStart).toEqual(["same", "other"]);
-  });
-
-  it("拒否された操作を破棄し、記録から外す", async () => {
-    // Given
-    const { hub, reconciliation } = await setup();
-    await hub.append(STREAM, roundUpdated({ eventId: "a" }));
-
-    // When
-    await reconciliation.discard(STREAM, ["a"]);
-
-    // Then
-    expect(hub.record(STREAM).items).toEqual([]);
-  });
-});
-
-describe("send", () => {
-  it("成功は、効かない項目があったかだけを返す", async () => {
-    // Given
-    const { hub, transport, reconciliation } = await setup();
-    await hub.append(STREAM, roundUpdated({ eventId: "a" }));
-    transport.send.mockResolvedValue({
-      ok: true,
-      results: [
+    expect(rounds).toHaveLength(5);
+    expect(rounds).toEqual(
+      expect.arrayContaining([
         {
-          revision: 3,
-          applied: true,
-          appliedFields: null,
-          rejectedFields: [],
-          reason: null,
+          roundId: "r-open",
+          reason: "open",
+          reasons: ["open", "stale"],
+          openRequest: 1,
         },
-      ],
-    });
-
-    // When
-    const report = await reconciliation.send(STREAM, ["a"]);
-
-    // Then
-    expect(report).toEqual({ ok: true, diverged: false });
+        { roundId: "r-stale", reason: "stale", reasons: ["stale"] },
+        { roundId: "r-diverged", reason: "diverged", reasons: ["diverged"] },
+        { roundId: "r-overlay", reason: "overlay", reasons: ["overlay"] },
+        {
+          roundId: "r-both",
+          reason: "diverged",
+          reasons: ["diverged", "overlay"],
+        },
+      ]),
+    );
   });
 
-  it("失敗は、種類をrpcか例外の文字列にし、rpcには状態とSQLSTATEを添える", async () => {
+  it("当たる全ての理由を、開く依頼、古い、効かなかった、重ねられなかったの順に並べ、主の理由は先頭にする", async () => {
     // Given
-    const { hub, transport, reconciliation } = await setup();
-    await hub.append(STREAM, roundUpdated({ eventId: "a" }));
-    transport.send.mockResolvedValueOnce({
-      ok: false,
-      cause: { type: "rpc", status: 403, code: "PT403" },
-    });
-    transport.send.mockRejectedValueOnce(new Error("boom"));
+    const { hub, requests, control } = await setup();
+    void requests.open("r-open-all");
+    requests.watch("r-open-all", true);
+    await markDiverged(hub, "r-open-all");
+    requests.setOverlay("r-open-all", true);
+    requests.watch("r-stale-all", true);
+    await markDiverged(hub, "r-stale-all");
+    requests.setOverlay("r-stale-all", true);
 
     // When
-    const rpc = await reconciliation.send(STREAM, ["a"]);
-    const exception = await reconciliation.send(STREAM, ["a"]);
+    const { rounds } = control.refreshNeeds();
 
     // Then
-    expect(rpc).toEqual({
-      ok: false,
-      cause: "rpc",
-      status: 403,
-      code: "PT403",
-    });
-    expect(exception).toEqual({ ok: false, cause: "exception" });
+    expect(rounds).toHaveLength(2);
+    expect(rounds).toEqual(
+      expect.arrayContaining([
+        {
+          roundId: "r-open-all",
+          reason: "open",
+          reasons: ["open", "stale", "diverged", "overlay"],
+          openRequest: 1,
+        },
+        {
+          roundId: "r-stale-all",
+          reason: "stale",
+          reasons: ["stale", "diverged", "overlay"],
+        },
+      ]),
+    );
+  });
+
+  it("どの理由にも当たらない詳細は、要否に含めない", async () => {
+    // Given
+    const { requests, control } = await setup();
+    requests.watch("r-quiet", false);
+
+    // When
+    const { rounds } = control.refreshNeeds();
+
+    // Then
+    expect(rounds).toEqual([]);
   });
 });
 
 describe("refreshNeeds", () => {
   it("一覧の依頼の有無と、取り直しが要るラウンドを理由とともに返す", async () => {
     // Given
-    const { hub, requests, reconciliation } = await setup();
+    const { hub, requests, control } = await setup();
     void requests.open("opening");
     requests.watch("stale", true);
     requests.watch("quiet", false);
@@ -310,7 +184,7 @@ describe("refreshNeeds", () => {
     requests.requestAll();
 
     // When
-    const needs = reconciliation.refreshNeeds();
+    const needs = control.refreshNeeds();
 
     // Then
     expect(needs.list).toBe(true);
@@ -332,14 +206,14 @@ describe("refreshNeeds", () => {
 
   it("refreshNeedsは、理由がopenのラウンドにだけopenRequestを付け、一覧の依頼の番号を添える", async () => {
     // Given
-    const { requests, reconciliation } = await setup();
+    const { requests, control } = await setup();
     void requests.open("r-1");
     void requests.open("r-1");
     requests.watch("r-2", true);
     requests.requestAll();
 
     // When
-    const needs = reconciliation.refreshNeeds();
+    const needs = control.refreshNeeds();
 
     // Then
     expect(needs.listRequest).toBe(1);
@@ -355,14 +229,14 @@ describe("refreshNeeds", () => {
 
   it("理由は、開く依頼、端末のベースで開いた詳細の古さ、効かなかった印、重ねられなかった印の順に先のものが返り、先の理由が無くなると次のものが返る", async () => {
     // Given
-    const { hub, requests, reconciliation } = await setup();
+    const { hub, requests, control } = await setup();
     const stream = roundStreamId("r-1");
     void requests.open("r-1");
     requests.watch("r-1", true);
     await hub.append(stream, roundUpdated({ eventId: "d" }));
     hub.applySendResults(stream, ["d"], [unfitResult]);
     requests.setOverlay("r-1", true);
-    const reasons = () => reconciliation.refreshNeeds().rounds;
+    const reasons = () => control.refreshNeeds().rounds;
 
     // When
     const first = reasons();
@@ -406,14 +280,14 @@ describe("refreshNeeds", () => {
 
   it("端末のベースで開いた詳細に効かなかった印が付くと、主の理由はstaleのまま、reasonsにdivergedが加わる", async () => {
     // Given
-    const { hub, requests, reconciliation } = await setup();
+    const { hub, requests, control } = await setup();
     const stream = roundStreamId("r-1");
     requests.watch("r-1", true);
     await hub.append(stream, roundUpdated({ eventId: "d" }));
     hub.applySendResults(stream, ["d"], [unfitResult]);
 
     // When
-    const needs = reconciliation.refreshNeeds();
+    const needs = control.refreshNeeds();
 
     // Then
     expect(needs.rounds).toEqual([
@@ -431,18 +305,18 @@ describe("refreshNeeds", () => {
       const detailFetch =
         Promise.withResolvers<FetchResult<FetchedRoundDetail>>();
       tab.fetching.fetchRoundDetail.mockReturnValueOnce(detailFetch.promise);
-      const before = tab.reconciliation.refreshNeeds().rounds;
-      const refreshing = tab.reconciliation.refreshRound("r-1");
+      const before = tab.control.refreshNeeds().rounds;
+      const refreshing = tab.control.refreshRound("r-1");
       await flush();
       return { ...tab, detailFetch, refreshing, before };
     }
 
     it("取り直しを始めると、取得が終わる前に効かなかった印が消える", async () => {
       // Given
-      const { reconciliation, before } = await withDivergedMark();
+      const { control, before } = await withDivergedMark();
 
       // When
-      const during = reconciliation.refreshNeeds().rounds;
+      const during = control.refreshNeeds().rounds;
 
       // Then
       expect(before).toEqual([
@@ -453,8 +327,7 @@ describe("refreshNeeds", () => {
 
     it("取得が失敗しても、効かなかった印は戻らない", async () => {
       // Given
-      const { reconciliation, detailFetch, refreshing } =
-        await withDivergedMark();
+      const { control, detailFetch, refreshing } = await withDivergedMark();
 
       // When
       detailFetch.resolve({ status: "error", message: "x" });
@@ -462,13 +335,13 @@ describe("refreshNeeds", () => {
 
       // Then
       expect(result).toBe("failed");
-      expect(reconciliation.refreshNeeds().rounds).toEqual([]);
+      expect(control.refreshNeeds().rounds).toEqual([]);
     });
   });
 
   it("端末のベースで開いた詳細が取り直しで成功すると、古い理由から外れる", async () => {
     // Given
-    const { requests, reconciliation } = await setup();
+    const { requests, control } = await setup();
     requests.watch("stale", true);
 
     // When
@@ -478,14 +351,14 @@ describe("refreshNeeds", () => {
     });
 
     // Then
-    expect(reconciliation.refreshNeeds().rounds).toEqual([]);
+    expect(control.refreshNeeds().rounds).toEqual([]);
   });
 
   it("依頼や記録が変わったら通知し、解除すると両方の通知が止まる", async () => {
     // Given
-    const { hub, requests, reconciliation } = await setup();
+    const { hub, requests, control } = await setup();
     const listener = vi.fn();
-    const stop = reconciliation.onRefreshNeeds(listener);
+    const stop = control.onRefreshNeeds(listener);
 
     // When
     requests.notify();
@@ -504,7 +377,7 @@ describe("refreshNeeds", () => {
 describe("取得と反映", () => {
   it("refreshAllは、反映したかを返し、refreshRoundは結果の種類を返す", async () => {
     // Given
-    const { fetching, reconciliation } = await setup();
+    const { fetching, control } = await setup();
     fetching.fetchRoundDetails.mockResolvedValue({
       status: "ok",
       data: { rounds: new Map(), startedAt: 1, userId: "user-1" },
@@ -512,8 +385,8 @@ describe("取得と反映", () => {
     fetching.fetchRoundDetail.mockResolvedValue({ status: "not-found" });
 
     // When
-    const committed = await reconciliation.refreshAll({ waitForList: false });
-    const round = await reconciliation.refreshRound("round-1");
+    const committed = await control.refreshAll({ waitForList: false });
+    const round = await control.refreshRound("round-1");
 
     // Then
     expect(committed).toBe(true);
@@ -521,12 +394,12 @@ describe("取得と反映", () => {
   });
   it("開始した後に出した開く依頼は、その実行の結果を受けずに待ちとして残り、openを返し続ける。開始前の依頼は結果を受ける", async () => {
     // Given
-    const { requests, fetching, reconciliation } = await setup();
+    const { requests, fetching, control } = await setup();
     const before = requests.open("r-1");
     const detailFetch =
       Promise.withResolvers<FetchResult<FetchedRoundDetail>>();
     fetching.fetchRoundDetail.mockReturnValueOnce(detailFetch.promise);
-    const refreshing = reconciliation.refreshRound("r-1");
+    const refreshing = control.refreshRound("r-1");
     await flush();
     const after = requests.open("r-1");
     let afterSettled = false;
@@ -542,7 +415,7 @@ describe("取得と反映", () => {
     // Then
     expect(await before).toMatchObject({ status: "ok" });
     expect(afterSettled).toBe(false);
-    expect(reconciliation.refreshNeeds().rounds).toEqual([
+    expect(control.refreshNeeds().rounds).toEqual([
       { roundId: "r-1", reason: "open", reasons: ["open"], openRequest: 2 },
     ]);
   });

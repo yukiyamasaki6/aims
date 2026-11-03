@@ -112,18 +112,33 @@ describe("startsRefresh", () => {
 describe("shouldRefetch", () => {
   it("開いたときは常に取り直し、他の理由はオフラインでは取り直さない", () => {
     // Given
-    const others = ["stale", "diverged", "overlay"] as const;
-
     // When
-    const open = [true, false].map((offline) => shouldRefetch("open", offline));
-    const online = others.map((reason) => shouldRefetch(reason, false));
-    const offline = others.map((reason) => shouldRefetch(reason, true));
+    const open = [true, false].map((offline) => shouldRefetch(true, offline));
+    const otherOnline = shouldRefetch(false, false);
+    const otherOffline = shouldRefetch(false, true);
 
     // Then
     expect(open).toEqual([true, true]);
-    expect(online).toEqual([true, true, true]);
-    expect(offline).toEqual([false, false, false]);
+    expect(otherOnline).toBe(true);
+    expect(otherOffline).toBe(false);
   });
+
+  it.each([
+    { isOpenRequest: true, offline: false, expected: true },
+    { isOpenRequest: true, offline: true, expected: true },
+    { isOpenRequest: false, offline: false, expected: true },
+    { isOpenRequest: false, offline: true, expected: false },
+  ])(
+    "開く依頼が$isOpenRequest、オフラインが$offlineのとき、取り直しは$expectedになる",
+    ({ isOpenRequest, offline, expected }) => {
+      // Given
+      // When
+      const result = shouldRefetch(isOpenRequest, offline);
+
+      // Then
+      expect(result).toBe(expected);
+    },
+  );
 });
 
 describe("refreshDecision", () => {

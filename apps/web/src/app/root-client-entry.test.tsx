@@ -7,11 +7,11 @@ import {
   createUpdateActivation,
   type UpdateActivation,
 } from "@/features/offline-pwa/application/update-activation";
-import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
 import { createContentFetcher } from "@/features/rounds/application/content-fetcher";
 import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
+import { createOpSender } from "@/features/rounds/application/op-sender";
 import { createPresetDeletion } from "@/features/rounds/application/preset-deletion";
 import { createPresetSaving } from "@/features/rounds/application/preset-saving";
 import { createRoundDeletion } from "@/features/rounds/application/round-deletion";
@@ -24,6 +24,7 @@ import { createRoundStart } from "@/features/rounds/application/round-start";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
 import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
 import { roundCreated } from "@/features/rounds/domain/round-op-test-helpers";
+import { outboxOf } from "@/features/rounds/domain/round-record";
 import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
 import { createBrowserUniqueIds } from "@/features/rounds/infrastructure/browser-unique-ids";
 import { createPresetCommands } from "@/features/rounds/infrastructure/preset-commands";
@@ -365,16 +366,13 @@ vi.mock(
     };
   },
 );
-vi.mock(
-  "@/features/round-sync/application/op-sender",
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import("@/features/round-sync/application/op-sender")
-      >();
-    return { createOpSender: vi.fn(actual.createOpSender) };
-  },
-);
+vi.mock("@/features/rounds/application/op-sender", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("@/features/rounds/application/op-sender")
+    >();
+  return { createOpSender: vi.fn(actual.createOpSender) };
+});
 vi.mock(
   "@/features/round-sync/application/round-sync",
   async (importOriginal) => {
@@ -867,12 +865,12 @@ describe("RootClientEntry", () => {
       );
       storage.hold = true;
       const created = roundCreated();
-      const records = vi.mocked(createOpSender).mock.calls[0][0].records;
+      const { hub } = vi.mocked(createOpSender).mock.calls[0][0];
 
       // When
       const appending = store?.round("round-1").append(created);
       await Promise.resolve();
-      const outboxWhileSaving = records.outbox("round:round-1");
+      const outboxWhileSaving = outboxOf(hub.record("round:round-1"));
       let persisted = false;
       const waiting = vi
         .mocked(createUpdateActivation)

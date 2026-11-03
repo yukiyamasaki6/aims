@@ -8,17 +8,11 @@ import type { SyncOperation } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 import { createNewRoundStore } from "./new-round-store";
-import {
-  createOperationSending,
-  type RoundTransport,
-  type SendOutcome,
-} from "./operation-sending";
+import type { RoundTransport, SendOutcome } from "./operation-sending";
 import { createRefreshRequests } from "./refresh-requests";
-import { createRoundBaseRefreshing } from "./round-base-refreshing";
 import { createRoundDetailStore } from "./round-detail-store";
 import { createRoundEditing } from "./round-editing";
 import type { RoundFetching } from "./round-fetching";
-import { createRoundReconciliation } from "./round-reconciliation";
 import { createRoundRecordHub } from "./round-record-hub";
 import { createRoundsListStore } from "./rounds-list-store";
 
@@ -122,7 +116,7 @@ export function createTestRounds(
 }
 
 // 手動で結果を返せる、書き込みの転送。送った要求が`sent`に並び、テストが結果を返す。
-function createManualTransport() {
+export function createManualTransport() {
   const sent: {
     eventIds: string[];
     resolve: (outcome: SendOutcome) => void;
@@ -152,42 +146,6 @@ export function appliedOutcome(count: number, firstRevision = 1): SendOutcome {
       rejectedFields: [],
       reason: null,
     })),
-  };
-}
-
-// 他の機能へ公開する突き合わせ。記録のハブ、依頼の記録、送信は実物で、転送と取得を差し替える。
-export function createTestReconciliation(
-  options: {
-    shared?: Parameters<typeof createTestRoundHub>[0];
-    userId?: string | null;
-  } = {},
-) {
-  const { hub, store } = createTestRoundHub(options.shared);
-  hub.start(options.userId === undefined ? "user-1" : options.userId);
-  const requests = createRefreshRequests();
-  const { transport, sent } = createManualTransport();
-  const fetching = {
-    fetchRoundDetail: vi.fn(),
-    fetchRoundDetails: vi.fn(),
-  };
-  const reconciliation = createRoundReconciliation({
-    hub,
-    requests,
-    send: createOperationSending({ hub, transport }),
-    refresh: createRoundBaseRefreshing({
-      hub,
-      requests,
-      fetching: fetching as unknown as RoundFetching,
-    }),
-  });
-  return {
-    reconciliation,
-    hub,
-    store,
-    requests,
-    fetching,
-    transport,
-    sent,
   };
 }
 

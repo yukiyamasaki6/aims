@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import { roundStreamId } from "@/features/rounds/application/../domain/sync-events";
-import type { SendOutcome } from "@/features/rounds/application/operation-sending";
-import {
-  appliedOutcome,
-  createMemoryRoundStore,
-} from "@/features/rounds/application/round-record-test-helpers";
 import {
   roundUpdated,
   shotCleared,
   shotRecorded,
-} from "@/features/rounds/domain/round-op-test-helpers";
+} from "../domain/round-op-test-helpers";
+import { roundStreamId } from "../domain/sync-events";
 import { createSenderRig, flush } from "./op-sender-test-helpers";
+import type { SendOutcome } from "./operation-sending";
+import {
+  appliedOutcome,
+  createMemoryRoundStore,
+} from "./round-record-test-helpers";
 
 const STREAM = roundStreamId("round-1");
 
@@ -146,14 +146,14 @@ describe("送信の順序", () => {
     await rig.hub.append(STREAM, shot("a", 1));
     await flush();
     await respond(rig, 0, appliedOutcome(1));
-    rig.session.reading = { status: "unauthenticated" };
+    rig.signIn.reading = { status: "unauthenticated", message: "未認証" };
 
     // When
     await rig.hub.append(STREAM, shot("b", 2));
     await flush();
 
     // Then
-    expect(rig.session.readSession).toHaveBeenCalledTimes(2);
+    expect(rig.signIn.read).toHaveBeenCalledTimes(2);
     expect(sentIds(rig)).toEqual([["a"]]);
   });
 
@@ -189,32 +189,85 @@ describe("送信の順序", () => {
   });
 });
 
+describe("送る候補と衝突の判定", () => {
+  it("確定済みの操作は送らず、確定していない操作だけを送る", async () => {
+    // Given
+    const rig = createSenderRig();
+    await rig.hub.ready();
+    await rig.hub.append(STREAM, roundUpdated({ eventId: "confirmed" }));
+    rig.hub.applySendResults(
+      STREAM,
+      ["confirmed"],
+      [{ revision: 1, applied: true, appliedFields: null, rejectedFields: [] }],
+    );
+    await rig.hub.append(STREAM, shotRecorded({ eventId: "shot" }));
+
+    // When
+    rig.sender.start();
+    await flush();
+
+    // Then
+    expect(sentIds(rig)).toEqual([["shot"]]);
+  });
+
+  it("同じ矢の記録と取り消しは衝突として、記録の送信が終わるまで取り消しを送らない", async () => {
+    // Given
+    const rig = await started();
+    await rig.hub.append(STREAM, shotRecorded({ eventId: "rec" }));
+    await rig.hub.append(STREAM, shotCleared({ eventId: "clr" }));
+    await flush();
+    const whileSending = sentIds(rig);
+
+    // When
+    await respond(rig, 0, appliedOutcome(1));
+
+    // Then
+    expect(whileSending).toEqual([["rec"]]);
+    expect(sentIds(rig)).toEqual([["rec"], ["clr"]]);
+  });
+
+  it("記録が変わった後に追記した操作も、送信中の操作との衝突を判定する(古い値の索引を使わない)", async () => {
+    // Given
+    const rig = await started();
+    await rig.hub.append(STREAM, shotRecorded({ eventId: "rec" }));
+    await rig.hub.append(STREAM, shotCleared({ eventId: "clr" }));
+    await flush();
+
+    // When
+    await rig.hub.append(STREAM, shotCleared({ eventId: "clr2" }));
+    await flush();
+
+    // Then
+    expect(sentIds(rig)).toEqual([["rec"]]);
+  });
+});
+
 describe("記録が返す平らな失敗", () => {
-  type Report = Awaited<ReturnType<Rig["records"]["send"]>>;
+  type Report = Awaited<ReturnType<Rig["sending"]["send"]>>;
   type Row = [string, Report | Error, "破棄" | "再送"];
   const rows: Row[] = [
     [
       "rpc 403 PT403",
-      { ok: false, cause: "rpc", status: 403, code: "PT403" },
+      { ok: false, cause: { type: "rpc", status: 403, code: "PT403" } },
       "破棄",
     ],
     [
       "rpc 422 PT422",
-      { ok: false, cause: "rpc", status: 422, code: "PT422" },
+      { ok: false, cause: { type: "rpc", status: 422, code: "PT422" } },
       "破棄",
     ],
     [
       "rpc 500 XX000",
-      { ok: false, cause: "rpc", status: 500, code: "XX000" },
+      { ok: false, cause: { type: "rpc", status: 500, code: "XX000" } },
       "再送",
     ],
     [
       "rpc 404 PGRST202",
-      { ok: false, cause: "rpc", status: 404, code: "PGRST202" },
+      { ok: false, cause: { type: "rpc", status: 404, code: "PGRST202" } },
       "再送",
     ],
-    ["rpc 状態もコードも無い", { ok: false, cause: "rpc" }, "再送"],
-    ["exception", { ok: false, cause: "exception" }, "再送"],
+    ["rpc 状態もコードも無い", { ok: false, cause: { type: "rpc" } }, "再送"],
+    ["exception", { ok: false, cause: { type: "exception" } }, "再送"],
     ["sendが例外を投げる", new Error("boom"), "再送"],
   ];
 
@@ -224,7 +277,7 @@ describe("記録が返す平らな失敗", () => {
       // Given
       const rig = await started();
       const send = vi
-        .spyOn(rig.records, "send")
+        .spyOn(rig.sending, "send")
         .mockImplementation(async () => {
           if (returned instanceof Error) throw returned;
           return returned;
@@ -431,14 +484,16 @@ describe("失敗の扱い", () => {
 describe("サインインの状態", () => {
   it("未認証なら送らずに保留し、衝突する後続も止める。サインインし直して再開すると送る", async () => {
     // Given
-    const rig = await started({ reading: { status: "unauthenticated" } });
+    const rig = await started({
+      reading: { status: "unauthenticated", message: "未認証" },
+    });
     await rig.hub.append(STREAM, shot("a", 1));
     await rig.hub.append(STREAM, shot("follower", 1));
     await flush();
     const whileHeld = rig.sent.length;
 
     // When
-    rig.session.reading = { status: "authenticated", userId: "user-1" };
+    rig.signIn.reading = { status: "authenticated", userId: "user-1" };
     rig.sender.resumeHeld();
     await flush();
 
@@ -449,10 +504,12 @@ describe("サインインの状態", () => {
 
   it("サインインの状態が不明(通信失敗)なら送らずに再試行し、確認できるようになると送る", async () => {
     // Given
-    const rig = await started({ reading: { status: "unknown" } });
+    const rig = await started({
+      reading: { status: "unknown", message: "確認できない" },
+    });
     await rig.hub.append(STREAM, shot("a"));
     await flush();
-    rig.session.reading = { status: "authenticated", userId: "user-1" };
+    rig.signIn.reading = { status: "authenticated", userId: "user-1" };
 
     // When
     await rig.clock.advanceAsync(3000);
@@ -496,7 +553,7 @@ describe("保存の読み込みの待ち", () => {
     await rig.hub.append(STREAM, shot("a"));
     const first = Promise.withResolvers<void>();
     const second = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "ready")
+    vi.spyOn(rig.hub, "ready")
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     rig.sender.start();
@@ -504,7 +561,7 @@ describe("保存の読み込みの待ち", () => {
     rig.sender.stop();
     rig.sender.start();
     await flush();
-    const outbox = vi.spyOn(rig.records, "outbox");
+    const outbox = vi.spyOn(rig.hub, "record");
 
     // When
     first.resolve();
@@ -551,7 +608,7 @@ describe("保存の読み込みの待ち", () => {
     // Given
     const { rig, kinds } = await reloadingRig(true);
     const reload = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "ready").mockReturnValueOnce(reload.promise);
+    vi.spyOn(rig.hub, "ready").mockReturnValueOnce(reload.promise);
     rig.sender.start();
     await flush();
 
@@ -574,7 +631,7 @@ describe("保存の読み込みの待ち", () => {
     // Given
     const { rig } = await reloadingRig(false);
     const reload = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "ready").mockReturnValueOnce(reload.promise);
+    vi.spyOn(rig.hub, "ready").mockReturnValueOnce(reload.promise);
     rig.sender.start();
     await flush();
 
@@ -594,7 +651,7 @@ describe("保存の読み込みの待ち", () => {
     const { rig, kinds } = await reloadingRig(false);
     const first = Promise.withResolvers<void>();
     const second = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "ready")
+    vi.spyOn(rig.hub, "ready")
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     rig.sender.start();
@@ -624,7 +681,9 @@ describe("保存の読み込みの待ち", () => {
 describe("利用者の切り替え", () => {
   it("利用者を替えると、前の利用者の保留の操作を送らず、保存したまま残す", async () => {
     // Given
-    const rig = await started({ reading: { status: "unauthenticated" } });
+    const rig = await started({
+      reading: { status: "unauthenticated", message: "未認証" },
+    });
     await rig.hub.append(STREAM, shot("a"));
     await flush();
 
@@ -632,7 +691,7 @@ describe("利用者の切り替え", () => {
     rig.sender.reset();
     rig.hub.setUser("user-2");
     await rig.hub.ready();
-    rig.session.reading = { status: "authenticated", userId: "user-2" };
+    rig.signIn.reading = { status: "authenticated", userId: "user-2" };
     rig.sender.resumeHeld();
     await flush();
 
