@@ -3,8 +3,10 @@ import type { RefreshRequests } from "./refresh-requests";
 import type { RoundBaseRefreshing } from "./round-base-refreshing";
 import type { RoundRecordHub } from "./round-record-hub";
 
-// 取り直しの理由。open: 開いたとき、stale: 端末のベースで開いたまま、diverged: 効かなかった結果を受けた、overlay: 確定済みの操作をベースに重ねられなかった。
-type RefreshNeedReason = "open" | "stale" | "diverged" | "overlay";
+// 取り直しの理由を、優先の順に並べた唯一の定義。リテラル和型はここから導く。
+// open: 開いたとき、stale: 端末のベースで開いたまま、diverged: 効かなかった結果を受けた、overlay: 確定済みの操作をベースに重ねられなかった。
+const REFRESH_NEED_REASONS = ["open", "stale", "diverged", "overlay"] as const;
+type RefreshNeedReason = (typeof REFRESH_NEED_REASONS)[number];
 
 // 他の機能へ公開する、取り直しの操作。引数と戻り値は、ラウンドのIDの文字列、理由と結果の種類の文字列、数、真偽だけで、ドメインの型は越えない。
 export type RoundRefreshControl = {
@@ -41,19 +43,11 @@ export type RoundRefreshControl = {
   reset(): void;
 };
 
-// 当たる全ての理由を、open、stale、diverged、overlay の順に並べる。主の理由は先頭。
-function reasonsOf(state: {
-  opening: boolean;
-  stale: boolean;
-  diverged: boolean;
-  overlay: boolean;
-}): RefreshNeedReason[] {
-  const reasons: RefreshNeedReason[] = [];
-  if (state.opening) reasons.push("open");
-  if (state.stale) reasons.push("stale");
-  if (state.diverged) reasons.push("diverged");
-  if (state.overlay) reasons.push("overlay");
-  return reasons;
+// 当たる全ての理由を、優先の順に並べる。主の理由は先頭。
+function reasonsOf(
+  applies: Record<RefreshNeedReason, boolean>,
+): RefreshNeedReason[] {
+  return REFRESH_NEED_REASONS.filter((reason) => applies[reason]);
 }
 
 export function createRoundRefreshControl(deps: {
@@ -87,7 +81,7 @@ export function createRoundRefreshControl(deps: {
     }[] = [];
     for (const roundId of new Set([...pending, ...watched.keys()])) {
       const reasons = reasonsOf({
-        opening: pending.has(roundId),
+        open: pending.has(roundId),
         stale:
           watched.get(roundId) === true && requests.outcomeOf(roundId) !== "ok",
         diverged: hub.divergedStreams().has(roundStreamId(roundId)),
