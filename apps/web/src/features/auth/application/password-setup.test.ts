@@ -80,8 +80,8 @@ describe("パスワード設定の共通の手続き", () => {
         captchaToken: "resend-token",
       });
       expect(order).toEqual(["codeResent", "resetCheck"]);
-      expect(view.state.captchaToken).toBeNull();
-      expect(view.state.resendCooldown).toBe(60);
+      expect(view.observedState.captchaToken).toBeNull();
+      expect(view.observedState.resendCooldown).toBe(60);
     });
 
     it("待ち時間が残っていれば、再送の不備だけを示し、送らない", async () => {
@@ -93,7 +93,7 @@ describe("パスワード設定の共通の手続き", () => {
       await resend(context, { email }, view);
 
       // Then
-      expect(view.state.fieldErrors).toEqual({
+      expect(view.observedState.fieldErrors).toEqual({
         resend:
           "再送はクールダウン中です。しばらくしてから再度お試しください。",
       });
@@ -124,11 +124,11 @@ describe("パスワード設定の共通の手続き", () => {
       await resend(context, { email }, view);
 
       // Then
-      expect(view.state.error).toBe(
+      expect(view.observedState.error).toBe(
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
       );
-      expect(view.state.captchaToken).toBe("resend-token");
-      expect(view.state.pending).toBeNull();
+      expect(view.observedState.captchaToken).toBe("resend-token");
+      expect(view.observedState.pending).toBeNull();
       expect(resetCheck).not.toHaveBeenCalled();
     });
 
@@ -146,8 +146,8 @@ describe("パスワード設定の共通の手続き", () => {
 
       // Then
       expect(order).toEqual(["refused", "resetCheck"]);
-      expect(view.state.captchaToken).toBeNull();
-      expect(view.state.error).toBe(
+      expect(view.observedState.captchaToken).toBeNull();
+      expect(view.observedState.error).toBe(
         "認証に失敗しました。もう一度お試しください。",
       );
     });
@@ -169,8 +169,8 @@ describe("パスワード設定の共通の手続き", () => {
         code: "123456",
       });
       expect(types(events)).toEqual(["codeConfirmed"]);
-      expect(view.state.step).toBe("password");
-      expect(view.state.pending).toBeNull();
+      expect(view.observedState.step).toBe("password");
+      expect(view.observedState.pending).toBeNull();
     });
 
     it("認証に失敗すれば、失敗を示してコード入力の段階に留まる", async () => {
@@ -185,8 +185,8 @@ describe("パスワード設定の共通の手続き", () => {
 
       // Then
       expect(events.at(-1)).toEqual({ type: "failed", failure });
-      expect(view.state.step).toBe("code");
-      expect(view.state.pending).toBeNull();
+      expect(view.observedState.step).toBe("code");
+      expect(view.observedState.pending).toBeNull();
     });
 
     it("コードに不備があれば、不備だけを示し、認証しない", async () => {
@@ -200,7 +200,7 @@ describe("パスワード設定の共通の手続き", () => {
 
       // Then
       expect(events).toEqual([]);
-      expect(view.state.fieldErrors.code).toBeDefined();
+      expect(view.observedState.fieldErrors.code).toBeDefined();
       expect(authenticator.verifyCode).not.toHaveBeenCalled();
     });
 
@@ -280,7 +280,7 @@ describe("パスワード設定の共通の手続き", () => {
         "password1",
       );
       expect(events).toEqual([]);
-      expect(view.state.pending).toBe("setPassword");
+      expect(view.observedState.pending).toBe("setPassword");
     });
 
     it("設定に失敗すれば、失敗を示し、続きを行わず、実行中を解除する", async () => {
@@ -301,10 +301,10 @@ describe("パスワード設定の共通の手続き", () => {
 
       // Then
       expect(proceed).toBe(false);
-      expect(view.state.error).toBe(
+      expect(view.observedState.error).toBe(
         "8〜72文字の半角英数記号で、英字と数字を含めてください。",
       );
-      expect(view.state.pending).toBeNull();
+      expect(view.observedState.pending).toBeNull();
     });
 
     it("パスワードに不備があれば、不備だけを示し、設定しない", async () => {
@@ -323,7 +323,7 @@ describe("パスワード設定の共通の手続き", () => {
       // Then
       expect(proceed).toBe(false);
       expect(events).toEqual([]);
-      expect(view.state.fieldErrors.password).toBeDefined();
+      expect(view.observedState.fieldErrors.password).toBeDefined();
       expect(authenticator.setPassword).not.toHaveBeenCalled();
     });
 

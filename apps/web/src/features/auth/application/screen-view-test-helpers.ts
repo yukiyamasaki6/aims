@@ -3,7 +3,7 @@ import type { Start } from "../domain/flow";
 import type { ScreenView } from "./screen-view";
 
 // 画面の約束の偽。手続きのテストが使う。
-// 実物(useScreenView)と同じく、開始の命令と出来事を実物の集約(reducer)で適用し、stateは適用した直後の値を返す。
+// 実物(useScreenView)と同じく、開始の命令と出来事を実物の集約(reducer)で適用し、observedStateは適用した直後の値を返す(最終状態の観測用。画面の約束には無い)。
 // 送られた出来事(events)と、出来事とチェックのやり直しの順序(order)を記録する。表示中かどうかは、テストが切り替える(screen.mounted)。
 export function screenHarness<State, Event extends { type: string }>(
   reducer: (state: State, event: Event) => State,
@@ -12,10 +12,12 @@ export function screenHarness<State, Event extends { type: string }>(
   const order: string[] = [];
   const resetCheck = vi.fn(() => order.push("resetCheck"));
   const screen = { mounted: true };
-  const viewOf = (initial: State): ScreenView<State, Event> => {
+  const viewOf = (
+    initial: State,
+  ): ScreenView<State, Event> & { readonly observedState: State } => {
     let current = initial;
     return {
-      get state() {
+      get observedState() {
         return current;
       },
       begin<Request>(command: (state: State) => Start<State, Request>) {

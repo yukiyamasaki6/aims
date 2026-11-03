@@ -4,7 +4,7 @@ import { useMountedRef } from "@/hooks/use-mounted-ref";
 import type { ScreenView } from "../application/screen-view";
 
 // 画面の状態を、集約の命令(開始)と事実(reducer)で遷移させて持ち、手続きへ渡す画面の約束を作る。
-// 最新の値をrefにも同期して持ち、`view.state`は命令や事実を適用した直後の値を、描画を待たずに返す。
+// 最新の値をrefにも同期して持ち、命令や事実は描画を待たずに、直前の適用の結果に適用する。
 // 表示中かの判定と、セキュリティチェックのウィジェットのやり直しも、ここで結ぶ。
 // 約束の関数は最初の描画のものが使われるため、reducerは変わらない関数を渡す。
 export function useScreenView<State, Event>(
@@ -25,9 +25,6 @@ export function useScreenView<State, Event>(
       setState(next);
     };
     return {
-      get state() {
-        return latest.current;
-      },
       begin(command) {
         const start = command(latest.current);
         apply(start.state);
