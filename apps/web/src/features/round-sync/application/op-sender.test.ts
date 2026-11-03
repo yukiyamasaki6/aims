@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { roundStreamId } from "@/features/rounds/application/../domain/sync-events";
+import type { SendOutcome } from "@/features/rounds/application/operation-sending";
 import {
   appliedOutcome,
   createMemoryRoundStore,
   createRecordBus,
 } from "@/features/rounds/application/round-record-test-helpers";
-import type { SendOutcome } from "@/features/rounds/application/send-operations";
 import {
   roundUpdated,
   shotCleared,

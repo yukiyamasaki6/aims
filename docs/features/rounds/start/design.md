@@ -34,12 +34,12 @@
 - `features/rounds/ui/round-preset-select.tsx`: UI層。取得と選択の状態を持ち、一覧、開始の帯、削除の確認を描く。`NewRoundStore`を文脈で受け取り、`store.loadPresets()`で一覧を得る。「一覧へ戻る」は`ROUNDS_PATH`を使う。削除の部品は`rounds/preset`が扱う。
 - `features/rounds/ui/use-start-round.ts`: UI層。作成中とエラーの状態を持ち、二重の開始を防いで`NewRoundStore.startRound`を呼ぶ。
 - `features/rounds/ui/preset-info.tsx`、`target-face-info.tsx`: UI層。プリセットと距離、的の情報の表示。
-- `NewRoundStore.loadPresets`と`features/rounds/application/fetch-round-detail.ts`の`RoundFetching.fetchPresets`: 取得の順序(手続き)。成功した結果を保存し、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず、取得に使った利用者のキーへ保存する。
+- `NewRoundStore.loadPresets`と`features/rounds/application/round-fetching.ts`の`RoundFetching.fetchPresets`: 取得の順序(手続き)。成功した結果を保存し、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず、取得に使った利用者のキーへ保存する。
 - `features/rounds/infrastructure/round-queries.ts`の`RoundQueries.presets`: 個人（`owner_id`が自分）と公式（`owner_id`が`null`）を1回の取得で得る。`DatabaseGateway`の`select`で行い、状態0かエラーはそのまま返す。
 - `features/rounds/domain/preset.ts`: ドメイン層。プリセットの値、並びの比較`comparePresets`、並べて個人と公式に振り分ける`presetsOf`、距離の並び、個人プリセットの除去。
 - `features/rounds/domain/preset-list-view.ts`: ドメイン層。取得結果から、削除済みを除いた表示と選択中のプリセットを決める`presetListView`。
 - `features/rounds/infrastructure/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。例外は投げない。識別情報は起動地点から`IdentityReader`で受け取り、読むたびにその時点で読む。
-- `NewRoundStore.startRound`と開始の手続き(`features/rounds/application/start-round.ts`): サインインの状態の確認、選択中プリセットからの作成の操作の組み立て(`features/rounds/domain/round-start.ts`の`roundCreatedDraftOf`がIDを除いた内容を作り、手続きが各要素にIDを振る)、`round.created`の追記を行う。追記の完了の後に、共有の技術の約束`PageNavigation`(`go(path)`)で`roundPath(roundId)`へ進む。実装は`lib/page-navigation/infrastructure/router-page-navigation.ts`で、起動地点が画面のパッケージの遷移の部品から生成する。
+- `NewRoundStore.startRound`と開始の手続き(`features/rounds/application/round-start.ts`): サインインの状態の確認、選択中プリセットからの作成の操作の組み立て(`features/rounds/domain/round-start.ts`の`roundCreatedDraftOf`がIDを除いた内容を作り、手続きが各要素にIDを振る)、`round.created`の追記を行う。追記の完了の後に、共有の技術の約束`PageNavigation`(`go(path)`)で`roundPath(roundId)`へ進む。実装は`lib/page-navigation/infrastructure/router-page-navigation.ts`で、起動地点が画面のパッケージの遷移の部品から生成する。
 
 - 並びは、種別、弓種、距離の本数（多い方が先）、先頭の距離（大きい方が先）、作成日時（新しい方が先）の順である。
 - 開始は一覧の取得結果の構成で作る。一覧の表示後に削除されたプリセットでも、表示していた構成で開始する。
@@ -65,12 +65,12 @@
 | `features/rounds/domain/write-result.ts` | ドメイン層(値オブジェクト: 書き込みの結果の種類と文言) |
 | `features/rounds/domain/option-label.ts` | ドメイン層(値オブジェクト: 選択肢の値の表示名`labelOf`) |
 | `features/rounds/domain/target-face.ts` | ドメイン層(値オブジェクト。的を引く`lookupTargetFace`を持つ) |
-| `features/rounds/application/start-round.ts` | 手続き(開始) |
-| `features/rounds/application/delete-preset.ts` | 手続き(個人プリセットの削除) |
+| `features/rounds/application/round-start.ts` | 手続き(開始) |
+| `features/rounds/application/preset-deletion.ts` | 手続き(個人プリセットの削除) |
 | `features/rounds/application/preset-commands.ts` | 手続きの約束(`PresetCommands`)。使い手が複数の手続きになるため、手続きのファイルから分けて置く |
 | `features/rounds/application/sign-in-reader.ts`、`reference-snapshots.ts`、`unique-ids.ts` | 手続きの約束(`SignInReader`、`ReferenceSnapshots`、`UniqueIds`。使い手が2つ以上) |
 | `features/rounds/application/new-round-store.ts` | 手続き(作成の画面に渡す状態と変更の方法。プリセットの取得、削除、開始) |
-| `features/rounds/application/fetch-round-detail.ts` | 手続き(取得の順序。プリセットの取得を持つ)と約束(`RoundQueries`) |
+| `features/rounds/application/round-fetching.ts` | 手続き(取得の順序。プリセットの取得を持つ)と約束(`RoundQueries`) |
 | `features/rounds/infrastructure/preset-commands.ts` | インフラ層(プリセットの書き込みと、結果の種類への写し) |
 | `features/rounds/infrastructure/browser-unique-ids.ts` | インフラ層(新しいIDの払い出し) |
 | `features/rounds/infrastructure/round-queries.ts`、`reference-snapshot.ts`、`auth-sign-in-reader.ts`、`rounds-db-schema.ts` | インフラ層(プリセットの問い合わせ、保存済みの書き換え、不明の文言、プリセットの表を持つ) |

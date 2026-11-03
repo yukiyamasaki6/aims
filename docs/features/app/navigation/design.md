@@ -26,7 +26,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 
 ## 構成とデータの流れ
 
-- `src/proxy.ts`(要求の入口): `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に、認証の機能の経路の規則(`features/auth/domain/routes.ts` の `redirectFor`)へ、ラウンドの入口が公開する保護の範囲の根の経路 `ROUNDS_PATH` を添えて `updateSession` へ渡す。`config.matcher` は Next.js がビルド時に静的に読み、定数を参照できないため、経路を文字列で再掲し、`proxy.test.ts` が `ROUNDS_PATH` との一致を確かめる。`/` は対象外である。
+- `src/proxy.ts`(要求の入口): `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に、認証の機能の経路の規則(`features/auth/domain/auth-routes.ts` の `redirectFor`)へ、ラウンドの入口が公開する保護の範囲の根の経路 `ROUNDS_PATH` を添えて `updateSession` へ渡す。`config.matcher` は Next.js がビルド時に静的に読み、定数を参照できないため、経路を文字列で再掲し、`proxy.test.ts` が `ROUNDS_PATH` との一致を確かめる。`/` は対象外である。
 - `src/lib/supabase/infrastructure/session.ts`(共有の技術の実装): `updateSession` が要求ごとにセッションを更新して認証状態を判定し、経路の規則は引数で受ける。規則は認証の機能の `redirectFor` が持ち、`proxy.ts` が渡す。
   - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
   - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。`/signin` は有効な遷移元があればそこへ送る（`auth/signin`）。

@@ -33,7 +33,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/domain/email-address.ts`: メールアドレスの規則(値オブジェクト)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
 - `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(登録済み(`already_registered`)を含む)と利用者向けの文言(値オブジェクト)。認証サービスの語彙は持たない。
 - `src/features/auth/domain/captcha-token.ts`、`password.ts`: セキュリティチェックのトークンと、パスワードの入力と強さの規則と文言(値オブジェクト)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
-- `src/features/auth/domain/routes.ts`: 経路の規則(値オブジェクト)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは保護の範囲の根(今はラウンド一覧の経路)の配下の同一オリジンのパスだけ。根は`protectedPath`として受け取る)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`)、クエリからの読み取り(`readReturnTo`)、要求のリダイレクト先(`redirectFor`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
+- `src/features/auth/domain/auth-routes.ts`: 経路の規則(値オブジェクト)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは保護の範囲の根(今はラウンド一覧の経路)の配下の同一オリジンのパスだけ。根は`protectedPath`として受け取る)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`)、クエリからの読み取り(`readReturnTo`)、要求のリダイレクト先(`redirectFor`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
 - `src/features/auth/index.ts`: 認証の機能の入口。他の機能が使う型と文言と経路(`unconfirmedMessage`、`destinationOf`、`SIGN_UP_PATH`)を、別名なしで再公開する。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。`signInWithPassword`の呼び出しと、エラーを失敗の種類に写す変換(通信の断は名前で先に判定する)、例外(接続を作れない場合を含む)を届かない結果に変える変換を含む。接続は、渡された関数で照合のたびに取得する。
 - `src/features/auth/infrastructure/browser-return-to.ts`: 現在のURLのクエリの遷移元の値の読み出し(検証せずに返し、検証は手続きの`destinationOf`が行う)。routerによる遷移は共有の技術 `src/lib/page-navigation/infrastructure/router-page-navigation.ts` が持つ。
@@ -44,7 +44,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/ui/auth-header.tsx`: 認証画面の見出し。
 - `src/lib/supabase/infrastructure/client.ts`: ブラウザの接続。
 - `src/hooks/use-mounted-ref.ts`: 画面がマウント中かどうかの参照。画面が`isMounted`として手続きへ渡し、手続きが照合の後に確かめる。
-- `src/lib/supabase/infrastructure/session.ts`: `proxy.ts`から呼ばれ、要求ごとにセッションを更新して、サインインの有無を判定する。経路の規則は持たず、`proxy.ts`が認証の機能の`redirectFor`(`domain/routes.ts`)を関数として渡す。認証済みの`/signin`は、有効な遷移元があればそこへ、無ければ`/rounds`へ送られる。
+- `src/lib/supabase/infrastructure/session.ts`: `proxy.ts`から呼ばれ、要求ごとにセッションを更新して、サインインの有無を判定する。経路の規則は持たず、`proxy.ts`が認証の機能の`redirectFor`(`domain/auth-routes.ts`)を関数として渡す。認証済みの`/signin`は、有効な遷移元があればそこへ、無ければ`/rounds`へ送られる。
 
 流れは次のとおりである。
 

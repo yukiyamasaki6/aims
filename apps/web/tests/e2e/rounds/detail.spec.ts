@@ -294,7 +294,7 @@ test("他の端末で記録した入力中のラウンドは、オンライン�
   await expect(page.getByTestId("score-button-9")).toBeVisible();
 });
 
-// src/features/fetch-result/fetch-content.tsのFALLBACK_WAIT_MS。
+// src/features/rounds/domain/fetch-result.tsのFALLBACK_WAIT_MS。
 const FALLBACK_WAIT_MS = 1_000;
 // 待ちの後の描画とブラウザ・CIの揺れの余裕。
 const RENDER_MARGIN_MS = 500;

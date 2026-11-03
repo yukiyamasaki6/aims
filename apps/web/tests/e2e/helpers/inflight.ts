@@ -3,7 +3,7 @@ import {
   RESET_PASSWORD_PATH,
   SIGN_IN_PATH,
   SIGN_UP_PATH,
-} from "@/features/auth/domain/routes";
+} from "@/features/auth/domain/auth-routes";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 
 // proxy.tsの対象のパスへの要求のうち、応答がまだ届いていないものを、contextごとに記録する。

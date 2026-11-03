@@ -10,17 +10,17 @@ import { localOpening, openPlan } from "../domain/round-view";
 import { shotIdAfter } from "../domain/shot-id";
 import { roundStreamId } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
-import type { RoundEditing } from "./edit-round";
-import type { RoundFetching } from "./fetch-round-detail";
-import type { RoundLeaving } from "./leave-round";
+import type { PresetSaving, PresetSavingResult } from "./preset-saving";
 import type { OpenedRound, RefreshRequests } from "./refresh-requests";
+import type { RoundEditing } from "./round-editing";
+import type { RoundFetching } from "./round-fetching";
 import {
   createRoundHandle,
   type LoadedRound,
   type RoundHandle,
 } from "./round-handle";
+import type { RoundLeaving } from "./round-leaving";
 import type { RoundRecordHub, RoundStoreGroup } from "./round-record-hub";
-import type { PresetSaving, SavePresetResult } from "./save-preset";
 import { TIMED_OUT, withinFetchTimeout, withinTime } from "./time-limit";
 import type { UniqueIds } from "./unique-ids";
 import { type WhenOnline, whenOnline } from "./when-online";
@@ -42,7 +42,7 @@ export type RoundDetailStore = {
   // 一覧へ置き換えて移る(削除済み、作成が確定せずに消えたとき)。
   leaveRound(): void;
   // 現在の構成のプリセットとしての保存。サインインの確認、書き込み、成功の後の保存済みの再取得を行う。
-  savePreset(preset: PresetToSave): Promise<SavePresetResult>;
+  savePreset(preset: PresetToSave): Promise<PresetSavingResult>;
   // 新しいID(操作のイベントID、距離のID)の払い出し。
   newId(): string;
   // そのエンドの既にある矢のIDより後ろに並ぶ、時刻順の矢のIDの払い出し。

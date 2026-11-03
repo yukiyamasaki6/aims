@@ -2,7 +2,7 @@ import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigat
 import { statusOperation } from "../domain/round-progress";
 import { ROUNDS_PATH } from "../domain/round-routes";
 import { roundStreamId } from "../domain/sync-events";
-import type { RoundDeletion } from "./delete-round";
+import type { RoundDeletion } from "./round-deletion";
 import type { RoundRecordHub } from "./round-record-hub";
 import type { UniqueIds } from "./unique-ids";
 

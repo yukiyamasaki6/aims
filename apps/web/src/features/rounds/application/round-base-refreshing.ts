@@ -6,12 +6,12 @@ import {
   roundIdOfStream,
   roundStreamId,
 } from "../domain/sync-events";
+import type { RefreshRequests } from "./refresh-requests";
 import type {
   FetchedRoundDetail,
   FetchedRoundDetails,
   RoundFetching,
-} from "./fetch-round-detail";
-import type { RefreshRequests } from "./refresh-requests";
+} from "./round-fetching";
 import type { RoundRecordHub } from "./round-record-hub";
 
 function baseOf(detail: FetchedRoundDetail) {
@@ -64,10 +64,10 @@ async function retainedRoundIds(hub: RoundRecordHub): Promise<string[]> {
   }
 }
 
-export type RoundRefreshResult = "ok" | "gone" | "failed";
+export type RoundBaseRefreshResult = "ok" | "gone" | "failed";
 
 // ベースの取得と反映。公開する突き合わせの操作(`round-reconciliation.ts`)から呼ばれる。
-export function createRefreshRoundBases(deps: {
+export function createRoundBaseRefreshing(deps: {
   hub: RoundRecordHub;
   fetching: RoundFetching;
   requests: RefreshRequests;
@@ -104,12 +104,12 @@ export function createRefreshRoundBases(deps: {
   }
 
   // 開いた詳細のラウンドを取得して端末の記録へ反映し、依頼を待つ側へ結果を返す。
-  async function refreshRound(roundId: string): Promise<RoundRefreshResult> {
-    const run = requests.beginRound(roundId);
-    hub.clearDiverged(roundStreamId(roundId));
+  async function refreshRound(id: string): Promise<RoundBaseRefreshResult> {
+    const run = requests.beginRound(id);
+    hub.clearDiverged(roundStreamId(id));
     let fetched: FetchResult<FetchedRoundDetail>;
     try {
-      fetched = await fetching.fetchRoundDetail(roundId);
+      fetched = await fetching.fetchRoundDetail(id);
     } catch {
       fetched = { status: "error", message: FETCH_ERROR_MESSAGE };
     }
@@ -121,7 +121,7 @@ export function createRefreshRoundBases(deps: {
     let deleted = false;
     try {
       const group = await hub.commit(
-        roundStreamId(roundId),
+        roundStreamId(id),
         base,
         fetched.data.startedAt,
         fetched.data.userId,
@@ -149,4 +149,4 @@ export function createRefreshRoundBases(deps: {
   return { refreshAll, refreshRound };
 }
 
-export type RefreshRoundBases = ReturnType<typeof createRefreshRoundBases>;
+export type RoundBaseRefreshing = ReturnType<typeof createRoundBaseRefreshing>;

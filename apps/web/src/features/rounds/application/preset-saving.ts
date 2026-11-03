@@ -1,17 +1,17 @@
 import type { PresetToSave } from "../domain/preset-save";
 import { PRESET_SAVE_ERROR_MESSAGE } from "../domain/write-result";
-import type { RoundFetching } from "./fetch-round-detail";
 import type { PresetCommands } from "./preset-commands";
+import type { RoundFetching } from "./round-fetching";
 import type { SignInReader } from "./sign-in-reader";
 
 // saved: 保存した。
 // failed: 保存できず、画面に出す文言がある。
-export type SavePresetResult =
+export type PresetSavingResult =
   | { status: "saved" }
   | { status: "failed"; error: string };
 
 export type PresetSaving = {
-  savePreset(preset: PresetToSave): Promise<SavePresetResult>;
+  savePreset(preset: PresetToSave): Promise<PresetSavingResult>;
 };
 
 // 現在の構成をプリセットとして保存する。サインインを確かめ、書き込み、成功したら保存済みの背景を取り直す。

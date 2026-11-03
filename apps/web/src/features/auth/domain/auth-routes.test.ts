@@ -5,7 +5,7 @@ import {
   readReturnTo,
   redirectFor,
   signInHref,
-} from "./routes";
+} from "./auth-routes";
 
 // 保護の範囲の根は使う側が渡す引数のため、既存の件は一覧の経路で確かめる。
 const ROUNDS = "/rounds";

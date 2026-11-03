@@ -1,7 +1,7 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import { UNREACHABLE } from "../domain/auth-failure";
+import { SIGN_IN_PATH } from "../domain/auth-routes";
 import { beginSendCode } from "../domain/password-setup-flow";
-import { SIGN_IN_PATH } from "../domain/routes";
 import type { CallResult } from "./call-result";
 import {
   applyPassword,

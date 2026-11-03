@@ -6,11 +6,11 @@ import {
   FETCH_ERROR_MESSAGE,
   FETCH_TIMEOUT_MS,
 } from "../domain/fetch-result";
+import { createContentFetcher } from "./content-fetcher";
 import {
   createFakeSignInReader,
   type SignInReading,
 } from "./fake-sign-in-reader-test-helpers";
-import { createContentFetcher } from "./fetch-content";
 
 const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
 

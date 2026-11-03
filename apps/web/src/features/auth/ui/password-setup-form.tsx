@@ -7,6 +7,7 @@ import { BusyButton } from "@/components/ui/busy-button";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { PasswordSetup } from "../application/password-setup";
 import type { ScreenView } from "../application/screen-view";
+import { SIGN_IN_PATH } from "../domain/auth-routes";
 import { PASSWORD_MIN_LENGTH } from "../domain/password";
 import {
   initialPasswordSetupFlow,
@@ -14,7 +15,6 @@ import {
   type PasswordSetupFlow,
   passwordSetupReducer,
 } from "../domain/password-setup-flow";
-import { SIGN_IN_PATH } from "../domain/routes";
 import { AuthField } from "./auth-field";
 import { AuthHeader } from "./auth-header";
 import { OtpCodeStep } from "./otp-code-step";

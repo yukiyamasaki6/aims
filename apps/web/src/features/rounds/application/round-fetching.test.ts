@@ -17,10 +17,10 @@ import type { ServerRound } from "../domain/round-tables";
 import type { TargetFaceRecord } from "../domain/target-face";
 import { createRoundQueries } from "../infrastructure/round-queries";
 import type { RoundsDbSchema } from "../infrastructure/rounds-db-schema";
+import { createContentFetcher } from "./content-fetcher";
 import { createFakeSignInReader } from "./fake-sign-in-reader-test-helpers";
-import { createContentFetcher } from "./fetch-content";
-import { createRoundFetching, type RoundQueries } from "./fetch-round-detail";
 import type { ReferenceKind, ReferenceSnapshots } from "./reference-snapshots";
+import { createRoundFetching, type RoundQueries } from "./round-fetching";
 import type { SignInReader } from "./sign-in-reader";
 
 const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";

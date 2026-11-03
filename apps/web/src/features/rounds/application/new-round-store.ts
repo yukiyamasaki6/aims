@@ -1,9 +1,9 @@
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { FetchResult } from "../domain/fetch-result";
 import type { Preset, Presets } from "../domain/preset";
-import type { DeletePresetResult, PresetDeletion } from "./delete-preset";
-import type { RoundFetching } from "./fetch-round-detail";
-import type { RoundStart, StartRoundResult } from "./start-round";
+import type { PresetDeletion, PresetDeletionResult } from "./preset-deletion";
+import type { RoundFetching } from "./round-fetching";
+import type { RoundStart, RoundStartResult } from "./round-start";
 import { type WhenOnline, whenOnline } from "./when-online";
 
 export type NewRoundStore = {
@@ -13,12 +13,12 @@ export type NewRoundStore = {
   startRound(
     preset: Preset | null,
     isCurrent: () => boolean,
-  ): Promise<StartRoundResult>;
+  ): Promise<RoundStartResult>;
   // 個人プリセットの削除。成功で保存済みからも除く。`isCurrent`は、結果を受け取る画面がまだあるかを返す。
   deletePreset(
     presetId: string,
     isCurrent: () => boolean,
-  ): Promise<DeletePresetResult>;
+  ): Promise<PresetDeletionResult>;
   whenOnline: WhenOnline;
 };
 

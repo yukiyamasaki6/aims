@@ -13,7 +13,7 @@ import type { UniqueIds } from "./unique-ids";
 // created: 作成を端末の操作の列へ保存し、詳細の画面へ進んだ。
 // failed: 開始できず、画面に出す文言がある。
 // discarded: 認証の確認を待つ間に、結果を受け取る画面が無くなった。
-export type StartRoundResult =
+export type RoundStartResult =
   | { status: "created"; roundId: string }
   | { status: "failed"; error: string }
   | { status: "discarded" };
@@ -22,7 +22,7 @@ export type RoundStart = {
   startRound(
     preset: Preset | null,
     isCurrent: () => boolean,
-  ): Promise<StartRoundResult>;
+  ): Promise<RoundStartResult>;
 };
 
 // 選択したプリセット(無ければnull)でラウンドを開始する。端末への保存の完了だけを待ち、送信を待たずに詳細の画面へ進む。

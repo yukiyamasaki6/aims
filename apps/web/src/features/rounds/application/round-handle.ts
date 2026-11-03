@@ -12,8 +12,8 @@ import {
 } from "../domain/round-view";
 import { roundStreamId, type SyncOperation } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
-import type { RoundEditing } from "./edit-round";
 import type { RefreshRequests } from "./refresh-requests";
+import type { RoundEditing } from "./round-editing";
 import type { RoundRecordHub } from "./round-record-hub";
 
 // 開いた詳細の材料。

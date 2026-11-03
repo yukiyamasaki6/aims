@@ -1,6 +1,6 @@
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
-import { destinationOf } from "../domain/routes";
+import { destinationOf } from "../domain/auth-routes";
 import {
   beginSignIn,
   type Credentials,

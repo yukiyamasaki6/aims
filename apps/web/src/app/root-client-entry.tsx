@@ -15,22 +15,22 @@ import { createSyncTriggers } from "@/features/round-sync/application/sync-trigg
 import { createBrowserSenderLock } from "@/features/round-sync/infrastructure/browser-sender-lock";
 import { createBrowserVisibility } from "@/features/round-sync/infrastructure/browser-visibility";
 import { RoundBaseRefresher } from "@/features/round-sync/ui/round-base-refresher";
-import { createPresetDeletion } from "@/features/rounds/application/delete-preset";
-import { createRoundDeletion } from "@/features/rounds/application/delete-round";
-import { createRoundEditing } from "@/features/rounds/application/edit-round";
-import { createContentFetcher } from "@/features/rounds/application/fetch-content";
-import { createRoundFetching } from "@/features/rounds/application/fetch-round-detail";
-import { createRoundLeaving } from "@/features/rounds/application/leave-round";
+import { createContentFetcher } from "@/features/rounds/application/content-fetcher";
 import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
+import { createOperationSending } from "@/features/rounds/application/operation-sending";
+import { createPresetDeletion } from "@/features/rounds/application/preset-deletion";
+import { createPresetSaving } from "@/features/rounds/application/preset-saving";
 import { createRefreshRequests } from "@/features/rounds/application/refresh-requests";
-import { createRefreshRoundBases } from "@/features/rounds/application/refresh-round-bases";
+import { createRoundBaseRefreshing } from "@/features/rounds/application/round-base-refreshing";
+import { createRoundDeletion } from "@/features/rounds/application/round-deletion";
 import { createRoundDetailStore } from "@/features/rounds/application/round-detail-store";
+import { createRoundEditing } from "@/features/rounds/application/round-editing";
+import { createRoundFetching } from "@/features/rounds/application/round-fetching";
+import { createRoundLeaving } from "@/features/rounds/application/round-leaving";
 import { createRoundReconciliation } from "@/features/rounds/application/round-reconciliation";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
+import { createRoundStart } from "@/features/rounds/application/round-start";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
-import { createPresetSaving } from "@/features/rounds/application/save-preset";
-import { createSendOperations } from "@/features/rounds/application/send-operations";
-import { createRoundStart } from "@/features/rounds/application/start-round";
 import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-result";
 import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
@@ -105,11 +105,11 @@ function composeRecords(inputs: Inputs) {
   const reconciliation = createRoundReconciliation({
     hub,
     requests,
-    send: createSendOperations({
+    send: createOperationSending({
       hub,
       transport: createRoundOpTransport(database),
     }),
-    refresh: createRefreshRoundBases({ hub, fetching, requests }),
+    refresh: createRoundBaseRefreshing({ hub, fetching, requests }),
   });
   return { hub, requests, snapshots, fetching, reconciliation };
 }

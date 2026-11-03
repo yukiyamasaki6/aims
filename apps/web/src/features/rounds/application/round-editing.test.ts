@@ -7,8 +7,8 @@ import {
 } from "../domain/round-tables";
 import type { ScoringTargetFace } from "../domain/scorecard-scoring";
 import { roundStreamId, type SyncOperation } from "../domain/sync-events";
-import { createRoundEditing } from "./edit-round";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
+import { createRoundEditing } from "./round-editing";
 
 const faces: ScoringTargetFace[] = [
   {

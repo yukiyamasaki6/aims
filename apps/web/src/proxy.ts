@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { redirectFor } from "@/features/auth/domain/routes";
+import { redirectFor } from "@/features/auth/domain/auth-routes";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import { updateSession } from "@/lib/supabase/infrastructure/session";
 

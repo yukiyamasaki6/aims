@@ -6,8 +6,8 @@ import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { SignIn } from "../application/sign-in";
+import { RESET_PASSWORD_PATH, SIGN_UP_PATH } from "../domain/auth-routes";
 import { EMAIL_MAX_LENGTH } from "../domain/email-address";
-import { RESET_PASSWORD_PATH, SIGN_UP_PATH } from "../domain/routes";
 import {
   initialSignInFlow,
   type SignInFlow,

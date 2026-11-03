@@ -29,6 +29,34 @@
 - 規約の形にならない外部の名前に限り、`// biome-ignore lint/style/useNamingConvention: <理由>`で例外にする。理由には名前を決めた外部を書く。例外の一覧は`git grep -n "biome-ignore lint/style/useNamingConvention"`で出す。
 - 生成されたDBの型(`apps/web/src/types/supabase.ts`)は、生成器とDBが名前を決めるため検査の対象外とする(`biome.json`の`overrides`)。
 
+## 構造の部品の命名
+
+- 構造の部品の名前を、次の表の形にする。1つの規則を機能ごとに別の形で書かない。
+
+| 概念 | 規則 |
+| --- | --- |
+| 経路のファイル | `domain/<機能の単数形の概念>-routes.ts`(1機能に1つ以下)。定数は`<名前>_PATH`、関数は`<名前>Path` |
+| 手続き | ファイル名は型名のkebab-case(1ファイル1手続き)。生成関数は`create<型名>`。型名は`<対象><動作の名詞形>`(`RoundDeletion`)、対象を持たない操作名(`SignIn`、`Start`)、役割の名詞(`Session`、`OpSender`、`ContentFetcher`)のどれか。動詞で始まる型名は置かない。付属の型は手続きの型名を接頭にする(`RoundStartResult`)。例外は、1つの型の手続きを画面ごとに作る生成関数(`createSignUp`、`createResetPassword`は`PasswordSetup`を返す)で、画面の操作名で呼び、ファイルも画面の操作名とする |
+| 窓口 | 型`<画面>Store`、ファイル`<画面>-store.ts`、生成関数`create<画面>Store`(`RoundsListStore`ほか) |
+| 手続きの約束 | 頼むこと、読み出す対象を表す名詞(`Clock`、`PageNavigation`、`SignInReader`、`UniqueIds`)。独立のファイルのときはkebab-case。使い手が1つの約束は、その手続きのファイルに置く |
+| 手続きの依存の引数名 | 約束の型名の先頭を小文字にした名前(`pageNavigation`、`returnToReader`) |
+| 約束の実装 | ファイル`<技術または相手の機能>-<約束名>.ts`、生成関数`create<技術または相手><約束名>`(`browser-clock.ts`と`createBrowserClock`、`router-page-navigation.ts`、`auth-sign-in-reader.ts`)。1つの実装が複数の約束を満たすときは主な約束の名前(`createBrowserPageLoad`は`PageLoad`と`PageReplace`) |
+| 他の機能の入口を包む約束 | 下の表のとおり |
+| 型だけ・定数だけのファイル | `-types`、`-constants`は、型だけ、定数だけのファイルに限る。関数を持つファイルには付けず、概念の名前にする |
+| テスト補助 | `agents/testing.md`の「テスト補助の置き場」 |
+
+### サインイン状態を読む約束
+
+- サインイン状態を読む約束は統一せず、次の表のとおり並存させる。変換する中身(文言、経路)が違い、1つにすると片方が使わないメンバーを持つため。
+- 他の機能の入口を包む手続きの約束は、自機能での用途の名前にする(`SignInReader`、`SignInCheck`)。包むインフラ層の実装は、ファイル名`<相手の機能>-<約束名>.ts`、生成関数`create<相手の機能><約束名>`にする(`auth-sign-in-reader.ts`と`createAuthSignInReader`)。型だけで足りるときは、自分の約束を置かない(`SessionReader`、`IdentityReader`)。
+
+| 型 | 持ち主 | 形 | 使い手 | 並存の理由 |
+| --- | --- | --- | --- | --- |
+| `SessionReader` | 認証(入口が型を公開) | `readSession(options?)`が`{status, userId?}`を返す | 同期の手続き(`round-sync.ts`、`op-sender.ts`)が型だけで直接受ける | 形を変えずに使える |
+| `IdentityReader` | 認証(入口が型を公開) | `read()`が端末に記録された最後の利用者を返す(同期、通信なし) | `sync-triggers.ts`(型だけ)、`reference-snapshot.ts`(インフラ層) | サインインの状態ではなく、端末の記録の読み出しで、別の概念 |
+| `SignInReader` | ラウンド(手続きの約束) | `read(options?)`が、未認証と不明に利用者向けの文言を足した形を返す | 取得、開始、プリセットの手続き | 認証の文言(`unconfirmedMessage`、ドメインの関数)を使う変換があり、手続きは他の機能の関数を参照できない |
+| `SignInCheck` | ナビゲーション(手続きの約束) | `readStatus()`と、サインアップの経路、サインインの後の既定の行き先 | 開始の手続き | 認証の経路の関数・定数(`SIGN_UP_PATH`、`destinationOf`)とラウンドの定数を、ナビゲーションの言葉に変える。同上 |
+
 ## フロントエンド
 
 - `any` は使用しない。

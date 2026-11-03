@@ -6,9 +6,9 @@ import {
 } from "../domain/round-progress";
 import { ROUNDS_PATH } from "../domain/round-routes";
 import { roundStreamId } from "../domain/sync-events";
-import { createRoundDeletion } from "./delete-round";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
-import { createRoundLeaving } from "./leave-round";
+import { createRoundDeletion } from "./round-deletion";
+import { createRoundLeaving } from "./round-leaving";
 
 // 保存の完了と遷移の順序を、1つの列に積んで観測する。
 function setup(

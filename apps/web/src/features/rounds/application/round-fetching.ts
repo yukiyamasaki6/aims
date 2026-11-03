@@ -21,7 +21,7 @@ import {
   type TargetFaceOption,
   type TargetFaceRecord,
 } from "../domain/target-face";
-import type { ContentFetcher } from "./fetch-content";
+import type { ContentFetcher } from "./content-fetcher";
 import type { ReferenceKind, ReferenceSnapshots } from "./reference-snapshots";
 
 export type RoundDetailData = {

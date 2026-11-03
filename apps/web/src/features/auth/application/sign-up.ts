@@ -1,8 +1,8 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { ALREADY_REGISTERED, UNREACHABLE } from "../domain/auth-failure";
+import { destinationOf } from "../domain/auth-routes";
 import { beginSendCode } from "../domain/password-setup-flow";
-import { destinationOf } from "../domain/routes";
 import {
   applyPassword,
   deliver,

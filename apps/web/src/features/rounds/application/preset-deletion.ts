@@ -7,7 +7,7 @@ import type { SignInReader } from "./sign-in-reader";
 // deleted: 削除した。
 // failed: 削除できず、画面に出す文言がある。
 // discarded: 完了を待つ間に、結果を受け取る画面が無くなった。
-export type DeletePresetResult =
+export type PresetDeletionResult =
   | { status: "deleted" }
   | { status: "failed"; error: string }
   | { status: "discarded" };
@@ -16,7 +16,7 @@ export type PresetDeletion = {
   deletePreset(
     presetId: string,
     isCurrent: () => boolean,
-  ): Promise<DeletePresetResult>;
+  ): Promise<PresetDeletionResult>;
 };
 
 // 確認の後に呼ぶ個人プリセットの削除。成功したら保存済みからも除く。

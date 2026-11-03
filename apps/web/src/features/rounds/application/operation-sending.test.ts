@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { roundUpdated } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
+import {
+  createOperationSending,
+  type OpResult,
+  type RoundTransport,
+  type SendOutcome,
+} from "./operation-sending";
 import type { RecordMessage } from "./round-record-hub";
 import {
   createRecordBus,
   createTestRoundHub,
 } from "./round-record-test-helpers";
-import {
-  createSendOperations,
-  type OpResult,
-  type RoundTransport,
-  type SendOutcome,
-} from "./send-operations";
 
 const STREAM = roundStreamId("round-1");
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -34,7 +34,7 @@ async function setup(outcome: SendOutcome | (() => Promise<SendOutcome>)) {
     typeof outcome === "function" ? outcome() : outcome,
   );
   const transport: RoundTransport = { send };
-  const sending = createSendOperations({ hub, transport });
+  const sending = createOperationSending({ hub, transport });
   const posted: RecordMessage[] = [];
   bus.channel().open((message) => posted.push(message));
   return { hub, store, sending, send, posted };

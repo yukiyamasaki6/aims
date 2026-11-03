@@ -1,4 +1,4 @@
-import type { SavePresetResult } from "../application/save-preset";
+import type { PresetSavingResult } from "../application/preset-saving";
 import {
   type PresetSource,
   type PresetToSave,
@@ -58,7 +58,7 @@ export function startPresetSave(
 // 失敗した場合はダイアログを開いたままエラーを表示し、成功した場合は閉じて名前欄を空に戻す。
 export function finishPresetSave(
   state: PresetDialogState,
-  result: SavePresetResult,
+  result: PresetSavingResult,
 ): PresetDialogState {
   if (result.status === "failed") {
     return { ...state, submitting: false, error: result.error };

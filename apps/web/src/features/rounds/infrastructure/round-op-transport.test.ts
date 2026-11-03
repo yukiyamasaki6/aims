@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DatabaseGateway } from "@/lib/supabase/contract/database";
-import type { SendOutcome } from "../application/send-operations";
+import type { SendOutcome } from "../application/operation-sending";
 import {
   distanceCreated,
   distanceDisabled,

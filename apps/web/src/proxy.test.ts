@@ -6,7 +6,7 @@ import {
   redirectFor,
   SIGN_IN_PATH,
   SIGN_UP_PATH,
-} from "@/features/auth/domain/routes";
+} from "@/features/auth/domain/auth-routes";
 import {
   OFFLINE_PATH,
   shellUrlOf,

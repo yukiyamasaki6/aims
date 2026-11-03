@@ -31,7 +31,7 @@ export type SendReport =
   | { ok: false; cause: SendFailureCause };
 
 // 操作の送信と、確定の記録。
-export function createSendOperations(deps: {
+export function createOperationSending(deps: {
   hub: RoundRecordHub;
   transport: RoundTransport;
 }) {
@@ -67,4 +67,4 @@ export function createSendOperations(deps: {
   };
 }
 
-export type SendOperations = ReturnType<typeof createSendOperations>;
+export type OperationSending = ReturnType<typeof createOperationSending>;

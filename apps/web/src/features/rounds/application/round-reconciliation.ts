@@ -3,10 +3,10 @@ import { batchLimitOf, conflicts, laneOf } from "../domain/round-op-conflicts";
 import { outboxOf, type RoundRecord } from "../domain/round-record";
 import { freshBaseNeeds } from "../domain/round-view";
 import { roundStreamId, type SyncOperation } from "../domain/sync-events";
+import type { OperationSending } from "./operation-sending";
 import type { RefreshRequests } from "./refresh-requests";
-import type { RefreshRoundBases } from "./refresh-round-bases";
+import type { RoundBaseRefreshing } from "./round-base-refreshing";
 import type { RecordChange, RoundRecordHub } from "./round-record-hub";
-import type { SendOperations } from "./send-operations";
 
 // 取り直しの理由。open: 開いたとき、stale: 端末のベースで開いたまま、diverged: 効かなかった結果を受けた、overlay: 確定済みの操作をベースに重ねられなかった。
 type RefreshNeedReason = "open" | "stale" | "diverged" | "overlay";
@@ -87,8 +87,8 @@ export type RoundReconciliation = {
 export function createRoundReconciliation(deps: {
   hub: RoundRecordHub;
   requests: RefreshRequests;
-  send: SendOperations;
-  refresh: RefreshRoundBases;
+  send: OperationSending;
+  refresh: RoundBaseRefreshing;
 }): RoundReconciliation {
   const { hub, requests, send, refresh } = deps;
 

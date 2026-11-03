@@ -34,9 +34,9 @@
 - `features/rounds/ui/save-preset-dialog.tsx`: 保存ダイアログの描画。`RoundDetailStore.savePreset`を呼び、結果を状態へ反映する。
 - `features/rounds/ui/save-preset-dialog-state.ts`: 開閉時の事前入力と破棄、二重の実行の防止、結果の反映を純関数で行う。
 - `features/rounds/domain/preset-save.ts`: 保存するプリセットの内容(外部の引数名を持たない)、名前の決定と長さ検証、距離の位置キーの連番の振り直しを行う。
-- `RoundDetailStore.savePreset`と保存の手続き(`features/rounds/application/save-preset.ts`): 起動地点の`SignInReader`でサインインの状態を確かめ、書き込みを実行し、成功の後にプリセット一覧を背景で再取得して端末の保存済みを更新する。
+- `RoundDetailStore.savePreset`と保存の手続き(`features/rounds/application/preset-saving.ts`): 起動地点の`SignInReader`でサインインの状態を確かめ、書き込みを実行し、成功の後にプリセット一覧を背景で再取得して端末の保存済みを更新する。
 - `features/rounds/ui/use-preset-delete.ts`: 削除を確認中のプリセットと、削除済みのID、実行中とエラーを持ち、`NewRoundStore.deletePreset`を呼ぶ。
-- `NewRoundStore.deletePreset`と削除の手続き(`features/rounds/application/delete-preset.ts`): サインインの状態を確かめ、削除を実行する。書き込みに成功したら、削除の応答を待つ間に画面を離れていても保存済みから除く(画面への結果だけを破棄する)。届かなかったときと拒否されたときは保存済みを変えない。
+- `NewRoundStore.deletePreset`と削除の手続き(`features/rounds/application/preset-deletion.ts`): サインインの状態を確かめ、削除を実行する。書き込みに成功したら、削除の応答を待つ間に画面を離れていても保存済みから除く(画面への結果だけを破棄する)。届かなかったときと拒否されたときは保存済みを変えない。
 - `features/rounds/infrastructure/preset-commands.ts`: 削除は`DatabaseGateway.delete`で`preset_rounds`を`id`で消す。保存は`DatabaseGateway.rpc("save_round_as_preset")`を呼び、外部の引数名`p_*`はここだけが知る。どちらも結果を種類(届いた、届かなかった、拒否された)に写す。文言は作らない。
 - `features/rounds/ui/scorecard-client.tsx`: 保存ダイアログへ、ラウンド名と画面に表示中の構成(操作の列から導いた距離)を渡す。
 - サインインの確認の文言: 保存も削除も、起動地点が生成した`SignInReader`の`read`が返す文言(未認証と不明（通信失敗）。`features/auth`の入口の`unconfirmedMessage`から作る)で受ける。

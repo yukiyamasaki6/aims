@@ -39,8 +39,8 @@
 - `features/rounds/domain/rounds-list-view.ts`（ドメイン層、ドメインサービス）: 取得結果を、入力中の領域とそれ以外の並びに分ける(`overlayRoundsList`)。それ以外 = 取得 − 入力中の領域のID − 削除済みで、値は取得の値のまま(完了で未送信の変更が残るラウンドを端末の値で出さない)。どちらも実施日の新しい順に安定ソートし、同じ実施日は取得の順、取得に無い入力中のラウンドはその後に置く。`roundsListView`は、取得の状態と端末の入力中のラウンドと待ちの経過から、画面に出す内容を決める純粋関数である。
 - `features/rounds/domain/round-list.ts`（ドメイン層、ドメインサービス）: 一覧の材料の型(`LoadedRoundsList`、`LocalRoundsList`、`ServerRoundSummary`)と、削除済みと入力中と合計点の導出を持つ。合計点は`roundListItemOf`が求める。
 - `features/rounds/domain/round-routes.ts`（ドメイン層、値オブジェクト）: ラウンドの画面の経路(`ROUNDS_PATH`、`NEW_ROUND_PATH`、`roundPath`、経路からIDを読む`roundIdOfPath`)。
-- `features/rounds/application/rounds-list-store.ts`（手続き）: 一覧の画面に渡す状態と変更の方法。`loadList()`は一覧の取得を自分で行い、取得の前に端末の記録(`readAll`)を読み、列で削除済みのラウンドを求める。続けて一覧の取得(`RoundFetching.fetchRoundsList`)と、入力中と端末が保持するラウンドの一括の取得の依頼を並行に行い、両方が成功したときだけ成功とする。どちらかが失敗したときは、一覧の取得の結果、なければ一括の取得の結果を返す。一括の取得は同期が行い、一覧の取得が成功したときだけ端末の記録へ反映する(`features/round-sync/application/round-sync.ts`、`features/rounds/application/refresh-round-bases.ts`)。両方が成功したら、削除が確定済みのラウンドを削除の印として反映し(取得の内容とは照合せず、確定済みの操作を反映済みとして列から外す。削除の確定の後に始めた取得には、どのページ・フィルタでも現れないため)、その後に入力中のラウンドを求めて返す。入力中のラウンドは、端末の各組を`features/rounds/domain/round-view.ts`の`deriveRoundState`(保存済みの的を使う)で状態にし、`features/rounds/domain/round-retention.ts`の`isRoundInProgress`が真のものを名前・実施日・合計点にする(`round-list.ts`)。ユーザーの突き合わせは行わない。ベースと操作の列は端末でユーザーごとに隔離され、取得の利用者と記録の利用者が`same`でない反映は端末へ保存されない。削除(`deleteRound`。手続き`delete-round.ts`へ委譲する)、通信の復帰の合図(`whenOnline`)、待ちの経過の合図(`afterFallbackWait`)も持つ。画面は時刻、乱数、通信の可否に触らない。
-- `features/rounds/application/fetch-round-detail.ts`（手続き）: 取得の順序。`fetchRoundsList`が、`fetchContent`（`features/rounds/application/fetch-content.ts`）経由で認証を確かめて`RoundQueries.roundsList`を呼び、`roundListItemOf`で`RoundListItem[]`にする。
+- `features/rounds/application/rounds-list-store.ts`（手続き）: 一覧の画面に渡す状態と変更の方法。`loadList()`は一覧の取得を自分で行い、取得の前に端末の記録(`readAll`)を読み、列で削除済みのラウンドを求める。続けて一覧の取得(`RoundFetching.fetchRoundsList`)と、入力中と端末が保持するラウンドの一括の取得の依頼を並行に行い、両方が成功したときだけ成功とする。どちらかが失敗したときは、一覧の取得の結果、なければ一括の取得の結果を返す。一括の取得は同期が行い、一覧の取得が成功したときだけ端末の記録へ反映する(`features/round-sync/application/round-sync.ts`、`features/rounds/application/round-base-refreshing.ts`)。両方が成功したら、削除が確定済みのラウンドを削除の印として反映し(取得の内容とは照合せず、確定済みの操作を反映済みとして列から外す。削除の確定の後に始めた取得には、どのページ・フィルタでも現れないため)、その後に入力中のラウンドを求めて返す。入力中のラウンドは、端末の各組を`features/rounds/domain/round-view.ts`の`deriveRoundState`(保存済みの的を使う)で状態にし、`features/rounds/domain/round-retention.ts`の`isRoundInProgress`が真のものを名前・実施日・合計点にする(`round-list.ts`)。ユーザーの突き合わせは行わない。ベースと操作の列は端末でユーザーごとに隔離され、取得の利用者と記録の利用者が`same`でない反映は端末へ保存されない。削除(`deleteRound`。手続き`round-deletion.ts`へ委譲する)、通信の復帰の合図(`whenOnline`)、待ちの経過の合図(`afterFallbackWait`)も持つ。画面は時刻、乱数、通信の可否に触らない。
+- `features/rounds/application/round-fetching.ts`（手続き）: 取得の順序。`fetchRoundsList`が、`fetchContent`（`features/rounds/application/content-fetcher.ts`）経由で認証を確かめて`RoundQueries.roundsList`を呼び、`roundListItemOf`で`RoundListItem[]`にする。
 - `features/rounds/infrastructure/round-queries.ts`（インフラ層）: 一覧の問い合わせを`DatabaseGateway<RoundsDbSchema>`の`select`で行い、行をドメインの形(`ServerRoundSummary`)に写す。`rounds-db-schema.ts`は並べる列(`round_date`)を含む。
 
 一覧の取得は`.retry(false)`を付け、`rounds`から`distances(disabled_at, shots(score_int, disabled_at))`までのネストで1回行う。
@@ -62,8 +62,8 @@
 | `features/rounds/domain/rounds-list-view.ts` | ドメイン層(ドメインサービス: 取得結果と入力中のラウンドの重ね合わせと、表示の内容の決定) |
 | `features/rounds/domain/round-list.ts` | ドメイン層(ドメインサービス: 削除済みと入力中と合計点の導出、一覧の材料の型) |
 | `features/rounds/domain/round-routes.ts` | ドメイン層(値オブジェクト: ラウンドの画面の経路) |
-| `features/rounds/application/rounds-list-store.ts`、`delete-round.ts` | 手続き(一覧の画面に渡す状態と変更の方法、削除) |
-| `features/rounds/application/fetch-round-detail.ts` | 手続き(取得の順序)と約束(`RoundQueries`) |
+| `features/rounds/application/rounds-list-store.ts`、`round-deletion.ts` | 手続き(一覧の画面に渡す状態と変更の方法、削除) |
+| `features/rounds/application/round-fetching.ts` | 手続き(取得の順序)と約束(`RoundQueries`) |
 | `features/rounds/infrastructure/round-queries.ts` | インフラ層(一覧の問い合わせと行の写し) |
 | `features/rounds/infrastructure/browser-unique-ids.ts` | インフラ層(新しいIDと、IDに混ぜる乱数(`randomBytes`)の払い出し) |
 | `features/rounds/infrastructure/rounds-db-schema.ts` | インフラ層(ラウンドが使うスキーマの部分の型) |

@@ -6,13 +6,13 @@ import {
   roundUpdated,
 } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
+import { createRefreshRequests } from "./refresh-requests";
+import { createRoundBaseRefreshing } from "./round-base-refreshing";
 import type {
   FetchedRoundDetail,
   FetchedRoundDetails,
   RoundFetching,
-} from "./fetch-round-detail";
-import { createRefreshRequests } from "./refresh-requests";
-import { createRefreshRoundBases } from "./refresh-round-bases";
+} from "./round-fetching";
 import { createTestRoundHub } from "./round-record-test-helpers";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -59,7 +59,7 @@ async function setup(userId: string | null = "user-1") {
     fetchRoundDetails: vi.fn(),
     fetchRoundDetail: vi.fn(),
   };
-  const refresh = createRefreshRoundBases({
+  const refresh = createRoundBaseRefreshing({
     hub,
     fetching: fetching as unknown as RoundFetching,
     requests,

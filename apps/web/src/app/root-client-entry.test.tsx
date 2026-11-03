@@ -10,18 +10,18 @@ import {
 import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
-import { createPresetDeletion } from "@/features/rounds/application/delete-preset";
-import { createRoundDeletion } from "@/features/rounds/application/delete-round";
-import { createRoundEditing } from "@/features/rounds/application/edit-round";
-import { createContentFetcher } from "@/features/rounds/application/fetch-content";
-import { createRoundFetching } from "@/features/rounds/application/fetch-round-detail";
-import { createRoundLeaving } from "@/features/rounds/application/leave-round";
+import { createContentFetcher } from "@/features/rounds/application/content-fetcher";
 import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
+import { createPresetDeletion } from "@/features/rounds/application/preset-deletion";
+import { createPresetSaving } from "@/features/rounds/application/preset-saving";
+import { createRoundDeletion } from "@/features/rounds/application/round-deletion";
 import { createRoundDetailStore } from "@/features/rounds/application/round-detail-store";
+import { createRoundEditing } from "@/features/rounds/application/round-editing";
+import { createRoundFetching } from "@/features/rounds/application/round-fetching";
+import { createRoundLeaving } from "@/features/rounds/application/round-leaving";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
+import { createRoundStart } from "@/features/rounds/application/round-start";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
-import { createPresetSaving } from "@/features/rounds/application/save-preset";
-import { createRoundStart } from "@/features/rounds/application/start-round";
 import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-result";
 import { roundCreated } from "@/features/rounds/domain/round-op-test-helpers";
 import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
@@ -187,11 +187,11 @@ vi.mock(
   },
 );
 vi.mock(
-  "@/features/rounds/application/delete-round",
+  "@/features/rounds/application/round-deletion",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/rounds/application/delete-round")
+        typeof import("@/features/rounds/application/round-deletion")
       >();
     return {
       ...actual,
@@ -286,43 +286,52 @@ vi.mock(
     return { ...actual, createRoundQueries: vi.fn(actual.createRoundQueries) };
   },
 );
-vi.mock("@/features/rounds/application/edit-round", async (importOriginal) => {
+vi.mock(
+  "@/features/rounds/application/round-editing",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/round-editing")
+      >();
+    return { ...actual, createRoundEditing: vi.fn(actual.createRoundEditing) };
+  },
+);
+vi.mock(
+  "@/features/rounds/application/round-leaving",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/round-leaving")
+      >();
+    return { ...actual, createRoundLeaving: vi.fn(actual.createRoundLeaving) };
+  },
+);
+vi.mock(
+  "@/features/rounds/application/preset-saving",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/preset-saving")
+      >();
+    return {
+      ...actual,
+      createPresetSaving: vi.fn(actual.createPresetSaving),
+    };
+  },
+);
+vi.mock("@/features/rounds/application/round-start", async (importOriginal) => {
   const actual =
     await importOriginal<
-      typeof import("@/features/rounds/application/edit-round")
-    >();
-  return { ...actual, createRoundEditing: vi.fn(actual.createRoundEditing) };
-});
-vi.mock("@/features/rounds/application/leave-round", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("@/features/rounds/application/leave-round")
-    >();
-  return { ...actual, createRoundLeaving: vi.fn(actual.createRoundLeaving) };
-});
-vi.mock("@/features/rounds/application/save-preset", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("@/features/rounds/application/save-preset")
-    >();
-  return {
-    ...actual,
-    createPresetSaving: vi.fn(actual.createPresetSaving),
-  };
-});
-vi.mock("@/features/rounds/application/start-round", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("@/features/rounds/application/start-round")
+      typeof import("@/features/rounds/application/round-start")
     >();
   return { ...actual, createRoundStart: vi.fn(actual.createRoundStart) };
 });
 vi.mock(
-  "@/features/rounds/application/delete-preset",
+  "@/features/rounds/application/preset-deletion",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/rounds/application/delete-preset")
+        typeof import("@/features/rounds/application/preset-deletion")
       >();
     return {
       ...actual,
@@ -331,11 +340,11 @@ vi.mock(
   },
 );
 vi.mock(
-  "@/features/rounds/application/fetch-content",
+  "@/features/rounds/application/content-fetcher",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/rounds/application/fetch-content")
+        typeof import("@/features/rounds/application/content-fetcher")
       >();
     return {
       ...actual,
@@ -344,11 +353,11 @@ vi.mock(
   },
 );
 vi.mock(
-  "@/features/rounds/application/fetch-round-detail",
+  "@/features/rounds/application/round-fetching",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/rounds/application/fetch-round-detail")
+        typeof import("@/features/rounds/application/round-fetching")
       >();
     return {
       ...actual,

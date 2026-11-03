@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { roundDisabledOperation } from "../domain/round-progress";
 import { roundStreamId } from "../domain/sync-events";
-import { createRoundDeletion } from "./delete-round";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
+import { createRoundDeletion } from "./round-deletion";
 import { createTestRoundHub } from "./round-record-test-helpers";
 
 // 保存の完了を、1つの列に積んで観測する。

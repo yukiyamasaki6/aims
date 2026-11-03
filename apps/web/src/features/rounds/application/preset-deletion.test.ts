@@ -4,9 +4,9 @@ import {
   PRESET_DELETE_ERROR_MESSAGE,
   type WriteResult,
 } from "../domain/write-result";
-import { createPresetDeletion } from "./delete-preset";
 import { createFakeSignInReader } from "./fake-sign-in-reader-test-helpers";
 import type { PresetCommands } from "./preset-commands";
+import { createPresetDeletion } from "./preset-deletion";
 import type { ReferenceSnapshots } from "./reference-snapshots";
 import type { SignInReader } from "./sign-in-reader";
 

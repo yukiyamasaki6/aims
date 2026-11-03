@@ -6,7 +6,7 @@ import type {
   OpResult,
   RoundTransport,
   SendOutcome,
-} from "../application/send-operations";
+} from "../application/operation-sending";
 import type {
   DistanceChanges,
   RoundChanges,
