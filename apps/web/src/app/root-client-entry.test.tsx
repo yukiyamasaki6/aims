@@ -892,17 +892,20 @@ describe("RootClientEntry", () => {
       expect(persisted).toBe(true);
     });
 
-    it("トークンの更新は、同期の再開として届き、識別情報の記録は変わらない", () => {
+    it("トークンの更新は、サインインの変化として同期へ届き、識別情報の記録は変わらない", () => {
       // Given
       localStorage.setItem("aims:local-user-id", "user-1");
       render(<RootClientEntry>{null}</RootClientEntry>);
-      const resume = vi.spyOn(lastSync(), "resume");
+      const signInChanged = vi.spyOn(lastSync(), "signInChanged");
 
       // When
       act(() => supabase.emit("TOKEN_REFRESHED", { user: { id: "user-1" } }));
 
       // Then
-      expect(resume).toHaveBeenCalledTimes(1);
+      expect(signInChanged).toHaveBeenCalledExactlyOnceWith({
+        kind: "token-refreshed",
+        userId: "user-1",
+      });
       expect(createBrowserIdentityStore().read()).toBe("user-1");
     });
 

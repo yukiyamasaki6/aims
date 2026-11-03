@@ -382,17 +382,37 @@ describe("applySendResults と discard", () => {
     const { hub, store } = await startedHub();
     await hub.append(STREAM, op("a"));
     store.rows.length = 0;
-    hub.setInFlight(STREAM, ["a"], true);
+    hub.replaceInFlight(STREAM, ["a"]);
 
     // When
     await hub.reloadAll();
     const whileSending = hub.record(STREAM).items.length;
-    hub.setInFlight(STREAM, ["a"], false);
+    hub.replaceInFlight(STREAM, []);
     await hub.reloadAll();
 
     // Then
     expect(whileSending).toBe(1);
     expect(hub.record(STREAM).items).toEqual([]);
+  });
+
+  it("印の集合が変わらない列と、記録が無い列では、記録を作り直さず、通知もしない", async () => {
+    // Given
+    const { hub } = await startedHub();
+    await hub.append(STREAM, op("a"));
+    hub.replaceInFlight(STREAM, ["a"]);
+    const marked = hub.record(STREAM);
+    const listener = vi.fn();
+    hub.subscribe(listener);
+
+    // When
+    hub.replaceInFlight(STREAM, ["a"]);
+    hub.replaceInFlight(roundStreamId("missing"), ["x"]);
+    const missing = hub.record(roundStreamId("missing")).items;
+
+    // Then
+    expect(hub.record(STREAM)).toBe(marked);
+    expect(missing).toEqual([]);
+    expect(listener).not.toHaveBeenCalled();
   });
 });
 
@@ -404,7 +424,7 @@ describe("commit", () => {
     await hub.append(STREAM, op("b"));
     hub.applySendResults(STREAM, ["a"], [applied(1)]);
     await flush();
-    hub.setInFlight(STREAM, ["b"], true);
+    hub.replaceInFlight(STREAM, ["b"]);
 
     // When
     const group = await hub.commit(

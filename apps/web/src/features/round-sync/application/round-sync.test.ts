@@ -47,10 +47,8 @@ function setup(
     stop: vi.fn(() => {
       calls.push("control.stop");
     }),
-    setUser: vi.fn(),
     matchUser: vi.fn(() => state.match),
-    resumeSending: vi.fn(),
-    recoverOnline: vi.fn(),
+    signInChanged: vi.fn(),
   } satisfies RoundRecordControl;
   const refresh = {
     refreshNeeds: () => needs.current,
@@ -154,20 +152,16 @@ describe("開始と停止", () => {
     expect(t.calls).toEqual(["control.start", "control.stop", "refresh.reset"]);
   });
 
-  it("利用者の切り替えは送信の状態を捨てて記録の利用者を替え、再開は保留を戻し、通信の復帰は送信器へ伝える", () => {
+  it("サインインの変化は、そのまま記録の制御へ渡す", () => {
     // Given
     const t = setup();
+    const change = { kind: "signed-in", userId: "user-2" } as const;
 
     // When
-    t.sync.switchUser("user-2");
-    t.sync.resume();
-    t.sync.online();
+    t.sync.signInChanged(change);
 
     // Then
-    expect(t.control.setUser).toHaveBeenCalledExactlyOnceWith("user-2");
-    expect(t.control.resumeSending).toHaveBeenCalledTimes(1);
-    expect(t.control.recoverOnline).toHaveBeenCalledTimes(1);
-    expect(t.sync.matchUser("user-1")).toBe("same");
+    expect(t.control.signInChanged).toHaveBeenCalledExactlyOnceWith(change);
   });
 });
 
