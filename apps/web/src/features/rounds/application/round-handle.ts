@@ -69,7 +69,10 @@ const UNOPENED: RoundScreenSnapshot = {
 export function createRoundHandle(
   deps: {
     hub: RoundRecordHub;
-    requests: RefreshRequests;
+    requests: Pick<
+      RefreshRequests,
+      "outcomeOf" | "setOverlay" | "subscribe" | "watch"
+    >;
     editing: RoundEditing;
   },
   roundId: string,

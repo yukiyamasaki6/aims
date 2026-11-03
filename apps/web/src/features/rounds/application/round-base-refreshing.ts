@@ -70,7 +70,10 @@ export type RoundBaseRefreshResult = "ok" | "gone" | "failed";
 export function createRoundBaseRefreshing(deps: {
   hub: RoundRecordHub;
   fetching: Pick<RoundFetching, "fetchRoundDetail" | "fetchRoundDetails">;
-  requests: RefreshRequests;
+  requests: Pick<
+    RefreshRequests,
+    "beginAll" | "beginRound" | "settleAll" | "settleRound" | "whenListAllows"
+  >;
 }) {
   const { hub, fetching, requests } = deps;
 

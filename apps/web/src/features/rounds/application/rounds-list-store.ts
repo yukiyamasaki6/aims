@@ -31,7 +31,7 @@ export type RoundsListStore = {
 
 type Deps = {
   hub: RoundRecordHub;
-  requests: RefreshRequests;
+  requests: Pick<RefreshRequests, "requestAll" | "allowCommit">;
   fetching: Pick<RoundFetching, "fetchRoundsList" | "savedTargetFaces">;
   clock: Clock;
   connectivity: Connectivity;
