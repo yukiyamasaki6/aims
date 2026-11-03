@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createFakeUniqueIds } from "@/features/rounds/application/fake-unique-ids-test-helpers";
 import { createOpSender } from "@/features/rounds/application/op-sender";
 import {
@@ -29,7 +30,6 @@ import {
 import { roundStreamId } from "@/features/rounds/domain/sync-events";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import { createRoundSync } from "./round-sync";
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
