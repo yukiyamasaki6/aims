@@ -3,7 +3,7 @@ import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import { planFlights } from "../domain/op-plan";
 import { matchRecordUser } from "../domain/record-user";
 import { batchLimitOf, conflicts, laneOf } from "../domain/round-op-conflicts";
-import { outboxOf, type RoundRecord } from "../domain/round-record";
+import { outboxOf } from "../domain/round-record";
 import {
   dueFlights,
   EMPTY_QUEUE,
@@ -20,7 +20,6 @@ import {
   statusOf,
   syncOutbox,
 } from "../domain/send-queue";
-import type { SyncOperation } from "../domain/sync-events";
 import {
   decideSyncResult,
   type SyncFailure,
@@ -70,39 +69,6 @@ export function createOpSender(deps: {
   let queues = new Map<string, SendQueue>();
   const timers = new Set<() => void>();
   let stopListening: (() => void)[] = [];
-
-  // 記録の値ごとに、操作のIDの索引を1度だけ作る。記録が変わると新しい値になるため、索引は作り直され、古い値の索引は捨てられる。
-  const indexes = new WeakMap<RoundRecord, Map<string, SyncOperation>>();
-
-  function operationOf(streamId: string, eventId: string) {
-    const record = hub.record(streamId);
-    let index = indexes.get(record);
-    if (!index) {
-      index = new Map(
-        record.items.map((item) => [item.eventId, item.operation]),
-      );
-      indexes.set(record, index);
-    }
-    return index.get(eventId);
-  }
-
-  function outbox(streamId: string) {
-    return outboxOf(hub.record(streamId)).map((item) => ({
-      eventId: item.eventId,
-      lane: laneOf(item.operation),
-      saved: item.saved,
-      hasSeq: item.hasSeq,
-    }));
-  }
-
-  // 計画が渡すIDは、同じ記録の送れる操作の一覧から来るため、通常は索引に有る。記録が変わって索引に無いIDは、衝突しないものとして扱う。
-  function conflictsIn(streamId: string, previousId: string, nextId: string) {
-    const previous = operationOf(streamId, previousId);
-    const next = operationOf(streamId, nextId);
-    return previous !== undefined && next !== undefined
-      ? conflicts(previous, next)
-      : false;
-  }
 
   const queueOf = (streamId: string) => queues.get(streamId) ?? EMPTY_QUEUE;
 
@@ -171,10 +137,14 @@ export function createOpSender(deps: {
     pump(streamId);
   }
 
-  function planItems(streamId: string, queue: SendQueue): PlanItem[] {
-    return outbox(streamId).map((item) => ({
+  function planItems(
+    outbox: ReturnType<typeof outboxOf>,
+    queue: SendQueue,
+  ): PlanItem[] {
+    return outbox.map((item) => ({
       eventId: item.eventId,
-      lane: item.lane,
+      lane: laneOf(item.operation),
+      operation: item.operation,
       status: statusOf(queue, item),
       solo: isSolo(queue, item.eventId),
       // 保存の読み込みの前は、保存に失敗して`seq`を持たない操作だけを送る(保存から読む操作より後の順序を守るため)。
@@ -184,14 +154,18 @@ export function createOpSender(deps: {
 
   function pump(streamId: string) {
     if (!started || connectivity.isOffline()) return;
-    const ids = outbox(streamId).map((item) => item.eventId);
-    let queue = syncOutbox(queueOf(streamId), ids);
+    // 1回の計画の入力は、記録の1つの値から作る。
+    const outbox = outboxOf(hub.record(streamId));
+    let queue = syncOutbox(
+      queueOf(streamId),
+      outbox.map((item) => item.eventId),
+    );
     const now = clock.now();
     // 期限の来たリトライ待機の要求を、新しい要求より先に再送する。
     const due = dueFlights(queue, now);
     for (const flight of due) queue = resumeFlight(queue, flight);
-    const planned = planFlights(planItems(streamId, queue), {
-      conflicts: (previous, next) => conflictsIn(streamId, previous, next),
+    const planned = planFlights(planItems(outbox, queue), {
+      conflicts,
       batchLimitOf,
     });
     const next = startFlights(queue, planned, now);
