@@ -3,11 +3,11 @@ import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { FetchResult } from "../domain/fetch-status";
 import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
 import type { PresetToSave } from "../domain/preset-save";
+import { localOpening, openPlan } from "../domain/round-opening";
 import {
   type RoundTables,
   roundTablesFromCreated,
 } from "../domain/round-tables";
-import { localOpening, openPlan } from "../domain/round-view";
 import { shotIdAfter } from "../domain/shot-id";
 import { roundStreamId } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
