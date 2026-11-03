@@ -40,8 +40,8 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/ui/use-screen-view.ts`: 画面の状態を持つ汎用のフック。`reducer`で遷移させる状態を、最新の値の`ref`と描画用の`useState`で持ち、画面の約束`ScreenView`を作る。
 - `src/lib/page-navigation/contract/page-navigation.ts`: 画面の遷移の約束(`PageNavigation`)。サインイン、サインアップが使う。遷移元の読み出しの約束(`ReturnToReader`)は使い手がサインインだけのため、`application/sign-in.ts`に置く。
 - `src/features/auth/application/screen-view.ts`: 手続きが画面に頼む約束。開始の命令の適用(`begin`)、事実の送信、出来事を送った直後の最新の状態を返す契約をここに書く。
-- `src/components/turnstile.tsx`: Turnstileの共通部品。`interaction-only`で描画し、操作が必要な間だけ領域を出し、それ以外は畳む。未完了のエラー文言も表示する。サイトキー(環境変数`NEXT_PUBLIC_TURNSTILE_SITE_KEY`)は自分で読む。
-- `src/components/auth-header.tsx`: 認証画面の見出し。
+- `src/features/auth/ui/turnstile.tsx`: Turnstileの部品。`interaction-only`で描画し、操作が必要な間だけ領域を出し、それ以外は畳む。未完了のエラー文言も表示する。サイトキーは引数で受ける(環境変数`NEXT_PUBLIC_TURNSTILE_SITE_KEY`の読み出しは各画面の入口が行い、画面の部品を通して渡す。未設定のときは描画で例外を投げる)。
+- `src/features/auth/ui/auth-header.tsx`: 認証画面の見出し。
 - `src/lib/supabase/infrastructure/client.ts`: ブラウザの接続。
 - `src/hooks/use-mounted-ref.ts`: 画面がマウント中かどうかの参照。画面が`isMounted`として手続きへ渡し、手続きが照合の後に確かめる。
 - `src/lib/supabase/infrastructure/session.ts`: `proxy.ts`から呼ばれ、要求ごとにセッションを更新して、サインインの有無を判定する。経路の規則は持たず、`proxy.ts`が認証の機能の`redirectFor`(`domain/routes.ts`)を関数として渡す。認証済みの`/signin`は、有効な遷移元があればそこへ、無ければ`/rounds`へ送られる。

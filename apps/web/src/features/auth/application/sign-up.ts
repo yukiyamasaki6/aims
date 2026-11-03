@@ -1,3 +1,4 @@
+import type { Clock } from "@/lib/clock/contract/clock";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { ALREADY_REGISTERED, UNREACHABLE } from "../domain/auth-failure";
 import { beginSendCode } from "../domain/password-setup-flow";
@@ -9,6 +10,7 @@ import {
   type PasswordSetupContext,
   type PasswordSetupView,
   resend,
+  tickCooldown,
   verifyCode,
 } from "./password-setup";
 import type { PasswordSetupAuthenticator } from "./password-setup-authenticator";
@@ -23,6 +25,7 @@ type Dependencies = {
   authenticator: PasswordSetupAuthenticator;
   registration: RegistrationLookup;
   pageNavigation: Pick<PageNavigation, "go">;
+  clock: Clock;
   // 保護対象の画面の範囲の根の経路。サインインの後の既定の行き先になる。
   protectedPath: string;
 };
@@ -31,13 +34,19 @@ export function createSignUp({
   authenticator,
   registration,
   pageNavigation,
+  clock,
   protectedPath,
 }: Dependencies): PasswordSetup {
-  const context: PasswordSetupContext = { authenticator, purpose: "sign-up" };
+  const context: PasswordSetupContext = {
+    authenticator,
+    purpose: "sign-up",
+    clock,
+  };
   return {
     sendCode: (input, view) => sendCode(context, registration, input, view),
     resend: (input, view) => resend(context, input, view),
     verifyCode: (input, view) => verifyCode(context, input, view),
+    tickCooldown: (view) => tickCooldown(context, view),
     setPassword: (input, view) =>
       setPassword(authenticator, pageNavigation, protectedPath, input, view),
   };

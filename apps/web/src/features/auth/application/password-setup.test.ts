@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import {
   beginSendCode,
@@ -11,6 +12,7 @@ import {
   applyPassword,
   type PasswordSetupContext,
   resend,
+  tickCooldown,
   verifyCode,
 } from "./password-setup";
 import type { PasswordSetupAuthenticator } from "./password-setup-authenticator";
@@ -25,13 +27,16 @@ function setup() {
     verifyCode: vi.fn(async (): Promise<CallResult> => accepted),
     setPassword: vi.fn(async (): Promise<CallResult> => accepted),
   } satisfies PasswordSetupAuthenticator;
+  const clock = createManualClock();
   const context: PasswordSetupContext = {
     authenticator,
     purpose: "password-reset",
+    clock,
   };
   return {
     authenticator,
     context,
+    clock,
     ...screenHarness<
       ReturnType<typeof passwordSetupReducer>,
       PasswordSetupEvent
@@ -64,6 +69,38 @@ const onPasswordStep = passwordSetupReducer(onCodeStep, {
 });
 
 describe("パスワード設定の共通の手続き", () => {
+  describe("再送の待ちの計時", () => {
+    it("tickCooldownは、1秒後(999msでは送らない)にcooldownTickedを1回送る", () => {
+      // Given
+      const { context, clock, events, viewOf } = setup();
+      const view = viewOf(resendable);
+
+      // When
+      tickCooldown(context, view);
+      clock.advance(999);
+      const before = events.length;
+      clock.advance(1);
+
+      // Then
+      expect(before).toBe(0);
+      expect(events).toEqual([{ type: "cooldownTicked" }]);
+    });
+
+    it("返した関数で取り消すと、cooldownTickedを送らない", () => {
+      // Given
+      const { context, clock, events, viewOf } = setup();
+      const view = viewOf(resendable);
+
+      // When
+      const cancel = tickCooldown(context, view);
+      cancel();
+      clock.advance(1000);
+
+      // Then
+      expect(events).toEqual([]);
+    });
+  });
+
   describe("コードの再送", () => {
     it("待ち時間が明けてトークンがあれば、送って成功を示し、チェックをやり直させる", async () => {
       // Given

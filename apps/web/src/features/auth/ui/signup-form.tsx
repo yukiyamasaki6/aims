@@ -14,6 +14,12 @@ const COPY = {
   passwordFooter: null,
 };
 
-export function SignUpForm({ signUp }: { signUp: PasswordSetup }) {
-  return <PasswordSetupForm procedure={signUp} copy={COPY} />;
+export function SignUpForm({
+  signUp,
+  siteKey,
+}: {
+  signUp: PasswordSetup;
+  siteKey: string | undefined;
+}) {
+  return <PasswordSetupForm procedure={signUp} copy={COPY} siteKey={siteKey} />;
 }

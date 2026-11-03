@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import type { CallResult } from "../application/call-result";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import { createResetPassword } from "../application/reset-password";
@@ -33,7 +34,7 @@ const auth = {
 const turnstile = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
 }));
-vi.mock("@/components/turnstile", () => ({
+vi.mock("./turnstile", () => ({
   Turnstile: forwardRef<unknown, { onVerify: (token: string | null) => void }>(
     function TurnstileStub(props, ref) {
       turnstile.onVerify = props.onVerify;
@@ -45,11 +46,14 @@ vi.mock("@/components/turnstile", () => ({
 
 function renderForm() {
   const resetPassword = createResetPassword({
+    clock: createBrowserClock(),
     authenticator: auth,
     passwordChange,
     pageLoad,
   });
-  return render(<ResetPasswordForm resetPassword={resetPassword} />);
+  return render(
+    <ResetPasswordForm resetPassword={resetPassword} siteKey="site-key" />,
+  );
 }
 
 function passwordInput() {

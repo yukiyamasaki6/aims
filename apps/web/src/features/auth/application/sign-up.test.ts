@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import {
   ALREADY_REGISTERED,
@@ -32,6 +33,7 @@ function setup(protectedPath = "/rounds") {
     authenticator,
     registration,
     pageNavigation,
+    clock: createManualClock(),
     protectedPath,
   });
   return {

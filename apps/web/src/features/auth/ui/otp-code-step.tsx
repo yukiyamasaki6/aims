@@ -2,12 +2,12 @@
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import type { FormEvent, RefObject } from "react";
-import { AuthHeader } from "@/components/auth-header";
-import { Turnstile } from "@/components/turnstile";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { AUTH_CODE_LENGTH } from "../domain/auth-code";
 import { AuthField } from "./auth-field";
+import { AuthHeader } from "./auth-header";
+import { Turnstile } from "./turnstile";
 
 type Pending = "verify" | "resend" | null;
 
@@ -25,6 +25,7 @@ type OtpCodeStepProps = {
   onBack: () => void;
   onVerify: (e: FormEvent<HTMLFormElement>) => void;
   onResend: () => void;
+  siteKey: string | undefined;
   checkRef: RefObject<TurnstileInstance | undefined>;
   onCheck: (token: string | null) => void;
   // セキュリティチェックが完了している(トークンがある)か。
@@ -44,6 +45,7 @@ export function OtpCodeStep({
   onBack,
   onVerify,
   onResend,
+  siteKey,
   checkRef,
   onCheck,
   checked,
@@ -69,7 +71,7 @@ export function OtpCodeStep({
       <p className="text-center text-muted-foreground text-sm">
         メールが届かない場合は、迷惑メールフォルダをご確認ください。
       </p>
-      <Turnstile ref={checkRef} onVerify={onCheck} />
+      <Turnstile siteKey={siteKey} ref={checkRef} onVerify={onCheck} />
       <ResendSection
         pending={pending}
         checked={checked}

@@ -18,6 +18,7 @@
 - `src/lib/supabase/infrastructure/server.ts`: サーバーでの接続。管理者の接続と、要求の利用者のセッションの接続。
 - `src/features/auth/ui/use-screen-view.ts`: 画面の状態、表示中の判定、チェックのウィジェットの参照を持ち、手続きへ渡す画面の約束を作る。
 - `src/features/auth/ui/auth-field.tsx`、`src/components/ui/busy-button.tsx`: 入力欄とエラー文の結び付け、処理中のボタンの表現。
+- `src/features/auth/ui/auth-header.tsx`、`turnstile.tsx`: 認証画面の見出しと、セキュリティチェックの部品(サイトキーは画面の入口が引数で渡す)。
 
 ## 命名の規則
 

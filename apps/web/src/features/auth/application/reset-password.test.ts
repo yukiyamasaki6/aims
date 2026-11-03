@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import {
   type AuthFailure,
   NETWORK_ERROR_MESSAGE,
@@ -36,6 +37,7 @@ function setup() {
     authenticator,
     passwordChange,
     pageLoad,
+    clock: createManualClock(),
   });
   return {
     procedure,

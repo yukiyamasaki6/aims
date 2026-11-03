@@ -9,9 +9,13 @@ import { cn } from "@/lib/utils";
 
 export const Turnstile = forwardRef<
   TurnstileInstance | undefined,
-  { onVerify: (token: string | null) => void; error?: string }
->(function Turnstile({ onVerify, error }, ref) {
-  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  {
+    // サイトキー(環境変数の値)。読み出しは画面の入口が行い、引数で渡す。
+    siteKey: string | undefined;
+    onVerify: (token: string | null) => void;
+    error?: string;
+  }
+>(function Turnstile({ siteKey, onVerify, error }, ref) {
   // 利用者の操作が必要なチャレンジが出ている間だけtrueにする。
   const [interactive, setInteractive] = useState(false);
 

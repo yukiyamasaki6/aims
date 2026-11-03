@@ -16,6 +16,7 @@ function useOpenState() {
   const [animate, setAnimate] = useState(false);
   // 連続操作でタイマーを延ばすため、操作の回数を依存にする。
   const [operations, setOperations] = useState(0);
+  // setTimeoutは、開閉のtransitionの終わりに合わせるだけの画面の動きの待ちで、画面の機能として直接呼ぶ(docs/architecture.mdのX01)。業務の時間には使わない。
   useEffect(() => {
     if (operations === 0) return;
     const id = setTimeout(() => setAnimate(false), ANIMATE_MS);

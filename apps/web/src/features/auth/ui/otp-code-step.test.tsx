@@ -6,7 +6,7 @@ import { AUTH_CODE_LENGTH } from "../domain/auth-code";
 import { OtpCodeStep } from "./otp-code-step";
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックする。
-vi.mock("@/components/turnstile", () => ({
+vi.mock("./turnstile", () => ({
   Turnstile: forwardRef(function TurnstileStub() {
     return <div data-testid="turnstile-stub" />;
   }),
@@ -26,6 +26,7 @@ function createForm(overrides: Partial<Props> = {}) {
     onBack: vi.fn(),
     onVerify: vi.fn((e) => e.preventDefault()),
     onResend: vi.fn(),
+    siteKey: "site-key",
     checkRef: { current: undefined },
     onCheck: vi.fn(),
     checked: false,

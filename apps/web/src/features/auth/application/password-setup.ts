@@ -1,3 +1,4 @@
+import type { Clock } from "@/lib/clock/contract/clock";
 import {
   beginResend,
   beginSetPassword,
@@ -32,13 +33,28 @@ export type PasswordSetup = {
     input: { password: string },
     view: PasswordSetupView,
   ): Promise<void>;
+  // 再送の待ちを1秒進める出来事を、1秒後に1回送る予約。返す関数で取り消す。
+  tickCooldown(view: PasswordSetupView): () => void;
 };
 
 // 共有の順序が使う、認証サービスと、手続きごとのコードの目的。
 export type PasswordSetupContext = {
   authenticator: Omit<PasswordSetupAuthenticator, "setPassword">;
   purpose: CodePurpose;
+  clock: Clock;
 };
+
+// 再送の待ちの1秒の予約(業務の時間)。
+const COOLDOWN_TICK_MS = 1000;
+
+export function tickCooldown(
+  { clock }: PasswordSetupContext,
+  view: PasswordSetupView,
+): () => void {
+  return clock.after(COOLDOWN_TICK_MS, () =>
+    view.dispatch({ type: "cooldownTicked" }),
+  );
+}
 
 // コードの送信の依頼。応答があれば、成功でも拒否でも、使ったトークンは消費し、チェックをやり直させる。
 // 応答が無かった(unreachable)ときは、トークンを使っていないので消費せず、チェックもやり直さない。

@@ -21,5 +21,10 @@ export default function SignInPage() {
       protectedPath: ROUNDS_PATH,
     }),
   );
-  return <SignInForm signIn={signIn} />;
+  return (
+    <SignInForm
+      signIn={signIn}
+      siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+    />
+  );
 }

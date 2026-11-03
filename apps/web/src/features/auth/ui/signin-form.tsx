@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 import { type FormEvent, useState } from "react";
-import { AuthHeader } from "@/components/auth-header";
-import { Turnstile } from "@/components/turnstile";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -17,12 +15,20 @@ import {
   signInReducer,
 } from "../domain/sign-in-flow";
 import { AuthField } from "./auth-field";
+import { AuthHeader } from "./auth-header";
+import { Turnstile } from "./turnstile";
 import { useScreenView } from "./use-screen-view";
 
 // エラー文の要素のidの接頭辞(`${ID_PREFIX}-email-error`)。
 const ID_PREFIX = "signin";
 
-export function SignInForm({ signIn }: { signIn: SignIn }) {
+export function SignInForm({
+  signIn,
+  siteKey,
+}: {
+  signIn: SignIn;
+  siteKey: string | undefined;
+}) {
   const {
     state: flow,
     view,
@@ -54,6 +60,7 @@ export function SignInForm({ signIn }: { signIn: SignIn }) {
           fieldErrors={flow.fieldErrors}
         />
         <Turnstile
+          siteKey={siteKey}
           ref={checkRef}
           onVerify={(token) => view.dispatch({ type: "captchaChecked", token })}
           error={flow.fieldErrors.captcha}

@@ -23,7 +23,7 @@ const widget = vi.hoisted(() => ({
   reset: vi.fn(),
 }));
 
-vi.mock("@/components/turnstile", () => ({
+vi.mock("./turnstile", () => ({
   Turnstile: forwardRef<
     unknown,
     {
@@ -56,7 +56,7 @@ function setup({
     returnToReader: { read: () => returnTo },
     protectedPath: "/rounds",
   });
-  const form = <SignInForm signIn={signIn} />;
+  const form = <SignInForm signIn={signIn} siteKey="site-key" />;
   const rendered = render(strict ? <StrictMode>{form}</StrictMode> : form);
   return { signIn, authenticator, navigation, ...rendered };
 }

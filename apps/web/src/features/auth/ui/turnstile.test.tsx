@@ -1,5 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Turnstile } from "./turnstile";
 
 type Callbacks = {
@@ -48,19 +48,11 @@ function expectExpanded() {
 }
 
 describe("Turnstile", () => {
-  beforeEach(() => {
-    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "test-site-key");
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   describe("描画", () => {
-    it("設定されたサイトキーと、操作が必要なときだけ表示するオプションでウィジェットを描画する", () => {
+    it("渡されたサイトキーと、操作が必要なときだけ表示するオプションでウィジェットを描画する", () => {
       // Given
       // When
-      render(<Turnstile onVerify={vi.fn()} />);
+      render(<Turnstile siteKey="test-site-key" onVerify={vi.fn()} />);
 
       // Then
       expect(screen.getByTestId("turnstile")).toBeInTheDocument();
@@ -75,18 +67,21 @@ describe("Turnstile", () => {
       // Given
 
       // When
-      render(<Turnstile onVerify={vi.fn()} />);
+      render(<Turnstile siteKey="test-site-key" onVerify={vi.fn()} />);
 
       // Then
       expectCollapsed();
     });
 
-    it("サイトキーの環境変数が無い場合は例外を投げる", () => {
+    it.each([
+      ["未設定", undefined],
+      ["空", ""],
+    ])("サイトキーが%sの場合は例外を投げる", (_name, siteKey) => {
       // Given
-      vi.unstubAllEnvs();
 
       // When
-      const renderWidget = () => render(<Turnstile onVerify={vi.fn()} />);
+      const renderWidget = () =>
+        render(<Turnstile siteKey={siteKey} onVerify={vi.fn()} />);
 
       // Then
       expect(renderWidget).toThrow(
@@ -98,7 +93,7 @@ describe("Turnstile", () => {
   describe("操作が必要になったとき", () => {
     it("操作が必要になる前のコールバックで展開する", () => {
       // Given
-      render(<Turnstile onVerify={vi.fn()} />);
+      render(<Turnstile siteKey="test-site-key" onVerify={vi.fn()} />);
 
       // When
       act(() => callbacks.current.onBeforeInteractive?.());
@@ -109,7 +104,7 @@ describe("Turnstile", () => {
 
     it("操作が終わったコールバックで再び畳まれる", () => {
       // Given
-      render(<Turnstile onVerify={vi.fn()} />);
+      render(<Turnstile siteKey="test-site-key" onVerify={vi.fn()} />);
       act(() => callbacks.current.onBeforeInteractive?.());
 
       // When
@@ -122,7 +117,7 @@ describe("Turnstile", () => {
     it("成功すると畳まれ、トークンでonVerifyを呼ぶ", () => {
       // Given
       const handleVerify = vi.fn();
-      render(<Turnstile onVerify={handleVerify} />);
+      render(<Turnstile siteKey="test-site-key" onVerify={handleVerify} />);
       act(() => callbacks.current.onBeforeInteractive?.());
 
       // When
@@ -136,7 +131,7 @@ describe("Turnstile", () => {
     it("通常のチャレンジで成功しても、トークンでonVerifyを呼び、畳まれたままである", () => {
       // Given
       const handleVerify = vi.fn();
-      render(<Turnstile onVerify={handleVerify} />);
+      render(<Turnstile siteKey="test-site-key" onVerify={handleVerify} />);
 
       // When
       act(() => callbacks.current.onSuccess?.("token-123"));
@@ -149,7 +144,7 @@ describe("Turnstile", () => {
     it("期限切れになると畳まれ、nullでonVerifyを呼ぶ", () => {
       // Given
       const handleVerify = vi.fn();
-      render(<Turnstile onVerify={handleVerify} />);
+      render(<Turnstile siteKey="test-site-key" onVerify={handleVerify} />);
       act(() => callbacks.current.onBeforeInteractive?.());
 
       // When
@@ -163,7 +158,7 @@ describe("Turnstile", () => {
     it("エラーになると失敗を見せるために展開し、nullでonVerifyを呼ぶ", () => {
       // Given
       const handleVerify = vi.fn();
-      render(<Turnstile onVerify={handleVerify} />);
+      render(<Turnstile siteKey="test-site-key" onVerify={handleVerify} />);
 
       // When
       act(() => callbacks.current.onError?.());
@@ -175,7 +170,7 @@ describe("Turnstile", () => {
 
     it("エラーで展開したあと、自動リトライが成功すると畳まれる", () => {
       // Given
-      render(<Turnstile onVerify={vi.fn()} />);
+      render(<Turnstile siteKey="test-site-key" onVerify={vi.fn()} />);
       act(() => callbacks.current.onError?.());
 
       // When
@@ -190,7 +185,7 @@ describe("Turnstile", () => {
     it("errorが無い場合は文言を描画しない", () => {
       // Given
       // When
-      render(<Turnstile onVerify={vi.fn()} />);
+      render(<Turnstile siteKey="test-site-key" onVerify={vi.fn()} />);
 
       // Then
       expect(document.querySelector("p")).toBeNull();
@@ -200,7 +195,13 @@ describe("Turnstile", () => {
       // Given
 
       // When
-      const turnstile = <Turnstile onVerify={vi.fn()} error="未完了です" />;
+      const turnstile = (
+        <Turnstile
+          siteKey="test-site-key"
+          onVerify={vi.fn()}
+          error="未完了です"
+        />
+      );
       render(turnstile);
 
       // Then
@@ -209,7 +210,13 @@ describe("Turnstile", () => {
 
     it("操作が必要な間も、errorの文言を表示する", () => {
       // Given
-      render(<Turnstile onVerify={vi.fn()} error="未完了です" />);
+      render(
+        <Turnstile
+          siteKey="test-site-key"
+          onVerify={vi.fn()}
+          error="未完了です"
+        />,
+      );
 
       // When
       act(() => callbacks.current.onBeforeInteractive?.());
