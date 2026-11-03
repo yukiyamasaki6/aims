@@ -340,7 +340,7 @@ test.describe("入力中の領域", () => {
     await expect(inProgressArea(page)).toHaveCount(0);
   });
 
-  // src/features/rounds/domain/fetch-result.tsのFALLBACK_WAIT_MS。
+  // src/features/rounds/domain/fetch-wait.tsのFALLBACK_WAIT_MS。
   const fallbackWaitMs = 1_000;
   // 待ちの後の描画とブラウザ・CIの揺れの余裕。
   const renderMarginMs = 500;

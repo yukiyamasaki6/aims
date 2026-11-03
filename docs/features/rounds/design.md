@@ -145,7 +145,9 @@ flowchart LR
 
 ### 窓口に関わるファイル
 
-- `features/rounds/application/`: `rounds-list-store.ts`、`new-round-store.ts`、`round-detail-store.ts`(窓口)、`round-handle.ts`(開いた詳細の購読と追記)、`when-online.ts`(通信の復帰の合図)、`round-deletion.ts`(画面に残る削除)、`round-leaving.ts`(完了、削除して離れる、一覧へ戻る)、`time-limit.ts`(`withinFetchTimeout`を持つ)。
+- `features/rounds/application/`: `rounds-list-store.ts`、`new-round-store.ts`、`round-detail-store.ts`(窓口)、`round-handle.ts`(開いた詳細の購読と追記)、`when-online.ts`(通信の復帰の合図)、`round-deletion.ts`(画面に残る削除)、`round-leaving.ts`(完了、削除して離れる、一覧へ戻る)、`time-limit.ts`(`withinFetchTimeout`を持つ)、`content-fetcher.ts`(認証つきの取得と、auth-rejectedでのセッション更新・1回の取り直し。`QueryOutcome`から`FetchResult`への変換は`fetchResultOf`を呼ぶ)。
+- `features/rounds/domain/`: `fetch-status.ts`(値オブジェクト。取得の結果`FetchResult`、固定文言、`QueryOutcome`から結果への`fetchResultOf`)、`fetch-wait.ts`(ドメインサービス。時間制限の値と代わりを返す`withFallback`。状態を持たない時間の規則のため、既定の`*-service.ts`の名前から外れる)、`query-outcome.ts`(値オブジェクト。問い合わせの結果の種類`QueryOutcome`、型だけ)。
+- `features/rounds/infrastructure/`: `db-response-outcome.ts`(データベースの応答を`QueryOutcome`の種類へ写し、複数の応答を畳む優先順を持つ`failureOfResponses`)。
 - `features/rounds/ui/`: `rounds-context.tsx`(3つの文脈)、`use-fetch-result.ts`(`whenOnline`を引数で受ける)。
 
 ## 命名の規則
@@ -172,5 +174,6 @@ flowchart LR
 | 窓口を画面別に分け、複数画面の`whenOnline`は各窓口が同じ契約で持つ | 画面ごとに必要な委譲だけが見え、偽物が小さく、共有フックが窓口に依存しないため。共有の第4の窓口は、節点が増え使い手の少ない窓口になるため採らない | 4つ目の画面が同じ取得の状態を使うとき |
 | 操作のIDは詳細の窓口が払い出す | 操作を組み立てるのは詳細の画面だけで、一覧の削除と作成の開始は手続きが払い出すため。操作の組み立てを手続きへ移す案は、同じ操作を表す型が2つになり、指す矢と履歴の持ち主が画面と手続きに分かれるため採らない | 操作の組み立てを全て手続きへ移すとき |
 | 削除は一覧の窓口の`deleteRound`(画面に残る)と詳細の窓口の`deleteRoundAndLeave`(離れる)に分け、手続きも`round-deletion.ts`と`round-leaving.ts`に分ける | 各窓口に削除が1つになり、他画面の削除を指す注記が要らなくなるため。手続きを分けない案は、一覧が「離れる手続き」の削除を引き、手続きの責務の説明が画面と合わないため採らない | 一覧と詳細の削除の手続きが同じ変更を受け続けるとき |
+| 取得結果の型・文言・分類・時間制限を`rounds`の内側に置く(層ごとに分ける) | `FetchResult`の文言と分類は業務の言葉を持ち、`rounds`以外の機能が使っていないため。共有へ上げる条件は、`rounds`以外の機能が使う、または`docs/architecture.md`第11節を満たす見込みのとき。上げられるのは`FETCH_TIMEOUT_MS`・`FALLBACK_WAIT_MS`・`waitLimitMs`だけで、`FetchResult`の種類と固定文言、`withFallback`は共有に置けない(第11節、U01) | 他の機能が取得結果の型や時間制限を使うとき |
 | 起動地点は層までのパスで各層の生成関数を取り込む | `docs/architecture.md`第5節の参照の書き方(組み立て層は入口を経由しない)に従うため | 規則が変わったとき |
 | テスト補助は使う層のうち最も内側の層に置く | 参照の向きを依存の向きに合わせ、補助が使い手より外側の層に置かれて層が不明になることを避けるため | テストの置き場の方針が変わったとき |
