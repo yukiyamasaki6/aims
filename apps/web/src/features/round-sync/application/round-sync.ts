@@ -11,12 +11,12 @@ import {
   type FlightGate,
   IDLE_GATE,
 } from "../domain/flight-gate";
-import { staleRetryDelayMs } from "../domain/stale-retry";
 import {
   refreshDecision,
   type SignInChange,
   shouldRefetch,
 } from "../domain/sync-trigger";
+import { createStaleClock } from "./stale-clock";
 
 // 取り直しの理由。取り直しの制御が返す理由の型から導く。
 type RefreshReason = ReturnType<
@@ -47,9 +47,6 @@ export function createRoundSync(deps: {
   let active = false;
   // 開始と停止のたびに進める。停止をまたぐ古い処理が、新しい状態を変えないため。
   let epoch = 0;
-  let staleSeq = 0;
-  // 端末のベースの取り直しの時計ごとの印。時計を作り直した(閉じた、開き直した)とき、古い処理の続きを捨てるため。
-  const staleTokens = new Map<string, number>();
   // 同時に1回までの扉は、常駐の一括の取得と、ラウンドごとの取り直しの2種類だけに置く。一覧の一括の取得とラウンドごとの開く依頼は、依頼の番号ごとに扉なしで並行して実行する。
   let residentGate: FlightGate = IDLE_GATE;
   // 最後に実行を始めた一覧の依頼の番号と、ラウンドごとの開く依頼の番号。同じ番号のあいだは、記録の知らせが何度届いても、実行を重ねない。
@@ -58,9 +55,14 @@ export function createRoundSync(deps: {
   let refreshed = 0;
   const refreshedListeners = new Set<(count: number) => void>();
   const refetchLane: RoundLane = { gates: new Map(), reruns: new Map() };
-  // 端末のベースで開いている間の取り直しの、試行の番号と時計。
-  const attempts = new Map<string, number>();
-  const staleTimers = new Map<string, () => void>();
+  // 端末のベースで開いている間の取り直しの時計。
+  const staleClock = createStaleClock({
+    clock,
+    connectivity,
+    isActive: () => active,
+    refetch: (roundId) => refetchRound(roundId, "stale"),
+    stillStale: (roundId) => needOf(roundId)?.reason === "stale",
+  });
   // 前回の見直しで要ると判断した理由。新しく要る(または理由が変わった)ときだけ取り直しを始める。
   const lastReasons = new Map<string, RefreshReason>();
   // 前回の見直しで、主の理由が stale のときに添えられていた diverged と overlay。overlay が新しく当たったかを知るため。
@@ -204,34 +206,6 @@ export function createRoundSync(deps: {
     }
   }
 
-  function cancelStale(roundId: string) {
-    staleTimers.get(roundId)?.();
-    staleTimers.delete(roundId);
-  }
-
-  // 端末のベースで開いている間、`navigator.onLine`がtrueのまま通信が戻る場合のために、間隔を置いて取り直す。
-  function scheduleStale(roundId: string) {
-    cancelStale(roundId);
-    if (!active || connectivity.isOffline()) return;
-    staleSeq += 1;
-    const token = staleSeq;
-    staleTokens.set(roundId, token);
-    const cancel = clock.after(
-      staleRetryDelayMs(attempts.get(roundId) ?? 0),
-      () => {
-        staleTimers.delete(roundId);
-        void (async () => {
-          await refetchRound(roundId, "stale");
-          // 取り直しの間に時計を作り直した(閉じた、開き直した)ときは、新しい時計の試行番号を進めない。
-          if (staleTokens.get(roundId) !== token) return;
-          attempts.set(roundId, (attempts.get(roundId) ?? 0) + 1);
-          if (needOf(roundId)?.reason === "stale") scheduleStale(roundId);
-        })();
-      },
-    );
-    staleTimers.set(roundId, cancel);
-  }
-
   // 開く依頼は、依頼の番号が増えたときだけ、依頼ごとにすぐ実行を始める(取り直しの実行中でも、前の開く依頼の実行中でも並行して始める)。
   function startOpenRun(need: {
     roundId: string;
@@ -308,7 +282,7 @@ export function createRoundSync(deps: {
       lastReasons.set(need.roundId, need.reason);
       lastExtras.set(need.roundId, extrasOf(need));
     }
-    cancelStaleExcept(
+    staleClock.keepOnly(
       new Set(
         needs.rounds
           .filter((need) => need.reason === "stale")
@@ -335,23 +309,9 @@ export function createRoundSync(deps: {
   ) {
     if (need.reason === "open") return;
     if (need.reason === "stale") {
-      if (!staleTimers.has(need.roundId)) scheduleStale(need.roundId);
+      if (!staleClock.has(need.roundId)) staleClock.schedule(need.roundId);
     } else if (shouldRefetch(NOT_OPEN_REQUEST, offline)) {
       void refetchRound(need.roundId, need.reason);
-    }
-  }
-
-  // 取り直しが要らなくなったラウンドの時計を止める。
-  function cancelStaleExcept(keep: ReadonlySet<string>) {
-    for (const roundId of new Set([
-      ...staleTimers.keys(),
-      ...attempts.keys(),
-    ])) {
-      if (keep.has(roundId)) continue;
-      // 取り直しが要らなくなった詳細は、時計と試行番号を捨てる(開き直したときは0から数える)。
-      cancelStale(roundId);
-      attempts.delete(roundId);
-      staleTokens.delete(roundId);
     }
   }
 
@@ -359,9 +319,9 @@ export function createRoundSync(deps: {
   function restartStale() {
     for (const need of refresh.refreshNeeds().rounds) {
       if (need.reason !== "stale") continue;
-      attempts.set(need.roundId, 0);
+      staleClock.resetAttempts(need.roundId);
       void refetchRound(need.roundId, "stale");
-      scheduleStale(need.roundId);
+      staleClock.schedule(need.roundId);
     }
   }
 
@@ -379,12 +339,10 @@ export function createRoundSync(deps: {
       epoch += 1;
       stopNeeds?.();
       stopNeeds = undefined;
-      for (const roundId of [...staleTimers.keys()]) cancelStale(roundId);
+      staleClock.dispose();
       residentGate = IDLE_GATE;
       startedList = 0;
       startedOpen.clear();
-      attempts.clear();
-      staleTokens.clear();
       refetchLane.gates.clear();
       refetchLane.reruns.clear();
       lastReasons.clear();
@@ -404,7 +362,7 @@ export function createRoundSync(deps: {
       restartStale();
     },
     offline() {
-      for (const roundId of [...staleTimers.keys()]) cancelStale(roundId);
+      staleClock.pause();
     },
     visible() {
       requestResident();
