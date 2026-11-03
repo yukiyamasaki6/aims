@@ -90,6 +90,20 @@ async function started(options: { registered?: boolean } = {}) {
   return { ...env, stop };
 }
 
+// 未処理の拒否は実イベントループの次のターンで通知されるため、manual clockとは別に実タイマーで1ターン待ってから数える。
+function watchUnhandledRejections() {
+  const reasons: unknown[] = [];
+  const listener = (reason: unknown) => reasons.push(reason);
+  process.on("unhandledRejection", listener);
+  return {
+    reasons,
+    async settle() {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    },
+    stop: () => process.off("unhandledRejection", listener),
+  };
+}
+
 describe("createUpdateActivation", () => {
   describe("リンク操作の前の切り替え", () => {
     it("waitingがあれば遷移を止め、保存の完了後にSKIP_WAITINGを1回送り、controllerchangeの後に遷移する", async () => {
@@ -375,6 +389,56 @@ describe("createUpdateActivation", () => {
       expect(env.persistence.whenPersisted).toHaveBeenCalledTimes(1);
     });
 
+    it("保存の完了待ちの途中で停止すると、保存が完了しても購読もSKIP_WAITINGも起きない", async () => {
+      // Given
+      const env = await started();
+      env.registration.waiting = true;
+      let finish: () => void = () => {};
+      env.persistence.whenPersisted.mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      );
+      const subscribe = vi.spyOn(env.host, "onControllerChange");
+      const link = fakeLink();
+      env.click(link);
+      await env.clock.advanceAsync(0);
+
+      // When
+      env.stop();
+      finish();
+      await env.clock.advanceAsync(DEADLINE_MS * 2);
+
+      // Then
+      expect(subscribe).not.toHaveBeenCalled();
+      expect(env.controllerListeners.size).toBe(0);
+      expect(env.registration.skipWaiting).not.toHaveBeenCalled();
+      expect(link.follow).not.toHaveBeenCalled();
+      expect(link.repeat).not.toHaveBeenCalled();
+      expect(env.clock.pendingCount()).toBe(0);
+    });
+
+    it("controllerchangeの直後、継続が進む前に停止しても、新しい保存待ちを始めない", async () => {
+      // Given
+      const env = await started();
+      env.registration.waiting = true;
+      const link = fakeLink();
+      env.click(link);
+      await env.clock.advanceAsync(0);
+
+      // When
+      env.emitControllerChange();
+      env.stop();
+      await env.clock.advanceAsync(DEADLINE_MS * 2);
+
+      // Then
+      expect(env.persistence.whenPersisted).toHaveBeenCalledTimes(1);
+      expect(link.follow).not.toHaveBeenCalled();
+      expect(link.repeat).not.toHaveBeenCalled();
+      expect(env.controllerListeners.size).toBe(0);
+      expect(env.clock.pendingCount()).toBe(0);
+    });
+
     it("諦めた遷移の次の遷移では、再び判定して切り替える", async () => {
       // Given
       const env = await started();
@@ -417,6 +481,62 @@ describe("createUpdateActivation", () => {
       expect(env.clock.pendingCount()).toBe(0);
       expect(link.follow).not.toHaveBeenCalled();
       expect(link.repeat).not.toHaveBeenCalled();
+    });
+
+    it("登録の取得が拒否されても未処理の拒否を出さず、リンクの遷移を止めない", async () => {
+      // Given
+      const env = setup();
+      vi.mocked(env.host.getRegistration).mockRejectedValue(
+        new Error("failed"),
+      );
+      const watcher = watchUnhandledRejections();
+      const link = fakeLink();
+
+      try {
+        // When
+        env.activation.start();
+        await env.clock.advanceAsync(0);
+        env.click(link);
+        await env.clock.advanceAsync(0);
+        await watcher.settle();
+
+        // Then
+        expect(watcher.reasons).toEqual([]);
+        expect(link.block).not.toHaveBeenCalled();
+        expect(link.follow).not.toHaveBeenCalled();
+        expect(link.repeat).not.toHaveBeenCalled();
+        expect(env.registration.skipWaiting).not.toHaveBeenCalled();
+        expect(env.persistence.whenPersisted).not.toHaveBeenCalled();
+      } finally {
+        watcher.stop();
+      }
+    });
+
+    it("取得の拒否の後、次の機会に取得が成功すれば登録を保持する", async () => {
+      // Given
+      const env = setup();
+      env.registration.waiting = true;
+      vi.mocked(env.host.getRegistration).mockRejectedValueOnce(
+        new Error("failed"),
+      );
+      const watcher = watchUnhandledRejections();
+      const link = fakeLink();
+      env.activation.start();
+      await env.clock.advanceAsync(0);
+
+      try {
+        // When
+        env.activation.pathChanged();
+        await env.clock.advanceAsync(0);
+        env.click(link);
+        await watcher.settle();
+
+        // Then
+        expect(env.host.getRegistration).toHaveBeenCalledTimes(2);
+        expect(link.block).toHaveBeenCalledTimes(1);
+      } finally {
+        watcher.stop();
+      }
     });
 
     it("始める前に返った登録は保持しない", async () => {
@@ -474,6 +594,31 @@ describe("createUpdateActivation", () => {
       expect(env.registration.skipWaiting).not.toHaveBeenCalled();
       expect(env.registration.update).not.toHaveBeenCalled();
       expect(env.persistence.whenPersisted).not.toHaveBeenCalled();
+    });
+
+    it("登録の取得が拒否されても、未処理の拒否を出さず、更新の確認もしない", async () => {
+      // Given
+      const env = setup();
+      vi.mocked(env.host.getRegistration).mockRejectedValue(
+        new Error("failed"),
+      );
+      const watcher = watchUnhandledRejections();
+      env.activation.start();
+      await env.clock.advanceAsync(0);
+
+      try {
+        // When
+        env.activation.pathChanged();
+        env.activation.pathChanged();
+        await env.clock.advanceAsync(0);
+        await watcher.settle();
+
+        // Then
+        expect(watcher.reasons).toEqual([]);
+        expect(env.registration.update).not.toHaveBeenCalled();
+      } finally {
+        watcher.stop();
+      }
     });
 
     it("更新の確認が拒否されてもエラーにならない", async () => {
