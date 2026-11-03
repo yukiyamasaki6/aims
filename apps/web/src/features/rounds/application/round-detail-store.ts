@@ -54,7 +54,7 @@ export type RoundDetailStore = {
 type Deps = {
   hub: RoundRecordHub;
   requests: RefreshRequests;
-  fetching: RoundFetching;
+  fetching: Pick<RoundFetching, "fetchTargetFaces" | "savedTargetFaces">;
   clock: Clock;
   connectivity: Connectivity;
   ids: UniqueIds;

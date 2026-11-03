@@ -69,7 +69,7 @@ export type RoundBaseRefreshResult = "ok" | "gone" | "failed";
 // ベースの取得と反映。公開する突き合わせの操作(`round-reconciliation.ts`)から呼ばれる。
 export function createRoundBaseRefreshing(deps: {
   hub: RoundRecordHub;
-  fetching: RoundFetching;
+  fetching: Pick<RoundFetching, "fetchRoundDetail" | "fetchRoundDetails">;
   requests: RefreshRequests;
 }) {
   const { hub, fetching, requests } = deps;

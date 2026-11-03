@@ -32,7 +32,7 @@ export type RoundsListStore = {
 type Deps = {
   hub: RoundRecordHub;
   requests: RefreshRequests;
-  fetching: RoundFetching;
+  fetching: Pick<RoundFetching, "fetchRoundsList" | "savedTargetFaces">;
   clock: Clock;
   connectivity: Connectivity;
   deletion: RoundDeletion;
