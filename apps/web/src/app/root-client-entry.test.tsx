@@ -910,8 +910,6 @@ describe("RootClientEntry", () => {
 
     it("事前描画(サーバー側の描画)で生成しても、ブラウザの購読や大域の名前に触れず、投げない", () => {
       // Given
-      const channel = vi.fn();
-      vi.stubGlobal("BroadcastChannel", channel);
       const addWindow = vi.spyOn(window, "addEventListener");
       const addDocument = vi.spyOn(document, "addEventListener");
 
@@ -924,12 +922,10 @@ describe("RootClientEntry", () => {
 
       // Then
       expect(html).toContain("子要素");
-      expect(channel).not.toHaveBeenCalled();
       expect(addWindow).not.toHaveBeenCalled();
       expect(addDocument).not.toHaveBeenCalled();
       expect(nav.router.push).not.toHaveBeenCalled();
       expect(nav.router.replace).not.toHaveBeenCalled();
-      vi.unstubAllGlobals();
     });
   });
 

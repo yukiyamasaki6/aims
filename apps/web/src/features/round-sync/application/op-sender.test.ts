@@ -4,19 +4,13 @@ import type { SendOutcome } from "@/features/rounds/application/operation-sendin
 import {
   appliedOutcome,
   createMemoryRoundStore,
-  createRecordBus,
 } from "@/features/rounds/application/round-record-test-helpers";
 import {
   roundUpdated,
   shotCleared,
   shotRecorded,
 } from "@/features/rounds/domain/round-op-test-helpers";
-import type { SenderMessage } from "./op-sender";
-import {
-  createSenderLockBus,
-  createSenderRig,
-  flush,
-} from "./op-sender-test-helpers";
+import { createSenderRig, flush } from "./op-sender-test-helpers";
 
 const STREAM = roundStreamId("round-1");
 
@@ -40,7 +34,7 @@ const rpcFailure = (status: number, code?: string): SendOutcome => ({
 type Rig = ReturnType<typeof createSenderRig>;
 type RigOptions = Parameters<typeof createSenderRig>[0];
 
-// 起動して、送る役の選出と読み込みを終えた送信器。
+// 起動して、保存の読み込みを終えた送信器。
 async function started(options: RigOptions = {}): Promise<Rig> {
   const rig = createSenderRig(options);
   await rig.hub.ready();
@@ -494,15 +488,15 @@ describe("サインインの状態", () => {
   });
 });
 
-describe("送る役の選出", () => {
-  it("止めて始め直した後は、前の選出の読み直しが終わっても、計画を始めない", async () => {
+describe("保存の読み込みの待ち", () => {
+  it("止めて始め直した後は、前の起動の読み込みが終わっても、計画を始めない", async () => {
     // Given
     const rig = createSenderRig();
     await rig.hub.ready();
     await rig.hub.append(STREAM, shot("a"));
     const first = Promise.withResolvers<void>();
     const second = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "reloadAll")
+    vi.spyOn(rig.records, "ready")
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     rig.sender.start();
@@ -522,27 +516,24 @@ describe("送る役の選出", () => {
     await flush();
     expect(outbox).toHaveBeenCalled();
   });
-  it("送る役になる前に、別のタブが知らせなしに新しい列へ保存していた操作も、送る役になると読み直して送る", async () => {
+  it("別のタブが保存していた新しい列の操作も、起動したタブが保存から読んで送る", async () => {
     // Given
     const store = createMemoryRoundStore();
-    const follower = createSenderRig({ shared: { store } });
-    await follower.hub.ready();
-    // 記録の知らせを共有しない別のタブが、新しい列へ保存する。
     const writer = createSenderRig({ shared: { store } });
     await writer.hub.ready();
     await writer.hub.append(STREAM, shot("a"));
-    const known = follower.hub.record(STREAM).items;
+    const starting = createSenderRig({ shared: { store } });
 
     // When
-    follower.sender.start();
+    await starting.hub.ready();
+    starting.sender.start();
     await flush();
 
     // Then
-    expect(known).toEqual([]);
-    expect(sentIds(follower)).toEqual([["a"]]);
+    expect(sentIds(starting)).toEqual([["a"]]);
   });
 
-  // 保存済みの操作と、保存に失敗した操作(別の距離)を持ち、読み直しが保留中の状態。
+  // 保存済みの操作と、保存に失敗した操作(別の距離)を持つ状態。
   async function reloadingRig(withUnsaved: boolean) {
     const rig = createSenderRig();
     await rig.hub.ready();
@@ -556,11 +547,11 @@ describe("送る役の選出", () => {
     return { rig, kinds };
   }
 
-  it("読み直しが終わるまで、既知の列の保存済みの操作を送らない。保存に失敗した操作は送る。終わると保存済みの操作を送る", async () => {
+  it("読み込みが終わるまで、既知の列の保存済みの操作を送らない。保存に失敗した操作は送る。終わると保存済みの操作を送る", async () => {
     // Given
     const { rig, kinds } = await reloadingRig(true);
     const reload = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "reloadAll").mockReturnValueOnce(reload.promise);
+    vi.spyOn(rig.records, "ready").mockReturnValueOnce(reload.promise);
     rig.sender.start();
     await flush();
 
@@ -579,11 +570,11 @@ describe("送る役の選出", () => {
     expect(sentIds(rig).flat().sort()).toEqual(["later", "saved", "unsaved"]);
   });
 
-  it("読み直しを終える前に止めると、その後に読み直しが終わって通信の復帰があっても、何も送らない", async () => {
+  it("読み込みを終える前に止めると、その後に読み込みが終わって通信の復帰があっても、何も送らない", async () => {
     // Given
     const { rig } = await reloadingRig(false);
     const reload = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "reloadAll").mockReturnValueOnce(reload.promise);
+    vi.spyOn(rig.records, "ready").mockReturnValueOnce(reload.promise);
     rig.sender.start();
     await flush();
 
@@ -598,12 +589,12 @@ describe("送る役の選出", () => {
     expect(rig.sent).toHaveLength(0);
   });
 
-  it("止めて始め直した後、古い選出の読み直しだけが終わっても、通信の復帰と記録の知らせでは保存済みの操作を送らない。今の選出の読み直しが終わると送る", async () => {
+  it("止めて始め直した後、古い起動の読み込みだけが終わっても、通信の復帰と記録の知らせでは保存済みの操作を送らない。今の起動の読み込みが終わると送る", async () => {
     // Given
     const { rig, kinds } = await reloadingRig(false);
     const first = Promise.withResolvers<void>();
     const second = Promise.withResolvers<void>();
-    vi.spyOn(rig.records, "reloadAll")
+    vi.spyOn(rig.records, "ready")
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     rig.sender.start();
@@ -764,133 +755,6 @@ describe("止める", () => {
 
     // Then
     expect(rig.clock.pendingCount()).toBe(0);
-  });
-});
-
-describe("複数のタブ", () => {
-  // 保存先と記録の知らせを共有する2つのタブ。先に起動したタブが送る役になる。
-  async function twoTabs() {
-    const shared = { store: createMemoryRoundStore(), bus: createRecordBus() };
-    const bus = createSenderLockBus();
-    const leader = await started({ shared, bus });
-    const follower = await started({ shared, bus });
-    return { leader, follower, shared, bus };
-  }
-
-  it("送る役のタブだけが送り、他のタブの追記も送る役が読み直して送る", async () => {
-    // Given
-    const { leader, follower } = await twoTabs();
-
-    // When
-    await follower.hub.append(STREAM, shot("a"));
-    await flush();
-
-    // Then
-    expect(sentIds(leader)).toEqual([["a"]]);
-    expect(follower.sent).toHaveLength(0);
-  });
-
-  it("送る役の確定が、他のタブの記録へ届く", async () => {
-    // Given
-    const { leader, follower } = await twoTabs();
-    await follower.hub.append(STREAM, shot("a"));
-    await flush();
-
-    // When
-    await respond(leader, 0, appliedOutcome(1, 5));
-    await flush();
-
-    // Then
-    expect(follower.hub.record(STREAM).items[0].ackedRevision).toBe(5);
-  });
-
-  it("送る役でないタブは、保存済みの操作を送らず、保存に失敗した操作だけを送る", async () => {
-    // Given
-    const { follower, shared } = await twoTabs();
-    await follower.hub.append(STREAM, shot("saved"));
-    vi.spyOn(shared.store, "append").mockRejectedValueOnce(new Error("quota"));
-
-    // When
-    await follower.hub.append(STREAM, shot("unsaved", 2));
-    await flush();
-
-    // Then
-    expect(sentIds(follower)).toEqual([["unsaved"]]);
-  });
-
-  it("送る役のタブを止めると、他のタブが引き継いで送る", async () => {
-    // Given
-    const { leader, follower } = await twoTabs();
-    await follower.hub.append(STREAM, shot("a"));
-    await flush();
-
-    // When
-    leader.sender.stop();
-    await flush();
-
-    // Then
-    expect(sentIds(leader)).toEqual([["a"]]);
-    expect(sentIds(follower)).toEqual([["a"]]);
-  });
-
-  it("未認証で保留すると、保留した操作を他のタブへ知らせ、後から起動したタブの依頼にも答える", async () => {
-    // Given
-    const bus = createSenderLockBus();
-    const heard: SenderMessage[] = [];
-    bus.lock().open((message) => heard.push(message));
-    const leader = await started({
-      bus,
-      reading: { status: "unauthenticated" },
-    });
-    await leader.hub.append(STREAM, shot("a"));
-    await flush();
-    const afterHold = [...heard];
-    heard.length = 0;
-
-    // When
-    await started({ bus, reading: { status: "unauthenticated" } });
-
-    // Then
-    expect(afterHold).toContainEqual({
-      type: "held",
-      streamId: STREAM,
-      held: ["a"],
-    });
-    expect(heard).toContainEqual({
-      type: "held",
-      streamId: STREAM,
-      held: ["a"],
-    });
-  });
-
-  it("保留を戻すと、保留が無いことを他のタブへ知らせる", async () => {
-    // Given
-    const bus = createSenderLockBus();
-    const heard: SenderMessage[] = [];
-    bus.lock().open((message) => heard.push(message));
-    const rig = await started({ bus, reading: { status: "unauthenticated" } });
-    await rig.hub.append(STREAM, shot("a"));
-    await flush();
-
-    // When
-    rig.session.reading = { status: "authenticated", userId: "user-1" };
-    rig.sender.resumeHeld();
-    await flush();
-
-    // Then
-    expect(heard).toContainEqual({ type: "held", streamId: STREAM, held: [] });
-  });
-
-  it("Web Locksが無い環境では、単独の送り手として送る", async () => {
-    // Given
-    const rig = await started({ bus: createSenderLockBus({ solo: true }) });
-
-    // When
-    await rig.hub.append(STREAM, shot("a"));
-    await flush();
-
-    // Then
-    expect(sentIds(rig)).toEqual([["a"]]);
   });
 });
 

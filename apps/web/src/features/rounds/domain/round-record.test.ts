@@ -226,7 +226,7 @@ describe("adoptGroup", () => {
     expect(outboxOf(adopted).map((entry) => entry.eventId)).toEqual(["b", "c"]);
   });
 
-  it("未確定の操作が他のタブで確定したら確定済みにし、組から外れた未確定の操作を取り除く", () => {
+  it("未確定の操作が保存で確定したら確定済みにし、組から外れた未確定の操作を取り除く", () => {
     // Given
     const [a, b] = [op("a"), op("b")];
     const record = adoptGroup(

@@ -8,11 +8,11 @@ import type {
 } from "./contract/op-log-store";
 
 export type MemoryOpLogStore<Op extends OpBase, Base> = OpLogStore<Op, Base> & {
-  // 保存している行。複数のタブが同じ保存先を共有する様子を、テストが覗く。
+  // 保存している行。2つのハブが同じ保存先を共有する様子を、テストが覗く。
   rows: OpLogEntry<Op>[];
 };
 
-// 端末の保存の代わりに、複数のタブが共有できるメモリの保存先。
+// 端末の保存の代わりに、2つのハブが共有できるメモリの保存先。
 // 実物(IndexedDB)の全ての規則は持たず、取得の反映は「新しい取得だけを採り、反映済みの行を消す」までを再現する。
 export function createMemoryOpLogStore<Op extends OpBase, Base>(
   rules: Pick<StreamRules<Op, Base>, "reflects">,

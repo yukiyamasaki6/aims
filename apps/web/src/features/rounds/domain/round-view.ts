@@ -109,7 +109,7 @@ export function roundScreenState(
   };
 }
 
-// 確定していない作成の操作が、確定を見ずに記録から消えたかの判定。消えたとき(破棄された、または他のタブが反映を確かめて外した)gone。
+// 確定していない作成の操作が、確定を見ずに記録から消えたかの判定。消えたとき(破棄された、または反映を確かめて外した)gone。
 export type CreationProgress = {
   seen: boolean;
   confirmed: boolean;

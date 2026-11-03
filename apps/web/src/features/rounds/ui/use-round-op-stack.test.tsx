@@ -164,7 +164,7 @@ describe("useRoundOpStack", () => {
   });
 
   describe("削除の知らせ", () => {
-    it("他のタブが削除の印を反映したら、onGoneを呼ぶ", async () => {
+    it("削除の印が反映されたら、onGoneを呼ぶ", async () => {
       // Given
       const { tab, wrapper } = setup();
       const onGone = vi.fn();

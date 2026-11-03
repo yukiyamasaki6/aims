@@ -263,7 +263,7 @@ describe("MainLayout", () => {
       expect(supabase.listeners).toHaveLength(1);
     });
 
-    it("他のタブなどでsigned-outを受けると、開いている画面を遷移元に付けて、ページ全体を置き換えてサインインへ移る", () => {
+    it("signed-outの通知を受けると、開いている画面を遷移元に付けて、ページ全体を置き換えてサインインへ移る", () => {
       // Given
       renderLayout();
 

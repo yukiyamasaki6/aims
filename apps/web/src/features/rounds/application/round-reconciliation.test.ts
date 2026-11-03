@@ -148,22 +148,34 @@ describe("記録の公開", () => {
     expect(reconciliation.batchLimitOf("lane")).toBeGreaterThanOrEqual(1);
   });
 
-  it("reloadAllは、記録に無い列を端末の保存先から読んで、列の一覧に加える", async () => {
+  it("readyは、記録の読み込みが終わるまで解決せず、終わると解決する", async () => {
     // Given
-    const { reconciliation, store } = await setup();
-    // 知らせを共有しない別の記録のハブが、新しい列へ保存する。
-    const other = createTestRoundHub({ store }).hub;
-    other.start("user-1");
-    await other.ready();
-    await other.append(STREAM, roundUpdated());
-    const before = reconciliation.streams();
+    // 起動前のハブを使うため、setupは使わない。
+    const { hub } = createTestRoundHub();
+    const reconciliation = createRoundReconciliation({
+      hub,
+      requests: createRefreshRequests(),
+      send: createOperationSending({ hub, transport: { send: vi.fn() } }),
+      refresh: createRoundBaseRefreshing({
+        hub,
+        requests: createRefreshRequests(),
+        fetching: {} as RoundFetching,
+      }),
+    });
+    let settled = false;
 
     // When
-    await reconciliation.reloadAll();
+    const waiting = reconciliation.ready().then(() => {
+      settled = true;
+    });
+    await flush();
+    const beforeStart = settled;
+    hub.start("user-1");
+    await waiting;
 
     // Then
-    expect(before).toEqual([]);
-    expect(reconciliation.streams()).toEqual([STREAM]);
+    expect(beforeStart).toBe(false);
+    expect(settled).toBe(true);
   });
 
   it("利用者を替え、送信中の目印を付けて、読み直しと変化の購読を行える", async () => {
@@ -175,7 +187,6 @@ describe("記録の公開", () => {
 
     // When
     reconciliation.markInFlight(STREAM, ["a"], true);
-    await reconciliation.reloadStream(STREAM);
     const keptWhileSending = hub.record(STREAM).items.length;
     reconciliation.setUser("user-2");
     const afterSwitch = [

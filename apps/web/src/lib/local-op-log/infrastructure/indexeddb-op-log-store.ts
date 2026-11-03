@@ -41,38 +41,25 @@ interface OpLogDb<Op extends OpBase, Base> extends DBSchema {
   };
 }
 
-// 他の接続がversionの更新を待っているとき(blocking)は閉じて譲り、次の呼び出しで開き直す。
-// 古い接続が閉じず更新が待たされているとき(blocked)は開けなかったものとして失敗にする。
-function openOpLogDb<Op extends OpBase, Base>(
-  onBlocking: () => void,
-): Promise<IDBPDatabase<OpLogDb<Op, Base>>> {
-  return new Promise((resolve, reject) => {
-    let failed = false;
-    openDB<OpLogDb<Op, Base>>(DB_NAME, DB_VERSION, {
-      upgrade(database) {
-        for (const name of Array.from(database.objectStoreNames)) {
-          database.deleteObjectStore(name);
-        }
-        const store = database.createObjectStore(STORE_NAME, {
-          keyPath: "seq",
-          autoIncrement: true,
-        });
-        store.createIndex("by-event-id", "eventId", { unique: true });
-        store.createIndex("by-stream", "streamId");
-        database.createObjectStore(BASE_STORE_NAME, {
-          keyPath: ["userId", "streamId"],
-        });
-      },
-      blocked() {
-        failed = true;
-        reject(new Error("aims-sync is blocked by an older connection"));
-      },
-      blocking: onBlocking,
-    }).then((db) => {
-      // 失敗にした後に開けた接続は使わない。
-      if (failed) db.close();
-      else resolve(db);
-    }, reject);
+// versionの更新が古い版の接続で塞がれているとき、開く処理は塞ぎが解けるまで終わらない。
+function openOpLogDb<Op extends OpBase, Base>(): Promise<
+  IDBPDatabase<OpLogDb<Op, Base>>
+> {
+  return openDB<OpLogDb<Op, Base>>(DB_NAME, DB_VERSION, {
+    upgrade(database) {
+      for (const name of Array.from(database.objectStoreNames)) {
+        database.deleteObjectStore(name);
+      }
+      const store = database.createObjectStore(STORE_NAME, {
+        keyPath: "seq",
+        autoIncrement: true,
+      });
+      store.createIndex("by-event-id", "eventId", { unique: true });
+      store.createIndex("by-stream", "streamId");
+      database.createObjectStore(BASE_STORE_NAME, {
+        keyPath: ["userId", "streamId"],
+      });
+    },
   });
 }
 
@@ -84,17 +71,7 @@ export function createIndexedDbOpLogStore<Op extends OpBase, Base>(
   let opened: Promise<Db> | undefined;
   const database = () => {
     if (!opened) {
-      const attempt = openOpLogDb<Op, Base>(() => {
-        // 譲る相手の更新が終わるまで、この接続は使わない。
-        if (opened === attempt) opened = undefined;
-        void (async () => {
-          try {
-            (await attempt).close();
-          } catch {
-            // 開けなかった接続は閉じるものが無い。
-          }
-        })();
-      });
+      const attempt = openOpLogDb<Op, Base>();
       opened = attempt;
       attempt.catch(() => {
         if (opened === attempt) opened = undefined;

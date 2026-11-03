@@ -37,7 +37,7 @@ export function createOperationSending(deps: {
 }) {
   const { hub, transport } = deps;
   return {
-    // 成功したら記録へ確定を書き、効かなかった操作を外し、書き込みの後に他のタブへ知らせる。
+    // 成功したら記録へ確定を書き、効かなかった操作を外す。
     async send(
       streamId: string,
       eventIds: readonly string[],

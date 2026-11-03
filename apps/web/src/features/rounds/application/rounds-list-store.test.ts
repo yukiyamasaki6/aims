@@ -226,6 +226,62 @@ describe("loadList", () => {
   });
 });
 
+describe("loadList: 別のタブの変化", () => {
+  const items: RoundListItem[] = [];
+
+  it("通知なしで、別のタブの追記と削除を反映し、別のタブが完了したラウンドは入力中に載せない", async () => {
+    // Given
+    const other = createTestRounds({ savedFaces: [face] });
+    await other.hub.ready();
+    const finished = roundStreamId("finished");
+    await other.hub.commit(
+      finished,
+      roundBase({ name: "完了前" }),
+      10,
+      "user-1",
+    );
+    const tab = createTestRounds({
+      savedFaces: [face],
+      shared: { store: other.opLog },
+    });
+    await tab.hub.ready();
+    await other.hub.commit(
+      finished,
+      roundBase({ name: "完了前", status: "completed" }),
+      20,
+      "user-1",
+    );
+    await other.hub.commit(
+      STREAM,
+      roundBase({ name: "別のタブ" }),
+      10,
+      "user-1",
+    );
+    await other.hub.append(roundStreamId("deleted"), {
+      type: "round.disabled",
+      eventId: "e-deleted",
+      roundId: "deleted",
+    });
+    const loading = loadListWith(tab, async () => ({
+      status: "ok",
+      data: items,
+    }));
+    await flush();
+
+    // When
+    syncFinishesAll(tab.requests);
+    const result = await loading;
+
+    // Then
+    expect(result.status === "ok" && result.data.inProgress).toEqual([
+      { id: "round-1", name: "別のタブ", roundDate: "2026-09-15", total: 0 },
+    ]);
+    expect(result.status === "ok" && [...result.data.deleted]).toEqual([
+      "deleted",
+    ]);
+  });
+});
+
 describe("loadList: 取得の間の利用者の切り替え", () => {
   async function confirmedDeletionIn(tab: ReturnType<typeof createTestRounds>) {
     await tab.hub.ready();
@@ -334,10 +390,10 @@ describe("loadLocalList", () => {
     expect([...list.deleted]).toEqual(["deleted"]);
   });
 
-  it("保存した的が無いときは的なしで判定し、記録を読めないときは空を返す", async () => {
+  it("ハブの一覧の読み取りが失敗したときは空を返す", async () => {
     // Given
     const tab = createTestRounds();
-    vi.spyOn(tab.hub, "readAll").mockRejectedValue(new Error("idb"));
+    vi.spyOn(tab.hub, "readList").mockRejectedValue(new Error("idb"));
 
     // When
     const list = await tab.list.loadLocalList();
@@ -421,7 +477,7 @@ describe("打ち切り", () => {
   it("端末の記録の読み込みが終わらない間に打ち切られても、切断ならofflineにする(一覧)", async () => {
     // Given
     const tab = createTestRounds();
-    vi.spyOn(tab.hub, "readAll").mockReturnValue(new Promise(() => {}));
+    vi.spyOn(tab.hub, "readList").mockReturnValue(new Promise(() => {}));
     const list = loadListWith(tab, async () => ({ status: "ok", data: [] }));
     tab.connectivity.goOffline();
 

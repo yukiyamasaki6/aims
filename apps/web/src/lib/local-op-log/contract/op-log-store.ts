@@ -56,7 +56,7 @@ export type StreamRules<Op extends OpBase, Base> = {
 type RetireReason = "reflected" | "ineffective" | "discarded";
 
 export type OpLogStore<Op extends OpBase, Base> = {
-  // 呼び出された順に保存し、採番された`seq`を返す。`base`(送信器のタブのベース)が保存済みより新しく、保持の規則に当たるときは、同じトランザクションで保存する。
+  // 呼び出された順に保存し、採番された`seq`を返す。`base`(記録のベース)が保存済みより新しく、保持の規則に当たるときは、同じトランザクションで保存する。
   append: (
     entry: NewOpLogEntry<Op>,
     base?: StreamBase<Base>,

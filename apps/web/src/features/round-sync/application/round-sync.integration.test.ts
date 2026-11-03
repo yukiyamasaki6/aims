@@ -28,7 +28,7 @@ import { roundStreamId } from "@/features/rounds/domain/sync-events";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import { createOpSender } from "./op-sender";
-import { createSenderLockBus, flush } from "./op-sender-test-helpers";
+import { flush } from "./op-sender-test-helpers";
 import { createRoundSync } from "./round-sync";
 
 // 実物の依頼の記録、取得と反映、画面の状態、同期の手続きを接続する。取得(サーバー)、送信、時計だけを差し替える。
@@ -86,7 +86,6 @@ function rig() {
     sender: createOpSender({
       records,
       session,
-      lock: createSenderLockBus({ solo: true }).lock(),
       clock,
       connectivity,
     }),
@@ -277,11 +276,12 @@ describe("一覧と常駐の取得", () => {
   });
 });
 
-describe("送る役の引き継ぎ", () => {
-  // タブごとの組み立て。記録の知らせは共有しないため、タブの間には何も届かない。
+describe("同じ保存を共有する複数のタブ", () => {
+  const stream = roundStreamId("round-1");
+
+  // タブごとの組み立て。タブの間に通知の経路は無く、保存だけを共有する。
   async function senderTab(
     store: ReturnType<typeof createMemoryRoundStore>,
-    lockBus: ReturnType<typeof createSenderLockBus>,
     send: () => Promise<SendOutcome>,
   ) {
     const { hub } = createTestRoundHub({ store });
@@ -289,7 +289,7 @@ describe("送る役の引き継ぎ", () => {
     await hub.ready();
     const requests = createRefreshRequests();
     const transport = { send: vi.fn(send) };
-    const reconciliation = createRoundReconciliation({
+    const records = createRoundReconciliation({
       hub,
       requests,
       send: createOperationSending({ hub, transport }),
@@ -302,7 +302,6 @@ describe("送る役の引き継ぎ", () => {
         } as unknown as RoundFetching,
       }),
     });
-    const records = reconciliation;
     const session = {
       readSession: async () =>
         ({ status: "authenticated", userId: "user-1" }) as const,
@@ -310,42 +309,96 @@ describe("送る役の引き継ぎ", () => {
     const sender = createOpSender({
       records,
       session,
-      lock: lockBus.lock(),
       clock: createManualClock(1000),
       connectivity: createFakeConnectivity(),
     });
     return { hub, sender, transport };
   }
 
-  it("送る役のタブが保存して送る前に止まり、もう一方のタブが送る役を引き継ぐと、記録の知らせが無くても保存されていた新しい列の操作を送る", async () => {
+  const never = () => new Promise<never>(() => {});
+  const sentEventIds = (tab: Awaited<ReturnType<typeof senderTab>>) =>
+    tab.transport.send.mock.calls.flatMap(([entries]: unknown[]) =>
+      (entries as { eventId: string }[]).map((entry) => entry.eventId),
+    );
+
+  it("それぞれのタブが、自分の追記を送る", async () => {
     // Given
-    const stream = roundStreamId("round-1");
     const store = createMemoryRoundStore();
-    const lockBus = createSenderLockBus();
-    const holder = await senderTab(
-      store,
-      lockBus,
-      () => new Promise<never>(() => {}),
-    );
-    const successor = await senderTab(store, lockBus, async () =>
-      appliedOutcome(1),
-    );
-    holder.sender.start();
+    const first = await senderTab(store, async () => appliedOutcome(1));
+    const second = await senderTab(store, async () => appliedOutcome(1));
+    first.sender.start();
+    second.sender.start();
     await flush();
-    successor.sender.start();
-    await flush();
-    await holder.hub.append(stream, roundUpdated({ eventId: "new-op" }));
-    await flush();
-    const known = successor.hub.record(stream).items;
 
     // When
-    holder.sender.stop();
+    await first.hub.append(stream, roundUpdated({ eventId: "first-op" }));
+    await second.hub.append(
+      roundStreamId("round-2"),
+      roundUpdated({ eventId: "second-op" }),
+    );
     await flush();
 
     // Then
-    expect(known).toEqual([]);
-    expect(successor.transport.send).toHaveBeenCalledWith([
-      expect.objectContaining({ eventId: "new-op" }),
-    ]);
+    expect(sentEventIds(first)).toEqual(["first-op"]);
+    expect(sentEventIds(second)).toEqual(["second-op"]);
+  });
+
+  it("同じイベントIDの操作を2つのタブが送り、応答が両方に返っても、確定は重ねて書かれず、各タブの記録が壊れない", async () => {
+    // Given
+    const store = createMemoryRoundStore();
+    const first = await senderTab(store, async () => appliedOutcome(1, 5));
+    await first.hub.append(stream, roundUpdated({ eventId: "same-op" }));
+    const second = await senderTab(store, async () => appliedOutcome(1, 5));
+
+    // When
+    first.sender.start();
+    second.sender.start();
+    await flush();
+
+    // Then
+    // 実際に二重適用されないことは、サーバー側のpgTAPと保存の単体が担う。ここでは重複した応答の処理だけを確かめる。
+    expect(sentEventIds(first)).toEqual(["same-op"]);
+    expect(sentEventIds(second)).toEqual(["same-op"]);
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0].ackedRevision).toBe(5);
+    expect(first.hub.record(stream).items).toHaveLength(1);
+    expect(second.hub.record(stream).items).toHaveLength(1);
+  });
+
+  it("保存して送る前にタブが止まっても、新しく起動したタブが起動時に保存から読んで、通知なしで送る", async () => {
+    // Given
+    const store = createMemoryRoundStore();
+    const closed = await senderTab(store, never);
+    await closed.hub.append(stream, roundUpdated({ eventId: "saved-op" }));
+    const opened = await senderTab(store, async () => appliedOutcome(1));
+
+    // When
+    opened.sender.start();
+    await flush();
+
+    // Then
+    expect(sentEventIds(opened)).toEqual(["saved-op"]);
+  });
+
+  it("一方のタブの未送信が残る状態で止まっても、もう一方のタブは自分の追記を送り続ける", async () => {
+    // Given
+    const store = createMemoryRoundStore();
+    const stopped = await senderTab(store, never);
+    const running = await senderTab(store, async () => appliedOutcome(1));
+    stopped.sender.start();
+    running.sender.start();
+    await stopped.hub.append(stream, roundUpdated({ eventId: "stuck-op" }));
+    await flush();
+    stopped.sender.stop();
+
+    // When
+    await running.hub.append(
+      roundStreamId("round-2"),
+      roundUpdated({ eventId: "own-op" }),
+    );
+    await flush();
+
+    // Then
+    expect(sentEventIds(running)).toEqual(["own-op"]);
   });
 });

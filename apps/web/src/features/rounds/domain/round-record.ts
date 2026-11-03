@@ -29,7 +29,7 @@ export type RoundRecord = {
   readonly retired: ReadonlySet<string>;
   // このタブでの保存が終わるたびに進める。古い読み込みが、保存済みの操作を外さないための目印。
   readonly persistTick: number;
-  // 送信中(リトライ待機を含む)の操作。他のタブの読み込みで外さない。
+  // 送信中(リトライ待機を含む)の操作。保存からの読み込みで外さない。
   readonly inFlight: ReadonlySet<string>;
 };
 
@@ -143,7 +143,7 @@ function rowOf(item: RecordItem) {
   };
 }
 
-// 別のタブが確定前に破棄した操作。確定済みの操作は、共有の組のベースを取ったときだけ、組から無くなったものを外す(そのベースとともに外れたもの)。
+// 保存から無くなった操作。確定済みの操作は、共有の組のベースを取ったときだけ、組から無くなったものを外す(そのベースとともに外れたもの)。
 function isSettledElsewhere(
   record: RoundRecord,
   item: RecordItem,

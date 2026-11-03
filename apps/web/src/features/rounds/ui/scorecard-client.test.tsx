@@ -308,7 +308,7 @@ function rpcSucceeds(name: string, args?: { p_shots?: unknown[] }) {
 // 記録は端末への保存の完了後に画面へ反映される。保存先(fake-indexeddb)の初回の接続は、負荷が高いと操作の間隔を超えるため、操作の間隔を広げて、反映を待たずに次の操作や検証へ進まないようにする。
 const userEventSetup = userEvent.setup.bind(userEvent);
 
-// 画面は、アプリの起動地点(実物)が渡すラウンドの状態と変更の方法を使う。他のタブの操作を模す追記のために、受け取った入口を覚える。
+// 画面は、アプリの起動地点(実物)が渡すラウンドの状態と変更の方法を使う。別経路の追記を模すために、受け取った入口を覚える。
 let appStore: RoundDetailStore | undefined;
 
 function StoreProbe() {
@@ -325,8 +325,8 @@ function AppWrapper({ children }: { children: ReactNode }) {
   );
 }
 
-// 他のタブの追記を模す。
-function appendFromOtherTab(operation: SyncOperation) {
+// 別経路の追記を模す。
+function appendFromOtherPath(operation: SyncOperation) {
   return appStore?.round("round-1").append(operation);
 }
 
@@ -2245,7 +2245,7 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
     expect(provisionalEnd()).toBe("end-row-1-1");
   });
 
-  it("戻すと矢が復活するが、そのエンドが他のタブの矢で矢数に達しているときは、何も積まずに列だけを進める", async () => {
+  it("戻すと矢が復活するが、そのエンドが別経路の矢で矢数に達しているときは、何も積まずに列だけを進める", async () => {
     // Given
     const user = userEvent.setup();
     setup({
@@ -2259,7 +2259,7 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
     await user.click(screen.getByTestId("score-button-clear"));
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["8", "7"]));
     await act(() =>
-      appendFromOtherTab({
+      appendFromOtherPath({
         type: "shot.recorded",
         eventId: "e-other-tab",
         shotId: "s-other",

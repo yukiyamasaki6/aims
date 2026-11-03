@@ -27,7 +27,7 @@ export async function withinTime<T>(
 }
 
 // 画面の読み込み(端末の保存の読み書きと取得)の全体を、開始からFETCH_TIMEOUT_MSで打ち切る。
-// 端末の保存(IndexedDB)の待ちは時間制限を持たず、他のタブが保存を塞ぐと「読み込み中」に固定されるため。
+// 端末の保存(IndexedDB)の待ちは時間制限を持たず、古い版のタブが保存の版更新を塞ぐと「読み込み中」に固定されるため。
 // 打ち切った時点の通信の可否で、offlineかerrorを返す。打ち切った後も読み込みは続き、その結果は捨てる。
 export async function withinFetchTimeout<T>(
   clock: Clock,

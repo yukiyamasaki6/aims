@@ -545,24 +545,9 @@ describe("op log store", () => {
       expect(names).toEqual(["bases", "ops"]);
     });
 
-    it("後のversionへの更新を待たれたら、接続を閉じて譲る", async () => {
-      // Given
-      const store = newStore();
-      await store.append(entry("a"));
-
-      // When
-      const next = await openDB("aims-sync", 6);
-      const version = next.version;
-      next.close();
-
-      // Then
-      expect(version).toBe(6);
-    });
-
-    it("古い接続が閉じず更新が待たされるときは、開けなかったものとして拒否し、閉じた後は開き直す", async () => {
-      // Given
-      // 更新を知らされても閉じない、version 3の接続を開いておく。
-      const previous = await openDB("aims-sync", 3, {
+    // 更新を知らされても閉じない、version 3の接続を開いておく。
+    function openStaleConnection() {
+      return openDB("aims-sync", 3, {
         upgrade(database) {
           const ops = database.createObjectStore("ops", {
             keyPath: "seq",
@@ -572,19 +557,48 @@ describe("op log store", () => {
           ops.createIndex("by-stream", "streamId");
         },
       });
+    }
+
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    it("古い接続が閉じない間は拒否もされず終わらず、古い接続を閉じると終わり、更新後の保存を読み書きできる", async () => {
+      // Given
+      const previous = await openStaleConnection();
       const store = newStore();
+      let settled = false;
+      const appending = store.append(entry("a")).finally(() => {
+        settled = true;
+      });
 
       // When
-      const whileBlocked = await store.append(entry("a")).then(
-        () => "saved",
-        () => "rejected",
-      );
+      await wait(50);
+      const settledWhileBlocked = settled;
       previous.close();
-      const afterClose = await store.append(entry("b"));
+      const seq = await appending;
+      const reloaded = await store.loadStream(STREAM, "user-1");
 
       // Then
-      expect(whileBlocked).toBe("rejected");
-      expect(afterClose).toBeGreaterThan(0);
+      expect(settledWhileBlocked).toBe(false);
+      expect(seq).toBeGreaterThan(0);
+      expect(reloaded.entries.map((e) => e.operation.value)).toEqual(["a"]);
+    });
+
+    it("更新が塞がれている間、古い版の保存の内容は変わらない", async () => {
+      // Given
+      const previous = await openStaleConnection();
+      await previous.add("ops", entry("old"));
+      const store = newStore();
+      const appending = store.append(entry("new"));
+
+      // When
+      await wait(50);
+      const whileBlocked = await previous.getAll("ops");
+      previous.close();
+      await appending;
+
+      // Then
+      expect(whileBlocked.map((row) => row.operation.value)).toEqual(["old"]);
     });
   });
 });
