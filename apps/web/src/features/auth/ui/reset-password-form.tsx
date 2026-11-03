@@ -18,8 +18,16 @@ const COPY = {
 
 export function ResetPasswordForm({
   resetPassword,
+  siteKey,
 }: {
   resetPassword: PasswordSetup;
+  siteKey: string | undefined;
 }) {
-  return <PasswordSetupForm procedure={resetPassword} copy={COPY} />;
+  return (
+    <PasswordSetupForm
+      procedure={resetPassword}
+      copy={COPY}
+      siteKey={siteKey}
+    />
+  );
 }

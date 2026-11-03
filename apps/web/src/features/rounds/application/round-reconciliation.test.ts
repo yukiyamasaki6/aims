@@ -8,15 +8,18 @@ import {
   shotRecorded,
 } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
-import type { FetchedRoundDetail, RoundFetching } from "./fetch-round-detail";
+import {
+  createOperationSending,
+  type RoundTransport,
+} from "./operation-sending";
 import { createRefreshRequests } from "./refresh-requests";
-import { createRefreshRoundBases } from "./refresh-round-bases";
+import { createRoundBaseRefreshing } from "./round-base-refreshing";
+import type { FetchedRoundDetail, RoundFetching } from "./round-fetching";
 import { createRoundReconciliation } from "./round-reconciliation";
 import {
   createTestRoundHub,
   settleRoundNow,
 } from "./round-record-test-helpers";
-import { createSendOperations, type RoundTransport } from "./send-operations";
 
 const STREAM = roundStreamId("round-1");
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -61,8 +64,8 @@ async function setup() {
   const reconciliation = createRoundReconciliation({
     hub,
     requests,
-    send: createSendOperations({ hub, transport }),
-    refresh: createRefreshRoundBases({
+    send: createOperationSending({ hub, transport }),
+    refresh: createRoundBaseRefreshing({
       hub,
       requests,
       fetching: fetching as unknown as RoundFetching,

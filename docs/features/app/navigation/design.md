@@ -26,7 +26,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 
 ## 構成とデータの流れ
 
-- `src/proxy.ts`(要求の入口): `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に、認証の機能の経路の規則(`features/auth/domain/routes.ts` の `redirectFor`)へ、ラウンドの入口が公開する保護の範囲の根の経路 `ROUNDS_PATH` を添えて `updateSession` へ渡す。`config.matcher` は Next.js がビルド時に静的に読み、定数を参照できないため、経路を文字列で再掲し、`proxy.test.ts` が `ROUNDS_PATH` との一致を確かめる。`/` は対象外である。
+- `src/proxy.ts`(要求の入口): `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に、認証の機能の経路の規則(`features/auth/domain/auth-routes.ts` の `redirectFor`)へ、ラウンドの入口が公開する保護の範囲の根の経路 `ROUNDS_PATH` を添えて `updateSession` へ渡す。`config.matcher` は Next.js がビルド時に静的に読み、定数を参照できないため、経路を文字列で再掲し、`proxy.test.ts` が `ROUNDS_PATH` との一致を確かめる。`/` は対象外である。
 - `src/lib/supabase/infrastructure/session.ts`(共有の技術の実装): `updateSession` が要求ごとにセッションを更新して認証状態を判定し、経路の規則は引数で受ける。規則は認証の機能の `redirectFor` が持ち、`proxy.ts` が渡す。
   - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
   - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。`/signin` は有効な遷移元があればそこへ送る（`auth/signin`）。
@@ -37,6 +37,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 - `src/features/navigation/ui/start-button.tsx`(UI層): 開始ボタン。画面を開いたときに1回だけ手続きに行き先を決めさせ、判定中は判定中の行き先を表示する。
 - `src/features/navigation/application/start.ts`(手続きと約束): サインインの状態を読み、行き先の規則で開始の行き先を決める。認証の機能に頼むこと(サインインの状態の読み取りとサインアップのパス)の約束 `SignInCheck` を持つ。
 - `src/features/navigation/infrastructure/auth-sign-in-check.ts`(インフラ層): `SignInCheck` を、認証の機能の入口の `SessionReader`、`SIGN_UP_PATH`、`destinationOf` と、ラウンドの機能の入口の `ROUNDS_PATH` で満たす(サインインの後の既定の行き先は `destinationOf(null, ROUNDS_PATH)`)。
+- 遷移の約束(アプリ全体): ナビゲーションの機能は遷移の約束を持たない。開始の行き先は、手続きが行き先(href)を返し、`start-button.tsx` のリンクで遷移する。ルーターで進む遷移は共有の技術の `PageNavigation`(`src/lib/page-navigation/contract/page-navigation.ts`。認証のサインイン、サインアップとラウンドの開始、完了、削除して離れる、一覧へ戻るが使う)、ページ全体の読み込みの遷移は認証の `PageLoad`、`PageReplace`、遷移元の読み出しは認証の `ReturnToReader` である。
 - `src/features/navigation/domain/start-destination.ts`(ドメイン層): 開始の行き先の規則。判定中と未認証はサインアップ、認証済みと確かめられないときはサインインの後の既定の行き先(今は `/rounds`)。経路はどちらも認証から受け取る。
 - `src/app/(main)/layout.tsx`(画面の入口): 認証が要る画面の集合の枠。セッションの手続きと実装を生成し(`protectedPath` に `ROUNDS_PATH` を値で渡す)て見張りを始め、個人リンクの行き先として `ROUNDS_PATH` を渡したレフトパネルと、サインアウトの部品(`features/auth/ui/sign-out-button.tsx`)を描く。
 - `src/components/app-logo.tsx`(共有の画面部品)が、認証画面・`/`・`/offline` の左上のロゴである。

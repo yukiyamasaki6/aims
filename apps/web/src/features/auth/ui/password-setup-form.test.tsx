@@ -14,6 +14,7 @@ import {
   useImperativeHandle,
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import type { CallResult } from "../application/call-result";
 import type { PasswordSetup } from "../application/password-setup";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
@@ -66,12 +67,13 @@ const subjects: {
     name: "サインアップ",
     create: () =>
       createSignUp({
+        clock: createBrowserClock(),
         authenticator: auth,
         registration: auth,
-        navigation: { go: leave },
+        pageNavigation: { go: leave },
         protectedPath: "/rounds",
       }),
-    form: (procedure) => <SignUpForm signUp={procedure} />,
+    form: (procedure) => <SignUpForm signUp={procedure} siteKey="site-key" />,
     emailHeading: "サインアップ",
     passwordHeading: "パスワードを設定",
     passwordPlaceholder: "パスワード（8文字以上・英数字を含む）",
@@ -83,11 +85,14 @@ const subjects: {
     name: "パスワード再設定",
     create: () =>
       createResetPassword({
+        clock: createBrowserClock(),
         authenticator: auth,
         passwordChange: { change: auth.setPassword },
         pageLoad: { load: leave },
       }),
-    form: (procedure) => <ResetPasswordForm resetPassword={procedure} />,
+    form: (procedure) => (
+      <ResetPasswordForm resetPassword={procedure} siteKey="site-key" />
+    ),
     emailHeading: "パスワードを再設定",
     passwordHeading: "新しいパスワードを設定",
     passwordPlaceholder: "新しいパスワード（8文字以上・英数字を含む）",
@@ -103,7 +108,7 @@ const turnstile = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
   reset: vi.fn(),
 }));
-vi.mock("@/components/turnstile", () => ({
+vi.mock("./turnstile", () => ({
   Turnstile: forwardRef<
     unknown,
     { onVerify: (token: string | null) => void; error?: string }
@@ -656,6 +661,34 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
         // Then
         expect(resendButton()).toHaveTextContent(/^再送$/);
+      });
+
+      it("待ちが0になった後は、計時を予約せず、時間が進んでも表示を変えない", async () => {
+        // Given
+        renderForm();
+        await advanceToCodeStep();
+        await advanceSeconds(60);
+
+        // When
+        await advanceSeconds(3);
+
+        // Then
+        expect(vi.getTimerCount()).toBe(0);
+        expect(resendButton()).toHaveTextContent(/^再送$/);
+      });
+
+      it("待ちの途中でアンマウントすると、計時の予約が取り消される", async () => {
+        // Given
+        const view = renderForm();
+        await advanceToCodeStep();
+        await advanceSeconds(1);
+        expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+        // When
+        view.unmount();
+
+        // Then
+        expect(vi.getTimerCount()).toBe(0);
       });
 
       it("クールダウン中に押した場合、再送欄にクールダウン中のエラーを表示し再送しない", async () => {

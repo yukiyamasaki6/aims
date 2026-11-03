@@ -22,13 +22,13 @@
 
 - `apps/web/src/features/rounds/ui/rounds-list.tsx`: 一覧のカードのメニューと、削除済みの集合によるカードの除去。
 - `features/rounds/ui/round-menu.tsx`: 詳細のヘッダーのメニュー。確認で`RoundDetailStore.deleteRoundAndLeave`を呼ぶ(保存の完了の後に一覧へ置き換えて遷移する)。
-- `features/rounds/application/rounds-list-store.ts`の`RoundsListStore.deleteRound`(一覧): 手続き`features/rounds/application/delete-round.ts`の`RoundDeletion.deleteRound`(離れない削除)へ委譲する。手続きが`round.disabled`(操作の組み立ては`features/rounds/domain/round-progress.ts`の`roundDisabledOperation`)を新しい`eventId`(約束`UniqueIds`、実装は`features/rounds/infrastructure/browser-unique-ids.ts`)で列へ追記する。保存の試みの完了で解決し、拒否しない。
+- `features/rounds/application/rounds-list-store.ts`の`RoundsListStore.deleteRound`(一覧): 手続き`features/rounds/application/round-deletion.ts`の`RoundDeletion.deleteRound`(離れない削除)へ委譲する。手続きが`round.disabled`(操作の組み立ては`features/rounds/domain/round-progress.ts`の`roundDisabledOperation`)を新しい`eventId`(約束`UniqueIds`、実装は`features/rounds/infrastructure/browser-unique-ids.ts`)で列へ追記する。保存の試みの完了で解決し、拒否しない。
 - `components/ui/confirm-dialog.tsx`の`ConfirmDialog`: 確認後すぐ閉じる。
 - `apps/web/src/features/rounds/domain/rounds-list-view.ts`: 一覧の取得結果と端末の入力中のラウンドから、列で削除済みのラウンドを除く（`rounds/history`）。
 - `features/rounds/application/round-detail-store.ts`の`load`: 列に削除があれば、取得せずに削除済みを返す（`rounds/detail`）。
 
-流れは、メニューから確認ダイアログを開き、確認で、一覧は`RoundsListStore.deleteRound`、詳細は`RoundDetailStore.deleteRoundAndLeave`を呼ぶ(詳細の手続き`leave-round.ts`は、一覧と同じ`delete-round.ts`の`deleteRound`の完了の後に遷移する)。
-一覧は、そのラウンドを削除済みの集合へ足して除く。詳細は、窓口の`deleteRoundAndLeave`(手続き`features/rounds/application/leave-round.ts`が`delete-round.ts`の削除の保存の完了の後に`Navigation.replace(ROUNDS_PATH)`を呼ぶ)で一覧へ置き換える。
+流れは、メニューから確認ダイアログを開き、確認で、一覧は`RoundsListStore.deleteRound`、詳細は`RoundDetailStore.deleteRoundAndLeave`を呼ぶ(詳細の手続き`round-leaving.ts`は、一覧と同じ`round-deletion.ts`の`deleteRound`の完了の後に遷移する)。
+一覧は、そのラウンドを削除済みの集合へ足して除く。詳細は、窓口の`deleteRoundAndLeave`(手続き`features/rounds/application/round-leaving.ts`が`round-deletion.ts`の削除の保存の完了の後に`PageNavigation.replace(ROUNDS_PATH)`を呼ぶ)で一覧へ置き換える。
 送信は常駐の送信器が行い、画面が閉じても続く。未確定の作成のラウンドは、既存の衝突規則で作成の確定を待って削除が送られる。
 認可の拒否と契約の不一致は破棄され、一覧を取得し直すとラウンドが再表示される。
 

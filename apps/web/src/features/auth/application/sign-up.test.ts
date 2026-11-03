@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
+import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import {
   ALREADY_REGISTERED,
   type AuthFailure,
@@ -25,11 +27,13 @@ function setup(protectedPath = "/rounds") {
     setPassword: vi.fn(async (): Promise<CallResult> => accepted),
   } satisfies PasswordSetupAuthenticator;
   const registration = { isRegistered: vi.fn(async () => false) };
-  const navigation = { go: vi.fn() };
+  const { pageNavigation, go } = createFakePageNavigation();
+  const navigation = { go };
   const signUp = createSignUp({
     authenticator,
     registration,
-    navigation,
+    pageNavigation,
+    clock: createManualClock(),
     protectedPath,
   });
   return {
@@ -88,7 +92,7 @@ describe("サインアップの手続き", () => {
       });
       expect(types(events)).toEqual(["codeSent"]);
       expect(order).toEqual(["codeSent", "resetCheck"]);
-      expect(view.state.step).toBe("code");
+      expect(view.observedState.step).toBe("code");
     });
 
     it("入力に不備があれば、不備だけを示し、認証サービスを呼ばない", async () => {
@@ -107,7 +111,7 @@ describe("サインアップの手続き", () => {
       await signUp.sendCode({ email: "invalid-email" }, view);
 
       // Then
-      expect(view.state.fieldErrors).toEqual({
+      expect(view.observedState.fieldErrors).toEqual({
         email: "メールアドレスの形式が正しくありません。",
       });
       expect(events).toEqual([]);
@@ -125,7 +129,7 @@ describe("サインアップの手続き", () => {
       await signUp.sendCode({ email }, view);
 
       // Then
-      expect(view.state.fieldErrors).toEqual({
+      expect(view.observedState.fieldErrors).toEqual({
         captcha: "セキュリティチェックが完了していません。",
       });
       expect(events).toEqual([]);
@@ -195,8 +199,8 @@ describe("サインアップの手続き", () => {
         // Then
         expect(events).toEqual([{ type: "failed", failure }]);
         expect(resetCheck).not.toHaveBeenCalled();
-        expect(view.state.captchaToken).toBe("first-token");
-        expect(view.state.pending).toBeNull();
+        expect(view.observedState.captchaToken).toBe("first-token");
+        expect(view.observedState.pending).toBeNull();
       },
     );
 
@@ -233,9 +237,9 @@ describe("サインアップの手続き", () => {
       // Then
       expect(events.at(-1)).toEqual({ type: "refused", failure });
       expect(order.at(-1)).toBe("resetCheck");
-      expect(view.state.captchaToken).toBeNull();
-      expect(view.state.step).toBe("email");
-      expect(view.state.pending).toBeNull();
+      expect(view.observedState.captchaToken).toBeNull();
+      expect(view.observedState.step).toBe("email");
+      expect(view.observedState.pending).toBeNull();
     });
   });
 
@@ -311,7 +315,7 @@ describe("サインアップの手続き", () => {
       );
       expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds");
       expect(events).toEqual([{ type: "passwordSet" }]);
-      expect(view.state.pending).toBe("setPassword");
+      expect(view.observedState.pending).toBe("setPassword");
     });
 
     it("弱いパスワードで拒否された後の成功では、遷移の前にpasswordSetを送り、遷移の中ではエラーが消えて実行中のままである", async () => {
@@ -331,8 +335,8 @@ describe("サインアップの手続き", () => {
       navigation.go.mockImplementation(() => {
         seen.push({
           events: types(events),
-          error: view.state.error,
-          pending: view.state.pending,
+          error: view.observedState.error,
+          pending: view.observedState.pending,
         });
       });
 
@@ -362,10 +366,10 @@ describe("サインアップの手続き", () => {
 
       // Then
       expect(types(events)).toEqual(["passwordSet", "failed"]);
-      expect(view.state.error).toBe(
+      expect(view.observedState.error).toBe(
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
       );
-      expect(view.state.pending).toBeNull();
+      expect(view.observedState.pending).toBeNull();
     });
 
     it("同じタスクで続けて2回呼んでも、2回目は実行中を見て拒否され、設定と遷移は1回になる", async () => {
@@ -417,7 +421,7 @@ describe("サインアップの手続き", () => {
         email,
         code: "123456",
       });
-      expect(view.state.step).toBe("password");
+      expect(view.observedState.step).toBe("password");
     });
   });
 
@@ -567,20 +571,20 @@ describe("サインアップの手続き", () => {
 
       // When
       await signUp.sendCode({ email }, view);
-      const afterRegistered = view.state;
+      const afterRegistered = view.observedState;
       await signUp.sendCode({ email: "new@example.com" }, view);
-      const afterSent = view.state;
+      const afterSent = view.observedState;
       await signUp.verifyCode(
         { email: "new@example.com", code: "123456" },
         view,
       );
-      const afterExpired = view.state;
+      const afterExpired = view.observedState;
       await signUp.verifyCode(
         { email: "new@example.com", code: "123456" },
         view,
       );
       await signUp.setPassword({ password: "password1" }, view);
-      const afterWeak = view.state;
+      const afterWeak = view.observedState;
       await signUp.setPassword({ password: "password1" }, view);
 
       // Then

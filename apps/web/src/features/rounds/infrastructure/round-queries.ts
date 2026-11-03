@@ -7,7 +7,7 @@ import type {
   RoundDetailData,
   RoundDetailsData,
   RoundQueries,
-} from "../application/fetch-round-detail";
+} from "../application/round-fetching";
 import { foldFailures, type ResponseLike } from "../domain/fetch-result";
 import type { PresetRecord } from "../domain/preset";
 import { newestById } from "../domain/round-base";

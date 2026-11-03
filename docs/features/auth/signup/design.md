@@ -38,8 +38,8 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。コードの目的`sign-up`の`signInWithOtp`、`verifyOtp`、`updateUser`の呼び出しを含む。呼び出しの結果は`CallResult`の値で返し、応答が無かった場合(接続を作れない、呼び出しが投げた)は`unreachable`にする。
 - `src/features/auth/infrastructure/supabase-registration-check.ts`: 管理者キーで確認済みかを調べる登録済み判定。利用者が見つからないエラー(`user_not_found`)だけを未登録とし、それ以外は投げる。
 - `src/features/auth/ui/otp-email-step.tsx`、`otp-code-step.tsx`: メール入力とコード入力の段階の描画。パスワード再設定も使う。
-- `src/hooks/use-countdown.ts`: 再送できるまでの秒数を1秒ごとに進める。
-- `src/app/(auth)/layout.tsx`、`src/components/auth-header.tsx`、`src/components/turnstile.tsx`: 認証画面の共通部品と枠。
+- `src/features/auth/application/password-setup.ts`の`tickCooldown`: 再送できるまでの秒数を進める1秒の予約(`Clock`)。画面の部品`password-setup-form.tsx`が、残りが変わるたびに予約し直す。
+- `src/app/(auth)/layout.tsx`、`src/features/auth/ui/auth-header.tsx`、`src/features/auth/ui/turnstile.tsx`: 認証画面の共通部品と枠。
 - `supabase/migrations/20261016000000_users.sql`: `auth.users`のINSERTで`public.users`を作るトリガー。
 
 契約は次のとおりである。

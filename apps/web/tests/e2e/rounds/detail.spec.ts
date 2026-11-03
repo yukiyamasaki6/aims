@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { roundPath } from "@/features/rounds/domain/round-routes";
 import { expect, test } from "../fixtures";
 import {
   getSharedEmail,
@@ -120,7 +121,7 @@ async function completeRound(roundId: string) {
   await updateRound(supabase, roundId, { status: "completed" });
 }
 
-const MISSING_ROUND_PATH = "/rounds/00000000-0000-0000-0000-000000000000";
+const MISSING_ROUND_PATH = roundPath("00000000-0000-0000-0000-000000000000");
 const ROUND_DETAIL_REST = "**/rest/v1/rounds?*";
 
 test("存在しないラウンドを開くと、枠内に「ラウンドが見つかりません。」と「一覧へ戻る」リンクが表示される", async ({
@@ -293,7 +294,7 @@ test("他の端末で記録した入力中のラウンドは、オンライン�
   await expect(page.getByTestId("score-button-9")).toBeVisible();
 });
 
-// src/features/fetch-result/fetch-content.tsのFALLBACK_WAIT_MS。
+// src/features/rounds/domain/fetch-result.tsのFALLBACK_WAIT_MS。
 const FALLBACK_WAIT_MS = 1_000;
 // 待ちの後の描画とブラウザ・CIの揺れの余裕。
 const RENDER_MARGIN_MS = 500;

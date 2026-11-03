@@ -2,13 +2,13 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-import { Skeleton } from "@/components/ui/skeleton";
 import type { LoadedRoundDetail } from "../application/round-detail-store";
 import { roundIdOfPath } from "../domain/round-routes";
 import { FetchState } from "./fetch-state";
 import { RoundDetailFrame } from "./round-detail-frame";
 import { useRoundDetailStore } from "./rounds-context";
 import { ScorecardClient } from "./scorecard-client";
+import { Skeleton } from "./skeleton";
 import { useCreationGone } from "./use-creation-gone";
 import { useFetchResult } from "./use-fetch-result";
 

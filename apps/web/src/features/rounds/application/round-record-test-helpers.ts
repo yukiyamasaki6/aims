@@ -6,13 +6,18 @@ import type { RoundBaseRecord } from "../domain/round-base";
 import { roundStreamRules } from "../domain/round-retention";
 import type { SyncOperation } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
-import { createRoundEditing } from "./edit-round";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
-import type { RoundFetching } from "./fetch-round-detail";
 import { createNewRoundStore } from "./new-round-store";
+import {
+  createOperationSending,
+  type RoundTransport,
+  type SendOutcome,
+} from "./operation-sending";
 import { createRefreshRequests } from "./refresh-requests";
-import { createRefreshRoundBases } from "./refresh-round-bases";
+import { createRoundBaseRefreshing } from "./round-base-refreshing";
 import { createRoundDetailStore } from "./round-detail-store";
+import { createRoundEditing } from "./round-editing";
+import type { RoundFetching } from "./round-fetching";
 import { createRoundReconciliation } from "./round-reconciliation";
 import {
   createRoundRecordHub,
@@ -20,11 +25,6 @@ import {
   type RecordMessage,
 } from "./round-record-hub";
 import { createRoundsListStore } from "./rounds-list-store";
-import {
-  createSendOperations,
-  type RoundTransport,
-  type SendOutcome,
-} from "./send-operations";
 
 // 端末の保存の、ラウンドの規則を使うメモリの実装。複数のタブで共有できる。
 export function createMemoryRoundStore() {
@@ -206,8 +206,8 @@ export function createTestReconciliation(
   const reconciliation = createRoundReconciliation({
     hub,
     requests,
-    send: createSendOperations({ hub, transport }),
-    refresh: createRefreshRoundBases({
+    send: createOperationSending({ hub, transport }),
+    refresh: createRoundBaseRefreshing({
       hub,
       requests,
       fetching: fetching as unknown as RoundFetching,

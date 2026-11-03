@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, StrictMode, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import type { CallResult } from "../application/call-result";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import { createSignUp } from "../application/sign-up";
@@ -28,7 +29,7 @@ const turnstile = vi.hoisted(() => ({
   onVerify: undefined as ((token: string | null) => void) | undefined,
   reset: vi.fn(),
 }));
-vi.mock("@/components/turnstile", () => ({
+vi.mock("./turnstile", () => ({
   Turnstile: forwardRef<
     unknown,
     { onVerify: (token: string | null) => void; error?: string }
@@ -48,12 +49,13 @@ type User = ReturnType<typeof userEvent.setup>;
 
 function renderForm(options?: { strict?: boolean }) {
   const signUp = createSignUp({
+    clock: createBrowserClock(),
     authenticator: auth,
     registration: auth,
-    navigation: nav,
+    pageNavigation: { go: nav.go },
     protectedPath: "/rounds",
   });
-  const form = <SignUpForm signUp={signUp} />;
+  const form = <SignUpForm signUp={signUp} siteKey="site-key" />;
   return render(options?.strict ? <StrictMode>{form}</StrictMode> : form);
 }
 

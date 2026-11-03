@@ -5,4 +5,4 @@ export type {
 export type { IdentityReader } from "./application/identity-reader";
 export type { SessionReader } from "./application/session";
 export { unconfirmedMessage } from "./domain/auth-failure";
-export { destinationOf, SIGN_UP_PATH } from "./domain/routes";
+export { destinationOf, SIGN_UP_PATH } from "./domain/auth-routes";

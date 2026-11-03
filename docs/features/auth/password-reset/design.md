@@ -33,12 +33,12 @@
 - `src/features/auth/application/password-change.ts`: サーバーの手続き。パスワードの変更と、成功したときの全ての端末のサインインの終了の順序を持ち、画面の手続きの約束`PasswordChange`を満たす。全端末のサインインの終了の約束(`SignOutEverywhere`)を持つ。
 - `src/features/auth/application/password-setup.ts`、`password-setup-authenticator.ts`: サインアップと共有する、手続きの共通の順序(操作の開始、コードの送信の依頼、再送、確認、パスワード設定の依頼)と、認証サービスへ頼むことの約束。
 - `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、開始の命令(`beginSendCode`ほか)が、操作の可否と入力の検証の順序、確認・再送・戻るの排他を守って`Start`を返す。事実の遷移でトークンの消費を守る。サインアップと共有する。
-- `src/features/auth/domain/password.ts`、`auth-code.ts`、`email-address.ts`、`captcha-token.ts`、`auth-failure.ts`、`routes.ts`: パスワードの強さ、認証コードと再送の待ち時間、メールアドレス、セキュリティチェック、失敗の種類、遷移先の規則と文言(値オブジェクト)。
+- `src/features/auth/domain/password.ts`、`auth-code.ts`、`email-address.ts`、`captcha-token.ts`、`auth-failure.ts`、`auth-routes.ts`: パスワードの強さ、認証コードと再送の待ち時間、メールアドレス、セキュリティチェック、失敗の種類、遷移先の規則と文言(値オブジェクト)。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。画面はブラウザの接続で`resetPasswordForEmail`、`verifyOtp`を、要求の入口はサーバーの接続で`updateUser`と`signOut`(範囲`global`)を使う。応答が無かった場合(接続を作れない、呼び出しが投げた)は、`unreachable`として返す。
 - `src/lib/supabase/infrastructure/server.ts`: サーバーでの接続(要求の利用者のセッション)。
 - `src/features/auth/infrastructure/browser-page-load.ts`: `window.location.assign`によるページ全体の読み込み。サインアウトのセッション喪失の遷移（置き換え、今の場所）も同じ実装が満たす。
-- `src/hooks/use-countdown.ts`: 再送できるまでの秒数を1秒ごとに進める。
-- `src/app/(auth)/layout.tsx`、`src/components/auth-header.tsx`、`src/components/turnstile.tsx`: 認証画面の共通部品と枠。
+- `src/features/auth/application/password-setup.ts`の`tickCooldown`: 再送できるまでの秒数を進める1秒の予約(`Clock`)。画面の部品`password-setup-form.tsx`が、残りが変わるたびに予約し直す。
+- `src/app/(auth)/layout.tsx`、`src/features/auth/ui/auth-header.tsx`、`src/features/auth/ui/turnstile.tsx`: 認証画面の共通部品と枠。
 
 契約は次のとおりである。
 
@@ -58,7 +58,7 @@
 | パスワードの変更と全ての端末のサインインの終了を、Server Actionの1回の要求にする | ブラウザが順に頼むと、変更の応答の後に画面を閉じたとき、終了が頼まれないため。管理者の鍵は使わず、要求の利用者のセッションで頼む。サーバー用に別の実装を作ると同じ頼みごとの呼び出しが2か所になるため採らない | 認証サービスが、パスワードの変更で全てのセッションを終えるようになったとき |
 | 集約、手続きの共通の順序、画面の骨組みをサインアップと共有し、再設定だけの動作は再設定の手続きと実装に置く | 認証コードでの本人確認とパスワード設定の規則が変わる理由が同じで、複製を残す理由が無いため。登録の判定の有無、コードの種類、設定後の動作は、共有の部品に分岐として入れない | 再設定とサインアップの規則が分かれるとき |
 | 確認・再送・戻るを排他にし、実行中の操作を集約の1つの値で守る | 並行操作で状態が壊れたため、確認中と再送中を独立させる方式をやめた。詳細: #545 | 応答を世代管理する方式にするとき |
-| ページ全体の読み込みを再設定の手続きの約束にし、`Navigation`に足さない | 再設定だけが使う操作を、サインインの汎用の約束に集めないため。前の画面の状態とクライアントのキャッシュを捨てるため、routerの遷移は使わない。セッション喪失の遷移（`replace`、今の場所）は別の約束`PageReplace`にし、実装だけを共有する。約束の置き場は、方針のR02の読み（使い手の手続きの数。`Navigation`は2つの手続きが使い、`PageLoad`と`PageReplace`は使い手が1つ）で決める | `Navigation`の`go`をページ全体の読み込みにするとき |
+| ページ全体の読み込みを再設定の手続きの約束にし、`PageNavigation`に足さない | 再設定だけが使う操作を、サインインの汎用の約束に集めないため。前の画面の状態とクライアントのキャッシュを捨てるため、routerの遷移は使わない。セッション喪失の遷移（`replace`、今の場所）は別の約束`PageReplace`にし、実装だけを共有する。約束の置き場は、方針のR02の読み（使い手の手続きの数。`PageNavigation`は共有の技術の約束で、遷移元は`ReturnToReader`で別に読み、`PageLoad`と`PageReplace`は使い手が1つ）で決める | `PageNavigation`の`go`をページ全体の読み込みにするとき |
 | ネイティブの`disabled`、`required`、`minLength`を使わず、クライアント検証と`aria-disabled`を使う | 理由を利用者へ伝え、E2Eでの二重送信を防ぐため | 検証の理由を別の方法で利用者へ伝えるとき |
 | パスワードの長さを`maxLength`でなく送信時に検証する。メールアドレスとコードは、入力欄の`maxLength`で入力時に制限し、送信時にも検証する | Playwrightの`fill()`が`maxLength`で切り詰めるため。サインインのパスワード欄には適用しない | パスワード規則を変えるとき |
 | 認証済みのリダイレクトを`proxy.ts`へ集約し、画面ごとのE2Eは残す | 実装を一箇所にまとめつつ、各画面の挙動を保証するため | ガードの実装を変えるとき |

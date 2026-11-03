@@ -5,28 +5,33 @@ import { type ReactNode, useEffect, useState } from "react";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { createUpdateActivation } from "@/features/offline-pwa/application/update-activation";
+import { createBrowserLinkClicks } from "@/features/offline-pwa/infrastructure/browser-link-clicks";
+import { createBrowserServiceWorker } from "@/features/offline-pwa/infrastructure/browser-service-worker";
+import { SwUpdateActivator } from "@/features/offline-pwa/ui/sw-update-activator";
 import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
 import { createBrowserSenderLock } from "@/features/round-sync/infrastructure/browser-sender-lock";
 import { createBrowserVisibility } from "@/features/round-sync/infrastructure/browser-visibility";
 import { RoundBaseRefresher } from "@/features/round-sync/ui/round-base-refresher";
-import { createPresetDeletion } from "@/features/rounds/application/delete-preset";
-import { createRoundDeletion } from "@/features/rounds/application/delete-round";
-import { createRoundEditing } from "@/features/rounds/application/edit-round";
-import { createContentFetcher } from "@/features/rounds/application/fetch-content";
-import { createRoundFetching } from "@/features/rounds/application/fetch-round-detail";
-import { createRoundLeaving } from "@/features/rounds/application/leave-round";
+import { createContentFetcher } from "@/features/rounds/application/content-fetcher";
 import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
+import { createOperationSending } from "@/features/rounds/application/operation-sending";
+import { createPresetDeletion } from "@/features/rounds/application/preset-deletion";
+import { createPresetSaving } from "@/features/rounds/application/preset-saving";
 import { createRefreshRequests } from "@/features/rounds/application/refresh-requests";
-import { createRefreshRoundBases } from "@/features/rounds/application/refresh-round-bases";
+import { createRoundBaseRefreshing } from "@/features/rounds/application/round-base-refreshing";
+import { createRoundDeletion } from "@/features/rounds/application/round-deletion";
 import { createRoundDetailStore } from "@/features/rounds/application/round-detail-store";
+import { createRoundEditing } from "@/features/rounds/application/round-editing";
+import { createRoundFetching } from "@/features/rounds/application/round-fetching";
+import { createRoundLeaving } from "@/features/rounds/application/round-leaving";
 import { createRoundReconciliation } from "@/features/rounds/application/round-reconciliation";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
+import { createRoundStart } from "@/features/rounds/application/round-start";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
-import { createPresetSaving } from "@/features/rounds/application/save-preset";
-import { createSendOperations } from "@/features/rounds/application/send-operations";
-import { createRoundStart } from "@/features/rounds/application/start-round";
+import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-result";
 import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
@@ -39,10 +44,6 @@ import { createRoundOpTransport } from "@/features/rounds/infrastructure/round-o
 import { createRoundQueries } from "@/features/rounds/infrastructure/round-queries";
 import type { RoundsDbSchema } from "@/features/rounds/infrastructure/rounds-db-schema";
 import {
-  createRouterNavigation,
-  type PageRouter,
-} from "@/features/rounds/infrastructure/router-navigation";
-import {
   NewRoundStoreProvider,
   RoundDetailStoreProvider,
   RoundsListStoreProvider,
@@ -50,12 +51,15 @@ import {
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
+import {
+  createRouterPageNavigation,
+  type PageRouter,
+} from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import {
   createSupabaseDatabase,
   narrowDatabase,
 } from "@/lib/supabase/infrastructure/database";
-import { SwUpdateActivator } from "./sw-update-activator";
 
 // 入力(認証、識別情報の保存、接続、時計、データベース、遷移)。実行環境の大域の名前に触る実装は、開始の後に初めて触る(事前描画でも生成できる)。
 // routerは画面のパッケージの遷移の部品で、アプリで1つ。
@@ -75,7 +79,7 @@ function composeInputs(router: PageRouter) {
     database: narrowDatabase<RoundsDbSchema>(
       createSupabaseDatabase(createClient),
     ),
-    navigation: createRouterNavigation(router),
+    pageNavigation: createRouterPageNavigation(router),
   };
 }
 
@@ -101,11 +105,11 @@ function composeRecords(inputs: Inputs) {
   const reconciliation = createRoundReconciliation({
     hub,
     requests,
-    send: createSendOperations({
+    send: createOperationSending({
       hub,
       transport: createRoundOpTransport(database),
     }),
-    refresh: createRefreshRoundBases({ hub, fetching, requests }),
+    refresh: createRoundBaseRefreshing({ hub, fetching, requests }),
   });
   return { hub, requests, snapshots, fetching, reconciliation };
 }
@@ -114,7 +118,7 @@ type Records = ReturnType<typeof composeRecords>;
 
 // 窓口(手続きと、一覧、作成、詳細の窓口)。
 function composeStores(inputs: Inputs, records: Records) {
-  const { signIn, connectivity, clock, database, navigation } = inputs;
+  const { signIn, connectivity, clock, database, pageNavigation } = inputs;
   const { hub, requests, snapshots, fetching } = records;
   const ids = createBrowserUniqueIds();
   const commands = createPresetCommands(database);
@@ -127,13 +131,19 @@ function composeStores(inputs: Inputs, records: Records) {
       clock,
       connectivity,
       ids,
-      leaving: createRoundLeaving({ hub, ids, navigation, deletion }),
+      leaving: createRoundLeaving({ hub, ids, pageNavigation, deletion }),
       editing: createRoundEditing({ hub, ids }),
       presetSaving: createPresetSaving({ signIn, commands, fetching }),
     }),
     newRoundStore: createNewRoundStore({
       fetching,
-      roundStart: createRoundStart({ hub, signIn, ids, clock, navigation }),
+      roundStart: createRoundStart({
+        hub,
+        signIn,
+        ids,
+        clock,
+        pageNavigation,
+      }),
       presetDeletion: createPresetDeletion({ signIn, commands, snapshots }),
       connectivity,
     }),
@@ -174,6 +184,18 @@ function composeSync(inputs: Inputs, records: Records) {
   return { sync, triggers };
 }
 
+// オフラインとアプリの更新(Service Workerの更新の切り替え)。
+function composeOffline(inputs: Inputs, records: Records) {
+  const swUpdate = createUpdateActivation({
+    host: createBrowserServiceWorker(),
+    links: createBrowserLinkClicks(),
+    persistence: records.hub,
+    clock: inputs.clock,
+    deadlineMs: FALLBACK_WAIT_MS,
+  });
+  return { swUpdate };
+}
+
 // アプリで1つの部品を、1度だけ生成して結ぶ。
 function composeApp(router: PageRouter) {
   const inputs = composeInputs(router);
@@ -183,6 +205,7 @@ function composeApp(router: PageRouter) {
     hub: records.hub,
     ...composeStores(inputs, records),
     ...composeSync(inputs, records),
+    ...composeOffline(inputs, records),
   };
 }
 
@@ -193,13 +216,14 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
   const [app] = useState(() => composeApp(router));
   useEffect(() => app.localIdentity.start(), [app]);
   useEffect(() => app.triggers.start(), [app]);
+  useEffect(() => app.swUpdate.start(), [app]);
 
   return (
     <RoundsListStoreProvider store={app.listStore}>
       <NewRoundStoreProvider store={app.newRoundStore}>
         <RoundDetailStoreProvider store={app.detailStore}>
           <RoundBaseRefresher sync={app.sync} />
-          <SwUpdateActivator whenPersisted={app.hub.whenPersisted} />
+          <SwUpdateActivator activation={app.swUpdate} />
           {children}
         </RoundDetailStoreProvider>
       </NewRoundStoreProvider>

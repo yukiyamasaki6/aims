@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { BrowserContext, Page } from "@playwright/test";
+import {
+  OFFLINE_PATH,
+  shellUrlOf,
+} from "@/features/offline-pwa/domain/offline-routes";
+import { ROUND_FRAME_PATHS } from "@/features/rounds/domain/round-routes";
 import { expect, test } from "../fixtures";
 import {
   getSharedEmail,
@@ -74,11 +79,7 @@ async function precachedUrls(page: Page): Promise<string[]> {
 }
 
 // プリキャッシュに入る画面の枠。proxy.tsの対象外の/__shell/*で配られる。
-const FRAME_PATHS = [
-  "/__shell/rounds",
-  "/__shell/rounds/new",
-  "/__shell/rounds/_",
-];
+const FRAME_PATHS = ROUND_FRAME_PATHS.map(shellUrlOf);
 
 // 新しいビルドのService Workerが、プリキャッシュ対象の枠をこの目印付きで保存する。
 // 遷移先が新しいビルドの枠で表示されたかを、読み込んだ文書の本文で確かめるため。
@@ -94,7 +95,7 @@ const NEW_SW_URL = "/sw-e2e-new.js";
 
 async function routeNewBuild(page: Page, context: BrowserContext) {
   const urls = await precachedUrls(page);
-  const revisions = ["/offline", ...FRAME_PATHS].map((path) => {
+  const revisions = [OFFLINE_PATH, ...FRAME_PATHS].map((path) => {
     const revision = urls
       .find((url) => url.includes(`${path}?__WB_REVISION__=`))
       ?.split("__WB_REVISION__=")[1];

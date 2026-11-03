@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import type { AuthChange, SessionStatus } from "../domain/auth-change";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import type { CallResult } from "./call-result";
@@ -30,13 +31,9 @@ function setup(
   } = {},
 ) {
   const listeners: Array<(event: AuthChange) => void> = [];
-  const onlineListeners: Array<() => void> = [];
   const unsubscribe = vi.fn();
-  const stopOnline = vi.fn();
-  const state: { status: SessionStatus; offline: boolean } = {
-    status: "authenticated",
-    offline: options.offline ?? false,
-  };
+  const connectivity = createFakeConnectivity(options.offline ?? false);
+  const state: { status: SessionStatus } = { status: "authenticated" };
   const check = options.check ?? (async () => state.status);
   const signOutHere = options.signOutHere ?? (async () => null);
   const authority = {
@@ -57,17 +54,7 @@ function setup(
   };
   const session = createSession({
     authenticator: authority,
-    connectivity: {
-      isOffline: () => state.offline,
-      onOnline: (listener) => {
-        onlineListeners.push(listener);
-        return () => {
-          onlineListeners.splice(onlineListeners.indexOf(listener), 1);
-          stopOnline();
-        };
-      },
-      onOffline: () => () => {},
-    },
+    connectivity,
     pageReplace: page,
     protectedPath: options.protectedPath ?? "/rounds",
   });
@@ -77,14 +64,11 @@ function setup(
     page,
     state,
     unsubscribe,
-    stopOnline,
+    connectivity,
     emit(event: AuthChange) {
       for (const listener of listeners) listener(event);
     },
-    goOnline() {
-      state.offline = false;
-      for (const listener of onlineListeners) listener();
-    },
+    goOnline: () => connectivity.goOnline(),
   };
 }
 
@@ -649,15 +633,16 @@ describe("セッション喪失の見張り", () => {
   describe("やめた後", () => {
     it("認証状態の購読と、通信が戻る通知を解除する", () => {
       // Given
-      const { session, unsubscribe, stopOnline } = setup();
+      const { session, unsubscribe, connectivity } = setup();
       const stop = session.watch();
+      expect(connectivity.subscribers().online).toBe(1);
 
       // When
       stop();
 
       // Then
       expect(unsubscribe).toHaveBeenCalledTimes(1);
-      expect(stopOnline).toHaveBeenCalledTimes(1);
+      expect(connectivity.subscribers().online).toBe(0);
     });
 
     it("signed-outが来ても、移らない", async () => {

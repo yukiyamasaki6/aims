@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRoundEditing } from "@/features/rounds/application/edit-round";
 import { createFakeUniqueIds } from "@/features/rounds/application/fake-unique-ids-test-helpers";
+import {
+  createOperationSending,
+  type SendOutcome,
+} from "@/features/rounds/application/operation-sending";
+import { createRefreshRequests } from "@/features/rounds/application/refresh-requests";
+import { createRoundBaseRefreshing } from "@/features/rounds/application/round-base-refreshing";
+import { createRoundDetailStore } from "@/features/rounds/application/round-detail-store";
+import { createRoundEditing } from "@/features/rounds/application/round-editing";
 import type {
   FetchedRoundDetail,
   RoundFetching,
-} from "@/features/rounds/application/fetch-round-detail";
-import { createRefreshRequests } from "@/features/rounds/application/refresh-requests";
-import { createRefreshRoundBases } from "@/features/rounds/application/refresh-round-bases";
-import { createRoundDetailStore } from "@/features/rounds/application/round-detail-store";
+} from "@/features/rounds/application/round-fetching";
 import { createRoundReconciliation } from "@/features/rounds/application/round-reconciliation";
 import {
   appliedOutcome,
@@ -15,10 +19,6 @@ import {
   createTestRoundHub,
 } from "@/features/rounds/application/round-record-test-helpers";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
-import {
-  createSendOperations,
-  type SendOutcome,
-} from "@/features/rounds/application/send-operations";
 import type { FetchResult } from "@/features/rounds/domain/fetch-result";
 import {
   roundBase,
@@ -66,11 +66,11 @@ function rig() {
   const reconciliation = createRoundReconciliation({
     hub,
     requests,
-    send: createSendOperations({
+    send: createOperationSending({
       hub,
       transport: { send: vi.fn(() => new Promise<never>(() => {})) },
     }),
-    refresh: createRefreshRoundBases({
+    refresh: createRoundBaseRefreshing({
       hub,
       requests,
       fetching: fetching as unknown as RoundFetching,
@@ -292,8 +292,8 @@ describe("送る役の引き継ぎ", () => {
     const reconciliation = createRoundReconciliation({
       hub,
       requests,
-      send: createSendOperations({ hub, transport }),
-      refresh: createRefreshRoundBases({
+      send: createOperationSending({ hub, transport }),
+      refresh: createRoundBaseRefreshing({
         hub,
         requests,
         fetching: {

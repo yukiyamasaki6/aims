@@ -2,12 +2,12 @@
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import type { FormEvent, ReactNode, RefObject } from "react";
-import { AuthHeader } from "@/components/auth-header";
-import { Turnstile } from "@/components/turnstile";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import { AuthField } from "./auth-field";
+import { AuthHeader } from "./auth-header";
+import { Turnstile } from "./turnstile";
 
 type OtpEmailStepProps = {
   // エラー文の要素のidの接頭辞(`${idPrefix}-email-error`)。
@@ -23,6 +23,7 @@ type OtpEmailStepProps = {
   error: string | null;
   hydrated: boolean;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
+  siteKey: string | undefined;
   checkRef: RefObject<TurnstileInstance | undefined>;
   onCheck: (token: string | null) => void;
   // セキュリティチェックが完了している(トークンがある)か。
@@ -41,6 +42,7 @@ export function OtpEmailStep({
   error,
   hydrated,
   onSubmit,
+  siteKey,
   checkRef,
   onCheck,
   checked,
@@ -67,7 +69,12 @@ export function OtpEmailStep({
             />
           )}
         </AuthField>
-        <Turnstile ref={checkRef} onVerify={onCheck} error={captchaError} />
+        <Turnstile
+          siteKey={siteKey}
+          ref={checkRef}
+          onVerify={onCheck}
+          error={captchaError}
+        />
         <BusyButton
           type="submit"
           data-captcha-ready={checked}

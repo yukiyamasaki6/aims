@@ -1,11 +1,12 @@
 import type { MetadataRoute } from "next";
+import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "AIMS",
     short_name: "AIMS",
     description: "AIMS Web Application",
-    start_url: "/rounds",
+    start_url: ROUNDS_PATH,
     display: "standalone",
     background_color: "#FFFFFF",
     theme_color: "#FFFFFF",

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import {
   beginSignIn,
@@ -21,8 +22,15 @@ function setup(returnTo: string | null = null, protectedPath = "/rounds") {
   const authenticator = {
     signIn: vi.fn(async (): Promise<CallResult> => accepted),
   };
-  const navigation = { returnTo: vi.fn(() => returnTo), go: vi.fn() };
-  const signIn = createSignIn({ authenticator, navigation, protectedPath });
+  const fake = createFakePageNavigation();
+  const returnToReader = { read: vi.fn(() => returnTo) };
+  const navigation = { returnTo: returnToReader.read, go: fake.go };
+  const signIn = createSignIn({
+    authenticator,
+    pageNavigation: fake.pageNavigation,
+    returnToReader,
+    protectedPath,
+  });
   const { events, resetCheck, viewOf, screen } = screenHarness(signInReducer);
   return {
     signIn,
@@ -112,8 +120,8 @@ describe("サインインの手続き", () => {
     const observe = () => {
       seen.push({
         events: actions.map((event) => event.type),
-        error: view.state.error,
-        submitting: view.state.submitting,
+        error: view.observedState.error,
+        submitting: view.observedState.submitting,
       });
     };
     navigation.returnTo.mockImplementation(() => {
@@ -182,8 +190,8 @@ describe("サインインの手続き", () => {
 
       // Then
       expect(authenticator.signIn).not.toHaveBeenCalled();
-      expect(Object.keys(view.state.fieldErrors)).toHaveLength(1);
-      expect(view.state.submitting).toBe(false);
+      expect(Object.keys(view.observedState.fieldErrors)).toHaveLength(1);
+      expect(view.observedState.submitting).toBe(false);
       expect(actions).toEqual([]);
       expect(resetCheck).not.toHaveBeenCalled();
     },
@@ -202,8 +210,8 @@ describe("サインインの手続き", () => {
     // Then
     expect(actions).toEqual([{ type: "refused", failure: failure401 }]);
     expect(resetCheck).toHaveBeenCalledOnce();
-    expect(view.state.captchaToken).toBeNull();
-    expect(view.state.error).toBe(
+    expect(view.observedState.captchaToken).toBeNull();
+    expect(view.observedState.error).toBe(
       "メールアドレスまたはパスワードが間違っています。",
     );
     expect(navigation.go).not.toHaveBeenCalled();
@@ -227,11 +235,11 @@ describe("サインインの手続き", () => {
       // Then
       expect(actions).toEqual([{ type: "failed", failure: UNREACHABLE }]);
       expect(resetCheck).not.toHaveBeenCalled();
-      expect(view.state.captchaToken).toBe("first-token");
-      expect(view.state.error).toBe(
+      expect(view.observedState.captchaToken).toBe("first-token");
+      expect(view.observedState.error).toBe(
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
       );
-      expect(view.state.submitting).toBe(false);
+      expect(view.observedState.submitting).toBe(false);
       expect(navigation.go).not.toHaveBeenCalled();
     },
   );
@@ -267,7 +275,7 @@ describe("サインインの手続き", () => {
 
     // Then
     expect(authenticator.signIn).toHaveBeenCalledOnce();
-    expect(view.state.fieldErrors).toEqual({
+    expect(view.observedState.fieldErrors).toEqual({
       captcha: "セキュリティチェックが完了していません。",
     });
   });
@@ -363,11 +371,11 @@ describe("サインインの手続き", () => {
         { type: "refused", failure: UNREACHABLE },
       ]);
       expect(resetCheck).toHaveBeenCalledOnce();
-      expect(view.state.error).toBe(
+      expect(view.observedState.error).toBe(
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
       );
-      expect(view.state.captchaToken).toBeNull();
-      expect(view.state.submitting).toBe(false);
+      expect(view.observedState.captchaToken).toBeNull();
+      expect(view.observedState.submitting).toBe(false);
     },
   );
 });

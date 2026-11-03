@@ -15,7 +15,7 @@ export type ResponseLike<T> = {
   status: number;
 };
 
-// 認証の拒否。セッションの問題かは応答だけでは決まらないため、取得の側で更新を強制して確かめる(fetch-content.ts)。
+// 認証の拒否。セッションの問題かは応答だけでは決まらないため、取得の側で更新を強制して確かめる(content-fetcher.ts)。
 export function isAuthRejected(res: ResponseLike<unknown>): boolean {
   return res.status === 401 || res.error?.code === "PGRST301";
 }

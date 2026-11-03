@@ -13,9 +13,9 @@ import {
   type RoundListItem,
 } from "../domain/round-list";
 import { roundIdOfStream, roundStreamId } from "../domain/sync-events";
-import type { RoundDeletion } from "./delete-round";
-import type { RoundFetching } from "./fetch-round-detail";
 import type { RefreshRequests } from "./refresh-requests";
+import type { RoundDeletion } from "./round-deletion";
+import type { RoundFetching } from "./round-fetching";
 import type { HubSnapshot, RoundRecordHub } from "./round-record-hub";
 import { withinFetchTimeout } from "./time-limit";
 import { type WhenOnline, whenOnline } from "./when-online";

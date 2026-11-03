@@ -11,18 +11,25 @@ function setup() {
 }
 
 describe("useScreenView", () => {
-  it("初期の状態がstateとview.stateの両方で返る", () => {
+  it("初期の状態がstateと、beginの命令が受ける状態で返る", () => {
     // Given
 
     // When
     const { result } = setup();
+    let received = 0;
+    act(() => {
+      result.current.view.begin((state) => {
+        received = state;
+        return { kind: "invalid", state } as Start<number, string>;
+      });
+    });
 
     // Then
     expect(result.current.state).toBe(10);
-    expect(result.current.view.state).toBe(10);
+    expect(received).toBe(10);
   });
 
-  it("出来事を送った直後に、再描画を待たずview.stateが最新の値を返す", () => {
+  it("出来事を送った直後に、再描画を待たずbeginの命令が最新の値を受ける", () => {
     // Given
     const { result } = setup();
 
@@ -30,7 +37,10 @@ describe("useScreenView", () => {
     let immediate = 0;
     act(() => {
       result.current.view.dispatch(5);
-      immediate = result.current.view.state;
+      result.current.view.begin((state) => {
+        immediate = state;
+        return { kind: "invalid", state } as Start<number, string>;
+      });
     });
 
     // Then
@@ -43,14 +53,19 @@ describe("useScreenView", () => {
     const { result } = setup();
 
     // When
+    let immediate = 0;
     act(() => {
       result.current.view.dispatch(1);
       result.current.view.dispatch(2);
       result.current.view.dispatch(3);
+      result.current.view.begin((state) => {
+        immediate = state;
+        return { kind: "invalid", state } as Start<number, string>;
+      });
     });
 
     // Then
-    expect(result.current.view.state).toBe(16);
+    expect(immediate).toBe(16);
     expect(result.current.state).toBe(16);
   });
 
@@ -141,15 +156,74 @@ describe("useScreenView", () => {
       // When
       let first: string | null | undefined = null;
       let second: string | null | undefined = null;
+      const received: number[] = [];
+      const recording = (state: number) => {
+        received.push(state);
+        return startOnce(state);
+      };
       act(() => {
-        first = result.current.view.begin(startOnce);
-        second = result.current.view.begin(startOnce);
+        first = result.current.view.begin(recording);
+        second = result.current.view.begin(recording);
       });
 
       // Then
       expect(first).toBe("go");
       expect(second).toBeNull();
+      expect(received).toEqual([10, 11]);
       expect(result.current.state).toBe(11);
+    });
+
+    it("不備で開始できなかった後の再実行が、反映後の状態を受けて開始できる", () => {
+      // Given
+      const { result } = setup();
+      const received: number[] = [];
+      const command = (state: number): Start<number, string> => {
+        received.push(state);
+        return state < 10
+          ? ({ kind: "started", state: state + 1, request: "go" } as const)
+          : ({ kind: "invalid", state: state - 1 } as const);
+      };
+
+      // When
+      let first: string | null = "unset";
+      let second: string | null = "unset";
+      act(() => {
+        first = result.current.view.begin(command);
+        second = result.current.view.begin(command);
+      });
+
+      // Then
+      expect(first).toBeNull();
+      expect(second).toBe("go");
+      expect(received).toEqual([10, 9]);
+      expect(result.current.state).toBe(10);
+    });
+
+    it("実行中として拒否された後に失敗の事実を送ると、続くbeginが解除後の状態を受けて開始できる", () => {
+      // Given
+      const { result } = setup();
+      const command = (state: number): Start<number, string> =>
+        state > 10
+          ? ({ kind: "busy", state } as const)
+          : ({ kind: "started", state: state + 1, request: "go" } as const);
+
+      // When
+      const results: (string | null)[] = [];
+      let received = 0;
+      act(() => {
+        results.push(result.current.view.begin(command));
+        results.push(result.current.view.begin(command));
+        result.current.view.dispatch(-5);
+        result.current.view.begin((state) => {
+          received = state;
+          return command(state);
+        });
+      });
+
+      // Then
+      expect(results).toEqual(["go", null]);
+      expect(received).toBe(6);
+      expect(result.current.state).toBe(7);
     });
 
     it("開始できなくても、結果の状態は反映する(不備を示す)", () => {
@@ -194,7 +268,10 @@ describe("useScreenView", () => {
       view.dispatch("next");
       view.dispatch("next");
       view.dispatch("back");
-      seen = view.state;
+      view.begin((state) => {
+        seen = state;
+        return { kind: "invalid", state } as Start<Flow, string>;
+      });
     });
 
     // Then

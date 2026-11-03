@@ -1,6 +1,7 @@
+import type { Clock } from "@/lib/clock/contract/clock";
 import { UNREACHABLE } from "../domain/auth-failure";
+import { SIGN_IN_PATH } from "../domain/auth-routes";
 import { beginSendCode } from "../domain/password-setup-flow";
-import { SIGN_IN_PATH } from "../domain/routes";
 import type { CallResult } from "./call-result";
 import {
   applyPassword,
@@ -9,6 +10,7 @@ import {
   type PasswordSetupContext,
   type PasswordSetupView,
   resend,
+  tickCooldown,
   verifyCode,
 } from "./password-setup";
 import type { PasswordSetupAuthenticator } from "./password-setup-authenticator";
@@ -21,7 +23,7 @@ export type PasswordChange = {
   change(password: string): Promise<CallResult>;
 };
 
-// ページ全体を読み込み直して進む遷移。履歴に残し、前の画面の状態とクライアントのキャッシュを捨てる(ルーターで進む遷移はNavigation)。
+// ページ全体を読み込み直して進む遷移。履歴に残し、前の画面の状態とクライアントのキャッシュを捨てる(ルーターで進む遷移はPageNavigation)。
 // 例外: 投げることがあり、手続きが通信エラーの失敗として扱う。
 export type PageLoad = { load(path: string): void };
 
@@ -29,21 +31,25 @@ type Dependencies = {
   authenticator: Omit<PasswordSetupAuthenticator, "setPassword">;
   passwordChange: PasswordChange;
   pageLoad: PageLoad;
+  clock: Clock;
 };
 
 export function createResetPassword({
   authenticator,
   passwordChange,
   pageLoad,
+  clock,
 }: Dependencies): PasswordSetup {
   const context: PasswordSetupContext = {
     authenticator,
     purpose: "password-reset",
+    clock,
   };
   return {
     sendCode: (input, view) => sendCode(context, input, view),
     resend: (input, view) => resend(context, input, view),
     verifyCode: (input, view) => verifyCode(context, input, view),
+    tickCooldown: (view) => tickCooldown(context, view),
     setPassword: (input, view) =>
       setPassword(passwordChange, pageLoad, input, view),
   };

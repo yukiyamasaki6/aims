@@ -1,7 +1,7 @@
 import { lostByStatus, type SessionStatus } from "./auth-change";
 import { type AuthFailure, UNREACHABLE } from "./auth-failure";
+import { signInHref } from "./auth-routes";
 import type { Start, Step } from "./flow";
-import { signInHref } from "./routes";
 
 // セッションの終わり(明示のサインアウトと、セッションの喪失)の流れ。開始の可否、終えられたかの判定、遷移は1回を守る集約。
 

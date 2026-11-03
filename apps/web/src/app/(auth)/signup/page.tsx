@@ -3,10 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createSignUp } from "@/features/auth/application/sign-up";
-import { createBrowserNavigation } from "@/features/auth/infrastructure/browser-navigation";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SignUpForm } from "@/features/auth/ui/signup-form";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
+import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
+import { createRouterPageNavigation } from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import { isEmailRegistered } from "./actions";
 
@@ -17,9 +18,15 @@ export default function SignUpPage() {
     createSignUp({
       authenticator: createSupabaseAuth(createClient),
       registration: { isRegistered: isEmailRegistered },
-      navigation: createBrowserNavigation(router),
+      pageNavigation: createRouterPageNavigation(router),
+      clock: createBrowserClock(),
       protectedPath: ROUNDS_PATH,
     }),
   );
-  return <SignUpForm signUp={signUp} />;
+  return (
+    <SignUpForm
+      signUp={signUp}
+      siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+    />
+  );
 }

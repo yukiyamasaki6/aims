@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, StrictMode, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import type { CallResult } from "../application/call-result";
 import { createSignIn } from "../application/sign-in";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
@@ -22,7 +23,7 @@ const widget = vi.hoisted(() => ({
   reset: vi.fn(),
 }));
 
-vi.mock("@/components/turnstile", () => ({
+vi.mock("./turnstile", () => ({
   Turnstile: forwardRef<
     unknown,
     {
@@ -47,13 +48,15 @@ function setup({
   const authenticator = {
     signIn: vi.fn(async (): Promise<CallResult> => accepted),
   };
-  const navigation = { returnTo: vi.fn(() => returnTo), go: vi.fn() };
+  const fake = createFakePageNavigation();
+  const navigation = { go: fake.go };
   const signIn = createSignIn({
     authenticator,
-    navigation,
+    pageNavigation: fake.pageNavigation,
+    returnToReader: { read: () => returnTo },
     protectedPath: "/rounds",
   });
-  const form = <SignInForm signIn={signIn} />;
+  const form = <SignInForm signIn={signIn} siteKey="site-key" />;
   const rendered = render(strict ? <StrictMode>{form}</StrictMode> : form);
   return { signIn, authenticator, navigation, ...rendered };
 }

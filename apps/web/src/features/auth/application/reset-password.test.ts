@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import {
   type AuthFailure,
   NETWORK_ERROR_MESSAGE,
@@ -36,6 +37,7 @@ function setup() {
     authenticator,
     passwordChange,
     pageLoad,
+    clock: createManualClock(),
   });
   return {
     procedure,
@@ -92,8 +94,8 @@ describe("パスワード再設定の手続き", () => {
         captchaToken: "first-token",
       });
       expect(order).toEqual(["codeSent", "resetCheck"]);
-      expect(view.state.step).toBe("code");
-      expect(view.state.captchaToken).toBeNull();
+      expect(view.observedState.step).toBe("code");
+      expect(view.observedState.captchaToken).toBeNull();
     });
 
     it("入力に不備があれば、不備だけを示し、認証サービスを呼ばない", async () => {
@@ -106,7 +108,7 @@ describe("パスワード再設定の手続き", () => {
       await procedure.sendCode({ email: "invalid-email" }, view);
 
       // Then
-      expect(view.state.fieldErrors).toEqual({
+      expect(view.observedState.fieldErrors).toEqual({
         email: "メールアドレスの形式が正しくありません。",
       });
       expect(events).toEqual([]);
@@ -124,7 +126,7 @@ describe("パスワード再設定の手続き", () => {
       await procedure.sendCode({ email }, view);
 
       // Then
-      expect(view.state.fieldErrors).toEqual({
+      expect(view.observedState.fieldErrors).toEqual({
         captcha: "セキュリティチェックが完了していません。",
       });
       expect(events).toEqual([]);
@@ -170,9 +172,9 @@ describe("パスワード再設定の手続き", () => {
       await procedure.sendCode({ email }, view);
 
       // Then
-      expect(view.state.error).toBe(NETWORK_ERROR_MESSAGE);
-      expect(view.state.captchaToken).toBe("first-token");
-      expect(view.state.pending).toBeNull();
+      expect(view.observedState.error).toBe(NETWORK_ERROR_MESSAGE);
+      expect(view.observedState.captchaToken).toBe("first-token");
+      expect(view.observedState.pending).toBeNull();
       expect(resetCheck).not.toHaveBeenCalled();
     });
 
@@ -189,9 +191,9 @@ describe("パスワード再設定の手続き", () => {
       // Then
       expect(events.at(-1)).toEqual({ type: "refused", failure });
       expect(order.at(-1)).toBe("resetCheck");
-      expect(view.state.captchaToken).toBeNull();
-      expect(view.state.step).toBe("email");
-      expect(view.state.pending).toBeNull();
+      expect(view.observedState.captchaToken).toBeNull();
+      expect(view.observedState.step).toBe("email");
+      expect(view.observedState.pending).toBeNull();
     });
 
     it.each([
@@ -245,7 +247,7 @@ describe("パスワード再設定の手続き", () => {
       expect(passwordChange.change).toHaveBeenCalledExactlyOnceWith(password);
       expect(pageLoad.load).toHaveBeenCalledExactlyOnceWith("/signin");
       expect(events).toEqual([{ type: "passwordSet" }]);
-      expect(view.state.pending).toBe("setPassword");
+      expect(view.observedState.pending).toBe("setPassword");
     });
 
     it("弱いパスワードで拒否された後の成功では、遷移の前にpasswordSetを送り、遷移の中ではエラーが消えて実行中のままである", async () => {
@@ -264,8 +266,8 @@ describe("パスワード再設定の手続き", () => {
       pageLoad.load.mockImplementation(() => {
         seen.push({
           events: types(events),
-          error: view.state.error,
-          pending: view.state.pending,
+          error: view.observedState.error,
+          pending: view.observedState.pending,
         });
       });
 
@@ -317,9 +319,9 @@ describe("パスワード再設定の手続き", () => {
         await procedure.setPassword({ password }, view);
 
         // Then
-        expect(view.state.error).toBe(message);
-        expect(view.state.pending).toBeNull();
-        expect(view.state.step).toBe("password");
+        expect(view.observedState.error).toBe(message);
+        expect(view.observedState.pending).toBeNull();
+        expect(view.observedState.step).toBe("password");
         expect(pageLoad.load).not.toHaveBeenCalled();
       },
     );
@@ -361,7 +363,7 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(events).toEqual([]);
-      expect(view.state.fieldErrors.password).toBeDefined();
+      expect(view.observedState.fieldErrors.password).toBeDefined();
       expect(passwordChange.change).not.toHaveBeenCalled();
     });
 
@@ -497,8 +499,8 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(types(events)).toEqual(["passwordSet", "failed"]);
-      expect(view.state.pending).toBeNull();
-      expect(view.state.error).toBe(NETWORK_ERROR_MESSAGE);
+      expect(view.observedState.pending).toBeNull();
+      expect(view.observedState.error).toBe(NETWORK_ERROR_MESSAGE);
     });
 
     it("遷移を呼んだ中で離れ、その遷移が投げたら、遷移の前のpasswordSetのほかに出来事を送らない", async () => {
@@ -550,7 +552,7 @@ describe("パスワード再設定の手続き", () => {
         email,
         code: "123456",
       });
-      expect(view.state.step).toBe("password");
+      expect(view.observedState.step).toBe("password");
     });
   });
 
@@ -581,21 +583,21 @@ describe("パスワード再設定の手続き", () => {
 
       // When
       await procedure.sendCode({ email }, view);
-      const afterRefused = view.state;
+      const afterRefused = view.observedState;
       view.dispatch({ type: "captchaChecked", token: "second-token" });
       await procedure.sendCode({ email: "new@example.com" }, view);
-      const afterSent = view.state;
+      const afterSent = view.observedState;
       await procedure.verifyCode(
         { email: "new@example.com", code: "123456" },
         view,
       );
-      const afterExpired = view.state;
+      const afterExpired = view.observedState;
       await procedure.verifyCode(
         { email: "new@example.com", code: "123456" },
         view,
       );
       await procedure.setPassword({ password }, view);
-      const afterWeak = view.state;
+      const afterWeak = view.observedState;
       await procedure.setPassword({ password }, view);
 
       // Then

@@ -13,13 +13,18 @@ export type Visibility = {
 };
 
 // 契機の受け取り。受けた契機を規則で同期の手続きの操作に変える。
+type SyncTriggers = {
+  // 戻り値は、止める関数。
+  start(): () => void;
+};
+
 export function createSyncTriggers(deps: {
   identityReader: IdentityReader;
   changes: SignInChanges;
   visibility: Visibility;
   connectivity: Connectivity;
   sync: RoundSync;
-}) {
+}): SyncTriggers {
   const { identityReader, changes, visibility, connectivity, sync } = deps;
 
   function handleSignIn(change: SignInChange) {
@@ -30,8 +35,7 @@ export function createSyncTriggers(deps: {
   }
 
   return {
-    // 戻り値は、止める関数。
-    start(): () => void {
+    start() {
       sync.start(identityReader.read());
       const stops = [
         changes.subscribe(handleSignIn),

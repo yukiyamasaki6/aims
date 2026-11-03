@@ -3,29 +3,34 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
+import {
+  createUpdateActivation,
+  type UpdateActivation,
+} from "@/features/offline-pwa/application/update-activation";
 import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
-import { createPresetDeletion } from "@/features/rounds/application/delete-preset";
-import { createRoundDeletion } from "@/features/rounds/application/delete-round";
-import { createRoundEditing } from "@/features/rounds/application/edit-round";
-import { createContentFetcher } from "@/features/rounds/application/fetch-content";
-import { createRoundFetching } from "@/features/rounds/application/fetch-round-detail";
-import { createRoundLeaving } from "@/features/rounds/application/leave-round";
+import { createContentFetcher } from "@/features/rounds/application/content-fetcher";
 import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
+import { createPresetDeletion } from "@/features/rounds/application/preset-deletion";
+import { createPresetSaving } from "@/features/rounds/application/preset-saving";
+import { createRoundDeletion } from "@/features/rounds/application/round-deletion";
 import { createRoundDetailStore } from "@/features/rounds/application/round-detail-store";
+import { createRoundEditing } from "@/features/rounds/application/round-editing";
+import { createRoundFetching } from "@/features/rounds/application/round-fetching";
+import { createRoundLeaving } from "@/features/rounds/application/round-leaving";
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
+import { createRoundStart } from "@/features/rounds/application/round-start";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
-import { createPresetSaving } from "@/features/rounds/application/save-preset";
-import { createRoundStart } from "@/features/rounds/application/start-round";
+import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-result";
 import { roundCreated } from "@/features/rounds/domain/round-op-test-helpers";
 import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
 import { createBrowserUniqueIds } from "@/features/rounds/infrastructure/browser-unique-ids";
 import { createPresetCommands } from "@/features/rounds/infrastructure/preset-commands";
 import { createReferenceSnapshots } from "@/features/rounds/infrastructure/reference-snapshot";
 import { createRoundQueries } from "@/features/rounds/infrastructure/round-queries";
-import { createRouterNavigation } from "@/features/rounds/infrastructure/router-navigation";
 import { useRoundDetailStore } from "@/features/rounds/ui/rounds-context";
+import { createRouterPageNavigation } from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { RootClientEntry } from "./root-client-entry";
 
 // Supabaseクライアントは外部サービスとの境界のため、認証状態の変化を任意に発火できるスタブで模す。
@@ -102,14 +107,35 @@ vi.mock("next/navigation", () => ({ useRouter: () => nav.router }));
 
 // 再読み込みを担う別の入口は別のテストで確かめるため、受け取ったpropsを記録する代役に差し替える。
 const activator = vi.hoisted(() => ({
-  props: [] as { whenPersisted: () => Promise<void> }[],
+  props: [] as { activation: UpdateActivation }[],
 }));
-vi.mock("./sw-update-activator", () => ({
-  SwUpdateActivator: (props: { whenPersisted: () => Promise<void> }) => {
+vi.mock("@/features/offline-pwa/ui/sw-update-activator", () => ({
+  SwUpdateActivator: (props: { activation: UpdateActivation }) => {
     activator.props.push(props);
     return null;
   },
 }));
+vi.mock(
+  "@/features/offline-pwa/application/update-activation",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/offline-pwa/application/update-activation")
+      >();
+    // 起動と停止の呼び出しを観測するため、実物のstartと、その停止関数を記録する関数で包む。
+    return {
+      createUpdateActivation: vi.fn(
+        (...args: Parameters<typeof actual.createUpdateActivation>) => {
+          const activation = actual.createUpdateActivation(...args);
+          return {
+            pathChanged: activation.pathChanged,
+            start: vi.fn(() => vi.fn(activation.start())),
+          };
+        },
+      ),
+    };
+  },
+);
 
 // 生成した部品の引数と実体を観測するため、実物を呼び通す記録に包む。
 type RoundSyncInstance = ReturnType<typeof createRoundSync>;
@@ -161,11 +187,11 @@ vi.mock(
   },
 );
 vi.mock(
-  "@/features/rounds/application/delete-round",
+  "@/features/rounds/application/round-deletion",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/rounds/application/delete-round")
+        typeof import("@/features/rounds/application/round-deletion")
       >();
     return {
       ...actual,
@@ -212,15 +238,15 @@ vi.mock(
   },
 );
 vi.mock(
-  "@/features/rounds/infrastructure/router-navigation",
+  "@/lib/page-navigation/infrastructure/router-page-navigation",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/rounds/infrastructure/router-navigation")
+        typeof import("@/lib/page-navigation/infrastructure/router-page-navigation")
       >();
     return {
       ...actual,
-      createRouterNavigation: vi.fn(actual.createRouterNavigation),
+      createRouterPageNavigation: vi.fn(actual.createRouterPageNavigation),
     };
   },
 );
@@ -260,43 +286,52 @@ vi.mock(
     return { ...actual, createRoundQueries: vi.fn(actual.createRoundQueries) };
   },
 );
-vi.mock("@/features/rounds/application/edit-round", async (importOriginal) => {
+vi.mock(
+  "@/features/rounds/application/round-editing",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/round-editing")
+      >();
+    return { ...actual, createRoundEditing: vi.fn(actual.createRoundEditing) };
+  },
+);
+vi.mock(
+  "@/features/rounds/application/round-leaving",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/round-leaving")
+      >();
+    return { ...actual, createRoundLeaving: vi.fn(actual.createRoundLeaving) };
+  },
+);
+vi.mock(
+  "@/features/rounds/application/preset-saving",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/preset-saving")
+      >();
+    return {
+      ...actual,
+      createPresetSaving: vi.fn(actual.createPresetSaving),
+    };
+  },
+);
+vi.mock("@/features/rounds/application/round-start", async (importOriginal) => {
   const actual =
     await importOriginal<
-      typeof import("@/features/rounds/application/edit-round")
-    >();
-  return { ...actual, createRoundEditing: vi.fn(actual.createRoundEditing) };
-});
-vi.mock("@/features/rounds/application/leave-round", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("@/features/rounds/application/leave-round")
-    >();
-  return { ...actual, createRoundLeaving: vi.fn(actual.createRoundLeaving) };
-});
-vi.mock("@/features/rounds/application/save-preset", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("@/features/rounds/application/save-preset")
-    >();
-  return {
-    ...actual,
-    createPresetSaving: vi.fn(actual.createPresetSaving),
-  };
-});
-vi.mock("@/features/rounds/application/start-round", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("@/features/rounds/application/start-round")
+      typeof import("@/features/rounds/application/round-start")
     >();
   return { ...actual, createRoundStart: vi.fn(actual.createRoundStart) };
 });
 vi.mock(
-  "@/features/rounds/application/delete-preset",
+  "@/features/rounds/application/preset-deletion",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/rounds/application/delete-preset")
+        typeof import("@/features/rounds/application/preset-deletion")
       >();
     return {
       ...actual,
@@ -305,11 +340,11 @@ vi.mock(
   },
 );
 vi.mock(
-  "@/features/rounds/application/fetch-content",
+  "@/features/rounds/application/content-fetcher",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/rounds/application/fetch-content")
+        typeof import("@/features/rounds/application/content-fetcher")
       >();
     return {
       ...actual,
@@ -318,11 +353,11 @@ vi.mock(
   },
 );
 vi.mock(
-  "@/features/rounds/application/fetch-round-detail",
+  "@/features/rounds/application/round-fetching",
   async (importOriginal) => {
     const actual =
       await importOriginal<
-        typeof import("@/features/rounds/application/fetch-round-detail")
+        typeof import("@/features/rounds/application/round-fetching")
       >();
     return {
       ...actual,
@@ -415,14 +450,40 @@ describe("RootClientEntry", () => {
       );
     });
 
-    it("画面の遷移で待機中の新SWを有効にするSwUpdateActivatorを含め、保存の待ちを渡す", () => {
+    it("画面の遷移で待機中の新SWを有効にするSwUpdateActivatorを含め、更新の切り替えの手続きを渡す", () => {
       // Given
       // When
       render(<RootClientEntry>{null}</RootClientEntry>);
 
       // Then
+      expect(createUpdateActivation).toHaveBeenCalledTimes(1);
       expect(activator.props).toHaveLength(1);
-      expect(activator.props[0].whenPersisted).toBeTypeOf("function");
+      expect(activator.props[0].activation).toBe(
+        vi.mocked(createUpdateActivation).mock.results[0].value,
+      );
+    });
+
+    it("更新の切り替えの手続きは、期限に代わりがある待ちの上限(FALLBACK_WAIT_MS)と、アプリの時計、記録のハブの保存の待ちを受ける", () => {
+      // Given
+      // When
+      render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      const deps = vi.mocked(createUpdateActivation).mock.calls[0][0];
+      expect(deps.deadlineMs).toBe(FALLBACK_WAIT_MS);
+      expect(deps.persistence.whenPersisted).toBeTypeOf("function");
+      expect(deps.clock.now()).toBeTypeOf("number");
+    });
+
+    it("起動すると、更新の切り替えの手続きを1回だけ始める", () => {
+      // Given
+      // When
+      render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      const activation = vi.mocked(createUpdateActivation).mock.results[0]
+        .value;
+      expect(activation.start).toHaveBeenCalledTimes(1);
     });
 
     it("サインインしたユーザーを端末ローカルの識別ユーザーとして記録する", () => {
@@ -524,8 +585,8 @@ describe("RootClientEntry", () => {
       rerender(<RootClientEntry>{null}</RootClientEntry>);
 
       // Then
-      expect(createRouterNavigation).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(createRouterNavigation).mock.calls[0][0]).toBe(
+      expect(createRouterPageNavigation).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(createRouterPageNavigation).mock.calls[0][0]).toBe(
         nav.router,
       );
     });
@@ -540,8 +601,8 @@ describe("RootClientEntry", () => {
       // Then
       expect(createRoundStart).toHaveBeenCalledTimes(1);
       const deps = vi.mocked(createRoundStart).mock.calls[0][0];
-      expect(deps.navigation).toBe(
-        vi.mocked(createRouterNavigation).mock.results[0].value,
+      expect(deps.pageNavigation).toBe(
+        vi.mocked(createRouterPageNavigation).mock.results[0].value,
       );
       expect(deps.ids).toBe(
         vi.mocked(createBrowserUniqueIds).mock.results[0].value,
@@ -588,8 +649,8 @@ describe("RootClientEntry", () => {
       expect(deps.ids).toBe(
         vi.mocked(createBrowserUniqueIds).mock.results[0].value,
       );
-      expect(deps.navigation).toBe(
-        vi.mocked(createRouterNavigation).mock.results[0].value,
+      expect(deps.pageNavigation).toBe(
+        vi.mocked(createRouterPageNavigation).mock.results[0].value,
       );
     });
 
@@ -617,9 +678,10 @@ describe("RootClientEntry", () => {
       render(<RootClientEntry>{null}</RootClientEntry>);
 
       // Then
-      expect(createRouterNavigation).toHaveBeenCalledTimes(1);
-      const start = vi.mocked(createRoundStart).mock.calls[0][0].navigation;
-      const leaving = vi.mocked(createRoundLeaving).mock.calls[0][0].navigation;
+      expect(createRouterPageNavigation).toHaveBeenCalledTimes(1);
+      const start = vi.mocked(createRoundStart).mock.calls[0][0].pageNavigation;
+      const leaving =
+        vi.mocked(createRoundLeaving).mock.calls[0][0].pageNavigation;
       expect(leaving).toBe(start);
     });
 
@@ -812,9 +874,12 @@ describe("RootClientEntry", () => {
       await Promise.resolve();
       const outboxWhileSaving = records.outbox("round:round-1");
       let persisted = false;
-      const waiting = activator.props[0].whenPersisted().then(() => {
-        persisted = true;
-      });
+      const waiting = vi
+        .mocked(createUpdateActivation)
+        .mock.calls[0][0].persistence.whenPersisted()
+        .then(() => {
+          persisted = true;
+        });
       await new Promise((resolve) => setTimeout(resolve, 0));
       const persistedBeforeRelease = persisted;
       storage.release?.();
@@ -869,6 +934,21 @@ describe("RootClientEntry", () => {
   });
 
   describe("アンマウント", () => {
+    it("更新の切り替えの手続きの停止関数を呼ぶ", () => {
+      // Given
+      const { unmount } = render(<RootClientEntry>{null}</RootClientEntry>);
+      const activation = vi.mocked(createUpdateActivation).mock.results[0]
+        .value;
+      const stop = vi.mocked(activation.start).mock.results[0].value;
+      expect(stop).not.toHaveBeenCalled();
+
+      // When
+      unmount();
+
+      // Then
+      expect(stop).toHaveBeenCalledTimes(1);
+    });
+
     it("認証状態の変化の購読を、識別情報の記録と同期の契機の2本とも解除する", () => {
       // Given
       const { unmount } = render(<RootClientEntry>{null}</RootClientEntry>);

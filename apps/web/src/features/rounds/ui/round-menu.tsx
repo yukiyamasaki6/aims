@@ -8,7 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "./dropdown-menu";
 import { useRoundDetailStore } from "./rounds-context";
 
 // スコアカードのラウンドのメニューと、そこから開くラウンド削除の確認。

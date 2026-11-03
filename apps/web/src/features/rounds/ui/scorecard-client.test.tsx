@@ -30,8 +30,8 @@ import { useRoundDetailStore } from "@/features/rounds/ui/rounds-context";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
 import { ScorecardClient } from "./scorecard-client";
 
-// 更新の案内は別のテストで確かめるため、何も描かない代役に差し替える。
-vi.mock("@/app/sw-update-activator", () => ({
+// 更新の案内は別のテストで確かめるため、何も描かない代役に差し替える(起動地点のRootClientEntryが描く)。
+vi.mock("@/features/offline-pwa/ui/sw-update-activator", () => ({
   SwUpdateActivator: () => null,
 }));
 

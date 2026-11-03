@@ -2,14 +2,12 @@
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import Link from "next/link";
-import { type RefObject, useState } from "react";
-import { AuthHeader } from "@/components/auth-header";
+import { type RefObject, useEffect, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
-import { PasswordInput } from "@/components/ui/password-input";
-import { useCountdown } from "@/hooks/use-countdown";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { PasswordSetup } from "../application/password-setup";
 import type { ScreenView } from "../application/screen-view";
+import { SIGN_IN_PATH } from "../domain/auth-routes";
 import { PASSWORD_MIN_LENGTH } from "../domain/password";
 import {
   initialPasswordSetupFlow,
@@ -17,10 +15,11 @@ import {
   type PasswordSetupFlow,
   passwordSetupReducer,
 } from "../domain/password-setup-flow";
-import { SIGN_IN_PATH } from "../domain/routes";
 import { AuthField } from "./auth-field";
+import { AuthHeader } from "./auth-header";
 import { OtpCodeStep } from "./otp-code-step";
 import { OtpEmailStep } from "./otp-email-step";
+import { PasswordInput } from "./password-input";
 import { useScreenView } from "./use-screen-view";
 
 // サインインへのリンクの文言。リンク先は経路の規則が持つ。
@@ -45,15 +44,18 @@ type StepProps = {
   copy: PasswordSetupCopy;
   flow: PasswordSetupFlow;
   view: ScreenView<PasswordSetupFlow, PasswordSetupEvent>;
+  siteKey: string | undefined;
 };
 
 // メール入力、コード入力、パスワード設定の3段階の画面。サインアップとパスワード再設定が使う。
 export function PasswordSetupForm({
   procedure,
   copy,
+  siteKey,
 }: {
   procedure: PasswordSetup;
   copy: PasswordSetupCopy;
+  siteKey: string | undefined;
 }) {
   const {
     state: flow,
@@ -62,10 +64,13 @@ export function PasswordSetupForm({
   } = useScreenView(passwordSetupReducer, initialPasswordSetupFlow);
   const [email, setEmail] = useState("");
   const hydrated = useHydrated();
-  useCountdown(flow.resendCooldown, () =>
-    view.dispatch({ type: "cooldownTicked" }),
+  // 残りが変わるたびに1秒の予約をやり直し、0で止まり、離れるときに取り消す。
+  useEffect(
+    () =>
+      flow.resendCooldown === 0 ? undefined : procedure.tickCooldown(view),
+    [flow.resendCooldown, procedure, view],
   );
-  const step = { procedure, copy, flow, view };
+  const step = { procedure, copy, flow, view, siteKey };
 
   if (flow.step === "password") return <PasswordStep {...step} />;
   if (flow.step === "code")
@@ -82,6 +87,7 @@ export function PasswordSetupForm({
       submitting={flow.pending === "send"}
       error={flow.error}
       hydrated={hydrated}
+      siteKey={siteKey}
       onSubmit={(e) => {
         e.preventDefault();
         void procedure.sendCode({ email }, view);
@@ -99,6 +105,7 @@ function CodeStep({
   copy,
   flow,
   view,
+  siteKey,
   check,
   email,
 }: StepProps & {
@@ -126,6 +133,7 @@ function CodeStep({
         void procedure.verifyCode({ email, code }, view);
       }}
       onResend={() => void procedure.resend({ email }, view)}
+      siteKey={siteKey}
       checkRef={check}
       onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
       checked={flow.captchaToken !== null}

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { roundIdOfPath } from "@/features/rounds/domain/round-routes";
+import {
+  ROUND_FRAME_PATH,
+  ROUND_FRAME_PATHS,
+  roundFramePathOf,
+  roundIdOfPath,
+} from "@/features/rounds/domain/round-routes";
 
 const ID = "123e4567-e89b-12d3-a456-426614174000";
 
@@ -49,5 +54,71 @@ describe("roundIdOfPath", () => {
 
     // Then
     expect(id).toBeNull();
+  });
+});
+
+describe("roundFramePathOf", () => {
+  it.each([
+    ["/rounds", "/rounds"],
+    ["/rounds/new", "/rounds/new"],
+    ["/rounds/6f1c2f3e-0000-4000-8000-000000000000", "/rounds/_"],
+    ["/rounds/abc", "/rounds/_"],
+    ["/rounds/_", "/rounds/_"],
+  ])("%sに対応する枠の経路は%sである", (pathname, expected) => {
+    // Given
+    // When
+    const framePath = roundFramePathOf(pathname);
+
+    // Then
+    expect(framePath).toBe(expected);
+  });
+
+  it.each([
+    "/",
+    "/signin",
+    "/offline",
+    "/rounds/",
+    "/rounds/abc/x",
+    "/rounds/new/x",
+    "/roundsx",
+    "/__shell/rounds",
+  ])("%sは枠がない", (pathname) => {
+    // Given
+    // When
+    const framePath = roundFramePathOf(pathname);
+
+    // Then
+    expect(framePath).toBeNull();
+  });
+
+  it("newは任意IDの枠にならない", () => {
+    // Given
+    // When
+    const framePath = roundFramePathOf("/rounds/new");
+
+    // Then
+    expect(framePath).not.toBe(ROUND_FRAME_PATH);
+  });
+
+  it("返す枠の経路は、全てROUND_FRAME_PATHSに含まれる", () => {
+    // Given
+    const pathnames = ["/rounds", "/rounds/new", "/rounds/x"];
+
+    // When
+    const frames = pathnames.map(roundFramePathOf);
+
+    // Then
+    for (const frame of frames) expect(ROUND_FRAME_PATHS).toContain(frame);
+  });
+});
+
+describe("ROUND_FRAME_PATHS", () => {
+  it("枠の3画面(一覧、作成、詳細)の経路を持つ", () => {
+    // Given
+    // When
+    const paths = ROUND_FRAME_PATHS;
+
+    // Then
+    expect(paths).toEqual(["/rounds", "/rounds/new", "/rounds/_"]);
   });
 });

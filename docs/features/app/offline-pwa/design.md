@@ -22,24 +22,28 @@
 ## 構成とデータの流れ
 
 - `src/app/layout.tsx` の `SerwistProvider` が `/sw.js` を登録する。本番ビルド以外では無効にする。
-- `src/app/sw.ts` がService Workerの本体である。
+- `src/app/sw.ts`(Service Workerの入口)は、`Serwist` の構成の組み立てだけを行う。戦略は機能 `src/features/offline-pwa/` のインフラ層が持つ。
   - 新しいService Workerを待機させ、ページからの`SKIP_WAITING`(Serwistが既定で待ち受ける)で有効にする。初回の登録は`clientsClaim`で最初の画面を制御する。
-  - 枠のナビゲーションをプリキャッシュから返す（`PrecachedFrame`）。枠が未格納なら通常のネットワーク取得に落とす。
-  - フォント、画像、`/_next/static` のJS、CSSをキャッシュする。
-  - 同一オリジンのその他のリクエスト（RSCを含む）はNetworkOnlyにする。クロスオリジンは経由させない。
+  - `infrastructure/runtime-caching.ts`(`createRuntimeCaching`)が、枠のナビゲーション(`infrastructure/precached-frame.ts`の`PrecachedFrame`。プリキャッシュから返し、未格納なら通常のネットワーク取得に落とす)、フォント、画像、`/_next/static` のJS、CSSのキャッシュ、同一オリジンのその他(RSCを含む)のNetworkOnlyを定める。クロスオリジンは経由させない。
   - 枠のないパスのナビゲーションの失敗時は `/offline` を返す。`navigationPreload` は使わない。
-  - `/__shell/` 配下のプリキャッシュ応答がリダイレクトされたら、インストールを失敗させる。
-- `src/app/sw-frames.ts` が枠の定義（パスに対応する枠のURL、プリキャッシュ対象）を持ち、`sw.ts` と `serwist.config.mjs` が共有する。
+  - `infrastructure/shell-guard.ts`(`shellFrameGuard`)が、`/__shell/` 配下のプリキャッシュ応答がリダイレクトされたら、インストールを失敗させる。
+- `src/app/offline/page.tsx`(画面の入口)は、`ui/offline-screen.tsx`の`OfflineScreen`(ロゴ、枠、固定文言)を描くだけである。
+- 経路の持ち主は2つである。枠の経路(`ROUND_FRAME_PATHS`、`roundFramePathOf`、`ROUND_FRAME_ID`)は `src/features/rounds/domain/round-routes.ts`、`/offline` と枠の配布URL(`OFFLINE_PATH`、`SHELL_PREFIX`、`shellUrlOf`、`frameHtmlOf`、`isShellUrl`、`frameUrlFor`)は `src/features/offline-pwa/domain/offline-routes.ts` が持つ。`sw.ts`、`serwist.config.mjs`、`next.config.ts`、`manifest.ts` はここから導く。`proxy.ts` の `matcher` だけは、Next.jsが静的に読むため文字列で再掲し、`proxy.test.ts` が一致を確かめる。
 - `serwist.config.mjs` が `public/sw.js` を生成し、`/offline` と枠3件（`/__shell/rounds`、`/__shell/rounds/new`、`/__shell/rounds/_`）をHTMLの内容ハッシュのリビジョンでプリキャッシュする。リビジョンはビルドごとに変わる。
 - `next.config.ts` が `/__shell/*` を実ルートへrewriteし（`beforeFiles`）、`/rounds/<ID>` を `/rounds/_` へrewriteする（`afterFiles`）。`/__shell/*` は `proxy.ts` の対象外なので、未認証の登録でも各画面の枠が保存される。オンラインの `/rounds/<ID>` も `/rounds/_` の枠だけが配信され、IDごとの生成物は作られない（`rounds/[id]/page.tsx` の `dynamicParams = false`）。
-- `src/app/sw-update-activator.tsx`の`SwUpdateActivator`(`root-client-entry.tsx`が描く)が、登録を保持し、`document`のcapture段階の`click`で、待機中の版があるときの内部リンク(修飾キー、`target`、`download`、外部、ハッシュのみを除く)の遷移を止める。端末の保存の完了(記録のハブの`whenPersisted`(起動地点が引数で渡す))を待ち、`SKIP_WAITING`を1回送り、`controllerchange`の後、文書を読み直す直前に保存を再確認して、`location.assign`で遷移する。これらの待ちは、クリックからの合計で上限1秒を共有する。切り替えをしない経路は`whenPersisted`を呼ばない。待機の判定は保持した登録の`waiting`の同期の読み取りだけで行い、登録の保持の前の操作は止めない。待機が無いパスの変化では`registration.update()`を呼ぶ。読み込み時には切り替えない。表示は行わない。
-- `src/app/manifest.ts` がManifestを返す。`start_url` は `/rounds` で、未認証の起動は `proxy.ts` が `/signin` へ移す。
+- 更新の切り替えは、機能 `offline-pwa` の手続き `application/update-activation.ts`(`createUpdateActivation`)が担う。登録を保持し、待機中の版があるときの内部リンクの遷移を止め、端末の保存の完了(記録のハブの`whenPersisted`)を待ち、`SKIP_WAITING`を1回送り、`controllerchange`の後、文書を読み直す直前に保存を再確認して遷移する。これらの待ちは、クリックからの合計で上限1秒(`FALLBACK_WAIT_MS`)を時計(`Clock`)で共有する。切り替えをしない経路は`whenPersisted`を呼ばない。待機の判定は保持した登録の`waiting`の同期の読み取りだけで行い、登録の保持の前の操作は止めない。待機が無い経路の変化では`registration.update()`を呼ぶ。読み込み時には切り替えない。
+  - 手続きの約束(`SwHost`、`SwRegistration`、`LinkClicks`、`LinkClick`、`PersistenceWait`)を実装する外部への実装は、インフラ層 `browser-service-worker.ts`(`navigator.serviceWorker`)と `browser-link-clicks.ts`(`document`のcapture段階の`click`。修飾キー、`defaultPrevented`、`target`、`download`、外部、ハッシュのみを除く)である。
+  - `ui/sw-update-activator.tsx`の`SwUpdateActivator`が、経路(`usePathname()`)の変化を手続きへ知らせる(表示は行わない)。
+  - 起動地点 `root-client-entry.tsx` の `composeOffline` が手続きを生成し、効果で `start()` を呼び、`SwUpdateActivator` を描く。
+- `src/app/manifest.ts` がManifestを返す。`start_url` は `ROUNDS_PATH`(`/rounds`)で、未認証の起動は `proxy.ts` が `/signin` へ移す。
 - `src/app/apple-icon.png` はiOSホーム画面用アイコン(180x180、白の不透明な地)で、Next.jsのファイル規約により全ページに `apple-touch-icon` のlinkが出る。`scripts/generate-icon.mjs` が他のアイコンと一緒に生成する。`/apple-icon.png` は `proxy.ts` の対象外なので未認証でも取得できる。
 - manifestのアイコン(any/maskable)は、環の直径を画像の幅の61%(`INSTALL_ART_SCALE`=61/80)にして生成する。絵柄全体を元の比率のまま縮める。表示は2経路ある。余白のある経路(インストールしたホーム画面、アプリの一覧)では、Chromeがmaskableに約1.309倍の透明の余白を足すため、画像の中央87.3%が表示され、環は枠の約70%に見える。余白のない経路(「ホーム画面に追加」の丸、ショートカット)では、画像の中央66.7%から70%が丸に表示され、環は枠の約87%から91%に見える。この経路で棒の先が欠けることは認めるが、環の外に棒は見える。iOS用のapple-iconは縮小しない(iOSは画像の全体を表示するため、環は枠の80%に見える)。環の外縁が半幅の80%という割合はicon.svg(タブ用)とapple-iconの値である。
 - `src/features/rounds/domain/fetch-result.ts` が取得結果（ok / not-found / offline / error）と、レスポンスから結果を決める `classifyResponse` を持つ。通信失敗（`status: 0`）は原因を断定せず固定文の `error`、`PGRST116` は `not-found`、その他のエラーも固定文の `error` にする。`offline` は `fetchContent` が `navigator.onLine` の false と `offline` イベントで確定したときだけ返す。
-- `features/rounds/application/fetch-content.ts` の `createContentFetcher` が返す `fetchContent` が取得の入口である。サインインの状態の読み取り(`SignInReader`)、通信の可否(`Connectivity`)、時刻(`Clock`)は、起動地点が生成して注入する。`navigator.onLine` が false なら `readSession` もクエリも呼ばず `offline` を返す。それ以外は `SignInReader`の`read`（認証の入口の`SessionReader`を包む実装を受け取る。実装は起動地点が生成する。確かめたセッションは利用者のID（`{userId}`）を持つ）を `offline` イベントと競わせ、認証済みのときだけ、確かめたセッションでクエリを実行する。クエリが認証の拒否（401か`PGRST301`）で返ったら、更新を強制してセッションを確かめ、認証済みなら1回だけ取り直す。クエリには `.retry(false)` を付ける。全体は10秒の時間制限（`FETCH_TIMEOUT_MS`）とも競わせ、超えたら `error` にする。代わり（保存済み）がある取得は1秒（`FALLBACK_WAIT_MS`）で時間切れにし、その後も10秒までは結果を待って`onLateResult`へ渡す（表示しない）。`readSession` の例外・通信失敗も `error` にする。`RoundDetailStore`の`load`と`RoundsListStore`の`loadList`が、端末の保存の待ちを含む画面の読み込みの全体を、開始から10秒で同じ`error`にする(一覧と詳細)。
+- `features/rounds/application/content-fetcher.ts` の `createContentFetcher` が返す `fetchContent` が取得の入口である。サインインの状態の読み取り(`SignInReader`)、通信の可否(`Connectivity`)、時刻(`Clock`)は、起動地点が生成して注入する。`navigator.onLine` が false なら `readSession` もクエリも呼ばず `offline` を返す。それ以外は `SignInReader`の`read`（認証の入口の`SessionReader`を包む実装を受け取る。実装は起動地点が生成する。確かめたセッションは利用者のID（`{userId}`）を持つ）を `offline` イベントと競わせ、認証済みのときだけ、確かめたセッションでクエリを実行する。クエリが認証の拒否（401か`PGRST301`）で返ったら、更新を強制してセッションを確かめ、認証済みなら1回だけ取り直す。クエリには `.retry(false)` を付ける。全体は10秒の時間制限（`FETCH_TIMEOUT_MS`）とも競わせ、超えたら `error` にする。代わり（保存済み）がある取得は1秒（`FALLBACK_WAIT_MS`）で時間切れにし、その後も10秒までは結果を待って`onLateResult`へ渡す（表示しない）。`readSession` の例外・通信失敗も `error` にする。`RoundDetailStore`の`load`と`RoundsListStore`の`loadList`が、端末の保存の待ちを含む画面の読み込みの全体を、開始から10秒で同じ`error`にする(一覧と詳細)。
 - `features/rounds/ui/fetch-state.tsx` が取得中・見つからない・オフライン・エラーの枠内表示（取得中以外は枠の領域の中央。取得中の骨組みは画面ごとに渡し、読み込み後の形に揃える）を担い、`features/rounds/ui/use-fetch-result.ts` が取得中の状態、アンマウント後の結果の破棄、取得関数の例外のerror化、再試行、offline表示の間だけ通信の復帰(各画面の窓口が持つ`whenOnline`を引数で受ける)を受ける自動再取得を持つ(`offline`に決まった時点ですでにオンラインなら、`whenOnline`が直ちに呼ぶ)。depsが変わった描画では前の結果を見せずloadingにする。
 - `/rounds/_` は `/rounds/[id]` の静的な枠で、任意のIDの水和に使える。Service Workerは任意のIDのナビゲーションに、キャッシュキーを変えてこの枠を返す。
+
+- 各ファイルの用語は方針(`docs/architecture.md`)の既定の置き場に従う。画面のパッケージは `react`、`next/navigation`(`usePathname`)、その他のパッケージは `serwist`(インフラ層、`sw.ts`)、`@serwist/next`(`app/layout.tsx` の `SerwistProvider`、`serwist.config.mjs`)である。
 
 ## 設計判断
 
@@ -57,7 +61,7 @@
 
 ## 制約と未対応
 
-- `serwist.config.mjs` が `sw-frames.ts` をNodeの型除去で読むため、Node 22.18以上が前提（`.node-version` は24）で、ビルド時に `MODULE_TYPELESS_PACKAGE_JSON` の警告が出る。
+- `serwist.config.mjs` が `round-routes.ts` と `offline-routes.ts` をNodeの型除去で読むため、Node 22.18以上が前提（`.node-version` は24）で、ビルド時に `MODULE_TYPELESS_PACKAGE_JSON` の警告が出る。
 - Service Workerが未登録、または制御していないタブのオフラインは、ブラウザ標準のエラーになる。iOS Safariのホーム画面アプリでの挙動は実機で確認していない。
 - 切り替えが1秒で進まない(`controllerchange`が来ない)ときと、保存が上限(1秒)までに終わらないときは、切り替えずに旧版のまま遷移し、その遷移では再び試みない。次の遷移で通常どおり判定する。登録の保持の前の操作も同じである。
 - 複数のウィンドウを開いているとき、1つの遷移で切り替えると、他のウィンドウの旧ドキュメントを新しいService Workerが制御し、その遅延チャンクは取得できないことがある。そのウィンドウの通常の遷移(ハードナビゲーション)で回復する。

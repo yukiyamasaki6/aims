@@ -6,7 +6,7 @@ import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import { OtpEmailStep } from "./otp-email-step";
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、errorの受け渡しを確かめられるスタブで模す。
-vi.mock("@/components/turnstile", () => ({
+vi.mock("./turnstile", () => ({
   Turnstile: forwardRef<unknown, { error?: string }>(
     function TurnstileStub(props) {
       return (
@@ -34,6 +34,7 @@ function createForm(overrides: Partial<Props> = {}) {
     error: null,
     hydrated: true,
     onSubmit: vi.fn((e) => e.preventDefault()),
+    siteKey: "site-key",
     checkRef: { current: undefined },
     onCheck: vi.fn(),
     checked: false,
