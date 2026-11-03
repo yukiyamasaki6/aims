@@ -29,11 +29,15 @@ flowchart LR
   hub["記録のハブ"]
   requests["取り直しの依頼"]
   fetching["取得 round-fetching"]
-  reconciliation["突き合わせ round-reconciliation"]
+  control["記録の制御 round-record-control"]
+  refreshControl["取り直しの制御 round-refresh-control"]
+  sender["送信器 op-sender"]
   sync["同期 round-sync"]
   compose --> stores
   compose --> procedures
-  compose --> reconciliation
+  compose --> control
+  compose --> refreshControl
+  compose --> sender
   compose --> sync
   list --> deletion
   list --> hub
@@ -54,10 +58,14 @@ flowchart LR
   start --> hub
   editing --> hub
   presetSaving --> fetching
-  reconciliation --> hub
-  reconciliation --> requests
-  reconciliation --> fetching
-  sync --> reconciliation
+  control --> hub
+  control --> sender
+  sender --> hub
+  refreshControl --> hub
+  refreshControl --> requests
+  refreshControl --> fetching
+  sync --> control
+  sync --> refreshControl
 ```
 
 認証、接続、時計、データベースは図の外の入力である。
@@ -126,7 +134,7 @@ flowchart LR
 
 ### 起動地点の組み立て
 
-起動地点(`app/root-client-entry.tsx`)は、責務ごとの5つの関数を呼んで結ぶ。入力(認証、識別情報の保存、接続、時計、データベース、遷移)、記録と取得(ハブ、依頼の記録、取得、突き合わせ)、窓口(手続きと3つの窓口)、同期(同期と契機)、オフライン(更新の切り替えの手続き。`features/offline-pwa`)。
+起動地点(`app/root-client-entry.tsx`)は、責務ごとの5つの関数を呼んで結ぶ。入力(認証、識別情報の保存、接続、時計、データベース、遷移)、記録と取得(ハブ、依頼の記録、取得、送信器、記録の制御、取り直しの制御)、窓口(手続きと3つの窓口)、同期(同期と契機)、オフライン(更新の切り替えの手続き。`features/offline-pwa`)。
 
 | 部品 | 受ける部品(注入) |
 | --- | --- |

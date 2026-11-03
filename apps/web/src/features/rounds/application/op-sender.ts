@@ -1,8 +1,9 @@
-import type { SessionReader } from "@/features/auth";
-import type { RoundReconciliation } from "@/features/rounds";
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import { planFlights } from "../domain/op-plan";
+import { matchRecordUser } from "../domain/record-user";
+import { batchLimitOf, conflicts, laneOf } from "../domain/round-op-conflicts";
+import { outboxOf, type RoundRecord } from "../domain/round-record";
 import {
   dueFlights,
   EMPTY_QUEUE,
@@ -19,36 +20,46 @@ import {
   statusOf,
   syncOutbox,
 } from "../domain/send-queue";
+import type { SyncOperation } from "../domain/sync-events";
 import {
   decideSyncResult,
   type SyncFailure,
   sessionFailure,
 } from "../domain/sync-failure";
+import type { OperationSending, SendReport } from "./operation-sending";
+import type { RoundRecordHub } from "./round-record-hub";
+import type { SignInReader } from "./sign-in-reader";
 
 export type OpSender = ReturnType<typeof createOpSender>;
+
+// 送信の結果の失敗を、失敗の分類へ渡す形にする。
+function failureOf(report: Extract<SendReport, { ok: false }>): SyncFailure {
+  const { cause } = report;
+  return cause.type === "rpc"
+    ? { cause: "rpc", status: cause.status, code: cause.code }
+    : { cause: "exception" };
+}
 
 // 操作の列の送信器。列ごとの送信の状態(集約の値)を保ち、計画と失敗の判定を求めて、集約の命令へ渡す。
 // 認可・契約で拒否された操作は破棄し、効かなかった操作は記録から外す。止めて残すのは未認証のときだけである。
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createOpSender(deps: {
-  records: Pick<
-    RoundReconciliation,
+  hub: Pick<
+    RoundRecordHub,
     | "streams"
-    | "outbox"
-    | "conflicts"
-    | "batchLimitOf"
-    | "markInFlight"
-    | "send"
-    | "discard"
+    | "record"
+    | "userId"
     | "ready"
-    | "onChange"
-    | "matchUser"
+    | "subscribe"
+    | "setInFlight"
+    | "discard"
   >;
-  session: Pick<SessionReader, "readSession">;
+  sending: Pick<OperationSending, "send">;
+  signIn: Pick<SignInReader, "read">;
   clock: Clock;
   connectivity: Connectivity;
 }) {
-  const { records, session, clock, connectivity } = deps;
+  const { hub, sending, signIn, clock, connectivity } = deps;
   let started = false;
   // 今の開始の保存の読み込みを終え、保存済みの操作を送れる状態。
   let ready = false;
@@ -59,6 +70,38 @@ export function createOpSender(deps: {
   let queues = new Map<string, SendQueue>();
   const timers = new Set<() => void>();
   let stopListening: (() => void)[] = [];
+
+  // 記録の値ごとに、操作のIDの索引を1度だけ作る。記録が変わると新しい値になるため、索引は作り直され、古い値の索引は捨てられる。
+  const indexes = new WeakMap<RoundRecord, Map<string, SyncOperation>>();
+
+  function operationOf(streamId: string, eventId: string) {
+    const record = hub.record(streamId);
+    let index = indexes.get(record);
+    if (!index) {
+      index = new Map(
+        record.items.map((item) => [item.eventId, item.operation]),
+      );
+      indexes.set(record, index);
+    }
+    return index.get(eventId);
+  }
+
+  function outbox(streamId: string) {
+    return outboxOf(hub.record(streamId)).map((item) => ({
+      eventId: item.eventId,
+      lane: laneOf(item.operation),
+      saved: item.saved,
+      hasSeq: item.hasSeq,
+    }));
+  }
+
+  function conflictsIn(streamId: string, previousId: string, nextId: string) {
+    const previous = operationOf(streamId, previousId);
+    const next = operationOf(streamId, nextId);
+    return previous !== undefined && next !== undefined
+      ? conflicts(previous, next)
+      : false;
+  }
 
   const queueOf = (streamId: string) => queues.get(streamId) ?? EMPTY_QUEUE;
 
@@ -74,15 +117,15 @@ export function createOpSender(deps: {
     streamId: string,
     flight: Flight,
   ): Promise<SyncFailure | undefined> {
-    const reading = await session.readSession();
+    const reading = await signIn.read();
     if (reading.status !== "authenticated") return sessionFailure(reading);
     // 列の利用者と違うときは未認証として保留する(別の利用者の認証で送らないため)。
-    if (records.matchUser(reading.userId) === "other") {
+    if (matchRecordUser(hub.userId(), reading.userId) === "other") {
       return sessionFailure({ status: "unauthenticated" });
     }
     try {
-      const report = await records.send(streamId, flight.eventIds);
-      return report.ok ? undefined : report;
+      const report = await sending.send(streamId, flight.eventIds);
+      return report.ok ? undefined : failureOf(report);
     } catch {
       return { cause: "exception" };
     }
@@ -90,7 +133,7 @@ export function createOpSender(deps: {
 
   async function run(streamId: string, flight: Flight) {
     const target = generation;
-    records.markInFlight(streamId, flight.eventIds, true);
+    hub.setInFlight(streamId, flight.eventIds, true);
     const failure = await attempt(streamId, flight);
     if (generation !== target) return;
     settle(streamId, flight, failure);
@@ -103,7 +146,7 @@ export function createOpSender(deps: {
   ) {
     if (!failure) {
       queues.set(streamId, settleSent(queueOf(streamId), flight));
-      records.markInFlight(streamId, flight.eventIds, false);
+      hub.setInFlight(streamId, flight.eventIds, false);
       pump(streamId);
       return;
     }
@@ -119,16 +162,16 @@ export function createOpSender(deps: {
     if (decision.type === "retry") {
       scheduleTimer(streamId, decision.delayMs);
     } else {
-      records.markInFlight(streamId, flight.eventIds, false);
+      hub.setInFlight(streamId, flight.eventIds, false);
     }
     if (decision.type === "discard") {
-      void records.discard(streamId, flight.eventIds);
+      void hub.discard(streamId, flight.eventIds);
     }
     pump(streamId);
   }
 
   function planItems(streamId: string, queue: SendQueue): PlanItem[] {
-    return records.outbox(streamId).map((item) => ({
+    return outbox(streamId).map((item) => ({
       eventId: item.eventId,
       lane: item.lane,
       status: statusOf(queue, item),
@@ -140,17 +183,15 @@ export function createOpSender(deps: {
 
   function pump(streamId: string) {
     if (!started || connectivity.isOffline()) return;
-    const outbox = records.outbox(streamId);
-    const ids = outbox.map((item) => item.eventId);
+    const ids = outbox(streamId).map((item) => item.eventId);
     let queue = syncOutbox(queueOf(streamId), ids);
     const now = clock.now();
     // 期限の来たリトライ待機の要求を、新しい要求より先に再送する。
     const due = dueFlights(queue, now);
     for (const flight of due) queue = resumeFlight(queue, flight);
     const planned = planFlights(planItems(streamId, queue), {
-      conflicts: (previous, next) =>
-        records.conflicts(streamId, previous, next),
-      batchLimitOf: (lane) => records.batchLimitOf(lane),
+      conflicts: (previous, next) => conflictsIn(streamId, previous, next),
+      batchLimitOf,
     });
     const next = startFlights(queue, planned, now);
     queues.set(streamId, next.queue);
@@ -158,7 +199,7 @@ export function createOpSender(deps: {
   }
 
   function pumpAll() {
-    for (const streamId of new Set([...records.streams(), ...queues.keys()])) {
+    for (const streamId of new Set([...hub.streams(), ...queues.keys()])) {
       pump(streamId);
     }
   }
@@ -169,7 +210,7 @@ export function createOpSender(deps: {
 
   // 保存の読み込みが終わってから、保存済みの操作を送る。
   async function whenLoaded(mine: number) {
-    await records.ready();
+    await hub.ready();
     // 停止や再開の後に終わった古い読み込みでは、送れる状態にしない。
     if (startSeq !== mine) return;
     ready = true;
@@ -190,7 +231,7 @@ export function createOpSender(deps: {
       started = true;
       startSeq += 1;
       const mine = startSeq;
-      stopListening = [records.onChange(handleChange)];
+      stopListening = [hub.subscribe(handleChange)];
       void whenLoaded(mine);
       pumpAll();
     },

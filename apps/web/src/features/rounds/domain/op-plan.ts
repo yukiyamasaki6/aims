@@ -1,6 +1,6 @@
 import type { PlanItem, PlannedFlight } from "./send-queue";
 
-// 計画が問う、操作の関係。操作の意味はラウンドが持ち、同期は操作のIDで問う。
+// 計画が問う、操作の関係。操作の意味はラウンドが持ち、計画は操作のIDで問う。
 export type OpPlanPorts = {
   // 前の操作と後の操作が、適用順で結果が変わる、または検証が順序に依存するとき真。
   conflicts: (previousEventId: string, nextEventId: string) => boolean;
