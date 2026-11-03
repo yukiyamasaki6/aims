@@ -3,6 +3,10 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
+import {
+  createUpdateActivation,
+  type UpdateActivation,
+} from "@/features/offline-pwa/application/update-activation";
 import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
@@ -18,6 +22,7 @@ import { createRoundRecordHub } from "@/features/rounds/application/round-record
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
 import { createPresetSaving } from "@/features/rounds/application/save-preset";
 import { createRoundStart } from "@/features/rounds/application/start-round";
+import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-result";
 import { roundCreated } from "@/features/rounds/domain/round-op-test-helpers";
 import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
 import { createBrowserUniqueIds } from "@/features/rounds/infrastructure/browser-unique-ids";
@@ -102,14 +107,35 @@ vi.mock("next/navigation", () => ({ useRouter: () => nav.router }));
 
 // 再読み込みを担う別の入口は別のテストで確かめるため、受け取ったpropsを記録する代役に差し替える。
 const activator = vi.hoisted(() => ({
-  props: [] as { whenPersisted: () => Promise<void> }[],
+  props: [] as { activation: UpdateActivation }[],
 }));
-vi.mock("./sw-update-activator", () => ({
-  SwUpdateActivator: (props: { whenPersisted: () => Promise<void> }) => {
+vi.mock("@/features/offline-pwa/ui/sw-update-activator", () => ({
+  SwUpdateActivator: (props: { activation: UpdateActivation }) => {
     activator.props.push(props);
     return null;
   },
 }));
+vi.mock(
+  "@/features/offline-pwa/application/update-activation",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/offline-pwa/application/update-activation")
+      >();
+    // 起動と停止の呼び出しを観測するため、実物のstartと、その停止関数を記録する関数で包む。
+    return {
+      createUpdateActivation: vi.fn(
+        (...args: Parameters<typeof actual.createUpdateActivation>) => {
+          const activation = actual.createUpdateActivation(...args);
+          return {
+            pathChanged: activation.pathChanged,
+            start: vi.fn(() => vi.fn(activation.start())),
+          };
+        },
+      ),
+    };
+  },
+);
 
 // 生成した部品の引数と実体を観測するため、実物を呼び通す記録に包む。
 type RoundSyncInstance = ReturnType<typeof createRoundSync>;
@@ -415,14 +441,40 @@ describe("RootClientEntry", () => {
       );
     });
 
-    it("画面の遷移で待機中の新SWを有効にするSwUpdateActivatorを含め、保存の待ちを渡す", () => {
+    it("画面の遷移で待機中の新SWを有効にするSwUpdateActivatorを含め、更新の切り替えの手続きを渡す", () => {
       // Given
       // When
       render(<RootClientEntry>{null}</RootClientEntry>);
 
       // Then
+      expect(createUpdateActivation).toHaveBeenCalledTimes(1);
       expect(activator.props).toHaveLength(1);
-      expect(activator.props[0].whenPersisted).toBeTypeOf("function");
+      expect(activator.props[0].activation).toBe(
+        vi.mocked(createUpdateActivation).mock.results[0].value,
+      );
+    });
+
+    it("更新の切り替えの手続きは、期限に代わりがある待ちの上限(FALLBACK_WAIT_MS)と、アプリの時計、記録のハブの保存の待ちを受ける", () => {
+      // Given
+      // When
+      render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      const deps = vi.mocked(createUpdateActivation).mock.calls[0][0];
+      expect(deps.deadlineMs).toBe(FALLBACK_WAIT_MS);
+      expect(deps.persistence.whenPersisted).toBeTypeOf("function");
+      expect(deps.clock.now()).toBeTypeOf("number");
+    });
+
+    it("起動すると、更新の切り替えの手続きを1回だけ始める", () => {
+      // Given
+      // When
+      render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      const activation = vi.mocked(createUpdateActivation).mock.results[0]
+        .value;
+      expect(activation.start).toHaveBeenCalledTimes(1);
     });
 
     it("サインインしたユーザーを端末ローカルの識別ユーザーとして記録する", () => {
@@ -813,9 +865,12 @@ describe("RootClientEntry", () => {
       await Promise.resolve();
       const outboxWhileSaving = records.outbox("round:round-1");
       let persisted = false;
-      const waiting = activator.props[0].whenPersisted().then(() => {
-        persisted = true;
-      });
+      const waiting = vi
+        .mocked(createUpdateActivation)
+        .mock.calls[0][0].persistence.whenPersisted()
+        .then(() => {
+          persisted = true;
+        });
       await new Promise((resolve) => setTimeout(resolve, 0));
       const persistedBeforeRelease = persisted;
       storage.release?.();
@@ -870,6 +925,21 @@ describe("RootClientEntry", () => {
   });
 
   describe("アンマウント", () => {
+    it("更新の切り替えの手続きの停止関数を呼ぶ", () => {
+      // Given
+      const { unmount } = render(<RootClientEntry>{null}</RootClientEntry>);
+      const activation = vi.mocked(createUpdateActivation).mock.results[0]
+        .value;
+      const stop = vi.mocked(activation.start).mock.results[0].value;
+      expect(stop).not.toHaveBeenCalled();
+
+      // When
+      unmount();
+
+      // Then
+      expect(stop).toHaveBeenCalledTimes(1);
+    });
+
     it("認証状態の変化の購読を、識別情報の記録と同期の契機の2本とも解除する", () => {
       // Given
       const { unmount } = render(<RootClientEntry>{null}</RootClientEntry>);

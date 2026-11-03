@@ -38,7 +38,7 @@
 | ファイル | 用語 | 内容 |
 | :--- | :--- | :--- |
 | `app/layout.tsx` | アプリの起動地点 | ルートレイアウト。`<RootClientEntry>`で`SerwistProvider`と`children`を包む |
-| `app/root-client-entry.tsx` | アプリの起動地点(クライアントの処理の部分) | 部品を`useState`の初期化で1度だけ生成して結び、効果で識別情報の記録と契機の手続きを始める。3つの窓口をそれぞれの文脈(`RoundsListStoreProvider`、`NewRoundStoreProvider`、`RoundDetailStoreProvider`)で画面へ渡し、`RoundBaseRefresher`と`SwUpdateActivator`(保存の完了を待つ関数を受ける)を描く |
+| `app/root-client-entry.tsx` | アプリの起動地点(クライアントの処理の部分) | 部品を`useState`の初期化で1度だけ生成して結び、効果で識別情報の記録と契機の手続きを始める。3つの窓口をそれぞれの文脈(`RoundsListStoreProvider`、`NewRoundStoreProvider`、`RoundDetailStoreProvider`)で画面へ渡し、`RoundBaseRefresher`と`SwUpdateActivator`(`features/offline-pwa/ui`。更新の切り替えの手続きを受ける)を描き、効果で更新の切り替えの手続きも始める |
 | `features/rounds/domain/sync-events.ts` | ドメイン層(出来事) | 操作の型。操作はクライアント生成のイベントIDを持つ。`round.updated`と`distance.updated`は、変えた項目だけの差分(`changes`)を持つ。矢の操作(`shot.recorded`・`shot.cleared`)は矢のID(`shotId`)で矢を指し、`shot.recorded`の射手(`shooterId`)と射順(`shotNumber`)は、変えるときだけ持つ。列の削除の有無`hasRoundDeletion`と、列のID(`round:<roundId>`)の変換 |
 | `features/rounds/domain/round-op-conflicts.ts` | ドメイン層(ドメインサービス) | 操作の衝突の表と、並べる単位(lane)・送る単位の上限。矢の操作どうしは、同じ矢(`shotId`)か同じエンドなら衝突とする |
 | `features/rounds/domain/round-record.ts` | ドメイン層(集約) | 1つのラウンドの端末の記録(ベース、操作の列、外した操作、保存の目印、送信中の印)を、変更しない値と関数にしたもの。取り込み(新しい方のベース、共有の組のベースを取ったときだけ組から無くなった確定済みの操作を外す)、確定の反映、効かなかった操作の除去 |
@@ -59,7 +59,7 @@
 | `features/rounds/application/edit-round.ts` | 手続き | 追記と再開(完了のラウンドの編集で表示中の距離か矢が変わるとき、追記の前の状態で判定し、続けて入力中へ戻す操作を積む。窓口の`handle.append`が今の状態の読み手を渡して呼ぶ) |
 | `features/rounds/application/delete-round.ts`、`leave-round.ts`、`save-preset.ts` | 手続き | 削除(一覧用。離れない。`delete-round.ts`)、完了、削除して離れる(`delete-round.ts`の後に遷移)、一覧へ戻る(保存の完了の後に`PageNavigation`で進む、または置き換える。`leave-round.ts`)と、プリセットの保存(サインインの確認、書き込み、成功の後の保存済みの再取得) |
 | `features/rounds/application/send-operations.ts`、`round-reconciliation.ts` | 手続き | 操作の送信と確定の記録(約束`RoundTransport`)、同期へ公開する突き合わせの操作`RoundReconciliation` |
-| `features/rounds/index.ts` | 機能の入口 | `RoundReconciliation`、`FALLBACK_WAIT_MS`、`ROUNDS_PATH`を公開する |
+| `features/rounds/index.ts` | 機能の入口 | `RoundReconciliation`、`ROUNDS_PATH`を公開する |
 | `features/rounds/infrastructure/` | インフラ層 | `round-op-transport.ts`(操作の種類ごとにRPCを呼び、操作ごとの判定結果を返す)、`round-queries.ts`(取得の問い合わせ、プリセットと一覧の問い合わせと行の写し)、`browser-unique-ids.ts`(新しいIDと乱数の払い出し)、`preset-commands.ts`(プリセットの削除と保存の書き込みと結果の種類への写し)、`rounds-db-schema.ts`(ラウンドが使うスキーマの部分の型。一覧が並べる列とプリセットの表、保存の関数を含む)、`reference-snapshot.ts`(保存済みの書き換えを含む)、`reference-query-constants.ts`、`browser-record-channel.ts`(チャネル`aims-sync`)、`auth-sign-in-reader.ts`(認証の入口を自分の約束で包む) |
 | `features/rounds/ui/rounds-context.tsx` | UI層 | 画面ごとの文脈(`RoundsListStoreProvider`と`useRoundsListStore`、`NewRoundStoreProvider`と`useNewRoundStore`、`RoundDetailStoreProvider`と`useRoundDetailStore`) |
 | `features/rounds/ui/rounds-list.tsx`、`use-local-rounds-list.ts`、`use-fetch-result.ts`、`fetch-state.tsx` | UI層 | 一覧の描画と削除のメニュー、端末の入力中のラウンドの読み込みと待ちの経過、画面の取得の状態と再取得、取得の状態の表示。オフライン表示の間の読み直しは、`use-fetch-result.ts`が画面の窓口から受けた`whenOnline`で行う |

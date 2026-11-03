@@ -5,6 +5,10 @@ import { type ReactNode, useEffect, useState } from "react";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { createUpdateActivation } from "@/features/offline-pwa/application/update-activation";
+import { createBrowserLinkClicks } from "@/features/offline-pwa/infrastructure/browser-link-clicks";
+import { createBrowserServiceWorker } from "@/features/offline-pwa/infrastructure/browser-service-worker";
+import { SwUpdateActivator } from "@/features/offline-pwa/ui/sw-update-activator";
 import { createOpSender } from "@/features/round-sync/application/op-sender";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
@@ -27,6 +31,7 @@ import { createRoundsListStore } from "@/features/rounds/application/rounds-list
 import { createPresetSaving } from "@/features/rounds/application/save-preset";
 import { createSendOperations } from "@/features/rounds/application/send-operations";
 import { createRoundStart } from "@/features/rounds/application/start-round";
+import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-result";
 import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
@@ -55,7 +60,6 @@ import {
   createSupabaseDatabase,
   narrowDatabase,
 } from "@/lib/supabase/infrastructure/database";
-import { SwUpdateActivator } from "./sw-update-activator";
 
 // 入力(認証、識別情報の保存、接続、時計、データベース、遷移)。実行環境の大域の名前に触る実装は、開始の後に初めて触る(事前描画でも生成できる)。
 // routerは画面のパッケージの遷移の部品で、アプリで1つ。
@@ -180,6 +184,18 @@ function composeSync(inputs: Inputs, records: Records) {
   return { sync, triggers };
 }
 
+// オフラインとアプリの更新(Service Workerの更新の切り替え)。
+function composeOffline(inputs: Inputs, records: Records) {
+  const swUpdate = createUpdateActivation({
+    host: createBrowserServiceWorker(),
+    links: createBrowserLinkClicks(),
+    persistence: records.hub,
+    clock: inputs.clock,
+    deadlineMs: FALLBACK_WAIT_MS,
+  });
+  return { swUpdate };
+}
+
 // アプリで1つの部品を、1度だけ生成して結ぶ。
 function composeApp(router: PageRouter) {
   const inputs = composeInputs(router);
@@ -189,6 +205,7 @@ function composeApp(router: PageRouter) {
     hub: records.hub,
     ...composeStores(inputs, records),
     ...composeSync(inputs, records),
+    ...composeOffline(inputs, records),
   };
 }
 
@@ -199,13 +216,14 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
   const [app] = useState(() => composeApp(router));
   useEffect(() => app.localIdentity.start(), [app]);
   useEffect(() => app.triggers.start(), [app]);
+  useEffect(() => app.swUpdate.start(), [app]);
 
   return (
     <RoundsListStoreProvider store={app.listStore}>
       <NewRoundStoreProvider store={app.newRoundStore}>
         <RoundDetailStoreProvider store={app.detailStore}>
           <RoundBaseRefresher sync={app.sync} />
-          <SwUpdateActivator whenPersisted={app.hub.whenPersisted} />
+          <SwUpdateActivator activation={app.swUpdate} />
           {children}
         </RoundDetailStoreProvider>
       </NewRoundStoreProvider>
