@@ -2,12 +2,15 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
+
+const roundsText = translatorFor("rounds");
 
 describe("DropdownMenuContent", () => {
   describe("表示", () => {
@@ -99,7 +102,7 @@ describe("DropdownMenuItem", () => {
   describe("表示", () => {
     it("子要素をdata-slotを付与したメニュー項目として表示する", async () => {
       // Given
-      const label = "削除";
+      const label = roundsText("delete");
 
       // When
       render(
@@ -114,7 +117,7 @@ describe("DropdownMenuItem", () => {
 
       // Then
       expect(
-        await screen.findByRole("menuitem", { name: "削除" }),
+        await screen.findByRole("menuitem", { name: roundsText("delete") }),
       ).toHaveAttribute("data-slot", "dropdown-menu-item");
     });
 
@@ -136,7 +139,7 @@ describe("DropdownMenuItem", () => {
 
         // Then
         expect(
-          await screen.findByRole("menuitem", { name: "削除" }),
+          await screen.findByRole("menuitem", { name: roundsText("delete") }),
         ).toHaveClass("custom-class");
       });
     });
@@ -158,7 +161,9 @@ describe("DropdownMenuItem", () => {
       );
 
       // When
-      await user.click(await screen.findByRole("menuitem", { name: "削除" }));
+      await user.click(
+        await screen.findByRole("menuitem", { name: roundsText("delete") }),
+      );
 
       // Then
       expect(handleClick).toHaveBeenCalledTimes(1);

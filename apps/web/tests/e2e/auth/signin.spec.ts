@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
@@ -7,14 +8,16 @@ import {
 } from "../helpers/auth";
 import { expectHidden, expectUncovered } from "../helpers/visibility";
 
+const authText = translatorFor("auth");
+
 const EMAIL_PLACEHOLDER = "you@example.com";
-const PASSWORD_PLACEHOLDER = "パスワード";
+const PASSWORD_PLACEHOLDER = authText("passwordPlaceholder");
 
 async function openSignIn(page: Page, returnTo?: string) {
   const query = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : "";
   await page.goto(`/signin${query}`);
   await waitForHydration(page);
-  return page.getByRole("button", { name: "サインイン" });
+  return page.getByRole("button", { name: authText("signInSubmit") });
 }
 
 async function fillCredentials(page: Page, email: string, password: string) {
@@ -72,11 +75,11 @@ test("サインイン画面で「パスワードをお忘れですか」を押�
 }) => {
   await openSignIn(page);
   await page
-    .getByRole("link", { name: "パスワードをお忘れですか", exact: true })
+    .getByRole("link", { name: authText("signInForgotPassword"), exact: true })
     .click();
   await expect(page).toHaveURL(/\/reset-password$/);
   await expect(
-    page.getByRole("heading", { name: "パスワードを再設定" }),
+    page.getByRole("heading", { name: authText("resetTitle") }),
   ).toBeVisible();
 });
 
@@ -84,10 +87,12 @@ test("サインイン画面で「サインアップ」を押すと、サイン�
   page,
 }) => {
   await openSignIn(page);
-  await page.getByRole("link", { name: "サインアップ", exact: true }).click();
+  await page
+    .getByRole("link", { name: authText("signInSignUpLink"), exact: true })
+    .click();
   await expect(page).toHaveURL(/\/signup$/);
   await expect(
-    page.getByRole("heading", { name: "サインアップ" }),
+    page.getByRole("heading", { name: authText("signUpTitle") }),
   ).toBeVisible();
 });
 
@@ -117,7 +122,7 @@ test("認証に失敗すると、理由が表示されセキュリティチェ�
   await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
   await signInButton.click();
   await expect(
-    page.getByText("メールアドレスまたはパスワードが間違っています。"),
+    page.getByText(authText("failure.invalid_credentials")),
   ).toBeVisible();
   await expect(signInButton).toHaveAttribute("aria-disabled", "false");
   await expect(signInButton).toHaveAttribute("data-captcha-ready", "false");

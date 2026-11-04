@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { type PresetSource, presetToSave } from "../domain/preset-save";
 import type { Distance } from "../domain/scorecard-types";
 import {
@@ -8,6 +9,8 @@ import {
   type PresetDialogState,
   startPresetSave,
 } from "./save-preset-dialog-state";
+
+const roundsText = translatorFor("rounds");
 
 const distanceA: Distance = {
   id: "d-a",
@@ -72,7 +75,10 @@ describe("changePresetDialogOpen", () => {
   describe("閉じる場合", () => {
     it("送信中でなければ、名前欄とエラーを破棄して閉じる", () => {
       // Given
-      const current = openDialog({ name: "入力中", error: "saveFailed" });
+      const current = openDialog({
+        name: roundsText("listInProgress"),
+        error: "saveFailed",
+      });
 
       // When
       const state = changePresetDialogOpen(current, false, "午前練習");

@@ -2,7 +2,7 @@ import { SerwistProvider } from "@serwist/next/react";
 import { render, screen } from "@testing-library/react";
 import { Children, isValidElement, type ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import RootLayout from "./layout";
+import RootLayout, { metadata } from "./layout";
 import { RootClientEntry } from "./root-client-entry";
 
 // next/font/localはNext.jsのコンパイラによる変換を前提とし、Vitest上では実行できないため境界としてモックする。
@@ -50,6 +50,18 @@ function findSerwistProvider(children: React.ReactNode) {
   if (!provider) throw new Error("SerwistProviderが含まれていません。");
   return provider.props as Record<string, unknown>;
 }
+
+describe("metadata", () => {
+  it("タイトルと説明は、文言そのもの(現在と同じ内容)である", () => {
+    // Given
+    // When
+    const { title, description } = metadata;
+
+    // Then
+    expect(title).toBe("AIMS");
+    expect(description).toBe("AIMS Web Application");
+  });
+});
 
 describe("RootLayout", () => {
   describe("html要素", () => {

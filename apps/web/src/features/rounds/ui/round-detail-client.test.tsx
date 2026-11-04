@@ -12,8 +12,11 @@ import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
 import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { RoundDetailClient } from "./round-detail-client";
 import { useCreationGone } from "./use-creation-gone";
+
+const roundsText = translatorFor("rounds");
 
 const ID = "123e4567-e89b-12d3-a456-426614174000";
 const OTHER_ID = "223e4567-e89b-12d3-a456-426614174000";
@@ -128,9 +131,11 @@ describe("RoundDetailClient", () => {
 
       // Then
       expect(
-        screen.getByRole("link", { name: "一覧へ戻る" }),
+        screen.getByRole("link", { name: roundsText("backToList") }),
       ).toBeInTheDocument();
-      expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
+      expect(screen.getByRole("status")).toHaveTextContent(
+        roundsText("fetchLoading"),
+      );
       expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
     });
 
@@ -147,7 +152,7 @@ describe("RoundDetailClient", () => {
       // Then
       // 水和の不一致を避けるため、サーバーの描画は読み込み中の表示と同一になる。
       expect(html).toBe(placeholderHtml);
-      expect(html).toContain("読み込み中");
+      expect(html).toContain(roundsText("fetchLoading"));
       expect(load).not.toHaveBeenCalled();
     });
   });
@@ -182,7 +187,9 @@ describe("RoundDetailClient", () => {
       // Then
       await waitFor(() => expect(store.leaveRound).toHaveBeenCalledTimes(1));
       expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
-      expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
+      expect(screen.getByRole("status")).toHaveTextContent(
+        roundsText("fetchLoading"),
+      );
     });
 
     it("列に削除がなければ、一覧へ戻る手続きを呼ばない", async () => {
@@ -214,7 +221,9 @@ describe("RoundDetailClient", () => {
 
       // Then
       expect(screen.queryByText("最初")).not.toBeInTheDocument();
-      expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
+      expect(screen.getByRole("status")).toHaveTextContent(
+        roundsText("fetchLoading"),
+      );
       expect(load).toHaveBeenLastCalledWith(OTHER_ID);
     });
   });
@@ -229,12 +238,12 @@ describe("RoundDetailClient", () => {
 
       // Then
       expect(
-        await screen.findByText("ラウンドが見つかりません。"),
+        await screen.findByText(roundsText("detailNotFound")),
       ).toBeInTheDocument();
       // 戻る導線は枠のヘッダーの1つだけにする。
-      expect(screen.getAllByRole("link", { name: "一覧へ戻る" })).toHaveLength(
-        1,
-      );
+      expect(
+        screen.getAllByRole("link", { name: roundsText("backToList") }),
+      ).toHaveLength(1);
       expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
     });
 
@@ -252,7 +261,7 @@ describe("RoundDetailClient", () => {
 
         // Then
         expect(
-          await screen.findByText("ラウンドが見つかりません。"),
+          await screen.findByText(roundsText("detailNotFound")),
         ).toBeInTheDocument();
         expect(load).not.toHaveBeenCalled();
       },
@@ -267,10 +276,10 @@ describe("RoundDetailClient", () => {
 
       // Then
       expect(
-        await screen.findByText("ネットワークに接続されていません"),
+        await screen.findByText(roundsText("fetchOffline")),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("link", { name: "一覧へ戻る" }),
+        screen.getByRole("link", { name: roundsText("backToList") }),
       ).toBeInTheDocument();
     });
 
@@ -286,10 +295,10 @@ describe("RoundDetailClient", () => {
 
       // Then
       expect(await screen.findByRole("alert")).toHaveTextContent(
-        "読み込めませんでした。",
+        roundsText("fetchFailure.failed"),
       );
       expect(
-        screen.getByRole("button", { name: "再試行" }),
+        screen.getByRole("button", { name: roundsText("fetchRetry") }),
       ).toBeInTheDocument();
     });
 
@@ -302,7 +311,9 @@ describe("RoundDetailClient", () => {
       load.mockResolvedValueOnce({ status: "ok", data: detail("午前練習") });
       const user = userEvent.setup();
       renderDetail();
-      const retry = await screen.findByRole("button", { name: "再試行" });
+      const retry = await screen.findByRole("button", {
+        name: roundsText("fetchRetry"),
+      });
 
       // When
       await act(async () => {
@@ -320,7 +331,12 @@ describe("RoundDetailClient", () => {
       // Given
       resolves({
         status: "ok",
-        data: detail("入力中", null, "local", faces("face-1")),
+        data: detail(
+          roundsText("listInProgress"),
+          null,
+          "local",
+          faces("face-1"),
+        ),
       });
 
       // When
@@ -337,7 +353,12 @@ describe("RoundDetailClient", () => {
       // Given
       resolves({
         status: "ok",
-        data: detail("入力中", null, "local", faces("face-1")),
+        data: detail(
+          roundsText("listInProgress"),
+          null,
+          "local",
+          faces("face-1"),
+        ),
       });
       const user = userEvent.setup();
       renderDetail();

@@ -1,6 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { AuthField } from "./auth-field";
+
+const authText = translatorFor("auth");
 
 function renderField(error: string | undefined) {
   render(
@@ -28,13 +31,13 @@ describe("AuthField", () => {
     // Given
 
     // When
-    const input = renderField("メールアドレスを入力してください。");
+    const input = renderField(authText("fieldError.email.required"));
 
     // Then
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input).toHaveAttribute("aria-describedby", "email-error");
     expect(
-      screen.getByText("メールアドレスを入力してください。"),
+      screen.getByText(authText("fieldError.email.required")),
     ).toHaveAttribute("id", "email-error");
   });
 });

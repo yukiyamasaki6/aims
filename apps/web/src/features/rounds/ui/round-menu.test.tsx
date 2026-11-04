@@ -9,7 +9,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
 import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { RoundMenu } from "./round-menu";
+
+const roundsText = translatorFor("rounds");
 
 // 削除して離れる手続きは境界として偽の約束(ラウンドの状態と変更の方法)のdeleteRoundAndLeaveで受ける。遷移の順序は手続きのテストが確かめる。
 let fake: ReturnType<typeof createFakeRoundDetailStore>;
@@ -47,9 +50,7 @@ describe("RoundMenu", () => {
 
       // Then
       expect(
-        screen.getByText(
-          "このラウンドを削除しますか？記録したスコアもすべて失われます。",
-        ),
+        screen.getByText(roundsText("roundDeleteConfirm")),
       ).toBeInTheDocument();
     });
 

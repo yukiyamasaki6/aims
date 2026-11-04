@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
 import { roundPath } from "@/features/rounds/domain/round-routes";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   getSharedEmail,
@@ -32,6 +33,8 @@ import {
 } from "../helpers/service-worker";
 import { holdNextRefresh } from "../helpers/session-overlap";
 import { expectHidden, expectUncovered } from "../helpers/visibility";
+
+const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -76,9 +79,15 @@ test("記録済みの得点があるラウンドを開くと、スコアカー�
 
   await expect(page.getByTestId("round-config-summary")).toBeVisible();
   await expect(page.getByTestId("end-row-1-1")).toBeVisible();
-  await expect(page.getByTestId("round-summary")).toContainText("合計23");
-  await expect(page.getByTestId("distance-summary-1")).toContainText("小計18");
-  await expect(page.getByTestId("distance-summary-2")).toContainText("小計5");
+  await expect(page.getByTestId("round-summary")).toContainText(
+    roundsText("roundTotal", { total: "23" }),
+  );
+  await expect(page.getByTestId("distance-summary-1")).toContainText(
+    roundsText("distanceSubtotal", { total: "18" }),
+  );
+  await expect(page.getByTestId("distance-summary-2")).toContainText(
+    roundsText("distanceSubtotal", { total: "5" }),
+  );
   await expect(page.getByTestId("distance-top-scores-1")).toHaveText(
     "10: 1 / X: 1",
   );
@@ -101,7 +110,11 @@ test("1画面に収まらないラウンドで別の距離のエンドまでス�
     );
   // 1つ目の距離の見出しが画面の外へ出たことで、別の距離までスクロールしたことを確かめる。
   await expectHidden(page.getByTestId("distance-config-toggle-1"));
-  await expectUncovered(page.getByTestId("round-summary").getByText(/^合計/));
+  await expectUncovered(
+    page
+      .getByTestId("round-summary")
+      .getByText(new RegExp(`^${roundsText("roundTotal", { total: "" })}`)),
+  );
   await expectUncovered(page.getByTestId("distance-top-scores-2"));
 });
 
@@ -110,7 +123,7 @@ test("「一覧へ戻る」リンクを押すと、ラウンド一覧へ移動�
 }) => {
   await openRound(page);
 
-  await page.getByRole("link", { name: "一覧へ戻る" }).click();
+  await page.getByRole("link", { name: roundsText("backToList") }).click();
 
   await expect(page).toHaveURL(/\/rounds$/);
   await expect(page.getByTestId("new-round-fab")).toBeVisible();
@@ -130,8 +143,10 @@ test("存在しないラウンドを開くと、枠内に「ラウンドが見�
 }) => {
   await page.goto(MISSING_ROUND_PATH);
 
-  await expect(page.getByText("ラウンドが見つかりません。")).toBeVisible();
-  await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
+  await expect(page.getByText(roundsText("detailNotFound"))).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: roundsText("backToList") }),
+  ).toBeVisible();
 });
 
 test("端末にオフラインで開ける内容がないラウンドを開いて通信できないとき、「一覧へ戻る」リンクと「読み込めませんでした。」と再試行ボタンが表示される", async ({
@@ -141,9 +156,13 @@ test("端末にオフラインで開ける内容がないラウンドを開い�
 
   await page.goto(MISSING_ROUND_PATH);
 
-  await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
-  await expect(page.getByText("読み込めませんでした。")).toBeVisible();
-  await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: roundsText("backToList") }),
+  ).toBeVisible();
+  await expect(page.getByText(roundsText("fetchFailure.failed"))).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: roundsText("fetchRetry") }),
+  ).toBeVisible();
 });
 
 test("端末の保存の読み書きが続いているとき、ラウンドを開くと、10秒後に「一覧へ戻る」リンクと「読み込めませんでした。」と再試行ボタンが表示される", async ({
@@ -165,16 +184,22 @@ test("端末の保存の読み書きが続いているとき、ラウンドを�
   await page.clock.install();
   await page.goto(`/rounds/${roundId}`);
   await expect(
-    page.getByRole("status").filter({ hasText: "読み込み中" }),
+    page.getByRole("status").filter({ hasText: roundsText("fetchLoading") }),
   ).toBeVisible();
 
   // 10秒進め、枠とエラーと再試行ボタンを確かめる。
   await page.clock.runFor(10_000);
-  await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
   await expect(
-    page.getByRole("alert").filter({ hasText: "読み込めませんでした。" }),
+    page.getByRole("link", { name: roundsText("backToList") }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: roundsText("fetchFailure.failed") }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: roundsText("fetchRetry") }),
+  ).toBeVisible();
   await release();
 });
 
@@ -182,9 +207,9 @@ test("端末の保存の読み書きが続いているとき、ラウンドを�
 async function expectLoadFailsAtTenSeconds(page: Page) {
   const failure = page
     .getByRole("alert")
-    .filter({ hasText: "読み込めませんでした。" });
+    .filter({ hasText: roundsText("fetchFailure.failed") });
   await expect(
-    page.getByRole("status").filter({ hasText: "読み込み中" }),
+    page.getByRole("status").filter({ hasText: roundsText("fetchLoading") }),
   ).toBeVisible();
   // 読み込みの時計が仕掛けられる前に進めて空振りしないよう、実時間で少し待つ。待った分も偽の時計は進む。
   await page.waitForTimeout(300);
@@ -216,18 +241,24 @@ test("古い版の端末の保存の接続が閉じられていないとき、�
   await page.clock.install();
   await page.goto("/rounds");
   await expect(
-    page.getByRole("status").filter({ hasText: "読み込み中" }),
+    page.getByRole("status").filter({ hasText: roundsText("fetchLoading") }),
   ).toBeVisible();
 
   // 10秒進め、一覧のエラーと再試行ボタンを確かめる。
   await expectLoadFailsAtTenSeconds(page);
-  await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: roundsText("fetchRetry") }),
+  ).toBeVisible();
 
   // 詳細を開き、読み込み中から10秒後に枠とエラーと再試行ボタンが表示されることを確かめる。
   await page.goto(`/rounds/${roundId}`);
   await expectLoadFailsAtTenSeconds(page);
-  await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: roundsText("backToList") }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: roundsText("fetchRetry") }),
+  ).toBeVisible();
   await release();
 });
 
@@ -268,18 +299,14 @@ test("的の一覧を端末に保存せずにオフラインで開始したラ�
   page,
 }) => {
   await startRoundOfflineWithoutTargetFaces(page);
-  await expect(
-    page.getByText("ネットワークに接続されていません"),
-  ).toBeVisible();
+  await expect(page.getByText(roundsText("fetchOffline"))).toBeVisible();
   await expect(page.getByTestId("round-summary")).toHaveCount(0);
 
   // 的の一覧の取得を戻してオンラインに戻り、ラウンドの内容が表示されるのを確かめる。
   await page.context().unroute(TARGET_FACES_REST);
   await comeBackOnline(page.context(), page);
   await expect(page.getByTestId("round-summary")).toBeVisible();
-  await expect(page.getByText("ネットワークに接続されていません")).toHaveCount(
-    0,
-  );
+  await expect(page.getByText(roundsText("fetchOffline"))).toHaveCount(0);
 });
 
 test("的の一覧を端末に保存済みなら、オフラインで開始した作成が未確定のラウンドで、テンキーに的の点数ボタンが表示され、点数ボタンを押すと合計が更新される", async ({
@@ -292,13 +319,17 @@ test("的の一覧を端末に保存済みなら、オフラインで開始し�
   await expect(
     page.getByTestId("distance-summary-1").locator('[role="img"]').first(),
   ).toBeVisible();
-  await expect(page.getByTestId("round-summary")).toContainText("合計0");
+  await expect(page.getByTestId("round-summary")).toContainText(
+    roundsText("roundTotal", { total: "0" }),
+  );
   // WA 1440の的は10点的で、Xリングがある。
   await expect(page.getByTestId("score-button-X")).toBeVisible();
 
   // 点数ボタンを押し、合計が更新されるのを確かめる。
   await page.getByTestId("score-button-9").click();
-  await expect(page.getByTestId("round-summary")).toContainText("合計9");
+  await expect(page.getByTestId("round-summary")).toContainText(
+    roundsText("roundTotal", { total: "9" }),
+  );
 });
 
 test("オンラインでプリセットを選んで開始し、作成が未確定のままオフラインで開き直すと、全ての距離に的の図が表示される", async ({
@@ -328,7 +359,7 @@ test("オンラインでプリセットを選んで開始し、作成が未確�
     const summary = page.getByTestId(`distance-summary-${n}`);
     await expect(summary.locator('[role="img"]').first()).toBeVisible();
   }
-  await expect(page.getByText("的データを取得できません")).toHaveCount(0);
+  await expect(page.getByText(roundsText("targetFaceMissing"))).toHaveCount(0);
 });
 
 test("他の端末で記録した入力中のラウンドは、オンラインで取得を済ませた後なら、一度も開かずにオフラインで再起動して開いても、記録と合計と仮の矢とテンキーが表示される", async ({
@@ -357,7 +388,9 @@ test("他の端末で記録した入力中のラウンドは、オンライン�
   await goOffline(context);
   await page.goto(`/rounds/${roundId}`);
   await waitForHydration(page);
-  await expect(page.getByTestId("round-summary")).toContainText("合計18");
+  await expect(page.getByTestId("round-summary")).toContainText(
+    roundsText("roundTotal", { total: "18" }),
+  );
   await expect(page.getByTestId("distance-summary-1")).toContainText("18m");
   await expect(
     page.getByTestId("end-row-1-1").locator("[data-shot-id]"),
@@ -409,7 +442,7 @@ test("オンラインのまま通信が応答しないとき、端末が保持�
     };
     new MutationObserver(() => {
       const el = document.querySelector('[data-testid="round-summary"]');
-      if (el?.textContent?.includes("合計9"))
+      if (el?.textContent?.includes(roundsText("roundTotal", { total: "9" })))
         w.e2eShownAt ??= performance.now();
     }).observe(document, {
       childList: true,
@@ -420,9 +453,12 @@ test("オンラインのまま通信が応答しないとき、端末が保持�
   // Service Workerが制御する文書の通信も止めるため、contextで止める。
   await page.context().route(/\/(rest|auth)\/v1\//, () => {});
   await page.goto(`/rounds/${roundId}`);
-  await expect(page.getByTestId("round-summary")).toContainText("合計9", {
-    timeout: 10_000,
-  });
+  await expect(page.getByTestId("round-summary")).toContainText(
+    roundsText("roundTotal", { total: "9" }),
+    {
+      timeout: 10_000,
+    },
+  );
   const { firstRequestAt, shownAt } = await page.evaluate(() => {
     const w = window as unknown as {
       e2eFirstRequestAt?: number;
@@ -473,7 +509,7 @@ test("端末の内容で表示しているラウンドが、他の端末で削�
   release();
   await expect(page).toHaveURL(/\/rounds$/);
   await expect(
-    page.getByRole("heading", { name: "ラウンド一覧" }),
+    page.getByRole("heading", { name: roundsText("listTitle") }),
   ).toBeVisible();
 });
 
@@ -509,7 +545,7 @@ test("オフラインのラウンド一覧で削除したラウンドを、オ�
   await page.goto(`/rounds/${roundId}`);
   await expect(page).toHaveURL(/\/rounds$/);
   await expect(
-    page.getByRole("heading", { name: "ラウンド一覧" }),
+    page.getByRole("heading", { name: roundsText("listTitle") }),
   ).toBeVisible();
   await expect(link).toBeHidden();
 });
@@ -561,20 +597,28 @@ test.describe("セッションの確認", () => {
     // 確かめる時間は、取得全体の上限(10秒)より短くする。
     await refresh.requested;
     await expect(
-      page.getByRole("status").filter({ hasText: "読み込み中" }),
+      page.getByRole("status").filter({ hasText: roundsText("fetchLoading") }),
     ).toBeVisible();
     await page.waitForTimeout(2_000);
     await expect(
-      page.getByRole("status").filter({ hasText: "読み込み中" }),
+      page.getByRole("status").filter({ hasText: roundsText("fetchLoading") }),
     ).toBeVisible();
-    await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
-    await expect(page.getByText("読み込めませんでした。")).toHaveCount(0);
+    await expect(
+      page.getByText(roundsText("fetchFailure.unauthenticated")),
+    ).toHaveCount(0);
+    await expect(page.getByText(roundsText("fetchFailure.failed"))).toHaveCount(
+      0,
+    );
 
     // 止めた更新を通し、スコアカードが表示されるのを確かめる。
     refresh.release();
     await refresh.passed;
-    await expect(page.getByTestId("round-summary")).toContainText("合計9");
-    await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
+    await expect(page.getByTestId("round-summary")).toContainText(
+      roundsText("roundTotal", { total: "9" }),
+    );
+    await expect(
+      page.getByText(roundsText("fetchFailure.unauthenticated")),
+    ).toHaveCount(0);
   });
 
   test("端末に表示できる内容がある入力中のラウンドは、開くときのセッションの更新が終わらなくても、端末の内容で表示され、エラーは表示されない", async ({
@@ -589,9 +633,15 @@ test.describe("セッションの確認", () => {
     const refresh = await holdNextRefresh(page);
     await page.locator(`a[href="/rounds/${roundId}"]`).click();
     await refresh.requested;
-    await expect(page.getByTestId("round-summary")).toContainText("合計9");
-    await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
-    await expect(page.getByText("読み込めませんでした。")).toHaveCount(0);
+    await expect(page.getByTestId("round-summary")).toContainText(
+      roundsText("roundTotal", { total: "9" }),
+    );
+    await expect(
+      page.getByText(roundsText("fetchFailure.unauthenticated")),
+    ).toHaveCount(0);
+    await expect(page.getByText(roundsText("fetchFailure.failed"))).toHaveCount(
+      0,
+    );
   });
 
   test("ラウンドの取得が一度だけ認証の拒否で返っても、「サインインが必要です。」は表示されず、スコアカードが表示される", async ({
@@ -620,8 +670,12 @@ test.describe("セッションの確認", () => {
 
     await page.goto(`/rounds/${roundId}`);
 
-    await expect(page.getByTestId("round-summary")).toContainText("合計9");
+    await expect(page.getByTestId("round-summary")).toContainText(
+      roundsText("roundTotal", { total: "9" }),
+    );
     expect(rejected).toBe(1);
-    await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
+    await expect(
+      page.getByText(roundsText("fetchFailure.unauthenticated")),
+    ).toHaveCount(0);
   });
 });

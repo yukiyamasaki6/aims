@@ -26,9 +26,12 @@ import {
 } from "@/features/rounds/domain/sync-events";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { useRoundDetailStore } from "@/features/rounds/ui/rounds-context";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
 import { retryDelayMs } from "../domain/sync-failure";
 import { ScorecardClient } from "./scorecard-client";
+
+const roundsText = translatorFor("rounds");
 
 // 更新の案内は別のテストで確かめるため、何も描かない代役に差し替える(起動地点のRootClientEntryが描く)。
 vi.mock("@/features/offline-pwa/ui/sw-update-activator", () => ({
@@ -400,7 +403,7 @@ describe("ScorecardClient 初期表示・集計", () => {
     );
     expect(screen.getByTestId("end-subtotal-1-2")).toHaveTextContent("");
     expect(screen.getByTestId("distance-summary-1")).toHaveTextContent(
-      "小計20",
+      roundsText("distanceSubtotal", { total: "20" }),
     );
     expect(screen.getByTestId("distance-top-scores-1")).toHaveTextContent(
       "10: 2 / X: 1",
@@ -408,7 +411,9 @@ describe("ScorecardClient 初期表示・集計", () => {
     expect(screen.getByTestId("round-top-scores")).toHaveTextContent(
       "10: 2 / X: 1",
     );
-    expect(screen.getByText("合計20")).toBeInTheDocument();
+    expect(
+      screen.getByText(roundsText("roundTotal", { total: "20" })),
+    ).toBeInTheDocument();
   });
 
   it("Xの無い的では、スコアを入力すると、小計・合計・最高点数と次点数が距離とラウンド全体に反映される", async () => {
@@ -423,7 +428,7 @@ describe("ScorecardClient 初期表示・集計", () => {
     // Then
     expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("11");
     expect(screen.getByTestId("distance-summary-1")).toHaveTextContent(
-      "小計11",
+      roundsText("distanceSubtotal", { total: "11" }),
     );
     expect(screen.getByTestId("distance-top-scores-1")).toHaveTextContent(
       "6: 1 / 5: 1",
@@ -431,7 +436,9 @@ describe("ScorecardClient 初期表示・集計", () => {
     expect(screen.getByTestId("round-top-scores")).toHaveTextContent(
       "6: 1 / 5: 1",
     );
-    expect(screen.getByText("合計11")).toBeInTheDocument();
+    expect(
+      screen.getByText(roundsText("roundTotal", { total: "11" })),
+    ).toBeInTheDocument();
   });
 
   it("距離間で的の点数構成が異なる場合、ラウンド全体の最高点数などは表示せず、距離ごとには表示する", () => {
@@ -451,7 +458,9 @@ describe("ScorecardClient 初期表示・集計", () => {
     expect(screen.getByTestId("distance-top-scores-2")).toHaveTextContent(
       "6: 0 / 5: 1",
     );
-    expect(screen.getByText("合計5")).toBeInTheDocument();
+    expect(
+      screen.getByText(roundsText("roundTotal", { total: "5" })),
+    ).toBeInTheDocument();
   });
 
   it("距離の的で最高点数などを集計できない場合、その距離の最高点数などは表示しない", () => {
@@ -488,9 +497,11 @@ describe("ScorecardClient 初期表示・集計", () => {
 
       // Then
       const row = screen.getByTestId("distance-config-toggle-1");
-      expect(row).toHaveTextContent("的データを取得できません");
+      expect(row).toHaveTextContent(roundsText("targetFaceMissing"));
       expect(row).toHaveTextContent("70m");
-      expect(row).toHaveTextContent("3本×12エンド");
+      expect(row).toHaveTextContent(
+        roundsText("distanceEnds", { arrowsPerEnd: "3", totalEnds: "12" }),
+      );
       expect(screen.getByTestId("shot-ball-1-1-1")).toHaveTextContent("9");
     });
 
@@ -895,7 +906,7 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
 
     // Then
     expect(screen.getByTestId("end-blank-1-2")).toHaveAccessibleName(
-      "エンド2に追加",
+      roundsText("endBlankAdd", { end: "2" }),
     );
   });
 
@@ -2414,7 +2425,9 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     const user = userEvent.setup();
     setup({ distances: [distanceA, distanceB] });
     await user.click(screen.getByTestId("score-button-10"));
-    expect(screen.getByText("合計10")).toBeInTheDocument();
+    expect(
+      screen.getByText(roundsText("roundTotal", { total: "10" })),
+    ).toBeInTheDocument();
 
     // When
     await user.click(screen.getByTestId("distance-config-toggle-1"));
@@ -2424,7 +2437,9 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     // Then
     expect(screen.queryByTestId("distance-summary-2")).not.toBeInTheDocument();
     expect(screen.getByTestId("distance-summary-1")).toBeInTheDocument();
-    expect(screen.getByText("合計0")).toBeInTheDocument();
+    expect(
+      screen.getByText(roundsText("roundTotal", { total: "0" })),
+    ).toBeInTheDocument();
     expect(provisionalEnd()).toBeNull();
   });
 
@@ -2545,7 +2560,7 @@ describe("ScorecardClient プリセット保存の失敗", () => {
 
     // Then
     expect(
-      await screen.findByText("保存できませんでした。"),
+      await screen.findByText(roundsText("presetSaveFailure.saveFailed")),
     ).toBeInTheDocument();
     expect(screen.queryByText("保存に失敗しました。")).not.toBeInTheDocument();
     expect(screen.getByTestId("save-as-preset-name")).toHaveValue(
@@ -2566,7 +2581,7 @@ describe("ScorecardClient プリセット保存の失敗", () => {
 
     // Then
     expect(
-      await screen.findByText("保存できませんでした。"),
+      await screen.findByText(roundsText("presetSaveFailure.saveFailed")),
     ).toBeInTheDocument();
     expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
   });
@@ -2580,7 +2595,7 @@ describe("ScorecardClient プリセット保存の失敗", () => {
 
     // Then
     expect(
-      await screen.findByText("サインインが必要です。"),
+      await screen.findByText(roundsText("fetchFailure.unauthenticated")),
     ).toBeInTheDocument();
     expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
     expect(savePresetCalls()).toEqual([]);
@@ -2598,12 +2613,10 @@ describe("ScorecardClient プリセット保存の失敗", () => {
 
     // Then
     expect(
-      await screen.findByText(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      ),
+      await screen.findByText(roundsText("fetchFailure.unreachable")),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText("サインインが必要です。"),
+      screen.queryByText(roundsText("fetchFailure.unauthenticated")),
     ).not.toBeInTheDocument();
     expect(savePresetCalls()).toEqual([]);
   });
@@ -2928,7 +2941,7 @@ describe("ScorecardClient ラウンドの完了", () => {
 
     // Then
     expect(
-      screen.getByText("記録がありません。入力を完了しますか？"),
+      screen.getByText(roundsText("completionConfirmation.noRecords")),
     ).toBeInTheDocument();
   });
 

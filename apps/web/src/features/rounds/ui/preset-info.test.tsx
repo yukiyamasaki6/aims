@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { DistanceInfo } from "./preset-info";
+
+const roundsText = translatorFor("rounds");
 
 describe("DistanceInfo", () => {
   it("距離があり、フィールド以外の種別ではMarked/Unmarkedを表示しない", () => {
@@ -108,7 +111,9 @@ describe("DistanceInfo(的の状態)", () => {
     const { container } = renderWith("missing");
 
     expect(screen.getByText("70m")).toBeInTheDocument();
-    expect(container).toHaveTextContent("6本×6エンド");
-    expect(container).toHaveTextContent("的データを取得できません");
+    expect(container).toHaveTextContent(
+      roundsText("distanceEnds", { arrowsPerEnd: "6", totalEnds: "6" }),
+    );
+    expect(container).toHaveTextContent(roundsText("targetFaceMissing"));
   });
 });

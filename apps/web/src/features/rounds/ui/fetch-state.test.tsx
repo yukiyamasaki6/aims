@@ -2,7 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { FetchState } from "./fetch-state";
+
+const roundsText = translatorFor("rounds");
 
 describe("FetchState", () => {
   describe("正常系", () => {
@@ -49,7 +52,7 @@ describe("FetchState", () => {
 
       // Then
       expect(
-        screen.getByText("ラウンドが見つかりません。"),
+        screen.getByText(roundsText("detailNotFound")),
       ).toBeInTheDocument();
       expect(screen.queryByRole("link")).not.toBeInTheDocument();
     });
@@ -62,11 +65,9 @@ describe("FetchState", () => {
       });
 
       // Then
+      expect(screen.getByText(roundsText("fetchOffline"))).toBeInTheDocument();
       expect(
-        screen.getByText("ネットワークに接続されていません"),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "再試行" }),
+        screen.getByRole("button", { name: roundsText("fetchRetry") }),
       ).toBeInTheDocument();
     });
 
@@ -78,7 +79,9 @@ describe("FetchState", () => {
       });
 
       // When
-      await userEvent.click(screen.getByRole("button", { name: "再試行" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: roundsText("fetchRetry") }),
+      );
 
       // Then
       expect(onRetry).toHaveBeenCalledTimes(1);
@@ -97,10 +100,10 @@ describe("FetchState", () => {
 
       // Then
       expect(screen.getByRole("alert")).toHaveTextContent(
-        "読み込めませんでした。",
+        roundsText("fetchFailure.failed"),
       );
       expect(
-        screen.getByRole("button", { name: "再試行" }),
+        screen.getByRole("button", { name: roundsText("fetchRetry") }),
       ).toBeInTheDocument();
     });
 
@@ -116,7 +119,9 @@ describe("FetchState", () => {
       );
 
       // When
-      await userEvent.click(screen.getByRole("button", { name: "再試行" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: roundsText("fetchRetry") }),
+      );
 
       // Then
       expect(onRetry).toHaveBeenCalledTimes(1);
@@ -132,7 +137,7 @@ describe("FetchState", () => {
       });
 
       // Then
-      expect(screen.getByText("見つかりませんでした。")).toBeInTheDocument();
+      expect(screen.getByText(roundsText("fetchNotFound"))).toBeInTheDocument();
       expect(screen.queryByRole("link")).not.toBeInTheDocument();
     });
 

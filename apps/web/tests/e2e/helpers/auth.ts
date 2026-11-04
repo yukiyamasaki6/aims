@@ -2,6 +2,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { translatorFor } from "@/i18n/translator-test-helpers";
+
+const authText = translatorFor("auth");
 
 export const SHARED_AUTH_STATE_PATH = "playwright/.auth/e2e-shared-user.json";
 const SHARED_EMAIL_PATH = "playwright/.auth/e2e-shared-email.txt";
@@ -75,8 +78,12 @@ export async function signUpAndSignIn(
   await page.goto("/signin");
   await waitForHydration(page);
   await page.getByPlaceholder("you@example.com").fill(input.email);
-  await page.getByPlaceholder("パスワード").fill(input.password);
-  const signInButton = page.getByRole("button", { name: "サインイン" });
+  await page
+    .getByPlaceholder(authText("passwordPlaceholder"))
+    .fill(input.password);
+  const signInButton = page.getByRole("button", {
+    name: authText("signInSubmit"),
+  });
   await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
   await signInButton.click();
   await expect(page).toHaveURL(/\/rounds/);

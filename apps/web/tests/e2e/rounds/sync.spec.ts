@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Page, Route } from "@playwright/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
@@ -37,6 +38,9 @@ import {
 } from "../helpers/service-worker";
 import { overlapNextRefresh } from "../helpers/session-overlap";
 import { mockTurnstile } from "../helpers/turnstile";
+
+const authText = translatorFor("auth");
+const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -105,7 +109,7 @@ async function expectSavedShots(
 
 // 一覧と詳細の行き来は、ハブの常駐を確かめるため、画面を読み込み直さないリンクの遷移で行う。
 async function backToList(page: Page) {
-  await page.getByRole("link", { name: "一覧へ戻る" }).click();
+  await page.getByRole("link", { name: roundsText("backToList") }).click();
   await expect(page).toHaveURL(/\/rounds$/);
 }
 
@@ -138,15 +142,21 @@ async function signInOnPage(
   user: { email: string; password: string },
 ) {
   await page.getByPlaceholder("you@example.com").fill(user.email);
-  await page.getByPlaceholder("パスワード").fill(user.password);
-  const signInButton = page.getByRole("button", { name: "サインイン" });
+  await page
+    .getByPlaceholder(authText("passwordPlaceholder"))
+    .fill(user.password);
+  const signInButton = page.getByRole("button", {
+    name: authText("signInSubmit"),
+  });
   await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
   await signInButton.click();
 }
 
 async function signOutOnPage(page: Page) {
-  await page.getByRole("button", { name: "サインアウト" }).click();
-  await page.getByRole("button", { name: "サインアウトする" }).click();
+  await page.getByRole("button", { name: authText("signOut") }).click();
+  await page
+    .getByRole("button", { name: authText("signOutConfirmLabel") })
+    .click();
   await expect(page).toHaveURL(/\/signin/);
   // 水和の前に入力すると、メールアドレス欄が水和で空に戻るため、水和を待つ。
   await waitForHydration(page);
@@ -468,7 +478,7 @@ test("開始したラウンドの作成が、受け付けられない形とし�
 
   // 作成の拒否を返し、「ラウンドが見つかりません。」と表示されることを確かめる。
   release();
-  await expect(page.getByText("ラウンドが見つかりません。")).toBeVisible();
+  await expect(page.getByText(roundsText("detailNotFound"))).toBeVisible();
 
   await backToList(page);
   await expect(roundLinks(page, id)).toHaveCount(0);
@@ -883,7 +893,7 @@ test("他の端末の矢がある距離で、オフラインで距離(m)とエ�
   await page.getByTestId("distance-config-save-1").click();
   await expect(page.getByTestId("distance-config-save-1")).toBeHidden();
   await expect(page.getByTestId("distance-summary-1")).toContainText(
-    "3本×12エンド",
+    roundsText("distanceEnds", { arrowsPerEnd: "3", totalEnds: "12" }),
   );
 
   // 他の端末がエンド1へ5本を記録した後でオンラインに戻り、距離(m)だけが保存されることを確かめる。
@@ -913,7 +923,7 @@ test("他の端末の矢がある距離で、オフラインで距離(m)とエ�
   // 再読み込みし、元のエンド数・矢数と変えた距離(m)で、他の端末の5本が表示されることを確かめる。
   await reloadRound(page);
   await expect(page.getByTestId("distance-summary-1")).toContainText(
-    "6本×6エンド",
+    roundsText("distanceEnds", { arrowsPerEnd: "6", totalEnds: "6" }),
   );
   await expect(page.getByTestId("distance-summary-1")).toContainText("40m");
   await expect(endBalls(page, 1, 1)).toHaveText(["10", "9", "8", "7", "6"]);
@@ -952,7 +962,7 @@ test("2つのタブで開いたラウンドの一方のタブの変更が他の�
   await goOnline(page);
   await expect(page.getByTestId("distance-summary-1")).toContainText("40m");
   await expect(page.getByTestId("distance-summary-1")).toContainText(
-    "6本×6エンド",
+    roundsText("distanceEnds", { arrowsPerEnd: "6", totalEnds: "6" }),
   );
   await expect(endBalls(page, 1, 1)).toHaveText(["10", "9", "8", "7", "6"]);
 
@@ -1012,7 +1022,10 @@ test("他の端末がラウンドの名前と日付を、この端末がオフ�
   // 再読み込みし、保存された名前・日付・弓種が表示されることを確かめる。
   await reloadRound(page);
   await expect(page.getByTestId("round-config-summary")).toHaveText(
-    "ページ側の名前 / 2026-08-25 / アウトドア / コンパウンド",
+    roundsText("formatBowType", {
+      format: "ページ側の名前",
+      bowType: "2026-08-25 / アウトドア / コンパウンド",
+    }),
   );
 });
 
@@ -1158,7 +1171,7 @@ test("他の端末がラウンドを削除した後に、この端末がオフ�
   await sent;
   await shotsSent;
   await page.reload();
-  await expect(page.getByText("ラウンドが見つかりません。")).toBeVisible();
+  await expect(page.getByText(roundsText("detailNotFound"))).toBeVisible();
 });
 
 test("送信に失敗して2つのタブに未送信の点数があるとき、一方のタブを閉じてから残ったタブを再読み込みすると、両方の点数が保存される", async ({

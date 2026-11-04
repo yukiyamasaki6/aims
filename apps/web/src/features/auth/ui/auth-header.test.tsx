@@ -2,7 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { AuthHeader } from "./auth-header";
+
+const authText = translatorFor("auth");
 
 describe("AuthHeader", () => {
   describe("表示", () => {
@@ -11,7 +14,7 @@ describe("AuthHeader", () => {
         // Given
 
         // When
-        const title = "サインイン";
+        const title = authText("signInTitle");
         render(<AuthHeader title={title} />, { wrapper: IntlTestProvider });
 
         // Then
@@ -39,7 +42,7 @@ describe("AuthHeader", () => {
         // Given
 
         // When
-        const title = "サインイン";
+        const title = authText("signInTitle");
         const { container } = render(<AuthHeader title={title} />, {
           wrapper: IntlTestProvider,
         });
@@ -61,7 +64,7 @@ describe("AuthHeader", () => {
 
         // Then
         expect(
-          screen.getByRole("button", { name: /戻る/ }),
+          screen.getByRole("button", { name: authText("back") }),
         ).toBeInTheDocument();
       });
 
@@ -69,12 +72,12 @@ describe("AuthHeader", () => {
         // Given
 
         // When
-        const title = "サインイン";
+        const title = authText("signInTitle");
         render(<AuthHeader title={title} />, { wrapper: IntlTestProvider });
 
         // Then
         expect(
-          screen.queryByRole("button", { name: /戻る/ }),
+          screen.queryByRole("button", { name: authText("back") }),
         ).not.toBeInTheDocument();
       });
     });
@@ -91,10 +94,9 @@ describe("AuthHeader", () => {
         );
 
         // Then
-        expect(screen.getByRole("button", { name: /戻る/ })).toHaveAttribute(
-          "aria-disabled",
-          "true",
-        );
+        expect(
+          screen.getByRole("button", { name: authText("back") }),
+        ).toHaveAttribute("aria-disabled", "true");
       });
 
       it.each([
@@ -118,7 +120,7 @@ describe("AuthHeader", () => {
 
           // Then
           expect(
-            screen.getByRole("button", { name: /戻る/ }),
+            screen.getByRole("button", { name: authText("back") }),
           ).not.toHaveAttribute("aria-disabled", "true");
         },
       );
@@ -135,7 +137,7 @@ describe("AuthHeader", () => {
       });
 
       // When
-      await user.click(screen.getByRole("button", { name: /戻る/ }));
+      await user.click(screen.getByRole("button", { name: authText("back") }));
 
       // Then
       expect(handleBack).toHaveBeenCalledTimes(1);
@@ -152,7 +154,7 @@ describe("AuthHeader", () => {
       );
 
       // When
-      await user.click(screen.getByRole("button", { name: /戻る/ }));
+      await user.click(screen.getByRole("button", { name: authText("back") }));
 
       // Then
       expect(handleBack).toHaveBeenCalledTimes(1);

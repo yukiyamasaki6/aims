@@ -15,6 +15,7 @@ import {
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import type { CallResult } from "../application/call-result";
 import type { PasswordSetup } from "../application/password-setup";
@@ -25,13 +26,12 @@ import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import { ResetPasswordForm } from "./reset-password-form";
 import { SignUpForm } from "./signup-form";
 
-const NETWORK_ERROR_MESSAGE =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
-const CAPTCHA_ERROR_MESSAGE = "セキュリティチェックが完了していません。";
-const COOLDOWN_ERROR_MESSAGE =
-  "再送はクールダウン中です。しばらくしてから再度お試しください。";
-const OTP_EXPIRED_MESSAGE =
-  "認証コードが正しくないか、有効期限が切れています。";
+const authText = translatorFor("auth");
+
+const NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
+const CAPTCHA_ERROR_MESSAGE = authText("fieldError.captcha.incomplete");
+const COOLDOWN_ERROR_MESSAGE = authText("fieldError.resend.cooldown");
+const OTP_EXPIRED_MESSAGE = authText("failure.code_expired");
 const ACCEPTED: CallResult = { kind: "accepted" };
 
 // 認証サービスが拒否した結果。
@@ -65,7 +65,7 @@ const subjects: {
   purpose: "sign-up" | "password-reset";
 }[] = [
   {
-    name: "サインアップ",
+    name: authText("signInSignUpLink"),
     create: () =>
       createSignUp({
         clock: createBrowserClock(),
@@ -155,20 +155,22 @@ function passwordInput() {
 }
 
 function sendCodeButton() {
-  return screen.getByRole("button", { name: "認証コードを送信" });
+  return screen.getByRole("button", { name: authText("otpSendCode") });
 }
 
 function verifyButton() {
-  return screen.getByRole("button", { name: "確認" });
+  return screen.getByRole("button", { name: authText("otpVerify") });
 }
 
 // クールダウン中は「再送（N秒）」と表示されるため、前方一致で取得する。
 function resendButton() {
-  return screen.getByRole("button", { name: /^再送/ });
+  return screen.getByRole("button", {
+    name: new RegExp(`^${authText("otpResend")}`),
+  });
 }
 
 function backButton() {
-  return screen.getByRole("button", { name: "戻る" });
+  return screen.getByRole("button", { name: authText("back") });
 }
 
 function setPasswordButton() {
@@ -213,7 +215,7 @@ async function advanceToCodeStep(email = "user@example.com") {
   completeCaptcha();
   fireEvent.click(sendCodeButton());
   await settle();
-  expect(heading("認証コードを入力")).toBeInTheDocument();
+  expect(heading(authText("otpTitle"))).toBeInTheDocument();
   vi.clearAllMocks();
 }
 
@@ -263,7 +265,7 @@ function expectCodeStepOperationsBlocked(pending: "verify" | "resend") {
   fireEvent.click(resendButton());
   fireEvent.click(backButton());
 
-  expect(heading("認証コードを入力")).toBeInTheDocument();
+  expect(heading(authText("otpTitle"))).toBeInTheDocument();
   expect(screen.queryByText(COOLDOWN_ERROR_MESSAGE)).not.toBeInTheDocument();
 }
 
@@ -286,11 +288,11 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // Then
       expect(
-        await screen.findByRole("heading", { name: "認証コードを入力" }),
+        await screen.findByRole("heading", { name: authText("otpTitle") }),
       ).toBeInTheDocument();
       expect(
         screen.getByText(
-          "new@example.com に送信されたコードを入力してください。",
+          authText("otpDescription", { email: "new@example.com" }),
         ),
       ).toBeInTheDocument();
       expect(resendButton()).toHaveTextContent("再送（60秒）");
@@ -336,7 +338,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // Then
       const message = screen.getByText(
-        "メールアドレスの形式が正しくありません。",
+        authText("fieldError.email.invalidFormat"),
       );
       expect(emailInput()).toHaveAttribute("aria-invalid", "true");
       expect(emailInput()).toHaveAttribute("aria-describedby", message.id);
@@ -369,9 +371,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // Then
       expect(
-        await screen.findByText(
-          "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
-        ),
+        await screen.findByText(authText("failure.rate_limited")),
       ).toBeInTheDocument();
       expect(heading(subject.emailHeading)).toBeInTheDocument();
       expect(turnstile.reset).toHaveBeenCalledOnce();
@@ -419,7 +419,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // Then
       expect(
-        await screen.findByRole("heading", { name: "認証コードを入力" }),
+        await screen.findByRole("heading", { name: authText("otpTitle") }),
       ).toBeInTheDocument();
       expect(auth.sendCode).toHaveBeenLastCalledWith({
         purpose: subject.purpose,
@@ -437,7 +437,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       const user = userEvent.setup();
       renderForm();
       await submitEmailStep(user);
-      await screen.findByText(/リクエストの間隔が短すぎます/);
+      await screen.findByText(authText("failure.rate_limited"));
       await user.click(sendCodeButton());
       expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
       expect(auth.sendCode).toHaveBeenCalledOnce();
@@ -448,7 +448,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // Then
       expect(
-        await screen.findByRole("heading", { name: "認証コードを入力" }),
+        await screen.findByRole("heading", { name: authText("otpTitle") }),
       ).toBeInTheDocument();
       expect(auth.sendCode).toHaveBeenLastCalledWith({
         purpose: subject.purpose,
@@ -469,7 +469,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // Then
       expect(
-        await screen.findByRole("heading", { name: "認証コードを入力" }),
+        await screen.findByRole("heading", { name: authText("otpTitle") }),
       ).toBeInTheDocument();
       expect(auth.sendCode).toHaveBeenCalledOnce();
       expect(turnstile.reset).toHaveBeenCalledOnce();
@@ -553,7 +553,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // Then
       expect(await screen.findByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-      expect(heading("認証コードを入力")).toBeInTheDocument();
+      expect(heading(authText("otpTitle"))).toBeInTheDocument();
       await expectCodeStepOperationsAvailable();
     });
 
@@ -572,7 +572,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       expect(
         await screen.findByText(NETWORK_ERROR_MESSAGE),
       ).toBeInTheDocument();
-      expect(heading("認証コードを入力")).toBeInTheDocument();
+      expect(heading(authText("otpTitle"))).toBeInTheDocument();
       await expectCodeStepOperationsAvailable();
     });
   });
@@ -607,7 +607,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // When
       await user.click(sendCodeButton());
-      await screen.findByRole("heading", { name: "認証コードを入力" });
+      await screen.findByRole("heading", { name: authText("otpTitle") });
 
       // Then
       expect(codeInput()).toHaveValue("");
@@ -663,7 +663,9 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
         await advanceSeconds(1);
 
         // Then
-        expect(resendButton()).toHaveTextContent(/^再送$/);
+        expect(resendButton()).toHaveTextContent(
+          new RegExp(`^${authText("otpResend")}$`),
+        );
       });
 
       it("待ちが0になった後は、計時を予約せず、時間が進んでも表示を変えない", async () => {
@@ -677,7 +679,9 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
         // Then
         expect(vi.getTimerCount()).toBe(0);
-        expect(resendButton()).toHaveTextContent(/^再送$/);
+        expect(resendButton()).toHaveTextContent(
+          new RegExp(`^${authText("otpResend")}$`),
+        );
       });
 
       it("待ちの途中でアンマウントすると、計時の予約が取り消される", async () => {
@@ -779,7 +783,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // Then
       expect(
-        screen.getByText("認証に失敗しました。もう一度お試しください。"),
+        screen.getByText(authText("failure.captcha_failed")),
       ).toBeInTheDocument();
       expect(turnstile.reset).toHaveBeenCalledOnce();
       await expectCodeStepOperationsAvailable();
@@ -970,7 +974,9 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       await user.click(setPasswordButton());
 
       // Then
-      const message = screen.getByText("パスワードを入力してください。");
+      const message = screen.getByText(
+        authText("fieldError.password.required"),
+      );
       expect(passwordInput()).toHaveAttribute("aria-invalid", "true");
       expect(passwordInput()).toHaveAttribute("aria-describedby", message.id);
       expect(auth.setPassword).not.toHaveBeenCalled();
@@ -1134,8 +1140,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
   // 判断Q: 理由が表示された後に再び送信した場合は、次の結果が出るまで、表示された理由が残る。
   describe("再送信の間のエラー表示", () => {
-    const RateLimitedMessage =
-      "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。";
+    const RateLimitedMessage = authText("failure.rate_limited");
     const WeakMessage =
       "8〜72文字の半角英数記号で、英字と数字を含めてください。";
 
@@ -1180,7 +1185,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       await settle();
 
       // Then
-      expect(heading("認証コードを入力")).toBeInTheDocument();
+      expect(heading(authText("otpTitle"))).toBeInTheDocument();
       expect(screen.queryByText(RateLimitedMessage)).not.toBeInTheDocument();
     });
 
@@ -1257,7 +1262,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       await advanceToPasswordStep();
       fireEvent.click(setPasswordButton());
       expect(
-        screen.getByText("パスワードを入力してください。"),
+        screen.getByText(authText("fieldError.password.required")),
       ).toBeInTheDocument();
       changeValue(passwordInput(), "password123");
       auth.setPassword.mockReturnValue(new Promise(() => {}));
@@ -1268,7 +1273,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // Then
       expect(
-        screen.getByText("パスワードを入力してください。"),
+        screen.getByText(authText("fieldError.password.required")),
       ).toBeInTheDocument();
       expect(passwordInput()).toHaveAttribute("aria-invalid", "true");
       expect(spinnerIn(setPasswordButton())).not.toBeNull();
@@ -1329,7 +1334,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
         // Then
         expect(screen.queryByText(OTP_EXPIRED_MESSAGE)).not.toBeInTheDocument();
-        expect(heading("認証コードを入力")).toBeInTheDocument();
+        expect(heading(authText("otpTitle"))).toBeInTheDocument();
       });
     });
   });

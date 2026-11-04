@@ -5,6 +5,7 @@ import {
   shellUrlOf,
 } from "@/features/offline-pwa/domain/offline-routes";
 import { ROUND_FRAME_PATHS } from "@/features/rounds/domain/round-routes";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   getSharedEmail,
@@ -16,6 +17,10 @@ import {
 import { expectRoundBasesFetched } from "../helpers/reference-data";
 import { createRound } from "../helpers/rounds";
 import { comeBackOnline, goOffline } from "../helpers/service-worker";
+
+const authText = translatorFor("auth");
+const offlinePwaText = translatorFor("offlinePwa");
+const roundsText = translatorFor("rounds");
 
 // 認証に依存しない/を使い、Service Workerが有効になるまで待つ。
 async function openWithServiceWorker(page: Page) {
@@ -399,7 +404,7 @@ test("未認証で紹介画面を開くと画面の枠が保存され、サイ�
     );
   }
   expect(frameBodies["/__shell/rounds"], "一覧の枠の本文").toContain(
-    "ラウンド一覧",
+    roundsText("listTitle"),
   );
 
   // 入力中のラウンドが端末に無い使い捨てのユーザーでサインインし、ラウンド一覧へ進む。
@@ -414,25 +419,27 @@ test("未認証で紹介画面を開くと画面の枠が保存され、サイ�
   expect(response?.fromServiceWorker()).toBe(true);
   await expect(page).toHaveURL(/\/rounds$/);
   await expect(
-    page.getByRole("heading", { name: "ラウンド一覧" }),
+    page.getByRole("heading", { name: roundsText("listTitle") }),
   ).toBeVisible();
   await expect(page.getByTestId("new-round-fab")).toBeVisible();
-  await expect(
-    page.getByText("ネットワークに接続されていません"),
-  ).toBeVisible();
+  await expect(page.getByText(roundsText("fetchOffline"))).toBeVisible();
   await expect(page.getByPlaceholder("you@example.com")).toHaveCount(0);
-  await expect(page.getByPlaceholder("パスワード")).toHaveCount(0);
-  await expect(page.getByText("まだラウンドがありません。")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "入力中" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "過去履歴" })).toHaveCount(0);
+  await expect(
+    page.getByPlaceholder(authText("passwordPlaceholder")),
+  ).toHaveCount(0);
+  await expect(page.getByText(roundsText("listEmpty"))).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: roundsText("listInProgress") }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: roundsText("listHistory") }),
+  ).toHaveCount(0);
   expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
 
   // オンラインに戻り、一覧の内容(ラウンドが無い表示)が表示されることを確かめる。
   await comeBackOnline(context, page);
-  await expect(page.getByText("まだラウンドがありません。")).toBeVisible();
-  await expect(page.getByText("ネットワークに接続されていません")).toHaveCount(
-    0,
-  );
+  await expect(page.getByText(roundsText("listEmpty"))).toBeVisible();
+  await expect(page.getByText(roundsText("fetchOffline"))).toHaveCount(0);
 });
 
 test("Service Workerが登録済みでオフラインのとき、紹介画面を開くと、オフラインのページが表示される", async ({
@@ -447,12 +454,10 @@ test("Service Workerが登録済みでオフラインのとき、紹介画面を
   await page.goto("/");
 
   await expect(
-    page.getByRole("heading", { name: "オフラインです" }),
+    page.getByRole("heading", { name: offlinePwaText("offlineTitle") }),
   ).toBeVisible();
   await expect(
-    page.getByText(
-      "インターネットに接続されていません。接続を確認してから、もう一度お試しください。",
-    ),
+    page.getByText(offlinePwaText("offlineDescription")),
   ).toBeVisible();
 });
 
@@ -511,7 +516,9 @@ test.describe("認証済みで開く", () => {
     });
 
     expect(response?.fromServiceWorker()).toBe(true);
-    await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: roundsText("backToList") }),
+    ).toBeVisible();
     await expect(page.getByRole("status")).toBeVisible();
     await expect(page.getByTestId("round-config-summary")).toHaveCount(0);
     release();
@@ -530,19 +537,15 @@ test.describe("認証済みで開く", () => {
     const response = await page.goto("/rounds/new");
     expect(response?.fromServiceWorker()).toBe(true);
     await expect(
-      page.getByRole("heading", { name: "ラウンドを作成" }),
+      page.getByRole("heading", { name: roundsText("createRound") }),
     ).toBeVisible();
-    await expect(
-      page.getByText("ネットワークに接続されていません"),
-    ).toBeVisible();
+    await expect(page.getByText(roundsText("fetchOffline"))).toBeVisible();
     expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
 
     // オンラインに戻り、プリセット一覧が表示されることを確かめる。
     await comeBackOnline(context, page);
     await expect(page.getByTestId("round-preset-button").first()).toBeVisible();
-    await expect(
-      page.getByText("ネットワークに接続されていません"),
-    ).toHaveCount(0);
+    await expect(page.getByText(roundsText("fetchOffline"))).toHaveCount(0);
   });
 
   test("端末にオフラインで開ける内容がないラウンドを、オフラインで開くと、詳細の枠と「ネットワークに接続されていません」が表示され、オンラインに戻るとラウンドの内容が表示される", async ({
@@ -564,18 +567,16 @@ test.describe("認証済みで開く", () => {
     await goOffline(context);
     const response = await page.goto(`/rounds/${roundId}`);
     expect(response?.fromServiceWorker()).toBe(true);
-    await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
     await expect(
-      page.getByText("ネットワークに接続されていません"),
+      page.getByRole("link", { name: roundsText("backToList") }),
     ).toBeVisible();
+    await expect(page.getByText(roundsText("fetchOffline"))).toBeVisible();
     expect(errors, "ハイドレーションエラーがないこと").toEqual([]);
 
     // オンラインに戻り、ラウンドの内容が表示されることを確かめる。
     await comeBackOnline(context, page);
     await expect(page.getByTestId("round-config-summary")).toBeVisible();
-    await expect(
-      page.getByText("ネットワークに接続されていません"),
-    ).toHaveCount(0);
+    await expect(page.getByText(roundsText("fetchOffline"))).toHaveCount(0);
   });
 });
 
@@ -602,7 +603,7 @@ test.describe("新しいビルドへの更新", () => {
     expect((await workerState(page)).activeNew).toBe(false);
     expect(await isSameDocument(page)).toBe(true);
     await expect(
-      page.getByRole("heading", { name: "ラウンド一覧" }),
+      page.getByRole("heading", { name: roundsText("listTitle") }),
     ).toBeVisible();
 
     // リンクを押してラウンド作成画面へ移り、旧ビルドの枠を挟まずに新しいビルドの枠で表示されることを確かめる。
@@ -649,9 +650,7 @@ test.describe("新しいビルドへの更新", () => {
     await transitionUntilSwitched(page);
     await expect.poll(shownNewBuild, { timeout: 15_000 }).toBe(true);
     await expect(page).toHaveURL(/\/rounds(\/new)?$/);
-    await expect(
-      page.getByText("ネットワークに接続されていません"),
-    ).toBeVisible();
+    await expect(page.getByText(roundsText("fetchOffline"))).toBeVisible();
   });
 
   test("新しいService Workerへの切り替えが進まないとき、リンクを押して他の画面へ移ると、旧ビルドの枠で表示されて操作でき、次にリンクを押したときに改めて切り替えを試みる", async ({

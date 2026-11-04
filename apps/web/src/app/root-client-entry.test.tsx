@@ -1,4 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
+import { useTranslations } from "next-intl";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
@@ -30,6 +31,7 @@ import { createPresetCommands } from "@/features/rounds/infrastructure/preset-co
 import { createReferenceSnapshots } from "@/features/rounds/infrastructure/reference-snapshot";
 import { createRoundQueries } from "@/features/rounds/infrastructure/round-queries";
 import { useRoundDetailStore } from "@/features/rounds/ui/rounds-context";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createRouterPageNavigation } from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { RootClientEntry } from "./root-client-entry";
 
@@ -516,6 +518,49 @@ describe("RootClientEntry", () => {
 
       // Then
       expect(createBrowserIdentityStore().read()).toBe("user-1");
+    });
+  });
+
+  describe("文言", () => {
+    it("包んだ子の部品が、useTranslationsで文言の一覧の本文を表示する", () => {
+      // Given
+      function Label() {
+        return <p>{useTranslations("shared")("confirmDelete")}</p>;
+      }
+
+      // When
+      render(
+        <RootClientEntry>
+          <Label />
+        </RootClientEntry>,
+      );
+
+      // Then
+      expect(
+        screen.getByText(translatorFor("shared")("confirmDelete")),
+      ).toBeInTheDocument();
+    });
+
+    it("存在しないキーを参照しても、画面にキー名が出ない", () => {
+      // Given
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      function Missing() {
+        const t = useTranslations("shared") as unknown as (
+          key: string,
+        ) => string;
+        return <p data-testid="missing">{t("noSuchKey")}</p>;
+      }
+
+      // When
+      render(
+        <RootClientEntry>
+          <Missing />
+        </RootClientEntry>,
+      );
+
+      // Then
+      expect(screen.getByTestId("missing")).toBeEmptyDOMElement();
+      expect(document.body).not.toHaveTextContent("noSuchKey");
     });
   });
 

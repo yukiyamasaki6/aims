@@ -4,10 +4,13 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { DistanceConfig } from "../domain/distance-config";
 import { DistanceEditFields } from "./distance-edit-fields";
 import { createFakeRoundDetailStore } from "./round-stores-test-helpers";
 import { RoundDetailStoreProvider } from "./rounds-context";
+
+const roundsText = translatorFor("rounds");
 
 const targetFaceOutdoorRecurve: TargetFaceOption = {
   id: "face-outdoor-recurve",
@@ -136,7 +139,7 @@ describe("DistanceEditFields", () => {
 
       it.each([
         ["distance-config-arrows-1", "本数"],
-        ["distance-config-total-ends-1", "総エンド数"],
+        ["distance-config-total-ends-1", roundsText("distanceFieldTotalEnds")],
       ])(
         "%sを押すとメッセージが表示され、値は変わらない（%s）",
         async (testId) => {
@@ -152,7 +155,7 @@ describe("DistanceEditFields", () => {
 
           // Then
           expect(screen.getByRole("alert")).toHaveTextContent(
-            "スコアが記録済みのため変更できません",
+            roundsText("distanceLocked"),
           );
           expect(
             screen.getByTestId(`${testId}-locked-message`),
@@ -174,7 +177,7 @@ describe("DistanceEditFields", () => {
         // Then
         expect(
           screen.getByTestId("distance-config-target-face-locked-message"),
-        ).toHaveTextContent("スコアが記録済みのため変更できません");
+        ).toHaveTextContent(roundsText("distanceLocked"));
         expect(
           screen.queryByTestId(
             `target-face-option-${targetFaceOutdoorRecurve.id}`,
@@ -235,7 +238,9 @@ describe("DistanceEditFields", () => {
 
         // Then
         expect(
-          screen.getByLabelText("的（スコア記録済みのため変更不可）"),
+          screen.getByLabelText(
+            roundsText("targetFaceTriggerLocked", { name: "的" }),
+          ),
         ).toBeInTheDocument();
       });
     });
@@ -252,9 +257,9 @@ describe("DistanceEditFields", () => {
 
         // Then
         const trigger = screen.getByLabelText(
-          "的データを取得できません（タップで変更）",
+          roundsText("targetFaceTriggerMissing"),
         );
-        expect(trigger).toHaveTextContent("的データを取得できません");
+        expect(trigger).toHaveTextContent(roundsText("targetFaceMissing"));
         expect(trigger).not.toHaveAttribute("aria-disabled");
       });
 
@@ -265,7 +270,7 @@ describe("DistanceEditFields", () => {
 
         // When
         await user.click(
-          screen.getByLabelText("的データを取得できません（タップで変更）"),
+          screen.getByLabelText(roundsText("targetFaceTriggerMissing")),
         );
 
         // Then
@@ -283,7 +288,9 @@ describe("DistanceEditFields", () => {
 
         // Then
         expect(
-          screen.getByLabelText("的（スコア記録済みのため変更不可）"),
+          screen.getByLabelText(
+            roundsText("targetFaceTriggerLocked", { name: "的" }),
+          ),
         ).toHaveAttribute("aria-disabled", "true");
       });
     });
@@ -433,7 +440,7 @@ describe("DistanceEditFields", () => {
 
         // Then
         expect(
-          screen.getByText("距離を入力してください。"),
+          screen.getByText(roundsText("distanceConfigError.required")),
         ).toBeInTheDocument();
         expect(
           screen.getAllByText("1以上の整数を入力してください。"),
@@ -476,9 +483,7 @@ describe("DistanceEditFields", () => {
 
         // Then
         expect(
-          screen.getByText(
-            "この距離にはすでにスコアが記録されています。削除するとスコアも失われます。削除しますか？",
-          ),
+          screen.getByText(roundsText("distanceDeleteConfirm")),
         ).toBeInTheDocument();
         expect(onDeleted).not.toHaveBeenCalled();
       });

@@ -6,16 +6,17 @@ import { forwardRef, useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import SignUpPage from "./page";
 
-const NETWORK_ERROR_MESSAGE =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
-const CAPTCHA_ERROR_MESSAGE = "セキュリティチェックが完了していません。";
-const OTP_EXPIRED_MESSAGE =
-  "認証コードが正しくないか、有効期限が切れています。";
+const authText = translatorFor("auth");
+
+const NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
+const CAPTCHA_ERROR_MESSAGE = authText("fieldError.captcha.incomplete");
+const OTP_EXPIRED_MESSAGE = authText("failure.code_expired");
 const WEAK_PASSWORD_MESSAGE =
   "8〜72文字の半角英数記号で、英字と数字を含めてください。";
-const REGISTERED_MESSAGE = "このメールアドレスは既に登録されています。";
+const REGISTERED_MESSAGE = authText("failure.already_registered");
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
@@ -81,7 +82,7 @@ function emailInput() {
 }
 
 function sendCodeButton() {
-  return screen.getByRole("button", { name: "認証コードを送信" });
+  return screen.getByRole("button", { name: authText("otpSendCode") });
 }
 
 function codeInput() {
@@ -89,19 +90,23 @@ function codeInput() {
 }
 
 function verifyButton() {
-  return screen.getByRole("button", { name: "確認" });
+  return screen.getByRole("button", { name: authText("otpVerify") });
 }
 
 function resendButton() {
-  return screen.getByRole("button", { name: /^再送/ });
+  return screen.getByRole("button", {
+    name: new RegExp(`^${authText("otpResend")}`),
+  });
 }
 
 function passwordInput() {
-  return screen.getByPlaceholderText("パスワード（8文字以上・英数字を含む）");
+  return screen.getByPlaceholderText(
+    authText("passwordFieldPlaceholder", { label: "パスワード", min: "8" }),
+  );
 }
 
 function setPasswordButton() {
-  return screen.getByRole("button", { name: "登録してサインイン" });
+  return screen.getByRole("button", { name: authText("signUpPasswordSubmit") });
 }
 
 function widgetButton() {
@@ -118,7 +123,7 @@ async function advanceToCodeStep(user: User) {
   server.isEmailRegistered.mockResolvedValue(false);
   auth.signInWithOtp.mockResolvedValue({ error: null });
   await submitEmailStep(user);
-  await screen.findByRole("heading", { name: "認証コードを入力" });
+  await screen.findByRole("heading", { name: authText("otpTitle") });
 }
 
 async function advanceToPasswordStep(user: User) {
@@ -126,7 +131,7 @@ async function advanceToPasswordStep(user: User) {
   auth.verifyOtp.mockResolvedValue({ error: null });
   await user.type(codeInput(), "123456");
   await user.click(verifyButton());
-  await screen.findByRole("heading", { name: "パスワードを設定" });
+  await screen.findByRole("heading", { name: authText("signUpPasswordTitle") });
 }
 
 // 応答済みのモックの結果を、実際のマクロタスク境界まで進めて画面へ反映させる。フェイクタイマー下でも進むよう、node:timersを使う。
@@ -167,10 +172,10 @@ describe("サインアップ画面の入口", () => {
 
     // Then
     expect(
-      screen.getByRole("heading", { name: "サインアップ" }),
+      screen.getByRole("heading", { name: authText("signUpTitle") }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "認証コードを送信" }),
+      screen.getByRole("button", { name: authText("otpSendCode") }),
     ).toBeInTheDocument();
   });
 
@@ -193,10 +198,12 @@ describe("サインアップ画面の入口", () => {
     const user = userEvent.setup();
     render(<SignUpPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user, "new@example.com");
-    await screen.findByRole("heading", { name: "認証コードを入力" });
+    await screen.findByRole("heading", { name: authText("otpTitle") });
     await user.type(codeInput(), "123456");
     await user.click(verifyButton());
-    await screen.findByRole("heading", { name: "パスワードを設定" });
+    await screen.findByRole("heading", {
+      name: authText("signUpPasswordTitle"),
+    });
     await user.type(passwordInput(), "password123");
 
     // When
@@ -256,7 +263,7 @@ describe("サインアップ画面の入口", () => {
 
     // Then
     expect(
-      await screen.findByRole("heading", { name: "認証コードを入力" }),
+      await screen.findByRole("heading", { name: authText("otpTitle") }),
     ).toBeInTheDocument();
     expect(auth.signInWithOtp).toHaveBeenCalledExactlyOnceWith({
       email: "user@example.com",
@@ -281,7 +288,7 @@ describe("サインアップ画面の入口", () => {
 
     // Then
     expect(
-      await screen.findByRole("heading", { name: "認証コードを入力" }),
+      await screen.findByRole("heading", { name: authText("otpTitle") }),
     ).toBeInTheDocument();
     expect(auth.signInWithOtp).toHaveBeenCalledTimes(2);
     expect(auth.signInWithOtp).toHaveBeenLastCalledWith({
@@ -295,7 +302,7 @@ describe("サインアップ画面の入口", () => {
     [
       "送信の間隔の制限を値で返した",
       rateLimited,
-      "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
+      authText("failure.rate_limited"),
     ],
   ])(
     "コードの送信でSDKが%sときは、文言を示し、使用済みのトークンでの再送信を拒み、新しいトークンで取り直して進める",
@@ -320,7 +327,7 @@ describe("サインアップ画面の入口", () => {
 
       // Then
       expect(
-        await screen.findByRole("heading", { name: "認証コードを入力" }),
+        await screen.findByRole("heading", { name: authText("otpTitle") }),
       ).toBeInTheDocument();
       expect(auth.signInWithOtp).toHaveBeenLastCalledWith({
         email: "user@example.com",
@@ -347,9 +354,7 @@ describe("サインアップ画面の入口", () => {
 
     // Then
     expect(
-      await screen.findByText(
-        "エラーが発生しました。しばらくしてから再度お試しください。",
-      ),
+      await screen.findByText(authText("failure.other")),
     ).toBeInTheDocument();
     expect(screen.queryByText(/otp mailer exploded/)).not.toBeInTheDocument();
   });
@@ -390,12 +395,14 @@ describe("サインアップ画面の入口", () => {
     await user.clear(emailInput());
     await user.type(emailInput(), "new@example.com");
     await user.click(sendCodeButton());
-    await screen.findByRole("heading", { name: "認証コードを入力" });
+    await screen.findByRole("heading", { name: authText("otpTitle") });
     await user.type(codeInput(), "123456");
     await user.click(verifyButton());
     await screen.findByText(OTP_EXPIRED_MESSAGE);
     await user.click(verifyButton());
-    await screen.findByRole("heading", { name: "パスワードを設定" });
+    await screen.findByRole("heading", {
+      name: authText("signUpPasswordTitle"),
+    });
     await user.type(passwordInput(), "password123");
     await user.click(setPasswordButton());
     await screen.findByText(WEAK_PASSWORD_MESSAGE);
@@ -429,7 +436,9 @@ describe("サインアップ画面の入口", () => {
 
     // Then
     expect(
-      await screen.findByRole("heading", { name: "パスワードを設定" }),
+      await screen.findByRole("heading", {
+        name: authText("signUpPasswordTitle"),
+      }),
     ).toBeInTheDocument();
     expect(auth.verifyOtp).toHaveBeenCalledTimes(2);
   });
@@ -579,7 +588,7 @@ describe("サインアップ画面の入口", () => {
     render(<SignUpPage />, { wrapper: IntlTestProvider });
 
     // Then
-    expect(heading("サインアップ")).toBeInTheDocument();
+    expect(heading(authText("signInSignUpLink"))).toBeInTheDocument();
     expect(connection.createBrowserClient).not.toHaveBeenCalled();
   });
 
@@ -619,14 +628,16 @@ describe("サインアップ画面の入口", () => {
       fireEvent.click(widgetButton());
       fireEvent.click(sendCodeButton());
       await settle();
-      expect(heading("認証コードを入力")).toBeInTheDocument();
+      expect(heading(authText("otpTitle"))).toBeInTheDocument();
       expect(resendButton()).toHaveTextContent("再送（60秒）");
       for (let i = 0; i < 60; i++) {
         await act(async () => {
           await vi.advanceTimersByTimeAsync(1000);
         });
       }
-      expect(resendButton()).toHaveTextContent(/^再送$/);
+      expect(resendButton()).toHaveTextContent(
+        new RegExp(`^${authText("otpResend")}$`),
+      );
     }
 
     it("待ち時間の後に新しいトークンで再送し、チェックをリセットして待ち時間を再開する", async () => {

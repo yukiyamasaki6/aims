@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import type { CallResult } from "../application/call-result";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
@@ -11,11 +12,15 @@ import { createResetPassword } from "../application/reset-password";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import { ResetPasswordForm } from "./reset-password-form";
 
-const NETWORK_ERROR_MESSAGE =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
+const authText = translatorFor("auth");
+
+const NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
 const WEAK_PASSWORD_MESSAGE =
   "8〜72文字の半角英数記号で、英字と数字を含めてください。";
-const PASSWORD_PLACEHOLDER = "新しいパスワード（8文字以上・英数字を含む）";
+const PASSWORD_PLACEHOLDER = authText("passwordFieldPlaceholder", {
+  label: "新しいパスワード",
+  min: "8",
+});
 const ACCEPTED: CallResult = { kind: "accepted" };
 
 // 認証サービスが拒否した結果。
@@ -63,7 +68,7 @@ function passwordInput() {
 }
 
 function setPasswordButton() {
-  return screen.getByRole("button", { name: "パスワードを変更" });
+  return screen.getByRole("button", { name: authText("resetPasswordSubmit") });
 }
 
 function spinnerIn(button: HTMLElement) {
@@ -88,15 +93,17 @@ async function advanceToPasswordStep() {
   act(() => {
     turnstile.onVerify?.("captcha-token");
   });
-  fireEvent.click(screen.getByRole("button", { name: "認証コードを送信" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: authText("otpSendCode") }),
+  );
   await settle();
   fireEvent.change(screen.getByPlaceholderText("123456"), {
     target: { value: "123456" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "確認" }));
+  fireEvent.click(screen.getByRole("button", { name: authText("otpVerify") }));
   await settle();
   expect(
-    screen.getByRole("heading", { name: "新しいパスワードを設定" }),
+    screen.getByRole("heading", { name: authText("resetPasswordTitle") }),
   ).toBeInTheDocument();
   vi.clearAllMocks();
 }
@@ -266,10 +273,10 @@ describe("ResetPasswordForm", () => {
 
       // Then
       expect(
-        screen.getByRole("heading", { name: "パスワードを再設定" }),
+        screen.getByRole("heading", { name: authText("resetTitle") }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("link", { name: "サインインに戻る" }),
+        screen.getByRole("link", { name: authText("resetBackToSignIn") }),
       ).toHaveAttribute("href", "/signin");
     });
 
@@ -280,18 +287,18 @@ describe("ResetPasswordForm", () => {
 
       // When
       const title = screen.getByRole("heading", {
-        name: "新しいパスワードを設定",
+        name: authText("resetPasswordTitle"),
       });
 
       // Then
       expect(title).toBeInTheDocument();
       expect(
-        screen.getByText("このパスワードで次回からサインインします。"),
+        screen.getByText(authText("resetPasswordDescription")),
       ).toBeInTheDocument();
       expect(passwordInput()).toBeInTheDocument();
       expect(setPasswordButton()).toBeInTheDocument();
       expect(
-        screen.getByRole("link", { name: "サインインに戻る" }),
+        screen.getByRole("link", { name: authText("resetBackToSignIn") }),
       ).toHaveAttribute("href", "/signin");
     });
 
@@ -304,7 +311,9 @@ describe("ResetPasswordForm", () => {
       fireEvent.click(setPasswordButton());
 
       // Then
-      const message = screen.getByText("パスワードを入力してください。");
+      const message = screen.getByText(
+        authText("fieldError.password.required"),
+      );
       expect(message).toHaveAttribute("id", "reset-password-password-error");
       expect(passwordInput()).toHaveAttribute(
         "aria-describedby",

@@ -1,11 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import type {
   TargetFaceRing,
   TargetFaceSpotLayout,
 } from "../domain/target-face";
 import { TargetFaceIcon, TargetFaceInfo } from "./target-face-info";
+
+const roundsText = translatorFor("rounds");
 
 const yellowRing: TargetFaceRing = {
   radius: 8,
@@ -136,7 +139,7 @@ describe("TargetFaceInfo", () => {
       wrapper: IntlTestProvider,
     });
 
-    expect(container).toHaveTextContent("的データを取得できません");
+    expect(container).toHaveTextContent(roundsText("targetFaceMissing"));
     expect(container.querySelector("svg")).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 import type { Browser, BrowserContext, Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
@@ -11,19 +12,24 @@ import { fastForwardResendCooldown } from "../helpers/clock";
 import { getOtpCodeFromMailpit } from "../helpers/mailpit";
 import { mockTurnstile } from "../helpers/turnstile";
 
+const authText = translatorFor("auth");
+
 const ORIGINAL_PASSWORD = "password-original";
 const NEW_PASSWORD = "password-changed1";
 const EMAIL_PLACEHOLDER = "you@example.com";
 const CODE_PLACEHOLDER = "123456";
-const NEW_PASSWORD_PLACEHOLDER = "新しいパスワード（8文字以上・英数字を含む）";
-const SIGNIN_PASSWORD_PLACEHOLDER = "パスワード";
+const NEW_PASSWORD_PLACEHOLDER = authText("passwordFieldPlaceholder", {
+  label: "新しいパスワード",
+  min: "8",
+});
+const SIGNIN_PASSWORD_PLACEHOLDER = authText("passwordPlaceholder");
 
 async function openEmailStep(page: Page) {
   await page.goto("/reset-password");
   await waitForHydration(page);
   return {
     emailInput: page.getByPlaceholder(EMAIL_PLACEHOLDER),
-    sendCodeButton: page.getByRole("button", { name: "認証コードを送信" }),
+    sendCodeButton: page.getByRole("button", { name: authText("otpSendCode") }),
   };
 }
 
@@ -48,7 +54,9 @@ async function expectSignedOutIn(context: BrowserContext) {
   const page = await context.newPage();
   await page.goto("/rounds");
   await expect(page).toHaveURL(/\/signin/);
-  await expect(page.getByRole("heading", { name: "サインイン" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: authText("signInTitle") }),
+  ).toBeVisible();
   await page.close();
 }
 
@@ -84,22 +92,24 @@ test("メールで本人確認してパスワードを変更すると、この�
   await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
   await sendCodeButton.click();
   await expect(
-    page.getByRole("heading", { name: "認証コードを入力" }),
+    page.getByRole("heading", { name: authText("otpTitle") }),
   ).toBeVisible();
   await expect(page.getByText(/再送（\d+秒）/)).toBeVisible();
-  await expect(page.getByText("迷惑メールフォルダ")).toBeVisible();
+  await expect(page.getByText(authText("otpSpamNote"))).toBeVisible();
 
   // メールに届いたコードを入力して、新しいパスワードの設定画面へ進む。
   const code = await getOtpCodeFromMailpit(email);
   await page.getByPlaceholder(CODE_PLACEHOLDER).fill(code);
-  await page.getByRole("button", { name: "確認" }).click();
+  await page.getByRole("button", { name: authText("otpVerify") }).click();
   await expect(
-    page.getByRole("heading", { name: "新しいパスワードを設定" }),
+    page.getByRole("heading", { name: authText("resetPasswordTitle") }),
   ).toBeVisible();
 
   // 新しいパスワードに変更して、サインイン画面へ進む。
   await page.getByPlaceholder(NEW_PASSWORD_PLACEHOLDER).fill(NEW_PASSWORD);
-  await page.getByRole("button", { name: "パスワードを変更" }).click();
+  await page
+    .getByRole("button", { name: authText("resetPasswordSubmit") })
+    .click();
   await expect(page).toHaveURL(/\/signin$/);
 
   // この端末と別の端末で保護された画面を開くと、どちらもサインインへ移される。
@@ -115,12 +125,14 @@ test("メールで本人確認してパスワードを変更すると、この�
   await waitForHydration(page);
   await page.getByPlaceholder(EMAIL_PLACEHOLDER).fill(email);
   await page.getByPlaceholder(SIGNIN_PASSWORD_PLACEHOLDER).fill(NEW_PASSWORD);
-  const signInButton = page.getByRole("button", { name: "サインイン" });
+  const signInButton = page.getByRole("button", {
+    name: authText("signInSubmit"),
+  });
   await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
   await signInButton.click();
   await expect(page).toHaveURL(/\/rounds/);
   await expect(
-    page.getByRole("button", { name: "サインアウト" }),
+    page.getByRole("button", { name: authText("signOut") }),
   ).toBeVisible();
 });
 
@@ -135,15 +147,17 @@ test("再送待機時間の終了後に再送すると、新しい認証コー�
   await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
   await sendCodeButton.click();
   await expect(
-    page.getByRole("heading", { name: "認証コードを入力" }),
+    page.getByRole("heading", { name: authText("otpTitle") }),
   ).toBeVisible();
   const firstCode = await getOtpCodeFromMailpit(email);
 
   // 再送の待機時間を過ぎて、再送できる状態にする。
-  const resendButton = page.getByRole("button", { name: /^再送/ });
+  const resendButton = page.getByRole("button", {
+    name: new RegExp(`^${authText("otpResend")}`),
+  });
   await expect(resendButton).toHaveAttribute("data-captcha-ready", "true");
   await fastForwardResendCooldown(page);
-  await expect(resendButton).toHaveText("再送");
+  await expect(resendButton).toHaveText(authText("otpResend"));
 
   // 再送して、新しい認証コードを受け取る。
   // サーバー側の送信間隔は実時間で判定されるため、ローカル・CIの設定値を超えるまで待つ。
@@ -159,10 +173,12 @@ test("パスワード再設定画面で「サインインに戻る」を押す�
 }) => {
   await openEmailStep(page);
   await page
-    .getByRole("link", { name: "サインインに戻る", exact: true })
+    .getByRole("link", { name: authText("resetBackToSignIn"), exact: true })
     .click();
   await expect(page).toHaveURL(/\/signin$/);
-  await expect(page.getByRole("heading", { name: "サインイン" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: authText("signInTitle") }),
+  ).toBeVisible();
 });
 
 test.describe("認証済み", () => {

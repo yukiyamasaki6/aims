@@ -1,7 +1,10 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { useOptionLabels } from "./use-option-labels";
+
+const roundsText = translatorFor("rounds");
 
 describe("useOptionLabels", () => {
   it("種別と弓種の値を、表示名にする", () => {
@@ -14,8 +17,8 @@ describe("useOptionLabels", () => {
     const { formatLabel, bowTypeLabel } = result.current;
 
     // Then
-    expect(formatLabel("outdoor")).toBe("アウトドア");
-    expect(bowTypeLabel("barebow")).toBe("ベアボウ");
+    expect(formatLabel("outdoor")).toBe(roundsText("formatOption.outdoor"));
+    expect(bowTypeLabel("barebow")).toBe(roundsText("bowTypeOption.barebow"));
   });
 
   it("選択肢に無い値は、値のまま返す", () => {
@@ -48,9 +51,9 @@ describe("useOptionLabels", () => {
       { value: "field", label: "フィールド" },
     ]);
     expect(bowTypeOptions.map((o) => o.label)).toEqual([
-      "リカーブ",
-      "コンパウンド",
-      "ベアボウ",
+      roundsText("bowTypeOption.recurve"),
+      roundsText("bowTypeOption.compound"),
+      roundsText("bowTypeOption.barebow"),
     ]);
   });
 });

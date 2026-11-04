@@ -2,7 +2,11 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { LeftPanel } from "./left-panel";
+
+const authText = translatorFor("auth");
+const navigationText = translatorFor("navigation");
 
 function wideToggle() {
   return screen.getByTestId("left-panel-toggle-wide");
@@ -17,7 +21,9 @@ function panel() {
 }
 
 function closeMenuButtons() {
-  return screen.getAllByRole("button", { name: "メニューを閉じる" });
+  return screen.getAllByRole("button", {
+    name: navigationText("leftPanelCloseMenu"),
+  });
 }
 
 describe("LeftPanel", () => {
@@ -33,7 +39,7 @@ describe("LeftPanel", () => {
 
       // Then
       expect(
-        screen.getByRole("button", { name: "サインアウト" }),
+        screen.getByRole("button", { name: authText("signOut") }),
       ).toBeInTheDocument();
     });
   });
@@ -49,10 +55,9 @@ describe("LeftPanel", () => {
 
       // Then
       expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "個人" })).toHaveAttribute(
-        "href",
-        "/rounds",
-      );
+      expect(
+        screen.getByRole("link", { name: navigationText("leftPanelPersonal") }),
+      ).toHaveAttribute("href", "/rounds");
     });
 
     // 渡す値そのものが検証の対象のため、実在しない経路で、固定の値でないことを確かめる。
@@ -64,10 +69,9 @@ describe("LeftPanel", () => {
       });
 
       // Then
-      expect(screen.getByRole("link", { name: "個人" })).toHaveAttribute(
-        "href",
-        "/elsewhere",
-      );
+      expect(
+        screen.getByRole("link", { name: navigationText("leftPanelPersonal") }),
+      ).toHaveAttribute("href", "/elsewhere");
     });
   });
 
@@ -81,7 +85,11 @@ describe("LeftPanel", () => {
       });
 
       // When
-      await user.click(screen.getByRole("button", { name: "メニューを開く" }));
+      await user.click(
+        screen.getByRole("button", {
+          name: navigationText("leftPanelOpenMenu"),
+        }),
+      );
 
       // Then
       expect(closeMenuButtons()).toHaveLength(2);
@@ -93,7 +101,11 @@ describe("LeftPanel", () => {
       render(<LeftPanel personalHref="/rounds" signOut={null} />, {
         wrapper: IntlTestProvider,
       });
-      await user.click(screen.getByRole("button", { name: "メニューを開く" }));
+      await user.click(
+        screen.getByRole("button", {
+          name: navigationText("leftPanelOpenMenu"),
+        }),
+      );
 
       // When
       // 背景はパネルより前にDOMへ配置される。
@@ -109,7 +121,11 @@ describe("LeftPanel", () => {
       render(<LeftPanel personalHref="/rounds" signOut={null} />, {
         wrapper: IntlTestProvider,
       });
-      await user.click(screen.getByRole("button", { name: "メニューを開く" }));
+      await user.click(
+        screen.getByRole("button", {
+          name: navigationText("leftPanelOpenMenu"),
+        }),
+      );
 
       // When
       await user.click(closeMenuButtons()[1]);
@@ -131,7 +147,9 @@ describe("LeftPanel", () => {
       await user.click(wideToggle());
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName("パネルを開く");
+      expect(wideToggle()).toHaveAccessibleName(
+        navigationText("leftPanelExpand"),
+      );
     });
 
     it("格納後に開くボタンを押すと再び開く", async () => {
@@ -146,7 +164,9 @@ describe("LeftPanel", () => {
       await user.click(wideToggle());
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
+      expect(wideToggle()).toHaveAccessibleName(
+        navigationText("leftPanelCollapse"),
+      );
     });
   });
 
@@ -160,8 +180,12 @@ describe("LeftPanel", () => {
       });
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
-      expect(compactToggle()).toHaveAccessibleName("パネルを開く");
+      expect(wideToggle()).toHaveAccessibleName(
+        navigationText("leftPanelCollapse"),
+      );
+      expect(compactToggle()).toHaveAccessibleName(
+        navigationText("leftPanelExpand"),
+      );
       expect(closeMenuButtons()).toHaveLength(1);
     });
 
@@ -176,8 +200,12 @@ describe("LeftPanel", () => {
       await user.click(wideToggle());
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName("パネルを開く");
-      expect(compactToggle()).toHaveAccessibleName("パネルを開く");
+      expect(wideToggle()).toHaveAccessibleName(
+        navigationText("leftPanelExpand"),
+      );
+      expect(compactToggle()).toHaveAccessibleName(
+        navigationText("leftPanelExpand"),
+      );
       expect(closeMenuButtons()).toHaveLength(1);
     });
 
@@ -193,8 +221,12 @@ describe("LeftPanel", () => {
       await user.click(wideToggle());
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
-      expect(compactToggle()).toHaveAccessibleName("パネルを格納する");
+      expect(wideToggle()).toHaveAccessibleName(
+        navigationText("leftPanelCollapse"),
+      );
+      expect(compactToggle()).toHaveAccessibleName(
+        navigationText("leftPanelCollapse"),
+      );
       expect(closeMenuButtons()).toHaveLength(2);
     });
 
@@ -209,7 +241,9 @@ describe("LeftPanel", () => {
       await user.click(compactToggle());
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
+      expect(wideToggle()).toHaveAccessibleName(
+        navigationText("leftPanelCollapse"),
+      );
       expect(closeMenuButtons()).toHaveLength(2);
     });
 
@@ -226,8 +260,12 @@ describe("LeftPanel", () => {
       await user.click(closeMenuButtons()[0]);
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName("パネルを開く");
-      expect(compactToggle()).toHaveAccessibleName("パネルを開く");
+      expect(wideToggle()).toHaveAccessibleName(
+        navigationText("leftPanelExpand"),
+      );
+      expect(compactToggle()).toHaveAccessibleName(
+        navigationText("leftPanelExpand"),
+      );
       expect(closeMenuButtons()).toHaveLength(1);
     });
 
@@ -239,11 +277,19 @@ describe("LeftPanel", () => {
       });
 
       // When
-      await user.click(screen.getByRole("button", { name: "メニューを開く" }));
+      await user.click(
+        screen.getByRole("button", {
+          name: navigationText("leftPanelOpenMenu"),
+        }),
+      );
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
-      expect(compactToggle()).toHaveAccessibleName("パネルを格納する");
+      expect(wideToggle()).toHaveAccessibleName(
+        navigationText("leftPanelCollapse"),
+      );
+      expect(compactToggle()).toHaveAccessibleName(
+        navigationText("leftPanelCollapse"),
+      );
     });
   });
 

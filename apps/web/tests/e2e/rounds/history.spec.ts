@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   getSharedEmail,
@@ -26,6 +27,9 @@ import {
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
 import { holdNextRefresh } from "../helpers/session-overlap";
+
+const authText = translatorFor("auth");
+const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -54,7 +58,9 @@ test("ラウンドのカードを押すと、そのラウンドの詳細画面�
   await page.getByRole("link", { name: new RegExp(name) }).click();
 
   await expect(page).toHaveURL(`/rounds/${roundId}`);
-  await expect(page.getByTestId("round-summary")).toContainText("合計0");
+  await expect(page.getByTestId("round-summary")).toContainText(
+    roundsText("roundTotal", { total: "0" }),
+  );
 });
 
 // 入力中のラウンドの有無で表示が変わるため、以降のテストは使い捨てのユーザーで前提を作る。
@@ -104,7 +110,7 @@ test.describe("入力中の領域", () => {
 
   const inProgressArea = (page: Page) => page.getByTestId("in-progress-rounds");
   const otherArea = (page: Page) => page.getByTestId("other-rounds");
-  const offlineMessage = "ネットワークに接続されていません";
+  const offlineMessage = roundsText("fetchOffline");
 
   // 入力中のラウンドと完了のラウンドを持つユーザーで、オンラインで一覧を開いて端末に保持させ、オフラインで一覧を開き直す。
   async function openOfflineList(page: Page) {
@@ -153,18 +159,24 @@ test.describe("入力中の領域", () => {
       name: /入力中の古い/,
     });
     await expect(
-      inProgressArea(page).getByRole("heading", { name: "入力中" }),
+      inProgressArea(page).getByRole("heading", {
+        name: roundsText("listInProgress"),
+      }),
     ).toBeVisible();
     await expect(inProgressCard).toContainText("2026-01-10");
-    await expect(inProgressCard).toContainText("7点");
+    await expect(inProgressCard).toContainText(
+      roundsText("roundTotalPoints", { total: "7" }),
+    );
     const completedCard = otherArea(page).getByRole("link", {
       name: /完了の新しい/,
     });
     await expect(
-      otherArea(page).getByRole("heading", { name: "過去履歴" }),
+      otherArea(page).getByRole("heading", { name: roundsText("listHistory") }),
     ).toBeVisible();
     await expect(completedCard).toContainText("2026-05-01");
-    await expect(completedCard).toContainText("0点");
+    await expect(completedCard).toContainText(
+      roundsText("roundTotalPoints", { total: "0" }),
+    );
     await expect(otherArea(page).getByText("入力中の古い")).toHaveCount(0);
     await expect(inProgressArea(page).getByText("完了の新しい")).toHaveCount(0);
   });
@@ -177,17 +189,21 @@ test.describe("入力中の領域", () => {
       name: new RegExp(inProgressName),
     });
     await expect(card).toContainText("2026-03-01");
-    await expect(card).toContainText("9点");
+    await expect(card).toContainText(
+      roundsText("roundTotalPoints", { total: "9" }),
+    );
     const others = otherArea(page);
     await expect(
-      others.getByRole("heading", { name: "過去履歴" }),
+      others.getByRole("heading", { name: roundsText("listHistory") }),
     ).toBeVisible();
     await expect(others.getByText(offlineMessage)).toBeVisible();
 
     // 入力中のラウンドのカードを押し、オフラインのままラウンド詳細を開く。
     await card.click();
     await expect(page).toHaveURL(`/rounds/${inProgressId}`);
-    await expect(page.getByTestId("round-summary")).toContainText("合計9");
+    await expect(page.getByTestId("round-summary")).toContainText(
+      roundsText("roundTotal", { total: "9" }),
+    );
   });
 
   test("オフラインで作成して点数を記録したラウンドは、一覧に戻ると、記録した点数を含む合計点で入力中のラウンドとして表示される", async ({
@@ -199,14 +215,18 @@ test.describe("入力中の領域", () => {
     await startRoundOffline(page, "WA 1440");
     const roundId = page.url().split("/").pop();
     await page.getByTestId("score-button-9").click();
-    await expect(page.getByTestId("round-summary")).toContainText("合計9");
+    await expect(page.getByTestId("round-summary")).toContainText(
+      roundsText("roundTotal", { total: "9" }),
+    );
 
     // 一覧へ戻り、記録した点数を含む合計点を確かめる。
-    await page.getByRole("link", { name: "一覧へ戻る" }).click();
+    await page.getByRole("link", { name: roundsText("backToList") }).click();
     await expect(page).toHaveURL(/\/rounds$/);
     const card = inProgressArea(page).locator(`a[href="/rounds/${roundId}"]`);
     await expect(card).toHaveCount(1);
-    await expect(card).toContainText("9点");
+    await expect(card).toContainText(
+      roundsText("roundTotalPoints", { total: "9" }),
+    );
   });
 
   test("オフラインの一覧でオンラインに戻ると、入力中でないラウンドも表示され、「ネットワークに接続されていません」が消え、同じラウンドが2件表示されない", async ({
@@ -241,17 +261,21 @@ test.describe("入力中の領域", () => {
     // オフラインで点数を記録する。
     await goOffline(context);
     await page.getByTestId("score-button-9").click();
-    await expect(page.getByTestId("round-summary")).toContainText("合計9");
+    await expect(page.getByTestId("round-summary")).toContainText(
+      roundsText("roundTotal", { total: "9" }),
+    );
 
     // 送信を止めたままオンラインに戻り、一覧へ戻って合計点を確かめる。
     await context.route("**/rest/v1/rpc/record_shots", (route) =>
       route.abort("failed"),
     );
     await comeBackOnline(context, page);
-    await page.getByRole("link", { name: "一覧へ戻る" }).click();
+    await page.getByRole("link", { name: roundsText("backToList") }).click();
     const card = page.locator(`a[href="/rounds/${roundId}"]`);
     await expect(card).toHaveCount(1);
-    await expect(card).toContainText("9点");
+    await expect(card).toContainText(
+      roundsText("roundTotalPoints", { total: "9" }),
+    );
     await expect(inProgressArea(page).locator(card)).toHaveCount(1);
   });
 
@@ -326,8 +350,10 @@ test.describe("入力中の領域", () => {
     await expect(inProgressArea(page).getByText(name)).toBeVisible();
 
     // サインアウトして、サインイン画面へ移る。
-    await page.getByRole("button", { name: "サインアウト" }).click();
-    await page.getByRole("button", { name: "サインアウトする" }).click();
+    await page.getByRole("button", { name: authText("signOut") }).click();
+    await page
+      .getByRole("button", { name: authText("signOutConfirmLabel") })
+      .click();
     await expect(page).toHaveURL(/\/signin/);
 
     // ユーザーBでサインインし、オフラインで一覧を開く。
@@ -419,10 +445,14 @@ test.describe("入力中の領域", () => {
     await expect(inProgressArea(page).getByText(name)).toBeVisible();
     const others = otherArea(page);
     await expect(
-      others.getByRole("heading", { name: "過去履歴" }),
+      others.getByRole("heading", { name: roundsText("listHistory") }),
     ).toBeVisible();
-    await expect(others.getByText("読み込めませんでした。")).toBeVisible();
-    await expect(others.getByRole("button", { name: "再試行" })).toBeVisible();
+    await expect(
+      others.getByText(roundsText("fetchFailure.failed")),
+    ).toBeVisible();
+    await expect(
+      others.getByRole("button", { name: roundsText("fetchRetry") }),
+    ).toBeVisible();
   });
 
   test("一覧を開くときにセッションの更新が別の書き手の更新と重なっても、「サインインが必要です。」は表示されず、ラウンドが表示される", async ({
@@ -437,10 +467,10 @@ test.describe("入力中の領域", () => {
     await waitForHydration(page);
     const refresh = await holdNextRefresh(page);
     // ページを読み込み直すと、更新が初期化の中で済み、取得の確認と重ならないため、リンクで開く。
-    await page.getByRole("link", { name: "一覧へ戻る" }).click();
+    await page.getByRole("link", { name: roundsText("backToList") }).click();
     await refresh.requested;
     await expect(
-      page.getByRole("status").filter({ hasText: "読み込み中" }),
+      page.getByRole("status").filter({ hasText: roundsText("fetchLoading") }),
     ).toBeVisible();
 
     // 止めた更新を別の書き手の更新と重ねて通し、ラウンドが表示されるのを確かめる。
@@ -449,7 +479,9 @@ test.describe("入力中の領域", () => {
     await expect(
       page.getByRole("link", { name: new RegExp(name) }),
     ).toBeVisible();
-    await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
+    await expect(
+      page.getByText(roundsText("fetchFailure.unauthenticated")),
+    ).toHaveCount(0);
   });
 
   // 一覧からラウンド作成画面へ移り、内容と端末への取得が済んだ状態にする。後で一覧へ戻る先のタブとして使う。
@@ -495,23 +527,31 @@ test.describe("入力中の領域", () => {
     await startRoundOffline(other, "WA 1440");
     const createdId = other.url().split("/").pop();
     await other.getByTestId("score-button-9").click();
-    await expect(other.getByTestId("round-summary")).toContainText("合計9");
+    await expect(other.getByTestId("round-summary")).toContainText(
+      roundsText("roundTotal", { total: "9" }),
+    );
 
     // 先に開いていたタブで一覧へ戻り、記録したラウンドだけが入力中に表示されることを確かめる。
     await page.bringToFront();
-    await page.getByRole("link", { name: "一覧へ戻る" }).click();
+    await page.getByRole("link", { name: roundsText("backToList") }).click();
     await expect(page).toHaveURL(/\/rounds$/);
     const created = inProgressArea(page).locator(
       `a[href="/rounds/${createdId}"]`,
     );
-    await expect(created).toContainText("9点");
+    await expect(created).toContainText(
+      roundsText("roundTotalPoints", { total: "9" }),
+    );
     await expect(page.getByText(deletedName)).toHaveCount(0);
 
     // 詳細を開いて点数が表示され、再読み込みした一覧も同じであることを確かめる。
     await created.click();
-    await expect(page.getByTestId("round-summary")).toContainText("合計9");
+    await expect(page.getByTestId("round-summary")).toContainText(
+      roundsText("roundTotal", { total: "9" }),
+    );
     await page.goto("/rounds");
-    await expect(created).toContainText("9点");
+    await expect(created).toContainText(
+      roundsText("roundTotalPoints", { total: "9" }),
+    );
     await expect(page.getByText(deletedName)).toHaveCount(0);
   });
 
@@ -558,7 +598,7 @@ test.describe("入力中の領域", () => {
     // 先に開いていたタブでオフラインのまま一覧へ戻り、そのラウンドが表示されないことを確かめる。
     await goOffline(context);
     await page.bringToFront();
-    await page.getByRole("link", { name: "一覧へ戻る" }).click();
+    await page.getByRole("link", { name: roundsText("backToList") }).click();
     await expect(page.getByText(offlineMessage)).toBeVisible();
     await expect(page.getByText(name)).toHaveCount(0);
   });
@@ -574,15 +614,19 @@ test.describe("入力中の領域", () => {
     await page.clock.install();
     await page.goto("/rounds");
     await expect(
-      page.getByRole("status").filter({ hasText: "読み込み中" }),
+      page.getByRole("status").filter({ hasText: roundsText("fetchLoading") }),
     ).toBeVisible();
 
     // 10秒進め、エラーと再試行ボタンを確かめる。
     await page.clock.runFor(10_000);
     await expect(
-      page.getByRole("alert").filter({ hasText: "読み込めませんでした。" }),
+      page
+        .getByRole("alert")
+        .filter({ hasText: roundsText("fetchFailure.failed") }),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: roundsText("fetchRetry") }),
+    ).toBeVisible();
     await release();
   });
 });

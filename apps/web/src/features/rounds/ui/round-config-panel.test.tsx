@@ -4,9 +4,12 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RoundConfig } from "@/features/rounds/domain/round-config";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { RoundConfigPanel } from "./round-config-panel";
 import { createFakeRoundDetailStore } from "./round-stores-test-helpers";
 import { RoundDetailStoreProvider } from "./rounds-context";
+
+const roundsText = translatorFor("rounds");
 
 const initial: RoundConfig = {
   name: "午前練習",
@@ -64,7 +67,12 @@ describe("RoundConfigPanel", () => {
 
       // Then
       expect(
-        screen.getByText("午前練習 / 2026-09-15 / アウトドア / リカーブ"),
+        screen.getByText(
+          roundsText("formatBowType", {
+            format: "午前練習",
+            bowType: "2026-09-15 / アウトドア / リカーブ",
+          }),
+        ),
       ).toBeInTheDocument();
       expect(screen.queryByTestId("round-config-name")).not.toBeInTheDocument();
     });
@@ -179,12 +187,10 @@ describe("RoundConfigPanel", () => {
           screen.getByText("ラウンド名は50文字以内で入力してください。"),
         ).toBeInTheDocument();
         expect(
-          screen.getByText("実施日を入力してください。"),
+          screen.getByText(roundsText("roundConfigError.required")),
         ).toBeInTheDocument();
         expect(
-          screen.getByText(
-            "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。",
-          ),
+          screen.getByText(roundsText("roundConfigError.unmarkedDistances")),
         ).toBeInTheDocument();
         expect(enqueue).not.toHaveBeenCalled();
       });
@@ -239,7 +245,12 @@ describe("RoundConfigPanel", () => {
 
       // Then
       expect(
-        screen.getByText("更新後 / 2026-09-15 / アウトドア / リカーブ"),
+        screen.getByText(
+          roundsText("formatBowType", {
+            format: "更新後",
+            bowType: "2026-09-15 / アウトドア / リカーブ",
+          }),
+        ),
       ).toBeInTheDocument();
     });
 
@@ -281,8 +292,8 @@ describe("RoundConfigPanel", () => {
 
   describe("入力欄のEnterキー", () => {
     it.each([
-      ["ラウンド名", "round-config-name"],
-      ["実施日", "round-config-date"],
+      [roundsText("roundConfigName"), "round-config-name"],
+      [roundsText("roundConfigDate"), "round-config-date"],
     ])(
       "%sの入力欄でEnterを押しても、保存もダイアログの閉鎖もしない",
       async (_label, testId) => {

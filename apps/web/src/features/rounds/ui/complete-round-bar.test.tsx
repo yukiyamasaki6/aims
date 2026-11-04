@@ -2,7 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { CompleteRoundBar } from "./complete-round-bar";
+
+const roundsText = translatorFor("rounds");
 
 describe("CompleteRoundBar", () => {
   describe("表示", () => {
@@ -20,7 +23,7 @@ describe("CompleteRoundBar", () => {
 
       // Then
       expect(screen.getByTestId("complete-round-button")).toHaveTextContent(
-        "入力を完了する",
+        roundsText("completeRound"),
       );
     });
 
@@ -79,7 +82,7 @@ describe("CompleteRoundBar", () => {
 
       // Then
       expect(
-        screen.getByText("未入力のマスがあります。入力を完了しますか？"),
+        screen.getByText(roundsText("completionConfirmation.unfilledCells")),
       ).toBeInTheDocument();
       expect(onComplete).not.toHaveBeenCalled();
     });
@@ -120,7 +123,7 @@ describe("CompleteRoundBar", () => {
 
       // Then
       expect(
-        screen.getByText("記録がありません。入力を完了しますか？"),
+        screen.getByText(roundsText("completionConfirmation.noRecords")),
       ).toBeInTheDocument();
     });
 
