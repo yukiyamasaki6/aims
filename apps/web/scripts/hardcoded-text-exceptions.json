@@ -4,14 +4,6 @@
     "reason": "未移行: rounds"
   },
   {
-    "path": "app/layout.tsx",
-    "reason": "未移行: metadata"
-  },
-  {
-    "path": "app/manifest.ts",
-    "reason": "未移行: metadata"
-  },
-  {
     "path": "components/logo-image.tsx",
     "reason": "未移行: 共有の画面部品"
   },

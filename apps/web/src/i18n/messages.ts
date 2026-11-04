@@ -1,4 +1,5 @@
 import type { IntlConfig, IntlError } from "next-intl";
+import { screenMessages } from "@/components/screen-messages";
 
 const locale = "ja";
 
@@ -8,7 +9,7 @@ const messages = {
   rounds: {},
   navigation: {},
   offlinePwa: {},
-  shared: {},
+  shared: screenMessages.ja,
 } as const;
 
 declare module "next-intl" {

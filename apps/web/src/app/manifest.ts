@@ -1,11 +1,14 @@
 import type { MetadataRoute } from "next";
+import { createTranslator } from "next-intl";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
+import { intlConfig } from "@/i18n/messages";
 
 export default function manifest(): MetadataRoute.Manifest {
+  const t = createTranslator({ ...intlConfig, namespace: "shared" });
   return {
-    name: "AIMS",
-    short_name: "AIMS",
-    description: "AIMS Web Application",
+    name: t("appName"),
+    short_name: t("appName"),
+    description: t("appDescription"),
     start_url: ROUNDS_PATH,
     display: "standalone",
     background_color: "#FFFFFF",
