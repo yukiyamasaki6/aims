@@ -178,6 +178,12 @@ describe("D2と対象外", () => {
     expect(texts("a.ts", source)).toEqual(["日本語"]);
   });
 
+  it("通常の関数呼び出しの日本語の引数は検出する(newを伴わないErrorの呼び出しを含む)", () => {
+    const source =
+      'setError("日本語"); form.setError("入力", { label: "詳細" }); Error("失敗");';
+    expect(texts("a.ts", source)).toEqual(["日本語", "入力", "詳細", "失敗"]);
+  });
+
   it("import・exportの指定子は検出しない", () => {
     const source = 'import x from "./日本語"; export * from "é";';
     expect(texts("a.ts", source)).toEqual([]);
