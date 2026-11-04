@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
 import { shellUrlOf } from "./src/features/offline-pwa/domain/offline-routes";
 import {
   ROUND_FRAME_PATH,
@@ -54,4 +55,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// 要求の設定は、ロケール固定でheaders()・cookies()を読まないため、ページは静的なままである。
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
+
+export default withNextIntl(nextConfig);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { NextIntlClientProvider } from "next-intl";
 import { type ReactNode, useEffect, useState } from "react";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
@@ -47,6 +48,7 @@ import {
   RoundDetailStoreProvider,
   RoundsListStoreProvider,
 } from "@/features/rounds/ui/rounds-context";
+import { intlConfig } from "@/i18n/messages";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
@@ -217,15 +219,18 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
   useEffect(() => app.triggers.start(), [app]);
   useEffect(() => app.swUpdate.start(), [app]);
 
+  // getMessageFallbackとonErrorは関数で、サーバーから渡せないため、クライアントのこの入口で設定を直接読み込む。
   return (
-    <RoundsListStoreProvider store={app.listStore}>
-      <NewRoundStoreProvider store={app.newRoundStore}>
-        <RoundDetailStoreProvider store={app.detailStore}>
-          <RoundBaseRefresher sync={app.sync} />
-          <SwUpdateActivator activation={app.swUpdate} />
-          {children}
-        </RoundDetailStoreProvider>
-      </NewRoundStoreProvider>
-    </RoundsListStoreProvider>
+    <NextIntlClientProvider {...intlConfig}>
+      <RoundsListStoreProvider store={app.listStore}>
+        <NewRoundStoreProvider store={app.newRoundStore}>
+          <RoundDetailStoreProvider store={app.detailStore}>
+            <RoundBaseRefresher sync={app.sync} />
+            <SwUpdateActivator activation={app.swUpdate} />
+            {children}
+          </RoundDetailStoreProvider>
+        </NewRoundStoreProvider>
+      </RoundsListStoreProvider>
+    </NextIntlClientProvider>
   );
 }
