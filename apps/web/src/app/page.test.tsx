@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import Home from "./page";
 
 // 認証SDKの接続を隔離する。手続きと変換の実装と認証の実装は実物のまま通す。
@@ -40,7 +41,7 @@ describe("Home", () => {
     received.replace = false;
 
     // When
-    render(<Home />);
+    render(<Home />, { wrapper: IntlTestProvider });
 
     // Then
     expect(screen.getByRole("heading", { name: "AIMS" })).toBeInTheDocument();
@@ -59,7 +60,7 @@ describe("Home", () => {
     received.replace = true;
 
     // When
-    render(<Home />);
+    render(<Home />, { wrapper: IntlTestProvider });
 
     // Then
     expect(received.props?.start?.pendingHref).toBe("/signup");

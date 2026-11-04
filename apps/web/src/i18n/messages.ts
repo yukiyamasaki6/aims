@@ -1,5 +1,6 @@
 import type { IntlConfig, IntlError } from "next-intl";
 import { screenMessages } from "@/components/screen-messages";
+import { navigationMessages } from "@/features/navigation/ui/navigation-messages";
 
 const locale = "ja";
 
@@ -7,7 +8,7 @@ const locale = "ja";
 const messages = {
   auth: {},
   rounds: {},
-  navigation: {},
+  navigation: navigationMessages.ja,
   offlinePwa: {},
   shared: screenMessages.ja,
 } as const;

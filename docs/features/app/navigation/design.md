@@ -35,6 +35,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 - `src/app/page.tsx`(画面の入口): 静的な紹介画面の入口。認証の読み取りの実装、それを開始の約束に変える実装、開始の手続きを生成し、紹介画面へ渡す。
 - `src/features/navigation/ui/intro-screen.tsx`(UI層): 紹介画面。アプリ名、説明文、左上のロゴ、開始ボタンを表示し、受け取った手続きを開始ボタンへ渡す。
 - `src/features/navigation/ui/start-button.tsx`(UI層): 開始ボタン。画面を開いたときに1回だけ手続きに行き先を決めさせ、判定中は判定中の行き先を表示する。
+- `src/features/navigation/ui/navigation-messages.ts`(UI層): 紹介画面と左パネルの文言の一覧(名前空間`navigation`)。部品は`useTranslations("navigation")`で文言を得る。
 - `src/features/navigation/application/start.ts`(手続きと約束): サインインの状態を読み、行き先の規則で開始の行き先を決める。認証の機能に頼むこと(サインインの状態の読み取りとサインアップのパス)の約束 `SignInCheck` を持つ。
 - `src/features/navigation/infrastructure/auth-sign-in-check.ts`(インフラ層): `SignInCheck` を、認証の機能の入口の `SessionReader`、`SIGN_UP_PATH`、`destinationOf` と、ラウンドの機能の入口の `ROUNDS_PATH` で満たす(サインインの後の既定の行き先は `destinationOf(null, ROUNDS_PATH)`)。
 - 遷移の約束(アプリ全体): ナビゲーションの機能は遷移の約束を持たない。開始の行き先は、手続きが行き先(href)を返し、`start-button.tsx` のリンクで遷移する。ルーターで進む遷移は共有の技術の `PageNavigation`(`src/lib/page-navigation/contract/page-navigation.ts`。認証のサインイン、サインアップとラウンドの開始、完了、削除して離れる、一覧へ戻るが使う)、ページ全体の読み込みの遷移は認証の `PageLoad`、`PageReplace`、遷移元の読み出しは認証の `ReturnToReader` である。
@@ -46,7 +47,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 - `src/features/navigation/ui/left-panel.tsx`(UI層)が開閉（帯とサイドで共有する1つの状態）とリンクを持ち、個人リンクの行き先(`personalHref`)と、下端に、入口が渡すサインアウトの部品（`features/auth/ui/sign-out-button.tsx`）を描く。認証状態は持たず、常に全内容を表示する。配置と開閉ボタンの表示はCSSだけで決める（`side`variant=幅が広い または 横向き、`max-md:landscape:`=横向きかつ狭い）。開閉ボタンは広い用と横向きかつ狭い用の2つを置き、CSSで出し分ける。操作の直後だけtransitionを有効にする`animate`状態を持つ。入口のガードは `proxy.ts`、表示中の喪失は`(main)`のレイアウトが始める見張りが担う。
 - `src/lib/supabase/infrastructure/client.ts`(共有の技術の実装): ブラウザの接続。入口が、接続を作る関数として認証の実装へ渡す。
 - `src/lib/utils.ts`(共有の画面部品): クラス名の結合。
-- 各ファイルの用語は方針(`docs/architecture.md`)の既定の置き場に従う。画面のパッケージは `react`、`next/link`、`next/image`、`lucide-react`、`clsx`、`tailwind-merge`、`class-variance-authority`、`@base-ui/react`、その他のパッケージは `@supabase/ssr`、`@supabase/supabase-js`、`next/server` である。
+- 各ファイルの用語は方針(`docs/architecture.md`)の既定の置き場に従う。画面のパッケージは `react`、`next-intl`、`next/link`、`next/image`、`lucide-react`、`clsx`、`tailwind-merge`、`class-variance-authority`、`@base-ui/react`、その他のパッケージは `@supabase/ssr`、`@supabase/supabase-js`、`next/server` である。
 
 ## 設計判断
 

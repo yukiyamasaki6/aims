@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import type { Start } from "../application/start";
 import { IntroScreen } from "./intro-screen";
 
@@ -32,7 +33,7 @@ describe("IntroScreen", () => {
     const start = createFakeStart();
 
     // When
-    render(<IntroScreen start={start} />);
+    render(<IntroScreen start={start} />, { wrapper: IntlTestProvider });
 
     // Then
     expect(screen.getByRole("heading", { name: "AIMS" })).toBeInTheDocument();
@@ -55,7 +56,7 @@ describe("IntroScreen", () => {
     const start = createFakeStart();
 
     // When
-    render(<IntroScreen start={start} />);
+    render(<IntroScreen start={start} />, { wrapper: IntlTestProvider });
 
     // Then
     expect(received.props?.start).toBe(start);

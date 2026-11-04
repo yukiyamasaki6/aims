@@ -68,18 +68,6 @@
     "reason": "未移行: auth"
   },
   {
-    "path": "features/navigation/ui/intro-screen.tsx",
-    "reason": "未移行: navigation"
-  },
-  {
-    "path": "features/navigation/ui/left-panel.tsx",
-    "reason": "未移行: navigation"
-  },
-  {
-    "path": "features/navigation/ui/start-button.tsx",
-    "reason": "未移行: navigation"
-  },
-  {
     "path": "features/offline-pwa/ui/offline-screen.tsx",
     "reason": "未移行: offline-pwa"
   },

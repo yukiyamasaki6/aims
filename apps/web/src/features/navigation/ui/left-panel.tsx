@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useState } from "react";
 import { LogoImage } from "@/components/logo-image";
 import { cn } from "@/lib/utils";
@@ -94,6 +95,7 @@ function PanelBody({
   personalHref: string;
   signOut: ReactNode;
 }) {
+  const t = useTranslations("navigation");
   return (
     <>
       <nav
@@ -107,7 +109,7 @@ function PanelBody({
           href={personalHref}
           className="rounded-lg bg-muted px-3 py-2 text-sm font-medium"
         >
-          個人
+          {t("leftPanelPersonal")}
         </Link>
       </nav>
 
@@ -133,24 +135,25 @@ function MobileMenuBar({
   onOpen: () => void;
   onClose: () => void;
 }) {
+  const t = useTranslations("navigation");
   return (
     <>
       <div className="flex shrink-0 items-center border-b p-3 side:hidden">
         <button
           type="button"
           onClick={onOpen}
-          aria-label="メニューを開く"
+          aria-label={t("leftPanelOpenMenu")}
           className="flex items-center gap-2 text-sm"
         >
           <Menu className="size-5" />
-          個人
+          {t("leftPanelPersonal")}
         </button>
       </div>
 
       {open && (
         <button
           type="button"
-          aria-label="メニューを閉じる"
+          aria-label={t("leftPanelCloseMenu")}
           onClick={onClose}
           className="fixed inset-0 z-40 bg-black/40 side:hidden"
         />
@@ -172,6 +175,7 @@ function PanelHeader({
   onToggleWide: () => void;
   onToggleCompact: () => void;
 }) {
+  const t = useTranslations("navigation");
   return (
     <div
       className={cn(
@@ -193,7 +197,7 @@ function PanelHeader({
       <button
         type="button"
         onClick={onCloseMobile}
-        aria-label="メニューを閉じる"
+        aria-label={t("leftPanelCloseMenu")}
         className="side:hidden"
       >
         <X className="size-5" />
@@ -226,11 +230,12 @@ function ToggleButton({
   testId: string;
   className: string;
 }) {
+  const t = useTranslations("navigation");
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={open ? "パネルを格納する" : "パネルを開く"}
+      aria-label={open ? t("leftPanelCollapse") : t("leftPanelExpand")}
       data-testid={testId}
       className={cn("hidden shrink-0", className)}
     >

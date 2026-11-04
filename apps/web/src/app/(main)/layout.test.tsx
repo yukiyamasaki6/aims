@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { RootClientEntry } from "../root-client-entry";
 import MainLayout from "./layout";
 
@@ -103,6 +104,7 @@ function renderLayout() {
     <MainLayout>
       <p>子要素</p>
     </MainLayout>,
+    { wrapper: IntlTestProvider },
   );
 }
 
@@ -114,6 +116,7 @@ function renderLayoutWithIdentity() {
         <p>子要素</p>
       </MainLayout>
     </RootClientEntry>,
+    { wrapper: IntlTestProvider },
   );
 }
 
@@ -176,9 +179,11 @@ describe("MainLayout", () => {
       // When
       const render = () =>
         renderToString(
-          <MainLayout>
-            <p>子要素</p>
-          </MainLayout>,
+          <IntlTestProvider>
+            <MainLayout>
+              <p>子要素</p>
+            </MainLayout>
+          </IntlTestProvider>,
         );
 
       // Then

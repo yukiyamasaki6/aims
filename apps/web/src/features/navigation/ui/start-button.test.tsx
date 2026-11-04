@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { createStart } from "../application/start";
 import { createAuthSignInCheck } from "../infrastructure/auth-sign-in-check";
 import { StartButton } from "./start-button";
@@ -24,7 +25,9 @@ describe("StartButton", () => {
     sessionReader.readSession.mockReturnValue(new Promise(() => {}));
 
     // When
-    render(<StartButton start={createStartWith(sessionReader)} />);
+    render(<StartButton start={createStartWith(sessionReader)} />, {
+      wrapper: IntlTestProvider,
+    });
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -40,7 +43,9 @@ describe("StartButton", () => {
     });
 
     // When
-    render(<StartButton start={createStartWith(sessionReader)} />);
+    render(<StartButton start={createStartWith(sessionReader)} />, {
+      wrapper: IntlTestProvider,
+    });
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -53,7 +58,9 @@ describe("StartButton", () => {
     sessionReader.readSession.mockResolvedValue({ status: "unknown" });
 
     // When
-    render(<StartButton start={createStartWith(sessionReader)} />);
+    render(<StartButton start={createStartWith(sessionReader)} />, {
+      wrapper: IntlTestProvider,
+    });
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -67,7 +74,9 @@ describe("StartButton", () => {
     });
 
     // When
-    render(<StartButton start={createStartWith(sessionReader)} />);
+    render(<StartButton start={createStartWith(sessionReader)} />, {
+      wrapper: IntlTestProvider,
+    });
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -91,7 +100,9 @@ describe("StartButton", () => {
     );
 
     // When
-    render(<StartButton start={createStartWith(throwingReader)} />);
+    render(<StartButton start={createStartWith(throwingReader)} />, {
+      wrapper: IntlTestProvider,
+    });
 
     // Then
     const link = screen.getByRole("link", { name: "開始" });
@@ -112,7 +123,9 @@ describe("StartButton", () => {
     it("描画して判定が済むと、読み取りは1回である", async () => {
       // Given
       // When
-      render(<StartButton start={createStartWith(sessionReader)} />);
+      render(<StartButton start={createStartWith(sessionReader)} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
       await vi.waitFor(() =>
@@ -126,7 +139,9 @@ describe("StartButton", () => {
 
     it("判定済みの開始リンクを押しても、読み直さない", async () => {
       // Given
-      render(<StartButton start={createStartWith(sessionReader)} />);
+      render(<StartButton start={createStartWith(sessionReader)} />, {
+        wrapper: IntlTestProvider,
+      });
       const link = screen.getByRole("link", { name: "開始" });
       await vi.waitFor(() =>
         expect(link).toHaveAttribute("data-hydrated", "true"),
@@ -144,7 +159,9 @@ describe("StartButton", () => {
     it("同じ手続きで再描画しても、読み直さない", async () => {
       // Given
       const start = createStartWith(sessionReader);
-      const { rerender } = render(<StartButton start={start} />);
+      const { rerender } = render(<StartButton start={start} />, {
+        wrapper: IntlTestProvider,
+      });
       await vi.waitFor(() =>
         expect(screen.getByRole("link", { name: "開始" })).toHaveAttribute(
           "data-hydrated",

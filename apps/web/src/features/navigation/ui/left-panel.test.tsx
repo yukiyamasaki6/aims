@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { LeftPanel } from "./left-panel";
 
 function wideToggle() {
@@ -26,7 +27,9 @@ describe("LeftPanel", () => {
       const signOut = <button type="button">サインアウト</button>;
 
       // When
-      render(<LeftPanel personalHref="/rounds" signOut={signOut} />);
+      render(<LeftPanel personalHref="/rounds" signOut={signOut} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
       expect(
@@ -40,7 +43,9 @@ describe("LeftPanel", () => {
     it("AIMSロゴと、入口が渡した行き先を向く個人リンクを表示する", () => {
       // Given
       // When
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
       expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();
@@ -54,7 +59,9 @@ describe("LeftPanel", () => {
     it("個人リンクは、渡された別の行き先を向く", () => {
       // Given
       // When
-      render(<LeftPanel personalHref="/elsewhere" signOut={null} />);
+      render(<LeftPanel personalHref="/elsewhere" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
       expect(screen.getByRole("link", { name: "個人" })).toHaveAttribute(
@@ -69,7 +76,9 @@ describe("LeftPanel", () => {
     it("開くボタンを押すと、背景を含めて開く", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // When
       await user.click(screen.getByRole("button", { name: "メニューを開く" }));
@@ -81,7 +90,9 @@ describe("LeftPanel", () => {
     it("背景を押すと閉じる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
       await user.click(screen.getByRole("button", { name: "メニューを開く" }));
 
       // When
@@ -95,7 +106,9 @@ describe("LeftPanel", () => {
     it("パネル内の閉じるボタンを押すと閉じる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
       await user.click(screen.getByRole("button", { name: "メニューを開く" }));
 
       // When
@@ -110,7 +123,9 @@ describe("LeftPanel", () => {
     it("格納ボタンを押すと格納する", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // When
       await user.click(wideToggle());
@@ -122,7 +137,9 @@ describe("LeftPanel", () => {
     it("格納後に開くボタンを押すと再び開く", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
       await user.click(wideToggle());
 
       // When
@@ -138,7 +155,9 @@ describe("LeftPanel", () => {
     it("操作前は、広い用が格納する、横向きかつ狭い用が開くで、ドロワーの背景は出ない", () => {
       // Given
       // When
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
       expect(wideToggle()).toHaveAccessibleName("パネルを格納する");
@@ -149,7 +168,9 @@ describe("LeftPanel", () => {
     it("広い用で格納すると、両方のボタンが開くになり、ドロワーは開かない", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // When
       await user.click(wideToggle());
@@ -163,7 +184,9 @@ describe("LeftPanel", () => {
     it("広い用で格納した後に展開すると、両方のボタンが格納するになり、ドロワーが開く", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
       await user.click(wideToggle());
 
       // When
@@ -178,7 +201,9 @@ describe("LeftPanel", () => {
     it("横向きかつ狭い用で展開すると、広い用も格納するになり、ドロワーが開く", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // When
       await user.click(compactToggle());
@@ -191,7 +216,9 @@ describe("LeftPanel", () => {
     it("横向きかつ狭い用で展開した後に背景を押すと、両方のボタンが開くになり、ドロワーが閉じる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
       await user.click(compactToggle());
 
       // When
@@ -207,7 +234,9 @@ describe("LeftPanel", () => {
     it("ハンバーガーでドロワーを開くと、両方のボタンが格納するになる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // When
       await user.click(screen.getByRole("button", { name: "メニューを開く" }));
@@ -230,7 +259,9 @@ describe("LeftPanel", () => {
     it("初回表示ではtransitionが付かない", () => {
       // Given
       // When
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
       expect(panel()).not.toHaveClass("duration-200");
@@ -239,7 +270,9 @@ describe("LeftPanel", () => {
     it("操作の直後はtransitionが付く", async () => {
       // Given
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // When
       await user.click(wideToggle());
@@ -251,7 +284,9 @@ describe("LeftPanel", () => {
     it("操作から250ms経つと、transitionが外れる", async () => {
       // Given
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
       await user.click(wideToggle());
 
       // When
@@ -266,7 +301,9 @@ describe("LeftPanel", () => {
     it("100ms間隔の2回の操作では、最初の操作から200ms後もまだ付いている", async () => {
       // Given
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<LeftPanel personalHref="/rounds" signOut={null} />);
+      render(<LeftPanel personalHref="/rounds" signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
       await user.click(wideToggle());
       act(() => {
         vi.advanceTimersByTime(100);
