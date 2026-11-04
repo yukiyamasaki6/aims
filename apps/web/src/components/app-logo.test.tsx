@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { AppLogo } from "./app-logo";
 
 describe("AppLogo", () => {
@@ -7,7 +8,7 @@ describe("AppLogo", () => {
   it("AIMSのリンクを表示する", () => {
     // Given
     // When
-    render(<AppLogo />);
+    render(<AppLogo />, { wrapper: IntlTestProvider });
 
     // Then
     expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();

@@ -3,5 +3,8 @@ export const screenMessages = {
   ja: {
     appName: "AIMS",
     appDescription: "AIMS Web Application",
+    logoAlt: "AIMS",
+    confirmDelete: "削除",
+    confirmCancel: "キャンセル",
   },
 } as const;

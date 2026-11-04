@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, type Mock, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { BlockingConfirmDialog, ConfirmDialog } from "./confirm-dialog";
 import { Dialog, DialogContent } from "./dialog";
 
@@ -40,6 +41,7 @@ describe("ConfirmDialog", () => {
           description={description}
           onConfirm={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -61,6 +63,7 @@ describe("ConfirmDialog", () => {
           description={description}
           onConfirm={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -81,6 +84,7 @@ describe("ConfirmDialog", () => {
             confirmLabel={confirmLabel}
             onConfirm={vi.fn()}
           />,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
@@ -101,6 +105,7 @@ describe("ConfirmDialog", () => {
           description="説明"
           onConfirm={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -120,6 +125,7 @@ describe("ConfirmDialog", () => {
           confirmVariant="default"
           onConfirm={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -141,6 +147,7 @@ describe("ConfirmDialog", () => {
           description="説明"
           onConfirm={handleConfirm}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -165,6 +172,7 @@ describe("ConfirmDialog", () => {
           description="説明"
           onConfirm={handleConfirm}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -189,6 +197,7 @@ describe("ConfirmDialog", () => {
           description="説明"
           onConfirm={handleConfirm}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -213,6 +222,7 @@ describe("ConfirmDialog", () => {
           description="説明"
           onConfirm={handleConfirm}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -243,6 +253,7 @@ describe("ConfirmDialog", () => {
             />
           </DialogContent>
         </Dialog>,
+        { wrapper: IntlTestProvider },
       );
       const backdrops = document.querySelectorAll(".bg-black\\/40");
 
@@ -271,6 +282,7 @@ function renderBlocking({
       error={error}
       {...props}
     />,
+    { wrapper: IntlTestProvider },
   );
 }
 

@@ -1,10 +1,1 @@
-[
-  {
-    "path": "components/logo-image.tsx",
-    "reason": "未移行: 共有の画面部品"
-  },
-  {
-    "path": "components/ui/confirm-dialog.tsx",
-    "reason": "未移行: 共有の画面部品"
-  }
-]
+[]
