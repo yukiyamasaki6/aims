@@ -6,6 +6,7 @@ import type { Distance } from "@/features/rounds/domain/scorecard-types";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
 import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { SavePresetDialog } from "./save-preset-dialog";
 
 // 保存の手続き(サインインの確認、書き込み、再取得)は、ラウンドの状態と変更の方法の偽のsavePresetで受ける。手続きの規則は手続きのテスト、実物の結線はスコアカードのテストが確かめる。
@@ -67,6 +68,7 @@ function setup(
         {...overrides}
       />
     </RoundDetailStoreProvider>,
+    { wrapper: IntlTestProvider },
   );
   return { user };
 }
@@ -300,7 +302,7 @@ describe("SavePresetDialog", () => {
       // Given
       savePreset.mockResolvedValue({
         status: "failed",
-        error: "サインインが必要です。",
+        error: "unauthenticated",
       });
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
@@ -327,7 +329,7 @@ describe("SavePresetDialog", () => {
       });
       savePreset.mockResolvedValue({
         status: "failed",
-        error: "サインインが必要です。",
+        error: "unauthenticated",
       });
       await user.click(screen.getByTestId("save-as-preset-trigger"));
 
@@ -346,7 +348,7 @@ describe("SavePresetDialog", () => {
       // Given
       savePreset.mockResolvedValue({
         status: "failed",
-        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+        error: "unreachable",
       });
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
@@ -370,7 +372,7 @@ describe("SavePresetDialog", () => {
       // Given
       savePreset.mockResolvedValue({
         status: "failed",
-        error: "保存できませんでした。",
+        error: "saveFailed",
       });
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));

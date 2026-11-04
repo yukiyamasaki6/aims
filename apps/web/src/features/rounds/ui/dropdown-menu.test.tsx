@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +21,7 @@ describe("DropdownMenuContent", () => {
           <DropdownMenuTrigger>開く</DropdownMenuTrigger>
           <DropdownMenuContent>{content}</DropdownMenuContent>
         </DropdownMenu>,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -41,6 +43,7 @@ describe("DropdownMenuContent", () => {
               項目
             </DropdownMenuContent>
           </DropdownMenu>,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
@@ -59,6 +62,7 @@ describe("DropdownMenuContent", () => {
             <DropdownMenuTrigger>開く</DropdownMenuTrigger>
             <DropdownMenuContent>{content}</DropdownMenuContent>
           </DropdownMenu>,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
@@ -78,6 +82,7 @@ describe("DropdownMenuContent", () => {
             <DropdownMenuTrigger>開く</DropdownMenuTrigger>
             <DropdownMenuContent align={align}>項目</DropdownMenuContent>
           </DropdownMenu>,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
@@ -104,6 +109,7 @@ describe("DropdownMenuItem", () => {
             <DropdownMenuItem>{label}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -125,6 +131,7 @@ describe("DropdownMenuItem", () => {
               <DropdownMenuItem className={className}>削除</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
@@ -147,6 +154,7 @@ describe("DropdownMenuItem", () => {
             <DropdownMenuItem onClick={handleClick}>削除</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -170,6 +178,7 @@ describe("DropdownMenu", () => {
             <DropdownMenuItem>項目</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>,
+        { wrapper: IntlTestProvider },
       );
       await user.click(screen.getByText("開く"));
       expect(await screen.findByRole("menu")).toBeInTheDocument();

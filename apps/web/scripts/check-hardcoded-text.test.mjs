@@ -43,6 +43,12 @@ describe("findViolations", () => {
     expect(texts("a.tsx", source)).toEqual(["Yes", "No", "logo"]);
   });
 
+  it("規則2: 比較の相手の文字列は検出しない", () => {
+    const source =
+      'const x = <a lockedMessage={pressed === "arrows"} titleText={on && "Shown"} />;';
+    expect(texts("a.tsx", source)).toEqual(["Shown"]);
+  });
+
   it("規則2: 空の属性の文字列は検出しない", () => {
     expect(texts("a.tsx", 'const x = <a title="" alt={""} />;')).toEqual([]);
   });

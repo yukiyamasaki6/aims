@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { KeypadPanel } from "./keypad-panel";
 
 describe("KeypadPanel", () => {
@@ -17,6 +18,7 @@ describe("KeypadPanel", () => {
       >
         score buttons
       </KeypadPanel>,
+      { wrapper: IntlTestProvider },
     );
 
     // Then
@@ -31,6 +33,7 @@ describe("KeypadPanel", () => {
       <KeypadPanel mounted visible onNodeChange={vi.fn()} onClose={vi.fn()}>
         score buttons
       </KeypadPanel>,
+      { wrapper: IntlTestProvider },
     );
 
     // Then
@@ -55,6 +58,7 @@ describe("KeypadPanel", () => {
       >
         score buttons
       </KeypadPanel>,
+      { wrapper: IntlTestProvider },
     );
 
     // Then
@@ -72,6 +76,7 @@ describe("KeypadPanel", () => {
       <KeypadPanel mounted visible onNodeChange={vi.fn()} onClose={onClose}>
         score buttons
       </KeypadPanel>,
+      { wrapper: IntlTestProvider },
     );
 
     // When
@@ -89,6 +94,7 @@ describe("KeypadPanel", () => {
       <KeypadPanel mounted visible onNodeChange={vi.fn()} onClose={vi.fn()}>
         score buttons
       </KeypadPanel>,
+      { wrapper: IntlTestProvider },
     );
 
     // Then

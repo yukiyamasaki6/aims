@@ -133,7 +133,7 @@ describe("presetToSave", () => {
       });
       expect(overResult).toEqual({
         type: "invalid",
-        error: "プリセット名は50文字以内で入力してください。",
+        error: "nameTooLong",
       });
     });
   });
@@ -174,7 +174,7 @@ describe("presetToSave", () => {
       });
       expect(overResult).toEqual({
         type: "invalid",
-        error: "プリセット名は50文字以内で入力してください。",
+        error: "nameTooLong",
       });
     });
   });

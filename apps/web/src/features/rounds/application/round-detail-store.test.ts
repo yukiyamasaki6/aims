@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-status";
+import type { FetchResult } from "../domain/fetch-status";
 import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import {
   roundBase,
@@ -353,7 +353,7 @@ describe("load", () => {
       expect(early).toBe(false);
       expect(await loading).toEqual({
         status: "error",
-        message: FETCH_ERROR_MESSAGE,
+        reason: "failed",
       });
     });
 

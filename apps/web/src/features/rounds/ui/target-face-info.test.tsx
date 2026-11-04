@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import type {
   TargetFaceRing,
   TargetFaceSpotLayout,
@@ -38,7 +39,9 @@ describe("TargetFaceIcon", () => {
   };
 
   it("renders a dashed placeholder when no spot has any ring", () => {
-    const { container } = render(<TargetFaceIcon spots={[emptySpot]} />);
+    const { container } = render(<TargetFaceIcon spots={[emptySpot]} />, {
+      wrapper: IntlTestProvider,
+    });
     expect(container.querySelector("svg")).toBeNull();
     expect(container.querySelector("span.border-dashed")).not.toBeNull();
   });
@@ -46,6 +49,7 @@ describe("TargetFaceIcon", () => {
   it("renders a group per spot, positioned by center_x/center_y", () => {
     const { container } = render(
       <TargetFaceIcon spots={[emptySpot, filledSpot]} />,
+      { wrapper: IntlTestProvider },
     );
     // 空のスポットもグループ自体は描画されるが、中身のcircleは持たない。
     const groups = container.querySelectorAll("g");
@@ -70,7 +74,9 @@ describe("TargetFaceInfo", () => {
   };
 
   it("的があれば、サイズと図を表示する", () => {
-    const { container } = render(<TargetFaceInfo face={face} />);
+    const { container } = render(<TargetFaceInfo face={face} />, {
+      wrapper: IntlTestProvider,
+    });
 
     expect(container).toHaveTextContent("122cm");
     expect(container.querySelectorAll("svg").length).toBeGreaterThan(0);
@@ -105,7 +111,9 @@ describe("TargetFaceInfo", () => {
     };
 
     // When
-    render(<TargetFaceInfo face={standardFace} />);
+    render(<TargetFaceInfo face={standardFace} />, {
+      wrapper: IntlTestProvider,
+    });
 
     // Then
     const detail = screen.getByRole("img");
@@ -124,7 +132,9 @@ describe("TargetFaceInfo", () => {
   });
 
   it("見つからないときは、「的データを取得できません」を表示する", () => {
-    const { container } = render(<TargetFaceInfo face="missing" />);
+    const { container } = render(<TargetFaceInfo face="missing" />, {
+      wrapper: IntlTestProvider,
+    });
 
     expect(container).toHaveTextContent("的データを取得できません");
     expect(container.querySelector("svg")).toBeNull();

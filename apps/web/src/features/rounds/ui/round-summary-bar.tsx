@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import type { summarizeRound } from "../domain/scorecard-scoring";
 
 // 合計バー。
@@ -21,6 +22,7 @@ export function RoundSummaryBar({
 }: {
   roundSummary: ReturnType<typeof summarizeRound>;
 }) {
+  const t = useTranslations("rounds");
   return (
     <div
       data-testid="round-summary"
@@ -33,14 +35,16 @@ export function RoundSummaryBar({
             data-testid="round-top-scores"
             className="text-muted-foreground text-sm"
           >
-            {roundSummary.topScores.firstLabel}:{" "}
-            {roundSummary.topScores.firstCount} /{" "}
-            {roundSummary.topScores.secondLabel}:{" "}
-            {roundSummary.topScores.secondCount}
+            {t("topScores", {
+              firstLabel: roundSummary.topScores.firstLabel,
+              firstCount: String(roundSummary.topScores.firstCount),
+              secondLabel: roundSummary.topScores.secondLabel,
+              secondCount: String(roundSummary.topScores.secondCount),
+            })}
           </span>
         )}
         <span className="font-heading text-lg font-semibold">
-          合計{roundSummary.total}
+          {t("roundTotal", { total: String(roundSummary.total) })}
         </span>
       </div>
     </div>

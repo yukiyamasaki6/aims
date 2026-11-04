@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import type { FetchResult } from "../domain/fetch-status";
 import type {
   LoadedRoundsList,
@@ -37,6 +38,7 @@ function renderList() {
     <RoundsListStoreProvider store={fake.store}>
       <RoundsList />
     </RoundsListStoreProvider>,
+    { wrapper: IntlTestProvider },
   );
 }
 
@@ -172,7 +174,7 @@ describe("RoundsList", () => {
 
     it("取得がエラーの場合はエラーメッセージを表示し、空状態は表示せず、新規作成ボタンは表示する", async () => {
       // Given
-      fetchResolves({ status: "error", message: "読み込めませんでした。" });
+      fetchResolves({ status: "error", reason: "failed" });
 
       // When
       renderList();
@@ -458,7 +460,7 @@ describe("RoundsList", () => {
     it("取得に失敗したときは、入力中のラウンドを表示し、「過去履歴」の下にエラーと再試行を表示する", async () => {
       // Given
       offlineWithLocal();
-      fetchResolves({ status: "error", message: "読み込めませんでした。" });
+      fetchResolves({ status: "error", reason: "failed" });
 
       // When
       renderList();

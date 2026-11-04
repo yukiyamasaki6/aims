@@ -1,15 +1,16 @@
+import type { SessionReader } from "@/features/auth";
+import { signInFailure } from "../domain/fetch-status";
 import { type Presets, withoutPreset } from "../domain/preset";
-import { PRESET_DELETE_ERROR_MESSAGE } from "../domain/write-result";
+import type { PresetDeleteFailure } from "../domain/write-result";
 import type { PresetCommands } from "./preset-commands";
 import type { ReferenceSnapshots } from "./reference-snapshots";
-import type { SignInReader } from "./sign-in-reader";
 
 // deleted: 削除した。
-// failed: 削除できず、画面に出す文言がある。
+// failed: 削除できず、失敗の種類がある。
 // discarded: 完了を待つ間に、結果を受け取る画面が無くなった。
 export type PresetDeletionResult =
   | { status: "deleted" }
-  | { status: "failed"; error: string }
+  | { status: "failed"; error: PresetDeleteFailure }
   | { status: "discarded" };
 
 export type PresetDeletion = {
@@ -21,18 +22,18 @@ export type PresetDeletion = {
 
 // 確認の後に呼ぶ個人プリセットの削除。成功したら保存済みからも除く。
 export function createPresetDeletion(deps: {
-  signIn: SignInReader;
+  sessionReader: SessionReader;
   commands: Pick<PresetCommands, "deletePreset">;
   snapshots: ReferenceSnapshots;
 }): PresetDeletion {
-  const { signIn, commands, snapshots } = deps;
+  const { sessionReader, commands, snapshots } = deps;
 
   return {
     async deletePreset(presetId, isCurrent) {
-      const reading = await signIn.read();
+      const reading = await sessionReader.readSession();
       if (!isCurrent()) return { status: "discarded" };
       if (reading.status !== "authenticated") {
-        return { status: "failed", error: reading.message };
+        return { status: "failed", error: signInFailure(reading.status) };
       }
 
       const result = await commands.deletePreset(presetId);
@@ -44,7 +45,7 @@ export function createPresetDeletion(deps: {
       }
       if (!isCurrent()) return { status: "discarded" };
       if (result !== "written") {
-        return { status: "failed", error: PRESET_DELETE_ERROR_MESSAGE };
+        return { status: "failed", error: "deleteFailed" };
       }
       return { status: "deleted" };
     },

@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ringColorFor } from "../domain/ring-color";
@@ -189,13 +190,14 @@ function EndBlanks({
   showProvisional: boolean;
   onSelect: () => void;
 }) {
+  const t = useTranslations("rounds");
   return (
     <>
       {blanks > 0 && (
         <button
           type="button"
           data-testid={`end-blank-${testIdSuffix}`}
-          aria-label={`エンド${end}に追加`}
+          aria-label={t("endBlankAdd", { end: String(end) })}
           data-ring={showProvisional ? "new" : undefined}
           onClick={onSelect}
           className="flex h-10 items-center justify-center"

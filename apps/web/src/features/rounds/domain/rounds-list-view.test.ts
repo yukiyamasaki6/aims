@@ -182,7 +182,7 @@ describe("roundsListView", () => {
 
   it.each([
     ["offline", { status: "offline" }],
-    ["error", { status: "error", message: "読み込めませんでした。" }],
+    ["error", { status: "error", reason: "failed" }],
   ] as const)(
     "取得が%sなら、待たずに端末の入力中のラウンドを実施日の新しい順に返し、取得の状態を返す",
     (_name, view) => {

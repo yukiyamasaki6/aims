@@ -1,6 +1,6 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-status";
+import type { FetchResult } from "../domain/fetch-status";
 import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
 import {
   deletionsOf,
@@ -40,7 +40,7 @@ type Deps = {
 
 const ERROR_RESULT = {
   status: "error",
-  message: FETCH_ERROR_MESSAGE,
+  reason: "failed",
 } as const;
 
 async function readSnapshots(hub: Pick<RoundRecordHub, "readList">) {

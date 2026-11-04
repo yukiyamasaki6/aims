@@ -2,6 +2,7 @@
 
 import { MoreHorizontal, Plus } from "lucide-react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -24,6 +25,7 @@ import { useFetchResult } from "./use-fetch-result";
 import { useLocalRoundsList } from "./use-local-rounds-list";
 
 export function RoundsList() {
+  const t = useTranslations("rounds");
   const hydrated = useHydrated();
   const store = useRoundsListStore();
   const { view, retry } = useFetchResult<LoadedRoundsList>(
@@ -56,7 +58,12 @@ export function RoundsList() {
     });
   }
 
-  const below = belowSection({ others, empty, rest }, retry, startDelete);
+  const below = belowSection(
+    { others, empty, rest },
+    retry,
+    startDelete,
+    t("listEmpty"),
+  );
 
   return (
     <>
@@ -69,20 +76,31 @@ export function RoundsList() {
       <ConfirmDialog
         open={target !== null}
         onOpenChange={() => setTarget(null)}
-        description={deleteDescription(target?.name ?? "")}
+        description={
+          target?.name
+            ? t("roundDeleteConfirmNamed", { name: target.name })
+            : t("roundDeleteConfirm")
+        }
         onConfirm={() => target?.confirm()}
       />
 
-      <Link
-        href={NEW_ROUND_PATH}
-        data-hydrated={hydrated}
-        data-testid="new-round-fab"
-        aria-label="ラウンドを新規作成"
-        className="fixed right-6 bottom-6 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-colors hover:bg-primary/80"
-      >
-        <Plus className="size-6" />
-      </Link>
+      <NewRoundLink hydrated={hydrated} />
     </>
+  );
+}
+
+function NewRoundLink({ hydrated }: { hydrated: boolean }) {
+  const t = useTranslations("rounds");
+  return (
+    <Link
+      href={NEW_ROUND_PATH}
+      data-hydrated={hydrated}
+      data-testid="new-round-fab"
+      aria-label={t("newRoundLabel")}
+      className="fixed right-6 bottom-6 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-colors hover:bg-primary/80"
+    >
+      <Plus className="size-6" />
+    </Link>
   );
 }
 
@@ -91,16 +109,13 @@ function belowSection(
   { others, empty, rest }: Pick<RoundsListView, "others" | "empty" | "rest">,
   retry: () => void,
   onDelete: (round: RoundListItem) => void,
+  emptyText: string,
 ): ReactNode {
   if (others && others.length > 0) {
     return <RoundCards rounds={others} onDelete={onDelete} />;
   }
   if (empty) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        まだラウンドがありません。
-      </p>
-    );
+    return <p className="text-muted-foreground text-sm">{emptyText}</p>;
   }
   if (rest) {
     return (
@@ -124,6 +139,7 @@ function RoundsSections({
   below: ReactNode;
   onDelete: (round: RoundListItem) => void;
 }) {
+  const t = useTranslations("rounds");
   return (
     <>
       {inProgress.length > 0 && (
@@ -131,7 +147,7 @@ function RoundsSections({
           data-testid="in-progress-rounds"
           className="flex flex-col gap-2"
         >
-          <h2 className="text-sm font-medium">入力中</h2>
+          <h2 className="text-sm font-medium">{t("listInProgress")}</h2>
           <RoundCards rounds={inProgress} onDelete={onDelete} />
         </section>
       )}
@@ -141,7 +157,7 @@ function RoundsSections({
           data-testid="other-rounds"
           className="flex flex-1 flex-col gap-2"
         >
-          <h2 className="text-sm font-medium">過去履歴</h2>
+          <h2 className="text-sm font-medium">{t("listHistory")}</h2>
           {below}
         </section>
       ) : (
@@ -152,15 +168,6 @@ function RoundsSections({
 }
 
 // 名前の無いラウンドは、詳細画面と同じく名前を引用せずに指す。
-function deleteDescription(name: string): string {
-  return name === ""
-    ? "このラウンドを削除しますか？記録したスコアもすべて失われます。"
-    : `「${name}」を削除しますか？記録したスコアもすべて失われます。`;
-}
-
-function menuLabel(name: string): string {
-  return name === "" ? "ラウンドのメニュー" : `「${name}」のメニュー`;
-}
 
 // 読み込み後のカード（高さ62px、間隔gap-3）と同じ形にする。
 function RoundCardsSkeleton() {
@@ -180,6 +187,7 @@ function RoundCards({
   rounds: RoundListItem[];
   onDelete: (round: RoundListItem) => void;
 }) {
+  const t = useTranslations("rounds");
   return (
     <ul className="flex flex-col gap-3">
       {rounds.map((round) => (
@@ -194,11 +202,17 @@ function RoundCards({
                 {round.roundDate}
               </span>
             </span>
-            <span className="text-lg font-semibold">{round.total}点</span>
+            <span className="text-lg font-semibold">
+              {t("roundTotalPoints", { total: String(round.total) })}
+            </span>
           </Link>
           <DropdownMenu>
             <DropdownMenuTrigger
-              aria-label={menuLabel(round.name)}
+              aria-label={
+                round.name === ""
+                  ? t("roundMenuLabel")
+                  : t("roundMenuLabelNamed", { name: round.name })
+              }
               data-testid="round-menu-trigger"
               className="-translate-y-1/2 absolute top-1/2 right-2 p-2 text-muted-foreground hover:text-foreground"
             >
@@ -210,7 +224,7 @@ function RoundCards({
                 className="text-destructive data-[highlighted]:text-destructive"
                 onClick={() => onDelete(round)}
               >
-                削除
+                {t("delete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RoundConfig } from "@/features/rounds/domain/round-config";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { RoundConfigPanel } from "./round-config-panel";
 import { createFakeRoundDetailStore } from "./round-stores-test-helpers";
 import { RoundDetailStoreProvider } from "./rounds-context";
@@ -31,9 +32,11 @@ function setup(
   const enqueue = vi.fn();
   const { store } = createFakeRoundDetailStore();
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <RoundDetailStoreProvider store={store}>
-      {children}
-    </RoundDetailStoreProvider>
+    <IntlTestProvider>
+      <RoundDetailStoreProvider store={store}>
+        {children}
+      </RoundDetailStoreProvider>
+    </IntlTestProvider>
   );
   const utils = render(
     <RoundConfigPanel

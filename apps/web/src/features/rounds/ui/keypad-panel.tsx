@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ export function KeypadPanel({
   onClose: () => void;
   children?: ReactNode;
 }) {
+  const t = useTranslations("rounds");
   if (!mounted) return null;
 
   return (
@@ -48,7 +50,7 @@ export function KeypadPanel({
             type="button"
             data-testid="keypad-panel-close"
             onClick={onClose}
-            aria-label="テンキーパネルを閉じる"
+            aria-label={t("keypadPanelClose")}
             className="shrink-0"
           >
             <ChevronRight className="size-5" />

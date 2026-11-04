@@ -1,4 +1,5 @@
 import { ChevronDown } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { useKeypad } from "./use-keypad";
@@ -62,6 +63,7 @@ function KeypadSheet({
   keypad: KeypadState;
   children: ReactNode;
 }) {
+  const t = useTranslations("rounds");
   return (
     <div
       ref={keypad.setKeypadNode}
@@ -80,7 +82,7 @@ function KeypadSheet({
           type="button"
           data-testid="keypad-toggle"
           onClick={keypad.closeKeypad}
-          aria-label="テンキーを閉じる"
+          aria-label={t("keypadClose")}
           className="-top-12 absolute right-4 flex h-12 w-[calc((100%-3.5rem)/4)] items-center justify-center rounded-t-lg border-2 border-b-0 border-foreground/20 bg-card text-muted-foreground shadow-[0_-4px_6px_-1px_rgb(0_0_0/0.1),0_-2px_4px_-2px_rgb(0_0_0/0.1)] hover:text-foreground active:bg-muted"
         >
           <ChevronDown className="size-6" />

@@ -8,6 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import type { FetchResult } from "../domain/fetch-status";
 import type { Preset, Presets } from "../domain/preset";
 import { RoundPresetSelect } from "./round-preset-select";
@@ -29,7 +30,9 @@ let deletePreset: ReturnType<
 
 function render(ui: ReactElement) {
   return renderWithoutStore(
-    <NewRoundStoreProvider store={fake.store}>{ui}</NewRoundStoreProvider>,
+    <IntlTestProvider>
+      <NewRoundStoreProvider store={fake.store}>{ui}</NewRoundStoreProvider>
+    </IntlTestProvider>,
   );
 }
 
@@ -188,7 +191,7 @@ describe("RoundPresetSelect", () => {
 
     it("取得がエラーの場合はエラーメッセージを表示する", async () => {
       // Given
-      fetchResolves({ status: "error", message: "読み込めませんでした。" });
+      fetchResolves({ status: "error", reason: "failed" });
 
       // When
       render(<RoundPresetSelect />);
@@ -201,7 +204,7 @@ describe("RoundPresetSelect", () => {
 
     it("取得がエラーの場合も、開始ボタンを押すとラウンドの開始を依頼する", async () => {
       // Given
-      fetchResolves({ status: "error", message: "読み込めませんでした。" });
+      fetchResolves({ status: "error", reason: "failed" });
       const user = userEvent.setup();
       render(<RoundPresetSelect />);
       await screen.findByRole("alert");
@@ -573,7 +576,7 @@ describe("RoundPresetSelect", () => {
         // Given
         startRound.mockResolvedValue({
           status: "failed",
-          error: "権限がありません。",
+          error: "unauthenticated",
         });
         const user = userEvent.setup();
         await renderSelect([], []);
@@ -585,7 +588,7 @@ describe("RoundPresetSelect", () => {
 
         // Then
         expect(
-          await screen.findByText("権限がありません。"),
+          await screen.findByText("サインインが必要です。"),
         ).toBeInTheDocument();
         expect(
           screen.getByRole("button", { name: "プリセット無しで開始" }),
@@ -670,7 +673,7 @@ describe("RoundPresetSelect", () => {
         // Given
         deletePreset.mockResolvedValue({
           status: "failed",
-          error: "削除できませんでした。",
+          error: "deleteFailed",
         });
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);
@@ -690,7 +693,7 @@ describe("RoundPresetSelect", () => {
         // Given
         deletePreset.mockResolvedValue({
           status: "failed",
-          error: "削除できませんでした。",
+          error: "deleteFailed",
         });
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);

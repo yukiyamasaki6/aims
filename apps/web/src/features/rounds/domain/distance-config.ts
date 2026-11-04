@@ -18,17 +18,17 @@ export type DistanceDraft = Omit<
   arrowsPerEnd: number | null;
 };
 
+// 入力の誤りの種類。required: 未入力。notPositiveInteger: 1以上の整数でない。
+export type DistanceConfigError = "required" | "notPositiveInteger";
 export type DistanceConfigErrors = {
-  distance?: string;
-  arrowsPerEnd?: string;
-  totalEnds?: string;
+  distance?: Extract<DistanceConfigError, "required">;
+  arrowsPerEnd?: Extract<DistanceConfigError, "notPositiveInteger">;
+  totalEnds?: Extract<DistanceConfigError, "notPositiveInteger">;
 };
 
 export type DistanceConfigValidation =
   | { type: "valid"; config: DistanceConfig }
   | { type: "invalid"; errors: DistanceConfigErrors };
-
-const POSITIVE_INTEGER_ERROR = "1以上の整数を入力してください。";
 
 function isPositiveInteger(value: number | null): value is number {
   return value !== null && Number.isInteger(value) && value >= 1;
@@ -42,13 +42,13 @@ export function validateDistanceDraft(
   const { arrowsPerEnd, totalEnds } = draft;
   const errors: DistanceConfigErrors = {};
   if (draft.isMarked && draft.distance === null) {
-    errors.distance = "距離を入力してください。";
+    errors.distance = "required";
   }
   if (!isPositiveInteger(arrowsPerEnd)) {
-    errors.arrowsPerEnd = POSITIVE_INTEGER_ERROR;
+    errors.arrowsPerEnd = "notPositiveInteger";
   }
   if (!isPositiveInteger(totalEnds)) {
-    errors.totalEnds = POSITIVE_INTEGER_ERROR;
+    errors.totalEnds = "notPositiveInteger";
   }
   // 本数・エンド数を再度判定するのは、nullでないことを型へ伝えるため。
   if (

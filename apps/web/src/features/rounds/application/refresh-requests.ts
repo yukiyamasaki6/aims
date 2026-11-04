@@ -1,4 +1,4 @@
-import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-status";
+import type { FetchResult } from "../domain/fetch-status";
 import {
   beginListRun,
   decideList,
@@ -38,7 +38,7 @@ function outcomeOfResult(result: FetchResult<OpenedRound>): RoundOutcome {
 
 const STOPPED: FetchResult<never> = {
   status: "error",
-  message: FETCH_ERROR_MESSAGE,
+  reason: "failed",
 };
 
 // 取り直しの依頼の記録。画面は「開いた」「一覧を開いた」と依頼するだけで、取得と反映の時点はこの記録では決めない。

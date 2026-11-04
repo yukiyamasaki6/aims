@@ -1,20 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import type { SessionReader } from "@/features/auth";
+import { createFakeSessionReader } from "@/features/auth/application/session-reader-test-helpers";
 import type { Preset, Presets } from "../domain/preset";
-import {
-  PRESET_DELETE_ERROR_MESSAGE,
-  type WriteResult,
-} from "../domain/write-result";
-import { createFakeSignInReader } from "./fake-sign-in-reader-test-helpers";
+import type { WriteResult } from "../domain/write-result";
 import type { PresetCommands } from "./preset-commands";
 import { createPresetDeletion } from "./preset-deletion";
 import type { ReferenceSnapshots } from "./reference-snapshots";
-import type { SignInReader } from "./sign-in-reader";
 
-type Reading = Awaited<ReturnType<SignInReader["read"]>>;
-
-const SIGN_IN_REQUIRED = "サインインが必要です。";
-const NETWORK_ERROR =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
+type Reading = Awaited<ReturnType<SessionReader["readSession"]>>;
 
 function preset(id: string): Preset {
   return {
@@ -35,12 +28,12 @@ const initialPresets: Presets = {
 function setup(
   options: {
     readings?: Reading[];
-    read?: SignInReader["read"];
+    read?: SessionReader["readSession"];
     deleteResult?: WriteResult;
     deleteCommand?: PresetCommands["deletePreset"];
   } = {},
 ) {
-  const { signIn } = createFakeSignInReader(
+  const { sessionReader } = createFakeSessionReader(
     options.read
       ? [options.read]
       : [
@@ -61,7 +54,7 @@ function setup(
     update,
   } as unknown as ReferenceSnapshots;
   const deletion = createPresetDeletion({
-    signIn,
+    sessionReader,
     commands: { deletePreset },
     snapshots,
   });
@@ -92,14 +85,14 @@ describe("createPresetDeletion", () => {
     it("サインインしていないとき、削除せず、読み取りの文言でfailedを返す", async () => {
       // Given
       const { deletion, deletePreset, update } = setup({
-        readings: [{ status: "unauthenticated", message: SIGN_IN_REQUIRED }],
+        readings: [{ status: "unauthenticated" }],
       });
 
       // When
       const result = await deletion.deletePreset("preset-1", () => true);
 
       // Then
-      expect(result).toEqual({ status: "failed", error: SIGN_IN_REQUIRED });
+      expect(result).toEqual({ status: "failed", error: "unauthenticated" });
       expect(deletePreset).not.toHaveBeenCalled();
       expect(update).not.toHaveBeenCalled();
     });
@@ -109,7 +102,7 @@ describe("createPresetDeletion", () => {
       const { deletion, deletePreset } = setup({
         readings: [
           { status: "authenticated", userId: "user-1" },
-          { status: "unauthenticated", message: SIGN_IN_REQUIRED },
+          { status: "unauthenticated" },
         ],
       });
       const first = await deletion.deletePreset("preset-1", () => true);
@@ -119,21 +112,21 @@ describe("createPresetDeletion", () => {
 
       // Then
       expect(first.status).toBe("deleted");
-      expect(second).toEqual({ status: "failed", error: SIGN_IN_REQUIRED });
+      expect(second).toEqual({ status: "failed", error: "unauthenticated" });
       expect(deletePreset).toHaveBeenCalledTimes(1);
     });
 
     it("認証が不明のとき、削除せず、読み取りの文言でfailedを返す", async () => {
       // Given
       const { deletion, deletePreset } = setup({
-        readings: [{ status: "unknown", message: NETWORK_ERROR }],
+        readings: [{ status: "unknown" }],
       });
 
       // When
       const result = await deletion.deletePreset("preset-1", () => true);
 
       // Then
-      expect(result).toEqual({ status: "failed", error: NETWORK_ERROR });
+      expect(result).toEqual({ status: "failed", error: "unreachable" });
       expect(deletePreset).not.toHaveBeenCalled();
     });
 
@@ -152,7 +145,7 @@ describe("createPresetDeletion", () => {
         // Then
         expect(result).toEqual({
           status: "failed",
-          error: PRESET_DELETE_ERROR_MESSAGE,
+          error: "deleteFailed",
         });
         expect(update).not.toHaveBeenCalled();
         expect(saved.presets).toBe(initialPresets);
@@ -185,7 +178,7 @@ describe("createPresetDeletion", () => {
       const { deletion } = setup({
         read: async () => {
           current = false;
-          return { status: "unknown", message: NETWORK_ERROR };
+          return { status: "unknown" };
         },
       });
 
@@ -202,7 +195,7 @@ describe("createPresetDeletion", () => {
       const { deletion, deletePreset, update } = setup({
         read: async () => {
           current = false;
-          return { status: "unauthenticated", message: SIGN_IN_REQUIRED };
+          return { status: "unauthenticated" };
         },
       });
 

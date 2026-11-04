@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import type { FetchResult } from "../domain/fetch-status";
 import { createFakeRoundsListStore } from "./round-stores-test-helpers";
 import { useFetchResult } from "./use-fetch-result";
@@ -26,8 +27,9 @@ describe("useFetchResult", () => {
       const d = deferred<FetchResult<number>>();
 
       // When
-      const { result } = renderHook(() =>
-        useFetchResult(() => d.promise, [], fake.store.whenOnline),
+      const { result } = renderHook(
+        () => useFetchResult(() => d.promise, [], fake.store.whenOnline),
+        { wrapper: IntlTestProvider },
       );
       const pending = result.current.view;
       await act(async () => d.resolve({ status: "ok", data: 1 }));
@@ -45,8 +47,9 @@ describe("useFetchResult", () => {
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({ status: "ok", data: 2 });
-      const { result } = renderHook(() =>
-        useFetchResult(fetcher, [], fake.store.whenOnline),
+      const { result } = renderHook(
+        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
 
@@ -69,8 +72,9 @@ describe("useFetchResult", () => {
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({ status: "ok", data: 2 });
-      const { result } = renderHook(() =>
-        useFetchResult(fetcher, [], fake.store.whenOnline),
+      const { result } = renderHook(
+        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
 
@@ -96,7 +100,7 @@ describe("useFetchResult", () => {
       );
       const { result, rerender } = renderHook(
         ({ id }) => useFetchResult(fetcher, [id], fake.store.whenOnline),
-        { initialProps: { id: "a" } },
+        { wrapper: IntlTestProvider, initialProps: { id: "a" } },
       );
       await waitFor(() => expect(result.current.view.status).toBe("ok"));
 
@@ -118,8 +122,9 @@ describe("useFetchResult", () => {
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValueOnce({ status: "offline" })
         .mockReturnValueOnce(d.promise);
-      const { result } = renderHook(() =>
-        useFetchResult(fetcher, [], fake.store.whenOnline),
+      const { result } = renderHook(
+        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
 
@@ -148,8 +153,9 @@ describe("useFetchResult", () => {
           return { status: "offline" };
         })
         .mockResolvedValueOnce({ status: "ok", data: 3 });
-      const { result } = renderHook(() =>
-        useFetchResult(fetcher, [], fake.store.whenOnline),
+      const { result } = renderHook(
+        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
       act(() => fake.returnOnline());
@@ -178,8 +184,9 @@ describe("useFetchResult", () => {
         .mockResolvedValueOnce({ status: "ok", data: 4 });
 
       // When
-      const { result } = renderHook(() =>
-        useFetchResult(fetcher, [], fake.store.whenOnline),
+      const { result } = renderHook(
+        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -198,8 +205,9 @@ describe("useFetchResult", () => {
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValueOnce({ status: "offline" })
         .mockReturnValueOnce(d.promise);
-      const { result } = renderHook(() =>
-        useFetchResult(fetcher, [], fake.store.whenOnline),
+      const { result } = renderHook(
+        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
       act(() => result.current.retry());
@@ -216,7 +224,7 @@ describe("useFetchResult", () => {
     });
 
     it.each([
-      ["error", { status: "error", message: "失敗" }],
+      ["error", { status: "error", reason: "failed" }],
       ["not-found", { status: "not-found" }],
       ["ok", { status: "ok", data: 1 }],
     ] satisfies [string, FetchResult<number>][])(
@@ -228,8 +236,9 @@ describe("useFetchResult", () => {
         const fetcher = vi.fn(
           async (): Promise<FetchResult<number>> => settled,
         );
-        const { result } = renderHook(() =>
-          useFetchResult(fetcher, [], fake.store.whenOnline),
+        const { result } = renderHook(
+          () => useFetchResult(fetcher, [], fake.store.whenOnline),
+          { wrapper: IntlTestProvider },
         );
         await waitFor(() => expect(result.current.view.status).toBe(status));
 
@@ -249,7 +258,9 @@ describe("useFetchResult", () => {
       fake.goOffline();
       const d = deferred<FetchResult<number>>();
       const fetcher = vi.fn(() => d.promise);
-      renderHook(() => useFetchResult(fetcher, [], fake.store.whenOnline));
+      renderHook(() => useFetchResult(fetcher, [], fake.store.whenOnline), {
+        wrapper: IntlTestProvider,
+      });
 
       // When
       act(() => fake.returnOnline());
@@ -269,8 +280,9 @@ describe("useFetchResult", () => {
       const fetcher = vi.fn(
         async (): Promise<FetchResult<number>> => ({ status: "offline" }),
       );
-      const { result, rerender } = renderHook(() =>
-        useFetchResult(fetcher, [], fake.store.whenOnline),
+      const { result, rerender } = renderHook(
+        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
       const subscribed = fake.store.whenOnline.mock.calls.length;
@@ -290,8 +302,9 @@ describe("useFetchResult", () => {
       const { fake } = setup();
       const d = deferred<FetchResult<number>>();
       const errorSpy = vi.spyOn(console, "error");
-      const { result, unmount } = renderHook(() =>
-        useFetchResult(() => d.promise, [], fake.store.whenOnline),
+      const { result, unmount } = renderHook(
+        () => useFetchResult(() => d.promise, [], fake.store.whenOnline),
+        { wrapper: IntlTestProvider },
       );
       unmount();
 
@@ -311,8 +324,9 @@ describe("useFetchResult", () => {
       const fetcher = vi
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValue({ status: "offline" });
-      const { result, unmount } = renderHook(() =>
-        useFetchResult(fetcher, [], fake.store.whenOnline),
+      const { result, unmount } = renderHook(
+        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
       unmount();
@@ -336,7 +350,7 @@ describe("useFetchResult", () => {
         .mockReturnValueOnce(second.promise);
       const { result, rerender } = renderHook(
         ({ id }) => useFetchResult(fetcher, [id], fake.store.whenOnline),
-        { initialProps: { id: "a" } },
+        { wrapper: IntlTestProvider, initialProps: { id: "a" } },
       );
       rerender({ id: "b" });
 
@@ -361,7 +375,7 @@ describe("useFetchResult", () => {
           seen.push(`${id}:${r.view.status}`);
           return r;
         },
-        { initialProps: { id: "a" } },
+        { wrapper: IntlTestProvider, initialProps: { id: "a" } },
       );
       await waitFor(() => expect(result.current.view.status).toBe("ok"));
 
@@ -382,15 +396,16 @@ describe("useFetchResult", () => {
       });
 
       // When
-      const { result } = renderHook(() =>
-        useFetchResult(fetcher, [], fake.store.whenOnline),
+      const { result } = renderHook(
+        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        { wrapper: IntlTestProvider },
       );
 
       // Then
       await waitFor(() =>
         expect(result.current.view).toEqual({
           status: "error",
-          message: "読み込めませんでした。",
+          reason: "failed",
         }),
       );
     });

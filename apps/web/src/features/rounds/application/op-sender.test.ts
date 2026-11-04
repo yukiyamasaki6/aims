@@ -146,7 +146,7 @@ describe("送信の順序", () => {
     await rig.hub.append(STREAM, shot("a", 1));
     await flush();
     await respond(rig, 0, appliedOutcome(1));
-    rig.signIn.reading = { status: "unauthenticated", message: "未認証" };
+    rig.signIn.reading = { status: "unauthenticated" };
 
     // When
     await rig.hub.append(STREAM, shot("b", 2));
@@ -485,7 +485,7 @@ describe("サインインの状態", () => {
   it("未認証なら送らずに保留し、衝突する後続も止める。サインインし直して再開すると送る", async () => {
     // Given
     const rig = await started({
-      reading: { status: "unauthenticated", message: "未認証" },
+      reading: { status: "unauthenticated" },
     });
     await rig.hub.append(STREAM, shot("a", 1));
     await rig.hub.append(STREAM, shot("follower", 1));
@@ -505,7 +505,7 @@ describe("サインインの状態", () => {
   it("サインインの状態が不明(通信失敗)なら送らずに再試行し、確認できるようになると送る", async () => {
     // Given
     const rig = await started({
-      reading: { status: "unknown", message: "確認できない" },
+      reading: { status: "unknown" },
     });
     await rig.hub.append(STREAM, shot("a"));
     await flush();
@@ -682,7 +682,7 @@ describe("利用者の切り替え", () => {
   it("利用者を替えると、前の利用者の保留の操作を送らず、保存したまま残す", async () => {
     // Given
     const rig = await started({
-      reading: { status: "unauthenticated", message: "未認証" },
+      reading: { status: "unauthenticated" },
     });
     await rig.hub.append(STREAM, shot("a"));
     await flush();
@@ -797,7 +797,7 @@ describe("送信中の印", () => {
     await discarding.hub.append(STREAM, shot("a"));
     await flush();
     const holding = await started({
-      reading: { status: "unauthenticated", message: "未認証" },
+      reading: { status: "unauthenticated" },
     });
 
     // When
@@ -815,7 +815,7 @@ describe("送信中の印", () => {
   it("サインインし直して保留を戻すと、再び送るときに印が付き直る", async () => {
     // Given
     const rig = await started({
-      reading: { status: "unauthenticated", message: "未認証" },
+      reading: { status: "unauthenticated" },
     });
     await rig.hub.append(STREAM, shot("a"));
     await flush();

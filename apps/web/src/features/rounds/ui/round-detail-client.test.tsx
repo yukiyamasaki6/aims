@@ -11,6 +11,7 @@ import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
 import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { RoundDetailClient } from "./round-detail-client";
 import { useCreationGone } from "./use-creation-gone";
 
@@ -88,14 +89,17 @@ function renderDetail() {
     <RoundDetailStoreProvider store={store}>
       <RoundDetailClient />
     </RoundDetailStoreProvider>,
+    { wrapper: IntlTestProvider },
   );
 }
 
 function renderDetailToString() {
   return renderToString(
-    <RoundDetailStoreProvider store={store}>
-      <RoundDetailClient />
-    </RoundDetailStoreProvider>,
+    <IntlTestProvider>
+      <RoundDetailStoreProvider store={store}>
+        <RoundDetailClient />
+      </RoundDetailStoreProvider>
+    </IntlTestProvider>,
   );
 }
 
@@ -274,7 +278,7 @@ describe("RoundDetailClient", () => {
       // Given
       load.mockResolvedValue({
         status: "error",
-        message: "読み込めませんでした。",
+        reason: "failed",
       });
 
       // When
@@ -293,7 +297,7 @@ describe("RoundDetailClient", () => {
       // Given
       load.mockResolvedValueOnce({
         status: "error",
-        message: "読み込めませんでした。",
+        reason: "failed",
       });
       load.mockResolvedValueOnce({ status: "ok", data: detail("午前練習") });
       const user = userEvent.setup();

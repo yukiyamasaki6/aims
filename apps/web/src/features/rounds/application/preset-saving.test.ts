@@ -1,20 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import type { SessionReader } from "@/features/auth";
+import { createFakeSessionReader } from "@/features/auth/application/session-reader-test-helpers";
 import type { PresetToSave } from "../domain/preset-save";
-import {
-  PRESET_SAVE_ERROR_MESSAGE,
-  type WriteResult,
-} from "../domain/write-result";
-import { createFakeSignInReader } from "./fake-sign-in-reader-test-helpers";
+import type { WriteResult } from "../domain/write-result";
 import type { PresetCommands } from "./preset-commands";
 import { createPresetSaving } from "./preset-saving";
 import type { RoundFetching } from "./round-fetching";
-import type { SignInReader } from "./sign-in-reader";
 
-type Reading = Awaited<ReturnType<SignInReader["read"]>>;
-
-const SIGN_IN_REQUIRED = "サインインが必要です。";
-const NETWORK_ERROR =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
+type Reading = Awaited<ReturnType<SessionReader["readSession"]>>;
 
 const preset: PresetToSave = {
   name: "練習用",
@@ -44,13 +37,13 @@ const preset: PresetToSave = {
 function setup(
   options: {
     readings?: Reading[];
-    read?: SignInReader["read"];
+    read?: SessionReader["readSession"];
     writeResult?: WriteResult;
     fetchPresets?: () => Promise<unknown>;
   } = {},
 ) {
   const calls: string[] = [];
-  const { read } = createFakeSignInReader(
+  const { readSession: read } = createFakeSessionReader(
     options.read
       ? [options.read]
       : [
@@ -58,7 +51,7 @@ function setup(
           { status: "authenticated", userId: "user-1" },
         ],
   );
-  const order: SignInReader["read"] = async (...args) => {
+  const order: SessionReader["readSession"] = async (...args) => {
     calls.push("sign-in");
     return read(...args);
   };
@@ -71,7 +64,7 @@ function setup(
     return options.fetchPresets?.();
   });
   const saving = createPresetSaving({
-    signIn: { read: order },
+    sessionReader: { readSession: order },
     commands: { savePreset },
     fetching: { fetchPresets } as unknown as Pick<
       RoundFetching,
@@ -126,7 +119,7 @@ describe("createPresetSaving", () => {
       const { saving, savePreset } = setup({
         readings: [
           { status: "authenticated", userId: "user-1" },
-          { status: "unauthenticated", message: SIGN_IN_REQUIRED },
+          { status: "unauthenticated" },
         ],
       });
 
@@ -136,7 +129,7 @@ describe("createPresetSaving", () => {
 
       // Then
       expect(first).toEqual({ status: "saved" });
-      expect(second).toEqual({ status: "failed", error: SIGN_IN_REQUIRED });
+      expect(second).toEqual({ status: "failed", error: "unauthenticated" });
       expect(savePreset).toHaveBeenCalledTimes(1);
     });
   });
@@ -145,14 +138,14 @@ describe("createPresetSaving", () => {
     it("サインインしていないとき、書き込まず、再取得もせず、読み取りの文言でfailedを返す", async () => {
       // Given
       const { saving, savePreset, fetchPresets } = setup({
-        readings: [{ status: "unauthenticated", message: SIGN_IN_REQUIRED }],
+        readings: [{ status: "unauthenticated" }],
       });
 
       // When
       const result = await saving.savePreset(preset);
 
       // Then
-      expect(result).toEqual({ status: "failed", error: SIGN_IN_REQUIRED });
+      expect(result).toEqual({ status: "failed", error: "unauthenticated" });
       expect(savePreset).not.toHaveBeenCalled();
       expect(fetchPresets).not.toHaveBeenCalled();
     });
@@ -160,14 +153,14 @@ describe("createPresetSaving", () => {
     it("確認が通信失敗で不明なとき、書き込まず、読み取りの文言でfailedを返す", async () => {
       // Given
       const { saving, savePreset } = setup({
-        readings: [{ status: "unknown", message: NETWORK_ERROR }],
+        readings: [{ status: "unknown" }],
       });
 
       // When
       const result = await saving.savePreset(preset);
 
       // Then
-      expect(result).toEqual({ status: "failed", error: NETWORK_ERROR });
+      expect(result).toEqual({ status: "failed", error: "unreachable" });
       expect(savePreset).not.toHaveBeenCalled();
     });
 
@@ -200,11 +193,11 @@ describe("createPresetSaving", () => {
         // Then
         expect(result).toEqual({
           status: "failed",
-          error: PRESET_SAVE_ERROR_MESSAGE,
+          error: "saveFailed",
         });
         expect(result).toEqual({
           status: "failed",
-          error: "保存できませんでした。",
+          error: "saveFailed",
         });
         expect(fetchPresets).not.toHaveBeenCalled();
       },

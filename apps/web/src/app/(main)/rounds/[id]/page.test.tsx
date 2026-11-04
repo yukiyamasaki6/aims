@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import RoundPage, { generateStaticParams } from "./page";
 
 // 取得と表示は別のテストで確かめるため、クライアントコンポーネントは目印だけを描画するスタブにする。
@@ -12,7 +13,7 @@ describe("RoundPage", () => {
     // Given
 
     // When
-    render(<RoundPage />);
+    render(<RoundPage />, { wrapper: IntlTestProvider });
 
     // Then
     expect(screen.getByTestId("round-detail-client")).toBeInTheDocument();

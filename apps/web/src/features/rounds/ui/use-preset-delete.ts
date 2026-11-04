@@ -2,6 +2,7 @@
 
 import { type RefObject, useRef, useState } from "react";
 import type { Preset } from "../domain/preset";
+import type { PresetDeleteFailure } from "../domain/write-result";
 import { useNewRoundStore } from "./rounds-context";
 
 // 個人プリセットの削除。確認中のプリセットと、削除済みのIDと、削除の実行中の状態を持つ。
@@ -16,7 +17,7 @@ export function usePresetDelete(
     null,
   );
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PresetDeleteFailure | null>(null);
   // 二重実行の判定は同期的なrefで行う。setDeleting()由来のstateはレンダーを
   // 挟むまで更新されず、連打で2回目の呼び出しが古いdeleting=falseの
   // クロージャのまま実行されてしまうため、stateだけでは防げない。

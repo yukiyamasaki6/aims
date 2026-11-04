@@ -27,6 +27,13 @@ const PROPERTY_NAMES = new Set([
   "name",
   "short_name",
 ]);
+// 値を作る演算子だけをたどる。比較の相手の文字列は、利用者に届かない。
+const VALUE_OPERATORS = new Set([
+  ts.SyntaxKind.PlusToken,
+  ts.SyntaxKind.BarBarToken,
+  ts.SyntaxKind.QuestionQuestionToken,
+  ts.SyntaxKind.AmpersandAmpersandToken,
+]);
 const NON_ASCII = /[\u0080-￿]/;
 const LETTER = /\p{L}/u;
 const EXCLUDED_FILE =
@@ -66,7 +73,10 @@ function stringsOf(expression) {
       ...stringsOf(expression.whenFalse),
     ];
   }
-  if (ts.isBinaryExpression(expression)) {
+  if (
+    ts.isBinaryExpression(expression) &&
+    VALUE_OPERATORS.has(expression.operatorToken.kind)
+  ) {
     return [...stringsOf(expression.left), ...stringsOf(expression.right)];
   }
   if (

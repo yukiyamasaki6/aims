@@ -1,4 +1,5 @@
 import { ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import type { DistanceConfig } from "../domain/distance-config";
 import { distanceNumber, summarizeDistance } from "../domain/scorecard-scoring";
@@ -183,6 +184,7 @@ function DistanceSubtotalBar({
   displayNumber: number;
   summary: DistanceSummary;
 }) {
+  const t = useTranslations("rounds");
   return (
     <div
       data-sticky-inset
@@ -190,12 +192,16 @@ function DistanceSubtotalBar({
     >
       {summary.topScores && (
         <span data-testid={`distance-top-scores-${displayNumber}`}>
-          {summary.topScores.firstLabel}: {summary.topScores.firstCount} /{" "}
-          {summary.topScores.secondLabel}: {summary.topScores.secondCount}
+          {t("topScores", {
+            firstLabel: summary.topScores.firstLabel,
+            firstCount: String(summary.topScores.firstCount),
+            secondLabel: summary.topScores.secondLabel,
+            secondCount: String(summary.topScores.secondCount),
+          })}
         </span>
       )}
       <span className="text-foreground text-sm font-semibold">
-        小計{summary.total}
+        {t("distanceSubtotal", { total: String(summary.total) })}
       </span>
     </div>
   );

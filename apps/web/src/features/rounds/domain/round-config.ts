@@ -8,10 +8,12 @@ export type RoundConfig = {
   bowType: string;
 };
 
+// 入力の誤りの種類。tooLong: 上限を超える。required: 未入力。unmarkedDistances: Unmarkedの距離が残っている。
+export type RoundConfigError = "tooLong" | "required" | "unmarkedDistances";
 export type RoundConfigErrors = {
-  name?: string;
-  roundDate?: string;
-  format?: string;
+  name?: Extract<RoundConfigError, "tooLong">;
+  roundDate?: Extract<RoundConfigError, "required">;
+  format?: Extract<RoundConfigError, "unmarkedDistances">;
 };
 
 export type RoundConfigValidation =
@@ -26,14 +28,13 @@ export function validateRoundConfig(
 ): RoundConfigValidation {
   const errors: RoundConfigErrors = {};
   if (draft.name.length > NAME_MAX_LENGTH) {
-    errors.name = `ラウンド名は${NAME_MAX_LENGTH}文字以内で入力してください。`;
+    errors.name = "tooLong";
   }
   if (draft.roundDate === "") {
-    errors.roundDate = "実施日を入力してください。";
+    errors.roundDate = "required";
   }
   if (draft.format !== "field" && hasUnmarkedDistances) {
-    errors.format =
-      "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。";
+    errors.format = "unmarkedDistances";
   }
   if (Object.keys(errors).length > 0) {
     return { type: "invalid", errors };

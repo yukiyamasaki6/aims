@@ -1,27 +1,41 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { labelOf } from "../domain/option-label";
 import {
   buildRoundUpdatedOperation,
   type RoundConfig,
   type RoundConfigErrors,
   validateRoundConfig,
 } from "../domain/round-config";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../domain/round-constants";
 import type { SyncOperation } from "../domain/sync-events";
 import { useRoundDetailStore } from "./rounds-context";
+import { useOptionLabels } from "./use-option-labels";
 
 function RequiredMark() {
+  const t = useTranslations("rounds");
   return (
     <span className="text-destructive" aria-hidden="true">
-      *
+      {t("requiredMark")}
     </span>
   );
+}
+
+// 設定の要約行の文字列。名前、実施日、種別、弓種のうち、空でないものを並べる。
+function useSummaryText(config: RoundConfig): string {
+  const { formatLabel, bowTypeLabel } = useOptionLabels();
+  return [
+    config.name,
+    config.roundDate,
+    formatLabel(config.format),
+    bowTypeLabel(config.bowType),
+  ]
+    .filter((part) => part !== "")
+    .join(" / ");
 }
 
 export function RoundConfigPanel({
@@ -38,6 +52,7 @@ export function RoundConfigPanel({
   enqueue: (operation: SyncOperation) => void;
 }) {
   const store = useRoundDetailStore();
+  const summary = useSummaryText(initial);
   const [expanded, setExpanded] = useState(defaultExpanded);
   // 下書きと起点(開いたときの値)は、開いたときに作り、閉じるまで`initial`の変化で書き換えない。
   const [origin, setOrigin] = useState(initial);
@@ -81,16 +96,7 @@ export function RoundConfigPanel({
         onClick={toggleExpanded}
         className="flex w-full items-center justify-between gap-2 rounded-t-xl p-3 text-left text-sm"
       >
-        <span className="truncate">
-          {[
-            initial.name,
-            initial.roundDate,
-            labelOf(FORMAT_OPTIONS, initial.format),
-            labelOf(BOW_TYPE_OPTIONS, initial.bowType),
-          ]
-            .filter((part) => part !== "")
-            .join(" / ")}
-        </span>
+        <span className="truncate">{summary}</span>
         <ChevronRight className="size-4 shrink-0" />
       </button>
 
@@ -124,6 +130,8 @@ function RoundConfigFields({
   fieldErrors: RoundConfigErrors;
   onSave: () => void;
 }) {
+  const t = useTranslations("rounds");
+  const { formatOptions, bowTypeOptions } = useOptionLabels();
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
@@ -131,7 +139,7 @@ function RoundConfigFields({
           htmlFor="round-config-name"
           className="text-muted-foreground text-xs"
         >
-          ラウンド名
+          {t("roundConfigName")}
         </label>
         <Input
           id="round-config-name"
@@ -141,7 +149,9 @@ function RoundConfigFields({
           aria-invalid={Boolean(fieldErrors.name)}
         />
         {fieldErrors.name && (
-          <p className="text-destructive text-sm">{fieldErrors.name}</p>
+          <p className="text-destructive text-sm">
+            {t(`roundConfigError.${fieldErrors.name}`)}
+          </p>
         )}
       </div>
 
@@ -150,7 +160,7 @@ function RoundConfigFields({
           htmlFor="round-config-date"
           className="text-muted-foreground text-xs"
         >
-          実施日 <RequiredMark />
+          {t("roundConfigDate")} <RequiredMark />
         </label>
         <Input
           id="round-config-date"
@@ -163,22 +173,26 @@ function RoundConfigFields({
           aria-invalid={Boolean(fieldErrors.roundDate)}
         />
         {fieldErrors.roundDate && (
-          <p className="text-destructive text-sm">{fieldErrors.roundDate}</p>
+          <p className="text-destructive text-sm">
+            {t(`roundConfigError.${fieldErrors.roundDate}`)}
+          </p>
         )}
       </div>
 
       <OptionGrid
-        label="種別"
-        options={FORMAT_OPTIONS}
+        label={t("roundConfigFormat")}
+        options={formatOptions}
         current={draft.format}
         testIdPrefix="round-config-format"
-        error={fieldErrors.format}
+        error={
+          fieldErrors.format && t(`roundConfigError.${fieldErrors.format}`)
+        }
         onChange={(format) => setDraft((d) => ({ ...d, format }))}
       />
 
       <OptionGrid
-        label="弓種"
-        options={BOW_TYPE_OPTIONS}
+        label={t("roundConfigBowType")}
+        options={bowTypeOptions}
         current={draft.bowType}
         testIdPrefix="round-config-bow-type"
         onChange={(bowType) => setDraft((d) => ({ ...d, bowType }))}
@@ -190,7 +204,7 @@ function RoundConfigFields({
         data-testid="round-config-save"
         onClick={onSave}
       >
-        保存
+        {t("save")}
       </Button>
     </div>
   );

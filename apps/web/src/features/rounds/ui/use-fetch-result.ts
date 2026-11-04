@@ -2,11 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { WhenOnline } from "../application/when-online";
-import {
-  FETCH_ERROR_MESSAGE,
-  type FetchResult,
-  type FetchView,
-} from "../domain/fetch-status";
+import type { FetchResult, FetchView } from "../domain/fetch-status";
 
 type Settled<T> = {
   key: readonly unknown[];
@@ -38,9 +34,7 @@ export function useFetchResult<T>(
       if (active) setSettled({ key, result });
     };
     // 取得関数がrejectしても、loadingのまま固定されないようerrorにする。
-    fetcher().then(settle, () =>
-      settle({ status: "error", message: FETCH_ERROR_MESSAGE }),
-    );
+    fetcher().then(settle, () => settle({ status: "error", reason: "failed" }));
     return () => {
       active = false;
     };

@@ -97,7 +97,7 @@ describe("presetListView", () => {
   it.each<[string, FetchView<Presets>]>([
     ["取得中", { status: "loading" }],
     ["オフライン", { status: "offline" }],
-    ["取得エラー", { status: "error", message: "読み込めませんでした。" }],
+    ["取得エラー", { status: "error", reason: "failed" }],
   ])(
     "%sのときは、個人と公式は空でselectedはnullになる",
     (_label, notLoaded) => {

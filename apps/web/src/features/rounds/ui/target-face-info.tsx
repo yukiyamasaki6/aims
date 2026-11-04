@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import type {
   TargetFaceRing,
@@ -275,15 +276,18 @@ const THUMBNAIL_SIZE = 48;
 const CENTER_DETAIL_WIDTH = 73;
 
 export function TargetFaceInfo({ face }: { face: TargetFaceView }) {
+  const t = useTranslations("rounds");
   if (face === "missing") {
-    return <span className="min-w-0">的データを取得できません</span>;
+    return <span className="min-w-0">{t("targetFaceMissing")}</span>;
   }
 
   return (
     <span className="flex items-center justify-center gap-1">
       <TargetFaceIcon spots={face.target_face_spots} size={THUMBNAIL_SIZE} />
       <span className="flex flex-col items-start">
-        <span className="text-sm leading-4">{face.size}cm</span>
+        <span className="text-sm leading-4">
+          {t("targetFaceSize", { size: String(face.size) })}
+        </span>
         <TargetFaceCenterDetail
           rings={face.target_face_spots[0]?.target_face_rings ?? []}
           pixelWidth={CENTER_DETAIL_WIDTH}

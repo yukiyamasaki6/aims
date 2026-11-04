@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import type { LoadedRoundDetail } from "../application/round-detail-store";
 import { roundIdOfPath } from "../domain/round-routes";
@@ -24,8 +25,6 @@ function ScorecardSkeleton() {
   );
 }
 
-const NOT_FOUND = { message: "ラウンドが見つかりません。" };
-
 // pathnameは取得のkeyにだけ使い、初回描画は取得中の枠になる。
 // SSRのHTMLと、Service Workerが別URLへ返す枠のHTMLが同一になり、水和が一致する。
 export function RoundDetailClient() {
@@ -34,6 +33,7 @@ export function RoundDetailClient() {
 }
 
 function RoundDetailLoader({ roundId }: { roundId: string | null }) {
+  const t = useTranslations("rounds");
   const store = useRoundDetailStore();
   const { view, retry } = useFetchResult<LoadedRoundDetail>(
     () =>
@@ -65,7 +65,7 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
       <FetchState
         view={view.status === "ok" ? { status: "loading" } : view}
         onRetry={retry}
-        notFound={NOT_FOUND}
+        notFound={{ message: t("detailNotFound") }}
         loading={<ScorecardSkeleton />}
       />
     </RoundDetailFrame>

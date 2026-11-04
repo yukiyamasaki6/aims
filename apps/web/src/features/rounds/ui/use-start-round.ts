@@ -1,6 +1,7 @@
 "use client";
 
 import { type RefObject, useRef, useState } from "react";
+import type { SignInFailure } from "../domain/fetch-status";
 import type { Preset } from "../domain/preset";
 import { useNewRoundStore } from "./rounds-context";
 
@@ -10,7 +11,7 @@ export function useStartRound(
   mountedRef: RefObject<boolean>,
 ) {
   const store = useNewRoundStore();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<SignInFailure | null>(null);
   // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
   // 挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseの
   // クロージャのまま実行されてしまうため、stateだけでは防げない。

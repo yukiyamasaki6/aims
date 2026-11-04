@@ -2,13 +2,14 @@ import type { IntlConfig, IntlError } from "next-intl";
 import { screenMessages } from "@/components/screen-messages";
 import { navigationMessages } from "@/features/navigation/ui/navigation-messages";
 import { offlinePwaMessages } from "@/features/offline-pwa/ui/offline-pwa-messages";
+import { roundsMessages } from "@/features/rounds/ui/rounds-messages";
 
 const locale = "ja";
 
 // 名前空間ごとに、各機能の文言の一覧(ja)を集める。新しい一覧は、ここへ名前空間として足す。
 const messages = {
   auth: {},
-  rounds: {},
+  rounds: roundsMessages.ja,
   navigation: navigationMessages.ja,
   offlinePwa: offlinePwaMessages.ja,
   shared: screenMessages.ja,

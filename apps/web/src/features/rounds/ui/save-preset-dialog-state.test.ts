@@ -72,7 +72,7 @@ describe("changePresetDialogOpen", () => {
   describe("閉じる場合", () => {
     it("送信中でなければ、名前欄とエラーを破棄して閉じる", () => {
       // Given
-      const current = openDialog({ name: "入力中", error: "エラー" });
+      const current = openDialog({ name: "入力中", error: "saveFailed" });
 
       // When
       const state = changePresetDialogOpen(current, false, "午前練習");
@@ -97,7 +97,7 @@ describe("changePresetDialogOpen", () => {
 describe("startPresetSave", () => {
   it("名前が入力されているとき、直前のエラーを消して送信中にし、保存する内容を返す", () => {
     // Given
-    const current = openDialog({ name: " 練習用 ", error: "エラー" });
+    const current = openDialog({ name: " 練習用 ", error: "saveFailed" });
 
     // When
     const start = startPresetSave(current, source);
@@ -131,7 +131,7 @@ describe("startPresetSave", () => {
         open: true,
         name: "あ".repeat(51),
         submitting: false,
-        error: "プリセット名は50文字以内で入力してください。",
+        error: "nameTooLong",
       },
     });
   });
@@ -167,7 +167,7 @@ describe("finishPresetSave", () => {
     // When
     const state = finishPresetSave(current, {
       status: "failed",
-      error: "保存できませんでした。",
+      error: "saveFailed",
     });
 
     // Then
@@ -175,7 +175,7 @@ describe("finishPresetSave", () => {
       open: true,
       name: "午前練習",
       submitting: false,
-      error: "保存できませんでした。",
+      error: "saveFailed",
     });
   });
 });

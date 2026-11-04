@@ -47,7 +47,7 @@ describe("詳細を開く依頼", () => {
     settleRoundNow(requests, "deleted", { status: "ok", data: opened(true) });
     settleRoundNow(requests, "missing", { status: "not-found" });
     settleRoundNow(requests, "offline", { status: "offline" });
-    settleRoundNow(requests, "error", { status: "error", message: "x" });
+    settleRoundNow(requests, "error", { status: "error", reason: "failed" });
 
     // Then
     expect(
@@ -454,7 +454,7 @@ describe("依頼の状態の遷移", () => {
     requests.reset();
 
     // Then
-    const error = { status: "error", message: "読み込めませんでした。" };
+    const error = { status: "error", reason: "failed" };
     expect(await open).toEqual(error);
     expect(await included.result).toEqual(error);
     expect(await pending.result).toEqual(error);
@@ -478,7 +478,7 @@ describe("依頼の状態の遷移", () => {
     expect(await waiting).toBe(false);
     expect(await list.result).toEqual({
       status: "error",
-      message: "読み込めませんでした。",
+      reason: "failed",
     });
   });
 

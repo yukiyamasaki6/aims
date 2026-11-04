@@ -27,7 +27,7 @@ export type PresetToSave = {
 
 export type PresetToSaveResult =
   | { type: "valid"; preset: PresetToSave }
-  | { type: "invalid"; error: string };
+  | { type: "invalid"; error: "nameTooLong" };
 
 // プリセット保存ダイアログの名前欄プレースホルダー（自動生成の候補名）。
 // ラウンド名が設定されている場合は、こちらではなくラウンド名自体を名前欄に事前入力するため、ここは距離構成のみのフォールバックでよい。
@@ -66,7 +66,7 @@ export function presetToSave(
   if (resolved.length > NAME_MAX_LENGTH) {
     return {
       type: "invalid",
-      error: `プリセット名は${NAME_MAX_LENGTH}文字以内で入力してください。`,
+      error: "nameTooLong",
     };
   }
   return {

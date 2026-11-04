@@ -133,6 +133,7 @@ Playwrightを使用する。
 | `Connectivity` | `lib/connectivity/fake-connectivity-test-helpers.ts` | 2 |
 | `PageNavigation` | `lib/page-navigation/fake-page-navigation-test-helpers.ts` | 2 |
 | `UniqueIds` | `features/rounds/application/fake-unique-ids-test-helpers.ts` | 3 |
+| `SessionReader` | `features/auth/application/session-reader-test-helpers.ts` | 3 |
 
 `Connectivity`で共有の偽物にしない例外は、購読者へ知らせずに状態だけを替える検証と、購読の依頼の回数を数える検証である(`rounds`の`content-fetcher.test.ts`、`round-sync`の`sync-triggers.test.ts`)。
 

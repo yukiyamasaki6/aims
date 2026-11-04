@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { DistanceInfo } from "./preset-info";
 
 describe("DistanceInfo", () => {
@@ -13,6 +14,7 @@ describe("DistanceInfo", () => {
         arrowsPerEnd={6}
         totalEnds={6}
       />,
+      { wrapper: IntlTestProvider },
     );
 
     expect(screen.getByText("70m")).toBeInTheDocument();
@@ -28,6 +30,7 @@ describe("DistanceInfo", () => {
         arrowsPerEnd={6}
         totalEnds={6}
       />,
+      { wrapper: IntlTestProvider },
     );
 
     expect(screen.queryByText(/m$/)).not.toBeInTheDocument();
@@ -45,6 +48,7 @@ describe("DistanceInfo", () => {
         arrowsPerEnd={6}
         totalEnds={6}
       />,
+      { wrapper: IntlTestProvider },
     );
 
     expect(screen.getByText("Marked (70m)")).toBeInTheDocument();
@@ -61,6 +65,7 @@ describe("DistanceInfo", () => {
         arrowsPerEnd={6}
         totalEnds={6}
       />,
+      { wrapper: IntlTestProvider },
     );
 
     expect(screen.getByText("Unmarked")).toBeInTheDocument();
@@ -76,6 +81,7 @@ describe("DistanceInfo", () => {
         arrowsPerEnd={6}
         totalEnds={6}
       />,
+      { wrapper: IntlTestProvider },
     );
 
     expect(screen.getByText("Unmarked (45m)")).toBeInTheDocument();
@@ -94,6 +100,7 @@ describe("DistanceInfo(的の状態)", () => {
         arrowsPerEnd={6}
         totalEnds={6}
       />,
+      { wrapper: IntlTestProvider },
     );
   }
 

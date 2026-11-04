@@ -1,20 +1,20 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
-import { labelOf } from "../domain/option-label";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../domain/round-constants";
 import type { TargetFaceView } from "../domain/target-face";
 import { TargetFaceInfo } from "./target-face-info";
+import { useOptionLabels } from "./use-option-labels";
 
 // 1行目の文字列。フィールドは区分を先に置き、距離を括弧で添える（例: `Marked (90m)`）。
 // 距離が無ければ区分のみ、フィールド以外は距離のみにする。
+// kindは、Marked・Unmarkedの表示名。
 function distanceLabel(
+  kind: string,
   distance: number | null,
-  isMarked: boolean,
   format: string,
 ): string {
   if (format !== "field") return distance !== null ? `${distance}m` : "";
-  const kind = isMarked ? "Marked" : "Unmarked";
   return distance !== null ? `${kind} (${distance}m)` : kind;
 }
 
@@ -37,12 +37,22 @@ export function DistanceInfo({
   arrowsPerEnd: number;
   totalEnds: number;
 }) {
+  const t = useTranslations("rounds");
   return (
     <div className="flex min-w-0 items-center gap-3">
       <div className="flex min-w-[7.5rem] shrink-0 flex-col whitespace-nowrap">
-        <span>{distanceLabel(distance, isMarked, format)}</span>
         <span>
-          {arrowsPerEnd}本×{totalEnds}エンド
+          {distanceLabel(
+            t(isMarked ? "distanceMarked" : "distanceUnmarked"),
+            distance,
+            format,
+          )}
+        </span>
+        <span>
+          {t("distanceEnds", {
+            arrowsPerEnd: String(arrowsPerEnd),
+            totalEnds: String(totalEnds),
+          })}
         </span>
       </div>
       <TargetFaceInfo face={face} />
@@ -91,10 +101,15 @@ export function PresetInfo({
   bowType: string;
   distances: DistanceInfoItem[];
 }) {
+  const t = useTranslations("rounds");
+  const { formatLabel, bowTypeLabel } = useOptionLabels();
   return (
     <div className="flex flex-col gap-2 text-sm">
       <span data-testid="round-preset-format-bow-type">
-        {labelOf(FORMAT_OPTIONS, format)} / {labelOf(BOW_TYPE_OPTIONS, bowType)}
+        {t("formatBowType", {
+          format: formatLabel(format),
+          bowType: bowTypeLabel(bowType),
+        })}
       </span>
       <DistanceInfoList format={format} items={distances} />
     </div>

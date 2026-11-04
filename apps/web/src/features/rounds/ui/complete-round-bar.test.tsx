@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { CompleteRoundBar } from "./complete-round-bar";
 
 describe("CompleteRoundBar", () => {
@@ -14,6 +15,7 @@ describe("CompleteRoundBar", () => {
           confirmation={null}
           onComplete={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -31,6 +33,7 @@ describe("CompleteRoundBar", () => {
           confirmation={null}
           onComplete={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -48,6 +51,7 @@ describe("CompleteRoundBar", () => {
           confirmation={null}
           onComplete={onComplete}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -64,9 +68,10 @@ describe("CompleteRoundBar", () => {
       render(
         <CompleteRoundBar
           status="in_progress"
-          confirmation="未入力のマスがあります。入力を完了しますか？"
+          confirmation="unfilledCells"
           onComplete={onComplete}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -85,9 +90,10 @@ describe("CompleteRoundBar", () => {
       render(
         <CompleteRoundBar
           status="in_progress"
-          confirmation="未入力のマスがあります。入力を完了しますか？"
+          confirmation="unfilledCells"
           onComplete={onComplete}
         />,
+        { wrapper: IntlTestProvider },
       );
       await userEvent.click(screen.getByTestId("complete-round-button"));
 
@@ -103,9 +109,10 @@ describe("CompleteRoundBar", () => {
       render(
         <CompleteRoundBar
           status="in_progress"
-          confirmation="記録がありません。入力を完了しますか？"
+          confirmation="noRecords"
           onComplete={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -123,9 +130,10 @@ describe("CompleteRoundBar", () => {
       render(
         <CompleteRoundBar
           status="in_progress"
-          confirmation="未入力のマスがあります。入力を完了しますか？"
+          confirmation="unfilledCells"
           onComplete={onComplete}
         />,
+        { wrapper: IntlTestProvider },
       );
       await userEvent.click(screen.getByTestId("complete-round-button"));
 

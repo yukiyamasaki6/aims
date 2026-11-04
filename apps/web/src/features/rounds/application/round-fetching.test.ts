@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import type { SessionReader } from "@/features/auth";
+import { createFakeSessionReader } from "@/features/auth/application/session-reader-test-helpers";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import type {
   DatabaseGateway,
   DbResponse,
 } from "@/lib/supabase/contract/database";
-import { FETCH_ERROR_MESSAGE } from "../domain/fetch-status";
 import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { PresetRecord, Presets } from "../domain/preset";
 import type { QueryFailure, QueryOutcome } from "../domain/query-outcome";
@@ -15,12 +16,8 @@ import type { TargetFaceRecord } from "../domain/target-face";
 import { createRoundQueries } from "../infrastructure/round-queries";
 import type { RoundsDbSchema } from "../infrastructure/rounds-db-schema";
 import { createContentFetcher } from "./content-fetcher";
-import { createFakeSignInReader } from "./fake-sign-in-reader-test-helpers";
 import type { ReferenceKind, ReferenceSnapshots } from "./reference-snapshots";
 import { createRoundFetching, type RoundQueries } from "./round-fetching";
-import type { SignInReader } from "./sign-in-reader";
-
-const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
 
 function face(
   id: string,
@@ -129,7 +126,7 @@ function memorySnapshots(
   return { snapshots, saved, savedPresets, identity, save };
 }
 
-type Readings = Awaited<ReturnType<SignInReader["read"]>>;
+type Readings = Awaited<ReturnType<SessionReader["readSession"]>>;
 
 function setup(
   options: {
@@ -142,8 +139,10 @@ function setup(
 ) {
   const clock = createManualClock(1000);
   const connectivity = createFakeConnectivity(options.offline);
-  const { signIn } = createFakeSignInReader(options.signIn && [options.signIn]);
-  const content = createContentFetcher({ signIn, connectivity, clock });
+  const { sessionReader, readSession } = createFakeSessionReader(
+    options.signIn && [options.signIn],
+  );
+  const content = createContentFetcher({ sessionReader, connectivity, clock });
   const memory = memorySnapshots({
     targetFaces: options.saved,
     presets: options.presets,
@@ -166,7 +165,7 @@ function setup(
     snapshots: memory.snapshots,
     clock,
   });
-  return { fetching, queries, clock, signIn, ...memory };
+  return { fetching, queries, clock, readSession, ...memory };
 }
 
 const idsOf = (faces: unknown) => (faces as { id: string }[]).map((f) => f.id);
@@ -264,14 +263,14 @@ describe("fetchRoundDetail", () => {
   it("サインインが必要なときは、問い合わせずに約束の文言のerrorを返す", async () => {
     // Given
     const { fetching, queries } = setup({
-      signIn: { status: "unauthenticated", message: AUTH_REQUIRED_MESSAGE },
+      signIn: { status: "unauthenticated" },
     });
 
     // When
     const result = await fetching.fetchRoundDetail("round-1");
 
     // Then
-    expect(result).toEqual({ status: "error", message: AUTH_REQUIRED_MESSAGE });
+    expect(result).toEqual({ status: "error", reason: "unauthenticated" });
     expect(queries.roundDetail).not.toHaveBeenCalled();
   });
 
@@ -293,8 +292,8 @@ describe("fetchRoundDetail", () => {
     const second = await commError.fetching.fetchRoundDetail("r");
 
     // Then
-    expect(first).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
-    expect(second).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+    expect(first).toEqual({ status: "error", reason: "failed" });
+    expect(second).toEqual({ status: "error", reason: "failed" });
   });
 
   it("待ちは10秒のままで、FALLBACK_WAIT_MSでは返らない", async () => {
@@ -317,7 +316,7 @@ describe("fetchRoundDetail", () => {
     expect(settledAtFallback).toBe(false);
     await expect(pending).resolves.toEqual({
       status: "error",
-      message: FETCH_ERROR_MESSAGE,
+      reason: "failed",
     });
   });
 
@@ -469,7 +468,7 @@ describe("fetchTargetFaces", () => {
     expect(settledAtFallback).toBe(false);
     await expect(pending).resolves.toEqual({
       status: "error",
-      message: FETCH_ERROR_MESSAGE,
+      reason: "failed",
     });
   });
 
@@ -595,7 +594,7 @@ describe("fetchPresets", () => {
 
   it("確かめた利用者のIDで問い合わせ、問い合わせの前に認証を読み直さない", async () => {
     // Given
-    const { fetching, queries, signIn } = setup();
+    const { fetching, queries, readSession } = setup();
 
     // When
     const result = await fetching.fetchPresets();
@@ -603,7 +602,7 @@ describe("fetchPresets", () => {
     // Then
     expect(result.status).toBe("ok");
     expect(queries.presets).toHaveBeenCalledExactlyOnceWith("user-1");
-    expect(signIn.read).toHaveBeenCalledTimes(1);
+    expect(readSession).toHaveBeenCalledTimes(1);
   });
 
   it("okの結果を、問い合わせに使った利用者のキーへ、取得の開始時刻で保存する", async () => {
@@ -704,7 +703,7 @@ describe("fetchPresets", () => {
     const result = await fetching.fetchPresets();
 
     // Then
-    expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+    expect(result).toEqual({ status: "error", reason: "failed" });
   });
 
   it("サーバーエラーは、保存済みが無ければerrorを返す", async () => {
@@ -719,20 +718,20 @@ describe("fetchPresets", () => {
     const result = await fetching.fetchPresets();
 
     // Then
-    expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+    expect(result).toEqual({ status: "error", reason: "failed" });
   });
 
   it("サインインしていないとき、問い合わせずに、読み取りの文言でerrorを返す", async () => {
     // Given
     const { fetching, queries } = setup({
-      signIn: { status: "unauthenticated", message: AUTH_REQUIRED_MESSAGE },
+      signIn: { status: "unauthenticated" },
     });
 
     // When
     const result = await fetching.fetchPresets();
 
     // Then
-    expect(result).toEqual({ status: "error", message: AUTH_REQUIRED_MESSAGE });
+    expect(result).toEqual({ status: "error", reason: "unauthenticated" });
     expect(queries.presets).not.toHaveBeenCalled();
   });
 
@@ -773,7 +772,7 @@ describe("fetchPresets", () => {
     expect(settledAtFallback).toBe(false);
     await expect(pending).resolves.toEqual({
       status: "error",
-      message: FETCH_ERROR_MESSAGE,
+      reason: "failed",
     });
   });
 
@@ -881,14 +880,14 @@ describe("fetchRoundDetails", () => {
   it("サインインが必要なときは、取得せずに約束の文言のerrorを返す", async () => {
     // Given
     const { fetching, queries } = setup({
-      signIn: { status: "unauthenticated", message: AUTH_REQUIRED_MESSAGE },
+      signIn: { status: "unauthenticated" },
     });
 
     // When
     const result = await fetching.fetchRoundDetails([]);
 
     // Then
-    expect(result).toEqual({ status: "error", message: AUTH_REQUIRED_MESSAGE });
+    expect(result).toEqual({ status: "error", reason: "unauthenticated" });
     expect(queries.roundDetails).not.toHaveBeenCalled();
   });
 
@@ -1002,7 +1001,7 @@ describe("fetchRoundsList", () => {
     const result = await fetching.fetchRoundsList();
 
     // Then
-    expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+    expect(result).toEqual({ status: "error", reason: "failed" });
   });
 
   it("取得がエラーのとき、errorを返し、一覧は返さない", async () => {
@@ -1017,13 +1016,13 @@ describe("fetchRoundsList", () => {
     const result = await fetching.fetchRoundsList();
 
     // Then
-    expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+    expect(result).toEqual({ status: "error", reason: "failed" });
   });
 
   it("サインインしていないとき、roundsListを呼ばず、サインインが必要なerrorを返す", async () => {
     // Given
     const { fetching, queries } = setup({
-      signIn: { status: "unauthenticated", message: AUTH_REQUIRED_MESSAGE },
+      signIn: { status: "unauthenticated" },
     });
 
     // When
@@ -1032,7 +1031,7 @@ describe("fetchRoundsList", () => {
     // Then
     expect(result).toEqual({
       status: "error",
-      message: AUTH_REQUIRED_MESSAGE,
+      reason: "unauthenticated",
     });
     expect(queries.roundsList).not.toHaveBeenCalled();
   });
@@ -1056,7 +1055,7 @@ describe("fetchRoundsList", () => {
     expect(settledAtFallback).toBe(false);
     await expect(pending).resolves.toEqual({
       status: "error",
-      message: FETCH_ERROR_MESSAGE,
+      reason: "failed",
     });
   });
 });

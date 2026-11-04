@@ -1,6 +1,7 @@
 "use client";
 
 import { MoreHorizontal } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { type Preset, presetDistancesInOrder } from "../domain/preset";
 import {
@@ -42,6 +43,7 @@ function PresetRow({
   onSelect: () => void;
   onDelete?: () => void;
 }) {
+  const t = useTranslations("rounds");
   const distances = presetDistancesInOrder(preset);
 
   return (
@@ -71,7 +73,7 @@ function PresetRow({
         {onDelete && (
           <DropdownMenu>
             <DropdownMenuTrigger
-              aria-label={`「${preset.name}」のメニュー`}
+              aria-label={t("presetMenuLabel", { name: preset.name })}
               data-testid="round-preset-menu-trigger"
               className="-translate-y-1/2 absolute top-1/2 right-1 p-2 text-muted-foreground hover:text-foreground"
             >
@@ -83,7 +85,7 @@ function PresetRow({
                 className="text-destructive data-[highlighted]:text-destructive"
                 onClick={onDelete}
               >
-                削除
+                {t("delete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -127,16 +129,17 @@ export function PresetSections({
   onToggle: (id: string) => void;
   onDelete: (preset: Preset) => void;
 }) {
+  const t = useTranslations("rounds");
   return (
     <>
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium">個人プリセット</span>
+        <span className="text-sm font-medium">{t("presetPersonal")}</span>
         {personalPresets.length === 0 ? (
           <p
             data-testid="personal-preset-placeholder"
             className="text-muted-foreground text-sm"
           >
-            プリセットとして保存すると、ここに表示されます。
+            {t("presetPersonalEmpty")}
           </p>
         ) : (
           <div className="flex flex-col gap-2">
@@ -154,7 +157,7 @@ export function PresetSections({
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium">公式プリセット</span>
+        <span className="text-sm font-medium">{t("presetGlobal")}</span>
         <div className="flex flex-col gap-2">
           {globalPresets.map((preset) => (
             <PresetRow

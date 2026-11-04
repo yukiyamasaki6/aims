@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import type { SessionReader } from "@/features/auth";
+import { createFakeSessionReader } from "@/features/auth/application/session-reader-test-helpers";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
@@ -6,16 +8,10 @@ import type { Preset } from "../domain/preset";
 import { roundPath } from "../domain/round-routes";
 import { roundCreatedDraftOf } from "../domain/round-start";
 import { roundStreamId } from "../domain/sync-events";
-import { createFakeSignInReader } from "./fake-sign-in-reader-test-helpers";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 import { createRoundStart } from "./round-start";
-import type { SignInReader } from "./sign-in-reader";
 
-type Reading = Awaited<ReturnType<SignInReader["read"]>>;
-
-const SIGN_IN_REQUIRED = "サインインが必要です。";
-const NETWORK_ERROR =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
+type Reading = Awaited<ReturnType<SessionReader["readSession"]>>;
 
 // UTCでは2026-09-29になる時刻。
 const NOW = Date.parse("2026-09-29T12:00:00.000Z");
@@ -53,14 +49,14 @@ const preset: Preset = {
 function setup(
   options: {
     readings?: Reading[];
-    read?: SignInReader["read"];
+    read?: SessionReader["readSession"];
     holdAppend?: boolean;
     go?: (path: string) => void;
   } = {},
 ) {
   const calls: string[] = [];
   const clock = createManualClock(NOW);
-  const { signIn } = createFakeSignInReader(
+  const { sessionReader } = createFakeSessionReader(
     options.read
       ? [options.read]
       : [
@@ -84,7 +80,7 @@ function setup(
   const { ids, issued } = createFakeUniqueIds();
   const roundStart = createRoundStart({
     hub: { append },
-    signIn,
+    sessionReader,
     ids,
     clock,
     pageNavigation,
@@ -236,7 +232,7 @@ describe("createRoundStart", () => {
     it("認証が不明でも、開始する", async () => {
       // Given
       const { roundStart, append, go } = setup({
-        readings: [{ status: "unknown", message: NETWORK_ERROR }],
+        readings: [{ status: "unknown" }],
       });
 
       // When
@@ -278,14 +274,14 @@ describe("createRoundStart", () => {
     it("サインインしていないとき、追記も遷移もせず、読み取りの文言でfailedを返す", async () => {
       // Given
       const { roundStart, append, go } = setup({
-        readings: [{ status: "unauthenticated", message: SIGN_IN_REQUIRED }],
+        readings: [{ status: "unauthenticated" }],
       });
 
       // When
       const result = await roundStart.startRound(null, () => true);
 
       // Then
-      expect(result).toEqual({ status: "failed", error: SIGN_IN_REQUIRED });
+      expect(result).toEqual({ status: "failed", error: "unauthenticated" });
       expect(append).not.toHaveBeenCalled();
       expect(go).not.toHaveBeenCalled();
     });
@@ -295,7 +291,7 @@ describe("createRoundStart", () => {
       const { roundStart, append } = setup({
         readings: [
           { status: "authenticated", userId: "user-1" },
-          { status: "unauthenticated", message: SIGN_IN_REQUIRED },
+          { status: "unauthenticated" },
         ],
       });
       const first = await roundStart.startRound(null, () => true);
@@ -305,7 +301,7 @@ describe("createRoundStart", () => {
 
       // Then
       expect(first.status).toBe("created");
-      expect(second).toEqual({ status: "failed", error: SIGN_IN_REQUIRED });
+      expect(second).toEqual({ status: "failed", error: "unauthenticated" });
       expect(append).toHaveBeenCalledTimes(1);
     });
 
@@ -334,7 +330,7 @@ describe("createRoundStart", () => {
       const { roundStart } = setup({
         read: async () => {
           current = false;
-          return { status: "unauthenticated", message: SIGN_IN_REQUIRED };
+          return { status: "unauthenticated" };
         },
       });
 

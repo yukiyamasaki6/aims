@@ -70,16 +70,13 @@ function rig() {
     readSession: async () =>
       ({ status: "authenticated", userId: "user-1" }) as const,
   };
-  const signIn = {
-    read: async () => ({ status: "authenticated", userId: "user-1" }) as const,
-  };
   const sender = createOpSender({
     hub,
     sending: createOperationSending({
       hub,
       transport: { send: vi.fn(() => new Promise<never>(() => {})) },
     }),
-    signIn,
+    sessionReader: session,
     clock,
     connectivity,
   });
@@ -296,8 +293,8 @@ describe("同じ保存を共有する複数のタブ", () => {
     const sender = createOpSender({
       hub,
       sending: createOperationSending({ hub, transport }),
-      signIn: {
-        read: async () =>
+      sessionReader: {
+        readSession: async () =>
           ({ status: "authenticated", userId: "user-1" }) as const,
       },
       clock: createManualClock(1000),
@@ -422,8 +419,8 @@ describe("通信の回復の購読の順序", () => {
           }),
       ),
     };
-    const signIn = {
-      read: async () =>
+    const sessionReader = {
+      readSession: async () =>
         ({ status: "authenticated", userId: "user-1" }) as const,
     };
     // 通信の復帰の知らせを受けた直後の同期の処理(購読の順序)を、呼び出しの時点で観測する。
@@ -442,7 +439,7 @@ describe("通信の回復の購読の順序", () => {
     const sender = createOpSender({
       hub,
       sending: createOperationSending({ hub, transport }),
-      signIn,
+      sessionReader,
       clock,
       connectivity,
     });

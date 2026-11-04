@@ -14,7 +14,7 @@ const validDraft: DistanceDraft = {
   isMarked: true,
 };
 
-const POSITIVE_INTEGER_ERROR = "1以上の整数を入力してください。";
+const POSITIVE_INTEGER_ERROR = "notPositiveInteger";
 
 describe("validateDistanceDraft", () => {
   describe("すべての項目が有効な場合", () => {
@@ -75,7 +75,7 @@ describe("validateDistanceDraft", () => {
         // Then
         expect(result).toEqual({
           type: "invalid",
-          errors: { distance: "距離を入力してください。" },
+          errors: { distance: "required" },
         });
       });
     });
@@ -128,7 +128,7 @@ describe("validateDistanceDraft", () => {
       expect(result).toEqual({
         type: "invalid",
         errors: {
-          distance: "距離を入力してください。",
+          distance: "required",
           arrowsPerEnd: POSITIVE_INTEGER_ERROR,
           totalEnds: POSITIVE_INTEGER_ERROR,
         },

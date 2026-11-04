@@ -1,16 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import type { SessionReader } from "@/features/auth";
+import { createFakeSessionReader } from "@/features/auth/application/session-reader-test-helpers";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import { FETCH_ERROR_MESSAGE } from "../domain/fetch-status";
 import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { QueryOutcome } from "../domain/query-outcome";
 import { createContentFetcher } from "./content-fetcher";
-import {
-  createFakeSignInReader,
-  type SignInReading,
-} from "./fake-sign-in-reader-test-helpers";
-
-const AUTH_REQUIRED_MESSAGE = "サインインが必要です。";
 
 const okResponse: QueryOutcome<{ id: string }> = {
   status: "ok",
@@ -18,16 +13,11 @@ const okResponse: QueryOutcome<{ id: string }> = {
 };
 const authRejected: QueryOutcome<{ id: string }> = { status: "auth-rejected" };
 const commFailure: QueryOutcome<{ id: string }> = { status: "comm-failure" };
-const UNREACHABLE_MESSAGE =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
-const unknown = { status: "unknown", message: UNREACHABLE_MESSAGE } as const;
+const unknown = { status: "unknown" } as const;
 const authenticated = { status: "authenticated", userId: "u1" } as const;
-const unauthenticated = {
-  status: "unauthenticated",
-  message: AUTH_REQUIRED_MESSAGE,
-} as const;
+const unauthenticated = { status: "unauthenticated" } as const;
 
-type Reading = SignInReading;
+type Reading = Awaited<ReturnType<SessionReader["readSession"]>>;
 
 // 切断の状態と通知を、テストから動かせる通信の可否。
 // lib の createFakeConnectivity に置き換えない理由: 取得の途中で、購読者へ知らせずに切断の状態だけを替える検証
@@ -63,11 +53,11 @@ function setup(
 ) {
   const clock = createManualClock();
   const network = makeConnectivity(options.offline);
-  const { signIn, read } = createFakeSignInReader(
+  const { sessionReader, readSession: read } = createFakeSessionReader(
     options.readings ?? [authenticated],
   );
   const fetcher = createContentFetcher({
-    signIn,
+    sessionReader,
     connectivity: network.connectivity,
     clock,
   });
@@ -134,7 +124,7 @@ describe("fetchContent", () => {
       const result = await fetcher.fetchContent(run);
 
       // Then
-      expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+      expect(result).toEqual({ status: "error", reason: "failed" });
     });
 
     it("同じ取得器で続けて取得すると、取得のたびにサインインしている利用者を読み直す", async () => {
@@ -183,7 +173,7 @@ describe("fetchContent", () => {
       // Then
       expect(result).toEqual({
         status: "error",
-        message: AUTH_REQUIRED_MESSAGE,
+        reason: "unauthenticated",
       });
       expect(run).not.toHaveBeenCalled();
     });
@@ -201,7 +191,7 @@ describe("fetchContent", () => {
       expect(first).toEqual({ status: "ok", data: { id: "a" } });
       expect(second).toEqual({
         status: "error",
-        message: AUTH_REQUIRED_MESSAGE,
+        reason: "unauthenticated",
       });
       expect(run).toHaveBeenCalledTimes(1);
     });
@@ -215,7 +205,7 @@ describe("fetchContent", () => {
       const result = await fetcher.fetchContent(run);
 
       // Then
-      expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+      expect(result).toEqual({ status: "error", reason: "failed" });
       expect(run).not.toHaveBeenCalled();
     });
 
@@ -230,7 +220,7 @@ describe("fetchContent", () => {
       // Then
       expect(result).toEqual({
         status: "error",
-        message: AUTH_REQUIRED_MESSAGE,
+        reason: "unauthenticated",
       });
       expect(run).toHaveBeenCalledTimes(1);
     });
@@ -246,7 +236,7 @@ describe("fetchContent", () => {
       const result = await fetcher.fetchContent(run);
 
       // Then
-      expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+      expect(result).toEqual({ status: "error", reason: "failed" });
       expect(run).toHaveBeenCalledTimes(1);
     });
 
@@ -259,7 +249,7 @@ describe("fetchContent", () => {
       const result = await fetcher.fetchContent(run);
 
       // Then
-      expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+      expect(result).toEqual({ status: "error", reason: "failed" });
       expect(run).toHaveBeenCalledTimes(2);
       expect(read).toHaveBeenCalledTimes(2);
     });
@@ -276,7 +266,7 @@ describe("fetchContent", () => {
       const result = await fetcher.fetchContent(run);
 
       // Then
-      expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+      expect(result).toEqual({ status: "error", reason: "failed" });
     });
 
     it("サインインの読み取りの待機中にofflineの知らせが来ると、解決を待たずofflineにする", async () => {
@@ -308,7 +298,7 @@ describe("fetchContent", () => {
       // Then
       await expect(pending).resolves.toEqual({
         status: "error",
-        message: FETCH_ERROR_MESSAGE,
+        reason: "failed",
       });
     });
 
@@ -326,7 +316,7 @@ describe("fetchContent", () => {
       expect(early).toBe("running");
       await expect(pending).resolves.toEqual({
         status: "error",
-        message: FETCH_ERROR_MESSAGE,
+        reason: "failed",
       });
     });
 
@@ -375,12 +365,12 @@ describe("fetchContent", () => {
       // Given
       const network = makeConnectivity();
       const fetcher = createContentFetcher({
-        signIn: createFakeSignInReader([
+        sessionReader: createFakeSessionReader([
           async () => {
             network.state.offline = true;
             return unknown;
           },
-        ]).signIn,
+        ]).sessionReader,
         connectivity: network.connectivity,
         clock: createManualClock(),
       });
@@ -404,7 +394,7 @@ describe("fetchContent", () => {
       const result = await fetcher.fetchContent(run);
 
       // Then
-      expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+      expect(result).toEqual({ status: "error", reason: "failed" });
     });
 
     it("時間内に終われば、時間切れの登録を残さない", async () => {
@@ -441,7 +431,7 @@ describe("fetchContent", () => {
       const result = await fetcher.fetchContent(run);
 
       // Then
-      expect(result).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+      expect(result).toEqual({ status: "error", reason: "failed" });
     });
   });
 
@@ -470,7 +460,7 @@ describe("fetchContent", () => {
       // Then
       await expect(pending).resolves.toEqual({
         status: "error",
-        message: FETCH_ERROR_MESSAGE,
+        reason: "failed",
       });
     });
 

@@ -25,7 +25,6 @@ import { createRoundsListStore } from "@/features/rounds/application/rounds-list
 import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
 import { roundCreated } from "@/features/rounds/domain/round-op-test-helpers";
 import { outboxOf } from "@/features/rounds/domain/round-record";
-import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
 import { createBrowserUniqueIds } from "@/features/rounds/infrastructure/browser-unique-ids";
 import { createPresetCommands } from "@/features/rounds/infrastructure/preset-commands";
 import { createReferenceSnapshots } from "@/features/rounds/infrastructure/reference-snapshot";
@@ -210,18 +209,6 @@ vi.mock(
     return {
       ...actual,
       createNewRoundStore: vi.fn(actual.createNewRoundStore),
-    };
-  },
-);
-vi.mock(
-  "@/features/rounds/infrastructure/auth-sign-in-reader",
-  async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import("@/features/rounds/infrastructure/auth-sign-in-reader")
-      >();
-    return {
-      createAuthSignInReader: vi.fn(actual.createAuthSignInReader),
     };
   },
 );
@@ -605,8 +592,8 @@ describe("RootClientEntry", () => {
       expect(deps.ids).toBe(
         vi.mocked(createBrowserUniqueIds).mock.results[0].value,
       );
-      expect(deps.signIn).toBe(
-        vi.mocked(createAuthSignInReader).mock.results[0].value,
+      expect(deps.sessionReader).toBe(
+        vi.mocked(createLocalIdentity).mock.calls[0][0].changes,
       );
     });
 
@@ -623,8 +610,8 @@ describe("RootClientEntry", () => {
       expect(deps.commands).toBe(
         vi.mocked(createPresetCommands).mock.results[0].value,
       );
-      expect(deps.signIn).toBe(
-        vi.mocked(createAuthSignInReader).mock.results[0].value,
+      expect(deps.sessionReader).toBe(
+        vi.mocked(createLocalIdentity).mock.calls[0][0].changes,
       );
       expect(deps.snapshots).toBe(
         vi.mocked(createReferenceSnapshots).mock.results[0].value,
@@ -709,8 +696,8 @@ describe("RootClientEntry", () => {
       // Then
       expect(createPresetSaving).toHaveBeenCalledTimes(1);
       const deps = vi.mocked(createPresetSaving).mock.calls[0][0];
-      expect(deps.signIn).toBe(
-        vi.mocked(createRoundStart).mock.calls[0][0].signIn,
+      expect(deps.sessionReader).toBe(
+        vi.mocked(createRoundStart).mock.calls[0][0].sessionReader,
       );
       expect(deps.fetching).toBe(
         vi.mocked(createRoundFetching).mock.results[0].value,
@@ -723,9 +710,11 @@ describe("RootClientEntry", () => {
       render(<RootClientEntry>{null}</RootClientEntry>);
 
       // Then
-      const fetcher = vi.mocked(createContentFetcher).mock.calls[0][0].signIn;
-      const start = vi.mocked(createRoundStart).mock.calls[0][0].signIn;
-      const deletion = vi.mocked(createPresetDeletion).mock.calls[0][0].signIn;
+      const fetcher =
+        vi.mocked(createContentFetcher).mock.calls[0][0].sessionReader;
+      const start = vi.mocked(createRoundStart).mock.calls[0][0].sessionReader;
+      const deletion =
+        vi.mocked(createPresetDeletion).mock.calls[0][0].sessionReader;
       expect(start).toBe(fetcher);
       expect(deletion).toBe(fetcher);
     });
@@ -851,8 +840,9 @@ describe("RootClientEntry", () => {
 
       // Then
       const { changes } = vi.mocked(createLocalIdentity).mock.calls[0][0];
-      expect(createAuthSignInReader).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(createAuthSignInReader).mock.calls[0][0]).toBe(changes);
+      expect(
+        vi.mocked(createContentFetcher).mock.calls[0][0].sessionReader,
+      ).toBe(changes);
     });
 
     it("画面の追記、再読み込みの前の保存の待ち、同期が、同じ記録のハブを使う", async () => {

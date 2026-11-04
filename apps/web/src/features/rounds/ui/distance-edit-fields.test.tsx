@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import type { DistanceConfig } from "../domain/distance-config";
 import { DistanceEditFields } from "./distance-edit-fields";
 import { createFakeRoundDetailStore } from "./round-stores-test-helpers";
@@ -49,9 +50,11 @@ function setup(
   const enqueue = vi.fn();
   const { store } = createFakeRoundDetailStore();
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <RoundDetailStoreProvider store={store}>
-      {children}
-    </RoundDetailStoreProvider>
+    <IntlTestProvider>
+      <RoundDetailStoreProvider store={store}>
+        {children}
+      </RoundDetailStoreProvider>
+    </IntlTestProvider>
   );
   const utils = render(
     <DistanceEditFields

@@ -1,32 +1,26 @@
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../domain/round-constants";
 import { lookupTargetFace, type TargetFaceOption } from "../domain/target-face";
 import { FILTER_ALL, filterTargetFaces } from "../domain/target-face-filter";
 import { TargetFaceInfo } from "./target-face-info";
+import { useOptionLabels } from "./use-option-labels";
 
 // フィルタ（種別・弓種）は「すべて」も選択肢に含める。ラウンドの種別・弓種を
 // 既定にはするが、絞り込みが自由度を奪って目的の的を選べなくなることが
 // ないよう、常に全件へ戻れる逃げ道を残す。
-const FORMAT_FILTER_OPTIONS = [
-  { value: FILTER_ALL, label: "すべて" },
-  ...FORMAT_OPTIONS,
-];
-const BOW_TYPE_FILTER_OPTIONS = [
-  { value: FILTER_ALL, label: "すべて" },
-  ...BOW_TYPE_OPTIONS,
-];
-
 function triggerLabel(
+  t: ReturnType<typeof useTranslations<"rounds">>,
   selected: TargetFaceOption | "missing",
   locked: boolean | undefined,
 ): string {
-  const name = typeof selected === "string" ? "的" : selected.name;
-  if (locked) return `${name}（スコア記録済みのため変更不可）`;
-  if (selected === "missing") return "的データを取得できません（タップで変更）";
-  return `${name}（タップで変更）`;
+  const name =
+    typeof selected === "string" ? t("targetFaceName") : selected.name;
+  if (locked) return t("targetFaceTriggerLocked", { name });
+  if (selected === "missing") return t("targetFaceTriggerMissing");
+  return t("targetFaceTrigger", { name });
 }
 
 // 的の選択UI。名称は一切表示せず、実際のリング配色・レイアウト（3つ目の
@@ -52,6 +46,8 @@ export function TargetFacePicker({
   onLockedPress?: () => void;
   describedBy?: string;
 }) {
+  const t = useTranslations("rounds");
+  const { formatOptions, bowTypeOptions } = useOptionLabels();
   const [open, setOpen] = useState(false);
   // ラウンドの種別・弓種に対応するタブを既定にする。選び直した場合はダイアログを
   // 再度開いてもそのまま保持する（開くたびに毎回既定へ戻すと、直前に見ていた
@@ -74,7 +70,7 @@ export function TargetFacePicker({
         data-testid="target-face-picker-trigger"
         aria-disabled={locked ? true : undefined}
         aria-describedby={describedBy}
-        aria-label={triggerLabel(selected, locked)}
+        aria-label={triggerLabel(t, selected, locked)}
         className={cn("w-full", locked && "cursor-not-allowed opacity-50")}
       >
         <TargetFaceInfo face={selected} />
@@ -88,13 +84,19 @@ export function TargetFacePicker({
       >
         <div className="flex h-full flex-col gap-3">
           <FilterTabs
-            options={FORMAT_FILTER_OPTIONS}
+            options={[
+              { value: FILTER_ALL, label: t("filterAll") },
+              ...formatOptions,
+            ]}
             current={selectedFormat}
             testIdPrefix="target-face-format-tab"
             onChange={setSelectedFormat}
           />
           <FilterTabs
-            options={BOW_TYPE_FILTER_OPTIONS}
+            options={[
+              { value: FILTER_ALL, label: t("filterAll") },
+              ...bowTypeOptions,
+            ]}
             current={selectedBowType}
             testIdPrefix="target-face-bow-type-tab"
             onChange={setSelectedBowType}
