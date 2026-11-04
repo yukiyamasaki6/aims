@@ -98,9 +98,14 @@ function nameOf(name) {
 function isExemptCall(node) {
   // import・exportの指定子は、モジュールの指定で、利用者に届かない。
   if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return true;
-  if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+  // 例外の生成(`new Error(...)`、`new XxxError(...)`)の引数だけを除く。`setError("...")`などの呼び出しは除かない。
+  if (ts.isNewExpression(node)) {
+    return (
+      ts.isIdentifier(node.expression) && node.expression.text.endsWith("Error")
+    );
+  }
+  if (ts.isCallExpression(node)) {
     const callee = node.expression;
-    if (ts.isIdentifier(callee)) return callee.text.endsWith("Error");
     return (
       ts.isPropertyAccessExpression(callee) &&
       ts.isIdentifier(callee.expression) &&
