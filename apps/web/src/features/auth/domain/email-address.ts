@@ -2,14 +2,14 @@
 export const EMAIL_MAX_LENGTH = 254;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// メールアドレスの誤りの種類。required: 未入力。tooLong: 上限を超える。invalidFormat: 形式が正しくない。
+export type EmailError = "required" | "tooLong" | "invalidFormat";
+
 // 入力欄のmaxLengthはブラウザ側の制限にすぎず、回避され得るため、ここでも上限を検証する。
-// 正しければundefined、誤りなら利用者向けの文言を返す。
-export function validateEmail(email: string): string | undefined {
-  if (!email) return "メールアドレスを入力してください。";
-  if (email.length > EMAIL_MAX_LENGTH) {
-    return `メールアドレスは${EMAIL_MAX_LENGTH}文字以内で入力してください。`;
-  }
-  if (!EMAIL_PATTERN.test(email))
-    return "メールアドレスの形式が正しくありません。";
+// 正しければundefined、誤りなら誤りの種類を返す。
+export function validateEmail(email: string): EmailError | undefined {
+  if (!email) return "required";
+  if (email.length > EMAIL_MAX_LENGTH) return "tooLong";
+  if (!EMAIL_PATTERN.test(email)) return "invalidFormat";
   return undefined;
 }

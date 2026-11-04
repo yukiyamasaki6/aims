@@ -1,8 +1,5 @@
-import { type AuthFailure, failureMessage } from "./auth-failure";
-import {
-  CAPTCHA_INCOMPLETE_MESSAGE,
-  isCaptchaCompleted,
-} from "./captcha-token";
+import type { AuthFailure, AuthFailureKind } from "./auth-failure";
+import { isCaptchaCompleted } from "./captcha-token";
 import { validateEmail } from "./email-address";
 import type { FieldErrors, Start } from "./flow";
 import { validatePasswordPresent } from "./password";
@@ -13,7 +10,7 @@ export type SignInFlow = {
   readonly captchaToken: string | null;
   readonly submitting: boolean;
   readonly fieldErrors: FieldErrors<"email" | "password" | "captcha">;
-  readonly error: string | null;
+  readonly error: AuthFailureKind | null;
 };
 
 export const initialSignInFlow: SignInFlow = {
@@ -47,7 +44,7 @@ export function beginSignIn(
   const password = validatePasswordPresent(input.password);
   if (password) return invalid({ password });
   if (!isCaptchaCompleted(flow.captchaToken)) {
-    return invalid({ captcha: CAPTCHA_INCOMPLETE_MESSAGE });
+    return invalid({ captcha: "incomplete" });
   }
   return {
     kind: "started",
@@ -79,7 +76,7 @@ export function signInReducer(
       return {
         ...flow,
         submitting: false,
-        error: failureMessage(event.failure),
+        error: event.failure.kind,
         fieldErrors: {},
       };
     // 使ったトークンでは再送信できないため、消費する。画面のチェックのやり直しは、手続きが画面の約束で頼む。

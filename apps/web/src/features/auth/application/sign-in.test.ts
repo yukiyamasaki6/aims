@@ -211,9 +211,7 @@ describe("サインインの手続き", () => {
     expect(actions).toEqual([{ type: "refused", failure: failure401 }]);
     expect(resetCheck).toHaveBeenCalledOnce();
     expect(view.observedState.captchaToken).toBeNull();
-    expect(view.observedState.error).toBe(
-      "メールアドレスまたはパスワードが間違っています。",
-    );
+    expect(view.observedState.error).toBe("invalid_credentials");
     expect(navigation.go).not.toHaveBeenCalled();
   });
 
@@ -236,9 +234,7 @@ describe("サインインの手続き", () => {
       expect(actions).toEqual([{ type: "failed", failure: UNREACHABLE }]);
       expect(resetCheck).not.toHaveBeenCalled();
       expect(view.observedState.captchaToken).toBe("first-token");
-      expect(view.observedState.error).toBe(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      expect(view.observedState.error).toBe("unreachable");
       expect(view.observedState.submitting).toBe(false);
       expect(navigation.go).not.toHaveBeenCalled();
     },
@@ -276,7 +272,7 @@ describe("サインインの手続き", () => {
     // Then
     expect(authenticator.signIn).toHaveBeenCalledOnce();
     expect(view.observedState.fieldErrors).toEqual({
-      captcha: "セキュリティチェックが完了していません。",
+      captcha: "incomplete",
     });
   });
 
@@ -371,9 +367,7 @@ describe("サインインの手続き", () => {
         { type: "refused", failure: UNREACHABLE },
       ]);
       expect(resetCheck).toHaveBeenCalledOnce();
-      expect(view.observedState.error).toBe(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      expect(view.observedState.error).toBe("unreachable");
       expect(view.observedState.captchaToken).toBeNull();
       expect(view.observedState.submitting).toBe(false);
     },

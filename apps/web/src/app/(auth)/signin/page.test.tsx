@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { forwardRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import SignInPage from "./page";
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
@@ -74,7 +75,7 @@ describe("サインイン画面の入口", () => {
     // Given
 
     // When
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
 
     // Then
     expect(
@@ -87,7 +88,7 @@ describe("サインイン画面の入口", () => {
     // Given
     auth.signInWithPassword.mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await user.type(
       screen.getByPlaceholderText("you@example.com"),
       "user@example.com",
@@ -113,7 +114,7 @@ describe("サインイン画面の入口", () => {
     const deferred = Promise.withResolvers<{ error: null }>();
     auth.signInWithPassword.mockReturnValue(deferred.promise);
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
@@ -131,7 +132,7 @@ describe("サインイン画面の入口", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
 
     // When
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
 
     // Then
     expect(
@@ -145,7 +146,7 @@ describe("サインイン画面の入口", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
@@ -169,7 +170,7 @@ describe("サインイン画面の入口", () => {
       throw new Error("push failed");
     });
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
@@ -189,7 +190,7 @@ describe("サインイン画面の入口", () => {
     window.history.replaceState(null, "", "/signin?returnTo=%2Frounds%2Fnew");
     auth.signInWithPassword.mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
@@ -215,7 +216,7 @@ describe("サインイン画面の入口", () => {
       );
       auth.signInWithPassword.mockResolvedValue({ error: null });
       const user = userEvent.setup();
-      render(<SignInPage />);
+      render(<SignInPage />, { wrapper: IntlTestProvider });
       await fillAndVerify(user);
 
       // When
@@ -245,7 +246,7 @@ describe("サインイン画面の入口", () => {
         })
         .mockResolvedValue({ error: null });
       const user = userEvent.setup();
-      render(<SignInPage />);
+      render(<SignInPage />, { wrapper: IntlTestProvider });
       await fillAndVerify(user);
       await user.click(submitButton());
       expect(await screen.findByText(message)).toBeInTheDocument();
@@ -284,7 +285,7 @@ describe("サインイン画面の入口", () => {
         })
         .mockResolvedValue({ error: null });
       const user = userEvent.setup();
-      render(<SignInPage />);
+      render(<SignInPage />, { wrapper: IntlTestProvider });
       await fillAndVerify(user);
       await user.click(submitButton());
       expect(await screen.findByText(message)).toBeInTheDocument();
@@ -314,7 +315,7 @@ describe("サインイン画面の入口", () => {
       ),
     });
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
@@ -337,7 +338,7 @@ describe("サインイン画面の入口", () => {
       .mockRejectedValueOnce(new Error("Failed to fetch"))
       .mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
     await user.click(submitButton());
     await screen.findByText(

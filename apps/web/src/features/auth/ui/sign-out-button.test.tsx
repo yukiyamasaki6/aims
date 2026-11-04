@@ -7,10 +7,11 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import type { CallResult } from "../application/call-result";
 import { createSession, type SignOutResult } from "../application/session";
-import { NETWORK_ERROR_MESSAGE, UNREACHABLE } from "../domain/auth-failure";
+import { UNREACHABLE } from "../domain/auth-failure";
 import { SignOutButton } from "./sign-out-button";
 
 async function confirmSignOut(user: ReturnType<typeof userEvent.setup>) {
@@ -18,13 +19,16 @@ async function confirmSignOut(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId("confirm-dialog-confirm"));
 }
 
+const NETWORK_ERROR_MESSAGE =
+  "通信エラーが発生しました。しばらくしてから再度お試しください。";
+
 describe("SignOutButton", () => {
   it("サインアウトのボタンを表示する", () => {
     // Given
     const signOut = vi.fn();
 
     // When
-    render(<SignOutButton signOut={signOut} />);
+    render(<SignOutButton signOut={signOut} />, { wrapper: IntlTestProvider });
 
     // Then
     expect(
@@ -36,7 +40,7 @@ describe("SignOutButton", () => {
     // Given
     const user = userEvent.setup();
     const signOut = vi.fn();
-    render(<SignOutButton signOut={signOut} />);
+    render(<SignOutButton signOut={signOut} />, { wrapper: IntlTestProvider });
 
     // When
     await user.click(screen.getByRole("button", { name: "サインアウト" }));
@@ -55,7 +59,7 @@ describe("SignOutButton", () => {
     // Given
     const user = userEvent.setup();
     const signOut = vi.fn(async () => ({ kind: "completed" }) as const);
-    render(<SignOutButton signOut={signOut} />);
+    render(<SignOutButton signOut={signOut} />, { wrapper: IntlTestProvider });
 
     // When
     await confirmSignOut(user);
@@ -78,7 +82,7 @@ describe("SignOutButton", () => {
         failure: { kind: "rate_limited" },
       }),
     );
-    render(<SignOutButton signOut={signOut} />);
+    render(<SignOutButton signOut={signOut} />, { wrapper: IntlTestProvider });
 
     // When
     await confirmSignOut(user);
@@ -105,7 +109,7 @@ describe("SignOutButton", () => {
         failure: { kind: "other" },
       }),
     );
-    render(<SignOutButton signOut={signOut} />);
+    render(<SignOutButton signOut={signOut} />, { wrapper: IntlTestProvider });
 
     // When
     await confirmSignOut(user);
@@ -129,7 +133,9 @@ describe("SignOutButton", () => {
         finish = resolve;
       });
     });
-    const { unmount } = render(<SignOutButton signOut={signOut} />);
+    const { unmount } = render(<SignOutButton signOut={signOut} />, {
+      wrapper: IntlTestProvider,
+    });
     await confirmSignOut(user);
     expect(view?.isMounted()).toBe(true);
 
@@ -158,7 +164,9 @@ describe("SignOutButton", () => {
       pageReplace: { here: () => "/rounds", replace: vi.fn() },
       protectedPath: "/rounds",
     });
-    render(<SignOutButton signOut={session.signOut} />);
+    render(<SignOutButton signOut={session.signOut} />, {
+      wrapper: IntlTestProvider,
+    });
     await user.click(screen.getByRole("button", { name: "サインアウト" }));
     const confirm = screen.getByTestId("confirm-dialog-confirm");
 
@@ -188,7 +196,7 @@ describe("SignOutButton", () => {
       .fn<(view: { isMounted(): boolean }) => Promise<SignOutResult>>()
       .mockResolvedValueOnce({ kind: "failed", failure: UNREACHABLE })
       .mockResolvedValueOnce({ kind: "completed" });
-    render(<SignOutButton signOut={signOut} />);
+    render(<SignOutButton signOut={signOut} />, { wrapper: IntlTestProvider });
     await confirmSignOut(user);
     await screen.findByText(NETWORK_ERROR_MESSAGE);
     const confirm = screen.getByTestId("confirm-dialog-confirm");
@@ -217,7 +225,7 @@ describe("SignOutButton", () => {
         failure: UNREACHABLE,
       }),
     );
-    render(<SignOutButton signOut={signOut} />);
+    render(<SignOutButton signOut={signOut} />, { wrapper: IntlTestProvider });
     await confirmSignOut(user);
     await screen.findByText(NETWORK_ERROR_MESSAGE);
 
@@ -236,7 +244,7 @@ describe("SignOutButton", () => {
     const signOut = vi.fn(
       async (): Promise<SignOutResult> => ({ kind: "busy" }),
     );
-    render(<SignOutButton signOut={signOut} />);
+    render(<SignOutButton signOut={signOut} />, { wrapper: IntlTestProvider });
 
     // When
     await confirmSignOut(user);

@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { PasswordInput } from "./password-input";
 
 function toggleButton() {
@@ -14,7 +15,9 @@ describe("PasswordInput", () => {
       const placeholder = "パスワード";
 
       // When
-      render(<PasswordInput placeholder={placeholder} />);
+      render(<PasswordInput placeholder={placeholder} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
       expect(screen.getByPlaceholderText("パスワード")).toHaveAttribute(
@@ -32,6 +35,7 @@ describe("PasswordInput", () => {
         // When
         render(
           <PasswordInput placeholder="パスワード" className={className} />,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
@@ -46,7 +50,9 @@ describe("PasswordInput", () => {
     it("1回押すと値を平文で表示し、非表示ボタンに切り替える", async () => {
       // Given
       const user = userEvent.setup();
-      render(<PasswordInput placeholder="パスワード" />);
+      render(<PasswordInput placeholder="パスワード" />, {
+        wrapper: IntlTestProvider,
+      });
 
       // When
       await user.click(toggleButton());
@@ -62,7 +68,9 @@ describe("PasswordInput", () => {
     it("2回押すと値を再び伏せ、表示ボタンに戻す", async () => {
       // Given
       const user = userEvent.setup();
-      render(<PasswordInput placeholder="パスワード" />);
+      render(<PasswordInput placeholder="パスワード" />, {
+        wrapper: IntlTestProvider,
+      });
 
       // When
       await user.click(toggleButton());
@@ -88,6 +96,7 @@ describe("PasswordInput", () => {
           value=""
           onChange={handleChange}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When

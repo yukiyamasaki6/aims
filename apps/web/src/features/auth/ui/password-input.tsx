@@ -1,6 +1,7 @@
 "use client";
 
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ function PasswordInput({
   className,
   ...props
 }: Omit<React.ComponentProps<"input">, "type">) {
+  const t = useTranslations("auth");
   const [visible, setVisible] = useState(false);
 
   return (
@@ -24,7 +26,7 @@ function PasswordInput({
         variant="ghost"
         size="icon-sm"
         className="absolute inset-y-0 right-0.5 my-auto text-muted-foreground"
-        aria-label={visible ? "パスワードを非表示" : "パスワードを表示"}
+        aria-label={visible ? t("passwordHide") : t("passwordShow")}
         onClick={() => setVisible((v) => !v)}
       >
         {visible ? <EyeOff /> : <Eye />}

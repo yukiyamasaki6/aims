@@ -14,6 +14,7 @@ import {
   useImperativeHandle,
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import type { CallResult } from "../application/call-result";
 import type { PasswordSetup } from "../application/password-setup";
@@ -132,7 +133,9 @@ function refused(kind: "rate_limited" | "captcha_failed"): CallResult {
 
 function renderForm(options?: { strict?: boolean }) {
   const form = subject.form(subject.create());
-  return render(options?.strict ? <StrictMode>{form}</StrictMode> : form);
+  return render(options?.strict ? <StrictMode>{form}</StrictMode> : form, {
+    wrapper: IntlTestProvider,
+  });
 }
 
 function heading(name: string) {

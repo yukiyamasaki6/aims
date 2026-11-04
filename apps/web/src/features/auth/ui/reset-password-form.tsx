@@ -1,20 +1,8 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import type { PasswordSetup } from "../application/password-setup";
 import { PasswordSetupForm } from "./password-setup-form";
-
-const SIGN_IN_LINK = { label: "サインインに戻る" };
-
-const COPY = {
-  idPrefix: "reset-password",
-  emailTitle: "パスワードを再設定",
-  emailFooter: SIGN_IN_LINK,
-  passwordTitle: "新しいパスワードを設定",
-  passwordDescription: "このパスワードで次回からサインインします。",
-  passwordLabel: "新しいパスワード",
-  passwordSubmit: "パスワードを変更",
-  passwordFooter: SIGN_IN_LINK,
-};
 
 export function ResetPasswordForm({
   resetPassword,
@@ -23,10 +11,22 @@ export function ResetPasswordForm({
   resetPassword: PasswordSetup;
   siteKey: string | undefined;
 }) {
+  const t = useTranslations("auth");
+  const signInLink = { label: t("resetBackToSignIn") };
+  const copy = {
+    idPrefix: "reset-password",
+    emailTitle: t("resetTitle"),
+    emailFooter: signInLink,
+    passwordTitle: t("resetPasswordTitle"),
+    passwordDescription: t("resetPasswordDescription"),
+    passwordLabel: t("resetPasswordLabel"),
+    passwordSubmit: t("resetPasswordSubmit"),
+    passwordFooter: signInLink,
+  };
   return (
     <PasswordSetupForm
       procedure={resetPassword}
-      copy={COPY}
+      copy={copy}
       siteKey={siteKey}
     />
   );

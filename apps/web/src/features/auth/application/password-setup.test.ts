@@ -131,8 +131,7 @@ describe("パスワード設定の共通の手続き", () => {
 
       // Then
       expect(view.observedState.fieldErrors).toEqual({
-        resend:
-          "再送はクールダウン中です。しばらくしてから再度お試しください。",
+        resend: "cooldown",
       });
       expect(events).toEqual([]);
       expect(authenticator.sendCode).not.toHaveBeenCalled();
@@ -161,9 +160,7 @@ describe("パスワード設定の共通の手続き", () => {
       await resend(context, { email }, view);
 
       // Then
-      expect(view.observedState.error).toBe(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      expect(view.observedState.error).toBe("unreachable");
       expect(view.observedState.captchaToken).toBe("resend-token");
       expect(view.observedState.pending).toBeNull();
       expect(resetCheck).not.toHaveBeenCalled();
@@ -184,9 +181,7 @@ describe("パスワード設定の共通の手続き", () => {
       // Then
       expect(order).toEqual(["refused", "resetCheck"]);
       expect(view.observedState.captchaToken).toBeNull();
-      expect(view.observedState.error).toBe(
-        "認証に失敗しました。もう一度お試しください。",
-      );
+      expect(view.observedState.error).toBe("captcha_failed");
     });
   });
 
@@ -338,9 +333,7 @@ describe("パスワード設定の共通の手続き", () => {
 
       // Then
       expect(proceed).toBe(false);
-      expect(view.observedState.error).toBe(
-        "8〜72文字の半角英数記号で、英字と数字を含めてください。",
-      );
+      expect(view.observedState.error).toBe("weak_password");
       expect(view.observedState.pending).toBeNull();
     });
 

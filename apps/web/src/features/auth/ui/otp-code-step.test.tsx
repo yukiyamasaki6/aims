@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, forwardRef } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { AUTH_CODE_LENGTH } from "../domain/auth-code";
 import { OtpCodeStep } from "./otp-code-step";
 
@@ -37,7 +38,9 @@ function createForm(overrides: Partial<Props> = {}) {
 }
 
 function renderStep(form: Props, idPrefix = form.idPrefix) {
-  return render(<OtpCodeStep {...form} idPrefix={idPrefix} />);
+  return render(<OtpCodeStep {...form} idPrefix={idPrefix} />, {
+    wrapper: IntlTestProvider,
+  });
 }
 
 describe("OtpCodeStep", () => {

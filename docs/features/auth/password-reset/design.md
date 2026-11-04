@@ -26,14 +26,14 @@
 
 - `src/app/(auth)/reset-password/page.tsx`: 画面の入口。認証の実装(接続を作る関数`createClient`を渡す)、ページ全体の読み込みの実装、手続きを生成し、手続きを画面へ渡す。要求の入口の関数を、パスワードの変更の約束として手続きへ渡す。
 - `src/app/(auth)/reset-password/actions.ts`: 要求の入口。要求のcookieでサーバーの接続を作り、認証の実装とサーバーの手続き(`createPasswordChange`)を生成して呼ぶ。
-- `src/features/auth/ui/reset-password-form.tsx`: 再設定の画面の文言とリンク(見出し、サインインへのリンク、パスワード設定の段階の文言)。サインアップと共有の骨組みへ渡す。
+- `src/features/auth/ui/reset-password-form.tsx`: 再設定の画面の文言とリンク(見出し、サインインへのリンク、パスワード設定の段階の文言)を、UI層の文言の一覧から得る。サインアップと共有の骨組みへ渡す。
 - `src/features/auth/ui/password-setup-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。状態を`useScreenView`で持ち、操作のたびに入力と画面の約束(`ScreenView`)を手続きへ渡す。サインアップと共有する。
 - `src/features/auth/ui/otp-email-step.tsx`、`otp-code-step.tsx`: メール入力とコード入力の段階の描画。サインアップと共有する。
 - `src/features/auth/application/reset-password.ts`: 手続き。状態を持たず、コードの送信、再送、確認の順序と、パスワードの変更の要求の後のページ全体の読み込みを持つ。約束は、パスワードの変更の要求(`PasswordChange`。投げることがある)とページ全体の読み込み(`PageLoad`)。
 - `src/features/auth/application/password-change.ts`: サーバーの手続き。パスワードの変更と、成功したときの全ての端末のサインインの終了の順序を持ち、画面の手続きの約束`PasswordChange`を満たす。全端末のサインインの終了の約束(`SignOutEverywhere`)を持つ。
 - `src/features/auth/application/password-setup.ts`、`password-setup-authenticator.ts`: サインアップと共有する、手続きの共通の順序(操作の開始、コードの送信の依頼、再送、確認、パスワード設定の依頼)と、認証サービスへ頼むことの約束。
 - `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、開始の命令(`beginSendCode`ほか)が、操作の可否と入力の検証の順序、確認・再送・戻るの排他を守って`Start`を返す。事実の遷移でトークンの消費を守る。サインアップと共有する。
-- `src/features/auth/domain/password.ts`、`auth-code.ts`、`email-address.ts`、`captcha-token.ts`、`auth-failure.ts`、`auth-routes.ts`: パスワードの強さ、認証コードと再送の待ち時間、メールアドレス、セキュリティチェック、失敗の種類、遷移先の規則と文言(値オブジェクト)。
+- `src/features/auth/domain/password.ts`、`auth-code.ts`、`email-address.ts`、`captcha-token.ts`、`auth-failure.ts`、`auth-routes.ts`: パスワードの強さ、認証コードと再送の待ち時間、メールアドレス、セキュリティチェック、失敗の種類、遷移先の規則(値オブジェクト)。入力の誤りと失敗は種類で返し、文言は持たない。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。画面はブラウザの接続で`resetPasswordForEmail`、`verifyOtp`を、要求の入口はサーバーの接続で`updateUser`と`signOut`(範囲`global`)を使う。応答が無かった場合(接続を作れない、呼び出しが投げた)は、`unreachable`として返す。
 - `src/lib/supabase/infrastructure/server.ts`: サーバーでの接続(要求の利用者のセッション)。
 - `src/features/auth/infrastructure/browser-page-load.ts`: `window.location.assign`によるページ全体の読み込み。サインアウトのセッション喪失の遷移（置き換え、今の場所）も同じ実装が満たす。

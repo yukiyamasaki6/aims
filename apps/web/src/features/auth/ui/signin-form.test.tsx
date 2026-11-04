@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, StrictMode, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import type { CallResult } from "../application/call-result";
 import { createSignIn } from "../application/sign-in";
@@ -57,7 +58,9 @@ function setup({
     protectedPath: "/rounds",
   });
   const form = <SignInForm signIn={signIn} siteKey="site-key" />;
-  const rendered = render(strict ? <StrictMode>{form}</StrictMode> : form);
+  const rendered = render(strict ? <StrictMode>{form}</StrictMode> : form, {
+    wrapper: IntlTestProvider,
+  });
   return { signIn, authenticator, navigation, ...rendered };
 }
 

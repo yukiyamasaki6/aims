@@ -1,4 +1,5 @@
 import { ChevronLeft } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
 export function AuthHeader({
@@ -12,6 +13,7 @@ export function AuthHeader({
   onBack?: () => void;
   backDisabled?: boolean;
 }) {
+  const t = useTranslations("auth");
   return (
     <>
       {onBack && (
@@ -25,7 +27,7 @@ export function AuthHeader({
           )}
         >
           <ChevronLeft className="size-4" />
-          戻る
+          {t("back")}
         </button>
       )}
       <div className="flex flex-col gap-1 text-center">

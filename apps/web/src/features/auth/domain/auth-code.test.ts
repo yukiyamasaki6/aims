@@ -6,7 +6,7 @@ import {
   validateResendWait,
 } from "./auth-code";
 
-const requirementMessage = "認証コードは6桁の数字で入力してください。";
+const requirementMessage = "invalidFormat";
 
 describe("認証コードの検証", () => {
   it("6桁の数字の場合はエラーなし", () => {
@@ -46,7 +46,7 @@ describe("認証コードの検証", () => {
     const result = validateAuthCode(code);
 
     // Then
-    expect(result).toBe("認証コードを入力してください。");
+    expect(result).toBe("required");
   });
 
   it.each([
@@ -64,8 +64,7 @@ describe("認証コードの検証", () => {
   });
 });
 
-const waitMessage =
-  "再送はクールダウン中です。しばらくしてから再度お試しください。";
+const waitMessage = "cooldown";
 
 describe("再送の待ち時間", () => {
   it("待ち時間は60秒", () => {

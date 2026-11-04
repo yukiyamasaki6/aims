@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, StrictMode, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import type { CallResult } from "../application/call-result";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
@@ -56,7 +57,9 @@ function renderForm(options?: { strict?: boolean }) {
     protectedPath: "/rounds",
   });
   const form = <SignUpForm signUp={signUp} siteKey="site-key" />;
-  return render(options?.strict ? <StrictMode>{form}</StrictMode> : form);
+  return render(options?.strict ? <StrictMode>{form}</StrictMode> : form, {
+    wrapper: IntlTestProvider,
+  });
 }
 
 function heading(name: string) {

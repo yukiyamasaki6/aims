@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { type FormEvent, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ import { AuthField } from "./auth-field";
 import { AuthHeader } from "./auth-header";
 import { PasswordInput } from "./password-input";
 import { Turnstile } from "./turnstile";
+import { useAuthTexts } from "./use-auth-texts";
 import { useScreenView } from "./use-screen-view";
 
 // エラー文の要素のidの接頭辞(`${ID_PREFIX}-email-error`)。
@@ -37,6 +39,8 @@ export function SignInForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const hydrated = useHydrated();
+  const t = useTranslations("auth");
+  const texts = useAuthTexts();
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -45,7 +49,7 @@ export function SignInForm({
 
   return (
     <>
-      <AuthHeader title="サインイン" />
+      <AuthHeader title={t("signInTitle")} />
       <form
         onSubmit={onSubmit}
         noValidate
@@ -63,28 +67,30 @@ export function SignInForm({
           siteKey={siteKey}
           ref={checkRef}
           onVerify={(token) => view.dispatch({ type: "captchaChecked", token })}
-          error={flow.fieldErrors.captcha}
+          error={texts.fieldError("captcha", flow.fieldErrors.captcha)}
         />
         <BusyButton
           type="submit"
           data-captcha-ready={flow.captchaToken !== null}
           busy={flow.submitting}
         >
-          サインイン
+          {t("signInSubmit")}
         </BusyButton>
       </form>
       {flow.error && (
-        <p className="text-center text-destructive text-sm">{flow.error}</p>
+        <p className="text-center text-destructive text-sm">
+          {texts.failure(flow.error)}
+        </p>
       )}
       <p className="text-muted-foreground text-sm">
         <Link href={RESET_PASSWORD_PATH} className="underline">
-          パスワードをお忘れですか
+          {t("signInForgotPassword")}
         </Link>
       </p>
       <p className="text-muted-foreground text-sm">
-        アカウントをお持ちでない方は{" "}
+        {t("signInNoAccount")}{" "}
         <Link href={SIGN_UP_PATH} className="underline">
-          サインアップ
+          {t("signInSignUpLink")}
         </Link>
       </p>
     </>
@@ -104,13 +110,18 @@ function SignInFields({
   setPassword: (value: string) => void;
   fieldErrors: SignInFlow["fieldErrors"];
 }) {
+  const t = useTranslations("auth");
+  const texts = useAuthTexts();
   return (
     <>
-      <AuthField errorId={`${ID_PREFIX}-email-error`} error={fieldErrors.email}>
+      <AuthField
+        errorId={`${ID_PREFIX}-email-error`}
+        error={texts.fieldError("email", fieldErrors.email)}
+      >
         {(aria) => (
           <Input
             type="email"
-            placeholder="you@example.com"
+            placeholder={t("emailPlaceholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             maxLength={EMAIL_MAX_LENGTH}
@@ -120,11 +131,11 @@ function SignInFields({
       </AuthField>
       <AuthField
         errorId={`${ID_PREFIX}-password-error`}
-        error={fieldErrors.password}
+        error={texts.fieldError("password", fieldErrors.password)}
       >
         {(aria) => (
           <PasswordInput
-            placeholder="パスワード"
+            placeholder={t("passwordPlaceholder")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             {...aria}

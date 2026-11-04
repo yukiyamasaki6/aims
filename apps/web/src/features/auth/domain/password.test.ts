@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateNewPassword, validatePasswordPresent } from "./password";
 
-const requirementMessage =
-  "8〜72文字の半角英数記号で、英字と数字を含めてください。";
+const requirementMessage = "invalidRule";
 
 describe("新しいパスワードの検証", () => {
   it("8文字以上で英数字を含む場合はエラーなし", () => {
@@ -58,7 +57,7 @@ describe("新しいパスワードの検証", () => {
     const result = validateNewPassword(password);
 
     // Then
-    expect(result).toBe("パスワードを入力してください。");
+    expect(result).toBe("required");
   });
 
   it.each([
@@ -98,6 +97,6 @@ describe("validatePasswordPresent", () => {
     const result = validatePasswordPresent("");
 
     // Then
-    expect(result).toBe("パスワードを入力してください。");
+    expect(result).toBe("required");
   });
 });

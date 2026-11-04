@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import SignUpPage from "./page";
 
 const NETWORK_ERROR_MESSAGE =
@@ -162,7 +163,7 @@ describe("サインアップ画面の入口", () => {
   it("サインアップフォームを表示する", () => {
     // Given
     // When
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
 
     // Then
     expect(
@@ -177,7 +178,7 @@ describe("サインアップ画面の入口", () => {
     // Given
 
     // When
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
 
     // Then
     expect(widget.siteKey).toBe("page-site-key");
@@ -190,7 +191,7 @@ describe("サインアップ画面の入口", () => {
     auth.verifyOtp.mockResolvedValue({ error: null });
     auth.updateUser.mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user, "new@example.com");
     await screen.findByRole("heading", { name: "認証コードを入力" });
     await user.type(codeInput(), "123456");
@@ -226,7 +227,7 @@ describe("サインアップ画面の入口", () => {
     // Given
     server.isEmailRegistered.mockResolvedValue(true);
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
 
     // When
     await submitEmailStep(user);
@@ -245,7 +246,7 @@ describe("サインアップ画面の入口", () => {
       .mockResolvedValue(false);
     auth.signInWithOtp.mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user);
     await screen.findByText(NETWORK_ERROR_MESSAGE);
     expect(widget.resets).toBe(0);
@@ -270,7 +271,7 @@ describe("サインアップ画面の入口", () => {
       .mockRejectedValueOnce(new Error("Failed to fetch"))
       .mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user);
     await screen.findByText(NETWORK_ERROR_MESSAGE);
     expect(widget.resets).toBe(0);
@@ -305,7 +306,7 @@ describe("サインアップ画面の入口", () => {
         .mockResolvedValueOnce({ error })
         .mockResolvedValue({ error: null });
       const user = userEvent.setup();
-      render(<SignUpPage />);
+      render(<SignUpPage />, { wrapper: IntlTestProvider });
       await submitEmailStep(user);
       expect(await screen.findByText(message)).toBeInTheDocument();
       expect(widget.resets).toBe(1);
@@ -339,7 +340,7 @@ describe("サインアップ画面の入口", () => {
       ),
     });
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
 
     // When
     await submitEmailStep(user);
@@ -356,7 +357,7 @@ describe("サインアップ画面の入口", () => {
   it("規則に合わないパスワードは、認証サービスが弱いパスワードとして拒否したときと同じ規則の文面で示し、設定しない", async () => {
     // Given
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
     await user.type(passwordInput(), "onlyletters");
 
@@ -381,7 +382,7 @@ describe("サインアップ画面の入口", () => {
       .mockResolvedValueOnce({ error: weakPassword })
       .mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user, "old@example.com");
     await screen.findByText(REGISTERED_MESSAGE);
 
@@ -414,7 +415,7 @@ describe("サインアップ画面の入口", () => {
   it("確認の通信エラーを値で返した場合も、通信エラーを示し、再度確認できる", async () => {
     // Given
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
     await advanceToCodeStep(user);
     auth.verifyOtp
       .mockResolvedValueOnce({ error: connectionLost })
@@ -436,7 +437,7 @@ describe("サインアップ画面の入口", () => {
   it("遷移が投げると、通信エラーを示し、送信中を解除して再度送信できる", async () => {
     // Given
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
     auth.updateUser.mockResolvedValue({ error: null });
     navigation.push.mockImplementationOnce(() => {
@@ -459,7 +460,7 @@ describe("サインアップ画面の入口", () => {
     // Given
     const deferred = Promise.withResolvers<{ error: null }>();
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
     auth.updateUser.mockReturnValue(deferred.promise);
     await user.type(passwordInput(), "password123");
@@ -477,7 +478,7 @@ describe("サインアップ画面の入口", () => {
     // Given
     const deferred = Promise.withResolvers<{ error: null }>();
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
     auth.updateUser.mockReturnValue(deferred.promise);
     await user.type(passwordInput(), "password123");
@@ -498,7 +499,7 @@ describe("サインアップ画面の入口", () => {
     // Given
     auth.updateUser.mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
     await user.type(passwordInput(), "password123");
     await user.click(setPasswordButton());
@@ -518,7 +519,7 @@ describe("サインアップ画面の入口", () => {
     server.isEmailRegistered.mockReturnValue(deferred.promise);
     auth.signInWithOtp.mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
     await user.type(emailInput(), "user@example.com");
     await user.click(widgetButton());
 
@@ -537,7 +538,7 @@ describe("サインアップ画面の入口", () => {
     const deferred = Promise.withResolvers<{ error: null }>();
     auth.signInWithOtp.mockReturnValue(deferred.promise);
     const user = userEvent.setup();
-    const { unmount } = render(<SignUpPage />);
+    const { unmount } = render(<SignUpPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user);
 
     // When
@@ -553,7 +554,7 @@ describe("サインアップ画面の入口", () => {
   it("パスワードの設定の応答待ちで画面を離れたら、遷移しない", async () => {
     // Given
     const user = userEvent.setup();
-    const { unmount } = render(<SignUpPage />);
+    const { unmount } = render(<SignUpPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
     const deferred = Promise.withResolvers<{ error: null }>();
     auth.updateUser.mockReturnValue(deferred.promise);
@@ -575,7 +576,7 @@ describe("サインアップ画面の入口", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
 
     // When
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
 
     // Then
     expect(heading("サインアップ")).toBeInTheDocument();
@@ -588,7 +589,7 @@ describe("サインアップ画面の入口", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
     server.isEmailRegistered.mockResolvedValue(false);
     const user = userEvent.setup();
-    render(<SignUpPage />);
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
 
     // When
     await submitEmailStep(user);
@@ -613,7 +614,7 @@ describe("サインアップ画面の入口", () => {
     async function advanceToResendReady() {
       server.isEmailRegistered.mockResolvedValue(false);
       auth.signInWithOtp.mockResolvedValue({ error: null });
-      render(<SignUpPage />);
+      render(<SignUpPage />, { wrapper: IntlTestProvider });
       fireEvent.change(emailInput(), { target: { value: "user@example.com" } });
       fireEvent.click(widgetButton());
       fireEvent.click(sendCodeButton());

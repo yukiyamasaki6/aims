@@ -23,7 +23,7 @@
 構造の方針は`docs/architecture.md`に従う。
 
 - `src/app/(main)/layout.tsx`: 画面の入口。手続き、認証の実装（`createSupabaseAuth`）、通信の可否の実装、ページ遷移の実装を生成して注入し、喪失の見張りを始め、左パネルへサインアウトの部品を渡す。接続を作る関数`createClient`は渡すだけで、描画時には呼ばない。
-- `src/features/auth/ui/sign-out-button.tsx`: サインアウトのボタンと確認ダイアログ。実行中の表示とエラーを持ち、手続きの`signOut`を呼ぶ。`busy`と`discarded`の結果では状態を更新しない。失敗なら`failureMessage`の文言を示す。画面が表示中かを`isMounted`として渡す。
+- `src/features/auth/ui/sign-out-button.tsx`: サインアウトのボタンと確認ダイアログ。実行中の表示とエラーを持ち、手続きの`signOut`を呼ぶ。`busy`と`discarded`の結果では状態を更新しない。失敗なら失敗の種類の文言(UI層の文言の一覧)を示す。画面が表示中かを`isMounted`として渡す。
 - `src/components/ui/confirm-dialog.tsx`: `BlockingConfirmDialog`。`busy`と`error`を外から受け取る表現だけの部品で、実行中は閉じず、ボタンを無効にして表示する。二重実行の拒否は呼び出し側が行う（サインアウトは集約、プリセット削除は削除側のフック）。`rounds/delete`と共通である。
 - `src/features/auth/application/session.ts`: 手続き。`signOut`（実行中なら`busy`、認証サービスに頼む、離脱を確かめる、サインインの状態を読む、判定する、終えられたら遷移する）と、`watch`（喪失の検知と遷移）の順序を持つ。集約の現在の値を持ち、サインインの状態の読み取りとページ遷移の約束を宣言する。
 - `src/features/auth/domain/session-end-flow.ts`: 集約。実行中の判定、終えられたかの判定（呼び出しの後の未認証。喪失の定義と同じ）、実行中の喪失を委ねること、遷移は1回、行き先を守る。

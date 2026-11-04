@@ -3,11 +3,8 @@ import {
   validateAuthCode,
   validateResendWait,
 } from "./auth-code";
-import { type AuthFailure, failureMessage } from "./auth-failure";
-import {
-  CAPTCHA_INCOMPLETE_MESSAGE,
-  isCaptchaCompleted,
-} from "./captcha-token";
+import type { AuthFailure, AuthFailureKind } from "./auth-failure";
+import { isCaptchaCompleted } from "./captcha-token";
 import { validateEmail } from "./email-address";
 import type { FieldErrors, Start } from "./flow";
 import { validateNewPassword } from "./password";
@@ -26,7 +23,7 @@ export type PasswordSetupFlow = {
   readonly fieldErrors: FieldErrors<
     "email" | "captcha" | "code" | "resend" | "password"
   >;
-  readonly error: string | null;
+  readonly error: AuthFailureKind | null;
 };
 
 export const initialPasswordSetupFlow: PasswordSetupFlow = {
@@ -87,7 +84,7 @@ export function beginSendCode(
     if (!isCaptchaCompleted(flow.captchaToken)) {
       return {
         ok: false,
-        fieldErrors: { captcha: CAPTCHA_INCOMPLETE_MESSAGE },
+        fieldErrors: { captcha: "incomplete" },
       };
     }
     return {
@@ -117,7 +114,7 @@ export function beginResend(
     const wait = validateResendWait(flow.resendCooldown);
     if (wait) return { ok: false, fieldErrors: { resend: wait } };
     if (!isCaptchaCompleted(flow.captchaToken)) {
-      return { ok: false, fieldErrors: { resend: CAPTCHA_INCOMPLETE_MESSAGE } };
+      return { ok: false, fieldErrors: { resend: "incomplete" } };
     }
     return {
       ok: true,
@@ -216,7 +213,7 @@ function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
       return {
         ...flow,
         pending: null,
-        error: failureMessage(event.failure),
+        error: event.failure.kind,
         fieldErrors: {},
       };
     case "refused":

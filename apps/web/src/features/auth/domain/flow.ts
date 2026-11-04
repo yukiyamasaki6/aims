@@ -1,8 +1,22 @@
+import type { AuthCodeError, ResendWaitError } from "./auth-code";
+import type { CaptchaError } from "./captcha-token";
+import type { EmailError } from "./email-address";
+import type { PasswordError } from "./password";
+
 // 操作の流れ(集約)が共通に使う型。4つの操作の集約が、同じ形の命令の結果を返す。
 
-// 欄ごとのエラー。キーは欄の名前、値は利用者向けの文言。
-export type FieldErrors<Field extends string> = {
-  readonly [F in Field]?: string;
+// 欄ごとの入力の誤りの種類。欄の名前ごとに、その欄で起きる誤りの種類が決まる。
+export type FieldErrorKinds = {
+  email: EmailError;
+  password: PasswordError;
+  captcha: CaptchaError;
+  code: AuthCodeError;
+  resend: ResendWaitError | CaptchaError;
+};
+
+// 欄ごとのエラー。キーは欄の名前、値は誤りの種類。
+export type FieldErrors<Field extends keyof FieldErrorKinds> = {
+  readonly [F in Field]?: FieldErrorKinds[F];
 };
 
 // 操作の開始の結果。どの結果も、命令を受けた後の状態(state)を持つ。

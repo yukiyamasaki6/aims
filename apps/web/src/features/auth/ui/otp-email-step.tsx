@@ -1,6 +1,7 @@
 "use client";
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
+import { useTranslations } from "next-intl";
 import type { FormEvent, ReactNode, RefObject } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,7 @@ export function OtpEmailStep({
   onCheck,
   checked,
 }: OtpEmailStepProps) {
+  const t = useTranslations("auth");
   const errorId = `${idPrefix}-email-error`;
   return (
     <>
@@ -61,7 +63,7 @@ export function OtpEmailStep({
           {(aria) => (
             <Input
               type="email"
-              placeholder="you@example.com"
+              placeholder={t("emailPlaceholder")}
               maxLength={EMAIL_MAX_LENGTH}
               value={email}
               onChange={(e) => onEmailChange(e.target.value)}
@@ -80,7 +82,7 @@ export function OtpEmailStep({
           data-captcha-ready={checked}
           busy={submitting}
         >
-          認証コードを送信
+          {t("otpSendCode")}
         </BusyButton>
       </form>
       {error && <p className="text-center text-destructive text-sm">{error}</p>}

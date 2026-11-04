@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, forwardRef } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import { OtpEmailStep } from "./otp-email-step";
 
@@ -53,6 +54,7 @@ function renderStep(
       title={props.title ?? form.title}
       footer={props.footer ? <p>{props.footer}</p> : form.footer}
     />,
+    { wrapper: IntlTestProvider },
   );
 }
 

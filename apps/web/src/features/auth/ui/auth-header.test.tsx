@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { AuthHeader } from "./auth-header";
 
 describe("AuthHeader", () => {
@@ -11,7 +12,7 @@ describe("AuthHeader", () => {
 
         // When
         const title = "サインイン";
-        render(<AuthHeader title={title} />);
+        render(<AuthHeader title={title} />, { wrapper: IntlTestProvider });
 
         // Then
         expect(
@@ -26,7 +27,9 @@ describe("AuthHeader", () => {
 
         // When
         const description = "説明文";
-        render(<AuthHeader title="サインイン" description={description} />);
+        render(<AuthHeader title="サインイン" description={description} />, {
+          wrapper: IntlTestProvider,
+        });
 
         // Then
         expect(screen.getByText(description)).toBeInTheDocument();
@@ -37,7 +40,9 @@ describe("AuthHeader", () => {
 
         // When
         const title = "サインイン";
-        const { container } = render(<AuthHeader title={title} />);
+        const { container } = render(<AuthHeader title={title} />, {
+          wrapper: IntlTestProvider,
+        });
 
         // Then
         expect(container.querySelector("p")).toBeNull();
@@ -50,7 +55,9 @@ describe("AuthHeader", () => {
 
         // When
         const handleBack = vi.fn();
-        render(<AuthHeader title="サインイン" onBack={handleBack} />);
+        render(<AuthHeader title="サインイン" onBack={handleBack} />, {
+          wrapper: IntlTestProvider,
+        });
 
         // Then
         expect(
@@ -63,7 +70,7 @@ describe("AuthHeader", () => {
 
         // When
         const title = "サインイン";
-        render(<AuthHeader title={title} />);
+        render(<AuthHeader title={title} />, { wrapper: IntlTestProvider });
 
         // Then
         expect(
@@ -80,6 +87,7 @@ describe("AuthHeader", () => {
         const handleBack = vi.fn();
         render(
           <AuthHeader title="サインイン" onBack={handleBack} backDisabled />,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
@@ -105,6 +113,7 @@ describe("AuthHeader", () => {
               onBack={handleBack}
               backDisabled={backDisabled}
             />,
+            { wrapper: IntlTestProvider },
           );
 
           // Then
@@ -121,7 +130,9 @@ describe("AuthHeader", () => {
       // Given
       const handleBack = vi.fn();
       const user = userEvent.setup();
-      render(<AuthHeader title="サインイン" onBack={handleBack} />);
+      render(<AuthHeader title="サインイン" onBack={handleBack} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // When
       await user.click(screen.getByRole("button", { name: /戻る/ }));
@@ -137,6 +148,7 @@ describe("AuthHeader", () => {
       const user = userEvent.setup();
       render(
         <AuthHeader title="サインイン" onBack={handleBack} backDisabled />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
