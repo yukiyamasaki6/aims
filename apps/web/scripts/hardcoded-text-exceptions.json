@@ -68,10 +68,6 @@
     "reason": "未移行: auth"
   },
   {
-    "path": "features/offline-pwa/ui/offline-screen.tsx",
-    "reason": "未移行: offline-pwa"
-  },
-  {
     "path": "features/rounds/domain/distance-config.ts",
     "reason": "未移行: rounds"
   },

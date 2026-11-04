@@ -27,7 +27,7 @@
   - `infrastructure/runtime-caching.ts`(`createRuntimeCaching`)が、枠のナビゲーション(`infrastructure/precached-frame.ts`の`PrecachedFrame`。プリキャッシュから返し、未格納なら通常のネットワーク取得に落とす)、フォント、画像、`/_next/static` のJS、CSSのキャッシュ、同一オリジンのその他(RSCを含む)のNetworkOnlyを定める。クロスオリジンは経由させない。
   - 枠のないパスのナビゲーションの失敗時は `/offline` を返す。`navigationPreload` は使わない。
   - `infrastructure/shell-guard.ts`(`shellFrameGuard`)が、`/__shell/` 配下のプリキャッシュ応答がリダイレクトされたら、インストールを失敗させる。
-- `src/app/offline/page.tsx`(画面の入口)は、`ui/offline-screen.tsx`の`OfflineScreen`(ロゴ、枠、固定文言)を描くだけである。
+- `src/app/offline/page.tsx`(画面の入口)は、`ui/offline-screen.tsx`の`OfflineScreen`(ロゴ、枠、文言)を描くだけである。文言は`ui/offline-pwa-messages.ts`の一覧(名前空間`offlinePwa`)から`useTranslations`で得る。要求の設定は`headers()`と`cookies()`を読まないため、ページは静的なままで、文言は最初のHTMLに含まれ、プリキャッシュされた枠はオフラインでも文言を表示する。
 - 経路の持ち主は2つである。枠の経路(`ROUND_FRAME_PATHS`、`roundFramePathOf`、`ROUND_FRAME_ID`)は `src/features/rounds/domain/round-routes.ts`、`/offline` と枠の配布URL(`OFFLINE_PATH`、`SHELL_PREFIX`、`shellUrlOf`、`frameHtmlOf`、`isShellUrl`、`frameUrlFor`)は `src/features/offline-pwa/domain/offline-routes.ts` が持つ。`sw.ts`、`serwist.config.mjs`、`next.config.ts`、`manifest.ts` はここから導く。`proxy.ts` の `matcher` だけは、Next.jsが静的に読むため文字列で再掲し、`proxy.test.ts` が一致を確かめる。
 - `serwist.config.mjs` が `public/sw.js` を生成し、`/offline` と枠3件（`/__shell/rounds`、`/__shell/rounds/new`、`/__shell/rounds/_`）をHTMLの内容ハッシュのリビジョンでプリキャッシュする。リビジョンはビルドごとに変わる。
 - `next.config.ts` が `/__shell/*` を実ルートへrewriteし（`beforeFiles`）、`/rounds/<ID>` を `/rounds/_` へrewriteする（`afterFiles`）。`/__shell/*` は `proxy.ts` の対象外なので、未認証の登録でも各画面の枠が保存される。オンラインの `/rounds/<ID>` も `/rounds/_` の枠だけが配信され、IDごとの生成物は作られない（`rounds/[id]/page.tsx` の `dynamicParams = false`）。

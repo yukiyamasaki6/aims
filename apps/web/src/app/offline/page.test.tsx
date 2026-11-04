@@ -1,12 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import OfflinePage from "./page";
 
 describe("OfflinePage", () => {
   it("オフラインであることを表示する", () => {
     // Given
     // When
-    render(<OfflinePage />);
+    render(<OfflinePage />, { wrapper: IntlTestProvider });
 
     // Then
     expect(
@@ -17,7 +18,7 @@ describe("OfflinePage", () => {
   it("AIMSロゴのリンクを表示する", () => {
     // Given
     // When
-    render(<OfflinePage />);
+    render(<OfflinePage />, { wrapper: IntlTestProvider });
 
     // Then
     expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();
