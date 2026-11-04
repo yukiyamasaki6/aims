@@ -427,7 +427,8 @@ test("オンラインのまま通信が応答しないとき、端末が保持�
 
   // 通信が応答しない状態でラウンドを開き、表示までの時間を確かめる。
   // 待ちと表示の時刻をページ内で測る(Node側の時刻はポーリングの間隔を含むため)。
-  await page.addInitScript(() => {
+  const shownText = roundsText("roundTotal", { total: "9" });
+  await page.addInitScript((text) => {
     const w = window as unknown as {
       e2eFirstRequestAt?: number;
       e2eShownAt?: number;
@@ -442,14 +443,13 @@ test("オンラインのまま通信が応答しないとき、端末が保持�
     };
     new MutationObserver(() => {
       const el = document.querySelector('[data-testid="round-summary"]');
-      if (el?.textContent?.includes(roundsText("roundTotal", { total: "9" })))
-        w.e2eShownAt ??= performance.now();
+      if (el?.textContent?.includes(text)) w.e2eShownAt ??= performance.now();
     }).observe(document, {
       childList: true,
       subtree: true,
       characterData: true,
     });
-  });
+  }, shownText);
   // Service Workerが制御する文書の通信も止めるため、contextで止める。
   await page.context().route(/\/(rest|auth)\/v1\//, () => {});
   await page.goto(`/rounds/${roundId}`);
