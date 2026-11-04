@@ -96,6 +96,8 @@ function nameOf(name) {
 }
 
 function isExemptCall(node) {
+  // import・exportの指定子は、モジュールの指定で、利用者に届かない。
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return true;
   if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
     const callee = node.expression;
     if (ts.isIdentifier(callee)) return callee.text.endsWith("Error");
@@ -215,13 +217,23 @@ export function formatProblems({ remaining, unused }) {
   ];
 }
 
+function hasReason(exception) {
+  return typeof exception.reason === "string" && exception.reason.trim() !== "";
+}
+
 export function checkSources(sources, exceptions) {
   const violationsByFile = {};
   for (const [file, text] of Object.entries(sources)) {
     if (!isCheckedFile(file)) continue;
     violationsByFile[file] = findViolations(file, text);
   }
-  return formatProblems(applyExceptions(violationsByFile, exceptions));
+  const withoutReason = exceptions
+    .filter((exception) => !hasReason(exception))
+    .map((exception) => `${exception.path}: 例外の行に理由がありません`);
+  return [
+    ...withoutReason,
+    ...formatProblems(applyExceptions(violationsByFile, exceptions)),
+  ];
 }
 
 function readSources(srcDir) {
