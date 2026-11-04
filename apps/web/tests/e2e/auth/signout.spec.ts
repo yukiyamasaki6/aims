@@ -1,6 +1,10 @@
 import type { Page } from "@playwright/test";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import { signUpAndSignIn, waitForHydration } from "../helpers/auth";
+
+const authText = translatorFor("auth");
+const offlinePwaText = translatorFor("offlinePwa");
 
 // サインアウトする（失敗するケースも含む）テストのため、
 // 共有の認証状態を汚さないよう使い捨てユーザーで専用のセッションを使う。
@@ -25,8 +29,10 @@ async function signInAndOpenDialog(
     await page.goto(options.path);
     await waitForHydration(page);
   }
-  await page.getByRole("button", { name: "サインアウト" }).click();
-  const confirmButton = page.getByRole("button", { name: "サインアウトする" });
+  await page.getByRole("button", { name: authText("signOut") }).click();
+  const confirmButton = page.getByRole("button", {
+    name: authText("signOutConfirmLabel"),
+  });
   await expect(confirmButton).toBeVisible();
   return { confirmButton };
 }
@@ -42,7 +48,9 @@ test("別の画面でサインアウトを確認すると、この端末のセ�
   await confirmButton.click();
   await expect(page).toHaveURL(/\/signin$/);
   await waitForHydration(page);
-  await expect(page.getByRole("heading", { name: "サインイン" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: authText("signInTitle") }),
+  ).toBeVisible();
   await expect(page).toHaveURL(/\/signin$/);
 
   // ラウンド一覧を開き直して、この端末のセッションが終了したことを確かめる。
@@ -73,7 +81,7 @@ test("オフラインでサインアウトを確認すると、この端末の�
   await confirmButton.click();
 
   await expect(
-    page.getByRole("heading", { name: "オフラインです" }),
+    page.getByRole("heading", { name: offlinePwaText("offlineTitle") }),
   ).toBeVisible();
 
   // 端末のセッションが消えていることを、オンラインへ戻して確認する。
@@ -100,9 +108,7 @@ test("トークンを更新できずサインアウトに失敗すると、エ�
 
   // auth-jsは更新の通信失敗を、待機（setTimeout）を挟んで約25秒まで再試行してから諦める。
   // 時計を差し替えているため、エラーが表示されるまで1秒ずつ進める。既定の間隔(1秒)では実時間で約13秒かかるため、間隔を短くする。
-  const errorMessage = page.getByText(
-    "通信エラーが発生しました。しばらくしてから再度お試しください。",
-  );
+  const errorMessage = page.getByText(authText("failure.unreachable"));
   await expect
     .poll(
       async () => {

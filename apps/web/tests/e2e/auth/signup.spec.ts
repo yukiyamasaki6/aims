@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
@@ -8,20 +9,27 @@ import {
 import { fastForwardResendCooldown } from "../helpers/clock";
 import { getOtpCodeFromMailpit } from "../helpers/mailpit";
 
+const authText = translatorFor("auth");
+
 const EMAIL_PLACEHOLDER = "you@example.com";
 const CODE_PLACEHOLDER = "123456";
-const PASSWORD_PLACEHOLDER = "パスワード（8文字以上・英数字を含む）";
+const PASSWORD_PLACEHOLDER = authText("passwordFieldPlaceholder", {
+  label: "パスワード",
+  min: "8",
+});
 
 function uniqueEmail(prefix: string): string {
   return `${prefix}-${Date.now()}@aims.test`;
 }
 
 function sendCodeButton(page: Page) {
-  return page.getByRole("button", { name: "認証コードを送信" });
+  return page.getByRole("button", { name: authText("otpSendCode") });
 }
 
 function resendButton(page: Page) {
-  return page.getByRole("button", { name: /^再送/ });
+  return page.getByRole("button", {
+    name: new RegExp(`^${authText("otpResend")}`),
+  });
 }
 
 async function openSignUp(page: Page): Promise<void> {
@@ -42,25 +50,27 @@ test("メールで本人確認してパスワードを設定すると、登録�
   );
   await sendCodeButton(page).click();
   await expect(
-    page.getByRole("heading", { name: "認証コードを入力" }),
+    page.getByRole("heading", { name: authText("otpTitle") }),
   ).toBeVisible();
   await expect(page.getByText(/再送（\d+秒）/)).toBeVisible();
-  await expect(page.getByText("迷惑メールフォルダ")).toBeVisible();
+  await expect(page.getByText(authText("otpSpamNote"))).toBeVisible();
 
   // メールに届いたコードを入力して、パスワードの設定画面へ進む。
   const code = await getOtpCodeFromMailpit(email);
   await page.getByPlaceholder(CODE_PLACEHOLDER).fill(code);
-  await page.getByRole("button", { name: "確認" }).click();
+  await page.getByRole("button", { name: authText("otpVerify") }).click();
   await expect(
-    page.getByRole("heading", { name: "パスワードを設定" }),
+    page.getByRole("heading", { name: authText("signUpPasswordTitle") }),
   ).toBeVisible();
 
   // パスワードを設定して登録し、ラウンド一覧へ進む。
   await page.getByPlaceholder(PASSWORD_PLACEHOLDER).fill("password1");
-  await page.getByRole("button", { name: "登録してサインイン" }).click();
+  await page
+    .getByRole("button", { name: authText("signUpPasswordSubmit") })
+    .click();
   await expect(page).toHaveURL(/\/rounds/);
   await expect(
-    page.getByRole("button", { name: "サインアウト" }),
+    page.getByRole("button", { name: authText("signOut") }),
   ).toBeVisible();
 });
 
@@ -78,7 +88,7 @@ test("再送待機時間の終了後に再送すると、新しい認証コー�
   );
   await sendCodeButton(page).click();
   await expect(
-    page.getByRole("heading", { name: "認証コードを入力" }),
+    page.getByRole("heading", { name: authText("otpTitle") }),
   ).toBeVisible();
   const firstCode = await getOtpCodeFromMailpit(email);
 
@@ -88,7 +98,7 @@ test("再送待機時間の終了後に再送すると、新しい認証コー�
     "true",
   );
   await fastForwardResendCooldown(page);
-  await expect(resendButton(page)).toHaveText("再送");
+  await expect(resendButton(page)).toHaveText(authText("otpResend"));
 
   // 再送して、新しい認証コードを受け取る。
   // サーバー側の送信間隔は実時間で判定されるため、ローカル・CIの設定値を超えるまで待つ。
@@ -112,10 +122,10 @@ test("登録済みのメールアドレスでコードを送信すると、新�
   );
   await sendCodeButton(page).click();
   await expect(
-    page.getByText("このメールアドレスは既に登録されています。"),
+    page.getByText(authText("failure.already_registered")),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "サインアップ" }),
+    page.getByRole("heading", { name: authText("signUpTitle") }),
   ).toBeVisible();
 });
 
@@ -123,9 +133,13 @@ test("サインアップ画面で「サインイン」を押すと、サイン�
   page,
 }) => {
   await openSignUp(page);
-  await page.getByRole("link", { name: "サインイン", exact: true }).click();
+  await page
+    .getByRole("link", { name: authText("signUpFooterLink"), exact: true })
+    .click();
   await expect(page).toHaveURL(/\/signin$/);
-  await expect(page.getByRole("heading", { name: "サインイン" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: authText("signInTitle") }),
+  ).toBeVisible();
 });
 
 test.describe("認証済み", () => {

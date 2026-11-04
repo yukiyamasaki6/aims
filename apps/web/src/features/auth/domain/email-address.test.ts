@@ -24,7 +24,7 @@ describe("validateEmail", () => {
     expect(EMAIL_MAX_LENGTH).toBe(254);
     expect(below).toBeUndefined();
     expect(at).toBeUndefined();
-    expect(over).toBe("メールアドレスは254文字以内で入力してください。");
+    expect(over).toBe("tooLong");
   });
 
   it("空は入力を促す文言を返す", () => {
@@ -34,7 +34,7 @@ describe("validateEmail", () => {
     const result = validateEmail("");
 
     // Then
-    expect(result).toBe("メールアドレスを入力してください。");
+    expect(result).toBe("required");
   });
 
   it.each([
@@ -50,6 +50,6 @@ describe("validateEmail", () => {
     const result = validateEmail(email);
 
     // Then
-    expect(result).toBe("メールアドレスの形式が正しくありません。");
+    expect(result).toBe("invalidFormat");
   });
 });

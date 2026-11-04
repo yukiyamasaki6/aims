@@ -241,7 +241,7 @@ describe("refreshNeeds", () => {
     // When
     const first = reasons();
     // settleRoundNowは取り直しの開始で効かなかった印を消さないため、順を保てる。
-    settleRoundNow(requests, "r-1", { status: "error", message: "x" });
+    settleRoundNow(requests, "r-1", { status: "error", reason: "failed" });
     const second = reasons();
     settleRoundNow(requests, "r-1", {
       status: "ok",
@@ -330,7 +330,7 @@ describe("refreshNeeds", () => {
       const { control, detailFetch, refreshing } = await withDivergedMark();
 
       // When
-      detailFetch.resolve({ status: "error", message: "x" });
+      detailFetch.resolve({ status: "error", reason: "failed" });
       const result = await refreshing;
 
       // Then

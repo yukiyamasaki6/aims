@@ -95,7 +95,7 @@ describe("completionConfirmation", () => {
     const full = confirmationOf(tables("completed", allShots()));
 
     // Then
-    expect(partial).toBe("未入力のマスがあります。入力を完了しますか？");
+    expect(partial).toBe("unfilledCells");
     expect(full).toBeNull();
   });
 
@@ -105,7 +105,7 @@ describe("completionConfirmation", () => {
     const result = confirmationOf(tables("completed", [], []));
 
     // Then
-    expect(result).toBe("記録がありません。入力を完了しますか？");
+    expect(result).toBe("noRecords");
   });
 });
 

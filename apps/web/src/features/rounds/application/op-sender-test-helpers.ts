@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import type { SessionReader } from "@/features/auth";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import { createOpSender } from "./op-sender";
@@ -7,9 +8,8 @@ import {
   createManualTransport,
   createTestRoundHub,
 } from "./round-record-test-helpers";
-import type { SignInReader } from "./sign-in-reader";
 
-type Reading = Awaited<ReturnType<SignInReader["read"]>>;
+type Reading = Awaited<ReturnType<SessionReader["readSession"]>>;
 
 export const flush = () =>
   new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -30,14 +30,14 @@ export function createSenderRig(
   const sending = createOperationSending({ hub, transport });
   const clock = createManualClock(1000);
   const connectivity = createFakeConnectivity(options.offline);
-  const signIn: Pick<SignInReader, "read"> & { reading: Reading } = {
+  const signIn: { reading: Reading; read: () => Promise<Reading> } = {
     reading: options.reading ?? { status: "authenticated", userId: "user-1" },
     read: vi.fn(async (): Promise<Reading> => signIn.reading),
   };
   const sender = createOpSender({
     hub,
     sending,
-    signIn,
+    sessionReader: { readSession: signIn.read },
     clock,
     connectivity,
   });

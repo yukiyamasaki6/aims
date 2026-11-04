@@ -1,13 +1,14 @@
+import type { SessionReader } from "@/features/auth";
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import {
   commFailure,
   type FetchResult,
   fetchResultOf,
+  signInFailure,
 } from "../domain/fetch-status";
 import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { QueryOutcome } from "../domain/query-outcome";
-import type { SignInReader } from "./sign-in-reader";
 import { TIMED_OUT, withinTime } from "./time-limit";
 
 type FetchOptions<T> = {
@@ -25,11 +26,11 @@ export type ContentFetcher = {
 // 認証を確かめた取得と取り直し、時間制限。
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createContentFetcher(deps: {
-  signIn: SignInReader;
+  sessionReader: SessionReader;
   connectivity: Connectivity;
   clock: Clock;
 }): ContentFetcher {
-  const { signIn, connectivity, clock } = deps;
+  const { sessionReader, connectivity, clock } = deps;
 
   function failureOfComm<T>(): FetchResult<T> {
     return commFailure(connectivity.isOffline());
@@ -41,9 +42,12 @@ export function createContentFetcher(deps: {
   ): Promise<{ session: { userId: string } } | { failure: FetchResult<T> }> {
     const { promise, resolve } = Promise.withResolvers<"offline">();
     const stop = connectivity.onOffline(() => resolve("offline"));
-    let reading: Awaited<ReturnType<SignInReader["read"]>>;
+    let reading: Awaited<ReturnType<SessionReader["readSession"]>>;
     try {
-      const raced = await Promise.race([signIn.read(opts), promise]);
+      const raced = await Promise.race([
+        sessionReader.readSession(opts),
+        promise,
+      ]);
       if (raced === "offline") return { failure: { status: "offline" } };
       reading = raced;
     } finally {
@@ -51,7 +55,9 @@ export function createContentFetcher(deps: {
     }
     if (reading.status === "unknown") return { failure: failureOfComm() };
     if (reading.status === "unauthenticated") {
-      return { failure: { status: "error", message: reading.message } };
+      return {
+        failure: { status: "error", reason: signInFailure(reading.status) },
+      };
     }
     return { session: { userId: reading.userId } };
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-status";
+import type { FetchResult } from "../domain/fetch-status";
 import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { RoundListItem } from "../domain/round-list";
 import { roundBase, roundDisabled } from "../domain/round-op-test-helpers";
@@ -112,7 +112,7 @@ describe("loadList", () => {
   it("一覧の取得が失敗したら、一括の取得の反映を許さず、一覧の結果を返す(一括の結果に依らない)", async () => {
     // Given
     const tab = createTestRounds();
-    const failure = { status: "error", message: "一覧" } as const;
+    const failure = { status: "error", reason: "failed" } as const;
     const loading = loadListWith(tab, async () => failure);
     await flush();
     const run3 = tab.requests.beginAll();
@@ -143,7 +143,7 @@ describe("loadList", () => {
     expect(allowed).toBe(false);
     expect(await loading).toEqual({
       status: "error",
-      message: FETCH_ERROR_MESSAGE,
+      reason: "failed",
     });
   });
 
@@ -173,7 +173,7 @@ describe("loadList", () => {
   it("両方が失敗したら、一覧の結果を返す", async () => {
     // Given
     const tab = createTestRounds();
-    const listFailure = { status: "error", message: "一覧" } as const;
+    const listFailure = { status: "error", reason: "failed" } as const;
     const loading = loadListWith(tab, async () => listFailure);
     await flush();
 
@@ -466,7 +466,7 @@ describe("打ち切り", () => {
     // Then
     expect(await loading).toEqual({
       status: "error",
-      message: FETCH_ERROR_MESSAGE,
+      reason: "failed",
     });
   });
 

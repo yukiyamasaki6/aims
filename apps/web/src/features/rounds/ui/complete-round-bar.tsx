@@ -1,22 +1,24 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { RoundStatus } from "../domain/sync-events";
 
 // 入力中のラウンドの最下部に出す、入力を完了にする帯。完了のラウンドでは出さない。
-// 確認の文言があるときは、確認してから完了にする。
+// 確認の種類があるときは、確認してから完了にする。
 export function CompleteRoundBar({
   status,
   confirmation,
   onComplete,
 }: {
   status: RoundStatus;
-  // 確認の文言。nullなら確認なしで完了にする。
-  confirmation: string | null;
+  // 確認の種類。nullなら確認なしで完了にする。
+  confirmation: "noRecords" | "unfilledCells" | null;
   onComplete: () => void;
 }) {
+  const t = useTranslations("rounds");
   const [confirming, setConfirming] = useState(false);
   if (status === "completed") return null;
   return (
@@ -32,14 +34,16 @@ export function CompleteRoundBar({
             else onComplete();
           }}
         >
-          入力を完了する
+          {t("completeRound")}
         </Button>
       </div>
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        description={confirmation ?? ""}
-        confirmLabel="完了する"
+        description={
+          confirmation ? t(`completionConfirmation.${confirmation}`) : ""
+        }
+        confirmLabel={t("completeRoundConfirm")}
         confirmVariant="default"
         onConfirm={onComplete}
       />

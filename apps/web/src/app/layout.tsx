@@ -1,12 +1,17 @@
 import { SerwistProvider } from "@serwist/next/react";
 import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
+import { createTranslator } from "next-intl";
+import { intlConfig } from "@/i18n/messages";
 import "./globals.css";
 import { RootClientEntry } from "./root-client-entry";
 
+// 静的なまま、文言の設定から解決する。
+const t = createTranslator({ ...intlConfig, namespace: "shared" });
+
 export const metadata: Metadata = {
-  title: "AIMS",
-  description: "AIMS Web Application",
+  title: t("appName"),
+  description: t("appDescription"),
   manifest: "/manifest.webmanifest",
 };
 

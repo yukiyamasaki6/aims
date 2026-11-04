@@ -28,13 +28,13 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 
 - `src/app/(auth)/signup/page.tsx`: 画面の入口。認証の実装(接続を作る関数`createClient`と、登録済み判定の関数を渡す)、遷移の実装、手続きを生成し、手続きを画面へ渡す。
 - `src/app/(auth)/signup/actions.ts`: 要求の入口。登録済み判定のServer Action。管理者の接続(`lib/supabase/infrastructure/server.ts`の`createAdminClient`)を渡して判定の実装を生成し、呼ぶ。
-- `src/features/auth/ui/signup-form.tsx`: サインアップの画面の文言とリンク(見出し、サインインへのリンク、パスワード設定の段階の文言)。パスワード再設定と共有の骨組みへ渡す。
+- `src/features/auth/ui/signup-form.tsx`: サインアップの画面の文言とリンク(見出し、サインインへのリンク、パスワード設定の段階の文言)を、UI層の文言の一覧から得る。パスワード再設定と共有の骨組みへ渡す。
 - `src/features/auth/ui/password-setup-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。状態を`useScreenView`で持ち、操作のたびに入力と画面の約束(`ScreenView`)を手続きへ渡す。メール入力とコード入力は段階の部品へ渡す。パスワード再設定と共有する。
 - `src/features/auth/application/sign-up.ts`: 手続き。コードの送信(登録済みの判定を含む)と、パスワード設定の後の遷移(`/rounds`)を持つ。再送、確認と、操作の開始、コードの送信の依頼、パスワード設定の依頼は、共通の順序を使う。登録済みの判定は、手続きの約束`RegistrationLookup`(真偽値。投げることがあり、届かなかった失敗として扱う)で受け、入口がServer Actionを渡す。
 - `src/features/auth/application/password-setup.ts`、`password-setup-authenticator.ts`: パスワード再設定と共有する、手続きの共通の順序(操作の開始、コードの送信の依頼、再送、確認、パスワード設定の依頼)と、認証サービスへ頼むこと(コードの送信、確認、パスワードの設定)の約束。
 - `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、開始の命令(`beginSendCode`ほか)が、操作の可否と入力の検証の順序、確認・再送・戻るの排他を守って`Start`を返す。事実の遷移(`passwordSetupReducer`。パスワード設定の成功の`passwordSet`を含む)で、トークンの消費を守る。パスワード再設定と共有する。
-- `src/features/auth/domain/password.ts`、`auth-code.ts`: パスワードの強さ、認証コードと再送の待ち時間の規則と文言(値オブジェクト)。パスワード再設定も使う。
-- `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(登録済みを含む)と利用者向けの文言。
+- `src/features/auth/domain/password.ts`、`auth-code.ts`: パスワードの強さ、認証コードと再送の待ち時間の規則(値オブジェクト。誤りの種類を返す)。パスワード再設定も使う。
+- `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(登録済みを含む)。文言は持たない。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。コードの目的`sign-up`の`signInWithOtp`、`verifyOtp`、`updateUser`の呼び出しを含む。呼び出しの結果は`CallResult`の値で返し、応答が無かった場合(接続を作れない、呼び出しが投げた)は`unreachable`にする。
 - `src/features/auth/infrastructure/supabase-registration-check.ts`: 管理者キーで確認済みかを調べる登録済み判定。利用者が見つからないエラー(`user_not_found`)だけを未登録とし、それ以外は投げる。
 - `src/features/auth/ui/otp-email-step.tsx`、`otp-code-step.tsx`: メール入力とコード入力の段階の描画。パスワード再設定も使う。

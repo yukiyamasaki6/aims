@@ -1,22 +1,23 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type {
+  DistanceConfigError,
   DistanceConfigErrors,
   DistanceDraft,
 } from "../domain/distance-config";
 import type { TargetFaceOption } from "../domain/target-face";
 import { TargetFacePicker } from "./target-face-picker";
 
-const LOCKED_MESSAGE = "スコアが記録済みのため変更できません";
-
 type LockedField = "arrows" | "total-ends" | "target-face";
 
 // 編集不可の項目を押したときに、その項目の直下へ出す理由。
 function LockedMessage({ id, testId }: { id: string; testId: string }) {
+  const t = useTranslations("rounds");
   return (
     <p
       id={id}
@@ -24,15 +25,15 @@ function LockedMessage({ id, testId }: { id: string; testId: string }) {
       data-testid={testId}
       className="text-muted-foreground text-sm"
     >
-      {LOCKED_MESSAGE}
+      {t("distanceLocked")}
     </p>
   );
 }
 
 const MARKED_OPTIONS = [
-  { value: true, label: "Marked" },
-  { value: false, label: "Unmarked" },
-];
+  { value: true, key: "marked" },
+  { value: false, key: "unmarked" },
+] as const;
 
 // 距離1件分の編集フォームの数値入力欄。空欄はnullとして扱う。
 function NumberField({
@@ -106,10 +107,13 @@ function TargetFaceField({
   showLockedMessage: boolean;
   onLockedPress: () => void;
 }) {
+  const t = useTranslations("rounds");
   const messageId = `distance-config-target-face-locked-${distanceNumber}`;
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-muted-foreground text-xs">的</span>
+      <span className="text-muted-foreground text-xs">
+        {t("distanceTargetFace")}
+      </span>
       <TargetFacePicker
         targetFaces={targetFaces}
         selectedId={selectedId}
@@ -149,6 +153,9 @@ export function DistanceFields({
   roundBowType: string;
   hasShots: boolean;
 }) {
+  const t = useTranslations("rounds");
+  const errorText = (error: DistanceConfigError | undefined) =>
+    error ? t(`distanceConfigError.${error}`) : undefined;
   // 押した編集不可の項目だけに理由を出す。別の項目を押すと移る。
   const [pressedLocked, setPressedLocked] = useState<LockedField | null>(null);
   return (
@@ -162,20 +169,20 @@ export function DistanceFields({
       )}
 
       <NumberField
-        label="距離（m）"
+        label={t("distanceFieldDistance")}
         slug="distance"
         distanceNumber={distanceNumber}
         value={draft.distance}
-        error={fieldErrors.distance}
+        error={errorText(fieldErrors.distance)}
         onChange={(v) => setDraft((d) => ({ ...d, distance: v }))}
       />
 
       <NumberField
-        label="エンドあたりの本数"
+        label={t("distanceFieldArrows")}
         slug="arrows"
         distanceNumber={distanceNumber}
         value={draft.arrowsPerEnd}
-        error={fieldErrors.arrowsPerEnd}
+        error={errorText(fieldErrors.arrowsPerEnd)}
         locked={hasShots}
         lockedMessage={pressedLocked === "arrows"}
         onLockedPress={() => setPressedLocked("arrows")}
@@ -183,11 +190,11 @@ export function DistanceFields({
       />
 
       <NumberField
-        label="総エンド数"
+        label={t("distanceFieldTotalEnds")}
         slug="total-ends"
         distanceNumber={distanceNumber}
         value={draft.totalEnds}
-        error={fieldErrors.totalEnds}
+        error={errorText(fieldErrors.totalEnds)}
         locked={hasShots}
         lockedMessage={pressedLocked === "total-ends"}
         onLockedPress={() => setPressedLocked("total-ends")}
@@ -218,9 +225,12 @@ function MarkedToggle({
   distanceNumber: number;
   onChange: (isMarked: boolean) => void;
 }) {
+  const t = useTranslations("rounds");
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-muted-foreground text-xs">Marked / Unmarked</span>
+      <span className="text-muted-foreground text-xs">
+        {t("distanceMarkedToggle")}
+      </span>
       <div className="grid grid-cols-2 gap-2">
         {MARKED_OPTIONS.map((o) => (
           <Button
@@ -228,10 +238,10 @@ function MarkedToggle({
             type="button"
             variant={isMarked === o.value ? "default" : "outline"}
             size="sm"
-            data-testid={`distance-config-${o.label.toLowerCase()}-${distanceNumber}`}
+            data-testid={`distance-config-${o.key}-${distanceNumber}`}
             onClick={() => onChange(o.value)}
           >
-            {o.label}
+            {t(o.key === "marked" ? "distanceMarked" : "distanceUnmarked")}
           </Button>
         ))}
       </div>

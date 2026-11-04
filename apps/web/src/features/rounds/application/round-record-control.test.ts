@@ -180,7 +180,7 @@ describe("記録の制御", () => {
   it("記録の利用者と同じ利用者のサインインは、未認証で保留した操作を、サインインし直した後に送る", async () => {
     // Given
     const rig = createRealControl({
-      reading: { status: "unauthenticated", message: "未認証" },
+      reading: { status: "unauthenticated" },
     });
     await rig.hub.ready();
     rig.control.start("user-1");

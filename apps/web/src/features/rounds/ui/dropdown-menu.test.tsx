@@ -1,12 +1,16 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
+
+const roundsText = translatorFor("rounds");
 
 describe("DropdownMenuContent", () => {
   describe("表示", () => {
@@ -20,6 +24,7 @@ describe("DropdownMenuContent", () => {
           <DropdownMenuTrigger>開く</DropdownMenuTrigger>
           <DropdownMenuContent>{content}</DropdownMenuContent>
         </DropdownMenu>,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -41,6 +46,7 @@ describe("DropdownMenuContent", () => {
               項目
             </DropdownMenuContent>
           </DropdownMenu>,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
@@ -59,6 +65,7 @@ describe("DropdownMenuContent", () => {
             <DropdownMenuTrigger>開く</DropdownMenuTrigger>
             <DropdownMenuContent>{content}</DropdownMenuContent>
           </DropdownMenu>,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
@@ -78,6 +85,7 @@ describe("DropdownMenuContent", () => {
             <DropdownMenuTrigger>開く</DropdownMenuTrigger>
             <DropdownMenuContent align={align}>項目</DropdownMenuContent>
           </DropdownMenu>,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
@@ -94,7 +102,7 @@ describe("DropdownMenuItem", () => {
   describe("表示", () => {
     it("子要素をdata-slotを付与したメニュー項目として表示する", async () => {
       // Given
-      const label = "削除";
+      const label = roundsText("delete");
 
       // When
       render(
@@ -104,11 +112,12 @@ describe("DropdownMenuItem", () => {
             <DropdownMenuItem>{label}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
       expect(
-        await screen.findByRole("menuitem", { name: "削除" }),
+        await screen.findByRole("menuitem", { name: roundsText("delete") }),
       ).toHaveAttribute("data-slot", "dropdown-menu-item");
     });
 
@@ -125,11 +134,12 @@ describe("DropdownMenuItem", () => {
               <DropdownMenuItem className={className}>削除</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
         expect(
-          await screen.findByRole("menuitem", { name: "削除" }),
+          await screen.findByRole("menuitem", { name: roundsText("delete") }),
         ).toHaveClass("custom-class");
       });
     });
@@ -147,10 +157,13 @@ describe("DropdownMenuItem", () => {
             <DropdownMenuItem onClick={handleClick}>削除</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>,
+        { wrapper: IntlTestProvider },
       );
 
       // When
-      await user.click(await screen.findByRole("menuitem", { name: "削除" }));
+      await user.click(
+        await screen.findByRole("menuitem", { name: roundsText("delete") }),
+      );
 
       // Then
       expect(handleClick).toHaveBeenCalledTimes(1);
@@ -170,6 +183,7 @@ describe("DropdownMenu", () => {
             <DropdownMenuItem>項目</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>,
+        { wrapper: IntlTestProvider },
       );
       await user.click(screen.getByText("開く"));
       expect(await screen.findByRole("menu")).toBeInTheDocument();

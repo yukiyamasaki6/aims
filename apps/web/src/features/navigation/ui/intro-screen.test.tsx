@@ -1,7 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { Start } from "../application/start";
 import { IntroScreen } from "./intro-screen";
+
+const navigationText = translatorFor("navigation");
 
 // 開始ボタンは実物のまま描き、受け取ったpropsだけを記録する。
 const received = vi.hoisted(() => ({
@@ -32,21 +36,22 @@ describe("IntroScreen", () => {
     const start = createFakeStart();
 
     // When
-    render(<IntroScreen start={start} />);
+    render(<IntroScreen start={start} />, { wrapper: IntlTestProvider });
 
     // Then
     expect(screen.getByRole("heading", { name: "AIMS" })).toBeInTheDocument();
     expect(
-      screen.getByText("アーチェリーのスコア記録・分析・共有アプリ"),
+      screen.getByText(navigationText("introDescription")),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "開始" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: navigationText("startButton") }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();
     // 開始ボタンの非同期の判定が終わるまで待つ(描画後の状態更新を描画の外に残さない)。
     await vi.waitFor(() =>
-      expect(screen.getByRole("link", { name: "開始" })).toHaveAttribute(
-        "data-hydrated",
-        "true",
-      ),
+      expect(
+        screen.getByRole("link", { name: navigationText("startButton") }),
+      ).toHaveAttribute("data-hydrated", "true"),
     );
   });
 
@@ -55,7 +60,7 @@ describe("IntroScreen", () => {
     const start = createFakeStart();
 
     // When
-    render(<IntroScreen start={start} />);
+    render(<IntroScreen start={start} />, { wrapper: IntlTestProvider });
 
     // Then
     expect(received.props?.start).toBe(start);

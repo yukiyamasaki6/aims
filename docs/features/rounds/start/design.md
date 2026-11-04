@@ -62,18 +62,18 @@
 | `features/rounds/domain/preset.ts` | ドメイン層(値オブジェクト: プリセットの型、距離の並び、プリセットの並びと振り分け、除去) |
 | `features/rounds/domain/preset-list-view.ts` | ドメイン層(ドメインサービス: 取得結果からの表示の内容の決定) |
 | `features/rounds/domain/round-start.ts` | ドメイン層(ドメインサービス: プリセットの構成からの、IDを除いたラウンドの作成の内容の組み立て) |
-| `features/rounds/domain/write-result.ts` | ドメイン層(値オブジェクト: 書き込みの結果の種類と文言) |
+| `features/rounds/domain/write-result.ts` | ドメイン層(値オブジェクト: 書き込みの結果の種類と、保存と削除の失敗の種類) |
 | `features/rounds/domain/option-label.ts` | ドメイン層(値オブジェクト: 選択肢の値の表示名`labelOf`) |
 | `features/rounds/domain/target-face.ts` | ドメイン層(値オブジェクト。的を引く`lookupTargetFace`を持つ) |
 | `features/rounds/application/round-start.ts` | 手続き(開始) |
 | `features/rounds/application/preset-deletion.ts` | 手続き(個人プリセットの削除) |
 | `features/rounds/application/preset-commands.ts` | 手続きの約束(`PresetCommands`)。使い手が複数の手続きになるため、手続きのファイルから分けて置く |
-| `features/rounds/application/sign-in-reader.ts`、`reference-snapshots.ts`、`unique-ids.ts` | 手続きの約束(`SignInReader`、`ReferenceSnapshots`、`UniqueIds`。使い手が2つ以上) |
+| `features/rounds/application/reference-snapshots.ts`、`unique-ids.ts` | 手続きの約束(`ReferenceSnapshots`、`UniqueIds`。使い手が2つ以上)。サインインの状態は、認証の入口の`SessionReader`を型だけで受ける |
 | `features/rounds/application/new-round-store.ts` | 手続き(作成の画面に渡す状態と変更の方法。プリセットの取得、削除、開始) |
 | `features/rounds/application/round-fetching.ts` | 手続き(取得の順序。プリセットの取得を持つ)と約束(`RoundQueries`) |
 | `features/rounds/infrastructure/preset-commands.ts` | インフラ層(プリセットの書き込みと、結果の種類への写し) |
 | `features/rounds/infrastructure/browser-unique-ids.ts` | インフラ層(新しいIDの払い出し) |
-| `features/rounds/infrastructure/round-queries.ts`、`reference-snapshot.ts`、`auth-sign-in-reader.ts`、`rounds-db-schema.ts` | インフラ層(プリセットの問い合わせ、保存済みの書き換え、不明の文言、プリセットの表を持つ) |
+| `features/rounds/infrastructure/round-queries.ts`、`reference-snapshot.ts`、`rounds-db-schema.ts` | インフラ層(プリセットの問い合わせ、保存済みの書き換え、プリセットの表を持つ) |
 | `hooks/use-mounted-ref.ts`、`hooks/use-hydrated.ts`、`components/ui/{button,confirm-dialog}.tsx`、`lib/utils.ts` | 共有の画面部品 |
 | `lib/supabase/contract/database.ts`、`lib/supabase/infrastructure/database.ts` | 共有の技術の約束と実装(削除`delete`を持つ) |
 
@@ -93,7 +93,7 @@
 | プリセットをラウンドの機能の中に置く | プリセットを使う画面はどれもラウンドの画面で、構成と一緒に変わり、別の機能にすると開始と保存で機能の間が循環するため(M02、D06) | ラウンドの画面の外でプリセットを扱うとき |
 | 開始の後の遷移を共有の技術の約束(`PageNavigation`。`lib/page-navigation/contract/page-navigation.ts`)で表し、取得と削除と開始を`NewRoundStore`に持たせる。約束の使い手は開始と、詳細の完了、削除して離れる、一覧へ戻るである | 保存の後に進む順序を手続きに置き、画面に渡す形を1つにするため(L01、R01) | 画面ごとに異なる遷移の方法が要るとき |
 | 並びを名前でなく構成で決める | 名前は自由入力で内容を反映せず、自然順ソートは漢字の読みで曖昧になるため | プリセットの種類が増えたとき |
-| クライアントの認証確認は起動地点が生成した`SignInReader`の`read`で判定し、未認証と確定したときだけ止めて「サインインが必要です。」を表示する。不明（通信失敗）と`FALLBACK_WAIT_MS`（1秒。代わりがある待ちの上限、`app/offline-pwa`）の時間切れは開始する | `getUser()`はサーバー再検証を伴い、認可の実体はRPCにあるため。オフラインで開始でき、未認証の確認を保つため。待つのはトークンの失効時だけ | 開始の待ちが知覚されたとき |
+| クライアントの認証確認は起動地点が渡す`SessionReader`の`readSession`で判定し、未認証と確定したときだけ止めて、失敗の種類`unauthenticated`(文言は「サインインが必要です。」)を返す。不明（通信失敗）と`FALLBACK_WAIT_MS`（1秒。代わりがある待ちの上限、`app/offline-pwa`）の時間切れは開始する | `getUser()`はサーバー再検証を伴い、認可の実体はRPCにあるため。オフラインで開始でき、未認証の確認を保つため。待つのはトークンの失効時だけ | 開始の待ちが知覚されたとき |
 
 ## 制約と未対応
 

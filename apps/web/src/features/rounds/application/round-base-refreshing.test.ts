@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-status";
+import type { FetchResult } from "../domain/fetch-status";
 import {
   roundCreated,
   roundDisabled,
@@ -314,7 +314,7 @@ describe("refreshAll", () => {
     const tab = await setup();
     const failure: FetchResult<FetchedRoundDetails> = {
       status: "error",
-      message: FETCH_ERROR_MESSAGE,
+      reason: "failed",
     };
     tab.fetching.fetchRoundDetails.mockResolvedValue(failure);
     const list = tab.requests.requestAll();
@@ -342,7 +342,7 @@ describe("refreshAll", () => {
     expect(outcome.committed).toBe(false);
     await expect(list.result).resolves.toEqual({
       status: "error",
-      message: FETCH_ERROR_MESSAGE,
+      reason: "failed",
     });
   });
 
@@ -364,7 +364,7 @@ describe("refreshAll", () => {
     expect(outcome.committed).toBe(false);
     expect(outcome.result).toEqual({
       status: "error",
-      message: FETCH_ERROR_MESSAGE,
+      reason: "failed",
     });
     expect(listSettled).toBe(false);
   });
@@ -558,7 +558,7 @@ describe("refreshRound", () => {
     expect(result).toBe("failed");
     expect(await opened).toEqual({
       status: "error",
-      message: FETCH_ERROR_MESSAGE,
+      reason: "failed",
     });
   });
 
@@ -579,7 +579,7 @@ describe("refreshRound", () => {
     expect(result).toBe("failed");
     expect(await opened).toEqual({
       status: "error",
-      message: FETCH_ERROR_MESSAGE,
+      reason: "failed",
     });
   });
 });

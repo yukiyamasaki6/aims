@@ -1,14 +1,20 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { FetchState } from "./fetch-state";
+
+const roundsText = translatorFor("rounds");
 
 describe("FetchState", () => {
   describe("正常系", () => {
     it("loadingのとき、取得中であることを示すスケルトンを表示する", () => {
       // Given
       // When
-      render(<FetchState view={{ status: "loading" }} onRetry={vi.fn()} />);
+      render(<FetchState view={{ status: "loading" }} onRetry={vi.fn()} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
       expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
@@ -23,6 +29,7 @@ describe("FetchState", () => {
           onRetry={vi.fn()}
           loading={<div data-testid="custom-skeleton" />}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -40,11 +47,12 @@ describe("FetchState", () => {
           onRetry={vi.fn()}
           notFound={{ message: "ラウンドが見つかりません。" }}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
       expect(
-        screen.getByText("ラウンドが見つかりません。"),
+        screen.getByText(roundsText("detailNotFound")),
       ).toBeInTheDocument();
       expect(screen.queryByRole("link")).not.toBeInTheDocument();
     });
@@ -52,24 +60,28 @@ describe("FetchState", () => {
     it("offlineのとき、「ネットワークに接続されていません」と再試行ボタンを表示する", () => {
       // Given
       // When
-      render(<FetchState view={{ status: "offline" }} onRetry={vi.fn()} />);
+      render(<FetchState view={{ status: "offline" }} onRetry={vi.fn()} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
+      expect(screen.getByText(roundsText("fetchOffline"))).toBeInTheDocument();
       expect(
-        screen.getByText("ネットワークに接続されていません"),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "再試行" }),
+        screen.getByRole("button", { name: roundsText("fetchRetry") }),
       ).toBeInTheDocument();
     });
 
     it("offlineのとき、再試行を押すとonRetryを呼ぶ", async () => {
       // Given
       const onRetry = vi.fn();
-      render(<FetchState view={{ status: "offline" }} onRetry={onRetry} />);
+      render(<FetchState view={{ status: "offline" }} onRetry={onRetry} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // When
-      await userEvent.click(screen.getByRole("button", { name: "再試行" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: roundsText("fetchRetry") }),
+      );
 
       // Then
       expect(onRetry).toHaveBeenCalledTimes(1);
@@ -80,17 +92,18 @@ describe("FetchState", () => {
       // When
       render(
         <FetchState
-          view={{ status: "error", message: "読み込めませんでした。" }}
+          view={{ status: "error", reason: "failed" }}
           onRetry={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
       expect(screen.getByRole("alert")).toHaveTextContent(
-        "読み込めませんでした。",
+        roundsText("fetchFailure.failed"),
       );
       expect(
-        screen.getByRole("button", { name: "再試行" }),
+        screen.getByRole("button", { name: roundsText("fetchRetry") }),
       ).toBeInTheDocument();
     });
 
@@ -99,13 +112,16 @@ describe("FetchState", () => {
       const onRetry = vi.fn();
       render(
         <FetchState
-          view={{ status: "error", message: "読み込めませんでした。" }}
+          view={{ status: "error", reason: "failed" }}
           onRetry={onRetry}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
-      await userEvent.click(screen.getByRole("button", { name: "再試行" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: roundsText("fetchRetry") }),
+      );
 
       // Then
       expect(onRetry).toHaveBeenCalledTimes(1);
@@ -116,10 +132,12 @@ describe("FetchState", () => {
     it("not-foundでメッセージを渡さないとき、既定の文言を表示し、リンクを表示しない", () => {
       // Given
       // When
-      render(<FetchState view={{ status: "not-found" }} onRetry={vi.fn()} />);
+      render(<FetchState view={{ status: "not-found" }} onRetry={vi.fn()} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
-      expect(screen.getByText("見つかりませんでした。")).toBeInTheDocument();
+      expect(screen.getByText(roundsText("fetchNotFound"))).toBeInTheDocument();
       expect(screen.queryByRole("link")).not.toBeInTheDocument();
     });
 

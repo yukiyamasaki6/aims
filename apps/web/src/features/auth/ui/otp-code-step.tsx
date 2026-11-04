@@ -1,6 +1,7 @@
 "use client";
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
+import { useTranslations } from "next-intl";
 import type { FormEvent, RefObject } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
@@ -51,11 +52,12 @@ export function OtpCodeStep({
   checked,
   resendCooldown,
 }: OtpCodeStepProps) {
+  const t = useTranslations("auth");
   return (
     <>
       <AuthHeader
-        title="認証コードを入力"
-        description={`${email} に送信されたコードを入力してください。`}
+        title={t("otpTitle")}
+        description={t("otpDescription", { email })}
         onBack={onBack}
         backDisabled={pending !== null}
       />
@@ -69,7 +71,7 @@ export function OtpCodeStep({
       />
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
       <p className="text-center text-muted-foreground text-sm">
-        メールが届かない場合は、迷惑メールフォルダをご確認ください。
+        {t("otpSpamNote")}
       </p>
       <Turnstile siteKey={siteKey} ref={checkRef} onVerify={onCheck} />
       <ResendSection
@@ -98,6 +100,7 @@ function CodeEntryForm({
   errorId: string;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }) {
+  const t = useTranslations("auth");
   return (
     <form onSubmit={onSubmit} noValidate className="flex w-full flex-col gap-3">
       <AuthField errorId={errorId} error={error}>
@@ -105,7 +108,7 @@ function CodeEntryForm({
           <Input
             type="text"
             inputMode="numeric"
-            placeholder="123456"
+            placeholder={t("otpCodePlaceholder")}
             className="text-center tracking-widest"
             maxLength={AUTH_CODE_LENGTH}
             value={code}
@@ -119,7 +122,7 @@ function CodeEntryForm({
         busy={pending !== null}
         spinner={pending === "verify"}
       >
-        確認
+        {t("otpVerify")}
       </BusyButton>
     </form>
   );
@@ -138,6 +141,7 @@ function ResendSection({
   resendError: string | undefined;
   onResend: () => void;
 }) {
+  const t = useTranslations("auth");
   return (
     <div className="flex w-full flex-col items-center gap-1">
       <BusyButton
@@ -149,7 +153,9 @@ function ResendSection({
         data-captcha-ready={checked}
         onClick={onResend}
       >
-        {resendCooldown > 0 ? `再送（${resendCooldown}秒）` : "再送"}
+        {resendCooldown > 0
+          ? t("otpResendWait", { seconds: String(resendCooldown) })
+          : t("otpResend")}
       </BusyButton>
       {resendError && <p className="text-destructive text-sm">{resendError}</p>}
     </div>

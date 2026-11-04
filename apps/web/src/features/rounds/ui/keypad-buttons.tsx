@@ -1,4 +1,5 @@
 import { Redo, Undo } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
   type ScoringTargetFace,
@@ -24,6 +25,7 @@ export function KeypadButtons({
   history: ScoreHistory;
   input: ShotInput;
 }) {
+  const t = useTranslations("rounds");
   if (!keypadDistance) return null;
   const targetFace = targetFaces.find(
     (f) => f.id === keypadDistance.target_face_id,
@@ -38,7 +40,7 @@ export function KeypadButtons({
           className="col-span-2 h-12"
           disabled={!history.canUndo}
           data-testid="score-button-undo"
-          aria-label="一つ戻る"
+          aria-label={t("keypadUndo")}
           onClick={input.handleUndo}
         >
           <Undo />
@@ -50,7 +52,7 @@ export function KeypadButtons({
           className="h-12"
           disabled={!history.canRedo}
           data-testid="score-button-redo"
-          aria-label="一つ進む"
+          aria-label={t("keypadRedo")}
           onClick={input.handleRedo}
         >
           <Redo />
@@ -62,10 +64,10 @@ export function KeypadButtons({
           className="h-12 text-lg"
           disabled={pointer?.kind !== "shot"}
           data-testid="score-button-clear"
-          aria-label="クリア"
+          aria-label={t("keypadClear")}
           onClick={input.handleClear}
         >
-          C
+          {t("keypadClearKey")}
         </Button>
       </div>
       <ScoreKeys targetFace={targetFace} onScore={input.handleScore} />

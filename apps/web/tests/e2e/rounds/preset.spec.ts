@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   getSharedEmail,
@@ -12,6 +13,8 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
+
+const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -84,7 +87,7 @@ test("表示中の構成を名前を付けて保存すると、ダイアログ�
   page,
 }) => {
   // 保存ダイアログを開き、名前を付けて保存する。
-  const name = uniqueName("保存");
+  const name = uniqueName(roundsText("save"));
   await openRound(page);
   await page.getByTestId("save-as-preset-trigger").click();
   await expect(page.getByTestId("save-as-preset-name")).toBeVisible();
@@ -99,7 +102,9 @@ test("表示中の構成を名前を付けて保存すると、ダイアログ�
   // 距離構成（兄弟要素）まで含めるには2階層上がる。
   const card = presetButton(page, name).locator("../..");
   await expect(card).toContainText("30m");
-  await expect(card).toContainText("6本×6エンド");
+  await expect(card).toContainText(
+    roundsText("distanceEnds", { arrowsPerEnd: "6", totalEnds: "6" }),
+  );
 });
 
 test("距離を編集した直後に保存すると、サーバーへの反映を待たずに、編集後の構成で保存される", async ({
@@ -188,7 +193,9 @@ test("メニューから削除して確認すると、プリセットが一覧�
   // 削除を選び、メニューが閉じて確認ダイアログが開くことを確かめる。
   await page.getByTestId("round-preset-delete").click();
   await expect(page.getByTestId("round-preset-delete")).toBeHidden();
-  await expect(page.getByText(`「${name}」を削除しますか？`)).toBeVisible();
+  await expect(
+    page.getByText(roundsText("presetDeleteConfirm", { name })),
+  ).toBeVisible();
 
   // 確認して削除し、再読み込みしても現れないことを確かめる。
   await page.getByTestId("confirm-dialog-confirm").click();

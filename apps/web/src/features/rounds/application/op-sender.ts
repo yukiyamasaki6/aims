@@ -1,3 +1,4 @@
+import type { SessionReader } from "@/features/auth";
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import { planFlights } from "../domain/op-plan";
@@ -28,7 +29,6 @@ import {
 } from "../domain/sync-failure";
 import type { OperationSending, SendReport } from "./operation-sending";
 import type { RoundRecordHub } from "./round-record-hub";
-import type { SignInReader } from "./sign-in-reader";
 
 export type OpSender = ReturnType<typeof createOpSender>;
 
@@ -55,11 +55,11 @@ export function createOpSender(deps: {
     | "discard"
   >;
   sending: Pick<OperationSending, "send">;
-  signIn: Pick<SignInReader, "read">;
+  sessionReader: Pick<SessionReader, "readSession">;
   clock: Clock;
   connectivity: Connectivity;
 }) {
-  const { hub, sending, signIn, clock, connectivity } = deps;
+  const { hub, sending, sessionReader, clock, connectivity } = deps;
   let started = false;
   // 今の開始の保存の読み込みを終え、保存済みの操作を送れる状態。
   let ready = false;
@@ -91,7 +91,7 @@ export function createOpSender(deps: {
     streamId: string,
     flight: Flight,
   ): Promise<SyncFailure | undefined> {
-    const reading = await signIn.read();
+    const reading = await sessionReader.readSession();
     if (reading.status !== "authenticated") return sessionFailure(reading);
     // 列の利用者と違うときは未認証として保留する(別の利用者の認証で送らないため)。
     if (matchRecordUser(hub.userId(), reading.userId) === "other") {

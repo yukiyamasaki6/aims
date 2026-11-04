@@ -2,8 +2,12 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, forwardRef } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import { OtpEmailStep } from "./otp-email-step";
+
+const authText = translatorFor("auth");
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、errorの受け渡しを確かめられるスタブで模す。
 vi.mock("./turnstile", () => ({
@@ -53,6 +57,7 @@ function renderStep(
       title={props.title ?? form.title}
       footer={props.footer ? <p>{props.footer}</p> : form.footer}
     />,
+    { wrapper: IntlTestProvider },
   );
 }
 
@@ -67,7 +72,7 @@ describe("OtpEmailStep", () => {
 
       // Then
       expect(
-        screen.getByRole("heading", { name: "パスワードを再設定" }),
+        screen.getByRole("heading", { name: authText("resetTitle") }),
       ).toBeInTheDocument();
       const errorText = screen.getByText("全体のエラー");
       const footer = screen.getByText("戻るリンク");
@@ -174,7 +179,9 @@ describe("OtpEmailStep", () => {
       renderStep(form);
 
       // Then
-      const button = screen.getByRole("button", { name: "認証コードを送信" });
+      const button = screen.getByRole("button", {
+        name: authText("otpSendCode"),
+      });
       expect(button).toHaveAttribute("aria-disabled", "true");
       expect(button.querySelector("svg")).not.toBeNull();
     });
@@ -187,7 +194,9 @@ describe("OtpEmailStep", () => {
       renderStep(form);
 
       // Then
-      const button = screen.getByRole("button", { name: "認証コードを送信" });
+      const button = screen.getByRole("button", {
+        name: authText("otpSendCode"),
+      });
       expect(button).toHaveAttribute("aria-disabled", "false");
       expect(button.querySelector("svg")).toBeNull();
     });
@@ -221,12 +230,12 @@ describe("OtpEmailStep", () => {
       const notReady = createForm({ checked: false });
       const { unmount } = renderStep(ready);
       const readyValue = screen
-        .getByRole("button", { name: "認証コードを送信" })
+        .getByRole("button", { name: authText("otpSendCode") })
         .getAttribute("data-captcha-ready");
       unmount();
       renderStep(notReady);
       const notReadyValue = screen
-        .getByRole("button", { name: "認証コードを送信" })
+        .getByRole("button", { name: authText("otpSendCode") })
         .getAttribute("data-captcha-ready");
 
       // Then

@@ -11,11 +11,9 @@ import {
   passwordSetupReducer,
 } from "./password-setup-flow";
 
-const NETWORK_ERROR_MESSAGE =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
-const CAPTCHA_MESSAGE = "セキュリティチェックが完了していません。";
-const WAIT_MESSAGE =
-  "再送はクールダウン中です。しばらくしてから再度お試しください。";
+const NETWORK_ERROR_MESSAGE = "unreachable";
+const CAPTCHA_MESSAGE = "incomplete";
+const WAIT_MESSAGE = "cooldown";
 
 type Operation = NonNullable<PasswordSetupFlow["pending"]>;
 const OPERATIONS: Operation[] = ["send", "verify", "resend", "setPassword"];
@@ -79,8 +77,8 @@ describe("パスワード設定の流れの遷移", () => {
       const flow = flowWith({
         captchaToken: "used",
         pending: "send",
-        error: "前回のエラー",
-        fieldErrors: { email: "stale" },
+        error: "other",
+        fieldErrors: { email: "required" },
       });
 
       // When
@@ -101,8 +99,8 @@ describe("パスワード設定の流れの遷移", () => {
       // Given
       const flow = flowWith({
         step: "code",
-        error: "何かのエラー",
-        fieldErrors: { code: "認証コードを入力してください。" },
+        error: "other",
+        fieldErrors: { code: "required" },
         resendCooldown: 60,
         captchaToken: "used",
         pending: "resend",
@@ -129,8 +127,8 @@ describe("パスワード設定の流れの遷移", () => {
         step: "code",
         pending: "verify",
         captchaToken: "kept",
-        error: "前回のエラー",
-        fieldErrors: { code: "stale" },
+        error: "other",
+        fieldErrors: { code: "required" },
       });
 
       // When
@@ -150,7 +148,7 @@ describe("パスワード設定の流れの遷移", () => {
       [
         "拒否の理由",
         {
-          error: "8〜72文字の半角英数記号で、英字と数字を含めてください。",
+          error: "weak_password",
           fieldErrors: {},
         },
       ],
@@ -158,7 +156,7 @@ describe("パスワード設定の流れの遷移", () => {
         "欄のエラー",
         {
           error: null,
-          fieldErrors: { password: "パスワードを入力してください。" },
+          fieldErrors: { password: "required" },
         },
       ],
     ] as const)(
@@ -207,31 +205,19 @@ describe("パスワード設定の流れの遷移", () => {
       [
         "already_registered",
         { kind: "already_registered" },
-        "このメールアドレスは既に登録されています。",
+        "already_registered",
       ],
       ["unreachable", { kind: "unreachable" }, NETWORK_ERROR_MESSAGE],
-      [
-        "code_expired",
-        { kind: "code_expired" },
-        "認証コードが正しくないか、有効期限が切れています。",
-      ],
-      [
-        "weak_password",
-        { kind: "weak_password" },
-        "8〜72文字の半角英数記号で、英字と数字を含めてください。",
-      ],
-      [
-        "other",
-        { kind: "other" },
-        "エラーが発生しました。しばらくしてから再度お試しください。",
-      ],
+      ["code_expired", { kind: "code_expired" }, "code_expired"],
+      ["weak_password", { kind: "weak_password" }, "weak_password"],
+      ["other", { kind: "other" }, "other"],
     ])(
       "%sは、文言をエラーに設定し、欄のエラーをクリアして実行中を解除する",
       (_name, failure, message) => {
         // Given
         const flow = flowWith({
           pending: "send",
-          fieldErrors: { email: "stale", resend: "stale" },
+          fieldErrors: { email: "required", resend: "cooldown" },
         });
 
         // When
@@ -272,7 +258,7 @@ describe("パスワード設定の流れの遷移", () => {
       const flow = flowWith({
         step: "code",
         pending: "resend",
-        fieldErrors: { resend: "stale", code: "stale" },
+        fieldErrors: { resend: "cooldown", code: "required" },
       });
 
       // When
@@ -282,9 +268,7 @@ describe("パスワード設定の流れの遷移", () => {
       });
 
       // Then
-      expect(next.error).toBe(
-        "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
-      );
+      expect(next.error).toBe("rate_limited");
       expect(next.fieldErrors).toEqual({});
       expect(next.pending).toBeNull();
       expect(next.step).toBe("code");
@@ -334,8 +318,8 @@ describe("パスワード設定の流れの遷移", () => {
       // Given
       const flow = flowWith({
         step: "code",
-        error: "何かのエラー",
-        fieldErrors: { code: "認証コードを入力してください。" },
+        error: "other",
+        fieldErrors: { code: "required" },
         captchaToken: "code-step-token",
         resendCooldown: 30,
       });
@@ -359,7 +343,7 @@ describe("パスワード設定の流れの遷移", () => {
           step: "code",
           pending,
           captchaToken: "token",
-          error: "エラー",
+          error: "other",
         });
 
         // When
@@ -518,7 +502,7 @@ describe("操作の開始の可否と入力の検証", () => {
         pending: "send",
         ...c.ready,
         ...c.invalidFlow,
-        fieldErrors: { email: "前回の不備" },
+        fieldErrors: { email: "required" },
       });
 
       // When
@@ -549,8 +533,8 @@ describe("操作の開始の可否と入力の検証", () => {
       const flow = {
         ...readyFlow(),
         ...c.invalidFlow,
-        error: "前回のエラー",
-        fieldErrors: { email: "前回の不備" },
+        error: "other" as const,
+        fieldErrors: { email: "tooLong" as const },
       };
 
       // When
@@ -585,9 +569,7 @@ describe("操作の開始の可否と入力の検証", () => {
         error: failed.error,
         fieldErrors: {},
       });
-      expect(failed.error).toBe(
-        "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
-      );
+      expect(failed.error).toBe("rate_limited");
     });
 
     it("入力の不備を直して開始しても、送信中は直した欄の以前のエラーを残す", () => {
@@ -686,7 +668,7 @@ describe("操作の開始の可否と入力の検証", () => {
       expect(result).toMatchObject({
         kind: "invalid",
         state: {
-          fieldErrors: { email: "メールアドレスの形式が正しくありません。" },
+          fieldErrors: { email: "invalidFormat" },
         },
       });
     });
@@ -719,7 +701,7 @@ describe("操作の開始の可否と入力の検証", () => {
       expect(result).toMatchObject({
         kind: "invalid",
         state: {
-          fieldErrors: { email: "メールアドレスを入力してください。" },
+          fieldErrors: { email: "required" },
         },
       });
     });
@@ -757,7 +739,7 @@ describe("操作の開始の可否と入力の検証", () => {
       expect(result).toMatchObject({
         kind: "invalid",
         state: {
-          fieldErrors: { code: "認証コードは6桁の数字で入力してください。" },
+          fieldErrors: { code: "invalidFormat" },
         },
       });
     });
@@ -865,7 +847,7 @@ describe("操作の開始の可否と入力の検証", () => {
       // Then
       expect(result).toMatchObject({
         kind: "invalid",
-        state: { fieldErrors: { password: "パスワードを入力してください。" } },
+        state: { fieldErrors: { password: "required" } },
       });
     });
   });

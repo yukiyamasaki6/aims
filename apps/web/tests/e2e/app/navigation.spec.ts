@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Locator, Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   SHARED_AUTH_STATE_PATH,
@@ -10,6 +11,10 @@ import {
 import { comeBackOnline, goOffline } from "../helpers/service-worker";
 import { overlapNextRefresh } from "../helpers/session-overlap";
 import { expectUncovered } from "../helpers/visibility";
+
+const authText = translatorFor("auth");
+const navigationText = translatorFor("navigation");
+const roundsText = translatorFor("rounds");
 
 const MOBILE_VIEWPORT = { width: 375, height: 667 };
 const COMPACT_LANDSCAPE_VIEWPORT = { width: 667, height: 375 };
@@ -64,8 +69,8 @@ async function openRounds(page: Page) {
 function panelContents(page: Page) {
   return [
     page.getByRole("link", { name: "AIMS" }),
-    page.getByRole("link", { name: "個人" }),
-    page.getByRole("button", { name: "サインアウト" }),
+    page.getByRole("link", { name: navigationText("leftPanelPersonal") }),
+    page.getByRole("button", { name: authText("signOut") }),
   ];
 }
 
@@ -115,14 +120,16 @@ test.describe("紹介画面とロゴ", () => {
     await waitForHydration(page);
     await expect(page.getByRole("heading", { name: "AIMS" })).toBeVisible();
     await expect(
-      page.getByText("アーチェリーのスコア記録・分析・共有アプリ"),
+      page.getByText(navigationText("introDescription")),
     ).toBeVisible();
 
     // 開始ボタンを押して、サインアップ画面へ進む。
-    await page.getByRole("link", { name: "開始" }).click();
+    await page
+      .getByRole("link", { name: navigationText("startButton") })
+      .click();
     await expect(page).toHaveURL(/\/signup$/);
     await expect(
-      page.getByRole("heading", { name: "サインアップ" }),
+      page.getByRole("heading", { name: authText("signUpTitle") }),
     ).toBeVisible();
   });
 
@@ -152,14 +159,16 @@ test.describe("認証済み", () => {
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("heading", { name: "AIMS" })).toBeVisible();
     await expect(
-      page.getByText("アーチェリーのスコア記録・分析・共有アプリ"),
+      page.getByText(navigationText("introDescription")),
     ).toBeVisible();
 
     // 開始ボタンを押して、ラウンド一覧へ進む。
-    await page.getByRole("link", { name: "開始" }).click();
+    await page
+      .getByRole("link", { name: navigationText("startButton") })
+      .click();
     await expect(page).toHaveURL(/\/rounds$/);
     await expect(
-      page.getByRole("heading", { name: "ラウンド一覧" }),
+      page.getByRole("heading", { name: roundsText("listTitle") }),
     ).toBeVisible();
   });
 
@@ -181,11 +190,13 @@ test.describe("認証済み", () => {
     await page.goto("/rounds/new");
     await waitForHydration(page);
 
-    await page.getByRole("link", { name: "個人" }).click();
+    await page
+      .getByRole("link", { name: navigationText("leftPanelPersonal") })
+      .click();
 
     await expect(page).toHaveURL(/\/rounds$/);
     await expect(
-      page.getByRole("heading", { name: "ラウンド一覧" }),
+      page.getByRole("heading", { name: roundsText("listTitle") }),
     ).toBeVisible();
   });
 
@@ -199,13 +210,15 @@ test.describe("認証済み", () => {
       await expectPanelCollapsed(page);
 
       // ハンバーガーボタンを押して、レフトパネルを展開する。
-      await page.getByRole("button", { name: "メニューを開く" }).click();
+      await page
+        .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
+        .click();
       await expectPanelExpanded(page);
 
       // 閉じるボタンを押して、レフトパネルを格納する。
       // 背景も同じ名前のボタンで、パネルの中の閉じるボタンはDOMで後にある。
       await page
-        .getByRole("button", { name: "メニューを閉じる" })
+        .getByRole("button", { name: navigationText("leftPanelCloseMenu") })
         .last()
         .click();
       await expectPanelCollapsed(page);
@@ -219,11 +232,15 @@ test.describe("認証済み", () => {
       await expectPanelExpanded(page);
 
       // 格納ボタンを押して、レフトパネルを格納する。
-      await page.getByRole("button", { name: "パネルを格納する" }).click();
+      await page
+        .getByRole("button", { name: navigationText("leftPanelCollapse") })
+        .click();
       await expectPanelCollapsed(page);
 
       // 開くボタンを押して、レフトパネルを展開する。
-      await page.getByRole("button", { name: "パネルを開く" }).click();
+      await page
+        .getByRole("button", { name: navigationText("leftPanelExpand") })
+        .click();
       await expectPanelExpanded(page);
     });
 
@@ -236,11 +253,15 @@ test.describe("認証済み", () => {
       await expectPanelCollapsed(page);
 
       // 開くボタンを押して、レフトパネルを展開する。
-      await page.getByRole("button", { name: "パネルを開く" }).click();
+      await page
+        .getByRole("button", { name: navigationText("leftPanelExpand") })
+        .click();
       await expectPanelExpanded(page);
 
       // 格納ボタンを押して、レフトパネルを格納する。
-      await page.getByRole("button", { name: "パネルを格納する" }).click();
+      await page
+        .getByRole("button", { name: navigationText("leftPanelCollapse") })
+        .click();
       await expectPanelCollapsed(page);
     });
 
@@ -271,7 +292,9 @@ test.describe("認証済み", () => {
       // 縦向きで狭い画面でラウンド一覧を開き、ハンバーガーボタンでレフトパネルを展開する。
       await page.setViewportSize(MOBILE_VIEWPORT);
       await openRounds(page);
-      await page.getByRole("button", { name: "メニューを開く" }).click();
+      await page
+        .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
+        .click();
       await expectPanelExpanded(page);
 
       // 横向きで狭い画面へ回して、展開されたままであることを確かめる。
@@ -293,7 +316,9 @@ test.describe("認証済み", () => {
       // 広い画面でラウンド一覧を開き、格納ボタンでレフトパネルを格納する。
       await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
       await openRounds(page);
-      await page.getByRole("button", { name: "パネルを格納する" }).click();
+      await page
+        .getByRole("button", { name: navigationText("leftPanelCollapse") })
+        .click();
       await expectPanelCollapsed(page);
 
       // 縦向きで狭い画面へ回して、格納されたままであることを確かめる。
@@ -335,8 +360,10 @@ test.describe("セッション喪失", () => {
     await otherTab.goto("/rounds");
     await waitForHydration(otherTab);
 
-    await page.getByRole("button", { name: "サインアウト" }).click();
-    await page.getByRole("button", { name: "サインアウトする" }).click();
+    await page.getByRole("button", { name: authText("signOut") }).click();
+    await page
+      .getByRole("button", { name: authText("signOutConfirmLabel") })
+      .click();
     await expect(page).toHaveURL(/\/signin/);
 
     // 認証の通知による移動に頼らず、他方のタブで保護された画面を開き直し、サインイン画面へ移動することを確かめる。
@@ -381,7 +408,7 @@ test.describe("セッション喪失", () => {
     await page.waitForTimeout(1_000);
     await expect(page).toHaveURL(/\/rounds$/);
     await expect(
-      page.getByRole("heading", { name: "ラウンド一覧" }),
+      page.getByRole("heading", { name: roundsText("listTitle") }),
     ).toBeVisible();
   });
 
@@ -409,7 +436,7 @@ test.describe("セッション喪失", () => {
       ),
     ).toBe(true);
     await expect(
-      page.getByRole("heading", { name: "ラウンド一覧" }),
+      page.getByRole("heading", { name: roundsText("listTitle") }),
     ).toBeVisible();
   });
 });

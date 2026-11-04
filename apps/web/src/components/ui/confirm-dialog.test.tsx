@@ -2,14 +2,19 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, type Mock, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { BlockingConfirmDialog, ConfirmDialog } from "./confirm-dialog";
 import { Dialog, DialogContent } from "./dialog";
 
+const roundsText = translatorFor("rounds");
+const sharedText = translatorFor("shared");
+
 function cancelButton() {
-  return screen.getByRole("button", { name: "キャンセル" });
+  return screen.getByRole("button", { name: sharedText("confirmCancel") });
 }
 
-function confirmButton(name = "削除") {
+function confirmButton(name = sharedText("confirmDelete")) {
   return screen.getByRole("button", { name });
 }
 
@@ -40,13 +45,14 @@ describe("ConfirmDialog", () => {
           description={description}
           onConfirm={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
       const dialog = screen.getByRole("dialog");
       expect(dialog).toHaveTextContent("この距離を削除しますか？");
       expect(cancelButton()).toBeInTheDocument();
-      expect(confirmButton("削除")).toBeInTheDocument();
+      expect(confirmButton(sharedText("confirmDelete"))).toBeInTheDocument();
     });
 
     it("openがfalseの場合、ダイアログを表示しない", () => {
@@ -61,6 +67,7 @@ describe("ConfirmDialog", () => {
           description={description}
           onConfirm={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -81,6 +88,7 @@ describe("ConfirmDialog", () => {
             confirmLabel={confirmLabel}
             onConfirm={vi.fn()}
           />,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
@@ -101,6 +109,7 @@ describe("ConfirmDialog", () => {
           description="説明"
           onConfirm={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -120,11 +129,16 @@ describe("ConfirmDialog", () => {
           confirmVariant="default"
           onConfirm={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
-      expect(confirmButton("完了する")).not.toHaveClass("text-destructive");
-      expect(confirmButton("完了する")).toHaveClass("bg-primary");
+      expect(confirmButton(roundsText("completeRoundConfirm"))).not.toHaveClass(
+        "text-destructive",
+      );
+      expect(confirmButton(roundsText("completeRoundConfirm"))).toHaveClass(
+        "bg-primary",
+      );
     });
   });
 
@@ -141,6 +155,7 @@ describe("ConfirmDialog", () => {
           description="説明"
           onConfirm={handleConfirm}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -165,6 +180,7 @@ describe("ConfirmDialog", () => {
           description="説明"
           onConfirm={handleConfirm}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -189,6 +205,7 @@ describe("ConfirmDialog", () => {
           description="説明"
           onConfirm={handleConfirm}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -213,6 +230,7 @@ describe("ConfirmDialog", () => {
           description="説明"
           onConfirm={handleConfirm}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -243,6 +261,7 @@ describe("ConfirmDialog", () => {
             />
           </DialogContent>
         </Dialog>,
+        { wrapper: IntlTestProvider },
       );
       const backdrops = document.querySelectorAll(".bg-black\\/40");
 
@@ -271,6 +290,7 @@ function renderBlocking({
       error={error}
       {...props}
     />,
+    { wrapper: IntlTestProvider },
   );
 }
 
@@ -287,7 +307,10 @@ describe("BlockingConfirmDialog", () => {
         "このラウンドを削除しますか？",
       );
       expect(cancelButton()).toHaveAttribute("aria-disabled", "false");
-      expect(confirmButton("削除")).toHaveAttribute("aria-disabled", "false");
+      expect(confirmButton(sharedText("confirmDelete"))).toHaveAttribute(
+        "aria-disabled",
+        "false",
+      );
     });
 
     it("openがfalseの場合、ダイアログを表示しない", () => {

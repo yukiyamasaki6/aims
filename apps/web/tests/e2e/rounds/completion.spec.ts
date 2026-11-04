@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
@@ -18,6 +19,8 @@ import {
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
 import { expectHidden, expectUncovered } from "../helpers/visibility";
+
+const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -91,7 +94,7 @@ test("全てのエンドが矢数に達した入力中のラウンドで入力�
 }) => {
   // 全てのエンドが矢数に達したラウンドで入力を完了するボタンを押し、確認なしでラウンド一覧へ移る。
   const roundId = await openRound(page, { shots: allShots(0, 12, 3) });
-  await expect(completeButton(page)).toHaveText("入力を完了する");
+  await expect(completeButton(page)).toHaveText(roundsText("completeRound"));
   await completeButton(page).click();
   await expect(page).toHaveURL(/\/rounds$/);
 

@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  commFailure,
-  FETCH_ERROR_MESSAGE,
-  fetchResultOf,
-} from "./fetch-status";
+import { commFailure, fetchResultOf, signInFailure } from "./fetch-status";
 
 describe("commFailure", () => {
   it("オフラインならoffline、そうでなければ原因を断定しないerrorにする", () => {
@@ -15,12 +11,12 @@ describe("commFailure", () => {
 
     // Then
     expect(offline).toEqual({ status: "offline" });
-    expect(error).toEqual({ status: "error", message: FETCH_ERROR_MESSAGE });
+    expect(error).toEqual({ status: "error", reason: "failed" });
   });
 });
 
 describe("fetchResultOf", () => {
-  const errorResult = { status: "error", message: "読み込めませんでした。" };
+  const errorResult = { status: "error", reason: "failed" };
 
   it("okはデータ付きのok、not-foundはnot-foundにする", () => {
     // Given
@@ -60,4 +56,18 @@ describe("fetchResultOf", () => {
       expect(offline).toEqual(errorResult);
     },
   );
+});
+
+describe("signInFailure", () => {
+  it("未認証はサインインを促す種類、不明は通信できない種類にする", () => {
+    // Given
+
+    // When
+    const unauthenticated = signInFailure("unauthenticated");
+    const unknown = signInFailure("unknown");
+
+    // Then
+    expect(unauthenticated).toBe("unauthenticated");
+    expect(unknown).toBe("unreachable");
+  });
 });

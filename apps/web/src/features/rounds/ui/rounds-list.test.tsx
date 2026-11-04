@@ -1,6 +1,8 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { FetchResult } from "../domain/fetch-status";
 import type {
   LoadedRoundsList,
@@ -11,6 +13,8 @@ import { NEW_ROUND_PATH, roundPath } from "../domain/round-routes";
 import { createFakeRoundsListStore } from "./round-stores-test-helpers";
 import { RoundsListStoreProvider } from "./rounds-context";
 import { RoundsList } from "./rounds-list";
+
+const roundsText = translatorFor("rounds");
 
 // ラウンドの状態と変更の方法は、一覧の読み込み、削除、端末の列、待ちの合図だけを持つ偽の約束で渡す。
 // 取得、端末の列、削除の実物はそれぞれのテストで確かめる。
@@ -37,6 +41,7 @@ function renderList() {
     <RoundsListStoreProvider store={fake.store}>
       <RoundsList />
     </RoundsListStoreProvider>,
+    { wrapper: IntlTestProvider },
   );
 }
 
@@ -115,10 +120,12 @@ describe("RoundsList", () => {
       renderList();
 
       // Then
-      expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
+      expect(screen.getByRole("status")).toHaveTextContent(
+        roundsText("fetchLoading"),
+      );
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
       expect(
-        screen.queryByText("まだラウンドがありません。"),
+        screen.queryByText(roundsText("listEmpty")),
       ).not.toBeInTheDocument();
     });
 
@@ -133,7 +140,9 @@ describe("RoundsList", () => {
       expect(await screen.findByText("午前練習")).toBeInTheDocument();
       expect(load).toHaveBeenCalledExactlyOnceWith();
       expect(screen.getByText("2026-09-15")).toBeInTheDocument();
-      expect(screen.getByText("300点")).toBeInTheDocument();
+      expect(
+        screen.getByText(roundsText("roundTotalPoints", { total: "300" })),
+      ).toBeInTheDocument();
       expect(screen.getByText("午後練習")).toBeInTheDocument();
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
@@ -148,7 +157,7 @@ describe("RoundsList", () => {
 
       // Then
       expect(
-        await screen.findByText("まだラウンドがありません。"),
+        await screen.findByText(roundsText("listEmpty")),
       ).toBeInTheDocument();
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
     });
@@ -162,28 +171,28 @@ describe("RoundsList", () => {
 
       // Then
       expect(
-        await screen.findByText("ネットワークに接続されていません"),
+        await screen.findByText(roundsText("fetchOffline")),
       ).toBeInTheDocument();
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
       expect(
-        screen.queryByText("まだラウンドがありません。"),
+        screen.queryByText(roundsText("listEmpty")),
       ).not.toBeInTheDocument();
     });
 
     it("取得がエラーの場合はエラーメッセージを表示し、空状態は表示せず、新規作成ボタンは表示する", async () => {
       // Given
-      fetchResolves({ status: "error", message: "読み込めませんでした。" });
+      fetchResolves({ status: "error", reason: "failed" });
 
       // When
       renderList();
 
       // Then
       expect(await screen.findByRole("alert")).toHaveTextContent(
-        "読み込めませんでした。",
+        roundsText("fetchFailure.failed"),
       );
       expect(screen.getByTestId("new-round-fab")).toBeInTheDocument();
       expect(
-        screen.queryByText("まだラウンドがありません。"),
+        screen.queryByText(roundsText("listEmpty")),
       ).not.toBeInTheDocument();
     });
 
@@ -216,7 +225,7 @@ describe("RoundsList", () => {
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({ status: "ok", data: loaded(rounds) });
       renderList();
-      await screen.findByText("ネットワークに接続されていません");
+      await screen.findByText(roundsText("fetchOffline"));
 
       // When
       await act(async () => fake.returnOnline());
@@ -233,7 +242,9 @@ describe("RoundsList", () => {
         .mockResolvedValueOnce({ status: "ok", data: loaded(rounds) });
       const user = userEvent.setup();
       renderList();
-      const retry = await screen.findByRole("button", { name: "再試行" });
+      const retry = await screen.findByRole("button", {
+        name: roundsText("fetchRetry"),
+      });
 
       // When
       await user.click(retry);
@@ -242,7 +253,7 @@ describe("RoundsList", () => {
       expect(await screen.findByText("午前練習")).toBeInTheDocument();
       expect(load).toHaveBeenCalledTimes(2);
       expect(
-        screen.queryByText("ネットワークに接続されていません"),
+        screen.queryByText(roundsText("fetchOffline")),
       ).not.toBeInTheDocument();
     });
   });
@@ -276,7 +287,7 @@ describe("RoundsList", () => {
       await openDeleteDialog(user, "午前練習");
       expect(
         screen.getByText(
-          "「午前練習」を削除しますか？記録したスコアもすべて失われます。",
+          roundsText("roundDeleteConfirmNamed", { name: "午前練習" }),
         ),
       ).toBeInTheDocument();
 
@@ -322,10 +333,12 @@ describe("RoundsList", () => {
 
       // Then
       expect(
-        screen.getByRole("button", { name: "「午前練習」のメニュー" }),
+        screen.getByRole("button", {
+          name: roundsText("roundMenuLabelNamed", { name: "午前練習" }),
+        }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "ラウンドのメニュー" }),
+        screen.getByRole("button", { name: roundsText("roundMenuLabel") }),
       ).toBeInTheDocument();
     });
 
@@ -342,9 +355,7 @@ describe("RoundsList", () => {
 
       // Then
       expect(
-        screen.getByText(
-          "このラウンドを削除しますか？記録したスコアもすべて失われます。",
-        ),
+        screen.getByText(roundsText("roundDeleteConfirm")),
       ).toBeInTheDocument();
       expect(screen.queryByText(/「」/)).toBeNull();
     });
@@ -386,13 +397,17 @@ describe("RoundsList", () => {
       // Then
       const area = await screen.findByTestId("in-progress-rounds");
       expect(
-        within(area).getByRole("heading", { name: "入力中" }),
+        within(area).getByRole("heading", {
+          name: roundsText("listInProgress"),
+        }),
       ).toBeInTheDocument();
       expect(within(area).getByText("入力中の練習")).toBeInTheDocument();
       expect(within(area).queryByText("午前練習")).not.toBeInTheDocument();
       const others = screen.getByTestId("other-rounds");
       expect(
-        within(others).getByRole("heading", { name: "過去履歴" }),
+        within(others).getByRole("heading", {
+          name: roundsText("listHistory"),
+        }),
       ).toBeInTheDocument();
       expect(within(others).getByText("午前練習")).toBeInTheDocument();
       expect(
@@ -414,8 +429,12 @@ describe("RoundsList", () => {
       // Then
       expect(screen.queryByTestId("in-progress-rounds")).toBeNull();
       expect(screen.queryByTestId("other-rounds")).toBeNull();
-      expect(screen.queryByRole("heading", { name: "入力中" })).toBeNull();
-      expect(screen.queryByRole("heading", { name: "過去履歴" })).toBeNull();
+      expect(
+        screen.queryByRole("heading", { name: roundsText("listInProgress") }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("heading", { name: roundsText("listHistory") }),
+      ).toBeNull();
     });
 
     it("入力中のラウンドだけがあるときは、「過去履歴」の節も「まだラウンドがありません。」も表示しない", async () => {
@@ -431,7 +450,7 @@ describe("RoundsList", () => {
 
       // Then
       expect(screen.queryByTestId("other-rounds")).toBeNull();
-      expect(screen.queryByText("まだラウンドがありません。")).toBeNull();
+      expect(screen.queryByText(roundsText("listEmpty"))).toBeNull();
     });
 
     it("オフラインでは、入力中のラウンドを表示し、「過去履歴」の下に「ネットワークに接続されていません」を表示する", async () => {
@@ -447,18 +466,20 @@ describe("RoundsList", () => {
       expect(within(area).getByText("入力中の練習")).toBeInTheDocument();
       const others = screen.getByTestId("other-rounds");
       expect(
-        within(others).getByRole("heading", { name: "過去履歴" }),
+        within(others).getByRole("heading", {
+          name: roundsText("listHistory"),
+        }),
       ).toBeInTheDocument();
       expect(
-        within(others).getByText("ネットワークに接続されていません"),
+        within(others).getByText(roundsText("fetchOffline")),
       ).toBeInTheDocument();
-      expect(screen.queryByText("まだラウンドがありません。")).toBeNull();
+      expect(screen.queryByText(roundsText("listEmpty"))).toBeNull();
     });
 
     it("取得に失敗したときは、入力中のラウンドを表示し、「過去履歴」の下にエラーと再試行を表示する", async () => {
       // Given
       offlineWithLocal();
-      fetchResolves({ status: "error", message: "読み込めませんでした。" });
+      fetchResolves({ status: "error", reason: "failed" });
 
       // When
       renderList();
@@ -467,10 +488,10 @@ describe("RoundsList", () => {
       // Then
       const others = screen.getByTestId("other-rounds");
       expect(within(others).getByRole("alert")).toHaveTextContent(
-        "読み込めませんでした。",
+        roundsText("fetchFailure.failed"),
       );
       expect(
-        within(others).getByRole("button", { name: "再試行" }),
+        within(others).getByRole("button", { name: roundsText("fetchRetry") }),
       ).toBeInTheDocument();
     });
 
@@ -505,12 +526,12 @@ describe("RoundsList", () => {
       // When
       renderList();
       await elapseWait();
-      await screen.findByText("ネットワークに接続されていません");
+      await screen.findByText(roundsText("fetchOffline"));
 
       // Then
       expect(screen.queryByTestId("in-progress-rounds")).toBeNull();
       expect(screen.queryByTestId("other-rounds")).toBeNull();
-      expect(screen.queryByText("まだラウンドがありません。")).toBeNull();
+      expect(screen.queryByText(roundsText("listEmpty"))).toBeNull();
     });
 
     it("入力中のラウンドのカードも削除でき、最後の1件を消すと領域が見出しごと消える", async () => {
@@ -530,8 +551,12 @@ describe("RoundsList", () => {
       await waitFor(() => {
         expect(screen.queryByTestId("in-progress-rounds")).toBeNull();
       });
-      expect(screen.queryByRole("heading", { name: "入力中" })).toBeNull();
-      expect(screen.queryByRole("heading", { name: "過去履歴" })).toBeNull();
+      expect(
+        screen.queryByRole("heading", { name: roundsText("listInProgress") }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("heading", { name: roundsText("listHistory") }),
+      ).toBeNull();
     });
 
     it("削除したラウンドは、再試行で取得が変わっても表示しない", async () => {
@@ -550,7 +575,9 @@ describe("RoundsList", () => {
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
       // When
-      await user.click(await screen.findByRole("button", { name: "再試行" }));
+      await user.click(
+        await screen.findByRole("button", { name: roundsText("fetchRetry") }),
+      );
 
       // Then
       expect(await screen.findByText("午前練習")).toBeInTheDocument();

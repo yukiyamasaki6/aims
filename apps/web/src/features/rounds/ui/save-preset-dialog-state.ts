@@ -4,13 +4,17 @@ import {
   type PresetToSave,
   presetToSave,
 } from "../domain/preset-save";
+import type { PresetSaveFailure } from "../domain/write-result";
+
+// ダイアログに出す誤りの種類。nameTooLong: 名前が上限を超える。それ以外は、保存の失敗の種類。
+export type PresetDialogError = PresetSaveFailure | "nameTooLong";
 
 // プリセット保存ダイアログの状態。
 export type PresetDialogState = {
   open: boolean;
   name: string;
   submitting: boolean;
-  error: string | null;
+  error: PresetDialogError | null;
 };
 
 export const CLOSED_PRESET_DIALOG: PresetDialogState = {

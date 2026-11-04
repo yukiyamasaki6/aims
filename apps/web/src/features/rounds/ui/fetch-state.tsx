@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { FetchView } from "../domain/fetch-status";
@@ -19,6 +20,7 @@ export function FetchState({
   // 取得中の表示。読み込み後の画面と形を揃えるため、画面ごとに渡す。
   loading?: ReactNode;
 }) {
+  const t = useTranslations("rounds");
   switch (view.status) {
     case "loading":
       return (
@@ -27,7 +29,7 @@ export function FetchState({
           aria-busy="true"
           className={loading ? undefined : "space-y-3"}
         >
-          <span className="sr-only">読み込み中</span>
+          <span className="sr-only">{t("fetchLoading")}</span>
           {loading ?? (
             <>
               <Skeleton className="h-6 w-1/2 rounded" />
@@ -39,15 +41,15 @@ export function FetchState({
     case "not-found":
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-sm">
-          <p>{notFound?.message ?? "見つかりませんでした。"}</p>
+          <p>{notFound?.message ?? t("fetchNotFound")}</p>
         </div>
       );
     case "offline":
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-sm">
-          <p>ネットワークに接続されていません</p>
+          <p>{t("fetchOffline")}</p>
           <Button variant="outline" onClick={onRetry}>
-            再試行
+            {t("fetchRetry")}
           </Button>
         </div>
       );
@@ -57,9 +59,9 @@ export function FetchState({
           role="alert"
           className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-sm"
         >
-          <p>{view.message}</p>
+          <p>{t(`fetchFailure.${view.reason}`)}</p>
           <Button variant="outline" onClick={onRetry}>
-            再試行
+            {t("fetchRetry")}
           </Button>
         </div>
       );

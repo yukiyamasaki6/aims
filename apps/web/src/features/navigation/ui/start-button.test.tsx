@@ -2,9 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createStart } from "../application/start";
 import { createAuthSignInCheck } from "../infrastructure/auth-sign-in-check";
 import { StartButton } from "./start-button";
+
+const navigationText = translatorFor("navigation");
 
 const sessionReader = { readSession: vi.fn() };
 
@@ -24,10 +28,14 @@ describe("StartButton", () => {
     sessionReader.readSession.mockReturnValue(new Promise(() => {}));
 
     // When
-    render(<StartButton start={createStartWith(sessionReader)} />);
+    render(<StartButton start={createStartWith(sessionReader)} />, {
+      wrapper: IntlTestProvider,
+    });
 
     // Then
-    const link = screen.getByRole("link", { name: "開始" });
+    const link = screen.getByRole("link", {
+      name: navigationText("startButton"),
+    });
     expect(link).toHaveAttribute("href", "/signup");
     expect(link).not.toHaveAttribute("data-hydrated");
   });
@@ -40,10 +48,14 @@ describe("StartButton", () => {
     });
 
     // When
-    render(<StartButton start={createStartWith(sessionReader)} />);
+    render(<StartButton start={createStartWith(sessionReader)} />, {
+      wrapper: IntlTestProvider,
+    });
 
     // Then
-    const link = screen.getByRole("link", { name: "開始" });
+    const link = screen.getByRole("link", {
+      name: navigationText("startButton"),
+    });
     await vi.waitFor(() => expect(link).toHaveAttribute("href", "/rounds"));
     expect(link).toHaveAttribute("data-hydrated", "true");
   });
@@ -53,10 +65,14 @@ describe("StartButton", () => {
     sessionReader.readSession.mockResolvedValue({ status: "unknown" });
 
     // When
-    render(<StartButton start={createStartWith(sessionReader)} />);
+    render(<StartButton start={createStartWith(sessionReader)} />, {
+      wrapper: IntlTestProvider,
+    });
 
     // Then
-    const link = screen.getByRole("link", { name: "開始" });
+    const link = screen.getByRole("link", {
+      name: navigationText("startButton"),
+    });
     await vi.waitFor(() => expect(link).toHaveAttribute("href", "/rounds"));
   });
 
@@ -67,10 +83,14 @@ describe("StartButton", () => {
     });
 
     // When
-    render(<StartButton start={createStartWith(sessionReader)} />);
+    render(<StartButton start={createStartWith(sessionReader)} />, {
+      wrapper: IntlTestProvider,
+    });
 
     // Then
-    const link = screen.getByRole("link", { name: "開始" });
+    const link = screen.getByRole("link", {
+      name: navigationText("startButton"),
+    });
     await vi.waitFor(() =>
       expect(link).toHaveAttribute("data-hydrated", "true"),
     );
@@ -91,10 +111,14 @@ describe("StartButton", () => {
     );
 
     // When
-    render(<StartButton start={createStartWith(throwingReader)} />);
+    render(<StartButton start={createStartWith(throwingReader)} />, {
+      wrapper: IntlTestProvider,
+    });
 
     // Then
-    const link = screen.getByRole("link", { name: "開始" });
+    const link = screen.getByRole("link", {
+      name: navigationText("startButton"),
+    });
     await vi.waitFor(() =>
       expect(link).toHaveAttribute("data-hydrated", "true"),
     );
@@ -112,22 +136,27 @@ describe("StartButton", () => {
     it("描画して判定が済むと、読み取りは1回である", async () => {
       // Given
       // When
-      render(<StartButton start={createStartWith(sessionReader)} />);
+      render(<StartButton start={createStartWith(sessionReader)} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
       await vi.waitFor(() =>
-        expect(screen.getByRole("link", { name: "開始" })).toHaveAttribute(
-          "data-hydrated",
-          "true",
-        ),
+        expect(
+          screen.getByRole("link", { name: navigationText("startButton") }),
+        ).toHaveAttribute("data-hydrated", "true"),
       );
       expect(sessionReader.readSession).toHaveBeenCalledTimes(1);
     });
 
     it("判定済みの開始リンクを押しても、読み直さない", async () => {
       // Given
-      render(<StartButton start={createStartWith(sessionReader)} />);
-      const link = screen.getByRole("link", { name: "開始" });
+      render(<StartButton start={createStartWith(sessionReader)} />, {
+        wrapper: IntlTestProvider,
+      });
+      const link = screen.getByRole("link", {
+        name: navigationText("startButton"),
+      });
       await vi.waitFor(() =>
         expect(link).toHaveAttribute("data-hydrated", "true"),
       );
@@ -144,12 +173,13 @@ describe("StartButton", () => {
     it("同じ手続きで再描画しても、読み直さない", async () => {
       // Given
       const start = createStartWith(sessionReader);
-      const { rerender } = render(<StartButton start={start} />);
+      const { rerender } = render(<StartButton start={start} />, {
+        wrapper: IntlTestProvider,
+      });
       await vi.waitFor(() =>
-        expect(screen.getByRole("link", { name: "開始" })).toHaveAttribute(
-          "data-hydrated",
-          "true",
-        ),
+        expect(
+          screen.getByRole("link", { name: navigationText("startButton") }),
+        ).toHaveAttribute("data-hydrated", "true"),
       );
 
       // When

@@ -6,7 +6,11 @@ import type { Distance } from "@/features/rounds/domain/scorecard-types";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
 import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { SavePresetDialog } from "./save-preset-dialog";
+
+const roundsText = translatorFor("rounds");
 
 // 保存の手続き(サインインの確認、書き込み、再取得)は、ラウンドの状態と変更の方法の偽のsavePresetで受ける。手続きの規則は手続きのテスト、実物の結線はスコアカードのテストが確かめる。
 const fake = createFakeRoundDetailStore();
@@ -67,6 +71,7 @@ function setup(
         {...overrides}
       />
     </RoundDetailStoreProvider>,
+    { wrapper: IntlTestProvider },
   );
   return { user };
 }
@@ -105,11 +110,16 @@ describe("SavePresetDialog", () => {
 
       // Then
       const dialog = screen.getByRole("dialog");
-      expect(dialog).toHaveTextContent("アウトドア / リカーブ");
+      expect(dialog).toHaveTextContent(
+        roundsText("formatBowType", {
+          format: "アウトドア",
+          bowType: "リカーブ",
+        }),
+      );
       const text = dialog.textContent ?? "";
       expect(text.indexOf("70m")).toBeGreaterThanOrEqual(0);
       expect(text.indexOf("70m")).toBeLessThan(text.indexOf("50m"));
-      expect(dialog).toHaveTextContent("的データを取得できません");
+      expect(dialog).toHaveTextContent(roundsText("targetFaceMissing"));
     });
   });
 
@@ -300,7 +310,7 @@ describe("SavePresetDialog", () => {
       // Given
       savePreset.mockResolvedValue({
         status: "failed",
-        error: "サインインが必要です。",
+        error: "unauthenticated",
       });
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
@@ -310,7 +320,9 @@ describe("SavePresetDialog", () => {
 
       // Then
       expect(
-        await screen.findByText("サインインが必要です。"),
+        await screen.findByText(
+          roundsText("presetSaveFailure.unauthenticated"),
+        ),
       ).toBeInTheDocument();
       expect(screen.getByTestId("save-as-preset-name")).toHaveValue("午前練習");
     });
@@ -327,7 +339,7 @@ describe("SavePresetDialog", () => {
       });
       savePreset.mockResolvedValue({
         status: "failed",
-        error: "サインインが必要です。",
+        error: "unauthenticated",
       });
       await user.click(screen.getByTestId("save-as-preset-trigger"));
 
@@ -336,7 +348,9 @@ describe("SavePresetDialog", () => {
 
       // Then
       expect(
-        await screen.findByText("サインインが必要です。"),
+        await screen.findByText(
+          roundsText("presetSaveFailure.unauthenticated"),
+        ),
       ).toBeInTheDocument();
       expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
       expect(savePreset).toHaveBeenCalledTimes(2);
@@ -346,7 +360,7 @@ describe("SavePresetDialog", () => {
       // Given
       savePreset.mockResolvedValue({
         status: "failed",
-        error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+        error: "unreachable",
       });
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
@@ -356,12 +370,10 @@ describe("SavePresetDialog", () => {
 
       // Then
       expect(
-        await screen.findByText(
-          "通信エラーが発生しました。しばらくしてから再度お試しください。",
-        ),
+        await screen.findByText(roundsText("presetSaveFailure.unreachable")),
       ).toBeInTheDocument();
       expect(
-        screen.queryByText("サインインが必要です。"),
+        screen.queryByText(roundsText("presetSaveFailure.unauthenticated")),
       ).not.toBeInTheDocument();
       expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
     });
@@ -370,7 +382,7 @@ describe("SavePresetDialog", () => {
       // Given
       savePreset.mockResolvedValue({
         status: "failed",
-        error: "保存できませんでした。",
+        error: "saveFailed",
       });
       const { user } = setup();
       await user.click(screen.getByTestId("save-as-preset-trigger"));
@@ -380,7 +392,7 @@ describe("SavePresetDialog", () => {
 
       // Then
       expect(
-        await screen.findByText("保存できませんでした。"),
+        await screen.findByText(roundsText("presetSaveFailure.saveFailed")),
       ).toBeInTheDocument();
       expect(
         screen.queryByText("保存に失敗しました。"),

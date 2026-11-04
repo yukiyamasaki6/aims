@@ -1,7 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { CompleteRoundBar } from "./complete-round-bar";
+
+const roundsText = translatorFor("rounds");
 
 describe("CompleteRoundBar", () => {
   describe("表示", () => {
@@ -14,11 +18,12 @@ describe("CompleteRoundBar", () => {
           confirmation={null}
           onComplete={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
       expect(screen.getByTestId("complete-round-button")).toHaveTextContent(
-        "入力を完了する",
+        roundsText("completeRound"),
       );
     });
 
@@ -31,6 +36,7 @@ describe("CompleteRoundBar", () => {
           confirmation={null}
           onComplete={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // Then
@@ -48,6 +54,7 @@ describe("CompleteRoundBar", () => {
           confirmation={null}
           onComplete={onComplete}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -64,9 +71,10 @@ describe("CompleteRoundBar", () => {
       render(
         <CompleteRoundBar
           status="in_progress"
-          confirmation="未入力のマスがあります。入力を完了しますか？"
+          confirmation="unfilledCells"
           onComplete={onComplete}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -74,7 +82,7 @@ describe("CompleteRoundBar", () => {
 
       // Then
       expect(
-        screen.getByText("未入力のマスがあります。入力を完了しますか？"),
+        screen.getByText(roundsText("completionConfirmation.unfilledCells")),
       ).toBeInTheDocument();
       expect(onComplete).not.toHaveBeenCalled();
     });
@@ -85,9 +93,10 @@ describe("CompleteRoundBar", () => {
       render(
         <CompleteRoundBar
           status="in_progress"
-          confirmation="未入力のマスがあります。入力を完了しますか？"
+          confirmation="unfilledCells"
           onComplete={onComplete}
         />,
+        { wrapper: IntlTestProvider },
       );
       await userEvent.click(screen.getByTestId("complete-round-button"));
 
@@ -103,9 +112,10 @@ describe("CompleteRoundBar", () => {
       render(
         <CompleteRoundBar
           status="in_progress"
-          confirmation="記録がありません。入力を完了しますか？"
+          confirmation="noRecords"
           onComplete={vi.fn()}
         />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
@@ -113,7 +123,7 @@ describe("CompleteRoundBar", () => {
 
       // Then
       expect(
-        screen.getByText("記録がありません。入力を完了しますか？"),
+        screen.getByText(roundsText("completionConfirmation.noRecords")),
       ).toBeInTheDocument();
     });
 
@@ -123,9 +133,10 @@ describe("CompleteRoundBar", () => {
       render(
         <CompleteRoundBar
           status="in_progress"
-          confirmation="未入力のマスがあります。入力を完了しますか？"
+          confirmation="unfilledCells"
           onComplete={onComplete}
         />,
+        { wrapper: IntlTestProvider },
       );
       await userEvent.click(screen.getByTestId("complete-round-button"));
 

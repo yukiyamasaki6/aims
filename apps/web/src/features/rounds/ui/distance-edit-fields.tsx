@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -33,6 +34,7 @@ export function DistanceEditFields({
   onOpenChange: (open: boolean) => void;
   enqueue: (operation: SyncOperation) => void;
 }) {
+  const t = useTranslations("rounds");
   const {
     draft,
     setDraft,
@@ -70,7 +72,7 @@ export function DistanceEditFields({
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        description="この距離にはすでにスコアが記録されています。削除するとスコアも失われます。削除しますか？"
+        description={t("distanceDeleteConfirm")}
         onConfirm={performDelete}
         nested
       />
@@ -87,6 +89,7 @@ function DistanceEditActions({
   onSave: () => void;
   onDelete: () => void;
 }) {
+  const t = useTranslations("rounds");
   return (
     <>
       <Button
@@ -95,7 +98,7 @@ function DistanceEditActions({
         data-testid={`distance-config-save-${distanceNumber}`}
         onClick={onSave}
       >
-        保存
+        {t("save")}
       </Button>
 
       <div className="flex flex-col gap-3 border-t pt-3">
@@ -106,7 +109,7 @@ function DistanceEditActions({
           data-testid={`distance-config-delete-${distanceNumber}`}
           onClick={onDelete}
         >
-          距離を削除
+          {t("distanceDelete")}
         </Button>
       </div>
     </>

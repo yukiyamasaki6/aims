@@ -1,7 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { AuthHeader } from "./auth-header";
+
+const authText = translatorFor("auth");
 
 describe("AuthHeader", () => {
   describe("表示", () => {
@@ -10,8 +14,8 @@ describe("AuthHeader", () => {
         // Given
 
         // When
-        const title = "サインイン";
-        render(<AuthHeader title={title} />);
+        const title = authText("signInTitle");
+        render(<AuthHeader title={title} />, { wrapper: IntlTestProvider });
 
         // Then
         expect(
@@ -26,7 +30,9 @@ describe("AuthHeader", () => {
 
         // When
         const description = "説明文";
-        render(<AuthHeader title="サインイン" description={description} />);
+        render(<AuthHeader title="サインイン" description={description} />, {
+          wrapper: IntlTestProvider,
+        });
 
         // Then
         expect(screen.getByText(description)).toBeInTheDocument();
@@ -36,8 +42,10 @@ describe("AuthHeader", () => {
         // Given
 
         // When
-        const title = "サインイン";
-        const { container } = render(<AuthHeader title={title} />);
+        const title = authText("signInTitle");
+        const { container } = render(<AuthHeader title={title} />, {
+          wrapper: IntlTestProvider,
+        });
 
         // Then
         expect(container.querySelector("p")).toBeNull();
@@ -50,11 +58,13 @@ describe("AuthHeader", () => {
 
         // When
         const handleBack = vi.fn();
-        render(<AuthHeader title="サインイン" onBack={handleBack} />);
+        render(<AuthHeader title="サインイン" onBack={handleBack} />, {
+          wrapper: IntlTestProvider,
+        });
 
         // Then
         expect(
-          screen.getByRole("button", { name: /戻る/ }),
+          screen.getByRole("button", { name: authText("back") }),
         ).toBeInTheDocument();
       });
 
@@ -62,12 +72,12 @@ describe("AuthHeader", () => {
         // Given
 
         // When
-        const title = "サインイン";
-        render(<AuthHeader title={title} />);
+        const title = authText("signInTitle");
+        render(<AuthHeader title={title} />, { wrapper: IntlTestProvider });
 
         // Then
         expect(
-          screen.queryByRole("button", { name: /戻る/ }),
+          screen.queryByRole("button", { name: authText("back") }),
         ).not.toBeInTheDocument();
       });
     });
@@ -80,13 +90,13 @@ describe("AuthHeader", () => {
         const handleBack = vi.fn();
         render(
           <AuthHeader title="サインイン" onBack={handleBack} backDisabled />,
+          { wrapper: IntlTestProvider },
         );
 
         // Then
-        expect(screen.getByRole("button", { name: /戻る/ })).toHaveAttribute(
-          "aria-disabled",
-          "true",
-        );
+        expect(
+          screen.getByRole("button", { name: authText("back") }),
+        ).toHaveAttribute("aria-disabled", "true");
       });
 
       it.each([
@@ -105,11 +115,12 @@ describe("AuthHeader", () => {
               onBack={handleBack}
               backDisabled={backDisabled}
             />,
+            { wrapper: IntlTestProvider },
           );
 
           // Then
           expect(
-            screen.getByRole("button", { name: /戻る/ }),
+            screen.getByRole("button", { name: authText("back") }),
           ).not.toHaveAttribute("aria-disabled", "true");
         },
       );
@@ -121,10 +132,12 @@ describe("AuthHeader", () => {
       // Given
       const handleBack = vi.fn();
       const user = userEvent.setup();
-      render(<AuthHeader title="サインイン" onBack={handleBack} />);
+      render(<AuthHeader title="サインイン" onBack={handleBack} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // When
-      await user.click(screen.getByRole("button", { name: /戻る/ }));
+      await user.click(screen.getByRole("button", { name: authText("back") }));
 
       // Then
       expect(handleBack).toHaveBeenCalledTimes(1);
@@ -137,10 +150,11 @@ describe("AuthHeader", () => {
       const user = userEvent.setup();
       render(
         <AuthHeader title="サインイン" onBack={handleBack} backDisabled />,
+        { wrapper: IntlTestProvider },
       );
 
       // When
-      await user.click(screen.getByRole("button", { name: /戻る/ }));
+      await user.click(screen.getByRole("button", { name: authText("back") }));
 
       // Then
       expect(handleBack).toHaveBeenCalledTimes(1);

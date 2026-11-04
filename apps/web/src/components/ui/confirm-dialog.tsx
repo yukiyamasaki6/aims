@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -13,7 +14,7 @@ export function ConfirmDialog({
   open,
   onOpenChange,
   description,
-  confirmLabel = "削除",
+  confirmLabel,
   confirmVariant = "destructive",
   onConfirm,
   nested = false,
@@ -29,6 +30,7 @@ export function ConfirmDialog({
   // 詳細はDialogContentのnestedの説明を参照。
   nested?: boolean;
 }) {
+  const t = useTranslations("shared");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent nested={nested}>
@@ -41,7 +43,7 @@ export function ConfirmDialog({
               data-testid="confirm-dialog-cancel"
               onClick={() => onOpenChange(false)}
             >
-              キャンセル
+              {t("confirmCancel")}
             </Button>
             <Button
               type="button"
@@ -52,7 +54,7 @@ export function ConfirmDialog({
                 onConfirm();
               }}
             >
-              {confirmLabel}
+              {confirmLabel ?? t("confirmDelete")}
             </Button>
           </div>
         </div>
@@ -72,7 +74,7 @@ export function BlockingConfirmDialog({
   open,
   onOpenChange,
   description,
-  confirmLabel = "削除",
+  confirmLabel,
   onConfirm,
   busy,
   error,
@@ -86,6 +88,7 @@ export function BlockingConfirmDialog({
   busy: boolean;
   error: string | null;
 }) {
+  const t = useTranslations("shared");
   return (
     <Dialog
       open={open}
@@ -110,7 +113,7 @@ export function BlockingConfirmDialog({
                 onOpenChange(false);
               }}
             >
-              キャンセル
+              {t("confirmCancel")}
             </BusyButton>
             <BusyButton
               type="button"
@@ -119,7 +122,7 @@ export function BlockingConfirmDialog({
               data-testid="confirm-dialog-confirm"
               onClick={onConfirm}
             >
-              {confirmLabel}
+              {confirmLabel ?? t("confirmDelete")}
             </BusyButton>
           </div>
         </div>

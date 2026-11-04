@@ -2,11 +2,15 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, StrictMode, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import type { CallResult } from "../application/call-result";
 import { createSignIn } from "../application/sign-in";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import { SignInForm } from "./signin-form";
+
+const authText = translatorFor("auth");
 
 const accepted: CallResult = { kind: "accepted" };
 
@@ -57,7 +61,9 @@ function setup({
     protectedPath: "/rounds",
   });
   const form = <SignInForm signIn={signIn} siteKey="site-key" />;
-  const rendered = render(strict ? <StrictMode>{form}</StrictMode> : form);
+  const rendered = render(strict ? <StrictMode>{form}</StrictMode> : form, {
+    wrapper: IntlTestProvider,
+  });
   return { signIn, authenticator, navigation, ...rendered };
 }
 
@@ -66,11 +72,11 @@ function emailInput() {
 }
 
 function passwordInput() {
-  return screen.getByPlaceholderText("パスワード");
+  return screen.getByPlaceholderText(authText("passwordPlaceholder"));
 }
 
 function submitButton() {
-  return screen.getByRole("button", { name: "サインイン" });
+  return screen.getByRole("button", { name: authText("signInSubmit") });
 }
 
 async function fillCredentials(user: ReturnType<typeof userEvent.setup>) {
@@ -97,7 +103,7 @@ describe("サインイン画面の部品", () => {
 
     // Then
     expect(
-      screen.getByRole("heading", { name: "サインイン" }),
+      screen.getByRole("heading", { name: authText("signInTitle") }),
     ).toBeInTheDocument();
     expect(emailInput()).toHaveAttribute("aria-invalid", "false");
     expect(passwordInput()).toHaveAttribute("aria-invalid", "false");
@@ -150,7 +156,9 @@ describe("サインイン画面の部品", () => {
     await user.type(passwordInput(), "password1");
 
     // When
-    await user.click(screen.getByRole("button", { name: "パスワードを表示" }));
+    await user.click(
+      screen.getByRole("button", { name: authText("passwordShow") }),
+    );
 
     // Then
     expect(passwordInput()).toHaveAttribute("type", "text");
@@ -180,14 +188,14 @@ describe("サインイン画面の部品", () => {
       "invalid",
       "password1",
       "captcha-token",
-      "メールアドレスの形式が正しくありません。",
+      authText("fieldError.email.invalidFormat"),
       "email",
     ],
     [
       "user@example.com",
       "",
       "captcha-token",
-      "パスワードを入力してください。",
+      authText("fieldError.password.required"),
       "password",
     ],
   ])(
@@ -222,7 +230,7 @@ describe("サインイン画面の部品", () => {
     await user.click(submitButton());
 
     // Then
-    expect(widget.error).toBe("セキュリティチェックが完了していません。");
+    expect(widget.error).toBe(authText("fieldError.captcha.incomplete"));
     expect(authenticator.signIn).not.toHaveBeenCalled();
   });
 
@@ -241,9 +249,7 @@ describe("サインイン画面の部品", () => {
 
     // Then
     expect(
-      await screen.findByText(
-        "メールアドレスまたはパスワードが間違っています。",
-      ),
+      await screen.findByText(authText("failure.invalid_credentials")),
     ).toBeInTheDocument();
     expect(widget.reset).toHaveBeenCalledOnce();
     expect(submitButton()).toHaveAttribute("aria-disabled", "false");
@@ -270,7 +276,7 @@ describe("サインイン画面の部品", () => {
     ["認証の失敗(遷移元付き)", "/rounds/new", "/rounds/new"],
   ] as const)("%sの後の再送信", (_name, returnTo, destination) => {
     const failure = { kind: "invalid_credentials" } as const;
-    const message = "メールアドレスまたはパスワードが間違っています。";
+    const message = authText("failure.invalid_credentials");
 
     it("失敗の文言を表示し、チェックを1回リセットして、ボタンを再び押せるようにする", async () => {
       // Given
@@ -302,7 +308,7 @@ describe("サインイン画面の部品", () => {
       await user.click(submitButton());
 
       // Then
-      expect(widget.error).toBe("セキュリティチェックが完了していません。");
+      expect(widget.error).toBe(authText("fieldError.captcha.incomplete"));
       expect(authenticator.signIn).toHaveBeenCalledOnce();
     });
 
@@ -335,8 +341,7 @@ describe("サインイン画面の部品", () => {
     ["通信の断(遷移元付き)", "/rounds/new", "/rounds/new"],
   ] as const)("%sの後の再送信", (_name, returnTo, destination) => {
     const failure = { kind: "unreachable" } as const;
-    const message =
-      "通信エラーが発生しました。しばらくしてから再度お試しください。";
+    const message = authText("failure.unreachable");
 
     it("失敗の文言を表示し、チェックをリセットせず、ボタンを再び押せるようにする", async () => {
       // Given
@@ -545,9 +550,7 @@ describe("サインイン画面の部品", () => {
 
     // Then
     expect(
-      await screen.findByText(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      ),
+      await screen.findByText(authText("failure.unreachable")),
     ).toBeInTheDocument();
     expect(submitButton()).toHaveAttribute("aria-disabled", "false");
     expect(widget.reset).toHaveBeenCalledOnce();
@@ -555,7 +558,7 @@ describe("サインイン画面の部品", () => {
 
   // 判断Q: 理由が表示された後に再び送信した場合は、次の結果が出るまで、表示された理由が残る。
   describe("再送信の間のエラー表示", () => {
-    const InvalidMessage = "メールアドレスまたはパスワードが間違っています。";
+    const InvalidMessage = authText("failure.invalid_credentials");
 
     it("認証の失敗の後に新しいトークンで送り直すと、応答までは失敗の理由を残したまま送信中にする", async () => {
       // Given
@@ -607,7 +610,7 @@ describe("サインイン画面の部品", () => {
       verify("captcha-token");
       await user.click(submitButton());
       expect(
-        screen.getByText("パスワードを入力してください。"),
+        screen.getByText(authText("fieldError.password.required")),
       ).toBeInTheDocument();
       await user.type(passwordInput(), "password1");
 
@@ -616,7 +619,7 @@ describe("サインイン画面の部品", () => {
 
       // Then
       expect(
-        screen.getByText("パスワードを入力してください。"),
+        screen.getByText(authText("fieldError.password.required")),
       ).toBeInTheDocument();
       expect(passwordInput()).toHaveAttribute("aria-invalid", "true");
       expect(submitButton()).toHaveAttribute("aria-disabled", "true");

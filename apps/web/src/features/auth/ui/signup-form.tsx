@@ -1,18 +1,8 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import type { PasswordSetup } from "../application/password-setup";
 import { PasswordSetupForm } from "./password-setup-form";
-
-const COPY = {
-  idPrefix: "signup",
-  emailTitle: "サインアップ",
-  emailFooter: { lead: "既にアカウントをお持ちの方は", label: "サインイン" },
-  passwordTitle: "パスワードを設定",
-  passwordDescription: "次回以降はこのパスワードでサインインします。",
-  passwordLabel: "パスワード",
-  passwordSubmit: "登録してサインイン",
-  passwordFooter: null,
-};
 
 export function SignUpForm({
   signUp,
@@ -21,5 +11,16 @@ export function SignUpForm({
   signUp: PasswordSetup;
   siteKey: string | undefined;
 }) {
-  return <PasswordSetupForm procedure={signUp} copy={COPY} siteKey={siteKey} />;
+  const t = useTranslations("auth");
+  const copy = {
+    idPrefix: "signup",
+    emailTitle: t("signUpTitle"),
+    emailFooter: { lead: t("signUpFooterLead"), label: t("signUpFooterLink") },
+    passwordTitle: t("signUpPasswordTitle"),
+    passwordDescription: t("signUpPasswordDescription"),
+    passwordLabel: t("signUpPasswordLabel"),
+    passwordSubmit: t("signUpPasswordSubmit"),
+    passwordFooter: null,
+  };
+  return <PasswordSetupForm procedure={signUp} copy={copy} siteKey={siteKey} />;
 }

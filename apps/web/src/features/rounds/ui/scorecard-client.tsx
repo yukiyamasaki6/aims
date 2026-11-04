@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import type { LoadedRound } from "../application/round-handle";
 import { completionConfirmation } from "../domain/round-progress";
@@ -99,6 +100,7 @@ export function ScorecardClient({
 
 // ラウンドの設定、合計、距離ごとのカード。
 function ScorecardBody({ model }: { model: ScorecardModel }) {
+  const t = useTranslations("rounds");
   const { sync, editing, input, targetFaces } = model;
   const { roundConfig, distances, shots } = sync.state;
   const distanceIdsWithShots = new Set(shots.map((s) => s.distance_id));
@@ -147,7 +149,7 @@ function ScorecardBody({ model }: { model: ScorecardModel }) {
           className="h-12 border-dashed"
         >
           <Plus />
-          距離を追加
+          {t("addDistance")}
         </Button>
       </div>
     </div>

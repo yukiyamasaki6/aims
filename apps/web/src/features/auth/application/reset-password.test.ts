@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
-import {
-  type AuthFailure,
-  NETWORK_ERROR_MESSAGE,
-  UNREACHABLE,
-} from "../domain/auth-failure";
+import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import {
   initialPasswordSetupFlow,
   type PasswordSetupEvent,
@@ -109,7 +105,7 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(view.observedState.fieldErrors).toEqual({
-        email: "メールアドレスの形式が正しくありません。",
+        email: "invalidFormat",
       });
       expect(events).toEqual([]);
       expect(authenticator.sendCode).not.toHaveBeenCalled();
@@ -127,7 +123,7 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(view.observedState.fieldErrors).toEqual({
-        captcha: "セキュリティチェックが完了していません。",
+        captcha: "incomplete",
       });
       expect(events).toEqual([]);
       expect(authenticator.sendCode).not.toHaveBeenCalled();
@@ -172,7 +168,7 @@ describe("パスワード再設定の手続き", () => {
       await procedure.sendCode({ email }, view);
 
       // Then
-      expect(view.observedState.error).toBe(NETWORK_ERROR_MESSAGE);
+      expect(view.observedState.error).toBe("unreachable");
       expect(view.observedState.captchaToken).toBe("first-token");
       expect(view.observedState.pending).toBeNull();
       expect(resetCheck).not.toHaveBeenCalled();
@@ -288,24 +284,20 @@ describe("パスワード再設定の手続き", () => {
       [
         "拒否を返した",
         async () => refused({ kind: "weak_password" }),
-        "8〜72文字の半角英数記号で、英字と数字を含めてください。",
+        "weak_password",
       ],
-      [
-        "通信の断の値を返した",
-        async () => refused(UNREACHABLE),
-        NETWORK_ERROR_MESSAGE,
-      ],
+      ["通信の断の値を返した", async () => refused(UNREACHABLE), "unreachable"],
       [
         "未到達を返した",
         async (): Promise<CallResult> => UNREACHABLE,
-        NETWORK_ERROR_MESSAGE,
+        "unreachable",
       ],
       [
         "投げた",
         async (): Promise<CallResult> => {
           throw new Error("Failed to fetch");
         },
-        NETWORK_ERROR_MESSAGE,
+        "unreachable",
       ],
     ])(
       "変更の要求が%sときは、理由を示し、実行中を解除し、遷移しない",
@@ -500,7 +492,7 @@ describe("パスワード再設定の手続き", () => {
       // Then
       expect(types(events)).toEqual(["passwordSet", "failed"]);
       expect(view.observedState.pending).toBeNull();
-      expect(view.observedState.error).toBe(NETWORK_ERROR_MESSAGE);
+      expect(view.observedState.error).toBe("unreachable");
     });
 
     it("遷移を呼んだ中で離れ、その遷移が投げたら、遷移の前のpasswordSetのほかに出来事を送らない", async () => {
@@ -609,9 +601,7 @@ describe("パスワード再設定の手続き", () => {
         captchaToken: "second-token",
       });
       expect(afterSent.step).toBe("code");
-      expect(afterExpired.error).toBe(
-        "認証コードが正しくないか、有効期限が切れています。",
-      );
+      expect(afterExpired.error).toBe("code_expired");
       expect(afterExpired.step).toBe("code");
       expect(afterWeak.step).toBe("password");
       expect(afterWeak.pending).toBeNull();

@@ -45,7 +45,7 @@ describe("beginSignIn", () => {
     const submitting: SignInFlow = {
       ...verified,
       submitting: true,
-      error: "前回の失敗",
+      error: "other",
     };
 
     // When
@@ -62,25 +62,25 @@ describe("beginSignIn", () => {
       "メール、パスワード、チェックがすべて不備ならメールだけ",
       { email: "", password: "" },
       null,
-      { email: "メールアドレスを入力してください。" },
+      { email: "required" },
     ],
     [
       "メールが不正でパスワードが空ならメールだけ",
       { email: "invalid", password: "" },
       "token",
-      { email: "メールアドレスの形式が正しくありません。" },
+      { email: "invalidFormat" },
     ],
     [
       "パスワードが空でチェックが未完了ならパスワードだけ",
       { email: "user@example.com", password: "" },
       null,
-      { password: "パスワードを入力してください。" },
+      { password: "required" },
     ],
     [
       "チェックだけが未完了ならチェックだけ",
       validInput,
       null,
-      { captcha: "セキュリティチェックが完了していません。" },
+      { captcha: "incomplete" },
     ],
   ] as const)("入力不備では、%s示す", (_name, input, token, fieldErrors) => {
     // Given
@@ -101,8 +101,8 @@ describe("beginSignIn", () => {
     // メールを直してパスワードを空にして再送信する、実際に起こる入力。
     const flow: SignInFlow = {
       ...verified,
-      error: "前回の失敗",
-      fieldErrors: { email: "メールアドレスの形式が正しくありません。" },
+      error: "other",
+      fieldErrors: { email: "invalidFormat" },
     };
 
     // When
@@ -111,7 +111,7 @@ describe("beginSignIn", () => {
     // Then
     expect(result.kind).toBe("invalid");
     expect(result.state.fieldErrors).toEqual({
-      password: "パスワードを入力してください。",
+      password: "required",
     });
     expect(result.state).toMatchObject({
       error: null,
@@ -135,7 +135,7 @@ describe("beginSignIn", () => {
     expect(result.kind).toBe("started");
     expect(result.state).toMatchObject({
       submitting: true,
-      error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      error: "unreachable",
       fieldErrors: {},
       captchaToken: "captcha-token",
     });
@@ -156,7 +156,7 @@ describe("beginSignIn", () => {
     expect(result.state).toMatchObject({
       submitting: true,
       error: null,
-      fieldErrors: { password: "パスワードを入力してください。" },
+      fieldErrors: { password: "required" },
     });
   });
 });
@@ -184,7 +184,7 @@ describe("signInReducer: signedIn", () => {
     [
       "前の失敗の理由",
       {
-        error: "メールアドレスまたはパスワードが間違っています。",
+        error: "invalid_credentials",
         fieldErrors: {},
       },
     ],
@@ -192,7 +192,7 @@ describe("signInReducer: signedIn", () => {
       "直した欄の以前のエラー",
       {
         error: null,
-        fieldErrors: { password: "パスワードを入力してください。" },
+        fieldErrors: { password: "required" },
       },
     ],
   ] as const)("%sを消し、送信中のままにする", (_name, errors) => {
@@ -228,7 +228,7 @@ describe("signInReducer: failed", () => {
 
     // Then
     expect(result).toMatchObject({
-      error: "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      error: "unreachable",
       submitting: false,
       captchaToken: "captcha-token",
       fieldErrors: {},
@@ -280,12 +280,12 @@ describe("signInReducer: refused", () => {
     [
       "認証の拒否",
       { kind: "invalid_credentials" } as const,
-      "メールアドレスまたはパスワードが間違っています。",
+      "invalid_credentials",
     ],
     [
       "成功の後の遷移の失敗(通信エラー)",
       { kind: "unreachable" } as const,
-      "通信エラーが発生しました。しばらくしてから再度お試しください。",
+      "unreachable",
     ],
   ])(
     "%sで送信中を解除し、使ったトークンを消費して、失敗の文言を示す",
@@ -325,7 +325,7 @@ describe("signInReducer: refused", () => {
     expect(withoutToken).toMatchObject({
       kind: "invalid",
       state: {
-        fieldErrors: { captcha: "セキュリティチェックが完了していません。" },
+        fieldErrors: { captcha: "incomplete" },
       },
     });
     expect(result).toMatchObject({

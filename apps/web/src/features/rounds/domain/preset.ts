@@ -38,6 +38,11 @@ export function presetDistancesInOrder(preset: Preset): PresetDistance[] {
   );
 }
 
+// 選択肢の並びでの位置。無ければ-1。
+function optionIndex(options: readonly string[], value: string): number {
+  return options.indexOf(value);
+}
+
 // プリセット名は自由入力で内容を反映するとは限らないため、名前ではなく
 // 実際のラウンド構成（種別→弓種→距離）で並べる。名前ベースの自然順ソートは
 // 日本語の読みの曖昧さ（漢字）等の限界があり不採用とした。
@@ -46,13 +51,13 @@ export function presetDistancesInOrder(preset: Preset): PresetDistance[] {
 // 界隈の慣習に合わせる。最後まで並びが同じ場合は作成日時が新しい方を上にする。
 export function comparePresets(a: PresetRecord, b: PresetRecord): number {
   const formatDiff =
-    FORMAT_OPTIONS.findIndex((o) => o.value === a.format) -
-    FORMAT_OPTIONS.findIndex((o) => o.value === b.format);
+    optionIndex(FORMAT_OPTIONS, a.format) -
+    optionIndex(FORMAT_OPTIONS, b.format);
   if (formatDiff !== 0) return formatDiff;
 
   const bowTypeDiff =
-    BOW_TYPE_OPTIONS.findIndex((o) => o.value === a.bow_type) -
-    BOW_TYPE_OPTIONS.findIndex((o) => o.value === b.bow_type);
+    optionIndex(BOW_TYPE_OPTIONS, a.bow_type) -
+    optionIndex(BOW_TYPE_OPTIONS, b.bow_type);
   if (bowTypeDiff !== 0) return bowTypeDiff;
 
   const aDistances = presetDistancesInOrder(a).map(

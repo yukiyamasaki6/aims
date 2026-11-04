@@ -1,10 +1,13 @@
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { LocalRoundsList } from "../domain/round-list";
 import { createFakeRoundsListStore } from "./round-stores-test-helpers";
 import { RoundsListStoreProvider } from "./rounds-context";
 import { useLocalRoundsList } from "./use-local-rounds-list";
+
+const roundsText = translatorFor("rounds");
 
 // 端末の記録からの導出は別のテストで確かめるため、ラウンドの状態は端末の一覧と待ちの合図だけを返す偽の約束で模す。
 function setup() {
@@ -20,7 +23,14 @@ function setup() {
 }
 
 const loaded: LocalRoundsList = {
-  inProgress: [{ id: "r1", name: "入力中", roundDate: "2026-09-15", total: 3 }],
+  inProgress: [
+    {
+      id: "r1",
+      name: roundsText("listInProgress"),
+      roundDate: "2026-09-15",
+      total: 3,
+    },
+  ],
   deleted: new Set(),
 };
 

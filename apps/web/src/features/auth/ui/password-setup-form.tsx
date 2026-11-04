@@ -2,6 +2,7 @@
 
 import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -20,6 +21,7 @@ import { AuthHeader } from "./auth-header";
 import { OtpCodeStep } from "./otp-code-step";
 import { OtpEmailStep } from "./otp-email-step";
 import { PasswordInput } from "./password-input";
+import { useAuthTexts } from "./use-auth-texts";
 import { useScreenView } from "./use-screen-view";
 
 // サインインへのリンクの文言。リンク先は経路の規則が持つ。
@@ -64,6 +66,7 @@ export function PasswordSetupForm({
   } = useScreenView(passwordSetupReducer, initialPasswordSetupFlow);
   const [email, setEmail] = useState("");
   const hydrated = useHydrated();
+  const texts = useAuthTexts();
   // 残りが変わるたびに1秒の予約をやり直し、0で止まり、離れるときに取り消す。
   useEffect(
     () =>
@@ -82,10 +85,10 @@ export function PasswordSetupForm({
       footer={<SignInLink copy={copy.emailFooter} />}
       email={email}
       onEmailChange={setEmail}
-      emailError={flow.fieldErrors.email}
-      captchaError={flow.fieldErrors.captcha}
+      emailError={texts.fieldError("email", flow.fieldErrors.email)}
+      captchaError={texts.fieldError("captcha", flow.fieldErrors.captcha)}
       submitting={flow.pending === "send"}
-      error={flow.error}
+      error={texts.failure(flow.error)}
       hydrated={hydrated}
       siteKey={siteKey}
       onSubmit={(e) => {
@@ -112,6 +115,7 @@ function CodeStep({
   check: RefObject<TurnstileInstance | undefined>;
   email: string;
 }) {
+  const texts = useAuthTexts();
   const [code, setCode] = useState("");
   const pending =
     flow.pending === "verify" || flow.pending === "resend"
@@ -123,10 +127,10 @@ function CodeStep({
       email={email}
       code={code}
       onCodeChange={setCode}
-      codeError={flow.fieldErrors.code}
-      resendError={flow.fieldErrors.resend}
+      codeError={texts.fieldError("code", flow.fieldErrors.code)}
+      resendError={texts.fieldError("resend", flow.fieldErrors.resend)}
       pending={pending}
-      error={flow.error}
+      error={texts.failure(flow.error)}
       onBack={() => view.dispatch({ type: "emailStepReturned" })}
       onVerify={(e) => {
         e.preventDefault();
@@ -143,6 +147,8 @@ function CodeStep({
 }
 
 function PasswordStep({ procedure, copy, flow, view }: StepProps) {
+  const t = useTranslations("auth");
+  const texts = useAuthTexts();
   const [password, setPassword] = useState("");
   const submitting = flow.pending === "setPassword";
   const errorId = `${copy.idPrefix}-password-error`;
@@ -160,10 +166,16 @@ function PasswordStep({ procedure, copy, flow, view }: StepProps) {
         noValidate
         className="flex w-full flex-col gap-3"
       >
-        <AuthField errorId={errorId} error={flow.fieldErrors.password}>
+        <AuthField
+          errorId={errorId}
+          error={texts.fieldError("password", flow.fieldErrors.password)}
+        >
           {(aria) => (
             <PasswordInput
-              placeholder={`${copy.passwordLabel}（${PASSWORD_MIN_LENGTH}文字以上・英数字を含む）`}
+              placeholder={t("passwordFieldPlaceholder", {
+                label: copy.passwordLabel,
+                min: String(PASSWORD_MIN_LENGTH),
+              })}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               {...aria}
@@ -175,7 +187,9 @@ function PasswordStep({ procedure, copy, flow, view }: StepProps) {
         </BusyButton>
       </form>
       {flow.error && (
-        <p className="text-center text-destructive text-sm">{flow.error}</p>
+        <p className="text-center text-destructive text-sm">
+          {texts.failure(flow.error)}
+        </p>
       )}
       {copy.passwordFooter && <SignInLink copy={copy.passwordFooter} />}
     </>

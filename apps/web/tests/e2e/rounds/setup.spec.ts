@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
@@ -22,14 +23,18 @@ import {
 } from "../helpers/reference-data";
 import { createRound, TRIPLE_SPOT_TARGET_FACE_ID } from "../helpers/rounds";
 
+const roundsText = translatorFor("rounds");
+
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
 const FIELD_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000010"; // フィールド的（80cm）
 const OUTDOOR_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001"; // 10点的（アウトドア・122cm）
 const INDOOR_40CM_TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000007"; // 10点的（インドア・40cm）
-const INDOOR_40CM_TARGET_FACE_LABEL = "インドア・40cm";
+const INDOOR_40CM_TARGET_FACE_LABEL = roundsText("targetFaceSize", {
+  size: "インドア・40",
+});
 
-const MISSING_TARGET = "的データを取得できません";
+const MISSING_TARGET = roundsText("targetFaceMissing");
 
 const UPDATE_ROUND_RPC = "**/rest/v1/rpc/update_round";
 const CREATE_DISTANCE_RPC = "**/rest/v1/rpc/create_distance";
@@ -72,15 +77,22 @@ test("開くと、ラウンドの設定が1行で、各距離の距離・的・�
   });
 
   await expect(page.getByTestId("round-config-summary")).toHaveText(
-    "設定テスト / 2026-08-24 / アウトドア / リカーブ",
+    roundsText("formatBowType", {
+      format: "設定テスト",
+      bowType: "2026-08-24 / アウトドア / リカーブ",
+    }),
   );
   const first = page.getByTestId("distance-summary-1");
   await expect(first).toContainText("18m");
-  await expect(first).toContainText("3本×12エンド");
+  await expect(first).toContainText(
+    roundsText("distanceEnds", { arrowsPerEnd: "3", totalEnds: "12" }),
+  );
   await expect(first.locator("svg").first()).toBeVisible();
   const second = page.getByTestId("distance-summary-2");
   await expect(second).toContainText("30m");
-  await expect(second).toContainText("3本×12エンド");
+  await expect(second).toContainText(
+    roundsText("distanceEnds", { arrowsPerEnd: "3", totalEnds: "12" }),
+  );
 });
 
 test("ラウンドの設定を変えて保存すると、すぐに反映されて閉じ、再読み込みしても保たれる", async ({
@@ -96,7 +108,10 @@ test("ラウンドの設定を変えて保存すると、すぐに反映され�
   const sent = page.waitForResponse(UPDATE_ROUND_RPC);
   await page.getByTestId("round-config-save").click();
   const summary = page.getByTestId("round-config-summary");
-  const expected = "編集後の名前 / 2026-08-25 / インドア / コンパウンド";
+  const expected = roundsText("formatBowType", {
+    format: "編集後の名前",
+    bowType: "2026-08-25 / インドア / コンパウンド",
+  });
   await expect(summary).toHaveText(expected);
   await expect(page.getByTestId("round-config-save")).toBeHidden();
 
@@ -137,7 +152,9 @@ test("距離があるときに距離を追加すると、最後の距離をコ�
   await reloadAfter(page, sent);
   const added = page.getByTestId("distance-summary-2");
   await expect(added).toContainText("50m");
-  await expect(added).toContainText("3本×10エンド");
+  await expect(added).toContainText(
+    roundsText("distanceEnds", { arrowsPerEnd: "3", totalEnds: "10" }),
+  );
 });
 
 test("距離・的・本数・エンド数を変えて保存すると、すぐに反映されて閉じ、再読み込みしても保たれる", async ({
@@ -158,13 +175,17 @@ test("距離・的・本数・エンド数を変えて保存すると、すぐ�
   await page.getByTestId("distance-config-save-1").click();
   const summary = page.getByTestId("distance-summary-1");
   await expect(summary).toContainText("30m");
-  await expect(summary).toContainText("6本×6エンド");
+  await expect(summary).toContainText(
+    roundsText("distanceEnds", { arrowsPerEnd: "6", totalEnds: "6" }),
+  );
   await expect(page.getByTestId("distance-config-distance-1")).toBeHidden();
 
   // 再読み込みして、変えた内容が残ることを確かめる。
   await reloadAfter(page, sent);
   await expect(summary).toContainText("30m");
-  await expect(summary).toContainText("6本×6エンド");
+  await expect(summary).toContainText(
+    roundsText("distanceEnds", { arrowsPerEnd: "6", totalEnds: "6" }),
+  );
   await page.getByTestId("distance-config-toggle-1").click();
   await expect(
     page.getByTestId("target-face-picker-trigger"),
@@ -338,7 +359,9 @@ test.describe("的の取得を止める", () => {
     const releaseTargetFaces = await holdTargetFacesThenSelectPreset(page);
     await page.getByTestId("round-start-button").click();
     await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-    await expect(page.getByRole("status")).toContainText("読み込み中");
+    await expect(page.getByRole("status")).toContainText(
+      roundsText("fetchLoading"),
+    );
     await expect(page.getByTestId("distance-summary-1")).toHaveCount(0);
 
     // 取得を再開して、的のサイズと図、点数のキーを確かめる。
@@ -381,7 +404,10 @@ test("ラウンド編集中に他の端末の変更が届いても、変更中�
   await page.getByTestId("round-config-save").click();
   await reloadAfter(page, sent);
   await expect(page.getByTestId("round-config-summary")).toHaveText(
-    "編集中の名前 / 2026-08-25 / アウトドア / リカーブ",
+    roundsText("formatBowType", {
+      format: "編集中の名前",
+      bowType: "2026-08-25 / アウトドア / リカーブ",
+    }),
   );
 });
 
@@ -407,5 +433,7 @@ test("距離編集中に他の端末の変更が届いても、変更中のエ�
   await reloadAfter(page, sent);
   const summary = page.getByTestId("distance-summary-1");
   await expect(summary).toContainText("30m");
-  await expect(summary).toContainText("3本×6エンド");
+  await expect(summary).toContainText(
+    roundsText("distanceEnds", { arrowsPerEnd: "3", totalEnds: "6" }),
+  );
 });

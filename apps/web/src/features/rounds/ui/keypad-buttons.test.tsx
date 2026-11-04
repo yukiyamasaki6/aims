@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Distance } from "@/features/rounds/domain/scorecard-types";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { KeypadButtons } from "./keypad-buttons";
 import type { ScoreHistory } from "./use-score-history";
 import type { ShotInput } from "./use-shot-input";
@@ -29,6 +30,7 @@ describe("KeypadButtons", () => {
         history={history}
         input={input}
       />,
+      { wrapper: IntlTestProvider },
     );
 
     // Then
@@ -48,6 +50,7 @@ describe("KeypadButtons", () => {
         history={history}
         input={input}
       />,
+      { wrapper: IntlTestProvider },
     );
 
     // Then

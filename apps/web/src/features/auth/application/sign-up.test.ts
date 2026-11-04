@@ -112,7 +112,7 @@ describe("サインアップの手続き", () => {
 
       // Then
       expect(view.observedState.fieldErrors).toEqual({
-        email: "メールアドレスの形式が正しくありません。",
+        email: "invalidFormat",
       });
       expect(events).toEqual([]);
       expect(registration.isRegistered).not.toHaveBeenCalled();
@@ -130,7 +130,7 @@ describe("サインアップの手続き", () => {
 
       // Then
       expect(view.observedState.fieldErrors).toEqual({
-        captcha: "セキュリティチェックが完了していません。",
+        captcha: "incomplete",
       });
       expect(events).toEqual([]);
       expect(registration.isRegistered).not.toHaveBeenCalled();
@@ -366,9 +366,7 @@ describe("サインアップの手続き", () => {
 
       // Then
       expect(types(events)).toEqual(["passwordSet", "failed"]);
-      expect(view.observedState.error).toBe(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      );
+      expect(view.observedState.error).toBe("unreachable");
       expect(view.observedState.pending).toBeNull();
     });
 
@@ -588,9 +586,7 @@ describe("サインアップの手続き", () => {
       await signUp.setPassword({ password: "password1" }, view);
 
       // Then
-      expect(afterRegistered.error).toBe(
-        "このメールアドレスは既に登録されています。",
-      );
+      expect(afterRegistered.error).toBe("already_registered");
       expect(afterRegistered.captchaToken).toBe("first-token");
       expect(authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
         purpose: "sign-up",
@@ -598,9 +594,7 @@ describe("サインアップの手続き", () => {
         captchaToken: "first-token",
       });
       expect(afterSent.step).toBe("code");
-      expect(afterExpired.error).toBe(
-        "認証コードが正しくないか、有効期限が切れています。",
-      );
+      expect(afterExpired.error).toBe("code_expired");
       expect(afterExpired.step).toBe("code");
       expect(afterWeak.step).toBe("password");
       expect(afterWeak.pending).toBeNull();

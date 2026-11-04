@@ -3,14 +3,17 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, StrictMode, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import type { CallResult } from "../application/call-result";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import { createSignUp } from "../application/sign-up";
 import { SignUpForm } from "./signup-form";
 
-const NETWORK_ERROR_MESSAGE =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
+const authText = translatorFor("auth");
+
+const NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
 const ACCEPTED: CallResult = { kind: "accepted" };
 
 // 認証と遷移は、手続きの外側の境界のため偽に替える。手続き(createSignUp)は実物を通す。
@@ -56,7 +59,9 @@ function renderForm(options?: { strict?: boolean }) {
     protectedPath: "/rounds",
   });
   const form = <SignUpForm signUp={signUp} siteKey="site-key" />;
-  return render(options?.strict ? <StrictMode>{form}</StrictMode> : form);
+  return render(options?.strict ? <StrictMode>{form}</StrictMode> : form, {
+    wrapper: IntlTestProvider,
+  });
 }
 
 function heading(name: string) {
@@ -68,7 +73,7 @@ function emailInput() {
 }
 
 function sendCodeButton() {
-  return screen.getByRole("button", { name: "認証コードを送信" });
+  return screen.getByRole("button", { name: authText("otpSendCode") });
 }
 
 function completeCaptcha(token = "captcha-token") {
@@ -112,7 +117,7 @@ async function renderPasswordStep() {
   fireEvent.click(sendCodeButton());
   await settle();
   changeValue(screen.getByPlaceholderText("123456"), "123456");
-  fireEvent.click(screen.getByRole("button", { name: "確認" }));
+  fireEvent.click(screen.getByRole("button", { name: authText("otpVerify") }));
   await settle();
 }
 
@@ -133,7 +138,7 @@ describe("SignUpForm", () => {
 
       // Then
       expect(
-        await screen.findByText("このメールアドレスは既に登録されています。"),
+        await screen.findByText(authText("failure.already_registered")),
       ).toBeInTheDocument();
       expect(auth.sendCode).not.toHaveBeenCalled();
       expect(turnstile.reset).not.toHaveBeenCalled();
@@ -147,7 +152,7 @@ describe("SignUpForm", () => {
       const user = userEvent.setup();
       renderForm();
       await submitEmailStep(user);
-      await screen.findByText("このメールアドレスは既に登録されています。");
+      await screen.findByText(authText("failure.already_registered"));
       auth.isRegistered.mockResolvedValue(false);
       auth.sendCode.mockResolvedValue(ACCEPTED);
 
@@ -158,7 +163,7 @@ describe("SignUpForm", () => {
 
       // Then
       expect(
-        await screen.findByRole("heading", { name: "認証コードを入力" }),
+        await screen.findByRole("heading", { name: authText("otpTitle") }),
       ).toBeInTheDocument();
       expect(auth.sendCode).toHaveBeenCalledWith({
         purpose: "sign-up",
@@ -202,7 +207,7 @@ describe("SignUpForm", () => {
 
       // Then
       expect(
-        await screen.findByRole("heading", { name: "認証コードを入力" }),
+        await screen.findByRole("heading", { name: authText("otpTitle") }),
       ).toBeInTheDocument();
       expect(auth.sendCode).toHaveBeenCalledExactlyOnceWith({
         purpose: "sign-up",
@@ -241,11 +246,10 @@ describe("SignUpForm", () => {
       renderForm();
 
       // Then
-      expect(heading("サインアップ")).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "サインイン" })).toHaveAttribute(
-        "href",
-        "/signin",
-      );
+      expect(heading(authText("signInSignUpLink"))).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: authText("signUpFooterLink") }),
+      ).toHaveAttribute("href", "/signin");
     });
 
     it("パスワード設定の段階は、サインアップの文言を表示し、リンクを表示しない", async () => {
@@ -253,18 +257,23 @@ describe("SignUpForm", () => {
       await renderPasswordStep();
 
       // When
-      const title = heading("パスワードを設定");
+      const title = heading(authText("signUpPasswordTitle"));
 
       // Then
       expect(title).toBeInTheDocument();
       expect(
-        screen.getByText("次回以降はこのパスワードでサインインします。"),
+        screen.getByText(authText("signUpPasswordDescription")),
       ).toBeInTheDocument();
       expect(
-        screen.getByPlaceholderText("パスワード（8文字以上・英数字を含む）"),
+        screen.getByPlaceholderText(
+          authText("passwordFieldPlaceholder", {
+            label: "パスワード",
+            min: "8",
+          }),
+        ),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "登録してサインイン" }),
+        screen.getByRole("button", { name: authText("signUpPasswordSubmit") }),
       ).toBeInTheDocument();
       expect(screen.queryByRole("link")).not.toBeInTheDocument();
     });
@@ -275,14 +284,21 @@ describe("SignUpForm", () => {
 
       // When
       fireEvent.click(
-        screen.getByRole("button", { name: "登録してサインイン" }),
+        screen.getByRole("button", { name: authText("signUpPasswordSubmit") }),
       );
 
       // Then
-      const message = screen.getByText("パスワードを入力してください。");
+      const message = screen.getByText(
+        authText("fieldError.password.required"),
+      );
       expect(message).toHaveAttribute("id", "signup-password-error");
       expect(
-        screen.getByPlaceholderText("パスワード（8文字以上・英数字を含む）"),
+        screen.getByPlaceholderText(
+          authText("passwordFieldPlaceholder", {
+            label: "パスワード",
+            min: "8",
+          }),
+        ),
       ).toHaveAttribute("aria-describedby", "signup-password-error");
     });
   });

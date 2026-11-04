@@ -12,8 +12,7 @@ const validDraft: RoundConfig = {
   bowType: "recurve",
 };
 
-const UNMARKED_ERROR =
-  "Unmarkedの距離が残っているため、フィールド以外の種別には変更できません。先に各距離をMarkedに変更してください。";
+const UNMARKED_ERROR = "unmarkedDistances";
 
 describe("validateRoundConfig", () => {
   describe("すべての項目が有効な場合", () => {
@@ -62,7 +61,7 @@ describe("validateRoundConfig", () => {
       // Then
       expect(result).toEqual({
         type: "invalid",
-        errors: { name: "ラウンド名は50文字以内で入力してください。" },
+        errors: { name: "tooLong" },
       });
     });
   });
@@ -79,7 +78,7 @@ describe("validateRoundConfig", () => {
       // Then
       expect(result).toEqual({
         type: "invalid",
-        errors: { roundDate: "実施日を入力してください。" },
+        errors: { roundDate: "required" },
       });
     });
   });
@@ -146,8 +145,8 @@ describe("validateRoundConfig", () => {
       expect(result).toEqual({
         type: "invalid",
         errors: {
-          name: "ラウンド名は50文字以内で入力してください。",
-          roundDate: "実施日を入力してください。",
+          name: "tooLong",
+          roundDate: "required",
           format: UNMARKED_ERROR,
         },
       });

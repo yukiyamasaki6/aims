@@ -1,4 +1,4 @@
-import { FETCH_ERROR_MESSAGE, type FetchResult } from "../domain/fetch-status";
+import type { FetchResult } from "../domain/fetch-status";
 import { isRetainedForRefresh } from "../domain/round-retention";
 import { roundTablesFromServer } from "../domain/round-tables";
 import {
@@ -100,7 +100,7 @@ export function createRoundBaseRefreshing(deps: {
       }
     } catch {
       outcome = {
-        result: { status: "error", message: FETCH_ERROR_MESSAGE },
+        result: { status: "error", reason: "failed" },
         committed: false,
       };
     }
@@ -116,7 +116,7 @@ export function createRoundBaseRefreshing(deps: {
     try {
       fetched = await fetching.fetchRoundDetail(id);
     } catch {
-      fetched = { status: "error", message: FETCH_ERROR_MESSAGE };
+      fetched = { status: "error", reason: "failed" };
     }
     if (fetched.status !== "ok") {
       requests.settleRound(run, fetched);
@@ -136,7 +136,7 @@ export function createRoundBaseRefreshing(deps: {
     } catch {
       requests.settleRound(run, {
         status: "error",
-        message: FETCH_ERROR_MESSAGE,
+        reason: "failed",
       });
       return "failed";
     }

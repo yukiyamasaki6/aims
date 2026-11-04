@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
   createConfirmedUser,
@@ -23,6 +24,9 @@ import {
 } from "../helpers/service-worker";
 import { overlapNextRefresh } from "../helpers/session-overlap";
 import { mockTurnstile } from "../helpers/turnstile";
+
+const authText = translatorFor("auth");
+const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -66,15 +70,19 @@ test("個人プリセットと公式プリセットの一覧から公式プリ�
 }) => {
   // 一覧から公式プリセットを選び、距離構成を展開する。
   await openNewRound(page);
-  await expect(page.getByText("個人プリセット", { exact: true })).toBeVisible();
-  await expect(page.getByText("公式プリセット", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(roundsText("presetPersonal"), { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(roundsText("presetGlobal"), { exact: true }),
+  ).toBeVisible();
   await presetButton(page, "WA 1440").click();
   await expect(presetButton(page, "WA 1440")).toHaveAttribute(
     "aria-pressed",
     "true",
   );
   await expect(page.getByTestId("round-start-button")).toHaveText(
-    "「WA 1440」で開始",
+    roundsText("startWithPreset", { name: "WA 1440" }),
   );
   const card = presetCard(page, "WA 1440");
   await expect(card).toContainText("90m");
@@ -97,7 +105,9 @@ test("プリセットを選ばずに開始すると、距離のないラウン�
   await page.getByTestId("round-start-button").click();
 
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-  await expect(page.getByTestId("round-summary")).toContainText("合計0");
+  await expect(page.getByTestId("round-summary")).toContainText(
+    roundsText("roundTotal", { total: "0" }),
+  );
   await expect(page.getByTestId("distance-summary-1")).toHaveCount(0);
   const id = page.url().split("/").pop() as string;
   const { supabase } = await signInAsTestUser(
@@ -114,7 +124,7 @@ test("「一覧へ戻る」リンクを押すと、ラウンド一覧へ移動�
 }) => {
   await openNewRound(page);
 
-  await page.getByRole("link", { name: "一覧へ戻る" }).click();
+  await page.getByRole("link", { name: roundsText("backToList") }).click();
 
   await expect(page).toHaveURL(/\/rounds$/);
 });
@@ -131,7 +141,9 @@ test("的の一覧を端末に保存済みなら、オフラインでも開始�
 
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
   await waitForHydration(page);
-  await expect(page.getByTestId("round-summary")).toContainText("合計0");
+  await expect(page.getByTestId("round-summary")).toContainText(
+    roundsText("roundTotal", { total: "0" }),
+  );
 });
 
 test("的の一覧を端末に保存済みなら、アクセストークンを更新できないときも開始して、ラウンドが表示される", async ({
@@ -148,7 +160,9 @@ test("的の一覧を端末に保存済みなら、アクセストークンを�
   await page.getByTestId("round-start-button").click();
 
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-  await expect(page.getByTestId("round-summary")).toContainText("合計0");
+  await expect(page.getByTestId("round-summary")).toContainText(
+    roundsText("roundTotal", { total: "0" }),
+  );
 });
 
 // セッションの更新はリフレッシュトークンを入れ替え、共有のユーザーの他のテストのセッションを無効にし得るため、使い捨てのユーザーで行う。
@@ -171,8 +185,12 @@ test.describe("セッションの更新の重なり", () => {
 
     await overlapped;
     await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
-    await expect(page.getByTestId("round-summary")).toContainText("合計0");
-    await expect(page.getByText("サインインが必要です。")).toHaveCount(0);
+    await expect(page.getByTestId("round-summary")).toContainText(
+      roundsText("roundTotal", { total: "0" }),
+    );
+    await expect(
+      page.getByText(roundsText("fetchFailure.unauthenticated")),
+    ).toHaveCount(0);
   });
 });
 
@@ -186,11 +204,13 @@ test("オンラインで一度開いた後のオフラインでも、保存済�
   await page.goto("/rounds/new");
   await expect(presetButton(page, name)).toBeVisible();
   await expect(presetButton(page, "WA 1440")).toBeVisible();
-  await expect(page.getByText("個人プリセット", { exact: true })).toBeVisible();
-  await expect(page.getByText("公式プリセット", { exact: true })).toBeVisible();
-  await expect(page.getByText("ネットワークに接続されていません")).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByText(roundsText("presetPersonal"), { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(roundsText("presetGlobal"), { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(roundsText("fetchOffline"))).toHaveCount(0);
   await presetButton(page, "WA 1440").click();
   await expect(presetButton(page, "WA 1440")).toHaveAttribute(
     "aria-pressed",
@@ -231,8 +251,10 @@ test("別のユーザーでサインインし直した後のオフラインで�
   await openNewRound(page);
   await expect(presetButton(page, name)).toBeVisible();
   await page.goto("/rounds");
-  await page.getByRole("button", { name: "サインアウト" }).click();
-  await page.getByRole("button", { name: "サインアウトする" }).click();
+  await page.getByRole("button", { name: authText("signOut") }).click();
+  await page
+    .getByRole("button", { name: authText("signOutConfirmLabel") })
+    .click();
   await expect(page).toHaveURL(/\/signin/);
 
   // ユーザーBでサインインし、ラウンド一覧へ進む。
@@ -246,7 +268,7 @@ test("別のユーザーでサインインし直した後のオフラインで�
   await goOffline(context);
   await page.goto("/rounds/new");
   await expect(
-    page.getByRole("heading", { name: "ラウンドを作成" }),
+    page.getByRole("heading", { name: roundsText("createRound") }),
   ).toBeVisible();
   await expect(presetButton(page, name)).toHaveCount(0);
   await context.close();
@@ -262,7 +284,9 @@ test("サインインが切れた後に開始すると、サインインが必�
 
   await page.getByTestId("round-start-button").click();
 
-  await expect(page.getByText("サインインが必要です。")).toBeVisible();
+  await expect(
+    page.getByText(roundsText("fetchFailure.unauthenticated")),
+  ).toBeVisible();
   await expect(page).toHaveURL(/\/rounds\/new$/);
 });
 
@@ -273,10 +297,14 @@ test("プリセットを取得できない(通信できない)ときも、「読
 
   await openNewRound(page);
 
-  await expect(page.getByRole("link", { name: "一覧へ戻る" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: roundsText("backToList") }),
+  ).toBeVisible();
   await expect(page.getByTestId("round-start-button")).toBeVisible();
-  await expect(page.getByText("読み込めませんでした。")).toBeVisible();
-  await expect(page.getByRole("button", { name: "再試行" })).toBeVisible();
+  await expect(page.getByText(roundsText("fetchFailure.failed"))).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: roundsText("fetchRetry") }),
+  ).toBeVisible();
   await page.getByTestId("round-start-button").click();
   await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import manifest from "./manifest";
 
 describe("manifest", () => {
-  it("アプリ名・起動URL・表示モードを返す", () => {
+  it("アプリ名と説明の文言そのもの(現在と同じ内容)、起動URL、表示モードを返す", () => {
     // Given
     // When
     const result = manifest();
@@ -11,6 +11,7 @@ describe("manifest", () => {
     expect(result).toMatchObject({
       name: "AIMS",
       short_name: "AIMS",
+      description: "AIMS Web Application",
       start_url: "/rounds",
       display: "standalone",
     });

@@ -5,15 +5,13 @@ import type { Distance, Shot } from "./scorecard-types";
 import { firstOpenEnd } from "./shot-pointer";
 import type { RoundStatus, SyncOperation } from "./sync-events";
 
-// 入力を完了にする前の確認の文言。確認が要らない(全てのエンドが矢数に達している)ときはnull。
+// 入力を完了にする前の確認の種類。noRecords: 記録が無い。unfilledCells: 未入力のマスがある。確認が要らない(全てのエンドが矢数に達している)ときはnull。
 export function completionConfirmation(
   distances: Distance[],
   shots: Shot[],
-): string | null {
-  if (distances.length === 0) return "記録がありません。入力を完了しますか？";
-  if (firstOpenEnd(distances, shots) !== null) {
-    return "未入力のマスがあります。入力を完了しますか？";
-  }
+): "noRecords" | "unfilledCells" | null {
+  if (distances.length === 0) return "noRecords";
+  if (firstOpenEnd(distances, shots) !== null) return "unfilledCells";
   return null;
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { NextIntlClientProvider } from "next-intl";
 import { type ReactNode, useEffect, useState } from "react";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
@@ -35,7 +36,6 @@ import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
 import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
-import { createAuthSignInReader } from "@/features/rounds/infrastructure/auth-sign-in-reader";
 import { createBrowserUniqueIds } from "@/features/rounds/infrastructure/browser-unique-ids";
 import { createPresetCommands } from "@/features/rounds/infrastructure/preset-commands";
 import { createReferenceSnapshots } from "@/features/rounds/infrastructure/reference-snapshot";
@@ -47,6 +47,7 @@ import {
   RoundDetailStoreProvider,
   RoundsListStoreProvider,
 } from "@/features/rounds/ui/rounds-context";
+import { intlConfig } from "@/i18n/messages";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
@@ -72,7 +73,7 @@ function composeInputs(router: PageRouter) {
       changes: authenticator,
       writer: identityStore,
     }),
-    signIn: createAuthSignInReader(authenticator),
+    sessionReader: authenticator,
     connectivity: createBrowserConnectivity(),
     clock: createBrowserClock(),
     database: narrowDatabase<RoundsDbSchema>(
@@ -86,7 +87,8 @@ type Inputs = ReturnType<typeof composeInputs>;
 
 // 記録と取得(記録のハブ、取り直しの依頼、取得、送信、記録の制御、取り直しの制御)。
 function composeRecords(inputs: Inputs) {
-  const { identityStore, signIn, connectivity, clock, database } = inputs;
+  const { identityStore, sessionReader, connectivity, clock, database } =
+    inputs;
   const hub = createRoundRecordHub({
     store: createIndexedDbOpLogStore<SyncOperation, RoundBaseRecord>(
       roundStreamRules,
@@ -95,7 +97,7 @@ function composeRecords(inputs: Inputs) {
   const requests = createRefreshRequests();
   const snapshots = createReferenceSnapshots(identityStore);
   const fetching = createRoundFetching({
-    content: createContentFetcher({ signIn, connectivity, clock }),
+    content: createContentFetcher({ sessionReader, connectivity, clock }),
     queries: createRoundQueries(database),
     snapshots,
     clock,
@@ -106,7 +108,7 @@ function composeRecords(inputs: Inputs) {
       hub,
       transport: createRoundOpTransport(database),
     }),
-    signIn,
+    sessionReader,
     clock,
     connectivity,
   });
@@ -123,7 +125,8 @@ type Records = ReturnType<typeof composeRecords>;
 
 // 窓口(手続きと、一覧、作成、詳細の窓口)。
 function composeStores(inputs: Inputs, records: Records) {
-  const { signIn, connectivity, clock, database, pageNavigation } = inputs;
+  const { sessionReader, connectivity, clock, database, pageNavigation } =
+    inputs;
   const { hub, requests, snapshots, fetching } = records;
   const ids = createBrowserUniqueIds();
   const commands = createPresetCommands(database);
@@ -138,18 +141,22 @@ function composeStores(inputs: Inputs, records: Records) {
       ids,
       leaving: createRoundLeaving({ hub, ids, pageNavigation, deletion }),
       editing: createRoundEditing({ hub, ids }),
-      presetSaving: createPresetSaving({ signIn, commands, fetching }),
+      presetSaving: createPresetSaving({ sessionReader, commands, fetching }),
     }),
     newRoundStore: createNewRoundStore({
       fetching,
       roundStart: createRoundStart({
         hub,
-        signIn,
+        sessionReader,
         ids,
         clock,
         pageNavigation,
       }),
-      presetDeletion: createPresetDeletion({ signIn, commands, snapshots }),
+      presetDeletion: createPresetDeletion({
+        sessionReader,
+        commands,
+        snapshots,
+      }),
       connectivity,
     }),
     listStore: createRoundsListStore({
@@ -217,15 +224,18 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
   useEffect(() => app.triggers.start(), [app]);
   useEffect(() => app.swUpdate.start(), [app]);
 
+  // getMessageFallbackとonErrorは関数で、サーバーから渡せないため、クライアントのこの入口で設定を直接読み込む。
   return (
-    <RoundsListStoreProvider store={app.listStore}>
-      <NewRoundStoreProvider store={app.newRoundStore}>
-        <RoundDetailStoreProvider store={app.detailStore}>
-          <RoundBaseRefresher sync={app.sync} />
-          <SwUpdateActivator activation={app.swUpdate} />
-          {children}
-        </RoundDetailStoreProvider>
-      </NewRoundStoreProvider>
-    </RoundsListStoreProvider>
+    <NextIntlClientProvider {...intlConfig}>
+      <RoundsListStoreProvider store={app.listStore}>
+        <NewRoundStoreProvider store={app.newRoundStore}>
+          <RoundDetailStoreProvider store={app.detailStore}>
+            <RoundBaseRefresher sync={app.sync} />
+            <SwUpdateActivator activation={app.swUpdate} />
+            {children}
+          </RoundDetailStoreProvider>
+        </NewRoundStoreProvider>
+      </RoundsListStoreProvider>
+    </NextIntlClientProvider>
   );
 }

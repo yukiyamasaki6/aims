@@ -4,20 +4,25 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import MainLayout from "../../(main)/layout";
 import Home from "../../page";
 import ResetPasswordPage from "./page";
 
-const NETWORK_ERROR_MESSAGE =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
-const CAPTCHA_ERROR_MESSAGE = "セキュリティチェックが完了していません。";
-const OTP_EXPIRED_MESSAGE =
-  "認証コードが正しくないか、有効期限が切れています。";
+const authText = translatorFor("auth");
+const navigationText = translatorFor("navigation");
+
+const NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
+const CAPTCHA_ERROR_MESSAGE = authText("fieldError.captcha.incomplete");
+const OTP_EXPIRED_MESSAGE = authText("failure.code_expired");
 const WEAK_PASSWORD_MESSAGE =
   "8〜72文字の半角英数記号で、英字と数字を含めてください。";
-const OTHER_FAILURE_MESSAGE =
-  "エラーが発生しました。しばらくしてから再度お試しください。";
-const PASSWORD_PLACEHOLDER = "新しいパスワード（8文字以上・英数字を含む）";
+const OTHER_FAILURE_MESSAGE = authText("failure.other");
+const PASSWORD_PLACEHOLDER = authText("passwordFieldPlaceholder", {
+  label: "新しいパスワード",
+  min: "8",
+});
 
 // SDKは境界のため差し替える。入口が得た接続で、認証の実装が呼ぶ。
 // パスワードの変更はServer Actionの中で行うため、ブラウザの接続では呼ばれないことを確かめる。
@@ -83,7 +88,7 @@ function emailInput() {
 }
 
 function sendCodeButton() {
-  return screen.getByRole("button", { name: "認証コードを送信" });
+  return screen.getByRole("button", { name: authText("otpSendCode") });
 }
 
 function codeInput() {
@@ -91,11 +96,13 @@ function codeInput() {
 }
 
 function verifyButton() {
-  return screen.getByRole("button", { name: "確認" });
+  return screen.getByRole("button", { name: authText("otpVerify") });
 }
 
 function resendButton() {
-  return screen.getByRole("button", { name: /^再送/ });
+  return screen.getByRole("button", {
+    name: new RegExp(`^${authText("otpResend")}`),
+  });
 }
 
 function passwordInput() {
@@ -103,7 +110,7 @@ function passwordInput() {
 }
 
 function setPasswordButton() {
-  return screen.getByRole("button", { name: "パスワードを変更" });
+  return screen.getByRole("button", { name: authText("resetPasswordSubmit") });
 }
 
 function widgetButton() {
@@ -119,7 +126,7 @@ async function submitEmailStep(user: User, email = "user@example.com") {
 async function advanceToCodeStep(user: User) {
   auth.resetPasswordForEmail.mockResolvedValue({ error: null });
   await submitEmailStep(user);
-  await screen.findByRole("heading", { name: "認証コードを入力" });
+  await screen.findByRole("heading", { name: authText("otpTitle") });
 }
 
 async function advanceToPasswordStep(user: User) {
@@ -127,7 +134,7 @@ async function advanceToPasswordStep(user: User) {
   auth.verifyOtp.mockResolvedValue({ error: null });
   await user.type(codeInput(), "123456");
   await user.click(verifyButton());
-  await screen.findByRole("heading", { name: "新しいパスワードを設定" });
+  await screen.findByRole("heading", { name: authText("resetPasswordTitle") });
 }
 
 // 応答済みのモックの結果を、実際のマクロタスク境界まで進めて画面へ反映させる。フェイクタイマー下でも進むよう、node:timersを使う。
@@ -181,10 +188,10 @@ describe("パスワード再設定画面の入口", () => {
     // Given
 
     // When
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
 
     // Then
-    expect(heading("パスワードを再設定")).toBeInTheDocument();
+    expect(heading(authText("resetTitle"))).toBeInTheDocument();
     expect(sendCodeButton()).toBeInTheDocument();
   });
 
@@ -192,7 +199,7 @@ describe("パスワード再設定画面の入口", () => {
     // Given
 
     // When
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
 
     // Then
     expect(widget.siteKey).toBe("page-site-key");
@@ -204,12 +211,14 @@ describe("パスワード再設定画面の入口", () => {
     auth.verifyOtp.mockResolvedValue({ error: null });
     action.changePassword.mockResolvedValue(accepted);
     const user = userEvent.setup();
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user, "new@example.com");
-    await screen.findByRole("heading", { name: "認証コードを入力" });
+    await screen.findByRole("heading", { name: authText("otpTitle") });
     await user.type(codeInput(), "123456");
     await user.click(verifyButton());
-    await screen.findByRole("heading", { name: "新しいパスワードを設定" });
+    await screen.findByRole("heading", {
+      name: authText("resetPasswordTitle"),
+    });
     await user.type(passwordInput(), "password123");
 
     // When
@@ -241,7 +250,7 @@ describe("パスワード再設定画面の入口", () => {
       .mockRejectedValueOnce(new Error("Failed to fetch"))
       .mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user);
     await screen.findByText(NETWORK_ERROR_MESSAGE);
     expect(widget.resets).toBe(0);
@@ -251,7 +260,7 @@ describe("パスワード再設定画面の入口", () => {
 
     // Then
     expect(
-      await screen.findByRole("heading", { name: "認証コードを入力" }),
+      await screen.findByRole("heading", { name: authText("otpTitle") }),
     ).toBeInTheDocument();
     expect(auth.resetPasswordForEmail).toHaveBeenCalledTimes(2);
     expect(auth.resetPasswordForEmail).toHaveBeenLastCalledWith(
@@ -265,7 +274,7 @@ describe("パスワード再設定画面の入口", () => {
     [
       "送信の間隔の制限を値で返した",
       rateLimited,
-      "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
+      authText("failure.rate_limited"),
     ],
   ])(
     "コードの送信でSDKが%sときは、文言を示し、使用済みのトークンでの再送信を拒み、新しいトークンで取り直して進める",
@@ -275,7 +284,7 @@ describe("パスワード再設定画面の入口", () => {
         .mockResolvedValueOnce({ error })
         .mockResolvedValue({ error: null });
       const user = userEvent.setup();
-      render(<ResetPasswordPage />);
+      render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
       await submitEmailStep(user);
       expect(await screen.findByText(message)).toBeInTheDocument();
       expect(widget.resets).toBe(1);
@@ -289,7 +298,7 @@ describe("パスワード再設定画面の入口", () => {
 
       // Then
       expect(
-        await screen.findByRole("heading", { name: "認証コードを入力" }),
+        await screen.findByRole("heading", { name: authText("otpTitle") }),
       ).toBeInTheDocument();
       expect(auth.resetPasswordForEmail).toHaveBeenLastCalledWith(
         "user@example.com",
@@ -308,7 +317,7 @@ describe("パスワード再設定画面の入口", () => {
       ),
     });
     const user = userEvent.setup();
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
 
     // When
     await submitEmailStep(user);
@@ -330,21 +339,23 @@ describe("パスワード再設定画面の入口", () => {
       .mockResolvedValueOnce(weakPassword)
       .mockResolvedValue(accepted);
     const user = userEvent.setup();
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user, "old@example.com");
-    await screen.findByText(/リクエストの間隔が短すぎます/);
+    await screen.findByText(authText("failure.rate_limited"));
 
     // When
     await user.clear(emailInput());
     await user.type(emailInput(), "new@example.com");
     await user.click(widgetButton());
     await user.click(sendCodeButton());
-    await screen.findByRole("heading", { name: "認証コードを入力" });
+    await screen.findByRole("heading", { name: authText("otpTitle") });
     await user.type(codeInput(), "123456");
     await user.click(verifyButton());
     await screen.findByText(OTP_EXPIRED_MESSAGE);
     await user.click(verifyButton());
-    await screen.findByRole("heading", { name: "新しいパスワードを設定" });
+    await screen.findByRole("heading", {
+      name: authText("resetPasswordTitle"),
+    });
     await user.type(passwordInput(), "password123");
     await user.click(setPasswordButton());
     await screen.findByText(WEAK_PASSWORD_MESSAGE);
@@ -364,7 +375,7 @@ describe("パスワード再設定画面の入口", () => {
   it("確認の通信エラーを値で返した場合も、通信エラーを示し、再度確認できる", async () => {
     // Given
     const user = userEvent.setup();
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await advanceToCodeStep(user);
     auth.verifyOtp
       .mockResolvedValueOnce({ error: connectionLost })
@@ -378,7 +389,9 @@ describe("パスワード再設定画面の入口", () => {
 
     // Then
     expect(
-      await screen.findByRole("heading", { name: "新しいパスワードを設定" }),
+      await screen.findByRole("heading", {
+        name: authText("resetPasswordTitle"),
+      }),
     ).toBeInTheDocument();
     expect(auth.verifyOtp).toHaveBeenCalledTimes(2);
   });
@@ -386,7 +399,7 @@ describe("パスワード再設定画面の入口", () => {
   it("遷移が投げると、通信エラーを示し、送信中を解除して再度送信できる", async () => {
     // Given
     const user = userEvent.setup();
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
     action.changePassword.mockResolvedValue(accepted);
     locationAssign.mockImplementationOnce(() => {
@@ -408,7 +421,7 @@ describe("パスワード再設定画面の入口", () => {
   it("変更の要求が投げると(表示中)、通信エラーを示し、送信中を解除し、遷移しない", async () => {
     // Given
     const user = userEvent.setup();
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
     action.changePassword.mockRejectedValue(new Error("Failed to fetch"));
     await user.type(passwordInput(), "password123");
@@ -426,7 +439,7 @@ describe("パスワード再設定画面の入口", () => {
     // Given
     const deferred = Promise.withResolvers<typeof accepted>();
     const user = userEvent.setup();
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
     action.changePassword.mockReturnValue(deferred.promise);
     await user.type(passwordInput(), "password123");
@@ -444,7 +457,7 @@ describe("パスワード再設定画面の入口", () => {
     // Given
     const deferred = Promise.withResolvers<typeof accepted>();
     const user = userEvent.setup();
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
     action.changePassword.mockReturnValue(deferred.promise);
     await user.type(passwordInput(), "password123");
@@ -465,7 +478,7 @@ describe("パスワード再設定画面の入口", () => {
     // Given
     action.changePassword.mockResolvedValue(accepted);
     const user = userEvent.setup();
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
     await user.type(passwordInput(), "password123");
     await user.click(setPasswordButton());
@@ -484,7 +497,7 @@ describe("パスワード再設定画面の入口", () => {
     const deferred = Promise.withResolvers<{ error: null }>();
     auth.resetPasswordForEmail.mockReturnValue(deferred.promise);
     const user = userEvent.setup();
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await user.type(emailInput(), "user@example.com");
     await user.click(widgetButton());
 
@@ -505,7 +518,9 @@ describe("パスワード再設定画面の入口", () => {
     it("変更の要求の応答待ちで離れたら、変更が成功しても、遷移しない", async () => {
       // Given
       const user = userEvent.setup();
-      const { unmount } = render(<ResetPasswordPage />);
+      const { unmount } = render(<ResetPasswordPage />, {
+        wrapper: IntlTestProvider,
+      });
       await startSettingPassword(user);
       const deferred = Promise.withResolvers<typeof accepted>();
       action.changePassword.mockReturnValue(deferred.promise);
@@ -522,7 +537,7 @@ describe("パスワード再設定画面の入口", () => {
 
     // 離れた先を描画してから、未完了の変更の要求の結果を返す。サインインの状態の読み取りは認証済みにし、離れた先の保護による遷移を起こさない。
     describe.each([
-      ["紹介画面", "/", "アーチェリーのスコア記録・分析・共有アプリ"],
+      ["紹介画面", "/", navigationText("introDescription")],
       ["ラウンド作成画面", "/rounds/new", "ラウンド作成"],
     ] as const)("%sへ離れた後", (_destination, pathname, shown) => {
       const locationReplace = vi.fn();
@@ -546,6 +561,7 @@ describe("パスワード再設定画面の入口", () => {
               <p>ラウンド作成</p>
             </MainLayout>
           ),
+          { wrapper: IntlTestProvider },
         );
       }
 
@@ -571,7 +587,9 @@ describe("パスワード再設定画面の入口", () => {
             data: { subscription: { unsubscribe: vi.fn() } },
           });
           const user = userEvent.setup();
-          const { unmount } = render(<ResetPasswordPage />);
+          const { unmount } = render(<ResetPasswordPage />, {
+            wrapper: IntlTestProvider,
+          });
           await startSettingPassword(user);
           const response = Promise.withResolvers<void>();
           action.changePassword.mockImplementation(async () => {
@@ -606,7 +624,9 @@ describe("パスワード再設定画面の入口", () => {
       const deferred = Promise.withResolvers<{ error: null }>();
       auth.resetPasswordForEmail.mockReturnValue(deferred.promise);
       const user = userEvent.setup();
-      const { unmount } = render(<ResetPasswordPage />);
+      const { unmount } = render(<ResetPasswordPage />, {
+        wrapper: IntlTestProvider,
+      });
       await submitEmailStep(user);
 
       // When
@@ -621,7 +641,9 @@ describe("パスワード再設定画面の入口", () => {
     it("確認の応答待ちで離れたら、状態を更新せず、パスワードの設定を呼ばない", async () => {
       // Given
       const user = userEvent.setup();
-      const { unmount } = render(<ResetPasswordPage />);
+      const { unmount } = render(<ResetPasswordPage />, {
+        wrapper: IntlTestProvider,
+      });
       await advanceToCodeStep(user);
       const deferred = Promise.withResolvers<{ error: null }>();
       auth.verifyOtp.mockReturnValue(deferred.promise);
@@ -640,7 +662,9 @@ describe("パスワード再設定画面の入口", () => {
     it("パスワード設定の段階で押さずに離れたら、変更が行われない", async () => {
       // Given
       const user = userEvent.setup();
-      const { unmount } = render(<ResetPasswordPage />);
+      const { unmount } = render(<ResetPasswordPage />, {
+        wrapper: IntlTestProvider,
+      });
       await startSettingPassword(user);
 
       // When
@@ -659,10 +683,10 @@ describe("パスワード再設定画面の入口", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
 
     // When
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
 
     // Then
-    expect(heading("パスワードを再設定")).toBeInTheDocument();
+    expect(heading(authText("resetTitle"))).toBeInTheDocument();
     expect(connection.createBrowserClient).not.toHaveBeenCalled();
   });
 
@@ -671,7 +695,7 @@ describe("パスワード再設定画面の入口", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
     const user = userEvent.setup();
-    render(<ResetPasswordPage />);
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
 
     // When
     await submitEmailStep(user);
@@ -703,15 +727,17 @@ describe("パスワード再設定画面の入口", () => {
 
     async function advanceToResendReady() {
       auth.resetPasswordForEmail.mockResolvedValue({ error: null });
-      render(<ResetPasswordPage />);
+      render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
       fireEvent.change(emailInput(), { target: { value: "user@example.com" } });
       fireEvent.click(widgetButton());
       fireEvent.click(sendCodeButton());
       await settle();
-      expect(heading("認証コードを入力")).toBeInTheDocument();
+      expect(heading(authText("otpTitle"))).toBeInTheDocument();
       expect(resendButton()).toHaveTextContent("再送（60秒）");
       await advanceSeconds(60);
-      expect(resendButton()).toHaveTextContent(/^再送$/);
+      expect(resendButton()).toHaveTextContent(
+        new RegExp(`^${authText("otpResend")}$`),
+      );
     }
 
     it("待ち時間の後に新しいトークンで再送し、チェックをリセットして待ち時間を再開する", async () => {

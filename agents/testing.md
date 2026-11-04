@@ -124,15 +124,16 @@ Playwrightを使用する。
 2. 業務の言葉を持たない技術の約束の偽物(時刻、通信の可否、画面の遷移、端末の保存)は、`lib/<能力>/`の直下に置き、機能が共有する。
 3. 業務の言葉を持つ補助は、その業務を持つ機能の中に置く。置く層は、使うテストの層のうち最も内側の層(1つの層だけが使うならその層、複数の層が使うなら最も内側の層。機能の直下には置かない)。
 4. 他の機能のテストが、持ち主の機能の補助を使ってよい。補助を機能の入口(`index.ts`)へ出さない。
-5. 次の表の約束は、全てのテストが共有の偽物を使い、別に定義しない。意図的に別物にするときは、理由をテストに書く。呼び出しを数えるだけの`vi.fn()`の差し込みは、約束を満たす偽物ではなく、表の対象外とする(例: 手続きの約束`PageLoad`、`ReturnToReader`)。
+5. 文言を描く部品のテストは、`src/i18n/intl-test-helpers.tsx`の`IntlTestProvider`で包む。全ての文言の一覧と同じ設定を使い、見つからないキーは例外にする。テスト(E2Eを含む)が文言を要素を探す手がかりや期待値に使うときは、文字列を直書きせず、`src/i18n/translator-test-helpers.ts`の翻訳の関数で文言を得る。文言そのもの(差し込みの結果など)を確かめるテストだけ、文字列を書き、テスト名でそれと分かるようにする。
+6. 次の表の約束は、全てのテストが共有の偽物を使い、別に定義しない。意図的に別物にするときは、理由をテストに書く。呼び出しを数えるだけの`vi.fn()`の差し込みは、約束を満たす偽物ではなく、表の対象外とする(例: 手続きの約束`PageLoad`、`ReturnToReader`)。
 
 | 約束 | 共有の偽物 | 置き場の規則 |
 | --- | --- | --- |
 | `Clock` | `lib/clock/manual-clock-test-helpers.ts` | 2 |
 | `Connectivity` | `lib/connectivity/fake-connectivity-test-helpers.ts` | 2 |
 | `PageNavigation` | `lib/page-navigation/fake-page-navigation-test-helpers.ts` | 2 |
-| `SignInReader` | `features/rounds/application/fake-sign-in-reader-test-helpers.ts` | 3 |
 | `UniqueIds` | `features/rounds/application/fake-unique-ids-test-helpers.ts` | 3 |
+| `SessionReader` | `features/auth/application/session-reader-test-helpers.ts` | 3 |
 
 `Connectivity`で共有の偽物にしない例外は、購読者へ知らせずに状態だけを替える検証と、購読の依頼の回数を数える検証である(`rounds`の`content-fetcher.test.ts`、`round-sync`の`sync-triggers.test.ts`)。
 

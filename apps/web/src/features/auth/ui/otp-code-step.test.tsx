@@ -2,8 +2,12 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, forwardRef } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { AUTH_CODE_LENGTH } from "../domain/auth-code";
 import { OtpCodeStep } from "./otp-code-step";
+
+const authText = translatorFor("auth");
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックする。
 vi.mock("./turnstile", () => ({
@@ -37,7 +41,9 @@ function createForm(overrides: Partial<Props> = {}) {
 }
 
 function renderStep(form: Props, idPrefix = form.idPrefix) {
-  return render(<OtpCodeStep {...form} idPrefix={idPrefix} />);
+  return render(<OtpCodeStep {...form} idPrefix={idPrefix} />, {
+    wrapper: IntlTestProvider,
+  });
 }
 
 describe("OtpCodeStep", () => {
@@ -51,18 +57,14 @@ describe("OtpCodeStep", () => {
 
       // Then
       expect(
-        screen.getByRole("heading", { name: "認証コードを入力" }),
+        screen.getByRole("heading", { name: authText("otpTitle") }),
       ).toBeInTheDocument();
       expect(
         screen.getByText(
-          "me@example.com に送信されたコードを入力してください。",
+          authText("otpDescription", { email: "me@example.com" }),
         ),
       ).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          "メールが届かない場合は、迷惑メールフォルダをご確認ください。",
-        ),
-      ).toBeInTheDocument();
+      expect(screen.getByText(authText("otpSpamNote"))).toBeInTheDocument();
     });
 
     it("codeの値を表示し、入力でonCodeChangeを呼ぶ", async () => {
@@ -169,7 +171,9 @@ describe("OtpCodeStep", () => {
       renderStep(form);
 
       // When
-      await userEvent.click(screen.getByRole("button", { name: "再送" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: authText("otpResend") }),
+      );
 
       // Then
       expect(form.onResend).toHaveBeenCalledTimes(1);
@@ -181,7 +185,9 @@ describe("OtpCodeStep", () => {
       renderStep(form);
 
       // When
-      await userEvent.click(screen.getByRole("button", { name: "戻る" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: authText("back") }),
+      );
 
       // Then
       expect(form.onBack).toHaveBeenCalledTimes(1);
@@ -197,15 +203,23 @@ describe("OtpCodeStep", () => {
       renderStep(form);
 
       // Then
-      for (const name of ["確認", "再送", "戻る"]) {
+      for (const name of [
+        authText("otpVerify"),
+        authText("otpResend"),
+        authText("back"),
+      ]) {
         const button = screen.getByRole("button", { name });
         expect(button, name).toHaveAttribute("aria-disabled", "false");
       }
       expect(
-        screen.getByRole("button", { name: "確認" }).querySelector("svg"),
+        screen
+          .getByRole("button", { name: authText("otpVerify") })
+          .querySelector("svg"),
       ).toBeNull();
       expect(
-        screen.getByRole("button", { name: "再送" }).querySelector("svg"),
+        screen
+          .getByRole("button", { name: authText("otpResend") })
+          .querySelector("svg"),
       ).toBeNull();
     });
 
@@ -217,17 +231,25 @@ describe("OtpCodeStep", () => {
       renderStep(form);
 
       // Then
-      for (const name of ["確認", "再送", "戻る"]) {
+      for (const name of [
+        authText("otpVerify"),
+        authText("otpResend"),
+        authText("back"),
+      ]) {
         expect(screen.getByRole("button", { name }), name).toHaveAttribute(
           "aria-disabled",
           "true",
         );
       }
       expect(
-        screen.getByRole("button", { name: "確認" }).querySelector("svg"),
+        screen
+          .getByRole("button", { name: authText("otpVerify") })
+          .querySelector("svg"),
       ).not.toBeNull();
       expect(
-        screen.getByRole("button", { name: "再送" }).querySelector("svg"),
+        screen
+          .getByRole("button", { name: authText("otpResend") })
+          .querySelector("svg"),
       ).toBeNull();
     });
 
@@ -239,17 +261,25 @@ describe("OtpCodeStep", () => {
       renderStep(form);
 
       // Then
-      for (const name of ["確認", "再送", "戻る"]) {
+      for (const name of [
+        authText("otpVerify"),
+        authText("otpResend"),
+        authText("back"),
+      ]) {
         expect(screen.getByRole("button", { name }), name).toHaveAttribute(
           "aria-disabled",
           "true",
         );
       }
       expect(
-        screen.getByRole("button", { name: "再送" }).querySelector("svg"),
+        screen
+          .getByRole("button", { name: authText("otpResend") })
+          .querySelector("svg"),
       ).not.toBeNull();
       expect(
-        screen.getByRole("button", { name: "確認" }).querySelector("svg"),
+        screen
+          .getByRole("button", { name: authText("otpVerify") })
+          .querySelector("svg"),
       ).toBeNull();
     });
   });
@@ -263,16 +293,16 @@ describe("OtpCodeStep", () => {
       const one = createForm({ resendCooldown: 1 });
       const { unmount } = renderStep(zero);
       const zeroLabel = screen.getByRole("button", {
-        name: /^再送/,
+        name: new RegExp(`^${authText("otpResend")}`),
       }).textContent;
       unmount();
       renderStep(one);
       const oneLabel = screen.getByRole("button", {
-        name: /^再送/,
+        name: new RegExp(`^${authText("otpResend")}`),
       }).textContent;
 
       // Then
-      expect(zeroLabel).toBe("再送");
+      expect(zeroLabel).toBe(authText("otpResend"));
       expect(oneLabel).toBe("再送（1秒）");
     });
 
@@ -284,12 +314,12 @@ describe("OtpCodeStep", () => {
       const notReady = createForm({ checked: false });
       const { unmount } = renderStep(ready);
       const readyValue = screen
-        .getByRole("button", { name: "再送" })
+        .getByRole("button", { name: authText("otpResend") })
         .getAttribute("data-captcha-ready");
       unmount();
       renderStep(notReady);
       const notReadyValue = screen
-        .getByRole("button", { name: "再送" })
+        .getByRole("button", { name: authText("otpResend") })
         .getAttribute("data-captcha-ready");
 
       // Then

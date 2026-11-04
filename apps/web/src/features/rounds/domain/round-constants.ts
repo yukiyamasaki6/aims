@@ -2,17 +2,12 @@
 // プレーンなモジュールとして分離する（"use client"ファイルの側からエクスポート
 // すると、サーバーコンポーネントからはクライアント参照に置き換わってしまい、
 // 配列としてそのまま使えない）。
-export const FORMAT_OPTIONS = [
-  { value: "outdoor", label: "アウトドア" },
-  { value: "indoor", label: "インドア" },
-  { value: "field", label: "フィールド" },
-];
+// 選択肢は、値と並びだけを持つ。表示名は、UI層の文言の一覧が値ごとに持つ。
+export const FORMAT_OPTIONS = ["outdoor", "indoor", "field"] as const;
+export type FormatOption = (typeof FORMAT_OPTIONS)[number];
 
-export const BOW_TYPE_OPTIONS = [
-  { value: "recurve", label: "リカーブ" },
-  { value: "compound", label: "コンパウンド" },
-  { value: "barebow", label: "ベアボウ" },
-];
+export const BOW_TYPE_OPTIONS = ["recurve", "compound", "barebow"] as const;
+export type BowTypeOption = (typeof BOW_TYPE_OPTIONS)[number];
 
 // ラウンド名・プリセット名は一覧・要約行のいずれも折り返し/省略に対応して
 // いないため、表示崩れを防ぐ目的で上限を設ける（DB側にも同じ上限のCHECK

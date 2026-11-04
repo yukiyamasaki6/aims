@@ -8,11 +8,15 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { FetchResult } from "../domain/fetch-status";
 import type { Preset, Presets } from "../domain/preset";
 import { RoundPresetSelect } from "./round-preset-select";
 import { createFakeNewRoundStore } from "./round-stores-test-helpers";
 import { NewRoundStoreProvider } from "./rounds-context";
+
+const roundsText = translatorFor("rounds");
 
 // 取得、削除、開始の手続きは、それぞれのテストで確かめるため、ラウンドの状態と変更の方法は偽の約束で渡す。
 // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
@@ -29,7 +33,9 @@ let deletePreset: ReturnType<
 
 function render(ui: ReactElement) {
   return renderWithoutStore(
-    <NewRoundStoreProvider store={fake.store}>{ui}</NewRoundStoreProvider>,
+    <IntlTestProvider>
+      <NewRoundStoreProvider store={fake.store}>{ui}</NewRoundStoreProvider>
+    </IntlTestProvider>,
   );
 }
 
@@ -125,14 +131,18 @@ describe("RoundPresetSelect", () => {
       render(<RoundPresetSelect />);
 
       // Then
-      expect(screen.getByRole("status")).toHaveTextContent("読み込み中");
+      expect(screen.getByRole("status")).toHaveTextContent(
+        roundsText("fetchLoading"),
+      );
       expect(
-        screen.getByRole("link", { name: "一覧へ戻る" }),
+        screen.getByRole("link", { name: roundsText("backToList") }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "プリセット無しで開始" }),
+        screen.getByRole("button", { name: roundsText("startWithoutPreset") }),
       ).toHaveAttribute("aria-disabled", "false");
-      expect(screen.queryByText("個人プリセット")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(roundsText("presetPersonal")),
+      ).not.toBeInTheDocument();
     });
 
     it("取得が完了しない間も開始ボタンは押せ、押すとプリセット未選択で開始を依頼する", async () => {
@@ -143,7 +153,7 @@ describe("RoundPresetSelect", () => {
 
       // When
       await user.click(
-        screen.getByRole("button", { name: "プリセット無しで開始" }),
+        screen.getByRole("button", { name: roundsText("startWithoutPreset") }),
       );
 
       // Then
@@ -162,10 +172,14 @@ describe("RoundPresetSelect", () => {
 
       // Then
       expect(
-        await screen.findByText("ネットワークに接続されていません"),
+        await screen.findByText(roundsText("fetchOffline")),
       ).toBeInTheDocument();
-      expect(screen.queryByText("個人プリセット")).not.toBeInTheDocument();
-      expect(screen.queryByText("公式プリセット")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(roundsText("presetPersonal")),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(roundsText("presetGlobal")),
+      ).not.toBeInTheDocument();
     });
 
     it("通信できない場合も、開始ボタンを押すとラウンドの開始を依頼する", async () => {
@@ -173,11 +187,11 @@ describe("RoundPresetSelect", () => {
       fetchResolves({ status: "offline" });
       const user = userEvent.setup();
       render(<RoundPresetSelect />);
-      await screen.findByText("ネットワークに接続されていません");
+      await screen.findByText(roundsText("fetchOffline"));
 
       // When
       await user.click(
-        screen.getByRole("button", { name: "プリセット無しで開始" }),
+        screen.getByRole("button", { name: roundsText("startWithoutPreset") }),
       );
 
       // Then
@@ -188,27 +202,27 @@ describe("RoundPresetSelect", () => {
 
     it("取得がエラーの場合はエラーメッセージを表示する", async () => {
       // Given
-      fetchResolves({ status: "error", message: "読み込めませんでした。" });
+      fetchResolves({ status: "error", reason: "failed" });
 
       // When
       render(<RoundPresetSelect />);
 
       // Then
       expect(await screen.findByRole("alert")).toHaveTextContent(
-        "読み込めませんでした。",
+        roundsText("fetchFailure.failed"),
       );
     });
 
     it("取得がエラーの場合も、開始ボタンを押すとラウンドの開始を依頼する", async () => {
       // Given
-      fetchResolves({ status: "error", message: "読み込めませんでした。" });
+      fetchResolves({ status: "error", reason: "failed" });
       const user = userEvent.setup();
       render(<RoundPresetSelect />);
       await screen.findByRole("alert");
 
       // When
       await user.click(
-        screen.getByRole("button", { name: "プリセット無しで開始" }),
+        screen.getByRole("button", { name: roundsText("startWithoutPreset") }),
       );
 
       // Then
@@ -229,12 +243,14 @@ describe("RoundPresetSelect", () => {
       render(<RoundPresetSelect />);
 
       // When
-      await user.click(await screen.findByRole("button", { name: "再試行" }));
+      await user.click(
+        await screen.findByRole("button", { name: roundsText("fetchRetry") }),
+      );
 
       // Then
       expect(await screen.findByText("公式720ラウンド")).toBeInTheDocument();
       expect(
-        screen.queryByText("ネットワークに接続されていません"),
+        screen.queryByText(roundsText("fetchOffline")),
       ).not.toBeInTheDocument();
       expect(loadPresets).toHaveBeenCalledTimes(2);
     });
@@ -265,7 +281,7 @@ describe("RoundPresetSelect", () => {
           data: { personal: [], global: [globalPreset] },
         });
       render(<RoundPresetSelect />);
-      await screen.findByText("ネットワークに接続されていません");
+      await screen.findByText(roundsText("fetchOffline"));
 
       // When
       await act(async () => fake.returnOnline());
@@ -292,7 +308,7 @@ describe("RoundPresetSelect", () => {
 
       // Then
       expect(
-        screen.getByRole("button", { name: "プリセット無しで開始" }),
+        screen.getByRole("button", { name: roundsText("startWithoutPreset") }),
       ).toBeInTheDocument();
     });
 
@@ -311,7 +327,7 @@ describe("RoundPresetSelect", () => {
 
       // Then
       expect(
-        screen.getByText("プリセットとして保存すると、ここに表示されます。"),
+        screen.getByText(roundsText("presetPersonalEmpty")),
       ).toBeInTheDocument();
     });
 
@@ -325,7 +341,9 @@ describe("RoundPresetSelect", () => {
 
       // Then
       expect(
-        screen.getByRole("button", { name: "「個人練習セット」で開始" }),
+        screen.getByRole("button", {
+          name: roundsText("startWithPreset", { name: "個人練習セット" }),
+        }),
       ).toBeInTheDocument();
     });
 
@@ -335,7 +353,9 @@ describe("RoundPresetSelect", () => {
       await renderSelect([personalPreset], [globalPreset]);
       await user.click(screen.getAllByTestId("round-preset-button")[0]);
       expect(
-        screen.getByRole("button", { name: "「個人練習セット」で開始" }),
+        screen.getByRole("button", {
+          name: roundsText("startWithPreset", { name: "個人練習セット" }),
+        }),
       ).toBeInTheDocument();
 
       // When
@@ -343,7 +363,7 @@ describe("RoundPresetSelect", () => {
 
       // Then
       expect(
-        screen.getByRole("button", { name: "プリセット無しで開始" }),
+        screen.getByRole("button", { name: roundsText("startWithoutPreset") }),
       ).toBeInTheDocument();
     });
 
@@ -358,7 +378,9 @@ describe("RoundPresetSelect", () => {
 
       // Then
       expect(
-        screen.getByRole("button", { name: "「別の個人セット」で開始" }),
+        screen.getByRole("button", {
+          name: roundsText("startWithPreset", { name: "別の個人セット" }),
+        }),
       ).toBeInTheDocument();
       expect(screen.queryByText("70m")).not.toBeInTheDocument();
     });
@@ -374,7 +396,9 @@ describe("RoundPresetSelect", () => {
 
       // Then
       expect(
-        screen.getByRole("button", { name: "「公式720ラウンド」で開始" }),
+        screen.getByRole("button", {
+          name: roundsText("startWithPreset", { name: "公式720ラウンド" }),
+        }),
       ).toBeInTheDocument();
     });
   });
@@ -416,10 +440,19 @@ describe("RoundPresetSelect", () => {
       // Then
       expect(
         screen.getByTestId("round-preset-format-bow-type"),
-      ).toHaveTextContent("アウトドア / リカーブ");
+      ).toHaveTextContent(
+        roundsText("formatBowType", {
+          format: "アウトドア",
+          bowType: "リカーブ",
+        }),
+      );
       expect(screen.getByText("70m")).toBeInTheDocument();
       expect(screen.getByText("50m")).toBeInTheDocument();
-      expect(screen.getAllByText("6本×6エンド")).toHaveLength(2);
+      expect(
+        screen.getAllByText(
+          roundsText("distanceEnds", { arrowsPerEnd: "6", totalEnds: "6" }),
+        ),
+      ).toHaveLength(2);
     });
 
     it("プリセットに的が埋め込まれていない距離は「的データを取得できません」と表示する", async () => {
@@ -431,7 +464,9 @@ describe("RoundPresetSelect", () => {
       await user.click(screen.getAllByTestId("round-preset-button")[0]);
 
       // Then
-      expect(screen.getAllByText("的データを取得できません")).toHaveLength(2);
+      expect(screen.getAllByText(roundsText("targetFaceMissing"))).toHaveLength(
+        2,
+      );
     });
 
     it("展開された距離構成の部分をクリックしても、選択が解除される", async () => {
@@ -447,7 +482,7 @@ describe("RoundPresetSelect", () => {
       // Then
       expect(screen.queryByText("70m")).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "プリセット無しで開始" }),
+        screen.getByRole("button", { name: roundsText("startWithoutPreset") }),
       ).toBeInTheDocument();
     });
   });
@@ -461,7 +496,9 @@ describe("RoundPresetSelect", () => {
 
         // When
         await user.click(
-          screen.getByRole("button", { name: "プリセット無しで開始" }),
+          screen.getByRole("button", {
+            name: roundsText("startWithoutPreset"),
+          }),
         );
 
         // Then
@@ -481,7 +518,9 @@ describe("RoundPresetSelect", () => {
 
         // When
         await user.click(
-          screen.getByRole("button", { name: "「個人練習セット」で開始" }),
+          screen.getByRole("button", {
+            name: roundsText("startWithPreset", { name: "個人練習セット" }),
+          }),
         );
 
         // Then
@@ -502,7 +541,9 @@ describe("RoundPresetSelect", () => {
 
         // When
         await user.click(
-          screen.getByRole("button", { name: "「個人練習セット」で開始" }),
+          screen.getByRole("button", {
+            name: roundsText("startWithPreset", { name: "個人練習セット" }),
+          }),
         );
 
         // Then
@@ -526,7 +567,7 @@ describe("RoundPresetSelect", () => {
         const user = userEvent.setup();
         await renderSelect([], []);
         const button = screen.getByRole("button", {
-          name: "プリセット無しで開始",
+          name: roundsText("startWithoutPreset"),
         });
         await user.click(button);
         await waitFor(() => {
@@ -550,7 +591,7 @@ describe("RoundPresetSelect", () => {
         const user = userEvent.setup();
         await renderSelect([], []);
         const button = screen.getByRole("button", {
-          name: "プリセット無しで開始",
+          name: roundsText("startWithoutPreset"),
         });
         await user.click(button);
         await waitFor(() => {
@@ -573,22 +614,26 @@ describe("RoundPresetSelect", () => {
         // Given
         startRound.mockResolvedValue({
           status: "failed",
-          error: "権限がありません。",
+          error: "unauthenticated",
         });
         const user = userEvent.setup();
         await renderSelect([], []);
 
         // When
         await user.click(
-          screen.getByRole("button", { name: "プリセット無しで開始" }),
+          screen.getByRole("button", {
+            name: roundsText("startWithoutPreset"),
+          }),
         );
 
         // Then
         expect(
-          await screen.findByText("権限がありません。"),
+          await screen.findByText(roundsText("fetchFailure.unauthenticated")),
         ).toBeInTheDocument();
         expect(
-          screen.getByRole("button", { name: "プリセット無しで開始" }),
+          screen.getByRole("button", {
+            name: roundsText("startWithoutPreset"),
+          }),
         ).toHaveAttribute("aria-disabled", "false");
       });
     });
@@ -625,7 +670,9 @@ describe("RoundPresetSelect", () => {
           expect.any(Function),
         );
         expect(
-          screen.getByRole("button", { name: "プリセット無しで開始" }),
+          screen.getByRole("button", {
+            name: roundsText("startWithoutPreset"),
+          }),
         ).toBeInTheDocument();
       });
 
@@ -644,7 +691,9 @@ describe("RoundPresetSelect", () => {
           expect(screen.queryByText("別の個人セット")).not.toBeInTheDocument();
         });
         expect(
-          screen.getByRole("button", { name: "「個人練習セット」で開始" }),
+          screen.getByRole("button", {
+            name: roundsText("startWithPreset", { name: "個人練習セット" }),
+          }),
         ).toBeInTheDocument();
       });
     });
@@ -670,7 +719,7 @@ describe("RoundPresetSelect", () => {
         // Given
         deletePreset.mockResolvedValue({
           status: "failed",
-          error: "削除できませんでした。",
+          error: "deleteFailed",
         });
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);
@@ -681,7 +730,9 @@ describe("RoundPresetSelect", () => {
 
         // Then
         expect(
-          await screen.findByText("削除できませんでした。"),
+          await screen.findByText(
+            roundsText("presetDeleteFailure.deleteFailed"),
+          ),
         ).toBeInTheDocument();
         expect(screen.getByText("個人練習セット")).toBeInTheDocument();
       });
@@ -690,7 +741,7 @@ describe("RoundPresetSelect", () => {
         // Given
         deletePreset.mockResolvedValue({
           status: "failed",
-          error: "削除できませんでした。",
+          error: "deleteFailed",
         });
         const user = userEvent.setup();
         await renderSelect([personalPreset], []);
@@ -701,7 +752,9 @@ describe("RoundPresetSelect", () => {
 
         // Then
         expect(
-          await screen.findByText("削除できませんでした。"),
+          await screen.findByText(
+            roundsText("presetDeleteFailure.deleteFailed"),
+          ),
         ).toBeInTheDocument();
         expect(screen.getByTestId("confirm-dialog-confirm")).toBeEnabled();
         expect(

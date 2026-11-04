@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { type Dispatch, type SetStateAction, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
@@ -33,6 +34,7 @@ export function SavePresetDialog({
   distances: Distance[];
   targetFaces: TargetFaceOption[];
 }) {
+  const t = useTranslations("rounds");
   const store = useRoundDetailStore();
   const [state, setState] = useState(CLOSED_PRESET_DIALOG);
 
@@ -57,7 +59,7 @@ export function SavePresetDialog({
         data-testid="save-as-preset-trigger"
         className={buttonVariants({ variant: "default", size: "sm" })}
       >
-        プリセット保存
+        {t("presetSaveTrigger")}
       </DialogTrigger>
       <DialogContent>
         <PresetDialogBody
@@ -91,11 +93,10 @@ function PresetDialogBody({
   targetFaces: TargetFaceOption[];
   onSave: () => void;
 }) {
+  const t = useTranslations("rounds");
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="font-medium text-sm">
-        現在の構成をプリセットとして保存しますか？
-      </h2>
+      <h2 className="font-medium text-sm">{t("presetSaveTitle")}</h2>
       <PresetInfo
         format={format}
         bowType={bowType}
@@ -113,7 +114,7 @@ function PresetDialogBody({
           htmlFor="save-as-preset-name"
           className="text-muted-foreground text-xs"
         >
-          プリセット名
+          {t("presetName")}
         </label>
         <Input
           id="save-as-preset-name"
@@ -127,7 +128,9 @@ function PresetDialogBody({
           aria-invalid={Boolean(state.error)}
         />
         {state.error && (
-          <p className="text-destructive text-sm">{state.error}</p>
+          <p className="text-destructive text-sm">
+            {t(`presetSaveFailure.${state.error}`)}
+          </p>
         )}
       </div>
       <Button
@@ -138,7 +141,7 @@ function PresetDialogBody({
         onClick={onSave}
       >
         {state.submitting && <Loader2 className="size-3.5 animate-spin" />}
-        保存
+        {t("save")}
       </Button>
     </div>
   );

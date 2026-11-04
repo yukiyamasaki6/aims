@@ -1,6 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import Home from "./page";
+
+const navigationText = translatorFor("navigation");
 
 // 認証SDKの接続を隔離する。手続きと変換の実装と認証の実装は実物のまま通す。
 vi.mock("@/lib/supabase/infrastructure/client", () => ({
@@ -40,17 +44,18 @@ describe("Home", () => {
     received.replace = false;
 
     // When
-    render(<Home />);
+    render(<Home />, { wrapper: IntlTestProvider });
 
     // Then
     expect(screen.getByRole("heading", { name: "AIMS" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "開始" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: navigationText("startButton") }),
+    ).toBeInTheDocument();
     // 開始ボタンの判定が済むまで待つ(描画後の状態更新を描画の外に残さない)。
     await vi.waitFor(() =>
-      expect(screen.getByRole("link", { name: "開始" })).toHaveAttribute(
-        "data-hydrated",
-        "true",
-      ),
+      expect(
+        screen.getByRole("link", { name: navigationText("startButton") }),
+      ).toHaveAttribute("data-hydrated", "true"),
     );
   });
 
@@ -59,7 +64,7 @@ describe("Home", () => {
     received.replace = true;
 
     // When
-    render(<Home />);
+    render(<Home />, { wrapper: IntlTestProvider });
 
     // Then
     expect(received.props?.start?.pendingHref).toBe("/signup");

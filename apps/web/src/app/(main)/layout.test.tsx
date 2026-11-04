@@ -10,8 +10,13 @@ import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { RootClientEntry } from "../root-client-entry";
 import MainLayout from "./layout";
+
+const authText = translatorFor("auth");
+const navigationText = translatorFor("navigation");
 
 // 入口のテスト。SDK(@supabase/ssr)と、ブラウザの保存先(localStorage)・場所(location)・通信の可否(navigator.onLine)の境界だけを差し替え、
 // 手続き、実装、画面、確認ダイアログ、左パネルは実物を通す。
@@ -61,8 +66,7 @@ vi.mock("@supabase/ssr", () => ({
 const replace = vi.fn();
 const assign = vi.fn();
 const IDENTITY_KEY = "aims:local-user-id";
-const NETWORK_ERROR =
-  "通信エラーが発生しました。しばらくしてから再度お試しください。";
+const NETWORK_ERROR = authText("failure.unreachable");
 const RATE_LIMIT_ERROR = new AuthApiError(
   "limit",
   429,
@@ -94,7 +98,7 @@ function signOutClearingSession(result: () => Promise<unknown>) {
 }
 
 async function confirmSignOut(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: "サインアウト" }));
+  await user.click(screen.getByRole("button", { name: authText("signOut") }));
   await user.click(screen.getByTestId("confirm-dialog-confirm"));
 }
 
@@ -103,6 +107,7 @@ function renderLayout() {
     <MainLayout>
       <p>子要素</p>
     </MainLayout>,
+    { wrapper: IntlTestProvider },
   );
 }
 
@@ -114,6 +119,7 @@ function renderLayoutWithIdentity() {
         <p>子要素</p>
       </MainLayout>
     </RootClientEntry>,
+    { wrapper: IntlTestProvider },
   );
 }
 
@@ -151,7 +157,7 @@ describe("MainLayout", () => {
 
       // Then
       expect(screen.getByRole("complementary")).toContainElement(
-        screen.getByRole("button", { name: "サインアウト" }),
+        screen.getByRole("button", { name: authText("signOut") }),
       );
       expect(screen.getByText("子要素")).toBeInTheDocument();
     });
@@ -162,10 +168,9 @@ describe("MainLayout", () => {
       renderLayout();
 
       // Then
-      expect(screen.getByRole("link", { name: "個人" })).toHaveAttribute(
-        "href",
-        ROUNDS_PATH,
-      );
+      expect(
+        screen.getByRole("link", { name: navigationText("leftPanelPersonal") }),
+      ).toHaveAttribute("href", ROUNDS_PATH);
     });
 
     it("Supabaseの環境変数が無くても、描画時に接続を作らず描画できる", () => {
@@ -176,9 +181,11 @@ describe("MainLayout", () => {
       // When
       const render = () =>
         renderToString(
-          <MainLayout>
-            <p>子要素</p>
-          </MainLayout>,
+          <IntlTestProvider>
+            <MainLayout>
+              <p>子要素</p>
+            </MainLayout>
+          </IntlTestProvider>,
         );
 
       // Then
@@ -204,7 +211,7 @@ describe("MainLayout", () => {
 
       // Then
       expect(await screen.findByText(NETWORK_ERROR)).toBeInTheDocument();
-      expect(screen.getByText("サインアウトしますか？")).toBeInTheDocument();
+      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
       expect(screen.getByTestId("confirm-dialog-confirm")).toHaveAttribute(
         "aria-disabled",
         "false",
@@ -416,7 +423,7 @@ describe("MainLayout", () => {
       expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
       await waitFor(() => {
         expect(
-          screen.queryByText("サインアウトしますか？"),
+          screen.queryByText(authText("signOutConfirm")),
         ).not.toBeInTheDocument();
       });
     });
@@ -437,7 +444,7 @@ describe("MainLayout", () => {
       expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
       await waitFor(() => {
         expect(
-          screen.queryByText("サインアウトしますか？"),
+          screen.queryByText(authText("signOutConfirm")),
         ).not.toBeInTheDocument();
       });
       expect(screen.queryByText(NETWORK_ERROR)).not.toBeInTheDocument();
@@ -459,7 +466,7 @@ describe("MainLayout", () => {
       expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
       await waitFor(() => {
         expect(
-          screen.queryByText("サインアウトしますか？"),
+          screen.queryByText(authText("signOutConfirm")),
         ).not.toBeInTheDocument();
       });
       expect(screen.queryByText(NETWORK_ERROR)).not.toBeInTheDocument();
@@ -479,7 +486,7 @@ describe("MainLayout", () => {
       expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
       await waitFor(() => {
         expect(
-          screen.queryByText("サインアウトしますか？"),
+          screen.queryByText(authText("signOutConfirm")),
         ).not.toBeInTheDocument();
       });
     });
@@ -497,13 +504,11 @@ describe("MainLayout", () => {
       expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
       await waitFor(() => {
         expect(
-          screen.queryByText("サインアウトしますか？"),
+          screen.queryByText(authText("signOutConfirm")),
         ).not.toBeInTheDocument();
       });
       expect(
-        screen.queryByText(
-          "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
-        ),
+        screen.queryByText(authText("failure.rate_limited")),
       ).not.toBeInTheDocument();
     });
 
@@ -518,11 +523,9 @@ describe("MainLayout", () => {
 
       // Then
       expect(
-        await screen.findByText(
-          "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
-        ),
+        await screen.findByText(authText("failure.rate_limited")),
       ).toBeInTheDocument();
-      expect(screen.getByText("サインアウトしますか？")).toBeInTheDocument();
+      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
       expect(replace).not.toHaveBeenCalled();
     });
 
@@ -537,11 +540,9 @@ describe("MainLayout", () => {
 
       // Then
       expect(
-        await screen.findByText(
-          "通信エラーが発生しました。しばらくしてから再度お試しください。",
-        ),
+        await screen.findByText(authText("failure.unreachable")),
       ).toBeInTheDocument();
-      expect(screen.getByText("サインアウトしますか？")).toBeInTheDocument();
+      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
       expect(replace).not.toHaveBeenCalled();
     });
 
@@ -562,9 +563,7 @@ describe("MainLayout", () => {
 
       // Then
       expect(
-        await screen.findByText(
-          "エラーが発生しました。しばらくしてから再度お試しください。",
-        ),
+        await screen.findByText(authText("failure.other")),
       ).toBeInTheDocument();
       expect(
         screen.queryByText(/session store exploded/),
@@ -578,9 +577,7 @@ describe("MainLayout", () => {
       supabase.signOut.mockResolvedValue({ error: RATE_LIMIT_ERROR });
       renderLayout();
       await confirmSignOut(user);
-      await screen.findByText(
-        "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
-      );
+      await screen.findByText(authText("failure.rate_limited"));
 
       // When
       act(() => supabase.emit("SIGNED_OUT", null));
@@ -597,9 +594,7 @@ describe("MainLayout", () => {
       supabase.signOut.mockResolvedValueOnce({ error: RATE_LIMIT_ERROR });
       renderLayoutWithIdentity();
       await confirmSignOut(user);
-      await screen.findByText(
-        "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
-      );
+      await screen.findByText(authText("failure.rate_limited"));
       signOutClearingSession(async () => ({ error: null }));
 
       // When
@@ -614,7 +609,9 @@ describe("MainLayout", () => {
       const user = userEvent.setup();
       supabase.signOut.mockReturnValue(new Promise(() => {}));
       renderLayout();
-      await user.click(screen.getByRole("button", { name: "サインアウト" }));
+      await user.click(
+        screen.getByRole("button", { name: authText("signOut") }),
+      );
       const confirm = screen.getByTestId("confirm-dialog-confirm");
 
       // When

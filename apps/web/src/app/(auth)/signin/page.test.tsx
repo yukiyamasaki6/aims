@@ -4,7 +4,11 @@ import userEvent from "@testing-library/user-event";
 import { forwardRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import SignInPage from "./page";
+
+const authText = translatorFor("auth");
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
@@ -43,7 +47,7 @@ vi.mock("@marsidev/react-turnstile", () => ({
 }));
 
 function submitButton() {
-  return screen.getByRole("button", { name: "サインイン" });
+  return screen.getByRole("button", { name: authText("signInSubmit") });
 }
 
 async function fillAndVerify(user: ReturnType<typeof userEvent.setup>) {
@@ -51,7 +55,10 @@ async function fillAndVerify(user: ReturnType<typeof userEvent.setup>) {
     screen.getByPlaceholderText("you@example.com"),
     "user@example.com",
   );
-  await user.type(screen.getByPlaceholderText("パスワード"), "password1");
+  await user.type(
+    screen.getByPlaceholderText(authText("passwordPlaceholder")),
+    "password1",
+  );
   await user.click(screen.getByRole("button", { name: "チェックを完了" }));
 }
 
@@ -74,11 +81,11 @@ describe("サインイン画面の入口", () => {
     // Given
 
     // When
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
 
     // Then
     expect(
-      screen.getByRole("heading", { name: "サインイン" }),
+      screen.getByRole("heading", { name: authText("signInTitle") }),
     ).toBeInTheDocument();
     expect(widget.siteKey).toBe("page-site-key");
   });
@@ -87,16 +94,21 @@ describe("サインイン画面の入口", () => {
     // Given
     auth.signInWithPassword.mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await user.type(
       screen.getByPlaceholderText("you@example.com"),
       "user@example.com",
     );
-    await user.type(screen.getByPlaceholderText("パスワード"), "password1");
+    await user.type(
+      screen.getByPlaceholderText(authText("passwordPlaceholder")),
+      "password1",
+    );
     await user.click(screen.getByRole("button", { name: "チェックを完了" }));
 
     // When
-    await user.click(screen.getByRole("button", { name: "サインイン" }));
+    await user.click(
+      screen.getByRole("button", { name: authText("signInSubmit") }),
+    );
 
     // Then
     expect(connection.createBrowserClient).toHaveBeenCalled();
@@ -113,7 +125,7 @@ describe("サインイン画面の入口", () => {
     const deferred = Promise.withResolvers<{ error: null }>();
     auth.signInWithPassword.mockReturnValue(deferred.promise);
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
@@ -131,11 +143,11 @@ describe("サインイン画面の入口", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
 
     // When
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
 
     // Then
     expect(
-      screen.getByRole("heading", { name: "サインイン" }),
+      screen.getByRole("heading", { name: authText("signInTitle") }),
     ).toBeInTheDocument();
     expect(connection.createBrowserClient).not.toHaveBeenCalled();
   });
@@ -145,7 +157,7 @@ describe("サインイン画面の入口", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
@@ -153,9 +165,7 @@ describe("サインイン画面の入口", () => {
 
     // Then
     expect(
-      await screen.findByText(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      ),
+      await screen.findByText(authText("failure.unreachable")),
     ).toBeInTheDocument();
     expect(submitButton()).toHaveAttribute("aria-disabled", "false");
     expect(connection.createBrowserClient).not.toHaveBeenCalled();
@@ -169,7 +179,7 @@ describe("サインイン画面の入口", () => {
       throw new Error("push failed");
     });
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
@@ -177,9 +187,7 @@ describe("サインイン画面の入口", () => {
 
     // Then
     expect(
-      await screen.findByText(
-        "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      ),
+      await screen.findByText(authText("failure.unreachable")),
     ).toBeInTheDocument();
     expect(submitButton()).toHaveAttribute("aria-disabled", "false");
   });
@@ -189,7 +197,7 @@ describe("サインイン画面の入口", () => {
     window.history.replaceState(null, "", "/signin?returnTo=%2Frounds%2Fnew");
     auth.signInWithPassword.mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
@@ -215,7 +223,7 @@ describe("サインイン画面の入口", () => {
       );
       auth.signInWithPassword.mockResolvedValue({ error: null });
       const user = userEvent.setup();
-      render(<SignInPage />);
+      render(<SignInPage />, { wrapper: IntlTestProvider });
       await fillAndVerify(user);
 
       // When
@@ -233,7 +241,7 @@ describe("サインイン画面の入口", () => {
     "認証サービスが認証の拒否を返しても(%s)、文言を示し、使用済みのトークンでの再送を拒み、新しいトークンで再送信して遷移できる",
     async (_name, query, destination) => {
       // Given
-      const message = "メールアドレスまたはパスワードが間違っています。";
+      const message = authText("failure.invalid_credentials");
       window.history.replaceState(null, "", `/signin${query}`);
       auth.signInWithPassword
         .mockResolvedValueOnce({
@@ -245,7 +253,7 @@ describe("サインイン画面の入口", () => {
         })
         .mockResolvedValue({ error: null });
       const user = userEvent.setup();
-      render(<SignInPage />);
+      render(<SignInPage />, { wrapper: IntlTestProvider });
       await fillAndVerify(user);
       await user.click(submitButton());
       expect(await screen.findByText(message)).toBeInTheDocument();
@@ -275,8 +283,7 @@ describe("サインイン画面の入口", () => {
     "認証サービスが通信の断を値で返したときは(%s)、文言を示し、チェックをやり直さずに同じトークンで再送信して遷移できる",
     async (_name, query, destination) => {
       // Given
-      const message =
-        "通信エラーが発生しました。しばらくしてから再度お試しください。";
+      const message = authText("failure.unreachable");
       window.history.replaceState(null, "", `/signin${query}`);
       auth.signInWithPassword
         .mockResolvedValueOnce({
@@ -284,7 +291,7 @@ describe("サインイン画面の入口", () => {
         })
         .mockResolvedValue({ error: null });
       const user = userEvent.setup();
-      render(<SignInPage />);
+      render(<SignInPage />, { wrapper: IntlTestProvider });
       await fillAndVerify(user);
       await user.click(submitButton());
       expect(await screen.findByText(message)).toBeInTheDocument();
@@ -314,7 +321,7 @@ describe("サインイン画面の入口", () => {
       ),
     });
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
 
     // When
@@ -322,9 +329,7 @@ describe("サインイン画面の入口", () => {
 
     // Then
     expect(
-      await screen.findByText(
-        "エラーが発生しました。しばらくしてから再度お試しください。",
-      ),
+      await screen.findByText(authText("failure.other")),
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/password hash backend down/),
@@ -337,12 +342,10 @@ describe("サインイン画面の入口", () => {
       .mockRejectedValueOnce(new Error("Failed to fetch"))
       .mockResolvedValue({ error: null });
     const user = userEvent.setup();
-    render(<SignInPage />);
+    render(<SignInPage />, { wrapper: IntlTestProvider });
     await fillAndVerify(user);
     await user.click(submitButton());
-    await screen.findByText(
-      "通信エラーが発生しました。しばらくしてから再度お試しください。",
-    );
+    await screen.findByText(authText("failure.unreachable"));
     await user.click(screen.getByRole("button", { name: "チェックを完了" }));
 
     // When
