@@ -178,8 +178,7 @@ describe("D2と対象外", () => {
     expect(texts("a.ts", source)).toEqual(["日本語"]);
   });
 
-  // 設計: import・exportの指定子は検出しない。本体は検出するため、修正まで失敗を期待する。
-  it.fails("import・exportの指定子は検出しない", () => {
+  it("import・exportの指定子は検出しない", () => {
     const source = 'import x from "./日本語"; export * from "é";';
     expect(texts("a.ts", source)).toEqual([]);
   });
@@ -265,8 +264,7 @@ describe("例外の一覧", () => {
     },
   );
 
-  // 設計: 理由が無い行は失敗にする。本体は検査しないため、修正まで失敗を期待する。
-  it.fails("理由が無い行は、失敗にする", () => {
+  it("理由が無い行は、失敗にする", () => {
     const problems = checkSources({ "a.ts": "const a = 'あ';" }, [
       { path: "a.ts" },
     ]);
