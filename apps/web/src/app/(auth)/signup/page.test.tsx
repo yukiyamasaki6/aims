@@ -458,28 +458,6 @@ describe("サインアップ画面の入口", () => {
     expect(auth.verifyOtp).toHaveBeenCalledTimes(2);
   });
 
-  it("遷移が投げると、通信エラーを示し、送信中を解除して再度送信できる", async () => {
-    // Given
-    const user = userEvent.setup();
-    render(<SignUpPage />, { wrapper: IntlTestProvider });
-    await advanceToPasswordStep(user);
-    auth.updateUser.mockResolvedValue({ error: null });
-    navigation.push.mockImplementationOnce(() => {
-      throw new Error("push failed");
-    });
-    await user.type(passwordInput(), "password123");
-    await user.click(setPasswordButton());
-    await screen.findByText(NETWORK_ERROR_MESSAGE);
-    expect(setPasswordButton()).toHaveAttribute("aria-disabled", "false");
-
-    // When
-    await user.click(setPasswordButton());
-
-    // Then
-    expect(navigation.push).toHaveBeenCalledTimes(2);
-    expect(navigation.push).toHaveBeenLastCalledWith(ROUNDS_PATH);
-  });
-
   it("入口から通して連打しても、パスワードの設定は1回だけで、遷移も1回になる", async () => {
     // Given
     const deferred = Promise.withResolvers<{ error: null }>();

@@ -184,26 +184,6 @@ describe("サインイン画面の入口", () => {
     expect(navigation.push).not.toHaveBeenCalled();
   });
 
-  it("遷移が投げると、通信エラーを示し、送信中を解除する", async () => {
-    // Given
-    auth.signInWithPassword.mockResolvedValue({ error: null });
-    navigation.push.mockImplementation(() => {
-      throw new Error("push failed");
-    });
-    const user = userEvent.setup();
-    render(<SignInPage />, { wrapper: IntlTestProvider });
-    await fillAndVerify(user);
-
-    // When
-    await user.click(submitButton());
-
-    // Then
-    expect(
-      await screen.findByText(authText("failure.unreachable")),
-    ).toBeInTheDocument();
-    expect(submitButton()).toHaveAttribute("aria-disabled", "false");
-  });
-
   it("遷移元付きのURLで開いた成功では、その遷移元へ遷移する", async () => {
     // Given
     window.history.replaceState(null, "", "/signin?returnTo=%2Frounds%2Fnew");

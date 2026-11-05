@@ -1,5 +1,5 @@
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
-import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
+import type { AuthFailure } from "../domain/auth-failure";
 import { destinationOf } from "../domain/auth-routes";
 import {
   beginSignIn,
@@ -16,7 +16,6 @@ export type SignInAuthenticator = {
 };
 
 // 今の画面の遷移元の値の読み出し。検証していない値で、無ければnull。検証は手続きが経路の規則で行う。
-// 例外: 投げることがあり、手続きが通信エラーの失敗として扱う。
 export type ReturnToReader = {
   read(): string | null;
 };
@@ -64,12 +63,7 @@ export function createSignIn({
       }
       // 成功時は以前のエラーを消し、送信中は解除しない。遷移が終わる前に再び押され、使用済みのトークンで二重に送信されるのを防ぐため。
       view.dispatch({ type: "signedIn" });
-      // 遷移元の読み出しと遷移が投げたときは、トークンは使用済みのため、通信エラーとして消費し、送信中のまま止めない。
-      try {
-        pageNavigation.go(destinationOf(returnToReader.read(), protectedPath));
-      } catch {
-        refuse(UNREACHABLE);
-      }
+      pageNavigation.go(destinationOf(returnToReader.read(), protectedPath));
     },
   };
 }

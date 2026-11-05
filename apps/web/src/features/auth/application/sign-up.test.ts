@@ -353,23 +353,6 @@ describe("サインアップの手続き", () => {
       ]);
     });
 
-    it("遷移が投げたら、passwordSetの後に通信エラーとして失敗にし、実行中のまま止めない", async () => {
-      // Given
-      const { signUp, navigation, events, viewOf } = setup();
-      navigation.go.mockImplementation(() => {
-        throw new Error("push failed");
-      });
-      const view = viewOf(onPasswordStep);
-
-      // When
-      await signUp.setPassword({ password: "password1" }, view);
-
-      // Then
-      expect(types(events)).toEqual(["passwordSet", "failed"]);
-      expect(view.observedState.error).toBe("unreachable");
-      expect(view.observedState.pending).toBeNull();
-    });
-
     it("同じタスクで続けて2回呼んでも、2回目は実行中を見て拒否され、設定と遷移は1回になる", async () => {
       // Given
       const { signUp, authenticator, navigation, viewOf } = setup();

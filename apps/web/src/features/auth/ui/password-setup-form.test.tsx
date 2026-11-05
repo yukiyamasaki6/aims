@@ -1112,30 +1112,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
         deferred.resolve(ACCEPTED);
       });
     });
-
-    it("遷移が投げた場合、通信エラーのメッセージを表示し、送信中を解除して再度送信できる", async () => {
-      // Given
-      auth.setPassword.mockResolvedValue(ACCEPTED);
-      leave.mockImplementationOnce(() => {
-        throw new Error("push failed");
-      });
-      const user = userEvent.setup();
-      renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-      await user.click(setPasswordButton());
-      expect(
-        await screen.findByText(NETWORK_ERROR_MESSAGE),
-      ).toBeInTheDocument();
-      expect(setPasswordButton()).toHaveAttribute("aria-disabled", "false");
-
-      // When
-      await user.click(setPasswordButton());
-
-      // Then
-      expect(leave).toHaveBeenCalledTimes(2);
-      expect(leave).toHaveBeenLastCalledWith(subject.destination);
-    });
   });
 
   // 判断Q: 理由が表示された後に再び送信した場合は、次の結果が出るまで、表示された理由が残る。

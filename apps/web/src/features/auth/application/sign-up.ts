@@ -79,7 +79,7 @@ async function sendCode(
   await deliver(context, request, view, { type: "codeSent" });
 }
 
-// 設定に成功したら、サインインの後の既定の行き先へ遷移する。遷移が投げたときは、通信エラーとして失敗にし、実行中のまま止めない。
+// 設定に成功したら、サインインの後の既定の行き先へ遷移する。
 async function setPassword(
   authenticator: Pick<PasswordSetupAuthenticator, "setPassword">,
   pageNavigation: Pick<PageNavigation, "go">,
@@ -99,9 +99,5 @@ async function setPassword(
   // 遷移の直前に、画面が表示中かを確かめ直す(再設定と同じ理由。離脱の原則)。
   if (!view.isMounted()) return;
   view.dispatch({ type: "passwordSet" });
-  try {
-    pageNavigation.go(destinationOf(null, protectedPath));
-  } catch {
-    view.dispatch({ type: "failed", failure: UNREACHABLE });
-  }
+  pageNavigation.go(destinationOf(null, protectedPath));
 }

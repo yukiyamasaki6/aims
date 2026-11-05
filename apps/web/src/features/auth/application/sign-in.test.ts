@@ -344,32 +344,4 @@ describe("サインインの手続き", () => {
       expect(navigation.go).not.toHaveBeenCalled();
     },
   );
-
-  it.each([
-    ["遷移", "go"],
-    ["遷移元の読み出し", "returnTo"],
-  ] as const)(
-    "成功の後に%sが投げると、signedInの後に、使ったトークンを消費して通信断の失敗にし、チェックをやり直させて送信中を解除する",
-    async (_name, method) => {
-      // Given
-      const { signIn, navigation, actions, resetCheck, viewOf } = setup();
-      navigation[method].mockImplementation(() => {
-        throw new Error("navigation failed");
-      });
-      const view = viewOf(verified);
-
-      // When
-      await signIn.submit(input, view);
-
-      // Then
-      expect(actions).toEqual([
-        { type: "signedIn" },
-        { type: "refused", failure: UNREACHABLE },
-      ]);
-      expect(resetCheck).toHaveBeenCalledOnce();
-      expect(view.observedState.error).toBe("unreachable");
-      expect(view.observedState.captchaToken).toBeNull();
-      expect(view.observedState.submitting).toBe(false);
-    },
-  );
 });

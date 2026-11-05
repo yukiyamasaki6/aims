@@ -535,27 +535,6 @@ describe("サインイン画面の部品", () => {
     expect(submitButton().querySelector(".animate-spin")).not.toBeNull();
   });
 
-  it("遷移が投げると、通信エラーの文言を示し、送信中を解除してチェックをやり直させる", async () => {
-    // Given
-    const { navigation } = setup();
-    navigation.go.mockImplementation(() => {
-      throw new Error("push failed");
-    });
-    const user = userEvent.setup();
-    await fillCredentials(user);
-    verify("captcha-token");
-
-    // When
-    await user.click(submitButton());
-
-    // Then
-    expect(
-      await screen.findByText(authText("failure.unreachable")),
-    ).toBeInTheDocument();
-    expect(submitButton()).toHaveAttribute("aria-disabled", "false");
-    expect(widget.reset).toHaveBeenCalledOnce();
-  });
-
   // 判断Q: 理由が表示された後に再び送信した場合は、次の結果が出るまで、表示された理由が残る。
   describe("再送信の間のエラー表示", () => {
     const InvalidMessage = authText("failure.invalid_credentials");
