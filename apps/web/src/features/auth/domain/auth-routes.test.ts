@@ -54,7 +54,7 @@ describe("allowedReturnTo", () => {
     });
   });
 
-  describe("拒否する値の場合", () => {
+  describe("拒否する値の場合(型・別オリジン・保護範囲の外)", () => {
     it.each([
       ["null", null],
       ["undefined", undefined],
@@ -66,14 +66,10 @@ describe("allowedReturnTo", () => {
       ["javascriptスキーム", "javascript:alert(1)"],
       ["dataスキーム", "data:text/html,x"],
       ["/\\で始まる値", "/\\evil.com"],
-      ["バックスラッシュを含む値", "/rounds\\..\\signin"],
+      ["バックスラッシュで/rounds配下から抜ける値", "/rounds\\..\\signin"],
       ["タブを挟んだ外部ホスト", "/\t/evil.com"],
       ["改行を挟んだ外部ホスト", "/\n/evil.com"],
       ["復帰文字を挟んだ外部ホスト", "/\r/evil.com"],
-      ["パス中の改行", "/rounds/new\n"],
-      ["NUL文字", "/rounds/\u0000new"],
-      ["DEL文字", "/rounds/\u007fnew"],
-      ["/で始まらない値", "rounds/new"],
       ["/signin", "/signin"],
       ["クエリ付きの/signin", "/signin?returnTo=%2Frounds"],
       ["/signup", "/signup"],
@@ -92,20 +88,37 @@ describe("allowedReturnTo", () => {
       // Then
       expect(result).toBeNull();
     });
+  });
 
-    it("長さが2048を超える値を拒否し、2048までは受け入れる", () => {
+  describe("URLの正規化で保護パスになる値の場合", () => {
+    it.each([
+      ["パス末尾の改行", "/rounds/new\n", "/rounds/new"],
+      ["NUL文字", "/rounds/\u0000new", "/rounds/%00new"],
+      ["DEL文字", "/rounds/\u007fnew", "/rounds/%7Fnew"],
+      ["バックスラッシュ", "/rounds\\new", "/rounds/new"],
+      ["先頭の/が無い値", "rounds/new", "/rounds/new"],
+    ])(
+      "%sは、同一オリジンの保護パスなので、正規化後の値を返す",
+      (_name, raw, expected) => {
+        // Given
+
+        // When
+        const result = allowedReturnTo(raw, ROUNDS);
+
+        // Then
+        expect(result).toBe(expected);
+      },
+    );
+
+    it("長さが2048を超える値も、同一オリジンの保護パスなら受け入れる", () => {
       // Given
 
       // When
-      const atLimit = `/rounds/${"a".repeat(2048 - "/rounds/".length)}`;
-      const overLimit = `${atLimit}a`;
-      const accepted = allowedReturnTo(atLimit, ROUNDS);
-      const rejected = allowedReturnTo(overLimit, ROUNDS);
+      const raw = `/rounds/${"a".repeat(3000)}`;
+      const result = allowedReturnTo(raw, ROUNDS);
 
       // Then
-      expect(atLimit).toHaveLength(2048);
-      expect(accepted).toBe(atLimit);
-      expect(rejected).toBeNull();
+      expect(result).toBe(raw);
     });
   });
 });

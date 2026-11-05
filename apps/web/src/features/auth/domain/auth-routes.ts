@@ -9,7 +9,6 @@ const GUEST_ONLY_PATHS: readonly string[] = [
   RESET_PASSWORD_PATH,
 ];
 export const RETURN_TO_PARAM = "returnTo";
-const MAX_LENGTH = 2048;
 const BASE = "http://localhost";
 
 // サインインが要る画面(保護の範囲の根とその配下)かを返す。
@@ -23,12 +22,9 @@ export function allowedReturnTo(
   raw: string | null | undefined,
   protectedPath: string,
 ): string | null {
-  if (typeof raw !== "string" || raw.length > MAX_LENGTH) return null;
-  if (!raw.startsWith("/") || raw[1] === "/" || raw[1] === "\\") return null;
-  // URLパーサが改行・タブを除去して//hostになる迂回を防ぐ。
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字の拒否が目的
-  if (/[\u0000-\u001f\u007f\\]/.test(raw)) return null;
+  if (typeof raw !== "string") return null;
 
+  // URLパーサが//hostや/\hostの形にする迂回は、基準と別のオリジンになるため、次の検査で拒否される。
   let url: URL;
   try {
     url = new URL(raw, BASE);
