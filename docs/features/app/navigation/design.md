@@ -30,7 +30,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 - `src/lib/supabase/infrastructure/session.ts`(共有の技術の実装): `updateSession` が要求ごとにセッションを更新し、`getClaims`(端末内でトークンの署名と期限を検証する)でサインインしているかと、更新したcookieを書いた応答を返す。経路の規則は持たない。規則は認証の機能の `redirectFor` が持ち、`proxy.ts` が呼ぶ。
   - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
   - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。
-- `src/features/auth/application/session.ts` の手続き`createSession`(保護の範囲の根 `protectedPath` を依存として受ける)の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、マウント時の`unauthenticated`）と、一度だけの`/signin`への遷移（`replace`。今の場所を遷移元に付ける）を持つ。喪失の定義は`domain/auth-change.ts`、遷移の規則（1回、遷移元、サインアウトの実行中は委ねる）は`domain/session-end-flow.ts`。`(main)`のレイアウトが、手続きと実装を生成して見張りを始める。
+- `src/features/auth/application/session.ts` の手続き`createSession`(保護の範囲の根 `protectedPath` を依存として受ける)の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、マウント時の`unauthenticated`）と、`/signin`への遷移（`replace`。今の場所を遷移元に付ける）を持つ。喪失の定義は`domain/auth-change.ts`、遷移の規則（遷移元、サインアウトの実行中は移らない）は`domain/session-end-flow.ts`。`(main)`のレイアウトが、手続きと実装を生成して見張りを始める。
 - `src/app/page.tsx`(画面の入口): 静的な紹介画面の入口。認証の経路の定数 `SIGN_UP_PATH` を読み、開始の行き先として紹介画面へ渡す。
 - `src/features/navigation/ui/intro-screen.tsx`(UI層): 紹介画面。アプリ名、説明文、左上のロゴ、開始ボタンを表示し、受け取った行き先を開始ボタンへ渡す。
 - `src/features/navigation/ui/start-button.tsx`(UI層): 開始ボタン。受け取った行き先へのリンクで、状態を持たない。
@@ -52,7 +52,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 | 入口のガードを `proxy.ts`、表示中の喪失の検知を `(main)` のレイアウトが始める見張りに分ける | `proxy.ts` はリクエスト時しか働かず、サインアウト・更新拒否・SWの枠を検知できないため。 | ガードを1か所にできる方式が出たとき。 |
 | 喪失を `SIGNED_OUT` と、マウント時の `readSession` の未認証（保存先が空、またはサーバーの拒否が確定）に限る | `INITIAL_SESSION` のnullと `AuthRetryableFetchError` は通信失敗でも起き、入力中の画面を誤って遷移させるため使わない。 | supabase-jsのイベントの意味が変わったとき。 |
 | 喪失の見張りを`(main)`のレイアウトが始める | 認証が要る画面の集合をルートグループで表し、除外リストを持たないため。`/offline` はSWが元のURLのまま返すため、パスでの除外は画面と食い違う。 | `(main)` の外に認証が要る画面を置くとき。 |
-| `window.location.replace` で一度だけ遷移する | 前の利用者の画面の状態とRouter Cacheを捨てるため。`router.push` は捨てられないため採らない。 | Router Cacheを明示的に消せるようになったとき。 |
+| `window.location.replace` で遷移する | 前の利用者の画面の状態とRouter Cacheを捨てるため。`router.push` は捨てられないため採らない。 | Router Cacheを明示的に消せるようになったとき。 |
 | 文字付きロゴは、文字を図形にしたSVGの画像で表示し、HTMLの文字で組まない | 表示する環境のフォントによらず同じ形にし、READMEと同じ画像にするため。マークだけを別の生成で作ると、マークを変えたときにロゴのマークが古い形で残るため、アイコンと同じスクリプトと値で作る。 | ダークモードを入れるとき。マークを別の方法で作るとき。 |
 | 文字付きロゴに白い丸角の地を付け、明るい表示用の1種類にする | GitHubの暗い表示で黒い絵柄が見えなくならないため。アプリは白地なので地は見えない。暗い表示用の画像を分けると、画面とREADMEで同じ画像でなくなるため採らない。 | ダークモードを入れるとき。 |
 | AIMSロゴ・リンクの遷移先を全画面で `/` にする | 認証画面を含め、どの画面からもアプリの入口へ戻れるようにするため。`/rounds` へは個人リンクと開始ボタンで移る。 | ロゴに別の役割を持たせるとき。 |

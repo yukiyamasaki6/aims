@@ -67,7 +67,7 @@ export type Session = {
 
 // サインアウトは、この端末のサインインの終了を頼んだ後、サインインの状態を読み、未認証なら終えられたとしてサインインへ移す。
 // セッションの喪失(サインアウトの通知、更新の拒否、確認の結果の未認証)は見張りが検知して移す。サインアウトの実行中の喪失は、サインアウトの判定に委ねる。
-// 遷移の状態(SessionEndFlow)は、この手続きが1つ持ち、サインアウトと見張りの両方が使う。
+// 実行中の状態(SessionEndFlow)は、この手続きが1つ持ち、サインアウトと見張りの両方が使う。
 export function createSession({
   authenticator,
   pageReplace,
@@ -96,9 +96,8 @@ export function createSession({
   }
 
   function go(from: string | null) {
-    const left = leave(flow, from, protectedPath);
-    flow = left.state;
-    if (left.result !== null) pageReplace.replace(left.result);
+    const destination = leave(flow, from, protectedPath);
+    if (destination !== null) pageReplace.replace(destination);
   }
 
   function lose() {

@@ -17,7 +17,7 @@ describe("beginSignOut", () => {
 
     // Then
     expect(result).toEqual({
-      state: { running: true, left: false },
+      state: { running: true },
       request: true,
     });
   });
@@ -69,7 +69,7 @@ describe("endSignOut", () => {
 
       // Then
       expect(result).toEqual({
-        state: { running: false, left: false },
+        state: { running: false },
         result: { kind: "completed" },
       });
     });
@@ -92,7 +92,7 @@ describe("endSignOut", () => {
 
       // Then
       expect(result).toEqual({
-        state: { running: false, left: false },
+        state: { running: false },
         result: { kind: "failed", failure: { kind: "rate_limited" } },
       });
     });
@@ -123,7 +123,7 @@ describe("endSignOut", () => {
 
       // Then
       expect(result).toEqual({
-        state: { running: false, left: false },
+        state: { running: false },
         result: { kind: "discarded" },
       });
     });
@@ -139,10 +139,7 @@ describe("leave", () => {
     const result = leave(state, "/rounds/new?from=a", "/rounds");
 
     // Then
-    expect(result).toEqual({
-      state: { running: false, left: true },
-      result: "/signin?returnTo=%2Frounds%2Fnew%3Ffrom%3Da",
-    });
+    expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew%3Ffrom%3Da");
   });
 
   it("保護の範囲の根(/rounds)でも、その場所を遷移元に付けてサインインへ移る", () => {
@@ -153,7 +150,7 @@ describe("leave", () => {
     const result = leave(state, "/rounds", "/rounds");
 
     // Then
-    expect(result.result).toBe("/signin?returnTo=%2Frounds");
+    expect(result).toBe("/signin?returnTo=%2Frounds");
   });
 
   it("保護の範囲の外(/other)は遷移元にならず、遷移元を付けずにサインインへ移る", () => {
@@ -164,7 +161,7 @@ describe("leave", () => {
     const result = leave(state, "/other", "/rounds");
 
     // Then
-    expect(result.result).toBe("/signin");
+    expect(result).toBe("/signin");
   });
 
   it("保護の範囲の根が異なる場合、根の下の場所だけを遷移元にする", () => {
@@ -176,8 +173,8 @@ describe("leave", () => {
     const outside = leave(state, "/rounds/x", "/elsewhere");
 
     // Then
-    expect(inside.result).toBe("/signin?returnTo=%2Felsewhere%2Fx");
-    expect(outside.result).toBe("/signin");
+    expect(inside).toBe("/signin?returnTo=%2Felsewhere%2Fx");
+    expect(outside).toBe("/signin");
   });
 
   it("遷移元を明示しない(サインアウトを終えられた)ときは、遷移元を付けずにサインインへ移る", () => {
@@ -192,10 +189,7 @@ describe("leave", () => {
     const result = leave(completed, null, "/rounds");
 
     // Then
-    expect(result).toEqual({
-      state: { running: false, left: true },
-      result: "/signin",
-    });
+    expect(result).toBe("/signin");
   });
 
   it("サインアウトの実行中は、遷移元があっても移らず、状態を変えない", () => {
@@ -206,7 +200,7 @@ describe("leave", () => {
     const result = leave(running, "/rounds/new", "/rounds");
 
     // Then
-    expect(result).toEqual({ state: running, result: null });
+    expect(result).toBeNull();
   });
 
   it.each([
@@ -232,19 +226,7 @@ describe("leave", () => {
       const result = leave(settled, "/rounds/new", "/rounds");
 
       // Then
-      expect(result.result).toBe("/signin?returnTo=%2Frounds%2Fnew");
+      expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew");
     },
   );
-
-  it("移った後に重ねて呼んでも、遷移は1回である", () => {
-    // Given
-    const first = leave(initialSessionEndFlow, "/rounds/new", "/rounds");
-
-    // When
-    const second = leave(first.state, null, "/rounds");
-
-    // Then
-    expect(first.result).not.toBeNull();
-    expect(second).toEqual({ state: first.state, result: null });
-  });
 });

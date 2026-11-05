@@ -27,7 +27,8 @@
 | --- | --- | --- |
 | 集約の型と初期値 | `<操作>Flow`、`initial<型名>` | `SignInFlow`、`initialSessionEndFlow` |
 | 開始の命令 | `begin<操作>(流れ, 入力)`が`Start<流れ, 依頼>`(新しい状態と、開始するときだけ依頼。開始しないときは`null`)を返す | `beginSignIn`、`beginSignOut` |
-| 結果つきの命令 | `<動詞><操作>(流れ, 入力)`が`Step<流れ, 結果>`を返す | `endSignOut`、`leave` |
+| 結果つきの命令 | `<動詞><操作>(流れ, 入力)`が`Step<流れ, 結果>`を返す | `endSignOut` |
+| 状態を持たない判定 | `<動詞>(流れ, 入力)`が結果だけを返す(`Step`を使わない) | `leave` |
 | 画面から送る事実 | 過去形の出来事。reducerは`<操作>Reducer` | `captchaChecked`、`failed` |
 | 認証サービスの状態変化 | `AuthChange`(ドメイン)、`AuthChanges`(約束)。他の機能へ公開する平らな値の通知は`SignInChange`、`SignInChanges`(約束) | |
 | 認証サービスに頼む約束 | `<手続き>Authenticator` | `SignInAuthenticator`、`SessionAuthenticator` |

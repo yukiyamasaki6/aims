@@ -432,19 +432,6 @@ describe("セッション喪失の見張り", () => {
       // Then
       expect(page.replace).not.toHaveBeenCalled();
     });
-
-    it("入力が重なっても、遷移は1回である", () => {
-      // Given
-      const { session, page, emit } = setup();
-      session.watch();
-
-      // When
-      emit(signedOut);
-      emit(signedOut);
-
-      // Then
-      expect(page.replace).toHaveBeenCalledTimes(1);
-    });
   });
 
   describe("始めた時の確認", () => {

@@ -291,18 +291,6 @@ describe("MainLayout", () => {
       );
     });
 
-    it("入力が重なっても、遷移は1回である", () => {
-      // Given
-      renderLayout();
-
-      // When
-      supabase.emit("SIGNED_OUT", null);
-      supabase.emit("SIGNED_OUT", null);
-
-      // Then
-      expect(replace).toHaveBeenCalledTimes(1);
-    });
-
     it("表示した時にオンラインで未認証なら、サインインへ移る", async () => {
       // Given
       supabase.getSession.mockResolvedValue({
