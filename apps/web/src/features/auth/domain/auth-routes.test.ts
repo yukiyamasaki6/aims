@@ -7,7 +7,7 @@ import {
 } from "./auth-routes";
 
 // 保護の範囲の根は使う側が渡す引数のため、既存の件は一覧の経路で確かめる。
-const ROUNDS = "/rounds";
+const _ROUNDS = "/rounds";
 
 describe("allowedReturnTo", () => {
   describe("/rounds配下の相対パスの場合", () => {
@@ -24,7 +24,7 @@ describe("allowedReturnTo", () => {
       // Given
 
       // When
-      const result = allowedReturnTo(raw, ROUNDS);
+      const result = allowedReturnTo(raw);
 
       // Then
       expect(result).toBe(expected);
@@ -35,7 +35,7 @@ describe("allowedReturnTo", () => {
 
       // When
       const raw = "/rounds/new?a=1#section";
-      const result = allowedReturnTo(raw, ROUNDS);
+      const result = allowedReturnTo(raw);
 
       // Then
       expect(result).toBe("/rounds/new?a=1");
@@ -46,7 +46,7 @@ describe("allowedReturnTo", () => {
 
       // When
       const raw = "/rounds/x/../new";
-      const result = allowedReturnTo(raw, ROUNDS);
+      const result = allowedReturnTo(raw);
 
       // Then
       expect(result).toBe("/rounds/new");
@@ -82,7 +82,7 @@ describe("allowedReturnTo", () => {
       // Given
 
       // When
-      const result = allowedReturnTo(raw, ROUNDS);
+      const result = allowedReturnTo(raw);
 
       // Then
       expect(result).toBeNull();
@@ -102,7 +102,7 @@ describe("allowedReturnTo", () => {
         // Given
 
         // When
-        const result = allowedReturnTo(raw, ROUNDS);
+        const result = allowedReturnTo(raw);
 
         // Then
         expect(result).toBe(expected);
@@ -114,7 +114,7 @@ describe("allowedReturnTo", () => {
 
       // When
       const raw = `/rounds/${"a".repeat(3000)}`;
-      const result = allowedReturnTo(raw, ROUNDS);
+      const result = allowedReturnTo(raw);
 
       // Then
       expect(result).toBe(raw);
@@ -127,7 +127,7 @@ describe("destinationOf", () => {
     // Given
 
     // When
-    const result = destinationOf("/rounds/new?a=1", ROUNDS);
+    const result = destinationOf("/rounds/new?a=1");
 
     // Then
     expect(result).toBe("/rounds/new?a=1");
@@ -137,8 +137,8 @@ describe("destinationOf", () => {
     // Given
 
     // When
-    const missing = destinationOf(null, ROUNDS);
-    const external = destinationOf("https://evil.com/rounds", ROUNDS);
+    const missing = destinationOf(null);
+    const external = destinationOf("https://evil.com/rounds");
 
     // Then
     expect(missing).toBe("/rounds");
@@ -231,7 +231,7 @@ describe("redirectFor", () => {
     // Given
 
     // When
-    const result = redirectFor({ ...request, ...override }, ROUNDS);
+    const result = redirectFor({ ...request, ...override });
 
     // Then
     expect(result).toBe(expected);
@@ -247,7 +247,7 @@ describe("redirectFor", () => {
     // Given
 
     // When
-    const result = redirectFor({ ...request, ...override }, ROUNDS);
+    const result = redirectFor({ ...request, ...override });
 
     // Then
     expect(result).toBeNull();
@@ -255,70 +255,3 @@ describe("redirectFor", () => {
 });
 
 // 保護の範囲の根は引数で渡る。実在する経路でない値で、規則が根に従うことを確かめる(値そのものが検証の対象)。
-describe("保護の範囲の根を差し替えたとき", () => {
-  const Elsewhere = "/elsewhere";
-  const request = {
-    signedIn: false,
-    pathname: "/",
-    search: "",
-  };
-
-  it("根とその下だけを保護の範囲にし、/roundsと根で始まる別のパスは保護しない", () => {
-    // Given
-
-    // When
-    const root = redirectFor({ ...request, pathname: "/elsewhere" }, Elsewhere);
-    const below = redirectFor(
-      { ...request, pathname: "/elsewhere/1" },
-      Elsewhere,
-    );
-    const rounds = redirectFor({ ...request, pathname: "/rounds" }, Elsewhere);
-    const prefixOnly = redirectFor(
-      { ...request, pathname: "/elsewherex" },
-      Elsewhere,
-    );
-
-    // Then
-    expect(root).toBe("/signin?returnTo=%2Felsewhere");
-    expect(below).toBe("/signin?returnTo=%2Felsewhere%2F1");
-    expect(rounds).toBeNull();
-    expect(prefixOnly).toBeNull();
-  });
-
-  it("遷移元に許すのは根とその下だけで、/rounds配下は拒否する", () => {
-    // Given
-
-    // When
-    const below = allowedReturnTo("/elsewhere/1", Elsewhere);
-    const rounds = allowedReturnTo("/rounds/1", Elsewhere);
-
-    // Then
-    expect(below).toBe("/elsewhere/1");
-    expect(rounds).toBeNull();
-  });
-
-  it("既定の行き先は根で、無効な遷移元でも根になる", () => {
-    // Given
-
-    // When
-    const missing = destinationOf(null, Elsewhere);
-    const outside = destinationOf("/rounds/1", Elsewhere);
-
-    // Then
-    expect(missing).toBe("/elsewhere");
-    expect(outside).toBe("/elsewhere");
-  });
-
-  it("認証済みで未認証専用の画面を開くと、根へ送る", () => {
-    // Given
-
-    // When
-    const result = redirectFor(
-      { ...request, signedIn: true, pathname: "/signin" },
-      Elsewhere,
-    );
-
-    // Then
-    expect(result).toBe("/elsewhere");
-  });
-});

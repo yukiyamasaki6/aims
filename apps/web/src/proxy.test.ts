@@ -87,14 +87,11 @@ describe("proxy", () => {
         // Given
         const redirects = [false, true].some(
           (signedIn) =>
-            redirectFor(
-              {
-                signedIn,
-                pathname,
-                search: "",
-              },
-              ROUNDS_PATH,
-            ) !== null,
+            redirectFor({
+              signedIn,
+              pathname,
+              search: "",
+            }) !== null,
         );
 
         // When

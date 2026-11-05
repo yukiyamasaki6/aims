@@ -1,19 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { redirectFor } from "@/features/auth/domain/auth-routes";
-import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import { updateSession } from "@/lib/supabase/infrastructure/session";
 
-// 保護の範囲の根は、ラウンド一覧の経路である。
 export async function proxy(request: NextRequest) {
   const { signedIn, response } = await updateSession(request);
-  const destination = redirectFor(
-    {
-      signedIn,
-      pathname: request.nextUrl.pathname,
-      search: request.nextUrl.search,
-    },
-    ROUNDS_PATH,
-  );
+  const destination = redirectFor({
+    signedIn,
+    pathname: request.nextUrl.pathname,
+    search: request.nextUrl.search,
+  });
   if (destination !== null) {
     return NextResponse.redirect(new URL(destination, request.url));
   }

@@ -1,5 +1,6 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
+import { destinationOf } from "../domain/auth-routes";
 import {
   applyPassword,
   type PasswordSetup,
@@ -15,15 +16,12 @@ type Dependencies = {
   authenticator: PasswordSetupAuthenticator;
   pageNavigation: Pick<PageNavigation, "go">;
   clock: Clock;
-  // 保護対象の画面の範囲の根の経路。サインインの後の既定の行き先になる。
-  protectedPath: string;
 };
 
 export function createSignUp({
   authenticator,
   pageNavigation,
   clock,
-  protectedPath,
 }: Dependencies): PasswordSetup {
   const context: PasswordSetupContext = {
     authenticator,
@@ -35,7 +33,7 @@ export function createSignUp({
     verifyCode: (input, view) => verifyCode(context, input, view),
     tickCooldown: (dispatch) => tickCooldown(context, dispatch),
     setPassword: (input, view) =>
-      setPassword(authenticator, pageNavigation, protectedPath, input, view),
+      setPassword(authenticator, pageNavigation, input, view),
   };
 }
 
@@ -43,7 +41,6 @@ export function createSignUp({
 async function setPassword(
   authenticator: Pick<PasswordSetupAuthenticator, "setPassword">,
   pageNavigation: Pick<PageNavigation, "go">,
-  protectedPath: string,
   input: { password: string },
   view: PasswordSetupView,
 ) {
@@ -57,5 +54,5 @@ async function setPassword(
     return;
   }
   view.dispatch({ type: "passwordSet" });
-  pageNavigation.go(protectedPath);
+  pageNavigation.go(destinationOf(null));
 }

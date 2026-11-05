@@ -70,7 +70,6 @@ const subjects: {
         clock: createBrowserClock(),
         authenticator: auth,
         pageNavigation: { go: leave },
-        protectedPath: "/rounds",
       }),
     form: (procedure) => <SignUpForm signUp={procedure} siteKey="site-key" />,
     emailHeading: "サインアップ",

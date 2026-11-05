@@ -25,12 +25,9 @@ export type SignIn = {
 export function createSignIn({
   authenticator,
   pageNavigation,
-  protectedPath,
 }: {
   authenticator: SignInAuthenticator;
   pageNavigation: PageNavigation;
-  // 保護対象の画面の範囲の根の経路。遷移元の検証と、既定の行き先に使う。
-  protectedPath: string;
 }): SignIn {
   return {
     async submit(input, view) {
@@ -50,7 +47,7 @@ export function createSignIn({
       }
       // 成功時は以前のエラーを消し、送信中は解除しない。遷移が終わる前に再び押され、使用済みのトークンで二重に送信されるのを防ぐため。
       view.dispatch({ type: "signedIn" });
-      pageNavigation.go(destinationOf(input.from, protectedPath));
+      pageNavigation.go(destinationOf(input.from));
     },
   };
 }

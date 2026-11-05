@@ -55,7 +55,6 @@ function setup({
   const signIn = createSignIn({
     authenticator,
     pageNavigation: fake.pageNavigation,
-    protectedPath: "/rounds",
   });
   const form = (
     <SignInForm

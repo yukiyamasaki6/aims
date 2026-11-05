@@ -67,7 +67,7 @@
 | `features/rounds/infrastructure/round-queries.ts` | インフラ層(一覧の問い合わせと行の写し) |
 | `features/rounds/infrastructure/browser-unique-ids.ts` | インフラ層(新しいIDと、IDに混ぜる乱数(`randomBytes`)の払い出し) |
 | `features/rounds/infrastructure/rounds-db-schema.ts` | インフラ層(ラウンドが使うスキーマの部分の型) |
-| `features/rounds/index.ts` | 機能の入口 |
+| `features/rounds/index.ts` | 機能の入口(`ROUNDS_PATH`を公開) |
 | `hooks/use-hydrated.ts`、`components/ui/{confirm-dialog,busy-button,dialog,button}.tsx`、`lib/utils.ts` | 共有の画面部品 |
 | `lib/supabase/contract/database.ts`、`lib/supabase/infrastructure/database.ts` | 共有の技術の約束と実装(並びの向き`ascending`) |
 

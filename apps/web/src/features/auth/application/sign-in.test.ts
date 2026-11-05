@@ -23,7 +23,7 @@ const verified = signInReducer(initialSignInFlow, {
 
 const accepted: CallResult = { kind: "accepted" };
 
-function setup(protectedPath = "/rounds") {
+function setup() {
   const authenticator = {
     signIn: vi.fn(async (): Promise<CallResult> => accepted),
   };
@@ -32,7 +32,6 @@ function setup(protectedPath = "/rounds") {
   const signIn = createSignIn({
     authenticator,
     pageNavigation: fake.pageNavigation,
-    protectedPath,
   });
   const { events, resetCheck, viewOf, screen } = screenHarness(signInReducer);
   return {
@@ -81,38 +80,6 @@ describe("サインインの手続き", () => {
       expect(resetCheck).not.toHaveBeenCalled();
     },
   );
-
-  it("保護の範囲の根が異なる場合、既定の行き先は根になり、根の下の遷移元だけを許す", async () => {
-    // Given
-    const withoutReturnTo = setup("/elsewhere");
-    const insideRoot = setup("/elsewhere");
-    const outsideRoot = setup("/elsewhere");
-
-    // When
-    await withoutReturnTo.signIn.submit(
-      input,
-      withoutReturnTo.viewOf(verified),
-    );
-    await insideRoot.signIn.submit(
-      { ...input, from: "/elsewhere/x?a=1" },
-      insideRoot.viewOf(verified),
-    );
-    await outsideRoot.signIn.submit(
-      { ...input, from: "/rounds/new" },
-      outsideRoot.viewOf(verified),
-    );
-
-    // Then
-    expect(withoutReturnTo.navigation.go).toHaveBeenCalledExactlyOnceWith(
-      "/elsewhere",
-    );
-    expect(insideRoot.navigation.go).toHaveBeenCalledExactlyOnceWith(
-      "/elsewhere/x?a=1",
-    );
-    expect(outsideRoot.navigation.go).toHaveBeenCalledExactlyOnceWith(
-      "/elsewhere",
-    );
-  });
 
   it("前の失敗の後の成功では、遷移の前にsignedInを送り、遷移の中ではエラーが消えて送信中のままである", async () => {
     // Given

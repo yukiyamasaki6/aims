@@ -51,7 +51,6 @@ function renderForm(options?: { strict?: boolean }) {
     clock: createBrowserClock(),
     authenticator: auth,
     pageNavigation: { go: nav.go },
-    protectedPath: "/rounds",
   });
   const form = <SignUpForm signUp={signUp} siteKey="site-key" />;
   return render(options?.strict ? <StrictMode>{form}</StrictMode> : form, {
