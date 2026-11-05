@@ -1,9 +1,8 @@
 // 認証の失敗の種類。サインイン、サインアップ、パスワード再設定、サインアウト、他の機能が使う。
-// 利用者向けの文言は持たない。文言は、UI層の文言の一覧が種類ごとに持つ。種類を作るのは、認証サービスのエラーを写すインフラ層(拒否の種類、other)と、手続きが判定して加える箇所(unauthenticated)である。
+// 利用者向けの文言は持たない。文言は、UI層の文言の一覧が種類ごとに持つ。種類を作るのは、認証サービスのエラーを写すインフラ層(拒否の種類、other)である。
 // 認証サービスに届かなかった(unreachable)ことを表す語は、この種類だけである。
 export type AuthFailureKind =
   | "unreachable"
-  | "unauthenticated"
   | "invalid_credentials"
   | "code_expired"
   | "rate_limited"

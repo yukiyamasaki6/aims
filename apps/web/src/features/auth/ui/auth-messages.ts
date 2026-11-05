@@ -12,7 +12,6 @@ export const authMessages = {
     failure: {
       unreachable:
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      unauthenticated: "サインインが必要です。",
       invalid_credentials: "メールアドレスまたはパスワードが間違っています。",
       code_expired: "認証コードが正しくないか、有効期限が切れています。",
       rate_limited:

@@ -126,10 +126,7 @@ async function read(
   }
 }
 
-type RejectionKind = Exclude<
-  AuthFailure["kind"],
-  "other" | "unreachable" | "unauthenticated" | "already_registered"
->;
+type RejectionKind = Exclude<AuthFailure["kind"], "other" | "unreachable">;
 
 // 認証サービスが拒否したときの、エラーコードと失敗の種類の対応。
 const REJECTION_KINDS = new Map<string, RejectionKind>([
