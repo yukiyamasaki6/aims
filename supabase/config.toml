@@ -255,10 +255,11 @@ otp_expiry = 900
 subject = "AIMS メールアドレス認証"
 content_path = "./supabase/templates/otp.html"
 
-# マジックリンクではなく認証コード(OTP)でサインインするため、コードを表示するテンプレートに差し替える。
+# 確認済みの既存利用者のサインアップ(signInWithOtp)に届く案内。
+# 既存のアカウントへ入れてしまわないよう、コードもリンクも入れず、サインインと再設定への案内だけにする。
 [auth.email.template.magic_link]
-subject = "AIMS メールアドレス認証"
-content_path = "./supabase/templates/otp.html"
+subject = "AIMS 登録済みのメールアドレスです"
+content_path = "./supabase/templates/already-registered.html"
 
 # パスワード再設定もリンクではなく認証コード(OTP)で行うため、コードを表示するテンプレートに差し替える。
 [auth.email.template.recovery]
