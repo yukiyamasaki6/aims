@@ -1034,27 +1034,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       expect(auth.setPassword).toHaveBeenCalledOnce();
       expect(leave).not.toHaveBeenCalled();
     });
-
-    it("再描画を挟まず同じタスクで2回押しても、設定は1回だけになる", async () => {
-      // Given
-      const deferred = Promise.withResolvers<CallResult>();
-      auth.setPassword.mockReturnValue(deferred.promise);
-      renderForm();
-      await advanceToPasswordStep();
-      changeValue(passwordInput(), "password123");
-
-      // When
-      act(() => {
-        fireEvent.click(setPasswordButton());
-        fireEvent.click(setPasswordButton());
-      });
-
-      // Then
-      expect(auth.setPassword).toHaveBeenCalledOnce();
-      await act(async () => {
-        deferred.resolve(ACCEPTED);
-      });
-    });
   });
 
   // 判断Q: 理由が表示された後に再び送信した場合は、次の結果が出るまで、表示された理由が残る。

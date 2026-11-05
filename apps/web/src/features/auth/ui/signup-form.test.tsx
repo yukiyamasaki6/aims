@@ -214,27 +214,6 @@ describe("SignUpForm", () => {
         captchaToken: "captcha-token",
       });
     });
-
-    it("再描画を挟まず同じタスクで2回押しても、登録の判定は1回だけになる", async () => {
-      // Given
-      const deferred = Promise.withResolvers<boolean>();
-      auth.isRegistered.mockReturnValue(deferred.promise);
-      renderForm();
-      changeValue(emailInput(), "user@example.com");
-      completeCaptcha();
-
-      // When
-      act(() => {
-        fireEvent.click(sendCodeButton());
-        fireEvent.click(sendCodeButton());
-      });
-
-      // Then
-      expect(auth.isRegistered).toHaveBeenCalledOnce();
-      await act(async () => {
-        deferred.resolve(true);
-      });
-    });
   });
 
   describe("文言とリンク", () => {

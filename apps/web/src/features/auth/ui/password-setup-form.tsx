@@ -67,11 +67,12 @@ export function PasswordSetupForm({
   const [email, setEmail] = useState("");
   const hydrated = useHydrated();
   const texts = useAuthTexts();
+  const { dispatch } = view;
   // 残りが変わるたびに1秒の予約をやり直し、0で止まり、離れるときに取り消す。
   useEffect(
     () =>
-      flow.resendCooldown === 0 ? undefined : procedure.tickCooldown(view),
-    [flow.resendCooldown, procedure, view],
+      flow.resendCooldown === 0 ? undefined : procedure.tickCooldown(dispatch),
+    [flow.resendCooldown, procedure, dispatch],
   );
   const step = { procedure, copy, flow, view, siteKey };
 

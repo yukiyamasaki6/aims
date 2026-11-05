@@ -76,7 +76,7 @@ describe("パスワード設定の共通の手続き", () => {
       const view = viewOf(resendable);
 
       // When
-      tickCooldown(context, view);
+      tickCooldown(context, view.dispatch);
       clock.advance(999);
       const before = events.length;
       clock.advance(1);
@@ -92,7 +92,7 @@ describe("パスワード設定の共通の手続き", () => {
       const view = viewOf(resendable);
 
       // When
-      const cancel = tickCooldown(context, view);
+      const cancel = tickCooldown(context, view.dispatch);
       cancel();
       clock.advance(1000);
 

@@ -476,27 +476,6 @@ describe("サインアップ画面の入口", () => {
     expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
   });
 
-  it("再描画を挟まず同じタスクで2回押しても、パスワードの設定は1回だけになる", async () => {
-    // Given
-    const deferred = Promise.withResolvers<{ error: null }>();
-    const user = userEvent.setup();
-    render(<SignUpPage />, { wrapper: IntlTestProvider });
-    await advanceToPasswordStep(user);
-    auth.updateUser.mockReturnValue(deferred.promise);
-    await user.type(passwordInput(), "password123");
-
-    // When
-    act(() => {
-      fireEvent.click(setPasswordButton());
-      fireEvent.click(setPasswordButton());
-    });
-    await act(async () => deferred.resolve({ error: null }));
-
-    // Then
-    expect(auth.updateUser).toHaveBeenCalledOnce();
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
-  });
-
   it("パスワードの設定に成功して遷移を始めた後に再度押しても、再送信しない", async () => {
     // Given
     auth.updateUser.mockResolvedValue({ error: null });

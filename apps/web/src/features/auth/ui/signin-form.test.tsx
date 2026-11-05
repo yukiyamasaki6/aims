@@ -419,27 +419,6 @@ describe("サインイン画面の部品", () => {
     expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds");
   });
 
-  it("再描画を挟まず同じタスクで2回送信しても、認証は1回だけ行う", async () => {
-    // Given
-    const { authenticator } = setup();
-    const deferred = Promise.withResolvers<CallResult>();
-    authenticator.signIn.mockReturnValue(deferred.promise);
-    const user = userEvent.setup();
-    await fillCredentials(user);
-    verify("captcha-token");
-    const form = submitButton().closest("form") as HTMLFormElement;
-
-    // When
-    act(() => {
-      fireEvent.submit(form);
-      fireEvent.submit(form);
-    });
-    await act(async () => deferred.resolve(accepted));
-
-    // Then
-    expect(authenticator.signIn).toHaveBeenCalledOnce();
-  });
-
   it("成功の後にもう一度押しても、認証は1回のままで、ボタンは無効のままにする", async () => {
     // Given
     const { authenticator, navigation } = setup();

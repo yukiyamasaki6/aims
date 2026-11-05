@@ -34,7 +34,7 @@ export type PasswordSetup = {
     view: PasswordSetupView,
   ): Promise<void>;
   // 再送の待ちを1秒進める出来事を、1秒後に1回送る予約。返す関数で取り消す。
-  tickCooldown(view: PasswordSetupView): () => void;
+  tickCooldown(dispatch: PasswordSetupView["dispatch"]): () => void;
 };
 
 // 共有の順序が使う、認証サービスと、手続きごとのコードの目的。
@@ -49,10 +49,10 @@ const COOLDOWN_TICK_MS = 1000;
 
 export function tickCooldown(
   { clock }: PasswordSetupContext,
-  view: PasswordSetupView,
+  dispatch: PasswordSetupView["dispatch"],
 ): () => void {
   return clock.after(COOLDOWN_TICK_MS, () =>
-    view.dispatch({ type: "cooldownTicked" }),
+    dispatch({ type: "cooldownTicked" }),
   );
 }
 

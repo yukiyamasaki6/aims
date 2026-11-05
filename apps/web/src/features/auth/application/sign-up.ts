@@ -46,7 +46,7 @@ export function createSignUp({
     sendCode: (input, view) => sendCode(context, registration, input, view),
     resend: (input, view) => resend(context, input, view),
     verifyCode: (input, view) => verifyCode(context, input, view),
-    tickCooldown: (view) => tickCooldown(context, view),
+    tickCooldown: (dispatch) => tickCooldown(context, dispatch),
     setPassword: (input, view) =>
       setPassword(authenticator, pageNavigation, protectedPath, input, view),
   };

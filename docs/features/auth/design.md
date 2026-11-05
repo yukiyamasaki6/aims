@@ -16,7 +16,7 @@
 - `src/features/auth/application/call-result.ts`: 認証サービスへの頼みごとの結果(`CallResult`)。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装。画面はブラウザの接続を、再設定の要求の入口はサーバーの接続を渡す。応答の変換(エラーのクラス名とコード、イベント名、セッションの形)も、このファイルだけが知る。
 - `src/lib/supabase/infrastructure/server.ts`: サーバーでの接続。管理者の接続と、要求の利用者のセッションの接続。
-- `src/features/auth/ui/use-screen-view.ts`: 画面の状態、表示中の判定、チェックのウィジェットの参照を持ち、手続きへ渡す画面の約束を作る。
+- `src/features/auth/ui/use-screen-view.ts`: 画面の状態、表示中の判定、チェックのウィジェットの参照を持ち、手続きへ渡す画面の約束を作る(約束は描画ごとに作り、`begin`は描画済みの状態に適用する)。
 - `src/features/auth/ui/auth-field.tsx`、`src/components/ui/busy-button.tsx`: 入力欄とエラー文の結び付け、処理中のボタンの表現。
 - `src/features/auth/ui/auth-header.tsx`、`turnstile.tsx`: 認証画面の見出しと、セキュリティチェックの部品(サイトキーは画面の入口が引数で渡す)。
 
