@@ -32,7 +32,6 @@ function createForm(overrides: Partial<Props> = {}) {
     siteKey: "site-key",
     checkRef: { current: undefined },
     onCheck: vi.fn(),
-    checked: false,
     resendCooldown: 0,
     ...overrides,
   } satisfies Props;
@@ -267,27 +266,6 @@ describe("OtpCodeStep", () => {
       // Then
       expect(zeroLabel).toBe(authText("otpResend"));
       expect(oneLabel).toBe("再送（1秒）");
-    });
-
-    it("セキュリティチェックの完了をdata-captcha-readyに反映する", () => {
-      // Given
-
-      // When
-      const ready = createForm({ checked: true });
-      const notReady = createForm({ checked: false });
-      const { unmount } = renderStep(ready);
-      const readyValue = screen
-        .getByRole("button", { name: authText("otpResend") })
-        .getAttribute("data-captcha-ready");
-      unmount();
-      renderStep(notReady);
-      const notReadyValue = screen
-        .getByRole("button", { name: authText("otpResend") })
-        .getAttribute("data-captcha-ready");
-
-      // Then
-      expect(readyValue).toBe("true");
-      expect(notReadyValue).toBe("false");
     });
   });
 });

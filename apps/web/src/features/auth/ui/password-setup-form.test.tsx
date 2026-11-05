@@ -395,7 +395,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       expect(turnstile.reset).toHaveBeenCalledOnce();
       expect(sendCodeButton()).toHaveAttribute("aria-disabled", "false");
       expect(spinnerIn(sendCodeButton())).toBeNull();
-      expect(sendCodeButton()).toHaveAttribute("data-captcha-ready", "false");
     });
 
     it.each([
@@ -570,7 +569,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       // Then
       expect(heading(subject.emailHeading)).toBeInTheDocument();
       expect(emailInput()).toHaveValue("user@example.com");
-      expect(sendCodeButton()).toHaveAttribute("data-captcha-ready", "false");
     });
 
     it("戻った後に再度コード入力画面へ進むと、前回のコード入力値が残っていない", async () => {

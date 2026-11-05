@@ -37,7 +37,7 @@ import {
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
 import { overlapNextRefresh } from "../helpers/session-overlap";
-import { mockTurnstile } from "../helpers/turnstile";
+import { mockTurnstile, waitForTurnstileToken } from "../helpers/turnstile";
 
 const authText = translatorFor("auth");
 const roundsText = translatorFor("rounds");
@@ -148,7 +148,7 @@ async function signInOnPage(
   const signInButton = page.getByRole("button", {
     name: authText("signInSubmit"),
   });
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
   await signInButton.click();
 }
 

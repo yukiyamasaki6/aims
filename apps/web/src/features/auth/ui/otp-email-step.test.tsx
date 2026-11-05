@@ -41,7 +41,6 @@ function createForm(overrides: Partial<Props> = {}) {
     siteKey: "site-key",
     checkRef: { current: undefined },
     onCheck: vi.fn(),
-    checked: false,
     ...overrides,
   } satisfies Props;
 }
@@ -216,27 +215,6 @@ describe("OtpEmailStep", () => {
       const notReadyValue = second.container
         .querySelector("form")
         ?.getAttribute("data-hydrated");
-
-      // Then
-      expect(readyValue).toBe("true");
-      expect(notReadyValue).toBe("false");
-    });
-
-    it("セキュリティチェックの完了を送信ボタンのdata-captcha-readyに反映する", () => {
-      // Given
-
-      // When
-      const ready = createForm({ checked: true });
-      const notReady = createForm({ checked: false });
-      const { unmount } = renderStep(ready);
-      const readyValue = screen
-        .getByRole("button", { name: authText("otpSendCode") })
-        .getAttribute("data-captcha-ready");
-      unmount();
-      renderStep(notReady);
-      const notReadyValue = screen
-        .getByRole("button", { name: authText("otpSendCode") })
-        .getAttribute("data-captcha-ready");
 
       // Then
       expect(readyValue).toBe("true");

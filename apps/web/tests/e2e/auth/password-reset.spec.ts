@@ -10,7 +10,7 @@ import {
 } from "../helpers/auth";
 import { fastForwardResendCooldown } from "../helpers/clock";
 import { getOtpCodeFromMailpit } from "../helpers/mailpit";
-import { mockTurnstile } from "../helpers/turnstile";
+import { mockTurnstile, waitForTurnstileToken } from "../helpers/turnstile";
 
 const authText = translatorFor("auth");
 
@@ -89,7 +89,7 @@ test("メールで本人確認してパスワードを変更すると、この�
   // メールを送って認証コードの入力画面へ進む。
   const { emailInput, sendCodeButton } = await openEmailStep(page);
   await emailInput.fill(email);
-  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
   await sendCodeButton.click();
   await expect(
     page.getByRole("heading", { name: authText("otpTitle") }),
@@ -128,7 +128,7 @@ test("メールで本人確認してパスワードを変更すると、この�
   const signInButton = page.getByRole("button", {
     name: authText("signInSubmit"),
   });
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
   await signInButton.click();
   await expect(page).toHaveURL(/\/rounds/);
   await expect(
@@ -144,7 +144,7 @@ test("再送待機時間の終了後に再送すると、新しい認証コー�
   await page.clock.install();
   const { emailInput, sendCodeButton } = await openEmailStep(page);
   await emailInput.fill(email);
-  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
   await sendCodeButton.click();
   await expect(
     page.getByRole("heading", { name: authText("otpTitle") }),
@@ -155,7 +155,7 @@ test("再送待機時間の終了後に再送すると、新しい認証コー�
   const resendButton = page.getByRole("button", {
     name: new RegExp(`^${authText("otpResend")}`),
   });
-  await expect(resendButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 2);
   await fastForwardResendCooldown(page);
   await expect(resendButton).toHaveText(authText("otpResend"));
 

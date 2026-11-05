@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { waitForTurnstileToken } from "./turnstile";
 
 const authText = translatorFor("auth");
 
@@ -84,7 +85,7 @@ export async function signUpAndSignIn(
   const signInButton = page.getByRole("button", {
     name: authText("signInSubmit"),
   });
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
   await signInButton.click();
   await expect(page).toHaveURL(/\/rounds/);
 }

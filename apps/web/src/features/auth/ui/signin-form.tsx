@@ -69,11 +69,7 @@ export function SignInForm({
           onVerify={(token) => view.dispatch({ type: "captchaChecked", token })}
           error={texts.fieldError("captcha", flow.fieldErrors.captcha)}
         />
-        <BusyButton
-          type="submit"
-          data-captcha-ready={flow.captchaToken !== null}
-          busy={flow.submitting}
-        >
+        <BusyButton type="submit" busy={flow.submitting}>
           {t("signInSubmit")}
         </BusyButton>
       </form>

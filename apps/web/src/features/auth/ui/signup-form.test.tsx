@@ -189,7 +189,6 @@ describe("SignUpForm", () => {
       expect(turnstile.reset).not.toHaveBeenCalled();
       expect(sendCodeButton()).toHaveAttribute("aria-disabled", "false");
       expect(spinnerIn(sendCodeButton())).toBeNull();
-      expect(sendCodeButton()).toHaveAttribute("data-captcha-ready", "true");
     });
 
     it("通信エラーの後は使っていないトークンを保ち、同じトークンで再試行して進める", async () => {

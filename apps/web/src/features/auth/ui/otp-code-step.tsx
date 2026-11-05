@@ -25,8 +25,6 @@ type OtpCodeStepProps = {
   siteKey: string;
   checkRef: RefObject<TurnstileInstance | undefined>;
   onCheck: (token: string | null) => void;
-  // セキュリティチェックが完了している(トークンがある)か。
-  checked: boolean;
   resendCooldown: number;
 };
 
@@ -43,7 +41,6 @@ export function OtpCodeStep({
   siteKey,
   checkRef,
   onCheck,
-  checked,
   resendCooldown,
 }: OtpCodeStepProps) {
   const t = useTranslations("auth");
@@ -68,7 +65,6 @@ export function OtpCodeStep({
       <Turnstile siteKey={siteKey} ref={checkRef} onVerify={onCheck} />
       <ResendSection
         pending={pending}
-        checked={checked}
         resendCooldown={resendCooldown}
         resendError={resendError}
         onResend={onResend}
@@ -113,13 +109,11 @@ function CodeEntryForm({
 
 function ResendSection({
   pending,
-  checked,
   resendCooldown,
   resendError,
   onResend,
 }: {
   pending: Pending;
-  checked: boolean;
   resendCooldown: number;
   resendError: string | undefined;
   onResend: () => void;
@@ -133,7 +127,6 @@ function ResendSection({
         className="w-full"
         busy={pending !== null}
         spinner={pending === "resend"}
-        data-captcha-ready={checked}
         onClick={onResend}
       >
         {resendCooldown > 0

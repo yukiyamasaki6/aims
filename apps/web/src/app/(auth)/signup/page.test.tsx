@@ -255,7 +255,6 @@ describe("サインアップ画面の入口", () => {
     expect(await screen.findByText(REGISTERED_MESSAGE)).toBeInTheDocument();
     expect(auth.signInWithOtp).not.toHaveBeenCalled();
     expect(widget.resets).toBe(0);
-    expect(sendCodeButton()).toHaveAttribute("data-captcha-ready", "true");
   });
 
   it("登録の判定が通信に失敗しても、通信エラーを示し、同じトークンで再試行して進める", async () => {

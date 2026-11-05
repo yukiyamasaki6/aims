@@ -108,7 +108,6 @@ describe("サインイン画面の部品", () => {
     expect(emailInput()).not.toHaveAttribute("aria-describedby");
     expect(passwordInput()).not.toHaveAttribute("aria-describedby");
     expect(widget.reset).not.toHaveBeenCalled();
-    expect(submitButton()).toHaveAttribute("data-captcha-ready", "false");
     expect(submitButton().closest("form")).toHaveAttribute(
       "data-hydrated",
       "true",
@@ -134,17 +133,6 @@ describe("サインイン画面の部品", () => {
     expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds");
     expect(emailInput()).toHaveValue("user@example.com");
     expect(passwordInput()).toHaveValue("password1");
-  });
-
-  it("検証結果に応じて送信準備の属性を更新する", () => {
-    // Given
-    setup();
-
-    // When
-    verify("captcha-token");
-
-    // Then
-    expect(submitButton()).toHaveAttribute("data-captcha-ready", "true");
   });
 
   it("パスワードの表示を切り替えても入力値を保つ", async () => {
@@ -251,7 +239,6 @@ describe("サインイン画面の部品", () => {
     ).toBeInTheDocument();
     expect(widget.reset).toHaveBeenCalledOnce();
     expect(submitButton()).toHaveAttribute("aria-disabled", "false");
-    expect(submitButton()).toHaveAttribute("data-captcha-ready", "false");
   });
 
   async function failFirstAttempt(

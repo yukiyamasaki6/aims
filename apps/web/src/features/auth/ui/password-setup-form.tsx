@@ -97,7 +97,6 @@ export function PasswordSetupForm({
       }}
       checkRef={check}
       onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
-      checked={flow.captchaToken !== null}
     />
   );
 }
@@ -137,7 +136,6 @@ function CodeStep({
       siteKey={siteKey}
       checkRef={check}
       onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
-      checked={flow.captchaToken !== null}
       resendCooldown={flow.resendCooldown}
     />
   );

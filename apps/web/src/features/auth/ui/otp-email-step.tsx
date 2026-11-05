@@ -27,8 +27,6 @@ type OtpEmailStepProps = {
   siteKey: string;
   checkRef: RefObject<TurnstileInstance | undefined>;
   onCheck: (token: string | null) => void;
-  // セキュリティチェックが完了している(トークンがある)か。
-  checked: boolean;
 };
 
 export function OtpEmailStep({
@@ -46,7 +44,6 @@ export function OtpEmailStep({
   siteKey,
   checkRef,
   onCheck,
-  checked,
 }: OtpEmailStepProps) {
   const t = useTranslations("auth");
   const errorId = `${idPrefix}-email-error`;
@@ -77,11 +74,7 @@ export function OtpEmailStep({
           onVerify={onCheck}
           error={captchaError}
         />
-        <BusyButton
-          type="submit"
-          data-captcha-ready={checked}
-          busy={submitting}
-        >
+        <BusyButton type="submit" busy={submitting}>
           {t("otpSendCode")}
         </BusyButton>
       </form>
