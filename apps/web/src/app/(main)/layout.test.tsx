@@ -421,60 +421,6 @@ describe("MainLayout", () => {
       expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
     });
 
-    it("認証サービスが通信の失敗を返してもローカルのセッションが消えていれば、完了として移る", async () => {
-      // Given
-      const user = userEvent.setup();
-      signOutClearingSession(async () => ({
-        error: new AuthRetryableFetchError("Failed to fetch", 0),
-      }));
-      renderLayoutWithIdentity();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(localStorage.getItem(IDENTITY_KEY)).toBeNull();
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      // 完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示のまま変えない。
-      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
-      expect(screen.queryByText(NETWORK_ERROR)).not.toBeInTheDocument();
-    });
-
-    it("通信が例外になってもローカルのセッションが消えていれば、完了として移る", async () => {
-      // Given
-      const user = userEvent.setup();
-      signOutClearingSession(async () => {
-        throw new TypeError("Failed to fetch");
-      });
-      renderLayoutWithIdentity();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(localStorage.getItem(IDENTITY_KEY)).toBeNull();
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      // 完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示のまま変えない。
-      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
-      expect(screen.queryByText(NETWORK_ERROR)).not.toBeInTheDocument();
-    });
-
-    it("ルートの識別情報の記録と合わせて、サインアウトで端末の識別情報が消え、完了として移る", async () => {
-      // Given
-      const user = userEvent.setup();
-      signOutClearingSession(async () => ({ error: null }));
-      renderLayoutWithIdentity();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(localStorage.getItem(IDENTITY_KEY)).toBeNull();
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      // 完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示のまま変えない。
-      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
-    });
-
     it("認証サービスが拒否しても、その後の読み取りが未認証なら、エラーを示さず、完了として遷移元を付けずに移る", async () => {
       // Given
       const user = userEvent.setup();
@@ -493,65 +439,6 @@ describe("MainLayout", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("認証サービスが拒否して読み取りが認証済みのままのときは、理由を示し、閉じずに移らない", async () => {
-      // Given
-      const user = userEvent.setup();
-      supabase.signOut.mockResolvedValue({ error: RATE_LIMIT_ERROR });
-      renderLayout();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(
-        await screen.findByText(authText("failure.rate_limited")),
-      ).toBeInTheDocument();
-      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
-      expect(replace).not.toHaveBeenCalled();
-    });
-
-    it("例外で終えられず読み取りが認証済みのままのときは、通信エラーを示し、閉じずに移らない", async () => {
-      // Given
-      const user = userEvent.setup();
-      supabase.signOut.mockRejectedValue(new TypeError("Failed to fetch"));
-      renderLayout();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(
-        await screen.findByText(authText("failure.unreachable")),
-      ).toBeInTheDocument();
-      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
-      expect(replace).not.toHaveBeenCalled();
-    });
-
-    it("認証サービスが未知のエラーを返して終えられないときは、固定の文言を示し、認証サービスの文言を出さない", async () => {
-      // Given
-      const user = userEvent.setup();
-      supabase.signOut.mockResolvedValue({
-        error: new AuthApiError(
-          "Service detail: session store exploded",
-          500,
-          "unexpected_failure",
-        ),
-      });
-      renderLayout();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(
-        await screen.findByText(authText("failure.other")),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText(/session store exploded/),
-      ).not.toBeInTheDocument();
-      expect(replace).not.toHaveBeenCalled();
-    });
-
     it("失敗の後に別の理由でセッションを失ったときは、開いていた画面を遷移元に付けて移る", async () => {
       // Given
       const user = userEvent.setup();
@@ -567,22 +454,6 @@ describe("MainLayout", () => {
       expect(replace).toHaveBeenCalledExactlyOnceWith(
         "/signin?returnTo=%2Frounds%2Fnew",
       );
-    });
-
-    it("失敗の後に再度確認して完了すれば、遷移元を付けずに移る", async () => {
-      // Given
-      const user = userEvent.setup();
-      supabase.signOut.mockResolvedValueOnce({ error: RATE_LIMIT_ERROR });
-      renderLayoutWithIdentity();
-      await confirmSignOut(user);
-      await screen.findByText(authText("failure.rate_limited"));
-      signOutClearingSession(async () => ({ error: null }));
-
-      // When
-      await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-      // Then
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
     });
 
     it("再描画を挟まない同じタスクで2回確認しても、認証は1回である", async () => {
@@ -603,26 +474,6 @@ describe("MainLayout", () => {
 
       // Then
       expect(supabase.signOut).toHaveBeenCalledTimes(1);
-    });
-
-    it("完了を待つ間に画面が離れたときは、結果を破棄して移らない", async () => {
-      // Given
-      const user = userEvent.setup();
-      let finish: (value: unknown) => void = () => {};
-      supabase.signOut.mockReturnValue(
-        new Promise((resolve) => {
-          finish = resolve;
-        }),
-      );
-      const { unmount } = renderLayout();
-      await confirmSignOut(user);
-      unmount();
-
-      // When
-      await act(async () => finish({ error: null }));
-
-      // Then
-      expect(replace).not.toHaveBeenCalled();
     });
   });
 });

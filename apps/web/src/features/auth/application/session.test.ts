@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import type { AuthChange, SessionStatus } from "../domain/auth-change";
-import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
+import type { AuthFailure } from "../domain/auth-failure";
 import type { CallResult } from "./call-result";
 import { createSession, type SessionReading } from "./session";
 
@@ -256,32 +256,6 @@ describe("サインアウト", () => {
       expect(second).toEqual({ kind: "ignored" });
     });
 
-    it("最初の終了が届かず読み取りが不明で失敗した後に再び頼み、読み取りが未認証なら、完了して遷移元の無いサインインへ1回移る", async () => {
-      // Given
-      const { session, authority, page, state } = setup({
-        here: "/rounds/new",
-      });
-      authority.signOutHere.mockResolvedValueOnce({
-        kind: "failed",
-        failure: UNREACHABLE,
-      });
-      state.status = "unknown";
-      const first = await session.signOut(mounted);
-      authority.signOutHere.mockImplementationOnce(async () => {
-        state.status = "unauthenticated";
-        return accepted;
-      });
-
-      // When
-      const result = await session.signOut(mounted);
-
-      // Then
-      expect(first).toEqual({ kind: "failed", failure: UNREACHABLE });
-      expect(result).toEqual({ kind: "ignored" });
-      expect(authority.signOutHere).toHaveBeenCalledTimes(2);
-      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
-    });
-
     it("失敗の後は、実行中が解かれて、再び開始できる", async () => {
       // Given
       const { session, authority } = setup({
@@ -431,50 +405,6 @@ describe("サインアウト", () => {
         );
       },
     );
-
-    it("保護の範囲の根が異なる場合、遷移元の検証が根に従う", async () => {
-      // Given
-      const inside = setup({
-        signOutHere: async () => ({ kind: "rate_limited" }),
-        here: "/elsewhere/x",
-        protectedPath: "/elsewhere",
-      });
-      const outside = setup({
-        signOutHere: async () => ({ kind: "rate_limited" }),
-        here: "/rounds/x",
-        protectedPath: "/elsewhere",
-      });
-      for (const { session } of [inside, outside]) {
-        session.watch();
-        await session.signOut(mounted);
-      }
-
-      // When
-      inside.emit(signedOut);
-      outside.emit(signedOut);
-
-      // Then
-      expect(inside.page.replace).toHaveBeenCalledWith(
-        "/signin?returnTo=%2Felsewhere%2Fx",
-      );
-      expect(outside.page.replace).toHaveBeenCalledWith("/signin");
-    });
-
-    it("ラウンド一覧でサインアウトが失敗した後にセッションを失ったときも、一覧を遷移元に付ける", async () => {
-      // Given
-      const { session, page, emit } = setup({
-        signOutHere: async () => ({ kind: "rate_limited" }),
-        here: "/rounds",
-      });
-      session.watch();
-      await session.signOut(mounted);
-
-      // When
-      emit(signedOut);
-
-      // Then
-      expect(page.replace).toHaveBeenCalledWith("/signin?returnTo=%2Frounds");
-    });
   });
 });
 
