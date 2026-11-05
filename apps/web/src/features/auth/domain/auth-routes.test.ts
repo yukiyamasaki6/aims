@@ -193,7 +193,6 @@ describe("redirectFor", () => {
     signedIn: false,
     pathname: "/",
     search: "",
-    isServerAction: false,
   };
 
   it.each([
@@ -268,42 +267,14 @@ describe("redirectFor", () => {
     // Then
     expect(result).toBeNull();
   });
-
-  it("Server Action呼び出しは、未認証でも認証済みでもリダイレクトしない", () => {
-    // Given
-
-    // When
-    const signedOut = redirectFor(
-      {
-        ...request,
-        pathname: "/rounds/1",
-        isServerAction: true,
-      },
-      ROUNDS,
-    );
-    const signedIn = redirectFor(
-      {
-        ...request,
-        signedIn: true,
-        pathname: "/signin",
-        isServerAction: true,
-      },
-      ROUNDS,
-    );
-
-    // Then
-    expect(signedOut).toBeNull();
-    expect(signedIn).toBeNull();
-  });
 });
 
-// 経路の規則は、セッションの更新(lib/supabase/infrastructure/session)から引数で渡されるため、ここで要求ごとの行き先を確かめる。
+// 経路の規則は、proxyが、セッションの更新の結果の利用者から呼ぶため、ここで要求ごとの行き先を確かめる。
 describe("redirectFor: 要求ごとの行き先", () => {
   const request = {
     signedIn: false,
     pathname: "/",
     search: "",
-    isServerAction: false,
   };
 
   it("未認証で/roundsにアクセスすると、/roundsを遷移元に付けて/signinへリダイレクトする", () => {
@@ -409,7 +380,6 @@ describe("保護の範囲の根を差し替えたとき", () => {
     signedIn: false,
     pathname: "/",
     search: "",
-    isServerAction: false,
   };
 
   it("根とその下だけを保護の範囲にし、/roundsと根で始まる別のパスは保護しない", () => {

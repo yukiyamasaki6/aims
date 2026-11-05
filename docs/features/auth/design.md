@@ -11,7 +11,7 @@
 
 - `src/features/auth/domain/flow.ts`: 命令の結果の型(`Start`、`Step`)と欄ごとのエラーの型(`FieldErrors`)。
 - `src/features/auth/domain/auth-failure.ts`: 失敗の種類(`AuthFailureKind`)。失敗値の作成(`UNREACHABLE`など)も持つ。文言は持たない。文言は、UI層の文言の一覧(`ui/auth-messages.ts`)が、失敗の種類ごと、欄ごとの入力の誤りの種類ごとに持つ。
-- `src/features/auth/domain/auth-routes.ts`: 保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則と、要求のリダイレクト先(`redirectFor`)。保護の範囲の根の経路(`protectedPath`)は引数で受け、入口(`src/proxy.ts`、サインインとサインアップの画面、`(main)`のレイアウト)がラウンドの入口の`ROUNDS_PATH`を値として渡す。根はサインインの後の既定の行き先でもある。`src/proxy.ts`が`lib/supabase/infrastructure/session.ts`へ関数として渡す。既定の行き先の規則(`destinationOf`)は、入口から公開し、ナビゲーションの開始の行き先が使う。
+- `src/features/auth/domain/auth-routes.ts`: 保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則と、要求のリダイレクト先(`redirectFor`)。保護の範囲の根の経路(`protectedPath`)は引数で受け、入口(`src/proxy.ts`、サインインとサインアップの画面、`(main)`のレイアウト)がラウンドの入口の`ROUNDS_PATH`を値として渡す。根はサインインの後の既定の行き先でもある。`src/proxy.ts`が、セッションの更新の結果の利用者から`redirectFor`を呼ぶ。既定の行き先の規則(`destinationOf`)は、入口から公開し、ナビゲーションの開始の行き先が使う。
 - `src/features/auth/domain/password.ts`: パスワードの入力と文字種の規則(空でなく、半角英数記号のみ)。長さと強さは認証サービスが拒否する。最小長と最大長の数値は、規則の文面に要るため、ここだけが持つ。規則の文面は一覧が持ち、入力の検証と弱いパスワードの拒否が同じ文面を使う。
 - `src/features/auth/application/call-result.ts`: 認証サービスへの頼みごとの結果(`CallResult`)。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装。画面がブラウザの接続を渡す。応答の変換(エラーのクラス名とコード、イベント名、セッションの形)も、このファイルだけが知る。

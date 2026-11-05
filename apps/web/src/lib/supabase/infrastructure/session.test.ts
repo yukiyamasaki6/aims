@@ -22,90 +22,39 @@ beforeEach(() => {
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
 });
 
-const noRedirect = () => null;
-
 describe("updateSession", () => {
-  it("Supabaseの環境変数が無い場合はエラーを投げる", async () => {
+  it("環境変数のURLと鍵を、@supabase/ssrの接続へそのまま渡す", async () => {
     // Given
-    process.env.NEXT_PUBLIC_SUPABASE_URL = "";
+    mockUser(null);
 
     // When
     const request = new NextRequest("https://app.example.com/rounds");
-    const result = updateSession(request, noRedirect);
+    await updateSession(request);
 
     // Then
-    await expect(result).rejects.toThrow(
-      "Missing Supabase environment variables in middleware.",
-    );
-  });
-
-  it("規則が行き先を返したら、その行き先へリダイレクトする", async () => {
-    // Given
-    mockUser(null);
-    const rule = vi.fn(() => "/signin?returnTo=%2Frounds%2F1");
-
-    // When
-    const request = new NextRequest("https://app.example.com/rounds/1");
-    const res = await updateSession(request, rule);
-
-    // Then
-    expect(res.headers.get("location")).toBe(
-      "https://app.example.com/signin?returnTo=%2Frounds%2F1",
-    );
-  });
-
-  it("規則がnullを返したら、リダイレクトしない", async () => {
-    // Given
-    mockUser({ id: "user-1" });
-
-    // When
-    const request = new NextRequest("https://app.example.com/rounds/1");
-    const res = await updateSession(request, noRedirect);
-
-    // Then
-    expect(res.headers.get("location")).toBeNull();
+    const [url, key] = db.createServerClient.mock.calls[0];
+    expect(url).toBe("https://example.supabase.co");
+    expect(key).toBe("anon-key");
   });
 
   it.each([
-    ["未認証", null, false],
-    ["認証済み", { id: "user-1" }, true],
+    ["サインインしている", { id: "user-1" }],
+    ["サインインしていない", null],
   ])(
-    "規則へ、%sかを示すsignedInと、パスとクエリを渡す",
-    async (_name, user, signedIn) => {
+    "%s場合は、その利用者(無ければnull)と、リダイレクトしない応答を返す",
+    async (_name, user) => {
       // Given
       mockUser(user);
-      const rule = vi.fn(noRedirect);
 
       // When
-      const request = new NextRequest("https://app.example.com/rounds/1?a=1");
-      await updateSession(request, rule);
+      const request = new NextRequest("https://app.example.com/rounds/1");
+      const result = await updateSession(request);
 
       // Then
-      expect(rule).toHaveBeenCalledExactlyOnceWith({
-        signedIn,
-        pathname: "/rounds/1",
-        search: "?a=1",
-        isServerAction: false,
-      });
+      expect(result.user).toEqual(user);
+      expect(result.response.headers.get("location")).toBeNull();
     },
   );
-
-  it("Server Action呼び出し(next-actionヘッダー付き)かどうかを規則へ渡す", async () => {
-    // Given
-    mockUser(null);
-    const rule = vi.fn(noRedirect);
-
-    // When
-    const request = new NextRequest("https://app.example.com/rounds/1", {
-      headers: { "next-action": "abc123" },
-    });
-    await updateSession(request, rule);
-
-    // Then
-    expect(rule).toHaveBeenCalledWith(
-      expect.objectContaining({ isServerAction: true }),
-    );
-  });
 
   it("cookiesのgetAllはrequestのcookieをそのまま返す", async () => {
     // Given
@@ -115,14 +64,14 @@ describe("updateSession", () => {
     const request = new NextRequest("https://app.example.com/rounds/1", {
       headers: { cookie: "existing=1" },
     });
-    await updateSession(request, noRedirect);
+    await updateSession(request);
 
     // Then
     const [, , options] = db.createServerClient.mock.calls[0];
     expect(options.cookies.getAll()).toEqual(request.cookies.getAll());
   });
 
-  it("cookiesのsetAllで書き込まれた値をrequestとレスポンス双方に反映する", async () => {
+  it("cookiesのsetAllで書き込まれた値を、応答だけに反映する", async () => {
     // Given
     // 実際のSDKはセッションリフレッシュ時にgetUser内部からcookies.setAllを
     // 呼び出す。ここではその呼び出しをgetUserのモック内で再現する。
@@ -139,10 +88,10 @@ describe("updateSession", () => {
 
     // When
     const request = new NextRequest("https://app.example.com/rounds/1");
-    const res = await updateSession(request, noRedirect);
+    const { response } = await updateSession(request);
 
     // Then
-    expect(request.cookies.get("sb-token")?.value).toBe("new-value");
-    expect(res.cookies.get("sb-token")?.value).toBe("new-value");
+    expect(response.cookies.get("sb-token")?.value).toBe("new-value");
+    expect(request.cookies.get("sb-token")).toBeUndefined();
   });
 });

@@ -96,7 +96,6 @@ describe("proxy", () => {
                 signedIn,
                 pathname,
                 search: "",
-                isServerAction: false,
               },
               ROUNDS_PATH,
             ) !== null,
@@ -126,18 +125,17 @@ describe("proxy", () => {
       );
     });
 
-    it("セッションの更新結果をレスポンスとして返す", async () => {
+    it("認証済みで一覧の経路を開くと、リダイレクトせず、セッションの更新の応答を返す", async () => {
       // Given
-      db.getUser.mockResolvedValue({ data: { user: null } });
+      db.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
 
       // When
       const request = new NextRequest("https://app.example.com/rounds/1");
       const response = await proxy(request);
 
       // Then
-      expect(response.headers.get("location")).toBe(
-        "https://app.example.com/signin?returnTo=%2Frounds%2F1",
-      );
+      expect(response.headers.get("location")).toBeNull();
+      expect(response.headers.get("x-middleware-next")).toBe("1");
     });
   });
 });

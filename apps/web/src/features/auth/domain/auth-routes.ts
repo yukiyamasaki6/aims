@@ -52,17 +52,14 @@ export function signInHref(from: string | null, protectedPath: string): string {
 
 // 要求に対するリダイレクト先(パスとクエリ)。リダイレクトしないときはnull。
 // 未認証で保護の範囲を開くと、遷移元付きのサインインへ送る。認証済みで未認証専用の画面を開くと、既定の行き先へ送る。
-// Server Action呼び出しは画面の遷移ではないため、リダイレクトしない(未認証の扱いは各Server Actionのガードに任せる)。
 export function redirectFor(
   request: {
     signedIn: boolean;
     pathname: string;
     search: string;
-    isServerAction: boolean;
   },
   protectedPath: string,
 ): string | null {
-  if (request.isServerAction) return null;
   if (!request.signedIn && isProtectedPath(request.pathname, protectedPath)) {
     return signInHref(request.pathname + request.search, protectedPath);
   }

@@ -45,7 +45,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/ui/auth-header.tsx`: 認証画面の見出し。
 - `src/lib/supabase/infrastructure/client.ts`: ブラウザの接続。
 - `src/hooks/use-mounted-ref.ts`: 画面がマウント中かどうかの参照。画面が`isMounted`として手続きへ渡し、手続きが照合の後に確かめる。
-- `src/lib/supabase/infrastructure/session.ts`: `proxy.ts`から呼ばれ、要求ごとにセッションを更新して、サインインの有無を判定する。経路の規則は持たず、`proxy.ts`が認証の機能の`redirectFor`(`domain/auth-routes.ts`)を関数として渡す。認証済みの`/signin`は、遷移元によらず`/rounds`へ送られる。
+- `src/lib/supabase/infrastructure/session.ts`: `proxy.ts`から呼ばれ、要求ごとにセッションを更新して、利用者(無ければnull)と応答を返す。経路の規則は持たず、`proxy.ts`が認証の機能の`redirectFor`(`domain/auth-routes.ts`)を呼ぶ。認証済みの`/signin`は、遷移元によらず`/rounds`へ送られる。
 
 流れは次のとおりである。
 
