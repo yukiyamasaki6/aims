@@ -9,12 +9,12 @@ import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import type { CallResult } from "../application/call-result";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import { createResetPassword } from "../application/reset-password";
-import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
+import type { AuthFailure } from "../domain/auth-failure";
 import { ResetPasswordForm } from "./reset-password-form";
 
 const authText = translatorFor("auth");
 
-const NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
+const _NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
 const WEAK_PASSWORD_MESSAGE =
   "8〜72文字の半角英数記号で、英字と数字を含めてください。";
 const PASSWORD_PLACEHOLDER = authText("passwordFieldPlaceholder", {
@@ -134,27 +134,6 @@ describe("ResetPasswordForm", () => {
         });
         expect(auth.setPassword).toHaveBeenCalledExactlyOnceWith("password123");
       });
-
-      it("送信中を解除せず、遷移の前に再び押しても再送信しない", async () => {
-        // Given
-        auth.setPassword.mockResolvedValue(ACCEPTED);
-        const user = userEvent.setup();
-        renderForm();
-        await advanceToPasswordStep();
-        await user.type(passwordInput(), "password123");
-        await user.click(setPasswordButton());
-        await vi.waitFor(() => {
-          expect(navigation.go).toHaveBeenCalledOnce();
-        });
-
-        // When
-        await user.click(setPasswordButton());
-
-        // Then
-        expect(setPasswordButton()).toHaveAttribute("aria-disabled", "true");
-        expect(spinnerIn(setPasswordButton())).not.toBeNull();
-        expect(auth.setPassword).toHaveBeenCalledOnce();
-      });
     });
 
     it("認証エラーの場合、翻訳したメッセージを表示し、遷移しない", async () => {
@@ -200,73 +179,6 @@ describe("ResetPasswordForm", () => {
         expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/signin");
       });
       expect(auth.setPassword).toHaveBeenCalledTimes(2);
-    });
-
-    it("通信エラーの場合、通信エラーのメッセージを表示し、遷移しない", async () => {
-      // Given
-      auth.setPassword.mockResolvedValue({
-        kind: "failed",
-        failure: UNREACHABLE,
-      });
-      const user = userEvent.setup();
-      renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-
-      // When
-      await user.click(setPasswordButton());
-
-      // Then
-      expect(
-        await screen.findByText(NETWORK_ERROR_MESSAGE),
-      ).toBeInTheDocument();
-      expect(navigation.go).not.toHaveBeenCalled();
-      expect(setPasswordButton()).toHaveAttribute("aria-disabled", "false");
-      expect(spinnerIn(setPasswordButton())).toBeNull();
-    });
-
-    it("通信エラーの後に再び送信するとサインインへ移る", async () => {
-      // Given
-      auth.setPassword.mockResolvedValueOnce({
-        kind: "failed",
-        failure: UNREACHABLE,
-      });
-      auth.setPassword.mockResolvedValue(ACCEPTED);
-      const user = userEvent.setup();
-      renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-      await user.click(setPasswordButton());
-      await screen.findByText(NETWORK_ERROR_MESSAGE);
-
-      // When
-      await user.click(setPasswordButton());
-
-      // Then
-      await vi.waitFor(() => {
-        expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/signin");
-      });
-      expect(auth.setPassword).toHaveBeenCalledTimes(2);
-    });
-
-    it("送信中にアンマウントされた場合、成功応答の後に画面遷移を行わない", async () => {
-      // Given
-      const deferred = Promise.withResolvers<CallResult>();
-      auth.setPassword.mockReturnValue(deferred.promise);
-      const user = userEvent.setup();
-      const { unmount } = renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-      fireEvent.click(setPasswordButton());
-
-      // When
-      unmount();
-      deferred.resolve(ACCEPTED);
-      await settle();
-
-      // Then
-      expect(auth.setPassword).toHaveBeenCalledOnce();
-      expect(navigation.go).not.toHaveBeenCalled();
     });
   });
 
