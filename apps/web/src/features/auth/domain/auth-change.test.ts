@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  type AuthChange,
-  identityChange,
-  lostByChange,
-  lostByStatus,
-} from "./auth-change";
+import { identityChange, lostByStatus } from "./auth-change";
 
 describe("identityChange", () => {
   it.each([
@@ -44,27 +39,6 @@ describe("identityChange", () => {
     // Then
     expect(result).toEqual(expected);
   });
-});
-
-describe("lostByChange", () => {
-  it.each([
-    ["signed-out", { kind: "signed-out", userId: null }, true],
-    ["signed-in", { kind: "signed-in", userId: "user-1" }, false],
-    ["token-refreshed", { kind: "token-refreshed", userId: "user-1" }, false],
-    ["initial(セッションが無い)", { kind: "initial", userId: null }, false],
-    ["それ以外の変化", { kind: "other", userId: null }, false],
-  ] as const satisfies readonly (readonly [string, AuthChange, boolean])[])(
-    "%sのとき、喪失かを決める",
-    (_name, event, expected) => {
-      // Given
-
-      // When
-      const result = lostByChange(event);
-
-      // Then
-      expect(result).toBe(expected);
-    },
-  );
 });
 
 describe("lostByStatus", () => {

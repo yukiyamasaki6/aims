@@ -1,8 +1,4 @@
-import {
-  lostByChange,
-  lostByStatus,
-  type SessionStatus,
-} from "../domain/auth-change";
+import { lostByStatus, type SessionStatus } from "../domain/auth-change";
 import type { AuthFailure } from "../domain/auth-failure";
 import {
   beginSignOut,
@@ -116,7 +112,7 @@ export function createSession({
     }
 
     const unsubscribe = authenticator.subscribe((change) => {
-      if (lostByChange(change)) lose();
+      if (change.kind === "signed-out") lose();
     });
     void check();
 

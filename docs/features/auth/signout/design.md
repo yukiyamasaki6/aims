@@ -27,7 +27,7 @@
 - `src/components/ui/confirm-dialog.tsx`: `BlockingConfirmDialog`。`busy`と`error`を外から受け取る表現だけの部品で、実行中は閉じず、ボタンを無効にして表示する。二重実行の拒否は呼び出し側が行う（サインアウトは集約、プリセット削除は削除側のフック）。`rounds/delete`と共通である。
 - `src/features/auth/application/session.ts`: 手続き。`signOut`（実行中なら何もせず`ignored`、認証サービスに頼む、サインインの状態を読む、離脱を確かめる、判定する、終えられたら遷移する）と、`watch`（喪失の検知と遷移）の順序を持つ。集約の現在の値を持ち、サインインの状態の読み取りとページ遷移の約束を宣言する。
 - `src/features/auth/domain/session-end-flow.ts`: 集約。実行中の判定、終えられたかの判定（呼び出しの後の未認証。喪失の定義と同じ）、実行中の喪失を委ねること、遷移は1回、行き先を守る。
-- `src/features/auth/domain/auth-change.ts`: 認証状態の変化とサインインの状態の分類の規則。識別情報の更新と、セッション喪失の定義。
+- `src/features/auth/domain/auth-change.ts`: 認証状態の変化とサインインの状態の分類の規則。識別情報の更新と、確かめた結果の喪失の定義。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装（`docs/features/auth/design.md`）。この端末のサインアウト（範囲`local`）、サインインの状態の読み取り、認証状態の変化の購読を含む。接続は、渡された関数で使うたびに取得する。
 - `src/features/auth/infrastructure/browser-page-load.ts`: ページ全体の読み込みと置き換え、今の場所の読み出し。
 - `src/features/auth/application/local-identity.ts`、`src/features/auth/application/identity-reader.ts`、`src/app/root-client-entry.tsx`、`src/features/auth/infrastructure/browser-identity-store.ts`: 端末の識別情報の記録と読み出し。ルートのクライアントの入口が保存先と認証の実装を1度だけ生成し、記録を始め、認証状態の変化に追従する。読み出しは他の機能（ラウンドの参照データ、同期の開始）が入口から`IdentityReader`の型で受け取って使い、サインアウトの判定には使わない。

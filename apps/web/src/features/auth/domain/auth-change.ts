@@ -36,12 +36,8 @@ export function identityChange(change: AuthChange): IdentityChange {
 // サインインの状態の3分類。確かめられないとき(通信失敗など)はunknownにする。この分類の定義は、ここだけである。
 export type SessionStatus = "authenticated" | "unauthenticated" | "unknown";
 
-// セッションの喪失は、signed-outと、確かめた結果の未認証(確定)に限る。
+// セッションの喪失は、signed-outの通知と、確かめた結果の未認証(確定)に限る。
 // initialでセッションが無い状態と、確かめられない状態(通信失敗)は、通信失敗でも起きるため喪失としない。
-export function lostByChange(change: AuthChange): boolean {
-  return change.kind === "signed-out";
-}
-
 export function lostByStatus(status: SessionStatus): boolean {
   return status === "unauthenticated";
 }
