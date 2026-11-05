@@ -34,7 +34,7 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 - `src/features/auth/application/sign-up.ts`: 手続き。コードの送信(登録済みの判定を含む)と、パスワード設定の後の遷移(`/rounds`)を持つ。再送、確認と、操作の開始、コードの送信の依頼、パスワード設定の依頼は、共通の順序を使う。登録済みの判定は、手続きの約束`RegistrationLookup`(真偽値。投げることがあり、届かなかった失敗として扱う)で受け、入口がServer Actionを渡す。
 - `src/features/auth/application/password-setup.ts`、`password-setup-authenticator.ts`: パスワード再設定と共有する、手続きの共通の順序(操作の開始、コードの送信の依頼、再送、確認、パスワード設定の依頼)と、認証サービスへ頼むこと(コードの送信、確認、パスワードの設定)の約束。
 - `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、開始の命令(`beginSendCode`ほか)が、操作の可否と入力の検証の順序、確認・再送・戻るの排他を守って`Start`を返す。事実の遷移(`passwordSetupReducer`。パスワード設定の成功の`passwordSet`を含む)で、トークンの消費を守る。パスワード再設定と共有する。
-- `src/features/auth/domain/password.ts`、`auth-code.ts`: パスワードの強さ、認証コードと再送の待ち時間の規則(値オブジェクト。誤りの種類を返す)。パスワード再設定も使う。
+- `src/features/auth/domain/password.ts`、`auth-code.ts`: パスワードの文字種、認証コードと再送の待ち時間の規則(値オブジェクト。誤りの種類を返す)。パスワード再設定も使う。
 - `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(登録済みを含む)。文言は持たない。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。コードの目的`sign-up`の`signInWithOtp`、`verifyOtp`、`updateUser`の呼び出しを含む。呼び出しの結果は`CallResult`の値で返し、応答が無かった場合(接続を作れない、呼び出しが投げた)は`unreachable`にする。
 - `src/features/auth/infrastructure/supabase-registration-check.ts`: 管理者キーで確認済みかを調べる登録済み判定。利用者が見つからないエラー(`user_not_found`)だけを未登録とし、それ以外は投げる。
@@ -70,7 +70,7 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 | 確認・再送・戻るを排他にし、実行中の操作を集約の1つの値で守る | 遅れて届いた応答が別の状態へ反映される不整合が起きたため、独立した操作をやめた | 非同期の応答を世代管理する方式にするとき |
 | 応答があった送信と再送だけトークンを消費し、応答が無かった失敗は保持する | 使っていないトークンの取り直しを強いないため。認証サービスが通信の失敗を値で返す場合は応答があったとして消費する(変更前と同じ) | 認証サービスの通信の失敗の扱いが変わるとき |
 | ネイティブの`disabled`を使わず、`aria-disabled`と検証メッセージで表す | 空入力、captcha未完了、クールダウン中の理由を利用者へ伝えるため | 理由を別の方法で利用者へ伝えるとき |
-| パスワードの規則(英字と数字の両方を含む半角英数字と記号で8〜72文字)は、`maxLength`でなく送信時に検証する。メールアドレスの254文字とコードの6桁は、入力欄の`maxLength`で入力時に制限し、送信時にも検証する | bcryptが72バイトまでのため。Playwrightの`fill()`が`maxLength`で切り詰めるため | パスワード規則を変えるとき |
+| パスワードは、半角英数字と記号のみ`maxLength`でなく送信時に検証し、長さと強さ(8〜72文字で英字と数字を含む)は認証サービスの拒否を規則の文面で示す。メールアドレスの254文字とコードの6桁は、入力欄の`maxLength`で入力時に制限し、送信時にも検証する | bcryptが72バイトまでのため。Playwrightの`fill()`が`maxLength`で切り詰めるため | パスワード規則を変えるとき |
 | 水和の完了を`data-hydrated`で示し、E2Eはそれを待つ | 水和前の操作によるE2Eの不安定さを避けるため | E2Eが水和を別の方法で待てるとき |
 
 ## 制約と未対応

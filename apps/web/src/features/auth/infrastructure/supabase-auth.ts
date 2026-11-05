@@ -59,8 +59,13 @@ export function createSupabaseAuth(
           type: purpose === "sign-up" ? "email" : "recovery",
         }),
       ),
+    // パスワードの長さと強さの正本は認証サービスで、validation_failed(72バイトを超えるなど)も規則の文面で示す。
+    // 全体の対応には足さない。メールアドレスの形式の誤りなど、他の操作のvalidation_failedを規則の文面にしてしまうため。
     setPassword: (password) =>
-      toCallResult(() => auth().updateUser({ password })),
+      toCallResult(
+        () => auth().updateUser({ password }),
+        PASSWORD_REJECTION_KINDS,
+      ),
     // この端末のサインインだけを終える。終えられたかは、呼び出し側が、この後のサインインの状態の読み取りで決める。
     signOutHere: () => toCallResult(() => signOut(auth(), "local")),
     // その利用者の全ての端末のサインインが終わる。
@@ -140,14 +145,22 @@ const REJECTION_KINDS = new Map<string, RejectionKind>([
   ["weak_password", "weak_password"],
 ]);
 
+// パスワードの設定だけが、上の対応に足して使う対応。
+const PASSWORD_REJECTION_KINDS = new Map<string, RejectionKind>([
+  ...REJECTION_KINDS,
+  ["validation_failed", "weak_password"],
+]);
+
 type AuthServiceError = { name?: string; code?: string };
 
 // 認証サービスのエラー(通信の断を含む)を、失敗の種類に写す。
 // 通信の断はerror.codeの無いAuthRetryableFetchErrorになるため、コードより先に名前で見る。
-function toAuthFailure(error: AuthServiceError): AuthFailure {
+function toAuthFailure(
+  error: AuthServiceError,
+  kinds: ReadonlyMap<string, RejectionKind>,
+): AuthFailure {
   if (error.name === "AuthRetryableFetchError") return UNREACHABLE;
-  const kind =
-    error.code === undefined ? undefined : REJECTION_KINDS.get(error.code);
+  const kind = error.code === undefined ? undefined : kinds.get(error.code);
   return { kind: kind ?? "other" };
 }
 
@@ -155,11 +168,12 @@ function toAuthFailure(error: AuthServiceError): AuthFailure {
 // 応答があって成功なら受け付けられた、エラーが値で返れば(通信の断を値で返す場合を含む)拒否された、呼び出しが投げたとき(接続を得られない場合を含む)は届かなかった、とする。
 async function toCallResult(
   call: () => Promise<{ error: AuthError | null }>,
+  kinds: ReadonlyMap<string, RejectionKind> = REJECTION_KINDS,
 ): Promise<CallResult> {
   try {
     const { error } = await call();
     return error
-      ? { kind: "refused", failure: toAuthFailure(error) }
+      ? { kind: "refused", failure: toAuthFailure(error, kinds) }
       : { kind: "accepted" };
   } catch {
     return UNREACHABLE;

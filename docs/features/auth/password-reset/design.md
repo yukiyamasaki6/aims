@@ -34,7 +34,7 @@
 - `src/features/auth/application/password-change.ts`: サーバーの手続き。パスワードの変更と、成功したときの全ての端末のサインインの終了の順序を持ち、画面の手続きの約束`PasswordChange`を満たす。全端末のサインインの終了の約束(`SignOutEverywhere`)を持つ。
 - `src/features/auth/application/password-setup.ts`、`password-setup-authenticator.ts`: サインアップと共有する、手続きの共通の順序(操作の開始、コードの送信の依頼、再送、確認、パスワード設定の依頼)と、認証サービスへ頼むことの約束。
 - `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、開始の命令(`beginSendCode`ほか)が、操作の可否と入力の検証の順序、確認・再送・戻るの排他を守って`Start`を返す。事実の遷移でトークンの消費を守る。サインアップと共有する。
-- `src/features/auth/domain/password.ts`、`auth-code.ts`、`email-address.ts`、`captcha-token.ts`、`auth-failure.ts`、`auth-routes.ts`: パスワードの強さ、認証コードと再送の待ち時間、メールアドレス、セキュリティチェック、失敗の種類、遷移先の規則(値オブジェクト)。入力の誤りと失敗は種類で返し、文言は持たない。
+- `src/features/auth/domain/password.ts`、`auth-code.ts`、`email-address.ts`、`captcha-token.ts`、`auth-failure.ts`、`auth-routes.ts`: パスワードの文字種、認証コードと再送の待ち時間、メールアドレス、セキュリティチェック、失敗の種類、遷移先の規則(値オブジェクト)。入力の誤りと失敗は種類で返し、文言は持たない。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。画面はブラウザの接続で`resetPasswordForEmail`、`verifyOtp`を、要求の入口はサーバーの接続で`updateUser`と`signOut`(範囲`global`)を使う。応答が無かった場合(接続を作れない、呼び出しが投げた)は、`unreachable`として返す。
 - `src/lib/supabase/infrastructure/server.ts`: サーバーでの接続(要求の利用者のセッション)。
 - `src/features/auth/infrastructure/browser-page-load.ts`: `window.location.assign`によるページ全体の読み込み。サインアウトのセッション喪失の遷移（置き換え、今の場所）も同じ実装が満たす。
@@ -43,8 +43,8 @@
 
 契約は次のとおりである。
 
-- メールアドレスは254文字以内、コードは6桁、パスワードは半角英数字と記号で8〜72文字で、英字と数字を含む。送信前に検証し、満たさなければ送信しない。
-- Supabaseが拒否した`weak_password`は、入力の検証と同じ規則の文面で示す。
+- メールアドレスは254文字以内、コードは6桁で、送信前に検証し、満たさなければ送信しない。パスワードは半角英数字と記号のみ送信前に検証する。
+- パスワードの長さと強さ(8〜72文字で英字と数字を含む)は認証サービスが拒否する。`weak_password`と、パスワードの設定での`validation_failed`は、入力の検証と同じ規則の文面で示す。
 - captchaトークンは、認証サービスが応答した送信と再送(成功も拒否も)で消費し、取り直させる。送信と再送が例外で終わった場合は、使っていないので消費せず、同じトークンで再試行できる。確認とパスワード設定には使わない。
 - 再送の間隔は`max_frequency`で、productionとpreviewは60秒、ローカルとCIは1秒である。クールダウンは、再送の開始時に始まる。
 - パスワードの変更の成功後は、送信中を解除せず、ページ全体を読み込んで`/signin`へ遷移する。全ての端末のサインインの終了はサーバーが同じ要求で行う。サーバーは終了の応答を待ってから応答するが、終了の成否によらず変更の成功を返し、表示中の画面はサインインへ移る。
@@ -61,7 +61,7 @@
 | 確認・再送・戻るを排他にし、実行中の操作を集約の1つの値で守る | 並行操作で状態が壊れたため、確認中と再送中を独立させる方式をやめた。詳細: #545 | 応答を世代管理する方式にするとき |
 | ページ全体の読み込みを再設定の手続きの約束にし、`PageNavigation`に足さない | 再設定だけが使う操作を、サインインの汎用の約束に集めないため。前の画面の状態とクライアントのキャッシュを捨てるため、routerの遷移は使わない。セッション喪失の遷移（`replace`、今の場所）は別の約束`PageReplace`にし、実装だけを共有する。約束の置き場は、方針のR02の読み（使い手の手続きの数。`PageNavigation`は共有の技術の約束で、遷移元は`ReturnToReader`で別に読み、`PageLoad`と`PageReplace`は使い手が1つ）で決める | `PageNavigation`の`go`をページ全体の読み込みにするとき |
 | ネイティブの`disabled`、`required`、`minLength`を使わず、クライアント検証と`aria-disabled`を使う | 理由を利用者へ伝え、E2Eでの二重送信を防ぐため | 検証の理由を別の方法で利用者へ伝えるとき |
-| パスワードの長さを`maxLength`でなく送信時に検証する。メールアドレスとコードは、入力欄の`maxLength`で入力時に制限し、送信時にも検証する | Playwrightの`fill()`が`maxLength`で切り詰めるため。サインインのパスワード欄には適用しない | パスワード規則を変えるとき |
+| パスワードの文字種を`maxLength`でなく送信時に検証する。メールアドレスとコードは、入力欄の`maxLength`で入力時に制限し、送信時にも検証する | Playwrightの`fill()`が`maxLength`で切り詰めるため。サインインのパスワード欄には適用しない | パスワード規則を変えるとき |
 | 認証済みのリダイレクトを`proxy.ts`へ集約し、画面ごとのE2Eは残す | 実装を一箇所にまとめつつ、各画面の挙動を保証するため | ガードの実装を変えるとき |
 | captchaは送信と再送に適用し、`verifyOtp`には適用しない | ボットによるメール送信の濫用を防ぐため。テスト用キーは、previewのドメインを事前登録できないため | captchaの方式を変えるとき |
 | 水和の完了を`data-hydrated`、captchaの準備を`data-captcha-ready`で示す | E2Eの水和競合を防ぐため | E2Eが水和とcaptchaの準備を別の方法で待てるとき |

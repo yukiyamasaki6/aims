@@ -590,6 +590,48 @@ describe("パスワードの設定(setPassword)", () => {
     });
   });
 
+  it("認証サービスがvalidation_failed(72バイトを超えるなど)で拒否したら、弱いパスワードの失敗に写して返す", async () => {
+    // Given
+    const { service, auth } = setup();
+    auth.updateUser.mockResolvedValue({
+      error: new AuthApiError("too long", 422, "validation_failed"),
+    });
+
+    // When
+    const result = await service.setPassword("a1".repeat(37));
+
+    // Then
+    expect(result).toEqual({
+      kind: "refused",
+      failure: { kind: "weak_password" },
+    });
+  });
+
+  it("パスワード以外の操作のvalidation_failed(メールアドレスの形式の誤りなど)は、規則の文面にならず、その他の失敗のままにする", async () => {
+    // Given
+    const { service, auth } = setup();
+    const validationFailed = new AuthApiError(
+      "invalid email",
+      422,
+      "validation_failed",
+    );
+    auth.signInWithPassword.mockResolvedValue({ error: validationFailed });
+    auth.signInWithOtp.mockResolvedValue({ error: validationFailed });
+
+    // When
+    const signedIn = await service.signIn(credentials);
+    const sent = await service.sendCode({
+      purpose: "sign-up",
+      email: "user@example.com",
+      captchaToken: "token",
+    });
+
+    // Then
+    const other = { kind: "refused", failure: { kind: "other" } };
+    expect(signedIn).toEqual(other);
+    expect(sent).toEqual(other);
+  });
+
   it("呼び出しが投げたら、届かなかった失敗として返す", async () => {
     // Given
     const { service, auth } = setup();

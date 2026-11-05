@@ -371,8 +371,9 @@ describe("サインアップ画面の入口", () => {
     expect(screen.queryByText(/otp mailer exploded/)).not.toBeInTheDocument();
   });
 
-  it("規則に合わないパスワードは、認証サービスが弱いパスワードとして拒否したときと同じ規則の文面で示し、設定しない", async () => {
+  it("英字だけのパスワードは送信前に止めず、認証サービスの拒否を、規則の文面で示す", async () => {
     // Given
+    auth.updateUser.mockResolvedValue({ error: weakPassword });
     const user = userEvent.setup();
     render(<SignUpPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
@@ -382,8 +383,10 @@ describe("サインアップ画面の入口", () => {
     await user.click(setPasswordButton());
 
     // Then
-    expect(screen.getByText(WEAK_PASSWORD_MESSAGE)).toBeInTheDocument();
-    expect(auth.updateUser).not.toHaveBeenCalled();
+    expect(await screen.findByText(WEAK_PASSWORD_MESSAGE)).toBeInTheDocument();
+    expect(auth.updateUser).toHaveBeenCalledExactlyOnceWith({
+      password: "onlyletters",
+    });
   });
 
   it("登録済みの拒否、メールの修正、確認の期限切れ、再試行、弱いパスワード、再試行の順に、同じ画面で進めて遷移できる", async () => {
