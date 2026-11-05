@@ -5,10 +5,10 @@ import { updateSession } from "@/lib/supabase/infrastructure/session";
 
 // 保護の範囲の根は、ラウンド一覧の経路である。
 export async function proxy(request: NextRequest) {
-  const { user, response } = await updateSession(request);
+  const { signedIn, response } = await updateSession(request);
   const destination = redirectFor(
     {
-      signedIn: user !== null,
+      signedIn,
       pathname: request.nextUrl.pathname,
       search: request.nextUrl.search,
     },

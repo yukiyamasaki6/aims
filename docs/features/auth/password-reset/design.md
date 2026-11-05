@@ -3,7 +3,7 @@
 ## 概要
 
 `/reset-password`でメールアドレス、認証コード(OTP)、新しいパスワードの3段階を進める。
-`resetPasswordForEmail`でコードを送り、`verifyOtp`(type: recovery)で確認する。パスワードの変更は、ブラウザから`updateUser`で行う。他の端末のサインインは、認証サービスがパスワードの変更時に終える。変更後は`signOut`(範囲`local`)でこの端末のサインインを終え、routerで`/signin`へ移り、自動ではサインインしない。
+`resetPasswordForEmail`でコードを送り、`verifyOtp`(type: recovery)で確認する。パスワードの変更は、ブラウザから`updateUser`で行う。他の端末のサインインは、認証サービスがパスワードの変更時に終える。他の端末の画面は、アクセストークンの期限後の更新の拒否で、`/signin`へ移る。変更後は`signOut`(範囲`local`)でこの端末のサインインを終え、routerで`/signin`へ移り、自動ではサインインしない。
 送信と再送にはTurnstileを使い、`verifyOtp`には使わない。
 手順と状態の規則は、サインアップと共有する(集約、手続きの共通の順序、画面の骨組み)。再設定だけが持つのは、登録の有無を判定しないこと、コードの種類、変更後のこの端末のサインインの終了と遷移である。
 認証済みで`/reset-password`を開くと、共通の認証ガードが`/rounds`へ送る。
