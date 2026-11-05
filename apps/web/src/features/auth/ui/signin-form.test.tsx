@@ -58,7 +58,11 @@ function setup({
     protectedPath: "/rounds",
   });
   const form = (
-    <SignInForm signIn={signIn} siteKey="site-key" from={returnTo} />
+    <SignInForm
+      signIn={signIn}
+      siteKey="site-key"
+      readReturnTo={() => returnTo}
+    />
   );
   const rendered = render(strict ? <StrictMode>{form}</StrictMode> : form, {
     wrapper: IntlTestProvider,

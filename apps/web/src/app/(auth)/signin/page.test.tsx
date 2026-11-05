@@ -11,11 +11,7 @@ import SignInPage from "./page";
 const authText = translatorFor("auth");
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock("next/navigation", () => ({
-  useRouter: () => navigation,
-  // 実物はURLのクエリを返す。jsdomの現在のURLから作る。
-  useSearchParams: () => new URLSearchParams(window.location.search),
-}));
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 
 const auth = vi.hoisted(() => ({ signInWithPassword: vi.fn() }));
 const connection = vi.hoisted(() => ({
