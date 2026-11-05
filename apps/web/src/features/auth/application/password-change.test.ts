@@ -6,7 +6,7 @@ import { createPasswordChange } from "./password-change";
 const password = "newPassword123";
 const accepted: CallResult = { kind: "accepted" };
 const weakPassword: CallResult = {
-  kind: "refused",
+  kind: "failed",
   failure: { kind: "weak_password" },
 };
 
@@ -53,9 +53,8 @@ describe("パスワードの変更と全端末のサインインの終了(サー
     });
 
     it.each([
-      ["拒否", { kind: "refused", failure: { kind: "rate_limited" } } as const],
-      ["通信の断の値", { kind: "refused", failure: UNREACHABLE } as const],
-      ["未到達", UNREACHABLE],
+      ["拒否", { kind: "failed", failure: { kind: "rate_limited" } } as const],
+      ["通信の断の値", { kind: "failed", failure: UNREACHABLE } as const],
     ])(
       "終了が%sを返しても、変更の失敗にせず、変更の成功を返す",
       async (_name, signOutResult) => {
@@ -89,7 +88,7 @@ describe("パスワードの変更と全端末のサインインの終了(サー
       const beforeResponse = settled;
 
       // When
-      signOut.resolve({ kind: "refused", failure: { kind: "rate_limited" } });
+      signOut.resolve({ kind: "failed", failure: { kind: "rate_limited" } });
       const result = await pending;
 
       // Then
@@ -101,8 +100,7 @@ describe("パスワードの変更と全端末のサインインの終了(サー
   describe("変更に成功しなかった場合", () => {
     it.each([
       ["拒否", weakPassword],
-      ["通信の断の値", { kind: "refused", failure: UNREACHABLE } as const],
-      ["未到達", UNREACHABLE],
+      ["通信の断の値", { kind: "failed", failure: UNREACHABLE } as const],
     ])(
       "変更が%sを返したら、その結果を返し、終了は頼まない",
       async (_name, setResult) => {

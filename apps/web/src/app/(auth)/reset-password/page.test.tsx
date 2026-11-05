@@ -152,7 +152,7 @@ const rateLimited = new AuthApiError(
 );
 const accepted = { kind: "accepted" } as const;
 const weakPassword = {
-  kind: "refused",
+  kind: "failed",
   failure: { kind: "weak_password" },
 } as const;
 const connectionLost = new AuthRetryableFetchError("Failed to fetch", 0);
@@ -256,7 +256,7 @@ describe("パスワード再設定画面の入口", () => {
     expect(widget.resets).toBe(1);
   });
 
-  it("コードの送信がSDKの呼び出しの失敗で届かなくても、通信エラーを示し、同じトークンで再試行して進める", async () => {
+  it("コードの送信がSDKの呼び出しの失敗で届かなくても、通信エラーを示し、使用済みのトークンを消費して、新しいトークンで取り直して進める", async () => {
     // Given
     auth.resetPasswordForEmail
       .mockRejectedValueOnce(new Error("Failed to fetch"))
@@ -265,7 +265,8 @@ describe("パスワード再設定画面の入口", () => {
     render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user);
     await screen.findByText(NETWORK_ERROR_MESSAGE);
-    expect(widget.resets).toBe(0);
+    expect(widget.resets).toBe(1);
+    await user.click(widgetButton());
 
     // When
     await user.click(sendCodeButton());
@@ -277,7 +278,7 @@ describe("パスワード再設定画面の入口", () => {
     expect(auth.resetPasswordForEmail).toHaveBeenCalledTimes(2);
     expect(auth.resetPasswordForEmail).toHaveBeenLastCalledWith(
       "user@example.com",
-      { captchaToken: "captcha-token" },
+      { captchaToken: "captcha-token-2" },
     );
   });
 
@@ -731,7 +732,7 @@ describe("パスワード再設定画面の入口", () => {
       expect(widget.resets).toBe(2);
     });
 
-    it("再送が通信エラーで届かなくても、使っていないトークンを保ち、同じトークンで再送できる", async () => {
+    it("再送が通信エラーで届かなくても、使ったトークンを消費して、新しいトークンで再送できる", async () => {
       // Given
       await advanceToResendReady();
       auth.resetPasswordForEmail.mockClear();
@@ -745,6 +746,8 @@ describe("パスワード再設定画面の入口", () => {
       auth.resetPasswordForEmail.mockResolvedValue({ error: null });
       await advanceSeconds(60);
 
+      fireEvent.click(widgetButton());
+
       // When
       fireEvent.click(resendButton());
       await settle();
@@ -753,7 +756,7 @@ describe("パスワード再設定画面の入口", () => {
       expect(auth.resetPasswordForEmail).toHaveBeenCalledTimes(2);
       expect(auth.resetPasswordForEmail).toHaveBeenLastCalledWith(
         "user@example.com",
-        { captchaToken: "captcha-token-2" },
+        { captchaToken: "captcha-token-3" },
       );
     });
 

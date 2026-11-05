@@ -54,14 +54,12 @@ export function beginSignIn(
 }
 
 // 画面で起きた事実。開始の命令は含まない(beginSignIn)。
-// failed: 照合が届かなかった。トークンは使われていないので保持する。
-// refused: 照合が届いた後の失敗(拒否と、成功の後の遷移の失敗)。トークンは使われたので消費する。
+// failed: 照合の失敗(拒否も、通信の断も)。使ったトークンでは再送信できないため、全て消費する。
 // signedIn: 照合が受け付けられた。遷移の前に以前のエラーを消す。送信中は解除しない。
 export type SignInEvent =
   | { type: "captchaChecked"; token: string | null }
   | { type: "signedIn" }
-  | { type: "failed"; failure: AuthFailure }
-  | { type: "refused"; failure: AuthFailure };
+  | { type: "failed"; failure: AuthFailure };
 
 export function signInReducer(
   flow: SignInFlow,
@@ -72,18 +70,14 @@ export function signInReducer(
       return { ...flow, captchaToken: event.token };
     case "signedIn":
       return { ...flow, error: null, fieldErrors: {} };
+    // 画面のチェックのやり直しは、手続きが画面の約束で頼む。
     case "failed":
       return {
         ...flow,
         submitting: false,
+        captchaToken: null,
         error: event.failure.kind,
         fieldErrors: {},
-      };
-    // 使ったトークンでは再送信できないため、消費する。画面のチェックのやり直しは、手続きが画面の約束で頼む。
-    case "refused":
-      return {
-        ...signInReducer(flow, { type: "failed", failure: event.failure }),
-        captchaToken: null,
       };
   }
 }

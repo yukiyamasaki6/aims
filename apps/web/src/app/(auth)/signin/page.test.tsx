@@ -272,7 +272,7 @@ describe("サインイン画面の入口", () => {
     ["遷移元なし", "", ROUNDS_PATH],
     ["遷移元付き", "?returnTo=%2Frounds%2Fnew", "/rounds/new"],
   ])(
-    "認証サービスが通信の断を値で返したときは(%s)、文言を示し、チェックをやり直さずに同じトークンで再送信して遷移できる",
+    "認証サービスが通信の断を値で返したときは(%s)、文言を示し、新しいトークンで再送信して遷移できる",
     async (_name, query, destination) => {
       // Given
       const message = authText("failure.unreachable");
@@ -287,6 +287,7 @@ describe("サインイン画面の入口", () => {
       await fillAndVerify(user);
       await user.click(submitButton());
       expect(await screen.findByText(message)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "チェックを完了" }));
 
       // When
       await user.click(submitButton());
@@ -296,7 +297,7 @@ describe("サインイン画面の入口", () => {
       expect(auth.signInWithPassword).toHaveBeenLastCalledWith({
         email: "user@example.com",
         password: "password1",
-        options: { captchaToken: "captcha-token" },
+        options: { captchaToken: "captcha-token-2" },
       });
       expect(navigation.push).toHaveBeenCalledExactlyOnceWith(destination);
       expect(screen.queryByText(message)).not.toBeInTheDocument();

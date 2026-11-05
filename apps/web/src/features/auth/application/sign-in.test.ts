@@ -44,7 +44,7 @@ function setup(returnTo: string | null = null, protectedPath = "/rounds") {
 }
 
 const refused = (failure: AuthFailure): CallResult => ({
-  kind: "refused",
+  kind: "failed",
   failure,
 });
 
@@ -109,9 +109,10 @@ describe("サインインの手続き", () => {
     // Given
     const { signIn, authenticator, navigation, actions, resetCheck, viewOf } =
       setup("/rounds/new");
-    authenticator.signIn.mockResolvedValueOnce(UNREACHABLE);
+    authenticator.signIn.mockResolvedValueOnce(refused(UNREACHABLE));
     const view = viewOf(verified);
     await signIn.submit(input, view);
+    view.dispatch({ type: "captchaChecked", token: "second-token" });
     const seen: {
       events: string[];
       error: string | null;
@@ -135,11 +136,20 @@ describe("サインインの手続き", () => {
 
     // Then
     expect(seen).toEqual([
-      { events: ["failed", "signedIn"], error: null, submitting: true },
-      { events: ["failed", "signedIn"], error: null, submitting: true },
+      {
+        events: ["failed", "captchaChecked", "signedIn"],
+        error: null,
+        submitting: true,
+      },
+      {
+        events: ["failed", "captchaChecked", "signedIn"],
+        error: null,
+        submitting: true,
+      },
     ]);
     expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds/new");
-    expect(resetCheck).not.toHaveBeenCalled();
+    // 最初の失敗の分だけで、成功ではやり直さない。
+    expect(resetCheck).toHaveBeenCalledOnce();
   });
 
   it("渡された状態が送信中なら、何も送らず、照合も遷移もしない", async () => {
@@ -197,7 +207,7 @@ describe("サインインの手続き", () => {
     },
   );
 
-  it("通常の拒否では、refusedを送ってトークンを消費し、チェックを1回やり直させ、遷移しない", async () => {
+  it("拒否では、failedを送ってトークンを消費し、チェックを1回やり直させ、遷移しない", async () => {
     // Given
     const { signIn, authenticator, navigation, actions, resetCheck, viewOf } =
       setup();
@@ -208,58 +218,33 @@ describe("サインインの手続き", () => {
     await signIn.submit(input, view);
 
     // Then
-    expect(actions).toEqual([{ type: "refused", failure: failure401 }]);
+    expect(actions).toEqual([{ type: "failed", failure: failure401 }]);
     expect(resetCheck).toHaveBeenCalledOnce();
     expect(view.observedState.captchaToken).toBeNull();
     expect(view.observedState.error).toBe("invalid_credentials");
     expect(navigation.go).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["呼び出しが投げた", UNREACHABLE],
-    ["通信の断を値で返した", refused(UNREACHABLE)],
-  ])(
-    "照合が届かなかった(%s)ときは、failedを送ってトークンを保持し、チェックをやり直させず、遷移しない",
-    async (_name, result) => {
-      // Given
-      const { signIn, authenticator, navigation, actions, resetCheck, viewOf } =
-        setup();
-      authenticator.signIn.mockResolvedValue(result);
-      const view = viewOf(verified);
-
-      // When
-      await signIn.submit(input, view);
-
-      // Then
-      expect(actions).toEqual([{ type: "failed", failure: UNREACHABLE }]);
-      expect(resetCheck).not.toHaveBeenCalled();
-      expect(view.observedState.captchaToken).toBe("first-token");
-      expect(view.observedState.error).toBe("unreachable");
-      expect(view.observedState.submitting).toBe(false);
-      expect(navigation.go).not.toHaveBeenCalled();
-    },
-  );
-
-  it("照合が届かなかった後は、チェックをやり直さずに同じトークンで再送信でき、元の遷移先へ進む", async () => {
+  it("通信の断を値で返された失敗も、拒否と同じく、failedを送ってトークンを消費し、チェックを1回やり直させ、遷移しない", async () => {
     // Given
-    const { signIn, authenticator, navigation, viewOf } = setup("/rounds/new");
-    authenticator.signIn.mockResolvedValueOnce(UNREACHABLE);
+    const { signIn, authenticator, navigation, actions, resetCheck, viewOf } =
+      setup();
+    authenticator.signIn.mockResolvedValue(refused(UNREACHABLE));
     const view = viewOf(verified);
-    await signIn.submit(input, view);
 
     // When
     await signIn.submit(input, view);
 
     // Then
-    expect(authenticator.signIn).toHaveBeenCalledTimes(2);
-    expect(authenticator.signIn).toHaveBeenLastCalledWith({
-      ...input,
-      captchaToken: "first-token",
-    });
-    expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds/new");
+    expect(actions).toEqual([{ type: "failed", failure: UNREACHABLE }]);
+    expect(resetCheck).toHaveBeenCalledOnce();
+    expect(view.observedState.captchaToken).toBeNull();
+    expect(view.observedState.error).toBe("unreachable");
+    expect(view.observedState.submitting).toBe(false);
+    expect(navigation.go).not.toHaveBeenCalled();
   });
 
-  it("通常の拒否の後は、新しいトークンが無いまま再送信しても照合しない", async () => {
+  it("失敗の後は、新しいトークンが無いまま再送信しても照合しない", async () => {
     // Given
     const { signIn, authenticator, viewOf } = setup();
     authenticator.signIn.mockResolvedValueOnce(refused(failure401));
@@ -314,8 +299,8 @@ describe("サインインの手続き", () => {
   });
 
   it.each([
-    ["届かない失敗", UNREACHABLE],
-    ["通常の拒否", refused(failure401)],
+    ["通信の失敗", refused(UNREACHABLE)],
+    ["拒否", refused(failure401)],
   ])(
     "照合の後に画面が離れていれば、%sでも出来事を送らずチェックをやり直させない",
     async (_name, result) => {

@@ -35,7 +35,7 @@
 - `src/features/auth/application/password-setup.ts`、`password-setup-authenticator.ts`: サインアップと共有する、手続きの共通の順序(操作の開始、コードの送信の依頼、再送、確認、パスワード設定の依頼)と、認証サービスへ頼むことの約束。
 - `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、開始の命令(`beginSendCode`ほか)が、操作の可否と入力の検証の順序、確認・再送・戻るの排他を守って`Start`を返す。事実の遷移でトークンの消費を守る。サインアップと共有する。
 - `src/features/auth/domain/password.ts`、`auth-code.ts`、`email-address.ts`、`captcha-token.ts`、`auth-failure.ts`、`auth-routes.ts`: パスワードの文字種、認証コードと再送の待ち時間、メールアドレス、セキュリティチェック、失敗の種類、遷移先の規則(値オブジェクト)。入力の誤りと失敗は種類で返し、文言は持たない。
-- `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。画面はブラウザの接続で`resetPasswordForEmail`、`verifyOtp`を、要求の入口はサーバーの接続で`updateUser`と`signOut`(範囲`global`)を使う。応答が無かった場合(接続を作れない、呼び出しが投げた)は、`unreachable`として返す。
+- `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。画面はブラウザの接続で`resetPasswordForEmail`、`verifyOtp`を、要求の入口はサーバーの接続で`updateUser`と`signOut`(範囲`global`)を使う。応答が無かった場合(接続を作れない、呼び出しが投げた)は、`unreachable`の失敗として返す。
 - `src/lib/supabase/infrastructure/server.ts`: サーバーでの接続(要求の利用者のセッション)。
 - `src/features/auth/infrastructure/browser-page-load.ts`: `window.location.assign`によるページ全体の読み込み。サインアウトのセッション喪失の遷移（置き換え、今の場所）も同じ実装が満たす。
 - `src/features/auth/application/password-setup.ts`の`tickCooldown`: 再送できるまでの秒数を進める1秒の予約(`Clock`)。画面の部品`password-setup-form.tsx`が、残りが変わるたびに予約し直す。
@@ -45,7 +45,7 @@
 
 - メールアドレスは254文字以内で、パスワードは半角英数字と記号のみ、送信前に検証し、満たさなければ送信しない。コードは入力欄の`maxLength`(6桁)で制限し、検証は認証サービスに任せる(空のコードも送る)。
 - パスワードの長さと強さ(8〜72文字で英字と数字を含む)は認証サービスが拒否する。`weak_password`と、パスワードの設定での`validation_failed`は、入力の検証と同じ規則の文面で示す。
-- captchaトークンは、認証サービスが応答した送信と再送(成功も拒否も)で消費し、取り直させる。送信と再送が例外で終わった場合は、使っていないので消費せず、同じトークンで再試行できる。確認とパスワード設定には使わない。
+- captchaトークンは、送信と再送の成功も失敗も(通信の失敗を含む)消費し、取り直させる。確認とパスワード設定には使わない。
 - 再送の間隔は`max_frequency`で、productionとpreviewは60秒、ローカルとCIは1秒である。クールダウンは、再送の開始時に始まる。
 - パスワードの変更の成功後は、送信中を解除せず、ページ全体を読み込んで`/signin`へ遷移する。全ての端末のサインインの終了はサーバーが同じ要求で行う。サーバーは終了の応答を待ってから応答するが、終了の成否によらず変更の成功を返し、表示中の画面はサインインへ移る。
 - パスワードの変更の要求は、自アプリのサーバーを経由する。パスワードをログに残さない。

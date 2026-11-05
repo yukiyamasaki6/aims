@@ -176,7 +176,6 @@ describe("サインアップの手続き", () => {
         accepted,
         UNREACHABLE,
       ],
-      ["送信が届かない", async () => false, UNREACHABLE, UNREACHABLE],
     ])(
       "%sなら、失敗を示し、トークンを使っていないのでチェックをやり直させず保つ",
       async (_name, lookup, delivery, failure) => {
@@ -204,6 +203,32 @@ describe("サインアップの手続き", () => {
       },
     );
 
+    it("未登録でコードの送信が通信の失敗になっても、拒否と同じく、トークンを消費してチェックをやり直させる", async () => {
+      // Given
+      const {
+        signUp,
+        authenticator,
+        registration,
+        events,
+        resetCheck,
+        viewOf,
+      } = setup();
+      registration.isRegistered.mockResolvedValue(false);
+      authenticator.sendCode.mockResolvedValue({
+        kind: "failed",
+        failure: UNREACHABLE,
+      });
+      const view = viewOf(checked);
+
+      // When
+      await signUp.sendCode({ email }, view);
+
+      // Then
+      expect(events).toEqual([{ type: "refused", failure: UNREACHABLE }]);
+      expect(resetCheck).toHaveBeenCalledOnce();
+      expect(view.observedState.captchaToken).toBeNull();
+    });
+
     it.each<[string, () => Promise<boolean>]>([
       ["登録済み", async () => true],
       [
@@ -228,7 +253,7 @@ describe("サインアップの手続き", () => {
       // Given
       const { signUp, authenticator, events, order, viewOf } = setup();
       const failure: AuthFailure = { kind: "rate_limited" };
-      authenticator.sendCode.mockResolvedValue({ kind: "refused", failure });
+      authenticator.sendCode.mockResolvedValue({ kind: "failed", failure });
       const view = viewOf(checked);
 
       // When
@@ -277,7 +302,7 @@ describe("サインアップの手続き", () => {
       // Given
       const { signUp, authenticator, navigation, events, viewOf } = setup();
       authenticator.setPassword.mockResolvedValueOnce({
-        kind: "refused",
+        kind: "failed",
         failure: { kind: "weak_password" },
       });
       const view = viewOf(onPasswordStep);
@@ -454,13 +479,13 @@ describe("サインアップの手続き", () => {
         .mockResolvedValue(false);
       authenticator.verifyCode
         .mockResolvedValueOnce({
-          kind: "refused",
+          kind: "failed",
           failure: { kind: "code_expired" },
         })
         .mockResolvedValue(accepted);
       authenticator.setPassword
         .mockResolvedValueOnce({
-          kind: "refused",
+          kind: "failed",
           failure: { kind: "weak_password" },
         })
         .mockResolvedValue(accepted);

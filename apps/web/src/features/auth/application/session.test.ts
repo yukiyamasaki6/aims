@@ -10,9 +10,7 @@ const accepted: CallResult = { kind: "accepted" };
 // 失敗の値(なければnull)を、認証サービスの頼みごとの結果へ写す。
 function resultOf(failure: AuthFailure | null): CallResult {
   if (failure === null) return accepted;
-  return failure.kind === "unreachable"
-    ? UNREACHABLE
-    : { kind: "refused", failure };
+  return { kind: "failed", failure };
 }
 
 function readingOf(status: SessionStatus): SessionReading {
@@ -263,7 +261,10 @@ describe("サインアウト", () => {
       const { session, authority, page, state } = setup({
         here: "/rounds/new",
       });
-      authority.signOutHere.mockResolvedValueOnce(UNREACHABLE);
+      authority.signOutHere.mockResolvedValueOnce({
+        kind: "failed",
+        failure: UNREACHABLE,
+      });
       state.status = "unknown";
       const first = await session.signOut(mounted);
       authority.signOutHere.mockImplementationOnce(async () => {

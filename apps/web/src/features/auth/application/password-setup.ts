@@ -56,8 +56,7 @@ export function tickCooldown(
   );
 }
 
-// コードの送信の依頼。応答があれば、成功でも拒否でも、使ったトークンは消費し、チェックをやり直させる。
-// 応答が無かった(unreachable)ときは、トークンを使っていないので消費せず、チェックもやり直さない。
+// コードの送信の依頼。成功でも失敗でも、トークンは消費し、チェックをやり直させる。
 export async function deliver(
   { authenticator, purpose }: PasswordSetupContext,
   { email, captchaToken }: { email: string; captchaToken: string },
@@ -65,10 +64,6 @@ export async function deliver(
   sent: Extract<PasswordSetupEvent, { type: "codeSent" | "codeResent" }>,
 ) {
   const result = await authenticator.sendCode({ purpose, email, captchaToken });
-  if (result.kind === "unreachable") {
-    view.dispatch({ type: "failed", failure: result });
-    return;
-  }
   view.dispatch(
     result.kind === "accepted"
       ? sent

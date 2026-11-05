@@ -102,11 +102,11 @@ describe("頼みごとの結果", () => {
 
     // Then
     expect(weak).toEqual({
-      kind: "refused",
+      kind: "failed",
       failure: { kind: "weak_password" },
     });
     expect(lost).toEqual({
-      kind: "refused",
+      kind: "failed",
       failure: { kind: "unreachable" },
     });
   });
@@ -121,8 +121,14 @@ describe("頼みごとの結果", () => {
     const unavailable = await unavailableService().signIn(credentials);
 
     // Then
-    expect(thrown).toEqual({ kind: "unreachable" });
-    expect(unavailable).toEqual({ kind: "unreachable" });
+    expect(thrown).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+    expect(unavailable).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
   });
 
   it("接続を得られないときの読み取りは、不明にする", async () => {
@@ -180,7 +186,7 @@ describe("認証サービスのエラーの失敗の種類への変換", () => {
     const result = await refusedWith(error);
 
     // Then
-    expect(result).toEqual({ kind: "refused", failure: { kind } });
+    expect(result).toEqual({ kind: "failed", failure: { kind } });
   });
 
   it("名前がAuthRetryableFetchErrorなら、コードがあっても届かなかった失敗にする", async () => {
@@ -193,7 +199,7 @@ describe("認証サービスのエラーの失敗の種類への変換", () => {
 
     // Then
     expect(result).toEqual({
-      kind: "refused",
+      kind: "failed",
       failure: { kind: "unreachable" },
     });
   });
@@ -207,7 +213,7 @@ describe("認証サービスのエラーの失敗の種類への変換", () => {
 
     // Then
     expect(result).toEqual({
-      kind: "refused",
+      kind: "failed",
       failure: { kind: "unreachable" },
     });
   });
@@ -228,7 +234,7 @@ describe("認証サービスのエラーの失敗の種類への変換", () => {
 
       // Then
       expect(result).toStrictEqual({
-        kind: "refused",
+        kind: "failed",
         failure: { kind: "other" },
       });
       expect(JSON.stringify(result)).not.toContain(message);
@@ -293,7 +299,7 @@ describe("サインイン(signIn)", () => {
 
     // Then
     expect(result).toEqual({
-      kind: "refused",
+      kind: "failed",
       failure: { kind: "invalid_credentials" },
     });
   });
@@ -310,7 +316,7 @@ describe("サインイン(signIn)", () => {
 
     // Then
     expect(result).toEqual({
-      kind: "refused",
+      kind: "failed",
       failure: { kind: "unreachable" },
     });
   });
@@ -324,7 +330,10 @@ describe("サインイン(signIn)", () => {
     const result = await service.signIn(credentials);
 
     // Then
-    expect(result).toEqual({ kind: "unreachable" });
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
   });
 
   it("接続を作る関数が投げると、通信断にする", async () => {
@@ -338,7 +347,10 @@ describe("サインイン(signIn)", () => {
     const result = await service.signIn(credentials);
 
     // Then
-    expect(result).toEqual({ kind: "unreachable" });
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
     expect(auth.signInWithPassword).not.toHaveBeenCalled();
   });
 });
@@ -440,12 +452,12 @@ describe("コードの送信(sendCode)", () => {
     [
       "送信の間隔の制限",
       rateLimited,
-      { kind: "refused", failure: { kind: "rate_limited" } },
+      { kind: "failed", failure: { kind: "rate_limited" } },
     ],
     [
       "通信の断",
       connectionLost,
-      { kind: "refused", failure: { kind: "unreachable" } },
+      { kind: "failed", failure: { kind: "unreachable" } },
     ],
   ])(
     "%sを値で返したら、応答があったとして拒否で返す",
@@ -476,8 +488,14 @@ describe("コードの送信(sendCode)", () => {
     const resetResult = await service.sendCode(reset);
 
     // Then
-    expect(signUpResult).toEqual({ kind: "unreachable" });
-    expect(resetResult).toEqual({ kind: "unreachable" });
+    expect(signUpResult).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+    expect(resetResult).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
   });
 
   it("接続を作れなければ、届かなかったとして返す", async () => {
@@ -489,8 +507,14 @@ describe("コードの送信(sendCode)", () => {
     const resetResult = await service.sendCode(reset);
 
     // Then
-    expect(signUpResult).toEqual({ kind: "unreachable" });
-    expect(resetResult).toEqual({ kind: "unreachable" });
+    expect(signUpResult).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
+    expect(resetResult).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
   });
 });
 
@@ -527,7 +551,7 @@ describe("コードの確認(verifyCode)", () => {
 
     // Then
     expect(result).toEqual({
-      kind: "refused",
+      kind: "failed",
       failure: { kind: "code_expired" },
     });
   });
@@ -544,7 +568,10 @@ describe("コードの確認(verifyCode)", () => {
     });
 
     // Then
-    expect(result).toEqual({ kind: "unreachable" });
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
   });
 
   it("接続を作れなければ、届かなかった失敗として返す", async () => {
@@ -555,7 +582,10 @@ describe("コードの確認(verifyCode)", () => {
     const result = await service.verifyCode({ purpose: "sign-up", ...request });
 
     // Then
-    expect(result).toEqual({ kind: "unreachable" });
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
   });
 });
 
@@ -585,7 +615,7 @@ describe("パスワードの設定(setPassword)", () => {
 
     // Then
     expect(result).toEqual({
-      kind: "refused",
+      kind: "failed",
       failure: { kind: "weak_password" },
     });
   });
@@ -602,7 +632,7 @@ describe("パスワードの設定(setPassword)", () => {
 
     // Then
     expect(result).toEqual({
-      kind: "refused",
+      kind: "failed",
       failure: { kind: "weak_password" },
     });
   });
@@ -627,7 +657,7 @@ describe("パスワードの設定(setPassword)", () => {
     });
 
     // Then
-    const other = { kind: "refused", failure: { kind: "other" } };
+    const other = { kind: "failed", failure: { kind: "other" } };
     expect(signedIn).toEqual(other);
     expect(sent).toEqual(other);
   });
@@ -641,7 +671,10 @@ describe("パスワードの設定(setPassword)", () => {
     const result = await service.setPassword("password1");
 
     // Then
-    expect(result).toEqual({ kind: "unreachable" });
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
   });
 
   it("接続を作れなければ、届かなかった失敗として返す", async () => {
@@ -652,7 +685,10 @@ describe("パスワードの設定(setPassword)", () => {
     const result = await service.setPassword("password1");
 
     // Then
-    expect(result).toEqual({ kind: "unreachable" });
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
   });
 });
 
@@ -680,7 +716,7 @@ describe("全ての端末のサインアウト(signOutEverywhere)", () => {
 
     // Then
     expect(result).toEqual({
-      kind: "refused",
+      kind: "failed",
       failure: { kind: "unreachable" },
     });
   });
@@ -694,7 +730,10 @@ describe("全ての端末のサインアウト(signOutEverywhere)", () => {
     const result = await service.signOutEverywhere();
 
     // Then
-    expect(result).toEqual({ kind: "unreachable" });
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
   });
 
   it("接続を作れなければ、届かなかった失敗として返す", async () => {
@@ -705,7 +744,10 @@ describe("全ての端末のサインアウト(signOutEverywhere)", () => {
     const result = await service.signOutEverywhere();
 
     // Then
-    expect(result).toEqual({ kind: "unreachable" });
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
   });
 });
 
@@ -742,7 +784,7 @@ describe("この端末のサインアウト(signOutHere)", () => {
       const result = await service.signOutHere();
 
       // Then
-      expect(result).toEqual({ kind: "refused", failure });
+      expect(result).toEqual({ kind: "failed", failure });
     },
   );
 
@@ -755,7 +797,10 @@ describe("この端末のサインアウト(signOutHere)", () => {
     const result = await service.signOutHere();
 
     // Then
-    expect(result).toEqual({ kind: "unreachable" });
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
   });
 
   it("接続を得られないときも、届かなかった失敗にする", async () => {
@@ -766,7 +811,10 @@ describe("この端末のサインアウト(signOutHere)", () => {
     const result = await service.signOutHere();
 
     // Then
-    expect(result).toEqual({ kind: "unreachable" });
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
   });
 });
 

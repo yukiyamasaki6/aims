@@ -165,7 +165,7 @@ function toAuthFailure(
 }
 
 // 認証サービスの呼び出しを、例外を投げずに結果の値にする。
-// 応答があって成功なら受け付けられた、エラーが値で返れば(通信の断を値で返す場合を含む)拒否された、呼び出しが投げたとき(接続を得られない場合を含む)は届かなかった、とする。
+// 応答があって成功なら受け付けられた、エラーが値で返れば(通信の断を値で返す場合を含む)その失敗、呼び出しが投げたとき(接続を得られない場合を含む)は届かなかった失敗、とする。
 async function toCallResult(
   call: () => Promise<{ error: AuthError | null }>,
   kinds: ReadonlyMap<string, RejectionKind> = REJECTION_KINDS,
@@ -173,10 +173,10 @@ async function toCallResult(
   try {
     const { error } = await call();
     return error
-      ? { kind: "refused", failure: toAuthFailure(error, kinds) }
+      ? { kind: "failed", failure: toAuthFailure(error, kinds) }
       : { kind: "accepted" };
   } catch {
-    return UNREACHABLE;
+    return { kind: "failed", failure: UNREACHABLE };
   }
 }
 

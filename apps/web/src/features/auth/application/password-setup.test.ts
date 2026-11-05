@@ -150,10 +150,13 @@ describe("パスワード設定の共通の手続き", () => {
       expect(authenticator.sendCode).not.toHaveBeenCalled();
     });
 
-    it("送信が届かなければ、通信エラーを示し、トークンを使っていないのでチェックをやり直させず保つ", async () => {
+    it("通信の失敗でも、拒否と同じく、通信エラーを示し、トークンを消費してチェックをやり直させる", async () => {
       // Given
       const { authenticator, context, resetCheck, viewOf } = setup();
-      authenticator.sendCode.mockResolvedValue(UNREACHABLE);
+      authenticator.sendCode.mockResolvedValue({
+        kind: "failed",
+        failure: UNREACHABLE,
+      });
       const view = viewOf(readyToResend);
 
       // When
@@ -161,16 +164,16 @@ describe("パスワード設定の共通の手続き", () => {
 
       // Then
       expect(view.observedState.error).toBe("unreachable");
-      expect(view.observedState.captchaToken).toBe("resend-token");
+      expect(view.observedState.captchaToken).toBeNull();
       expect(view.observedState.pending).toBeNull();
-      expect(resetCheck).not.toHaveBeenCalled();
+      expect(resetCheck).toHaveBeenCalledOnce();
     });
 
     it("認証サービスが拒否したなら、拒否を示し、トークンを消費してチェックをやり直させる", async () => {
       // Given
       const { authenticator, context, order, viewOf } = setup();
       authenticator.sendCode.mockResolvedValue({
-        kind: "refused",
+        kind: "failed",
         failure: { kind: "captcha_failed" },
       });
       const view = viewOf(readyToResend);
@@ -209,7 +212,7 @@ describe("パスワード設定の共通の手続き", () => {
       // Given
       const { authenticator, context, events, viewOf } = setup();
       const failure: AuthFailure = { kind: "code_expired" };
-      authenticator.verifyCode.mockResolvedValue({ kind: "refused", failure });
+      authenticator.verifyCode.mockResolvedValue({ kind: "failed", failure });
       const view = viewOf(onCodeStep);
 
       // When
@@ -225,7 +228,7 @@ describe("パスワード設定の共通の手続き", () => {
       // Given
       const { authenticator, context, events, viewOf } = setup();
       const failure: AuthFailure = { kind: "other" };
-      authenticator.verifyCode.mockResolvedValue({ kind: "refused", failure });
+      authenticator.verifyCode.mockResolvedValue({ kind: "failed", failure });
       const view = viewOf(onCodeStep);
 
       // When
@@ -280,7 +283,7 @@ describe("パスワード設定の共通の手続き", () => {
       // Given
       const { authenticator, viewOf } = setup();
       authenticator.setPassword.mockResolvedValue({
-        kind: "refused",
+        kind: "failed",
         failure: { kind: "weak_password" },
       });
       const view = viewOf(onPasswordStep);

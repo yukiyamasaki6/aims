@@ -16,7 +16,7 @@ const email = "user@example.com";
 const password = "password123";
 const accepted: CallResult = { kind: "accepted" };
 const refused = (failure: AuthFailure): CallResult => ({
-  kind: "refused",
+  kind: "failed",
   failure,
 });
 
@@ -158,10 +158,13 @@ describe("パスワード再設定の手続き", () => {
       expect(types(events)).toEqual(["codeSent"]);
     });
 
-    it("送信が届かなければ、通信エラーを示し、トークンを使っていないのでチェックをやり直させず保つ", async () => {
+    it("通信の失敗でも、拒否と同じく、通信エラーを示し、トークンを消費してチェックをやり直させる", async () => {
       // Given
       const { procedure, authenticator, resetCheck, viewOf } = setup();
-      authenticator.sendCode.mockResolvedValue(UNREACHABLE);
+      authenticator.sendCode.mockResolvedValue({
+        kind: "failed",
+        failure: UNREACHABLE,
+      });
       const view = viewOf(checked);
 
       // When
@@ -169,16 +172,16 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(view.observedState.error).toBe("unreachable");
-      expect(view.observedState.captchaToken).toBe("first-token");
+      expect(view.observedState.captchaToken).toBeNull();
       expect(view.observedState.pending).toBeNull();
-      expect(resetCheck).not.toHaveBeenCalled();
+      expect(resetCheck).toHaveBeenCalledOnce();
     });
 
     it("認証サービスが拒否したなら、拒否を示し、トークンを消費してチェックをやり直させる", async () => {
       // Given
       const { procedure, authenticator, events, order, viewOf } = setup();
       const failure: AuthFailure = { kind: "rate_limited" };
-      authenticator.sendCode.mockResolvedValue({ kind: "refused", failure });
+      authenticator.sendCode.mockResolvedValue({ kind: "failed", failure });
       const view = viewOf(checked);
 
       // When
@@ -250,11 +253,6 @@ describe("パスワード再設定の手続き", () => {
         "weak_password",
       ],
       ["通信の断の値を返した", async () => refused(UNREACHABLE), "unreachable"],
-      [
-        "未到達を返した",
-        async (): Promise<CallResult> => UNREACHABLE,
-        "unreachable",
-      ],
       [
         "投げた",
         async (): Promise<CallResult> => {
@@ -357,7 +355,6 @@ describe("パスワード再設定の手続き", () => {
     it.each([
       ["成功", async (): Promise<CallResult> => accepted],
       ["拒否", async () => refused({ kind: "weak_password" })],
-      ["未到達", async (): Promise<CallResult> => UNREACHABLE],
       [
         "例外",
         async (): Promise<CallResult> => {
@@ -505,7 +502,7 @@ describe("パスワード再設定の手続き", () => {
       const view = viewOf(checked);
       authenticator.sendCode
         .mockResolvedValueOnce({
-          kind: "refused",
+          kind: "failed",
           failure: { kind: "rate_limited" },
         })
         .mockResolvedValue(accepted);

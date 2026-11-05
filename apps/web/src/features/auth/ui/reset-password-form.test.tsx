@@ -25,7 +25,7 @@ const ACCEPTED: CallResult = { kind: "accepted" };
 
 // 認証サービスが拒否した結果。
 function refusedWith(failure: AuthFailure): CallResult {
-  return { kind: "refused", failure };
+  return { kind: "failed", failure };
 }
 
 // 認証、パスワードの変更の要求(Server Action)、ページ全体の読み込みは、手続きの外側の境界のため偽に替える。手続き(createResetPassword)は実物を通す。
@@ -204,7 +204,10 @@ describe("ResetPasswordForm", () => {
 
     it("通信エラーの場合、通信エラーのメッセージを表示し、遷移しない", async () => {
       // Given
-      passwordChange.change.mockResolvedValue(UNREACHABLE);
+      passwordChange.change.mockResolvedValue({
+        kind: "failed",
+        failure: UNREACHABLE,
+      });
       const user = userEvent.setup();
       renderForm();
       await advanceToPasswordStep();
@@ -224,7 +227,10 @@ describe("ResetPasswordForm", () => {
 
     it("通信エラーの後に再び送信するとサインインへ移る", async () => {
       // Given
-      passwordChange.change.mockResolvedValueOnce(UNREACHABLE);
+      passwordChange.change.mockResolvedValueOnce({
+        kind: "failed",
+        failure: UNREACHABLE,
+      });
       passwordChange.change.mockResolvedValue(ACCEPTED);
       const user = userEvent.setup();
       renderForm();

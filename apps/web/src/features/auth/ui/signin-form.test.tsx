@@ -16,9 +16,7 @@ const accepted: CallResult = { kind: "accepted" };
 
 // 失敗の値を、認証サービスへの頼みごとの結果に写す。
 function resultOf(failure: AuthFailure): CallResult {
-  return failure.kind === "unreachable"
-    ? UNREACHABLE
-    : { kind: "refused", failure };
+  return { kind: "failed", failure };
 }
 
 const widget = vi.hoisted(() => ({
@@ -271,12 +269,20 @@ describe("サインイン画面の部品", () => {
     return { ...rendered, user };
   }
 
+  // 通信の断も含め、どの失敗でも、使ったトークンは消費してチェックをやり直す。
   describe.each([
-    ["認証の失敗", null, "/rounds"],
-    ["認証の失敗(遷移元付き)", "/rounds/new", "/rounds/new"],
-  ] as const)("%sの後の再送信", (_name, returnTo, destination) => {
-    const failure = { kind: "invalid_credentials" } as const;
-    const message = authText("failure.invalid_credentials");
+    ["認証の失敗", "invalid_credentials", null, "/rounds"],
+    [
+      "認証の失敗(遷移元付き)",
+      "invalid_credentials",
+      "/rounds/new",
+      "/rounds/new",
+    ],
+    ["通信の断", "unreachable", null, "/rounds"],
+    ["通信の断(遷移元付き)", "unreachable", "/rounds/new", "/rounds/new"],
+  ] as const)("%sの後の再送信", (_name, kind, returnTo, destination) => {
+    const failure = { kind } as const;
+    const message = authText(`failure.${kind}`);
 
     it("失敗の文言を表示し、チェックを1回リセットして、ボタンを再び押せるようにする", async () => {
       // Given
@@ -336,78 +342,6 @@ describe("サインイン画面の部品", () => {
     });
   });
 
-  describe.each([
-    ["通信の断", null, "/rounds"],
-    ["通信の断(遷移元付き)", "/rounds/new", "/rounds/new"],
-  ] as const)("%sの後の再送信", (_name, returnTo, destination) => {
-    const failure = { kind: "unreachable" } as const;
-    const message = authText("failure.unreachable");
-
-    it("失敗の文言を表示し、チェックをリセットせず、ボタンを再び押せるようにする", async () => {
-      // Given
-      const { authenticator } = setup({ returnTo });
-      authenticator.signIn.mockResolvedValueOnce(resultOf(failure));
-      const user = userEvent.setup();
-      await fillCredentials(user);
-      verify("token-1");
-
-      // When
-      await user.click(submitButton());
-
-      // Then
-      expect(await screen.findByText(message)).toBeInTheDocument();
-      expect(widget.reset).not.toHaveBeenCalled();
-      expect(submitButton()).toHaveAttribute("aria-disabled", "false");
-      expect(submitButton()).toHaveAttribute("data-captcha-ready", "true");
-      expect(submitButton().querySelector(".animate-spin")).toBeNull();
-    });
-
-    it("チェックをやり直さずに押すと、同じトークンで照合して遷移し、失敗の文言が消える", async () => {
-      // Given
-      const { authenticator, navigation, user } = await failFirstAttempt(
-        failure,
-        message,
-        returnTo,
-      );
-
-      // When
-      await user.click(submitButton());
-
-      // Then
-      expect(authenticator.signIn).toHaveBeenCalledTimes(2);
-      expect(authenticator.signIn).toHaveBeenLastCalledWith({
-        email: "user@example.com",
-        password: "password1",
-        captchaToken: "token-1",
-      });
-      expect(navigation.go).toHaveBeenCalledExactlyOnceWith(destination);
-      expect(screen.queryByText(message)).not.toBeInTheDocument();
-    });
-
-    it("新しいトークンで再送信すると、そのトークンで照合して遷移し、失敗の文言が消える", async () => {
-      // Given
-      const { authenticator, navigation, user } = await failFirstAttempt(
-        failure,
-        message,
-        returnTo,
-      );
-      verify("token-2");
-
-      // When
-      await user.click(submitButton());
-
-      // Then
-      expect(authenticator.signIn).toHaveBeenCalledTimes(2);
-      expect(authenticator.signIn).toHaveBeenLastCalledWith({
-        email: "user@example.com",
-        password: "password1",
-        captchaToken: "token-2",
-      });
-      expect(navigation.go).toHaveBeenCalledExactlyOnceWith(destination);
-      expect(screen.queryByText(message)).not.toBeInTheDocument();
-    });
-  });
-
   it("アンマウント後の認証失敗ではチェックをリセットしない", async () => {
     // Given
     const { authenticator, unmount } = setup();
@@ -420,7 +354,9 @@ describe("サインイン画面の部品", () => {
 
     // When
     unmount();
-    await act(async () => deferred.resolve(UNREACHABLE));
+    await act(async () =>
+      deferred.resolve({ kind: "failed", failure: UNREACHABLE }),
+    );
 
     // Then
     expect(widget.reset).not.toHaveBeenCalled();

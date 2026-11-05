@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { UNREACHABLE } from "../domain/auth-failure";
 import { failureOf } from "./call-result";
 
 describe("failureOf", () => {
@@ -13,24 +12,16 @@ describe("failureOf", () => {
     expect(result).toBeNull();
   });
 
-  it("拒否されたときは、拒否の失敗をそのまま返す", () => {
+  it.each([
+    ["拒否", { kind: "rate_limited" }],
+    ["通信の断", { kind: "unreachable" }],
+  ] as const)("失敗したときは、%sの失敗をそのまま返す", (_name, failure) => {
     // Given
-    const failure = { kind: "rate_limited" } as const;
 
     // When
-    const result = failureOf({ kind: "refused", failure });
+    const result = failureOf({ kind: "failed", failure });
 
     // Then
     expect(result).toBe(failure);
-  });
-
-  it("届かなかったときは、通信エラーを返す", () => {
-    // Given
-
-    // When
-    const result = failureOf(UNREACHABLE);
-
-    // Then
-    expect(result).toEqual({ kind: "unreachable" });
   });
 });

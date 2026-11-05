@@ -123,10 +123,13 @@ describe("beginSignIn", () => {
   it("前の失敗の理由が表示されていても、開始では送信中にし、その理由とトークンを残す", () => {
     // Given
     const started = beginSignIn(verified, validInput).state;
-    const failed = signInReducer(started, {
-      type: "failed",
-      failure: { kind: "unreachable" },
-    });
+    const failed = signInReducer(
+      signInReducer(started, {
+        type: "failed",
+        failure: { kind: "unreachable" },
+      }),
+      { type: "captchaChecked", token: "new-token" },
+    );
 
     // When
     const result = beginSignIn(failed, validInput);
@@ -137,7 +140,7 @@ describe("beginSignIn", () => {
       submitting: true,
       error: "unreachable",
       fieldErrors: {},
-      captchaToken: "captcha-token",
+      captchaToken: "new-token",
     });
   });
 
@@ -216,50 +219,11 @@ describe("signInReducer: signedIn", () => {
 });
 
 describe("signInReducer: failed", () => {
-  it("照合が届かなかったとき、送信中を解除し、トークンを保持して、失敗の文言を示す", () => {
-    // Given
-    const started = beginSignIn(verified, validInput).state;
-
-    // When
-    const result = signInReducer(started, {
-      type: "failed",
-      failure: { kind: "unreachable" },
-    });
-
-    // Then
-    expect(result).toMatchObject({
-      error: "unreachable",
-      submitting: false,
-      captchaToken: "captcha-token",
-      fieldErrors: {},
-    });
-  });
-
-  it("届かなかった失敗の後は、チェックをやり直さずに同じトークンで再び開始できる", () => {
-    // Given
-    const started = beginSignIn(verified, validInput).state;
-    const failed = signInReducer(started, {
-      type: "failed",
-      failure: { kind: "unreachable" },
-    });
-
-    // When
-    const result = beginSignIn(failed, validInput);
-
-    // Then
-    expect(result).toMatchObject({
-      kind: "started",
-      request: { ...validInput, captchaToken: "captcha-token" },
-    });
-  });
-});
-
-describe("signInReducer: refused", () => {
-  it("前と同じ拒否が続いたら、同じ理由を示したまま送信中を解除する", () => {
+  it("前と同じ失敗が続いたら、同じ理由を示したまま送信中を解除する", () => {
     // Given
     const failure = { kind: "invalid_credentials" } as const;
     const first = signInReducer(beginSignIn(verified, validInput).state, {
-      type: "refused",
+      type: "failed",
       failure,
     });
     const retrying = beginSignIn(
@@ -268,7 +232,7 @@ describe("signInReducer: refused", () => {
     ).state;
 
     // When
-    const result = signInReducer(retrying, { type: "refused", failure });
+    const result = signInReducer(retrying, { type: "failed", failure });
 
     // Then
     expect(retrying.error).toBe(first.error);
@@ -282,11 +246,7 @@ describe("signInReducer: refused", () => {
       { kind: "invalid_credentials" } as const,
       "invalid_credentials",
     ],
-    [
-      "成功の後の遷移の失敗(通信エラー)",
-      { kind: "unreachable" } as const,
-      "unreachable",
-    ],
+    ["通信の失敗", { kind: "unreachable" } as const, "unreachable"],
   ])(
     "%sで送信中を解除し、使ったトークンを消費して、失敗の文言を示す",
     (_name, failure, expected) => {
@@ -294,7 +254,7 @@ describe("signInReducer: refused", () => {
       const started = beginSignIn(verified, validInput).state;
 
       // When
-      const result = signInReducer(started, { type: "refused", failure });
+      const result = signInReducer(started, { type: "failed", failure });
 
       // Then
       expect(result).toMatchObject({
@@ -306,11 +266,11 @@ describe("signInReducer: refused", () => {
     },
   );
 
-  it("拒否の後は、チェックをやり直すまで開始できず、新しいトークンで再び開始できる", () => {
+  it("失敗の後は、チェックをやり直すまで開始できず、新しいトークンで再び開始できる", () => {
     // Given
     const started = beginSignIn(verified, validInput).state;
     const refused = signInReducer(started, {
-      type: "refused",
+      type: "failed",
       failure: { kind: "invalid_credentials" },
     });
 

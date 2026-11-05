@@ -124,7 +124,7 @@ describe("changePassword(パスワード変更の要求の入口)", () => {
 
     // Then
     expect(result).toEqual({
-      kind: "refused",
+      kind: "failed",
       failure: { kind: "weak_password" },
     });
     expect(sdk.auth.signOut).not.toHaveBeenCalled();
@@ -138,7 +138,10 @@ describe("changePassword(パスワード変更の要求の入口)", () => {
     const result = await changePassword("newPassword123");
 
     // Then
-    expect(result).toEqual({ kind: "unreachable" });
+    expect(result).toEqual({
+      kind: "failed",
+      failure: { kind: "unreachable" },
+    });
     expect(sdk.auth.signOut).not.toHaveBeenCalled();
   });
 });

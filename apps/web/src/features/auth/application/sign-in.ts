@@ -1,5 +1,4 @@
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
-import type { AuthFailure } from "../domain/auth-failure";
 import { destinationOf } from "../domain/auth-routes";
 import {
   beginSignIn,
@@ -43,22 +42,14 @@ export function createSignIn({
     async submit(input, view) {
       const credentials = view.begin((flow) => beginSignIn(flow, input));
       if (!credentials) return;
-      // 届いた後の失敗は、使ったトークンを消費済みにしたうえで、チェックをやり直させる。
-      const refuse = (failure: AuthFailure) => {
-        view.dispatch({ type: "refused", failure });
-        view.resetCheck();
-      };
       const result = await authenticator.signIn(credentials);
       // 送信中に画面を離れたときは、状態を変えず、遷移もしない。
       if (!view.isMounted()) return;
       const failure = failureOf(result);
-      // 照合が届かなかったとき(呼び出しが投げた、通信の断を値で返した)は、トークンを使っていないので保持し、チェックをやり直さない。
-      if (failure?.kind === "unreachable") {
-        view.dispatch({ type: "failed", failure });
-        return;
-      }
+      // 失敗は全て、トークンを消費したうえで、チェックをやり直させる。
       if (failure) {
-        refuse(failure);
+        view.dispatch({ type: "failed", failure });
+        view.resetCheck();
         return;
       }
       // 成功時は以前のエラーを消し、送信中は解除しない。遷移が終わる前に再び押され、使用済みのトークンで二重に送信されるのを防ぐため。

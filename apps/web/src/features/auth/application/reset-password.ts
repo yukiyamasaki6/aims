@@ -80,7 +80,7 @@ async function setPassword(
     try {
       return await passwordChange.change(password);
     } catch {
-      return UNREACHABLE;
+      return { kind: "failed", failure: UNREACHABLE };
     }
   };
   if (!(await applyPassword(change, input, view))) return;
