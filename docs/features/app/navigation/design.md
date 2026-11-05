@@ -29,7 +29,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 - `src/proxy.ts`(要求の入口): `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に、認証の機能の経路の規則(`features/auth/domain/auth-routes.ts` の `redirectFor`)へ、ラウンドの入口が公開する保護の範囲の根の経路 `ROUNDS_PATH` を添えて `updateSession` へ渡す。`config.matcher` は Next.js がビルド時に静的に読み、定数を参照できないため、経路を文字列で再掲し、`proxy.test.ts` が `ROUNDS_PATH` との一致を確かめる。`/` は対象外である。
 - `src/lib/supabase/infrastructure/session.ts`(共有の技術の実装): `updateSession` が要求ごとにセッションを更新して認証状態を判定し、経路の規則は引数で受ける。規則は認証の機能の `redirectFor` が持ち、`proxy.ts` が渡す。
   - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
-  - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。`/signin` は有効な遷移元があればそこへ送る（`auth/signin`）。
+  - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。
   - Server Action呼び出しはどちらも対象外とする。
 - `src/features/auth/application/session.ts` の手続き`createSession`(保護の範囲の根 `protectedPath` を依存として受ける)の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、オンラインでの`unauthenticated`）と、一度だけの`/signin`への遷移（`replace`。今の場所を遷移元に付ける）を持つ。喪失の定義は`domain/auth-change.ts`、遷移の規則（1回、遷移元、サインアウトの実行中は委ねる）は`domain/session-end-flow.ts`。`(main)`のレイアウトが、手続きと実装を生成して見張りを始める。
 - `src/app/page.tsx`(画面の入口): 静的な紹介画面の入口。認証の読み取りの実装、それを開始の約束に変える実装、開始の手続きを生成し、紹介画面へ渡す。

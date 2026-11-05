@@ -50,19 +50,8 @@ export function signInHref(from: string | null, protectedPath: string): string {
   return `${SIGN_IN_PATH}?${RETURN_TO_PARAM}=${encodeURIComponent(resolved)}`;
 }
 
-// クエリ文字列から、許可された遷移元を読む。無い、または拒否されたときはnull。
-export function readReturnTo(
-  search: string,
-  protectedPath: string,
-): string | null {
-  return allowedReturnTo(
-    new URLSearchParams(search).get(RETURN_TO_PARAM),
-    protectedPath,
-  );
-}
-
 // 要求に対するリダイレクト先(パスとクエリ)。リダイレクトしないときはnull。
-// 未認証で保護の範囲を開くと、遷移元付きのサインインへ送る。認証済みで未認証専用の画面を開くと、サインインなら有効な遷移元、それ以外は既定の行き先へ送る。
+// 未認証で保護の範囲を開くと、遷移元付きのサインインへ送る。認証済みで未認証専用の画面を開くと、既定の行き先へ送る。
 // Server Action呼び出しは画面の遷移ではないため、リダイレクトしない(未認証の扱いは各Server Actionのガードに任せる)。
 export function redirectFor(
   request: {
@@ -78,11 +67,7 @@ export function redirectFor(
     return signInHref(request.pathname + request.search, protectedPath);
   }
   if (request.signedIn && GUEST_ONLY_PATHS.includes(request.pathname)) {
-    const destination =
-      request.pathname === SIGN_IN_PATH
-        ? readReturnTo(request.search, protectedPath)
-        : null;
-    return destination ?? destinationOf(null, protectedPath);
+    return destinationOf(null, protectedPath);
   }
   return null;
 }

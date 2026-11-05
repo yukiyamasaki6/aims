@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   allowedReturnTo,
   destinationOf,
-  readReturnTo,
   redirectFor,
   signInHref,
 } from "./auth-routes";
@@ -187,52 +186,6 @@ describe("signInHref", () => {
     // Then
     expect(result).toBe("/signin");
   });
-
-  it("作ったreturnTo付きの/signinから、同じ遷移元を読み戻せる", () => {
-    // Given
-
-    // When
-    const from = "/rounds/abc?a=1&b=%E3%81%82";
-    const href = signInHref(from, ROUNDS);
-    const result = readReturnTo(href.slice(href.indexOf("?")), ROUNDS);
-
-    // Then
-    expect(result).toBe(from);
-  });
-});
-
-describe("readReturnTo", () => {
-  it.each([
-    ["?returnTo=%2Frounds%2Fnew", "/rounds/new"],
-    ["returnTo=%2Frounds%2Fnew", "/rounds/new"],
-    ["?a=1&returnTo=%2Frounds%2Fx%3Fb%3D2", "/rounds/x?b=2"],
-  ])("%sから遷移元を読む", (search, expected) => {
-    // Given
-
-    // When
-    const result = readReturnTo(search, ROUNDS);
-
-    // Then
-    expect(result).toBe(expected);
-  });
-
-  it.each([
-    ["空のクエリ", ""],
-    ["returnToが無い", "?a=1"],
-    ["returnToが空", "?returnTo="],
-    ["外部URL", `?returnTo=${encodeURIComponent("https://evil.com")}`],
-    ["//で始まる値", `?returnTo=${encodeURIComponent("//evil.com")}`],
-    ["/signin", `?returnTo=${encodeURIComponent("/signin")}`],
-    ["エンコードされた改行入りの値", "?returnTo=%2F%0A%2Fevil.com"],
-  ])("%sの場合はnullを返す", (_name, search) => {
-    // Given
-
-    // When
-    const result = readReturnTo(search, ROUNDS);
-
-    // Then
-    expect(result).toBeNull();
-  });
 });
 
 describe("redirectFor", () => {
@@ -255,13 +208,13 @@ describe("redirectFor", () => {
       "/signin?returnTo=%2Frounds%2Fx%3Fa%3D1",
     ],
     [
-      "認証済みでサインインを開くと、有効な遷移元",
+      "認証済みでサインインを遷移元付きで開いても、遷移元を使わずラウンド一覧",
       {
         signedIn: true,
         pathname: "/signin",
         search: "?returnTo=%2Frounds%2Fx",
       },
-      "/rounds/x",
+      "/rounds",
     ],
     [
       "認証済みでサインインを遷移元なしで開くと、ラウンド一覧",
@@ -399,7 +352,7 @@ describe("redirectFor: 要求ごとの行き先", () => {
     },
   );
 
-  it("認証済みで有効な遷移元付きの/signinにアクセスすると、遷移元へリダイレクトする", () => {
+  it("認証済みで遷移元付きの/signinにアクセスしても、遷移元を使わず/roundsへリダイレクトする", () => {
     // Given
 
     // When
@@ -414,34 +367,8 @@ describe("redirectFor: 要求ごとの行き先", () => {
     );
 
     // Then
-    expect(result).toBe("/rounds/new?a=1");
+    expect(result).toBe("/rounds");
   });
-
-  it.each([
-    ["外部URL", encodeURIComponent("https://evil.com")],
-    ["//で始まる値", encodeURIComponent("//evil.com")],
-    ["/signin", encodeURIComponent("/signin")],
-    ["/rounds配下から抜けるドットセグメント", "%2Frounds%2F..%2Fsignin"],
-  ])(
-    "認証済みで不正な遷移元(%s)付きの/signinにアクセスすると、遷移元を引き継がず/roundsへリダイレクトする",
-    (_name, returnTo) => {
-      // Given
-
-      // When
-      const result = redirectFor(
-        {
-          ...request,
-          signedIn: true,
-          pathname: "/signin",
-          search: `?returnTo=${returnTo}`,
-        },
-        ROUNDS,
-      );
-
-      // Then
-      expect(result).toBe("/rounds");
-    },
-  );
 
   it.each(["/signup", "/reset-password"])(
     "認証済みで有効な遷移元付きの%sにアクセスしても、遷移元を使わず/roundsへリダイレクトする",
