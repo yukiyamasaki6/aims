@@ -81,6 +81,12 @@
 - `metadata`と`manifest`は、`src/i18n/messages.ts`の設定から`createTranslator`で解決する。
 - `pnpm lint`の文言の検査(`apps/web/scripts/check-hardcoded-text.mjs`)が、テストと生成物と文言の一覧を除く`apps/web/src`の直書きを検出する。検出の対象は、JSXのテキスト、利用者に届く属性(`aria-label`、`aria-description`、`aria-placeholder`、`aria-roledescription`、`aria-valuetext`、`placeholder`、`title`、`alt`、`label`と、名前が`Label`・`Title`・`Text`・`Message`・`Description`・`Placeholder`で終わる属性)の文字列、利用者に届く名前のプロパティ(`label`、`title`、`description`、`message`、`placeholder`、`alt`、`name`、`short_name`)の文字列、非ASCIIの文字を含む全ての文字列である。`console.*`と例外の生成(`new Error`など)の引数は対象外とする。
 - D1とD2の境界の例外は、`apps/web/scripts/hardcoded-text-exceptions.json`に、ファイルと文字列と理由を書く。どの直書きにも当たらない例外の行があると、検査は失敗する。
+- `pnpm lint`の未使用キーの検査(`apps/web/scripts/check-unused-message-keys.mjs`)が、文言の一覧のうち本番のコードから参照されないキーを、キーの完全な経路で報告して失敗する。
+- 検査の対象のキーは、`src/i18n/messages.ts`の`AppConfig`に登録した`Messages`の型から求める。一覧を名前空間として登録すれば、検査の設定は要らない。
+- 参照として数えるのは、テストのファイルと、テストからだけ参照される補助のファイルを除く`apps/web/src`の、`useTranslations`・`getTranslations`・`createTranslator`で得た翻訳関数の呼び出しである。テストからだけ参照されるキーは未使用とする。
+- キーの引数は、型で取り得る文字列の集合に展開する。種類の値を差し込む``t(`failure.${kind}`)``は、種類の型の値ごとのキーを参照する。種類の型を`string`に広げると展開できない。
+- 翻訳関数は、別名(`const lookup = t as ...`)と、`ReturnType<typeof useTranslations<"<名前空間>">>`の型の引数への受け渡しだけを追う。それ以外の使い方と、展開できないキーの引数は、解釈できない参照として位置を報告して失敗する。
+- 解釈できない参照を残すときは、`apps/web/scripts/unused-message-keys-exceptions.json`に、ファイルと、その参照が使うキーの経路(末尾の`.*`で配下全体)と、理由を書く。どの解釈できない参照にも当たらない例外の行、どのキーにも当たらない経路、理由のない行があると、検査は失敗する。
 
 ### 成果物
 

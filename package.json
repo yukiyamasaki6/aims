@@ -10,7 +10,7 @@
     "start": "pnpm --filter web start",
     "preview": "pnpm --filter web preview",
 
-    "lint": "biome check . && pnpm --filter web lint:text",
+    "lint": "biome check . && pnpm --filter web lint:text && pnpm --filter web lint:messages",
     "lint:fix": "biome check --write .",
     "typecheck": "pnpm --filter web typecheck",
     "knip": "pnpm --filter web knip",
