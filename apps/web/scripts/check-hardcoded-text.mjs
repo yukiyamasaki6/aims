@@ -40,7 +40,7 @@ const EXCLUDED_FILE =
   /(\.(test|spec)\.tsx?$|-test-helpers\.tsx?$|-messages\.ts$|^types\/supabase\.ts$)/;
 const SOURCE_FILE = /\.tsx?$/;
 
-export const RULES = {
+const RULES = {
   jsxText: "規則1: JSXのテキスト",
   attribute: "規則2: 利用者に届く属性の文字列",
   property: "規則3: 利用者に届く名前のプロパティの文字列",
@@ -153,7 +153,7 @@ function matchesRule(rule, node) {
 }
 
 // 構文木から違反を集める。違反は、行、文字列、当たった規則である。
-export function findViolations(fileName, sourceText) {
+function findViolations(fileName, sourceText) {
   const kind = fileName.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const source = ts.createSourceFile(
     fileName,
@@ -181,7 +181,7 @@ export function findViolations(fileName, sourceText) {
   return violations;
 }
 
-export function isCheckedFile(relativePath) {
+function isCheckedFile(relativePath) {
   return SOURCE_FILE.test(relativePath) && !EXCLUDED_FILE.test(relativePath);
 }
 
@@ -190,7 +190,7 @@ function isFileException(exception) {
 }
 
 // 例外を適用し、残った違反と、どの直書きにも当たらない例外の行を返す。
-export function applyExceptions(violationsByFile, exceptions) {
+function applyExceptions(violationsByFile, exceptions) {
   const used = new Set();
   const remaining = [];
   for (const [file, violations] of Object.entries(violationsByFile)) {
@@ -208,7 +208,7 @@ export function applyExceptions(violationsByFile, exceptions) {
   return { remaining, unused };
 }
 
-export function formatProblems({ remaining, unused }) {
+function formatProblems({ remaining, unused }) {
   return [
     ...remaining.map(
       ({ file, line, text, rule }) => `${file}:${line}  ${rule}  "${text}"`,
@@ -226,7 +226,7 @@ function hasReason(exception) {
   return typeof exception.reason === "string" && exception.reason.trim() !== "";
 }
 
-export function checkSources(sources, exceptions) {
+function checkSources(sources, exceptions) {
   const violationsByFile = {};
   for (const [file, text] of Object.entries(sources)) {
     if (!isCheckedFile(file)) continue;
@@ -251,30 +251,17 @@ function readSources(srcDir) {
   return sources;
 }
 
-// 引数: --src <走査の起点> --exceptions <例外の一覧のパス>。既定は`src`と`scripts/hardcoded-text-exceptions.json`。
-export function parseArguments(argv, webDir) {
-  const options = {
-    src: path.join(webDir, "src"),
-    exceptions: path.join(webDir, "scripts", "hardcoded-text-exceptions.json"),
-  };
-  for (let index = 0; index < argv.length; index += 2) {
-    const key = argv[index];
-    if (key !== "--src" && key !== "--exceptions") {
-      throw new Error(`不明な引数です: ${key}`);
-    }
-    options[key.slice(2)] = path.resolve(argv[index + 1]);
-  }
-  return options;
-}
-
-export function run(options) {
+function run(options) {
   const exceptions = JSON.parse(fs.readFileSync(options.exceptions, "utf8"));
   return checkSources(readSources(options.src), exceptions);
 }
 
 function main() {
   const webDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-  const problems = run(parseArguments(process.argv.slice(2), webDir));
+  const problems = run({
+    src: path.join(webDir, "src"),
+    exceptions: path.join(webDir, "scripts", "hardcoded-text-exceptions.json"),
+  });
   for (const problem of problems) console.error(problem);
   if (problems.length > 0) {
     console.error(`文言の検査に失敗しました(${problems.length}件)。`);
@@ -282,4 +269,4 @@ function main() {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main();
+main();
