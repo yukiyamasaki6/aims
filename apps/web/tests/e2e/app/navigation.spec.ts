@@ -117,7 +117,6 @@ test.describe("紹介画面とロゴ", () => {
   }) => {
     // 紹介画面を開き、アプリ名と説明文が表示されることを確かめる。
     await page.goto("/");
-    await waitForHydration(page);
     await expect(page.getByRole("heading", { name: "AIMS" })).toBeVisible();
     await expect(
       page.getByText(navigationText("introDescription")),
@@ -149,20 +148,18 @@ test.describe("紹介画面とロゴ", () => {
 test.describe("認証済み", () => {
   test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
-  test("認証済みで紹介画面を開くと、紹介画面のままアプリ名と説明文が表示され、開始ボタンを押すとラウンド一覧へ移動する", async ({
+  test("認証済みで紹介画面を開くと、紹介画面のままアプリ名と説明文が表示され、開始ボタンを押すと、/signupを経て、ラウンド一覧へ移動する", async ({
     page,
   }) => {
     // 紹介画面を開き、移動せずにアプリ名と説明文が表示されることを確かめる。
-    // 開始ボタンの行き先は判定の後に決まるため、判定の完了(data-hydrated)を待つ。
     await page.goto("/");
-    await waitForHydration(page);
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("heading", { name: "AIMS" })).toBeVisible();
     await expect(
       page.getByText(navigationText("introDescription")),
     ).toBeVisible();
 
-    // 開始ボタンを押して、ラウンド一覧へ進む。
+    // 開始ボタンを押して、/signupの認証済みの転送を経て、ラウンド一覧へ進む。
     await page
       .getByRole("link", { name: navigationText("startButton") })
       .click();

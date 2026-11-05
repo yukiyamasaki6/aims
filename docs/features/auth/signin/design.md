@@ -35,7 +35,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(値オブジェクト)。利用者向けの文言は持たない。認証サービスの語彙も持たない。
 - `src/features/auth/domain/captcha-token.ts`、`password.ts`: セキュリティチェックのトークンと、パスワードの入力と文字種の規則(値オブジェクト。誤りの種類を返す)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
 - `src/features/auth/domain/auth-routes.ts`: 経路の規則(値オブジェクト)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは保護の範囲の根(今はラウンド一覧の経路)の配下の同一オリジンのパスだけ。根は`protectedPath`として受け取る)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`)、要求のリダイレクト先(`redirectFor`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
-- `src/features/auth/index.ts`: 認証の機能の入口。他の機能が使う型と経路(`destinationOf`、`SIGN_UP_PATH`)を、別名なしで再公開する。
+- `src/features/auth/index.ts`: 認証の機能の入口。他の機能が使う型を、別名なしで再公開する。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。`signInWithPassword`の呼び出しと、エラーを失敗の種類に写す変換(通信の断は名前で先に判定する)、例外(接続を作れない場合を含む)を通信エラーの失敗に変える変換を含む。接続は、渡された関数で照合のたびに取得する。
 - routerによる遷移は共有の技術 `src/lib/page-navigation/infrastructure/router-page-navigation.ts` が持つ。遷移元(`from`)は検証せずに入口から手続きへ渡り、検証は手続きの`destinationOf`が行う。
 - `src/features/auth/ui/use-screen-view.ts`: 画面の状態を持つ汎用のフック。`reducer`で遷移させる状態を`useState`で持ち、画面の約束`ScreenView`を作る。約束は描画ごとに作り、`dispatch`、`resetCheck`、`isMounted`は同じ参照にする。
@@ -75,4 +75,4 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 
 - 再試行の回数制限は、captcha以外に設けていない。
 - signup・reset-passwordを経由すると遷移元は引き継がない。
-- 認証の機能が他の機能へ公開する名前は、入口の`SessionReader`、`IdentityReader`、`SignInChange`、`SignInChanges`、`destinationOf`、`SIGN_UP_PATH`だけである。他の機能のファイルは、認証の機能の内部を参照せず、入口だけを参照する。サインインの状態の読み出しと端末の識別情報の読み出しは、入口(組み立て層)が`infrastructure/supabase-auth.ts`と`infrastructure/browser-identity-store.ts`から生成し、他の機能へ`SessionReader`と`IdentityReader`の型で注入する。サインインの状態の変化は、同期の機能のインフラ層が`SignInChanges`の型で受け取る。
+- 認証の機能が他の機能へ公開する名前は、入口の`SessionReader`、`IdentityReader`、`SignInChange`、`SignInChanges`だけである。他の機能のファイルは、認証の機能の内部を参照せず、入口だけを参照する。サインインの状態の読み出しと端末の識別情報の読み出しは、入口(組み立て層)が`infrastructure/supabase-auth.ts`と`infrastructure/browser-identity-store.ts`から生成し、他の機能へ`SessionReader`と`IdentityReader`の型で注入する。サインインの状態の変化は、同期の機能のインフラ層が`SignInChanges`の型で受け取る。

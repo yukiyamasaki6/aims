@@ -1,19 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
-import { createStart } from "@/features/navigation/application/start";
-import { createAuthSignInCheck } from "@/features/navigation/infrastructure/auth-sign-in-check";
+import { SIGN_UP_PATH } from "@/features/auth/domain/auth-routes";
 import { IntroScreen } from "@/features/navigation/ui/intro-screen";
-import { createClient } from "@/lib/supabase/infrastructure/client";
 
+// 開始ボタンは常に/signupへのリンクで、認証済みなら/signupの認証済みの転送で一覧へ着く。
 export default function Home() {
-  // 画面を開いている間、同じ手続きを保つ。
-  const [start] = useState(() =>
-    createStart({
-      signInCheck: createAuthSignInCheck(createSupabaseAuth(createClient)),
-    }),
-  );
-
-  return <IntroScreen start={start} />;
+  return <IntroScreen startHref={SIGN_UP_PATH} />;
 }
