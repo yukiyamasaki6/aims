@@ -405,9 +405,6 @@ describe("パスワード設定の流れの遷移", () => {
 describe("操作の開始の可否と入力の検証", () => {
   const validEmail = { email: "user@example.com" };
 
-  type Step = PasswordSetupFlow["step"];
-  const Steps: Step[] = ["email", "code", "password"];
-
   // 操作ごとに、操作の段階と、不備が無い状態での開始の命令。
   const cases = [
     {
@@ -467,21 +464,7 @@ describe("操作の開始の可否と入力の検証", () => {
       },
     );
 
-    it.each(Steps.filter((step) => step !== c.ownStep))(
-      "段階が%sなら、入力が正しくても、認証サービスを呼ばせず、状態を変えずに実行中と返す",
-      (step) => {
-        // Given
-        const flow = flowWith({ step, ...c.ready });
-
-        // When
-        const result = c.begin(flow);
-
-        // Then
-        expect(result).toEqual({ kind: "busy", state: flow });
-      },
-    );
-
-    it("自分の段階で実行中でなければ、busyを返さない", () => {
+    it("実行中でなければ、busyを返さない", () => {
       // Given
       const flow = readyFlow();
 
@@ -531,22 +514,6 @@ describe("操作の開始の可否と入力の検証", () => {
         ...c.ready,
         ...c.invalidFlow,
         fieldErrors: { email: "required" },
-      });
-
-      // When
-      const result = c.invalidBegin(flow);
-
-      // Then
-      expect(result).toEqual({ kind: "busy", state: flow });
-    });
-
-    it("段階外なら、入力に不備があっても不備を示さず、状態を変えずに実行中と返す", () => {
-      // Given
-      const otherStep = Steps.find((step) => step !== c.ownStep);
-      const flow = flowWith({
-        step: otherStep,
-        ...c.ready,
-        ...c.invalidFlow,
       });
 
       // When

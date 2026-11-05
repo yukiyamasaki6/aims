@@ -19,7 +19,7 @@ export type FieldErrors<Field extends keyof FieldErrorKinds> = {
 };
 
 // 操作の開始の結果。どの結果も、命令を受けた後の状態(state)を持つ。
-// - busy: 実行中か段階外のため、開始しない。状態は受けたまま(副作用なし)。
+// - busy: 実行中のため、開始しない。状態は受けたまま(副作用なし)。
 // - invalid: 入力に不備がある。不備を示す状態。
 // - started: 開始する。実行中の状態と、認証サービスへ頼む内容(request)。
 export type Start<State, Request = undefined> =

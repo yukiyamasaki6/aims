@@ -243,51 +243,6 @@ describe("サインアップの手続き", () => {
     });
   });
 
-  // コードの確認、再送、パスワードの設定の段階外の呼び出しは、共通の手続きのテストが担う。
-  describe("段階外の呼び出し", () => {
-    it.each([
-      ["コードの送信", "code", "sendCode"],
-      ["コードの送信", "password", "sendCode"],
-    ] as const)(
-      "%sを段階が%sのときに呼んでも、認証サービスを呼ばず、出来事も送らない",
-      async (_label, step, operation) => {
-        // Given
-        const {
-          signUp,
-          authenticator,
-          registration,
-          navigation,
-          events,
-          viewOf,
-        } = setup();
-        const view = viewOf({
-          ...resendable,
-          step,
-          resendCooldown: 0,
-          captchaToken: "token",
-        });
-        const calls = {
-          sendCode: () => signUp.sendCode({ email }, view),
-          verifyCode: () => signUp.verifyCode({ email, code: "123456" }, view),
-          resend: () => signUp.resend({ email }, view),
-          setPassword: () =>
-            signUp.setPassword({ password: "password1" }, view),
-        };
-
-        // When
-        await calls[operation]();
-
-        // Then
-        expect(events).toEqual([]);
-        expect(registration.isRegistered).not.toHaveBeenCalled();
-        expect(authenticator.sendCode).not.toHaveBeenCalled();
-        expect(authenticator.verifyCode).not.toHaveBeenCalled();
-        expect(authenticator.setPassword).not.toHaveBeenCalled();
-        expect(navigation.go).not.toHaveBeenCalled();
-      },
-    );
-  });
-
   describe("パスワードの設定", () => {
     it("保護の範囲の根が異なる場合、設定できれば根へ遷移する", async () => {
       // Given

@@ -191,25 +191,6 @@ describe("パスワード再設定の手続き", () => {
       expect(view.observedState.step).toBe("email");
       expect(view.observedState.pending).toBeNull();
     });
-
-    it.each([
-      ["コード", "code"],
-      ["パスワード", "password"],
-    ] as const)(
-      "段階が%sのときに呼んでも、認証サービスを呼ばず、出来事も送らない",
-      async (_label, step) => {
-        // Given
-        const { procedure, authenticator, events, viewOf } = setup();
-        const view = viewOf({ ...resendable, step, captchaToken: "token" });
-
-        // When
-        await procedure.sendCode({ email }, view);
-
-        // Then
-        expect(events).toEqual([]);
-        expect(authenticator.sendCode).not.toHaveBeenCalled();
-      },
-    );
   });
 
   describe("パスワードの設定", () => {
@@ -369,26 +350,6 @@ describe("パスワード再設定の手続き", () => {
       expect(events).toEqual([]);
       expect(passwordChange.change).not.toHaveBeenCalled();
     });
-
-    it.each([
-      ["メール", "email"],
-      ["コード", "code"],
-    ] as const)(
-      "段階が%sのときに呼んでも、変更を頼まず、出来事も送らない",
-      async (_label, step) => {
-        // Given
-        const { procedure, passwordChange, pageLoad, events, viewOf } = setup();
-        const view = viewOf({ ...onPasswordStep, step });
-
-        // When
-        await procedure.setPassword({ password }, view);
-
-        // Then
-        expect(events).toEqual([]);
-        expect(passwordChange.change).not.toHaveBeenCalled();
-        expect(pageLoad.load).not.toHaveBeenCalled();
-      },
-    );
   });
 
   // 離れた後は、表示も遷移もしない(変更と全端末の終了は、要求が届いていればサーバーで完了する)。

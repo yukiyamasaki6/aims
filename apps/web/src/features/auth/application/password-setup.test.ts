@@ -254,49 +254,6 @@ describe("パスワード設定の共通の手続き", () => {
     });
   });
 
-  describe("段階外の呼び出し", () => {
-    it.each([
-      ["コードの確認", "email", "verifyCode"],
-      ["コードの確認", "password", "verifyCode"],
-      ["コードの再送", "email", "resend"],
-      ["コードの再送", "password", "resend"],
-      ["パスワードの設定", "email", "applyPassword"],
-      ["パスワードの設定", "code", "applyPassword"],
-    ] as const)(
-      "%sを段階が%sのときに呼んでも、認証サービスを呼ばず、出来事も送らない",
-      async (_label, step, operation) => {
-        // Given
-        const { authenticator, context, events, viewOf } = setup();
-        const view = viewOf({
-          ...resendable,
-          step,
-          resendCooldown: 0,
-          captchaToken: "token",
-        });
-        const calls = {
-          verifyCode: () =>
-            verifyCode(context, { email, code: "123456" }, view),
-          resend: () => resend(context, { email }, view),
-          applyPassword: () =>
-            applyPassword(
-              authenticator.setPassword,
-              { password: "password1" },
-              view,
-            ),
-        };
-
-        // When
-        await calls[operation]();
-
-        // Then
-        expect(events).toEqual([]);
-        expect(authenticator.sendCode).not.toHaveBeenCalled();
-        expect(authenticator.verifyCode).not.toHaveBeenCalled();
-        expect(authenticator.setPassword).not.toHaveBeenCalled();
-      },
-    );
-  });
-
   describe("パスワードの設定", () => {
     it("設定できて表示中なら、渡された設定の依頼で入力したパスワードを頼み、続きを行ってよいと返し、実行中を解除しない", async () => {
       // Given

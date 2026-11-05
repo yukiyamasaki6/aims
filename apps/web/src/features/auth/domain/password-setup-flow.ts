@@ -38,16 +38,15 @@ type Checked<Request> =
   | { readonly ok: false; readonly fieldErrors: FieldErrorSet }
   | { readonly ok: true; readonly request: Request };
 
-// 開始の命令。実行中の操作が無く、操作の段階にあるときだけ開始できる(busy)。
+// 開始の命令。実行中の操作が無いときだけ開始できる(busy)。画面は現在の段階の操作だけを描くため、段階は検査しない。
 // 入力の不備は、操作ごとの順序で最初の1件を示す(invalid)。開始できるなら、その操作を実行中にする(started)。
 // 開始では以前のエラーを消さない。エラーは次の結果で変わる(4操作で同じ)。
 function begin<Request>(
   flow: PasswordSetupFlow,
   operation: Operation,
-  step: PasswordSetupFlow["step"],
   check: () => Checked<Request>,
 ): Start<PasswordSetupFlow, Request> {
-  if (flow.pending !== null || flow.step !== step) {
+  if (flow.pending !== null) {
     return { kind: "busy", state: flow };
   }
   const checked = check();
@@ -74,7 +73,7 @@ export function beginSendCode(
   flow: PasswordSetupFlow,
   input: { email: string },
 ): Start<PasswordSetupFlow, { email: string; captchaToken: string }> {
-  return begin(flow, "send", "email", () => {
+  return begin(flow, "send", () => {
     const email = validateEmail(input.email);
     if (email) return { ok: false, fieldErrors: { email } };
     if (!isCaptchaCompleted(flow.captchaToken)) {
@@ -95,7 +94,7 @@ export function beginVerifyCode(
   flow: PasswordSetupFlow,
   input: { email: string; code: string },
 ): Start<PasswordSetupFlow, { email: string; code: string }> {
-  return begin(flow, "verify", "code", () => ({
+  return begin(flow, "verify", () => ({
     ok: true,
     request: { email: input.email, code: input.code },
   }));
@@ -106,7 +105,7 @@ export function beginResend(
   flow: PasswordSetupFlow,
   input: { email: string },
 ): Start<PasswordSetupFlow, { email: string; captchaToken: string }> {
-  return begin(flow, "resend", "code", () => {
+  return begin(flow, "resend", () => {
     const wait = validateResendWait(flow.resendCooldown);
     if (wait) return { ok: false, fieldErrors: { resend: wait } };
     if (!isCaptchaCompleted(flow.captchaToken)) {
@@ -123,7 +122,7 @@ export function beginSetPassword(
   flow: PasswordSetupFlow,
   input: { password: string },
 ): Start<PasswordSetupFlow, { password: string }> {
-  return begin(flow, "setPassword", "password", () => {
+  return begin(flow, "setPassword", () => {
     const password = validateNewPassword(input.password);
     if (password) return { ok: false, fieldErrors: { password } };
     return { ok: true, request: { password: input.password } };
