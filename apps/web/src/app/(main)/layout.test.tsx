@@ -284,7 +284,7 @@ describe("MainLayout", () => {
       expect(assign).not.toHaveBeenCalled();
     });
 
-    it("ラウンド一覧では、遷移元を付けない", () => {
+    it("ラウンド一覧でも、一覧を遷移元に付ける", () => {
       // Given
       setLocation("/rounds");
       renderLayout();
@@ -293,7 +293,9 @@ describe("MainLayout", () => {
       supabase.emit("SIGNED_OUT", null);
 
       // Then
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
+      expect(replace).toHaveBeenCalledExactlyOnceWith(
+        "/signin?returnTo=%2Frounds",
+      );
     });
 
     it("入力が重なっても、遷移は1回である", () => {

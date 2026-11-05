@@ -145,19 +145,27 @@ describe("leave", () => {
     });
   });
 
-  it.each(["/rounds", "/other"])(
-    "遷移元にならない場所(%s)では、遷移元を付けずにサインインへ移る",
-    (here) => {
-      // Given
-      const state = initialSessionEndFlow;
+  it("保護の範囲の根(/rounds)でも、その場所を遷移元に付けてサインインへ移る", () => {
+    // Given
+    const state = initialSessionEndFlow;
 
-      // When
-      const result = leave(state, here, "/rounds");
+    // When
+    const result = leave(state, "/rounds", "/rounds");
 
-      // Then
-      expect(result.result).toBe("/signin");
-    },
-  );
+    // Then
+    expect(result.result).toBe("/signin?returnTo=%2Frounds");
+  });
+
+  it("保護の範囲の外(/other)は遷移元にならず、遷移元を付けずにサインインへ移る", () => {
+    // Given
+    const state = initialSessionEndFlow;
+
+    // When
+    const result = leave(state, "/other", "/rounds");
+
+    // Then
+    expect(result.result).toBe("/signin");
+  });
 
   it("保護の範囲の根が異なる場合、根の下の場所だけを遷移元にする", () => {
     // Given

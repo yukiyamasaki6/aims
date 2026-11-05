@@ -173,7 +173,6 @@ describe("signInHref", () => {
 
   it.each([
     ["null", null],
-    ["/rounds(既定の行き先と同じ)", "/rounds"],
     ["外部URL", "https://evil.com"],
     ["//で始まる値", "//evil.com"],
     ["/signin", "/signin"],
@@ -246,9 +245,9 @@ describe("redirectFor", () => {
 
   it.each([
     [
-      "未認証で/roundsを開くと、遷移元の無いサインイン",
+      "未認証で/roundsを開くと、/roundsを遷移元に付けたサインイン",
       { pathname: "/rounds" },
-      "/signin",
+      "/signin?returnTo=%2Frounds",
     ],
     [
       "未認証で/rounds配下を開くと、クエリ付きの遷移元つきのサインイン",
@@ -354,14 +353,14 @@ describe("redirectFor: 要求ごとの行き先", () => {
     isServerAction: false,
   };
 
-  it("未認証で/roundsにアクセスすると、遷移元を付けずに/signinへリダイレクトする", () => {
+  it("未認証で/roundsにアクセスすると、/roundsを遷移元に付けて/signinへリダイレクトする", () => {
     // Given
 
     // When
     const result = redirectFor({ ...request, pathname: "/rounds" }, ROUNDS);
 
     // Then
-    expect(result).toBe("/signin");
+    expect(result).toBe("/signin?returnTo=%2Frounds");
   });
 
   it.each([
@@ -502,7 +501,7 @@ describe("保護の範囲の根を差し替えたとき", () => {
     );
 
     // Then
-    expect(root).toBe("/signin");
+    expect(root).toBe("/signin?returnTo=%2Felsewhere");
     expect(below).toBe("/signin?returnTo=%2Felsewhere%2F1");
     expect(rounds).toBeNull();
     expect(prefixOnly).toBeNull();

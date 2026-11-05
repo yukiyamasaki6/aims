@@ -43,12 +43,10 @@ export function destinationOf(
   return allowedReturnTo(returnTo, protectedPath) ?? protectedPath;
 }
 
-// 遷移元を付けたサインインのURL。無効な値や既定の行き先のみのときは付けない。
+// 遷移元を付けたサインインのURL。無効な値のときは付けない。
 export function signInHref(from: string | null, protectedPath: string): string {
   const resolved = allowedReturnTo(from, protectedPath);
-  if (resolved === null || resolved === destinationOf(null, protectedPath)) {
-    return SIGN_IN_PATH;
-  }
+  if (resolved === null) return SIGN_IN_PATH;
   return `${SIGN_IN_PATH}?${RETURN_TO_PARAM}=${encodeURIComponent(resolved)}`;
 }
 

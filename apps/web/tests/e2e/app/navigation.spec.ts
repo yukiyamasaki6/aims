@@ -342,7 +342,7 @@ test.describe("未認証のガード", () => {
   test("未認証でラウンド作成画面を開くと、開いた画面を遷移元に付けてサインイン画面へ移動する", async ({
     page,
   }) => {
-    // 代表として/rounds/newを開く。/rounds（遷移元を付けない）、/rounds/[id]・クエリ付きは単体テスト（session.test.ts）で検証する。
+    // 代表として/rounds/newを開く。/rounds・/rounds/[id]・クエリ付きは単体テスト（session.test.ts）で検証する。
     await page.goto("/rounds/new");
 
     await expect(page).toHaveURL(/\/signin\?returnTo=%2Frounds%2Fnew$/);

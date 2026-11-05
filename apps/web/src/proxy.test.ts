@@ -112,7 +112,7 @@ describe("proxy", () => {
   });
 
   describe("リクエストを受け取る", () => {
-    it("未認証で一覧の経路を開くと、遷移元を付けずにサインインへリダイレクトする", async () => {
+    it("未認証で一覧の経路を開くと、その経路を遷移元に付けてサインインへリダイレクトする", async () => {
       // Given
       db.getUser.mockResolvedValue({ data: { user: null } });
 
@@ -122,7 +122,7 @@ describe("proxy", () => {
 
       // Then
       expect(response.headers.get("location")).toBe(
-        "https://app.example.com/signin",
+        "https://app.example.com/signin?returnTo=%2Frounds",
       );
     });
 

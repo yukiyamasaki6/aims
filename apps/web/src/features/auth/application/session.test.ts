@@ -460,7 +460,7 @@ describe("サインアウト", () => {
       expect(outside.page.replace).toHaveBeenCalledWith("/signin");
     });
 
-    it("ラウンド一覧でサインアウトが失敗した後にセッションを失ったときは、遷移元を付けない", async () => {
+    it("ラウンド一覧でサインアウトが失敗した後にセッションを失ったときも、一覧を遷移元に付ける", async () => {
       // Given
       const { session, page, emit } = setup({
         signOutHere: async () => ({ kind: "rate_limited" }),
@@ -473,7 +473,7 @@ describe("サインアウト", () => {
       emit(signedOut);
 
       // Then
-      expect(page.replace).toHaveBeenCalledWith("/signin");
+      expect(page.replace).toHaveBeenCalledWith("/signin?returnTo=%2Frounds");
     });
 
     it("完了の遷移が投げても、完了を返す", async () => {
