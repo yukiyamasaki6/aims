@@ -32,7 +32,7 @@ export function beginSignIn(
   flow: SignInFlow,
   input: { email: string; password: string },
 ): Start<SignInFlow, Credentials> {
-  if (flow.submitting) return { kind: "busy", state: flow };
+  if (flow.submitting) return { state: flow, request: null };
   const email = validateEmail(input.email);
   // 登録時のパスワードポリシーをサインインで課すと、ポリシー変更前に登録した正しいパスワードで入れなくなるため、空かどうかだけを見る。
   const password = validatePasswordPresent(input.password);
@@ -44,12 +44,11 @@ export function beginSignIn(
       ...(!isCaptchaCompleted(captchaToken) && { captcha: "incomplete" }),
     };
     return {
-      kind: "invalid",
       state: { ...flow, error: null, fieldErrors },
+      request: null,
     };
   }
   return {
-    kind: "started",
     state: { ...flow, submitting: true, error: null, fieldErrors: {} },
     request: { ...input, captchaToken },
   };

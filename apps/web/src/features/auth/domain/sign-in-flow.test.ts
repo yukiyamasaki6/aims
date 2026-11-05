@@ -21,7 +21,6 @@ describe("beginSignIn", () => {
 
     // Then
     expect(result).toMatchObject({
-      kind: "started",
       state: { submitting: true },
       request: { ...validInput, captchaToken: "captcha-token" },
     });
@@ -36,7 +35,7 @@ describe("beginSignIn", () => {
       const result = beginSignIn(verified, { ...validInput, password });
 
       // Then
-      expect(result.kind).toBe("started");
+      expect(result.request).not.toBeNull();
     },
   );
 
@@ -53,8 +52,10 @@ describe("beginSignIn", () => {
     const invalid = beginSignIn(submitting, { email: "", password: "" });
 
     // Then
-    expect(valid).toEqual({ kind: "busy", state: submitting });
-    expect(invalid).toEqual({ kind: "busy", state: submitting });
+    expect(valid.state).toBe(submitting);
+    expect(valid.request).toBeNull();
+    expect(invalid.state).toBe(submitting);
+    expect(invalid.request).toBeNull();
   });
 
   it.each([
@@ -93,7 +94,7 @@ describe("beginSignIn", () => {
     const result = beginSignIn(flow, input);
 
     // Then
-    expect(result).toMatchObject({ kind: "invalid", state: { fieldErrors } });
+    expect(result).toMatchObject({ request: null, state: { fieldErrors } });
   });
 
   it("開始できるときは、前回の失敗の文言と欄のエラーを消して送信中にする", () => {
@@ -108,7 +109,7 @@ describe("beginSignIn", () => {
     const result = beginSignIn(flow, validInput);
 
     // Then
-    expect(result.kind).toBe("started");
+    expect(result.request).not.toBeNull();
     expect(result.state).toMatchObject({
       submitting: true,
       error: null,
@@ -130,7 +131,7 @@ describe("beginSignIn", () => {
     const result = beginSignIn(flow, { ...validInput, password: "" });
 
     // Then
-    expect(result.kind).toBe("invalid");
+    expect(result.request).toBeNull();
     expect(result.state.fieldErrors).toEqual({
       password: "required",
     });
@@ -240,13 +241,12 @@ describe("signInReducer: failed", () => {
 
     // Then
     expect(withoutToken).toMatchObject({
-      kind: "invalid",
+      request: null,
       state: {
         fieldErrors: { captcha: "incomplete" },
       },
     });
     expect(result).toMatchObject({
-      kind: "started",
       request: { ...validInput, captchaToken: "new-token" },
     });
   });

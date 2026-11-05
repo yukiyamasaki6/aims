@@ -81,7 +81,7 @@ export function createSession({
   async function signOut(view: ViewLifetime): Promise<SignOutResult> {
     const start = beginSignOut(flow);
     flow = start.state;
-    if (start.kind !== "started") return { kind: "ignored" };
+    if (start.request === null) return { kind: "ignored" };
     const failure = failureOf(await authenticator.signOutHere());
     const reading = await authenticator.readSession();
     // 読んだ後に離れていたら、結果を破棄する。終了の依頼は取り消さない。

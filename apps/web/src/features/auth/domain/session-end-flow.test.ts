@@ -17,9 +17,8 @@ describe("beginSignOut", () => {
 
     // Then
     expect(result).toEqual({
-      kind: "started",
       state: { running: true, left: false },
-      request: undefined,
+      request: true,
     });
   });
 
@@ -31,7 +30,8 @@ describe("beginSignOut", () => {
     const result = beginSignOut(running);
 
     // Then
-    expect(result).toEqual({ kind: "busy", state: running });
+    expect(result.state).toBe(running);
+    expect(result.request).toBeNull();
   });
 
   it("完了または失敗で実行中が解かれた後は、再び開始できる", () => {
@@ -46,7 +46,7 @@ describe("beginSignOut", () => {
     const result = beginSignOut(failed);
 
     // Then
-    expect(result.kind).toBe("started");
+    expect(result.request).not.toBeNull();
   });
 });
 

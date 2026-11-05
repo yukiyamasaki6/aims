@@ -29,7 +29,7 @@ export function useScreenView<State, Event>(
     begin(command) {
       const start = command(state);
       setState(start.state);
-      return start.kind === "started" ? start.request : null;
+      return start.request;
     },
   };
   return { state, view, checkRef };

@@ -397,7 +397,8 @@ describe("操作の開始の可否と入力の検証", () => {
         const result = c.begin(flow);
 
         // Then
-        expect(result).toEqual({ kind: "busy", state: flow });
+        expect(result.state).toBe(flow);
+        expect(result.request).toBeNull();
       },
     );
 
@@ -413,7 +414,7 @@ describe("操作の開始の可否と入力の検証", () => {
       const result = c.begin(flow);
 
       // Then
-      expect(result.kind).toBe("started");
+      expect(result.request).not.toBeNull();
       expect(result.state).toMatchObject({
         pending: c.operation,
         error: null,
@@ -429,7 +430,7 @@ describe("操作の開始の可否と入力の検証", () => {
       const result = c.begin(flow);
 
       // Then
-      expect(result.kind).not.toBe("busy");
+      expect(result.request).not.toBeNull();
     });
   });
 
@@ -452,7 +453,8 @@ describe("操作の開始の可否と入力の検証", () => {
       const result = c.invalidBegin(flow);
 
       // Then
-      expect(result).toEqual({ kind: "busy", state: flow });
+      expect(result.state).toBe(flow);
+      expect(result.request).toBeNull();
     });
 
     it("入力に不備があれば、前回のエラーを消して欄のエラーを差し替え、実行中にしない", () => {
@@ -468,7 +470,7 @@ describe("操作の開始の可否と入力の検証", () => {
       const result = c.invalidBegin(flow);
 
       // Then
-      expect(result.kind).toBe("invalid");
+      expect(result.request).toBeNull();
       expect(result.state.pending).toBeNull();
       expect(result.state.error).toBeNull();
       expect(result.state.fieldErrors).not.toEqual(flow.fieldErrors);
@@ -521,7 +523,6 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "started",
         request: { email: "user@example.com", captchaToken: "token" },
       });
     });
@@ -535,7 +536,7 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "invalid",
+        request: null,
         state: {
           fieldErrors: { email: "invalidFormat" },
         },
@@ -553,7 +554,7 @@ describe("操作の開始の可否と入力の検証", () => {
 
         // Then
         expect(result).toMatchObject({
-          kind: "invalid",
+          request: null,
           state: { fieldErrors: { captcha: CAPTCHA_MESSAGE } },
         });
       },
@@ -568,7 +569,7 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "invalid",
+        request: null,
         state: {
           fieldErrors: { email: "required", captcha: CAPTCHA_MESSAGE },
         },
@@ -590,7 +591,6 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "started",
         state: { pending: "verify" },
         request: { email: "user@example.com", code: "123456" },
       });
@@ -607,7 +607,6 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "started",
         state: { pending: "verify" },
         request: { email: "user@example.com", code: "" },
       });
@@ -628,7 +627,6 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "started",
         state: { pending: "send", resendCooldown: 0 },
         request: { email: "user@example.com", captchaToken: "token" },
       });
@@ -647,7 +645,7 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "invalid",
+        request: null,
         state: { fieldErrors: { resend: WAIT_MESSAGE }, resendCooldown: 30 },
       });
     });
@@ -665,7 +663,7 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "invalid",
+        request: null,
         state: {
           fieldErrors: { resend: WAIT_MESSAGE, captcha: CAPTCHA_MESSAGE },
         },
@@ -686,7 +684,6 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "started",
         request: { password: "password1" },
       });
     });
@@ -699,7 +696,7 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "invalid",
+        request: null,
         state: { fieldErrors: { password: "required" } },
       });
     });

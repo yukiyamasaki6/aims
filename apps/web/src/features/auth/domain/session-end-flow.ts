@@ -24,13 +24,11 @@ export type SignOutVerdict =
   | { readonly kind: "discarded" };
 
 // サインアウトを始める。実行中なら始めない。
-export function beginSignOut(flow: SessionEndFlow): Start<SessionEndFlow> {
-  if (flow.running) return { kind: "busy", state: flow };
-  return {
-    kind: "started",
-    state: { ...flow, running: true },
-    request: undefined,
-  };
+export function beginSignOut(
+  flow: SessionEndFlow,
+): Start<SessionEndFlow, true> {
+  if (flow.running) return { state: flow, request: null };
+  return { state: { ...flow, running: true }, request: true };
 }
 
 // サインアウトの呼び出しの後に観測したこと。画面が離れていれば、観測しない(discarded)。

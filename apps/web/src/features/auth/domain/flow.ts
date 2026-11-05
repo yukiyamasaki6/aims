@@ -18,18 +18,13 @@ export type FieldErrors<Field extends keyof FieldErrorKinds> = {
   readonly [F in Field]?: FieldErrorKinds[F];
 };
 
-// 操作の開始の結果。どの結果も、命令を受けた後の状態(state)を持つ。
-// - busy: 実行中のため、開始しない。状態は受けたまま(副作用なし)。
-// - invalid: 入力に不備がある。不備を示す状態。
-// - started: 開始する。実行中の状態と、認証サービスへ頼む内容(request)。
-export type Start<State, Request = undefined> =
-  | { readonly kind: "busy"; readonly state: State }
-  | { readonly kind: "invalid"; readonly state: State }
-  | {
-      readonly kind: "started";
-      readonly state: State;
-      readonly request: Request;
-    };
+// 操作の開始の結果。命令を受けた後の状態(state)と、認証サービスへ頼む内容(request)を持つ。
+// - 開始する: 実行中の状態と、request。
+// - 開始しない(request が null): 実行中のときは、状態は受けたまま(副作用なし)。入力に不備があるときは、不備を示す状態(error・fieldErrors)。
+export type Start<State, Request> = {
+  readonly state: State;
+  readonly request: Request | null;
+};
 
 // 開始の後の命令の結果。新しい状態と、命令の結果。
 export type Step<State, Result> = {

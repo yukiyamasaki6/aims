@@ -47,17 +47,16 @@ function begin<Request>(
   check: () => Checked<Request>,
 ): Start<PasswordSetupFlow, Request> {
   if (flow.pending !== null) {
-    return { kind: "busy", state: flow };
+    return { state: flow, request: null };
   }
   const checked = check();
   if (!checked.ok) {
     return {
-      kind: "invalid",
       state: { ...flow, error: null, fieldErrors: checked.fieldErrors },
+      request: null,
     };
   }
   return {
-    kind: "started",
     state: {
       ...flow,
       error: null,

@@ -20,7 +20,7 @@ describe("useScreenView", () => {
     act(() => {
       result.current.view.begin((state) => {
         received = state;
-        return { kind: "invalid", state } as Start<number, string>;
+        return { state, request: null } as Start<number, string>;
       });
     });
 
@@ -54,7 +54,7 @@ describe("useScreenView", () => {
     act(() => {
       result.current.view.begin((state) => {
         received = state;
-        return { kind: "invalid", state } as Start<number, string>;
+        return { state, request: null } as Start<number, string>;
       });
     });
 
@@ -118,9 +118,8 @@ describe("useScreenView", () => {
   describe("begin", () => {
     const start = (state: number, amount: number): Start<number, number> =>
       state + amount > 100
-        ? ({ kind: "busy", state } as const)
+        ? ({ state, request: null } as const)
         : ({
-            kind: "started",
             state: state + amount,
             request: amount,
           } as const);
@@ -146,7 +145,7 @@ describe("useScreenView", () => {
       const received: number[] = [];
       const recording = (state: number): Start<number, string> => {
         received.push(state);
-        return { kind: "started", state: state + 1, request: "go" };
+        return { state: state + 1, request: "go" };
       };
 
       // When
@@ -167,8 +166,8 @@ describe("useScreenView", () => {
       const { result } = setup();
       const command = (state: number): Start<number, string> =>
         state > 10
-          ? ({ kind: "busy", state } as const)
-          : ({ kind: "started", state: state + 1, request: "go" } as const);
+          ? ({ state, request: null } as const)
+          : ({ state: state + 1, request: "go" } as const);
       const results: (string | null)[] = [];
       act(() => {
         results.push(result.current.view.begin(command));
@@ -197,7 +196,7 @@ describe("useScreenView", () => {
       // Given
       const { result } = setup();
       const invalid = (state: number): Start<number, string> =>
-        ({ kind: "invalid", state: state - 1 }) as const;
+        ({ state: state - 1, request: null }) as const;
 
       // When
       let request: unknown = "unset";
