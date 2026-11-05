@@ -67,7 +67,6 @@ export function endSignOut(
 export function leave(
   flow: SessionEndFlow,
   from: string | null,
-  protectedPath: string,
 ): string | null {
-  return flow.running ? null : signInHref(from, protectedPath);
+  return flow.running ? null : signInHref(from);
 }

@@ -23,7 +23,6 @@ function setup(
     signOutHere?: () => Promise<AuthFailure | null>;
     check?: () => Promise<SessionStatus>;
     here?: string;
-    protectedPath?: string;
   } = {},
 ) {
   const listeners: Array<(event: AuthChange) => void> = [];
@@ -50,7 +49,6 @@ function setup(
   const session = createSession({
     authenticator: authority,
     pageReplace: page,
-    protectedPath: options.protectedPath ?? "/rounds",
   });
   return {
     session,

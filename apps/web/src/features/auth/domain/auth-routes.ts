@@ -43,11 +43,11 @@ export function destinationOf(
   return allowedReturnTo(returnTo, protectedPath) ?? protectedPath;
 }
 
-// 遷移元を付けたサインインのURL。無効な値のときは付けない。
-export function signInHref(from: string | null, protectedPath: string): string {
-  const resolved = allowedReturnTo(from, protectedPath);
-  if (resolved === null) return SIGN_IN_PATH;
-  return `${SIGN_IN_PATH}?${RETURN_TO_PARAM}=${encodeURIComponent(resolved)}`;
+// 遷移元を付けたサインインのURL。遷移元がnullのときは付けない。
+// 入力は、ブラウザの今の場所と、保護の範囲を開いた要求のパスで、どちらも保護の範囲の中である。外部の値は、読む側(destinationOf)が検証する。
+export function signInHref(from: string | null): string {
+  if (from === null) return SIGN_IN_PATH;
+  return `${SIGN_IN_PATH}?${RETURN_TO_PARAM}=${encodeURIComponent(from)}`;
 }
 
 // 要求に対するリダイレクト先(パスとクエリ)。リダイレクトしないときはnull。
@@ -61,7 +61,7 @@ export function redirectFor(
   protectedPath: string,
 ): string | null {
   if (!request.signedIn && isProtectedPath(request.pathname, protectedPath)) {
-    return signInHref(request.pathname + request.search, protectedPath);
+    return signInHref(request.pathname + request.search);
   }
   if (request.signedIn && GUEST_ONLY_PATHS.includes(request.pathname)) {
     return destinationOf(null, protectedPath);

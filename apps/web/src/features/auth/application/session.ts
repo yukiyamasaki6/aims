@@ -50,8 +50,6 @@ export type SignOutResult =
 type Dependencies = {
   authenticator: SessionAuthenticator;
   pageReplace: PageReplace;
-  // 保護対象の画面の範囲の根の経路。遷移元の検証に使う。
-  protectedPath: string;
 };
 
 export type Session = {
@@ -67,7 +65,6 @@ export type Session = {
 export function createSession({
   authenticator,
   pageReplace,
-  protectedPath,
 }: Dependencies): Session {
   let flow = initialSessionEndFlow;
 
@@ -92,7 +89,7 @@ export function createSession({
   }
 
   function go(from: string | null) {
-    const destination = leave(flow, from, protectedPath);
+    const destination = leave(flow, from);
     if (destination !== null) pageReplace.replace(destination);
   }
 

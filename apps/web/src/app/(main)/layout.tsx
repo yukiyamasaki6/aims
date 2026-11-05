@@ -19,7 +19,6 @@ export default function MainLayout({
     createSession({
       authenticator: createSupabaseAuth(createClient),
       pageReplace: createBrowserPageLoad(),
-      protectedPath: ROUNDS_PATH,
     }),
   );
   // セッションを失ったら/signinへ移す。認証が要る画面の集合(このレイアウトの下)の間、見張る。

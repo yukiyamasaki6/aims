@@ -136,7 +136,7 @@ describe("leave", () => {
     const state = initialSessionEndFlow;
 
     // When
-    const result = leave(state, "/rounds/new?from=a", "/rounds");
+    const result = leave(state, "/rounds/new?from=a");
 
     // Then
     expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew%3Ffrom%3Da");
@@ -147,34 +147,10 @@ describe("leave", () => {
     const state = initialSessionEndFlow;
 
     // When
-    const result = leave(state, "/rounds", "/rounds");
+    const result = leave(state, "/rounds");
 
     // Then
     expect(result).toBe("/signin?returnTo=%2Frounds");
-  });
-
-  it("保護の範囲の外(/other)は遷移元にならず、遷移元を付けずにサインインへ移る", () => {
-    // Given
-    const state = initialSessionEndFlow;
-
-    // When
-    const result = leave(state, "/other", "/rounds");
-
-    // Then
-    expect(result).toBe("/signin");
-  });
-
-  it("保護の範囲の根が異なる場合、根の下の場所だけを遷移元にする", () => {
-    // Given
-    const state = initialSessionEndFlow;
-
-    // When
-    const inside = leave(state, "/elsewhere/x", "/elsewhere");
-    const outside = leave(state, "/rounds/x", "/elsewhere");
-
-    // Then
-    expect(inside).toBe("/signin?returnTo=%2Felsewhere%2Fx");
-    expect(outside).toBe("/signin");
   });
 
   it("遷移元を明示しない(サインアウトを終えられた)ときは、遷移元を付けずにサインインへ移る", () => {
@@ -186,7 +162,7 @@ describe("leave", () => {
     }).state;
 
     // When
-    const result = leave(completed, null, "/rounds");
+    const result = leave(completed, null);
 
     // Then
     expect(result).toBe("/signin");
@@ -197,7 +173,7 @@ describe("leave", () => {
     const running = beginSignOut(initialSessionEndFlow).state;
 
     // When
-    const result = leave(running, "/rounds/new", "/rounds");
+    const result = leave(running, "/rounds/new");
 
     // Then
     expect(result).toBeNull();
@@ -223,7 +199,7 @@ describe("leave", () => {
       ).state;
 
       // When
-      const result = leave(settled, "/rounds/new", "/rounds");
+      const result = leave(settled, "/rounds/new");
 
       // Then
       expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew");

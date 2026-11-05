@@ -152,39 +152,31 @@ describe("signInHref", () => {
 
     // When
     const from = "/rounds/new?x=1";
-    const result = signInHref(from, ROUNDS);
+    const result = signInHref(from);
 
     // Then
     expect(result).toBe(`/signin?returnTo=${encodeURIComponent(from)}`);
     expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew%3Fx%3D1");
   });
 
-  it("ハッシュは含めずに返す", () => {
+  it("遷移元がnullのときは、returnTo無しの/signinにする", () => {
     // Given
 
     // When
-    const from = "/rounds/new#top";
-    const result = signInHref(from, ROUNDS);
-
-    // Then
-    expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew");
-  });
-
-  it.each([
-    ["null", null],
-    ["外部URL", "https://evil.com"],
-    ["//で始まる値", "//evil.com"],
-    ["/signin", "/signin"],
-    ["/rounds/../signin", "/rounds/../signin"],
-    ["空文字", ""],
-  ])("%sはreturnTo無しの/signinにする", (_name, from) => {
-    // Given
-
-    // When
-    const result = signInHref(from, ROUNDS);
+    const result = signInHref(null);
 
     // Then
     expect(result).toBe("/signin");
+  });
+
+  it("遷移元は、そのままエンコードしてreturnToに付ける", () => {
+    // Given
+
+    // When
+    const result = signInHref("/rounds/x?a=1&b=2");
+
+    // Then
+    expect(result).toBe("/signin?returnTo=%2Frounds%2Fx%3Fa%3D1%26b%3D2");
   });
 });
 
@@ -328,17 +320,5 @@ describe("保護の範囲の根を差し替えたとき", () => {
 
     // Then
     expect(result).toBe("/elsewhere");
-  });
-
-  it("根の下の遷移元をreturnToに付けたサインインにし、/rounds配下の遷移元は付けない", () => {
-    // Given
-
-    // When
-    const below = signInHref("/elsewhere/1", Elsewhere);
-    const rounds = signInHref("/rounds/1", Elsewhere);
-
-    // Then
-    expect(below).toBe("/signin?returnTo=%2Felsewhere%2F1");
-    expect(rounds).toBe("/signin");
   });
 });
