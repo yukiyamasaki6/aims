@@ -38,6 +38,8 @@ export type PasswordSetupCopy = {
   // パスワード欄の見出し。説明(最小文字数など)は規則の持ち主から得て足す。
   passwordLabel: string;
   passwordSubmit: string;
+  // コード入力の段階に出す案内(無ければ出さない)。
+  codeNote?: string;
 };
 
 type StepProps = {
@@ -104,6 +106,7 @@ export function PasswordSetupForm({
 // コードの入力値は、この段階の中だけで持つ。戻ると段階ごと破棄され、入力値が残らない。
 function CodeStep({
   procedure,
+  copy,
   flow,
   view,
   siteKey,
@@ -122,6 +125,7 @@ function CodeStep({
   return (
     <OtpCodeStep
       email={email}
+      note={copy.codeNote}
       code={code}
       onCodeChange={setCode}
       resendError={texts.fieldError("resend", flow.fieldErrors.resend)}

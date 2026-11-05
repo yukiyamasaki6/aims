@@ -9,7 +9,6 @@ import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createRouterPageNavigation } from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { createClient } from "@/lib/supabase/infrastructure/client";
-import { isEmailRegistered } from "./actions";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -17,7 +16,6 @@ export default function SignUpPage() {
   const [signUp] = useState(() =>
     createSignUp({
       authenticator: createSupabaseAuth(createClient),
-      registration: { isRegistered: isEmailRegistered },
       pageNavigation: createRouterPageNavigation(router),
       clock: createBrowserClock(),
       protectedPath: ROUNDS_PATH,

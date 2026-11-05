@@ -32,7 +32,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/application/sign-in.ts`: 手続き。状態を持たず、画面の約束の`begin`で開始し(実行中と入力の不備は集約が拒否する)、照合、離脱の判定、失敗とチェックのやり直し、または遷移の順序と、サインインの照合の約束(`SignInAuthenticator`)を持つ。失敗は全て、トークンを消費してチェックのやり直しを頼む。
 - `src/features/auth/domain/sign-in-flow.ts`: 集約。開始の命令`beginSignIn`が、送信の可否と入力の検証の順序を守り、`Start`(`busy`、`invalid`、`started`)を新しい状態つきで返す。事実(`captchaChecked`、`signedIn`、`failed`)は`reducer`で反映し、失敗の後の状態とcaptchaトークンの消費を守る。`failed`は全ての失敗でトークンを消費する。
 - `src/features/auth/domain/email-address.ts`: メールアドレスの規則(値オブジェクト)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
-- `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(登録済み(`already_registered`)を含む)(値オブジェクト)。利用者向けの文言は持たない。認証サービスの語彙も持たない。
+- `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(値オブジェクト)。利用者向けの文言は持たない。認証サービスの語彙も持たない。
 - `src/features/auth/domain/captcha-token.ts`、`password.ts`: セキュリティチェックのトークンと、パスワードの入力と文字種の規則(値オブジェクト。誤りの種類を返す)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
 - `src/features/auth/domain/auth-routes.ts`: 経路の規則(値オブジェクト)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは保護の範囲の根(今はラウンド一覧の経路)の配下の同一オリジンのパスだけ。根は`protectedPath`として受け取る)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`)、クエリからの読み取り(`readReturnTo`)、要求のリダイレクト先(`redirectFor`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
 - `src/features/auth/index.ts`: 認証の機能の入口。他の機能が使う型と経路(`destinationOf`、`SIGN_UP_PATH`)を、別名なしで再公開する。

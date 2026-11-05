@@ -20,7 +20,6 @@ export const authMessages = {
         "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
       captcha_failed: "認証に失敗しました。もう一度お試しください。",
       weak_password: passwordRule,
-      already_registered: "このメールアドレスは既に登録されています。",
       other: "エラーが発生しました。しばらくしてから再度お試しください。",
     } satisfies Record<AuthFailureKind, string>,
     // 入力の誤りの種類。欄ごとに持つ。
@@ -79,6 +78,9 @@ export const authMessages = {
     otpTitle: "認証コードを入力",
     otpDescription: "{email} に送信されたコードを入力してください。",
     otpSpamNote: "メールが届かない場合は、迷惑メールフォルダをご確認ください。",
+    // サインアップのコード入力だけに出す。登録の有無は画面に出さず、登録済みの利用者にはコードの代わりに案内が届く。
+    signUpCodeNote:
+      "登録済みのメールアドレスには、コードの代わりに案内のメールが届きます。",
     otpCodePlaceholder: "123456",
     otpVerify: "確認",
     otpResend: "再送",

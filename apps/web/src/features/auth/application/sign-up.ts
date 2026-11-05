@@ -1,7 +1,5 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
-import { ALREADY_REGISTERED, UNREACHABLE } from "../domain/auth-failure";
-import { destinationOf } from "../domain/auth-routes";
 import { beginSendCode } from "../domain/password-setup-flow";
 import {
   applyPassword,
@@ -15,15 +13,8 @@ import {
 } from "./password-setup";
 import type { PasswordSetupAuthenticator } from "./password-setup-authenticator";
 
-// メールアドレスが登録済みかの判定。
-// 例外: 投げることがあり、手続きが通信エラーの失敗として扱う。
-type RegistrationLookup = {
-  isRegistered(email: string): Promise<boolean>;
-};
-
 type Dependencies = {
   authenticator: PasswordSetupAuthenticator;
-  registration: RegistrationLookup;
   pageNavigation: Pick<PageNavigation, "go">;
   clock: Clock;
   // 保護対象の画面の範囲の根の経路。サインインの後の既定の行き先になる。
@@ -32,7 +23,6 @@ type Dependencies = {
 
 export function createSignUp({
   authenticator,
-  registration,
   pageNavigation,
   clock,
   protectedPath,
@@ -43,7 +33,7 @@ export function createSignUp({
     clock,
   };
   return {
-    sendCode: (input, view) => sendCode(context, registration, input, view),
+    sendCode: (input, view) => sendCode(context, input, view),
     resend: (input, view) => resend(context, input, view),
     verifyCode: (input, view) => verifyCode(context, input, view),
     tickCooldown: (dispatch) => tickCooldown(context, dispatch),
@@ -52,30 +42,14 @@ export function createSignUp({
   };
 }
 
-// 登録済みのメールアドレスには、コードを送らない。登録の有無を確かめられないときと、確認の待ちで画面を離れたときも、送らない。
+// 登録済みの確認済み利用者には、認証サービスがコードの代わりに案内のメールを送る。画面は登録の有無を区別せず、再設定と同じ順序でコード入力へ進める。
 async function sendCode(
   context: PasswordSetupContext,
-  registration: RegistrationLookup,
   input: { email: string },
   view: PasswordSetupView,
 ) {
   const request = view.begin((flow) => beginSendCode(flow, input));
   if (!request) return;
-  let failure: typeof ALREADY_REGISTERED | typeof UNREACHABLE | null;
-  try {
-    failure = (await registration.isRegistered(request.email))
-      ? ALREADY_REGISTERED
-      : null;
-  } catch {
-    failure = UNREACHABLE;
-  }
-  // 送信中に画面を離れたときは、状態を変えず、チェックのやり直しもしない。
-  if (!view.isMounted()) return;
-  // 登録済みの判定と、判定の失敗は、トークンを使っていないので消費しない。
-  if (failure) {
-    view.dispatch({ type: "failed", failure });
-    return;
-  }
   await deliver(context, request, view, { type: "codeSent" });
 }
 
@@ -97,5 +71,5 @@ async function setPassword(
     return;
   }
   view.dispatch({ type: "passwordSet" });
-  pageNavigation.go(destinationOf(null, protectedPath));
+  pageNavigation.go(protectedPath);
 }

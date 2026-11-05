@@ -16,7 +16,6 @@ const CAPTCHA_ERROR_MESSAGE = authText("fieldError.captcha.incomplete");
 const OTP_EXPIRED_MESSAGE = authText("failure.code_expired");
 const WEAK_PASSWORD_MESSAGE =
   "8〜72文字の半角英数記号で、英字と数字を含めてください。";
-const REGISTERED_MESSAGE = authText("failure.already_registered");
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
@@ -32,12 +31,6 @@ const connection = vi.hoisted(() => ({
 }));
 vi.mock("@supabase/ssr", () => ({
   createBrowserClient: connection.createBrowserClient,
-}));
-
-// Server Actionはクライアントから見るとサーバーとの通信のため、境界として差し替える。
-const server = vi.hoisted(() => ({ isEmailRegistered: vi.fn() }));
-vi.mock("./actions", () => ({
-  isEmailRegistered: server.isEmailRegistered,
 }));
 
 // 外部のウィジェット(iframe)は境界のため差し替える。押すたびに新しいトークンを発行し、リセットの呼び出しを数える。
@@ -120,7 +113,6 @@ async function submitEmailStep(user: User, email = "user@example.com") {
 }
 
 async function advanceToCodeStep(user: User) {
-  server.isEmailRegistered.mockResolvedValue(false);
   auth.signInWithOtp.mockResolvedValue({ error: null });
   await submitEmailStep(user);
   await screen.findByRole("heading", { name: authText("otpTitle") });
@@ -203,7 +195,6 @@ describe("サインアップ画面の入口", () => {
 
   it("3つの段階を最後まで通すと、入口が得た接続とサーバー関数で認証し、ラウンド一覧へ遷移する", async () => {
     // Given
-    server.isEmailRegistered.mockResolvedValue(false);
     auth.signInWithOtp.mockResolvedValue({ error: null });
     auth.verifyOtp.mockResolvedValue({ error: null });
     auth.updateUser.mockResolvedValue({ error: null });
@@ -223,9 +214,6 @@ describe("サインアップ画面の入口", () => {
 
     // Then
     expect(connection.createBrowserClient).toHaveBeenCalled();
-    expect(server.isEmailRegistered).toHaveBeenCalledExactlyOnceWith(
-      "new@example.com",
-    );
     expect(auth.signInWithOtp).toHaveBeenCalledExactlyOnceWith({
       email: "new@example.com",
       options: { captchaToken: "captcha-token" },
@@ -242,49 +230,8 @@ describe("サインアップ画面の入口", () => {
     expect(widget.resets).toBe(1);
   });
 
-  it("登録済みと判定されたら、拒否を示し、コードを送らず、チェックを保つ", async () => {
-    // Given
-    server.isEmailRegistered.mockResolvedValue(true);
-    const user = userEvent.setup();
-    render(<SignUpPage />, { wrapper: IntlTestProvider });
-
-    // When
-    await submitEmailStep(user);
-
-    // Then
-    expect(await screen.findByText(REGISTERED_MESSAGE)).toBeInTheDocument();
-    expect(auth.signInWithOtp).not.toHaveBeenCalled();
-    expect(widget.resets).toBe(0);
-  });
-
-  it("登録の判定が通信に失敗しても、通信エラーを示し、同じトークンで再試行して進める", async () => {
-    // Given
-    server.isEmailRegistered
-      .mockRejectedValueOnce(new Error("network down"))
-      .mockResolvedValue(false);
-    auth.signInWithOtp.mockResolvedValue({ error: null });
-    const user = userEvent.setup();
-    render(<SignUpPage />, { wrapper: IntlTestProvider });
-    await submitEmailStep(user);
-    await screen.findByText(NETWORK_ERROR_MESSAGE);
-    expect(widget.resets).toBe(0);
-
-    // When
-    await user.click(sendCodeButton());
-
-    // Then
-    expect(
-      await screen.findByRole("heading", { name: authText("otpTitle") }),
-    ).toBeInTheDocument();
-    expect(auth.signInWithOtp).toHaveBeenCalledExactlyOnceWith({
-      email: "user@example.com",
-      options: { captchaToken: "captcha-token" },
-    });
-  });
-
   it("コードの送信がSDKの呼び出しの失敗で届かなくても、通信エラーを示し、使用済みのトークンを消費して、新しいトークンで取り直して進める", async () => {
     // Given
-    server.isEmailRegistered.mockResolvedValue(false);
     auth.signInWithOtp
       .mockRejectedValueOnce(new Error("Failed to fetch"))
       .mockResolvedValue({ error: null });
@@ -320,7 +267,6 @@ describe("サインアップ画面の入口", () => {
     "コードの送信でSDKが%sときは、文言を示し、使用済みのトークンでの再送信を拒み、新しいトークンで取り直して進める",
     async (_name, error, message) => {
       // Given
-      server.isEmailRegistered.mockResolvedValue(false);
       auth.signInWithOtp
         .mockResolvedValueOnce({ error })
         .mockResolvedValue({ error: null });
@@ -350,7 +296,6 @@ describe("サインアップ画面の入口", () => {
 
   it("コードの送信でSDKが未知のエラーを返したときは、固定の文言を示し、認証サービスの文言を出さない", async () => {
     // Given
-    server.isEmailRegistered.mockResolvedValue(false);
     auth.signInWithOtp.mockResolvedValue({
       error: new AuthApiError(
         "Service detail: otp mailer exploded",
@@ -389,12 +334,11 @@ describe("サインアップ画面の入口", () => {
     });
   });
 
-  it("登録済みの拒否、メールの修正、確認の期限切れ、再試行、弱いパスワード、再試行の順に、同じ画面で進めて遷移できる", async () => {
+  it("拒否、メールの修正、確認の期限切れ、再試行、弱いパスワード、再試行の順に、同じ画面で進めて遷移できる", async () => {
     // Given
-    server.isEmailRegistered
-      .mockResolvedValueOnce(true)
-      .mockResolvedValue(false);
-    auth.signInWithOtp.mockResolvedValue({ error: null });
+    auth.signInWithOtp
+      .mockResolvedValueOnce({ error: rateLimited })
+      .mockResolvedValue({ error: null });
     auth.verifyOtp
       .mockResolvedValueOnce({ error: otpExpired })
       .mockResolvedValue({ error: null });
@@ -404,11 +348,12 @@ describe("サインアップ画面の入口", () => {
     const user = userEvent.setup();
     render(<SignUpPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user, "old@example.com");
-    await screen.findByText(REGISTERED_MESSAGE);
+    await screen.findByText(authText("failure.rate_limited"));
 
     // When
     await user.clear(emailInput());
     await user.type(emailInput(), "new@example.com");
+    await user.click(widgetButton());
     await user.click(sendCodeButton());
     await screen.findByRole("heading", { name: authText("otpTitle") });
     await user.type(codeInput(), "123456");
@@ -425,9 +370,9 @@ describe("サインアップ画面の入口", () => {
 
     // Then
     expect(screen.queryByText(WEAK_PASSWORD_MESSAGE)).not.toBeInTheDocument();
-    expect(auth.signInWithOtp).toHaveBeenCalledExactlyOnceWith({
+    expect(auth.signInWithOtp).toHaveBeenLastCalledWith({
       email: "new@example.com",
-      options: { captchaToken: "captcha-token" },
+      options: { captchaToken: "captcha-token-2" },
     });
     expect(auth.verifyOtp).toHaveBeenCalledTimes(2);
     expect(auth.updateUser).toHaveBeenCalledTimes(2);
@@ -494,11 +439,10 @@ describe("サインアップ画面の入口", () => {
     expect(setPasswordButton()).toHaveAttribute("aria-disabled", "true");
   });
 
-  it("入口から通して連打しても、登録の判定とコードの送信は1回だけになる", async () => {
+  it("入口から通して連打しても、コードの送信は1回だけになる", async () => {
     // Given
-    const deferred = Promise.withResolvers<boolean>();
-    server.isEmailRegistered.mockReturnValue(deferred.promise);
-    auth.signInWithOtp.mockResolvedValue({ error: null });
+    const deferred = Promise.withResolvers<{ error: null }>();
+    auth.signInWithOtp.mockReturnValue(deferred.promise);
     const user = userEvent.setup();
     render(<SignUpPage />, { wrapper: IntlTestProvider });
     await user.type(emailInput(), "user@example.com");
@@ -506,10 +450,9 @@ describe("サインアップ画面の入口", () => {
 
     // When
     await user.dblClick(sendCodeButton());
-    await act(async () => deferred.resolve(false));
+    await act(async () => deferred.resolve({ error: null }));
 
     // Then
-    expect(server.isEmailRegistered).toHaveBeenCalledOnce();
     expect(auth.signInWithOtp).toHaveBeenCalledOnce();
   });
 
@@ -549,7 +492,6 @@ describe("サインアップ画面の入口", () => {
     // Given
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
-    server.isEmailRegistered.mockResolvedValue(false);
     const user = userEvent.setup();
     render(<SignUpPage />, { wrapper: IntlTestProvider });
 
@@ -574,7 +516,6 @@ describe("サインアップ画面の入口", () => {
     });
 
     async function advanceToResendReady() {
-      server.isEmailRegistered.mockResolvedValue(false);
       auth.signInWithOtp.mockResolvedValue({ error: null });
       render(<SignUpPage />, { wrapper: IntlTestProvider });
       fireEvent.change(emailInput(), { target: { value: "user@example.com" } });

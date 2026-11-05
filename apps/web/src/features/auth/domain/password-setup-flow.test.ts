@@ -181,11 +181,6 @@ describe("パスワード設定の流れの遷移", () => {
 
   describe("failed", () => {
     it.each<[string, AuthFailure, string]>([
-      [
-        "already_registered",
-        { kind: "already_registered" },
-        "already_registered",
-      ],
       ["unreachable", { kind: "unreachable" }, NETWORK_ERROR_MESSAGE],
       ["code_expired", { kind: "code_expired" }, "code_expired"],
       ["weak_password", { kind: "weak_password" }, "weak_password"],

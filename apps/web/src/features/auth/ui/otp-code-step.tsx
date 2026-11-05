@@ -13,6 +13,8 @@ type Pending = "verify" | "resend" | null;
 
 type OtpCodeStepProps = {
   email: string;
+  // 迷惑メールの案内に続けて出す、画面ごとの案内(無ければ出さない)。
+  note?: string;
   code: string;
   onCodeChange: (value: string) => void;
   resendError: string | undefined;
@@ -30,6 +32,7 @@ type OtpCodeStepProps = {
 
 export function OtpCodeStep({
   email,
+  note,
   code,
   onCodeChange,
   resendError,
@@ -62,6 +65,9 @@ export function OtpCodeStep({
       <p className="text-center text-muted-foreground text-sm">
         {t("otpSpamNote")}
       </p>
+      {note && (
+        <p className="text-center text-muted-foreground text-sm">{note}</p>
+      )}
       <Turnstile siteKey={siteKey} ref={checkRef} onVerify={onCheck} />
       <ResendSection
         pending={pending}

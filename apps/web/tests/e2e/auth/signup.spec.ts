@@ -7,7 +7,7 @@ import {
   waitForHydration,
 } from "../helpers/auth";
 import { fastForwardResendCooldown } from "../helpers/clock";
-import { getOtpCodeFromMailpit } from "../helpers/mailpit";
+import { getEmailFromMailpit, getOtpCodeFromMailpit } from "../helpers/mailpit";
 import { waitForTurnstileToken } from "../helpers/turnstile";
 
 const authText = translatorFor("auth");
@@ -101,9 +101,10 @@ test("再送待機時間の終了後に再送すると、新しい認証コー�
   }).toPass();
 });
 
-test("登録済みのメールアドレスでコードを送信すると、新規登録を開始できない", async ({
+test("登録済みのメールアドレスで送信すると、コード入力画面へ進み、コードを含まない案内のメールが届く", async ({
   page,
 }) => {
+  // 登録済みのメールアドレスを送って、コード入力画面へ進む。
   const email = uniqueEmail("signup-registered");
   await createConfirmedUser({ email, password: "password1" });
   await openSignUp(page);
@@ -111,11 +112,16 @@ test("登録済みのメールアドレスでコードを送信すると、新�
   await waitForTurnstileToken(page, 1);
   await sendCodeButton(page).click();
   await expect(
-    page.getByText(authText("failure.already_registered")),
+    page.getByRole("heading", { name: authText("otpTitle") }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: authText("signUpTitle") }),
-  ).toBeVisible();
+  await expect(page.getByText(authText("signUpCodeNote"))).toBeVisible();
+
+  // 認証コードの代わりに、登録済みを知らせる案内のメールが届く。
+  const notice = await getEmailFromMailpit(
+    email,
+    "AIMS 登録済みのメールアドレスです",
+  );
+  expect(notice.html).not.toMatch(/\d{6}/);
 });
 
 test("サインアップ画面で「サインイン」を押すと、サインイン画面へ移動する", async ({

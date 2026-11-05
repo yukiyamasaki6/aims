@@ -43,13 +43,11 @@ function refusedWith(failure: AuthFailure): CallResult {
 // サインアップと再設定の完了後の遷移は、同じ偽の関数(leave)で受ける。
 const leave = vi.fn();
 const auth = {
-  isRegistered: vi.fn(),
   sendCode: vi.fn(),
   verifyCode: vi.fn(),
   setPassword: vi.fn(),
   signOutHere: vi.fn(),
 } satisfies PasswordSetupAuthenticator & {
-  isRegistered: (email: string) => Promise<boolean>;
   signOutHere(): Promise<CallResult>;
 };
 
@@ -71,7 +69,6 @@ const subjects: {
       createSignUp({
         clock: createBrowserClock(),
         authenticator: auth,
-        registration: auth,
         pageNavigation: { go: leave },
         protectedPath: "/rounds",
       }),
@@ -211,7 +208,6 @@ function spinnerIn(button: HTMLElement) {
 
 // 前提となる画面まで進める。検証対象の操作ではなく、フェイクタイマー下でも使えるようにfireEventで操作する。
 async function advanceToCodeStep(email = "user@example.com") {
-  auth.isRegistered.mockResolvedValue(false);
   auth.sendCode.mockResolvedValue(ACCEPTED);
   changeValue(emailInput(), email);
   completeCaptcha();
@@ -280,7 +276,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
   describe("認証コード送信", () => {
     it("captchaトークンで認証コードを送信し、captchaをリセットして送信中表示を解除してコード入力画面へ進む", async () => {
       // Given
-      auth.isRegistered.mockResolvedValue(false);
       auth.sendCode.mockResolvedValue(ACCEPTED);
       const user = userEvent.setup();
       renderForm();
@@ -311,7 +306,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
     it("送信中に二重クリックした場合、送信中表示にし1回しか送信しない", async () => {
       // Given
-      auth.isRegistered.mockResolvedValue(false);
       const deferred = Promise.withResolvers<CallResult>();
       auth.sendCode.mockReturnValue(deferred.promise);
       const user = userEvent.setup();
@@ -379,7 +373,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
     it("認証エラーの場合、翻訳したメッセージを表示しcaptchaをリセットして、メールアドレス入力画面に留まる", async () => {
       // Given
-      auth.isRegistered.mockResolvedValue(false);
       auth.sendCode.mockResolvedValue(refused("rate_limited"));
       const user = userEvent.setup();
       renderForm();
@@ -404,7 +397,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       "%s後は使ったトークンを消費し、新しいトークンで取り直して進める",
       async (_name, kind) => {
         // Given
-        auth.isRegistered.mockResolvedValue(false);
         auth.sendCode.mockResolvedValueOnce(refused(kind));
         auth.sendCode.mockResolvedValue(ACCEPTED);
         const user = userEvent.setup();
@@ -433,7 +425,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
     it("Strict Modeの二重実行の後でも、送信が終わってコード入力画面へ進む", async () => {
       // Given
-      auth.isRegistered.mockResolvedValue(false);
       auth.sendCode.mockResolvedValue(ACCEPTED);
       const user = userEvent.setup();
       renderForm({ strict: true });
