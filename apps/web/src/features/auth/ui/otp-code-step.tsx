@@ -6,19 +6,15 @@ import type { FormEvent, RefObject } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { AUTH_CODE_LENGTH } from "../domain/auth-code";
-import { AuthField } from "./auth-field";
 import { AuthHeader } from "./auth-header";
 import { Turnstile } from "./turnstile";
 
 type Pending = "verify" | "resend" | null;
 
 type OtpCodeStepProps = {
-  // エラー文の要素のidの接頭辞(`${idPrefix}-code-error`)。
-  idPrefix: string;
   email: string;
   code: string;
   onCodeChange: (value: string) => void;
-  codeError: string | undefined;
   resendError: string | undefined;
   // 実行中の確認か再送。どちらかが実行中の間は、3つのボタンを無効にする。
   pending: Pending;
@@ -35,11 +31,9 @@ type OtpCodeStepProps = {
 };
 
 export function OtpCodeStep({
-  idPrefix,
   email,
   code,
   onCodeChange,
-  codeError,
   resendError,
   pending,
   error,
@@ -64,9 +58,7 @@ export function OtpCodeStep({
       <CodeEntryForm
         code={code}
         onCodeChange={onCodeChange}
-        error={codeError}
         pending={pending}
-        errorId={`${idPrefix}-code-error`}
         onSubmit={onVerify}
       />
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
@@ -88,35 +80,26 @@ export function OtpCodeStep({
 function CodeEntryForm({
   code,
   onCodeChange,
-  error,
   pending,
-  errorId,
   onSubmit,
 }: {
   code: string;
   onCodeChange: (value: string) => void;
-  error: string | undefined;
   pending: Pending;
-  errorId: string;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }) {
   const t = useTranslations("auth");
   return (
     <form onSubmit={onSubmit} noValidate className="flex w-full flex-col gap-3">
-      <AuthField errorId={errorId} error={error}>
-        {(aria) => (
-          <Input
-            type="text"
-            inputMode="numeric"
-            placeholder={t("otpCodePlaceholder")}
-            className="text-center tracking-widest"
-            maxLength={AUTH_CODE_LENGTH}
-            value={code}
-            onChange={(e) => onCodeChange(e.target.value)}
-            {...aria}
-          />
-        )}
-      </AuthField>
+      <Input
+        type="text"
+        inputMode="numeric"
+        placeholder={t("otpCodePlaceholder")}
+        className="text-center tracking-widest"
+        maxLength={AUTH_CODE_LENGTH}
+        value={code}
+        onChange={(e) => onCodeChange(e.target.value)}
+      />
       <BusyButton
         type="submit"
         busy={pending !== null}

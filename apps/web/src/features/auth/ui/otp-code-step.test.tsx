@@ -23,7 +23,6 @@ function createForm(overrides: Partial<Props> = {}) {
     email: "user@example.com",
     code: "",
     onCodeChange: vi.fn(),
-    codeError: undefined,
     resendError: undefined,
     pending: null,
     error: null,
@@ -35,15 +34,12 @@ function createForm(overrides: Partial<Props> = {}) {
     onCheck: vi.fn(),
     checked: false,
     resendCooldown: 0,
-    idPrefix: "test",
     ...overrides,
   } satisfies Props;
 }
 
-function renderStep(form: Props, idPrefix = form.idPrefix) {
-  return render(<OtpCodeStep {...form} idPrefix={idPrefix} />, {
-    wrapper: IntlTestProvider,
-  });
+function renderStep(form: Props) {
+  return render(<OtpCodeStep {...form} />, { wrapper: IntlTestProvider });
 }
 
 describe("OtpCodeStep", () => {
@@ -106,40 +102,7 @@ describe("OtpCodeStep", () => {
     });
   });
 
-  describe("エラー文の結びつき", () => {
-    it("コードのエラー文の要素のidをidPrefixから作り、入力欄と結びつける", () => {
-      // Given
-
-      // When
-      const form = createForm({ codeError: "コードのエラー" });
-      renderStep(form, "reset-password");
-
-      // Then
-      const input = screen.getByPlaceholderText("123456");
-      expect(screen.getByText("コードのエラー")).toHaveAttribute(
-        "id",
-        "reset-password-code-error",
-      );
-      expect(input).toHaveAttribute(
-        "aria-describedby",
-        "reset-password-code-error",
-      );
-      expect(input).toHaveAttribute("aria-invalid", "true");
-    });
-
-    it("コードのエラーがないとき、入力欄を結びつけない", () => {
-      // Given
-
-      // When
-      const form = createForm();
-      renderStep(form);
-
-      // Then
-      const input = screen.getByPlaceholderText("123456");
-      expect(input).not.toHaveAttribute("aria-describedby");
-      expect(input).toHaveAttribute("aria-invalid", "false");
-    });
-
+  describe("再送のエラー", () => {
     it("再送のエラーを再送の欄に表示する", () => {
       // Given
 

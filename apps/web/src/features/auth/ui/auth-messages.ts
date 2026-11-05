@@ -1,4 +1,3 @@
-import { AUTH_CODE_LENGTH } from "../domain/auth-code";
 import type { AuthFailureKind } from "../domain/auth-failure";
 import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import type { FieldErrorKinds } from "../domain/flow";
@@ -37,10 +36,6 @@ export const authMessages = {
       },
       captcha: {
         incomplete: "セキュリティチェックが完了していません。",
-      },
-      code: {
-        required: "認証コードを入力してください。",
-        invalidFormat: `認証コードは${AUTH_CODE_LENGTH}桁の数字で入力してください。`,
       },
       resend: {
         cooldown:

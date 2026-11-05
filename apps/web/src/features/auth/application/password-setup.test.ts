@@ -221,19 +221,23 @@ describe("パスワード設定の共通の手続き", () => {
       expect(view.observedState.pending).toBeNull();
     });
 
-    it("コードに不備があれば、不備だけを示し、認証しない", async () => {
+    it("空のコードでも検査せずに認証サービスへ送り、その拒否を示す", async () => {
       // Given
       const { authenticator, context, events, viewOf } = setup();
-
+      const failure: AuthFailure = { kind: "other" };
+      authenticator.verifyCode.mockResolvedValue({ kind: "refused", failure });
       const view = viewOf(onCodeStep);
 
       // When
-      await verifyCode(context, { email, code: "12a" }, view);
+      await verifyCode(context, { email, code: "" }, view);
 
       // Then
-      expect(events).toEqual([]);
-      expect(view.observedState.fieldErrors.code).toBeDefined();
-      expect(authenticator.verifyCode).not.toHaveBeenCalled();
+      expect(authenticator.verifyCode).toHaveBeenCalledExactlyOnceWith({
+        purpose: "password-reset",
+        email,
+        code: "",
+      });
+      expect(events.at(-1)).toEqual({ type: "failed", failure });
     });
 
     it("実行中なら、何も送らず、認証しない", async () => {

@@ -105,7 +105,6 @@ export function PasswordSetupForm({
 // コードの入力値は、この段階の中だけで持つ。戻ると段階ごと破棄され、入力値が残らない。
 function CodeStep({
   procedure,
-  copy,
   flow,
   view,
   siteKey,
@@ -123,11 +122,9 @@ function CodeStep({
       : null;
   return (
     <OtpCodeStep
-      idPrefix={copy.idPrefix}
       email={email}
       code={code}
       onCodeChange={setCode}
-      codeError={texts.fieldError("code", flow.fieldErrors.code)}
       resendError={texts.fieldError("resend", flow.fieldErrors.resend)}
       pending={pending}
       error={texts.failure(flow.error)}

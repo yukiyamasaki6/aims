@@ -1,4 +1,4 @@
-import type { AuthCodeError, ResendWaitError } from "./auth-code";
+import type { ResendWaitError } from "./auth-code";
 import type { CaptchaError } from "./captcha-token";
 import type { EmailError } from "./email-address";
 import type { PasswordError } from "./password";
@@ -10,7 +10,6 @@ export type FieldErrorKinds = {
   email: EmailError;
   password: PasswordError;
   captcha: CaptchaError;
-  code: AuthCodeError;
   resend: ResendWaitError | CaptchaError;
 };
 
