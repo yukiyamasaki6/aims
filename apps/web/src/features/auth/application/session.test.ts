@@ -475,39 +475,6 @@ describe("サインアウト", () => {
       // Then
       expect(page.replace).toHaveBeenCalledWith("/signin?returnTo=%2Frounds");
     });
-
-    it("完了の遷移が投げても、完了を返す", async () => {
-      // Given
-      const { session, page, state } = setup();
-      state.status = "unauthenticated";
-      page.replace.mockImplementationOnce(() => {
-        throw new Error("replace failed");
-      });
-
-      // When
-      const result = await session.signOut(mounted);
-
-      // Then
-      expect(result).toEqual({ kind: "completed" });
-      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
-    });
-
-    it("完了の遷移が投げた後に喪失が来ても、再び遷移しない", async () => {
-      // Given
-      const { session, page, state, emit } = setup();
-      session.watch();
-      state.status = "unauthenticated";
-      page.replace.mockImplementationOnce(() => {
-        throw new Error("replace failed");
-      });
-      await session.signOut(mounted);
-
-      // When
-      emit(signedOut);
-
-      // Then
-      expect(page.replace).toHaveBeenCalledOnce();
-    });
   });
 });
 

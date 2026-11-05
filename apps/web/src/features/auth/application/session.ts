@@ -39,7 +39,7 @@ export type SessionAuthenticator = AuthChanges &
   };
 
 // ページ全体を読み込んで、今の場所をサインインに置き換える遷移。履歴を残さず、前の利用者の画面の状態とクライアントのキャッシュを捨てる。
-// 例外: replaceは投げることがある。手続きは扱わず、以後の遷移も行わない(稀な経路。見張りでもサインアウトでも同じ)。hereは投げない。
+// 例外: replaceは投げることがある。手続きは扱わない。hereは投げない。
 export type PageReplace = {
   // 今の場所(パスとクエリ)。
   here(): string;
@@ -89,13 +89,7 @@ export function createSession({
         : { kind: "discarded" },
     );
     flow = ended.state;
-    if (ended.result.kind === "completed") {
-      try {
-        go(null);
-      } catch {
-        // 遷移が投げたときは扱わない(稀な経路)。遷移は始めた扱いのため、以後の遷移も行わない。
-      }
-    }
+    if (ended.result.kind === "completed") go(null);
     return ended.result;
   }
 
