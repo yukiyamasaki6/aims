@@ -14,7 +14,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 | `/` | 未認証・認証済みとも、アプリ名、説明文、開始ボタンを持つ紹介画面を表示する。開始ボタンは常に`/signup`へのリンクで、認証済みなら`/signup`の認証済みの転送で`/rounds`へ着く。 |
 | `/rounds` 配下（未認証） | 遷移元のパス付きで `/signin` へリダイレクトする。`/rounds/new`、`/rounds/[id]` も対象である。 |
 | ロゴ | レフトパネルのAIMSロゴと、認証画面・`/`・`/offline` の左上のロゴは `/` へ遷移する。 |
-| セッション喪失 | `SIGNED_OUT`（通知は発生元を区別せず届く）と、マウント時・`online` 時の `unauthenticated` で、遷移元のパス付きで `/signin` へ遷移する。明示のサインアウトの実行中の喪失は、サインアウトの判定に委ねる(終えられたら遷移元を付けずに移る。`auth/signout`)。`unknown` とオフラインの `unauthenticated` では留まる。 |
+| セッション喪失 | `SIGNED_OUT`（通知は発生元を区別せず届く）と、マウント時の `unauthenticated` で、遷移元のパス付きで `/signin` へ遷移する。明示のサインアウトの実行中の喪失は、サインアウトの判定に委ねる(終えられたら遷移元を付けずに移る。`auth/signout`)。`unknown` では留まる。保存先が空の未認証は、オフラインでもマウント時に `/signin` へ移り、`/offline` が出る。 |
 | レフトパネルのリンク | 個人リンクは `/rounds` へ遷移する。サインアウトボタンは確認ダイアログを開く。 |
 | レフトパネル（縦向きかつ狭い） | 上端の帯を出す。未操作のときの初期は格納。ハンバーガーボタンで展開し、閉じるボタンまたはオーバーレイで格納する。 |
 | レフトパネル（横向き、または広い） | サイドに出す。未操作のときの初期は展開。格納ボタンと開くボタンで切り替える。 |
@@ -30,7 +30,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 - `src/lib/supabase/infrastructure/session.ts`(共有の技術の実装): `updateSession` が要求ごとにセッションを更新し、`getClaims`(端末内でトークンの署名と期限を検証する)でサインインしているかと、更新したcookieを書いた応答を返す。経路の規則は持たない。規則は認証の機能の `redirectFor` が持ち、`proxy.ts` が呼ぶ。
   - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
   - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。
-- `src/features/auth/application/session.ts` の手続き`createSession`(保護の範囲の根 `protectedPath` を依存として受ける)の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、オンラインでの`unauthenticated`）と、一度だけの`/signin`への遷移（`replace`。今の場所を遷移元に付ける）を持つ。喪失の定義は`domain/auth-change.ts`、遷移の規則（1回、遷移元、サインアウトの実行中は委ねる）は`domain/session-end-flow.ts`。`(main)`のレイアウトが、手続きと実装を生成して見張りを始める。
+- `src/features/auth/application/session.ts` の手続き`createSession`(保護の範囲の根 `protectedPath` を依存として受ける)の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、マウント時の`unauthenticated`）と、一度だけの`/signin`への遷移（`replace`。今の場所を遷移元に付ける）を持つ。喪失の定義は`domain/auth-change.ts`、遷移の規則（1回、遷移元、サインアウトの実行中は委ねる）は`domain/session-end-flow.ts`。`(main)`のレイアウトが、手続きと実装を生成して見張りを始める。
 - `src/app/page.tsx`(画面の入口): 静的な紹介画面の入口。認証の経路の定数 `SIGN_UP_PATH` を読み、開始の行き先として紹介画面へ渡す。
 - `src/features/navigation/ui/intro-screen.tsx`(UI層): 紹介画面。アプリ名、説明文、左上のロゴ、開始ボタンを表示し、受け取った行き先を開始ボタンへ渡す。
 - `src/features/navigation/ui/start-button.tsx`(UI層): 開始ボタン。受け取った行き先へのリンクで、状態を持たない。
@@ -50,7 +50,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 | 判断 | 理由 | 見直す条件 |
 | :--- | :--- | :--- |
 | 入口のガードを `proxy.ts`、表示中の喪失の検知を `(main)` のレイアウトが始める見張りに分ける | `proxy.ts` はリクエスト時しか働かず、サインアウト・更新拒否・SWの枠を検知できないため。 | ガードを1か所にできる方式が出たとき。 |
-| 喪失を `SIGNED_OUT` と、オンラインでの `readSession` の未認証（保存先が空、またはサーバーの拒否が確定）に限る | `INITIAL_SESSION` のnullと `AuthRetryableFetchError` は通信失敗でも起き、入力中の画面を誤って遷移させるため使わない。オフラインで `/signin` へ移ると行き止まりになるため保留する。 | supabase-jsのイベントの意味が変わったとき。 |
+| 喪失を `SIGNED_OUT` と、マウント時の `readSession` の未認証（保存先が空、またはサーバーの拒否が確定）に限る | `INITIAL_SESSION` のnullと `AuthRetryableFetchError` は通信失敗でも起き、入力中の画面を誤って遷移させるため使わない。 | supabase-jsのイベントの意味が変わったとき。 |
 | 喪失の見張りを`(main)`のレイアウトが始める | 認証が要る画面の集合をルートグループで表し、除外リストを持たないため。`/offline` はSWが元のURLのまま返すため、パスでの除外は画面と食い違う。 | `(main)` の外に認証が要る画面を置くとき。 |
 | `window.location.replace` で一度だけ遷移する | 前の利用者の画面の状態とRouter Cacheを捨てるため。`router.push` は捨てられないため採らない。 | Router Cacheを明示的に消せるようになったとき。 |
 | 文字付きロゴは、文字を図形にしたSVGの画像で表示し、HTMLの文字で組まない | 表示する環境のフォントによらず同じ形にし、READMEと同じ画像にするため。マークだけを別の生成で作ると、マークを変えたときにロゴのマークが古い形で残るため、アイコンと同じスクリプトと値で作る。 | ダークモードを入れるとき。マークを別の方法で作るとき。 |
@@ -69,7 +69,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 ## 制約と未対応
 
 - 開閉状態は画面遷移やリロードで初期状態へ戻る。
-- オフラインではrefresh tokenの失効を検知できず、オンライン復帰の更新で検知する。
+- オフラインではrefresh tokenの失効を検知できず、オンラインに戻った後の認証サービスの更新で検知する。
 - 遷移の瞬間に未完了のIndexedDBの書き込みは中断されうる。
 - サイド表示でレフトパネルを格納するとAIMSロゴは隠れる（個人リンク・サインアウトと同じ）。
 - 横向きかつ狭い画面で展開すると本文の幅が約224px減る。

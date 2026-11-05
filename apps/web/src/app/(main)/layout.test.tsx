@@ -12,7 +12,7 @@ import MainLayout from "./layout";
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
 
-// 入口のテスト。SDK(@supabase/ssr)と、ブラウザの保存先(localStorage)・場所(location)・通信の可否(navigator.onLine)の境界だけを差し替え、
+// 入口のテスト。SDK(@supabase/ssr)と、ブラウザの保存先(localStorage)・場所(location)の境界だけを差し替え、
 // 手続き、実装、画面、確認ダイアログ、左パネルは実物を通す。
 const supabase = vi.hoisted(() => {
   const listeners: Array<
@@ -133,7 +133,6 @@ beforeEach(() => {
     error: null,
   });
   setLocation("/rounds/new");
-  vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -335,45 +334,6 @@ describe("MainLayout", () => {
       // Then
       expect(supabase.getSession).toHaveBeenCalledTimes(1);
       expect(replace).not.toHaveBeenCalled();
-    });
-
-    it("オフラインで未認証と判っても、移動せず留まる", async () => {
-      // Given
-      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-      supabase.getSession.mockResolvedValue({
-        data: { session: null },
-        error: null,
-      });
-
-      // When
-      renderLayout();
-      await flush();
-
-      // Then
-      expect(replace).not.toHaveBeenCalled();
-      expect(supabase.getSession).not.toHaveBeenCalled();
-    });
-
-    it("パスワードの再設定から離れた先のラウンド作成画面では、通信の回復の確認で未認証と判れば、開いている画面を遷移元に付けてサインインへ移る", async () => {
-      // Given
-      renderLayout();
-      await flush();
-      supabase.getSession.mockResolvedValue({
-        data: { session: null },
-        error: null,
-      });
-
-      // When
-      act(() => {
-        window.dispatchEvent(new Event("online"));
-      });
-      await flush();
-
-      // Then
-      expect(replace).toHaveBeenCalledExactlyOnceWith(
-        "/signin?returnTo=%2Frounds%2Fnew",
-      );
-      expect(assign).not.toHaveBeenCalled();
     });
 
     it("離れると、購読を解除し、それ以降のsigned-outでは移らない", () => {

@@ -7,7 +7,6 @@ import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth
 import { SignOutButton } from "@/features/auth/ui/sign-out-button";
 import { LeftPanel } from "@/features/navigation/ui/left-panel";
 import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
-import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 
 export default function MainLayout({
@@ -19,7 +18,6 @@ export default function MainLayout({
   const [session] = useState(() =>
     createSession({
       authenticator: createSupabaseAuth(createClient),
-      connectivity: createBrowserConnectivity(),
       pageReplace: createBrowserPageLoad(),
       protectedPath: ROUNDS_PATH,
     }),

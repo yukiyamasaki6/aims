@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import type { AuthChange, SessionStatus } from "../domain/auth-change";
 import type { AuthFailure } from "../domain/auth-failure";
 import type { CallResult } from "./call-result";
@@ -17,20 +16,18 @@ function readingOf(status: SessionStatus): SessionReading {
   return status === "authenticated" ? { status, userId: "user-1" } : { status };
 }
 
-// 偽の部品。認証サービス、通信の可否、ページ遷移の境界だけを差し替える。
+// 偽の部品。認証サービス、ページ遷移の境界だけを差し替える。
 // サインインの状態の読み取りは、checkがあればその結果を、無ければstate.statusを返す。
 function setup(
   options: {
     signOutHere?: () => Promise<AuthFailure | null>;
     check?: () => Promise<SessionStatus>;
-    offline?: boolean;
     here?: string;
     protectedPath?: string;
   } = {},
 ) {
   const listeners: Array<(event: AuthChange) => void> = [];
   const unsubscribe = vi.fn();
-  const connectivity = createFakeConnectivity(options.offline ?? false);
   const state: { status: SessionStatus } = { status: "authenticated" };
   const check = options.check ?? (async () => state.status);
   const signOutHere = options.signOutHere ?? (async () => null);
@@ -52,7 +49,6 @@ function setup(
   };
   const session = createSession({
     authenticator: authority,
-    connectivity,
     pageReplace: page,
     protectedPath: options.protectedPath ?? "/rounds",
   });
@@ -62,11 +58,9 @@ function setup(
     page,
     state,
     unsubscribe,
-    connectivity,
     emit(event: AuthChange) {
       for (const listener of listeners) listener(event);
     },
-    goOnline: () => connectivity.goOnline(),
   };
 }
 
@@ -356,16 +350,14 @@ describe("サインアウト", () => {
 
     it("実行中に見張りの確認が未認証を返しても、遷移はサインアウトの判定に委ね、遷移元を付けずに1回だけ移る", async () => {
       // Given
-      const { session, authority, page, state, goOnline } = setup({
-        offline: true,
+      const { session, authority, page, state } = setup({
         here: "/rounds/new",
       });
-      session.watch();
       const response = Promise.withResolvers<CallResult>();
       authority.signOutHere.mockReturnValue(response.promise);
       const running = session.signOut(mounted);
       state.status = "unauthenticated";
-      goOnline();
+      session.watch();
       await flush();
       const beforeVerdict = page.replace.mock.calls.length;
 
@@ -422,18 +414,6 @@ describe("セッション喪失の見張り", () => {
       expect(page.replace).toHaveBeenCalledExactlyOnceWith(
         "/signin?returnTo=%2Frounds%2Fnew",
       );
-    });
-
-    it("オフラインでもsigned-outを受けると、サインインへ移る", () => {
-      // Given
-      const { session, page, emit } = setup({ offline: true });
-      session.watch();
-
-      // When
-      emit(signedOut);
-
-      // Then
-      expect(page.replace).toHaveBeenCalledTimes(1);
     });
 
     it.each([
@@ -494,53 +474,19 @@ describe("セッション喪失の見張り", () => {
       // Then
       expect(page.replace).not.toHaveBeenCalled();
     });
-
-    it("オフラインでは、確認せず、移らない", async () => {
-      // Given
-      const { session, authority, page } = setup({
-        offline: true,
-        check: async () => "unauthenticated",
-      });
-
-      // When
-      session.watch();
-      await flush();
-
-      // Then
-      expect(authority.readSession).not.toHaveBeenCalled();
-      expect(page.replace).not.toHaveBeenCalled();
-    });
-
-    it("オフラインで始めた後にオンラインに戻ると、確認して未認証なら移る", async () => {
-      // Given
-      const { session, page, goOnline } = setup({
-        offline: true,
-        check: async () => "unauthenticated",
-      });
-      session.watch();
-
-      // When
-      goOnline();
-      await flush();
-
-      // Then
-      expect(page.replace).toHaveBeenCalledTimes(1);
-    });
   });
 
   describe("やめた後", () => {
-    it("認証状態の購読と、通信が戻る通知を解除する", () => {
+    it("認証状態の購読を解除する", () => {
       // Given
-      const { session, unsubscribe, connectivity } = setup();
+      const { session, unsubscribe } = setup();
       const stop = session.watch();
-      expect(connectivity.subscribers().online).toBe(1);
 
       // When
       stop();
 
       // Then
       expect(unsubscribe).toHaveBeenCalledTimes(1);
-      expect(connectivity.subscribers().online).toBe(0);
     });
 
     it("signed-outが来ても、移らない", async () => {
@@ -572,20 +518,6 @@ describe("セッション喪失の見張り", () => {
 
       // Then
       expect(page.replace).not.toHaveBeenCalled();
-    });
-
-    it("通信が戻る通知が来ても、確認しない", async () => {
-      // Given
-      const { session, authority, goOnline } = setup({ offline: true });
-      const stop = session.watch();
-      stop();
-
-      // When
-      goOnline();
-      await flush();
-
-      // Then
-      expect(authority.readSession).not.toHaveBeenCalled();
     });
   });
 });

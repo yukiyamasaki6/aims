@@ -37,6 +37,7 @@ import {
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
 import { overlapNextRefresh } from "../helpers/session-overlap";
+import { revokeAllSessions } from "../helpers/session-revoke";
 import { mockTurnstile, waitForTurnstileToken } from "../helpers/turnstile";
 
 const authText = translatorFor("auth");
@@ -44,6 +45,8 @@ const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
+// supabase/config.tomlのjwt_expiry（3600秒）を越える時間。
+const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
 const UPDATE_ROUND_RPC = "**/rest/v1/rpc/update_round";
 const RECORD_SHOTS_RPC = "**/rest/v1/rpc/record_shots";
 const CREATE_ROUND_RPC = "**/rest/v1/rpc/create_round";
@@ -727,42 +730,58 @@ test("3つのラウンドに未送信の点数があり、1つが権限の無い
   await expect(endBalls(page, 1, 1)).toHaveCount(0);
 });
 
-test("サインインが切れて送れなかった点数は、ラウンド一覧にいるままサインインし直すと、そのラウンドを開き直さずに保存される", async ({
-  page,
-  context,
-}) => {
-  // 送信が失敗する状態で点数を記録する。
-  const { supabase, distanceIds } = await createSyncRound({
-    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
-  });
-  await mockTurnstile(page);
-  let attempts = 0;
-  await page.route(RECORD_SHOTS_RPC, async (route) => {
-    attempts++;
-    await route.abort("failed");
-  });
-  await openRound(page);
-  await page.getByTestId("score-button-10").click();
-  await expect.poll(() => attempts).toBeGreaterThan(0);
+// サーバー側でセッションを失効させるため、共有のユーザーではなく使い捨てのユーザーで行う。
+test.describe("サインインが切れた後の再送", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
 
-  await backToList(page);
+  test("サインインが切れて送れなかった点数は、ラウンド一覧にいるままサインインし直すと、そのラウンドを開き直さずに保存される", async ({
+    page,
+  }) => {
+    // 使い捨てのユーザーでサインインし、送信が失敗する状態で点数を記録する。
+    // 時計は画面遷移より前に差し替える必要があるため、サインインの前に呼ぶ。
+    const credentials = {
+      email: `e2e-sync-expired-${Date.now()}-${randomUUID().slice(0, 8)}@aims.test`,
+      password: "password-e2e-sync",
+    };
+    await page.clock.install();
+    await signUpAndSignIn(page, credentials);
+    roundId = await createRound({
+      ...credentials,
+      name: "失効テスト",
+      roundDate: "2026-08-24",
+      distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+    });
+    const device = await openOtherDevice(
+      credentials.email,
+      credentials.password,
+    );
+    const [distanceId] = await getDistanceIds(device.supabase, roundId);
+    await mockTurnstile(page);
+    let attempts = 0;
+    await page.route(RECORD_SHOTS_RPC, async (route) => {
+      attempts++;
+      await route.abort("failed");
+    });
+    await openRound(page);
+    await page.getByTestId("score-button-10").click();
+    await expect.poll(() => attempts).toBeGreaterThan(0);
 
-  // サインインを切って通信を戻し、サインイン画面へ移るのを待つ。
-  await context.clearCookies();
-  await page.unroute(RECORD_SHOTS_RPC);
-  // 再送は、サインインが切れているため、未認証で保留になる。同じ契機で、セッションの喪失を検知した共通のガードがサインイン画面へ移す。
-  // テストからサインイン画面を開くと、ガードの遷移と競合して中断されるため、ガードの遷移を待つ。
-  await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await expect(page).toHaveURL(/\/signin$/);
-  await waitForHydration(page);
+    await backToList(page);
 
-  // サインインし直してラウンド一覧へ戻り、そのラウンドを開き直さずに点数が保存されることを確かめる。
-  await signInOnPage(page, {
-    email: getSharedEmail(),
-    password: SHARED_PASSWORD,
+    // サーバー側でセッションを失効させ、通信を戻し、アクセストークンの期限を過ぎさせる。
+    // 更新の拒否を検知した共通のガードがサインイン画面へ移す。
+    // テストからサインイン画面を開くと、ガードの遷移と競合して中断されるため、ガードの遷移を待つ。
+    await revokeAllSessions(credentials);
+    await page.unroute(RECORD_SHOTS_RPC);
+    await page.clock.fastForward(PAST_JWT_EXPIRY_MS);
+    await expect(page).toHaveURL(/\/signin(\?|$)/);
+    await waitForHydration(page);
+
+    // サインインし直してラウンド一覧へ戻り、そのラウンドを開き直さずに点数が保存されることを確かめる。
+    await signInOnPage(page, credentials);
+    await expect(page).toHaveURL(/\/rounds$/);
+    await expectSavedShots(device.supabase, distanceId, ["1:10"]);
   });
-  await expect(page).toHaveURL(/\/rounds$/);
-  await expectSavedShots(supabase, distanceIds[0], ["1:10"]);
 });
 
 // セッションの更新はリフレッシュトークンを入れ替え、共有のユーザーの他のテストのセッションを無効にし得るため、使い捨てのユーザーで行う。

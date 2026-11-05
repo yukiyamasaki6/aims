@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { Locator, Page } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
@@ -10,6 +9,7 @@ import {
 } from "../helpers/auth";
 import { comeBackOnline, goOffline } from "../helpers/service-worker";
 import { overlapNextRefresh } from "../helpers/session-overlap";
+import { revokeAllSessions } from "../helpers/session-revoke";
 import { expectUncovered } from "../helpers/visibility";
 
 const authText = translatorFor("auth");
@@ -33,32 +33,6 @@ async function signInAsDisposableUser(page: Page, prefix: string) {
     password: "password1",
   });
   await waitForHydration(page);
-}
-
-// 同じユーザーの別セッションを作り、そのアクセストークンで管理APIから
-// 全セッションを無効化する（サーバー側でリフレッシュトークンが拒否される状態にする）。
-async function revokeAllSessions(email: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const secretKey = process.env.SUPABASE_SECRET_KEY;
-  if (!url || !anonKey || !secretKey) {
-    throw new Error("Missing Supabase environment variables in e2e test.");
-  }
-  const options = { auth: { autoRefreshToken: false, persistSession: false } };
-  const user = createClient(url, anonKey, options);
-  const { data, error } = await user.auth.signInWithPassword({
-    email,
-    password: "password1",
-    // Turnstileの公式テストキーは、どのトークンでも検証を通過させる。
-    options: { captchaToken: "XXXX.DUMMY.TOKEN.XXXX" },
-  });
-  if (error || !data.session) throw error ?? new Error("no session");
-  const admin = createClient(url, secretKey, options);
-  const result = await admin.auth.admin.signOut(
-    data.session.access_token,
-    "global",
-  );
-  if (result.error) throw result.error;
 }
 
 async function openRounds(page: Page) {
@@ -380,7 +354,7 @@ test.describe("セッション喪失", () => {
     await signUpAndSignIn(page, { email, password: "password1" });
     await page.goto("/rounds/new");
     await waitForHydration(page);
-    await revokeAllSessions(email);
+    await revokeAllSessions({ email, password: "password1" });
 
     await page.clock.fastForward(PAST_JWT_EXPIRY_MS);
 

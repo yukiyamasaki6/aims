@@ -1,4 +1,3 @@
-import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import {
   lostByChange,
   lostByStatus,
@@ -54,7 +53,6 @@ export type SignOutResult =
 
 type Dependencies = {
   authenticator: SessionAuthenticator;
-  connectivity: Connectivity;
   pageReplace: PageReplace;
   // 保護対象の画面の範囲の根の経路。遷移元の検証に使う。
   protectedPath: string;
@@ -72,7 +70,6 @@ export type Session = {
 // 遷移の状態(SessionEndFlow)は、この手続きが1つ持ち、サインアウトと見張りの両方が使う。
 export function createSession({
   authenticator,
-  connectivity,
   pageReplace,
   protectedPath,
 }: Dependencies): Session {
@@ -108,12 +105,12 @@ export function createSession({
     go(pageReplace.here());
   }
 
-  // オフラインで/signinへ移ると行き止まりになるため、確認はオンラインまで保留し、戻ったら確かめる。
+  // 起動時に1回、サインインの状態を確かめる。保存先が空の起動ではサインアウトの通知が来ないため、これが要る。
+  // 保存先が空の未認証は、オフラインでも移る(/offlineが出る)。
   function watch() {
     let disposed = false;
 
     async function check() {
-      if (connectivity.isOffline()) return;
       const reading = await authenticator.readSession();
       if (disposed) return;
       if (lostByStatus(reading.status)) lose();
@@ -122,13 +119,11 @@ export function createSession({
     const unsubscribe = authenticator.subscribe((change) => {
       if (lostByChange(change)) lose();
     });
-    const stopOnline = connectivity.onOnline(() => void check());
     void check();
 
     return () => {
       disposed = true;
       unsubscribe();
-      stopOnline();
     };
   }
 
