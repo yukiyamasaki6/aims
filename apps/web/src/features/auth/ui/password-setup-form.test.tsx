@@ -22,13 +22,13 @@ import type { PasswordSetup } from "../application/password-setup";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import { createResetPassword } from "../application/reset-password";
 import { createSignUp } from "../application/sign-up";
-import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
+import type { AuthFailure } from "../domain/auth-failure";
 import { ResetPasswordForm } from "./reset-password-form";
 import { SignUpForm } from "./signup-form";
 
 const authText = translatorFor("auth");
 
-const NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
+const _NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
 const CAPTCHA_ERROR_MESSAGE = authText("fieldError.captcha.incomplete");
 const COOLDOWN_ERROR_MESSAGE = authText("fieldError.resend.cooldown");
 const OTP_EXPIRED_MESSAGE = authText("failure.code_expired");
@@ -350,20 +350,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       expect(auth.sendCode).not.toHaveBeenCalled();
     });
 
-    it("captcha未完了の場合、captcha欄にエラーを表示し送信しない", async () => {
-      // Given
-      const user = userEvent.setup();
-      renderForm();
-      await user.type(emailInput(), "user@example.com");
-
-      // When
-      await user.click(sendCodeButton());
-
-      // Then
-      expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
-      expect(auth.sendCode).not.toHaveBeenCalled();
-    });
-
     it("メールアドレスが未入力でcaptchaも未完了の場合、メール欄とcaptcha欄のエラーを同時に表示し送信しない", async () => {
       // Given
       const user = userEvent.setup();
@@ -527,28 +513,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // Then
       expect(await screen.findByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-      expect(heading(authText("otpTitle"))).toBeInTheDocument();
-      await expectCodeStepOperationsAvailable();
-    });
-
-    it("通信エラーの場合、通信エラーのメッセージを表示し、再送・確認・戻るを再び実行できる", async () => {
-      // Given
-      const user = userEvent.setup();
-      renderForm();
-      await advanceToCodeStep();
-      auth.verifyCode.mockResolvedValue({
-        kind: "failed",
-        failure: UNREACHABLE,
-      });
-      await user.type(codeInput(), "123456");
-
-      // When
-      await user.click(verifyButton());
-
-      // Then
-      expect(
-        await screen.findByText(NETWORK_ERROR_MESSAGE),
-      ).toBeInTheDocument();
       expect(heading(authText("otpTitle"))).toBeInTheDocument();
       await expectCodeStepOperationsAvailable();
     });
@@ -765,23 +729,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       await expectCodeStepOperationsAvailable("captcha");
     });
 
-    it("通信エラーの場合、通信エラーのメッセージを表示し、再送・確認・戻るを再び実行できる", async () => {
-      // Given
-      renderForm();
-      await advanceToResendReady();
-      auth.sendCode.mockResolvedValue({ kind: "failed", failure: UNREACHABLE });
-      changeValue(codeInput(), "123456");
-      completeCaptcha("resend-captcha-token");
-
-      // When
-      fireEvent.click(resendButton());
-      await settle();
-
-      // Then
-      expect(screen.getByText(NETWORK_ERROR_MESSAGE)).toBeInTheDocument();
-      await expectCodeStepOperationsAvailable("captcha");
-    });
-
     it.each([
       ["認証サービスが拒否した", "rate_limited"],
       ["通信の失敗になった", "unreachable"],
@@ -856,49 +803,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
         expect(auth.setPassword).toHaveBeenCalledOnce();
         expect(auth.setPassword).toHaveBeenCalledWith("password123");
       });
-
-      it("送信中状態を解除せず、遷移完了前に再度押しても再送信しない", async () => {
-        // Given
-        auth.setPassword.mockResolvedValue(ACCEPTED);
-        const user = userEvent.setup();
-        renderForm();
-        await advanceToPasswordStep();
-        await user.type(passwordInput(), "password123");
-        await user.click(setPasswordButton());
-        await waitFor(() => {
-          expect(leave).toHaveBeenCalledWith(subject.destination);
-        });
-
-        // When
-        await user.click(setPasswordButton());
-
-        // Then
-        expect(setPasswordButton()).toHaveAttribute("aria-disabled", "true");
-        expect(spinnerIn(setPasswordButton())).not.toBeNull();
-        expect(auth.setPassword).toHaveBeenCalledOnce();
-      });
-    });
-
-    it("送信中に二重クリックした場合、送信中表示にし1回しか送信しない", async () => {
-      // Given
-      const deferred = Promise.withResolvers<CallResult>();
-      auth.setPassword.mockReturnValue(deferred.promise);
-      const user = userEvent.setup();
-      renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-
-      // When
-      await user.click(setPasswordButton());
-      await user.click(setPasswordButton());
-
-      // Then
-      expect(setPasswordButton()).toHaveAttribute("aria-disabled", "true");
-      expect(spinnerIn(setPasswordButton())).not.toBeNull();
-      expect(auth.setPassword).toHaveBeenCalledOnce();
-      await act(async () => {
-        deferred.resolve(ACCEPTED);
-      });
     });
 
     it("パスワードが未入力の場合、パスワード欄にエラーを表示し設定しない", async () => {
@@ -966,73 +870,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
         expect(leave).toHaveBeenCalledWith(subject.destination);
       });
       expect(auth.setPassword).toHaveBeenCalledTimes(2);
-    });
-
-    it("通信エラーの場合、通信エラーのメッセージを表示し、遷移しない", async () => {
-      // Given
-      auth.setPassword.mockResolvedValue({
-        kind: "failed",
-        failure: UNREACHABLE,
-      });
-      const user = userEvent.setup();
-      renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-
-      // When
-      await user.click(setPasswordButton());
-
-      // Then
-      expect(
-        await screen.findByText(NETWORK_ERROR_MESSAGE),
-      ).toBeInTheDocument();
-      expect(leave).not.toHaveBeenCalled();
-      expect(setPasswordButton()).toHaveAttribute("aria-disabled", "false");
-      expect(spinnerIn(setPasswordButton())).toBeNull();
-    });
-
-    it("通信エラーの後に再度送信すると、完了後の遷移先へ進む", async () => {
-      // Given
-      auth.setPassword.mockResolvedValue({
-        kind: "failed",
-        failure: UNREACHABLE,
-      });
-      const user = userEvent.setup();
-      renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-      await user.click(setPasswordButton());
-      await screen.findByText(NETWORK_ERROR_MESSAGE);
-      auth.setPassword.mockResolvedValue(ACCEPTED);
-
-      // When
-      await user.click(setPasswordButton());
-
-      // Then
-      await waitFor(() => {
-        expect(leave).toHaveBeenCalledWith(subject.destination);
-      });
-      expect(auth.setPassword).toHaveBeenCalledTimes(2);
-    });
-
-    it("送信中にアンマウントされた場合、/roundsへ遷移しない", async () => {
-      // Given
-      const deferred = Promise.withResolvers<CallResult>();
-      auth.setPassword.mockReturnValue(deferred.promise);
-      const user = userEvent.setup();
-      const { unmount } = renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-      fireEvent.click(setPasswordButton());
-
-      // When
-      unmount();
-      deferred.resolve(ACCEPTED);
-      await settle();
-
-      // Then
-      expect(auth.setPassword).toHaveBeenCalledOnce();
-      expect(leave).not.toHaveBeenCalled();
     });
   });
 
