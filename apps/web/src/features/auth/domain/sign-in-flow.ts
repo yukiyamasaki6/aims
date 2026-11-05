@@ -26,30 +26,32 @@ export type Credentials = {
   readonly captchaToken: string;
 };
 
-// 開始の命令。送信中なら開始しない。入力の不備は、メールアドレス、パスワード、チェックの順に最初の1件を示す。開始できるなら送信中にする。
-// 開始では以前のエラーを消さない。エラーは次の結果で変わる。
+// 開始の命令。送信中なら開始しない。入力の不備は、メールアドレス、パスワード、チェックの全てを示す。開始できるなら送信中にする。
+// 開始では以前のエラーを消す。
 export function beginSignIn(
   flow: SignInFlow,
   input: { email: string; password: string },
 ): Start<SignInFlow, Credentials> {
   if (flow.submitting) return { kind: "busy", state: flow };
-  const invalid = (fieldErrors: SignInFlow["fieldErrors"]) =>
-    ({
-      kind: "invalid",
-      state: { ...flow, error: null, fieldErrors },
-    }) as const;
   const email = validateEmail(input.email);
-  if (email) return invalid({ email });
   // 登録時のパスワードポリシーをサインインで課すと、ポリシー変更前に登録した正しいパスワードで入れなくなるため、空かどうかだけを見る。
   const password = validatePasswordPresent(input.password);
-  if (password) return invalid({ password });
-  if (!isCaptchaCompleted(flow.captchaToken)) {
-    return invalid({ captcha: "incomplete" });
+  const { captchaToken } = flow;
+  if (email || password || !isCaptchaCompleted(captchaToken)) {
+    const fieldErrors: SignInFlow["fieldErrors"] = {
+      ...(email && { email }),
+      ...(password && { password }),
+      ...(!isCaptchaCompleted(captchaToken) && { captcha: "incomplete" }),
+    };
+    return {
+      kind: "invalid",
+      state: { ...flow, error: null, fieldErrors },
+    };
   }
   return {
     kind: "started",
-    state: { ...flow, submitting: true },
-    request: { ...input, captchaToken: flow.captchaToken },
+    state: { ...flow, submitting: true, error: null, fieldErrors: {} },
+    request: { ...input, captchaToken },
   };
 }
 

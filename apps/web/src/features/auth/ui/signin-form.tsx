@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -112,6 +112,7 @@ function SignInFields({
 }) {
   const t = useTranslations("auth");
   const texts = useAuthTexts();
+  const passwordRef = useRef<HTMLInputElement>(null);
   return (
     <>
       <AuthField
@@ -125,6 +126,13 @@ function SignInFields({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             maxLength={EMAIL_MAX_LENGTH}
+            enterKeyHint="next"
+            // 変換中でないEnterは、送信せずにパスワード欄へ進む。送信はパスワード欄のEnterとボタンで行う。
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              passwordRef.current?.focus();
+            }}
             {...aria}
           />
         )}
@@ -135,6 +143,7 @@ function SignInFields({
       >
         {(aria) => (
           <PasswordInput
+            ref={passwordRef}
             placeholder={t("passwordPlaceholder")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}

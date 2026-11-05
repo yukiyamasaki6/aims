@@ -39,8 +39,8 @@ type Checked<Request> =
   | { readonly ok: true; readonly request: Request };
 
 // 開始の命令。実行中の操作が無いときだけ開始できる(busy)。画面は現在の段階の操作だけを描くため、段階は検査しない。
-// 入力の不備は、操作ごとの順序で最初の1件を示す(invalid)。開始できるなら、その操作を実行中にする(started)。
-// 開始では以前のエラーを消さない。エラーは次の結果で変わる(4操作で同じ)。
+// 入力の不備は、検査できる全てを示す(invalid)。開始できるなら、その操作を実行中にする(started)。
+// 開始では以前のエラーを消す(4操作で同じ)。
 function begin<Request>(
   flow: PasswordSetupFlow,
   operation: Operation,
@@ -60,6 +60,8 @@ function begin<Request>(
     kind: "started",
     state: {
       ...flow,
+      error: null,
+      fieldErrors: {},
       pending: operation,
       resendCooldown:
         operation === "resend" ? RESEND_COOLDOWN_SECONDS : flow.resendCooldown,
@@ -68,24 +70,24 @@ function begin<Request>(
   };
 }
 
-// コードの送信。メールアドレス、セキュリティチェックの順に不備が無ければ送れる。
+// コードの送信。メールアドレスとセキュリティチェックの両方に不備が無ければ送れる。
 export function beginSendCode(
   flow: PasswordSetupFlow,
   input: { email: string },
 ): Start<PasswordSetupFlow, { email: string; captchaToken: string }> {
   return begin(flow, "send", () => {
     const email = validateEmail(input.email);
-    if (email) return { ok: false, fieldErrors: { email } };
-    if (!isCaptchaCompleted(flow.captchaToken)) {
+    const { captchaToken } = flow;
+    if (email || !isCaptchaCompleted(captchaToken)) {
       return {
         ok: false,
-        fieldErrors: { captcha: "incomplete" },
+        fieldErrors: {
+          ...(email && { email }),
+          ...(!isCaptchaCompleted(captchaToken) && { captcha: "incomplete" }),
+        },
       };
     }
-    return {
-      ok: true,
-      request: { email: input.email, captchaToken: flow.captchaToken },
-    };
+    return { ok: true, request: { email: input.email, captchaToken } };
   });
 }
 
@@ -100,21 +102,22 @@ export function beginVerifyCode(
   }));
 }
 
-// コードの再送。待ち時間、セキュリティチェックの順に不備が無ければ送れる。
+// コードの再送。待ち時間とセキュリティチェックに不備が無ければ送れる。
+// 不備は再送の欄の1つの値で示すため、両方にあるときは待ち時間を示す(欄の整理は送付の統合で行う)。
 export function beginResend(
   flow: PasswordSetupFlow,
   input: { email: string },
 ): Start<PasswordSetupFlow, { email: string; captchaToken: string }> {
   return begin(flow, "resend", () => {
     const wait = validateResendWait(flow.resendCooldown);
-    if (wait) return { ok: false, fieldErrors: { resend: wait } };
-    if (!isCaptchaCompleted(flow.captchaToken)) {
-      return { ok: false, fieldErrors: { resend: "incomplete" } };
+    const { captchaToken } = flow;
+    if (wait || !isCaptchaCompleted(captchaToken)) {
+      return {
+        ok: false,
+        fieldErrors: { resend: wait ?? "incomplete" },
+      };
     }
-    return {
-      ok: true,
-      request: { email: input.email, captchaToken: flow.captchaToken },
-    };
+    return { ok: true, request: { email: input.email, captchaToken } };
   });
 }
 

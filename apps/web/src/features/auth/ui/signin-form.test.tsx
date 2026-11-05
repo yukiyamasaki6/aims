@@ -471,74 +471,84 @@ describe("サインイン画面の部品", () => {
     expect(submitButton().querySelector(".animate-spin")).not.toBeNull();
   });
 
-  // 判断Q: 理由が表示された後に再び送信した場合は、次の結果が出るまで、表示された理由が残る。
-  describe("再送信の間のエラー表示", () => {
-    const InvalidMessage = authText("failure.invalid_credentials");
+  it("何も入力せずに送信すると、メールアドレス、パスワード、セキュリティチェックの不備を全て表示し、認証しない", async () => {
+    // Given
+    const { authenticator } = setup();
+    const user = userEvent.setup();
 
-    it("認証の失敗の後に新しいトークンで送り直すと、応答までは失敗の理由を残したまま送信中にする", async () => {
+    // When
+    await user.click(submitButton());
+
+    // Then
+    expect(
+      screen.getByText(authText("fieldError.email.required")),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(authText("fieldError.password.required")),
+    ).toBeInTheDocument();
+    expect(widget.error).toBe(authText("fieldError.captcha.incomplete"));
+    expect(authenticator.signIn).not.toHaveBeenCalled();
+  });
+
+  describe("メールアドレス欄のEnter", () => {
+    it("画面キーボードに「次へ」を示す", () => {
       // Given
-      const { authenticator, user } = await failFirstAttempt(
-        { kind: "invalid_credentials" },
-        InvalidMessage,
-        null,
-      );
-      verify("token-2");
-      authenticator.signIn.mockReturnValue(new Promise(() => {}));
 
       // When
-      await user.click(submitButton());
+      setup();
 
       // Then
-      expect(screen.getByText(InvalidMessage)).toBeInTheDocument();
-      expect(submitButton()).toHaveAttribute("aria-disabled", "true");
-      expect(submitButton().querySelector(".animate-spin")).not.toBeNull();
+      expect(emailInput()).toHaveAttribute("enterkeyhint", "next");
     });
 
-    it("認証の失敗の後に送り直して同じ理由でまた失敗すると、同じ理由を1つだけ示し、送信中の表示を消して再び押せるようにする", async () => {
-      // Given
-      const { authenticator, user } = await failFirstAttempt(
-        { kind: "invalid_credentials" },
-        InvalidMessage,
-        null,
-      );
-      verify("token-2");
-      authenticator.signIn.mockResolvedValue(
-        resultOf({ kind: "invalid_credentials" }),
-      );
-
-      // When
-      await user.click(submitButton());
-
-      // Then
-      expect(screen.getAllByText(InvalidMessage)).toHaveLength(1);
-      expect(submitButton()).toHaveAttribute("aria-disabled", "false");
-      expect(submitButton().querySelector(".animate-spin")).toBeNull();
-      expect(authenticator.signIn).toHaveBeenCalledTimes(2);
-    });
-
-    it("パスワードの入力の不備を直して送ると、応答までは直した欄の以前のエラーを残したまま送信中にする", async () => {
+    it("送信せずに、パスワード欄へフォーカスを移す", async () => {
       // Given
       const { authenticator } = setup();
-      authenticator.signIn.mockReturnValue(new Promise(() => {}));
       const user = userEvent.setup();
-      await user.type(emailInput(), "user@example.com");
+      await fillCredentials(user);
       verify("captcha-token");
-      await user.click(submitButton());
-      expect(
-        screen.getByText(authText("fieldError.password.required")),
-      ).toBeInTheDocument();
-      await user.type(passwordInput(), "password1");
+      await user.click(emailInput());
 
       // When
-      await user.click(submitButton());
+      await user.keyboard("{Enter}");
 
       // Then
-      expect(
-        screen.getByText(authText("fieldError.password.required")),
-      ).toBeInTheDocument();
-      expect(passwordInput()).toHaveAttribute("aria-invalid", "true");
-      expect(submitButton()).toHaveAttribute("aria-disabled", "true");
-      expect(authenticator.signIn).toHaveBeenCalledOnce();
+      expect(passwordInput()).toHaveFocus();
+      expect(authenticator.signIn).not.toHaveBeenCalled();
+    });
+
+    it("変換中のEnterは、何もしない", () => {
+      // Given
+      setup();
+      emailInput().focus();
+
+      // When
+      const notCancelled = fireEvent.keyDown(emailInput(), {
+        key: "Enter",
+        isComposing: true,
+      });
+
+      // Then
+      expect(notCancelled).toBe(true);
+      expect(emailInput()).toHaveFocus();
+    });
+  });
+
+  it("パスワード欄のEnterで送信する", async () => {
+    // Given
+    const { authenticator } = setup();
+    const user = userEvent.setup();
+    await fillCredentials(user);
+    verify("captcha-token");
+
+    // When
+    await user.type(passwordInput(), "{Enter}");
+
+    // Then
+    expect(authenticator.signIn).toHaveBeenCalledExactlyOnceWith({
+      email: "user@example.com",
+      password: "password1",
+      captchaToken: "captcha-token",
     });
   });
 });

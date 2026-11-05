@@ -361,6 +361,22 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       expect(auth.sendCode).not.toHaveBeenCalled();
     });
 
+    it("メールアドレスが未入力でcaptchaも未完了の場合、メール欄とcaptcha欄のエラーを同時に表示し送信しない", async () => {
+      // Given
+      const user = userEvent.setup();
+      renderForm();
+
+      // When
+      await user.click(sendCodeButton());
+
+      // Then
+      expect(
+        screen.getByText(authText("fieldError.email.required")),
+      ).toBeInTheDocument();
+      expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
+      expect(auth.sendCode).not.toHaveBeenCalled();
+    });
+
     it("認証エラーの場合、翻訳したメッセージを表示しcaptchaをリセットして、メールアドレス入力画面に留まる", async () => {
       // Given
       auth.isRegistered.mockResolvedValue(false);
@@ -1044,203 +1060,4 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
   });
 
   // 判断Q: 理由が表示された後に再び送信した場合は、次の結果が出るまで、表示された理由が残る。
-  describe("再送信の間のエラー表示", () => {
-    const RateLimitedMessage = authText("failure.rate_limited");
-    const WeakMessage =
-      "8〜72文字の半角英数記号で、英字と数字を含めてください。";
-
-    it("コードの送信が拒否された後に送り直すと、応答までは拒否の理由を残したまま送信中にする", async () => {
-      // Given
-      auth.isRegistered.mockResolvedValue(false);
-      auth.sendCode.mockResolvedValueOnce(refused("rate_limited"));
-      renderForm();
-      changeValue(emailInput(), "user@example.com");
-      completeCaptcha();
-      fireEvent.click(sendCodeButton());
-      await settle();
-      expect(screen.getByText(RateLimitedMessage)).toBeInTheDocument();
-      completeCaptcha("second-token");
-      auth.sendCode.mockReturnValue(new Promise(() => {}));
-
-      // When
-      fireEvent.click(sendCodeButton());
-      await settle();
-
-      // Then
-      expect(screen.getByText(RateLimitedMessage)).toBeInTheDocument();
-      expect(sendCodeButton()).toHaveAttribute("aria-disabled", "true");
-      expect(spinnerIn(sendCodeButton())).not.toBeNull();
-    });
-
-    it("コードの送信が拒否された後の送り直しが成功すると、拒否の理由を消してコード入力の段階へ進む", async () => {
-      // Given
-      auth.isRegistered.mockResolvedValue(false);
-      auth.sendCode.mockResolvedValueOnce(refused("rate_limited"));
-      renderForm();
-      changeValue(emailInput(), "user@example.com");
-      completeCaptcha();
-      fireEvent.click(sendCodeButton());
-      await settle();
-      expect(screen.getByText(RateLimitedMessage)).toBeInTheDocument();
-      completeCaptcha("second-token");
-      auth.sendCode.mockResolvedValue(ACCEPTED);
-
-      // When
-      fireEvent.click(sendCodeButton());
-      await settle();
-
-      // Then
-      expect(heading(authText("otpTitle"))).toBeInTheDocument();
-      expect(screen.queryByText(RateLimitedMessage)).not.toBeInTheDocument();
-    });
-
-    it("コードの確認が期限切れで失敗した後に確認し直すと、応答までは理由を残したまま確認中にする", async () => {
-      // Given
-      renderForm();
-      await advanceToCodeStep();
-      auth.verifyCode.mockResolvedValueOnce(
-        refusedWith({ kind: "code_expired" }),
-      );
-      changeValue(codeInput(), "123456");
-      fireEvent.click(verifyButton());
-      await settle();
-      expect(screen.getByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-      auth.verifyCode.mockReturnValue(new Promise(() => {}));
-
-      // When
-      fireEvent.click(verifyButton());
-      await settle();
-
-      // Then
-      expect(screen.getByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-      expect(verifyButton()).toHaveAttribute("aria-disabled", "true");
-      expect(spinnerIn(verifyButton())).not.toBeNull();
-    });
-
-    it("コードの確認が同じ理由でまた失敗すると、同じ理由を1つだけ示し、送信中の表示を消して再び操作できるようにする", async () => {
-      // Given
-      renderForm();
-      await advanceToCodeStep();
-      auth.verifyCode.mockResolvedValue(refusedWith({ kind: "code_expired" }));
-      changeValue(codeInput(), "123456");
-      fireEvent.click(verifyButton());
-      await settle();
-      expect(screen.getByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-
-      // When
-      fireEvent.click(verifyButton());
-      await settle();
-
-      // Then
-      expect(screen.getAllByText(OTP_EXPIRED_MESSAGE)).toHaveLength(1);
-      expect(spinnerIn(verifyButton())).toBeNull();
-      expect(verifyButton()).toHaveAttribute("aria-disabled", "false");
-      expect(auth.verifyCode).toHaveBeenCalledTimes(2);
-    });
-
-    it("パスワードの設定が拒否された後に設定し直すと、応答までは拒否の理由を残したまま設定中にする", async () => {
-      // Given
-      renderForm();
-      await advanceToPasswordStep();
-      auth.setPassword.mockResolvedValueOnce(
-        refusedWith({ kind: "weak_password" }),
-      );
-      changeValue(passwordInput(), "password123");
-      fireEvent.click(setPasswordButton());
-      await settle();
-      expect(screen.getByText(WeakMessage)).toBeInTheDocument();
-      auth.setPassword.mockReturnValue(new Promise(() => {}));
-
-      // When
-      fireEvent.click(setPasswordButton());
-      await settle();
-
-      // Then
-      expect(screen.getByText(WeakMessage)).toBeInTheDocument();
-      expect(setPasswordButton()).toHaveAttribute("aria-disabled", "true");
-      expect(spinnerIn(setPasswordButton())).not.toBeNull();
-    });
-
-    it("パスワードの入力の不備を直して設定すると、応答までは直した欄の以前のエラーを残したまま設定中にする", async () => {
-      // Given
-      renderForm();
-      await advanceToPasswordStep();
-      fireEvent.click(setPasswordButton());
-      expect(
-        screen.getByText(authText("fieldError.password.required")),
-      ).toBeInTheDocument();
-      changeValue(passwordInput(), "password123");
-      auth.setPassword.mockReturnValue(new Promise(() => {}));
-
-      // When
-      fireEvent.click(setPasswordButton());
-      await settle();
-
-      // Then
-      expect(
-        screen.getByText(authText("fieldError.password.required")),
-      ).toBeInTheDocument();
-      expect(passwordInput()).toHaveAttribute("aria-invalid", "true");
-      expect(spinnerIn(setPasswordButton())).not.toBeNull();
-    });
-
-    // 再送はクールダウン(60秒)の経過が前提のため、フェイクタイマーで時間を進める。
-    describe("再送", () => {
-      beforeEach(() => {
-        vi.useFakeTimers();
-      });
-
-      afterEach(() => {
-        vi.useRealTimers();
-      });
-
-      async function failVerifyAndWaitCooldown() {
-        await advanceToCodeStep();
-        auth.verifyCode.mockResolvedValueOnce(
-          refusedWith({ kind: "code_expired" }),
-        );
-        changeValue(codeInput(), "123456");
-        fireEvent.click(verifyButton());
-        await settle();
-        expect(screen.getByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-        for (let i = 0; i < 60; i++) {
-          await act(async () => {
-            await vi.advanceTimersByTimeAsync(1000);
-          });
-        }
-        completeCaptcha("resend-token");
-      }
-
-      it("確認の失敗の理由が表示された後に再送すると、応答までは理由を残したまま再送中にする", async () => {
-        // Given
-        renderForm();
-        await failVerifyAndWaitCooldown();
-        auth.sendCode.mockReturnValue(new Promise(() => {}));
-
-        // When
-        fireEvent.click(resendButton());
-        await settle();
-
-        // Then
-        expect(screen.getByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-        expect(resendButton()).toHaveAttribute("aria-disabled", "true");
-        expect(spinnerIn(resendButton())).not.toBeNull();
-      });
-
-      it("確認の失敗の理由が表示された後の再送が成功すると、理由を消す", async () => {
-        // Given
-        renderForm();
-        await failVerifyAndWaitCooldown();
-        auth.sendCode.mockResolvedValue(ACCEPTED);
-
-        // When
-        fireEvent.click(resendButton());
-        await settle();
-
-        // Then
-        expect(screen.queryByText(OTP_EXPIRED_MESSAGE)).not.toBeInTheDocument();
-        expect(heading(authText("otpTitle"))).toBeInTheDocument();
-      });
-    });
-  });
 });
