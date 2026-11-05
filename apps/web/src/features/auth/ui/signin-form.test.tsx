@@ -55,10 +55,11 @@ function setup({
   const signIn = createSignIn({
     authenticator,
     pageNavigation: fake.pageNavigation,
-    returnToReader: { read: () => returnTo },
     protectedPath: "/rounds",
   });
-  const form = <SignInForm signIn={signIn} siteKey="site-key" />;
+  const form = (
+    <SignInForm signIn={signIn} siteKey="site-key" from={returnTo} />
+  );
   const rendered = render(strict ? <StrictMode>{form}</StrictMode> : form, {
     wrapper: IntlTestProvider,
   });

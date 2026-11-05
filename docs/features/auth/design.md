@@ -71,7 +71,7 @@
 ## 約束の例外の契約
 
 投げない: 認証サービスへの頼みごと(`CallResult`で返す)、サインインの状態の読み取り、端末の識別情報の書き込み、画面の約束、通信の可否。
-投げることがある: `PageNavigation`、`ReturnToReader`(サインインとサインアップの手続きは扱わない)、`PageLoad`(再設定の手続きが通信エラーの失敗として扱う)、`RegistrationLookup`(届かなかった失敗として扱う)、`PasswordChange`(通信エラーの失敗として扱う)、`PageReplace.replace`(見張りもサインアウトも扱わない。以後の遷移も行わない)、`AuthChanges.subscribe`と`SignInChanges.subscribe`(どちらも接続を得られないとき同期に投げる。手続きは扱わない)。
+投げることがある: `PageNavigation`(サインインとサインアップの手続きは扱わない)、`PageLoad`(再設定の手続きが通信エラーの失敗として扱う)、`RegistrationLookup`(届かなかった失敗として扱う)、`PasswordChange`(通信エラーの失敗として扱う)、`PageReplace.replace`(見張りもサインアウトも扱わない。以後の遷移も行わない)、`AuthChanges.subscribe`と`SignInChanges.subscribe`(どちらも接続を得られないとき同期に投げる。手続きは扱わない)。
 
 ## 設計判断
 

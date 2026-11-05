@@ -27,9 +27,12 @@ const ID_PREFIX = "signin";
 export function SignInForm({
   signIn,
   siteKey,
+  from,
 }: {
   signIn: SignIn;
   siteKey: string;
+  // URLのクエリの遷移元の値(検証していない値)。
+  from: string | null;
 }) {
   const {
     state: flow,
@@ -44,7 +47,7 @@ export function SignInForm({
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    void signIn.submit({ email, password }, view);
+    void signIn.submit({ email, password, from }, view);
   }
 
   return (

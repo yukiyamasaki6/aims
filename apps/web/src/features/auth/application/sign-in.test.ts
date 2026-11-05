@@ -10,7 +10,12 @@ import type { CallResult } from "./call-result";
 import { screenHarness } from "./screen-view-test-helpers";
 import { createSignIn } from "./sign-in";
 
-const input = { email: "user@example.com", password: "password1" };
+const input = {
+  email: "user@example.com",
+  password: "password1",
+  from: null,
+};
+const credentialsOf = { email: input.email, password: input.password };
 const verified = signInReducer(initialSignInFlow, {
   type: "captchaChecked",
   token: "first-token",
@@ -18,17 +23,15 @@ const verified = signInReducer(initialSignInFlow, {
 
 const accepted: CallResult = { kind: "accepted" };
 
-function setup(returnTo: string | null = null, protectedPath = "/rounds") {
+function setup(protectedPath = "/rounds") {
   const authenticator = {
     signIn: vi.fn(async (): Promise<CallResult> => accepted),
   };
   const fake = createFakePageNavigation();
-  const returnToReader = { read: vi.fn(() => returnTo) };
-  const navigation = { returnTo: returnToReader.read, go: fake.go };
+  const navigation = { go: fake.go };
   const signIn = createSignIn({
     authenticator,
     pageNavigation: fake.pageNavigation,
-    returnToReader,
     protectedPath,
   });
   const { events, resetCheck, viewOf, screen } = screenHarness(signInReducer);
@@ -63,14 +66,14 @@ describe("サインインの手続き", () => {
     async (returnTo, expected) => {
       // Given
       const { signIn, authenticator, navigation, actions, resetCheck, viewOf } =
-        setup(returnTo);
+        setup();
 
       // When
-      await signIn.submit(input, viewOf(verified));
+      await signIn.submit({ ...input, from: returnTo }, viewOf(verified));
 
       // Then
       expect(authenticator.signIn).toHaveBeenCalledWith({
-        ...input,
+        ...credentialsOf,
         captchaToken: "first-token",
       });
       expect(navigation.go).toHaveBeenCalledExactlyOnceWith(expected);
@@ -81,17 +84,23 @@ describe("サインインの手続き", () => {
 
   it("保護の範囲の根が異なる場合、既定の行き先は根になり、根の下の遷移元だけを許す", async () => {
     // Given
-    const withoutReturnTo = setup(null, "/elsewhere");
-    const insideRoot = setup("/elsewhere/x?a=1", "/elsewhere");
-    const outsideRoot = setup("/rounds/new", "/elsewhere");
+    const withoutReturnTo = setup("/elsewhere");
+    const insideRoot = setup("/elsewhere");
+    const outsideRoot = setup("/elsewhere");
 
     // When
     await withoutReturnTo.signIn.submit(
       input,
       withoutReturnTo.viewOf(verified),
     );
-    await insideRoot.signIn.submit(input, insideRoot.viewOf(verified));
-    await outsideRoot.signIn.submit(input, outsideRoot.viewOf(verified));
+    await insideRoot.signIn.submit(
+      { ...input, from: "/elsewhere/x?a=1" },
+      insideRoot.viewOf(verified),
+    );
+    await outsideRoot.signIn.submit(
+      { ...input, from: "/rounds/new" },
+      outsideRoot.viewOf(verified),
+    );
 
     // Then
     expect(withoutReturnTo.navigation.go).toHaveBeenCalledExactlyOnceWith(
@@ -105,10 +114,10 @@ describe("サインインの手続き", () => {
     );
   });
 
-  it("前の失敗の後の成功では、遷移元の読み出しと遷移の前にsignedInを送り、遷移の中ではエラーが消えて送信中のままである", async () => {
+  it("前の失敗の後の成功では、遷移の前にsignedInを送り、遷移の中ではエラーが消えて送信中のままである", async () => {
     // Given
     const { signIn, authenticator, navigation, actions, resetCheck, viewOf } =
-      setup("/rounds/new");
+      setup();
     authenticator.signIn.mockResolvedValueOnce(refused(UNREACHABLE));
     const view = viewOf(verified);
     await signIn.submit(input, view);
@@ -125,22 +134,13 @@ describe("サインインの手続き", () => {
         submitting: view.observedState.submitting,
       });
     };
-    navigation.returnTo.mockImplementation(() => {
-      observe();
-      return "/rounds/new";
-    });
     navigation.go.mockImplementation(observe);
 
     // When
-    await signIn.submit(input, view);
+    await signIn.submit({ ...input, from: "/rounds/new" }, view);
 
     // Then
     expect(seen).toEqual([
-      {
-        events: ["failed", "captchaChecked", "signedIn"],
-        error: null,
-        submitting: true,
-      },
       {
         events: ["failed", "captchaChecked", "signedIn"],
         error: null,
@@ -196,7 +196,7 @@ describe("サインインの手続き", () => {
       );
 
       // When
-      await signIn.submit({ email, password }, view);
+      await signIn.submit({ email, password, from: null }, view);
 
       // Then
       expect(authenticator.signIn).not.toHaveBeenCalled();
@@ -263,18 +263,19 @@ describe("サインインの手続き", () => {
 
   it("失敗後の新しいトークンで再送信すると元の遷移先へ進む", async () => {
     // Given
-    const { signIn, authenticator, navigation, viewOf } = setup("/rounds/new");
+    const { signIn, authenticator, navigation, viewOf } = setup();
+    const retry = { ...input, from: "/rounds/new" };
     authenticator.signIn.mockResolvedValueOnce(refused(failure401));
     const view = viewOf(verified);
-    await signIn.submit(input, view);
+    await signIn.submit(retry, view);
 
     // When
     view.dispatch({ type: "captchaChecked", token: "second-token" });
-    await signIn.submit(input, view);
+    await signIn.submit(retry, view);
 
     // Then
     expect(authenticator.signIn).toHaveBeenLastCalledWith({
-      ...input,
+      ...credentialsOf,
       captchaToken: "second-token",
     });
     expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds/new");

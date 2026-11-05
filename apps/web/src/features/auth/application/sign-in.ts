@@ -14,14 +14,10 @@ export type SignInAuthenticator = {
   signIn(credentials: Credentials): Promise<CallResult>;
 };
 
-// 今の画面の遷移元の値の読み出し。検証していない値で、無ければnull。検証は手続きが経路の規則で行う。
-export type ReturnToReader = {
-  read(): string | null;
-};
-
 export type SignIn = {
   submit(
-    input: { email: string; password: string },
+    // from: 画面が受けた遷移元の値。検証していない値で、無ければnull。検証は手続きが経路の規則で行う。
+    input: { email: string; password: string; from: string | null },
     view: ScreenView<SignInFlow, SignInEvent>,
   ): Promise<void>;
 };
@@ -29,18 +25,18 @@ export type SignIn = {
 export function createSignIn({
   authenticator,
   pageNavigation,
-  returnToReader,
   protectedPath,
 }: {
   authenticator: SignInAuthenticator;
   pageNavigation: PageNavigation;
-  returnToReader: ReturnToReader;
   // 保護対象の画面の範囲の根の経路。遷移元の検証と、既定の行き先に使う。
   protectedPath: string;
 }): SignIn {
   return {
     async submit(input, view) {
-      const credentials = view.begin((flow) => beginSignIn(flow, input));
+      const credentials = view.begin((flow) =>
+        beginSignIn(flow, { email: input.email, password: input.password }),
+      );
       if (!credentials) return;
       const result = await authenticator.signIn(credentials);
       // 送信中に画面を離れたときは、状態を変えず、遷移もしない。
@@ -54,7 +50,7 @@ export function createSignIn({
       }
       // 成功時は以前のエラーを消し、送信中は解除しない。遷移が終わる前に再び押され、使用済みのトークンで二重に送信されるのを防ぐため。
       view.dispatch({ type: "signedIn" });
-      pageNavigation.go(destinationOf(returnToReader.read(), protectedPath));
+      pageNavigation.go(destinationOf(input.from, protectedPath));
     },
   };
 }
