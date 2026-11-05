@@ -1,0 +1,166 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024.5" height="1674.0" viewBox="0 0 1024.5 1674.0" font-family="IPAGothic, sans-serif">
+<rect width="1024.5" height="1674.0" fill="#fff"/>
+<g>
+<text x="20.0" y="38.0" font-size="15" fill="#222" font-weight="bold">変更後: コード送付・確認・パスワード設定と結果の型の構造</text>
+<rect x="20.0" y="186.0" width="984.5" height="352.0" fill="#f4f4f4"/>
+<text x="32.0" y="207.5" font-size="13" fill="#222" font-weight="bold">UI層</text>
+<text x="32.0" y="225.5" font-size="13" fill="#666">画面の部品</text>
+<rect x="20.0" y="538.0" width="984.5" height="448.0" fill="#e8e8e8"/>
+<text x="32.0" y="559.5" font-size="13" fill="#222" font-weight="bold">アプリケーション層</text>
+<text x="32.0" y="577.5" font-size="13" fill="#666">操作の手続きと手続き</text>
+<text x="32.0" y="595.5" font-size="13" fill="#666">の約束</text>
+<rect x="20.0" y="986.0" width="984.5" height="388.0" fill="#f4f4f4"/>
+<text x="32.0" y="1007.5" font-size="13" fill="#222" font-weight="bold">ドメイン層</text>
+<text x="32.0" y="1025.5" font-size="13" fill="#666">業務の規則と状態</text>
+<rect x="20.0" y="1374.0" width="984.5" height="148.0" fill="#e8e8e8"/>
+<text x="32.0" y="1395.5" font-size="13" fill="#222" font-weight="bold">インフラ層</text>
+<text x="32.0" y="1413.5" font-size="13" fill="#666">外部へのアクセスと形</text>
+<text x="32.0" y="1431.5" font-size="13" fill="#666">の変換</text>
+<rect x="190.0" y="142.0" width="814.5" height="1396.0" fill="none" stroke="#888" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="597.2" y="159.5" font-size="13" fill="#222" font-weight="bold" text-anchor="middle">認証</text>
+<text x="597.2" y="177.5" font-size="13" fill="#666" text-anchor="middle">サインイン・サインアップ・パスワード再設定</text>
+<rect x="20.0" y="52.0" width="984.5" height="66.0" fill="none" stroke="#888" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="32.0" y="73.5" font-size="13" fill="#222" font-weight="bold">外部</text>
+<path d="M477.34488,686 Q477.34488,770 664.138137,854 Q850.931395,938 850.931395,1022" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<path d="M640.136932,686 Q640.136932,700 680.393772,714 Q720.650612,728 720.650612,742" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M425.629072,686 Q425.629072,867 393.248639,1048 Q360.868206,1229 360.868206,1410" fill="none" stroke="#8e24aa" stroke-width="1.5"/>
+<path d="M224.221651,818 Q224.221651,873.5 224.548259,929 Q224.874867,984.5 224.874867,1040" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M214,818 Q214,966 214,1114 Q214,1262 214,1410" fill="none" stroke="#8e24aa" stroke-width="1.5"/>
+<path d="M287.202985,1116 Q287.202985,1134.5 459.600939,1153 Q631.998893,1171.5 631.998893,1190" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M214,334 Q214,436 214.491905,538 Q214.98381,640 214.98381,742" fill="none" stroke="#8e24aa" stroke-width="1.5"/>
+<path d="M222,334 Q222,510.5 218,687 Q214,863.5 214,1040" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<path d="M346.388684,334 Q346.388684,357 370.395548,380 Q394.402412,403 394.402412,426" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<path d="M764.102472,1134 Q764.102472,1148 799.822232,1162 Q835.541993,1176 835.541993,1190" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M935.876936,818 Q935.876936,869 929.995048,920 Q924.113159,971 924.113159,1022" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M694.439498,818 Q694.439498,832 685.296422,846 Q676.153346,860 676.153346,874" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M896.234526,370 Q896.234526,421 776.76197,472 Q657.289414,523 657.289414,574" fill="none" stroke="#8e24aa" stroke-width="1.5"/>
+<path d="M972.45,370 Q972.45,533 976.45,696 Q980.45,859 980.45,1022" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<path d="M980.45,370 Q980.45,575 980.45,780 Q980.45,985 980.45,1190" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<path d="M788.329995,370 Q788.329995,384 723.252842,398 Q658.175689,412 658.175689,426" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<path d="M327.153024,1410 Q327.153024,1083 340.258165,756 Q353.363307,429 353.363307,102" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M379.333097,1410 Q379.333097,1295 429.890802,1180 Q480.448508,1065 480.448508,950" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<rect x="420.3" y="574.0" width="245.0" height="112.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="432.3" y="595.5" font-size="13" fill="#222" font-weight="bold">コード送付後のパスワード設定と遷移</text>
+<path d="M426.3,603.0 L659.3,603.0" stroke="#ccc" stroke-width="1"/>
+<text x="432.3" y="619.5" font-size="13" fill="#222">sign-up.ts</text>
+<text x="444.3" y="637.5" font-size="13" fill="#222">ƒ createSignUp</text>
+<text x="432.3" y="655.5" font-size="13" fill="#222">reset-password.ts</text>
+<text x="444.3" y="673.5" font-size="13" fill="#222">ƒ createResetPassword</text>
+<rect x="210.0" y="742.0" width="136.1" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="222.0" y="763.5" font-size="13" fill="#222" font-weight="bold">照合の順序</text>
+<path d="M216.0,771.0 L340.1,771.0" stroke="#ccc" stroke-width="1"/>
+<text x="222.0" y="787.5" font-size="13" fill="#222">sign-in.ts</text>
+<text x="234.0" y="805.5" font-size="13" fill="#222">ƒ createSignIn</text>
+<rect x="210.0" y="1040.0" width="234.9" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="222.0" y="1061.5" font-size="13" fill="#222" font-weight="bold">サインインの開始の可否と状態</text>
+<path d="M216.0,1069.0 L438.9,1069.0" stroke="#ccc" stroke-width="1"/>
+<text x="222.0" y="1085.5" font-size="13" fill="#222">sign-in-flow.ts</text>
+<text x="234.0" y="1103.5" font-size="13" fill="#222">ƒ beginSignIn、signInReducer</text>
+<rect x="210.0" y="258.0" width="219.0" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="222.0" y="279.5" font-size="13" fill="#222" font-weight="bold">メールとパスワードの入力と送信</text>
+<path d="M216.0,287.0 L423.0,287.0" stroke="#ccc" stroke-width="1"/>
+<text x="222.0" y="303.5" font-size="13" fill="#222">signin-form.tsx</text>
+<text x="234.0" y="321.5" font-size="13" fill="#222">ƒ SignInForm</text>
+<rect x="488.9" y="1022.0" width="495.6" height="112.0" rx="3" fill="#fff" stroke="#ef6c00" stroke-width="3"/>
+<text x="500.9" y="1043.5" font-size="13" fill="#222" font-weight="bold">段階・実行中の操作・再送の待ち・トークン</text>
+<path d="M494.9,1051.0 L978.5,1051.0" stroke="#ccc" stroke-width="1"/>
+<text x="500.9" y="1067.5" font-size="13" fill="#222">password-setup-flow.ts</text>
+<text x="512.9" y="1085.5" font-size="13" fill="#222">ƒ beginSendCode、beginVerifyCode、beginSetPassword、</text>
+<text x="512.9" y="1103.5" font-size="13" fill="#222">  passwordSetupReducer</text>
+<text x="512.9" y="1121.5" font-size="13" fill="#222">c initialPasswordSetupFlow</text>
+<rect x="620.8" y="1190.0" width="363.6" height="148.0" rx="3" fill="#fff" stroke="#ef6c00" stroke-width="3"/>
+<text x="632.8" y="1211.5" font-size="13" fill="#222" font-weight="bold">認証コードの待ちとパスワードの規則</text>
+<path d="M626.8,1219.0 L978.5,1219.0" stroke="#ccc" stroke-width="1"/>
+<text x="632.8" y="1235.5" font-size="13" fill="#222">auth-code.ts</text>
+<text x="644.8" y="1253.5" font-size="13" fill="#222">ƒ validateResendWait</text>
+<text x="644.8" y="1271.5" font-size="13" fill="#222">c AUTH_CODE_LENGTH、RESEND_COOLDOWN_SECONDS</text>
+<text x="632.8" y="1289.5" font-size="13" fill="#222">password.ts</text>
+<text x="644.8" y="1307.5" font-size="13" fill="#222">ƒ validatePasswordPresent、validateNewPassword</text>
+<text x="644.8" y="1325.5" font-size="13" fill="#222">c PASSWORD_MIN_LENGTH、PASSWORD_MAX_LENGTH</text>
+<rect x="538.9" y="742.0" width="445.5" height="76.0" rx="3" fill="#fff" stroke="#ef6c00" stroke-width="3"/>
+<text x="550.9" y="763.5" font-size="13" fill="#222" font-weight="bold">送付・確認・パスワード設定の共通の順序</text>
+<path d="M544.9,771.0 L978.5,771.0" stroke="#ccc" stroke-width="1"/>
+<text x="550.9" y="787.5" font-size="13" fill="#222">password-setup.ts</text>
+<text x="562.9" y="805.5" font-size="13" fill="#222">ƒ tickCooldown、<tspan fill="#2e7d32">sendCode</tspan>、verifyCode、applyPassword</text>
+<rect x="745.3" y="222.0" width="239.2" height="148.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="757.3" y="243.5" font-size="13" fill="#222" font-weight="bold">メール・コード・パスワードの3段階</text>
+<path d="M751.3,251.0 L978.5,251.0" stroke="#ccc" stroke-width="1"/>
+<text x="757.3" y="267.5" font-size="13" fill="#222">password-setup-form.tsx</text>
+<text x="769.3" y="285.5" font-size="13" fill="#222">ƒ PasswordSetupForm</text>
+<text x="757.3" y="303.5" font-size="13" fill="#222">otp-email-step.tsx</text>
+<text x="769.3" y="321.5" font-size="13" fill="#222">ƒ OtpEmailStep</text>
+<text x="757.3" y="339.5" font-size="13" fill="#222">otp-code-step.tsx</text>
+<text x="769.3" y="357.5" font-size="13" fill="#222">ƒ OtpCodeStep</text>
+<rect x="356.9" y="426.0" width="323.0" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="368.9" y="447.5" font-size="13" fill="#222" font-weight="bold">集約の状態を持ち、手続きへ渡す画面の約束を作る</text>
+<path d="M362.9,455.0 L673.9,455.0" stroke="#ccc" stroke-width="1"/>
+<text x="368.9" y="471.5" font-size="13" fill="#222">use-screen-view.ts</text>
+<text x="380.9" y="489.5" font-size="13" fill="#222">ƒ useScreenView</text>
+<rect x="210.0" y="1410.0" width="297.0" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="222.0" y="1431.5" font-size="13" fill="#222" font-weight="bold">認証サービスに頼み、応答を結果の値に変える</text>
+<path d="M216.0,1439.0 L501.0,1439.0" stroke="#ccc" stroke-width="1"/>
+<text x="222.0" y="1455.5" font-size="13" fill="#222">supabase-auth.ts</text>
+<text x="234.0" y="1473.5" font-size="13" fill="#222">ƒ createSupabaseAuth</text>
+<rect x="427.2" y="874.0" width="303.5" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="439.2" y="895.5" font-size="13" fill="#222" font-weight="bold">頼みごとの結果の型(after: 受付と失敗の2種)</text>
+<path d="M433.2,903.0 L724.7,903.0" stroke="#ccc" stroke-width="1"/>
+<text x="439.2" y="919.5" font-size="13" fill="#222">call-result.ts</text>
+<text x="451.2" y="937.5" font-size="13" fill="#222">ƒ failureOf</text>
+<rect x="307.5" y="68.0" width="102.0" height="34.0" rx="10" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="358.5" y="90.0" font-size="13" fill="#222" text-anchor="middle">認証サービス</text>
+<circle cx="477.3" cy="686.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="846.9,1018.0 854.9,1018.0 850.9,1026.0" fill="#000000" fill-opacity="0.45"/>
+<circle cx="640.1" cy="686.0" r="4.0" fill="#000000"/>
+<polygon points="716.7,738.0 724.7,738.0 720.7,746.0" fill="#000000"/>
+<circle cx="425.6" cy="686.0" r="4.0" fill="#8e24aa"/>
+<polygon points="356.9,1406.0 364.9,1406.0 360.9,1414.0" fill="#8e24aa"/>
+<circle cx="224.2" cy="818.0" r="4.0" fill="#000000"/>
+<polygon points="220.9,1036.0 228.9,1036.0 224.9,1044.0" fill="#000000"/>
+<circle cx="214.0" cy="818.0" r="4.0" fill="#8e24aa"/>
+<polygon points="210.0,1406.0 218.0,1406.0 214.0,1414.0" fill="#8e24aa"/>
+<circle cx="287.2" cy="1116.0" r="4.0" fill="#000000"/>
+<polygon points="628.0,1186.0 636.0,1186.0 632.0,1194.0" fill="#000000"/>
+<circle cx="214.0" cy="334.0" r="4.0" fill="#8e24aa"/>
+<polygon points="211.0,738.0 219.0,738.0 215.0,746.0" fill="#8e24aa"/>
+<circle cx="222.0" cy="334.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="210.0,1036.0 218.0,1036.0 214.0,1044.0" fill="#000000" fill-opacity="0.45"/>
+<circle cx="346.4" cy="334.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="390.4,422.0 398.4,422.0 394.4,430.0" fill="#000000" fill-opacity="0.45"/>
+<circle cx="764.1" cy="1134.0" r="4.0" fill="#000000"/>
+<polygon points="831.5,1186.0 839.5,1186.0 835.5,1194.0" fill="#000000"/>
+<circle cx="935.9" cy="818.0" r="4.0" fill="#000000"/>
+<polygon points="920.1,1018.0 928.1,1018.0 924.1,1026.0" fill="#000000"/>
+<circle cx="694.4" cy="818.0" r="4.0" fill="#000000"/>
+<polygon points="672.2,870.0 680.2,870.0 676.2,878.0" fill="#000000"/>
+<circle cx="896.2" cy="370.0" r="4.0" fill="#8e24aa"/>
+<polygon points="653.3,570.0 661.3,570.0 657.3,578.0" fill="#8e24aa"/>
+<circle cx="972.5" cy="370.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="976.5,1018.0 984.5,1018.0 980.5,1026.0" fill="#000000" fill-opacity="0.45"/>
+<circle cx="980.5" cy="370.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="976.5,1186.0 984.5,1186.0 980.5,1194.0" fill="#000000" fill-opacity="0.45"/>
+<circle cx="788.3" cy="370.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="654.2,422.0 662.2,422.0 658.2,430.0" fill="#000000" fill-opacity="0.45"/>
+<circle cx="327.2" cy="1410.0" r="4.0" fill="#000000"/>
+<polygon points="349.4,106.0 357.4,106.0 353.4,98.0" fill="#000000"/>
+<circle cx="379.3" cy="1410.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="476.4,954.0 484.4,954.0 480.4,946.0" fill="#000000" fill-opacity="0.45"/>
+</g>
+<path d="M20.0,1568.0 L56.0,1568.0" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<polygon points="52.0,1564.0 52.0,1572.0 60.0,1568.0" fill="#000000" fill-opacity="0.45"/>
+<text x="64.0" y="1573.0" font-size="13" fill="#222">参照: 型、値、文書、設定などへの静的な依存</text>
+<path d="M366.3,1568.0 L402.3,1568.0" stroke="#000000" stroke-width="1.5"/>
+<polygon points="398.3,1564.0 398.3,1572.0 406.3,1568.0" fill="#000000"/>
+<text x="410.3" y="1573.0" font-size="13" fill="#222">呼び出し: 実行時に、処理する相手を呼ぶ</text>
+<path d="M20.0,1592.0 L56.0,1592.0" stroke="#8e24aa" stroke-width="1.5"/>
+<polygon points="52.0,1588.0 52.0,1596.0 60.0,1592.0" fill="#8e24aa"/>
+<text x="64.0" y="1597.0" font-size="13" fill="#222">注入経由の呼び出し: 実行時に、注入された実装を呼ぶ</text>
+<rect x="418.3" y="1584.0" width="28" height="16" rx="3" fill="#fff" stroke="#ef6c00" stroke-width="3"/>
+<text x="454.3" y="1597.0" font-size="13" fill="#222">橙の枠: 表示内容が変わるグループ(変更前・変更後)</text>
+<text x="24.0" y="1621.0" font-size="13" fill="#2e7d32">Aa</text>
+<text x="56.0" y="1621.0" font-size="13" fill="#222">緑の文字: 追加されるファイル・関数・定数(変更後)</text>
+<path d="M402.6,1616.0 L430.6,1616.0" stroke="#000000" stroke-width="1.5"/>
+<circle cx="402.6" cy="1616.0" r="4.0" fill="#000000"/>
+<polygon points="426.6,1612.0 426.6,1620.0 434.6,1616.0" fill="#000000"/>
+<text x="442.6" y="1621.0" font-size="13" fill="#222">丸: 線の始点、三角: 線の終点</text>
+<text x="20.0" y="1645.0" font-size="13" fill="#222">ƒ: 他のファイルから使える関数、c: 他のファイルから使える定数</text>
+</svg>

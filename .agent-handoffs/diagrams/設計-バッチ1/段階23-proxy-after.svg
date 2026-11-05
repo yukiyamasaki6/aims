@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1005.0" height="956.0" viewBox="0 0 1005.0 956.0" font-family="IPAGothic, sans-serif">
+<rect width="1005.0" height="956.0" fill="#fff"/>
+<g>
+<text x="20.0" y="38.0" font-size="15" fill="#222" font-weight="bold">変更後: 要求ごとのセッション更新と転送の規則の構造</text>
+<rect x="20.0" y="204.0" width="965.0" height="148.0" fill="#f4f4f4"/>
+<text x="32.0" y="225.5" font-size="13" fill="#222" font-weight="bold">組み立て層</text>
+<text x="32.0" y="243.5" font-size="13" fill="#666">入口。生成と注入</text>
+<rect x="20.0" y="352.0" width="965.0" height="90.0" fill="#e8e8e8"/>
+<text x="32.0" y="373.5" font-size="13" fill="#222" font-weight="bold">UI層</text>
+<text x="32.0" y="391.5" font-size="13" fill="#666">画面の部品</text>
+<rect x="20.0" y="442.0" width="965.0" height="90.0" fill="#f4f4f4"/>
+<text x="32.0" y="463.5" font-size="13" fill="#222" font-weight="bold">アプリケーション層</text>
+<text x="32.0" y="481.5" font-size="13" fill="#666">操作の手続きと約束</text>
+<rect x="20.0" y="532.0" width="965.0" height="148.0" fill="#e8e8e8"/>
+<text x="32.0" y="553.5" font-size="13" fill="#222" font-weight="bold">ドメイン層</text>
+<text x="32.0" y="571.5" font-size="13" fill="#666">業務の規則と状態</text>
+<rect x="20.0" y="680.0" width="965.0" height="148.0" fill="#f4f4f4"/>
+<text x="32.0" y="701.5" font-size="13" fill="#222" font-weight="bold">インフラ層</text>
+<text x="32.0" y="719.5" font-size="13" fill="#666">外部へのアクセスと形</text>
+<text x="32.0" y="737.5" font-size="13" fill="#666">の変換</text>
+<rect x="791.0" y="142.0" width="194.0" height="702.0" fill="none" stroke="#888" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="888.0" y="159.5" font-size="13" fill="#222" font-weight="bold" text-anchor="middle">認証</text>
+<text x="888.0" y="177.5" font-size="13" fill="#666" text-anchor="middle">サインイン・サインアッ</text>
+<text x="888.0" y="195.5" font-size="13" fill="#666" text-anchor="middle">プ・再設定</text>
+<rect x="458.0" y="142.0" width="285.0" height="702.0" fill="none" stroke="#888" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="600.5" y="159.5" font-size="13" fill="#222" font-weight="bold" text-anchor="middle">共有の技術</text>
+<text x="600.5" y="177.5" font-size="13" fill="#666" text-anchor="middle">接続・遷移・時計</text>
+<rect x="190.0" y="142.0" width="220.0" height="702.0" fill="none" stroke="#888" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="300.0" y="159.5" font-size="13" fill="#222" font-weight="bold" text-anchor="middle">ラウンド</text>
+<text x="300.0" y="177.5" font-size="13" fill="#666" text-anchor="middle">経路の定数だけ使う</text>
+<rect x="20.0" y="52.0" width="965.0" height="66.0" fill="none" stroke="#888" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="32.0" y="73.5" font-size="13" fill="#222" font-weight="bold">外部</text>
+<path d="M646.725162,316 Q646.725162,379 739.637206,442 Q832.54925,505 832.54925,568" fill="none" stroke="#2e7d32" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M626.823696,716 Q626.823696,562.5 616.122379,409 Q605.421063,255.5 605.421063,102" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M549.30041,316 Q549.30041,381.25 458.367483,446.5 Q367.434555,511.75 367.434555,577" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<path d="M646.725162,316 Q646.725162,379 739.637206,442 Q832.54925,505 832.54925,568" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M603.739269,316 Q603.739269,416 597.113508,516 Q590.487748,616 590.487748,716" fill="none" stroke="#000000" stroke-width="1.5"/>
+<rect x="210.0" y="577.0" width="180.0" height="58.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="222.0" y="598.5" font-size="13" fill="#222" font-weight="bold">ラウンドの経路のまとまり</text>
+<path d="M216.0,606.0 L384.0,606.0" stroke="#ccc" stroke-width="1"/>
+<text x="222.0" y="622.5" font-size="13" fill="#222">round-routes.ts</text>
+<rect x="811.0" y="568.0" width="154.0" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="823.0" y="589.5" font-size="13" fill="#222" font-weight="bold">経路の規則のまとまり</text>
+<path d="M817.0,597.0 L959.0,597.0" stroke="#ccc" stroke-width="1"/>
+<text x="823.0" y="613.5" font-size="13" fill="#222">auth-routes.ts</text>
+<text x="835.0" y="631.5" font-size="13" fill="#222">ƒ redirectFor</text>
+<rect x="478.0" y="716.0" width="245.0" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="490.0" y="737.5" font-size="13" fill="#222" font-weight="bold">要求ごとのセッション更新のまとまり</text>
+<path d="M484.0,745.0 L717.0,745.0" stroke="#ccc" stroke-width="1"/>
+<text x="490.0" y="761.5" font-size="13" fill="#222">session.ts</text>
+<text x="502.0" y="779.5" font-size="13" fill="#222">ƒ updateSession</text>
+<rect x="533.4" y="240.0" width="154.0" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="545.4" y="261.5" font-size="13" fill="#222" font-weight="bold">要求の入口のまとまり</text>
+<path d="M539.4,269.0 L681.4,269.0" stroke="#ccc" stroke-width="1"/>
+<text x="545.4" y="285.5" font-size="13" fill="#222">proxy.ts</text>
+<text x="557.4" y="303.5" font-size="13" fill="#222">ƒ proxy</text>
+<rect x="549.5" y="68.0" width="102.0" height="34.0" rx="10" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="600.5" y="90.0" font-size="13" fill="#222" text-anchor="middle">認証サービス</text>
+<circle cx="626.8" cy="716.0" r="4.0" fill="#000000"/>
+<polygon points="601.4,106.0 609.4,106.0 605.4,98.0" fill="#000000"/>
+<circle cx="549.3" cy="316.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="363.4,573.0 371.4,573.0 367.4,581.0" fill="#000000" fill-opacity="0.45"/>
+<circle cx="646.7" cy="316.0" r="4.0" fill="#000000"/>
+<polygon points="828.5,564.0 836.5,564.0 832.5,572.0" fill="#000000"/>
+<circle cx="603.7" cy="316.0" r="4.0" fill="#000000"/>
+<polygon points="586.5,712.0 594.5,712.0 590.5,720.0" fill="#000000"/>
+</g>
+<path d="M20.0,874.0 L56.0,874.0" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<polygon points="52.0,870.0 52.0,878.0 60.0,874.0" fill="#000000" fill-opacity="0.45"/>
+<text x="64.0" y="879.0" font-size="13" fill="#222">参照: 型、値、文書、設定などへの静的な依存</text>
+<path d="M366.3,874.0 L402.3,874.0" stroke="#000000" stroke-width="1.5"/>
+<polygon points="398.3,870.0 398.3,878.0 406.3,874.0" fill="#000000"/>
+<text x="410.3" y="879.0" font-size="13" fill="#222">呼び出し: 実行時に、処理する相手を呼ぶ</text>
+<path d="M20.0,898.0 L56.0,898.0" stroke="#8e24aa" stroke-width="1.5"/>
+<polygon points="52.0,894.0 52.0,902.0 60.0,898.0" fill="#8e24aa"/>
+<text x="64.0" y="903.0" font-size="13" fill="#222">注入経由の呼び出し: 実行時に、注入された実装を呼ぶ</text>
+<path d="M418.3,898.0 L454.3,898.0" stroke="#2e7d32" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M418.3,898.0 L454.3,898.0" stroke="#000000" stroke-width="1.5"/>
+<polygon points="450.3,894.0 450.3,902.0 458.3,898.0" fill="#000000"/>
+<text x="462.3" y="903.0" font-size="13" fill="#222">緑の背景: 増える関係(変更後)</text>
+<path d="M678.9,898.0 L706.9,898.0" stroke="#000000" stroke-width="1.5"/>
+<circle cx="678.9" cy="898.0" r="4.0" fill="#000000"/>
+<polygon points="702.9,894.0 702.9,902.0 710.9,898.0" fill="#000000"/>
+<text x="718.9" y="903.0" font-size="13" fill="#222">丸: 線の始点、三角: 線の終点</text>
+<text x="20.0" y="927.0" font-size="13" fill="#222">ƒ: 他のファイルから使える関数、c: 他のファイルから使える定数</text>
+</svg>

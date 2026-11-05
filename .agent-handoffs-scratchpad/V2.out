@@ -1,0 +1,14 @@
+[3/7] [chromium] › tests/e2e/auth/b-measure.spec.ts:68:5 › B37: パスワード変更後の遷移先
+[MEASURE] password step reached; sb cookies: ["sb-localhost-auth-token-flow-70b8aac0616aafd2b2e8a65a851c26a2-code-verifier","sb-localhost-auth-token-flows-code-verifier","sb-localhost-auth-token-code-verifier","sb-localhost-auth-token"]
+[chromium] › tests/e2e/auth/b-measure.spec.ts:68:5 › B37: パスワード変更後の遷移先
+[MEASURE] body text head: "サインイン\nサインイン\n\nパスワードをお忘れですか\n\nアカウントをお持ちでない方は サインアップ"
+[MEASURE] sb cookies after click: ["sb-localhost-auth-token-flow-70b8aac0616aafd2b2e8a65a851c26a2-code-verifier","sb-localhost-auth-token-flows-code-verifier","sb-localhost-auth-token-code-verifier","sb-localhost-auth-token"]
+[4/7] [chromium] › tests/e2e/auth/password-reset.spec.ts:73:5 › メールで本人確認してパスワードを変更すると、この端末と別の端末のサインインが終わり、新しいパスワードでだけサインインできる
+[chromium] › tests/e2e/auth/b-measure.spec.ts:68:5 › B37: パスワード変更後の遷移先
+[MEASURE] final URL: http://localhost:3100/signin
+[MEASURE] requests after submit: ["GET /signin?_rsc=4Pr3jFygW3IfPV3D rsc=1 prefetch=-"]
+[MEASURE] signin heading visible: true
+[MEASURE] body text head: "サインイン\nサインイン\n\nパスワードをお忘れですか\n\nアカウントをお持ちでない方は サインアップ"
+[MEASURE] sb cookies: []
+[MEASURE] goto /rounds -> http://localhost:3100/rounds
+  7 passed (29.9s)

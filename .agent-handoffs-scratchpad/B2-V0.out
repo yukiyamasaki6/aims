@@ -1,0 +1,93 @@
+[M 39w3] +0.5s REQ GET /signin rsc prefetch=1 nav=false
+[M 39w3] +0.5s RES 200 /signin location=-
+[M 39w3] +0.5s email step loaded
+[M 39w3] +0.5s REQ GET /signin rsc prefetch=1 nav=false
+[M 39w3] +0.5s REQ GET /signin rsc prefetch=1 nav=false
+[M 39w3] +0.5s REQ GET /signin rsc prefetch=1 nav=false
+[M 39w3] +0.5s REQ GET /signin rsc prefetch=1 nav=false
+[M 39w3] +0.5s RES 200 /signin location=-
+[M 39w3] +0.5s RES 200 /signin location=-
+[M 39w3] +0.5s RES 200 /signin location=-
+[M 39w3] +0.5s REQ GET /signin rsc prefetch=1 nav=false
+[M 39w3] +0.6s RES 200 /signin location=-
+[M 39w3] +0.6s RES 200 /signin location=-
+[M 39w3] +0.8s password step reached (recovery session exists)
+[M 39w3] +0.8s auth cookie present: true
+[M 39w3] +3.8s clicking link
+[M 39w3] +4.1s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w3] +4.1s RES 200 /rounds location=-
+[M 39w3] +4.1s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w3] +4.1s RES 200 /rounds location=-
+[M 39w3] +4.1s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w3] +4.1s RES 200 /rounds location=-
+[M 39w3] +4.1s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w3] +4.1s RES 200 /rounds location=-
+[M 39w3] +6.9s URL after click: http://localhost:3100/signin | signin heading: true
+[M 39w3] +6.9s REQ GET /rounds  prefetch=- nav=true
+[M 39w3] +6.9s RES 200 /rounds location=-
+[M 39w3] +7.1s REQ GET /rounds/new rsc prefetch=1 nav=false
+[M 39w3] +7.1s RES 200 /rounds/new location=-
+[M 39w3] +7.1s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w3] +7.1s RES 200 /rounds location=-
+[M 39w3] +7.1s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w3] +7.1s RES 200 /rounds location=-
+[M 39w3] +7.2s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w3] +7.2s RES 200 /rounds location=-
+[M 39w3] +7.2s REQ GET /rounds/new rsc prefetch=1 nav=false
+[M 39w3] +7.2s RES 200 /rounds/new location=-
+[M 39w3] +7.2s REQ GET /rounds/new rsc prefetch=1 nav=false
+[M 39w3] +7.2s RES 200 /rounds/new location=-
+[M 39w3] +7.2s REQ GET /rounds/new rsc prefetch=1 nav=false
+[M 39w3] +7.2s RES 200 /rounds/new location=-
+[M 39w3] +7.2s REQ GET /rounds/new rsc prefetch=1 nav=false
+[M 39w3] +7.2s RES 200 /rounds/new location=-
+[M 39w3] +7.3s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w3] +7.3s RES 200 /rounds location=-
+[M 39w3] +8.5s URL after reload: http://localhost:3100/rounds
+[M 39w40] +8.8s REQ GET /signin rsc prefetch=1 nav=false
+[M 39w40] +8.8s email step loaded
+[M 39w40] +8.8s RES 200 /signin location=-
+[M 39w40] +8.8s REQ GET /signin rsc prefetch=1 nav=false
+[M 39w40] +8.8s REQ GET /signin rsc prefetch=1 nav=false
+[M 39w40] +8.8s REQ GET /signin rsc prefetch=1 nav=false
+[M 39w40] +8.8s REQ GET /signin rsc prefetch=1 nav=false
+[M 39w40] +8.8s RES 200 /signin location=-
+[M 39w40] +8.8s RES 200 /signin location=-
+[M 39w40] +8.8s RES 200 /signin location=-
+[M 39w40] +8.8s REQ GET /signin rsc prefetch=1 nav=false
+[M 39w40] +8.8s RES 200 /signin location=-
+[M 39w40] +8.9s RES 200 /signin location=-
+[M 39w40] +9.2s password step reached (recovery session exists)
+[M 39w40] +9.2s auth cookie present: true
+[M 39w40] +49.2s clicking link
+[M 39w40] +49.5s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w40] +49.5s RES 200 /rounds location=-
+[M 39w40] +49.5s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w40] +49.5s RES 200 /rounds location=-
+[M 39w40] +49.5s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w40] +49.5s RES 200 /rounds location=-
+[M 39w40] +49.5s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w40] +49.5s RES 200 /rounds location=-
+[M 39w40] +52.3s URL after click: http://localhost:3100/signin | signin heading: true
+[M 39w40] +52.3s REQ GET /rounds  prefetch=- nav=true
+[M 39w40] +52.3s RES 200 /rounds location=-
+[M 39w40] +52.5s REQ GET /rounds/new rsc prefetch=1 nav=false
+[M 39w40] +52.5s RES 200 /rounds/new location=-
+[M 39w40] +52.5s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w40] +52.5s RES 200 /rounds location=-
+[M 39w40] +52.5s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w40] +52.5s RES 200 /rounds location=-
+[M 39w40] +52.5s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w40] +52.5s RES 200 /rounds location=-
+[M 39w40] +52.6s REQ GET /rounds/new rsc prefetch=1 nav=false
+[M 39w40] +52.6s RES 200 /rounds/new location=-
+[M 39w40] +52.6s REQ GET /rounds/new rsc prefetch=1 nav=false
+[M 39w40] +52.6s RES 200 /rounds/new location=-
+[M 39w40] +52.6s REQ GET /rounds/new rsc prefetch=1 nav=false
+[M 39w40] +52.6s RES 200 /rounds/new location=-
+[M 39w40] +52.6s REQ GET /rounds/new rsc prefetch=1 nav=false
+[M 39w40] +52.6s RES 200 /rounds/new location=-
+[M 39w40] +52.6s REQ GET /rounds rsc prefetch=1 nav=false
+[M 39w40] +52.6s RES 200 /rounds location=-
+[M 39w40] +53.9s URL after reload: http://localhost:3100/rounds
+  3 passed (1.2m)

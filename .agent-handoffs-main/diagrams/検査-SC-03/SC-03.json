@@ -1,0 +1,1146 @@
+{
+ "title": "SC-03 パスワードを再設定する",
+ "actors": [
+  {
+   "id": "screen",
+   "label": "画面"
+  },
+  {
+   "id": "proc",
+   "label": "再設定の手続き(規則を含む)"
+  },
+  {
+   "id": "srv",
+   "label": "サーバーアクション(要求のセッション)"
+  },
+  {
+   "id": "auth",
+   "label": "認証サービス(メール・DBを含む)"
+  },
+  {
+   "id": "nav",
+   "label": "遷移(ページ全体の読み込み)"
+  }
+ ],
+ "steps": [
+  {
+   "id": "start",
+   "actor": "screen",
+   "type": "start",
+   "label": "利用者が/reset-passwordを開く(メール入力の段階)"
+  },
+  {
+   "id": "widget",
+   "actor": "screen",
+   "type": "action",
+   "label": "Turnstileの結果(トークン、失効・失敗はnull)を状態に保持する"
+  },
+  {
+   "id": "s_email",
+   "actor": "screen",
+   "type": "action",
+   "label": "メールを入力して「認証コードを送信」を押す"
+  },
+  {
+   "id": "p_begin1",
+   "actor": "proc",
+   "type": "action",
+   "label": "送信の開始を命じる(描画を待たない最新の状態に適用)"
+  },
+  {
+   "id": "d_busy1",
+   "actor": "proc",
+   "type": "decision",
+   "label": "実行中か、段階がメール入力でないか"
+  },
+  {
+   "id": "d_email",
+   "actor": "proc",
+   "type": "decision",
+   "label": "メールは正しいか(空・254文字以内・形式)"
+  },
+  {
+   "id": "d_cap1",
+   "actor": "proc",
+   "type": "decision",
+   "label": "チェックは完了しているか"
+  },
+  {
+   "id": "p_started1",
+   "actor": "proc",
+   "type": "action",
+   "label": "送信中にして、メールとトークンを取り出す(登録の確認はしない)"
+  },
+  {
+   "id": "p_send",
+   "actor": "proc",
+   "type": "action",
+   "label": "認証コードの送付を頼む(目的は再設定、メール、トークン)"
+  },
+  {
+   "id": "a_rec",
+   "actor": "auth",
+   "type": "action",
+   "label": "接続を得て、resetPasswordForEmailをトークン付きで呼ぶ"
+  },
+  {
+   "id": "d_svc1",
+   "actor": "auth",
+   "type": "decision",
+   "label": "応答は"
+  },
+  {
+   "id": "a_ok1",
+   "actor": "auth",
+   "type": "action",
+   "label": "登録済みの利用者にはrecoveryのコードのメールを送る(未登録は何も送らず成功を返す。未実測)。受け付けられたを返す"
+  },
+  {
+   "id": "a_unreach1",
+   "actor": "auth",
+   "type": "action",
+   "label": "届かなかったを返す(呼び出しが投げた、接続を得られない)"
+  },
+  {
+   "id": "a_reject1",
+   "actor": "auth",
+   "type": "action",
+   "label": "通信の断なら届かなかった、他は種類へ写し(未知はother)、拒否されたを返す"
+  },
+  {
+   "id": "d_mount2",
+   "actor": "proc",
+   "type": "decision",
+   "label": "画面はまだ表示中か"
+  },
+  {
+   "id": "d_res1",
+   "actor": "proc",
+   "type": "decision",
+   "label": "結果は"
+  },
+  {
+   "id": "p_failed1",
+   "actor": "proc",
+   "type": "action",
+   "label": "failedを送る(トークンは未使用なので保持)"
+  },
+  {
+   "id": "s_show_failed1",
+   "actor": "screen",
+   "type": "action",
+   "label": "通信エラーを表示し、実行中を解除する"
+  },
+  {
+   "id": "p_refused1",
+   "actor": "proc",
+   "type": "action",
+   "label": "refusedを送る(トークンは使用済みなので消費)"
+  },
+  {
+   "id": "s_show_refused1",
+   "actor": "screen",
+   "type": "action",
+   "label": "失敗の文言を表示し、実行中を解除する"
+  },
+  {
+   "id": "s_reset1",
+   "actor": "screen",
+   "type": "action",
+   "label": "Turnstileをやり直す"
+  },
+  {
+   "id": "d_which",
+   "actor": "proc",
+   "type": "decision",
+   "label": "初回の送付か、再送か"
+  },
+  {
+   "id": "p_sent",
+   "actor": "proc",
+   "type": "action",
+   "label": "codeSentを送る(コード入力の段階へ。トークン消費、再送の待ち60秒)"
+  },
+  {
+   "id": "p_resent",
+   "actor": "proc",
+   "type": "action",
+   "label": "codeResentを送る(段階は変えない。トークン消費)"
+  },
+  {
+   "id": "s_reset2",
+   "actor": "screen",
+   "type": "action",
+   "label": "Turnstileをやり直す(再送用の新しいトークン)"
+  },
+  {
+   "id": "s_code",
+   "actor": "screen",
+   "type": "action",
+   "label": "コード入力の画面を表示し、再送の待ちを1秒ごとに減らす"
+  },
+  {
+   "id": "d_op",
+   "actor": "screen",
+   "type": "decision",
+   "label": "利用者の操作は"
+  },
+  {
+   "id": "s_verify",
+   "actor": "screen",
+   "type": "action",
+   "label": "メールのコードを入力して「確認」を押す"
+  },
+  {
+   "id": "p_begin2",
+   "actor": "proc",
+   "type": "action",
+   "label": "確認の開始を命じる"
+  },
+  {
+   "id": "d_busy2",
+   "actor": "proc",
+   "type": "decision",
+   "label": "実行中か、段階がコード入力でないか"
+  },
+  {
+   "id": "d_code",
+   "actor": "proc",
+   "type": "decision",
+   "label": "コードは6桁の数字か"
+  },
+  {
+   "id": "p_started2",
+   "actor": "proc",
+   "type": "action",
+   "label": "確認中にして、メールとコードを取り出す"
+  },
+  {
+   "id": "a_verify",
+   "actor": "auth",
+   "type": "action",
+   "label": "接続を得て、verifyOtpをtype=recoveryで呼ぶ"
+  },
+  {
+   "id": "d_svc2",
+   "actor": "auth",
+   "type": "decision",
+   "label": "応答は"
+  },
+  {
+   "id": "a_ok2",
+   "actor": "auth",
+   "type": "action",
+   "label": "コードが正しければ、端末にセッションが保存される(PASSWORD_RECOVERYが通知される)。受け付けられたを返す"
+  },
+  {
+   "id": "a_unreach2",
+   "actor": "auth",
+   "type": "action",
+   "label": "届かなかったを返す(呼び出しが投げた)"
+  },
+  {
+   "id": "a_reject2",
+   "actor": "auth",
+   "type": "action",
+   "label": "通信の断なら届かなかった、期限切れ・誤りは種類へ写し、拒否されたを返す"
+  },
+  {
+   "id": "d_mount3",
+   "actor": "proc",
+   "type": "decision",
+   "label": "画面はまだ表示中か"
+  },
+  {
+   "id": "d_res2",
+   "actor": "proc",
+   "type": "decision",
+   "label": "結果は(届かなかった・拒否は同じ失敗にまとめる)"
+  },
+  {
+   "id": "p_failed2",
+   "actor": "proc",
+   "type": "action",
+   "label": "failedを送る(種類つき)"
+  },
+  {
+   "id": "s_show_failed2",
+   "actor": "screen",
+   "type": "action",
+   "label": "失敗の文言を表示し、実行中を解除する"
+  },
+  {
+   "id": "p_confirmed",
+   "actor": "proc",
+   "type": "action",
+   "label": "codeConfirmedを送る(パスワード設定の段階へ)"
+  },
+  {
+   "id": "s_resend",
+   "actor": "screen",
+   "type": "action",
+   "label": "「再送」を押す"
+  },
+  {
+   "id": "p_begin3",
+   "actor": "proc",
+   "type": "action",
+   "label": "再送の開始を命じる"
+  },
+  {
+   "id": "d_busy3",
+   "actor": "proc",
+   "type": "decision",
+   "label": "実行中か、段階がコード入力でないか"
+  },
+  {
+   "id": "d_wait",
+   "actor": "proc",
+   "type": "decision",
+   "label": "再送の待ちは残っていないか"
+  },
+  {
+   "id": "d_cap2",
+   "actor": "proc",
+   "type": "decision",
+   "label": "チェックは完了しているか"
+  },
+  {
+   "id": "p_started3",
+   "actor": "proc",
+   "type": "action",
+   "label": "再送中にして、再送の待ちを60秒に戻す(結果を待たずに)"
+  },
+  {
+   "id": "s_back",
+   "actor": "screen",
+   "type": "action",
+   "label": "「戻る」を押す"
+  },
+  {
+   "id": "d_back",
+   "actor": "proc",
+   "type": "decision",
+   "label": "実行中の操作があるか"
+  },
+  {
+   "id": "p_backed",
+   "actor": "proc",
+   "type": "action",
+   "label": "emailStepReturnedを送る(メール入力の段階へ。メールは保持、トークンとエラーを消去)"
+  },
+  {
+   "id": "s_pwview",
+   "actor": "screen",
+   "type": "action",
+   "label": "パスワード設定の画面を表示する(「サインインに戻る」リンクつき)"
+  },
+  {
+   "id": "d_op2",
+   "actor": "screen",
+   "type": "decision",
+   "label": "利用者の操作は"
+  },
+  {
+   "id": "s_link",
+   "actor": "screen",
+   "type": "action",
+   "label": "「サインインに戻る」を押す(Linkによる画面遷移)"
+  },
+  {
+   "id": "e_link",
+   "actor": "screen",
+   "type": "end",
+   "label": "/signinの要求はproxyを通る(SC-05)。セッションがあるため/roundsへ送られるはず(未実測)。パスワードは変わらない"
+  },
+  {
+   "id": "s_pw",
+   "actor": "screen",
+   "type": "action",
+   "label": "新しいパスワードを入力して(表示を切り替えられる)「パスワードを変更」を押す"
+  },
+  {
+   "id": "p_begin4",
+   "actor": "proc",
+   "type": "action",
+   "label": "設定の開始を命じる"
+  },
+  {
+   "id": "d_busy4",
+   "actor": "proc",
+   "type": "decision",
+   "label": "実行中か、段階がパスワード設定でないか"
+  },
+  {
+   "id": "d_pw",
+   "actor": "proc",
+   "type": "decision",
+   "label": "パスワードは規則に合うか(空でない・8〜72文字・半角英数記号・英字と数字)"
+  },
+  {
+   "id": "p_started4",
+   "actor": "proc",
+   "type": "action",
+   "label": "設定中にして、パスワードを取り出す"
+  },
+  {
+   "id": "p_call",
+   "actor": "proc",
+   "type": "action",
+   "label": "パスワードの変更をサーバーアクションへ頼む(1回の要求)"
+  },
+  {
+   "id": "d_call",
+   "actor": "proc",
+   "type": "decision",
+   "label": "要求は届き、応答を受け取れたか"
+  },
+  {
+   "id": "p_unreach",
+   "actor": "proc",
+   "type": "action",
+   "label": "要求が届かない・応答を受け取れない・サーバーが投げた: 届かなかったにする"
+  },
+  {
+   "id": "sv_proxy",
+   "actor": "srv",
+   "type": "action",
+   "label": "要求がproxyを通る(Server Actionの呼び出しはリダイレクトされない。判定はSC-05)"
+  },
+  {
+   "id": "d_sv_client",
+   "actor": "srv",
+   "type": "decision",
+   "label": "要求のcookieから、利用者のセッションで認証サービスへの接続を作れたか"
+  },
+  {
+   "id": "a_update",
+   "actor": "auth",
+   "type": "action",
+   "label": "要求のセッションで、updateUserをパスワード付きで呼ぶ"
+  },
+  {
+   "id": "d_svc3",
+   "actor": "auth",
+   "type": "decision",
+   "label": "応答は"
+  },
+  {
+   "id": "a_ok3",
+   "actor": "auth",
+   "type": "action",
+   "label": "パスワードが設定される(他のセッションが同時に終わるかは認証サービスの版による。未確認)。受け付けられたを返す"
+  },
+  {
+   "id": "a_unreach3",
+   "actor": "auth",
+   "type": "action",
+   "label": "届かなかったを返す(呼び出しが投げた)"
+  },
+  {
+   "id": "a_reject3",
+   "actor": "auth",
+   "type": "action",
+   "label": "通信の断なら届かなかった、弱いパスワードなどは種類へ写し(未知はother)、拒否されたを返す"
+  },
+  {
+   "id": "d_sv_res",
+   "actor": "srv",
+   "type": "decision",
+   "label": "変更の結果は"
+  },
+  {
+   "id": "sv_signout",
+   "actor": "srv",
+   "type": "action",
+   "label": "全ての端末のサインインの終了を頼む(同じ接続)"
+  },
+  {
+   "id": "a_so",
+   "actor": "auth",
+   "type": "action",
+   "label": "signOutをscope=globalで呼ぶ"
+  },
+  {
+   "id": "d_so",
+   "actor": "auth",
+   "type": "decision",
+   "label": "応答は"
+  },
+  {
+   "id": "a_so_ok",
+   "actor": "auth",
+   "type": "action",
+   "label": "その利用者の全ての端末のセッションを消す。この接続のセッションも消え、応答のcookieに削除が書かれる"
+  },
+  {
+   "id": "a_so_ng",
+   "actor": "auth",
+   "type": "action",
+   "label": "失敗を返す(届かなかった・拒否)。他の端末が残る可能性がある。auth-js 2.112.3は、失敗でもこの接続のセッションを消し、応答のcookieに削除を書く"
+  },
+  {
+   "id": "sv_ret",
+   "actor": "srv",
+   "type": "action",
+   "label": "変更の結果(受け付けられた)を返す。終了の結果は見ない"
+  },
+  {
+   "id": "sv_ret2",
+   "actor": "srv",
+   "type": "action",
+   "label": "変更の結果(拒否・届かなかった)をそのまま返す。終了は頼まない"
+  },
+  {
+   "id": "d_mount4",
+   "actor": "proc",
+   "type": "decision",
+   "label": "画面はまだ表示中か(応答の後)"
+  },
+  {
+   "id": "d_res3",
+   "actor": "proc",
+   "type": "decision",
+   "label": "結果は(届かなかった・拒否は同じ失敗にまとめる)"
+  },
+  {
+   "id": "p_failed3",
+   "actor": "proc",
+   "type": "action",
+   "label": "failedを送る(種類つき)"
+  },
+  {
+   "id": "s_show_failed3",
+   "actor": "screen",
+   "type": "action",
+   "label": "失敗の文言を表示し、実行中を解除する"
+  },
+  {
+   "id": "d_mount5",
+   "actor": "proc",
+   "type": "decision",
+   "label": "画面はまだ表示中か(遷移の直前に再確認)"
+  },
+  {
+   "id": "p_set",
+   "actor": "proc",
+   "type": "action",
+   "label": "passwordSetを送る(以前のエラーを消す。設定中は維持)"
+  },
+  {
+   "id": "n_load",
+   "actor": "nav",
+   "type": "action",
+   "label": "ページ全体を読み込み直して/signinへ進む(履歴に残す)"
+  },
+  {
+   "id": "d_nav",
+   "actor": "nav",
+   "type": "decision",
+   "label": "遷移は投げなかったか"
+  },
+  {
+   "id": "p_failed_nav",
+   "actor": "proc",
+   "type": "action",
+   "label": "通信エラーとしてfailedを送る"
+  },
+  {
+   "id": "e_ok",
+   "actor": "nav",
+   "type": "end",
+   "label": "サインインの画面が開く。新しいパスワードでサインインする(SC-02)。端末のセッションは消えている"
+  },
+  {
+   "id": "s_invalid",
+   "actor": "screen",
+   "type": "action",
+   "label": "最初の1件をその欄に表示する(送信は欄ごと、再送は再送の欄)"
+  },
+  {
+   "id": "e_invalid",
+   "actor": "screen",
+   "type": "end",
+   "label": "認証せず終了(同じ段階で再操作できる)"
+  },
+  {
+   "id": "e_busy",
+   "actor": "proc",
+   "type": "end",
+   "label": "何もしない(重複させない)"
+  },
+  {
+   "id": "e_left",
+   "actor": "proc",
+   "type": "end",
+   "label": "状態を変えず、次へ進まない(送らない・遷移しない)。変更はサーバーで完了している"
+  },
+  {
+   "id": "e_retry",
+   "actor": "screen",
+   "type": "end",
+   "label": "同じ段階から再試行できる(トークンは保持)"
+  },
+  {
+   "id": "e_refused",
+   "actor": "screen",
+   "type": "end",
+   "label": "同じ段階で、新しいトークンで再操作できる"
+  },
+  {
+   "id": "e_nothing",
+   "actor": "proc",
+   "type": "end",
+   "label": "戻らず、そのまま(操作中は戻らない)"
+  }
+ ],
+ "flows": [
+  {
+   "from": "start",
+   "to": "widget"
+  },
+  {
+   "from": "widget",
+   "to": "s_email"
+  },
+  {
+   "from": "s_email",
+   "to": "p_begin1"
+  },
+  {
+   "from": "p_begin1",
+   "to": "d_busy1"
+  },
+  {
+   "from": "d_busy1",
+   "to": "e_busy",
+   "label": "はい"
+  },
+  {
+   "from": "d_busy1",
+   "to": "d_email",
+   "label": "いいえ"
+  },
+  {
+   "from": "d_email",
+   "to": "s_invalid",
+   "label": "誤り"
+  },
+  {
+   "from": "d_email",
+   "to": "d_cap1",
+   "label": "正しい"
+  },
+  {
+   "from": "d_cap1",
+   "to": "s_invalid",
+   "label": "未完了"
+  },
+  {
+   "from": "d_cap1",
+   "to": "p_started1",
+   "label": "完了"
+  },
+  {
+   "from": "s_invalid",
+   "to": "e_invalid"
+  },
+  {
+   "from": "p_started1",
+   "to": "p_send"
+  },
+  {
+   "from": "p_send",
+   "to": "a_rec"
+  },
+  {
+   "from": "a_rec",
+   "to": "d_svc1"
+  },
+  {
+   "from": "d_svc1",
+   "to": "a_ok1",
+   "label": "成功"
+  },
+  {
+   "from": "d_svc1",
+   "to": "a_unreach1",
+   "label": "投げた"
+  },
+  {
+   "from": "d_svc1",
+   "to": "a_reject1",
+   "label": "エラーが値で返った"
+  },
+  {
+   "from": "a_ok1",
+   "to": "d_mount2"
+  },
+  {
+   "from": "a_unreach1",
+   "to": "d_mount2"
+  },
+  {
+   "from": "a_reject1",
+   "to": "d_mount2"
+  },
+  {
+   "from": "d_mount2",
+   "to": "e_left",
+   "label": "離れた"
+  },
+  {
+   "from": "d_mount2",
+   "to": "d_res1",
+   "label": "表示中"
+  },
+  {
+   "from": "d_res1",
+   "to": "p_failed1",
+   "label": "届かなかった"
+  },
+  {
+   "from": "d_res1",
+   "to": "p_refused1",
+   "label": "拒否された"
+  },
+  {
+   "from": "d_res1",
+   "to": "d_which",
+   "label": "受け付けられた"
+  },
+  {
+   "from": "p_failed1",
+   "to": "s_show_failed1"
+  },
+  {
+   "from": "s_show_failed1",
+   "to": "e_retry"
+  },
+  {
+   "from": "p_refused1",
+   "to": "s_show_refused1"
+  },
+  {
+   "from": "s_show_refused1",
+   "to": "s_reset1"
+  },
+  {
+   "from": "s_reset1",
+   "to": "e_refused"
+  },
+  {
+   "from": "d_which",
+   "to": "p_sent",
+   "label": "初回"
+  },
+  {
+   "from": "d_which",
+   "to": "p_resent",
+   "label": "再送"
+  },
+  {
+   "from": "p_sent",
+   "to": "s_code"
+  },
+  {
+   "from": "p_resent",
+   "to": "s_reset2"
+  },
+  {
+   "from": "s_reset2",
+   "to": "d_op"
+  },
+  {
+   "from": "s_code",
+   "to": "d_op"
+  },
+  {
+   "from": "d_op",
+   "to": "s_verify",
+   "label": "コードを入力して確認"
+  },
+  {
+   "from": "d_op",
+   "to": "s_resend",
+   "label": "再送"
+  },
+  {
+   "from": "d_op",
+   "to": "s_back",
+   "label": "戻る"
+  },
+  {
+   "from": "s_verify",
+   "to": "p_begin2"
+  },
+  {
+   "from": "p_begin2",
+   "to": "d_busy2"
+  },
+  {
+   "from": "d_busy2",
+   "to": "e_busy",
+   "label": "はい"
+  },
+  {
+   "from": "d_busy2",
+   "to": "d_code",
+   "label": "いいえ"
+  },
+  {
+   "from": "d_code",
+   "to": "s_invalid",
+   "label": "誤り"
+  },
+  {
+   "from": "d_code",
+   "to": "p_started2",
+   "label": "正しい"
+  },
+  {
+   "from": "p_started2",
+   "to": "a_verify"
+  },
+  {
+   "from": "a_verify",
+   "to": "d_svc2"
+  },
+  {
+   "from": "d_svc2",
+   "to": "a_ok2",
+   "label": "成功"
+  },
+  {
+   "from": "d_svc2",
+   "to": "a_unreach2",
+   "label": "投げた"
+  },
+  {
+   "from": "d_svc2",
+   "to": "a_reject2",
+   "label": "エラーが値で返った"
+  },
+  {
+   "from": "a_ok2",
+   "to": "d_mount3"
+  },
+  {
+   "from": "a_unreach2",
+   "to": "d_mount3"
+  },
+  {
+   "from": "a_reject2",
+   "to": "d_mount3"
+  },
+  {
+   "from": "d_mount3",
+   "to": "e_left",
+   "label": "離れた"
+  },
+  {
+   "from": "d_mount3",
+   "to": "d_res2",
+   "label": "表示中"
+  },
+  {
+   "from": "d_res2",
+   "to": "p_failed2",
+   "label": "失敗"
+  },
+  {
+   "from": "d_res2",
+   "to": "p_confirmed",
+   "label": "受け付けられた"
+  },
+  {
+   "from": "p_failed2",
+   "to": "s_show_failed2"
+  },
+  {
+   "from": "s_show_failed2",
+   "to": "e_retry"
+  },
+  {
+   "from": "p_confirmed",
+   "to": "s_pwview"
+  },
+  {
+   "from": "s_resend",
+   "to": "p_begin3"
+  },
+  {
+   "from": "p_begin3",
+   "to": "d_busy3"
+  },
+  {
+   "from": "d_busy3",
+   "to": "e_busy",
+   "label": "はい"
+  },
+  {
+   "from": "d_busy3",
+   "to": "d_wait",
+   "label": "いいえ"
+  },
+  {
+   "from": "d_wait",
+   "to": "s_invalid",
+   "label": "待ちが残る"
+  },
+  {
+   "from": "d_wait",
+   "to": "d_cap2",
+   "label": "待ちなし"
+  },
+  {
+   "from": "d_cap2",
+   "to": "s_invalid",
+   "label": "未完了"
+  },
+  {
+   "from": "d_cap2",
+   "to": "p_started3",
+   "label": "完了"
+  },
+  {
+   "from": "p_started3",
+   "to": "p_send"
+  },
+  {
+   "from": "s_back",
+   "to": "d_back"
+  },
+  {
+   "from": "d_back",
+   "to": "e_nothing",
+   "label": "ある"
+  },
+  {
+   "from": "d_back",
+   "to": "p_backed",
+   "label": "ない"
+  },
+  {
+   "from": "p_backed",
+   "to": "widget"
+  },
+  {
+   "from": "s_pwview",
+   "to": "d_op2"
+  },
+  {
+   "from": "d_op2",
+   "to": "s_pw",
+   "label": "パスワードを変更"
+  },
+  {
+   "from": "d_op2",
+   "to": "s_link",
+   "label": "サインインに戻る"
+  },
+  {
+   "from": "s_link",
+   "to": "e_link"
+  },
+  {
+   "from": "s_pw",
+   "to": "p_begin4"
+  },
+  {
+   "from": "p_begin4",
+   "to": "d_busy4"
+  },
+  {
+   "from": "d_busy4",
+   "to": "e_busy",
+   "label": "はい"
+  },
+  {
+   "from": "d_busy4",
+   "to": "d_pw",
+   "label": "いいえ"
+  },
+  {
+   "from": "d_pw",
+   "to": "s_invalid",
+   "label": "不適合"
+  },
+  {
+   "from": "d_pw",
+   "to": "p_started4",
+   "label": "適合"
+  },
+  {
+   "from": "p_started4",
+   "to": "p_call"
+  },
+  {
+   "from": "p_call",
+   "to": "d_call"
+  },
+  {
+   "from": "d_call",
+   "to": "sv_proxy",
+   "label": "届いた(サーバーが処理する)"
+  },
+  {
+   "from": "d_call",
+   "to": "p_unreach",
+   "label": "届かない・受け取れない"
+  },
+  {
+   "from": "p_unreach",
+   "to": "d_mount4"
+  },
+  {
+   "from": "sv_proxy",
+   "to": "d_sv_client"
+  },
+  {
+   "from": "d_sv_client",
+   "to": "a_update",
+   "label": "作れた"
+  },
+  {
+   "from": "d_sv_client",
+   "to": "p_unreach",
+   "label": "投げた"
+  },
+  {
+   "from": "a_update",
+   "to": "d_svc3"
+  },
+  {
+   "from": "d_svc3",
+   "to": "a_ok3",
+   "label": "成功"
+  },
+  {
+   "from": "d_svc3",
+   "to": "a_unreach3",
+   "label": "投げた"
+  },
+  {
+   "from": "d_svc3",
+   "to": "a_reject3",
+   "label": "エラーが値で返った"
+  },
+  {
+   "from": "a_ok3",
+   "to": "d_sv_res"
+  },
+  {
+   "from": "a_unreach3",
+   "to": "d_sv_res"
+  },
+  {
+   "from": "a_reject3",
+   "to": "d_sv_res"
+  },
+  {
+   "from": "d_sv_res",
+   "to": "sv_signout",
+   "label": "受け付けられた"
+  },
+  {
+   "from": "d_sv_res",
+   "to": "sv_ret2",
+   "label": "拒否・届かなかった"
+  },
+  {
+   "from": "sv_signout",
+   "to": "a_so"
+  },
+  {
+   "from": "a_so",
+   "to": "d_so"
+  },
+  {
+   "from": "d_so",
+   "to": "a_so_ok",
+   "label": "成功"
+  },
+  {
+   "from": "d_so",
+   "to": "a_so_ng",
+   "label": "失敗"
+  },
+  {
+   "from": "a_so_ok",
+   "to": "sv_ret"
+  },
+  {
+   "from": "a_so_ng",
+   "to": "sv_ret"
+  },
+  {
+   "from": "sv_ret",
+   "to": "d_mount4"
+  },
+  {
+   "from": "sv_ret2",
+   "to": "d_mount4"
+  },
+  {
+   "from": "d_mount4",
+   "to": "e_left",
+   "label": "離れた"
+  },
+  {
+   "from": "d_mount4",
+   "to": "d_res3",
+   "label": "表示中"
+  },
+  {
+   "from": "d_res3",
+   "to": "p_failed3",
+   "label": "失敗"
+  },
+  {
+   "from": "d_res3",
+   "to": "d_mount5",
+   "label": "受け付けられた"
+  },
+  {
+   "from": "p_failed3",
+   "to": "s_show_failed3"
+  },
+  {
+   "from": "s_show_failed3",
+   "to": "e_retry"
+  },
+  {
+   "from": "d_mount5",
+   "to": "e_left",
+   "label": "離れた"
+  },
+  {
+   "from": "d_mount5",
+   "to": "p_set",
+   "label": "表示中"
+  },
+  {
+   "from": "p_set",
+   "to": "n_load"
+  },
+  {
+   "from": "n_load",
+   "to": "d_nav"
+  },
+  {
+   "from": "d_nav",
+   "to": "e_ok",
+   "label": "成功"
+  },
+  {
+   "from": "d_nav",
+   "to": "p_failed_nav",
+   "label": "投げた"
+  },
+  {
+   "from": "p_failed_nav",
+   "to": "s_show_failed3"
+  }
+ ]
+}

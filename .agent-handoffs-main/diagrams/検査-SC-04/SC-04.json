@@ -1,0 +1,528 @@
+{
+ "title": "SC-04 サインアウトする",
+ "actors": [
+  {
+   "id": "screen",
+   "label": "画面(サインアウトのボタンと確認ダイアログ)"
+  },
+  {
+   "id": "proc",
+   "label": "サインアウトの手続き(規則を含む)"
+  },
+  {
+   "id": "auth",
+   "label": "認証サービスの窓口(auth-jsと端末のセッション)"
+  },
+  {
+   "id": "svc",
+   "label": "認証サービス(サーバー)"
+  },
+  {
+   "id": "nav",
+   "label": "遷移(ページ全体の読み込み)"
+  }
+ ],
+ "steps": [
+  {
+   "id": "start",
+   "actor": "screen",
+   "type": "start",
+   "label": "利用者がレフトパネル下端の「サインアウト」を押す"
+  },
+  {
+   "id": "s_open",
+   "actor": "screen",
+   "type": "action",
+   "label": "確認ダイアログを開く(まだ実行しない)"
+  },
+  {
+   "id": "d_choice",
+   "actor": "screen",
+   "type": "decision",
+   "label": "利用者の操作は"
+  },
+  {
+   "id": "d_closing",
+   "actor": "screen",
+   "type": "decision",
+   "label": "実行中か(閉じる操作の可否)"
+  },
+  {
+   "id": "e_noclose",
+   "actor": "screen",
+   "type": "end",
+   "label": "閉じない。ダイアログは開いたまま"
+  },
+  {
+   "id": "s_close",
+   "actor": "screen",
+   "type": "action",
+   "label": "ダイアログを閉じ、表示中の失敗を消す"
+  },
+  {
+   "id": "e_cancel",
+   "actor": "screen",
+   "type": "end",
+   "label": "何も変わらない(取り消し)"
+  },
+  {
+   "id": "s_confirm",
+   "actor": "screen",
+   "type": "action",
+   "label": "実行中の表示にし、失敗を消して、手続きにサインアウトを頼む(画面が表示中かを答える関数を渡す)"
+  },
+  {
+   "id": "p_begin",
+   "actor": "proc",
+   "type": "decision",
+   "label": "手続きの状態は実行中か(開始の命令)"
+  },
+  {
+   "id": "p_busy",
+   "actor": "proc",
+   "type": "action",
+   "label": "実行中の結果(busy)を返す。状態は変えない"
+  },
+  {
+   "id": "e_busy",
+   "actor": "screen",
+   "type": "end",
+   "label": "画面は何も変えない(最初の呼び出しの結果が実行中の表示を解く)"
+  },
+  {
+   "id": "p_start",
+   "actor": "proc",
+   "type": "action",
+   "label": "実行中の状態にして、この端末のサインアウトを頼む"
+  },
+  {
+   "id": "a_call",
+   "actor": "auth",
+   "type": "action",
+   "label": "接続を取得し、signOut(scope: local)を呼ぶ"
+  },
+  {
+   "id": "d_thrown",
+   "actor": "auth",
+   "type": "decision",
+   "label": "呼び出しは投げたか(接続を得られないなど)"
+  },
+  {
+   "id": "a_thrown",
+   "actor": "auth",
+   "type": "action",
+   "label": "「届かなかった」の結果にする"
+  },
+  {
+   "id": "d_load",
+   "actor": "auth",
+   "type": "decision",
+   "label": "保存先のセッションを読めたか(期限切れなら更新を試みる)"
+  },
+  {
+   "id": "a_keep",
+   "actor": "auth",
+   "type": "action",
+   "label": "保存先を消さずにエラーを返す(更新が通信失敗のとき)"
+  },
+  {
+   "id": "d_tok",
+   "actor": "auth",
+   "type": "decision",
+   "label": "アクセストークンはあるか"
+  },
+  {
+   "id": "v_logout",
+   "actor": "svc",
+   "type": "action",
+   "label": "この端末のセッションを無効にする(/logout?scope=local)"
+  },
+  {
+   "id": "d_resp",
+   "actor": "svc",
+   "type": "decision",
+   "label": "応答は"
+  },
+  {
+   "id": "a_mem",
+   "actor": "auth",
+   "type": "action",
+   "label": "サービスのエラーを覚える(401・403・404以外のエラーでも、保存先は消す)"
+  },
+  {
+   "id": "a_rm",
+   "actor": "auth",
+   "type": "action",
+   "label": "保存先のセッションを消し、SIGNED_OUTを購読者へ通知する(通知の完了まで待つ)。通知先の更新(識別=SC-08、記録=SC-55、見張り=SC-06)はこの図の外"
+  },
+  {
+   "id": "p_watch",
+   "actor": "proc",
+   "type": "action",
+   "label": "見張りがSIGNED_OUTを受けるが、実行中のため遷移しない(SC-06)"
+  },
+  {
+   "id": "d_after",
+   "actor": "auth",
+   "type": "decision",
+   "label": "消す前にサービスのエラーを受けていたか"
+  },
+  {
+   "id": "a_ok",
+   "actor": "auth",
+   "type": "action",
+   "label": "「受け付けられた」の結果にする"
+  },
+  {
+   "id": "a_map",
+   "actor": "auth",
+   "type": "action",
+   "label": "エラーを失敗の種類に写し「拒否」の結果にする(通信断はunreachable、リクエスト過多はrate_limited、それ以外はother)"
+  },
+  {
+   "id": "p_fold",
+   "actor": "proc",
+   "type": "action",
+   "label": "結果を失敗の有無にまとめる(受け付け=なし、拒否=その失敗、届かなかった=通信エラー)"
+  },
+  {
+   "id": "d_mount1",
+   "actor": "proc",
+   "type": "decision",
+   "label": "画面はまだ表示中か(読み取りの前)"
+  },
+  {
+   "id": "a_read",
+   "actor": "auth",
+   "type": "action",
+   "label": "サインインの状態を読む(保存先のセッション無し=未認証、有効=認証済み、更新が通信失敗=不明。投げない)"
+  },
+  {
+   "id": "d_mount2",
+   "actor": "proc",
+   "type": "decision",
+   "label": "画面はまだ表示中か(読み取りの後)"
+  },
+  {
+   "id": "p_discard",
+   "actor": "proc",
+   "type": "action",
+   "label": "実行中を解き、結果を破棄する(discarded)。サインアウトの依頼は取り消さない"
+  },
+  {
+   "id": "s_discard",
+   "actor": "screen",
+   "type": "action",
+   "label": "画面は状態を更新しない"
+  },
+  {
+   "id": "e_discard",
+   "actor": "screen",
+   "type": "end",
+   "label": "遷移しない。端末のセッションは既に消えている"
+  },
+  {
+   "id": "d_status",
+   "actor": "proc",
+   "type": "decision",
+   "label": "呼び出しの後に、この端末は未認証と確かめられたか"
+  },
+  {
+   "id": "p_done",
+   "actor": "proc",
+   "type": "action",
+   "label": "実行中を解き、完了を返す(呼び出しが失敗を返していても、失敗は示さない)"
+  },
+  {
+   "id": "d_left",
+   "actor": "proc",
+   "type": "decision",
+   "label": "サインインへの遷移をすでに始めているか"
+  },
+  {
+   "id": "p_go",
+   "actor": "proc",
+   "type": "action",
+   "label": "遷移済みにして、遷移先を求める(遷移元なしの/signin)"
+  },
+  {
+   "id": "n_replace",
+   "actor": "nav",
+   "type": "action",
+   "label": "/signinへページ全体を読み込んで置き換える(履歴に残さない)"
+  },
+  {
+   "id": "d_navthrow",
+   "actor": "proc",
+   "type": "decision",
+   "label": "遷移の呼び出しは投げたか"
+  },
+  {
+   "id": "p_swallow",
+   "actor": "proc",
+   "type": "action",
+   "label": "扱わない。完了を返す"
+  },
+  {
+   "id": "s_ok",
+   "actor": "screen",
+   "type": "action",
+   "label": "完了を受けて、実行中を解き、ダイアログを閉じる"
+  },
+  {
+   "id": "e_ok",
+   "actor": "screen",
+   "type": "end",
+   "label": "/signinが開く(遷移元なし。前の画面の状態は捨てられる)"
+  },
+  {
+   "id": "p_fail",
+   "actor": "proc",
+   "type": "action",
+   "label": "実行中を解き、失敗を返す(理由は呼び出しの失敗、無ければ通信エラー)"
+  },
+  {
+   "id": "s_err",
+   "actor": "screen",
+   "type": "action",
+   "label": "実行中を解き、失敗の種類を文言にして、ダイアログ内に表示する。ダイアログは開いたまま"
+  }
+ ],
+ "flows": [
+  {
+   "from": "start",
+   "to": "s_open"
+  },
+  {
+   "from": "s_open",
+   "to": "d_choice"
+  },
+  {
+   "from": "d_choice",
+   "to": "d_closing",
+   "label": "キャンセル・Esc・背景"
+  },
+  {
+   "from": "d_closing",
+   "to": "e_noclose",
+   "label": "はい"
+  },
+  {
+   "from": "d_closing",
+   "to": "s_close",
+   "label": "いいえ"
+  },
+  {
+   "from": "s_close",
+   "to": "e_cancel"
+  },
+  {
+   "from": "d_choice",
+   "to": "s_confirm",
+   "label": "「サインアウトする」"
+  },
+  {
+   "from": "s_confirm",
+   "to": "p_begin"
+  },
+  {
+   "from": "p_begin",
+   "to": "p_busy",
+   "label": "はい"
+  },
+  {
+   "from": "p_busy",
+   "to": "e_busy"
+  },
+  {
+   "from": "p_begin",
+   "to": "p_start",
+   "label": "いいえ"
+  },
+  {
+   "from": "p_start",
+   "to": "a_call"
+  },
+  {
+   "from": "a_call",
+   "to": "d_thrown"
+  },
+  {
+   "from": "d_thrown",
+   "to": "a_thrown",
+   "label": "はい"
+  },
+  {
+   "from": "d_thrown",
+   "to": "d_load",
+   "label": "いいえ"
+  },
+  {
+   "from": "d_load",
+   "to": "a_keep",
+   "label": "読めない"
+  },
+  {
+   "from": "d_load",
+   "to": "d_tok",
+   "label": "読めた(セッション無しを含む)"
+  },
+  {
+   "from": "d_tok",
+   "to": "v_logout",
+   "label": "ある"
+  },
+  {
+   "from": "d_tok",
+   "to": "a_rm",
+   "label": "無い"
+  },
+  {
+   "from": "v_logout",
+   "to": "d_resp"
+  },
+  {
+   "from": "d_resp",
+   "to": "a_rm",
+   "label": "成功・401・403・404"
+  },
+  {
+   "from": "d_resp",
+   "to": "a_mem",
+   "label": "通信失敗・その他のエラー"
+  },
+  {
+   "from": "a_mem",
+   "to": "a_rm"
+  },
+  {
+   "from": "a_rm",
+   "to": "p_watch"
+  },
+  {
+   "from": "p_watch",
+   "to": "d_after"
+  },
+  {
+   "from": "d_after",
+   "to": "a_ok",
+   "label": "いいえ"
+  },
+  {
+   "from": "d_after",
+   "to": "a_map",
+   "label": "はい"
+  },
+  {
+   "from": "a_keep",
+   "to": "a_map"
+  },
+  {
+   "from": "a_thrown",
+   "to": "p_fold"
+  },
+  {
+   "from": "a_ok",
+   "to": "p_fold"
+  },
+  {
+   "from": "a_map",
+   "to": "p_fold"
+  },
+  {
+   "from": "p_fold",
+   "to": "d_mount1"
+  },
+  {
+   "from": "d_mount1",
+   "to": "a_read",
+   "label": "はい"
+  },
+  {
+   "from": "d_mount1",
+   "to": "p_discard",
+   "label": "いいえ(読まない)"
+  },
+  {
+   "from": "a_read",
+   "to": "d_mount2"
+  },
+  {
+   "from": "d_mount2",
+   "to": "d_status",
+   "label": "はい"
+  },
+  {
+   "from": "d_mount2",
+   "to": "p_discard",
+   "label": "いいえ"
+  },
+  {
+   "from": "p_discard",
+   "to": "s_discard"
+  },
+  {
+   "from": "s_discard",
+   "to": "e_discard"
+  },
+  {
+   "from": "d_status",
+   "to": "p_done",
+   "label": "はい(未認証)"
+  },
+  {
+   "from": "d_status",
+   "to": "p_fail",
+   "label": "いいえ(認証済み・不明)"
+  },
+  {
+   "from": "p_done",
+   "to": "d_left"
+  },
+  {
+   "from": "d_left",
+   "to": "p_go",
+   "label": "いいえ"
+  },
+  {
+   "from": "d_left",
+   "to": "s_ok",
+   "label": "はい(移らない)"
+  },
+  {
+   "from": "p_go",
+   "to": "n_replace"
+  },
+  {
+   "from": "n_replace",
+   "to": "d_navthrow"
+  },
+  {
+   "from": "d_navthrow",
+   "to": "p_swallow",
+   "label": "はい"
+  },
+  {
+   "from": "d_navthrow",
+   "to": "s_ok",
+   "label": "いいえ"
+  },
+  {
+   "from": "p_swallow",
+   "to": "s_ok"
+  },
+  {
+   "from": "s_ok",
+   "to": "e_ok"
+  },
+  {
+   "from": "p_fail",
+   "to": "s_err"
+  },
+  {
+   "from": "s_err",
+   "to": "d_choice",
+   "label": "利用者が再操作"
+  }
+ ]
+}

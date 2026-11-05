@@ -1,0 +1,575 @@
+{
+ "title": "SC-07 通信復帰の購読で、未認証を確かめて/signinへ移る(購読の始め方と、始めた時・通信が戻った時の確認)",
+ "actors": [
+  {
+   "id": "ent",
+   "label": "入口と通信状態((main)/layout.tsx、connectivity)"
+  },
+  {
+   "id": "proc",
+   "label": "見張りの手続き(session.ts)"
+  },
+  {
+   "id": "conv",
+   "label": "窓口の変換(supabase-auth.tsの読み取り)"
+  },
+  {
+   "id": "auth",
+   "label": "認証サービスの窓口(auth-jsと端末のセッション)"
+  },
+  {
+   "id": "srv",
+   "label": "認証サービス(サーバー)"
+  },
+  {
+   "id": "rule",
+   "label": "規則(auth-change、session-end-flow、auth-routes)"
+  },
+  {
+   "id": "nav",
+   "label": "遷移(ページ全体の読み込み)"
+  }
+ ],
+ "steps": [
+  {
+   "id": "start",
+   "actor": "ent",
+   "type": "start",
+   "label": "認証が必要な画面((main)配下)が表示される(マウント)"
+  },
+  {
+   "id": "e_watch",
+   "actor": "ent",
+   "type": "action",
+   "label": "表示の間だけ見張りを始める(useEffectでwatch()。通信状態の部品は入口で作って渡してある)"
+  },
+  {
+   "id": "p_sub",
+   "actor": "proc",
+   "type": "action",
+   "label": "認証状態の購読を登録する(発火後の経路はSC-06)"
+  },
+  {
+   "id": "p_on",
+   "actor": "proc",
+   "type": "action",
+   "label": "通信復帰の購読を登録する(戻ったら確認を始める)"
+  },
+  {
+   "id": "n_listen",
+   "actor": "ent",
+   "type": "action",
+   "label": "onlineイベントの待ち受けをwindowに登録する"
+  },
+  {
+   "id": "p_check",
+   "actor": "proc",
+   "type": "action",
+   "label": "確認を始める(check。始めた時と、通信が戻った時)"
+  },
+  {
+   "id": "n_read",
+   "actor": "ent",
+   "type": "action",
+   "label": "通信状態を返す(navigator.onLineがfalseのときだけオフライン)"
+  },
+  {
+   "id": "p_off",
+   "actor": "proc",
+   "type": "decision",
+   "label": "オフラインか"
+  },
+  {
+   "id": "p_req",
+   "actor": "proc",
+   "type": "action",
+   "label": "サインインの状態の読み取りを頼む(readSession。更新の強制はしない)"
+  },
+  {
+   "id": "c_get",
+   "actor": "conv",
+   "type": "action",
+   "label": "保存先のセッションの読み取りを窓口に頼む(getSession。投げたら不明にする)"
+  },
+  {
+   "id": "a_load",
+   "actor": "auth",
+   "type": "action",
+   "label": "端末の保存先(cookie)からセッションを読む"
+  },
+  {
+   "id": "a_has",
+   "actor": "auth",
+   "type": "decision",
+   "label": "保存先にセッションはあるか"
+  },
+  {
+   "id": "a_exp",
+   "actor": "auth",
+   "type": "decision",
+   "label": "アクセストークンの期限が近い(残り90秒未満)か"
+  },
+  {
+   "id": "a_refresh",
+   "actor": "auth",
+   "type": "action",
+   "label": "更新トークンで、トークンの更新を認証サービスに頼む"
+  },
+  {
+   "id": "s_ref",
+   "actor": "srv",
+   "type": "action",
+   "label": "更新を判定し、新しいトークンか、拒否か、失敗を返す"
+  },
+  {
+   "id": "a_res",
+   "actor": "auth",
+   "type": "decision",
+   "label": "更新の結果は"
+  },
+  {
+   "id": "a_save",
+   "actor": "auth",
+   "type": "action",
+   "label": "新しいセッションを保存先へ書く(TOKEN_REFRESHEDを通知。受け手はSC-06、SC-08、SC-55)"
+  },
+  {
+   "id": "a_valid",
+   "actor": "auth",
+   "type": "decision",
+   "label": "アクセストークンはまだ有効で、保存先のセッションが変わっていないか"
+  },
+  {
+   "id": "a_kind",
+   "actor": "auth",
+   "type": "decision",
+   "label": "失敗の種類は"
+  },
+  {
+   "id": "a_disc",
+   "actor": "auth",
+   "type": "action",
+   "label": "更新の結果を捨てる(破棄のエラーを返す。保存先は別の書き手が書いたまま)"
+  },
+  {
+   "id": "a_clear",
+   "actor": "auth",
+   "type": "action",
+   "label": "保存先を空にし、SIGNED_OUTを通知する(見張りの購読者もこの通知で喪失として移ろうとする。SC-06)"
+  },
+  {
+   "id": "a_ret",
+   "actor": "auth",
+   "type": "action",
+   "label": "セッションとエラーを返す"
+  },
+  {
+   "id": "c_judge",
+   "actor": "conv",
+   "type": "decision",
+   "label": "取得結果の判定"
+  },
+  {
+   "id": "c_auth",
+   "actor": "conv",
+   "type": "action",
+   "label": "認証済みを返す(利用者ID付き)"
+  },
+  {
+   "id": "c_unauth",
+   "actor": "conv",
+   "type": "action",
+   "label": "未認証を返す"
+  },
+  {
+   "id": "c_unknown",
+   "actor": "conv",
+   "type": "action",
+   "label": "不明を返す(確かめられない)"
+  },
+  {
+   "id": "c_clear",
+   "actor": "conv",
+   "type": "action",
+   "label": "保存先を空にする(この端末のサインアウトを呼ぶ。SIGNED_OUTを通知)"
+  },
+  {
+   "id": "p_disp",
+   "actor": "proc",
+   "type": "decision",
+   "label": "見張りはまだ続いているか(解除されていないか)"
+  },
+  {
+   "id": "r_lost",
+   "actor": "rule",
+   "type": "decision",
+   "label": "確かめた結果は未認証か(lostByStatus)"
+  },
+  {
+   "id": "w_wait",
+   "actor": "ent",
+   "type": "decision",
+   "label": "移らずに待つ。次に起きるのは"
+  },
+  {
+   "id": "e_unmount",
+   "actor": "ent",
+   "type": "end",
+   "label": "見張りが解除される(アンマウント。解除の中身はSC-12)"
+  },
+  {
+   "id": "p_lose",
+   "actor": "proc",
+   "type": "action",
+   "label": "喪失として、今の場所を遷移元の候補にして、遷移の可否を規則に尋ねる"
+  },
+  {
+   "id": "n_here",
+   "actor": "nav",
+   "type": "action",
+   "label": "今の場所(パスとクエリ)を返す(window.location)"
+  },
+  {
+   "id": "r_running",
+   "actor": "rule",
+   "type": "decision",
+   "label": "サインアウトを実行中か"
+  },
+  {
+   "id": "e_running",
+   "actor": "rule",
+   "type": "end",
+   "label": "移らない(サインアウトが、完了後に遷移元なしで移るかを判定する。SC-04)"
+  },
+  {
+   "id": "r_left",
+   "actor": "rule",
+   "type": "decision",
+   "label": "サインインへの遷移をすでに始めているか"
+  },
+  {
+   "id": "e_left",
+   "actor": "rule",
+   "type": "end",
+   "label": "移らない(遷移は1回だけ。認証の通知や別の確認が先に移している)"
+  },
+  {
+   "id": "r_mark",
+   "actor": "rule",
+   "type": "action",
+   "label": "遷移を始めた状態にする(left=true)"
+  },
+  {
+   "id": "r_valid",
+   "actor": "rule",
+   "type": "decision",
+   "label": "今の場所は遷移元として有効か(長さ、先頭の//、制御文字、同一オリジン、保護の範囲)"
+  },
+  {
+   "id": "r_default",
+   "actor": "rule",
+   "type": "decision",
+   "label": "有効な場所は、既定の行き先(/rounds)そのものか"
+  },
+  {
+   "id": "r_plain",
+   "actor": "rule",
+   "type": "action",
+   "label": "移る先を/signin(遷移元なし)にする"
+  },
+  {
+   "id": "r_with",
+   "actor": "rule",
+   "type": "action",
+   "label": "移る先を/signin?returnTo=<符号化した今の場所>にする"
+  },
+  {
+   "id": "p_go",
+   "actor": "proc",
+   "type": "action",
+   "label": "移る先を受け、ページの置き換えを頼む"
+  },
+  {
+   "id": "n_replace",
+   "actor": "nav",
+   "type": "action",
+   "label": "ページ全体を移る先へ置き換える(履歴に残さない)"
+  },
+  {
+   "id": "end",
+   "actor": "nav",
+   "type": "end",
+   "label": "/signinの読み込みへ(表示はSC-02、オフラインの応答はSC-15)"
+  }
+ ],
+ "flows": [
+  {
+   "from": "start",
+   "to": "e_watch"
+  },
+  {
+   "from": "e_watch",
+   "to": "p_sub"
+  },
+  {
+   "from": "p_sub",
+   "to": "p_on"
+  },
+  {
+   "from": "p_on",
+   "to": "n_listen"
+  },
+  {
+   "from": "n_listen",
+   "to": "p_check"
+  },
+  {
+   "from": "p_check",
+   "to": "n_read"
+  },
+  {
+   "from": "n_read",
+   "to": "p_off"
+  },
+  {
+   "from": "p_off",
+   "to": "w_wait",
+   "label": "オフライン"
+  },
+  {
+   "from": "p_off",
+   "to": "p_req",
+   "label": "オフラインでない"
+  },
+  {
+   "from": "p_req",
+   "to": "c_get"
+  },
+  {
+   "from": "c_get",
+   "to": "a_load"
+  },
+  {
+   "from": "a_load",
+   "to": "a_has"
+  },
+  {
+   "from": "a_has",
+   "to": "a_ret",
+   "label": "ない"
+  },
+  {
+   "from": "a_has",
+   "to": "a_exp",
+   "label": "ある"
+  },
+  {
+   "from": "a_exp",
+   "to": "a_ret",
+   "label": "近くない"
+  },
+  {
+   "from": "a_exp",
+   "to": "a_refresh",
+   "label": "近い"
+  },
+  {
+   "from": "a_refresh",
+   "to": "s_ref"
+  },
+  {
+   "from": "s_ref",
+   "to": "a_res"
+  },
+  {
+   "from": "a_res",
+   "to": "a_save",
+   "label": "成功"
+  },
+  {
+   "from": "a_res",
+   "to": "a_valid",
+   "label": "失敗"
+  },
+  {
+   "from": "a_save",
+   "to": "a_ret"
+  },
+  {
+   "from": "a_valid",
+   "to": "a_ret",
+   "label": "有効で変わっていない"
+  },
+  {
+   "from": "a_valid",
+   "to": "a_kind",
+   "label": "期限切れ、または保存先が変わった"
+  },
+  {
+   "from": "a_kind",
+   "to": "a_ret",
+   "label": "通信失敗(再試行可能)"
+  },
+  {
+   "from": "a_kind",
+   "to": "a_disc",
+   "label": "破棄(更新の間に別の書き手が保存先を書き換えた)"
+  },
+  {
+   "from": "a_kind",
+   "to": "a_clear",
+   "label": "拒否"
+  },
+  {
+   "from": "a_disc",
+   "to": "a_ret"
+  },
+  {
+   "from": "a_clear",
+   "to": "a_ret"
+  },
+  {
+   "from": "a_ret",
+   "to": "c_judge"
+  },
+  {
+   "from": "c_judge",
+   "to": "c_auth",
+   "label": "セッションと利用者がある"
+  },
+  {
+   "from": "c_judge",
+   "to": "c_unauth",
+   "label": "セッションが無く、エラーも無い"
+  },
+  {
+   "from": "c_judge",
+   "to": "c_unknown",
+   "label": "セッションが無く、通信失敗のエラー"
+  },
+  {
+   "from": "c_judge",
+   "to": "c_clear",
+   "label": "同じ拒否のエラーが続いた"
+  },
+  {
+   "from": "c_judge",
+   "to": "c_get",
+   "label": "別のエラー(破棄、または拒否の1回目)。読み直す"
+  },
+  {
+   "from": "c_clear",
+   "to": "c_unauth"
+  },
+  {
+   "from": "c_auth",
+   "to": "p_disp"
+  },
+  {
+   "from": "c_unauth",
+   "to": "p_disp"
+  },
+  {
+   "from": "c_unknown",
+   "to": "p_disp"
+  },
+  {
+   "from": "p_disp",
+   "to": "e_unmount",
+   "label": "解除済み"
+  },
+  {
+   "from": "p_disp",
+   "to": "r_lost",
+   "label": "続いている"
+  },
+  {
+   "from": "r_lost",
+   "to": "p_lose",
+   "label": "未認証"
+  },
+  {
+   "from": "r_lost",
+   "to": "w_wait",
+   "label": "認証済み、または不明"
+  },
+  {
+   "from": "w_wait",
+   "to": "p_check",
+   "label": "通信が戻る(onlineイベント)"
+  },
+  {
+   "from": "w_wait",
+   "to": "e_unmount",
+   "label": "画面が離れる(アンマウント)"
+  },
+  {
+   "from": "p_lose",
+   "to": "n_here"
+  },
+  {
+   "from": "n_here",
+   "to": "r_running"
+  },
+  {
+   "from": "r_running",
+   "to": "e_running",
+   "label": "実行中"
+  },
+  {
+   "from": "r_running",
+   "to": "r_left",
+   "label": "実行中でない"
+  },
+  {
+   "from": "r_left",
+   "to": "e_left",
+   "label": "始めている"
+  },
+  {
+   "from": "r_left",
+   "to": "r_mark",
+   "label": "始めていない"
+  },
+  {
+   "from": "r_mark",
+   "to": "r_valid"
+  },
+  {
+   "from": "r_valid",
+   "to": "r_plain",
+   "label": "無効"
+  },
+  {
+   "from": "r_valid",
+   "to": "r_default",
+   "label": "有効"
+  },
+  {
+   "from": "r_default",
+   "to": "r_plain",
+   "label": "そのもの"
+  },
+  {
+   "from": "r_default",
+   "to": "r_with",
+   "label": "別の場所"
+  },
+  {
+   "from": "r_plain",
+   "to": "p_go"
+  },
+  {
+   "from": "r_with",
+   "to": "p_go"
+  },
+  {
+   "from": "p_go",
+   "to": "n_replace"
+  },
+  {
+   "from": "n_replace",
+   "to": "end"
+  }
+ ]
+}

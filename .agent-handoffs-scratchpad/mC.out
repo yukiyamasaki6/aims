@@ -1,0 +1,13 @@
+resetPasswordForEmail -> ok
+mail1: AIMS パスワード再設定 mails: 1 code: 209208
+generateLink -> ok confirmed_at: set otp: 980145
+verifyOtp(mail1 code) after generateLink -> 403 otp_expired: Token has expired or is invalid
+CONTROL verifyOtp(mail code), no generateLink -> SUCCESS
+verifyOtp(generateLink own otp) -> SUCCESS
+verifyOtp(mailed code, after own-otp consumed) -> 403 otp_expired
+DB recovery_token/sent_at initial: |
+after resetPasswordForEmail: 89e787cb2a23|2026-11-05 01:29:17.259655+00
+after admin generateLink recovery: d366748a6b59|2026-11-05 01:29:18.833852+00
+signUp -> ok
+generateLink recovery on UNCONFIRMED user -> ok, email_confirmed_at=null
+verifyOtp(signup code, type=email) after generateLink -> SUCCESS

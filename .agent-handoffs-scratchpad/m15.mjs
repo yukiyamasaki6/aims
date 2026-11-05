@@ -1,0 +1,16 @@
+const API='http://127.0.0.1:54321';
+const SECRET='<LOCAL_SECRET_KEY: supabase status で得る>';
+const PUB='sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
+const email=`m15-${Date.now()}@example.com`;
+const H={apikey:PUB,'content-type':'application/json'};
+await fetch(`${API}/auth/v1/admin/users`,{method:'POST',headers:{apikey:SECRET,Authorization:`Bearer ${SECRET}`,'content-type':'application/json'},body:JSON.stringify({email,password:'Passw0rd!x',email_confirm:true})});
+const cap={gotrue_meta_security:{captcha_token:'XXXX.DUMMY.TOKEN.XXXX'}};
+let r=await fetch(`${API}/auth/v1/recover`,{method:'POST',headers:H,body:JSON.stringify({email,...cap})});console.log('recover',r.status);
+await new Promise(r=>setTimeout(r,1500));
+const get=async()=>{const l=await (await fetch(`http://127.0.0.1:54324/api/v1/search?query=${encodeURIComponent('to:'+email)}`)).json();return Promise.all(l.messages.map(async m=>{const d=await (await fetch(`http://127.0.0.1:54324/api/v1/message/${m.ID}`)).json();return {s:d.Subject,code:(/\b(\d{6})\b/.exec(d.HTML)||[])[1]}}))};
+const before=await get();console.log(before);
+const code=before.find(m=>m.code).code;
+r=await fetch(`${API}/auth/v1/otp`,{method:'POST',headers:H,body:JSON.stringify({email,create_user:true,...cap})});console.log('otp(signup)',r.status);
+await new Promise(r=>setTimeout(r,1500));
+console.log(await get());
+r=await fetch(`${API}/auth/v1/verify`,{method:'POST',headers:H,body:JSON.stringify({type:'recovery',email,token:code})});const b=await r.json();console.log('verify old reset code',r.status,b.error_code??'ok');

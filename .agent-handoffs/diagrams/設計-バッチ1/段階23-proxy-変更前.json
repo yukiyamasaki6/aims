@@ -1,0 +1,131 @@
+{
+ "title": "要求ごとのセッション更新と転送の規則の構造",
+ "layers": [
+  {
+   "name": "組み立て層",
+   "label": "入口。生成と注入"
+  },
+  {
+   "name": "UI層",
+   "label": "画面の部品"
+  },
+  {
+   "name": "アプリケーション層",
+   "label": "操作の手続きと約束"
+  },
+  {
+   "name": "ドメイン層",
+   "label": "業務の規則と状態"
+  },
+  {
+   "name": "インフラ層",
+   "label": "外部へのアクセスと形の変換"
+  }
+ ],
+ "features": [
+  {
+   "name": "認証",
+   "label": "サインイン・サインアップ・再設定"
+  },
+  {
+   "name": "共有の技術",
+   "label": "接続・遷移・時計"
+  },
+  {
+   "name": "ラウンド",
+   "label": "経路の定数だけ使う"
+  }
+ ],
+ "groups": [
+  {
+   "name": "要求の入口",
+   "feature": "共有の技術",
+   "layer": "組み立て層",
+   "label": "要求の入口のまとまり",
+   "files": [
+    {
+     "path": "proxy.ts",
+     "functions": [
+      "proxy"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "要求ごとのセッション更新",
+   "feature": "共有の技術",
+   "layer": "インフラ層",
+   "label": "要求ごとのセッション更新のまとまり",
+   "files": [
+    {
+     "path": "lib/supabase/infrastructure/session.ts",
+     "functions": [
+      "updateSession"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "経路の規則",
+   "feature": "認証",
+   "layer": "ドメイン層",
+   "label": "経路の規則のまとまり",
+   "files": [
+    {
+     "path": "features/auth/domain/auth-routes.ts",
+     "functions": [
+      "redirectFor"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "ラウンドの経路",
+   "feature": "ラウンド",
+   "layer": "ドメイン層",
+   "label": "ラウンドの経路のまとまり",
+   "files": [
+    {
+     "path": "features/rounds/domain/round-routes.ts",
+     "functions": [],
+     "constants": []
+    }
+   ]
+  }
+ ],
+ "externals": [
+  "認証サービス"
+ ],
+ "references": [
+  {
+   "from": "proxy.ts",
+   "to": "lib/supabase/infrastructure/session.ts"
+  },
+  {
+   "from": "proxy.ts",
+   "to": "features/auth/domain/auth-routes.ts"
+  },
+  {
+   "from": "proxy.ts",
+   "to": "features/rounds/domain/round-routes.ts"
+  }
+ ],
+ "calls": [
+  {
+   "from": "proxy.ts",
+   "to": "lib/supabase/infrastructure/session.ts"
+  },
+  {
+   "from": "lib/supabase/infrastructure/session.ts",
+   "to": "features/auth/domain/auth-routes.ts",
+   "via_injection": true
+  },
+  {
+   "from": "lib/supabase/infrastructure/session.ts",
+   "to": "認証サービス"
+  }
+ ]
+}

@@ -1,0 +1,387 @@
+{
+ "title": "コード送付・確認・パスワード設定と結果の型の構造",
+ "layers": [
+  {
+   "name": "UI層",
+   "label": "画面の部品"
+  },
+  {
+   "name": "アプリケーション層",
+   "label": "操作の手続きと手続きの約束"
+  },
+  {
+   "name": "ドメイン層",
+   "label": "業務の規則と状態"
+  },
+  {
+   "name": "インフラ層",
+   "label": "外部へのアクセスと形の変換"
+  }
+ ],
+ "features": [
+  {
+   "name": "認証",
+   "label": "サインイン・サインアップ・パスワード再設定"
+  }
+ ],
+ "groups": [
+  {
+   "name": "サインイン画面",
+   "feature": "認証",
+   "layer": "UI層",
+   "label": "メールとパスワードの入力と送信",
+   "files": [
+    {
+     "path": "features/auth/ui/signin-form.tsx",
+     "functions": [
+      "SignInForm"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "段階式画面",
+   "feature": "認証",
+   "layer": "UI層",
+   "label": "メール・コード・パスワードの3段階",
+   "files": [
+    {
+     "path": "features/auth/ui/password-setup-form.tsx",
+     "functions": [
+      "PasswordSetupForm"
+     ],
+     "constants": []
+    },
+    {
+     "path": "features/auth/ui/otp-email-step.tsx",
+     "functions": [
+      "OtpEmailStep"
+     ],
+     "constants": []
+    },
+    {
+     "path": "features/auth/ui/otp-code-step.tsx",
+     "functions": [
+      "OtpCodeStep"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "画面の状態",
+   "feature": "認証",
+   "layer": "UI層",
+   "label": "集約の状態を持ち、手続きへ渡す画面の約束を作る",
+   "files": [
+    {
+     "path": "features/auth/ui/use-screen-view.ts",
+     "functions": [
+      "useScreenView"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインインの手続き",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "照合の順序",
+   "files": [
+    {
+     "path": "features/auth/application/sign-in.ts",
+     "functions": [
+      "createSignIn"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインアップ・再設定の手続き",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "コード送付後のパスワード設定と遷移",
+   "files": [
+    {
+     "path": "features/auth/application/sign-up.ts",
+     "functions": [
+      "createSignUp"
+     ],
+     "constants": []
+    },
+    {
+     "path": "features/auth/application/reset-password.ts",
+     "functions": [
+      "createResetPassword"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "共通の順序",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "送付・確認・パスワード設定の共通の順序",
+   "files": [
+    {
+     "path": "features/auth/application/password-setup.ts",
+     "functions": [
+      "tickCooldown",
+      "sendCode",
+      "verifyCode",
+      "applyPassword"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "認証サービスへの結果",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "頼みごとの結果の型(after: 受付と失敗の2種)",
+   "files": [
+    {
+     "path": "features/auth/application/call-result.ts",
+     "functions": [
+      "failureOf"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインインの集約",
+   "feature": "認証",
+   "layer": "ドメイン層",
+   "label": "サインインの開始の可否と状態",
+   "files": [
+    {
+     "path": "features/auth/domain/sign-in-flow.ts",
+     "functions": [
+      "beginSignIn",
+      "signInReducer"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "パスワード設定の集約",
+   "feature": "認証",
+   "layer": "ドメイン層",
+   "label": "段階・実行中の操作・再送の待ち・トークン",
+   "files": [
+    {
+     "path": "features/auth/domain/password-setup-flow.ts",
+     "functions": [
+      "beginSendCode",
+      "beginVerifyCode",
+      "beginSetPassword",
+      "passwordSetupReducer"
+     ],
+     "constants": [
+      "initialPasswordSetupFlow"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "入力の規則",
+   "feature": "認証",
+   "layer": "ドメイン層",
+   "label": "認証コードの待ちとパスワードの規則",
+   "files": [
+    {
+     "path": "features/auth/domain/auth-code.ts",
+     "functions": [
+      "validateResendWait"
+     ],
+     "constants": [
+      "AUTH_CODE_LENGTH",
+      "RESEND_COOLDOWN_SECONDS"
+     ]
+    },
+    {
+     "path": "features/auth/domain/password.ts",
+     "functions": [
+      "validatePasswordPresent",
+      "validateNewPassword"
+     ],
+     "constants": [
+      "PASSWORD_MIN_LENGTH",
+      "PASSWORD_MAX_LENGTH"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "認証サービスの実装",
+   "feature": "認証",
+   "layer": "インフラ層",
+   "label": "認証サービスに頼み、応答を結果の値に変える",
+   "files": [
+    {
+     "path": "features/auth/infrastructure/supabase-auth.ts",
+     "functions": [
+      "createSupabaseAuth"
+     ],
+     "constants": []
+    }
+   ]
+  }
+ ],
+ "externals": [
+  "認証サービス"
+ ],
+ "references": [
+  {
+   "from": "features/auth/ui/signin-form.tsx",
+   "to": "features/auth/domain/sign-in-flow.ts"
+  },
+  {
+   "from": "features/auth/ui/signin-form.tsx",
+   "to": "features/auth/ui/use-screen-view.ts"
+  },
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/domain/password-setup-flow.ts"
+  },
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/ui/use-screen-view.ts"
+  },
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/domain/password.ts"
+  },
+  {
+   "from": "features/auth/ui/otp-code-step.tsx",
+   "to": "features/auth/domain/auth-code.ts"
+  },
+  {
+   "from": "features/auth/application/sign-in.ts",
+   "to": "features/auth/domain/sign-in-flow.ts"
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "features/auth/domain/password-setup-flow.ts"
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/domain/password-setup-flow.ts"
+  },
+  {
+   "from": "features/auth/application/password-setup.ts",
+   "to": "features/auth/domain/password-setup-flow.ts"
+  },
+  {
+   "from": "features/auth/application/password-setup.ts",
+   "to": "features/auth/application/call-result.ts"
+  },
+  {
+   "from": "features/auth/domain/password-setup-flow.ts",
+   "to": "features/auth/domain/auth-code.ts"
+  },
+  {
+   "from": "features/auth/domain/password-setup-flow.ts",
+   "to": "features/auth/domain/password.ts"
+  },
+  {
+   "from": "features/auth/domain/sign-in-flow.ts",
+   "to": "features/auth/domain/password.ts"
+  },
+  {
+   "from": "features/auth/infrastructure/supabase-auth.ts",
+   "to": "features/auth/application/call-result.ts"
+  }
+ ],
+ "calls": [
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/ui/otp-email-step.tsx"
+  },
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/ui/otp-code-step.tsx"
+  },
+  {
+   "from": "features/auth/ui/signin-form.tsx",
+   "to": "features/auth/application/sign-in.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/application/sign-up.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/application/reset-password.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/password-setup.ts",
+   "to": "features/auth/domain/password-setup-flow.ts"
+  },
+  {
+   "from": "features/auth/application/password-setup.ts",
+   "to": "features/auth/application/call-result.ts"
+  },
+  {
+   "from": "features/auth/application/sign-in.ts",
+   "to": "features/auth/domain/sign-in-flow.ts"
+  },
+  {
+   "from": "features/auth/infrastructure/supabase-auth.ts",
+   "to": "認証サービス"
+  },
+  {
+   "from": "features/auth/application/sign-in.ts",
+   "to": "features/auth/infrastructure/supabase-auth.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "features/auth/infrastructure/supabase-auth.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/infrastructure/supabase-auth.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/domain/password-setup-flow.ts",
+   "to": "features/auth/domain/auth-code.ts"
+  },
+  {
+   "from": "features/auth/domain/password-setup-flow.ts",
+   "to": "features/auth/domain/password.ts"
+  },
+  {
+   "from": "features/auth/domain/sign-in-flow.ts",
+   "to": "features/auth/domain/password.ts"
+  }
+ ]
+}

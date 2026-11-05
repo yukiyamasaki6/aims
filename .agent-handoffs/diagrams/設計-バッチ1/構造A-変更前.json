@@ -1,0 +1,662 @@
+{
+ "title": "認証画面の入口・サーバー側・遷移元の構造",
+ "layers": [
+  {
+   "name": "組み立て層",
+   "label": "入口。具体実装と手続きの生成・注入"
+  },
+  {
+   "name": "UI層",
+   "label": "画面の部品"
+  },
+  {
+   "name": "アプリケーション層",
+   "label": "操作の手続きと手続きの約束"
+  },
+  {
+   "name": "ドメイン層",
+   "label": "業務の規則と状態"
+  },
+  {
+   "name": "インフラ層",
+   "label": "外部へのアクセスと形の変換"
+  }
+ ],
+ "features": [
+  {
+   "name": "認証",
+   "label": "サインイン・サインアップ・パスワード再設定"
+  },
+  {
+   "name": "共有の技術",
+   "label": "複数の機能が使う接続・遷移・時計"
+  },
+  {
+   "name": "ラウンド",
+   "label": "ラウンドの経路の定数だけを使う"
+  }
+ ],
+ "groups": [
+  {
+   "name": "サインインの入口",
+   "feature": "認証",
+   "layer": "組み立て層",
+   "label": "サインイン画面の手続きを生成して画面へ渡す",
+   "files": [
+    {
+     "path": "app/(auth)/signin/page.tsx",
+     "functions": [
+      "SignInPage"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインアップの入口",
+   "feature": "認証",
+   "layer": "組み立て層",
+   "label": "サインアップ画面の手続きを生成して画面へ渡す",
+   "files": [
+    {
+     "path": "app/(auth)/signup/page.tsx",
+     "functions": [
+      "SignUpPage"
+     ],
+     "constants": []
+    },
+    {
+     "path": "app/(auth)/signup/actions.ts",
+     "functions": [
+      "isEmailRegistered"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "再設定の入口",
+   "feature": "認証",
+   "layer": "組み立て層",
+   "label": "再設定画面の手続きを生成して画面へ渡す",
+   "files": [
+    {
+     "path": "app/(auth)/reset-password/page.tsx",
+     "functions": [
+      "ResetPasswordPage"
+     ],
+     "constants": []
+    },
+    {
+     "path": "app/(auth)/reset-password/actions.ts",
+     "functions": [
+      "changePassword"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "本体画面の入口",
+   "feature": "認証",
+   "layer": "組み立て層",
+   "label": "サインアウトとセッション見張りの入口(範囲外。依存の位置づけ用)",
+   "files": [
+    {
+     "path": "app/(main)/layout.tsx",
+     "functions": [
+      "MainLayout"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインイン画面",
+   "feature": "認証",
+   "layer": "UI層",
+   "label": "メールとパスワードの入力と送信",
+   "files": [
+    {
+     "path": "features/auth/ui/signin-form.tsx",
+     "functions": [
+      "SignInForm"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "段階式画面",
+   "feature": "認証",
+   "layer": "UI層",
+   "label": "メール・コード・パスワードの3段階(サインアップと再設定で共有)",
+   "files": [
+    {
+     "path": "features/auth/ui/signup-form.tsx",
+     "functions": [
+      "SignUpForm"
+     ],
+     "constants": []
+    },
+    {
+     "path": "features/auth/ui/reset-password-form.tsx",
+     "functions": [
+      "ResetPasswordForm"
+     ],
+     "constants": []
+    },
+    {
+     "path": "features/auth/ui/password-setup-form.tsx",
+     "functions": [
+      "PasswordSetupForm"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインインの手続き",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "照合の順序と遷移",
+   "files": [
+    {
+     "path": "features/auth/application/sign-in.ts",
+     "functions": [
+      "createSignIn"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインアップ・再設定の手続き",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "コード送付後のパスワード設定と遷移",
+   "files": [
+    {
+     "path": "features/auth/application/sign-up.ts",
+     "functions": [
+      "createSignUp"
+     ],
+     "constants": []
+    },
+    {
+     "path": "features/auth/application/reset-password.ts",
+     "functions": [
+      "createResetPassword"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サーバーの手続き",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "パスワード変更と全端末のサインイン終了をサーバーで行う",
+   "files": [
+    {
+     "path": "features/auth/application/password-change.ts",
+     "functions": [
+      "createPasswordChange"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "共通の順序",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "送付・確認・パスワード設定の共通の順序",
+   "files": [
+    {
+     "path": "features/auth/application/password-setup.ts",
+     "functions": [
+      "applyPassword",
+      "verifyCode"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "経路の規則",
+   "feature": "認証",
+   "layer": "ドメイン層",
+   "label": "遷移先の規則",
+   "files": [
+    {
+     "path": "features/auth/domain/auth-routes.ts",
+     "functions": [
+      "destinationOf"
+     ],
+     "constants": [
+      "SIGN_IN_PATH"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "認証サービスの実装",
+   "feature": "認証",
+   "layer": "インフラ層",
+   "label": "利用者のセッションで認証サービスに頼む唯一の実装",
+   "files": [
+    {
+     "path": "features/auth/infrastructure/supabase-auth.ts",
+     "functions": [
+      "createSupabaseAuth"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "登録確認",
+   "feature": "認証",
+   "layer": "インフラ層",
+   "label": "管理者の接続でメールの登録有無を調べる",
+   "files": [
+    {
+     "path": "features/auth/infrastructure/supabase-registration-check.ts",
+     "functions": [
+      "createSupabaseRegistrationCheck"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "遷移元の読み出し",
+   "feature": "認証",
+   "layer": "インフラ層",
+   "label": "URLのクエリから遷移元の値を読む",
+   "files": [
+    {
+     "path": "features/auth/infrastructure/browser-return-to.ts",
+     "functions": [
+      "createBrowserReturnTo"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "ページ全体の読み込み",
+   "feature": "認証",
+   "layer": "インフラ層",
+   "label": "ハード遷移(本体画面のセッション喪失の遷移が使う)",
+   "files": [
+    {
+     "path": "features/auth/infrastructure/browser-page-load.ts",
+     "functions": [
+      "createBrowserPageLoad"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "ブラウザの接続",
+   "feature": "共有の技術",
+   "layer": "インフラ層",
+   "label": "ブラウザの認証サービス接続",
+   "files": [
+    {
+     "path": "lib/supabase/infrastructure/client.ts",
+     "functions": [
+      "createClient"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サーバーの接続",
+   "feature": "共有の技術",
+   "layer": "インフラ層",
+   "label": "管理者の接続と要求のcookieの接続",
+   "files": [
+    {
+     "path": "lib/supabase/infrastructure/server.ts",
+     "functions": [
+      "createAdminClient",
+      "createServerClient"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "遷移と時計",
+   "feature": "共有の技術",
+   "layer": "インフラ層",
+   "label": "routerによる遷移と時間の経過",
+   "files": [
+    {
+     "path": "lib/page-navigation/infrastructure/router-page-navigation.ts",
+     "functions": [
+      "createRouterPageNavigation"
+     ],
+     "constants": []
+    },
+    {
+     "path": "lib/clock/infrastructure/browser-clock.ts",
+     "functions": [
+      "createBrowserClock"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "ラウンドの経路",
+   "feature": "ラウンド",
+   "layer": "ドメイン層",
+   "label": "保護対象の根の経路",
+   "files": [
+    {
+     "path": "features/rounds/domain/round-routes.ts",
+     "constants": [
+      "ROUNDS_PATH"
+     ],
+     "functions": []
+    }
+   ]
+  }
+ ],
+ "externals": [
+  "認証サービス"
+ ],
+ "references": [
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "features/auth/application/sign-in.ts"
+  },
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "features/auth/infrastructure/supabase-auth.ts"
+  },
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "features/auth/ui/signin-form.tsx"
+  },
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "lib/page-navigation/infrastructure/router-page-navigation.ts"
+  },
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "lib/supabase/infrastructure/client.ts"
+  },
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "features/rounds/domain/round-routes.ts"
+  },
+  {
+   "from": "app/(auth)/signup/page.tsx",
+   "to": "features/auth/application/sign-up.ts"
+  },
+  {
+   "from": "app/(auth)/signup/page.tsx",
+   "to": "features/auth/infrastructure/supabase-auth.ts"
+  },
+  {
+   "from": "app/(auth)/signup/page.tsx",
+   "to": "features/auth/ui/signup-form.tsx"
+  },
+  {
+   "from": "app/(auth)/signup/page.tsx",
+   "to": "lib/page-navigation/infrastructure/router-page-navigation.ts"
+  },
+  {
+   "from": "app/(auth)/signup/page.tsx",
+   "to": "lib/supabase/infrastructure/client.ts"
+  },
+  {
+   "from": "app/(auth)/signup/page.tsx",
+   "to": "features/rounds/domain/round-routes.ts"
+  },
+  {
+   "from": "app/(auth)/signup/page.tsx",
+   "to": "lib/clock/infrastructure/browser-clock.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/page.tsx",
+   "to": "features/auth/application/reset-password.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/page.tsx",
+   "to": "features/auth/infrastructure/supabase-auth.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/page.tsx",
+   "to": "features/auth/ui/reset-password-form.tsx"
+  },
+  {
+   "from": "app/(auth)/reset-password/page.tsx",
+   "to": "lib/supabase/infrastructure/client.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/page.tsx",
+   "to": "lib/clock/infrastructure/browser-clock.ts"
+  },
+  {
+   "from": "features/auth/ui/signup-form.tsx",
+   "to": "features/auth/ui/password-setup-form.tsx"
+  },
+  {
+   "from": "features/auth/ui/reset-password-form.tsx",
+   "to": "features/auth/ui/password-setup-form.tsx"
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "features/auth/domain/auth-routes.ts"
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/domain/auth-routes.ts"
+  },
+  {
+   "from": "features/auth/application/sign-in.ts",
+   "to": "features/auth/domain/auth-routes.ts"
+  },
+  {
+   "from": "app/(main)/layout.tsx",
+   "to": "features/auth/infrastructure/browser-page-load.ts"
+  },
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "features/auth/infrastructure/browser-return-to.ts"
+  },
+  {
+   "from": "app/(auth)/signup/page.tsx",
+   "to": "app/(auth)/signup/actions.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/page.tsx",
+   "to": "features/auth/infrastructure/browser-page-load.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/page.tsx",
+   "to": "app/(auth)/reset-password/actions.ts"
+  },
+  {
+   "from": "app/(auth)/signup/actions.ts",
+   "to": "features/auth/infrastructure/supabase-registration-check.ts"
+  },
+  {
+   "from": "app/(auth)/signup/actions.ts",
+   "to": "lib/supabase/infrastructure/server.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/actions.ts",
+   "to": "features/auth/application/password-change.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/actions.ts",
+   "to": "features/auth/infrastructure/supabase-auth.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/actions.ts",
+   "to": "lib/supabase/infrastructure/server.ts"
+  },
+  {
+   "from": "features/auth/application/password-change.ts",
+   "to": "features/auth/application/reset-password.ts"
+  },
+  {
+   "from": "features/auth/infrastructure/supabase-auth.ts",
+   "to": "features/auth/application/password-change.ts"
+  },
+  {
+   "from": "features/auth/infrastructure/browser-page-load.ts",
+   "to": "features/auth/application/reset-password.ts"
+  },
+  {
+   "from": "features/auth/application/sign-in.ts",
+   "to": "features/auth/infrastructure/browser-return-to.ts"
+  }
+ ],
+ "calls": [
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "features/auth/ui/signin-form.tsx"
+  },
+  {
+   "from": "app/(auth)/signup/page.tsx",
+   "to": "features/auth/ui/signup-form.tsx"
+  },
+  {
+   "from": "app/(auth)/reset-password/page.tsx",
+   "to": "features/auth/ui/reset-password-form.tsx"
+  },
+  {
+   "from": "features/auth/ui/signin-form.tsx",
+   "to": "features/auth/application/sign-in.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/application/sign-up.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/application/reset-password.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/sign-in.ts",
+   "to": "features/auth/infrastructure/supabase-auth.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/sign-in.ts",
+   "to": "lib/page-navigation/infrastructure/router-page-navigation.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "features/auth/infrastructure/supabase-auth.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "lib/page-navigation/infrastructure/router-page-navigation.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/infrastructure/supabase-auth.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/infrastructure/supabase-auth.ts",
+   "to": "lib/supabase/infrastructure/client.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/infrastructure/supabase-auth.ts",
+   "to": "認証サービス"
+  },
+  {
+   "from": "app/(main)/layout.tsx",
+   "to": "features/auth/infrastructure/browser-page-load.ts"
+  },
+  {
+   "from": "features/auth/application/sign-in.ts",
+   "to": "features/auth/infrastructure/browser-return-to.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "app/(auth)/signup/actions.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "app/(auth)/reset-password/actions.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/infrastructure/browser-page-load.ts",
+   "via_injection": true
+  },
+  {
+   "from": "app/(auth)/signup/actions.ts",
+   "to": "features/auth/infrastructure/supabase-registration-check.ts"
+  },
+  {
+   "from": "app/(auth)/signup/actions.ts",
+   "to": "lib/supabase/infrastructure/server.ts"
+  },
+  {
+   "from": "features/auth/infrastructure/supabase-registration-check.ts",
+   "to": "lib/supabase/infrastructure/server.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/infrastructure/supabase-registration-check.ts",
+   "to": "認証サービス"
+  },
+  {
+   "from": "app/(auth)/reset-password/actions.ts",
+   "to": "features/auth/application/password-change.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/actions.ts",
+   "to": "lib/supabase/infrastructure/server.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/actions.ts",
+   "to": "features/auth/infrastructure/supabase-auth.ts"
+  },
+  {
+   "from": "features/auth/application/password-change.ts",
+   "to": "features/auth/infrastructure/supabase-auth.ts",
+   "via_injection": true
+  }
+ ]
+}

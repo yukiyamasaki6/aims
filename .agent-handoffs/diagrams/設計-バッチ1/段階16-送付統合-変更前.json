@@ -1,0 +1,191 @@
+{
+ "title": "コード送付と再送の手続きの構造",
+ "layers": [
+  {
+   "name": "組み立て層",
+   "label": "入口。生成と注入"
+  },
+  {
+   "name": "UI層",
+   "label": "画面の部品"
+  },
+  {
+   "name": "アプリケーション層",
+   "label": "操作の手続きと約束"
+  },
+  {
+   "name": "ドメイン層",
+   "label": "業務の規則と状態"
+  },
+  {
+   "name": "インフラ層",
+   "label": "外部へのアクセスと形の変換"
+  }
+ ],
+ "features": [
+  {
+   "name": "認証",
+   "label": "サインイン・サインアップ・再設定"
+  },
+  {
+   "name": "共有の技術",
+   "label": "接続・遷移・時計"
+  },
+  {
+   "name": "ラウンド",
+   "label": "経路の定数だけ使う"
+  }
+ ],
+ "groups": [
+  {
+   "name": "段階式画面",
+   "feature": "認証",
+   "layer": "UI層",
+   "label": "段階式画面のまとまり",
+   "files": [
+    {
+     "path": "features/auth/ui/password-setup-form.tsx",
+     "functions": [
+      "PasswordSetupForm"
+     ],
+     "constants": []
+    },
+    {
+     "path": "features/auth/ui/otp-email-step.tsx",
+     "functions": [
+      "OtpEmailStep"
+     ],
+     "constants": []
+    },
+    {
+     "path": "features/auth/ui/otp-code-step.tsx",
+     "functions": [
+      "OtpCodeStep"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインアップ・再設定の手続き",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "サインアップ・再設定の手続きのまとまり",
+   "files": [
+    {
+     "path": "features/auth/application/sign-up.ts",
+     "functions": [
+      "createSignUp"
+     ],
+     "constants": []
+    },
+    {
+     "path": "features/auth/application/reset-password.ts",
+     "functions": [
+      "createResetPassword"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "共通の順序",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "共通の順序のまとまり",
+   "files": [
+    {
+     "path": "features/auth/application/password-setup.ts",
+     "functions": [
+      "deliver",
+      "resend",
+      "verifyCode",
+      "applyPassword",
+      "tickCooldown"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "パスワード設定の集約",
+   "feature": "認証",
+   "layer": "ドメイン層",
+   "label": "パスワード設定の集約のまとまり",
+   "files": [
+    {
+     "path": "features/auth/domain/password-setup-flow.ts",
+     "functions": [
+      "beginSendCode",
+      "beginResend",
+      "beginVerifyCode",
+      "beginSetPassword",
+      "passwordSetupReducer"
+     ],
+     "constants": []
+    }
+   ]
+  }
+ ],
+ "externals": [
+  "認証サービス"
+ ],
+ "references": [
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/domain/password-setup-flow.ts"
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/password-setup.ts",
+   "to": "features/auth/domain/password-setup-flow.ts"
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "features/auth/domain/password-setup-flow.ts"
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/domain/password-setup-flow.ts"
+  }
+ ],
+ "calls": [
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/ui/otp-email-step.tsx"
+  },
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/ui/otp-code-step.tsx"
+  },
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/application/sign-up.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/ui/password-setup-form.tsx",
+   "to": "features/auth/application/reset-password.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/sign-up.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/password-setup.ts",
+   "to": "features/auth/domain/password-setup-flow.ts"
+  }
+ ]
+}

@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1564.8" height="1388.0" viewBox="0 0 1564.8 1388.0" font-family="IPAGothic, sans-serif">
+<rect width="1564.8" height="1388.0" fill="#fff"/>
+<g>
+<text x="20.0" y="38.0" font-size="15" fill="#222" font-weight="bold">変更前: 再設定のパスワード変更の構造</text>
+<rect x="20.0" y="204.0" width="1524.8" height="184.0" fill="#f4f4f4"/>
+<text x="32.0" y="225.5" font-size="13" fill="#222" font-weight="bold">組み立て層</text>
+<text x="32.0" y="243.5" font-size="13" fill="#666">入口。生成と注入</text>
+<rect x="20.0" y="388.0" width="1524.8" height="90.0" fill="#e8e8e8"/>
+<text x="32.0" y="409.5" font-size="13" fill="#222" font-weight="bold">UI層</text>
+<text x="32.0" y="427.5" font-size="13" fill="#666">画面の部品</text>
+<rect x="20.0" y="478.0" width="1524.8" height="412.0" fill="#f4f4f4"/>
+<text x="32.0" y="499.5" font-size="13" fill="#222" font-weight="bold">アプリケーション層</text>
+<text x="32.0" y="517.5" font-size="13" fill="#666">操作の手続きと約束</text>
+<rect x="20.0" y="890.0" width="1524.8" height="90.0" fill="#e8e8e8"/>
+<text x="32.0" y="911.5" font-size="13" fill="#222" font-weight="bold">ドメイン層</text>
+<text x="32.0" y="929.5" font-size="13" fill="#666">業務の規則と状態</text>
+<rect x="20.0" y="980.0" width="1524.8" height="280.0" fill="#f4f4f4"/>
+<text x="32.0" y="1001.5" font-size="13" fill="#222" font-weight="bold">インフラ層</text>
+<text x="32.0" y="1019.5" font-size="13" fill="#666">外部へのアクセスと形</text>
+<text x="32.0" y="1037.5" font-size="13" fill="#666">の変換</text>
+<rect x="1035.8" y="142.0" width="509.0" height="1134.0" fill="none" stroke="#888" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="1290.3" y="159.5" font-size="13" fill="#222" font-weight="bold" text-anchor="middle">認証</text>
+<text x="1290.3" y="177.5" font-size="13" fill="#666" text-anchor="middle">サインイン・サインアップ・再設定</text>
+<rect x="354.0" y="142.0" width="633.8" height="1134.0" fill="none" stroke="#888" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="670.9" y="159.5" font-size="13" fill="#222" font-weight="bold" text-anchor="middle">共有の技術</text>
+<text x="670.9" y="177.5" font-size="13" fill="#666" text-anchor="middle">接続・遷移・時計</text>
+<rect x="190.0" y="142.0" width="116.0" height="1134.0" fill="none" stroke="#888" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="248.0" y="159.5" font-size="13" fill="#222" font-weight="bold" text-anchor="middle">ラウンド</text>
+<text x="248.0" y="177.5" font-size="13" fill="#666" text-anchor="middle">経路の定数</text>
+<text x="248.0" y="195.5" font-size="13" fill="#666" text-anchor="middle">だけ使う</text>
+<rect x="20.0" y="52.0" width="1524.8" height="66.0" fill="none" stroke="#888" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="32.0" y="73.5" font-size="13" fill="#222" font-weight="bold">外部</text>
+<path d="M1506.372459,722 Q1506.372459,828.5 1499.571144,935 Q1492.769829,1041.5 1492.769829,1148" fill="none" stroke="#d32f2f" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M1257.75,646 Q1257.75,572.5 1188.903822,499 Q1120.057643,425.5 1120.057643,352" fill="none" stroke="#d32f2f" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M1375.688557,590 Q1375.688557,604 1375.926728,618 Q1376.164899,632 1376.164899,646" fill="none" stroke="#d32f2f" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M1269.953456,590 Q1269.953456,729.5 1223.830478,869 Q1177.7075,1008.5 1177.7075,1148" fill="none" stroke="#d32f2f" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M1520.75,1148 Q1520.75,1041.5 1519.947026,935 Q1519.144051,828.5 1519.144051,722" fill="none" stroke="#d32f2f" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M1136.61091,352 Q1136.61091,425.5 1201.582036,499 Q1266.553162,572.5 1266.553162,646" fill="none" stroke="#d32f2f" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M1184.406582,352 Q1184.406582,392.5 1241.008041,433 Q1297.6095,473.5 1297.6095,514" fill="none" stroke="#d32f2f" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M1059.75,352 Q1059.75,551 775.812583,750 Q491.875167,949 491.875167,1148" fill="none" stroke="#d32f2f" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M1101.912564,352 Q1101.912564,551 1223.211309,750 Q1344.510055,949 1344.510055,1148" fill="none" stroke="#d32f2f" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M1083.75,352 Q1083.75,551 1098.996833,750 Q1114.243666,949 1114.243666,1148" fill="none" stroke="#d32f2f" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M1197.681576,1148 Q1197.681576,1008.5 1237.817516,869 Q1277.953456,729.5 1277.953456,590" fill="none" stroke="#d32f2f" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M1506.372459,722 Q1506.372459,828.5 1499.571144,935 Q1492.769829,1041.5 1492.769829,1148" fill="none" stroke="#8e24aa" stroke-width="1.5"/>
+<path d="M1402.566675,722 Q1402.566675,736 1398.422673,750 Q1394.278671,764 1394.278671,778" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M1257.75,646 Q1257.75,572.5 1188.903822,499 Q1120.057643,425.5 1120.057643,352" fill="none" stroke="#8e24aa" stroke-width="1.5"/>
+<path d="M1375.688557,590 Q1375.688557,604 1375.926728,618 Q1376.164899,632 1376.164899,646" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<path d="M1269.953456,590 Q1269.953456,729.5 1223.830478,869 Q1177.7075,1008.5 1177.7075,1148" fill="none" stroke="#8e24aa" stroke-width="1.5"/>
+<path d="M1520.75,1148 Q1520.75,1041.5 1519.947026,935 Q1519.144051,828.5 1519.144051,722" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<path d="M1136.61091,352 Q1136.61091,425.5 1201.582036,499 Q1266.553162,572.5 1266.553162,646" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M1184.406582,352 Q1184.406582,392.5 1241.008041,433 Q1297.6095,473.5 1297.6095,514" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M1059.75,352 Q1059.75,551 775.812583,750 Q491.875167,949 491.875167,1148" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M1067.75,352 Q1067.75,518 915.895361,684 Q764.040722,850 764.040722,1016" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<path d="M1101.912564,352 Q1101.912564,551 1223.211309,750 Q1344.510055,949 1344.510055,1148" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<path d="M1083.75,352 Q1083.75,551 1098.996833,750 Q1114.243666,949 1114.243666,1148" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M1520.75,334 Q1520.75,537.5 1516.75,741 Q1512.75,944.5 1512.75,1148" fill="none" stroke="#000000" stroke-width="1.5"/>
+<path d="M1197.681576,1148 Q1197.681576,1008.5 1237.817516,869 Q1277.953456,729.5 1277.953456,590" fill="none" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<path d="M1091.883105,1148 Q1091.883105,1134 933.39479,1120 Q774.906475,1106 774.906475,1092" fill="none" stroke="#8e24aa" stroke-width="1.5"/>
+<path d="M1157.300864,1148 Q1157.300864,886.5 1158.757622,625 Q1160.21438,363.5 1160.21438,102" fill="none" stroke="#000000" stroke-width="1.5"/>
+<rect x="1253.8" y="646.0" width="271.0" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="1265.8" y="667.5" font-size="13" fill="#222" font-weight="bold">サインアップ・再設定の手続きのまとまり</text>
+<path d="M1259.8,675.0 L1518.8,675.0" stroke="#ccc" stroke-width="1"/>
+<text x="1265.8" y="691.5" font-size="13" fill="#222">reset-password.ts</text>
+<text x="1277.8" y="709.5" font-size="13" fill="#222">ƒ createResetPassword</text>
+<rect x="1266.0" y="514.0" width="193.3" height="76.0" rx="3" fill="#fff" stroke="#d32f2f" stroke-width="3"/>
+<text x="1278.0" y="535.5" font-size="13" fill="#222" font-weight="bold">サーバーの手続きのまとまり</text>
+<path d="M1272.0,543.0 L1453.3,543.0" stroke="#ccc" stroke-width="1"/>
+<text x="1278.0" y="559.5" font-size="13" fill="#d32f2f">password-change.ts</text>
+<text x="1290.0" y="577.5" font-size="13" fill="#222">ƒ <tspan fill="#d32f2f">createPasswordChange</tspan></text>
+<rect x="374.0" y="1148.0" width="313.6" height="76.0" rx="3" fill="#fff" stroke="#ef6c00" stroke-width="3"/>
+<text x="386.0" y="1169.5" font-size="13" fill="#222" font-weight="bold">サーバーの接続のまとまり</text>
+<path d="M380.0,1177.0 L681.6,1177.0" stroke="#ccc" stroke-width="1"/>
+<text x="386.0" y="1193.5" font-size="13" fill="#222">server.ts</text>
+<text x="398.0" y="1211.5" font-size="13" fill="#222">ƒ createAdminClient、<tspan fill="#d32f2f">createServerClient</tspan></text>
+<rect x="606.7" y="1016.0" width="180.0" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="618.7" y="1037.5" font-size="13" fill="#222" font-weight="bold">ブラウザの接続のまとまり</text>
+<path d="M612.7,1045.0 L780.7,1045.0" stroke="#ccc" stroke-width="1"/>
+<text x="618.7" y="1061.5" font-size="13" fill="#222">client.ts</text>
+<text x="630.7" y="1079.5" font-size="13" fill="#222">ƒ createClient</text>
+<rect x="1305.8" y="1148.0" width="219.0" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="1317.8" y="1169.5" font-size="13" fill="#222" font-weight="bold">ページ全体の読み込みのまとまり</text>
+<path d="M1311.8,1177.0 L1518.8,1177.0" stroke="#ccc" stroke-width="1"/>
+<text x="1317.8" y="1193.5" font-size="13" fill="#222">browser-page-load.ts</text>
+<text x="1329.8" y="1211.5" font-size="13" fill="#222">ƒ createBrowserPageLoad</text>
+<rect x="1327.8" y="778.0" width="154.0" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="1339.8" y="799.5" font-size="13" fill="#222" font-weight="bold">共通の順序のまとまり</text>
+<path d="M1333.8,807.0 L1475.8,807.0" stroke="#ccc" stroke-width="1"/>
+<text x="1339.8" y="823.5" font-size="13" fill="#222">password-setup.ts</text>
+<text x="1351.8" y="841.5" font-size="13" fill="#222">ƒ applyPassword</text>
+<rect x="1055.8" y="240.0" width="171.9" height="112.0" rx="3" fill="#fff" stroke="#ef6c00" stroke-width="3"/>
+<text x="1067.8" y="261.5" font-size="13" fill="#222" font-weight="bold">再設定の入口のまとまり</text>
+<path d="M1061.8,269.0 L1221.6,269.0" stroke="#ccc" stroke-width="1"/>
+<text x="1067.8" y="285.5" font-size="13" fill="#222">page.tsx</text>
+<text x="1079.8" y="303.5" font-size="13" fill="#222">ƒ ResetPasswordPage</text>
+<text x="1067.8" y="321.5" font-size="13" fill="#d32f2f">actions.ts</text>
+<text x="1079.8" y="339.5" font-size="13" fill="#222">ƒ <tspan fill="#d32f2f">changePassword</tspan></text>
+<rect x="1344.8" y="258.0" width="180.0" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="1356.8" y="279.5" font-size="13" fill="#222" font-weight="bold">本体画面の入口のまとまり</text>
+<path d="M1350.8,287.0 L1518.8,287.0" stroke="#ccc" stroke-width="1"/>
+<text x="1356.8" y="303.5" font-size="13" fill="#222">layout.tsx</text>
+<text x="1368.8" y="321.5" font-size="13" fill="#222">ƒ MainLayout</text>
+<rect x="1055.8" y="1148.0" width="206.0" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="1067.8" y="1169.5" font-size="13" fill="#222" font-weight="bold">認証サービスの実装のまとまり</text>
+<path d="M1061.8,1177.0 L1255.8,1177.0" stroke="#ccc" stroke-width="1"/>
+<text x="1067.8" y="1193.5" font-size="13" fill="#222">supabase-auth.ts</text>
+<text x="1079.8" y="1211.5" font-size="13" fill="#222">ƒ createSupabaseAuth</text>
+<rect x="731.6" y="1148.0" width="236.2" height="76.0" rx="3" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="743.6" y="1169.5" font-size="13" fill="#222" font-weight="bold">遷移と時計のまとまり</text>
+<path d="M737.6,1177.0 L961.8,1177.0" stroke="#ccc" stroke-width="1"/>
+<text x="743.6" y="1193.5" font-size="13" fill="#222">router-page-navigation.ts</text>
+<text x="755.6" y="1211.5" font-size="13" fill="#222">ƒ createRouterPageNavigation</text>
+<rect x="1107.8" y="68.0" width="102.0" height="34.0" rx="10" fill="#fff" stroke="#444" stroke-width="3"/>
+<text x="1158.8" y="90.0" font-size="13" fill="#222" text-anchor="middle">認証サービス</text>
+<circle cx="1506.4" cy="722.0" r="4.0" fill="#8e24aa"/>
+<polygon points="1488.8,1144.0 1496.8,1144.0 1492.8,1152.0" fill="#8e24aa"/>
+<circle cx="1402.6" cy="722.0" r="4.0" fill="#000000"/>
+<polygon points="1390.3,774.0 1398.3,774.0 1394.3,782.0" fill="#000000"/>
+<circle cx="1257.8" cy="646.0" r="4.0" fill="#8e24aa"/>
+<polygon points="1116.1,356.0 1124.1,356.0 1120.1,348.0" fill="#8e24aa"/>
+<circle cx="1375.7" cy="590.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="1372.2,642.0 1380.2,642.0 1376.2,650.0" fill="#000000" fill-opacity="0.45"/>
+<circle cx="1270.0" cy="590.0" r="4.0" fill="#8e24aa"/>
+<polygon points="1173.7,1144.0 1181.7,1144.0 1177.7,1152.0" fill="#8e24aa"/>
+<circle cx="1520.8" cy="1148.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="1515.1,726.0 1523.1,726.0 1519.1,718.0" fill="#000000" fill-opacity="0.45"/>
+<circle cx="1136.6" cy="352.0" r="4.0" fill="#000000"/>
+<polygon points="1262.6,642.0 1270.6,642.0 1266.6,650.0" fill="#000000"/>
+<circle cx="1184.4" cy="352.0" r="4.0" fill="#000000"/>
+<polygon points="1293.6,510.0 1301.6,510.0 1297.6,518.0" fill="#000000"/>
+<circle cx="1059.8" cy="352.0" r="4.0" fill="#000000"/>
+<polygon points="487.9,1144.0 495.9,1144.0 491.9,1152.0" fill="#000000"/>
+<circle cx="1067.8" cy="352.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="760.0,1012.0 768.0,1012.0 764.0,1020.0" fill="#000000" fill-opacity="0.45"/>
+<circle cx="1101.9" cy="352.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="1340.5,1144.0 1348.5,1144.0 1344.5,1152.0" fill="#000000" fill-opacity="0.45"/>
+<circle cx="1083.8" cy="352.0" r="4.0" fill="#000000"/>
+<polygon points="1110.2,1144.0 1118.2,1144.0 1114.2,1152.0" fill="#000000"/>
+<circle cx="1520.8" cy="334.0" r="4.0" fill="#000000"/>
+<polygon points="1508.8,1144.0 1516.8,1144.0 1512.8,1152.0" fill="#000000"/>
+<circle cx="1197.7" cy="1148.0" r="4.0" fill="#000000" fill-opacity="0.45"/>
+<polygon points="1274.0,594.0 1282.0,594.0 1278.0,586.0" fill="#000000" fill-opacity="0.45"/>
+<circle cx="1091.9" cy="1148.0" r="4.0" fill="#8e24aa"/>
+<polygon points="770.9,1096.0 778.9,1096.0 774.9,1088.0" fill="#8e24aa"/>
+<circle cx="1157.3" cy="1148.0" r="4.0" fill="#000000"/>
+<polygon points="1156.2,106.0 1164.2,106.0 1160.2,98.0" fill="#000000"/>
+</g>
+<path d="M20.0,1306.0 L56.0,1306.0" stroke="#000000" stroke-width="1.5" stroke-dasharray="2 3" stroke-opacity="0.45"/>
+<polygon points="52.0,1302.0 52.0,1310.0 60.0,1306.0" fill="#000000" fill-opacity="0.45"/>
+<text x="64.0" y="1311.0" font-size="13" fill="#222">参照: 型、値、文書、設定などへの静的な依存</text>
+<path d="M366.3,1306.0 L402.3,1306.0" stroke="#000000" stroke-width="1.5"/>
+<polygon points="398.3,1302.0 398.3,1310.0 406.3,1306.0" fill="#000000"/>
+<text x="410.3" y="1311.0" font-size="13" fill="#222">呼び出し: 実行時に、処理する相手を呼ぶ</text>
+<path d="M686.6,1306.0 L722.6,1306.0" stroke="#8e24aa" stroke-width="1.5"/>
+<polygon points="718.6,1302.0 718.6,1310.0 726.6,1306.0" fill="#8e24aa"/>
+<text x="730.6" y="1311.0" font-size="13" fill="#222">注入経由の呼び出し: 実行時に、注入された実装を呼ぶ</text>
+<path d="M1084.9,1306.0 L1120.9,1306.0" stroke="#d32f2f" stroke-width="8" stroke-opacity="0.35"/>
+<path d="M1084.9,1306.0 L1120.9,1306.0" stroke="#000000" stroke-width="1.5"/>
+<polygon points="1116.9,1302.0 1116.9,1310.0 1124.9,1306.0" fill="#000000"/>
+<text x="1128.9" y="1311.0" font-size="13" fill="#222">赤い背景: 消える関係(変更前)</text>
+<rect x="20.0" y="1322.0" width="28" height="16" rx="3" fill="#fff" stroke="#d32f2f" stroke-width="3"/>
+<text x="56.0" y="1335.0" font-size="13" fill="#222">赤の枠: 削除されるグループ(変更前)</text>
+<rect x="307.6" y="1322.0" width="28" height="16" rx="3" fill="#fff" stroke="#ef6c00" stroke-width="3"/>
+<text x="343.6" y="1335.0" font-size="13" fill="#222">橙の枠: 表示内容が変わるグループ(変更前・変更後)</text>
+<text x="690.2" y="1335.0" font-size="13" fill="#d32f2f">Aa</text>
+<text x="722.2" y="1335.0" font-size="13" fill="#222">赤い文字: 削除されるファイル・関数・定数(変更前)</text>
+<path d="M1068.8,1330.0 L1096.8,1330.0" stroke="#000000" stroke-width="1.5"/>
+<circle cx="1068.8" cy="1330.0" r="4.0" fill="#000000"/>
+<polygon points="1092.8,1326.0 1092.8,1334.0 1100.8,1330.0" fill="#000000"/>
+<text x="1108.8" y="1335.0" font-size="13" fill="#222">丸: 線の始点、三角: 線の終点</text>
+<text x="20.0" y="1359.0" font-size="13" fill="#222">ƒ: 他のファイルから使える関数、c: 他のファイルから使える定数</text>
+</svg>

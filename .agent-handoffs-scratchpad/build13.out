@@ -1,0 +1,44 @@
+$ next build && serwist build serwist.config.mjs
+▲ Next.js 16.2.11 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 5.1s
+  Running TypeScript ...
+  Finished TypeScript in 9.9s ...
+  Collecting page data using 3 workers ...
+  Generating static pages using 3 workers (0/14) ...
+  Generating static pages using 3 workers (3/14) 
+  Generating static pages using 3 workers (6/14) 
+  Generating static pages using 3 workers (10/14) 
+✓ Generating static pages using 3 workers (14/14) in 378ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /apple-icon.png
+├ ○ /icon.svg
+├ ○ /manifest.webmanifest
+├ ○ /offline
+├ ○ /reset-password
+├ ○ /rounds
+├ ● /rounds/[id]
+│ └ /rounds/_
+├ ○ /rounds/new
+├ ○ /signin
+└ ○ /signup
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)  prerendered as static content
+●  (SSG)     prerendered as static HTML (uses generateStaticParams)
+
+(node:15329) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///root/worktrees/aims-batch1-simplify/apps/web/src/features/offline-pwa/domain/offline-routes.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /root/worktrees/aims-batch1-simplify/apps/web/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Using configuration from /root/worktrees/aims-batch1-simplify/apps/web/serwist.config.mjs.
+The service worker file was written to public/sw.js.
+The service worker will precache 45 URLs, totaling 1.66 MB.

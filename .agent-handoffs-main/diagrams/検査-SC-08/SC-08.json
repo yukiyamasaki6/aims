@@ -1,0 +1,413 @@
+{
+ "title": "SC-08 サインイン状態の変化を購読して、端末の利用者識別を記録する(購読の始め方と、通知ごとの記録・消去)",
+ "actors": [
+  {
+   "id": "ent",
+   "label": "入口(root-client-entry.tsx)"
+  },
+  {
+   "id": "rec",
+   "label": "識別の記録(local-identity.ts)"
+  },
+  {
+   "id": "conv",
+   "label": "窓口の変換(supabase-auth.tsの購読と変換)"
+  },
+  {
+   "id": "auth",
+   "label": "認証サービスの窓口(auth-jsと端末のセッション)"
+  },
+  {
+   "id": "rule",
+   "label": "規則(auth-change.tsのidentityChange)"
+  },
+  {
+   "id": "store",
+   "label": "識別の保存(browser-identity-store.ts、localStorage)"
+  }
+ ],
+ "steps": [
+  {
+   "id": "start",
+   "actor": "ent",
+   "type": "start",
+   "label": "アプリが起動する(ルート入口がマウントされる。(main)と(auth)を含む全ページ)"
+  },
+  {
+   "id": "e_start",
+   "actor": "ent",
+   "type": "action",
+   "label": "識別の記録を始める(useEffectでlocalIdentity.start()。解除する関数を保つ)"
+  },
+  {
+   "id": "r_sub",
+   "actor": "rec",
+   "type": "action",
+   "label": "認証状態の変化の購読を頼む(changes.subscribe)"
+  },
+  {
+   "id": "c_conn",
+   "actor": "conv",
+   "type": "action",
+   "label": "認証サービスの接続を取得する(createClient)"
+  },
+  {
+   "id": "c_env",
+   "actor": "conv",
+   "type": "decision",
+   "label": "接続を作れるか(環境変数はあるか)"
+  },
+  {
+   "id": "c_throw",
+   "actor": "conv",
+   "type": "end",
+   "label": "起動の不備として同期に投げる(購読は始まらない)"
+  },
+  {
+   "id": "c_reg",
+   "actor": "conv",
+   "type": "action",
+   "label": "通知の受け手として登録する(onAuthStateChange。受け取った通知を変換して渡す。解除はsubscription.unsubscribe)"
+  },
+  {
+   "id": "a_init",
+   "actor": "auth",
+   "type": "action",
+   "label": "初期化を待ち、保存先のセッションを読んで、この受け手へだけINITIAL_SESSIONを1回通知する(読み取りが失敗したときはセッション無しで通知。受け手ごとに1回)"
+  },
+  {
+   "id": "a_notify",
+   "actor": "auth",
+   "type": "action",
+   "label": "認証状態が変わり、全ての受け手へ通知する(サインイン成功やタブが見えた時の復元=SIGNED_IN、更新=TOKEN_REFRESHED、セッション削除=SIGNED_OUT、再設定の確認など。発生元の手続きはSC-01〜04、07)"
+  },
+  {
+   "id": "a_kind",
+   "actor": "auth",
+   "type": "decision",
+   "label": "通知のイベント名は"
+  },
+  {
+   "id": "c_in",
+   "actor": "conv",
+   "type": "action",
+   "label": "signed-inに写す(利用者=セッションの利用者ID)"
+  },
+  {
+   "id": "c_ini",
+   "actor": "conv",
+   "type": "action",
+   "label": "initialに写す(利用者=セッションの利用者ID。セッションが無ければnull)"
+  },
+  {
+   "id": "c_tok",
+   "actor": "conv",
+   "type": "action",
+   "label": "token-refreshedに写す(利用者=セッションの利用者ID)"
+  },
+  {
+   "id": "c_out",
+   "actor": "conv",
+   "type": "action",
+   "label": "signed-outに写す(利用者はnull)"
+  },
+  {
+   "id": "c_oth",
+   "actor": "conv",
+   "type": "action",
+   "label": "otherに写す(利用者はnull。例: PASSWORD_RECOVERY)"
+  },
+  {
+   "id": "c_call",
+   "actor": "conv",
+   "type": "action",
+   "label": "変化(種類と利用者)を、記録の手続きの受け手へ渡す(同じ通知を見張り=SC-06、記録の利用者=SC-55も並列に受ける)"
+  },
+  {
+   "id": "r_recv",
+   "actor": "rec",
+   "type": "action",
+   "label": "受け取った変化を規則に渡し、記録・消去・何もしないを決めさせる(identityChange)"
+  },
+  {
+   "id": "d_kind",
+   "actor": "rule",
+   "type": "decision",
+   "label": "変化の種類は"
+  },
+  {
+   "id": "d_user",
+   "actor": "rule",
+   "type": "decision",
+   "label": "利用者がいるか"
+  },
+  {
+   "id": "r_keep",
+   "actor": "rec",
+   "type": "action",
+   "label": "何も書かない(識別情報は変わらない。利用者のいないinitialは、通信失敗でも起きるため消さない)"
+  },
+  {
+   "id": "r_rec",
+   "actor": "rec",
+   "type": "action",
+   "label": "利用者IDを書くよう頼む(writer.write(利用者ID)。別の利用者へ替わったときも同じ上書き)"
+  },
+  {
+   "id": "r_clr",
+   "actor": "rec",
+   "type": "action",
+   "label": "消すよう頼む(writer.write(null))"
+  },
+  {
+   "id": "s_win",
+   "actor": "store",
+   "type": "decision",
+   "label": "サーバーでの描画中(windowが無い)か"
+  },
+  {
+   "id": "s_none",
+   "actor": "store",
+   "type": "action",
+   "label": "何もしない"
+  },
+  {
+   "id": "s_val",
+   "actor": "store",
+   "type": "decision",
+   "label": "渡された値は"
+  },
+  {
+   "id": "s_set",
+   "actor": "store",
+   "type": "action",
+   "label": "localStorageのaims:local-user-idに利用者IDを書く(setItem)"
+  },
+  {
+   "id": "s_rm",
+   "actor": "store",
+   "type": "action",
+   "label": "localStorageのaims:local-user-idを消す(removeItem)"
+  },
+  {
+   "id": "s_res",
+   "actor": "store",
+   "type": "decision",
+   "label": "保存先は使えたか(例外を捕まえる)"
+  },
+  {
+   "id": "s_done",
+   "actor": "store",
+   "type": "action",
+   "label": "端末の利用者IDが書き換わる(同じ端末の全タブで共有される)"
+  },
+  {
+   "id": "s_swallow",
+   "actor": "store",
+   "type": "action",
+   "label": "黙って無視する(識別情報は変わらない。通知の受け手は投げない)"
+  },
+  {
+   "id": "w_wait",
+   "actor": "ent",
+   "type": "decision",
+   "label": "次に起きるのは"
+  },
+  {
+   "id": "end",
+   "actor": "ent",
+   "type": "end",
+   "label": "アンマウントで購読を解除する(SC-12)"
+  }
+ ],
+ "flows": [
+  {
+   "from": "start",
+   "to": "e_start"
+  },
+  {
+   "from": "e_start",
+   "to": "r_sub"
+  },
+  {
+   "from": "r_sub",
+   "to": "c_conn"
+  },
+  {
+   "from": "c_conn",
+   "to": "c_env"
+  },
+  {
+   "from": "c_env",
+   "to": "c_reg",
+   "label": "作れる"
+  },
+  {
+   "from": "c_env",
+   "to": "c_throw",
+   "label": "作れない"
+  },
+  {
+   "from": "c_reg",
+   "to": "a_init"
+  },
+  {
+   "from": "a_init",
+   "to": "a_kind"
+  },
+  {
+   "from": "a_notify",
+   "to": "a_kind"
+  },
+  {
+   "from": "a_kind",
+   "to": "c_in",
+   "label": "SIGNED_IN"
+  },
+  {
+   "from": "a_kind",
+   "to": "c_ini",
+   "label": "INITIAL_SESSION"
+  },
+  {
+   "from": "a_kind",
+   "to": "c_tok",
+   "label": "TOKEN_REFRESHED"
+  },
+  {
+   "from": "a_kind",
+   "to": "c_out",
+   "label": "SIGNED_OUT"
+  },
+  {
+   "from": "a_kind",
+   "to": "c_oth",
+   "label": "それ以外"
+  },
+  {
+   "from": "c_in",
+   "to": "c_call"
+  },
+  {
+   "from": "c_ini",
+   "to": "c_call"
+  },
+  {
+   "from": "c_tok",
+   "to": "c_call"
+  },
+  {
+   "from": "c_out",
+   "to": "c_call"
+  },
+  {
+   "from": "c_oth",
+   "to": "c_call"
+  },
+  {
+   "from": "c_call",
+   "to": "r_recv"
+  },
+  {
+   "from": "r_recv",
+   "to": "d_kind"
+  },
+  {
+   "from": "d_kind",
+   "to": "r_clr",
+   "label": "signed-out"
+  },
+  {
+   "from": "d_kind",
+   "to": "d_user",
+   "label": "signed-in、またはinitial"
+  },
+  {
+   "from": "d_kind",
+   "to": "r_keep",
+   "label": "token-refreshed、またはother"
+  },
+  {
+   "from": "d_user",
+   "to": "r_rec",
+   "label": "いる"
+  },
+  {
+   "from": "d_user",
+   "to": "r_keep",
+   "label": "いない"
+  },
+  {
+   "from": "r_rec",
+   "to": "s_win"
+  },
+  {
+   "from": "r_clr",
+   "to": "s_win"
+  },
+  {
+   "from": "s_win",
+   "to": "s_none",
+   "label": "無い(サーバーでの描画中)"
+  },
+  {
+   "from": "s_win",
+   "to": "s_val",
+   "label": "ある"
+  },
+  {
+   "from": "s_val",
+   "to": "s_set",
+   "label": "利用者ID"
+  },
+  {
+   "from": "s_val",
+   "to": "s_rm",
+   "label": "null"
+  },
+  {
+   "from": "s_set",
+   "to": "s_res"
+  },
+  {
+   "from": "s_rm",
+   "to": "s_res"
+  },
+  {
+   "from": "s_res",
+   "to": "s_done",
+   "label": "使えた"
+  },
+  {
+   "from": "s_res",
+   "to": "s_swallow",
+   "label": "投げた(使えない、容量超過)"
+  },
+  {
+   "from": "r_keep",
+   "to": "w_wait"
+  },
+  {
+   "from": "s_none",
+   "to": "w_wait"
+  },
+  {
+   "from": "s_done",
+   "to": "w_wait"
+  },
+  {
+   "from": "s_swallow",
+   "to": "w_wait"
+  },
+  {
+   "from": "w_wait",
+   "to": "a_notify",
+   "label": "認証状態が変わる(通知が届く)"
+  },
+  {
+   "from": "w_wait",
+   "to": "end",
+   "label": "画面が離れる(アンマウント)"
+  }
+ ]
+}

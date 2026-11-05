@@ -1,0 +1,234 @@
+{
+ "title": "再設定のパスワード変更の構造",
+ "layers": [
+  {
+   "name": "組み立て層",
+   "label": "入口。生成と注入"
+  },
+  {
+   "name": "UI層",
+   "label": "画面の部品"
+  },
+  {
+   "name": "アプリケーション層",
+   "label": "操作の手続きと約束"
+  },
+  {
+   "name": "ドメイン層",
+   "label": "業務の規則と状態"
+  },
+  {
+   "name": "インフラ層",
+   "label": "外部へのアクセスと形の変換"
+  }
+ ],
+ "features": [
+  {
+   "name": "認証",
+   "label": "サインイン・サインアップ・再設定"
+  },
+  {
+   "name": "共有の技術",
+   "label": "接続・遷移・時計"
+  },
+  {
+   "name": "ラウンド",
+   "label": "経路の定数だけ使う"
+  }
+ ],
+ "groups": [
+  {
+   "name": "再設定の入口",
+   "feature": "認証",
+   "layer": "組み立て層",
+   "label": "再設定の入口のまとまり",
+   "files": [
+    {
+     "path": "app/(auth)/reset-password/page.tsx",
+     "functions": [
+      "ResetPasswordPage"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインアップ・再設定の手続き",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "サインアップ・再設定の手続きのまとまり",
+   "files": [
+    {
+     "path": "features/auth/application/reset-password.ts",
+     "functions": [
+      "createResetPassword"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "共通の順序",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "共通の順序のまとまり",
+   "files": [
+    {
+     "path": "features/auth/application/password-setup.ts",
+     "functions": [
+      "applyPassword"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "認証サービスの実装",
+   "feature": "認証",
+   "layer": "インフラ層",
+   "label": "認証サービスの実装のまとまり",
+   "files": [
+    {
+     "path": "features/auth/infrastructure/supabase-auth.ts",
+     "functions": [
+      "createSupabaseAuth"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サーバーの接続",
+   "feature": "共有の技術",
+   "layer": "インフラ層",
+   "label": "サーバーの接続のまとまり",
+   "files": [
+    {
+     "path": "lib/supabase/infrastructure/server.ts",
+     "functions": [
+      "createAdminClient"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "ページ全体の読み込み",
+   "feature": "認証",
+   "layer": "インフラ層",
+   "label": "ページ全体の読み込みのまとまり",
+   "files": [
+    {
+     "path": "features/auth/infrastructure/browser-page-load.ts",
+     "functions": [
+      "createBrowserPageLoad"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "ブラウザの接続",
+   "feature": "共有の技術",
+   "layer": "インフラ層",
+   "label": "ブラウザの接続のまとまり",
+   "files": [
+    {
+     "path": "lib/supabase/infrastructure/client.ts",
+     "functions": [
+      "createClient"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "本体画面の入口",
+   "feature": "認証",
+   "layer": "組み立て層",
+   "label": "本体画面の入口のまとまり",
+   "files": [
+    {
+     "path": "app/(main)/layout.tsx",
+     "functions": [
+      "MainLayout"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "遷移と時計",
+   "feature": "共有の技術",
+   "layer": "インフラ層",
+   "label": "遷移と時計のまとまり",
+   "files": [
+    {
+     "path": "lib/page-navigation/infrastructure/router-page-navigation.ts",
+     "functions": [
+      "createRouterPageNavigation"
+     ],
+     "constants": []
+    }
+   ]
+  }
+ ],
+ "externals": [
+  "認証サービス"
+ ],
+ "references": [
+  {
+   "from": "app/(auth)/reset-password/page.tsx",
+   "to": "features/auth/application/reset-password.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/page.tsx",
+   "to": "lib/page-navigation/infrastructure/router-page-navigation.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/page.tsx",
+   "to": "features/auth/infrastructure/supabase-auth.ts"
+  },
+  {
+   "from": "app/(auth)/reset-password/page.tsx",
+   "to": "lib/supabase/infrastructure/client.ts"
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "app/(main)/layout.tsx",
+   "to": "features/auth/infrastructure/browser-page-load.ts"
+  }
+ ],
+ "calls": [
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/application/password-setup.ts"
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "features/auth/infrastructure/supabase-auth.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/reset-password.ts",
+   "to": "lib/page-navigation/infrastructure/router-page-navigation.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/infrastructure/supabase-auth.ts",
+   "to": "lib/supabase/infrastructure/client.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/infrastructure/supabase-auth.ts",
+   "to": "認証サービス"
+  },
+  {
+   "from": "app/(main)/layout.tsx",
+   "to": "features/auth/infrastructure/browser-page-load.ts"
+  }
+ ]
+}

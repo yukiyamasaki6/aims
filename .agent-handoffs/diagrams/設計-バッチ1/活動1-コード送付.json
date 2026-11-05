@@ -1,0 +1,181 @@
+{
+ "title": "コードの送付と再送(サインアップ・再設定共通。変更後)",
+ "actors": [
+  {
+   "id": "u",
+   "label": "利用者"
+  },
+  {
+   "id": "v",
+   "label": "画面と集約"
+  },
+  {
+   "id": "p",
+   "label": "手続き"
+  },
+  {
+   "id": "s",
+   "label": "認証サービス"
+  }
+ ],
+ "steps": [
+  {
+   "id": "a0",
+   "actor": "u",
+   "type": "start",
+   "label": "送信または再送を押す"
+  },
+  {
+   "id": "a1",
+   "actor": "v",
+   "type": "decision",
+   "label": "実行中か"
+  },
+  {
+   "id": "a2",
+   "actor": "v",
+   "type": "decision",
+   "label": "メール・待ち(コード段階)・チェックのいずれかに不備か"
+  },
+  {
+   "id": "a3",
+   "actor": "v",
+   "type": "action",
+   "label": "不備を全て欄に示す(送らない)"
+  },
+  {
+   "id": "a4",
+   "actor": "v",
+   "type": "action",
+   "label": "送信中にする(送付を依頼)"
+  },
+  {
+   "id": "a5",
+   "actor": "p",
+   "type": "action",
+   "label": "コードの送付を頼む(トークン付き)"
+  },
+  {
+   "id": "a6",
+   "actor": "s",
+   "type": "decision",
+   "label": "登録済みの確認済み利用者か(サインアップのみ)"
+  },
+  {
+   "id": "a7",
+   "actor": "s",
+   "type": "action",
+   "label": "案内メールを送る(コードなし)"
+  },
+  {
+   "id": "a8",
+   "actor": "s",
+   "type": "action",
+   "label": "コードのメールを送る"
+  },
+  {
+   "id": "a9",
+   "actor": "p",
+   "type": "decision",
+   "label": "受け付けられたか"
+  },
+  {
+   "id": "a10",
+   "actor": "v",
+   "type": "action",
+   "label": "コード段階へ。待ちを60秒にし、トークンを消費してチェックをやり直す"
+  },
+  {
+   "id": "a11",
+   "actor": "v",
+   "type": "action",
+   "label": "失敗の理由を示し、トークンを消費してチェックをやり直す(通信断も同じ)"
+  },
+  {
+   "id": "a12",
+   "actor": "u",
+   "type": "end",
+   "label": "終了"
+  },
+  {
+   "id": "a13",
+   "actor": "v",
+   "type": "end",
+   "label": "何もしない"
+  }
+ ],
+ "flows": [
+  {
+   "from": "a0",
+   "to": "a1"
+  },
+  {
+   "from": "a1",
+   "to": "a13",
+   "label": "実行中"
+  },
+  {
+   "from": "a1",
+   "to": "a2",
+   "label": "実行中でない"
+  },
+  {
+   "from": "a2",
+   "to": "a3",
+   "label": "不備あり"
+  },
+  {
+   "from": "a3",
+   "to": "a12"
+  },
+  {
+   "from": "a2",
+   "to": "a4",
+   "label": "不備なし"
+  },
+  {
+   "from": "a4",
+   "to": "a5"
+  },
+  {
+   "from": "a5",
+   "to": "a6"
+  },
+  {
+   "from": "a6",
+   "to": "a7",
+   "label": "はい"
+  },
+  {
+   "from": "a6",
+   "to": "a8",
+   "label": "いいえ"
+  },
+  {
+   "from": "a7",
+   "to": "a9"
+  },
+  {
+   "from": "a8",
+   "to": "a9"
+  },
+  {
+   "from": "a9",
+   "to": "a10",
+   "label": "受け付けられた"
+  },
+  {
+   "from": "a9",
+   "to": "a11",
+   "label": "失敗"
+  },
+  {
+   "from": "a10",
+   "to": "a12"
+  },
+  {
+   "from": "a11",
+   "to": "a12"
+  }
+ ]
+}

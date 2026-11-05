@@ -1,0 +1,233 @@
+{
+ "title": "SC-06 認証状態の購読で、セッション喪失を検知して/signinへ移る(通知が発火した後の流れ)",
+ "actors": [
+  {
+   "id": "auth",
+   "label": "認証サービスの窓口(auth-jsと端末のセッション)"
+  },
+  {
+   "id": "conv",
+   "label": "窓口の変換(supabase-auth.tsの購読)"
+  },
+  {
+   "id": "proc",
+   "label": "見張りの手続き(session.ts)"
+  },
+  {
+   "id": "rule",
+   "label": "規則(auth-change、session-end-flow、auth-routes)"
+  },
+  {
+   "id": "nav",
+   "label": "遷移(ページ全体の読み込み)"
+  }
+ ],
+ "steps": [
+  {
+   "id": "start",
+   "actor": "auth",
+   "type": "start",
+   "label": "認証状態の通知が発火する(SIGNED_OUTなど)"
+  },
+  {
+   "id": "c_map",
+   "actor": "conv",
+   "type": "action",
+   "label": "イベント名を内側の変化に写して知らせる(SIGNED_OUTはsigned-outでuserIdはnull。SIGNED_IN、INITIAL_SESSION、TOKEN_REFRESHED、それ以外もそれぞれの種類に写す)"
+  },
+  {
+   "id": "p_recv",
+   "actor": "proc",
+   "type": "action",
+   "label": "購読者が変化を受け、喪失かを規則に尋ねる(通信状態は見ない)"
+  },
+  {
+   "id": "r_lost",
+   "actor": "rule",
+   "type": "decision",
+   "label": "変化の種類はsigned-outか"
+  },
+  {
+   "id": "e_keep",
+   "actor": "rule",
+   "type": "end",
+   "label": "喪失ではない。移らない(signed-in、initial、token-refreshed、other)"
+  },
+  {
+   "id": "p_lose",
+   "actor": "proc",
+   "type": "action",
+   "label": "喪失として、今の場所を遷移元の候補にして、遷移の可否を規則に尋ねる"
+  },
+  {
+   "id": "n_here",
+   "actor": "nav",
+   "type": "action",
+   "label": "今の場所(パスとクエリ)を返す(window.location)"
+  },
+  {
+   "id": "r_running",
+   "actor": "rule",
+   "type": "decision",
+   "label": "サインアウトを実行中か"
+  },
+  {
+   "id": "e_running",
+   "actor": "rule",
+   "type": "end",
+   "label": "移らない(サインアウトが、完了後に遷移元なしで移るかを判定する。SC-04)"
+  },
+  {
+   "id": "r_left",
+   "actor": "rule",
+   "type": "decision",
+   "label": "サインインへの遷移をすでに始めているか"
+  },
+  {
+   "id": "e_left",
+   "actor": "rule",
+   "type": "end",
+   "label": "移らない(遷移は1回だけ)"
+  },
+  {
+   "id": "r_mark",
+   "actor": "rule",
+   "type": "action",
+   "label": "遷移を始めた状態にする(left=true)"
+  },
+  {
+   "id": "r_valid",
+   "actor": "rule",
+   "type": "decision",
+   "label": "今の場所は遷移元として有効か(長さ、先頭の//、制御文字、同一オリジン、保護の範囲)"
+  },
+  {
+   "id": "r_default",
+   "actor": "rule",
+   "type": "decision",
+   "label": "有効な場所は、既定の行き先(/rounds)そのものか"
+  },
+  {
+   "id": "r_plain",
+   "actor": "rule",
+   "type": "action",
+   "label": "移る先を/signin(遷移元なし)にする"
+  },
+  {
+   "id": "r_with",
+   "actor": "rule",
+   "type": "action",
+   "label": "移る先を/signin?returnTo=<符号化した今の場所>にする"
+  },
+  {
+   "id": "p_go",
+   "actor": "proc",
+   "type": "action",
+   "label": "移る先を受け、ページの置き換えを頼む"
+  },
+  {
+   "id": "n_replace",
+   "actor": "nav",
+   "type": "action",
+   "label": "ページ全体を移る先へ置き換える(履歴に残さない)"
+  },
+  {
+   "id": "end",
+   "actor": "nav",
+   "type": "end",
+   "label": "/signinの読み込みへ(表示はSC-02、オフラインの応答はSC-15。同じ通知を受ける他の購読者はSC-08、SC-55)"
+  }
+ ],
+ "flows": [
+  {
+   "from": "start",
+   "to": "c_map"
+  },
+  {
+   "from": "c_map",
+   "to": "p_recv"
+  },
+  {
+   "from": "p_recv",
+   "to": "r_lost"
+  },
+  {
+   "from": "r_lost",
+   "to": "e_keep",
+   "label": "いいえ"
+  },
+  {
+   "from": "r_lost",
+   "to": "p_lose",
+   "label": "はい"
+  },
+  {
+   "from": "p_lose",
+   "to": "n_here"
+  },
+  {
+   "from": "n_here",
+   "to": "r_running"
+  },
+  {
+   "from": "r_running",
+   "to": "e_running",
+   "label": "実行中"
+  },
+  {
+   "from": "r_running",
+   "to": "r_left",
+   "label": "実行中でない"
+  },
+  {
+   "from": "r_left",
+   "to": "e_left",
+   "label": "始めている"
+  },
+  {
+   "from": "r_left",
+   "to": "r_mark",
+   "label": "始めていない"
+  },
+  {
+   "from": "r_mark",
+   "to": "r_valid"
+  },
+  {
+   "from": "r_valid",
+   "to": "r_plain",
+   "label": "無効"
+  },
+  {
+   "from": "r_valid",
+   "to": "r_default",
+   "label": "有効"
+  },
+  {
+   "from": "r_default",
+   "to": "r_plain",
+   "label": "そのもの"
+  },
+  {
+   "from": "r_default",
+   "to": "r_with",
+   "label": "別の場所"
+  },
+  {
+   "from": "r_plain",
+   "to": "p_go"
+  },
+  {
+   "from": "r_with",
+   "to": "p_go"
+  },
+  {
+   "from": "p_go",
+   "to": "n_replace"
+  },
+  {
+   "from": "n_replace",
+   "to": "end"
+  }
+ ]
+}

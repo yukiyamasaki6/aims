@@ -1,0 +1,20 @@
+$ pnpm --filter web test
+$ vitest run
+
+ RUN  v4.1.11 /root/worktrees/aims-batch1-simplify/apps/web
+      Coverage enabled with v8
+
+
+ Test Files  191 passed (191)
+      Tests  2617 passed (2617)
+   Start at  07:10:19
+   Duration  110.04s (transform 5.61s, setup 29.71s, import 21.28s, tests 80.65s, environment 145.19s)
+
+ % Coverage report from v8
+
+=============================== Coverage summary ===============================
+Statements   : 99.37% ( 4479/4507 )
+Branches     : 97.38% ( 2458/2524 )
+Functions    : 99.86% ( 1431/1433 )
+Lines        : 99.89% ( 3929/3933 )
+================================================================================

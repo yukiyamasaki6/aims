@@ -1,0 +1,11 @@
+
+
+
+Running 5 tests using 2 workers
+
+[1/5] [setup] › tests/e2e/auth.setup.ts:15:6 › 共有E2Eユーザーの認証状態を準備する
+[2/5] [chromium] › tests/e2e/auth/password-reset.spec.ts:127:5 › 再送待機時間の終了後に再送すると、新しい認証コードが届く
+[3/5] [chromium] › tests/e2e/auth/password-reset.spec.ts:73:5 › メールで本人確認してパスワードを変更すると、この端末と別の端末のサインインが終わり、新しいパスワードでだけサインインできる
+[4/5] [chromium] › tests/e2e/auth/password-reset.spec.ts:157:5 › パスワード再設定画面で「サインインに戻る」を押すと、サインイン画面へ移動する
+[5/5] [chromium] › tests/e2e/auth/password-reset.spec.ts:171:7 › 認証済み › パスワード再設定画面を開くと、ラウンド一覧へリダイレクトされる
+  5 passed (23.1s)

@@ -1,0 +1,149 @@
+{
+ "title": "認証サービスへの結果の型の構造",
+ "layers": [
+  {
+   "name": "組み立て層",
+   "label": "入口。生成と注入"
+  },
+  {
+   "name": "UI層",
+   "label": "画面の部品"
+  },
+  {
+   "name": "アプリケーション層",
+   "label": "操作の手続きと約束"
+  },
+  {
+   "name": "ドメイン層",
+   "label": "業務の規則と状態"
+  },
+  {
+   "name": "インフラ層",
+   "label": "外部へのアクセスと形の変換"
+  }
+ ],
+ "features": [
+  {
+   "name": "認証",
+   "label": "サインイン・サインアップ・再設定"
+  },
+  {
+   "name": "共有の技術",
+   "label": "接続・遷移・時計"
+  },
+  {
+   "name": "ラウンド",
+   "label": "経路の定数だけ使う"
+  }
+ ],
+ "groups": [
+  {
+   "name": "結果の型",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "結果の型のまとまり",
+   "files": [
+    {
+     "path": "features/auth/application/call-result.ts",
+     "functions": [
+      "failureOf"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "認証サービスの実装",
+   "feature": "認証",
+   "layer": "インフラ層",
+   "label": "認証サービスの実装のまとまり",
+   "files": [
+    {
+     "path": "features/auth/infrastructure/supabase-auth.ts",
+     "functions": [
+      "createSupabaseAuth"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインインの手続き",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "サインインの手続きのまとまり",
+   "files": [
+    {
+     "path": "features/auth/application/sign-in.ts",
+     "functions": [
+      "createSignIn"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "共通の順序",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "共通の順序のまとまり",
+   "files": [
+    {
+     "path": "features/auth/application/password-setup.ts",
+     "functions": [
+      "deliver",
+      "verifyCode",
+      "applyPassword"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインアウトの手続き",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "サインアウトの手続きのまとまり",
+   "files": [
+    {
+     "path": "features/auth/application/session.ts",
+     "functions": [
+      "createSession"
+     ],
+     "constants": []
+    }
+   ]
+  }
+ ],
+ "externals": [
+  "認証サービス"
+ ],
+ "references": [
+  {
+   "from": "features/auth/infrastructure/supabase-auth.ts",
+   "to": "features/auth/application/call-result.ts"
+  },
+  {
+   "from": "features/auth/application/password-setup.ts",
+   "to": "features/auth/application/call-result.ts"
+  },
+  {
+   "from": "features/auth/application/session.ts",
+   "to": "features/auth/application/call-result.ts"
+  }
+ ],
+ "calls": [
+  {
+   "from": "features/auth/application/password-setup.ts",
+   "to": "features/auth/application/call-result.ts"
+  },
+  {
+   "from": "features/auth/application/session.ts",
+   "to": "features/auth/application/call-result.ts"
+  },
+  {
+   "from": "features/auth/infrastructure/supabase-auth.ts",
+   "to": "認証サービス"
+  }
+ ]
+}

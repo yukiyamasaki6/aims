@@ -1,0 +1,185 @@
+{
+ "title": "再設定のパスワード変更(変更後。ブラウザから直接)",
+ "actors": [
+  {
+   "id": "u",
+   "label": "利用者"
+  },
+  {
+   "id": "v",
+   "label": "画面と集約"
+  },
+  {
+   "id": "p",
+   "label": "再設定の手続き"
+  },
+  {
+   "id": "s",
+   "label": "認証サービス(ブラウザの接続)"
+  },
+  {
+   "id": "n",
+   "label": "遷移(router)"
+  }
+ ],
+ "steps": [
+  {
+   "id": "b0",
+   "actor": "u",
+   "type": "start",
+   "label": "新しいパスワードを入れて変更を押す"
+  },
+  {
+   "id": "b1",
+   "actor": "v",
+   "type": "decision",
+   "label": "実行中か"
+  },
+  {
+   "id": "b2",
+   "actor": "v",
+   "type": "decision",
+   "label": "パスワードが空、または半角英数記号以外か"
+  },
+  {
+   "id": "b3",
+   "actor": "v",
+   "type": "action",
+   "label": "規則の文面を示す"
+  },
+  {
+   "id": "b4",
+   "actor": "v",
+   "type": "action",
+   "label": "設定中にする"
+  },
+  {
+   "id": "b5",
+   "actor": "p",
+   "type": "action",
+   "label": "updateUserでパスワードを変更"
+  },
+  {
+   "id": "b6",
+   "actor": "s",
+   "type": "decision",
+   "label": "受け付けたか(受付時に他の端末のセッションを全て終える)"
+  },
+  {
+   "id": "b7",
+   "actor": "v",
+   "type": "action",
+   "label": "理由を示す(72バイト超・弱いパスワードは規則の文面)。設定中を解除"
+  },
+  {
+   "id": "b8",
+   "actor": "v",
+   "type": "decision",
+   "label": "画面はまだ表示中か"
+  },
+  {
+   "id": "b9",
+   "actor": "v",
+   "type": "action",
+   "label": "passwordSetを送る(設定中は解除しない)"
+  },
+  {
+   "id": "b10",
+   "actor": "p",
+   "type": "action",
+   "label": "この端末のサインインを終える(signOut local。結果は見ない)"
+  },
+  {
+   "id": "b11",
+   "actor": "n",
+   "type": "action",
+   "label": "/signinへrouterで移る"
+  },
+  {
+   "id": "b12",
+   "actor": "u",
+   "type": "end",
+   "label": "終了"
+  },
+  {
+   "id": "b13",
+   "actor": "v",
+   "type": "end",
+   "label": "何もしない"
+  }
+ ],
+ "flows": [
+  {
+   "from": "b0",
+   "to": "b1"
+  },
+  {
+   "from": "b1",
+   "to": "b13",
+   "label": "実行中"
+  },
+  {
+   "from": "b1",
+   "to": "b2",
+   "label": "実行中でない"
+  },
+  {
+   "from": "b2",
+   "to": "b3",
+   "label": "不備あり"
+  },
+  {
+   "from": "b3",
+   "to": "b12"
+  },
+  {
+   "from": "b2",
+   "to": "b4",
+   "label": "不備なし"
+  },
+  {
+   "from": "b4",
+   "to": "b5"
+  },
+  {
+   "from": "b5",
+   "to": "b6"
+  },
+  {
+   "from": "b6",
+   "to": "b7",
+   "label": "失敗"
+  },
+  {
+   "from": "b7",
+   "to": "b12"
+  },
+  {
+   "from": "b6",
+   "to": "b8",
+   "label": "受け付けた"
+  },
+  {
+   "from": "b8",
+   "to": "b13",
+   "label": "離れていた(遷移しない)"
+  },
+  {
+   "from": "b8",
+   "to": "b9",
+   "label": "表示中"
+  },
+  {
+   "from": "b9",
+   "to": "b10"
+  },
+  {
+   "from": "b10",
+   "to": "b11"
+  },
+  {
+   "from": "b11",
+   "to": "b12"
+  }
+ ]
+}

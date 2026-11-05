@@ -1,0 +1,175 @@
+{
+ "title": "サインインの送信(変更後)",
+ "actors": [
+  {
+   "id": "u",
+   "label": "利用者"
+  },
+  {
+   "id": "v",
+   "label": "画面と集約"
+  },
+  {
+   "id": "p",
+   "label": "サインインの手続き"
+  },
+  {
+   "id": "s",
+   "label": "認証サービス"
+  },
+  {
+   "id": "n",
+   "label": "遷移(router)"
+  }
+ ],
+ "steps": [
+  {
+   "id": "c0",
+   "actor": "u",
+   "type": "start",
+   "label": "メール欄でEnter(次の欄へ)、パスワード欄のEnterまたはボタンで送信"
+  },
+  {
+   "id": "c1",
+   "actor": "v",
+   "type": "decision",
+   "label": "送信中か"
+  },
+  {
+   "id": "c2",
+   "actor": "v",
+   "type": "decision",
+   "label": "メール・パスワード・チェックのいずれかに不備か"
+  },
+  {
+   "id": "c3",
+   "actor": "v",
+   "type": "action",
+   "label": "不備を全て欄に示す(送らない)"
+  },
+  {
+   "id": "c4",
+   "actor": "v",
+   "type": "action",
+   "label": "送信中にする"
+  },
+  {
+   "id": "c5",
+   "actor": "p",
+   "type": "action",
+   "label": "signInWithPasswordをトークン付きで呼ぶ"
+  },
+  {
+   "id": "c6",
+   "actor": "s",
+   "type": "decision",
+   "label": "受け付けたか"
+  },
+  {
+   "id": "c7",
+   "actor": "v",
+   "type": "action",
+   "label": "失敗の理由を示し、トークンを消費してチェックをやり直す(通信断も同じ)。送信中を解除"
+  },
+  {
+   "id": "c8",
+   "actor": "v",
+   "type": "decision",
+   "label": "画面はまだ表示中か"
+  },
+  {
+   "id": "c9",
+   "actor": "v",
+   "type": "action",
+   "label": "signedInを送る(送信中は解除しない)"
+  },
+  {
+   "id": "c10",
+   "actor": "n",
+   "type": "action",
+   "label": "画面の入口が渡したfromから行き先を決めて遷移(無効なら/rounds)"
+  },
+  {
+   "id": "c11",
+   "actor": "u",
+   "type": "end",
+   "label": "終了"
+  },
+  {
+   "id": "c12",
+   "actor": "v",
+   "type": "end",
+   "label": "何もしない"
+  }
+ ],
+ "flows": [
+  {
+   "from": "c0",
+   "to": "c1"
+  },
+  {
+   "from": "c1",
+   "to": "c12",
+   "label": "送信中"
+  },
+  {
+   "from": "c1",
+   "to": "c2",
+   "label": "送信中でない"
+  },
+  {
+   "from": "c2",
+   "to": "c3",
+   "label": "不備あり"
+  },
+  {
+   "from": "c3",
+   "to": "c11"
+  },
+  {
+   "from": "c2",
+   "to": "c4",
+   "label": "不備なし"
+  },
+  {
+   "from": "c4",
+   "to": "c5"
+  },
+  {
+   "from": "c5",
+   "to": "c6"
+  },
+  {
+   "from": "c6",
+   "to": "c7",
+   "label": "失敗"
+  },
+  {
+   "from": "c7",
+   "to": "c11"
+  },
+  {
+   "from": "c6",
+   "to": "c8",
+   "label": "受け付けた"
+  },
+  {
+   "from": "c8",
+   "to": "c12",
+   "label": "離れていた"
+  },
+  {
+   "from": "c8",
+   "to": "c9",
+   "label": "表示中"
+  },
+  {
+   "from": "c9",
+   "to": "c10"
+  },
+  {
+   "from": "c10",
+   "to": "c11"
+  }
+ ]
+}

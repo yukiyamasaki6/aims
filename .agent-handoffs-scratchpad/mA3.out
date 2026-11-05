@@ -1,0 +1,37 @@
+--- z-control (mA-z-control-1793841690572@aims.test)
+before: otherDev1: GET /user -> 200 ok
+DB sessions before: 3
+control (no updateUser): otherDev1: GET /user -> 200 ok ; refresh -> 200 ok
+control: otherDev2: GET /user -> 200 ok ; refresh -> 200 ok
+--- a-updateUser-only (mA-a-updateUser-only-1793841691332@aims.test)
+before: otherDev1: GET /user -> 200 ok
+DB sessions before: 3
+updateUser -> ok
+after updateUser: otherDev1: GET /user -> 403 session_not_found ; refresh -> 400 refresh_token_not_found
+after updateUser: otherDev2: GET /user -> 403 session_not_found ; refresh -> 400 refresh_token_not_found
+after updateUser: recoverySession(self): GET /user -> 200 ok ; refresh -> 200 ok
+DB sessions at end: 1
+--- b-global (mA-b-global-1793841692234@aims.test)
+before: otherDev1: GET /user -> 200 ok
+DB sessions before: 3
+updateUser -> ok
+after updateUser: otherDev1: GET /user -> 403 session_not_found ; refresh -> 400 refresh_token_not_found
+after updateUser: otherDev2: GET /user -> 403 session_not_found ; refresh -> 400 refresh_token_not_found
+after updateUser: recoverySession(self): GET /user -> 200 ok ; refresh -> 200 ok
+signOut(global) -> ok
+after signOut(global): otherDev1: GET /user -> 403 session_not_found ; refresh -> 400 refresh_token_not_found
+after signOut(global): otherDev2: GET /user -> 403 session_not_found ; refresh -> 400 refresh_token_not_found
+after signOut(global): recoverySession(self): GET /user -> 403 session_not_found ; refresh -> 400 refresh_token_not_found
+DB sessions at end: 0
+--- c-local (mA-c-local-1793841693260@aims.test)
+before: otherDev1: GET /user -> 200 ok
+DB sessions before: 3
+updateUser -> ok
+after updateUser: otherDev1: GET /user -> 403 session_not_found ; refresh -> 400 refresh_token_not_found
+after updateUser: otherDev2: GET /user -> 403 session_not_found ; refresh -> 400 refresh_token_not_found
+after updateUser: recoverySession(self): GET /user -> 200 ok ; refresh -> 200 ok
+signOut(local) -> ok
+after signOut(local): otherDev1: GET /user -> 403 session_not_found ; refresh -> 400 refresh_token_not_found
+after signOut(local): otherDev2: GET /user -> 403 session_not_found ; refresh -> 400 refresh_token_not_found
+after signOut(local): recoverySession(self): GET /user -> 403 session_not_found ; refresh -> 400 refresh_token_not_found
+DB sessions at end: 0

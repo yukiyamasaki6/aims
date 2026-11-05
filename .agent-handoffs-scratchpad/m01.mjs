@@ -1,0 +1,15 @@
+const API='http://127.0.0.1:54321';
+const SECRET='<LOCAL_SECRET_KEY: supabase status で得る>';
+const PUB='sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH';
+const email=`reg-${Date.now()}@example.com`;
+let r=await fetch(`${API}/auth/v1/admin/users`,{method:'POST',headers:{apikey:SECRET,Authorization:`Bearer ${SECRET}`,'content-type':'application/json'},body:JSON.stringify({email,password:'Passw0rd!x',email_confirm:true})});
+console.log('create',r.status);
+r=await fetch(`${API}/auth/v1/otp`,{method:'POST',headers:{apikey:PUB,'content-type':'application/json'},body:JSON.stringify({email,create_user:true,gotrue_meta_security:{captcha_token:'XXXX.DUMMY.TOKEN.XXXX'}})});
+console.log('otp',r.status,await r.text());
+await new Promise(r=>setTimeout(r,1500));
+const list=await (await fetch('http://127.0.0.1:54324/api/v1/messages')).json();
+const m=list.messages.find(m=>m.To.some(t=>t.Address===email));
+console.log(m?.Subject);
+const full=await (await fetch(`http://127.0.0.1:54324/api/v1/message/${m.ID}`)).json();
+console.log(full.HTML);
+console.log('has6digit',/\b\d{6}\b/.test(full.HTML),'hasLink',/token=|verify|href/.test(full.HTML));

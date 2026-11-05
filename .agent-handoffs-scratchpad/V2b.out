@@ -1,0 +1,5 @@
+[M37b] same document kept (no full reload): same-document
+[M37b] URL after 2s: http://localhost:3100/signin
+[M37b] captcha-ready attr: true
+[M37b] URL after sign-in attempt: http://localhost:3100/rounds | body: "個人\nサインアウト\nラウンド一覧\n\nまだラウンドがありません。"
+  2 passed (26.7s)

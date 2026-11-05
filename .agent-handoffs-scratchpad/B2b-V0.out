@@ -1,0 +1,25 @@
+[M 39w3] +0.5s email step loaded
+[M 39w3] +0.8s password step reached (recovery session exists)
+[M 39w3] +0.8s auth cookie present: true
+[M 39w3] +3.8s clicking link
+[M 39w3] +3.8s framenavigated http://localhost:3100/signin
+[M 39w3] +4.1s RES 200 /rounds location=-
+[M 39w3] +4.1s RES 200 /rounds location=-
+[M 39w3] +4.1s RES 200 /rounds location=-
+[M 39w3] +4.1s RES 200 /rounds location=-
+[M 39w3] +4.3s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +4.8s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +5.3s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +5.8s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +6.4s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +6.9s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +7.4s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +7.9s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +8.4s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +8.9s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +9.4s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +9.9s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +10.4s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +10.9s poll url: http://localhost:3100/signin | h1: "サインイン"
+[M 39w3] +10.9s cookie present at end: true
+  2 passed (32.5s)

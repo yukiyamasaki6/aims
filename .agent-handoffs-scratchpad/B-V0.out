@@ -1,0 +1,51 @@
+
+
+
+Running 3 tests using 2 workers
+
+[1/3] [setup] › tests/e2e/auth.setup.ts:15:6 › 共有E2Eユーザーの認証状態を準備する
+[2/3] [chromium] › tests/e2e/auth/b-measure.spec.ts:68:5 › B37: パスワード変更後の遷移先
+[3/3] [chromium] › tests/e2e/auth/b-measure.spec.ts:26:5 › B39: パスワード段階の「サインインに戻る」
+[chromium] › tests/e2e/auth/b-measure.spec.ts:26:5 › B39: パスワード段階の「サインインに戻る」
+[MEASURE] password step reached; sb cookies: ["sb-localhost-auth-token-flow-bbeb04232f08b531d376c3f7b28c270e-code-verifier","sb-localhost-auth-token-flows-code-verifier","sb-localhost-auth-token-code-verifier","sb-localhost-auth-token"]
+
+[MEASURE] link count in password step: 1 href: /signin
+
+[MEASURE] requests to /signin|/rounds BEFORE click: ["GET /signin?_rsc=5dk0BnaBCbAA9qLH rsc=1 prefetch=1","GET /signin?_rsc=t-h9rwXTB_3m-zo4 rsc=1 prefetch=1","GET /signin?_rsc=-Y1mpLiShg50vgme rsc=1 prefetch=1","GET /signin?_rsc=x6EXz_AhH0VDy-ol rsc=1 prefetch=1","GET /signin?_rsc=r0MOHG2BqpNJJrS7 rsc=1 prefetch=1","GET /signin?_rsc=X98_2OptnkdmXiTA rsc=1 prefetch=1"]
+
+[MEASURE] responses BEFORE click: ["200 /signin?_rsc=5dk0BnaBCbAA9qLH location=- type=text/x-component","200 /signin?_rsc=t-h9rwXTB_3m-zo4 location=- type=text/x-component","200 /signin?_rsc=-Y1mpLiShg50vgme location=- type=text/x-component","200 /signin?_rsc=x6EXz_AhH0VDy-ol location=- type=text/x-component","200 /signin?_rsc=r0MOHG2BqpNJJrS7 location=- type=text/x-component","200 /signin?_rsc=X98_2OptnkdmXiTA location=- type=text/x-component"]
+
+[chromium] › tests/e2e/auth/b-measure.spec.ts:68:5 › B37: パスワード変更後の遷移先
+[MEASURE] prefetch-ish requests before submit: ["GET /signin?_rsc=5dk0BnaBCbAA9qLH rsc=1 prefetch=1","GET /signin?_rsc=t-h9rwXTB_3m-zo4 rsc=1 prefetch=1","GET /signin?_rsc=-Y1mpLiShg50vgme rsc=1 prefetch=1","GET /signin?_rsc=x6EXz_AhH0VDy-ol rsc=1 prefetch=1","GET /signin?_rsc=r0MOHG2BqpNJJrS7 rsc=1 prefetch=1","GET /signin?_rsc=X98_2OptnkdmXiTA rsc=1 prefetch=1"]
+
+[chromium] › tests/e2e/auth/b-measure.spec.ts:26:5 › B39: パスワード段階の「サインインに戻る」
+[MEASURE] URL after click: http://localhost:3100/signin
+
+[MEASURE] requests after click: ["GET /rounds?_rsc=fY_tl4JDagBTJcZI rsc=1 prefetch=1","GET /rounds?_rsc=PX78TOAYqE3zVP1G rsc=1 prefetch=1","GET /rounds?_rsc=3SWG4P0hPDLMwFOU rsc=1 prefetch=1","GET /rounds?_rsc=K5gjCVVGvCUQhiCL rsc=1 prefetch=1"]
+
+[MEASURE] responses after click (all): ["200 /signin?_rsc=5dk0BnaBCbAA9qLH location=- type=text/x-component","200 /signin?_rsc=t-h9rwXTB_3m-zo4 location=- type=text/x-component","200 /signin?_rsc=-Y1mpLiShg50vgme location=- type=text/x-component","200 /signin?_rsc=x6EXz_AhH0VDy-ol location=- type=text/x-component","200 /signin?_rsc=r0MOHG2BqpNJJrS7 location=- type=text/x-component","200 /signin?_rsc=X98_2OptnkdmXiTA location=- type=text/x-component","200 /rounds?_rsc=fY_tl4JDagBTJcZI location=- type=text/x-component","200 /rounds?_rsc=PX78TOAYqE3zVP1G location=- type=text/x-component","200 /rounds?_rsc=3SWG4P0hPDLMwFOU location=- type=text/x-component","200 /rounds?_rsc=K5gjCVVGvCUQhiCL location=- type=text/x-component"]
+
+[MEASURE] heading signin visible: true
+
+[MEASURE] body text head: "サインイン\nサインイン\n\nパスワードをお忘れですか\n\nアカウントをお持ちでない方は サインアップ"
+
+[MEASURE] sb cookies after click: ["sb-localhost-auth-token-flow-bbeb04232f08b531d376c3f7b28c270e-code-verifier","sb-localhost-auth-token-flows-code-verifier","sb-localhost-auth-token-code-verifier","sb-localhost-auth-token"]
+
+[MEASURE] after goto /rounds URL: http://localhost:3100/rounds
+
+[MEASURE] old password still valid (token endpoint status): 200
+
+[chromium] › tests/e2e/auth/b-measure.spec.ts:68:5 › B37: パスワード変更後の遷移先
+[MEASURE] final URL: http://localhost:3100/signin
+
+[MEASURE] requests after submit: ["GET /signin rsc=- prefetch=-"]
+
+[MEASURE] signin heading visible: true
+
+[MEASURE] body text head: "サインイン\nサインイン\n\nパスワードをお忘れですか\n\nアカウントをお持ちでない方は サインアップ"
+
+[MEASURE] sb cookies: []
+
+[MEASURE] goto /rounds -> http://localhost:3100/rounds
+
+  3 passed (28.6s)

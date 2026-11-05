@@ -1,0 +1,185 @@
+{
+ "title": "サインインの遷移元の受け渡しの構造",
+ "layers": [
+  {
+   "name": "組み立て層",
+   "label": "入口。生成と注入"
+  },
+  {
+   "name": "UI層",
+   "label": "画面の部品"
+  },
+  {
+   "name": "アプリケーション層",
+   "label": "操作の手続きと約束"
+  },
+  {
+   "name": "ドメイン層",
+   "label": "業務の規則と状態"
+  },
+  {
+   "name": "インフラ層",
+   "label": "外部へのアクセスと形の変換"
+  }
+ ],
+ "features": [
+  {
+   "name": "認証",
+   "label": "サインイン・サインアップ・再設定"
+  },
+  {
+   "name": "共有の技術",
+   "label": "接続・遷移・時計"
+  },
+  {
+   "name": "ラウンド",
+   "label": "経路の定数だけ使う"
+  }
+ ],
+ "groups": [
+  {
+   "name": "サインインの入口",
+   "feature": "認証",
+   "layer": "組み立て層",
+   "label": "サインインの入口のまとまり",
+   "files": [
+    {
+     "path": "app/(auth)/signin/page.tsx",
+     "functions": [
+      "SignInPage"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインイン画面",
+   "feature": "認証",
+   "layer": "UI層",
+   "label": "サインイン画面のまとまり",
+   "files": [
+    {
+     "path": "features/auth/ui/signin-form.tsx",
+     "functions": [
+      "SignInForm"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "サインインの手続き",
+   "feature": "認証",
+   "layer": "アプリケーション層",
+   "label": "サインインの手続きのまとまり",
+   "files": [
+    {
+     "path": "features/auth/application/sign-in.ts",
+     "functions": [
+      "createSignIn"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "経路の規則",
+   "feature": "認証",
+   "layer": "ドメイン層",
+   "label": "経路の規則のまとまり",
+   "files": [
+    {
+     "path": "features/auth/domain/auth-routes.ts",
+     "functions": [
+      "destinationOf"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "認証サービスの実装",
+   "feature": "認証",
+   "layer": "インフラ層",
+   "label": "認証サービスの実装のまとまり",
+   "files": [
+    {
+     "path": "features/auth/infrastructure/supabase-auth.ts",
+     "functions": [
+      "createSupabaseAuth"
+     ],
+     "constants": []
+    }
+   ]
+  },
+  {
+   "name": "遷移と時計",
+   "feature": "共有の技術",
+   "layer": "インフラ層",
+   "label": "遷移と時計のまとまり",
+   "files": [
+    {
+     "path": "lib/page-navigation/infrastructure/router-page-navigation.ts",
+     "functions": [
+      "createRouterPageNavigation"
+     ],
+     "constants": []
+    }
+   ]
+  }
+ ],
+ "externals": [
+  "認証サービス"
+ ],
+ "references": [
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "features/auth/application/sign-in.ts"
+  },
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "features/auth/ui/signin-form.tsx"
+  },
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "features/auth/infrastructure/supabase-auth.ts"
+  },
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "lib/page-navigation/infrastructure/router-page-navigation.ts"
+  },
+  {
+   "from": "features/auth/application/sign-in.ts",
+   "to": "features/auth/domain/auth-routes.ts"
+  }
+ ],
+ "calls": [
+  {
+   "from": "app/(auth)/signin/page.tsx",
+   "to": "features/auth/ui/signin-form.tsx"
+  },
+  {
+   "from": "features/auth/ui/signin-form.tsx",
+   "to": "features/auth/application/sign-in.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/sign-in.ts",
+   "to": "features/auth/infrastructure/supabase-auth.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/sign-in.ts",
+   "to": "lib/page-navigation/infrastructure/router-page-navigation.ts",
+   "via_injection": true
+  },
+  {
+   "from": "features/auth/application/sign-in.ts",
+   "to": "features/auth/domain/auth-routes.ts"
+  },
+  {
+   "from": "features/auth/infrastructure/supabase-auth.ts",
+   "to": "認証サービス"
+  }
+ ]
+}

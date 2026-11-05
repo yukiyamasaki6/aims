@@ -1,0 +1,525 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1735" height="13729" viewBox="0 0 1735 13729">
+<style>text { font-family: IPAGothic, sans-serif; } </style>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#64768A"/></marker>
+<marker id="return-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#AE6730"/></marker>
+<filter id="shadow" x="-20%" y="-30%" width="140%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#233244" flood-opacity="0.07"/></filter>
+</defs>
+<rect width="1735.0" height="13729" fill="#FFFFFF"/>
+<text x="30" y="43" font-size="21" font-weight="700" fill="#172635">SC-01 サインアップする</text>
+<rect x="30.0" y="65" width="322" height="13642.0" fill="#F1F6FC"/>
+<rect x="30.0" y="65" width="322" height="61" fill="#E1EDF9"/>
+<rect x="30.0" y="65" width="5" height="61" fill="#356D9F"/>
+<text x="191" y="100.9" font-size="16" text-anchor="middle" font-weight="700" fill="#172635">画面</text>
+<rect x="352.0" y="65" width="322" height="13642.0" fill="#F7F4FC"/>
+<rect x="352.0" y="65" width="322" height="61" fill="#EDE5F9"/>
+<rect x="352.0" y="65" width="5" height="61" fill="#8061A7"/>
+<line x1="352.0" y1="65" x2="352.0" y2="13707.0" stroke="#D6DFE7"/>
+<text x="513" y="100.9" font-size="16" text-anchor="middle" font-weight="700" fill="#172635">サインアップの手続き(規則を含む)</text>
+<rect x="674.0" y="65" width="322" height="13642.0" fill="#F2F9F6"/>
+<rect x="674.0" y="65" width="322" height="61" fill="#E0F1E8"/>
+<rect x="674.0" y="65" width="5" height="61" fill="#3B8661"/>
+<line x1="674.0" y1="65" x2="674.0" y2="13707.0" stroke="#D6DFE7"/>
+<text x="835" y="100.9" font-size="16" text-anchor="middle" font-weight="700" fill="#172635">登録の確認(サーバー)</text>
+<rect x="996.0" y="65" width="322" height="13642.0" fill="#FCF8F1"/>
+<rect x="996.0" y="65" width="322" height="61" fill="#F7EEDF"/>
+<rect x="996.0" y="65" width="5" height="61" fill="#AA8142"/>
+<line x1="996.0" y1="65" x2="996.0" y2="13707.0" stroke="#D6DFE7"/>
+<text x="1157" y="100.9" font-size="16" text-anchor="middle" font-weight="700" fill="#172635">認証サービス(メール・DBを含む)</text>
+<rect x="1318.0" y="65" width="287" height="13642.0" fill="#F3F8FA"/>
+<rect x="1318.0" y="65" width="287" height="61" fill="#E5F0F3"/>
+<rect x="1318.0" y="65" width="5" height="61" fill="#477B8D"/>
+<line x1="1318.0" y1="65" x2="1318.0" y2="13707.0" stroke="#D6DFE7"/>
+<text x="1461.5" y="100.9" font-size="16" text-anchor="middle" font-weight="700" fill="#172635">遷移</text>
+<path d="M 191 232 L 191 245 Q 191 254 182 254 L 182 254 Q 173 254 173 263 L 173 290" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 364 L 191 422" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 496 L 191 509 Q 191 518 200 518 L 504 518 Q 513 518 513 527 L 513 554" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 628 L 513 686" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 784 L 534.5 801 Q 534.5 810 543.5 810 L 665 810 Q 674 810 674 819 L 674 13604 Q 674 13613 665 13613 L 468 13613 Q 459 13613 459 13622 L 459 13635" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 784 L 491.5 797 Q 491.5 806 500.5 806 L 504 806 Q 513 806 513 815 L 513 842" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 940 L 491.5 957 Q 491.5 966 482.5 966 L 26 966 Q 17 966 17 975 L 17 12423.5 Q 17 12432.5 26 12432.5 L 92 12432.5 Q 101 12432.5 101 12441.5 L 101 12454.5" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 940 L 534.5 953 Q 534.5 962 525.5 962 L 522 962 Q 513 962 513 971 L 513 998" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 1096 L 491.5 1113 Q 491.5 1122 482.5 1122 L 52 1122 Q 43 1122 43 1131 L 43 12423.5 Q 43 12432.5 52 12432.5 L 128 12432.5 Q 137 12432.5 137 12441.5 L 137 12454.5" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 1096 L 534.5 1109 Q 534.5 1118 525.5 1118 L 522 1118 Q 513 1118 513 1127 L 513 1154" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 12528.5 L 191 12598" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 1228 L 513 1286" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 1360 L 513 1373 Q 513 1382 522 1382 L 826 1382 Q 835 1382 835 1391 L 835 1418" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 835 1515 L 835 1573" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 792 1671 L 792 1693 Q 792 1702 801 1702 L 826 1702 Q 835 1702 835 1711 L 835 1729" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 835 1671 L 835 1688 Q 835 1697 826 1697 L 696 1697 Q 687 1697 687 1706 L 687 1944 Q 687 1953 696 1953 L 826 1953 Q 835 1953 835 1962 L 835 1975" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 878 1671 L 878 1688 Q 878 1697 887 1697 L 974 1697 Q 983 1697 983 1706 L 983 2190 Q 983 2199 974 2199 L 844 2199 Q 835 2199 835 2208 L 835 2221" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 835 1803 L 835 1816 Q 835 1825 826 1825 L 486 1825 Q 477 1825 477 1834 L 477 2353" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 835 2049 L 835 2062 Q 835 2071 826 2071 L 522 2071 Q 513 2071 513 2080 L 513 2353" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 835 2295 L 835 2308 Q 835 2317 826 2317 L 558 2317 Q 549 2317 549 2326 L 549 2353" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 2451 L 534.5 2468 Q 534.5 2477 525.5 2477 L 348 2477 Q 339 2477 339 2486 L 339 13362 Q 339 13371 348 13371 L 432 13371 Q 441 13371 441 13380 L 441 13393" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 2451 L 491.5 2464 Q 491.5 2473 500.5 2473 L 504 2473 Q 513 2473 513 2482 L 513 2509" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 2607 L 491.5 2620 Q 491.5 2629 500.5 2629 L 504 2629 Q 513 2629 513 2638 L 513 2665" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 2607 L 534.5 2624 Q 534.5 2633 525.5 2633 L 374 2633 Q 365 2633 365 2642 L 365 2921 Q 365 2930 374 2930 L 486 2930 Q 495 2930 495 2939 L 495 2952" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 2762 L 513 2775 Q 513 2784 504 2784 L 200 2784 Q 191 2784 191 2793 L 191 2820" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 2894 L 191 2911 Q 191 2920 200 2920 L 343 2920 Q 352 2920 352 2929 L 352 11474 Q 352 11483 343 11483 L 146 11483 Q 137 11483 137 11492 L 137 11505" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 3026 L 513 3039 Q 513 3048 522 3048 L 1148 3048 Q 1157 3048 1157 3057 L 1157 3084" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 3158 L 1157 3216" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1114 3314 L 1114 3336 Q 1114 3345 1123 3345 L 1148 3345 Q 1157 3345 1157 3354 L 1157 3372" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 3314 L 1157 3331 Q 1157 3340 1148 3340 L 1018 3340 Q 1009 3340 1009 3349 L 1009 3633 Q 1009 3642 1018 3642 L 1148 3642 Q 1157 3642 1157 3651 L 1157 3664" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1200 3314 L 1200 3331 Q 1200 3340 1209 3340 L 1296 3340 Q 1305 3340 1305 3349 L 1305 3879 Q 1305 3888 1296 3888 L 1166 3888 Q 1157 3888 1157 3897 L 1157 3910" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 3492 L 1157 3505 Q 1157 3514 1148 3514 L 486 3514 Q 477 3514 477 3523 L 477 4065" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 3738 L 1157 3751 Q 1157 3760 1148 3760 L 522 3760 Q 513 3760 513 3769 L 513 4065" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 4007 L 1157 4020 Q 1157 4029 1148 4029 L 558 4029 Q 549 4029 549 4038 L 549 4065" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 4163 L 534.5 4180 Q 534.5 4189 543.5 4189 L 678 4189 Q 687 4189 687 4198 L 687 13362 Q 687 13371 678 13371 L 486 13371 Q 477 13371 477 13380 L 477 13393" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 4163 L 491.5 4176 Q 491.5 4185 500.5 4185 L 504 4185 Q 513 4185 513 4194 L 513 4221" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 470 4319 L 470 4341 Q 470 4350 479 4350 L 504 4350 Q 513 4350 513 4359 L 513 4377" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 4319 L 513 4336 Q 513 4345 522 4345 L 652 4345 Q 661 4345 661 4354 L 661 4610 Q 661 4619 652 4619 L 522 4619 Q 513 4619 513 4628 L 513 4641" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 556 4319 L 556 4336 Q 556 4345 547 4345 L 374 4345 Q 365 4345 365 4354 L 365 4874 Q 365 4883 374 4883 L 504 4883 Q 513 4883 513 4892 L 513 4905" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 4451 L 513 4464 Q 513 4473 504 4473 L 200 4473 Q 191 4473 191 4482 L 191 4509" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 4583 L 191 4600 Q 191 4609 182 4609 L 39 4609 Q 30 4609 30 4618 L 30 11474 Q 30 11483 39 11483 L 164 11483 Q 173 11483 173 11492 L 173 11505" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 4715 L 513 4728 Q 513 4737 504 4737 L 200 4737 Q 191 4737 191 4746 L 191 4773" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 4847 L 191 4926" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 4982 L 191 5074.5" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 5003 L 491.5 5016 Q 491.5 5025 500.5 5025 L 504 5025 Q 513 5025 513 5034 L 513 5061" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 5003 L 534.5 5020 Q 534.5 5029 543.5 5029 L 652 5029 Q 661 5029 661 5038 L 661 5299 Q 661 5308 652 5308 L 522 5308 Q 513 5308 513 5317 L 513 5330" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 5158 L 513 5171 Q 513 5180 504 5180 L 200 5180 Q 191 5180 191 5189 L 191 5330" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 5404 L 513 5483 Q 513 5492 504 5492 L 200 5492 Q 191 5492 191 5501 L 191 5576" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 5650 L 191 5663 Q 191 5672 200 5672 L 200 5672 Q 209 5672 209 5681 L 209 5708" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 5404 L 191 5421 Q 191 5430 200 5430 L 356 5430 Q 365 5430 365 5439 L 365 5677 Q 365 5686 356 5686 L 182 5686 Q 173 5686 173 5695 L 173 5708" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 148 5806 L 148 5828 Q 148 5837 157 5837 L 182 5837 Q 191 5837 191 5846 L 191 5864" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 5806 L 191 5823 Q 191 5832 182 5832 L 26 5832 Q 17 5832 17 5841 L 17 11716 Q 17 11725 26 11725 L 182 11725 Q 191 11725 191 11734 L 191 11747" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 234 5806 L 234 5823 Q 234 5832 243 5832 L 356 5832 Q 365 5832 365 5841 L 365 11965 Q 365 11974 356 11974 L 200 11974 Q 191 11974 191 11983 L 191 11996" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 5938 L 191 5951 Q 191 5960 200 5960 L 504 5960 Q 513 5960 513 5969 L 513 5996" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 6052 L 513 6110" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 6208 L 534.5 6225 Q 534.5 6234 543.5 6234 L 652 6234 Q 661 6234 661 6243 L 661 13604 Q 661 13613 652 13613 L 504 13613 Q 495 13613 495 13622 L 495 13635" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 6208 L 491.5 6221 Q 491.5 6230 500.5 6230 L 504 6230 Q 513 6230 513 6239 L 513 6266" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 6364 L 491.5 6381 Q 491.5 6390 500.5 6390 L 665 6390 Q 674 6390 674 6399 L 674 12423.5 Q 674 12432.5 665 12432.5 L 182 12432.5 Q 173 12432.5 173 12441.5 L 173 12454.5" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 6364 L 534.5 6377 Q 534.5 6386 525.5 6386 L 522 6386 Q 513 6386 513 6395 L 513 6422" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 6496 L 513 6509 Q 513 6518 522 6518 L 1148 6518 Q 1157 6518 1157 6527 L 1157 6554" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 6610 L 1157 6668" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1114 6766 L 1114 6788 Q 1114 6797 1123 6797 L 1148 6797 Q 1157 6797 1157 6806 L 1157 6824" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 6766 L 1157 6783 Q 1157 6792 1148 6792 L 1018 6792 Q 1009 6792 1009 6801 L 1009 7062 Q 1009 7071 1018 7071 L 1148 7071 Q 1157 7071 1157 7080 L 1157 7093" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1200 6766 L 1200 6783 Q 1200 6792 1209 6792 L 1296 6792 Q 1305 6792 1305 6801 L 1305 7308 Q 1305 7317 1296 7317 L 1166 7317 Q 1157 7317 1157 7326 L 1157 7339" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 6921 L 1157 6934 Q 1157 6943 1148 6943 L 486 6943 Q 477 6943 477 6952 L 477 7494" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 7167 L 1157 7180 Q 1157 7189 1148 7189 L 522 7189 Q 513 7189 513 7198 L 513 7494" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 7436 L 1157 7449 Q 1157 7458 1148 7458 L 558 7458 Q 549 7458 549 7467 L 549 7494" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 7592 L 534.5 7609 Q 534.5 7618 525.5 7618 L 348 7618 Q 339 7618 339 7627 L 339 13362 Q 339 13371 348 13371 L 504 13371 Q 513 13371 513 13380 L 513 13393" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 7592 L 491.5 7605 Q 491.5 7614 500.5 7614 L 504 7614 Q 513 7614 513 7623 L 513 7650" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 7748 L 491.5 7761 Q 491.5 7770 500.5 7770 L 504 7770 Q 513 7770 513 7779 L 513 7806" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 7748 L 534.5 7765 Q 534.5 7774 543.5 7774 L 652 7774 Q 661 7774 661 7783 L 661 8021 Q 661 8030 652 8030 L 522 8030 Q 513 8030 513 8039 L 513 8052" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 7862 L 513 7875 Q 513 7884 504 7884 L 200 7884 Q 191 7884 191 7893 L 191 7920" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 7994 L 191 8011 Q 191 8020 182 8020 L 52 8020 Q 43 8020 43 8029 L 43 11474 Q 43 11483 52 11483 L 200 11483 Q 209 11483 209 11492 L 209 11505" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 8126 L 513 8139 Q 513 8148 504 8148 L 200 8148 Q 191 8148 191 8157 L 191 8184" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 11803 L 191 11816 Q 191 11825 200 11825 L 504 11825 Q 513 11825 513 11834 L 513 11861" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 11917 L 513 11975" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 12073 L 534.5 12090 Q 534.5 12099 525.5 12099 L 374 12099 Q 365 12099 365 12108 L 365 13604 Q 365 13613 374 13613 L 558 13613 Q 567 13613 567 13622 L 567 13635" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 12073 L 491.5 12086 Q 491.5 12095 500.5 12095 L 504 12095 Q 513 12095 513 12104 L 513 12131" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 12229 L 491.5 12242 Q 491.5 12251 482.5 12251 L 254 12251 Q 245 12251 245 12260 L 245 12454.5" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 12229 L 534.5 12242 Q 534.5 12251 525.5 12251 L 522 12251 Q 513 12251 513 12260 L 513 12287" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 12385 L 491.5 12398 Q 491.5 12407 482.5 12407 L 290 12407 Q 281 12407 281 12416 L 281 12454.5" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 12385 L 534.5 12398 Q 534.5 12407 525.5 12407 L 522 12407 Q 513 12407 513 12416 L 513 12443" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 12540 L 513 12557 Q 513 12566 522 12566 L 1654 12566 Q 1663 12566 1663 12557 L 1663 2938 Q 1663 2929 1654 2929 L 522 2929 Q 513 2929 513 2938 L 513 2952" fill="none" stroke="#AE6730" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#return-arrow)"/>
+<path d="M 191 12052 L 191 12069 Q 191 12078 182 12078 L 52 12078 Q 43 12078 43 12087 L 43 12695 Q 43 12704 52 12704 L 504 12704 Q 513 12704 513 12713 L 513 12726" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 12824 L 534.5 12841 Q 534.5 12850 543.5 12850 L 652 12850 Q 661 12850 661 12859 L 661 13120 Q 661 13129 652 13129 L 522 13129 Q 513 13129 513 13138 L 513 13151" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 12824 L 491.5 12837 Q 491.5 12846 500.5 12846 L 504 12846 Q 513 12846 513 12855 L 513 12882" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 12979 L 513 12996 Q 513 13005 522 13005 L 1624 13005 Q 1633 13005 1633 12996 L 1633 276 Q 1633 267 1624 267 L 200 267 Q 191 267 191 276 L 191 290" fill="none" stroke="#AE6730" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#return-arrow)"/>
+<path d="M 191 8240 L 191 8298" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 8395 L 191 8408 Q 191 8417 200 8417 L 504 8417 Q 513 8417 513 8426 L 513 8453" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 8509 L 513 8567" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 8665 L 534.5 8682 Q 534.5 8691 525.5 8691 L 361 8691 Q 352 8691 352 8700 L 352 13604 Q 352 13613 361 13613 L 522 13613 Q 531 13613 531 13622 L 531 13635" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 8665 L 491.5 8678 Q 491.5 8687 500.5 8687 L 504 8687 Q 513 8687 513 8696 L 513 8723" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 8844 L 491.5 8861 Q 491.5 8870 482.5 8870 L 39 8870 Q 30 8870 30 8879 L 30 12423.5 Q 30 12432.5 39 12432.5 L 200 12432.5 Q 209 12432.5 209 12441.5 L 209 12454.5" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 8844 L 534.5 8857 Q 534.5 8866 525.5 8866 L 522 8866 Q 513 8866 513 8875 L 513 8902" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 8976 L 513 8989 Q 513 8998 522 8998 L 1148 8998 Q 1157 8998 1157 9007 L 1157 9034" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 9108 L 1157 9166" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1114 9264 L 1114 9286 Q 1114 9295 1123 9295 L 1148 9295 Q 1157 9295 1157 9304 L 1157 9322" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 9264 L 1157 9281 Q 1157 9290 1148 9290 L 1018 9290 Q 1009 9290 1009 9299 L 1009 9560 Q 1009 9569 1018 9569 L 1148 9569 Q 1157 9569 1157 9578 L 1157 9591" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1200 9264 L 1200 9281 Q 1200 9290 1209 9290 L 1296 9290 Q 1305 9290 1305 9299 L 1305 9806 Q 1305 9815 1296 9815 L 1166 9815 Q 1157 9815 1157 9824 L 1157 9837" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 9419 L 1157 9432 Q 1157 9441 1148 9441 L 486 9441 Q 477 9441 477 9450 L 477 9992" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 9665 L 1157 9678 Q 1157 9687 1148 9687 L 522 9687 Q 513 9687 513 9696 L 513 9992" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1157 9934 L 1157 9947 Q 1157 9956 1148 9956 L 558 9956 Q 549 9956 549 9965 L 549 9992" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 10090 L 534.5 10107 Q 534.5 10116 525.5 10116 L 374 10116 Q 365 10116 365 10125 L 365 13362 Q 365 13371 374 13371 L 540 13371 Q 549 13371 549 13380 L 549 13393" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 10090 L 491.5 10103 Q 491.5 10112 500.5 10112 L 504 10112 Q 513 10112 513 10121 L 513 10148" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 10246 L 491.5 10259 Q 491.5 10268 500.5 10268 L 504 10268 Q 513 10268 513 10277 L 513 10304" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 10246 L 534.5 10263 Q 534.5 10272 543.5 10272 L 652 10272 Q 661 10272 661 10281 L 661 10501 Q 661 10510 652 10510 L 522 10510 Q 513 10510 513 10519 L 513 10532" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 10360 L 513 10373 Q 513 10382 504 10382 L 182 10382 Q 173 10382 173 10391 L 173 11373" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 191 11447 L 191 11460 Q 191 11469 200 11469 L 236 11469 Q 245 11469 245 11478 L 245 11505" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 534.5 10630 L 534.5 10647 Q 534.5 10656 543.5 10656 L 678 10656 Q 687 10656 687 10665 L 687 13362 Q 687 13371 678 13371 L 594 13371 Q 585 13371 585 13380 L 585 13393" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 491.5 10630 L 491.5 10643 Q 491.5 10652 500.5 10652 L 504 10652 Q 513 10652 513 10661 L 513 10688" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 10762 L 513 10820" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 10894 L 513 10907 Q 513 10916 522 10916 L 1452.5 10916 Q 1461.5 10916 1461.5 10925 L 1461.5 10952" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1461.5 11008 L 1461.5 11066" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1483 11164 L 1483 11177 Q 1483 11186 1474 11186 L 1470.5 11186 Q 1461.5 11186 1461.5 11195 L 1461.5 11222" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1440 11164 L 1440 11177 Q 1440 11186 1431 11186 L 522 11186 Q 513 11186 513 11195 L 513 11240.5" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 513 11296.5 L 513 11309.5 Q 513 11318.5 504 11318.5 L 218 11318.5 Q 209 11318.5 209 11327.5 L 209 11373" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="546" y="793" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="565.5" y="807" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">はい</text>
+<rect x="429" y="793" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="454.5" y="807" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">いいえ</text>
+<rect x="441" y="949" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="460.5" y="963" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">誤り</text>
+<rect x="546" y="949" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="571.5" y="963" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">正しい</text>
+<rect x="429" y="1105" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="454.5" y="1119" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">未完了</text>
+<rect x="546" y="1105" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="565.5" y="1119" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">完了</text>
+<rect x="645.5" y="1680" width="135" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="713" y="1694" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">確認済みの利用者あり</text>
+<rect x="846.5" y="1680" width="193.1" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="943" y="1694" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">user_not_found、または未確認</text>
+<rect x="889.5" y="1680" width="99" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="939" y="1694" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">その他のエラー</text>
+<rect x="546" y="2460" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="571.5" y="2474" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">離れた</text>
+<rect x="429" y="2460" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="454.5" y="2474" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">表示中</text>
+<rect x="261" y="2616" width="219" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="370.5" y="2630" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">登録済み、または確かめられなかった</text>
+<rect x="546" y="2616" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="571.5" y="2630" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">未登録</text>
+<rect x="1063.5" y="3323" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1083" y="3337" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">成功</text>
+<rect x="1168.5" y="3323" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1194" y="3337" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">投げた</text>
+<rect x="1211.5" y="3323" width="123" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1273" y="3337" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">エラーが値で返った</text>
+<rect x="546" y="4172" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="571.5" y="4186" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">離れた</text>
+<rect x="429" y="4172" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="454.5" y="4186" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">表示中</text>
+<rect x="371.5" y="4328" width="87" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="415" y="4342" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">届かなかった</text>
+<rect x="524.5" y="4328" width="75" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="562" y="4342" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">拒否された</text>
+<rect x="567.5" y="4328" width="99" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="617" y="4342" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">受け付けられた</text>
+<rect x="441" y="5012" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="460.5" y="5026" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">初回</text>
+<rect x="546" y="5012" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="565.5" y="5026" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">再送</text>
+<rect x="1.5" y="5815" width="135" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="69" y="5829" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">コードを入力して確認</text>
+<rect x="202.5" y="5815" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="222" y="5829" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">再送</text>
+<rect x="245.5" y="5815" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="265" y="5829" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">戻る</text>
+<rect x="546" y="6217" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="565.5" y="6231" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">はい</text>
+<rect x="429" y="6217" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="454.5" y="6231" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">いいえ</text>
+<rect x="441" y="6373" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="460.5" y="6387" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">誤り</text>
+<rect x="546" y="6373" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="571.5" y="6387" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">正しい</text>
+<rect x="1063.5" y="6775" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1083" y="6789" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">成功</text>
+<rect x="1168.5" y="6775" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1194" y="6789" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">投げた</text>
+<rect x="1211.5" y="6775" width="123" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1273" y="6789" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">エラーが値で返った</text>
+<rect x="546" y="7601" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="571.5" y="7615" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">離れた</text>
+<rect x="429" y="7601" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="454.5" y="7615" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">表示中</text>
+<rect x="441" y="7757" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="460.5" y="7771" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">失敗</text>
+<rect x="546" y="7757" width="99" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="595.5" y="7771" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">受け付けられた</text>
+<rect x="546" y="12082" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="565.5" y="12096" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">はい</text>
+<rect x="429" y="12082" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="454.5" y="12096" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">いいえ</text>
+<rect x="405" y="12238" width="75" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="442.5" y="12252" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">待ちが残る</text>
+<rect x="546" y="12238" width="63" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="577.5" y="12252" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">待ちなし</text>
+<rect x="429" y="12394" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="454.5" y="12408" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">未完了</text>
+<rect x="546" y="12394" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="565.5" y="12408" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">完了</text>
+<rect x="546" y="12833" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="565.5" y="12847" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">ある</text>
+<rect x="441" y="12833" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="460.5" y="12847" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">ない</text>
+<rect x="546" y="8674" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="565.5" y="8688" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">はい</text>
+<rect x="429" y="8674" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="454.5" y="8688" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">いいえ</text>
+<rect x="429" y="8853" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="454.5" y="8867" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">不適合</text>
+<rect x="546" y="8853" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="565.5" y="8867" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">適合</text>
+<rect x="1063.5" y="9273" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1083" y="9287" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">成功</text>
+<rect x="1168.5" y="9273" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1194" y="9287" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">投げた</text>
+<rect x="1211.5" y="9273" width="123" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1273" y="9287" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">エラーが値で返った</text>
+<rect x="546" y="10099" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="571.5" y="10113" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">離れた</text>
+<rect x="429" y="10099" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="454.5" y="10113" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">表示中</text>
+<rect x="441" y="10255" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="460.5" y="10269" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">失敗</text>
+<rect x="546" y="10255" width="99" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="595.5" y="10269" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">受け付けられた</text>
+<rect x="546" y="10639" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="571.5" y="10653" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">離れた</text>
+<rect x="429" y="10639" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="454.5" y="10653" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">表示中</text>
+<rect x="1494.5" y="11173" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1514" y="11187" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">成功</text>
+<rect x="1377.5" y="11173" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1403" y="11187" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">投げた</text>
+<rect x="83.5" y="166" width="215" height="66" rx="33" fill="#1E486D" stroke="#1E486D"/>
+<text x="191" y="193.3" font-size="14" text-anchor="middle" font-weight="700" fill="#FFFFFF">利用者が/signupを開く(メ</text>
+<text x="191" y="214.3" font-size="14" text-anchor="middle" font-weight="700" fill="#FFFFFF">ール入力の段階)</text>
+<rect x="66" y="294" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="323.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">Turnstileの結果(トークン、失効</text>
+<text x="191" y="344.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">・失敗はnull)を状態に保持する</text>
+<rect x="66" y="426" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="455.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">メールを入力して「認証コードを</text>
+<text x="191" y="476.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">送信」を押す</text>
+<rect x="388" y="558" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="587.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">送信の開始を命じる(描画を待たな</text>
+<text x="513" y="608.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">い最新の状態に適用)</text>
+<polygon points="513,690 638,737 513,784 388,737" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="731.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">実行中か、段階がメール入力</text>
+<text x="513" y="752.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">でないか</text>
+<polygon points="513,846 638,893 513,940 388,893" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="887.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">メールは正しいか(空・254文</text>
+<text x="513" y="908.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">字以内・形式)</text>
+<polygon points="513,1002 631,1049 513,1096 395,1049" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="1053.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">チェックは完了しているか</text>
+<rect x="388" y="1158" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="1187.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">送信中にして、メールとトークン</text>
+<text x="513" y="1208.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">を取り出す</text>
+<rect x="388" y="1290" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="1319.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">登録の確認を頼む(トークンは使わ</text>
+<text x="513" y="1340.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">ない)</text>
+<rect x="710" y="1422" width="250" height="93" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="835" y="1452.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">管理者の接続で再設定用リンクの</text>
+<text x="835" y="1473.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">生成を試し、利用者の有無と確認</text>
+<text x="835" y="1494.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">済みかを調べる</text>
+<polygon points="835,1577 910,1624 835,1671 760,1624" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="835" y="1628.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">結果は</text>
+<rect x="710" y="1733" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="835" y="1762.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">確認済みの利用者がいる: 登録済</text>
+<text x="835" y="1783.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">みを返す</text>
+<rect x="710" y="1979" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="835" y="2008.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">利用者がいない、または未確認: </text>
+<text x="835" y="2029.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">未登録を返す</text>
+<rect x="710" y="2225" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="835" y="2254.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">それ以外のエラー、または投げた:</text>
+<text x="835" y="2275.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635"> 確かめられなかったとして投げる</text>
+<polygon points="513,2357 610,2404 513,2451 416,2404" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="2408.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">画面はまだ表示中か</text>
+<polygon points="513,2513 589,2560 513,2607 437,2560" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="2564.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">確認の結果は</text>
+<rect x="388" y="2669" width="250" height="93" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="2699.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">failedを送る(登録済み、または</text>
+<text x="513" y="2720.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">通信エラー。トークンは未使用な</text>
+<text x="513" y="2741.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">ので保持)</text>
+<rect x="66" y="2824" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="2853.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">失敗の文言を表示し、送信中を解</text>
+<text x="191" y="2874.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">除する</text>
+<rect x="388" y="2956" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="2985.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">認証コードの送付を頼む(目的はサ</text>
+<text x="513" y="3006.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">インアップ、メール、トークン)</text>
+<rect x="1032" y="3088" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1157" y="3117.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">接続を得て、signInWithOtpをト</text>
+<text x="1157" y="3138.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">ークン付きで呼ぶ</text>
+<polygon points="1157,3220 1232,3267 1157,3314 1082,3267" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="1157" y="3271.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">応答は</text>
+<rect x="1032" y="3376" width="250" height="116" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1157" y="3407.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">未確認の利用者を作り(新規のとき</text>
+<text x="1157" y="3428.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">)、トリガーでusersに行ができ、</text>
+<text x="1157" y="3449.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">コードのメールを送る。受け付け</text>
+<text x="1157" y="3470.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">られたを返す</text>
+<rect x="1032" y="3668" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1157" y="3697.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">届かなかったを返す(呼び出しが投</text>
+<text x="1157" y="3718.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">げた、接続を得られない)</text>
+<rect x="1032" y="3914" width="250" height="93" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1157" y="3944.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">通信の断なら届かなかった、他は</text>
+<text x="1157" y="3965.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">種類へ写し(未知はother)、拒否</text>
+<text x="1157" y="3986.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">されたを返す</text>
+<polygon points="513,4069 610,4116 513,4163 416,4116" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="4120.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">画面はまだ表示中か</text>
+<polygon points="513,4225 588,4272 513,4319 438,4272" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="4276.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">結果は</text>
+<rect x="388" y="4381" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="4410.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">failedを送る(トークンは未使用</text>
+<text x="513" y="4431.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">なので保持)</text>
+<rect x="66" y="4513" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="4542.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">通信エラーを表示し、実行中を解</text>
+<text x="191" y="4563.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">除する</text>
+<rect x="388" y="4645" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="4674.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">refusedを送る(トークンは使用済</text>
+<text x="513" y="4695.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">みなので消費)</text>
+<rect x="66" y="4777" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="4806.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">失敗の文言を表示し、実行中を解</text>
+<text x="191" y="4827.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">除する</text>
+<rect x="106.7" y="4930" width="168.6" height="52" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="4960.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">Turnstileをやり直す</text>
+<polygon points="513,4909 617,4956 513,5003 409,4956" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="4960.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">初回の送付か、再送か</text>
+<rect x="388" y="5065" width="250" height="93" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="5095.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">codeSentを送る(コード入力の段</text>
+<text x="513" y="5116.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">階へ。トークン消費、再送の待ち6</text>
+<text x="513" y="5137.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">0秒)</text>
+<rect x="388" y="5334" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="5363.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">codeResentを送る(段階は変えな</text>
+<text x="513" y="5384.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">い。トークン消費)</text>
+<rect x="66" y="5580" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="5609.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">Turnstileをやり直す(再送用の新</text>
+<text x="191" y="5630.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">しいトークン)</text>
+<rect x="66" y="5334" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="5363.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">コード入力の画面を表示し、再送</text>
+<text x="191" y="5384.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">の待ちを1秒ごとに減らす</text>
+<polygon points="191,5712 274,5759 191,5806 108,5759" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="191" y="5763.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">利用者の操作は</text>
+<rect x="66" y="5868" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="5897.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">メールのコードを入力して「確認</text>
+<text x="191" y="5918.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">」を押す</text>
+<rect x="436" y="6000" width="154" height="52" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="6030.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">確認の開始を命じる</text>
+<polygon points="513,6114 638,6161 513,6208 388,6161" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="6155.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">実行中か、段階がコード入力</text>
+<text x="513" y="6176.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">でないか</text>
+<polygon points="513,6270 613.9,6317 513,6364 412.1,6317" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="6321.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">コードは6桁の数字か</text>
+<rect x="388" y="6426" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="6455.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">確認中にして、メールとコードを</text>
+<text x="513" y="6476.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">取り出す</text>
+<rect x="1044.7" y="6558" width="224.6" height="52" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1157" y="6588.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">接続を得て、verifyOtpを呼ぶ</text>
+<polygon points="1157,6672 1232,6719 1157,6766 1082,6719" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="1157" y="6723.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">応答は</text>
+<rect x="1032" y="6828" width="250" height="93" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1157" y="6858.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">メールが確認され、端末にセッシ</text>
+<text x="1157" y="6879.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">ョンが保存される。受け付けられ</text>
+<text x="1157" y="6900.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">たを返す</text>
+<rect x="1032" y="7097" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1157" y="7126.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">届かなかったを返す(呼び出しが投</text>
+<text x="1157" y="7147.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">げた)</text>
+<rect x="1032" y="7343" width="250" height="93" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1157" y="7373.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">通信の断なら届かなかった、期限</text>
+<text x="1157" y="7394.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">切れ・誤りは種類へ写し、拒否さ</text>
+<text x="1157" y="7415.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">れたを返す</text>
+<polygon points="513,7498 610,7545 513,7592 416,7545" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="7549.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">画面はまだ表示中か</text>
+<polygon points="513,7654 638,7701 513,7748 388,7701" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="7695.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">結果は(届かなかった・拒否</text>
+<text x="513" y="7716.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">は同じ失敗にまとめる)</text>
+<rect x="418.6" y="7810" width="188.7" height="52" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="7840.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">failedを送る(種類つき)</text>
+<rect x="66" y="7924" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="7953.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">失敗の文言を表示し、実行中を解</text>
+<text x="191" y="7974.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">除する</text>
+<rect x="388" y="8056" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="8085.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">codeConfirmedを送る(パスワード</text>
+<text x="513" y="8106.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">設定の段階へ)</text>
+<rect x="128" y="11751" width="126" height="52" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="11781.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">「再送」を押す</text>
+<rect x="436" y="11865" width="154" height="52" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="11895.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">再送の開始を命じる</text>
+<polygon points="513,11979 638,12026 513,12073 388,12026" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="12020.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">実行中か、段階がコード入力</text>
+<text x="513" y="12041.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">でないか</text>
+<polygon points="513,12135 638,12182 513,12229 388,12182" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="12186.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">再送の待ちは残っていないか</text>
+<polygon points="513,12291 631,12338 513,12385 395,12338" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="12342.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">チェックは完了しているか</text>
+<rect x="388" y="12447" width="250" height="93" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="12477.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">再送中にして、再送の待ちを60秒</text>
+<text x="513" y="12498.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">に戻す(結果を待たずに)。登録の</text>
+<text x="513" y="12519.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">確認はしない</text>
+<rect x="128" y="12000" width="126" height="52" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="12030.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">「戻る」を押す</text>
+<polygon points="513,12730 617,12777 513,12824 409,12777" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="12781.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">実行中の操作があるか</text>
+<rect x="388" y="12886" width="250" height="93" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="12916.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">emailStepReturnedを送る(メー</text>
+<text x="513" y="12937.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">ル入力の段階へ。メールは保持、</text>
+<text x="513" y="12958.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">トークンとエラーを消去)</text>
+<rect x="72" y="8188" width="238" height="52" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="8218.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">パスワード設定の画面を表示する</text>
+<rect x="66" y="8302" width="250" height="93" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="8332.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">パスワードを入力して(表示を切り</text>
+<text x="191" y="8353.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">替えられる)「登録してサインイン</text>
+<text x="191" y="8374.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">」を押す</text>
+<rect x="436" y="8457" width="154" height="52" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="8487.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">設定の開始を命じる</text>
+<polygon points="513,8571 638,8618 513,8665 388,8618" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="8612.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">実行中か、段階がパスワード</text>
+<text x="513" y="8633.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">設定でないか</text>
+<polygon points="513,8727 638,8785.5 513,8844 388,8785.5" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="8769.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">パスワードは規則に合うか(</text>
+<text x="513" y="8790.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">空でない・8〜72文字・半角</text>
+<text x="513" y="8811.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">英数記号・英字と数字)</text>
+<rect x="388" y="8906" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="8935.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">設定中にして、パスワードを取り</text>
+<text x="513" y="8956.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">出す</text>
+<rect x="1032" y="9038" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1157" y="9067.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">接続を得て、updateUserをパスワ</text>
+<text x="1157" y="9088.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">ード付きで呼ぶ</text>
+<polygon points="1157,9170 1232,9217 1157,9264 1082,9217" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="1157" y="9221.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">応答は</text>
+<rect x="1032" y="9326" width="250" height="93" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1157" y="9356.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">パスワードが設定される(サインイ</text>
+<text x="1157" y="9377.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">ン状態のまま)。受け付けられたを</text>
+<text x="1157" y="9398.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">返す</text>
+<rect x="1032" y="9595" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1157" y="9624.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">届かなかったを返す(呼び出しが投</text>
+<text x="1157" y="9645.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">げた)</text>
+<rect x="1032" y="9841" width="250" height="93" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1157" y="9871.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">通信の断なら届かなかった、弱い</text>
+<text x="1157" y="9892.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">パスワードなどは種類へ写し、拒</text>
+<text x="1157" y="9913.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">否されたを返す</text>
+<polygon points="513,9996 610,10043 513,10090 416,10043" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="10047.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">画面はまだ表示中か</text>
+<polygon points="513,10152 638,10199 513,10246 388,10199" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="10193.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">結果は(届かなかった・拒否</text>
+<text x="513" y="10214.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">は同じ失敗にまとめる)</text>
+<rect x="418.6" y="10308" width="188.7" height="52" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="10338.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">failedを送る(種類つき)</text>
+<rect x="66" y="11377" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="11406.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">失敗の文言を表示し、実行中を解</text>
+<text x="191" y="11427.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">除する</text>
+<polygon points="513,10536 638,10583 513,10630 388,10583" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="513" y="10577.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">画面はまだ表示中か(遷移の</text>
+<text x="513" y="10598.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">直前に再確認)</text>
+<rect x="388" y="10692" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="10721.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">passwordSetを送る(以前のエラー</text>
+<text x="513" y="10742.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">を消す。設定中は維持)</text>
+<rect x="388" y="10824" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="10853.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">既定の行き先(/rounds)を決める(</text>
+<text x="513" y="10874.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">遷移元は使わない)</text>
+<rect x="1368.5" y="10956" width="185.9" height="52" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1461.5" y="10986.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">routerで/roundsへ進む</text>
+<polygon points="1461.5,11070 1565.5,11117 1461.5,11164 1357.5,11117" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="1461.5" y="11121.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">遷移は投げなかったか</text>
+<rect x="398.5" y="11244.5" width="229" height="52" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="513" y="11275.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">通信エラーとしてfailedを送る</text>
+<rect x="1354" y="11226" width="215" height="89" rx="44.5" fill="#FFFFFF" stroke="#2E597A" stroke-width="2.5"/>
+<text x="1461.5" y="11254.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">一覧の画面へ移る(設定中の</text>
+<text x="1461.5" y="11275.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">まま)。アカウントと端末の</text>
+<text x="1461.5" y="11296.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">セッションができている</text>
+<rect x="66" y="12458.5" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="191" y="12487.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">最初の1件をその欄に表示する(送</text>
+<text x="191" y="12508.8" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">信は欄ごと、再送は再送の欄)</text>
+<rect x="83.5" y="12602" width="215" height="66" rx="33" fill="#FFFFFF" stroke="#2E597A" stroke-width="2.5"/>
+<text x="191" y="12629.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">認証せず終了(同じ段階で再</text>
+<text x="191" y="12650.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">操作できる)</text>
+<rect x="410.2" y="13639" width="205.7" height="46" rx="23" fill="#FFFFFF" stroke="#2E597A" stroke-width="2.5"/>
+<text x="513" y="13666.8" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">何もしない(重複させない)</text>
+<rect x="405.5" y="13397" width="215" height="66" rx="33" fill="#FFFFFF" stroke="#2E597A" stroke-width="2.5"/>
+<text x="513" y="13424.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">状態を変えず、次へ進まない</text>
+<text x="513" y="13445.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">(送らない・遷移しない)</text>
+<rect x="83.5" y="11509" width="215" height="66" rx="33" fill="#FFFFFF" stroke="#2E597A" stroke-width="2.5"/>
+<text x="191" y="11536.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">同じ段階から再試行できる(</text>
+<text x="191" y="11557.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">トークンは保持)</text>
+<rect x="83.5" y="5078.5" width="215" height="66" rx="33" fill="#FFFFFF" stroke="#2E597A" stroke-width="2.5"/>
+<text x="191" y="5105.8" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">同じ段階で、新しいトークン</text>
+<text x="191" y="5126.8" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">で再操作できる</text>
+<rect x="405.5" y="13155" width="215" height="66" rx="33" fill="#FFFFFF" stroke="#2E597A" stroke-width="2.5"/>
+<text x="513" y="13182.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">戻らず、そのまま(操作中は</text>
+<text x="513" y="13203.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">戻らない)</text>
+</svg>

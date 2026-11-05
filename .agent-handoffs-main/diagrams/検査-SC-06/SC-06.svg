@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1968" height="3180" viewBox="0 0 1968 3180">
+<style>text { font-family: IPAGothic, sans-serif; } </style>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#64768A"/></marker>
+<marker id="return-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#AE6730"/></marker>
+<filter id="shadow" x="-20%" y="-30%" width="140%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#233244" flood-opacity="0.07"/></filter>
+</defs>
+<rect width="1968.3200000000002" height="3180" fill="#FFFFFF"/>
+<text x="30" y="43" font-size="21" font-weight="700" fill="#172635">SC-06 認証状態の購読で、セッション喪失を検知して/signinへ移る(通知が発火した後の流れ)</text>
+<rect x="30.0" y="65" width="416.6" height="3093.0" fill="#F1F6FC"/>
+<rect x="30.0" y="65" width="416.6" height="61" fill="#E1EDF9"/>
+<rect x="30.0" y="65" width="5" height="61" fill="#356D9F"/>
+<text x="238.3" y="100.9" font-size="16" text-anchor="middle" font-weight="700" fill="#172635">認証サービスの窓口(auth-jsと端末のセッション)</text>
+<rect x="446.64" y="65" width="337.3" height="3093.0" fill="#F7F4FC"/>
+<rect x="446.64" y="65" width="337.3" height="61" fill="#EDE5F9"/>
+<rect x="446.64" y="65" width="5" height="61" fill="#8061A7"/>
+<line x1="446.64" y1="65" x2="446.64" y2="3158.0" stroke="#D6DFE7"/>
+<text x="615.3" y="100.9" font-size="16" text-anchor="middle" font-weight="700" fill="#172635">窓口の変換(supabase-auth.tsの購読)</text>
+<rect x="783.9200000000001" y="65" width="322" height="3093.0" fill="#F2F9F6"/>
+<rect x="783.9200000000001" y="65" width="322" height="61" fill="#E0F1E8"/>
+<rect x="783.9200000000001" y="65" width="5" height="61" fill="#3B8661"/>
+<line x1="783.9200000000001" y1="65" x2="783.9200000000001" y2="3158.0" stroke="#D6DFE7"/>
+<text x="944.9" y="100.9" font-size="16" text-anchor="middle" font-weight="700" fill="#172635">見張りの手続き(session.ts)</text>
+<rect x="1105.92" y="65" width="470.4" height="3093.0" fill="#FCF8F1"/>
+<rect x="1105.92" y="65" width="470.4" height="61" fill="#F7EEDF"/>
+<rect x="1105.92" y="65" width="5" height="61" fill="#AA8142"/>
+<line x1="1105.92" y1="65" x2="1105.92" y2="3158.0" stroke="#D6DFE7"/>
+<text x="1341.1" y="100.9" font-size="16" text-anchor="middle" font-weight="700" fill="#172635">規則(auth-change、session-end-flow、auth-routes)</text>
+<rect x="1576.3200000000002" y="65" width="322" height="3093.0" fill="#F3F8FA"/>
+<rect x="1576.3200000000002" y="65" width="322" height="61" fill="#E5F0F3"/>
+<rect x="1576.3200000000002" y="65" width="5" height="61" fill="#477B8D"/>
+<line x1="1576.3200000000002" y1="65" x2="1576.3200000000002" y2="3158.0" stroke="#D6DFE7"/>
+<text x="1737.3" y="100.9" font-size="16" text-anchor="middle" font-weight="700" fill="#172635">遷移(ページ全体の読み込み)</text>
+<path d="M 238.3 232 L 238.3 245 Q 238.3 254 247.3 254 L 606.3 254 Q 615.3 254 615.3 263 L 615.3 290" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 615.3 456 L 615.3 469 Q 615.3 478 624.3 478 L 935.9 478 Q 944.9 478 944.9 487 L 944.9 514" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 944.9 588 L 944.9 601 Q 944.9 610 953.9 610 L 1332.1 610 Q 1341.1 610 1341.1 619 L 1341.1 646" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1362.6 744 L 1362.6 757 Q 1362.6 766 1353.6 766 L 1350.1 766 Q 1341.1 766 1341.1 775 L 1341.1 804" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1319.6 744 L 1319.6 757 Q 1319.6 766 1310.6 766 L 953.9 766 Q 944.9 766 944.9 775 L 944.9 802" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 944.9 899 L 944.9 912 Q 944.9 921 953.9 921 L 1728.3 921 Q 1737.3 921 1737.3 930 L 1737.3 957" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1737.3 1031 L 1737.3 1044 Q 1737.3 1053 1728.3 1053 L 1350.1 1053 Q 1341.1 1053 1341.1 1062 L 1341.1 1089" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1319.6 1187 L 1319.6 1200 Q 1319.6 1209 1328.6 1209 L 1332.1 1209 Q 1341.1 1209 1341.1 1218 L 1341.1 1245" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1362.6 1187 L 1362.6 1204 Q 1362.6 1213 1371.6 1213 L 1554.3 1213 Q 1563.3 1213 1563.3 1222 L 1563.3 1479 Q 1563.3 1488 1554.3 1488 L 1350.1 1488 Q 1341.1 1488 1341.1 1497 L 1341.1 1510" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1319.6 1608 L 1319.6 1621 Q 1319.6 1630 1328.6 1630 L 1332.1 1630 Q 1341.1 1630 1341.1 1639 L 1341.1 1666" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1362.6 1608 L 1362.6 1625 Q 1362.6 1634 1371.6 1634 L 1554.3 1634 Q 1563.3 1634 1563.3 1643 L 1563.3 1857 Q 1563.3 1866 1554.3 1866 L 1350.1 1866 Q 1341.1 1866 1341.1 1875 L 1341.1 1888" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1341.1 1962 L 1341.1 2020" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1362.6 2164 L 1362.6 2181 Q 1362.6 2190 1353.6 2190 L 1127.9 2190 Q 1118.9 2190 1118.9 2199 L 1118.9 2593 Q 1118.9 2602 1127.9 2602 L 1314.1 2602 Q 1323.1 2602 1323.1 2611 L 1323.1 2624" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1319.6 2164 L 1319.6 2177 Q 1319.6 2186 1328.6 2186 L 1332.1 2186 Q 1341.1 2186 1341.1 2195 L 1341.1 2222" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1362.6 2320 L 1362.6 2337 Q 1362.6 2346 1371.6 2346 L 1554.3 2346 Q 1563.3 2346 1563.3 2355 L 1563.3 2593 Q 1563.3 2602 1554.3 2602 L 1368.1 2602 Q 1359.1 2602 1359.1 2611 L 1359.1 2624" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1319.6 2320 L 1319.6 2333 Q 1319.6 2342 1328.6 2342 L 1332.1 2342 Q 1341.1 2342 1341.1 2351 L 1341.1 2378" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1341.1 2698 L 1341.1 2711 Q 1341.1 2720 1332.1 2720 L 971.9 2720 Q 962.9 2720 962.9 2729 L 962.9 2756" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1341.1 2452 L 1341.1 2465 Q 1341.1 2474 1332.1 2474 L 935.9 2474 Q 926.9 2474 926.9 2483 L 926.9 2756" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 944.9 2830 L 944.9 2843 Q 944.9 2852 953.9 2852 L 1728.3 2852 Q 1737.3 2852 1737.3 2861 L 1737.3 2888" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M 1737.3 2962 L 1737.3 3020" fill="none" stroke="#64768A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="1374.1" y="753" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1399.6" y="767" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">いいえ</text>
+<rect x="1269.1" y="753" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1288.6" y="767" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">はい</text>
+<rect x="1257.1" y="1196" width="51" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1282.6" y="1210" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">実行中</text>
+<rect x="1374.1" y="1196" width="87" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1417.6" y="1210" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">実行中でない</text>
+<rect x="1233.1" y="1617" width="75" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1270.6" y="1631" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">始めている</text>
+<rect x="1374.1" y="1617" width="87" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1417.6" y="1631" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">始めていない</text>
+<rect x="1374.1" y="2173" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1393.6" y="2187" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">無効</text>
+<rect x="1269.1" y="2173" width="39" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1288.6" y="2187" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">有効</text>
+<rect x="1374.1" y="2329" width="63" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1405.6" y="2343" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">そのもの</text>
+<rect x="1245.1" y="2329" width="63" height="19" rx="9.5" fill="#FFFFFF" stroke="#D9E2EB" stroke-width=".8"/>
+<text x="1276.6" y="2343" font-size="12" font-weight="600" text-anchor="middle" fill="#172635">別の場所</text>
+<rect x="130.8" y="166" width="215" height="66" rx="33" fill="#1E486D" stroke="#1E486D"/>
+<text x="238.3" y="193.3" font-size="14" text-anchor="middle" font-weight="700" fill="#FFFFFF">認証状態の通知が発火する(S</text>
+<text x="238.3" y="214.3" font-size="14" text-anchor="middle" font-weight="700" fill="#FFFFFF">IGNED_OUTなど)</text>
+<rect x="490.3" y="294" width="250" height="162" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="615.3" y="327.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">イベント名を内側の変化に写して</text>
+<text x="615.3" y="348.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">知らせる(SIGNED_OUTはsigned-o</text>
+<text x="615.3" y="369.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">utでuserIdはnull。SIGNED_IN、</text>
+<text x="615.3" y="390.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">INITIAL_SESSION、TOKEN_REFRE</text>
+<text x="615.3" y="411.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">SHED、それ以外もそれぞれの種類</text>
+<text x="615.3" y="432.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">に写す)</text>
+<rect x="819.9" y="518" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="944.9" y="547.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">購読者が変化を受け、喪失かを規</text>
+<text x="944.9" y="568.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">則に尋ねる(通信状態は見ない)</text>
+<polygon points="1341.1,650 1463.3,697 1341.1,744 1218.9,697" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="1341.1" y="701.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">変化の種類はsigned-outか</text>
+<rect x="1233.6" y="808" width="215" height="89" rx="44.5" fill="#FFFFFF" stroke="#2E597A" stroke-width="2.5"/>
+<text x="1341.1" y="836.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">喪失ではない。移らない(si</text>
+<text x="1341.1" y="857.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">gned-in、initial、token-</text>
+<text x="1341.1" y="878.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">refreshed、other)</text>
+<rect x="819.9" y="806" width="250" height="93" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="944.9" y="836.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">喪失として、今の場所を遷移元の</text>
+<text x="944.9" y="857.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">候補にして、遷移の可否を規則に</text>
+<text x="944.9" y="878.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">尋ねる</text>
+<rect x="1612.3" y="961" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1737.3" y="990.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">今の場所(パスとクエリ)を返す(wi</text>
+<text x="1737.3" y="1011.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">ndow.location)</text>
+<polygon points="1341.1,1093 1452.1,1140 1341.1,1187 1230.1,1140" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="1341.1" y="1144.8" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">サインアウトを実行中か</text>
+<rect x="1233.6" y="1249" width="215" height="89" rx="44.5" fill="#FFFFFF" stroke="#2E597A" stroke-width="2.5"/>
+<text x="1341.1" y="1277.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">移らない(サインアウトが、</text>
+<text x="1341.1" y="1298.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">完了後に遷移元なしで移るか</text>
+<text x="1341.1" y="1319.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">を判定する。SC-04)</text>
+<polygon points="1341.1,1514 1466.1,1561 1341.1,1608 1216.1,1561" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="1341.1" y="1555.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">サインインへの遷移をすでに</text>
+<text x="1341.1" y="1576.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">始めているか</text>
+<rect x="1241.4" y="1670" width="199.5" height="46" rx="23" fill="#FFFFFF" stroke="#2E597A" stroke-width="2.5"/>
+<text x="1341.1" y="1697.8" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">移らない(遷移は1回だけ)</text>
+<rect x="1216.1" y="1892" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1341.1" y="1921.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">遷移を始めた状態にする(left=tr</text>
+<text x="1341.1" y="1942.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">ue)</text>
+<polygon points="1341.1,2024 1466.1,2094 1341.1,2164 1216.1,2094" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="1341.1" y="2067.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">今の場所は遷移元として有効</text>
+<text x="1341.1" y="2088.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">か(長さ、先頭の//、制御文</text>
+<text x="1341.1" y="2109.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">字、同一オリジン、保護の範</text>
+<text x="1341.1" y="2130.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">囲)</text>
+<polygon points="1341.1,2226 1466.1,2273 1341.1,2320 1216.1,2273" fill="#FFF3DE" stroke="#C18C38" stroke-width="2" filter="url(#shadow)"/>
+<text x="1341.1" y="2267.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">有効な場所は、既定の行き先</text>
+<text x="1341.1" y="2288.3" font-size="14" text-anchor="middle" font-weight="700" fill="#724B16">(/rounds)そのものか</text>
+<rect x="1216.1" y="2628" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1341.1" y="2657.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">移る先を/signin(遷移元なし)に</text>
+<text x="1341.1" y="2678.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">する</text>
+<rect x="1216.1" y="2382" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1341.1" y="2411.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">移る先を/signin?returnTo=&lt;符</text>
+<text x="1341.1" y="2432.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">号化した今の場所&gt;にする</text>
+<rect x="819.9" y="2760" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="944.9" y="2789.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">移る先を受け、ページの置き換え</text>
+<text x="944.9" y="2810.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">を頼む</text>
+<rect x="1612.3" y="2892" width="250" height="70" rx="9" fill="#FFFFFF" stroke="#94A8BA" stroke-width="1.7" filter="url(#shadow)"/>
+<text x="1737.3" y="2921.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">ページ全体を移る先へ置き換える(</text>
+<text x="1737.3" y="2942.3" font-size="14" text-anchor="middle" font-weight="500" fill="#172635">履歴に残さない)</text>
+<rect x="1629.8" y="3024" width="215" height="112" rx="56" fill="#FFFFFF" stroke="#2E597A" stroke-width="2.5"/>
+<text x="1737.3" y="3053.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">/signinの読み込みへ(表示</text>
+<text x="1737.3" y="3074.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">はSC-02、オフラインの応答</text>
+<text x="1737.3" y="3095.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">はSC-15。同じ通知を受ける</text>
+<text x="1737.3" y="3116.3" font-size="14" text-anchor="middle" font-weight="700" fill="#204C6F">他の購読者はSC-08、SC-55)</text>
+</svg>
