@@ -19,6 +19,7 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 | 処理中 | 該当ボタンを`aria-disabled`にする。コード入力では確認・再送・戻るを同時に無効にする。以前のエラーは結果が出るまで残す | 完了で元の状態 |
 
 - 戻るとメール入力に戻り、入力済みのメールアドレスを保持する。コードの入力値は破棄する。
+- パスワードの入力欄は`PasswordInput`で、表示・非表示を切り替えても入力値を保つ。再送ボタンは、待ち中は「再送（N秒）」(`otpResendWait`)と残りを示し、`tickCooldown`が1秒ごとに進める。
 - 確認が成功した時点でセッションは確立済みである。パスワード設定はそのセッションへの`updateUser`である。
 - 認証済みで`/signup`を開くと`/rounds`へ送る。
 
