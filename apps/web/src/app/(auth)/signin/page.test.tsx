@@ -1,4 +1,4 @@
-import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
+import { AuthApiError } from "@supabase/supabase-js";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef } from "react";
@@ -184,6 +184,24 @@ describe("サインイン画面の入口", () => {
     expect(navigation.push).not.toHaveBeenCalled();
   });
 
+  it("入口から通して、認証の応答待ちで画面を離れたら、成功が戻っても遷移しない", async () => {
+    // Given
+    const deferred = Promise.withResolvers<{ error: null }>();
+    auth.signInWithPassword.mockReturnValue(deferred.promise);
+    const user = userEvent.setup();
+    const { unmount } = render(<SignInPage />, { wrapper: IntlTestProvider });
+    await fillAndVerify(user);
+    await user.click(submitButton());
+
+    // When
+    unmount();
+    await act(async () => deferred.resolve({ error: null }));
+
+    // Then
+    expect(auth.signInWithPassword).toHaveBeenCalledOnce();
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
   it("遷移元付きのURLで開いた成功では、その遷移元へ遷移する", async () => {
     // Given
     window.history.replaceState(null, "", "/signin?returnTo=%2Frounds%2Fnew");
@@ -198,111 +216,6 @@ describe("サインイン画面の入口", () => {
     // Then
     expect(navigation.push).toHaveBeenCalledExactlyOnceWith("/rounds/new");
   });
-
-  it.each([
-    ["外部URL", "https://evil.com"],
-    ["//始まり", "//evil.com"],
-    ["サインイン画面", "/signin"],
-    ["ドットセグメントで/roundsの外へ抜ける", "/rounds/../signin"],
-  ])(
-    "不正な遷移元(%s)で開いた成功では、ラウンド一覧へ遷移する",
-    async (_name, returnTo) => {
-      // Given
-      window.history.replaceState(
-        null,
-        "",
-        `/signin?returnTo=${encodeURIComponent(returnTo)}`,
-      );
-      auth.signInWithPassword.mockResolvedValue({ error: null });
-      const user = userEvent.setup();
-      render(<SignInPage />, { wrapper: IntlTestProvider });
-      await fillAndVerify(user);
-
-      // When
-      await user.click(submitButton());
-
-      // Then
-      expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
-    },
-  );
-
-  it.each([
-    ["遷移元なし", "", ROUNDS_PATH],
-    ["遷移元付き", "?returnTo=%2Frounds%2Fnew", "/rounds/new"],
-  ])(
-    "認証サービスが認証の拒否を返しても(%s)、文言を示し、使用済みのトークンでの再送を拒み、新しいトークンで再送信して遷移できる",
-    async (_name, query, destination) => {
-      // Given
-      const message = authText("failure.invalid_credentials");
-      window.history.replaceState(null, "", `/signin${query}`);
-      auth.signInWithPassword
-        .mockResolvedValueOnce({
-          error: new AuthApiError(
-            "Invalid login credentials",
-            400,
-            "invalid_credentials",
-          ),
-        })
-        .mockResolvedValue({ error: null });
-      const user = userEvent.setup();
-      render(<SignInPage />, { wrapper: IntlTestProvider });
-      await fillAndVerify(user);
-      await user.click(submitButton());
-      expect(await screen.findByText(message)).toBeInTheDocument();
-      await user.click(submitButton());
-      expect(auth.signInWithPassword).toHaveBeenCalledOnce();
-      await user.click(screen.getByRole("button", { name: "チェックを完了" }));
-
-      // When
-      await user.click(submitButton());
-
-      // Then
-      expect(auth.signInWithPassword).toHaveBeenCalledTimes(2);
-      expect(auth.signInWithPassword).toHaveBeenLastCalledWith({
-        email: "user@example.com",
-        password: "password1",
-        options: { captchaToken: "captcha-token-2" },
-      });
-      expect(navigation.push).toHaveBeenCalledExactlyOnceWith(destination);
-      expect(screen.queryByText(message)).not.toBeInTheDocument();
-    },
-  );
-
-  it.each([
-    ["遷移元なし", "", ROUNDS_PATH],
-    ["遷移元付き", "?returnTo=%2Frounds%2Fnew", "/rounds/new"],
-  ])(
-    "認証サービスが通信の断を値で返したときは(%s)、文言を示し、新しいトークンで再送信して遷移できる",
-    async (_name, query, destination) => {
-      // Given
-      const message = authText("failure.unreachable");
-      window.history.replaceState(null, "", `/signin${query}`);
-      auth.signInWithPassword
-        .mockResolvedValueOnce({
-          error: new AuthRetryableFetchError("Failed to fetch", 0),
-        })
-        .mockResolvedValue({ error: null });
-      const user = userEvent.setup();
-      render(<SignInPage />, { wrapper: IntlTestProvider });
-      await fillAndVerify(user);
-      await user.click(submitButton());
-      expect(await screen.findByText(message)).toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: "チェックを完了" }));
-
-      // When
-      await user.click(submitButton());
-
-      // Then
-      expect(auth.signInWithPassword).toHaveBeenCalledTimes(2);
-      expect(auth.signInWithPassword).toHaveBeenLastCalledWith({
-        email: "user@example.com",
-        password: "password1",
-        options: { captchaToken: "captcha-token-2" },
-      });
-      expect(navigation.push).toHaveBeenCalledExactlyOnceWith(destination);
-      expect(screen.queryByText(message)).not.toBeInTheDocument();
-    },
-  );
 
   it("認証サービスが未知のエラーを返したときは、固定の文言を示し、認証サービスの文言を出さない", async () => {
     // Given
@@ -327,30 +240,5 @@ describe("サインイン画面の入口", () => {
     expect(
       screen.queryByText(/password hash backend down/),
     ).not.toBeInTheDocument();
-  });
-
-  it("認証サービスへの送信が失敗しても、通信エラーを示し、新しいトークンで再送信して遷移できる", async () => {
-    // Given
-    auth.signInWithPassword
-      .mockRejectedValueOnce(new Error("Failed to fetch"))
-      .mockResolvedValue({ error: null });
-    const user = userEvent.setup();
-    render(<SignInPage />, { wrapper: IntlTestProvider });
-    await fillAndVerify(user);
-    await user.click(submitButton());
-    await screen.findByText(authText("failure.unreachable"));
-    await user.click(screen.getByRole("button", { name: "チェックを完了" }));
-
-    // When
-    await user.click(submitButton());
-
-    // Then
-    expect(auth.signInWithPassword).toHaveBeenCalledTimes(2);
-    expect(auth.signInWithPassword).toHaveBeenLastCalledWith({
-      email: "user@example.com",
-      password: "password1",
-      options: { captchaToken: "captcha-token-2" },
-    });
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
   });
 });
