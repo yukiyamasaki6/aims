@@ -24,7 +24,7 @@ export default function SignInPage() {
   return (
     <SignInForm
       signIn={signIn}
-      siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+      siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? ""}
     />
   );
 }

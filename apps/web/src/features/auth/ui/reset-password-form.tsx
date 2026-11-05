@@ -9,7 +9,7 @@ export function ResetPasswordForm({
   siteKey,
 }: {
   resetPassword: PasswordSetup;
-  siteKey: string | undefined;
+  siteKey: string;
 }) {
   const t = useTranslations("auth");
   const signInLink = { label: t("resetBackToSignIn") };

@@ -9,7 +9,7 @@ export function SignUpForm({
   siteKey,
 }: {
   signUp: PasswordSetup;
-  siteKey: string | undefined;
+  siteKey: string;
 }) {
   const t = useTranslations("auth");
   const copy = {

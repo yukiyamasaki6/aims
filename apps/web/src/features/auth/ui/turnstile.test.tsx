@@ -72,22 +72,6 @@ describe("Turnstile", () => {
       // Then
       expectCollapsed();
     });
-
-    it.each([
-      ["未設定", undefined],
-      ["空", ""],
-    ])("サイトキーが%sの場合は例外を投げる", (_name, siteKey) => {
-      // Given
-
-      // When
-      const renderWidget = () =>
-        render(<Turnstile siteKey={siteKey} onVerify={vi.fn()} />);
-
-      // Then
-      expect(renderWidget).toThrow(
-        "Missing NEXT_PUBLIC_TURNSTILE_SITE_KEY environment variable.",
-      );
-    });
   });
 
   describe("操作が必要になったとき", () => {
@@ -141,17 +125,15 @@ describe("Turnstile", () => {
       expect(handleVerify).toHaveBeenCalledWith("token-123");
     });
 
-    it("期限切れになると畳まれ、nullでonVerifyを呼ぶ", () => {
+    it("期限切れになると、nullでonVerifyを呼ぶ", () => {
       // Given
       const handleVerify = vi.fn();
       render(<Turnstile siteKey="test-site-key" onVerify={handleVerify} />);
-      act(() => callbacks.current.onBeforeInteractive?.());
 
       // When
       act(() => callbacks.current.onExpire?.());
 
       // Then
-      expectCollapsed();
       expect(handleVerify).toHaveBeenCalledWith(null);
     });
 

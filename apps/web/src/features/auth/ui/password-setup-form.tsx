@@ -46,7 +46,7 @@ type StepProps = {
   copy: PasswordSetupCopy;
   flow: PasswordSetupFlow;
   view: ScreenView<PasswordSetupFlow, PasswordSetupEvent>;
-  siteKey: string | undefined;
+  siteKey: string;
 };
 
 // メール入力、コード入力、パスワード設定の3段階の画面。サインアップとパスワード再設定が使う。
@@ -57,7 +57,7 @@ export function PasswordSetupForm({
 }: {
   procedure: PasswordSetup;
   copy: PasswordSetupCopy;
-  siteKey: string | undefined;
+  siteKey: string;
 }) {
   const {
     state: flow,

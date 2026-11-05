@@ -24,7 +24,7 @@ type OtpEmailStepProps = {
   error: string | null;
   hydrated: boolean;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
-  siteKey: string | undefined;
+  siteKey: string;
   checkRef: RefObject<TurnstileInstance | undefined>;
   onCheck: (token: string | null) => void;
   // セキュリティチェックが完了している(トークンがある)か。

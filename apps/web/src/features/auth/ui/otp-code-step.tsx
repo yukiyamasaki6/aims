@@ -26,7 +26,7 @@ type OtpCodeStepProps = {
   onBack: () => void;
   onVerify: (e: FormEvent<HTMLFormElement>) => void;
   onResend: () => void;
-  siteKey: string | undefined;
+  siteKey: string;
   checkRef: RefObject<TurnstileInstance | undefined>;
   onCheck: (token: string | null) => void;
   // セキュリティチェックが完了している(トークンがある)か。

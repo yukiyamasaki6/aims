@@ -205,6 +205,18 @@ describe("パスワード再設定画面の入口", () => {
     expect(widget.siteKey).toBe("page-site-key");
   });
 
+  it("サイトキーの環境変数が無くても例外を投げずに描画し、空のキーをウィジェットへ渡す", () => {
+    // Given
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", undefined);
+    widget.siteKey = "not rendered";
+
+    // When
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
+
+    // Then
+    expect(widget.siteKey).toBe("");
+  });
+
   it("3つの段階を最後まで通すと、入口が得た接続でコードを確かめ、パスワードを変更の要求へ渡し、成功でサインインへページ全体を読み込む", async () => {
     // Given
     auth.resetPasswordForEmail.mockResolvedValue({ error: null });

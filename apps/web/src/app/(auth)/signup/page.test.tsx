@@ -189,6 +189,18 @@ describe("サインアップ画面の入口", () => {
     expect(widget.siteKey).toBe("page-site-key");
   });
 
+  it("サイトキーの環境変数が無くても例外を投げずに描画し、空のキーをウィジェットへ渡す", () => {
+    // Given
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", undefined);
+    widget.siteKey = "not rendered";
+
+    // When
+    render(<SignUpPage />, { wrapper: IntlTestProvider });
+
+    // Then
+    expect(widget.siteKey).toBe("");
+  });
+
   it("3つの段階を最後まで通すと、入口が得た接続とサーバー関数で認証し、ラウンド一覧へ遷移する", async () => {
     // Given
     server.isEmailRegistered.mockResolvedValue(false);

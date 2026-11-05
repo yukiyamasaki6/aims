@@ -29,7 +29,7 @@ export function SignInForm({
   siteKey,
 }: {
   signIn: SignIn;
-  siteKey: string | undefined;
+  siteKey: string;
 }) {
   const {
     state: flow,

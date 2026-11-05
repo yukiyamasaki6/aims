@@ -90,6 +90,18 @@ describe("サインイン画面の入口", () => {
     expect(widget.siteKey).toBe("page-site-key");
   });
 
+  it("サイトキーの環境変数が無くても例外を投げずに描画し、空のキーをウィジェットへ渡す", () => {
+    // Given
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", undefined);
+    widget.siteKey = "not rendered";
+
+    // When
+    render(<SignInPage />, { wrapper: IntlTestProvider });
+
+    // Then
+    expect(widget.siteKey).toBe("");
+  });
+
   it("入口が得た接続で認証し、成功時に遷移する", async () => {
     // Given
     auth.signInWithPassword.mockResolvedValue({ error: null });
