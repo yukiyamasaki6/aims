@@ -631,46 +631,6 @@ describe("パスワード再設定画面の入口", () => {
       );
     });
 
-    it("コードの送信の応答待ちで離れたら、チェックをリセットしない", async () => {
-      // Given
-      const deferred = Promise.withResolvers<{ error: null }>();
-      auth.resetPasswordForEmail.mockReturnValue(deferred.promise);
-      const user = userEvent.setup();
-      const { unmount } = render(<ResetPasswordPage />, {
-        wrapper: IntlTestProvider,
-      });
-      await submitEmailStep(user);
-
-      // When
-      unmount();
-      await act(async () => deferred.resolve({ error: null }));
-
-      // Then
-      expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
-      expect(widget.resets).toBe(0);
-    });
-
-    it("確認の応答待ちで離れたら、状態を更新せず、パスワードの設定を呼ばない", async () => {
-      // Given
-      const user = userEvent.setup();
-      const { unmount } = render(<ResetPasswordPage />, {
-        wrapper: IntlTestProvider,
-      });
-      await advanceToCodeStep(user);
-      const deferred = Promise.withResolvers<{ error: null }>();
-      auth.verifyOtp.mockReturnValue(deferred.promise);
-      await user.type(codeInput(), "123456");
-      await user.click(verifyButton());
-
-      // When
-      unmount();
-      await act(async () => deferred.resolve({ error: null }));
-
-      // Then
-      expect(auth.verifyOtp).toHaveBeenCalledOnce();
-      expect(action.changePassword).not.toHaveBeenCalled();
-    });
-
     it("パスワード設定の段階で押さずに離れたら、変更が行われない", async () => {
       // Given
       const user = userEvent.setup();

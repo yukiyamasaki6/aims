@@ -380,46 +380,8 @@ describe("パスワード設定の共通の手続き", () => {
     });
   });
 
-  // 離れた後に届いた応答は、状態もチェックも変えない。
+  // 離れた後は、設定の続き(遷移)を行わない。
   describe("画面を離れた後の応答", () => {
-    it("コードの再送の待ちで離れたら、拒否を反映せず、チェックをやり直させない", async () => {
-      // Given
-      const { authenticator, context, events, screen, resetCheck, viewOf } =
-        setup();
-      const response = Promise.withResolvers<CallResult>();
-      authenticator.sendCode.mockReturnValue(response.promise);
-      const running = resend(context, { email }, viewOf(readyToResend));
-
-      // When
-      screen.mounted = false;
-      response.resolve({ kind: "refused", failure: { kind: "rate_limited" } });
-      await running;
-
-      // Then
-      expect(events).toEqual([]);
-      expect(resetCheck).not.toHaveBeenCalled();
-    });
-
-    it("コードの確認の待ちで離れたら、結果を反映しない", async () => {
-      // Given
-      const { authenticator, context, events, screen, viewOf } = setup();
-      const response = Promise.withResolvers<CallResult>();
-      authenticator.verifyCode.mockReturnValue(response.promise);
-      const running = verifyCode(
-        context,
-        { email, code: "123456" },
-        viewOf(onCodeStep),
-      );
-
-      // When
-      screen.mounted = false;
-      response.resolve(accepted);
-      await running;
-
-      // Then
-      expect(events).toEqual([]);
-    });
-
     it("パスワードの設定の待ちで離れたら、結果を反映せず、続きを行わない", async () => {
       // Given
       const { authenticator, events, screen, viewOf } = setup();

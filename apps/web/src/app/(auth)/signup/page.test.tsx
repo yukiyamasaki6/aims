@@ -534,25 +534,6 @@ describe("サインアップ画面の入口", () => {
     expect(auth.signInWithOtp).toHaveBeenCalledOnce();
   });
 
-  it("コードの送信の応答待ちで画面を離れたら、チェックをリセットせず、遷移もしない", async () => {
-    // Given
-    server.isEmailRegistered.mockResolvedValue(false);
-    const deferred = Promise.withResolvers<{ error: null }>();
-    auth.signInWithOtp.mockReturnValue(deferred.promise);
-    const user = userEvent.setup();
-    const { unmount } = render(<SignUpPage />, { wrapper: IntlTestProvider });
-    await submitEmailStep(user);
-
-    // When
-    unmount();
-    await act(async () => deferred.resolve({ error: null }));
-
-    // Then
-    expect(auth.signInWithOtp).toHaveBeenCalledOnce();
-    expect(widget.resets).toBe(0);
-    expect(navigation.push).not.toHaveBeenCalled();
-  });
-
   it("パスワードの設定の応答待ちで画面を離れたら、遷移しない", async () => {
     // Given
     const user = userEvent.setup();

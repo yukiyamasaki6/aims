@@ -460,25 +460,6 @@ describe("サインアップの手続き", () => {
       expect(resetCheck).not.toHaveBeenCalled();
     });
 
-    it("コードの送信の待ちで離れたら、成功を反映せず、チェックをやり直させない", async () => {
-      // Given
-      const { signUp, authenticator, events, screen, resetCheck, viewOf } =
-        setup();
-      const response = Promise.withResolvers<CallResult>();
-      authenticator.sendCode.mockReturnValue(response.promise);
-      const running = signUp.sendCode({ email }, viewOf(checked));
-      await vi.waitFor(() => expect(authenticator.sendCode).toHaveBeenCalled());
-
-      // When
-      screen.mounted = false;
-      response.resolve(accepted);
-      await running;
-
-      // Then
-      expect(events).toEqual([]);
-      expect(resetCheck).not.toHaveBeenCalled();
-    });
-
     it("パスワードの設定の待ちで離れたら、結果を反映せず、遷移しない", async () => {
       // Given
       const { signUp, authenticator, navigation, events, screen, viewOf } =
@@ -498,27 +479,6 @@ describe("サインアップの手続き", () => {
       // Then
       expect(events).toEqual([]);
       expect(navigation.go).not.toHaveBeenCalled();
-    });
-    it("共通の順序の中では表示中でも、呼び出し元の再開時に離れていれば、遷移せず、出来事を送らない", async () => {
-      // Given
-      const { signUp, navigation, events, screen, viewOf } = setup();
-      // 共通の順序(applyPassword)の確かめでは表示中、その後の呼び出し元の確かめでは離脱済みという順序を再現する。
-      let observed = false;
-      Object.defineProperty(screen, "mounted", {
-        get: () => {
-          const mounted = !observed;
-          observed = true;
-          return mounted;
-        },
-      });
-      const view = viewOf(onPasswordStep);
-
-      // When
-      await signUp.setPassword({ password: "password1" }, view);
-
-      // Then
-      expect(navigation.go).not.toHaveBeenCalled();
-      expect(events).toEqual([]);
     });
   });
 

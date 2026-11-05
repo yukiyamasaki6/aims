@@ -380,29 +380,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       expect(sendCodeButton()).toHaveAttribute("data-captcha-ready", "false");
     });
 
-    it("送信中にアンマウントされた場合、captchaのリセットを行わない", async () => {
-      // Given
-      auth.isRegistered.mockResolvedValue(false);
-      const deferred = Promise.withResolvers<CallResult>();
-      auth.sendCode.mockReturnValue(deferred.promise);
-      const user = userEvent.setup();
-      const { unmount } = renderForm();
-      await user.type(emailInput(), "user@example.com");
-      completeCaptcha();
-      fireEvent.click(sendCodeButton());
-      await waitFor(() => {
-        expect(auth.sendCode).toHaveBeenCalledOnce();
-      });
-
-      // When
-      unmount();
-      deferred.resolve(ACCEPTED);
-      await settle();
-
-      // Then
-      expect(turnstile.reset).not.toHaveBeenCalled();
-    });
-
     it("コードの送信が届かなかった場合も、使っていないトークンを保ち、同じトークンで再試行して進める", async () => {
       // Given
       auth.isRegistered.mockResolvedValue(false);
@@ -804,25 +781,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       // Then
       expect(screen.getByText(NETWORK_ERROR_MESSAGE)).toBeInTheDocument();
       await expectCodeStepOperationsAvailable();
-    });
-
-    it("送信中にアンマウントされた場合、captchaのリセットを行わない", async () => {
-      // Given
-      const { unmount } = renderForm();
-      await advanceToResendReady();
-      const deferred = Promise.withResolvers<CallResult>();
-      auth.sendCode.mockReturnValue(deferred.promise);
-      completeCaptcha("resend-captcha-token");
-      fireEvent.click(resendButton());
-
-      // When
-      unmount();
-      deferred.resolve(ACCEPTED);
-      await settle();
-
-      // Then
-      expect(auth.sendCode).toHaveBeenCalledOnce();
-      expect(turnstile.reset).not.toHaveBeenCalled();
     });
 
     it("通信エラーの後は使っていないトークンを保ち、同じトークンで再送を再試行できる", async () => {

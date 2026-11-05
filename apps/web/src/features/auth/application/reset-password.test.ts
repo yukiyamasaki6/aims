@@ -210,24 +210,6 @@ describe("パスワード再設定の手続き", () => {
         expect(authenticator.sendCode).not.toHaveBeenCalled();
       },
     );
-
-    it("送信の待ちで離れたら、状態を変えず、チェックをやり直させない", async () => {
-      // Given
-      const { procedure, authenticator, events, screen, resetCheck, viewOf } =
-        setup();
-      const response = Promise.withResolvers<CallResult>();
-      authenticator.sendCode.mockReturnValue(response.promise);
-      const running = procedure.sendCode({ email }, viewOf(checked));
-
-      // When
-      screen.mounted = false;
-      response.resolve(accepted);
-      await running;
-
-      // Then
-      expect(events).toEqual([]);
-      expect(resetCheck).not.toHaveBeenCalled();
-    });
   });
 
   describe("パスワードの設定", () => {

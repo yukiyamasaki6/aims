@@ -96,8 +96,6 @@ async function setPassword(
   ) {
     return;
   }
-  // 遷移の直前に、画面が表示中かを確かめ直す(再設定と同じ理由。離脱の原則)。
-  if (!view.isMounted()) return;
   view.dispatch({ type: "passwordSet" });
   pageNavigation.go(destinationOf(null, protectedPath));
 }
