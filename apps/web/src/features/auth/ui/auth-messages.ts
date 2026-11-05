@@ -39,7 +39,6 @@ export const authMessages = {
       resend: {
         cooldown:
           "再送はクールダウン中です。しばらくしてから再度お試しください。",
-        incomplete: "セキュリティチェックが完了していません。",
       },
     } satisfies {
       [Field in keyof FieldErrorKinds]: Record<FieldErrorKinds[Field], string>;

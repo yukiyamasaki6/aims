@@ -119,9 +119,7 @@ function CodeStep({
   const texts = useAuthTexts();
   const [code, setCode] = useState("");
   const pending =
-    flow.pending === "verify" || flow.pending === "resend"
-      ? flow.pending
-      : null;
+    flow.pending === "verify" || flow.pending === "send" ? flow.pending : null;
   return (
     <OtpCodeStep
       email={email}
@@ -129,6 +127,7 @@ function CodeStep({
       code={code}
       onCodeChange={setCode}
       resendError={texts.fieldError("resend", flow.fieldErrors.resend)}
+      captchaError={texts.fieldError("captcha", flow.fieldErrors.captcha)}
       pending={pending}
       error={texts.failure(flow.error)}
       onBack={() => view.dispatch({ type: "emailStepReturned" })}
@@ -136,7 +135,7 @@ function CodeStep({
         e.preventDefault();
         void procedure.verifyCode({ email, code }, view);
       }}
-      onResend={() => void procedure.resend({ email }, view)}
+      onResend={() => void procedure.sendCode({ email }, view)}
       siteKey={siteKey}
       checkRef={check}
       onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}

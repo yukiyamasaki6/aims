@@ -24,6 +24,7 @@ function createForm(overrides: Partial<Props> = {}) {
     code: "",
     onCodeChange: vi.fn(),
     resendError: undefined,
+    captchaError: undefined,
     pending: null,
     error: null,
     onBack: vi.fn(),
@@ -111,6 +112,17 @@ describe("OtpCodeStep", () => {
 
       // Then
       expect(screen.getByText("再送のエラー")).toBeInTheDocument();
+    });
+
+    it("セキュリティチェックの不備を、再送の欄(再送ボタンの下)に表示する", () => {
+      // Given
+
+      // When
+      const form = createForm({ captchaError: "チェックが未完了" });
+      renderStep(form);
+
+      // Then
+      expect(screen.getByText("チェックが未完了")).toBeInTheDocument();
     });
   });
 
@@ -219,7 +231,7 @@ describe("OtpCodeStep", () => {
       // Given
 
       // When
-      const form = createForm({ pending: "resend" });
+      const form = createForm({ pending: "send" });
       renderStep(form);
 
       // Then

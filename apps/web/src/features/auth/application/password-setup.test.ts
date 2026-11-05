@@ -11,7 +11,7 @@ import type { CallResult } from "./call-result";
 import {
   applyPassword,
   type PasswordSetupContext,
-  resend,
+  sendCode,
   tickCooldown,
   verifyCode,
 } from "./password-setup";
@@ -101,14 +101,14 @@ describe("パスワード設定の共通の手続き", () => {
     });
   });
 
-  describe("コードの再送", () => {
+  describe("コードの送付(コード入力の段階からの再送)", () => {
     it("待ち時間が明けてトークンがあれば、送って成功を示し、チェックをやり直させる", async () => {
       // Given
       const { authenticator, context, order, viewOf } = setup();
       const view = viewOf(readyToResend);
 
       // When
-      await resend(context, { email }, view);
+      await sendCode(context, { email }, view);
 
       // Then
       expect(authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
@@ -116,7 +116,7 @@ describe("パスワード設定の共通の手続き", () => {
         email,
         captchaToken: "resend-token",
       });
-      expect(order).toEqual(["codeResent", "resetCheck"]);
+      expect(order).toEqual(["codeSent", "resetCheck"]);
       expect(view.observedState.captchaToken).toBeNull();
       expect(view.observedState.resendCooldown).toBe(60);
     });
@@ -127,7 +127,7 @@ describe("パスワード設定の共通の手続き", () => {
       const view = viewOf(resendable);
 
       // When
-      await resend(context, { email }, view);
+      await sendCode(context, { email }, view);
 
       // Then
       expect(view.observedState.fieldErrors).toEqual({
@@ -143,7 +143,7 @@ describe("パスワード設定の共通の手続き", () => {
       const running = { ...readyToResend, pending: "verify" as const };
 
       // When
-      await resend(context, { email }, viewOf(running));
+      await sendCode(context, { email }, viewOf(running));
 
       // Then
       expect(events).toEqual([]);
@@ -160,12 +160,13 @@ describe("パスワード設定の共通の手続き", () => {
       const view = viewOf(readyToResend);
 
       // When
-      await resend(context, { email }, view);
+      await sendCode(context, { email }, view);
 
       // Then
       expect(view.observedState.error).toBe("unreachable");
       expect(view.observedState.captchaToken).toBeNull();
       expect(view.observedState.pending).toBeNull();
+      expect(view.observedState.resendCooldown).toBe(0);
       expect(resetCheck).toHaveBeenCalledOnce();
     });
 
@@ -179,7 +180,7 @@ describe("パスワード設定の共通の手続き", () => {
       const view = viewOf(readyToResend);
 
       // When
-      await resend(context, { email }, view);
+      await sendCode(context, { email }, view);
 
       // Then
       expect(order).toEqual(["refused", "resetCheck"]);
@@ -246,7 +247,7 @@ describe("パスワード設定の共通の手続き", () => {
     it("実行中なら、何も送らず、認証しない", async () => {
       // Given
       const { authenticator, context, events, viewOf } = setup();
-      const running = { ...onCodeStep, pending: "resend" as const };
+      const running = { ...onCodeStep, pending: "send" as const };
 
       // When
       await verifyCode(context, { email, code: "123456" }, viewOf(running));

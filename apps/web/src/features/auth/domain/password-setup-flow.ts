@@ -9,7 +9,7 @@ import { validateNewPassword } from "./password";
 // 段階、実行中の操作、再送の待ち時間、セキュリティチェックのトークンと、
 // 操作の開始の可否と入力の検証の順序、失敗の後の状態、トークンの消費を守る集約。
 
-type Operation = "send" | "verify" | "resend" | "setPassword";
+type Operation = "send" | "verify" | "setPassword";
 
 export type PasswordSetupFlow = {
   readonly step: "email" | "code" | "password";
@@ -63,26 +63,27 @@ function begin<Request>(
       error: null,
       fieldErrors: {},
       pending: operation,
-      resendCooldown:
-        operation === "resend" ? RESEND_COOLDOWN_SECONDS : flow.resendCooldown,
     },
     request: checked.request,
   };
 }
 
-// コードの送信。メールアドレスとセキュリティチェックの両方に不備が無ければ送れる。
+// コードの送付(初回も再送も)。メールアドレス、再送の待ち時間、セキュリティチェックの全てに不備が無ければ送れる。
+// 待ちは、コード入力の段階で残りがあるときの不備である(メール入力の段階では0)。
 export function beginSendCode(
   flow: PasswordSetupFlow,
   input: { email: string },
 ): Start<PasswordSetupFlow, { email: string; captchaToken: string }> {
   return begin(flow, "send", () => {
     const email = validateEmail(input.email);
+    const wait = validateResendWait(flow.resendCooldown);
     const { captchaToken } = flow;
-    if (email || !isCaptchaCompleted(captchaToken)) {
+    if (email || wait || !isCaptchaCompleted(captchaToken)) {
       return {
         ok: false,
         fieldErrors: {
           ...(email && { email }),
+          ...(wait && { resend: wait }),
           ...(!isCaptchaCompleted(captchaToken) && { captcha: "incomplete" }),
         },
       };
@@ -102,25 +103,6 @@ export function beginVerifyCode(
   }));
 }
 
-// コードの再送。待ち時間とセキュリティチェックに不備が無ければ送れる。
-// 不備は再送の欄の1つの値で示すため、両方にあるときは待ち時間を示す(欄の整理は送付の統合で行う)。
-export function beginResend(
-  flow: PasswordSetupFlow,
-  input: { email: string },
-): Start<PasswordSetupFlow, { email: string; captchaToken: string }> {
-  return begin(flow, "resend", () => {
-    const wait = validateResendWait(flow.resendCooldown);
-    const { captchaToken } = flow;
-    if (wait || !isCaptchaCompleted(captchaToken)) {
-      return {
-        ok: false,
-        fieldErrors: { resend: wait ?? "incomplete" },
-      };
-    }
-    return { ok: true, request: { email: input.email, captchaToken } };
-  });
-}
-
 export function beginSetPassword(
   flow: PasswordSetupFlow,
   input: { password: string },
@@ -138,7 +120,6 @@ export type PasswordSetupEvent =
   | { type: "cooldownTicked" }
   | { type: "emailStepReturned" }
   | { type: "codeSent" }
-  | { type: "codeResent" }
   | { type: "codeConfirmed" }
   | { type: "passwordSet" }
   | { type: "failed"; failure: AuthFailure }
@@ -153,7 +134,7 @@ export function passwordSetupReducer(
       return { ...flow, captchaToken: event.token };
     case "cooldownTicked":
       return { ...flow, resendCooldown: flow.resendCooldown - 1 };
-    // 確認と再送の応答待ちに戻ると、遅れて届いた応答が別の段階へ反映されるため、操作中は戻らない。
+    // 確認と送付の応答待ちに戻ると、遅れて届いた応答が別の段階へ反映されるため、操作中は戻らない。
     case "emailStepReturned":
       return flow.pending !== null
         ? flow
@@ -161,6 +142,7 @@ export function passwordSetupReducer(
             ...flow,
             step: "email",
             captchaToken: null,
+            resendCooldown: 0,
             error: null,
             fieldErrors: {},
           };
@@ -174,11 +156,11 @@ export function passwordSetupReducer(
 
 type Settlement = Extract<
   PasswordSetupEvent,
-  { type: "codeSent" | "codeResent" | "codeConfirmed" | "failed" | "refused" }
+  { type: "codeSent" | "codeConfirmed" | "failed" | "refused" }
 >;
 
 // 操作の結果。実行中を解除し、結果を反映する。成功は以前のエラーを消し、失敗は理由に差し替える。
-// セキュリティチェックのトークンは、認証サービスが応答すれば(コードの送信と再送の成功も、拒否も)使ったため消費する。応答が無かった失敗(failed)は、使っていないので消費しない。
+// セキュリティチェックのトークンは、コードの送付の成功(codeSent)も失敗(refused)も使ったため消費する。確認とパスワードの設定の失敗(failed)はトークンを使わない。
 function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
   switch (event.type) {
     case "codeSent":
@@ -190,14 +172,6 @@ function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
         error: null,
         fieldErrors: {},
         resendCooldown: RESEND_COOLDOWN_SECONDS,
-      };
-    case "codeResent":
-      return {
-        ...flow,
-        captchaToken: null,
-        pending: null,
-        error: null,
-        fieldErrors: {},
       };
     case "codeConfirmed":
       return {

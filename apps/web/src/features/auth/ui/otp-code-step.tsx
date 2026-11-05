@@ -9,7 +9,8 @@ import { AUTH_CODE_LENGTH } from "../domain/auth-code";
 import { AuthHeader } from "./auth-header";
 import { Turnstile } from "./turnstile";
 
-type Pending = "verify" | "resend" | null;
+// 実行中の確認(verify)か、コードの送付(send。この段階では再送)。
+type Pending = "verify" | "send" | null;
 
 type OtpCodeStepProps = {
   email: string;
@@ -18,6 +19,8 @@ type OtpCodeStepProps = {
   code: string;
   onCodeChange: (value: string) => void;
   resendError: string | undefined;
+  // セキュリティチェックが未完了の不備。再送ボタンの下に出す。
+  captchaError: string | undefined;
   // 実行中の確認か再送。どちらかが実行中の間は、3つのボタンを無効にする。
   pending: Pending;
   error: string | null;
@@ -36,6 +39,7 @@ export function OtpCodeStep({
   code,
   onCodeChange,
   resendError,
+  captchaError,
   pending,
   error,
   onBack,
@@ -73,6 +77,7 @@ export function OtpCodeStep({
         pending={pending}
         resendCooldown={resendCooldown}
         resendError={resendError}
+        captchaError={captchaError}
         onResend={onResend}
       />
     </>
@@ -117,11 +122,13 @@ function ResendSection({
   pending,
   resendCooldown,
   resendError,
+  captchaError,
   onResend,
 }: {
   pending: Pending;
   resendCooldown: number;
   resendError: string | undefined;
+  captchaError: string | undefined;
   onResend: () => void;
 }) {
   const t = useTranslations("auth");
@@ -132,7 +139,7 @@ function ResendSection({
         variant="outline"
         className="w-full"
         busy={pending !== null}
-        spinner={pending === "resend"}
+        spinner={pending === "send"}
         onClick={onResend}
       >
         {resendCooldown > 0
@@ -140,6 +147,9 @@ function ResendSection({
           : t("otpResend")}
       </BusyButton>
       {resendError && <p className="text-destructive text-sm">{resendError}</p>}
+      {captchaError && (
+        <p className="text-destructive text-sm">{captchaError}</p>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import {
-  beginResend,
+  beginSendCode,
   beginSetPassword,
   beginVerifyCode,
   type PasswordSetupEvent,
@@ -24,7 +24,6 @@ export type PasswordSetupView = ScreenView<
 // 画面が呼ぶ操作。
 export type PasswordSetup = {
   sendCode(input: { email: string }, view: PasswordSetupView): Promise<void>;
-  resend(input: { email: string }, view: PasswordSetupView): Promise<void>;
   verifyCode(
     input: { email: string; code: string },
     view: PasswordSetupView,
@@ -56,30 +55,22 @@ export function tickCooldown(
   );
 }
 
-// コードの送信の依頼。成功でも失敗でも、トークンは消費し、チェックをやり直させる。
-export async function deliver(
+// コードの送付の依頼(初回も再送も)。成功でも失敗でも、トークンは消費し、チェックをやり直させる。
+// 再送の待ちは、送付の成功で始まる。失敗では始めない。
+export async function sendCode(
   { authenticator, purpose }: PasswordSetupContext,
-  { email, captchaToken }: { email: string; captchaToken: string },
-  view: PasswordSetupView,
-  sent: Extract<PasswordSetupEvent, { type: "codeSent" | "codeResent" }>,
-) {
-  const result = await authenticator.sendCode({ purpose, email, captchaToken });
-  view.dispatch(
-    result.kind === "accepted"
-      ? sent
-      : { type: "refused", failure: result.failure },
-  );
-  view.resetCheck();
-}
-
-export async function resend(
-  context: PasswordSetupContext,
   input: { email: string },
   view: PasswordSetupView,
 ) {
-  const request = view.begin((flow) => beginResend(flow, input));
+  const request = view.begin((flow) => beginSendCode(flow, input));
   if (!request) return;
-  await deliver(context, request, view, { type: "codeResent" });
+  const result = await authenticator.sendCode({ purpose, ...request });
+  view.dispatch(
+    result.kind === "accepted"
+      ? { type: "codeSent" }
+      : { type: "refused", failure: result.failure },
+  );
+  view.resetCheck();
 }
 
 export async function verifyCode(

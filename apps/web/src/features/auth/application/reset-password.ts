@@ -1,15 +1,13 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { SIGN_IN_PATH } from "../domain/auth-routes";
-import { beginSendCode } from "../domain/password-setup-flow";
 import type { CallResult } from "./call-result";
 import {
   applyPassword,
-  deliver,
   type PasswordSetup,
   type PasswordSetupContext,
   type PasswordSetupView,
-  resend,
+  sendCode,
   tickCooldown,
   verifyCode,
 } from "./password-setup";
@@ -38,23 +36,11 @@ export function createResetPassword({
   };
   return {
     sendCode: (input, view) => sendCode(context, input, view),
-    resend: (input, view) => resend(context, input, view),
     verifyCode: (input, view) => verifyCode(context, input, view),
     tickCooldown: (dispatch) => tickCooldown(context, dispatch),
     setPassword: (input, view) =>
       setPassword(authenticator, pageNavigation, input, view),
   };
-}
-
-// メールアドレスが登録済みかは判定しない(登録の有無を画面に出さない)。
-async function sendCode(
-  context: PasswordSetupContext,
-  input: { email: string },
-  view: PasswordSetupView,
-) {
-  const request = view.begin((flow) => beginSendCode(flow, input));
-  if (!request) return;
-  await deliver(context, request, view, { type: "codeSent" });
 }
 
 // パスワードを変え、変えられて画面が表示中なら、この端末のサインインを終えて、サインインの画面へ移る(自動ではサインインしない)。

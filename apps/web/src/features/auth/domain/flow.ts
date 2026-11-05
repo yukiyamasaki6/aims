@@ -10,7 +10,7 @@ export type FieldErrorKinds = {
   email: EmailError;
   password: PasswordError;
   captcha: CaptchaError;
-  resend: ResendWaitError | CaptchaError;
+  resend: ResendWaitError;
 };
 
 // 欄ごとのエラー。キーは欄の名前、値は誤りの種類。

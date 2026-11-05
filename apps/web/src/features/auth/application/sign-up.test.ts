@@ -272,7 +272,7 @@ describe("サインアップの手続き", () => {
       const view = viewOf(readyToResend);
 
       // When
-      await signUp.resend({ email }, view);
+      await signUp.sendCode({ email }, view);
 
       // Then
       expect(authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
@@ -280,7 +280,7 @@ describe("サインアップの手続き", () => {
         email,
         captchaToken: "resend-token",
       });
-      expect(order).toEqual(["codeResent", "resetCheck"]);
+      expect(order).toEqual(["codeSent", "resetCheck"]);
     });
 
     it("コードの確認は、共通の順序で認証し、パスワード設定の段階へ進む", async () => {

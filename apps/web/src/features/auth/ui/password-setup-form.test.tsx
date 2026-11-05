@@ -229,12 +229,21 @@ async function advanceToPasswordStep() {
 
 // 確認・再送が終わった後に、送信中表示を解除し、再送・確認・戻るのいずれも再び実行できる（共有の送信中ガードが解除されている）ことを検証する。
 // 再送はクールダウン中のため、クールダウン中のエラーが表示されることで操作を受け付けたことを確認する。
-async function expectCodeStepOperationsAvailable() {
+// resendBlockedBy: 再送を押したときに示される不備。待ちが残っていれば"cooldown"、再送の失敗の直後(待ちを始めず、トークンを消費済み)は"captcha"。
+async function expectCodeStepOperationsAvailable(
+  resendBlockedBy: "cooldown" | "captcha" = "cooldown",
+) {
   expect(spinnerIn(verifyButton())).toBeNull();
   expect(spinnerIn(resendButton())).toBeNull();
 
   fireEvent.click(resendButton());
-  expect(screen.getByText(COOLDOWN_ERROR_MESSAGE)).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      resendBlockedBy === "cooldown"
+        ? COOLDOWN_ERROR_MESSAGE
+        : CAPTCHA_ERROR_MESSAGE,
+    ),
+  ).toBeInTheDocument();
 
   auth.verifyCode.mockClear();
   auth.verifyCode.mockResolvedValue(refusedWith({ kind: "code_expired" }));
@@ -248,7 +257,7 @@ async function expectCodeStepOperationsAvailable() {
 }
 
 // 確認・再送の通信中に、確認・再送・戻るを無効表示にして通信中の操作のボタンのみ送信中表示にし、いずれの操作も受け付けないことを検証する。
-function expectCodeStepOperationsBlocked(pending: "verify" | "resend") {
+function expectCodeStepOperationsBlocked(pending: "verify" | "send") {
   for (const button of [verifyButton(), resendButton(), backButton()]) {
     expect(button).toHaveAttribute("aria-disabled", "true");
   }
@@ -729,7 +738,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       fireEvent.click(resendButton());
 
       // Then
-      expectCodeStepOperationsBlocked("resend");
+      expectCodeStepOperationsBlocked("send");
       expect(auth.sendCode).toHaveBeenCalledOnce();
       expect(auth.verifyCode).not.toHaveBeenCalled();
       deferred.resolve(ACCEPTED);
@@ -753,7 +762,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
         screen.getByText(authText("failure.captcha_failed")),
       ).toBeInTheDocument();
       expect(turnstile.reset).toHaveBeenCalledOnce();
-      await expectCodeStepOperationsAvailable();
+      await expectCodeStepOperationsAvailable("captcha");
     });
 
     it("通信エラーの場合、通信エラーのメッセージを表示し、再送・確認・戻るを再び実行できる", async () => {
@@ -770,7 +779,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // Then
       expect(screen.getByText(NETWORK_ERROR_MESSAGE)).toBeInTheDocument();
-      await expectCodeStepOperationsAvailable();
+      await expectCodeStepOperationsAvailable("captcha");
     });
 
     it.each([

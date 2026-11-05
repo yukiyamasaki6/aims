@@ -406,7 +406,7 @@ describe("パスワード再設定の手続き", () => {
       const view = viewOf(readyToResend);
 
       // When
-      await procedure.resend({ email }, view);
+      await procedure.sendCode({ email }, view);
 
       // Then
       expect(authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
@@ -414,7 +414,7 @@ describe("パスワード再設定の手続き", () => {
         email,
         captchaToken: "resend-token",
       });
-      expect(order).toEqual(["codeResent", "resetCheck"]);
+      expect(order).toEqual(["codeSent", "resetCheck"]);
     });
 
     it("コードの確認は、共通の順序で認証し、パスワード設定の段階へ進む", async () => {
