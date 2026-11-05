@@ -1,5 +1,4 @@
 import type { AuthFailureKind } from "../domain/auth-failure";
-import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import type { FieldErrorKinds } from "../domain/flow";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "../domain/password";
 
@@ -26,7 +25,6 @@ export const authMessages = {
     fieldError: {
       email: {
         required: "メールアドレスを入力してください。",
-        tooLong: `メールアドレスは${EMAIL_MAX_LENGTH}文字以内で入力してください。`,
         invalidFormat: "メールアドレスの形式が正しくありません。",
       },
       password: {

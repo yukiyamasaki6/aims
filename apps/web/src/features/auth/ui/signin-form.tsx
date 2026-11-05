@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { SignIn } from "../application/sign-in";
 import { RESET_PASSWORD_PATH, SIGN_UP_PATH } from "../domain/auth-routes";
-import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import {
   initialSignInFlow,
   type SignInFlow,
@@ -124,7 +123,6 @@ function SignInFields({
             placeholder={t("emailPlaceholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            maxLength={EMAIL_MAX_LENGTH}
             enterKeyHint="next"
             // 変換中でないEnterは、送信せずにパスワード欄へ進む。送信はパスワード欄のEnterとボタンで行う。
             onKeyDown={(e) => {

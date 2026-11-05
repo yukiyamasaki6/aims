@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import type { FormEvent, ReactNode, RefObject } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
-import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import { AuthField } from "./auth-field";
 import { AuthHeader } from "./auth-header";
 import { Turnstile } from "./turnstile";
@@ -61,7 +60,6 @@ export function OtpEmailStep({
             <Input
               type="email"
               placeholder={t("emailPlaceholder")}
-              maxLength={EMAIL_MAX_LENGTH}
               value={email}
               onChange={(e) => onEmailChange(e.target.value)}
               {...aria}

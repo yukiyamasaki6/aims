@@ -406,7 +406,7 @@ describe("操作の開始の可否と入力の検証", () => {
       const flow = {
         ...readyFlow(),
         error: "rate_limited" as const,
-        fieldErrors: { email: "tooLong" as const },
+        fieldErrors: { email: "invalidFormat" as const },
       };
 
       // When
@@ -461,7 +461,7 @@ describe("操作の開始の可否と入力の検証", () => {
         ...readyFlow(),
         ...c.invalidFlow,
         error: "other" as const,
-        fieldErrors: { email: "tooLong" as const },
+        fieldErrors: { email: "invalidFormat" as const },
       };
 
       // When

@@ -4,7 +4,6 @@ import { type ComponentProps, forwardRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import { OtpEmailStep } from "./otp-email-step";
 
 const authText = translatorFor("auth");
@@ -99,19 +98,6 @@ describe("OtpEmailStep", () => {
         "reset-password-email-error",
       );
       expect(input).toHaveAttribute("aria-invalid", "true");
-    });
-  });
-
-  describe("入力欄", () => {
-    it("メールアドレスの入力欄の最大長は、ドメインのメールアドレスの上限である", () => {
-      // Given
-
-      // When
-      renderStep(createForm());
-
-      // Then
-      const input = screen.getByPlaceholderText("you@example.com");
-      expect(input).toHaveAttribute("maxlength", String(EMAIL_MAX_LENGTH));
     });
   });
 
