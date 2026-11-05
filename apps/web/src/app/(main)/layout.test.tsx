@@ -1,11 +1,5 @@
 import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -423,11 +417,8 @@ describe("MainLayout", () => {
         scope: "local",
       });
       expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      await waitFor(() => {
-        expect(
-          screen.queryByText(authText("signOutConfirm")),
-        ).not.toBeInTheDocument();
-      });
+      // 完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示のまま変えない。
+      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
     });
 
     it("認証サービスが通信の失敗を返してもローカルのセッションが消えていれば、完了として移る", async () => {
@@ -444,11 +435,8 @@ describe("MainLayout", () => {
       // Then
       expect(localStorage.getItem(IDENTITY_KEY)).toBeNull();
       expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      await waitFor(() => {
-        expect(
-          screen.queryByText(authText("signOutConfirm")),
-        ).not.toBeInTheDocument();
-      });
+      // 完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示のまま変えない。
+      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
       expect(screen.queryByText(NETWORK_ERROR)).not.toBeInTheDocument();
     });
 
@@ -466,11 +454,8 @@ describe("MainLayout", () => {
       // Then
       expect(localStorage.getItem(IDENTITY_KEY)).toBeNull();
       expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      await waitFor(() => {
-        expect(
-          screen.queryByText(authText("signOutConfirm")),
-        ).not.toBeInTheDocument();
-      });
+      // 完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示のまま変えない。
+      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
       expect(screen.queryByText(NETWORK_ERROR)).not.toBeInTheDocument();
     });
 
@@ -486,11 +471,8 @@ describe("MainLayout", () => {
       // Then
       expect(localStorage.getItem(IDENTITY_KEY)).toBeNull();
       expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      await waitFor(() => {
-        expect(
-          screen.queryByText(authText("signOutConfirm")),
-        ).not.toBeInTheDocument();
-      });
+      // 完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示のまま変えない。
+      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
     });
 
     it("認証サービスが拒否しても、その後の読み取りが未認証なら、エラーを示さず、完了として遷移元を付けずに移る", async () => {
@@ -504,11 +486,8 @@ describe("MainLayout", () => {
 
       // Then
       expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      await waitFor(() => {
-        expect(
-          screen.queryByText(authText("signOutConfirm")),
-        ).not.toBeInTheDocument();
-      });
+      // 完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示のまま変えない。
+      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
       expect(
         screen.queryByText(authText("failure.rate_limited")),
       ).not.toBeInTheDocument();

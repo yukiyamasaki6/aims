@@ -81,7 +81,7 @@ async function flush() {
 
 describe("サインアウト", () => {
   describe("表示中に終了の後の読み取りが未認証の場合", () => {
-    it("この端末の終了を1回頼んだ後に状態を読み、完了を返し、遷移元の無いサインインへ1回置き換える", async () => {
+    it("この端末の終了を1回頼んだ後に状態を読み、ignoredを返し、遷移元の無いサインインへ1回置き換える", async () => {
       // Given
       const { session, authority, page, state } = setup({
         here: "/rounds/new",
@@ -95,7 +95,7 @@ describe("サインアウト", () => {
       const result = await session.signOut(mounted);
 
       // Then
-      expect(result).toEqual({ kind: "completed" });
+      expect(result).toEqual({ kind: "ignored" });
       expect(authority.signOutHere).toHaveBeenCalledOnce();
       expect(authority.readSession).toHaveBeenCalledOnce();
       expect(authority.signOutHere.mock.invocationCallOrder[0]).toBeLessThan(
@@ -121,7 +121,7 @@ describe("サインアウト", () => {
         const result = await session.signOut(mounted);
 
         // Then
-        expect(result).toEqual({ kind: "completed" });
+        expect(result).toEqual({ kind: "ignored" });
         expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
       },
     );
@@ -182,7 +182,7 @@ describe("サインアウト", () => {
       const result = await session.signOut({ isMounted: () => isMounted });
 
       // Then
-      expect(result).toEqual({ kind: "discarded" });
+      expect(result).toEqual({ kind: "ignored" });
       expect(authority.readSession).toHaveBeenCalledOnce();
       expect(page.replace).not.toHaveBeenCalled();
     });
@@ -200,7 +200,7 @@ describe("サインアウト", () => {
       const result = await session.signOut({ isMounted: () => isMounted });
 
       // Then
-      expect(result).toEqual({ kind: "discarded" });
+      expect(result).toEqual({ kind: "ignored" });
       expect(page.replace).not.toHaveBeenCalled();
     });
   });
@@ -252,8 +252,8 @@ describe("サインアウト", () => {
 
       // Then
       expect(authority.signOutHere).toHaveBeenCalledTimes(1);
-      expect(first).toEqual({ kind: "completed" });
-      expect(second).toEqual({ kind: "busy" });
+      expect(first).toEqual({ kind: "ignored" });
+      expect(second).toEqual({ kind: "ignored" });
     });
 
     it("最初の終了が届かず読み取りが不明で失敗した後に再び頼み、読み取りが未認証なら、完了して遷移元の無いサインインへ1回移る", async () => {
@@ -277,7 +277,7 @@ describe("サインアウト", () => {
 
       // Then
       expect(first).toEqual({ kind: "failed", failure: UNREACHABLE });
-      expect(result).toEqual({ kind: "completed" });
+      expect(result).toEqual({ kind: "ignored" });
       expect(authority.signOutHere).toHaveBeenCalledTimes(2);
       expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
     });
@@ -307,8 +307,8 @@ describe("サインアウト", () => {
       const result = await session.signOut(mounted);
 
       // Then
-      expect(discarded).toEqual({ kind: "discarded" });
-      expect(result).toEqual({ kind: "completed" });
+      expect(discarded).toEqual({ kind: "ignored" });
+      expect(result).toEqual({ kind: "ignored" });
     });
   });
 

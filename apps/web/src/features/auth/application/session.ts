@@ -4,12 +4,12 @@ import {
   lostByStatus,
   type SessionStatus,
 } from "../domain/auth-change";
+import type { AuthFailure } from "../domain/auth-failure";
 import {
   beginSignOut,
   endSignOut,
   initialSessionEndFlow,
   leave,
-  type SignOutVerdict,
 } from "../domain/session-end-flow";
 import type { AuthChanges } from "./auth-changes";
 import { type CallResult, failureOf } from "./call-result";
@@ -46,8 +46,11 @@ export type PageReplace = {
   replace(path: string): void;
 };
 
-// busy: 実行中のため、始めなかった。
-export type SignOutResult = SignOutVerdict | { readonly kind: "busy" };
+// サインアウトの結果。画面が区別するのは、失敗(理由を示して再試行できる)とそれ以外だけである。
+// ignored: 完了(遷移で画面ごと捨てられる)、実行中のため始めなかった、離れたため結果を破棄した、のどれか。
+export type SignOutResult =
+  | { readonly kind: "failed"; readonly failure: AuthFailure }
+  | { readonly kind: "ignored" };
 
 type Dependencies = {
   authenticator: SessionAuthenticator;
@@ -58,7 +61,7 @@ type Dependencies = {
 };
 
 export type Session = {
-  // サインアウトを始める。実行中の判定は集約が持ち、実行中に呼ぶとbusyを返して何もしない。終えられたら、遷移元を付けずにサインインへ移す。
+  // サインアウトを始める。実行中の判定は集約が持ち、実行中に呼ぶと何もしない(ignored)。終えられたら、遷移元を付けずにサインインへ移す。
   signOut(view: ViewLifetime): Promise<SignOutResult>;
   // セッションの喪失を見張り、失ったらサインインへ移す。見張りをやめる関数を返す。
   watch(): () => void;
@@ -78,7 +81,7 @@ export function createSession({
   async function signOut(view: ViewLifetime): Promise<SignOutResult> {
     const start = beginSignOut(flow);
     flow = start.state;
-    if (start.kind !== "started") return { kind: "busy" };
+    if (start.kind !== "started") return { kind: "ignored" };
     const failure = failureOf(await authenticator.signOutHere());
     const reading = await authenticator.readSession();
     // 読んだ後に離れていたら、結果を破棄する。終了の依頼は取り消さない。
@@ -90,7 +93,9 @@ export function createSession({
     );
     flow = ended.state;
     if (ended.result.kind === "completed") go(null);
-    return ended.result;
+    return ended.result.kind === "failed"
+      ? { kind: "failed", failure: ended.result.failure }
+      : { kind: "ignored" };
   }
 
   function go(from: string | null) {

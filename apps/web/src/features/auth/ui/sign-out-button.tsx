@@ -23,14 +23,11 @@ export function SignOutButton({ signOut }: { signOut: Session["signOut"] }) {
     setBusy(true);
     setError(null);
     const result = await signOut({ isMounted: () => mountedRef.current });
-    // 実行中の別の呼び出しが表示を解く。離れた後は、状態を更新しない。
-    if (result.kind === "busy" || result.kind === "discarded") return;
-    setBusy(false);
+    // 失敗のときだけ、実行中の表示を解いて理由を示す。完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示を保つ。実行中の別の呼び出しが表示を解く。離れた後は、状態を更新しない。
     if (result.kind === "failed") {
+      setBusy(false);
       setError(result.failure.kind);
-      return;
     }
-    setOpen(false);
   }
 
   return (
@@ -47,7 +44,7 @@ export function SignOutButton({ signOut }: { signOut: Session["signOut"] }) {
         open={open}
         onOpenChange={(next) => {
           setOpen(next);
-          if (!next) setError(null);
+          setError(null);
         }}
         description={t("signOutConfirm")}
         confirmLabel={t("signOutConfirmLabel")}
