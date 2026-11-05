@@ -167,7 +167,7 @@ describe("サインアウト", () => {
   });
 
   describe("完了を待つ間に離れた場合", () => {
-    it("終了の応答の前に離れたら、状態を読まずに結果を破棄し、遷移しない", async () => {
+    it("終了の応答の前に離れたら、状態を読んだ上で結果を破棄し、遷移しない", async () => {
       // Given
       let isMounted = true;
       const { session, authority, page, state } = setup({
@@ -183,7 +183,7 @@ describe("サインアウト", () => {
 
       // Then
       expect(result).toEqual({ kind: "discarded" });
-      expect(authority.readSession).not.toHaveBeenCalled();
+      expect(authority.readSession).toHaveBeenCalledOnce();
       expect(page.replace).not.toHaveBeenCalled();
     });
 

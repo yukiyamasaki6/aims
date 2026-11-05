@@ -626,7 +626,7 @@ describe("MainLayout", () => {
       expect(supabase.signOut).toHaveBeenCalledTimes(1);
     });
 
-    it("完了を待つ間に画面が離れたときは、サインインの状態を読まず、結果を破棄して移らない", async () => {
+    it("完了を待つ間に画面が離れたときは、結果を破棄して移らない", async () => {
       // Given
       const user = userEvent.setup();
       let finish: (value: unknown) => void = () => {};
@@ -637,14 +637,12 @@ describe("MainLayout", () => {
       );
       const { unmount } = renderLayout();
       await confirmSignOut(user);
-      const readsBeforeLeaving = supabase.getSession.mock.calls.length;
       unmount();
 
       // When
       await act(async () => finish({ error: null }));
 
       // Then
-      expect(supabase.getSession).toHaveBeenCalledTimes(readsBeforeLeaving);
       expect(replace).not.toHaveBeenCalled();
     });
   });

@@ -80,11 +80,11 @@ export function createSession({
     flow = start.state;
     if (start.kind !== "started") return { kind: "busy" };
     const failure = failureOf(await authenticator.signOutHere());
-    // 離れた後は、読まずに結果を破棄する。終了の依頼は取り消さない。
-    const reading = view.isMounted() ? await authenticator.readSession() : null;
+    const reading = await authenticator.readSession();
+    // 読んだ後に離れていたら、結果を破棄する。終了の依頼は取り消さない。
     const ended = endSignOut(
       flow,
-      reading !== null && view.isMounted()
+      view.isMounted()
         ? { kind: "observed", status: reading.status, failure }
         : { kind: "discarded" },
     );
