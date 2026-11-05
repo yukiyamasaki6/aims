@@ -8,7 +8,6 @@ import {
 } from "@supabase/supabase-js";
 import type { AuthChanges } from "../application/auth-changes";
 import type { CallResult } from "../application/call-result";
-import type { SignOutEverywhere } from "../application/password-change";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import type {
   SessionAuthenticator,
@@ -26,7 +25,6 @@ import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 export type SupabaseAuth = SignInAuthenticator &
   PasswordSetupAuthenticator &
   SessionAuthenticator &
-  SignOutEverywhere &
   AuthChanges;
 
 type Auth = SupabaseClient["auth"];
@@ -68,8 +66,6 @@ export function createSupabaseAuth(
       ),
     // この端末のサインインだけを終える。終えられたかは、呼び出し側が、この後のサインインの状態の読み取りで決める。
     signOutHere: () => toCallResult(() => signOut(auth(), "local")),
-    // その利用者の全ての端末のサインインが終わる。
-    signOutEverywhere: () => toCallResult(() => signOut(auth(), "global")),
     subscribe: (listener) => {
       const {
         data: { subscription },
@@ -88,8 +84,8 @@ export function createSupabaseAuth(
   };
 }
 
-// 認証サービスのサインアウトの呼び出しは、ここだけである。localはこの端末だけ、globalはその利用者の全ての端末のセッションを無効にする。
-function signOut(auth: Auth, scope: "local" | "global") {
+// 認証サービスのサインアウトの呼び出しは、ここだけである。この端末のセッションだけを無効にする。
+function signOut(auth: Auth, scope: "local") {
   return auth.signOut({ scope });
 }
 

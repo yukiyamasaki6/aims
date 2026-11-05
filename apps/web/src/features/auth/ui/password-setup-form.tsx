@@ -38,7 +38,6 @@ export type PasswordSetupCopy = {
   // パスワード欄の見出し。説明(最小文字数など)は規則の持ち主から得て足す。
   passwordLabel: string;
   passwordSubmit: string;
-  passwordFooter: SignInLinkCopy | null;
 };
 
 type StepProps = {
@@ -187,7 +186,6 @@ function PasswordStep({ procedure, copy, flow, view }: StepProps) {
           {texts.failure(flow.error)}
         </p>
       )}
-      {copy.passwordFooter && <SignInLink copy={copy.passwordFooter} />}
     </>
   );
 }

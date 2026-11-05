@@ -20,7 +20,6 @@ export function SignUpForm({
     passwordDescription: t("signUpPasswordDescription"),
     passwordLabel: t("signUpPasswordLabel"),
     passwordSubmit: t("signUpPasswordSubmit"),
-    passwordFooter: null,
   };
   return <PasswordSetupForm procedure={signUp} copy={copy} siteKey={siteKey} />;
 }

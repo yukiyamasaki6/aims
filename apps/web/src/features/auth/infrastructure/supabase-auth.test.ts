@@ -355,7 +355,7 @@ describe("サインイン(signIn)", () => {
   });
 });
 
-describe("目的と範囲の違い", () => {
+describe("目的の違い", () => {
   it("コードの送信と確認は、目的で認証サービスの呼び出しを選ぶ", async () => {
     // Given
     const { service, auth } = setup();
@@ -406,22 +406,6 @@ describe("目的と範囲の違い", () => {
     expect(resetVerify).toEqual([
       { email: "a@b.co", token: "1", type: "recovery" },
     ]);
-  });
-
-  it("サインアウトは、この端末だけと全ての端末を、範囲で選ぶ", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signOut.mockResolvedValue({ error: null });
-
-    // When
-    await service.signOutHere();
-    const here = auth.signOut.mock.lastCall;
-    await service.signOutEverywhere();
-    const everywhere = auth.signOut.mock.lastCall;
-
-    // Then
-    expect(here).toEqual([{ scope: "local" }]);
-    expect(everywhere).toEqual([{ scope: "global" }]);
   });
 });
 
@@ -683,65 +667,6 @@ describe("パスワードの設定(setPassword)", () => {
 
     // When
     const result = await service.setPassword("password1");
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-});
-
-describe("全ての端末のサインアウト(signOutEverywhere)", () => {
-  it("範囲にglobalを明示してサインアウトを依頼し、成功を受け付けられたで返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signOut.mockResolvedValue({ error: null });
-
-    // When
-    const result = await service.signOutEverywhere();
-
-    // Then
-    expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "global" });
-    expect(result).toEqual({ kind: "accepted" });
-  });
-
-  it("認証サービスが値のエラーを返したら、応答があった拒否として返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signOut.mockResolvedValue({ error: connectionLost });
-
-    // When
-    const result = await service.signOutEverywhere();
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-
-  it("呼び出しが投げたら、届かなかった失敗として返す", async () => {
-    // Given
-    const { service, auth } = setup();
-    auth.signOut.mockRejectedValue(new Error("network down"));
-
-    // When
-    const result = await service.signOutEverywhere();
-
-    // Then
-    expect(result).toEqual({
-      kind: "failed",
-      failure: { kind: "unreachable" },
-    });
-  });
-
-  it("接続を作れなければ、届かなかった失敗として返す", async () => {
-    // Given
-    const service = unavailableService();
-
-    // When
-    const result = await service.signOutEverywhere();
 
     // Then
     expect(result).toEqual({

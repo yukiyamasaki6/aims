@@ -40,16 +40,17 @@ function refusedWith(failure: AuthFailure): CallResult {
 }
 
 // 認証と、完了後の遷移は、手続きの外側の境界のため偽に替える。手続き(createSignUp、createResetPassword)は実物を通す。
-// サインアップの遷移(navigation.go)と再設定のページ全体の読み込み(pageLoad.load)は、同じ偽の関数で受ける。
-// パスワードの設定は、サインアップではブラウザの認証の実装へ、再設定では要求の入口(passwordChange)へ頼む。どちらも同じ偽の関数(setPassword)で受ける。
+// サインアップと再設定の完了後の遷移は、同じ偽の関数(leave)で受ける。
 const leave = vi.fn();
 const auth = {
   isRegistered: vi.fn(),
   sendCode: vi.fn(),
   verifyCode: vi.fn(),
   setPassword: vi.fn(),
+  signOutHere: vi.fn(),
 } satisfies PasswordSetupAuthenticator & {
   isRegistered: (email: string) => Promise<boolean>;
+  signOutHere(): Promise<CallResult>;
 };
 
 // 画面の骨組みを共有する2つの手続きと、手続きごとに違う値(見出し、欄の名前、完了後の遷移先)。
@@ -88,8 +89,7 @@ const subjects: {
       createResetPassword({
         clock: createBrowserClock(),
         authenticator: auth,
-        passwordChange: { change: auth.setPassword },
-        pageLoad: { load: leave },
+        pageNavigation: { go: leave },
       }),
     form: (procedure) => (
       <ResetPasswordForm resetPassword={procedure} siteKey="site-key" />
