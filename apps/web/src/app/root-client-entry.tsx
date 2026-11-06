@@ -208,7 +208,6 @@ function composeApp(router: PageRouter) {
   const records = composeRecords(inputs);
   return {
     localIdentity: inputs.localIdentity,
-    hub: records.hub,
     ...composeStores(inputs, records),
     ...composeSync(inputs, records),
     ...composeOffline(inputs, records),
