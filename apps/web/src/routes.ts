@@ -44,3 +44,7 @@ export const RESET_PASSWORD_PATH = "/reset-password";
 
 // アプリの紹介画面。ロゴの行き先。
 export const HOME_PATH = "/";
+
+// Service Workerのスクリプトと、Web App Manifestの配信先。
+export const SW_PATH = "/sw.js";
+export const MANIFEST_PATH = "/manifest.webmanifest";

@@ -3,12 +3,15 @@ import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { redirectFor } from "@/features/auth/domain/auth-routes";
 import {
+  HOME_PATH,
+  MANIFEST_PATH,
   OFFLINE_PATH,
   RESET_PASSWORD_PATH,
   ROUND_FRAME_PATHS,
   ROUNDS_PATH,
   SIGN_IN_PATH,
   SIGN_UP_PATH,
+  SW_PATH,
   shellUrlOf,
 } from "@/routes";
 import { config, proxy } from "./proxy";
@@ -42,10 +45,10 @@ describe("proxy", () => {
     });
 
     it.each([
-      "/",
+      HOME_PATH,
       OFFLINE_PATH,
-      "/sw.js",
-      "/manifest.webmanifest",
+      SW_PATH,
+      MANIFEST_PATH,
       "/_next/static/chunks/main.js",
       "/signin/extra",
       "/roundsx",
@@ -70,8 +73,10 @@ describe("proxy", () => {
       "/rounds/new",
       ROUNDS_PATH,
       `${ROUNDS_PATH}/1`,
-      "/",
+      HOME_PATH,
       OFFLINE_PATH,
+      SW_PATH,
+      MANIFEST_PATH,
       "/roundsx",
       "/signin/extra",
       ...ROUND_FRAME_PATHS.map(shellUrlOf),

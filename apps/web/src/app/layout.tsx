@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
 import { createTranslator } from "next-intl";
 import { intlConfig } from "@/i18n/messages";
+import { MANIFEST_PATH, SW_PATH } from "@/routes";
 import "./globals.css";
 import { RootClientEntry } from "./root-client-entry";
 
@@ -12,7 +13,7 @@ const t = createTranslator({ ...intlConfig, namespace: "shared" });
 export const metadata: Metadata = {
   title: t("appName"),
   description: t("appDescription"),
-  manifest: "/manifest.webmanifest",
+  manifest: MANIFEST_PATH,
 };
 
 // interactiveWidget: "resizes-content" により、モバイルのソフトキーボード
@@ -40,7 +41,7 @@ export default function RootLayout({
       <body className="h-dvh overflow-hidden">
         <RootClientEntry>
           <SerwistProvider
-            swUrl="/sw.js"
+            swUrl={SW_PATH}
             disable={process.env.NODE_ENV !== "production"}
             // sw.tsはページ内容をキャッシュしない（枠はプリキャッシュで配り、
             // 内容は枠内で取得する）ため、reloadOnOnlineの本来の目的（古い

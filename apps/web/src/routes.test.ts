@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   frameHtmlOf,
   HOME_PATH,
+  MANIFEST_PATH,
   NEW_ROUND_PATH,
   OFFLINE_PATH,
   RESET_PASSWORD_PATH,
@@ -13,6 +14,7 @@ import {
   SHELL_PREFIX,
   SIGN_IN_PATH,
   SIGN_UP_PATH,
+  SW_PATH,
   shellUrlOf,
 } from "./routes";
 
@@ -102,5 +104,14 @@ describe("routes", () => {
 
     // Then
     expect(path).toBe("/");
+  });
+
+  it("Service WorkerとManifestの配信先を持つ", () => {
+    // Given
+    // When
+    const paths = [SW_PATH, MANIFEST_PATH];
+
+    // Then
+    expect(paths).toEqual(["/sw.js", "/manifest.webmanifest"]);
   });
 });

@@ -21,7 +21,7 @@
 
 ## 構成とデータの流れ
 
-- `src/app/layout.tsx` の `SerwistProvider` が `/sw.js` を登録する。本番ビルド以外では無効にする。
+- `src/app/layout.tsx` の `SerwistProvider` が、経路表(`src/routes.ts`)の `SW_PATH`(`/sw.js`)を登録する。本番ビルド以外では無効にする。
 - `src/app/sw.ts`(Service Workerの入口)は、`Serwist` の構成の組み立てだけを行う。戦略は機能 `src/features/offline-pwa/` のインフラ層が持つ。
   - 新しいService Workerを待機させ、ページからの`SKIP_WAITING`(Serwistが既定で待ち受ける)で有効にする。初回の登録は`clientsClaim`で最初の画面を制御する。
   - `infrastructure/runtime-caching.ts`(`createRuntimeCaching`)が、枠のナビゲーション(`infrastructure/precached-frame.ts`の`PrecachedFrame`。プリキャッシュから返し、未格納なら通常のネットワーク取得に落とす)、フォント、画像、`/_next/static` のJS、CSSのキャッシュ、同一オリジンのその他(RSCを含む)のNetworkOnlyを定める。クロスオリジンは経由させない。
@@ -29,12 +29,13 @@
   - `infrastructure/shell-guard.ts`(`shellFrameGuard`)が、`/__shell/` 配下のプリキャッシュ応答がリダイレクトされたら、インストールを失敗させる。
 - `src/app/offline/page.tsx`(画面の入口)は、`ui/offline-screen.tsx`の`OfflineScreen`(ロゴ、枠、文言)を描くだけである。文言は`ui/offline-pwa-messages.ts`の一覧(名前空間`offlinePwa`)から`useTranslations`で得る。要求の設定は`headers()`と`cookies()`を読まないため、ページは静的なままで、文言は最初のHTMLに含まれ、プリキャッシュされた枠はオフラインでも文言を表示する。
 - 経路の持ち主は、経路表(`src/routes.ts`)と各機能の経路のファイルである。`/offline`、枠の配布URL(`OFFLINE_PATH`、`SHELL_PREFIX`、`shellUrlOf`、`frameHtmlOf`)、枠の経路(`ROUND_FRAME_PATHS`、`ROUND_FRAME_ID`)は経路表が持つ。判定・変換の関数は、`isShellUrl`、`frameUrlFor` を `src/features/offline-pwa/domain/offline-routes.ts` が、`roundFramePathOf` を `src/features/rounds/domain/round-routes.ts` が持つ。`sw.ts`、`serwist.config.mjs`、`next.config.ts`、`manifest.ts` はここから導く。`proxy.ts` の `matcher` だけは、Next.jsが静的に読むため文字列で再掲し、`proxy.test.ts` が一致を確かめる。
-- `serwist.config.mjs` が `public/sw.js` を生成し、`/offline` と枠3件（`/__shell/rounds`、`/__shell/rounds/new`、`/__shell/rounds/_`）をHTMLの内容ハッシュのリビジョンでプリキャッシュする。リビジョンはビルドごとに変わる。
+- `serwist.config.mjs` が `public/sw.js`(経路表の `SW_PATH` から導く)を生成し、`/offline` と枠3件（`/__shell/rounds`、`/__shell/rounds/new`、`/__shell/rounds/_`）をHTMLの内容ハッシュのリビジョンでプリキャッシュする。リビジョンはビルドごとに変わる。
 - `next.config.ts` が `/__shell/*` を実ルートへrewriteし（`beforeFiles`）、`/rounds/<ID>` を `/rounds/_` へrewriteする（`afterFiles`）。`/__shell/*` は `proxy.ts` の対象外なので、未認証の登録でも各画面の枠が保存される。オンラインの `/rounds/<ID>` も `/rounds/_` の枠だけが配信され、IDごとの生成物は作られない（`rounds/[id]/page.tsx` の `dynamicParams = false`）。
 - 更新の切り替えは、機能 `offline-pwa` の手続き `application/update-activation.ts`(`createUpdateActivation`)が担う。登録を保持し、待機中の版があるときの内部リンクの遷移を止め、端末の保存の完了(記録のハブの`whenPersisted`)を待ち、`SKIP_WAITING`を1回送り、`controllerchange`の後、文書を読み直す直前に保存を再確認して遷移する。これらの待ちは、クリックからの合計で上限1秒(`FALLBACK_WAIT_MS`)を時計(`Clock`)で共有する。切り替えをしない経路は`whenPersisted`を呼ばない。待機の判定は保持した登録の`waiting`の同期の読み取りだけで行い、登録の保持の前の操作は止めない。待機が無い経路の変化では`registration.update()`を呼ぶ。読み込み時には切り替えない。
   - 手続きの約束(`SwHost`、`SwRegistration`、`LinkClicks`、`LinkClick`、`PersistenceWait`)を実装する外部への実装は、インフラ層 `browser-service-worker.ts`(`navigator.serviceWorker`)と `browser-link-clicks.ts`(`document`のcapture段階の`click`。修飾キー、`defaultPrevented`、`target`、`download`、外部、ハッシュのみを除く)である。
   - `ui/sw-update-activator.tsx`の`SwUpdateActivator`が、経路(`usePathname()`)の変化を手続きへ知らせる(表示は行わない)。
   - 起動地点 `root-client-entry.tsx` の `composeOffline` が手続きを生成し、効果で `start()` を呼び、`SwUpdateActivator` を描く。
+- `src/app/layout.tsx` の `metadata.manifest` は経路表の `MANIFEST_PATH`(`/manifest.webmanifest`)である。`serwist.config.mjs` が読む `/offline` のHTMLの名前は、経路表の `frameHtmlOf(OFFLINE_PATH)` から導く。
 - `src/app/manifest.ts` がManifestを返す。`start_url` は経路表の `ROUNDS_PATH`(`/rounds`)で、未認証の起動は `proxy.ts` が `/signin` へ移す。
 - `src/app/apple-icon.png` はiOSホーム画面用アイコン(180x180、白の不透明な地)で、Next.jsのファイル規約により全ページに `apple-touch-icon` のlinkが出る。`scripts/generate-icon.mjs` が他のアイコンと一緒に生成する。`/apple-icon.png` は `proxy.ts` の対象外なので未認証でも取得できる。
 - manifestのアイコン(any/maskable)は、環の直径を画像の幅の61%(`INSTALL_ART_SCALE`=61/80)にして生成する。絵柄全体を元の比率のまま縮める。表示は2経路ある。余白のある経路(インストールしたホーム画面、アプリの一覧)では、Chromeがmaskableに約1.309倍の透明の余白を足すため、画像の中央87.3%が表示され、環は枠の約70%に見える。余白のない経路(「ホーム画面に追加」の丸、ショートカット)では、画像の中央66.7%から70%が丸に表示され、環は枠の約87%から91%に見える。この経路で棒の先が欠けることは認めるが、環の外に棒は見える。iOS用のapple-iconは縮小しない(iOSは画像の全体を表示するため、環は枠の80%に見える)。環の外縁が半幅の80%という割合はicon.svg(タブ用)とapple-iconの値である。
