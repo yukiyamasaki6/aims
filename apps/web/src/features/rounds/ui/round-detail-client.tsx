@@ -40,7 +40,6 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
       roundId
         ? store.load(roundId)
         : Promise.resolve({ status: "not-found" as const }),
-    [roundId],
     store.whenOnline,
   );
   const deleted = view.status === "ok" && view.data.deleted;

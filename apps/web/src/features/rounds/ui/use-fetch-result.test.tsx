@@ -28,7 +28,7 @@ describe("useFetchResult", () => {
 
       // When
       const { result } = renderHook(
-        () => useFetchResult(() => d.promise, [], fake.store.whenOnline),
+        () => useFetchResult(() => d.promise, fake.store.whenOnline),
         { wrapper: IntlTestProvider },
       );
       const pending = result.current.view;
@@ -48,7 +48,7 @@ describe("useFetchResult", () => {
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({ status: "ok", data: 2 });
       const { result } = renderHook(
-        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.store.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -73,7 +73,7 @@ describe("useFetchResult", () => {
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({ status: "ok", data: 2 });
       const { result } = renderHook(
-        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.store.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -88,28 +88,6 @@ describe("useFetchResult", () => {
       );
       expect(fetcher).toHaveBeenCalledTimes(2);
     });
-
-    it("depsが変わると、再取得する", async () => {
-      // Given
-      const { fake } = setup();
-      const fetcher = vi.fn(
-        async (): Promise<FetchResult<number>> => ({
-          status: "ok",
-          data: 1,
-        }),
-      );
-      const { result, rerender } = renderHook(
-        ({ id }) => useFetchResult(fetcher, [id], fake.store.whenOnline),
-        { wrapper: IntlTestProvider, initialProps: { id: "a" } },
-      );
-      await waitFor(() => expect(result.current.view.status).toBe("ok"));
-
-      // When
-      rerender({ id: "b" });
-
-      // Then
-      await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
-    });
   });
 
   describe("境界", () => {
@@ -123,7 +101,7 @@ describe("useFetchResult", () => {
         .mockResolvedValueOnce({ status: "offline" })
         .mockReturnValueOnce(d.promise);
       const { result } = renderHook(
-        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.store.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -154,7 +132,7 @@ describe("useFetchResult", () => {
         })
         .mockResolvedValueOnce({ status: "ok", data: 3 });
       const { result } = renderHook(
-        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.store.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -185,7 +163,7 @@ describe("useFetchResult", () => {
 
       // When
       const { result } = renderHook(
-        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.store.whenOnline),
         { wrapper: IntlTestProvider },
       );
 
@@ -206,7 +184,7 @@ describe("useFetchResult", () => {
         .mockResolvedValueOnce({ status: "offline" })
         .mockReturnValueOnce(d.promise);
       const { result } = renderHook(
-        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.store.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -237,7 +215,7 @@ describe("useFetchResult", () => {
           async (): Promise<FetchResult<number>> => settled,
         );
         const { result } = renderHook(
-          () => useFetchResult(fetcher, [], fake.store.whenOnline),
+          () => useFetchResult(fetcher, fake.store.whenOnline),
           { wrapper: IntlTestProvider },
         );
         await waitFor(() => expect(result.current.view.status).toBe(status));
@@ -258,7 +236,7 @@ describe("useFetchResult", () => {
       fake.goOffline();
       const d = deferred<FetchResult<number>>();
       const fetcher = vi.fn(() => d.promise);
-      renderHook(() => useFetchResult(fetcher, [], fake.store.whenOnline), {
+      renderHook(() => useFetchResult(fetcher, fake.store.whenOnline), {
         wrapper: IntlTestProvider,
       });
 
@@ -281,7 +259,7 @@ describe("useFetchResult", () => {
         async (): Promise<FetchResult<number>> => ({ status: "offline" }),
       );
       const { result, rerender } = renderHook(
-        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.store.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -303,7 +281,7 @@ describe("useFetchResult", () => {
       const d = deferred<FetchResult<number>>();
       const errorSpy = vi.spyOn(console, "error");
       const { result, unmount } = renderHook(
-        () => useFetchResult(() => d.promise, [], fake.store.whenOnline),
+        () => useFetchResult(() => d.promise, fake.store.whenOnline),
         { wrapper: IntlTestProvider },
       );
       unmount();
@@ -325,7 +303,7 @@ describe("useFetchResult", () => {
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValue({ status: "offline" });
       const { result, unmount } = renderHook(
-        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.store.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -339,55 +317,6 @@ describe("useFetchResult", () => {
       expect(fetcher).toHaveBeenCalledTimes(1);
     });
 
-    it("depsが変わったあと、古い取得の結果は破棄する", async () => {
-      // Given
-      const { fake } = setup();
-      const first = deferred<FetchResult<string>>();
-      const second = deferred<FetchResult<string>>();
-      const fetcher = vi
-        .fn<() => Promise<FetchResult<string>>>()
-        .mockReturnValueOnce(first.promise)
-        .mockReturnValueOnce(second.promise);
-      const { result, rerender } = renderHook(
-        ({ id }) => useFetchResult(fetcher, [id], fake.store.whenOnline),
-        { wrapper: IntlTestProvider, initialProps: { id: "a" } },
-      );
-      rerender({ id: "b" });
-
-      // When
-      await act(async () => second.resolve({ status: "ok", data: "new" }));
-      await act(async () => first.resolve({ status: "ok", data: "old" }));
-
-      // Then
-      expect(result.current.view).toEqual({ status: "ok", data: "new" });
-    });
-
-    it("depsが変わった最初の描画では、前のdepsのokデータを見せずloadingにする", async () => {
-      // Given
-      const { fake } = setup();
-      const fetcher = vi.fn(
-        async (): Promise<FetchResult<string>> => ({ status: "ok", data: "a" }),
-      );
-      const seen: string[] = [];
-      const { result, rerender } = renderHook(
-        ({ id }) => {
-          const r = useFetchResult(fetcher, [id], fake.store.whenOnline);
-          seen.push(`${id}:${r.view.status}`);
-          return r;
-        },
-        { wrapper: IntlTestProvider, initialProps: { id: "a" } },
-      );
-      await waitFor(() => expect(result.current.view.status).toBe("ok"));
-
-      // When
-      rerender({ id: "b" });
-
-      // Then
-      expect(seen).toContain("b:loading");
-      expect(seen).not.toContain("b:ok:a");
-      expect(result.current.view).toEqual({ status: "loading" });
-    });
-
     it("fetcherがrejectすると、loadingに固定せずerrorにする", async () => {
       // Given
       const { fake } = setup();
@@ -397,7 +326,7 @@ describe("useFetchResult", () => {
 
       // When
       const { result } = renderHook(
-        () => useFetchResult(fetcher, [], fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.store.whenOnline),
         { wrapper: IntlTestProvider },
       );
 
