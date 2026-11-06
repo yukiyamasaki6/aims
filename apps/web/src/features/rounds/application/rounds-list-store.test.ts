@@ -385,19 +385,6 @@ describe("loadLocalList", () => {
     ]);
     expect([...list.deleted]).toEqual(["deleted"]);
   });
-
-  it("ハブの一覧の読み取りが失敗したときは空を返す", async () => {
-    // Given
-    const tab = createTestRounds();
-    vi.spyOn(tab.hub, "readList").mockRejectedValue(new Error("idb"));
-
-    // When
-    const list = await tab.list.loadLocalList();
-
-    // Then
-    expect(list.inProgress).toEqual([]);
-    expect(list.deleted.size).toBe(0);
-  });
 });
 
 describe("deleteRound", () => {

@@ -44,18 +44,14 @@ const ERROR_RESULT = {
 } as const;
 
 async function readSnapshots(hub: Pick<RoundRecordHub, "readList">) {
-  try {
-    const all = await hub.readList();
-    // 列のIDをラウンドIDに写す。ラウンドの列でないものは除く。
-    const byRound = new Map<string, HubSnapshot>();
-    for (const [streamId, snapshot] of all) {
-      const roundId = roundIdOfStream(streamId);
-      if (roundId !== null) byRound.set(roundId, snapshot);
-    }
-    return byRound;
-  } catch {
-    return new Map<string, HubSnapshot>();
+  const all = await hub.readList();
+  // 列のIDをラウンドIDに写す。ラウンドの列でないものは除く。
+  const byRound = new Map<string, HubSnapshot>();
+  for (const [streamId, snapshot] of all) {
+    const roundId = roundIdOfStream(streamId);
+    if (roundId !== null) byRound.set(roundId, snapshot);
   }
+  return byRound;
 }
 
 async function localList(
