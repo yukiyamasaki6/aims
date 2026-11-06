@@ -4,6 +4,7 @@ import { forwardRef, StrictMode, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import type { CallResult } from "../application/call-result";
 import { createSignIn } from "../application/sign-in";
@@ -43,9 +44,11 @@ vi.mock("./turnstile", () => ({
 function setup({
   strict = false,
   returnTo = null,
+  offline = false,
 }: {
   strict?: boolean;
   returnTo?: string | null;
+  offline?: boolean;
 } = {}) {
   const authenticator = {
     signIn: vi.fn(async (): Promise<CallResult> => accepted),
@@ -55,6 +58,7 @@ function setup({
   const signIn = createSignIn({
     authenticator,
     pageNavigation: fake.pageNavigation,
+    connectivity: createFakeConnectivity(offline),
   });
   const form = (
     <SignInForm
@@ -337,6 +341,22 @@ describe("サインイン画面の部品", () => {
     ).toBeInTheDocument();
     expect(widget.error).toBe(authText("fieldError.captcha.incomplete"));
     expect(authenticator.signIn).not.toHaveBeenCalled();
+  });
+
+  it("オフラインで送信すると、チェック未完了でなくオフラインの文言を全体のエラーに表示し、認証しない", async () => {
+    // Given
+    const { authenticator } = setup({ offline: true });
+    const user = userEvent.setup();
+    await fillCredentials(user);
+
+    // When
+    await user.click(submitButton());
+
+    // Then
+    expect(await screen.findByText(authText("failure.offline"))).toBeVisible();
+    expect(widget.error).toBeUndefined();
+    expect(authenticator.signIn).not.toHaveBeenCalled();
+    expect(widget.reset).not.toHaveBeenCalled();
   });
 
   describe("メールアドレス欄のEnter", () => {

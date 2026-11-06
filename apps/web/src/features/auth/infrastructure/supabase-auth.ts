@@ -126,7 +126,11 @@ async function read(
   }
 }
 
-type RejectionKind = Exclude<AuthFailure["kind"], "other" | "unreachable">;
+// offlineは送信の前に集約が作る種類で、認証サービスの応答からは作らない。
+type RejectionKind = Exclude<
+  AuthFailure["kind"],
+  "other" | "unreachable" | "offline"
+>;
 
 // 認証サービスが拒否したときの、エラーコードと失敗の種類の対応。
 const REJECTION_KINDS = new Map<string, RejectionKind>([

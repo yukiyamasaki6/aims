@@ -73,6 +73,7 @@ describe("サインイン画面の入口", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     window.history.replaceState(null, "", "/");
   });
@@ -130,6 +131,23 @@ describe("サインイン画面の入口", () => {
       options: { captchaToken: "captcha-token" },
     });
     expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
+  });
+
+  it("入口が得た端末の通信の状態がオフラインなら、認証サービスを呼ばず、オフラインの文言を示す", async () => {
+    // Given
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    const user = userEvent.setup();
+    render(<SignInPage />, { wrapper: IntlTestProvider });
+    await fillAndVerify(user);
+
+    // When
+    await user.click(submitButton());
+
+    // Then
+    expect(
+      await screen.findByText(authText("failure.offline")),
+    ).toBeInTheDocument();
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
   });
 
   it("入口から通して連打しても、認証サービスへの送信は1回だけで、遷移も1回になる", async () => {

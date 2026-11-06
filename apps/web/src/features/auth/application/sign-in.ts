@@ -1,3 +1,4 @@
+import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { destinationOf } from "../domain/auth-routes";
 import {
@@ -25,14 +26,22 @@ export type SignIn = {
 export function createSignIn({
   authenticator,
   pageNavigation,
+  connectivity,
 }: {
   authenticator: SignInAuthenticator;
   pageNavigation: PageNavigation;
+  connectivity: Pick<Connectivity, "isOffline">;
 }): SignIn {
   return {
     async submit(input, view) {
+      // 送信の直前に1回だけ読む(購読しない)。判定は集約が行う。
+      const offline = connectivity.isOffline();
       const credentials = view.begin((flow) =>
-        beginSignIn(flow, { email: input.email, password: input.password }),
+        beginSignIn(flow, {
+          email: input.email,
+          password: input.password,
+          offline,
+        }),
       );
       if (!credentials) return;
       const result = await authenticator.signIn(credentials);

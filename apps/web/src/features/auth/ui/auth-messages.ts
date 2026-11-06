@@ -10,6 +10,8 @@ export const authMessages = {
   ja: {
     // 失敗の種類。認証サービスの文言は出さない。
     failure: {
+      offline:
+        "ネットワークに接続されていません。接続を確認してから再度お試しください。",
       unreachable:
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
       invalid_credentials: "メールアドレスまたはパスワードが間違っています。",

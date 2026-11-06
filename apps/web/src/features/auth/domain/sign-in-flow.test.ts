@@ -6,7 +6,11 @@ import {
   signInReducer,
 } from "./sign-in-flow";
 
-const validInput = { email: "user@example.com", password: "password1" };
+const validInput = {
+  email: "user@example.com",
+  password: "password1",
+  offline: false,
+};
 const verified = signInReducer(initialSignInFlow, {
   type: "captchaChecked",
   token: "captcha-token",
@@ -22,7 +26,11 @@ describe("beginSignIn", () => {
     // Then
     expect(result).toMatchObject({
       state: { submitting: true },
-      request: { ...validInput, captchaToken: "captcha-token" },
+      request: {
+        email: validInput.email,
+        password: validInput.password,
+        captchaToken: "captcha-token",
+      },
     });
   });
 
@@ -49,7 +57,11 @@ describe("beginSignIn", () => {
 
     // When
     const valid = beginSignIn(submitting, validInput);
-    const invalid = beginSignIn(submitting, { email: "", password: "" });
+    const invalid = beginSignIn(submitting, {
+      ...validInput,
+      email: "",
+      password: "",
+    });
 
     // Then
     expect(valid.state).toBe(submitting);
@@ -61,19 +73,19 @@ describe("beginSignIn", () => {
   it.each([
     [
       "メール、パスワード、チェックがすべて不備なら全て",
-      { email: "", password: "" },
+      { email: "", password: "", offline: false },
       null,
       { email: "required", password: "required", captcha: "incomplete" },
     ],
     [
       "メールが不正でパスワードが空ならその2つ",
-      { email: "invalid", password: "" },
+      { email: "invalid", password: "", offline: false },
       "token",
       { email: "invalidFormat", password: "required" },
     ],
     [
       "パスワードが空でチェックが未完了ならその2つ",
-      { email: "user@example.com", password: "" },
+      { email: "user@example.com", password: "", offline: false },
       null,
       { password: "required", captcha: "incomplete" },
     ],
@@ -140,6 +152,80 @@ describe("beginSignIn", () => {
       submitting: false,
       captchaToken: "captcha-token",
     });
+  });
+});
+
+describe("beginSignIn: オフライン", () => {
+  const offlineInput = { ...validInput, offline: true };
+
+  it("入力に不備が無ければ、offlineを示して送らず、トークンは保持する", () => {
+    // Given
+
+    // When
+    const result = beginSignIn(verified, offlineInput);
+
+    // Then
+    expect(result.request).toBeNull();
+    expect(result.state).toMatchObject({
+      error: "offline",
+      fieldErrors: {},
+      submitting: false,
+      captchaToken: "captcha-token",
+    });
+  });
+
+  it("チェックが未完了でも、チェック未完了を示さず、offlineを示す", () => {
+    // Given
+
+    // When
+    const result = beginSignIn(initialSignInFlow, offlineInput);
+
+    // Then
+    expect(result.request).toBeNull();
+    expect(result.state).toMatchObject({ error: "offline", fieldErrors: {} });
+  });
+
+  it("入力に不備があれば、その不備だけを示し、チェック未完了もofflineも示さない", () => {
+    // Given
+    const flow: SignInFlow = { ...initialSignInFlow, error: "other" };
+
+    // When
+    const result = beginSignIn(flow, {
+      email: "",
+      password: "",
+      offline: true,
+    });
+
+    // Then
+    expect(result.request).toBeNull();
+    expect(result.state).toMatchObject({
+      error: null,
+      fieldErrors: { email: "required", password: "required" },
+    });
+  });
+
+  it("前回のoffline表示は、オンラインでの再送信の開始で消える", () => {
+    // Given
+    const offlineShown = beginSignIn(verified, offlineInput).state;
+
+    // When
+    const result = beginSignIn(offlineShown, validInput);
+
+    // Then
+    expect(result.request).not.toBeNull();
+    expect(result.state).toMatchObject({ error: null, submitting: true });
+  });
+
+  it("送信中ならオフラインでも状態を変えない", () => {
+    // Given
+    const submitting: SignInFlow = { ...verified, submitting: true };
+
+    // When
+    const result = beginSignIn(submitting, offlineInput);
+
+    // Then
+    expect(result.state).toBe(submitting);
+    expect(result.request).toBeNull();
   });
 });
 
@@ -247,7 +333,11 @@ describe("signInReducer: failed", () => {
       },
     });
     expect(result).toMatchObject({
-      request: { ...validInput, captchaToken: "new-token" },
+      request: {
+        email: validInput.email,
+        password: validInput.password,
+        captchaToken: "new-token",
+      },
     });
   });
 });
