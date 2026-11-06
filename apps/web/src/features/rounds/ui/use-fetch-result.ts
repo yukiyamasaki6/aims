@@ -23,7 +23,11 @@ export function useFetchResult<T>(
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: fetcherは表示の開始時と再試行のときだけ呼ぶ
   useEffect(() => {
-    const settle = (result: FetchResult<T>) => setSettled({ attempt, result });
+    // 再試行で試行が重なったとき、遅れて届いた古い試行の結果で新しい結果を上書きしない。
+    const settle = (result: FetchResult<T>) =>
+      setSettled((current) =>
+        current && current.attempt > attempt ? current : { attempt, result },
+      );
     // 取得関数がrejectしても、loadingのまま固定されないようerrorにする。
     fetcher().then(settle, () => settle({ status: "error", reason: "failed" }));
   }, [attempt]);

@@ -297,6 +297,29 @@ describe("useFetchResult", () => {
       expect(fetcher).toHaveBeenCalledTimes(1);
     });
 
+    it("取得中に再試行して試行が重なっても、古い試行の遅い結果で新しい結果を上書きしない", async () => {
+      // Given
+      const { fake } = setup();
+      const first = deferred<FetchResult<string>>();
+      const second = deferred<FetchResult<string>>();
+      const fetcher = vi
+        .fn<() => Promise<FetchResult<string>>>()
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise);
+      const { result } = renderHook(
+        () => useFetchResult(fetcher, fake.store.whenOnline),
+        { wrapper: IntlTestProvider },
+      );
+      act(() => result.current.retry());
+
+      // When
+      await act(async () => second.resolve({ status: "ok", data: "new" }));
+      await act(async () => first.resolve({ status: "ok", data: "old" }));
+
+      // Then
+      expect(result.current.view).toEqual({ status: "ok", data: "new" });
+    });
+
     it("fetcherがrejectすると、loadingに固定せずerrorにする", async () => {
       // Given
       const { fake } = setup();
