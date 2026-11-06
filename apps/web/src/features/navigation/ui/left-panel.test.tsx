@@ -1,6 +1,6 @@
-import { act, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { LeftPanel } from "./left-panel";
@@ -14,10 +14,6 @@ function wideToggle() {
 
 function compactToggle() {
   return screen.getByTestId("left-panel-toggle-compact");
-}
-
-function panel() {
-  return screen.getByRole("complementary");
 }
 
 function closeMenuButtons() {
@@ -276,79 +272,6 @@ describe("LeftPanel", () => {
       expect(compactToggle()).toHaveAccessibleName(
         navigationText("leftPanelCollapse"),
       );
-    });
-  });
-
-  describe("開閉のtransition", () => {
-    beforeEach(() => {
-      vi.useFakeTimers({ shouldAdvanceTime: true });
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it("初回表示ではtransitionが付かない", () => {
-      // Given
-      // When
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
-
-      // Then
-      expect(panel()).not.toHaveClass("duration-200");
-    });
-
-    it("操作の直後はtransitionが付く", async () => {
-      // Given
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
-
-      // When
-      await user.click(wideToggle());
-
-      // Then
-      expect(panel()).toHaveClass("duration-200");
-    });
-
-    it("操作から250ms経つと、transitionが外れる", async () => {
-      // Given
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
-      await user.click(wideToggle());
-
-      // When
-      act(() => {
-        vi.advanceTimersByTime(250);
-      });
-
-      // Then
-      expect(panel()).not.toHaveClass("duration-200");
-    });
-
-    it("100ms間隔の2回の操作では、最初の操作から200ms後もまだ付いている", async () => {
-      // Given
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
-      await user.click(wideToggle());
-      act(() => {
-        vi.advanceTimersByTime(100);
-      });
-      await user.click(wideToggle());
-
-      // When
-      act(() => {
-        vi.advanceTimersByTime(200);
-      });
-
-      // Then
-      expect(panel()).toHaveClass("duration-200");
     });
   });
 });

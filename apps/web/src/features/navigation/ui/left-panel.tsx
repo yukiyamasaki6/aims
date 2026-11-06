@@ -3,43 +3,24 @@
 import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { LogoImage } from "@/components/logo-image";
 import { cn } from "@/lib/utils";
 import { HOME_PATH, ROUNDS_PATH } from "@/routes";
 
-// 操作の直後だけ開閉のtransitionを有効にする時間。transitionの200msより少し長い。
-const ANIMATE_MS = 250;
-
 function useOpenState() {
   // 利用者が操作するまではnullで、表示ごとの初期状態に従う。操作後は全表示で共有する。
   const [userOpen, setUserOpen] = useState<boolean | null>(null);
-  // 初回表示と環境の変化(回転、窓の変形)では動かさず、操作の直後だけtrueにする。
-  const [animate, setAnimate] = useState(false);
-  // 連続操作でタイマーを延ばすため、操作の回数を依存にする。
-  const [operations, setOperations] = useState(0);
-  // setTimeoutは、開閉のtransitionの終わりに合わせるだけの画面の動きの待ちで、画面の機能として直接呼ぶ(docs/architecture.mdのX01)。業務の時間には使わない。
-  useEffect(() => {
-    if (operations === 0) return;
-    const id = setTimeout(() => setAnimate(false), ANIMATE_MS);
-    return () => clearTimeout(id);
-  }, [operations]);
-  function operate(next: boolean) {
-    setAnimate(true);
-    setOperations((n) => n + 1);
-    setUserOpen(next);
-  }
   return {
     wideOpen: userOpen ?? true,
     compactOpen: userOpen ?? false,
-    animate,
-    operate,
+    operate: setUserOpen,
   };
 }
 
 // signOut: 下端に置くサインアウトの操作。入口が渡す。
 export function LeftPanel({ signOut }: { signOut: ReactNode }) {
-  const { wideOpen, compactOpen, animate, operate } = useOpenState();
+  const { wideOpen, compactOpen, operate } = useOpenState();
 
   return (
     <>
@@ -52,8 +33,7 @@ export function LeftPanel({ signOut }: { signOut: ReactNode }) {
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 -translate-x-full flex-col overflow-y-auto border-r bg-card text-card-foreground side:static side:z-auto side:translate-x-0",
-          animate &&
-            "transition-transform duration-200 side:transition-[width]",
+          "transition-transform duration-200 side:transition-[width]",
           compactOpen && "translate-x-0",
           wideOpen ? "md:w-56" : "md:w-14",
           compactOpen ? "max-md:landscape:w-56" : "max-md:landscape:w-14",
