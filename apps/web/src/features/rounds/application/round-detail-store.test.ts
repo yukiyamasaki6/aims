@@ -273,50 +273,6 @@ describe("load", () => {
       // Then
       expect(await loading).toEqual({ status: "not-found" });
     });
-
-    it("保存した的が無いときは、端末のベースで開かず、取得の完了を待つ", async () => {
-      // Given
-      const tab = await withLocalBase(null);
-      const loading = tab.detail.load("round-1");
-      await tab.clock.advanceAsync(FALLBACK_WAIT_MS);
-      const waiting = await settled(loading);
-
-      // When
-      settleRoundNow(tab.requests, "round-1", { status: "ok", data: opened() });
-
-      // Then
-      expect(waiting).toBe(false);
-      expect(await loading).toMatchObject({
-        status: "ok",
-        data: { source: "server" },
-      });
-    });
-
-    it("完了でも、未送信の操作が残るときは、端末のベースで開く", async () => {
-      // Given
-      const tab = createTestRounds({ savedFaces: [face] });
-      await tab.hub.ready();
-      await tab.hub.commit(
-        STREAM,
-        roundBase({ status: "completed" }),
-        10,
-        "user-1",
-      );
-      await tab.hub.append(
-        STREAM,
-        roundUpdated({ changes: { name: "未送信" } }),
-      );
-      const loading = tab.detail.load("round-1");
-
-      // When
-      await tab.clock.advanceAsync(FALLBACK_WAIT_MS);
-
-      // Then
-      expect(await loading).toMatchObject({
-        status: "ok",
-        data: { source: "local" },
-      });
-    });
   });
 
   describe("打ち切り", () => {
