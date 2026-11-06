@@ -480,23 +480,20 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       });
     });
 
-    it("コードが空でも送信を止めず、認証サービスの拒否を表示する", async () => {
+    it("コードが空の場合、コード欄に未入力のエラーを表示し認証しない", async () => {
       // Given
       const user = userEvent.setup();
       renderForm();
       await advanceToCodeStep();
-      auth.verifyCode.mockResolvedValue(refusedWith({ kind: "other" }));
 
       // When
       await user.click(verifyButton());
 
       // Then
-      expect(await screen.findByText(authText("failure.other"))).toBeVisible();
-      expect(auth.verifyCode).toHaveBeenCalledExactlyOnceWith({
-        purpose: subject.purpose,
-        email: "user@example.com",
-        code: "",
-      });
+      const message = screen.getByText(authText("fieldError.code.required"));
+      expect(codeInput()).toHaveAttribute("aria-invalid", "true");
+      expect(codeInput()).toHaveAttribute("aria-describedby", message.id);
+      expect(auth.verifyCode).not.toHaveBeenCalled();
     });
 
     it("認証エラーの場合、翻訳したメッセージを表示し、再送・確認・戻るを再び実行できる", async () => {

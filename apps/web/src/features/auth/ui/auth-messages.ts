@@ -33,6 +33,9 @@ export const authMessages = {
       captcha: {
         incomplete: "セキュリティチェックが完了していません。",
       },
+      code: {
+        required: "認証コードを入力してください。",
+      },
       resend: {
         cooldown:
           "再送はクールダウン中です。しばらくしてから再度お試しください。",

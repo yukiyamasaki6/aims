@@ -122,10 +122,12 @@ function CodeStep({
     flow.pending === "verify" || flow.pending === "send" ? flow.pending : null;
   return (
     <OtpCodeStep
+      idPrefix={copy.idPrefix}
       email={email}
       note={copy.codeNote}
       code={code}
       onCodeChange={setCode}
+      codeError={texts.fieldError("code", flow.fieldErrors.code)}
       resendError={texts.fieldError("resend", flow.fieldErrors.resend)}
       captchaError={texts.fieldError("captcha", flow.fieldErrors.captcha)}
       pending={pending}

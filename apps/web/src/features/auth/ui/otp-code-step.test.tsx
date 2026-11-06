@@ -20,9 +20,11 @@ type Props = ComponentProps<typeof OtpCodeStep>;
 
 function createForm(overrides: Partial<Props> = {}) {
   return {
+    idPrefix: "test",
     email: "user@example.com",
     code: "",
     onCodeChange: vi.fn(),
+    codeError: undefined,
     resendError: undefined,
     captchaError: undefined,
     pending: null,
@@ -38,8 +40,10 @@ function createForm(overrides: Partial<Props> = {}) {
   } satisfies Props;
 }
 
-function renderStep(form: Props) {
-  return render(<OtpCodeStep {...form} />, { wrapper: IntlTestProvider });
+function renderStep(form: Props, idPrefix = form.idPrefix) {
+  return render(<OtpCodeStep {...form} idPrefix={idPrefix} />, {
+    wrapper: IntlTestProvider,
+  });
 }
 
 describe("OtpCodeStep", () => {
@@ -99,6 +103,40 @@ describe("OtpCodeStep", () => {
       // Then
       const input = screen.getByPlaceholderText("123456");
       expect(input).toHaveAttribute("maxlength", String(AUTH_CODE_LENGTH));
+    });
+  });
+
+  describe("エラー文の結びつき", () => {
+    it("コードのエラー文の要素のidをidPrefixから作り、入力欄と結びつける", () => {
+      // Given
+
+      // When
+      const form = createForm({ codeError: "コードのエラー" });
+      renderStep(form, "reset-password");
+
+      // Then
+      const input = screen.getByPlaceholderText("123456");
+      expect(screen.getByText("コードのエラー")).toHaveAttribute(
+        "id",
+        "reset-password-code-error",
+      );
+      expect(input).toHaveAttribute(
+        "aria-describedby",
+        "reset-password-code-error",
+      );
+      expect(input).toHaveAttribute("aria-invalid", "true");
+    });
+
+    it("コードのエラーがないとき、入力欄を結びつけない", () => {
+      // Given
+
+      // When
+      renderStep(createForm());
+
+      // Then
+      const input = screen.getByPlaceholderText("123456");
+      expect(input).not.toHaveAttribute("aria-describedby");
+      expect(input).toHaveAttribute("aria-invalid", "false");
     });
   });
 

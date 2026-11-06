@@ -1,4 +1,8 @@
-import { RESEND_COOLDOWN_SECONDS, validateResendWait } from "./auth-code";
+import {
+  RESEND_COOLDOWN_SECONDS,
+  validateAuthCode,
+  validateResendWait,
+} from "./auth-code";
 import type { AuthFailure, AuthFailureKind } from "./auth-failure";
 import { isCaptchaCompleted } from "./captcha-token";
 import { validateEmail } from "./email-address";
@@ -17,7 +21,7 @@ export type PasswordSetupFlow = {
   readonly pending: Operation | null;
   readonly resendCooldown: number;
   readonly fieldErrors: FieldErrors<
-    "email" | "captcha" | "resend" | "password"
+    "email" | "captcha" | "resend" | "password" | "code"
   >;
   readonly error: AuthFailureKind | null;
 };
@@ -91,15 +95,16 @@ export function beginSendCode(
   });
 }
 
-// コードの確認。入力の検査はせず、空のコードも認証サービスに送って判断を任せる。
+// コードの確認。送信前に見るのは未入力だけで、桁数と正しさは認証サービスに任せる。
 export function beginVerifyCode(
   flow: PasswordSetupFlow,
   input: { email: string; code: string },
 ): Start<PasswordSetupFlow, { email: string; code: string }> {
-  return begin(flow, "verify", () => ({
-    ok: true,
-    request: { email: input.email, code: input.code },
-  }));
+  return begin(flow, "verify", () => {
+    const code = validateAuthCode(input.code);
+    if (code) return { ok: false, fieldErrors: { code } };
+    return { ok: true, request: { email: input.email, code: input.code } };
+  });
 }
 
 export function beginSetPassword(

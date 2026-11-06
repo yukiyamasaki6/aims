@@ -596,7 +596,7 @@ describe("操作の開始の可否と入力の検証", () => {
       });
     });
 
-    it("空のコードでも検査せずに開始し、そのコードを認証サービスへの頼みに載せる", () => {
+    it("空のコードは送らず、コード欄の未入力の誤りを示す(実行中にならない)", () => {
       // Given
 
       // When
@@ -606,11 +606,35 @@ describe("操作の開始の可否と入力の検証", () => {
       });
 
       // Then
-      expect(result).toMatchObject({
-        state: { pending: "verify" },
-        request: { email: "user@example.com", code: "" },
+      expect(result.request).toBeNull();
+      expect(result.state).toMatchObject({
+        pending: null,
+        error: null,
+        fieldErrors: { code: "required" },
       });
     });
+
+    it.each([
+      ["桁数が足りない", "123"],
+      ["英字を含む", "12a456"],
+    ])(
+      "コードが%sでも送る(事前チェックを桁数や文字種まで戻さない)",
+      (_name, code) => {
+        // Given
+
+        // When
+        const result = beginVerifyCode(onCodeFlow, {
+          email: "user@example.com",
+          code,
+        });
+
+        // Then
+        expect(result).toMatchObject({
+          state: { pending: "verify" },
+          request: { email: "user@example.com", code },
+        });
+      },
+    );
   });
 
   describe("beginSendCode: コード入力の段階からの再送", () => {
