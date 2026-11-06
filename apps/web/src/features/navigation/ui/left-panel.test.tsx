@@ -5,15 +5,16 @@ import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { LeftPanel } from "./left-panel";
 
-const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
 
 function wideToggle() {
   return screen.getByTestId("left-panel-toggle-wide");
 }
 
-function compactToggle() {
-  return screen.getByTestId("left-panel-toggle-compact");
+function openMenuButton() {
+  return screen.getByRole("button", {
+    name: navigationText("leftPanelOpenMenu"),
+  });
 }
 
 function closeMenuButtons() {
@@ -23,91 +24,15 @@ function closeMenuButtons() {
 }
 
 describe("LeftPanel", () => {
-  describe("サインアウトの操作", () => {
-    it("入口が渡した操作を、下端の領域に表示する", () => {
-      // Given
-      const signOut = <button type="button">サインアウト</button>;
-
-      // When
-      render(<LeftPanel signOut={signOut} />, {
-        wrapper: IntlTestProvider,
-      });
-
-      // Then
-      expect(
-        screen.getByRole("button", { name: authText("signOut") }),
-      ).toBeInTheDocument();
-    });
-  });
-
-  describe("リンク", () => {
-    // 遷移先は、押して確かめるE2E（navigation.spec.ts）に任せる。
-    it("AIMSロゴと、ラウンド一覧を向く個人リンクを表示する", () => {
-      // Given
-      // When
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
-
-      // Then
-      expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();
-      expect(
-        screen.getByRole("link", { name: navigationText("leftPanelPersonal") }),
-      ).toHaveAttribute("href", "/rounds");
-    });
-  });
-
-  describe("縦向きで狭い画面のメニュー", () => {
+  describe("狭い画面のメニュー", () => {
     // 閉じるボタン（X）は常時DOM上に存在するため、開いている間だけ表示される背景の閉じるボタンの分だけ件数が増えることで開閉を判定する。
-    it("開くボタンを押すと、背景を含めて開く", async () => {
-      // Given
-      const user = userEvent.setup();
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
-
-      // When
-      await user.click(
-        screen.getByRole("button", {
-          name: navigationText("leftPanelOpenMenu"),
-        }),
-      );
-
-      // Then
-      expect(closeMenuButtons()).toHaveLength(2);
-    });
-
-    it("背景を押すと閉じる", async () => {
-      // Given
-      const user = userEvent.setup();
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
-      await user.click(
-        screen.getByRole("button", {
-          name: navigationText("leftPanelOpenMenu"),
-        }),
-      );
-
-      // When
-      // 背景はパネルより前にDOMへ配置される。
-      await user.click(closeMenuButtons()[0]);
-
-      // Then
-      expect(closeMenuButtons()).toHaveLength(1);
-    });
-
     it("パネル内の閉じるボタンを押すと閉じる", async () => {
       // Given
       const user = userEvent.setup();
       render(<LeftPanel signOut={null} />, {
         wrapper: IntlTestProvider,
       });
-      await user.click(
-        screen.getByRole("button", {
-          name: navigationText("leftPanelOpenMenu"),
-        }),
-      );
+      await user.click(openMenuButton());
 
       // When
       await user.click(closeMenuButtons()[1]);
@@ -117,8 +42,23 @@ describe("LeftPanel", () => {
     });
   });
 
-  describe("広い画面のパネル", () => {
-    it("格納ボタンを押すと格納する", async () => {
+  // jsdomはCSSを評価しないため、表示の切替（幅と向き）はE2Eで確かめる。ここでは、ドロワーと列が別々に持つ開閉の状態を確かめる。
+  describe("開閉の状態", () => {
+    it("操作前は、列のボタンが格納するで、ドロワーの背景は出ない", () => {
+      // Given
+      // When
+      render(<LeftPanel signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
+
+      // Then
+      expect(wideToggle()).toHaveAccessibleName(
+        navigationText("leftPanelCollapse"),
+      );
+      expect(closeMenuButtons()).toHaveLength(1);
+    });
+
+    it("列のボタンで格納すると、ボタンが開くになり、ドロワーは開かない", async () => {
       // Given
       const user = userEvent.setup();
       render(<LeftPanel signOut={null} />, {
@@ -130,128 +70,46 @@ describe("LeftPanel", () => {
 
       // Then
       expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelExpand"),
-      );
-    });
-
-    it("格納後に開くボタンを押すと再び開く", async () => {
-      // Given
-      const user = userEvent.setup();
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
-      await user.click(wideToggle());
-
-      // When
-      await user.click(wideToggle());
-
-      // Then
-      expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelCollapse"),
-      );
-    });
-  });
-
-  // jsdomはCSSを評価しないため、表示の切替（向きと幅）はE2Eで確かめる。ここでは共有される開閉の状態と、2つの開閉ボタンの表示を確かめる。
-  describe("開閉の状態の共有", () => {
-    it("操作前は、広い用が格納する、横向きかつ狭い用が開くで、ドロワーの背景は出ない", () => {
-      // Given
-      // When
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
-
-      // Then
-      expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelCollapse"),
-      );
-      expect(compactToggle()).toHaveAccessibleName(
         navigationText("leftPanelExpand"),
       );
       expect(closeMenuButtons()).toHaveLength(1);
     });
 
-    it("広い用で格納すると、両方のボタンが開くになり、ドロワーは開かない", async () => {
+    it("列のボタンで格納した後に展開すると、ボタンが格納するになり、ドロワーは開かない", async () => {
       // Given
       const user = userEvent.setup();
       render(<LeftPanel signOut={null} />, {
         wrapper: IntlTestProvider,
       });
+      await user.click(wideToggle());
 
       // When
       await user.click(wideToggle());
 
       // Then
       expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelExpand"),
-      );
-      expect(compactToggle()).toHaveAccessibleName(
-        navigationText("leftPanelExpand"),
+        navigationText("leftPanelCollapse"),
       );
       expect(closeMenuButtons()).toHaveLength(1);
     });
 
-    it("広い用で格納した後に展開すると、両方のボタンが格納するになり、ドロワーが開く", async () => {
+    it("ハンバーガーで開いた後に背景を押すと、ドロワーが閉じる", async () => {
       // Given
       const user = userEvent.setup();
       render(<LeftPanel signOut={null} />, {
         wrapper: IntlTestProvider,
       });
-      await user.click(wideToggle());
-
-      // When
-      await user.click(wideToggle());
-
-      // Then
-      expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelCollapse"),
-      );
-      expect(compactToggle()).toHaveAccessibleName(
-        navigationText("leftPanelCollapse"),
-      );
-      expect(closeMenuButtons()).toHaveLength(2);
-    });
-
-    it("横向きかつ狭い用で展開すると、広い用も格納するになり、ドロワーが開く", async () => {
-      // Given
-      const user = userEvent.setup();
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
-
-      // When
-      await user.click(compactToggle());
-
-      // Then
-      expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelCollapse"),
-      );
-      expect(closeMenuButtons()).toHaveLength(2);
-    });
-
-    it("横向きかつ狭い用で展開した後に背景を押すと、両方のボタンが開くになり、ドロワーが閉じる", async () => {
-      // Given
-      const user = userEvent.setup();
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
-      await user.click(compactToggle());
+      await user.click(openMenuButton());
 
       // When
       // 背景はパネルより前にDOMへ配置される。
       await user.click(closeMenuButtons()[0]);
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelExpand"),
-      );
-      expect(compactToggle()).toHaveAccessibleName(
-        navigationText("leftPanelExpand"),
-      );
       expect(closeMenuButtons()).toHaveLength(1);
     });
 
-    it("ハンバーガーでドロワーを開くと、両方のボタンが格納するになる", async () => {
+    it("ハンバーガーでドロワーを開くと、背景が出て、列のボタンは操作前のままである", async () => {
       // Given
       const user = userEvent.setup();
       render(<LeftPanel signOut={null} />, {
@@ -259,17 +117,11 @@ describe("LeftPanel", () => {
       });
 
       // When
-      await user.click(
-        screen.getByRole("button", {
-          name: navigationText("leftPanelOpenMenu"),
-        }),
-      );
+      await user.click(openMenuButton());
 
       // Then
+      expect(closeMenuButtons()).toHaveLength(2);
       expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelCollapse"),
-      );
-      expect(compactToggle()).toHaveAccessibleName(
         navigationText("leftPanelCollapse"),
       );
     });
