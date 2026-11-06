@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Locator, Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { ROUNDS_PATH } from "@/routes";
 import { expect, test } from "../fixtures";
 import {
   SHARED_AUTH_STATE_PATH,
@@ -80,6 +81,44 @@ async function expectPanelCollapsed(page: Page) {
 async function expectPanelExpanded(page: Page) {
   for (const item of panelContents(page)) {
     await expectUncovered(item, 5);
+  }
+}
+
+// Tabで一巡し、フォーカスされた要素を順に返す。一巡は、すでに通った要素へ戻った時に終える。
+async function tabCycle(page: Page) {
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll("[data-e2e-visited]")) {
+      el.removeAttribute("data-e2e-visited");
+    }
+  });
+  const focused: { inPanel: boolean; href: string | null }[] = [];
+  for (let i = 0; i < 50; i++) {
+    await page.keyboard.press("Tab");
+    const step = await page.evaluate(() => {
+      const el = document.activeElement;
+      if (!el || el === document.body) return { visited: false, item: null };
+      const visited = el.hasAttribute("data-e2e-visited");
+      el.setAttribute("data-e2e-visited", "");
+      return {
+        visited,
+        item: { inPanel: !!el.closest("aside"), href: el.getAttribute("href") },
+      };
+    });
+    if (step.visited) break;
+    if (step.item) focused.push(step.item);
+  }
+  return focused;
+}
+
+async function expectTabNeverEntersPanel(page: Page) {
+  const focused = await tabCycle(page);
+  expect(focused.length).toBeGreaterThan(0);
+  expect(focused.filter((item) => item.inPanel)).toEqual([]);
+}
+
+async function expectPanelContentsAbsent(page: Page) {
+  for (const item of panelContents(page)) {
+    await expect(item).toHaveCount(0);
   }
 }
 
@@ -171,6 +210,26 @@ test.describe("認証済み", () => {
     ).toBeVisible();
   });
 
+  test("縦向きで狭い画面でレフトパネルを展開して個人リンクを押すと、ラウンド一覧へ移動し、レフトパネルが格納される", async ({
+    page,
+  }) => {
+    // 縦向きで狭い画面でラウンド作成画面を開き、ハンバーガーボタンでレフトパネルを展開する。
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await page.goto("/rounds/new");
+    await waitForHydration(page);
+    await page
+      .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
+      .click();
+    await expectPanelExpanded(page);
+
+    // 個人リンクを押して、ラウンド一覧へ移り、レフトパネルが格納されていることを確かめる。
+    await page
+      .getByRole("link", { name: navigationText("leftPanelPersonal") })
+      .click();
+    await expect(page).toHaveURL(/\/rounds$/);
+    await expectPanelCollapsed(page);
+  });
+
   test.describe("レフトパネルの開閉", () => {
     test("縦向きで狭い画面では、レフトパネルが格納された状態で始まり、ハンバーガーボタンで展開し、閉じるボタンで格納する", async ({
       page,
@@ -215,7 +274,7 @@ test.describe("認証済み", () => {
       await expectPanelExpanded(page);
     });
 
-    test("横向きで狭い画面では、レフトパネルが格納された状態で始まり、開くボタンで展開し、格納ボタンで格納する", async ({
+    test("横向きで狭い画面では、レフトパネルが格納された状態で始まり、ハンバーガーボタンで展開し、閉じるボタンで格納する", async ({
       page,
     }) => {
       // 横向きで狭い画面でラウンド一覧を開き、レフトパネルが格納されていることを確かめる。
@@ -223,15 +282,17 @@ test.describe("認証済み", () => {
       await openRounds(page);
       await expectPanelCollapsed(page);
 
-      // 開くボタンを押して、レフトパネルを展開する。
+      // 左端の縦の帯のハンバーガーボタンを押して、レフトパネルを展開する。
       await page
-        .getByRole("button", { name: navigationText("leftPanelExpand") })
+        .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
         .click();
       await expectPanelExpanded(page);
 
-      // 格納ボタンを押して、レフトパネルを格納する。
+      // 閉じるボタンを押して、レフトパネルを格納する。
+      // 背景も同じ名前のボタンで、パネルの中の閉じるボタンはDOMで後にある。
       await page
-        .getByRole("button", { name: navigationText("leftPanelCollapse") })
+        .getByRole("button", { name: navigationText("leftPanelCloseMenu") })
+        .last()
         .click();
       await expectPanelCollapsed(page);
     });
@@ -301,6 +362,84 @@ test.describe("認証済み", () => {
       await expectPanelCollapsed(page);
 
       // 広い画面へ戻して、展開されずに格納されたままであることを確かめる。
+      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
+      await expectPanelCollapsed(page);
+    });
+
+    test("幅768px未満で格納されたレフトパネルの中身には、Tabでフォーカスが届かず、展開している間だけ届く", async ({
+      page,
+    }) => {
+      // 縦向きで狭い画面で格納されている間は、Tabを一巡しても、パネルの中にフォーカスが届かない。
+      await page.setViewportSize(MOBILE_VIEWPORT);
+      await openRounds(page);
+      await expectPanelContentsAbsent(page);
+      await expectTabNeverEntersPanel(page);
+
+      // ハンバーガーボタンで展開し、Tabで個人リンクまで届く。
+      const hamburger = page.getByRole("button", {
+        name: navigationText("leftPanelOpenMenu"),
+      });
+      await hamburger.focus();
+      await hamburger.click();
+      const personalLink = page.getByRole("link", {
+        name: navigationText("leftPanelPersonal"),
+      });
+      for (let i = 0; i < 5; i++) {
+        if (await personalLink.evaluate((el) => el === document.activeElement))
+          break;
+        await page.keyboard.press("Tab");
+      }
+      await expect(personalLink).toBeFocused();
+
+      // 閉じるボタンで格納し、中身が隠れてから、Tabがパネルの中に届かないことを確かめる。
+      await page
+        .getByRole("button", { name: navigationText("leftPanelCloseMenu") })
+        .last()
+        .click();
+      await expectPanelContentsAbsent(page);
+      await expectTabNeverEntersPanel(page);
+
+      // 横向きで狭い画面へ回しても、格納されたままパネルの中に届かず、縦の帯のハンバーガーボタンには届く。
+      await page.setViewportSize(COMPACT_LANDSCAPE_VIEWPORT);
+      await expectPanelContentsAbsent(page);
+      await expectTabNeverEntersPanel(page);
+      await page.evaluate(() =>
+        (document.activeElement as HTMLElement)?.blur(),
+      );
+      for (let i = 0; i < 5; i++) {
+        if (await hamburger.evaluate((el) => el === document.activeElement))
+          break;
+        await page.keyboard.press("Tab");
+      }
+      await expect(hamburger).toBeFocused();
+
+      // 広い画面へ変えると、個人リンクに1回だけ届く。
+      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
+      const focused = await tabCycle(page);
+      expect(focused.filter((item) => item.href === ROUNDS_PATH)).toHaveLength(
+        1,
+      );
+    });
+
+    test("広い画面でレフトパネルを格納した後、縦向きで狭い画面でドロワーを展開しても、広い画面へ戻すと、広い画面のレフトパネルは格納されたままである", async ({
+      page,
+    }) => {
+      // 広い画面でラウンド一覧を開き、格納ボタンでレフトパネルを格納する。
+      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
+      await openRounds(page);
+      await page
+        .getByRole("button", { name: navigationText("leftPanelCollapse") })
+        .click();
+      await expectPanelCollapsed(page);
+
+      // 縦向きで狭い画面へ変えて、ハンバーガーボタンでドロワーを展開し、中身が見えることを確かめる。
+      await page.setViewportSize(MOBILE_VIEWPORT);
+      await page
+        .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
+        .click();
+      await expectPanelExpanded(page);
+
+      // 広い画面へ戻して、広い画面のレフトパネルが格納されたままであることを確かめる。
       await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
       await expectPanelCollapsed(page);
     });

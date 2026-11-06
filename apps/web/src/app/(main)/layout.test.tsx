@@ -1,5 +1,5 @@
 import { AuthApiError } from "@supabase/supabase-js";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -91,8 +91,13 @@ function signOutClearingSession(result: () => Promise<unknown>) {
   });
 }
 
+// jsdomはCSSを評価せず、ドロワーと縦の列の2つの枠が両方見える。どちらの枠のボタンも同じ確認を開くので、DOM順で先の枠を押す。
+function signOutButton() {
+  return screen.getAllByRole("button", { name: authText("signOut") })[0];
+}
+
 async function confirmSignOut(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: authText("signOut") }));
+  await user.click(signOutButton());
   await user.click(screen.getByTestId("confirm-dialog-confirm"));
 }
 
@@ -143,27 +148,35 @@ afterEach(() => {
 
 describe("MainLayout", () => {
   describe("表示", () => {
-    it("左パネルのサインアウトの操作と子要素を並べて表示する", () => {
+    it("左パネルの2つの枠が、それぞれサインアウトの操作を持ち、子要素と並べて表示する", () => {
       // Given
       // When
       renderLayout();
 
       // Then
-      expect(screen.getByRole("complementary")).toContainElement(
-        screen.getByRole("button", { name: authText("signOut") }),
-      );
+      const frames = screen.getAllByRole("complementary");
+      expect(frames).toHaveLength(2);
+      for (const frame of frames) {
+        expect(
+          within(frame).getByRole("button", { name: authText("signOut") }),
+        ).toBeInTheDocument();
+      }
       expect(screen.getByText("子要素")).toBeInTheDocument();
     });
 
-    it("左パネルの個人リンクは、一覧の経路を向く", () => {
+    it("左パネルの2つの個人リンクは、どちらも一覧の経路を向く", () => {
       // Given
       // When
       renderLayout();
 
       // Then
-      expect(
-        screen.getByRole("link", { name: navigationText("leftPanelPersonal") }),
-      ).toHaveAttribute("href", ROUNDS_PATH);
+      const links = screen.getAllByRole("link", {
+        name: navigationText("leftPanelPersonal"),
+      });
+      expect(links).toHaveLength(2);
+      for (const link of links) {
+        expect(link).toHaveAttribute("href", ROUNDS_PATH);
+      }
     });
 
     it("Supabaseの環境変数が無くても、描画時に接続を作らず描画できる", () => {
@@ -367,9 +380,7 @@ describe("MainLayout", () => {
       const user = userEvent.setup();
       supabase.signOut.mockReturnValue(new Promise(() => {}));
       renderLayout();
-      await user.click(
-        screen.getByRole("button", { name: authText("signOut") }),
-      );
+      await user.click(signOutButton());
       const confirm = screen.getByTestId("confirm-dialog-confirm");
 
       // When

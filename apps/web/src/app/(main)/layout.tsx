@@ -24,7 +24,7 @@ export default function MainLayout({
   useEffect(() => session.watch(), [session]);
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden side:flex-row">
+    <div className="flex h-dvh flex-col overflow-hidden md:flex-row max-md:landscape:flex-row">
       <LeftPanel signOut={<SignOutButton signOut={session.signOut} />} />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</div>
     </div>
