@@ -28,7 +28,7 @@
   - 枠のないパスのナビゲーションの失敗時は `/offline` を返す。`navigationPreload` は使わない。
   - `infrastructure/shell-guard.ts`(`shellFrameGuard`)が、`/__shell/` 配下のプリキャッシュ応答がリダイレクトされたら、インストールを失敗させる。
 - `src/app/offline/page.tsx`(画面の入口)は、`ui/offline-screen.tsx`の`OfflineScreen`(ロゴ、枠、文言)を描くだけである。文言は`ui/offline-pwa-messages.ts`の一覧(名前空間`offlinePwa`)から`useTranslations`で得る。要求の設定は`headers()`と`cookies()`を読まないため、ページは静的なままで、文言は最初のHTMLに含まれ、プリキャッシュされた枠はオフラインでも文言を表示する。
-- 経路の持ち主は2つである。枠の経路(`ROUND_FRAME_PATHS`、`roundFramePathOf`、`ROUND_FRAME_ID`)は `src/features/rounds/domain/round-routes.ts`、`/offline` と枠の配布URL(`OFFLINE_PATH`、`SHELL_PREFIX`、`shellUrlOf`、`frameHtmlOf`、`isShellUrl`、`frameUrlFor`)は `src/features/offline-pwa/domain/offline-routes.ts` が持つ。`sw.ts`、`serwist.config.mjs`、`next.config.ts`、`manifest.ts` はここから導く。`proxy.ts` の `matcher` だけは、Next.jsが静的に読むため文字列で再掲し、`proxy.test.ts` が一致を確かめる。
+- 経路の持ち主は、経路表(`src/routes.ts`)と各機能の経路のファイルである。`/offline` と枠の配布URL(`OFFLINE_PATH`、`SHELL_PREFIX`、`shellUrlOf`、`frameHtmlOf`)は経路表が持ち、判定・変換の関数(`isShellUrl`、`frameUrlFor`)は `src/features/offline-pwa/domain/offline-routes.ts` が持つ。枠の経路(`ROUND_FRAME_PATHS`、`roundFramePathOf`、`ROUND_FRAME_ID`)は `src/features/rounds/domain/round-routes.ts` が持つ。`sw.ts`、`serwist.config.mjs`、`next.config.ts`、`manifest.ts` はここから導く。`proxy.ts` の `matcher` だけは、Next.jsが静的に読むため文字列で再掲し、`proxy.test.ts` が一致を確かめる。
 - `serwist.config.mjs` が `public/sw.js` を生成し、`/offline` と枠3件（`/__shell/rounds`、`/__shell/rounds/new`、`/__shell/rounds/_`）をHTMLの内容ハッシュのリビジョンでプリキャッシュする。リビジョンはビルドごとに変わる。
 - `next.config.ts` が `/__shell/*` を実ルートへrewriteし（`beforeFiles`）、`/rounds/<ID>` を `/rounds/_` へrewriteする（`afterFiles`）。`/__shell/*` は `proxy.ts` の対象外なので、未認証の登録でも各画面の枠が保存される。オンラインの `/rounds/<ID>` も `/rounds/_` の枠だけが配信され、IDごとの生成物は作られない（`rounds/[id]/page.tsx` の `dynamicParams = false`）。
 - 更新の切り替えは、機能 `offline-pwa` の手続き `application/update-activation.ts`(`createUpdateActivation`)が担う。登録を保持し、待機中の版があるときの内部リンクの遷移を止め、端末の保存の完了(記録のハブの`whenPersisted`)を待ち、`SKIP_WAITING`を1回送り、`controllerchange`の後、文書を読み直す直前に保存を再確認して遷移する。これらの待ちは、クリックからの合計で上限1秒(`FALLBACK_WAIT_MS`)を時計(`Clock`)で共有する。切り替えをしない経路は`whenPersisted`を呼ばない。待機の判定は保持した登録の`waiting`の同期の読み取りだけで行い、登録の保持の前の操作は止めない。待機が無い経路の変化では`registration.update()`を呼ぶ。読み込み時には切り替えない。
@@ -61,7 +61,7 @@
 
 ## 制約と未対応
 
-- `serwist.config.mjs` が `round-routes.ts` と `offline-routes.ts` をNodeの型除去で読むため、Node 22.18以上が前提（`.node-version` は24）で、ビルド時に `MODULE_TYPELESS_PACKAGE_JSON` の警告が出る。
+- `next.config.ts` と `serwist.config.mjs` が `round-routes.ts` と経路表(`routes.ts`)をNodeの型除去で読むため、Node 22.18以上が前提（`.node-version` は24）で、ビルド時に `MODULE_TYPELESS_PACKAGE_JSON` の警告が出る。
 - Service Workerが未登録、または制御していないタブのオフラインは、ブラウザ標準のエラーになる。iOS Safariのホーム画面アプリでの挙動は実機で確認していない。
 - 切り替えが1秒で進まない(`controllerchange`が来ない)ときと、保存が上限(1秒)までに終わらないときは、切り替えずに旧版のまま遷移し、その遷移では再び試みない。次の遷移で通常どおり判定する。登録の保持の前の操作も同じである。
 - 複数のウィンドウを開いているとき、1つの遷移で切り替えると、他のウィンドウの旧ドキュメントを新しいService Workerが制御し、その遅延チャンクは取得できないことがある。そのウィンドウの通常の遷移(ハードナビゲーション)で回復する。

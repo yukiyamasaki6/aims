@@ -1,12 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { serwist } from "@serwist/next/config";
-import {
-  frameHtmlOf,
-  OFFLINE_PATH,
-  shellUrlOf,
-} from "./src/features/offline-pwa/domain/offline-routes.ts";
 import { ROUND_FRAME_PATHS } from "./src/features/rounds/domain/round-routes.ts";
+import { frameHtmlOf, OFFLINE_PATH, shellUrlOf } from "./src/routes.ts";
 
 // /offlineだけは認証に依存しない完全に静的なページなので、他の
 // プリレンダーページとは別枠で個別にプリキャッシュする（sw.tsから

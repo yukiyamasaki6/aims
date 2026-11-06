@@ -8,13 +8,10 @@ import {
   SIGN_UP_PATH,
 } from "@/features/auth/domain/auth-routes";
 import {
-  OFFLINE_PATH,
-  shellUrlOf,
-} from "@/features/offline-pwa/domain/offline-routes";
-import {
   ROUND_FRAME_PATHS,
   ROUNDS_PATH,
 } from "@/features/rounds/domain/round-routes";
+import { OFFLINE_PATH, shellUrlOf } from "@/routes";
 import { config, proxy } from "./proxy";
 
 // Supabaseクライアントは外部サービスとの境界のため、getClaimsの結果を制御できるスタブで模す。

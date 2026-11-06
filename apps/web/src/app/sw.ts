@@ -1,13 +1,11 @@
 /// <reference lib="webworker" />
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
 import { Serwist } from "serwist";
-import {
-  frameUrlFor,
-  OFFLINE_PATH,
-} from "@/features/offline-pwa/domain/offline-routes";
+import { frameUrlFor } from "@/features/offline-pwa/domain/offline-routes";
 import { createRuntimeCaching } from "@/features/offline-pwa/infrastructure/runtime-caching";
 import { shellFrameGuard } from "@/features/offline-pwa/infrastructure/shell-guard";
 import { roundFramePathOf } from "@/features/rounds/domain/round-routes";
+import { OFFLINE_PATH } from "@/routes";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
