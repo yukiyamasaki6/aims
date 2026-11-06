@@ -125,7 +125,7 @@ describe("サインインの手続き", () => {
 
   it("オフラインなら、認証サービスを呼ばず、チェックのやり直しもせず、offlineを示す", async () => {
     // Given
-    const { signIn, authenticator, navigation, resetCheck, viewOf, state } =
+    const { signIn, authenticator, navigation, resetCheck, viewOf } =
       setup(true);
     const view = viewOf(verified);
 
@@ -139,7 +139,6 @@ describe("サインインの手続き", () => {
     expect(view.observedState.error).toBe("offline");
     expect(view.observedState.captchaToken).toBe("first-token");
     expect(view.observedState.submitting).toBe(false);
-    expect(state).toBeDefined();
   });
 
   it("オフラインでチェックが未完了でも、チェック未完了でなくoffline。オンラインに戻すと通常の送信になる", async () => {
@@ -159,7 +158,7 @@ describe("サインインの手続き", () => {
     expect(authenticator.signIn).toHaveBeenCalledOnce();
   });
 
-  it("オフラインの状態を送信ごとに1回だけ読み、購読しない", async () => {
+  it("オフラインの状態を購読しない", async () => {
     // Given
     const { signIn, connectivity, viewOf } = setup(true);
 
