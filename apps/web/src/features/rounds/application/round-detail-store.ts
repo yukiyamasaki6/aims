@@ -2,7 +2,6 @@ import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { FetchResult } from "../domain/fetch-status";
 import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
-import type { PresetToSave } from "../domain/preset-save";
 import { localOpening, openPlan } from "../domain/round-opening";
 import {
   type RoundTables,
@@ -11,7 +10,6 @@ import {
 import { shotIdAfter } from "../domain/shot-id";
 import { roundStreamId } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
-import type { PresetSaving, PresetSavingResult } from "./preset-saving";
 import type { OpenedRound, RefreshRequests } from "./refresh-requests";
 import type { RoundEditing } from "./round-editing";
 import type { RoundFetching } from "./round-fetching";
@@ -20,7 +18,6 @@ import {
   type LoadedRound,
   type RoundHandle,
 } from "./round-handle";
-import type { RoundLeaving } from "./round-leaving";
 import type { RoundRecordHub, RoundStoreGroup } from "./round-record-hub";
 import { TIMED_OUT, withinFetchTimeout, withinTime } from "./time-limit";
 import type { UniqueIds } from "./unique-ids";
@@ -36,16 +33,6 @@ export type RoundDetailStore = {
   load(roundId: string): Promise<FetchResult<LoadedRoundDetail>>;
   // 購読と操作の追記を持つ`RoundHandle`。ラウンドごとに1つ。
   round(roundId: string): RoundHandle;
-  // 入力の完了。完了の操作を積み、保存の完了の後に一覧へ進む。送信の完了は待たない。遷移が投げたときは拒否する。
-  completeRound(roundId: string): Promise<void>;
-  // 詳細の確認の後に呼ぶ削除。round.disabledを積み、保存の完了の後に一覧へ置き換えて移る。送信の完了は待たない。遷移が投げたときは拒否する。
-  deleteRoundAndLeave(roundId: string): Promise<void>;
-  // 一覧へ置き換えて移る(削除済み、作成が確定せずに消えたとき)。
-  leaveRound(): void;
-  // 現在の構成のプリセットとしての保存。サインインの確認、書き込み、成功の後の保存済みの再取得を行う。
-  savePreset(preset: PresetToSave): Promise<PresetSavingResult>;
-  // 新しいID(操作のイベントID、距離のID)の払い出し。
-  newId(): string;
   // そのエンドの既にある矢のIDより後ろに並ぶ、時刻順の矢のIDの払い出し。
   newShotId(endShotIds: readonly string[]): string;
   whenOnline: WhenOnline;
@@ -64,9 +51,7 @@ type Deps = {
   clock: Clock;
   connectivity: Connectivity;
   ids: UniqueIds;
-  leaving: RoundLeaving;
   editing: RoundEditing;
-  presetSaving: PresetSaving;
 };
 
 async function readGroup(
@@ -153,7 +138,7 @@ async function openDetail(
 
 // 詳細の画面へ渡す、状態と変更の方法。
 export function createRoundDetailStore(deps: Deps): RoundDetailStore {
-  const { hub, requests, clock, connectivity, ids, leaving, editing } = deps;
+  const { hub, requests, clock, connectivity, ids, editing } = deps;
   const handles = new Map<string, RoundHandle>();
   return {
     load: (roundId) =>
@@ -166,11 +151,6 @@ export function createRoundDetailStore(deps: Deps): RoundDetailStore {
       }
       return handle;
     },
-    completeRound: (roundId) => leaving.completeRound(roundId),
-    deleteRoundAndLeave: (roundId) => leaving.deleteRoundAndLeave(roundId),
-    leaveRound: () => leaving.leaveRound(),
-    savePreset: (preset) => deps.presetSaving.savePreset(preset),
-    newId: () => ids.next(),
     newShotId: (endShotIds) =>
       shotIdAfter(endShotIds, clock.now(), ids.randomBytes(10)),
     whenOnline: (listener) => whenOnline(connectivity, listener),

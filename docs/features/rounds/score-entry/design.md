@@ -49,7 +49,7 @@
 ## 構成とデータの流れ
 
 - `features/rounds/ui/scorecard-client.tsx`: スコアカードの枠。`use-scorecard.ts`の状態と操作を、部品とテンキーへ渡す。
-- `features/rounds/ui/use-shot-input.ts`: 点数の書き込み、クリア、戻る・進む、玉と空白の押下を受ける。操作のイベントIDと新しい矢のIDは窓口(`useRoundDetailStore()`の`newId`、`newShotId`)から受ける。画面へまだ反映されていない自分の矢の操作は`use-pending-shots.ts`、指している矢の保持と他端末の変化への合わせ込みは`use-reconciled-pointer.ts`が持つ。
+- `features/rounds/ui/use-shot-input.ts`: 点数の書き込み、クリア、戻る・進む、玉と空白の押下を受ける。操作のイベントIDと新しい矢のIDは手続きの入れ物(`useRoundProcedures()`の`ids.next`)と窓口(`useRoundDetailStore()`の`newShotId`)から受ける。画面へまだ反映されていない自分の矢の操作は`use-pending-shots.ts`、指している矢の保持と他端末の変化への合わせ込みは`use-reconciled-pointer.ts`が持つ。
 - `features/rounds/ui/use-score-history.ts`: 取り消しの列をstateに持つ。
 - `features/rounds/ui/end-row.tsx`: エンドの行、矢数分の場所、玉、空白、仮の矢を描く。
 - `features/rounds/ui/use-reorder-animation.ts`: 玉は矢のIDごとに、輪(指している玉か仮の矢)は玉の領域ごとに、前の描画の位置を覚えて動かす。動いている途中の位置は、動かすときに要素の見た目の位置(`getBoundingClientRect`)から求める。

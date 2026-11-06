@@ -147,9 +147,7 @@ function composeStores(inputs: Inputs, records: Records) {
       clock,
       connectivity,
       ids,
-      leaving,
       editing: createRoundEditing({ hub, ids }),
-      presetSaving,
     }),
     newRoundStore: createNewRoundStore({
       fetching,

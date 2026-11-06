@@ -135,10 +135,6 @@ export function createFakeRoundDetailStore(
     round: vi.fn(),
     append: vi.fn().mockResolvedValue(undefined),
     whenOnline,
-    completeRound: vi.fn().mockResolvedValue(undefined),
-    deleteRoundAndLeave: vi.fn().mockResolvedValue(undefined),
-    leaveRound: vi.fn(),
-    savePreset: vi.fn().mockResolvedValue({ status: "saved" }),
     newShotId: vi.fn(
       () =>
         `00000000-0000-7000-8000-${String(++issued.shots).padStart(12, "0")}`,
@@ -146,10 +142,6 @@ export function createFakeRoundDetailStore(
     ...overrides,
   } as unknown as RoundDetailStore & {
     whenOnline: ReturnType<typeof vi.fn>;
-    completeRound: ReturnType<typeof vi.fn>;
-    deleteRoundAndLeave: ReturnType<typeof vi.fn>;
-    leaveRound: ReturnType<typeof vi.fn>;
-    savePreset: ReturnType<typeof vi.fn>;
     newShotId: ReturnType<typeof vi.fn>;
   };
 
