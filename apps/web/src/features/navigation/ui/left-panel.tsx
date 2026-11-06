@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useState } from "react";
 import { LogoImage } from "@/components/logo-image";
 import { cn } from "@/lib/utils";
+import { HOME_PATH } from "@/routes";
 
 // 操作の直後だけ開閉のtransitionを有効にする時間。transitionの200msより少し長い。
 const ANIMATE_MS = 250;
@@ -185,7 +186,7 @@ function PanelHeader({
       )}
     >
       <Link
-        href="/"
+        href={HOME_PATH}
         className={cn(
           "shrink-0",
           !wideOpen && "md:hidden",

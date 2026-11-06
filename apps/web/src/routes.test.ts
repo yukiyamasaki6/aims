@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   frameHtmlOf,
+  HOME_PATH,
   NEW_ROUND_PATH,
   OFFLINE_PATH,
   RESET_PASSWORD_PATH,
@@ -92,5 +93,14 @@ describe("routes", () => {
 
     // Then
     expect(paths).toEqual(["/signin", "/signup", "/reset-password"]);
+  });
+
+  it("紹介画面の経路を持つ", () => {
+    // Given
+    // When
+    const path = HOME_PATH;
+
+    // Then
+    expect(path).toBe("/");
   });
 });

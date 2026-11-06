@@ -41,3 +41,6 @@ export const ROUND_FRAME_PATHS: string[] = [
 export const SIGN_IN_PATH = "/signin";
 export const SIGN_UP_PATH = "/signup";
 export const RESET_PASSWORD_PATH = "/reset-password";
+
+// アプリの紹介画面。ロゴの行き先。
+export const HOME_PATH = "/";

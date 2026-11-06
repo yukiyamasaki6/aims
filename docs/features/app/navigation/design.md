@@ -37,7 +37,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 - `src/features/navigation/ui/navigation-messages.ts`(UI層): 紹介画面と左パネルの文言の一覧(名前空間`navigation`)。部品は`useTranslations("navigation")`で文言を得る。
 - 遷移の約束(アプリ全体): ナビゲーションの機能は遷移の約束を持たない。開始の行き先は、入口が渡す行き先(href)へ、`start-button.tsx` のリンクで遷移する。ルーターで進む遷移は共有の技術の `PageNavigation`(`src/lib/page-navigation/contract/page-navigation.ts`。認証のサインイン、サインアップとラウンドの開始、完了、削除して離れる、一覧へ戻るが使う)、ページ全体の読み込みの遷移は認証の `PageLoad`、`PageReplace`、遷移元の読み出しは認証の `ReturnToReader` である。
 - `src/app/(main)/layout.tsx`(画面の入口): 認証が要る画面の集合の枠。セッションの手続きと実装を生成して見張りを始め、個人リンクの行き先として経路表の `ROUNDS_PATH` を渡したレフトパネルと、サインアウトの部品(`features/auth/ui/sign-out-button.tsx`)を描く。
-- `src/components/app-logo.tsx`(共有の画面部品)が、認証画面・`/`・`/offline` の左上のロゴである。
+- `src/components/app-logo.tsx`(共有の画面部品)が、認証画面・`/`・`/offline` の左上のロゴである。ロゴの行き先は、経路表(`src/routes.ts`)の `HOME_PATH`(`/`)で、`left-panel.tsx` のロゴも同じである。
 - `src/components/logo-image.tsx`(共有の画面部品)が、文字付きロゴの画像（`public/logo.svg`）を表示する。代替テキスト「AIMS」がロゴのリンクの名前になる。`app-logo.tsx` と `left-panel.tsx` が使う。
 - `public/logo.svg` は、`scripts/generate-icon.mjs` が、マークと同じ値と、`geist` のGeist SansのBoldの字形から生成する。文字は図形にし、フォントを参照しない。READMEの冒頭も同じファイルを表示する。
 - `src/features/navigation/ui/left-panel.tsx`(UI層)が開閉（帯とサイドで共有する1つの状態）とリンクを持ち、個人リンクの行き先(`personalHref`)と、下端に、入口が渡すサインアウトの部品（`features/auth/ui/sign-out-button.tsx`）を描く。認証状態は持たず、常に全内容を表示する。配置と開閉ボタンの表示はCSSだけで決める（`side`variant=幅が広い または 横向き、`max-md:landscape:`=横向きかつ狭い）。開閉ボタンは広い用と横向きかつ狭い用の2つを置き、CSSで出し分ける。操作の直後だけtransitionを有効にする`animate`状態を持つ。入口のガードは `proxy.ts`、表示中の喪失は`(main)`のレイアウトが始める見張りが担う。
