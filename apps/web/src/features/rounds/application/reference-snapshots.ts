@@ -1,6 +1,6 @@
 export type ReferenceKind = "target-faces" | "presets";
 
-// 参照データ(的、プリセット)の端末への保存。例外: 投げない。
+// 参照データ(的、プリセット)の端末への保存。保存の読み書きの失敗では投げない。`update`は渡された関数が投げたとき投げる(呼び手は純粋な`withoutPreset`だけ)。
 export type ReferenceSnapshots = {
   load<T>(kind: ReferenceKind): T | null;
   save<T>(

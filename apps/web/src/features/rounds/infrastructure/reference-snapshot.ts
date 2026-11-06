@@ -10,7 +10,8 @@ import {
 
 // オフラインでも使えるよう、最後にオンラインで得た参照データ（的・プリセット）を
 // ユーザーごとに端末へ保存する。サインアウトでは消さず、別のユーザーはキーが違い読めない。
-// 取得の失敗・時間切れのときだけ使うスナップショットで、すべての関数は例外を外へ出さない。
+// 取得の失敗・時間切れのときだけ使うスナップショットで、保存の読み書きの失敗は外へ出さない。
+// `update`は渡された関数が投げたとき投げる。呼び手は純粋な`withoutPreset`だけで、投げない。
 const SHAPES = {
   presets: ROUND_PRESET_SELECT,
   "target-faces": TARGET_FACE_SELECT,
@@ -92,11 +93,7 @@ function updateReferenceSnapshot<T>(
   if (!userId) return;
   const current = read<T>(kind, userId);
   if (!current) return;
-  try {
-    write(kind, userId, update(current.data), Date.now());
-  } catch {
-    // 書き換えに失敗したときは保存済みを変えない。
-  }
+  write(kind, userId, update(current.data), Date.now());
 }
 
 // 取得の手続きが使う、参照データの保存。読み込みは端末の識別情報の利用者で行う。
