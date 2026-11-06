@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AUTH_CODE_LENGTH,
   RESEND_COOLDOWN_SECONDS,
+  validateAuthCode,
   validateResendWait,
 } from "./auth-code";
 
@@ -14,6 +15,34 @@ describe("認証コードの桁数", () => {
 
     // Then
     expect(length).toBe(6);
+  });
+});
+
+describe("認証コードの検証", () => {
+  it("空は未入力の誤りにする", () => {
+    // Given
+
+    // When
+    const result = validateAuthCode("");
+
+    // Then
+    expect(result).toBe("required");
+  });
+
+  it.each([
+    ["6桁の数字", "123456"],
+    ["5桁(桁数を誤りにしない)", "12345"],
+    ["7桁(桁数を誤りにしない)", "1234567"],
+    ["英字を含む(文字種を誤りにしない)", "12a456"],
+    ["空白だけ", "      "],
+  ])("1文字以上なら誤りなし(%s)", (_name, code) => {
+    // Given
+
+    // When
+    const result = validateAuthCode(code);
+
+    // Then
+    expect(result).toBeUndefined();
   });
 });
 

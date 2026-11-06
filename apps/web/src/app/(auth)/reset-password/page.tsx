@@ -6,6 +6,7 @@ import { createResetPassword } from "@/features/auth/application/reset-password"
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { ResetPasswordForm } from "@/features/auth/ui/reset-password-form";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
+import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createRouterPageNavigation } from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 
@@ -17,6 +18,7 @@ export default function ResetPasswordPage() {
       authenticator: createSupabaseAuth(createClient),
       pageNavigation: createRouterPageNavigation(router),
       clock: createBrowserClock(),
+      connectivity: createBrowserConnectivity(),
     }),
   );
   return (

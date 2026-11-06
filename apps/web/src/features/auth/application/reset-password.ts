@@ -1,4 +1,5 @@
 import type { Clock } from "@/lib/clock/contract/clock";
+import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { SIGN_IN_PATH } from "../domain/auth-routes";
 import type { CallResult } from "./call-result";
@@ -22,24 +23,27 @@ type Dependencies = {
   authenticator: PasswordSetupAuthenticator & LocalSignOut;
   pageNavigation: Pick<PageNavigation, "go">;
   clock: Clock;
+  connectivity: Pick<Connectivity, "isOffline">;
 };
 
 export function createResetPassword({
   authenticator,
   pageNavigation,
   clock,
+  connectivity,
 }: Dependencies): PasswordSetup {
   const context: PasswordSetupContext = {
     authenticator,
     purpose: "password-reset",
     clock,
+    connectivity,
   };
   return {
     sendCode: (input, view) => sendCode(context, input, view),
     verifyCode: (input, view) => verifyCode(context, input, view),
     tickCooldown: (dispatch) => tickCooldown(context, dispatch),
     setPassword: (input, view) =>
-      setPassword(authenticator, pageNavigation, input, view),
+      setPassword(authenticator, connectivity, pageNavigation, input, view),
   };
 }
 
@@ -48,6 +52,7 @@ export function createResetPassword({
 // 変更の応答待ちに画面を離れたときは、表示も遷移もしない。
 async function setPassword(
   authenticator: PasswordSetupAuthenticator & LocalSignOut,
+  connectivity: Pick<Connectivity, "isOffline">,
   pageNavigation: Pick<PageNavigation, "go">,
   input: { password: string },
   view: PasswordSetupView,
@@ -55,6 +60,7 @@ async function setPassword(
   if (
     !(await applyPassword(
       (password) => authenticator.setPassword(password),
+      connectivity,
       input,
       view,
     ))

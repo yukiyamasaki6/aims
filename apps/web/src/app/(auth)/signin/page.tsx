@@ -6,6 +6,7 @@ import { createSignIn } from "@/features/auth/application/sign-in";
 import { RETURN_TO_PARAM } from "@/features/auth/domain/auth-routes";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SignInForm } from "@/features/auth/ui/signin-form";
+import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
 import { createRouterPageNavigation } from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 
@@ -20,6 +21,7 @@ export default function SignInPage() {
     createSignIn({
       authenticator: createSupabaseAuth(createClient),
       pageNavigation: createRouterPageNavigation(router),
+      connectivity: createBrowserConnectivity(),
     }),
   );
   return (

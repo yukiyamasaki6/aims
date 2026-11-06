@@ -48,7 +48,7 @@ export function signInHref(from: string | null): string {
 }
 
 // 要求に対するリダイレクト先(パスとクエリ)。リダイレクトしないときはnull。
-// 未認証で保護の範囲を開くと、遷移元付きのサインインへ送る。認証済みで未認証専用の画面を開くと、既定の行き先へ送る。
+// 未認証で保護の範囲を開くと、遷移元付きのサインインへ送る。認証済みで未認証専用の画面を開くと、サインインなら有効な遷移元、それ以外は既定の行き先へ送る。
 export function redirectFor(request: {
   signedIn: boolean;
   pathname: string;
@@ -56,6 +56,11 @@ export function redirectFor(request: {
 }): string | null {
   if (!request.signedIn && isProtectedPath(request.pathname)) {
     return signInHref(request.pathname + request.search);
+  }
+  if (request.signedIn && request.pathname === SIGN_IN_PATH) {
+    return destinationOf(
+      new URLSearchParams(request.search).get(RETURN_TO_PARAM),
+    );
   }
   if (request.signedIn && GUEST_ONLY_PATHS.includes(request.pathname)) {
     return ROUNDS_PATH;

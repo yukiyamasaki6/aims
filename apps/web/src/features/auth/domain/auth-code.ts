@@ -1,6 +1,15 @@
 // 認証サービスが発行する認証コード(OTP)の規則。桁数(入力欄の上限)と、再送できるまでの待ち時間。
-// コードの正しさは送信前に検査せず、認証サービスの確認に任せる。
+// コードの形式(桁数、数字か)は検査せず認証サービスに任せる。未入力だけを送信前に見る。
 export const AUTH_CODE_LENGTH = 6;
+
+// 認証コードの誤りの種類。required: 未入力。
+export type AuthCodeError = "required";
+
+// 入力されたコードが空でないかだけを見る。
+// 入力されていればundefined、空なら誤りの種類を返す。
+export function validateAuthCode(code: string): AuthCodeError | undefined {
+  return code ? undefined : "required";
+}
 
 // 認証コードを送ってから、再送できるまでの待ち時間(秒)。
 export const RESEND_COOLDOWN_SECONDS = 60;

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import {
@@ -23,20 +24,23 @@ const verified = signInReducer(initialSignInFlow, {
 
 const accepted: CallResult = { kind: "accepted" };
 
-function setup() {
+function setup(offline = false) {
   const authenticator = {
     signIn: vi.fn(async (): Promise<CallResult> => accepted),
   };
   const fake = createFakePageNavigation();
   const navigation = { go: fake.go };
+  const connectivity = createFakeConnectivity(offline);
   const signIn = createSignIn({
     authenticator,
     pageNavigation: fake.pageNavigation,
+    connectivity,
   });
   const { events, resetCheck, viewOf, screen } = screenHarness(signInReducer);
   return {
     signIn,
     authenticator,
+    connectivity,
     navigation,
     actions: events,
     resetCheck,
@@ -119,10 +123,59 @@ describe("サインインの手続き", () => {
     expect(resetCheck).toHaveBeenCalledOnce();
   });
 
+  it("オフラインなら、認証サービスを呼ばず、チェックのやり直しもせず、offlineを示す", async () => {
+    // Given
+    const { signIn, authenticator, navigation, resetCheck, viewOf } =
+      setup(true);
+    const view = viewOf(verified);
+
+    // When
+    await signIn.submit(input, view);
+
+    // Then
+    expect(authenticator.signIn).not.toHaveBeenCalled();
+    expect(resetCheck).not.toHaveBeenCalled();
+    expect(navigation.go).not.toHaveBeenCalled();
+    expect(view.observedState.error).toBe("offline");
+    expect(view.observedState.captchaToken).toBe("first-token");
+    expect(view.observedState.submitting).toBe(false);
+  });
+
+  it("オフラインでチェックが未完了でも、チェック未完了でなくoffline。オンラインに戻すと通常の送信になる", async () => {
+    // Given
+    const { signIn, authenticator, connectivity, viewOf } = setup(true);
+    const view = viewOf(initialSignInFlow);
+
+    // When
+    await signIn.submit(input, view);
+    const whileOffline = view.observedState;
+    connectivity.goOnline();
+    await signIn.submit(input, viewOf(verified));
+
+    // Then
+    expect(whileOffline.error).toBe("offline");
+    expect(whileOffline.fieldErrors).toEqual({});
+    expect(authenticator.signIn).toHaveBeenCalledOnce();
+  });
+
+  it("オフラインの状態を購読しない", async () => {
+    // Given
+    const { signIn, connectivity, viewOf } = setup(true);
+
+    // When
+    await signIn.submit(input, viewOf(verified));
+
+    // Then
+    expect(connectivity.subscribers()).toEqual({ online: 0, offline: 0 });
+  });
+
   it("渡された状態が送信中なら、何も送らず、照合も遷移もしない", async () => {
     // Given
     const { signIn, authenticator, navigation, actions, viewOf } = setup();
-    const started = beginSignIn(verified, input).state;
+    const started = beginSignIn(verified, {
+      ...credentialsOf,
+      offline: false,
+    }).state;
 
     // When
     await signIn.submit(input, viewOf(started));

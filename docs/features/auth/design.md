@@ -10,7 +10,7 @@
 ## 構成
 
 - `src/features/auth/domain/flow.ts`: 命令の結果の型(`Start`、`Step`)と欄ごとのエラーの型(`FieldErrors`)。
-- `src/features/auth/domain/auth-failure.ts`: 失敗の種類(`AuthFailureKind`)。失敗値の作成(`UNREACHABLE`など)も持つ。文言は持たない。文言は、UI層の文言の一覧(`ui/auth-messages.ts`)が、失敗の種類ごと、欄ごとの入力の誤りの種類ごとに持つ。
+- `src/features/auth/domain/auth-failure.ts`: 失敗の種類(`AuthFailureKind`)。失敗値の作成(`UNREACHABLE`など)も持つ。文言は持たない。文言は、UI層の文言の一覧(`ui/auth-messages.ts`)が、失敗の種類ごと、欄ごとの入力の誤りの種類ごとに持つ。失敗の種類`offline`は、送信の前に端末のオフラインを判定して集約が作り、認証サービスの応答からは作らない。
 - `src/features/auth/domain/auth-routes.ts`: 保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則と、要求のリダイレクト先(`redirectFor`)。保護の範囲の根の経路は、ラウンドの入口が公開する`ROUNDS_PATH`を、この部品だけが値で読む(architecture.mdの例外の1か所)。根はサインインの後の既定の行き先でもある。`src/proxy.ts`が、セッションの更新の結果の利用者から`redirectFor`を呼ぶ。既定の行き先の規則(`destinationOf`)は、サインインとサインアップの手続きが使う。
 - `src/features/auth/domain/password.ts`: パスワードの入力と文字種の規則(空でなく、半角英数記号のみ)。長さと強さは認証サービスが拒否する。最小長と最大長の数値は、規則の文面に要るため、ここだけが持つ。規則の文面は一覧が持ち、入力の検証と弱いパスワードの拒否が同じ文面を使う。
 - `src/features/auth/application/call-result.ts`: 認証サービスへの頼みごとの結果(`CallResult`)。
@@ -83,6 +83,6 @@
 
 ## 制約と未対応
 
-- 同期とラウンドの取得の手続きは、起動地点が生成した通信の可否を約束(`Connectivity`)で受け取る。
+- 同期とラウンドの取得の手続きは、起動地点が生成した通信の可否を約束(`Connectivity`)で受け取る。サインイン、サインアップ、パスワード再設定の送信の手続き(コードの送付、確認、パスワード設定を含む)も、入口が生成した`Connectivity`を、送信の直前の読み取り(`isOffline()`を1回。購読しない)に使う。
 - `src/proxy.ts`の`config.matcher`は、経路を文字列で再掲する(Next.jsの静的な設定のため)。`proxy.test.ts`が、`ROUNDS_PATH`とその下で一致することを確かめる。
 - 遷移が投げたときの扱いは、サインイン、サインアップ、再設定では扱わない。

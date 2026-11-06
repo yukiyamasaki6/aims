@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
+import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import {
@@ -38,6 +39,7 @@ function setup() {
     authenticator,
     pageNavigation: fake.pageNavigation,
     clock: createManualClock(),
+    connectivity: createFakeConnectivity(),
   });
   return {
     procedure,
