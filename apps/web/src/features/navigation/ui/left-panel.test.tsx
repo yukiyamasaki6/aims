@@ -126,4 +126,45 @@ describe("LeftPanel", () => {
       );
     });
   });
+
+  describe("個人リンクの押下", () => {
+    // 個人リンクは2つの枠に1つずつあり、DOM順で先のドロワーの枠を押す。
+    function personalLink() {
+      return screen.getAllByRole("link", {
+        name: navigationText("leftPanelPersonal"),
+      })[0];
+    }
+
+    it("ハンバーガーでドロワーを開き、個人リンクを押すと、ドロワーが閉じる", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<LeftPanel signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
+      await user.click(openMenuButton());
+
+      // When
+      await user.click(personalLink());
+
+      // Then
+      expect(closeMenuButtons()).toHaveLength(1);
+    });
+
+    it("列のボタンで格納した後に個人リンクを押しても、列のボタンは開くのまま変わらない", async () => {
+      // Given
+      const user = userEvent.setup();
+      render(<LeftPanel signOut={null} />, {
+        wrapper: IntlTestProvider,
+      });
+      await user.click(wideToggle());
+
+      // When
+      await user.click(personalLink());
+
+      // Then
+      expect(wideToggle()).toHaveAccessibleName(
+        navigationText("leftPanelExpand"),
+      );
+    });
+  });
 });

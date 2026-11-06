@@ -210,6 +210,26 @@ test.describe("認証済み", () => {
     ).toBeVisible();
   });
 
+  test("縦向きで狭い画面でレフトパネルを展開して個人リンクを押すと、ラウンド一覧へ移動し、レフトパネルが格納される", async ({
+    page,
+  }) => {
+    // 縦向きで狭い画面でラウンド作成画面を開き、ハンバーガーボタンでレフトパネルを展開する。
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await page.goto("/rounds/new");
+    await waitForHydration(page);
+    await page
+      .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
+      .click();
+    await expectPanelExpanded(page);
+
+    // 個人リンクを押して、ラウンド一覧へ移り、レフトパネルが格納されていることを確かめる。
+    await page
+      .getByRole("link", { name: navigationText("leftPanelPersonal") })
+      .click();
+    await expect(page).toHaveURL(/\/rounds$/);
+    await expectPanelCollapsed(page);
+  });
+
   test.describe("レフトパネルの開閉", () => {
     test("縦向きで狭い画面では、レフトパネルが格納された状態で始まり、ハンバーガーボタンで展開し、閉じるボタンで格納する", async ({
       page,

@@ -18,22 +18,26 @@ function useOpenState() {
 // signOut: 下端に置くサインアウトの操作。入口が渡す。2つの枠に1つずつ置かれる。
 export function LeftPanel({ signOut }: { signOut: ReactNode }) {
   const { drawerOpen, setDrawerOpen, railOpen, setRailOpen } = useOpenState();
+  // 個人リンクの押下は、ドロワーの値だけを閉にする。列の値は変えない。
+  const closeDrawer = () => setDrawerOpen(false);
 
   return (
     <>
       <MobileMenuBar onOpen={() => setDrawerOpen(true)} />
 
-      {drawerOpen && <Scrim onClose={() => setDrawerOpen(false)} />}
+      {drawerOpen && <Scrim onClose={closeDrawer} />}
 
       <DrawerFrame
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={closeDrawer}
+        onNavigate={closeDrawer}
         signOut={signOut}
       />
 
       <RailFrame
         open={railOpen}
         onToggle={() => setRailOpen(!railOpen)}
+        onNavigate={closeDrawer}
         signOut={signOut}
       />
     </>
@@ -43,10 +47,12 @@ export function LeftPanel({ signOut }: { signOut: ReactNode }) {
 function DrawerFrame({
   open,
   onClose,
+  onNavigate,
   signOut,
 }: {
   open: boolean;
   onClose: () => void;
+  onNavigate: () => void;
   signOut: ReactNode;
 }) {
   const t = useTranslations("navigation");
@@ -68,7 +74,7 @@ function DrawerFrame({
         </button>
       </div>
 
-      <PanelBody collapsed={false} signOut={signOut} />
+      <PanelBody collapsed={false} onNavigate={onNavigate} signOut={signOut} />
     </aside>
   );
 }
@@ -76,10 +82,12 @@ function DrawerFrame({
 function RailFrame({
   open,
   onToggle,
+  onNavigate,
   signOut,
 }: {
   open: boolean;
   onToggle: () => void;
+  onNavigate: () => void;
   signOut: ReactNode;
 }) {
   return (
@@ -99,7 +107,7 @@ function RailFrame({
         <ToggleButton open={open} onClick={onToggle} />
       </div>
 
-      <PanelBody collapsed={!open} signOut={signOut} />
+      <PanelBody collapsed={!open} onNavigate={onNavigate} signOut={signOut} />
     </aside>
   );
 }
@@ -112,12 +120,14 @@ function LogoLink({ className }: { className?: string }) {
   );
 }
 
-// collapsed: 縦の列の格納時に、中身を隠す。
+// collapsed: 縦の列の格納時に、中身を隠す。onNavigate: 個人リンクの押下で呼ぶ。
 function PanelBody({
   collapsed,
+  onNavigate,
   signOut,
 }: {
   collapsed: boolean;
+  onNavigate: () => void;
   signOut: ReactNode;
 }) {
   const t = useTranslations("navigation");
@@ -128,6 +138,7 @@ function PanelBody({
       >
         <Link
           href={ROUNDS_PATH}
+          onClick={onNavigate}
           className="rounded-lg bg-muted px-3 py-2 text-sm font-medium"
         >
           {t("leftPanelPersonal")}
