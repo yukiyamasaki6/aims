@@ -8,73 +8,123 @@ import { LogoImage } from "@/components/logo-image";
 import { cn } from "@/lib/utils";
 import { HOME_PATH, ROUNDS_PATH } from "@/routes";
 
+// 画面の幅768px未満のドロワーと、768px以上の縦の列は別の枠で、それぞれの開閉を持つ。初期値は固定で、幅で分岐しない。
 function useOpenState() {
-  // 利用者が操作するまではnullで、表示ごとの初期状態に従う。操作後は全表示で共有する。
-  const [userOpen, setUserOpen] = useState<boolean | null>(null);
-  return {
-    wideOpen: userOpen ?? true,
-    compactOpen: userOpen ?? false,
-    operate: setUserOpen,
-  };
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [railOpen, setRailOpen] = useState(true);
+  return { drawerOpen, setDrawerOpen, railOpen, setRailOpen };
 }
 
-// signOut: 下端に置くサインアウトの操作。入口が渡す。
+// signOut: 下端に置くサインアウトの操作。入口が渡す。2つの枠に1つずつ置かれる。
 export function LeftPanel({ signOut }: { signOut: ReactNode }) {
-  const { wideOpen, compactOpen, operate } = useOpenState();
+  const { drawerOpen, setDrawerOpen, railOpen, setRailOpen } = useOpenState();
 
   return (
     <>
-      <MobileMenuBar
-        open={compactOpen}
-        onOpen={() => operate(true)}
-        onClose={() => operate(false)}
+      <MobileMenuBar onOpen={() => setDrawerOpen(true)} />
+
+      {drawerOpen && <Scrim onClose={() => setDrawerOpen(false)} />}
+
+      <DrawerFrame
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        signOut={signOut}
       />
 
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 -translate-x-full flex-col overflow-y-auto border-r bg-card text-card-foreground side:static side:z-auto side:translate-x-0",
-          "transition-transform duration-200 side:transition-[width]",
-          compactOpen && "translate-x-0",
-          wideOpen ? "md:w-56" : "md:w-14",
-          compactOpen ? "max-md:landscape:w-56" : "max-md:landscape:w-14",
-        )}
-      >
-        <PanelHeader
-          wideOpen={wideOpen}
-          compactOpen={compactOpen}
-          onCloseMobile={() => operate(false)}
-          onToggleWide={() => operate(!wideOpen)}
-          onToggleCompact={() => operate(!compactOpen)}
-        />
-
-        <PanelBody
-          wideOpen={wideOpen}
-          compactOpen={compactOpen}
-          signOut={signOut}
-        />
-      </aside>
+      <RailFrame
+        open={railOpen}
+        onToggle={() => setRailOpen(!railOpen)}
+        signOut={signOut}
+      />
     </>
   );
 }
 
-function PanelBody({
-  wideOpen,
-  compactOpen,
+function DrawerFrame({
+  open,
+  onClose,
   signOut,
 }: {
-  wideOpen: boolean;
-  compactOpen: boolean;
+  open: boolean;
+  onClose: () => void;
+  signOut: ReactNode;
+}) {
+  const t = useTranslations("navigation");
+  return (
+    <aside
+      className={cn(
+        "fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col overflow-y-auto border-r bg-card text-card-foreground transition-transform duration-200 md:hidden",
+        open && "translate-x-0",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2 p-4">
+        <LogoLink />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t("leftPanelCloseMenu")}
+        >
+          <X className="size-5" />
+        </button>
+      </div>
+
+      <PanelBody collapsed={false} signOut={signOut} />
+    </aside>
+  );
+}
+
+function RailFrame({
+  open,
+  onToggle,
+  signOut,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  signOut: ReactNode;
+}) {
+  return (
+    <aside
+      className={cn(
+        "flex shrink-0 flex-col overflow-y-auto border-r bg-card text-card-foreground transition-[width] duration-200 max-md:hidden",
+        open ? "w-56" : "w-14",
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-center justify-between gap-2 p-4",
+          !open && "justify-center",
+        )}
+      >
+        <LogoLink className={cn(!open && "hidden")} />
+        <ToggleButton open={open} onClick={onToggle} />
+      </div>
+
+      <PanelBody collapsed={!open} signOut={signOut} />
+    </aside>
+  );
+}
+
+function LogoLink({ className }: { className?: string }) {
+  return (
+    <Link href={HOME_PATH} className={cn("shrink-0", className)}>
+      <LogoImage />
+    </Link>
+  );
+}
+
+// collapsed: 縦の列の格納時に、中身を隠す。
+function PanelBody({
+  collapsed,
+  signOut,
+}: {
+  collapsed: boolean;
   signOut: ReactNode;
 }) {
   const t = useTranslations("navigation");
   return (
     <>
       <nav
-        className={cn(
-          "flex flex-1 flex-col gap-1 px-4",
-          !wideOpen && "md:hidden",
-          !compactOpen && "max-md:landscape:hidden",
-        )}
+        className={cn("flex flex-1 flex-col gap-1 px-4", collapsed && "hidden")}
       >
         <Link
           href={ROUNDS_PATH}
@@ -84,122 +134,49 @@ function PanelBody({
         </Link>
       </nav>
 
-      <div
-        className={cn(
-          "border-t p-4",
-          !wideOpen && "md:hidden",
-          !compactOpen && "max-md:landscape:hidden",
-        )}
-      >
-        {signOut}
-      </div>
+      <div className={cn("border-t p-4", collapsed && "hidden")}>{signOut}</div>
     </>
   );
 }
 
-function MobileMenuBar({
-  open,
-  onOpen,
-  onClose,
-}: {
-  open: boolean;
-  onOpen: () => void;
-  onClose: () => void;
-}) {
+// ドロワーの開き口。1つの要素で、縦向きは上端の横のバー、横向きは左端の縦の帯(ハンバーガーだけ)の形になる。
+function MobileMenuBar({ onOpen }: { onOpen: () => void }) {
   const t = useTranslations("navigation");
   return (
-    <>
-      <div className="flex shrink-0 items-center border-b p-3 side:hidden">
-        <button
-          type="button"
-          onClick={onOpen}
-          aria-label={t("leftPanelOpenMenu")}
-          className="flex items-center gap-2 text-sm"
-        >
-          <Menu className="size-5" />
-          {t("leftPanelPersonal")}
-        </button>
-      </div>
-
-      {open && (
-        <button
-          type="button"
-          aria-label={t("leftPanelCloseMenu")}
-          onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/40 side:hidden"
-        />
-      )}
-    </>
-  );
-}
-
-function PanelHeader({
-  wideOpen,
-  compactOpen,
-  onCloseMobile,
-  onToggleWide,
-  onToggleCompact,
-}: {
-  wideOpen: boolean;
-  compactOpen: boolean;
-  onCloseMobile: () => void;
-  onToggleWide: () => void;
-  onToggleCompact: () => void;
-}) {
-  const t = useTranslations("navigation");
-  return (
-    <div
-      className={cn(
-        "flex items-center justify-between gap-2 p-4",
-        !wideOpen && "md:justify-center",
-        !compactOpen && "max-md:landscape:justify-center",
-      )}
-    >
-      <Link
-        href={HOME_PATH}
-        className={cn(
-          "shrink-0",
-          !wideOpen && "md:hidden",
-          !compactOpen && "max-md:landscape:hidden",
-        )}
-      >
-        <LogoImage />
-      </Link>
+    <div className="flex shrink-0 items-center border-b p-3 md:hidden max-md:landscape:w-14 max-md:landscape:items-start max-md:landscape:justify-center max-md:landscape:border-r max-md:landscape:border-b-0">
       <button
         type="button"
-        onClick={onCloseMobile}
-        aria-label={t("leftPanelCloseMenu")}
-        className="side:hidden"
+        onClick={onOpen}
+        aria-label={t("leftPanelOpenMenu")}
+        className="flex items-center gap-2 text-sm"
       >
-        <X className="size-5" />
+        <Menu className="size-5" />
+        <span className="max-md:landscape:hidden">
+          {t("leftPanelPersonal")}
+        </span>
       </button>
-      <ToggleButton
-        open={wideOpen}
-        onClick={onToggleWide}
-        testId="left-panel-toggle-wide"
-        className="md:block"
-      />
-      <ToggleButton
-        open={compactOpen}
-        onClick={onToggleCompact}
-        testId="left-panel-toggle-compact"
-        className="max-md:landscape:block"
-      />
     </div>
   );
 }
 
-// 広い画面と横向きかつ狭い画面でボタンを分け、表示の切替をCSSだけで合わせる。
+function Scrim({ onClose }: { onClose: () => void }) {
+  const t = useTranslations("navigation");
+  return (
+    <button
+      type="button"
+      aria-label={t("leftPanelCloseMenu")}
+      onClick={onClose}
+      className="fixed inset-0 z-40 bg-black/40 md:hidden"
+    />
+  );
+}
+
 function ToggleButton({
   open,
   onClick,
-  testId,
-  className,
 }: {
   open: boolean;
   onClick: () => void;
-  testId: string;
-  className: string;
 }) {
   const t = useTranslations("navigation");
   return (
@@ -207,8 +184,8 @@ function ToggleButton({
       type="button"
       onClick={onClick}
       aria-label={open ? t("leftPanelCollapse") : t("leftPanelExpand")}
-      data-testid={testId}
-      className={cn("hidden shrink-0", className)}
+      data-testid="left-panel-toggle-wide"
+      className="shrink-0"
     >
       {open ? (
         <ChevronLeft className="size-5" />

@@ -215,7 +215,7 @@ test.describe("認証済み", () => {
       await expectPanelExpanded(page);
     });
 
-    test("横向きで狭い画面では、レフトパネルが格納された状態で始まり、開くボタンで展開し、格納ボタンで格納する", async ({
+    test("横向きで狭い画面では、レフトパネルが格納された状態で始まり、ハンバーガーボタンで展開し、閉じるボタンで格納する", async ({
       page,
     }) => {
       // 横向きで狭い画面でラウンド一覧を開き、レフトパネルが格納されていることを確かめる。
@@ -223,15 +223,17 @@ test.describe("認証済み", () => {
       await openRounds(page);
       await expectPanelCollapsed(page);
 
-      // 開くボタンを押して、レフトパネルを展開する。
+      // 左端の縦の帯のハンバーガーボタンを押して、レフトパネルを展開する。
       await page
-        .getByRole("button", { name: navigationText("leftPanelExpand") })
+        .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
         .click();
       await expectPanelExpanded(page);
 
-      // 格納ボタンを押して、レフトパネルを格納する。
+      // 閉じるボタンを押して、レフトパネルを格納する。
+      // 背景も同じ名前のボタンで、パネルの中の閉じるボタンはDOMで後にある。
       await page
-        .getByRole("button", { name: navigationText("leftPanelCollapse") })
+        .getByRole("button", { name: navigationText("leftPanelCloseMenu") })
+        .last()
         .click();
       await expectPanelCollapsed(page);
     });
@@ -301,6 +303,29 @@ test.describe("認証済み", () => {
       await expectPanelCollapsed(page);
 
       // 広い画面へ戻して、展開されずに格納されたままであることを確かめる。
+      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
+      await expectPanelCollapsed(page);
+    });
+
+    test("広い画面でレフトパネルを格納した後、縦向きで狭い画面でドロワーを展開しても、広い画面へ戻すと、広い画面のレフトパネルは格納されたままである", async ({
+      page,
+    }) => {
+      // 広い画面でラウンド一覧を開き、格納ボタンでレフトパネルを格納する。
+      await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
+      await openRounds(page);
+      await page
+        .getByRole("button", { name: navigationText("leftPanelCollapse") })
+        .click();
+      await expectPanelCollapsed(page);
+
+      // 縦向きで狭い画面へ変えて、ハンバーガーボタンでドロワーを展開し、中身が見えることを確かめる。
+      await page.setViewportSize(MOBILE_VIEWPORT);
+      await page
+        .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
+        .click();
+      await expectPanelExpanded(page);
+
+      // 広い画面へ戻して、広い画面のレフトパネルが格納されたままであることを確かめる。
       await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
       await expectPanelCollapsed(page);
     });

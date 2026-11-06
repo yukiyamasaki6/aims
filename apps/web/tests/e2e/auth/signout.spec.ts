@@ -10,6 +10,9 @@ const offlinePwaText = translatorFor("offlinePwa");
 // 共有の認証状態を汚さないよう使い捨てユーザーで専用のセッションを使う。
 test.use({ storageState: { cookies: [], origins: [] } });
 
+// ドロワーの枠へ切り替わる幅768px未満の縦向き。
+const MOBILE_VIEWPORT = { width: 375, height: 667 };
+
 // supabase/config.tomlのjwt_expiry（3600秒）を越える時間。
 const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
 
@@ -56,6 +59,22 @@ test("別の画面でサインアウトを確認すると、この端末のセ�
   // ラウンド一覧を開き直して、この端末のセッションが終了したことを確かめる。
   await page.goto("/rounds");
   await expect(page).toHaveURL(/\/signin/);
+});
+
+test("広い画面でサインアウトの確認を開いたまま縦向きで狭い画面へ変えても、確認が開いたままで、確認するとサインイン画面へ移動する", async ({
+  page,
+}) => {
+  const { confirmButton } = await signInAndOpenDialog(page, "signout-resize", {
+    path: "/rounds/new",
+  });
+
+  // 縦向きで狭い画面へ変えて、確認が開いたままであることを確かめる。
+  await page.setViewportSize(MOBILE_VIEWPORT);
+  await expect(confirmButton).toBeVisible();
+
+  // サインアウトを確認して、サインイン画面へ移動する。
+  await confirmButton.click();
+  await expect(page).toHaveURL(/\/signin$/);
 });
 
 test("オフラインでサインアウトを確認すると、この端末のセッションが終了し、オフライン画面が表示される", async ({
