@@ -3,7 +3,7 @@ import { AppLogo } from "@/components/app-logo";
 import { StartButton } from "./start-button";
 
 // 紹介画面。アプリ名、説明文、左上のロゴ、開始ボタンを表示する。認証状態によらず同じ内容である。
-export function IntroScreen({ startHref }: { startHref: string }) {
+export function IntroScreen() {
   const t = useTranslations("navigation");
   return (
     <>
@@ -17,7 +17,7 @@ export function IntroScreen({ startHref }: { startHref: string }) {
             {t("introDescription")}
           </p>
         </div>
-        <StartButton href={startHref} />
+        <StartButton />
       </main>
     </>
   );

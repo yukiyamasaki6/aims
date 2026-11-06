@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useState } from "react";
 import { LogoImage } from "@/components/logo-image";
 import { cn } from "@/lib/utils";
+import { HOME_PATH, ROUNDS_PATH } from "@/routes";
 
 // 操作の直後だけ開閉のtransitionを有効にする時間。transitionの200msより少し長い。
 const ANIMATE_MS = 250;
@@ -36,15 +37,8 @@ function useOpenState() {
   };
 }
 
-// personalHref: 個人リンクの行き先。入口が渡す。
 // signOut: 下端に置くサインアウトの操作。入口が渡す。
-export function LeftPanel({
-  personalHref,
-  signOut,
-}: {
-  personalHref: string;
-  signOut: ReactNode;
-}) {
+export function LeftPanel({ signOut }: { signOut: ReactNode }) {
   const { wideOpen, compactOpen, animate, operate } = useOpenState();
 
   return (
@@ -76,7 +70,6 @@ export function LeftPanel({
         <PanelBody
           wideOpen={wideOpen}
           compactOpen={compactOpen}
-          personalHref={personalHref}
           signOut={signOut}
         />
       </aside>
@@ -87,12 +80,10 @@ export function LeftPanel({
 function PanelBody({
   wideOpen,
   compactOpen,
-  personalHref,
   signOut,
 }: {
   wideOpen: boolean;
   compactOpen: boolean;
-  personalHref: string;
   signOut: ReactNode;
 }) {
   const t = useTranslations("navigation");
@@ -106,7 +97,7 @@ function PanelBody({
         )}
       >
         <Link
-          href={personalHref}
+          href={ROUNDS_PATH}
           className="rounded-lg bg-muted px-3 py-2 text-sm font-medium"
         >
           {t("leftPanelPersonal")}
@@ -185,7 +176,7 @@ function PanelHeader({
       )}
     >
       <Link
-        href="/"
+        href={HOME_PATH}
         className={cn(
           "shrink-0",
           !wideOpen && "md:hidden",

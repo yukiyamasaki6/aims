@@ -1,12 +1,12 @@
 import path from "node:path";
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
-import { shellUrlOf } from "./src/features/offline-pwa/domain/offline-routes";
 import {
   ROUND_FRAME_PATH,
   ROUND_FRAME_PATHS,
   ROUNDS_PATH,
-} from "./src/features/rounds/domain/round-routes";
+  shellUrlOf,
+} from "./src/routes";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 // ローカルSupabase CLIは常に127.0.0.1で公開される。

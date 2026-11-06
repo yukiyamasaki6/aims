@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { createTranslator } from "next-intl";
-import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import { intlConfig } from "@/i18n/messages";
+import { ROUNDS_PATH } from "@/routes";
 
 export default function manifest(): MetadataRoute.Manifest {
   const t = createTranslator({ ...intlConfig, namespace: "shared" });

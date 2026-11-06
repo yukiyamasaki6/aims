@@ -6,8 +6,8 @@ import { type FormEvent, useRef, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { RESET_PASSWORD_PATH, SIGN_UP_PATH } from "@/routes";
 import type { SignIn } from "../application/sign-in";
-import { RESET_PASSWORD_PATH, SIGN_UP_PATH } from "../domain/auth-routes";
 import {
   initialSignInFlow,
   type SignInFlow,

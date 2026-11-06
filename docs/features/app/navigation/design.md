@@ -26,21 +26,21 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 
 ## 構成とデータの流れ
 
-- `src/proxy.ts`(要求の入口): `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に、`updateSession` が返すサインインしているかから、認証の機能の経路の規則(`features/auth/domain/auth-routes.ts` の `redirectFor`)を呼び、行き先があればリダイレクトし、無ければ `updateSession` の応答を返す。`config.matcher` は Next.js がビルド時に静的に読み、定数を参照できないため、経路を文字列で再掲し、`proxy.test.ts` が `ROUNDS_PATH` との一致を確かめる。`/` は対象外である。
+- `src/proxy.ts`(要求の入口): `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に、`updateSession` が返すサインインしているかから、認証の機能の経路の規則(`features/auth/domain/auth-routes.ts` の `redirectFor`)を呼び、行き先があればリダイレクトし、無ければ `updateSession` の応答を返す。`config.matcher` は Next.js がビルド時に静的に読み、定数を参照できないため、経路を文字列で再掲し、`proxy.test.ts` が経路表の `ROUNDS_PATH` との一致を確かめる。`/` は対象外である。
 - `src/lib/supabase/infrastructure/session.ts`(共有の技術の実装): `updateSession` が要求ごとにセッションを更新し、`getClaims`(端末内でトークンの署名と期限を検証する)でサインインしているかと、更新したcookieを書いた応答を返す。経路の規則は持たない。規則は認証の機能の `redirectFor` が持ち、`proxy.ts` が呼ぶ。
   - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
   - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。`/signin` は有効な遷移元があればそこへ送る（`auth/signin`）。
 - `src/features/auth/application/session.ts` の手続き`createSession`の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、マウント時の`unauthenticated`）と、`/signin`への遷移（`replace`。今の場所を遷移元に付ける）を持つ。確かめた結果の喪失の定義(`lostByStatus`)は`domain/auth-change.ts`、遷移の規則（遷移元、サインアウトの実行中は移らない）は`domain/session-end-flow.ts`。`(main)`のレイアウトが、手続きと実装を生成して見張りを始める。
-- `src/app/page.tsx`(画面の入口): 静的な紹介画面の入口。認証の経路の定数 `SIGN_UP_PATH` を読み、開始の行き先として紹介画面へ渡す。
-- `src/features/navigation/ui/intro-screen.tsx`(UI層): 紹介画面。アプリ名、説明文、左上のロゴ、開始ボタンを表示し、受け取った行き先を開始ボタンへ渡す。
-- `src/features/navigation/ui/start-button.tsx`(UI層): 開始ボタン。受け取った行き先へのリンクで、状態を持たない。
+- `src/app/page.tsx`(画面の入口): 静的な紹介画面の入口。紹介画面を描くだけで、開始の行き先は渡さない。
+- `src/features/navigation/ui/intro-screen.tsx`(UI層): 紹介画面。アプリ名、説明文、左上のロゴ、開始ボタンを表示する。
+- `src/features/navigation/ui/start-button.tsx`(UI層): 開始ボタン。経路表(`src/routes.ts`)の `SIGN_UP_PATH` へのリンクで、状態を持たない。
 - `src/features/navigation/ui/navigation-messages.ts`(UI層): 紹介画面と左パネルの文言の一覧(名前空間`navigation`)。部品は`useTranslations("navigation")`で文言を得る。
-- 遷移の約束(アプリ全体): ナビゲーションの機能は遷移の約束を持たない。開始の行き先は、入口が渡す行き先(href)へ、`start-button.tsx` のリンクで遷移する。ルーターで進む遷移は共有の技術の `PageNavigation`(`src/lib/page-navigation/contract/page-navigation.ts`。認証のサインイン、サインアップとラウンドの開始、完了、削除して離れる、一覧へ戻るが使う)、ページ全体の読み込みの遷移は認証の `PageLoad`、`PageReplace`、遷移元の読み出しは認証の `ReturnToReader` である。
-- `src/app/(main)/layout.tsx`(画面の入口): 認証が要る画面の集合の枠。セッションの手続きと実装を生成して見張りを始め、個人リンクの行き先として `ROUNDS_PATH` を渡したレフトパネルと、サインアウトの部品(`features/auth/ui/sign-out-button.tsx`)を描く。
-- `src/components/app-logo.tsx`(共有の画面部品)が、認証画面・`/`・`/offline` の左上のロゴである。
+- 遷移の約束(アプリ全体): ナビゲーションの機能は遷移の約束を持たない。開始の行き先は、経路表の `SIGN_UP_PATH` へ、`start-button.tsx` のリンクで遷移する。ルーターで進む遷移は共有の技術の `PageNavigation`(`src/lib/page-navigation/contract/page-navigation.ts`。認証のサインイン、サインアップとラウンドの開始、完了、削除して離れる、一覧へ戻るが使う)、ページ全体の読み込みの遷移は認証の `PageLoad`、`PageReplace`、遷移元の読み出しは認証の `ReturnToReader` である。
+- `src/app/(main)/layout.tsx`(画面の入口): 認証が要る画面の集合の枠。セッションの手続きと実装を生成して見張りを始め、レフトパネルと、サインアウトの部品(`features/auth/ui/sign-out-button.tsx`)を描く。
+- `src/components/app-logo.tsx`(共有の画面部品)が、認証画面・`/`・`/offline` の左上のロゴである。ロゴの行き先は、経路表(`src/routes.ts`)の `HOME_PATH`(`/`)で、`left-panel.tsx` のロゴも同じである。
 - `src/components/logo-image.tsx`(共有の画面部品)が、文字付きロゴの画像（`public/logo.svg`）を表示する。代替テキスト「AIMS」がロゴのリンクの名前になる。`app-logo.tsx` と `left-panel.tsx` が使う。
 - `public/logo.svg` は、`scripts/generate-icon.mjs` が、マークと同じ値と、`geist` のGeist SansのBoldの字形から生成する。文字は図形にし、フォントを参照しない。READMEの冒頭も同じファイルを表示する。
-- `src/features/navigation/ui/left-panel.tsx`(UI層)が開閉（帯とサイドで共有する1つの状態）とリンクを持ち、個人リンクの行き先(`personalHref`)と、下端に、入口が渡すサインアウトの部品（`features/auth/ui/sign-out-button.tsx`）を描く。認証状態は持たず、常に全内容を表示する。配置と開閉ボタンの表示はCSSだけで決める（`side`variant=幅が広い または 横向き、`max-md:landscape:`=横向きかつ狭い）。開閉ボタンは広い用と横向きかつ狭い用の2つを置き、CSSで出し分ける。操作の直後だけtransitionを有効にする`animate`状態を持つ。入口のガードは `proxy.ts`、表示中の喪失は`(main)`のレイアウトが始める見張りが担う。
+- `src/features/navigation/ui/left-panel.tsx`(UI層)が開閉（帯とサイドで共有する1つの状態）とリンクを持つ。個人リンクは経路表(`src/routes.ts`)の `ROUNDS_PATH` を向き、下端に、入口が渡すサインアウトの部品（`features/auth/ui/sign-out-button.tsx`）を描く。認証状態は持たず、常に全内容を表示する。配置と開閉ボタンの表示はCSSだけで決める（`side`variant=幅が広い または 横向き、`max-md:landscape:`=横向きかつ狭い）。開閉ボタンは広い用と横向きかつ狭い用の2つを置き、CSSで出し分ける。操作の直後だけtransitionを有効にする`animate`状態を持つ。入口のガードは `proxy.ts`、表示中の喪失は`(main)`のレイアウトが始める見張りが担う。
 - `src/lib/supabase/infrastructure/client.ts`(共有の技術の実装): ブラウザの接続。入口が、接続を作る関数として認証の実装へ渡す。
 - `src/lib/utils.ts`(共有の画面部品): クラス名の結合。
 - 各ファイルの用語は方針(`docs/architecture.md`)の既定の置き場に従う。画面のパッケージは `react`、`next-intl`、`next/link`、`next/image`、`lucide-react`、`clsx`、`tailwind-merge`、`class-variance-authority`、`@base-ui/react`、その他のパッケージは `@supabase/ssr`、`@supabase/supabase-js`、`next/server` である。

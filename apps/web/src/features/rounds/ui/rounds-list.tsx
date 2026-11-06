@@ -6,8 +6,8 @@ import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { NEW_ROUND_PATH, roundPath } from "@/routes";
 import type { LoadedRoundsList, RoundListItem } from "../domain/round-list";
-import { NEW_ROUND_PATH, roundPath } from "../domain/round-routes";
 import {
   type RoundsListView,
   roundsListView,

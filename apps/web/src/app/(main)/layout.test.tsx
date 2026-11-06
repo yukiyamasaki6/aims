@@ -3,9 +3,9 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { ROUNDS_PATH } from "@/routes";
 import { RootClientEntry } from "../root-client-entry";
 import MainLayout from "./layout";
 

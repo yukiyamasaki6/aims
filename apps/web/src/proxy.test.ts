@@ -1,20 +1,19 @@
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { redirectFor } from "@/features/auth/domain/auth-routes";
 import {
-  RESET_PASSWORD_PATH,
-  redirectFor,
-  SIGN_IN_PATH,
-  SIGN_UP_PATH,
-} from "@/features/auth/domain/auth-routes";
-import {
+  HOME_PATH,
+  MANIFEST_PATH,
   OFFLINE_PATH,
-  shellUrlOf,
-} from "@/features/offline-pwa/domain/offline-routes";
-import {
+  RESET_PASSWORD_PATH,
   ROUND_FRAME_PATHS,
   ROUNDS_PATH,
-} from "@/features/rounds/domain/round-routes";
+  SIGN_IN_PATH,
+  SIGN_UP_PATH,
+  SW_PATH,
+  shellUrlOf,
+} from "@/routes";
 import { config, proxy } from "./proxy";
 
 // Supabaseクライアントは外部サービスとの境界のため、getClaimsの結果を制御できるスタブで模す。
@@ -46,10 +45,10 @@ describe("proxy", () => {
     });
 
     it.each([
-      "/",
+      HOME_PATH,
       OFFLINE_PATH,
-      "/sw.js",
-      "/manifest.webmanifest",
+      SW_PATH,
+      MANIFEST_PATH,
       "/_next/static/chunks/main.js",
       "/signin/extra",
       "/roundsx",
@@ -74,8 +73,10 @@ describe("proxy", () => {
       "/rounds/new",
       ROUNDS_PATH,
       `${ROUNDS_PATH}/1`,
-      "/",
+      HOME_PATH,
       OFFLINE_PATH,
+      SW_PATH,
+      MANIFEST_PATH,
       "/roundsx",
       "/signin/extra",
       ...ROUND_FRAME_PATHS.map(shellUrlOf),

@@ -8,11 +8,11 @@ const navigationText = translatorFor("navigation");
 
 describe("StartButton", () => {
   // 押して移ることはE2E(navigation.spec.ts)が確かめる。
-  it("渡された行き先を、開始リンクの行き先にする", () => {
+  it("開始リンクは、サインアップの画面を向く", () => {
     // Given
 
     // When
-    render(<StartButton href="/signup" />, { wrapper: IntlTestProvider });
+    render(<StartButton />, { wrapper: IntlTestProvider });
 
     // Then
     expect(

@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  ROUND_FRAME_PATH,
-  ROUND_FRAME_PATHS,
   roundFramePathOf,
   roundIdOfPath,
 } from "@/features/rounds/domain/round-routes";
+import { ROUND_FRAME_PATH, ROUND_FRAME_PATHS } from "@/routes";
 
 const ID = "123e4567-e89b-12d3-a456-426614174000";
 
@@ -109,16 +108,5 @@ describe("roundFramePathOf", () => {
 
     // Then
     for (const frame of frames) expect(ROUND_FRAME_PATHS).toContain(frame);
-  });
-});
-
-describe("ROUND_FRAME_PATHS", () => {
-  it("枠の3画面(一覧、作成、詳細)の経路を持つ", () => {
-    // Given
-    // When
-    const paths = ROUND_FRAME_PATHS;
-
-    // Then
-    expect(paths).toEqual(["/rounds", "/rounds/new", "/rounds/_"]);
   });
 });

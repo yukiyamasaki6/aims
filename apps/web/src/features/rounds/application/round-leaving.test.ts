@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
+import { ROUNDS_PATH } from "@/routes";
 import {
   roundDisabledOperation,
   statusOperation,
 } from "../domain/round-progress";
-import { ROUNDS_PATH } from "../domain/round-routes";
 import { roundStreamId } from "../domain/sync-events";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 import { createRoundDeletion } from "./round-deletion";

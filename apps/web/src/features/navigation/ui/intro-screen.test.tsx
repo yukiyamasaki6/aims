@@ -7,13 +7,11 @@ import { IntroScreen } from "./intro-screen";
 const navigationText = translatorFor("navigation");
 
 describe("IntroScreen", () => {
-  it("アプリ名と説明文、開始リンク、AIMSロゴを表示し、開始リンクは渡された行き先を向く", () => {
+  it("アプリ名と説明文、開始リンク、AIMSロゴを表示し、開始リンクはサインアップの画面を向く", () => {
     // Given
 
     // When
-    render(<IntroScreen startHref="/signup-x" />, {
-      wrapper: IntlTestProvider,
-    });
+    render(<IntroScreen />, { wrapper: IntlTestProvider });
 
     // Then
     expect(screen.getByRole("heading", { name: "AIMS" })).toBeInTheDocument();
@@ -22,7 +20,7 @@ describe("IntroScreen", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: navigationText("startButton") }),
-    ).toHaveAttribute("href", "/signup-x");
+    ).toHaveAttribute("href", "/signup");
     expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();
   });
 });

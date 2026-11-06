@@ -50,7 +50,7 @@
 | `features/rounds/domain/rounds-list-view.ts` | ドメイン層(ドメインサービス) | 一覧の重ね合わせと表示の内容の決定 |
 | `features/rounds/domain/preset.ts`、`preset-list-view.ts`、`round-start.ts`、`write-result.ts` | ドメイン層 | プリセットの値と並び・振り分け・除去、作成の画面の表示の決定、プリセットの構成からの、IDを除いた作成の内容の組み立て、書き込みの結果の種類と削除、保存の失敗の文言 |
 | `features/rounds/domain/shot-pointer.ts`、`score-history.ts`、`shot-operations.ts`、`round-progress.ts`、`distance-config.ts`、`distance-operations.ts`、`target-face-filter.ts`、`preset-save.ts`、`ring-color.ts`、`shot-id.ts` | ドメイン層 | 詳細の画面の規則。指している矢の遷移、取り消しの列、矢の操作の組み立て、完了の確認と状態を変える操作、距離の設定の検証と距離の操作、的の絞り込み、保存するプリセットの内容、リング色、時刻順の矢のID(時刻と乱数は引数) |
-| `features/rounds/domain/round-routes.ts` | ドメイン層(値オブジェクト) | ラウンドの画面の経路(`ROUNDS_PATH`、`NEW_ROUND_PATH`、`roundPath`、経路からIDを読む`roundIdOfPath`) |
+| `features/rounds/domain/round-routes.ts` | ドメイン層(値オブジェクト) | ラウンドの画面の経路の判定・変換(`roundFramePathOf`、経路からIDを読む`roundIdOfPath`)。経路の定数(`ROUNDS_PATH`、`NEW_ROUND_PATH`、`roundPath`)は経路表(`src/routes.ts`)が持つ |
 | `features/rounds/domain/open-requests.ts`、`list-requests.ts` | ドメイン層(集約) | 取り直しの依頼の規則。開く依頼は、ラウンドごとの依頼の番号、待っている依頼、記録の権利、結果の分類を持つ。一覧の依頼は、依頼の番号、成否、実行に含めた依頼を持つ |
 | `features/rounds/domain/fetch-status.ts` | ドメイン層(値オブジェクト) | 取得の結果の型(失敗は種類`reason`で持ち、文言は持たない)、サインインの確認の失敗の種類への対応`signInFailure`、問い合わせの結果の種類から結果への対応`fetchResultOf` |
 | `features/rounds/domain/query-outcome.ts` | ドメイン層(値オブジェクト) | 問い合わせの結果の種類`QueryOutcome`(型だけ) |
@@ -64,7 +64,7 @@
 | `features/rounds/application/round-deletion.ts`、`round-leaving.ts`、`preset-saving.ts` | 手続き | 削除(一覧用。離れない。`round-deletion.ts`)、完了、削除して離れる(`round-deletion.ts`の後に遷移)、一覧へ戻る(保存の完了の後に`PageNavigation`で進む、または置き換える。`round-leaving.ts`)と、プリセットの保存(サインインの確認、書き込み、成功の後の保存済みの再取得) |
 | `features/rounds/application/operation-sending.ts`、`op-sender.ts` | 手続き | 操作の送信と確定の記録(約束`RoundTransport`)、列ごとの送信の時機(送信器。送信の状態の保持、計画の実行、リトライの待機、保留と再開。記録のハブ、`OperationSending`、`SessionReader`を直接使う)。記録の送信中の印は、列の状態の射影として、送信器の`writeQueue`だけが書く |
 | `features/rounds/application/round-record-control.ts`、`round-refresh-control.ts` | 手続き | 同期へ公開する、記録の制御`RoundRecordControl`(記録の起動と送信器の起動の順序、サインインの変化への反応を持つ)と、取り直しの制御`RoundRefreshControl`(要否の導出と、取り直しの実行の委譲)。取り直しの理由(`open`、`stale`、`diverged`、`overlay`。優先の順)の型は`RoundRefreshControl`の`refreshNeeds`の戻り値が唯一の定義で、同期は`round-sync.ts`でその型から導く |
-| `features/rounds/index.ts` | 機能の入口 | `RoundRecordControl`、`RoundRefreshControl`、`ROUNDS_PATH`を公開する |
+| `features/rounds/index.ts` | 機能の入口 | `RoundRecordControl`、`RoundRefreshControl`の型を公開する |
 | `features/rounds/infrastructure/` | インフラ層 | `round-op-transport.ts`(操作の種類ごとにRPCを呼び、操作ごとの判定結果を返す)、`round-queries.ts`(取得の問い合わせ、プリセットと一覧の問い合わせと行の写し)、`db-response-outcome.ts`(応答を`QueryOutcome`の種類へ写す。複数の応答の畳む優先順は通信失敗→認証拒否→その他の先頭)、`browser-unique-ids.ts`(新しいIDと乱数の払い出し)、`preset-commands.ts`(プリセットの削除と保存の書き込みと結果の種類への写し)、`rounds-db-schema.ts`(ラウンドが使うスキーマの部分の型。一覧が並べる列とプリセットの表、保存の関数を含む)、`reference-snapshot.ts`(保存済みの書き換えを含む)、`reference-query-constants.ts`、`browser-record-channel.ts`(チャネル`aims-sync`) |
 | `features/rounds/ui/rounds-context.tsx` | UI層 | 画面ごとの文脈(`RoundsListStoreProvider`と`useRoundsListStore`、`NewRoundStoreProvider`と`useNewRoundStore`、`RoundDetailStoreProvider`と`useRoundDetailStore`) |
 | `features/rounds/ui/rounds-list.tsx`、`use-local-rounds-list.ts`、`use-fetch-result.ts`、`fetch-state.tsx` | UI層 | 一覧の描画と削除のメニュー、端末の入力中のラウンドの読み込みと待ちの経過、画面の取得の状態と再取得、取得の状態の表示。オフライン表示の間の読み直しは、`use-fetch-result.ts`が画面の窓口から受けた`whenOnline`で行う |
