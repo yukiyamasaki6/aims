@@ -106,14 +106,7 @@ export function createRoundRecordHub(deps: {
     options: AdoptOptions = {},
     kind: RecordChange["kind"] = "changed",
   ) {
-    // 別の利用者の行は取り込まない。
-    const own = {
-      base: group.base,
-      entries: group.entries.filter(
-        (row) => row.userId === undefined || row.userId === userId,
-      ),
-    };
-    const next = adoptGroup(record(streamId), own, {
+    const next = adoptGroup(record(streamId), group, {
       fetched: options.fetched,
       readAt: options.readAt ?? 0,
     });
