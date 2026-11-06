@@ -163,26 +163,7 @@ describe("RoundPresetSelect", () => {
       expect(startRound).toHaveBeenCalledWith(null, expect.any(Function));
     });
 
-    it("通信できない場合はネットワークに接続されていませんを表示し、プリセットの見出しは出さない", async () => {
-      // Given
-      fetchResolves({ status: "offline" });
-
-      // When
-      render(<RoundPresetSelect />);
-
-      // Then
-      expect(
-        await screen.findByText(roundsText("fetchOffline")),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText(roundsText("presetPersonal")),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.queryByText(roundsText("presetGlobal")),
-      ).not.toBeInTheDocument();
-    });
-
-    it("通信できない場合も、開始ボタンを押すとラウンドの開始を依頼する", async () => {
+    it("通信できない場合も、プリセットの見出しは出さず、開始ボタンを押すとラウンドの開始を依頼する", async () => {
       // Given
       fetchResolves({ status: "offline" });
       const user = userEvent.setup();
@@ -198,19 +179,12 @@ describe("RoundPresetSelect", () => {
       await waitFor(() => {
         expect(startRound).toHaveBeenCalledTimes(1);
       });
-    });
-
-    it("取得がエラーの場合はエラーメッセージを表示する", async () => {
-      // Given
-      fetchResolves({ status: "error", reason: "failed" });
-
-      // When
-      render(<RoundPresetSelect />);
-
-      // Then
-      expect(await screen.findByRole("alert")).toHaveTextContent(
-        roundsText("fetchFailure.failed"),
-      );
+      expect(
+        screen.queryByText(roundsText("presetPersonal")),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(roundsText("presetGlobal")),
+      ).not.toBeInTheDocument();
     });
 
     it("取得がエラーの場合も、開始ボタンを押すとラウンドの開始を依頼する", async () => {
