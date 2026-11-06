@@ -38,17 +38,12 @@ describe("FetchState", () => {
       );
     });
 
-    it("not-foundのとき、渡したメッセージだけを表示し、リンクを表示しない", () => {
+    it("not-foundのとき、見つからない旨だけを表示し、リンクを表示しない", () => {
       // Given
       // When
-      render(
-        <FetchState
-          view={{ status: "not-found" }}
-          onRetry={vi.fn()}
-          notFound={{ message: "ラウンドが見つかりません。" }}
-        />,
-        { wrapper: IntlTestProvider },
-      );
+      render(<FetchState view={{ status: "not-found" }} onRetry={vi.fn()} />, {
+        wrapper: IntlTestProvider,
+      });
 
       // Then
       expect(
@@ -129,18 +124,6 @@ describe("FetchState", () => {
   });
 
   describe("異常系", () => {
-    it("not-foundでメッセージを渡さないとき、既定の文言を表示し、リンクを表示しない", () => {
-      // Given
-      // When
-      render(<FetchState view={{ status: "not-found" }} onRetry={vi.fn()} />, {
-        wrapper: IntlTestProvider,
-      });
-
-      // Then
-      expect(screen.getByText(roundsText("fetchNotFound"))).toBeInTheDocument();
-      expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    });
-
     it("okを受け取る呼び出しは型エラーになる", () => {
       // Given
       type View = React.ComponentProps<typeof FetchState>["view"];

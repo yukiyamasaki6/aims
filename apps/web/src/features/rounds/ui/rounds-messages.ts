@@ -22,7 +22,6 @@ export const roundsMessages = {
     requiredMark: "*",
     // 取得の状態
     fetchLoading: "読み込み中",
-    fetchNotFound: "見つかりませんでした。",
     fetchOffline: "ネットワークに接続されていません",
     fetchRetry: "再試行",
     fetchFailure: {

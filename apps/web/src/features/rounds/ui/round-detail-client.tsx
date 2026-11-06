@@ -1,7 +1,6 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import type { LoadedRoundDetail } from "../application/round-detail-store";
 import { roundIdOfPath } from "../domain/round-routes";
@@ -33,7 +32,6 @@ export function RoundDetailClient() {
 }
 
 function RoundDetailLoader({ roundId }: { roundId: string | null }) {
-  const t = useTranslations("rounds");
   const store = useRoundDetailStore();
   const { view, retry } = useFetchResult<LoadedRoundDetail>(
     () =>
@@ -64,7 +62,6 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
       <FetchState
         view={view.status === "ok" ? { status: "loading" } : view}
         onRetry={retry}
-        notFound={{ message: t("detailNotFound") }}
         loading={<ScorecardSkeleton />}
       />
     </RoundDetailFrame>
