@@ -3,8 +3,14 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Distance } from "../domain/scorecard-types";
 import { newShotPointer, type Pointer } from "../domain/shot-pointer";
-import { createFakeRoundDetailStore } from "./round-stores-test-helpers";
-import { RoundDetailStoreProvider } from "./rounds-context";
+import {
+  createFakeRoundDetailStore,
+  createFakeRoundProcedures,
+} from "./round-stores-test-helpers";
+import {
+  RoundDetailStoreProvider,
+  RoundProceduresProvider,
+} from "./rounds-context";
 import type { ScoreHistory } from "./use-score-history";
 import { useShotInput } from "./use-shot-input";
 
@@ -28,6 +34,7 @@ function setup(
   } = {},
 ) {
   const { store } = createFakeRoundDetailStore();
+  const procedures = createFakeRoundProcedures();
   const appendShot = vi.fn();
   const setPointer = vi.fn();
   const setKeypadMounted = vi.fn();
@@ -42,7 +49,9 @@ function setup(
   } as ScoreHistory;
   const wrapper = ({ children }: { children: ReactNode }) => (
     <RoundDetailStoreProvider store={store}>
-      {children}
+      <RoundProceduresProvider procedures={procedures}>
+        {children}
+      </RoundProceduresProvider>
     </RoundDetailStoreProvider>
   );
   const { result } = renderHook(

@@ -14,7 +14,7 @@ import {
   shotPointer,
 } from "../domain/shot-pointer";
 import type { SyncOperation } from "../domain/sync-events";
-import { useRoundDetailStore } from "./rounds-context";
+import { useRoundDetailStore, useRoundProcedures } from "./rounds-context";
 import type { ScoreHistory } from "./use-score-history";
 
 type ShotInputContext = {
@@ -112,6 +112,7 @@ export function useShotInput({
   appendShot: (operation: SyncOperation, pointer: Pointer) => void;
 }) {
   const store = useRoundDetailStore();
+  const { ids } = useRoundProcedures();
   const ctx: ShotInputContext = {
     distances,
     liveShots,
@@ -120,7 +121,7 @@ export function useShotInput({
     setKeypadMounted,
     appendShot: (operation) => appendShot(operation, pointer),
     history,
-    newId: () => store.newId(),
+    newId: () => ids.next(),
     newShotId: (endShotIds) => store.newShotId(endShotIds),
   };
 

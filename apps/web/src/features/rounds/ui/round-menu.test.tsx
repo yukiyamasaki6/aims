@@ -6,23 +6,23 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
-import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
+import { createFakeRoundProcedures } from "@/features/rounds/ui/round-stores-test-helpers";
+import { RoundProceduresProvider } from "@/features/rounds/ui/rounds-context";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { RoundMenu } from "./round-menu";
 
 const roundsText = translatorFor("rounds");
 
-// 削除して離れる手続きは境界として偽の約束(ラウンドの状態と変更の方法)のdeleteRoundAndLeaveで受ける。遷移の順序は手続きのテストが確かめる。
-let fake: ReturnType<typeof createFakeRoundDetailStore>;
+// 削除して離れる手続きは境界として偽の手続きの入れ物のdeleteRoundAndLeaveで受ける。遷移の順序は手続きのテストが確かめる。
+let procedures: ReturnType<typeof createFakeRoundProcedures>;
 
 function render(ui: ReactElement) {
   return renderWithoutStore(
     <IntlTestProvider>
-      <RoundDetailStoreProvider store={fake.store}>
+      <RoundProceduresProvider procedures={procedures}>
         {ui}
-      </RoundDetailStoreProvider>
+      </RoundProceduresProvider>
     </IntlTestProvider>,
   );
 }
@@ -34,7 +34,7 @@ async function openDeleteConfirm(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  fake = createFakeRoundDetailStore();
+  procedures = createFakeRoundProcedures();
 });
 
 describe("RoundMenu", () => {
@@ -64,9 +64,9 @@ describe("RoundMenu", () => {
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
 
       // Then
-      expect(fake.store.deleteRoundAndLeave).toHaveBeenCalledExactlyOnceWith(
-        "round-1",
-      );
+      expect(
+        procedures.leaving.deleteRoundAndLeave,
+      ).toHaveBeenCalledExactlyOnceWith("round-1");
       await waitFor(() => {
         expect(screen.queryByTestId("confirm-dialog-confirm")).toBeNull();
       });
@@ -75,7 +75,7 @@ describe("RoundMenu", () => {
     it("削除して離れる手続きが終わるまでの間も、ダイアログはすぐ閉じる", async () => {
       // Given
       const leaving = Promise.withResolvers<void>();
-      fake.store.deleteRoundAndLeave.mockReturnValue(leaving.promise);
+      procedures.leaving.deleteRoundAndLeave.mockReturnValue(leaving.promise);
       const user = userEvent.setup();
       render(<RoundMenu roundId="round-1" />);
       await openDeleteConfirm(user);

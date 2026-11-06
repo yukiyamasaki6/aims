@@ -6,7 +6,7 @@ import type { LoadedRoundDetail } from "../application/round-detail-store";
 import { roundIdOfPath } from "../domain/round-routes";
 import { FetchState } from "./fetch-state";
 import { RoundDetailFrame } from "./round-detail-frame";
-import { useRoundDetailStore } from "./rounds-context";
+import { useRoundDetailStore, useRoundProcedures } from "./rounds-context";
 import { ScorecardClient } from "./scorecard-client";
 import { Skeleton } from "./skeleton";
 import { useCreationGone } from "./use-creation-gone";
@@ -33,6 +33,7 @@ export function RoundDetailClient() {
 
 function RoundDetailLoader({ roundId }: { roundId: string | null }) {
   const store = useRoundDetailStore();
+  const { leaving } = useRoundProcedures();
   const { view, retry } = useFetchResult<LoadedRoundDetail>(
     () =>
       roundId
@@ -44,15 +45,15 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
   useCreationGone(roundId, retry);
 
   useEffect(() => {
-    if (deleted) store.leaveRound();
-  }, [deleted, store]);
+    if (deleted) leaving.leaveRound();
+  }, [deleted, leaving]);
 
   if (roundId && view.status === "ok" && !view.data.deleted) {
     return (
       <ScorecardClient
         roundId={roundId}
         loaded={view.data}
-        onGone={() => store.leaveRound()}
+        onGone={() => leaving.leaveRound()}
         targetFaces={view.data.targetFaces}
       />
     );

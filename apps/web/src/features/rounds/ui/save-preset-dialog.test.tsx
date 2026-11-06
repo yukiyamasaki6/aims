@@ -4,17 +4,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PresetToSave } from "@/features/rounds/domain/preset-save";
 import type { Distance } from "@/features/rounds/domain/scorecard-types";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
-import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
-import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
+import { createFakeRoundProcedures } from "@/features/rounds/ui/round-stores-test-helpers";
+import { RoundProceduresProvider } from "@/features/rounds/ui/rounds-context";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { SavePresetDialog } from "./save-preset-dialog";
 
 const roundsText = translatorFor("rounds");
 
-// 保存の手続き(サインインの確認、書き込み、再取得)は、ラウンドの状態と変更の方法の偽のsavePresetで受ける。手続きの規則は手続きのテスト、実物の結線はスコアカードのテストが確かめる。
-const fake = createFakeRoundDetailStore();
-const savePreset = fake.store.savePreset;
+// 保存の手続き(サインインの確認、書き込み、再取得)は、偽の手続きの入れ物のsavePresetで受ける。手続きの規則は手続きのテスト、実物の結線はスコアカードのテストが確かめる。
+const procedures = createFakeRoundProcedures();
+const savePreset = procedures.presetSaving.savePreset;
 
 const targetFace: TargetFaceOption = {
   id: "face-x",
@@ -61,7 +61,7 @@ function setup(
 ) {
   const user = userEvent.setup();
   render(
-    <RoundDetailStoreProvider store={fake.store}>
+    <RoundProceduresProvider procedures={procedures}>
       <SavePresetDialog
         roundName="午前練習"
         format="outdoor"
@@ -70,7 +70,7 @@ function setup(
         targetFaces={[targetFace]}
         {...overrides}
       />
-    </RoundDetailStoreProvider>,
+    </RoundProceduresProvider>,
     { wrapper: IntlTestProvider },
   );
   return { user };

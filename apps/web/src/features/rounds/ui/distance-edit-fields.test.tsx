@@ -7,8 +7,8 @@ import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { DistanceConfig } from "../domain/distance-config";
 import { DistanceEditFields } from "./distance-edit-fields";
-import { createFakeRoundDetailStore } from "./round-stores-test-helpers";
-import { RoundDetailStoreProvider } from "./rounds-context";
+import { createFakeRoundProcedures } from "./round-stores-test-helpers";
+import { RoundProceduresProvider } from "./rounds-context";
 
 const roundsText = translatorFor("rounds");
 
@@ -51,12 +51,12 @@ function setup(
   const onDeleted = vi.fn();
   const onOpenChange = vi.fn();
   const enqueue = vi.fn();
-  const { store } = createFakeRoundDetailStore();
+  const procedures = createFakeRoundProcedures();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <IntlTestProvider>
-      <RoundDetailStoreProvider store={store}>
+      <RoundProceduresProvider procedures={procedures}>
         {children}
-      </RoundDetailStoreProvider>
+      </RoundProceduresProvider>
     </IntlTestProvider>
   );
   const utils = render(
@@ -74,7 +74,7 @@ function setup(
     />,
     { wrapper },
   );
-  return { onSaved, onDeleted, onOpenChange, enqueue, store, ...utils };
+  return { onSaved, onDeleted, onOpenChange, enqueue, procedures, ...utils };
 }
 
 describe("DistanceEditFields", () => {
@@ -301,8 +301,8 @@ describe("DistanceEditFields", () => {
       it("onSavedとenqueueを検証済みの距離設定で呼ぶ", async () => {
         // Given
         const user = userEvent.setup();
-        const { onSaved, enqueue, store } = setup();
-        store.newId.mockReturnValue(EVENT_ID);
+        const { onSaved, enqueue, procedures } = setup();
+        procedures.ids.next.mockReturnValue(EVENT_ID);
         await user.clear(screen.getByTestId("distance-config-distance-1"));
         await user.type(screen.getByTestId("distance-config-distance-1"), "50");
         await user.clear(screen.getByTestId("distance-config-arrows-1"));
@@ -346,8 +346,8 @@ describe("DistanceEditFields", () => {
       it("onSavedは呼ぶが、enqueueは呼ばない", async () => {
         // Given
         const user = userEvent.setup();
-        const { onSaved, enqueue, store } = setup();
-        store.newId.mockReturnValue(EVENT_ID);
+        const { onSaved, enqueue, procedures } = setup();
+        procedures.ids.next.mockReturnValue(EVENT_ID);
 
         // When
         await user.click(screen.getByTestId("distance-config-save-1"));
@@ -392,8 +392,8 @@ describe("DistanceEditFields", () => {
       it("開いている間に他の端末の変更が届いた後に保存すると、開いたときの値との差だけを送る", async () => {
         // Given
         const user = userEvent.setup();
-        const { enqueue, rerender, store, ...props } = setup();
-        store.newId.mockReturnValue(EVENT_ID);
+        const { enqueue, rerender, procedures, ...props } = setup();
+        procedures.ids.next.mockReturnValue(EVENT_ID);
         await user.clear(screen.getByTestId("distance-config-distance-1"));
         await user.type(screen.getByTestId("distance-config-distance-1"), "50");
         const element = (distance: DistanceConfig) => (
@@ -456,8 +456,8 @@ describe("DistanceEditFields", () => {
       it("確認なしにonDeletedとenqueueを呼ぶ", async () => {
         // Given
         const user = userEvent.setup();
-        const { onDeleted, enqueue, store } = setup({ hasShots: false });
-        store.newId.mockReturnValue(EVENT_ID);
+        const { onDeleted, enqueue, procedures } = setup({ hasShots: false });
+        procedures.ids.next.mockReturnValue(EVENT_ID);
 
         // When
         await user.click(screen.getByTestId("distance-config-delete-1"));
