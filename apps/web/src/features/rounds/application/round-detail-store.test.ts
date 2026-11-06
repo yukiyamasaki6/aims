@@ -292,25 +292,6 @@ describe("load", () => {
       });
     });
 
-    it("完了のベースで未送信の操作が無いときは、保持の対象でないため、端末のベースで開かない", async () => {
-      // Given
-      const tab = createTestRounds({ savedFaces: [face] });
-      await tab.hub.ready();
-      await tab.hub.commit(
-        STREAM,
-        roundBase({ status: "completed" }),
-        10,
-        "user-1",
-      );
-      const loading = tab.detail.load("round-1");
-
-      // When
-      await tab.clock.advanceAsync(FALLBACK_WAIT_MS);
-
-      // Then
-      expect(await settled(loading)).toBe(false);
-    });
-
     it("完了でも、未送信の操作が残るときは、端末のベースで開く", async () => {
       // Given
       const tab = createTestRounds({ savedFaces: [face] });

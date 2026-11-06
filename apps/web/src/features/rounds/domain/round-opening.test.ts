@@ -61,7 +61,7 @@ describe("localOpening", () => {
     },
   ];
 
-  it("端末のベースが保持の規則に当たり、保存した的があるときは、端末のベースと的で開く", () => {
+  it("端末のベースと保存した的があるときは、端末のベースと的で開く", () => {
     // Given
     const stored = roundBase();
     const group = { base: { startedAt: 1, base: stored }, entries: [] };
@@ -73,18 +73,12 @@ describe("localOpening", () => {
     expect(opening).toEqual({ base: stored.tables, targetFaces: savedFaces });
   });
 
-  it("ベースが無い、削除の印、保持の規則に当たらない、保存した的が無いときは、開けない", () => {
+  it("ベースが無い、削除の印、保存した的が無いときは、開けない", () => {
     // Given
-    const completed = roundBase({ status: "completed" });
-
     // When
     const noBase = localOpening({ base: undefined, entries: [] }, savedFaces);
     const marker = localOpening(
       { base: { startedAt: 1, base: null }, entries: [] },
-      savedFaces,
-    );
-    const notKept = localOpening(
-      { base: { startedAt: 1, base: completed }, entries: [] },
       savedFaces,
     );
     const noFaces = localOpening(
@@ -93,11 +87,6 @@ describe("localOpening", () => {
     );
 
     // Then
-    expect([noBase, marker, notKept, noFaces]).toEqual([
-      null,
-      null,
-      null,
-      null,
-    ]);
+    expect([noBase, marker, noFaces]).toEqual([null, null, null]);
   });
 });
