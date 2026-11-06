@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AuthFailure } from "./auth-failure";
 import {
-  beginResend,
   beginSendCode,
   beginSetPassword,
   beginVerifyCode,
@@ -16,7 +15,7 @@ const CAPTCHA_MESSAGE = "incomplete";
 const WAIT_MESSAGE = "cooldown";
 
 type Operation = NonNullable<PasswordSetupFlow["pending"]>;
-const OPERATIONS: Operation[] = ["send", "verify", "resend", "setPassword"];
+const OPERATIONS: Operation[] = ["send", "verify", "setPassword"];
 const PENDING_VALUES: PasswordSetupFlow["pending"][] = [null, ...OPERATIONS];
 
 function flowWith(overrides: Partial<PasswordSetupFlow>): PasswordSetupFlow {
@@ -44,7 +43,7 @@ describe("パスワード設定の流れの遷移", () => {
   describe("captchaChecked", () => {
     it("セキュリティチェックのトークンを記録し、他を変えない", () => {
       // Given
-      const flow = flowWith({ pending: "resend", resendCooldown: 5 });
+      const flow = flowWith({ pending: "send", resendCooldown: 5 });
 
       // When
       const next = passwordSetupReducer(flow, {
@@ -94,32 +93,6 @@ describe("パスワード設定の流れの遷移", () => {
     });
   });
 
-  describe("codeResent", () => {
-    it("実行中を解除して使ったトークンを消費し、上部と欄のエラーを消し、段階と待ち時間を変えない", () => {
-      // Given
-      const flow = flowWith({
-        step: "code",
-        error: "other",
-        fieldErrors: { code: "required" },
-        resendCooldown: 60,
-        captchaToken: "used",
-        pending: "resend",
-      });
-
-      // When
-      const next = passwordSetupReducer(flow, { type: "codeResent" });
-
-      // Then
-      expect(next).toEqual({
-        ...flow,
-        captchaToken: null,
-        pending: null,
-        error: null,
-        fieldErrors: {},
-      });
-    });
-  });
-
   describe("codeConfirmed", () => {
     it("パスワード設定の段階へ進み、エラーと欄のエラーをクリアして実行中を解除する", () => {
       // Given
@@ -128,7 +101,7 @@ describe("パスワード設定の流れの遷移", () => {
         pending: "verify",
         captchaToken: "kept",
         error: "other",
-        fieldErrors: { code: "required" },
+        fieldErrors: { resend: "cooldown" },
       });
 
       // When
@@ -180,33 +153,7 @@ describe("パスワード設定の流れの遷移", () => {
   });
 
   describe("failed", () => {
-    it("前と同じ失敗が続いたら、同じ理由を示したまま実行中を解除する", () => {
-      // Given
-      const failure = { kind: "code_expired" } as const;
-      const first = passwordSetupReducer(
-        flowWith({ step: "code", pending: "verify" }),
-        { type: "failed", failure },
-      );
-      const retrying = beginVerifyCode(first, {
-        email: "user@example.com",
-        code: "123456",
-      }).state;
-
-      // When
-      const next = passwordSetupReducer(retrying, { type: "failed", failure });
-
-      // Then
-      expect(retrying.error).toBe(first.error);
-      expect(next.error).toBe(first.error);
-      expect(next.pending).toBeNull();
-    });
-
     it.each<[string, AuthFailure, string]>([
-      [
-        "already_registered",
-        { kind: "already_registered" },
-        "already_registered",
-      ],
       ["unreachable", { kind: "unreachable" }, NETWORK_ERROR_MESSAGE],
       ["code_expired", { kind: "code_expired" }, "code_expired"],
       ["weak_password", { kind: "weak_password" }, "weak_password"],
@@ -236,7 +183,7 @@ describe("パスワード設定の流れの遷移", () => {
         step: "code",
         captchaToken: "unused",
         resendCooldown: 12,
-        pending: "resend",
+        pending: "send",
       });
 
       // When
@@ -257,8 +204,8 @@ describe("パスワード設定の流れの遷移", () => {
       // Given
       const flow = flowWith({
         step: "code",
-        pending: "resend",
-        fieldErrors: { resend: "cooldown", code: "required" },
+        pending: "send",
+        fieldErrors: { resend: "cooldown", captcha: "incomplete" },
       });
 
       // When
@@ -314,12 +261,12 @@ describe("パスワード設定の流れの遷移", () => {
   });
 
   describe("emailStepReturned", () => {
-    it("メールアドレスの段階へ戻り、エラーと欄のエラーを戻してトークンを破棄し、待ち時間を保つ", () => {
+    it("メールアドレスの段階へ戻り、エラーと欄のエラーを戻してトークンを破棄し、待ち時間を0に戻す", () => {
       // Given
       const flow = flowWith({
         step: "code",
         error: "other",
-        fieldErrors: { code: "required" },
+        fieldErrors: { resend: "cooldown" },
         captchaToken: "code-step-token",
         resendCooldown: 30,
       });
@@ -332,10 +279,10 @@ describe("パスワード設定の流れの遷移", () => {
       expect(next.error).toBeNull();
       expect(next.fieldErrors).toEqual({});
       expect(next.captchaToken).toBeNull();
-      expect(next.resendCooldown).toBe(30);
+      expect(next.resendCooldown).toBe(0);
     });
 
-    it.each(["verify", "resend"] as const)(
+    it.each(["verify", "send"] as const)(
       "%sの実行中は、遅れて届く応答が別の段階へ反映されないよう、何も変えない",
       (pending) => {
         // Given
@@ -380,7 +327,6 @@ describe("パスワード設定の流れの遷移", () => {
   describe("実行中を解除する出来事", () => {
     const results: PasswordSetupEvent[] = [
       { type: "codeSent" },
-      { type: "codeResent" },
       { type: "codeConfirmed" },
       { type: "failed", failure: { kind: "code_expired" } },
       { type: "failed", failure: { kind: "unreachable" } },
@@ -405,9 +351,6 @@ describe("パスワード設定の流れの遷移", () => {
 describe("操作の開始の可否と入力の検証", () => {
   const validEmail = { email: "user@example.com" };
 
-  type Step = PasswordSetupFlow["step"];
-  const Steps: Step[] = ["email", "code", "password"];
-
   // 操作ごとに、操作の段階と、不備が無い状態での開始の命令。
   const cases = [
     {
@@ -425,20 +368,8 @@ describe("操作の開始の可否と入力の検証", () => {
       operation: "verify",
       ownStep: "code",
       ready: {},
-      invalidFlow: {},
       begin: (flow: PasswordSetupFlow) =>
         beginVerifyCode(flow, { ...validEmail, code: "123456" }),
-      invalidBegin: (flow: PasswordSetupFlow) =>
-        beginVerifyCode(flow, { ...validEmail, code: "" }),
-    },
-    {
-      name: "コードの再送",
-      operation: "resend",
-      ownStep: "code",
-      ready: { captchaToken: "token" },
-      begin: (flow: PasswordSetupFlow) => beginResend(flow, validEmail),
-      invalidFlow: { resendCooldown: 30 },
-      invalidBegin: (flow: PasswordSetupFlow) => beginResend(flow, validEmail),
     },
     {
       name: "パスワードの設定",
@@ -466,25 +397,32 @@ describe("操作の開始の可否と入力の検証", () => {
         const result = c.begin(flow);
 
         // Then
-        expect(result).toEqual({ kind: "busy", state: flow });
+        expect(result.state).toBe(flow);
+        expect(result.request).toBeNull();
       },
     );
 
-    it.each(Steps.filter((step) => step !== c.ownStep))(
-      "段階が%sなら、入力が正しくても、認証サービスを呼ばせず、状態を変えずに実行中と返す",
-      (step) => {
-        // Given
-        const flow = flowWith({ step, ...c.ready });
+    it("開始できるときは、前回の失敗の理由と欄のエラーを消して、操作を実行中にする", () => {
+      // Given
+      const flow = {
+        ...readyFlow(),
+        error: "rate_limited" as const,
+        fieldErrors: { email: "invalidFormat" as const },
+      };
 
-        // When
-        const result = c.begin(flow);
+      // When
+      const result = c.begin(flow);
 
-        // Then
-        expect(result).toEqual({ kind: "busy", state: flow });
-      },
-    );
+      // Then
+      expect(result.request).not.toBeNull();
+      expect(result.state).toMatchObject({
+        pending: c.operation,
+        error: null,
+        fieldErrors: {},
+      });
+    });
 
-    it("自分の段階で実行中でなければ、busyを返さない", () => {
+    it("実行中でなければ、busyを返さない", () => {
       // Given
       const flow = readyFlow();
 
@@ -492,8 +430,14 @@ describe("操作の開始の可否と入力の検証", () => {
       const result = c.begin(flow);
 
       // Then
-      expect(result.kind).not.toBe("busy");
+      expect(result.request).not.toBeNull();
     });
+  });
+
+  const invalidCases = cases.flatMap((c) => ("invalidBegin" in c ? [c] : []));
+
+  describe.each(invalidCases)("$name の入力の不備", (c) => {
+    const readyFlow = () => flowWith({ step: c.ownStep, ...c.ready });
 
     it("実行中なら、入力に不備があっても不備を示さず、状態を変えずに実行中と返す", () => {
       // Given
@@ -509,23 +453,8 @@ describe("操作の開始の可否と入力の検証", () => {
       const result = c.invalidBegin(flow);
 
       // Then
-      expect(result).toEqual({ kind: "busy", state: flow });
-    });
-
-    it("段階外なら、入力に不備があっても不備を示さず、状態を変えずに実行中と返す", () => {
-      // Given
-      const otherStep = Steps.find((step) => step !== c.ownStep);
-      const flow = flowWith({
-        step: otherStep,
-        ...c.ready,
-        ...c.invalidFlow,
-      });
-
-      // When
-      const result = c.invalidBegin(flow);
-
-      // Then
-      expect(result).toEqual({ kind: "busy", state: flow });
+      expect(result.state).toBe(flow);
+      expect(result.request).toBeNull();
     });
 
     it("入力に不備があれば、前回のエラーを消して欄のエラーを差し替え、実行中にしない", () => {
@@ -534,79 +463,21 @@ describe("操作の開始の可否と入力の検証", () => {
         ...readyFlow(),
         ...c.invalidFlow,
         error: "other" as const,
-        fieldErrors: { email: "tooLong" as const },
+        fieldErrors: { email: "invalidFormat" as const },
       };
 
       // When
       const result = c.invalidBegin(flow);
 
       // Then
-      expect(result.kind).toBe("invalid");
+      expect(result.request).toBeNull();
       expect(result.state.pending).toBeNull();
       expect(result.state.error).toBeNull();
       expect(result.state.fieldErrors).not.toEqual(flow.fieldErrors);
     });
-
-    it("前の失敗の理由が表示されていても、開始できるなら、その理由を残したまま操作を実行中にする", () => {
-      // Given
-      const started = c.begin(readyFlow()).state;
-      // 再送は開始で待ち時間が始まるため、待ち時間が明けた後の再試行として扱う。
-      const failed = {
-        ...passwordSetupReducer(started, {
-          type: "failed",
-          failure: { kind: "rate_limited" },
-        }),
-        resendCooldown: readyFlow().resendCooldown,
-      };
-
-      // When
-      const result = c.begin(failed);
-
-      // Then
-      expect(result.kind).toBe("started");
-      expect(result.state).toMatchObject({
-        pending: c.operation,
-        error: failed.error,
-        fieldErrors: {},
-      });
-      expect(failed.error).toBe("rate_limited");
-    });
-
-    it("入力の不備を直して開始しても、送信中は直した欄の以前のエラーを残す", () => {
-      // Given
-      const invalid = c.invalidBegin({
-        ...readyFlow(),
-        ...c.invalidFlow,
-      }).state;
-      const fixed = { ...invalid, resendCooldown: readyFlow().resendCooldown };
-
-      // When
-      const result = c.begin(fixed);
-
-      // Then
-      expect(result.kind).toBe("started");
-      expect(result.state.pending).toBe(c.operation);
-      expect(result.state.fieldErrors).toEqual(invalid.fieldErrors);
-      expect(Object.keys(invalid.fieldErrors)).toHaveLength(1);
-    });
   });
 
-  describe("開始の後の待ち時間", () => {
-    it("再送の開始は、待ち時間を60にする", () => {
-      // Given
-      const flow = flowWith({
-        step: "code",
-        resendCooldown: 0,
-        captchaToken: "token",
-      });
-
-      // When
-      const result = beginResend(flow, validEmail);
-
-      // Then
-      expect(result.state.resendCooldown).toBe(60);
-    });
-
+  describe("開始の後の待ち時間(送付の成功まで始めない)", () => {
     it.each([
       [
         "コードの送信",
@@ -652,7 +523,6 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "started",
         request: { email: "user@example.com", captchaToken: "token" },
       });
     });
@@ -666,7 +536,7 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "invalid",
+        request: null,
         state: {
           fieldErrors: { email: "invalidFormat" },
         },
@@ -684,13 +554,13 @@ describe("操作の開始の可否と入力の検証", () => {
 
         // Then
         expect(result).toMatchObject({
-          kind: "invalid",
+          request: null,
           state: { fieldErrors: { captcha: CAPTCHA_MESSAGE } },
         });
       },
     );
 
-    it("メールアドレスとセキュリティチェックの両方に不備があれば、メールアドレスだけを示す", () => {
+    it("メールアドレスとセキュリティチェックの両方に不備があれば、両方を示す", () => {
       // Given
       const flow = flowWith({ captchaToken: null });
 
@@ -699,9 +569,9 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "invalid",
+        request: null,
         state: {
-          fieldErrors: { email: "required" },
+          fieldErrors: { email: "required", captcha: CAPTCHA_MESSAGE },
         },
       });
     });
@@ -710,7 +580,7 @@ describe("操作の開始の可否と入力の検証", () => {
   describe("beginVerifyCode", () => {
     const onCodeFlow = flowWith({ step: "code" });
 
-    it("コードが正しければ、メールアドレスとコードを返す", () => {
+    it("メールアドレスとコードを返し、確認を実行中にする", () => {
       // Given
 
       // When
@@ -721,32 +591,30 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "started",
+        state: { pending: "verify" },
         request: { email: "user@example.com", code: "123456" },
       });
     });
 
-    it("コードに不備があれば、コードの不備を示す", () => {
+    it("空のコードでも検査せずに開始し、そのコードを認証サービスへの頼みに載せる", () => {
       // Given
 
       // When
       const result = beginVerifyCode(onCodeFlow, {
         email: "user@example.com",
-        code: "12a",
+        code: "",
       });
 
       // Then
       expect(result).toMatchObject({
-        kind: "invalid",
-        state: {
-          fieldErrors: { code: "invalidFormat" },
-        },
+        state: { pending: "verify" },
+        request: { email: "user@example.com", code: "" },
       });
     });
   });
 
-  describe("beginResend", () => {
-    it("待ち時間が明けてトークンがあれば、メールアドレスとトークンを返し、待ち時間を始めて実行中にする", () => {
+  describe("beginSendCode: コード入力の段階からの再送", () => {
+    it("待ち時間が明けてトークンがあれば、メールアドレスとトークンを返し、実行中にする(待ちは送付の成功まで始めない)", () => {
       // Given
       const flow = flowWith({
         step: "code",
@@ -755,12 +623,11 @@ describe("操作の開始の可否と入力の検証", () => {
       });
 
       // When
-      const result = beginResend(flow, { email: "user@example.com" });
+      const result = beginSendCode(flow, { email: "user@example.com" });
 
       // Then
       expect(result).toMatchObject({
-        kind: "started",
-        state: { pending: "resend", resendCooldown: 60 },
+        state: { pending: "send", resendCooldown: 0 },
         request: { email: "user@example.com", captchaToken: "token" },
       });
     });
@@ -774,34 +641,16 @@ describe("操作の開始の可否と入力の検証", () => {
       });
 
       // When
-      const result = beginResend(flow, { email: "user@example.com" });
+      const result = beginSendCode(flow, { email: "user@example.com" });
 
       // Then
       expect(result).toMatchObject({
-        kind: "invalid",
+        request: null,
         state: { fieldErrors: { resend: WAIT_MESSAGE }, resendCooldown: 30 },
       });
     });
 
-    it("待ち時間が明けてもトークンが無ければ、セキュリティチェックの不備を再送の欄に示す", () => {
-      // Given
-      const flow = flowWith({
-        step: "code",
-        resendCooldown: 0,
-        captchaToken: null,
-      });
-
-      // When
-      const result = beginResend(flow, { email: "user@example.com" });
-
-      // Then
-      expect(result).toMatchObject({
-        kind: "invalid",
-        state: { fieldErrors: { resend: CAPTCHA_MESSAGE } },
-      });
-    });
-
-    it("待ち時間とセキュリティチェックの両方に不備があれば、待ち時間の不備を優先する", () => {
+    it("待ち時間とセキュリティチェックの両方に不備があれば、両方を示す", () => {
       // Given
       const flow = flowWith({
         step: "code",
@@ -810,12 +659,14 @@ describe("操作の開始の可否と入力の検証", () => {
       });
 
       // When
-      const result = beginResend(flow, { email: "user@example.com" });
+      const result = beginSendCode(flow, { email: "user@example.com" });
 
       // Then
       expect(result).toMatchObject({
-        kind: "invalid",
-        state: { fieldErrors: { resend: WAIT_MESSAGE } },
+        request: null,
+        state: {
+          fieldErrors: { resend: WAIT_MESSAGE, captcha: CAPTCHA_MESSAGE },
+        },
       });
     });
   });
@@ -833,7 +684,6 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "started",
         request: { password: "password1" },
       });
     });
@@ -846,7 +696,7 @@ describe("操作の開始の可否と入力の検証", () => {
 
       // Then
       expect(result).toMatchObject({
-        kind: "invalid",
+        request: null,
         state: { fieldErrors: { password: "required" } },
       });
     });

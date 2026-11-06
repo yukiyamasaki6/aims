@@ -1,20 +1,3 @@
-// 認証の通知。他の機能の公開の型と同じ平らな形。
-type SignInChangeKind =
-  | "signed-in"
-  | "initial"
-  | "token-refreshed"
-  | "signed-out"
-  | "other";
-export type SignInChange = { kind: SignInChangeKind; userId: string | null };
-
-// 常駐の一括の取得の契機か。サインインした、開いたときの確認(利用者あり)だけ。
-export function startsRefresh(change: SignInChange): boolean {
-  return (
-    Boolean(change.userId) &&
-    (change.kind === "signed-in" || change.kind === "initial")
-  );
-}
-
 // 取り直しを行うか。開いたときの依頼は常に行い、他の理由はオフラインでは行わない。
 export function shouldRefetch(
   isOpenRequest: boolean,

@@ -21,7 +21,6 @@ describe("beginSignIn", () => {
 
     // Then
     expect(result).toMatchObject({
-      kind: "started",
       state: { submitting: true },
       request: { ...validInput, captchaToken: "captcha-token" },
     });
@@ -36,7 +35,7 @@ describe("beginSignIn", () => {
       const result = beginSignIn(verified, { ...validInput, password });
 
       // Then
-      expect(result.kind).toBe("started");
+      expect(result.request).not.toBeNull();
     },
   );
 
@@ -53,28 +52,30 @@ describe("beginSignIn", () => {
     const invalid = beginSignIn(submitting, { email: "", password: "" });
 
     // Then
-    expect(valid).toEqual({ kind: "busy", state: submitting });
-    expect(invalid).toEqual({ kind: "busy", state: submitting });
+    expect(valid.state).toBe(submitting);
+    expect(valid.request).toBeNull();
+    expect(invalid.state).toBe(submitting);
+    expect(invalid.request).toBeNull();
   });
 
   it.each([
     [
-      "メール、パスワード、チェックがすべて不備ならメールだけ",
+      "メール、パスワード、チェックがすべて不備なら全て",
       { email: "", password: "" },
       null,
-      { email: "required" },
+      { email: "required", password: "required", captcha: "incomplete" },
     ],
     [
-      "メールが不正でパスワードが空ならメールだけ",
+      "メールが不正でパスワードが空ならその2つ",
       { email: "invalid", password: "" },
       "token",
-      { email: "invalidFormat" },
+      { email: "invalidFormat", password: "required" },
     ],
     [
-      "パスワードが空でチェックが未完了ならパスワードだけ",
+      "パスワードが空でチェックが未完了ならその2つ",
       { email: "user@example.com", password: "" },
       null,
-      { password: "required" },
+      { password: "required", captcha: "incomplete" },
     ],
     [
       "チェックだけが未完了ならチェックだけ",
@@ -93,7 +94,28 @@ describe("beginSignIn", () => {
     const result = beginSignIn(flow, input);
 
     // Then
-    expect(result).toMatchObject({ kind: "invalid", state: { fieldErrors } });
+    expect(result).toMatchObject({ request: null, state: { fieldErrors } });
+  });
+
+  it("開始できるときは、前回の失敗の文言と欄のエラーを消して送信中にする", () => {
+    // Given
+    const flow: SignInFlow = {
+      ...verified,
+      error: "invalid_credentials",
+      fieldErrors: { password: "required" },
+    };
+
+    // When
+    const result = beginSignIn(flow, validInput);
+
+    // Then
+    expect(result.request).not.toBeNull();
+    expect(result.state).toMatchObject({
+      submitting: true,
+      error: null,
+      fieldErrors: {},
+      captchaToken: "captcha-token",
+    });
   });
 
   it("入力不備では、前回のフィールドエラーを差し替えて新しいものだけを載せ、前回の失敗の文言を消し、送信中にしない", () => {
@@ -109,7 +131,7 @@ describe("beginSignIn", () => {
     const result = beginSignIn(flow, { ...validInput, password: "" });
 
     // Then
-    expect(result.kind).toBe("invalid");
+    expect(result.request).toBeNull();
     expect(result.state.fieldErrors).toEqual({
       password: "required",
     });
@@ -117,46 +139,6 @@ describe("beginSignIn", () => {
       error: null,
       submitting: false,
       captchaToken: "captcha-token",
-    });
-  });
-
-  it("前の失敗の理由が表示されていても、開始では送信中にし、その理由とトークンを残す", () => {
-    // Given
-    const started = beginSignIn(verified, validInput).state;
-    const failed = signInReducer(started, {
-      type: "failed",
-      failure: { kind: "unreachable" },
-    });
-
-    // When
-    const result = beginSignIn(failed, validInput);
-
-    // Then
-    expect(result.kind).toBe("started");
-    expect(result.state).toMatchObject({
-      submitting: true,
-      error: "unreachable",
-      fieldErrors: {},
-      captchaToken: "captcha-token",
-    });
-  });
-
-  it("入力の不備を直して開始しても、送信中は直した欄の以前のエラーを残す", () => {
-    // Given
-    const invalid = beginSignIn(verified, {
-      ...validInput,
-      password: "",
-    }).state;
-
-    // When
-    const result = beginSignIn(invalid, validInput);
-
-    // Then
-    expect(result.kind).toBe("started");
-    expect(result.state).toMatchObject({
-      submitting: true,
-      error: null,
-      fieldErrors: { password: "required" },
     });
   });
 });
@@ -216,77 +198,13 @@ describe("signInReducer: signedIn", () => {
 });
 
 describe("signInReducer: failed", () => {
-  it("照合が届かなかったとき、送信中を解除し、トークンを保持して、失敗の文言を示す", () => {
-    // Given
-    const started = beginSignIn(verified, validInput).state;
-
-    // When
-    const result = signInReducer(started, {
-      type: "failed",
-      failure: { kind: "unreachable" },
-    });
-
-    // Then
-    expect(result).toMatchObject({
-      error: "unreachable",
-      submitting: false,
-      captchaToken: "captcha-token",
-      fieldErrors: {},
-    });
-  });
-
-  it("届かなかった失敗の後は、チェックをやり直さずに同じトークンで再び開始できる", () => {
-    // Given
-    const started = beginSignIn(verified, validInput).state;
-    const failed = signInReducer(started, {
-      type: "failed",
-      failure: { kind: "unreachable" },
-    });
-
-    // When
-    const result = beginSignIn(failed, validInput);
-
-    // Then
-    expect(result).toMatchObject({
-      kind: "started",
-      request: { ...validInput, captchaToken: "captcha-token" },
-    });
-  });
-});
-
-describe("signInReducer: refused", () => {
-  it("前と同じ拒否が続いたら、同じ理由を示したまま送信中を解除する", () => {
-    // Given
-    const failure = { kind: "invalid_credentials" } as const;
-    const first = signInReducer(beginSignIn(verified, validInput).state, {
-      type: "refused",
-      failure,
-    });
-    const retrying = beginSignIn(
-      signInReducer(first, { type: "captchaChecked", token: "new-token" }),
-      validInput,
-    ).state;
-
-    // When
-    const result = signInReducer(retrying, { type: "refused", failure });
-
-    // Then
-    expect(retrying.error).toBe(first.error);
-    expect(result.error).toBe(first.error);
-    expect(result.submitting).toBe(false);
-  });
-
   it.each([
     [
       "認証の拒否",
       { kind: "invalid_credentials" } as const,
       "invalid_credentials",
     ],
-    [
-      "成功の後の遷移の失敗(通信エラー)",
-      { kind: "unreachable" } as const,
-      "unreachable",
-    ],
+    ["通信の失敗", { kind: "unreachable" } as const, "unreachable"],
   ])(
     "%sで送信中を解除し、使ったトークンを消費して、失敗の文言を示す",
     (_name, failure, expected) => {
@@ -294,7 +212,7 @@ describe("signInReducer: refused", () => {
       const started = beginSignIn(verified, validInput).state;
 
       // When
-      const result = signInReducer(started, { type: "refused", failure });
+      const result = signInReducer(started, { type: "failed", failure });
 
       // Then
       expect(result).toMatchObject({
@@ -306,11 +224,11 @@ describe("signInReducer: refused", () => {
     },
   );
 
-  it("拒否の後は、チェックをやり直すまで開始できず、新しいトークンで再び開始できる", () => {
+  it("失敗の後は、チェックをやり直すまで開始できず、新しいトークンで再び開始できる", () => {
     // Given
     const started = beginSignIn(verified, validInput).state;
     const refused = signInReducer(started, {
-      type: "refused",
+      type: "failed",
       failure: { kind: "invalid_credentials" },
     });
 
@@ -323,13 +241,12 @@ describe("signInReducer: refused", () => {
 
     // Then
     expect(withoutToken).toMatchObject({
-      kind: "invalid",
+      request: null,
       state: {
         fieldErrors: { captcha: "incomplete" },
       },
     });
     expect(result).toMatchObject({
-      kind: "started",
       request: { ...validInput, captchaToken: "new-token" },
     });
   });

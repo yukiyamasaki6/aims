@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import type { FormEvent, ReactNode, RefObject } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
-import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import { AuthField } from "./auth-field";
 import { AuthHeader } from "./auth-header";
 import { Turnstile } from "./turnstile";
@@ -24,11 +23,9 @@ type OtpEmailStepProps = {
   error: string | null;
   hydrated: boolean;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
-  siteKey: string | undefined;
+  siteKey: string;
   checkRef: RefObject<TurnstileInstance | undefined>;
   onCheck: (token: string | null) => void;
-  // セキュリティチェックが完了している(トークンがある)か。
-  checked: boolean;
 };
 
 export function OtpEmailStep({
@@ -46,7 +43,6 @@ export function OtpEmailStep({
   siteKey,
   checkRef,
   onCheck,
-  checked,
 }: OtpEmailStepProps) {
   const t = useTranslations("auth");
   const errorId = `${idPrefix}-email-error`;
@@ -64,7 +60,6 @@ export function OtpEmailStep({
             <Input
               type="email"
               placeholder={t("emailPlaceholder")}
-              maxLength={EMAIL_MAX_LENGTH}
               value={email}
               onChange={(e) => onEmailChange(e.target.value)}
               {...aria}
@@ -77,11 +72,7 @@ export function OtpEmailStep({
           onVerify={onCheck}
           error={captchaError}
         />
-        <BusyButton
-          type="submit"
-          data-captcha-ready={checked}
-          busy={submitting}
-        >
+        <BusyButton type="submit" busy={submitting}>
           {t("otpSendCode")}
         </BusyButton>
       </form>

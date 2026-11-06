@@ -35,3 +35,29 @@ export async function getOtpCodeFromMailpit(email: string): Promise<string> {
 
   return match[1];
 }
+
+// 宛先と件名に当たるメールを待ち、件名と本文のHTMLを返す。コードを含まない案内のメールを確かめるために使う。
+export async function getEmailFromMailpit(
+  email: string,
+  subject: string,
+): Promise<{ subject: string; html: string }> {
+  for (let i = 0; i < 20; i++) {
+    const listRes = await fetch(
+      `${MAILPIT_URL}/api/v1/search?query=${encodeURIComponent(`to:${email} subject:"${subject}"`)}`,
+    );
+    const list = await listRes.json();
+    const found = list.messages?.[0];
+
+    if (found) {
+      const detailRes = await fetch(
+        `${MAILPIT_URL}/api/v1/message/${found.ID}`,
+      );
+      const detail = await detailRes.json();
+      return { subject: detail.Subject, html: detail.HTML };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  throw new Error(`"${subject}" email not found for ${email}`);
+}

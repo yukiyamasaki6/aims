@@ -23,7 +23,7 @@ export function screenHarness<State, Event extends { type: string }>(
       begin<Request>(command: (state: State) => Start<State, Request>) {
         const start = command(current);
         current = start.state;
-        return start.kind === "started" ? start.request : null;
+        return start.request;
       },
       dispatch: (event) => {
         events.push(event);

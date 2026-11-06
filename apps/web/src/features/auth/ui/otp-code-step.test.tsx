@@ -23,8 +23,8 @@ function createForm(overrides: Partial<Props> = {}) {
     email: "user@example.com",
     code: "",
     onCodeChange: vi.fn(),
-    codeError: undefined,
     resendError: undefined,
+    captchaError: undefined,
     pending: null,
     error: null,
     onBack: vi.fn(),
@@ -33,17 +33,13 @@ function createForm(overrides: Partial<Props> = {}) {
     siteKey: "site-key",
     checkRef: { current: undefined },
     onCheck: vi.fn(),
-    checked: false,
     resendCooldown: 0,
-    idPrefix: "test",
     ...overrides,
   } satisfies Props;
 }
 
-function renderStep(form: Props, idPrefix = form.idPrefix) {
-  return render(<OtpCodeStep {...form} idPrefix={idPrefix} />, {
-    wrapper: IntlTestProvider,
-  });
+function renderStep(form: Props) {
+  return render(<OtpCodeStep {...form} />, { wrapper: IntlTestProvider });
 }
 
 describe("OtpCodeStep", () => {
@@ -106,40 +102,7 @@ describe("OtpCodeStep", () => {
     });
   });
 
-  describe("エラー文の結びつき", () => {
-    it("コードのエラー文の要素のidをidPrefixから作り、入力欄と結びつける", () => {
-      // Given
-
-      // When
-      const form = createForm({ codeError: "コードのエラー" });
-      renderStep(form, "reset-password");
-
-      // Then
-      const input = screen.getByPlaceholderText("123456");
-      expect(screen.getByText("コードのエラー")).toHaveAttribute(
-        "id",
-        "reset-password-code-error",
-      );
-      expect(input).toHaveAttribute(
-        "aria-describedby",
-        "reset-password-code-error",
-      );
-      expect(input).toHaveAttribute("aria-invalid", "true");
-    });
-
-    it("コードのエラーがないとき、入力欄を結びつけない", () => {
-      // Given
-
-      // When
-      const form = createForm();
-      renderStep(form);
-
-      // Then
-      const input = screen.getByPlaceholderText("123456");
-      expect(input).not.toHaveAttribute("aria-describedby");
-      expect(input).toHaveAttribute("aria-invalid", "false");
-    });
-
+  describe("再送のエラー", () => {
     it("再送のエラーを再送の欄に表示する", () => {
       // Given
 
@@ -149,6 +112,17 @@ describe("OtpCodeStep", () => {
 
       // Then
       expect(screen.getByText("再送のエラー")).toBeInTheDocument();
+    });
+
+    it("セキュリティチェックの不備を、再送の欄(再送ボタンの下)に表示する", () => {
+      // Given
+
+      // When
+      const form = createForm({ captchaError: "チェックが未完了" });
+      renderStep(form);
+
+      // Then
+      expect(screen.getByText("チェックが未完了")).toBeInTheDocument();
     });
   });
 
@@ -257,7 +231,7 @@ describe("OtpCodeStep", () => {
       // Given
 
       // When
-      const form = createForm({ pending: "resend" });
+      const form = createForm({ pending: "send" });
       renderStep(form);
 
       // Then
@@ -304,27 +278,6 @@ describe("OtpCodeStep", () => {
       // Then
       expect(zeroLabel).toBe(authText("otpResend"));
       expect(oneLabel).toBe("再送（1秒）");
-    });
-
-    it("セキュリティチェックの完了をdata-captcha-readyに反映する", () => {
-      // Given
-
-      // When
-      const ready = createForm({ checked: true });
-      const notReady = createForm({ checked: false });
-      const { unmount } = renderStep(ready);
-      const readyValue = screen
-        .getByRole("button", { name: authText("otpResend") })
-        .getAttribute("data-captcha-ready");
-      unmount();
-      renderStep(notReady);
-      const notReadyValue = screen
-        .getByRole("button", { name: authText("otpResend") })
-        .getAttribute("data-captcha-ready");
-
-      // Then
-      expect(readyValue).toBe("true");
-      expect(notReadyValue).toBe("false");
     });
   });
 });

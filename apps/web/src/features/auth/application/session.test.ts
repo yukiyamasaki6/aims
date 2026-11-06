@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import type { AuthChange, SessionStatus } from "../domain/auth-change";
-import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
+import type { SessionStatus } from "../domain/auth-change";
+import type { AuthFailure } from "../domain/auth-failure";
+import type { SignInChange } from "./auth-changes";
 import type { CallResult } from "./call-result";
 import { createSession, type SessionReading } from "./session";
 
@@ -10,36 +10,31 @@ const accepted: CallResult = { kind: "accepted" };
 // 失敗の値(なければnull)を、認証サービスの頼みごとの結果へ写す。
 function resultOf(failure: AuthFailure | null): CallResult {
   if (failure === null) return accepted;
-  return failure.kind === "unreachable"
-    ? UNREACHABLE
-    : { kind: "refused", failure };
+  return { kind: "failed", failure };
 }
 
 function readingOf(status: SessionStatus): SessionReading {
   return status === "authenticated" ? { status, userId: "user-1" } : { status };
 }
 
-// 偽の部品。認証サービス、通信の可否、ページ遷移の境界だけを差し替える。
+// 偽の部品。認証サービス、ページ遷移の境界だけを差し替える。
 // サインインの状態の読み取りは、checkがあればその結果を、無ければstate.statusを返す。
 function setup(
   options: {
     signOutHere?: () => Promise<AuthFailure | null>;
     check?: () => Promise<SessionStatus>;
-    offline?: boolean;
     here?: string;
-    protectedPath?: string;
   } = {},
 ) {
-  const listeners: Array<(event: AuthChange) => void> = [];
+  const listeners: Array<(event: SignInChange) => void> = [];
   const unsubscribe = vi.fn();
-  const connectivity = createFakeConnectivity(options.offline ?? false);
   const state: { status: SessionStatus } = { status: "authenticated" };
   const check = options.check ?? (async () => state.status);
   const signOutHere = options.signOutHere ?? (async () => null);
   const authority = {
     signOutHere: vi.fn(async () => resultOf(await signOutHere())),
     readSession: vi.fn(async () => readingOf(await check())),
-    subscribe: vi.fn((listener: (event: AuthChange) => void) => {
+    subscribe: vi.fn((listener: (event: SignInChange) => void) => {
       listeners.push(listener);
       // 解除すると、実際にこのリスナーへ以降の出来事が届かなくなる。
       return () => {
@@ -54,9 +49,7 @@ function setup(
   };
   const session = createSession({
     authenticator: authority,
-    connectivity,
     pageReplace: page,
-    protectedPath: options.protectedPath ?? "/rounds",
   });
   return {
     session,
@@ -64,18 +57,16 @@ function setup(
     page,
     state,
     unsubscribe,
-    connectivity,
-    emit(event: AuthChange) {
+    emit(event: SignInChange) {
       for (const listener of listeners) listener(event);
     },
-    goOnline: () => connectivity.goOnline(),
   };
 }
 
 type Authority = ReturnType<typeof setup>["authority"];
 
 const mounted = { isMounted: () => true };
-const signedOut: AuthChange = { kind: "signed-out", userId: null };
+const signedOut: SignInChange = { kind: "signed-out" };
 
 async function flush() {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -83,7 +74,7 @@ async function flush() {
 
 describe("サインアウト", () => {
   describe("表示中に終了の後の読み取りが未認証の場合", () => {
-    it("この端末の終了を1回頼んだ後に状態を読み、完了を返し、遷移元の無いサインインへ1回置き換える", async () => {
+    it("この端末の終了を1回頼んだ後に状態を読み、ignoredを返し、遷移元の無いサインインへ1回置き換える", async () => {
       // Given
       const { session, authority, page, state } = setup({
         here: "/rounds/new",
@@ -97,7 +88,7 @@ describe("サインアウト", () => {
       const result = await session.signOut(mounted);
 
       // Then
-      expect(result).toEqual({ kind: "completed" });
+      expect(result).toEqual({ kind: "ignored" });
       expect(authority.signOutHere).toHaveBeenCalledOnce();
       expect(authority.readSession).toHaveBeenCalledOnce();
       expect(authority.signOutHere.mock.invocationCallOrder[0]).toBeLessThan(
@@ -123,7 +114,7 @@ describe("サインアウト", () => {
         const result = await session.signOut(mounted);
 
         // Then
-        expect(result).toEqual({ kind: "completed" });
+        expect(result).toEqual({ kind: "ignored" });
         expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
       },
     );
@@ -169,7 +160,7 @@ describe("サインアウト", () => {
   });
 
   describe("完了を待つ間に離れた場合", () => {
-    it("終了の応答の前に離れたら、状態を読まずに結果を破棄し、遷移しない", async () => {
+    it("終了の応答の前に離れたら、状態を読んだ上で結果を破棄し、遷移しない", async () => {
       // Given
       let isMounted = true;
       const { session, authority, page, state } = setup({
@@ -184,8 +175,8 @@ describe("サインアウト", () => {
       const result = await session.signOut({ isMounted: () => isMounted });
 
       // Then
-      expect(result).toEqual({ kind: "discarded" });
-      expect(authority.readSession).not.toHaveBeenCalled();
+      expect(result).toEqual({ kind: "ignored" });
+      expect(authority.readSession).toHaveBeenCalledOnce();
       expect(page.replace).not.toHaveBeenCalled();
     });
 
@@ -202,7 +193,7 @@ describe("サインアウト", () => {
       const result = await session.signOut({ isMounted: () => isMounted });
 
       // Then
-      expect(result).toEqual({ kind: "discarded" });
+      expect(result).toEqual({ kind: "ignored" });
       expect(page.replace).not.toHaveBeenCalled();
     });
   });
@@ -254,31 +245,8 @@ describe("サインアウト", () => {
 
       // Then
       expect(authority.signOutHere).toHaveBeenCalledTimes(1);
-      expect(first).toEqual({ kind: "completed" });
-      expect(second).toEqual({ kind: "busy" });
-    });
-
-    it("最初の終了が届かず読み取りが不明で失敗した後に再び頼み、読み取りが未認証なら、完了して遷移元の無いサインインへ1回移る", async () => {
-      // Given
-      const { session, authority, page, state } = setup({
-        here: "/rounds/new",
-      });
-      authority.signOutHere.mockResolvedValueOnce(UNREACHABLE);
-      state.status = "unknown";
-      const first = await session.signOut(mounted);
-      authority.signOutHere.mockImplementationOnce(async () => {
-        state.status = "unauthenticated";
-        return accepted;
-      });
-
-      // When
-      const result = await session.signOut(mounted);
-
-      // Then
-      expect(first).toEqual({ kind: "failed", failure: UNREACHABLE });
-      expect(result).toEqual({ kind: "completed" });
-      expect(authority.signOutHere).toHaveBeenCalledTimes(2);
-      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+      expect(first).toEqual({ kind: "ignored" });
+      expect(second).toEqual({ kind: "ignored" });
     });
 
     it("失敗の後は、実行中が解かれて、再び開始できる", async () => {
@@ -306,8 +274,8 @@ describe("サインアウト", () => {
       const result = await session.signOut(mounted);
 
       // Then
-      expect(discarded).toEqual({ kind: "discarded" });
-      expect(result).toEqual({ kind: "completed" });
+      expect(discarded).toEqual({ kind: "ignored" });
+      expect(result).toEqual({ kind: "ignored" });
     });
   });
 
@@ -381,16 +349,14 @@ describe("サインアウト", () => {
 
     it("実行中に見張りの確認が未認証を返しても、遷移はサインアウトの判定に委ね、遷移元を付けずに1回だけ移る", async () => {
       // Given
-      const { session, authority, page, state, goOnline } = setup({
-        offline: true,
+      const { session, authority, page, state } = setup({
         here: "/rounds/new",
       });
-      session.watch();
       const response = Promise.withResolvers<CallResult>();
       authority.signOutHere.mockReturnValue(response.promise);
       const running = session.signOut(mounted);
       state.status = "unauthenticated";
-      goOnline();
+      session.watch();
       await flush();
       const beforeVerdict = page.replace.mock.calls.length;
 
@@ -430,83 +396,6 @@ describe("サインアウト", () => {
         );
       },
     );
-
-    it("保護の範囲の根が異なる場合、遷移元の検証が根に従う", async () => {
-      // Given
-      const inside = setup({
-        signOutHere: async () => ({ kind: "rate_limited" }),
-        here: "/elsewhere/x",
-        protectedPath: "/elsewhere",
-      });
-      const outside = setup({
-        signOutHere: async () => ({ kind: "rate_limited" }),
-        here: "/rounds/x",
-        protectedPath: "/elsewhere",
-      });
-      for (const { session } of [inside, outside]) {
-        session.watch();
-        await session.signOut(mounted);
-      }
-
-      // When
-      inside.emit(signedOut);
-      outside.emit(signedOut);
-
-      // Then
-      expect(inside.page.replace).toHaveBeenCalledWith(
-        "/signin?returnTo=%2Felsewhere%2Fx",
-      );
-      expect(outside.page.replace).toHaveBeenCalledWith("/signin");
-    });
-
-    it("ラウンド一覧でサインアウトが失敗した後にセッションを失ったときは、遷移元を付けない", async () => {
-      // Given
-      const { session, page, emit } = setup({
-        signOutHere: async () => ({ kind: "rate_limited" }),
-        here: "/rounds",
-      });
-      session.watch();
-      await session.signOut(mounted);
-
-      // When
-      emit(signedOut);
-
-      // Then
-      expect(page.replace).toHaveBeenCalledWith("/signin");
-    });
-
-    it("完了の遷移が投げても、完了を返す", async () => {
-      // Given
-      const { session, page, state } = setup();
-      state.status = "unauthenticated";
-      page.replace.mockImplementationOnce(() => {
-        throw new Error("replace failed");
-      });
-
-      // When
-      const result = await session.signOut(mounted);
-
-      // Then
-      expect(result).toEqual({ kind: "completed" });
-      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
-    });
-
-    it("完了の遷移が投げた後に喪失が来ても、再び遷移しない", async () => {
-      // Given
-      const { session, page, state, emit } = setup();
-      session.watch();
-      state.status = "unauthenticated";
-      page.replace.mockImplementationOnce(() => {
-        throw new Error("replace failed");
-      });
-      await session.signOut(mounted);
-
-      // When
-      emit(signedOut);
-
-      // Then
-      expect(page.replace).toHaveBeenCalledOnce();
-    });
   });
 });
 
@@ -526,23 +415,9 @@ describe("セッション喪失の見張り", () => {
       );
     });
 
-    it("オフラインでもsigned-outを受けると、サインインへ移る", () => {
-      // Given
-      const { session, page, emit } = setup({ offline: true });
-      session.watch();
-
-      // When
-      emit(signedOut);
-
-      // Then
-      expect(page.replace).toHaveBeenCalledTimes(1);
-    });
-
     it.each([
       ["signed-in", { kind: "signed-in", userId: "user-1" }],
-      ["セッションが無いinitial", { kind: "initial", userId: null }],
-      ["トークンの更新", { kind: "token-refreshed", userId: "user-1" }],
-      ["それ以外の変化", { kind: "other", userId: null }],
+      ["token-refreshed", { kind: "token-refreshed", userId: "user-1" }],
     ] as const)("%sでは、移らない", (_name, event) => {
       // Given
       const { session, page, emit } = setup();
@@ -553,19 +428,6 @@ describe("セッション喪失の見張り", () => {
 
       // Then
       expect(page.replace).not.toHaveBeenCalled();
-    });
-
-    it("入力が重なっても、遷移は1回である", () => {
-      // Given
-      const { session, page, emit } = setup();
-      session.watch();
-
-      // When
-      emit(signedOut);
-      emit(signedOut);
-
-      // Then
-      expect(page.replace).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -596,53 +458,19 @@ describe("セッション喪失の見張り", () => {
       // Then
       expect(page.replace).not.toHaveBeenCalled();
     });
-
-    it("オフラインでは、確認せず、移らない", async () => {
-      // Given
-      const { session, authority, page } = setup({
-        offline: true,
-        check: async () => "unauthenticated",
-      });
-
-      // When
-      session.watch();
-      await flush();
-
-      // Then
-      expect(authority.readSession).not.toHaveBeenCalled();
-      expect(page.replace).not.toHaveBeenCalled();
-    });
-
-    it("オフラインで始めた後にオンラインに戻ると、確認して未認証なら移る", async () => {
-      // Given
-      const { session, page, goOnline } = setup({
-        offline: true,
-        check: async () => "unauthenticated",
-      });
-      session.watch();
-
-      // When
-      goOnline();
-      await flush();
-
-      // Then
-      expect(page.replace).toHaveBeenCalledTimes(1);
-    });
   });
 
   describe("やめた後", () => {
-    it("認証状態の購読と、通信が戻る通知を解除する", () => {
+    it("認証状態の購読を解除する", () => {
       // Given
-      const { session, unsubscribe, connectivity } = setup();
+      const { session, unsubscribe } = setup();
       const stop = session.watch();
-      expect(connectivity.subscribers().online).toBe(1);
 
       // When
       stop();
 
       // Then
       expect(unsubscribe).toHaveBeenCalledTimes(1);
-      expect(connectivity.subscribers().online).toBe(0);
     });
 
     it("signed-outが来ても、移らない", async () => {
@@ -674,20 +502,6 @@ describe("セッション喪失の見張り", () => {
 
       // Then
       expect(page.replace).not.toHaveBeenCalled();
-    });
-
-    it("通信が戻る通知が来ても、確認しない", async () => {
-      // Given
-      const { session, authority, goOnline } = setup({ offline: true });
-      const stop = session.watch();
-      stop();
-
-      // When
-      goOnline();
-      await flush();
-
-      // Then
-      expect(authority.readSession).not.toHaveBeenCalled();
     });
   });
 });

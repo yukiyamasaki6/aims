@@ -3,18 +3,15 @@ import { type AuthFailure, UNREACHABLE } from "./auth-failure";
 import { signInHref } from "./auth-routes";
 import type { Start, Step } from "./flow";
 
-// セッションの終わり(明示のサインアウトと、セッションの喪失)の流れ。開始の可否、終えられたかの判定、遷移は1回を守る集約。
+// セッションの終わり(明示のサインアウトと、セッションの喪失)の流れ。開始の可否、終えられたかの判定、遷移の可否を持つ集約。
 
 // running: サインアウトを実行中。実行中は、次のサインアウトを開始せず、喪失の遷移はサインアウトの判定に委ねる(遷移しない)。
-// left: サインインへ移る遷移を始めた。遷移は1回だけにする。
 export type SessionEndFlow = {
   readonly running: boolean;
-  readonly left: boolean;
 };
 
 export const initialSessionEndFlow: SessionEndFlow = {
   running: false,
-  left: false,
 };
 
 // completed: この端末のサインインを終えられた。failed: 終えられなかった(理由つき)。discarded: 完了を待つ間に画面が離れたため、結果を破棄した。
@@ -24,13 +21,11 @@ export type SignOutVerdict =
   | { readonly kind: "discarded" };
 
 // サインアウトを始める。実行中なら始めない。
-export function beginSignOut(flow: SessionEndFlow): Start<SessionEndFlow> {
-  if (flow.running) return { kind: "busy", state: flow };
-  return {
-    kind: "started",
-    state: { ...flow, running: true },
-    request: undefined,
-  };
+export function beginSignOut(
+  flow: SessionEndFlow,
+): Start<SessionEndFlow, true> {
+  if (flow.running) return { state: flow, request: null };
+  return { state: { ...flow, running: true }, request: true };
 }
 
 // サインアウトの呼び出しの後に観測したこと。画面が離れていれば、観測しない(discarded)。
@@ -66,16 +61,12 @@ export function endSignOut(
   };
 }
 
-// サインインへ移る。遷移は1回だけで、移る先を返す(移らないときはnull)。
+// サインインへ移る先を返す(移らないときはnull)。状態は変えない。
+// 同じ喪失が重ねて届いても、同じ場所から同じ移る先を作るので、同じ遷移になる。
 // サインアウトの実行中は移らない(サインアウトの判定に委ねる)。fromは遷移元にする今の場所で、サインアウトが終えられたときはnull(遷移元を付けない)。
 export function leave(
   flow: SessionEndFlow,
   from: string | null,
-  protectedPath: string,
-): Step<SessionEndFlow, string | null> {
-  if (flow.left || flow.running) return { state: flow, result: null };
-  return {
-    state: { ...flow, left: true },
-    result: signInHref(from, protectedPath),
-  };
+): string | null {
+  return flow.running ? null : signInHref(from);
 }

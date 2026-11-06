@@ -1,55 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { validateNewPassword, validatePasswordPresent } from "./password";
 
-const requirementMessage = "invalidRule";
-
 describe("新しいパスワードの検証", () => {
-  it("8文字以上で英数字を含む場合はエラーなし", () => {
+  it("半角英数記号だけなら、長さや英字・数字の有無によらず誤りなし(長さと強さは認証サービスが判断する)", () => {
     // Given
 
     // When
-    const password = "password1";
-    const result = validateNewPassword(password);
+    const results = [
+      "password1",
+      "abc123", // 8文字未満
+      "onlyletters", // 英字のみ
+      "12345678", // 数字のみ
+      "a".repeat(100), // 72文字超
+      "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", // 記号のみ(範囲の両端の!と~を含む)
+    ].map((password) => validateNewPassword(password));
 
     // Then
-    expect(result).toBeUndefined();
+    expect(results).toEqual(Array(results.length).fill(undefined));
   });
 
-  it("下限境界（7/8/9文字）で、7文字のみエラーになる", () => {
-    // Given
-
-    // When
-    const tooShort = "abcdef1"; // 7文字: 下限未満
-    const atMinimum = "abcdefg1"; // 8文字: 下限ちょうど
-    const aboveMinimum = "abcdefgh1"; // 9文字: 下限+1
-    const tooShortResult = validateNewPassword(tooShort);
-    const atMinimumResult = validateNewPassword(atMinimum);
-    const aboveMinimumResult = validateNewPassword(aboveMinimum);
-
-    // Then
-    expect(tooShortResult).toBe(requirementMessage);
-    expect(atMinimumResult).toBeUndefined();
-    expect(aboveMinimumResult).toBeUndefined();
-  });
-
-  it("上限境界（71/72/73文字）で、73文字のみエラーになる", () => {
-    // Given
-
-    // When
-    const belowMaximum = `${"a".repeat(70)}1`; // 71文字: 上限-1
-    const atMaximum = `${"a".repeat(71)}1`; // 72文字: 上限ちょうど
-    const overMaximum = `${"a".repeat(72)}1`; // 73文字: 上限超過
-    const belowMaximumResult = validateNewPassword(belowMaximum);
-    const atMaximumResult = validateNewPassword(atMaximum);
-    const overMaximumResult = validateNewPassword(overMaximum);
-
-    // Then
-    expect(belowMaximumResult).toBeUndefined();
-    expect(atMaximumResult).toBeUndefined();
-    expect(overMaximumResult).toBe(requirementMessage);
-  });
-
-  it("空の場合は入力を促すメッセージを返す", () => {
+  it("空の場合は入力を促す誤りの種類を返す", () => {
     // Given
 
     // When
@@ -61,19 +31,21 @@ describe("新しいパスワードの検証", () => {
   });
 
   it.each([
-    ["8文字未満", "abc123"],
-    ["英字のみ", "onlyletters"],
-    ["数字のみ", "12345678"],
-    ["半角英数記号以外の文字を含む", "password1あ"],
-  ])("%sの場合は要件のメッセージを返す", (_name, password) => {
-    // Given
+    ["日本語を含む", "password1あ"],
+    ["全角英数を含む", "ｐａｓｓｗｏｒｄ１"],
+    ["空白を含む", "pass word1"],
+  ])(
+    "半角英数記号以外の文字を含む(%s)場合は規則の誤りを返す",
+    (_name, password) => {
+      // Given
 
-    // When
-    const result = validateNewPassword(password);
+      // When
+      const result = validateNewPassword(password);
 
-    // Then
-    expect(result).toBe(requirementMessage);
-  });
+      // Then
+      expect(result).toBe("invalidRule");
+    },
+  );
 });
 
 describe("validatePasswordPresent", () => {

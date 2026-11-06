@@ -6,6 +6,11 @@ import {
   SHARED_AUTH_STATE_PATH,
   waitForHydration,
 } from "../helpers/auth";
+import {
+  expectTurnstileReset,
+  turnstileTokenCount,
+  waitForTurnstileToken,
+} from "../helpers/turnstile";
 import { expectHidden, expectUncovered } from "../helpers/visibility";
 
 const authText = translatorFor("auth");
@@ -38,7 +43,7 @@ test("確認済みアカウントでサインインすると、ラウンド一�
   const { email, password } = await createUniqueUser("signin");
   const signInButton = await openSignIn(page);
   await fillCredentials(page, email, password);
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
   await expectHidden(page.locator("[data-turnstile-widget]"));
   await signInButton.click();
   await expect(page).toHaveURL(/\/rounds/);
@@ -50,7 +55,7 @@ test("許可された遷移元からサインインすると、その画面へ�
   const { email, password } = await createUniqueUser("signin-return-to");
   const signInButton = await openSignIn(page, "/rounds/new");
   await fillCredentials(page, email, password);
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
   await signInButton.click();
   await expect(page).toHaveURL(/\/rounds\/new$/);
 });
@@ -64,7 +69,7 @@ test("外部URLを遷移元に指定してサインインすると、外部へ�
     "https://evil.example.com/rounds",
   );
   await fillCredentials(page, email, password);
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
   await signInButton.click();
   await expect(page).toHaveURL(/\/rounds$/);
   expect(new URL(page.url()).hostname).not.toBe("evil.example.com");
@@ -117,7 +122,7 @@ test("認証に失敗すると、理由が表示されセキュリティチェ�
     `signin-wrong-password-${Date.now()}@aims.test`,
     "wrong-password",
   );
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
   // 失敗後の再検証をブロックし、リセットされたまま戻らないことを確認する。
   await page.route("**/challenges.cloudflare.com/**", (route) => route.abort());
   await signInButton.click();
@@ -125,7 +130,7 @@ test("認証に失敗すると、理由が表示されセキュリティチェ�
     page.getByText(authText("failure.invalid_credentials")),
   ).toBeVisible();
   await expect(signInButton).toHaveAttribute("aria-disabled", "false");
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "false");
+  await expectTurnstileReset(page, 1);
 });
 
 test("操作が必要なセキュリティチェックを完了すると、サインインできる", async ({
@@ -141,7 +146,7 @@ test("操作が必要なセキュリティチェックを完了すると、サ�
   const signInButton = await openSignIn(page);
   const widget = page.locator("[data-turnstile-widget]");
   await expectUncovered(widget);
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "false");
+  expect(await turnstileTokenCount(page)).toBe(0);
   await fillCredentials(page, email, password);
   await page.evaluate(() =>
     (
@@ -149,7 +154,7 @@ test("操作が必要なセキュリティチェックを完了すると、サ�
     ).e2eTurnstileSolve(),
   );
   await expectHidden(widget);
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
 
   // サインインしてラウンド一覧へ進む。
   await signInButton.click();

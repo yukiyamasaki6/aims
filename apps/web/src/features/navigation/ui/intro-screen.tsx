@@ -1,10 +1,9 @@
 import { useTranslations } from "next-intl";
 import { AppLogo } from "@/components/app-logo";
-import type { Start } from "../application/start";
 import { StartButton } from "./start-button";
 
 // 紹介画面。アプリ名、説明文、左上のロゴ、開始ボタンを表示する。認証状態によらず同じ内容である。
-export function IntroScreen({ start }: { start: Start }) {
+export function IntroScreen({ startHref }: { startHref: string }) {
   const t = useTranslations("navigation");
   return (
     <>
@@ -18,7 +17,7 @@ export function IntroScreen({ start }: { start: Start }) {
             {t("introDescription")}
           </p>
         </div>
-        <StartButton start={start} />
+        <StartButton href={startHref} />
       </main>
     </>
   );

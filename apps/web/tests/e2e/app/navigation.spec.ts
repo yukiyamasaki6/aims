@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { Locator, Page } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
@@ -10,6 +9,7 @@ import {
 } from "../helpers/auth";
 import { comeBackOnline, goOffline } from "../helpers/service-worker";
 import { overlapNextRefresh } from "../helpers/session-overlap";
+import { revokeAllSessions } from "../helpers/session-revoke";
 import { expectUncovered } from "../helpers/visibility";
 
 const authText = translatorFor("auth");
@@ -33,32 +33,6 @@ async function signInAsDisposableUser(page: Page, prefix: string) {
     password: "password1",
   });
   await waitForHydration(page);
-}
-
-// 同じユーザーの別セッションを作り、そのアクセストークンで管理APIから
-// 全セッションを無効化する（サーバー側でリフレッシュトークンが拒否される状態にする）。
-async function revokeAllSessions(email: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const secretKey = process.env.SUPABASE_SECRET_KEY;
-  if (!url || !anonKey || !secretKey) {
-    throw new Error("Missing Supabase environment variables in e2e test.");
-  }
-  const options = { auth: { autoRefreshToken: false, persistSession: false } };
-  const user = createClient(url, anonKey, options);
-  const { data, error } = await user.auth.signInWithPassword({
-    email,
-    password: "password1",
-    // Turnstileの公式テストキーは、どのトークンでも検証を通過させる。
-    options: { captchaToken: "XXXX.DUMMY.TOKEN.XXXX" },
-  });
-  if (error || !data.session) throw error ?? new Error("no session");
-  const admin = createClient(url, secretKey, options);
-  const result = await admin.auth.admin.signOut(
-    data.session.access_token,
-    "global",
-  );
-  if (result.error) throw result.error;
 }
 
 async function openRounds(page: Page) {
@@ -117,7 +91,6 @@ test.describe("紹介画面とロゴ", () => {
   }) => {
     // 紹介画面を開き、アプリ名と説明文が表示されることを確かめる。
     await page.goto("/");
-    await waitForHydration(page);
     await expect(page.getByRole("heading", { name: "AIMS" })).toBeVisible();
     await expect(
       page.getByText(navigationText("introDescription")),
@@ -149,20 +122,18 @@ test.describe("紹介画面とロゴ", () => {
 test.describe("認証済み", () => {
   test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
-  test("認証済みで紹介画面を開くと、紹介画面のままアプリ名と説明文が表示され、開始ボタンを押すとラウンド一覧へ移動する", async ({
+  test("認証済みで紹介画面を開くと、紹介画面のままアプリ名と説明文が表示され、開始ボタンを押すと、/signupを経て、ラウンド一覧へ移動する", async ({
     page,
   }) => {
     // 紹介画面を開き、移動せずにアプリ名と説明文が表示されることを確かめる。
-    // 開始ボタンの行き先は判定の後に決まるため、判定の完了(data-hydrated)を待つ。
     await page.goto("/");
-    await waitForHydration(page);
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("heading", { name: "AIMS" })).toBeVisible();
     await expect(
       page.getByText(navigationText("introDescription")),
     ).toBeVisible();
 
-    // 開始ボタンを押して、ラウンド一覧へ進む。
+    // 開始ボタンを押して、/signupの認証済みの転送を経て、ラウンド一覧へ進む。
     await page
       .getByRole("link", { name: navigationText("startButton") })
       .click();
@@ -342,7 +313,7 @@ test.describe("未認証のガード", () => {
   test("未認証でラウンド作成画面を開くと、開いた画面を遷移元に付けてサインイン画面へ移動する", async ({
     page,
   }) => {
-    // 代表として/rounds/newを開く。/rounds（遷移元を付けない）、/rounds/[id]・クエリ付きは単体テスト（session.test.ts）で検証する。
+    // 代表として/rounds/newを開く。/rounds・/rounds/[id]・クエリ付きは単体テスト（session.test.ts）で検証する。
     await page.goto("/rounds/new");
 
     await expect(page).toHaveURL(/\/signin\?returnTo=%2Frounds%2Fnew$/);
@@ -383,7 +354,7 @@ test.describe("セッション喪失", () => {
     await signUpAndSignIn(page, { email, password: "password1" });
     await page.goto("/rounds/new");
     await waitForHydration(page);
-    await revokeAllSessions(email);
+    await revokeAllSessions({ email, password: "password1" });
 
     await page.clock.fastForward(PAST_JWT_EXPIRY_MS);
 

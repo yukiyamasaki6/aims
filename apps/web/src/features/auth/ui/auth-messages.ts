@@ -1,6 +1,4 @@
-import { AUTH_CODE_LENGTH } from "../domain/auth-code";
 import type { AuthFailureKind } from "../domain/auth-failure";
-import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import type { FieldErrorKinds } from "../domain/flow";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "../domain/password";
 
@@ -14,21 +12,18 @@ export const authMessages = {
     failure: {
       unreachable:
         "通信エラーが発生しました。しばらくしてから再度お試しください。",
-      unauthenticated: "サインインが必要です。",
       invalid_credentials: "メールアドレスまたはパスワードが間違っています。",
       code_expired: "認証コードが正しくないか、有効期限が切れています。",
       rate_limited:
         "リクエストの間隔が短すぎます。しばらくしてから再度お試しください。",
       captcha_failed: "認証に失敗しました。もう一度お試しください。",
       weak_password: passwordRule,
-      already_registered: "このメールアドレスは既に登録されています。",
       other: "エラーが発生しました。しばらくしてから再度お試しください。",
     } satisfies Record<AuthFailureKind, string>,
     // 入力の誤りの種類。欄ごとに持つ。
     fieldError: {
       email: {
         required: "メールアドレスを入力してください。",
-        tooLong: `メールアドレスは${EMAIL_MAX_LENGTH}文字以内で入力してください。`,
         invalidFormat: "メールアドレスの形式が正しくありません。",
       },
       password: {
@@ -38,14 +33,9 @@ export const authMessages = {
       captcha: {
         incomplete: "セキュリティチェックが完了していません。",
       },
-      code: {
-        required: "認証コードを入力してください。",
-        invalidFormat: `認証コードは${AUTH_CODE_LENGTH}桁の数字で入力してください。`,
-      },
       resend: {
         cooldown:
           "再送はクールダウン中です。しばらくしてから再度お試しください。",
-        incomplete: "セキュリティチェックが完了していません。",
       },
     } satisfies {
       [Field in keyof FieldErrorKinds]: Record<FieldErrorKinds[Field], string>;
@@ -84,6 +74,9 @@ export const authMessages = {
     otpTitle: "認証コードを入力",
     otpDescription: "{email} に送信されたコードを入力してください。",
     otpSpamNote: "メールが届かない場合は、迷惑メールフォルダをご確認ください。",
+    // サインアップのコード入力だけに出す。登録の有無は画面に出さず、登録済みの利用者にはコードの代わりに案内が届く。
+    signUpCodeNote:
+      "登録済みのメールアドレスには、コードの代わりに案内のメールが届きます。",
     otpCodePlaceholder: "123456",
     otpVerify: "確認",
     otpResend: "再送",

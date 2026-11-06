@@ -1,6 +1,6 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import {
-  beginResend,
+  beginSendCode,
   beginSetPassword,
   beginVerifyCode,
   type PasswordSetupEvent,
@@ -24,7 +24,6 @@ export type PasswordSetupView = ScreenView<
 // 画面が呼ぶ操作。
 export type PasswordSetup = {
   sendCode(input: { email: string }, view: PasswordSetupView): Promise<void>;
-  resend(input: { email: string }, view: PasswordSetupView): Promise<void>;
   verifyCode(
     input: { email: string; code: string },
     view: PasswordSetupView,
@@ -34,7 +33,7 @@ export type PasswordSetup = {
     view: PasswordSetupView,
   ): Promise<void>;
   // 再送の待ちを1秒進める出来事を、1秒後に1回送る予約。返す関数で取り消す。
-  tickCooldown(view: PasswordSetupView): () => void;
+  tickCooldown(dispatch: PasswordSetupView["dispatch"]): () => void;
 };
 
 // 共有の順序が使う、認証サービスと、手続きごとのコードの目的。
@@ -49,44 +48,29 @@ const COOLDOWN_TICK_MS = 1000;
 
 export function tickCooldown(
   { clock }: PasswordSetupContext,
-  view: PasswordSetupView,
+  dispatch: PasswordSetupView["dispatch"],
 ): () => void {
   return clock.after(COOLDOWN_TICK_MS, () =>
-    view.dispatch({ type: "cooldownTicked" }),
+    dispatch({ type: "cooldownTicked" }),
   );
 }
 
-// コードの送信の依頼。応答があれば、成功でも拒否でも、使ったトークンは消費し、チェックをやり直させる。
-// 応答が無かった(unreachable)ときは、トークンを使っていないので消費せず、チェックもやり直さない。
-// 送信中に画面を離れたときは、状態を変えず、チェックのやり直しもしない。
-export async function deliver(
+// コードの送付の依頼(初回も再送も)。成功でも失敗でも、トークンは消費し、チェックをやり直させる。
+// 再送の待ちは、送付の成功で始まる。失敗では始めない。
+export async function sendCode(
   { authenticator, purpose }: PasswordSetupContext,
-  { email, captchaToken }: { email: string; captchaToken: string },
-  view: PasswordSetupView,
-  sent: Extract<PasswordSetupEvent, { type: "codeSent" | "codeResent" }>,
-) {
-  const result = await authenticator.sendCode({ purpose, email, captchaToken });
-  if (!view.isMounted()) return;
-  if (result.kind === "unreachable") {
-    view.dispatch({ type: "failed", failure: result });
-    return;
-  }
-  view.dispatch(
-    result.kind === "accepted"
-      ? sent
-      : { type: "refused", failure: result.failure },
-  );
-  view.resetCheck();
-}
-
-export async function resend(
-  context: PasswordSetupContext,
   input: { email: string },
   view: PasswordSetupView,
 ) {
-  const request = view.begin((flow) => beginResend(flow, input));
+  const request = view.begin((flow) => beginSendCode(flow, input));
   if (!request) return;
-  await deliver(context, request, view, { type: "codeResent" });
+  const result = await authenticator.sendCode({ purpose, ...request });
+  view.dispatch(
+    result.kind === "accepted"
+      ? { type: "codeSent" }
+      : { type: "refused", failure: result.failure },
+  );
+  view.resetCheck();
 }
 
 export async function verifyCode(
@@ -97,7 +81,6 @@ export async function verifyCode(
   const request = view.begin((flow) => beginVerifyCode(flow, input));
   if (!request) return;
   const result = await authenticator.verifyCode({ purpose, ...request });
-  if (!view.isMounted()) return;
   const failure = failureOf(result);
   view.dispatch(
     failure ? { type: "failed", failure } : { type: "codeConfirmed" },

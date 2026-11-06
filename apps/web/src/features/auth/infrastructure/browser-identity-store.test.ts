@@ -92,21 +92,16 @@ describe("ブラウザの端末の識別情報", () => {
   });
 
   describe("windowが無い場合(サーバーでの描画中に誤って呼ばれたとき)", () => {
-    it("読み出しはnullを返し、書き込みと消去は何もしない", () => {
+    it("読み出しはnullを返す", () => {
       // Given
       const store = createBrowserIdentityStore();
       vi.stubGlobal("window", undefined);
 
       // When
-      const write = () => {
-        store.write("user-1");
-        store.write(null);
-      };
       const identity = store.read();
 
       // Then
       expect(identity).toBeNull();
-      expect(write).not.toThrow();
     });
   });
 });

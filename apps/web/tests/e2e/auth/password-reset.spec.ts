@@ -1,4 +1,4 @@
-import type { Browser, BrowserContext, Page } from "@playwright/test";
+import type { Browser, Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
@@ -10,7 +10,7 @@ import {
 } from "../helpers/auth";
 import { fastForwardResendCooldown } from "../helpers/clock";
 import { getOtpCodeFromMailpit } from "../helpers/mailpit";
-import { mockTurnstile } from "../helpers/turnstile";
+import { mockTurnstile, waitForTurnstileToken } from "../helpers/turnstile";
 
 const authText = translatorFor("auth");
 
@@ -39,25 +39,31 @@ async function newUser(prefix: string) {
   return email;
 }
 
-// 別の端末に見立てた、別のブラウザの文脈でサインインする。
-// 画面の枠をService Workerのキャッシュから返さず、保護された画面を開くたびにサーバー側の保護を通すため、この文脈ではService Workerを使わない。
+// アクセストークンの期限(jwt_expiry、3600秒)を過ぎるまで時計を進める量。
+const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
+
+// 別の端末に見立てた、別のブラウザの文脈でサインインし、保護された画面(ラウンド一覧)を開いた画面を返す。
+// 画面の枠をService Workerのキャッシュから返さないため、この文脈ではService Workerを使わない。
+// 時計を先に差し替え、期限を過ぎるまで進められるようにする。
 async function signInOnOtherDevice(browser: Browser, email: string) {
   const context = await browser.newContext({ serviceWorkers: "block" });
   const page = await context.newPage();
   await mockTurnstile(page);
+  await page.clock.install();
   await signUpAndSignIn(page, { email, password: ORIGINAL_PASSWORD });
-  return context;
+  await page.goto("/rounds");
+  await waitForHydration(page);
+  return { context, page };
 }
 
-// その文脈で保護された画面を開き、サインインへ移されるか(サインインが終わったか)を確かめる。
-async function expectSignedOutIn(context: BrowserContext) {
-  const page = await context.newPage();
-  await page.goto("/rounds");
-  await expect(page).toHaveURL(/\/signin/);
+// 他の端末のセッションは、パスワードの変更で認証サービスが終える。proxy は端末内でトークンを検証するため、アクセストークンの期限までは枠が開く。
+// 期限を過ぎて更新が拒否されると、見張りがサインインへ移す。
+async function expectSignedOutIn(page: Page) {
+  await page.clock.fastForward(PAST_JWT_EXPIRY_MS);
+  await expect(page).toHaveURL(/\/signin(\?|$)/);
   await expect(
     page.getByRole("heading", { name: authText("signInTitle") }),
   ).toBeVisible();
-  await page.close();
 }
 
 // 検証の対象のセッションとは別のクライアントで、その資格情報でサインインできるかを確かめる。
@@ -89,7 +95,7 @@ test("メールで本人確認してパスワードを変更すると、この�
   // メールを送って認証コードの入力画面へ進む。
   const { emailInput, sendCodeButton } = await openEmailStep(page);
   await emailInput.fill(email);
-  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
   await sendCodeButton.click();
   await expect(
     page.getByRole("heading", { name: authText("otpTitle") }),
@@ -112,11 +118,11 @@ test("メールで本人確認してパスワードを変更すると、この�
     .click();
   await expect(page).toHaveURL(/\/signin$/);
 
-  // この端末と別の端末で保護された画面を開くと、どちらもサインインへ移される。
+  // この端末で保護された画面を開くとサインインへ移され、別の端末は期限を過ぎるとサインインへ移される。
   await page.goto("/rounds");
   await expect(page).toHaveURL(/\/signin/);
-  await expectSignedOutIn(otherDevice);
-  await otherDevice.close();
+  await expectSignedOutIn(otherDevice.page);
+  await otherDevice.context.close();
 
   // 古いパスワードは拒否され、新しいパスワードでサインインしてラウンド一覧へ進む。
   expect(await signInError(email, ORIGINAL_PASSWORD)).toBe(
@@ -128,7 +134,7 @@ test("メールで本人確認してパスワードを変更すると、この�
   const signInButton = page.getByRole("button", {
     name: authText("signInSubmit"),
   });
-  await expect(signInButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
   await signInButton.click();
   await expect(page).toHaveURL(/\/rounds/);
   await expect(
@@ -144,7 +150,7 @@ test("再送待機時間の終了後に再送すると、新しい認証コー�
   await page.clock.install();
   const { emailInput, sendCodeButton } = await openEmailStep(page);
   await emailInput.fill(email);
-  await expect(sendCodeButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 1);
   await sendCodeButton.click();
   await expect(
     page.getByRole("heading", { name: authText("otpTitle") }),
@@ -155,7 +161,7 @@ test("再送待機時間の終了後に再送すると、新しい認証コー�
   const resendButton = page.getByRole("button", {
     name: new RegExp(`^${authText("otpResend")}`),
   });
-  await expect(resendButton).toHaveAttribute("data-captcha-ready", "true");
+  await waitForTurnstileToken(page, 2);
   await fastForwardResendCooldown(page);
   await expect(resendButton).toHaveText(authText("otpResend"));
 

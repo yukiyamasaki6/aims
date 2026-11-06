@@ -10,11 +10,17 @@ vi.mock("@supabase/ssr", () => ({
   createServerClient: db.createServerClient,
 }));
 
-function mockUser(user: { id: string } | null) {
+// getClaimsの結果。claimsがあれば認証済み、無い(null)・エラーは未認証。
+function mockClaims(result: {
+  data: { claims: { sub: string } } | null;
+  error: Error | null;
+}) {
   db.createServerClient.mockImplementation(() => ({
-    auth: { getUser: vi.fn().mockResolvedValue({ data: { user } }) },
+    auth: { getClaims: vi.fn().mockResolvedValue(result) },
   }));
 }
+
+const signedInClaims = { data: { claims: { sub: "user-1" } }, error: null };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -22,127 +28,97 @@ beforeEach(() => {
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
 });
 
-const noRedirect = () => null;
-
 describe("updateSession", () => {
-  it("Supabaseの環境変数が無い場合はエラーを投げる", async () => {
+  it("環境変数のURLと鍵を、@supabase/ssrの接続へそのまま渡す", async () => {
     // Given
-    process.env.NEXT_PUBLIC_SUPABASE_URL = "";
+    mockClaims({ data: null, error: null });
 
     // When
     const request = new NextRequest("https://app.example.com/rounds");
-    const result = updateSession(request, noRedirect);
+    await updateSession(request);
 
     // Then
-    await expect(result).rejects.toThrow(
-      "Missing Supabase environment variables in middleware.",
-    );
-  });
-
-  it("規則が行き先を返したら、その行き先へリダイレクトする", async () => {
-    // Given
-    mockUser(null);
-    const rule = vi.fn(() => "/signin?returnTo=%2Frounds%2F1");
-
-    // When
-    const request = new NextRequest("https://app.example.com/rounds/1");
-    const res = await updateSession(request, rule);
-
-    // Then
-    expect(res.headers.get("location")).toBe(
-      "https://app.example.com/signin?returnTo=%2Frounds%2F1",
-    );
-  });
-
-  it("規則がnullを返したら、リダイレクトしない", async () => {
-    // Given
-    mockUser({ id: "user-1" });
-
-    // When
-    const request = new NextRequest("https://app.example.com/rounds/1");
-    const res = await updateSession(request, noRedirect);
-
-    // Then
-    expect(res.headers.get("location")).toBeNull();
+    const [url, key] = db.createServerClient.mock.calls[0];
+    expect(url).toBe("https://example.supabase.co");
+    expect(key).toBe("anon-key");
   });
 
   it.each([
-    ["未認証", null, false],
-    ["認証済み", { id: "user-1" }, true],
+    ["claimsがある", signedInClaims, true],
+    ["claimsが無い", { data: null, error: null }, false],
+    [
+      "署名が不正などのエラー",
+      { data: null, error: new Error("invalid JWT") },
+      false,
+    ],
   ])(
-    "規則へ、%sかを示すsignedInと、パスとクエリを渡す",
-    async (_name, user, signedIn) => {
+    "getClaimsの結果が%sときは、サインインしているか(%s)を返し、リダイレクトしない応答を返す",
+    async (_name, result, expected) => {
       // Given
-      mockUser(user);
-      const rule = vi.fn(noRedirect);
+      mockClaims(result);
 
       // When
-      const request = new NextRequest("https://app.example.com/rounds/1?a=1");
-      await updateSession(request, rule);
+      const request = new NextRequest("https://app.example.com/rounds/1");
+      const { signedIn, response } = await updateSession(request);
 
       // Then
-      expect(rule).toHaveBeenCalledExactlyOnceWith({
-        signedIn,
-        pathname: "/rounds/1",
-        search: "?a=1",
-        isServerAction: false,
-      });
+      expect(signedIn).toBe(expected);
+      expect(response.headers.get("location")).toBeNull();
     },
   );
 
-  it("Server Action呼び出し(next-actionヘッダー付き)かどうかを規則へ渡す", async () => {
+  it("getClaimsが投げたときも、投げ直さず、未認証として返す", async () => {
     // Given
-    mockUser(null);
-    const rule = vi.fn(noRedirect);
+    db.createServerClient.mockImplementation(() => ({
+      auth: {
+        getClaims: vi.fn().mockRejectedValue(new Error("crypto failed")),
+      },
+    }));
 
     // When
-    const request = new NextRequest("https://app.example.com/rounds/1", {
-      headers: { "next-action": "abc123" },
-    });
-    await updateSession(request, rule);
+    const request = new NextRequest("https://app.example.com/rounds/1");
+    const result = updateSession(request);
 
     // Then
-    expect(rule).toHaveBeenCalledWith(
-      expect.objectContaining({ isServerAction: true }),
-    );
+    await expect(result).resolves.toMatchObject({ signedIn: false });
   });
 
   it("cookiesのgetAllはrequestのcookieをそのまま返す", async () => {
     // Given
-    mockUser({ id: "user-1" });
+    mockClaims(signedInClaims);
 
     // When
     const request = new NextRequest("https://app.example.com/rounds/1", {
       headers: { cookie: "existing=1" },
     });
-    await updateSession(request, noRedirect);
+    await updateSession(request);
 
     // Then
     const [, , options] = db.createServerClient.mock.calls[0];
     expect(options.cookies.getAll()).toEqual(request.cookies.getAll());
   });
 
-  it("cookiesのsetAllで書き込まれた値をrequestとレスポンス双方に反映する", async () => {
+  it("cookiesのsetAllで書き込まれた値を、応答だけに反映する", async () => {
     // Given
-    // 実際のSDKはセッションリフレッシュ時にgetUser内部からcookies.setAllを
-    // 呼び出す。ここではその呼び出しをgetUserのモック内で再現する。
+    // 実際のSDKはセッションリフレッシュ時にgetClaims内部からcookies.setAllを
+    // 呼び出す。ここではその呼び出しをgetClaimsのモック内で再現する。
     db.createServerClient.mockImplementation((_url, _key, options) => ({
       auth: {
-        getUser: vi.fn().mockImplementation(async () => {
+        getClaims: vi.fn().mockImplementation(async () => {
           options.cookies.setAll([
             { name: "sb-token", value: "new-value", options: { path: "/" } },
           ]);
-          return { data: { user: { id: "user-1" } } };
+          return signedInClaims;
         }),
       },
     }));
 
     // When
     const request = new NextRequest("https://app.example.com/rounds/1");
-    const res = await updateSession(request, noRedirect);
+    const { response } = await updateSession(request);
 
     // Then
-    expect(request.cookies.get("sb-token")?.value).toBe("new-value");
-    expect(res.cookies.get("sb-token")?.value).toBe("new-value");
+    expect(response.cookies.get("sb-token")?.value).toBe("new-value");
+    expect(request.cookies.get("sb-token")).toBeUndefined();
   });
 });

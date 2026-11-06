@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { Input } from "@/components/ui/input";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { SignIn } from "../application/sign-in";
 import { RESET_PASSWORD_PATH, SIGN_UP_PATH } from "../domain/auth-routes";
-import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import {
   initialSignInFlow,
   type SignInFlow,
@@ -27,9 +26,12 @@ const ID_PREFIX = "signin";
 export function SignInForm({
   signIn,
   siteKey,
+  readReturnTo,
 }: {
   signIn: SignIn;
-  siteKey: string | undefined;
+  siteKey: string;
+  // 送信時に呼ぶ、URLのクエリの遷移元の値の読み出し(検証していない値で、無ければnull)。
+  readReturnTo: () => string | null;
 }) {
   const {
     state: flow,
@@ -44,7 +46,7 @@ export function SignInForm({
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    void signIn.submit({ email, password }, view);
+    void signIn.submit({ email, password, from: readReturnTo() }, view);
   }
 
   return (
@@ -69,11 +71,7 @@ export function SignInForm({
           onVerify={(token) => view.dispatch({ type: "captchaChecked", token })}
           error={texts.fieldError("captcha", flow.fieldErrors.captcha)}
         />
-        <BusyButton
-          type="submit"
-          data-captcha-ready={flow.captchaToken !== null}
-          busy={flow.submitting}
-        >
+        <BusyButton type="submit" busy={flow.submitting}>
           {t("signInSubmit")}
         </BusyButton>
       </form>
@@ -112,6 +110,7 @@ function SignInFields({
 }) {
   const t = useTranslations("auth");
   const texts = useAuthTexts();
+  const passwordRef = useRef<HTMLInputElement>(null);
   return (
     <>
       <AuthField
@@ -124,7 +123,13 @@ function SignInFields({
             placeholder={t("emailPlaceholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            maxLength={EMAIL_MAX_LENGTH}
+            enterKeyHint="next"
+            // 変換中でないEnterは、送信せずにパスワード欄へ進む。送信はパスワード欄のEnterとボタンで行う。
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+              e.preventDefault();
+              passwordRef.current?.focus();
+            }}
             {...aria}
           />
         )}
@@ -135,6 +140,7 @@ function SignInFields({
       >
         {(aria) => (
           <PasswordInput
+            ref={passwordRef}
             placeholder={t("passwordPlaceholder")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}

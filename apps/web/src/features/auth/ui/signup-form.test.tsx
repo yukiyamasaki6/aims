@@ -13,19 +13,15 @@ import { SignUpForm } from "./signup-form";
 
 const authText = translatorFor("auth");
 
-const NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
 const ACCEPTED: CallResult = { kind: "accepted" };
 
 // 認証と遷移は、手続きの外側の境界のため偽に替える。手続き(createSignUp)は実物を通す。
 const nav = { go: vi.fn() };
 const auth = {
-  isRegistered: vi.fn(),
   sendCode: vi.fn(),
   verifyCode: vi.fn(),
   setPassword: vi.fn(),
-} satisfies PasswordSetupAuthenticator & {
-  isRegistered: (email: string) => Promise<boolean>;
-};
+} satisfies PasswordSetupAuthenticator & {};
 
 // 外部のTurnstileウィジェット（iframe）を包むコンポーネントのため境界としてモックし、onVerifyの発火とreset()の呼び出しを制御し、errorの表示を受け取れるスタブで模す。
 const turnstile = vi.hoisted(() => ({
@@ -54,9 +50,7 @@ function renderForm(options?: { strict?: boolean }) {
   const signUp = createSignUp({
     clock: createBrowserClock(),
     authenticator: auth,
-    registration: auth,
     pageNavigation: { go: nav.go },
-    protectedPath: "/rounds",
   });
   const form = <SignUpForm signUp={signUp} siteKey="site-key" />;
   return render(options?.strict ? <StrictMode>{form}</StrictMode> : form, {
@@ -102,13 +96,8 @@ function changeValue(input: HTMLElement, value: string) {
   fireEvent.change(input, { target: { value } });
 }
 
-function spinnerIn(button: HTMLElement) {
-  return button.querySelector(".animate-spin");
-}
-
 // パスワード設定の段階まで進める。検証対象の操作ではなく、前提の画面を作る。
 async function renderPasswordStep() {
-  auth.isRegistered.mockResolvedValue(false);
   auth.sendCode.mockResolvedValue(ACCEPTED);
   auth.verifyCode.mockResolvedValue(ACCEPTED);
   renderForm();
@@ -126,115 +115,33 @@ describe("SignUpForm", () => {
     vi.clearAllMocks();
   });
 
-  describe("登録済みの判定", () => {
-    it("登録済みのメールアドレスの場合、登録済みのメッセージを表示し、認証コードを送信せずcaptchaも消費しない", async () => {
+  describe("コード入力の案内", () => {
+    it("メールの送信に成功してコード入力の段階へ進むと、登録済みの利用者にはコードの代わりに案内が届くことを表示する", async () => {
       // Given
-      auth.isRegistered.mockResolvedValue(true);
-      const user = userEvent.setup();
-      renderForm();
-
-      // When
-      await submitEmailStep(user);
-
-      // Then
-      expect(
-        await screen.findByText(authText("failure.already_registered")),
-      ).toBeInTheDocument();
-      expect(auth.sendCode).not.toHaveBeenCalled();
-      expect(turnstile.reset).not.toHaveBeenCalled();
-      expect(sendCodeButton()).toHaveAttribute("aria-disabled", "false");
-      expect(spinnerIn(sendCodeButton())).toBeNull();
-    });
-
-    it("登録済みのメッセージの後にメールアドレスを直して送信すると、同じcaptchaトークンでコード入力画面へ進む", async () => {
-      // Given
-      auth.isRegistered.mockResolvedValue(true);
-      const user = userEvent.setup();
-      renderForm();
-      await submitEmailStep(user);
-      await screen.findByText(authText("failure.already_registered"));
-      auth.isRegistered.mockResolvedValue(false);
       auth.sendCode.mockResolvedValue(ACCEPTED);
+      const user = userEvent.setup();
+      renderForm();
 
       // When
-      await user.clear(emailInput());
-      await user.type(emailInput(), "new@example.com");
-      await user.click(sendCodeButton());
+      await submitEmailStep(user);
 
       // Then
       expect(
         await screen.findByRole("heading", { name: authText("otpTitle") }),
       ).toBeInTheDocument();
-      expect(auth.sendCode).toHaveBeenCalledWith({
-        purpose: "sign-up",
-        email: "new@example.com",
-        captchaToken: "captcha-token",
-      });
+      expect(screen.getByText(authText("signUpCodeNote"))).toBeInTheDocument();
     });
 
-    it("登録確認で通信エラーの場合、通信エラーのメッセージを表示し、認証コードを送信せずcaptchaも消費しない", async () => {
+    it("メール入力の段階には、案内を表示しない", () => {
       // Given
-      auth.isRegistered.mockRejectedValue(new Error("lookup failed"));
-      const user = userEvent.setup();
-      renderForm();
 
       // When
-      await submitEmailStep(user);
+      renderForm();
 
       // Then
       expect(
-        await screen.findByText(NETWORK_ERROR_MESSAGE),
-      ).toBeInTheDocument();
-      expect(auth.sendCode).not.toHaveBeenCalled();
-      expect(turnstile.reset).not.toHaveBeenCalled();
-      expect(sendCodeButton()).toHaveAttribute("aria-disabled", "false");
-      expect(spinnerIn(sendCodeButton())).toBeNull();
-      expect(sendCodeButton()).toHaveAttribute("data-captcha-ready", "true");
-    });
-
-    it("通信エラーの後は使っていないトークンを保ち、同じトークンで再試行して進める", async () => {
-      // Given
-      auth.isRegistered.mockRejectedValueOnce(new Error("lookup failed"));
-      auth.isRegistered.mockResolvedValue(false);
-      auth.sendCode.mockResolvedValue(ACCEPTED);
-      const user = userEvent.setup();
-      renderForm();
-      await submitEmailStep(user);
-      await screen.findByText(NETWORK_ERROR_MESSAGE);
-
-      // When
-      await user.click(sendCodeButton());
-
-      // Then
-      expect(
-        await screen.findByRole("heading", { name: authText("otpTitle") }),
-      ).toBeInTheDocument();
-      expect(auth.sendCode).toHaveBeenCalledExactlyOnceWith({
-        purpose: "sign-up",
-        email: "user@example.com",
-        captchaToken: "captcha-token",
-      });
-    });
-
-    it("再描画を挟まず同じタスクで2回押しても、登録の判定は1回だけになる", async () => {
-      // Given
-      const deferred = Promise.withResolvers<boolean>();
-      auth.isRegistered.mockReturnValue(deferred.promise);
-      renderForm();
-      changeValue(emailInput(), "user@example.com");
-      completeCaptcha();
-
-      // When
-      act(() => {
-        fireEvent.click(sendCodeButton());
-        fireEvent.click(sendCodeButton());
-      });
-
-      // Then
-      expect(auth.isRegistered).toHaveBeenCalledOnce();
-      await act(async () => {
-        deferred.resolve(true);
-      });
+        screen.queryByText(authText("signUpCodeNote")),
+      ).not.toBeInTheDocument();
     });
   });
 

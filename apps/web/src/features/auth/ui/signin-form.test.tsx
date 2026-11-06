@@ -7,7 +7,7 @@ import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import type { CallResult } from "../application/call-result";
 import { createSignIn } from "../application/sign-in";
-import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
+import type { AuthFailure } from "../domain/auth-failure";
 import { SignInForm } from "./signin-form";
 
 const authText = translatorFor("auth");
@@ -16,9 +16,7 @@ const accepted: CallResult = { kind: "accepted" };
 
 // 失敗の値を、認証サービスへの頼みごとの結果に写す。
 function resultOf(failure: AuthFailure): CallResult {
-  return failure.kind === "unreachable"
-    ? UNREACHABLE
-    : { kind: "refused", failure };
+  return { kind: "failed", failure };
 }
 
 const widget = vi.hoisted(() => ({
@@ -57,10 +55,14 @@ function setup({
   const signIn = createSignIn({
     authenticator,
     pageNavigation: fake.pageNavigation,
-    returnToReader: { read: () => returnTo },
-    protectedPath: "/rounds",
   });
-  const form = <SignInForm signIn={signIn} siteKey="site-key" />;
+  const form = (
+    <SignInForm
+      signIn={signIn}
+      siteKey="site-key"
+      readReturnTo={() => returnTo}
+    />
+  );
   const rendered = render(strict ? <StrictMode>{form}</StrictMode> : form, {
     wrapper: IntlTestProvider,
   });
@@ -110,7 +112,6 @@ describe("サインイン画面の部品", () => {
     expect(emailInput()).not.toHaveAttribute("aria-describedby");
     expect(passwordInput()).not.toHaveAttribute("aria-describedby");
     expect(widget.reset).not.toHaveBeenCalled();
-    expect(submitButton()).toHaveAttribute("data-captcha-ready", "false");
     expect(submitButton().closest("form")).toHaveAttribute(
       "data-hydrated",
       "true",
@@ -136,17 +137,6 @@ describe("サインイン画面の部品", () => {
     expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds");
     expect(emailInput()).toHaveValue("user@example.com");
     expect(passwordInput()).toHaveValue("password1");
-  });
-
-  it("検証結果に応じて送信準備の属性を更新する", () => {
-    // Given
-    setup();
-
-    // When
-    verify("captcha-token");
-
-    // Then
-    expect(submitButton()).toHaveAttribute("data-captcha-ready", "true");
   });
 
   it("パスワードの表示を切り替えても入力値を保つ", async () => {
@@ -234,28 +224,6 @@ describe("サインイン画面の部品", () => {
     expect(authenticator.signIn).not.toHaveBeenCalled();
   });
 
-  it("認証失敗の文言を表示し、回の前進でチェックを1回リセットする", async () => {
-    // Given
-    const { authenticator } = setup();
-    authenticator.signIn.mockResolvedValue(
-      resultOf({ kind: "invalid_credentials" }),
-    );
-    const user = userEvent.setup();
-    await fillCredentials(user);
-    verify("captcha-token");
-
-    // When
-    await user.click(submitButton());
-
-    // Then
-    expect(
-      await screen.findByText(authText("failure.invalid_credentials")),
-    ).toBeInTheDocument();
-    expect(widget.reset).toHaveBeenCalledOnce();
-    expect(submitButton()).toHaveAttribute("aria-disabled", "false");
-    expect(submitButton()).toHaveAttribute("data-captcha-ready", "false");
-  });
-
   async function failFirstAttempt(
     failure: AuthFailure,
     message: string,
@@ -271,12 +239,13 @@ describe("サインイン画面の部品", () => {
     return { ...rendered, user };
   }
 
+  // 通信の断も含め、どの失敗でも、使ったトークンは消費してチェックをやり直す。
   describe.each([
-    ["認証の失敗", null, "/rounds"],
-    ["認証の失敗(遷移元付き)", "/rounds/new", "/rounds/new"],
-  ] as const)("%sの後の再送信", (_name, returnTo, destination) => {
-    const failure = { kind: "invalid_credentials" } as const;
-    const message = authText("failure.invalid_credentials");
+    ["認証の失敗", "invalid_credentials", null, "/rounds"],
+    ["通信の断(遷移元付き)", "unreachable", "/rounds/new", "/rounds/new"],
+  ] as const)("%sの後の再送信", (_name, kind, returnTo, destination) => {
+    const failure = { kind } as const;
+    const message = authText(`failure.${kind}`);
 
     it("失敗の文言を表示し、チェックを1回リセットして、ボタンを再び押せるようにする", async () => {
       // Given
@@ -336,151 +305,6 @@ describe("サインイン画面の部品", () => {
     });
   });
 
-  describe.each([
-    ["通信の断", null, "/rounds"],
-    ["通信の断(遷移元付き)", "/rounds/new", "/rounds/new"],
-  ] as const)("%sの後の再送信", (_name, returnTo, destination) => {
-    const failure = { kind: "unreachable" } as const;
-    const message = authText("failure.unreachable");
-
-    it("失敗の文言を表示し、チェックをリセットせず、ボタンを再び押せるようにする", async () => {
-      // Given
-      const { authenticator } = setup({ returnTo });
-      authenticator.signIn.mockResolvedValueOnce(resultOf(failure));
-      const user = userEvent.setup();
-      await fillCredentials(user);
-      verify("token-1");
-
-      // When
-      await user.click(submitButton());
-
-      // Then
-      expect(await screen.findByText(message)).toBeInTheDocument();
-      expect(widget.reset).not.toHaveBeenCalled();
-      expect(submitButton()).toHaveAttribute("aria-disabled", "false");
-      expect(submitButton()).toHaveAttribute("data-captcha-ready", "true");
-      expect(submitButton().querySelector(".animate-spin")).toBeNull();
-    });
-
-    it("チェックをやり直さずに押すと、同じトークンで照合して遷移し、失敗の文言が消える", async () => {
-      // Given
-      const { authenticator, navigation, user } = await failFirstAttempt(
-        failure,
-        message,
-        returnTo,
-      );
-
-      // When
-      await user.click(submitButton());
-
-      // Then
-      expect(authenticator.signIn).toHaveBeenCalledTimes(2);
-      expect(authenticator.signIn).toHaveBeenLastCalledWith({
-        email: "user@example.com",
-        password: "password1",
-        captchaToken: "token-1",
-      });
-      expect(navigation.go).toHaveBeenCalledExactlyOnceWith(destination);
-      expect(screen.queryByText(message)).not.toBeInTheDocument();
-    });
-
-    it("新しいトークンで再送信すると、そのトークンで照合して遷移し、失敗の文言が消える", async () => {
-      // Given
-      const { authenticator, navigation, user } = await failFirstAttempt(
-        failure,
-        message,
-        returnTo,
-      );
-      verify("token-2");
-
-      // When
-      await user.click(submitButton());
-
-      // Then
-      expect(authenticator.signIn).toHaveBeenCalledTimes(2);
-      expect(authenticator.signIn).toHaveBeenLastCalledWith({
-        email: "user@example.com",
-        password: "password1",
-        captchaToken: "token-2",
-      });
-      expect(navigation.go).toHaveBeenCalledExactlyOnceWith(destination);
-      expect(screen.queryByText(message)).not.toBeInTheDocument();
-    });
-  });
-
-  it("アンマウント後の認証失敗ではチェックをリセットしない", async () => {
-    // Given
-    const { authenticator, unmount } = setup();
-    const deferred = Promise.withResolvers<CallResult>();
-    authenticator.signIn.mockReturnValue(deferred.promise);
-    const user = userEvent.setup();
-    await fillCredentials(user);
-    verify("captcha-token");
-    fireEvent.click(submitButton());
-
-    // When
-    unmount();
-    await act(async () => deferred.resolve(UNREACHABLE));
-
-    // Then
-    expect(widget.reset).not.toHaveBeenCalled();
-  });
-
-  it("送信中に画面を離れ、その後に成功が戻っても、遷移しない", async () => {
-    // Given
-    const { authenticator, navigation, unmount } = setup();
-    const deferred = Promise.withResolvers<CallResult>();
-    authenticator.signIn.mockReturnValue(deferred.promise);
-    const user = userEvent.setup();
-    await fillCredentials(user);
-    verify("captcha-token");
-    fireEvent.click(submitButton());
-
-    // When
-    unmount();
-    await act(async () => deferred.resolve(accepted));
-
-    // Then
-    expect(authenticator.signIn).toHaveBeenCalledOnce();
-    expect(navigation.go).not.toHaveBeenCalled();
-  });
-
-  it("連打しても認証は1回だけ行い、結果の後に1回だけ遷移する", async () => {
-    // Given
-    const { authenticator, navigation } = setup();
-    const deferred = Promise.withResolvers<CallResult>();
-    authenticator.signIn.mockReturnValue(deferred.promise);
-    const user = userEvent.setup();
-    await fillCredentials(user);
-    verify("captcha-token");
-
-    // When
-    await user.dblClick(submitButton());
-    await act(async () => deferred.resolve(accepted));
-
-    // Then
-    expect(authenticator.signIn).toHaveBeenCalledOnce();
-    expect(navigation.go).toHaveBeenCalledOnce();
-  });
-
-  it("Enterで送信した直後にボタンを押しても、認証は1回だけ行う", async () => {
-    // Given
-    const { authenticator } = setup();
-    const deferred = Promise.withResolvers<CallResult>();
-    authenticator.signIn.mockReturnValue(deferred.promise);
-    const user = userEvent.setup();
-    await fillCredentials(user);
-    verify("captcha-token");
-
-    // When
-    await user.type(passwordInput(), "{Enter}");
-    await user.click(submitButton());
-    await act(async () => deferred.resolve(accepted));
-
-    // Then
-    expect(authenticator.signIn).toHaveBeenCalledOnce();
-  });
-
   it("Strict Modeの二重実行の後でも、送信が終わり遷移する", async () => {
     // Given
     const { authenticator, navigation } = setup({ strict: true });
@@ -496,134 +320,84 @@ describe("サインイン画面の部品", () => {
     expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds");
   });
 
-  it("再描画を挟まず同じタスクで2回送信しても、認証は1回だけ行う", async () => {
+  it("何も入力せずに送信すると、メールアドレス、パスワード、セキュリティチェックの不備を全て表示し、認証しない", async () => {
     // Given
     const { authenticator } = setup();
-    const deferred = Promise.withResolvers<CallResult>();
-    authenticator.signIn.mockReturnValue(deferred.promise);
     const user = userEvent.setup();
-    await fillCredentials(user);
-    verify("captcha-token");
-    const form = submitButton().closest("form") as HTMLFormElement;
-
-    // When
-    act(() => {
-      fireEvent.submit(form);
-      fireEvent.submit(form);
-    });
-    await act(async () => deferred.resolve(accepted));
-
-    // Then
-    expect(authenticator.signIn).toHaveBeenCalledOnce();
-  });
-
-  it("成功の後にもう一度押しても、認証は1回のままで、ボタンは無効のままにする", async () => {
-    // Given
-    const { authenticator, navigation } = setup();
-    const user = userEvent.setup();
-    await fillCredentials(user);
-    verify("captcha-token");
-    await user.click(submitButton());
-
-    // When
-    await user.click(submitButton());
-
-    // Then
-    expect(authenticator.signIn).toHaveBeenCalledOnce();
-    expect(navigation.go).toHaveBeenCalledOnce();
-    expect(submitButton()).toHaveAttribute("aria-disabled", "true");
-    expect(submitButton().querySelector(".animate-spin")).not.toBeNull();
-  });
-
-  it("遷移が投げると、通信エラーの文言を示し、送信中を解除してチェックをやり直させる", async () => {
-    // Given
-    const { navigation } = setup();
-    navigation.go.mockImplementation(() => {
-      throw new Error("push failed");
-    });
-    const user = userEvent.setup();
-    await fillCredentials(user);
-    verify("captcha-token");
 
     // When
     await user.click(submitButton());
 
     // Then
     expect(
-      await screen.findByText(authText("failure.unreachable")),
+      screen.getByText(authText("fieldError.email.required")),
     ).toBeInTheDocument();
-    expect(submitButton()).toHaveAttribute("aria-disabled", "false");
-    expect(widget.reset).toHaveBeenCalledOnce();
+    expect(
+      screen.getByText(authText("fieldError.password.required")),
+    ).toBeInTheDocument();
+    expect(widget.error).toBe(authText("fieldError.captcha.incomplete"));
+    expect(authenticator.signIn).not.toHaveBeenCalled();
   });
 
-  // 判断Q: 理由が表示された後に再び送信した場合は、次の結果が出るまで、表示された理由が残る。
-  describe("再送信の間のエラー表示", () => {
-    const InvalidMessage = authText("failure.invalid_credentials");
-
-    it("認証の失敗の後に新しいトークンで送り直すと、応答までは失敗の理由を残したまま送信中にする", async () => {
+  describe("メールアドレス欄のEnter", () => {
+    it("画面キーボードに「次へ」を示す", () => {
       // Given
-      const { authenticator, user } = await failFirstAttempt(
-        { kind: "invalid_credentials" },
-        InvalidMessage,
-        null,
-      );
-      verify("token-2");
-      authenticator.signIn.mockReturnValue(new Promise(() => {}));
 
       // When
-      await user.click(submitButton());
+      setup();
 
       // Then
-      expect(screen.getByText(InvalidMessage)).toBeInTheDocument();
-      expect(submitButton()).toHaveAttribute("aria-disabled", "true");
-      expect(submitButton().querySelector(".animate-spin")).not.toBeNull();
+      expect(emailInput()).toHaveAttribute("enterkeyhint", "next");
     });
 
-    it("認証の失敗の後に送り直して同じ理由でまた失敗すると、同じ理由を1つだけ示し、送信中の表示を消して再び押せるようにする", async () => {
-      // Given
-      const { authenticator, user } = await failFirstAttempt(
-        { kind: "invalid_credentials" },
-        InvalidMessage,
-        null,
-      );
-      verify("token-2");
-      authenticator.signIn.mockResolvedValue(
-        resultOf({ kind: "invalid_credentials" }),
-      );
-
-      // When
-      await user.click(submitButton());
-
-      // Then
-      expect(screen.getAllByText(InvalidMessage)).toHaveLength(1);
-      expect(submitButton()).toHaveAttribute("aria-disabled", "false");
-      expect(submitButton().querySelector(".animate-spin")).toBeNull();
-      expect(authenticator.signIn).toHaveBeenCalledTimes(2);
-    });
-
-    it("パスワードの入力の不備を直して送ると、応答までは直した欄の以前のエラーを残したまま送信中にする", async () => {
+    it("送信せずに、パスワード欄へフォーカスを移す", async () => {
       // Given
       const { authenticator } = setup();
-      authenticator.signIn.mockReturnValue(new Promise(() => {}));
       const user = userEvent.setup();
-      await user.type(emailInput(), "user@example.com");
+      await fillCredentials(user);
       verify("captcha-token");
-      await user.click(submitButton());
-      expect(
-        screen.getByText(authText("fieldError.password.required")),
-      ).toBeInTheDocument();
-      await user.type(passwordInput(), "password1");
+      await user.click(emailInput());
 
       // When
-      await user.click(submitButton());
+      await user.keyboard("{Enter}");
 
       // Then
-      expect(
-        screen.getByText(authText("fieldError.password.required")),
-      ).toBeInTheDocument();
-      expect(passwordInput()).toHaveAttribute("aria-invalid", "true");
-      expect(submitButton()).toHaveAttribute("aria-disabled", "true");
-      expect(authenticator.signIn).toHaveBeenCalledOnce();
+      expect(passwordInput()).toHaveFocus();
+      expect(authenticator.signIn).not.toHaveBeenCalled();
+    });
+
+    it("変換中のEnterは、何もしない", () => {
+      // Given
+      setup();
+      emailInput().focus();
+
+      // When
+      const notCancelled = fireEvent.keyDown(emailInput(), {
+        key: "Enter",
+        isComposing: true,
+      });
+
+      // Then
+      expect(notCancelled).toBe(true);
+      expect(emailInput()).toHaveFocus();
+    });
+  });
+
+  it("パスワード欄のEnterで送信する", async () => {
+    // Given
+    const { authenticator } = setup();
+    const user = userEvent.setup();
+    await fillCredentials(user);
+    verify("captcha-token");
+
+    // When
+    await user.type(passwordInput(), "{Enter}");
+
+    // Then
+    expect(authenticator.signIn).toHaveBeenCalledExactlyOnceWith({
+      email: "user@example.com",
+      password: "password1",
+      captchaToken: "captcha-token",
     });
   });
 });

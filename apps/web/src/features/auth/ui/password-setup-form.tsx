@@ -38,7 +38,8 @@ export type PasswordSetupCopy = {
   // パスワード欄の見出し。説明(最小文字数など)は規則の持ち主から得て足す。
   passwordLabel: string;
   passwordSubmit: string;
-  passwordFooter: SignInLinkCopy | null;
+  // コード入力の段階に出す案内(無ければ出さない)。
+  codeNote?: string;
 };
 
 type StepProps = {
@@ -46,7 +47,7 @@ type StepProps = {
   copy: PasswordSetupCopy;
   flow: PasswordSetupFlow;
   view: ScreenView<PasswordSetupFlow, PasswordSetupEvent>;
-  siteKey: string | undefined;
+  siteKey: string;
 };
 
 // メール入力、コード入力、パスワード設定の3段階の画面。サインアップとパスワード再設定が使う。
@@ -57,7 +58,7 @@ export function PasswordSetupForm({
 }: {
   procedure: PasswordSetup;
   copy: PasswordSetupCopy;
-  siteKey: string | undefined;
+  siteKey: string;
 }) {
   const {
     state: flow,
@@ -67,11 +68,12 @@ export function PasswordSetupForm({
   const [email, setEmail] = useState("");
   const hydrated = useHydrated();
   const texts = useAuthTexts();
+  const { dispatch } = view;
   // 残りが変わるたびに1秒の予約をやり直し、0で止まり、離れるときに取り消す。
   useEffect(
     () =>
-      flow.resendCooldown === 0 ? undefined : procedure.tickCooldown(view),
-    [flow.resendCooldown, procedure, view],
+      flow.resendCooldown === 0 ? undefined : procedure.tickCooldown(dispatch),
+    [flow.resendCooldown, procedure, dispatch],
   );
   const step = { procedure, copy, flow, view, siteKey };
 
@@ -97,7 +99,6 @@ export function PasswordSetupForm({
       }}
       checkRef={check}
       onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
-      checked={flow.captchaToken !== null}
     />
   );
 }
@@ -118,17 +119,15 @@ function CodeStep({
   const texts = useAuthTexts();
   const [code, setCode] = useState("");
   const pending =
-    flow.pending === "verify" || flow.pending === "resend"
-      ? flow.pending
-      : null;
+    flow.pending === "verify" || flow.pending === "send" ? flow.pending : null;
   return (
     <OtpCodeStep
-      idPrefix={copy.idPrefix}
       email={email}
+      note={copy.codeNote}
       code={code}
       onCodeChange={setCode}
-      codeError={texts.fieldError("code", flow.fieldErrors.code)}
       resendError={texts.fieldError("resend", flow.fieldErrors.resend)}
+      captchaError={texts.fieldError("captcha", flow.fieldErrors.captcha)}
       pending={pending}
       error={texts.failure(flow.error)}
       onBack={() => view.dispatch({ type: "emailStepReturned" })}
@@ -136,11 +135,10 @@ function CodeStep({
         e.preventDefault();
         void procedure.verifyCode({ email, code }, view);
       }}
-      onResend={() => void procedure.resend({ email }, view)}
+      onResend={() => void procedure.sendCode({ email }, view)}
       siteKey={siteKey}
       checkRef={check}
       onCheck={(token) => view.dispatch({ type: "captchaChecked", token })}
-      checked={flow.captchaToken !== null}
       resendCooldown={flow.resendCooldown}
     />
   );
@@ -191,7 +189,6 @@ function PasswordStep({ procedure, copy, flow, view }: StepProps) {
           {texts.failure(flow.error)}
         </p>
       )}
-      {copy.passwordFooter && <SignInLink copy={copy.passwordFooter} />}
     </>
   );
 }

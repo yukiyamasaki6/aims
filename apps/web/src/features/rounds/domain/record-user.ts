@@ -12,20 +12,17 @@ export function matchRecordUser(
 
 // サインインの変化への、記録の利用者の反応。
 export type RecordUserReaction =
-  | { type: "none" }
   | { type: "switch-user"; userId: string | null }
   | { type: "resume" };
 
-// サインインの変化への反応。`signedOut`はサインアウト、`ignored`は利用者を判断できない変化。
-// サインアウトは利用者を無くす。利用者が無い変化と判断できない変化は何もしない(オフラインで検証できないだけの可能性があるため)。
-// 記録の利用者と同じなら保留を再開し、別の利用者か記録の利用者がnullなら、利用者を切り替える。
+// サインインの変化への反応。userIdは、サインインした利用者で、サインアウトならnull。
+// サインアウトは利用者を無くす。記録の利用者と同じなら保留を再開し、別の利用者か記録の利用者がnullなら、利用者を切り替える。
 export function reactionToSignIn(
-  change: { userId: string | null; signedOut: boolean; ignored: boolean },
+  userId: string | null,
   recordUserId: string | null,
 ): RecordUserReaction {
-  if (change.signedOut) return { type: "switch-user", userId: null };
-  if (!change.userId || change.ignored) return { type: "none" };
-  return matchRecordUser(recordUserId, change.userId) === "same"
+  if (userId === null) return { type: "switch-user", userId: null };
+  return matchRecordUser(recordUserId, userId) === "same"
     ? { type: "resume" }
-    : { type: "switch-user", userId: change.userId };
+    : { type: "switch-user", userId };
 }

@@ -9,7 +9,7 @@ export function SignUpForm({
   siteKey,
 }: {
   signUp: PasswordSetup;
-  siteKey: string | undefined;
+  siteKey: string;
 }) {
   const t = useTranslations("auth");
   const copy = {
@@ -20,7 +20,7 @@ export function SignUpForm({
     passwordDescription: t("signUpPasswordDescription"),
     passwordLabel: t("signUpPasswordLabel"),
     passwordSubmit: t("signUpPasswordSubmit"),
-    passwordFooter: null,
+    codeNote: t("signUpCodeNote"),
   };
   return <PasswordSetupForm procedure={signUp} copy={copy} siteKey={siteKey} />;
 }

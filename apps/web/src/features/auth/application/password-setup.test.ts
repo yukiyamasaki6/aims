@@ -11,7 +11,7 @@ import type { CallResult } from "./call-result";
 import {
   applyPassword,
   type PasswordSetupContext,
-  resend,
+  sendCode,
   tickCooldown,
   verifyCode,
 } from "./password-setup";
@@ -76,7 +76,7 @@ describe("パスワード設定の共通の手続き", () => {
       const view = viewOf(resendable);
 
       // When
-      tickCooldown(context, view);
+      tickCooldown(context, view.dispatch);
       clock.advance(999);
       const before = events.length;
       clock.advance(1);
@@ -92,7 +92,7 @@ describe("パスワード設定の共通の手続き", () => {
       const view = viewOf(resendable);
 
       // When
-      const cancel = tickCooldown(context, view);
+      const cancel = tickCooldown(context, view.dispatch);
       cancel();
       clock.advance(1000);
 
@@ -101,14 +101,14 @@ describe("パスワード設定の共通の手続き", () => {
     });
   });
 
-  describe("コードの再送", () => {
+  describe("コードの送付(コード入力の段階からの再送)", () => {
     it("待ち時間が明けてトークンがあれば、送って成功を示し、チェックをやり直させる", async () => {
       // Given
       const { authenticator, context, order, viewOf } = setup();
       const view = viewOf(readyToResend);
 
       // When
-      await resend(context, { email }, view);
+      await sendCode(context, { email }, view);
 
       // Then
       expect(authenticator.sendCode).toHaveBeenCalledExactlyOnceWith({
@@ -116,7 +116,7 @@ describe("パスワード設定の共通の手続き", () => {
         email,
         captchaToken: "resend-token",
       });
-      expect(order).toEqual(["codeResent", "resetCheck"]);
+      expect(order).toEqual(["codeSent", "resetCheck"]);
       expect(view.observedState.captchaToken).toBeNull();
       expect(view.observedState.resendCooldown).toBe(60);
     });
@@ -127,7 +127,7 @@ describe("パスワード設定の共通の手続き", () => {
       const view = viewOf(resendable);
 
       // When
-      await resend(context, { email }, view);
+      await sendCode(context, { email }, view);
 
       // Then
       expect(view.observedState.fieldErrors).toEqual({
@@ -143,40 +143,44 @@ describe("パスワード設定の共通の手続き", () => {
       const running = { ...readyToResend, pending: "verify" as const };
 
       // When
-      await resend(context, { email }, viewOf(running));
+      await sendCode(context, { email }, viewOf(running));
 
       // Then
       expect(events).toEqual([]);
       expect(authenticator.sendCode).not.toHaveBeenCalled();
     });
 
-    it("送信が届かなければ、通信エラーを示し、トークンを使っていないのでチェックをやり直させず保つ", async () => {
+    it("通信の失敗でも、拒否と同じく、通信エラーを示し、トークンを消費してチェックをやり直させる", async () => {
       // Given
       const { authenticator, context, resetCheck, viewOf } = setup();
-      authenticator.sendCode.mockResolvedValue(UNREACHABLE);
+      authenticator.sendCode.mockResolvedValue({
+        kind: "failed",
+        failure: UNREACHABLE,
+      });
       const view = viewOf(readyToResend);
 
       // When
-      await resend(context, { email }, view);
+      await sendCode(context, { email }, view);
 
       // Then
       expect(view.observedState.error).toBe("unreachable");
-      expect(view.observedState.captchaToken).toBe("resend-token");
+      expect(view.observedState.captchaToken).toBeNull();
       expect(view.observedState.pending).toBeNull();
-      expect(resetCheck).not.toHaveBeenCalled();
+      expect(view.observedState.resendCooldown).toBe(0);
+      expect(resetCheck).toHaveBeenCalledOnce();
     });
 
     it("認証サービスが拒否したなら、拒否を示し、トークンを消費してチェックをやり直させる", async () => {
       // Given
       const { authenticator, context, order, viewOf } = setup();
       authenticator.sendCode.mockResolvedValue({
-        kind: "refused",
+        kind: "failed",
         failure: { kind: "captcha_failed" },
       });
       const view = viewOf(readyToResend);
 
       // When
-      await resend(context, { email }, view);
+      await sendCode(context, { email }, view);
 
       // Then
       expect(order).toEqual(["refused", "resetCheck"]);
@@ -209,7 +213,7 @@ describe("パスワード設定の共通の手続き", () => {
       // Given
       const { authenticator, context, events, viewOf } = setup();
       const failure: AuthFailure = { kind: "code_expired" };
-      authenticator.verifyCode.mockResolvedValue({ kind: "refused", failure });
+      authenticator.verifyCode.mockResolvedValue({ kind: "failed", failure });
       const view = viewOf(onCodeStep);
 
       // When
@@ -221,25 +225,29 @@ describe("パスワード設定の共通の手続き", () => {
       expect(view.observedState.pending).toBeNull();
     });
 
-    it("コードに不備があれば、不備だけを示し、認証しない", async () => {
+    it("空のコードでも検査せずに認証サービスへ送り、その拒否を示す", async () => {
       // Given
       const { authenticator, context, events, viewOf } = setup();
-
+      const failure: AuthFailure = { kind: "other" };
+      authenticator.verifyCode.mockResolvedValue({ kind: "failed", failure });
       const view = viewOf(onCodeStep);
 
       // When
-      await verifyCode(context, { email, code: "12a" }, view);
+      await verifyCode(context, { email, code: "" }, view);
 
       // Then
-      expect(events).toEqual([]);
-      expect(view.observedState.fieldErrors.code).toBeDefined();
-      expect(authenticator.verifyCode).not.toHaveBeenCalled();
+      expect(authenticator.verifyCode).toHaveBeenCalledExactlyOnceWith({
+        purpose: "password-reset",
+        email,
+        code: "",
+      });
+      expect(events.at(-1)).toEqual({ type: "failed", failure });
     });
 
     it("実行中なら、何も送らず、認証しない", async () => {
       // Given
       const { authenticator, context, events, viewOf } = setup();
-      const running = { ...onCodeStep, pending: "resend" as const };
+      const running = { ...onCodeStep, pending: "send" as const };
 
       // When
       await verifyCode(context, { email, code: "123456" }, viewOf(running));
@@ -248,49 +256,6 @@ describe("パスワード設定の共通の手続き", () => {
       expect(events).toEqual([]);
       expect(authenticator.verifyCode).not.toHaveBeenCalled();
     });
-  });
-
-  describe("段階外の呼び出し", () => {
-    it.each([
-      ["コードの確認", "email", "verifyCode"],
-      ["コードの確認", "password", "verifyCode"],
-      ["コードの再送", "email", "resend"],
-      ["コードの再送", "password", "resend"],
-      ["パスワードの設定", "email", "applyPassword"],
-      ["パスワードの設定", "code", "applyPassword"],
-    ] as const)(
-      "%sを段階が%sのときに呼んでも、認証サービスを呼ばず、出来事も送らない",
-      async (_label, step, operation) => {
-        // Given
-        const { authenticator, context, events, viewOf } = setup();
-        const view = viewOf({
-          ...resendable,
-          step,
-          resendCooldown: 0,
-          captchaToken: "token",
-        });
-        const calls = {
-          verifyCode: () =>
-            verifyCode(context, { email, code: "123456" }, view),
-          resend: () => resend(context, { email }, view),
-          applyPassword: () =>
-            applyPassword(
-              authenticator.setPassword,
-              { password: "password1" },
-              view,
-            ),
-        };
-
-        // When
-        await calls[operation]();
-
-        // Then
-        expect(events).toEqual([]);
-        expect(authenticator.sendCode).not.toHaveBeenCalled();
-        expect(authenticator.verifyCode).not.toHaveBeenCalled();
-        expect(authenticator.setPassword).not.toHaveBeenCalled();
-      },
-    );
   });
 
   describe("パスワードの設定", () => {
@@ -319,7 +284,7 @@ describe("パスワード設定の共通の手続き", () => {
       // Given
       const { authenticator, viewOf } = setup();
       authenticator.setPassword.mockResolvedValue({
-        kind: "refused",
+        kind: "failed",
         failure: { kind: "weak_password" },
       });
       const view = viewOf(onPasswordStep);
@@ -376,46 +341,8 @@ describe("パスワード設定の共通の手続き", () => {
     });
   });
 
-  // 離れた後に届いた応答は、状態もチェックも変えない。
+  // 離れた後は、設定の続き(遷移)を行わない。
   describe("画面を離れた後の応答", () => {
-    it("コードの再送の待ちで離れたら、拒否を反映せず、チェックをやり直させない", async () => {
-      // Given
-      const { authenticator, context, events, screen, resetCheck, viewOf } =
-        setup();
-      const response = Promise.withResolvers<CallResult>();
-      authenticator.sendCode.mockReturnValue(response.promise);
-      const running = resend(context, { email }, viewOf(readyToResend));
-
-      // When
-      screen.mounted = false;
-      response.resolve({ kind: "refused", failure: { kind: "rate_limited" } });
-      await running;
-
-      // Then
-      expect(events).toEqual([]);
-      expect(resetCheck).not.toHaveBeenCalled();
-    });
-
-    it("コードの確認の待ちで離れたら、結果を反映しない", async () => {
-      // Given
-      const { authenticator, context, events, screen, viewOf } = setup();
-      const response = Promise.withResolvers<CallResult>();
-      authenticator.verifyCode.mockReturnValue(response.promise);
-      const running = verifyCode(
-        context,
-        { email, code: "123456" },
-        viewOf(onCodeStep),
-      );
-
-      // When
-      screen.mounted = false;
-      response.resolve(accepted);
-      await running;
-
-      // Then
-      expect(events).toEqual([]);
-    });
-
     it("パスワードの設定の待ちで離れたら、結果を反映せず、続きを行わない", async () => {
       // Given
       const { authenticator, events, screen, viewOf } = setup();

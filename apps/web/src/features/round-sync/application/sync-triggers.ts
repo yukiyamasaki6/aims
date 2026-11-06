@@ -1,6 +1,9 @@
-import type { IdentityReader, SignInChanges } from "@/features/auth";
+import type {
+  IdentityReader,
+  SignInChange,
+  SignInChanges,
+} from "@/features/auth";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import { type SignInChange, startsRefresh } from "../domain/sync-trigger";
 import type { RoundSync } from "./round-sync";
 
 // 画面が見える状態になったことの通知。
@@ -25,7 +28,7 @@ export function createSyncTriggers(deps: {
 
   function handleSignIn(change: SignInChange) {
     sync.signInChanged(change);
-    if (startsRefresh(change)) sync.refreshAll("resident");
+    if (change.kind === "signed-in") sync.refreshAll("resident");
   }
 
   return {

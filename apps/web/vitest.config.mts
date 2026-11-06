@@ -12,7 +12,6 @@ export default defineConfig({
     env: {
       NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key",
-      SUPABASE_SECRET_KEY: "secret-key",
     },
     exclude: ["node_modules/**", "tests/e2e/**"],
     coverage: {

@@ -1,8 +1,4 @@
-import {
-  RESEND_COOLDOWN_SECONDS,
-  validateAuthCode,
-  validateResendWait,
-} from "./auth-code";
+import { RESEND_COOLDOWN_SECONDS, validateResendWait } from "./auth-code";
 import type { AuthFailure, AuthFailureKind } from "./auth-failure";
 import { isCaptchaCompleted } from "./captcha-token";
 import { validateEmail } from "./email-address";
@@ -13,7 +9,7 @@ import { validateNewPassword } from "./password";
 // 段階、実行中の操作、再送の待ち時間、セキュリティチェックのトークンと、
 // 操作の開始の可否と入力の検証の順序、失敗の後の状態、トークンの消費を守る集約。
 
-type Operation = "send" | "verify" | "resend" | "setPassword";
+type Operation = "send" | "verify" | "setPassword";
 
 export type PasswordSetupFlow = {
   readonly step: "email" | "code" | "password";
@@ -21,7 +17,7 @@ export type PasswordSetupFlow = {
   readonly pending: Operation | null;
   readonly resendCooldown: number;
   readonly fieldErrors: FieldErrors<
-    "email" | "captcha" | "code" | "resend" | "password"
+    "email" | "captcha" | "resend" | "password"
   >;
   readonly error: AuthFailureKind | null;
 };
@@ -42,92 +38,75 @@ type Checked<Request> =
   | { readonly ok: false; readonly fieldErrors: FieldErrorSet }
   | { readonly ok: true; readonly request: Request };
 
-// 開始の命令。実行中の操作が無く、操作の段階にあるときだけ開始できる(busy)。
-// 入力の不備は、操作ごとの順序で最初の1件を示す(invalid)。開始できるなら、その操作を実行中にする(started)。
-// 開始では以前のエラーを消さない。エラーは次の結果で変わる(4操作で同じ)。
+// 開始の命令。実行中の操作が無いときだけ開始できる(busy)。画面は現在の段階の操作だけを描くため、段階は検査しない。
+// 入力の不備は、検査できる全てを示す(invalid)。開始できるなら、その操作を実行中にする(started)。
+// 開始では以前のエラーを消す(4操作で同じ)。
 function begin<Request>(
   flow: PasswordSetupFlow,
   operation: Operation,
-  step: PasswordSetupFlow["step"],
   check: () => Checked<Request>,
 ): Start<PasswordSetupFlow, Request> {
-  if (flow.pending !== null || flow.step !== step) {
-    return { kind: "busy", state: flow };
+  if (flow.pending !== null) {
+    return { state: flow, request: null };
   }
   const checked = check();
   if (!checked.ok) {
     return {
-      kind: "invalid",
       state: { ...flow, error: null, fieldErrors: checked.fieldErrors },
+      request: null,
     };
   }
   return {
-    kind: "started",
     state: {
       ...flow,
+      error: null,
+      fieldErrors: {},
       pending: operation,
-      resendCooldown:
-        operation === "resend" ? RESEND_COOLDOWN_SECONDS : flow.resendCooldown,
     },
     request: checked.request,
   };
 }
 
-// コードの送信。メールアドレス、セキュリティチェックの順に不備が無ければ送れる。
+// コードの送付(初回も再送も)。メールアドレス、再送の待ち時間、セキュリティチェックの全てに不備が無ければ送れる。
+// 待ちは、コード入力の段階で残りがあるときの不備である(メール入力の段階では0)。
 export function beginSendCode(
   flow: PasswordSetupFlow,
   input: { email: string },
 ): Start<PasswordSetupFlow, { email: string; captchaToken: string }> {
-  return begin(flow, "send", "email", () => {
+  return begin(flow, "send", () => {
     const email = validateEmail(input.email);
-    if (email) return { ok: false, fieldErrors: { email } };
-    if (!isCaptchaCompleted(flow.captchaToken)) {
+    const wait = validateResendWait(flow.resendCooldown);
+    const { captchaToken } = flow;
+    if (email || wait || !isCaptchaCompleted(captchaToken)) {
       return {
         ok: false,
-        fieldErrors: { captcha: "incomplete" },
+        fieldErrors: {
+          ...(email && { email }),
+          ...(wait && { resend: wait }),
+          ...(!isCaptchaCompleted(captchaToken) && { captcha: "incomplete" }),
+        },
       };
     }
-    return {
-      ok: true,
-      request: { email: input.email, captchaToken: flow.captchaToken },
-    };
+    return { ok: true, request: { email: input.email, captchaToken } };
   });
 }
 
+// コードの確認。入力の検査はせず、空のコードも認証サービスに送って判断を任せる。
 export function beginVerifyCode(
   flow: PasswordSetupFlow,
   input: { email: string; code: string },
 ): Start<PasswordSetupFlow, { email: string; code: string }> {
-  return begin(flow, "verify", "code", () => {
-    const code = validateAuthCode(input.code);
-    if (code) return { ok: false, fieldErrors: { code } };
-    return { ok: true, request: { email: input.email, code: input.code } };
-  });
-}
-
-// コードの再送。待ち時間、セキュリティチェックの順に不備が無ければ送れる。
-export function beginResend(
-  flow: PasswordSetupFlow,
-  input: { email: string },
-): Start<PasswordSetupFlow, { email: string; captchaToken: string }> {
-  return begin(flow, "resend", "code", () => {
-    const wait = validateResendWait(flow.resendCooldown);
-    if (wait) return { ok: false, fieldErrors: { resend: wait } };
-    if (!isCaptchaCompleted(flow.captchaToken)) {
-      return { ok: false, fieldErrors: { resend: "incomplete" } };
-    }
-    return {
-      ok: true,
-      request: { email: input.email, captchaToken: flow.captchaToken },
-    };
-  });
+  return begin(flow, "verify", () => ({
+    ok: true,
+    request: { email: input.email, code: input.code },
+  }));
 }
 
 export function beginSetPassword(
   flow: PasswordSetupFlow,
   input: { password: string },
 ): Start<PasswordSetupFlow, { password: string }> {
-  return begin(flow, "setPassword", "password", () => {
+  return begin(flow, "setPassword", () => {
     const password = validateNewPassword(input.password);
     if (password) return { ok: false, fieldErrors: { password } };
     return { ok: true, request: { password: input.password } };
@@ -140,7 +119,6 @@ export type PasswordSetupEvent =
   | { type: "cooldownTicked" }
   | { type: "emailStepReturned" }
   | { type: "codeSent" }
-  | { type: "codeResent" }
   | { type: "codeConfirmed" }
   | { type: "passwordSet" }
   | { type: "failed"; failure: AuthFailure }
@@ -155,7 +133,7 @@ export function passwordSetupReducer(
       return { ...flow, captchaToken: event.token };
     case "cooldownTicked":
       return { ...flow, resendCooldown: flow.resendCooldown - 1 };
-    // 確認と再送の応答待ちに戻ると、遅れて届いた応答が別の段階へ反映されるため、操作中は戻らない。
+    // 確認と送付の応答待ちに戻ると、遅れて届いた応答が別の段階へ反映されるため、操作中は戻らない。
     case "emailStepReturned":
       return flow.pending !== null
         ? flow
@@ -163,6 +141,7 @@ export function passwordSetupReducer(
             ...flow,
             step: "email",
             captchaToken: null,
+            resendCooldown: 0,
             error: null,
             fieldErrors: {},
           };
@@ -176,11 +155,11 @@ export function passwordSetupReducer(
 
 type Settlement = Extract<
   PasswordSetupEvent,
-  { type: "codeSent" | "codeResent" | "codeConfirmed" | "failed" | "refused" }
+  { type: "codeSent" | "codeConfirmed" | "failed" | "refused" }
 >;
 
 // 操作の結果。実行中を解除し、結果を反映する。成功は以前のエラーを消し、失敗は理由に差し替える。
-// セキュリティチェックのトークンは、認証サービスが応答すれば(コードの送信と再送の成功も、拒否も)使ったため消費する。応答が無かった失敗(failed)は、使っていないので消費しない。
+// セキュリティチェックのトークンは、コードの送付の成功(codeSent)も失敗(refused)も使ったため消費する。確認とパスワードの設定の失敗(failed)はトークンを使わない。
 function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
   switch (event.type) {
     case "codeSent":
@@ -192,14 +171,6 @@ function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
         error: null,
         fieldErrors: {},
         resendCooldown: RESEND_COOLDOWN_SECONDS,
-      };
-    case "codeResent":
-      return {
-        ...flow,
-        captchaToken: null,
-        pending: null,
-        error: null,
-        fieldErrors: {},
       };
     case "codeConfirmed":
       return {

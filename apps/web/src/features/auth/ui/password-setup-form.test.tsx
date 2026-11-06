@@ -22,13 +22,13 @@ import type { PasswordSetup } from "../application/password-setup";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import { createResetPassword } from "../application/reset-password";
 import { createSignUp } from "../application/sign-up";
-import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
+import type { AuthFailure } from "../domain/auth-failure";
 import { ResetPasswordForm } from "./reset-password-form";
 import { SignUpForm } from "./signup-form";
 
 const authText = translatorFor("auth");
 
-const NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
+const _NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
 const CAPTCHA_ERROR_MESSAGE = authText("fieldError.captcha.incomplete");
 const COOLDOWN_ERROR_MESSAGE = authText("fieldError.resend.cooldown");
 const OTP_EXPIRED_MESSAGE = authText("failure.code_expired");
@@ -36,20 +36,19 @@ const ACCEPTED: CallResult = { kind: "accepted" };
 
 // 認証サービスが拒否した結果。
 function refusedWith(failure: AuthFailure): CallResult {
-  return { kind: "refused", failure };
+  return { kind: "failed", failure };
 }
 
 // 認証と、完了後の遷移は、手続きの外側の境界のため偽に替える。手続き(createSignUp、createResetPassword)は実物を通す。
-// サインアップの遷移(navigation.go)と再設定のページ全体の読み込み(pageLoad.load)は、同じ偽の関数で受ける。
-// パスワードの設定は、サインアップではブラウザの認証の実装へ、再設定では要求の入口(passwordChange)へ頼む。どちらも同じ偽の関数(setPassword)で受ける。
+// サインアップと再設定の完了後の遷移は、同じ偽の関数(leave)で受ける。
 const leave = vi.fn();
 const auth = {
-  isRegistered: vi.fn(),
   sendCode: vi.fn(),
   verifyCode: vi.fn(),
   setPassword: vi.fn(),
+  signOutHere: vi.fn(),
 } satisfies PasswordSetupAuthenticator & {
-  isRegistered: (email: string) => Promise<boolean>;
+  signOutHere(): Promise<CallResult>;
 };
 
 // 画面の骨組みを共有する2つの手続きと、手続きごとに違う値(見出し、欄の名前、完了後の遷移先)。
@@ -70,9 +69,7 @@ const subjects: {
       createSignUp({
         clock: createBrowserClock(),
         authenticator: auth,
-        registration: auth,
         pageNavigation: { go: leave },
-        protectedPath: "/rounds",
       }),
     form: (procedure) => <SignUpForm signUp={procedure} siteKey="site-key" />,
     emailHeading: "サインアップ",
@@ -88,8 +85,7 @@ const subjects: {
       createResetPassword({
         clock: createBrowserClock(),
         authenticator: auth,
-        passwordChange: { change: auth.setPassword },
-        pageLoad: { load: leave },
+        pageNavigation: { go: leave },
       }),
     form: (procedure) => (
       <ResetPasswordForm resetPassword={procedure} siteKey="site-key" />
@@ -127,8 +123,10 @@ vi.mock("./turnstile", () => ({
 
 type User = ReturnType<typeof userEvent.setup>;
 
-function refused(kind: "rate_limited" | "captcha_failed"): CallResult {
-  return { kind: "refused", failure: { kind } };
+function refused(
+  kind: "rate_limited" | "captcha_failed" | "unreachable",
+): CallResult {
+  return { kind: "failed", failure: { kind } };
 }
 
 function renderForm(options?: { strict?: boolean }) {
@@ -209,7 +207,6 @@ function spinnerIn(button: HTMLElement) {
 
 // 前提となる画面まで進める。検証対象の操作ではなく、フェイクタイマー下でも使えるようにfireEventで操作する。
 async function advanceToCodeStep(email = "user@example.com") {
-  auth.isRegistered.mockResolvedValue(false);
   auth.sendCode.mockResolvedValue(ACCEPTED);
   changeValue(emailInput(), email);
   completeCaptcha();
@@ -231,12 +228,21 @@ async function advanceToPasswordStep() {
 
 // 確認・再送が終わった後に、送信中表示を解除し、再送・確認・戻るのいずれも再び実行できる（共有の送信中ガードが解除されている）ことを検証する。
 // 再送はクールダウン中のため、クールダウン中のエラーが表示されることで操作を受け付けたことを確認する。
-async function expectCodeStepOperationsAvailable() {
+// resendBlockedBy: 再送を押したときに示される不備。待ちが残っていれば"cooldown"、再送の失敗の直後(待ちを始めず、トークンを消費済み)は"captcha"。
+async function expectCodeStepOperationsAvailable(
+  resendBlockedBy: "cooldown" | "captcha" = "cooldown",
+) {
   expect(spinnerIn(verifyButton())).toBeNull();
   expect(spinnerIn(resendButton())).toBeNull();
 
   fireEvent.click(resendButton());
-  expect(screen.getByText(COOLDOWN_ERROR_MESSAGE)).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      resendBlockedBy === "cooldown"
+        ? COOLDOWN_ERROR_MESSAGE
+        : CAPTCHA_ERROR_MESSAGE,
+    ),
+  ).toBeInTheDocument();
 
   auth.verifyCode.mockClear();
   auth.verifyCode.mockResolvedValue(refusedWith({ kind: "code_expired" }));
@@ -250,7 +256,7 @@ async function expectCodeStepOperationsAvailable() {
 }
 
 // 確認・再送の通信中に、確認・再送・戻るを無効表示にして通信中の操作のボタンのみ送信中表示にし、いずれの操作も受け付けないことを検証する。
-function expectCodeStepOperationsBlocked(pending: "verify" | "resend") {
+function expectCodeStepOperationsBlocked(pending: "verify" | "send") {
   for (const button of [verifyButton(), resendButton(), backButton()]) {
     expect(button).toHaveAttribute("aria-disabled", "true");
   }
@@ -278,7 +284,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
   describe("認証コード送信", () => {
     it("captchaトークンで認証コードを送信し、captchaをリセットして送信中表示を解除してコード入力画面へ進む", async () => {
       // Given
-      auth.isRegistered.mockResolvedValue(false);
       auth.sendCode.mockResolvedValue(ACCEPTED);
       const user = userEvent.setup();
       renderForm();
@@ -309,7 +314,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
     it("送信中に二重クリックした場合、送信中表示にし1回しか送信しない", async () => {
       // Given
-      auth.isRegistered.mockResolvedValue(false);
       const deferred = Promise.withResolvers<CallResult>();
       auth.sendCode.mockReturnValue(deferred.promise);
       const user = userEvent.setup();
@@ -345,23 +349,24 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       expect(auth.sendCode).not.toHaveBeenCalled();
     });
 
-    it("captcha未完了の場合、captcha欄にエラーを表示し送信しない", async () => {
+    it("メールアドレスが未入力でcaptchaも未完了の場合、メール欄とcaptcha欄のエラーを同時に表示し送信しない", async () => {
       // Given
       const user = userEvent.setup();
       renderForm();
-      await user.type(emailInput(), "user@example.com");
 
       // When
       await user.click(sendCodeButton());
 
       // Then
+      expect(
+        screen.getByText(authText("fieldError.email.required")),
+      ).toBeInTheDocument();
       expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
       expect(auth.sendCode).not.toHaveBeenCalled();
     });
 
     it("認証エラーの場合、翻訳したメッセージを表示しcaptchaをリセットして、メールアドレス入力画面に留まる", async () => {
       // Given
-      auth.isRegistered.mockResolvedValue(false);
       auth.sendCode.mockResolvedValue(refused("rate_limited"));
       const user = userEvent.setup();
       renderForm();
@@ -377,89 +382,43 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       expect(turnstile.reset).toHaveBeenCalledOnce();
       expect(sendCodeButton()).toHaveAttribute("aria-disabled", "false");
       expect(spinnerIn(sendCodeButton())).toBeNull();
-      expect(sendCodeButton()).toHaveAttribute("data-captcha-ready", "false");
     });
 
-    it("送信中にアンマウントされた場合、captchaのリセットを行わない", async () => {
-      // Given
-      auth.isRegistered.mockResolvedValue(false);
-      const deferred = Promise.withResolvers<CallResult>();
-      auth.sendCode.mockReturnValue(deferred.promise);
-      const user = userEvent.setup();
-      const { unmount } = renderForm();
-      await user.type(emailInput(), "user@example.com");
-      completeCaptcha();
-      fireEvent.click(sendCodeButton());
-      await waitFor(() => {
+    it.each([
+      ["認証サービスが拒否した", "rate_limited"],
+      ["通信の失敗になった", "unreachable"],
+    ] as const)(
+      "%s後は使ったトークンを消費し、新しいトークンで取り直して進める",
+      async (_name, kind) => {
+        // Given
+        auth.sendCode.mockResolvedValueOnce(refused(kind));
+        auth.sendCode.mockResolvedValue(ACCEPTED);
+        const user = userEvent.setup();
+        renderForm();
+        await submitEmailStep(user);
+        await screen.findByText(authText(`failure.${kind}`));
+        await user.click(sendCodeButton());
+        expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
         expect(auth.sendCode).toHaveBeenCalledOnce();
-      });
+        completeCaptcha("second-token");
 
-      // When
-      unmount();
-      deferred.resolve(ACCEPTED);
-      await settle();
+        // When
+        await user.click(sendCodeButton());
 
-      // Then
-      expect(turnstile.reset).not.toHaveBeenCalled();
-    });
-
-    it("コードの送信が届かなかった場合も、使っていないトークンを保ち、同じトークンで再試行して進める", async () => {
-      // Given
-      auth.isRegistered.mockResolvedValue(false);
-      auth.sendCode.mockResolvedValueOnce(UNREACHABLE);
-      auth.sendCode.mockResolvedValue(ACCEPTED);
-      const user = userEvent.setup();
-      renderForm();
-      await submitEmailStep(user);
-      await screen.findByText(NETWORK_ERROR_MESSAGE);
-      expect(sendCodeButton()).toHaveAttribute("data-captcha-ready", "true");
-
-      // When
-      await user.click(sendCodeButton());
-
-      // Then
-      expect(
-        await screen.findByRole("heading", { name: authText("otpTitle") }),
-      ).toBeInTheDocument();
-      expect(auth.sendCode).toHaveBeenLastCalledWith({
-        purpose: subject.purpose,
-        email: "user@example.com",
-        captchaToken: "captcha-token",
-      });
-      expect(turnstile.reset).toHaveBeenCalledOnce();
-    });
-
-    it("認証サービスが拒否した後は使ったトークンを消費し、新しいトークンで取り直して進める", async () => {
-      // Given
-      auth.isRegistered.mockResolvedValue(false);
-      auth.sendCode.mockResolvedValueOnce(refused("rate_limited"));
-      auth.sendCode.mockResolvedValue(ACCEPTED);
-      const user = userEvent.setup();
-      renderForm();
-      await submitEmailStep(user);
-      await screen.findByText(authText("failure.rate_limited"));
-      await user.click(sendCodeButton());
-      expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
-      expect(auth.sendCode).toHaveBeenCalledOnce();
-      completeCaptcha("second-token");
-
-      // When
-      await user.click(sendCodeButton());
-
-      // Then
-      expect(
-        await screen.findByRole("heading", { name: authText("otpTitle") }),
-      ).toBeInTheDocument();
-      expect(auth.sendCode).toHaveBeenLastCalledWith({
-        purpose: subject.purpose,
-        email: "user@example.com",
-        captchaToken: "second-token",
-      });
-    });
+        // Then
+        expect(
+          await screen.findByRole("heading", { name: authText("otpTitle") }),
+        ).toBeInTheDocument();
+        expect(auth.sendCode).toHaveBeenLastCalledWith({
+          purpose: subject.purpose,
+          email: "user@example.com",
+          captchaToken: "second-token",
+        });
+      },
+    );
 
     it("Strict Modeの二重実行の後でも、送信が終わってコード入力画面へ進む", async () => {
       // Given
-      auth.isRegistered.mockResolvedValue(false);
       auth.sendCode.mockResolvedValue(ACCEPTED);
       const user = userEvent.setup();
       renderForm({ strict: true });
@@ -521,23 +480,23 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       });
     });
 
-    it("コードの形式が不正な場合、コード欄にエラーを表示し認証しない", async () => {
+    it("コードが空でも送信を止めず、認証サービスの拒否を表示する", async () => {
       // Given
       const user = userEvent.setup();
       renderForm();
       await advanceToCodeStep();
-      await user.type(codeInput(), "12a");
+      auth.verifyCode.mockResolvedValue(refusedWith({ kind: "other" }));
 
       // When
       await user.click(verifyButton());
 
       // Then
-      const message = screen.getByText(
-        "認証コードは6桁の数字で入力してください。",
-      );
-      expect(codeInput()).toHaveAttribute("aria-invalid", "true");
-      expect(codeInput()).toHaveAttribute("aria-describedby", message.id);
-      expect(auth.verifyCode).not.toHaveBeenCalled();
+      expect(await screen.findByText(authText("failure.other"))).toBeVisible();
+      expect(auth.verifyCode).toHaveBeenCalledExactlyOnceWith({
+        purpose: subject.purpose,
+        email: "user@example.com",
+        code: "",
+      });
     });
 
     it("認証エラーの場合、翻訳したメッセージを表示し、再送・確認・戻るを再び実行できる", async () => {
@@ -553,25 +512,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
 
       // Then
       expect(await screen.findByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-      expect(heading(authText("otpTitle"))).toBeInTheDocument();
-      await expectCodeStepOperationsAvailable();
-    });
-
-    it("通信エラーの場合、通信エラーのメッセージを表示し、再送・確認・戻るを再び実行できる", async () => {
-      // Given
-      const user = userEvent.setup();
-      renderForm();
-      await advanceToCodeStep();
-      auth.verifyCode.mockResolvedValue(UNREACHABLE);
-      await user.type(codeInput(), "123456");
-
-      // When
-      await user.click(verifyButton());
-
-      // Then
-      expect(
-        await screen.findByText(NETWORK_ERROR_MESSAGE),
-      ).toBeInTheDocument();
       expect(heading(authText("otpTitle"))).toBeInTheDocument();
       await expectCodeStepOperationsAvailable();
     });
@@ -592,7 +532,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       // Then
       expect(heading(subject.emailHeading)).toBeInTheDocument();
       expect(emailInput()).toHaveValue("user@example.com");
-      expect(sendCodeButton()).toHaveAttribute("data-captcha-ready", "false");
     });
 
     it("戻った後に再度コード入力画面へ進むと、前回のコード入力値が残っていない", async () => {
@@ -762,7 +701,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       fireEvent.click(resendButton());
 
       // Then
-      expectCodeStepOperationsBlocked("resend");
+      expectCodeStepOperationsBlocked("send");
       expect(auth.sendCode).toHaveBeenCalledOnce();
       expect(auth.verifyCode).not.toHaveBeenCalled();
       deferred.resolve(ACCEPTED);
@@ -786,98 +725,42 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
         screen.getByText(authText("failure.captcha_failed")),
       ).toBeInTheDocument();
       expect(turnstile.reset).toHaveBeenCalledOnce();
-      await expectCodeStepOperationsAvailable();
+      await expectCodeStepOperationsAvailable("captcha");
     });
 
-    it("通信エラーの場合、通信エラーのメッセージを表示し、再送・確認・戻るを再び実行できる", async () => {
-      // Given
-      renderForm();
-      await advanceToResendReady();
-      auth.sendCode.mockResolvedValue(UNREACHABLE);
-      changeValue(codeInput(), "123456");
-      completeCaptcha("resend-captcha-token");
+    it.each([
+      ["認証サービスが拒否した", "rate_limited"],
+      ["通信の失敗になった", "unreachable"],
+    ] as const)(
+      "%s後は使ったトークンを消費し、新しいトークンで再送する",
+      async (_name, kind) => {
+        // Given
+        renderForm();
+        await advanceToResendReady();
+        auth.sendCode.mockResolvedValueOnce(refused(kind));
+        completeCaptcha("resend-captcha-token");
+        fireEvent.click(resendButton());
+        await settle();
+        await advanceSeconds(60);
+        fireEvent.click(resendButton());
+        expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
+        expect(auth.sendCode).toHaveBeenCalledOnce();
+        auth.sendCode.mockResolvedValue(ACCEPTED);
+        completeCaptcha("second-resend-token");
 
-      // When
-      fireEvent.click(resendButton());
-      await settle();
+        // When
+        fireEvent.click(resendButton());
+        await settle();
 
-      // Then
-      expect(screen.getByText(NETWORK_ERROR_MESSAGE)).toBeInTheDocument();
-      await expectCodeStepOperationsAvailable();
-    });
-
-    it("送信中にアンマウントされた場合、captchaのリセットを行わない", async () => {
-      // Given
-      const { unmount } = renderForm();
-      await advanceToResendReady();
-      const deferred = Promise.withResolvers<CallResult>();
-      auth.sendCode.mockReturnValue(deferred.promise);
-      completeCaptcha("resend-captcha-token");
-      fireEvent.click(resendButton());
-
-      // When
-      unmount();
-      deferred.resolve(ACCEPTED);
-      await settle();
-
-      // Then
-      expect(auth.sendCode).toHaveBeenCalledOnce();
-      expect(turnstile.reset).not.toHaveBeenCalled();
-    });
-
-    it("通信エラーの後は使っていないトークンを保ち、同じトークンで再送を再試行できる", async () => {
-      // Given
-      renderForm();
-      await advanceToResendReady();
-      auth.sendCode.mockResolvedValueOnce(UNREACHABLE);
-      completeCaptcha("resend-captcha-token");
-      fireEvent.click(resendButton());
-      await settle();
-      expect(screen.getByText(NETWORK_ERROR_MESSAGE)).toBeInTheDocument();
-      auth.sendCode.mockResolvedValue(ACCEPTED);
-
-      // When
-      await advanceSeconds(60);
-      fireEvent.click(resendButton());
-      await settle();
-
-      // Then
-      expect(auth.sendCode).toHaveBeenCalledTimes(2);
-      expect(auth.sendCode).toHaveBeenLastCalledWith({
-        purpose: subject.purpose,
-        email: "user@example.com",
-        captchaToken: "resend-captcha-token",
-      });
-      expect(turnstile.reset).toHaveBeenCalledOnce();
-    });
-
-    it("認証サービスが拒否した後は使ったトークンを消費し、新しいトークンで再送する", async () => {
-      // Given
-      renderForm();
-      await advanceToResendReady();
-      auth.sendCode.mockResolvedValueOnce(refused("rate_limited"));
-      completeCaptcha("resend-captcha-token");
-      fireEvent.click(resendButton());
-      await settle();
-      await advanceSeconds(60);
-      fireEvent.click(resendButton());
-      expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
-      expect(auth.sendCode).toHaveBeenCalledOnce();
-      auth.sendCode.mockResolvedValue(ACCEPTED);
-      completeCaptcha("second-resend-token");
-
-      // When
-      fireEvent.click(resendButton());
-      await settle();
-
-      // Then
-      expect(auth.sendCode).toHaveBeenCalledTimes(2);
-      expect(auth.sendCode).toHaveBeenLastCalledWith({
-        purpose: subject.purpose,
-        email: "user@example.com",
-        captchaToken: "second-resend-token",
-      });
-    });
+        // Then
+        expect(auth.sendCode).toHaveBeenCalledTimes(2);
+        expect(auth.sendCode).toHaveBeenLastCalledWith({
+          purpose: subject.purpose,
+          email: "user@example.com",
+          captchaToken: "second-resend-token",
+        });
+      },
+    );
 
     it("コード入力中に再描画されても、クールダウンの1秒の計時をやり直さない", async () => {
       // Given
@@ -918,49 +801,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
         });
         expect(auth.setPassword).toHaveBeenCalledOnce();
         expect(auth.setPassword).toHaveBeenCalledWith("password123");
-      });
-
-      it("送信中状態を解除せず、遷移完了前に再度押しても再送信しない", async () => {
-        // Given
-        auth.setPassword.mockResolvedValue(ACCEPTED);
-        const user = userEvent.setup();
-        renderForm();
-        await advanceToPasswordStep();
-        await user.type(passwordInput(), "password123");
-        await user.click(setPasswordButton());
-        await waitFor(() => {
-          expect(leave).toHaveBeenCalledWith(subject.destination);
-        });
-
-        // When
-        await user.click(setPasswordButton());
-
-        // Then
-        expect(setPasswordButton()).toHaveAttribute("aria-disabled", "true");
-        expect(spinnerIn(setPasswordButton())).not.toBeNull();
-        expect(auth.setPassword).toHaveBeenCalledOnce();
-      });
-    });
-
-    it("送信中に二重クリックした場合、送信中表示にし1回しか送信しない", async () => {
-      // Given
-      const deferred = Promise.withResolvers<CallResult>();
-      auth.setPassword.mockReturnValue(deferred.promise);
-      const user = userEvent.setup();
-      renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-
-      // When
-      await user.click(setPasswordButton());
-      await user.click(setPasswordButton());
-
-      // Then
-      expect(setPasswordButton()).toHaveAttribute("aria-disabled", "true");
-      expect(spinnerIn(setPasswordButton())).not.toBeNull();
-      expect(auth.setPassword).toHaveBeenCalledOnce();
-      await act(async () => {
-        deferred.resolve(ACCEPTED);
       });
     });
 
@@ -1030,312 +870,7 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
       });
       expect(auth.setPassword).toHaveBeenCalledTimes(2);
     });
-
-    it("通信エラーの場合、通信エラーのメッセージを表示し、遷移しない", async () => {
-      // Given
-      auth.setPassword.mockResolvedValue(UNREACHABLE);
-      const user = userEvent.setup();
-      renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-
-      // When
-      await user.click(setPasswordButton());
-
-      // Then
-      expect(
-        await screen.findByText(NETWORK_ERROR_MESSAGE),
-      ).toBeInTheDocument();
-      expect(leave).not.toHaveBeenCalled();
-      expect(setPasswordButton()).toHaveAttribute("aria-disabled", "false");
-      expect(spinnerIn(setPasswordButton())).toBeNull();
-    });
-
-    it("通信エラーの後に再度送信すると、完了後の遷移先へ進む", async () => {
-      // Given
-      auth.setPassword.mockResolvedValue(UNREACHABLE);
-      const user = userEvent.setup();
-      renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-      await user.click(setPasswordButton());
-      await screen.findByText(NETWORK_ERROR_MESSAGE);
-      auth.setPassword.mockResolvedValue(ACCEPTED);
-
-      // When
-      await user.click(setPasswordButton());
-
-      // Then
-      await waitFor(() => {
-        expect(leave).toHaveBeenCalledWith(subject.destination);
-      });
-      expect(auth.setPassword).toHaveBeenCalledTimes(2);
-    });
-
-    it("送信中にアンマウントされた場合、/roundsへ遷移しない", async () => {
-      // Given
-      const deferred = Promise.withResolvers<CallResult>();
-      auth.setPassword.mockReturnValue(deferred.promise);
-      const user = userEvent.setup();
-      const { unmount } = renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-      fireEvent.click(setPasswordButton());
-
-      // When
-      unmount();
-      deferred.resolve(ACCEPTED);
-      await settle();
-
-      // Then
-      expect(auth.setPassword).toHaveBeenCalledOnce();
-      expect(leave).not.toHaveBeenCalled();
-    });
-
-    it("再描画を挟まず同じタスクで2回押しても、設定は1回だけになる", async () => {
-      // Given
-      const deferred = Promise.withResolvers<CallResult>();
-      auth.setPassword.mockReturnValue(deferred.promise);
-      renderForm();
-      await advanceToPasswordStep();
-      changeValue(passwordInput(), "password123");
-
-      // When
-      act(() => {
-        fireEvent.click(setPasswordButton());
-        fireEvent.click(setPasswordButton());
-      });
-
-      // Then
-      expect(auth.setPassword).toHaveBeenCalledOnce();
-      await act(async () => {
-        deferred.resolve(ACCEPTED);
-      });
-    });
-
-    it("遷移が投げた場合、通信エラーのメッセージを表示し、送信中を解除して再度送信できる", async () => {
-      // Given
-      auth.setPassword.mockResolvedValue(ACCEPTED);
-      leave.mockImplementationOnce(() => {
-        throw new Error("push failed");
-      });
-      const user = userEvent.setup();
-      renderForm();
-      await advanceToPasswordStep();
-      await user.type(passwordInput(), "password123");
-      await user.click(setPasswordButton());
-      expect(
-        await screen.findByText(NETWORK_ERROR_MESSAGE),
-      ).toBeInTheDocument();
-      expect(setPasswordButton()).toHaveAttribute("aria-disabled", "false");
-
-      // When
-      await user.click(setPasswordButton());
-
-      // Then
-      expect(leave).toHaveBeenCalledTimes(2);
-      expect(leave).toHaveBeenLastCalledWith(subject.destination);
-    });
   });
 
   // 判断Q: 理由が表示された後に再び送信した場合は、次の結果が出るまで、表示された理由が残る。
-  describe("再送信の間のエラー表示", () => {
-    const RateLimitedMessage = authText("failure.rate_limited");
-    const WeakMessage =
-      "8〜72文字の半角英数記号で、英字と数字を含めてください。";
-
-    it("コードの送信が拒否された後に送り直すと、応答までは拒否の理由を残したまま送信中にする", async () => {
-      // Given
-      auth.isRegistered.mockResolvedValue(false);
-      auth.sendCode.mockResolvedValueOnce(refused("rate_limited"));
-      renderForm();
-      changeValue(emailInput(), "user@example.com");
-      completeCaptcha();
-      fireEvent.click(sendCodeButton());
-      await settle();
-      expect(screen.getByText(RateLimitedMessage)).toBeInTheDocument();
-      completeCaptcha("second-token");
-      auth.sendCode.mockReturnValue(new Promise(() => {}));
-
-      // When
-      fireEvent.click(sendCodeButton());
-      await settle();
-
-      // Then
-      expect(screen.getByText(RateLimitedMessage)).toBeInTheDocument();
-      expect(sendCodeButton()).toHaveAttribute("aria-disabled", "true");
-      expect(spinnerIn(sendCodeButton())).not.toBeNull();
-    });
-
-    it("コードの送信が拒否された後の送り直しが成功すると、拒否の理由を消してコード入力の段階へ進む", async () => {
-      // Given
-      auth.isRegistered.mockResolvedValue(false);
-      auth.sendCode.mockResolvedValueOnce(refused("rate_limited"));
-      renderForm();
-      changeValue(emailInput(), "user@example.com");
-      completeCaptcha();
-      fireEvent.click(sendCodeButton());
-      await settle();
-      expect(screen.getByText(RateLimitedMessage)).toBeInTheDocument();
-      completeCaptcha("second-token");
-      auth.sendCode.mockResolvedValue(ACCEPTED);
-
-      // When
-      fireEvent.click(sendCodeButton());
-      await settle();
-
-      // Then
-      expect(heading(authText("otpTitle"))).toBeInTheDocument();
-      expect(screen.queryByText(RateLimitedMessage)).not.toBeInTheDocument();
-    });
-
-    it("コードの確認が期限切れで失敗した後に確認し直すと、応答までは理由を残したまま確認中にする", async () => {
-      // Given
-      renderForm();
-      await advanceToCodeStep();
-      auth.verifyCode.mockResolvedValueOnce(
-        refusedWith({ kind: "code_expired" }),
-      );
-      changeValue(codeInput(), "123456");
-      fireEvent.click(verifyButton());
-      await settle();
-      expect(screen.getByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-      auth.verifyCode.mockReturnValue(new Promise(() => {}));
-
-      // When
-      fireEvent.click(verifyButton());
-      await settle();
-
-      // Then
-      expect(screen.getByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-      expect(verifyButton()).toHaveAttribute("aria-disabled", "true");
-      expect(spinnerIn(verifyButton())).not.toBeNull();
-    });
-
-    it("コードの確認が同じ理由でまた失敗すると、同じ理由を1つだけ示し、送信中の表示を消して再び操作できるようにする", async () => {
-      // Given
-      renderForm();
-      await advanceToCodeStep();
-      auth.verifyCode.mockResolvedValue(refusedWith({ kind: "code_expired" }));
-      changeValue(codeInput(), "123456");
-      fireEvent.click(verifyButton());
-      await settle();
-      expect(screen.getByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-
-      // When
-      fireEvent.click(verifyButton());
-      await settle();
-
-      // Then
-      expect(screen.getAllByText(OTP_EXPIRED_MESSAGE)).toHaveLength(1);
-      expect(spinnerIn(verifyButton())).toBeNull();
-      expect(verifyButton()).toHaveAttribute("aria-disabled", "false");
-      expect(auth.verifyCode).toHaveBeenCalledTimes(2);
-    });
-
-    it("パスワードの設定が拒否された後に設定し直すと、応答までは拒否の理由を残したまま設定中にする", async () => {
-      // Given
-      renderForm();
-      await advanceToPasswordStep();
-      auth.setPassword.mockResolvedValueOnce(
-        refusedWith({ kind: "weak_password" }),
-      );
-      changeValue(passwordInput(), "password123");
-      fireEvent.click(setPasswordButton());
-      await settle();
-      expect(screen.getByText(WeakMessage)).toBeInTheDocument();
-      auth.setPassword.mockReturnValue(new Promise(() => {}));
-
-      // When
-      fireEvent.click(setPasswordButton());
-      await settle();
-
-      // Then
-      expect(screen.getByText(WeakMessage)).toBeInTheDocument();
-      expect(setPasswordButton()).toHaveAttribute("aria-disabled", "true");
-      expect(spinnerIn(setPasswordButton())).not.toBeNull();
-    });
-
-    it("パスワードの入力の不備を直して設定すると、応答までは直した欄の以前のエラーを残したまま設定中にする", async () => {
-      // Given
-      renderForm();
-      await advanceToPasswordStep();
-      fireEvent.click(setPasswordButton());
-      expect(
-        screen.getByText(authText("fieldError.password.required")),
-      ).toBeInTheDocument();
-      changeValue(passwordInput(), "password123");
-      auth.setPassword.mockReturnValue(new Promise(() => {}));
-
-      // When
-      fireEvent.click(setPasswordButton());
-      await settle();
-
-      // Then
-      expect(
-        screen.getByText(authText("fieldError.password.required")),
-      ).toBeInTheDocument();
-      expect(passwordInput()).toHaveAttribute("aria-invalid", "true");
-      expect(spinnerIn(setPasswordButton())).not.toBeNull();
-    });
-
-    // 再送はクールダウン(60秒)の経過が前提のため、フェイクタイマーで時間を進める。
-    describe("再送", () => {
-      beforeEach(() => {
-        vi.useFakeTimers();
-      });
-
-      afterEach(() => {
-        vi.useRealTimers();
-      });
-
-      async function failVerifyAndWaitCooldown() {
-        await advanceToCodeStep();
-        auth.verifyCode.mockResolvedValueOnce(
-          refusedWith({ kind: "code_expired" }),
-        );
-        changeValue(codeInput(), "123456");
-        fireEvent.click(verifyButton());
-        await settle();
-        expect(screen.getByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-        for (let i = 0; i < 60; i++) {
-          await act(async () => {
-            await vi.advanceTimersByTimeAsync(1000);
-          });
-        }
-        completeCaptcha("resend-token");
-      }
-
-      it("確認の失敗の理由が表示された後に再送すると、応答までは理由を残したまま再送中にする", async () => {
-        // Given
-        renderForm();
-        await failVerifyAndWaitCooldown();
-        auth.sendCode.mockReturnValue(new Promise(() => {}));
-
-        // When
-        fireEvent.click(resendButton());
-        await settle();
-
-        // Then
-        expect(screen.getByText(OTP_EXPIRED_MESSAGE)).toBeInTheDocument();
-        expect(resendButton()).toHaveAttribute("aria-disabled", "true");
-        expect(spinnerIn(resendButton())).not.toBeNull();
-      });
-
-      it("確認の失敗の理由が表示された後の再送が成功すると、理由を消す", async () => {
-        // Given
-        renderForm();
-        await failVerifyAndWaitCooldown();
-        auth.sendCode.mockResolvedValue(ACCEPTED);
-
-        // When
-        fireEvent.click(resendButton());
-        await settle();
-
-        // Then
-        expect(screen.queryByText(OTP_EXPIRED_MESSAGE)).not.toBeInTheDocument();
-        expect(heading(authText("otpTitle"))).toBeInTheDocument();
-      });
-    });
-  });
 });

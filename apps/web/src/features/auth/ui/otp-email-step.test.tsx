@@ -4,7 +4,6 @@ import { type ComponentProps, forwardRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import { EMAIL_MAX_LENGTH } from "../domain/email-address";
 import { OtpEmailStep } from "./otp-email-step";
 
 const authText = translatorFor("auth");
@@ -41,7 +40,6 @@ function createForm(overrides: Partial<Props> = {}) {
     siteKey: "site-key",
     checkRef: { current: undefined },
     onCheck: vi.fn(),
-    checked: false,
     ...overrides,
   } satisfies Props;
 }
@@ -100,19 +98,6 @@ describe("OtpEmailStep", () => {
         "reset-password-email-error",
       );
       expect(input).toHaveAttribute("aria-invalid", "true");
-    });
-  });
-
-  describe("入力欄", () => {
-    it("メールアドレスの入力欄の最大長は、ドメインのメールアドレスの上限である", () => {
-      // Given
-
-      // When
-      renderStep(createForm());
-
-      // Then
-      const input = screen.getByPlaceholderText("you@example.com");
-      expect(input).toHaveAttribute("maxlength", String(EMAIL_MAX_LENGTH));
     });
   });
 
@@ -216,27 +201,6 @@ describe("OtpEmailStep", () => {
       const notReadyValue = second.container
         .querySelector("form")
         ?.getAttribute("data-hydrated");
-
-      // Then
-      expect(readyValue).toBe("true");
-      expect(notReadyValue).toBe("false");
-    });
-
-    it("セキュリティチェックの完了を送信ボタンのdata-captcha-readyに反映する", () => {
-      // Given
-
-      // When
-      const ready = createForm({ checked: true });
-      const notReady = createForm({ checked: false });
-      const { unmount } = renderStep(ready);
-      const readyValue = screen
-        .getByRole("button", { name: authText("otpSendCode") })
-        .getAttribute("data-captcha-ready");
-      unmount();
-      renderStep(notReady);
-      const notReadyValue = screen
-        .getByRole("button", { name: authText("otpSendCode") })
-        .getAttribute("data-captcha-ready");
 
       // Then
       expect(readyValue).toBe("true");

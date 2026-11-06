@@ -17,10 +17,10 @@ import {
 } from "@/features/rounds/domain/round-routes";
 import { config, proxy } from "./proxy";
 
-// Supabaseクライアントは外部サービスとの境界のため、getUserの結果を制御できるスタブで模す。
-const db = vi.hoisted(() => ({ getUser: vi.fn() }));
+// Supabaseクライアントは外部サービスとの境界のため、getClaimsの結果を制御できるスタブで模す。
+const db = vi.hoisted(() => ({ getClaims: vi.fn() }));
 vi.mock("@supabase/ssr", () => ({
-  createServerClient: () => ({ auth: { getUser: db.getUser } }),
+  createServerClient: () => ({ auth: { getClaims: db.getClaims } }),
 }));
 
 afterEach(() => {
@@ -33,8 +33,6 @@ describe("proxy", () => {
       "/signin",
       "/signup",
       "/reset-password",
-      "/rounds",
-      "/rounds/1",
       "/rounds/1/edit",
       ROUNDS_PATH,
       `${ROUNDS_PATH}/1`,
@@ -72,8 +70,6 @@ describe("proxy", () => {
       SIGN_IN_PATH,
       SIGN_UP_PATH,
       RESET_PASSWORD_PATH,
-      "/rounds",
-      "/rounds/1",
       "/rounds/1/edit",
       "/rounds/new",
       ROUNDS_PATH,
@@ -91,15 +87,11 @@ describe("proxy", () => {
         // Given
         const redirects = [false, true].some(
           (signedIn) =>
-            redirectFor(
-              {
-                signedIn,
-                pathname,
-                search: "",
-                isServerAction: false,
-              },
-              ROUNDS_PATH,
-            ) !== null,
+            redirectFor({
+              signedIn,
+              pathname,
+              search: "",
+            }) !== null,
         );
 
         // When
@@ -112,9 +104,9 @@ describe("proxy", () => {
   });
 
   describe("リクエストを受け取る", () => {
-    it("未認証で一覧の経路を開くと、遷移元を付けずにサインインへリダイレクトする", async () => {
+    it("未認証で一覧の経路を開くと、その経路を遷移元に付けてサインインへリダイレクトする", async () => {
       // Given
-      db.getUser.mockResolvedValue({ data: { user: null } });
+      db.getClaims.mockResolvedValue({ data: null, error: null });
 
       // When
       const request = new NextRequest(`https://app.example.com${ROUNDS_PATH}`);
@@ -122,22 +114,24 @@ describe("proxy", () => {
 
       // Then
       expect(response.headers.get("location")).toBe(
-        "https://app.example.com/signin",
+        "https://app.example.com/signin?returnTo=%2Frounds",
       );
     });
 
-    it("セッションの更新結果をレスポンスとして返す", async () => {
+    it("認証済みで一覧の経路を開くと、リダイレクトせず、セッションの更新の応答を返す", async () => {
       // Given
-      db.getUser.mockResolvedValue({ data: { user: null } });
+      db.getClaims.mockResolvedValue({
+        data: { claims: { sub: "user-1" } },
+        error: null,
+      });
 
       // When
       const request = new NextRequest("https://app.example.com/rounds/1");
       const response = await proxy(request);
 
       // Then
-      expect(response.headers.get("location")).toBe(
-        "https://app.example.com/signin?returnTo=%2Frounds%2F1",
-      );
+      expect(response.headers.get("location")).toBeNull();
+      expect(response.headers.get("x-middleware-next")).toBe("1");
     });
   });
 });

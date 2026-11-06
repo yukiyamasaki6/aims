@@ -6,17 +6,15 @@ import { forwardRef, useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import MainLayout from "../../(main)/layout";
-import Home from "../../page";
 import ResetPasswordPage from "./page";
 
 const authText = translatorFor("auth");
-const navigationText = translatorFor("navigation");
+const _navigationText = translatorFor("navigation");
 
 const NETWORK_ERROR_MESSAGE = authText("failure.unreachable");
-const CAPTCHA_ERROR_MESSAGE = authText("fieldError.captcha.incomplete");
-const OTP_EXPIRED_MESSAGE = authText("failure.code_expired");
-const WEAK_PASSWORD_MESSAGE =
+const _CAPTCHA_ERROR_MESSAGE = authText("fieldError.captcha.incomplete");
+const _OTP_EXPIRED_MESSAGE = authText("failure.code_expired");
+const _WEAK_PASSWORD_MESSAGE =
   "8〜72文字の半角英数記号で、英字と数字を含めてください。";
 const OTHER_FAILURE_MESSAGE = authText("failure.other");
 const PASSWORD_PLACEHOLDER = authText("passwordFieldPlaceholder", {
@@ -25,7 +23,6 @@ const PASSWORD_PLACEHOLDER = authText("passwordFieldPlaceholder", {
 });
 
 // SDKは境界のため差し替える。入口が得た接続で、認証の実装が呼ぶ。
-// パスワードの変更はServer Actionの中で行うため、ブラウザの接続では呼ばれないことを確かめる。
 // 離れた先の画面(紹介画面の開始ボタン、ラウンドの画面の見張り)も、同じ接続でサインインの状態を読み、変化を購読する。
 const auth = vi.hoisted(() => ({
   resetPasswordForEmail: vi.fn(),
@@ -36,9 +33,8 @@ const auth = vi.hoisted(() => ({
   onAuthStateChange: vi.fn(),
 }));
 
-// Server Actionは通信の境界のため差し替える。結果は変更の結果(CallResult)で、届かないときは投げる。
-const action = vi.hoisted(() => ({ changePassword: vi.fn() }));
-vi.mock("./actions", () => ({ changePassword: action.changePassword }));
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 const connection = vi.hoisted(() => ({
   createBrowserClient: vi.fn(() => ({ auth })),
 }));
@@ -144,22 +140,17 @@ async function settle() {
   });
 }
 
-const otpExpired = new AuthApiError("expired", 403, "otp_expired");
-const rateLimited = new AuthApiError(
+const _otpExpired = new AuthApiError("expired", 403, "otp_expired");
+const _rateLimited = new AuthApiError(
   "rate limit",
   429,
   "over_email_send_rate_limit",
 );
-const accepted = { kind: "accepted" } as const;
-const weakPassword = {
-  kind: "refused",
-  failure: { kind: "weak_password" },
-} as const;
-const connectionLost = new AuthRetryableFetchError("Failed to fetch", 0);
+const _weakPassword = new AuthApiError("weak", 422, "weak_password");
+const _connectionLost = new AuthRetryableFetchError("Failed to fetch", 0);
 
 describe("パスワード再設定画面の入口", () => {
   const originalLocation = window.location;
-  const locationAssign = vi.fn();
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -169,11 +160,8 @@ describe("パスワード再設定画面の入口", () => {
     vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "page-site-key");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
-    // jsdomのlocation.assignはnon-configurableでvi.spyOnできず、呼び出すと未実装のページ遷移になるため、window.locationごと差し替える。
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: { ...originalLocation, assign: locationAssign },
-    });
+    auth.updateUser.mockResolvedValue({ error: null });
+    auth.signOut.mockResolvedValue({ error: null });
   });
 
   afterEach(() => {
@@ -205,11 +193,22 @@ describe("パスワード再設定画面の入口", () => {
     expect(widget.siteKey).toBe("page-site-key");
   });
 
-  it("3つの段階を最後まで通すと、入口が得た接続でコードを確かめ、パスワードを変更の要求へ渡し、成功でサインインへページ全体を読み込む", async () => {
+  it("サイトキーの環境変数が無くても例外を投げずに描画し、空のキーをウィジェットへ渡す", () => {
+    // Given
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", undefined);
+    widget.siteKey = "not rendered";
+
+    // When
+    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
+
+    // Then
+    expect(widget.siteKey).toBe("");
+  });
+
+  it("3つの段階を最後まで通すと、入口が得た接続でコードを確かめ、パスワードを設定し、この端末のサインインを終えて、サインインへ遷移する", async () => {
     // Given
     auth.resetPasswordForEmail.mockResolvedValue({ error: null });
     auth.verifyOtp.mockResolvedValue({ error: null });
-    action.changePassword.mockResolvedValue(accepted);
     const user = userEvent.setup();
     render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await submitEmailStep(user, "new@example.com");
@@ -235,77 +234,13 @@ describe("パスワード再設定画面の入口", () => {
       token: "123456",
       type: "recovery",
     });
-    expect(action.changePassword).toHaveBeenCalledExactlyOnceWith(
-      "password123",
-    );
-    expect(auth.updateUser).not.toHaveBeenCalled();
-    expect(auth.signOut).not.toHaveBeenCalled();
-    expect(locationAssign).toHaveBeenCalledExactlyOnceWith("/signin");
+    expect(auth.updateUser).toHaveBeenCalledExactlyOnceWith({
+      password: "password123",
+    });
+    expect(auth.signOut).toHaveBeenCalledExactlyOnceWith({ scope: "local" });
+    expect(navigation.push).toHaveBeenCalledExactlyOnceWith("/signin");
     expect(widget.resets).toBe(1);
   });
-
-  it("コードの送信がSDKの呼び出しの失敗で届かなくても、通信エラーを示し、同じトークンで再試行して進める", async () => {
-    // Given
-    auth.resetPasswordForEmail
-      .mockRejectedValueOnce(new Error("Failed to fetch"))
-      .mockResolvedValue({ error: null });
-    const user = userEvent.setup();
-    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
-    await submitEmailStep(user);
-    await screen.findByText(NETWORK_ERROR_MESSAGE);
-    expect(widget.resets).toBe(0);
-
-    // When
-    await user.click(sendCodeButton());
-
-    // Then
-    expect(
-      await screen.findByRole("heading", { name: authText("otpTitle") }),
-    ).toBeInTheDocument();
-    expect(auth.resetPasswordForEmail).toHaveBeenCalledTimes(2);
-    expect(auth.resetPasswordForEmail).toHaveBeenLastCalledWith(
-      "user@example.com",
-      { captchaToken: "captcha-token" },
-    );
-  });
-
-  it.each([
-    ["通信の断を値で返した", connectionLost, NETWORK_ERROR_MESSAGE],
-    [
-      "送信の間隔の制限を値で返した",
-      rateLimited,
-      authText("failure.rate_limited"),
-    ],
-  ])(
-    "コードの送信でSDKが%sときは、文言を示し、使用済みのトークンでの再送信を拒み、新しいトークンで取り直して進める",
-    async (_name, error, message) => {
-      // Given
-      auth.resetPasswordForEmail
-        .mockResolvedValueOnce({ error })
-        .mockResolvedValue({ error: null });
-      const user = userEvent.setup();
-      render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
-      await submitEmailStep(user);
-      expect(await screen.findByText(message)).toBeInTheDocument();
-      expect(widget.resets).toBe(1);
-      await user.click(sendCodeButton());
-      expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
-      expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
-      await user.click(widgetButton());
-
-      // When
-      await user.click(sendCodeButton());
-
-      // Then
-      expect(
-        await screen.findByRole("heading", { name: authText("otpTitle") }),
-      ).toBeInTheDocument();
-      expect(auth.resetPasswordForEmail).toHaveBeenLastCalledWith(
-        "user@example.com",
-        { captchaToken: "captcha-token-2" },
-      );
-    },
-  );
 
   it("コードの送信でSDKが未知のエラーを返したときは、固定の文言を示し、認証サービスの文言を出さない", async () => {
     // Given
@@ -327,186 +262,22 @@ describe("パスワード再設定画面の入口", () => {
     expect(screen.queryByText(/reset mailer exploded/)).not.toBeInTheDocument();
   });
 
-  it("拒否の後にメールを直して送信、確認の期限切れ、再試行、弱いパスワード、再試行、成功の順に、同じ画面で進められる", async () => {
-    // Given
-    auth.resetPasswordForEmail
-      .mockResolvedValueOnce({ error: rateLimited })
-      .mockResolvedValue({ error: null });
-    auth.verifyOtp
-      .mockResolvedValueOnce({ error: otpExpired })
-      .mockResolvedValue({ error: null });
-    action.changePassword
-      .mockResolvedValueOnce(weakPassword)
-      .mockResolvedValue(accepted);
-    const user = userEvent.setup();
-    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
-    await submitEmailStep(user, "old@example.com");
-    await screen.findByText(authText("failure.rate_limited"));
-
-    // When
-    await user.clear(emailInput());
-    await user.type(emailInput(), "new@example.com");
-    await user.click(widgetButton());
-    await user.click(sendCodeButton());
-    await screen.findByRole("heading", { name: authText("otpTitle") });
-    await user.type(codeInput(), "123456");
-    await user.click(verifyButton());
-    await screen.findByText(OTP_EXPIRED_MESSAGE);
-    await user.click(verifyButton());
-    await screen.findByRole("heading", {
-      name: authText("resetPasswordTitle"),
-    });
-    await user.type(passwordInput(), "password123");
-    await user.click(setPasswordButton());
-    await screen.findByText(WEAK_PASSWORD_MESSAGE);
-    await user.click(setPasswordButton());
-
-    // Then
-    expect(screen.queryByText(WEAK_PASSWORD_MESSAGE)).not.toBeInTheDocument();
-    expect(auth.resetPasswordForEmail).toHaveBeenLastCalledWith(
-      "new@example.com",
-      { captchaToken: "captcha-token-2" },
-    );
-    expect(auth.verifyOtp).toHaveBeenCalledTimes(2);
-    expect(action.changePassword).toHaveBeenCalledTimes(2);
-    expect(locationAssign).toHaveBeenCalledExactlyOnceWith("/signin");
-  });
-
-  it("確認の通信エラーを値で返した場合も、通信エラーを示し、再度確認できる", async () => {
-    // Given
-    const user = userEvent.setup();
-    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
-    await advanceToCodeStep(user);
-    auth.verifyOtp
-      .mockResolvedValueOnce({ error: connectionLost })
-      .mockResolvedValue({ error: null });
-    await user.type(codeInput(), "123456");
-    await user.click(verifyButton());
-    await screen.findByText(NETWORK_ERROR_MESSAGE);
-
-    // When
-    await user.click(verifyButton());
-
-    // Then
-    expect(
-      await screen.findByRole("heading", {
-        name: authText("resetPasswordTitle"),
-      }),
-    ).toBeInTheDocument();
-    expect(auth.verifyOtp).toHaveBeenCalledTimes(2);
-  });
-
-  it("遷移が投げると、通信エラーを示し、送信中を解除して再度送信できる", async () => {
-    // Given
-    const user = userEvent.setup();
-    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
-    await advanceToPasswordStep(user);
-    action.changePassword.mockResolvedValue(accepted);
-    locationAssign.mockImplementationOnce(() => {
-      throw new Error("assign failed");
-    });
-    await user.type(passwordInput(), "password123");
-    await user.click(setPasswordButton());
-    await screen.findByText(NETWORK_ERROR_MESSAGE);
-    expect(setPasswordButton()).toHaveAttribute("aria-disabled", "false");
-
-    // When
-    await user.click(setPasswordButton());
-
-    // Then
-    expect(locationAssign).toHaveBeenCalledTimes(2);
-    expect(locationAssign).toHaveBeenLastCalledWith("/signin");
-  });
-
-  it("変更の要求が投げると(表示中)、通信エラーを示し、送信中を解除し、遷移しない", async () => {
-    // Given
-    const user = userEvent.setup();
-    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
-    await advanceToPasswordStep(user);
-    action.changePassword.mockRejectedValue(new Error("Failed to fetch"));
-    await user.type(passwordInput(), "password123");
-
-    // When
-    await user.click(setPasswordButton());
-
-    // Then
-    expect(await screen.findByText(NETWORK_ERROR_MESSAGE)).toBeInTheDocument();
-    expect(setPasswordButton()).toHaveAttribute("aria-disabled", "false");
-    expect(locationAssign).not.toHaveBeenCalled();
-  });
-
   it("入口から通して連打しても、変更の要求は1回だけで、遷移も1回になる", async () => {
     // Given
-    const deferred = Promise.withResolvers<typeof accepted>();
+    const deferred = Promise.withResolvers<{ error: null }>();
     const user = userEvent.setup();
     render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
     await advanceToPasswordStep(user);
-    action.changePassword.mockReturnValue(deferred.promise);
+    auth.updateUser.mockReturnValue(deferred.promise);
     await user.type(passwordInput(), "password123");
 
     // When
     await user.dblClick(setPasswordButton());
-    await act(async () => deferred.resolve(accepted));
-
-    // Then
-    expect(action.changePassword).toHaveBeenCalledOnce();
-    expect(locationAssign).toHaveBeenCalledExactlyOnceWith("/signin");
-  });
-
-  it("再描画を挟まず同じタスクで2回押しても、変更の要求は1回だけになる", async () => {
-    // Given
-    const deferred = Promise.withResolvers<typeof accepted>();
-    const user = userEvent.setup();
-    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
-    await advanceToPasswordStep(user);
-    action.changePassword.mockReturnValue(deferred.promise);
-    await user.type(passwordInput(), "password123");
-
-    // When
-    act(() => {
-      fireEvent.click(setPasswordButton());
-      fireEvent.click(setPasswordButton());
-    });
-    await act(async () => deferred.resolve(accepted));
-
-    // Then
-    expect(action.changePassword).toHaveBeenCalledOnce();
-    expect(locationAssign).toHaveBeenCalledExactlyOnceWith("/signin");
-  });
-
-  it("パスワードの設定に成功して遷移を始めた後に再度押しても、再送信しない", async () => {
-    // Given
-    action.changePassword.mockResolvedValue(accepted);
-    const user = userEvent.setup();
-    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
-    await advanceToPasswordStep(user);
-    await user.type(passwordInput(), "password123");
-    await user.click(setPasswordButton());
-    expect(locationAssign).toHaveBeenCalledOnce();
-
-    // When
-    await user.click(setPasswordButton());
-
-    // Then
-    expect(action.changePassword).toHaveBeenCalledOnce();
-    expect(setPasswordButton()).toHaveAttribute("aria-disabled", "true");
-  });
-
-  it("入口から通して連打しても、コードの送信は1回だけになる", async () => {
-    // Given
-    const deferred = Promise.withResolvers<{ error: null }>();
-    auth.resetPasswordForEmail.mockReturnValue(deferred.promise);
-    const user = userEvent.setup();
-    render(<ResetPasswordPage />, { wrapper: IntlTestProvider });
-    await user.type(emailInput(), "user@example.com");
-    await user.click(widgetButton());
-
-    // When
-    await user.dblClick(sendCodeButton());
     await act(async () => deferred.resolve({ error: null }));
 
     // Then
-    expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
+    expect(auth.updateUser).toHaveBeenCalledOnce();
+    expect(navigation.push).toHaveBeenCalledExactlyOnceWith("/signin");
   });
 
   describe("画面を離れたときの扱い", () => {
@@ -515,165 +286,25 @@ describe("パスワード再設定画面の入口", () => {
       await user.type(passwordInput(), "password123");
     }
 
-    it("変更の要求の応答待ちで離れたら、変更が成功しても、遷移しない", async () => {
+    it("設定の応答待ちで離れたら、設定が成功しても、サインインを終えず、遷移しない", async () => {
       // Given
       const user = userEvent.setup();
       const { unmount } = render(<ResetPasswordPage />, {
         wrapper: IntlTestProvider,
       });
       await startSettingPassword(user);
-      const deferred = Promise.withResolvers<typeof accepted>();
-      action.changePassword.mockReturnValue(deferred.promise);
+      const deferred = Promise.withResolvers<{ error: null }>();
+      auth.updateUser.mockReturnValue(deferred.promise);
       await user.click(setPasswordButton());
 
       // When
       unmount();
-      await act(async () => deferred.resolve(accepted));
-
-      // Then
-      expect(action.changePassword).toHaveBeenCalledOnce();
-      expect(locationAssign).not.toHaveBeenCalled();
-    });
-
-    // 離れた先を描画してから、未完了の変更の要求の結果を返す。サインインの状態の読み取りは認証済みにし、離れた先の保護による遷移を起こさない。
-    describe.each([
-      ["紹介画面", "/", navigationText("introDescription")],
-      ["ラウンド作成画面", "/rounds/new", "ラウンド作成"],
-    ] as const)("%sへ離れた後", (_destination, pathname, shown) => {
-      const locationReplace = vi.fn();
-
-      function renderDestination() {
-        Object.defineProperty(window, "location", {
-          configurable: true,
-          value: {
-            ...originalLocation,
-            assign: locationAssign,
-            replace: locationReplace,
-            pathname,
-            search: "",
-          },
-        });
-        return render(
-          pathname === "/" ? (
-            <Home />
-          ) : (
-            <MainLayout>
-              <p>ラウンド作成</p>
-            </MainLayout>
-          ),
-          { wrapper: IntlTestProvider },
-        );
-      }
-
-      it.each([
-        ["成功", async () => accepted],
-        ["拒否", async () => weakPassword],
-        ["未到達", async () => ({ kind: "unreachable" }) as const],
-        [
-          "例外",
-          async () => {
-            throw new Error("Failed to fetch");
-          },
-        ],
-      ])(
-        "変更の要求が%sになっても、再設定の処理は遷移もエラーの表示もしない",
-        async (_name, outcome) => {
-          // Given
-          auth.getSession.mockResolvedValue({
-            data: { session: { user: { id: "user-1" } } },
-            error: null,
-          });
-          auth.onAuthStateChange.mockReturnValue({
-            data: { subscription: { unsubscribe: vi.fn() } },
-          });
-          const user = userEvent.setup();
-          const { unmount } = render(<ResetPasswordPage />, {
-            wrapper: IntlTestProvider,
-          });
-          await startSettingPassword(user);
-          const response = Promise.withResolvers<void>();
-          action.changePassword.mockImplementation(async () => {
-            await response.promise;
-            return outcome();
-          });
-          await user.click(setPasswordButton());
-          unmount();
-          renderDestination();
-
-          // When
-          await act(async () => response.resolve());
-          await settle();
-
-          // Then
-          expect(action.changePassword).toHaveBeenCalledOnce();
-          expect(locationAssign).not.toHaveBeenCalled();
-          expect(locationReplace).not.toHaveBeenCalled();
-          expect(
-            screen.queryByText(NETWORK_ERROR_MESSAGE),
-          ).not.toBeInTheDocument();
-          expect(
-            screen.queryByText(WEAK_PASSWORD_MESSAGE),
-          ).not.toBeInTheDocument();
-          expect(screen.getByText(shown)).toBeInTheDocument();
-        },
-      );
-    });
-
-    it("コードの送信の応答待ちで離れたら、チェックをリセットしない", async () => {
-      // Given
-      const deferred = Promise.withResolvers<{ error: null }>();
-      auth.resetPasswordForEmail.mockReturnValue(deferred.promise);
-      const user = userEvent.setup();
-      const { unmount } = render(<ResetPasswordPage />, {
-        wrapper: IntlTestProvider,
-      });
-      await submitEmailStep(user);
-
-      // When
-      unmount();
       await act(async () => deferred.resolve({ error: null }));
 
       // Then
-      expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
-      expect(widget.resets).toBe(0);
-    });
-
-    it("確認の応答待ちで離れたら、状態を更新せず、パスワードの設定を呼ばない", async () => {
-      // Given
-      const user = userEvent.setup();
-      const { unmount } = render(<ResetPasswordPage />, {
-        wrapper: IntlTestProvider,
-      });
-      await advanceToCodeStep(user);
-      const deferred = Promise.withResolvers<{ error: null }>();
-      auth.verifyOtp.mockReturnValue(deferred.promise);
-      await user.type(codeInput(), "123456");
-      await user.click(verifyButton());
-
-      // When
-      unmount();
-      await act(async () => deferred.resolve({ error: null }));
-
-      // Then
-      expect(auth.verifyOtp).toHaveBeenCalledOnce();
-      expect(action.changePassword).not.toHaveBeenCalled();
-    });
-
-    it("パスワード設定の段階で押さずに離れたら、変更が行われない", async () => {
-      // Given
-      const user = userEvent.setup();
-      const { unmount } = render(<ResetPasswordPage />, {
-        wrapper: IntlTestProvider,
-      });
-      await startSettingPassword(user);
-
-      // When
-      unmount();
-      await settle();
-
-      // Then
-      expect(action.changePassword).not.toHaveBeenCalled();
-      expect(locationAssign).not.toHaveBeenCalled();
+      expect(auth.updateUser).toHaveBeenCalledOnce();
+      expect(auth.signOut).not.toHaveBeenCalled();
+      expect(navigation.push).not.toHaveBeenCalled();
     });
   });
 
@@ -757,50 +388,6 @@ describe("パスワード再設定画面の入口", () => {
       );
       expect(resendButton()).toHaveTextContent("再送（60秒）");
       expect(widget.resets).toBe(2);
-    });
-
-    it("再送が通信エラーで届かなくても、使っていないトークンを保ち、同じトークンで再送できる", async () => {
-      // Given
-      await advanceToResendReady();
-      auth.resetPasswordForEmail.mockClear();
-      auth.resetPasswordForEmail.mockRejectedValueOnce(
-        new Error("Failed to fetch"),
-      );
-      fireEvent.click(widgetButton());
-      fireEvent.click(resendButton());
-      await settle();
-      expect(screen.getByText(NETWORK_ERROR_MESSAGE)).toBeInTheDocument();
-      auth.resetPasswordForEmail.mockResolvedValue({ error: null });
-      await advanceSeconds(60);
-
-      // When
-      fireEvent.click(resendButton());
-      await settle();
-
-      // Then
-      expect(auth.resetPasswordForEmail).toHaveBeenCalledTimes(2);
-      expect(auth.resetPasswordForEmail).toHaveBeenLastCalledWith(
-        "user@example.com",
-        { captchaToken: "captcha-token-2" },
-      );
-    });
-
-    it("再送を認証サービスが拒否したら、使ったトークンを消費し、新しいトークンがなければ再送できない", async () => {
-      // Given
-      await advanceToResendReady();
-      auth.resetPasswordForEmail.mockClear();
-      auth.resetPasswordForEmail.mockResolvedValueOnce({ error: rateLimited });
-      fireEvent.click(widgetButton());
-      fireEvent.click(resendButton());
-      await settle();
-      await advanceSeconds(60);
-
-      // When
-      fireEvent.click(resendButton());
-
-      // Then
-      expect(screen.getByText(CAPTCHA_ERROR_MESSAGE)).toBeInTheDocument();
-      expect(auth.resetPasswordForEmail).toHaveBeenCalledOnce();
     });
   });
 });

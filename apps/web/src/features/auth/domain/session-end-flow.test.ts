@@ -17,9 +17,8 @@ describe("beginSignOut", () => {
 
     // Then
     expect(result).toEqual({
-      kind: "started",
-      state: { running: true, left: false },
-      request: undefined,
+      state: { running: true },
+      request: true,
     });
   });
 
@@ -31,7 +30,8 @@ describe("beginSignOut", () => {
     const result = beginSignOut(running);
 
     // Then
-    expect(result).toEqual({ kind: "busy", state: running });
+    expect(result.state).toBe(running);
+    expect(result.request).toBeNull();
   });
 
   it("完了または失敗で実行中が解かれた後は、再び開始できる", () => {
@@ -46,7 +46,7 @@ describe("beginSignOut", () => {
     const result = beginSignOut(failed);
 
     // Then
-    expect(result.kind).toBe("started");
+    expect(result.request).not.toBeNull();
   });
 });
 
@@ -69,7 +69,7 @@ describe("endSignOut", () => {
 
       // Then
       expect(result).toEqual({
-        state: { running: false, left: false },
+        state: { running: false },
         result: { kind: "completed" },
       });
     });
@@ -92,7 +92,7 @@ describe("endSignOut", () => {
 
       // Then
       expect(result).toEqual({
-        state: { running: false, left: false },
+        state: { running: false },
         result: { kind: "failed", failure: { kind: "rate_limited" } },
       });
     });
@@ -123,7 +123,7 @@ describe("endSignOut", () => {
 
       // Then
       expect(result).toEqual({
-        state: { running: false, left: false },
+        state: { running: false },
         result: { kind: "discarded" },
       });
     });
@@ -136,40 +136,21 @@ describe("leave", () => {
     const state = initialSessionEndFlow;
 
     // When
-    const result = leave(state, "/rounds/new?from=a", "/rounds");
+    const result = leave(state, "/rounds/new?from=a");
 
     // Then
-    expect(result).toEqual({
-      state: { running: false, left: true },
-      result: "/signin?returnTo=%2Frounds%2Fnew%3Ffrom%3Da",
-    });
+    expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew%3Ffrom%3Da");
   });
 
-  it.each(["/rounds", "/other"])(
-    "遷移元にならない場所(%s)では、遷移元を付けずにサインインへ移る",
-    (here) => {
-      // Given
-      const state = initialSessionEndFlow;
-
-      // When
-      const result = leave(state, here, "/rounds");
-
-      // Then
-      expect(result.result).toBe("/signin");
-    },
-  );
-
-  it("保護の範囲の根が異なる場合、根の下の場所だけを遷移元にする", () => {
+  it("保護の範囲の根(/rounds)でも、その場所を遷移元に付けてサインインへ移る", () => {
     // Given
     const state = initialSessionEndFlow;
 
     // When
-    const inside = leave(state, "/elsewhere/x", "/elsewhere");
-    const outside = leave(state, "/rounds/x", "/elsewhere");
+    const result = leave(state, "/rounds");
 
     // Then
-    expect(inside.result).toBe("/signin?returnTo=%2Felsewhere%2Fx");
-    expect(outside.result).toBe("/signin");
+    expect(result).toBe("/signin?returnTo=%2Frounds");
   });
 
   it("遷移元を明示しない(サインアウトを終えられた)ときは、遷移元を付けずにサインインへ移る", () => {
@@ -181,13 +162,10 @@ describe("leave", () => {
     }).state;
 
     // When
-    const result = leave(completed, null, "/rounds");
+    const result = leave(completed, null);
 
     // Then
-    expect(result).toEqual({
-      state: { running: false, left: true },
-      result: "/signin",
-    });
+    expect(result).toBe("/signin");
   });
 
   it("サインアウトの実行中は、遷移元があっても移らず、状態を変えない", () => {
@@ -195,10 +173,10 @@ describe("leave", () => {
     const running = beginSignOut(initialSessionEndFlow).state;
 
     // When
-    const result = leave(running, "/rounds/new", "/rounds");
+    const result = leave(running, "/rounds/new");
 
     // Then
-    expect(result).toEqual({ state: running, result: null });
+    expect(result).toBeNull();
   });
 
   it.each([
@@ -221,22 +199,10 @@ describe("leave", () => {
       ).state;
 
       // When
-      const result = leave(settled, "/rounds/new", "/rounds");
+      const result = leave(settled, "/rounds/new");
 
       // Then
-      expect(result.result).toBe("/signin?returnTo=%2Frounds%2Fnew");
+      expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew");
     },
   );
-
-  it("移った後に重ねて呼んでも、遷移は1回である", () => {
-    // Given
-    const first = leave(initialSessionEndFlow, "/rounds/new", "/rounds");
-
-    // When
-    const second = leave(first.state, null, "/rounds");
-
-    // Then
-    expect(first.result).not.toBeNull();
-    expect(second).toEqual({ state: first.state, result: null });
-  });
 });

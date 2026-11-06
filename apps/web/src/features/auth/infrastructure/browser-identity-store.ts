@@ -20,8 +20,6 @@ export function createBrowserIdentityStore(): IdentityWriter & IdentityReader {
       }
     },
     write: (userId) => {
-      // 読み出し同様、サーバーでの描画中の呼び出しに対する防御。
-      if (typeof window === "undefined") return;
       try {
         if (userId) {
           window.localStorage.setItem(STORAGE_KEY, userId);
@@ -29,7 +27,7 @@ export function createBrowserIdentityStore(): IdentityWriter & IdentityReader {
           window.localStorage.removeItem(STORAGE_KEY);
         }
       } catch {
-        // プライベートブラウジングなどでlocalStorageが使えない場合は何もできない。
+        // プライベートブラウジングなどでlocalStorageが使えない場合(windowが無い場合を含む)は何もできない。
       }
     },
   };

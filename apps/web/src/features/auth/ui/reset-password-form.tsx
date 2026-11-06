@@ -9,19 +9,17 @@ export function ResetPasswordForm({
   siteKey,
 }: {
   resetPassword: PasswordSetup;
-  siteKey: string | undefined;
+  siteKey: string;
 }) {
   const t = useTranslations("auth");
-  const signInLink = { label: t("resetBackToSignIn") };
   const copy = {
     idPrefix: "reset-password",
     emailTitle: t("resetTitle"),
-    emailFooter: signInLink,
+    emailFooter: { label: t("resetBackToSignIn") },
     passwordTitle: t("resetPasswordTitle"),
     passwordDescription: t("resetPasswordDescription"),
     passwordLabel: t("resetPasswordLabel"),
     passwordSubmit: t("resetPasswordSubmit"),
-    passwordFooter: signInLink,
   };
   return (
     <PasswordSetupForm

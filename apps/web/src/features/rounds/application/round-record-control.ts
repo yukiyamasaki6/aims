@@ -31,17 +31,13 @@ export function createRoundRecordControl(deps: {
     matchUser: (userId) => matchRecordUser(hub.userId(), userId),
     signInChanged(change) {
       const reaction = reactionToSignIn(
-        {
-          userId: change.userId,
-          signedOut: change.kind === "signed-out",
-          ignored: change.kind === "other",
-        },
+        change.kind === "signed-out" ? null : change.userId,
         hub.userId(),
       );
       if (reaction.type === "switch-user") {
         sender.reset();
         hub.setUser(reaction.userId);
-      } else if (reaction.type === "resume") {
+      } else {
         sender.resumeHeld();
       }
     },

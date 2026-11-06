@@ -1,64 +1,38 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import type { Database } from "@/types/supabase";
 
-// 要求に対するリダイレクト先(パスとクエリ)を決める。リダイレクトしないときはnull。
-// 保護対象の画面などの経路の規則は、呼び出し側が持つ(この関数は規則を持たない)。
-export type RedirectRule = (request: {
-  signedIn: boolean;
-  pathname: string;
-  search: string;
-  isServerAction: boolean;
-}) => string | null;
+// 要求ごとにセッションを更新し、サインインしているか(認証済みか)と、更新したcookieを書いた応答を返す。
+// 判定は getClaims で行う。非対称鍵(JWKS)なら、認証サービスへ要求ごとに問い合わせず、端末内でトークンの署名と期限を検証する。
+// このため、サーバー側で無効にされたセッション(パスワード変更、停止、削除)は、アクセストークンの期限までページの枠が開く。期限後の更新の拒否で検知する。
+// 署名が不正・検証できないときと、getClaims が投げたときは、未認証とする(proxy を失敗させない)。
+// リダイレクトの規則は持たない(呼び出し側が決める)。環境変数が無いときは、@supabase/ssrが投げる。
+export async function updateSession(request: NextRequest) {
+  const response = NextResponse.next({ request });
 
-export async function updateSession(
-  request: NextRequest,
-  redirectFor: RedirectRule,
-) {
-  let supabaseResponse = NextResponse.next({ request });
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error("Missing Supabase environment variables in middleware.");
-  }
-
-  const supabase = createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        for (const { name, value } of cookiesToSet) {
-          request.cookies.set(name, value);
-        }
-        supabaseResponse = NextResponse.next({ request });
-        for (const { name, value, options } of cookiesToSet) {
-          supabaseResponse.cookies.set(name, value, options);
-        }
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          for (const { name, value, options } of cookiesToSet) {
+            response.cookies.set(name, value, options);
+          }
+        },
       },
     },
-  });
+  );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Server Action呼び出し（Next-Actionヘッダー付きのPOST）はページ遷移では
-  // ないため、ここでリダイレクトしてしまうとNext.jsが期待するアクションの
-  // レスポンス形式と一致せず「An unexpected response was received from the
-  // server.」という分かりにくいエラーになる。リダイレクトの規則は
-  // isServerActionを受け取って判断する。
-  const destination = redirectFor({
-    signedIn: user !== null,
-    pathname: request.nextUrl.pathname,
-    search: request.nextUrl.search,
-    isServerAction: request.headers.has("next-action"),
-  });
-  if (destination !== null) {
-    return NextResponse.redirect(new URL(destination, request.url));
+  let signedIn = false;
+  try {
+    const { data } = await supabase.auth.getClaims();
+    signedIn = Boolean(data?.claims);
+  } catch {
+    signedIn = false;
   }
 
-  return supabaseResponse;
+  return { signedIn, response };
 }

@@ -10,26 +10,7 @@ afterEach(() => {
   });
 });
 
-describe("ブラウザのページ全体の読み込みの実装", () => {
-  it("行き先を、履歴を置き換えないlocation.assignへ渡す", () => {
-    // Given
-    // jsdomのlocation.assignはnon-configurableでvi.spyOnできず、呼び出すと未実装のページ遷移になるため、window.locationごと差し替える。
-    const assign = vi.fn();
-    const replace = vi.fn();
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: { ...originalLocation, assign, replace },
-    });
-    const pageLoad = createBrowserPageLoad();
-
-    // When
-    pageLoad.load("/signin");
-
-    // Then
-    expect(assign).toHaveBeenCalledExactlyOnceWith("/signin");
-    expect(replace).not.toHaveBeenCalled();
-  });
-
+describe("ブラウザのページ全体の読み込み(置き換え)の実装", () => {
   it("置き換える遷移は、行き先を履歴を残すlocation.assignでなくlocation.replaceへ渡す", () => {
     // Given
     const assign = vi.fn();

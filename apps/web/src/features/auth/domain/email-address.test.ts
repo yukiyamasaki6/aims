@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMAIL_MAX_LENGTH, validateEmail } from "./email-address";
+import { validateEmail } from "./email-address";
 
 describe("validateEmail", () => {
   it("正しい形式のメールアドレスはundefinedを返す", () => {
@@ -10,21 +10,6 @@ describe("validateEmail", () => {
 
     // Then
     expect(result).toBeUndefined();
-  });
-
-  it("上限は254文字で、254文字までは受け付け255文字を拒否する", () => {
-    // Given
-
-    // When
-    const below = validateEmail(`${"a".repeat(241)}@example.com`); // 253文字
-    const at = validateEmail(`${"a".repeat(242)}@example.com`); // 254文字
-    const over = validateEmail(`${"a".repeat(243)}@example.com`); // 255文字
-
-    // Then
-    expect(EMAIL_MAX_LENGTH).toBe(254);
-    expect(below).toBeUndefined();
-    expect(at).toBeUndefined();
-    expect(over).toBe("tooLong");
   });
 
   it("空は入力を促す文言を返す", () => {

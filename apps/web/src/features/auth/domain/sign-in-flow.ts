@@ -26,42 +26,41 @@ export type Credentials = {
   readonly captchaToken: string;
 };
 
-// 開始の命令。送信中なら開始しない。入力の不備は、メールアドレス、パスワード、チェックの順に最初の1件を示す。開始できるなら送信中にする。
-// 開始では以前のエラーを消さない。エラーは次の結果で変わる。
+// 開始の命令。送信中なら開始しない。入力の不備は、メールアドレス、パスワード、チェックの全てを示す。開始できるなら送信中にする。
+// 開始では以前のエラーを消す。
 export function beginSignIn(
   flow: SignInFlow,
   input: { email: string; password: string },
 ): Start<SignInFlow, Credentials> {
-  if (flow.submitting) return { kind: "busy", state: flow };
-  const invalid = (fieldErrors: SignInFlow["fieldErrors"]) =>
-    ({
-      kind: "invalid",
-      state: { ...flow, error: null, fieldErrors },
-    }) as const;
+  if (flow.submitting) return { state: flow, request: null };
   const email = validateEmail(input.email);
-  if (email) return invalid({ email });
   // 登録時のパスワードポリシーをサインインで課すと、ポリシー変更前に登録した正しいパスワードで入れなくなるため、空かどうかだけを見る。
   const password = validatePasswordPresent(input.password);
-  if (password) return invalid({ password });
-  if (!isCaptchaCompleted(flow.captchaToken)) {
-    return invalid({ captcha: "incomplete" });
+  const { captchaToken } = flow;
+  if (email || password || !isCaptchaCompleted(captchaToken)) {
+    const fieldErrors: SignInFlow["fieldErrors"] = {
+      ...(email && { email }),
+      ...(password && { password }),
+      ...(!isCaptchaCompleted(captchaToken) && { captcha: "incomplete" }),
+    };
+    return {
+      state: { ...flow, error: null, fieldErrors },
+      request: null,
+    };
   }
   return {
-    kind: "started",
-    state: { ...flow, submitting: true },
-    request: { ...input, captchaToken: flow.captchaToken },
+    state: { ...flow, submitting: true, error: null, fieldErrors: {} },
+    request: { ...input, captchaToken },
   };
 }
 
 // 画面で起きた事実。開始の命令は含まない(beginSignIn)。
-// failed: 照合が届かなかった。トークンは使われていないので保持する。
-// refused: 照合が届いた後の失敗(拒否と、成功の後の遷移の失敗)。トークンは使われたので消費する。
+// failed: 照合の失敗(拒否も、通信の断も)。使ったトークンでは再送信できないため、全て消費する。
 // signedIn: 照合が受け付けられた。遷移の前に以前のエラーを消す。送信中は解除しない。
 export type SignInEvent =
   | { type: "captchaChecked"; token: string | null }
   | { type: "signedIn" }
-  | { type: "failed"; failure: AuthFailure }
-  | { type: "refused"; failure: AuthFailure };
+  | { type: "failed"; failure: AuthFailure };
 
 export function signInReducer(
   flow: SignInFlow,
@@ -72,18 +71,14 @@ export function signInReducer(
       return { ...flow, captchaToken: event.token };
     case "signedIn":
       return { ...flow, error: null, fieldErrors: {} };
+    // 画面のチェックのやり直しは、手続きが画面の約束で頼む。
     case "failed":
       return {
         ...flow,
         submitting: false,
+        captchaToken: null,
         error: event.failure.kind,
         fieldErrors: {},
-      };
-    // 使ったトークンでは再送信できないため、消費する。画面のチェックのやり直しは、手続きが画面の約束で頼む。
-    case "refused":
-      return {
-        ...signInReducer(flow, { type: "failed", failure: event.failure }),
-        captchaToken: null,
       };
   }
 }

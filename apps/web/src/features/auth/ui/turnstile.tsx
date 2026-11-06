@@ -10,20 +10,14 @@ import { cn } from "@/lib/utils";
 export const Turnstile = forwardRef<
   TurnstileInstance | undefined,
   {
-    // サイトキー(環境変数の値)。読み出しは画面の入口が行い、引数で渡す。
-    siteKey: string | undefined;
+    // サイトキー(環境変数の値)。読み出しは画面の入口が行い、引数で渡す。空のときはウィジェットがエラーを報告し、チェック未完了のまま送信は止まる。
+    siteKey: string;
     onVerify: (token: string | null) => void;
     error?: string;
   }
 >(function Turnstile({ siteKey, onVerify, error }, ref) {
   // 利用者の操作が必要なチャレンジが出ている間だけtrueにする。
   const [interactive, setInteractive] = useState(false);
-
-  if (!siteKey) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_TURNSTILE_SITE_KEY environment variable.",
-    );
-  }
 
   return (
     <>
@@ -48,10 +42,7 @@ export const Turnstile = forwardRef<
             setInteractive(false);
             onVerify(token);
           }}
-          onExpire={() => {
-            setInteractive(false);
-            onVerify(null);
-          }}
+          onExpire={() => onVerify(null)}
           onError={() => {
             setInteractive(true);
             onVerify(null);

@@ -6,16 +6,14 @@ import {
   type Session,
   type SupabaseClient,
 } from "@supabase/supabase-js";
-import type { AuthChanges } from "../application/auth-changes";
+import type { SignInChange, SignInChanges } from "../application/auth-changes";
 import type { CallResult } from "../application/call-result";
-import type { SignOutEverywhere } from "../application/password-change";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import type {
   SessionAuthenticator,
   SessionReading,
 } from "../application/session";
 import type { SignInAuthenticator } from "../application/sign-in";
-import type { AuthChange } from "../domain/auth-change";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 
 // 認証サービスの語彙(エラーのクラス名とコード、イベントの名前、セッションの形)を知るのは、このファイルだけである。
@@ -26,8 +24,7 @@ import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 export type SupabaseAuth = SignInAuthenticator &
   PasswordSetupAuthenticator &
   SessionAuthenticator &
-  SignOutEverywhere &
-  AuthChanges;
+  SignInChanges;
 
 type Auth = SupabaseClient["auth"];
 
@@ -59,18 +56,22 @@ export function createSupabaseAuth(
           type: purpose === "sign-up" ? "email" : "recovery",
         }),
       ),
+    // パスワードの長さと強さの正本は認証サービスで、validation_failed(72バイトを超えるなど)も規則の文面で示す。
+    // 全体の対応には足さない。メールアドレスの形式の誤りなど、他の操作のvalidation_failedを規則の文面にしてしまうため。
     setPassword: (password) =>
-      toCallResult(() => auth().updateUser({ password })),
+      toCallResult(
+        () => auth().updateUser({ password }),
+        PASSWORD_REJECTION_KINDS,
+      ),
     // この端末のサインインだけを終える。終えられたかは、呼び出し側が、この後のサインインの状態の読み取りで決める。
     signOutHere: () => toCallResult(() => signOut(auth(), "local")),
-    // その利用者の全ての端末のサインインが終わる。
-    signOutEverywhere: () => toCallResult(() => signOut(auth(), "global")),
     subscribe: (listener) => {
       const {
         data: { subscription },
-      } = auth().onAuthStateChange((event, session) =>
-        listener(toAuthChange(event, session)),
-      );
+      } = auth().onAuthStateChange((event, session) => {
+        const change = toSignInChange(event, session);
+        if (change !== null) listener(change);
+      });
       return () => subscription.unsubscribe();
     },
     readSession: async (options = {}) => {
@@ -83,8 +84,8 @@ export function createSupabaseAuth(
   };
 }
 
-// 認証サービスのサインアウトの呼び出しは、ここだけである。localはこの端末だけ、globalはその利用者の全ての端末のセッションを無効にする。
-function signOut(auth: Auth, scope: "local" | "global") {
+// 認証サービスのサインアウトの呼び出しは、ここだけである。この端末のセッションだけを無効にする。
+function signOut(auth: Auth, scope: "local") {
   return auth.signOut({ scope });
 }
 
@@ -125,10 +126,7 @@ async function read(
   }
 }
 
-type RejectionKind = Exclude<
-  AuthFailure["kind"],
-  "other" | "unreachable" | "unauthenticated" | "already_registered"
->;
+type RejectionKind = Exclude<AuthFailure["kind"], "other" | "unreachable">;
 
 // 認証サービスが拒否したときの、エラーコードと失敗の種類の対応。
 const REJECTION_KINDS = new Map<string, RejectionKind>([
@@ -140,49 +138,63 @@ const REJECTION_KINDS = new Map<string, RejectionKind>([
   ["weak_password", "weak_password"],
 ]);
 
+// パスワードの設定だけが、上の対応に足して使う対応。
+const PASSWORD_REJECTION_KINDS = new Map<string, RejectionKind>([
+  ...REJECTION_KINDS,
+  ["validation_failed", "weak_password"],
+]);
+
 type AuthServiceError = { name?: string; code?: string };
 
 // 認証サービスのエラー(通信の断を含む)を、失敗の種類に写す。
 // 通信の断はerror.codeの無いAuthRetryableFetchErrorになるため、コードより先に名前で見る。
-function toAuthFailure(error: AuthServiceError): AuthFailure {
+function toAuthFailure(
+  error: AuthServiceError,
+  kinds: ReadonlyMap<string, RejectionKind>,
+): AuthFailure {
   if (error.name === "AuthRetryableFetchError") return UNREACHABLE;
-  const kind =
-    error.code === undefined ? undefined : REJECTION_KINDS.get(error.code);
+  const kind = error.code === undefined ? undefined : kinds.get(error.code);
   return { kind: kind ?? "other" };
 }
 
 // 認証サービスの呼び出しを、例外を投げずに結果の値にする。
-// 応答があって成功なら受け付けられた、エラーが値で返れば(通信の断を値で返す場合を含む)拒否された、呼び出しが投げたとき(接続を得られない場合を含む)は届かなかった、とする。
+// 応答があって成功なら受け付けられた、エラーが値で返れば(通信の断を値で返す場合を含む)その失敗、呼び出しが投げたとき(接続を得られない場合を含む)は届かなかった失敗、とする。
 async function toCallResult(
   call: () => Promise<{ error: AuthError | null }>,
+  kinds: ReadonlyMap<string, RejectionKind> = REJECTION_KINDS,
 ): Promise<CallResult> {
   try {
     const { error } = await call();
     return error
-      ? { kind: "refused", failure: toAuthFailure(error) }
+      ? { kind: "failed", failure: toAuthFailure(error, kinds) }
       : { kind: "accepted" };
   } catch {
-    return UNREACHABLE;
+    return { kind: "failed", failure: UNREACHABLE };
   }
 }
 
-// 認証サービスのイベント名を、内側の出来事に写す。
-function toAuthChange(
+// 認証サービスのイベント名を、内側の出来事に写す。通知しない出来事はnull。
+// SIGNED_IN、利用者のいる起動時のセッションの復元は、signed-in。トークンの更新はtoken-refreshed。SIGNED_OUTはsigned-out。
+// 利用者のいない起動時と、その他の出来事(PASSWORD_RECOVERY、USER_UPDATEDなど)は通知しない。
+// 利用者のいない起動時は、未サインインではなく確かめられなかっただけの可能性があるため、記録を消さない。再設定の途中のセッションは、利用者として記録しない。
+function toSignInChange(
   event: AuthChangeEvent,
   session: Session | null,
-): AuthChange {
-  const userId = session?.user.id || null;
+): SignInChange | null {
   switch (event) {
     case "SIGNED_IN":
-      return { kind: "signed-in", userId };
-    case "INITIAL_SESSION":
-      return { kind: "initial", userId };
-    case "TOKEN_REFRESHED":
-      return { kind: "token-refreshed", userId };
+    case "INITIAL_SESSION": {
+      const userId = session?.user.id;
+      return userId ? { kind: "signed-in", userId } : null;
+    }
+    case "TOKEN_REFRESHED": {
+      const userId = session?.user.id;
+      return userId ? { kind: "token-refreshed", userId } : null;
+    }
     case "SIGNED_OUT":
-      return { kind: "signed-out", userId: null };
+      return { kind: "signed-out" };
     default:
-      return { kind: "other", userId: null };
+      return null;
   }
 }
 

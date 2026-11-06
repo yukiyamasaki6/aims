@@ -1,17 +1,9 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import type { CallResult } from "../application/call-result";
-import { createSession, type SignOutResult } from "../application/session";
+import type { SignOutResult } from "../application/session";
 import { UNREACHABLE } from "../domain/auth-failure";
 import { SignOutButton } from "./sign-out-button";
 
@@ -58,21 +50,23 @@ describe("SignOutButton", () => {
     expect(signOut).not.toHaveBeenCalled();
   });
 
-  it("完了した場合は、確認ダイアログを閉じる", async () => {
+  it("完了しても、実行中の表示のまま何も変えない(遷移で画面ごと捨てられる)", async () => {
     // Given
     const user = userEvent.setup();
-    const signOut = vi.fn(async () => ({ kind: "completed" }) as const);
+    const signOut = vi.fn(
+      async (): Promise<SignOutResult> => ({ kind: "ignored" }),
+    );
     render(<SignOutButton signOut={signOut} />, { wrapper: IntlTestProvider });
 
     // When
     await confirmSignOut(user);
 
     // Then
-    await waitFor(() => {
-      expect(
-        screen.queryByText(authText("signOutConfirm")),
-      ).not.toBeInTheDocument();
-    });
+    expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
+    expect(screen.getByTestId("confirm-dialog-confirm")).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     expect(signOut).toHaveBeenCalledTimes(1);
   });
 
@@ -143,58 +137,16 @@ describe("SignOutButton", () => {
 
     // Then
     expect(view?.isMounted()).toBe(false);
-    await act(async () => finish({ kind: "discarded" }));
+    await act(async () => finish({ kind: "ignored" }));
   });
 
-  it("再描画を挟まない同じタスクの2回の確認でも、本物の手続きで認証サービスへの依頼は1回で、実行中は閉じず、完了で閉じる", async () => {
-    // Given
-    const user = userEvent.setup();
-    const request = Promise.withResolvers<CallResult>();
-    const signOutHere = vi.fn(() => request.promise);
-    const session = createSession({
-      authenticator: {
-        signOutHere,
-        readSession: vi.fn(async () => ({
-          status: "unauthenticated" as const,
-        })),
-        subscribe: vi.fn(() => () => {}),
-      },
-      connectivity: createFakeConnectivity(),
-      pageReplace: { here: () => "/rounds", replace: vi.fn() },
-      protectedPath: "/rounds",
-    });
-    render(<SignOutButton signOut={session.signOut} />, {
-      wrapper: IntlTestProvider,
-    });
-    await user.click(screen.getByRole("button", { name: authText("signOut") }));
-    const confirm = screen.getByTestId("confirm-dialog-confirm");
-
-    // When
-    act(() => {
-      fireEvent.click(confirm);
-      fireEvent.click(confirm);
-    });
-    await user.keyboard("{Escape}");
-
-    // Then
-    expect(signOutHere).toHaveBeenCalledTimes(1);
-    expect(confirm).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
-    await act(async () => request.resolve({ kind: "accepted" }));
-    await waitFor(() => {
-      expect(
-        screen.queryByText(authText("signOutConfirm")),
-      ).not.toBeInTheDocument();
-    });
-  });
-
-  it("失敗した後は、ボタンを戻して再度確認でき、成功すれば閉じる", async () => {
+  it("失敗した後は、ボタンを戻して再度確認でき、再度の確認が始まれば実行中の表示にする", async () => {
     // Given
     const user = userEvent.setup();
     const signOut = vi
       .fn<(view: { isMounted(): boolean }) => Promise<SignOutResult>>()
       .mockResolvedValueOnce({ kind: "failed", failure: UNREACHABLE })
-      .mockResolvedValueOnce({ kind: "completed" });
+      .mockImplementationOnce(() => new Promise<SignOutResult>(() => {}));
     render(<SignOutButton signOut={signOut} />, { wrapper: IntlTestProvider });
     await confirmSignOut(user);
     await screen.findByText(NETWORK_ERROR_MESSAGE);
@@ -207,11 +159,8 @@ describe("SignOutButton", () => {
     await user.click(confirm);
 
     // Then
-    await waitFor(() => {
-      expect(
-        screen.queryByText(authText("signOutConfirm")),
-      ).not.toBeInTheDocument();
-    });
+    expect(confirm).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByText(NETWORK_ERROR_MESSAGE)).not.toBeInTheDocument();
     expect(signOut).toHaveBeenCalledTimes(2);
   });
 
@@ -237,23 +186,5 @@ describe("SignOutButton", () => {
     // Then
     expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
     expect(screen.queryByText(NETWORK_ERROR_MESSAGE)).not.toBeInTheDocument();
-  });
-
-  it("別の呼び出しが実行中でbusyを返されても、表示は実行中のまま保つ", async () => {
-    // Given
-    const user = userEvent.setup();
-    const signOut = vi.fn(
-      async (): Promise<SignOutResult> => ({ kind: "busy" }),
-    );
-    render(<SignOutButton signOut={signOut} />, { wrapper: IntlTestProvider });
-
-    // When
-    await confirmSignOut(user);
-
-    // Then
-    expect(screen.getByTestId("confirm-dialog-confirm")).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
   });
 });

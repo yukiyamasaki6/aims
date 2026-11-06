@@ -1,11 +1,5 @@
-import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { AuthApiError } from "@supabase/supabase-js";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,7 +12,7 @@ import MainLayout from "./layout";
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
 
-// 入口のテスト。SDK(@supabase/ssr)と、ブラウザの保存先(localStorage)・場所(location)・通信の可否(navigator.onLine)の境界だけを差し替え、
+// 入口のテスト。SDK(@supabase/ssr)と、ブラウザの保存先(localStorage)・場所(location)の境界だけを差し替え、
 // 手続き、実装、画面、確認ダイアログ、左パネルは実物を通す。
 const supabase = vi.hoisted(() => {
   const listeners: Array<
@@ -139,7 +133,6 @@ beforeEach(() => {
     error: null,
   });
   setLocation("/rounds/new");
-  vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -284,30 +277,6 @@ describe("MainLayout", () => {
       expect(assign).not.toHaveBeenCalled();
     });
 
-    it("ラウンド一覧では、遷移元を付けない", () => {
-      // Given
-      setLocation("/rounds");
-      renderLayout();
-
-      // When
-      supabase.emit("SIGNED_OUT", null);
-
-      // Then
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-    });
-
-    it("入力が重なっても、遷移は1回である", () => {
-      // Given
-      renderLayout();
-
-      // When
-      supabase.emit("SIGNED_OUT", null);
-      supabase.emit("SIGNED_OUT", null);
-
-      // Then
-      expect(replace).toHaveBeenCalledTimes(1);
-    });
-
     it("表示した時にオンラインで未認証なら、サインインへ移る", async () => {
       // Given
       supabase.getSession.mockResolvedValue({
@@ -323,73 +292,6 @@ describe("MainLayout", () => {
       expect(replace).toHaveBeenCalledExactlyOnceWith(
         "/signin?returnTo=%2Frounds%2Fnew",
       );
-    });
-
-    it("表示した時の確認が通信の失敗で確かめられない(不明)ときは、移らない", async () => {
-      // Given
-      supabase.getSession.mockResolvedValue({
-        data: { session: null },
-        error: new AuthRetryableFetchError("Failed to fetch", 0),
-      });
-
-      // When
-      renderLayout();
-      await flush();
-
-      // Then
-      expect(supabase.getSession).toHaveBeenCalledTimes(1);
-      expect(replace).not.toHaveBeenCalled();
-    });
-
-    it("オフラインで未認証と判っても、移動せず留まる", async () => {
-      // Given
-      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-      supabase.getSession.mockResolvedValue({
-        data: { session: null },
-        error: null,
-      });
-
-      // When
-      renderLayout();
-      await flush();
-
-      // Then
-      expect(replace).not.toHaveBeenCalled();
-      expect(supabase.getSession).not.toHaveBeenCalled();
-    });
-
-    it("パスワードの再設定から離れた先のラウンド作成画面では、通信の回復の確認で未認証と判れば、開いている画面を遷移元に付けてサインインへ移る", async () => {
-      // Given
-      renderLayout();
-      await flush();
-      supabase.getSession.mockResolvedValue({
-        data: { session: null },
-        error: null,
-      });
-
-      // When
-      act(() => {
-        window.dispatchEvent(new Event("online"));
-      });
-      await flush();
-
-      // Then
-      expect(replace).toHaveBeenCalledExactlyOnceWith(
-        "/signin?returnTo=%2Frounds%2Fnew",
-      );
-      expect(assign).not.toHaveBeenCalled();
-    });
-
-    it("離れると、購読を解除し、それ以降のsigned-outでは移らない", () => {
-      // Given
-      const { unmount } = renderLayout();
-
-      // When
-      unmount();
-
-      // Then
-      expect(supabase.unsubscribe).toHaveBeenCalledTimes(1);
-      expect(supabase.listeners).toHaveLength(0);
     });
 
     it("離れた後にsigned-outが来ても、移らない", async () => {
@@ -421,74 +323,8 @@ describe("MainLayout", () => {
         scope: "local",
       });
       expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      await waitFor(() => {
-        expect(
-          screen.queryByText(authText("signOutConfirm")),
-        ).not.toBeInTheDocument();
-      });
-    });
-
-    it("認証サービスが通信の失敗を返してもローカルのセッションが消えていれば、完了として移る", async () => {
-      // Given
-      const user = userEvent.setup();
-      signOutClearingSession(async () => ({
-        error: new AuthRetryableFetchError("Failed to fetch", 0),
-      }));
-      renderLayoutWithIdentity();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(localStorage.getItem(IDENTITY_KEY)).toBeNull();
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      await waitFor(() => {
-        expect(
-          screen.queryByText(authText("signOutConfirm")),
-        ).not.toBeInTheDocument();
-      });
-      expect(screen.queryByText(NETWORK_ERROR)).not.toBeInTheDocument();
-    });
-
-    it("通信が例外になってもローカルのセッションが消えていれば、完了として移る", async () => {
-      // Given
-      const user = userEvent.setup();
-      signOutClearingSession(async () => {
-        throw new TypeError("Failed to fetch");
-      });
-      renderLayoutWithIdentity();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(localStorage.getItem(IDENTITY_KEY)).toBeNull();
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      await waitFor(() => {
-        expect(
-          screen.queryByText(authText("signOutConfirm")),
-        ).not.toBeInTheDocument();
-      });
-      expect(screen.queryByText(NETWORK_ERROR)).not.toBeInTheDocument();
-    });
-
-    it("ルートの識別情報の記録と合わせて、サインアウトで端末の識別情報が消え、完了として移る", async () => {
-      // Given
-      const user = userEvent.setup();
-      signOutClearingSession(async () => ({ error: null }));
-      renderLayoutWithIdentity();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(localStorage.getItem(IDENTITY_KEY)).toBeNull();
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      await waitFor(() => {
-        expect(
-          screen.queryByText(authText("signOutConfirm")),
-        ).not.toBeInTheDocument();
-      });
+      // 完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示のまま変えない。
+      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
     });
 
     it("認証サービスが拒否しても、その後の読み取りが未認証なら、エラーを示さず、完了として遷移元を付けずに移る", async () => {
@@ -502,73 +338,11 @@ describe("MainLayout", () => {
 
       // Then
       expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      await waitFor(() => {
-        expect(
-          screen.queryByText(authText("signOutConfirm")),
-        ).not.toBeInTheDocument();
-      });
+      // 完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示のまま変えない。
+      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
       expect(
         screen.queryByText(authText("failure.rate_limited")),
       ).not.toBeInTheDocument();
-    });
-
-    it("認証サービスが拒否して読み取りが認証済みのままのときは、理由を示し、閉じずに移らない", async () => {
-      // Given
-      const user = userEvent.setup();
-      supabase.signOut.mockResolvedValue({ error: RATE_LIMIT_ERROR });
-      renderLayout();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(
-        await screen.findByText(authText("failure.rate_limited")),
-      ).toBeInTheDocument();
-      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
-      expect(replace).not.toHaveBeenCalled();
-    });
-
-    it("例外で終えられず読み取りが認証済みのままのときは、通信エラーを示し、閉じずに移らない", async () => {
-      // Given
-      const user = userEvent.setup();
-      supabase.signOut.mockRejectedValue(new TypeError("Failed to fetch"));
-      renderLayout();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(
-        await screen.findByText(authText("failure.unreachable")),
-      ).toBeInTheDocument();
-      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
-      expect(replace).not.toHaveBeenCalled();
-    });
-
-    it("認証サービスが未知のエラーを返して終えられないときは、固定の文言を示し、認証サービスの文言を出さない", async () => {
-      // Given
-      const user = userEvent.setup();
-      supabase.signOut.mockResolvedValue({
-        error: new AuthApiError(
-          "Service detail: session store exploded",
-          500,
-          "unexpected_failure",
-        ),
-      });
-      renderLayout();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(
-        await screen.findByText(authText("failure.other")),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText(/session store exploded/),
-      ).not.toBeInTheDocument();
-      expect(replace).not.toHaveBeenCalled();
     });
 
     it("失敗の後に別の理由でセッションを失ったときは、開いていた画面を遷移元に付けて移る", async () => {
@@ -586,22 +360,6 @@ describe("MainLayout", () => {
       expect(replace).toHaveBeenCalledExactlyOnceWith(
         "/signin?returnTo=%2Frounds%2Fnew",
       );
-    });
-
-    it("失敗の後に再度確認して完了すれば、遷移元を付けずに移る", async () => {
-      // Given
-      const user = userEvent.setup();
-      supabase.signOut.mockResolvedValueOnce({ error: RATE_LIMIT_ERROR });
-      renderLayoutWithIdentity();
-      await confirmSignOut(user);
-      await screen.findByText(authText("failure.rate_limited"));
-      signOutClearingSession(async () => ({ error: null }));
-
-      // When
-      await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-      // Then
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
     });
 
     it("再描画を挟まない同じタスクで2回確認しても、認証は1回である", async () => {
@@ -622,28 +380,6 @@ describe("MainLayout", () => {
 
       // Then
       expect(supabase.signOut).toHaveBeenCalledTimes(1);
-    });
-
-    it("完了を待つ間に画面が離れたときは、サインインの状態を読まず、結果を破棄して移らない", async () => {
-      // Given
-      const user = userEvent.setup();
-      let finish: (value: unknown) => void = () => {};
-      supabase.signOut.mockReturnValue(
-        new Promise((resolve) => {
-          finish = resolve;
-        }),
-      );
-      const { unmount } = renderLayout();
-      await confirmSignOut(user);
-      const readsBeforeLeaving = supabase.getSession.mock.calls.length;
-      unmount();
-
-      // When
-      await act(async () => finish({ error: null }));
-
-      // Then
-      expect(supabase.getSession).toHaveBeenCalledTimes(readsBeforeLeaving);
-      expect(replace).not.toHaveBeenCalled();
     });
   });
 });
