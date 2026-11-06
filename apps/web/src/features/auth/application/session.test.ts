@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AuthChange, SessionStatus } from "../domain/auth-change";
+import type { SessionStatus } from "../domain/auth-change";
 import type { AuthFailure } from "../domain/auth-failure";
+import type { SignInChange } from "./auth-changes";
 import type { CallResult } from "./call-result";
 import { createSession, type SessionReading } from "./session";
 
@@ -25,7 +26,7 @@ function setup(
     here?: string;
   } = {},
 ) {
-  const listeners: Array<(event: AuthChange) => void> = [];
+  const listeners: Array<(event: SignInChange) => void> = [];
   const unsubscribe = vi.fn();
   const state: { status: SessionStatus } = { status: "authenticated" };
   const check = options.check ?? (async () => state.status);
@@ -33,7 +34,7 @@ function setup(
   const authority = {
     signOutHere: vi.fn(async () => resultOf(await signOutHere())),
     readSession: vi.fn(async () => readingOf(await check())),
-    subscribe: vi.fn((listener: (event: AuthChange) => void) => {
+    subscribe: vi.fn((listener: (event: SignInChange) => void) => {
       listeners.push(listener);
       // 解除すると、実際にこのリスナーへ以降の出来事が届かなくなる。
       return () => {
@@ -56,7 +57,7 @@ function setup(
     page,
     state,
     unsubscribe,
-    emit(event: AuthChange) {
+    emit(event: SignInChange) {
       for (const listener of listeners) listener(event);
     },
   };
@@ -65,7 +66,7 @@ function setup(
 type Authority = ReturnType<typeof setup>["authority"];
 
 const mounted = { isMounted: () => true };
-const signedOut: AuthChange = { kind: "signed-out", userId: null };
+const signedOut: SignInChange = { kind: "signed-out" };
 
 async function flush() {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -416,9 +417,7 @@ describe("セッション喪失の見張り", () => {
 
     it.each([
       ["signed-in", { kind: "signed-in", userId: "user-1" }],
-      ["セッションが無いinitial", { kind: "initial", userId: null }],
-      ["トークンの更新", { kind: "token-refreshed", userId: "user-1" }],
-      ["それ以外の変化", { kind: "other", userId: null }],
+      ["token-refreshed", { kind: "token-refreshed", userId: "user-1" }],
     ] as const)("%sでは、移らない", (_name, event) => {
       // Given
       const { session, page, emit } = setup();

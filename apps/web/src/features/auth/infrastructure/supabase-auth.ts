@@ -6,7 +6,7 @@ import {
   type Session,
   type SupabaseClient,
 } from "@supabase/supabase-js";
-import type { AuthChanges } from "../application/auth-changes";
+import type { SignInChange, SignInChanges } from "../application/auth-changes";
 import type { CallResult } from "../application/call-result";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import type {
@@ -14,7 +14,6 @@ import type {
   SessionReading,
 } from "../application/session";
 import type { SignInAuthenticator } from "../application/sign-in";
-import type { AuthChange } from "../domain/auth-change";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 
 // 認証サービスの語彙(エラーのクラス名とコード、イベントの名前、セッションの形)を知るのは、このファイルだけである。
@@ -25,7 +24,7 @@ import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 export type SupabaseAuth = SignInAuthenticator &
   PasswordSetupAuthenticator &
   SessionAuthenticator &
-  AuthChanges;
+  SignInChanges;
 
 type Auth = SupabaseClient["auth"];
 
@@ -69,9 +68,10 @@ export function createSupabaseAuth(
     subscribe: (listener) => {
       const {
         data: { subscription },
-      } = auth().onAuthStateChange((event, session) =>
-        listener(toAuthChange(event, session)),
-      );
+      } = auth().onAuthStateChange((event, session) => {
+        const change = toSignInChange(event, session);
+        if (change !== null) listener(change);
+      });
       return () => subscription.unsubscribe();
     },
     readSession: async (options = {}) => {
@@ -173,23 +173,28 @@ async function toCallResult(
   }
 }
 
-// 認証サービスのイベント名を、内側の出来事に写す。
-function toAuthChange(
+// 認証サービスのイベント名を、内側の出来事に写す。通知しない出来事はnull。
+// SIGNED_IN、利用者のいる起動時のセッションの復元は、signed-in。トークンの更新はtoken-refreshed。SIGNED_OUTはsigned-out。
+// 利用者のいない起動時と、その他の出来事(PASSWORD_RECOVERY、USER_UPDATEDなど)は通知しない。
+// 利用者のいない起動時は、未サインインではなく確かめられなかっただけの可能性があるため、記録を消さない。再設定の途中のセッションは、利用者として記録しない。
+function toSignInChange(
   event: AuthChangeEvent,
   session: Session | null,
-): AuthChange {
-  const userId = session?.user.id || null;
+): SignInChange | null {
   switch (event) {
     case "SIGNED_IN":
-      return { kind: "signed-in", userId };
-    case "INITIAL_SESSION":
-      return { kind: "initial", userId };
-    case "TOKEN_REFRESHED":
-      return { kind: "token-refreshed", userId };
+    case "INITIAL_SESSION": {
+      const userId = session?.user.id;
+      return userId ? { kind: "signed-in", userId } : null;
+    }
+    case "TOKEN_REFRESHED": {
+      const userId = session?.user.id;
+      return userId ? { kind: "token-refreshed", userId } : null;
+    }
     case "SIGNED_OUT":
-      return { kind: "signed-out", userId: null };
+      return { kind: "signed-out" };
     default:
-      return { kind: "other", userId: null };
+      return null;
   }
 }
 

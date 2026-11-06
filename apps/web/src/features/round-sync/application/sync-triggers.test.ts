@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
-  SignInChange as AuthSignInChange,
   IdentityReader,
+  SignInChange,
   SignInChanges,
 } from "@/features/auth";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
@@ -10,7 +10,7 @@ import { createSyncTriggers, type Visibility } from "./sync-triggers";
 
 // 契機の受け取りは、受けた契機を同期の手続きの操作に変える。通知の源、同期の手続きは約束で差し替える。
 function setup(initialUserId: string | null = "user-1") {
-  const signIn = new Set<(change: AuthSignInChange) => void>();
+  const signIn = new Set<(change: SignInChange) => void>();
   const online = new Set<() => void>();
   const offline = new Set<() => void>();
   const visible = new Set<() => void>();
@@ -59,7 +59,7 @@ function setup(initialUserId: string | null = "user-1") {
     sync,
     changes,
     connectivity,
-    emitSignIn: (change: AuthSignInChange) => {
+    emitSignIn: (change: SignInChange) => {
       for (const listener of [...signIn]) listener(change);
     },
     fire: {
@@ -83,32 +83,24 @@ function setup(initialUserId: string | null = "user-1") {
 }
 
 describe("認証の通知", () => {
-  // 通知の種類ごとに、サインインの変化をそのまま同期へ渡し、一括の取得を始めるかを、同期の操作で観測する。反応の規則はラウンド側が持つ。
+  // サインインの変化をそのまま同期へ渡し、signed-inのときだけ一括の取得を始める(トークンの更新は始めない)。反応の規則はラウンド側が持つ。
   it.each([
-    ["signed-in", "user-9", true],
-    ["initial", "user-9", true],
-    ["token-refreshed", "user-9", false],
-    ["other", "user-9", false],
-    ["signed-out", null, false],
-    ["initial", null, false],
-    ["token-refreshed", null, false],
-    ["other", null, false],
+    ["signed-in", { kind: "signed-in", userId: "user-9" }, 1],
+    ["token-refreshed", { kind: "token-refreshed", userId: "user-9" }, 0],
+    ["signed-out", { kind: "signed-out" }, 0],
   ] as const)(
-    "%sの通知(利用者%s)は、そのまま同期へ渡し、一括の取得の開始は%sになる",
-    (kind, userId, starts) => {
+    "%sの通知は、そのまま同期へ渡し、一括の取得の開始は%s回になる",
+    (_name, change, starts) => {
       // Given
       const t = setup();
       t.triggers.start();
 
       // When
-      t.emitSignIn({ kind, userId });
+      t.emitSignIn(change);
 
       // Then
-      expect(t.sync.signInChanged).toHaveBeenCalledExactlyOnceWith({
-        kind,
-        userId,
-      });
-      expect(t.sync.refreshAll).toHaveBeenCalledTimes(starts ? 1 : 0);
+      expect(t.sync.signInChanged).toHaveBeenCalledExactlyOnceWith(change);
+      expect(t.sync.refreshAll).toHaveBeenCalledTimes(starts);
     },
   );
 });

@@ -7,7 +7,7 @@ import {
   type SupabaseClient,
 } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
-import type { AuthChange } from "../domain/auth-change";
+import type { SignInChange } from "../application/auth-changes";
 import { createSupabaseAuth } from "./supabase-auth";
 
 const expired = new AuthApiError("Token has expired", 403, "otp_expired");
@@ -787,40 +787,67 @@ describe("サインインの状態の確認(readSession)", () => {
 
 describe("認証状態の購読(subscribe)", () => {
   it.each([
-    [
-      "SIGNED_IN",
-      { user: { id: "user-1" } },
-      { kind: "signed-in", userId: "user-1" },
-    ],
-    [
-      "INITIAL_SESSION",
-      { user: { id: "user-1" } },
-      { kind: "initial", userId: "user-1" },
-    ],
-    ["INITIAL_SESSION", null, { kind: "initial", userId: null }],
-    ["SIGNED_OUT", null, { kind: "signed-out", userId: null }],
-    [
-      "TOKEN_REFRESHED",
-      { user: { id: "user-1" } },
-      { kind: "token-refreshed", userId: "user-1" },
-    ],
-    ["TOKEN_REFRESHED", null, { kind: "token-refreshed", userId: null }],
-    ["PASSWORD_RECOVERY", null, { kind: "other", userId: null }],
+    ["SIGNED_IN", { user: { id: "user-1" } }, "user-1"],
+    ["INITIAL_SESSION", { user: { id: "user-1" } }, "user-1"],
   ] as const)(
-    "%sを内側の出来事に写して知らせる",
-    (event, session, expected) => {
+    "%s(利用者あり)を、signed-inに写して知らせる",
+    (event, session, userId) => {
       // Given
       const { service, emit } = setup();
-      const received: AuthChange[] = [];
+      const received: SignInChange[] = [];
       service.subscribe((change) => received.push(change));
 
       // When
       emit(event, session);
 
       // Then
-      expect(received).toEqual([expected]);
+      expect(received).toEqual([{ kind: "signed-in", userId }]);
     },
   );
+
+  it("TOKEN_REFRESHED(利用者あり)を、token-refreshedに写して知らせる", () => {
+    // Given
+    const { service, emit } = setup();
+    const received: SignInChange[] = [];
+    service.subscribe((change) => received.push(change));
+
+    // When
+    emit("TOKEN_REFRESHED", { user: { id: "user-1" } });
+
+    // Then
+    expect(received).toEqual([{ kind: "token-refreshed", userId: "user-1" }]);
+  });
+
+  it("SIGNED_OUTを、signed-outに写して知らせる", () => {
+    // Given
+    const { service, emit } = setup();
+    const received: SignInChange[] = [];
+    service.subscribe((change) => received.push(change));
+
+    // When
+    emit("SIGNED_OUT", null);
+
+    // Then
+    expect(received).toEqual([{ kind: "signed-out" }]);
+  });
+
+  it.each([
+    ["INITIAL_SESSION(利用者なし)", "INITIAL_SESSION", null],
+    ["TOKEN_REFRESHED(利用者なし)", "TOKEN_REFRESHED", null],
+    ["PASSWORD_RECOVERY", "PASSWORD_RECOVERY", { user: { id: "user-1" } }],
+    ["USER_UPDATED", "USER_UPDATED", { user: { id: "user-1" } }],
+  ] as const)("%sは、知らせない", (_name, event, session) => {
+    // Given
+    const { service, emit } = setup();
+    const received: SignInChange[] = [];
+    service.subscribe((change) => received.push(change));
+
+    // When
+    emit(event, session);
+
+    // Then
+    expect(received).toEqual([]);
+  });
 
   it("返す関数で購読を解除する", () => {
     // Given
@@ -837,7 +864,7 @@ describe("認証状態の購読(subscribe)", () => {
   it("解除した後の出来事は、知らせない", () => {
     // Given
     const { service, emit } = setup();
-    const received: AuthChange[] = [];
+    const received: SignInChange[] = [];
     const stop = service.subscribe((change) => received.push(change));
     stop();
 

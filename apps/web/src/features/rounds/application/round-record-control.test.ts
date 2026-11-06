@@ -170,7 +170,7 @@ describe("記録の制御", () => {
     await hub.append(STREAM, roundUpdated({ eventId: "a" }));
 
     // When
-    control.signInChanged({ kind: "signed-out", userId: null });
+    control.signInChanged({ kind: "signed-out" });
     const afterSignOut = [control.matchUser("user-1"), control.matchUser(null)];
 
     // Then
@@ -204,9 +204,6 @@ describe("サインインの変化への反応", () => {
     ["signed-in", "user-1", "resume"],
     ["signed-in", "user-0", "switch"],
     ["signed-in", null, "switch"],
-    ["initial", "user-1", "resume"],
-    ["initial", "user-0", "switch"],
-    ["initial", null, "switch"],
     ["token-refreshed", "user-1", "resume"],
     ["token-refreshed", "user-0", "switch"],
     ["token-refreshed", null, "switch"],
@@ -238,24 +235,10 @@ describe("サインインの変化への反応", () => {
     });
 
     // When
-    control.signInChanged({ kind: "signed-out", userId: null });
+    control.signInChanged({ kind: "signed-out" });
 
     // Then
     expect(calls).toEqual(["sender.reset", "hub.setUser"]);
     expect(hub.setUser).toHaveBeenCalledWith(null);
-  });
-
-  it("利用者のないinitialとtoken-refreshed、otherは、何もしない", () => {
-    // Given
-    const { calls, control } = createOrderedFakes({ recordUserId: "user-1" });
-
-    // When
-    control.signInChanged({ kind: "initial", userId: null });
-    control.signInChanged({ kind: "token-refreshed", userId: null });
-    control.signInChanged({ kind: "other", userId: null });
-    control.signInChanged({ kind: "other", userId: "user-1" });
-
-    // Then
-    expect(calls).toEqual([]);
   });
 });

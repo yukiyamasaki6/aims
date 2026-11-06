@@ -1,5 +1,4 @@
-import { identityChange } from "../domain/auth-change";
-import type { AuthChanges } from "./auth-changes";
+import type { SignInChanges } from "./auth-changes";
 
 // 端末の識別情報の書き込み。nullは消す。書けないとき(保存先が使えない環境)は何もしない。例外は投げない。
 export type IdentityWriter = {
@@ -7,7 +6,7 @@ export type IdentityWriter = {
 };
 
 type Dependencies = {
-  changes: AuthChanges;
+  changes: SignInChanges;
   writer: IdentityWriter;
 };
 
@@ -23,9 +22,10 @@ export function createLocalIdentity({
   return {
     start: () =>
       changes.subscribe((change) => {
-        const next = identityChange(change);
-        if (next.kind === "record") writer.write(next.userId);
-        else if (next.kind === "clear") writer.write(null);
+        // サインインした利用者を記録し、サインアウトで消す。トークンの更新は利用者が変わらないため、記録を変えない。
+        // 記録しない出来事(利用者のいない起動時など)は通知されない。
+        if (change.kind === "signed-in") writer.write(change.userId);
+        else if (change.kind === "signed-out") writer.write(null);
       }),
   };
 }

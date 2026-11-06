@@ -73,7 +73,7 @@
 | `features/rounds/domain/send-queue.ts` | ドメイン層(集約) | 1つの列の送信の状態(待ち、送信中、リトライ待機、保留、単独の印、要求) |
 | `features/rounds/domain/op-plan.ts`、`sync-failure.ts` | ドメイン層(ドメインサービス) | 送れる要求の計画(衝突する先行がある操作を含めない)。送信の失敗を、再試行する(`retry`)・保留する(`hold`。未認証)・破棄する(`discard`。`PT403`と`PT422`)・切り分けるに分ける判定と再試行の間隔`retryDelayMs` |
 | `features/round-sync/domain/flight-gate.ts` | ドメイン層(集約) | 取り直しの同時に1回までの実行の制御 |
-| `features/round-sync/domain/sync-trigger.ts`、`stale-retry.ts` | ドメイン層(ドメインサービス) | 契機への反応の規則(常駐の一括の取得を始める判定`startsRefresh`など)。端末のベースで開いたままの詳細を取り直す間隔`staleRetryDelayMs`(3秒から2倍で60秒まで。送信のリトライの`retryDelayMs`とは変わる理由が別で、値が同じなのは偶然のため共有しない) |
+| `features/round-sync/domain/sync-trigger.ts`、`stale-retry.ts` | ドメイン層(ドメインサービス) | 契機への反応の規則(取り直しの要否の判定など。常駐の一括の取得は、サインインの変化がsigned-inのときに契機の受け取りが始め、トークンの更新では始めない)。端末のベースで開いたままの詳細を取り直す間隔`staleRetryDelayMs`(3秒から2倍で60秒まで。送信のリトライの`retryDelayMs`とは変わる理由が別で、値が同じなのは偶然のため共有しない) |
 | `features/round-sync/application/` | 手続き | `round-sync.ts`(契機を受けて、いつ取り直すかを決める唯一の手続き)、`stale-clock.ts`(端末のベースで開いたままの詳細の取り直しの時計。ラウンドごとの試行の番号と時計を持ち、取り直しの実行と要否の判断は同期が渡す)、`sync-triggers.ts`(契機の受け取り。約束`Visibility`) |
 | `features/round-sync/infrastructure/` | インフラ層 | `browser-visibility.ts` |
 | `features/round-sync/ui/round-base-refresher.tsx` | UI層 | 常駐の一括の取得の成功の回数を`data-refreshed-count`に出す |

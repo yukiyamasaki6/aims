@@ -6,7 +6,7 @@ import {
   initialSessionEndFlow,
   leave,
 } from "../domain/session-end-flow";
-import type { AuthChanges } from "./auth-changes";
+import type { SignInChanges } from "./auth-changes";
 import { type CallResult, failureOf } from "./call-result";
 import type { ViewLifetime } from "./screen-view";
 
@@ -27,7 +27,7 @@ export type SessionReader = {
 
 // セッションが認証サービスに頼むこと。認証状態の変化の購読と、サインインの状態の読み取りに、この端末のサインアウトを足す。
 // 例外は投げない(購読だけは、接続を得られないとき同期に投げる)。
-export type SessionAuthenticator = AuthChanges &
+export type SessionAuthenticator = SignInChanges &
   SessionReader & {
     // この端末のサインインだけを終える。
     signOutHere(): Promise<CallResult>;

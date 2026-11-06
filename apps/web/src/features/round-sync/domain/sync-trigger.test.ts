@@ -1,34 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  refreshDecision,
-  type SignInChange,
-  shouldRefetch,
-  startsRefresh,
-} from "./sync-trigger";
-
-describe("startsRefresh", () => {
-  it.each([
-    ["signed-in", "user-1", true],
-    ["initial", "user-1", true],
-    ["token-refreshed", "user-1", false],
-    ["other", "user-1", false],
-    ["signed-out", null, false],
-    ["initial", null, false],
-    ["signed-in", null, false],
-  ] as const)(
-    "%sの通知(利用者%s)で一括の取得を始めるかは%sになる",
-    (kind, userId, expected) => {
-      // Given
-      const change: SignInChange = { kind, userId };
-
-      // When
-      const starts = startsRefresh(change);
-
-      // Then
-      expect(starts).toBe(expected);
-    },
-  );
-});
+import { refreshDecision, shouldRefetch } from "./sync-trigger";
 
 describe("shouldRefetch", () => {
   it("開いたときは常に取り直し、他の理由はオフラインでは取り直さない", () => {

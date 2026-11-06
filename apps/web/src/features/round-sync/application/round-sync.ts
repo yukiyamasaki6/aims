@@ -1,4 +1,4 @@
-import type { SessionReader } from "@/features/auth";
+import type { SessionReader, SignInChange } from "@/features/auth";
 import type {
   RoundRecordControl,
   RoundRefreshControl,
@@ -11,11 +11,7 @@ import {
   type FlightGate,
   IDLE_GATE,
 } from "../domain/flight-gate";
-import {
-  refreshDecision,
-  type SignInChange,
-  shouldRefetch,
-} from "../domain/sync-trigger";
+import { refreshDecision, shouldRefetch } from "../domain/sync-trigger";
 import { createStaleClock } from "./stale-clock";
 
 // 取り直しの理由。取り直しの制御が返す理由の型から導く。

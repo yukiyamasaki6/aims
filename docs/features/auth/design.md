@@ -30,7 +30,7 @@
 | 結果つきの命令 | `<動詞><操作>(流れ, 入力)`が`Step<流れ, 結果>`を返す | `endSignOut` |
 | 状態を持たない判定 | `<動詞>(流れ, 入力)`が結果だけを返す(`Step`を使わない) | `leave` |
 | 画面から送る事実 | 過去形の出来事。reducerは`<操作>Reducer` | `captchaChecked`、`failed` |
-| 認証サービスの状態変化 | `AuthChange`(ドメイン)、`AuthChanges`(約束)。他の機能へ公開する平らな値の通知は`SignInChange`、`SignInChanges`(約束) | |
+| サインインの変化の通知 | `SignInChange`(値)、`SignInChanges`(約束)。型は1つで、他の機能へも入口で公開する | |
 | 認証サービスに頼む約束 | `<手続き>Authenticator` | `SignInAuthenticator`、`SessionAuthenticator` |
 | 「セッション」を含む名前 | `Session`(手続き)、`SessionEndFlow`(集約)、`SessionStatus`(分類)、`SessionReading`(読み取り結果)。SDKの`Session`はこのアプリの名前に使わない | |
 | 「届かなかった」 | 失敗の種類`unreachable`だけ。頼みごとの結果は`accepted`か`failed`の2つ | |
@@ -61,14 +61,13 @@
 
 ## 認証の変化の出来事
 
-認証の変化の出来事(`AuthChange`)は、`signed-in`、`initial`、`token-refreshed`(トークンの更新)、`signed-out`、`other`と、変化の時点の利用者(`userId`。サインアウトとその他はnull)を持つ。
-端末の識別情報の記録はトークンの更新で記録を変えず、サインインの喪失の見張りはトークンの更新を喪失としない(既存の使い手の振る舞いを保つ契約)。
-他の機能へは、同じ形の平らな値の通知(`SignInChange`、`SignInChanges`)を入口で公開する。
+サインインの変化(`SignInChange`)は、`signed-in`(サインイン、利用者のいる起動時の復元)、`token-refreshed`(トークンの更新)、`signed-out`の3種で、サインアウト以外は利用者(`userId`)を持つ。利用者のいない起動時と、その他の出来事(パスワードの再設定の途中など)は、インフラ層の変換が通知しない。
+端末の識別情報の記録はトークンの更新で記録を変えず、サインインの喪失の見張りはトークンの更新を喪失としない。同期はsigned-inだけで常駐の取得を始める(トークンの更新を分けるのは、取得の認証の拒否が起こす強制更新の通知で、取得が止まらなくなる循環を避けるため)。記録の制御はトークンの更新をsigned-inと同じに扱う。
 
 ## 約束の例外の契約
 
 投げない: 認証サービスへの頼みごと(`CallResult`で返す)、サインインの状態の読み取り、端末の識別情報の書き込み、画面の約束、通信の可否。
-投げることがある: `PageNavigation`(サインイン、サインアップ、再設定の手続きは扱わない)、`PageReplace.replace`(手続きは扱わない)、`AuthChanges.subscribe`と`SignInChanges.subscribe`(どちらも接続を得られないとき同期に投げる。手続きは扱わない)。
+投げることがある: `PageNavigation`(サインイン、サインアップ、再設定の手続きは扱わない)、`PageReplace.replace`(手続きは扱わない)、`SignInChanges.subscribe`(接続を得られないとき同期に投げる。手続きは扱わない)。
 
 ## 設計判断
 
