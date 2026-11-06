@@ -19,7 +19,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 | 送信中 | ボタンを`aria-disabled`にする。以前のエラーは開始で消す | 成功で以前のエラーを消して遷移元、無ければ`/rounds` |
 | 認証失敗(通信の断を含む) | エラーを表示し、ボタンを再度有効にし、captchaを未完了に戻す | 再送信 |
 
-- 認証済みで`/signin`を開くと、遷移元によらず`/rounds`へ送る。
+- 認証済みで`/signin`を開くと、有効な遷移元があればそこへ、無ければ`/rounds`へ送る。
 - パスワードの入力欄は`PasswordInput`で、表示・非表示を切り替えても入力値を保つ。
 - メールアドレス欄で変換中でないEnterを押すと、送信せずにパスワード欄へ移る(画面キーボードの確定キーは「次へ」)。送信はパスワード欄のEnterとボタンで行う。
 
@@ -45,7 +45,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/ui/auth-header.tsx`: 認証画面の見出し。
 - `src/lib/supabase/infrastructure/client.ts`: ブラウザの接続。
 - `src/hooks/use-mounted-ref.ts`: 画面がマウント中かどうかの参照。画面が`isMounted`として手続きへ渡し、手続きが照合の後に確かめる。
-- `src/lib/supabase/infrastructure/session.ts`: `proxy.ts`から呼ばれ、要求ごとにセッションを更新して、利用者(無ければnull)と応答を返す。経路の規則は持たず、`proxy.ts`が認証の機能の`redirectFor`(`domain/auth-routes.ts`)を呼ぶ。認証済みの`/signin`は、遷移元によらず`/rounds`へ送られる。
+- `src/lib/supabase/infrastructure/session.ts`: `proxy.ts`から呼ばれ、要求ごとにセッションを更新して、利用者(無ければnull)と応答を返す。経路の規則は持たず、`proxy.ts`が認証の機能の`redirectFor`(`domain/auth-routes.ts`)を呼ぶ。認証済みの`/signin`は、有効な遷移元があればそこへ、無ければ`/rounds`へ送られる。
 
 流れは次のとおりである。
 

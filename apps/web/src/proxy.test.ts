@@ -118,6 +118,25 @@ describe("proxy", () => {
       );
     });
 
+    it("認証済みで遷移元付きのサインインを開くと、遷移元へリダイレクトする", async () => {
+      // Given
+      db.getClaims.mockResolvedValue({
+        data: { claims: { sub: "user-1" } },
+        error: null,
+      });
+
+      // When
+      const request = new NextRequest(
+        "https://app.example.com/signin?returnTo=%2Frounds%2Fx%3Fa%3D1",
+      );
+      const response = await proxy(request);
+
+      // Then
+      expect(response.headers.get("location")).toBe(
+        "https://app.example.com/rounds/x?a=1",
+      );
+    });
+
     it("認証済みで一覧の経路を開くと、リダイレクトせず、セッションの更新の応答を返す", async () => {
       // Given
       db.getClaims.mockResolvedValue({

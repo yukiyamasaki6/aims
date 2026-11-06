@@ -111,6 +111,13 @@ test.describe("認証済み", () => {
     await page.goto("/signin");
     await expect(page).toHaveURL(/\/rounds/);
   });
+
+  test("認証済みで遷移元付きのサインイン画面を開くと、遷移元へリダイレクトされる", async ({
+    page,
+  }) => {
+    await page.goto(`/signin?returnTo=${encodeURIComponent("/rounds/new")}`);
+    await expect(page).toHaveURL(/\/rounds\/new$/);
+  });
 });
 
 test("認証に失敗すると、理由が表示されセキュリティチェックをやり直せる", async ({

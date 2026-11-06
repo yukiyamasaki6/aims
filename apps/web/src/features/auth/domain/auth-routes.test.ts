@@ -205,13 +205,22 @@ describe("redirectFor", () => {
       "/rounds",
     ],
     [
-      "認証済みでサインインを遷移元付きで開いても、遷移元を使わずラウンド一覧",
+      "認証済みでサインインを遷移元付きで開くと、その遷移元",
       {
         signedIn: true,
         pathname: "/signin",
         search: "?returnTo=%2Frounds%2Fx",
       },
-      "/rounds",
+      "/rounds/x",
+    ],
+    [
+      "認証済みでサインインをクエリ付きの遷移元で開くと、クエリ付きのその遷移元",
+      {
+        signedIn: true,
+        pathname: "/signin",
+        search: `?returnTo=${encodeURIComponent("/rounds/x?a=1")}`,
+      },
+      "/rounds/x?a=1",
     ],
     [
       "認証済みでサインアップを開くと、遷移元を使わずラウンド一覧",
@@ -236,6 +245,30 @@ describe("redirectFor", () => {
     // Then
     expect(result).toBe(expected);
   });
+
+  it.each([
+    ["外部のURL", "https://evil.com/rounds"],
+    ["スキームを省いた外部のURL", "//evil.com/rounds"],
+    ["保護の範囲の外", "/other"],
+    ["サインイン", "/signin"],
+  ])(
+    "認証済みでサインインを開き、遷移元が拒否される値(%s)なら、ラウンド一覧",
+    (_name, returnTo) => {
+      // Given
+      const search = `?returnTo=${encodeURIComponent(returnTo)}`;
+
+      // When
+      const result = redirectFor({
+        ...request,
+        signedIn: true,
+        pathname: "/signin",
+        search,
+      });
+
+      // Then
+      expect(result).toBe("/rounds");
+    },
+  );
 
   it.each([
     ["未認証でサインインを開く", { pathname: "/signin" }],
