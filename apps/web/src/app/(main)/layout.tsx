@@ -7,7 +7,6 @@ import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth
 import { SignOutButton } from "@/features/auth/ui/sign-out-button";
 import { LeftPanel } from "@/features/navigation/ui/left-panel";
 import { createClient } from "@/lib/supabase/infrastructure/client";
-import { ROUNDS_PATH } from "@/routes";
 
 export default function MainLayout({
   children,
@@ -26,10 +25,7 @@ export default function MainLayout({
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden side:flex-row">
-      <LeftPanel
-        personalHref={ROUNDS_PATH}
-        signOut={<SignOutButton signOut={session.signOut} />}
-      />
+      <LeftPanel signOut={<SignOutButton signOut={session.signOut} />} />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</div>
     </div>
   );
