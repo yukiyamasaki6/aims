@@ -4,12 +4,12 @@ import type { RoundDetailStore } from "../application/round-detail-store";
 import type { RoundsListStore } from "../application/rounds-list-store";
 
 // 通信の復帰と待ちの経過の合図を、テストが起こす。
-// 契約(whenOnline: 今オンラインなら直ちに1回、オフラインなら次の復帰で1回。afterFallbackWait: 経過で1回。どちらも返す関数で取り消せる)は、実物と同じにする。
+// 契約(whenOnline: 今オンラインなら直ちに1回、オフラインなら次の復帰で1回。afterFallbackWait: 経過で1回。whenOnlineは返す関数で取り消せる)は、実物と同じにする。
 function createFakeWaiting() {
   const state = { offline: false };
   const waitingForOnline = new Set<() => void>();
   const waitingForFallback = new Set<() => void>();
-  const cancelled = { online: 0, fallback: 0 };
+  const cancelled = { online: 0 };
 
   return {
     whenOnline: vi.fn((listener: () => void) => {
@@ -24,9 +24,6 @@ function createFakeWaiting() {
     }),
     afterFallbackWait: vi.fn((listener: () => void) => {
       waitingForFallback.add(listener);
-      return () => {
-        if (waitingForFallback.delete(listener)) cancelled.fallback += 1;
-      };
     }),
     // 以降のwhenOnlineを、オフラインの扱い(復帰まで呼ばない)にする。
     goOffline() {
@@ -49,7 +46,6 @@ function createFakeWaiting() {
     },
     // 取り消された数。
     online: { cancelled: () => cancelled.online },
-    fallback: { cancelled: () => cancelled.fallback },
   };
 }
 

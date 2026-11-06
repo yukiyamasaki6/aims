@@ -81,7 +81,7 @@ flowchart LR
 | `loadList()` | 一覧の取得と一括の取得の依頼を並行に行い、削除の印を反映して一覧の材料を返す。`FETCH_TIMEOUT_MS`で打ち切る | 窓口内、`fetching.fetchRoundsList`、`requests`、`hub` |
 | `loadLocalList()` | 端末の入力中のラウンドの一覧 | 窓口内 |
 | `deleteRound(roundId)` | 削除を積み、画面に残る。保存の試みが終われば解決し、拒否しない | `deletion.deleteRound` |
-| `afterFallbackWait(listener)` | `FALLBACK_WAIT_MS`後に1回呼ぶ。返す関数で取り消す。使い手は一覧だけ | `clock.after` |
+| `afterFallbackWait(listener)` | `FALLBACK_WAIT_MS`後に1回呼ぶ。返り値は無い。使い手は一覧だけ | `clock.after` |
 | `whenOnline(listener)` | 共有表のとおり | `when-online.ts` |
 
 作成の窓口`NewRoundStore`(`new-round-store.ts`)

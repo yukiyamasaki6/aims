@@ -435,20 +435,6 @@ describe("afterFallbackWait", () => {
     expect(calledBefore).toBe(0);
     expect(listener).toHaveBeenCalledOnce();
   });
-
-  it("返す関数で取り消すと、時計が進んでも呼ばない", () => {
-    // Given
-    const tab = createTestRounds();
-    const listener = vi.fn();
-    const cancel = tab.list.afterFallbackWait(listener);
-
-    // When
-    cancel();
-    tab.clock.advance(FETCH_TIMEOUT_MS);
-
-    // Then
-    expect(listener).not.toHaveBeenCalled();
-  });
 });
 
 describe("打ち切り", () => {
