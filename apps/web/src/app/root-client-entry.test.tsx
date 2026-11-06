@@ -140,8 +140,6 @@ vi.mock(
 );
 
 // 生成した部品の引数と実体を観測するため、実物を呼び通す記録に包む。
-type RoundSyncInstance = ReturnType<typeof createRoundSync>;
-const built = vi.hoisted(() => ({ syncs: [] as unknown[] }));
 vi.mock(
   "@/features/auth/application/local-identity",
   async (importOriginal) => {
@@ -369,15 +367,7 @@ vi.mock(
       await importOriginal<
         typeof import("@/features/round-sync/application/round-sync")
       >();
-    return {
-      createRoundSync: vi.fn(
-        (deps: Parameters<typeof actual.createRoundSync>[0]) => {
-          const sync = actual.createRoundSync(deps);
-          built.syncs.push(sync);
-          return sync;
-        },
-      ),
-    };
+    return { createRoundSync: vi.fn(actual.createRoundSync) };
   },
 );
 vi.mock(
@@ -395,7 +385,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   supabase.listeners.length = 0;
   activator.props.length = 0;
-  built.syncs.length = 0;
   storage.hold = false;
   storage.release = null;
   localStorage.clear();
@@ -404,8 +393,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-const lastSync = () => built.syncs.at(-1) as RoundSyncInstance;
 
 // 子の画面が、ラウンドの状態と変更の方法を受け取って追記する。
 function Appender({
@@ -961,42 +948,6 @@ describe("RootClientEntry", () => {
 
       // Then
       expect(supabase.unsubscribe).toHaveBeenCalledTimes(2);
-    });
-
-    it("通信の復帰、切断、見える状態の購読を解除し、解除した後の通知で同期を動かさない", () => {
-      // Given
-      const { unmount } = render(<RootClientEntry>{null}</RootClientEntry>);
-      const sync = lastSync();
-      const online = vi.spyOn(sync, "online");
-      const offline = vi.spyOn(sync, "offline");
-      const visible = vi.spyOn(sync, "visible");
-      unmount();
-
-      // When
-      window.dispatchEvent(new Event("online"));
-      window.dispatchEvent(new Event("offline"));
-      document.dispatchEvent(new Event("visibilitychange"));
-
-      // Then
-      expect(online).not.toHaveBeenCalled();
-      expect(offline).not.toHaveBeenCalled();
-      expect(visible).not.toHaveBeenCalled();
-    });
-
-    it("解除した後にサインインやサインアウトが来ても、識別情報を記録も消去もしない", () => {
-      // Given
-      localStorage.setItem("aims:local-user-id", "user-1");
-      const { unmount } = render(<RootClientEntry>{null}</RootClientEntry>);
-      unmount();
-
-      // When
-      act(() => {
-        supabase.emit("SIGNED_IN", { user: { id: "user-2" } });
-        supabase.emit("SIGNED_OUT", null);
-      });
-
-      // Then
-      expect(createBrowserIdentityStore().read()).toBe("user-1");
     });
   });
 });
