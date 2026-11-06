@@ -275,26 +275,6 @@ describe("useFetchResult", () => {
   });
 
   describe("異常系", () => {
-    it("アンマウント後に届いた結果は破棄する", async () => {
-      // Given
-      const { fake } = setup();
-      const d = deferred<FetchResult<number>>();
-      const errorSpy = vi.spyOn(console, "error");
-      const { result, unmount } = renderHook(
-        () => useFetchResult(() => d.promise, fake.store.whenOnline),
-        { wrapper: IntlTestProvider },
-      );
-      unmount();
-
-      // When
-      await act(async () => d.resolve({ status: "ok", data: 1 }));
-
-      // Then
-      expect(result.current.view).toEqual({ status: "loading" });
-      expect(errorSpy).not.toHaveBeenCalled();
-      errorSpy.mockRestore();
-    });
-
     it("offlineのままアンマウントすると購読を取り消し、その後の復帰では取得しない", async () => {
       // Given
       const { fake } = setup();

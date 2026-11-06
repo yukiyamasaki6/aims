@@ -9,7 +9,7 @@ type Settled<T> = {
   result: FetchResult<T>;
 };
 
-// 取得中の状態、アンマウント後の結果の破棄、再試行を扱う。
+// 取得中の状態、再試行を扱う。
 // offline表示の間はonlineイベントでも再取得する。offlineに決まった時点ですでにオンラインなら、すぐ再取得する。
 // 取得するのは表示の開始時と再試行のときで、fetcherは効果の依存に含めない。
 // whenOnlineは呼び出し側の画面の窓口のものを受け、再描画で参照が変わらないものを渡す(変わると再購読する)。
@@ -23,15 +23,9 @@ export function useFetchResult<T>(
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: fetcherは表示の開始時と再試行のときだけ呼ぶ
   useEffect(() => {
-    let active = true;
-    const settle = (result: FetchResult<T>) => {
-      if (active) setSettled({ attempt, result });
-    };
+    const settle = (result: FetchResult<T>) => setSettled({ attempt, result });
     // 取得関数がrejectしても、loadingのまま固定されないようerrorにする。
     fetcher().then(settle, () => settle({ status: "error", reason: "failed" }));
-    return () => {
-      active = false;
-    };
   }, [attempt]);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
