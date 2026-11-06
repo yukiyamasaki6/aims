@@ -437,6 +437,22 @@ describe("RoundsList", () => {
       ).toBeNull();
     });
 
+    it("入力中のラウンドだけがあるときは、「過去履歴」の節も「まだラウンドがありません。」も表示しない", async () => {
+      // Given
+      load.mockResolvedValue({
+        status: "ok",
+        data: loaded(inProgressRounds, { inProgress: inProgressRounds }),
+      });
+
+      // When
+      renderList();
+      await screen.findByTestId("in-progress-rounds");
+
+      // Then
+      expect(screen.queryByTestId("other-rounds")).toBeNull();
+      expect(screen.queryByText(roundsText("listEmpty"))).toBeNull();
+    });
+
     it("オフラインでは、入力中のラウンドを表示し、「過去履歴」の下に「ネットワークに接続されていません」を表示する", async () => {
       // Given
       offlineWithLocal();
