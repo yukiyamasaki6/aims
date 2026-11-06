@@ -1,16 +1,14 @@
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  RESET_PASSWORD_PATH,
-  redirectFor,
-  SIGN_IN_PATH,
-  SIGN_UP_PATH,
-} from "@/features/auth/domain/auth-routes";
+import { redirectFor } from "@/features/auth/domain/auth-routes";
 import {
   OFFLINE_PATH,
+  RESET_PASSWORD_PATH,
   ROUND_FRAME_PATHS,
   ROUNDS_PATH,
+  SIGN_IN_PATH,
+  SIGN_UP_PATH,
   shellUrlOf,
 } from "@/routes";
 import { config, proxy } from "./proxy";

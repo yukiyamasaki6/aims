@@ -3,12 +3,15 @@ import {
   frameHtmlOf,
   NEW_ROUND_PATH,
   OFFLINE_PATH,
+  RESET_PASSWORD_PATH,
   ROUND_FRAME_ID,
   ROUND_FRAME_PATH,
   ROUND_FRAME_PATHS,
   ROUNDS_PATH,
   roundPath,
   SHELL_PREFIX,
+  SIGN_IN_PATH,
+  SIGN_UP_PATH,
   shellUrlOf,
 } from "./routes";
 
@@ -80,5 +83,14 @@ describe("routes", () => {
       // Then
       expect(paths).toEqual(["/rounds", "/rounds/new", "/rounds/_"]);
     });
+  });
+
+  it("認証の画面の経路を持つ", () => {
+    // Given
+    // When
+    const paths = [SIGN_IN_PATH, SIGN_UP_PATH, RESET_PASSWORD_PATH];
+
+    // Then
+    expect(paths).toEqual(["/signin", "/signup", "/reset-password"]);
   });
 });

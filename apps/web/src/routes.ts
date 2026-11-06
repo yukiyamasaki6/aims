@@ -36,3 +36,8 @@ export const ROUND_FRAME_PATHS: string[] = [
   NEW_ROUND_PATH,
   ROUND_FRAME_PATH,
 ];
+
+// 認証の画面の経路。
+export const SIGN_IN_PATH = "/signin";
+export const SIGN_UP_PATH = "/signup";
+export const RESET_PASSWORD_PATH = "/reset-password";

@@ -31,7 +31,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
   - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
   - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。`/signin` は有効な遷移元があればそこへ送る（`auth/signin`）。
 - `src/features/auth/application/session.ts` の手続き`createSession`の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、マウント時の`unauthenticated`）と、`/signin`への遷移（`replace`。今の場所を遷移元に付ける）を持つ。確かめた結果の喪失の定義(`lostByStatus`)は`domain/auth-change.ts`、遷移の規則（遷移元、サインアウトの実行中は移らない）は`domain/session-end-flow.ts`。`(main)`のレイアウトが、手続きと実装を生成して見張りを始める。
-- `src/app/page.tsx`(画面の入口): 静的な紹介画面の入口。認証の経路の定数 `SIGN_UP_PATH` を読み、開始の行き先として紹介画面へ渡す。
+- `src/app/page.tsx`(画面の入口): 静的な紹介画面の入口。経路表(`src/routes.ts`)の認証の経路の定数 `SIGN_UP_PATH` を読み、開始の行き先として紹介画面へ渡す。
 - `src/features/navigation/ui/intro-screen.tsx`(UI層): 紹介画面。アプリ名、説明文、左上のロゴ、開始ボタンを表示し、受け取った行き先を開始ボタンへ渡す。
 - `src/features/navigation/ui/start-button.tsx`(UI層): 開始ボタン。受け取った行き先へのリンクで、状態を持たない。
 - `src/features/navigation/ui/navigation-messages.ts`(UI層): 紹介画面と左パネルの文言の一覧(名前空間`navigation`)。部品は`useTranslations("navigation")`で文言を得る。

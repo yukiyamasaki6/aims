@@ -1,10 +1,12 @@
 // サインインの前後の経路の規則。保護対象の画面、未認証専用の画面、サインインのURL、サインインの後に戻ってよい場所(遷移元)。
-// 認証の画面の経路の文字列は、この部品だけが持つ。保護対象の画面の範囲は、ラウンド一覧の経路(ROUNDS_PATH)とその配下である。根は、サインインの後の既定の行き先でもある。
-import { ROUNDS_PATH } from "@/routes";
+// 認証の画面の経路の文字列は、経路表(src/routes.ts)が持つ。保護対象の画面の範囲は、ラウンド一覧の経路(ROUNDS_PATH)とその配下である。根は、サインインの後の既定の行き先でもある。
+import {
+  RESET_PASSWORD_PATH,
+  ROUNDS_PATH,
+  SIGN_IN_PATH,
+  SIGN_UP_PATH,
+} from "@/routes";
 
-export const SIGN_IN_PATH = "/signin";
-export const SIGN_UP_PATH = "/signup";
-export const RESET_PASSWORD_PATH = "/reset-password";
 const GUEST_ONLY_PATHS: readonly string[] = [
   SIGN_IN_PATH,
   SIGN_UP_PATH,

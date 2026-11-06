@@ -6,9 +6,9 @@ import { useTranslations } from "next-intl";
 import { type RefObject, useEffect, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { SIGN_IN_PATH } from "@/routes";
 import type { PasswordSetup } from "../application/password-setup";
 import type { ScreenView } from "../application/screen-view";
-import { SIGN_IN_PATH } from "../domain/auth-routes";
 import { PASSWORD_MIN_LENGTH } from "../domain/password";
 import {
   initialPasswordSetupFlow,

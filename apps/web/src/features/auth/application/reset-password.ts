@@ -1,7 +1,7 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
-import { SIGN_IN_PATH } from "../domain/auth-routes";
+import { SIGN_IN_PATH } from "@/routes";
 import type { CallResult } from "./call-result";
 import {
   applyPassword,
