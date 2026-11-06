@@ -251,6 +251,12 @@ describe("redirectFor", () => {
     ["スキームを省いた外部のURL", "//evil.com/rounds"],
     ["保護の範囲の外", "/other"],
     ["サインイン", "/signin"],
+    ["バックスラッシュで始まる外部のURL", "/\\evil.com/rounds"],
+    ["タブを挟んだ外部のURL", "/\t/evil.com/rounds"],
+    ["ドットの区間を挟んだ外部のURL", "/.//evil.com/rounds"],
+    ["javascriptスキーム", "javascript:alert(1)"],
+    ["先頭のスラッシュが無い相対パス", "rounds"],
+    ["親の区間で保護の範囲の外へ出る値", "/rounds/../signin"],
   ])(
     "認証済みでサインインを開き、遷移元が拒否される値(%s)なら、ラウンド一覧",
     (_name, returnTo) => {
