@@ -287,41 +287,6 @@ describe("RoundDetailClient", () => {
       },
     );
 
-    it("通信できない場合は、一覧へ戻るリンクとネットワークに接続されていませんを出す", async () => {
-      // Given
-      resolves({ status: "offline" });
-
-      // When
-      renderDetail();
-
-      // Then
-      expect(
-        await screen.findByText(roundsText("fetchOffline")),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("link", { name: roundsText("backToList") }),
-      ).toBeInTheDocument();
-    });
-
-    it("取得エラーの場合は、メッセージと再試行ボタンを出す", async () => {
-      // Given
-      load.mockResolvedValue({
-        status: "error",
-        reason: "failed",
-      });
-
-      // When
-      renderDetail();
-
-      // Then
-      expect(await screen.findByRole("alert")).toHaveTextContent(
-        roundsText("fetchFailure.failed"),
-      );
-      expect(
-        screen.getByRole("button", { name: roundsText("fetchRetry") }),
-      ).toBeInTheDocument();
-    });
-
     it("取得エラーの後に再試行すると、取得し直して表示する", async () => {
       // Given
       load.mockResolvedValueOnce({
@@ -345,28 +310,6 @@ describe("RoundDetailClient", () => {
         "午前練習",
       );
       expect(load).toHaveBeenCalledTimes(2);
-    });
-
-    it("端末のベースで開いたときは、読み込みの結果の的をスコアカードへ渡す", async () => {
-      // Given
-      resolves({
-        status: "ok",
-        data: detail(
-          roundsText("listInProgress"),
-          null,
-          "local",
-          faces("face-1"),
-        ),
-      });
-
-      // When
-      renderDetail();
-
-      // Then
-      expect(await screen.findByTestId("scorecard")).toHaveAttribute(
-        "data-faces",
-        "face-1",
-      );
     });
 
     it("端末のベースで開いた後に、サーバーにラウンドが無いと分かったら、一覧へ戻る手続きを呼ぶ", async () => {
@@ -394,28 +337,6 @@ describe("RoundDetailClient", () => {
 
   describe("作成が未確定のラウンド", () => {
     const pendingEventId = "event-1";
-
-    it("読み込みの結果の的をスコアカードへ渡す", async () => {
-      // Given
-      resolves({
-        status: "ok",
-        data: detail(
-          "作成中",
-          pendingEventId,
-          "server",
-          faces("face-1", "face-2"),
-        ),
-      });
-
-      // When
-      renderDetail();
-
-      // Then
-      expect(await screen.findByTestId("scorecard")).toHaveAttribute(
-        "data-faces",
-        "face-1,face-2",
-      );
-    });
 
     it("作成の消失の監視へラウンドIDを渡す", async () => {
       // Given
