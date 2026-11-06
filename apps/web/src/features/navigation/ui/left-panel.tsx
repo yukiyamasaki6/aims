@@ -53,8 +53,8 @@ function DrawerFrame({
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col overflow-y-auto border-r bg-card text-card-foreground transition-transform duration-200 md:hidden",
-        open && "translate-x-0",
+        "fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col overflow-y-auto border-r bg-card text-card-foreground transition-[transform,translate,visibility] duration-200 md:hidden",
+        open ? "translate-x-0" : "invisible",
       )}
     >
       <div className="flex items-center justify-between gap-2 p-4">
