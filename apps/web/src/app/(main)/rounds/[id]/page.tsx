@@ -1,5 +1,5 @@
-import { ROUND_FRAME_ID } from "@/features/rounds/domain/round-routes";
 import { RoundDetailClient } from "@/features/rounds/ui/round-detail-client";
+import { ROUND_FRAME_ID } from "@/routes";
 
 // /rounds/[id]を静的な枠にするため、プレースホルダーだけをプリレンダーする。実際のIDはクライアントがpathnameから得る。
 // /rounds/<ID>はnext.configのrewriteで/rounds/_の枠へ向けるため、未知のIDは動的ルートに届かない。

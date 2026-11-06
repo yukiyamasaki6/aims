@@ -3,13 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { NEW_ROUND_PATH, roundPath } from "@/routes";
 import type { FetchResult } from "../domain/fetch-status";
 import type {
   LoadedRoundsList,
   LocalRoundsList,
   RoundListItem,
 } from "../domain/round-list";
-import { NEW_ROUND_PATH, roundPath } from "../domain/round-routes";
 import { createFakeRoundsListStore } from "./round-stores-test-helpers";
 import { RoundsListStoreProvider } from "./rounds-context";
 import { RoundsList } from "./rounds-list";

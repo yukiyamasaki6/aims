@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  ROUND_FRAME_PATHS,
-  roundFramePathOf,
-} from "@/features/rounds/domain/round-routes";
-import { shellUrlOf } from "@/routes";
+import { roundFramePathOf } from "@/features/rounds/domain/round-routes";
+import { ROUND_FRAME_PATHS, shellUrlOf } from "@/routes";
 import { frameUrlFor, isShellUrl } from "./offline-routes";
 
 describe("offline-routes", () => {

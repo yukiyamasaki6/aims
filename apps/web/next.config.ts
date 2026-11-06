@@ -5,8 +5,8 @@ import {
   ROUND_FRAME_PATH,
   ROUND_FRAME_PATHS,
   ROUNDS_PATH,
-} from "./src/features/rounds/domain/round-routes";
-import { shellUrlOf } from "./src/routes";
+  shellUrlOf,
+} from "./src/routes";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 // ローカルSupabase CLIは常に127.0.0.1で公開される。

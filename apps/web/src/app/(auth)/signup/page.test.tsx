@@ -4,9 +4,9 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { forwardRef, useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { ROUNDS_PATH } from "@/routes";
 import SignUpPage from "./page";
 
 const authText = translatorFor("auth");

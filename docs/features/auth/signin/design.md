@@ -35,7 +35,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/domain/email-address.ts`: メールアドレスの規則(値オブジェクト)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
 - `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(値オブジェクト)。利用者向けの文言は持たない。認証サービスの語彙も持たない。
 - `src/features/auth/domain/captcha-token.ts`、`password.ts`: セキュリティチェックのトークンと、パスワードの入力と文字種の規則(値オブジェクト。誤りの種類を返す)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
-- `src/features/auth/domain/auth-routes.ts`: 経路の規則(値オブジェクト)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは保護の範囲の根(ラウンド一覧の経路`ROUNDS_PATH`)の配下の同一オリジンのパスだけ。根はラウンドの入口から値で読む)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`。書く側は検証せず符号化して付ける。検証は読む側の`destinationOf`だけが行う)、要求のリダイレクト先(`redirectFor`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
+- `src/features/auth/domain/auth-routes.ts`: 経路の規則(値オブジェクト)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは保護の範囲の根(ラウンド一覧の経路`ROUNDS_PATH`)の配下の同一オリジンのパスだけ。根は経路表の`ROUNDS_PATH`を読む)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`。書く側は検証せず符号化して付ける。検証は読む側の`destinationOf`だけが行う)、要求のリダイレクト先(`redirectFor`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
 - `src/features/auth/index.ts`: 認証の機能の入口。他の機能が使う型を、別名なしで再公開する。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。`signInWithPassword`の呼び出しと、エラーを失敗の種類に写す変換(通信の断は名前で先に判定する)、例外(接続を作れない場合を含む)を通信エラーの失敗に変える変換を含む。接続は、渡された関数で照合のたびに取得する。
 - routerによる遷移は共有の技術 `src/lib/page-navigation/infrastructure/router-page-navigation.ts` が持つ。遷移元(`from`)は検証せずに入口から手続きへ渡り、検証は読む側の`destinationOf`が行う。

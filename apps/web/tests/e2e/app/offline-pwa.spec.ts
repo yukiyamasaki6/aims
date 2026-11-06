@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { BrowserContext, Page } from "@playwright/test";
-import { ROUND_FRAME_PATHS } from "@/features/rounds/domain/round-routes";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import { OFFLINE_PATH, shellUrlOf } from "@/routes";
+import { OFFLINE_PATH, ROUND_FRAME_PATHS, shellUrlOf } from "@/routes";
 import { expect, test } from "../fixtures";
 import {
   getSharedEmail,

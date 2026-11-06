@@ -26,7 +26,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 
 ## 構成とデータの流れ
 
-- `src/proxy.ts`(要求の入口): `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に、`updateSession` が返すサインインしているかから、認証の機能の経路の規則(`features/auth/domain/auth-routes.ts` の `redirectFor`)を呼び、行き先があればリダイレクトし、無ければ `updateSession` の応答を返す。`config.matcher` は Next.js がビルド時に静的に読み、定数を参照できないため、経路を文字列で再掲し、`proxy.test.ts` が `ROUNDS_PATH` との一致を確かめる。`/` は対象外である。
+- `src/proxy.ts`(要求の入口): `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に、`updateSession` が返すサインインしているかから、認証の機能の経路の規則(`features/auth/domain/auth-routes.ts` の `redirectFor`)を呼び、行き先があればリダイレクトし、無ければ `updateSession` の応答を返す。`config.matcher` は Next.js がビルド時に静的に読み、定数を参照できないため、経路を文字列で再掲し、`proxy.test.ts` が経路表の `ROUNDS_PATH` との一致を確かめる。`/` は対象外である。
 - `src/lib/supabase/infrastructure/session.ts`(共有の技術の実装): `updateSession` が要求ごとにセッションを更新し、`getClaims`(端末内でトークンの署名と期限を検証する)でサインインしているかと、更新したcookieを書いた応答を返す。経路の規則は持たない。規則は認証の機能の `redirectFor` が持ち、`proxy.ts` が呼ぶ。
   - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
   - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。`/signin` は有効な遷移元があればそこへ送る（`auth/signin`）。
@@ -36,7 +36,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 - `src/features/navigation/ui/start-button.tsx`(UI層): 開始ボタン。受け取った行き先へのリンクで、状態を持たない。
 - `src/features/navigation/ui/navigation-messages.ts`(UI層): 紹介画面と左パネルの文言の一覧(名前空間`navigation`)。部品は`useTranslations("navigation")`で文言を得る。
 - 遷移の約束(アプリ全体): ナビゲーションの機能は遷移の約束を持たない。開始の行き先は、入口が渡す行き先(href)へ、`start-button.tsx` のリンクで遷移する。ルーターで進む遷移は共有の技術の `PageNavigation`(`src/lib/page-navigation/contract/page-navigation.ts`。認証のサインイン、サインアップとラウンドの開始、完了、削除して離れる、一覧へ戻るが使う)、ページ全体の読み込みの遷移は認証の `PageLoad`、`PageReplace`、遷移元の読み出しは認証の `ReturnToReader` である。
-- `src/app/(main)/layout.tsx`(画面の入口): 認証が要る画面の集合の枠。セッションの手続きと実装を生成して見張りを始め、個人リンクの行き先として `ROUNDS_PATH` を渡したレフトパネルと、サインアウトの部品(`features/auth/ui/sign-out-button.tsx`)を描く。
+- `src/app/(main)/layout.tsx`(画面の入口): 認証が要る画面の集合の枠。セッションの手続きと実装を生成して見張りを始め、個人リンクの行き先として経路表の `ROUNDS_PATH` を渡したレフトパネルと、サインアウトの部品(`features/auth/ui/sign-out-button.tsx`)を描く。
 - `src/components/app-logo.tsx`(共有の画面部品)が、認証画面・`/`・`/offline` の左上のロゴである。
 - `src/components/logo-image.tsx`(共有の画面部品)が、文字付きロゴの画像（`public/logo.svg`）を表示する。代替テキスト「AIMS」がロゴのリンクの名前になる。`app-logo.tsx` と `left-panel.tsx` が使う。
 - `public/logo.svg` は、`scripts/generate-icon.mjs` が、マークと同じ値と、`geist` のGeist SansのBoldの字形から生成する。文字は図形にし、フォントを参照しない。READMEの冒頭も同じファイルを表示する。

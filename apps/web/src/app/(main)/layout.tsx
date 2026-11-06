@@ -6,8 +6,8 @@ import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-pa
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SignOutButton } from "@/features/auth/ui/sign-out-button";
 import { LeftPanel } from "@/features/navigation/ui/left-panel";
-import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
 import { createClient } from "@/lib/supabase/infrastructure/client";
+import { ROUNDS_PATH } from "@/routes";
 
 export default function MainLayout({
   children,

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
-import { roundPath } from "@/features/rounds/domain/round-routes";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { roundPath } from "@/routes";
 import { expect, test } from "../fixtures";
 import {
   getSharedEmail,

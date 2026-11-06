@@ -1,10 +1,10 @@
 import type { SessionReader } from "@/features/auth";
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
+import { roundPath } from "@/routes";
 import { type SignInFailure, signInFailure } from "../domain/fetch-status";
 import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
 import type { Preset } from "../domain/preset";
-import { roundPath } from "../domain/round-routes";
 import { type RoundCreated, roundCreatedDraftOf } from "../domain/round-start";
 import { roundStreamId } from "../domain/sync-events";
 import type { RoundRecordHub } from "./round-record-hub";

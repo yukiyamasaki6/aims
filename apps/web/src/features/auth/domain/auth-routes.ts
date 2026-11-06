@@ -1,7 +1,6 @@
 // サインインの前後の経路の規則。保護対象の画面、未認証専用の画面、サインインのURL、サインインの後に戻ってよい場所(遷移元)。
 // 認証の画面の経路の文字列は、この部品だけが持つ。保護対象の画面の範囲は、ラウンド一覧の経路(ROUNDS_PATH)とその配下である。根は、サインインの後の既定の行き先でもある。
-// 例外: この部品は、ドメイン層から他の機能(rounds)の入口を値で読む(architecture.mdの例外。他の層・他の場所は読まない)。
-import { ROUNDS_PATH } from "@/features/rounds";
+import { ROUNDS_PATH } from "@/routes";
 
 export const SIGN_IN_PATH = "/signin";
 export const SIGN_UP_PATH = "/signup";

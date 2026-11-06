@@ -4,7 +4,7 @@ import {
   SIGN_IN_PATH,
   SIGN_UP_PATH,
 } from "@/features/auth/domain/auth-routes";
-import { ROUNDS_PATH } from "@/features/rounds/domain/round-routes";
+import { ROUNDS_PATH } from "@/routes";
 
 // proxy.tsの対象のパスへの要求のうち、応答がまだ届いていないものを、contextごとに記録する。
 // proxy.tsは応答にSet-Cookieでセッションを付けるため、保存先のCookieを書き換えた後にその応答が届くと、書き換えを元に戻す。
