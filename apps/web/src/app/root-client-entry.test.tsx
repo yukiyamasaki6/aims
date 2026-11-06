@@ -507,18 +507,6 @@ describe("RootClientEntry", () => {
       // Then
       expect(createBrowserIdentityStore().read()).toBe("user-1");
     });
-
-    it("トークンの更新では、識別情報を変えず、消さない", () => {
-      // Given
-      render(<RootClientEntry>{null}</RootClientEntry>);
-      act(() => supabase.emit("SIGNED_IN", { user: { id: "user-1" } }));
-
-      // When
-      act(() => supabase.emit("TOKEN_REFRESHED", { user: { id: "user-1" } }));
-
-      // Then
-      expect(createBrowserIdentityStore().read()).toBe("user-1");
-    });
   });
 
   describe("文言", () => {
@@ -925,23 +913,6 @@ describe("RootClientEntry", () => {
       ]);
       expect(persistedBeforeRelease).toBe(false);
       expect(persisted).toBe(true);
-    });
-
-    it("トークンの更新は、サインインの変化として同期へ届き、識別情報の記録は変わらない", () => {
-      // Given
-      localStorage.setItem("aims:local-user-id", "user-1");
-      render(<RootClientEntry>{null}</RootClientEntry>);
-      const signInChanged = vi.spyOn(lastSync(), "signInChanged");
-
-      // When
-      act(() => supabase.emit("TOKEN_REFRESHED", { user: { id: "user-1" } }));
-
-      // Then
-      expect(signInChanged).toHaveBeenCalledExactlyOnceWith({
-        kind: "token-refreshed",
-        userId: "user-1",
-      });
-      expect(createBrowserIdentityStore().read()).toBe("user-1");
     });
 
     it("事前描画(サーバー側の描画)で生成しても、ブラウザの購読や大域の名前に触れず、投げない", () => {

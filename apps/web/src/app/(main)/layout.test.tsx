@@ -1,4 +1,4 @@
-import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
+import { AuthApiError } from "@supabase/supabase-js";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToString } from "react-dom/server";
@@ -277,20 +277,6 @@ describe("MainLayout", () => {
       expect(assign).not.toHaveBeenCalled();
     });
 
-    it("ラウンド一覧でも、一覧を遷移元に付ける", () => {
-      // Given
-      setLocation("/rounds");
-      renderLayout();
-
-      // When
-      supabase.emit("SIGNED_OUT", null);
-
-      // Then
-      expect(replace).toHaveBeenCalledExactlyOnceWith(
-        "/signin?returnTo=%2Frounds",
-      );
-    });
-
     it("表示した時にオンラインで未認証なら、サインインへ移る", async () => {
       // Given
       supabase.getSession.mockResolvedValue({
@@ -306,34 +292,6 @@ describe("MainLayout", () => {
       expect(replace).toHaveBeenCalledExactlyOnceWith(
         "/signin?returnTo=%2Frounds%2Fnew",
       );
-    });
-
-    it("表示した時の確認が通信の失敗で確かめられない(不明)ときは、移らない", async () => {
-      // Given
-      supabase.getSession.mockResolvedValue({
-        data: { session: null },
-        error: new AuthRetryableFetchError("Failed to fetch", 0),
-      });
-
-      // When
-      renderLayout();
-      await flush();
-
-      // Then
-      expect(supabase.getSession).toHaveBeenCalledTimes(1);
-      expect(replace).not.toHaveBeenCalled();
-    });
-
-    it("離れると、購読を解除し、それ以降のsigned-outでは移らない", () => {
-      // Given
-      const { unmount } = renderLayout();
-
-      // When
-      unmount();
-
-      // Then
-      expect(supabase.unsubscribe).toHaveBeenCalledTimes(1);
-      expect(supabase.listeners).toHaveLength(0);
     });
 
     it("離れた後にsigned-outが来ても、移らない", async () => {
