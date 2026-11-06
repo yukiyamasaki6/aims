@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
+import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import {
   beginSendCode,
@@ -21,22 +22,25 @@ import { screenHarness } from "./screen-view-test-helpers";
 const email = "user@example.com";
 const accepted: CallResult = { kind: "accepted" };
 
-function setup() {
+function setup(offline = false) {
   const authenticator = {
     sendCode: vi.fn(async (): Promise<CallResult> => accepted),
     verifyCode: vi.fn(async (): Promise<CallResult> => accepted),
     setPassword: vi.fn(async (): Promise<CallResult> => accepted),
   } satisfies PasswordSetupAuthenticator;
   const clock = createManualClock();
+  const connectivity = createFakeConnectivity(offline);
   const context: PasswordSetupContext = {
     authenticator,
     purpose: "password-reset",
     clock,
+    connectivity,
   };
   return {
     authenticator,
     context,
     clock,
+    connectivity,
     ...screenHarness<
       ReturnType<typeof passwordSetupReducer>,
       PasswordSetupEvent
@@ -53,7 +57,7 @@ const checked = passwordSetupReducer(initialPasswordSetupFlow, {
   token: "first-token",
 });
 const onCodeStep = passwordSetupReducer(
-  beginSendCode(checked, { email }).state,
+  beginSendCode(checked, { email, offline: false }).state,
   { type: "codeSent" },
 );
 const resendable = passwordSetupReducer(
@@ -256,12 +260,13 @@ describe("パスワード設定の共通の手続き", () => {
   describe("パスワードの設定", () => {
     it("設定できて表示中なら、渡された設定の依頼で入力したパスワードを頼み、続きを行ってよいと返し、実行中を解除しない", async () => {
       // Given
-      const { authenticator, events, viewOf } = setup();
+      const { context, authenticator, events, viewOf } = setup();
       const view = viewOf(onPasswordStep);
 
       // When
       const proceed = await applyPassword(
         authenticator.setPassword,
+        context.connectivity,
         { password: "password1" },
         view,
       );
@@ -277,7 +282,7 @@ describe("パスワード設定の共通の手続き", () => {
 
     it("設定に失敗すれば、失敗を示し、続きを行わず、実行中を解除する", async () => {
       // Given
-      const { authenticator, viewOf } = setup();
+      const { context, authenticator, viewOf } = setup();
       authenticator.setPassword.mockResolvedValue({
         kind: "failed",
         failure: { kind: "weak_password" },
@@ -287,6 +292,7 @@ describe("パスワード設定の共通の手続き", () => {
       // When
       const proceed = await applyPassword(
         authenticator.setPassword,
+        context.connectivity,
         { password: "password1" },
         view,
       );
@@ -299,13 +305,14 @@ describe("パスワード設定の共通の手続き", () => {
 
     it("パスワードに不備があれば、不備だけを示し、設定しない", async () => {
       // Given
-      const { authenticator, events, viewOf } = setup();
+      const { context, authenticator, events, viewOf } = setup();
 
       const view = viewOf(onPasswordStep);
 
       // When
       const proceed = await applyPassword(
         authenticator.setPassword,
+        context.connectivity,
         { password: "" },
         view,
       );
@@ -319,12 +326,13 @@ describe("パスワード設定の共通の手続き", () => {
 
     it("実行中なら、何も送らず、設定しない", async () => {
       // Given
-      const { authenticator, events, viewOf } = setup();
+      const { context, authenticator, events, viewOf } = setup();
       const running = { ...onPasswordStep, pending: "setPassword" as const };
 
       // When
       const proceed = await applyPassword(
         authenticator.setPassword,
+        context.connectivity,
         { password: "password1" },
         viewOf(running),
       );
@@ -336,15 +344,96 @@ describe("パスワード設定の共通の手続き", () => {
     });
   });
 
+  describe("オフライン", () => {
+    it("コードの送付は、認証サービスを呼ばず、チェックのやり直しもせず、offlineを示してトークンを保持する", async () => {
+      // Given
+      const { authenticator, context, resetCheck, viewOf } = setup(true);
+      const view = viewOf(readyToResend);
+
+      // When
+      await sendCode(context, { email }, view);
+
+      // Then
+      expect(authenticator.sendCode).not.toHaveBeenCalled();
+      expect(resetCheck).not.toHaveBeenCalled();
+      expect(view.observedState.error).toBe("offline");
+      expect(view.observedState.captchaToken).toBe("resend-token");
+      expect(view.observedState.pending).toBeNull();
+    });
+
+    it("コードの確認は、認証サービスを呼ばず、offlineを示す", async () => {
+      // Given
+      const { authenticator, context, events, viewOf } = setup(true);
+      const view = viewOf(onCodeStep);
+
+      // When
+      await verifyCode(context, { email, code: "123456" }, view);
+
+      // Then
+      expect(authenticator.verifyCode).not.toHaveBeenCalled();
+      expect(events).toEqual([]);
+      expect(view.observedState.error).toBe("offline");
+      expect(view.observedState.pending).toBeNull();
+    });
+
+    it("パスワードの設定は、設定を頼まず、続きを行わず、offlineを示す", async () => {
+      // Given
+      const { authenticator, context, events, viewOf } = setup(true);
+      const view = viewOf(onPasswordStep);
+
+      // When
+      const proceed = await applyPassword(
+        authenticator.setPassword,
+        context.connectivity,
+        { password: "password1" },
+        view,
+      );
+
+      // Then
+      expect(proceed).toBe(false);
+      expect(authenticator.setPassword).not.toHaveBeenCalled();
+      expect(events).toEqual([]);
+      expect(view.observedState.error).toBe("offline");
+      expect(view.observedState.pending).toBeNull();
+    });
+
+    it("オンラインに戻ると、同じ操作は通常どおり送られる", async () => {
+      // Given
+      const { authenticator, connectivity, context, viewOf } = setup(true);
+      const view = viewOf(onCodeStep);
+      await verifyCode(context, { email, code: "123456" }, view);
+
+      // When
+      connectivity.goOnline();
+      await verifyCode(context, { email, code: "123456" }, view);
+
+      // Then
+      expect(authenticator.verifyCode).toHaveBeenCalledOnce();
+      expect(view.observedState.step).toBe("password");
+    });
+
+    it("送信ごとに1回だけ読み、購読しない", async () => {
+      // Given
+      const { connectivity, context, viewOf } = setup(true);
+
+      // When
+      await verifyCode(context, { email, code: "123456" }, viewOf(onCodeStep));
+
+      // Then
+      expect(connectivity.subscribers()).toEqual({ online: 0, offline: 0 });
+    });
+  });
+
   // 離れた後は、設定の続き(遷移)を行わない。
   describe("画面を離れた後の応答", () => {
     it("パスワードの設定の待ちで離れたら、結果を反映せず、続きを行わない", async () => {
       // Given
-      const { authenticator, events, screen, viewOf } = setup();
+      const { context, authenticator, events, screen, viewOf } = setup();
       const response = Promise.withResolvers<CallResult>();
       authenticator.setPassword.mockReturnValue(response.promise);
       const running = applyPassword(
         authenticator.setPassword,
+        context.connectivity,
         { password: "password1" },
         viewOf(onPasswordStep),
       );

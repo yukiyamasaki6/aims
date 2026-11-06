@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
+import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import type { CallResult } from "../application/call-result";
 import type { PasswordSetupAuthenticator } from "../application/password-setup-authenticator";
 import { createSignUp } from "../application/sign-up";
@@ -49,6 +50,7 @@ type User = ReturnType<typeof userEvent.setup>;
 function renderForm(options?: { strict?: boolean }) {
   const signUp = createSignUp({
     clock: createBrowserClock(),
+    connectivity: createFakeConnectivity(),
     authenticator: auth,
     pageNavigation: { go: nav.go },
   });

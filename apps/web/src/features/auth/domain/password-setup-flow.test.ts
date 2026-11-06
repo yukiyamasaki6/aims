@@ -349,7 +349,7 @@ describe("パスワード設定の流れの遷移", () => {
 });
 
 describe("操作の開始の可否と入力の検証", () => {
-  const validEmail = { email: "user@example.com" };
+  const validEmail = { email: "user@example.com", offline: false };
 
   // 操作ごとに、操作の段階と、不備が無い状態での開始の命令。
   const cases = [
@@ -361,7 +361,7 @@ describe("操作の開始の可否と入力の検証", () => {
       invalidFlow: {},
       begin: (flow: PasswordSetupFlow) => beginSendCode(flow, validEmail),
       invalidBegin: (flow: PasswordSetupFlow) =>
-        beginSendCode(flow, { email: "" }),
+        beginSendCode(flow, { email: "", offline: false }),
     },
     {
       name: "コードの確認",
@@ -369,7 +369,11 @@ describe("操作の開始の可否と入力の検証", () => {
       ownStep: "code",
       ready: {},
       begin: (flow: PasswordSetupFlow) =>
-        beginVerifyCode(flow, { ...validEmail, code: "123456" }),
+        beginVerifyCode(flow, {
+          ...validEmail,
+          code: "123456",
+          offline: false,
+        }),
     },
     {
       name: "パスワードの設定",
@@ -378,9 +382,9 @@ describe("操作の開始の可否と入力の検証", () => {
       ready: {},
       invalidFlow: {},
       begin: (flow: PasswordSetupFlow) =>
-        beginSetPassword(flow, { password: "password1" }),
+        beginSetPassword(flow, { password: "password1", offline: false }),
       invalidBegin: (flow: PasswordSetupFlow) =>
-        beginSetPassword(flow, { password: "" }),
+        beginSetPassword(flow, { password: "", offline: false }),
     },
   ] as const;
 
@@ -493,6 +497,7 @@ describe("操作の開始の可否と入力の検証", () => {
           beginVerifyCode(flowWith({ step: "code", resendCooldown: 17 }), {
             ...validEmail,
             code: "123456",
+            offline: false,
           }),
       ],
       [
@@ -500,6 +505,7 @@ describe("操作の開始の可否と入力の検証", () => {
         () =>
           beginSetPassword(flowWith({ step: "password", resendCooldown: 17 }), {
             password: "password1",
+            offline: false,
           }),
       ],
     ])("%sの開始は、待ち時間を変えない", (_name, begin) => {
@@ -519,7 +525,10 @@ describe("操作の開始の可否と入力の検証", () => {
       const flow = flowWith({ captchaToken: "token" });
 
       // When
-      const result = beginSendCode(flow, { email: "user@example.com" });
+      const result = beginSendCode(flow, {
+        email: "user@example.com",
+        offline: false,
+      });
 
       // Then
       expect(result).toMatchObject({
@@ -532,7 +541,10 @@ describe("操作の開始の可否と入力の検証", () => {
       const flow = flowWith({ captchaToken: "token" });
 
       // When
-      const result = beginSendCode(flow, { email: "invalid-email" });
+      const result = beginSendCode(flow, {
+        email: "invalid-email",
+        offline: false,
+      });
 
       // Then
       expect(result).toMatchObject({
@@ -550,7 +562,10 @@ describe("操作の開始の可否と入力の検証", () => {
         const flow = flowWith({ captchaToken });
 
         // When
-        const result = beginSendCode(flow, { email: "user@example.com" });
+        const result = beginSendCode(flow, {
+          email: "user@example.com",
+          offline: false,
+        });
 
         // Then
         expect(result).toMatchObject({
@@ -565,7 +580,7 @@ describe("操作の開始の可否と入力の検証", () => {
       const flow = flowWith({ captchaToken: null });
 
       // When
-      const result = beginSendCode(flow, { email: "" });
+      const result = beginSendCode(flow, { email: "", offline: false });
 
       // Then
       expect(result).toMatchObject({
@@ -587,6 +602,7 @@ describe("操作の開始の可否と入力の検証", () => {
       const result = beginVerifyCode(onCodeFlow, {
         email: "user@example.com",
         code: "123456",
+        offline: false,
       });
 
       // Then
@@ -603,6 +619,7 @@ describe("操作の開始の可否と入力の検証", () => {
       const result = beginVerifyCode(onCodeFlow, {
         email: "user@example.com",
         code: "",
+        offline: false,
       });
 
       // Then
@@ -626,6 +643,7 @@ describe("操作の開始の可否と入力の検証", () => {
         const result = beginVerifyCode(onCodeFlow, {
           email: "user@example.com",
           code,
+          offline: false,
         });
 
         // Then
@@ -647,7 +665,10 @@ describe("操作の開始の可否と入力の検証", () => {
       });
 
       // When
-      const result = beginSendCode(flow, { email: "user@example.com" });
+      const result = beginSendCode(flow, {
+        email: "user@example.com",
+        offline: false,
+      });
 
       // Then
       expect(result).toMatchObject({
@@ -665,7 +686,10 @@ describe("操作の開始の可否と入力の検証", () => {
       });
 
       // When
-      const result = beginSendCode(flow, { email: "user@example.com" });
+      const result = beginSendCode(flow, {
+        email: "user@example.com",
+        offline: false,
+      });
 
       // Then
       expect(result).toMatchObject({
@@ -683,7 +707,10 @@ describe("操作の開始の可否と入力の検証", () => {
       });
 
       // When
-      const result = beginSendCode(flow, { email: "user@example.com" });
+      const result = beginSendCode(flow, {
+        email: "user@example.com",
+        offline: false,
+      });
 
       // Then
       expect(result).toMatchObject({
@@ -704,6 +731,7 @@ describe("操作の開始の可否と入力の検証", () => {
       // When
       const result = beginSetPassword(onPasswordFlow, {
         password: "password1",
+        offline: false,
       });
 
       // Then
@@ -716,12 +744,178 @@ describe("操作の開始の可否と入力の検証", () => {
       // Given
 
       // When
-      const result = beginSetPassword(onPasswordFlow, { password: "" });
+      const result = beginSetPassword(onPasswordFlow, {
+        password: "",
+        offline: false,
+      });
 
       // Then
       expect(result).toMatchObject({
         request: null,
         state: { fieldErrors: { password: "required" } },
+      });
+    });
+  });
+});
+
+describe("オフラインの判定", () => {
+  const email = "user@example.com";
+  const offlineFlow = (overrides: Partial<PasswordSetupFlow> = {}) =>
+    flowWith({ captchaToken: "token", error: "other", ...overrides });
+
+  describe("beginSendCode", () => {
+    it("入力に不備が無ければ、offlineを示して送らず、トークンを保持し、実行中にしない", () => {
+      // Given
+      const flow = offlineFlow();
+
+      // When
+      const result = beginSendCode(flow, { email, offline: true });
+
+      // Then
+      expect(result.request).toBeNull();
+      expect(result.state).toMatchObject({
+        error: "offline",
+        fieldErrors: {},
+        pending: null,
+        captchaToken: "token",
+      });
+    });
+
+    it("チェックが未完了でも、チェック未完了を示さずofflineを示す", () => {
+      // Given
+      const flow = offlineFlow({ captchaToken: null });
+
+      // When
+      const result = beginSendCode(flow, { email, offline: true });
+
+      // Then
+      expect(result.request).toBeNull();
+      expect(result.state).toMatchObject({ error: "offline", fieldErrors: {} });
+    });
+
+    it.each([
+      ["メールが空", { email: "" }, {}, { email: "required" }],
+      [
+        "再送の待ち中",
+        { email },
+        { step: "code", resendCooldown: 30 },
+        { resend: WAIT_MESSAGE },
+      ],
+    ] as const)(
+      "%sなら、その不備だけを示し、チェック未完了もofflineも示さない",
+      (_name, input, overrides, fieldErrors) => {
+        // Given
+        const flow = offlineFlow({ ...overrides, captchaToken: null });
+
+        // When
+        const result = beginSendCode(flow, { ...input, offline: true });
+
+        // Then
+        expect(result.request).toBeNull();
+        expect(result.state).toMatchObject({ error: null, fieldErrors });
+        expect(result.state.fieldErrors.captcha).toBeUndefined();
+      },
+    );
+
+    it("オンラインでは、不備とチェック未完了を全部まとめて示す(従来どおり)", () => {
+      // Given
+      const flow = offlineFlow({ captchaToken: null });
+
+      // When
+      const result = beginSendCode(flow, { email: "", offline: false });
+
+      // Then
+      expect(result.state.fieldErrors).toEqual({
+        email: "required",
+        captcha: CAPTCHA_MESSAGE,
+      });
+    });
+
+    it("実行中なら、オフラインでも状態を変えない", () => {
+      // Given
+      const flow = offlineFlow({ pending: "send" });
+
+      // When
+      const result = beginSendCode(flow, { email, offline: true });
+
+      // Then
+      expect(result.state).toBe(flow);
+      expect(result.request).toBeNull();
+    });
+  });
+
+  describe("beginVerifyCode", () => {
+    it("コードがあってオフラインなら、offlineを示して送らない", () => {
+      // Given
+      const flow = offlineFlow({ step: "code" });
+
+      // When
+      const result = beginVerifyCode(flow, {
+        email,
+        code: "123456",
+        offline: true,
+      });
+
+      // Then
+      expect(result.request).toBeNull();
+      expect(result.state).toMatchObject({
+        error: "offline",
+        fieldErrors: {},
+        pending: null,
+      });
+    });
+
+    it("コードが空でオフラインなら、未入力の不備だけを示す", () => {
+      // Given
+      const flow = offlineFlow({ step: "code" });
+
+      // When
+      const result = beginVerifyCode(flow, { email, code: "", offline: true });
+
+      // Then
+      expect(result.request).toBeNull();
+      expect(result.state).toMatchObject({
+        error: null,
+        fieldErrors: { code: "required" },
+      });
+    });
+  });
+
+  describe("beginSetPassword", () => {
+    it("パスワードが正しくてオフラインなら、offlineを示して送らない", () => {
+      // Given
+      const flow = offlineFlow({ step: "password" });
+
+      // When
+      const result = beginSetPassword(flow, {
+        password: "password1",
+        offline: true,
+      });
+
+      // Then
+      expect(result.request).toBeNull();
+      expect(result.state).toMatchObject({
+        error: "offline",
+        fieldErrors: {},
+        pending: null,
+      });
+    });
+
+    it("許さない文字を含みオフラインなら、その不備だけを示す", () => {
+      // Given
+      const flow = offlineFlow({ step: "password" });
+
+      // When
+      const result = beginSetPassword(flow, {
+        password: "パスワード1",
+        offline: true,
+      });
+
+      // Then
+      expect(result.request).toBeNull();
+      expect(result.state).toMatchObject({
+        error: null,
+        fieldErrors: { password: "invalidRule" },
       });
     });
   });

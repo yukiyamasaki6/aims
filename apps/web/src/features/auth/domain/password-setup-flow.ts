@@ -42,12 +42,15 @@ type Checked<Request> =
   | { readonly ok: false; readonly fieldErrors: FieldErrorSet }
   | { readonly ok: true; readonly request: Request };
 
-// 開始の命令。実行中の操作が無いときだけ開始できる(busy)。画面は現在の段階の操作だけを描くため、段階は検査しない。
-// 入力の不備は、検査できる全てを示す(invalid)。開始できるなら、その操作を実行中にする(started)。
+// 開始の命令。判定の順序は、実行中 → 入力の判定 → オフラインの判定(→ 送付ではチェックの判定を入力の判定に含める)。
+// 実行中の操作が無いときだけ開始できる(busy)。画面は現在の段階の操作だけを描くため、段階は検査しない。
+// 入力の不備は、検査できる全てを示す(invalid)。入力に不備が無くオフラインなら、通信もトークンの消費もせず、オフラインを示す(offline)。
+// 開始できるなら、その操作を実行中にする(started)。
 // 開始では以前のエラーを消す(4操作で同じ)。
 function begin<Request>(
   flow: PasswordSetupFlow,
   operation: Operation,
+  offline: boolean,
   check: () => Checked<Request>,
 ): Start<PasswordSetupFlow, Request> {
   if (flow.pending !== null) {
@@ -57,6 +60,12 @@ function begin<Request>(
   if (!checked.ok) {
     return {
       state: { ...flow, error: null, fieldErrors: checked.fieldErrors },
+      request: null,
+    };
+  }
+  if (offline) {
+    return {
+      state: { ...flow, error: "offline", fieldErrors: {} },
       request: null,
     };
   }
@@ -71,36 +80,42 @@ function begin<Request>(
   };
 }
 
-// コードの送付(初回も再送も)。メールアドレス、再送の待ち時間、セキュリティチェックの全てに不備が無ければ送れる。
+// コードの送付(初回も再送も)。メールアドレス、再送の待ち時間、セキュリティチェックの全てに不備が無く、オフラインでなければ送れる。
 // 待ちは、コード入力の段階で残りがあるときの不備である(メール入力の段階では0)。
+// チェック未完了は、オンラインのときだけ不備にする(オフラインでは原因を取り違えるため示さない)。
 export function beginSendCode(
   flow: PasswordSetupFlow,
-  input: { email: string },
+  input: { email: string; offline: boolean },
 ): Start<PasswordSetupFlow, { email: string; captchaToken: string }> {
-  return begin(flow, "send", () => {
+  return begin(flow, "send", input.offline, () => {
     const email = validateEmail(input.email);
     const wait = validateResendWait(flow.resendCooldown);
     const { captchaToken } = flow;
-    if (email || wait || !isCaptchaCompleted(captchaToken)) {
+    const captchaMissing = !input.offline && !isCaptchaCompleted(captchaToken);
+    if (email || wait || captchaMissing) {
       return {
         ok: false,
         fieldErrors: {
           ...(email && { email }),
           ...(wait && { resend: wait }),
-          ...(!isCaptchaCompleted(captchaToken) && { captcha: "incomplete" }),
+          ...(captchaMissing && { captcha: "incomplete" }),
         },
       };
     }
-    return { ok: true, request: { email: input.email, captchaToken } };
+    // オフラインのときは、この値は使われない(beginが送らない)。
+    return {
+      ok: true,
+      request: { email: input.email, captchaToken: captchaToken ?? "" },
+    };
   });
 }
 
 // コードの確認。送信前に見るのは未入力だけで、桁数と正しさは認証サービスに任せる。
 export function beginVerifyCode(
   flow: PasswordSetupFlow,
-  input: { email: string; code: string },
+  input: { email: string; code: string; offline: boolean },
 ): Start<PasswordSetupFlow, { email: string; code: string }> {
-  return begin(flow, "verify", () => {
+  return begin(flow, "verify", input.offline, () => {
     const code = validateAuthCode(input.code);
     if (code) return { ok: false, fieldErrors: { code } };
     return { ok: true, request: { email: input.email, code: input.code } };
@@ -109,9 +124,9 @@ export function beginVerifyCode(
 
 export function beginSetPassword(
   flow: PasswordSetupFlow,
-  input: { password: string },
+  input: { password: string; offline: boolean },
 ): Start<PasswordSetupFlow, { password: string }> {
-  return begin(flow, "setPassword", () => {
+  return begin(flow, "setPassword", input.offline, () => {
     const password = validateNewPassword(input.password);
     if (password) return { ok: false, fieldErrors: { password } };
     return { ok: true, request: { password: input.password } };
