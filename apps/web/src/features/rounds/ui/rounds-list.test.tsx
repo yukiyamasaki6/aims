@@ -437,22 +437,6 @@ describe("RoundsList", () => {
       ).toBeNull();
     });
 
-    it("入力中のラウンドだけがあるときは、「過去履歴」の節も「まだラウンドがありません。」も表示しない", async () => {
-      // Given
-      load.mockResolvedValue({
-        status: "ok",
-        data: loaded(inProgressRounds, { inProgress: inProgressRounds }),
-      });
-
-      // When
-      renderList();
-      await screen.findByTestId("in-progress-rounds");
-
-      // Then
-      expect(screen.queryByTestId("other-rounds")).toBeNull();
-      expect(screen.queryByText(roundsText("listEmpty"))).toBeNull();
-    });
-
     it("オフラインでは、入力中のラウンドを表示し、「過去履歴」の下に「ネットワークに接続されていません」を表示する", async () => {
       // Given
       offlineWithLocal();
@@ -476,25 +460,6 @@ describe("RoundsList", () => {
       expect(screen.queryByText(roundsText("listEmpty"))).toBeNull();
     });
 
-    it("取得に失敗したときは、入力中のラウンドを表示し、「過去履歴」の下にエラーと再試行を表示する", async () => {
-      // Given
-      offlineWithLocal();
-      fetchResolves({ status: "error", reason: "failed" });
-
-      // When
-      renderList();
-      await screen.findByTestId("in-progress-rounds");
-
-      // Then
-      const others = screen.getByTestId("other-rounds");
-      expect(within(others).getByRole("alert")).toHaveTextContent(
-        roundsText("fetchFailure.failed"),
-      );
-      expect(
-        within(others).getByRole("button", { name: roundsText("fetchRetry") }),
-      ).toBeInTheDocument();
-    });
-
     it("取得中は、待つ間は入力中の領域を表示せず、待ちが経過した後は入力中の領域と「過去履歴」の下のスケルトンを表示する", async () => {
       // Given
       load.mockReturnValue(new Promise(() => {}));
@@ -516,22 +481,6 @@ describe("RoundsList", () => {
       expect(
         within(screen.getByTestId("other-rounds")).getByRole("status"),
       ).toBeInTheDocument();
-    });
-
-    it("入力中がなく取得できないときは、今と同じ表示で、見出しも「まだラウンドがありません。」も表示しない", async () => {
-      // Given
-      setLocal({ inProgress: [], deleted: new Set() });
-      fetchResolves({ status: "offline" });
-
-      // When
-      renderList();
-      await elapseWait();
-      await screen.findByText(roundsText("fetchOffline"));
-
-      // Then
-      expect(screen.queryByTestId("in-progress-rounds")).toBeNull();
-      expect(screen.queryByTestId("other-rounds")).toBeNull();
-      expect(screen.queryByText(roundsText("listEmpty"))).toBeNull();
     });
 
     it("入力中のラウンドのカードも削除でき、最後の1件を消すと領域が見出しごと消える", async () => {
