@@ -27,7 +27,7 @@ export type RoundsListStore = {
 };
 
 type Deps = {
-  hub: Pick<RoundRecordHub, "commit" | "generation" | "readList" | "userId">;
+  hub: Pick<RoundRecordHub, "commit" | "readList" | "userId">;
   requests: Pick<RefreshRequests, "requestAll" | "allowCommit">;
   fetching: Pick<RoundFetching, "fetchRoundsList" | "savedTargetFaces">;
   clock: Clock;
@@ -84,30 +84,22 @@ async function fetchListing(
 async function listDetail(deps: Deps): Promise<FetchResult<LoadedRoundsList>> {
   const { hub, clock } = deps;
   const startedAt = clock.now();
-  const generation = hub.generation();
   const { deleted, confirmed } = deletionsOf(await readSnapshots(hub));
   const list = await fetchListing(deps);
   if (list.status !== "ok") return list;
-  // 取得の間に利用者が替わったとき(通常の起動で、記録の利用者がnullから現在の利用者に確定するときを含む)は、取得の前の削除の印を現在の記録へ書かず、削除済みを現在の記録から求め直して、一覧は返す。
-  const switched = hub.generation() !== generation;
   // 取得の前に削除が確定していたラウンドは、削除の印として端末の記録へ反映する。
-  if (!switched) {
-    await Promise.all(
-      confirmed.map((roundId) =>
-        hub.commit(roundStreamId(roundId), null, startedAt, hub.userId()),
-      ),
-    );
-  }
-  const deletedNow = switched
-    ? deletionsOf(await readSnapshots(hub)).deleted
-    : deleted;
+  await Promise.all(
+    confirmed.map((roundId) =>
+      hub.commit(roundStreamId(roundId), null, startedAt, hub.userId()),
+    ),
+  );
   const local = await localList(deps);
   return {
     status: "ok",
     data: {
       items: list.data,
       inProgress: local.inProgress,
-      deleted: deletedNow,
+      deleted,
     },
   };
 }
