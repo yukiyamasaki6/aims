@@ -3,10 +3,8 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  LoadedRoundDetail,
-  RoundDetailStore,
-} from "@/features/rounds/application/round-detail-store";
+import type { RoundDetailStore } from "@/features/rounds/application/round-detail-store";
+import type { LoadedRound } from "@/features/rounds/application/round-handle";
 import type { FetchResult } from "@/features/rounds/domain/fetch-status";
 import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
@@ -85,9 +83,8 @@ function detail(
   pendingCreationEventId: string | null = null,
   source: "server" | "local" = "server",
   targetFaces: TargetFaceOption[] = [],
-): LoadedRoundDetail {
+): LoadedRound {
   return {
-    deleted: false,
     base: roundTablesFromServer({
       status: "in_progress",
       roundConfig: {
@@ -124,7 +121,7 @@ function renderDetailToString() {
   );
 }
 
-function resolves(result: FetchResult<LoadedRoundDetail>) {
+function resolves(result: FetchResult<LoadedRound>) {
   load.mockResolvedValue(result);
 }
 
@@ -193,35 +190,6 @@ describe("RoundDetailClient", () => {
       expect(scorecard).toHaveAttribute("data-faces", "face-1,face-2");
       expect(load).toHaveBeenCalledTimes(1);
       expect(load).toHaveBeenCalledWith(ID);
-    });
-
-    it("列に削除があれば、スコアカードを出さず、一覧へ戻る手続きを呼ぶ", async () => {
-      // Given
-      resolves({ status: "ok", data: { deleted: true } });
-
-      // When
-      renderDetail();
-
-      // Then
-      await waitFor(() =>
-        expect(procedures.leaving.leaveRound).toHaveBeenCalledTimes(1),
-      );
-      expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
-      expect(screen.getByRole("status")).toHaveTextContent(
-        roundsText("fetchLoading"),
-      );
-    });
-
-    it("列に削除がなければ、一覧へ戻る手続きを呼ばない", async () => {
-      // Given
-      resolves({ status: "ok", data: detail("午前練習") });
-
-      // When
-      renderDetail();
-      await screen.findByTestId("scorecard");
-
-      // Then
-      expect(procedures.leaving.leaveRound).not.toHaveBeenCalled();
     });
 
     it("pathnameのIDが変わると、前のラウンドを見せずに取得し直す", async () => {

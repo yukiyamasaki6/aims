@@ -73,7 +73,7 @@ function _syncFinishesAll(
 }
 
 describe("load", () => {
-  it("端末の記録にラウンドの削除があれば、取得せずに削除として返す", async () => {
+  it("端末の記録にラウンドの削除があれば、取得せずに見つからないとして返す", async () => {
     // Given
     const tab = createTestRounds();
     await tab.hub.append(STREAM, roundDisabled());
@@ -82,7 +82,7 @@ describe("load", () => {
     const result = await tab.detail.load("round-1");
 
     // Then
-    expect(result).toEqual({ status: "ok", data: { deleted: true } });
+    expect(result).toEqual({ status: "not-found" });
     expect(tab.requests.pendingOpens()).toEqual([]);
     expect(tab.fetching.fetchTargetFaces).not.toHaveBeenCalled();
   });
@@ -104,7 +104,6 @@ describe("load", () => {
     expect(result).toMatchObject({
       status: "ok",
       data: {
-        deleted: false,
         pendingCreationEventId: created.eventId,
         targetFaces: [face],
         source: "server",
@@ -143,7 +142,6 @@ describe("load", () => {
     expect(result).toMatchObject({
       status: "ok",
       data: {
-        deleted: false,
         source: "server",
         pendingCreationEventId: null,
         targetFaces: [face],
@@ -151,7 +149,7 @@ describe("load", () => {
     });
   });
 
-  it("取得した材料が削除を含むときは、削除として返し、見つからないときはnot-foundを返す", async () => {
+  it("取得した材料が削除を含むときも、見つからないときも、not-foundを返す", async () => {
     // Given
     const tab = createTestRounds();
     const deleted = tab.detail.load("round-1");
@@ -167,7 +165,7 @@ describe("load", () => {
     settleRoundNow(tab.requests, "round-2", { status: "not-found" });
 
     // Then
-    expect(await deleted).toEqual({ status: "ok", data: { deleted: true } });
+    expect(await deleted).toEqual({ status: "not-found" });
     expect(await missing).toEqual({ status: "not-found" });
   });
 
@@ -239,7 +237,6 @@ describe("load", () => {
       expect(result).toMatchObject({
         status: "ok",
         data: {
-          deleted: false,
           source: "local",
           targetFaces: [face],
           base: { round: { config: { name: "端末" } } },

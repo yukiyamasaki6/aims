@@ -513,7 +513,7 @@ test("端末の内容で表示しているラウンドが、他の端末で削�
   ).toBeVisible();
 });
 
-test("オフラインのラウンド一覧で削除したラウンドを、オフラインのまま詳細で開くと、ラウンド一覧へ移動し、そのラウンドは表示されない", async ({
+test("オフラインのラウンド一覧で削除したラウンドを、オフラインのまま詳細で開くと、その画面のまま見つからない表示になり、戻るリンクで移ったラウンド一覧にそのラウンドは表示されない", async ({
   page,
 }) => {
   // オフラインのラウンド一覧で削除を確認し、ラウンドが一覧から消えることを確かめる。
@@ -541,8 +541,13 @@ test("オフラインのラウンド一覧で削除したラウンドを、オ�
   await expect(page.getByTestId("confirm-dialog-confirm")).toBeHidden();
   await expect(link).toBeHidden();
 
-  // オフラインのまま削除したラウンドの詳細を開き、ラウンド一覧へ移ってラウンドが表示されないことを確かめる。
+  // オフラインのまま削除したラウンドの詳細を開き、詳細のURLのまま見つからない表示と戻るリンクが出ることを確かめる。
   await page.goto(`/rounds/${roundId}`);
+  await expect(page.getByText(roundsText("detailNotFound"))).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
+
+  // 戻るリンクでラウンド一覧へ移り、ラウンドが表示されないことを確かめる。
+  await page.getByRole("link", { name: roundsText("backToList") }).click();
   await expect(page).toHaveURL(/\/rounds$/);
   await expect(
     page.getByRole("heading", { name: roundsText("listTitle") }),

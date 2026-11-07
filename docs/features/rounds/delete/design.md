@@ -13,7 +13,7 @@
 | メニュー閉 | 一覧はカードごと、詳細はヘッダーにメニューボタン | メニューボタンで展開 |
 | メニュー展開 | 一覧は「削除」、詳細は「ラウンドを削除」 | 削除ボタンで確認中、外側クリックで閉じる |
 | 確認中 | 説明文とキャンセル・確認ボタン | キャンセル・背景クリック・Escで閉じる、確認ボタンで閉じて削除済み |
-| 削除済み | 一覧はカードが消え、詳細は`/rounds`へ置き換えて遷移する | - |
+| 削除済み | 一覧はカードが消え、詳細は枠の中の見つからない表示になる | - |
 
 - 確認文言は、一覧ではラウンド名を含み、詳細では含まない。一覧でも名前の無いラウンドは名前を含めず、詳細と同じ文言にする（メニューボタンの読み上げ名も「ラウンドのメニュー」）。どちらも、記録したスコアがすべて失われることを明示する。
 - 確認後の画面更新は画面ごとに異なる。一覧は削除済みの集合へ足してカードを除き、詳細は列への保存の後に`/rounds`へ`replace`で遷移する（戻るボタンで削除したラウンドの詳細へ戻らない）。
@@ -25,7 +25,7 @@
 - `features/rounds/application/rounds-list-store.ts`の`RoundsListStore.deleteRound`(一覧): 手続き`features/rounds/application/round-deletion.ts`の`RoundDeletion.deleteRound`(離れない削除)へ委譲する。手続きが`round.disabled`(操作の組み立ては`features/rounds/domain/round-progress.ts`の`roundDisabledOperation`)を新しい`eventId`(約束`UniqueIds`、実装は`features/rounds/infrastructure/browser-unique-ids.ts`)で列へ追記する。保存の試みの完了で解決し、拒否しない。
 - `components/ui/confirm-dialog.tsx`の`ConfirmDialog`: 確認後すぐ閉じる。
 - `apps/web/src/features/rounds/domain/rounds-list-view.ts`: 一覧の取得結果と端末の入力中のラウンドから、列で削除済みのラウンドを除く（`rounds/history`）。
-- `features/rounds/application/round-detail-store.ts`の`load`: 列に削除があれば、取得せずに削除済みを返す（`rounds/detail`）。
+- `features/rounds/application/round-detail-store.ts`の`load`: 列に削除があれば、取得せずに見つからないを返す（`rounds/detail`）。
 
 流れは、メニューから確認ダイアログを開き、確認で、一覧は`RoundsListStore.deleteRound`、詳細は手続きの入れ物の`leaving.deleteRoundAndLeave`を呼ぶ(詳細の手続き`round-leaving.ts`は、一覧と同じ`round-deletion.ts`の`deleteRound`の完了の後に遷移する)。
 一覧は、そのラウンドを削除済みの集合へ足して除く。詳細は、手続きの入れ物の`leaving.deleteRoundAndLeave`(手続き`features/rounds/application/round-leaving.ts`が`round-deletion.ts`の削除の保存の完了の後に`PageNavigation.replace(ROUNDS_PATH)`を呼ぶ)で一覧へ置き換える。

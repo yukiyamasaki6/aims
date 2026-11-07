@@ -1,8 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
-import type { LoadedRoundDetail } from "../application/round-detail-store";
+import type { LoadedRound } from "../application/round-handle";
 import { roundIdOfPath } from "../domain/round-routes";
 import { FetchState } from "./fetch-state";
 import { RoundDetailFrame } from "./round-detail-frame";
@@ -34,21 +33,16 @@ export function RoundDetailClient() {
 function RoundDetailLoader({ roundId }: { roundId: string | null }) {
   const store = useRoundDetailStore();
   const { leaving } = useRoundProcedures();
-  const { view, retry } = useFetchResult<LoadedRoundDetail>(
+  const { view, retry } = useFetchResult<LoadedRound>(
     () =>
       roundId
         ? store.load(roundId)
         : Promise.resolve({ status: "not-found" as const }),
     store.whenOnline,
   );
-  const deleted = view.status === "ok" && view.data.deleted;
   useCreationGone(roundId, retry);
 
-  useEffect(() => {
-    if (deleted) leaving.leaveRound();
-  }, [deleted, leaving]);
-
-  if (roundId && view.status === "ok" && !view.data.deleted) {
+  if (roundId && view.status === "ok") {
     return (
       <ScorecardClient
         roundId={roundId}
