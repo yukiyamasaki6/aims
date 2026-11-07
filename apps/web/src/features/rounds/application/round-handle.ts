@@ -33,7 +33,7 @@ export type LoadedRound = {
 type RoundScreenSnapshot = {
   state: RoundState | null;
   tables: RoundTables | null;
-  // 削除されて離れるべきか。
+  // 削除されて見つからなくなったか。
   gone: boolean;
   // 確定していない作成の操作が、確定を見ずに消えたか。
   creationGone: boolean;

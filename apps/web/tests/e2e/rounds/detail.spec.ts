@@ -473,7 +473,7 @@ test("オンラインのまま通信が応答しないとき、端末が保持�
   );
 });
 
-test("端末の内容で表示しているラウンドが、他の端末で削除されていたと分かると、ラウンド一覧へ移動する", async ({
+test("端末の内容で表示しているラウンドが、他の端末で削除されていたと分かると、その画面のまま見つからない表示になる", async ({
   page,
 }) => {
   // 一覧を開き、入力中のラウンドと的の一覧を端末に保持させる。
@@ -505,11 +505,12 @@ test("端末の内容で表示しているラウンドが、他の端末で削�
     "他の端末で削除",
   );
 
-  // 保留を解き、取得でラウンドが無いと分かると、ラウンド一覧へ移動することを確かめる。
+  // 保留を解き、取得でラウンドが無いと分かると、詳細のURLのまま見つからない表示と戻るリンクが出ることを確かめる。
   release();
-  await expect(page).toHaveURL(/\/rounds$/);
+  await expect(page.getByText(roundsText("detailNotFound"))).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
   await expect(
-    page.getByRole("heading", { name: roundsText("listTitle") }),
+    page.getByRole("link", { name: roundsText("backToList") }),
   ).toBeVisible();
 });
 

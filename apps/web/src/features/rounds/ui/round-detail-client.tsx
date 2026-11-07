@@ -1,11 +1,13 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import type { LoadedRound } from "../application/round-handle";
+import type { FetchView } from "../domain/fetch-status";
 import { roundIdOfPath } from "../domain/round-routes";
 import { FetchState } from "./fetch-state";
 import { RoundDetailFrame } from "./round-detail-frame";
-import { useRoundDetailStore, useRoundProcedures } from "./rounds-context";
+import { useRoundDetailStore } from "./rounds-context";
 import { ScorecardClient } from "./scorecard-client";
 import { Skeleton } from "./skeleton";
 import { useCreationGone } from "./use-creation-gone";
@@ -30,9 +32,17 @@ export function RoundDetailClient() {
   return <RoundDetailLoader key={roundId ?? "invalid"} roundId={roundId} />;
 }
 
+// スコアカードを出さないときの枠の表示。読み込みが済んでいれば、無いと分かった(`gone`)ときは見つからない、それ以外は取得中。
+function frameView(
+  view: FetchView<LoadedRound>,
+  gone: boolean,
+): Exclude<FetchView<unknown>, { status: "ok" }> {
+  if (view.status !== "ok") return view;
+  return { status: gone ? "not-found" : "loading" };
+}
+
 function RoundDetailLoader({ roundId }: { roundId: string | null }) {
   const store = useRoundDetailStore();
-  const { leaving } = useRoundProcedures();
   const { view, retry } = useFetchResult<LoadedRound>(
     () =>
       roundId
@@ -40,14 +50,16 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
         : Promise.resolve({ status: "not-found" as const }),
     store.whenOnline,
   );
+  // 開いている間に、ラウンドが無いと分かったか(他の端末で削除された、取り直したサーバーに無い)。部品の寿命まで戻さない。
+  const [gone, setGone] = useState(false);
   useCreationGone(roundId, retry);
 
-  if (roundId && view.status === "ok") {
+  if (roundId && view.status === "ok" && !gone) {
     return (
       <ScorecardClient
         roundId={roundId}
         loaded={view.data}
-        onGone={() => leaving.leaveRound()}
+        onGone={() => setGone(true)}
         targetFaces={view.data.targetFaces}
       />
     );
@@ -55,7 +67,7 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
   return (
     <RoundDetailFrame>
       <FetchState
-        view={view.status === "ok" ? { status: "loading" } : view}
+        view={frameView(view, gone)}
         onRetry={retry}
         loading={<ScorecardSkeleton />}
       />

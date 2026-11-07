@@ -280,7 +280,7 @@ describe("RoundDetailClient", () => {
       expect(load).toHaveBeenCalledTimes(2);
     });
 
-    it("端末のベースで開いた後に、サーバーにラウンドが無いと分かったら、一覧へ戻る手続きを呼ぶ", async () => {
+    it("`onGone`が呼ばれると、スコアカードを閉じて、見つからない表示と一覧へ戻るリンクを出す", async () => {
       // Given
       resolves({
         status: "ok",
@@ -299,7 +299,11 @@ describe("RoundDetailClient", () => {
       await user.click(gone);
 
       // Then
-      expect(procedures.leaving.leaveRound).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
+      expect(screen.getByText(roundsText("detailNotFound"))).toBeVisible();
+      expect(
+        screen.getByRole("link", { name: roundsText("backToList") }),
+      ).toBeVisible();
     });
   });
 
