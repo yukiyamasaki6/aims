@@ -14,7 +14,7 @@ function item(id: string, roundDate = "2026-09-15", total = 0): RoundListItem {
 const ids = (rounds: RoundListItem[] | null) => rounds?.map((r) => r.id);
 
 describe("overlayRoundsList", () => {
-  it("削除済みのラウンドを除き、同じ実施日では取得の順序を保つ", () => {
+  it("削除済みのラウンドを除き、それ以外は取得の順のまま並べる", () => {
     // Given
 
     // When
@@ -28,14 +28,14 @@ describe("overlayRoundsList", () => {
     expect(ids(result.others)).toEqual(["c", "b"]);
   });
 
-  it("入力中のラウンドと、それ以外を、実施日の新しい順に分ける", () => {
+  it("入力中のラウンドは実施日の新しい順に並べ、それ以外は取得の順のまま、分ける", () => {
     // Given
 
     // When
     const result = overlayRoundsList(
       [
-        item("old", "2026-09-01"),
         item("new", "2026-09-20"),
+        item("old", "2026-09-01"),
         item("p-old", "2026-09-02"),
         item("p-new", "2026-09-19"),
       ],
@@ -63,7 +63,7 @@ describe("overlayRoundsList", () => {
     expect(result.others).toEqual([]);
   });
 
-  it("取得に無い入力中のラウンドも、入力中の領域に出し、同じ実施日では取得にあるものの後に置く", () => {
+  it("取得に無い入力中のラウンドも、入力中の領域に出す", () => {
     // Given
 
     // When
@@ -74,7 +74,7 @@ describe("overlayRoundsList", () => {
     );
 
     // Then
-    expect(ids(result.inProgress)).toEqual(["a", "local"]);
+    expect(ids(result.inProgress)).toEqual(["local", "a"]);
   });
 
   it("取得で入力中でないラウンド(端末で完了にした未送信のラウンドなど)は、それ以外の並びに取得の値で出す", () => {

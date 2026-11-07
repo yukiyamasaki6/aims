@@ -5,41 +5,24 @@ import type {
   RoundListItem,
 } from "./round-list";
 
-// 実施日の新しい順に並べる。同じ実施日は元の順を保つ。
+// 実施日の新しい順に並べる。
 function byRoundDateDesc(rounds: RoundListItem[]): RoundListItem[] {
-  return rounds
-    .map((round, index) => ({ round, index }))
-    .sort(
-      (a, b) =>
-        b.round.roundDate.localeCompare(a.round.roundDate) || a.index - b.index,
-    )
-    .map(({ round }) => round);
+  return [...rounds].sort((a, b) => b.roundDate.localeCompare(a.roundDate));
 }
 
-// 取得結果を、入力中の領域とそれ以外の並びに分ける。どちらも実施日の新しい順で、同じIDは入力中の領域にだけ置く。
-// 入力中の領域 = 入力中のラウンド − 削除済み。それ以外 = 取得 − 入力中の領域のID − 削除済み。値は取得の値のまま。
+// 取得結果を、入力中の領域とそれ以外の並びに分ける。同じIDは入力中の領域にだけ置く。
+// 入力中の領域 = 入力中のラウンド − 削除済み(実施日の新しい順)。それ以外 = 取得 − 入力中の領域のID − 削除済み(取得の順のまま。サーバーが実施日の新しい順で返す)。値は取得の値のまま。
 export function overlayRoundsList(
   fetched: RoundListItem[],
   inProgress: RoundListItem[],
   deleted: ReadonlySet<string>,
 ): { inProgress: RoundListItem[]; others: RoundListItem[] } {
-  // 同じ実施日では、取得の順に並べ、取得に無い入力中のラウンドはその後に置く。
-  const order = new Map(fetched.map((round, index) => [round.id, index]));
-  const shown = inProgress
-    .filter((round) => !deleted.has(round.id))
-    .map((round, index) => ({
-      round,
-      key: order.get(round.id) ?? fetched.length + index,
-    }))
-    .sort((a, b) => a.key - b.key)
-    .map(({ round }) => round);
+  const shown = inProgress.filter((round) => !deleted.has(round.id));
   const shownIds = new Set(shown.map((round) => round.id));
   return {
     inProgress: byRoundDateDesc(shown),
-    others: byRoundDateDesc(
-      fetched.filter(
-        (round) => !deleted.has(round.id) && !shownIds.has(round.id),
-      ),
+    others: fetched.filter(
+      (round) => !deleted.has(round.id) && !shownIds.has(round.id),
     ),
   };
 }
