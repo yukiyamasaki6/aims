@@ -131,7 +131,7 @@ describe("useRoundOpStack", () => {
       { wrapper },
     );
     await act(async () => {
-      await result.current.append(shotRecorded());
+      await result.current.append(shotRecorded()).saved;
     });
 
     // When

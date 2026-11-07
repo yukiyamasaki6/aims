@@ -16,7 +16,7 @@ export function useDistanceEditing({
 }: {
   roundId: string;
   distances: Distance[];
-  append: (operation: SyncOperation) => Promise<void>;
+  append: (operation: SyncOperation) => unknown;
   // 距離の書き込みを、戻す・やり直しの列から捨てる。
   discardHistory: (distanceId: string) => void;
 }) {

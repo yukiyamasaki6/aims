@@ -5,7 +5,7 @@ import type { SyncOperation } from "../domain/sync-events";
 
 // 画面へまだ反映されていない(保存の完了を待つ)自分の矢の操作。空白・新しい矢・次のエンドの判定に数える。
 export function usePendingShots(
-  append: (operation: SyncOperation) => Promise<void>,
+  append: (operation: SyncOperation) => { saved: Promise<void> },
   shots: Shot[],
 ) {
   const [pendingShots, setPendingShots] = useState<SyncOperation[]>([]);
@@ -16,7 +16,7 @@ export function usePendingShots(
     setPendingShots((prev) => [...prev, operation]);
     const settle = () =>
       setPendingShots((prev) => prev.filter((p) => p !== operation));
-    void append(operation).then(settle);
+    void append(operation).saved.then(settle);
   }
 
   return { liveShots, appendShot };
