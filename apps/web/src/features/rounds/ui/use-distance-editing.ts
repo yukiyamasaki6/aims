@@ -27,20 +27,14 @@ export function useDistanceEditing({
   discardHistory: (distanceId: string) => void;
 }) {
   const { ids } = useRoundProcedures();
-  const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
-    new Set(),
+  // 編集を開く距離は1つだけ。どの距離も開いていないときはnull。
+  const [editingDistanceId, setEditingDistanceId] = useState<string | null>(
+    null,
   );
 
+  // 同じ距離なら閉じ、違う距離なら開く距離を替える。
   function toggleDistanceEditing(distanceId: string) {
-    setEditingDistanceIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(distanceId)) {
-        next.delete(distanceId);
-      } else {
-        next.add(distanceId);
-      }
-      return next;
-    });
+    setEditingDistanceId((prev) => (prev === distanceId ? null : distanceId));
   }
 
   function handleAddDistance() {
@@ -51,7 +45,7 @@ export function useDistanceEditing({
       roundId,
     });
     // 追加した距離はすぐ編集できるよう、編集パネルを展開しておく。
-    setEditingDistanceIds((prev) => new Set(prev).add(newDistance.id));
+    setEditingDistanceId(newDistance.id);
     append(operation);
   }
 
@@ -64,16 +58,13 @@ export function useDistanceEditing({
 
   function handleDistanceDeleted(distanceId: string) {
     discardHistory(distanceId);
-    setEditingDistanceIds((prev) => {
-      const next = new Set(prev);
-      next.delete(distanceId);
-      return next;
-    });
+    // 削除の確定の直後に、編集のダイアログを閉じる。
+    setEditingDistanceId(null);
     if (pointer?.distanceId === distanceId) setPointer(null);
   }
 
   return {
-    editingDistanceIds,
+    editingDistanceId,
     toggleDistanceEditing,
     handleAddDistance,
     handleDistanceSaved,

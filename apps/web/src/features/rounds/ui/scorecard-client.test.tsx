@@ -2489,6 +2489,41 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     });
   });
 
+  it("距離を追加を続けて2回押すと、2つとも足され、編集を開くのは最後に足した距離だけになる", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup();
+    const createdIds = () =>
+      supabase.rpc.mock.calls
+        .filter(([name]) => name === "create_distance")
+        .map(([, args]) => (args as { p_id: string }).p_id);
+
+    // When
+    await user.dblClick(screen.getByTestId("add-distance-button"));
+
+    // Then
+    // 2回分の保存の完了を待つ。
+    await waitFor(
+      () => {
+        expect(screen.getAllByTestId(/^distance-summary-/)).toHaveLength(3);
+        expect(createdIds()).toHaveLength(2);
+      },
+      { timeout: 5000 },
+    );
+    // 最後に足した距離のカードの番号を、行の属性(距離のID)から求める。
+    const lastId = createdIds()[1];
+    const card = document
+      .querySelector(`[data-follow-row^="${lastId}:"]`)
+      ?.closest("[data-distance-card]");
+    const number = card
+      ?.getAttribute("data-testid")
+      ?.replace(/^distance-summary-/, "");
+    expect(screen.getAllByTestId(/^distance-config-distance-/)).toHaveLength(1);
+    expect(
+      screen.getByTestId(`distance-config-distance-${number}`),
+    ).toBeInTheDocument();
+  });
+
   it("構成が変わる設定で距離を保存すると、その距離のUndo/Redo履歴だけが破棄され、他の距離の履歴は残る", async () => {
     // Given
     // 的はスコアが記録済みの距離では変更できないため、1つ目の距離は取り消して記録の無い状態にする。

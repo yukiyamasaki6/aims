@@ -133,7 +133,7 @@ function ScorecardBody({ model }: { model: ScorecardModel }) {
             targetFaces={targetFaces}
             roundFormat={roundConfig.format}
             roundBowType={roundConfig.bowType}
-            editing={editing.editingDistanceIds.has(d.id)}
+            editing={editing.editingDistanceId === d.id}
             hasShots={distanceIdsWithShots.has(d.id)}
             pointer={model.pointer}
             onToggleEditing={() => editing.toggleDistanceEditing(d.id)}
