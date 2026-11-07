@@ -11,12 +11,10 @@ export type RoundLeaving = {
   completeRound(roundId: string): Promise<void>;
   // 削除を積み(RoundDeletion.deleteRound)、その完了の後に一覧へ置き換えて移る。送信の完了は待たない。
   deleteRoundAndLeave(roundId: string): Promise<void>;
-  // 一覧へ置き換えて移る。
-  leaveRound(): void;
 };
 
 // 詳細の画面から離れる手続き。保存の後に遷移する順序をここに置き、画面は遷移の実装を持たない。
-// 例外: hub.appendは保存の試みが終われば解決し拒否しない。遷移が投げたときだけ、その例外で拒否する。完了と削除の後の遷移は、保存が済んでいて、失敗を隠さないため拒否として伝える。一覧へ戻るだけの遷移は、例外をそのまま投げる。
+// 例外: hub.appendは保存の試みが終われば解決し拒否しない。遷移が投げたときだけ、その例外で拒否する。完了と削除の後の遷移は、保存が済んでいて、失敗を隠さないため拒否として伝える。
 export function createRoundLeaving(deps: {
   hub: Pick<RoundRecordHub, "append">;
   ids: Pick<UniqueIds, "next">;
@@ -35,9 +33,6 @@ export function createRoundLeaving(deps: {
     },
     async deleteRoundAndLeave(roundId) {
       await deletion.deleteRound(roundId);
-      pageNavigation.replace(ROUNDS_PATH);
-    },
-    leaveRound() {
       pageNavigation.replace(ROUNDS_PATH);
     },
   };

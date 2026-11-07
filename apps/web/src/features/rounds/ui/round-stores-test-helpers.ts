@@ -106,7 +106,6 @@ export function createFakeRoundProcedures() {
     leaving: {
       completeRound: vi.fn().mockResolvedValue(undefined),
       deleteRoundAndLeave: vi.fn().mockResolvedValue(undefined),
-      leaveRound: vi.fn(),
     },
     presetSaving: {
       savePreset: vi.fn().mockResolvedValue({ status: "saved" }),

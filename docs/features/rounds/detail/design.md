@@ -76,7 +76,7 @@
 | `features/rounds/application/round-editing.ts` | 手続き(追記。完了のラウンドの編集で、続けて入力中へ戻す操作を積む) |
 | `features/rounds/domain/distance-config.ts`、`distance-operations.ts`、`target-face-filter.ts`、`position-key.ts` | ドメイン層(距離の設定の検証、距離の操作、的の絞り込み、位置キー) |
 | `features/rounds/domain/preset-save.ts`、`ring-color.ts`、`shot-id.ts`、`round-routes.ts`、`write-result.ts` | ドメイン層(保存するプリセットの内容、リング色、時刻順の矢のID、経路の判定、書き込みの文言) |
-| `features/rounds/application/round-leaving.ts`、`preset-saving.ts` | 手続き(完了、削除、削除して離れる、一覧へ戻る。プリセットの保存) |
+| `features/rounds/application/round-leaving.ts`、`preset-saving.ts` | 手続き(完了、削除、削除して離れる。プリセットの保存) |
 | `features/rounds/application/preset-commands.ts`、`unique-ids.ts` | 手続きの約束(`PresetCommands`、`UniqueIds`) |
 | `features/rounds/application/round-detail-store.ts`、`round-handle.ts` | 手続き(詳細の画面に渡す状態と変更の方法、開いた詳細の購読の状態) |
 | `preset-commands.ts`、`browser-unique-ids.ts`、`rounds-db-schema.ts` | インフラ層(遷移、保存の書き込み、乱数の払い出し、保存の関数) |

@@ -8,14 +8,8 @@ import type { LoadedRound } from "@/features/rounds/application/round-handle";
 import type { FetchResult } from "@/features/rounds/domain/fetch-status";
 import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
-import {
-  createFakeRoundDetailStore,
-  createFakeRoundProcedures,
-} from "@/features/rounds/ui/round-stores-test-helpers";
-import {
-  RoundDetailStoreProvider,
-  RoundProceduresProvider,
-} from "@/features/rounds/ui/rounds-context";
+import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
+import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { RoundDetailClient } from "./round-detail-client";
@@ -35,14 +29,11 @@ const load = vi.fn<RoundDetailStore["load"]>();
 const fake = createFakeRoundDetailStore({ load });
 fake.goOffline();
 const store = fake.store;
-const procedures = createFakeRoundProcedures();
 
 function Providers({ children }: { children: ReactNode }) {
   return (
     <RoundDetailStoreProvider store={store}>
-      <RoundProceduresProvider procedures={procedures}>
-        {children}
-      </RoundProceduresProvider>
+      {children}
     </RoundDetailStoreProvider>
   );
 }
