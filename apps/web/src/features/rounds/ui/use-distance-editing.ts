@@ -7,7 +7,7 @@ import {
 import type { Distance } from "../domain/scorecard-types";
 import type { Pointer } from "../domain/shot-pointer";
 import type { SyncOperation } from "../domain/sync-events";
-import { useRoundDetailStore } from "./rounds-context";
+import { useRoundProcedures } from "./rounds-context";
 
 // 距離の編集パネルの開閉と、距離の追加、保存、削除の後始末。
 export function useDistanceEditing({
@@ -26,7 +26,7 @@ export function useDistanceEditing({
   // 距離の書き込みを、戻す・やり直しの列から捨てる。
   discardHistory: (distanceId: string) => void;
 }) {
-  const store = useRoundDetailStore();
+  const { ids } = useRoundProcedures();
   const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
     new Set(),
   );
@@ -46,8 +46,8 @@ export function useDistanceEditing({
   function handleAddDistance() {
     // IDは楽観的UIのためここで確定し、そのまま操作の列へ追記する。
     const { distance: newDistance, operation } = distanceToAdd(distances, {
-      id: store.newId(),
-      eventId: store.newId(),
+      id: ids.next(),
+      eventId: ids.next(),
       roundId,
     });
     // 追加した距離はすぐ編集できるよう、編集パネルを展開しておく。

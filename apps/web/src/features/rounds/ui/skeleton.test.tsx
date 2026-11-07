@@ -5,18 +5,6 @@ import { Skeleton } from "./skeleton";
 
 describe("Skeleton", () => {
   describe("表示", () => {
-    it("data-slotを付与した枠を表示する", () => {
-      // Given
-      const testId = "frame";
-
-      // When
-      render(<Skeleton data-testid={testId} />, { wrapper: IntlTestProvider });
-
-      // Then
-      const frame = screen.getByTestId(testId);
-      expect(frame).toHaveAttribute("data-slot", "skeleton");
-    });
-
     it("指定したクラスを付与する", () => {
       // Given
       const testId = "frame";

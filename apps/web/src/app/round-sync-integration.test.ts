@@ -103,13 +103,7 @@ function rig() {
     clock,
     connectivity,
     ids,
-    leaving: {
-      completeRound: vi.fn(),
-      deleteRoundAndLeave: vi.fn(),
-      leaveRound: vi.fn(),
-    },
     editing: createRoundEditing({ hub, ids }),
-    presetSaving: { savePreset: vi.fn() },
   });
   const list = createRoundsListStore({
     hub,

@@ -1,13 +1,12 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import type { LoadedRoundDetail } from "../application/round-detail-store";
 import { roundIdOfPath } from "../domain/round-routes";
 import { FetchState } from "./fetch-state";
 import { RoundDetailFrame } from "./round-detail-frame";
-import { useRoundDetailStore } from "./rounds-context";
+import { useRoundDetailStore, useRoundProcedures } from "./rounds-context";
 import { ScorecardClient } from "./scorecard-client";
 import { Skeleton } from "./skeleton";
 import { useCreationGone } from "./use-creation-gone";
@@ -33,29 +32,28 @@ export function RoundDetailClient() {
 }
 
 function RoundDetailLoader({ roundId }: { roundId: string | null }) {
-  const t = useTranslations("rounds");
   const store = useRoundDetailStore();
+  const { leaving } = useRoundProcedures();
   const { view, retry } = useFetchResult<LoadedRoundDetail>(
     () =>
       roundId
         ? store.load(roundId)
         : Promise.resolve({ status: "not-found" as const }),
-    [roundId],
     store.whenOnline,
   );
   const deleted = view.status === "ok" && view.data.deleted;
   useCreationGone(roundId, retry);
 
   useEffect(() => {
-    if (deleted) store.leaveRound();
-  }, [deleted, store]);
+    if (deleted) leaving.leaveRound();
+  }, [deleted, leaving]);
 
   if (roundId && view.status === "ok" && !view.data.deleted) {
     return (
       <ScorecardClient
         roundId={roundId}
         loaded={view.data}
-        onGone={() => store.leaveRound()}
+        onGone={() => leaving.leaveRound()}
         targetFaces={view.data.targetFaces}
       />
     );
@@ -65,7 +63,6 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
       <FetchState
         view={view.status === "ok" ? { status: "loading" } : view}
         onRetry={retry}
-        notFound={{ message: t("detailNotFound") }}
         loading={<ScorecardSkeleton />}
       />
     </RoundDetailFrame>

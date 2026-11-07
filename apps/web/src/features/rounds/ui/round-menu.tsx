@@ -10,18 +10,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
-import { useRoundDetailStore } from "./rounds-context";
+import { useRoundProcedures } from "./rounds-context";
 
 // スコアカードのラウンドのメニューと、そこから開くラウンド削除の確認。
 // 確認すると、操作の列への保存の後に、送信の完了を待たず一覧へ置き換えて遷移する。
 export function RoundMenu({ roundId }: { roundId: string }) {
   const t = useTranslations("rounds");
-  const store = useRoundDetailStore();
+  const { leaving } = useRoundProcedures();
   const [deleteRoundConfirmOpen, setDeleteRoundConfirmOpen] = useState(false);
 
   function handleDeleteRound() {
     // 手続きが遷移で投げたときの拒否は意図して捕まえない(握りつぶすと原因を追えないためコンソールに出す)。渡す経路は定数で、実際には失敗しない。
-    void store.deleteRoundAndLeave(roundId);
+    void leaving.deleteRoundAndLeave(roundId);
   }
 
   return (

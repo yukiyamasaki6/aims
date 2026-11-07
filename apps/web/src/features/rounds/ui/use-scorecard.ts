@@ -3,7 +3,7 @@ import { useHydrated } from "@/hooks/use-hydrated";
 import type { LoadedRound } from "../application/round-handle";
 import { isRoundInProgress } from "../domain/round-retention";
 import type { TargetFaceOption } from "../domain/target-face";
-import { useRoundDetailStore } from "./rounds-context";
+import { useRoundProcedures } from "./rounds-context";
 import { useDistanceEditing } from "./use-distance-editing";
 import { useKeypad } from "./use-keypad";
 import { usePendingShots } from "./use-pending-shots";
@@ -50,7 +50,7 @@ type ScorecardOptions = {
 // スコアカード画面の状態と操作。
 export function useScorecard(options: ScorecardOptions) {
   const { roundId, loaded, targetFaces } = options;
-  const store = useRoundDetailStore();
+  const { leaving } = useRoundProcedures();
   // 画面の状態は、ベースへ操作の列を重ねた導出だけから得る。
   const sync = useRoundOpStack(roundId, loaded, options.onGone);
   const { distances } = sync.state;
@@ -86,7 +86,7 @@ export function useScorecard(options: ScorecardOptions) {
     // 完了へ変える操作を積み、保存を待ってから一覧へ移る。移った後も送信は常駐の送信器が続ける。
     // 手続きが遷移で投げたときの拒否は意図して捕まえない(握りつぶすと原因を追えないためコンソールに出す)。渡す経路は定数で、実際には失敗しない。
     onComplete: () => {
-      void store.completeRound(roundId);
+      void leaving.completeRound(roundId);
     },
   };
 }

@@ -37,8 +37,6 @@ export type RoundRecord = {
 export type RecordRow = {
   seq: number;
   eventId: string;
-  // 保存先の行の利用者。あるときは、取り込む記録の利用者と照合する。
-  userId?: string | null;
   ackedRevision?: number;
   ackedApplied?: boolean;
   ackedFields?: string[];

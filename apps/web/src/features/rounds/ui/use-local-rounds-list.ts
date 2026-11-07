@@ -15,18 +15,8 @@ export function useLocalRoundsList(): {
   const [waited, setWaited] = useState(false);
 
   useEffect(() => {
-    let active = true;
-    store.loadLocalList().then(
-      (loaded) => {
-        if (active) setLocal(loaded);
-      },
-      () => {},
-    );
-    const cancel = store.afterFallbackWait(() => setWaited(true));
-    return () => {
-      active = false;
-      cancel();
-    };
+    store.loadLocalList().then(setLocal);
+    store.afterFallbackWait(() => setWaited(true));
   }, [store]);
 
   return { local, waited };

@@ -6,9 +6,12 @@ import type { RoundsListStore } from "../application/rounds-list-store";
 import {
   NewRoundStoreProvider,
   RoundDetailStoreProvider,
+  type RoundProcedures,
+  RoundProceduresProvider,
   RoundsListStoreProvider,
   useNewRoundStore,
   useRoundDetailStore,
+  useRoundProcedures,
   useRoundsListStore,
 } from "./rounds-context";
 
@@ -110,6 +113,41 @@ describe("rounds-context(作成)", () => {
 
     // Then
     expect(rendering).toThrow("NewRoundStoreProvider");
+    expect(screen.queryByText("描画された")).toBeNull();
+    vi.restoreAllMocks();
+  });
+});
+
+describe("rounds-context(手続き)", () => {
+  it("提供された手続きの入れ物を、子の部品に返す", () => {
+    // Given
+    const procedures = {} as RoundProcedures;
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <RoundProceduresProvider procedures={procedures}>
+        {children}
+      </RoundProceduresProvider>
+    );
+
+    // When
+    const { result } = renderHook(() => useRoundProcedures(), { wrapper });
+
+    // Then
+    expect(result.current).toBe(procedures);
+  });
+
+  it("提供が無いときは投げる", () => {
+    // Given
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    function Probe() {
+      useRoundProcedures();
+      return <span>描画された</span>;
+    }
+
+    // When
+    const rendering = () => render(<Probe />);
+
+    // Then
+    expect(rendering).toThrow("RoundProceduresProvider");
     expect(screen.queryByText("描画された")).toBeNull();
     vi.restoreAllMocks();
   });

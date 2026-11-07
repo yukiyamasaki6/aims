@@ -12,7 +12,7 @@ import { compareDistancePosition } from "../domain/scorecard-scoring";
 import type { Distance } from "../domain/scorecard-types";
 import { lookupTargetFace, type TargetFaceOption } from "../domain/target-face";
 import { PresetInfo } from "./preset-info";
-import { useRoundDetailStore } from "./rounds-context";
+import { useRoundProcedures } from "./rounds-context";
 import {
   CLOSED_PRESET_DIALOG,
   changePresetDialogOpen,
@@ -35,7 +35,7 @@ export function SavePresetDialog({
   targetFaces: TargetFaceOption[];
 }) {
   const t = useTranslations("rounds");
-  const store = useRoundDetailStore();
+  const { presetSaving } = useRoundProcedures();
   const [state, setState] = useState(CLOSED_PRESET_DIALOG);
 
   async function handleSave() {
@@ -44,7 +44,7 @@ export function SavePresetDialog({
     setState(start.state);
     if (start.type === "invalid") return;
 
-    const result = await store.savePreset(start.preset);
+    const result = await presetSaving.savePreset(start.preset);
     setState((prev) => finishPresetSave(prev, result));
   }
 

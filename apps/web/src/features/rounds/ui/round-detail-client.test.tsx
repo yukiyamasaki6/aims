@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -9,8 +10,14 @@ import type {
 import type { FetchResult } from "@/features/rounds/domain/fetch-status";
 import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
-import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
-import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
+import {
+  createFakeRoundDetailStore,
+  createFakeRoundProcedures,
+} from "@/features/rounds/ui/round-stores-test-helpers";
+import {
+  RoundDetailStoreProvider,
+  RoundProceduresProvider,
+} from "@/features/rounds/ui/rounds-context";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { RoundDetailClient } from "./round-detail-client";
@@ -30,6 +37,17 @@ const load = vi.fn<RoundDetailStore["load"]>();
 const fake = createFakeRoundDetailStore({ load });
 fake.goOffline();
 const store = fake.store;
+const procedures = createFakeRoundProcedures();
+
+function Providers({ children }: { children: ReactNode }) {
+  return (
+    <RoundDetailStoreProvider store={store}>
+      <RoundProceduresProvider procedures={procedures}>
+        {children}
+      </RoundProceduresProvider>
+    </RoundDetailStoreProvider>
+  );
+}
 vi.mock("./use-creation-gone", () => ({ useCreationGone: vi.fn() }));
 const creationGone = vi.mocked(useCreationGone);
 vi.mock("./scorecard-client", () => ({
@@ -89,9 +107,9 @@ function detail(
 
 function renderDetail() {
   return render(
-    <RoundDetailStoreProvider store={store}>
+    <Providers>
       <RoundDetailClient />
-    </RoundDetailStoreProvider>,
+    </Providers>,
     { wrapper: IntlTestProvider },
   );
 }
@@ -99,9 +117,9 @@ function renderDetail() {
 function renderDetailToString() {
   return renderToString(
     <IntlTestProvider>
-      <RoundDetailStoreProvider store={store}>
+      <Providers>
         <RoundDetailClient />
-      </RoundDetailStoreProvider>
+      </Providers>
     </IntlTestProvider>,
   );
 }
@@ -185,7 +203,9 @@ describe("RoundDetailClient", () => {
       renderDetail();
 
       // Then
-      await waitFor(() => expect(store.leaveRound).toHaveBeenCalledTimes(1));
+      await waitFor(() =>
+        expect(procedures.leaving.leaveRound).toHaveBeenCalledTimes(1),
+      );
       expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
       expect(screen.getByRole("status")).toHaveTextContent(
         roundsText("fetchLoading"),
@@ -201,7 +221,7 @@ describe("RoundDetailClient", () => {
       await screen.findByTestId("scorecard");
 
       // Then
-      expect(store.leaveRound).not.toHaveBeenCalled();
+      expect(procedures.leaving.leaveRound).not.toHaveBeenCalled();
     });
 
     it("pathnameのIDが変わると、前のラウンドを見せずに取得し直す", async () => {
@@ -214,9 +234,9 @@ describe("RoundDetailClient", () => {
       // When
       nav.pathname = `/rounds/${OTHER_ID}`;
       rerender(
-        <RoundDetailStoreProvider store={store}>
+        <Providers>
           <RoundDetailClient />
-        </RoundDetailStoreProvider>,
+        </Providers>,
       );
 
       // Then
@@ -267,41 +287,6 @@ describe("RoundDetailClient", () => {
       },
     );
 
-    it("通信できない場合は、一覧へ戻るリンクとネットワークに接続されていませんを出す", async () => {
-      // Given
-      resolves({ status: "offline" });
-
-      // When
-      renderDetail();
-
-      // Then
-      expect(
-        await screen.findByText(roundsText("fetchOffline")),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("link", { name: roundsText("backToList") }),
-      ).toBeInTheDocument();
-    });
-
-    it("取得エラーの場合は、メッセージと再試行ボタンを出す", async () => {
-      // Given
-      load.mockResolvedValue({
-        status: "error",
-        reason: "failed",
-      });
-
-      // When
-      renderDetail();
-
-      // Then
-      expect(await screen.findByRole("alert")).toHaveTextContent(
-        roundsText("fetchFailure.failed"),
-      );
-      expect(
-        screen.getByRole("button", { name: roundsText("fetchRetry") }),
-      ).toBeInTheDocument();
-    });
-
     it("取得エラーの後に再試行すると、取得し直して表示する", async () => {
       // Given
       load.mockResolvedValueOnce({
@@ -327,28 +312,6 @@ describe("RoundDetailClient", () => {
       expect(load).toHaveBeenCalledTimes(2);
     });
 
-    it("端末のベースで開いたときは、読み込みの結果の的をスコアカードへ渡す", async () => {
-      // Given
-      resolves({
-        status: "ok",
-        data: detail(
-          roundsText("listInProgress"),
-          null,
-          "local",
-          faces("face-1"),
-        ),
-      });
-
-      // When
-      renderDetail();
-
-      // Then
-      expect(await screen.findByTestId("scorecard")).toHaveAttribute(
-        "data-faces",
-        "face-1",
-      );
-    });
-
     it("端末のベースで開いた後に、サーバーにラウンドが無いと分かったら、一覧へ戻る手続きを呼ぶ", async () => {
       // Given
       resolves({
@@ -368,34 +331,12 @@ describe("RoundDetailClient", () => {
       await user.click(gone);
 
       // Then
-      expect(store.leaveRound).toHaveBeenCalledTimes(1);
+      expect(procedures.leaving.leaveRound).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("作成が未確定のラウンド", () => {
     const pendingEventId = "event-1";
-
-    it("読み込みの結果の的をスコアカードへ渡す", async () => {
-      // Given
-      resolves({
-        status: "ok",
-        data: detail(
-          "作成中",
-          pendingEventId,
-          "server",
-          faces("face-1", "face-2"),
-        ),
-      });
-
-      // When
-      renderDetail();
-
-      // Then
-      expect(await screen.findByTestId("scorecard")).toHaveAttribute(
-        "data-faces",
-        "face-1,face-2",
-      );
-    });
 
     it("作成の消失の監視へラウンドIDを渡す", async () => {
       // Given

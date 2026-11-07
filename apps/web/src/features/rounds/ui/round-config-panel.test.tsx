@@ -6,8 +6,8 @@ import type { RoundConfig } from "@/features/rounds/domain/round-config";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { RoundConfigPanel } from "./round-config-panel";
-import { createFakeRoundDetailStore } from "./round-stores-test-helpers";
-import { RoundDetailStoreProvider } from "./rounds-context";
+import { createFakeRoundProcedures } from "./round-stores-test-helpers";
+import { RoundProceduresProvider } from "./rounds-context";
 
 const roundsText = translatorFor("rounds");
 
@@ -33,12 +33,12 @@ function setup(
   overrides: Partial<Parameters<typeof RoundConfigPanel>[0]> = {},
 ) {
   const enqueue = vi.fn();
-  const { store } = createFakeRoundDetailStore();
+  const procedures = createFakeRoundProcedures();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <IntlTestProvider>
-      <RoundDetailStoreProvider store={store}>
+      <RoundProceduresProvider procedures={procedures}>
         {children}
-      </RoundDetailStoreProvider>
+      </RoundProceduresProvider>
     </IntlTestProvider>
   );
   const utils = render(
@@ -51,7 +51,7 @@ function setup(
     />,
     { wrapper },
   );
-  return { enqueue, store, ...utils };
+  return { enqueue, procedures, ...utils };
 }
 
 describe("RoundConfigPanel", () => {
@@ -142,8 +142,10 @@ describe("RoundConfigPanel", () => {
       it("enqueueを検証済みの設定で呼び、折りたたむ", async () => {
         // Given
         const user = userEvent.setup();
-        const { enqueue, store } = setup();
-        store.newId.mockReturnValue("00000000-0000-4000-8000-000000000001");
+        const { enqueue, procedures } = setup();
+        procedures.ids.next.mockReturnValue(
+          "00000000-0000-4000-8000-000000000001",
+        );
         await user.click(screen.getByTestId("round-config-summary"));
         await user.clear(screen.getByTestId("round-config-name"));
         await user.type(screen.getByTestId("round-config-name"), "午後練習");

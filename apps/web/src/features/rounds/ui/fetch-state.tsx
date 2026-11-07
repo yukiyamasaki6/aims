@@ -4,19 +4,15 @@ import { Button } from "@/components/ui/button";
 import type { FetchView } from "../domain/fetch-status";
 import { Skeleton } from "./skeleton";
 
-type NotFoundMessage = { message: string };
-
 // okは画面ごとに描画するため受け取らない。
 // loading以外は、親（flex列）の残りの領域の中心（縦横とも）に置く。
 export function FetchState({
   view,
   onRetry,
-  notFound,
   loading,
 }: {
   view: Exclude<FetchView<unknown>, { status: "ok" }>;
   onRetry: () => void;
-  notFound?: NotFoundMessage;
   // 取得中の表示。読み込み後の画面と形を揃えるため、画面ごとに渡す。
   loading?: ReactNode;
 }) {
@@ -41,7 +37,7 @@ export function FetchState({
     case "not-found":
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-sm">
-          <p>{notFound?.message ?? t("fetchNotFound")}</p>
+          <p>{t("detailNotFound")}</p>
         </div>
       );
     case "offline":

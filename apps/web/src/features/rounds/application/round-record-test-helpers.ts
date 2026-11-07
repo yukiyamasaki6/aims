@@ -58,13 +58,7 @@ export function createTestRounds(
   };
   const roundStart = { startRound: vi.fn() };
   const presetDeletion = { deletePreset: vi.fn() };
-  const leaving = {
-    completeRound: vi.fn(),
-    deleteRoundAndLeave: vi.fn(),
-    leaveRound: vi.fn(),
-  };
   const deletion = { deleteRound: vi.fn() };
-  const presetSaving = { savePreset: vi.fn() };
   const { ids } = createFakeUniqueIds({
     prefix: "event",
     randomBytes: options.randomBytes,
@@ -77,9 +71,7 @@ export function createTestRounds(
     clock,
     connectivity,
     ids,
-    leaving,
     editing,
-    presetSaving,
   });
   const newRound = createNewRoundStore({
     fetching: fetching as unknown as RoundFetching,
@@ -108,10 +100,8 @@ export function createTestRounds(
     fetching,
     roundStart,
     presetDeletion,
-    leaving,
     deletion,
     editing,
-    presetSaving,
   };
 }
 

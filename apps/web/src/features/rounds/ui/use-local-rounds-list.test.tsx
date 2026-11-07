@@ -80,38 +80,4 @@ describe("useLocalRoundsList", () => {
     expect(waitedBeforeElapse).toBe(false);
     expect(result.current.waited).toBe(true);
   });
-
-  it("アンマウントの後に終わった読み込みは捨て、待ちの合図を取り消す", async () => {
-    // Given
-    const { fake, wrapper } = setup();
-    const loading = Promise.withResolvers<LocalRoundsList>();
-    fake.store.loadLocalList.mockReturnValue(loading.promise);
-    const { result, unmount } = renderHook(() => useLocalRoundsList(), {
-      wrapper,
-    });
-    unmount();
-
-    // When
-    loading.resolve(loaded);
-    await act(async () => {});
-    act(() => fake.elapseFallbackWait());
-
-    // Then
-    expect(result.current.local).toBeNull();
-    expect(result.current.waited).toBe(false);
-    expect(fake.fallback.cancelled()).toBe(1);
-  });
-
-  it("読み込みに失敗しても、nullのまま例外にしない", async () => {
-    // Given
-    const { fake, wrapper } = setup();
-    fake.store.loadLocalList.mockRejectedValue(new Error("idb"));
-
-    // When
-    const { result } = renderHook(() => useLocalRoundsList(), { wrapper });
-    await act(async () => {});
-
-    // Then
-    expect(result.current.local).toBeNull();
-  });
 });

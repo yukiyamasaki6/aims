@@ -102,7 +102,7 @@ export function createRoundFetching(deps: {
   ): Promise<FetchResult<T>> {
     const startedAt = clock.now();
     const saved = snapshots.load<T>(kind);
-    let queriedUserId: string | undefined;
+    let queriedUserId = "";
     const result = await content.fetchContent(
       (session) => {
         queriedUserId = session.userId;
@@ -111,7 +111,7 @@ export function createRoundFetching(deps: {
       {
         timeoutMs: waitLimitMs(saved !== null),
         onLateResult: (late) => {
-          if (late.status === "ok" && queriedUserId) {
+          if (late.status === "ok") {
             snapshots.save(kind, queriedUserId, order(late.data), startedAt);
           }
         },
@@ -119,9 +119,7 @@ export function createRoundFetching(deps: {
     );
     if (result.status !== "ok") return withFallback(result, saved);
     const data = order(result.data);
-    if (queriedUserId) {
-      snapshots.save(kind, queriedUserId, data, startedAt);
-    }
+    snapshots.save(kind, queriedUserId, data, startedAt);
     return { status: "ok", data };
   }
 

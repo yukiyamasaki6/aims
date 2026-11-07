@@ -45,6 +45,7 @@ import type { RoundsDbSchema } from "@/features/rounds/infrastructure/rounds-db-
 import {
   NewRoundStoreProvider,
   RoundDetailStoreProvider,
+  RoundProceduresProvider,
   RoundsListStoreProvider,
 } from "@/features/rounds/ui/rounds-context";
 import { intlConfig } from "@/i18n/messages";
@@ -131,7 +132,14 @@ function composeStores(inputs: Inputs, records: Records) {
   const ids = createBrowserUniqueIds();
   const commands = createPresetCommands(database);
   const deletion = createRoundDeletion({ hub, ids });
+  const leaving = createRoundLeaving({ hub, ids, pageNavigation, deletion });
+  const presetSaving = createPresetSaving({
+    sessionReader,
+    commands,
+    fetching,
+  });
   return {
+    procedures: { leaving, presetSaving, ids },
     detailStore: createRoundDetailStore({
       hub,
       requests,
@@ -139,9 +147,7 @@ function composeStores(inputs: Inputs, records: Records) {
       clock,
       connectivity,
       ids,
-      leaving: createRoundLeaving({ hub, ids, pageNavigation, deletion }),
       editing: createRoundEditing({ hub, ids }),
-      presetSaving: createPresetSaving({ sessionReader, commands, fetching }),
     }),
     newRoundStore: createNewRoundStore({
       fetching,
@@ -229,9 +235,11 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
       <RoundsListStoreProvider store={app.listStore}>
         <NewRoundStoreProvider store={app.newRoundStore}>
           <RoundDetailStoreProvider store={app.detailStore}>
-            <RoundBaseRefresher sync={app.sync} />
-            <SwUpdateActivator activation={app.swUpdate} />
-            {children}
+            <RoundProceduresProvider procedures={app.procedures}>
+              <RoundBaseRefresher sync={app.sync} />
+              <SwUpdateActivator activation={app.swUpdate} />
+              {children}
+            </RoundProceduresProvider>
           </RoundDetailStoreProvider>
         </NewRoundStoreProvider>
       </RoundsListStoreProvider>

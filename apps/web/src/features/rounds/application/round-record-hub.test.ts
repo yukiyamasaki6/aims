@@ -1065,22 +1065,6 @@ describe("利用者の切り替えをまたぐ処理", () => {
     expect(load).toHaveBeenLastCalledWith("user-2");
   });
 
-  it("adoptは、別の利用者の行を取り込まず、現在の利用者の行だけを取り込む", async () => {
-    // Given
-    const { hub } = await startedHub("user-1");
-
-    // When
-    hub.adopt(STREAM, {
-      base: undefined,
-      entries: [row("theirs", "user-2"), row("mine", "user-1")],
-    });
-
-    // Then
-    expect(hub.record(STREAM).items.map((item) => item.eventId)).toEqual([
-      "mine",
-    ]);
-  });
-
   it("appendの保存の完了が利用者の切り替えより遅れても、現在の記録に触れず、通知もしない", async () => {
     // Given
     const { hub, store, changes } = await startedHub("user-1");

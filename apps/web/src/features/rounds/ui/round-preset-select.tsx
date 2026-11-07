@@ -25,7 +25,6 @@ export function RoundPresetSelect() {
   const store = useNewRoundStore();
   const { view, retry } = useFetchResult(
     () => store.loadPresets(),
-    [],
     store.whenOnline,
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);

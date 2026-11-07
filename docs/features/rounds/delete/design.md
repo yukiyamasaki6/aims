@@ -21,14 +21,14 @@
 ## 構成とデータの流れ
 
 - `apps/web/src/features/rounds/ui/rounds-list.tsx`: 一覧のカードのメニューと、削除済みの集合によるカードの除去。
-- `features/rounds/ui/round-menu.tsx`: 詳細のヘッダーのメニュー。確認で`RoundDetailStore.deleteRoundAndLeave`を呼ぶ(保存の完了の後に一覧へ置き換えて遷移する)。
+- `features/rounds/ui/round-menu.tsx`: 詳細のヘッダーのメニュー。確認で手続きの入れ物の`leaving.deleteRoundAndLeave`を呼ぶ(保存の完了の後に一覧へ置き換えて遷移する)。
 - `features/rounds/application/rounds-list-store.ts`の`RoundsListStore.deleteRound`(一覧): 手続き`features/rounds/application/round-deletion.ts`の`RoundDeletion.deleteRound`(離れない削除)へ委譲する。手続きが`round.disabled`(操作の組み立ては`features/rounds/domain/round-progress.ts`の`roundDisabledOperation`)を新しい`eventId`(約束`UniqueIds`、実装は`features/rounds/infrastructure/browser-unique-ids.ts`)で列へ追記する。保存の試みの完了で解決し、拒否しない。
 - `components/ui/confirm-dialog.tsx`の`ConfirmDialog`: 確認後すぐ閉じる。
 - `apps/web/src/features/rounds/domain/rounds-list-view.ts`: 一覧の取得結果と端末の入力中のラウンドから、列で削除済みのラウンドを除く（`rounds/history`）。
 - `features/rounds/application/round-detail-store.ts`の`load`: 列に削除があれば、取得せずに削除済みを返す（`rounds/detail`）。
 
-流れは、メニューから確認ダイアログを開き、確認で、一覧は`RoundsListStore.deleteRound`、詳細は`RoundDetailStore.deleteRoundAndLeave`を呼ぶ(詳細の手続き`round-leaving.ts`は、一覧と同じ`round-deletion.ts`の`deleteRound`の完了の後に遷移する)。
-一覧は、そのラウンドを削除済みの集合へ足して除く。詳細は、窓口の`deleteRoundAndLeave`(手続き`features/rounds/application/round-leaving.ts`が`round-deletion.ts`の削除の保存の完了の後に`PageNavigation.replace(ROUNDS_PATH)`を呼ぶ)で一覧へ置き換える。
+流れは、メニューから確認ダイアログを開き、確認で、一覧は`RoundsListStore.deleteRound`、詳細は手続きの入れ物の`leaving.deleteRoundAndLeave`を呼ぶ(詳細の手続き`round-leaving.ts`は、一覧と同じ`round-deletion.ts`の`deleteRound`の完了の後に遷移する)。
+一覧は、そのラウンドを削除済みの集合へ足して除く。詳細は、手続きの入れ物の`leaving.deleteRoundAndLeave`(手続き`features/rounds/application/round-leaving.ts`が`round-deletion.ts`の削除の保存の完了の後に`PageNavigation.replace(ROUNDS_PATH)`を呼ぶ)で一覧へ置き換える。
 送信は常駐の送信器が行い、画面が閉じても続く。未確定の作成のラウンドは、既存の衝突規則で作成の確定を待って削除が送られる。
 認可の拒否と契約の不一致は破棄され、一覧を取得し直すとラウンドが再表示される。
 
@@ -49,7 +49,7 @@
 | 削除を、`disabled_at`による論理削除にする | 追記専用のイベントログと射影を用いるため。再送しても二重に適用されない | 保持期間や物理削除の運用を決めるとき |
 | 認可を、RPC内の`round_users.role = 'editor'`の確認で行う | 書き込みを権限確認するRPCの境界へ統一したため。クライアントのセッション確認は予防にすぎず、起動地点が渡す`SessionReader`の`readSession`で未認証と不明（通信失敗）を区別し（ラウンド削除とプリセット削除で同じ判定）、`getUser()`でなく`getSession()`を使う | 認可の方式を変えるとき |
 | 詳細のメニューを、`RoundConfigPanel`でなくページのヘッダーに置く | 将来の印刷・共有などラウンド全体の操作の置き場も兼ねるため | ラウンド全体の操作を別の場所へ集めるとき |
-| 操作の組み立て(`roundDisabledOperation`)を共通にし、一覧は`deleteRound`、詳細は`deleteRoundAndLeave`を呼ぶ。画面からの除去は各画面が行う | 一覧と詳細で処理が重複していたため | 画面ごとの成功後の処理が揃うとき |
+| 操作の組み立て(`roundDisabledOperation`)を共通にし、一覧は`deleteRound`、詳細は`leaving.deleteRoundAndLeave`を呼ぶ。画面からの除去は各画面が行う | 一覧と詳細で処理が重複していたため | 画面ごとの成功後の処理が揃うとき |
 
 ## 制約と未対応
 

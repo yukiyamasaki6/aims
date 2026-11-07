@@ -1,5 +1,4 @@
 import type { RecordBase } from "./round-base";
-import { roundStreamRules } from "./round-retention";
 import type { RoundTables } from "./round-tables";
 import { hasRoundDeletion, type SyncOperation } from "./sync-events";
 import type { TargetFaceOption } from "./target-face";
@@ -37,7 +36,7 @@ export function openPlan(group: OpenGroup): OpenPlan {
   return { kind: "fetch" };
 }
 
-// 端末のベースで開くための材料。的の一覧の保存分が無いとき、端末のベースが保持の規則に当たらないときはnull。
+// 端末のベースで開くための材料。端末のベースが無い(削除の印を含む)とき、的の一覧の保存分が無いときはnull。
 export type LocalOpening = {
   base: RoundTables;
   targetFaces: TargetFaceOption[];
@@ -49,7 +48,6 @@ export function localOpening(
 ): LocalOpening | null {
   const stored = group.base?.base;
   if (!stored) return null;
-  if (!roundStreamRules.keeps(stored, [...group.entries])) return null;
   if (savedFaces === null) return null;
   return { base: stored.tables, targetFaces: savedFaces };
 }

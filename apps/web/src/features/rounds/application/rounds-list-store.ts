@@ -24,8 +24,8 @@ export type RoundsListStore = {
   loadLocalList(): Promise<LocalRoundsList>;
   // 削除を積み、画面に残る。保存の試みが終わると解決し、拒否しない。送信の完了は待たない。
   deleteRound(roundId: string): Promise<void>;
-  // FALLBACK_WAIT_MSの後に1回listenerを呼ぶ。返す関数で取り消す。
-  afterFallbackWait(listener: () => void): () => void;
+  // FALLBACK_WAIT_MSの後に1回listenerを呼ぶ。
+  afterFallbackWait(listener: () => void): void;
   whenOnline: WhenOnline;
 };
 
@@ -44,18 +44,14 @@ const ERROR_RESULT = {
 } as const;
 
 async function readSnapshots(hub: Pick<RoundRecordHub, "readList">) {
-  try {
-    const all = await hub.readList();
-    // 列のIDをラウンドIDに写す。ラウンドの列でないものは除く。
-    const byRound = new Map<string, HubSnapshot>();
-    for (const [streamId, snapshot] of all) {
-      const roundId = roundIdOfStream(streamId);
-      if (roundId !== null) byRound.set(roundId, snapshot);
-    }
-    return byRound;
-  } catch {
-    return new Map<string, HubSnapshot>();
+  const all = await hub.readList();
+  // 列のIDをラウンドIDに写す。ラウンドの列でないものは除く。
+  const byRound = new Map<string, HubSnapshot>();
+  for (const [streamId, snapshot] of all) {
+    const roundId = roundIdOfStream(streamId);
+    if (roundId !== null) byRound.set(roundId, snapshot);
   }
+  return byRound;
 }
 
 async function localList(
@@ -127,7 +123,9 @@ export function createRoundsListStore(deps: Deps): RoundsListStore {
     loadList: () => withinFetchTimeout(clock, connectivity, listDetail(deps)),
     loadLocalList: () => localList(deps),
     deleteRound: (roundId) => deletion.deleteRound(roundId),
-    afterFallbackWait: (listener) => clock.after(FALLBACK_WAIT_MS, listener),
+    afterFallbackWait: (listener) => {
+      clock.after(FALLBACK_WAIT_MS, listener);
+    },
     whenOnline: (listener) => whenOnline(connectivity, listener),
   };
 }

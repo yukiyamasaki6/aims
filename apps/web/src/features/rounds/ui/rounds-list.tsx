@@ -30,7 +30,6 @@ export function RoundsList() {
   const store = useRoundsListStore();
   const { view, retry } = useFetchResult<LoadedRoundsList>(
     () => store.loadList(),
-    [],
     store.whenOnline,
   );
   const { local, waited } = useLocalRoundsList();

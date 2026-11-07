@@ -266,23 +266,6 @@ describe("reference-snapshot", () => {
         n: 2,
       });
     });
-
-    it("書き換えの関数が例外を投げても、保存済みを変えず、投げない", () => {
-      // Given
-      snapshots.save("presets", "user-1", { n: 1 }, 100);
-
-      // When
-      const update = () =>
-        snapshots.update("presets", () => {
-          throw new Error("boom");
-        });
-
-      // Then
-      expect(update).not.toThrow();
-      expect(snapshots.load("presets")).toEqual({
-        n: 1,
-      });
-    });
   });
 });
 

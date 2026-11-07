@@ -13,7 +13,7 @@ import {
   validateRoundConfig,
 } from "../domain/round-config";
 import type { SyncOperation } from "../domain/sync-events";
-import { useRoundDetailStore } from "./rounds-context";
+import { useRoundProcedures } from "./rounds-context";
 import { useOptionLabels } from "./use-option-labels";
 
 function RequiredMark() {
@@ -51,7 +51,7 @@ export function RoundConfigPanel({
   hasUnmarkedDistances: boolean;
   enqueue: (operation: SyncOperation) => void;
 }) {
-  const store = useRoundDetailStore();
+  const { ids } = useRoundProcedures();
   const summary = useSummaryText(initial);
   const [expanded, setExpanded] = useState(defaultExpanded);
   // 下書きと起点(開いたときの値)は、開いたときに作り、閉じるまで`initial`の変化で書き換えない。
@@ -81,7 +81,7 @@ export function RoundConfigPanel({
       roundId,
       origin,
       config,
-      store.newId(),
+      ids.next(),
     );
     setExpanded(false);
     // 変えた項目が無ければ、操作を積まない。

@@ -2,12 +2,23 @@
 
 import { createContext, type ReactNode, useContext } from "react";
 import type { NewRoundStore } from "../application/new-round-store";
+import type { PresetSaving } from "../application/preset-saving";
 import type { RoundDetailStore } from "../application/round-detail-store";
+import type { RoundLeaving } from "../application/round-leaving";
 import type { RoundsListStore } from "../application/rounds-list-store";
+import type { UniqueIds } from "../application/unique-ids";
+
+// 詳細の画面が窓口を通さずに使う手続き。離れる(完了、削除、一覧へ戻る)、プリセットの保存、IDの払い出し。
+export type RoundProcedures = {
+  leaving: RoundLeaving;
+  presetSaving: PresetSaving;
+  ids: UniqueIds;
+};
 
 const RoundDetailStoreContext = createContext<RoundDetailStore | null>(null);
 const RoundsListStoreContext = createContext<RoundsListStore | null>(null);
 const NewRoundStoreContext = createContext<NewRoundStore | null>(null);
+const RoundProceduresContext = createContext<RoundProcedures | null>(null);
 
 // 詳細の画面へ、状態と変更の方法を渡す。
 export function RoundDetailStoreProvider({
@@ -70,4 +81,25 @@ export function useNewRoundStore(): NewRoundStore {
   const store = useContext(NewRoundStoreContext);
   if (!store) throw new Error("NewRoundStoreProvider がありません。");
   return store;
+}
+
+// 詳細の画面へ、窓口を通さない手続きを渡す。
+export function RoundProceduresProvider({
+  procedures,
+  children,
+}: {
+  procedures: RoundProcedures;
+  children: ReactNode;
+}) {
+  return (
+    <RoundProceduresContext.Provider value={procedures}>
+      {children}
+    </RoundProceduresContext.Provider>
+  );
+}
+
+export function useRoundProcedures(): RoundProcedures {
+  const procedures = useContext(RoundProceduresContext);
+  if (!procedures) throw new Error("RoundProceduresProvider がありません。");
+  return procedures;
 }

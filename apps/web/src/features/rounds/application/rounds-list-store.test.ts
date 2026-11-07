@@ -385,19 +385,6 @@ describe("loadLocalList", () => {
     ]);
     expect([...list.deleted]).toEqual(["deleted"]);
   });
-
-  it("ハブの一覧の読み取りが失敗したときは空を返す", async () => {
-    // Given
-    const tab = createTestRounds();
-    vi.spyOn(tab.hub, "readList").mockRejectedValue(new Error("idb"));
-
-    // When
-    const list = await tab.list.loadLocalList();
-
-    // Then
-    expect(list.inProgress).toEqual([]);
-    expect(list.deleted.size).toBe(0);
-  });
 });
 
 describe("deleteRound", () => {
@@ -434,20 +421,6 @@ describe("afterFallbackWait", () => {
     // Then
     expect(calledBefore).toBe(0);
     expect(listener).toHaveBeenCalledOnce();
-  });
-
-  it("返す関数で取り消すと、時計が進んでも呼ばない", () => {
-    // Given
-    const tab = createTestRounds();
-    const listener = vi.fn();
-    const cancel = tab.list.afterFallbackWait(listener);
-
-    // When
-    cancel();
-    tab.clock.advance(FETCH_TIMEOUT_MS);
-
-    // Then
-    expect(listener).not.toHaveBeenCalled();
   });
 });
 
