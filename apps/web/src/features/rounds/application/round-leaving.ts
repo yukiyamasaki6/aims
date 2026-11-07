@@ -14,7 +14,7 @@ export type RoundLeaving = {
 };
 
 // 詳細の画面から離れる手続き。保存の後に遷移する順序をここに置き、画面は遷移の実装を持たない。
-// 例外: hub.appendは保存の試みが終われば解決し拒否しない。遷移が投げたときだけ、その例外で拒否する。完了と削除の後の遷移は、保存が済んでいて、失敗を隠さないため拒否として伝える。
+// 例外: 拒否しない(hub.appendは保存の試みが終われば解決し拒否しない)。
 export function createRoundLeaving(deps: {
   hub: Pick<RoundRecordHub, "append">;
   ids: Pick<UniqueIds, "next">;

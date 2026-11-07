@@ -82,7 +82,6 @@ export function useScorecard(options: ScorecardOptions) {
     input,
     editing,
     // 完了へ変える操作を積み、保存を待ってから一覧へ移る。移った後も送信は常駐の送信器が続ける。
-    // 手続きが遷移で投げたときの拒否は意図して捕まえない(握りつぶすと原因を追えないためコンソールに出す)。渡す経路は定数で、実際には失敗しない。
     onComplete: () => {
       void leaving.completeRound(roundId);
     },

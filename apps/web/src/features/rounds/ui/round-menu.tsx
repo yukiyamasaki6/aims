@@ -20,7 +20,6 @@ export function RoundMenu({ roundId }: { roundId: string }) {
   const [deleteRoundConfirmOpen, setDeleteRoundConfirmOpen] = useState(false);
 
   function handleDeleteRound() {
-    // 手続きが遷移で投げたときの拒否は意図して捕まえない(握りつぶすと原因を追えないためコンソールに出す)。渡す経路は定数で、実際には失敗しない。
     void leaving.deleteRoundAndLeave(roundId);
   }
 

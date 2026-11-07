@@ -24,10 +24,6 @@ export function useStartRound(
     setError(null);
     setSubmitting(true);
 
-    // 開始の手続きが遷移で投げたときの拒否は意図して捕まえない。実行中を戻さず
-    // （作成済みのラウンドを二重に作らせない）、握りつぶすと原因を追えないため
-    // コンソールに出す。渡す経路は/rounds/<ID>だけで、実際には失敗しない。
-    // 詳細はdocs/features/rounds/start/design.mdの「制約と未対応」。
     const result = await store.startRound(
       selectedPreset,
       () => mountedRef.current,

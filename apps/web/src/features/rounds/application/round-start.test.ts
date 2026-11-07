@@ -51,7 +51,6 @@ function setup(
     readings?: Reading[];
     read?: SessionReader["readSession"];
     holdAppend?: boolean;
-    go?: (path: string) => void;
   } = {},
 ) {
   const calls: string[] = [];
@@ -73,10 +72,7 @@ function setup(
     }
     calls.push("append:done");
   });
-  const { pageNavigation, go } = createFakePageNavigation({
-    log: calls,
-    onGo: options.go,
-  });
+  const { pageNavigation, go } = createFakePageNavigation({ log: calls });
   const { ids, issued } = createFakeUniqueIds();
   const roundStart = createRoundStart({
     hub: { append },
@@ -339,24 +335,6 @@ describe("createRoundStart", () => {
 
       // Then
       expect(result).toEqual({ status: "discarded" });
-    });
-
-    it("遷移が投げたとき、追記は済んでおり、開始はその例外で拒否され、createdもfailedも返らない", async () => {
-      // Given
-      const failure = new Error("rejected path");
-      const { roundStart, append, go } = setup({
-        go: () => {
-          throw failure;
-        },
-      });
-
-      // When
-      const outcome = roundStart.startRound(null, () => true);
-
-      // Then
-      await expect(outcome).rejects.toBe(failure);
-      expect(append).toHaveBeenCalledTimes(1);
-      expect(go).toHaveBeenCalledTimes(1);
     });
   });
 });

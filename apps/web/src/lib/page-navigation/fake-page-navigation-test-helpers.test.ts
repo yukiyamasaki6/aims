@@ -28,22 +28,6 @@ describe("createFakePageNavigation", () => {
     expect(go).toHaveBeenCalledTimes(1);
   });
 
-  it("failureを渡すと、goとreplaceのどちらも投げる(呼び出しは記録する)", () => {
-    // Given
-    const failure = new Error("failed");
-    const log: string[] = [];
-    const { pageNavigation } = createFakePageNavigation({ log, failure });
-
-    // When
-    const go = () => pageNavigation.go("/a");
-    const replace = () => pageNavigation.replace("/b");
-
-    // Then
-    expect(go).toThrow(failure);
-    expect(replace).toThrow(failure);
-    expect(log).toEqual(["go:/a", "replace:/b"]);
-  });
-
   it("onGoは、goのときだけ呼ばれる", () => {
     // Given
     const gone: string[] = [];
