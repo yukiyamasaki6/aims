@@ -1,3 +1,4 @@
+import type { RoundAppendResult } from "../application/round-handle";
 import type { HistoryEntry } from "../domain/score-history";
 import type { Distance, Shot } from "../domain/scorecard-types";
 import {
@@ -5,7 +6,6 @@ import {
   clearHistoryEntry,
   replayHistoryEntry,
   scoreHistoryEntry,
-  withPendingShots,
 } from "../domain/shot-operations";
 import {
   newShotPointer,
@@ -19,27 +19,27 @@ import type { ScoreHistory } from "./use-score-history";
 
 type ShotInputContext = {
   distances: Distance[];
-  liveShots: Shot[];
+  shots: Shot[];
   pointer: Pointer;
   setPointer: (pointer: Pointer) => void;
-  appendShot: (operation: SyncOperation) => void;
+  append: (operation: SyncOperation) => RoundAppendResult;
   history: ScoreHistory;
   newId: () => string;
   newShotId: (endShotIds: readonly string[]) => string;
 };
 
 function scoreShot(ctx: ShotInputContext, scoreStr: string, scoreInt: number) {
-  const { pointer, distances, liveShots } = ctx;
+  const { pointer, distances, shots } = ctx;
   if (!pointer) return;
   // 指している矢の距離と、新しい矢のエンドの空きは、reconcilePointerが常に保証する。
 
   // 新しい矢のIDは、そのエンドの既にある矢より後ろに並ぶ時刻順のUUIDにする。
   const entry = scoreHistoryEntry(
-    liveShots,
+    shots,
     pointer,
     { scoreStr, scoreInt },
     ctx.newShotId(
-      liveShots
+      shots
         .filter(
           (s) =>
             s.distance_id === pointer.distanceId &&
@@ -49,22 +49,17 @@ function scoreShot(ctx: ShotInputContext, scoreStr: string, scoreInt: number) {
     ),
   );
   const operation = buildShotOperation(entry, entry.after, ctx.newId());
-  ctx.appendShot(operation);
+  // 指す矢は、追記の結果の画面の状態から決める。規則で効かない操作は、画面と同じく反映されない。
+  const { state } = ctx.append(operation);
   ctx.history.recordHistory(entry);
-  ctx.setPointer(
-    pointerAfterScore(
-      distances,
-      withPendingShots(liveShots, [operation]),
-      pointer,
-    ),
-  );
+  ctx.setPointer(pointerAfterScore(distances, state.shots, pointer));
 }
 
 // クリアのキーは記録済みの矢を指すときだけ有効で、指す矢はreconcilePointerが常に状態に合わせる。
-function pointedShot({ pointer, liveShots }: ShotInputContext): Shot {
+function pointedShot({ pointer, shots }: ShotInputContext): Shot {
   const shot =
     pointer?.kind === "shot"
-      ? liveShots.find((s) => s.id === pointer.shotId)
+      ? shots.find((s) => s.id === pointer.shotId)
       : undefined;
   if (!shot) throw new Error("クリアする矢を指していません。");
   return shot;
@@ -74,7 +69,7 @@ function clearShot(ctx: ShotInputContext) {
   const shot = pointedShot(ctx);
 
   const entry = clearHistoryEntry(shot);
-  ctx.appendShot(buildShotOperation(entry, entry.after, ctx.newId()));
+  ctx.append(buildShotOperation(entry, entry.after, ctx.newId()));
   ctx.history.recordHistory(entry);
   ctx.setPointer(newShotPointer(shot.distance_id, shot.end_number));
 }
@@ -84,33 +79,33 @@ function clearShot(ctx: ShotInputContext) {
 function replay(ctx: ShotInputContext, entry: HistoryEntry, forward: boolean) {
   const result = replayHistoryEntry(
     ctx.distances,
-    ctx.liveShots,
+    ctx.shots,
     entry,
     forward ? entry.after : entry.before,
     ctx.newId(),
   );
   if (!result) return;
-  ctx.appendShot(result.operation);
+  ctx.append(result.operation);
   ctx.setPointer(result.pointer);
 }
 
 // テンキーと玉の操作。
 export function useShotInput({
   distances,
-  liveShots,
+  shots,
   pointer,
   setPointer,
-  appendShot,
+  append,
   history,
 }: Omit<ShotInputContext, "newId" | "newShotId">) {
   const store = useRoundDetailStore();
   const { ids } = useRoundProcedures();
   const ctx: ShotInputContext = {
     distances,
-    liveShots,
+    shots,
     pointer,
     setPointer,
-    appendShot,
+    append,
     history,
     newId: () => ids.next(),
     newShotId: (endShotIds) => store.newShotId(endShotIds),

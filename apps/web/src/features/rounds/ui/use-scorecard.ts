@@ -6,7 +6,6 @@ import type { TargetFaceOption } from "../domain/target-face";
 import { useRoundProcedures } from "./rounds-context";
 import { useDistanceEditing } from "./use-distance-editing";
 import { useKeypad } from "./use-keypad";
-import { usePendingShots } from "./use-pending-shots";
 import { useReconciledPointer } from "./use-reconciled-pointer";
 import { useReorderAnimation } from "./use-reorder-animation";
 import { useRoundOpStack } from "./use-round-op-stack";
@@ -19,21 +18,19 @@ function useScorecardInput(
   inProgress: boolean,
 ) {
   const { distances, shots } = sync.state;
-  const pending = usePendingShots(sync.append, shots);
   const [pointer, setPointer] = useReconciledPointer(
     inProgress,
     distances,
     shots,
-    pending.liveShots,
   );
   const keypad = useKeypad({ pointer, distances, setPointer });
   const history = useScoreHistory();
   const input = useShotInput({
     distances,
-    liveShots: pending.liveShots,
+    shots,
     pointer,
     setPointer: keypad.followPointer,
-    appendShot: pending.appendShot,
+    append: sync.append,
     history,
   });
   return { pointer, keypad, history, input };

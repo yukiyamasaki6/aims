@@ -1,8 +1,10 @@
 import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { Distance } from "../domain/scorecard-types";
+import type { RoundState } from "../domain/round-tables";
+import type { Distance, Shot } from "../domain/scorecard-types";
 import { newShotPointer, type Pointer } from "../domain/shot-pointer";
+import type { SyncOperation } from "../domain/sync-events";
 import {
   createFakeRoundDetailStore,
   createFakeRoundProcedures,
@@ -31,11 +33,16 @@ function setup(
     distances?: Distance[];
 
     history?: Partial<ScoreHistory>;
+    resultShots?: Shot[];
   } = {},
 ) {
   const { store } = createFakeRoundDetailStore();
   const procedures = createFakeRoundProcedures();
-  const appendShot = vi.fn();
+  // 追記の結果の画面の状態は、テストが与える矢を持つ。
+  const append = vi.fn((_operation: SyncOperation) => ({
+    state: { shots: options.resultShots ?? [] } as RoundState,
+    saved: Promise.resolve(),
+  }));
   const setPointer = vi.fn();
   const history = {
     canUndo: false,
@@ -57,28 +64,28 @@ function setup(
     () =>
       useShotInput({
         distances: options.distances ?? [distance],
-        liveShots: [],
+        shots: [],
         pointer: options.pointer ?? newShotPointer("d-1", 1),
         setPointer,
-        appendShot,
+        append,
         history,
       }),
     { wrapper },
   );
-  return { input: result.current, appendShot, history };
+  return { input: result.current, append, history, setPointer };
 }
 
 describe("useShotInput", () => {
   it("新しい矢へ点数を書くと、窓口から払い出された矢のIDとイベントIDの記録を積み、取り消しの列へ記録する", () => {
     // Given
-    const { input, appendShot, history } = setup();
+    const { input, append, history } = setup();
 
     // When
     input.handleScore("10", 10);
 
     // Then
-    expect(appendShot).toHaveBeenCalledTimes(1);
-    expect(appendShot.mock.calls[0][0]).toMatchObject({
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(append.mock.calls[0][0]).toMatchObject({
       type: "shot.recorded",
       distanceId: "d-1",
       endNumber: 1,
@@ -88,16 +95,38 @@ describe("useShotInput", () => {
     expect(history.recordHistory).toHaveBeenCalledTimes(1);
   });
 
+  it("点数を書いた後に指す矢は、追記の結果の画面の状態から決まり、エンドが満杯になれば次のエンドの新しい矢になる", () => {
+    // Given
+    const full = [1, 2, 3].map(
+      (n) =>
+        ({
+          id: `s-${n}`,
+          distance_id: "d-1",
+          end_number: 1,
+          score_str: "10",
+          score_int: 10,
+          shot_number: null,
+        }) as Shot,
+    );
+    const { input, setPointer } = setup({ resultShots: full });
+
+    // When
+    input.handleScore("10", 10);
+
+    // Then
+    expect(setPointer).toHaveBeenCalledWith(newShotPointer("d-1", 2));
+  });
+
   it("記録済みの矢を指していないときのクリアは、何も積まずに例外にする", () => {
     // Given
-    const { input, appendShot, history } = setup();
+    const { input, append, history } = setup();
 
     // When
     const clear = () => input.handleClear();
 
     // Then
     expect(clear).toThrow();
-    expect(appendShot).not.toHaveBeenCalled();
+    expect(append).not.toHaveBeenCalled();
     expect(history.recordHistory).not.toHaveBeenCalled();
   });
 });
