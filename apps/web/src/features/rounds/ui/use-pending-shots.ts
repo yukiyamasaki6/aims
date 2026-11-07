@@ -31,7 +31,7 @@ export function usePendingShots(
     }
     const settle = () =>
       setPendingShots((prev) => prev.filter((p) => p !== operation));
-    void append(operation).then(settle, settle);
+    void append(operation).then(settle);
   }
 
   return { liveShots, leavingShotId, appendShot };
