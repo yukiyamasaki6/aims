@@ -1,5 +1,5 @@
 import type { SignInChange } from "@/features/auth";
-import { matchRecordUser, reactionToSignIn } from "../domain/record-user";
+import { matchRecordUser } from "../domain/record-user";
 import type { OpSender } from "./op-sender";
 import type { RoundRecordHub } from "./round-record-hub";
 
@@ -10,12 +10,12 @@ export type RoundRecordControl = {
   // 送信を止め、その後に記録を止める。
   stop(): void;
   matchUser(userId: string | null): "same" | "other" | "unowned";
-  // サインインの変化に反応する。同じ利用者なら、保留した送信を戻して送る。別の利用者か、記録の利用者がnullなら、送信の状態を捨てて、記録の利用者を替える。サインアウトは利用者を無くす。
+  // サインインの変化に反応する。利用者のいる変化では、保留した送信を戻す(別の利用者の送信は送信器が保留したままにする)。サインアウトでは何もしない(利用者の切り替えは、見張りがページ全体を読み込み直して行う)。
   signInChanged(change: SignInChange): void;
 };
 
 export function createRoundRecordControl(deps: {
-  hub: Pick<RoundRecordHub, "start" | "stop" | "setUser" | "userId">;
+  hub: Pick<RoundRecordHub, "start" | "stop" | "userId">;
   sender: OpSender;
 }): RoundRecordControl {
   const { hub, sender } = deps;
@@ -30,16 +30,7 @@ export function createRoundRecordControl(deps: {
     },
     matchUser: (userId) => matchRecordUser(hub.userId(), userId),
     signInChanged(change) {
-      const reaction = reactionToSignIn(
-        change.kind === "signed-out" ? null : change.userId,
-        hub.userId(),
-      );
-      if (reaction.type === "switch-user") {
-        sender.reset();
-        hub.setUser(reaction.userId);
-      } else {
-        sender.resumeHeld();
-      }
+      if (change.kind !== "signed-out") sender.resumeHeld();
     },
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchRecordUser, reactionToSignIn } from "./record-user";
+import { matchRecordUser } from "./record-user";
 
 describe("matchRecordUser", () => {
   it.each([
@@ -20,41 +20,4 @@ describe("matchRecordUser", () => {
       expect(match).toBe(expected);
     },
   );
-});
-
-// サインインの変化の種類は、アプリケーション層が利用者のID(サインアウトならnull)に写す。
-describe("reactionToSignIn", () => {
-  it.each([
-    ["same", "user-1", { type: "resume" }],
-    ["other", "user-0", { type: "switch-user", userId: "user-1" }],
-    ["unowned", null, { type: "switch-user", userId: "user-1" }],
-  ] as const)(
-    "サインインした利用者で記録の利用者との照合が%sなら、反応は%sになる",
-    (_match, recordUserId, expected) => {
-      // Given
-      const userId = "user-1";
-
-      // When
-      const reaction = reactionToSignIn(userId, recordUserId);
-
-      // Then
-      expect(reaction).toEqual(expected);
-    },
-  );
-
-  it("サインアウトは、記録の利用者によらず、利用者を外す", () => {
-    // Given
-    const userId = null;
-
-    // When
-    const reactions = ["user-1", null].map((recordUserId) =>
-      reactionToSignIn(userId, recordUserId),
-    );
-
-    // Then
-    expect(reactions).toEqual([
-      { type: "switch-user", userId: null },
-      { type: "switch-user", userId: null },
-    ]);
-  });
 });

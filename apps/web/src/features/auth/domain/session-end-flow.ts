@@ -1,6 +1,5 @@
 import { lostByStatus, type SessionStatus } from "./auth-change";
 import { type AuthFailure, UNREACHABLE } from "./auth-failure";
-import { signInHref } from "./auth-routes";
 import type { Start, Step } from "./flow";
 
 // セッションの終わり(明示のサインアウトと、セッションの喪失)の流れ。開始の可否、終えられたかの判定、遷移の可否を持つ集約。
@@ -61,12 +60,17 @@ export function endSignOut(
   };
 }
 
-// サインインへ移る先を返す(移らないときはnull)。状態は変えない。
-// 同じ喪失が重ねて届いても、同じ場所から同じ移る先を作るので、同じ遷移になる。
-// サインアウトの実行中は移らない(サインアウトの判定に委ねる)。fromは遷移元にする今の場所で、サインアウトが終えられたときはnull(遷移元を付けない)。
+// 通知の利用者と、記録の利用者の関係。same: 同じ。other: 別の利用者。unowned: 記録の利用者がいない。
+export type UserMatch = "same" | "other" | "unowned";
+
+// ページ全体を置き換える先を返す(置き換えないときはnull)。状態は変えない。
+// 同じ喪失が重ねて届いても、同じ場所から同じ先を作るので、同じ置き換えになる。
+// サインアウトの実行中は置き換えない(サインアウトの判定に委ねる)。
+// matchは、サインインの通知の利用者と記録の利用者の関係で、sameなら置き換えない(利用者が替わっていない)。喪失(利用者の照合を伴わない)はother扱いにして、常に置き換える。
 export function leave(
   flow: SessionEndFlow,
-  from: string | null,
+  destination: string,
+  match: UserMatch = "other",
 ): string | null {
-  return flow.running ? null : signInHref(from);
+  return flow.running || match === "same" ? null : destination;
 }

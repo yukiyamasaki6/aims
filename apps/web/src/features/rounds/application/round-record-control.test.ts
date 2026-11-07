@@ -23,7 +23,6 @@ function createOrderedFakes(
   const hub = {
     start: record("hub.start"),
     stop: record("hub.stop"),
-    setUser: record("hub.setUser"),
     userId: vi.fn(() => options.recordUserId ?? null),
   };
   const sender = {
@@ -33,10 +32,7 @@ function createOrderedFakes(
     resumeHeld: record("sender.resumeHeld"),
   };
   const control = createRoundRecordControl({
-    hub: hub as unknown as Pick<
-      RoundRecordHub,
-      "start" | "stop" | "setUser" | "userId"
-    >,
+    hub: hub as unknown as Pick<RoundRecordHub, "start" | "stop" | "userId">,
     sender,
   });
   return { calls, hub, sender, control };
@@ -74,20 +70,6 @@ describe("順序", () => {
 
     // Then
     expect(calls).toEqual(["sender.stop", "hub.stop"]);
-  });
-
-  it("別の利用者のサインインは、送信の状態を捨てた後に利用者を替える", () => {
-    // Given
-    const { calls, hub, control } = createOrderedFakes({
-      recordUserId: "user-1",
-    });
-
-    // When
-    control.signInChanged({ kind: "signed-in", userId: "user-2" });
-
-    // Then
-    expect(calls).toEqual(["sender.reset", "hub.setUser"]);
-    expect(hub.setUser).toHaveBeenCalledWith("user-2");
   });
 
   it("記録の停止が例外を投げても、送信器の停止は先に終わっていて、例外は呼び出し側へ伝わる", () => {
@@ -148,33 +130,22 @@ describe("記録の制御", () => {
     expect(matches).toEqual(["same", "other"]);
   });
 
-  it("別の利用者のサインインで利用者を替えると、照合の基準が新しい利用者になる", async () => {
+  it("別の利用者のサインインとサインアウトは、記録の利用者を替えない(切り替えは読み込み直しが行う)", async () => {
     // Given
     const { hub, control } = createRealControl({});
     await hub.append(STREAM, roundUpdated({ eventId: "a" }));
 
     // When
     control.signInChanged({ kind: "signed-in", userId: "user-2" });
-    const afterSwitch = [
-      control.matchUser("user-2"),
+    control.signInChanged({ kind: "signed-out" });
+    const afterChanges = [
       control.matchUser("user-1"),
+      control.matchUser("user-2"),
     ];
 
     // Then
-    expect(afterSwitch).toEqual(["same", "other"]);
-  });
-
-  it("サインアウトは、利用者を無くす", async () => {
-    // Given
-    const { hub, control } = createRealControl({});
-    await hub.append(STREAM, roundUpdated({ eventId: "a" }));
-
-    // When
-    control.signInChanged({ kind: "signed-out" });
-    const afterSignOut = [control.matchUser("user-1"), control.matchUser(null)];
-
-    // Then
-    expect(afterSignOut).toEqual(["unowned", "unowned"]);
+    expect(afterChanges).toEqual(["same", "other"]);
+    expect(hub.streams()).toEqual([STREAM]);
   });
 
   it("記録の利用者と同じ利用者のサインインは、未認証で保留した操作を、サインインし直した後に送る", async () => {
@@ -201,36 +172,29 @@ describe("記録の制御", () => {
 
 describe("サインインの変化への反応", () => {
   it.each([
-    ["signed-in", "user-1", "resume"],
-    ["signed-in", "user-0", "switch"],
-    ["signed-in", null, "switch"],
-    ["token-refreshed", "user-1", "resume"],
-    ["token-refreshed", "user-0", "switch"],
-    ["token-refreshed", null, "switch"],
+    ["signed-in", "user-1"],
+    ["signed-in", "user-0"],
+    ["signed-in", null],
+    ["token-refreshed", "user-1"],
+    ["token-refreshed", "user-0"],
+    ["token-refreshed", null],
   ] as const)(
-    "利用者のある%sの通知で、記録の利用者が%sなら、%sする。通知の利用者を記録の利用者と照合する",
-    (kind, recordUserId, reaction) => {
+    "利用者のある%sの通知で、記録の利用者が%sでも、保留した送信を戻すだけである",
+    (kind, recordUserId) => {
       // Given
-      const { calls, hub, control } = createOrderedFakes({ recordUserId });
+      const { calls, control } = createOrderedFakes({ recordUserId });
 
       // When
       control.signInChanged({ kind, userId: "user-1" });
 
       // Then
-      expect(calls).toEqual(
-        reaction === "resume"
-          ? ["sender.resumeHeld"]
-          : ["sender.reset", "hub.setUser"],
-      );
-      if (reaction === "switch") {
-        expect(hub.setUser).toHaveBeenCalledWith("user-1");
-      }
+      expect(calls).toEqual(["sender.resumeHeld"]);
     },
   );
 
-  it("サインアウトは、送信の状態を捨てた後に利用者を外す", () => {
+  it("サインアウトでは、何もしない", () => {
     // Given
-    const { calls, hub, control } = createOrderedFakes({
+    const { calls, control } = createOrderedFakes({
       recordUserId: "user-1",
     });
 
@@ -238,7 +202,6 @@ describe("サインインの変化への反応", () => {
     control.signInChanged({ kind: "signed-out" });
 
     // Then
-    expect(calls).toEqual(["sender.reset", "hub.setUser"]);
-    expect(hub.setUser).toHaveBeenCalledWith(null);
+    expect(calls).toEqual([]);
   });
 });
