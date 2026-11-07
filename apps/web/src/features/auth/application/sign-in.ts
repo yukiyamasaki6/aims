@@ -1,5 +1,4 @@
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { destinationOf } from "../domain/auth-routes";
 import {
   beginSignIn,
@@ -8,6 +7,7 @@ import {
   type SignInFlow,
 } from "../domain/sign-in-flow";
 import { type CallResult, failureOf } from "./call-result";
+import type { PageReplace } from "./page-replace";
 import type { ScreenView } from "./screen-view";
 
 // 認証サービスに資格情報を照合させる。例外は投げず、結果は値で返す。
@@ -25,11 +25,11 @@ export type SignIn = {
 
 export function createSignIn({
   authenticator,
-  pageNavigation,
+  pageReplace,
   connectivity,
 }: {
   authenticator: SignInAuthenticator;
-  pageNavigation: PageNavigation;
+  pageReplace: Pick<PageReplace, "replace">;
   connectivity: Pick<Connectivity, "isOffline">;
 }): SignIn {
   return {
@@ -56,7 +56,7 @@ export function createSignIn({
       }
       // 成功時は以前のエラーを消し、送信中は解除しない。遷移が終わる前に再び押され、使用済みのトークンで二重に送信されるのを防ぐため。
       view.dispatch({ type: "signedIn" });
-      pageNavigation.go(destinationOf(input.from));
+      pageReplace.replace(destinationOf(input.from));
     },
   };
 }
