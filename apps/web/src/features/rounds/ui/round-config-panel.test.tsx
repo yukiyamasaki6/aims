@@ -23,6 +23,7 @@ function panel(config: RoundConfig, enqueue = vi.fn()) {
     <RoundConfigPanel
       roundId="round-1"
       initial={config}
+      defaultExpanded={false}
       hasUnmarkedDistances={false}
       enqueue={enqueue}
     />
@@ -45,6 +46,7 @@ function setup(
     <RoundConfigPanel
       roundId="round-1"
       initial={initial}
+      defaultExpanded={false}
       hasUnmarkedDistances={false}
       enqueue={enqueue}
       {...overrides}

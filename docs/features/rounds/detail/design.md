@@ -52,7 +52,7 @@
 - `features/rounds/ui/round-detail-frame.tsx`、`back-to-list-link.tsx`: 枠と「一覧へ戻る」リンク(経路表(`src/routes.ts`)の`ROUNDS_PATH`を使う)。
 - `features/rounds/ui/scorecard-client.tsx`（Client Component）: スコアカードの枠を組み立てる。
 - `features/rounds/ui/use-scorecard.ts`: `state`(保存が完了した操作から導いた`shots`と距離の構成)を`useRoundOpStack`から受け、画面のフック(指している矢、テンキー、取り消しの列、距離の編集)を束ねる。
-- `features/rounds/ui/scorecard-header-bar.tsx`、`round-config-card.tsx`、`round-summary-bar.tsx`: ヘッダーの帯(領域の外)、ラウンドの設定のカード、合計の帯(領域の中)。
+- `features/rounds/ui/scorecard-header-bar.tsx`、`round-config-panel.tsx`、`round-summary-bar.tsx`: ヘッダーの帯(領域の外)、ラウンドの設定のカード(カードの枠と編集のダイアログを1つの部品に持つ)、合計の帯(領域の中)。
 - `features/rounds/ui/distance-section.tsx`: 距離ごとのカード(見出し、編集、小計、エンドの行)。
 - `features/rounds/domain/scorecard-scoring.ts`: 距離とラウンドの集計、エンドの小計を求める純粋関数。
 
@@ -65,7 +65,7 @@
 | `app/(main)/rounds/[id]/page.tsx` | 画面の入口(サーバー専用の宣言を持ち、クライアントの部品を描くだけ) |
 | `app/root-client-entry.tsx` | アプリの起動地点(完了と保存の手続きと遷移の`replace`を生成する) |
 | `features/rounds/ui/round-detail-client.tsx`、`round-detail-frame.tsx`、`back-to-list-link.tsx` | UI層(取得の表示の切り替え、取得中などの枠、一覧へ戻るリンク) |
-| `features/rounds/ui/scorecard-client.tsx`、`scorecard-header-bar.tsx`、`round-config-card.tsx`、`round-summary-bar.tsx` | UI層(スコアカードの組み立て、上端の帯、設定のカード、合計の帯) |
+| `features/rounds/ui/scorecard-client.tsx`、`scorecard-header-bar.tsx`、`round-summary-bar.tsx` | UI層(スコアカードの組み立て、上端の帯、合計の帯) |
 | `features/rounds/ui/round-config-panel.tsx`、`round-menu.tsx`、`save-preset-dialog.tsx`、`save-preset-dialog-state.ts` | UI層(設定のパネルと編集のダイアログ、メニューと削除の確認、保存のダイアログの描画と状態) |
 | `features/rounds/ui/distance-section.tsx`、`distance-edit-fields.tsx`、`distance-fields.tsx`、`use-distance-draft.ts`、`target-face-picker.tsx`、`end-row.tsx` | UI層(距離のカード、距離の編集のダイアログと操作、編集フォームの欄の描画、編集フォームの下書きと検証・保存・削除、的の選択、エンドの行) |
 | `features/rounds/ui/keypad-buttons.tsx`、`keypad-panel.tsx`、`bottom-frame.tsx`、`complete-round-bar.tsx` | UI層(テンキー、横向きのパネル、縦向きの下端の枠、完了の帯と確認) |

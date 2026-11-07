@@ -12,7 +12,7 @@ import { CompleteRoundBar } from "./complete-round-bar";
 import { DistanceSection } from "./distance-section";
 import { KeypadButtons } from "./keypad-buttons";
 import { KeypadPanel } from "./keypad-panel";
-import { RoundConfigCard } from "./round-config-card";
+import { RoundConfigPanel } from "./round-config-panel";
 import { RoundSummaryBar } from "./round-summary-bar";
 import { ScorecardHeaderBar } from "./scorecard-header-bar";
 import { type ScorecardModel, useScorecard } from "./use-scorecard";
@@ -112,9 +112,9 @@ function ScorecardBody({ model }: { model: ScorecardModel }) {
 
   return (
     <div className="flex flex-1 flex-col gap-6 px-8 pb-8">
-      <RoundConfigCard
+      <RoundConfigPanel
         roundId={model.roundId}
-        roundConfig={roundConfig}
+        initial={roundConfig}
         defaultExpanded={model.initiallyEmpty && model.inProgress}
         hasUnmarkedDistances={distances.some((d) => !d.is_marked)}
         enqueue={sync.append}
