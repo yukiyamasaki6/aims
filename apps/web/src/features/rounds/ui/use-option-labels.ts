@@ -6,21 +6,14 @@ import {
   type FormatOption,
 } from "../domain/round-constants";
 
-function isFormat(value: string): value is FormatOption {
-  return (FORMAT_OPTIONS as readonly string[]).includes(value);
-}
-
-function isBowType(value: string): value is BowTypeOption {
-  return (BOW_TYPE_OPTIONS as readonly string[]).includes(value);
-}
-
-// 種別と弓種の表示名。選択肢に無い値は、値のまま返す。
+// 種別と弓種の表示名。値はDBのCHECKで選択肢のどれかに限られる。
+// 値の型が文字列の使い手が多く、取得の境界から型を絞ると広がるため、引数は文字列のまま受けて文言の引き方で選択肢の型にする。
 export function useOptionLabels() {
   const t = useTranslations("rounds");
   const formatLabel = (value: string) =>
-    isFormat(value) ? t(`formatOption.${value}`) : value;
+    t(`formatOption.${value as FormatOption}`);
   const bowTypeLabel = (value: string) =>
-    isBowType(value) ? t(`bowTypeOption.${value}`) : value;
+    t(`bowTypeOption.${value as BowTypeOption}`);
   return {
     formatLabel,
     bowTypeLabel,
