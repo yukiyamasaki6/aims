@@ -22,7 +22,6 @@ type ShotInputContext = {
   liveShots: Shot[];
   pointer: Pointer;
   setPointer: (pointer: Pointer) => void;
-  setKeypadMounted: (mounted: boolean) => void;
   appendShot: (operation: SyncOperation) => void;
   history: ScoreHistory;
   newId: () => string;
@@ -92,7 +91,6 @@ function replay(ctx: ShotInputContext, entry: HistoryEntry, forward: boolean) {
   );
   if (!result) return;
   ctx.appendShot(result.operation);
-  ctx.setKeypadMounted(true);
   ctx.setPointer(result.pointer);
 }
 
@@ -102,12 +100,9 @@ export function useShotInput({
   liveShots,
   pointer,
   setPointer,
-  setKeypadMounted,
   appendShot,
   history,
-}: Omit<ShotInputContext, "appendShot" | "newId" | "newShotId"> & {
-  appendShot: (operation: SyncOperation) => void;
-}) {
+}: Omit<ShotInputContext, "newId" | "newShotId">) {
   const store = useRoundDetailStore();
   const { ids } = useRoundProcedures();
   const ctx: ShotInputContext = {
@@ -115,30 +110,21 @@ export function useShotInput({
     liveShots,
     pointer,
     setPointer,
-    setKeypadMounted,
     appendShot,
     history,
     newId: () => ids.next(),
     newShotId: (endShotIds) => store.newShotId(endShotIds),
   };
 
-  // 格納後に再度開く場合、keypadMountedがマウント用useEffectを経由して
-  // 遅れて反映されると、スクロール計算がテンキーの要素の未接続のまま実行されて
-  // しまうため、ここで同期的にマウント済みにしておく。
   return {
     handleScore: (scoreStr: string, scoreInt: number) =>
       scoreShot(ctx, scoreStr, scoreInt),
     handleClear: () => clearShot(ctx),
     handleUndo: () => replay(ctx, history.undo(), false),
     handleRedo: () => replay(ctx, history.redo(), true),
-    selectShot: (shot: Shot) => {
-      setKeypadMounted(true);
-      setPointer(shotPointer(shot));
-    },
-    selectEnd: (distance: Distance, end: number) => {
-      setKeypadMounted(true);
-      setPointer(newShotPointer(distance.id, end));
-    },
+    selectShot: (shot: Shot) => setPointer(shotPointer(shot)),
+    selectEnd: (distance: Distance, end: number) =>
+      setPointer(newShotPointer(distance.id, end)),
   };
 }
 

@@ -37,7 +37,6 @@ function setup(
   const procedures = createFakeRoundProcedures();
   const appendShot = vi.fn();
   const setPointer = vi.fn();
-  const setKeypadMounted = vi.fn();
   const history = {
     canUndo: false,
     canRedo: false,
@@ -61,7 +60,6 @@ function setup(
         liveShots: [],
         pointer: options.pointer ?? newShotPointer("d-1", 1),
         setPointer,
-        setKeypadMounted,
         appendShot,
         history,
       }),

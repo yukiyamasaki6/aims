@@ -33,7 +33,6 @@ function useScorecardInput(
     liveShots: pending.liveShots,
     pointer,
     setPointer: keypad.followPointer,
-    setKeypadMounted: keypad.setKeypadMounted,
     appendShot: pending.appendShot,
     history,
   });
