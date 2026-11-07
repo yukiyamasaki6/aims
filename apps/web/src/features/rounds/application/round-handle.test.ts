@@ -185,7 +185,7 @@ describe("round(...)", () => {
     unwatch();
   });
 
-  it("開いている間の印を付け、解除で外す。端末のベースで開いたかを印に持つ。2回解除しても数を崩さない", () => {
+  it("開いている間の印を付け、解除で外す。端末のベースで開いたかを印に持つ", () => {
     // Given
     const tab = createTab();
     const handle = tab.round("round-1");
@@ -193,7 +193,6 @@ describe("round(...)", () => {
     // When
     const first = handle.watch(loadedOf({ source: "local" }));
     const marked = tab.requests.watched();
-    first();
     first();
 
     // Then

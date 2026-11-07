@@ -75,7 +75,6 @@ export function createRoundHandle(
   const streamId = roundStreamId(roundId);
   const listeners = new Set<() => void>();
   let opening: LoadedRound | null = null;
-  let watchers = 0;
   let snapshot = UNOPENED;
   let creation: CreationProgress = INITIAL_CREATION;
   let seen: {
@@ -175,20 +174,14 @@ export function createRoundHandle(
       return screen.state;
     },
     watch(next) {
-      if (watchers === 0) creation = INITIAL_CREATION;
+      creation = INITIAL_CREATION;
       opening = next;
       seen = null;
-      watchers += 1;
       const unmark = requests.watch(roundId, next.source === "local");
       stopObserving ??= observe();
       recompute();
-      let released = false;
       return () => {
-        if (released) return;
-        released = true;
         unmark();
-        watchers -= 1;
-        if (watchers > 0) return;
         stopObserving?.();
         stopObserving = undefined;
         requests.setOverlay(roundId, false);
