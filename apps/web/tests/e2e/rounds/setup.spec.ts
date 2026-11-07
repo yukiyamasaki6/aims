@@ -6,6 +6,7 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
+import { blockOpLogStore } from "../helpers/op-log";
 import {
   getDistanceIds,
   openOtherDevice,
@@ -436,4 +437,39 @@ test("距離編集中に他の端末の変更が届いても、変更中のエ�
   await expect(summary).toContainText(
     roundsText("distanceEnds", { arrowsPerEnd: "3", totalEnds: "6" }),
   );
+});
+
+test("端末の保存が終わらない間も、設定の保存と距離の削除がすぐに反映される", async ({
+  page,
+}) => {
+  // 端末の保存を塞いだ状態で設定を保存し、要約がすぐに変わることを確かめる。
+  await openRound(page, {
+    distances: [
+      { distance: 18, totalEnds: 12, arrowsPerEnd: 3 },
+      { distance: 30, totalEnds: 12, arrowsPerEnd: 3 },
+    ],
+  });
+  const release = await blockOpLogStore(page);
+  await page.getByTestId("round-config-summary").click();
+  await page.getByTestId("round-config-name").fill("保存待ちの名前");
+  await page.getByTestId("round-config-save").click();
+  await expect(page.getByTestId("round-config-summary")).toContainText(
+    "保存待ちの名前",
+  );
+  await expect(page.getByTestId("round-config-save")).toBeHidden();
+
+  // 距離を削除し、カードがすぐに消えることを確かめる。
+  await page.getByTestId("distance-config-toggle-2").click();
+  await page.getByTestId("distance-config-delete-2").click();
+  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
+  await expect(page.getByTestId("distance-config-delete-2")).toBeHidden();
+
+  // 塞ぎを解き、再読み込みしても保たれることを確かめる。
+  const sent = page.waitForResponse(DISABLE_DISTANCE_RPC);
+  await release();
+  await reloadAfter(page, sent);
+  await expect(page.getByTestId("round-config-summary")).toContainText(
+    "保存待ちの名前",
+  );
+  await expect(page.getByTestId("distance-summary-2")).toBeHidden();
 });

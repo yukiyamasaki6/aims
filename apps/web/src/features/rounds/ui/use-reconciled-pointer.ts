@@ -13,12 +13,11 @@ export function useReconciledPointer(
   inProgress: boolean,
   distances: Distance[],
   shots: Shot[],
-  liveShots: Shot[],
 ) {
   const [storedPointer, setPointer] = useState<Pointer>(() =>
     inProgress ? firstOpenEnd(distances, shots) : null,
   );
-  const pointer = reconcilePointer(distances, liveShots, storedPointer);
+  const pointer = reconcilePointer(distances, shots, storedPointer);
   if (!isSamePointer(pointer, storedPointer)) setPointer(pointer);
   return [pointer, setPointer] as const;
 }

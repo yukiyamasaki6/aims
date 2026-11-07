@@ -6,7 +6,6 @@ import {
   clearHistoryEntry,
   replayHistoryEntry,
   scoreHistoryEntry,
-  withPendingShots,
 } from "@/features/rounds/domain/shot-operations";
 import {
   newShotPointer,
@@ -270,43 +269,5 @@ describe("replayHistoryEntry", () => {
 
     // Then
     expect(result).toBeNull();
-  });
-});
-
-describe("withPendingShots", () => {
-  it("画面へまだ反映されていない記録とクリアを、生きている矢に重ねる", () => {
-    // Given
-
-    // When
-    const shots = [{ ...shot("a", "d-a", 1), shooter_id: "u-1" }];
-    const result = withPendingShots(shots, [
-      buildShotOperation(
-        { shotId: "b", distanceId: "d-a", endNumber: 1 },
-        { alive: true, ...score },
-        "e-1",
-      ),
-      buildShotOperation(
-        { shotId: "a", distanceId: "d-a", endNumber: 1 },
-        { alive: true, scoreStr: "M", scoreInt: 0 },
-        "e-2",
-      ),
-      buildShotOperation(
-        { shotId: "c", distanceId: "d-a", endNumber: 2 },
-        { alive: true, ...score },
-        "e-3",
-      ),
-      buildShotOperation(
-        { shotId: "c", distanceId: "d-a", endNumber: 2 },
-        { alive: false },
-        "e-4",
-      ),
-      { type: "round.updated", eventId: "e-5", roundId: "r", changes: {} },
-    ]);
-
-    // Then
-    expect(result).toEqual([
-      { ...shot("a", "d-a", 1, "M", 0), shooter_id: "u-1" },
-      shot("b", "d-a", 1, "9", 9),
-    ]);
   });
 });

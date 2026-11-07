@@ -30,7 +30,7 @@ export type RecordChange = {
 
 export type RoundStoreGroup = StreamGroup<SyncOperation, RoundBaseRecord>;
 
-// 1つの列の、メモリにあるベースと保存が完了した操作。
+// 1つの列の、メモリにあるベースと、保存の完了前を含む操作。
 export type HubSnapshot = {
   base: RecordBase | undefined;
   operations: readonly RecordedOperation[];
@@ -162,7 +162,7 @@ export function createRoundRecordHub(deps: {
         // 保存の間に停止されたときは、現在の記録に触れない(保存先の書き込みは完了している)。
         if (epoch !== target) return;
         if (seq === undefined) markWriteFailed(streamId, target);
-        // 画面へは、保存が完了した操作から反映する(保存の完了前の離脱で、見えた操作を失わないため)。
+        // 画面へは追記の時点で反映済みで、保存の完了では画面の状態は変わらない(送信だけが保存の完了を待つ)。
         const next = markPersisted(record(streamId), operation.eventId, seq);
         put(streamId, next, "appended");
       });
@@ -315,7 +315,7 @@ export function createRoundRecordHub(deps: {
         listeners.delete(listener);
       };
     },
-    // 記録へ追記し、保存の完了後に画面へ反映する。戻り値は、保存の試みが終わった時点で解決する(拒否しない)。
+    // 記録へ追記し、画面へは直ちに反映する(送信は保存の完了後)。戻り値は、保存の試みが終わった時点で解決する(拒否しない)。
     append,
     // 呼んだ時点で保存の途中の操作が全て終わる(失敗を含む)と解決し、拒否しない。再読み込みの前に呼び、保存の途中の操作を失わないため。
     async whenPersisted(): Promise<void> {

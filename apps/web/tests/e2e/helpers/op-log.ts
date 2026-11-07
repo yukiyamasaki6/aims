@@ -25,6 +25,17 @@ async function pendingOpCount(page: Page, roundId: string): Promise<number> {
   );
 }
 
+// 画面は追記の直後に変わるため、端末の保存の完了を待たずに画面を閉じる・読み込み直す前に、ラウンドの操作がcount件以上保存されるまで待つ。
+export async function expectOpsSaved(
+  page: Page,
+  roundId: string,
+  count: number,
+) {
+  await expect
+    .poll(() => pendingOpCount(page, roundId))
+    .toBeGreaterThanOrEqual(count);
+}
+
 // ラウンドの操作が、送信の結果の処理(確定または破棄)で端末の列から無くなるまで待つ。
 export async function expectNoPendingOps(page: Page, roundId: string) {
   await expect.poll(() => pendingOpCount(page, roundId)).toBe(0);

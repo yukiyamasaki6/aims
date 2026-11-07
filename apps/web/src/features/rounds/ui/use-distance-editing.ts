@@ -16,7 +16,7 @@ export function useDistanceEditing({
 }: {
   roundId: string;
   distances: Distance[];
-  append: (operation: SyncOperation) => Promise<void>;
+  append: (operation: SyncOperation) => unknown;
   // 距離の書き込みを、戻す・やり直しの列から捨てる。
   discardHistory: (distanceId: string) => void;
 }) {
@@ -51,10 +51,9 @@ export function useDistanceEditing({
   }
 
   function handleDistanceDeleted(distanceId: string) {
+    // 削除は追記の直後に画面へ反映され、距離のカードが消えて編集のダイアログも閉じる。
+    // 削除した距離を指していた矢は、reconcilePointerが外す。
     discardHistory(distanceId);
-    // 削除の確定の直後に、編集のダイアログを閉じる。
-    // 削除した距離を指していた矢は、保存の完了後の状態に合わせてreconcilePointerが外す。
-    setEditingDistanceId(null);
   }
 
   return {

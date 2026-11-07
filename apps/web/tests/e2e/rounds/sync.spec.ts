@@ -13,6 +13,7 @@ import {
   waitForHydration,
 } from "../helpers/auth";
 import { expectKeypadSettled } from "../helpers/keypad";
+import { expectOpsSaved } from "../helpers/op-log";
 import {
   disableRound,
   forwardAs,
@@ -1229,6 +1230,7 @@ test("送信に失敗して2つのタブに未送信の点数があるとき、�
 
   // 送信の失敗を解いて一方のタブを閉じ、残ったタブを再読み込みして、両方の点数が保存されることを確かめる。
   failing = false;
+  await expectOpsSaved(other, roundId, 2);
   await page.close();
   await reloadRound(other);
   await expectSavedShots(supabase, distanceIds[0], ["1:10", "2:9"]);
@@ -1283,6 +1285,7 @@ test("オフラインで点数を記録した入力中のラウンドを、ア�
   await waitForHydration(first.page);
   await first.page.getByTestId("score-button-9").click();
   await expect(endBalls(first.page, 1, 1)).toHaveText(["9"]);
+  await expectOpsSaved(first.page, roundId, 1);
 
   // アプリを閉じて開き直し、オフラインのまま開いて、点数が表示されることを確かめる。
   await profile.close();

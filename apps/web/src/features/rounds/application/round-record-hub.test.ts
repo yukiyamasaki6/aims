@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { roundBase, roundUpdated } from "../domain/round-op-test-helpers";
+import { operationsOf } from "../domain/round-record";
 import { roundStreamId, type SyncOperation } from "../domain/sync-events";
 import type { RecordChange } from "./round-record-hub";
 import { createTestRoundHub } from "./round-record-test-helpers";
@@ -168,7 +169,7 @@ describe("start と stop", () => {
 });
 
 describe("append", () => {
-  it("画面への反映は保存の完了後で、保存の完了を知らせ、戻り値も保存の完了後に解決する", async () => {
+  it("追記は直ちに画面用の列へ入り、保存の完了を知らせ、戻り値は保存の完了後に解決する", async () => {
     // Given
     const { hub, store, changes } = await startedHub();
     const saving = deferred<number>();
@@ -178,6 +179,7 @@ describe("append", () => {
     const appended = hub.append(STREAM, op("a"));
     const beforeSave = {
       saved: hub.record(STREAM).items[0]?.saved,
+      shown: operationsOf(hub.record(STREAM)).length,
       kinds: changes.map((change) => change.kind),
       settled: await settled(appended),
     };
@@ -187,10 +189,12 @@ describe("append", () => {
     // Then
     expect(beforeSave).toEqual({
       saved: false,
+      shown: 1,
       kinds: ["changed"],
       settled: false,
     });
     expect(hub.record(STREAM).items[0]).toMatchObject({ saved: true, seq: 3 });
+    expect(operationsOf(hub.record(STREAM))).toHaveLength(1);
     expect(changes.map((change) => change.kind)).toEqual([
       "changed",
       "appended",

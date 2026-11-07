@@ -347,16 +347,14 @@ export function outboxOf(record: RoundRecord): {
     }));
 }
 
-// 画面が適用に使う、保存が完了した操作。
+// 画面が適用に使う操作。保存の完了前の操作を含む全項目(保存の完了では変わらない)。
 export function operationsOf(record: RoundRecord): RecordedOperation[] {
-  return record.items
-    .filter((item) => item.saved)
-    .map((item) => ({
-      operation: item.operation,
-      confirmedFields: isConfirmed(item)
-        ? (item.confirmedFields ?? null)
-        : undefined,
-    }));
+  return record.items.map((item) => ({
+    operation: item.operation,
+    confirmedFields: isConfirmed(item)
+      ? (item.confirmedFields ?? null)
+      : undefined,
+  }));
 }
 
 // この記録のメモリ上の操作を、端末の組の形にする。

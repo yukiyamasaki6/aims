@@ -7,35 +7,36 @@ import {
   undoHistory,
 } from "../domain/score-history";
 
-// 点数の書き込みの、戻す・やり直しの列。
+// 点数の書き込みの、戻す・やり直しの列。2本の列は1つの状態として持つ。
 export function useScoreHistory() {
-  const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
-  const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
+  const [history, setHistory] = useState<{
+    undoStack: HistoryEntry[];
+    redoStack: HistoryEntry[];
+  }>({ undoStack: [], redoStack: [] });
+  const { undoStack, redoStack } = history;
 
   function recordHistory(entry: HistoryEntry) {
-    const history = pushHistory({ undoStack, redoStack }, entry);
-    setUndoStack(history.undoStack);
-    setRedoStack(history.redoStack);
+    setHistory(pushHistory(history, entry));
   }
 
   // 列を進めて、戻す・やり直す書き込みを返す。列が空のときは呼ばない。
   function undo(): HistoryEntry {
-    const result = undoHistory({ undoStack, redoStack });
-    setUndoStack(result.history.undoStack);
-    setRedoStack(result.history.redoStack);
+    const result = undoHistory(history);
+    setHistory(result.history);
     return result.entry;
   }
 
   function redo(): HistoryEntry {
-    const result = redoHistory({ undoStack, redoStack });
-    setUndoStack(result.history.undoStack);
-    setRedoStack(result.history.redoStack);
+    const result = redoHistory(history);
+    setHistory(result.history);
     return result.entry;
   }
 
   function discardDistance(distanceId: string) {
-    setUndoStack((prev) => discardDistanceEntries(prev, distanceId));
-    setRedoStack((prev) => discardDistanceEntries(prev, distanceId));
+    setHistory((prev) => ({
+      undoStack: discardDistanceEntries(prev.undoStack, distanceId),
+      redoStack: discardDistanceEntries(prev.redoStack, distanceId),
+    }));
   }
 
   return {

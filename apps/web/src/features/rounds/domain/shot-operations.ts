@@ -87,32 +87,3 @@ export function replayHistoryEntry(
       : newShotPointer(entry.distanceId, entry.endNumber),
   };
 }
-
-// 画面へまだ反映されていない自分の矢の操作を、生きている矢に重ねる。
-// 空白・新しい矢・次のエンドの判定が、保存の完了を待たずに自分の追加を数えるために使う。
-export function withPendingShots(
-  shots: Shot[],
-  pending: readonly SyncOperation[],
-): Shot[] {
-  let result = shots;
-  for (const operation of pending) {
-    if (operation.type === "shot.cleared") {
-      result = result.filter((s) => s.id !== operation.shotId);
-    } else if (operation.type === "shot.recorded") {
-      const existing = result.find((s) => s.id === operation.shotId);
-      const next: Shot = {
-        shot_number: null,
-        ...existing,
-        id: operation.shotId,
-        distance_id: operation.distanceId,
-        end_number: operation.endNumber,
-        score_str: operation.scoreStr,
-        score_int: operation.scoreInt,
-      };
-      result = existing
-        ? result.map((s) => (s.id === next.id ? next : s))
-        : [...result, next];
-    }
-  }
-  return result;
-}

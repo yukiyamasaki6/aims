@@ -157,13 +157,14 @@ describe("射影", () => {
     ]);
   });
 
-  it("operationsOfは保存が完了した操作だけを返し、確定した操作には効いた項目を付ける", () => {
+  it("operationsOfは保存の完了前を含む全ての操作を返し、確定した操作には効いた項目を付ける", () => {
     // Given
     const a = op("a");
     const b = op("b");
     let record = savedRecord(a, b);
     record = applySendResults(record, ["a"], [applied(1, ["name"])]).record;
-    record = appendPending(record, op("unsaved"));
+    const unsaved = op("unsaved");
+    record = appendPending(record, unsaved);
 
     // When
     const operations = operationsOf(record);
@@ -172,6 +173,7 @@ describe("射影", () => {
     expect(operations).toEqual([
       { operation: a, confirmedFields: ["name"] },
       { operation: b, confirmedFields: undefined },
+      { operation: unsaved, confirmedFields: undefined },
     ]);
   });
 

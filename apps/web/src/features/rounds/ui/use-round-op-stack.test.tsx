@@ -104,7 +104,7 @@ describe("useRoundOpStack", () => {
     expect(result.current.state.roundConfig.name).toBe("未送信");
   });
 
-  it("操作を追記すると、保存の完了後に画面の状態へ反映する", async () => {
+  it("操作を追記すると、画面の状態へ反映する", async () => {
     // Given
     const { wrapper } = setup();
     const { result } = renderHook(
@@ -131,7 +131,7 @@ describe("useRoundOpStack", () => {
       { wrapper },
     );
     await act(async () => {
-      await result.current.append(shotRecorded());
+      await result.current.append(shotRecorded()).saved;
     });
 
     // When
