@@ -678,46 +678,6 @@ describe("保存の読み込みの待ち", () => {
   });
 });
 
-describe("利用者の切り替え", () => {
-  it("利用者を替えると、前の利用者の保留の操作を送らず、保存したまま残す", async () => {
-    // Given
-    const rig = await started({
-      reading: { status: "unauthenticated" },
-    });
-    await rig.hub.append(STREAM, shot("a"));
-    await flush();
-
-    // When
-    rig.sender.reset();
-    rig.hub.setUser("user-2");
-    await rig.hub.ready();
-    rig.signIn.reading = { status: "authenticated", userId: "user-2" };
-    rig.sender.resumeHeld();
-    await flush();
-
-    // Then
-    expect(rig.sent).toHaveLength(0);
-    expect(rig.store.rows.map((row) => [row.eventId, row.userId])).toEqual([
-      ["a", "user-1"],
-    ]);
-  });
-
-  it("サインアウトで利用者を外した後に追記された操作は、サインインした利用者で送る", async () => {
-    // Given
-    const rig = await started();
-    rig.sender.reset();
-    rig.hub.setUser(null);
-    await rig.hub.ready();
-
-    // When
-    await rig.hub.append(STREAM, shot("a"));
-    await flush();
-
-    // Then
-    expect(sentIds(rig)).toEqual([["a"]]);
-  });
-});
-
 describe("通信の可否", () => {
   it("オフラインの間は要求を始めず、onlineの知らせで送る", async () => {
     // Given
@@ -865,21 +825,6 @@ describe("送信中の印", () => {
     expect(marked(rig)).toEqual([]);
   });
 
-  it("利用者を替えるときに送信の状態を捨てると、記録を替える前に印が外れる", async () => {
-    // Given
-    const rig = await started();
-    await rig.hub.append(STREAM, shot("a"));
-    await flush();
-    const whileSending = marked(rig);
-
-    // When
-    rig.sender.reset();
-
-    // Then
-    expect(whileSending).toEqual(["a"]);
-    expect(marked(rig)).toEqual([]);
-  });
-
   it("停止すると、全ての列の印が外れる", async () => {
     // Given
     const rig = await started();
@@ -945,20 +890,6 @@ describe("止める", () => {
 
     // When
     rig.sender.stop();
-
-    // Then
-    expect(rig.clock.pendingCount()).toBe(0);
-  });
-
-  it("利用者を替えるときのresetは、送信の状態を捨て、前の送信の結果を捨てる", async () => {
-    // Given
-    const rig = await started();
-    await rig.hub.append(STREAM, shot("a"));
-    await flush();
-
-    // When
-    rig.sender.reset();
-    await respond(rig, 0, rpcFailure(500));
 
     // Then
     expect(rig.clock.pendingCount()).toBe(0);

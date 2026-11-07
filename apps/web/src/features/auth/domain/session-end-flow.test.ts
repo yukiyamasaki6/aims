@@ -131,49 +131,52 @@ describe("endSignOut", () => {
 });
 
 describe("leave", () => {
-  it("/rounds配下の画面を遷移元にすると、その場所を遷移元としてサインインへ移る", () => {
+  it("サインアウトの実行中でなければ、行き先をそのまま返す", () => {
     // Given
     const state = initialSessionEndFlow;
 
     // When
-    const result = leave(state, "/rounds/new?from=a");
-
-    // Then
-    expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew%3Ffrom%3Da");
-  });
-
-  it("保護の範囲の根(/rounds)でも、その場所を遷移元に付けてサインインへ移る", () => {
-    // Given
-    const state = initialSessionEndFlow;
-
-    // When
-    const result = leave(state, "/rounds");
+    const result = leave(state, "/signin?returnTo=%2Frounds");
 
     // Then
     expect(result).toBe("/signin?returnTo=%2Frounds");
   });
 
-  it("遷移元を明示しない(サインアウトを終えられた)ときは、遷移元を付けずにサインインへ移る", () => {
-    // Given
-    const completed = endSignOut(beginSignOut(initialSessionEndFlow).state, {
-      kind: "observed",
-      status: "unauthenticated",
-      failure: null,
-    }).state;
-
-    // When
-    const result = leave(completed, null);
-
-    // Then
-    expect(result).toBe("/signin");
-  });
-
-  it("サインアウトの実行中は、遷移元があっても移らず、状態を変えない", () => {
+  it("サインアウトの実行中は、行き先があっても返さない(状態を変えない)", () => {
     // Given
     const running = beginSignOut(initialSessionEndFlow).state;
 
     // When
-    const result = leave(running, "/rounds/new");
+    const result = leave(running, "/signin");
+
+    // Then
+    expect(result).toBeNull();
+  });
+
+  it.each([
+    ["別の利用者", "other", "/rounds/new"],
+    ["記録の利用者がいない", "unowned", "/rounds/new"],
+    ["同じ利用者", "same", null],
+  ] as const)(
+    "サインインの通知の利用者が%s(%s)のとき、行き先は%sになる",
+    (_name, match, expected) => {
+      // Given
+      const state = initialSessionEndFlow;
+
+      // When
+      const result = leave(state, "/rounds/new", match);
+
+      // Then
+      expect(result).toBe(expected);
+    },
+  );
+
+  it("サインアウトの実行中は、別の利用者でも返さない", () => {
+    // Given
+    const running = beginSignOut(initialSessionEndFlow).state;
+
+    // When
+    const result = leave(running, "/rounds/new", "other");
 
     // Then
     expect(result).toBeNull();
@@ -190,7 +193,7 @@ describe("leave", () => {
     ],
     ["破棄", { kind: "discarded" } as const],
   ])(
-    "サインアウトの%sで実行中が解かれた後は、今の場所を遷移元として移る",
+    "サインアウトの%sで実行中が解かれた後は、行き先を返す",
     (_name, observation) => {
       // Given
       const settled = endSignOut(
@@ -199,10 +202,10 @@ describe("leave", () => {
       ).state;
 
       // When
-      const result = leave(settled, "/rounds/new");
+      const result = leave(settled, "/signin");
 
       // Then
-      expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew");
+      expect(result).toBe("/signin");
     },
   );
 });

@@ -1,13 +1,17 @@
 import { lostByStatus, type SessionStatus } from "../domain/auth-change";
 import type { AuthFailure } from "../domain/auth-failure";
+import { signInHref } from "../domain/auth-routes";
 import {
   beginSignOut,
   endSignOut,
   initialSessionEndFlow,
   leave,
+  type UserMatch,
 } from "../domain/session-end-flow";
 import type { SignInChanges } from "./auth-changes";
 import { type CallResult, failureOf } from "./call-result";
+import type { IdentityReader } from "./identity-reader";
+import type { IdentityWriter } from "./local-identity";
 import type { ViewLifetime } from "./screen-view";
 
 // サインインの状態の読み取り結果。認証済みのときだけ、利用者のIDを持つ。
@@ -33,12 +37,17 @@ export type SessionAuthenticator = SignInChanges &
     signOutHere(): Promise<CallResult>;
   };
 
-// ページ全体を読み込んで、今の場所をサインインに置き換える遷移。履歴を残さず、前の利用者の画面の状態とクライアントのキャッシュを捨てる。
+// ページ全体を読み込んで、今の場所を置き換える遷移。履歴を残さず、前の利用者の画面の状態とクライアントのキャッシュを捨てる。
 // 例外: 投げない。
 export type PageReplace = {
   // 今の場所(パスとクエリ)。
   here(): string;
   replace(path: string): void;
+};
+
+// 記録の利用者(この文書の間、変わらない)との照合。持ち主は他の機能(ラウンドの記録)で、入口が渡す。
+type RecordUser = {
+  matchUser(userId: string): UserMatch;
 };
 
 // サインアウトの結果。画面が区別するのは、失敗(理由を示して再試行できる)とそれ以外だけである。
@@ -50,21 +59,26 @@ export type SignOutResult =
 type Dependencies = {
   authenticator: SessionAuthenticator;
   pageReplace: PageReplace;
+  recordUser: RecordUser;
+  identity: IdentityReader & IdentityWriter;
 };
 
 export type Session = {
   // サインアウトを始める。実行中の判定は集約が持ち、実行中に呼ぶと何もしない(ignored)。終えられたら、遷移元を付けずにサインインへ移す。
   signOut(view: ViewLifetime): Promise<SignOutResult>;
-  // セッションの喪失を見張り、失ったらサインインへ移す。見張りをやめる関数を返す。
+  // セッションの喪失と、記録の利用者と違う利用者のサインインを見張る。失ったらサインインへ、違う利用者なら今の場所へ、ページ全体を置き換える。見張りをやめる関数を返す。
   watch(): () => void;
 };
 
 // サインアウトは、この端末のサインインの終了を頼んだ後、サインインの状態を読み、未認証なら終えられたとしてサインインへ移す。
 // セッションの喪失(サインアウトの通知、更新の拒否、確認の結果の未認証)は見張りが検知して移す。サインアウトの実行中の喪失は、サインアウトの判定に委ねる。
+// サインインの通知の利用者が記録の利用者と違うとき(起動時の復元の不一致、別の利用者のサインイン)は、新しい利用者を端末の識別情報へ書き、今の場所を読み込み直す。新しい文書は、その利用者の記録で起動する。
 // 実行中の状態(SessionEndFlow)は、この手続きが1つ持ち、サインアウトと見張りの両方が使う。
 export function createSession({
   authenticator,
   pageReplace,
+  recordUser,
+  identity,
 }: Dependencies): Session {
   let flow = initialSessionEndFlow;
 
@@ -82,19 +96,33 @@ export function createSession({
         : { kind: "discarded" },
     );
     flow = ended.state;
-    if (ended.result.kind === "completed") go(null);
+    if (ended.result.kind === "completed") go(signInHref(null));
     return ended.result.kind === "failed"
       ? { kind: "failed", failure: ended.result.failure }
       : { kind: "ignored" };
   }
 
-  function go(from: string | null) {
-    const destination = leave(flow, from);
-    if (destination !== null) pageReplace.replace(destination);
+  function go(destination: string) {
+    const target = leave(flow, destination);
+    if (target !== null) pageReplace.replace(target);
   }
 
   function lose() {
-    go(pageReplace.here());
+    go(signInHref(pageReplace.here()));
+  }
+
+  // 記録の利用者と違う利用者のサインインは、今の場所を読み込み直す。
+  // 先に識別情報へ書いて読み戻し、一致しないとき(保存先が使えない環境)は、読み込み直しを繰り返さないために置き換えない。
+  function reloadFor(userId: string) {
+    const target = leave(
+      flow,
+      pageReplace.here(),
+      recordUser.matchUser(userId),
+    );
+    if (target === null) return;
+    identity.write(userId);
+    if (identity.read() !== userId) return;
+    pageReplace.replace(target);
   }
 
   // 起動時に1回、サインインの状態を確かめる。保存先が空の起動ではサインアウトの通知が来ないため、これが要る。
@@ -110,6 +138,7 @@ export function createSession({
 
     const unsubscribe = authenticator.subscribe((change) => {
       if (change.kind === "signed-out") lose();
+      else if (change.kind === "signed-in") reloadFor(change.userId);
     });
     void check();
 

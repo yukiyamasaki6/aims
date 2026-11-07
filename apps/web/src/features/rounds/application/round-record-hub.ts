@@ -53,7 +53,7 @@ export function createRoundRecordHub(deps: {
   const { store } = deps;
   let userId: string | null = null;
   let started = false;
-  // 起動、停止、利用者の変更のたびに進める。古い読み込みの結果を捨てるため。
+  // 起動、停止のたびに進める。古い読み込みの結果を捨てるため。
   let epoch = 0;
   // `reloadAll`が終わった世代。`ready`の判定に使う。
   let loadedEpoch = -1;
@@ -63,7 +63,7 @@ export function createRoundRecordHub(deps: {
   const diverged = new Set<string>();
   // 保存の途中の`append`。`whenPersisted`が終わりを待つ。
   const persisting = new Set<Promise<void>>();
-  // このタブで保存の書き込みに失敗した列。一覧の材料をメモリから作る。解除せず、停止と利用者の切り替えで空になる。
+  // このタブで保存の書き込みに失敗した列。一覧の材料をメモリから作る。解除せず、停止で空になる。
   const writeFailed = new Set<string>();
 
   function markWriteFailed(streamId: string, target: number) {
@@ -159,7 +159,7 @@ export function createRoundRecordHub(deps: {
         () => undefined,
       )
       .then((seq) => {
-        // 保存の間に利用者が替わったときは、現在の記録に触れない(保存先の書き込みは旧利用者のものとして完了している)。
+        // 保存の間に停止されたときは、現在の記録に触れない(保存先の書き込みは完了している)。
         if (epoch !== target) return;
         if (seq === undefined) markWriteFailed(streamId, target);
         // 画面へは、保存が完了した操作から反映する(保存の完了前の離脱で、見えた操作を失わないため)。
@@ -200,7 +200,7 @@ export function createRoundRecordHub(deps: {
         markWriteFailed(streamId, target);
       }
     }
-    // 保存の間に利用者が替わったときは、旧利用者の組を現在の記録へ取り込まず、結果にも使わせない(保存先の書き込みは旧利用者のものとして完了している)。
+    // 保存の間に停止されたときは、その組を現在の記録へ取り込まず、結果にも使わせない(保存先の書き込みは完了している)。
     if (epoch !== target) return { base: undefined, entries: [] };
     if (group) {
       adopt(streamId, group, { readAt, fetched: incoming });
@@ -251,14 +251,6 @@ export function createRoundRecordHub(deps: {
     return all;
   }
 
-  function discardRecords() {
-    const streamIds = [...records.keys()];
-    records = new Map();
-    diverged.clear();
-    writeFailed.clear();
-    return streamIds;
-  }
-
   return {
     // 2回目以降は何もしない。
     start(initialUserId: string | null) {
@@ -269,24 +261,17 @@ export function createRoundRecordHub(deps: {
       void reloadAll();
     },
     stop() {
-      discardRecords();
+      records = new Map();
+      diverged.clear();
+      writeFailed.clear();
       epoch += 1;
       started = false;
     },
-    // 利用者を替える。記録を捨てて、新しい利用者の記録を読み直す。
-    setUser(nextUserId: string | null) {
-      if (nextUserId === userId) return;
-      const streamIds = discardRecords();
-      epoch += 1;
-      userId = nextUserId;
-      for (const streamId of streamIds) emit(streamId, "changed");
-      if (started) void reloadAll();
-    },
     userId: () => userId,
-    // 現在の世代の読み込みが終わる(失敗を含む)まで解決しない。`start`前、`setUser`と`stop`の後は次の読み込みの完了まで待つ。
+    // 現在の世代の読み込みが終わる(失敗を含む)まで解決しない。`start`前と`stop`の後は次の読み込みの完了まで待つ。
     ready,
     // 現在の利用者の列の組を、保存先から返す。読み込みの完了後に読み、失敗は投げる。
-    // 読み込みの間に利用者が替わったときは、その結果を返さず、現在の利用者で読み直す。
+    // 読み込みの間に停止・起動をまたいだときは、その結果を返さず、読み直す。
     async read(streamId: string): Promise<RoundStoreGroup> {
       for (;;) {
         await ready();
@@ -304,11 +289,11 @@ export function createRoundRecordHub(deps: {
         if (epoch === target) return all;
       }
     },
-    // 利用者の切り替えと停止のたびに進む世代。非同期の処理が、開始時の世代と完了時を比べるために使う。
+    // 起動と停止のたびに進む世代。非同期の処理が、開始時の世代と完了時を比べるために使う。
     generation: (): number => epoch,
     // 一覧の材料。読み込みの完了後に、現在の利用者の全ての列のベースと操作を返す。
     // 端末の保存を基準にし、このタブで保存の書き込みに失敗した列だけメモリの記録から作る。保存の読み込みに失敗したときは、全ての列をメモリから作る。
-    // 読み込みの間に利用者が替わったときは、現在の利用者で読み直す。
+    // 読み込みの間に停止・起動をまたいだときは、読み直す。
     async readList(): Promise<Map<string, HubSnapshot>> {
       for (;;) {
         await ready();
@@ -347,7 +332,7 @@ export function createRoundRecordHub(deps: {
       results: readonly (RecordSendResult & { revision: number | null })[],
       generation: number = epoch,
     ): { diverged: boolean } {
-      // 送信の間に利用者が替わったときは、現在の記録に触れず、保存先の確定だけを書く。
+      // 送信の間に停止されたときは、現在の記録に触れず、保存先の確定だけを書く。
       const current = generation === epoch;
       const applied = applySendResults(
         current ? record(streamId) : EMPTY_RECORD,

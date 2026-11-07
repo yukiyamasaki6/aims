@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { waitForTurnstileToken } from "./turnstile";
@@ -70,6 +70,25 @@ export async function createConfirmedUser(input: {
   }
 }
 
+// サインインを押し、一覧へ移った後のページ全体の読み込み直しを待つ。
+// 記録の利用者がいない端末や別の利用者のサインインは、一覧(`(main)`)が開いた後に文書を読み込み直す。直後の操作(page.gotoなど)と競合しないよう、文書が替わる(押す前に付けた印が消える)まで待つ。
+// 読み込み直しが起きなければ、待ちが期限で失敗する(退行を検出する)。記録の利用者と同じ利用者で入り直すとき(識別情報が残る端末)は、reloadsをfalseにして待たない。
+export async function clickSignInAndAwaitReload(
+  page: Page,
+  signInButton: Locator,
+  { reloads = true }: { reloads?: boolean } = {},
+): Promise<void> {
+  await page.evaluate(() => {
+    (window as unknown as Record<string, boolean>).signedInDocument = true;
+  });
+  await signInButton.click();
+  await expect(page).toHaveURL(/\/rounds/);
+  if (!reloads) return;
+  await page.waitForFunction(() => !("signedInDocument" in window), undefined, {
+    timeout: 10_000,
+  });
+}
+
 export async function signUpAndSignIn(
   page: Page,
   input: { email: string; password: string },
@@ -86,6 +105,5 @@ export async function signUpAndSignIn(
     name: authText("signInSubmit"),
   });
   await waitForTurnstileToken(page, 1);
-  await signInButton.click();
-  await expect(page).toHaveURL(/\/rounds/);
+  await clickSignInAndAwaitReload(page, signInButton);
 }

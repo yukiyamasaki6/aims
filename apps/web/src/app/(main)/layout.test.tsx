@@ -1,10 +1,17 @@
 import { AuthApiError } from "@supabase/supabase-js";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { type ReactNode, useState } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createSession } from "@/features/auth/application/session";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
+import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { SessionProvider } from "@/features/auth/ui/session-context";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import { ROUNDS_PATH } from "@/routes";
 import { RootClientEntry } from "../root-client-entry";
 import MainLayout from "./layout";
@@ -101,12 +108,29 @@ async function confirmSignOut(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId("confirm-dialog-confirm"));
 }
 
+// 入口が渡すセッションの手続きを、実物で組み立てて渡す(識別情報の記録は含まない)。
+function SessionWrapper({ children }: { children: ReactNode }) {
+  const [session] = useState(() =>
+    createSession({
+      authenticator: createSupabaseAuth(createClient),
+      pageReplace: createBrowserPageLoad(),
+      recordUser: { matchUser: () => "same" },
+      identity: createBrowserIdentityStore(),
+    }),
+  );
+  return (
+    <IntlTestProvider>
+      <SessionProvider session={session}>{children}</SessionProvider>
+    </IntlTestProvider>
+  );
+}
+
 function renderLayout() {
   return render(
     <MainLayout>
       <p>子要素</p>
     </MainLayout>,
-    { wrapper: IntlTestProvider },
+    { wrapper: SessionWrapper },
   );
 }
 
@@ -187,11 +211,11 @@ describe("MainLayout", () => {
       // When
       const render = () =>
         renderToString(
-          <IntlTestProvider>
+          <SessionWrapper>
             <MainLayout>
               <p>子要素</p>
             </MainLayout>
-          </IntlTestProvider>,
+          </SessionWrapper>,
         );
 
       // Then
@@ -305,6 +329,33 @@ describe("MainLayout", () => {
       expect(replace).toHaveBeenCalledExactlyOnceWith(
         "/signin?returnTo=%2Frounds%2Fnew",
       );
+    });
+
+    // 実物の入口(記録の起動、識別情報の記録、見張りの結線)を通す。見張りの購読が記録の起動より先に登録されても、起動時の通知は非同期で届くため記録の利用者が確定していることを固定する。
+    it("識別情報が別の利用者のまま、起動時の復元の通知(INITIAL_SESSION)が来ると、今の場所を1回置き換え、識別情報を通知の利用者にする", async () => {
+      // Given
+      renderLayoutWithIdentity();
+      await flush();
+
+      // When
+      act(() => supabase.emit("INITIAL_SESSION", { user: { id: "user-2" } }));
+
+      // Then
+      expect(replace).toHaveBeenCalledExactlyOnceWith("/rounds/new");
+      expect(localStorage.getItem(IDENTITY_KEY)).toBe("user-2");
+    });
+
+    it("識別情報が同じ利用者なら、起動時の復元の通知が来ても、置き換えない", async () => {
+      // Given
+      renderLayoutWithIdentity();
+      await flush();
+
+      // When
+      act(() => supabase.emit("INITIAL_SESSION", { user: { id: "user-1" } }));
+
+      // Then
+      expect(replace).not.toHaveBeenCalled();
+      expect(localStorage.getItem(IDENTITY_KEY)).toBe("user-1");
     });
 
     it("離れた後にsigned-outが来ても、移らない", async () => {

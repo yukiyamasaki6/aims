@@ -30,13 +30,13 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 - `src/lib/supabase/infrastructure/session.ts`(共有の技術の実装): `updateSession` が要求ごとにセッションを更新し、`getClaims`(端末内でトークンの署名と期限を検証する)でサインインしているかと、更新したcookieを書いた応答を返す。経路の規則は持たない。規則は認証の機能の `redirectFor` が持ち、`proxy.ts` が呼ぶ。
   - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
   - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds` へリダイレクトする。`/signin` は有効な遷移元があればそこへ送る（`auth/signin`）。
-- `src/features/auth/application/session.ts` の手続き`createSession`の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、マウント時の`unauthenticated`）と、`/signin`への遷移（`replace`。今の場所を遷移元に付ける）を持つ。確かめた結果の喪失の定義(`lostByStatus`)は`domain/auth-change.ts`、遷移の規則（遷移元、サインアウトの実行中は移らない）は`domain/session-end-flow.ts`。`(main)`のレイアウトが、手続きと実装を生成して見張りを始める。
+- `src/features/auth/application/session.ts` の手続き`createSession`の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、マウント時の`unauthenticated`）と、`/signin`への遷移（`replace`。今の場所を遷移元に付ける）、記録の利用者と違う利用者のサインインの検知と今の場所の読み込み直しを持つ。確かめた結果の喪失の定義(`lostByStatus`)は`domain/auth-change.ts`、遷移の規則（遷移元、サインアウトの実行中は移らない）は`domain/session-end-flow.ts`。手続きと実装はルートの入口(`app/root-client-entry.tsx`)がアプリで1つ生成し、`SessionProvider`で渡す。`(main)`のレイアウトは`useSession`で受け取り、見張りを始める。
 - `src/app/page.tsx`(画面の入口): 静的な紹介画面の入口。紹介画面を描くだけで、開始の行き先は渡さない。
 - `src/features/navigation/ui/intro-screen.tsx`(UI層): 紹介画面。アプリ名、説明文、左上のロゴ、開始ボタンを表示する。
 - `src/features/navigation/ui/start-button.tsx`(UI層): 開始ボタン。経路表(`src/routes.ts`)の `SIGN_UP_PATH` へのリンクで、状態を持たない。
 - `src/features/navigation/ui/navigation-messages.ts`(UI層): 紹介画面と左パネルの文言の一覧(名前空間`navigation`)。部品は`useTranslations("navigation")`で文言を得る。
 - 遷移の約束(アプリ全体): ナビゲーションの機能は遷移の約束を持たない。開始の行き先は、経路表の `SIGN_UP_PATH` へ、`start-button.tsx` のリンクで遷移する。ルーターで進む遷移は共有の技術の `PageNavigation`(`src/lib/page-navigation/contract/page-navigation.ts`。認証のサインイン、サインアップとラウンドの開始、完了、削除して離れるが使う)、ページ全体の読み込みの遷移は認証の `PageLoad`、`PageReplace`、遷移元の読み出しは認証の `ReturnToReader` である。
-- `src/app/(main)/layout.tsx`(画面の入口): 認証が要る画面の集合の枠。セッションの手続きと実装を生成して見張りを始め、レフトパネルと、サインアウトの部品(`features/auth/ui/sign-out-button.tsx`)を描く。
+- `src/app/(main)/layout.tsx`(画面の入口): 認証が要る画面の集合の枠。入口が渡すセッションの手続きを`useSession`で受け取って見張りを始め、レフトパネルと、サインアウトの部品(`features/auth/ui/sign-out-button.tsx`)を描く。
 - `src/components/app-logo.tsx`(共有の画面部品)が、認証画面・`/`・`/offline` の左上のロゴである。ロゴの行き先は、経路表(`src/routes.ts`)の `HOME_PATH`(`/`)で、`left-panel.tsx` のロゴも同じである。
 - `src/components/logo-image.tsx`(共有の画面部品)が、文字付きロゴの画像（`public/logo.svg`）を表示する。代替テキスト「AIMS」がロゴのリンクの名前になる。`app-logo.tsx` と `left-panel.tsx` が使う。
 - `public/logo.svg` は、`scripts/generate-icon.mjs` が、マークと同じ値と、`geist` のGeist SansのBoldの字形から生成する。文字は図形にし、フォントを参照しない。READMEの冒頭も同じファイルを表示する。
@@ -52,7 +52,7 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 | 入口のガードを `proxy.ts`、表示中の喪失の検知を `(main)` のレイアウトが始める見張りに分ける | `proxy.ts` はリクエスト時しか働かず、サインアウト・更新拒否・SWの枠を検知できないため。 | ガードを1か所にできる方式が出たとき。 |
 | 喪失を `SIGNED_OUT` と、マウント時の `readSession` の未認証（保存先が空、またはサーバーの拒否が確定）に限る | `INITIAL_SESSION` のnullと `AuthRetryableFetchError` は通信失敗でも起き、入力中の画面を誤って遷移させるため使わない。 | supabase-jsのイベントの意味が変わったとき。 |
 | 喪失の見張りを`(main)`のレイアウトが始める | 認証が要る画面の集合をルートグループで表し、除外リストを持たないため。`/offline` はSWが元のURLのまま返すため、パスでの除外は画面と食い違う。 | `(main)` の外に認証が要る画面を置くとき。 |
-| `window.location.replace` で遷移する | 前の利用者の画面の状態とRouter Cacheを捨てるため。`router.push` は捨てられないため採らない。 | Router Cacheを明示的に消せるようになったとき。 |
+| `window.location.replace` で遷移する | 前の利用者の画面の状態とRouter Cacheを捨てるため。`router.push` は捨てられないため採らない。サインアウトの完了、セッションの喪失に加え、記録の利用者と違う利用者のサインイン(利用者の切り替え)の読み込み直しも、同じ部品(`createBrowserPageLoad`)で行う。 | Router Cacheを明示的に消せるようになったとき。 |
 | 文字付きロゴは、文字を図形にしたSVGの画像で表示し、HTMLの文字で組まない | 表示する環境のフォントによらず同じ形にし、READMEと同じ画像にするため。マークだけを別の生成で作ると、マークを変えたときにロゴのマークが古い形で残るため、アイコンと同じスクリプトと値で作る。 | ダークモードを入れるとき。マークを別の方法で作るとき。 |
 | 文字付きロゴに白い丸角の地を付け、明るい表示用の1種類にする | GitHubの暗い表示で黒い絵柄が見えなくならないため。アプリは白地なので地は見えない。暗い表示用の画像を分けると、画面とREADMEで同じ画像でなくなるため採らない。 | ダークモードを入れるとき。 |
 | AIMSロゴ・リンクの遷移先を全画面で `/` にする | 認証画面を含め、どの画面からもアプリの入口へ戻れるようにするため。`/rounds` へは個人リンクと開始ボタンで移る。 | ロゴに別の役割を持たせるとき。 |

@@ -31,18 +31,18 @@
 機能は2つで、依存は同期からラウンドの一方向である(ラウンドは同期を知らない)。パスは`apps/web/src/`からの相対で示す。
 
 - ラウンド(`features/rounds/`): 業務の規則、端末の記録、画面に渡す正しい状態と変更の方法、送信の機構(送信器、列ごとの送信の状態、送れる要求の計画、失敗の分類、操作の送信と確定の記録)、ベースの取得と反映を持つ。
-- 同期(`features/round-sync/`): 契機を受けて、いつ取り直すかを決める唯一の手続きと、契機の受け取りを持つ。他の機能へ公開する名前が無いため、入口を置かない。ラウンドの入口が公開する記録の制御`RoundRecordControl`(4操作: `start`、`stop`、`matchUser`、`signInChanged`)と、取り直しの制御`RoundRefreshControl`(5操作: `refreshNeeds`、`onRefreshNeeds`、`refreshAll`、`refreshRound`、`reset`)の、平らな操作だけを使う。送信の内部の概念(送信の待ち、保留、リトライ待機、衝突、lane、失敗の分類)は境界を越えない。サインインの変化への反応(利用者の切り替え、保留の再開)と、通信の回復での再送は、ラウンドが決める。
+- 同期(`features/round-sync/`): 契機を受けて、いつ取り直すかを決める唯一の手続きと、契機の受け取りを持つ。他の機能へ公開する名前が無いため、入口を置かない。ラウンドの入口が公開する記録の制御`RoundRecordControl`(4操作: `start`、`stop`、`matchUser`、`signInChanged`)と、取り直しの制御`RoundRefreshControl`(5操作: `refreshNeeds`、`onRefreshNeeds`、`refreshAll`、`refreshRound`、`reset`)の、平らな操作だけを使う。送信の内部の概念(送信の待ち、保留、リトライ待機、衝突、lane、失敗の分類)は境界を越えない。サインインの変化への反応(保留の再開)と、通信の回復での再送は、ラウンドが決める。利用者の切り替えはラウンドが行わず、認証の見張りが記録の利用者(`matchUser`)との不一致でページ全体を読み込み直す。
 - 画面は、画面ごとの文脈から受け取る状態と変更の方法(一覧は`RoundsListStore`、作成は`NewRoundStore`、詳細は`RoundDetailStore`)だけを使う。共通の構造は[`rounds/design.md`](../design.md)に従う。取得の状態(読み込み中、オフライン、見つからない、エラー)は、画面に渡す見え方の型に持たせる。画面は「開いた」「もう一度読む」を依頼するだけで、取得と反映の時点は同期が決める。
 - パッケージ: 画面は`react`、端末の保存は`idb`(`lib/local-op-log/`だけ)、データベースは`@supabase/supabase-js`(機能では認証のインフラ層だけ。他は`lib/supabase/`)を使う。ラウンドと同期は、非画面のパッケージを直接参照しない。
 
 | ファイル | 用語 | 内容 |
 | :--- | :--- | :--- |
 | `app/layout.tsx` | アプリの起動地点 | ルートレイアウト。`<RootClientEntry>`で`SerwistProvider`と`children`を包む |
-| `app/root-client-entry.tsx` | アプリの起動地点(クライアントの処理の部分) | 部品を`useState`の初期化で1度だけ生成して結び、効果で識別情報の記録と契機の手続きを始める。3つの窓口をそれぞれの文脈(`RoundsListStoreProvider`、`NewRoundStoreProvider`、`RoundDetailStoreProvider`)で画面へ渡し、`RoundBaseRefresher`と`SwUpdateActivator`(`features/offline-pwa/ui`。更新の切り替えの手続きを受ける)を描き、効果で更新の切り替えの手続きも始める |
+| `app/root-client-entry.tsx` | アプリの起動地点(クライアントの処理の部分) | 部品を`useState`の初期化で1度だけ生成して結び、効果で識別情報の記録と契機の手続きを始める。3つの窓口をそれぞれの文脈(`RoundsListStoreProvider`、`NewRoundStoreProvider`、`RoundDetailStoreProvider`)で画面へ渡し、セッションの手続き(`createSession`。記録の制御を記録の利用者の照合に、識別情報の記録を書き込みに受ける)を`SessionProvider`(`features/auth/ui`)で渡し、`RoundBaseRefresher`と`SwUpdateActivator`(`features/offline-pwa/ui`。更新の切り替えの手続きを受ける)を描き、効果で更新の切り替えの手続きも始める |
 | `features/rounds/domain/sync-events.ts` | ドメイン層(出来事) | 操作の型。操作はクライアント生成のイベントIDを持つ。`round.updated`と`distance.updated`は、変えた項目だけの差分(`changes`)を持つ。矢の操作(`shot.recorded`・`shot.cleared`)は矢のID(`shotId`)で矢を指し、`shot.recorded`の射手(`shooterId`)と射順(`shotNumber`)は、変えるときだけ持つ。列の削除の有無`hasRoundDeletion`と、列のID(`round:<roundId>`)の変換 |
 | `features/rounds/domain/round-op-conflicts.ts` | ドメイン層(ドメインサービス) | 操作の衝突の表と、並べる単位(lane)・送る単位の上限。矢の操作どうしは、同じ矢(`shotId`)か同じエンドなら衝突とする |
 | `features/rounds/domain/round-record.ts` | ドメイン層(集約) | 1つのラウンドの端末の記録(ベース、操作の列、外した操作、保存の目印、送信中の印)を、変更しない値と関数にしたもの。取り込み(新しい方のベース、共有の組のベースを取ったときだけ組から無くなった確定済みの操作を外す)、確定の反映、効かなかった操作の除去 |
-| `features/rounds/domain/record-user.ts` | ドメイン層(ドメインサービス) | 記録の利用者の照合`matchRecordUser`(`same`、`other`、`unowned`。送る前、常駐の一括の取得の前段、取得の反映が使う)と、サインインの変化への反応`reactionToSignIn`(同じ利用者なら保留を再開、別の利用者か`unowned`なら利用者を切り替え、サインアウトなら利用者を無くす) |
+| `features/rounds/domain/record-user.ts` | ドメイン層(ドメインサービス) | 記録の利用者の照合`matchRecordUser`(`same`、`other`、`unowned`。送る前、常駐の一括の取得の前段、取得の反映が使う)。記録の利用者は文書の間、変わらない |
 | `features/rounds/domain/round-base.ts`、`round-tables.ts` | ドメイン層(値オブジェクト) | 端末に持つベースの記録(`RoundBaseRecord`。サーバーの状態と対象ごとの`revision`)と、反映済みの判定`reflectsBase`(確定の`revision`と取得の`revision`の比較1つ。効かなかった操作は反映済み、削除の印には確定済みの操作がすべて反映済み)・ベースの新旧`isOlderBase`。サーバーのテーブルの行の形(`RoundTables`。行は削除済みの印`disabled`を持つ)と、画面の状態(`RoundState`)を導く`selectRoundState`、取得した行を表示の状態に直す`fromServerRound` |
 | `features/rounds/domain/round-op-apply.ts`、`round-retention.ts` | ドメイン層(ドメインサービス) | 基準のテーブルへ操作を重ねる`applyOperations(base, 操作, 的)`。操作ごとの処理は、サーバーの対応するRPCと同じ判定の順序にする。未確定の操作は、サーバーと同じ規則で項目ごとに判定し、確定済みの操作はサーバーが効かせた項目だけを重ねる。構成の変更は矢を取り除かない(サーバーと同じ)。生きている矢を増やす記録(新しい矢、復活)は、確定の有無によらずエンドに空きがあるときだけ重ね、確定済みで重ねられなかったときは取り直す。射順(`shot_number`)が同じエンドの他の生きている矢と重なる項目は重ねず、復活で重なるときは射順をnullにして重ねる。端末に保持するかの規則(`isRoundInProgress`、`shouldKeepRoundBase`、`keepsRoundBase`、`isRetainedForRefresh`) |
 | `features/rounds/domain/round-opening.ts` | ドメイン層(ドメインサービス) | 詳細を開くときの判断(`openPlan`、`localOpening`)。詳細の窓口が使う |
@@ -86,7 +86,7 @@
 | 契機 | 反応 |
 | :--- | :--- |
 | 開始 | `sync.start(端末の識別情報の利用者)` |
-| サインインの変化(終了を含む) | `sync.signInChanged(change)`。ラウンドの`reactionToSignIn`が反応を決める。サインアウトは利用者を無くす。利用者の無い変化と判断できない変化は何もしない。照合が`same`なら保留を再開、`other`と`unowned`(記録の利用者がnull)なら利用者を切り替える |
+| サインインの変化(終了を含む) | `sync.signInChanged(change)`。利用者のある変化は保留した送信を戻し(別の利用者の送信は送信器の照合が保留のままにする)、サインアウトでは何もしない。利用者の無い変化と判断できない変化は何もしない。記録の利用者と違う利用者のサインインは、`(main)`の間は認証の見張りが識別情報を書いて今の場所を読み込み直し、新しい文書がその利用者の記録で起動する |
 | サインインした、開いたときの確認(利用者あり) | 上に加えて`sync.refreshAll("resident")` |
 | 通信の復帰 | `sync.online()`(常駐の取得と取り直しの再開)。送信器は通信の回復を自分で購読し、リトライ待機の要求をすぐに再送する(送信器の購読は同期の契機の受け取りより先に登録され、再送が先に動く) |
 | 通信の切断、画面が見える状態 | `sync.offline()`、`sync.visible()` |

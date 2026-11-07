@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
+  clickSignInAndAwaitReload,
   createConfirmedUser,
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
@@ -140,9 +141,11 @@ function uniqueName(label: string) {
   return `${label}-${randomUUID().slice(0, 8)}`;
 }
 
+// reloadsは、サインインの後にページ全体を読み込み直すか(端末の識別情報が同じ利用者のときは読み込み直さない)。
 async function signInOnPage(
   page: Page,
   user: { email: string; password: string },
+  options: { reloads?: boolean } = {},
 ) {
   await page.getByPlaceholder("you@example.com").fill(user.email);
   await page
@@ -152,7 +155,7 @@ async function signInOnPage(
     name: authText("signInSubmit"),
   });
   await waitForTurnstileToken(page, 1);
-  await signInButton.click();
+  await clickSignInAndAwaitReload(page, signInButton, options);
 }
 
 async function signOutOnPage(page: Page) {

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import {
+  clickSignInAndAwaitReload,
   createConfirmedUser,
   SHARED_AUTH_STATE_PATH,
   signUpAndSignIn,
@@ -135,8 +136,7 @@ test("メールで本人確認してパスワードを変更すると、この�
     name: authText("signInSubmit"),
   });
   await waitForTurnstileToken(page, 1);
-  await signInButton.click();
-  await expect(page).toHaveURL(/\/rounds/);
+  await clickSignInAndAwaitReload(page, signInButton);
   await expect(
     page.getByRole("button", { name: authText("signOut") }),
   ).toBeVisible();

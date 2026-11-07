@@ -346,7 +346,7 @@ export function createRoundSync(deps: {
       control.stop();
       refresh.reset();
     },
-    // サインインの変化を、記録の制御へ渡す。反応(利用者の切り替え、保留の再開)はラウンドが決める。
+    // サインインの変化を、記録の制御へ渡す。反応(保留の再開)はラウンドが決める。
     signInChanged(change: SignInChange) {
       control.signInChanged(change);
     },
