@@ -25,12 +25,12 @@
 - `src/app/(main)/layout.tsx`: 画面の入口。入口から`useSession`でセッションの手続きを受け取り、喪失と利用者の不一致の見張りを始め、左パネルへサインアウトの部品を渡す。接続を作る関数`createClient`は渡すだけで、描画時には呼ばない。
 - `src/features/auth/ui/sign-out-button.tsx`: サインアウトのボタンと確認ダイアログ。実行中の表示とエラーを持ち、手続きの`signOut`を呼ぶ。結果は失敗(`failed`)とそれ以外(`ignored`。完了、実行中のため始めなかった、離れて破棄した)だけで、失敗のときだけ実行中を解いて失敗の種類の文言(UI層の文言の一覧)を示す。完了しても状態を変えず、遷移で画面ごと捨てられるまで実行中の表示を保つ。画面が表示中かを`isMounted`として渡す。
 - `src/components/ui/confirm-dialog.tsx`: `BlockingConfirmDialog`。`busy`と`error`を外から受け取る表現だけの部品で、実行中は閉じず、ボタンを無効にして表示する。二重実行の拒否は呼び出し側が行う（サインアウトは集約、プリセット削除は削除側のフック）。`rounds/delete`と共通である。
-- `src/features/auth/application/session.ts`: 手続き。`signOut`（実行中なら何もせず`ignored`、認証サービスに頼む、サインインの状態を読む、離脱を確かめる、判定する、終えられたら遷移する）と、`watch`（喪失の検知と遷移、記録の利用者と違う利用者のサインインの検知と読み込み直し）の順序を持つ。不一致のときは、新しい利用者を端末の識別情報へ書き、読み戻せたときだけ今の場所を読み込み直す。記録の利用者の照合(`RecordUser`)と識別情報の書き込みは、入口が注入する。集約の現在の値を持ち、サインインの状態の読み取りとページ遷移の約束を宣言する。
+- `src/features/auth/application/session.ts`: 手続き。`signOut`（実行中なら何もせず`ignored`、認証サービスに頼む、サインインの状態を読む、離脱を確かめる、判定する、終えられたら遷移する）と、`watch`（喪失の検知と遷移、記録の利用者と違う利用者のサインインの検知と読み込み直し）の順序を持つ。不一致のときは、新しい利用者を端末の識別情報へ書き、読み戻せたときだけ今の場所を読み込み直す。記録の利用者の照合(`RecordUser`)と識別情報の書き込みは、入口が注入する。集約の現在の値を持ち、サインインの状態の読み取りを宣言する(ページ全体の置き換えの約束`PageReplace`は`page-replace.ts`)。見張りの読み込み直しは、サインイン・サインアップの完了が置き換えで済むようになっても残る。起動時の復元での食い違い、確認コードの検証だけで中断した後の`(main)`への移動、別のタブや再表示で届くサインインは、`(main)`の初回の通知でしか検知できないためである。
 - `src/features/auth/ui/session-context.tsx`: `SessionProvider`と`useSession`。入口(`src/app/root-client-entry.tsx`)がアプリで1つ生成したセッションの手続きを、認証が要る画面の集合(`(main)`のレイアウト)とサインアウトの部品へ渡す。
 - `src/features/auth/domain/session-end-flow.ts`: 集約。実行中の判定、終えられたかの判定（呼び出しの後の未認証。喪失の定義と同じ）、置き換える先を返す`leave`（実行中は置き換えない、通知の利用者が記録の利用者と同じなら置き換えない）、遷移は1回、行き先を守る。
 - `src/features/auth/domain/auth-change.ts`: サインインの状態の分類と、確かめた結果の喪失の定義。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装（`docs/features/auth/design.md`）。この端末のサインアウト（範囲`local`）、サインインの状態の読み取り、認証状態の変化の購読を含む。接続は、渡された関数で使うたびに取得する。
-- `src/features/auth/infrastructure/browser-page-load.ts`: ページ全体の読み込みと置き換え、今の場所の読み出し。サインアウトの完了、喪失、利用者の不一致の3つの置き換えが同じ部品を使う。
+- `src/features/auth/infrastructure/browser-page-load.ts`: ページ全体の読み込みと置き換え、今の場所の読み出し。サインアウトの完了、喪失、利用者の不一致の3つの置き換えと、サインイン・サインアップの入口(完了の置き換え)が同じ部品を使う。
 - `src/features/auth/application/local-identity.ts`、`src/features/auth/application/identity-reader.ts`、`src/app/root-client-entry.tsx`、`src/features/auth/infrastructure/browser-identity-store.ts`: 端末の識別情報の記録と読み出し。ルートのクライアントの入口が保存先と認証の実装を1度だけ生成し、記録を始め、認証状態の変化に追従する。読み出しは他の機能（ラウンドの参照データ、同期の開始）が入口から`IdentityReader`の型で受け取って使い、サインアウトの判定には使わない。
 
 契約は次のとおりである。

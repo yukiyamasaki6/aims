@@ -1,7 +1,7 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { destinationOf } from "../domain/auth-routes";
+import type { PageReplace } from "./page-replace";
 import {
   applyPassword,
   type PasswordSetup,
@@ -15,14 +15,14 @@ import type { PasswordSetupAuthenticator } from "./password-setup-authenticator"
 
 type Dependencies = {
   authenticator: PasswordSetupAuthenticator;
-  pageNavigation: Pick<PageNavigation, "go">;
+  pageReplace: Pick<PageReplace, "replace">;
   clock: Clock;
   connectivity: Pick<Connectivity, "isOffline">;
 };
 
 export function createSignUp({
   authenticator,
-  pageNavigation,
+  pageReplace,
   clock,
   connectivity,
 }: Dependencies): PasswordSetup {
@@ -37,7 +37,7 @@ export function createSignUp({
     verifyCode: (input, view) => verifyCode(context, input, view),
     tickCooldown: (dispatch) => tickCooldown(context, dispatch),
     setPassword: (input, view) =>
-      setPassword(authenticator, connectivity, pageNavigation, input, view),
+      setPassword(authenticator, connectivity, pageReplace, input, view),
   };
 }
 
@@ -45,7 +45,7 @@ export function createSignUp({
 async function setPassword(
   authenticator: Pick<PasswordSetupAuthenticator, "setPassword">,
   connectivity: Pick<Connectivity, "isOffline">,
-  pageNavigation: Pick<PageNavigation, "go">,
+  pageReplace: Pick<PageReplace, "replace">,
   input: { password: string },
   view: PasswordSetupView,
 ) {
@@ -60,5 +60,5 @@ async function setPassword(
     return;
   }
   view.dispatch({ type: "passwordSet" });
-  pageNavigation.go(destinationOf(null));
+  pageReplace.replace(destinationOf(null));
 }

@@ -71,7 +71,7 @@ const subjects: {
         clock: createBrowserClock(),
         connectivity: createFakeConnectivity(),
         authenticator: auth,
-        pageNavigation: { go: leave },
+        pageReplace: { replace: leave },
       }),
     form: (procedure) => <SignUpForm signUp={procedure} siteKey="site-key" />,
     emailHeading: "サインアップ",

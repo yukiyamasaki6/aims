@@ -10,8 +10,16 @@ import SignInPage from "./page";
 
 const authText = translatorFor("auth");
 
-const navigation = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+// ページ全体の置き換え(window.location.replace)の境界。jsdomは文書の置き換えを実装していないため、場所ごと差し替える。
+const page = vi.hoisted(() => ({ replace: vi.fn() }));
+
+function setLocation(search = "") {
+  vi.stubGlobal("location", {
+    pathname: "/signin",
+    search,
+    replace: page.replace,
+  });
+}
 
 const auth = vi.hoisted(() => ({ signInWithPassword: vi.fn() }));
 const connection = vi.hoisted(() => ({
@@ -70,12 +78,13 @@ describe("サインイン画面の入口", () => {
     vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "page-site-key");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
+    setLocation();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
-    window.history.replaceState(null, "", "/");
+    vi.unstubAllGlobals();
   });
 
   it("入口が読んだサイトキーを画面からウィジェットへ渡す", () => {
@@ -103,7 +112,7 @@ describe("サインイン画面の入口", () => {
     expect(widget.siteKey).toBe("");
   });
 
-  it("入口が得た接続で認証し、成功時に遷移する", async () => {
+  it("入口が得た接続で認証し、成功時にページ全体を置き換えて遷移する", async () => {
     // Given
     auth.signInWithPassword.mockResolvedValue({ error: null });
     const user = userEvent.setup();
@@ -130,7 +139,7 @@ describe("サインイン画面の入口", () => {
       password: "password1",
       options: { captchaToken: "captcha-token" },
     });
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
+    expect(page.replace).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
   });
 
   it("入口が得た端末の通信の状態がオフラインなら、認証サービスを呼ばず、オフラインの文言を示す", async () => {
@@ -164,7 +173,7 @@ describe("サインイン画面の入口", () => {
 
     // Then
     expect(auth.signInWithPassword).toHaveBeenCalledOnce();
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
+    expect(page.replace).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
   });
 
   it("Supabaseの環境変数が無くても描画でき、接続を作らない", () => {
@@ -199,7 +208,7 @@ describe("サインイン画面の入口", () => {
     ).toBeInTheDocument();
     expect(submitButton()).toHaveAttribute("aria-disabled", "false");
     expect(connection.createBrowserClient).not.toHaveBeenCalled();
-    expect(navigation.push).not.toHaveBeenCalled();
+    expect(page.replace).not.toHaveBeenCalled();
   });
 
   it("入口から通して、認証の応答待ちで画面を離れたら、成功が戻っても遷移しない", async () => {
@@ -217,12 +226,12 @@ describe("サインイン画面の入口", () => {
 
     // Then
     expect(auth.signInWithPassword).toHaveBeenCalledOnce();
-    expect(navigation.push).not.toHaveBeenCalled();
+    expect(page.replace).not.toHaveBeenCalled();
   });
 
   it("遷移元付きのURLで開いた成功では、その遷移元へ遷移する", async () => {
     // Given
-    window.history.replaceState(null, "", "/signin?returnTo=%2Frounds%2Fnew");
+    setLocation("?returnTo=%2Frounds%2Fnew");
     auth.signInWithPassword.mockResolvedValue({ error: null });
     const user = userEvent.setup();
     render(<SignInPage />, { wrapper: IntlTestProvider });
@@ -232,7 +241,7 @@ describe("サインイン画面の入口", () => {
     await user.click(submitButton());
 
     // Then
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith("/rounds/new");
+    expect(page.replace).toHaveBeenCalledExactlyOnceWith("/rounds/new");
   });
 
   it("認証サービスが未知のエラーを返したときは、固定の文言を示し、認証サービスの文言を出さない", async () => {

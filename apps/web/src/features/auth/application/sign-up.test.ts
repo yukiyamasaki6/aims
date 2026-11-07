@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import { type AuthFailure, UNREACHABLE } from "../domain/auth-failure";
 import {
   beginSendCode,
@@ -23,18 +22,17 @@ function setup() {
     verifyCode: vi.fn(async (): Promise<CallResult> => accepted),
     setPassword: vi.fn(async (): Promise<CallResult> => accepted),
   } satisfies PasswordSetupAuthenticator;
-  const { pageNavigation, go } = createFakePageNavigation();
-  const navigation = { go };
+  const pageReplace = { replace: vi.fn<(path: string) => void>() };
   const signUp = createSignUp({
     authenticator,
-    pageNavigation,
+    pageReplace,
     clock: createManualClock(),
     connectivity: createFakeConnectivity(),
   });
   return {
     signUp,
     authenticator,
-    navigation,
+    pageReplace,
     ...screenHarness<
       ReturnType<typeof passwordSetupReducer>,
       PasswordSetupEvent
@@ -188,7 +186,7 @@ describe("サインアップの手続き", () => {
   describe("パスワードの設定", () => {
     it("設定できれば、passwordSetを送ってラウンド一覧へ遷移し、実行中を解除しない", async () => {
       // Given
-      const { signUp, authenticator, navigation, events, viewOf } = setup();
+      const { signUp, authenticator, pageReplace, events, viewOf } = setup();
       const view = viewOf(onPasswordStep);
 
       // When
@@ -198,14 +196,14 @@ describe("サインアップの手続き", () => {
       expect(authenticator.setPassword).toHaveBeenCalledExactlyOnceWith(
         "password1",
       );
-      expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds");
+      expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
       expect(events).toEqual([{ type: "passwordSet" }]);
       expect(view.observedState.pending).toBe("setPassword");
     });
 
     it("弱いパスワードで拒否された後の成功では、遷移の前にpasswordSetを送り、遷移の中ではエラーが消えて実行中のままである", async () => {
       // Given
-      const { signUp, authenticator, navigation, events, viewOf } = setup();
+      const { signUp, authenticator, pageReplace, events, viewOf } = setup();
       authenticator.setPassword.mockResolvedValueOnce({
         kind: "failed",
         failure: { kind: "weak_password" },
@@ -217,7 +215,7 @@ describe("サインアップの手続き", () => {
         error: string | null;
         pending: string | null;
       }[] = [];
-      navigation.go.mockImplementation(() => {
+      pageReplace.replace.mockImplementation(() => {
         seen.push({
           events: types(events),
           error: view.observedState.error,
@@ -240,7 +238,7 @@ describe("サインアップの手続き", () => {
 
     it("同じタスクで続けて2回呼んでも、2回目は実行中を見て拒否され、設定と遷移は1回になる", async () => {
       // Given
-      const { signUp, authenticator, navigation, viewOf } = setup();
+      const { signUp, authenticator, pageReplace, viewOf } = setup();
       const view = viewOf(onPasswordStep);
 
       // When
@@ -250,7 +248,7 @@ describe("サインアップの手続き", () => {
 
       // Then
       expect(authenticator.setPassword).toHaveBeenCalledOnce();
-      expect(navigation.go).toHaveBeenCalledOnce();
+      expect(pageReplace.replace).toHaveBeenCalledOnce();
     });
   });
 
@@ -294,7 +292,7 @@ describe("サインアップの手続き", () => {
   describe("画面を離れた後の応答", () => {
     it("パスワードの設定の待ちで離れたら、結果を反映せず、遷移しない", async () => {
       // Given
-      const { signUp, authenticator, navigation, events, screen, viewOf } =
+      const { signUp, authenticator, pageReplace, events, screen, viewOf } =
         setup();
       const response = Promise.withResolvers<CallResult>();
       authenticator.setPassword.mockReturnValue(response.promise);
@@ -310,14 +308,15 @@ describe("サインアップの手続き", () => {
 
       // Then
       expect(events).toEqual([]);
-      expect(navigation.go).not.toHaveBeenCalled();
+      expect(pageReplace.replace).not.toHaveBeenCalled();
     });
   });
 
   describe("通しの経路", () => {
     it("メールの修正、確認の期限切れ、再試行、弱いパスワード、成功の順に、同じ画面の状態で進められる", async () => {
       // Given
-      const { signUp, authenticator, navigation, resetCheck, viewOf } = setup();
+      const { signUp, authenticator, pageReplace, resetCheck, viewOf } =
+        setup();
       const view = viewOf(checked);
       authenticator.sendCode
         .mockResolvedValueOnce({
@@ -371,7 +370,7 @@ describe("サインアップの手続き", () => {
       expect(afterWeak.step).toBe("password");
       expect(afterWeak.pending).toBeNull();
       expect(resetCheck).toHaveBeenCalledTimes(2);
-      expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds");
+      expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
     });
   });
 });

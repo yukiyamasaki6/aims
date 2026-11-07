@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
-import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import type { CallResult } from "../application/call-result";
 import { createSignIn } from "../application/sign-in";
 import type { AuthFailure } from "../domain/auth-failure";
@@ -53,11 +52,10 @@ function setup({
   const authenticator = {
     signIn: vi.fn(async (): Promise<CallResult> => accepted),
   };
-  const fake = createFakePageNavigation();
-  const navigation = { go: fake.go };
+  const pageReplace = { replace: vi.fn<(path: string) => void>() };
   const signIn = createSignIn({
     authenticator,
-    pageNavigation: fake.pageNavigation,
+    pageReplace,
     connectivity: createFakeConnectivity(offline),
   });
   const form = (
@@ -70,7 +68,7 @@ function setup({
   const rendered = render(strict ? <StrictMode>{form}</StrictMode> : form, {
     wrapper: IntlTestProvider,
   });
-  return { signIn, authenticator, navigation, ...rendered };
+  return { signIn, authenticator, pageReplace, ...rendered };
 }
 
 function emailInput() {
@@ -124,7 +122,7 @@ describe("サインイン画面の部品", () => {
 
   it("入力したフォームの値と検証トークンで手続きを呼び、入力値を保持する", async () => {
     // Given
-    const { authenticator, navigation } = setup();
+    const { authenticator, pageReplace } = setup();
     const user = userEvent.setup();
     await fillCredentials(user);
     verify("captcha-token");
@@ -138,7 +136,7 @@ describe("サインイン画面の部品", () => {
       password: "password1",
       captchaToken: "captcha-token",
     });
-    expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds");
+    expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
     expect(emailInput()).toHaveValue("user@example.com");
     expect(passwordInput()).toHaveValue("password1");
   });
@@ -287,7 +285,7 @@ describe("サインイン画面の部品", () => {
 
     it("新しいトークンで再送信すると、そのトークンで照合して遷移し、失敗の文言が消える", async () => {
       // Given
-      const { authenticator, navigation, user } = await failFirstAttempt(
+      const { authenticator, pageReplace, user } = await failFirstAttempt(
         failure,
         message,
         returnTo,
@@ -304,14 +302,14 @@ describe("サインイン画面の部品", () => {
         password: "password1",
         captchaToken: "token-2",
       });
-      expect(navigation.go).toHaveBeenCalledExactlyOnceWith(destination);
+      expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith(destination);
       expect(screen.queryByText(message)).not.toBeInTheDocument();
     });
   });
 
   it("Strict Modeの二重実行の後でも、送信が終わり遷移する", async () => {
     // Given
-    const { authenticator, navigation } = setup({ strict: true });
+    const { authenticator, pageReplace } = setup({ strict: true });
     const user = userEvent.setup();
     await fillCredentials(user);
     verify("captcha-token");
@@ -321,7 +319,7 @@ describe("サインイン画面の部品", () => {
 
     // Then
     expect(authenticator.signIn).toHaveBeenCalledOnce();
-    expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/rounds");
+    expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
   });
 
   it("何も入力せずに送信すると、メールアドレス、パスワード、セキュリティチェックの不備を全て表示し、認証しない", async () => {

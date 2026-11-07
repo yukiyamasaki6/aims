@@ -17,8 +17,8 @@ const _OTP_EXPIRED_MESSAGE = authText("failure.code_expired");
 const _WEAK_PASSWORD_MESSAGE =
   "8〜72文字の半角英数記号で、英字と数字を含めてください。";
 
-const navigation = vi.hoisted(() => ({ push: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+// ページ全体の置き換え(window.location.replace)の境界。jsdomは文書の置き換えを実装していないため、場所ごと差し替える。
+const page = vi.hoisted(() => ({ replace: vi.fn() }));
 
 // SDKは境界のため差し替える。入口が得た接続で、認証の実装が呼ぶ。
 const auth = vi.hoisted(() => ({
@@ -151,10 +151,16 @@ describe("サインアップ画面の入口", () => {
     vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "page-site-key");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
+    vi.stubGlobal("location", {
+      pathname: "/signup",
+      search: "",
+      replace: page.replace,
+    });
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it("サインアップフォームを表示する", () => {
@@ -226,7 +232,7 @@ describe("サインアップ画面の入口", () => {
     expect(auth.updateUser).toHaveBeenCalledExactlyOnceWith({
       password: "password123",
     });
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
+    expect(page.replace).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
     expect(widget.resets).toBe(1);
   });
 
@@ -267,7 +273,7 @@ describe("サインアップ画面の入口", () => {
 
     // Then
     expect(auth.updateUser).toHaveBeenCalledOnce();
-    expect(navigation.push).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
+    expect(page.replace).toHaveBeenCalledExactlyOnceWith(ROUNDS_PATH);
   });
 
   it("パスワードの設定の応答待ちで画面を離れたら、遷移しない", async () => {
@@ -286,7 +292,7 @@ describe("サインアップ画面の入口", () => {
 
     // Then
     expect(auth.updateUser).toHaveBeenCalledOnce();
-    expect(navigation.push).not.toHaveBeenCalled();
+    expect(page.replace).not.toHaveBeenCalled();
   });
 
   it("Supabaseの環境変数が無くても描画でき、接続を作らない", () => {

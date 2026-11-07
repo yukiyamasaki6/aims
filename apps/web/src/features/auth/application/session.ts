@@ -12,6 +12,7 @@ import type { SignInChanges } from "./auth-changes";
 import { type CallResult, failureOf } from "./call-result";
 import type { IdentityReader } from "./identity-reader";
 import type { IdentityWriter } from "./local-identity";
+import type { PageReplace } from "./page-replace";
 import type { ViewLifetime } from "./screen-view";
 
 // サインインの状態の読み取り結果。認証済みのときだけ、利用者のIDを持つ。
@@ -36,14 +37,6 @@ export type SessionAuthenticator = SignInChanges &
     // この端末のサインインだけを終える。
     signOutHere(): Promise<CallResult>;
   };
-
-// ページ全体を読み込んで、今の場所を置き換える遷移。履歴を残さず、前の利用者の画面の状態とクライアントのキャッシュを捨てる。
-// 例外: 投げない。
-export type PageReplace = {
-  // 今の場所(パスとクエリ)。
-  here(): string;
-  replace(path: string): void;
-};
 
 // 記録の利用者(この文書の間、変わらない)との照合。持ち主は他の機能(ラウンドの記録)で、入口が渡す。
 type RecordUser = {
