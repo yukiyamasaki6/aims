@@ -45,7 +45,7 @@ export function roundScreenState(
   needsRefetch: boolean;
   deletedElsewhere: boolean;
 } {
-  // 組にベースが無いのは、作成が未確定の間だけ(最初のベースは作成の操作が表す)。削除の印のときも、一覧へ戻るまでの間は最初のベースで描く。
+  // 組にベースが無いのは、作成が未確定の間だけ(最初のベースは作成の操作が表す)。削除の印のときも、スコアカードが外れるまでの間は最初のベースで描く。
   const base = record.base?.base?.tables ?? loadedBase;
   const derived = deriveTables(base, [...record.operations], faces);
   return {
