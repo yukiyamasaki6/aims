@@ -329,7 +329,7 @@ function rpcSucceeds(name: string, args?: { p_shots?: unknown[] }) {
   return Promise.resolve({ data, error: null });
 }
 
-// 記録は端末への保存の完了後に画面へ反映される。保存先(fake-indexeddb)の初回の接続は、負荷が高いと操作の間隔を超えるため、操作の間隔を広げて、反映を待たずに次の操作や検証へ進まないようにする。
+// 保存先(fake-indexeddb)の初回の接続は、負荷が高いと操作の間隔を超えるため、操作の間隔を広げて、次の操作や検証が保存の途中と重ならないようにする。
 const userEventSetup = userEvent.setup.bind(userEvent);
 
 // 画面は、アプリの起動地点(実物)が渡すラウンドの状態と変更の方法を使う。別経路の追記を模すために、受け取った入口を覚える。
@@ -1220,7 +1220,7 @@ describe("ScorecardClient 並び直りの動き", () => {
       await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9", "8"]));
     }
 
-    it("クリアすると、後ろの玉と仮の矢を動かし、仮の矢は最初の空白が詰まる分だけ動く", async () => {
+    it("クリアすると、後ろの玉と仮の矢を動かし、仮の矢は消えた玉の位置から最初の空白へ1回で動く", async () => {
       // Given
       const user = renderThreeShots(distanceSix);
 
@@ -1239,7 +1239,7 @@ describe("ScorecardClient 並び直りの動き", () => {
       expect(provisionalMoves()).toEqual([
         [
           [
-            { transform: "translate(36px, 0px)" },
+            { transform: "translate(-72px, 0px)" },
             { transform: "translate(0, 0)" },
           ],
           expect.anything(),
@@ -1247,7 +1247,7 @@ describe("ScorecardClient 並び直りの動き", () => {
       ]);
     });
 
-    it("満杯のエンドでクリアすると、仮の矢は動かさずに空いた場所へ出る", async () => {
+    it("満杯のエンドでクリアすると、仮の矢は消えた玉の位置から空いた場所へ動く", async () => {
       // Given
       const user = renderThreeShots(distanceA);
 
@@ -1256,7 +1256,15 @@ describe("ScorecardClient 並び直りの動き", () => {
 
       // Then
       expect(provisionalEnd()).toBe("end-row-1-1");
-      expect(provisionalMoves()).toEqual([]);
+      expect(provisionalMoves()).toEqual([
+        [
+          [
+            { transform: "translate(-72px, 0px)" },
+            { transform: "translate(0, 0)" },
+          ],
+          expect.anything(),
+        ],
+      ]);
     });
 
     it("記録済みの玉を指しているときに同じエンドの空白を押すと、仮の矢を動かさない", async () => {
@@ -1968,6 +1976,20 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
   });
 
+  it("点数を押すと玉は1つだけ現れ、保存の完了の後も増えない", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup({ distances: [distanceA] });
+
+    // When
+    await user.click(screen.getByTestId("score-button-10"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Then
+    expect(ballsOf(1, 1)).toEqual(["10"]);
+  });
+
   it("固定されていない小計の直下のマスを指して点数を入力して指す矢が移っても、スクロールし続けない", async () => {
     // Given
     // 1つ目の距離の小計の下端が、エンド1の行の上端（150）に接している（小計がまだ固定されていない）。
@@ -1981,7 +2003,7 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
 
     // When
     await user.click(screen.getByTestId("score-button-10"));
-    // 記録は保存の完了後に画面へ反映されるため、反映を待ってから押す。
+    // 記録は直ちに画面へ反映されるが、描画を待ってから押す。
     await user.click(await screen.findByTestId("shot-ball-1-1-1"));
 
     // Then
@@ -2469,7 +2491,7 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     await user.click(screen.getByTestId("add-distance-button"));
 
     // Then
-    // 距離の追加は保存の完了後に画面へ反映されるため、反映を待つ。
+    // 距離の追加の反映を待つ。
     expect(await screen.findByTestId("distance-config-distance-2")).toHaveValue(
       70,
     );
@@ -2502,7 +2524,7 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     await user.dblClick(screen.getByTestId("add-distance-button"));
 
     // Then
-    // 2回分の保存の完了を待つ。
+    // 2回分の反映を待つ。
     await waitFor(
       () => {
         expect(screen.getAllByTestId(/^distance-summary-/)).toHaveLength(3);

@@ -7,7 +7,7 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
-import { expectNoPendingOps } from "../helpers/op-log";
+import { blockOpLogStore, expectNoPendingOps } from "../helpers/op-log";
 import { forwardAs, openOtherDevice } from "../helpers/other-device";
 import {
   openNewRoundThenGoOffline,
@@ -232,4 +232,26 @@ test("削除する権限が無く削除が拒否されたときは、一覧を�
   await waitForHydration(page);
   await expect(link).toBeVisible();
   await expect(page.getByRole("alert").filter({ hasText: /./ })).toHaveCount(0);
+});
+
+test("端末の保存が終わらない間にラウンド詳細で削除を確認すると、保存が終わるまで詳細に留まり、保存が終わるとラウンド一覧へ移る", async ({
+  page,
+}) => {
+  // 詳細を開き、端末の保存を塞いだ状態で削除を確認する。
+  const { name, roundId } = await createNamedRound("保存待ちの削除");
+  const { link } = await openList(page, name);
+  await link.click();
+  await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
+  const release = await blockOpLogStore(page);
+  await chooseDelete(page);
+  await page.getByTestId("confirm-dialog-confirm").click();
+
+  // 確認ダイアログが閉じるが、まだ移らないことを確かめる。
+  await expect(page.getByTestId("confirm-dialog-confirm")).toBeHidden();
+  await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
+
+  // 塞ぎを解き、保存の後にラウンド一覧へ移ることを確かめる。
+  await release();
+  await expect(page).toHaveURL(/\/rounds$/);
+  await expect(link).toBeHidden();
 });

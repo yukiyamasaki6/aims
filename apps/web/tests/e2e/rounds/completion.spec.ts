@@ -7,6 +7,7 @@ import {
   waitForHydration,
 } from "../helpers/auth";
 import { expectKeypadSettled } from "../helpers/keypad";
+import { blockOpLogStore } from "../helpers/op-log";
 import {
   getRoundRow,
   openOtherDevice,
@@ -177,4 +178,19 @@ test("オフラインで、矢数に達していないエンドがあるラウ�
   await expect
     .poll(() => status(roundId), { timeout: 15_000 })
     .toBe("completed");
+});
+
+test("端末の保存が終わらない間に入力を完了すると、完了のバーが消えて詳細に留まり、保存が終わるとラウンド一覧へ移る", async ({
+  page,
+}) => {
+  // 端末の保存を塞いだ状態で入力を完了し、入力中でない表示へ変わるが、まだ移らないことを確かめる。
+  await openRound(page, { shots: allShots(0, 12, 3) });
+  const release = await blockOpLogStore(page);
+  await completeButton(page).click();
+  await expect(completeButton(page)).toBeHidden();
+  await expect(page).toHaveURL(/\/rounds\/[^/]+$/);
+
+  // 塞ぎを解き、保存の後にラウンド一覧へ移ることを確かめる。
+  await release();
+  await expect(page).toHaveURL(/\/rounds$/);
 });

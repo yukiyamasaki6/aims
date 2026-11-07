@@ -7,7 +7,7 @@ import { useRoundDetailStore } from "./rounds-context";
 export type RoundOpStack = {
   // 端末の記録(ベースに操作の列を重ねたもの)から求めた、画面の状態。
   state: RoundState;
-  // 操作を列へ追記する。画面への反映と送信は保存の完了後で、送信の完了は待たない。
+  // 操作を列へ追記する。画面へは直ちに反映し、送信は保存の完了後で、送信の完了は待たない。
   append: (operation: SyncOperation) => Promise<void>;
 };
 

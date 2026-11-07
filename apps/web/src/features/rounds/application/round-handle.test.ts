@@ -420,7 +420,7 @@ describe("round(...)", () => {
       return { tab, handle, base };
     }
 
-    it("保存の前の追記では、画面の値を作り直さず、聞き手も呼ばない。保存の完了で新しい値になり、1回呼ばれる", async () => {
+    it("保存の前の追記で、画面の値が新しくなり聞き手が1回呼ばれる。保存の完了では値も聞き手も変わらない", async () => {
       // Given
       const tab = createTab();
       const handle = tab.round("round-1");
@@ -441,11 +441,33 @@ describe("round(...)", () => {
       await appending;
 
       // Then
-      expect(duringSave.snapshot).toBe(first);
-      expect(duringSave.calls).toBe(0);
-      expect(handle.getSnapshot()).not.toBe(first);
-      expect(handle.getSnapshot().state?.shots).toHaveLength(1);
+      expect(duringSave.snapshot).not.toBe(first);
+      expect(duringSave.snapshot.state?.shots).toHaveLength(1);
+      expect(duringSave.calls).toBe(1);
+      expect(handle.getSnapshot()).toBe(duringSave.snapshot);
       expect(listener).toHaveBeenCalledTimes(1);
+      unwatch();
+    });
+
+    it("保存を保留しても、設定の保存で要約が直ちに変わる", async () => {
+      // Given
+      const tab = createTab();
+      const handle = tab.round("round-1");
+      const unwatch = handle.watch(loadedOf());
+      const saving = holdSaving(tab);
+
+      // When
+      const appending = handle.append(
+        roundUpdated({ changes: { name: "新" } }),
+      );
+      await flush();
+      const duringSave = handle.getSnapshot().state?.roundConfig.name;
+      saving.resolve();
+      await appending;
+
+      // Then
+      expect(duringSave).toBe("新");
+      expect(handle.getSnapshot().state?.roundConfig.name).toBe("新");
       unwatch();
     });
 
@@ -810,7 +832,7 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     expect(typesOf(tab)).toEqual([]);
   });
 
-  it("追記の戻り値は、保存の完了で解決し、解決の時点で画面の状態へ反映済みである", async () => {
+  it("追記の戻り値は保存の完了で解決し、画面の状態は保存の完了前に反映済みである", async () => {
     // Given
     const tab = createTab();
     const handle = tab.round("round-1");
@@ -827,7 +849,7 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
 
     // Then
     expect(resolvedBeforeSave).toBe(false);
-    expect(shotsBeforeSave).toBe(0);
+    expect(shotsBeforeSave).toBe(1);
     expect(handle.getSnapshot().state?.shots).toHaveLength(1);
   });
 });

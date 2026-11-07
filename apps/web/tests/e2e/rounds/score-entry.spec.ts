@@ -5,6 +5,7 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
+import { blockOpLogStore } from "../helpers/op-log";
 import { createRound, SIX_RING_TARGET_FACE_ID } from "../helpers/rounds";
 import { expectPartlyCovered, expectUncovered } from "../helpers/visibility";
 
@@ -245,4 +246,21 @@ test("点数を入力した後、次に指す行が固定表示とテンキー�
   await page.getByTestId("score-button-9").click();
   await expect(ball(page, 1, 4, 1)).toHaveText("9");
   await expectUncovered(endRow(page, 1, 4));
+});
+
+test("端末の保存が終わらない間も、点数を押すと玉がすぐに表示され、保存が終わると送信される", async ({
+  page,
+}) => {
+  // 端末の保存を塞いだ状態で点数を押し、玉がすぐに表示されることを確かめる。
+  await openRound(page);
+  const release = await blockOpLogStore(page);
+  await page.getByTestId("score-button-10").click();
+  await expect(ball(page, 1, 1, 1)).toHaveText("10");
+  await expectProvisionalIn(page, 1, 1);
+
+  // 塞ぎを解き、保存の後に送信されることを確かめる。
+  const sent = page.waitForResponse(RECORD_SHOTS_RPC);
+  await release();
+  await sent;
+  await expectBalls(page, 1, 1, ["10"]);
 });
