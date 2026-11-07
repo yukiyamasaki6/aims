@@ -58,14 +58,12 @@ export function createFakeRoundsListStore(
   const store = {
     loadList: vi.fn(),
     loadLocalList: vi.fn(),
-    deleteRound: vi.fn().mockResolvedValue(undefined),
     whenOnline,
     afterFallbackWait,
     ...overrides,
   } as unknown as RoundsListStore & {
     loadList: ReturnType<typeof vi.fn>;
     loadLocalList: ReturnType<typeof vi.fn>;
-    deleteRound: ReturnType<typeof vi.fn>;
     whenOnline: ReturnType<typeof vi.fn>;
     afterFallbackWait: ReturnType<typeof vi.fn>;
   };
@@ -106,6 +104,9 @@ export function createFakeRoundProcedures() {
     leaving: {
       completeRound: vi.fn().mockResolvedValue(undefined),
       deleteRoundAndLeave: vi.fn().mockResolvedValue(undefined),
+    },
+    deletion: {
+      deleteRound: vi.fn().mockResolvedValue(undefined),
     },
     presetSaving: {
       savePreset: vi.fn().mockResolvedValue({ status: "saved" }),

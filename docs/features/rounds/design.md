@@ -5,7 +5,7 @@
 一覧・作成・詳細・同期が共有する構造と、機能ごとに別の言い方にしない判断を書く。
 機能ごとの画面と流れは、各機能の`design.md`に従う。構造の方針は`docs/architecture.md`に従う。
 画面へ状態と変更の方法を渡す入口(窓口)は画面ごとに3つ(`RoundsListStore`、`NewRoundStore`、`RoundDetailStore`)で、手続きは画面に属し、記録のハブは1つで、同期は同期からラウンドへの一方向である。
-詳細の画面は、画面ごとの文脈から受ける窓口のほかに、離れる・プリセットの保存・IDの払い出しの手続きを、手続きの入れ物(`RoundProcedures`)から直接受ける。
+詳細と一覧の画面は、画面ごとの文脈から受ける窓口のほかに、離れる・ラウンドの削除(一覧)・プリセットの保存・IDの払い出しの手続きを、手続きの入れ物(`RoundProcedures`)から直接受ける。
 複数の画面で使う`whenOnline`は3つの窓口が同じ契約で持ち、共有フック`useFetchResult`は窓口を知らずに引数で受ける。
 起動地点は層までのパスで各層の生成関数を取り込む(`docs/architecture.md`第5節の参照の書き方)。
 
@@ -40,7 +40,6 @@ flowchart LR
   compose --> refreshControl
   compose --> sender
   compose --> sync
-  list --> deletion
   list --> hub
   list --> requests
   list --> fetching
@@ -79,7 +78,6 @@ flowchart LR
 | --- | --- | --- |
 | `loadList()` | 一覧の取得と一括の取得の依頼を並行に行い、削除の印を反映して一覧の材料を返す。`FETCH_TIMEOUT_MS`で打ち切る | 窓口内、`fetching.fetchRoundsList`、`requests`、`hub` |
 | `loadLocalList()` | 端末の入力中のラウンドの一覧 | 窓口内 |
-| `deleteRound(roundId)` | 削除を積み、画面に残る。保存の試みが終われば解決し、拒否しない | `deletion.deleteRound` |
 | `afterFallbackWait(listener)` | `FALLBACK_WAIT_MS`後に1回呼ぶ。返り値は無い。使い手は一覧だけ | `clock.after` |
 | `whenOnline(listener)` | 共有表のとおり | `when-online.ts` |
 
@@ -107,7 +105,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | `whenOnline` | 一覧、作成、詳細(`use-fetch-result.ts`が各画面の窓口の関数を引数で受ける) | 3つの窓口が同じ契約で持つ。実装は`application/when-online.ts`の1つ | 第4の窓口を作らず、共有フックが窓口に依存しない。契約と挙動は1か所 |
 | 窓口の文脈(`ui/rounds-context.tsx`) | 3画面 | 画面ごとに別の文脈(Providerとhookを各窓口に1つずつ) | 画面は自分の窓口だけを取り出せる。テストは使う窓口だけを渡す |
-| 詳細の手続きの入れ物`RoundProcedures`(`ui/rounds-context.tsx`) | 詳細(完了`use-scorecard.ts`、削除`round-menu.tsx`、プリセットの保存`save-preset-dialog.tsx`、IDの払い出し`round-config-panel.tsx`・`use-distance-draft.ts`・`use-distance-editing.ts`・`use-shot-input.ts`) | 離れる手続き`leaving`(`completeRound`、`deleteRoundAndLeave`)、保存の手続き`presetSaving`(`savePreset`)、`ids`(`next`)を1つの文脈(Providerとhookを1つ)にまとめる | 窓口を通さずに手続きを直接受ける。3つの別の文脈にすると起動地点の入れ子が増える |
+| 手続きの入れ物`RoundProcedures`(`ui/rounds-context.tsx`) | 詳細(完了`use-scorecard.ts`、削除`round-menu.tsx`、プリセットの保存`save-preset-dialog.tsx`、IDの払い出し`round-config-panel.tsx`・`use-distance-draft.ts`・`use-distance-editing.ts`・`use-shot-input.ts`) | 離れる手続き`leaving`(`completeRound`、`deleteRoundAndLeave`)、離れない削除の手続き`deletion`(`deleteRound`。一覧が使う)、保存の手続き`presetSaving`(`savePreset`)、`ids`(`next`)を1つの文脈(Providerとhookを1つ)にまとめる | 窓口を通さずに手続きを直接受ける。3つの別の文脈にすると起動地点の入れ子が増える |
 
 使い手のないメンバー`append`(窓口の直接の追記)は持たない。追記は`round(roundId).append`が手続き`round-editing.ts`を通して行う。
 窓口の生成は、状態を持たない部分をモジュール関数に出し、deps(受け取る手続きと部品)を引数で受ける。状態を閉じ込める`createRoundHandle`(`round-handle.ts`)だけが関数の長さの例外を持つ。
@@ -177,7 +175,7 @@ flowchart LR
 | --- | --- | --- |
 | 窓口を画面別に分け、複数画面の`whenOnline`は各窓口が同じ契約で持つ | 画面ごとに必要な委譲だけが見え、偽物が小さく、共有フックが窓口に依存しないため。共有の第4の窓口は、節点が増え使い手の少ない窓口になるため採らない | 4つ目の画面が同じ取得の状態を使うとき |
 | 操作のIDは詳細の画面が手続きの入れ物の`ids`から受ける(矢のIDは窓口の`newShotId`) | 操作を組み立てるのは詳細の画面だけで、一覧の削除と作成の開始は手続きが払い出すため。操作の組み立てを手続きへ移す案は、同じ操作を表す型が2つになり、指す矢と履歴の持ち主が画面と手続きに分かれるため採らない | 操作の組み立てを全て手続きへ移すとき |
-| 削除は一覧の窓口の`deleteRound`(画面に残る)と詳細の手続きの入れ物の`leaving.deleteRoundAndLeave`(離れる)に分け、手続きも`round-deletion.ts`と`round-leaving.ts`に分ける | 各窓口に削除が1つになり、他画面の削除を指す注記が要らなくなるため。手続きを分けない案は、一覧が「離れる手続き」の削除を引き、手続きの責務の説明が画面と合わないため採らない | 一覧と詳細の削除の手続きが同じ変更を受け続けるとき |
+| 削除は一覧が手続きの入れ物の`deletion.deleteRound`(画面に残る)、詳細が`leaving.deleteRoundAndLeave`(離れる)を直接受けて呼び、手続きも`round-deletion.ts`と`round-leaving.ts`に分ける | 各窓口に削除が1つになり、他画面の削除を指す注記が要らなくなるため。手続きを分けない案は、一覧が「離れる手続き」の削除を引き、手続きの責務の説明が画面と合わないため採らない | 一覧と詳細の削除の手続きが同じ変更を受け続けるとき |
 | 取得結果の型・失敗の種類・分類・時間制限を`rounds`の内側に置く(層ごとに分ける。文言はUI層の一覧が持つ) | `FetchResult`の失敗の種類と分類は業務の言葉を持ち、`rounds`以外の機能が使っていないため。共有へ上げる条件は、`rounds`以外の機能が使う、または`docs/architecture.md`第11節を満たす見込みのとき。上げられるのは`FETCH_TIMEOUT_MS`・`FALLBACK_WAIT_MS`・`waitLimitMs`だけで、`FetchResult`の種類、`withFallback`は共有に置けない(第11節、U01) | 他の機能が取得結果の型や時間制限を使うとき |
 | 起動地点は層までのパスで各層の生成関数を取り込む | `docs/architecture.md`第5節の参照の書き方(組み立て層は入口を経由しない)に従うため | 規則が変わったとき |
 | テスト補助は使う層のうち最も内側の層に置く | 参照の向きを依存の向きに合わせ、補助が使い手より外側の層に置かれて層が不明になることを避けるため | テストの置き場の方針が変わったとき |

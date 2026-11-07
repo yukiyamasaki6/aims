@@ -111,7 +111,6 @@ function rig() {
     fetching: fetching as unknown as RoundFetching,
     clock,
     connectivity,
-    deletion: { deleteRound: vi.fn() },
   });
   sync.start("user-1");
   return { sync, detail, list, requests, fetching, clock };

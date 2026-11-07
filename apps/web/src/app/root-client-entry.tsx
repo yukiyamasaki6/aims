@@ -139,7 +139,7 @@ function composeStores(inputs: Inputs, records: Records) {
     fetching,
   });
   return {
-    procedures: { leaving, presetSaving, ids },
+    procedures: { leaving, deletion, presetSaving, ids },
     detailStore: createRoundDetailStore({
       hub,
       requests,
@@ -171,7 +171,6 @@ function composeStores(inputs: Inputs, records: Records) {
       fetching,
       clock,
       connectivity,
-      deletion,
     }),
   };
 }

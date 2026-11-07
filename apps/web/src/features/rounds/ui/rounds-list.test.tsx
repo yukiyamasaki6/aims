@@ -10,8 +10,14 @@ import type {
   LocalRoundsList,
   RoundListItem,
 } from "../domain/round-list";
-import { createFakeRoundsListStore } from "./round-stores-test-helpers";
-import { RoundsListStoreProvider } from "./rounds-context";
+import {
+  createFakeRoundProcedures,
+  createFakeRoundsListStore,
+} from "./round-stores-test-helpers";
+import {
+  RoundProceduresProvider,
+  RoundsListStoreProvider,
+} from "./rounds-context";
 import { RoundsList } from "./rounds-list";
 
 const roundsText = translatorFor("rounds");
@@ -20,9 +26,10 @@ const roundsText = translatorFor("rounds");
 // 取得、端末の列、削除の実物はそれぞれのテストで確かめる。
 let fake: ReturnType<typeof createFakeRoundsListStore>;
 let load: ReturnType<typeof createFakeRoundsListStore>["store"]["loadList"];
+let procedures: ReturnType<typeof createFakeRoundProcedures>;
 let deleteRound: ReturnType<
-  typeof createFakeRoundsListStore
->["store"]["deleteRound"];
+  typeof createFakeRoundProcedures
+>["deletion"]["deleteRound"];
 
 function loaded(
   items: RoundListItem[],
@@ -39,7 +46,9 @@ function loaded(
 function renderList() {
   return render(
     <RoundsListStoreProvider store={fake.store}>
-      <RoundsList />
+      <RoundProceduresProvider procedures={procedures}>
+        <RoundsList />
+      </RoundProceduresProvider>
     </RoundsListStoreProvider>,
     { wrapper: IntlTestProvider },
   );
@@ -102,7 +111,8 @@ beforeEach(() => {
   // 端末の列は、既定では読み込みが終わらない。
   fake.store.loadLocalList.mockReturnValue(new Promise(() => {}));
   load = fake.store.loadList;
-  deleteRound = fake.store.deleteRound;
+  procedures = createFakeRoundProcedures();
+  deleteRound = procedures.deletion.deleteRound;
 });
 
 // 待ちの経過の合図を起こす。

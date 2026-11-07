@@ -3,14 +3,16 @@
 import { createContext, type ReactNode, useContext } from "react";
 import type { NewRoundStore } from "../application/new-round-store";
 import type { PresetSaving } from "../application/preset-saving";
+import type { RoundDeletion } from "../application/round-deletion";
 import type { RoundDetailStore } from "../application/round-detail-store";
 import type { RoundLeaving } from "../application/round-leaving";
 import type { RoundsListStore } from "../application/rounds-list-store";
 import type { UniqueIds } from "../application/unique-ids";
 
-// 詳細の画面が窓口を通さずに使う手続き。離れる(完了、削除)、プリセットの保存、IDの払い出し。
+// 画面が窓口を通さずに使う手続き。離れる(完了、削除)、ラウンドの削除(一覧)、プリセットの保存、IDの払い出し。
 export type RoundProcedures = {
   leaving: RoundLeaving;
+  deletion: RoundDeletion;
   presetSaving: PresetSaving;
   ids: UniqueIds;
 };

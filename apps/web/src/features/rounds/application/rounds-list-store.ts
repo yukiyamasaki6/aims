@@ -11,7 +11,6 @@ import {
 } from "../domain/round-list";
 import { roundIdOfStream, roundStreamId } from "../domain/sync-events";
 import type { RefreshRequests } from "./refresh-requests";
-import type { RoundDeletion } from "./round-deletion";
 import type { RoundFetching } from "./round-fetching";
 import type { HubSnapshot, RoundRecordHub } from "./round-record-hub";
 import { withinFetchTimeout } from "./time-limit";
@@ -22,8 +21,6 @@ export type RoundsListStore = {
   loadList(): Promise<FetchResult<LoadedRoundsList>>;
   // 端末の入力中のラウンドの一覧。
   loadLocalList(): Promise<LocalRoundsList>;
-  // 削除を積み、画面に残る。保存の試みが終わると解決し、拒否しない。送信の完了は待たない。
-  deleteRound(roundId: string): Promise<void>;
   // FALLBACK_WAIT_MSの後に1回listenerを呼ぶ。
   afterFallbackWait(listener: () => void): void;
   whenOnline: WhenOnline;
@@ -35,7 +32,6 @@ type Deps = {
   fetching: Pick<RoundFetching, "fetchRoundsList" | "savedTargetFaces">;
   clock: Clock;
   connectivity: Connectivity;
-  deletion: RoundDeletion;
 };
 
 const ERROR_RESULT = {
@@ -118,11 +114,10 @@ async function listDetail(deps: Deps): Promise<FetchResult<LoadedRoundsList>> {
 
 // 一覧の画面へ渡す、状態と変更の方法。
 export function createRoundsListStore(deps: Deps): RoundsListStore {
-  const { clock, connectivity, deletion } = deps;
+  const { clock, connectivity } = deps;
   return {
     loadList: () => withinFetchTimeout(clock, connectivity, listDetail(deps)),
     loadLocalList: () => localList(deps),
-    deleteRound: (roundId) => deletion.deleteRound(roundId),
     afterFallbackWait: (listener) => {
       clock.after(FALLBACK_WAIT_MS, listener);
     },

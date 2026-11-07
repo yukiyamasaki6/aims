@@ -19,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "./dropdown-menu";
 import { FetchState } from "./fetch-state";
-import { useRoundsListStore } from "./rounds-context";
+import { useRoundProcedures, useRoundsListStore } from "./rounds-context";
 import { Skeleton } from "./skeleton";
 import { useFetchResult } from "./use-fetch-result";
 import { useLocalRoundsList } from "./use-local-rounds-list";
@@ -28,6 +28,7 @@ export function RoundsList() {
   const t = useTranslations("rounds");
   const hydrated = useHydrated();
   const store = useRoundsListStore();
+  const { deletion } = useRoundProcedures();
   const { view, retry } = useFetchResult<LoadedRoundsList>(
     () => store.loadList(),
     store.whenOnline,
@@ -51,7 +52,7 @@ export function RoundsList() {
     setTarget({
       name: round.name,
       confirm: () => {
-        void store.deleteRound(round.id);
+        void deletion.deleteRound(round.id);
         setRemoved((prev) => new Set(prev).add(round.id));
       },
     });
