@@ -39,19 +39,13 @@ type RoundScreenSnapshot = {
   creationGone: boolean;
 };
 
-// 開いた材料から求めた、状態を持つスナップショット。
-type PeekedSnapshot = RoundScreenSnapshot & {
-  state: RoundState;
-  tables: RoundTables;
-};
-
 export type RoundHandle = {
   subscribe(listener: () => void): () => void;
   getSnapshot(): RoundScreenSnapshot;
   // 開いている間の印を付ける。返す関数で外す。開いた材料から、状態を求める。
   watch(opening: LoadedRound): () => void;
   // 印を付けずに、開いた材料から今の状態を求める(最初の描画で、印を付ける前に状態を得るため)。副作用を持たない。
-  peek(opening: LoadedRound): PeekedSnapshot;
+  peek(opening: LoadedRound): RoundState;
   // 操作を追記する。画面への反映と送信は保存の完了後で、送信の完了は待たない。
   // 完了のラウンドの表示中の距離か矢を変える編集は、続けて入力中へ戻す操作を積む。判定は追記の前の画面の状態で行う(追記の結果の反映後では、変化が無いと判定して積まないため)。画面を開いていない(watchの前)ときは積まない。
   append(operation: SyncOperation): Promise<void>;
@@ -194,16 +188,7 @@ export function createRoundHandle(
         from.base,
         from.targetFaces,
       );
-      return {
-        state: screen.state,
-        tables: screen.tables,
-        gone: isGone(
-          screen.deletedElsewhere,
-          from,
-          requests.outcomeOf(roundId),
-        ),
-        creationGone: false,
-      };
+      return screen.state;
     },
     watch(next) {
       if (watchers === 0) creation = INITIAL_CREATION;

@@ -43,7 +43,7 @@ export function useRoundOpStack(
   }, [snapshot.gone]);
 
   // 印を付ける前の最初の描画は、開いた材料から副作用なしで状態を求める。
-  const state = snapshot.state ?? handle.peek(loaded).state;
+  const state = snapshot.state ?? handle.peek(loaded);
   const append = useCallback(
     (operation: SyncOperation) => handle.append(operation),
     [handle],

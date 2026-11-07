@@ -129,22 +129,9 @@ describe("round(...)", () => {
     const peeked = handle.peek(loadedOf());
 
     // Then
-    expect(peeked.state.roundConfig.name).toBe("未送信");
-    expect(peeked.gone).toBe(false);
+    expect(peeked.roundConfig.name).toBe("未送信");
     expect(tab.requests.watched()).toEqual([]);
     expect(handle.getSnapshot().state).toBeNull();
-  });
-
-  it("peekは、削除の印があればgoneを返す", async () => {
-    // Given
-    const tab = createTab();
-    await tab.hub.commit(STREAM, null, 10, "user-1");
-
-    // When
-    const peeked = tab.round("round-1").peek(loadedOf());
-
-    // Then
-    expect(peeked.gone).toBe(true);
   });
 
   it("最後の印を外すと状態を捨て、開き直した最初の描画で前の状態を見せない", async () => {
@@ -162,7 +149,7 @@ describe("round(...)", () => {
     // Then
     expect(snapshot.state).toBeNull();
     expect(snapshot.tables).toBeNull();
-    expect(peeked.state.roundConfig.name).toBe("午前練習");
+    expect(peeked.roundConfig.name).toBe("午前練習");
   });
 
   it("追記と変化の通知で状態が更新され、購読者へ知らせる。追記は保存の完了後に反映される", async () => {
