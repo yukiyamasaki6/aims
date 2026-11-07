@@ -28,7 +28,6 @@ function createOrderedFakes(
   const sender = {
     start: record("sender.start"),
     stop: record("sender.stop"),
-    reset: record("sender.reset"),
     resumeHeld: record("sender.resumeHeld"),
   };
   const control = createRoundRecordControl({

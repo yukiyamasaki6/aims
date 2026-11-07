@@ -65,7 +65,7 @@ export function createOpSender(deps: {
   let ready = false;
   // 開始と停止のたびに進める。古い読み込みの続きが、新しい開始の状態を変えないため。
   let startSeq = 0;
-  // 開始、停止、利用者の切り替えのたびに進める。古い送信の結果を捨てるため。
+  // 開始、停止のたびに進める。古い送信の結果を捨てるため。
   let generation = 0;
   let queues = new Map<string, SendQueue>();
   const timers = new Set<() => void>();
@@ -234,10 +234,6 @@ export function createOpSender(deps: {
       ready = false;
       for (const stop of stopListening) stop();
       stopListening = [];
-      clearState();
-    },
-    // 利用者を替えるときに、送信の状態を捨てる。
-    reset() {
       clearState();
     },
     // 保留を戻して送る。サインインし直したときに使う。試行の番号は、新しい要求として0から数える。
