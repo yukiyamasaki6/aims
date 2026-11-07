@@ -1,5 +1,5 @@
 import { useTranslations } from "next-intl";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ringColorFor } from "../domain/ring-color";
 import {
@@ -47,6 +47,7 @@ export function EndRow({
   pointer,
   onSelectShot,
   onSelectEnd,
+  onLinesChange,
 }: {
   distance: Distance;
   displayNumber: number;
@@ -56,8 +57,16 @@ export function EndRow({
   pointer: Pointer;
   onSelectShot: (shot: Shot) => void;
   onSelectEnd: (distance: Distance, end: number) => void;
+  // 段の数が変わったときに呼ぶ。行の高さが変わり、指す行の位置がずれるため。
+  onLinesChange: () => void;
 }) {
   const { ref, lines, columns } = useBallLines(distance.arrows_per_end);
+  const previousLines = useRef(lines);
+  useEffect(() => {
+    if (previousLines.current === lines) return;
+    previousLines.current = lines;
+    onLinesChange();
+  }, [lines, onLinesChange]);
   const endShots = sortEndShots(
     shots.filter((s) => s.distance_id === distance.id && s.end_number === end),
   );

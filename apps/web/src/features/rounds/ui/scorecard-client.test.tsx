@@ -1677,25 +1677,53 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     vi.restoreAllMocks();
   });
 
-  it("テンキーの高さが測れたとき、選択中のマスが領域の下端の格納ボタン（48px）に隠れる場合は、隠れる分だけ下へスクロールする", () => {
-    // Given
-    // 高さ800の領域（テンキーの上端まで）の700〜740にマスがある。見える下端は800-格納ボタンのはみ出し48-余白16=736のため、4だけ隠れている（テンキーの高さが測れる前から隠れているので、初期表示でもスクロールする）。
-    let reportKeypadHeight: (height: number) => void = () => {};
+  // 観測先ごとに大きさの変化を通知できるResizeObserverの差し替え。観測した要素を記録する。
+  function stubResizeObserver() {
+    const observed = new Map<
+      Element,
+      (width: number, height: number) => void
+    >();
     vi.stubGlobal(
       "ResizeObserver",
       class {
-        constructor(callback: ResizeObserverCallback) {
-          reportKeypadHeight = (height) =>
-            callback(
-              [{ contentRect: { height } } as ResizeObserverEntry],
+        constructor(private callback: ResizeObserverCallback) {}
+        observe(element: Element) {
+          observed.set(element, (width, height) =>
+            this.callback(
+              [{ contentRect: { width, height } } as ResizeObserverEntry],
               this as unknown as ResizeObserver,
-            );
+            ),
+          );
         }
-        observe() {}
         unobserve() {}
         disconnect() {}
       },
     );
+    const target = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (!element) throw new Error(`${selector}が無い`);
+      return element;
+    };
+    return {
+      observed,
+      // スクロール領域(<main>)の大きさが変わったことを知らせる。
+      resizeContainer: () =>
+        act(() => observed.get(target("[data-follow-container]"))?.(0, 800)),
+      // エンドの玉の領域の幅が測れた・変わったことを知らせる。
+      resizeBalls: (testId: string, width: number) =>
+        act(() => {
+          const grid = target(`[data-testid="${testId}"]`).querySelector(
+            ".relative.grid",
+          );
+          if (grid) observed.get(grid)?.(width, 0);
+        }),
+    };
+  }
+
+  it("領域の大きさが変わったとき(テンキーの高さが測れたとき)、選択中のマスが領域の下端の格納ボタン（48px）に隠れる場合は、隠れる分だけ下へスクロールする", () => {
+    // Given
+    // 高さ800の領域（テンキーの上端まで）の700〜740にマスがある。見える下端は800-格納ボタンのはみ出し48-余白16=736のため、4だけ隠れている（初期表示でもスクロールする）。
+    const { resizeContainer } = stubResizeObserver();
     stubLayout({
       cell: { top: 700, bottom: 740 },
       container: { top: 0, bottom: 800 },
@@ -1704,15 +1732,89 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     vi.mocked(Element.prototype.scrollBy).mockClear();
 
     // When
-    act(() => reportKeypadHeight(300));
+    resizeContainer();
 
     // Then
-    // テンキーの高さの値は、スクロール量の計算に使わない。
     expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
     expect(Element.prototype.scrollBy).toHaveBeenCalledWith({
       top: 4,
       behavior: "smooth",
     });
+  });
+
+  it("玉の領域の幅が測れて行の段数が変わったとき、指す行が隠れていればスクロールする", () => {
+    // Given
+    const { resizeBalls } = stubResizeObserver();
+    const layout = stubLayout({
+      cell: { top: 100, bottom: 140 },
+      container: { top: 0, bottom: 800 },
+    });
+    setup();
+    layout.cell = { top: 760, bottom: 790 };
+    vi.mocked(Element.prototype.scrollBy).mockClear();
+
+    // When
+    // 矢数3で、幅72pxには2つまで収まるため、段数が1から2になる。
+    resizeBalls("end-row-1-1", 72);
+
+    // Then
+    expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
+    expect(Element.prototype.scrollBy).toHaveBeenCalledWith({
+      top: 790 - (800 - 48 - 16),
+      behavior: "smooth",
+    });
+  });
+
+  it("行の段数が変わらない幅の変化では、スクロールしない", () => {
+    // Given
+    const { resizeBalls } = stubResizeObserver();
+    const layout = stubLayout({
+      cell: { top: 100, bottom: 140 },
+      container: { top: 0, bottom: 800 },
+    });
+    setup();
+    layout.cell = { top: 760, bottom: 790 };
+    vi.mocked(Element.prototype.scrollBy).mockClear();
+
+    // When
+    // 矢数3は、幅108px(3つ収まる)でも幅144px(4つ収まる)でも1段のまま。
+    resizeBalls("end-row-1-1", 108);
+    resizeBalls("end-row-1-1", 144);
+
+    // Then
+    expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("距離を追加して内容が伸びても、別の場所へスクロールした位置は戻らない", async () => {
+    // Given
+    const user = userEvent.setup();
+    const { observed } = stubResizeObserver();
+    const layout = stubLayout({
+      cell: { top: 100, bottom: 140 },
+      container: { top: 0, bottom: 800 },
+    });
+    setup();
+    // 利用者が別の場所へスクロールし、指す行が隠れた。
+    layout.cell = { top: 760, bottom: 790 };
+    vi.mocked(Element.prototype.scrollBy).mockClear();
+
+    // When
+    await user.click(screen.getByTestId("add-distance-button"));
+    await screen.findByTestId("distance-config-distance-2");
+
+    // Then
+    expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+    // 内容全体は観測しない。観測するのは、スクロール領域、玉の領域、テンキーだけである。
+    const container = document.querySelector("[data-follow-container]");
+    for (const element of observed.keys()) {
+      const allowed =
+        element === container ||
+        element.matches(".relative.grid") ||
+        element.closest(
+          "[data-testid='keypad-panel'],[data-testid='bottom-frame']",
+        );
+      expect(allowed).toBeTruthy();
+    }
   });
 
   it("選択中のマスが表示領域より上にある場合は、上端の余白の位置まで上へスクロールする", () => {
@@ -2025,13 +2127,16 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
           removeEventListener: vi.fn(),
         }) as unknown as MediaQueryList,
     );
+    const { resizeContainer } = stubResizeObserver();
     stubLayout({
       cell: { top: 760, bottom: 790 },
       container: { top: 0, bottom: 800 },
     });
+    setup();
 
     // When
-    setup();
+    // 向きが変わると領域の大きさが変わり、横向きの重なり(0)で計算し直す。
+    resizeContainer();
 
     // Then
     expect(Element.prototype.scrollBy).toHaveBeenLastCalledWith({

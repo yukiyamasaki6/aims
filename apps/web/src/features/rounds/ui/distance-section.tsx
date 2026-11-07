@@ -30,6 +30,7 @@ export function DistanceSection({
   enqueue,
   onSelectShot,
   onSelectEnd,
+  onLinesChange,
 }: {
   distance: Distance;
   distances: Distance[];
@@ -46,6 +47,7 @@ export function DistanceSection({
   enqueue: (operation: SyncOperation) => void;
   onSelectShot: (shot: Shot) => void;
   onSelectEnd: (distance: Distance, end: number) => void;
+  onLinesChange: () => void;
 }) {
   const displayNumber = distanceNumber(distances, d.id);
   const face = targetFaces.find((f) => f.id === d.target_face_id);
@@ -63,6 +65,7 @@ export function DistanceSection({
       pointer={pointer}
       onSelectShot={onSelectShot}
       onSelectEnd={onSelectEnd}
+      onLinesChange={onLinesChange}
     />
   );
 

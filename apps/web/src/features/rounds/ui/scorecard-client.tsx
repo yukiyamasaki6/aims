@@ -67,6 +67,7 @@ export function ScorecardClient({
           />
         </div>
         <main
+          ref={keypad.observeContainer}
           data-follow-container
           className="flex min-h-0 flex-1 flex-col overflow-y-auto"
         >
@@ -141,6 +142,7 @@ function ScorecardBody({ model }: { model: ScorecardModel }) {
             enqueue={sync.append}
             onSelectShot={input.selectShot}
             onSelectEnd={input.selectEnd}
+            onLinesChange={model.keypad.follow}
           />
         ))}
         <Button

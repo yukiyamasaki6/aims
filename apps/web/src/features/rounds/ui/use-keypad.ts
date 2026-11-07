@@ -83,6 +83,21 @@ function useKeypadHeight() {
   return { keypadHeight, setKeypadNode };
 }
 
+// スクロール領域(<main>)の大きさが変わったとき、follow()を呼ぶ。
+// 向きの切り替え、窓の大きさ、テンキーの高さ(暫定値から実測値への変化を含む)で変わる。
+// 内容全体の高さは見ない。距離の追加・削除などで内容が伸びたときに、利用者が別の場所へスクロールした位置を指す行へ戻してしまうため。
+function useFollowOnResize(follow: () => void) {
+  return useCallback(
+    (element: HTMLElement | null) => {
+      if (!element) return;
+      const observer = new ResizeObserver(follow);
+      observer.observe(element);
+      return () => observer.disconnect();
+    },
+    [follow],
+  );
+}
+
 // 指している矢の行が、テンキーと固定表示に隠れていれば、隠れない位置までスクロールする。見えていれば動かさない。
 // <main>の矩形が帯・テンキーの上端までになる。格納ボタンは重なるため、その分をbottomOverlayで引く。
 // 返す関数は安定していて、呼ぶ時点の最新の指す矢とbottomOverlayを参照から読む。
@@ -118,11 +133,12 @@ export function useKeypad({
   // 利用者の操作で指す矢を設定するたびに増やし、同じ矢でも同じエンド内の移動でもスクロールを促す。
   const [followKey, setFollowKey] = useState(0);
   const follow = useFollow(pointer, isLandscape ? 0 : KEYPAD_TOGGLE_OVERHANG);
-  const keypadInset = isLandscape ? 0 : keypadHeight + KEYPAD_TOGGLE_OVERHANG;
-  // 契機は、利用者の操作ごとの追従の要求(マウント時の最初の1回を含む)と、テンキーの占める高さ(向きの切り替えを含む)。
-  // 他の端末の変化で指す矢が直されても、追従しない。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keypadInset、followKeyだけを契機にする
-  useEffect(follow, [keypadInset, followKey]);
+  // 追従の契機は2系統で、処理はどちらもfollow()。
+  // (a) 利用者の操作で指す矢を設定したとき(マウント時の最初の1回を含む)。他の端末の変化で指す矢が直されても、追従しない。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: followKeyだけを契機にする
+  useEffect(follow, [followKey]);
+  // (b) 配置が変わったとき。スクロール領域の大きさが変わったとき(向き、窓、テンキーの高さ)と、行の段数が変わったとき(呼び元が`follow`を渡す)。
+  const observeContainer = useFollowOnResize(follow);
   const followPointer = useCallback(
     (next: Pointer) => {
       setPointer(next);
@@ -144,5 +160,7 @@ export function useKeypad({
     keypadDistance,
     closeKeypad,
     followPointer,
+    follow,
+    observeContainer,
   };
 }
