@@ -112,20 +112,6 @@ function useScrollToPointer(
   }, [pointerKey, keypadInset, followKey]);
 }
 
-// 玉と空白のボタンだけフォーカスを外す。無条件にblurすると、キーパッド外の
-// 他の入力欄（RoundConfigPanel等）へフォーカスした瞬間にも外れてしまう。
-function blurShotButtons() {
-  const active = document.activeElement as HTMLElement | null;
-  const testId = active?.dataset.testid;
-  if (
-    testId?.startsWith("shot-ball-") ||
-    testId?.startsWith("end-blank-") ||
-    testId?.startsWith("end-slot-")
-  ) {
-    active?.blur();
-  }
-}
-
 // テンキーの開閉、高さ、向きと、指している矢へのスクロール。
 // 指している矢の有無がそのままテンキーの開閉状態であり、別のstateとして二重管理しない。
 export function useKeypad({
@@ -161,14 +147,9 @@ export function useKeypad({
     [setPointer],
   );
 
-  const closeKeypad = useCallback(() => {
-    // 指している矢を残したままだと輪の表示が消えず、見た目上フォーカスが
-    // 外れていないように見えるため外す。
-    // これによりkeypadShouldBeOpen（=指している矢の有無）もfalseになり、
-    // useKeypadPresenceの格納アニメーション用useEffectが発火する。
-    setPointer(null);
-    blurShotButtons();
-  }, [setPointer]);
+  // 指している矢を外すと輪が消え、keypadShouldBeOpen（=指している矢の有無）もfalseになり、
+  // useKeypadPresenceの格納アニメーション用useEffectが発火する。
+  const closeKeypad = useCallback(() => setPointer(null), [setPointer]);
 
   return {
     ...presence,

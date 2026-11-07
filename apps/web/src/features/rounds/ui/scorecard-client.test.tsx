@@ -1600,21 +1600,6 @@ describe("ScorecardClient テンキーの開閉と配置", () => {
     });
   });
 
-  it("テンキーを閉じると、押した空白に残るフォーカスを外す", async () => {
-    // Given
-    const user = userEvent.setup();
-    setup();
-    await user.click(screen.getByTestId("end-blank-1-2"));
-    expect(screen.getByTestId("end-blank-1-2")).toHaveFocus();
-
-    // When
-    // iOSのSafariなど、ボタンをタップしてもフォーカスが移らない環境を模すため、フォーカスを移さないfireEventで押す。
-    fireEvent.click(screen.getByTestId("keypad-toggle"));
-
-    // Then
-    expect(screen.getByTestId("end-blank-1-2")).not.toHaveFocus();
-  });
-
   it("横向きの場合は、テンキーをボトムシートではなく横の側パネルに表示する", () => {
     // Given
     vi.mocked(window.matchMedia).mockImplementation(
