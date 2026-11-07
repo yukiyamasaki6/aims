@@ -294,7 +294,8 @@ describe("loadList: 取得の間の利用者の切り替え", () => {
     const listing = Promise.withResolvers<FetchResult<RoundListItem[]>>();
     const loading = loadListWith(tab, () => listing.promise);
     await flush();
-    tab.hub.setUser("user-2");
+    tab.hub.stop();
+    tab.hub.start("user-2");
     await tab.hub.ready();
     syncFinishesAll(tab.requests);
     listing.resolve({ status: "ok", data: [] });
@@ -333,7 +334,8 @@ describe("loadList: 取得の間の利用者の切り替え", () => {
     const listing = Promise.withResolvers<FetchResult<RoundListItem[]>>();
     const loading = loadListWith(tab, () => listing.promise);
     await flush();
-    tab.hub.setUser("user-1");
+    tab.hub.stop();
+    tab.hub.start("user-1");
     await tab.hub.ready();
     syncFinishesAll(tab.requests);
     listing.resolve({ status: "ok", data: [] });
