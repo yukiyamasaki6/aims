@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import type { DistanceConfig } from "../domain/distance-config";
+import type { Distance } from "../domain/scorecard-types";
 import type { SyncOperation } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
 import { DistanceFields } from "./distance-fields";
@@ -15,6 +15,7 @@ import { useDistanceDraft } from "./use-distance-draft";
 // （マウントのたびにdraftと起点が現在値から作られ、開いている間は`distance`の変化で書き換えない）。
 export function DistanceEditFields({
   distance,
+  displayNumber,
   hasShots,
   targetFaces,
   roundFormat,
@@ -24,12 +25,14 @@ export function DistanceEditFields({
   onOpenChange,
   enqueue,
 }: {
-  distance: DistanceConfig;
+  distance: Distance;
+  // 画面上の距離の番号。
+  displayNumber: number;
   hasShots: boolean;
   targetFaces: TargetFaceOption[];
   roundFormat: string;
   roundBowType: string;
-  onSaved: (updated: DistanceConfig) => void;
+  onSaved: (updated: Distance) => void;
   onDeleted: () => void;
   onOpenChange: (open: boolean) => void;
   enqueue: (operation: SyncOperation) => void;
@@ -51,7 +54,7 @@ export function DistanceEditFields({
       <DialogContent>
         <div className="flex flex-col gap-3">
           <DistanceFields
-            distanceNumber={distance.distanceNumber}
+            distanceNumber={displayNumber}
             draft={draft}
             setDraft={setDraft}
             fieldErrors={fieldErrors}
@@ -62,7 +65,7 @@ export function DistanceEditFields({
           />
 
           <DistanceEditActions
-            distanceNumber={distance.distanceNumber}
+            distanceNumber={displayNumber}
             onSave={handleSave}
             onDelete={handleDeleteClick}
           />

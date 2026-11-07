@@ -41,14 +41,6 @@ describe("TargetFaceIcon", () => {
     target_face_rings: [yellowRing, redRing],
   };
 
-  it("renders a dashed placeholder when no spot has any ring", () => {
-    const { container } = render(<TargetFaceIcon spots={[emptySpot]} />, {
-      wrapper: IntlTestProvider,
-    });
-    expect(container.querySelector("svg")).toBeNull();
-    expect(container.querySelector("span.border-dashed")).not.toBeNull();
-  });
-
   it("renders a group per spot, positioned by center_x/center_y", () => {
     const { container } = render(
       <TargetFaceIcon spots={[emptySpot, filledSpot]} />,

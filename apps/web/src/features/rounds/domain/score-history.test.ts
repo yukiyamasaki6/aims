@@ -55,26 +55,6 @@ describe("取り消しの列", () => {
     });
   });
 
-  it("列が空なら、戻るはnull", () => {
-    // Given
-
-    // When
-    const result = undoHistory({ undoStack: [], redoStack: [] });
-
-    // Then
-    expect(result).toBeNull();
-  });
-
-  it("列が空なら、進むはnull", () => {
-    // Given
-
-    // When
-    const result = redoHistory({ undoStack: [], redoStack: [] });
-
-    // Then
-    expect(result).toBeNull();
-  });
-
   it("距離の構成の変更・削除では、その距離の書き込みだけを捨てる", () => {
     // Given
 

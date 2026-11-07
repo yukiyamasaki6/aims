@@ -58,7 +58,6 @@ export function createTestRounds(
   };
   const roundStart = { startRound: vi.fn() };
   const presetDeletion = { deletePreset: vi.fn() };
-  const deletion = { deleteRound: vi.fn() };
   const { ids } = createFakeUniqueIds({
     prefix: "event",
     randomBytes: options.randomBytes,
@@ -85,7 +84,6 @@ export function createTestRounds(
     fetching: fetching as unknown as RoundFetching,
     clock,
     connectivity,
-    deletion,
   });
   hub.start(options.userId === undefined ? "user-1" : options.userId);
   return {
@@ -100,7 +98,6 @@ export function createTestRounds(
     fetching,
     roundStart,
     presetDeletion,
-    deletion,
     editing,
   };
 }

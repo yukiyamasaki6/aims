@@ -5,10 +5,28 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import type { DistanceConfig } from "../domain/distance-config";
+import type { Distance } from "../domain/scorecard-types";
 import { DistanceEditFields } from "./distance-edit-fields";
 import { createFakeRoundProcedures } from "./round-stores-test-helpers";
 import { RoundProceduresProvider } from "./rounds-context";
+
+// 輪を1つだけ持つ的。的の表示は輪を持つ的を前提にする。
+const SINGLE_RING_SPOTS = [
+  {
+    center_x: 0,
+    center_y: 0,
+    target_face_rings: [
+      {
+        radius: 1,
+        color: "#FFFFFF",
+        line_color: null,
+        z_index: 1,
+        score_str: "M",
+        score_int: 0,
+      },
+    ],
+  },
+];
 
 const roundsText = translatorFor("rounds");
 
@@ -18,7 +36,7 @@ const targetFaceOutdoorRecurve: TargetFaceOption = {
   size: 122,
   format: "outdoor",
   bow_type: ["recurve", "compound"],
-  target_face_spots: [],
+  target_face_spots: SINGLE_RING_SPOTS,
 };
 
 const targetFaceIndoorCompound: TargetFaceOption = {
@@ -27,19 +45,19 @@ const targetFaceIndoorCompound: TargetFaceOption = {
   size: 40,
   format: "indoor",
   bow_type: ["compound"],
-  target_face_spots: [],
+  target_face_spots: SINGLE_RING_SPOTS,
 };
 
 const targetFaces = [targetFaceOutdoorRecurve, targetFaceIndoorCompound];
 
-const baseDistance: DistanceConfig = {
+const baseDistance: Distance = {
   id: "distance-1",
-  distanceNumber: 1,
+  position_key: "a",
   distance: 70,
-  totalEnds: 6,
-  arrowsPerEnd: 6,
-  targetFaceId: targetFaceOutdoorRecurve.id,
-  isMarked: true,
+  total_ends: 6,
+  arrows_per_end: 6,
+  target_face_id: targetFaceOutdoorRecurve.id,
+  is_marked: true,
 };
 
 const EVENT_ID = "00000000-0000-4000-8000-000000000001";
@@ -62,6 +80,7 @@ function setup(
   const utils = render(
     <DistanceEditFields
       distance={baseDistance}
+      displayNumber={1}
       hasShots={false}
       targetFaces={targetFaces}
       roundFormat="outdoor"
@@ -233,7 +252,7 @@ describe("DistanceEditFields", () => {
         // When
         setup({
           hasShots: true,
-          distance: { ...baseDistance, targetFaceId: "unknown-face" },
+          distance: { ...baseDistance, target_face_id: "unknown-face" },
         });
 
         // Then
@@ -247,7 +266,7 @@ describe("DistanceEditFields", () => {
 
     describe("選択中の的が一覧に存在しない場合", () => {
       const props = {
-        distance: { ...baseDistance, targetFaceId: "unknown-face" },
+        distance: { ...baseDistance, target_face_id: "unknown-face" },
       };
 
       it("選択中の的が一覧に無ければ、トリガーは「的データを取得できません」の表示とラベルになり、操作不可にならない", () => {
@@ -319,12 +338,12 @@ describe("DistanceEditFields", () => {
         // Then
         expect(onSaved).toHaveBeenCalledWith({
           id: "distance-1",
-          distanceNumber: 1,
+          position_key: "a",
           distance: 50,
-          totalEnds: 12,
-          arrowsPerEnd: 3,
-          targetFaceId: "face-outdoor-recurve",
-          isMarked: true,
+          total_ends: 12,
+          arrows_per_end: 3,
+          target_face_id: "face-outdoor-recurve",
+          is_marked: true,
         });
         expect(enqueue).toHaveBeenCalledWith({
           type: "distance.updated",
@@ -367,9 +386,10 @@ describe("DistanceEditFields", () => {
         await user.type(screen.getByTestId("distance-config-distance-1"), "50");
 
         // When
-        const element = (distance: DistanceConfig) => (
+        const element = (distance: Distance) => (
           <DistanceEditFields
             distance={distance}
+            displayNumber={1}
             hasShots={false}
             targetFaces={targetFaces}
             roundFormat="outdoor"
@@ -381,7 +401,9 @@ describe("DistanceEditFields", () => {
           />
         );
         rerender(element({ ...baseDistance }));
-        rerender(element({ ...baseDistance, totalEnds: 12, arrowsPerEnd: 3 }));
+        rerender(
+          element({ ...baseDistance, total_ends: 12, arrows_per_end: 3 }),
+        );
 
         // Then
         expect(screen.getByTestId("distance-config-distance-1")).toHaveValue(
@@ -396,9 +418,10 @@ describe("DistanceEditFields", () => {
         procedures.ids.next.mockReturnValue(EVENT_ID);
         await user.clear(screen.getByTestId("distance-config-distance-1"));
         await user.type(screen.getByTestId("distance-config-distance-1"), "50");
-        const element = (distance: DistanceConfig) => (
+        const element = (distance: Distance) => (
           <DistanceEditFields
             distance={distance}
+            displayNumber={1}
             hasShots={false}
             targetFaces={targetFaces}
             roundFormat="outdoor"
@@ -410,7 +433,9 @@ describe("DistanceEditFields", () => {
           />
         );
         rerender(element({ ...baseDistance }));
-        rerender(element({ ...baseDistance, totalEnds: 12, arrowsPerEnd: 3 }));
+        rerender(
+          element({ ...baseDistance, total_ends: 12, arrows_per_end: 3 }),
+        );
 
         // When
         await user.click(screen.getByTestId("distance-config-save-1"));
@@ -658,7 +683,7 @@ describe("DistanceEditFields", () => {
           size: 80,
           format: "field",
           bow_type: ["recurve"],
-          target_face_spots: [],
+          target_face_spots: SINGLE_RING_SPOTS,
         };
         setup({ targetFaces: [...targetFaces, targetFaceField] });
         await user.click(screen.getByTestId("target-face-picker-trigger"));

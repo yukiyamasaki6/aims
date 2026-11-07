@@ -37,7 +37,6 @@ function setup(
   const procedures = createFakeRoundProcedures();
   const appendShot = vi.fn();
   const setPointer = vi.fn();
-  const setKeypadMounted = vi.fn();
   const history = {
     canUndo: false,
     canRedo: false,
@@ -61,7 +60,6 @@ function setup(
         liveShots: [],
         pointer: options.pointer ?? newShotPointer("d-1", 1),
         setPointer,
-        setKeypadMounted,
         appendShot,
         history,
       }),
@@ -88,5 +86,18 @@ describe("useShotInput", () => {
       scoreInt: 10,
     });
     expect(history.recordHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("記録済みの矢を指していないときのクリアは、何も積まずに例外にする", () => {
+    // Given
+    const { input, appendShot, history } = setup();
+
+    // When
+    const clear = () => input.handleClear();
+
+    // Then
+    expect(clear).toThrow();
+    expect(appendShot).not.toHaveBeenCalled();
+    expect(history.recordHistory).not.toHaveBeenCalled();
   });
 });

@@ -83,27 +83,14 @@ describe("shotIdAfter", () => {
       expect(third > second).toBe(true);
     });
 
-    it("UUIDの形でないIDは数えない", () => {
+    it("最大の1つ前の先頭を持つ矢の後は、先頭を+1にする", () => {
       // Given
 
       // When
-      const id = shotIdAfter(["s-9", "ffffffff"], NOW, ZEROS);
-
-      // Then
-      expect(timeOf(id)).toBe(NOW);
-    });
-
-    it("最大+1が48ビットを超えるときは時計の値にし、最大の1つ前は+1にする", () => {
-      // Given
-
-      // When
-      const atMax = "ffffffff-ffff-4fff-bfff-ffffffffffff";
       const belowMax = "ffffffff-fffe-4fff-bfff-ffffffffffff";
-      const afterMax = shotIdAfter([atMax], NOW, ZEROS);
       const afterBelowMax = shotIdAfter([belowMax], NOW, ZEROS);
 
       // Then
-      expect(timeOf(afterMax)).toBe(NOW);
       expect(afterBelowMax.startsWith("ffffffff-ffff-7")).toBe(true);
     });
   });

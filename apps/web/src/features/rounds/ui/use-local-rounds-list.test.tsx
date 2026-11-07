@@ -31,7 +31,6 @@ const loaded: LocalRoundsList = {
       total: 3,
     },
   ],
-  deleted: new Set(),
 };
 
 afterEach(() => {

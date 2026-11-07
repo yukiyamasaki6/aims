@@ -1,11 +1,9 @@
 import { useState } from "react";
-import type { DistanceConfig } from "../domain/distance-config";
 import {
   changesDistanceStructure,
   distanceToAdd,
 } from "../domain/distance-operations";
 import type { Distance } from "../domain/scorecard-types";
-import type { Pointer } from "../domain/shot-pointer";
 import type { SyncOperation } from "../domain/sync-events";
 import { useRoundProcedures } from "./rounds-context";
 
@@ -13,34 +11,24 @@ import { useRoundProcedures } from "./rounds-context";
 export function useDistanceEditing({
   roundId,
   distances,
-  pointer,
-  setPointer,
   append,
   discardHistory,
 }: {
   roundId: string;
   distances: Distance[];
-  pointer: Pointer;
-  setPointer: (pointer: Pointer) => void;
   append: (operation: SyncOperation) => Promise<void>;
   // 距離の書き込みを、戻す・やり直しの列から捨てる。
   discardHistory: (distanceId: string) => void;
 }) {
   const { ids } = useRoundProcedures();
-  const [editingDistanceIds, setEditingDistanceIds] = useState<Set<string>>(
-    new Set(),
+  // 編集を開く距離は1つだけ。どの距離も開いていないときはnull。
+  const [editingDistanceId, setEditingDistanceId] = useState<string | null>(
+    null,
   );
 
+  // 同じ距離なら閉じ、違う距離なら開く距離を替える。
   function toggleDistanceEditing(distanceId: string) {
-    setEditingDistanceIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(distanceId)) {
-        next.delete(distanceId);
-      } else {
-        next.add(distanceId);
-      }
-      return next;
-    });
+    setEditingDistanceId((prev) => (prev === distanceId ? null : distanceId));
   }
 
   function handleAddDistance() {
@@ -51,11 +39,11 @@ export function useDistanceEditing({
       roundId,
     });
     // 追加した距離はすぐ編集できるよう、編集パネルを展開しておく。
-    setEditingDistanceIds((prev) => new Set(prev).add(newDistance.id));
+    setEditingDistanceId(newDistance.id);
     append(operation);
   }
 
-  function handleDistanceSaved(updated: DistanceConfig) {
+  function handleDistanceSaved(updated: Distance) {
     const structureChanged = changesDistanceStructure(distances, updated);
     toggleDistanceEditing(updated.id);
     // 指している矢が新しい構成で無効になったときは、reconcilePointerが何も指さなくする。
@@ -64,16 +52,13 @@ export function useDistanceEditing({
 
   function handleDistanceDeleted(distanceId: string) {
     discardHistory(distanceId);
-    setEditingDistanceIds((prev) => {
-      const next = new Set(prev);
-      next.delete(distanceId);
-      return next;
-    });
-    if (pointer?.distanceId === distanceId) setPointer(null);
+    // 削除の確定の直後に、編集のダイアログを閉じる。
+    // 削除した距離を指していた矢は、保存の完了後の状態に合わせてreconcilePointerが外す。
+    setEditingDistanceId(null);
   }
 
   return {
-    editingDistanceIds,
+    editingDistanceId,
     toggleDistanceEditing,
     handleAddDistance,
     handleDistanceSaved,

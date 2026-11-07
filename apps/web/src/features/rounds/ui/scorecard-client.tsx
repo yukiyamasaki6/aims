@@ -12,7 +12,7 @@ import { CompleteRoundBar } from "./complete-round-bar";
 import { DistanceSection } from "./distance-section";
 import { KeypadButtons } from "./keypad-buttons";
 import { KeypadPanel } from "./keypad-panel";
-import { RoundConfigCard } from "./round-config-card";
+import { RoundConfigPanel } from "./round-config-panel";
 import { RoundSummaryBar } from "./round-summary-bar";
 import { ScorecardHeaderBar } from "./scorecard-header-bar";
 import { type ScorecardModel, useScorecard } from "./use-scorecard";
@@ -27,7 +27,7 @@ export function ScorecardClient({
   loaded: LoadedRound;
   targetFaces: TargetFaceOption[];
   // 端末のベースで開いたラウンドが、取り直したサーバーに無いとき(削除済みなど)に呼ぶ。
-  onGone?: () => void;
+  onGone: () => void;
 }) {
   const model = useScorecard({
     roundId,
@@ -37,7 +37,8 @@ export function ScorecardClient({
   });
   const { sync, keypad } = model;
   const { roundConfig, distances, shots, status } = sync.state;
-  const keypadButtons = (
+  // テンキーは指す矢があるか、格納の待ち(直近の距離を保持)のときだけ付く。一度も指していないときは距離が無く、付かない。
+  const keypadButtons = keypad.keypadDistance && (
     <KeypadButtons
       keypadDistance={keypad.keypadDistance}
       targetFaces={targetFaces}
@@ -65,7 +66,11 @@ export function ScorecardClient({
             targetFaces={targetFaces}
           />
         </div>
-        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <main
+          ref={keypad.observeContainer}
+          data-follow-container
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        >
           <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
             <ScorecardBody model={model} />
           </div>
@@ -107,9 +112,9 @@ function ScorecardBody({ model }: { model: ScorecardModel }) {
 
   return (
     <div className="flex flex-1 flex-col gap-6 px-8 pb-8">
-      <RoundConfigCard
+      <RoundConfigPanel
         roundId={model.roundId}
-        roundConfig={roundConfig}
+        initial={roundConfig}
         defaultExpanded={model.initiallyEmpty && model.inProgress}
         hasUnmarkedDistances={distances.some((d) => !d.is_marked)}
         enqueue={sync.append}
@@ -128,16 +133,16 @@ function ScorecardBody({ model }: { model: ScorecardModel }) {
             targetFaces={targetFaces}
             roundFormat={roundConfig.format}
             roundBowType={roundConfig.bowType}
-            editing={editing.editingDistanceIds.has(d.id)}
+            editing={editing.editingDistanceId === d.id}
             hasShots={distanceIdsWithShots.has(d.id)}
             pointer={model.pointer}
-            leavingShotId={model.leavingShotId}
             onToggleEditing={() => editing.toggleDistanceEditing(d.id)}
             onSaved={editing.handleDistanceSaved}
             onDeleted={() => editing.handleDistanceDeleted(d.id)}
             enqueue={sync.append}
             onSelectShot={input.selectShot}
             onSelectEnd={input.selectEnd}
+            onLinesChange={model.keypad.follow}
           />
         ))}
         <Button

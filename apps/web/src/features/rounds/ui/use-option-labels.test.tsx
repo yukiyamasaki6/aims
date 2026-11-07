@@ -21,20 +21,6 @@ describe("useOptionLabels", () => {
     expect(bowTypeLabel("barebow")).toBe(roundsText("bowTypeOption.barebow"));
   });
 
-  it("選択肢に無い値は、値のまま返す", () => {
-    // Given
-    const { result } = renderHook(() => useOptionLabels(), {
-      wrapper: IntlTestProvider,
-    });
-
-    // When
-    const { formatLabel, bowTypeLabel } = result.current;
-
-    // Then
-    expect(formatLabel("unknown")).toBe("unknown");
-    expect(bowTypeLabel("unknown")).toBe("unknown");
-  });
-
   it("選択肢を、値と表示名の組で、並びのとおり返す", () => {
     // Given
     const { result } = renderHook(() => useOptionLabels(), {

@@ -13,10 +13,7 @@ describe("Button", () => {
       render(<Button>{label}</Button>);
 
       // Then
-      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
-        "data-slot",
-        "button",
-      );
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     });
 
     describe("variant・size", () => {

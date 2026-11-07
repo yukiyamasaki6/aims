@@ -21,6 +21,11 @@ export function revealDelta({
   return 0;
 }
 
+// 追従の対象の行を指す属性(`data-follow-row`)の値。スクロールの領域は`data-follow-container`、距離のカードは`data-distance-card`で探す。
+export function followRowKey(distanceId: string, endNumber: number): string {
+  return `${distanceId}:${endNumber}`;
+}
+
 // 領域の中の固定表示（data-sticky-inset）の下端のうち最も下のもの。
 // 別の距離の小計は、その距離の行より上で外れていて対象の行を隠さないため除く。
 function stickyBottom(
@@ -28,10 +33,10 @@ function stickyBottom(
   cell: Element,
   fallback: number,
 ): number {
-  const ownDistance = cell.closest('[data-testid^="distance-summary-"]');
+  const ownDistance = cell.closest("[data-distance-card]");
   let bottom = fallback;
   for (const el of container.querySelectorAll("[data-sticky-inset]")) {
-    const distance = el.closest('[data-testid^="distance-summary-"]');
+    const distance = el.closest("[data-distance-card]");
     if (distance !== null && distance !== ownDistance) continue;
     bottom = Math.max(bottom, el.getBoundingClientRect().bottom);
   }
@@ -44,11 +49,14 @@ function stickyBottom(
 // 上側は領域の中の固定表示（ラウンドの結果、距離の小計）だけを実測で見込み、
 // 固定表示に余白を付けず、接する行は動かさない。
 export function scrollPointerIntoView(
-  testId: string,
+  distanceId: string,
+  endNumber: number,
   bottomOverlay: number,
 ): void {
-  const cell = document.querySelector(`[data-testid="${testId}"]`);
-  const container = cell?.closest<HTMLElement>(".overflow-y-auto");
+  const cell = document.querySelector(
+    `[data-follow-row="${followRowKey(distanceId, endNumber)}"]`,
+  );
+  const container = cell?.closest<HTMLElement>("[data-follow-container]");
   if (!cell || !container) return;
 
   const cellRect = cell.getBoundingClientRect();

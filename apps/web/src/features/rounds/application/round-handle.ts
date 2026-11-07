@@ -191,11 +191,13 @@ export function createRoundHandle(
         snapshot = UNOPENED;
       };
     },
+    // 画面の操作は開いている間にしか起きない。開いていないときは約束が破れたものとして例外にする。
     append: (operation) =>
-      editing.append(roundId, operation, () =>
-        opening && snapshot.tables
-          ? { tables: snapshot.tables, targetFaces: opening.targetFaces }
-          : null,
-      ),
+      editing.append(roundId, operation, () => {
+        if (!opening || !snapshot.tables) {
+          throw new Error("画面を開いていないラウンドへは追記できません。");
+        }
+        return { tables: snapshot.tables, targetFaces: opening.targetFaces };
+      }),
   };
 }

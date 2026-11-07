@@ -33,18 +33,17 @@ function useScorecardInput(
     liveShots: pending.liveShots,
     pointer,
     setPointer: keypad.followPointer,
-    setKeypadMounted: keypad.setKeypadMounted,
     appendShot: pending.appendShot,
     history,
   });
-  return { pending, pointer, setPointer, keypad, history, input };
+  return { pointer, keypad, history, input };
 }
 
 type ScorecardOptions = {
   roundId: string;
   loaded: LoadedRound;
   targetFaces: TargetFaceOption[];
-  onGone?: () => void;
+  onGone: () => void;
 };
 
 // スコアカード画面の状態と操作。
@@ -58,13 +57,13 @@ export function useScorecard(options: ScorecardOptions) {
   const scorecardRef = useRef<HTMLDivElement>(null);
   useReorderAnimation(scorecardRef);
 
-  const { pending, pointer, setPointer, keypad, history, input } =
-    useScorecardInput(sync, inProgress);
+  const { pointer, keypad, history, input } = useScorecardInput(
+    sync,
+    inProgress,
+  );
   const editing = useDistanceEditing({
     roundId,
     distances,
-    pointer,
-    setPointer,
     append: sync.append,
     discardHistory: history.discardDistance,
   });
@@ -78,13 +77,11 @@ export function useScorecard(options: ScorecardOptions) {
     inProgress,
     scorecardRef,
     pointer,
-    leavingShotId: pending.leavingShotId,
     keypad,
     history,
     input,
     editing,
     // 完了へ変える操作を積み、保存を待ってから一覧へ移る。移った後も送信は常駐の送信器が続ける。
-    // 手続きが遷移で投げたときの拒否は意図して捕まえない(握りつぶすと原因を追えないためコンソールに出す)。渡す経路は定数で、実際には失敗しない。
     onComplete: () => {
       void leaving.completeRound(roundId);
     },

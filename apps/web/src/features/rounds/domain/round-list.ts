@@ -23,14 +23,16 @@ export type ServerRoundSummary = {
   }[];
 };
 
-// 端末の記録だけから求めた、入力中のラウンドと削除済みのラウンドのID。
+// 端末の記録だけから求めた、入力中のラウンド。削除済みのラウンドは入らない。
 export type LocalRoundsList = {
   inProgress: RoundListItem[];
-  deleted: ReadonlySet<string>;
 };
 
 // 一覧の材料。items はサーバーの一覧(端末の列は重ねていない。入力中も含む)、inProgress は取得を端末の記録へ反映した後に求めた入力中、deleted は端末の列で削除済みのID。
-export type LoadedRoundsList = LocalRoundsList & { items: RoundListItem[] };
+export type LoadedRoundsList = LocalRoundsList & {
+  items: RoundListItem[];
+  deleted: ReadonlySet<string>;
+};
 
 // 合計点は、削除されていない距離の削除されていない矢の点の和で求める。
 export function roundListItemOf(summary: ServerRoundSummary): RoundListItem {
@@ -78,12 +80,8 @@ export function localRoundsList(
   faces: ScoringTargetFace[],
 ): LocalRoundsList {
   const inProgress: RoundListItem[] = [];
-  const deleted = new Set<string>();
   for (const [roundId, { base, operations }] of snapshots) {
-    if (hasRoundDeletion(operations.map((entry) => entry.operation))) {
-      deleted.add(roundId);
-      continue;
-    }
+    if (hasRoundDeletion(operations.map((entry) => entry.operation))) continue;
     const state = deriveRoundState(base, operations, faces);
     if (!state || !isRoundInProgress(state)) continue;
     inProgress.push({
@@ -93,5 +91,5 @@ export function localRoundsList(
       total: state.shots.reduce((sum, shot) => sum + shot.score_int, 0),
     });
   }
-  return { inProgress, deleted };
+  return { inProgress };
 }

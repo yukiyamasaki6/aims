@@ -5,16 +5,15 @@ import { roundStreamId, type SyncOperation } from "../domain/sync-events";
 import type { RoundRecordHub } from "./round-record-hub";
 import type { UniqueIds } from "./unique-ids";
 
-// 追記の前の、画面の今の状態。画面を開いていないときはnull。
+// 追記の前の、画面の今の状態。
 type CurrentRound = () => {
   tables: RoundTables;
   targetFaces: ScoringTargetFace[];
-} | null;
+};
 
 export type RoundEditing = {
   // 操作を追記する。完了のラウンドの編集で表示中の距離か矢が変わるときは、続けて入力中へ戻す操作を積む。
   // 元の操作の保存の完了で解決する。
-  // currentがnullを返すとき(画面を開いていないとき)は、再開の操作を積まない。
   append(
     roundId: string,
     operation: SyncOperation,
@@ -36,10 +35,13 @@ export function createRoundEditing(deps: {
     append(roundId, operation, current) {
       const streamId = roundStreamId(roundId);
       const now = current();
-      const reopening =
-        now && reopeningRequired(now.tables, operation, now.targetFaces)
-          ? statusOperation(roundId, "in_progress", ids.next())
-          : null;
+      const reopening = reopeningRequired(
+        now.tables,
+        operation,
+        now.targetFaces,
+      )
+        ? statusOperation(roundId, "in_progress", ids.next())
+        : null;
       const saved = hub.append(streamId, operation);
       if (reopening) void hub.append(streamId, reopening);
       return saved;

@@ -123,7 +123,7 @@ describe("round(...)", () => {
     // Given
     const tab = createTab();
     const handle = tab.round("round-1");
-    await handle.append(roundUpdated({ changes: { name: "未送信" } }));
+    await tab.hub.append(STREAM, roundUpdated({ changes: { name: "未送信" } }));
 
     // When
     const peeked = handle.peek(loadedOf());
@@ -279,7 +279,7 @@ describe("round(...)", () => {
       // Given
       const tab = createTab();
       const handle = tab.round("round-1");
-      await handle.append(created);
+      await tab.hub.append(STREAM, created);
       const unwatch = handle.watch(opening());
 
       // When
@@ -294,7 +294,7 @@ describe("round(...)", () => {
       // Given
       const tab = createTab();
       const handle = tab.round("round-1");
-      await handle.append(created);
+      await tab.hub.append(STREAM, created);
       const unwatch = handle.watch(opening());
       tab.hub.applySendResults(
         STREAM,
@@ -347,7 +347,7 @@ describe("round(...)", () => {
     });
     await tab.hub.commit(STREAM, base, 10, "user-1");
     const confirmed = shotRecorded({ shotId: "s-1" });
-    await handle.append(confirmed);
+    await tab.hub.append(STREAM, confirmed);
     tab.hub.applySendResults(
       STREAM,
       [confirmed.eventId],
@@ -404,7 +404,7 @@ describe("round(...)", () => {
       });
       await tab.hub.commit(STREAM, base, 10, "user-1");
       const confirmed = shotRecorded({ shotId: "s-1" });
-      await handle.append(confirmed);
+      await tab.hub.append(STREAM, confirmed);
       tab.hub.applySendResults(
         STREAM,
         [confirmed.eventId],
@@ -431,7 +431,7 @@ describe("round(...)", () => {
       const saving = holdSaving(tab);
 
       // When
-      const appending = handle.append(shotRecorded());
+      const appending = tab.hub.append(STREAM, shotRecorded());
       await flush();
       const duringSave = {
         snapshot: handle.getSnapshot(),
@@ -463,7 +463,7 @@ describe("round(...)", () => {
       const listener = vi.fn();
       handle.subscribe(listener);
       const saving = holdSaving(tab);
-      const appending = handle.append(created);
+      const appending = tab.hub.append(STREAM, created);
       await flush();
 
       // When
@@ -553,7 +553,7 @@ describe("round(...)", () => {
         eventId: "rename",
         changes: { name: "改名" },
       });
-      await handle.append(rename);
+      await tab.hub.append(STREAM, rename);
       let discarded = false;
       tab.requests.subscribe(() => {
         if (!discarded && tab.requests.overlayNeeded("round-1")) {
@@ -782,20 +782,20 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     expect(handle.getSnapshot().state?.status).toBe("in_progress");
   });
 
-  it("画面を開く前(印を付ける前)の追記では、元の操作だけを積む", async () => {
+  it("画面を開く前(印を付ける前)の追記は、何も積まずに例外にする", () => {
     // Given
     const tab = createTab();
     const handle = tab.round("round-1");
 
     // When
-    await handle.append(shotRecorded());
-    await flush();
+    const append = () => handle.append(shotRecorded());
 
     // Then
-    expect(typesOf(tab)).toEqual(["shot.recorded"]);
+    expect(append).toThrow();
+    expect(typesOf(tab)).toEqual([]);
   });
 
-  it("印を外した後の追記では、元の操作だけを積む", async () => {
+  it("印を外した後の追記は、何も積まずに例外にする", () => {
     // Given
     const tab = createTab();
     const handle = tab.round("round-1");
@@ -803,11 +803,11 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     unwatch();
 
     // When
-    await handle.append(shotRecorded());
-    await flush();
+    const append = () => handle.append(shotRecorded());
 
     // Then
-    expect(typesOf(tab)).toEqual(["shot.recorded"]);
+    expect(append).toThrow();
+    expect(typesOf(tab)).toEqual([]);
   });
 
   it("追記の戻り値は、保存の完了で解決し、解決の時点で画面の状態へ反映済みである", async () => {

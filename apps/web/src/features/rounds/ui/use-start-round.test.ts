@@ -133,22 +133,5 @@ describe("useStartRound", () => {
       // Then
       expect(result.current).toMatchObject({ submitting: true, error: null });
     });
-
-    it("startRoundが拒否したとき、捕まえずに伝え、実行中を戻さない", async () => {
-      // Given
-      const failure = new Error("rejected path");
-      startRound.mockRejectedValue(failure);
-      const { result } = setup();
-      let outcome: unknown;
-
-      // When
-      await act(async () => {
-        outcome = await result.current.handleStart().catch((e: unknown) => e);
-      });
-
-      // Then
-      expect(outcome).toBe(failure);
-      expect(result.current).toMatchObject({ submitting: true, error: null });
-    });
   });
 });

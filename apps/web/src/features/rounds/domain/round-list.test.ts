@@ -87,13 +87,12 @@ describe("localRoundsList", () => {
     ]);
 
     // When
-    const { inProgress, deleted } = localRoundsList(snapshots, faces);
+    const { inProgress } = localRoundsList(snapshots, faces);
 
     // Then
     expect(inProgress).toEqual([
       { id: "r-active", name: "午前", roundDate: "2026-09-15", total: 0 },
     ]);
-    expect([...deleted]).toEqual(["r-deleted"]);
   });
 
   it("作成が未確定で記録した矢の点数を、合計に含める", () => {

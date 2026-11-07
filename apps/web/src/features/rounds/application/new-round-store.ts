@@ -9,7 +9,7 @@ import { type WhenOnline, whenOnline } from "./when-online";
 export type NewRoundStore = {
   // プリセットの一覧(個人と公式)。取得できれば保存し、取得できなければ保存済み。
   loadPresets(): Promise<FetchResult<Presets>>;
-  // 開始。作成を積み、保存の完了の後に詳細へ進む。送信の完了は待たない。遷移が投げたときは拒否する。
+  // 開始。作成を積み、保存の完了の後に詳細へ進む。送信の完了は待たない。拒否しない。
   startRound(
     preset: Preset | null,
     isCurrent: () => boolean,

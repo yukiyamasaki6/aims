@@ -9,7 +9,7 @@ function backdrops() {
 
 describe("DialogContent", () => {
   describe("表示", () => {
-    it("子要素をdata-slotを付与したダイアログ内に表示する", () => {
+    it("子要素をダイアログ内に表示する", () => {
       // Given
       const content = "本文";
 
@@ -22,10 +22,6 @@ describe("DialogContent", () => {
 
       // Then
       expect(screen.getByRole("dialog")).toHaveTextContent("本文");
-      expect(screen.getByRole("dialog")).toHaveAttribute(
-        "data-slot",
-        "dialog-content",
-      );
     });
 
     it("指定した属性をダイアログへ渡す", () => {

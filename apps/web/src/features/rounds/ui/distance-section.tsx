@@ -1,7 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
-import type { DistanceConfig } from "../domain/distance-config";
 import { distanceNumber, summarizeDistance } from "../domain/scorecard-scoring";
 import type { Distance, Shot } from "../domain/scorecard-types";
 import type { Pointer } from "../domain/shot-pointer";
@@ -24,13 +23,13 @@ export function DistanceSection({
   editing,
   hasShots,
   pointer,
-  leavingShotId,
   onToggleEditing,
   onSaved,
   onDeleted,
   enqueue,
   onSelectShot,
   onSelectEnd,
+  onLinesChange,
 }: {
   distance: Distance;
   distances: Distance[];
@@ -41,13 +40,13 @@ export function DistanceSection({
   editing: boolean;
   hasShots: boolean;
   pointer: Pointer;
-  leavingShotId: string | null;
   onToggleEditing: () => void;
-  onSaved: (updated: DistanceConfig) => void;
+  onSaved: (updated: Distance) => void;
   onDeleted: () => void;
   enqueue: (operation: SyncOperation) => void;
   onSelectShot: (shot: Shot) => void;
   onSelectEnd: (distance: Distance, end: number) => void;
+  onLinesChange: () => void;
 }) {
   const displayNumber = distanceNumber(distances, d.id);
   const face = targetFaces.find((f) => f.id === d.target_face_id);
@@ -63,15 +62,16 @@ export function DistanceSection({
       shots={shots}
       targetFace={face}
       pointer={pointer}
-      leavingShotId={leavingShotId}
       onSelectShot={onSelectShot}
       onSelectEnd={onSelectEnd}
+      onLinesChange={onLinesChange}
     />
   );
 
   return (
     <div
       data-testid={`distance-summary-${displayNumber}`}
+      data-distance-card
       className="rounded-xl border bg-card text-card-foreground shadow-sm"
     >
       {/* 小計のsticky境界（position: stickyの直接の親）を最終行の
@@ -89,7 +89,8 @@ export function DistanceSection({
         />
         {editing && (
           <DistanceEditFields
-            distance={toDistanceConfig(d, displayNumber)}
+            distance={d}
+            displayNumber={displayNumber}
             hasShots={hasShots}
             targetFaces={targetFaces}
             roundFormat={roundFormat}
@@ -205,16 +206,4 @@ function DistanceSubtotalBar({
       </span>
     </div>
   );
-}
-
-function toDistanceConfig(d: Distance, displayNumber: number): DistanceConfig {
-  return {
-    id: d.id,
-    distanceNumber: displayNumber,
-    distance: d.distance,
-    totalEnds: d.total_ends,
-    arrowsPerEnd: d.arrows_per_end,
-    targetFaceId: d.target_face_id,
-    isMarked: d.is_marked,
-  };
 }

@@ -31,6 +31,26 @@ import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/ind
 import { retryDelayMs } from "../domain/sync-failure";
 import { ScorecardClient } from "./scorecard-client";
 
+// 輪を1つだけ持つ的。的の表示は輪を持つ的を前提にする。
+const SINGLE_RING_SPOTS = [
+  {
+    center_x: 0,
+    center_y: 0,
+    target_face_rings: [
+      {
+        radius: 1,
+        color: "#FFFFFF",
+        line_color: null,
+        z_index: 1,
+        score_str: "M",
+        score_int: 0,
+      },
+    ],
+  },
+];
+
+const ignoreGone = () => {};
+
 const roundsText = translatorFor("rounds");
 
 // 更新の案内は別のテストで確かめるため、何も描かない代役に差し替える(起動地点のRootClientEntryが描く)。
@@ -234,6 +254,7 @@ function setup(
         source: "server",
       }}
       targetFaces={faces}
+      onGone={ignoreGone}
     />,
     { wrapper: AppWrapper },
   );
@@ -448,7 +469,7 @@ describe("ScorecardClient 初期表示・集計", () => {
       size: 40,
       format: "outdoor",
       bow_type: ["recurve"],
-      target_face_spots: [],
+      target_face_spots: SINGLE_RING_SPOTS,
     };
     setup({
       distances: [{ ...distanceA, target_face_id: targetFaceBlank.id }],
@@ -1199,7 +1220,7 @@ describe("ScorecardClient 並び直りの動き", () => {
       await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9", "8"]));
     }
 
-    it("クリアすると、後ろの玉と仮の矢を動かし、仮の矢は消した玉の位置から最初の空白へ動く", async () => {
+    it("クリアすると、後ろの玉と仮の矢を動かし、仮の矢は最初の空白が詰まる分だけ動く", async () => {
       // Given
       const user = renderThreeShots(distanceSix);
 
@@ -1218,7 +1239,7 @@ describe("ScorecardClient 並び直りの動き", () => {
       expect(provisionalMoves()).toEqual([
         [
           [
-            { transform: "translate(-72px, 0px)" },
+            { transform: "translate(36px, 0px)" },
             { transform: "translate(0, 0)" },
           ],
           expect.anything(),
@@ -1226,7 +1247,7 @@ describe("ScorecardClient 並び直りの動き", () => {
       ]);
     });
 
-    it("満杯のエンドでクリアしても、仮の矢は消した玉の位置から最初の空白へ動く", async () => {
+    it("満杯のエンドでクリアすると、仮の矢は動かさずに空いた場所へ出る", async () => {
       // Given
       const user = renderThreeShots(distanceA);
 
@@ -1234,15 +1255,8 @@ describe("ScorecardClient 並び直りの動き", () => {
       await clearFirst(user);
 
       // Then
-      expect(provisionalMoves()).toEqual([
-        [
-          [
-            { transform: "translate(-72px, 0px)" },
-            { transform: "translate(0, 0)" },
-          ],
-          expect.anything(),
-        ],
-      ]);
+      expect(provisionalEnd()).toBe("end-row-1-1");
+      expect(provisionalMoves()).toEqual([]);
     });
 
     it("記録済みの玉を指しているときに同じエンドの空白を押すと、仮の矢を動かさない", async () => {
@@ -1604,21 +1618,6 @@ describe("ScorecardClient テンキーの開閉と配置", () => {
     });
   });
 
-  it("テンキーを閉じると、押した空白に残るフォーカスを外す", async () => {
-    // Given
-    const user = userEvent.setup();
-    setup();
-    await user.click(screen.getByTestId("end-blank-1-2"));
-    expect(screen.getByTestId("end-blank-1-2")).toHaveFocus();
-
-    // When
-    // iOSのSafariなど、ボタンをタップしてもフォーカスが移らない環境を模すため、フォーカスを移さないfireEventで押す。
-    fireEvent.click(screen.getByTestId("keypad-toggle"));
-
-    // Then
-    expect(screen.getByTestId("end-blank-1-2")).not.toHaveFocus();
-  });
-
   it("横向きの場合は、テンキーをボトムシートではなく横の側パネルに表示する", () => {
     // Given
     vi.mocked(window.matchMedia).mockImplementation(
@@ -1652,28 +1651,30 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     if (!el.hasAttribute("data-sticky-inset")) return "";
     const own = el.getAttribute("data-testid");
     if (own) return own;
-    const distance = el.closest('[data-testid^="distance-summary-"]');
+    const distance = el.closest("[data-distance-card]");
     return distance?.getAttribute("data-testid") ?? "";
   }
   function stubLayout({
     cell,
     container,
     sticky = {},
+    otherCells = {},
   }: {
     cell: Box;
     container: Box;
     sticky?: Record<string, Box>;
+    // エンド1以外の行の位置。距離Aの行を`distance-a:エンド番号`で与える。
+    otherCells?: Record<string, Box>;
   }) {
-    const layout = { cell, container, sticky };
+    const layout = { cell, container, sticky, otherCells };
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
       function (this: Element) {
-        const testId = this.getAttribute("data-testid");
-        const rect =
-          this.tagName === "MAIN"
-            ? layout.container
-            : testId === "end-row-1-1"
-              ? layout.cell
-              : (layout.sticky[stickyKeyOf(this)] ?? { top: 0, bottom: 0 });
+        const rect = this.hasAttribute("data-follow-container")
+          ? layout.container
+          : this.getAttribute("data-follow-row") === `${distanceA.id}:1`
+            ? layout.cell
+            : (layout.otherCells[this.getAttribute("data-follow-row") ?? ""] ??
+              layout.sticky[stickyKeyOf(this)] ?? { top: 0, bottom: 0 });
         return {
           ...rect,
           x: 0,
@@ -1694,25 +1695,53 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     vi.restoreAllMocks();
   });
 
-  it("テンキーの高さが測れたとき、選択中のマスが領域の下端の格納ボタン（48px）に隠れる場合は、隠れる分だけ下へスクロールする", () => {
-    // Given
-    // 高さ800の領域（テンキーの上端まで）の700〜740にマスがある。見える下端は800-格納ボタンのはみ出し48-余白16=736のため、4だけ隠れている（テンキーの高さが測れる前から隠れているので、初期表示でもスクロールする）。
-    let reportKeypadHeight: (height: number) => void = () => {};
+  // 観測先ごとに大きさの変化を通知できるResizeObserverの差し替え。観測した要素を記録する。
+  function stubResizeObserver() {
+    const observed = new Map<
+      Element,
+      (width: number, height: number) => void
+    >();
     vi.stubGlobal(
       "ResizeObserver",
       class {
-        constructor(callback: ResizeObserverCallback) {
-          reportKeypadHeight = (height) =>
-            callback(
-              [{ contentRect: { height } } as ResizeObserverEntry],
+        constructor(private callback: ResizeObserverCallback) {}
+        observe(element: Element) {
+          observed.set(element, (width, height) =>
+            this.callback(
+              [{ contentRect: { width, height } } as ResizeObserverEntry],
               this as unknown as ResizeObserver,
-            );
+            ),
+          );
         }
-        observe() {}
         unobserve() {}
         disconnect() {}
       },
     );
+    const target = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (!element) throw new Error(`${selector}が無い`);
+      return element;
+    };
+    return {
+      observed,
+      // スクロール領域(<main>)の大きさが変わったことを知らせる。
+      resizeContainer: () =>
+        act(() => observed.get(target("[data-follow-container]"))?.(0, 800)),
+      // エンドの玉の領域の幅が測れた・変わったことを知らせる。
+      resizeBalls: (testId: string, width: number) =>
+        act(() => {
+          const grid = target(`[data-testid="${testId}"]`).querySelector(
+            ".relative.grid",
+          );
+          if (grid) observed.get(grid)?.(width, 0);
+        }),
+    };
+  }
+
+  it("領域の大きさが変わったとき(テンキーの高さが測れたとき)、選択中のマスが領域の下端の格納ボタン（48px）に隠れる場合は、隠れる分だけ下へスクロールする", () => {
+    // Given
+    // 高さ800の領域（テンキーの上端まで）の700〜740にマスがある。見える下端は800-格納ボタンのはみ出し48-余白16=736のため、4だけ隠れている（初期表示でもスクロールする）。
+    const { resizeContainer } = stubResizeObserver();
     stubLayout({
       cell: { top: 700, bottom: 740 },
       container: { top: 0, bottom: 800 },
@@ -1721,15 +1750,89 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     vi.mocked(Element.prototype.scrollBy).mockClear();
 
     // When
-    act(() => reportKeypadHeight(300));
+    resizeContainer();
 
     // Then
-    // テンキーの高さの値は、スクロール量の計算に使わない。
     expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
     expect(Element.prototype.scrollBy).toHaveBeenCalledWith({
       top: 4,
       behavior: "smooth",
     });
+  });
+
+  it("玉の領域の幅が測れて行の段数が変わったとき、指す行が隠れていればスクロールする", () => {
+    // Given
+    const { resizeBalls } = stubResizeObserver();
+    const layout = stubLayout({
+      cell: { top: 100, bottom: 140 },
+      container: { top: 0, bottom: 800 },
+    });
+    setup();
+    layout.cell = { top: 760, bottom: 790 };
+    vi.mocked(Element.prototype.scrollBy).mockClear();
+
+    // When
+    // 矢数3で、幅72pxには2つまで収まるため、段数が1から2になる。
+    resizeBalls("end-row-1-1", 72);
+
+    // Then
+    expect(Element.prototype.scrollBy).toHaveBeenCalledTimes(1);
+    expect(Element.prototype.scrollBy).toHaveBeenCalledWith({
+      top: 790 - (800 - 48 - 16),
+      behavior: "smooth",
+    });
+  });
+
+  it("行の段数が変わらない幅の変化では、スクロールしない", () => {
+    // Given
+    const { resizeBalls } = stubResizeObserver();
+    const layout = stubLayout({
+      cell: { top: 100, bottom: 140 },
+      container: { top: 0, bottom: 800 },
+    });
+    setup();
+    layout.cell = { top: 760, bottom: 790 };
+    vi.mocked(Element.prototype.scrollBy).mockClear();
+
+    // When
+    // 矢数3は、幅108px(3つ収まる)でも幅144px(4つ収まる)でも1段のまま。
+    resizeBalls("end-row-1-1", 108);
+    resizeBalls("end-row-1-1", 144);
+
+    // Then
+    expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("距離を追加して内容が伸びても、別の場所へスクロールした位置は戻らない", async () => {
+    // Given
+    const user = userEvent.setup();
+    const { observed } = stubResizeObserver();
+    const layout = stubLayout({
+      cell: { top: 100, bottom: 140 },
+      container: { top: 0, bottom: 800 },
+    });
+    setup();
+    // 利用者が別の場所へスクロールし、指す行が隠れた。
+    layout.cell = { top: 760, bottom: 790 };
+    vi.mocked(Element.prototype.scrollBy).mockClear();
+
+    // When
+    await user.click(screen.getByTestId("add-distance-button"));
+    await screen.findByTestId("distance-config-distance-2");
+
+    // Then
+    expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+    // 内容全体は観測しない。観測するのは、スクロール領域、玉の領域、テンキーだけである。
+    const container = document.querySelector("[data-follow-container]");
+    for (const element of observed.keys()) {
+      const allowed =
+        element === container ||
+        element.matches(".relative.grid") ||
+        element.closest(
+          "[data-testid='keypad-panel'],[data-testid='bottom-frame']",
+        );
+      expect(allowed).toBeTruthy();
+    }
   });
 
   it("選択中のマスが表示領域より上にある場合は、上端の余白の位置まで上へスクロールする", () => {
@@ -1775,6 +1878,7 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
           source: "server",
         }}
         targetFaces={[...targetFaces]}
+        onGone={ignoreGone}
       />,
     );
 
@@ -1885,6 +1989,71 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
   });
 
+  describe("他の端末の変化で指す矢が直されたとき", () => {
+    it("指す矢のエンドが変わっても、行が隠れていてもスクロールしない", async () => {
+      // Given
+      stubLayout({
+        cell: { top: 100, bottom: 140 },
+        container: { top: 0, bottom: 800 },
+        otherCells: { [`${distanceA.id}:2`]: { top: 760, bottom: 790 } },
+      });
+      setup();
+      expect(provisionalEnd()).toBe("end-row-1-1");
+      vi.mocked(Element.prototype.scrollBy).mockClear();
+
+      // When
+      // 別経路の追記でエンド1が矢数に達し、指す新しい矢が次のエンドへ進む。
+      for (const n of [1, 2, 3]) {
+        await act(() =>
+          appendFromOtherPath({
+            type: "shot.recorded",
+            eventId: `e-other-${n}`,
+            shotId: `s-other-${n}`,
+            distanceId: distanceA.id,
+            endNumber: 1,
+            scoreStr: "9",
+            scoreInt: 9,
+          }),
+        );
+      }
+
+      // Then
+      await waitFor(() => expect(provisionalEnd()).toBe("end-row-1-2"));
+      await flushMicrotasks();
+      expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+    });
+
+    it("指す矢が消されて同じエンドの新しい矢へ直されても、行が隠れていてもスクロールしない", async () => {
+      // Given
+      const user = userEvent.setup();
+      const layout = stubLayout({
+        cell: { top: 100, bottom: 140 },
+        container: { top: 0, bottom: 800 },
+      });
+      setup({ initialShots: [shotRow("s-1", distanceA.id, 1, "10", 10)] });
+      await user.click(screen.getByTestId("shot-ball-1-1-1"));
+      layout.cell = { top: 760, bottom: 790 };
+      vi.mocked(Element.prototype.scrollBy).mockClear();
+
+      // When
+      await act(() =>
+        appendFromOtherPath({
+          type: "shot.cleared",
+          eventId: "e-other-clear",
+          shotId: "s-1",
+          distanceId: distanceA.id,
+          endNumber: 1,
+        }),
+      );
+
+      // Then
+      await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
+      await flushMicrotasks();
+      expect(provisionalEnd()).toBe("end-row-1-1");
+      expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+    });
+  });
+
   describe("同じエンドの中で指す矢が移る操作", () => {
     // 行が見える位置から、隠れる位置（見える下端736を超える）へ動かしてから操作する。
     function hideCell(layout: { cell: Box }) {
@@ -1976,13 +2145,16 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
           removeEventListener: vi.fn(),
         }) as unknown as MediaQueryList,
     );
+    const { resizeContainer } = stubResizeObserver();
     stubLayout({
       cell: { top: 760, bottom: 790 },
       container: { top: 0, bottom: 800 },
     });
+    setup();
 
     // When
-    setup();
+    // 向きが変わると領域の大きさが変わり、横向きの重なり(0)で計算し直す。
+    resizeContainer();
 
     // Then
     expect(Element.prototype.scrollBy).toHaveBeenLastCalledWith({
@@ -2059,6 +2231,22 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
     await waitFor(() => expect(sentShots("clear_shots")).toHaveLength(1));
     const [recorded] = sentShots("record_shots");
     expect(sentShots("clear_shots")[0].shot_id).toBe(recorded.shot_id);
+  });
+
+  it("一つ戻るを続けて2回押しても、1回だけ戻り、エラーにならない", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId("score-button-10"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
+
+    // When
+    await user.dblClick(screen.getByTestId("score-button-undo"));
+
+    // Then
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
+    expect(screen.getByTestId("score-button-undo")).toBeDisabled();
+    expect(screen.getByTestId("score-button-redo")).toBeEnabled();
   });
 
   it("戻した記録を進むと、同じ矢を記録し直して指し、一つ戻るだけを押せる", async () => {
@@ -2301,6 +2489,41 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     });
   });
 
+  it("距離を追加を続けて2回押すと、2つとも足され、編集を開くのは最後に足した距離だけになる", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup();
+    const createdIds = () =>
+      supabase.rpc.mock.calls
+        .filter(([name]) => name === "create_distance")
+        .map(([, args]) => (args as { p_id: string }).p_id);
+
+    // When
+    await user.dblClick(screen.getByTestId("add-distance-button"));
+
+    // Then
+    // 2回分の保存の完了を待つ。
+    await waitFor(
+      () => {
+        expect(screen.getAllByTestId(/^distance-summary-/)).toHaveLength(3);
+        expect(createdIds()).toHaveLength(2);
+      },
+      { timeout: 5000 },
+    );
+    // 最後に足した距離のカードの番号を、行の属性(距離のID)から求める。
+    const lastId = createdIds()[1];
+    const card = document
+      .querySelector(`[data-follow-row^="${lastId}:"]`)
+      ?.closest("[data-distance-card]");
+    const number = card
+      ?.getAttribute("data-testid")
+      ?.replace(/^distance-summary-/, "");
+    expect(screen.getAllByTestId(/^distance-config-distance-/)).toHaveLength(1);
+    expect(
+      screen.getByTestId(`distance-config-distance-${number}`),
+    ).toBeInTheDocument();
+  });
+
   it("構成が変わる設定で距離を保存すると、その距離のUndo/Redo履歴だけが破棄され、他の距離の履歴は残る", async () => {
     // Given
     // 的はスコアが記録済みの距離では変更できないため、1つ目の距離は取り消して記録の無い状態にする。
@@ -2415,7 +2638,7 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     expect(
       screen.getByText(roundsText("roundTotal", { total: "0" })),
     ).toBeInTheDocument();
-    expect(provisionalEnd()).toBeNull();
+    await waitFor(() => expect(provisionalEnd()).toBeNull());
   });
 
   it("スコア記録済みの距離を削除した後に空白を押してテンキーを開くと、一つ戻るを押せない", async () => {

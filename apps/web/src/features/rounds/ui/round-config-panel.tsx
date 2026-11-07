@@ -38,16 +38,19 @@ function useSummaryText(config: RoundConfig): string {
     .join(" / ");
 }
 
+// ラウンドの設定のカード。
+// 下端は合計バーと接する内部の継ぎ目のため、shadowが下方向へ滲まないよう、上・左・右にはみ出す分だけをclip-pathで残す（距離情報のトグルボタンと同じ考え方）。
+// ダイアログは枠の外(Portal)に置く。
 export function RoundConfigPanel({
   roundId,
   initial,
-  defaultExpanded = false,
+  defaultExpanded,
   hasUnmarkedDistances,
   enqueue,
 }: {
   roundId: string;
   initial: RoundConfig;
-  defaultExpanded?: boolean;
+  defaultExpanded: boolean;
   hasUnmarkedDistances: boolean;
   enqueue: (operation: SyncOperation) => void;
 }) {
@@ -90,15 +93,17 @@ export function RoundConfigPanel({
 
   return (
     <>
-      <button
-        type="button"
-        data-testid="round-config-summary"
-        onClick={toggleExpanded}
-        className="flex w-full items-center justify-between gap-2 rounded-t-xl p-3 text-left text-sm"
-      >
-        <span className="truncate">{summary}</span>
-        <ChevronRight className="size-4 shrink-0" />
-      </button>
+      <div className="rounded-t-xl border-x border-t bg-card text-card-foreground shadow-sm [clip-path:inset(-8px_-8px_0_-8px)]">
+        <button
+          type="button"
+          data-testid="round-config-summary"
+          onClick={toggleExpanded}
+          className="flex w-full items-center justify-between gap-2 rounded-t-xl p-3 text-left text-sm"
+        >
+          <span className="truncate">{summary}</span>
+          <ChevronRight className="size-4 shrink-0" />
+        </button>
+      </div>
 
       <Dialog
         open={expanded}

@@ -1,5 +1,5 @@
 import { useTranslations } from "next-intl";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ringColorFor } from "../domain/ring-color";
 import {
@@ -10,6 +10,7 @@ import {
 import type { Distance, Shot } from "../domain/scorecard-types";
 import type { Pointer } from "../domain/shot-pointer";
 import { paleTone } from "./color-tone";
+import { followRowKey } from "./scroll-to-pointer";
 
 // 場所の最小の幅(玉32px + 左右の余白2pxずつ、玉の間隔は最小4px)と、1段の高さ(行の高さ40px)。
 const BALL_SLOT_WIDTH = 36;
@@ -36,7 +37,6 @@ function useBallLines(arrows: number) {
 // エンド1行。左に番号、右に小計、中に矢数分の場所を等間隔で置く。
 // エンドは枠で囲まない。上下の線は親が引き、左右は距離の枠と共通にする。
 // 記録済みの玉(点数の高い順)を左の場所から入れ、残りは空白にする。新しい矢を指しているときは最初の空白に仮の矢を出す。
-// 指している矢を消した操作が未反映の間は、輪をその玉に残し、仮の矢を出さない。
 // 番号・小計は1段分の高さのまま、行全体の上下中央に置く。
 export function EndRow({
   distance,
@@ -45,9 +45,9 @@ export function EndRow({
   shots,
   targetFace,
   pointer,
-  leavingShotId,
   onSelectShot,
   onSelectEnd,
+  onLinesChange,
 }: {
   distance: Distance;
   displayNumber: number;
@@ -55,11 +55,18 @@ export function EndRow({
   shots: Shot[];
   targetFace: ScoringTargetFace | undefined;
   pointer: Pointer;
-  leavingShotId: string | null;
   onSelectShot: (shot: Shot) => void;
   onSelectEnd: (distance: Distance, end: number) => void;
+  // 段の数が変わったときに呼ぶ。行の高さが変わり、指す行の位置がずれるため。
+  onLinesChange: () => void;
 }) {
   const { ref, lines, columns } = useBallLines(distance.arrows_per_end);
+  const previousLines = useRef(lines);
+  useEffect(() => {
+    if (previousLines.current === lines) return;
+    previousLines.current = lines;
+    onLinesChange();
+  }, [lines, onLinesChange]);
   const endShots = sortEndShots(
     shots.filter((s) => s.distance_id === distance.id && s.end_number === end),
   );
@@ -69,15 +76,11 @@ export function EndRow({
     pointer?.kind === "new" &&
     pointer.distanceId === distance.id &&
     pointer.endNumber === end;
-  const leaving =
-    pointsNew &&
-    leavingShotId !== null &&
-    endShots.some((s) => s.id === leavingShotId);
-  const showProvisional = pointsNew && !leaving;
 
   return (
     <div
       data-testid={`end-row-${displayNumber}-${end}`}
+      data-follow-row={followRowKey(distance.id, end)}
       className="flex items-center gap-0.5"
     >
       <div className="flex h-10 w-5 shrink-0 items-center justify-center text-muted-foreground text-xs">
@@ -100,7 +103,6 @@ export function EndRow({
               shot={shot}
               testId={`shot-ball-${displayNumber}-${end}-${index + 1}`}
               pointed={pointed}
-              ringed={pointed || (leaving && shot.id === leavingShotId)}
               targetFace={targetFace}
               onSelect={() => onSelectShot(shot)}
             />
@@ -111,7 +113,7 @@ export function EndRow({
           end={end}
           blanks={blanks}
           filled={endShots.length}
-          showProvisional={showProvisional}
+          showProvisional={pointsNew}
           onSelect={() => onSelectEnd(distance, end)}
         />
       </div>
@@ -130,14 +132,12 @@ function ShotBall({
   shot,
   testId,
   pointed,
-  ringed,
   targetFace,
   onSelect,
 }: {
   shot: Shot;
   testId: string;
   pointed: boolean;
-  ringed: boolean;
   targetFace: ScoringTargetFace | undefined;
   onSelect: () => void;
 }) {
@@ -147,7 +147,7 @@ function ShotBall({
       type="button"
       data-testid={testId}
       data-shot-id={shot.id}
-      data-ring={ringed ? "shot" : undefined}
+      data-ring={pointed ? "shot" : undefined}
       aria-pressed={pointed}
       onClick={onSelect}
       // 押せる範囲を玉の間隔と行の高さまで広げ、玉は中に置く。
@@ -164,7 +164,7 @@ function ShotBall({
           // 12%）に合わせる（issue #286で他の対話的要素も含めて
           // 同じ基準に揃える予定）。
           "flex size-8 items-center justify-center rounded-full text-base font-medium transition-shadow group-hover:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.08)] group-active:shadow-[inset_0_0_0_999px_rgba(128,128,128,0.12)]",
-          ringed && "outline-2 outline-primary outline-offset-0",
+          pointed && "outline-2 outline-primary outline-offset-0",
         )}
         style={{ backgroundColor: color.bg, color: color.fg }}
       >

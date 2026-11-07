@@ -11,9 +11,7 @@ import { createRoundDeletion } from "./round-deletion";
 import { createRoundLeaving } from "./round-leaving";
 
 // 保存の完了と遷移の順序を、1つの列に積んで観測する。
-function setup(
-  options: { holdAppend?: boolean; navigationFailure?: Error } = {},
-) {
+function setup(options: { holdAppend?: boolean } = {}) {
   const calls: string[] = [];
   let finishAppend: () => void = () => {};
   const append = vi.fn(async (_streamId: string, _operation: unknown) => {
@@ -26,7 +24,6 @@ function setup(
   });
   const { pageNavigation, go, replace } = createFakePageNavigation({
     log: calls,
-    failure: options.navigationFailure,
   });
   const { ids, issued } = createFakeUniqueIds();
   const deletion = createRoundDeletion({ hub: { append }, ids });
@@ -74,19 +71,6 @@ describe("createRoundLeaving", () => {
       expect(go).toHaveBeenCalledTimes(1);
       expect(replace).not.toHaveBeenCalled();
     });
-
-    it("遷移が投げたときは、その例外で拒否する。追記は済んでいる", async () => {
-      // Given
-      const failure = new Error("go failed");
-      const { leaving, append } = setup({ navigationFailure: failure });
-
-      // When
-      const outcome = leaving.completeRound("round-1");
-
-      // Then
-      await expect(outcome).rejects.toBe(failure);
-      expect(append).toHaveBeenCalledTimes(1);
-    });
   });
 
   describe("deleteRoundAndLeave", () => {
@@ -111,19 +95,6 @@ describe("createRoundLeaving", () => {
       expect(calls).toEqual(["append:done", `replace:${ROUNDS_PATH}`]);
       expect(replace).toHaveBeenCalledTimes(1);
       expect(go).not.toHaveBeenCalled();
-    });
-
-    it("遷移が投げたときは、その例外で拒否する。追記は済んでいる", async () => {
-      // Given
-      const failure = new Error("replace failed");
-      const { leaving, append } = setup({ navigationFailure: failure });
-
-      // When
-      const outcome = leaving.deleteRoundAndLeave("round-1");
-
-      // Then
-      await expect(outcome).rejects.toBe(failure);
-      expect(append).toHaveBeenCalledTimes(1);
     });
   });
 

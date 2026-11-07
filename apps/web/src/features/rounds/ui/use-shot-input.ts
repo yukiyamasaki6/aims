@@ -22,7 +22,6 @@ type ShotInputContext = {
   liveShots: Shot[];
   pointer: Pointer;
   setPointer: (pointer: Pointer) => void;
-  setKeypadMounted: (mounted: boolean) => void;
   appendShot: (operation: SyncOperation) => void;
   history: ScoreHistory;
   newId: () => string;
@@ -61,14 +60,18 @@ function scoreShot(ctx: ShotInputContext, scoreStr: string, scoreInt: number) {
   );
 }
 
-function clearShot(ctx: ShotInputContext) {
-  const { pointer } = ctx;
-  // 指している記録済みの矢は、reconcilePointerにより常に生きている。
+// クリアのキーは記録済みの矢を指すときだけ有効で、指す矢はreconcilePointerが常に状態に合わせる。
+function pointedShot({ pointer, liveShots }: ShotInputContext): Shot {
   const shot =
     pointer?.kind === "shot"
-      ? ctx.liveShots.find((s) => s.id === pointer.shotId)
+      ? liveShots.find((s) => s.id === pointer.shotId)
       : undefined;
-  if (!shot) return;
+  if (!shot) throw new Error("クリアする矢を指していません。");
+  return shot;
+}
+
+function clearShot(ctx: ShotInputContext) {
+  const shot = pointedShot(ctx);
 
   const entry = clearHistoryEntry(shot);
   ctx.appendShot(buildShotOperation(entry, entry.after, ctx.newId()));
@@ -78,24 +81,16 @@ function clearShot(ctx: ShotInputContext) {
 
 // 戻した・やり直した矢を指し、何が変わったか見えるようにする。
 // 復活がその時点のエンドに入らないときは、操作を積まず列だけを進める。
-// 取り消しの列が空のときのnullは、ボタンが無効のため画面からは来ない。
-function replay(
-  ctx: ShotInputContext,
-  entry: HistoryEntry | null,
-  forward: boolean,
-) {
-  const result =
-    entry &&
-    replayHistoryEntry(
-      ctx.distances,
-      ctx.liveShots,
-      entry,
-      forward ? entry.after : entry.before,
-      ctx.newId(),
-    );
+function replay(ctx: ShotInputContext, entry: HistoryEntry, forward: boolean) {
+  const result = replayHistoryEntry(
+    ctx.distances,
+    ctx.liveShots,
+    entry,
+    forward ? entry.after : entry.before,
+    ctx.newId(),
+  );
   if (!result) return;
   ctx.appendShot(result.operation);
-  ctx.setKeypadMounted(true);
   ctx.setPointer(result.pointer);
 }
 
@@ -105,12 +100,9 @@ export function useShotInput({
   liveShots,
   pointer,
   setPointer,
-  setKeypadMounted,
   appendShot,
   history,
-}: Omit<ShotInputContext, "appendShot" | "newId" | "newShotId"> & {
-  appendShot: (operation: SyncOperation, pointer: Pointer) => void;
-}) {
+}: Omit<ShotInputContext, "newId" | "newShotId">) {
   const store = useRoundDetailStore();
   const { ids } = useRoundProcedures();
   const ctx: ShotInputContext = {
@@ -118,30 +110,21 @@ export function useShotInput({
     liveShots,
     pointer,
     setPointer,
-    setKeypadMounted,
-    appendShot: (operation) => appendShot(operation, pointer),
+    appendShot,
     history,
     newId: () => ids.next(),
     newShotId: (endShotIds) => store.newShotId(endShotIds),
   };
 
-  // 格納後に再度開く場合、keypadMountedがマウント用useEffectを経由して
-  // 遅れて反映されると、スクロール計算がテンキーの要素の未接続のまま実行されて
-  // しまうため、ここで同期的にマウント済みにしておく。
   return {
     handleScore: (scoreStr: string, scoreInt: number) =>
       scoreShot(ctx, scoreStr, scoreInt),
     handleClear: () => clearShot(ctx),
     handleUndo: () => replay(ctx, history.undo(), false),
     handleRedo: () => replay(ctx, history.redo(), true),
-    selectShot: (shot: Shot) => {
-      setKeypadMounted(true);
-      setPointer(shotPointer(shot));
-    },
-    selectEnd: (distance: Distance, end: number) => {
-      setKeypadMounted(true);
-      setPointer(newShotPointer(distance.id, end));
-    },
+    selectShot: (shot: Shot) => setPointer(shotPointer(shot)),
+    selectEnd: (distance: Distance, end: number) =>
+      setPointer(newShotPointer(distance.id, end)),
   };
 }
 

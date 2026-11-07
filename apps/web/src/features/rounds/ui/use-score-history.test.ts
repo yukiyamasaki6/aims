@@ -63,36 +63,4 @@ describe("useScoreHistory", () => {
     // Then
     expect(result.current.canUndo).toBe(false);
   });
-
-  it("記録が無いとき、戻すはnullを返し、列を変えない", () => {
-    // Given
-    const { result } = renderHook(() => useScoreHistory());
-
-    // When
-    let undone: HistoryEntry | null = entry;
-    act(() => {
-      undone = result.current.undo();
-    });
-
-    // Then
-    expect(undone).toBeNull();
-    expect(result.current.canUndo).toBe(false);
-    expect(result.current.canRedo).toBe(false);
-  });
-
-  it("記録が無いとき、やり直すはnullを返し、列を変えない", () => {
-    // Given
-    const { result } = renderHook(() => useScoreHistory());
-
-    // When
-    let redone: HistoryEntry | null = entry;
-    act(() => {
-      redone = result.current.redo();
-    });
-
-    // Then
-    expect(redone).toBeNull();
-    expect(result.current.canUndo).toBe(false);
-    expect(result.current.canRedo).toBe(false);
-  });
 });

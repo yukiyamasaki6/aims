@@ -54,7 +54,7 @@ const displayChanging = shotRecorded({ shotId: "s-2" });
 // 呼び出しの順序を、1つの列に積んで観測する。
 function setup(
   options: {
-    state?: "completed" | "in_progress" | null;
+    state?: "completed" | "in_progress";
     holdFirst?: boolean;
     holdSecond?: boolean;
   } = {},
@@ -72,12 +72,10 @@ function setup(
     }
   });
   const { ids, issued } = createFakeUniqueIds();
-  const state = options.state === undefined ? "completed" : options.state;
+  const state = options.state ?? "completed";
   const current = vi.fn(() => {
     calls.push("read");
-    return state === null
-      ? null
-      : { tables: tables(state), targetFaces: faces };
+    return { tables: tables(state), targetFaces: faces };
   });
   const editing = createRoundEditing({ hub: { append }, ids });
   return { editing, append, appended, issued, current, calls, finishers };
@@ -156,19 +154,6 @@ describe("createRoundEditing", () => {
       expect(issued()).toEqual([]);
     },
   );
-
-  it("読み手がnull(画面を開いていない)のときは、元の操作だけを追記し、IDも消費しない", async () => {
-    // Given
-    const { editing, current, appended, issued } = setup({ state: null });
-
-    // When
-    await editing.append("round-1", displayChanging, current);
-    await flush();
-
-    // Then
-    expect(appended.map((item) => item.operation)).toEqual([displayChanging]);
-    expect(issued()).toEqual([]);
-  });
 
   it("戻り値は、元の操作の保存の完了まで解決しない", async () => {
     // Given

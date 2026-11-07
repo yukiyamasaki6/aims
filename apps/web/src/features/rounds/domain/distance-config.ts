@@ -1,21 +1,10 @@
-export type DistanceConfig = {
-  id: string;
-  distanceNumber: number;
-  distance: number | null;
-  totalEnds: number;
-  arrowsPerEnd: number;
-  targetFaceId: string;
-  isMarked: boolean;
-};
+import type { Distance } from "./scorecard-types";
 
 // エンドあたりの本数・総エンド数は、入力欄を一旦空にできるよう編集中はnullを許容する（距離（m）欄と同じ扱い）。
 // number型のまま空文字をNumber("")=0として保持すると、常に「0」が残ってしまい消せなくなる。
-export type DistanceDraft = Omit<
-  DistanceConfig,
-  "totalEnds" | "arrowsPerEnd"
-> & {
-  totalEnds: number | null;
-  arrowsPerEnd: number | null;
+export type DistanceDraft = Omit<Distance, "total_ends" | "arrows_per_end"> & {
+  total_ends: number | null;
+  arrows_per_end: number | null;
 };
 
 // 入力の誤りの種類。required: 未入力。notPositiveInteger: 1以上の整数でない。
@@ -27,7 +16,7 @@ export type DistanceConfigErrors = {
 };
 
 export type DistanceConfigValidation =
-  | { type: "valid"; config: DistanceConfig }
+  | { type: "valid"; distance: Distance }
   | { type: "invalid"; errors: DistanceConfigErrors };
 
 function isPositiveInteger(value: number | null): value is number {
@@ -39,9 +28,9 @@ function isPositiveInteger(value: number | null): value is number {
 export function validateDistanceDraft(
   draft: DistanceDraft,
 ): DistanceConfigValidation {
-  const { arrowsPerEnd, totalEnds } = draft;
+  const { arrows_per_end: arrowsPerEnd, total_ends: totalEnds } = draft;
   const errors: DistanceConfigErrors = {};
-  if (draft.isMarked && draft.distance === null) {
+  if (draft.is_marked && draft.distance === null) {
     errors.distance = "required";
   }
   if (!isPositiveInteger(arrowsPerEnd)) {
@@ -56,7 +45,14 @@ export function validateDistanceDraft(
     isPositiveInteger(arrowsPerEnd) &&
     isPositiveInteger(totalEnds)
   ) {
-    return { type: "valid", config: { ...draft, arrowsPerEnd, totalEnds } };
+    return {
+      type: "valid",
+      distance: {
+        ...draft,
+        arrows_per_end: arrowsPerEnd,
+        total_ends: totalEnds,
+      },
+    };
   }
   return { type: "invalid", errors };
 }

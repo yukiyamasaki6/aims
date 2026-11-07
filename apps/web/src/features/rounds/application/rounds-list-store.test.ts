@@ -53,15 +53,6 @@ function syncFinishesAll(
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-async function settled(promise: Promise<unknown>): Promise<boolean> {
-  let done = false;
-  void promise.then(() => {
-    done = true;
-  });
-  await flush();
-  return done;
-}
-
 describe("loadList", () => {
   const items: RoundListItem[] = [
     { id: "round-1", name: "午前", roundDate: "2026-09-15", total: 0 },
@@ -383,26 +374,6 @@ describe("loadLocalList", () => {
     expect(list.inProgress).toEqual([
       { id: "round-1", name: "端末", roundDate: "2026-09-15", total: 0 },
     ]);
-    expect([...list.deleted]).toEqual(["deleted"]);
-  });
-});
-
-describe("deleteRound", () => {
-  it("手続きのdeleteRoundへ同じ引数を渡し、その保存の完了まで解決しない", async () => {
-    // Given
-    const tab = createTestRounds();
-    const pending = Promise.withResolvers<void>();
-    tab.deletion.deleteRound.mockReturnValue(pending.promise);
-
-    // When
-    const deleting = tab.list.deleteRound("round-1");
-    const resolvedBeforeRelease = await settled(deleting);
-    pending.resolve();
-
-    // Then
-    expect(tab.deletion.deleteRound).toHaveBeenCalledExactlyOnceWith("round-1");
-    expect(resolvedBeforeRelease).toBe(false);
-    await expect(deleting).resolves.toBeUndefined();
   });
 });
 
