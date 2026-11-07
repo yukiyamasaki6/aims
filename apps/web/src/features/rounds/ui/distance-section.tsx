@@ -69,6 +69,7 @@ export function DistanceSection({
   return (
     <div
       data-testid={`distance-summary-${displayNumber}`}
+      data-distance-card
       className="rounded-xl border bg-card text-card-foreground shadow-sm"
     >
       {/* 小計のsticky境界（position: stickyの直接の親）を最終行の

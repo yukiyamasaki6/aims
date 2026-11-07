@@ -66,7 +66,10 @@ export function ScorecardClient({
             targetFaces={targetFaces}
           />
         </div>
-        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <main
+          data-follow-container
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        >
           <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
             <ScorecardBody model={model} />
           </div>

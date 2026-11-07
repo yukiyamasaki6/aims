@@ -1633,7 +1633,7 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     if (!el.hasAttribute("data-sticky-inset")) return "";
     const own = el.getAttribute("data-testid");
     if (own) return own;
-    const distance = el.closest('[data-testid^="distance-summary-"]');
+    const distance = el.closest("[data-distance-card]");
     return distance?.getAttribute("data-testid") ?? "";
   }
   function stubLayout({
@@ -1648,13 +1648,11 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     const layout = { cell, container, sticky };
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
       function (this: Element) {
-        const testId = this.getAttribute("data-testid");
-        const rect =
-          this.tagName === "MAIN"
-            ? layout.container
-            : testId === "end-row-1-1"
-              ? layout.cell
-              : (layout.sticky[stickyKeyOf(this)] ?? { top: 0, bottom: 0 });
+        const rect = this.hasAttribute("data-follow-container")
+          ? layout.container
+          : this.getAttribute("data-follow-row") === `${distanceA.id}:1`
+            ? layout.cell
+            : (layout.sticky[stickyKeyOf(this)] ?? { top: 0, bottom: 0 });
         return {
           ...rect,
           x: 0,

@@ -10,6 +10,7 @@ import {
 import type { Distance, Shot } from "../domain/scorecard-types";
 import type { Pointer } from "../domain/shot-pointer";
 import { paleTone } from "./color-tone";
+import { followRowKey } from "./scroll-to-pointer";
 
 // 場所の最小の幅(玉32px + 左右の余白2pxずつ、玉の間隔は最小4px)と、1段の高さ(行の高さ40px)。
 const BALL_SLOT_WIDTH = 36;
@@ -70,6 +71,7 @@ export function EndRow({
   return (
     <div
       data-testid={`end-row-${displayNumber}-${end}`}
+      data-follow-row={followRowKey(distance.id, end)}
       className="flex items-center gap-0.5"
     >
       <div className="flex h-10 w-5 shrink-0 items-center justify-center text-muted-foreground text-xs">

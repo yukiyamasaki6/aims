@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { distanceNumber } from "../domain/scorecard-scoring";
 import type { Distance } from "../domain/scorecard-types";
 import type { Pointer } from "../domain/shot-pointer";
 import { scrollPointerIntoView } from "./scroll-to-pointer";
@@ -89,26 +88,22 @@ function useKeypadHeight() {
 // keypadInsetは計算に使わず、テンキーの高さの変化と向きの切り替えを契機にするためだけに受ける。
 function useScrollToPointer(
   pointer: Pointer,
-  distances: Distance[],
   bottomOverlay: number,
   keypadInset: number,
   followKey: number,
 ) {
-  // pointerとdistancesは描画のたびに作り直されるため、依存に入れると、利用者がスクロールした位置を入力位置へ戻してしまう。
+  // pointerは描画のたびに作り直されるため、依存に入れると、利用者がスクロールした位置を入力位置へ戻してしまう。
   // 指す位置、テンキーの高さ、利用者の操作ごとの追従の要求だけを契機にし、最新の値は参照から読む。
   const pointerKey = pointer
     ? `${pointer.distanceId}:${pointer.endNumber}`
     : null;
-  const scrollTargetRef = useRef({ pointer, distances });
-  scrollTargetRef.current = { pointer, distances };
+  const pointerRef = useRef(pointer);
+  pointerRef.current = pointer;
   // biome-ignore lint/correctness/useExhaustiveDependencies: pointerKey、keypadInset、followKeyだけを契機にする
   useEffect(() => {
-    const { pointer, distances } = scrollTargetRef.current;
-    if (!pointer) return;
-    scrollPointerIntoView(
-      `end-row-${distanceNumber(distances, pointer.distanceId)}-${pointer.endNumber}`,
-      bottomOverlay,
-    );
+    const current = pointerRef.current;
+    if (!current) return;
+    scrollPointerIntoView(current.distanceId, current.endNumber, bottomOverlay);
   }, [pointerKey, keypadInset, followKey]);
 }
 
@@ -134,7 +129,6 @@ export function useKeypad({
   const [followKey, setFollowKey] = useState(0);
   useScrollToPointer(
     pointer,
-    distances,
     isLandscape ? 0 : KEYPAD_TOGGLE_OVERHANG,
     isLandscape ? 0 : keypadHeight + KEYPAD_TOGGLE_OVERHANG,
     followKey,
