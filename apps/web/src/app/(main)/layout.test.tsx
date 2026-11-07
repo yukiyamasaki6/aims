@@ -1,10 +1,16 @@
 import { AuthApiError } from "@supabase/supabase-js";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { type ReactNode, useState } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createSession } from "@/features/auth/application/session";
+import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
+import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { SessionProvider } from "@/features/auth/ui/session-context";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { createClient } from "@/lib/supabase/infrastructure/client";
 import { ROUNDS_PATH } from "@/routes";
 import { RootClientEntry } from "../root-client-entry";
 import MainLayout from "./layout";
@@ -101,12 +107,27 @@ async function confirmSignOut(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId("confirm-dialog-confirm"));
 }
 
+// 入口が渡すセッションの手続きを、実物で組み立てて渡す(識別情報の記録は含まない)。
+function SessionWrapper({ children }: { children: ReactNode }) {
+  const [session] = useState(() =>
+    createSession({
+      authenticator: createSupabaseAuth(createClient),
+      pageReplace: createBrowserPageLoad(),
+    }),
+  );
+  return (
+    <IntlTestProvider>
+      <SessionProvider session={session}>{children}</SessionProvider>
+    </IntlTestProvider>
+  );
+}
+
 function renderLayout() {
   return render(
     <MainLayout>
       <p>子要素</p>
     </MainLayout>,
-    { wrapper: IntlTestProvider },
+    { wrapper: SessionWrapper },
   );
 }
 
@@ -187,11 +208,11 @@ describe("MainLayout", () => {
       // When
       const render = () =>
         renderToString(
-          <IntlTestProvider>
+          <SessionWrapper>
             <MainLayout>
               <p>子要素</p>
             </MainLayout>
-          </IntlTestProvider>,
+          </SessionWrapper>,
         );
 
       // Then

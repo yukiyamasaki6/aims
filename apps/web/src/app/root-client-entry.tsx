@@ -4,8 +4,11 @@ import { useRouter } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { type ReactNode, useEffect, useState } from "react";
 import { createLocalIdentity } from "@/features/auth/application/local-identity";
+import { createSession } from "@/features/auth/application/session";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
+import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { SessionProvider } from "@/features/auth/ui/session-context";
 import { createUpdateActivation } from "@/features/offline-pwa/application/update-activation";
 import { createBrowserLinkClicks } from "@/features/offline-pwa/infrastructure/browser-link-clicks";
 import { createBrowserServiceWorker } from "@/features/offline-pwa/infrastructure/browser-service-worker";
@@ -207,12 +210,21 @@ function composeOffline(inputs: Inputs, records: Records) {
   return { swUpdate };
 }
 
+// セッション(サインアウトと、セッションの喪失の見張り)。
+function composeSession(inputs: Inputs) {
+  return createSession({
+    authenticator: inputs.authenticator,
+    pageReplace: createBrowserPageLoad(),
+  });
+}
+
 // アプリで1つの部品を、1度だけ生成して結ぶ。
 function composeApp(router: PageRouter) {
   const inputs = composeInputs(router);
   const records = composeRecords(inputs);
   return {
     localIdentity: inputs.localIdentity,
+    session: composeSession(inputs),
     ...composeStores(inputs, records),
     ...composeSync(inputs, records),
     ...composeOffline(inputs, records),
@@ -235,9 +247,11 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
         <NewRoundStoreProvider store={app.newRoundStore}>
           <RoundDetailStoreProvider store={app.detailStore}>
             <RoundProceduresProvider procedures={app.procedures}>
-              <RoundBaseRefresher sync={app.sync} />
-              <SwUpdateActivator activation={app.swUpdate} />
-              {children}
+              <SessionProvider session={app.session}>
+                <RoundBaseRefresher sync={app.sync} />
+                <SwUpdateActivator activation={app.swUpdate} />
+                {children}
+              </SessionProvider>
             </RoundProceduresProvider>
           </RoundDetailStoreProvider>
         </NewRoundStoreProvider>

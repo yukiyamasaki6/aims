@@ -1,25 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createSession } from "@/features/auth/application/session";
-import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
-import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
+import { useEffect } from "react";
+import { useSession } from "@/features/auth/ui/session-context";
 import { SignOutButton } from "@/features/auth/ui/sign-out-button";
 import { LeftPanel } from "@/features/navigation/ui/left-panel";
-import { createClient } from "@/lib/supabase/infrastructure/client";
 
 export default function MainLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // 画面を開いている間、同じ手続きを保つ。
-  const [session] = useState(() =>
-    createSession({
-      authenticator: createSupabaseAuth(createClient),
-      pageReplace: createBrowserPageLoad(),
-    }),
-  );
+  // アプリで1つの手続き(入口が生成して渡す)。
+  const session = useSession();
   // セッションを失ったら/signinへ移す。認証が要る画面の集合(このレイアウトの下)の間、見張る。
   useEffect(() => session.watch(), [session]);
 
