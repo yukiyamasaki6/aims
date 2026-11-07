@@ -89,4 +89,17 @@ describe("useShotInput", () => {
     });
     expect(history.recordHistory).toHaveBeenCalledTimes(1);
   });
+
+  it("記録済みの矢を指していないときのクリアは、何も積まずに例外にする", () => {
+    // Given
+    const { input, appendShot, history } = setup();
+
+    // When
+    const clear = () => input.handleClear();
+
+    // Then
+    expect(clear).toThrow();
+    expect(appendShot).not.toHaveBeenCalled();
+    expect(history.recordHistory).not.toHaveBeenCalled();
+  });
 });

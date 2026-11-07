@@ -61,14 +61,18 @@ function scoreShot(ctx: ShotInputContext, scoreStr: string, scoreInt: number) {
   );
 }
 
-function clearShot(ctx: ShotInputContext) {
-  const { pointer } = ctx;
-  // 指している記録済みの矢は、reconcilePointerにより常に生きている。
+// クリアのキーは記録済みの矢を指すときだけ有効で、指す矢はreconcilePointerが常に状態に合わせる。
+function pointedShot({ pointer, liveShots }: ShotInputContext): Shot {
   const shot =
     pointer?.kind === "shot"
-      ? ctx.liveShots.find((s) => s.id === pointer.shotId)
+      ? liveShots.find((s) => s.id === pointer.shotId)
       : undefined;
-  if (!shot) return;
+  if (!shot) throw new Error("クリアする矢を指していません。");
+  return shot;
+}
+
+function clearShot(ctx: ShotInputContext) {
+  const shot = pointedShot(ctx);
 
   const entry = clearHistoryEntry(shot);
   ctx.appendShot(buildShotOperation(entry, entry.after, ctx.newId()));
