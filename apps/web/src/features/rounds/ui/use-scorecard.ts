@@ -44,7 +44,7 @@ type ScorecardOptions = {
   roundId: string;
   loaded: LoadedRound;
   targetFaces: TargetFaceOption[];
-  onGone?: () => void;
+  onGone: () => void;
 };
 
 // スコアカード画面の状態と操作。

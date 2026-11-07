@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { LoadedRound } from "../application/round-handle";
 import type { RoundState } from "../domain/round-tables";
 import type { SyncOperation } from "../domain/sync-events";
@@ -17,7 +17,7 @@ export type RoundOpStack = {
 export function useRoundOpStack(
   roundId: string,
   loaded: LoadedRound,
-  onGone: () => void = noop,
+  onGone: () => void,
 ): RoundOpStack {
   const store = useRoundDetailStore();
   const [handle] = useState(() => store.round(roundId));
@@ -30,15 +30,11 @@ export function useRoundOpStack(
     handle.getSnapshot,
     handle.getSnapshot,
   );
-  const onGoneRef = useRef(onGone);
-  onGoneRef.current = onGone;
   useEffect(() => {
-    if (snapshot.gone) onGoneRef.current();
-  }, [snapshot.gone]);
+    if (snapshot.gone) onGone();
+  }, [snapshot.gone, onGone]);
 
   // 印を付ける前の最初の描画は、開いた材料から副作用なしで状態を求める。
   const state = snapshot.state ?? handle.peek(loaded);
   return { state, append: handle.append };
 }
-
-function noop() {}

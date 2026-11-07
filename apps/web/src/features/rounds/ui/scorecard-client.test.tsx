@@ -31,6 +31,8 @@ import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/ind
 import { retryDelayMs } from "../domain/sync-failure";
 import { ScorecardClient } from "./scorecard-client";
 
+const ignoreGone = () => {};
+
 const roundsText = translatorFor("rounds");
 
 // 更新の案内は別のテストで確かめるため、何も描かない代役に差し替える(起動地点のRootClientEntryが描く)。
@@ -234,6 +236,7 @@ function setup(
         source: "server",
       }}
       targetFaces={faces}
+      onGone={ignoreGone}
     />,
     { wrapper: AppWrapper },
   );
@@ -1775,6 +1778,7 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
           source: "server",
         }}
         targetFaces={[...targetFaces]}
+        onGone={ignoreGone}
       />,
     );
 

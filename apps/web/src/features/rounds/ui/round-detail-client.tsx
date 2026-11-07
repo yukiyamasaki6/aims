@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { LoadedRound } from "../application/round-handle";
 import type { FetchView } from "../domain/fetch-status";
 import { roundIdOfPath } from "../domain/round-routes";
@@ -52,6 +52,7 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
   );
   // 開いている間に、ラウンドが無いと分かったか(他の端末で削除された、取り直したサーバーに無い)。部品の寿命まで戻さない。
   const [gone, setGone] = useState(false);
+  const markGone = useCallback(() => setGone(true), []);
   useCreationGone(roundId, retry);
 
   if (roundId && view.status === "ok" && !gone) {
@@ -59,7 +60,7 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
       <ScorecardClient
         roundId={roundId}
         loaded={view.data}
-        onGone={() => setGone(true)}
+        onGone={markGone}
         targetFaces={view.data.targetFaces}
       />
     );

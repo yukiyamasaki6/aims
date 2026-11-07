@@ -27,7 +27,7 @@ export function ScorecardClient({
   loaded: LoadedRound;
   targetFaces: TargetFaceOption[];
   // 端末のベースで開いたラウンドが、取り直したサーバーに無いとき(削除済みなど)に呼ぶ。
-  onGone?: () => void;
+  onGone: () => void;
 }) {
   const model = useScorecard({
     roundId,

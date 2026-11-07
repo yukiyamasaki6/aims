@@ -17,6 +17,8 @@ import { useRoundOpStack } from "./use-round-op-stack";
 
 const STREAM = roundStreamId("round-1");
 
+const ignoreGone = () => {};
+
 const distance = {
   id: "d-1",
   position_key: "a",
@@ -70,9 +72,12 @@ describe("useRoundOpStack", () => {
     const { tab, wrapper } = setup();
 
     // When
-    const { result } = renderHook(() => useRoundOpStack("round-1", loaded()), {
-      wrapper,
-    });
+    const { result } = renderHook(
+      () => useRoundOpStack("round-1", loaded(), ignoreGone),
+      {
+        wrapper,
+      },
+    );
 
     // Then
     expect(result.current.state.roundConfig.name).toBe("元");
@@ -88,9 +93,12 @@ describe("useRoundOpStack", () => {
     await tab.hub.append(STREAM, roundUpdated({ changes: { name: "未送信" } }));
 
     // When
-    const { result } = renderHook(() => useRoundOpStack("round-1", loaded()), {
-      wrapper,
-    });
+    const { result } = renderHook(
+      () => useRoundOpStack("round-1", loaded(), ignoreGone),
+      {
+        wrapper,
+      },
+    );
 
     // Then
     expect(result.current.state.roundConfig.name).toBe("未送信");
@@ -99,9 +107,12 @@ describe("useRoundOpStack", () => {
   it("操作を追記すると、保存の完了後に画面の状態へ反映する", async () => {
     // Given
     const { wrapper } = setup();
-    const { result } = renderHook(() => useRoundOpStack("round-1", loaded()), {
-      wrapper,
-    });
+    const { result } = renderHook(
+      () => useRoundOpStack("round-1", loaded(), ignoreGone),
+      {
+        wrapper,
+      },
+    );
 
     // When
     act(() => {
@@ -116,7 +127,7 @@ describe("useRoundOpStack", () => {
     // Given
     const { tab, wrapper } = setup();
     const { result, unmount } = renderHook(
-      () => useRoundOpStack("round-1", loaded()),
+      () => useRoundOpStack("round-1", loaded(), ignoreGone),
       { wrapper },
     );
     await act(async () => {
@@ -136,7 +147,11 @@ describe("useRoundOpStack", () => {
     const { tab, wrapper } = setup();
     const { unmount } = renderHook(
       () =>
-        useRoundOpStack("round-1", loaded("in_progress", { source: "local" })),
+        useRoundOpStack(
+          "round-1",
+          loaded("in_progress", { source: "local" }),
+          ignoreGone,
+        ),
       { wrapper, reactStrictMode: true },
     );
 
@@ -180,23 +195,6 @@ describe("useRoundOpStack", () => {
 
       // Then
       expect(onGone).not.toHaveBeenCalled();
-    });
-
-    it("onGoneを渡さずに開いた画面は、削除の印を反映されても、最初のベースで描き続ける", async () => {
-      // Given
-      const { tab, wrapper } = setup();
-      const { result } = renderHook(
-        () => useRoundOpStack("round-1", loaded()),
-        { wrapper },
-      );
-
-      // When
-      await act(async () => {
-        await tab.hub.commit(STREAM, null, 10, "user-1");
-      });
-
-      // Then
-      expect(result.current.state.roundConfig.name).toBe("元");
     });
 
     it("端末のベースで開いた詳細は、取り直しでサーバーにラウンドが無いと分かったら、onGoneを呼ぶ", () => {
