@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { LoadedRound } from "../application/round-handle";
 import type { RoundState } from "../domain/round-tables";
 import type { SyncOperation } from "../domain/sync-events";
@@ -44,11 +38,7 @@ export function useRoundOpStack(
 
   // 印を付ける前の最初の描画は、開いた材料から副作用なしで状態を求める。
   const state = snapshot.state ?? handle.peek(loaded);
-  const append = useCallback(
-    (operation: SyncOperation) => handle.append(operation),
-    [handle],
-  );
-  return { state, append };
+  return { state, append: handle.append };
 }
 
 function noop() {}
