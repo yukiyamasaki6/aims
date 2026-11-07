@@ -18,18 +18,16 @@ export function useScoreHistory() {
     setRedoStack(history.redoStack);
   }
 
-  // 列を進めて、戻す・やり直す書き込みを返す。無ければnull。
-  function undo(): HistoryEntry | null {
+  // 列を進めて、戻す・やり直す書き込みを返す。列が空のときは呼ばない。
+  function undo(): HistoryEntry {
     const result = undoHistory({ undoStack, redoStack });
-    if (!result) return null;
     setUndoStack(result.history.undoStack);
     setRedoStack(result.history.redoStack);
     return result.entry;
   }
 
-  function redo(): HistoryEntry | null {
+  function redo(): HistoryEntry {
     const result = redoHistory({ undoStack, redoStack });
-    if (!result) return null;
     setUndoStack(result.history.undoStack);
     setRedoStack(result.history.redoStack);
     return result.entry;

@@ -25,12 +25,12 @@ export function pushHistory(
   return { undoStack: [...history.undoStack, entry], redoStack: [] };
 }
 
-// 直近の書き込みを取り消し、やり直しの列へ移す。取り消すものが無ければnull。
-export function undoHistory(
-  history: HistoryStacks,
-): { entry: HistoryEntry; history: HistoryStacks } | null {
-  const entry = history.undoStack.at(-1);
-  if (!entry) return null;
+// 直近の書き込みを取り消し、やり直しの列へ移す。取り消しの列が空のときは呼ばない(戻るボタンは空のとき無効)。
+export function undoHistory(history: HistoryStacks): {
+  entry: HistoryEntry;
+  history: HistoryStacks;
+} {
+  const entry = history.undoStack[history.undoStack.length - 1];
   return {
     entry,
     history: {
@@ -40,12 +40,12 @@ export function undoHistory(
   };
 }
 
-// 直近に取り消した書き込みをやり直し、取り消しの列へ戻す。やり直すものが無ければnull。
-export function redoHistory(
-  history: HistoryStacks,
-): { entry: HistoryEntry; history: HistoryStacks } | null {
-  const entry = history.redoStack.at(-1);
-  if (!entry) return null;
+// 直近に取り消した書き込みをやり直し、取り消しの列へ戻す。やり直しの列が空のときは呼ばない(進むボタンは空のとき無効)。
+export function redoHistory(history: HistoryStacks): {
+  entry: HistoryEntry;
+  history: HistoryStacks;
+} {
+  const entry = history.redoStack[history.redoStack.length - 1];
   return {
     entry,
     history: {

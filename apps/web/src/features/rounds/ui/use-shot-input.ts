@@ -82,21 +82,14 @@ function clearShot(ctx: ShotInputContext) {
 
 // 戻した・やり直した矢を指し、何が変わったか見えるようにする。
 // 復活がその時点のエンドに入らないときは、操作を積まず列だけを進める。
-// 取り消しの列が空のときのnullは、ボタンが無効のため画面からは来ない。
-function replay(
-  ctx: ShotInputContext,
-  entry: HistoryEntry | null,
-  forward: boolean,
-) {
-  const result =
-    entry &&
-    replayHistoryEntry(
-      ctx.distances,
-      ctx.liveShots,
-      entry,
-      forward ? entry.after : entry.before,
-      ctx.newId(),
-    );
+function replay(ctx: ShotInputContext, entry: HistoryEntry, forward: boolean) {
+  const result = replayHistoryEntry(
+    ctx.distances,
+    ctx.liveShots,
+    entry,
+    forward ? entry.after : entry.before,
+    ctx.newId(),
+  );
   if (!result) return;
   ctx.appendShot(result.operation);
   ctx.setKeypadMounted(true);

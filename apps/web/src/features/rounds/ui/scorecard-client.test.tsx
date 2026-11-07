@@ -2061,6 +2061,22 @@ describe("ScorecardClient 一つ戻る・一つ進む", () => {
     expect(sentShots("clear_shots")[0].shot_id).toBe(recorded.shot_id);
   });
 
+  it("一つ戻るを続けて2回押しても、1回だけ戻り、エラーにならない", async () => {
+    // Given
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByTestId("score-button-10"));
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
+
+    // When
+    await user.dblClick(screen.getByTestId("score-button-undo"));
+
+    // Then
+    await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
+    expect(screen.getByTestId("score-button-undo")).toBeDisabled();
+    expect(screen.getByTestId("score-button-redo")).toBeEnabled();
+  });
+
   it("戻した記録を進むと、同じ矢を記録し直して指し、一つ戻るだけを押せる", async () => {
     // Given
     const user = userEvent.setup();
