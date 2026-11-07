@@ -79,9 +79,7 @@ export function createRoundHandle(
   let snapshot = UNOPENED;
   let creation: CreationProgress = INITIAL_CREATION;
   let seen: {
-    items: unknown;
     base: unknown;
-    outcome: unknown;
     operations: RecordedOperation[];
     screen: ReturnType<typeof roundScreenState>;
   } | null = null;
@@ -91,14 +89,6 @@ export function createRoundHandle(
   function recompute() {
     if (!opening) return;
     const record = hub.record(streamId);
-    const outcome = requests.outcomeOf(roundId);
-    if (
-      seen?.items === record.items &&
-      seen.base === record.base &&
-      seen.outcome === outcome
-    ) {
-      return;
-    }
     const operations = operationsOf(record);
     const screen =
       seen &&
@@ -118,14 +108,8 @@ export function createRoundHandle(
         opening.pendingCreationEventId,
       );
     }
-    seen = {
-      items: record.items,
-      base: record.base,
-      outcome,
-      operations,
-      screen,
-    };
-    publish(screen, outcome);
+    seen = { base: record.base, operations, screen };
+    publish(screen, requests.outcomeOf(roundId));
     // 印が変わると依頼の記録の購読者を同期で呼ぶ(この recompute 自身を含む)ため、最後に呼ぶ。
     requests.setOverlay(roundId, screen.needsRefetch);
   }
