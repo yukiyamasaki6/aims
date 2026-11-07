@@ -131,7 +131,6 @@ function ScorecardBody({ model }: { model: ScorecardModel }) {
             editing={editing.editingDistanceIds.has(d.id)}
             hasShots={distanceIdsWithShots.has(d.id)}
             pointer={model.pointer}
-            leavingShotId={model.leavingShotId}
             onToggleEditing={() => editing.toggleDistanceEditing(d.id)}
             onSaved={editing.handleDistanceSaved}
             onDeleted={() => editing.handleDistanceDeleted(d.id)}

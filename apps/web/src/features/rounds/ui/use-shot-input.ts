@@ -106,7 +106,7 @@ export function useShotInput({
   appendShot,
   history,
 }: Omit<ShotInputContext, "appendShot" | "newId" | "newShotId"> & {
-  appendShot: (operation: SyncOperation, pointer: Pointer) => void;
+  appendShot: (operation: SyncOperation) => void;
 }) {
   const store = useRoundDetailStore();
   const { ids } = useRoundProcedures();
@@ -116,7 +116,7 @@ export function useShotInput({
     pointer,
     setPointer,
     setKeypadMounted,
-    appendShot: (operation) => appendShot(operation, pointer),
+    appendShot,
     history,
     newId: () => ids.next(),
     newShotId: (endShotIds) => store.newShotId(endShotIds),

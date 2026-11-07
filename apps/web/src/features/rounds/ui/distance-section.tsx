@@ -24,7 +24,6 @@ export function DistanceSection({
   editing,
   hasShots,
   pointer,
-  leavingShotId,
   onToggleEditing,
   onSaved,
   onDeleted,
@@ -41,7 +40,6 @@ export function DistanceSection({
   editing: boolean;
   hasShots: boolean;
   pointer: Pointer;
-  leavingShotId: string | null;
   onToggleEditing: () => void;
   onSaved: (updated: DistanceConfig) => void;
   onDeleted: () => void;
@@ -63,7 +61,6 @@ export function DistanceSection({
       shots={shots}
       targetFace={face}
       pointer={pointer}
-      leavingShotId={leavingShotId}
       onSelectShot={onSelectShot}
       onSelectEnd={onSelectEnd}
     />

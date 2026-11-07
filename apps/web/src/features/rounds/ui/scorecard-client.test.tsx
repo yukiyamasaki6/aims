@@ -1202,7 +1202,7 @@ describe("ScorecardClient 並び直りの動き", () => {
       await waitFor(() => expect(ballsOf(1, 1)).toEqual(["9", "8"]));
     }
 
-    it("クリアすると、後ろの玉と仮の矢を動かし、仮の矢は消した玉の位置から最初の空白へ動く", async () => {
+    it("クリアすると、後ろの玉と仮の矢を動かし、仮の矢は最初の空白が詰まる分だけ動く", async () => {
       // Given
       const user = renderThreeShots(distanceSix);
 
@@ -1221,7 +1221,7 @@ describe("ScorecardClient 並び直りの動き", () => {
       expect(provisionalMoves()).toEqual([
         [
           [
-            { transform: "translate(-72px, 0px)" },
+            { transform: "translate(36px, 0px)" },
             { transform: "translate(0, 0)" },
           ],
           expect.anything(),
@@ -1229,7 +1229,7 @@ describe("ScorecardClient 並び直りの動き", () => {
       ]);
     });
 
-    it("満杯のエンドでクリアしても、仮の矢は消した玉の位置から最初の空白へ動く", async () => {
+    it("満杯のエンドでクリアすると、仮の矢は動かさずに空いた場所へ出る", async () => {
       // Given
       const user = renderThreeShots(distanceA);
 
@@ -1237,15 +1237,8 @@ describe("ScorecardClient 並び直りの動き", () => {
       await clearFirst(user);
 
       // Then
-      expect(provisionalMoves()).toEqual([
-        [
-          [
-            { transform: "translate(-72px, 0px)" },
-            { transform: "translate(0, 0)" },
-          ],
-          expect.anything(),
-        ],
-      ]);
+      expect(provisionalEnd()).toBe("end-row-1-1");
+      expect(provisionalMoves()).toEqual([]);
     });
 
     it("記録済みの玉を指しているときに同じエンドの空白を押すと、仮の矢を動かさない", async () => {
