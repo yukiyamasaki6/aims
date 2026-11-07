@@ -18,25 +18,6 @@ const input = {
 } as unknown as ShotInput;
 
 describe("KeypadButtons", () => {
-  it("指している距離が無いとき、何も表示しない", () => {
-    // Given
-
-    // When
-    const { container } = render(
-      <KeypadButtons
-        keypadDistance={null}
-        targetFaces={[]}
-        pointer={null}
-        history={history}
-        input={input}
-      />,
-      { wrapper: IntlTestProvider },
-    );
-
-    // Then
-    expect(container).toBeEmptyDOMElement();
-  });
-
   it("距離を指しているとき、戻す・進む・クリアのボタンを表示する", () => {
     // Given
 

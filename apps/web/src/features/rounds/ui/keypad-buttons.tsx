@@ -19,14 +19,13 @@ export function KeypadButtons({
   history,
   input,
 }: {
-  keypadDistance: Distance | null;
+  keypadDistance: Distance;
   targetFaces: ScoringTargetFace[];
   pointer: Pointer;
   history: ScoreHistory;
   input: ShotInput;
 }) {
   const t = useTranslations("rounds");
-  if (!keypadDistance) return null;
   const targetFace = targetFaces.find(
     (f) => f.id === keypadDistance.target_face_id,
   );

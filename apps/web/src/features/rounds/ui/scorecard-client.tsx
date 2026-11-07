@@ -37,7 +37,8 @@ export function ScorecardClient({
   });
   const { sync, keypad } = model;
   const { roundConfig, distances, shots, status } = sync.state;
-  const keypadButtons = (
+  // テンキーは指す矢があるか、格納の待ち(直近の距離を保持)のときだけ付く。一度も指していないときは距離が無く、付かない。
+  const keypadButtons = keypad.keypadDistance && (
     <KeypadButtons
       keypadDistance={keypad.keypadDistance}
       targetFaces={targetFaces}
