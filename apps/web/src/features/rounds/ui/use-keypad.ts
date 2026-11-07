@@ -83,28 +83,18 @@ function useKeypadHeight() {
   return { keypadHeight, setKeypadNode };
 }
 
-// 指している矢を、テンキーと固定表示に隠れない位置までスクロールして見せる。
+// 指している矢の行が、テンキーと固定表示に隠れていれば、隠れない位置までスクロールする。見えていれば動かさない。
 // <main>の矩形が帯・テンキーの上端までになる。格納ボタンは重なるため、その分をbottomOverlayで引く。
-// keypadInsetは計算に使わず、テンキーの高さの変化と向きの切り替えを契機にするためだけに受ける。
-function useScrollToPointer(
-  pointer: Pointer,
-  bottomOverlay: number,
-  keypadInset: number,
-  followKey: number,
-) {
-  // pointerは描画のたびに作り直されるため、依存に入れると、利用者がスクロールした位置を入力位置へ戻してしまう。
-  // 指す位置、テンキーの高さ、利用者の操作ごとの追従の要求だけを契機にし、最新の値は参照から読む。
-  const pointerKey = pointer
-    ? `${pointer.distanceId}:${pointer.endNumber}`
-    : null;
-  const pointerRef = useRef(pointer);
-  pointerRef.current = pointer;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: pointerKey、keypadInset、followKeyだけを契機にする
-  useEffect(() => {
-    const current = pointerRef.current;
+// 返す関数は安定していて、呼ぶ時点の最新の指す矢とbottomOverlayを参照から読む。
+// pointerは描画のたびに作り直されるため、これを効果の依存に入れると、利用者がスクロールした位置を入力位置へ戻してしまう。
+function useFollow(pointer: Pointer, bottomOverlay: number) {
+  const latestRef = useRef({ pointer, bottomOverlay });
+  latestRef.current = { pointer, bottomOverlay };
+  return useCallback(() => {
+    const { pointer: current, bottomOverlay: overlay } = latestRef.current;
     if (!current) return;
-    scrollPointerIntoView(current.distanceId, current.endNumber, bottomOverlay);
-  }, [pointerKey, keypadInset, followKey]);
+    scrollPointerIntoView(current.distanceId, current.endNumber, overlay);
+  }, []);
 }
 
 // テンキーの開閉、高さ、向きと、指している矢へのスクロール。
@@ -127,12 +117,14 @@ export function useKeypad({
   const keypadDistance = useLastDistance(pointedDistance);
   // 利用者が指す矢を変えた操作ごとに増やし、同じエンド内の移動でもスクロールを促す。
   const [followKey, setFollowKey] = useState(0);
-  useScrollToPointer(
-    pointer,
-    isLandscape ? 0 : KEYPAD_TOGGLE_OVERHANG,
-    isLandscape ? 0 : keypadHeight + KEYPAD_TOGGLE_OVERHANG,
-    followKey,
-  );
+  const follow = useFollow(pointer, isLandscape ? 0 : KEYPAD_TOGGLE_OVERHANG);
+  const pointerKey = pointer
+    ? `${pointer.distanceId}:${pointer.endNumber}`
+    : null;
+  const keypadInset = isLandscape ? 0 : keypadHeight + KEYPAD_TOGGLE_OVERHANG;
+  // 契機は、指す位置、テンキーの占める高さ(向きの切り替えを含む)、利用者の操作ごとの追従の要求。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pointerKey、keypadInset、followKeyだけを契機にする
+  useEffect(follow, [pointerKey, keypadInset, followKey]);
   const followPointer = useCallback(
     (next: Pointer) => {
       setPointer(next);

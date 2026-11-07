@@ -53,7 +53,7 @@
 - `features/rounds/ui/use-score-history.ts`: 取り消しの列をstateに持つ。
 - `features/rounds/ui/end-row.tsx`: エンドの行、矢数分の場所、玉、空白、仮の矢を描く。
 - `features/rounds/ui/use-reorder-animation.ts`: 玉は矢のIDごとに、輪(指している玉か仮の矢)は玉の領域ごとに、前の描画の位置を覚えて動かす。動いている途中の位置は、動かすときに要素の見た目の位置(`getBoundingClientRect`)から求める。
-- `features/rounds/ui/use-keypad.ts`: テンキーの開閉の表示、実測の高さ、指している矢へのスクロール。
+- `features/rounds/ui/use-keypad.ts`: テンキーの開閉の表示、実測の高さ、指している矢へのスクロール。スクロール(追従)は、最新の指す矢を参照から読んで行が隠れていれば動かす1つの処理`follow`で、契機は呼び元が決める。
 - `features/rounds/ui/scroll-to-pointer.ts`: 指している矢を、領域の矩形(帯・テンキーの上端まで)と、領域の中の固定表示(ラウンドの結果、距離の小計)に隠れない位置まで動かす計算と測定。行は`data-follow-row`(距離のIDとエンド番号)、スクロールの領域は`data-follow-container`、距離のカードは`data-distance-card`で探す。テスト用の`data-testid`やスタイルのクラス名には頼らない。
 - `features/rounds/ui/keypad-buttons.tsx`: テンキーの中身(戻る・進む・クリアの行と、的の点数のキー)。
 - `features/rounds/ui/bottom-frame.tsx`: 縦向きのテンキーと完了の帯を入れる、下端の枠。
