@@ -7,32 +7,13 @@ import { cn } from "@/lib/utils";
 const DropdownMenu = MenuPrimitive.Root;
 const DropdownMenuTrigger = MenuPrimitive.Trigger;
 
-function DropdownMenuContent({
-  className,
-  children,
-  align = "end",
-  sideOffset = 4,
-  ...props
-}: React.ComponentProps<typeof MenuPrimitive.Popup> &
-  Pick<
-    React.ComponentProps<typeof MenuPrimitive.Positioner>,
-    "align" | "sideOffset"
-  >) {
+// 末尾揃えで、トリガーから4px離して出す。
+function DropdownMenuContent({ children }: { children: React.ReactNode }) {
   return (
     <MenuPrimitive.Portal>
       {/* Portalでbody直下に出るが、Positionerは既定でz-indexを持たない。スクロール中のsticky(z-10〜z-30)の下に隠れないよう、Dialogと同じz-50にする */}
-      <MenuPrimitive.Positioner
-        align={align}
-        sideOffset={sideOffset}
-        className="z-50"
-      >
-        <MenuPrimitive.Popup
-          className={cn(
-            "min-w-32 rounded-lg border bg-card p-1 text-card-foreground shadow-lg outline-none",
-            className,
-          )}
-          {...props}
-        >
+      <MenuPrimitive.Positioner align="end" sideOffset={4} className="z-50">
+        <MenuPrimitive.Popup className="min-w-32 rounded-lg border bg-card p-1 text-card-foreground shadow-lg outline-none">
           {children}
         </MenuPrimitive.Popup>
       </MenuPrimitive.Positioner>

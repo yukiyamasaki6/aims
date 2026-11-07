@@ -32,29 +32,8 @@ describe("DropdownMenuContent", () => {
       expect(menu).toHaveTextContent("項目");
     });
 
-    describe("className", () => {
-      it("指定したクラスを付与する", async () => {
-        // Given
-        const className = "custom-class";
-
-        // When
-        render(
-          <DropdownMenu open>
-            <DropdownMenuTrigger>開く</DropdownMenuTrigger>
-            <DropdownMenuContent className={className}>
-              項目
-            </DropdownMenuContent>
-          </DropdownMenu>,
-          { wrapper: IntlTestProvider },
-        );
-
-        // Then
-        expect(await screen.findByRole("menu")).toHaveClass("custom-class");
-      });
-    });
-
     describe("align", () => {
-      it("未指定の場合、末尾揃えで配置する", async () => {
+      it("末尾揃えで配置する", async () => {
         // Given
         const content = "項目";
 
@@ -71,26 +50,6 @@ describe("DropdownMenuContent", () => {
         expect(await screen.findByRole("menu")).toHaveAttribute(
           "data-align",
           "end",
-        );
-      });
-
-      it("指定した場合、指定した揃えで配置する", async () => {
-        // Given
-        const align = "start";
-
-        // When
-        render(
-          <DropdownMenu open>
-            <DropdownMenuTrigger>開く</DropdownMenuTrigger>
-            <DropdownMenuContent align={align}>項目</DropdownMenuContent>
-          </DropdownMenu>,
-          { wrapper: IntlTestProvider },
-        );
-
-        // Then
-        expect(await screen.findByRole("menu")).toHaveAttribute(
-          "data-align",
-          "start",
         );
       });
     });
