@@ -14,7 +14,7 @@ const roundsText = translatorFor("rounds");
 
 describe("DropdownMenuContent", () => {
   describe("表示", () => {
-    it("子要素をdata-slotを付与したメニュー内に表示する", async () => {
+    it("子要素をメニュー内に表示する", async () => {
       // Given
       const content = "項目";
 
@@ -30,7 +30,6 @@ describe("DropdownMenuContent", () => {
       // Then
       const menu = await screen.findByRole("menu");
       expect(menu).toHaveTextContent("項目");
-      expect(menu).toHaveAttribute("data-slot", "dropdown-menu-content");
     });
 
     describe("className", () => {
@@ -100,7 +99,7 @@ describe("DropdownMenuContent", () => {
 
 describe("DropdownMenuItem", () => {
   describe("表示", () => {
-    it("子要素をdata-slotを付与したメニュー項目として表示する", async () => {
+    it("子要素をメニュー項目として表示する", async () => {
       // Given
       const label = roundsText("delete");
 
@@ -118,7 +117,7 @@ describe("DropdownMenuItem", () => {
       // Then
       expect(
         await screen.findByRole("menuitem", { name: roundsText("delete") }),
-      ).toHaveAttribute("data-slot", "dropdown-menu-item");
+      ).toBeInTheDocument();
     });
 
     describe("className", () => {

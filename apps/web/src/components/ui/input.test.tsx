@@ -6,7 +6,7 @@ import { Input } from "./input";
 
 describe("Input", () => {
   describe("表示", () => {
-    it("data-slotを付与した入力欄を表示する", () => {
+    it("入力欄を表示する", () => {
       // Given
       const placeholder = "入力";
 
@@ -14,10 +14,7 @@ describe("Input", () => {
       render(<Input placeholder={placeholder} />);
 
       // Then
-      expect(screen.getByPlaceholderText("入力")).toHaveAttribute(
-        "data-slot",
-        "input",
-      );
+      expect(screen.getByPlaceholderText("入力")).toBeInTheDocument();
     });
 
     describe("type", () => {

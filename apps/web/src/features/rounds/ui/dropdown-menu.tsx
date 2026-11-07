@@ -27,7 +27,6 @@ function DropdownMenuContent({
         className="z-50"
       >
         <MenuPrimitive.Popup
-          data-slot="dropdown-menu-content"
           className={cn(
             "min-w-32 rounded-lg border bg-card p-1 text-card-foreground shadow-lg outline-none",
             className,
@@ -47,7 +46,6 @@ function DropdownMenuItem({
 }: React.ComponentProps<typeof MenuPrimitive.Item>) {
   return (
     <MenuPrimitive.Item
-      data-slot="dropdown-menu-item"
       className={cn(
         "cursor-pointer rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted",
         className,
