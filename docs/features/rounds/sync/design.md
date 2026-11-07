@@ -56,7 +56,7 @@
 | `features/rounds/domain/query-outcome.ts` | ドメイン層(値オブジェクト) | 問い合わせの結果の種類`QueryOutcome`(型だけ) |
 | `features/rounds/domain/fetch-wait.ts` | ドメイン層(ドメインサービス) | 時間制限の値(`FETCH_TIMEOUT_MS`、`FALLBACK_WAIT_MS`)、`waitLimitMs`、代わりを返す`withFallback`。状態を持たない時間の規則のためドメインサービスに当たり、既定の`*-service.ts`の名前から外れる |
 | `features/rounds/domain/`の他 | ドメイン層(値オブジェクト) | `round-config.ts`、`round-constants.ts`、`option-label.ts`(選択肢の表示名)、`scorecard-types.ts`、`target-face.ts`(的を引く関数)、`position-key.ts`、`scorecard-scoring.ts` |
-| `features/rounds/application/round-record-hub.ts` | 手続き | アプリで1つの端末の記録。列ごとの記録を集約の値として保ち、保存の完了を待って変化を知らせる。起動時の読み込みの完了を待つ`ready`、保存先を読む`read`・`readStored`、一覧の材料を返す`readList`(保存を基準にし、このタブで保存の書き込みに失敗した列だけメモリから作る)、取得したベースを反映する`commit` |
+| `features/rounds/application/round-record-hub.ts` | 手続き | アプリで1つの端末の記録。列ごとの記録を集約の値として保ち、追記を直ちに画面用の列へ入れて変化を知らせる(送信は保存の完了後)。起動時の読み込みの完了を待つ`ready`、保存先を読む`read`・`readStored`、一覧の材料を返す`readList`(保存を基準にし、このタブで保存の書き込みに失敗した列だけメモリから作る)、取得したベースを反映する`commit` |
 | `features/rounds/application/refresh-requests.ts`、`rounds-list-store.ts`、`new-round-store.ts`、`round-detail-store.ts`、`round-handle.ts`、`when-online.ts` | 手続き | 取り直しの依頼の記録と、画面ごとに渡す状態と変更の方法(`RoundsListStore`、`NewRoundStore`、`RoundDetailStore`。メンバーは`rounds/design.md`の表)。開いた詳細の購読と追記(`round(...)`が返す`RoundHandle`)は`round-handle.ts`で、追記は手続き`round-editing.ts`を通して、完了のラウンドの編集で入力中へ戻す操作を続けて積む。約束`UniqueIds`(新しいIDと乱数の払い出し。`unique-ids.ts`) |
 | `features/rounds/application/round-base-refreshing.ts`、`round-fetching.ts`、`content-fetcher.ts`、`time-limit.ts` | 手続き | ベースの取得と反映(`refreshAll`、`refreshRound`)、取得の順序(的とプリセットの取得`fetchPresets`の保存、遅れた結果の保存だけ、一覧の取得`fetchRoundsList`)、認証を確かめた取得と取り直し(変換は`fetchResultOf`を呼ぶ)・時間制限。約束`RoundQueries`(戻り値は`QueryOutcome`)、認証の入口の`SessionReader`、`ReferenceSnapshots`(`reference-snapshots.ts`。取得と削除の手続きが使う)。時間制限の補助(`withinTime`)は、取得と画面の状態の2つの手続きが使う |
 | `features/rounds/application/round-start.ts`、`preset-deletion.ts` | 手続き | 開始(認証の確認、作成の追記、保存の完了の後に`PageNavigation`で詳細へ進む)と、個人プリセットの削除(保存済みからの除去を含む)。`PageNavigation`は共有の技術の約束(`lib/page-navigation`)、`PresetCommands`は`preset-commands.ts`に置く(約束は使い手が複数のため別ファイルに置く) |
@@ -101,7 +101,7 @@
 
 流れは次のとおりである。
 
-1. 操作を操作の列へ追記し、IndexedDBへの保存が完了した操作から画面の状態へ反映して送信する。保存の完了前の離脱で、画面に見えた操作を失わない(保存は約10msで、入力の遅れとして知覚されない)。画面は`selectRoundState(applyOperations(base, 操作の列))`だけから導き、読み込み時と操作時で同じ関数を使う。
+1. 操作を操作の列へ追記し、追記の直後に画面の状態へ反映する。送信は、IndexedDBへの保存が完了した操作だけを対象にする(サーバーへは保存の完了前の操作を送らない)。保存の完了前に画面を離れると、保存が未完の末尾の数件が端末に残らない窓がある(保存は通常数ms〜十数msだが、連打、取得の反映の直後、CPUの遅い機器で伸びる。Safari系は未実測)。保存の完了は画面の状態を変えない。画面は`selectRoundState(applyOperations(base, 操作の列))`だけから導き、読み込み時と操作時で同じ関数を使う。
 2. 保存の完了後に、衝突の規則(`round-op-conflicts.ts`)で、送信器の計画(`op-plan.ts`)が送れる要求を組む。衝突する先行がある操作は、先行が確定するまで送らない。作成に続く同じラウンドの操作は、作成の確定まで送らない。衝突しない操作は、止まった先行を待たず送る。矢の記録と取り消しは、距離ごとに別の要求(`record_shots`、`clear_shots`)へまとめて送る(1要求は同じ距離の矢だけ、100件まで。異なる距離の要求は並行して送ってよい)。
 3. 書き込みRPCは、認可つきで、イベントIDにより冪等である。再送しても二重に適用されない。
 4. 失敗は、`sync-failure.ts`が判定する。

@@ -32,7 +32,7 @@
 | 取得エラー | エラーメッセージと再試行 | 取得がエラー。通信失敗は「読み込めませんでした。」(端末がオフラインで開けるベースを持たないラウンド)。的の一覧がそろわない(取得に失敗し、保存分も無い)ときも同じ |
 | 取得中(的) | 読み込み中の表示。取得が完了すると内容を表示する | 作成が未確定のラウンドで、的の一覧の取得が完了していない(`rounds/setup`) |
 
-- 点数の記録で、合計・小計・最高点数・X数は、保存(約10ms)の完了後に更新する。
+- 点数の記録で、合計・小計・最高点数・X数は、追記の直後に更新する(保存の完了を待たない)。
 - 入力中で距離がないラウンドでは、ラウンド編集ダイアログを開いた状態で表示する。
 - 入力中のラウンドでは、矢数に達していない最初のエンドの新しい矢を指して、テンキーを展開する。全てのエンドが矢数に達していれば何も指さない。
 - 完了のラウンドは、新しい矢を指さず、テンキーを展開せず、距離がなくてもラウンド編集ダイアログを開かない。
@@ -47,11 +47,11 @@
 - `features/rounds/infrastructure/round-queries.ts`、`features/rounds/application/round-fetching.ts`: 問い合わせの組み立てと行の写しはインフラ層、取得の順序は手続きが持つ。ラウンド・距離・矢を1回のネスト取得、的を1回の取得で得る。インフラ層が応答を`QueryOutcome`の種類へ写し(`db-response-outcome.ts`)、`content-fetcher.ts`が`fetchResultOf`(`domain/fetch-status.ts`。固定文を付けるのはこの関数だけ)を呼んで`FetchResult`にする。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。的の取得(`fetchTargetFaces`)は、作成が未確定のラウンドの読み込みが使う。成功した一覧を端末に保存し(`features/rounds/infrastructure/reference-snapshot.ts`)、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。`fetchRoundDetail`は的を保存するが、代わりは持たず待ちは10秒のままである。一括の取得(`fetchRoundDetails`)も、的を保存する。
 - `features/rounds/application/round-detail-store.ts`の`load`: 開く材料(ベースと的)を返す。サーバーの取得と端末の記録への反映は同期が行い(`round-base-refreshing.ts`の`refreshRound`)、`load`はその結果を待つ。列は記録のハブの`read`で読み、最初の読み込みで列に削除があれば、取得せずに見つからないを返す(作成が未確定でも同じ)。反映した組の列に削除があるときも、見つからないを返す。作成が未確定のラウンドは、ラウンドを取得せず、作成の操作を基準にする。通信できないときは、端末にベース(削除の印でないもの)があれば、端末のベースで返す(`source`が`local`。保持の規則の判定は端末の保存が担い、開くときは確かめない)。取得が`FALLBACK_WAIT_MS`を超えたときは、その完了を待たず、同期が取得を続けて結果を反映する。結果は常に、そろった的の一覧全体(取得に成功した一覧、または最後に取得に成功した一覧の保存分)を持つ。作成が未確定のラウンドは`fetchTargetFaces`で的を得る。端末のベースは的の保存分があるときだけ使い、無ければサーバーの取得を待つ。そろわなければ、取得の結果(`offline`か`error`)を返す。効かなかった操作または項目がある応答を受けたときの取り直しは、同期が決める(`features/round-sync/application/round-sync.ts`)。
 - `features/rounds/domain/round-base.ts`、`features/rounds/application/round-base-refreshing.ts`: 端末に持つベースの規則と、入力中のラウンドの一括の取得(`rounds/sync`)。`features/rounds/domain/round-view.ts`の`deriveRoundState`は、端末の組から画面と同じ導出で状態を求める関数で、一覧も使う(`rounds/history`)。一括の取得の反映は、一覧も同じ経路(`refreshAll`)を使う。一括の取得は、`disabled_at is null`かつ`status = in_progress`、または端末にベースか操作があるラウンドを得て、ラウンドごとにベースを差し替える。端末のラウンドのIDは50件ごとの取得に分けて並行に得る(入力中の条件は最初の取得に含め、以降の取得は入力中を除く)。すべての取得が成功したときだけ成功とする。返らなかったラウンドは削除の印にする。
-- `features/rounds/domain/round-tables.ts`、`features/rounds/domain/round-op-apply.ts`、`features/rounds/ui/use-round-op-stack.ts`: サーバーのテーブルの形のベース(`RoundTables`)、操作の列を重ねる導出(RPCごとの処理)、画面の状態を導く`selectRoundState`と、`RoundDetailStore`の`round(...)`(`features/rounds/application/round-handle.ts`が返す購読と追記の入口)を購読するフック。完了のラウンドの編集で入力中へ戻す操作は、手続き`features/rounds/application/round-editing.ts`が積む(窓口の`handle.append`が今の状態の読み手を渡して呼ぶ。`rounds/completion`)。画面の状態は、端末の記録のベースと操作の列から求める。`use-scorecard.ts`は`state`(保存が完了した操作から導いた値)を`useRoundOpStack`から受ける。
+- `features/rounds/domain/round-tables.ts`、`features/rounds/domain/round-op-apply.ts`、`features/rounds/ui/use-round-op-stack.ts`: サーバーのテーブルの形のベース(`RoundTables`)、操作の列を重ねる導出(RPCごとの処理)、画面の状態を導く`selectRoundState`と、`RoundDetailStore`の`round(...)`(`features/rounds/application/round-handle.ts`が返す購読と追記の入口)を購読するフック。完了のラウンドの編集で入力中へ戻す操作は、手続き`features/rounds/application/round-editing.ts`が積む(窓口の`handle.append`が今の状態の読み手を渡して呼ぶ。`rounds/completion`)。画面の状態は、端末の記録のベースと操作の列から求める。`use-scorecard.ts`は`state`(保存の完了前の操作を含む記録から導いた値)を`useRoundOpStack`から受ける。
 - `features/round-sync/application/round-sync.ts`: 端末のベースで開いたときの取り直し。取得の完了、`online`、見える状態になったとき、同期の`staleRetryDelayMs`(3秒から2倍で60秒まで。`stale-retry.ts`)の間隔で取り直す(`navigator.onLine`が`true`のまま通信が戻る場合のため)。`offline`で止め、`online`で最初の間隔から始め直す。
 - `features/rounds/ui/round-detail-frame.tsx`、`back-to-list-link.tsx`: 枠と「一覧へ戻る」リンク(経路表(`src/routes.ts`)の`ROUNDS_PATH`を使う)。
 - `features/rounds/ui/scorecard-client.tsx`（Client Component）: スコアカードの枠を組み立てる。
-- `features/rounds/ui/use-scorecard.ts`: `state`(保存が完了した操作から導いた`shots`と距離の構成)を`useRoundOpStack`から受け、画面のフック(指している矢、テンキー、取り消しの列、距離の編集)を束ねる。
+- `features/rounds/ui/use-scorecard.ts`: `state`(保存の完了前の操作を含む記録から導いた`shots`と距離の構成)を`useRoundOpStack`から受け、画面のフック(指している矢、テンキー、取り消しの列、距離の編集)を束ねる。
 - `features/rounds/ui/scorecard-header-bar.tsx`、`round-config-panel.tsx`、`round-summary-bar.tsx`: ヘッダーの帯(領域の外)、ラウンドの設定のカード(カードの枠と編集のダイアログを1つの部品に持つ)、合計の帯(領域の中)。
 - `features/rounds/ui/distance-section.tsx`: 距離ごとのカード(見出し、編集、小計、エンドの行)。
 - `features/rounds/domain/scorecard-scoring.ts`: 距離とラウンドの集計、エンドの小計を求める純粋関数。
@@ -69,7 +69,7 @@
 | `features/rounds/ui/round-config-panel.tsx`、`round-menu.tsx`、`save-preset-dialog.tsx`、`save-preset-dialog-state.ts` | UI層(設定のパネルと編集のダイアログ、メニューと削除の確認、保存のダイアログの描画と状態) |
 | `features/rounds/ui/distance-section.tsx`、`distance-edit-fields.tsx`、`distance-fields.tsx`、`use-distance-draft.ts`、`target-face-picker.tsx`、`end-row.tsx` | UI層(距離のカード、距離の編集のダイアログと操作、編集フォームの欄の描画、編集フォームの下書きと検証・保存・削除、的の選択、エンドの行) |
 | `features/rounds/ui/keypad-buttons.tsx`、`keypad-panel.tsx`、`bottom-frame.tsx`、`complete-round-bar.tsx` | UI層(テンキー、横向きのパネル、縦向きの下端の枠、完了の帯と確認) |
-| `features/rounds/ui/use-scorecard.ts`、`use-round-op-stack.ts`、`use-score-history.ts`、`use-shot-input.ts`、`use-pending-shots.ts`、`use-reconciled-pointer.ts`、`use-distance-editing.ts`、`use-keypad.ts`、`use-reorder-animation.ts`、`use-creation-gone.ts`、`scroll-to-pointer.ts` | UI層(画面の状態と操作) |
+| `features/rounds/ui/use-scorecard.ts`、`use-round-op-stack.ts`、`use-score-history.ts`、`use-shot-input.ts`、`use-reconciled-pointer.ts`、`use-distance-editing.ts`、`use-keypad.ts`、`use-reorder-animation.ts`、`use-creation-gone.ts`、`scroll-to-pointer.ts` | UI層(画面の状態と操作) |
 | `features/rounds/ui/color-tone.ts` | UI層(16進の色から文字色と薄い色を求める計算。使い手はラウンドの機能だけ) |
 | `features/rounds/domain/shot-pointer.ts`、`score-history.ts`、`shot-operations.ts` | ドメイン層(指している矢の遷移、取り消しの列、矢の操作の組み立て) |
 | `features/rounds/domain/round-progress.ts` | ドメイン層(完了の確認、状態を変える操作、入力中へ戻すかの判定`reopeningRequired`、削除の操作) |
