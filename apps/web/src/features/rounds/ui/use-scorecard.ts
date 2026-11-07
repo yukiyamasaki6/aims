@@ -36,7 +36,7 @@ function useScorecardInput(
     appendShot: pending.appendShot,
     history,
   });
-  return { pointer, setPointer, keypad, history, input };
+  return { pointer, keypad, history, input };
 }
 
 type ScorecardOptions = {
@@ -57,15 +57,13 @@ export function useScorecard(options: ScorecardOptions) {
   const scorecardRef = useRef<HTMLDivElement>(null);
   useReorderAnimation(scorecardRef);
 
-  const { pointer, setPointer, keypad, history, input } = useScorecardInput(
+  const { pointer, keypad, history, input } = useScorecardInput(
     sync,
     inProgress,
   );
   const editing = useDistanceEditing({
     roundId,
     distances,
-    pointer,
-    setPointer,
     append: sync.append,
     discardHistory: history.discardDistance,
   });

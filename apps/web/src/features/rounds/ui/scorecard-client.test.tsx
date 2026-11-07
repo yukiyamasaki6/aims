@@ -2638,7 +2638,7 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     expect(
       screen.getByText(roundsText("roundTotal", { total: "0" })),
     ).toBeInTheDocument();
-    expect(provisionalEnd()).toBeNull();
+    await waitFor(() => expect(provisionalEnd()).toBeNull());
   });
 
   it("スコア記録済みの距離を削除した後に空白を押してテンキーを開くと、一つ戻るを押せない", async () => {
