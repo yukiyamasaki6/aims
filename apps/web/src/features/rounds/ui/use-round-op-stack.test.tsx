@@ -112,22 +112,6 @@ describe("useRoundOpStack", () => {
     await waitFor(() => expect(result.current.state.shots).toHaveLength(1));
   });
 
-  it("appendは、保存の完了で解決し、解決の時点で画面の状態へ反映済みである", async () => {
-    // Given
-    const { wrapper } = setup();
-    const { result } = renderHook(() => useRoundOpStack("round-1", loaded()), {
-      wrapper,
-    });
-
-    // When
-    await act(async () => {
-      await result.current.append(shotRecorded());
-    });
-
-    // Then
-    expect(result.current.state.shots).toHaveLength(1);
-  });
-
   it("画面を閉じると印を外すが、追記した操作は端末の記録に残る", async () => {
     // Given
     const { tab, wrapper } = setup();

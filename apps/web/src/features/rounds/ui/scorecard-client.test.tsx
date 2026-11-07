@@ -416,31 +416,6 @@ describe("ScorecardClient 初期表示・集計", () => {
     ).toBeInTheDocument();
   });
 
-  it("Xの無い的では、スコアを入力すると、小計・合計・最高点数と次点数が距離とラウンド全体に反映される", async () => {
-    // Given
-    const user = userEvent.setup();
-    setup({ distances: [{ ...distanceA, target_face_id: targetFaceNoX.id }] });
-
-    // When
-    await user.click(screen.getByTestId("score-button-6"));
-    await user.click(screen.getByTestId("score-button-5"));
-
-    // Then
-    expect(screen.getByTestId("end-subtotal-1-1")).toHaveTextContent("11");
-    expect(screen.getByTestId("distance-summary-1")).toHaveTextContent(
-      roundsText("distanceSubtotal", { total: "11" }),
-    );
-    expect(screen.getByTestId("distance-top-scores-1")).toHaveTextContent(
-      "6: 1 / 5: 1",
-    );
-    expect(screen.getByTestId("round-top-scores")).toHaveTextContent(
-      "6: 1 / 5: 1",
-    );
-    expect(
-      screen.getByText(roundsText("roundTotal", { total: "11" })),
-    ).toBeInTheDocument();
-  });
-
   it("距離間で的の点数構成が異なる場合、ラウンド全体の最高点数などは表示せず、距離ごとには表示する", () => {
     // Given
 

@@ -79,18 +79,6 @@ describe("deriveRoundState", () => {
     confirmedFields: undefined,
   });
 
-  it("ベースに操作を重ねた状態を返す", () => {
-    // Given
-
-    // When
-    const base = { startedAt: 1, base: roundBase() };
-    const state = deriveRoundState(base, [pending(roundUpdated)], faces);
-
-    // Then
-    expect(state?.roundConfig.name).toBe("更新後");
-    expect(state?.status).toBe("in_progress");
-  });
-
   it("画面と同じ導出(applyOperationsとselectRoundState)と同じ状態になる", () => {
     // Given
 

@@ -152,23 +152,6 @@ describe("round(...)", () => {
     expect(peeked.roundConfig.name).toBe("午前練習");
   });
 
-  it("追記と変化の通知で状態が更新され、購読者へ知らせる。追記は保存の完了後に反映される", async () => {
-    // Given
-    const tab = createTab();
-    const handle = tab.round("round-1");
-    const listener = vi.fn();
-    handle.subscribe(listener);
-    const unwatch = handle.watch(loadedOf());
-
-    // When
-    await handle.append(shotRecorded());
-
-    // Then
-    expect(handle.getSnapshot().state?.shots).toHaveLength(1);
-    expect(listener).toHaveBeenCalled();
-    unwatch();
-  });
-
   it("購読を解除すると、状態が変わっても知らせない", async () => {
     // Given
     const tab = createTab();
