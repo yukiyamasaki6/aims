@@ -41,11 +41,10 @@ const ERROR_RESULT = {
 
 async function readSnapshots(hub: Pick<RoundRecordHub, "readList">) {
   const all = await hub.readList();
-  // 列のIDをラウンドIDに写す。ラウンドの列でないものは除く。
+  // 列のIDをラウンドIDに写す。
   const byRound = new Map<string, HubSnapshot>();
   for (const [streamId, snapshot] of all) {
-    const roundId = roundIdOfStream(streamId);
-    if (roundId !== null) byRound.set(roundId, snapshot);
+    byRound.set(roundIdOfStream(streamId), snapshot);
   }
   return byRound;
 }

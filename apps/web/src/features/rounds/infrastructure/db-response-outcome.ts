@@ -7,11 +7,9 @@ function isAuthRejected(response: DbResponse): boolean {
 }
 
 // 通信失敗はpostgrest-jsが例外にせずstatus 0で返す。error.messageの文字列には依存しない。
-// not-foundは単一対象の取得だけで、配列の0件は失敗ではない。
 function failureOf(response: DbResponse): QueryFailure {
   if (response.status === 0) return { status: "comm-failure" };
   if (isAuthRejected(response)) return { status: "auth-rejected" };
-  if (response.error?.code === "PGRST116") return { status: "not-found" };
   return { status: "failed" };
 }
 

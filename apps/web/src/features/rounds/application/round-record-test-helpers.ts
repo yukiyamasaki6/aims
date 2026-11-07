@@ -130,8 +130,7 @@ export function appliedOutcome(count: number, firstRevision = 1): SendOutcome {
       revision: firstRevision + index,
       applied: true,
       appliedFields: null,
-      rejectedFields: [],
-      reason: null,
+      hasRejectedFields: false,
     })),
   };
 }

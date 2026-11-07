@@ -5,7 +5,6 @@ import {
   commFailure,
   type FetchResult,
   fetchResultOf,
-  signInFailure,
 } from "../domain/fetch-status";
 import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { QueryOutcome } from "../domain/query-outcome";
@@ -55,9 +54,7 @@ export function createContentFetcher(deps: {
     }
     if (reading.status === "unknown") return { failure: failureOfComm() };
     if (reading.status === "unauthenticated") {
-      return {
-        failure: { status: "error", reason: signInFailure(reading.status) },
-      };
+      return { failure: { status: "error", reason: "unauthenticated" } };
     }
     return { session: { userId: reading.userId } };
   }

@@ -104,9 +104,7 @@ export function roundStreamId(roundId: string): string {
   return `${STREAM_PREFIX}${roundId}`;
 }
 
-// 列のIDからラウンドIDを得る。ラウンドの列でなければnull。
-export function roundIdOfStream(streamId: string): string | null {
-  return streamId.startsWith(STREAM_PREFIX)
-    ? streamId.slice(STREAM_PREFIX.length)
-    : null;
+// 列のIDからラウンドIDを得る。アプリが書く列は`round:`のものだけ。
+export function roundIdOfStream(streamId: string): string {
+  return streamId.slice(STREAM_PREFIX.length);
 }

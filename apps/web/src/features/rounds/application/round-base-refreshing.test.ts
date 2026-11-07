@@ -120,17 +120,17 @@ describe("refreshAll", () => {
     expect(tab.hub.record(roundStreamId("kept")).base?.startedAt).toBe(100);
   });
 
-  it("端末の保存を読めないときは、保持するラウンドを空として取得する", async () => {
+  it("端末の保存を読めないときは、取得全体が失敗扱いで何も取得しない", async () => {
     // Given
     const tab = await setup();
     vi.spyOn(tab.hub, "readStored").mockRejectedValue(new Error("idb"));
-    tab.fetching.fetchRoundDetails.mockResolvedValue(fetchedOf([]));
 
     // When
-    await tab.refresh.refreshAll({ waitForList: false });
+    const { result } = await tab.refresh.refreshAll({ waitForList: false });
 
     // Then
-    expect(tab.fetching.fetchRoundDetails).toHaveBeenCalledWith([]);
+    expect(result).toEqual({ status: "error", reason: "failed" });
+    expect(tab.fetching.fetchRoundDetails).not.toHaveBeenCalled();
   });
 
   it("取得が返さなかった保持のラウンドは、削除の印として反映する", async () => {
@@ -486,7 +486,7 @@ describe("refreshRound", () => {
           revision: null,
           applied: false,
           appliedFields: null,
-          rejectedFields: [],
+          hasRejectedFields: false,
         },
       ],
     );

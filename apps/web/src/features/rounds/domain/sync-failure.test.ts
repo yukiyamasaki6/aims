@@ -6,7 +6,7 @@ import {
   sessionFailure,
 } from "./sync-failure";
 
-const NETWORK_FAILURE = { cause: "rpc", status: 0 } as const;
+const NETWORK_FAILURE = { cause: "rpc" } as const;
 
 describe("classifyFailure", () => {
   describe("認証の状態による失敗の場合", () => {
@@ -38,22 +38,20 @@ describe("classifyFailure", () => {
       // Given
       // When
       const dispositions = ["PT403", "PT422"].map((code) =>
-        classifyFailure({ cause: "rpc", status: 400, code }),
+        classifyFailure({ cause: "rpc", code }),
       );
 
       // Then
       expect(dispositions).toEqual(["discard", "discard"]);
     });
 
-    it("それ以外は、HTTPステータスやSQLSTATEによらず再試行する", () => {
+    it("それ以外は、SQLSTATEによらず再試行する", () => {
       // Given
       // When
       const causes = [
-        ...[408, 429, 400, 401, 403, 404, 409, 499, 500, 503, 0, undefined].map(
-          (status) => ({ cause: "rpc", status }) as const,
-        ),
-        { cause: "rpc", status: 404, code: "PGRST202" } as const,
-        { cause: "rpc", status: 400, code: "23505" } as const,
+        { cause: "rpc" } as const,
+        { cause: "rpc", code: "PGRST202" } as const,
+        { cause: "rpc", code: "23505" } as const,
       ];
       const dispositions = causes.map(classifyFailure);
 
@@ -145,7 +143,6 @@ describe("decideSyncResult", () => {
       // When
       const failure = {
         cause: "rpc",
-        status: 403,
         code: "PT403",
       } as const;
       const first = decideSyncResult(failure, 0, 1);
@@ -161,7 +158,6 @@ describe("decideSyncResult", () => {
       // When
       const failure = {
         cause: "rpc",
-        status: 422,
         code: "PT422",
       } as const;
       const decision = decideSyncResult(failure, 0, 3);

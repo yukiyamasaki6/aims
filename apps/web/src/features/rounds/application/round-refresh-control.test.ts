@@ -37,7 +37,7 @@ const unfitResult = {
   revision: null,
   applied: false,
   appliedFields: null,
-  rejectedFields: [],
+  hasRejectedFields: false,
 };
 
 // 結線(他の機能へ公開する平らな値への写し)が検証対象。取得の中身は別のテストで確かめるため、取得の約束を差し替える。
@@ -176,7 +176,7 @@ describe("refreshNeeds", () => {
           revision: null,
           applied: false,
           appliedFields: null,
-          rejectedFields: [],
+          hasRejectedFields: false,
         },
       ],
     );

@@ -146,7 +146,14 @@ describe("loadList", () => {
     tab.hub.applySendResults(
       STREAM,
       [roundDisabled().eventId],
-      [{ revision: 2, applied: true, appliedFields: null, rejectedFields: [] }],
+      [
+        {
+          revision: 2,
+          applied: true,
+          appliedFields: null,
+          hasRejectedFields: false,
+        },
+      ],
     );
     const loading = loadListWith(tab, ok);
     await flush();
@@ -189,7 +196,14 @@ describe("loadList", () => {
     tab.hub.applySendResults(
       confirmedStream,
       ["e-confirmed"],
-      [{ revision: 2, applied: true, appliedFields: null, rejectedFields: [] }],
+      [
+        {
+          revision: 2,
+          applied: true,
+          appliedFields: null,
+          hasRejectedFields: false,
+        },
+      ],
     );
     await tab.hub.append(unsentStream, {
       type: "round.disabled",

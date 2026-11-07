@@ -6,7 +6,6 @@ import {
   isRoundInProgress,
   keepsRoundBase,
   roundStreamRules,
-  shouldKeepRoundBase,
 } from "./round-retention";
 import { roundTablesFromServer } from "./round-tables";
 import type { SyncOperation } from "./sync-events";
@@ -81,27 +80,6 @@ describe("isRoundInProgress", () => {
     // Then
     expect(results).toEqual([true, false, false]);
   });
-});
-
-describe("shouldKeepRoundBase", () => {
-  it.each([
-    ["入力中", "in_progress", false, false, true],
-    ["入力中で未送信の操作あり", "in_progress", false, true, true],
-    ["完了で未送信の操作あり", "completed", false, true, true],
-    ["完了で未送信の操作なし", "completed", false, false, false],
-    ["削除済みで未送信の操作あり", "in_progress", true, true, true],
-    ["削除済みで未送信の操作なし", "in_progress", true, false, false],
-  ] as const)(
-    "%sのときは、保持する=%s",
-    (_name, status, roundDisabled, hasUnsent, expected) => {
-      // Given
-      // When
-      const kept = shouldKeepRoundBase({ status, roundDisabled }, hasUnsent);
-
-      // Then
-      expect(kept).toBe(expected);
-    },
-  );
 });
 
 describe("keepsRoundBase", () => {

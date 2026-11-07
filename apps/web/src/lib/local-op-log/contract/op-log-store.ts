@@ -52,9 +52,6 @@ export type StreamRules<Op extends OpBase, Base> = {
   isOlder: (current: Base, incoming: Base) => boolean;
 };
 
-// ineffectiveは効かなかった操作、discardedは認可・契約で拒否された操作。
-type RetireReason = "reflected" | "ineffective" | "discarded";
-
 export type OpLogStore<Op extends OpBase, Base> = {
   // 呼び出された順に保存し、採番された`seq`を返す。`base`(記録のベース)が保存済みより新しく、保持の規則に当たるときは、同じトランザクションで保存する。
   append: (
@@ -87,6 +84,5 @@ export type OpLogStore<Op extends OpBase, Base> = {
     appliedFields: string[] | null,
   ) => Promise<void>;
   // 列から外す。
-  retire: (eventIds: string[], reason: RetireReason) => Promise<void>;
-  close: () => Promise<void>;
+  retire: (eventIds: string[]) => Promise<void>;
 };

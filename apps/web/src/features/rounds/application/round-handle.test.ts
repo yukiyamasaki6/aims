@@ -304,7 +304,7 @@ describe("round(...)", () => {
             revision: 1,
             applied: true,
             appliedFields: null,
-            rejectedFields: [],
+            hasRejectedFields: false,
           },
         ],
       );
@@ -351,7 +351,14 @@ describe("round(...)", () => {
     tab.hub.applySendResults(
       STREAM,
       [confirmed.eventId],
-      [{ revision: 9, applied: true, appliedFields: null, rejectedFields: [] }],
+      [
+        {
+          revision: 9,
+          applied: true,
+          appliedFields: null,
+          hasRejectedFields: false,
+        },
+      ],
     );
 
     // When
@@ -413,7 +420,7 @@ describe("round(...)", () => {
             revision: 9,
             applied: true,
             appliedFields: null,
-            rejectedFields: [],
+            hasRejectedFields: false,
           },
         ],
       );

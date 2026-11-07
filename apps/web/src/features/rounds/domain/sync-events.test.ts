@@ -40,14 +40,4 @@ describe("列のID", () => {
     expect(streamId).toBe("round:round-1");
     expect(roundIdOfStream(streamId)).toBe("round-1");
   });
-
-  it("ラウンドの列でないIDは、ラウンドIDを持たない", () => {
-    // Given
-
-    // When
-    const roundId = roundIdOfStream("other:round-1");
-
-    // Then
-    expect(roundId).toBeNull();
-  });
 });

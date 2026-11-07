@@ -55,8 +55,7 @@ const resultOf = (revision: number | null = 5) => ({
   revision,
   applied: revision !== null,
   appliedFields: revision === null ? [] : null,
-  rejectedFields: [],
-  reason: revision === null ? "UNFIT" : null,
+  hasRejectedFields: false,
 });
 
 beforeEach(() => {
@@ -215,7 +214,6 @@ describe("createRoundOpTransport", () => {
           applied: true,
           applied_fields: ["score", "shooter_id"],
           rejected_fields: [{ field: "shot_number", reason: "UNFIT" }],
-          reason: null,
         },
       ],
       error: null,
@@ -235,8 +233,7 @@ describe("createRoundOpTransport", () => {
           revision: 3,
           applied: true,
           appliedFields: ["score", "shooter_id"],
-          rejectedFields: [{ field: "shot_number", reason: "UNFIT" }],
-          reason: null,
+          hasRejectedFields: true,
         },
       ],
     });
@@ -380,29 +377,13 @@ describe("createRoundOpTransport", () => {
           revision: 3,
           applied: true,
           appliedFields: ["name"],
-          rejectedFields: [{ field: "format", reason: "INVARIANT" }],
-          reason: null,
+          hasRejectedFields: true,
         },
       ],
     });
   });
 
-  it("判定結果の拒否した項目の形が不正なら、失敗として返す", async () => {
-    // Given
-    client.rpc.mockResolvedValue({
-      data: { ...resultJson(), rejected_fields: [{ field: 1 }] },
-      error: null,
-      status: 200,
-    });
-
-    // When
-    const outcome = await sendRoundBatch(flight(roundUpdated()));
-
-    // Then
-    expect(outcome).toMatchObject({ ok: false });
-  });
-
-  it("RPCがエラーを返せば、状態とSQLSTATEを持つ失敗の種類を返す", async () => {
+  it("RPCがエラーを返せば、SQLSTATEを持つ失敗の種類を返す", async () => {
     // Given
     client.rpc.mockResolvedValue({
       data: null,
@@ -416,7 +397,7 @@ describe("createRoundOpTransport", () => {
     // Then
     expect(outcome).toEqual({
       ok: false,
-      cause: { type: "rpc", status: 400, code: "P0001" },
+      failure: { cause: "rpc", code: "P0001" },
     });
   });
 
@@ -481,7 +462,7 @@ describe("createRoundOpTransport", () => {
     const outcome = await sendRoundBatch(request);
 
     // Then
-    expect(outcome).toEqual({ ok: false, cause: { type: "exception" } });
+    expect(outcome).toEqual({ ok: false, failure: { cause: "exception" } });
   });
 
   it("ゲートウェイが投げたら、そのまま投げる(手続きが例外の失敗にする)", async () => {

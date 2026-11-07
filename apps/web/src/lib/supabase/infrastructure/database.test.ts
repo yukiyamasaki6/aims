@@ -14,6 +14,10 @@ function fakeClient(response: unknown) {
     {},
     {
       get(_, method) {
+        // 再試行を指定しないDELETEは、ビルダーをそのままawaitして応答を得る。
+        if (method === "then") {
+          return (resolve: (value: unknown) => void) => resolve(response);
+        }
         return (...args: unknown[]) => {
           calls.push([String(method), args]);
           return method === "retry" ? Promise.resolve(response) : builder;
@@ -226,7 +230,7 @@ describe("select", () => {
 });
 
 describe("delete", () => {
-  it("表を指定して削除を始め、絞りを当て、最後に再試行なしを指定する", async () => {
+  it("表を指定して削除を始め、絞りを当てる", async () => {
     // Given
     const { client, calls } = fakeClient({
       data: null,
@@ -246,7 +250,6 @@ describe("delete", () => {
       ["from", ["preset_rounds"]],
       ["delete", []],
       ["eq", ["id", "p1"]],
-      ["retry", [false]],
     ]);
   });
 
@@ -274,7 +277,6 @@ describe("delete", () => {
       ["delete"],
       ["eq", "id", "p1"],
       ["is", "owner_id", null],
-      ["retry", false],
     ]);
   });
 

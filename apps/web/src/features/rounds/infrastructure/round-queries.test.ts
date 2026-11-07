@@ -344,7 +344,7 @@ describe("roundDetails", () => {
     return listed ? listed.replace(")", "").split(",") : [];
   }
 
-  it("入力中のラウンドと指定したラウンドを1回の取得で得る。UUIDでないIDは含めない", async () => {
+  it("入力中のラウンドと指定したラウンドを1回の取得で得る", async () => {
     // Given
     const database = makeDatabase({
       rounds: ok([
@@ -357,7 +357,7 @@ describe("roundDetails", () => {
     // When
     const response = await database
       .createQueries()
-      .roundDetails("user-1", [uuid2, "not-a-uuid"]);
+      .roundDetails("user-1", [uuid2]);
 
     // Then
     const [query] = database.queries_of("rounds");
@@ -424,20 +424,6 @@ describe("roundDetails", () => {
       expect(encodeURIComponent(ids.join(",")).length).toBeLessThan(3755);
     }
     expect(sent.flat()).toEqual(all);
-  });
-
-  it("UUIDでないIDは件数に数えない", async () => {
-    // Given
-    const junk = Array.from({ length: 10 }, (_, i) => `bad-${i}`);
-    const database = makeDatabase({ rounds: ok([]), target_faces: ok([]) });
-
-    // When
-    await database
-      .createQueries()
-      .roundDetails("user-1", [...junk, ...uuids(50)]);
-
-    // Then
-    expect(database.queries_of("rounds")).toHaveLength(1);
   });
 
   it("複数の取得の行を1つにまとめ、同じIDはrevisionが大きい行を使う", async () => {

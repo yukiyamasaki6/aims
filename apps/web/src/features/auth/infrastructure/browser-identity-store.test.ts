@@ -90,18 +90,4 @@ describe("ブラウザの端末の識別情報", () => {
       expect(write).not.toThrow();
     });
   });
-
-  describe("windowが無い場合(サーバーでの描画中に誤って呼ばれたとき)", () => {
-    it("読み出しはnullを返す", () => {
-      // Given
-      const store = createBrowserIdentityStore();
-      vi.stubGlobal("window", undefined);
-
-      // When
-      const identity = store.read();
-
-      // Then
-      expect(identity).toBeNull();
-    });
-  });
 });

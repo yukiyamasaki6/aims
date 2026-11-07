@@ -49,21 +49,16 @@ async function commitRoundDetails(
   await Promise.all(commits);
 }
 
-// 端末が保持するラウンドのID(削除されておらず作成が確定しているもの)。失敗時は空。
+// 端末が保持するラウンドのID(削除されておらず作成が確定しているもの)。保存を読めないときは投げる。
 async function retainedRoundIds(
   hub: Pick<RoundRecordHub, "readStored">,
 ): Promise<string[]> {
-  try {
-    const stored = await hub.readStored();
-    const ids: string[] = [];
-    for (const [streamId, group] of stored) {
-      const roundId = roundIdOfStream(streamId);
-      if (roundId !== null && isRetainedForRefresh(group)) ids.push(roundId);
-    }
-    return ids;
-  } catch {
-    return [];
+  const stored = await hub.readStored();
+  const ids: string[] = [];
+  for (const [streamId, group] of stored) {
+    if (isRetainedForRefresh(group)) ids.push(roundIdOfStream(streamId));
   }
+  return ids;
 }
 
 export type RoundBaseRefreshResult = "ok" | "gone" | "failed";

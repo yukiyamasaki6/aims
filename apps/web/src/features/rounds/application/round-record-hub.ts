@@ -25,7 +25,6 @@ import type { SyncOperation } from "../domain/sync-events";
 
 export type RecordChange = {
   streamId: string;
-  kind: "appended" | "changed" | "loaded";
 };
 
 export type RoundStoreGroup = StreamGroup<SyncOperation, RoundBaseRecord>;
@@ -74,17 +73,13 @@ export function createRoundRecordHub(deps: {
     return records.get(streamId) ?? EMPTY_RECORD;
   }
 
-  function emit(streamId: string, kind: RecordChange["kind"]) {
-    for (const listener of [...listeners]) listener({ streamId, kind });
+  function emit(streamId: string) {
+    for (const listener of listeners) listener({ streamId });
   }
 
-  function put(
-    streamId: string,
-    next: RoundRecord,
-    kind: RecordChange["kind"],
-  ) {
+  function put(streamId: string, next: RoundRecord) {
     records.set(streamId, next);
-    emit(streamId, kind);
+    emit(streamId);
   }
 
   function markLoaded(target: number) {
@@ -104,22 +99,17 @@ export function createRoundRecordHub(deps: {
     streamId: string,
     group: RecordGroup,
     options: AdoptOptions = {},
-    kind: RecordChange["kind"] = "changed",
   ) {
     const next = adoptGroup(record(streamId), group, {
       fetched: options.fetched,
       readAt: options.readAt ?? 0,
     });
-    put(streamId, next, kind);
+    put(streamId, next);
   }
 
   // 現在の利用者の全ての列を読み、記録へ取り込む。読み込みに失敗したときは何もしない。
   async function reloadAll() {
     const target = epoch;
-    const marks = new Map<string, number>();
-    for (const [streamId, current] of records) {
-      marks.set(streamId, current.persistTick);
-    }
     let streams: Map<string, RoundStoreGroup>;
     try {
       streams = await store.loadAll(userId);
@@ -128,21 +118,14 @@ export function createRoundRecordHub(deps: {
       return;
     }
     if (epoch !== target) return;
-    for (const [streamId, group] of streams) {
-      adopt(streamId, group, { readAt: marks.get(streamId) ?? 0 }, "loaded");
-    }
-    for (const streamId of [...records.keys()]) {
-      if (streams.has(streamId)) continue;
-      const empty = { base: undefined, entries: [] };
-      adopt(streamId, empty, { readAt: marks.get(streamId) ?? 0 }, "loaded");
-    }
+    for (const [streamId, group] of streams) adopt(streamId, group);
     markLoaded(target);
   }
 
   function append(streamId: string, operation: SyncOperation): Promise<void> {
     const entryUserId = userId;
     const target = epoch;
-    put(streamId, appendPending(record(streamId), operation), "changed");
+    put(streamId, appendPending(record(streamId), operation));
     const persisted = store
       .append(
         {
@@ -164,7 +147,7 @@ export function createRoundRecordHub(deps: {
         if (seq === undefined) markWriteFailed(streamId, target);
         // 画面へは追記の時点で反映済みで、保存の完了では画面の状態は変わらない(送信だけが保存の完了を待つ)。
         const next = markPersisted(record(streamId), operation.eventId, seq);
-        put(streamId, next, "appended");
+        put(streamId, next);
       });
     persisting.add(persisted);
     void persisted.finally(() => persisting.delete(persisted));
@@ -206,7 +189,7 @@ export function createRoundRecordHub(deps: {
       adopt(streamId, group, { readAt, fetched: incoming });
       return group;
     }
-    put(streamId, commitFetched(record(streamId), incoming), "changed");
+    put(streamId, commitFetched(record(streamId), incoming));
     return {
       base: incoming,
       entries: memoryEntries(record(streamId), streamId, userId),
@@ -252,9 +235,7 @@ export function createRoundRecordHub(deps: {
   }
 
   return {
-    // 2回目以降は何もしない。
     start(initialUserId: string | null) {
-      if (started) return;
       started = true;
       epoch += 1;
       userId = initialUserId;
@@ -324,14 +305,13 @@ export function createRoundRecordHub(deps: {
     // 読み込んだ組を記録へ取り込む。入出力を起こさない。
     adopt: (streamId: string, group: RecordGroup) => adopt(streamId, group),
     commit,
-    reloadAll,
     // 送信が成功した結果を記録へ書く。保存先への書き込みは待たない。
     applySendResults(
       streamId: string,
       eventIds: readonly string[],
       results: readonly (RecordSendResult & { revision: number | null })[],
       generation: number = epoch,
-    ): { diverged: boolean } {
+    ) {
       // 送信の間に停止されたときは、現在の記録に触れず、保存先の確定だけを書く。
       const current = generation === epoch;
       const applied = applySendResults(
@@ -342,7 +322,7 @@ export function createRoundRecordHub(deps: {
       if (current) {
         // 印を先に付ける(変化の通知を受けた側が、印を読めるようにするため)。
         if (applied.diverged) diverged.add(streamId);
-        put(streamId, applied.record, "changed");
+        put(streamId, applied.record);
       }
       const target = epoch;
       const failed = () => {
@@ -357,15 +337,14 @@ export function createRoundRecordHub(deps: {
           .catch(failed);
       });
       if (applied.ineffective.length > 0) {
-        void store.retire(applied.ineffective, "ineffective").catch(failed);
+        void store.retire(applied.ineffective).catch(failed);
       }
-      return { diverged: current && applied.diverged };
     },
     // 認可・契約で拒否された操作を、記録から外し、保存先からも退かせる。
     async discard(streamId: string, eventIds: readonly string[]) {
-      put(streamId, retireItems(record(streamId), eventIds), "changed");
+      put(streamId, retireItems(record(streamId), eventIds));
       const target = epoch;
-      await store.retire([...eventIds], "discarded").catch(() => {
+      await store.retire([...eventIds]).catch(() => {
         markWriteFailed(streamId, target);
       });
     },

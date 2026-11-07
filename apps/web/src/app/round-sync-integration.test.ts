@@ -471,7 +471,7 @@ describe("通信の回復の購読の順序", () => {
       roundUpdated({ eventId: "pending-op" }),
     );
     await flush();
-    t.sends[0]({ ok: false, cause: { type: "rpc", status: 500 } });
+    t.sends[0]({ ok: false, failure: { cause: "rpc" } });
     await flush();
     t.calls.length = 0;
 
@@ -493,7 +493,7 @@ describe("通信の回復の購読の順序", () => {
       roundUpdated({ eventId: "pending-op" }),
     );
     await flush();
-    t.sends[0]({ ok: false, cause: { type: "rpc", status: 500 } });
+    t.sends[0]({ ok: false, failure: { cause: "rpc" } });
     await flush();
     t.listeners.length = 0;
 

@@ -71,9 +71,6 @@ type RoundRow = {
   distances: DistanceRow[];
 };
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 // 1回の取得に並べるラウンドIDの上限。IDはGETのURLに載るため、ゲートウェイが長いURLを414で拒まない件数に分ける。50件で約3KBで、ローカルで通ることを確かめた長さ(約3.7KB)に収まる。
 const roundIdsPerRequest = 50;
 
@@ -214,9 +211,7 @@ export function createRoundQueries(
       };
     },
     async roundDetails(userId, roundIds) {
-      // IDはフィルタの文字列に埋め込むため、UUIDの形だけを通す。
-      const ids = roundIds.filter((id) => UUID_PATTERN.test(id));
-      const chunks = ids.length > 0 ? chunkIds(ids) : [[]];
+      const chunks = roundIds.length > 0 ? chunkIds(roundIds) : [[]];
       const [faces, ...responses] = await Promise.all([
         selectTargetFaces(userId),
         ...chunks.map((chunk, index) => selectRoundsChunk(chunk, index)),

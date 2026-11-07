@@ -25,9 +25,9 @@ interface QueryBuilder extends FilterBuilder<QueryBuilder> {
   retry(enabled: boolean): PromiseLike<DbResponse>;
 }
 
-interface DeleteBuilder extends FilterBuilder<DeleteBuilder> {
-  retry(enabled: boolean): PromiseLike<DbResponse>;
-}
+interface DeleteBuilder
+  extends FilterBuilder<DeleteBuilder>,
+    PromiseLike<DbResponse> {}
 
 type UntypedClient = {
   from(table: string): {
@@ -122,7 +122,7 @@ export function createSupabaseDatabase(
       for (const filter of command.filters) {
         builder = applyFilter(builder, filter);
       }
-      return toResponse(await builder.retry(false));
+      return toResponse(await builder);
     },
     // 戻り値の型は、生成した型の宣言どおりに返ることを前提にする(実行時の写しは変えない)。
     rpc: (async (name: string, args: object) =>

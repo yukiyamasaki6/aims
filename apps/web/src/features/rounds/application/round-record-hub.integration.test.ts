@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { openDB } from "idb";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
 import type { RoundBaseRecord } from "../domain/round-base";
 import { applyOperations } from "../domain/round-op-apply";
@@ -19,8 +19,6 @@ import { createRoundRecordHub } from "./round-record-hub";
 // 端末の保存(IndexedDB)の実物を通した、記録のハブの結合。fake-indexeddbで代替し、テストごとに空のDBから始める。
 const STREAM = roundStreamId("round-1");
 
-const stores: ReturnType<typeof newStore>[] = [];
-
 function newStore() {
   return createIndexedDbOpLogStore<SyncOperation, RoundBaseRecord>(
     roundStreamRules,
@@ -29,7 +27,6 @@ function newStore() {
 
 async function startedHub(userId: string | null = "user-1") {
   const store = newStore();
-  stores.push(store);
   const hub = createRoundRecordHub({ store });
   hub.start(userId);
   await hub.ready();
@@ -38,10 +35,6 @@ async function startedHub(userId: string | null = "user-1") {
 
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
-});
-
-afterEach(async () => {
-  await Promise.all(stores.splice(0).map((store) => store.close()));
 });
 
 describe("端末の保存を通した記録のハブ", () => {
@@ -114,8 +107,18 @@ describe("端末の保存を通した記録のハブ", () => {
       STREAM,
       ["reflected", "later"],
       [
-        { revision: 2, applied: true, appliedFields: null, rejectedFields: [] },
-        { revision: 5, applied: true, appliedFields: null, rejectedFields: [] },
+        {
+          revision: 2,
+          applied: true,
+          appliedFields: null,
+          hasRejectedFields: false,
+        },
+        {
+          revision: 5,
+          applied: true,
+          appliedFields: null,
+          hasRejectedFields: false,
+        },
       ],
     );
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -191,8 +194,18 @@ describe("端末の保存を通した記録のハブ", () => {
       STREAM,
       ["s1", "s2"],
       [
-        { revision: 1, applied: true, appliedFields: null, rejectedFields: [] },
-        { revision: 2, applied: true, appliedFields: null, rejectedFields: [] },
+        {
+          revision: 1,
+          applied: true,
+          appliedFields: null,
+          hasRejectedFields: false,
+        },
+        {
+          revision: 2,
+          applied: true,
+          appliedFields: null,
+          hasRejectedFields: false,
+        },
       ],
     );
     await new Promise((resolve) => setTimeout(resolve, 20));

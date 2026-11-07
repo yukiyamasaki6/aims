@@ -357,17 +357,13 @@ function appendFromOtherPath(operation: SyncOperation) {
 // 端末に保存されたround-1の操作の、確定の有無。送信の状態は画面に出ず、内部の状態は観測できないため、保存と確定の有無で確かめる。
 async function ackedStates(): Promise<("acked" | "unacked")[]> {
   const store = createIndexedDbOpLogStore(roundStreamRules);
-  try {
-    const group = await store.loadStream(
-      roundStreamId("round-1"),
-      createBrowserIdentityStore().read(),
-    );
-    return group.entries.map((entry) =>
-      entry.ackedRevision === undefined ? "unacked" : "acked",
-    );
-  } finally {
-    await store.close();
-  }
+  const group = await store.loadStream(
+    roundStreamId("round-1"),
+    createBrowserIdentityStore().read(),
+  );
+  return group.entries.map((entry) =>
+    entry.ackedRevision === undefined ? "unacked" : "acked",
+  );
 }
 
 beforeEach(() => {
@@ -2839,10 +2835,10 @@ describe("ScorecardClient プリセット保存の失敗", () => {
 
     // Then
     expect(
-      await screen.findByText(roundsText("fetchFailure.unreachable")),
+      await screen.findByText(roundsText("presetSaveFailure.unreachable")),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(roundsText("fetchFailure.unauthenticated")),
+      screen.queryByText(roundsText("presetSaveFailure.unauthenticated")),
     ).not.toBeInTheDocument();
     expect(savePresetCalls()).toEqual([]);
   });
