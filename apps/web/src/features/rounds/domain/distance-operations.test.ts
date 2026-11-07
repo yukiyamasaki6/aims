@@ -198,14 +198,14 @@ describe("changesDistanceStructure", () => {
   });
 
   describe("変更前の距離が無い場合", () => {
-    it("変わったと判定する", () => {
+    it("約束が破れたものとして例外にする", () => {
       // Given
       // When
       const distances = [distanceB];
-      const result = changesDistanceStructure(distances, configOfA());
+      const judge = () => changesDistanceStructure(distances, configOfA());
 
       // Then
-      expect(result).toBe(true);
+      expect(judge).toThrow();
     });
   });
 });

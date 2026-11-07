@@ -45,14 +45,14 @@ export function distanceToAdd(
 
 // 設定の保存で、その距離のマスの構成または得点判定が変わるか。
 // 距離（m）とMarked/Unmarkedはマスの構成にも得点判定にも影響しないため、変わらない扱いとする。
-// 変更前の距離が見つからない場合は、変わったものとして扱う。
+// 編集のダイアログは、その距離が状態にある描画の中で開き、距離が消えればカードごと閉じる。変更前の距離が見つからないときは約束が破れたものとして例外にする。
 export function changesDistanceStructure(
   distances: Distance[],
   config: DistanceConfig,
 ): boolean {
   const previous = distances.find((d) => d.id === config.id);
+  if (!previous) throw new Error("変更前の距離が見つかりません。");
   return (
-    !previous ||
     previous.total_ends !== config.totalEnds ||
     previous.arrows_per_end !== config.arrowsPerEnd ||
     previous.target_face_id !== config.targetFaceId
