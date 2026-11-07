@@ -129,22 +129,9 @@ describe("round(...)", () => {
     const peeked = handle.peek(loadedOf());
 
     // Then
-    expect(peeked.state.roundConfig.name).toBe("未送信");
-    expect(peeked.gone).toBe(false);
+    expect(peeked.roundConfig.name).toBe("未送信");
     expect(tab.requests.watched()).toEqual([]);
     expect(handle.getSnapshot().state).toBeNull();
-  });
-
-  it("peekは、削除の印があればgoneを返す", async () => {
-    // Given
-    const tab = createTab();
-    await tab.hub.commit(STREAM, null, 10, "user-1");
-
-    // When
-    const peeked = tab.round("round-1").peek(loadedOf());
-
-    // Then
-    expect(peeked.gone).toBe(true);
   });
 
   it("最後の印を外すと状態を捨て、開き直した最初の描画で前の状態を見せない", async () => {
@@ -162,24 +149,7 @@ describe("round(...)", () => {
     // Then
     expect(snapshot.state).toBeNull();
     expect(snapshot.tables).toBeNull();
-    expect(peeked.state.roundConfig.name).toBe("午前練習");
-  });
-
-  it("追記と変化の通知で状態が更新され、購読者へ知らせる。追記は保存の完了後に反映される", async () => {
-    // Given
-    const tab = createTab();
-    const handle = tab.round("round-1");
-    const listener = vi.fn();
-    handle.subscribe(listener);
-    const unwatch = handle.watch(loadedOf());
-
-    // When
-    await handle.append(shotRecorded());
-
-    // Then
-    expect(handle.getSnapshot().state?.shots).toHaveLength(1);
-    expect(listener).toHaveBeenCalled();
-    unwatch();
+    expect(peeked.roundConfig.name).toBe("午前練習");
   });
 
   it("購読を解除すると、状態が変わっても知らせない", async () => {
@@ -198,7 +168,7 @@ describe("round(...)", () => {
     unwatch();
   });
 
-  it("開いている間の印を付け、解除で外す。端末のベースで開いたかを印に持つ。2回解除しても数を崩さない", () => {
+  it("開いている間の印を付け、解除で外す。端末のベースで開いたかを印に持つ", () => {
     // Given
     const tab = createTab();
     const handle = tab.round("round-1");
@@ -206,7 +176,6 @@ describe("round(...)", () => {
     // When
     const first = handle.watch(loadedOf({ source: "local" }));
     const marked = tab.requests.watched();
-    first();
     first();
 
     // Then
@@ -491,14 +460,14 @@ describe("round(...)", () => {
       });
       const tab = createTab();
       const handle = tab.round("round-1");
-      const unwatch = handle.watch(opening());
       const listener = vi.fn();
       handle.subscribe(listener);
       const saving = holdSaving(tab);
-
-      // When
       const appending = handle.append(created);
       await flush();
+
+      // When
+      const unwatch = handle.watch(opening());
       const beforeGone = handle.getSnapshot().creationGone;
       await tab.hub.discard(STREAM, [created.eventId]);
       saving.resolve();

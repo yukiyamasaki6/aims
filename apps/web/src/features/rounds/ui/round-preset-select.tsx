@@ -1,7 +1,6 @@
 "use client";
 
-import { ChevronLeft, Loader2 } from "lucide-react";
-import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -9,11 +8,11 @@ import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useMountedRef } from "@/hooks/use-mounted-ref";
 import { cn } from "@/lib/utils";
-import { ROUNDS_PATH } from "@/routes";
 import type { SignInFailure } from "../domain/fetch-status";
 import type { Preset } from "../domain/preset";
 import { presetListView } from "../domain/preset-list-view";
 import type { PresetDeleteFailure } from "../domain/write-result";
+import { BackToListLink } from "./back-to-list-link";
 import { FetchState } from "./fetch-state";
 import { PresetListSkeleton, PresetSections } from "./preset-list";
 import { useNewRoundStore } from "./rounds-context";
@@ -128,13 +127,7 @@ function PageHeader() {
   const t = useTranslations("rounds");
   return (
     <div className="mx-auto w-full max-w-xl px-8 pt-8">
-      <Link
-        href={ROUNDS_PATH}
-        className="mb-2 inline-flex items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
-      >
-        <ChevronLeft className="size-4" />
-        {t("backToList")}
-      </Link>
+      <BackToListLink className="mb-2" />
       <h1 className="font-heading text-2xl leading-snug font-medium">
         {t("createRound")}
       </h1>

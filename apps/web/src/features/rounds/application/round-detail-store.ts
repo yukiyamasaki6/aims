@@ -23,14 +23,9 @@ import { TIMED_OUT, withinFetchTimeout, withinTime } from "./time-limit";
 import type { UniqueIds } from "./unique-ids";
 import { type WhenOnline, whenOnline } from "./when-online";
 
-// deleted: ラウンドの削除が列にあるため、取得した状態を表示せず一覧へ戻る。
-export type LoadedRoundDetail =
-  | { deleted: true }
-  | ({ deleted: false } & LoadedRound);
-
 export type RoundDetailStore = {
   // 開く材料。FETCH_TIMEOUT_MSで打ち切る。
-  load(roundId: string): Promise<FetchResult<LoadedRoundDetail>>;
+  load(roundId: string): Promise<FetchResult<LoadedRound>>;
   // 購読と操作の追記を持つ`RoundHandle`。ラウンドごとに1つ。
   round(roundId: string): RoundHandle;
   // そのエンドの既にある矢のIDより後ろに並ぶ、時刻順の矢のIDの払い出し。
@@ -65,17 +60,13 @@ async function readGroup(
   }
 }
 
-function toDetail(
-  result: FetchResult<OpenedRound>,
-): FetchResult<LoadedRoundDetail> {
+// 取得で削除済みと分かったラウンドは、見つからないものとして返す。
+function toDetail(result: FetchResult<OpenedRound>): FetchResult<LoadedRound> {
   if (result.status !== "ok") return result;
-  if (result.data.deleted) {
-    return { status: "ok", data: { deleted: true } };
-  }
+  if (result.data.deleted) return { status: "not-found" };
   return {
     status: "ok",
     data: {
-      deleted: false,
       base: result.data.base,
       targetFaces: result.data.targetFaces,
       pendingCreationEventId: null,
@@ -87,11 +78,10 @@ function toDetail(
 function localDetail(local: {
   base: RoundTables;
   targetFaces: TargetFaceOption[];
-}): FetchResult<LoadedRoundDetail> {
+}): FetchResult<LoadedRound> {
   return {
     status: "ok",
     data: {
-      deleted: false,
       base: local.base,
       targetFaces: local.targetFaces,
       pendingCreationEventId: null,
@@ -103,22 +93,19 @@ function localDetail(local: {
 async function openDetail(
   deps: Pick<Deps, "hub" | "requests" | "fetching" | "clock">,
   roundId: string,
-): Promise<FetchResult<LoadedRoundDetail>> {
+): Promise<FetchResult<LoadedRound>> {
   const { hub, requests, fetching, clock } = deps;
   const streamId = roundStreamId(roundId);
   const first = await readGroup(hub, streamId);
   hub.adopt(streamId, first);
   const plan = openPlan(first);
-  if (plan.kind === "deleted") {
-    return { status: "ok", data: { deleted: true } };
-  }
+  if (plan.kind === "deleted") return { status: "not-found" };
   if (plan.kind === "creation") {
     const faces = await fetching.fetchTargetFaces();
     if (faces.status !== "ok") return faces;
     return {
       status: "ok",
       data: {
-        deleted: false,
         base: roundTablesFromCreated(plan.operation),
         targetFaces: faces.data,
         pendingCreationEventId: plan.operation.eventId,

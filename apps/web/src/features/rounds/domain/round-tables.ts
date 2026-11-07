@@ -37,7 +37,7 @@ export type RoundState = {
   status: RoundStatus;
   distances: Distance[];
   shots: Shot[];
-  // ラウンドの削除が列にあるか。画面は一覧へ戻る。
+  // ラウンドの削除が列にあるか。画面は枠の中の見つからない表示にする。
   roundDisabled: boolean;
 };
 

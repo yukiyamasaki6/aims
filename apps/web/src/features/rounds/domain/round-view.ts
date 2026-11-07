@@ -45,7 +45,7 @@ export function roundScreenState(
   needsRefetch: boolean;
   deletedElsewhere: boolean;
 } {
-  // 組にベースが無いのは、作成が未確定の間だけ(最初のベースは作成の操作が表す)。削除の印のときも、一覧へ戻るまでの間は最初のベースで描く。
+  // 組にベースが無いのは、作成が未確定の間だけ(最初のベースは作成の操作が表す)。削除の印のときも、スコアカードが外れるまでの間は最初のベースで描く。
   const base = record.base?.base?.tables ?? loadedBase;
   const derived = deriveTables(base, [...record.operations], faces);
   return {
@@ -58,7 +58,6 @@ export function roundScreenState(
 
 // 確定していない作成の操作が、確定を見ずに記録から消えたかの判定。消えたとき(破棄された、または反映を確かめて外した)gone。
 export type CreationProgress = {
-  seen: boolean;
   confirmed: boolean;
   gone: boolean;
 };
@@ -68,20 +67,17 @@ export function creationProgress(
   items: readonly { eventId: string; ackedRevision?: number }[],
   creationEventId: string,
 ): CreationProgress {
-  if (previous.gone) return previous;
   const item = items.find((entry) => entry.eventId === creationEventId);
   if (item) {
     return {
-      seen: true,
       confirmed: previous.confirmed || item.ackedRevision !== undefined,
       gone: false,
     };
   }
-  return { ...previous, gone: previous.seen && !previous.confirmed };
+  return { ...previous, gone: !previous.confirmed };
 }
 
 export const INITIAL_CREATION: CreationProgress = {
-  seen: false,
   confirmed: false,
   gone: false,
 };

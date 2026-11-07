@@ -3,21 +3,13 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  LoadedRoundDetail,
-  RoundDetailStore,
-} from "@/features/rounds/application/round-detail-store";
+import type { RoundDetailStore } from "@/features/rounds/application/round-detail-store";
+import type { LoadedRound } from "@/features/rounds/application/round-handle";
 import type { FetchResult } from "@/features/rounds/domain/fetch-status";
 import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
-import {
-  createFakeRoundDetailStore,
-  createFakeRoundProcedures,
-} from "@/features/rounds/ui/round-stores-test-helpers";
-import {
-  RoundDetailStoreProvider,
-  RoundProceduresProvider,
-} from "@/features/rounds/ui/rounds-context";
+import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
+import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { RoundDetailClient } from "./round-detail-client";
@@ -37,14 +29,11 @@ const load = vi.fn<RoundDetailStore["load"]>();
 const fake = createFakeRoundDetailStore({ load });
 fake.goOffline();
 const store = fake.store;
-const procedures = createFakeRoundProcedures();
 
 function Providers({ children }: { children: ReactNode }) {
   return (
     <RoundDetailStoreProvider store={store}>
-      <RoundProceduresProvider procedures={procedures}>
-        {children}
-      </RoundProceduresProvider>
+      {children}
     </RoundDetailStoreProvider>
   );
 }
@@ -85,9 +74,8 @@ function detail(
   pendingCreationEventId: string | null = null,
   source: "server" | "local" = "server",
   targetFaces: TargetFaceOption[] = [],
-): LoadedRoundDetail {
+): LoadedRound {
   return {
-    deleted: false,
     base: roundTablesFromServer({
       status: "in_progress",
       roundConfig: {
@@ -124,7 +112,7 @@ function renderDetailToString() {
   );
 }
 
-function resolves(result: FetchResult<LoadedRoundDetail>) {
+function resolves(result: FetchResult<LoadedRound>) {
   load.mockResolvedValue(result);
 }
 
@@ -193,35 +181,6 @@ describe("RoundDetailClient", () => {
       expect(scorecard).toHaveAttribute("data-faces", "face-1,face-2");
       expect(load).toHaveBeenCalledTimes(1);
       expect(load).toHaveBeenCalledWith(ID);
-    });
-
-    it("列に削除があれば、スコアカードを出さず、一覧へ戻る手続きを呼ぶ", async () => {
-      // Given
-      resolves({ status: "ok", data: { deleted: true } });
-
-      // When
-      renderDetail();
-
-      // Then
-      await waitFor(() =>
-        expect(procedures.leaving.leaveRound).toHaveBeenCalledTimes(1),
-      );
-      expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
-      expect(screen.getByRole("status")).toHaveTextContent(
-        roundsText("fetchLoading"),
-      );
-    });
-
-    it("列に削除がなければ、一覧へ戻る手続きを呼ばない", async () => {
-      // Given
-      resolves({ status: "ok", data: detail("午前練習") });
-
-      // When
-      renderDetail();
-      await screen.findByTestId("scorecard");
-
-      // Then
-      expect(procedures.leaving.leaveRound).not.toHaveBeenCalled();
     });
 
     it("pathnameのIDが変わると、前のラウンドを見せずに取得し直す", async () => {
@@ -312,7 +271,7 @@ describe("RoundDetailClient", () => {
       expect(load).toHaveBeenCalledTimes(2);
     });
 
-    it("端末のベースで開いた後に、サーバーにラウンドが無いと分かったら、一覧へ戻る手続きを呼ぶ", async () => {
+    it("`onGone`が呼ばれると、スコアカードを閉じて、見つからない表示と一覧へ戻るリンクを出す", async () => {
       // Given
       resolves({
         status: "ok",
@@ -331,7 +290,11 @@ describe("RoundDetailClient", () => {
       await user.click(gone);
 
       // Then
-      expect(procedures.leaving.leaveRound).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
+      expect(screen.getByText(roundsText("detailNotFound"))).toBeVisible();
+      expect(
+        screen.getByRole("link", { name: roundsText("backToList") }),
+      ).toBeVisible();
     });
   });
 

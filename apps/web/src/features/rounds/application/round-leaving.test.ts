@@ -127,34 +127,6 @@ describe("createRoundLeaving", () => {
     });
   });
 
-  describe("leaveRound", () => {
-    it("追記せず、直ちに一覧へ置き換えて移る", () => {
-      // Given
-      const { leaving, append, go, replace } = setup();
-
-      // When
-      leaving.leaveRound();
-
-      // Then
-      expect(replace).toHaveBeenCalledTimes(1);
-      expect(replace).toHaveBeenCalledWith(ROUNDS_PATH);
-      expect(append).not.toHaveBeenCalled();
-      expect(go).not.toHaveBeenCalled();
-    });
-
-    it("遷移が投げたときは、その例外を投げる", () => {
-      // Given
-      const failure = new Error("replace failed");
-      const { leaving } = setup({ navigationFailure: failure });
-
-      // When
-      const leave = () => leaving.leaveRound();
-
-      // Then
-      expect(leave).toThrow(failure);
-    });
-  });
-
   it.each(["completeRound", "deleteRoundAndLeave"] as const)(
     "%sは、呼ぶたびに新しいイベントIDを使う",
     async (method) => {

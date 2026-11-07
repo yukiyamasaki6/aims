@@ -107,7 +107,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | `whenOnline` | 一覧、作成、詳細(`use-fetch-result.ts`が各画面の窓口の関数を引数で受ける) | 3つの窓口が同じ契約で持つ。実装は`application/when-online.ts`の1つ | 第4の窓口を作らず、共有フックが窓口に依存しない。契約と挙動は1か所 |
 | 窓口の文脈(`ui/rounds-context.tsx`) | 3画面 | 画面ごとに別の文脈(Providerとhookを各窓口に1つずつ) | 画面は自分の窓口だけを取り出せる。テストは使う窓口だけを渡す |
-| 詳細の手続きの入れ物`RoundProcedures`(`ui/rounds-context.tsx`) | 詳細(完了`use-scorecard.ts`、削除`round-menu.tsx`、一覧へ戻る`round-detail-client.tsx`、プリセットの保存`save-preset-dialog.tsx`、IDの払い出し`round-config-panel.tsx`・`use-distance-draft.ts`・`use-distance-editing.ts`・`use-shot-input.ts`) | 離れる手続き`leaving`(`completeRound`、`deleteRoundAndLeave`、`leaveRound`)、保存の手続き`presetSaving`(`savePreset`)、`ids`(`next`)を1つの文脈(Providerとhookを1つ)にまとめる | 窓口を通さずに手続きを直接受ける。3つの別の文脈にすると起動地点の入れ子が増える |
+| 詳細の手続きの入れ物`RoundProcedures`(`ui/rounds-context.tsx`) | 詳細(完了`use-scorecard.ts`、削除`round-menu.tsx`、プリセットの保存`save-preset-dialog.tsx`、IDの払い出し`round-config-panel.tsx`・`use-distance-draft.ts`・`use-distance-editing.ts`・`use-shot-input.ts`) | 離れる手続き`leaving`(`completeRound`、`deleteRoundAndLeave`)、保存の手続き`presetSaving`(`savePreset`)、`ids`(`next`)を1つの文脈(Providerとhookを1つ)にまとめる | 窓口を通さずに手続きを直接受ける。3つの別の文脈にすると起動地点の入れ子が増える |
 
 使い手のないメンバー`append`(窓口の直接の追記)は持たない。追記は`round(roundId).append`が手続き`round-editing.ts`を通して行う。
 窓口の生成は、状態を持たない部分をモジュール関数に出し、deps(受け取る手続きと部品)を引数で受ける。状態を閉じ込める`createRoundHandle`(`round-handle.ts`)だけが関数の長さの例外を持つ。
@@ -118,7 +118,7 @@ flowchart LR
 | --- | --- | --- |
 | 一覧 | `rounds-list.tsx`、`use-local-rounds-list.ts` | `useRoundsListStore` |
 | 作成 | `round-preset-select.tsx`、`preset-list.tsx`、`use-start-round.ts`、`use-preset-delete.ts` | `useNewRoundStore` |
-| 詳細 | `round-detail-client.tsx`、`use-creation-gone.ts`、`use-round-op-stack.ts`、`use-scorecard.ts`、`use-shot-input.ts`、`use-distance-editing.ts`、`distance-edit-fields.tsx`、`distance-fields.tsx`、`use-distance-draft.ts`、`round-config-panel.tsx`、`round-menu.tsx`、`save-preset-dialog.tsx` | `useRoundDetailStore`(`load`、`round`、`newShotId`、`whenOnline`)、`useRoundProcedures`(`leaving`、`presetSaving`、`ids`) |
+| 詳細 | `round-detail-client.tsx`、`use-creation-gone.ts`、`use-round-op-stack.ts`、`use-scorecard.ts`、`use-shot-input.ts`、`use-distance-editing.ts`、`distance-edit-fields.tsx`、`distance-fields.tsx`、`use-distance-draft.ts`、`round-config-panel.tsx`、`round-menu.tsx`、`save-preset-dialog.tsx` | `useRoundDetailStore`(`load`、`round`、`newShotId`、`whenOnline`)、`useRoundProcedures`(`leaving`、`presetSaving`、`ids`。`round-detail-client.tsx`は使わない) |
 | 詳細(窓口を使わない) | 上以外の`ui/`のファイル(`scorecard-client.tsx`、`round-summary-bar.tsx`、`end-row.tsx`、`keypad-panel.tsx`ほか) | なし(propsで値と関数を受ける) |
 | 複数画面 | `use-fetch-result.ts`、`fetch-state.tsx` | なし(`use-fetch-result.ts`は`whenOnline`を引数で受ける) |
 | 複数画面 | `preset-info.tsx`、`target-face-info.tsx` | なし(表示だけ。作成と詳細が使う) |
@@ -149,7 +149,7 @@ flowchart LR
 
 ### 窓口に関わるファイル
 
-- `features/rounds/application/`: `rounds-list-store.ts`、`new-round-store.ts`、`round-detail-store.ts`(窓口)、`round-handle.ts`(開いた詳細の購読と追記)、`when-online.ts`(通信の復帰の合図)、`round-deletion.ts`(画面に残る削除)、`round-leaving.ts`(完了、削除して離れる、一覧へ戻る)、`time-limit.ts`(`withinFetchTimeout`を持つ)、`content-fetcher.ts`(認証つきの取得と、auth-rejectedでのセッション更新・1回の取り直し。`QueryOutcome`から`FetchResult`への変換は`fetchResultOf`を呼ぶ)。
+- `features/rounds/application/`: `rounds-list-store.ts`、`new-round-store.ts`、`round-detail-store.ts`(窓口)、`round-handle.ts`(開いた詳細の購読と追記)、`when-online.ts`(通信の復帰の合図)、`round-deletion.ts`(画面に残る削除)、`round-leaving.ts`(完了、削除して離れる)、`time-limit.ts`(`withinFetchTimeout`を持つ)、`content-fetcher.ts`(認証つきの取得と、auth-rejectedでのセッション更新・1回の取り直し。`QueryOutcome`から`FetchResult`への変換は`fetchResultOf`を呼ぶ)。
 - `features/rounds/domain/`: `fetch-status.ts`(値オブジェクト。取得の結果`FetchResult`(失敗は種類`reason`で持つ)、サインインの確認の失敗の種類`signInFailure`、`QueryOutcome`から結果への`fetchResultOf`)、`fetch-wait.ts`(ドメインサービス。時間制限の値と代わりを返す`withFallback`。状態を持たない時間の規則のため、既定の`*-service.ts`の名前から外れる)、`query-outcome.ts`(値オブジェクト。問い合わせの結果の種類`QueryOutcome`、型だけ)。
 - `features/rounds/infrastructure/`: `db-response-outcome.ts`(データベースの応答を`QueryOutcome`の種類へ写し、複数の応答を畳む優先順を持つ`failureOfResponses`)。
 - `features/rounds/ui/`: `rounds-context.tsx`(3つの文脈)、`use-fetch-result.ts`(`whenOnline`を引数で受ける)。

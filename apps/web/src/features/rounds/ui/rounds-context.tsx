@@ -8,7 +8,7 @@ import type { RoundLeaving } from "../application/round-leaving";
 import type { RoundsListStore } from "../application/rounds-list-store";
 import type { UniqueIds } from "../application/unique-ids";
 
-// 詳細の画面が窓口を通さずに使う手続き。離れる(完了、削除、一覧へ戻る)、プリセットの保存、IDの払い出し。
+// 詳細の画面が窓口を通さずに使う手続き。離れる(完了、削除)、プリセットの保存、IDの払い出し。
 export type RoundProcedures = {
   leaving: RoundLeaving;
   presetSaving: PresetSaving;
