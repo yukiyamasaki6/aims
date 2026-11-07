@@ -2658,6 +2658,12 @@ describe("ScorecardClient 距離の追加・編集・削除", () => {
     expect(screen.queryByTestId("distance-summary-2")).not.toBeInTheDocument();
     expect(screen.getByTestId("distance-summary-1")).toBeInTheDocument();
     expect(
+      screen.queryByTestId("confirm-dialog-confirm"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("distance-config-delete-1"),
+    ).not.toBeInTheDocument();
+    expect(
       screen.getByText(roundsText("roundTotal", { total: "0" })),
     ).toBeInTheDocument();
     await waitFor(() => expect(provisionalEnd()).toBeNull());
