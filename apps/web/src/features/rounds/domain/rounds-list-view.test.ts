@@ -116,7 +116,6 @@ describe("roundsListView", () => {
   });
   const local: LocalRoundsList = {
     inProgress: [item("p1", "2026-09-10"), item("p2", "2026-09-12")],
-    deleted: new Set(),
   };
 
   it("取得が成功したら、入力中の領域とそれ以外の並びを返し、取得の状態は返さない", () => {
@@ -224,15 +223,15 @@ describe("roundsListView", () => {
     expect(result.inProgress).toEqual([]);
   });
 
-  it("端末で削除済み、またはこの画面で削除したラウンドは、端末から出す入力中の領域から除く", () => {
+  it("この画面で削除したラウンドは、端末から出す入力中の領域から除く", () => {
     // Given
 
     // When
     const result = roundsListView(
       { status: "offline" },
-      { ...local, deleted: new Set(["p1"]) },
+      local,
       false,
-      new Set(["p2"]),
+      new Set(["p1", "p2"]),
     );
 
     // Then

@@ -92,7 +92,7 @@ const inProgressRounds: RoundListItem[] = [
 ];
 
 function offlineWithLocal(items: RoundListItem[] = inProgressRounds) {
-  setLocal({ inProgress: items, deleted: new Set() });
+  setLocal({ inProgress: items });
 }
 
 beforeEach(() => {

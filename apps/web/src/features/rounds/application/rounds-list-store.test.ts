@@ -383,7 +383,6 @@ describe("loadLocalList", () => {
     expect(list.inProgress).toEqual([
       { id: "round-1", name: "端末", roundDate: "2026-09-15", total: 0 },
     ]);
-    expect([...list.deleted]).toEqual(["deleted"]);
   });
 });
 

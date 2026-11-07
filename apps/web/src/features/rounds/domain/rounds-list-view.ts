@@ -63,9 +63,7 @@ export function roundsListView(
   return {
     inProgress: show
       ? byRoundDateDesc(
-          local.inProgress.filter(
-            (round) => !local.deleted.has(round.id) && !removed.has(round.id),
-          ),
+          local.inProgress.filter((round) => !removed.has(round.id)),
         )
       : [],
     others: null,
