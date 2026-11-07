@@ -9,7 +9,10 @@ import {
 } from "@/features/offline-pwa/application/update-activation";
 import { createOpSender } from "@/features/rounds/application/op-sender";
 import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
-import { roundCreated } from "@/features/rounds/domain/round-op-test-helpers";
+import {
+  roundBase,
+  roundCreated,
+} from "@/features/rounds/domain/round-op-test-helpers";
 import { outboxOf } from "@/features/rounds/domain/round-record";
 import { useRoundDetailStore } from "@/features/rounds/ui/rounds-context";
 import { translatorFor } from "@/i18n/translator-test-helpers";
@@ -299,7 +302,14 @@ describe("RootClientEntry", () => {
       const { hub } = vi.mocked(createOpSender).mock.calls[0][0];
 
       // When
-      const appending = store?.round("round-1").append(created);
+      const handle = store?.round("round-1");
+      const unwatch = handle?.watch({
+        base: roundBase().tables,
+        targetFaces: [],
+        pendingCreationEventId: null,
+        source: "server",
+      });
+      const appending = handle?.append(created);
       await Promise.resolve();
       const outboxWhileSaving = outboxOf(hub.record("round:round-1"));
       let persisted = false;
@@ -314,6 +324,7 @@ describe("RootClientEntry", () => {
       storage.release?.();
       await appending;
       await waiting;
+      unwatch?.();
 
       // Then
       expect(outboxWhileSaving.map((item) => item.eventId)).toEqual([
