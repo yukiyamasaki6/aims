@@ -1,5 +1,4 @@
 import { useState } from "react";
-import type { DistanceConfig } from "../domain/distance-config";
 import {
   changesDistanceStructure,
   distanceToAdd,
@@ -44,7 +43,7 @@ export function useDistanceEditing({
     append(operation);
   }
 
-  function handleDistanceSaved(updated: DistanceConfig) {
+  function handleDistanceSaved(updated: Distance) {
     const structureChanged = changesDistanceStructure(distances, updated);
     toggleDistanceEditing(updated.id);
     // 指している矢が新しい構成で無効になったときは、reconcilePointerが何も指さなくする。

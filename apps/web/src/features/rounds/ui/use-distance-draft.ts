@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  type DistanceConfig,
   type DistanceConfigErrors,
   type DistanceDraft,
   validateDistanceDraft,
@@ -9,6 +8,7 @@ import {
   buildDistanceDisabledOperation,
   buildDistanceUpdatedOperation,
 } from "../domain/distance-operations";
+import type { Distance } from "../domain/scorecard-types";
 import type { SyncOperation } from "../domain/sync-events";
 import { useRoundProcedures } from "./rounds-context";
 
@@ -20,9 +20,9 @@ export function useDistanceDraft({
   onDeleted,
   enqueue,
 }: {
-  distance: DistanceConfig;
+  distance: Distance;
   hasShots: boolean;
-  onSaved: (updated: DistanceConfig) => void;
+  onSaved: (updated: Distance) => void;
   onDeleted: () => void;
   enqueue: (operation: SyncOperation) => void;
 }) {
@@ -41,11 +41,11 @@ export function useDistanceDraft({
     }
     setFieldErrors({});
 
-    onSaved(validation.config);
+    onSaved(validation.distance);
     // 変えた項目が無ければ、操作を積まない。
     const operation = buildDistanceUpdatedOperation(
       origin,
-      validation.config,
+      validation.distance,
       ids.next(),
     );
     if (operation) enqueue(operation);

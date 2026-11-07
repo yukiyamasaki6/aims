@@ -162,9 +162,9 @@ export function DistanceFields({
     <>
       {roundFormat === "field" && (
         <MarkedToggle
-          isMarked={draft.isMarked}
+          isMarked={draft.is_marked}
           distanceNumber={distanceNumber}
-          onChange={(isMarked) => setDraft((d) => ({ ...d, isMarked }))}
+          onChange={(marked) => setDraft((d) => ({ ...d, is_marked: marked }))}
         />
       )}
 
@@ -181,33 +181,33 @@ export function DistanceFields({
         label={t("distanceFieldArrows")}
         slug="arrows"
         distanceNumber={distanceNumber}
-        value={draft.arrowsPerEnd}
+        value={draft.arrows_per_end}
         error={errorText(fieldErrors.arrowsPerEnd)}
         locked={hasShots}
         lockedMessage={pressedLocked === "arrows"}
         onLockedPress={() => setPressedLocked("arrows")}
-        onChange={(v) => setDraft((d) => ({ ...d, arrowsPerEnd: v }))}
+        onChange={(v) => setDraft((d) => ({ ...d, arrows_per_end: v }))}
       />
 
       <NumberField
         label={t("distanceFieldTotalEnds")}
         slug="total-ends"
         distanceNumber={distanceNumber}
-        value={draft.totalEnds}
+        value={draft.total_ends}
         error={errorText(fieldErrors.totalEnds)}
         locked={hasShots}
         lockedMessage={pressedLocked === "total-ends"}
         onLockedPress={() => setPressedLocked("total-ends")}
-        onChange={(v) => setDraft((d) => ({ ...d, totalEnds: v }))}
+        onChange={(v) => setDraft((d) => ({ ...d, total_ends: v }))}
       />
 
       <TargetFaceField
         distanceNumber={distanceNumber}
         targetFaces={targetFaces}
-        selectedId={draft.targetFaceId}
+        selectedId={draft.target_face_id}
         roundFormat={roundFormat}
         roundBowType={roundBowType}
-        onSelect={(id) => setDraft((d) => ({ ...d, targetFaceId: id }))}
+        onSelect={(id) => setDraft((d) => ({ ...d, target_face_id: id }))}
         locked={hasShots}
         showLockedMessage={pressedLocked === "target-face"}
         onLockedPress={() => setPressedLocked("target-face")}

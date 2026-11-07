@@ -6,12 +6,12 @@ import {
 
 const validDraft: DistanceDraft = {
   id: "distance-1",
-  distanceNumber: 1,
+  position_key: "a",
   distance: 70,
-  totalEnds: 6,
-  arrowsPerEnd: 6,
-  targetFaceId: "face-1",
-  isMarked: true,
+  total_ends: 6,
+  arrows_per_end: 6,
+  target_face_id: "face-1",
+  is_marked: true,
 };
 
 const POSITIVE_INTEGER_ERROR = "notPositiveInteger";
@@ -26,14 +26,14 @@ describe("validateDistanceDraft", () => {
       // Then
       expect(result).toEqual({
         type: "valid",
-        config: {
+        distance: {
           id: "distance-1",
-          distanceNumber: 1,
+          position_key: "a",
           distance: 70,
-          totalEnds: 6,
-          arrowsPerEnd: 6,
-          targetFaceId: "face-1",
-          isMarked: true,
+          total_ends: 6,
+          arrows_per_end: 6,
+          target_face_id: "face-1",
+          is_marked: true,
         },
       });
     });
@@ -46,21 +46,21 @@ describe("validateDistanceDraft", () => {
         // When
         const result = validateDistanceDraft({
           ...validDraft,
-          isMarked: false,
+          is_marked: false,
           distance: null,
         });
 
         // Then
         expect(result).toEqual({
           type: "valid",
-          config: {
+          distance: {
             id: "distance-1",
-            distanceNumber: 1,
+            position_key: "a",
             distance: null,
-            totalEnds: 6,
-            arrowsPerEnd: 6,
-            targetFaceId: "face-1",
-            isMarked: false,
+            total_ends: 6,
+            arrows_per_end: 6,
+            target_face_id: "face-1",
+            is_marked: false,
           },
         });
       });
@@ -82,9 +82,9 @@ describe("validateDistanceDraft", () => {
   });
 
   describe.each([
-    ["エンドあたりの本数", "arrowsPerEnd"],
-    ["総エンド数", "totalEnds"],
-  ] as const)("%s", (_label, field) => {
+    ["エンドあたりの本数", "arrows_per_end", "arrowsPerEnd"],
+    ["総エンド数", "total_ends", "totalEnds"],
+  ] as const)("%s", (_label, field, errorField) => {
     it("1から有効で、0以下はエラーになる", () => {
       // Given
       // When
@@ -107,7 +107,7 @@ describe("validateDistanceDraft", () => {
       // Then
       const expected = {
         type: "invalid",
-        errors: { [field]: POSITIVE_INTEGER_ERROR },
+        errors: { [errorField]: POSITIVE_INTEGER_ERROR },
       };
       expect(results).toEqual([expected, expected, expected]);
     });
@@ -120,8 +120,8 @@ describe("validateDistanceDraft", () => {
       const result = validateDistanceDraft({
         ...validDraft,
         distance: null,
-        arrowsPerEnd: null,
-        totalEnds: 0,
+        arrows_per_end: null,
+        total_ends: 0,
       });
 
       // Then

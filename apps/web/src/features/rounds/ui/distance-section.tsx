@@ -1,7 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
-import type { DistanceConfig } from "../domain/distance-config";
 import { distanceNumber, summarizeDistance } from "../domain/scorecard-scoring";
 import type { Distance, Shot } from "../domain/scorecard-types";
 import type { Pointer } from "../domain/shot-pointer";
@@ -42,7 +41,7 @@ export function DistanceSection({
   hasShots: boolean;
   pointer: Pointer;
   onToggleEditing: () => void;
-  onSaved: (updated: DistanceConfig) => void;
+  onSaved: (updated: Distance) => void;
   onDeleted: () => void;
   enqueue: (operation: SyncOperation) => void;
   onSelectShot: (shot: Shot) => void;
@@ -90,7 +89,8 @@ export function DistanceSection({
         />
         {editing && (
           <DistanceEditFields
-            distance={toDistanceConfig(d, displayNumber)}
+            distance={d}
+            displayNumber={displayNumber}
             hasShots={hasShots}
             targetFaces={targetFaces}
             roundFormat={roundFormat}
@@ -206,16 +206,4 @@ function DistanceSubtotalBar({
       </span>
     </div>
   );
-}
-
-function toDistanceConfig(d: Distance, displayNumber: number): DistanceConfig {
-  return {
-    id: d.id,
-    distanceNumber: displayNumber,
-    distance: d.distance,
-    totalEnds: d.total_ends,
-    arrowsPerEnd: d.arrows_per_end,
-    targetFaceId: d.target_face_id,
-    isMarked: d.is_marked,
-  };
 }

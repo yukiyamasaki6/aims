@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { DistanceConfig } from "@/features/rounds/domain/distance-config";
 import {
   buildDistanceDisabledOperation,
   buildDistanceUpdatedOperation,
@@ -29,15 +28,15 @@ const distanceB: Distance = {
 };
 
 // distanceAの設定をそのまま保存する内容。
-function configOfA(overrides: Partial<DistanceConfig> = {}): DistanceConfig {
+function configOfA(overrides: Partial<Distance> = {}): Distance {
   return {
     id: "d-a",
-    distanceNumber: 1,
+    position_key: "a",
     distance: 70,
-    totalEnds: 12,
-    arrowsPerEnd: 3,
-    targetFaceId: "face-1",
-    isMarked: true,
+    total_ends: 12,
+    arrows_per_end: 3,
+    target_face_id: "face-1",
+    is_marked: true,
     ...overrides,
   };
 }
@@ -158,9 +157,9 @@ describe("changesDistanceStructure", () => {
   describe("構成が変わる場合", () => {
     // 1項目だけを変えた判定を確かめるため、変えた後の本数は実際の形にならない。
     it.each([
-      { field: "総エンド数", overrides: { totalEnds: 6 } },
-      { field: "エンドあたりの本数", overrides: { arrowsPerEnd: 6 } },
-      { field: "的", overrides: { targetFaceId: "face-2" } },
+      { field: "総エンド数", overrides: { total_ends: 6 } },
+      { field: "エンドあたりの本数", overrides: { arrows_per_end: 6 } },
+      { field: "的", overrides: { target_face_id: "face-2" } },
     ])("$fieldが変わると、変わったと判定する", ({ overrides }) => {
       // Given
       // When
@@ -189,7 +188,7 @@ describe("changesDistanceStructure", () => {
       const distances = [distanceA, distanceB];
       const result = changesDistanceStructure(
         distances,
-        configOfA({ distance: 30, isMarked: false }),
+        configOfA({ distance: 30, is_marked: false }),
       );
 
       // Then
@@ -211,20 +210,20 @@ describe("changesDistanceStructure", () => {
 });
 
 describe("buildDistanceUpdatedOperation", () => {
-  const saved: DistanceConfig = {
+  const saved: Distance = {
     id: "distance-2",
-    distanceNumber: 2,
+    position_key: "b",
     distance: 70,
-    totalEnds: 6,
-    arrowsPerEnd: 6,
-    targetFaceId: "face-1",
-    isMarked: true,
+    total_ends: 6,
+    arrows_per_end: 6,
+    target_face_id: "face-1",
+    is_marked: true,
   };
 
   it("変えた項目だけを、changesに持つ操作を作る", () => {
     // Given
     // When
-    const config = { ...saved, distance: null, isMarked: false };
+    const config = { ...saved, distance: null, is_marked: false };
     const operation = buildDistanceUpdatedOperation(saved, config, "event-1");
 
     // Then
@@ -239,7 +238,7 @@ describe("buildDistanceUpdatedOperation", () => {
   it("構成の3項目のどれかが変われば、config に3項目全てを持つ", () => {
     // Given
     // When
-    const config = { ...saved, totalEnds: 12, arrowsPerEnd: 3 };
+    const config = { ...saved, total_ends: 12, arrows_per_end: 3 };
     const operation = buildDistanceUpdatedOperation(saved, config, "event-1");
 
     // Then

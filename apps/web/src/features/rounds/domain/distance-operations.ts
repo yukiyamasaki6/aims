@@ -1,4 +1,3 @@
-import type { DistanceConfig } from "./distance-config";
 import { nextPositionKey } from "./position-key";
 import { compareDistancePosition } from "./scorecard-scoring";
 import type { Distance } from "./scorecard-types";
@@ -48,36 +47,36 @@ export function distanceToAdd(
 // 編集のダイアログは、その距離が状態にある描画の中で開き、距離が消えればカードごと閉じる。変更前の距離が見つからないときは約束が破れたものとして例外にする。
 export function changesDistanceStructure(
   distances: Distance[],
-  config: DistanceConfig,
+  updated: Distance,
 ): boolean {
-  const previous = distances.find((d) => d.id === config.id);
+  const previous = distances.find((d) => d.id === updated.id);
   if (!previous) throw new Error("変更前の距離が見つかりません。");
   return (
-    previous.total_ends !== config.totalEnds ||
-    previous.arrows_per_end !== config.arrowsPerEnd ||
-    previous.target_face_id !== config.targetFaceId
+    previous.total_ends !== updated.total_ends ||
+    previous.arrows_per_end !== updated.arrows_per_end ||
+    previous.target_face_id !== updated.target_face_id
   );
 }
 
 // 保存した値と編集後の値の差分を、操作として返す。差分が無ければ操作を積まない。
 // 構成は的・エンド数・矢数の1組で、どれかが変われば3項目全てを送る。
 export function buildDistanceUpdatedOperation(
-  saved: DistanceConfig,
-  config: DistanceConfig,
+  saved: Distance,
+  config: Distance,
   eventId: string,
 ): SyncOperation | null {
   const changes: DistanceChanges = {};
   if (config.distance !== saved.distance) changes.distance = config.distance;
-  if (config.isMarked !== saved.isMarked) changes.isMarked = config.isMarked;
+  if (config.is_marked !== saved.is_marked) changes.isMarked = config.is_marked;
   if (
-    config.totalEnds !== saved.totalEnds ||
-    config.arrowsPerEnd !== saved.arrowsPerEnd ||
-    config.targetFaceId !== saved.targetFaceId
+    config.total_ends !== saved.total_ends ||
+    config.arrows_per_end !== saved.arrows_per_end ||
+    config.target_face_id !== saved.target_face_id
   ) {
     changes.config = {
-      totalEnds: config.totalEnds,
-      arrowsPerEnd: config.arrowsPerEnd,
-      targetFaceId: config.targetFaceId,
+      totalEnds: config.total_ends,
+      arrowsPerEnd: config.arrows_per_end,
+      targetFaceId: config.target_face_id,
     };
   }
   if (Object.keys(changes).length === 0) return null;
