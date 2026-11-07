@@ -17,7 +17,7 @@ const authText = translatorFor("auth");
 const ACCEPTED: CallResult = { kind: "accepted" };
 
 // 認証と遷移は、手続きの外側の境界のため偽に替える。手続き(createSignUp)は実物を通す。
-const nav = { go: vi.fn() };
+const pageReplace = { replace: vi.fn() };
 const auth = {
   sendCode: vi.fn(),
   verifyCode: vi.fn(),
@@ -52,7 +52,7 @@ function renderForm(options?: { strict?: boolean }) {
     clock: createBrowserClock(),
     connectivity: createFakeConnectivity(),
     authenticator: auth,
-    pageNavigation: { go: nav.go },
+    pageReplace,
   });
   const form = <SignUpForm signUp={signUp} siteKey="site-key" />;
   return render(options?.strict ? <StrictMode>{form}</StrictMode> : form, {
