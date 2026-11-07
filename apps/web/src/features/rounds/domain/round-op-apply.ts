@@ -73,7 +73,6 @@ function replaceDistance(tables: RoundTables, next: DistanceRow): RoundTables {
 
 // update_round。効く項目は、確定済みはサーバーが返した項目、未確定は規則の判定。書き込みは共通。
 function judgeRoundFields(
-  tables: RoundTables,
   changes: Op<"round.updated">["changes"],
 ): Set<string> {
   const fields = new Set<string>();
@@ -82,13 +81,7 @@ function judgeRoundFields(
   if (changes.bowType !== undefined) fields.add("bow_type");
   // 状態は常に効く。
   if (changes.status !== undefined) fields.add("status");
-  if (changes.format !== undefined) {
-    // 決定4: Unmarkedの距離があるときは、フィールド以外へ変えない。
-    const blocked =
-      changes.format !== "field" &&
-      tables.distances.some((d) => !d.disabled && !d.is_marked);
-    if (!blocked) fields.add("format");
-  }
+  if (changes.format !== undefined) fields.add("format");
   return fields;
 }
 
@@ -109,7 +102,7 @@ function updateRound(
     .map(([key]) => key);
   const fields =
     confirmedFields === undefined
-      ? judgeRoundFields(tables, changes)
+      ? judgeRoundFields(changes)
       : appliedFields(confirmedFields, keys);
   const next: RoundConfig = { ...tables.round.config };
   if (fields.has("name") && changes.name !== undefined) {
@@ -140,17 +133,8 @@ function disableRound(tables: RoundTables): RoundTables {
 function createDistance(
   tables: RoundTables,
   operation: Op<"distance.created">,
-  confirmedFields: Confirmed,
 ): RoundTables {
   if (tables.distances.some((d) => d.id === operation.id)) {
-    return tables;
-  }
-  // 決定4: Unmarkedの距離は、フィールドのラウンドだけに作れる。
-  if (
-    confirmedFields === undefined &&
-    !operation.isMarked &&
-    tables.round.config.format !== "field"
-  ) {
     return tables;
   }
   return {
@@ -192,7 +176,7 @@ function hasShotInvalidUnder(
   );
 }
 
-// update_distanceの規則の判定。is_marked、distance、configの順に、先に効いた項目を重ねた値で判定する。
+// update_distanceの規則の判定。is_markedとdistanceは常に効き、configは表示中の矢が無効になるときだけ効かない。
 function judgeDistanceFields(
   tables: RoundTables,
   target: DistanceRow,
@@ -200,23 +184,8 @@ function judgeDistanceFields(
   faces: ScoringTargetFace[],
 ): Set<string> {
   const fields = new Set<string>();
-  let isMarked = target.is_marked;
-  if (changes.isMarked !== undefined) {
-    // Markedへ変えるときは、同じ操作の距離(m)があればその値で判定する。
-    const distance =
-      changes.distance !== undefined ? changes.distance : target.distance;
-    const blocked = changes.isMarked
-      ? distance === null
-      : tables.round.config.format !== "field";
-    if (!blocked) {
-      fields.add("is_marked");
-      isMarked = changes.isMarked;
-    }
-  }
-  if (changes.distance !== undefined) {
-    const blocked = changes.distance === null && isMarked;
-    if (!blocked) fields.add("distance");
-  }
+  if (changes.isMarked !== undefined) fields.add("is_marked");
+  if (changes.distance !== undefined) fields.add("distance");
   if (
     changes.config &&
     !hasShotInvalidUnder(tables, target, changes.config, faces)
@@ -428,7 +397,7 @@ function step(
     case "round.disabled":
       return unchanged(disableRound(tables));
     case "distance.created":
-      return unchanged(createDistance(tables, operation, confirmedFields));
+      return unchanged(createDistance(tables, operation));
     case "distance.updated":
       return unchanged(
         updateDistance(tables, operation, confirmedFields, faces),

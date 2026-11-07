@@ -136,40 +136,6 @@ describe("update_round(round.updated)", () => {
     expect(next.round.config.name).toBe("B");
   });
 
-  it("未確定でも、Unmarkedの距離があるときはフィールド以外へ変えない", () => {
-    // Given
-    // When
-    const blocked = apply(
-      fieldWithUnmarked,
-      round({ format: "indoor", name: "N" }),
-    );
-    const keptField = apply(fieldWithUnmarked, round({ format: "field" }));
-    const ok = apply(
-      base,
-      round({ format: "indoor", roundDate: "2026-10-01" }),
-    );
-
-    // Then
-    expect(blocked.round.config.format).toBe("field");
-    expect(blocked.round.config.name).toBe("N");
-    expect(keptField.round.config.format).toBe("field");
-    expect(ok.round.config).toMatchObject({
-      format: "indoor",
-      roundDate: "2026-10-01",
-    });
-  });
-
-  it("削除済みのUnmarkedの距離は、フォーマット変更を妨げない", () => {
-    // Given
-    const deleted = apply(fieldWithUnmarked, distanceDisabled());
-
-    // When
-    const next = apply(deleted, round({ format: "indoor" }));
-
-    // Then
-    expect(next.round.config.format).toBe("indoor");
-  });
-
   describe("確定済み", () => {
     const op = round({
       name: "N",
@@ -246,19 +212,6 @@ describe("round.updatedのstatus", () => {
     // Then
     expect(next.round.status).toBe("completed");
     expect(next.round.config).toEqual(base.round.config);
-  });
-
-  it("Unmarkedの距離でformatが効かなくても、同じ差分の状態は効く", () => {
-    // Given
-    // When
-    const next = apply(
-      fieldWithUnmarked,
-      round({ format: "indoor", status: "completed" }),
-    );
-
-    // Then
-    expect(next.round.config.format).toBe("field");
-    expect(next.round.status).toBe("completed");
   });
 
   it("名前だけの差分は状態を変えない", () => {
@@ -421,26 +374,6 @@ describe("create_distance(distance.created)", () => {
     // Then
     expect(next).toBe(deleted);
   });
-
-  it("未確定のUnmarkedの距離は、フィールド以外のラウンドには作らない", () => {
-    // Given
-    const op = distanceCreated({
-      id: "d-2",
-      positionKey: "b",
-      isMarked: false,
-      distance: null,
-    });
-
-    // When
-    const pendingOnBase = apply(base, op);
-    const pendingOnField = apply(field, op);
-    const confirmedOnBase = applyConfirmed(base, op, null);
-
-    // Then
-    expect(pendingOnBase).toBe(base);
-    expect(pendingOnField.distances).toHaveLength(2);
-    expect(confirmedOnBase.distances).toHaveLength(2);
-  });
 });
 
 describe("update_distance(distance.updated)", () => {
@@ -503,75 +436,6 @@ describe("update_distance(distance.updated)", () => {
 
     // Then
     expect(next.distances[0].distance).toBe(30);
-  });
-
-  describe("Marked/Unmarked", () => {
-    it("Markedへ変えるとき距離(m)が無ければ、Markedにしない", () => {
-      // Given
-      // When
-      const next = apply(fieldWithUnmarked, update({ isMarked: true }));
-
-      // Then
-      expect(next.distances[0].is_marked).toBe(false);
-    });
-
-    it("Markedへ変えるとき、同じ操作の距離(m)があれば、その値で判定して即Markedになる", () => {
-      // Given
-      // When
-      const next = apply(
-        fieldWithUnmarked,
-        update({ isMarked: true, distance: 30 }),
-      );
-
-      // Then
-      expect(next.distances[0]).toMatchObject({
-        is_marked: true,
-        distance: 30,
-      });
-    });
-
-    it("同じ操作の距離(m)がnullなら、Markedにしない。距離(m)の後の判定でもnullは効く", () => {
-      // Given
-      // When
-      const next = apply(
-        fieldWithUnmarked,
-        update({ isMarked: true, distance: null }),
-      );
-
-      // Then
-      expect(next.distances[0]).toMatchObject({
-        is_marked: false,
-        distance: null,
-      });
-    });
-
-    it("Unmarkedへ変えるのは、フィールドのときだけ", () => {
-      // Given
-      // When
-      const onBase = apply(base, update({ isMarked: false }));
-      const onField = apply(field, update({ isMarked: false }));
-
-      // Then
-      expect(onBase.distances[0].is_marked).toBe(true);
-      expect(onField.distances[0].is_marked).toBe(false);
-    });
-
-    it("Markedのまま距離(m)を空にしない。同じ操作でUnmarkedへ変わるなら空にできる", () => {
-      // Given
-      // When
-      const stillMarked = apply(base, update({ distance: null }));
-      const becomesUnmarked = apply(
-        field,
-        update({ isMarked: false, distance: null }),
-      );
-
-      // Then
-      expect(stillMarked.distances[0].distance).toBe(70);
-      expect(becomesUnmarked.distances[0]).toMatchObject({
-        is_marked: false,
-        distance: null,
-      });
-    });
   });
 
   describe("構成", () => {
