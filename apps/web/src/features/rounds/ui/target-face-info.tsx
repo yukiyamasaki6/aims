@@ -33,19 +33,6 @@ export function TargetFaceIcon({
   size?: number;
   className?: string;
 }) {
-  const hasAnyRing = spots.some((s) => s.target_face_rings.length > 0);
-  if (!hasAnyRing) {
-    return (
-      <span
-        className={cn(
-          "inline-block shrink-0 rounded-full border border-dashed",
-          className,
-        )}
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-
   const viewExtent = spotsViewExtent(spots);
 
   return (
@@ -67,10 +54,9 @@ export function TargetFaceIcon({
 function spotsViewExtent(spots: TargetFaceSpotLayout[]): number {
   let extent = 0;
   for (const spot of spots) {
-    const spotMaxRadius =
-      spot.target_face_rings.length > 0
-        ? Math.max(...spot.target_face_rings.map((r) => r.radius))
-        : 0;
+    const spotMaxRadius = Math.max(
+      ...spot.target_face_rings.map((r) => r.radius),
+    );
     extent = Math.max(
       extent,
       Math.abs(spot.center_x) + spotMaxRadius,
@@ -170,7 +156,6 @@ function TargetFaceCenterDetail({
   pixelWidth?: number;
 }) {
   const cluster = innerSameColorRings(rings);
-  if (cluster.length === 0) return null;
 
   const clusterOuterRadius = cluster[cluster.length - 1].radius;
   const sorted = [...rings].sort((a, b) => a.radius - b.radius);
@@ -289,7 +274,7 @@ export function TargetFaceInfo({ face }: { face: TargetFaceView }) {
           {t("targetFaceSize", { size: String(face.size) })}
         </span>
         <TargetFaceCenterDetail
-          rings={face.target_face_spots[0]?.target_face_rings ?? []}
+          rings={face.target_face_spots[0].target_face_rings}
           pixelWidth={CENTER_DETAIL_WIDTH}
         />
       </span>

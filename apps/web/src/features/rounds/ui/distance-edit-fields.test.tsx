@@ -10,6 +10,24 @@ import { DistanceEditFields } from "./distance-edit-fields";
 import { createFakeRoundProcedures } from "./round-stores-test-helpers";
 import { RoundProceduresProvider } from "./rounds-context";
 
+// 輪を1つだけ持つ的。的の表示は輪を持つ的を前提にする。
+const SINGLE_RING_SPOTS = [
+  {
+    center_x: 0,
+    center_y: 0,
+    target_face_rings: [
+      {
+        radius: 1,
+        color: "#FFFFFF",
+        line_color: null,
+        z_index: 1,
+        score_str: "M",
+        score_int: 0,
+      },
+    ],
+  },
+];
+
 const roundsText = translatorFor("rounds");
 
 const targetFaceOutdoorRecurve: TargetFaceOption = {
@@ -18,7 +36,7 @@ const targetFaceOutdoorRecurve: TargetFaceOption = {
   size: 122,
   format: "outdoor",
   bow_type: ["recurve", "compound"],
-  target_face_spots: [],
+  target_face_spots: SINGLE_RING_SPOTS,
 };
 
 const targetFaceIndoorCompound: TargetFaceOption = {
@@ -27,7 +45,7 @@ const targetFaceIndoorCompound: TargetFaceOption = {
   size: 40,
   format: "indoor",
   bow_type: ["compound"],
-  target_face_spots: [],
+  target_face_spots: SINGLE_RING_SPOTS,
 };
 
 const targetFaces = [targetFaceOutdoorRecurve, targetFaceIndoorCompound];
@@ -658,7 +676,7 @@ describe("DistanceEditFields", () => {
           size: 80,
           format: "field",
           bow_type: ["recurve"],
-          target_face_spots: [],
+          target_face_spots: SINGLE_RING_SPOTS,
         };
         setup({ targetFaces: [...targetFaces, targetFaceField] });
         await user.click(screen.getByTestId("target-face-picker-trigger"));

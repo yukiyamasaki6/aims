@@ -31,6 +31,24 @@ import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/ind
 import { retryDelayMs } from "../domain/sync-failure";
 import { ScorecardClient } from "./scorecard-client";
 
+// 輪を1つだけ持つ的。的の表示は輪を持つ的を前提にする。
+const SINGLE_RING_SPOTS = [
+  {
+    center_x: 0,
+    center_y: 0,
+    target_face_rings: [
+      {
+        radius: 1,
+        color: "#FFFFFF",
+        line_color: null,
+        z_index: 1,
+        score_str: "M",
+        score_int: 0,
+      },
+    ],
+  },
+];
+
 const ignoreGone = () => {};
 
 const roundsText = translatorFor("rounds");
@@ -451,7 +469,7 @@ describe("ScorecardClient 初期表示・集計", () => {
       size: 40,
       format: "outdoor",
       bow_type: ["recurve"],
-      target_face_spots: [],
+      target_face_spots: SINGLE_RING_SPOTS,
     };
     setup({
       distances: [{ ...distanceA, target_face_id: targetFaceBlank.id }],
