@@ -478,14 +478,14 @@ describe("round(...)", () => {
       });
       const tab = createTab();
       const handle = tab.round("round-1");
-      const unwatch = handle.watch(opening());
       const listener = vi.fn();
       handle.subscribe(listener);
       const saving = holdSaving(tab);
-
-      // When
       const appending = handle.append(created);
       await flush();
+
+      // When
+      const unwatch = handle.watch(opening());
       const beforeGone = handle.getSnapshot().creationGone;
       await tab.hub.discard(STREAM, [created.eventId]);
       saving.resolve();

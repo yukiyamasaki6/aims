@@ -58,7 +58,6 @@ export function roundScreenState(
 
 // 確定していない作成の操作が、確定を見ずに記録から消えたかの判定。消えたとき(破棄された、または反映を確かめて外した)gone。
 export type CreationProgress = {
-  seen: boolean;
   confirmed: boolean;
   gone: boolean;
 };
@@ -68,20 +67,17 @@ export function creationProgress(
   items: readonly { eventId: string; ackedRevision?: number }[],
   creationEventId: string,
 ): CreationProgress {
-  if (previous.gone) return previous;
   const item = items.find((entry) => entry.eventId === creationEventId);
   if (item) {
     return {
-      seen: true,
       confirmed: previous.confirmed || item.ackedRevision !== undefined,
       gone: false,
     };
   }
-  return { ...previous, gone: previous.seen && !previous.confirmed };
+  return { ...previous, gone: !previous.confirmed };
 }
 
 export const INITIAL_CREATION: CreationProgress = {
-  seen: false,
   confirmed: false,
   gone: false,
 };

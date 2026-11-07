@@ -278,7 +278,7 @@ describe("roundScreenState", () => {
 describe("creationProgress", () => {
   const eventId = roundCreated().eventId;
 
-  it("作成の操作が現れると見たことを覚え、確定したら確定を覚え、確定後に消えてもgoneにしない", () => {
+  it("確定を覚え、確定後に消えてもgoneにしない", () => {
     // Given
     const appeared = creationProgress(INITIAL_CREATION, [{ eventId }], eventId);
 
@@ -291,32 +291,19 @@ describe("creationProgress", () => {
     const afterRemoval = creationProgress(confirmed, [], eventId);
 
     // Then
-    expect(appeared).toEqual({ seen: true, confirmed: false, gone: false });
-    expect(confirmed).toEqual({ seen: true, confirmed: true, gone: false });
+    expect(appeared).toEqual({ confirmed: false, gone: false });
+    expect(confirmed).toEqual({ confirmed: true, gone: false });
     expect(afterRemoval.gone).toBe(false);
   });
 
-  it("まだ現れていない間はgoneにせず、確定を見ずに消えたときだけgoneにする", () => {
+  it("確定を見ずに消えたときgoneにする", () => {
     // Given
     const appeared = creationProgress(INITIAL_CREATION, [{ eventId }], eventId);
 
     // When
-    const notYet = creationProgress(INITIAL_CREATION, [], eventId);
     const removed = creationProgress(appeared, [], eventId);
 
     // Then
-    expect(notYet.gone).toBe(false);
     expect(removed.gone).toBe(true);
-  });
-
-  it("goneになった後は、操作が現れても変わらない", () => {
-    // Given
-    const gone = { seen: true, confirmed: false, gone: true };
-
-    // When
-    const next = creationProgress(gone, [{ eventId }], eventId);
-
-    // Then
-    expect(next).toBe(gone);
   });
 });
