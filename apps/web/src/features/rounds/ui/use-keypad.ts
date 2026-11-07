@@ -115,16 +115,14 @@ export function useKeypad({
   const pointedDistance =
     pointer && distances.find((d) => d.id === pointer.distanceId);
   const keypadDistance = useLastDistance(pointedDistance);
-  // 利用者が指す矢を変えた操作ごとに増やし、同じエンド内の移動でもスクロールを促す。
+  // 利用者の操作で指す矢を設定するたびに増やし、同じ矢でも同じエンド内の移動でもスクロールを促す。
   const [followKey, setFollowKey] = useState(0);
   const follow = useFollow(pointer, isLandscape ? 0 : KEYPAD_TOGGLE_OVERHANG);
-  const pointerKey = pointer
-    ? `${pointer.distanceId}:${pointer.endNumber}`
-    : null;
   const keypadInset = isLandscape ? 0 : keypadHeight + KEYPAD_TOGGLE_OVERHANG;
-  // 契機は、指す位置、テンキーの占める高さ(向きの切り替えを含む)、利用者の操作ごとの追従の要求。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: pointerKey、keypadInset、followKeyだけを契機にする
-  useEffect(follow, [pointerKey, keypadInset, followKey]);
+  // 契機は、利用者の操作ごとの追従の要求(マウント時の最初の1回を含む)と、テンキーの占める高さ(向きの切り替えを含む)。
+  // 他の端末の変化で指す矢が直されても、追従しない。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keypadInset、followKeyだけを契機にする
+  useEffect(follow, [keypadInset, followKey]);
   const followPointer = useCallback(
     (next: Pointer) => {
       setPointer(next);

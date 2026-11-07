@@ -1640,19 +1640,23 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     cell,
     container,
     sticky = {},
+    otherCells = {},
   }: {
     cell: Box;
     container: Box;
     sticky?: Record<string, Box>;
+    // エンド1以外の行の位置。距離Aの行を`distance-a:エンド番号`で与える。
+    otherCells?: Record<string, Box>;
   }) {
-    const layout = { cell, container, sticky };
+    const layout = { cell, container, sticky, otherCells };
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
       function (this: Element) {
         const rect = this.hasAttribute("data-follow-container")
           ? layout.container
           : this.getAttribute("data-follow-row") === `${distanceA.id}:1`
             ? layout.cell
-            : (layout.sticky[stickyKeyOf(this)] ?? { top: 0, bottom: 0 });
+            : (layout.otherCells[this.getAttribute("data-follow-row") ?? ""] ??
+              layout.sticky[stickyKeyOf(this)] ?? { top: 0, bottom: 0 });
         return {
           ...rect,
           x: 0,
@@ -1863,6 +1867,71 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
     // Then
     await waitFor(() => expect(ballsOf(1, 1)).toEqual(["10"]));
     expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+  });
+
+  describe("他の端末の変化で指す矢が直されたとき", () => {
+    it("指す矢のエンドが変わっても、行が隠れていてもスクロールしない", async () => {
+      // Given
+      stubLayout({
+        cell: { top: 100, bottom: 140 },
+        container: { top: 0, bottom: 800 },
+        otherCells: { [`${distanceA.id}:2`]: { top: 760, bottom: 790 } },
+      });
+      setup();
+      expect(provisionalEnd()).toBe("end-row-1-1");
+      vi.mocked(Element.prototype.scrollBy).mockClear();
+
+      // When
+      // 別経路の追記でエンド1が矢数に達し、指す新しい矢が次のエンドへ進む。
+      for (const n of [1, 2, 3]) {
+        await act(() =>
+          appendFromOtherPath({
+            type: "shot.recorded",
+            eventId: `e-other-${n}`,
+            shotId: `s-other-${n}`,
+            distanceId: distanceA.id,
+            endNumber: 1,
+            scoreStr: "9",
+            scoreInt: 9,
+          }),
+        );
+      }
+
+      // Then
+      await waitFor(() => expect(provisionalEnd()).toBe("end-row-1-2"));
+      await flushMicrotasks();
+      expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+    });
+
+    it("指す矢が消されて同じエンドの新しい矢へ直されても、行が隠れていてもスクロールしない", async () => {
+      // Given
+      const user = userEvent.setup();
+      const layout = stubLayout({
+        cell: { top: 100, bottom: 140 },
+        container: { top: 0, bottom: 800 },
+      });
+      setup({ initialShots: [shotRow("s-1", distanceA.id, 1, "10", 10)] });
+      await user.click(screen.getByTestId("shot-ball-1-1-1"));
+      layout.cell = { top: 760, bottom: 790 };
+      vi.mocked(Element.prototype.scrollBy).mockClear();
+
+      // When
+      await act(() =>
+        appendFromOtherPath({
+          type: "shot.cleared",
+          eventId: "e-other-clear",
+          shotId: "s-1",
+          distanceId: distanceA.id,
+          endNumber: 1,
+        }),
+      );
+
+      // Then
+      await waitFor(() => expect(ballsOf(1, 1)).toEqual([]));
+      await flushMicrotasks();
+      expect(provisionalEnd()).toBe("end-row-1-1");
+      expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+    });
   });
 
   describe("同じエンドの中で指す矢が移る操作", () => {
