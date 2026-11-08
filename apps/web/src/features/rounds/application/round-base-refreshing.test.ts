@@ -255,7 +255,7 @@ describe("refreshAll", () => {
     expect(tab.hub.record(roundStreamId("kept")).base?.startedAt).toBe(50);
   });
 
-  it("他の利用者の取得は、このタブのメモリだけに反映する", async () => {
+  it("他の利用者の取得は、端末の保存にも、このタブのメモリにも反映しない", async () => {
     // Given
     const tab = await setup("user-1");
     tab.fetching.fetchRoundDetails.mockResolvedValue(
@@ -269,7 +269,7 @@ describe("refreshAll", () => {
     await tab.refresh.refreshAll();
 
     // Then
-    expect(tab.hub.record(roundStreamId("r-1")).base?.startedAt).toBe(100);
+    expect(tab.hub.record(roundStreamId("r-1")).base).toBeUndefined();
     expect((await tab.hub.readStored()).size).toBe(0);
   });
 });
@@ -313,10 +313,9 @@ describe("refreshRound", () => {
     const opened = tab.requests.open("r-1");
 
     // When
-    const result = await tab.refresh.refreshRound("r-1");
+    await tab.refresh.refreshRound("r-1");
 
     // Then
-    expect(result).toBe("ok");
     expect(await opened).toMatchObject({
       status: "ok",
       data: { deleted: false, targetFaces: [] },
@@ -364,17 +363,16 @@ describe("refreshRound", () => {
     const opened = tab.requests.open("r-1");
 
     // When
-    const result = await tab.refresh.refreshRound("r-1");
+    await tab.refresh.refreshRound("r-1");
 
     // Then
-    expect(result).toBe("gone");
     expect(await opened).toMatchObject({
       status: "ok",
       data: { deleted: true },
     });
   });
 
-  it("取得が見つからないときはgone、その他の失敗はfailedとし、いずれも依頼を待つ側へ結果を返す", async () => {
+  it("取得が見つからない、または失敗したときは、依頼を待つ側へ結果を返し、結果の種類を依頼の記録に残す", async () => {
     // Given
     const tab = await setup();
     const missing = tab.requests.open("r-1");
@@ -384,52 +382,14 @@ describe("refreshRound", () => {
     const offline = tab.requests.open("r-2");
 
     // When
-    const gone = await tab.refresh.refreshRound("r-1");
+    await tab.refresh.refreshRound("r-1");
     tab.fetching.fetchRoundDetail.mockResolvedValueOnce({ status: "offline" });
-    const failed = await tab.refresh.refreshRound("r-2");
+    await tab.refresh.refreshRound("r-2");
 
     // Then
-    expect(gone).toBe("gone");
-    expect(failed).toBe("failed");
     expect(await missing).toEqual({ status: "not-found" });
     expect(await offline).toEqual({ status: "offline" });
-  });
-
-  it("取得が例外を投げたときは、固定文のerrorにしてfailedを返す", async () => {
-    // Given
-    const tab = await setup();
-    tab.fetching.fetchRoundDetail.mockRejectedValue(new Error("boom"));
-    const opened = tab.requests.open("r-1");
-
-    // When
-    const result = await tab.refresh.refreshRound("r-1");
-
-    // Then
-    expect(result).toBe("failed");
-    expect(await opened).toEqual({
-      status: "error",
-      reason: "failed",
-    });
-  });
-
-  it("反映が失敗したときは、failedを返し、依頼を待つ側へerrorを返す", async () => {
-    // Given
-    const tab = await setup();
-    tab.fetching.fetchRoundDetail.mockResolvedValue({
-      status: "ok",
-      data: detail("in_progress"),
-    });
-    vi.spyOn(tab.hub, "commit").mockRejectedValue(new Error("idb"));
-    const opened = tab.requests.open("r-1");
-
-    // When
-    const result = await tab.refresh.refreshRound("r-1");
-
-    // Then
-    expect(result).toBe("failed");
-    expect(await opened).toEqual({
-      status: "error",
-      reason: "failed",
-    });
+    expect(tab.requests.outcomeOf("r-1")).toBe("gone");
+    expect(tab.requests.outcomeOf("r-2")).toBe("failed");
   });
 });

@@ -62,6 +62,22 @@ async function setup() {
   return { hub, store, requests, fetching, control };
 }
 
+// 取り直しの要否の期待値。真の理由だけを指定する。
+function needOf(
+  roundId: string,
+  reasons: { open?: boolean; diverged?: boolean; overlay?: boolean },
+  openRequest = 0,
+) {
+  return {
+    roundId,
+    open: false,
+    diverged: false,
+    overlay: false,
+    ...reasons,
+    openRequest,
+  };
+}
+
 // 効かなかった結果の印を、そのラウンドの列に付ける。
 async function markDiverged(
   hub: Awaited<ReturnType<typeof setup>>["hub"],
@@ -73,7 +89,7 @@ async function markDiverged(
 }
 
 describe("理由の導出", () => {
-  it("開いた直後、効かなかった、重ねられなかったの順に先に当たる理由をreasonとして返す", async () => {
+  it("当たる理由を、ラウンドごとの真偽で返す", async () => {
     // Given
     const { hub, requests, control } = await setup();
     void requests.open("r-open");
@@ -93,24 +109,15 @@ describe("理由の導出", () => {
     expect(rounds).toHaveLength(4);
     expect(rounds).toEqual(
       expect.arrayContaining([
-        {
-          roundId: "r-open",
-          reason: "open",
-          reasons: ["open"],
-          openRequest: 1,
-        },
-        { roundId: "r-diverged", reason: "diverged", reasons: ["diverged"] },
-        { roundId: "r-overlay", reason: "overlay", reasons: ["overlay"] },
-        {
-          roundId: "r-both",
-          reason: "diverged",
-          reasons: ["diverged", "overlay"],
-        },
+        needOf("r-open", { open: true }, 1),
+        needOf("r-diverged", { diverged: true }),
+        needOf("r-overlay", { overlay: true }),
+        needOf("r-both", { diverged: true, overlay: true }),
       ]),
     );
   });
 
-  it("当たる全ての理由を、開く依頼、効かなかった、重ねられなかったの順に並べ、主の理由は先頭にする", async () => {
+  it("複数の理由が当たるラウンドは、全ての理由を真にして返す", async () => {
     // Given
     const { hub, requests, control } = await setup();
     void requests.open("r-open-all");
@@ -123,12 +130,7 @@ describe("理由の導出", () => {
 
     // Then
     expect(rounds).toEqual([
-      {
-        roundId: "r-open-all",
-        reason: "open",
-        reasons: ["open", "diverged", "overlay"],
-        openRequest: 1,
-      },
+      needOf("r-open-all", { open: true, diverged: true, overlay: true }, 1),
     ]);
   });
 
@@ -177,20 +179,15 @@ describe("refreshNeeds", () => {
     // Then
     expect(needs.rounds).toEqual(
       expect.arrayContaining([
-        {
-          roundId: "opening",
-          reason: "open",
-          reasons: ["open"],
-          openRequest: 1,
-        },
-        { roundId: "overlay", reason: "overlay", reasons: ["overlay"] },
-        { roundId: "diverged", reason: "diverged", reasons: ["diverged"] },
+        needOf("opening", { open: true }, 1),
+        needOf("overlay", { overlay: true }),
+        needOf("diverged", { diverged: true }),
       ]),
     );
     expect(needs.rounds.map((need) => need.roundId)).not.toContain("quiet");
   });
 
-  it("refreshNeedsは、理由がopenのラウンドにだけopenRequestを付ける", async () => {
+  it("refreshNeedsは、ラウンドごとの最後の開く依頼の番号をopenRequestに持つ", async () => {
     // Given
     const { requests, control } = await setup();
     void requests.open("r-1");
@@ -204,15 +201,13 @@ describe("refreshNeeds", () => {
     // Then
     expect(needs.rounds).toEqual(
       expect.arrayContaining([
-        { roundId: "r-1", reason: "open", reasons: ["open"], openRequest: 2 },
-        { roundId: "r-2", reason: "overlay", reasons: ["overlay"] },
+        needOf("r-1", { open: true }, 2),
+        needOf("r-2", { overlay: true }),
       ]),
     );
-    const overlay = needs.rounds.find((need) => need.roundId === "r-2");
-    expect(overlay && Object.hasOwn(overlay, "openRequest")).toBe(false);
   });
 
-  it("理由は、開く依頼、効かなかった印、重ねられなかった印の順に先のものが返り、先の理由が無くなると次のものが返る", async () => {
+  it("開く依頼が結果を受けると、openが偽になり、効かなかった印が外れるとdivergedが偽になる", async () => {
     // Given
     const { hub, requests, control } = await setup();
     const stream = roundStreamId("r-1");
@@ -238,19 +233,12 @@ describe("refreshNeeds", () => {
 
     // Then
     expect(first).toEqual([
-      {
-        roundId: "r-1",
-        reason: "open",
-        reasons: ["open", "diverged", "overlay"],
-        openRequest: 1,
-      },
+      needOf("r-1", { open: true, diverged: true, overlay: true }, 1),
     ]);
     expect(second).toEqual([
-      { roundId: "r-1", reason: "diverged", reasons: ["diverged", "overlay"] },
+      needOf("r-1", { diverged: true, overlay: true }, 1),
     ]);
-    expect(third).toEqual([
-      { roundId: "r-1", reason: "overlay", reasons: ["overlay"] },
-    ]);
+    expect(third).toEqual([needOf("r-1", { overlay: true }, 1)]);
     expect(fourth).toEqual([]);
   });
 
@@ -278,9 +266,7 @@ describe("refreshNeeds", () => {
       const during = control.refreshNeeds().rounds;
 
       // Then
-      expect(before).toEqual([
-        { roundId: "r-1", reason: "diverged", reasons: ["diverged"] },
-      ]);
+      expect(before).toEqual([needOf("r-1", { diverged: true })]);
       expect(during).toEqual([]);
     });
 
@@ -290,10 +276,9 @@ describe("refreshNeeds", () => {
 
       // When
       detailFetch.resolve({ status: "error", reason: "failed" });
-      const result = await refreshing;
+      await refreshing;
 
       // Then
-      expect(result).toBe("failed");
       expect(control.refreshNeeds().rounds).toEqual([]);
     });
   });
@@ -319,7 +304,7 @@ describe("refreshNeeds", () => {
 });
 
 describe("取得と反映", () => {
-  it("refreshAllは一括を取得して拒否せず、refreshRoundは結果の種類を返す", async () => {
+  it("refreshAllは一括を、refreshRoundは1つのラウンドを取得する", async () => {
     // Given
     const { fetching, control } = await setup();
     fetching.fetchRoundDetails.mockResolvedValue({
@@ -330,11 +315,11 @@ describe("取得と反映", () => {
 
     // When
     await control.refreshAll();
-    const round = await control.refreshRound("round-1");
+    await control.refreshRound("round-1");
 
     // Then
     expect(fetching.fetchRoundDetails).toHaveBeenCalledTimes(1);
-    expect(round).toBe("gone");
+    expect(fetching.fetchRoundDetail).toHaveBeenCalledWith("round-1");
   });
   it("開始した後に出した開く依頼は、その実行の結果を受けずに待ちとして残り、openを返し続ける。開始前の依頼は結果を受ける", async () => {
     // Given
@@ -360,7 +345,7 @@ describe("取得と反映", () => {
     expect(await before).toMatchObject({ status: "ok" });
     expect(afterSettled).toBe(false);
     expect(control.refreshNeeds().rounds).toEqual([
-      { roundId: "r-1", reason: "open", reasons: ["open"], openRequest: 2 },
+      needOf("r-1", { open: true }, 2),
     ]);
   });
 });

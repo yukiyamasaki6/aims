@@ -29,7 +29,7 @@ export async function blockTargetFacesOnDevice(page: Page) {
     .route(TARGET_FACES_REST, (route) => route.abort("failed"));
 }
 
-// オンラインでラウンド詳細を開き、的の一覧を端末に保存させる(的は詳細の取得で保存される)。
+// オンラインでラウンド詳細を開き、的の一覧を端末に保存させる(的は一括の取得で保存される)。
 export async function saveTargetFacesOnDevice(page: Page) {
   const roundId = await createRound({
     email: getSharedEmail(),
@@ -41,6 +41,7 @@ export async function saveTargetFacesOnDevice(page: Page) {
   await page.goto(`/rounds/${roundId}`);
   await waitForHydration(page);
   await expect(page.getByTestId("distance-summary-1")).toBeVisible();
+  await expectRoundBasesFetched(page);
   // 登録の途中で次の画面へ移ると新しいSWが待機のまま残ることがあるため、制御が始まるまで待つ。
   await waitForServiceWorkerControl(page);
 }

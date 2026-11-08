@@ -1,4 +1,3 @@
-import type { FetchResult } from "../domain/fetch-status";
 import { isRetainedForRefresh } from "../domain/round-retention";
 import { roundTablesFromServer } from "../domain/round-tables";
 import {
@@ -61,8 +60,6 @@ async function retainedRoundIds(
   return ids;
 }
 
-export type RoundBaseRefreshResult = "ok" | "gone" | "failed";
-
 // ベースの取得と反映。取り直しの制御(`round-refresh-control.ts`)から呼ばれる。
 export function createRoundBaseRefreshing(deps: {
   hub: Pick<RoundRecordHub, "commit" | "readStored" | "clearDiverged">;
@@ -86,37 +83,26 @@ export function createRoundBaseRefreshing(deps: {
   }
 
   // 開いた詳細のラウンドを取得して端末の記録へ反映し、依頼を待つ側へ結果を返す。
-  async function refreshRound(id: string): Promise<RoundBaseRefreshResult> {
+  // 取得(`fetchRoundDetail`)は例外を値にし、反映(`hub.commit`)は保存の失敗を握って拒否しないため、投げない。
+  async function refreshRound(id: string): Promise<void> {
     const run = requests.beginRound(id);
     hub.clearDiverged(roundStreamId(id));
-    let fetched: FetchResult<FetchedRoundDetail>;
-    try {
-      fetched = await fetching.fetchRoundDetail(id);
-    } catch {
-      fetched = { status: "error", reason: "failed" };
-    }
+    const fetched = await fetching.fetchRoundDetail(id);
     if (fetched.status !== "ok") {
       requests.settleRound(run, fetched);
-      return fetched.status === "not-found" ? "gone" : "failed";
+      return;
     }
     const base = baseOf(fetched.data);
-    let deleted = false;
-    try {
-      const group = await hub.commit(
-        roundStreamId(id),
-        base,
-        fetched.data.startedAt,
-        fetched.data.userId,
-      );
-      // 取得の間に追記された削除も、取得した状態を表示せずに離れる。
-      deleted = hasRoundDeletion(group.entries.map((entry) => entry.operation));
-    } catch {
-      requests.settleRound(run, {
-        status: "error",
-        reason: "failed",
-      });
-      return "failed";
-    }
+    const group = await hub.commit(
+      roundStreamId(id),
+      base,
+      fetched.data.startedAt,
+      fetched.data.userId,
+    );
+    // 取得の間に追記された削除も、取得した状態を表示せずに離れる。
+    const deleted = hasRoundDeletion(
+      group.entries.map((entry) => entry.operation),
+    );
     requests.settleRound(run, {
       status: "ok",
       data: {
@@ -125,7 +111,6 @@ export function createRoundBaseRefreshing(deps: {
         targetFaces: fetched.data.targetFaces,
       },
     });
-    return deleted ? "gone" : "ok";
   }
 
   return { refreshAll, refreshRound };

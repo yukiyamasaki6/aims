@@ -7,7 +7,6 @@ import {
   type RoundOutcome,
   requestOpen,
   settleOpenRun,
-  stopOpens,
 } from "../domain/open-requests";
 import type { RoundTables } from "../domain/round-tables";
 import type { TargetFaceOption } from "../domain/target-face";
@@ -24,11 +23,6 @@ function outcomeOfResult(result: FetchResult<OpenedRound>): RoundOutcome {
   if (result.status === "ok") return result.data.deleted ? "gone" : "ok";
   return result.status === "not-found" ? "gone" : "failed";
 }
-
-const STOPPED: FetchResult<never> = {
-  status: "error",
-  reason: "failed",
-};
 
 // 取り直しの依頼の記録。画面は「開いた」と依頼するだけで、取得と反映の時点はこの記録では決めない。
 // 規則は集約(開く依頼 `open-requests.ts`)が持ち、ここは状態を保ち、依頼の番号ごとの結果を渡す先を呼ぶ。
@@ -121,15 +115,6 @@ export function createRefreshRequests() {
       changed();
     },
     overlayNeeded: (roundId: string): boolean => overlay.has(roundId),
-    // 停止。待っている全ての依頼をエラーで終え、記録の権利を空にする。以後、停止前に始まった取り直しは、記録も解決もしない。
-    reset() {
-      const stoppedOpens = stopOpens(opens);
-      opens = stoppedOpens.state;
-      for (const { roundId, request } of stoppedOpens.answered) {
-        resolveOpen(roundId, request, STOPPED);
-      }
-      changed();
-    },
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {

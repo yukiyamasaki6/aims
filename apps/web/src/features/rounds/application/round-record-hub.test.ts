@@ -516,21 +516,19 @@ describe("commit", () => {
     ["別の利用者", "user-2", "user-1"],
     ["記録の利用者がnull(unowned)", "user-1", null],
   ])(
-    "%sの取得は、端末へ保存せず、このタブのベースにだけ反映する",
+    "%sの取得は、端末へ保存せず、このタブのベースも変えず、現在の組を返す",
     async (_name, fetchedUser, recordUser) => {
       // Given
       const { hub, store } = await startedHub(recordUser);
       const commit = vi.spyOn(store, "commit");
 
       // When
-      await hub.commit(STREAM, roundBase(), 30, fetchedUser);
+      const group = await hub.commit(STREAM, roundBase(), 30, fetchedUser);
 
       // Then
       expect(commit).not.toHaveBeenCalled();
-      expect(hub.record(STREAM).base).toEqual({
-        startedAt: 30,
-        base: roundBase(),
-      });
+      expect(group).toEqual({ base: undefined, entries: [] });
+      expect(hub.record(STREAM).base).toBeUndefined();
       expect((await hub.readStored()).size).toBe(0);
     },
   );

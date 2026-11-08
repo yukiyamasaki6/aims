@@ -155,7 +155,7 @@ export function createRoundRecordHub(deps: {
   }
 
   // 取得したベースを反映する。保存(1つのトランザクション)を待ち、その結果の組でこの記録を1回の通知で変える。
-  // 保存できなかったとき(別の利用者の取得を含む)は、このタブの記録のベースだけを変える。結果の組を返す。保存に失敗しても拒否しない。
+  // 保存に失敗したときは、このタブの記録のベースだけを変える。別の利用者の取得は、保存せず、このタブの記録も変えない。結果の組を返す。保存に失敗しても拒否しない。
   async function commit(
     streamId: string,
     fetched: RoundBaseRecord | null,
@@ -167,7 +167,11 @@ export function createRoundRecordHub(deps: {
     const readAt = record(streamId).persistTick;
     const incoming: RecordBase = { startedAt, base: fetched };
     // 組が消えた後でも、最後に取り込んだベースより古い状態の取得は、保存も反映もしない。
-    if (isOlderFetch(record(streamId), fetched)) {
+    // 別の利用者の取得も、保存も反映もしない(個別の問い合わせは本人のラウンドだけを返す)。
+    if (
+      isOlderFetch(record(streamId), fetched) ||
+      matchRecordUser(userId, fetchedUserId) !== "same"
+    ) {
       const current = record(streamId);
       return {
         base: current.base,
@@ -175,13 +179,11 @@ export function createRoundRecordHub(deps: {
       };
     }
     let group: RoundStoreGroup | undefined;
-    if (matchRecordUser(userId, fetchedUserId) === "same") {
-      try {
-        group = await store.commit(streamId, userId, fetched, startedAt);
-      } catch {
-        // 保存に失敗しても、このタブの画面は取得したベースで続ける。
-        markWriteFailed(streamId, target);
-      }
+    try {
+      group = await store.commit(streamId, userId, fetched, startedAt);
+    } catch {
+      // 保存に失敗しても、このタブの画面は取得したベースで続ける。
+      markWriteFailed(streamId, target);
     }
     // 保存の間に停止されたときは、その組を現在の記録へ取り込まず、結果にも使わせない(保存先の書き込みは完了している)。
     if (epoch !== target) return { base: undefined, entries: [] };

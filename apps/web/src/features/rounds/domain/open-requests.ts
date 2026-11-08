@@ -87,17 +87,3 @@ export function settleOpenRun(
     changed: true,
   };
 }
-
-// 停止。全ての待ちを解決する依頼として返し、待ちと記録の権利を空にする。latestとoutcomeは残す。
-export function stopOpens(state: OpenRequests): {
-  state: OpenRequests;
-  answered: readonly { roundId: string; request: number }[];
-} {
-  const answered: { roundId: string; request: number }[] = [];
-  const next = new Map<string, OpenRound>();
-  for (const [roundId, round] of state) {
-    for (const request of round.waiting) answered.push({ roundId, request });
-    next.set(roundId, { ...round, waiting: [], holder: null });
-  }
-  return { state: next, answered };
-}

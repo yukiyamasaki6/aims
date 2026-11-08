@@ -141,49 +141,6 @@ describe("詳細を開く依頼と同期", () => {
     expect(await loadSecond).toMatchObject({ status: "ok" });
     expect(t.fetching.fetchRoundDetail).toHaveBeenCalledTimes(2);
   });
-
-  it("停止前の詳細の取得は、再開後の成功の結果を上書きしない", async () => {
-    // Given
-    const t = rig();
-    const before = deferredDetail();
-    const after = deferredDetail();
-    t.fetching.fetchRoundDetail
-      .mockReturnValueOnce(before.promise)
-      .mockReturnValueOnce(after.promise);
-    const loadBefore = t.detail.load("r1");
-    await flush();
-    t.sync.stop();
-    t.sync.start("user-1");
-    const loadAfter = t.detail.load("r1");
-    await flush();
-
-    // When
-    after.resolve({ status: "ok", data: detail("再開後") });
-    await flush();
-    const outcomeAfterResume = t.requests.outcomeOf("r1");
-    before.resolve({ status: "not-found" });
-    await flush();
-
-    // Then
-    expect(await loadBefore).toMatchObject({ status: "error" });
-    expect(await loadAfter).toMatchObject({ status: "ok" });
-    expect(outcomeAfterResume).toBe("ok");
-    expect(t.requests.outcomeOf("r1")).toBe("ok");
-  });
-
-  it("停止すると、待っている開く依頼がエラーで終わる", async () => {
-    // Given
-    const t = rig();
-    t.fetching.fetchRoundDetail.mockReturnValue(new Promise(() => {}));
-    const detailLoading = t.detail.load("r1");
-    await flush();
-
-    // When
-    t.sync.stop();
-
-    // Then
-    expect(await detailLoading).toMatchObject({ status: "error" });
-  });
 });
 
 describe("先に始めた実行の終わり", () => {

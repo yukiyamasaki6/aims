@@ -132,7 +132,7 @@ describe("開いている詳細の印", () => {
 });
 
 describe("依頼の番号", () => {
-  it("latestOpenRequestは、依頼が届くたびに増え、停止でも数え直さない", () => {
+  it("latestOpenRequestは、依頼が届くたびに増える", () => {
     // Given
     const requests = createRefreshRequests();
     const numbers = () => [
@@ -145,16 +145,13 @@ describe("依頼の番号", () => {
     void requests.open("r-1");
     void requests.open("r-1");
     void requests.open("r-2");
-    const beforeReset = numbers();
-    requests.reset();
-    const afterReset = numbers();
+    const afterThree = numbers();
     void requests.open("r-1");
     const afterNext = numbers();
 
     // Then
     expect(initial).toEqual([0, 0]);
-    expect(beforeReset).toEqual([2, 1]);
-    expect(afterReset).toEqual([2, 1]);
+    expect(afterThree).toEqual([2, 1]);
     expect(afterNext).toEqual([3, 1]);
   });
 });
@@ -290,27 +287,6 @@ describe("並行する実行の結果の記録", () => {
     expect(requests.outcomeOf("r-1")).toBe("ok");
     expect(resolved).toEqual([results.ok]);
   });
-
-  it("停止の後は、停止前の実行の番号に妨げられず、再開後の結果が記録される", () => {
-    // Given
-    const requests = createRefreshRequests();
-    void requests.open("r-1");
-    const earlier = requests.beginRound("r-1");
-    const later = requests.beginRound("r-1");
-    requests.settleRound(later, results.ok);
-    requests.settleRound(earlier, results.ok);
-    const before = requests.outcomeOf("r-1");
-    requests.reset();
-
-    // When
-    void requests.open("r-1");
-    const run = requests.beginRound("r-1");
-    requests.settleRound(run, results.gone);
-
-    // Then
-    expect(before).toBe("ok");
-    expect(requests.outcomeOf("r-1")).toBe("gone");
-  });
 });
 
 describe("依頼の状態の遷移", () => {
@@ -344,53 +320,5 @@ describe("依頼の状態の遷移", () => {
     // Then
     expect(requests.pendingOpens()).toEqual(["r-1"]);
     expect(await settled(later)).toBe(false);
-  });
-
-  it("停止は、待っている開く依頼をエラーで終える", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    const open = requests.open("r-1");
-
-    // When
-    requests.reset();
-
-    // Then
-    expect(await open).toEqual({ status: "error", reason: "failed" });
-    expect(requests.pendingOpens()).toEqual([]);
-  });
-
-  it("停止前に始まった取り直しの完了は、結果の記録・待ち・通知のどれも変えない", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    void requests.open("r-1");
-    const stale = requests.beginRound("r-1");
-    requests.reset();
-    const resumed = requests.open("r-1");
-    const listener = vi.fn();
-    requests.subscribe(listener);
-
-    // When
-    requests.settleRound(stale, ok);
-
-    // Then
-    expect(requests.outcomeOf("r-1")).toBeUndefined();
-    expect(requests.pendingOpens()).toEqual(["r-1"]);
-    expect(await settled(resumed)).toBe(false);
-    expect(listener).not.toHaveBeenCalled();
-  });
-
-  it("再開後の開く依頼は新しい依頼として、新しい取得の結果で完了する", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    void requests.open("r-1");
-    requests.reset();
-    const resumed = requests.open("r-1");
-
-    // When
-    requests.settleRound(requests.beginRound("r-1"), ok);
-
-    // Then
-    expect(await resumed).toEqual(ok);
-    expect(requests.outcomeOf("r-1")).toBe("ok");
   });
 });
