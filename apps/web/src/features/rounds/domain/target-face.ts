@@ -1,15 +1,14 @@
-export type TargetFaceRing = {
-  radius: number;
-  color: string;
-  line_color: string | null;
-  z_index: number;
-  score_str: string;
-  score_int: number;
-};
+import type { Tables } from "@/types/supabase";
 
-export type TargetFaceSpotLayout = {
-  center_x: number;
-  center_y: number;
+export type TargetFaceRing = Pick<
+  Tables<"target_face_rings">,
+  "radius" | "color" | "line_color" | "z_index" | "score_str" | "score_int"
+>;
+
+export type TargetFaceSpotLayout = Pick<
+  Tables<"target_face_spots">,
+  "center_x" | "center_y"
+> & {
   target_face_rings: TargetFaceRing[];
 };
 
@@ -28,18 +27,17 @@ export function lookupTargetFace<T extends { id: string }>(
   return faces.find((f) => f.id === id) ?? "missing";
 }
 
-export type TargetFaceOption = {
-  id: string;
-  name: string;
-  size: number;
-  format: string;
-  bow_type: string[];
+export type TargetFaceOption = Pick<
+  Tables<"target_faces">,
+  "id" | "name" | "size" | "format" | "bow_type"
+> & {
   target_face_spots: TargetFaceSpotLayout[];
 };
 
 // 取得した的。個人の的は`ownerId`を持つ。
-// DBの行の列名`owner_id`のまま持つ(端末へ保存する値も変えない)。
-export type TargetFaceRecord = TargetFaceOption & { owner_id: string | null };
+// 列は生成型から導き、端末へ保存する値の形は変えない。
+export type TargetFaceRecord = TargetFaceOption &
+  Pick<Tables<"target_faces">, "owner_id">;
 
 // 個人の的を先に、それぞれ種類(outdoor→indoor→field)→サイズ(大→小)→名前の順に並べる。名前の比較はDBの照合順序でなくJSの比較で、この並びは意図した規則である。
 function compareTargetFaces(a: TargetFaceRecord, b: TargetFaceRecord): number {
