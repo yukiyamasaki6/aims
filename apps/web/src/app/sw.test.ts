@@ -4,12 +4,7 @@ import type {
   RouteMatchCallbackOptions,
   SerwistOptions,
 } from "serwist";
-import {
-  NetworkOnly,
-  RegExpRoute,
-  StaleWhileRevalidate,
-  Strategy,
-} from "serwist";
+import { NetworkOnly, RegExpRoute, Strategy } from "serwist";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Serwistはimport時にService Workerのイベントリスナー登録等の副作用を持つ外部パッケージのため、コンストラクタに渡された構成を捕捉するスタブに差し替える。キャッシュ戦略とルートの照合はserwistの実物を使う。
@@ -93,18 +88,6 @@ beforeAll(async () => {
 
 describe("sw", () => {
   describe("ランタイムキャッシュ", () => {
-    describe("同一オリジンの静的アセット", () => {
-      it("/fonts/geist.woff2はStaleWhileRevalidateでstatic-font-assetsにキャッシュする", () => {
-        // Given
-        // When
-        const handler = findHandler("/fonts/geist.woff2");
-
-        // Then
-        expect(handler).toBeInstanceOf(StaleWhileRevalidate);
-        expect(handler).toHaveProperty("cacheName", "static-font-assets");
-      });
-    });
-
     describe("画面の枠のナビゲーション", () => {
       it.each([
         ["/rounds", "/__shell/rounds"],
@@ -236,8 +219,12 @@ describe("sw", () => {
       return plugin.cacheWillUpdate;
     }
 
-    function updated(url: string, redirected: boolean) {
-      const response = { redirected } as Response;
+    function updated(url: string, redirected: boolean, status = 200) {
+      const response = {
+        redirected,
+        ok: status < 400,
+        status,
+      } as Response;
       return {
         request: new Request(new URL(url, location.origin)),
         response,
@@ -255,6 +242,19 @@ describe("sw", () => {
       // Then
       await expect(result).rejects.toThrow();
     });
+
+    it.each([404, 500])(
+      "ステータス%sの応答は保存せずエラーにする",
+      async (status) => {
+        // Given
+        // When
+        const params = updated("/_next/static/chunks/main.js", false, status);
+        const result = guard()(params);
+
+        // Then
+        await expect(result).rejects.toThrow();
+      },
+    );
 
     it.each([
       ["/__shell/rounds", false],

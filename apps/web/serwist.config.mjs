@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { serwist } from "@serwist/next/config";
+import { generateGlobPatterns, serwist } from "@serwist/next/config";
 import {
   frameHtmlOf,
   OFFLINE_PATH,
@@ -33,6 +33,8 @@ export default serwist({
   // リダイレクト先が変わるため、自動ではプリキャッシュしない。枠は
   // /__shell/*で明示的に入れる。詳細はsw.tsのコメント参照。
   precachePrerendered: false,
+  // 既定の対象(JS・CSS・画像など)に、フォント(woff2)を足す。woff2のURLはハッシュを含む。
+  globPatterns: [...generateGlobPatterns(".next/"), ".next/static/**/*.woff2"],
   additionalPrecacheEntries: [
     { url: OFFLINE_PATH, revision: offlineRevision },
     ...frameEntries,

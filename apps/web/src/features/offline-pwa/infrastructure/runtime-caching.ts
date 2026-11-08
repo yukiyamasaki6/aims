@@ -1,15 +1,12 @@
-import {
-  NetworkOnly,
-  type RuntimeCaching,
-  StaleWhileRevalidate,
-} from "serwist";
+import { NetworkOnly, type RuntimeCaching } from "serwist";
 import { PrecachedFrame, type PrecachedFrameDeps } from "./precached-frame";
 
 // ページ内容・RSCなど認証状態に依存するレスポンスはキャッシュ対象にしない
 // (サインアウト後も前のユーザーのデータが残り続けたり、認証ガードの
 // リダイレクトがキャッシュ済みレスポンスにより迂回されたりする)。
-// キャッシュするのはデータを含まない画面の枠(プリキャッシュ)と、プリキャッシュに
-// 入らない不変なフォントのみで、ナビゲーションの失敗はfallbacksが/offlineを返す。
+// キャッシュするのはビルド成果物の静的アセットとデータを含まない画面の枠で、
+// どちらもプリキャッシュ(serwist.config.mjs)に入れる。実行時の規則は枠だけで、
+// ナビゲーションの失敗はfallbacksが/offlineを返す。
 // それ以外(ナビゲーション以外の同一オリジンのリクエスト、クロスオリジンのリクエスト)は
 // どの規則にも当てず、Service Workerが応答せずブラウザが取得する。
 export function createRuntimeCaching(
@@ -20,10 +17,6 @@ export function createRuntimeCaching(
       matcher: ({ request, url }) =>
         request.mode === "navigate" && frames.frameUrlOf(url.pathname) !== null,
       handler: new PrecachedFrame(frames),
-    },
-    {
-      matcher: /\.(?:eot|otf|ttc|ttf|woff|woff2)$/i,
-      handler: new StaleWhileRevalidate({ cacheName: "static-font-assets" }),
     },
     // 枠のない・枠が未格納のナビゲーションは、ネットワークへ通す。失敗したときは
     // sw.tsのfallbacksが/offlineを返す。ナビゲーション以外の同一オリジンの

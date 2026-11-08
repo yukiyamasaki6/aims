@@ -1,8 +1,8 @@
 /// <reference lib="webworker" />
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
 import { Serwist } from "serwist";
+import { precacheGuard } from "@/features/offline-pwa/infrastructure/precache-guard";
 import { createRuntimeCaching } from "@/features/offline-pwa/infrastructure/runtime-caching";
-import { shellFrameGuard } from "@/features/offline-pwa/infrastructure/shell-guard";
 import { roundFramePathOf } from "@/features/rounds/domain/round-routes";
 import { OFFLINE_PATH, shellUrlOf } from "@/routes";
 
@@ -22,7 +22,7 @@ const serwist: Serwist = new Serwist({
   // 制御するために残す。
   clientsClaim: true,
   precacheOptions: {
-    plugins: [shellFrameGuard],
+    plugins: [precacheGuard],
   },
   runtimeCaching: createRuntimeCaching({
     frameUrlOf: (pathname) => {
