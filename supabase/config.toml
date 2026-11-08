@@ -9,8 +9,8 @@ enabled = true
 # Port to use for the API URL.
 port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
-# endpoints. `public` and `graphql_public` schemas are included by default.
-schemas = ["public", "graphql_public"]
+# endpoints. 省くと内蔵の既定で`graphql_public`も公開されるため、`public`だけを明示する。
+schemas = ["public"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
@@ -85,7 +85,7 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+additional_redirect_urls = []
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -222,7 +222,6 @@ project_id = "lsqbiaosjkcwntewjhzv"
 
 [remotes.production.auth]
 site_url = "https://aims-archery.com"
-additional_redirect_urls = ["https://aims-archery.com/**"]
 
 [remotes.production.auth.email]
 max_frequency = "60s"
@@ -235,4 +234,3 @@ max_frequency = "60s"
 
 [remotes.preview.auth]
 site_url = "https://aims-archery.com"
-additional_redirect_urls = ["https://*-yuki-ab8c.vercel.app/**"]
