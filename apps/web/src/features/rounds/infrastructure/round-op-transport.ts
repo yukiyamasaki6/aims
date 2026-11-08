@@ -58,23 +58,6 @@ function many(data: unknown, count: number): SendOutcome {
   return { ok: true, results };
 }
 
-// 数値(revision)だけを返すRPC。効かせる条件が無く、常に効く。
-function revisionOnly(data: unknown): SendOutcome {
-  return typeof data === "number"
-    ? {
-        ok: true,
-        results: [
-          {
-            revision: data,
-            applied: true,
-            appliedFields: null,
-            hasRejectedFields: false,
-          },
-        ],
-      }
-    : INVALID_RESPONSE;
-}
-
 function outcomeOf(
   response: DbResponse,
   parse: (data: unknown) => SendOutcome = single,
@@ -187,7 +170,6 @@ async function sendRoundOperation(
           p_round_event_id: operation.eventId,
           p_round_id: operation.roundId,
         }),
-        revisionOnly,
       );
   }
 }

@@ -1,9 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
-import {
-  createSupabaseDatabase,
-  narrowDatabase,
-} from "@/lib/supabase/infrastructure/database";
+import { createSupabaseDatabase } from "@/lib/supabase/infrastructure/database";
 import type { Database } from "@/types/supabase";
 import { roundUpdated, shotRecorded } from "../domain/round-op-test-helpers";
 import { createRoundOpTransport } from "./round-op-transport";
@@ -36,9 +33,7 @@ function fakeSdk(response: { data: unknown; error: unknown; status: number }) {
     rpc,
   } as unknown as SupabaseClient<Database>;
   return {
-    database: narrowDatabase<RoundsDbSchema>(
-      createSupabaseDatabase(() => client),
-    ),
+    database: createSupabaseDatabase<RoundsDbSchema>(() => client),
     calls,
     rpc,
   };

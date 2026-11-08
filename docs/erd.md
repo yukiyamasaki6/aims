@@ -79,7 +79,7 @@ erDiagram
     shots {
         uuid id PK "矢のID。新しい矢は端末が作る時刻順のUUID(UUIDv7の形式)。点数の変更・消去・復活で変わらない"
         uuid distance_id FK "所属する距離"
-        integer end_number "距離内で何番目のエンドか [CHECK: > 0]。生きている矢の数は距離の矢数以下(制約トリガー)"
+        integer end_number "距離内で何番目のエンドか [CHECK: > 0]。生きている矢の数は距離の矢数以下(RPCが判定する)"
         integer shot_number "エンド内で何射目か [NULLABLE: null=射順不明] [CHECK: >= 1] [矢数以下] [UK: (distance_id, end_number, shot_number) 生きている矢でnullでないもの]"
         uuid shooter_id FK "行射したユーザ"
         string score_str "点数の文字列表現（例：X, M, 10）"
@@ -194,5 +194,5 @@ erDiagram
 
 - `shots`の1行は1本の矢である。エンド内の何本目かという位置の列は持たず、表示の順(射順不明の矢は点数の高い順、同点は`id`の昇順)は画面が決める。新しい矢の`id`は、端末がそのエンドの既にある矢の`id`より大きい時刻順のUUIDにするため、同点の後ろに並ぶ(`rounds/score-entry`)。
 - `shot_number`がnullの矢は射順不明である。利用者が射順を明示しない限り、矢は射順を持たない。
-- 同じ距離・同じエンドの生きている矢(`disabled_at`がnull)は、その距離の`arrows_per_end`本を超えない。書き込みのRPCが距離の行をロックして数え、制約トリガーが最後に止める。
+- 同じ距離・同じエンドの生きている矢(`disabled_at`がnull)は、その距離の`arrows_per_end`本を超えない。書き込みのRPCが距離の行をロックして数え、効かせない。
 - 同じエンドの生きている矢は、同じ`shot_number`を持たない(部分一意索引)。消した矢を戻すときに、その射順を他の生きている矢が使っていれば、射順だけがnullになる。

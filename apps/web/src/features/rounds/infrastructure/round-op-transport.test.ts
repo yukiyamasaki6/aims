@@ -76,9 +76,6 @@ describe("createRoundOpTransport", () => {
     ["disable_distance", distanceDisabled()],
   ])("単独の操作は%sで送り、判定結果を返す", async (rpc, operation) => {
     // Given
-    if (rpc === "disable_round") {
-      client.rpc.mockResolvedValue({ data: 5, error: null, status: 200 });
-    }
 
     // When
     const outcome = await sendRoundBatch(flight(operation));

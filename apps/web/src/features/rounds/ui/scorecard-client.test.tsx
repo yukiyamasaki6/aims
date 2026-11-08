@@ -321,11 +321,10 @@ const APPLIED = {
   reason: null,
 };
 
-// RPCの成功は、判定結果を返す。マスの操作は、渡した件数分の配列を返す。ラウンドの削除だけは、revisionの数値を返す。
-function rpcSucceeds(name: string, args?: { p_shots?: unknown[] }) {
+// RPCの成功は、判定結果を返す。マスの操作は、渡した件数分の配列を返す。
+function rpcSucceeds(_name: string, args?: { p_shots?: unknown[] }) {
   let data: unknown = APPLIED;
   if (args?.p_shots) data = args.p_shots.map(() => APPLIED);
-  if (name === "disable_round") data = 2;
   return Promise.resolve({ data, error: null });
 }
 

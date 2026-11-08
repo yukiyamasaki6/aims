@@ -60,10 +60,7 @@ import {
   type PageRouter,
 } from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { createClient } from "@/lib/supabase/infrastructure/client";
-import {
-  createSupabaseDatabase,
-  narrowDatabase,
-} from "@/lib/supabase/infrastructure/database";
+import { createSupabaseDatabase } from "@/lib/supabase/infrastructure/database";
 
 // 入力(認証、識別情報の保存、接続、時計、データベース、遷移)。実行環境の大域の名前に触る実装は、開始の後に初めて触る(事前描画でも生成できる)。
 // routerは画面のパッケージの遷移の部品で、アプリで1つ。
@@ -80,9 +77,7 @@ function composeInputs(router: PageRouter) {
     sessionReader: authenticator,
     connectivity: createBrowserConnectivity(),
     clock: createBrowserClock(),
-    database: narrowDatabase<RoundsDbSchema>(
-      createSupabaseDatabase(createClient),
-    ),
+    database: createSupabaseDatabase<RoundsDbSchema>(createClient),
     pageNavigation: createRouterPageNavigation(router),
   };
 }

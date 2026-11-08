@@ -7,7 +7,7 @@
 
 begin;
 
-select plan(35);
+select plan(41);
 
 create temp table rv_id (alias text primary key, id uuid not null);
 insert into rv_id (alias, id) values
@@ -182,8 +182,8 @@ select is(
 );
 select is(
   pg_temp.revs(public.clear_shots(jsonb_build_array(pg_temp.shot(15, 'D2', 1, 1), pg_temp.shot(16, 'D2', 1, 1)))),
-  array[2, 3]::bigint[],
-  'clear_shotsは同じ矢が配列に複数あればrevisionを増やして返す'
+  array[2, null]::bigint[],
+  'clear_shotsは同じ矢が配列に複数あれば、2つ目はrevisionの無い効かない結果で返す'
 );
 select is(
   pg_temp.revs(public.clear_shots(jsonb_build_array(pg_temp.shot(15, 'D2', 1, 1), pg_temp.shot(17, 'D2', 4, 44)))),
@@ -192,7 +192,7 @@ select is(
 );
 select is(
   (select revision || '/' || (disabled_at is not null)::text from public.shots where id = pg_temp.shot_id(1)),
-  '3/true',
+  '2/true',
   '取り消した矢の行は、disabled_atと取り消しのrevisionを持つ'
 );
 select is(
@@ -268,6 +268,40 @@ select is(
   pg_temp.rev(public.create_distance(pg_temp.ev(32), pg_temp.id('D3'), pg_temp.id('R2'), 'a', null, 6, 6, pg_temp.face(), false)),
   1::bigint,
   'create_distance: 種別の変更後でも、確定済みのevent_idの再送は効かないと判定されず既存のrevisionを返す'
+);
+
+-- ============================================================
+-- 返り値: disable_round と、削除済みへの別の操作ID
+-- ============================================================
+select is(
+  public.disable_round(pg_temp.ev(40), pg_temp.id('RN')),
+  '{"revision":2,"applied":true,"reason":null}'::jsonb,
+  'disable_roundは他のRPCと同じjsonbで、確定したrevisionを返す'
+);
+select is(
+  public.disable_round(pg_temp.ev(40), pg_temp.id('RN')),
+  '{"revision":2,"applied":true,"reason":null}'::jsonb,
+  'disable_roundの同じevent_idの再送は、既存のrevisionを返す'
+);
+select is(
+  public.disable_round(pg_temp.ev(41), pg_temp.id('RN')),
+  '{"revision":null,"applied":false,"reason":"DISABLED"}'::jsonb,
+  '削除済みのラウンドを別のevent_idで削除する要求は、効かない結果(DISABLED)で返す'
+);
+select is(
+  (select revision || '/' || (select count(*) from public.round_events where round_id = pg_temp.id('RN')) from public.rounds where id = pg_temp.id('RN')),
+  '2/2',
+  '削除済みのラウンドへの別のevent_idの削除は、revisionもイベントも進めない'
+);
+select is(
+  public.clear_shots(jsonb_build_array(pg_temp.shot(42, 'D2', 1, 1))),
+  '[{"revision":null,"applied":false,"reason":"DISABLED"}]'::jsonb,
+  '取り消し済みの矢を別のevent_idで取り消す要求は、効かない結果(DISABLED)で返す'
+);
+select is(
+  (select count(*) from public.shot_events where shot_id = pg_temp.shot_id(1)),
+  2::bigint,
+  '取り消し済みの矢への別のevent_idの取り消しは、イベントを増やさない'
 );
 
 -- 権限のない呼び出しは、確定済みのevent_idでも拒否される。

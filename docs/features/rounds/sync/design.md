@@ -78,7 +78,7 @@
 | `features/round-sync/infrastructure/` | インフラ層 | `browser-visibility.ts` |
 | `features/round-sync/ui/round-base-refresher.tsx` | UI層 | 常駐の一括の取得の成功の回数を`data-refreshed-count`に出す |
 | `lib/local-op-log/` | 共有の技術(操作の列の端末の保存) | 約束`contract/op-log-store.ts`と、IndexedDBの実装`infrastructure/indexeddb-op-log-store.ts`。DB`aims-sync`のstore`ops`(`seq`が`autoIncrement`)と`bases`(キーは`[userId, streamId]`。取得の開始時刻`startedAt`と、ベースまたは削除の印`null`)。追記、`loadStream`・`loadAll`(現在のユーザーの組)、取得したベースを反映する`commit`、`ack`、`retire`。組を変える`commit`・`ack`・追記は`ops`と`bases`にまたがる1つのトランザクションで行い、途中で失敗すれば両方とも変えない。`commit`は、保存済みより`startedAt`が古い取得では何も変えない。保存済みのベース、または記録が最後に取り込んだベースよりrevisionが古い取得も反映しない(`isOlder`)。新しければ、ベースに反映済みの操作を消し、保持の規則に当たればベースを保存し、当たらなければ組(ベースと操作)を丸ごと消す(ベースに反映されていない操作が残る組は必ず当たる。古い取得で新しい保存を上書き・削除しない)。`ack`は確定を記録するだけで、操作を消さない。versionの更新が古い版の接続で塞がれているときは、接続を閉じも失敗にもせず、塞ぎが解けるまで開く処理が待つ(画面の読み込みは既存の10秒で「読み込めませんでした。」になる)。versionの更新では、全てのstoreを内容を移行せずに作り直す |
-| `lib/clock/`、`lib/connectivity/`、`lib/supabase/` | 共有の技術 | 時刻(`Clock`)、通信の可否(`Connectivity`。復帰と切断の通知を持つ)、データベースへの問い合わせ、削除、手続きの呼び出し(スキーマの形を型引数で受ける`DatabaseGateway<S>`と実装。ラウンドは使う部分の型`RoundsDbSchema`を宣言し、起動地点が`narrowDatabase`で生成した型と照合して受け取る) |
+| `lib/clock/`、`lib/connectivity/`、`lib/supabase/` | 共有の技術 | 時刻(`Clock`)、通信の可否(`Connectivity`。復帰の通知を持つ)、データベースへの問い合わせ、削除、手続きの呼び出し(スキーマの形を型引数で受ける`DatabaseGateway<S>`と実装。ラウンドは使う部分の型`RoundsDbSchema`を、生成した型の`Pick`で宣言し、起動地点が型引数に渡して受け取る) |
 | `SessionReader`の`readSession`(認証の機能の入口が公開する型。実装は`features/auth/infrastructure/supabase-auth.ts`) | 認証の入口 | 保存先を読み直して、認証済み・未認証（確定）・不明に分ける。同期は`SessionReader`の型で直接、取得と送信の手続きも`SessionReader`の型で、送信と取得のたびに読む。認証の変化は`SignInChanges`の型で同期の契機の受け取りが1本だけ受ける |
 
 契機の受け取り(`sync-triggers.ts`)は、契機を同期の手続きの操作に変える。サインインの変化は、そのまま記録の制御へ渡る。同期の`stop`の経路は1つで、契機の受け取りが同期の`stop`を呼び、同期が記録の制御の`stop`(送信の停止、記録の停止の順)、取り直しの制御の`reset`の順に呼ぶ。
@@ -127,14 +127,14 @@
 - 書き込みは認可つきRPCに限り、RLSで直接の書き込みを禁止する。認可、不変条件、並行更新の検証はDB側で保証する。
 - 変更は追記専用のイベントログに記録し、既存テーブルを同一トランザクションの射影とする。
 - `create_round`は他の書き込みRPCと同じ形で、作成の`revision` 1を返す。重複の`event_id`は作成者を照合し、違えば`PT403`とする。
-- 書き込みRPC(`create_round`、`update_round`、`create_distance`、`update_distance`、`disable_distance`、`record_shots`、`clear_shots`)は、操作ごとに`{revision, applied, applied_fields, rejected_fields, reason}`を返す。`disable_round`は従来どおり`revision`を返す。
+- 書き込みRPC(`create_round`、`update_round`、`disable_round`、`create_distance`、`update_distance`、`disable_distance`、`record_shots`、`clear_shots`)は、操作ごとに`{revision, applied, applied_fields, rejected_fields, reason}`の形で返す(`create_round`、`disable_round`、`disable_distance`は`applied_fields`と`rejected_fields`を持たない)。
 - `record_shots`と`clear_shots`は、配列の先頭から順に1トランザクションで処理し、入力の順の結果の配列を返す。
 - 設定の保存は、変えた項目だけを持つjsonbの差分(`p_changes`)で送る。`update_round`の差分は、ラウンドの状態(`status`。`rounds/completion`)も項目として持ち、常に効く。キーがあれば変えた項目、無ければ変えていない項目で、値のnullは「未設定にする」を表す(距離(m)だけ)。構成は的・エンド数・矢数の1組で、`config`キーに3項目を揃えて持つ。
 - 判定は確定の時点の状態だけで行い、操作に前提の版を持たせない。効く項目は同じ項目の後勝ちで、規則に当たる項目だけを効かせない。
-  - 削除: 削除済みのラウンド・距離への操作は効かない(`DISABLED`)。削除が勝つ。
+  - 削除: 削除済みのラウンド・距離への操作は効かない(`DISABLED`)。削除が勝つ。削除済みのラウンドを別の`event_id`で削除する要求と、取り消し済みの矢を別の`event_id`で取り消す要求も、書かずに`DISABLED`で返す(履歴に同じ消去を並べない)。同じ`event_id`の再送は、既存の`revision`を返す。
   - 存在しない距離への操作は、認可より前に`MISSING`で効かないと返す(距離IDは推測できず、情報は漏れない)。
   - 矢: 矢は端末が作るUUID(`shot_id`)で指し(新しい矢は時刻順のUUID。作り方と並べ方は`rounds/score-entry`。サーバーはUUIDの版を確かめない)。現在の構成で無効な矢(エンドの範囲外、的に無い点数、射順が1〜矢数の外)は効かない(`UNFIT`)。
-  - 矢数の上限: 生きている矢を増やす記録(新しい矢、消した矢の復活)は、距離の行をロックしてエンドの生きている矢を数え、矢数以上なら効かない(`UNFIT`)。制約トリガーが最後に止める(違反は例外で、再試行され続ける)。
+  - 矢数の上限: 生きている矢を増やす記録(新しい矢、消した矢の復活)は、距離の行をロックしてエンドの生きている矢を数え、矢数以上なら効かない(`UNFIT`)。書き込みはRPCだけで、`update_distance`も更新の検証で同じ判定を持つ。
   - 矢の項目: `record_shots`は要素に含まれる項目だけを変える。射手(`shooter_id`)と射順(`shot_number`)はキーがあるときだけ変え、新しい矢で射手が無ければ実行者にする。射順が同じエンドの他の生きている矢と重なるなら、射順の項目だけを効かせない。消した矢の復活で行の射順が重なるなら、射順をnullにして復活させる。部分一意索引が最後に止める。
   - 射手の保持: 端末は射手をこの端末の利用者として記録する矢の操作に射手を含めず、射手は変わらない(`rounds/sync`のE2E)。別の利用者を射手にした矢が、射手を含まない操作で書き換えられても射手を保つことは、DBのテスト(pgTAP、`supabase/tests/shot_identity.sql`)で担保する。
   - 存在しない矢のクリアは`MISSING`で、記録しない。取り消し済みの矢へのクリアは効いた操作として記録する。
