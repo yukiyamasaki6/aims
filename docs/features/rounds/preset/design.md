@@ -34,7 +34,7 @@
 - `features/rounds/ui/save-preset-dialog.tsx`: 保存ダイアログの描画。手続きの入れ物の`presetSaving.savePreset`を呼び、結果を状態へ反映する。
 - `features/rounds/ui/save-preset-dialog-state.ts`: 開閉時の事前入力と破棄、二重の実行の防止、結果の反映を純関数で行う。
 - `features/rounds/domain/preset-save.ts`: 保存するプリセットの内容(外部の引数名を持たない)、名前の決定と長さ検証、距離の位置キーの連番の振り直しを行う。
-- 保存の手続き(`RoundProcedures.presetSaving`。`features/rounds/application/preset-saving.ts`): 起動地点が渡す`SessionReader`でサインインの状態を確かめ、書き込みを実行し、成功の後にプリセット一覧を背景で再取得して端末の保存済みを更新する。
+- 保存の手続き(`RoundProcedures.presetSaving`。`features/rounds/application/preset-saving.ts`): 入口が渡す`SessionReader`でサインインの状態を確かめ、書き込みを実行し、成功の後にプリセット一覧を背景で再取得して端末の保存済みを更新する。
 - `features/rounds/ui/use-preset-delete.ts`: 削除を確認中のプリセットと、削除済みのID、実行中とエラーを持ち、`NewRoundStore.deletePreset`を呼ぶ。
 - `NewRoundStore.deletePreset`と削除の手続き(`features/rounds/application/preset-deletion.ts`): サインインの状態を確かめ、削除を実行する。書き込みに成功したら、削除の応答を待つ間に画面を離れていても保存済みから除く(画面への結果だけを破棄する)。届かなかったときと拒否されたときは保存済みを変えない。
 - `features/rounds/infrastructure/preset-commands.ts`: 削除は`DatabaseGateway.delete`で`preset_rounds`を`id`で消す。保存は`DatabaseGateway.rpc("save_round_as_preset")`を呼び、外部の引数名`p_*`はここだけが知る。どちらも結果を種類(届いた、届かなかった、拒否された)に写す。文言は作らない。
@@ -49,6 +49,7 @@
 - 削除は直接のDELETEで、`preset_rounds`のDELETEポリシーが認可を担う。`preset_distances`は外部キーのCASCADEで消える。
 - アプリが書き込む経路は、保存のRPCと削除だけである。`preset_rounds`のUPDATEと`preset_distances`のUPDATE・DELETEのポリシーとGRANTは持たない。
 - 削除は操作の列を使わず、削除側のフック(`use-preset-delete.ts`)が実行中と失敗を持ち、同期の`ref`で二重実行を拒否する。`BlockingConfirmDialog`は`busy`と`error`を受け取って完了を待つ表現だけを担う。
+- 保存(`save_round_as_preset`)も操作の列を使わない、オンライン専用の直接書き込みである(`preset-commands.ts`)。
 
 ## 設計判断
 
@@ -60,8 +61,8 @@
 | 自動生成名は距離構成だけにする | 弓種は個人でほぼ固定で、種別は距離から判別できるため。種別・弓種を含む名前は採らない | 弓種を複数使う利用が増えたとき |
 | 名前の上限を50文字にする | 一覧と要約行が折り返しと省略に対応していないため | 一覧が折り返しに対応したとき |
 | 削除の確認に完了を待つ`BlockingConfirmDialog`を使い、実行中の状態は削除側のフックが持つ | 破壊的な操作で、完了前に閉じると結果を確認できないため。実行中の状態は削除の状態(確認中のプリセット、削除済みのID)を持つ場所に置き、ダイアログは表現だけにする | 削除を取り消せるようにしたとき |
-| 削除の失敗を1つの種類にし、文言は一覧が固定で持つ | 外部のエラーから文言を作らないため(I01)。認証の`other`と同じ | 失敗の種類ごとに利用者の行動を変える必要が出たとき |
-| 保存の失敗を1つの種類にし、文言は一覧が固定で持つ | 外部のエラーから文言を作らないため(I01)。削除と同じ | 失敗の種類ごとに利用者の行動を変える必要が出たとき |
+| 削除の失敗を1つの種類にし、文言は一覧が固定で持つ | 外部のエラーから文言を作らないため(実装規約。`agents/implementation.md`)。認証の`other`と同じ | 失敗の種類ごとに利用者の行動を変える必要が出たとき |
+| 保存の失敗を1つの種類にし、文言は一覧が固定で持つ | 外部のエラーから文言を作らないため(実装規約。`agents/implementation.md`)。削除と同じ | 失敗の種類ごとに利用者の行動を変える必要が出たとき |
 | 削除メニューは、名前ボタンとメニューボタンだけを囲む`relative`ラッパー内で中央寄せする | カード全体を基準にすると、距離構成の展開時にメニューボタンが名前の行からずれるため | カードの構造を変えたとき |
 
 ## 制約と未対応

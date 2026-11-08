@@ -27,13 +27,13 @@ Supabase Authの`signInWithOtp`、`verifyOtp`、`updateUser({ password })`をこ
 
 構造の方針は`docs/architecture.md`に従う。
 
-- `src/app/(auth)/signup/page.tsx`: 画面の入口。認証の実装(接続を作る関数`createClient`を渡す)、ページ全体の置き換えの実装(`createBrowserPageLoad`)、通信の可否の約束(`Connectivity`。送信の直前のオフラインの読み取りに使う)、手続きを生成し、手続きを画面へ渡す。
+- `src/app/(auth)/signup/page.tsx`: 入口。認証の実装(接続を作る関数`createClient`を渡す)、ページ全体の置き換えの実装(`createBrowserPageLoad`)、通信の可否の約束(`Connectivity`。送信の直前のオフラインの読み取りに使う)、手続きを生成し、手続きを画面へ渡す。
 - `src/features/auth/ui/signup-form.tsx`: サインアップの画面の文言とリンク(見出し、サインインへのリンク、パスワード設定の段階の文言)を、UI層の文言の一覧から得る。パスワード再設定と共有の骨組みへ渡す。
 - `src/features/auth/ui/password-setup-form.tsx`: 段階の振り分けと、パスワード設定の段階の描画。状態を`useScreenView`で持ち、操作のたびに入力と画面の約束(`ScreenView`)を手続きへ渡す。メール入力とコード入力は段階の部品へ渡す。パスワード再設定と共有する。
 - `src/features/auth/application/sign-up.ts`: 手続き。コードの送信と、パスワード設定の後のページ全体の置き換え(`/rounds`)を持つ。確認と、操作の開始、コードの送付(初回も再送も同じ操作)の依頼、パスワード設定の依頼は、共通の順序を使う。
 - `src/features/auth/application/password-setup.ts`、`password-setup-authenticator.ts`: パスワード再設定と共有する、手続きの共通の順序(送信の直前にオフラインを1回読むことを含む。操作の開始、コードの送付の依頼、確認、パスワード設定の依頼)と、認証サービスへ頼むこと(コードの送信、確認、パスワードの設定)の約束。
 - `src/features/auth/domain/password-setup-flow.ts`: 集約。段階、実行中の操作、再送の待ち時間、captchaトークンを持ち、開始の命令(`beginSendCode`ほか)が、操作の可否と入力の検証の順序、確認・再送・戻るの排他を守って`Start`を返す。事実の遷移(`passwordSetupReducer`。パスワード設定の成功の`passwordSet`を含む)で、トークンの消費を守る。パスワード再設定と共有する。
-- `src/features/auth/domain/password.ts`、`auth-code.ts`: パスワードの文字種の規則と、認証コードの桁数(入力欄の上限)、未入力の検査と再送の待ち時間の規則(値オブジェクト。誤りの種類を返す)。パスワード再設定も使う。
+- `src/features/auth/domain/password.ts`、`auth-code.ts`: パスワードの文字種の規則と、認証コードの桁数(入力欄の上限)、未入力の検査と再送の待ち時間の規則(domain。誤りの種類を返す)。パスワード再設定も使う。
 - `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類。文言は持たない。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。コードの目的`sign-up`の`signInWithOtp`、`verifyOtp`、`updateUser`の呼び出しを含む。呼び出しの結果は`CallResult`(受け付けられた、または失敗)の値で返し、応答が無かった場合(接続を作れない、呼び出しが投げた)は`unreachable`の失敗にする。
 - `src/features/auth/ui/otp-email-step.tsx`、`otp-code-step.tsx`: メール入力とコード入力の段階の描画。パスワード再設定も使う。

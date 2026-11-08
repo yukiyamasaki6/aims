@@ -1,3 +1,4 @@
+import type { Tables } from "@/types/supabase";
 import type { RoundConfig } from "./round-config";
 import type { Distance, Shot } from "./scorecard-types";
 import type { RoundStatus, SyncOperation } from "./sync-events";
@@ -113,17 +114,17 @@ export function selectRoundState(tables: RoundTables): RoundState {
 }
 
 // サーバーから取得した、1つのラウンド。取り消した矢と無効化した距離の行も含み、対象ごとにrevisionを持つ。
-type ServerShot = Shot & { revision: number; disabled: boolean };
-type ServerDistance = Distance & {
-  revision: number;
-  disabled: boolean;
-  shots: ServerShot[];
-};
-export type ServerRound = {
-  id: string;
+// 列に当たる`id`と`revision`は生成型から導き、残りは取得後に組み替えた形である。
+type ServerShot = Shot &
+  Pick<Tables<"shots">, "revision"> & { disabled: boolean };
+type ServerDistance = Distance &
+  Pick<Tables<"distances">, "revision"> & {
+    disabled: boolean;
+    shots: ServerShot[];
+  };
+export type ServerRound = Pick<Tables<"rounds">, "id" | "revision"> & {
   roundConfig: RoundConfig;
   status: RoundStatus;
-  revision: number;
   distances: ServerDistance[];
 };
 

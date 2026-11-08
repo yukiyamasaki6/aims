@@ -1,32 +1,33 @@
+import type { Tables } from "@/types/supabase";
 import { comparePositionKey } from "./position-key";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "./round-constants";
 import type { TargetFaceLayout } from "./target-face";
 
-// プリセットの値。取得の行の列名のまま持つ(端末へ保存する値も変えない)。
-export type PresetDistance = {
-  id: string;
-  position_key: string;
-  distance: number | null;
-  is_marked: boolean;
-  total_ends: number;
-  arrows_per_end: number;
-  target_face_id: string;
+// プリセットの値。表の列は生成型から導き、結合(`target_faces`、`preset_distances`)だけ足す。
+// 取得の行の列名のまま持ち、端末へ保存する値の形は変えない。
+export type PresetDistance = Pick<
+  Tables<"preset_distances">,
+  | "id"
+  | "position_key"
+  | "distance"
+  | "is_marked"
+  | "total_ends"
+  | "arrows_per_end"
+  | "target_face_id"
+> & {
   target_faces: TargetFaceLayout | null;
 };
 
-export type Preset = {
-  id: string;
-  name: string;
-  format: string;
-  bow_type: string;
+export type Preset = Pick<
+  Tables<"preset_rounds">,
+  "id" | "name" | "format" | "bow_type"
+> & {
   preset_distances: PresetDistance[];
 };
 
 // 取得した行。個人のプリセットはowner_idを持つ。
-export type PresetRecord = Preset & {
-  owner_id: string | null;
-  created_at: string;
-};
+export type PresetRecord = Preset &
+  Pick<Tables<"preset_rounds">, "owner_id" | "created_at">;
 
 // 個人と公式に分けた、並べたプリセット。端末へ保存する形でもある。
 export type Presets = { personal: Preset[]; global: Preset[] };

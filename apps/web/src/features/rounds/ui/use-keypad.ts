@@ -31,7 +31,7 @@ function useIsLandscape() {
 // アニメーションが再生できないため、トランジション終了後に実際に
 // アンマウントするまでの間だけmountedをtrueに保つ。開いている描画では、
 // 記憶した状態を待たずにmountedにする(テンキーの要素が付いた後の寸法で追従を計算するため)。
-// setTimeoutとrequestAnimationFrameは、画面の動きに合わせるだけの待ち(格納のtransitionの終わり、表示の直前の2フレーム)で、画面の機能として直接呼ぶ(docs/architecture.mdのX01)。業務の時間、通信の待ち、再試行には使わない。
+// setTimeoutとrequestAnimationFrameは、画面の動きに合わせるだけの待ち(格納のtransitionの終わり、表示の直前の2フレーム)で、画面の機能として直接呼ぶ。業務の時間、通信の待ち、再試行には使わない。
 function useKeypadPresence(open: boolean) {
   const [retained, setRetained] = useState(open);
   const [keypadVisible, setKeypadVisible] = useState(open);
