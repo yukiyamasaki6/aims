@@ -96,7 +96,6 @@ describe("load", () => {
       data: {
         pendingCreationEventId: created.eventId,
         targetFaces: [face],
-        source: "server",
         base: { round: { config: { name: "新規" } } },
       },
     });
@@ -116,7 +115,7 @@ describe("load", () => {
     expect(result).toEqual({ status: "offline" });
   });
 
-  it("取得の依頼を記録し、取り直しの結果を待って返す。結果のsourceはserver", async () => {
+  it("取得の依頼を記録し、取り直しの結果を待って返す", async () => {
     // Given
     const tab = createTestRounds();
     const loading = tab.detail.load("round-1");
@@ -132,7 +131,6 @@ describe("load", () => {
     expect(result).toMatchObject({
       status: "ok",
       data: {
-        source: "server",
         pendingCreationEventId: null,
         targetFaces: [face],
       },
@@ -192,7 +190,6 @@ describe("load", () => {
     // Then
     expect(await loading).toMatchObject({
       status: "ok",
-      data: { source: "server" },
     });
   });
 
@@ -208,7 +205,6 @@ describe("load", () => {
       expect(result).toMatchObject({
         status: "ok",
         data: {
-          source: "local",
           targetFaces: [face],
           base: { round: { config: { name: "端末" } } },
         },
@@ -225,7 +221,7 @@ describe("load", () => {
       settleRoundNow(tab.requests, "round-1", { status: "ok", data: opened() });
 
       // Then
-      expect(result).toMatchObject({ data: { source: "local" } });
+      expect(result).toMatchObject({ status: "ok" });
       expect(tab.requests.outcomeOf("round-1")).toBe("ok");
     });
 
@@ -243,7 +239,7 @@ describe("load", () => {
         settleRoundNow(tab.requests, "round-1", fetched);
 
         // Then
-        expect(result).toMatchObject({ data: { source: "local" } });
+        expect(result).toMatchObject({ status: "ok" });
         expect(tab.requests.outcomeOf("round-1")).toBe(outcome);
       },
     );
@@ -266,7 +262,6 @@ describe("load", () => {
       expect(beforeSettled).toBe(false);
       expect(await loading).toMatchObject({
         status: "ok",
-        data: { source: "server" },
       });
     });
 

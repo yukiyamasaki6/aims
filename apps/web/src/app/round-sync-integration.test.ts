@@ -91,7 +91,6 @@ function rig() {
       }),
     }),
     session,
-    clock,
     connectivity,
   });
   const { ids } = createFakeUniqueIds({ prefix: "event" });
@@ -139,10 +138,7 @@ describe("詳細を開く依頼と同期", () => {
 
     // Then
     expect(await loadFirst).toMatchObject({ status: "ok" });
-    expect(await loadSecond).toMatchObject({
-      status: "ok",
-      data: { source: "server" },
-    });
+    expect(await loadSecond).toMatchObject({ status: "ok" });
     expect(t.fetching.fetchRoundDetail).toHaveBeenCalledTimes(2);
   });
 
@@ -208,7 +204,6 @@ describe("先に始めた実行の終わり", () => {
       base: roundBase().tables,
       targetFaces: [],
       pendingCreationEventId: null,
-      source: "local",
     });
     runB.resolve({ status: "ok", data: detail("後の実行") });
     await flush();

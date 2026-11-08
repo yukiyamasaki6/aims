@@ -69,7 +69,6 @@ function toDetail(result: FetchResult<OpenedRound>): FetchResult<LoadedRound> {
       base: result.data.base,
       targetFaces: result.data.targetFaces,
       pendingCreationEventId: null,
-      source: "server",
     },
   };
 }
@@ -84,7 +83,6 @@ function localDetail(local: {
       base: local.base,
       targetFaces: local.targetFaces,
       pendingCreationEventId: null,
-      source: "local",
     },
   };
 }
@@ -108,7 +106,6 @@ async function openDetail(
         base: roundTablesFromCreated(plan.operation),
         targetFaces: faces.data,
         pendingCreationEventId: plan.operation.eventId,
-        source: "server",
       },
     };
   }

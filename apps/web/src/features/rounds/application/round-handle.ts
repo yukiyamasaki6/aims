@@ -25,8 +25,6 @@ export type LoadedRound = {
   targetFaces: TargetFaceOption[];
   // 確定していない作成のeventId。あるとき、基準は端末の作成の操作である。
   pendingCreationEventId: string | null;
-  // 保存済みがあり、取得の結果を待たずに端末のベースで開いたときは"local"。
-  source: "server" | "local";
 };
 
 // 開いた詳細の状態。`watch`で開いている印を付けるまで、stateはnull。
@@ -143,12 +141,16 @@ export function createRoundHandle(
     for (const listener of [...listeners]) listener();
   }
 
+  // 結果の種類が gone なら、開き方によらず見つかりませんにする。作成が未確定のラウンドは、取り直しが gone を記録しても出さない(作成が拒否されたときは`creationGone`が出す)。
   function isGone(
     deletedElsewhere: boolean,
     from: LoadedRound,
     outcome: unknown,
   ): boolean {
-    return deletedElsewhere || (from.source === "local" && outcome === "gone");
+    return (
+      deletedElsewhere ||
+      (outcome === "gone" && from.pendingCreationEventId === null)
+    );
   }
 
   function observe() {
@@ -183,7 +185,7 @@ export function createRoundHandle(
       creation = INITIAL_CREATION;
       opening = next;
       seen = null;
-      const unmark = requests.watch(roundId, next.source === "local");
+      const unmark = requests.watch(roundId);
       stopObserving ??= observe();
       recompute();
       return () => {

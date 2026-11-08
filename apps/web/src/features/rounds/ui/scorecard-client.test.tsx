@@ -251,7 +251,6 @@ function setup(
         }),
         targetFaces: faces,
         pendingCreationEventId: null,
-        source: "server",
       }}
       targetFaces={faces}
       onGone={ignoreGone}
@@ -1878,7 +1877,6 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
           }),
           targetFaces: [...targetFaces],
           pendingCreationEventId: null,
-          source: "server",
         }}
         targetFaces={[...targetFaces]}
         onGone={ignoreGone}

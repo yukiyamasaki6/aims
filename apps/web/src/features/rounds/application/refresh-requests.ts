@@ -40,7 +40,7 @@ export function createRefreshRequests() {
     string,
     Map<number, (result: FetchResult<OpenedRound>) => void>
   >();
-  const watching = new Map<string, { count: number; local: boolean }>();
+  const watching = new Map<string, number>();
   // 確定済みの操作をベースに重ねられなかった(取り直しが要る)開いた詳細。
   const overlay = new Set<string>();
   const listeners = new Set<() => void>();
@@ -96,30 +96,23 @@ export function createRefreshRequests() {
     },
     outcomeOf: (roundId: string): RoundOutcome | undefined =>
       opens.get(roundId)?.outcome,
-    // 開いている間の印。localは、端末のベースで開いたこと(取得できるまで古い)。
-    watch(roundId: string, local: boolean): () => void {
-      const current = watching.get(roundId);
-      watching.set(roundId, {
-        count: (current?.count ?? 0) + 1,
-        local: current?.local === false ? false : local,
-      });
+    // 開いている間の印。取り直しの要否の判定が、開いている詳細を知るために使う。
+    watch(roundId: string): () => void {
+      watching.set(roundId, (watching.get(roundId) ?? 0) + 1);
       changed();
       let released = false;
       return () => {
         if (released) return;
         released = true;
-        const entry = watching.get(roundId);
-        if (!entry) return;
-        if (entry.count <= 1) watching.delete(roundId);
-        else watching.set(roundId, { ...entry, count: entry.count - 1 });
+        const count = watching.get(roundId);
+        if (count === undefined) return;
+        if (count <= 1) watching.delete(roundId);
+        else watching.set(roundId, count - 1);
         changed();
       };
     },
-    watched(): { roundId: string; local: boolean }[] {
-      return [...watching].map(([roundId, entry]) => ({
-        roundId,
-        local: entry.local,
-      }));
+    watched(): { roundId: string }[] {
+      return [...watching.keys()].map((roundId) => ({ roundId }));
     },
     setOverlay(roundId: string, needed: boolean) {
       if (overlay.has(roundId) === needed) return;

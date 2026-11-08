@@ -72,7 +72,6 @@ function faces(...ids: string[]): TargetFaceOption[] {
 function detail(
   name: string,
   pendingCreationEventId: string | null = null,
-  source: "server" | "local" = "server",
   targetFaces: TargetFaceOption[] = [],
 ): LoadedRound {
   return {
@@ -89,7 +88,6 @@ function detail(
     }),
     targetFaces,
     pendingCreationEventId,
-    source,
   };
 }
 
@@ -168,7 +166,7 @@ describe("RoundDetailClient", () => {
       // Given
       resolves({
         status: "ok",
-        data: detail("午前練習", null, "server", faces("face-1", "face-2")),
+        data: detail("午前練習", null, faces("face-1", "face-2")),
       });
 
       // When
@@ -275,12 +273,7 @@ describe("RoundDetailClient", () => {
       // Given
       resolves({
         status: "ok",
-        data: detail(
-          roundsText("listInProgress"),
-          null,
-          "local",
-          faces("face-1"),
-        ),
+        data: detail(roundsText("listInProgress"), null, faces("face-1")),
       });
       const user = userEvent.setup();
       renderDetail();

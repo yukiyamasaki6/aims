@@ -27,9 +27,9 @@ export function createSyncTriggers(deps: {
       sync.start(identityReader.read());
       const stops = [
         changes.subscribe((change) => sync.signInChanged(change)),
-        connectivity.onOnline(() => sync.online()),
-        connectivity.onOffline(() => sync.offline()),
-        visibility.onVisible(() => sync.visible()),
+        // 通信の復帰と画面が見える状態は、どちらも常駐の取得の契機である。
+        connectivity.onOnline(() => sync.resume()),
+        visibility.onVisible(() => sync.resume()),
       ];
       return () => {
         for (const stop of stops) stop();

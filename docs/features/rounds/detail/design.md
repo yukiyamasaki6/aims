@@ -27,7 +27,7 @@
 | :--- | :--- | :--- |
 | 取得中 | 「一覧へ戻る」の行と読み込み中の表示 | 取得が完了していない(読み込みの開始から10秒まで) |
 | 見つからない | 「ラウンドが見つかりません。」と「一覧へ戻る」リンク。存在しない・権限なし・論理削除済み・端末の列に削除がある・他の端末で削除された・作成が破棄された・UUIDでないIDを区別しない。URLは詳細のまま | ラウンドが得られない |
-| 端末のベースで表示 | ラウンドの内容(オンラインと同じ) | 端末が保持するラウンドで、的の一覧の保存分がある(取得の完了を待たずに開き、取得は同期が続ける) |
+| 端末のベースで表示 | ラウンドの内容(オンラインと同じ) | 端末が保持するラウンドで、的の一覧の保存分がある(取得の完了を待たずに開き、取得は同期が続ける。取得に失敗しても次の契機まで保存済みの表示が続く) |
 | オフライン | 「ネットワークに接続されていません」と再試行 | `navigator.onLine`が`false`で、端末がオフラインで開けるベースか、的の一覧の保存分を持たないラウンド。ベースを持たないときの表示は`app/offline-pwa` |
 | 取得エラー | エラーメッセージと再試行 | 取得がエラー。通信失敗は「読み込めませんでした。」(端末がオフラインで開けるベースを持たないラウンド)。的の一覧がそろわない(取得に失敗し、保存分も無い)ときも同じ |
 | 取得中(的) | 読み込み中の表示。取得が完了すると内容を表示する | 作成が未確定のラウンドで、的の一覧の取得が完了していない(`rounds/setup`) |
@@ -48,7 +48,7 @@
 - `features/rounds/application/round-detail-store.ts`の`load`: 開く材料(ベースと的)を返す。サーバーの取得と端末の記録への反映は同期が行い(`round-base-refreshing.ts`の`refreshRound`)、`load`はその結果を待つ。列は記録のハブの`read`で読み、最初の読み込みで列に削除があれば、取得せずに見つからないを返す(作成が未確定でも同じ)。反映した組の列に削除があるときも、見つからないを返す。作成が未確定のラウンドは、ラウンドを取得せず、作成の操作を基準にする。端末にベース(削除の印でないもの)と的の保存分があれば、取得の結果を待たず、端末のベースで返す(`source`が`local`。保持の規則の判定は端末の保存が担い、開くときは確かめない)。開く依頼は常に出し、同期が取得を続けて結果を端末の記録へ反映する。結果は常に、そろった的の一覧全体(取得に成功した一覧、または最後に取得に成功した一覧の保存分)を持つ。作成が未確定のラウンドは`fetchTargetFaces`で的を得る。端末のベースは的の保存分があるときだけ使い、無ければサーバーの取得の完了を待つ(上限は取得の打ち切り)。そろわなければ、取得の結果(`offline`か`error`)を返す。効かなかった操作または項目がある応答を受けたときの取り直しは、同期が決める(`features/round-sync/application/round-sync.ts`)。
 - `features/rounds/domain/round-base.ts`、`features/rounds/application/round-base-refreshing.ts`: 端末に持つベースの規則と、入力中のラウンドの一括の取得(`rounds/sync`)。`features/rounds/domain/round-view.ts`の`deriveRoundState`は、端末の組から画面と同じ導出で状態を求める関数で、一覧も使う(`rounds/history`)。一括の取得の反映は、一覧も同じ経路(`refreshAll`)を使う。一括の取得は、`disabled_at is null`かつ`status = in_progress`、または端末にベースか操作があるラウンドを得て、ラウンドごとにベースを差し替える。端末のラウンドのIDは50件ごとの取得に分けて並行に得る(入力中の条件は最初の取得に含め、以降の取得は入力中を除く)。すべての取得が成功したときだけ成功とする。返らなかったラウンドは削除の印にする。
 - `features/rounds/domain/round-tables.ts`、`features/rounds/domain/round-op-apply.ts`、`features/rounds/ui/use-round-op-stack.ts`: サーバーのテーブルの形のベース(`RoundTables`)、操作の列を重ねる導出(RPCごとの処理)、画面の状態を導く`selectRoundState`と、`RoundDetailStore`の`round(...)`(`features/rounds/application/round-handle.ts`が返す購読と追記の入口)を購読するフック。完了のラウンドの編集で入力中へ戻す操作は、手続き`features/rounds/application/round-editing.ts`が積む(窓口の`handle.append`が今の状態の読み手を渡して呼ぶ。`rounds/completion`)。画面の状態は、端末の記録のベースと操作の列から求める。`use-scorecard.ts`は`state`(保存の完了前の操作を含む記録から導いた値)を`useRoundOpStack`から受ける。
-- `features/round-sync/application/round-sync.ts`: 端末のベースで開いたときの取り直し。取得の完了、`online`、見える状態になったとき、同期の`staleRetryDelayMs`(3秒から2倍で60秒まで。`stale-retry.ts`)の間隔で取り直す(`navigator.onLine`が`true`のまま通信が戻る場合のため)。`offline`で止め、`online`で最初の間隔から始め直す。
+- `features/round-sync/application/round-sync.ts`: 端末のベースで開いたときの取り直し。取得に失敗しても、定期的な取り直しは行わず、次の契機(起動、通信の復帰、画面が見える状態、同じラウンドの開き直し、効かなかった結果の検出)まで端末のベースの表示が続く。数秒の瞬断は、取得のライブラリの再試行が吸収する。結果の種類が「無い」なら、開き方によらず見つかりませんにする(作成が未確定のラウンドを除く)。
 - `features/rounds/ui/round-detail-frame.tsx`、`back-to-list-link.tsx`: 枠と「一覧へ戻る」リンク(経路表(`src/routes.ts`)の`ROUNDS_PATH`を使う)。
 - `features/rounds/ui/scorecard-client.tsx`（Client Component）: スコアカードの枠を組み立てる。
 - `features/rounds/ui/use-scorecard.ts`: `state`(保存の完了前の操作を含む記録から導いた`shots`と距離の構成)を`useRoundOpStack`から受け、画面のフック(指している矢、テンキー、取り消しの列、距離の編集)を束ねる。

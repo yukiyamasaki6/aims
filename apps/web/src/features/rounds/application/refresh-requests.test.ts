@@ -75,15 +75,15 @@ describe("詳細を開く依頼", () => {
 });
 
 describe("開いている詳細の印", () => {
-  it("開いている間の印を付け、端末のベースで開いたかを持つ。外すと消え、2回外しても数を崩さない", () => {
+  it("開いている間の印を付ける。外すと消え、2回外しても数を崩さない", () => {
     // Given
     const requests = createRefreshRequests();
     const listener = vi.fn();
     requests.subscribe(listener);
 
     // When
-    const first = requests.watch("r-1", true);
-    const second = requests.watch("r-1", false);
+    const first = requests.watch("r-1");
+    const second = requests.watch("r-1");
     const both = requests.watched();
     first();
     first();
@@ -91,8 +91,8 @@ describe("開いている詳細の印", () => {
     second();
 
     // Then
-    expect(both).toEqual([{ roundId: "r-1", local: false }]);
-    expect(afterFirst).toEqual([{ roundId: "r-1", local: false }]);
+    expect(both).toEqual([{ roundId: "r-1" }]);
+    expect(afterFirst).toEqual([{ roundId: "r-1" }]);
     expect(requests.watched()).toEqual([]);
     expect(listener).toHaveBeenCalledTimes(4);
   });

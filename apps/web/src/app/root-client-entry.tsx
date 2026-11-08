@@ -173,12 +173,11 @@ function composeStores(inputs: Inputs, records: Records) {
 
 // 同期(同期と、その契機)。
 function composeSync(inputs: Inputs, records: Records) {
-  const { authenticator, identityStore, connectivity, clock } = inputs;
+  const { authenticator, identityStore, connectivity } = inputs;
   const sync = createRoundSync({
     control: records.control,
     refresh: records.refresh,
     session: authenticator,
-    clock,
     connectivity,
   });
   const triggers = createSyncTriggers({

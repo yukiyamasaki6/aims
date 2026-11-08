@@ -3,7 +3,6 @@ import type {
   RoundRecordControl,
   RoundRefreshControl,
 } from "@/features/rounds";
-import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import {
   beginFlight,
@@ -12,7 +11,6 @@ import {
   IDLE_GATE,
 } from "../domain/flight-gate";
 import { shouldRefetch } from "../domain/sync-trigger";
-import { createStaleClock } from "./stale-clock";
 
 // 取り直しの理由。取り直しの制御が返す理由の型から導く。
 type RefreshReason = ReturnType<
@@ -30,16 +28,15 @@ const NOT_OPEN_REQUEST = false;
 
 export type RoundSync = ReturnType<typeof createRoundSync>;
 
-// いつ送り、いつ取り直すかを決める唯一の手続き。契機(認証の通知、通信の復帰と切断、見える状態)と、画面の依頼を受けて、記録の制御と取り直しの制御を動かす。
+// いつ送り、いつ取り直すかを決める唯一の手続き。契機(開始、通信の復帰、見える状態)と、画面の依頼を受けて、記録の制御と取り直しの制御を動かす。
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createRoundSync(deps: {
   control: RoundRecordControl;
   refresh: RoundRefreshControl;
   session: Pick<SessionReader, "readSession">;
-  clock: Clock;
   connectivity: Connectivity;
 }) {
-  const { control, refresh, session, clock, connectivity } = deps;
+  const { control, refresh, session, connectivity } = deps;
   let active = false;
   // 開始と停止のたびに進める。停止をまたぐ古い処理が、新しい状態を変えないため。
   let epoch = 0;
@@ -48,18 +45,8 @@ export function createRoundSync(deps: {
   // ラウンドごとの、最後に実行を始めた開く依頼の番号。同じ番号のあいだは、記録の知らせが何度届いても、実行を重ねない。
   const startedOpen = new Map<string, number>();
   const refetchLane: RoundLane = { gates: new Map(), reruns: new Map() };
-  // 端末のベースで開いている間の取り直しの時計。
-  const staleClock = createStaleClock({
-    clock,
-    connectivity,
-    isActive: () => active,
-    refetch: (roundId) => refetchRound(roundId, "stale"),
-    stillStale: (roundId) => needOf(roundId)?.reason === "stale",
-  });
   // 前回の見直しで要ると判断した理由。新しく要る(または理由が変わった)ときだけ取り直しを始める。
   const lastReasons = new Map<string, RefreshReason>();
-  // 前回の見直しで、主の理由が stale のときに添えられていた diverged と overlay。overlay が新しく当たったかを知るため。
-  const lastExtras = new Map<string, ReadonlySet<RefreshReason>>();
   let stopNeeds: (() => void) | undefined;
 
   // 常駐の前段。サインイン済みで、記録の利用者と同じときだけ通る。
@@ -181,43 +168,6 @@ export function createRoundSync(deps: {
     void openRun(need.roundId);
   }
 
-  // 主の理由が stale のときに添えられた理由のうち、diverged と overlay。
-  function extrasOf(need: {
-    reason: RefreshReason;
-    reasons: readonly RefreshReason[];
-  }): ReadonlySet<RefreshReason> {
-    // 主の理由が stale のときだけ数える(それ以外は、主の理由の扱いに任せる)。
-    if (need.reason !== "stale") return new Set();
-    return new Set(
-      need.reasons.filter((r) => r === "diverged" || r === "overlay"),
-    );
-  }
-
-  // 主の理由が stale の間に、効かなかった結果(diverged)や重ねられなかった操作(overlay)が加わったら、時計とは別にすぐ取り直す。
-  // 時計と試行の番号は、止めず、進めない。diverged は通知ごとに、overlay は新しく当たったときだけ求める。
-  function requestExtraRefetch(
-    need: {
-      roundId: string;
-      reason: RefreshReason;
-      reasons: readonly RefreshReason[];
-    },
-    offline: boolean,
-  ) {
-    if (need.reason !== "stale") return;
-    if (need.reasons.includes("diverged")) {
-      if (shouldRefetch(NOT_OPEN_REQUEST, offline)) {
-        void refetchRound(need.roundId, "diverged");
-      }
-      return;
-    }
-    const isNewOverlay =
-      need.reasons.includes("overlay") &&
-      !lastExtras.get(need.roundId)?.has("overlay");
-    if (isNewOverlay && shouldRefetch(NOT_OPEN_REQUEST, offline)) {
-      void refetchRound(need.roundId, "overlay");
-    }
-  }
-
   // 依頼と記録の変化から、取り直しの要否を見直す。
   function evaluate() {
     if (!active) return;
@@ -227,22 +177,10 @@ export function createRoundSync(deps: {
       startOpenRun(need);
       // 効かなかった結果は通知ごとに取り直す(実行中に届いたものは完了後に1回やり直す)。印は取り直しの開始で消えるため、繰り返さない。
       if (isNewNeed(need)) applyNeed(need, offline);
-      requestExtraRefetch(need, offline);
     }
     // 今回の要否を、次の見直しの比べる元にする(要否に無いラウンドは除く)。
     lastReasons.clear();
-    lastExtras.clear();
-    for (const need of needs.rounds) {
-      lastReasons.set(need.roundId, need.reason);
-      lastExtras.set(need.roundId, extrasOf(need));
-    }
-    staleClock.keepOnly(
-      new Set(
-        needs.rounds
-          .filter((need) => need.reason === "stale")
-          .map((need) => need.roundId),
-      ),
-    );
+    for (const need of needs.rounds) lastReasons.set(need.roundId, need.reason);
   }
 
   // 新しく要る(または理由が変わった)か。効かなかった結果は、通知ごとに新しいとする。
@@ -256,26 +194,14 @@ export function createRoundSync(deps: {
     );
   }
 
-  // 端末のベースで開いたままの詳細は時計で取り直し、他の理由はすぐに取り直す。
+  // 開く依頼は依頼ごとに別に実行する。他の理由(diverged、overlay)は、オフラインでなければすぐに取り直す。
   function applyNeed(
     need: { roundId: string; reason: RefreshReason },
     offline: boolean,
   ) {
     if (need.reason === "open") return;
-    if (need.reason === "stale") {
-      if (!staleClock.has(need.roundId)) staleClock.schedule(need.roundId);
-    } else if (shouldRefetch(NOT_OPEN_REQUEST, offline)) {
+    if (shouldRefetch(NOT_OPEN_REQUEST, offline)) {
       void refetchRound(need.roundId, need.reason);
-    }
-  }
-
-  // 通信の復帰と見える状態で、端末のベースで開いている詳細の取り直しを、試行を0から数え直して始める。
-  function restartStale() {
-    for (const need of refresh.refreshNeeds().rounds) {
-      if (need.reason !== "stale") continue;
-      staleClock.resetAttempts(need.roundId);
-      void refetchRound(need.roundId, "stale");
-      staleClock.schedule(need.roundId);
     }
   }
 
@@ -295,13 +221,11 @@ export function createRoundSync(deps: {
       epoch += 1;
       stopNeeds?.();
       stopNeeds = undefined;
-      staleClock.dispose();
       residentGate = IDLE_GATE;
       startedOpen.clear();
       refetchLane.gates.clear();
       refetchLane.reruns.clear();
       lastReasons.clear();
-      lastExtras.clear();
       control.stop();
       refresh.reset();
     },
@@ -309,16 +233,9 @@ export function createRoundSync(deps: {
     signInChanged(change: SignInChange) {
       control.signInChanged(change);
     },
-    online() {
+    // 通信の復帰と画面が見える状態。常駐の一括の取得を頼む。
+    resume() {
       requestResident();
-      restartStale();
-    },
-    offline() {
-      staleClock.pause();
-    },
-    visible() {
-      requestResident();
-      restartStale();
     },
   };
 }

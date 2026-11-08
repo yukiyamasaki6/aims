@@ -4,7 +4,6 @@ import type {
   RoundRecordControl,
   RoundRefreshControl,
 } from "@/features/rounds";
-import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakeConnectivity } from "@/lib/connectivity/fake-connectivity-test-helpers";
 import { createRoundSync } from "./round-sync";
 
@@ -18,7 +17,6 @@ type Reading = Awaited<ReturnType<SessionReader["readSession"]>>;
 function setup(
   options: { reading?: Reading; match?: "same" | "other" | "unowned" } = {},
 ) {
-  const clock = createManualClock();
   const connectivity = createFakeConnectivity();
   // 同期の手続きは通信の可否を読むだけで、通知は契機の受け取りが同期の操作へ変えるため、可否だけを替える。
   const network = {
@@ -72,12 +70,10 @@ function setup(
     control,
     refresh,
     session,
-    clock,
     connectivity,
   });
   return {
     sync,
-    clock,
     network,
     needs,
     state,
@@ -115,7 +111,7 @@ const roundNeedWith = (
 ) => roundNeed(roundId, reasons[0], openRequest, reasons);
 
 describe("開始と停止", () => {
-  it("開始で記録の制御を始め、2回目の開始は何もしない。停止で購読と時計を止め、記録の制御を止めて取り直しの依頼を初期化する", async () => {
+  it("開始で記録の制御を始め、2回目の開始は何もしない。停止で購読を止め、記録の制御を止めて取り直しの依頼を初期化する", async () => {
     // Given
     const t = setup();
     t.sync.start("user-1");
@@ -211,24 +207,21 @@ describe("常駐の一括の取得", () => {
     expect(t.refreshAll).toHaveBeenCalledTimes(1);
   });
 
-  it("通信の復帰と見える状態でも同じ前段を通って取得する。切断では取得しない", async () => {
+  it("通信の復帰と見える状態(resume)でも同じ前段を通って取得し、取り直しは呼ばない", async () => {
     // Given
     const t = setup();
     t.sync.start("user-1");
     await flush();
 
     // When
-    t.sync.offline();
+    t.sync.resume();
     await flush();
-    const afterOffline = t.refreshAll.mock.calls.length;
-    t.sync.online();
-    await flush();
-    t.sync.visible();
+    t.sync.resume();
     await flush();
 
     // Then
-    expect(afterOffline).toBe(1);
     expect(t.refreshAll).toHaveBeenCalledTimes(3);
+    expect(t.refreshRound).not.toHaveBeenCalled();
   });
 
   it("前段を通らなかった開始の後でも、通信の復帰では、前段を通れば取得する", async () => {
@@ -239,7 +232,7 @@ describe("常駐の一括の取得", () => {
     t.session.reading = { status: "authenticated", userId: "user-1" };
 
     // When
-    t.sync.online();
+    t.sync.resume();
     await flush();
 
     // Then
@@ -254,7 +247,7 @@ describe("常駐の一括の取得", () => {
     await flush();
 
     // When
-    t.sync.online();
+    t.sync.resume();
     await flush();
 
     // Then
@@ -270,9 +263,9 @@ describe("常駐の一括の取得", () => {
     await flush();
 
     // When
-    t.sync.visible();
-    t.sync.online();
-    t.sync.visible();
+    t.sync.resume();
+    t.sync.resume();
+    t.sync.resume();
     await flush();
     const whileRunning = t.refreshAll.mock.calls.length;
     first.resolve();
@@ -301,7 +294,7 @@ describe("停止をまたぐ一括の取得", () => {
     // When
     old.resolve();
     await flush();
-    t.sync.visible();
+    t.sync.resume();
     await flush();
     const whileCurrentRuns = t.refreshAll.mock.calls.length;
     current.resolve();
@@ -347,54 +340,30 @@ describe("取得の扉は互いを待たない", () => {
     expect(t.refreshRound).toHaveBeenCalledTimes(3);
   });
 
-  describe("予約された取り直しと開く依頼", () => {
-    // 時計の期限でstaleの取得を始め、その実行中にdivergedの知らせで予約を入れ、理由をopenに変える。
-    async function reservedThenOpen() {
-      const t = setup();
-      const run1 = Promise.withResolvers<"ok">();
-      const open = Promise.withResolvers<"ok">();
-      t.refreshRound
-        .mockReturnValueOnce(run1.promise)
-        .mockReturnValueOnce(open.promise);
-      t.needs.current = needsOf([roundNeed("r1", "stale")]);
-      t.sync.start("user-1");
-      await t.clock.advanceAsync(3000);
-      const afterDeadline = t.refreshRound.mock.calls.length;
-      t.changeNeeds(needsOf([roundNeed("r1", "diverged")]));
-      const afterReservation = t.refreshRound.mock.calls.length;
-      t.changeNeeds(needsOf([roundNeed("r1", "open")]));
-      await flush();
-      run1.resolve("ok");
-      await flush();
-      return { t, open, afterDeadline, afterReservation };
-    }
+  it("予約された取り直しは、理由がopenに変わっていると、完了後にやり直さない", async () => {
+    // Given
+    const t = setup();
+    const run1 = Promise.withResolvers<"ok">();
+    const open = Promise.withResolvers<"ok">();
+    t.refreshRound
+      .mockReturnValueOnce(run1.promise)
+      .mockReturnValueOnce(open.promise);
+    t.needs.current = needsOf([roundNeed("r1", "diverged")]);
+    t.sync.start("user-1");
+    await flush();
+    const afterStart = t.refreshRound.mock.calls.length;
 
-    it("予約された取り直しは、理由がopenに変わっていると、完了後にやり直さない", async () => {
-      // Given
-      // When
-      const { t, afterDeadline, afterReservation } = await reservedThenOpen();
+    // When
+    t.changeNeeds(needsOf([roundNeed("r1", "diverged")]));
+    const afterReservation = t.refreshRound.mock.calls.length;
+    t.changeNeeds(needsOf([roundNeed("r1", "open")]));
+    await flush();
+    run1.resolve("ok");
+    await flush();
 
-      // Then
-      expect([afterDeadline, afterReservation]).toEqual([1, 1]);
-      expect(t.refreshRound).toHaveBeenCalledTimes(2);
-    });
-
-    it("開く依頼が解決して理由がstaleに戻ると、時計の期限の後に取り直しが始まる", async () => {
-      // Given
-      const { t, open } = await reservedThenOpen();
-
-      // When
-      open.resolve("ok");
-      t.changeNeeds(needsOf([roundNeed("r1", "stale")]));
-      await t.clock.advanceAsync(5999);
-      const beforeDeadline = t.refreshRound.mock.calls.length;
-      await t.clock.advanceAsync(1);
-
-      // Then
-      // 最初のstaleの取得の続きで試行番号が1になるため、待機は6000msである。
-      expect(beforeDeadline).toBe(2);
-      expect(t.refreshRound).toHaveBeenCalledTimes(3);
-    });
+    // Then
+    expect([afterStart, afterReservation]).toEqual([1, 1]);
+    expect(t.refreshRound).toHaveBeenCalledTimes(2);
   });
 
   // 停止前の実行が実行中のまま、再開後の扉が新しい取得を始められること(扉が空になること)を、扉ごとに確かめる。
@@ -407,7 +376,7 @@ describe("取得の扉は互いを待たない", () => {
           .mockReturnValueOnce(old as Promise<void>)
           .mockReturnValueOnce(current as Promise<void>);
       },
-      overlap: (t: T) => t.sync.visible(),
+      overlap: (t: T) => t.sync.resume(),
       count: (t: T) => t.refreshAll.mock.calls.length,
       value: undefined as unknown,
     },
@@ -691,398 +660,40 @@ describe("ラウンドごとの取り直し", () => {
     expect(t.refreshRound).toHaveBeenCalledTimes(2);
   });
 
-  describe("端末のベースで開いている間", () => {
-    const staleNeeds = (): Needs => needsOf([roundNeed("r1", "stale")]);
+  it("主の理由がopenのときは、reasonsにdivergedがあっても、開く依頼の実行の1回だけを始める", async () => {
+    // Given
+    const t = setup();
+    const withOpen = () => needsOf([roundNeedWith("r1", ["open", "diverged"])]);
+    t.needs.current = withOpen();
+    t.sync.start("user-1");
 
-    it("3秒から倍に伸ばした間隔で、取得できるまで取り直す", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = staleNeeds();
-      t.sync.start("user-1");
-      await flush();
+    // When
+    await flush();
+    const afterStart = t.refreshRound.mock.calls.length;
+    t.changeNeeds(withOpen());
+    t.changeNeeds(withOpen());
+    await flush();
 
-      // When
-      await t.clock.advanceAsync(2999);
-      const beforeFirst = t.refreshRound.mock.calls.length;
-      await t.clock.advanceAsync(1);
-      const afterFirst = t.refreshRound.mock.calls.length;
-      await t.clock.advanceAsync(5999);
-      const beforeSecond = t.refreshRound.mock.calls.length;
-      await t.clock.advanceAsync(1);
-
-      // Then
-      expect([beforeFirst, afterFirst, beforeSecond]).toEqual([0, 1, 1]);
-      expect(t.refreshRound).toHaveBeenCalledTimes(2);
-    });
-
-    it("取得できて端末のベースで開いている状態でなくなったら、時計を止める", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = staleNeeds();
-      t.sync.start("user-1");
-      await flush();
-
-      // When
-      t.changeNeeds(needsOf());
-      await t.clock.advanceAsync(60_000);
-
-      // Then
-      expect(t.refreshRound).not.toHaveBeenCalled();
-      expect(t.clock.pendingCount()).toBe(0);
-    });
-
-    it("オフラインの間は取り直さず、切断で時計を止め、通信の復帰で試行を0から数え直して取り直す", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = staleNeeds();
-      t.sync.start("user-1");
-      await flush();
-      await t.clock.advanceAsync(3000);
-      t.sync.offline();
-      t.network.offline = true;
-      const pendingAfterOffline = t.clock.pendingCount();
-      await t.clock.advanceAsync(60_000);
-      const whileOffline = t.refreshRound.mock.calls.length;
-
-      // When
-      t.network.offline = false;
-      t.sync.online();
-      await flush();
-      const afterOnline = t.refreshRound.mock.calls.length;
-      await t.clock.advanceAsync(3000);
-
-      // Then
-      expect(pendingAfterOffline).toBe(0);
-      expect(whileOffline).toBe(1);
-      expect(afterOnline).toBe(2);
-      expect(t.refreshRound).toHaveBeenCalledTimes(3);
-    });
-
-    it("見える状態になったときに、試行を0から数え直して取り直す", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = staleNeeds();
-      t.sync.start("user-1");
-      await flush();
-      await t.clock.advanceAsync(3000);
-      await t.clock.advanceAsync(6000);
-
-      // When
-      t.sync.visible();
-      await flush();
-
-      // Then
-      expect(t.refreshRound).toHaveBeenCalledTimes(3);
-    });
-
-    it("端末のベースで開いている詳細だけを取り直し、ほかの理由の詳細は通信の復帰で取り直さない", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = needsOf([roundNeed("quiet", "overlay")]);
-      t.sync.start("user-1");
-      await flush();
-      t.refreshRound.mockClear();
-
-      // When
-      t.sync.online();
-      await flush();
-
-      // Then
-      expect(t.refreshRound).not.toHaveBeenCalled();
-    });
-
-    it("詳細を閉じた後は、実行中に予約された再取得を実行しない", async () => {
-      // Given
-      const t = setup();
-      const running = Promise.withResolvers<"ok">();
-      t.refreshRound.mockReturnValueOnce(running.promise);
-      t.needs.current = needsOf([roundNeed("r1", "diverged")]);
-      t.sync.start("user-1");
-      await flush();
-      t.changeNeeds(needsOf([roundNeed("r1", "overlay")]));
-
-      // When
-      t.changeNeeds(needsOf());
-      running.resolve("ok");
-      await flush();
-
-      // Then
-      expect(t.refreshRound).toHaveBeenCalledTimes(1);
-    });
-
-    it("詳細を開き直すと、試行番号を引き継がず、0から3秒で取り直す", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = staleNeeds();
-      t.sync.start("user-1");
-      await flush();
-      await t.clock.advanceAsync(3000);
-      await t.clock.advanceAsync(6000);
-      t.changeNeeds(needsOf());
-      const before = t.refreshRound.mock.calls.length;
-
-      // When
-      t.changeNeeds(staleNeeds());
-      await t.clock.advanceAsync(2999);
-      const early = t.refreshRound.mock.calls.length;
-      await t.clock.advanceAsync(1);
-
-      // Then
-      expect(early).toBe(before);
-      expect(t.refreshRound).toHaveBeenCalledTimes(before + 1);
-    });
-
-    it("閉じる前から実行中だった取得の完了は、開き直した後の試行番号を進めない", async () => {
-      // Given
-      const t = setup();
-      const old = Promise.withResolvers<"ok">();
-      t.refreshRound.mockReturnValueOnce(old.promise);
-      t.needs.current = staleNeeds();
-      t.sync.start("user-1");
-      await flush();
-      await t.clock.advanceAsync(3000);
-      t.changeNeeds(needsOf());
-      t.changeNeeds(staleNeeds());
-      await t.clock.advanceAsync(3000);
-      old.resolve("ok");
-      await flush();
-      const afterFirst = t.refreshRound.mock.calls.length;
-
-      // When
-      await t.clock.advanceAsync(6000);
-
-      // Then
-      expect(afterFirst).toBe(2);
-      expect(t.refreshRound).toHaveBeenCalledTimes(3);
-    });
-
-    it("停止で時計を止める", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = staleNeeds();
-      t.sync.start("user-1");
-      await flush();
-
-      // When
-      t.sync.stop();
-
-      // Then
-      expect(t.clock.pendingCount()).toBe(0);
-    });
+    // Then
+    expect(afterStart).toBe(1);
+    expect(t.refreshRound).toHaveBeenCalledTimes(1);
   });
 
-  describe("端末のベースで開いている間に、差を知った時点で取り直す", () => {
-    const staleWith = (...extra: RefreshReason[]) =>
-      needsOf([roundNeedWith("r1", ["stale", ...extra])]);
-    const calls = (t: ReturnType<typeof setup>) =>
-      t.refreshRound.mock.calls.length;
+  it("主の理由がdivergedのときは、reasonsにoverlayが加わっていても、知らせごとに取り直しを1回だけ求める", async () => {
+    // Given
+    const t = setup();
+    const diverged = () =>
+      needsOf([roundNeedWith("r1", ["diverged", "overlay"])]);
+    t.needs.current = diverged();
+    t.sync.start("user-1");
+    await flush();
 
-    it("主の理由がstaleの間にreasonsへdivergedが加わると、時計の期限を待たずに取り直す。時計(元の期限)と試行の番号は変えない", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = staleWith();
-      t.sync.start("user-1");
-      await flush();
-      await t.clock.advanceAsync(1000);
+    // When
+    t.changeNeeds(diverged());
+    await flush();
 
-      // When
-      t.changeNeeds(staleWith("diverged"));
-      await flush();
-      const afterJoin = calls(t);
-      await t.clock.advanceAsync(1999);
-      const beforeDeadline = calls(t);
-      await t.clock.advanceAsync(1);
-      const atDeadline = calls(t);
-      await t.clock.advanceAsync(5999);
-      const beforeSecond = calls(t);
-      await t.clock.advanceAsync(1);
-
-      // Then
-      expect([afterJoin, beforeDeadline, atDeadline, beforeSecond]).toEqual([
-        1, 1, 2, 2,
-      ]);
-      expect(t.refreshRound).toHaveBeenCalledTimes(3);
-    });
-
-    it("divergedが続く間は、知らせのたびに取り直しを求める。時計の期限は動かない", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = staleWith();
-      t.sync.start("user-1");
-      await flush();
-      await t.clock.advanceAsync(1000);
-
-      // When
-      for (let i = 0; i < 3; i += 1) {
-        t.changeNeeds(staleWith("diverged"));
-        await flush();
-      }
-      const afterNotices = calls(t);
-      await t.clock.advanceAsync(1999);
-      const beforeDeadline = calls(t);
-      await t.clock.advanceAsync(1);
-
-      // Then
-      expect(afterNotices).toBe(3);
-      expect(beforeDeadline).toBe(3);
-      expect(t.refreshRound).toHaveBeenCalledTimes(4);
-    });
-
-    it("時計の取り直しの実行中にdivergedが加わると、重ねて始めず、完了後に1回だけやり直す。完了後の時計は、今の規則の6000msで続く", async () => {
-      // Given
-      const t = setup();
-      const running = Promise.withResolvers<"ok">();
-      t.refreshRound.mockReturnValueOnce(running.promise);
-      t.needs.current = staleWith();
-      t.sync.start("user-1");
-      await t.clock.advanceAsync(3000);
-
-      // When
-      t.changeNeeds(staleWith("diverged"));
-      t.changeNeeds(staleWith("diverged"));
-      t.changeNeeds(staleWith("diverged"));
-      await flush();
-      const whileRunning = calls(t);
-      running.resolve("ok");
-      await flush();
-      const afterRerun = calls(t);
-      await t.clock.advanceAsync(5999);
-      const beforeNext = calls(t);
-      await t.clock.advanceAsync(1);
-
-      // Then
-      expect([whileRunning, afterRerun, beforeNext]).toEqual([1, 2, 2]);
-      expect(t.refreshRound).toHaveBeenCalledTimes(3);
-    });
-
-    it("主の理由がstaleの間にreasonsへoverlayが加わると、すぐ1回取り直す。overlayが続く間の知らせでは重ねない。時計の期限は動かない", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = staleWith();
-      t.sync.start("user-1");
-      await flush();
-      await t.clock.advanceAsync(1000);
-
-      // When
-      t.changeNeeds(staleWith("overlay"));
-      await flush();
-      const afterJoin = calls(t);
-      t.changeNeeds(staleWith("overlay"));
-      t.changeNeeds(staleWith("overlay"));
-      await flush();
-      const afterRepeat = calls(t);
-      await t.clock.advanceAsync(1999);
-      const beforeDeadline = calls(t);
-      await t.clock.advanceAsync(1);
-
-      // Then
-      expect([afterJoin, afterRepeat, beforeDeadline]).toEqual([1, 1, 1]);
-      expect(t.refreshRound).toHaveBeenCalledTimes(2);
-    });
-
-    it("overlayが外れてまた当たると、新しく当たったものとして1回取り直す。時計の期限は動かない", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = staleWith();
-      t.sync.start("user-1");
-      await flush();
-      await t.clock.advanceAsync(1000);
-      t.changeNeeds(staleWith("overlay"));
-      await flush();
-
-      // When
-      t.changeNeeds(staleWith());
-      await flush();
-      const afterRemoved = calls(t);
-      t.changeNeeds(staleWith("overlay"));
-      await flush();
-      const afterRejoin = calls(t);
-      await t.clock.advanceAsync(1999);
-      const beforeDeadline = calls(t);
-      await t.clock.advanceAsync(1);
-
-      // Then
-      expect([afterRemoved, afterRejoin, beforeDeadline]).toEqual([1, 2, 2]);
-      expect(t.refreshRound).toHaveBeenCalledTimes(3);
-    });
-
-    it("停止して再開すると、overlayが当たっていれば1回取り直す。時計は再開の時点から3000msで数え直す", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = staleWith();
-      t.sync.start("user-1");
-      await flush();
-      await t.clock.advanceAsync(1000);
-      t.changeNeeds(staleWith("overlay"));
-      await flush();
-
-      // When
-      t.sync.stop();
-      t.sync.start("user-1");
-      await flush();
-      const afterRestart = calls(t);
-      await t.clock.advanceAsync(2999);
-      const beforeDeadline = calls(t);
-      await t.clock.advanceAsync(1);
-
-      // Then
-      expect([afterRestart, beforeDeadline]).toEqual([2, 2]);
-      expect(t.refreshRound).toHaveBeenCalledTimes(3);
-    });
-
-    it("オフラインでは、主の理由がstaleの間にdivergedかoverlayが加わっても取り直さない", async () => {
-      // Given
-      const t = setup();
-      t.needs.current = staleWith();
-      t.sync.start("user-1");
-      await flush();
-      t.network.offline = true;
-
-      // When
-      t.changeNeeds(staleWith("diverged"));
-      t.changeNeeds(staleWith("overlay"));
-      await flush();
-
-      // Then
-      expect(t.refreshRound).not.toHaveBeenCalled();
-    });
-
-    it("主の理由がopenのときは、reasonsにstaleやdivergedがあっても、開く依頼の実行の1回だけを始める", async () => {
-      // Given
-      const t = setup();
-      const withOpen = () =>
-        needsOf([roundNeedWith("r1", ["open", "stale", "diverged"])]);
-      t.needs.current = withOpen();
-      t.sync.start("user-1");
-
-      // When
-      await flush();
-      const afterStart = calls(t);
-      t.changeNeeds(withOpen());
-      t.changeNeeds(withOpen());
-      await flush();
-
-      // Then
-      expect(afterStart).toBe(1);
-      expect(t.refreshRound).toHaveBeenCalledTimes(1);
-    });
-
-    it("主の理由がdivergedのときは、reasonsにoverlayが加わっていても、知らせごとに取り直しを1回だけ求める", async () => {
-      // Given
-      const t = setup();
-      const diverged = () =>
-        needsOf([roundNeedWith("r1", ["diverged", "overlay"])]);
-      t.needs.current = diverged();
-      t.sync.start("user-1");
-      await flush();
-
-      // When
-      t.changeNeeds(diverged());
-      await flush();
-
-      // Then
-      expect(t.refreshRound).toHaveBeenCalledTimes(2);
-    });
+    // Then
+    expect(t.refreshRound).toHaveBeenCalledTimes(2);
   });
 });
 

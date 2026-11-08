@@ -304,7 +304,6 @@ describe("RootClientEntry", () => {
         base: roundBase().tables,
         targetFaces: [],
         pendingCreationEventId: null,
-        source: "server",
       });
       const appending = handle?.append(created);
       await Promise.resolve();

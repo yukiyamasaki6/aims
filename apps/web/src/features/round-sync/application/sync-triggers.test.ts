@@ -12,7 +12,6 @@ import { createSyncTriggers, type Visibility } from "./sync-triggers";
 function setup(initialUserId: string | null = "user-1") {
   const signIn = new Set<(change: SignInChange) => void>();
   const online = new Set<() => void>();
-  const offline = new Set<() => void>();
   const visible = new Set<() => void>();
   const changes: SignInChanges = {
     subscribe: (listener) => {
@@ -33,18 +32,12 @@ function setup(initialUserId: string | null = "user-1") {
       online.add(listener);
       return () => online.delete(listener);
     },
-    onOffline: (listener) => {
-      offline.add(listener);
-      return () => offline.delete(listener);
-    },
   };
   const sync = {
     start: vi.fn(),
     stop: vi.fn(),
     signInChanged: vi.fn(),
-    online: vi.fn(),
-    offline: vi.fn(),
-    visible: vi.fn(),
+    resume: vi.fn(),
   };
   const triggers = createSyncTriggers({
     identityReader,
@@ -63,9 +56,6 @@ function setup(initialUserId: string | null = "user-1") {
       online: () => {
         for (const listener of [...online]) listener();
       },
-      offline: () => {
-        for (const listener of [...offline]) listener();
-      },
       visible: () => {
         for (const listener of [...visible]) listener();
       },
@@ -73,7 +63,6 @@ function setup(initialUserId: string | null = "user-1") {
     counts: () => ({
       signIn: signIn.size,
       online: online.size,
-      offline: offline.size,
       visible: visible.size,
     }),
   };
@@ -94,8 +83,7 @@ describe("認証の通知", () => {
 
     // Then
     expect(t.sync.signInChanged).toHaveBeenCalledExactlyOnceWith(change);
-    expect(t.sync.online).not.toHaveBeenCalled();
-    expect(t.sync.visible).not.toHaveBeenCalled();
+    expect(t.sync.resume).not.toHaveBeenCalled();
   });
 });
 
@@ -122,20 +110,17 @@ describe("通信と画面の状態", () => {
     expect(t.sync.start).toHaveBeenCalledExactlyOnceWith(null);
   });
 
-  it("通信の復帰はonline、切断はoffline、見える状態はvisibleにする", () => {
+  it("通信の復帰と見える状態は、どちらもresumeにする(切断は購読しない)", () => {
     // Given
     const t = setup();
     t.triggers.start();
 
     // When
     t.fire.online();
-    t.fire.offline();
     t.fire.visible();
 
     // Then
-    expect(t.sync.online).toHaveBeenCalledTimes(1);
-    expect(t.sync.offline).toHaveBeenCalledTimes(1);
-    expect(t.sync.visible).toHaveBeenCalledTimes(1);
+    expect(t.sync.resume).toHaveBeenCalledTimes(2);
   });
 
   it("停止で購読を全て解除し、同期を止める。停止の後に来た通知では何も呼ばない", () => {
@@ -147,18 +132,16 @@ describe("通信と画面の状態", () => {
     stop();
     t.emitSignIn({ kind: "signed-in", userId: "user-1" });
     t.fire.online();
-    t.fire.offline();
     t.fire.visible();
 
     // Then
     expect(t.counts()).toEqual({
       signIn: 0,
       online: 0,
-      offline: 0,
       visible: 0,
     });
     expect(t.sync.stop).toHaveBeenCalledTimes(1);
-    expect(t.sync.online).not.toHaveBeenCalled();
+    expect(t.sync.resume).not.toHaveBeenCalled();
     expect(t.sync.signInChanged).not.toHaveBeenCalled();
   });
 });

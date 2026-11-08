@@ -5,18 +5,14 @@ function isOffline(): boolean {
   return navigator.onLine === false;
 }
 
-function subscribe(
-  type: "online" | "offline",
-  listener: () => void,
-): () => void {
-  window.addEventListener(type, listener);
-  return () => window.removeEventListener(type, listener);
+function subscribeOnline(listener: () => void): () => void {
+  window.addEventListener("online", listener);
+  return () => window.removeEventListener("online", listener);
 }
 
 export function createBrowserConnectivity(): Connectivity {
   return {
     isOffline,
-    onOnline: (listener) => subscribe("online", listener),
-    onOffline: (listener) => subscribe("offline", listener),
+    onOnline: subscribeOnline,
   };
 }

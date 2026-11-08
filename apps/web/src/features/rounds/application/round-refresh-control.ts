@@ -4,20 +4,19 @@ import type { RoundBaseRefreshing } from "./round-base-refreshing";
 import type { RoundRecordHub } from "./round-record-hub";
 
 // 取り直しの理由を、優先の順に並べた唯一の定義。リテラル和型はここから導く。
-// open: 開いたとき、stale: 端末のベースで開いたまま、diverged: 効かなかった結果を受けた、overlay: 確定済みの操作をベースに重ねられなかった。
-const REFRESH_NEED_REASONS = ["open", "stale", "diverged", "overlay"] as const;
+// open: 開いたとき、diverged: 効かなかった結果を受けた、overlay: 確定済みの操作をベースに重ねられなかった。
+const REFRESH_NEED_REASONS = ["open", "diverged", "overlay"] as const;
 type RefreshNeedReason = (typeof REFRESH_NEED_REASONS)[number];
 
 // 他の機能へ公開する、取り直しの操作。引数と戻り値は、ラウンドのIDの文字列、理由と結果の種類の文字列、数、真偽だけで、ドメインの型は越えない。
 export type RoundRefreshControl = {
   // 取り直しが要るかを、ラウンドごとの理由で返す。理由は次の契約に従う。
-  // - 理由はラウンドごとに1つで、当たるもののうち open、stale、diverged、overlay の順に先のものを返す。
+  // - 理由はラウンドごとに1つで、当たるもののうち open、diverged、overlay の順に先のものを返す。
   //   open: 詳細を開く依頼が、結果を待っている。
-  //   stale: 端末のベースで開いた詳細が、まだ取得に成功していない。
   //   diverged: 送信の結果に、効かなかった操作か項目があった。
   //   overlay: 確定済みの操作を、ベースに重ねられなかった。
   // - reasons は、当たる全ての理由を同じ優先の順で並べる。reason は reasons の先頭である。
-  // - 先の理由が無くなると、残る理由のうち次のものを返す(例: 開く依頼が結果を受けると、端末のベースで開いた詳細の理由は stale になる)。
+  // - 先の理由が無くなると、残る理由のうち次のものを返す。
   // - openRequest は、依頼が届くたびに増える番号で、停止でも数え直さない。番号が同じあいだは、新しい依頼は届いていない。
   refreshNeeds(): {
     rounds: readonly {
@@ -53,7 +52,6 @@ export function createRoundRefreshControl(deps: {
     RefreshRequests,
     | "pendingOpens"
     | "watched"
-    | "outcomeOf"
     | "overlayNeeded"
     | "latestOpenRequest"
     | "reset"
@@ -65,20 +63,16 @@ export function createRoundRefreshControl(deps: {
 
   function refreshNeeds() {
     const pending = new Set(requests.pendingOpens());
-    const watched = new Map(
-      requests.watched().map((entry) => [entry.roundId, entry.local]),
-    );
+    const watched = new Set(requests.watched().map((entry) => entry.roundId));
     const rounds: {
       roundId: string;
       reason: RefreshNeedReason;
       reasons: RefreshNeedReason[];
       openRequest?: number;
     }[] = [];
-    for (const roundId of new Set([...pending, ...watched.keys()])) {
+    for (const roundId of new Set([...pending, ...watched])) {
       const reasons = reasonsOf({
         open: pending.has(roundId),
-        stale:
-          watched.get(roundId) === true && requests.outcomeOf(roundId) !== "ok",
         diverged: hub.divergedStreams().has(roundStreamId(roundId)),
         overlay: requests.overlayNeeded(roundId),
       });

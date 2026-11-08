@@ -420,7 +420,7 @@ describe("パスワード設定の共通の手続き", () => {
       await verifyCode(context, { email, code: "123456" }, viewOf(onCodeStep));
 
       // Then
-      expect(connectivity.subscribers()).toEqual({ online: 0, offline: 0 });
+      expect(connectivity.subscribers()).toEqual({ online: 0 });
     });
   });
 

@@ -19,28 +19,18 @@ const unauthenticated = { status: "unauthenticated" } as const;
 
 type Reading = Awaited<ReturnType<SessionReader["readSession"]>>;
 
-// 切断の状態と通知を、テストから動かせる通信の可否。
-// lib の createFakeConnectivity に置き換えない理由: 取得の途中で、購読者へ知らせずに切断の状態だけを替える検証
-// (HTTP応答のあるエラー(failed)はerrorのまま、時間切れはofflineを返す、など)があり、
-// lib の fake は状態を替えると必ず購読者へ知らせるため、同じ検証にならない。
+// 切断の状態を、テストから動かせる通信の可否。
 function makeConnectivity(offline = false) {
   const state = { offline };
-  const offlineListeners = new Set<() => void>();
   const connectivity: Connectivity = {
     isOffline: () => state.offline,
     onOnline: () => () => {},
-    onOffline: (listener) => {
-      offlineListeners.add(listener);
-      return () => offlineListeners.delete(listener);
-    },
   };
   return {
     connectivity,
     state,
-    offlineListeners,
     goOffline() {
       state.offline = true;
-      for (const listener of [...offlineListeners]) listener();
     },
   };
 }
@@ -269,18 +259,22 @@ describe("fetchContent", () => {
       expect(result).toEqual({ status: "error", reason: "failed" });
     });
 
-    it("サインインの読み取りの待機中にofflineの知らせが来ると、解決を待たずofflineにする", async () => {
+    it("サインインの読み取りの待機中に切断になっても、読み取りを待ち続け、打ち切りでofflineにする", async () => {
       // Given
-      const { fetcher, network } = setup({
+      const { fetcher, network, clock } = setup({
         readings: [() => new Promise<Reading>(() => {})],
       });
       const run = vi.fn(async () => okResponse);
       const pending = fetcher.fetchContent(run);
-
-      // When
       network.goOffline();
 
+      // When
+      await clock.advanceAsync(FETCH_TIMEOUT_MS - 1);
+      const early = await Promise.race([pending, Promise.resolve("waiting")]);
+      await clock.advanceAsync(1);
+
       // Then
+      expect(early).toBe("waiting");
       await expect(pending).resolves.toEqual({ status: "offline" });
       expect(run).not.toHaveBeenCalled();
     });
@@ -407,17 +401,6 @@ describe("fetchContent", () => {
       // Then
       expect(result).toEqual({ status: "ok", data: { id: "a" } });
       expect(clock.pendingCount()).toBe(0);
-    });
-
-    it("完了後に、offlineの購読を解除する", async () => {
-      // Given
-      const { fetcher, network } = setup();
-
-      // When
-      await fetcher.fetchContent(async () => okResponse);
-
-      // Then
-      expect(network.offlineListeners.size).toBe(0);
     });
 
     it("クエリが例外を投げると、固定文のerrorにする", async () => {
