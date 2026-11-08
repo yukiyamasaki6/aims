@@ -41,7 +41,7 @@
 
 ## 構成とデータの流れ
 
-- `app/(main)/rounds/[id]/page.tsx`: 静的な枠の画面の入口。`generateStaticParams`で`/rounds/_`だけをプリレンダーし（`dynamicParams = false`）、取得も`cookies()`も使わない。`/rounds/<ID>`はnext.configのrewriteで`/rounds/_`の枠へ向ける。何も生成せず、`RoundDetailClient`を描くだけである。
+- `app/(main)/rounds/[id]/page.tsx`: 静的な枠の画面。`generateStaticParams`で`/rounds/_`だけをプリレンダーし（`dynamicParams = false`）、取得も`cookies()`も使わない。`/rounds/<ID>`はnext.configのrewriteで`/rounds/_`の枠へ向ける。何も生成せず、`RoundDetailClient`を描くだけである。
 - `features/rounds/ui/round-detail-client.tsx`: `usePathname()`のIDで取得し、状態に応じて枠の内表示かスコアカードを出す。列に削除があれば読み込みが見つからないを返し、枠の中の見つからない表示になる。的の一覧は読み込みの結果に含まれ、`ScorecardClient`へそのまま渡す。開いている間に他の端末で削除されたと分かったとき、端末のベースで開いたラウンドが取り直したサーバーに無いと分かったとき(削除済みなど)は、`ScorecardClient`の`onGone`で見つからない状態にし、スコアカードを外して枠の中の見つからない表示にする。作成が確定せずに消えたら取り直す(`features/rounds/ui/use-creation-gone.ts`)。読み込みの全体を`withinFetchTimeout`で10秒に打ち切る(`app/offline-pwa`)。
 - `features/rounds/domain/round-routes.ts`の`roundIdOfPath`: pathnameからUUIDを取り出す、経路の判定の関数。UUIDでなければ`null`で、問い合わせずに見つからないとする。
 - `features/rounds/infrastructure/round-queries.ts`、`features/rounds/application/round-fetching.ts`: 問い合わせの組み立てと行の写しはインフラ層、取得の順序は手続きが持つ。ラウンド・距離・矢を1回のネスト取得、的を1回の取得で得る。インフラ層が応答を`QueryOutcome`の種類へ写し(`db-response-outcome.ts`)、`content-fetcher.ts`が`fetchResultOf`(`domain/fetch-status.ts`。固定文を付けるのはこの関数だけ)を呼んで`FetchResult`にする。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。的の取得(`fetchTargetFaces`)は、作成が未確定のラウンドの読み込みが使う。成功した一覧を端末に保存し(`features/rounds/infrastructure/reference-snapshot.ts`)、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず保存する。`fetchRoundDetail`は的を保存するが、代わりは持たず待ちは10秒のままである。一括の取得(`fetchRoundDetails`)も、的を保存する。
@@ -56,30 +56,30 @@
 - `features/rounds/ui/distance-section.tsx`: 距離ごとのカード(見出し、編集、小計、エンドの行)。
 - `features/rounds/domain/scorecard-scoring.ts`: 距離とラウンドの集計、エンドの小計を求める純粋関数。
 
-## 対応表
+## ファイルと層
 
 詳細の画面の部品の置き場である。`app/(main)/rounds/[id]/`には`page.tsx`と`page.test.tsx`だけが残る。
 
-| ファイル | 用語 |
+| ファイル | 層 |
 | :--- | :--- |
-| `app/(main)/rounds/[id]/page.tsx` | 画面の入口(サーバー専用の宣言を持ち、クライアントの部品を描くだけ) |
-| `app/root-client-entry.tsx` | アプリの起動地点(完了と保存の手続きと遷移の`replace`を生成する) |
-| `features/rounds/ui/round-detail-client.tsx`、`round-detail-frame.tsx`、`back-to-list-link.tsx` | UI層(取得の表示の切り替え、取得中などの枠、一覧へ戻るリンク) |
-| `features/rounds/ui/scorecard-client.tsx`、`scorecard-header-bar.tsx`、`round-summary-bar.tsx` | UI層(スコアカードの組み立て、上端の帯、合計の帯) |
-| `features/rounds/ui/round-config-panel.tsx`、`round-menu.tsx`、`save-preset-dialog.tsx`、`save-preset-dialog-state.ts` | UI層(設定のパネルと編集のダイアログ、メニューと削除の確認、保存のダイアログの描画と状態) |
-| `features/rounds/ui/distance-section.tsx`、`distance-edit-fields.tsx`、`distance-fields.tsx`、`use-distance-draft.ts`、`target-face-picker.tsx`、`end-row.tsx` | UI層(距離のカード、距離の編集のダイアログと操作、編集フォームの欄の描画、編集フォームの下書きと検証・保存・削除、的の選択、エンドの行) |
-| `features/rounds/ui/keypad-buttons.tsx`、`keypad-panel.tsx`、`bottom-frame.tsx`、`complete-round-bar.tsx` | UI層(テンキー、横向きのパネル、縦向きの下端の枠、完了の帯と確認) |
-| `features/rounds/ui/use-scorecard.ts`、`use-round-op-stack.ts`、`use-score-history.ts`、`use-shot-input.ts`、`use-reconciled-pointer.ts`、`use-distance-editing.ts`、`use-keypad.ts`、`use-reorder-animation.ts`、`use-creation-gone.ts`、`scroll-to-pointer.ts` | UI層(画面の状態と操作) |
-| `features/rounds/ui/color-tone.ts` | UI層(16進の色から文字色と薄い色を求める計算。使い手はラウンドの機能だけ) |
-| `features/rounds/domain/shot-pointer.ts`、`score-history.ts`、`shot-operations.ts` | ドメイン層(指している矢の遷移、取り消しの列、矢の操作の組み立て) |
-| `features/rounds/domain/round-progress.ts` | ドメイン層(完了の確認、状態を変える操作、入力中へ戻すかの判定`reopeningRequired`、削除の操作) |
-| `features/rounds/application/round-editing.ts` | 手続き(追記。完了のラウンドの編集で、続けて入力中へ戻す操作を積む) |
-| `features/rounds/domain/distance-config.ts`、`distance-operations.ts`、`target-face-filter.ts`、`position-key.ts` | ドメイン層(距離の設定の検証、距離の操作、的の絞り込み、位置キー) |
-| `features/rounds/domain/preset-save.ts`、`ring-color.ts`、`shot-id.ts`、`round-routes.ts`、`write-result.ts` | ドメイン層(保存するプリセットの内容、リング色、時刻順の矢のID、経路の判定、書き込みの文言) |
-| `features/rounds/application/round-leaving.ts`、`preset-saving.ts` | 手続き(完了、削除、削除して離れる。プリセットの保存) |
-| `features/rounds/application/preset-commands.ts`、`unique-ids.ts` | 手続きの約束(`PresetCommands`、`UniqueIds`) |
-| `features/rounds/application/round-detail-store.ts`、`round-handle.ts` | 手続き(詳細の画面に渡す状態と変更の方法、開いた詳細の購読の状態) |
-| `preset-commands.ts`、`browser-unique-ids.ts`、`rounds-db-schema.ts` | インフラ層(遷移、保存の書き込み、乱数の払い出し、保存の関数) |
+| `app/(main)/rounds/[id]/page.tsx` | 入口(サーバー専用の宣言を持ち、クライアントの部品を描くだけ) |
+| `app/root-client-entry.tsx` | 入口(完了と保存の手続きと遷移の`replace`を生成する) |
+| `features/rounds/ui/round-detail-client.tsx`、`round-detail-frame.tsx`、`back-to-list-link.tsx` | ui(取得の表示の切り替え、取得中などの枠、一覧へ戻るリンク) |
+| `features/rounds/ui/scorecard-client.tsx`、`scorecard-header-bar.tsx`、`round-summary-bar.tsx` | ui(スコアカードの組み立て、上端の帯、合計の帯) |
+| `features/rounds/ui/round-config-panel.tsx`、`round-menu.tsx`、`save-preset-dialog.tsx`、`save-preset-dialog-state.ts` | ui(設定のパネルと編集のダイアログ、メニューと削除の確認、保存のダイアログの描画と状態) |
+| `features/rounds/ui/distance-section.tsx`、`distance-edit-fields.tsx`、`distance-fields.tsx`、`use-distance-draft.ts`、`target-face-picker.tsx`、`end-row.tsx` | ui(距離のカード、距離の編集のダイアログと操作、編集フォームの欄の描画、編集フォームの下書きと検証・保存・削除、的の選択、エンドの行) |
+| `features/rounds/ui/keypad-buttons.tsx`、`keypad-panel.tsx`、`bottom-frame.tsx`、`complete-round-bar.tsx` | ui(テンキー、横向きのパネル、縦向きの下端の枠、完了の帯と確認) |
+| `features/rounds/ui/use-scorecard.ts`、`use-round-op-stack.ts`、`use-score-history.ts`、`use-shot-input.ts`、`use-reconciled-pointer.ts`、`use-distance-editing.ts`、`use-keypad.ts`、`use-reorder-animation.ts`、`use-creation-gone.ts`、`scroll-to-pointer.ts` | ui(画面の状態と操作) |
+| `features/rounds/ui/color-tone.ts` | ui(16進の色から文字色と薄い色を求める計算。使い手はラウンドの機能だけ) |
+| `features/rounds/domain/shot-pointer.ts`、`score-history.ts`、`shot-operations.ts` | domain(指している矢の遷移、取り消しの列、矢の操作の組み立て) |
+| `features/rounds/domain/round-progress.ts` | domain(完了の確認、状態を変える操作、入力中へ戻すかの判定`reopeningRequired`、削除の操作) |
+| `features/rounds/application/round-editing.ts` | application(追記。完了のラウンドの編集で、続けて入力中へ戻す操作を積む) |
+| `features/rounds/domain/distance-config.ts`、`distance-operations.ts`、`target-face-filter.ts`、`position-key.ts` | domain(距離の設定の検証、距離の操作、的の絞り込み、位置キー) |
+| `features/rounds/domain/preset-save.ts`、`ring-color.ts`、`shot-id.ts`、`round-routes.ts`、`write-result.ts` | domain(保存するプリセットの内容、リング色、時刻順の矢のID、経路の判定、書き込みの文言) |
+| `features/rounds/application/round-leaving.ts`、`preset-saving.ts` | application(完了、削除、削除して離れる。プリセットの保存) |
+| `features/rounds/application/preset-commands.ts`、`unique-ids.ts` | application(約束`PresetCommands`、`UniqueIds`) |
+| `features/rounds/application/round-detail-store.ts`、`round-handle.ts` | application(詳細の画面に渡す状態と変更の方法、開いた詳細の購読の状態) |
+| `preset-commands.ts`、`browser-unique-ids.ts`、`rounds-db-schema.ts` | infrastructure(遷移、保存の書き込み、乱数の払い出し、保存の関数) |
 
 集計は、点数を入力するたびにクライアントで再計算し、サーバーへ問い合わせない。
 取得の結果は`ScorecardClient`へ渡し、以降の更新は楽観的UIと操作の列で行って、再取得を待たない。
@@ -104,8 +104,8 @@
 | 一括の取得の対象を、入力中のラウンドと、端末に保持するラウンドにする。契機は、認証イベント(`INITIAL_SESSION`・`SIGNED_IN`でセッションがあるとき)、`online`、見える状態になったときで、時間の値は使わない | 他端末で作成し記録したラウンドを、この端末で一度も開かなくても、オフラインで開けるようにするため。完了で送信済みのラウンドは対象にしないため、端末の保存量が入力中の数で抑えられる | 放置された入力中のラウンドの保持の上限が要るとき |
 | 一括の取得で、端末のラウンドのIDを50件ごとの取得に分け、どれかが失敗すれば全体を失敗とする | IDはGETのURLに載るため、全件を1回に並べると保持の件数に比例して伸び、ゲートウェイが414で拒むため。一部の成功を反映すると、返らなかった保持のラウンドが削除の印になるため。POSTのRPCへ移す案は、ネスト取得と認可をDBの関数で作り直す必要があるため採らない | 保持の件数に上限を設けるとき、またはゲートウェイのURL長の上限が分かったとき |
 | 的の一覧がそろうまで、ラウンドの内容を出さない。そろうとは、取得に成功した一覧か、最後に取得に成功した一覧の保存分があることとする | 的の無い間は、テンキーがMだけ、玉がMの色になり、未確定の操作も的で判定できない。このため、内容を先に出して的を背景で取得するのをやめた。的は配布でしか変わらないため、件数や版で最新性を確かめない | 利用者が的を作れるようにするとき |
-| 完了、削除、一覧へ戻る遷移を共有の技術の約束(`PageNavigation`。`lib/page-navigation`)で表し、窓口に持たせる | 保存の後に進む順序を手続きに置き、画面が遷移の実装を持たないため(L01、R01) | 画面ごとに異なる遷移の方法が要るとき |
-| IDの払い出しを手続きの入れ物の`ids.next`と窓口の`newShotId`から受ける | 乱数と時刻を画面が直接読まず、手続きが約束から読むため(X01、R01)。操作の組み立てを全て手続きへ移す案は、`SyncOperation`(同期の契約の型。`eventId`が必須)のほかに下書きの型を足し、同じ操作を表す型が2つになるため採らない | 操作の組み立てを手続きへ移すとき |
+| 完了、削除、一覧へ戻る遷移を共有の技術の約束(`PageNavigation`。`lib/page-navigation`)で表し、窓口に持たせる | 保存の後に進む順序を手続きに置き、画面が遷移の実装を持たないため(R3) | 画面ごとに異なる遷移の方法が要るとき |
+| IDの払い出しを手続きの入れ物の`ids.next`と窓口の`newShotId`から受ける | 乱数と時刻を画面が直接読まず、手続きが約束から読むため。操作の組み立てを全て手続きへ移す案は、`SyncOperation`(同期の契約の型。`eventId`が必須)のほかに下書きの型を足し、同じ操作を表す型が2つになるため採らない | 操作の組み立てを手続きへ移すとき |
 | 導出の初期値を取得の中で求め、`ScorecardClient`のマウント後には行わない | サーバーの値が一瞬見えるちらつきを避け、最初に指す新しい矢が未送信の矢を含む状態で決まるようにするため | 取得と重ね合わせを分ける必要が出たとき |
 
 ## 制約と未対応

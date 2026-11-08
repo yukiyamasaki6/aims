@@ -32,13 +32,13 @@
 
 パスは、断りがなければ`apps/web/src/`からの相対である。
 
-- `app/(main)/rounds/page.tsx`（Client Component、画面の入口）: 枠（見出し）を描画し、`RoundsList`を描く。何も生成せず、取得もせず、`cookies()`も読まない。
+- `app/(main)/rounds/page.tsx`（Client Component、入口）: 枠（見出し）を描画し、`RoundsList`を描く。何も生成せず、取得もせず、`cookies()`も読まない。
 - `features/rounds/ui/rounds-list.tsx`（UI層、Client Component）: `RoundsListStore`の`loadList`の結果から`roundsListView`が決めた内容に応じて、領域・カード・削除メニュー、または取得中・オフライン・エラーの表示を描画する。新規作成ボタンは全状態で描画する。カードと新規作成ボタンの行き先は`roundPath`、`NEW_ROUND_PATH`である。自分の削除は手続きの入れ物の`deletion.deleteRound`で行い、この画面の削除済みの集合へ足して除き、取得の状態が変わっても失わない。読み込みの全体を`withinFetchTimeout`で10秒に打ち切る(`app/offline-pwa`)。
 - `features/rounds/ui/use-local-rounds-list.ts`（UI層）: 表示の開始時に`RoundsListStore.loadLocalList`を1回読み、`RoundsListStore.afterFallbackWait`で`FALLBACK_WAIT_MS`が過ぎたことを返す。購読しない。
 - `features/rounds/ui/use-fetch-result.ts`、`fetch-state.tsx`（UI層）: 画面の取得の状態と再取得、取得の状態の表示。オフラインの間は、画面が渡す窓口の`whenOnline`(一覧は`RoundsListStore.whenOnline`)で通信の復帰を受ける。
-- `features/rounds/domain/rounds-list-view.ts`（ドメイン層、ドメインサービス）: 取得結果を、入力中の領域とそれ以外の並びに分ける(`overlayRoundsList`)。それ以外 = 取得 − 入力中の領域のID − 削除済みで、値は取得の値のまま(完了で未送信の変更が残るラウンドを端末の値で出さない)。入力中の領域は実施日の新しい順に並べ、それ以外は取得の順のまま(サーバーが実施日の新しい順で返す)にする。同じ実施日の並びは定めない。`roundsListView`は、取得の状態と端末の入力中のラウンドと待ちの経過から、画面に出す内容を決める純粋関数である。
-- `features/rounds/domain/round-list.ts`（ドメイン層、ドメインサービス）: 一覧の材料の型(`LoadedRoundsList`、`LocalRoundsList`、`ServerRoundSummary`)と、削除済みと入力中と合計点の導出を持つ。端末の記録だけから求める入力中のラウンド(`LocalRoundsList`)は削除済みを入れず、削除済みのID(`deleted`)は取得が成功したとき(`LoadedRoundsList`)にだけ持つ。合計点は`roundListItemOf`が求める。
-- `features/rounds/domain/round-routes.ts`（ドメイン層、値オブジェクト）: ラウンドの画面の経路の判定・変換(経路に対応する枠を返す`roundFramePathOf`、経路からIDを読む`roundIdOfPath`)。経路の定数(`ROUNDS_PATH`、`NEW_ROUND_PATH`、`roundPath`)は経路表(`src/routes.ts`)が持つ。
+- `features/rounds/domain/rounds-list-view.ts`（domain）: 取得結果を、入力中の領域とそれ以外の並びに分ける(`overlayRoundsList`)。それ以外 = 取得 − 入力中の領域のID − 削除済みで、値は取得の値のまま(完了で未送信の変更が残るラウンドを端末の値で出さない)。入力中の領域は実施日の新しい順に並べ、それ以外は取得の順のまま(サーバーが実施日の新しい順で返す)にする。同じ実施日の並びは定めない。`roundsListView`は、取得の状態と端末の入力中のラウンドと待ちの経過から、画面に出す内容を決める純粋関数である。
+- `features/rounds/domain/round-list.ts`（domain）: 一覧の材料の型(`LoadedRoundsList`、`LocalRoundsList`、`ServerRoundSummary`)と、削除済みと入力中と合計点の導出を持つ。端末の記録だけから求める入力中のラウンド(`LocalRoundsList`)は削除済みを入れず、削除済みのID(`deleted`)は取得が成功したとき(`LoadedRoundsList`)にだけ持つ。合計点は`roundListItemOf`が求める。
+- `features/rounds/domain/round-routes.ts`（domain）: ラウンドの画面の経路の判定・変換(経路に対応する枠を返す`roundFramePathOf`、経路からIDを読む`roundIdOfPath`)。経路の定数(`ROUNDS_PATH`、`NEW_ROUND_PATH`、`roundPath`)は経路表(`src/routes.ts`)が持つ。
 - `features/rounds/application/rounds-list-store.ts`（手続き）: 一覧の画面に渡す状態と変更の方法。`loadList()`は一覧の取得を自分で行い、取得の前に端末の記録(`readAll`)を読み、列で削除済みのラウンドを求める。続けて一覧の取得(`RoundFetching.fetchRoundsList`)を行い、失敗したときはその結果を返す。入力中と端末が保持するラウンドの一括の取得は、一覧とは別に同期が行う(`features/round-sync/application/round-sync.ts`、`features/rounds/application/round-base-refreshing.ts`)。一覧の取得が成功したら、削除が確定済みのラウンドを削除の印として反映し(取得の内容とは照合せず、確定済みの操作を反映済みとして列から外す。削除の確定の後に始めた取得には、どのページ・フィルタでも現れないため)、その後に入力中のラウンドを求めて返す。入力中のラウンドは、端末の各組を`features/rounds/domain/round-view.ts`の`deriveRoundState`(保存済みの的を使う)で状態にし、`features/rounds/domain/round-retention.ts`の`isRoundInProgress`が真のものを名前・実施日・合計点にする(`round-list.ts`)。ユーザーの突き合わせは行わない。ベースと操作の列は端末でユーザーごとに隔離され、取得の利用者と記録の利用者が`same`でない反映は端末へ保存されない。通信の復帰の合図(`whenOnline`)、待ちの経過の合図(`afterFallbackWait`)も持つ。画面は時刻、乱数、通信の可否に触らない。
 - `features/rounds/application/round-fetching.ts`（手続き）: 取得の順序。`fetchRoundsList`が、`fetchContent`（`features/rounds/application/content-fetcher.ts`）経由で認証を確かめて`RoundQueries.roundsList`を呼び、`roundListItemOf`で`RoundListItem[]`にする。
 - `features/rounds/infrastructure/round-queries.ts`（インフラ層）: 一覧の問い合わせを`DatabaseGateway<RoundsDbSchema>`の`select`で行い、行をドメインの形(`ServerRoundSummary`)に写し、`QueryOutcome`で返す。`rounds-db-schema.ts`は並べる列(`round_date`)を含む。
@@ -49,27 +49,25 @@
 - 取得できる行は、RLSの`select_if_member`により、ユーザーが`round_users`で属するラウンドに限る。利用者では絞らない。
 - 一覧はRPCを介さず、直接SELECTする。
 
-## 対応表
+## ファイルと層
 
-この作業で方針を適用したファイルと用語である。
-
-| ファイル | 用語 |
+| ファイル | 層 |
 | :--- | :--- |
-| `app/(main)/rounds/page.tsx` | 画面の入口 |
-| `features/rounds/ui/rounds-list.tsx` | UI層(一覧の描画と削除のメニュー) |
-| `features/rounds/ui/use-local-rounds-list.ts` | UI層(端末の入力中のラウンドの読み込みと待ちの経過) |
-| `features/rounds/ui/use-fetch-result.ts`、`fetch-state.tsx` | UI層(画面の取得の状態と再取得、取得の状態の表示) |
-| `features/rounds/domain/rounds-list-view.ts` | ドメイン層(ドメインサービス: 取得結果と入力中のラウンドの重ね合わせと、表示の内容の決定) |
-| `features/rounds/domain/round-list.ts` | ドメイン層(ドメインサービス: 削除済みと入力中と合計点の導出、一覧の材料の型) |
-| `features/rounds/domain/round-routes.ts` | ドメイン層(値オブジェクト: ラウンドの画面の経路の判定・変換) |
-| `features/rounds/application/rounds-list-store.ts`、`round-deletion.ts` | 手続き(一覧の画面に渡す状態と変更の方法、削除。削除は手続きの入れ物から画面が直接受ける) |
-| `features/rounds/application/round-fetching.ts` | 手続き(取得の順序)と約束(`RoundQueries`) |
-| `features/rounds/infrastructure/round-queries.ts` | インフラ層(一覧の問い合わせと行の写し) |
-| `features/rounds/infrastructure/browser-unique-ids.ts` | インフラ層(新しいIDと、IDに混ぜる乱数(`randomBytes`)の払い出し) |
-| `features/rounds/infrastructure/rounds-db-schema.ts` | インフラ層(ラウンドが使うスキーマの部分の型) |
+| `app/(main)/rounds/page.tsx` | 入口 |
+| `features/rounds/ui/rounds-list.tsx` | ui(一覧の描画と削除のメニュー) |
+| `features/rounds/ui/use-local-rounds-list.ts` | ui(端末の入力中のラウンドの読み込みと待ちの経過) |
+| `features/rounds/ui/use-fetch-result.ts`、`fetch-state.tsx` | ui(画面の取得の状態と再取得、取得の状態の表示) |
+| `features/rounds/domain/rounds-list-view.ts` | domain(取得結果と入力中のラウンドの重ね合わせと、表示の内容の決定) |
+| `features/rounds/domain/round-list.ts` | domain(削除済みと入力中と合計点の導出、一覧の材料の型) |
+| `features/rounds/domain/round-routes.ts` | domain(ラウンドの画面の経路の判定・変換) |
+| `features/rounds/application/rounds-list-store.ts`、`round-deletion.ts` | application(一覧の画面に渡す状態と変更の方法、削除。削除は手続きの入れ物から画面が直接受ける) |
+| `features/rounds/application/round-fetching.ts` | application(取得の順序)と約束(`RoundQueries`) |
+| `features/rounds/infrastructure/round-queries.ts` | infrastructure(一覧の問い合わせと行の写し) |
+| `features/rounds/infrastructure/browser-unique-ids.ts` | infrastructure(新しいIDと、IDに混ぜる乱数(`randomBytes`)の払い出し) |
+| `features/rounds/infrastructure/rounds-db-schema.ts` | infrastructure(ラウンドが使うスキーマの部分の型) |
 | `features/rounds/index.ts` | 機能の入口(型だけを公開) |
 | `hooks/use-hydrated.ts`、`components/ui/{confirm-dialog,busy-button,dialog,button}.tsx`、`lib/utils.ts` | 共有の画面部品 |
-| `lib/supabase/contract/database.ts`、`lib/supabase/infrastructure/database.ts` | 共有の技術の約束と実装(並びの向き`ascending`) |
+| `lib/supabase/contract/database.ts`、`lib/supabase/infrastructure/database.ts` | `lib/<能力>`(約束と実装: 並びの向き`ascending`) |
 
 ## 設計判断
 
@@ -87,7 +85,7 @@
 | 入力中のラウンドは、実施日に関わらず先頭の見出し付きの領域にまとめ、無いときは領域を出さない | 一覧から入力中のラウンドを見つけて開けるようにし、取得の前後で位置を変えないため | 入力中のラウンドが多く、領域が長くなるとき |
 | 入力中のラウンドは、詳細と同じ導出(`deriveRoundState`)と表示の規則で決め、保持の規則を使わない | 一覧と詳細の値を一致させ、完了で未送信の変更が残るラウンドを入力中と見せないため | 一覧に入力中でないラウンドを端末から出すとき |
 | 取得中は`FALLBACK_WAIT_MS`を待ってから入力中の領域を出す | 通信できるときに、端末の値から取得の値への入れ替わりを見せないため(詳細と同じ値) | 待ちの値を変えるとき |
-| 一覧の取得と削除と画面の合図を`RoundsListStore`に持たせ、画面は時刻、乱数、通信の可否に触らない | 画面に渡す形を1つにし、画面を変えずに手続きを検証するため(L01、X01) | 画面に別の手続きを渡す必要が出たとき |
+| 一覧の取得と削除と画面の合図を`RoundsListStore`に持たせ、画面は時刻、乱数、通信の可否に触らない | 画面に渡す形を1つにし、画面を変えずに手続きを検証するため | 画面に別の手続きを渡す必要が出たとき |
 | 作成と詳細の経路を一覧の経路から作り、経路表(`src/routes.ts`)が持つ | 一覧の経路の文字列の持ち主を1つにするため | 画面の経路の階層を変えるとき |
 | 一覧はユーザーを突き合わせず、現在のハブのユーザーの組を読むだけにする | ベースと操作の列はストアとハブでユーザーごとに隔離され、詳細も同じ前提で読むため。一覧で毎回突き合わせる仕組みは、隔離と重複するため採らない | ハブのユーザーの切り替えの手順を変えるとき |
 
