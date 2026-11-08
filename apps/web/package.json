@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "next build && serwist build serwist.config.mjs",
     "start": "next start",
-    "preview": "PORT=${PORT:-3000} next build && serwist build serwist.config.mjs && PORT=${PORT:-3000} next start",
+    "preview": "next build && serwist build serwist.config.mjs && next start",
     "typecheck": "tsc --noEmit",
     "knip": "knip",
     "lint:text": "node scripts/check-hardcoded-text.mjs",

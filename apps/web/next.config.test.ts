@@ -37,19 +37,35 @@ describe("next.config rewrites", () => {
       { source: "/rounds/:id", destination: "/rounds/_" },
     ]);
   });
+});
 
-  it("ローカルSupabaseのときだけ/supabase-apiを実アドレスへ向ける", async () => {
+async function env(supabaseUrl: string) {
+  vi.resetModules();
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", supabaseUrl);
+  const { default: nextConfig } = await import("./next.config");
+  return nextConfig.env;
+}
+
+describe("next.config env", () => {
+  it("ローカルSupabaseのときは、接続先をPORTのNext.jsサーバーの/supabase-apiへ差し替える", async () => {
     // Given
+    vi.stubEnv("PORT", "3100");
+
     // When
-    const { afterFiles } = await rewrites("http://127.0.0.1:54321");
+    const result = await env("http://127.0.0.1:54321");
 
     // Then
-    expect(afterFiles).toEqual([
-      { source: "/rounds/:id", destination: "/rounds/_" },
-      {
-        source: "/supabase-api/:path*",
-        destination: "http://127.0.0.1:54321/:path*",
-      },
-    ]);
+    expect(result).toEqual({
+      NEXT_PUBLIC_SUPABASE_URL: "http://localhost:3100/supabase-api",
+    });
+  });
+
+  it("ローカルでないSupabaseのときは、接続先を差し替えない", async () => {
+    // Given
+    // When
+    const result = await env("https://example.supabase.co");
+
+    // Then
+    expect(result).toBeUndefined();
   });
 });

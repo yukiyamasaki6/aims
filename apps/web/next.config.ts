@@ -15,13 +15,11 @@ const isLocalSupabase =
 
 // git worktreeで複数のpnpm-workspace.yamlが検出され、workspace root
 // 推測の警告が出るため、チェックアウトをルートとして明示する
+// (outputFileTracingRootを指定すれば、Next.jsがturbopack.rootへ同じ値を設定する)
 const monorepoRoot = path.join(import.meta.dirname, "..", "..");
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: monorepoRoot,
-  turbopack: {
-    root: monorepoRoot,
-  },
   // ローカルSupabaseは他ホストから直接到達できないため、Next.jsサーバー
   // 自身を経由する/supabase-apiに差し替え、実アドレスへrewriteする。
   env: isLocalSupabase
@@ -42,7 +40,7 @@ const nextConfig: NextConfig = {
         // /rounds/<ID>は全IDで同一の静的な枠なので、プレースホルダーの/rounds/_
         // へ向け、IDごとのHTMLが生成・永続化されないようにする。
         { source: `${ROUNDS_PATH}/:id`, destination: ROUND_FRAME_PATH },
-        ...(isLocalSupabase && supabaseUrl
+        ...(isLocalSupabase
           ? [
               {
                 source: "/supabase-api/:path*",
