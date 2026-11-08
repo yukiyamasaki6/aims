@@ -118,7 +118,7 @@ describe("SignUpForm", () => {
   });
 
   describe("コード入力の案内", () => {
-    it("メールの送信に成功してコード入力の段階へ進むと、登録済みの利用者にはコードの代わりに案内が届くことを表示する", async () => {
+    it("メールの送信に成功してコード入力の段階へ進んでも、登録済みメールアドレス向けの説明を表示しない", async () => {
       // Given
       auth.sendCode.mockResolvedValue(ACCEPTED);
       const user = userEvent.setup();
@@ -131,18 +131,10 @@ describe("SignUpForm", () => {
       expect(
         await screen.findByRole("heading", { name: authText("otpTitle") }),
       ).toBeInTheDocument();
-      expect(screen.getByText(authText("signUpCodeNote"))).toBeInTheDocument();
-    });
-
-    it("メール入力の段階には、案内を表示しない", () => {
-      // Given
-
-      // When
-      renderForm();
-
-      // Then
       expect(
-        screen.queryByText(authText("signUpCodeNote")),
+        screen.queryByText(
+          "登録済みのメールアドレスには、コードの代わりに案内のメールが届きます。",
+        ),
       ).not.toBeInTheDocument();
     });
   });
@@ -161,7 +153,7 @@ describe("SignUpForm", () => {
       ).toHaveAttribute("href", "/signin");
     });
 
-    it("パスワード設定の段階は、サインアップの文言を表示し、リンクを表示しない", async () => {
+    it("パスワード設定の段階は、サインアップの見出しを表示し、補足説明とリンクを表示しない", async () => {
       // Given
       await renderPasswordStep();
 
@@ -171,8 +163,8 @@ describe("SignUpForm", () => {
       // Then
       expect(title).toBeInTheDocument();
       expect(
-        screen.getByText(authText("signUpPasswordDescription")),
-      ).toBeInTheDocument();
+        screen.queryByText("次回以降はこのパスワードでサインインします。"),
+      ).not.toBeInTheDocument();
       expect(
         screen.getByPlaceholderText(
           authText("passwordFieldPlaceholder", {

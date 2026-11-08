@@ -17,10 +17,8 @@ export function SignUpForm({
     emailTitle: t("signUpTitle"),
     emailFooter: { lead: t("signUpFooterLead"), label: t("signUpFooterLink") },
     passwordTitle: t("signUpPasswordTitle"),
-    passwordDescription: t("signUpPasswordDescription"),
     passwordLabel: t("signUpPasswordLabel"),
     passwordSubmit: t("signUpPasswordSubmit"),
-    codeNote: t("signUpCodeNote"),
   };
   return <PasswordSetupForm procedure={signUp} copy={copy} siteKey={siteKey} />;
 }

@@ -17,7 +17,6 @@ export function ResetPasswordForm({
     emailTitle: t("resetTitle"),
     emailFooter: { label: t("resetBackToSignIn") },
     passwordTitle: t("resetPasswordTitle"),
-    passwordDescription: t("resetPasswordDescription"),
     passwordLabel: t("resetPasswordLabel"),
     passwordSubmit: t("resetPasswordSubmit"),
   };

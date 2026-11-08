@@ -200,7 +200,7 @@ describe("ResetPasswordForm", () => {
       ).toHaveAttribute("href", "/signin");
     });
 
-    it("パスワード設定の段階は、再設定の文言を表示し、サインインに戻るリンクを表示しない", async () => {
+    it("パスワード設定の段階は、再設定の見出しを表示し、補足説明とサインインに戻るリンクを表示しない", async () => {
       // Given
       renderForm();
       await advanceToPasswordStep();
@@ -213,8 +213,8 @@ describe("ResetPasswordForm", () => {
       // Then
       expect(title).toBeInTheDocument();
       expect(
-        screen.getByText(authText("resetPasswordDescription")),
-      ).toBeInTheDocument();
+        screen.queryByText("このパスワードで次回からサインインします。"),
+      ).not.toBeInTheDocument();
       expect(passwordInput()).toBeInTheDocument();
       expect(setPasswordButton()).toBeInTheDocument();
       expect(

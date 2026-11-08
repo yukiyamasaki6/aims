@@ -34,12 +34,9 @@ export type PasswordSetupCopy = {
   emailTitle: string;
   emailFooter: SignInLinkCopy;
   passwordTitle: string;
-  passwordDescription: string;
   // パスワード欄の見出し。説明(最小文字数など)は規則の持ち主から得て足す。
   passwordLabel: string;
   passwordSubmit: string;
-  // コード入力の段階に出す案内(無ければ出さない)。
-  codeNote?: string;
 };
 
 type StepProps = {
@@ -124,7 +121,6 @@ function CodeStep({
     <OtpCodeStep
       idPrefix={copy.idPrefix}
       email={email}
-      note={copy.codeNote}
       code={code}
       onCodeChange={setCode}
       codeError={texts.fieldError("code", flow.fieldErrors.code)}
@@ -154,10 +150,7 @@ function PasswordStep({ procedure, copy, flow, view }: StepProps) {
   const errorId = `${copy.idPrefix}-password-error`;
   return (
     <>
-      <AuthHeader
-        title={copy.passwordTitle}
-        description={copy.passwordDescription}
-      />
+      <AuthHeader title={copy.passwordTitle} />
       <form
         onSubmit={(e) => {
           e.preventDefault();
