@@ -57,6 +57,7 @@ type LooseSelect = {
     ascending?: boolean;
   }[];
   single?: "maybe";
+  retry?: boolean;
 };
 
 function applyFilter<B extends FilterBuilder<B>>(
@@ -116,7 +117,7 @@ export function createSupabaseDatabase<S extends DbSchema = Database["public"]>(
         builder = applyOrder(builder, order);
       }
       if (query.single === "maybe") builder = builder.maybeSingle();
-      return toResponse(await builder.retry(false));
+      return toResponse(await builder.retry(query.retry === true));
     },
     async delete(command: { table: string; filters: readonly LooseFilter[] }) {
       let builder = client().from(command.table).delete();

@@ -39,7 +39,7 @@
 - `features/rounds/domain/rounds-list-view.ts`（ドメイン層、ドメインサービス）: 取得結果を、入力中の領域とそれ以外の並びに分ける(`overlayRoundsList`)。それ以外 = 取得 − 入力中の領域のID − 削除済みで、値は取得の値のまま(完了で未送信の変更が残るラウンドを端末の値で出さない)。入力中の領域は実施日の新しい順に並べ、それ以外は取得の順のまま(サーバーが実施日の新しい順で返す)にする。同じ実施日の並びは定めない。`roundsListView`は、取得の状態と端末の入力中のラウンドと待ちの経過から、画面に出す内容を決める純粋関数である。
 - `features/rounds/domain/round-list.ts`（ドメイン層、ドメインサービス）: 一覧の材料の型(`LoadedRoundsList`、`LocalRoundsList`、`ServerRoundSummary`)と、削除済みと入力中と合計点の導出を持つ。端末の記録だけから求める入力中のラウンド(`LocalRoundsList`)は削除済みを入れず、削除済みのID(`deleted`)は取得が成功したとき(`LoadedRoundsList`)にだけ持つ。合計点は`roundListItemOf`が求める。
 - `features/rounds/domain/round-routes.ts`（ドメイン層、値オブジェクト）: ラウンドの画面の経路の判定・変換(経路に対応する枠を返す`roundFramePathOf`、経路からIDを読む`roundIdOfPath`)。経路の定数(`ROUNDS_PATH`、`NEW_ROUND_PATH`、`roundPath`)は経路表(`src/routes.ts`)が持つ。
-- `features/rounds/application/rounds-list-store.ts`（手続き）: 一覧の画面に渡す状態と変更の方法。`loadList()`は一覧の取得を自分で行い、取得の前に端末の記録(`readAll`)を読み、列で削除済みのラウンドを求める。続けて一覧の取得(`RoundFetching.fetchRoundsList`)と、入力中と端末が保持するラウンドの一括の取得の依頼を並行に行い、両方が成功したときだけ成功とする。どちらかが失敗したときは、一覧の取得の結果、なければ一括の取得の結果を返す。一括の取得は同期が行い、一覧の取得が成功したときだけ端末の記録へ反映する(`features/round-sync/application/round-sync.ts`、`features/rounds/application/round-base-refreshing.ts`)。両方が成功したら、削除が確定済みのラウンドを削除の印として反映し(取得の内容とは照合せず、確定済みの操作を反映済みとして列から外す。削除の確定の後に始めた取得には、どのページ・フィルタでも現れないため)、その後に入力中のラウンドを求めて返す。入力中のラウンドは、端末の各組を`features/rounds/domain/round-view.ts`の`deriveRoundState`(保存済みの的を使う)で状態にし、`features/rounds/domain/round-retention.ts`の`isRoundInProgress`が真のものを名前・実施日・合計点にする(`round-list.ts`)。ユーザーの突き合わせは行わない。ベースと操作の列は端末でユーザーごとに隔離され、取得の利用者と記録の利用者が`same`でない反映は端末へ保存されない。通信の復帰の合図(`whenOnline`)、待ちの経過の合図(`afterFallbackWait`)も持つ。画面は時刻、乱数、通信の可否に触らない。
+- `features/rounds/application/rounds-list-store.ts`（手続き）: 一覧の画面に渡す状態と変更の方法。`loadList()`は一覧の取得を自分で行い、取得の前に端末の記録(`readAll`)を読み、列で削除済みのラウンドを求める。続けて一覧の取得(`RoundFetching.fetchRoundsList`)を行い、失敗したときはその結果を返す。入力中と端末が保持するラウンドの一括の取得は、一覧とは別に同期が行う(`features/round-sync/application/round-sync.ts`、`features/rounds/application/round-base-refreshing.ts`)。一覧の取得が成功したら、削除が確定済みのラウンドを削除の印として反映し(取得の内容とは照合せず、確定済みの操作を反映済みとして列から外す。削除の確定の後に始めた取得には、どのページ・フィルタでも現れないため)、その後に入力中のラウンドを求めて返す。入力中のラウンドは、端末の各組を`features/rounds/domain/round-view.ts`の`deriveRoundState`(保存済みの的を使う)で状態にし、`features/rounds/domain/round-retention.ts`の`isRoundInProgress`が真のものを名前・実施日・合計点にする(`round-list.ts`)。ユーザーの突き合わせは行わない。ベースと操作の列は端末でユーザーごとに隔離され、取得の利用者と記録の利用者が`same`でない反映は端末へ保存されない。通信の復帰の合図(`whenOnline`)、待ちの経過の合図(`afterFallbackWait`)も持つ。画面は時刻、乱数、通信の可否に触らない。
 - `features/rounds/application/round-fetching.ts`（手続き）: 取得の順序。`fetchRoundsList`が、`fetchContent`（`features/rounds/application/content-fetcher.ts`）経由で認証を確かめて`RoundQueries.roundsList`を呼び、`roundListItemOf`で`RoundListItem[]`にする。
 - `features/rounds/infrastructure/round-queries.ts`（インフラ層）: 一覧の問い合わせを`DatabaseGateway<RoundsDbSchema>`の`select`で行い、行をドメインの形(`ServerRoundSummary`)に写し、`QueryOutcome`で返す。`rounds-db-schema.ts`は並べる列(`round_date`)を含む。
 
@@ -82,7 +82,7 @@
 | 枠は静的にし、取得はクライアントから行う（枠をSWが返す前提。詳細は#648） | 静的な枠を即座に返し、取得の失敗を枠内で区別して示すため | 一覧をサーバーで取得する必要が生じたとき |
 | 新規作成ボタンを右下に固定し、常時表示する | 一覧から作成画面へ辿る導線を常に示すため | 作成の導線を別へ移すとき |
 | 新規作成ボタンに`data-hydrated`を付ける | ハードナビゲーション直後の操作が、ハイドレーション前に空振りするのをE2Eが待てるようにするため | ハイドレーション完了の通知を共通化するとき |
-| 一覧の取得と一括の取得を並行に行い、両方が成功したときだけ取得の結果とする | 入力中のラウンドの値を、新しいベースに未送信の操作を重ねた値にし、他端末の変更を端末の古いベースで隠さないため。端末の組だけを使う案は、未送信の操作があるラウンドで他端末の変更を隠すため採らない | 一覧の取得量・回数が問題になるとき |
+| 一覧の取得と一括の取得を別々に行い、一覧は一括の取得を待たず、一括の失敗で隠さない | 一覧の表示を一括の取得の成否に依存させないため。入力中の区画は端末の記録から作り、他の端末で完了したラウンドが残る時間は、次の契機(起動、通信の復帰、画面が見える状態)まで延びる | 入力中の区画の鮮度が問題になるとき |
 | 一覧の取得から入力中のラウンドを除かず、入力中の領域のIDを除いてそれ以外の並びにする | 除いてもIDの重複の排除は残り、端末で完了にした未送信のラウンドの規則が増え、2つの取得の時刻のずれでラウンドが消えるため | ページ送りを入れ、ページの件数を領域と別に数えるとき(#387) |
 | 入力中のラウンドは、実施日に関わらず先頭の見出し付きの領域にまとめ、無いときは領域を出さない | 一覧から入力中のラウンドを見つけて開けるようにし、取得の前後で位置を変えないため | 入力中のラウンドが多く、領域が長くなるとき |
 | 入力中のラウンドは、詳細と同じ導出(`deriveRoundState`)と表示の規則で決め、保持の規則を使わない | 一覧と詳細の値を一致させ、完了で未送信の変更が残るラウンドを入力中と見せないため | 一覧に入力中でないラウンドを端末から出すとき |
@@ -96,5 +96,5 @@
 - 全件を1回で取得し、ページングや上限はない。
 - オフライン表示のときは、通信の復帰（`RoundsListStore.whenOnline`）で自動再取得する。通信失敗（`navigator.onLine`が`true`のまま）を含むエラーは、自動で取り直さず、再試行ボタンで取得し直す。
 - 完了で未送信の変更が残るラウンドは、取得の値で出し、オフラインでは出さない。
-- 一覧を開くたびに一括の取得を1回行う。起動直後は`RoundBaseRefresher`の取得と重なるが、`startedAt`の比較で古い取得は新しい保存を上書きしない。
+- 一括の取得は一覧を開いても起こさず、起動、通信の復帰、画面が見える状態で行う。
 - 利用者が並び順や絞り込みを選ぶ操作は持たない。

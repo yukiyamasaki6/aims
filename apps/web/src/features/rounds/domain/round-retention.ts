@@ -7,7 +7,7 @@ import {
 } from "./round-base";
 import { applyOperations } from "./round-op-apply";
 import { type RoundState, selectRoundState } from "./round-tables";
-import { hasRoundDeletion, type SyncOperation } from "./sync-events";
+import type { SyncOperation } from "./sync-events";
 
 // 入力中と見せるか。状態が入力中かだけで決め、矢数に達していないエンドの有無や記録日では決めない。
 export function isRoundInProgress(
@@ -48,15 +48,13 @@ export const roundStreamRules = {
   isOlder: isOlderBase,
 };
 
-// 取得して端末の記録へ反映する対象にするか。削除されておらず、作成が確定していて、ベースか操作を持つもの。
+// 取得して端末の記録へ反映する対象にするか。端末が持つ(ベースか操作がある)ラウンドのうち、作成が確定しているもの。
+// 取得で返らなかった対象は、削除の印にする。削除の操作が残っていても同じ規則で対象にする(削除済みのラウンドが、二重の削除の後にベースだけ残って再表示されないため)。
 // 確定していない作成は、サーバーにまだ無い。取得で返らなくても削除と扱わない。
 export function isRetainedForRefresh(group: {
   base: RecordBase | undefined;
   entries: readonly { operation: SyncOperation; ackedRevision?: number }[];
 }): boolean {
-  if (hasRoundDeletion(group.entries.map((entry) => entry.operation))) {
-    return false;
-  }
   const unconfirmedCreation = group.entries.some(
     (entry) =>
       entry.operation.type === "round.created" &&

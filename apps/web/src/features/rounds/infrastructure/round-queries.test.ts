@@ -140,6 +140,7 @@ describe("roundDetail", () => {
           { column: "id", referencedTable: "distances" },
         ],
         single: "maybe",
+        retry: true,
       },
       {
         table: "target_faces",
@@ -147,6 +148,7 @@ describe("roundDetail", () => {
         filters: [
           { op: "or", expression: "owner_id.is.null,owner_id.eq.user-1" },
         ],
+        retry: true,
       },
     ]);
   });
@@ -281,6 +283,55 @@ describe("roundDetail", () => {
     // Then
     expect(first).toEqual({ status: "failed" });
     expect(second).toEqual({ status: "failed" });
+  });
+});
+
+describe("再試行の指定", () => {
+  it("個別の取得と一括の取得は、ラウンドの全てのselectと的のselectにretry: trueを付ける", async () => {
+    // Given
+    const detailDatabase = makeDatabase({
+      rounds: ok(round),
+      target_faces: ok([]),
+    });
+    const batchDatabase = makeDatabase({
+      rounds: ok([]),
+      target_faces: ok([]),
+    });
+    const ids = Array.from({ length: 120 }, (_, i) => `id-${i}`);
+
+    // When
+    await detailDatabase.createQueries().roundDetail("user-1", "round-1");
+    await batchDatabase.createQueries().roundDetails("user-1", ids);
+
+    // Then
+    const retries = [...detailDatabase.queries, ...batchDatabase.queries].map(
+      (query) => query.retry,
+    );
+    expect(retries.length).toBeGreaterThan(4);
+    expect(retries.every((retry) => retry === true)).toBe(true);
+  });
+
+  it("的だけの取得、プリセット、一覧の取得はretryを付けない", async () => {
+    // Given
+    const database = makeDatabase({
+      rounds: ok([]),
+      target_faces: ok([]),
+      preset_rounds: ok([]),
+    });
+    const queries = database.createQueries();
+
+    // When
+    await queries.targetFaces("user-1");
+    await queries.presets("user-1");
+    await queries.roundsList();
+
+    // Then
+    expect(database.queries.length).toBe(3);
+    expect(database.queries.map((query) => query.retry)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 });
 

@@ -46,10 +46,11 @@ export function roundsListView(
   removed: ReadonlySet<string>,
 ): RoundsListView {
   if (view.status === "ok") {
-    const { items, inProgress, deleted } = view.data;
+    const { items, deleted } = view.data;
+    // 入力中の区画は、端末の記録から読み直した値を使う。読み込み前は取得時の値で出す。
     const result = overlayRoundsList(
       items,
-      inProgress,
+      (local ?? view.data).inProgress,
       new Set([...deleted, ...removed]),
     );
     return {

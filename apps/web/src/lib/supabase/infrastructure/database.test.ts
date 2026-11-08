@@ -38,7 +38,7 @@ function fakeClient(response: unknown) {
 const ok = { data: [{ id: "a" }], error: null, status: 200 };
 
 describe("select", () => {
-  it("表・列・フィルタ・並びの順に問い合わせを組み立て、最後に再試行なしを指定する", async () => {
+  it("表・列・フィルタ・並びの順に問い合わせを組み立て、最後に再試行の指定を付ける", async () => {
     // Given
     const { client, calls } = fakeClient(ok);
     const database = createSupabaseDatabase(() => client);
@@ -74,6 +74,30 @@ describe("select", () => {
       ["retry", [false]],
     ]);
     expect(response).toEqual(ok);
+  });
+
+  it("retryにtrueを指定すると、パッケージの再試行を有効にする", async () => {
+    // Given
+    const { client, calls } = fakeClient(ok);
+    const database = createSupabaseDatabase(() => client);
+
+    // When
+    await database.select({ table: "rounds", columns: "*", retry: true });
+
+    // Then
+    expect(calls.at(-1)).toEqual(["retry", [true]]);
+  });
+
+  it("retryを指定しなければ、再試行なしを指定する", async () => {
+    // Given
+    const { client, calls } = fakeClient(ok);
+    const database = createSupabaseDatabase(() => client);
+
+    // When
+    await database.select({ table: "rounds", columns: "*" });
+
+    // Then
+    expect(calls.at(-1)).toEqual(["retry", [false]]);
   });
 
   it("並びの向きを渡すと、パッケージのorderにascendingが渡る", async () => {

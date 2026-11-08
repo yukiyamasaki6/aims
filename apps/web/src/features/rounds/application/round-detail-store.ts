@@ -1,7 +1,6 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { FetchResult } from "../domain/fetch-status";
-import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
 import { localOpening, openPlan } from "../domain/round-opening";
 import {
   type RoundTables,
@@ -19,7 +18,7 @@ import {
   type RoundHandle,
 } from "./round-handle";
 import type { RoundRecordHub, RoundStoreGroup } from "./round-record-hub";
-import { TIMED_OUT, withinFetchTimeout, withinTime } from "./time-limit";
+import { withinFetchTimeout } from "./time-limit";
 import type { UniqueIds } from "./unique-ids";
 import { type WhenOnline, whenOnline } from "./when-online";
 
@@ -91,10 +90,10 @@ function localDetail(local: {
 }
 
 async function openDetail(
-  deps: Pick<Deps, "hub" | "requests" | "fetching" | "clock">,
+  deps: Pick<Deps, "hub" | "requests" | "fetching">,
   roundId: string,
 ): Promise<FetchResult<LoadedRound>> {
-  const { hub, requests, fetching, clock } = deps;
+  const { hub, requests, fetching } = deps;
   const streamId = roundStreamId(roundId);
   const first = await readGroup(hub, streamId);
   hub.adopt(streamId, first);
@@ -113,14 +112,13 @@ async function openDetail(
       },
     };
   }
-  // 取得はここでは行わず、依頼の結果を待つ。依頼の結果は拒否しない。
-  const server = requests.open(roundId).then(toDetail);
+  // 最新化を常に要求する(取得は同期が行う)。依頼の結果は拒否しない。
+  const server = requests.open(roundId);
   const local = localOpening(first, fetching.savedTargetFaces());
-  if (!local) return server;
-  const raced = await withinTime(clock, server, FALLBACK_WAIT_MS);
-  if (raced === TIMED_OUT) return localDetail(local);
-  if (raced.status === "ok" || raced.status === "not-found") return raced;
-  return localDetail(local);
+  // 保存済みがあれば、取得の結果を待たずに開く。結果は、端末の記録への反映と依頼の結果の記録で、開いた後の画面に届く。
+  if (local) return localDetail(local);
+  // 保存が無いときは、取得の完了を待つ。待ちの上限は`load`の打ち切りが決める。
+  return server.then(toDetail);
 }
 
 // 詳細の画面へ渡す、状態と変更の方法。

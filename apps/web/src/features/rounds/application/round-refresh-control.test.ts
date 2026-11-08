@@ -159,7 +159,7 @@ describe("理由の導出", () => {
 });
 
 describe("refreshNeeds", () => {
-  it("一覧の依頼の有無と、取り直しが要るラウンドを理由とともに返す", async () => {
+  it("取り直しが要るラウンドを理由とともに返す", async () => {
     // Given
     const { hub, requests, control } = await setup();
     void requests.open("opening");
@@ -181,13 +181,11 @@ describe("refreshNeeds", () => {
       ],
     );
     requests.watch("diverged", false);
-    requests.requestAll();
 
     // When
     const needs = control.refreshNeeds();
 
     // Then
-    expect(needs.list).toBe(true);
     expect(needs.rounds).toEqual(
       expect.arrayContaining([
         {
@@ -204,19 +202,17 @@ describe("refreshNeeds", () => {
     expect(needs.rounds.map((need) => need.roundId)).not.toContain("quiet");
   });
 
-  it("refreshNeedsは、理由がopenのラウンドにだけopenRequestを付け、一覧の依頼の番号を添える", async () => {
+  it("refreshNeedsは、理由がopenのラウンドにだけopenRequestを付ける", async () => {
     // Given
     const { requests, control } = await setup();
     void requests.open("r-1");
     void requests.open("r-1");
     requests.watch("r-2", true);
-    requests.requestAll();
 
     // When
     const needs = control.refreshNeeds();
 
     // Then
-    expect(needs.listRequest).toBe(1);
     expect(needs.rounds).toEqual(
       expect.arrayContaining([
         { roundId: "r-1", reason: "open", reasons: ["open"], openRequest: 2 },
@@ -375,7 +371,7 @@ describe("refreshNeeds", () => {
 });
 
 describe("取得と反映", () => {
-  it("refreshAllは、反映したかを返し、refreshRoundは結果の種類を返す", async () => {
+  it("refreshAllは一括を取得して拒否せず、refreshRoundは結果の種類を返す", async () => {
     // Given
     const { fetching, control } = await setup();
     fetching.fetchRoundDetails.mockResolvedValue({
@@ -385,11 +381,11 @@ describe("取得と反映", () => {
     fetching.fetchRoundDetail.mockResolvedValue({ status: "not-found" });
 
     // When
-    const committed = await control.refreshAll({ waitForList: false });
+    await control.refreshAll();
     const round = await control.refreshRound("round-1");
 
     // Then
-    expect(committed).toBe(true);
+    expect(fetching.fetchRoundDetails).toHaveBeenCalledTimes(1);
     expect(round).toBe("gone");
   });
   it("開始した後に出した開く依頼は、その実行の結果を受けずに待ちとして残り、openを返し続ける。開始前の依頼は結果を受ける", async () => {

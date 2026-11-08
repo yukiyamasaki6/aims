@@ -58,12 +58,14 @@ export function createFakeRoundsListStore(
   const store = {
     loadList: vi.fn(),
     loadLocalList: vi.fn(),
+    subscribe: vi.fn(() => () => {}),
     whenOnline,
     afterFallbackWait,
     ...overrides,
   } as unknown as RoundsListStore & {
     loadList: ReturnType<typeof vi.fn>;
     loadLocalList: ReturnType<typeof vi.fn>;
+    subscribe: ReturnType<typeof vi.fn>;
     whenOnline: ReturnType<typeof vi.fn>;
     afterFallbackWait: ReturnType<typeof vi.fn>;
   };

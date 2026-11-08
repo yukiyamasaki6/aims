@@ -199,7 +199,6 @@ export function createOpSender(deps: {
       started = true;
       startSeq += 1;
       const mine = startSeq;
-      // 通信の回復の購読は、同期の契機の受け取りの購読(取り直しの再開)より先に登録され、再送が先に動く。
       stopListening = [
         hub.subscribe(handleChange),
         connectivity.onOnline(recoverOnline),

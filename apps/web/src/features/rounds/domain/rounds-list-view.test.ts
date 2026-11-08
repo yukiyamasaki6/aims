@@ -136,6 +136,22 @@ describe("roundsListView", () => {
     expect(view.empty).toBe(false);
   });
 
+  it("取得が成功し、端末の入力中を読み直した後は、取得時の値でなく読み直した値を入力中の領域に使う", () => {
+    // Given
+
+    // When
+    const view = roundsListView(
+      loaded({ items: [item("a")], inProgress: [item("stale")] }),
+      { inProgress: [item("fresh")] },
+      false,
+      new Set(),
+    );
+
+    // Then
+    expect(ids(view.inProgress)).toEqual(["fresh"]);
+    expect(ids(view.others)).toEqual(["a"]);
+  });
+
   it("取得が成功し、両方が0件なら、空とする", () => {
     // Given
 

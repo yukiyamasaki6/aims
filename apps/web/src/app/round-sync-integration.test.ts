@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
-import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
 import { createFakeUniqueIds } from "@/features/rounds/application/fake-unique-ids-test-helpers";
 import { createOpSender } from "@/features/rounds/application/op-sender";
 import {
@@ -107,7 +106,6 @@ function rig() {
   });
   const list = createRoundsListStore({
     hub,
-    requests,
     fetching: fetching as unknown as RoundFetching,
     clock,
     connectivity,
@@ -177,12 +175,11 @@ describe("詳細を開く依頼と同期", () => {
     expect(t.requests.outcomeOf("r1")).toBe("ok");
   });
 
-  it("停止すると、待っている開く依頼と一覧の依頼がエラーで終わる", async () => {
+  it("停止すると、待っている開く依頼がエラーで終わる", async () => {
     // Given
     const t = rig();
     t.fetching.fetchRoundDetail.mockReturnValue(new Promise(() => {}));
     const detailLoading = t.detail.load("r1");
-    const listLoading = t.list.loadList();
     await flush();
 
     // When
@@ -190,7 +187,6 @@ describe("詳細を開く依頼と同期", () => {
 
     // Then
     expect(await detailLoading).toMatchObject({ status: "error" });
-    expect(await listLoading).toMatchObject({ status: "error" });
   });
 });
 
@@ -251,10 +247,7 @@ describe("一覧と常駐の取得", () => {
       status: "ok",
       data: { rounds: new Map(), startedAt: 1, userId: "user-1" },
     } as const;
-    t.fetching.fetchRoundDetails
-      .mockReturnValueOnce(resident.promise)
-      .mockResolvedValueOnce(empty);
-    t.sync.refreshAll("resident");
+    t.fetching.fetchRoundDetails.mockReturnValueOnce(resident.promise);
     await flush();
 
     // When
@@ -264,7 +257,7 @@ describe("一覧と常駐の取得", () => {
     // Then
     // 手動の時計を進めずに解決することが、常駐の取得を待っていない証拠になる。
     expect(await loading).toMatchObject({ status: "ok" });
-    expect(t.fetching.fetchRoundDetails).toHaveBeenCalledTimes(2);
+    expect(t.fetching.fetchRoundDetails).toHaveBeenCalledTimes(1);
     resident.resolve(empty);
     await flush();
     expect(await loading).toMatchObject({ status: "ok" });
@@ -381,128 +374,5 @@ describe("同じ保存を共有する複数のタブ", () => {
 
     // Then
     expect(sentEventIds(running)).toEqual(["own-op"]);
-  });
-});
-
-describe("通信の回復の購読の順序", () => {
-  // 契機の受け取りまで実物で組む。送信器と同期の契機が同じ通信の偽を購読し、送信と取得の呼び出しを、1つの並びへ名前で積む。
-  async function triggersRig() {
-    const calls: string[] = [];
-    const { hub } = createTestRoundHub();
-    const requests = createRefreshRequests();
-    const clock = createManualClock();
-    const connectivity = createFakeConnectivity();
-    const fetching = {
-      fetchRoundDetail: vi.fn(),
-      fetchRoundDetails: vi.fn(async () => {
-        calls.push("fetch");
-        return {
-          status: "ok",
-          data: { rounds: new Map(), startedAt: 1, userId: "user-1" },
-        } as const;
-      }),
-    };
-    const sends: ((outcome: SendOutcome) => void)[] = [];
-    const transport = {
-      send: vi.fn(
-        () =>
-          new Promise<SendOutcome>((resolve) => {
-            calls.push("send");
-            sends.push(resolve);
-          }),
-      ),
-    };
-    const sessionReader = {
-      readSession: async () =>
-        ({ status: "authenticated", userId: "user-1" }) as const,
-    };
-    // 通信の復帰の知らせを受けた直後の同期の処理(購読の順序)を、呼び出しの時点で観測する。
-    const listeners: string[] = [];
-    const session = {
-      readSession: async () => {
-        listeners.push("sync");
-        return { status: "authenticated", userId: "user-1" } as const;
-      },
-    };
-    const replaceInFlight = hub.replaceInFlight.bind(hub);
-    hub.replaceInFlight = (streamId, eventIds) => {
-      listeners.push("sender");
-      replaceInFlight(streamId, eventIds);
-    };
-    const sender = createOpSender({
-      hub,
-      sending: createOperationSending({ hub, transport }),
-      sessionReader,
-      clock,
-      connectivity,
-    });
-    const sync = createRoundSync({
-      control: createRoundRecordControl({ hub, sender }),
-      refresh: createRoundRefreshControl({
-        hub,
-        requests,
-        refresh: createRoundBaseRefreshing({
-          hub,
-          requests,
-          fetching: fetching as unknown as RoundFetching,
-        }),
-      }),
-      session,
-      clock,
-      connectivity,
-    });
-    const triggers = createSyncTriggers({
-      identityReader: { read: () => "user-1" },
-      changes: { subscribe: () => () => {} },
-      visibility: { onVisible: () => () => {} },
-      connectivity,
-      sync,
-    });
-    return { calls, listeners, hub, connectivity, sends, triggers };
-  }
-
-  it("通信の復帰で、送信器のリトライ待機の再送が、同期の常駐の取得より先に動く", async () => {
-    // Given
-    const t = await triggersRig();
-    t.triggers.start();
-    await t.hub.ready();
-    await t.hub.append(
-      roundStreamId("round-1"),
-      roundUpdated({ eventId: "pending-op" }),
-    );
-    await flush();
-    t.sends[0]({ ok: false, failure: { cause: "rpc" } });
-    await flush();
-    t.calls.length = 0;
-
-    // When
-    t.connectivity.goOnline();
-    await flush();
-
-    // Then
-    expect(t.calls).toEqual(["send", "fetch"]);
-  });
-
-  it("開始すると、送信器の通信の購読が、同期の契機の購読より先に登録され、復帰の知らせを先に受ける", async () => {
-    // Given
-    const t = await triggersRig();
-    t.triggers.start();
-    await t.hub.ready();
-    await t.hub.append(
-      roundStreamId("round-1"),
-      roundUpdated({ eventId: "pending-op" }),
-    );
-    await flush();
-    t.sends[0]({ ok: false, failure: { cause: "rpc" } });
-    await flush();
-    t.listeners.length = 0;
-
-    // When
-    t.connectivity.goOnline();
-
-    // Then
-    expect(t.connectivity.subscribers().online).toBe(2);
-    // 送信器は復帰の知らせで列ごとに印を書くため、並びは重複しうる。先に現れる名前の順を見る。
-    expect([...new Set(t.listeners)]).toEqual(["sender", "sync"]);
   });
 });

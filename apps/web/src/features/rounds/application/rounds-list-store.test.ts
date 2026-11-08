@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "../domain/fetch-status";
 import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { RoundListItem } from "../domain/round-list";
-import { roundBase, roundDisabled } from "../domain/round-op-test-helpers";
+import { roundBase } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
 import { createTestRounds } from "./round-record-test-helpers";
@@ -42,34 +42,20 @@ function loadListWith(
   return tab.list.loadList();
 }
 
-// 一括の取得が終わった。
-function syncFinishesAll(
-  requests: ReturnType<typeof createTestRounds>["requests"],
-  result: FetchResult<null> = { status: "ok", data: null },
-) {
-  const run1 = requests.beginAll();
-  requests.settleAll(run1, result);
-}
-
-const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-
 describe("loadList", () => {
   const items: RoundListItem[] = [
     { id: "round-1", name: "午前", roundDate: "2026-09-15", total: 0 },
   ];
   const ok = async () => ({ status: "ok", data: items }) as const;
 
-  it("一覧の取得と一括の取得の両方が成功したら、サーバーの一覧と、端末の入力中のラウンドを返す", async () => {
+  it("一覧の取得が成功したら、サーバーの一覧と、端末の入力中のラウンドを返す", async () => {
     // Given
     const tab = createTestRounds({ savedFaces: [face] });
     await tab.hub.ready();
     await tab.hub.commit(STREAM, roundBase({ name: "端末" }), 10, "user-1");
-    const loading = loadListWith(tab, ok);
-    await flush();
 
     // When
-    syncFinishesAll(tab.requests);
-    const result = await loading;
+    const result = await loadListWith(tab, ok);
 
     // Then
     expect(result).toEqual({
@@ -84,102 +70,42 @@ describe("loadList", () => {
     });
   });
 
-  it("一覧の取得が終わったとき、成否を一覧の依頼に残す(成功なら一括の取得の反映を許す)", async () => {
+  it("一覧を読み込んでも、一括の取得は起こさず、一括の取得を待たない(時計を進めずに解決する)", async () => {
     // Given
     const tab = createTestRounds();
-    const success = loadListWith(tab, ok);
-    await flush();
-    const run2 = tab.requests.beginAll();
 
     // When
-    const allowed = await tab.requests.whenListAllows(run2);
-    tab.requests.settleAll(run2, { status: "ok", data: null });
-    await success;
+    const result = await loadListWith(tab, ok);
 
     // Then
-    expect(allowed).toBe(true);
+    expect(result).toMatchObject({ status: "ok" });
+    expect(tab.fetching.fetchRoundDetails).not.toHaveBeenCalled();
+    expect(tab.requests.pendingOpens()).toEqual([]);
   });
 
-  it("一覧の取得が失敗したら、一括の取得の反映を許さず、一覧の結果を返す(一括の結果に依らない)", async () => {
+  it("一覧の取得が失敗したら、一覧の結果を返す", async () => {
     // Given
     const tab = createTestRounds();
     const failure = { status: "error", reason: "failed" } as const;
-    const loading = loadListWith(tab, async () => failure);
-    await flush();
-    const run3 = tab.requests.beginAll();
 
     // When
-    const allowed = await tab.requests.whenListAllows(run3);
-    tab.requests.settleAll(run3, { status: "ok", data: null });
-
-    // Then
-    expect(allowed).toBe(false);
-    expect(await loading).toEqual(failure);
-  });
-
-  it("一覧の取得が例外を投げたときも、固定文のerrorを返し、反映を許さない", async () => {
-    // Given
-    const tab = createTestRounds();
-    const loading = loadListWith(tab, async () => {
-      throw new Error("boom");
-    });
-    await flush();
-    const run4 = tab.requests.beginAll();
-
-    // When
-    const allowed = await tab.requests.whenListAllows(run4);
-    tab.requests.settleAll(run4, { status: "ok", data: null });
-
-    // Then
-    expect(allowed).toBe(false);
-    expect(await loading).toEqual({
-      status: "error",
-      reason: "failed",
-    });
-  });
-
-  it("一覧が成功し、一括の取得が失敗したら、一括の取得の結果を返し、ベースも削除の印も変えない", async () => {
-    // Given
-    const tab = createTestRounds();
-    await tab.hub.ready();
-    await tab.hub.append(STREAM, roundDisabled());
-    tab.hub.applySendResults(
-      STREAM,
-      [roundDisabled().eventId],
-      [
-        {
-          revision: 2,
-          applied: true,
-          appliedFields: null,
-          hasRejectedFields: false,
-        },
-      ],
-    );
-    const loading = loadListWith(tab, ok);
-    await flush();
-    const failure = { status: "offline" } as const;
-
-    // When
-    syncFinishesAll(tab.requests, failure);
-    const result = await loading;
+    const result = await loadListWith(tab, async () => failure);
 
     // Then
     expect(result).toEqual(failure);
-    expect(tab.hub.record(STREAM).base).toBeUndefined();
   });
 
-  it("両方が失敗したら、一覧の結果を返す", async () => {
+  it("一覧の取得が例外を投げたときも、固定文のerrorを返す", async () => {
     // Given
     const tab = createTestRounds();
-    const listFailure = { status: "error", reason: "failed" } as const;
-    const loading = loadListWith(tab, async () => listFailure);
-    await flush();
 
     // When
-    syncFinishesAll(tab.requests, { status: "offline" });
+    const result = await loadListWith(tab, async () => {
+      throw new Error("boom");
+    });
 
     // Then
-    expect(await loading).toEqual(listFailure);
+    expect(result).toEqual({ status: "error", reason: "failed" });
   });
 
   it("確定済みの削除は、削除の印として端末の記録へ反映してから、削除済みの一覧を返す。未確定の削除は反映しない", async () => {
@@ -210,12 +136,9 @@ describe("loadList", () => {
       eventId: "e-unsent",
       roundId: "unsent",
     });
-    const loading = loadListWith(tab, ok);
-    await flush();
 
     // When
-    syncFinishesAll(tab.requests);
-    const result = await loading;
+    const result = await loadListWith(tab, ok);
 
     // Then
     expect(result.status === "ok" && [...result.data.deleted]).toEqual([
@@ -263,15 +186,12 @@ describe("loadList: 別のタブの変化", () => {
       eventId: "e-deleted",
       roundId: "deleted",
     });
-    const loading = loadListWith(tab, async () => ({
+
+    // When
+    const result = await loadListWith(tab, async () => ({
       status: "ok",
       data: items,
     }));
-    await flush();
-
-    // When
-    syncFinishesAll(tab.requests);
-    const result = await loading;
 
     // Then
     expect(result.status === "ok" && result.data.inProgress).toEqual([
@@ -280,6 +200,26 @@ describe("loadList: 別のタブの変化", () => {
     expect(result.status === "ok" && [...result.data.deleted]).toEqual([
       "deleted",
     ]);
+  });
+});
+
+describe("subscribe", () => {
+  it("端末の記録が変わるたびに知らせ、解除すると知らせない", async () => {
+    // Given
+    const tab = createTestRounds();
+    await tab.hub.ready();
+    const listener = vi.fn();
+    const stop = tab.list.subscribe(listener);
+
+    // When
+    await tab.hub.commit(STREAM, roundBase({ name: "端末" }), 10, "user-1");
+    const whileSubscribed = listener.mock.calls.length;
+    stop();
+    await tab.hub.commit(STREAM, roundBase({ name: "更新" }), 20, "user-1");
+
+    // Then
+    expect(whileSubscribed).toBeGreaterThan(0);
+    expect(listener).toHaveBeenCalledTimes(whileSubscribed);
   });
 });
 
@@ -327,10 +267,7 @@ describe("打ち切り", () => {
   it("一覧の読み込みも、終わらないままFETCH_TIMEOUT_MSでerrorにする", async () => {
     // Given
     const tab = createTestRounds();
-    const loading = loadListWith(tab, async () => ({
-      status: "ok",
-      data: [],
-    }));
+    const loading = loadListWith(tab, () => new Promise(() => {}));
 
     // When
     await tab.clock.advanceAsync(FETCH_TIMEOUT_MS);

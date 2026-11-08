@@ -10,25 +10,25 @@ import {
   type RoundListItem,
 } from "../domain/round-list";
 import { roundIdOfStream, roundStreamId } from "../domain/sync-events";
-import type { RefreshRequests } from "./refresh-requests";
 import type { RoundFetching } from "./round-fetching";
 import type { HubSnapshot, RoundRecordHub } from "./round-record-hub";
 import { withinFetchTimeout } from "./time-limit";
 import { type WhenOnline, whenOnline } from "./when-online";
 
 export type RoundsListStore = {
-  // 一覧の材料。一覧の取得と一括の取得の依頼を並行に行い、削除の印を反映して返す。FETCH_TIMEOUT_MSで打ち切る。
+  // 一覧の材料。一覧の取得の結果に、削除の印を反映して返す。FETCH_TIMEOUT_MSで打ち切る。
   loadList(): Promise<FetchResult<LoadedRoundsList>>;
   // 端末の入力中のラウンドの一覧。
   loadLocalList(): Promise<LocalRoundsList>;
+  // 端末の記録が変わるたびにlistenerを呼ぶ。返す関数で解除する。
+  subscribe(listener: () => void): () => void;
   // FALLBACK_WAIT_MSの後に1回listenerを呼ぶ。
   afterFallbackWait(listener: () => void): void;
   whenOnline: WhenOnline;
 };
 
 type Deps = {
-  hub: Pick<RoundRecordHub, "commit" | "readList" | "userId">;
-  requests: Pick<RefreshRequests, "requestAll" | "allowCommit">;
+  hub: Pick<RoundRecordHub, "commit" | "readList" | "userId" | "subscribe">;
   fetching: Pick<RoundFetching, "fetchRoundsList" | "savedTargetFaces">;
   clock: Clock;
   connectivity: Connectivity;
@@ -57,34 +57,14 @@ async function localList(
   return localRoundsList(snapshots, faces);
 }
 
-// 一覧の取得と、一括の取得の依頼を並行に行い、両方が成功したときだけ成功とする。
-// 一括の取得は、一覧の取得が成功したときだけ反映される(`refreshAll` の契約)。
-async function fetchListing(
-  deps: Pick<Deps, "requests" | "fetching">,
-): Promise<FetchResult<RoundListItem[]>> {
-  const { requests, fetching } = deps;
-  const request = requests.requestAll();
-  const listing = fetching.fetchRoundsList().then(
-    (result) => {
-      requests.allowCommit(request.id, result.status === "ok");
-      return result;
-    },
-    (): FetchResult<RoundListItem[]> => {
-      requests.allowCommit(request.id, false);
-      return ERROR_RESULT;
-    },
-  );
-  const [list, all] = await Promise.all([listing, request.result]);
-  if (list.status !== "ok") return list;
-  if (all.status !== "ok") return all;
-  return list;
-}
-
 async function listDetail(deps: Deps): Promise<FetchResult<LoadedRoundsList>> {
   const { hub, clock } = deps;
   const startedAt = clock.now();
   const { deleted, confirmed } = deletionsOf(await readSnapshots(hub));
-  const list = await fetchListing(deps);
+  // 一覧の取得が例外を投げても、固定のerrorにする。
+  const list = await deps.fetching
+    .fetchRoundsList()
+    .catch((): FetchResult<RoundListItem[]> => ERROR_RESULT);
   if (list.status !== "ok") return list;
   // 取得の前に削除が確定していたラウンドは、削除の印として端末の記録へ反映する。
   await Promise.all(
@@ -109,6 +89,7 @@ export function createRoundsListStore(deps: Deps): RoundsListStore {
   return {
     loadList: () => withinFetchTimeout(clock, connectivity, listDetail(deps)),
     loadLocalList: () => localList(deps),
+    subscribe: (listener) => deps.hub.subscribe(() => listener()),
     afterFallbackWait: (listener) => {
       clock.after(FALLBACK_WAIT_MS, listener);
     },

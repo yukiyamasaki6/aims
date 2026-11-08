@@ -29,9 +29,7 @@ function setup(
   };
   const needs: { current: Needs } = { current: needsOf() };
   let notifyNeeds: () => void = () => {};
-  const refreshAll = vi.fn(
-    async (_options: { waitForList: boolean }): Promise<boolean> => true,
-  );
+  const refreshAll = vi.fn(async (): Promise<void> => {});
   const refreshRound = vi.fn(
     async (_roundId: string): Promise<"ok" | "gone" | "failed"> => "ok",
   );
@@ -77,8 +75,6 @@ function setup(
     clock,
     connectivity,
   });
-  const counts: number[] = [];
-  sync.subscribeRefreshed((count) => counts.push(count));
   return {
     sync,
     clock,
@@ -91,7 +87,6 @@ function setup(
     session,
     refreshAll,
     refreshRound,
-    counts,
     changeNeeds(next: Needs) {
       needs.current = next;
       notifyNeeds();
@@ -99,12 +94,7 @@ function setup(
   };
 }
 
-// 一覧の依頼の番号が0なら一覧の依頼は無い。番号は残るが依頼が無い状態(停止の後)は、listを偽にして作る。
-const needsOf = (
-  rounds: Needs["rounds"] = [],
-  listRequest = 0,
-  list = listRequest > 0,
-): Needs => ({ list, listRequest, rounds });
+const needsOf = (rounds: Needs["rounds"] = []): Needs => ({ rounds });
 
 // 理由がopenのときだけ、開く依頼の番号を付ける(既定は1)。reasonsは当たる全ての理由(既定は[reason])で、先頭がreasonである。
 const roundNeed = (
@@ -166,20 +156,17 @@ describe("開始と停止", () => {
 });
 
 describe("常駐の一括の取得", () => {
-  it("サインイン済みで記録の利用者と同じなら、一覧を待たずに取得して反映し、成功の回数を1増やして知らせる", async () => {
+  it("開始で、サインイン済みで記録の利用者と同じなら、取得して反映することを1回頼む", async () => {
     // Given
     const t = setup();
-    t.sync.start("user-1");
 
     // When
-    t.sync.refreshAll("resident");
+    t.sync.start("user-1");
     await flush();
 
     // Then
-    expect(t.refreshAll).toHaveBeenCalledExactlyOnceWith({
-      waitForList: false,
-    });
-    expect(t.counts).toEqual([1]);
+    expect(t.session.readSession).toHaveBeenCalledTimes(1);
+    expect(t.refreshAll).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -196,42 +183,39 @@ describe("常駐の一括の取得", () => {
       "unowned",
     ],
   ] as const)(
-    "%sのときは、取得せず、成功の回数も増やさない",
+    "%sのときは、開始でも取得しない",
     async (_name, reading, match) => {
       // Given
       const t = setup({ reading, match });
-      t.sync.start("user-1");
 
       // When
-      t.sync.refreshAll("resident");
+      t.sync.start("user-1");
       await flush();
 
       // Then
       expect(t.refreshAll).not.toHaveBeenCalled();
-      expect(t.counts).toEqual([]);
     },
   );
 
-  it("サインインの確認が投げても、取得せずに続ける", async () => {
+  it("サインインの変化は、取得を起こさない", async () => {
     // Given
     const t = setup();
-    t.session.readSession = vi.fn(async () => {
-      throw new Error("boom");
-    });
     t.sync.start("user-1");
+    await flush();
 
     // When
-    t.sync.refreshAll("resident");
+    t.sync.signInChanged({ kind: "signed-in", userId: "user-1" });
     await flush();
 
     // Then
-    expect(t.refreshAll).not.toHaveBeenCalled();
+    expect(t.refreshAll).toHaveBeenCalledTimes(1);
   });
 
   it("通信の復帰と見える状態でも同じ前段を通って取得する。切断では取得しない", async () => {
     // Given
     const t = setup();
     t.sync.start("user-1");
+    await flush();
 
     // When
     t.sync.offline();
@@ -243,252 +227,94 @@ describe("常駐の一括の取得", () => {
     await flush();
 
     // Then
-    expect(afterOffline).toBe(0);
-    expect(t.refreshAll).toHaveBeenCalledTimes(2);
-    expect(t.counts).toEqual([1, 2]);
+    expect(afterOffline).toBe(1);
+    expect(t.refreshAll).toHaveBeenCalledTimes(3);
   });
 
-  it("取得に失敗しても(反映しなかった、投げた)、成功の回数を増やさず、次の契機で取得する", async () => {
+  it("前段を通らなかった開始の後でも、通信の復帰では、前段を通れば取得する", async () => {
     // Given
-    const t = setup();
+    const t = setup({ reading: { status: "unauthenticated" } as Reading });
     t.sync.start("user-1");
-    t.refreshAll.mockResolvedValueOnce(false);
-    t.refreshAll.mockRejectedValueOnce(new Error("boom"));
+    await flush();
+    t.session.reading = { status: "authenticated", userId: "user-1" };
 
     // When
-    t.sync.refreshAll("resident");
-    await flush();
-    t.sync.refreshAll("resident");
-    await flush();
-    t.sync.refreshAll("resident");
+    t.sync.online();
     await flush();
 
     // Then
-    expect(t.refreshAll).toHaveBeenCalledTimes(3);
-    expect(t.counts).toEqual([1]);
+    expect(t.refreshAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("取得が投げても、次の契機で取得する", async () => {
+    // Given
+    const t = setup();
+    t.refreshAll.mockRejectedValueOnce(new Error("boom"));
+    t.sync.start("user-1");
+    await flush();
+
+    // When
+    t.sync.online();
+    await flush();
+
+    // Then
+    expect(t.refreshAll).toHaveBeenCalledTimes(2);
   });
 
   it("常駐の実行中の契機は、完了後に1回だけやり直す(同時に1回まで)", async () => {
     // Given
     const t = setup();
-    t.sync.start("user-1");
-    const first = Promise.withResolvers<boolean>();
+    const first = Promise.withResolvers<void>();
     t.refreshAll.mockReturnValueOnce(first.promise);
-    t.sync.refreshAll("resident");
+    t.sync.start("user-1");
     await flush();
 
     // When
     t.sync.visible();
     t.sync.online();
-    t.sync.refreshAll("resident");
+    t.sync.visible();
     await flush();
     const whileRunning = t.refreshAll.mock.calls.length;
-    first.resolve(true);
+    first.resolve();
     await flush();
 
     // Then
     expect(whileRunning).toBe(1);
     expect(t.refreshAll).toHaveBeenCalledTimes(2);
   });
-
-  it("停止の後に届いた取得の結果では、成功の回数も通知も更新しない", async () => {
-    // Given
-    const t = setup();
-    t.sync.start("user-1");
-    const pending = Promise.withResolvers<boolean>();
-    t.refreshAll.mockReturnValueOnce(pending.promise);
-    t.sync.refreshAll("resident");
-    await flush();
-
-    // When
-    t.sync.stop();
-    pending.resolve(true);
-    await flush();
-
-    // Then
-    expect(t.counts).toEqual([]);
-  });
-
-  it("購読を解除すると、成功の回数を通知しない", async () => {
-    // Given
-    const t = setup();
-    const listener = vi.fn();
-    t.sync.subscribeRefreshed(listener)();
-    t.sync.start("user-1");
-
-    // When
-    t.sync.refreshAll("resident");
-    await flush();
-
-    // Then
-    expect(listener).not.toHaveBeenCalled();
-  });
 });
 
 describe("停止をまたぐ一括の取得", () => {
-  it("停止前の一括の取得が再開後に終わっても、成功の回数・通知・ゲートに触れない", async () => {
+  it("停止前の一括の取得が再開後に終わっても、再開後の扉に触れない", async () => {
     // Given
     const t = setup();
-    t.sync.start("user-1");
-    const old = Promise.withResolvers<boolean>();
+    const old = Promise.withResolvers<void>();
     t.refreshAll.mockReturnValueOnce(old.promise);
-    t.sync.refreshAll("resident");
+    t.sync.start("user-1");
     await flush();
     t.sync.stop();
-    t.sync.start("user-1");
-    const current = Promise.withResolvers<boolean>();
+    const current = Promise.withResolvers<void>();
     t.refreshAll.mockReturnValueOnce(current.promise);
-    t.sync.refreshAll("resident");
+    t.sync.start("user-1");
     await flush();
 
     // When
-    old.resolve(true);
+    old.resolve();
     await flush();
     t.sync.visible();
     await flush();
     const whileCurrentRuns = t.refreshAll.mock.calls.length;
-    current.resolve(true);
+    current.resolve();
     await flush();
 
     // Then
     expect(whileCurrentRuns).toBe(2);
-    expect(t.counts).toEqual([1, 2]);
-  });
-});
-
-describe("一覧の依頼", () => {
-  it("一覧の依頼だけの実行は、サインインの確認を読まず、一覧の成功を待って反映する。反映しても回数は数えない", async () => {
-    // Given
-    const t = setup();
-    t.needs.current = needsOf([], 1);
-
-    // When
-    t.sync.start("user-1");
-    await flush();
-
-    // Then
-    expect(t.refreshAll).toHaveBeenCalledExactlyOnceWith({ waitForList: true });
-    expect(t.session.readSession).not.toHaveBeenCalled();
-    expect(t.counts).toEqual([]);
-  });
-
-  it("一覧が失敗して反映されなかったときも、回数を増やさない", async () => {
-    // Given
-    const t = setup();
-    t.refreshAll.mockResolvedValue(false);
-    t.needs.current = needsOf([], 1);
-
-    // When
-    t.sync.start("user-1");
-    await flush();
-
-    // Then
-    expect(t.counts).toEqual([]);
+    expect(t.refreshAll).toHaveBeenCalledTimes(3);
   });
 });
 
 describe("取得の扉は互いを待たない", () => {
   type T = ReturnType<typeof setup>;
-  // 常駐の呼び出し(waitForList偽)と一覧の呼び出し(真)を、扉ごとに振り分ける。
-  const byDoor = (
-    t: T,
-    resident: (call: number) => Promise<boolean> | boolean,
-    list: (call: number) => Promise<boolean> | boolean,
-  ) => {
-    const calls = { resident: 0, list: 0 };
-    t.refreshAll.mockImplementation(async (options) => {
-      if (options.waitForList) {
-        calls.list += 1;
-        return list(calls.list);
-      }
-      calls.resident += 1;
-      return resident(calls.resident);
-    });
-  };
-  const doors = (t: T) =>
-    t.refreshAll.mock.calls.map(([options]) => options.waitForList);
-
-  it("常駐の実行中に一覧の依頼が届くと、常駐の完了を待たずに一覧の取得が始まり、一覧は成功の回数に数えない", async () => {
-    // Given
-    const t = setup();
-    const resident = Promise.withResolvers<boolean>();
-    byDoor(
-      t,
-      () => resident.promise,
-      () => true,
-    );
-    t.sync.start("user-1");
-    t.sync.refreshAll("resident");
-    await flush();
-
-    // When
-    t.changeNeeds(needsOf([], 1));
-    await flush();
-    const beforeResident = doors(t);
-    resident.resolve(true);
-    await flush();
-
-    // Then
-    expect(beforeResident).toEqual([false, true]);
-    expect(t.counts).toEqual([1]);
-  });
-
-  it("一覧の実行中に常駐の契機が届くと、すぐに常駐の取得が始まり、一覧が失敗しても常駐は反映して回数を数える", async () => {
-    // Given
-    const t = setup();
-    const list = Promise.withResolvers<boolean>();
-    byDoor(
-      t,
-      () => true,
-      () => list.promise,
-    );
-    t.needs.current = needsOf([], 1);
-    t.sync.start("user-1");
-    await flush();
-
-    // When
-    t.sync.refreshAll("resident");
-    await flush();
-    const beforeList = doors(t);
-    const countsBeforeList = [...t.counts];
-    list.resolve(false);
-    await flush();
-
-    // Then
-    expect(beforeList).toEqual([true, false]);
-    expect(countsBeforeList).toEqual([1]);
-    expect(t.counts).toEqual([1]);
-  });
-
-  it("一覧の実行中に一覧の依頼が届くと、すぐに次の一覧の実行が並行して始まり、依頼ごとに1回だけ実行する", async () => {
-    // Given
-    const t = setup();
-    const list = Promise.withResolvers<boolean>();
-    byDoor(
-      t,
-      () => true,
-      (call) => (call === 1 ? list.promise : true),
-    );
-    t.needs.current = needsOf([], 1);
-    t.sync.start("user-1");
-    await flush();
-
-    // When
-    t.changeNeeds(needsOf([], 2));
-    await flush();
-    const afterSecond = doors(t).length;
-    t.changeNeeds(needsOf([], 2));
-    t.changeNeeds(needsOf([], 2));
-    await flush();
-    const afterRepeat = doors(t).length;
-    list.resolve(true);
-    await flush();
-
-    // Then
-    expect(afterSecond).toBe(2);
-    expect(afterRepeat).toBe(2);
-    expect(doors(t)).toEqual([true, true]);
-  });
 
   it("取り直しの実行中に開く依頼が届くと、すぐに開く依頼の取得が始まり、開く依頼が続いたときは、依頼ごとにすぐ取得を始める", async () => {
     // Given
@@ -576,34 +402,23 @@ describe("取得の扉は互いを待たない", () => {
     {
       door: "常駐",
       needs: needsOf(),
-      resident: true,
       install(t: T, old: Promise<unknown>, current: Promise<unknown>) {
-        byDoor(
-          t,
-          (n) =>
-            n === 1
-              ? (old as Promise<boolean>)
-              : n === 2
-                ? (current as Promise<boolean>)
-                : true,
-          () => true,
-        );
+        t.refreshAll
+          .mockReturnValueOnce(old as Promise<void>)
+          .mockReturnValueOnce(current as Promise<void>);
       },
-      begin: (t: T) => t.sync.refreshAll("resident"),
-      overlap: (t: T) => t.sync.refreshAll("resident"),
-      count: (t: T) => doors(t).filter((door) => !door).length,
-      value: true,
+      overlap: (t: T) => t.sync.visible(),
+      count: (t: T) => t.refreshAll.mock.calls.length,
+      value: undefined as unknown,
     },
     {
       door: "取り直し",
       needs: needsOf([roundNeed("r1", "diverged")]),
-      resident: false,
       install(t: T, old: Promise<unknown>, current: Promise<unknown>) {
         t.refreshRound
           .mockReturnValueOnce(old as Promise<"ok">)
           .mockReturnValueOnce(current as Promise<"ok">);
       },
-      begin: () => {},
       overlap: (t: T) => t.changeNeeds(needsOf([roundNeed("r1", "diverged")])),
       count: (t: T) => t.refreshRound.mock.calls.length,
       value: "ok" as unknown,
@@ -620,12 +435,10 @@ describe("取得の扉は互いを待たない", () => {
       row.install(t, old.promise, current.promise);
       t.needs.current = row.needs;
       t.sync.start("user-1");
-      row.begin(t);
       await flush();
       const runningBeforeStop = row.count(t);
       t.sync.stop();
       t.sync.start("user-1");
-      row.begin(t);
       await flush();
       const runningAfterResume = row.count(t);
 
@@ -633,7 +446,6 @@ describe("取得の扉は互いを待たない", () => {
       old.resolve(row.value);
       await flush();
       const afterOld = row.count(t);
-      const countsAfterOld = [...t.counts];
       row.overlap(t);
       row.overlap(t);
       await flush();
@@ -646,33 +458,10 @@ describe("取得の扉は互いを待たない", () => {
       expect(afterOld).toBe(2);
       expect(afterOverlap).toBe(2);
       expect(row.count(t)).toBe(3);
-      expect(countsAfterOld).toEqual([]);
-      // 停止前の実行は数えず、再開後の実行と、その完了後の1回のやり直しだけを数える。
-      if (row.resident) expect(t.counts).toEqual([1, 2]);
     },
   );
 
   const requestRows = [
-    {
-      request: "一覧",
-      needs: needsOf([], 1),
-      install(t: T, old: Promise<unknown>, current: Promise<unknown>) {
-        byDoor(
-          t,
-          () => true,
-          (n) =>
-            n === 1
-              ? (old as Promise<boolean>)
-              : n === 2
-                ? (current as Promise<boolean>)
-                : true,
-        );
-      },
-      next: (t: T) => t.changeNeeds(needsOf([], 2)),
-      same: (t: T) => t.changeNeeds(needsOf([], 1)),
-      count: (t: T) => doors(t).filter((door) => door).length,
-      value: true,
-    },
     {
       request: "開く依頼",
       needs: needsOf([roundNeed("r1", "open", 1)]),
@@ -731,10 +520,6 @@ describe("取得の扉は互いを待たない", () => {
 });
 
 describe("依頼の番号", () => {
-  type T = ReturnType<typeof setup>;
-  const doors = (t: T) =>
-    t.refreshAll.mock.calls.map(([options]) => options.waitForList);
-
   it("開く依頼の番号が増えなければ、記録の知らせが何度届いても、refreshRoundを重ねて呼ばない。初めての開く依頼では、ちょうど1回呼ぶ", async () => {
     // Given
     const t = setup();
@@ -756,49 +541,26 @@ describe("依頼の番号", () => {
     expect(t.refreshRound).toHaveBeenCalledTimes(1);
   });
 
-  it("一覧の依頼の番号が増えなければ、知らせが何度届いても、一覧の実行を重ねない", async () => {
+  it("停止の後に再開し、新しい開く依頼を出すと、1回ずつ実行が始まる(番号を数え直さない)", async () => {
     // Given
     const t = setup();
-    const list = Promise.withResolvers<boolean>();
-    t.refreshAll.mockImplementation(() => list.promise);
-    t.needs.current = needsOf([], 1);
-    t.sync.start("user-1");
-    await flush();
-
-    // When
-    t.changeNeeds(needsOf([], 1));
-    t.changeNeeds(needsOf([], 1));
-    t.changeNeeds(needsOf([], 1));
-    await flush();
-
-    // Then
-    expect(doors(t)).toEqual([true]);
-  });
-
-  it("停止の後に再開し、新しい開く依頼と一覧の依頼を出すと、それぞれ1回ずつ実行が始まる(番号を数え直さない)", async () => {
-    // Given
-    const t = setup();
-    t.needs.current = needsOf([roundNeed("r1", "open", 1)], 1);
+    t.needs.current = needsOf([roundNeed("r1", "open", 1)]);
     t.sync.start("user-1");
     await flush();
     t.sync.stop();
-    // 停止で依頼が消えたことを模す。番号1は残るが、一覧の依頼は無い。
-    t.needs.current = needsOf([], 1, false);
+    // 停止で依頼が消えたことを模す。番号1は残るが、依頼は無い。
+    t.needs.current = needsOf();
     t.sync.start("user-1");
     await flush();
-    const beforeNew = [
-      t.refreshRound.mock.calls.length,
-      doors(t).filter(Boolean).length,
-    ];
+    const beforeNew = t.refreshRound.mock.calls.length;
 
     // When
-    t.changeNeeds(needsOf([roundNeed("r1", "open", 2)], 2));
+    t.changeNeeds(needsOf([roundNeed("r1", "open", 2)]));
     await flush();
 
     // Then
-    expect(beforeNew).toEqual([1, 1]);
+    expect(beforeNew).toBe(1);
     expect(t.refreshRound).toHaveBeenCalledTimes(2);
-    expect(doors(t).filter(Boolean)).toHaveLength(2);
   });
 });
 
@@ -1332,7 +1094,7 @@ describe("停止の後", () => {
     t.sync.stop();
 
     // When
-    t.changeNeeds(needsOf([roundNeed("r1", "open")], 1));
+    t.changeNeeds(needsOf([roundNeed("r1", "open")]));
     await flush();
 
     // Then

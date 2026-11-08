@@ -134,13 +134,15 @@ export function createRoundQueries(
   database: DatabaseGateway<RoundsDbSchema>,
 ): RoundQueries {
   // target_facesのRLSは認証済みの全員に全行を見せるため、他人の個人の的を除くクエリの絞りが必須である。
-  const selectTargetFaces = (userId: string) =>
+  // `retry`は、裏の取得(個別と一括)の一部として問い合わせるときだけ真にする。
+  const selectTargetFaces = (userId: string, retry = false) =>
     database.select({
       table: "target_faces",
       columns: TARGET_FACE_SELECT,
       filters: [
         { op: "or", expression: `owner_id.is.null,owner_id.eq.${userId}` },
       ],
+      ...(retry ? { retry } : {}),
     });
 
   const roundOrders: readonly DbOrder<RoundsDbSchema, "rounds">[] = [
@@ -172,6 +174,7 @@ export function createRoundQueries(
           { op: "in", column: "id", values: chunk },
         ],
         orders: roundOrders,
+        retry: true,
       });
     }
     const filter = ["status.eq.in_progress"];
@@ -181,6 +184,7 @@ export function createRoundQueries(
       columns: ROUND_SELECT,
       filters: [notDisabled, { op: "or", expression: filter.join(",") }],
       orders: roundOrders,
+      retry: true,
     });
   }
 
@@ -196,8 +200,9 @@ export function createRoundQueries(
           ],
           orders: roundOrders,
           single: "maybe",
+          retry: true,
         }),
-        selectTargetFaces(userId),
+        selectTargetFaces(userId, true),
       ]);
       const failure = failureOfResponses([round, faces]);
       if (failure) return failure;
@@ -213,7 +218,7 @@ export function createRoundQueries(
     async roundDetails(userId, roundIds) {
       const chunks = roundIds.length > 0 ? chunkIds(roundIds) : [[]];
       const [faces, ...responses] = await Promise.all([
-        selectTargetFaces(userId),
+        selectTargetFaces(userId, true),
         ...chunks.map((chunk, index) => selectRoundsChunk(chunk, index)),
       ]);
       const failure = failureOfResponses([...responses, faces]);

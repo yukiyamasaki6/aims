@@ -374,16 +374,15 @@ test.describe("的の取得を止める", () => {
   });
 });
 
-// 一括の取得を起こし、成功の回数が増えるまで待つ。
+// 一括の取得を起こし、その応答(`/rest/v1/rounds?`)を待つ。
 async function refreshRoundBases(page: Page) {
-  const refresher = page.getByTestId("round-base-refresher");
-  const before = Number(await refresher.getAttribute("data-refreshed-count"));
+  const fetched = page.waitForResponse(
+    (response) =>
+      response.url().includes("/rest/v1/rounds?") &&
+      response.request().method() === "GET",
+  );
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  await expect
-    .poll(async () =>
-      Number(await refresher.getAttribute("data-refreshed-count")),
-    )
-    .toBeGreaterThan(before);
+  await fetched;
 }
 
 test("ラウンド編集中に他の端末の変更が届いても、変更中の名前が残り、保存すると両方の変更が保たれる", async ({

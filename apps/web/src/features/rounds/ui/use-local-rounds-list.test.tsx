@@ -64,6 +64,64 @@ describe("useLocalRoundsList", () => {
     expect(result.current.local).toBe(loaded);
   });
 
+  it("端末の記録が変わるたびに読み直し、後に始めた読み込みの結果だけを使い、解除後は読まない", async () => {
+    // Given
+    const { fake, wrapper } = setup();
+    let notify: () => void = () => {};
+    const stop = vi.fn();
+    fake.store.subscribe.mockImplementation((listener: () => void) => {
+      notify = listener;
+      return stop;
+    });
+    const updated: LocalRoundsList = { inProgress: [] };
+    const slow = Promise.withResolvers<LocalRoundsList>();
+    fake.store.loadLocalList
+      .mockReturnValueOnce(slow.promise)
+      .mockResolvedValueOnce(updated);
+    const { result, unmount } = renderHook(() => useLocalRoundsList(), {
+      wrapper,
+    });
+
+    // When
+    act(() => notify());
+    await act(async () => {});
+    slow.resolve(loaded);
+    await act(async () => {});
+    unmount();
+
+    // Then
+    expect(fake.store.loadLocalList).toHaveBeenCalledTimes(2);
+    expect(result.current.local).toBe(updated);
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("同じティックの連続した変化は1回の読み直しにまとめ、内容が同じなら状態を替えない", async () => {
+    // Given
+    const { fake, wrapper } = setup();
+    let notify: () => void = () => {};
+    fake.store.subscribe.mockImplementation((listener: () => void) => {
+      notify = listener;
+      return () => {};
+    });
+    fake.store.loadLocalList.mockResolvedValue(loaded);
+    const { result } = renderHook(() => useLocalRoundsList(), { wrapper });
+    await act(async () => {});
+    const before = result.current.local;
+    fake.store.loadLocalList.mockResolvedValue(structuredClone(loaded));
+
+    // When
+    act(() => {
+      notify();
+      notify();
+      notify();
+    });
+    await act(async () => {});
+
+    // Then
+    expect(fake.store.loadLocalList).toHaveBeenCalledTimes(2);
+    expect(result.current.local).toBe(before);
+  });
+
   it("待ちの経過の合図が起きるまでwaitedは偽で、起きたら真になる", async () => {
     // Given
     const { fake, wrapper } = setup();

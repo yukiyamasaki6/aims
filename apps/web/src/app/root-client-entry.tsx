@@ -16,7 +16,6 @@ import { SwUpdateActivator } from "@/features/offline-pwa/ui/sw-update-activator
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
 import { createBrowserVisibility } from "@/features/round-sync/infrastructure/browser-visibility";
-import { RoundBaseRefresher } from "@/features/round-sync/ui/round-base-refresher";
 import { createContentFetcher } from "@/features/rounds/application/content-fetcher";
 import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
 import { createOpSender } from "@/features/rounds/application/op-sender";
@@ -165,7 +164,6 @@ function composeStores(inputs: Inputs, records: Records) {
     }),
     listStore: createRoundsListStore({
       hub,
-      requests,
       fetching,
       clock,
       connectivity,
@@ -190,7 +188,7 @@ function composeSync(inputs: Inputs, records: Records) {
     connectivity,
     sync,
   });
-  return { sync, triggers };
+  return { triggers };
 }
 
 // オフラインとアプリの更新(Service Workerの更新の切り替え)。
@@ -246,7 +244,6 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
           <RoundDetailStoreProvider store={app.detailStore}>
             <RoundProceduresProvider procedures={app.procedures}>
               <SessionProvider session={app.session}>
-                <RoundBaseRefresher sync={app.sync} />
                 <SwUpdateActivator activation={app.swUpdate} />
                 {children}
               </SessionProvider>

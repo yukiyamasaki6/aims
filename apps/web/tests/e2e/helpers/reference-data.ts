@@ -45,12 +45,58 @@ export async function saveTargetFacesOnDevice(page: Page) {
   await waitForServiceWorkerControl(page);
 }
 
-// 端末への取得の完了は、常駐の取得の部品が出す成功の回数で確かめる。
-export async function expectRoundBasesFetched(page: Page) {
-  await expect(page.getByTestId("round-base-refresher")).not.toHaveAttribute(
-    "data-refreshed-count",
-    "0",
+// 的の一覧が端末(localStorage)に保存されたか。
+function targetFacesSaved(page: Page): Promise<boolean> {
+  return page.evaluate(() =>
+    Object.keys(localStorage).some((key) =>
+      key.startsWith("aims:reference:target-faces:"),
+    ),
   );
+}
+
+// ラウンドのベースが端末の保存(IndexedDBの`aims-sync`の`bases`)にあるか。ベースの保存のキーは[利用者, 列のID]。
+function roundBaseSaved(page: Page, roundId: string): Promise<boolean> {
+  return page.evaluate(
+    (streamId) =>
+      new Promise<boolean>((resolve, reject) => {
+        const open = indexedDB.open("aims-sync");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          if (!db.objectStoreNames.contains("bases")) {
+            db.close();
+            resolve(false);
+            return;
+          }
+          const request = db
+            .transaction("bases", "readonly")
+            .objectStore("bases")
+            .getAllKeys();
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            db.close();
+            resolve(
+              request.result.some(
+                (key) => Array.isArray(key) && key[1] === streamId,
+              ),
+            );
+          };
+        };
+      }),
+    `round:${roundId}`,
+  );
+}
+
+// 端末への取得の完了は、端末の保存への書き込みで確かめる。的の一覧が保存されるまで待ち、roundIdを渡したときは、そのラウンドのベースが保存されるまで待つ。
+// 的の一覧は`/rounds/new`の取得でも保存されるため、ラウンドのベースに頼るテストはroundIdを渡す。
+export async function expectRoundBasesFetched(
+  page: Page,
+  { roundId }: { roundId?: string } = {},
+) {
+  await expect.poll(() => targetFacesSaved(page)).toBe(true);
+  if (roundId !== undefined) {
+    await expect.poll(() => roundBaseSaved(page, roundId)).toBe(true);
+  }
 }
 
 // オンラインで/rounds/newを開いてプリセットを端末に保存させ、オフラインにする。

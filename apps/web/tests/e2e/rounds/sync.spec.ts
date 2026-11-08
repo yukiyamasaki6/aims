@@ -1275,9 +1275,7 @@ test("オフラインで点数を記録した入力中のラウンドを、ア�
     password: SHARED_PASSWORD,
   });
   await waitForServiceWorkerControl(first.page);
-  await expect(
-    first.page.getByTestId("round-base-refresher"),
-  ).not.toHaveAttribute("data-refreshed-count", "0");
+  await expectRoundBasesFetched(first.page, { roundId });
   await goOffline(first.context);
   await first.page.goto(`/rounds/${roundId}`);
   await waitForHydration(first.page);

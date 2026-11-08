@@ -25,7 +25,7 @@ export type LoadedRound = {
   targetFaces: TargetFaceOption[];
   // 確定していない作成のeventId。あるとき、基準は端末の作成の操作である。
   pendingCreationEventId: string | null;
-  // 取得できなかった(または`FALLBACK_WAIT_MS`内に終わらなかった)ため、端末のベースで開いたときは"local"。
+  // 保存済みがあり、取得の結果を待たずに端末のベースで開いたときは"local"。
   source: "server" | "local";
 };
 

@@ -174,9 +174,6 @@ describe("サインインの変化への反応", () => {
     ["signed-in", "user-1"],
     ["signed-in", "user-0"],
     ["signed-in", null],
-    ["token-refreshed", "user-1"],
-    ["token-refreshed", "user-0"],
-    ["token-refreshed", null],
   ] as const)(
     "利用者のある%sの通知で、記録の利用者が%sでも、保留した送信を戻すだけである",
     (kind, recordUserId) => {

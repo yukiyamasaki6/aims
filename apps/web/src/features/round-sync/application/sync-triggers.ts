@@ -1,8 +1,4 @@
-import type {
-  IdentityReader,
-  SignInChange,
-  SignInChanges,
-} from "@/features/auth";
+import type { IdentityReader, SignInChanges } from "@/features/auth";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { RoundSync } from "./round-sync";
 
@@ -26,16 +22,11 @@ export function createSyncTriggers(deps: {
 }): SyncTriggers {
   const { identityReader, changes, visibility, connectivity, sync } = deps;
 
-  function handleSignIn(change: SignInChange) {
-    sync.signInChanged(change);
-    if (change.kind === "signed-in") sync.refreshAll("resident");
-  }
-
   return {
     start() {
       sync.start(identityReader.read());
       const stops = [
-        changes.subscribe(handleSignIn),
+        changes.subscribe((change) => sync.signInChanged(change)),
         connectivity.onOnline(() => sync.online()),
         connectivity.onOffline(() => sync.offline()),
         visibility.onVisible(() => sync.visible()),

@@ -155,7 +155,7 @@ function Appender({
 
 describe("RootClientEntry", () => {
   describe("マウント", () => {
-    it("子要素を描き、常駐の部品は何も表示しない(成功の回数の観測点だけを隠して置く)", () => {
+    it("子要素を描く", () => {
       // Given
       const element = (
         <RootClientEntry>
@@ -168,9 +168,6 @@ describe("RootClientEntry", () => {
 
       // Then
       expect(screen.getByText("子要素")).toBeInTheDocument();
-      expect(screen.getByTestId("round-base-refresher")).toHaveAttribute(
-        "hidden",
-      );
     });
 
     it("画面の遷移で待機中の新SWを有効にするSwUpdateActivatorを含め、更新の切り替えの手続きを渡す", () => {

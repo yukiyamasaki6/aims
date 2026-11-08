@@ -80,7 +80,6 @@ export function createTestRounds(
   });
   const list = createRoundsListStore({
     hub,
-    requests,
     fetching: fetching as unknown as RoundFetching,
     clock,
     connectivity,

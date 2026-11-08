@@ -101,7 +101,7 @@ describe("書き込みのRPC", () => {
 });
 
 describe("取得の問い合わせ", () => {
-  it("ラウンドの詳細は、表・列・絞り・並び・1行の指定の順にSDKへ届き、最後に再試行なしを指定する", async () => {
+  it("ラウンドの詳細は、表・列・絞り・並び・1行の指定の順にSDKへ届き、最後に再試行ありを指定する", async () => {
     // Given
     const { database, calls } = fakeSdk({
       data: null,
@@ -130,8 +130,8 @@ describe("取得の問い合わせ", () => {
       ["owner_id.is.null,owner_id.eq.user-1"],
     ]);
     expect(calls.filter(([method]) => method === "retry")).toEqual([
-      ["retry", [false]],
-      ["retry", [false]],
+      ["retry", [true]],
+      ["retry", [true]],
     ]);
   });
 

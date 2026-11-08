@@ -67,40 +67,22 @@ export type RoundBaseRefreshResult = "ok" | "gone" | "failed";
 export function createRoundBaseRefreshing(deps: {
   hub: Pick<RoundRecordHub, "commit" | "readStored" | "clearDiverged">;
   fetching: Pick<RoundFetching, "fetchRoundDetail" | "fetchRoundDetails">;
-  requests: Pick<
-    RefreshRequests,
-    "beginAll" | "beginRound" | "settleAll" | "settleRound" | "whenListAllows"
-  >;
+  requests: Pick<RefreshRequests, "beginRound" | "settleRound">;
 }) {
   const { hub, fetching, requests } = deps;
 
   // 入力中のラウンドと、端末が保持するラウンドを、まとめて取得して端末の記録へ反映する。
-  // `waitForList`が真なら、一覧の依頼を実行に取り込み、一覧の取得が成功したときだけ反映して、依頼を解決する。
-  // 偽のときは、一覧の依頼に触れない(実行に取り込まず、解決もしない)。`committed`は、反映したか。
-  async function refreshAll(options: {
-    waitForList: boolean;
-  }): Promise<{ result: FetchResult<null>; committed: boolean }> {
-    const run = options.waitForList ? requests.beginAll() : null;
-    let outcome: { result: FetchResult<null>; committed: boolean };
+  // 取得や反映に失敗しても何もしない(次の契機で取り直す)。
+  async function refreshAll(): Promise<void> {
     try {
       const retained = await retainedRoundIds(hub);
       const fetched = await fetching.fetchRoundDetails(retained);
-      if (fetched.status !== "ok") {
-        outcome = { result: fetched, committed: false };
-      } else if (run !== null && !(await requests.whenListAllows(run))) {
-        outcome = { result: { status: "ok", data: null }, committed: false };
-      } else {
+      if (fetched.status === "ok") {
         await commitRoundDetails(hub, fetched.data, retained);
-        outcome = { result: { status: "ok", data: null }, committed: true };
       }
     } catch {
-      outcome = {
-        result: { status: "error", reason: "failed" },
-        committed: false,
-      };
+      // 失敗は何もしない。
     }
-    if (run !== null) requests.settleAll(run, outcome.result);
-    return outcome;
   }
 
   // 開いた詳細のラウンドを取得して端末の記録へ反映し、依頼を待つ側へ結果を返す。

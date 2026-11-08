@@ -11,7 +11,7 @@ import {
   type FlightGate,
   IDLE_GATE,
 } from "../domain/flight-gate";
-import { refreshDecision, shouldRefetch } from "../domain/sync-trigger";
+import { shouldRefetch } from "../domain/sync-trigger";
 import { createStaleClock } from "./stale-clock";
 
 // 取り直しの理由。取り直しの制御が返す理由の型から導く。
@@ -43,13 +43,10 @@ export function createRoundSync(deps: {
   let active = false;
   // 開始と停止のたびに進める。停止をまたぐ古い処理が、新しい状態を変えないため。
   let epoch = 0;
-  // 同時に1回までの扉は、常駐の一括の取得と、ラウンドごとの取り直しの2種類だけに置く。一覧の一括の取得とラウンドごとの開く依頼は、依頼の番号ごとに扉なしで並行して実行する。
+  // 同時に1回までの扉は、常駐の一括の取得と、ラウンドごとの取り直しの2種類だけに置く。ラウンドごとの開く依頼は、依頼の番号ごとに扉なしで並行して実行する。
   let residentGate: FlightGate = IDLE_GATE;
-  // 最後に実行を始めた一覧の依頼の番号と、ラウンドごとの開く依頼の番号。同じ番号のあいだは、記録の知らせが何度届いても、実行を重ねない。
-  let startedList = 0;
+  // ラウンドごとの、最後に実行を始めた開く依頼の番号。同じ番号のあいだは、記録の知らせが何度届いても、実行を重ねない。
   const startedOpen = new Map<string, number>();
-  let refreshed = 0;
-  const refreshedListeners = new Set<(count: number) => void>();
   const refetchLane: RoundLane = { gates: new Map(), reruns: new Map() };
   // 端末のベースで開いている間の取り直しの時計。
   const staleClock = createStaleClock({
@@ -67,42 +64,18 @@ export function createRoundSync(deps: {
 
   // 常駐の前段。サインイン済みで、記録の利用者と同じときだけ通る。
   async function residentPass(): Promise<boolean> {
-    try {
-      const reading = await session.readSession();
-      return (
-        reading.status === "authenticated" &&
-        control.matchUser(reading.userId) === "same"
-      );
-    } catch {
-      return false;
-    }
+    const reading = await session.readSession();
+    return (
+      reading.status === "authenticated" &&
+      control.matchUser(reading.userId) === "same"
+    );
   }
 
-  // 常駐の扉の1回。前段を通ったときだけ取得して反映し、反映したら成功の回数を数える。
+  // 常駐の扉の1回。前段を通ったときだけ取得して反映する。
   async function residentOnce(target: number) {
     const residentAllowed = await residentPass();
     if (epoch !== target) return;
-    const decision = refreshDecision({ kind: "resident", residentAllowed });
-    if (!decision.fetch) return;
-    const committed = await refresh.refreshAll({
-      waitForList: decision.waitForList,
-    });
-    // 停止をまたいだ結果は数えない。
-    if (committed && epoch === target) {
-      refreshed += 1;
-      for (const listener of [...refreshedListeners]) listener(refreshed);
-    }
-  }
-
-  // 一覧の依頼ごとの実行。一覧の依頼があるときだけ、一覧の取得が成功したときに反映する取得を行う。成功の回数は数えない。
-  async function listRun() {
-    try {
-      if (!refresh.refreshNeeds().list) return;
-      const decision = refreshDecision({ kind: "list" });
-      await refresh.refreshAll({ waitForList: decision.waitForList });
-    } catch {
-      // 取得の失敗は何もしない(依頼は取得の結果で終わる)。
-    }
+    if (residentAllowed) await refresh.refreshAll();
   }
 
   // 開く依頼ごとの実行。
@@ -115,23 +88,19 @@ export function createRoundSync(deps: {
   }
 
   // 常駐の扉で一括の取得を行う。実行中の契機は、完了後に1回だけやり直す。
-  async function runAll(
-    once: (target: number) => Promise<void>,
-    getGate: () => FlightGate,
-    setGate: (gate: FlightGate) => void,
-  ) {
+  async function runResident() {
     const target = epoch;
     let again = true;
     while (again) {
       try {
-        await once(target);
+        await residentOnce(target);
       } catch {
         // 取得の失敗は何もしない(次の契機で取り直す)。
       }
       // 停止をまたいだ処理は、新しい状態(扉と予約)に触れない。
       if (epoch !== target) return;
-      const end = endFlight(getGate());
-      setGate(end.gate);
+      const end = endFlight(residentGate);
+      residentGate = end.gate;
       again = end.again;
     }
   }
@@ -139,14 +108,7 @@ export function createRoundSync(deps: {
   function requestResident() {
     const begin = beginFlight(residentGate);
     residentGate = begin.gate;
-    if (!begin.run) return;
-    void runAll(
-      residentOnce,
-      () => residentGate,
-      (gate) => {
-        residentGate = gate;
-      },
-    );
+    if (begin.run) void runResident();
   }
 
   function needOf(roundId: string) {
@@ -260,10 +222,6 @@ export function createRoundSync(deps: {
   function evaluate() {
     if (!active) return;
     const needs = refresh.refreshNeeds();
-    if (needs.list && needs.listRequest > startedList) {
-      startedList = needs.listRequest;
-      void listRun();
-    }
     const offline = connectivity.isOffline();
     for (const need of needs.rounds) {
       startOpenRun(need);
@@ -329,6 +287,8 @@ export function createRoundSync(deps: {
       control.start(userId);
       stopNeeds = refresh.onRefreshNeeds(evaluate);
       evaluate();
+      // 起動時の常駐の取得は、サインインの通知を待たずにここで1回頼む。前段が、未認証と別の利用者を除く。
+      requestResident();
     },
     stop() {
       active = false;
@@ -337,7 +297,6 @@ export function createRoundSync(deps: {
       stopNeeds = undefined;
       staleClock.dispose();
       residentGate = IDLE_GATE;
-      startedList = 0;
       startedOpen.clear();
       refetchLane.gates.clear();
       refetchLane.reruns.clear();
@@ -350,9 +309,6 @@ export function createRoundSync(deps: {
     signInChanged(change: SignInChange) {
       control.signInChanged(change);
     },
-    refreshAll(_cause: "resident") {
-      requestResident();
-    },
     online() {
       requestResident();
       restartStale();
@@ -363,13 +319,6 @@ export function createRoundSync(deps: {
     visible() {
       requestResident();
       restartStale();
-    },
-    // 常駐の一括の取得が成功した回数の通知。
-    subscribeRefreshed(listener: (count: number) => void) {
-      refreshedListeners.add(listener);
-      return () => {
-        refreshedListeners.delete(listener);
-      };
     },
   };
 }

@@ -123,7 +123,6 @@ flowchart LR
 | 複数画面 | `rounds-context.tsx` | 3つの窓口の文脈と、詳細の手続きの入れ物の文脈を定義 |
 
 `round-config-panel.tsx`は詳細(スコアカードの設定の節)、`save-preset-dialog.tsx`は詳細(スコアカードのヘッダー)に属する。
-`features/round-sync/ui/round-base-refresher.tsx`は画面に属さない(同期の契機を渡す常駐の部品)。
 
 ### 起動地点の組み立て
 

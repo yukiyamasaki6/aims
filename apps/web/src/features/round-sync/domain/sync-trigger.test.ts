@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { refreshDecision, shouldRefetch } from "./sync-trigger";
+import { shouldRefetch } from "./sync-trigger";
 
 describe("shouldRefetch", () => {
   it("開いたときは常に取り直し、他の理由はオフラインでは取り直さない", () => {
@@ -31,39 +31,4 @@ describe("shouldRefetch", () => {
       expect(result).toBe(expected);
     },
   );
-});
-
-describe("refreshDecision", () => {
-  it("常駐の前段を通らなければ取得しない", () => {
-    // Given
-    // When
-    const decision = refreshDecision({
-      kind: "resident",
-      residentAllowed: false,
-    });
-
-    // Then
-    expect(decision).toEqual({ fetch: false, waitForList: false });
-  });
-
-  it("常駐の前段を通れば、一覧の成否を待たずに取得する", () => {
-    // Given
-    // When
-    const decision = refreshDecision({
-      kind: "resident",
-      residentAllowed: true,
-    });
-
-    // Then
-    expect(decision).toEqual({ fetch: true, waitForList: false });
-  });
-
-  it("一覧の依頼は常に取得し、一覧の成否を待つ", () => {
-    // Given
-    // When
-    const decision = refreshDecision({ kind: "list" });
-
-    // Then
-    expect(decision).toEqual({ fetch: true, waitForList: true });
-  });
 });
