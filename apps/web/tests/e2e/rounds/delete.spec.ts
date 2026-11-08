@@ -10,6 +10,7 @@ import {
 import { blockOpLogStore, expectNoPendingOps } from "../helpers/op-log";
 import { forwardAs, openOtherDevice } from "../helpers/other-device";
 import {
+  expectRoundBasesFetched,
   openNewRoundThenGoOffline,
   startRoundOffline,
 } from "../helpers/reference-data";
@@ -37,9 +38,11 @@ async function createNamedRound(prefix: string) {
   return { name, roundId };
 }
 
-async function openList(page: Page, name: string) {
+async function openList(page: Page, name: string, roundId: string) {
   await page.goto("/rounds");
   await waitForHydration(page);
+  // 入力中の区画は端末の保存から読むため、一括の取得の反映を待ってから操作する(区画へ移ると、開いたメニューが作り直される)。
+  await expectRoundBasesFetched(page, { roundId });
   return {
     row: page.locator("li", { hasText: name }),
     link: page.getByRole("link", { name: new RegExp(name) }),
@@ -89,8 +92,8 @@ test("ラウンド一覧でカードのメニューから削除を選んで確�
   page,
 }) => {
   // カードのメニューを開き、削除を選べることを確かめる。
-  const { name } = await createNamedRound("一覧から削除");
-  const { row, link } = await openList(page, name);
+  const { name, roundId } = await createNamedRound("一覧から削除");
+  const { row, link } = await openList(page, name, roundId);
   await expect(page.getByTestId("round-delete")).toBeHidden();
   await row.getByTestId("round-menu-trigger").click();
   await expect(page.getByTestId("round-delete")).toBeVisible();
@@ -111,7 +114,7 @@ test("ラウンド詳細のヘッダーのメニューから削除を選んで�
 }) => {
   // 一覧からラウンドの詳細を開く。
   const { name, roundId } = await createNamedRound("詳細から削除");
-  const { link } = await openList(page, name);
+  const { link } = await openList(page, name, roundId);
   // 戻る先の履歴を作るため、詳細は一覧から開く。
   await link.click();
   await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
@@ -140,7 +143,7 @@ test("オフラインのラウンド一覧で削除を確認すると、ダイ�
 }) => {
   // オフラインの一覧で削除を選んで確認し、ダイアログがすぐ閉じてラウンドが一覧から消えることを確かめる。
   const { name, roundId } = await createNamedRound("オフライン一覧削除");
-  const { row, link } = await openList(page, name);
+  const { row, link } = await openList(page, name, roundId);
   await expect(link).toBeVisible();
   await waitForServiceWorkerControl(page);
   await goOffline(page.context());
@@ -186,8 +189,8 @@ test("削除の送信が終わる前に一覧を再読み込みしても、削�
   page,
 }) => {
   // 削除の送信を止めた一覧で削除を選んで確認し、ラウンドが一覧から消えることを確かめる。
-  const { name } = await createNamedRound("送信前に再読み込み");
-  const { row, link } = await openList(page, name);
+  const { name, roundId } = await createNamedRound("送信前に再読み込み");
+  const { row, link } = await openList(page, name, roundId);
   const release = await holdDeleteRequest(page);
   await chooseDelete(page, row);
   await page.getByTestId("confirm-dialog-confirm").click();
@@ -221,7 +224,7 @@ test("削除する権限が無く削除が拒否されたときは、一覧を�
   await page.route(DISABLE_ROUND_RPC, async (route) => {
     rejectedStatus = await forwardAs(route, outsiderDevice.supabase);
   });
-  const { row, link } = await openList(page, name);
+  const { row, link } = await openList(page, name, roundId);
   await chooseDelete(page, row);
   await page.getByTestId("confirm-dialog-confirm").click();
   await expect.poll(() => rejectedStatus).toBe(403);
@@ -239,7 +242,7 @@ test("端末の保存が終わらない間にラウンド詳細で削除を確�
 }) => {
   // 詳細を開き、端末の保存を塞いだ状態で削除を確認する。
   const { name, roundId } = await createNamedRound("保存待ちの削除");
-  const { link } = await openList(page, name);
+  const { link } = await openList(page, name, roundId);
   await link.click();
   await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
   const release = await blockOpLogStore(page);

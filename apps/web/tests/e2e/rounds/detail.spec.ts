@@ -152,14 +152,20 @@ test("存在しないラウンドを開くと、枠内に「ラウンドが見�
 test("端末にオフラインで開ける内容がないラウンドを開いて通信できないとき、「一覧へ戻る」リンクと「読み込めませんでした。」と再試行ボタンが表示される", async ({
   page,
 }) => {
-  await page.route(ROUND_DETAIL_REST, (route) => route.abort("failed"));
+  // 裏の取得の再試行の間にService Workerが制御を始めるため、contextで止める。
+  await page
+    .context()
+    .route(ROUND_DETAIL_REST, (route) => route.abort("failed"));
 
   await page.goto(MISSING_ROUND_PATH);
 
   await expect(
     page.getByRole("link", { name: roundsText("backToList") }),
   ).toBeVisible();
-  await expect(page.getByText(roundsText("fetchFailure.failed"))).toBeVisible();
+  // 取得の再試行が尽きるまで約7秒かかり、10秒の打ち切りより前に失敗が表示される。
+  await expect(page.getByText(roundsText("fetchFailure.failed"))).toBeVisible({
+    timeout: 10_000,
+  });
   await expect(
     page.getByRole("button", { name: roundsText("fetchRetry") }),
   ).toBeVisible();
