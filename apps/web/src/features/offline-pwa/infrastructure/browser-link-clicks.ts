@@ -1,10 +1,9 @@
 import type { LinkClick, LinkClicks } from "../application/update-activation";
 
-// 内部へ移る、修飾なしの通常のリンク操作のときだけ、そのアンカーを返す。
+// 修飾なしで、別の経路へ移るリンク操作のときだけ、そのアンカーを返す。アプリのリンクは全て内部のパスで、外部・target・downloadのリンクは無い。
 function findNavigatingAnchor(
   event: MouseEvent,
 ): HTMLAnchorElement | undefined {
-  if (event.defaultPrevented || event.button !== 0) return undefined;
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
     return undefined;
   }
@@ -12,10 +11,8 @@ function findNavigatingAnchor(
     event.target instanceof Element
       ? event.target.closest<HTMLAnchorElement>("a[href]")
       : null;
-  if (!anchor || anchor.hasAttribute("download")) return undefined;
-  if (anchor.target && anchor.target !== "_self") return undefined;
+  if (!anchor) return undefined;
   const url = new URL(anchor.href, location.href);
-  if (url.origin !== location.origin) return undefined;
   if (url.pathname === location.pathname && url.search === location.search) {
     return undefined;
   }

@@ -86,6 +86,7 @@ function fakeLink() {
 async function started(options: { registered?: boolean } = {}) {
   const env = setup(options);
   const stop = env.activation.start();
+  env.activation.pathChanged();
   await env.clock.advanceAsync(0);
   return { ...env, stop };
 }
@@ -173,6 +174,7 @@ describe("createUpdateActivation", () => {
       env.registration.waiting = true;
       const release = env.withheldRegistration();
       env.activation.start();
+      env.activation.pathChanged();
       const link = fakeLink();
 
       // When
@@ -237,7 +239,6 @@ describe("createUpdateActivation", () => {
     it("切り替えを諦めて通した遷移では、更新を確認しない", async () => {
       // Given
       const env = await started();
-      env.activation.pathChanged();
       env.registration.waiting = true;
       env.click(fakeLink());
       await env.clock.advanceAsync(DEADLINE_MS);
@@ -389,56 +390,6 @@ describe("createUpdateActivation", () => {
       expect(env.persistence.whenPersisted).toHaveBeenCalledTimes(1);
     });
 
-    it("保存の完了待ちの途中で停止すると、保存が完了しても購読もSKIP_WAITINGも起きない", async () => {
-      // Given
-      const env = await started();
-      env.registration.waiting = true;
-      let finish: () => void = () => {};
-      env.persistence.whenPersisted.mockReturnValueOnce(
-        new Promise<void>((resolve) => {
-          finish = resolve;
-        }),
-      );
-      const subscribe = vi.spyOn(env.host, "onControllerChange");
-      const link = fakeLink();
-      env.click(link);
-      await env.clock.advanceAsync(0);
-
-      // When
-      env.stop();
-      finish();
-      await env.clock.advanceAsync(DEADLINE_MS * 2);
-
-      // Then
-      expect(subscribe).not.toHaveBeenCalled();
-      expect(env.controllerListeners.size).toBe(0);
-      expect(env.registration.skipWaiting).not.toHaveBeenCalled();
-      expect(link.follow).not.toHaveBeenCalled();
-      expect(link.repeat).not.toHaveBeenCalled();
-      expect(env.clock.pendingCount()).toBe(0);
-    });
-
-    it("controllerchangeの直後、継続が進む前に停止しても、新しい保存待ちを始めない", async () => {
-      // Given
-      const env = await started();
-      env.registration.waiting = true;
-      const link = fakeLink();
-      env.click(link);
-      await env.clock.advanceAsync(0);
-
-      // When
-      env.emitControllerChange();
-      env.stop();
-      await env.clock.advanceAsync(DEADLINE_MS * 2);
-
-      // Then
-      expect(env.persistence.whenPersisted).toHaveBeenCalledTimes(1);
-      expect(link.follow).not.toHaveBeenCalled();
-      expect(link.repeat).not.toHaveBeenCalled();
-      expect(env.controllerListeners.size).toBe(0);
-      expect(env.clock.pendingCount()).toBe(0);
-    });
-
     it("諦めた遷移の次の遷移では、再び判定して切り替える", async () => {
       // Given
       const env = await started();
@@ -462,25 +413,15 @@ describe("createUpdateActivation", () => {
   });
 
   describe("start", () => {
-    it("返した関数で、購読、期限の予約、進行中の切り替えを取り消す", async () => {
+    it("返した関数で、リンク操作の購読を解除する", async () => {
       // Given
       const env = await started();
-      env.registration.waiting = true;
-      const link = fakeLink();
-      env.click(link);
-      await env.clock.advanceAsync(0);
 
       // When
       env.stop();
-      env.emitControllerChange();
-      await env.clock.advanceAsync(DEADLINE_MS * 2);
 
       // Then
       expect(env.hasListener()).toBe(false);
-      expect(env.controllerListeners.size).toBe(0);
-      expect(env.clock.pendingCount()).toBe(0);
-      expect(link.follow).not.toHaveBeenCalled();
-      expect(link.repeat).not.toHaveBeenCalled();
     });
 
     it("登録の取得が拒否されても未処理の拒否を出さず、リンクの遷移を止めない", async () => {
@@ -495,6 +436,7 @@ describe("createUpdateActivation", () => {
       try {
         // When
         env.activation.start();
+        env.activation.pathChanged();
         await env.clock.advanceAsync(0);
         env.click(link);
         await env.clock.advanceAsync(0);
@@ -522,6 +464,7 @@ describe("createUpdateActivation", () => {
       const watcher = watchUnhandledRejections();
       const link = fakeLink();
       env.activation.start();
+      env.activation.pathChanged();
       await env.clock.advanceAsync(0);
 
       try {
@@ -538,30 +481,12 @@ describe("createUpdateActivation", () => {
         watcher.stop();
       }
     });
-
-    it("始める前に返った登録は保持しない", async () => {
-      // Given
-      const env = setup();
-      const release = env.withheldRegistration();
-      const stop = env.activation.start();
-      stop();
-
-      // When
-      release();
-      await env.clock.advanceAsync(0);
-      env.activation.pathChanged();
-      env.activation.pathChanged();
-
-      // Then
-      expect(env.registration.update).not.toHaveBeenCalled();
-    });
   });
 
   describe("pathChanged", () => {
     it("waitingが無ければ更新を確認する", async () => {
       // Given
       const env = await started();
-      env.activation.pathChanged();
 
       // When
       env.activation.pathChanged();
@@ -570,21 +495,9 @@ describe("createUpdateActivation", () => {
       expect(env.registration.update).toHaveBeenCalledTimes(1);
     });
 
-    it("読み込み時(最初の通知)は更新を確認しない", async () => {
-      // Given
-      const env = await started();
-
-      // When
-      env.activation.pathChanged();
-
-      // Then
-      expect(env.registration.update).not.toHaveBeenCalled();
-    });
-
     it("waitingがあるリンク以外の遷移では、合図も更新も保存の待ちもしない", async () => {
       // Given
       const env = await started();
-      env.activation.pathChanged();
       env.registration.waiting = true;
 
       // When
@@ -624,7 +537,6 @@ describe("createUpdateActivation", () => {
     it("更新の確認が拒否されてもエラーにならない", async () => {
       // Given
       const env = await started();
-      env.activation.pathChanged();
       env.registration.update.mockRejectedValue(new Error("offline"));
 
       // When

@@ -21,10 +21,9 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function addLink(href: string, attrs: Record<string, string> = {}) {
+function addLink(href: string) {
   const a = document.createElement("a");
   a.href = href;
-  for (const [k, v] of Object.entries(attrs)) a.setAttribute(k, v);
   a.addEventListener("click", (e) => e.preventDefault());
   document.body.append(a);
   return a;
@@ -50,22 +49,20 @@ describe("createBrowserLinkClicks", () => {
     expect(received[0]).not.toBeNull();
   });
 
-  it.each([
-    ["別のオリジン", "http://example.com/x", {}],
-    ["target=_blank", "http://localhost/x", { target: "_blank" }],
-    ["download", "http://localhost/x", { download: "" }],
-    ["同じパスのハッシュ", "http://localhost/rounds#a", {}],
-  ])("%sのリンクは、除外としてnullで渡す", (_, href, attrs) => {
-    // Given
-    const { received } = listen();
-    const link = addLink(href, attrs);
+  it.each([["同じパスのハッシュ", "http://localhost/rounds#a"]])(
+    "%sのリンクは、除外としてnullで渡す",
+    (_, href) => {
+      // Given
+      const { received } = listen();
+      const link = addLink(href);
 
-    // When
-    fireEvent.click(link);
+      // When
+      fireEvent.click(link);
 
-    // Then
-    expect(received).toEqual([null]);
-  });
+      // Then
+      expect(received).toEqual([null]);
+    },
+  );
 
   it("リンクの外のclickは、除外としてnullで渡す", () => {
     // Given
@@ -85,33 +82,6 @@ describe("createBrowserLinkClicks", () => {
 
     // When
     fireEvent.click(link, { ctrlKey: true });
-
-    // Then
-    expect(received).toEqual([null]);
-  });
-
-  it("主ボタンでないclickは、除外としてnullで渡す", () => {
-    // Given
-    const { received } = listen();
-    const link = addLink("http://localhost/rounds/new");
-
-    // When
-    fireEvent.click(link, { button: 1 });
-
-    // Then
-    expect(received).toEqual([null]);
-  });
-
-  it("他の処理が止めたclick(defaultPrevented)は、除外としてnullで渡す", () => {
-    // Given
-    const { received } = listen();
-    const link = addLink("http://localhost/rounds/new");
-    const stopper = (e: Event) => e.preventDefault();
-    window.addEventListener("click", stopper, true);
-
-    // When
-    fireEvent.click(link);
-    window.removeEventListener("click", stopper, true);
 
     // Then
     expect(received).toEqual([null]);

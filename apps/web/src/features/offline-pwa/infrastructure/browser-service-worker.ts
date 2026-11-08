@@ -15,16 +15,14 @@ function registrationOf(
   };
 }
 
-// ブラウザのService Workerの提供元。未対応の環境は、登録が無い(undefined)として扱う。
+// ブラウザのService Workerの提供元。未対応の環境では、取得が拒否される。
 export function createBrowserServiceWorker(): SwHost {
   return {
     async getRegistration() {
-      if (!("serviceWorker" in navigator)) return undefined;
       const registration = await navigator.serviceWorker.getRegistration();
       return registration ? registrationOf(registration) : undefined;
     },
     onControllerChange(listener) {
-      if (!("serviceWorker" in navigator)) return () => {};
       const container = navigator.serviceWorker;
       container.addEventListener("controllerchange", listener);
       return () => container.removeEventListener("controllerchange", listener);

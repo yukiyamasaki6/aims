@@ -21,28 +21,6 @@ function fakeContainer(registration: unknown) {
 }
 
 describe("createBrowserServiceWorker", () => {
-  it("Service Workerに未対応の環境では、登録が無い(undefined)", async () => {
-    // Given
-    vi.stubGlobal("navigator", {});
-
-    // When
-    const registration = await createBrowserServiceWorker().getRegistration();
-
-    // Then
-    expect(registration).toBeUndefined();
-  });
-
-  it("未対応の環境でも、controllerchangeの購読と解除はエラーにならない", () => {
-    // Given
-    vi.stubGlobal("navigator", {});
-
-    // When
-    const stop = createBrowserServiceWorker().onControllerChange(() => {});
-
-    // Then
-    expect(stop).not.toThrow();
-  });
-
   it("登録が無ければundefinedを返す", async () => {
     // Given
     vi.stubGlobal("navigator", {
