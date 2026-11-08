@@ -41,7 +41,12 @@ async function startedHub(
 }
 
 function applied(revision: number, fields: string[] | null = null) {
-  return { revision, applied: true, appliedFields: fields, rejectedFields: [] };
+  return {
+    revision,
+    applied: true,
+    appliedFields: fields,
+    hasRejectedFields: false,
+  };
 }
 
 describe("ready", () => {
@@ -120,22 +125,17 @@ describe("ready", () => {
 });
 
 describe("start と stop", () => {
-  it("2回目のstartは何もしない。stopで記録を捨てる", async () => {
+  it("stopで記録を捨てる", async () => {
     // Given
-    const { hub, store } = createTestRoundHub();
-    const loadAll = vi.spyOn(store, "loadAll");
+    const { hub } = createTestRoundHub();
     hub.start("user-1");
     await hub.ready();
     await hub.append(STREAM, op("a"));
 
     // When
-    hub.start("user-2");
-    const userAfterSecondStart = hub.userId();
     hub.stop();
 
     // Then
-    expect(loadAll).toHaveBeenCalledTimes(1);
-    expect(userAfterSecondStart).toBe("user-1");
     expect(hub.streams()).toEqual([]);
   });
 
@@ -168,6 +168,31 @@ describe("start と stop", () => {
   });
 });
 
+describe("読み込みの取り込み", () => {
+  it("読み込みの完了前に追記した操作は、読み込みの取り込みで失われない", async () => {
+    // Given
+    const { hub, store } = createTestRoundHub();
+    const gate = deferred<void>();
+    const loadAll = store.loadAll.bind(store);
+    vi.spyOn(store, "loadAll").mockImplementationOnce(async (userId) => {
+      await gate.promise;
+      return loadAll(userId);
+    });
+    hub.start("user-1");
+
+    // When
+    await hub.append(STREAM, op("a"));
+    gate.resolve();
+    await hub.ready();
+
+    // Then
+    expect(
+      operationsOf(hub.record(STREAM)).map((o) => o.operation.eventId),
+    ).toEqual(["a"]);
+    expect(hub.record(STREAM).items[0]).toMatchObject({ saved: true });
+  });
+});
+
 describe("append", () => {
   it("追記は直ちに画面用の列へ入り、保存の完了を知らせ、戻り値は保存の完了後に解決する", async () => {
     // Given
@@ -180,7 +205,7 @@ describe("append", () => {
     const beforeSave = {
       saved: hub.record(STREAM).items[0]?.saved,
       shown: operationsOf(hub.record(STREAM)).length,
-      kinds: changes.map((change) => change.kind),
+      notified: changes.length,
       settled: await settled(appended),
     };
     saving.resolve(3);
@@ -190,15 +215,12 @@ describe("append", () => {
     expect(beforeSave).toEqual({
       saved: false,
       shown: 1,
-      kinds: ["changed"],
+      notified: 1,
       settled: false,
     });
     expect(hub.record(STREAM).items[0]).toMatchObject({ saved: true, seq: 3 });
     expect(operationsOf(hub.record(STREAM))).toHaveLength(1);
-    expect(changes.map((change) => change.kind)).toEqual([
-      "changed",
-      "appended",
-    ]);
+    expect(changes).toHaveLength(2);
   });
 
   it("利用者と、このタブのベースを、保存の依頼に渡す", async () => {
@@ -279,11 +301,10 @@ describe("applySendResults と discard", () => {
     await hub.append(STREAM, op("a"));
 
     // When
-    const report = hub.applySendResults(STREAM, ["a"], [applied(5, ["name"])]);
+    hub.applySendResults(STREAM, ["a"], [applied(5, ["name"])]);
     await flush();
 
     // Then
-    expect(report).toEqual({ diverged: false });
     expect(hub.record(STREAM).items[0]).toMatchObject({
       ackedRevision: 5,
       confirmedFields: ["name"],
@@ -301,7 +322,7 @@ describe("applySendResults と discard", () => {
     await hub.append(STREAM, op("a"));
 
     // When
-    const report = hub.applySendResults(
+    hub.applySendResults(
       STREAM,
       ["a"],
       [
@@ -309,7 +330,7 @@ describe("applySendResults と discard", () => {
           revision: null,
           applied: false,
           appliedFields: null,
-          rejectedFields: [],
+          hasRejectedFields: false,
         },
       ],
     );
@@ -318,7 +339,6 @@ describe("applySendResults と discard", () => {
     hub.clearDiverged(STREAM);
 
     // Then
-    expect(report).toEqual({ diverged: true });
     expect(hub.record(STREAM).items).toEqual([]);
     expect(store.rows).toEqual([]);
     expect(marked).toBe(true);
@@ -341,7 +361,7 @@ describe("applySendResults と discard", () => {
           revision: null,
           applied: false,
           appliedFields: null,
-          rejectedFields: [],
+          hasRejectedFields: false,
         },
       ],
     );
@@ -378,7 +398,7 @@ describe("applySendResults と discard", () => {
     expect(hub.divergedStreams().size).toBe(0);
   });
 
-  it("送信中の目印を付けた操作は、保存先の読み直しで外れない", async () => {
+  it("送信中の目印を付けた操作は、取得の反映で保存先に無くても外れない", async () => {
     // Given
     const { hub, store } = await startedHub();
     await hub.append(STREAM, op("a"));
@@ -386,10 +406,10 @@ describe("applySendResults と discard", () => {
     hub.replaceInFlight(STREAM, ["a"]);
 
     // When
-    await hub.reloadAll();
+    await hub.commit(STREAM, null, 1, "user-1");
     const whileSending = hub.record(STREAM).items.length;
     hub.replaceInFlight(STREAM, []);
-    await hub.reloadAll();
+    await hub.commit(STREAM, null, 2, "user-1");
 
     // Then
     expect(whileSending).toBe(1);
@@ -496,21 +516,19 @@ describe("commit", () => {
     ["別の利用者", "user-2", "user-1"],
     ["記録の利用者がnull(unowned)", "user-1", null],
   ])(
-    "%sの取得は、端末へ保存せず、このタブのベースにだけ反映する",
+    "%sの取得は、端末へ保存せず、このタブのベースも変えず、現在の組を返す",
     async (_name, fetchedUser, recordUser) => {
       // Given
       const { hub, store } = await startedHub(recordUser);
       const commit = vi.spyOn(store, "commit");
 
       // When
-      await hub.commit(STREAM, roundBase(), 30, fetchedUser);
+      const group = await hub.commit(STREAM, roundBase(), 30, fetchedUser);
 
       // Then
       expect(commit).not.toHaveBeenCalled();
-      expect(hub.record(STREAM).base).toEqual({
-        startedAt: 30,
-        base: roundBase(),
-      });
+      expect(group).toEqual({ base: undefined, entries: [] });
+      expect(hub.record(STREAM).base).toBeUndefined();
       expect((await hub.readStored()).size).toBe(0);
     },
   );
@@ -650,7 +668,7 @@ const ineffective = {
   revision: null,
   applied: false,
   appliedFields: null,
-  rejectedFields: [],
+  hasRejectedFields: false,
 };
 
 // 一覧の材料で、列ごとの操作のIDを見る。
@@ -1098,7 +1116,7 @@ describe("停止・起動をまたぐ処理", () => {
     changes.length = 0;
 
     // When
-    const report = hub.applySendResults(
+    hub.applySendResults(
       STREAM,
       ["a"],
       [
@@ -1106,7 +1124,7 @@ describe("停止・起動をまたぐ処理", () => {
           revision: null,
           applied: false,
           appliedFields: null,
-          rejectedFields: [],
+          hasRejectedFields: false,
         },
       ],
       generation,
@@ -1114,7 +1132,6 @@ describe("停止・起動をまたぐ処理", () => {
     await flush();
 
     // Then
-    expect(report).toEqual({ diverged: false });
     expect(hub.divergedStreams().size).toBe(0);
     expect(changes).toEqual([]);
     expect(store.rows).toEqual([]);

@@ -5,7 +5,6 @@ import {
   commFailure,
   type FetchResult,
   fetchResultOf,
-  signInFailure,
 } from "../domain/fetch-status";
 import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { QueryOutcome } from "../domain/query-outcome";
@@ -24,7 +23,6 @@ export type ContentFetcher = {
 };
 
 // 認証を確かめた取得と取り直し、時間制限。
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createContentFetcher(deps: {
   sessionReader: SessionReader;
   connectivity: Connectivity;
@@ -36,28 +34,14 @@ export function createContentFetcher(deps: {
     return commFailure(connectivity.isOffline());
   }
 
-  // サインインの状態を、切断と競わせて確かめる。認証済みでなければ、取得の結果をfailureで返す。
+  // サインインの状態を確かめる。認証済みでなければ、取得の結果をfailureで返す。
   async function confirmSession<T>(
     opts: { refresh?: boolean } = {},
   ): Promise<{ session: { userId: string } } | { failure: FetchResult<T> }> {
-    const { promise, resolve } = Promise.withResolvers<"offline">();
-    const stop = connectivity.onOffline(() => resolve("offline"));
-    let reading: Awaited<ReturnType<SessionReader["readSession"]>>;
-    try {
-      const raced = await Promise.race([
-        sessionReader.readSession(opts),
-        promise,
-      ]);
-      if (raced === "offline") return { failure: { status: "offline" } };
-      reading = raced;
-    } finally {
-      stop();
-    }
+    const reading = await sessionReader.readSession(opts);
     if (reading.status === "unknown") return { failure: failureOfComm() };
     if (reading.status === "unauthenticated") {
-      return {
-        failure: { status: "error", reason: signInFailure(reading.status) },
-      };
+      return { failure: { status: "error", reason: "unauthenticated" } };
     }
     return { session: { userId: reading.userId } };
   }

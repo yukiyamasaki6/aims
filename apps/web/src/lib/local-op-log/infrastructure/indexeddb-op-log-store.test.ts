@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
+import { IDBFactory } from "fake-indexeddb";
 import { openDB } from "idb";
-import { afterEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type {
   NewOpLogEntry,
   OpLogStore,
@@ -42,16 +43,12 @@ function entry(
   };
 }
 
-const stores: OpLogStore<Op, Base>[] = [];
-function newStore() {
-  const store = createIndexedDbOpLogStore<Op, Base>(rules);
-  stores.push(store);
-  return store;
+function newStore(): OpLogStore<Op, Base> {
+  return createIndexedDbOpLogStore<Op, Base>(rules);
 }
 
-afterEach(async () => {
-  await Promise.all(stores.splice(0).map((store) => store.close()));
-  indexedDB.deleteDatabase("aims-sync");
+beforeEach(() => {
+  globalThis.indexedDB = new IDBFactory();
 });
 
 describe("op log store", () => {
@@ -70,6 +67,34 @@ describe("op log store", () => {
       "record-1",
       "clear",
       "record-2",
+    ]);
+  });
+
+  it("複数の列の追記が入り交じっても、列ごとにseqの昇順で読み出す", async () => {
+    // Given
+    const store = newStore();
+    const other = "round:r2";
+
+    // When
+    await store.append(entry("a1"));
+    await store.append(entry("b1", { streamId: other }));
+    await store.append(entry("a2"));
+    await store.append(entry("b2", { streamId: other }));
+    await store.append(entry("a3"));
+    const first = await store.loadStream(STREAM, "user-1");
+    const all = await store.loadAll("user-1");
+
+    // Then
+    const seqs = first.entries.map((e) => e.seq);
+    expect(first.entries.map((e) => e.operation.value)).toEqual([
+      "a1",
+      "a2",
+      "a3",
+    ]);
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    expect(all.get(other)?.entries.map((e) => e.operation.value)).toEqual([
+      "b1",
+      "b2",
     ]);
   });
 
@@ -179,7 +204,7 @@ describe("op log store", () => {
     await store.append(second);
 
     // When
-    await store.retire([first.eventId, crypto.randomUUID()], "reflected");
+    await store.retire([first.eventId, crypto.randomUUID()]);
     const { entries } = await store.loadStream(STREAM, "user-1");
 
     // Then
@@ -372,7 +397,6 @@ describe("op log store", () => {
           throw new Error("keeps");
         },
       });
-      stores.push(failing);
 
       // When
       const error = await failing

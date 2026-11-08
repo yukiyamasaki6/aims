@@ -1275,9 +1275,7 @@ test("オフラインで点数を記録した入力中のラウンドを、ア�
     password: SHARED_PASSWORD,
   });
   await waitForServiceWorkerControl(first.page);
-  await expect(
-    first.page.getByTestId("round-base-refresher"),
-  ).not.toHaveAttribute("data-refreshed-count", "0");
+  await expectRoundBasesFetched(first.page, { roundId });
   await goOffline(first.context);
   await first.page.goto(`/rounds/${roundId}`);
   await waitForHydration(first.page);
@@ -1304,4 +1302,31 @@ test("オフラインで点数を記録した入力中のラウンドを、ア�
   await expect(endBalls(page, 1, 2)).toHaveText(["5"]);
   await expect(endBalls(page, 1, 1)).toHaveText(["9"]);
   await expectSavedShots(supabase, distanceIds[0], ["1:9", "2:5"]);
+});
+
+test("入力中のラウンドを開いた状態で、他の端末がラウンドの名前を変えた後に取得が503を1回返しても、再試行されて、操作なしでその名前が表示される", async ({
+  page,
+}) => {
+  // ラウンドを開いて端末への取得を済ませ、他の端末が名前を変える。
+  const { supabase } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
+  await openRound(page);
+  await expectRoundBasesFetched(page, { roundId });
+  await updateRound(supabase, roundId, { name: "再試行後の名前" });
+
+  // 最初の取得だけ503を返し、通信の復帰で取得を起こすと、再試行された取得で名前が表示される。
+  let roundRequests = 0;
+  await page.context().route("**/rest/v1/rounds?*", (route) => {
+    roundRequests += 1;
+    if (roundRequests > 1) return route.continue();
+    return route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "Service Unavailable" }),
+    });
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(page.getByTestId("round-config-summary")).toContainText(
+    "再試行後の名前",
+  );
+  expect(roundRequests).toBeGreaterThanOrEqual(2);
 });

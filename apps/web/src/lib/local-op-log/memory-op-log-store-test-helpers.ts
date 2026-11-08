@@ -83,6 +83,5 @@ export function createMemoryOpLogStore<Op extends OpBase, Base>(
         if (index >= 0) rows.splice(index, 1);
       }
     },
-    async close() {},
   };
 }

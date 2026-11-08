@@ -26,9 +26,9 @@ const shot = (id: string, end = 1, distance = "d-1") =>
 const clear = (id: string, shotId: string, end = 1, distance = "d-1") =>
   shotCleared({ eventId: id, shotId, distanceId: distance, endNumber: end });
 
-const rpcFailure = (status: number, code?: string): SendOutcome => ({
+const rpcFailure = (code?: string): SendOutcome => ({
   ok: false,
-  cause: { type: "rpc", status, code },
+  failure: { cause: "rpc", code },
 });
 
 type Rig = ReturnType<typeof createSenderRig>;
@@ -198,7 +198,14 @@ describe("送る候補と衝突の判定", () => {
     rig.hub.applySendResults(
       STREAM,
       ["confirmed"],
-      [{ revision: 1, applied: true, appliedFields: null, rejectedFields: [] }],
+      [
+        {
+          revision: 1,
+          applied: true,
+          appliedFields: null,
+          hasRejectedFields: false,
+        },
+      ],
     );
     await rig.hub.append(STREAM, shotRecorded({ eventId: "shot" }));
 
@@ -248,26 +255,30 @@ describe("記録が返す平らな失敗", () => {
   const rows: Row[] = [
     [
       "rpc 403 PT403",
-      { ok: false, cause: { type: "rpc", status: 403, code: "PT403" } },
+      { ok: false, failure: { cause: "rpc", code: "PT403" } },
       "破棄",
     ],
     [
       "rpc 422 PT422",
-      { ok: false, cause: { type: "rpc", status: 422, code: "PT422" } },
+      { ok: false, failure: { cause: "rpc", code: "PT422" } },
       "破棄",
     ],
     [
       "rpc 500 XX000",
-      { ok: false, cause: { type: "rpc", status: 500, code: "XX000" } },
+      { ok: false, failure: { cause: "rpc", code: "XX000" } },
       "再送",
     ],
     [
       "rpc 404 PGRST202",
-      { ok: false, cause: { type: "rpc", status: 404, code: "PGRST202" } },
+      { ok: false, failure: { cause: "rpc", code: "PGRST202" } },
       "再送",
     ],
-    ["rpc 状態もコードも無い", { ok: false, cause: { type: "rpc" } }, "再送"],
-    ["exception", { ok: false, cause: { type: "exception" } }, "再送"],
+    [
+      "rpc 状態もコードも無い",
+      { ok: false, failure: { cause: "rpc" } },
+      "再送",
+    ],
+    ["exception", { ok: false, failure: { cause: "exception" } }, "再送"],
     ["sendが例外を投げる", new Error("boom"), "再送"],
   ];
 
@@ -316,7 +327,7 @@ describe("失敗の扱い", () => {
     await rig.hub.append(STREAM, shot("other-end", 2));
 
     // When
-    await respond(rig, 0, rpcFailure(500));
+    await respond(rig, 0, rpcFailure());
 
     // Then
     expect(sentIds(rig)).toEqual([["a"], ["other-end"]]);
@@ -328,7 +339,7 @@ describe("失敗の扱い", () => {
     await rig.hub.append(STREAM, shot("a", 1));
     await flush();
     await rig.hub.append(STREAM, shot("follower", 1));
-    await respond(rig, 0, rpcFailure(500));
+    await respond(rig, 0, rpcFailure());
     await rig.clock.advanceAsync(2999);
     const beforeDelay = rig.sent.length;
 
@@ -349,9 +360,9 @@ describe("失敗の扱い", () => {
     await rig.hub.append(STREAM, shot("a", 1));
     await flush();
     await rig.hub.append(STREAM, shot("follower", 1));
-    await respond(rig, 0, rpcFailure(503));
+    await respond(rig, 0, rpcFailure());
     await rig.clock.advanceAsync(3000);
-    await respond(rig, 1, rpcFailure(503));
+    await respond(rig, 1, rpcFailure());
 
     // When
     await rig.clock.advanceAsync(5999);
@@ -388,7 +399,7 @@ describe("失敗の扱い", () => {
     await rig.hub.append(STREAM, shot("follower", 1));
 
     // When
-    await respond(rig, 0, rpcFailure(403, "PT403"));
+    await respond(rig, 0, rpcFailure("PT403"));
 
     // Then
     expect(itemIds(rig)).toEqual(["follower"]);
@@ -402,7 +413,7 @@ describe("失敗の扱い", () => {
     await flush();
 
     // When
-    await respond(rig, 0, rpcFailure(404, "PGRST202"));
+    await respond(rig, 0, rpcFailure("PGRST202"));
     await rig.clock.advanceAsync(3000);
 
     // Then
@@ -421,8 +432,8 @@ describe("失敗の扱い", () => {
     await respond(rig, 0, appliedOutcome(1));
 
     // When
-    await respond(rig, 1, rpcFailure(422, "PT422"));
-    await respond(rig, 2, rpcFailure(422, "PT422"));
+    await respond(rig, 1, rpcFailure("PT422"));
+    await respond(rig, 2, rpcFailure("PT422"));
     await respond(rig, 3, appliedOutcome(1));
     await respond(rig, 4, appliedOutcome(1));
 
@@ -445,7 +456,7 @@ describe("失敗の扱い", () => {
     await flush();
 
     // When
-    await respond(rig, 0, rpcFailure(403, "PT403"));
+    await respond(rig, 0, rpcFailure("PT403"));
     await respond(rig, 1, appliedOutcome(1, 3));
 
     // Then
@@ -468,8 +479,7 @@ describe("失敗の扱い", () => {
           revision: null,
           applied: false,
           appliedFields: null,
-          rejectedFields: [],
-          reason: "UNFIT",
+          hasRejectedFields: false,
         },
       ],
     });
@@ -599,14 +609,12 @@ describe("保存の読み込みの待ち", () => {
       vi.spyOn(rig.store, "append").mockRejectedValueOnce(new Error("quota"));
       await rig.hub.append(STREAM, shot("unsaved", 1, "d-2"));
     }
-    const kinds: string[] = [];
-    rig.hub.subscribe((change) => kinds.push(change.kind));
-    return { rig, kinds };
+    return { rig };
   }
 
   it("読み込みが終わるまで、既知の列の保存済みの操作を送らない。保存に失敗した操作は送る。終わると保存済みの操作を送る", async () => {
     // Given
-    const { rig, kinds } = await reloadingRig(true);
+    const { rig } = await reloadingRig(true);
     const reload = Promise.withResolvers<void>();
     vi.spyOn(rig.hub, "ready").mockReturnValueOnce(reload.promise);
     rig.sender.start();
@@ -615,14 +623,12 @@ describe("保存の読み込みの待ち", () => {
     // When
     rig.connectivity.goOnline();
     await rig.hub.append(STREAM, shot("later", 3));
-    await rig.hub.reloadAll();
     await flush();
     const whileReloading = sentIds(rig).flat().sort();
     reload.resolve();
     await flush();
 
     // Then
-    expect(kinds).toEqual(expect.arrayContaining(["appended", "loaded"]));
     expect(whileReloading).toEqual(["unsaved"]);
     expect(sentIds(rig).flat().sort()).toEqual(["later", "saved", "unsaved"]);
   });
@@ -648,7 +654,7 @@ describe("保存の読み込みの待ち", () => {
 
   it("止めて始め直した後、古い起動の読み込みだけが終わっても、通信の復帰と記録の知らせでは保存済みの操作を送らない。今の起動の読み込みが終わると送る", async () => {
     // Given
-    const { rig, kinds } = await reloadingRig(false);
+    const { rig } = await reloadingRig(false);
     const first = Promise.withResolvers<void>();
     const second = Promise.withResolvers<void>();
     vi.spyOn(rig.hub, "ready")
@@ -664,7 +670,6 @@ describe("保存の読み込みの待ち", () => {
     first.resolve();
     await flush();
     rig.connectivity.goOnline();
-    await rig.hub.reloadAll();
     await rig.hub.append(STREAM, shot("later", 3));
     await flush();
     const afterOld = rig.sent.length;
@@ -672,7 +677,6 @@ describe("保存の読み込みの待ち", () => {
     await flush();
 
     // Then
-    expect(kinds).toEqual(expect.arrayContaining(["appended", "loaded"]));
     expect(afterOld).toBe(0);
     expect(sentIds(rig).flat().sort()).toEqual(["later", "saved"]);
   });
@@ -700,7 +704,7 @@ describe("通信の可否", () => {
     const rig = await started();
     await rig.hub.append(STREAM, shot("a"));
     await flush();
-    await respond(rig, 0, rpcFailure(500));
+    await respond(rig, 0, rpcFailure());
     await rig.clock.advanceAsync(1000);
 
     // When
@@ -761,8 +765,8 @@ describe("送信中の印", () => {
     });
 
     // When
-    await respond(retrying, 0, rpcFailure(500));
-    await respond(discarding, 0, rpcFailure(403, "PT403"));
+    await respond(retrying, 0, rpcFailure());
+    await respond(discarding, 0, rpcFailure("PT403"));
     await holding.hub.append(STREAM, shot("a"));
     await flush();
 
@@ -796,7 +800,7 @@ describe("送信中の印", () => {
     const rig = await started();
     await rig.hub.append(STREAM, shot("a"));
     await flush();
-    await respond(rig, 0, rpcFailure(500));
+    await respond(rig, 0, rpcFailure());
     const beforeOnline = marked(rig);
 
     // When
@@ -814,7 +818,7 @@ describe("送信中の印", () => {
     const rig = await started();
     await rig.hub.append(STREAM, shot("a"));
     await flush();
-    await respond(rig, 0, rpcFailure(500));
+    await respond(rig, 0, rpcFailure());
 
     // When
     await rig.hub.discard(STREAM, ["a"]);
@@ -825,7 +829,7 @@ describe("送信中の印", () => {
     expect(marked(rig)).toEqual([]);
   });
 
-  it("停止すると、全ての列の印が外れる", async () => {
+  it("送信器と記録を止めると、全ての列の印が外れる", async () => {
     // Given
     const rig = await started();
     await rig.hub.append(STREAM, shot("a"));
@@ -838,6 +842,7 @@ describe("送信中の印", () => {
 
     // When
     rig.sender.stop();
+    rig.hub.stop();
 
     // Then
     expect(whileSending.sort()).toEqual(["a", "b"]);
@@ -886,7 +891,7 @@ describe("止める", () => {
     const rig = await started();
     await rig.hub.append(STREAM, shot("a"));
     await flush();
-    await respond(rig, 0, rpcFailure(500));
+    await respond(rig, 0, rpcFailure());
 
     // When
     rig.sender.stop();

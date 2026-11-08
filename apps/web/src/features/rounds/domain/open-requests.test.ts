@@ -5,7 +5,6 @@ import {
   type OpenRequests,
   requestOpen,
   settleOpenRun,
-  stopOpens,
 } from "./open-requests";
 
 // 状態を作る補助。依頼を受ける。
@@ -192,63 +191,5 @@ describe("settleOpenRun", () => {
     expect(result.answered).toEqual([1]);
     expect(result.state.get("r-1")?.waiting).toEqual([2]);
     expect(result.state.get("r-1")?.holder).toBeNull();
-  });
-});
-
-describe("stopOpens", () => {
-  it("全ての待ちを解決する依頼として返し、待ちと記録の権利を空にする。依頼の番号と結果の記録は残す", () => {
-    // Given
-    const recorded = (() => {
-      const { state, run } = beginOpenRun(
-        requested(EMPTY_OPEN_REQUESTS, "r-1"),
-        "r-1",
-      );
-      return settleOpenRun(state, run, "ok").state;
-    })();
-    const r2 = beginOpenRun(requested(recorded, "r-2", 2), "r-2").state;
-    const state = requested(r2, "r-3");
-
-    // When
-    const stopped = stopOpens(state);
-
-    // Then
-    expect(stopped.answered).toHaveLength(3);
-    expect(stopped.answered).toEqual(
-      expect.arrayContaining([
-        { roundId: "r-2", request: 1 },
-        { roundId: "r-2", request: 2 },
-        { roundId: "r-3", request: 1 },
-      ]),
-    );
-    expect(stopped.state.get("r-2")).toMatchObject({
-      waiting: [],
-      holder: null,
-      latest: 2,
-    });
-    expect(stopped.state.get("r-3")).toMatchObject({
-      waiting: [],
-      holder: null,
-      latest: 1,
-    });
-    expect(stopped.state.get("r-1")).toMatchObject({
-      latest: 1,
-      outcome: "ok",
-    });
-  });
-
-  it("停止の後に依頼を受けると番号は数え直さず続き、停止前に始めた実行は結果を記録せず何も変えない", () => {
-    // Given
-    const a = beginOpenRun(requested(EMPTY_OPEN_REQUESTS, "r-1"), "r-1");
-    const stopped = stopOpens(a.state).state;
-    const next = requestOpen(stopped, "r-1");
-
-    // When
-    const result = settleOpenRun(next.state, a.run, "ok");
-
-    // Then
-    expect(next.request).toBe(2);
-    expect(result.state.get("r-1")?.outcome).toBeUndefined();
-    expect(result.answered).toEqual([]);
-    expect(result.changed).toBe(false);
   });
 });

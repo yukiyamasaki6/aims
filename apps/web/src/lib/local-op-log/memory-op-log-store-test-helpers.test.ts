@@ -79,7 +79,7 @@ describe("createMemoryOpLogStore", () => {
     await s.ack("a", 9, false, null);
     await s.ack("missing", 1, true, null);
     await s.ack("b", null, true, null);
-    await s.retire(["b", "missing"], "discarded");
+    await s.retire(["b", "missing"]);
 
     // Then
     expect(s.rows).toHaveLength(1);
@@ -89,7 +89,6 @@ describe("createMemoryOpLogStore", () => {
       ackedApplied: true,
       ackedFields: ["name"],
     });
-    await expect(s.close()).resolves.toBeUndefined();
   });
 
   it("確定のrevisionがnullなら0として付ける", async () => {

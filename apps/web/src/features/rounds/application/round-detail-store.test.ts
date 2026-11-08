@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { FetchResult } from "../domain/fetch-status";
-import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
+import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import {
   roundBase,
   roundCreated,
@@ -63,15 +62,6 @@ async function withLocalBase(savedFaces: TargetFaceOption[] | null = [face]) {
   return tab;
 }
 
-// 一括の取得が終わった。
-function _syncFinishesAll(
-  requests: ReturnType<typeof createTestRounds>["requests"],
-  result: FetchResult<null> = { status: "ok", data: null },
-) {
-  const run1 = requests.beginAll();
-  requests.settleAll(run1, result);
-}
-
 describe("load", () => {
   it("端末の記録にラウンドの削除があれば、取得せずに見つからないとして返す", async () => {
     // Given
@@ -106,7 +96,6 @@ describe("load", () => {
       data: {
         pendingCreationEventId: created.eventId,
         targetFaces: [face],
-        source: "server",
         base: { round: { config: { name: "新規" } } },
       },
     });
@@ -126,7 +115,7 @@ describe("load", () => {
     expect(result).toEqual({ status: "offline" });
   });
 
-  it("取得の依頼を記録し、取り直しの結果を待って返す。結果のsourceはserver", async () => {
+  it("取得の依頼を記録し、取り直しの結果を待って返す", async () => {
     // Given
     const tab = createTestRounds();
     const loading = tab.detail.load("round-1");
@@ -142,7 +131,6 @@ describe("load", () => {
     expect(result).toMatchObject({
       status: "ok",
       data: {
-        source: "server",
         pendingCreationEventId: null,
         targetFaces: [face],
       },
@@ -202,74 +190,100 @@ describe("load", () => {
     // Then
     expect(await loading).toMatchObject({
       status: "ok",
-      data: { source: "server" },
     });
   });
 
-  describe("端末のベースで開けるとき", () => {
-    it("FALLBACK_WAIT_MS以内に取得が済めば、取得の結果で開く", async () => {
+  describe("保存済みがあるとき(端末のベースと保存した的)", () => {
+    it("取得の完了を待たず、開く依頼を出して、保存済みの材料で開く(時計を進めずに解決する)", async () => {
       // Given
       const tab = await withLocalBase();
-      const loading = tab.detail.load("round-1");
-      await flush();
 
       // When
-      settleRoundNow(tab.requests, "round-1", { status: "ok", data: opened() });
-      const result = await loading;
-
-      // Then
-      expect(result).toMatchObject({
-        status: "ok",
-        data: { source: "server" },
-      });
-    });
-
-    it("FALLBACK_WAIT_MSを待っても取得が済まなければ、端末のベースと保存した的で開く(source=local)", async () => {
-      // Given
-      const tab = await withLocalBase();
-      const loading = tab.detail.load("round-1");
-
-      // When
-      await tab.clock.advanceAsync(FALLBACK_WAIT_MS);
-      const result = await loading;
+      const result = await tab.detail.load("round-1");
 
       // Then
       expect(result).toMatchObject({
         status: "ok",
         data: {
-          source: "local",
           targetFaces: [face],
           base: { round: { config: { name: "端末" } } },
         },
       });
+      expect(tab.requests.pendingOpens()).toEqual(["round-1"]);
     });
 
-    it("取得が上限の前に失敗(offline、error)で済んだときも、端末のベースで開く", async () => {
+    it("取得が後で成功しても、開いた結果は変わらず、依頼の結果の記録がokになる", async () => {
       // Given
       const tab = await withLocalBase();
-      const loading = tab.detail.load("round-1");
-      await flush();
+      const result = await tab.detail.load("round-1");
 
       // When
-      settleRoundNow(tab.requests, "round-1", { status: "offline" });
-      const result = await loading;
+      settleRoundNow(tab.requests, "round-1", { status: "ok", data: opened() });
 
       // Then
-      expect(result).toMatchObject({ status: "ok", data: { source: "local" } });
+      expect(result).toMatchObject({ status: "ok" });
+      expect(tab.requests.outcomeOf("round-1")).toBe("ok");
     });
 
-    it("サーバーにラウンドが無いと分かったときは、端末のベースで開かず、そのまま返す", async () => {
+    it.each([
+      ["見つからない", { status: "not-found" }, "gone"],
+      ["offline", { status: "offline" }, "failed"],
+    ] as const)(
+      "取得が後で%sで終わっても、開いた結果は変わらず、依頼の結果の記録が%sになる",
+      async (_name, fetched, outcome) => {
+        // Given
+        const tab = await withLocalBase();
+        const result = await tab.detail.load("round-1");
+
+        // When
+        settleRoundNow(tab.requests, "round-1", fetched);
+
+        // Then
+        expect(result).toMatchObject({ status: "ok" });
+        expect(tab.requests.outcomeOf("round-1")).toBe(outcome);
+      },
+    );
+  });
+
+  describe("保存が無いとき(ベースが無い、または的の保存分が無い)", () => {
+    it.each([
+      ["ベースが無い", async () => createTestRounds()],
+      ["的の保存分が無い", async () => withLocalBase(null)],
+    ])("%sときは、取得の完了を待って開く", async (_name, setup) => {
       // Given
-      const tab = await withLocalBase();
+      const tab = await setup();
       const loading = tab.detail.load("round-1");
-      await flush();
 
       // When
-      settleRoundNow(tab.requests, "round-1", { status: "not-found" });
+      const beforeSettled = await settled(loading);
+      settleRoundNow(tab.requests, "round-1", { status: "ok", data: opened() });
 
       // Then
-      expect(await loading).toEqual({ status: "not-found" });
+      expect(beforeSettled).toBe(false);
+      expect(await loading).toMatchObject({
+        status: "ok",
+      });
     });
+
+    it.each([
+      ["見つからない", { status: "not-found" }],
+      ["offline", { status: "offline" }],
+      ["error", { status: "error", reason: "failed" }],
+    ] as const)(
+      "取得が%sで済んだときは、その結果をそのまま返す",
+      async (_name, fetched) => {
+        // Given
+        const tab = createTestRounds();
+        const loading = tab.detail.load("round-1");
+        await flush();
+
+        // When
+        settleRoundNow(tab.requests, "round-1", fetched);
+
+        // Then
+        expect(await loading).toEqual(fetched);
+      },
+    );
   });
 
   describe("打ち切り", () => {

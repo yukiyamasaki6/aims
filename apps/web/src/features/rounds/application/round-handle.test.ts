@@ -97,7 +97,6 @@ describe("round(...)", () => {
       }).tables,
       targetFaces: [face],
       pendingCreationEventId: null,
-      source: "server",
       ...overrides,
     };
   }
@@ -168,18 +167,18 @@ describe("round(...)", () => {
     unwatch();
   });
 
-  it("開いている間の印を付け、解除で外す。端末のベースで開いたかを印に持つ", () => {
+  it("開いている間の印を付け、解除で外す", () => {
     // Given
     const tab = createTab();
     const handle = tab.round("round-1");
 
     // When
-    const first = handle.watch(loadedOf({ source: "local" }));
+    const first = handle.watch(loadedOf());
     const marked = tab.requests.watched();
     first();
 
     // Then
-    expect(marked).toEqual([{ roundId: "round-1", local: true }]);
+    expect(marked).toEqual([{ roundId: "round-1" }]);
     expect(tab.requests.watched()).toEqual([]);
   });
 
@@ -197,30 +196,47 @@ describe("round(...)", () => {
     unwatch();
   });
 
-  it("端末のベースで開いた詳細は、取り直しでサーバーにラウンドが無いと分かったとき、goneにする。サーバーで開いた詳細は変わらない", () => {
+  it("取り直しでサーバーにラウンドが無いと分かったとき、開き方によらずgoneにする", () => {
     // Given
     const tab = createTab();
-    const local = tab.round("local");
-    const server = tab.round("server");
-    const unwatchLocal = local.watch(loadedOf({ source: "local" }));
-    const unwatchServer = server.watch(loadedOf({ source: "server" }));
+    const first = tab.round("first");
+    const second = tab.round("second");
+    const unwatchFirst = first.watch(loadedOf());
+    const unwatchSecond = second.watch(loadedOf());
 
     // When
-    settleRoundNow(tab.requests, "local", { status: "not-found" });
-    settleRoundNow(tab.requests, "server", { status: "not-found" });
+    settleRoundNow(tab.requests, "first", { status: "not-found" });
+    settleRoundNow(tab.requests, "second", { status: "not-found" });
 
     // Then
-    expect(local.getSnapshot().gone).toBe(true);
-    expect(server.getSnapshot().gone).toBe(false);
-    unwatchLocal();
-    unwatchServer();
+    expect(first.getSnapshot().gone).toBe(true);
+    expect(second.getSnapshot().gone).toBe(true);
+    unwatchFirst();
+    unwatchSecond();
+  });
+
+  it("作成が未確定のラウンドは、取り直しがgoneを記録しても、見つかりませんにしない", () => {
+    // Given
+    const tab = createTab();
+    const handle = tab.round("pending");
+    const unwatch = handle.watch(
+      loadedOf({ pendingCreationEventId: roundCreated().eventId }),
+    );
+
+    // When
+    settleRoundNow(tab.requests, "pending", { status: "not-found" });
+
+    // Then
+    expect(tab.requests.outcomeOf("pending")).toBe("gone");
+    expect(handle.getSnapshot().gone).toBe(false);
+    unwatch();
   });
 
   it("後に始めた取り直しが成功した後に、先に始めた取り直しがサーバーにラウンドが無いと終わっても、削除扱いにならない", () => {
     // Given
     const tab = createTab();
     const local = tab.round("local");
-    const unwatch = local.watch(loadedOf({ source: "local" }));
+    const unwatch = local.watch(loadedOf());
     const earlier = tab.requests.beginRound("local");
     const later = tab.requests.beginRound("local");
 
@@ -242,7 +258,7 @@ describe("round(...)", () => {
       // Given
       const tab = createTab();
       const local = tab.round("local");
-      const unwatch = local.watch(loadedOf({ source: "local" }));
+      const unwatch = local.watch(loadedOf());
       const earlier = tab.requests.beginRound("local");
       const later = tab.requests.beginRound("local");
       const settleEarlier = () =>
@@ -272,7 +288,6 @@ describe("round(...)", () => {
         base: roundBase().tables,
         targetFaces: [face],
         pendingCreationEventId: created.eventId,
-        source: "server",
       }) as LoadedRound;
 
     it("確定を見ずに記録から消えたとき、creationGoneにする", async () => {
@@ -304,7 +319,7 @@ describe("round(...)", () => {
             revision: 1,
             applied: true,
             appliedFields: null,
-            rejectedFields: [],
+            hasRejectedFields: false,
           },
         ],
       );
@@ -351,7 +366,14 @@ describe("round(...)", () => {
     tab.hub.applySendResults(
       STREAM,
       [confirmed.eventId],
-      [{ revision: 9, applied: true, appliedFields: null, rejectedFields: [] }],
+      [
+        {
+          revision: 9,
+          applied: true,
+          appliedFields: null,
+          hasRejectedFields: false,
+        },
+      ],
     );
 
     // When
@@ -413,7 +435,7 @@ describe("round(...)", () => {
             revision: 9,
             applied: true,
             appliedFields: null,
-            rejectedFields: [],
+            hasRejectedFields: false,
           },
         ],
       );
@@ -478,7 +500,6 @@ describe("round(...)", () => {
         base: roundBase().tables,
         targetFaces: [face],
         pendingCreationEventId: created.eventId,
-        source: "server",
       });
       const tab = createTab();
       const handle = tab.round("round-1");
@@ -598,7 +619,7 @@ describe("round(...)", () => {
       // Given
       const tab = createTab();
       const handle = tab.round("round-1");
-      const unwatch = handle.watch(loadedOf({ source: "local" }));
+      const unwatch = handle.watch(loadedOf());
       const listener = vi.fn();
       handle.subscribe(listener);
       const before = handle.getSnapshot();
@@ -672,7 +693,6 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
         .tables,
       targetFaces: [face],
       pendingCreationEventId: null,
-      source: "server",
     };
   }
 

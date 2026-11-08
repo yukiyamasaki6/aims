@@ -202,12 +202,6 @@ export function createIndexedDbOpLogStore<Op extends OpBase, Base>(
       }
       await tx.done;
     },
-    async close() {
-      if (!opened) return;
-      const closing = opened;
-      opened = undefined;
-      (await closing).close();
-    },
   };
 }
 
@@ -274,7 +268,7 @@ async function streamEntries<Op extends OpBase, Base>(
     .objectStore(STORE_NAME)
     .index("by-stream")
     .getAll(streamId);
-  return sortedEntries(entries, userId);
+  return userEntries(entries, userId);
 }
 
 // 現在のユーザーの操作とベースを、列ごとの組にする。
@@ -305,8 +299,8 @@ function groupByStream<Op extends OpBase, Base>(
   return groups;
 }
 
-// 現在のユーザーの操作だけを`seq`順にする。
-function sortedEntries<Op extends OpBase>(
+// 現在のユーザーの操作だけを返す。`by-stream`の索引は同じ列の中で主キー`seq`の昇順に返すため、並べ直さない。
+function userEntries<Op extends OpBase>(
   entries: StoredEntry<Op>[],
   userId: string | null,
 ): OpLogEntry<Op>[] {
@@ -316,5 +310,5 @@ function sortedEntries<Op extends OpBase>(
       stored.push({ ...entry, seq: entry.seq });
     }
   }
-  return stored.sort((first, second) => first.seq - second.seq);
+  return stored;
 }

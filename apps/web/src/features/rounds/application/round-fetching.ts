@@ -149,8 +149,6 @@ export function createRoundFetching(deps: {
     });
     if (result.status !== "ok") return result;
     const faces = orderTargetFaces(result.data.targetFaces);
-    // 確定済みのラウンドの表示は代わりを持たないが、的の保存済みを最新にする機会として使う。
-    snapshots.save("target-faces", userId, faces, startedAt);
     return {
       status: "ok",
       data: toDetail(result.data.round, faces, startedAt, userId),

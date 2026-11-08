@@ -6,7 +6,6 @@ import {
   isRoundInProgress,
   keepsRoundBase,
   roundStreamRules,
-  shouldKeepRoundBase,
 } from "./round-retention";
 import { roundTablesFromServer } from "./round-tables";
 import type { SyncOperation } from "./sync-events";
@@ -81,27 +80,6 @@ describe("isRoundInProgress", () => {
     // Then
     expect(results).toEqual([true, false, false]);
   });
-});
-
-describe("shouldKeepRoundBase", () => {
-  it.each([
-    ["入力中", "in_progress", false, false, true],
-    ["入力中で未送信の操作あり", "in_progress", false, true, true],
-    ["完了で未送信の操作あり", "completed", false, true, true],
-    ["完了で未送信の操作なし", "completed", false, false, false],
-    ["削除済みで未送信の操作あり", "in_progress", true, true, true],
-    ["削除済みで未送信の操作なし", "in_progress", true, false, false],
-  ] as const)(
-    "%sのときは、保持する=%s",
-    (_name, status, roundDisabled, hasUnsent, expected) => {
-      // Given
-      // When
-      const kept = shouldKeepRoundBase({ status, roundDisabled }, hasUnsent);
-
-      // Then
-      expect(kept).toBe(expected);
-    },
-  );
 });
 
 describe("keepsRoundBase", () => {
@@ -215,7 +193,7 @@ describe("roundStreamRules", () => {
 describe("isRetainedForRefresh", () => {
   const baseOf = (startedAt = 1) => ({ startedAt, base: record() });
 
-  it("削除されておらず作成が確定していて、ベースか操作を持つ組は、取得の対象にする", () => {
+  it("作成が確定していて、ベースか操作を持つ組は、取得の対象にする", () => {
     // Given
     const withBase = { base: baseOf(), entries: [] };
     const withOperation = { base: undefined, entries: [entry(roundUpdated)] };
@@ -270,14 +248,20 @@ describe("isRetainedForRefresh", () => {
     expect(confirmed).toBe(true);
   });
 
-  it("ラウンドの削除を含む組は、ベースがあっても対象にしない", () => {
+  it("ラウンドの削除を含む組も、削除の有無によらず同じ規則で対象にする(確定していない作成だけが対象外)", () => {
     // Given
-    const group = { base: baseOf(), entries: [entry(disabledOp)] };
+    const withUnsentDeletion = { base: baseOf(), entries: [entry(disabledOp)] };
+    const withAckedDeletion = {
+      base: baseOf(),
+      entries: [entry(disabledOp, 3)],
+    };
 
     // When
-    const retained = isRetainedForRefresh(group);
+    const results = [withUnsentDeletion, withAckedDeletion].map(
+      isRetainedForRefresh,
+    );
 
     // Then
-    expect(retained).toBe(false);
+    expect(results).toEqual([true, true]);
   });
 });

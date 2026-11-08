@@ -11,8 +11,6 @@ export function createBrowserIdentityStore(): IdentityWriter & IdentityReader {
   return {
     // この端末に最後にサインインした利用者(いなければnull)。保存先が使えないときもnull。例外は投げない。
     read: () => {
-      // サーバーでの描画中に誤って呼ばれた場合の防御。
-      if (typeof window === "undefined") return null;
       try {
         return window.localStorage.getItem(STORAGE_KEY);
       } catch {

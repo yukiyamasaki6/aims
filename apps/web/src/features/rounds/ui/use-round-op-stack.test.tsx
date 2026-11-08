@@ -51,7 +51,6 @@ function loaded(
     base: roundBase({ status, name: "元", distances: [distance] }).tables,
     targetFaces: faces as unknown as LoadedRound["targetFaces"],
     pendingCreationEventId: null,
-    source: "server",
     ...overrides,
   };
 }
@@ -81,9 +80,7 @@ describe("useRoundOpStack", () => {
 
     // Then
     expect(result.current.state.roundConfig.name).toBe("元");
-    expect(tab.requests.watched()).toEqual([
-      { roundId: "round-1", local: false },
-    ]);
+    expect(tab.requests.watched()).toEqual([{ roundId: "round-1" }]);
   });
 
   it("端末の記録にある未送信の操作を、ベースに重ねた状態から始める", async () => {
@@ -146,12 +143,7 @@ describe("useRoundOpStack", () => {
     // Given
     const { tab, wrapper } = setup();
     const { unmount } = renderHook(
-      () =>
-        useRoundOpStack(
-          "round-1",
-          loaded("in_progress", { source: "local" }),
-          ignoreGone,
-        ),
+      () => useRoundOpStack("round-1", loaded("in_progress"), ignoreGone),
       { wrapper, reactStrictMode: true },
     );
 
@@ -202,12 +194,7 @@ describe("useRoundOpStack", () => {
       const { tab, wrapper } = setup();
       const onGone = vi.fn();
       renderHook(
-        () =>
-          useRoundOpStack(
-            "round-1",
-            loaded("in_progress", { source: "local" }),
-            onGone,
-          ),
+        () => useRoundOpStack("round-1", loaded("in_progress"), onGone),
         { wrapper },
       );
 
@@ -220,13 +207,19 @@ describe("useRoundOpStack", () => {
       expect(onGone).toHaveBeenCalledTimes(1);
     });
 
-    it("端末のベースで開いていないときは、取り直しでサーバーにラウンドが無いと分かっても、onGoneを呼ばない", () => {
+    it("作成が未確定のときは、取り直しでサーバーにラウンドが無いと分かっても、onGoneを呼ばない", () => {
       // Given
       const { tab, wrapper } = setup();
       const onGone = vi.fn();
-      renderHook(() => useRoundOpStack("round-1", loaded(), onGone), {
-        wrapper,
-      });
+      renderHook(
+        () =>
+          useRoundOpStack(
+            "round-1",
+            loaded("in_progress", { pendingCreationEventId: "pending" }),
+            onGone,
+          ),
+        { wrapper },
+      );
 
       // When
       act(() => {

@@ -178,8 +178,8 @@ async function toCallResult(
 }
 
 // 認証サービスのイベント名を、内側の出来事に写す。通知しない出来事はnull。
-// SIGNED_IN、利用者のいる起動時のセッションの復元は、signed-in。トークンの更新はtoken-refreshed。SIGNED_OUTはsigned-out。
-// 利用者のいない起動時と、その他の出来事(PASSWORD_RECOVERY、USER_UPDATEDなど)は通知しない。
+// SIGNED_IN、利用者のいる起動時のセッションの復元は、signed-in。SIGNED_OUTはsigned-out。
+// 利用者のいない起動時と、その他の出来事(TOKEN_REFRESHED、PASSWORD_RECOVERY、USER_UPDATEDなど)は通知しない。
 // 利用者のいない起動時は、未サインインではなく確かめられなかっただけの可能性があるため、記録を消さない。再設定の途中のセッションは、利用者として記録しない。
 function toSignInChange(
   event: AuthChangeEvent,
@@ -190,10 +190,6 @@ function toSignInChange(
     case "INITIAL_SESSION": {
       const userId = session?.user.id;
       return userId ? { kind: "signed-in", userId } : null;
-    }
-    case "TOKEN_REFRESHED": {
-      const userId = session?.user.id;
-      return userId ? { kind: "token-refreshed", userId } : null;
     }
     case "SIGNED_OUT":
       return { kind: "signed-out" };

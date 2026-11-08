@@ -53,18 +53,6 @@ describe("端末の識別情報の記録", () => {
     expect(writer.write).toHaveBeenCalledExactlyOnceWith(null);
   });
 
-  it("トークンの更新では、記録を変えず、消さない", () => {
-    // Given
-    const { localIdentity, writer, emit } = setup();
-    localIdentity.start();
-
-    // When
-    emit({ kind: "token-refreshed", userId: "user-1" });
-
-    // Then
-    expect(writer.write).not.toHaveBeenCalled();
-  });
-
   it("始めた回数だけ購読し、返す関数で購読を解除する", () => {
     // Given
     const { localIdentity, events, unsubscribe } = setup();

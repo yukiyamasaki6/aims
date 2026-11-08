@@ -198,7 +198,7 @@ describe("fetchRoundDetail", () => {
     });
   });
 
-  it("確かめたセッションの利用者で問い合わせ、的は個人を先に並べて返し、並べた的を取得の開始時刻でその利用者のキーへ保存する", async () => {
+  it("確かめたセッションの利用者で問い合わせ、的は個人を先に並べて返す。的は保存しない", async () => {
     // Given
     const faces = [face("g", null), face("p", "user-1")];
     const { fetching, queries, save } = setup({
@@ -221,12 +221,7 @@ describe("fetchRoundDetail", () => {
       "p",
       "g",
     ]);
-    expect(save).toHaveBeenCalledWith(
-      "target-faces",
-      "user-1",
-      expect.arrayContaining([expect.objectContaining({ id: "p" })]),
-      1000,
-    );
+    expect(save).not.toHaveBeenCalled();
   });
 
   it("ラウンドが見つからないときは、not-foundを返し、的は保存しない", async () => {

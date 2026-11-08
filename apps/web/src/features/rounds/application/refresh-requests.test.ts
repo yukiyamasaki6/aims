@@ -75,15 +75,15 @@ describe("詳細を開く依頼", () => {
 });
 
 describe("開いている詳細の印", () => {
-  it("開いている間の印を付け、端末のベースで開いたかを持つ。外すと消え、2回外しても数を崩さない", () => {
+  it("開いている間の印を付ける。外すと消え、2回外しても数を崩さない", () => {
     // Given
     const requests = createRefreshRequests();
     const listener = vi.fn();
     requests.subscribe(listener);
 
     // When
-    const first = requests.watch("r-1", true);
-    const second = requests.watch("r-1", false);
+    const first = requests.watch("r-1");
+    const second = requests.watch("r-1");
     const both = requests.watched();
     first();
     first();
@@ -91,8 +91,8 @@ describe("開いている詳細の印", () => {
     second();
 
     // Then
-    expect(both).toEqual([{ roundId: "r-1", local: false }]);
-    expect(afterFirst).toEqual([{ roundId: "r-1", local: false }]);
+    expect(both).toEqual([{ roundId: "r-1" }]);
+    expect(afterFirst).toEqual([{ roundId: "r-1" }]);
     expect(requests.watched()).toEqual([]);
     expect(listener).toHaveBeenCalledTimes(4);
   });
@@ -132,126 +132,27 @@ describe("開いている詳細の印", () => {
 });
 
 describe("依頼の番号", () => {
-  it("latestListRequestとlatestOpenRequestは、依頼が届くたびに増え、停止でも数え直さない", () => {
+  it("latestOpenRequestは、依頼が届くたびに増える", () => {
     // Given
     const requests = createRefreshRequests();
     const numbers = () => [
-      requests.latestListRequest(),
       requests.latestOpenRequest("r-1"),
       requests.latestOpenRequest("r-2"),
     ];
 
     // When
-    const initial = [
-      requests.latestListRequest(),
-      requests.latestOpenRequest("r-1"),
-    ];
-    requests.requestAll();
-    requests.requestAll();
+    const initial = numbers();
     void requests.open("r-1");
     void requests.open("r-1");
     void requests.open("r-2");
-    const beforeReset = numbers();
-    requests.reset();
-    const afterReset = numbers();
-    requests.requestAll();
+    const afterThree = numbers();
     void requests.open("r-1");
     const afterNext = numbers();
 
     // Then
     expect(initial).toEqual([0, 0]);
-    expect(beforeReset).toEqual([2, 2, 1]);
-    expect(afterReset).toEqual([2, 2, 1]);
-    expect(afterNext).toEqual([3, 3, 1]);
-  });
-});
-
-describe("一覧の依頼と whenListAllows", () => {
-  it("含まれる依頼が無ければ、待たずに偽を返す", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    const run1 = requests.beginAll();
-
-    // When
-    const allowed = await requests.whenListAllows(run1);
-
-    // Then
-    expect(allowed).toBe(false);
-  });
-
-  it("含まれる依頼の成否が全て決まると解決する。全て失敗なら偽、どれかが成功なら真", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    const first = requests.requestAll();
-    const second = requests.requestAll();
-    const run2 = requests.beginAll();
-    const allowed = requests.whenListAllows(run2);
-
-    // When
-    requests.allowCommit(first.id, false);
-    const afterFirst = await settled(allowed);
-    requests.allowCommit(second.id, false);
-    const afterAll = await settled(allowed);
-
-    // Then
-    expect(afterFirst).toBe(false);
-    expect(afterAll).toBe(true);
-    expect(await allowed).toBe(false);
-  });
-
-  it("1件が成功した時点で、他が未決でも真で解決する", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    const first = requests.requestAll();
-    requests.requestAll();
-    const run3 = requests.beginAll();
-    const allowed = requests.whenListAllows(run3);
-
-    // When
-    requests.allowCommit(first.id, true);
-
-    // Then
-    expect(await allowed).toBe(true);
-  });
-
-  it("実行中に届いた依頼は含まれず、次の実行に含まれる。実行を始めるまでは依頼として残る", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    const before = requests.requestAll();
-    const hasBefore = requests.hasListRequests();
-    const run4 = requests.beginAll();
-    const after = requests.requestAll();
-    requests.allowCommit(before.id, true);
-    const firstRun = requests.whenListAllows(run4);
-
-    // When
-    requests.allowCommit(after.id, false);
-    const firstAllowed = await firstRun;
-    requests.settleAll(run4, { status: "ok", data: null });
-    const hasAfter = requests.hasListRequests();
-    const run5 = requests.beginAll();
-    const secondAllowed = await requests.whenListAllows(run5);
-
-    // Then
-    expect(hasBefore).toBe(true);
-    expect(firstAllowed).toBe(true);
-    expect(hasAfter).toBe(true);
-    expect(secondAllowed).toBe(false);
-  });
-
-  it("一括の取得の結果は、この実行に含まれる依頼へだけ返す", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    const included = requests.requestAll();
-    const run6 = requests.beginAll();
-    const next = requests.requestAll();
-
-    // When
-    requests.settleAll(run6, { status: "ok", data: null });
-
-    // Then
-    expect(await included.result).toEqual({ status: "ok", data: null });
-    expect(await settled(next.result)).toBe(false);
+    expect(afterThree).toEqual([2, 1]);
+    expect(afterNext).toEqual([3, 1]);
   });
 });
 
@@ -386,27 +287,6 @@ describe("並行する実行の結果の記録", () => {
     expect(requests.outcomeOf("r-1")).toBe("ok");
     expect(resolved).toEqual([results.ok]);
   });
-
-  it("停止の後は、停止前の実行の番号に妨げられず、再開後の結果が記録される", () => {
-    // Given
-    const requests = createRefreshRequests();
-    void requests.open("r-1");
-    const earlier = requests.beginRound("r-1");
-    const later = requests.beginRound("r-1");
-    requests.settleRound(later, results.ok);
-    requests.settleRound(earlier, results.ok);
-    const before = requests.outcomeOf("r-1");
-    requests.reset();
-
-    // When
-    void requests.open("r-1");
-    const run = requests.beginRound("r-1");
-    requests.settleRound(run, results.gone);
-
-    // Then
-    expect(before).toBe("ok");
-    expect(requests.outcomeOf("r-1")).toBe("gone");
-  });
 });
 
 describe("依頼の状態の遷移", () => {
@@ -440,129 +320,5 @@ describe("依頼の状態の遷移", () => {
     // Then
     expect(requests.pendingOpens()).toEqual(["r-1"]);
     expect(await settled(later)).toBe(false);
-  });
-
-  it("停止は、待っている開く依頼と、含められた・含められていない一覧の依頼をエラーで終える", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    const open = requests.open("r-1");
-    const included = requests.requestAll();
-    requests.beginAll();
-    const pending = requests.requestAll();
-
-    // When
-    requests.reset();
-
-    // Then
-    const error = { status: "error", reason: "failed" };
-    expect(await open).toEqual(error);
-    expect(await included.result).toEqual(error);
-    expect(await pending.result).toEqual(error);
-    expect(requests.pendingOpens()).toEqual([]);
-    expect(requests.hasListRequests()).toBe(false);
-  });
-
-  it("一覧の成否を待つ間に停止すると、反映の許可の待ちは偽で解決し、一覧の依頼はエラーで終わる", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    const list = requests.requestAll();
-    const run = requests.beginAll();
-    const waiting = requests.whenListAllows(run);
-    const beforeReset = await settled(waiting);
-
-    // When
-    requests.reset();
-
-    // Then
-    expect(beforeReset).toBe(false);
-    expect(await waiting).toBe(false);
-    expect(await list.result).toEqual({
-      status: "error",
-      reason: "failed",
-    });
-  });
-
-  it("停止の後のallowCommitは何も起こさず、解決済みの待ちの値は変わらない", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    const list = requests.requestAll();
-    const run = requests.beginAll();
-    const waiting = requests.whenListAllows(run);
-    requests.reset();
-
-    // When
-    const allowing = () => requests.allowCommit(list.id, true);
-
-    // Then
-    expect(allowing).not.toThrow();
-    expect(await waiting).toBe(false);
-    expect(requests.hasListRequests()).toBe(false);
-  });
-
-  it("含まれる依頼が複数のときも、停止で登録された全ての待ちが偽で解決する", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    requests.requestAll();
-    requests.requestAll();
-    const run = requests.beginAll();
-    const first = requests.whenListAllows(run);
-    const second = requests.whenListAllows(run);
-
-    // When
-    requests.reset();
-
-    // Then
-    expect(await first).toBe(false);
-    expect(await second).toBe(false);
-  });
-
-  it("停止前に始まった取り直しの完了は、結果の記録・待ち・通知のどれも変えない", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    void requests.open("r-1");
-    const stale = requests.beginRound("r-1");
-    requests.reset();
-    const resumed = requests.open("r-1");
-    const listener = vi.fn();
-    requests.subscribe(listener);
-
-    // When
-    requests.settleRound(stale, ok);
-
-    // Then
-    expect(requests.outcomeOf("r-1")).toBeUndefined();
-    expect(requests.pendingOpens()).toEqual(["r-1"]);
-    expect(await settled(resumed)).toBe(false);
-    expect(listener).not.toHaveBeenCalled();
-  });
-
-  it("再開後の開く依頼は新しい依頼として、新しい取得の結果で完了する", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    void requests.open("r-1");
-    requests.reset();
-    const resumed = requests.open("r-1");
-
-    // When
-    requests.settleRound(requests.beginRound("r-1"), ok);
-
-    // Then
-    expect(await resumed).toEqual(ok);
-    expect(requests.outcomeOf("r-1")).toBe("ok");
-  });
-
-  it("一覧の依頼の識別子は一意で増え、知らない識別子と知らない実行は何も起こさない", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    const first = requests.requestAll();
-    const second = requests.requestAll();
-
-    // When
-    requests.allowCommit(999, true);
-    const unknownRun = await requests.whenListAllows({ requests: [] });
-
-    // Then
-    expect(second.id).toBeGreaterThan(first.id);
-    expect(unknownRun).toBe(false);
   });
 });

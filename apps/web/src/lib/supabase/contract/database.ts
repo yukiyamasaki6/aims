@@ -48,6 +48,8 @@ export type DbSelect<S extends DbSchema, T extends TableOf<S>> = {
   orders?: readonly DbOrder<S, T>[];
   // 1行を返す問い合わせ。無ければdataがnull。
   single?: "maybe";
+  // 通信の失敗と一時的なサーバーの失敗(503、520)を、ライブラリが自動で再試行するか。既定は再試行しない。
+  retry?: boolean;
 };
 
 // 1行以上を絞る削除。絞りの無い削除は型で書けない。
@@ -57,7 +59,7 @@ type DbDelete<S extends DbSchema, T extends TableOf<S>> = {
 };
 
 export type DatabaseGateway<S extends DbSchema> = {
-  // 問い合わせは、取得の側が再試行を持つため、パッケージの再試行を使わない。
+  // 問い合わせは、`retry`を指定したときだけ、パッケージの再試行を使う。
   select<T extends TableOf<S>>(query: DbSelect<S, T>): Promise<DbResponse>;
   delete<T extends TableOf<S>>(command: DbDelete<S, T>): Promise<DbResponse>;
   rpc<N extends keyof S["Functions"] & string>(

@@ -434,19 +434,6 @@ describe("セッション喪失の見張り", () => {
         "/signin?returnTo=%2Frounds%2Fnew",
       );
     });
-
-    it("token-refreshedでは、移らない", () => {
-      // Given
-      const { session, page, recordUser, emit } = setup();
-      session.watch();
-
-      // When
-      emit({ kind: "token-refreshed", userId: "user-2" });
-
-      // Then
-      expect(page.replace).not.toHaveBeenCalled();
-      expect(recordUser.matchUser).not.toHaveBeenCalled();
-    });
   });
 
   describe("記録の利用者と違う利用者のサインイン", () => {

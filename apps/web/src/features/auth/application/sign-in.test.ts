@@ -170,7 +170,7 @@ describe("サインインの手続き", () => {
     await signIn.submit(input, viewOf(verified));
 
     // Then
-    expect(connectivity.subscribers()).toEqual({ online: 0, offline: 0 });
+    expect(connectivity.subscribers()).toEqual({ online: 0 });
   });
 
   it("渡された状態が送信中なら、何も送らず、照合も遷移もしない", async () => {

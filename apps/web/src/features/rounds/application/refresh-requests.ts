@@ -1,16 +1,5 @@
 import type { FetchResult } from "../domain/fetch-status";
 import {
-  beginListRun,
-  decideList,
-  EMPTY_LIST_REQUESTS,
-  type ListRequests,
-  type ListRun,
-  listVerdict,
-  requestList,
-  settleListRun,
-  stopLists,
-} from "../domain/list-requests";
-import {
   beginOpenRun,
   EMPTY_OPEN_REQUESTS,
   type OpenRequests,
@@ -18,7 +7,6 @@ import {
   type RoundOutcome,
   requestOpen,
   settleOpenRun,
-  stopOpens,
 } from "../domain/open-requests";
 import type { RoundTables } from "../domain/round-tables";
 import type { TargetFaceOption } from "../domain/target-face";
@@ -36,28 +24,19 @@ function outcomeOfResult(result: FetchResult<OpenedRound>): RoundOutcome {
   return result.status === "not-found" ? "gone" : "failed";
 }
 
-const STOPPED: FetchResult<never> = {
-  status: "error",
-  reason: "failed",
-};
-
-// 取り直しの依頼の記録。画面は「開いた」「一覧を開いた」と依頼するだけで、取得と反映の時点はこの記録では決めない。
-// 規則は集約(開く依頼 `open-requests.ts`、一覧の依頼 `list-requests.ts`)が持ち、ここは状態を保ち、依頼の番号ごとの結果を渡す先を呼ぶ。
+// 取り直しの依頼の記録。画面は「開いた」と依頼するだけで、取得と反映の時点はこの記録では決めない。
+// 規則は集約(開く依頼 `open-requests.ts`)が持ち、ここは状態を保ち、依頼の番号ごとの結果を渡す先を呼ぶ。
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createRefreshRequests() {
   let opens: OpenRequests = EMPTY_OPEN_REQUESTS;
-  let lists: ListRequests = EMPTY_LIST_REQUESTS;
   // 依頼の番号ごとの、結果を渡す先。
   const openResolvers = new Map<
     string,
     Map<number, (result: FetchResult<OpenedRound>) => void>
   >();
-  const listResolvers = new Map<number, (result: FetchResult<null>) => void>();
-  const watching = new Map<string, { count: number; local: boolean }>();
+  const watching = new Map<string, number>();
   // 確定済みの操作をベースに重ねられなかった(取り直しが要る)開いた詳細。
   const overlay = new Set<string>();
-  // 反映の許可の待ち。判定の関数と、待ち(`whenListAllows` の約束)を解決する関数の組で持つ。停止で全て解決する。
-  const decisionWaiters = new Map<() => void, (allowed: boolean) => void>();
   const listeners = new Set<() => void>();
 
   function changed() {
@@ -87,8 +66,6 @@ export function createRefreshRequests() {
         changed();
       });
     },
-    // 最後に受けた一覧の依頼の番号。依頼が無ければ0。アプリの寿命の間増え続け、停止でも数え直さない。
-    latestListRequest: (): number => lists.latest,
     // そのラウンドの最後の開く依頼の番号。依頼が無ければ0。アプリの寿命の間増え続け、停止でも数え直さない。
     latestOpenRequest: (roundId: string): number =>
       opens.get(roundId)?.latest ?? 0,
@@ -113,30 +90,23 @@ export function createRefreshRequests() {
     },
     outcomeOf: (roundId: string): RoundOutcome | undefined =>
       opens.get(roundId)?.outcome,
-    // 開いている間の印。localは、端末のベースで開いたこと(取得できるまで古い)。
-    watch(roundId: string, local: boolean): () => void {
-      const current = watching.get(roundId);
-      watching.set(roundId, {
-        count: (current?.count ?? 0) + 1,
-        local: current?.local === false ? false : local,
-      });
+    // 開いている間の印。取り直しの要否の判定が、開いている詳細を知るために使う。
+    watch(roundId: string): () => void {
+      watching.set(roundId, (watching.get(roundId) ?? 0) + 1);
       changed();
       let released = false;
       return () => {
         if (released) return;
         released = true;
-        const entry = watching.get(roundId);
-        if (!entry) return;
-        if (entry.count <= 1) watching.delete(roundId);
-        else watching.set(roundId, { ...entry, count: entry.count - 1 });
+        const count = watching.get(roundId);
+        if (count === undefined) return;
+        if (count <= 1) watching.delete(roundId);
+        else watching.set(roundId, count - 1);
         changed();
       };
     },
-    watched(): { roundId: string; local: boolean }[] {
-      return [...watching].map(([roundId, entry]) => ({
-        roundId,
-        local: entry.local,
-      }));
+    watched(): { roundId: string }[] {
+      return [...watching.keys()].map((roundId) => ({ roundId }));
     },
     setOverlay(roundId: string, needed: boolean) {
       if (overlay.has(roundId) === needed) return;
@@ -145,72 +115,6 @@ export function createRefreshRequests() {
       changed();
     },
     overlayNeeded: (roundId: string): boolean => overlay.has(roundId),
-    // 一覧を開いた依頼。一括の取得の結果は、返すPromiseで待つ。
-    requestAll(): { id: number; result: Promise<FetchResult<null>> } {
-      const next = requestList(lists);
-      lists = next.state;
-      const result = new Promise<FetchResult<null>>((resolve) => {
-        listResolvers.set(next.request, resolve);
-      });
-      changed();
-      return { id: next.request, result };
-    },
-    // 一覧の取得の成否。成功のときだけ、一括の取得の結果を反映してよい。
-    allowCommit(id: number, ok: boolean) {
-      lists = decideList(lists, id, ok);
-      for (const check of [...decisionWaiters.keys()]) check();
-    },
-    // 実行を始めた時点で記録にある一覧の依頼を、この実行に含める。実行中に届いた依頼は、次の実行に含める。
-    beginAll(): ListRun {
-      const next = beginListRun(lists);
-      lists = next.state;
-      changed();
-      return next.run;
-    },
-    hasListRequests: (): boolean => lists.pending.length > 0,
-    // その実行に含まれる一覧の依頼のどれかの一覧の取得が成功なら真、全てが失敗なら偽。含まれる依頼が無ければ待たずに偽。
-    whenListAllows(run: ListRun): Promise<boolean> {
-      const first = listVerdict(lists, run);
-      if (first !== "undecided") return Promise.resolve(first === "allowed");
-      return new Promise((resolve) => {
-        const check = () => {
-          const verdict = listVerdict(lists, run);
-          if (verdict === "undecided") return;
-          decisionWaiters.delete(check);
-          resolve(verdict === "allowed");
-        };
-        decisionWaiters.set(check, resolve);
-      });
-    },
-    // 一括の取得の結果を、その実行に含まれる依頼へ返す。
-    settleAll(run: ListRun, result: FetchResult<null>) {
-      const next = settleListRun(lists, run);
-      lists = next.state;
-      for (const request of next.answered) {
-        listResolvers.get(request)?.(result);
-        listResolvers.delete(request);
-      }
-      changed();
-    },
-    // 停止。待っている全ての依頼をエラーで終え、記録の権利を空にする。以後、停止前に始まった取り直しは、記録も解決もしない。
-    reset() {
-      const stoppedOpens = stopOpens(opens);
-      opens = stoppedOpens.state;
-      for (const { roundId, request } of stoppedOpens.answered) {
-        resolveOpen(roundId, request, STOPPED);
-      }
-      const stoppedLists = stopLists(lists);
-      lists = stoppedLists.state;
-      for (const request of stoppedLists.answered) {
-        listResolvers.get(request)?.(STOPPED);
-        listResolvers.delete(request);
-      }
-      // 反映の許可を待つ実行は、反映しないで終える。
-      const allowWaiters = [...decisionWaiters.values()];
-      decisionWaiters.clear();
-      for (const resolve of allowWaiters) resolve(false);
-      changed();
-    },
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {

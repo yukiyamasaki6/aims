@@ -58,7 +58,7 @@ export type RecordSendResult = {
   revision: number | null;
   applied: boolean;
   appliedFields: string[] | null;
-  rejectedFields: readonly { field: string; reason: string }[];
+  hasRejectedFields: boolean;
 };
 
 export const EMPTY_RECORD: RoundRecord = {
@@ -282,7 +282,7 @@ export function applySendResults(
   const confirmed = new Map<string, RecordSendResult>();
   eventIds.forEach((eventId, index) => {
     const result = results[index];
-    if (!result.applied || result.rejectedFields.length > 0) diverged = true;
+    if (!result.applied || result.hasRejectedFields) diverged = true;
     if (result.applied) confirmed.set(eventId, result);
     else ineffective.push(eventId);
   });

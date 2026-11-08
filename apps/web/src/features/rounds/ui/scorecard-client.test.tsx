@@ -251,7 +251,6 @@ function setup(
         }),
         targetFaces: faces,
         pendingCreationEventId: null,
-        source: "server",
       }}
       targetFaces={faces}
       onGone={ignoreGone}
@@ -321,11 +320,10 @@ const APPLIED = {
   reason: null,
 };
 
-// RPCの成功は、判定結果を返す。マスの操作は、渡した件数分の配列を返す。ラウンドの削除だけは、revisionの数値を返す。
-function rpcSucceeds(name: string, args?: { p_shots?: unknown[] }) {
+// RPCの成功は、判定結果を返す。マスの操作は、渡した件数分の配列を返す。
+function rpcSucceeds(_name: string, args?: { p_shots?: unknown[] }) {
   let data: unknown = APPLIED;
   if (args?.p_shots) data = args.p_shots.map(() => APPLIED);
-  if (name === "disable_round") data = 2;
   return Promise.resolve({ data, error: null });
 }
 
@@ -357,17 +355,13 @@ function appendFromOtherPath(operation: SyncOperation) {
 // 端末に保存されたround-1の操作の、確定の有無。送信の状態は画面に出ず、内部の状態は観測できないため、保存と確定の有無で確かめる。
 async function ackedStates(): Promise<("acked" | "unacked")[]> {
   const store = createIndexedDbOpLogStore(roundStreamRules);
-  try {
-    const group = await store.loadStream(
-      roundStreamId("round-1"),
-      createBrowserIdentityStore().read(),
-    );
-    return group.entries.map((entry) =>
-      entry.ackedRevision === undefined ? "unacked" : "acked",
-    );
-  } finally {
-    await store.close();
-  }
+  const group = await store.loadStream(
+    roundStreamId("round-1"),
+    createBrowserIdentityStore().read(),
+  );
+  return group.entries.map((entry) =>
+    entry.ackedRevision === undefined ? "unacked" : "acked",
+  );
 }
 
 beforeEach(() => {
@@ -1883,7 +1877,6 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
           }),
           targetFaces: [...targetFaces],
           pendingCreationEventId: null,
-          source: "server",
         }}
         targetFaces={[...targetFaces]}
         onGone={ignoreGone}
@@ -2839,10 +2832,10 @@ describe("ScorecardClient プリセット保存の失敗", () => {
 
     // Then
     expect(
-      await screen.findByText(roundsText("fetchFailure.unreachable")),
+      await screen.findByText(roundsText("presetSaveFailure.unreachable")),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(roundsText("fetchFailure.unauthenticated")),
+      screen.queryByText(roundsText("presetSaveFailure.unauthenticated")),
     ).not.toBeInTheDocument();
     expect(savePresetCalls()).toEqual([]);
   });

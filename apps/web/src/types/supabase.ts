@@ -690,7 +690,7 @@ export type Database = {
       };
       disable_round: {
         Args: { p_round_event_id: string; p_round_id: string };
-        Returns: number;
+        Returns: Json;
       };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };

@@ -27,18 +27,10 @@ import {
   type SyncFailure,
   sessionFailure,
 } from "../domain/sync-failure";
-import type { OperationSending, SendReport } from "./operation-sending";
+import type { OperationSending } from "./operation-sending";
 import type { RoundRecordHub } from "./round-record-hub";
 
 export type OpSender = ReturnType<typeof createOpSender>;
-
-// 送信の結果の失敗を、失敗の分類へ渡す形にする。
-function failureOf(report: Extract<SendReport, { ok: false }>): SyncFailure {
-  const { cause } = report;
-  return cause.type === "rpc"
-    ? { cause: "rpc", status: cause.status, code: cause.code }
-    : { cause: "exception" };
-}
 
 // 操作の列の送信器。列ごとの送信の状態(集約の値)を保ち、計画と失敗の判定を求めて、集約の命令へ渡す。
 // 認可・契約で拒否された操作は破棄し、効かなかった操作は記録から外す。止めて残すのは未認証のときだけである。
@@ -99,7 +91,7 @@ export function createOpSender(deps: {
     }
     try {
       const report = await sending.send(streamId, flight.eventIds);
-      return report.ok ? undefined : failureOf(report);
+      return report.ok ? undefined : report.failure;
     } catch {
       return { cause: "exception" };
     }
@@ -177,9 +169,7 @@ export function createOpSender(deps: {
   }
 
   function pumpAll() {
-    for (const streamId of new Set([...hub.streams(), ...queues.keys()])) {
-      pump(streamId);
-    }
+    for (const streamId of hub.streams()) pump(streamId);
   }
 
   function handleChange(change: { streamId: string }) {
@@ -204,29 +194,16 @@ export function createOpSender(deps: {
     pumpAll();
   }
 
-  function clearState() {
-    generation += 1;
-    for (const cancel of timers) cancel();
-    timers.clear();
-    for (const streamId of [...queues.keys()])
-      writeQueue(streamId, EMPTY_QUEUE);
-    queues = new Map();
-  }
-
   return {
-    // 2回目以降は何もしない。
     start() {
-      if (started) return;
       started = true;
       startSeq += 1;
       const mine = startSeq;
-      // 通信の回復の購読は、同期の契機の受け取りの購読(取り直しの再開)より先に登録され、再送が先に動く。
       stopListening = [
         hub.subscribe(handleChange),
         connectivity.onOnline(recoverOnline),
       ];
       void whenLoaded(mine);
-      pumpAll();
     },
     stop() {
       started = false;
@@ -234,16 +211,22 @@ export function createOpSender(deps: {
       ready = false;
       for (const stop of stopListening) stop();
       stopListening = [];
-      clearState();
+      // 世代を進めて古い送信の結果を捨て、タイマーと列の状態を片付ける。記録の送信中の印は、ハブの停止が記録ごと空にする。
+      generation += 1;
+      for (const cancel of timers) cancel();
+      timers.clear();
+      queues = new Map();
     },
     // 保留を戻して送る。サインインし直したときに使う。試行の番号は、新しい要求として0から数える。
     resumeHeld() {
+      const resumedStreams: string[] = [];
       for (const [streamId, queue] of [...queues]) {
         const resumed = resumeHeld(queue);
         if (!resumed.resumed) continue;
         writeQueue(streamId, resumed.queue);
+        resumedStreams.push(streamId);
       }
-      pumpAll();
+      for (const streamId of resumedStreams) pump(streamId);
     },
   };
 }

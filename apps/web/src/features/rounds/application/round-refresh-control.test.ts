@@ -37,7 +37,7 @@ const unfitResult = {
   revision: null,
   applied: false,
   appliedFields: null,
-  rejectedFields: [],
+  hasRejectedFields: false,
 };
 
 // 結線(他の機能へ公開する平らな値への写し)が検証対象。取得の中身は別のテストで確かめるため、取得の約束を差し替える。
@@ -62,6 +62,22 @@ async function setup() {
   return { hub, store, requests, fetching, control };
 }
 
+// 取り直しの要否の期待値。真の理由だけを指定する。
+function needOf(
+  roundId: string,
+  reasons: { open?: boolean; diverged?: boolean; overlay?: boolean },
+  openRequest = 0,
+) {
+  return {
+    roundId,
+    open: false,
+    diverged: false,
+    overlay: false,
+    ...reasons,
+    openRequest,
+  };
+}
+
 // 効かなかった結果の印を、そのラウンドの列に付ける。
 async function markDiverged(
   hub: Awaited<ReturnType<typeof setup>>["hub"],
@@ -73,82 +89,58 @@ async function markDiverged(
 }
 
 describe("理由の導出", () => {
-  it("開いた直後、古い、効かなかった、重ねられなかったの順に先に当たる理由をreasonとして返す", async () => {
+  it("当たる理由を、ラウンドごとの真偽で返す", async () => {
     // Given
     const { hub, requests, control } = await setup();
     void requests.open("r-open");
-    requests.watch("r-open", true);
-    requests.watch("r-stale", true);
+    requests.watch("r-open");
     await markDiverged(hub, "r-diverged");
-    requests.watch("r-diverged", false);
+    requests.watch("r-diverged");
     requests.setOverlay("r-overlay", true);
-    requests.watch("r-overlay", false);
+    requests.watch("r-overlay");
     await markDiverged(hub, "r-both");
     requests.setOverlay("r-both", true);
-    requests.watch("r-both", false);
+    requests.watch("r-both");
 
     // When
     const { rounds } = control.refreshNeeds();
 
     // Then
-    expect(rounds).toHaveLength(5);
+    expect(rounds).toHaveLength(4);
     expect(rounds).toEqual(
       expect.arrayContaining([
-        {
-          roundId: "r-open",
-          reason: "open",
-          reasons: ["open", "stale"],
-          openRequest: 1,
-        },
-        { roundId: "r-stale", reason: "stale", reasons: ["stale"] },
-        { roundId: "r-diverged", reason: "diverged", reasons: ["diverged"] },
-        { roundId: "r-overlay", reason: "overlay", reasons: ["overlay"] },
-        {
-          roundId: "r-both",
-          reason: "diverged",
-          reasons: ["diverged", "overlay"],
-        },
+        needOf("r-open", { open: true }, 1),
+        needOf("r-diverged", { diverged: true }),
+        needOf("r-overlay", { overlay: true }),
+        needOf("r-both", { diverged: true, overlay: true }),
       ]),
     );
   });
 
-  it("当たる全ての理由を、開く依頼、古い、効かなかった、重ねられなかったの順に並べ、主の理由は先頭にする", async () => {
+  it("複数の理由が当たるラウンドは、全ての理由を真にして返す", async () => {
     // Given
     const { hub, requests, control } = await setup();
     void requests.open("r-open-all");
-    requests.watch("r-open-all", true);
+    requests.watch("r-open-all");
     await markDiverged(hub, "r-open-all");
     requests.setOverlay("r-open-all", true);
-    requests.watch("r-stale-all", true);
-    await markDiverged(hub, "r-stale-all");
-    requests.setOverlay("r-stale-all", true);
 
     // When
     const { rounds } = control.refreshNeeds();
 
     // Then
-    expect(rounds).toHaveLength(2);
-    expect(rounds).toEqual(
-      expect.arrayContaining([
-        {
-          roundId: "r-open-all",
-          reason: "open",
-          reasons: ["open", "stale", "diverged", "overlay"],
-          openRequest: 1,
-        },
-        {
-          roundId: "r-stale-all",
-          reason: "stale",
-          reasons: ["stale", "diverged", "overlay"],
-        },
-      ]),
-    );
+    expect(rounds).toEqual([
+      needOf("r-open-all", { open: true, diverged: true, overlay: true }, 1),
+    ]);
   });
 
-  it("どの理由にも当たらない詳細は、要否に含めない", async () => {
+  it("どの理由にも当たらない詳細は、要否に含めない(取得に失敗していても、古さを理由にしない)", async () => {
     // Given
     const { requests, control } = await setup();
-    requests.watch("r-quiet", false);
+    requests.watch("r-quiet");
+    void requests.open("r-failed");
+    requests.watch("r-failed");
+    settleRoundNow(requests, "r-failed", { status: "error", reason: "failed" });
 
     // When
     const { rounds } = control.refreshNeeds();
@@ -159,14 +151,13 @@ describe("理由の導出", () => {
 });
 
 describe("refreshNeeds", () => {
-  it("一覧の依頼の有無と、取り直しが要るラウンドを理由とともに返す", async () => {
+  it("取り直しが要るラウンドを理由とともに返す", async () => {
     // Given
     const { hub, requests, control } = await setup();
     void requests.open("opening");
-    requests.watch("stale", true);
-    requests.watch("quiet", false);
+    requests.watch("quiet");
     requests.setOverlay("overlay", true);
-    requests.watch("overlay", false);
+    requests.watch("overlay");
     await hub.append(roundStreamId("diverged"), roundUpdated({ eventId: "d" }));
     hub.applySendResults(
       roundStreamId("diverged"),
@@ -176,63 +167,52 @@ describe("refreshNeeds", () => {
           revision: null,
           applied: false,
           appliedFields: null,
-          rejectedFields: [],
+          hasRejectedFields: false,
         },
       ],
     );
-    requests.watch("diverged", false);
-    requests.requestAll();
+    requests.watch("diverged");
 
     // When
     const needs = control.refreshNeeds();
 
     // Then
-    expect(needs.list).toBe(true);
     expect(needs.rounds).toEqual(
       expect.arrayContaining([
-        {
-          roundId: "opening",
-          reason: "open",
-          reasons: ["open"],
-          openRequest: 1,
-        },
-        { roundId: "stale", reason: "stale", reasons: ["stale"] },
-        { roundId: "overlay", reason: "overlay", reasons: ["overlay"] },
-        { roundId: "diverged", reason: "diverged", reasons: ["diverged"] },
+        needOf("opening", { open: true }, 1),
+        needOf("overlay", { overlay: true }),
+        needOf("diverged", { diverged: true }),
       ]),
     );
     expect(needs.rounds.map((need) => need.roundId)).not.toContain("quiet");
   });
 
-  it("refreshNeedsは、理由がopenのラウンドにだけopenRequestを付け、一覧の依頼の番号を添える", async () => {
+  it("refreshNeedsは、ラウンドごとの最後の開く依頼の番号をopenRequestに持つ", async () => {
     // Given
     const { requests, control } = await setup();
     void requests.open("r-1");
     void requests.open("r-1");
-    requests.watch("r-2", true);
-    requests.requestAll();
+    requests.watch("r-2");
+    requests.setOverlay("r-2", true);
 
     // When
     const needs = control.refreshNeeds();
 
     // Then
-    expect(needs.listRequest).toBe(1);
     expect(needs.rounds).toEqual(
       expect.arrayContaining([
-        { roundId: "r-1", reason: "open", reasons: ["open"], openRequest: 2 },
-        { roundId: "r-2", reason: "stale", reasons: ["stale"] },
+        needOf("r-1", { open: true }, 2),
+        needOf("r-2", { overlay: true }),
       ]),
     );
-    const stale = needs.rounds.find((need) => need.roundId === "r-2");
-    expect(stale && Object.hasOwn(stale, "openRequest")).toBe(false);
   });
 
-  it("理由は、開く依頼、端末のベースで開いた詳細の古さ、効かなかった印、重ねられなかった印の順に先のものが返り、先の理由が無くなると次のものが返る", async () => {
+  it("開く依頼が結果を受けると、openが偽になり、効かなかった印が外れるとdivergedが偽になる", async () => {
     // Given
     const { hub, requests, control } = await setup();
     const stream = roundStreamId("r-1");
     void requests.open("r-1");
-    requests.watch("r-1", true);
+    requests.watch("r-1");
     await hub.append(stream, roundUpdated({ eventId: "d" }));
     hub.applySendResults(stream, ["d"], [unfitResult]);
     requests.setOverlay("r-1", true);
@@ -241,58 +221,25 @@ describe("refreshNeeds", () => {
     // When
     const first = reasons();
     // settleRoundNowは取り直しの開始で効かなかった印を消さないため、順を保てる。
-    settleRoundNow(requests, "r-1", { status: "error", reason: "failed" });
-    const second = reasons();
     settleRoundNow(requests, "r-1", {
       status: "ok",
       data: { deleted: false, base: roundBase().tables, targetFaces: [] },
     });
-    const third = reasons();
+    const second = reasons();
     hub.clearDiverged(stream);
-    const fourth = reasons();
+    const third = reasons();
     requests.setOverlay("r-1", false);
-    const fifth = reasons();
+    const fourth = reasons();
 
     // Then
     expect(first).toEqual([
-      {
-        roundId: "r-1",
-        reason: "open",
-        reasons: ["open", "stale", "diverged", "overlay"],
-        openRequest: 1,
-      },
+      needOf("r-1", { open: true, diverged: true, overlay: true }, 1),
     ]);
     expect(second).toEqual([
-      {
-        roundId: "r-1",
-        reason: "stale",
-        reasons: ["stale", "diverged", "overlay"],
-      },
+      needOf("r-1", { diverged: true, overlay: true }, 1),
     ]);
-    expect(third).toEqual([
-      { roundId: "r-1", reason: "diverged", reasons: ["diverged", "overlay"] },
-    ]);
-    expect(fourth).toEqual([
-      { roundId: "r-1", reason: "overlay", reasons: ["overlay"] },
-    ]);
-    expect(fifth).toEqual([]);
-  });
-
-  it("端末のベースで開いた詳細に効かなかった印が付くと、主の理由はstaleのまま、reasonsにdivergedが加わる", async () => {
-    // Given
-    const { hub, requests, control } = await setup();
-    const stream = roundStreamId("r-1");
-    requests.watch("r-1", true);
-    await hub.append(stream, roundUpdated({ eventId: "d" }));
-    hub.applySendResults(stream, ["d"], [unfitResult]);
-
-    // When
-    const needs = control.refreshNeeds();
-
-    // Then
-    expect(needs.rounds).toEqual([
-      { roundId: "r-1", reason: "stale", reasons: ["stale", "diverged"] },
-    ]);
+    expect(third).toEqual([needOf("r-1", { overlay: true }, 1)]);
+    expect(fourth).toEqual([]);
   });
 
   describe("取り直しの開始", () => {
@@ -301,7 +248,7 @@ describe("refreshNeeds", () => {
       const stream = roundStreamId("r-1");
       await tab.hub.append(stream, roundUpdated({ eventId: "d" }));
       tab.hub.applySendResults(stream, ["d"], [unfitResult]);
-      tab.requests.watch("r-1", false);
+      tab.requests.watch("r-1");
       const detailFetch =
         Promise.withResolvers<FetchResult<FetchedRoundDetail>>();
       tab.fetching.fetchRoundDetail.mockReturnValueOnce(detailFetch.promise);
@@ -319,9 +266,7 @@ describe("refreshNeeds", () => {
       const during = control.refreshNeeds().rounds;
 
       // Then
-      expect(before).toEqual([
-        { roundId: "r-1", reason: "diverged", reasons: ["diverged"] },
-      ]);
+      expect(before).toEqual([needOf("r-1", { diverged: true })]);
       expect(during).toEqual([]);
     });
 
@@ -331,27 +276,11 @@ describe("refreshNeeds", () => {
 
       // When
       detailFetch.resolve({ status: "error", reason: "failed" });
-      const result = await refreshing;
+      await refreshing;
 
       // Then
-      expect(result).toBe("failed");
       expect(control.refreshNeeds().rounds).toEqual([]);
     });
-  });
-
-  it("端末のベースで開いた詳細が取り直しで成功すると、古い理由から外れる", async () => {
-    // Given
-    const { requests, control } = await setup();
-    requests.watch("stale", true);
-
-    // When
-    settleRoundNow(requests, "stale", {
-      status: "ok",
-      data: { deleted: false, base: roundBase().tables, targetFaces: [] },
-    });
-
-    // Then
-    expect(control.refreshNeeds().rounds).toEqual([]);
   });
 
   it("依頼や記録が変わったら通知し、解除すると両方の通知が止まる", async () => {
@@ -375,7 +304,7 @@ describe("refreshNeeds", () => {
 });
 
 describe("取得と反映", () => {
-  it("refreshAllは、反映したかを返し、refreshRoundは結果の種類を返す", async () => {
+  it("refreshAllは一括を、refreshRoundは1つのラウンドを取得する", async () => {
     // Given
     const { fetching, control } = await setup();
     fetching.fetchRoundDetails.mockResolvedValue({
@@ -385,12 +314,12 @@ describe("取得と反映", () => {
     fetching.fetchRoundDetail.mockResolvedValue({ status: "not-found" });
 
     // When
-    const committed = await control.refreshAll({ waitForList: false });
-    const round = await control.refreshRound("round-1");
+    await control.refreshAll();
+    await control.refreshRound("round-1");
 
     // Then
-    expect(committed).toBe(true);
-    expect(round).toBe("gone");
+    expect(fetching.fetchRoundDetails).toHaveBeenCalledTimes(1);
+    expect(fetching.fetchRoundDetail).toHaveBeenCalledWith("round-1");
   });
   it("開始した後に出した開く依頼は、その実行の結果を受けずに待ちとして残り、openを返し続ける。開始前の依頼は結果を受ける", async () => {
     // Given
@@ -416,7 +345,7 @@ describe("取得と反映", () => {
     expect(await before).toMatchObject({ status: "ok" });
     expect(afterSettled).toBe(false);
     expect(control.refreshNeeds().rounds).toEqual([
-      { roundId: "r-1", reason: "open", reasons: ["open"], openRequest: 2 },
+      needOf("r-1", { open: true }, 2),
     ]);
   });
 });

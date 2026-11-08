@@ -204,7 +204,7 @@ function applied(
   revision: number | null,
   appliedFields: string[] | null = null,
 ) {
-  return { revision, applied: true, appliedFields, rejectedFields: [] };
+  return { revision, applied: true, appliedFields, hasRejectedFields: false };
 }
 
 describe("adoptGroup", () => {
@@ -485,7 +485,7 @@ describe("applySendResults", () => {
     const record = savedRecord(op("a"), op("b"), op("c"));
     const rejectedPart = {
       ...applied(5, ["name"]),
-      rejectedFields: [{ field: "status", reason: "completed" }],
+      hasRejectedFields: true,
     };
 
     // When
@@ -497,7 +497,7 @@ describe("applySendResults", () => {
           revision: 1,
           applied: false,
           appliedFields: null,
-          rejectedFields: [],
+          hasRejectedFields: false,
         },
         rejectedPart,
         applied(6),

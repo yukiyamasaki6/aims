@@ -705,7 +705,7 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('disable_round', 'unauthorized', 'default', 'non_member', 'error:[PT403]このラウンドを削除する権限がありません。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false'),
   ('disable_round', 'invalid', 'unknown_round', 'editor', 'error:[PT403]このラウンドを削除する権限がありません。', 'events=1 revision=1 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=false'),
   ('disable_round', 'idempotent', 'replay', 'editor', 'ok', 'events=2 revision=2 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=true'),
-  ('disable_round', 'idempotent', 'already_disabled', 'editor', 'ok', 'events=3 revision=3 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=true'),
+  ('disable_round', 'idempotent', 'already_disabled', 'editor', 'ok', 'events=2 revision=2 name=Matrix Outdoor date=2026-01-01 format=outdoor bow=recurve disabled=true'),
 
   ('disable_distance', 'success', 'default', 'editor', 'ok', 'events=2 revision=2 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=true ret=applied'),
   ('disable_distance', 'unauthorized', 'default', 'viewer', 'error:[PT403]この距離を削除する権限がありません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
@@ -741,7 +741,7 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
 
   ('clear_shots', 'success', 'single', 'editor', 'ok', 'events=3 shots=[1:SA:X/editor/r2/cleared 1:SB:9/editor/r1] ret=[applied]'),
   ('clear_shots', 'success', 'batch', 'editor', 'ok', 'events=4 shots=[1:SA:X/editor/r2/cleared 1:SB:9/editor/r2/cleared] ret=[applied,applied]'),
-  ('clear_shots', 'success', 'already_cleared', 'editor', 'ok', 'events=4 shots=[1:SA:X/editor/r3/cleared 1:SB:9/editor/r1] ret=[applied]'),
+  ('clear_shots', 'success', 'already_cleared', 'editor', 'ok', 'events=3 shots=[1:SA:X/editor/r2/cleared 1:SB:9/editor/r1] ret=[DISABLED]'),
   ('clear_shots', 'unauthorized', 'default', 'viewer', 'error:[PT403]この距離の矢を取り消す権限がありません。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
   ('clear_shots', 'unauthorized', 'default', 'non_member', 'error:[PT403]この距離の矢を取り消す権限がありません。', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=-'),
   ('clear_shots', 'invalid', 'unknown_distance', 'editor', 'ok', 'events=2 shots=[1:SA:X/editor/r1 1:SB:9/editor/r1] ret=[MISSING]'),

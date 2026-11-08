@@ -30,7 +30,7 @@ export function createRoundRecordControl(deps: {
     },
     matchUser: (userId) => matchRecordUser(hub.userId(), userId),
     signInChanged(change) {
-      if (change.kind !== "signed-out") sender.resumeHeld();
+      if (change.kind === "signed-in") sender.resumeHeld();
     },
   };
 }

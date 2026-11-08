@@ -63,6 +63,58 @@ test("ラウンドのカードを押すと、そのラウンドの詳細画面�
   );
 });
 
+const ROUNDS_REST = "**/rest/v1/rounds?*";
+
+// 一括の取得(入力中のラウンドと保持するラウンドを取る)は`status.eq.in_progress`を含む。個別の取得(`id=eq.…`)と一覧の取得は含まない。
+function isBulkRoundsRequest(url: string) {
+  return decodeURIComponent(url).includes("status.eq.in_progress");
+}
+
+test("サインイン済みでラウンド一覧を開き直すと、入力中のラウンドの一括の取得の要求は1回だけで、一覧が表示される", async ({
+  page,
+  context,
+}) => {
+  // 一括の取得の要求を数えながら、サインイン済みのままラウンド一覧を開き直す。
+  let bulkRequests = 0;
+  await context.route(ROUNDS_REST, (route) => {
+    if (isBulkRoundsRequest(route.request().url())) bulkRequests += 1;
+    return route.continue();
+  });
+  const bulkResponse = page.waitForResponse((response) =>
+    isBulkRoundsRequest(response.url()),
+  );
+  await page.goto("/rounds");
+  await bulkResponse;
+  await expect(page.getByTestId("new-round-fab")).toBeVisible();
+
+  // 追加の要求が遅れて出ないことを、通信が落ち着いてから確かめる。
+  await page.waitForLoadState("networkidle");
+  expect(bulkRequests).toBe(1);
+});
+
+test("一覧の取得が503を1回返すと、再試行されずに「読み込めませんでした。」が表示される", async ({
+  page,
+  context,
+}) => {
+  // 一覧の取得だけ最初の1回を503にして、ラウンド一覧を開く。
+  let listRequests = 0;
+  await context.route(ROUNDS_REST, (route) => {
+    if (isBulkRoundsRequest(route.request().url())) return route.continue();
+    listRequests += 1;
+    if (listRequests > 1) return route.continue();
+    return route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "Service Unavailable" }),
+    });
+  });
+  await page.goto("/rounds");
+
+  // 表示の前景の取得は再試行しないため、失敗がそのまま表示され、要求は1回で済む。
+  await expect(page.getByText(roundsText("fetchFailure.failed"))).toBeVisible();
+  expect(listRequests).toBe(1);
+});
+
 // 入力中のラウンドの有無で表示が変わるため、以降のテストは使い捨てのユーザーで前提を作る。
 test.describe("入力中の領域", () => {
   test.use({ storageState: { cookies: [], origins: [] } });

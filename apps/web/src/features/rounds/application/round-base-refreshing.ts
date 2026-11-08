@@ -1,4 +1,3 @@
-import type { FetchResult } from "../domain/fetch-status";
 import { isRetainedForRefresh } from "../domain/round-retention";
 import { roundTablesFromServer } from "../domain/round-tables";
 import {
@@ -49,97 +48,61 @@ async function commitRoundDetails(
   await Promise.all(commits);
 }
 
-// 端末が保持するラウンドのID(削除されておらず作成が確定しているもの)。失敗時は空。
+// 端末が保持するラウンドのID(削除されておらず作成が確定しているもの)。保存を読めないときは投げる。
 async function retainedRoundIds(
   hub: Pick<RoundRecordHub, "readStored">,
 ): Promise<string[]> {
-  try {
-    const stored = await hub.readStored();
-    const ids: string[] = [];
-    for (const [streamId, group] of stored) {
-      const roundId = roundIdOfStream(streamId);
-      if (roundId !== null && isRetainedForRefresh(group)) ids.push(roundId);
-    }
-    return ids;
-  } catch {
-    return [];
+  const stored = await hub.readStored();
+  const ids: string[] = [];
+  for (const [streamId, group] of stored) {
+    if (isRetainedForRefresh(group)) ids.push(roundIdOfStream(streamId));
   }
+  return ids;
 }
-
-export type RoundBaseRefreshResult = "ok" | "gone" | "failed";
 
 // ベースの取得と反映。取り直しの制御(`round-refresh-control.ts`)から呼ばれる。
 export function createRoundBaseRefreshing(deps: {
   hub: Pick<RoundRecordHub, "commit" | "readStored" | "clearDiverged">;
   fetching: Pick<RoundFetching, "fetchRoundDetail" | "fetchRoundDetails">;
-  requests: Pick<
-    RefreshRequests,
-    "beginAll" | "beginRound" | "settleAll" | "settleRound" | "whenListAllows"
-  >;
+  requests: Pick<RefreshRequests, "beginRound" | "settleRound">;
 }) {
   const { hub, fetching, requests } = deps;
 
   // 入力中のラウンドと、端末が保持するラウンドを、まとめて取得して端末の記録へ反映する。
-  // `waitForList`が真なら、一覧の依頼を実行に取り込み、一覧の取得が成功したときだけ反映して、依頼を解決する。
-  // 偽のときは、一覧の依頼に触れない(実行に取り込まず、解決もしない)。`committed`は、反映したか。
-  async function refreshAll(options: {
-    waitForList: boolean;
-  }): Promise<{ result: FetchResult<null>; committed: boolean }> {
-    const run = options.waitForList ? requests.beginAll() : null;
-    let outcome: { result: FetchResult<null>; committed: boolean };
+  // 取得や反映に失敗しても何もしない(次の契機で取り直す)。
+  async function refreshAll(): Promise<void> {
     try {
       const retained = await retainedRoundIds(hub);
       const fetched = await fetching.fetchRoundDetails(retained);
-      if (fetched.status !== "ok") {
-        outcome = { result: fetched, committed: false };
-      } else if (run !== null && !(await requests.whenListAllows(run))) {
-        outcome = { result: { status: "ok", data: null }, committed: false };
-      } else {
+      if (fetched.status === "ok") {
         await commitRoundDetails(hub, fetched.data, retained);
-        outcome = { result: { status: "ok", data: null }, committed: true };
       }
     } catch {
-      outcome = {
-        result: { status: "error", reason: "failed" },
-        committed: false,
-      };
+      // 失敗は何もしない。
     }
-    if (run !== null) requests.settleAll(run, outcome.result);
-    return outcome;
   }
 
   // 開いた詳細のラウンドを取得して端末の記録へ反映し、依頼を待つ側へ結果を返す。
-  async function refreshRound(id: string): Promise<RoundBaseRefreshResult> {
+  // 取得(`fetchRoundDetail`)は例外を値にし、反映(`hub.commit`)は保存の失敗を握って拒否しないため、投げない。
+  async function refreshRound(id: string): Promise<void> {
     const run = requests.beginRound(id);
     hub.clearDiverged(roundStreamId(id));
-    let fetched: FetchResult<FetchedRoundDetail>;
-    try {
-      fetched = await fetching.fetchRoundDetail(id);
-    } catch {
-      fetched = { status: "error", reason: "failed" };
-    }
+    const fetched = await fetching.fetchRoundDetail(id);
     if (fetched.status !== "ok") {
       requests.settleRound(run, fetched);
-      return fetched.status === "not-found" ? "gone" : "failed";
+      return;
     }
     const base = baseOf(fetched.data);
-    let deleted = false;
-    try {
-      const group = await hub.commit(
-        roundStreamId(id),
-        base,
-        fetched.data.startedAt,
-        fetched.data.userId,
-      );
-      // 取得の間に追記された削除も、取得した状態を表示せずに離れる。
-      deleted = hasRoundDeletion(group.entries.map((entry) => entry.operation));
-    } catch {
-      requests.settleRound(run, {
-        status: "error",
-        reason: "failed",
-      });
-      return "failed";
-    }
+    const group = await hub.commit(
+      roundStreamId(id),
+      base,
+      fetched.data.startedAt,
+      fetched.data.userId,
+    );
+    // 取得の間に追記された削除も、取得した状態を表示せずに離れる。
+    const deleted = hasRoundDeletion(
+      group.entries.map((entry) => entry.operation),
+    );
     requests.settleRound(run, {
       status: "ok",
       data: {
@@ -148,7 +111,6 @@ export function createRoundBaseRefreshing(deps: {
         targetFaces: fetched.data.targetFaces,
       },
     });
-    return deleted ? "gone" : "ok";
   }
 
   return { refreshAll, refreshRound };

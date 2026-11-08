@@ -620,7 +620,7 @@ where p.pronamespace = 'public'::regnamespace;
 -- 期待値の方針:
 --   RPCとSELECTポリシーのヘルパー（is_round_member）: authenticatedだけtrue。anonはfalse。
 --   is_round_editor、shot_fits: RPC（SECURITY DEFINER）の内部だけが呼ぶため、どちらもfalse。
---   トリガー関数（handle_new_user, set_updated_at, shots_capacity_guard, distances_capacity_guard）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
+--   トリガー関数（handle_new_user, set_updated_at）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
 -- 新しい関数を追加したら、PUBLICからREVOKEし、この表に行を追加する。
 create temp table rls_fn_expected (
   signature text, role_name text, can_execute boolean,
@@ -637,8 +637,6 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.disable_distance(uuid,uuid)',                                              'authenticated', true),
   ('public.disable_round(uuid,uuid)',                                                 'anon',          false),
   ('public.disable_round(uuid,uuid)',                                                 'authenticated', true),
-  ('public.distances_capacity_guard()',                                               'anon',          false),
-  ('public.distances_capacity_guard()',                                               'authenticated', false),
   ('public.handle_new_user()',                                                        'anon',          false),
   ('public.handle_new_user()',                                                        'authenticated', false),
   ('public.is_round_editor(uuid)',                                                    'anon',          false),
@@ -653,8 +651,6 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.set_updated_at()',                                                         'authenticated', false),
   ('public.shot_fits(uuid,bigint,bigint,bigint,bigint,text,bigint)',                  'anon',          false),
   ('public.shot_fits(uuid,bigint,bigint,bigint,bigint,text,bigint)',                  'authenticated', false),
-  ('public.shots_capacity_guard()',                                                   'anon',          false),
-  ('public.shots_capacity_guard()',                                                   'authenticated', false),
   ('public.update_distance(uuid,uuid,jsonb)',                                         'anon',          false),
   ('public.update_distance(uuid,uuid,jsonb)',                                         'authenticated', true),
   ('public.update_round(uuid,uuid,jsonb)',                                            'anon',          false),

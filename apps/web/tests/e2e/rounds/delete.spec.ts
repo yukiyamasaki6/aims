@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import {
+  expect,
+  type Locator,
+  type Page,
+  type Response,
+  test,
+} from "@playwright/test";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import {
   createConfirmedUser,
   getSharedEmail,
@@ -7,9 +14,14 @@ import {
   SHARED_PASSWORD,
   waitForHydration,
 } from "../helpers/auth";
-import { blockOpLogStore, expectNoPendingOps } from "../helpers/op-log";
+import {
+  blockOpLogStore,
+  expectNoPendingOps,
+  expectOpsSaved,
+} from "../helpers/op-log";
 import { forwardAs, openOtherDevice } from "../helpers/other-device";
 import {
+  expectRoundBasesFetched,
   openNewRoundThenGoOffline,
   startRoundOffline,
 } from "../helpers/reference-data";
@@ -19,6 +31,8 @@ import {
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
+
+const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
@@ -37,9 +51,11 @@ async function createNamedRound(prefix: string) {
   return { name, roundId };
 }
 
-async function openList(page: Page, name: string) {
+async function openList(page: Page, name: string, roundId: string) {
   await page.goto("/rounds");
   await waitForHydration(page);
+  // 入力中の区画は端末の保存から読むため、一括の取得の反映を待ってから操作する(区画へ移ると、開いたメニューが作り直される)。
+  await expectRoundBasesFetched(page, { roundId });
   return {
     row: page.locator("li", { hasText: name }),
     link: page.getByRole("link", { name: new RegExp(name) }),
@@ -89,8 +105,8 @@ test("ラウンド一覧でカードのメニューから削除を選んで確�
   page,
 }) => {
   // カードのメニューを開き、削除を選べることを確かめる。
-  const { name } = await createNamedRound("一覧から削除");
-  const { row, link } = await openList(page, name);
+  const { name, roundId } = await createNamedRound("一覧から削除");
+  const { row, link } = await openList(page, name, roundId);
   await expect(page.getByTestId("round-delete")).toBeHidden();
   await row.getByTestId("round-menu-trigger").click();
   await expect(page.getByTestId("round-delete")).toBeVisible();
@@ -111,7 +127,7 @@ test("ラウンド詳細のヘッダーのメニューから削除を選んで�
 }) => {
   // 一覧からラウンドの詳細を開く。
   const { name, roundId } = await createNamedRound("詳細から削除");
-  const { link } = await openList(page, name);
+  const { link } = await openList(page, name, roundId);
   // 戻る先の履歴を作るため、詳細は一覧から開く。
   await link.click();
   await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
@@ -140,7 +156,7 @@ test("オフラインのラウンド一覧で削除を確認すると、ダイ�
 }) => {
   // オフラインの一覧で削除を選んで確認し、ダイアログがすぐ閉じてラウンドが一覧から消えることを確かめる。
   const { name, roundId } = await createNamedRound("オフライン一覧削除");
-  const { row, link } = await openList(page, name);
+  const { row, link } = await openList(page, name, roundId);
   await expect(link).toBeVisible();
   await waitForServiceWorkerControl(page);
   await goOffline(page.context());
@@ -186,8 +202,8 @@ test("削除の送信が終わる前に一覧を再読み込みしても、削�
   page,
 }) => {
   // 削除の送信を止めた一覧で削除を選んで確認し、ラウンドが一覧から消えることを確かめる。
-  const { name } = await createNamedRound("送信前に再読み込み");
-  const { row, link } = await openList(page, name);
+  const { name, roundId } = await createNamedRound("送信前に再読み込み");
+  const { row, link } = await openList(page, name, roundId);
   const release = await holdDeleteRequest(page);
   await chooseDelete(page, row);
   await page.getByTestId("confirm-dialog-confirm").click();
@@ -221,7 +237,7 @@ test("削除する権限が無く削除が拒否されたときは、一覧を�
   await page.route(DISABLE_ROUND_RPC, async (route) => {
     rejectedStatus = await forwardAs(route, outsiderDevice.supabase);
   });
-  const { row, link } = await openList(page, name);
+  const { row, link } = await openList(page, name, roundId);
   await chooseDelete(page, row);
   await page.getByTestId("confirm-dialog-confirm").click();
   await expect.poll(() => rejectedStatus).toBe(403);
@@ -239,7 +255,7 @@ test("端末の保存が終わらない間にラウンド詳細で削除を確�
 }) => {
   // 詳細を開き、端末の保存を塞いだ状態で削除を確認する。
   const { name, roundId } = await createNamedRound("保存待ちの削除");
-  const { link } = await openList(page, name);
+  const { link } = await openList(page, name, roundId);
   await link.click();
   await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
   const release = await blockOpLogStore(page);
@@ -254,4 +270,106 @@ test("端末の保存が終わらない間にラウンド詳細で削除を確�
   await release();
   await expect(page).toHaveURL(/\/rounds$/);
   await expect(link).toBeHidden();
+});
+
+// 一括の取得(入力中のラウンドと保持するラウンドを取る)の応答。
+function isBulkRoundsResponse(response: Response) {
+  return decodeURIComponent(response.url()).includes("status.eq.in_progress");
+}
+
+// 一覧の取得(`disabled_at`だけを絞る)の応答。
+function isListRoundsResponse(response: Response) {
+  const url = decodeURIComponent(response.url());
+  return (
+    url.includes("/rest/v1/rounds?") &&
+    !url.includes("status.eq.in_progress") &&
+    !url.includes("id=eq")
+  );
+}
+
+// アプリ内で一覧を離れて戻り、一覧の取得が済むまで待つ。一覧は戻るたびに端末の保存から作り直される。
+async function leaveListAndComeBack(page: Page) {
+  await page.getByTestId("new-round-fab").click();
+  await expect(page).toHaveURL(/\/rounds\/new$/);
+  const listed = page.waitForResponse(isListRoundsResponse);
+  await page.getByRole("link", { name: roundsText("backToList") }).click();
+  await expect(page).toHaveURL(/\/rounds$/);
+  await listed;
+}
+
+test("別の端末が先に削除したラウンドを、この端末がオフラインで削除してオンラインに戻ると、送信が効かなかった扱いになっても、一覧を離れて戻ったときにそのラウンドは再表示されない", async ({
+  page: deviceA,
+  browser,
+  baseURL,
+}) => {
+  // 2つの端末で、同じ利用者の一覧に削除するラウンドと残すラウンドを表示する。
+  const target = await createNamedRound("二重削除");
+  const kept = await createNamedRound("二重削除の残り");
+  const contextB = await browser.newContext({
+    storageState: SHARED_AUTH_STATE_PATH,
+    // biome-ignore lint/style/useNamingConvention: Playwrightの設定の項目名
+    baseURL,
+  });
+  const deviceB = await contextB.newPage();
+  const listA = await openList(deviceA, target.name, target.roundId);
+  const listB = await openList(deviceB, target.name, target.roundId);
+  await expectRoundBasesFetched(deviceB, { roundId: kept.roundId });
+  await waitForServiceWorkerControl(deviceB);
+
+  // 端末Bがオフラインの間に、端末Aが削除してサーバーへ反映する。
+  await contextB.setOffline(true);
+  await chooseDelete(deviceA, listA.row);
+  await deviceA.getByTestId("confirm-dialog-confirm").click();
+  await expect(listA.link).toBeHidden();
+  await expectDeletedOnServer(target.roundId);
+
+  // 端末Bが、削除を知らずにオフラインで同じラウンドを削除する。
+  await chooseDelete(deviceB, listB.row);
+  await deviceB.getByTestId("confirm-dialog-confirm").click();
+  await expect(listB.link).toBeHidden();
+  await expectOpsSaved(deviceB, target.roundId, 1);
+
+  // オンラインに戻り、削除の送信が効かなかった扱いで操作の列から外れるまで待つ。
+  // 復帰の取得を1回に保つため、手動のonlineイベントは足さない(ブラウザが発火するonlineイベントが取得を起こす)。
+  await contextB.setOffline(false);
+  await expectNoPendingOps(deviceB, target.roundId);
+
+  // 一覧を離れて戻っても、削除されたラウンドは再表示されず、残したラウンドは表示される。
+  await leaveListAndComeBack(deviceB);
+  await expect(
+    deviceB.getByRole("link", { name: new RegExp(kept.name) }),
+  ).toBeVisible();
+  await expect(listB.link).toBeHidden();
+  await contextB.close();
+});
+
+test("ラウンドの削除が未送信のまま一括の取得が走り、サーバーがそのラウンドをまだ返しても、一覧を離れて戻ったときにそのラウンドは再表示されない", async ({
+  page,
+}) => {
+  // 削除するラウンドと残すラウンドを一覧に表示し、削除の送信を止めた状態で削除する。
+  const target = await createNamedRound("未送信の削除");
+  const kept = await createNamedRound("未送信の削除の残り");
+  const { row, link } = await openList(page, target.name, target.roundId);
+  await expectRoundBasesFetched(page, { roundId: kept.roundId });
+  const release = await holdDeleteRequest(page);
+  await chooseDelete(page, row);
+  await page.getByTestId("confirm-dialog-confirm").click();
+  await expect(link).toBeHidden();
+  await expectOpsSaved(page, target.roundId, 1);
+
+  // 削除が届いていないサーバーに対して一括の取得を起こし、その応答を待つ。
+  const fetched = page.waitForResponse(isBulkRoundsResponse);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await fetched;
+
+  // 一覧を離れて戻っても、削除したラウンドは再表示されず、残したラウンドは表示される。
+  await leaveListAndComeBack(page);
+  await expect(
+    page.getByRole("link", { name: new RegExp(kept.name) }),
+  ).toBeVisible();
+  await expect(link).toBeHidden();
+
+  // 送信を再開し、削除がサーバーへ届くことを確かめる。
+  release();
+  await expectDeletedOnServer(target.roundId);
 });

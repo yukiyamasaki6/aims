@@ -1,8 +1,9 @@
 import type { QueryOutcome } from "./query-outcome";
 
-// 取得の失敗の種類。unauthenticated: サインインが必要。unreachable: サインインの状態を確かめられない(通信できない)。failed: それ以外。
+// 書き込み側のサインインの確認の失敗の種類。unauthenticated: サインインが必要。unreachable: サインインの状態を確かめられない(通信できない)。
 export type SignInFailure = "unauthenticated" | "unreachable";
-export type FetchFailure = SignInFailure | "failed";
+// 取得の失敗の種類。unauthenticated: サインインが必要。failed: それ以外。
+export type FetchFailure = "unauthenticated" | "failed";
 
 export type FetchResult<T> =
   | { status: "ok"; data: T }

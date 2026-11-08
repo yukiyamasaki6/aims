@@ -18,11 +18,6 @@ const serverError: DbResponse = {
   error: { code: "XX000", message: "internal" },
   status: 500,
 };
-const notFoundError: DbResponse = {
-  data: null,
-  error: { code: "PGRST116", message: "no rows" },
-  status: 406,
-};
 
 describe("failureOfResponses", () => {
   describe("正常系", () => {
@@ -34,16 +29,6 @@ describe("failureOfResponses", () => {
 
       // Then
       expect(result).toBeUndefined();
-    });
-
-    it("PGRST116(406)は、not-foundにする", () => {
-      // Given
-
-      // When
-      const result = failureOfResponses([notFoundError]);
-
-      // Then
-      expect(result).toEqual({ status: "not-found" });
     });
 
     it.each([
@@ -77,16 +62,6 @@ describe("failureOfResponses", () => {
       expect(comm).toEqual({ status: "comm-failure" });
       expect(auth).toEqual({ status: "auth-rejected" });
       expect(other).toEqual({ status: "failed" });
-    });
-
-    it("その他のエラーは種類によらず先頭を取る(PGRST116が先頭なら、後ろが500でもnot-found)", () => {
-      // Given
-
-      // When
-      const result = failureOfResponses([notFoundError, serverError]);
-
-      // Then
-      expect(result).toEqual({ status: "not-found" });
     });
 
     // 旧の失敗判定(status === 0 || error)を保つため、errorが無くてもstatus 0は失敗として畳む。

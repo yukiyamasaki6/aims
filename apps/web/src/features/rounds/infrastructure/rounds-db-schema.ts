@@ -1,86 +1,35 @@
-// biome-ignore-all lint/style/useNamingConvention: 生成した型(types/supabase.ts)のスキーマの形(Functions、Tables、Args、Returns、Row)と同じ名前で宣言するため。
-// ラウンドが使うデータベースのスキーマの部分(型だけ)。生成した型(`types/supabase.ts`)と一致することは、起動地点の`narrowDatabase`が型で照合する。
+// biome-ignore-all lint/style/useNamingConvention: 生成した型(types/supabase.ts)のスキーマの形(Functions、Tables、Row)と同じ名前で宣言するため。
+import type { Database } from "@/types/supabase";
 
-// 生成した型と同じ定義。
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[];
+export type { Json } from "@/types/supabase";
 
+type Full = Database["public"];
+
+// ラウンドが使うデータベースのスキーマの部分。生成した型(`types/supabase.ts`)の部分集合で、列の定義は手で書かない。
 export type RoundsDbSchema = {
-  Functions: {
-    create_round: {
-      Args: {
-        p_bow_type: string;
-        p_distances: Json;
-        p_format: string;
-        p_id: string;
-        p_name: string;
-        p_round_date: string;
-        p_round_event_id: string;
-      };
-      Returns: Json;
-    };
-    update_round: {
-      Args: { p_changes: Json; p_round_event_id: string; p_round_id: string };
-      Returns: Json;
-    };
-    disable_round: {
-      Args: { p_round_event_id: string; p_round_id: string };
-      Returns: number;
-    };
-    create_distance: {
-      Args: {
-        p_arrows_per_end: number;
-        p_distance: number;
-        p_distance_event_id: string;
-        p_id: string;
-        p_is_marked: boolean;
-        p_position_key: string;
-        p_round_id: string;
-        p_target_face_id: string;
-        p_total_ends: number;
-      };
-      Returns: Json;
-    };
-    update_distance: {
-      Args: {
-        p_changes: Json;
-        p_distance_event_id: string;
-        p_distance_id: string;
-      };
-      Returns: Json;
-    };
-    disable_distance: {
-      Args: { p_distance_event_id: string; p_distance_id: string };
-      Returns: Json;
-    };
-    save_round_as_preset: {
-      Args: {
-        p_bow_type: string;
-        p_distances: Json;
-        p_format: string;
-        p_name: string;
-      };
-      Returns: string;
-    };
-    record_shots: { Args: { p_shots: Json }; Returns: Json };
-    clear_shots: { Args: { p_shots: Json }; Returns: Json };
-  };
+  Functions: Pick<
+    Full["Functions"],
+    | "create_round"
+    | "update_round"
+    | "disable_round"
+    | "create_distance"
+    | "update_distance"
+    | "disable_distance"
+    | "save_round_as_preset"
+    | "record_shots"
+    | "clear_shots"
+  >;
   Tables: {
     rounds: {
-      Row: {
-        id: string;
-        disabled_at: string | null;
-        status: string;
-        round_date: string;
-      };
+      Row: Pick<
+        Full["Tables"]["rounds"]["Row"],
+        "id" | "disabled_at" | "status" | "round_date"
+      >;
     };
-    distances: { Row: { position_key: string; id: string } };
+    distances: {
+      Row: Pick<Full["Tables"]["distances"]["Row"], "position_key" | "id">;
+    };
     target_faces: { Row: Record<never, never> };
-    preset_rounds: { Row: { id: string } };
+    preset_rounds: { Row: Pick<Full["Tables"]["preset_rounds"]["Row"], "id"> };
   };
 };

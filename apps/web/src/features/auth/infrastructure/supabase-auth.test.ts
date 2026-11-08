@@ -805,7 +805,7 @@ describe("認証状態の購読(subscribe)", () => {
     },
   );
 
-  it("TOKEN_REFRESHED(利用者あり)を、token-refreshedに写して知らせる", () => {
+  it("TOKEN_REFRESHED(利用者あり)は、知らせない", () => {
     // Given
     const { service, emit } = setup();
     const received: SignInChange[] = [];
@@ -815,7 +815,7 @@ describe("認証状態の購読(subscribe)", () => {
     emit("TOKEN_REFRESHED", { user: { id: "user-1" } });
 
     // Then
-    expect(received).toEqual([{ kind: "token-refreshed", userId: "user-1" }]);
+    expect(received).toEqual([]);
   });
 
   it("SIGNED_OUTを、signed-outに写して知らせる", () => {

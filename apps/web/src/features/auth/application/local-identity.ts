@@ -22,10 +22,9 @@ export function createLocalIdentity({
   return {
     start: () =>
       changes.subscribe((change) => {
-        // サインインした利用者を記録し、サインアウトで消す。トークンの更新は利用者が変わらないため、記録を変えない。
-        // 記録しない出来事(利用者のいない起動時など)は通知されない。
-        if (change.kind === "signed-in") writer.write(change.userId);
-        else if (change.kind === "signed-out") writer.write(null);
+        // サインインした利用者を記録し、サインアウトで消す。
+        // 記録しない出来事(利用者のいない起動時、トークンの更新など)は通知されない。
+        writer.write(change.kind === "signed-in" ? change.userId : null);
       }),
   };
 }

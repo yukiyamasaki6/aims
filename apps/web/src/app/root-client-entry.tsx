@@ -16,7 +16,6 @@ import { SwUpdateActivator } from "@/features/offline-pwa/ui/sw-update-activator
 import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
 import { createBrowserVisibility } from "@/features/round-sync/infrastructure/browser-visibility";
-import { RoundBaseRefresher } from "@/features/round-sync/ui/round-base-refresher";
 import { createContentFetcher } from "@/features/rounds/application/content-fetcher";
 import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
 import { createOpSender } from "@/features/rounds/application/op-sender";
@@ -60,10 +59,7 @@ import {
   type PageRouter,
 } from "@/lib/page-navigation/infrastructure/router-page-navigation";
 import { createClient } from "@/lib/supabase/infrastructure/client";
-import {
-  createSupabaseDatabase,
-  narrowDatabase,
-} from "@/lib/supabase/infrastructure/database";
+import { createSupabaseDatabase } from "@/lib/supabase/infrastructure/database";
 
 // 入力(認証、識別情報の保存、接続、時計、データベース、遷移)。実行環境の大域の名前に触る実装は、開始の後に初めて触る(事前描画でも生成できる)。
 // routerは画面のパッケージの遷移の部品で、アプリで1つ。
@@ -80,9 +76,7 @@ function composeInputs(router: PageRouter) {
     sessionReader: authenticator,
     connectivity: createBrowserConnectivity(),
     clock: createBrowserClock(),
-    database: narrowDatabase<RoundsDbSchema>(
-      createSupabaseDatabase(createClient),
-    ),
+    database: createSupabaseDatabase<RoundsDbSchema>(createClient),
     pageNavigation: createRouterPageNavigation(router),
   };
 }
@@ -170,7 +164,6 @@ function composeStores(inputs: Inputs, records: Records) {
     }),
     listStore: createRoundsListStore({
       hub,
-      requests,
       fetching,
       clock,
       connectivity,
@@ -180,12 +173,11 @@ function composeStores(inputs: Inputs, records: Records) {
 
 // 同期(同期と、その契機)。
 function composeSync(inputs: Inputs, records: Records) {
-  const { authenticator, identityStore, connectivity, clock } = inputs;
+  const { authenticator, identityStore, connectivity } = inputs;
   const sync = createRoundSync({
     control: records.control,
     refresh: records.refresh,
     session: authenticator,
-    clock,
     connectivity,
   });
   const triggers = createSyncTriggers({
@@ -195,7 +187,7 @@ function composeSync(inputs: Inputs, records: Records) {
     connectivity,
     sync,
   });
-  return { sync, triggers };
+  return { triggers };
 }
 
 // オフラインとアプリの更新(Service Workerの更新の切り替え)。
@@ -251,7 +243,6 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
           <RoundDetailStoreProvider store={app.detailStore}>
             <RoundProceduresProvider procedures={app.procedures}>
               <SessionProvider session={app.session}>
-                <RoundBaseRefresher sync={app.sync} />
                 <SwUpdateActivator activation={app.swUpdate} />
                 {children}
               </SessionProvider>

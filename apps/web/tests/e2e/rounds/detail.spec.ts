@@ -152,14 +152,20 @@ test("存在しないラウンドを開くと、枠内に「ラウンドが見�
 test("端末にオフラインで開ける内容がないラウンドを開いて通信できないとき、「一覧へ戻る」リンクと「読み込めませんでした。」と再試行ボタンが表示される", async ({
   page,
 }) => {
-  await page.route(ROUND_DETAIL_REST, (route) => route.abort("failed"));
+  // 裏の取得の再試行の間にService Workerが制御を始めるため、contextで止める。
+  await page
+    .context()
+    .route(ROUND_DETAIL_REST, (route) => route.abort("failed"));
 
   await page.goto(MISSING_ROUND_PATH);
 
   await expect(
     page.getByRole("link", { name: roundsText("backToList") }),
   ).toBeVisible();
-  await expect(page.getByText(roundsText("fetchFailure.failed"))).toBeVisible();
+  // 取得の再試行が尽きるまで約7秒かかり、10秒の打ち切りより前に失敗が表示される。
+  await expect(page.getByText(roundsText("fetchFailure.failed"))).toBeVisible({
+    timeout: 10_000,
+  });
   await expect(
     page.getByRole("button", { name: roundsText("fetchRetry") }),
   ).toBeVisible();
@@ -380,7 +386,7 @@ test("他の端末で記録した入力中のラウンドは、オンライン�
     password: SHARED_PASSWORD,
   });
   await waitForServiceWorkerControl(first.page);
-  await expectRoundBasesFetched(first.page);
+  await expectRoundBasesFetched(first.page, { roundId });
 
   // ブラウザを開き直してオフラインにし、一度も開いていないラウンドを開く。
   await profile.close();
@@ -404,12 +410,10 @@ test("他の端末で記録した入力中のラウンドは、オンライン�
   await expect(page.getByTestId("score-button-9")).toBeVisible();
 });
 
-// src/features/rounds/domain/fetch-wait.tsのFALLBACK_WAIT_MS。
-const FALLBACK_WAIT_MS = 1_000;
-// 待ちの後の描画とブラウザ・CIの揺れの余裕。
+// 描画とブラウザ・CIの揺れの余裕。
 const RENDER_MARGIN_MS = 500;
 
-test("オンラインのまま通信が応答しないとき、端末が保持する入力中のラウンドを開くと、通信の開始から1秒以内にラウンドが表示される", async ({
+test("オンラインのまま通信が応答しないとき、端末が保持する入力中のラウンドを開くと、開いた直後にラウンドが表示される", async ({
   page,
 }) => {
   // 一覧を開き、入力中のラウンドと的の一覧を端末に保持させる。
@@ -423,7 +427,7 @@ test("オンラインのまま通信が応答しないとき、端末が保持�
   });
   await page.goto("/rounds");
   // 入力中のラウンドと的の一覧は、どちらも一括の取得で端末に保存される。
-  await expectRoundBasesFetched(page);
+  await expectRoundBasesFetched(page, { roundId });
 
   // 通信が応答しない状態でラウンドを開き、表示までの時間を確かめる。
   // 待ちと表示の時刻をページ内で測る(Node側の時刻はポーリングの間隔を含むため)。
@@ -468,9 +472,8 @@ test("オンラインのまま通信が応答しないとき、端末が保持�
   });
   if (firstRequestAt === undefined) throw new Error("通信を始めていない");
   if (shownAt === undefined) throw new Error("表示されていない");
-  expect(shownAt - firstRequestAt).toBeLessThan(
-    FALLBACK_WAIT_MS + RENDER_MARGIN_MS,
-  );
+  // 取得の完了を待たないため、表示は通信の開始より遅れない(表示が先に出るときは負の値になる)。
+  expect(shownAt - firstRequestAt).toBeLessThan(RENDER_MARGIN_MS);
 });
 
 test("端末の内容で表示しているラウンドが、他の端末で削除されていたと分かると、その画面のまま見つからない表示になる", async ({
@@ -485,7 +488,7 @@ test("端末の内容で表示しているラウンドが、他の端末で削�
     distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
   });
   await page.goto("/rounds");
-  await expectRoundBasesFetched(page);
+  await expectRoundBasesFetched(page, { roundId });
 
   // 他の端末がラウンドを削除した後に、取得が保留された状態で詳細を開き、端末の内容でラウンドが表示されることを確かめる。
   const { supabase } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);
@@ -494,7 +497,7 @@ test("端末の内容で表示しているラウンドが、他の端末で削�
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  // 取得が1秒を超えると端末の内容で表示するため、ラウンドの取得を保留する。
+  // 取得を保留したまま端末の内容で表示されることを確かめるため、ラウンドの取得を保留する。
   // Service Workerが制御する文書の通信も止めるため、contextで止める。
   await page.context().route("**/rest/v1/rounds?*", async (route) => {
     await gate;
@@ -633,7 +636,7 @@ test.describe("セッションの確認", () => {
     const roundId = await signInWithRound(page, false);
     await openList(page, roundId);
     // 入力中のラウンドと的の一覧は、どちらも一括の取得で端末に保存される。
-    await expectRoundBasesFetched(page);
+    await expectRoundBasesFetched(page, { roundId });
 
     // セッションの更新を止めたまま、カードからラウンドを開き、端末の内容で表示されるのを確かめる。
     const refresh = await holdNextRefresh(page);

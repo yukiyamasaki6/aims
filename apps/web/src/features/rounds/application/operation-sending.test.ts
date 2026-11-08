@@ -16,8 +16,7 @@ const result = (overrides: Partial<OpResult> = {}): OpResult => ({
   revision: 5,
   applied: true,
   appliedFields: null,
-  rejectedFields: [],
-  reason: null,
+  hasRejectedFields: false,
   ...overrides,
 });
 
@@ -47,7 +46,7 @@ describe("send", () => {
     await flush();
 
     // Then
-    expect(report).toEqual({ ok: true, diverged: false });
+    expect(report).toEqual({ ok: true });
     expect(tab.send).toHaveBeenCalledExactlyOnceWith([
       { eventId: "a", operation: operation("a") },
     ]);
@@ -58,7 +57,7 @@ describe("send", () => {
     expect(tab.store.rows[0].ackedRevision).toBe(7);
   });
 
-  it("効かなかった操作は記録と保存先から外し、divergedを返す", async () => {
+  it("効かなかった操作は記録と保存先から外す", async () => {
     // Given
     const tab = await setup({
       ok: true,
@@ -71,7 +70,7 @@ describe("send", () => {
     await flush();
 
     // Then
-    expect(report).toEqual({ ok: true, diverged: true });
+    expect(report).toEqual({ ok: true });
     expect(tab.hub.record(STREAM).items).toEqual([]);
     expect(tab.store.rows).toEqual([]);
   });
@@ -80,7 +79,7 @@ describe("send", () => {
     // Given
     const tab = await setup({
       ok: false,
-      cause: { type: "rpc", status: 500, code: "XX000" },
+      failure: { cause: "rpc", code: "XX000" },
     });
     await tab.hub.append(STREAM, operation("a"));
 
@@ -90,12 +89,12 @@ describe("send", () => {
     // Then
     expect(report).toEqual({
       ok: false,
-      cause: { type: "rpc", status: 500, code: "XX000" },
+      failure: { cause: "rpc", code: "XX000" },
     });
     expect(tab.hub.record(STREAM).items[0].ackedRevision).toBeUndefined();
   });
 
-  it("転送が投げたら、例外の失敗にして返し、記録を変えない", async () => {
+  it("転送が投げたら、そのまま投げ、記録を変えない", async () => {
     // Given
     const tab = await setup(async () => {
       throw new Error("接続できない");
@@ -103,10 +102,10 @@ describe("send", () => {
     await tab.hub.append(STREAM, operation("a"));
 
     // When
-    const report = await tab.sending.send(STREAM, ["a"]);
+    const sending = tab.sending.send(STREAM, ["a"]);
 
     // Then
-    expect(report).toEqual({ ok: false, cause: { type: "exception" } });
+    await expect(sending).rejects.toThrow("接続できない");
     expect(tab.hub.record(STREAM).items[0].ackedRevision).toBeUndefined();
   });
 
@@ -127,7 +126,7 @@ describe("send", () => {
     await flush();
 
     // Then
-    expect(report).toEqual({ ok: true, diverged: false });
+    expect(report).toEqual({ ok: true });
     expect(tab.hub.record(STREAM).items).toEqual([]);
     expect(tab.store.rows[0]).toMatchObject({ eventId: "a", ackedRevision: 9 });
   });
@@ -140,7 +139,7 @@ describe("send", () => {
     const report = await tab.sending.send(STREAM, ["missing"]);
 
     // Then
-    expect(report).toEqual({ ok: true, diverged: false });
+    expect(report).toEqual({ ok: true });
     expect(tab.send).not.toHaveBeenCalled();
   });
 });

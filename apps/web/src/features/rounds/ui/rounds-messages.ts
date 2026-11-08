@@ -25,7 +25,7 @@ export const roundsMessages = {
     fetchOffline: "ネットワークに接続されていません",
     fetchRetry: "再試行",
     fetchFailure: {
-      ...signInFailureText,
+      unauthenticated: signInFailureText.unauthenticated,
       failed: "読み込めませんでした。",
     } satisfies Record<FetchFailure, string>,
     // ラウンド一覧

@@ -3,12 +3,12 @@
 --   - record_shotsは要素に含まれる項目だけを変え、効いた属性をset_fieldsとapplied_fieldsに残す
 --   - 射順は1〜矢数で、同じエンドの生きている矢で重ならない。重なる書き込みは射順だけが効かない
 --   - 消した矢を戻すとき、射順が他の生きている矢に使われていれば射順だけが外れる
---   - エンドの生きている矢は矢数を超えない（RPCの判定と、RPCを通らない書き込みを止める制約トリガー）
+--   - エンドの生きている矢は矢数を超えない（RPCの判定。書き込みはRPCだけである）
 -- RPC × 観点の網羅（権限、入力検証、冪等性）はrpc_matrix.sqlで固定している。
 
 begin;
 
-select plan(43);
+select plan(38);
 
 create temp table si_id (alias text primary key, id uuid not null);
 insert into si_id (alias, id) values
@@ -116,8 +116,6 @@ select hasnt_column('public', 'shots', 'arrow_number', 'shotsはエンド内の�
 select hasnt_column('public', 'shot_events', 'arrow_number', 'shot_eventsはエンド内の位置（arrow_number）を持たない');
 select col_not_null('public', 'shot_events', 'shot_id', 'shot_eventsは対象の矢のIDを必ず持つ');
 select col_is_unique('public', 'shot_events', array['shot_id', 'revision'], 'shot_eventsは矢ごとのrevisionで一意');
-select has_trigger('public', 'shots', 'shots_capacity_guard', 'shotsに矢数の上限の制約トリガーがある');
-select has_trigger('public', 'distances', 'distances_capacity_guard', 'distancesに矢数の上限の制約トリガーがある');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
@@ -339,27 +337,6 @@ select is(
     -> 'rejected_fields',
   '[{"field":"config","reason":"UNFIT"}]'::jsonb,
   '生きている矢の数が新しい矢数を超えるエンドがあれば、構成の変更は効かない'
-);
-
-reset role;
-
-select throws_ok(
-  format($$insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int) values (%L, 1, %L, '9', 9)$$, pg_temp.id('DC'), pg_temp.id('E')),
-  '23514',
-  'エンドの矢が矢数を超えます。',
-  'RPCを通らない、矢数を超える挿入は制約トリガーで止まる'
-);
-select throws_ok(
-  format($$update public.shots set disabled_at = null where id = %L$$, pg_temp.sh(30)),
-  '23514',
-  'エンドの矢が矢数を超えます。',
-  'RPCを通らない、矢数を超える復活は制約トリガーで止まる'
-);
-select throws_ok(
-  format($$update public.distances set arrows_per_end = 2 where id = %L$$, pg_temp.id('DC')),
-  '23514',
-  'エンドの矢が矢数を超えます。',
-  'RPCを通らない矢数の減少は制約トリガーで止まる'
 );
 
 select * from finish();

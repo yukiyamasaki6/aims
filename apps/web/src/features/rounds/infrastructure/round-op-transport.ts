@@ -16,7 +16,7 @@ import type { Json, RoundsDbSchema } from "./rounds-db-schema";
 
 const INVALID_RESPONSE: SendOutcome = {
   ok: false,
-  cause: { type: "exception" },
+  failure: { cause: "exception" },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -26,32 +26,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // RPCの結果(jsonb)を、操作ごとの判定結果へ写す。形が不正ならundefined。
 function parseResult(data: unknown): OpResult | undefined {
   if (!isRecord(data) || typeof data.applied !== "boolean") return undefined;
-  const { revision, applied_fields, rejected_fields, reason } = data;
+  const { revision, applied_fields, rejected_fields } = data;
   if (revision !== null && typeof revision !== "number") return undefined;
   const appliedFields =
     Array.isArray(applied_fields) &&
     applied_fields.every((f) => typeof f === "string")
       ? applied_fields
       : null;
-  const rejectedFields: OpResult["rejectedFields"] = [];
-  if (Array.isArray(rejected_fields)) {
-    for (const item of rejected_fields) {
-      if (
-        !isRecord(item) ||
-        typeof item.field !== "string" ||
-        typeof item.reason !== "string"
-      ) {
-        return undefined;
-      }
-      rejectedFields.push({ field: item.field, reason: item.reason });
-    }
-  }
   return {
     revision: revision ?? null,
     applied: data.applied,
     appliedFields,
-    rejectedFields,
-    reason: typeof reason === "string" ? reason : null,
+    hasRejectedFields:
+      Array.isArray(rejected_fields) && rejected_fields.length > 0,
   };
 }
 
@@ -71,32 +58,12 @@ function many(data: unknown, count: number): SendOutcome {
   return { ok: true, results };
 }
 
-// 数値(revision)だけを返すRPC。効かせる条件が無く、常に効く。
-function revisionOnly(data: unknown): SendOutcome {
-  return typeof data === "number"
-    ? {
-        ok: true,
-        results: [
-          {
-            revision: data,
-            applied: true,
-            appliedFields: null,
-            rejectedFields: [],
-            reason: null,
-          },
-        ],
-      }
-    : INVALID_RESPONSE;
-}
-
 function outcomeOf(
   response: DbResponse,
   parse: (data: unknown) => SendOutcome = single,
 ): SendOutcome {
-  const { data, error, status } = response;
-  if (error) {
-    return { ok: false, cause: { type: "rpc", status, code: error.code } };
-  }
+  const { data, error } = response;
+  if (error) return { ok: false, failure: { cause: "rpc", code: error.code } };
   return parse(data);
 }
 
@@ -141,9 +108,15 @@ type DistanceOperation = Extract<
   { type: "distance.created" | "distance.updated" | "distance.disabled" }
 >;
 
+function isShotOperation(operation: SyncOperation): operation is ShotOperation {
+  return (
+    operation.type === "shot.recorded" || operation.type === "shot.cleared"
+  );
+}
+
 async function sendSingle(
   database: DatabaseGateway<RoundsDbSchema>,
-  operation: SyncOperation,
+  operation: RoundOperation | DistanceOperation,
 ): Promise<SendOutcome> {
   switch (operation.type) {
     case "round.created":
@@ -154,9 +127,6 @@ async function sendSingle(
     case "distance.updated":
     case "distance.disabled":
       return sendDistanceOperation(database, operation);
-    case "shot.recorded":
-    case "shot.cleared":
-      return sendShots(database, [operation]);
   }
 }
 
@@ -200,7 +170,6 @@ async function sendRoundOperation(
           p_round_event_id: operation.eventId,
           p_round_id: operation.roundId,
         }),
-        revisionOnly,
       );
   }
 }
@@ -295,18 +264,17 @@ export function createRoundOpTransport(
 ): RoundTransport {
   return {
     send(entries) {
-      const shots: ShotOperation[] = [];
-      for (const { operation } of entries) {
-        if (
-          operation.type === "shot.recorded" ||
-          operation.type === "shot.cleared"
-        ) {
-          shots.push(operation);
-        }
+      const [first] = entries;
+      if (isShotOperation(first.operation)) {
+        return sendShots(
+          database,
+          entries.flatMap(({ operation }) =>
+            isShotOperation(operation) ? [operation] : [],
+          ),
+        );
       }
-      if (shots.length > 1) return sendShots(database, shots);
       // 矢の束以外は、計画が1件ずつの要求にする。
-      return sendSingle(database, entries[0].operation);
+      return sendSingle(database, first.operation);
     },
   };
 }
