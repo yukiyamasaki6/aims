@@ -114,7 +114,11 @@ test("登録済みのメールアドレスで送信すると、コード入力�
   await expect(
     page.getByRole("heading", { name: authText("otpTitle") }),
   ).toBeVisible();
-  await expect(page.getByText(authText("signUpCodeNote"))).toBeVisible();
+  await expect(
+    page.getByText(
+      "登録済みのメールアドレスには、コードの代わりに案内のメールが届きます。",
+    ),
+  ).not.toBeVisible();
 
   // 認証コードの代わりに、登録済みを知らせる案内のメールが届く。
   const notice = await getEmailFromMailpit(

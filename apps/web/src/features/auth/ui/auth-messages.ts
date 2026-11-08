@@ -33,7 +33,7 @@ export const authMessages = {
         invalidRule: passwordRule,
       },
       captcha: {
-        incomplete: "セキュリティチェックが完了していません。",
+        incomplete: "セキュリティを確認中です。もう一度お試しください。",
       },
       code: {
         required: "認証コードを入力してください。",
@@ -62,14 +62,12 @@ export const authMessages = {
     signUpFooterLead: "既にアカウントをお持ちの方は",
     signUpFooterLink: "サインイン",
     signUpPasswordTitle: "パスワードを設定",
-    signUpPasswordDescription: "次回以降はこのパスワードでサインインします。",
     signUpPasswordLabel: "パスワード",
     signUpPasswordSubmit: "登録してサインイン",
     // パスワードの再設定
     resetTitle: "パスワードを再設定",
     resetBackToSignIn: "サインインに戻る",
     resetPasswordTitle: "新しいパスワードを設定",
-    resetPasswordDescription: "このパスワードで次回からサインインします。",
     resetPasswordLabel: "新しいパスワード",
     resetPasswordSubmit: "パスワードを変更",
     // パスワードの設定(サインアップと再設定で共通)
@@ -79,9 +77,6 @@ export const authMessages = {
     otpTitle: "認証コードを入力",
     otpDescription: "{email} に送信されたコードを入力してください。",
     otpSpamNote: "メールが届かない場合は、迷惑メールフォルダをご確認ください。",
-    // サインアップのコード入力だけに出す。登録の有無は画面に出さず、登録済みの利用者にはコードの代わりに案内が届く。
-    signUpCodeNote:
-      "登録済みのメールアドレスには、コードの代わりに案内のメールが届きます。",
     otpCodePlaceholder: "123456",
     otpVerify: "確認",
     otpResend: "再送",

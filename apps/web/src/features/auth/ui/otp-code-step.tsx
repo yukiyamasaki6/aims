@@ -17,8 +17,6 @@ type OtpCodeStepProps = {
   // エラー文の要素のidの接頭辞(`${idPrefix}-code-error`)。
   idPrefix: string;
   email: string;
-  // 迷惑メールの案内に続けて出す、画面ごとの案内(無ければ出さない)。
-  note?: string;
   code: string;
   onCodeChange: (value: string) => void;
   codeError: string | undefined;
@@ -40,7 +38,6 @@ type OtpCodeStepProps = {
 export function OtpCodeStep({
   idPrefix,
   email,
-  note,
   code,
   onCodeChange,
   codeError,
@@ -77,9 +74,6 @@ export function OtpCodeStep({
       <p className="text-center text-muted-foreground text-sm">
         {t("otpSpamNote")}
       </p>
-      {note && (
-        <p className="text-center text-muted-foreground text-sm">{note}</p>
-      )}
       <Turnstile siteKey={siteKey} ref={checkRef} onVerify={onCheck} />
       <ResendSection
         pending={pending}
