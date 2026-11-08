@@ -20,10 +20,11 @@ export class PrecachedFrame extends Strategy {
   }
 
   async _handle(request: Request, handler: StrategyHandler) {
-    const frameUrl = this.#deps.frameUrlOf(new URL(request.url).pathname);
-    const frame = frameUrl
-      ? await this.#deps.matchPrecache(frameUrl)
-      : undefined;
+    // 枠の規則のmatcher(runtime-caching.ts)が、枠があるナビゲーションにだけこのハンドラを選ぶ。
+    const frameUrl = this.#deps.frameUrlOf(
+      new URL(request.url).pathname,
+    ) as string;
+    const frame = await this.#deps.matchPrecache(frameUrl);
     return frame ?? handler.fetch(request);
   }
 }

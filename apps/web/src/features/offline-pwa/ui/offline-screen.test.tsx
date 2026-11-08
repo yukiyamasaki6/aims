@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import OfflinePage from "@/app/offline/page";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { OfflineScreen } from "./offline-screen";
@@ -28,5 +29,16 @@ describe("OfflineScreen", () => {
 
     // Then
     expect(screen.getByRole("link", { name: "AIMS" })).toBeInTheDocument();
+  });
+
+  it("/offlineのページが、オフラインであることを表示する", () => {
+    // Given
+    // When
+    render(<OfflinePage />, { wrapper: IntlTestProvider });
+
+    // Then
+    expect(
+      screen.getByRole("heading", { name: offlinePwaText("offlineTitle") }),
+    ).toBeInTheDocument();
   });
 });

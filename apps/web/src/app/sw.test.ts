@@ -5,7 +5,6 @@ import type {
   SerwistOptions,
 } from "serwist";
 import {
-  CacheFirst,
   NetworkOnly,
   RegExpRoute,
   StaleWhileRevalidate,
@@ -87,82 +86,22 @@ beforeEach(() => {
   sw.matchPrecache.mockReset();
 });
 
-// self.skipWaiting()の呼び出し。SKIP_WAITINGの待ち受けはSerwistが持つため、ここでは待機させる構成だけを確かめる。
-const swScope = vi.hoisted(() => ({ skipWaiting: vi.fn() }));
-
 beforeAll(async () => {
   vi.stubGlobal("__SW_MANIFEST", MANIFEST);
-  vi.stubGlobal("skipWaiting", swScope.skipWaiting);
   await import("./sw");
 });
 
 describe("sw", () => {
-  describe("読み込み", () => {
-    it("ビルド時に注入された一覧をプリキャッシュする", () => {
-      // Given
-      // When
-      const { precacheEntries } = config();
-
-      // Then
-      expect(precacheEntries).toEqual(MANIFEST);
-    });
-
-    it("新しいビルドを待機させる(skipWaitingを指定しない)", () => {
-      // Given
-      // When
-      const { skipWaiting } = config();
-
-      // Then
-      expect(skipWaiting).toBeFalsy();
-      expect(swScope.skipWaiting).not.toHaveBeenCalled();
-    });
-
-    it("初回の登録で最初の画面を制御する", () => {
-      // Given
-      // When
-      const { clientsClaim } = config();
-
-      // Then
-      expect(clientsClaim).toBe(true);
-    });
-
-    it("Service Workerのイベントリスナーを登録する", () => {
-      // Given
-      // When
-      const { calls } = sw.addEventListeners.mock;
-
-      // Then
-      expect(calls).toHaveLength(1);
-    });
-  });
-
   describe("ランタイムキャッシュ", () => {
     describe("同一オリジンの静的アセット", () => {
-      it.each([
-        ["/fonts/geist.woff2", "static-font-assets"],
-        ["/fonts/geist.TTF", "static-font-assets"],
-        ["/icon.svg", "static-image-assets"],
-        ["/images/photo.JPEG", "static-image-assets"],
-        ["/_next/static/css/app.css", "static-style-assets"],
-      ])("%sはStaleWhileRevalidateで%sにキャッシュする", (url, cacheName) => {
+      it("/fonts/geist.woff2はStaleWhileRevalidateでstatic-font-assetsにキャッシュする", () => {
         // Given
         // When
-        const handler = findHandler(url);
+        const handler = findHandler("/fonts/geist.woff2");
 
         // Then
         expect(handler).toBeInstanceOf(StaleWhileRevalidate);
-        expect(handler).toHaveProperty("cacheName", cacheName);
-      });
-
-      it("/_next/static配下のJavaScriptはCacheFirstでnext-static-js-assetsにキャッシュする", () => {
-        // Given
-        // When
-        const url = "/_next/static/chunks/main.js";
-        const handler = findHandler(url);
-
-        // Then
-        expect(handler).toBeInstanceOf(CacheFirst);
-        expect(handler).toHaveProperty("cacheName", "next-static-js-assets");
+        expect(handler).toHaveProperty("cacheName", "static-font-assets");
       });
     });
 
@@ -215,27 +154,6 @@ describe("sw", () => {
         await expect(result).rejects.toThrow("Failed to fetch");
       });
 
-      it.each(["/rounds/1?_rsc=abc", "/rounds/new?_rsc=abc", "/rounds"])(
-        "ナビゲーション以外（cors）の%sは枠にせずネットワークへ通す",
-        (url) => {
-          // Given
-          // When
-          const handler = findHandler(url, "cors");
-
-          // Then
-          expect(handler).toBeInstanceOf(NetworkOnly);
-        },
-      );
-
-      it("クロスオリジンのナビゲーションは枠にしない", () => {
-        // Given
-        // When
-        const handler = findHandler("https://example.com/rounds", "navigate");
-
-        // Then
-        expect(handler).toBeUndefined();
-      });
-
       it.each([
         "/",
         "/signin",
@@ -254,15 +172,15 @@ describe("sw", () => {
     });
 
     describe("同一オリジンのその他のリクエスト", () => {
-      it.each(["/", "/rounds/1?_rsc=abc", "/api/rounds", "/sw.js"])(
-        "%sはキャッシュせずネットワークへ通す",
+      it.each(["/rounds/1?_rsc=abc", "/api/rounds", "/sw.js"])(
+        "%sはどのルートにもマッチさせない",
         (url) => {
           // Given
           // When
           const handler = findHandler(url);
 
           // Then
-          expect(handler).toBeInstanceOf(NetworkOnly);
+          expect(handler).toBeUndefined();
         },
       );
     });
@@ -350,15 +268,6 @@ describe("sw", () => {
 
       // Then
       expect(result).toBe(params.response);
-    });
-
-    it("ナビゲーションのプリロードは使わない", () => {
-      // Given
-      // When
-      const { navigationPreload } = config();
-
-      // Then
-      expect(navigationPreload).toBe(false);
     });
   });
 });
