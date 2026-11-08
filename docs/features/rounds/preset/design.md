@@ -49,6 +49,7 @@
 - 削除は直接のDELETEで、`preset_rounds`のDELETEポリシーが認可を担う。`preset_distances`は外部キーのCASCADEで消える。
 - アプリが書き込む経路は、保存のRPCと削除だけである。`preset_rounds`のUPDATEと`preset_distances`のUPDATE・DELETEのポリシーとGRANTは持たない。
 - 削除は操作の列を使わず、削除側のフック(`use-preset-delete.ts`)が実行中と失敗を持ち、同期の`ref`で二重実行を拒否する。`BlockingConfirmDialog`は`busy`と`error`を受け取って完了を待つ表現だけを担う。
+- 保存(`save_round_as_preset`)も操作の列を使わない、オンライン専用の直接書き込みである(`preset-commands.ts`)。
 
 ## 設計判断
 

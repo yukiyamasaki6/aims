@@ -70,6 +70,11 @@
 - 依存の向き、基盤SDKのimport、循環、domainの環境のグローバル参照は、`pnpm lint`のBiome(`biome.json`の`overrides`)が検査する。例外は、違反の1行上の`// biome-ignore lint/style/noRestrictedImports: <理由>`(循環は`lint/suspicious/noImportCycles`、グローバルは`lint/style/noRestrictedGlobals`)か、`overrides`の`includes`へのパス除外で示す。例外は原則として足さない。
 - 定数だけのファイルにするときは `*-constants.ts` とする。部品の付属の値は部品のファイルに、経路の事実は `src/routes.ts` に、経路の判定・変換の関数は機能の `*-routes.ts` に置く(`docs/architecture.md` の R02)。
 
+### 外部との境界
+
+- 外部の失敗は`infrastructure`が内側の形の結果に変え、外部の例外を内側へ出さない。
+- 規則に反する入力は、domainが拒否の値で返し、例外にしない。
+
 ### 文言
 
 - 利用者に届く文字列(画面の文言、`aria-label`・`placeholder`・`title`・`alt`などの属性値、`metadata`・`manifest`の文字列、利用者に示すエラーと検証の文言)は、言語を問わず直書きしない。コメント、ログ、開発者向けの例外、識別子、テストのデータ、`lang`などの技術的な設定値は対象外とする。開発者向けの例外でも、利用者に示される経路にあるものは対象とする。
