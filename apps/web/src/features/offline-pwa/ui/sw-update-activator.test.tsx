@@ -168,7 +168,7 @@ describe("SwUpdateActivator と実物のインフラの合成", () => {
     return a;
   }
 
-  it("waitingがあれば遷移を止め、保存の完了後にSKIP_WAITINGを1回送り、controllerchangeの後にlocation.assignする", async () => {
+  it("waitingがあれば遷移を止め、SKIP_WAITINGを1回送り、controllerchangeと保存の再確認の後にlocation.assignする", async () => {
     // Given
     let finish: () => void = () => {};
     persistence.whenPersisted.mockReturnValueOnce(
@@ -185,20 +185,18 @@ describe("SwUpdateActivator と実物のインフラの合成", () => {
 
     // When
     fireEvent.click(link);
-    await vi.advanceTimersByTimeAsync(100);
-    const sentBeforePersisted = waiting.postMessage.mock.calls.length;
-    finish();
     await settle();
-    const sentAfterPersisted = waiting.postMessage.mock.calls.length;
-    const assignedBeforeChange = assign.mock.calls.length;
+    const sentBeforeChange = waiting.postMessage.mock.calls.length;
     emitControllerChange();
+    await settle();
+    const assignedBeforePersisted = assign.mock.calls.length;
+    finish();
     await settle();
 
     // Then
-    expect(sentBeforePersisted).toBe(0);
-    expect(sentAfterPersisted).toBe(1);
+    expect(sentBeforeChange).toBe(1);
     expect(waiting.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
-    expect(assignedBeforeChange).toBe(0);
+    expect(assignedBeforePersisted).toBe(0);
     expect(passed).not.toHaveBeenCalled();
     expect(assign).toHaveBeenCalledWith("http://localhost/rounds/new");
   });
