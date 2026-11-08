@@ -18,16 +18,6 @@ describe("roundIdOfPath", () => {
     expect(id).toBe(ID);
   });
 
-  it("末尾のスラッシュを許す", () => {
-    // Given
-
-    // When
-    const id = roundIdOfPath(`/rounds/${ID}/`);
-
-    // Then
-    expect(id).toBe(ID);
-  });
-
   it("大文字のUUIDも受け付ける", () => {
     // Given
 

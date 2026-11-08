@@ -366,6 +366,7 @@ test("未認証で紹介画面を開くと画面の枠が保存され、サイ�
   const urls = await precachedUrls(page);
   expect(urls.some((url) => url.includes("/_next/static/"))).toBe(true);
   expect(urls.some((url) => url.includes("/offline"))).toBe(true);
+  expect(urls.some((url) => url.endsWith(".woff2"))).toBe(true);
   for (const frame of FRAME_PATHS) {
     expect(
       urls.some((url) => url.includes(`${frame}?__WB_REVISION__=`)),

@@ -14,7 +14,7 @@ export function roundFramePathOf(pathname: string): string | null {
 }
 
 const ROUND_PATH = new RegExp(
-  `^${ROUNDS_PATH}/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/?$`,
+  `^${ROUNDS_PATH}/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`,
   "i",
 );
 

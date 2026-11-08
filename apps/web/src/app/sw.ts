@@ -1,11 +1,10 @@
 /// <reference lib="webworker" />
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
 import { Serwist } from "serwist";
-import { frameUrlFor } from "@/features/offline-pwa/domain/offline-routes";
+import { precacheGuard } from "@/features/offline-pwa/infrastructure/precache-guard";
 import { createRuntimeCaching } from "@/features/offline-pwa/infrastructure/runtime-caching";
-import { shellFrameGuard } from "@/features/offline-pwa/infrastructure/shell-guard";
 import { roundFramePathOf } from "@/features/rounds/domain/round-routes";
-import { OFFLINE_PATH } from "@/routes";
+import { OFFLINE_PATH, shellUrlOf } from "@/routes";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
@@ -22,13 +21,14 @@ const serwist: Serwist = new Serwist({
   // （Serwistが既定で待ち受ける）。clientsClaimは、初回の登録で最初の画面を
   // 制御するために残す。
   clientsClaim: true,
-  // 枠はキャッシュ優先で返すため、プリロードの取得は捨てられ無駄になる。
-  navigationPreload: false,
   precacheOptions: {
-    plugins: [shellFrameGuard],
+    plugins: [precacheGuard],
   },
   runtimeCaching: createRuntimeCaching({
-    frameUrlOf: (pathname) => frameUrlFor(pathname, roundFramePathOf),
+    frameUrlOf: (pathname) => {
+      const framePath = roundFramePathOf(pathname);
+      return framePath === null ? null : shellUrlOf(framePath);
+    },
     // serwistは生成の後に参照する(ハンドラは生成の後にだけ呼ばれる)。
     matchPrecache: (url) => serwist.matchPrecache(url),
   }),

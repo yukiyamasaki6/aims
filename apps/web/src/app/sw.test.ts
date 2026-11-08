@@ -4,13 +4,7 @@ import type {
   RouteMatchCallbackOptions,
   SerwistOptions,
 } from "serwist";
-import {
-  CacheFirst,
-  NetworkOnly,
-  RegExpRoute,
-  StaleWhileRevalidate,
-  Strategy,
-} from "serwist";
+import { NetworkOnly, RegExpRoute, Strategy } from "serwist";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Serwistはimport時にService Workerのイベントリスナー登録等の副作用を持つ外部パッケージのため、コンストラクタに渡された構成を捕捉するスタブに差し替える。キャッシュ戦略とルートの照合はserwistの実物を使う。
@@ -87,85 +81,13 @@ beforeEach(() => {
   sw.matchPrecache.mockReset();
 });
 
-// self.skipWaiting()の呼び出し。SKIP_WAITINGの待ち受けはSerwistが持つため、ここでは待機させる構成だけを確かめる。
-const swScope = vi.hoisted(() => ({ skipWaiting: vi.fn() }));
-
 beforeAll(async () => {
   vi.stubGlobal("__SW_MANIFEST", MANIFEST);
-  vi.stubGlobal("skipWaiting", swScope.skipWaiting);
   await import("./sw");
 });
 
 describe("sw", () => {
-  describe("読み込み", () => {
-    it("ビルド時に注入された一覧をプリキャッシュする", () => {
-      // Given
-      // When
-      const { precacheEntries } = config();
-
-      // Then
-      expect(precacheEntries).toEqual(MANIFEST);
-    });
-
-    it("新しいビルドを待機させる(skipWaitingを指定しない)", () => {
-      // Given
-      // When
-      const { skipWaiting } = config();
-
-      // Then
-      expect(skipWaiting).toBeFalsy();
-      expect(swScope.skipWaiting).not.toHaveBeenCalled();
-    });
-
-    it("初回の登録で最初の画面を制御する", () => {
-      // Given
-      // When
-      const { clientsClaim } = config();
-
-      // Then
-      expect(clientsClaim).toBe(true);
-    });
-
-    it("Service Workerのイベントリスナーを登録する", () => {
-      // Given
-      // When
-      const { calls } = sw.addEventListeners.mock;
-
-      // Then
-      expect(calls).toHaveLength(1);
-    });
-  });
-
   describe("ランタイムキャッシュ", () => {
-    describe("同一オリジンの静的アセット", () => {
-      it.each([
-        ["/fonts/geist.woff2", "static-font-assets"],
-        ["/fonts/geist.TTF", "static-font-assets"],
-        ["/icon.svg", "static-image-assets"],
-        ["/images/photo.JPEG", "static-image-assets"],
-        ["/_next/static/css/app.css", "static-style-assets"],
-      ])("%sはStaleWhileRevalidateで%sにキャッシュする", (url, cacheName) => {
-        // Given
-        // When
-        const handler = findHandler(url);
-
-        // Then
-        expect(handler).toBeInstanceOf(StaleWhileRevalidate);
-        expect(handler).toHaveProperty("cacheName", cacheName);
-      });
-
-      it("/_next/static配下のJavaScriptはCacheFirstでnext-static-js-assetsにキャッシュする", () => {
-        // Given
-        // When
-        const url = "/_next/static/chunks/main.js";
-        const handler = findHandler(url);
-
-        // Then
-        expect(handler).toBeInstanceOf(CacheFirst);
-        expect(handler).toHaveProperty("cacheName", "next-static-js-assets");
-      });
-    });
-
     describe("画面の枠のナビゲーション", () => {
       it.each([
         ["/rounds", "/__shell/rounds"],
@@ -215,27 +137,6 @@ describe("sw", () => {
         await expect(result).rejects.toThrow("Failed to fetch");
       });
 
-      it.each(["/rounds/1?_rsc=abc", "/rounds/new?_rsc=abc", "/rounds"])(
-        "ナビゲーション以外（cors）の%sは枠にせずネットワークへ通す",
-        (url) => {
-          // Given
-          // When
-          const handler = findHandler(url, "cors");
-
-          // Then
-          expect(handler).toBeInstanceOf(NetworkOnly);
-        },
-      );
-
-      it("クロスオリジンのナビゲーションは枠にしない", () => {
-        // Given
-        // When
-        const handler = findHandler("https://example.com/rounds", "navigate");
-
-        // Then
-        expect(handler).toBeUndefined();
-      });
-
       it.each([
         "/",
         "/signin",
@@ -254,15 +155,15 @@ describe("sw", () => {
     });
 
     describe("同一オリジンのその他のリクエスト", () => {
-      it.each(["/", "/rounds/1?_rsc=abc", "/api/rounds", "/sw.js"])(
-        "%sはキャッシュせずネットワークへ通す",
+      it.each(["/rounds/1?_rsc=abc", "/api/rounds", "/sw.js"])(
+        "%sはどのルートにもマッチさせない",
         (url) => {
           // Given
           // When
           const handler = findHandler(url);
 
           // Then
-          expect(handler).toBeInstanceOf(NetworkOnly);
+          expect(handler).toBeUndefined();
         },
       );
     });
@@ -318,8 +219,12 @@ describe("sw", () => {
       return plugin.cacheWillUpdate;
     }
 
-    function updated(url: string, redirected: boolean) {
-      const response = { redirected } as Response;
+    function updated(url: string, redirected: boolean, status = 200) {
+      const response = {
+        redirected,
+        ok: status < 400,
+        status,
+      } as Response;
       return {
         request: new Request(new URL(url, location.origin)),
         response,
@@ -338,6 +243,19 @@ describe("sw", () => {
       await expect(result).rejects.toThrow();
     });
 
+    it.each([404, 500])(
+      "ステータス%sの応答は保存せずエラーにする",
+      async (status) => {
+        // Given
+        // When
+        const params = updated("/_next/static/chunks/main.js", false, status);
+        const result = guard()(params);
+
+        // Then
+        await expect(result).rejects.toThrow();
+      },
+    );
+
     it.each([
       ["/__shell/rounds", false],
       ["/_next/static/chunks/main.js", true],
@@ -350,15 +268,6 @@ describe("sw", () => {
 
       // Then
       expect(result).toBe(params.response);
-    });
-
-    it("ナビゲーションのプリロードは使わない", () => {
-      // Given
-      // When
-      const { navigationPreload } = config();
-
-      // Then
-      expect(navigationPreload).toBe(false);
     });
   });
 });

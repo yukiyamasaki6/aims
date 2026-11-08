@@ -7,7 +7,6 @@ export default function manifest(): MetadataRoute.Manifest {
   const t = createTranslator({ ...intlConfig, namespace: "shared" });
   return {
     name: t("appName"),
-    short_name: t("appName"),
     description: t("appDescription"),
     start_url: ROUNDS_PATH,
     display: "standalone",

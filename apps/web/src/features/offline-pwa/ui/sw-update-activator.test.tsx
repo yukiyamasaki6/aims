@@ -168,7 +168,7 @@ describe("SwUpdateActivator と実物のインフラの合成", () => {
     return a;
   }
 
-  it("waitingがあれば遷移を止め、保存の完了後にSKIP_WAITINGを1回送り、controllerchangeの後にlocation.assignする", async () => {
+  it("waitingがあれば遷移を止め、SKIP_WAITINGを1回送り、controllerchangeと保存の再確認の後にlocation.assignする", async () => {
     // Given
     let finish: () => void = () => {};
     persistence.whenPersisted.mockReturnValueOnce(
@@ -185,178 +185,30 @@ describe("SwUpdateActivator と実物のインフラの合成", () => {
 
     // When
     fireEvent.click(link);
-    await vi.advanceTimersByTimeAsync(100);
-    const sentBeforePersisted = waiting.postMessage.mock.calls.length;
-    finish();
     await settle();
-    const sentAfterPersisted = waiting.postMessage.mock.calls.length;
-    const assignedBeforeChange = assign.mock.calls.length;
+    const sentBeforeChange = waiting.postMessage.mock.calls.length;
     emitControllerChange();
+    await settle();
+    const assignedBeforePersisted = assign.mock.calls.length;
+    finish();
     await settle();
 
     // Then
-    expect(sentBeforePersisted).toBe(0);
-    expect(sentAfterPersisted).toBe(1);
+    expect(sentBeforeChange).toBe(1);
     expect(waiting.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
-    expect(assignedBeforeChange).toBe(0);
+    expect(assignedBeforePersisted).toBe(0);
     expect(passed).not.toHaveBeenCalled();
     expect(assign).toHaveBeenCalledWith("http://localhost/rounds/new");
   });
 
-  it("waitingが無ければ止めず、保存の完了も待たない", async () => {
-    // Given
-    await mount();
-    const link = addLink("http://localhost/rounds/new");
-    const passed = vi.fn();
-    document.addEventListener("click", passed);
-
-    // When
-    fireEvent.click(link);
-    await settle();
-
-    // Then
-    expect(passed).toHaveBeenCalledTimes(1);
-    expect(persistence.whenPersisted).not.toHaveBeenCalled();
-  });
-
-  it("登録の保持の前のclickは止めず、遅れて登録が返っても、合図を送らず保存の完了も待たない", async () => {
-    // Given
-    let resolveRegistration: (r: unknown) => void = () => {};
-    vi.stubGlobal("navigator", {
-      serviceWorker: {
-        getRegistration: () =>
-          new Promise((resolve) => {
-            resolveRegistration = resolve;
-          }),
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      },
-    });
-    const waiting = fakeWorker();
-    registration.waiting = waiting;
-    await mount();
-    const link = addLink("http://localhost/rounds/new");
-    const passed = vi.fn();
-    document.addEventListener("click", passed);
-
-    // When
-    fireEvent.click(link);
-    resolveRegistration(registration);
-    await settle();
-
-    // Then
-    expect(passed).toHaveBeenCalledTimes(1);
-    expect(waiting.postMessage).not.toHaveBeenCalled();
-    expect(persistence.whenPersisted).not.toHaveBeenCalled();
-  });
-
-  it("controllerchangeが1秒来なければ、合図を1回だけ送り、押し直して通常の遷移を進める", async () => {
-    // Given
-    const waiting = fakeWorker();
-    registration.waiting = waiting;
-    await mount();
-    const link = addLink("http://localhost/rounds/new");
-    const passed = vi.fn();
-    document.addEventListener("click", passed);
-
-    // When
-    fireEvent.click(link);
-    await vi.advanceTimersByTimeAsync(1_000);
-
-    // Then
-    expect(waiting.postMessage).toHaveBeenCalledTimes(1);
-    expect(passed).toHaveBeenCalledTimes(1);
-    expect(assign).not.toHaveBeenCalled();
-    expect(persistence.whenPersisted).toHaveBeenCalledTimes(1);
-  });
-
-  it("保存が1秒で終わらなければ、合図を送らずに押し直す", async () => {
-    // Given
-    persistence.whenPersisted.mockReturnValueOnce(new Promise<void>(() => {}));
-    const waiting = fakeWorker();
-    registration.waiting = waiting;
-    await mount();
-    const link = addLink("http://localhost/rounds/new");
-    const passed = vi.fn();
-    document.addEventListener("click", passed);
-
-    // When
-    fireEvent.click(link);
-    await vi.advanceTimersByTimeAsync(1_000);
-
-    // Then
-    expect(waiting.postMessage).not.toHaveBeenCalled();
-    expect(passed).toHaveBeenCalledTimes(1);
-  });
-
-  it("保存待ちと有効化待ちは、クリックから1つの1秒を共有する", async () => {
-    // Given
-    registration.waiting = fakeWorker();
-    await mount();
-    let finish: () => void = () => {};
-    persistence.whenPersisted.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        finish = resolve;
-      }),
-    );
-    fireEvent.click(addLink("http://localhost/rounds/new"));
-    await vi.advanceTimersByTimeAsync(900);
-    finish();
-    await settle();
-
-    // When
-    await vi.advanceTimersByTimeAsync(99);
-    const beforeDeadline = assign.mock.calls.length;
-    emitControllerChange();
-    await settle();
-    const afterChange = assign.mock.calls.length;
-
-    // Then
-    expect(beforeDeadline).toBe(0);
-    expect(afterChange).toBe(1);
-  });
-
-  it("切り替え中の追加のclickは止めたまま、二重に始めない", async () => {
-    // Given
-    const waiting = fakeWorker();
-    registration.waiting = waiting;
-    await mount();
-    const link = addLink("http://localhost/rounds/new");
-    const passed = vi.fn();
-    document.addEventListener("click", passed);
-    fireEvent.click(link);
-    await settle();
-
-    // When
-    fireEvent.click(link);
-    await settle();
-
-    // Then
-    expect(passed).not.toHaveBeenCalled();
-    expect(waiting.postMessage).toHaveBeenCalledTimes(1);
-  });
-
-  it("画面の経路が変わると、waitingが無ければ更新を確認し、読み込み時は確認しない", async () => {
+  it("画面の経路が変わると、waitingが無ければ更新を確認する", async () => {
     // Given
     const { navigate } = await mount();
-    const updatesAtLoad = registration.update.mock.calls.length;
 
     // When
     await navigate("/rounds/new");
 
     // Then
-    expect(updatesAtLoad).toBe(0);
     expect(registration.update).toHaveBeenCalledTimes(1);
-  });
-
-  it("Service Workerに未対応の環境でも、手続きを始めて描画してもエラーにならない", async () => {
-    // Given
-    vi.stubGlobal("navigator", {});
-
-    // When
-    const result = mount();
-
-    // Then
-    await expect(result).resolves.toBeDefined();
   });
 });

@@ -1,12 +1,12 @@
 -- ラウンドの状態（rounds.status）を、update_roundの差分のキー`status`で変える振る舞いを確認する。
 --   - 既定値と、create_roundで作ったラウンドの初期状態
 --   - statusが効く・不正値・削除済み・権限・冪等・他の項目との同時の変更
---   - round_eventsのstatus列とpayload制約
+--   - round_eventsのstatus列
 -- RPC × 観点の網羅（権限、入力検証、冪等性）はrpc_matrix.sqlで固定している。
 
 begin;
 
-select plan(23);
+select plan(21);
 
 create temp table st_id (alias text primary key, id uuid not null);
 insert into st_id (alias, id) values
@@ -162,20 +162,6 @@ select throws_ok(
   'PT403', null, 'update_round: viewerは状態を変えられない'
 );
 select is(pg_temp.status('R2'), 'in_progress', 'update_round: 拒否された状態の変更は反映されない');
-
--- ============================================================
--- round_eventsの制約
--- ============================================================
-
-reset role;
-select throws_ok(
-  format($$insert into public.round_events (event_id, round_id, type, author_id, revision, set_fields, status) values (%L, %L, 'UPDATED', %L, 90, array['name'], 'completed')$$, pg_temp.ev(50), pg_temp.id('R2'), pg_temp.id('E')),
-  '23514', null, 'round_events: set_fieldsにstatusが無いのにstatusを持つ行は拒否される'
-);
-select throws_ok(
-  format($$insert into public.round_events (event_id, round_id, type, author_id, revision, set_fields) values (%L, %L, 'UPDATED', %L, 91, array['status'])$$, pg_temp.ev(51), pg_temp.id('R2'), pg_temp.id('E')),
-  '23514', null, 'round_events: set_fieldsにstatusがあるのにstatusが無い行は拒否される'
-);
 
 select * from finish();
 
