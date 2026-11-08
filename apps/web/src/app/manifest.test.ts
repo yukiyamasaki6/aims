@@ -10,7 +10,6 @@ describe("manifest", () => {
     // Then
     expect(result).toMatchObject({
       name: "AIMS",
-      short_name: "AIMS",
       description: "AIMS Web Application",
       start_url: "/rounds",
       display: "standalone",

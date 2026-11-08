@@ -3,7 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import type { Metadata, Viewport } from "next";
 import { createTranslator } from "next-intl";
 import { intlConfig } from "@/i18n/messages";
-import { MANIFEST_PATH, SW_PATH } from "@/routes";
+import { SW_PATH } from "@/routes";
 import "./globals.css";
 import { RootClientEntry } from "./root-client-entry";
 
@@ -13,7 +13,6 @@ const t = createTranslator({ ...intlConfig, namespace: "shared" });
 export const metadata: Metadata = {
   title: t("appName"),
   description: t("appDescription"),
-  manifest: MANIFEST_PATH,
 };
 
 // interactiveWidget: "resizes-content" により、モバイルのソフトキーボード
@@ -22,8 +21,6 @@ export const metadata: Metadata = {
 // 可視領域の下端に合わせて縮む（対応ブラウザのみ。Android Chromeは対応、
 // iOS Safariは非対応のため実機確認が必要）。
 export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
   interactiveWidget: "resizes-content",
 };
 

@@ -35,7 +35,7 @@
   - 手続きの約束(`SwHost`、`SwRegistration`、`LinkClicks`、`LinkClick`、`PersistenceWait`)を実装する外部への実装は、インフラ層 `browser-service-worker.ts`(`navigator.serviceWorker`)と `browser-link-clicks.ts`(`document`のcapture段階の`click`。修飾キー、`defaultPrevented`、`target`、`download`、外部、ハッシュのみを除く)である。
   - `ui/sw-update-activator.tsx`の`SwUpdateActivator`が、経路(`usePathname()`)の変化を手続きへ知らせる(表示は行わない)。
   - 起動地点 `root-client-entry.tsx` の `composeOffline` が手続きを生成し、効果で `start()` を呼び、`SwUpdateActivator` を描く。
-- `src/app/layout.tsx` の `metadata.manifest` は経路表の `MANIFEST_PATH`(`/manifest.webmanifest`)である。`serwist.config.mjs` が読む `/offline` のHTMLの名前は、経路表の `frameHtmlOf(OFFLINE_PATH)` から導く。
+- `<link rel="manifest">` は `src/app/manifest.ts` から Next.js が出す(`/manifest.webmanifest`)。`serwist.config.mjs` が読む `/offline` のHTMLの名前は、経路表の `frameHtmlOf(OFFLINE_PATH)` から導く。
 - `src/app/manifest.ts` がManifestを返す。`start_url` は経路表の `ROUNDS_PATH`(`/rounds`)で、未認証の起動は `proxy.ts` が `/signin` へ移す。
 - `src/app/apple-icon.png` はiOSホーム画面用アイコン(180x180、白の不透明な地)で、Next.jsのファイル規約により全ページに `apple-touch-icon` のlinkが出る。`scripts/generate-icon.mjs` が他のアイコンと一緒に生成する。`/apple-icon.png` は `proxy.ts` の対象外なので未認証でも取得できる。
 - manifestのアイコン(any/maskable)は、環の直径を画像の幅の61%(`INSTALL_ART_SCALE`=61/80)にして生成する。絵柄全体を元の比率のまま縮める。表示は2経路ある。余白のある経路(インストールしたホーム画面、アプリの一覧)では、Chromeがmaskableに約1.309倍の透明の余白を足すため、画像の中央87.3%が表示され、環は枠の約70%に見える。余白のない経路(「ホーム画面に追加」の丸、ショートカット)では、画像の中央66.7%から70%が丸に表示され、環は枠の約87%から91%に見える。この経路で棒の先が欠けることは認めるが、環の外に棒は見える。iOS用のapple-iconは縮小しない(iOSは画像の全体を表示するため、環は枠の80%に見える)。環の外縁が半幅の80%という割合はicon.svg(タブ用)とapple-iconの値である。

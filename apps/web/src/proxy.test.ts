@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { redirectFor } from "@/features/auth/domain/auth-routes";
 import {
   HOME_PATH,
-  MANIFEST_PATH,
   OFFLINE_PATH,
   RESET_PASSWORD_PATH,
   ROUND_FRAME_PATHS,
@@ -48,7 +47,7 @@ describe("proxy", () => {
       HOME_PATH,
       OFFLINE_PATH,
       SW_PATH,
-      MANIFEST_PATH,
+      "/manifest.webmanifest",
       "/_next/static/chunks/main.js",
       "/signin/extra",
       "/roundsx",
@@ -76,7 +75,7 @@ describe("proxy", () => {
       HOME_PATH,
       OFFLINE_PATH,
       SW_PATH,
-      MANIFEST_PATH,
+      "/manifest.webmanifest",
       "/roundsx",
       "/signin/extra",
       ...ROUND_FRAME_PATHS.map(shellUrlOf),
