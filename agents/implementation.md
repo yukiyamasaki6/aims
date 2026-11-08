@@ -67,6 +67,7 @@
 
 - `docs/architecture.md`の置き場所に従う。機能は`features/<機能>/`、機能に属さない共有は、画面部品が`components/`と`hooks/`、技術が`lib/<能力>/`に置く(第2節)。
 - 共有コードは使う機能が複数のものだけを共有に置き、兄弟の機能の内部実装を参照しない。
+- 依存の向き、基盤SDKのimport、循環、domainの環境のグローバル参照は、`pnpm lint`のBiome(`biome.json`の`overrides`)が検査する。例外は、違反の1行上の`// biome-ignore lint/style/noRestrictedImports: <理由>`(循環は`lint/suspicious/noImportCycles`、グローバルは`lint/style/noRestrictedGlobals`)か、`overrides`の`includes`へのパス除外で示す。例外は原則として足さない。
 - 定数だけのファイルにするときは `*-constants.ts` とする。部品の付属の値は部品のファイルに、経路の事実は `src/routes.ts` に、経路の判定・変換の関数は機能の `*-routes.ts` に置く(`docs/architecture.md` の R02)。
 
 ### 文言

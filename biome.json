@@ -53,7 +53,8 @@
             ]
           }
         }
-      }
+      },
+      "suspicious": { "noImportCycles": "error" }
     }
   },
   "overrides": [
@@ -76,6 +77,238 @@
       "linter": {
         "rules": {
           "style": { "useNamingConvention": "off" }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/src/features/*/domain/**",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/*-test-helpers.*"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  { "group": ["**", "!./**", "!@/routes", "!@/types/supabase"] }
+                ]
+              }
+            },
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "window": "domainは環境のグローバルを参照しない",
+                  "document": "domainは環境のグローバルを参照しない",
+                  "localStorage": "domainは環境のグローバルを参照しない",
+                  "sessionStorage": "domainは環境のグローバルを参照しない",
+                  "indexedDB": "domainは環境のグローバルを参照しない",
+                  "navigator": "domainは環境のグローバルを参照しない",
+                  "location": "domainは環境のグローバルを参照しない",
+                  "fetch": "domainは環境のグローバルを参照しない",
+                  "process": "domainは環境のグローバルを参照しない",
+                  "crypto": "domainは環境のグローバルを参照しない"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/src/features/*/application/**",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/*-test-helpers.*"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "**",
+                      "!./**",
+                      "!../domain/**",
+                      "!@/lib/*/contract/**",
+                      "!@/routes",
+                      "!@/features/*"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/src/features/*/ui/**",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/*-test-helpers.*"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "../infrastructure/**",
+                      "@/features/**",
+                      "@/lib/*/**",
+                      "@/types/**",
+                      "@/app/**",
+                      "@/i18n/**",
+                      "@supabase/**",
+                      "idb",
+                      "serwist",
+                      "@serwist/**",
+                      "next/server",
+                      "next/headers"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/src/features/*/infrastructure/**",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/*-test-helpers.*"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "../ui/**",
+                      "@/features/*/**",
+                      "@/lib/*/infrastructure/**",
+                      "@/components/**",
+                      "@/routes",
+                      "@/hooks/**",
+                      "@/app/**",
+                      "@/i18n/**"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/src/components/**",
+        "apps/web/src/hooks/**",
+        "apps/web/src/lib/utils.ts",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/*-test-helpers.*"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@/features/**",
+                      "@/lib/*/**",
+                      "@/types/**",
+                      "@/app/**",
+                      "@/i18n/**",
+                      "@supabase/**",
+                      "idb",
+                      "serwist",
+                      "@serwist/**",
+                      "next/server",
+                      "next/headers"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/src/lib/*/contract/**",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/*-test-helpers.*"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  { "group": ["**", "!./**", "!../../*/contract/**"] }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/src/lib/*/infrastructure/**",
+        "!**/*.test.*",
+        "!**/*.spec.*",
+        "!**/*-test-helpers.*"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@/features/**",
+                      "@/components/**",
+                      "@/routes",
+                      "@/hooks/**",
+                      "@/app/**",
+                      "@/i18n/**",
+                      "@/lib/*/infrastructure/**"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
         }
       }
     }
