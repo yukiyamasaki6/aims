@@ -4,7 +4,6 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
-import { useMountedRef } from "@/hooks/use-mounted-ref";
 import type { Session } from "../application/session";
 import type { AuthFailureKind } from "../domain/auth-failure";
 import { useAuthTexts } from "./use-auth-texts";
@@ -16,14 +15,13 @@ export function SignOutButton({ signOut }: { signOut: Session["signOut"] }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AuthFailureKind | null>(null);
-  const mountedRef = useMountedRef();
   const texts = useAuthTexts();
 
   async function handleConfirm() {
     setBusy(true);
     setError(null);
-    const result = await signOut({ isMounted: () => mountedRef.current });
-    // 失敗のときだけ、実行中の表示を解いて理由を示す。完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示を保つ。実行中の別の呼び出しが表示を解く。離れた後は、状態を更新しない。
+    const result = await signOut();
+    // 失敗のときだけ、実行中の表示を解いて理由を示す。完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示を保つ。実行中の別の呼び出しが表示を解く。
     if (result.kind === "failed") {
       setBusy(false);
       setError(result.failure.kind);

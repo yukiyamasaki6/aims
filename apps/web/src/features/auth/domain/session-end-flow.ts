@@ -13,11 +13,10 @@ export const initialSessionEndFlow: SessionEndFlow = {
   running: false,
 };
 
-// completed: この端末のサインインを終えられた。failed: 終えられなかった(理由つき)。discarded: 完了を待つ間に画面が離れたため、結果を破棄した。
+// completed: この端末のサインインを終えられた。failed: 終えられなかった(理由つき)。
 export type SignOutVerdict =
   | { readonly kind: "completed" }
-  | { readonly kind: "failed"; readonly failure: AuthFailure }
-  | { readonly kind: "discarded" };
+  | { readonly kind: "failed"; readonly failure: AuthFailure };
 
 // サインアウトを始める。実行中なら始めない。
 export function beginSignOut(
@@ -27,15 +26,12 @@ export function beginSignOut(
   return { state: { ...flow, running: true }, request: true };
 }
 
-// サインアウトの呼び出しの後に観測したこと。画面が離れていれば、観測しない(discarded)。
+// サインアウトの呼び出しの後に観測したこと。
 // statusは、呼び出しの後に読んだこの端末のサインインの状態。failureは、呼び出しの失敗(無ければnull)。
-export type SignOutObservation =
-  | { readonly kind: "discarded" }
-  | {
-      readonly kind: "observed";
-      readonly status: SessionStatus;
-      readonly failure: AuthFailure | null;
-    };
+export type SignOutObservation = {
+  readonly status: SessionStatus;
+  readonly failure: AuthFailure | null;
+};
 
 // サインアウトの結果を判定し、実行中を解く。
 // 終えられたかは、呼び出しの成否でなく、呼び出しの後にこの端末が未認証と確かめられたか(喪失の定義と同じ)で決める。
@@ -45,9 +41,6 @@ export function endSignOut(
   observation: SignOutObservation,
 ): Step<SessionEndFlow, SignOutVerdict> {
   const settled = { ...flow, running: false };
-  if (observation.kind === "discarded") {
-    return { state: settled, result: { kind: "discarded" } };
-  }
   if (lostByStatus(observation.status)) {
     return { state: settled, result: { kind: "completed" } };
   }

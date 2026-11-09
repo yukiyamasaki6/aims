@@ -71,7 +71,6 @@ function setup(
 
 type Authority = ReturnType<typeof setup>["authority"];
 
-const mounted = { isMounted: () => true };
 const signedOut: SignInChange = { kind: "signed-out" };
 
 async function flush() {
@@ -91,7 +90,7 @@ describe("サインアウト", () => {
       });
 
       // When
-      const result = await session.signOut(mounted);
+      const result = await session.signOut();
 
       // Then
       expect(result).toEqual({ kind: "ignored" });
@@ -117,7 +116,7 @@ describe("サインアウト", () => {
         state.status = "unauthenticated";
 
         // When
-        const result = await session.signOut(mounted);
+        const result = await session.signOut();
 
         // Then
         expect(result).toEqual({ kind: "ignored" });
@@ -156,52 +155,13 @@ describe("サインアウト", () => {
         state.status = status;
 
         // When
-        const result = await session.signOut(mounted);
+        const result = await session.signOut();
 
         // Then
         expect(result).toEqual({ kind: "failed", failure: expected });
         expect(page.replace).not.toHaveBeenCalled();
       },
     );
-  });
-
-  describe("完了を待つ間に離れた場合", () => {
-    it("終了の応答の前に離れたら、状態を読んだ上で結果を破棄し、遷移しない", async () => {
-      // Given
-      let isMounted = true;
-      const { session, authority, page, state } = setup({
-        signOutHere: async () => {
-          isMounted = false;
-          return null;
-        },
-      });
-      state.status = "unauthenticated";
-
-      // When
-      const result = await session.signOut({ isMounted: () => isMounted });
-
-      // Then
-      expect(result).toEqual({ kind: "ignored" });
-      expect(authority.readSession).toHaveBeenCalledOnce();
-      expect(page.replace).not.toHaveBeenCalled();
-    });
-
-    it("読み取りの応答の前に離れたら、未認証でも結果を破棄し、遷移しない", async () => {
-      // Given
-      let isMounted = true;
-      const { session, authority, page } = setup();
-      authority.readSession.mockImplementation(async () => {
-        isMounted = false;
-        return readingOf("unauthenticated");
-      });
-
-      // When
-      const result = await session.signOut({ isMounted: () => isMounted });
-
-      // Then
-      expect(result).toEqual({ kind: "ignored" });
-      expect(page.replace).not.toHaveBeenCalled();
-    });
   });
 
   describe("保存先が使えない環境", () => {
@@ -222,7 +182,7 @@ describe("サインアウト", () => {
       state.status = "authenticated";
 
       // When
-      const result = await session.signOut(mounted);
+      const result = await session.signOut();
 
       // Then
       expect(result).toEqual({
@@ -245,8 +205,8 @@ describe("サインアウト", () => {
 
       // When
       const [first, second] = await Promise.all([
-        session.signOut(mounted),
-        session.signOut(mounted),
+        session.signOut(),
+        session.signOut(),
       ]);
 
       // Then
@@ -260,28 +220,14 @@ describe("サインアウト", () => {
       const { session, authority } = setup({
         signOutHere: async () => ({ kind: "rate_limited" }),
       });
-      await session.signOut(mounted);
+      await session.signOut();
 
       // When
-      const result = await session.signOut(mounted);
+      const result = await session.signOut();
 
       // Then
       expect(result.kind).toBe("failed");
       expect(authority.signOutHere).toHaveBeenCalledTimes(2);
-    });
-
-    it("離れて結果を破棄した後は、実行中が解かれて、再び開始できる", async () => {
-      // Given
-      const { session, state } = setup();
-      const discarded = await session.signOut({ isMounted: () => false });
-      state.status = "unauthenticated";
-
-      // When
-      const result = await session.signOut(mounted);
-
-      // Then
-      expect(discarded).toEqual({ kind: "ignored" });
-      expect(result).toEqual({ kind: "ignored" });
     });
   });
 
@@ -317,7 +263,7 @@ describe("サインアウト", () => {
         session.watch();
         const response = Promise.withResolvers<void>();
         const waiting = hold(authority, response.promise);
-        const running = session.signOut(mounted);
+        const running = session.signOut();
         await vi.waitFor(() => expect(waiting).toHaveBeenCalledOnce());
 
         // When
@@ -347,7 +293,7 @@ describe("サインアウト", () => {
       });
 
       // When
-      await session.signOut(mounted);
+      await session.signOut();
 
       // Then
       expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
@@ -360,7 +306,7 @@ describe("サインアウト", () => {
       });
       const response = Promise.withResolvers<CallResult>();
       authority.signOutHere.mockReturnValue(response.promise);
-      const running = session.signOut(mounted);
+      const running = session.signOut();
       state.status = "unauthenticated";
       session.watch();
       await flush();
@@ -375,33 +321,23 @@ describe("サインアウト", () => {
       expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
     });
 
-    it.each([
-      ["失敗", false],
-      ["破棄", true],
-    ] as const)(
-      "サインアウトの%sの後に見張りが喪失を検知したときは、遷移元を付けて遷移する",
-      async (_name, leaves) => {
-        // Given
-        let isMounted = true;
-        const { session, page, emit } = setup({
-          signOutHere: async () => {
-            if (leaves) isMounted = false;
-            return { kind: "rate_limited" };
-          },
-          here: "/rounds/new",
-        });
-        session.watch();
-        await session.signOut({ isMounted: () => isMounted });
+    it("サインアウトの失敗の後に見張りが喪失を検知したときは、遷移元を付けて遷移する", async () => {
+      // Given
+      const { session, page, emit } = setup({
+        signOutHere: async () => ({ kind: "rate_limited" }),
+        here: "/rounds/new",
+      });
+      session.watch();
+      await session.signOut();
 
-        // When
-        emit(signedOut);
+      // When
+      emit(signedOut);
 
-        // Then
-        expect(page.replace).toHaveBeenCalledExactlyOnceWith(
-          "/signin?returnTo=%2Frounds%2Fnew",
-        );
-      },
-    );
+      // Then
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith(
+        "/signin?returnTo=%2Frounds%2Fnew",
+      );
+    });
   });
 });
 
@@ -466,7 +402,7 @@ describe("セッション喪失の見張り", () => {
       // Given
       const { session, authority, page, emit } = setup();
       authority.signOutHere.mockReturnValue(new Promise(() => {}));
-      void session.signOut(mounted);
+      void session.signOut();
       session.watch();
 
       // When
