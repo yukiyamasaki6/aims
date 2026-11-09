@@ -31,14 +31,14 @@
 機能は2つで、依存は同期からラウンドの一方向である(ラウンドは同期を知らない)。パスは`apps/web/src/`からの相対で示す。
 
 - ラウンド(`features/rounds/`): 業務の規則、端末の記録、画面に渡す正しい状態と変更の方法、送信の機構(送信器、列ごとの送信の状態、送れる要求の計画、失敗の分類、操作の送信と確定の記録)、ベースの取得と反映を持つ。
-- 同期(`features/round-sync/`): 契機を受けて、いつ取り直すかを決める唯一の手続きと、契機の受け取りを持つ。他の機能へ公開する名前が無いため、入口を置かない。ラウンドの入口が公開する記録の制御`RoundRecordControl`(4操作: `start`、`stop`、`matchUser`、`signInChanged`)と、取り直しの制御`RoundRefreshControl`(5操作: `refreshNeeds`、`onRefreshNeeds`、`refreshAll`、`refreshRound`、`reset`)の、平らな操作だけを使う。送信の内部の概念(送信の待ち、保留、リトライ待機、衝突、lane、失敗の分類)は境界を越えない。サインインの変化への反応(保留の再開)と、通信の回復での再送は、ラウンドが決める。利用者の切り替えはラウンドが行わず、認証の見張りが記録の利用者(`matchUser`)との不一致でページ全体を読み込み直す。
+- 同期(`features/round-sync/`): 契機を受けて、いつ取り直すかを決める唯一の手続きと、契機の受け取りを持つ。他の機能へ公開する名前が無いため、入口を置かない。ラウンドの入口が公開する記録の制御`RoundRecordControl`(4操作: `start`、`stop`、`isRecordUser`、`signInChanged`)と、取り直しの制御`RoundRefreshControl`(5操作: `refreshNeeds`、`onRefreshNeeds`、`refreshAll`、`refreshRound`、`reset`)の、平らな操作だけを使う。送信の内部の概念(送信の待ち、保留、リトライ待機、衝突、lane、失敗の分類)は境界を越えない。サインインの変化への反応(保留の再開)と、通信の回復での再送は、ラウンドが決める。利用者の切り替えはラウンドが行わず、認証の見張りが記録の利用者(`isRecordUser`)との不一致でページ全体を読み込み直す。
 - 画面は、画面ごとの文脈から受け取る状態と変更の方法(一覧は`RoundsListStore`、作成は`NewRoundStore`、詳細は`RoundDetailStore`)だけを使う。共通の構造は[`rounds/design.md`](../design.md)に従う。取得の状態(読み込み中、オフライン、見つからない、エラー)は、画面に渡す見え方の型に持たせる。画面は「開いた」「もう一度読む」を依頼するだけで、取得と反映の時点は同期が決める。
 - パッケージ: 画面は`react`、端末の保存は`idb`(`lib/local-op-log/`だけ)、データベースは`@supabase/supabase-js`(機能では認証のインフラ層だけ。他は`lib/supabase/`)を使う。ラウンドと同期は、非画面のパッケージを直接参照しない。
 
 | ファイル | 層 | 内容 |
 | :--- | :--- | :--- |
 | `app/layout.tsx` | 入口 | ルートレイアウト。`<RootClientEntry>`で`SerwistProvider`と`children`を包む |
-| `app/root-client-entry.tsx` | 入口(クライアントの処理の部分) | 部品を`useState`の初期化で1度だけ生成して結び、効果で識別情報の記録と契機の手続きを始める。3つの窓口をそれぞれの文脈(`RoundsListStoreProvider`、`NewRoundStoreProvider`、`RoundDetailStoreProvider`)で画面へ渡し、セッションの手続き(`createSession`。記録の制御を記録の利用者の照合に、識別情報の記録を書き込みに受ける)を`SessionProvider`(`features/auth/ui`)で渡し、`RoundBaseRefresher`と`SwUpdateActivator`(`features/offline-pwa/ui`。更新の切り替えの手続きを受ける)を描き、効果で更新の切り替えの手続きも始める |
+| `app/root-client-entry.tsx` | 入口(クライアントの処理の部分) | 部品を`useState`の初期化で1度だけ生成して結び、効果で識別情報の記録と契機の手続きを始める。3つの窓口をそれぞれの文脈(`RoundsListStoreProvider`、`NewRoundStoreProvider`、`RoundDetailStoreProvider`)で画面へ渡し、セッションの手続き(`createSession`。記録の制御を記録の利用者の照合に受ける)を`SessionProvider`(`features/auth/ui`)で渡し、`RoundBaseRefresher`と`SwUpdateActivator`(`features/offline-pwa/ui`。更新の切り替えの手続きを受ける)を描き、効果で更新の切り替えの手続きも始める |
 | `features/rounds/domain/sync-events.ts` | domain | 操作の型。操作はクライアント生成のイベントIDを持つ。`round.updated`と`distance.updated`は、変えた項目だけの差分(`changes`)を持つ。矢の操作(`shot.recorded`・`shot.cleared`)は矢のID(`shotId`)で矢を指し、`shot.recorded`の射手(`shooterId`)と射順(`shotNumber`)は、変えるときだけ持つ。列の削除の有無`hasRoundDeletion`と、列のID(`round:<roundId>`)の変換 |
 | `features/rounds/domain/round-op-conflicts.ts` | domain | 操作の衝突の表と、並べる単位(lane)・送る単位の上限。矢の操作どうしは、同じ矢(`shotId`)か同じエンドなら衝突とする |
 | `features/rounds/domain/round-record.ts` | domain | 1つのラウンドの端末の記録(ベース、操作の列、外した操作、保存の目印、送信中の印)を、変更しない値と関数にしたもの。取り込み(新しい方のベース、共有の組のベースを取ったときだけ組から無くなった確定済みの操作を外す)、確定の反映、効かなかった操作の除去 |
@@ -84,7 +84,7 @@
 | 契機 | 反応 |
 | :--- | :--- |
 | 開始 | `sync.start(端末の識別情報の利用者)`。開始の中で常駐の一括の取得を1回頼む(サインインの通知を待たない) |
-| サインインの変化(終了を含む) | `sync.signInChanged(change)`。signed-inは保留した送信を戻し(別の利用者の送信は送信器の照合が保留のままにする)、サインアウトでは何もしない。利用者の無い変化と判断できない変化は何もしない。記録の利用者と違う利用者のサインインは、`(main)`の間は認証の見張りが識別情報を書いて今の場所を読み込み直し、新しい文書がその利用者の記録で起動する。サインイン・サインアップの完了は、それ自体がページ全体の置き換えで、新しい文書が最初からその利用者の記録で起動するので、見張りは読み込み直さない |
+| サインインの変化(終了を含む) | `sync.signInChanged(change)`。signed-inは保留した送信を戻し(別の利用者の送信は送信器の照合が保留のままにする)、サインアウトでは何もしない。利用者の無い変化と判断できない変化は何もしない。記録の利用者と違う利用者のサインインは、`(main)`の間は認証の見張りが今の場所を読み込み直し(識別情報は記録が書く)、新しい文書がその利用者の記録で起動する。サインイン・サインアップの完了は、それ自体がページ全体の置き換えで、新しい文書が最初からその利用者の記録で起動するので、見張りは読み込み直さない |
 | 通信の復帰 | 上の`sync.resume()`。送信器は通信の回復を自分で購読し、リトライ待機の要求をすぐに再送する |
 | 通信の復帰、画面が見える状態 | `sync.resume()`(常駐の取得を頼む)。切断は購読しない |
 

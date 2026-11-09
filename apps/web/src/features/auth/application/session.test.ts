@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionStatus } from "../domain/auth-change";
 import type { AuthFailure } from "../domain/auth-failure";
-import type { UserMatch } from "../domain/session-end-flow";
 import type { SignInChange } from "./auth-changes";
 import type { CallResult } from "./call-result";
 import { createSession, type SessionReading } from "./session";
@@ -25,8 +24,6 @@ function setup(
     signOutHere?: () => Promise<AuthFailure | null>;
     check?: () => Promise<SessionStatus>;
     here?: string;
-    // 識別情報を保存できない環境(書いても読み戻せない)にする。
-    canStore?: boolean;
   } = {},
 ) {
   const listeners: Array<(event: SignInChange) => void> = [];
@@ -52,29 +49,18 @@ function setup(
   };
   // 記録の利用者は"user-1"(文書の間、変わらない)。
   const recordUser = {
-    matchUser: vi.fn((userId: string): UserMatch => {
-      return userId === "user-1" ? "same" : "other";
-    }),
-  };
-  const stored: { userId: string | null } = { userId: null };
-  const identity = {
-    read: vi.fn(() => stored.userId),
-    write: vi.fn((userId: string | null) => {
-      if (options.canStore !== false) stored.userId = userId;
-    }),
+    isRecordUser: vi.fn((userId: string) => userId === "user-1"),
   };
   const session = createSession({
     authenticator: authority,
     pageReplace: page,
     recordUser,
-    identity,
   });
   return {
     session,
     authority,
     page,
     recordUser,
-    identity,
     state,
     unsubscribe,
     emit(event: SignInChange) {
@@ -437,9 +423,9 @@ describe("セッション喪失の見張り", () => {
   });
 
   describe("記録の利用者と違う利用者のサインイン", () => {
-    it("記録の利用者と同じ利用者のsigned-inでは、識別情報に触れず、置き換えない", () => {
+    it("記録の利用者と同じ利用者のsigned-inでは、置き換えない", () => {
       // Given
-      const { session, page, identity, emit } = setup();
+      const { session, page, emit } = setup();
       session.watch();
 
       // When
@@ -447,12 +433,11 @@ describe("セッション喪失の見張り", () => {
 
       // Then
       expect(page.replace).not.toHaveBeenCalled();
-      expect(identity.write).not.toHaveBeenCalled();
     });
 
-    it("別の利用者のsigned-inでは、識別情報を新しい利用者へ書いてから、今の場所でページ全体を1回置き換える", () => {
+    it("別の利用者のsigned-inでは、今の場所でページ全体を1回置き換える", () => {
       // Given
-      const { session, page, identity, emit } = setup({
+      const { session, page, emit } = setup({
         here: "/rounds/r1?a=1",
       });
       session.watch();
@@ -461,17 +446,13 @@ describe("セッション喪失の見張り", () => {
       emit({ kind: "signed-in", userId: "user-2" });
 
       // Then
-      expect(identity.write).toHaveBeenCalledExactlyOnceWith("user-2");
       expect(page.replace).toHaveBeenCalledExactlyOnceWith("/rounds/r1?a=1");
-      expect(identity.write.mock.invocationCallOrder[0]).toBeLessThan(
-        page.replace.mock.invocationCallOrder[0] ?? 0,
-      );
     });
 
-    it("記録の利用者がいない(unowned)ときのsigned-inでも、今の場所を置き換える", () => {
+    it("記録の利用者と照合できないときのsigned-inでも、今の場所を置き換える", () => {
       // Given
       const { session, page, recordUser, emit } = setup({ here: "/rounds" });
-      recordUser.matchUser.mockReturnValue("unowned");
+      recordUser.isRecordUser.mockReturnValue(false);
       session.watch();
 
       // When
@@ -481,22 +462,9 @@ describe("セッション喪失の見張り", () => {
       expect(page.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
     });
 
-    it("識別情報を読み戻せない(保存できない環境)ときは、置き換えない", () => {
+    it("サインアウトの実行中は、置き換えない", () => {
       // Given
-      const { session, page, identity, emit } = setup({ canStore: false });
-      session.watch();
-
-      // When
-      emit({ kind: "signed-in", userId: "user-2" });
-
-      // Then
-      expect(identity.write).toHaveBeenCalledExactlyOnceWith("user-2");
-      expect(page.replace).not.toHaveBeenCalled();
-    });
-
-    it("サインアウトの実行中は、識別情報に触れず、置き換えない", () => {
-      // Given
-      const { session, authority, page, identity, emit } = setup();
+      const { session, authority, page, emit } = setup();
       authority.signOutHere.mockReturnValue(new Promise(() => {}));
       void session.signOut(mounted);
       session.watch();
@@ -506,7 +474,6 @@ describe("セッション喪失の見張り", () => {
 
       // Then
       expect(page.replace).not.toHaveBeenCalled();
-      expect(identity.write).not.toHaveBeenCalled();
     });
 
     it("見張りをやめた後のsigned-inでは、置き換えない", () => {

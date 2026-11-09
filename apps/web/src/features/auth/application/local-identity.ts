@@ -1,6 +1,6 @@
 import type { SignInChanges } from "./auth-changes";
 
-// 端末の識別情報の書き込み。nullは消す。書けないとき(保存先が使えない環境)は何もしない。例外は投げない。
+// 端末の識別情報の書き込み。nullは消す。保存先が使えない環境は想定しない。
 export type IdentityWriter = {
   write(userId: string | null): void;
 };

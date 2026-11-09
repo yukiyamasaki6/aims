@@ -9,7 +9,7 @@ export type RoundRecordControl = {
   start(userId: string | null): void;
   // 送信を止め、その後に記録を止める。
   stop(): void;
-  matchUser(userId: string | null): "same" | "other" | "unowned";
+  isRecordUser(userId: string | null): boolean;
   // サインインの変化に反応する。利用者のいる変化では、保留した送信を戻す(別の利用者の送信は送信器が保留したままにする)。サインアウトでは何もしない(利用者の切り替えは、見張りがページ全体を読み込み直して行う)。
   signInChanged(change: SignInChange): void;
 };
@@ -28,7 +28,7 @@ export function createRoundRecordControl(deps: {
       sender.stop();
       hub.stop();
     },
-    matchUser: (userId) => matchRecordUser(hub.userId(), userId),
+    isRecordUser: (userId) => matchRecordUser(hub.userId(), userId) === "same",
     signInChanged(change) {
       if (change.kind === "signed-in") sender.resumeHeld();
     },

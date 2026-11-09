@@ -60,17 +60,14 @@ export function endSignOut(
   };
 }
 
-// 通知の利用者と、記録の利用者の関係。same: 同じ。other: 別の利用者。unowned: 記録の利用者がいない。
-export type UserMatch = "same" | "other" | "unowned";
-
 // ページ全体を置き換える先を返す(置き換えないときはnull)。状態は変えない。
 // 同じ喪失が重ねて届いても、同じ場所から同じ先を作るので、同じ置き換えになる。
 // サインアウトの実行中は置き換えない(サインアウトの判定に委ねる)。
-// matchは、サインインの通知の利用者と記録の利用者の関係で、sameなら置き換えない(利用者が替わっていない)。喪失(利用者の照合を伴わない)はother扱いにして、常に置き換える。
+// sameUserが真(利用者が替わっていない)なら置き換えない。喪失(利用者の照合を伴わない)は常に置き換える。
 export function leave(
   flow: SessionEndFlow,
   destination: string,
-  match: UserMatch = "other",
+  sameUser = false,
 ): string | null {
-  return flow.running || match === "same" ? null : destination;
+  return flow.running || sameUser ? null : destination;
 }

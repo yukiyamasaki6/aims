@@ -9,23 +9,13 @@ const STORAGE_KEY = "aims:local-user-id";
 // 他の機能(ラウンドの参照データ、同期の開始)は、入口から`IdentityReader`の型で受け取って使う。
 export function createBrowserIdentityStore(): IdentityWriter & IdentityReader {
   return {
-    // この端末に最後にサインインした利用者(いなければnull)。保存先が使えないときもnull。例外は投げない。
-    read: () => {
-      try {
-        return window.localStorage.getItem(STORAGE_KEY);
-      } catch {
-        return null;
-      }
-    },
+    // この端末に最後にサインインした利用者(いなければnull)。保存先(`localStorage`)が使えない環境は想定しない。
+    read: () => window.localStorage.getItem(STORAGE_KEY),
     write: (userId) => {
-      try {
-        if (userId) {
-          window.localStorage.setItem(STORAGE_KEY, userId);
-        } else {
-          window.localStorage.removeItem(STORAGE_KEY);
-        }
-      } catch {
-        // プライベートブラウジングなどでlocalStorageが使えない場合(windowが無い場合を含む)は何もできない。
+      if (userId) {
+        window.localStorage.setItem(STORAGE_KEY, userId);
+      } else {
+        window.localStorage.removeItem(STORAGE_KEY);
       }
     },
   };

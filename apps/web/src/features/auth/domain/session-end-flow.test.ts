@@ -154,17 +154,16 @@ describe("leave", () => {
   });
 
   it.each([
-    ["別の利用者", "other", "/rounds/new"],
-    ["記録の利用者がいない", "unowned", "/rounds/new"],
-    ["同じ利用者", "same", null],
+    ["別の利用者または記録の利用者がいない", false, "/rounds/new"],
+    ["同じ利用者", true, null],
   ] as const)(
     "サインインの通知の利用者が%s(%s)のとき、行き先は%sになる",
-    (_name, match, expected) => {
+    (_name, sameUser, expected) => {
       // Given
       const state = initialSessionEndFlow;
 
       // When
-      const result = leave(state, "/rounds/new", match);
+      const result = leave(state, "/rounds/new", sameUser);
 
       // Then
       expect(result).toBe(expected);
@@ -176,7 +175,7 @@ describe("leave", () => {
     const running = beginSignOut(initialSessionEndFlow).state;
 
     // When
-    const result = leave(running, "/rounds/new", "other");
+    const result = leave(running, "/rounds/new", false);
 
     // Then
     expect(result).toBeNull();

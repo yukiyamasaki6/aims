@@ -203,13 +203,12 @@ function composeOffline(inputs: Inputs, records: Records) {
 }
 
 // セッション(サインアウトと、セッションの喪失の見張り)。
-// 記録の利用者の照合は記録の制御に、端末の識別情報は入口の同じ部品に任せる。
+// 記録の利用者の照合は記録の制御に任せる。
 function composeSession(inputs: Inputs, records: Records) {
   return createSession({
     authenticator: inputs.authenticator,
     pageReplace: createBrowserPageLoad(),
     recordUser: records.control,
-    identity: inputs.identityStore,
   });
 }
 
