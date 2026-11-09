@@ -5,6 +5,7 @@ import { type ReactNode, useState } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSession } from "@/features/auth/application/session";
+import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SessionProvider } from "@/features/auth/ui/session-context";
@@ -113,6 +114,7 @@ function SessionWrapper({ children }: { children: ReactNode }) {
       authenticator: createSupabaseAuth(createClient),
       pageReplace: createBrowserPageLoad(),
       recordUser: { isRecordUser: () => true },
+      identity: createBrowserIdentityStore(),
     }),
   );
   return (

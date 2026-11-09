@@ -9,6 +9,8 @@ import {
 } from "../domain/session-end-flow";
 import type { SignInChanges } from "./auth-changes";
 import { type CallResult, failureOf } from "./call-result";
+import type { IdentityReader } from "./identity-reader";
+import type { IdentityWriter } from "./local-identity";
 import type { PageReplace } from "./page-replace";
 
 // サインインの状態の読み取り結果。認証済みのときだけ、利用者のIDを持つ。
@@ -49,6 +51,7 @@ type Dependencies = {
   authenticator: SessionAuthenticator;
   pageReplace: PageReplace;
   recordUser: RecordUser;
+  identity: IdentityReader & IdentityWriter;
 };
 
 export type Session = {
@@ -60,12 +63,13 @@ export type Session = {
 
 // サインアウトは、この端末のサインインの終了を頼んだ後、サインインの状態を読み、未認証なら終えられたとしてサインインへ移す。
 // セッションの喪失(サインアウトの通知、更新の拒否、確認の結果の未認証)は見張りが検知して移す。サインアウトの実行中の喪失は、サインアウトの判定に委ねる。
-// サインインの通知の利用者が記録の利用者と違うとき(起動時の復元の不一致、別の利用者のサインイン)は、今の場所を読み込み直す。端末の識別情報は、同じ通知で`local-identity`が書く。新しい文書は、その利用者の記録で起動する。
+// サインインの通知の利用者が記録の利用者と違うとき(起動時の復元の不一致、別の利用者のサインイン)は、新しい利用者を端末の識別情報へ書き、今の場所を読み込み直す。新しい文書は、その利用者の記録で起動する。
 // 実行中の状態(SessionEndFlow)は、この手続きが1つ持ち、サインアウトと見張りの両方が使う。
 export function createSession({
   authenticator,
   pageReplace,
   recordUser,
+  identity,
 }: Dependencies): Session {
   let flow = initialSessionEndFlow;
 
@@ -93,13 +97,17 @@ export function createSession({
   }
 
   // 記録の利用者と違う利用者のサインインは、今の場所を読み込み直す。
+  // 先に識別情報へ書いて読み戻し、一致しないとき(保存先が使えない環境)は、読み込み直しを繰り返さないために置き換えない。
   function reloadFor(userId: string) {
     const target = leave(
       flow,
       pageReplace.here(),
       recordUser.isRecordUser(userId),
     );
-    if (target !== null) pageReplace.replace(target);
+    if (target === null) return;
+    identity.write(userId);
+    if (identity.read() !== userId) return;
+    pageReplace.replace(target);
   }
 
   // 起動時に1回、サインインの状態を確かめる。保存先が空の起動ではサインアウトの通知が来ないため、これが要る。
