@@ -123,7 +123,7 @@ test("登録済みのメールアドレスで送信すると、コード入力�
   // 認証コードの代わりに、登録済みを知らせる案内のメールが届く。
   const notice = await getEmailFromMailpit(
     email,
-    "AIMS 登録済みのメールアドレスです",
+    "【AIMS】登録済みのメールアドレス",
   );
   expect(notice.html).not.toMatch(/\d{6}/);
 });
