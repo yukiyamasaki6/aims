@@ -12,7 +12,6 @@ export function LogoImage() {
       alt={t("logoAlt")}
       width={LOGO_WIDTH}
       height={24}
-      unoptimized
       className="block h-6 w-auto"
     />
   );
