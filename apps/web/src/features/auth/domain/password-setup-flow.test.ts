@@ -116,42 +116,6 @@ describe("パスワード設定の流れの遷移", () => {
     });
   });
 
-  describe("passwordSet", () => {
-    it.each([
-      [
-        "拒否の理由",
-        {
-          error: "weak_password",
-          fieldErrors: {},
-        },
-      ],
-      [
-        "欄のエラー",
-        {
-          error: null,
-          fieldErrors: { password: "required" },
-        },
-      ],
-    ] as const)(
-      "以前の%sを消し、パスワード設定を実行中のままにする",
-      (_name, errors) => {
-        // Given
-        const flow = flowWith({
-          step: "password",
-          pending: "setPassword",
-          captchaToken: "kept",
-          ...errors,
-        });
-
-        // When
-        const next = passwordSetupReducer(flow, { type: "passwordSet" });
-
-        // Then
-        expect(next).toEqual({ ...flow, error: null, fieldErrors: {} });
-      },
-    );
-  });
-
   describe("failed", () => {
     it.each<[string, AuthFailure, string]>([
       ["unreachable", { kind: "unreachable" }, NETWORK_ERROR_MESSAGE],

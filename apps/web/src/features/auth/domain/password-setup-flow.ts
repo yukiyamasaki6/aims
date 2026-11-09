@@ -140,7 +140,6 @@ export type PasswordSetupEvent =
   | { type: "emailStepReturned" }
   | { type: "codeSent" }
   | { type: "codeConfirmed" }
-  | { type: "passwordSet" }
   | { type: "failed"; failure: AuthFailure }
   | { type: "refused"; failure: AuthFailure };
 
@@ -165,9 +164,6 @@ export function passwordSetupReducer(
             error: null,
             fieldErrors: {},
           };
-    // パスワード設定の成功。遷移の前に以前のエラーを消す。実行中は解除しない(遷移までの二重設定を防ぐ)。
-    case "passwordSet":
-      return { ...flow, error: null, fieldErrors: {} };
     default:
       return settle(flow, event);
   }
