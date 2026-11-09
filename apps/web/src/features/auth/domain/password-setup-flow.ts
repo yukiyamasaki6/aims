@@ -47,6 +47,7 @@ type Checked<Request> =
 // 入力の不備は、検査できる全てを示す(invalid)。入力に不備が無くオフラインなら、通信もトークンの消費もせず、オフラインを示す(offline)。
 // 開始できるなら、その操作を実行中にする(started)。
 // 開始では以前のエラーを消す(4操作で同じ)。
+// 実行中の間はエラーを持たない。
 function begin<Request>(
   flow: PasswordSetupFlow,
   operation: Operation,
@@ -174,7 +175,9 @@ type Settlement = Extract<
   { type: "codeSent" | "codeConfirmed" | "failed" | "refused" }
 >;
 
-// 操作の結果。実行中を解除し、結果を反映する。成功は以前のエラーを消し、失敗は理由に差し替える。
+// 操作の結果。実行中を解除し、結果を反映する。
+// 失敗は理由に差し替える。
+// 実行中は`error`・`fieldErrors`が空であること(`begin`が開始で空にし、実行中に変えるのは結果だけ)を前提とし、以前のエラーはここでは消さない。
 // セキュリティチェックのトークンは、コードの送付の成功(codeSent)も失敗(refused)も使ったため消費する。確認とパスワードの設定の失敗(failed)はトークンを使わない。
 function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
   switch (event.type) {
@@ -184,8 +187,6 @@ function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
         step: "code",
         captchaToken: null,
         pending: null,
-        error: null,
-        fieldErrors: {},
         resendCooldown: RESEND_COOLDOWN_SECONDS,
       };
     case "codeConfirmed":
@@ -193,15 +194,12 @@ function settle(flow: PasswordSetupFlow, event: Settlement): PasswordSetupFlow {
         ...flow,
         step: "password",
         pending: null,
-        error: null,
-        fieldErrors: {},
       };
     case "failed":
       return {
         ...flow,
         pending: null,
         error: event.failure.kind,
-        fieldErrors: {},
       };
     case "refused":
       return {
