@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, type TouchEvent, useRef, useState } from "react";
 import { LogoImage } from "@/components/logo-image";
 import { cn } from "@/lib/utils";
 import { HOME_PATH, ROUNDS_PATH } from "@/routes";
@@ -15,23 +15,97 @@ function useOpenState() {
   return { drawerOpen, setDrawerOpen, railOpen, setRailOpen };
 }
 
+type SwipeStart = {
+  x: number;
+  y: number;
+  direction: "pending" | "horizontal" | "ignored";
+};
+
+function useDrawerSwipe(onClose: () => void) {
+  const start = useRef<SwipeStart | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [dragging, setDragging] = useState(false);
+
+  const reset = () => {
+    start.current = null;
+    setDragging(false);
+    setOffset(0);
+  };
+
+  const onTouchStart = (event: TouchEvent) => {
+    const touch = event.touches.length === 1 ? event.touches[0] : null;
+    start.current = touch
+      ? { x: touch.clientX, y: touch.clientY, direction: "pending" }
+      : null;
+  };
+
+  const onTouchMove = (event: TouchEvent) => {
+    const origin = start.current;
+    const touch = event.touches[0];
+    if (!origin || !touch || event.touches.length !== 1) return;
+
+    const horizontal = touch.clientX - origin.x;
+    const vertical = touch.clientY - origin.y;
+    if (
+      origin.direction === "pending" &&
+      Math.max(Math.abs(horizontal), Math.abs(vertical)) > 8
+    ) {
+      origin.direction =
+        horizontal < 0 && Math.abs(horizontal) > Math.abs(vertical) * 1.2
+          ? "horizontal"
+          : "ignored";
+      if (origin.direction === "horizontal") setDragging(true);
+    }
+    if (origin.direction === "horizontal")
+      setOffset(Math.min(0, Math.max(-256, horizontal)));
+  };
+
+  const onTouchEnd = (event: TouchEvent) => {
+    const origin = start.current;
+    const touch = event.changedTouches[0];
+    if (origin?.direction === "horizontal") event.preventDefault();
+    const shouldClose =
+      origin?.direction === "horizontal" &&
+      touch &&
+      touch.clientX - origin.x < -64;
+    reset();
+    if (shouldClose) onClose();
+  };
+
+  return {
+    handlers: { onTouchStart, onTouchMove, onTouchEnd, onTouchCancel: reset },
+    offset,
+    dragging,
+  };
+}
+
 // signOut: 下端に置くサインアウトの操作。入口が渡す。2つの枠に1つずつ置かれる。
 export function LeftPanel({ signOut }: { signOut: ReactNode }) {
   const { drawerOpen, setDrawerOpen, railOpen, setRailOpen } = useOpenState();
   // 個人リンクの押下は、ドロワーの値だけを閉にする。列の値は変えない。
   const closeDrawer = () => setDrawerOpen(false);
+  const swipe = useDrawerSwipe(closeDrawer);
 
   return (
     <>
       <MobileMenuBar onOpen={() => setDrawerOpen(true)} />
 
-      {drawerOpen && <Scrim onClose={closeDrawer} />}
+      <Scrim
+        open={drawerOpen}
+        onClose={closeDrawer}
+        swipe={swipe.handlers}
+        offset={swipe.offset}
+        dragging={swipe.dragging}
+      />
 
       <DrawerFrame
         open={drawerOpen}
         onClose={closeDrawer}
         onNavigate={closeDrawer}
         signOut={signOut}
+        swipe={swipe.handlers}
+        offset={swipe.offset}
+        dragging={swipe.dragging}
       />
 
       <RailFrame
@@ -49,17 +123,31 @@ function DrawerFrame({
   onClose,
   onNavigate,
   signOut,
+  swipe,
+  offset,
+  dragging,
 }: {
   open: boolean;
   onClose: () => void;
   onNavigate: () => void;
   signOut: ReactNode;
+  swipe: ReturnType<typeof useDrawerSwipe>["handlers"];
+  offset: number;
+  dragging: boolean;
 }) {
   const t = useTranslations("navigation");
   return (
     <aside
+      {...swipe}
+      style={{
+        transform: `translateX(${offset}px)`,
+        touchAction: "pan-y pinch-zoom",
+      }}
       className={cn(
-        "fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col overflow-y-auto border-r bg-card text-card-foreground transition-[transform,translate,visibility] duration-200 md:hidden",
+        "fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col overflow-y-auto border-r bg-card text-card-foreground md:hidden",
+        dragging
+          ? "transition-none"
+          : "transition-[transform,translate,visibility] duration-200",
         open ? "translate-x-0" : "invisible",
       )}
     >
@@ -170,14 +258,39 @@ function MobileMenuBar({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-function Scrim({ onClose }: { onClose: () => void }) {
+function Scrim({
+  open,
+  onClose,
+  swipe,
+  offset,
+  dragging,
+}: {
+  open: boolean;
+  onClose: () => void;
+  swipe: ReturnType<typeof useDrawerSwipe>["handlers"];
+  offset: number;
+  dragging: boolean;
+}) {
   const t = useTranslations("navigation");
   return (
     <button
+      {...swipe}
+      style={{
+        opacity: open ? Math.max(0, 1 + offset / 256) : 0,
+        touchAction: "pan-y pinch-zoom",
+      }}
       type="button"
       aria-label={t("leftPanelCloseMenu")}
+      aria-hidden={!open}
+      tabIndex={open ? 0 : -1}
       onClick={onClose}
-      className="fixed inset-0 z-40 bg-black/40 md:hidden"
+      className={cn(
+        "fixed inset-0 z-40 bg-black/40 md:hidden",
+        dragging
+          ? "transition-none"
+          : "transition-[opacity,visibility] duration-200",
+        open ? "visible" : "invisible pointer-events-none",
+      )}
     />
   );
 }
