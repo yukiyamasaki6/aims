@@ -47,3 +47,32 @@ test("端末の識別情報がサインイン中の利用者と違う状態で�
   await page.waitForTimeout(2_000);
   expect(loads).toBe(2);
 });
+
+test("端末の識別情報を書き込めない環境で、識別情報が別の利用者のまま開いても、ページ全体の読み込み直しを繰り返さない", async ({
+  page,
+}) => {
+  await signUpAndSignIn(page, {
+    email: `user-switch-nostore-${Date.now()}@aims.test`,
+    password: "password1",
+  });
+  await waitForHydration(page);
+  await page.evaluate(
+    (key) => window.localStorage.setItem(key, "another-user"),
+    IDENTITY_KEY,
+  );
+  // 以降の文書では、書き込みも消去も何もしない(例外は出ない)。
+  await page.addInitScript(() => {
+    Storage.prototype.setItem = () => {};
+    Storage.prototype.removeItem = () => {};
+  });
+  let loads = 0;
+  page.on("load", () => {
+    loads += 1;
+  });
+  await page.goto("/rounds");
+  await waitForHydration(page);
+
+  // 書き込みを読み戻せないため、見張りは読み込み直さない(1回目のgotoだけ)。
+  await page.waitForTimeout(3_000);
+  expect(loads).toBe(1);
+});

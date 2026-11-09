@@ -13,9 +13,7 @@ type Reading = Awaited<ReturnType<SessionReader["readSession"]>>;
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 // 同期の手続きは、いつ取得して反映し、いつ取り直すかを決める。記録の制御、取り直しの制御、サインインの確認、通信の可否は約束で差し替える。
-function setup(
-  options: { reading?: Reading; match?: "same" | "other" | "unowned" } = {},
-) {
+function setup(options: { reading?: Reading; same?: boolean } = {}) {
   const connectivity = createFakeConnectivity();
   // 同期の手続きは通信の可否を読むだけで、通知は契機の受け取りが同期の操作へ変えるため、可否だけを替える。
   const network = {
@@ -28,13 +26,11 @@ function setup(
   let notifyNeeds: () => void = () => {};
   const refreshAll = vi.fn(async (): Promise<void> => {});
   const refreshRound = vi.fn(async (_roundId: string): Promise<void> => {});
-  const state = {
-    match: options.match ?? ("same" as "same" | "other" | "unowned"),
-  };
+  const same = options.same ?? true;
   const control = {
     start: vi.fn((_userId: string | null) => {}),
     stop: vi.fn(),
-    matchUser: vi.fn(() => state.match),
+    isRecordUser: vi.fn(() => same),
     signInChanged: vi.fn(),
   } satisfies RoundRecordControl;
   const refresh = {
@@ -165,23 +161,18 @@ describe("常駐の一括の取得", () => {
   });
 
   it.each([
-    ["未認証", { status: "unauthenticated" } as Reading, "same"],
-    ["認証が不明", { status: "unknown" } as Reading, "same"],
+    ["未認証", { status: "unauthenticated" } as Reading, true],
+    ["認証が不明", { status: "unknown" } as Reading, true],
     [
-      "別の利用者の記録(other)",
+      "記録の利用者と違う",
       { status: "authenticated", userId: "user-1" } as Reading,
-      "other",
-    ],
-    [
-      "利用者のない記録(unowned)",
-      { status: "authenticated", userId: "user-1" } as Reading,
-      "unowned",
+      false,
     ],
   ] as const)(
     "%sのときは、開始でも取得しない",
-    async (_name, reading, match) => {
+    async (_name, reading, same) => {
       // Given
-      const t = setup({ reading, match });
+      const t = setup({ reading, same });
 
       // When
       t.sync.start("user-1");

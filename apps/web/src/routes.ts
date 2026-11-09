@@ -8,7 +8,7 @@
 export const OFFLINE_PATH = "/offline";
 
 // プリキャッシュの枠のURL。proxy.tsのmatcher外の/__shell/*で配り、未認証での登録でも/signinのHTMLを保存しない。
-export const SHELL_PREFIX = "/__shell";
+const SHELL_PREFIX = "/__shell";
 
 // 枠の経路に対応する、配布用のURL。
 export function shellUrlOf(framePath: string): string {

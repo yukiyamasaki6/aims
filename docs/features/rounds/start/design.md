@@ -38,7 +38,7 @@
 - `features/rounds/infrastructure/round-queries.ts`の`RoundQueries.presets`: 個人（`owner_id`が自分）と公式（`owner_id`が`null`）を1回の取得で得る。`DatabaseGateway`の`select`で行い、`QueryOutcome`(`domain/query-outcome.ts`)を返す。応答を種類へ写すのはインフラ層の`db-response-outcome.ts`である。
 - `features/rounds/domain/preset.ts`: ドメイン層。プリセットの値、並びの比較`comparePresets`、並べて個人と公式に振り分ける`presetsOf`、距離の並び、個人プリセットの除去。
 - `features/rounds/domain/preset-list-view.ts`: ドメイン層。取得結果から、削除済みを除いた表示と選択中のプリセットを決める`presetListView`。
-- `features/rounds/infrastructure/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。例外は投げない。識別情報は入口から`IdentityReader`で受け取り、読むたびにその時点で読む。
+- `features/rounds/infrastructure/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。保存先の失敗を例外にしない(識別情報の読み出しは対象外)。識別情報は入口から`IdentityReader`で受け取り、読むたびにその時点で読む。
 - `NewRoundStore.startRound`と開始の手続き(`features/rounds/application/round-start.ts`): サインインの状態の確認、選択中プリセットからの作成の操作の組み立て(`features/rounds/domain/round-start.ts`の`roundCreatedDraftOf`がIDを除いた内容を作り、手続きが各要素にIDを振る)、`round.created`の追記を行う。追記の完了の後に、共有の技術の約束`PageNavigation`(`go(path)`)で`roundPath(roundId)`へ進む。実装は`lib/page-navigation/infrastructure/router-page-navigation.ts`で、入口が画面のパッケージの遷移の部品から生成する。
 
 - 並びは、種別、弓種、距離の本数（多い方が先）、先頭の距離（大きい方が先）、作成日時（新しい方が先）の順である。

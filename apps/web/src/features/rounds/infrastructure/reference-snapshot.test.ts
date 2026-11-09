@@ -135,6 +135,9 @@ describe("reference-snapshot", () => {
   });
 
   describe("localStorageが例外を投げる場合", () => {
+    // 端末の識別情報の読み出しは保存先が使えない環境を想定しないため、識別情報は差し替え、スナップショット自身の保存先の失敗の扱いを確かめる。
+    const snapshots = createReferenceSnapshots({ read: () => "user-1" });
+
     beforeEach(() => {
       vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
         throw new Error("denied");

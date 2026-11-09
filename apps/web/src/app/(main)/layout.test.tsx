@@ -113,7 +113,7 @@ function SessionWrapper({ children }: { children: ReactNode }) {
     createSession({
       authenticator: createSupabaseAuth(createClient),
       pageReplace: createBrowserPageLoad(),
-      recordUser: { matchUser: () => "same" },
+      recordUser: { isRecordUser: () => true },
       identity: createBrowserIdentityStore(),
     }),
   );

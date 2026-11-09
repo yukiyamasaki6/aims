@@ -31,7 +31,7 @@
 機能は2つで、依存は同期からラウンドの一方向である(ラウンドは同期を知らない)。パスは`apps/web/src/`からの相対で示す。
 
 - ラウンド(`features/rounds/`): 業務の規則、端末の記録、画面に渡す正しい状態と変更の方法、送信の機構(送信器、列ごとの送信の状態、送れる要求の計画、失敗の分類、操作の送信と確定の記録)、ベースの取得と反映を持つ。
-- 同期(`features/round-sync/`): 契機を受けて、いつ取り直すかを決める唯一の手続きと、契機の受け取りを持つ。他の機能へ公開する名前が無いため、入口を置かない。ラウンドの入口が公開する記録の制御`RoundRecordControl`(4操作: `start`、`stop`、`matchUser`、`signInChanged`)と、取り直しの制御`RoundRefreshControl`(5操作: `refreshNeeds`、`onRefreshNeeds`、`refreshAll`、`refreshRound`、`reset`)の、平らな操作だけを使う。送信の内部の概念(送信の待ち、保留、リトライ待機、衝突、lane、失敗の分類)は境界を越えない。サインインの変化への反応(保留の再開)と、通信の回復での再送は、ラウンドが決める。利用者の切り替えはラウンドが行わず、認証の見張りが記録の利用者(`matchUser`)との不一致でページ全体を読み込み直す。
+- 同期(`features/round-sync/`): 契機を受けて、いつ取り直すかを決める唯一の手続きと、契機の受け取りを持つ。他の機能へ公開する名前が無いため、入口を置かない。ラウンドの入口が公開する記録の制御`RoundRecordControl`(4操作: `start`、`stop`、`isRecordUser`、`signInChanged`)と、取り直しの制御`RoundRefreshControl`(5操作: `refreshNeeds`、`onRefreshNeeds`、`refreshAll`、`refreshRound`、`reset`)の、平らな操作だけを使う。送信の内部の概念(送信の待ち、保留、リトライ待機、衝突、lane、失敗の分類)は境界を越えない。サインインの変化への反応(保留の再開)と、通信の回復での再送は、ラウンドが決める。利用者の切り替えはラウンドが行わず、認証の見張りが記録の利用者(`isRecordUser`)との不一致でページ全体を読み込み直す。
 - 画面は、画面ごとの文脈から受け取る状態と変更の方法(一覧は`RoundsListStore`、作成は`NewRoundStore`、詳細は`RoundDetailStore`)だけを使う。共通の構造は[`rounds/design.md`](../design.md)に従う。取得の状態(読み込み中、オフライン、見つからない、エラー)は、画面に渡す見え方の型に持たせる。画面は「開いた」「もう一度読む」を依頼するだけで、取得と反映の時点は同期が決める。
 - パッケージ: 画面は`react`、端末の保存は`idb`(`lib/local-op-log/`だけ)、データベースは`@supabase/supabase-js`(機能では認証のインフラ層だけ。他は`lib/supabase/`)を使う。ラウンドと同期は、非画面のパッケージを直接参照しない。
 

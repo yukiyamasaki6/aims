@@ -6,14 +6,12 @@ import {
   endSignOut,
   initialSessionEndFlow,
   leave,
-  type UserMatch,
 } from "../domain/session-end-flow";
 import type { SignInChanges } from "./auth-changes";
 import { type CallResult, failureOf } from "./call-result";
 import type { IdentityReader } from "./identity-reader";
 import type { IdentityWriter } from "./local-identity";
 import type { PageReplace } from "./page-replace";
-import type { ViewLifetime } from "./screen-view";
 
 // サインインの状態の読み取り結果。認証済みのときだけ、利用者のIDを持つ。
 // 分類(SessionStatus)の定義はドメインの1か所だけで、この型は分類にIDを足すだけである。
@@ -40,11 +38,11 @@ export type SessionAuthenticator = SignInChanges &
 
 // 記録の利用者(この文書の間、変わらない)との照合。持ち主は他の機能(ラウンドの記録)で、入口が渡す。
 type RecordUser = {
-  matchUser(userId: string): UserMatch;
+  isRecordUser(userId: string): boolean;
 };
 
 // サインアウトの結果。画面が区別するのは、失敗(理由を示して再試行できる)とそれ以外だけである。
-// ignored: 完了(遷移で画面ごと捨てられる)、実行中のため始めなかった、離れたため結果を破棄した、のどれか。
+// ignored: 完了(遷移で画面ごと捨てられる)、実行中のため始めなかった、のどれか。
 export type SignOutResult =
   | { readonly kind: "failed"; readonly failure: AuthFailure }
   | { readonly kind: "ignored" };
@@ -58,7 +56,7 @@ type Dependencies = {
 
 export type Session = {
   // サインアウトを始める。実行中の判定は集約が持ち、実行中に呼ぶと何もしない(ignored)。終えられたら、遷移元を付けずにサインインへ移す。
-  signOut(view: ViewLifetime): Promise<SignOutResult>;
+  signOut(): Promise<SignOutResult>;
   // セッションの喪失と、記録の利用者と違う利用者のサインインを見張る。失ったらサインインへ、違う利用者なら今の場所へ、ページ全体を置き換える。見張りをやめる関数を返す。
   watch(): () => void;
 };
@@ -75,19 +73,13 @@ export function createSession({
 }: Dependencies): Session {
   let flow = initialSessionEndFlow;
 
-  async function signOut(view: ViewLifetime): Promise<SignOutResult> {
+  async function signOut(): Promise<SignOutResult> {
     const start = beginSignOut(flow);
     flow = start.state;
     if (start.request === null) return { kind: "ignored" };
     const failure = failureOf(await authenticator.signOutHere());
     const reading = await authenticator.readSession();
-    // 読んだ後に離れていたら、結果を破棄する。終了の依頼は取り消さない。
-    const ended = endSignOut(
-      flow,
-      view.isMounted()
-        ? { kind: "observed", status: reading.status, failure }
-        : { kind: "discarded" },
-    );
+    const ended = endSignOut(flow, { status: reading.status, failure });
     flow = ended.state;
     if (ended.result.kind === "completed") go(signInHref(null));
     return ended.result.kind === "failed"
@@ -110,7 +102,7 @@ export function createSession({
     const target = leave(
       flow,
       pageReplace.here(),
-      recordUser.matchUser(userId),
+      recordUser.isRecordUser(userId),
     );
     if (target === null) return;
     identity.write(userId);

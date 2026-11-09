@@ -34,9 +34,9 @@ function setup(options: { registered?: boolean } = {}) {
       return () => controllerListeners.delete(listener);
     },
   };
-  let clickListener: ((link: LinkClick | null) => void) | undefined;
+  let clickListener: ((link: LinkClick) => void) | undefined;
   const links = {
-    onClick: vi.fn((listener: (link: LinkClick | null) => void) => {
+    onClick: vi.fn((listener: (link: LinkClick) => void) => {
       clickListener = listener;
       return () => {
         clickListener = undefined;
@@ -64,7 +64,7 @@ function setup(options: { registered?: boolean } = {}) {
     emitControllerChange: () => {
       for (const listener of [...controllerListeners]) listener();
     },
-    click: (link: LinkClick | null) => clickListener?.(link),
+    click: (link: LinkClick) => clickListener?.(link),
     hasListener: () => clickListener !== undefined,
     withheldRegistration() {
       host.getRegistration = vi.fn(
@@ -141,20 +141,6 @@ describe("createUpdateActivation", () => {
       // Then
       expect(link.block).not.toHaveBeenCalled();
       expect(env.persistence.whenPersisted).not.toHaveBeenCalled();
-    });
-
-    it("内部の通常のリンク操作でない操作(null)は、何もしない", async () => {
-      // Given
-      const env = await started();
-      env.registration.waiting = true;
-
-      // When
-      env.click(null);
-      await env.clock.advanceAsync(0);
-
-      // Then
-      expect(env.persistence.whenPersisted).not.toHaveBeenCalled();
-      expect(env.registration.skipWaiting).not.toHaveBeenCalled();
     });
 
     it("登録の保持の前のclickは止めず、遅れて登録が返っても、合図を送らず保存の完了も待たない", async () => {

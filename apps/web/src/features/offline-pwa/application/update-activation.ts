@@ -27,10 +27,10 @@ export type LinkClick = {
   repeat(): void;
 };
 
-// リンクの操作の購読。内部の通常のリンク操作でない操作は、nullで届く。解除する関数を返す。
+// リンクの操作の購読。内部の通常のリンク操作だけが届く。解除する関数を返す。
 // 例外: どれも投げない。
 export type LinkClicks = {
-  onClick(listener: (link: LinkClick | null) => void): () => void;
+  onClick(listener: (link: LinkClick) => void): () => void;
 };
 
 // 保存の途中の操作が全て終わるまで解決しない。
@@ -120,8 +120,8 @@ export function createUpdateActivation(deps: Dependencies): UpdateActivation {
   }
 
   // 待機中の版があれば遷移を止めて、切り替えてから文書を取得させる。
-  function handleClick(link: LinkClick | null) {
-    if (!link || !registration) return;
+  function handleClick(link: LinkClick) {
+    if (!registration) return;
     if (!registration.waiting && !switching) return;
     link.block();
     if (switching) return;

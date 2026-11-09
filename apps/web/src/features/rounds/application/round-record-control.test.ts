@@ -108,25 +108,45 @@ describe("記録の制御", () => {
     control.start("user-1");
     await hub.ready();
     const afterStart = [
-      control.matchUser("user-1"),
-      control.matchUser("user-2"),
+      control.isRecordUser("user-1"),
+      control.isRecordUser("user-2"),
     ];
 
     // Then
     expect(afterStop).toEqual([]);
-    expect(afterStart).toEqual(["same", "other"]);
+    expect(afterStart).toEqual([true, false]);
   });
 
-  it("利用者の照合は、記録の利用者と同じなら same、違えば other を返す", async () => {
+  it("利用者の照合は、記録の利用者と同じなら真、違えば偽を返す", async () => {
     // Given
     const { hub, control } = createRealControl({});
     await hub.append(STREAM, roundUpdated());
 
     // When
-    const matches = [control.matchUser("user-1"), control.matchUser("user-2")];
+    const matches = [
+      control.isRecordUser("user-1"),
+      control.isRecordUser("user-2"),
+    ];
 
     // Then
-    expect(matches).toEqual(["same", "other"]);
+    expect(matches).toEqual([true, false]);
+  });
+
+  it("記録の利用者がいない(null)ときは、どの利用者に対しても偽を返す", async () => {
+    // Given
+    const { hub, control } = createRealControl({});
+
+    // When
+    control.stop();
+    control.start(null);
+    await hub.ready();
+    const matches = [
+      control.isRecordUser("user-1"),
+      control.isRecordUser("user-2"),
+    ];
+
+    // Then
+    expect(matches).toEqual([false, false]);
   });
 
   it("別の利用者のサインインとサインアウトは、記録の利用者を替えない(切り替えは読み込み直しが行う)", async () => {
@@ -138,12 +158,12 @@ describe("記録の制御", () => {
     control.signInChanged({ kind: "signed-in", userId: "user-2" });
     control.signInChanged({ kind: "signed-out" });
     const afterChanges = [
-      control.matchUser("user-1"),
-      control.matchUser("user-2"),
+      control.isRecordUser("user-1"),
+      control.isRecordUser("user-2"),
     ];
 
     // Then
-    expect(afterChanges).toEqual(["same", "other"]);
+    expect(afterChanges).toEqual([true, false]);
     expect(hub.streams()).toEqual([STREAM]);
   });
 

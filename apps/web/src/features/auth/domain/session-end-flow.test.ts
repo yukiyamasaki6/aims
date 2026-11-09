@@ -37,7 +37,6 @@ describe("beginSignOut", () => {
   it("完了または失敗で実行中が解かれた後は、再び開始できる", () => {
     // Given
     const failed = endSignOut(beginSignOut(initialSessionEndFlow).state, {
-      kind: "observed",
       status: "authenticated",
       failure: null,
     }).state;
@@ -62,7 +61,6 @@ describe("endSignOut", () => {
 
       // When
       const result = endSignOut(state, {
-        kind: "observed",
         status: "unauthenticated",
         failure,
       });
@@ -85,7 +83,6 @@ describe("endSignOut", () => {
 
       // When
       const result = endSignOut(state, {
-        kind: "observed",
         status,
         failure: { kind: "rate_limited" },
       });
@@ -103,29 +100,12 @@ describe("endSignOut", () => {
 
       // When
       const result = endSignOut(state, {
-        kind: "observed",
         status,
         failure: null,
       });
 
       // Then
       expect(result.result).toEqual({ kind: "failed", failure: UNREACHABLE });
-    });
-  });
-
-  describe("画面が離れて結果を観測しなかった場合", () => {
-    it("結果を破棄し、実行中を解く", () => {
-      // Given
-      const state = beginSignOut(initialSessionEndFlow).state;
-
-      // When
-      const result = endSignOut(state, { kind: "discarded" });
-
-      // Then
-      expect(result).toEqual({
-        state: { running: false },
-        result: { kind: "discarded" },
-      });
     });
   });
 });
@@ -154,17 +134,16 @@ describe("leave", () => {
   });
 
   it.each([
-    ["別の利用者", "other", "/rounds/new"],
-    ["記録の利用者がいない", "unowned", "/rounds/new"],
-    ["同じ利用者", "same", null],
+    ["別の利用者または記録の利用者がいない", false, "/rounds/new"],
+    ["同じ利用者", true, null],
   ] as const)(
     "サインインの通知の利用者が%s(%s)のとき、行き先は%sになる",
-    (_name, match, expected) => {
+    (_name, sameUser, expected) => {
       // Given
       const state = initialSessionEndFlow;
 
       // When
-      const result = leave(state, "/rounds/new", match);
+      const result = leave(state, "/rounds/new", sameUser);
 
       // Then
       expect(result).toBe(expected);
@@ -176,36 +155,23 @@ describe("leave", () => {
     const running = beginSignOut(initialSessionEndFlow).state;
 
     // When
-    const result = leave(running, "/rounds/new", "other");
+    const result = leave(running, "/rounds/new", false);
 
     // Then
     expect(result).toBeNull();
   });
 
-  it.each([
-    [
-      "失敗",
-      {
-        kind: "observed",
-        status: "authenticated",
-        failure: null,
-      } as const,
-    ],
-    ["破棄", { kind: "discarded" } as const],
-  ])(
-    "サインアウトの%sで実行中が解かれた後は、行き先を返す",
-    (_name, observation) => {
-      // Given
-      const settled = endSignOut(
-        beginSignOut(initialSessionEndFlow).state,
-        observation,
-      ).state;
+  it("サインアウトの失敗で実行中が解かれた後は、行き先を返す", () => {
+    // Given
+    const settled = endSignOut(beginSignOut(initialSessionEndFlow).state, {
+      status: "authenticated",
+      failure: null,
+    }).state;
 
-      // When
-      const result = leave(settled, "/signin");
+    // When
+    const result = leave(settled, "/signin");
 
-      // Then
-      expect(result).toBe("/signin");
-    },
-  );
+    // Then
+    expect(result).toBe("/signin");
+  });
 });

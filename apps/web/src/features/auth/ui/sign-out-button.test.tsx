@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
@@ -115,36 +115,11 @@ describe("SignOutButton", () => {
     ).toBeInTheDocument();
   });
 
-  it("実行を頼むとき、画面が表示中かを渡し、離れた後は偽になる", async () => {
-    // Given
-    const user = userEvent.setup();
-    let view: { isMounted(): boolean } | undefined;
-    let finish: (result: SignOutResult) => void = () => {};
-    const signOut = vi.fn((v: { isMounted(): boolean }) => {
-      view = v;
-      return new Promise<SignOutResult>((resolve) => {
-        finish = resolve;
-      });
-    });
-    const { unmount } = render(<SignOutButton signOut={signOut} />, {
-      wrapper: IntlTestProvider,
-    });
-    await confirmSignOut(user);
-    expect(view?.isMounted()).toBe(true);
-
-    // When
-    unmount();
-
-    // Then
-    expect(view?.isMounted()).toBe(false);
-    await act(async () => finish({ kind: "ignored" }));
-  });
-
   it("失敗した後は、ボタンを戻して再度確認でき、再度の確認が始まれば実行中の表示にする", async () => {
     // Given
     const user = userEvent.setup();
     const signOut = vi
-      .fn<(view: { isMounted(): boolean }) => Promise<SignOutResult>>()
+      .fn<() => Promise<SignOutResult>>()
       .mockResolvedValueOnce({ kind: "failed", failure: UNREACHABLE })
       .mockImplementationOnce(() => new Promise<SignOutResult>(() => {}));
     render(<SignOutButton signOut={signOut} />, { wrapper: IntlTestProvider });

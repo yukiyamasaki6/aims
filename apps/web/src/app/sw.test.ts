@@ -219,9 +219,8 @@ describe("sw", () => {
       return plugin.cacheWillUpdate;
     }
 
-    function updated(url: string, redirected: boolean, status = 200) {
+    function updated(url: string, status = 200) {
       const response = {
-        redirected,
         ok: status < 400,
         status,
       } as Response;
@@ -233,22 +232,12 @@ describe("sw", () => {
       };
     }
 
-    it("枠がリダイレクトされた応答は保存せずエラーにする", async () => {
-      // Given
-      // When
-      const params = updated("/__shell/rounds", true);
-      const result = guard()(params);
-
-      // Then
-      await expect(result).rejects.toThrow();
-    });
-
     it.each([404, 500])(
       "ステータス%sの応答は保存せずエラーにする",
       async (status) => {
         // Given
         // When
-        const params = updated("/_next/static/chunks/main.js", false, status);
+        const params = updated("/_next/static/chunks/main.js", status);
         const result = guard()(params);
 
         // Then
@@ -256,18 +245,17 @@ describe("sw", () => {
       },
     );
 
-    it.each([
-      ["/__shell/rounds", false],
-      ["/_next/static/chunks/main.js", true],
-      ["/offline", true],
-    ])("%s（redirected: %s）は保存する", async (url, redirected) => {
-      // Given
-      // When
-      const params = updated(url, redirected);
-      const result = await guard()(params);
+    it.each(["/__shell/rounds", "/_next/static/chunks/main.js", "/offline"])(
+      "%sは保存する",
+      async (url) => {
+        // Given
+        // When
+        const params = updated(url);
+        const result = await guard()(params);
 
-      // Then
-      expect(result).toBe(params.response);
-    });
+        // Then
+        expect(result).toBe(params.response);
+      },
+    );
   });
 });

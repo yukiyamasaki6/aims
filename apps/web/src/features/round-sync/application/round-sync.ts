@@ -38,8 +38,7 @@ export function createRoundSync(deps: {
   async function residentPass(): Promise<boolean> {
     const reading = await session.readSession();
     return (
-      reading.status === "authenticated" &&
-      control.matchUser(reading.userId) === "same"
+      reading.status === "authenticated" && control.isRecordUser(reading.userId)
     );
   }
 

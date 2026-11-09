@@ -1,13 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { createBrowserIdentityStore } from "./browser-identity-store";
 
 beforeEach(() => {
   localStorage.clear();
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
 });
 
 describe("ブラウザの端末の識別情報", () => {
@@ -54,40 +49,5 @@ describe("ブラウザの端末の識別情報", () => {
 
     // Then
     expect(identity).toBe("user-1");
-  });
-
-  describe("localStorageが使用できない場合(プライベートブラウジングなど)", () => {
-    it("読み出しは、エラーを投げずnullを返す", () => {
-      // Given
-      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-        throw new Error("denied");
-      });
-
-      // When
-      const identity = createBrowserIdentityStore().read();
-
-      // Then
-      expect(identity).toBeNull();
-    });
-
-    it("書き込みと消去は、エラーを投げず黙って無視する", () => {
-      // Given
-      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-        throw new Error("denied");
-      });
-      vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
-        throw new Error("denied");
-      });
-      const store = createBrowserIdentityStore();
-
-      // When
-      const write = () => {
-        store.write("user-1");
-        store.write(null);
-      };
-
-      // Then
-      expect(write).not.toThrow();
-    });
   });
 });
