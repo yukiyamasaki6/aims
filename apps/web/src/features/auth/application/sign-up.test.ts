@@ -184,7 +184,7 @@ describe("サインアップの手続き", () => {
   });
 
   describe("パスワードの設定", () => {
-    it("設定できれば、passwordSetを送ってラウンド一覧へ遷移し、実行中を解除しない", async () => {
+    it("設定できれば、ラウンド一覧へ遷移し、実行中を解除しない", async () => {
       // Given
       const { signUp, authenticator, pageReplace, events, viewOf } = setup();
       const view = viewOf(onPasswordStep);
@@ -197,11 +197,11 @@ describe("サインアップの手続き", () => {
         "password1",
       );
       expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
-      expect(events).toEqual([{ type: "passwordSet" }]);
+      expect(events).toEqual([]);
       expect(view.observedState.pending).toBe("setPassword");
     });
 
-    it("弱いパスワードで拒否された後の成功では、遷移の前にpasswordSetを送り、遷移の中ではエラーが消えて実行中のままである", async () => {
+    it("弱いパスワードで拒否された後の成功では、遷移の時点でエラーは消えており、実行中のままである", async () => {
       // Given
       const { signUp, authenticator, pageReplace, events, viewOf } = setup();
       authenticator.setPassword.mockResolvedValueOnce({
@@ -229,7 +229,7 @@ describe("サインアップの手続き", () => {
       // Then
       expect(seen).toEqual([
         {
-          events: ["failed", "passwordSet"],
+          events: ["failed"],
           error: null,
           pending: "setPassword",
         },

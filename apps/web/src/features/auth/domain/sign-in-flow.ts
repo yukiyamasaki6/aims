@@ -30,6 +30,7 @@ export type Credentials = {
 // 送信中なら開始しない。入力の不備は、メールアドレス、パスワードと、オンラインのときのチェック未完了を全て示す。
 // 入力に不備が無くオフラインなら、通信もトークンの消費もせず、オフラインを示す(チェック未完了はオフラインでは示さない。原因を取り違えるため)。
 // 開始できるなら送信中にする。開始では以前のエラーを消す。
+// 送信中の間はエラーを持たない。
 export function beginSignIn(
   flow: SignInFlow,
   input: { email: string; password: string; offline: boolean },
@@ -72,10 +73,9 @@ export function beginSignIn(
 
 // 画面で起きた事実。開始の命令は含まない(beginSignIn)。
 // failed: 照合の失敗(拒否も、通信の断も)。使ったトークンでは再送信できないため、全て消費する。
-// signedIn: 照合が受け付けられた。遷移の前に以前のエラーを消す。送信中は解除しない。
+// 実行中は`error`・`fieldErrors`が空であることを前提とする(`beginSignIn`が開始で空にし、実行中に変えるのは結果だけ)。
 export type SignInEvent =
   | { type: "captchaChecked"; token: string | null }
-  | { type: "signedIn" }
   | { type: "failed"; failure: AuthFailure };
 
 export function signInReducer(
@@ -85,8 +85,6 @@ export function signInReducer(
   switch (event.type) {
     case "captchaChecked":
       return { ...flow, captchaToken: event.token };
-    case "signedIn":
-      return { ...flow, error: null, fieldErrors: {} };
     // 画面のチェックのやり直しは、手続きが画面の約束で頼む。
     case "failed":
       return {
@@ -94,7 +92,6 @@ export function signInReducer(
         submitting: false,
         captchaToken: null,
         error: event.failure.kind,
-        fieldErrors: {},
       };
   }
 }

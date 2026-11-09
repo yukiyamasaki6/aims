@@ -73,12 +73,10 @@ describe("パスワード設定の流れの遷移", () => {
   describe("codeSent", () => {
     it("コード入力の段階へ進み、待ち時間を60にし、使ったトークンを消費して実行中を解除する", () => {
       // Given
-      const flow = flowWith({
-        captchaToken: "used",
-        pending: "send",
-        error: "other",
-        fieldErrors: { email: "required" },
-      });
+      const flow = beginSendCode(flowWith({ captchaToken: "used" }), {
+        email: "user@example.com",
+        offline: false,
+      }).state;
 
       // When
       const next = passwordSetupReducer(flow, { type: "codeSent" });
@@ -94,15 +92,12 @@ describe("パスワード設定の流れの遷移", () => {
   });
 
   describe("codeConfirmed", () => {
-    it("パスワード設定の段階へ進み、エラーと欄のエラーをクリアして実行中を解除する", () => {
+    it("パスワード設定の段階へ進み、エラーを持たないまま実行中を解除する", () => {
       // Given
-      const flow = flowWith({
-        step: "code",
-        pending: "verify",
-        captchaToken: "kept",
-        error: "other",
-        fieldErrors: { resend: "cooldown" },
-      });
+      const flow = beginVerifyCode(
+        flowWith({ step: "code", captchaToken: "kept" }),
+        { email: "user@example.com", code: "123456", offline: false },
+      ).state;
 
       // When
       const next = passwordSetupReducer(flow, { type: "codeConfirmed" });
@@ -116,42 +111,6 @@ describe("パスワード設定の流れの遷移", () => {
     });
   });
 
-  describe("passwordSet", () => {
-    it.each([
-      [
-        "拒否の理由",
-        {
-          error: "weak_password",
-          fieldErrors: {},
-        },
-      ],
-      [
-        "欄のエラー",
-        {
-          error: null,
-          fieldErrors: { password: "required" },
-        },
-      ],
-    ] as const)(
-      "以前の%sを消し、パスワード設定を実行中のままにする",
-      (_name, errors) => {
-        // Given
-        const flow = flowWith({
-          step: "password",
-          pending: "setPassword",
-          captchaToken: "kept",
-          ...errors,
-        });
-
-        // When
-        const next = passwordSetupReducer(flow, { type: "passwordSet" });
-
-        // Then
-        expect(next).toEqual({ ...flow, error: null, fieldErrors: {} });
-      },
-    );
-  });
-
   describe("failed", () => {
     it.each<[string, AuthFailure, string]>([
       ["unreachable", { kind: "unreachable" }, NETWORK_ERROR_MESSAGE],
@@ -159,13 +118,13 @@ describe("パスワード設定の流れの遷移", () => {
       ["weak_password", { kind: "weak_password" }, "weak_password"],
       ["other", { kind: "other" }, "other"],
     ])(
-      "%sは、文言をエラーに設定し、欄のエラーをクリアして実行中を解除する",
+      "%sは、文言をエラーに設定し、欄のエラーを持たないまま実行中を解除する",
       (_name, failure, message) => {
         // Given
-        const flow = flowWith({
-          pending: "send",
-          fieldErrors: { email: "required", resend: "cooldown" },
-        });
+        const flow = beginSetPassword(flowWith({ step: "password" }), {
+          password: "password1",
+          offline: false,
+        }).state;
 
         // When
         const next = passwordSetupReducer(flow, { type: "failed", failure });
@@ -200,13 +159,12 @@ describe("パスワード設定の流れの遷移", () => {
   });
 
   describe("refused", () => {
-    it("拒否の文言をエラーに設定し、欄のエラーをクリアして実行中を解除する", () => {
+    it("拒否の文言をエラーに設定し、欄のエラーを持たないまま実行中を解除する", () => {
       // Given
-      const flow = flowWith({
-        step: "code",
-        pending: "send",
-        fieldErrors: { resend: "cooldown", captcha: "incomplete" },
-      });
+      const flow = beginSendCode(
+        flowWith({ step: "code", captchaToken: "used" }),
+        { email: "user@example.com", offline: false },
+      ).state;
 
       // When
       const next = passwordSetupReducer(flow, {

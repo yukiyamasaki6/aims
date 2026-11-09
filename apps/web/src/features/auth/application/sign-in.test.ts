@@ -63,7 +63,7 @@ describe("サインインの手続き", () => {
     ["/signin", "/rounds"],
     ["/rounds/../signin", "/rounds"],
   ])(
-    "成功時にsignedInだけを送って許可された遷移先 %s へ進み、失敗とチェックのやり直しを起こさない",
+    "成功時に何も送らずに許可された遷移先 %s へ進み、失敗とチェックのやり直しを起こさない",
     async (returnTo, expected) => {
       // Given
       const {
@@ -84,12 +84,12 @@ describe("サインインの手続き", () => {
         captchaToken: "first-token",
       });
       expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith(expected);
-      expect(actions).toEqual([{ type: "signedIn" }]);
+      expect(actions).toEqual([]);
       expect(resetCheck).not.toHaveBeenCalled();
     },
   );
 
-  it("前の失敗の後の成功では、遷移の前にsignedInを送り、遷移の中ではエラーが消えて送信中のままである", async () => {
+  it("前の失敗の後の成功では、遷移の時点でエラーは消えており、送信中のままである", async () => {
     // Given
     const { signIn, authenticator, pageReplace, actions, resetCheck, viewOf } =
       setup();
@@ -117,7 +117,7 @@ describe("サインインの手続き", () => {
     // Then
     expect(seen).toEqual([
       {
-        events: ["failed", "captchaChecked", "signedIn"],
+        events: ["failed", "captchaChecked"],
         error: null,
         submitting: true,
       },
@@ -202,7 +202,7 @@ describe("サインインの手続き", () => {
 
     // Then
     expect(authenticator.signIn).toHaveBeenCalledOnce();
-    expect(actions).toEqual([{ type: "signedIn" }]);
+    expect(actions).toEqual([]);
     expect(pageReplace.replace).toHaveBeenCalledOnce();
   });
 
@@ -305,7 +305,7 @@ describe("サインインの手続き", () => {
     expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds/new");
   });
 
-  it("照合の後に画面が離れていれば、成功でもsignedInを送らず、遷移しない", async () => {
+  it("照合の後に画面が離れていれば、成功でも遷移せず、何も送らない", async () => {
     // Given
     const { signIn, authenticator, pageReplace, actions, viewOf, state } =
       setup();

@@ -247,42 +247,6 @@ describe("signInReducer: captchaChecked", () => {
   });
 });
 
-describe("signInReducer: signedIn", () => {
-  it.each([
-    [
-      "前の失敗の理由",
-      {
-        error: "invalid_credentials",
-        fieldErrors: {},
-      },
-    ],
-    [
-      "直した欄の以前のエラー",
-      {
-        error: null,
-        fieldErrors: { password: "required" },
-      },
-    ],
-  ] as const)("%sを消し、送信中のままにする", (_name, errors) => {
-    // Given
-    const submitting: SignInFlow = {
-      ...beginSignIn(verified, validInput).state,
-      ...errors,
-    };
-
-    // When
-    const result = signInReducer(submitting, { type: "signedIn" });
-
-    // Then
-    expect(result).toEqual({
-      ...submitting,
-      error: null,
-      fieldErrors: {},
-    });
-    expect(result.submitting).toBe(true);
-  });
-});
-
 describe("signInReducer: failed", () => {
   it.each([
     [

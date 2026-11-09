@@ -54,8 +54,7 @@ export function createSignIn({
         view.resetCheck();
         return;
       }
-      // 成功時は以前のエラーを消し、送信中は解除しない。遷移が終わる前に再び押され、使用済みのトークンで二重に送信されるのを防ぐため。
-      view.dispatch({ type: "signedIn" });
+      // 成功時は送信中を解除しない。遷移が終わる前に再び押され、使用済みのトークンで二重に送信されるのを防ぐため。
       pageReplace.replace(destinationOf(input.from));
     },
   };

@@ -202,7 +202,7 @@ describe("パスワード再設定の手続き", () => {
   });
 
   describe("パスワードの設定", () => {
-    it("設定が成功し、表示中なら、入力したパスワードで1回頼み、passwordSetを送り、この端末のサインインを終えてから、サインインへ移り、実行中を解除しない", async () => {
+    it("設定が成功し、表示中なら、入力したパスワードで1回頼み、この端末のサインインを終えてから、サインインへ移り、実行中を解除しない", async () => {
       // Given
       const { procedure, authenticator, navigation, order, viewOf } = setup();
       authenticator.signOutHere.mockImplementation(async () => {
@@ -220,7 +220,7 @@ describe("パスワード再設定の手続き", () => {
         password,
       );
       expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/signin");
-      expect(order).toEqual(["passwordSet", "signOutHere", "go"]);
+      expect(order).toEqual(["signOutHere", "go"]);
       expect(view.observedState.pending).toBe("setPassword");
     });
 
@@ -237,10 +237,10 @@ describe("パスワード再設定の手続き", () => {
 
       // Then
       expect(navigation.go).toHaveBeenCalledExactlyOnceWith("/signin");
-      expect(events).toEqual([{ type: "passwordSet" }]);
+      expect(events).toEqual([]);
     });
 
-    it("弱いパスワードで拒否された後の成功では、遷移の前にpasswordSetを送り、遷移の中ではエラーが消えて実行中のままである", async () => {
+    it("弱いパスワードで拒否された後の成功では、遷移の時点でエラーは消えており、実行中のままである", async () => {
       // Given
       const { procedure, authenticator, navigation, events, viewOf } = setup();
       authenticator.setPassword.mockResolvedValueOnce(
@@ -267,7 +267,7 @@ describe("パスワード再設定の手続き", () => {
       // Then
       expect(seen).toEqual([
         {
-          events: ["failed", "passwordSet"],
+          events: ["failed"],
           error: null,
           pending: "setPassword",
         },

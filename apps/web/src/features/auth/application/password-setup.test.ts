@@ -258,15 +258,14 @@ describe("パスワード設定の共通の手続き", () => {
   });
 
   describe("パスワードの設定", () => {
-    it("設定できて表示中なら、渡された設定の依頼で入力したパスワードを頼み、続きを行ってよいと返し、実行中を解除しない", async () => {
+    it("設定できて表示中なら、認証サービスへ入力したパスワードを頼み、続きを行ってよいと返し、実行中を解除しない", async () => {
       // Given
       const { context, authenticator, events, viewOf } = setup();
       const view = viewOf(onPasswordStep);
 
       // When
       const proceed = await applyPassword(
-        authenticator.setPassword,
-        context.connectivity,
+        context,
         { password: "password1" },
         view,
       );
@@ -291,8 +290,7 @@ describe("パスワード設定の共通の手続き", () => {
 
       // When
       const proceed = await applyPassword(
-        authenticator.setPassword,
-        context.connectivity,
+        context,
         { password: "password1" },
         view,
       );
@@ -310,12 +308,7 @@ describe("パスワード設定の共通の手続き", () => {
       const view = viewOf(onPasswordStep);
 
       // When
-      const proceed = await applyPassword(
-        authenticator.setPassword,
-        context.connectivity,
-        { password: "" },
-        view,
-      );
+      const proceed = await applyPassword(context, { password: "" }, view);
 
       // Then
       expect(proceed).toBe(false);
@@ -331,8 +324,7 @@ describe("パスワード設定の共通の手続き", () => {
 
       // When
       const proceed = await applyPassword(
-        authenticator.setPassword,
-        context.connectivity,
+        context,
         { password: "password1" },
         viewOf(running),
       );
@@ -383,8 +375,7 @@ describe("パスワード設定の共通の手続き", () => {
 
       // When
       const proceed = await applyPassword(
-        authenticator.setPassword,
-        context.connectivity,
+        context,
         { password: "password1" },
         view,
       );
@@ -432,8 +423,7 @@ describe("パスワード設定の共通の手続き", () => {
       const response = Promise.withResolvers<CallResult>();
       authenticator.setPassword.mockReturnValue(response.promise);
       const running = applyPassword(
-        authenticator.setPassword,
-        context.connectivity,
+        context,
         { password: "password1" },
         viewOf(onPasswordStep),
       );

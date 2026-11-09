@@ -1,4 +1,6 @@
+import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { act, render, screen } from "@testing-library/react";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Turnstile } from "./turnstile";
 
@@ -10,8 +12,9 @@ type Callbacks = {
   onAfterInteractive?: () => void;
 };
 
-const { callbacks, siteKeyProp, optionsProp } = vi.hoisted(() => ({
+const { callbacks, refProp, siteKeyProp, optionsProp } = vi.hoisted(() => ({
   callbacks: { current: {} as Callbacks },
+  refProp: { current: undefined as unknown },
   siteKeyProp: { current: undefined as string | undefined },
   optionsProp: {
     current: undefined as { size?: string; appearance?: string } | undefined,
@@ -22,10 +25,12 @@ vi.mock("@marsidev/react-turnstile", () => ({
   Turnstile: (
     props: Callbacks & {
       siteKey: string;
+      ref?: unknown;
       options?: { size?: string; appearance?: string };
     },
   ) => {
     siteKeyProp.current = props.siteKey;
+    refProp.current = props.ref;
     optionsProp.current = props.options;
     callbacks.current = props;
     return <div data-testid="turnstile" />;
@@ -61,6 +66,19 @@ describe("Turnstile", () => {
         size: "normal",
         appearance: "interaction-only",
       });
+    });
+
+    it("渡されたrefをウィジェットへ渡す", () => {
+      // Given
+      const ref = createRef<TurnstileInstance | undefined>();
+
+      // When
+      render(
+        <Turnstile ref={ref} siteKey="test-site-key" onVerify={vi.fn()} />,
+      );
+
+      // Then
+      expect(refProp.current).toBe(ref);
     });
 
     it("初期状態では領域を取らないよう畳まれている", () => {
