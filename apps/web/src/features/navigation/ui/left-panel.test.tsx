@@ -7,8 +7,10 @@ import { LeftPanel } from "./left-panel";
 
 const navigationText = translatorFor("navigation");
 
-function wideToggle() {
-  return screen.getByTestId("left-panel-toggle-wide");
+function toggleButton(kind: "Collapse" | "Expand") {
+  return screen.getByRole("button", {
+    name: navigationText(`leftPanel${kind}`),
+  });
 }
 
 function openMenuButton() {
@@ -128,9 +130,7 @@ describe("LeftPanel", () => {
       });
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelCollapse"),
-      );
+      expect(toggleButton("Collapse")).toBeInTheDocument();
       expect(closeMenuButtons()).toHaveLength(1);
     });
 
@@ -142,12 +142,10 @@ describe("LeftPanel", () => {
       });
 
       // When
-      await user.click(wideToggle());
+      await user.click(toggleButton("Collapse"));
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelExpand"),
-      );
+      expect(toggleButton("Expand")).toBeInTheDocument();
       expect(closeMenuButtons()).toHaveLength(1);
     });
 
@@ -157,15 +155,13 @@ describe("LeftPanel", () => {
       render(<LeftPanel signOut={null} />, {
         wrapper: IntlTestProvider,
       });
-      await user.click(wideToggle());
+      await user.click(toggleButton("Collapse"));
 
       // When
-      await user.click(wideToggle());
+      await user.click(toggleButton("Expand"));
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelCollapse"),
-      );
+      expect(toggleButton("Collapse")).toBeInTheDocument();
       expect(closeMenuButtons()).toHaveLength(1);
     });
 
@@ -199,9 +195,7 @@ describe("LeftPanel", () => {
 
       // Then
       expect(closeMenuButtons()).toHaveLength(2);
-      expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelCollapse"),
-      );
+      expect(toggleButton("Collapse")).toBeInTheDocument();
     });
   });
 
@@ -234,15 +228,13 @@ describe("LeftPanel", () => {
       render(<LeftPanel signOut={null} />, {
         wrapper: IntlTestProvider,
       });
-      await user.click(wideToggle());
+      await user.click(toggleButton("Collapse"));
 
       // When
       await user.click(personalLink());
 
       // Then
-      expect(wideToggle()).toHaveAccessibleName(
-        navigationText("leftPanelExpand"),
-      );
+      expect(toggleButton("Expand")).toBeInTheDocument();
     });
   });
 });

@@ -308,7 +308,6 @@ function ToggleButton({
       type="button"
       onClick={onClick}
       aria-label={open ? t("leftPanelCollapse") : t("leftPanelExpand")}
-      data-testid="left-panel-toggle-wide"
       className="shrink-0"
     >
       {open ? (
