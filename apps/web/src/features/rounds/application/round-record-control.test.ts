@@ -132,6 +132,23 @@ describe("記録の制御", () => {
     expect(matches).toEqual([true, false]);
   });
 
+  it("記録の利用者がいない(null)ときは、どの利用者に対しても偽を返す", async () => {
+    // Given
+    const { hub, control } = createRealControl({});
+
+    // When
+    control.stop();
+    control.start(null);
+    await hub.ready();
+    const matches = [
+      control.isRecordUser("user-1"),
+      control.isRecordUser("user-2"),
+    ];
+
+    // Then
+    expect(matches).toEqual([false, false]);
+  });
+
   it("別の利用者のサインインとサインアウトは、記録の利用者を替えない(切り替えは読み込み直しが行う)", async () => {
     // Given
     const { hub, control } = createRealControl({});
