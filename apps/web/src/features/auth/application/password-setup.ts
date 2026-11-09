@@ -15,7 +15,7 @@ import type {
 import type { ScreenView } from "./screen-view";
 
 // 認証コードで本人確認をして、パスワードを設定する手続き(サインアップとパスワード再設定)が共有する順序。
-// 手続きごとに違うのは、コードの目的、コードの送信の前の確認、パスワードの設定を頼む先、パスワード設定の後の動作で、それぞれの手続きのファイルが持つ。
+// 手続きごとに違うのは、コードの目的と、パスワード設定の後の動作で、それぞれの手続きのファイルが持つ。
 
 export type PasswordSetupView = ScreenView<
   PasswordSetupFlow,
