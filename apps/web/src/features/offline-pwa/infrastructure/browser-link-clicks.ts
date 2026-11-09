@@ -19,7 +19,7 @@ function findNavigatingAnchor(
   return anchor;
 }
 
-// documentのcapture段階のclickを購読する。除外した操作はnullで届ける。
+// documentのcapture段階のclickを購読する。除外した操作は届けない。
 export function createBrowserLinkClicks(): LinkClicks {
   return {
     onClick(listener) {
@@ -28,10 +28,7 @@ export function createBrowserLinkClicks(): LinkClicks {
       const handle = (event: MouseEvent) => {
         if (repeating) return;
         const anchor = findNavigatingAnchor(event);
-        if (!anchor) {
-          listener(null);
-          return;
-        }
+        if (!anchor) return;
         const link: LinkClick = {
           block: () => {
             event.preventDefault();

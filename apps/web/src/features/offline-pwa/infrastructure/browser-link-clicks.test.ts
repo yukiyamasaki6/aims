@@ -30,7 +30,7 @@ function addLink(href: string) {
 }
 
 function listen() {
-  const received: (LinkClick | null)[] = [];
+  const received: LinkClick[] = [];
   const stop = createBrowserLinkClicks().onClick((link) => received.push(link));
   return { received, stop };
 }
@@ -46,11 +46,10 @@ describe("createBrowserLinkClicks", () => {
 
     // Then
     expect(received).toHaveLength(1);
-    expect(received[0]).not.toBeNull();
   });
 
   it.each([["同じパスのハッシュ", "http://localhost/rounds#a"]])(
-    "%sのリンクは、除外としてnullで渡す",
+    "%sのリンクは、通知しない",
     (_, href) => {
       // Given
       const { received } = listen();
@@ -60,11 +59,11 @@ describe("createBrowserLinkClicks", () => {
       fireEvent.click(link);
 
       // Then
-      expect(received).toEqual([null]);
+      expect(received).toEqual([]);
     },
   );
 
-  it("リンクの外のclickは、除外としてnullで渡す", () => {
+  it("リンクの外のclickは、通知しない", () => {
     // Given
     const { received } = listen();
 
@@ -72,10 +71,10 @@ describe("createBrowserLinkClicks", () => {
     fireEvent.click(document.body);
 
     // Then
-    expect(received).toEqual([null]);
+    expect(received).toEqual([]);
   });
 
-  it("修飾キーつきのclickは、除外としてnullで渡す", () => {
+  it("修飾キーつきのclickは、通知しない", () => {
     // Given
     const { received } = listen();
     const link = addLink("http://localhost/rounds/new");
@@ -84,7 +83,7 @@ describe("createBrowserLinkClicks", () => {
     fireEvent.click(link, { ctrlKey: true });
 
     // Then
-    expect(received).toEqual([null]);
+    expect(received).toEqual([]);
   });
 
   it("blockは、遷移を止め、後の購読者へclickを届けない", () => {
@@ -93,7 +92,7 @@ describe("createBrowserLinkClicks", () => {
     const link = addLink("http://localhost/rounds/new");
     const passed = vi.fn();
     document.addEventListener("click", passed);
-    const blockOnClick = createBrowserLinkClicks().onClick((l) => l?.block());
+    const blockOnClick = createBrowserLinkClicks().onClick((l) => l.block());
 
     // When
     fireEvent.click(link);
