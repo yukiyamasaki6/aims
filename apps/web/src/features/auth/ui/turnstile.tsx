@@ -4,18 +4,21 @@ import {
   Turnstile as ReactTurnstile,
   type TurnstileInstance,
 } from "@marsidev/react-turnstile";
-import { forwardRef, useState } from "react";
+import { type Ref, useState } from "react";
 import { cn } from "@/lib/utils";
 
-export const Turnstile = forwardRef<
-  TurnstileInstance | undefined,
-  {
-    // サイトキー(環境変数の値)。読み出しは画面の入口が行い、引数で渡す。空のときはウィジェットがエラーを報告し、チェック未完了のまま送信は止まる。
-    siteKey: string;
-    onVerify: (token: string | null) => void;
-    error?: string;
-  }
->(function Turnstile({ siteKey, onVerify, error }, ref) {
+export function Turnstile({
+  siteKey,
+  onVerify,
+  error,
+  ref,
+}: {
+  // サイトキー(環境変数の値)。読み出しは画面の入口が行い、引数で渡す。空のときはウィジェットがエラーを報告し、チェック未完了のまま送信は止まる。
+  siteKey: string;
+  onVerify: (token: string | null) => void;
+  error?: string;
+  ref?: Ref<TurnstileInstance | undefined>;
+}) {
   // 利用者の操作が必要なチャレンジが出ている間だけtrueにする。
   const [interactive, setInteractive] = useState(false);
 
@@ -53,4 +56,4 @@ export const Turnstile = forwardRef<
       {error && <p className="text-center text-destructive text-sm">{error}</p>}
     </>
   );
-});
+}
