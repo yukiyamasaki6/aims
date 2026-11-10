@@ -695,33 +695,6 @@ describe("presets", () => {
     expect(response).toEqual({ status: "ok", data: [presetRow] });
   });
 
-  it("距離の的が、1つのオブジェクトまたはnullのまま返る", async () => {
-    // Given
-    const withoutFace = {
-      ...presetRow,
-      id: "preset-2",
-      preset_distances: [
-        { ...presetRow.preset_distances[0], target_faces: null },
-      ],
-    };
-    const database = makeDatabase({
-      rounds: ok(null),
-      target_faces: noFaces,
-      preset_rounds: ok([presetRow, withoutFace]),
-    });
-
-    // When
-    const response = await database.createQueries().presets("user-1");
-
-    // Then
-    const [first, second] = dataOf(response) ?? [];
-    expect(first.preset_distances[0].target_faces).toEqual({
-      size: 122,
-      target_face_spots: [],
-    });
-    expect(second.preset_distances[0].target_faces).toBeNull();
-  });
-
   it("データがnullなら空の配列を返す", async () => {
     // Given
     const database = makeDatabase({

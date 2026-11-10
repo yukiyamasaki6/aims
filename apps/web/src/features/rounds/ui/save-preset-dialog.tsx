@@ -94,6 +94,9 @@ function PresetDialogBody({
   onSave: () => void;
 }) {
   const t = useTranslations("rounds");
+  // 距離がないときは、押す前から理由を示し、保存を押せなくする。
+  const noDistances = distances.length === 0;
+  const shown = noDistances ? "noDistances" : state.error;
   return (
     <div className="flex flex-col gap-3">
       <h2 className="font-medium text-sm">{t("presetSaveTitle")}</h2>
@@ -125,17 +128,18 @@ function PresetDialogBody({
             const name = e.target.value;
             setState((prev) => ({ ...prev, name }));
           }}
-          aria-invalid={Boolean(state.error)}
+          aria-invalid={Boolean(shown)}
         />
-        {state.error && (
+        {shown && (
           <p className="text-destructive text-sm">
-            {t(`presetSaveFailure.${state.error}`)}
+            {t(`presetSaveFailure.${shown}`)}
           </p>
         )}
       </div>
       <Button
         type="button"
         aria-disabled={state.submitting}
+        disabled={noDistances}
         className={cn(state.submitting && "pointer-events-none opacity-50")}
         data-testid="save-as-preset-confirm"
         onClick={onSave}

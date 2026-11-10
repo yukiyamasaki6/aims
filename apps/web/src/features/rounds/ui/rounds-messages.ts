@@ -63,6 +63,7 @@ export const roundsMessages = {
     presetSaveFailure: {
       ...signInFailureText,
       saveFailed: "保存できませんでした。",
+      noDistances: "距離がないため、プリセットとして保存できません。",
       nameTooLong: `プリセット名は${NAME_MAX_LENGTH}文字以内で入力してください。`,
     } satisfies Record<PresetDialogError, string>,
     // 種別と弓種

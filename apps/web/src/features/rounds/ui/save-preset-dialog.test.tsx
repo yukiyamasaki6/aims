@@ -211,20 +211,20 @@ describe("SavePresetDialog", () => {
         bowType: "recurve",
         distances: [
           {
-            positionKey: "a",
+            position_key: "a",
             distance: 70,
-            totalEnds: 6,
-            arrowsPerEnd: 6,
-            targetFaceId: "face-x",
-            isMarked: true,
+            total_ends: 6,
+            arrows_per_end: 6,
+            target_face_id: "face-x",
+            is_marked: true,
           },
           {
-            positionKey: "b",
+            position_key: "b",
             distance: 50,
-            totalEnds: 6,
-            arrowsPerEnd: 6,
-            targetFaceId: "face-x",
-            isMarked: true,
+            total_ends: 6,
+            arrows_per_end: 6,
+            target_face_id: "face-x",
+            is_marked: true,
           },
         ],
       };
@@ -376,6 +376,24 @@ describe("SavePresetDialog", () => {
       ).toBeInTheDocument();
       expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
       expect(savePreset).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("距離が1つもない場合", () => {
+    it("開いた時点から理由を表示し、保存ボタンを押せず、保存の手続きを呼ばない", async () => {
+      // Given
+      const { user } = setup({ distances: [] });
+
+      // When
+      await user.click(screen.getByTestId("save-as-preset-trigger"));
+      await user.click(screen.getByTestId("save-as-preset-confirm"));
+
+      // Then
+      expect(
+        screen.getByText(roundsText("presetSaveFailure.noDistances")),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("save-as-preset-confirm")).toBeDisabled();
+      expect(savePreset).not.toHaveBeenCalled();
     });
   });
 

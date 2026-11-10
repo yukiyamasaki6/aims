@@ -73,7 +73,7 @@ describe("changePresetDialogOpen", () => {
   });
 
   describe("閉じる場合", () => {
-    it("送信中でなければ、名前欄とエラーを破棄して閉じる", () => {
+    it("送信中でなければ、エラーを破棄して閉じる", () => {
       // Given
       const current = openDialog({
         name: roundsText("listInProgress"),
@@ -84,7 +84,7 @@ describe("changePresetDialogOpen", () => {
       const state = changePresetDialogOpen(current, false, "午前練習");
 
       // Then
-      expect(state).toEqual(CLOSED_PRESET_DIALOG);
+      expect(state).toEqual({ ...current, open: false, error: null });
     });
 
     it("送信中は閉じない", () => {
@@ -123,25 +123,6 @@ describe("startPresetSave", () => {
     });
   });
 
-  it("名前が長すぎるとき、送信せず、エラーを状態に出す", () => {
-    // Given
-    const current = openDialog({ name: "あ".repeat(51) });
-
-    // When
-    const start = startPresetSave(current, source);
-
-    // Then
-    expect(start).toEqual({
-      type: "invalid",
-      state: {
-        open: true,
-        name: "あ".repeat(51),
-        submitting: false,
-        error: "nameTooLong",
-      },
-    });
-  });
-
   it("送信中は重ねて送信しない", () => {
     // Given
     const current = openDialog({ submitting: true });
@@ -155,7 +136,7 @@ describe("startPresetSave", () => {
 });
 
 describe("finishPresetSave", () => {
-  it("成功した場合は、名前欄を空にして閉じる", () => {
+  it("成功した場合は、閉じて実行中を戻す", () => {
     // Given
     const current = openDialog({ submitting: true });
 
@@ -163,7 +144,7 @@ describe("finishPresetSave", () => {
     const state = finishPresetSave(current, { status: "saved" });
 
     // Then
-    expect(state).toEqual(CLOSED_PRESET_DIALOG);
+    expect(state).toEqual({ ...current, open: false, submitting: false });
   });
 
   it("失敗した場合は、名前欄を残したまま開いた状態でエラーを表示する", () => {

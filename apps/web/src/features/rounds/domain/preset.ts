@@ -15,7 +15,7 @@ export type PresetDistance = Pick<
   | "arrows_per_end"
   | "target_face_id"
 > & {
-  target_faces: TargetFaceLayout | null;
+  target_faces: TargetFaceLayout;
 };
 
 export type Preset = Pick<

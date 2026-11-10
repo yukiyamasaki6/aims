@@ -18,7 +18,7 @@ function preset(id: string): Preset {
         total_ends: 6,
         arrows_per_end: 6,
         target_face_id: "face-1",
-        target_faces: null,
+        target_faces: { size: 122, target_face_spots: [] },
       },
     ],
   };

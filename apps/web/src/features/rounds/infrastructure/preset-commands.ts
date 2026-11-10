@@ -10,14 +10,7 @@ function saveArgs(preset: PresetToSave) {
     p_name: preset.name,
     p_format: preset.format,
     p_bow_type: preset.bowType,
-    p_distances: preset.distances.map((d) => ({
-      position_key: d.positionKey,
-      distance: d.distance,
-      total_ends: d.totalEnds,
-      arrows_per_end: d.arrowsPerEnd,
-      target_face_id: d.targetFaceId,
-      is_marked: d.isMarked,
-    })),
+    p_distances: preset.distances,
   };
 }
 

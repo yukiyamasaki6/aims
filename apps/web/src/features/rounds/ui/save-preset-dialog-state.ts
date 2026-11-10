@@ -6,8 +6,11 @@ import {
 } from "../domain/preset-save";
 import type { PresetSaveFailure } from "../domain/write-result";
 
-// ダイアログに出す誤りの種類。nameTooLong: 名前が上限を超える。それ以外は、保存の失敗の種類。
-export type PresetDialogError = PresetSaveFailure | "nameTooLong";
+// ダイアログに出す誤りの種類。nameTooLong: 名前が上限を超える。noDistances: 保存する距離が1つもない。それ以外は、保存の失敗の種類。
+export type PresetDialogError =
+  | PresetSaveFailure
+  | "nameTooLong"
+  | "noDistances";
 
 // プリセット保存ダイアログの状態。
 export type PresetDialogState = {
@@ -29,7 +32,7 @@ export type PresetSaveStart =
   | { type: "invalid"; state: PresetDialogState }
   | { type: "submit"; state: PresetDialogState; preset: PresetToSave };
 
-// 開くときはラウンド名を名前欄に事前入力し、閉じるときは入力とエラーを破棄する。
+// 開くときはラウンド名を名前欄に事前入力し、閉じるときはエラーを破棄する(名前欄は開くたびに上書きされる)。
 // 送信中は背景クリック・Escでは閉じさせない。
 export function changePresetDialogOpen(
   state: PresetDialogState,
@@ -38,7 +41,7 @@ export function changePresetDialogOpen(
 ): PresetDialogState {
   if (!open && state.submitting) return state;
   if (open) return { ...state, open: true, name: roundName };
-  return { ...state, open: false, name: "", error: null };
+  return { ...state, open: false, error: null };
 }
 
 // 実行中なら二重に実行しない。名前の規則に反すればエラーを状態に出し、そうでなければ実行中の状態と保存する内容を返す。
@@ -59,7 +62,7 @@ export function startPresetSave(
   };
 }
 
-// 失敗した場合はダイアログを開いたままエラーを表示し、成功した場合は閉じて名前欄を空に戻す。
+// 失敗した場合はダイアログを開いたままエラーを表示し、成功した場合は閉じる。
 export function finishPresetSave(
   state: PresetDialogState,
   result: PresetSavingResult,
@@ -67,5 +70,5 @@ export function finishPresetSave(
   if (result.status === "failed") {
     return { ...state, submitting: false, error: result.error };
   }
-  return { ...state, open: false, name: "", submitting: false };
+  return { ...state, open: false, submitting: false };
 }

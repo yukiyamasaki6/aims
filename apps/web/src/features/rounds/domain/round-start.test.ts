@@ -19,7 +19,7 @@ const preset: Preset = {
       total_ends: 10,
       arrows_per_end: 3,
       target_face_id: "face-2",
-      target_faces: null,
+      target_faces: { size: 122, target_face_spots: [] },
     },
     {
       id: "d-first",
@@ -29,7 +29,7 @@ const preset: Preset = {
       total_ends: 20,
       arrows_per_end: 3,
       target_face_id: "face-1",
-      target_faces: null,
+      target_faces: { size: 122, target_face_spots: [] },
     },
   ],
 };

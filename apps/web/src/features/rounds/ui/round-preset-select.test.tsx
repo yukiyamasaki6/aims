@@ -80,7 +80,33 @@ const personalPreset: Preset = {
       total_ends: 6,
       arrows_per_end: 6,
       target_face_id: "face-1",
-      target_faces: null,
+      target_faces: {
+        size: 122,
+        target_face_spots: [
+          {
+            center_x: 0,
+            center_y: 0,
+            target_face_rings: [
+              {
+                radius: 10,
+                color: "#fff",
+                line_color: null,
+                z_index: 2,
+                score_str: "10",
+                score_int: 10,
+              },
+              {
+                radius: 20,
+                color: "#000",
+                line_color: null,
+                z_index: 1,
+                score_str: "9",
+                score_int: 9,
+              },
+            ],
+          },
+        ],
+      },
     },
     {
       id: "d1",
@@ -90,7 +116,33 @@ const personalPreset: Preset = {
       total_ends: 6,
       arrows_per_end: 6,
       target_face_id: "face-1",
-      target_faces: null,
+      target_faces: {
+        size: 122,
+        target_face_spots: [
+          {
+            center_x: 0,
+            center_y: 0,
+            target_face_rings: [
+              {
+                radius: 10,
+                color: "#fff",
+                line_color: null,
+                z_index: 2,
+                score_str: "10",
+                score_int: 10,
+              },
+              {
+                radius: 20,
+                color: "#000",
+                line_color: null,
+                z_index: 1,
+                score_str: "9",
+                score_int: 9,
+              },
+            ],
+          },
+        ],
+      },
     },
   ],
 };
@@ -427,20 +479,6 @@ describe("RoundPresetSelect", () => {
           roundsText("distanceEnds", { arrowsPerEnd: "6", totalEnds: "6" }),
         ),
       ).toHaveLength(2);
-    });
-
-    it("プリセットに的が埋め込まれていない距離は「的データを取得できません」と表示する", async () => {
-      // Given
-      const user = userEvent.setup();
-      await renderSelect([personalPreset], []);
-
-      // When
-      await user.click(screen.getAllByTestId("round-preset-button")[0]);
-
-      // Then
-      expect(screen.getAllByText(roundsText("targetFaceMissing"))).toHaveLength(
-        2,
-      );
     });
 
     it("展開された距離構成の部分をクリックしても、選択が解除される", async () => {

@@ -84,26 +84,26 @@ describe("createPresetCommands", () => {
       bowType: "recurve",
       distances: [
         {
-          positionKey: "a",
+          position_key: "a",
           distance: 70,
-          totalEnds: 6,
-          arrowsPerEnd: 6,
-          targetFaceId: "face-1",
-          isMarked: true,
+          total_ends: 6,
+          arrows_per_end: 6,
+          target_face_id: "face-1",
+          is_marked: true,
         },
         {
-          positionKey: "b",
+          position_key: "b",
           distance: null,
-          totalEnds: 6,
-          arrowsPerEnd: 3,
-          targetFaceId: "face-2",
-          isMarked: false,
+          total_ends: 6,
+          arrows_per_end: 3,
+          target_face_id: "face-2",
+          is_marked: false,
         },
       ],
     };
     const ok = { data: "new-preset-id", error: null, status: 200 };
 
-    it("関数save_round_as_presetを、ドメインの値を外部の引数名に写して呼ぶ。距離が未設定の要素はnullのまま渡す", async () => {
+    it("関数save_round_as_presetを、最上位だけを外部の引数名に写して呼ぶ。距離は行の名前のまま、未設定の要素もnullのまま渡す", async () => {
       // Given
       const { commands, rpc } = setup(respondWith(ok));
 
@@ -116,25 +116,9 @@ describe("createPresetCommands", () => {
         p_name: "練習用",
         p_format: "outdoor",
         p_bow_type: "recurve",
-        p_distances: [
-          {
-            position_key: "a",
-            distance: 70,
-            total_ends: 6,
-            arrows_per_end: 6,
-            target_face_id: "face-1",
-            is_marked: true,
-          },
-          {
-            position_key: "b",
-            distance: null,
-            total_ends: 6,
-            arrows_per_end: 3,
-            target_face_id: "face-2",
-            is_marked: false,
-          },
-        ],
+        p_distances: preset.distances,
       });
+      expect(preset.distances[1].distance).toBeNull();
     });
 
     it("応答がエラー無しなら、writtenを返す", async () => {
