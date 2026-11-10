@@ -211,20 +211,20 @@ describe("SavePresetDialog", () => {
         bowType: "recurve",
         distances: [
           {
-            positionKey: "a",
+            position_key: "a",
             distance: 70,
-            totalEnds: 6,
-            arrowsPerEnd: 6,
-            targetFaceId: "face-x",
-            isMarked: true,
+            total_ends: 6,
+            arrows_per_end: 6,
+            target_face_id: "face-x",
+            is_marked: true,
           },
           {
-            positionKey: "b",
+            position_key: "b",
             distance: 50,
-            totalEnds: 6,
-            arrowsPerEnd: 6,
-            targetFaceId: "face-x",
-            isMarked: true,
+            total_ends: 6,
+            arrows_per_end: 6,
+            target_face_id: "face-x",
+            is_marked: true,
           },
         ],
       };
@@ -324,26 +324,30 @@ describe("SavePresetDialog", () => {
       expect(savePreset).not.toHaveBeenCalled();
     });
 
-    it("サインインの確認で失敗の結果が返ると、その文言を表示してダイアログを開いたままにする", async () => {
-      // Given
-      savePreset.mockResolvedValue({
-        status: "failed",
-        error: "unauthenticated",
-      });
-      const { user } = setup();
-      await user.click(screen.getByTestId("save-as-preset-trigger"));
+    it.each([["unauthenticated"], ["saveFailed"]] as const)(
+      "保存の手続きが失敗の結果(%s)を返すと、その文言だけを表示し、名前欄を残して確定ボタンを有効にしたまま開いておく",
+      async (error) => {
+        // Given
+        savePreset.mockResolvedValue({ status: "failed", error });
+        const { user } = setup();
+        await user.click(screen.getByTestId("save-as-preset-trigger"));
 
-      // When
-      await user.click(screen.getByTestId("save-as-preset-confirm"));
+        // When
+        await user.click(screen.getByTestId("save-as-preset-confirm"));
 
-      // Then
-      expect(
-        await screen.findByText(
-          roundsText("presetSaveFailure.unauthenticated"),
-        ),
-      ).toBeInTheDocument();
-      expect(screen.getByTestId("save-as-preset-name")).toHaveValue("午前練習");
-    });
+        // Then
+        expect(
+          await screen.findByText(roundsText(`presetSaveFailure.${error}`)),
+        ).toBeInTheDocument();
+        expect(screen.getByTestId("save-as-preset-name")).toHaveValue(
+          "午前練習",
+        );
+        expect(screen.getByTestId("save-as-preset-confirm")).toHaveAttribute(
+          "aria-disabled",
+          "false",
+        );
+      },
+    );
 
     it("1回目は保存して閉じ、再度開いて確定した2回目の失敗の結果を表示する", async () => {
       // Given
@@ -373,53 +377,23 @@ describe("SavePresetDialog", () => {
       expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
       expect(savePreset).toHaveBeenCalledTimes(2);
     });
+  });
 
-    it("通信エラーの文言の結果が返ると、その文言だけを表示し、サインインを求めず、開いたままにする", async () => {
+  describe("距離が1つもない場合", () => {
+    it("開いた時点から理由を表示し、保存ボタンを押せず、保存の手続きを呼ばない", async () => {
       // Given
-      savePreset.mockResolvedValue({
-        status: "failed",
-        error: "unreachable",
-      });
-      const { user } = setup();
-      await user.click(screen.getByTestId("save-as-preset-trigger"));
+      const { user } = setup({ distances: [] });
 
       // When
+      await user.click(screen.getByTestId("save-as-preset-trigger"));
       await user.click(screen.getByTestId("save-as-preset-confirm"));
 
       // Then
       expect(
-        await screen.findByText(roundsText("presetSaveFailure.unreachable")),
+        screen.getByText(roundsText("presetSaveFailure.noDistances")),
       ).toBeInTheDocument();
-      expect(
-        screen.queryByText(roundsText("presetSaveFailure.unauthenticated")),
-      ).not.toBeInTheDocument();
-      expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
-    });
-
-    it("保存の手続きが固定の失敗の文言を返すと、その文言だけを表示し、名前欄を残して確定ボタンを有効にしたまま開いておく", async () => {
-      // Given
-      savePreset.mockResolvedValue({
-        status: "failed",
-        error: "saveFailed",
-      });
-      const { user } = setup();
-      await user.click(screen.getByTestId("save-as-preset-trigger"));
-
-      // When
-      await user.click(screen.getByTestId("save-as-preset-confirm"));
-
-      // Then
-      expect(
-        await screen.findByText(roundsText("presetSaveFailure.saveFailed")),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText("保存に失敗しました。"),
-      ).not.toBeInTheDocument();
-      expect(screen.getByTestId("save-as-preset-name")).toHaveValue("午前練習");
-      expect(screen.getByTestId("save-as-preset-confirm")).toHaveAttribute(
-        "aria-disabled",
-        "false",
-      );
+      expect(screen.getByTestId("save-as-preset-confirm")).toBeDisabled();
+      expect(savePreset).not.toHaveBeenCalled();
     });
   });
 

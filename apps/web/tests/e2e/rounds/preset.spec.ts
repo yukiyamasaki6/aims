@@ -145,6 +145,30 @@ test("距離を編集した直後に保存すると、サーバーへの反映�
   );
 });
 
+test("距離が1つもないラウンドでは、保存ダイアログを開くと理由が表示され、保存ボタンを押せず、保存の要求が出ない", async ({
+  page,
+}) => {
+  // 距離のないラウンドを開き、保存の要求を数える。
+  await openRound(page, { distances: [] });
+  let saveRequests = 0;
+  await page.route("**/rest/v1/rpc/save_round_as_preset", (route) => {
+    saveRequests += 1;
+    return route.continue();
+  });
+
+  // 距離がないラウンドはラウンド編集ダイアログが展開済みのため、閉じてから保存ダイアログを開く。
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await page.getByTestId("save-as-preset-trigger").click();
+
+  await expect(
+    page.getByText(roundsText("presetSaveFailure.noDistances")),
+  ).toBeVisible();
+  await expect(page.getByTestId("save-as-preset-confirm")).toBeDisabled();
+  await page.getByTestId("save-as-preset-confirm").click({ force: true });
+  expect(saveRequests).toBe(0);
+});
+
 test("保存したプリセットは、その後オフラインで開いたラウンド作成画面の個人プリセットに表示される", async ({
   page,
 }) => {

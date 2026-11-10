@@ -2,12 +2,12 @@ import { act, renderHook } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Preset } from "../domain/preset";
-import { createFakeNewRoundStore } from "./round-stores-test-helpers";
-import { NewRoundStoreProvider } from "./rounds-context";
+import { createFakeRoundProcedures } from "./round-stores-test-helpers";
+import { RoundProceduresProvider } from "./rounds-context";
 import { usePresetDelete } from "./use-preset-delete";
 
-const fake = createFakeNewRoundStore();
-const del = fake.store.deletePreset;
+const fake = createFakeRoundProcedures();
+const del = fake.presetDeletion.deletePreset;
 const preset: Preset = {
   id: "p1",
   name: "70m",
@@ -16,13 +16,14 @@ const preset: Preset = {
   preset_distances: [],
 };
 
-function setup(mounted = { current: true }) {
-  const onDeleted = vi.fn();
-  const hook = renderHook(() => usePresetDelete(mounted, onDeleted), {
+function setup() {
+  return renderHook(() => usePresetDelete(), {
     wrapper: ({ children }: { children: ReactNode }) =>
-      createElement(NewRoundStoreProvider, { store: fake.store, children }),
+      createElement(RoundProceduresProvider, {
+        procedures: fake,
+        children,
+      }),
   });
-  return { ...hook, onDeleted };
 }
 
 beforeEach(() => {
@@ -30,10 +31,10 @@ beforeEach(() => {
 });
 
 describe("usePresetDelete.dialog.onConfirm", () => {
-  it("削除できたら、一覧から除き、onDeletedを呼ぶ", async () => {
+  it("削除できたら、一覧から除く", async () => {
     // Given
     del.mockResolvedValue({ status: "deleted" });
-    const { result, onDeleted } = setup();
+    const { result } = setup();
     act(() => result.current.setPresetToDelete(preset));
 
     // When
@@ -43,33 +44,12 @@ describe("usePresetDelete.dialog.onConfirm", () => {
 
     // Then
     expect(result.current.removedIds).toEqual(["p1"]);
-    expect(onDeleted).toHaveBeenCalledWith("p1");
-  });
-
-  it("削除へ、確認中のプリセットのIDと、マウント中は真を返し、アンマウントを表す値に変わると偽を返す判定を渡す", async () => {
-    // Given
-    del.mockResolvedValue({ status: "deleted" });
-    const mounted = { current: true };
-    const { result } = setup(mounted);
-    act(() => result.current.setPresetToDelete(preset));
-
-    // When
-    await act(async () => {
-      await result.current.dialog.onConfirm();
-    });
-    const isCurrent = del.mock.calls[0][1] as () => boolean;
-    const whileMounted = isCurrent();
-    mounted.current = false;
-
-    // Then
-    expect(del.mock.calls[0][0]).toBe("p1");
-    expect(whileMounted).toBe(true);
-    expect(isCurrent()).toBe(false);
+    expect(del).toHaveBeenCalledExactlyOnceWith("p1");
   });
 
   it("確認中のプリセットが無ければ、何も削除しない", async () => {
     // Given
-    const { result, onDeleted } = setup();
+    const { result } = setup();
 
     // When
     await act(async () => {
@@ -78,13 +58,12 @@ describe("usePresetDelete.dialog.onConfirm", () => {
 
     // Then
     expect(del).not.toHaveBeenCalled();
-    expect(onDeleted).not.toHaveBeenCalled();
   });
 
   it("失敗したら、エラーを示し、一覧を変えない", async () => {
     // Given
     del.mockResolvedValue({ status: "failed", error: "boom" });
-    const { result, onDeleted } = setup();
+    const { result } = setup();
     act(() => result.current.setPresetToDelete(preset));
 
     // When
@@ -95,23 +74,6 @@ describe("usePresetDelete.dialog.onConfirm", () => {
     // Then
     expect(result.current.dialog.error).toBe("boom");
     expect(result.current.removedIds).toEqual([]);
-    expect(onDeleted).not.toHaveBeenCalled();
-  });
-
-  it("結果が破棄されたら、何も変えない", async () => {
-    // Given
-    del.mockResolvedValue({ status: "discarded" });
-    const { result, onDeleted } = setup();
-    act(() => result.current.setPresetToDelete(preset));
-
-    // When
-    await act(async () => {
-      await result.current.dialog.onConfirm();
-    });
-
-    // Then
-    expect(result.current.removedIds).toEqual([]);
-    expect(onDeleted).not.toHaveBeenCalled();
   });
 });
 
@@ -135,16 +97,18 @@ describe("usePresetDelete.dialog の実行中とエラー", () => {
     });
   });
 
-  it("再描画を挟まない同じタスクの2回の確認でも、削除は1回で、完了まで実行中になる", async () => {
+  it("実行中の間の2回目の確認は無視し、削除は1回で、完了まで実行中になる", async () => {
     // Given
     const finish = Promise.withResolvers<{ status: "deleted" }>();
     del.mockReturnValue(finish.promise);
     const { result } = setup();
     act(() => result.current.setPresetToDelete(preset));
+    await act(async () => {
+      void result.current.dialog.onConfirm();
+    });
 
     // When
     await act(async () => {
-      void result.current.dialog.onConfirm();
       void result.current.dialog.onConfirm();
     });
 
@@ -192,20 +156,5 @@ describe("usePresetDelete.dialog の実行中とエラー", () => {
 
     // Then
     expect(result.current.dialog).toMatchObject({ preset: null, error: null });
-  });
-
-  it("結果が破棄されたら、実行中を解かずに何も変えない", async () => {
-    // Given
-    del.mockResolvedValue({ status: "discarded" });
-    const { result } = setup();
-    act(() => result.current.setPresetToDelete(preset));
-
-    // When
-    await act(async () => {
-      await result.current.dialog.onConfirm();
-    });
-
-    // Then
-    expect(result.current.dialog).toMatchObject({ preset, error: null });
   });
 });

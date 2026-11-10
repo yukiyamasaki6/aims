@@ -1,45 +1,39 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { BusyButton } from "@/components/ui/busy-button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useMountedRef } from "@/hooks/use-mounted-ref";
-import { cn } from "@/lib/utils";
-import type { SignInFailure } from "../domain/fetch-status";
 import type { Preset } from "../domain/preset";
 import { presetListView } from "../domain/preset-list-view";
 import type { PresetDeleteFailure } from "../domain/write-result";
 import { BackToListLink } from "./back-to-list-link";
 import { FetchState } from "./fetch-state";
 import { PresetListSkeleton, PresetSections } from "./preset-list";
-import { useNewRoundStore } from "./rounds-context";
+import { useRoundProcedures } from "./rounds-context";
 import { useFetchResult } from "./use-fetch-result";
 import { usePresetDelete } from "./use-preset-delete";
 import { useStartRound } from "./use-start-round";
 
 export function RoundPresetSelect() {
-  const store = useNewRoundStore();
+  const { fetching, whenOnline } = useRoundProcedures();
   const { view, retry } = useFetchResult(
-    () => store.loadPresets(),
-    store.whenOnline,
+    () => fetching.fetchPresets(),
+    whenOnline,
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const mountedRef = useMountedRef();
   const hydrated = useHydrated();
-  const { removedIds, setPresetToDelete, dialog } = usePresetDelete(
-    mountedRef,
-    (presetId) => setSelectedId((prev) => (prev === presetId ? null : prev)),
-  );
+  const { removedIds, setPresetToDelete, dialog } = usePresetDelete();
 
   const {
     personal: personalPresets,
     global: globalPresets,
     selected: selectedPreset,
   } = presetListView(view, removedIds, selectedId);
-  const { error, submitting, handleStart } = useStartRound(
+  const { unauthenticated, submitting, handleStart } = useStartRound(
     selectedPreset,
     mountedRef,
   );
@@ -74,7 +68,7 @@ export function RoundPresetSelect() {
       </div>
 
       <StartBar
-        error={error}
+        unauthenticated={unauthenticated}
         submitting={submitting}
         selectedPreset={selectedPreset}
         onStart={handleStart}
@@ -86,12 +80,12 @@ export function RoundPresetSelect() {
 }
 
 function StartBar({
-  error,
+  unauthenticated,
   submitting,
   selectedPreset,
   onStart,
 }: {
-  error: SignInFailure | null;
+  unauthenticated: boolean;
   submitting: boolean;
   selectedPreset: Preset | null;
   onStart: () => void;
@@ -100,24 +94,22 @@ function StartBar({
   return (
     <div className="border-t bg-card shadow-lg">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-2 p-4">
-        {error && (
+        {unauthenticated && (
           <p className="text-destructive text-sm">
-            {t(`roundStartFailure.${error}`)}
+            {t("roundStartUnauthenticated")}
           </p>
         )}
         <p className="text-center font-medium text-sm">{t("startNotice")}</p>
-        <Button
+        <BusyButton
           type="button"
-          aria-disabled={submitting}
+          busy={submitting}
           data-testid="round-start-button"
-          className={cn(submitting && "pointer-events-none opacity-50")}
           onClick={onStart}
         >
-          {submitting && <Loader2 className="size-3.5 animate-spin" />}
           {selectedPreset
             ? t("startWithPreset", { name: selectedPreset.name })
             : t("startWithoutPreset")}
-        </Button>
+        </BusyButton>
       </div>
     </div>
   );

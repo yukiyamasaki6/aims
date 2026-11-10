@@ -1,5 +1,4 @@
 import type { SessionReader } from "@/features/auth";
-import { signInFailure } from "../domain/fetch-status";
 import { type Presets, withoutPreset } from "../domain/preset";
 import type { PresetDeleteFailure } from "../domain/write-result";
 import type { PresetCommands } from "./preset-commands";
@@ -7,20 +6,15 @@ import type { ReferenceSnapshots } from "./reference-snapshots";
 
 // deleted: 削除した。
 // failed: 削除できず、失敗の種類がある。
-// discarded: 完了を待つ間に、結果を受け取る画面が無くなった。
-export type PresetDeletionResult =
+type PresetDeletionResult =
   | { status: "deleted" }
-  | { status: "failed"; error: PresetDeleteFailure }
-  | { status: "discarded" };
+  | { status: "failed"; error: PresetDeleteFailure };
 
 export type PresetDeletion = {
-  deletePreset(
-    presetId: string,
-    isCurrent: () => boolean,
-  ): Promise<PresetDeletionResult>;
+  deletePreset(presetId: string): Promise<PresetDeletionResult>;
 };
 
-// 確認の後に呼ぶ個人プリセットの削除。成功したら保存済みからも除く。
+// 確認の後に呼ぶ個人プリセットの削除。未認証のときだけ止め、サインインを確かめられない(不明)ときは書き込みへ進む。成功したら保存済みからも除く。
 export function createPresetDeletion(deps: {
   sessionReader: SessionReader;
   commands: Pick<PresetCommands, "deletePreset">;
@@ -29,24 +23,20 @@ export function createPresetDeletion(deps: {
   const { sessionReader, commands, snapshots } = deps;
 
   return {
-    async deletePreset(presetId, isCurrent) {
+    async deletePreset(presetId) {
       const reading = await sessionReader.readSession();
-      if (!isCurrent()) return { status: "discarded" };
-      if (reading.status !== "authenticated") {
-        return { status: "failed", error: signInFailure(reading.status) };
+      if (reading.status === "unauthenticated") {
+        return { status: "failed", error: "unauthenticated" };
       }
 
       const result = await commands.deletePreset(presetId);
-      // 書き込みに成功したら、画面を離れていても保存済みから除く。保存済みはサーバーの事実の写しで、破棄は画面に結果を出さないことだけを意味する。届かなかったときと拒否されたときは変えない。
-      if (result === "written") {
-        snapshots.update<Presets>("presets", (presets) =>
-          withoutPreset(presets, presetId),
-        );
-      }
-      if (!isCurrent()) return { status: "discarded" };
+      // 書き込みに成功したら保存済みから除く。画面を離れていても完了する。書き込めなかったときは変えない。
       if (result !== "written") {
         return { status: "failed", error: "deleteFailed" };
       }
+      snapshots.update<Presets>("presets", (presets) =>
+        withoutPreset(presets, presetId),
+      );
       return { status: "deleted" };
     },
   };

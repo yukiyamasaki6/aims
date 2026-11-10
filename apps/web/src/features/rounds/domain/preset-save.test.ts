@@ -76,7 +76,7 @@ describe("generatePresetName", () => {
 
 describe("presetToSave", () => {
   describe("名前が入力されている場合", () => {
-    it("前後の空白を除いた名前と表示中の構成を、外部の引数名を持たない値にして返す", () => {
+    it("前後の空白を除いた名前と表示中の構成を、距離を行と同じ名前で持つ値にして返す", () => {
       // Given
 
       // When
@@ -91,20 +91,20 @@ describe("presetToSave", () => {
           bowType: "barebow",
           distances: [
             {
-              positionKey: "a",
+              position_key: "a",
               distance: 70,
-              totalEnds: 6,
-              arrowsPerEnd: 6,
-              targetFaceId: "face-1",
-              isMarked: true,
+              total_ends: 6,
+              arrows_per_end: 6,
+              target_face_id: "face-1",
+              is_marked: true,
             },
             {
-              positionKey: "b",
+              position_key: "b",
               distance: 30,
-              totalEnds: 6,
-              arrowsPerEnd: 6,
-              targetFaceId: "face-2",
-              isMarked: false,
+              total_ends: 6,
+              arrows_per_end: 6,
+              target_face_id: "face-2",
+              is_marked: false,
             },
           ],
         },
@@ -179,6 +179,55 @@ describe("presetToSave", () => {
     });
   });
 
+  describe("距離が1つもない場合", () => {
+    it("名前によらず、noDistancesで無効にする", () => {
+      // Given
+      const empty = { ...source, distances: [] };
+
+      // When
+      const named = presetToSave("午前練習", empty);
+      const blank = presetToSave("   ", empty);
+      const tooLong = presetToSave("あ".repeat(51), empty);
+
+      // Then
+      const invalid = { type: "invalid", error: "noDistances" };
+      expect(named).toEqual(invalid);
+      expect(blank).toEqual(invalid);
+      expect(tooLong).toEqual(invalid);
+    });
+  });
+
+  describe("保存される名前", () => {
+    it.each([
+      ["空の名前", "", [70]],
+      ["空白のみの名前", "  \u3000 ", [70, 30]],
+      ["通常の名前", "午前", [70]],
+      ["距離が未設定", "", [null]],
+      ["距離0m", "", [0]],
+      ["複数の距離", "", [70, 50, 30]],
+    ] as const)(
+      "%sでも、有効なら名前が1文字以上になる",
+      (_label, name, values) => {
+        // Given
+        const distances = values.map((distance, index) => ({
+          ...distanceA,
+          id: `d-${index}`,
+          position_key: String.fromCharCode(97 + index),
+          distance,
+        }));
+
+        // When
+        const result = presetToSave(name, { ...source, distances });
+
+        // Then
+        expect(result.type).toBe("valid");
+        if (result.type === "valid") {
+          expect(result.preset.name.length).toBeGreaterThan(0);
+        }
+      },
+    );
+  });
+
   describe("位置キーの振り直し", () => {
     it("同じ位置キーの距離は(位置キー、ID)の順に並べ、連番の一意なキーを振り直す", () => {
       // Given
@@ -192,11 +241,13 @@ describe("presetToSave", () => {
       const preset = validPreset("n", distances);
 
       // Then
-      expect(preset.distances.map((d) => [d.positionKey, d.distance])).toEqual([
-        ["a", 70],
-        ["b", 30],
-        ["c", 20],
-      ]);
+      expect(preset.distances.map((d) => [d.position_key, d.distance])).toEqual(
+        [
+          ["a", 70],
+          ["b", 30],
+          ["c", 20],
+        ],
+      );
     });
 
     it("26件を超えても、振り直したキーは辞書順で増加する", () => {
@@ -209,7 +260,7 @@ describe("presetToSave", () => {
 
       // When
       const keys = validPreset("n", distances).distances.map(
-        (d) => d.positionKey,
+        (d) => d.position_key,
       );
 
       // Then

@@ -50,16 +50,6 @@ type DistanceRow = {
 const ROUNDS_LIST_SELECT =
   "id, name, round_date, distances(disabled_at, shots(score_int, disabled_at))";
 
-type RoundSummaryRow = {
-  id: string;
-  name: string;
-  round_date: string;
-  distances: {
-    disabled_at: string | null;
-    shots: { score_int: number; disabled_at: string | null }[];
-  }[];
-};
-
 type RoundRow = {
   id: string;
   name: string;
@@ -99,21 +89,6 @@ function toServerRound(row: RoundRow): ServerRound {
       shots: shots.map(({ disabled_at: shotDisabledAt, ...shot }) => ({
         ...shot,
         disabled: shotDisabledAt !== null,
-      })),
-    })),
-  };
-}
-
-function toServerRoundSummary(row: RoundSummaryRow): ServerRoundSummary {
-  return {
-    id: row.id,
-    name: row.name,
-    roundDate: row.round_date,
-    distances: row.distances.map((distance) => ({
-      disabled: distance.disabled_at !== null,
-      shots: distance.shots.map((shot) => ({
-        score_int: shot.score_int,
-        disabled: shot.disabled_at !== null,
       })),
     })),
   };
@@ -244,9 +219,7 @@ export function createRoundQueries(
       if (failure) return failure;
       return {
         status: "ok",
-        data: ((response.data ?? []) as RoundSummaryRow[]).map(
-          toServerRoundSummary,
-        ),
+        data: (response.data ?? []) as ServerRoundSummary[],
       };
     },
     async targetFaces(userId) {

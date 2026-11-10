@@ -119,6 +119,40 @@ test("プリセットを選ばずに開始すると、距離のないラウン�
     .toBe(1);
 });
 
+// 実施日の初期値は、開始した時点の端末のローカルの日付になる(UTCの日付ではない)。
+for (const { timezoneId, instant, expected } of [
+  // 日本時間の3/2 8:30(UTCでは3/1)。
+  {
+    timezoneId: "Asia/Tokyo",
+    instant: "2026-03-01T23:30:00Z",
+    expected: "2026-03-02",
+  },
+  // ロサンゼルスの3/1 21:00(UTCでは3/2)。
+  {
+    timezoneId: "America/Los_Angeles",
+    instant: "2026-03-02T05:00:00Z",
+    expected: "2026-03-01",
+  },
+]) {
+  test.describe(`${timezoneId}で${instant}に開始する`, () => {
+    test.use({ timezoneId });
+
+    test(`実施日の初期値が端末のローカルの日付(${expected})になる`, async ({
+      page,
+    }) => {
+      // 時刻を固定してから開く(固定してもタイマーは止まらない)。
+      await page.clock.setFixedTime(new Date(instant));
+      await openNewRound(page);
+
+      await page.getByTestId("round-start-button").click();
+
+      await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]+$/);
+      // 距離がないラウンドはラウンド編集が展開済みのため、そのまま日付を確かめる。
+      await expect(page.getByTestId("round-config-date")).toHaveValue(expected);
+    });
+  });
+}
+
 test("「一覧へ戻る」リンクを押すと、ラウンド一覧へ移動する", async ({
   page,
 }) => {
@@ -285,7 +319,7 @@ test("サインインが切れた後に開始すると、サインインが必�
   await page.getByTestId("round-start-button").click();
 
   await expect(
-    page.getByText(roundsText("fetchFailure.unauthenticated")),
+    page.getByText(roundsText("roundStartUnauthenticated")),
   ).toBeVisible();
   await expect(page).toHaveURL(/\/rounds\/new$/);
 });

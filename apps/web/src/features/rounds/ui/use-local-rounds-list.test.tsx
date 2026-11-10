@@ -9,7 +9,7 @@ import { useLocalRoundsList } from "./use-local-rounds-list";
 
 const roundsText = translatorFor("rounds");
 
-// 端末の記録からの導出は別のテストで確かめるため、ラウンドの状態は端末の一覧と待ちの合図だけを返す偽の約束で模す。
+// 端末の記録からの導出は別のテストで確かめるため、ラウンドの状態は端末の一覧だけを返す偽の約束で模す。
 function setup() {
   const fake = createFakeRoundsListStore();
   function wrapper({ children }: { children: ReactNode }) {
@@ -47,7 +47,7 @@ describe("useLocalRoundsList", () => {
     const { result } = renderHook(() => useLocalRoundsList(), { wrapper });
 
     // Then
-    expect(result.current.local).toBeNull();
+    expect(result.current).toBeNull();
     expect(fake.store.loadLocalList).toHaveBeenCalledTimes(1);
   });
 
@@ -61,10 +61,10 @@ describe("useLocalRoundsList", () => {
     await act(async () => {});
 
     // Then
-    expect(result.current.local).toBe(loaded);
+    expect(result.current).toBe(loaded);
   });
 
-  it("端末の記録が変わるたびに読み直し、後に始めた読み込みの結果だけを使い、解除後は読まない", async () => {
+  it("端末の記録が変わるたびに読み直し、後に始めた読み込みの結果だけを使い、アンマウントすると購読を解除する", async () => {
     // Given
     const { fake, wrapper } = setup();
     let notify: () => void = () => {};
@@ -91,7 +91,7 @@ describe("useLocalRoundsList", () => {
 
     // Then
     expect(fake.store.loadLocalList).toHaveBeenCalledTimes(2);
-    expect(result.current.local).toBe(updated);
+    expect(result.current).toBe(updated);
     expect(stop).toHaveBeenCalledTimes(1);
   });
 
@@ -106,7 +106,7 @@ describe("useLocalRoundsList", () => {
     fake.store.loadLocalList.mockResolvedValue(loaded);
     const { result } = renderHook(() => useLocalRoundsList(), { wrapper });
     await act(async () => {});
-    const before = result.current.local;
+    const before = result.current;
     fake.store.loadLocalList.mockResolvedValue(structuredClone(loaded));
 
     // When
@@ -119,22 +119,6 @@ describe("useLocalRoundsList", () => {
 
     // Then
     expect(fake.store.loadLocalList).toHaveBeenCalledTimes(2);
-    expect(result.current.local).toBe(before);
-  });
-
-  it("待ちの経過の合図が起きるまでwaitedは偽で、起きたら真になる", async () => {
-    // Given
-    const { fake, wrapper } = setup();
-    fake.store.loadLocalList.mockResolvedValue(loaded);
-    const { result } = renderHook(() => useLocalRoundsList(), { wrapper });
-    await act(async () => {});
-    const waitedBeforeElapse = result.current.waited;
-
-    // When
-    act(() => fake.elapseFallbackWait());
-
-    // Then
-    expect(waitedBeforeElapse).toBe(false);
-    expect(result.current.waited).toBe(true);
+    expect(result.current).toBe(before);
   });
 });

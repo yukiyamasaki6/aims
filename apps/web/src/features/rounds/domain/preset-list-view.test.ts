@@ -18,7 +18,7 @@ function preset(id: string): Preset {
         total_ends: 6,
         arrows_per_end: 6,
         target_face_id: "face-1",
-        target_faces: null,
+        target_faces: { size: 122, target_face_spots: [] },
       },
     ],
   };
@@ -92,6 +92,16 @@ describe("presetListView", () => {
 
     // Then
     expect(view.selected).toBeNull();
+  });
+
+  it("別のプリセットを削除しても、選択中のプリセットはselectedのままになる", () => {
+    // Given
+
+    // When
+    const view = presetListView(loaded, ["mine-2"], "mine-1");
+
+    // Then
+    expect(view.selected).toBe(mine1);
   });
 
   it.each<[string, FetchView<Presets>]>([

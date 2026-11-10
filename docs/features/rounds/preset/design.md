@@ -15,7 +15,7 @@
 | 状態 | 表示 | 判定 |
 | :--- | :--- | :--- |
 | 閉じている | 「プリセット保存」ボタンのみ | `open`が`false` |
-| 入力中 | 名前欄にラウンド名を事前入力し、空なら距離構成から自動生成した名前をプレースホルダーに出す | `open`が`true` |
+| 入力中 | 名前欄にラウンド名を事前入力し、空なら距離構成から自動生成した名前をプレースホルダーに出す。距離が0件なら、開いた時点から名前欄の下に「距離がないため、プリセットとして保存できません。」を出し、保存ボタンを`disabled`にする | `open`が`true` |
 | 保存中 | 保存ボタンを無効にし、背景クリックやEscでは閉じない | `submitting`が`true` |
 | 保存失敗 | 開いたままエラーを出し、再び押せる | 名前が51文字以上、または保存が失敗 |
 
@@ -26,29 +26,29 @@
 | メニュー表示 | 個人プリセットの行に「削除」を出し、外側のクリックで閉じる | メニューを開いている |
 | 確認中 | `BlockingConfirmDialog`に「「<プリセット名>」を削除しますか？」。実行中(`busy`)とエラー(`error`)は削除側のフックが渡す | `presetToDelete`が設定されている |
 | 削除中 | キャンセルと確認を無効にし、背景クリックでも閉じない | 完了していない |
-| 削除成功 | 一覧から除く。削除対象が選択中なら選択も解除する | 結果が成功 |
+| 削除成功 | 一覧から除く。削除対象が選択中なら選択も解除する(選択は削除済みのIDを除く導出で解除される) | 結果が成功 |
 | 削除失敗 | 開いたままエラーを出し、確認ボタンを再び押せる | 結果が`failed` |
 
 ## 構成とデータの流れ
 
 - `features/rounds/ui/save-preset-dialog.tsx`: 保存ダイアログの描画。手続きの入れ物の`presetSaving.savePreset`を呼び、結果を状態へ反映する。
 - `features/rounds/ui/save-preset-dialog-state.ts`: 開閉時の事前入力と破棄、二重の実行の防止、結果の反映を純関数で行う。
-- `features/rounds/domain/preset-save.ts`: 保存するプリセットの内容(外部の引数名を持たない)、名前の決定と長さ検証、距離の位置キーの連番の振り直しを行う。
+- `features/rounds/domain/preset-save.ts`: 保存するプリセットの内容(距離は行と同じ名前で持ち、最上位の引数名`p_*`は持たない)、距離が1つ以上あることの検証、名前の決定と長さ検証、距離の位置キーの連番の振り直しを行う。
 - 保存の手続き(`RoundProcedures.presetSaving`。`features/rounds/application/preset-saving.ts`): 入口が渡す`SessionReader`でサインインの状態を確かめ、書き込みを実行し、成功の後にプリセット一覧を背景で再取得して端末の保存済みを更新する。
-- `features/rounds/ui/use-preset-delete.ts`: 削除を確認中のプリセットと、削除済みのID、実行中とエラーを持ち、`NewRoundStore.deletePreset`を呼ぶ。
-- `NewRoundStore.deletePreset`と削除の手続き(`features/rounds/application/preset-deletion.ts`): サインインの状態を確かめ、削除を実行する。書き込みに成功したら、削除の応答を待つ間に画面を離れていても保存済みから除く(画面への結果だけを破棄する)。届かなかったときと拒否されたときは保存済みを変えない。
-- `features/rounds/infrastructure/preset-commands.ts`: 削除は`DatabaseGateway.delete`で`preset_rounds`を`id`で消す。保存は`DatabaseGateway.rpc("save_round_as_preset")`を呼び、外部の引数名`p_*`はここだけが知る。どちらも結果を種類(届いた、届かなかった、拒否された)に写す。文言は作らない。
+- `features/rounds/ui/use-preset-delete.ts`: 削除を確認中のプリセットと、削除済みのID、実行中とエラーを持ち、手続きの入れ物の`presetDeletion.deletePreset`を呼ぶ。
+- 削除の手続き(`features/rounds/application/preset-deletion.ts`。手続きの入れ物の`presetDeletion`): サインインの状態を確かめ、削除を実行する。書き込みに成功したら保存済みから除く。削除の応答を待つ間に画面を離れていても完了する。書き込めなかったときは保存済みを変えない。
+- `features/rounds/infrastructure/preset-commands.ts`: 削除は`DatabaseGateway.delete`で`preset_rounds`を`id`で消す。保存は`DatabaseGateway.rpc("save_round_as_preset")`を呼び、最上位の外部の引数名`p_*`だけをここが知る(距離は行と同じ名前のままjsonbで渡す)。どちらも結果を書き込めたか書き込めなかったか(`WriteResult`)に写す。通信の失敗はSDKが例外でなく状態0とエラーで返すため、エラーの有無だけで判定する。文言は作らない。
 - `features/rounds/ui/scorecard-client.tsx`: 保存ダイアログへ、ラウンド名と画面に表示中の構成(操作の列から導いた距離)を渡す。
-- サインインの確認の失敗: 保存も削除も、`SessionReader`の`readSession`が返す未認証と不明（通信失敗）を、`fetch-status.ts`の`signInFailure`で失敗の種類(`unauthenticated`、`unreachable`)に写して返す。文言は、UI層の文言の一覧(`features/rounds/ui/rounds-messages.ts`)が種類ごとに持つ。
-- 削除の失敗は、ラウンドのドメイン(`features/rounds/domain/write-result.ts`の型`PresetDeleteFailure`)の種類`deleteFailed`で返す。届かなかったときも拒否されたときも同じ種類で、文言は一覧が「削除できませんでした。」と持ち、サーバーとパッケージの文言は出さない。
+- サインインの確認の失敗: 保存も削除も、`SessionReader`の`readSession`が未認証を返したときだけ失敗の種類`unauthenticated`で返す。確認できない（不明、通信失敗）ときは書き込みへ進み、書き込めなければ保存・削除の失敗になる。文言は、UI層の文言の一覧(`features/rounds/ui/rounds-messages.ts`)が種類ごとに持つ。
+- 削除の失敗は、ラウンドのドメイン(`features/rounds/domain/write-result.ts`の型`PresetDeleteFailure`)の種類`deleteFailed`で返す。届かなかったときも拒否されたときも同じ種類で、サインインを確かめられなかったときの書き込みの失敗も同じである。文言は一覧が「削除できませんでした。」と持ち、サーバーとパッケージの文言は出さない。
 - 保存の失敗も同じ場所の型`PresetSaveFailure`の種類`saveFailed`で返す。サインインの確認以外の失敗は、種類によらず一覧が「保存できませんでした。」と持ち、サーバーとパッケージの文言は出さない。
 
-- 名前が空白のみなら、距離を位置順に`-`でつないだ名前（未入力の距離は`??`）で保存する。
+- 名前が空白のみなら、距離を位置順に`-`でつないだ名前（未入力の距離は`??`）で保存する。距離が1つ以上あるときの規則で、このとき名前は必ず1文字以上になる。距離が0件なら保存しない(`noDistances`。画面は保存ボタンを押せなくし、domainは契約として拒否する)。
 - 名前は50文字以内とし、クライアントの検証とDBのCHECK制約の両方で守る。
 - `save_round_as_preset`は、渡された名前・種別・弓種・距離配列を`preset_rounds`と`preset_distances`へ1トランザクションで書く。`rounds`・`distances`は読まない。SECURITY INVOKERで、呼び出し元のRLSに従う。
 - 削除は直接のDELETEで、`preset_rounds`のDELETEポリシーが認可を担う。`preset_distances`は外部キーのCASCADEで消える。
 - アプリが書き込む経路は、保存のRPCと削除だけである。`preset_rounds`のUPDATEと`preset_distances`のUPDATE・DELETEのポリシーとGRANTは持たない。
-- 削除は操作の列を使わず、削除側のフック(`use-preset-delete.ts`)が実行中と失敗を持ち、同期の`ref`で二重実行を拒否する。`BlockingConfirmDialog`は`busy`と`error`を受け取って完了を待つ表現だけを担う。
+- 削除は操作の列を使わず、削除側のフック(`use-preset-delete.ts`)が実行中と失敗を持ち、実行中の`state`で二重実行を拒否する。`BlockingConfirmDialog`は`busy`と`error`を受け取って完了を待つ表現だけを担う。
 - 保存(`save_round_as_preset`)も操作の列を使わない、オンライン専用の直接書き込みである(`preset-commands.ts`)。
 
 ## 設計判断
@@ -62,6 +62,7 @@
 | 名前の上限を50文字にする | 一覧と要約行が折り返しと省略に対応していないため | 一覧が折り返しに対応したとき |
 | 削除の確認に完了を待つ`BlockingConfirmDialog`を使い、実行中の状態は削除側のフックが持つ | 破壊的な操作で、完了前に閉じると結果を確認できないため。実行中の状態は削除の状態(確認中のプリセット、削除済みのID)を持つ場所に置き、ダイアログは表現だけにする | 削除を取り消せるようにしたとき |
 | 削除の失敗を1つの種類にし、文言は一覧が固定で持つ | 外部のエラーから文言を作らないため(実装規約。`agents/implementation.md`)。認証の`other`と同じ | 失敗の種類ごとに利用者の行動を変える必要が出たとき |
+| 距離を1つ以上必須にする | 距離のないプリセットは開始画面で候補名も空のボタンになり、構成として意味が無いため | DBが検証を持ったとき |
 | 保存の失敗を1つの種類にし、文言は一覧が固定で持つ | 外部のエラーから文言を作らないため(実装規約。`agents/implementation.md`)。削除と同じ | 失敗の種類ごとに利用者の行動を変える必要が出たとき |
 | 削除メニューは、名前ボタンとメニューボタンだけを囲む`relative`ラッパー内で中央寄せする | カード全体を基準にすると、距離構成の展開時にメニューボタンが名前の行からずれるため | カードの構造を変えたとき |
 
@@ -69,4 +70,4 @@
 
 - 同名のプリセットを保存できる（一意制約を持たない）。
 - プリセットの名前変更・内容編集はできない。
-- 認証の読み取りと書き込みは投げない約束で、削除の手続きと画面は例外を捕まえない(約束の実装が捕まえる)。
+- 通信と拒否は結果で返し、削除の手続きと画面は例外を受けない。接続を得られない設定の誤り(環境変数の欠落)のときだけ書き込みが投げる(想定外)。

@@ -13,28 +13,28 @@ import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { FetchResult } from "../domain/fetch-status";
 import type { Preset, Presets } from "../domain/preset";
 import { RoundPresetSelect } from "./round-preset-select";
-import { createFakeNewRoundStore } from "./round-stores-test-helpers";
-import { NewRoundStoreProvider } from "./rounds-context";
+import { createFakeRoundProcedures } from "./round-stores-test-helpers";
+import { RoundProceduresProvider } from "./rounds-context";
 
 const roundsText = translatorFor("rounds");
 
-// 取得、削除、開始の手続きは、それぞれのテストで確かめるため、ラウンドの状態と変更の方法は偽の約束で渡す。
+// 取得、削除、開始の手続きは、それぞれのテストで確かめるため、手続きの入れ物は偽の約束で渡す。
 // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
-let fake: ReturnType<typeof createFakeNewRoundStore>;
+let fake: ReturnType<typeof createFakeRoundProcedures>;
 let loadPresets: ReturnType<
-  typeof createFakeNewRoundStore
->["store"]["loadPresets"];
+  typeof createFakeRoundProcedures
+>["fetching"]["fetchPresets"];
 let startRound: ReturnType<
-  typeof createFakeNewRoundStore
->["store"]["startRound"];
+  typeof createFakeRoundProcedures
+>["roundStart"]["startRound"];
 let deletePreset: ReturnType<
-  typeof createFakeNewRoundStore
->["store"]["deletePreset"];
+  typeof createFakeRoundProcedures
+>["presetDeletion"]["deletePreset"];
 
 function render(ui: ReactElement) {
   return renderWithoutStore(
     <IntlTestProvider>
-      <NewRoundStoreProvider store={fake.store}>{ui}</NewRoundStoreProvider>
+      <RoundProceduresProvider procedures={fake}>{ui}</RoundProceduresProvider>
     </IntlTestProvider>,
   );
 }
@@ -80,7 +80,33 @@ const personalPreset: Preset = {
       total_ends: 6,
       arrows_per_end: 6,
       target_face_id: "face-1",
-      target_faces: null,
+      target_faces: {
+        size: 122,
+        target_face_spots: [
+          {
+            center_x: 0,
+            center_y: 0,
+            target_face_rings: [
+              {
+                radius: 10,
+                color: "#fff",
+                line_color: null,
+                z_index: 2,
+                score_str: "10",
+                score_int: 10,
+              },
+              {
+                radius: 20,
+                color: "#000",
+                line_color: null,
+                z_index: 1,
+                score_str: "9",
+                score_int: 9,
+              },
+            ],
+          },
+        ],
+      },
     },
     {
       id: "d1",
@@ -90,7 +116,33 @@ const personalPreset: Preset = {
       total_ends: 6,
       arrows_per_end: 6,
       target_face_id: "face-1",
-      target_faces: null,
+      target_faces: {
+        size: 122,
+        target_face_spots: [
+          {
+            center_x: 0,
+            center_y: 0,
+            target_face_rings: [
+              {
+                radius: 10,
+                color: "#fff",
+                line_color: null,
+                z_index: 2,
+                score_str: "10",
+                score_int: 10,
+              },
+              {
+                radius: 20,
+                color: "#000",
+                line_color: null,
+                z_index: 1,
+                score_str: "9",
+                score_int: 9,
+              },
+            ],
+          },
+        ],
+      },
     },
   ],
 };
@@ -112,11 +164,11 @@ const otherPersonalPreset: Preset = {
 };
 
 beforeEach(() => {
-  fake = createFakeNewRoundStore();
+  fake = createFakeRoundProcedures();
   fake.goOffline();
-  loadPresets = fake.store.loadPresets;
-  startRound = fake.store.startRound;
-  deletePreset = fake.store.deletePreset;
+  loadPresets = fake.fetching.fetchPresets;
+  startRound = fake.roundStart.startRound;
+  deletePreset = fake.presetDeletion.deletePreset;
   startRound.mockResolvedValue({ status: "created", roundId: "new-round-id" });
   deletePreset.mockResolvedValue({ status: "deleted" });
 });
@@ -429,20 +481,6 @@ describe("RoundPresetSelect", () => {
       ).toHaveLength(2);
     });
 
-    it("プリセットに的が埋め込まれていない距離は「的データを取得できません」と表示する", async () => {
-      // Given
-      const user = userEvent.setup();
-      await renderSelect([personalPreset], []);
-
-      // When
-      await user.click(screen.getAllByTestId("round-preset-button")[0]);
-
-      // Then
-      expect(screen.getAllByText(roundsText("targetFaceMissing"))).toHaveLength(
-        2,
-      );
-    });
-
     it("展開された距離構成の部分をクリックしても、選択が解除される", async () => {
       // Given
       const user = userEvent.setup();
@@ -505,28 +543,6 @@ describe("RoundPresetSelect", () => {
           personalPreset,
           expect.any(Function),
         );
-      });
-
-      it("開始へ、マウント中は真を返す判定を渡し、アンマウント後は偽を返す", async () => {
-        // Given
-        const user = userEvent.setup();
-        const { unmount } = await renderSelect([personalPreset], []);
-        await user.click(screen.getAllByTestId("round-preset-button")[0]);
-
-        // When
-        await user.click(
-          screen.getByRole("button", {
-            name: roundsText("startWithPreset", { name: "個人練習セット" }),
-          }),
-        );
-
-        // Then
-        await waitFor(() => expect(startRound).toHaveBeenCalled());
-        const isCurrent = startRound.mock.calls[0][1] as () => boolean;
-        const whileMounted = isCurrent();
-        unmount();
-        expect(whileMounted).toBe(true);
-        expect(isCurrent()).toBe(false);
       });
     });
 
@@ -602,7 +618,7 @@ describe("RoundPresetSelect", () => {
 
         // Then
         expect(
-          await screen.findByText(roundsText("fetchFailure.unauthenticated")),
+          await screen.findByText(roundsText("roundStartUnauthenticated")),
         ).toBeInTheDocument();
         expect(
           screen.getByRole("button", {
@@ -639,34 +655,10 @@ describe("RoundPresetSelect", () => {
         await waitFor(() => {
           expect(screen.queryByText("個人練習セット")).not.toBeInTheDocument();
         });
-        expect(deletePreset).toHaveBeenCalledWith(
-          "preset-personal",
-          expect.any(Function),
-        );
+        expect(deletePreset).toHaveBeenCalledWith("preset-personal");
         expect(
           screen.getByRole("button", {
             name: roundsText("startWithoutPreset"),
-          }),
-        ).toBeInTheDocument();
-      });
-
-      it("選択中とは別のプリセットを削除すると、一覧から取り除き選択は維持する", async () => {
-        // Given
-        const user = userEvent.setup();
-        await renderSelect([personalPreset, otherPersonalPreset], []);
-        await user.click(screen.getAllByTestId("round-preset-button")[0]);
-        await openDeleteDialog(user, "別の個人セット");
-
-        // When
-        await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-        // Then
-        await waitFor(() => {
-          expect(screen.queryByText("別の個人セット")).not.toBeInTheDocument();
-        });
-        expect(
-          screen.getByRole("button", {
-            name: roundsText("startWithPreset", { name: "個人練習セット" }),
           }),
         ).toBeInTheDocument();
       });
@@ -709,31 +701,6 @@ describe("RoundPresetSelect", () => {
           ),
         ).toBeInTheDocument();
         expect(screen.getByText("個人練習セット")).toBeInTheDocument();
-      });
-
-      it("削除確認ダイアログは開いたままで、確認ボタンを再度押せる", async () => {
-        // Given
-        deletePreset.mockResolvedValue({
-          status: "failed",
-          error: "deleteFailed",
-        });
-        const user = userEvent.setup();
-        await renderSelect([personalPreset], []);
-        await openDeleteDialog(user, "個人練習セット");
-
-        // When
-        await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-        // Then
-        expect(
-          await screen.findByText(
-            roundsText("presetDeleteFailure.deleteFailed"),
-          ),
-        ).toBeInTheDocument();
-        expect(screen.getByTestId("confirm-dialog-confirm")).toBeEnabled();
-        expect(
-          screen.getByTestId("confirm-dialog-confirm"),
-        ).not.toHaveAttribute("aria-disabled", "true");
       });
     });
   });

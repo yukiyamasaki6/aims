@@ -75,7 +75,7 @@
 | `features/rounds/domain/round-progress.ts` | domain(完了の確認、状態を変える操作、入力中へ戻すかの判定`reopeningRequired`、削除の操作) |
 | `features/rounds/application/round-editing.ts` | application(追記。完了のラウンドの編集で、続けて入力中へ戻す操作を積む) |
 | `features/rounds/domain/distance-config.ts`、`distance-operations.ts`、`target-face-filter.ts`、`position-key.ts` | domain(距離の設定の検証、距離の操作、的の絞り込み、位置キー) |
-| `features/rounds/domain/preset-save.ts`、`ring-color.ts`、`shot-id.ts`、`round-routes.ts`、`write-result.ts` | domain(保存するプリセットの内容、リング色、時刻順の矢のID、経路の判定、書き込みの文言) |
+| `features/rounds/domain/preset-save.ts`、`ring-color.ts`、`shot-id.ts`、`round-routes.ts`、`write-result.ts` | domain(保存するプリセットの内容、リング色、時刻順の矢のID、経路の判定、書き込みの結果と失敗の種類) |
 | `features/rounds/application/round-leaving.ts`、`preset-saving.ts` | application(完了、削除、削除して離れる。プリセットの保存) |
 | `features/rounds/application/preset-commands.ts`、`unique-ids.ts` | application(約束`PresetCommands`、`UniqueIds`) |
 | `features/rounds/application/round-detail-store.ts`、`round-handle.ts` | application(詳細の画面に渡す状態と変更の方法、開いた詳細の購読の状態) |

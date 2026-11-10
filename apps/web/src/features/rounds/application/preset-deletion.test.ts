@@ -26,23 +26,14 @@ const initialPresets: Presets = {
 
 // 保存済みは端末の境界のため、更新の関数を実際に適用するメモリで模す。
 function setup(
-  options: {
-    readings?: Reading[];
-    read?: SessionReader["readSession"];
-    deleteResult?: WriteResult;
-    deleteCommand?: PresetCommands["deletePreset"];
-  } = {},
+  options: { readings?: Reading[]; deleteResult?: WriteResult } = {},
 ) {
-  const { sessionReader } = createFakeSessionReader(
-    options.read
-      ? [options.read]
-      : [
-          ...(options.readings ?? []),
-          { status: "authenticated", userId: "user-1" },
-        ],
-  );
+  const { sessionReader } = createFakeSessionReader([
+    ...(options.readings ?? []),
+    { status: "authenticated", userId: "user-1" },
+  ]);
   const deletePreset = vi.fn<PresetCommands["deletePreset"]>(
-    options.deleteCommand ?? (async () => options.deleteResult ?? "written"),
+    async () => options.deleteResult ?? "written",
   );
   const saved: { presets: Presets } = { presets: initialPresets };
   const update = vi.fn((kind: string, change: (data: Presets) => Presets) => {
@@ -68,7 +59,7 @@ describe("createPresetDeletion", () => {
       const { deletion, deletePreset, update, saved } = setup();
 
       // When
-      const result = await deletion.deletePreset("preset-1", () => true);
+      const result = await deletion.deletePreset("preset-1");
 
       // Then
       expect(result).toEqual({ status: "deleted" });
@@ -89,7 +80,7 @@ describe("createPresetDeletion", () => {
       });
 
       // When
-      const result = await deletion.deletePreset("preset-1", () => true);
+      const result = await deletion.deletePreset("preset-1");
 
       // Then
       expect(result).toEqual({ status: "failed", error: "unauthenticated" });
@@ -105,10 +96,10 @@ describe("createPresetDeletion", () => {
           { status: "unauthenticated" },
         ],
       });
-      const first = await deletion.deletePreset("preset-1", () => true);
+      const first = await deletion.deletePreset("preset-1");
 
       // When
-      const second = await deletion.deletePreset("preset-2", () => true);
+      const second = await deletion.deletePreset("preset-2");
 
       // Then
       expect(first.status).toBe("deleted");
@@ -116,139 +107,31 @@ describe("createPresetDeletion", () => {
       expect(deletePreset).toHaveBeenCalledTimes(1);
     });
 
-    it("認証が不明のとき、削除せず、読み取りの文言でfailedを返す", async () => {
+    it("認証が不明のときも、削除へ進み、削除が成功すればdeletedを返す", async () => {
       // Given
       const { deletion, deletePreset } = setup({
         readings: [{ status: "unknown" }],
       });
 
       // When
-      const result = await deletion.deletePreset("preset-1", () => true);
+      const result = await deletion.deletePreset("preset-1");
 
       // Then
-      expect(result).toEqual({ status: "failed", error: "unreachable" });
-      expect(deletePreset).not.toHaveBeenCalled();
+      expect(result.status).toBe("deleted");
+      expect(deletePreset).toHaveBeenCalledWith("preset-1");
     });
 
-    it.each([
-      ["届かなかった", "unreachable"],
-      ["拒否された", "rejected"],
-    ] as const)(
-      "削除が%sとき、「削除できませんでした。」でfailedを返し、保存済みは変えない",
-      async (_label, deleteResult) => {
-        // Given
-        const { deletion, update, saved } = setup({ deleteResult });
-
-        // When
-        const result = await deletion.deletePreset("preset-1", () => true);
-
-        // Then
-        expect(result).toEqual({
-          status: "failed",
-          error: "deleteFailed",
-        });
-        expect(update).not.toHaveBeenCalled();
-        expect(saved.presets).toBe(initialPresets);
-      },
-    );
-  });
-
-  describe("完了を待つ間に結果を受け取る画面が無くなった場合", () => {
-    it("認証の確認の間にisCurrentが偽になると、削除せずdiscardedを返す", async () => {
+    it("削除が失敗したとき、「削除できませんでした。」でfailedを返し、保存済みは変えない", async () => {
       // Given
-      let current = true;
-      const { deletion, deletePreset } = setup({
-        read: async () => {
-          current = false;
-          return { status: "authenticated", userId: "user-1" };
-        },
-      });
+      const { deletion, update, saved } = setup({ deleteResult: "failed" });
 
       // When
-      const result = await deletion.deletePreset("preset-1", () => current);
+      const result = await deletion.deletePreset("preset-1");
 
       // Then
-      expect(result).toEqual({ status: "discarded" });
-      expect(deletePreset).not.toHaveBeenCalled();
-    });
-
-    it("認証が不明を返す間にisCurrentが偽になっても、failedではなくdiscardedを返す", async () => {
-      // Given
-      let current = true;
-      const { deletion } = setup({
-        read: async () => {
-          current = false;
-          return { status: "unknown" };
-        },
-      });
-
-      // When
-      const result = await deletion.deletePreset("preset-1", () => current);
-
-      // Then
-      expect(result).toEqual({ status: "discarded" });
-    });
-
-    it("未認証の確認の間に破棄されたときは、failedではなくdiscardedを返し、削除も保存済みの更新もしない", async () => {
-      // Given
-      let current = true;
-      const { deletion, deletePreset, update } = setup({
-        read: async () => {
-          current = false;
-          return { status: "unauthenticated" };
-        },
-      });
-
-      // When
-      const result = await deletion.deletePreset("preset-1", () => current);
-
-      // Then
-      expect(result).toEqual({ status: "discarded" });
-      expect(deletePreset).not.toHaveBeenCalled();
+      expect(result).toEqual({ status: "failed", error: "deleteFailed" });
       expect(update).not.toHaveBeenCalled();
+      expect(saved.presets).toBe(initialPresets);
     });
-
-    it("書き込みに成功した後に画面を離れていても、保存済みから個人プリセットを除き、結果はdiscardedを返す", async () => {
-      // Given
-      let current = true;
-      const { deletion, update, saved } = setup({
-        deleteCommand: async () => {
-          current = false;
-          return "written";
-        },
-      });
-
-      // When
-      const result = await deletion.deletePreset("preset-1", () => current);
-
-      // Then
-      expect(result).toEqual({ status: "discarded" });
-      expect(update).toHaveBeenCalledWith("presets", expect.any(Function));
-      expect(saved.presets).toEqual({
-        personal: [preset("preset-2")],
-        global: [preset("official")],
-      });
-    });
-
-    it.each(["unreachable", "rejected"] as const)(
-      "削除の完了を待つ間にisCurrentが偽になると、%sでもfailedではなくdiscardedを返す",
-      async (failure) => {
-        // Given
-        let current = true;
-        const { deletion, update } = setup({
-          deleteCommand: async () => {
-            current = false;
-            return failure;
-          },
-        });
-
-        // When
-        const result = await deletion.deletePreset("preset-1", () => current);
-
-        // Then
-        expect(result).toEqual({ status: "discarded" });
-        expect(update).not.toHaveBeenCalled();
-      },
-    );
   });
 });

@@ -1,3 +1,4 @@
+import type { Tables } from "@/types/supabase";
 import { nextPositionKey } from "./position-key";
 import { NAME_MAX_LENGTH } from "./round-constants";
 import { compareDistancePosition } from "./scorecard-scoring";
@@ -10,24 +11,25 @@ export type PresetSource = {
   distances: Distance[];
 };
 
-// 保存するプリセットの内容。外部の引数名を持たない。
+// 保存するプリセットの内容。距離は`preset_distances`の行と同じ名前で持つ(保存のRPCの距離の配列のキーと同じ)。最上位の引数名は持たない。
 export type PresetToSave = {
   name: string;
   format: string;
   bowType: string;
-  distances: {
-    positionKey: string;
-    distance: number | null;
-    totalEnds: number;
-    arrowsPerEnd: number;
-    targetFaceId: string;
-    isMarked: boolean;
-  }[];
+  distances: Pick<
+    Tables<"preset_distances">,
+    | "position_key"
+    | "distance"
+    | "total_ends"
+    | "arrows_per_end"
+    | "target_face_id"
+    | "is_marked"
+  >[];
 };
 
 export type PresetToSaveResult =
   | { type: "valid"; preset: PresetToSave }
-  | { type: "invalid"; error: "nameTooLong" };
+  | { type: "invalid"; error: "nameTooLong" | "noDistances" };
 
 // プリセット保存ダイアログの名前欄プレースホルダー（自動生成の候補名）。
 // ラウンド名が設定されている場合は、こちらではなくラウンド名自体を名前欄に事前入力するため、ここは距離構成のみのフォールバックでよい。
@@ -44,22 +46,25 @@ function presetDistances(distances: Distance[]): PresetToSave["distances"] {
   return [...distances].sort(compareDistancePosition).map((d) => {
     key = key === null ? "a" : nextPositionKey(key);
     return {
-      positionKey: key,
+      position_key: key,
       distance: d.distance,
-      totalEnds: d.total_ends,
-      arrowsPerEnd: d.arrows_per_end,
-      targetFaceId: d.target_face_id,
-      isMarked: d.is_marked,
+      total_ends: d.total_ends,
+      arrows_per_end: d.arrows_per_end,
+      target_face_id: d.target_face_id,
+      is_marked: d.is_marked,
     };
   });
 }
 
-// 名前の前後の空白を除く。空（空白のみを含む）の場合は、距離構成から生成した名前で保存する。
+// 距離が1つもなければ保存しない。名前の前後の空白を除き、空（空白のみを含む）の場合は、距離構成から生成した名前で保存する(距離が1つ以上あれば、生成した名前は1文字以上になる)。
 // 画面に表示中の内容をそのまま保存する（ローカル起点）。DBに未送信の編集があってもそれを待つ必要はない。
 export function presetToSave(
   name: string,
   source: PresetSource,
 ): PresetToSaveResult {
+  if (source.distances.length === 0) {
+    return { type: "invalid", error: "noDistances" };
+  }
   const trimmed = name.trim();
   const resolved =
     trimmed !== "" ? trimmed : generatePresetName(source.distances);

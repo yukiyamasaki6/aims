@@ -104,7 +104,7 @@ function PresetRow({
               key: d.id,
               distance: d.distance,
               isMarked: d.is_marked,
-              face: d.target_faces ?? "missing",
+              face: d.target_faces,
               arrowsPerEnd: d.arrows_per_end,
               totalEnds: d.total_ends,
             }))}

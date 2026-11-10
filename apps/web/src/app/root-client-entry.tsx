@@ -17,7 +17,6 @@ import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
 import { createBrowserVisibility } from "@/features/round-sync/infrastructure/browser-visibility";
 import { createContentFetcher } from "@/features/rounds/application/content-fetcher";
-import { createNewRoundStore } from "@/features/rounds/application/new-round-store";
 import { createOpSender } from "@/features/rounds/application/op-sender";
 import { createOperationSending } from "@/features/rounds/application/operation-sending";
 import { createPresetDeletion } from "@/features/rounds/application/preset-deletion";
@@ -34,6 +33,7 @@ import { createRoundRecordHub } from "@/features/rounds/application/round-record
 import { createRoundRefreshControl } from "@/features/rounds/application/round-refresh-control";
 import { createRoundStart } from "@/features/rounds/application/round-start";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
+import { whenOnline } from "@/features/rounds/application/when-online";
 import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
 import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
@@ -45,7 +45,6 @@ import { createRoundOpTransport } from "@/features/rounds/infrastructure/round-o
 import { createRoundQueries } from "@/features/rounds/infrastructure/round-queries";
 import type { RoundsDbSchema } from "@/features/rounds/infrastructure/rounds-db-schema";
 import {
-  NewRoundStoreProvider,
   RoundDetailStoreProvider,
   RoundProceduresProvider,
   RoundsListStoreProvider,
@@ -121,7 +120,7 @@ function composeRecords(inputs: Inputs) {
 
 type Records = ReturnType<typeof composeRecords>;
 
-// 窓口(手続きと、一覧、作成、詳細の窓口)。
+// 窓口(手続きと、一覧、詳細の窓口)。
 function composeStores(inputs: Inputs, records: Records) {
   const { sessionReader, connectivity, clock, database, pageNavigation } =
     inputs;
@@ -136,7 +135,27 @@ function composeStores(inputs: Inputs, records: Records) {
     fetching,
   });
   return {
-    procedures: { leaving, deletion, presetSaving, ids },
+    procedures: {
+      leaving,
+      deletion,
+      roundStart: createRoundStart({
+        hub,
+        sessionReader,
+        ids,
+        clock,
+        pageNavigation,
+      }),
+      presetSaving,
+      presetDeletion: createPresetDeletion({
+        sessionReader,
+        commands,
+        snapshots,
+      }),
+      fetching,
+      ids,
+      // 参照を安定させるため、1度だけ作る。
+      whenOnline: whenOnline.bind(null, connectivity),
+    },
     detailStore: createRoundDetailStore({
       hub,
       requests,
@@ -145,22 +164,6 @@ function composeStores(inputs: Inputs, records: Records) {
       connectivity,
       ids,
       editing: createRoundEditing({ hub, ids }),
-    }),
-    newRoundStore: createNewRoundStore({
-      fetching,
-      roundStart: createRoundStart({
-        hub,
-        sessionReader,
-        ids,
-        clock,
-        pageNavigation,
-      }),
-      presetDeletion: createPresetDeletion({
-        sessionReader,
-        commands,
-        snapshots,
-      }),
-      connectivity,
     }),
     listStore: createRoundsListStore({
       hub,
@@ -239,16 +242,14 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
   return (
     <NextIntlClientProvider {...intlConfig}>
       <RoundsListStoreProvider store={app.listStore}>
-        <NewRoundStoreProvider store={app.newRoundStore}>
-          <RoundDetailStoreProvider store={app.detailStore}>
-            <RoundProceduresProvider procedures={app.procedures}>
-              <SessionProvider session={app.session}>
-                <SwUpdateActivator activation={app.swUpdate} />
-                {children}
-              </SessionProvider>
-            </RoundProceduresProvider>
-          </RoundDetailStoreProvider>
-        </NewRoundStoreProvider>
+        <RoundDetailStoreProvider store={app.detailStore}>
+          <RoundProceduresProvider procedures={app.procedures}>
+            <SessionProvider session={app.session}>
+              <SwUpdateActivator activation={app.swUpdate} />
+              {children}
+            </SessionProvider>
+          </RoundProceduresProvider>
+        </RoundDetailStoreProvider>
       </RoundsListStoreProvider>
     </NextIntlClientProvider>
   );

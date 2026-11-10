@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Preset } from "./preset";
 import { roundCreatedDraftOf } from "./round-start";
 
@@ -19,7 +19,7 @@ const preset: Preset = {
       total_ends: 10,
       arrows_per_end: 3,
       target_face_id: "face-2",
-      target_faces: null,
+      target_faces: { size: 122, target_face_spots: [] },
     },
     {
       id: "d-first",
@@ -29,24 +29,17 @@ const preset: Preset = {
       total_ends: 20,
       arrows_per_end: 3,
       target_face_id: "face-1",
-      target_faces: null,
+      target_faces: { size: 122, target_face_spots: [] },
     },
   ],
 };
-
-const originalTz = process.env.TZ;
-
-afterEach(() => {
-  if (originalTz === undefined) delete process.env.TZ;
-  else process.env.TZ = originalTz;
-});
 
 describe("roundCreatedDraftOf", () => {
   it("プリセットが無ければ、名前は空文字、屋外、リカーブ、距離無しの下書きを組み立てる", () => {
     // Given
 
     // When
-    const draft = roundCreatedDraftOf(null, now);
+    const draft = roundCreatedDraftOf(null, now, 0);
 
     // Then
     expect(draft).toEqual({
@@ -63,7 +56,7 @@ describe("roundCreatedDraftOf", () => {
     // Given
 
     // When
-    const draft = roundCreatedDraftOf(preset, now);
+    const draft = roundCreatedDraftOf(preset, now, 0);
 
     // Then
     expect(draft).toEqual({
@@ -93,30 +86,49 @@ describe("roundCreatedDraftOf", () => {
     });
   });
 
-  it("実施日はnowのUTCの日付で、実行環境のローカルの日付ではない(UTC 0時の前後を境にする)", () => {
-    // Given
-    // ローカル日付との取り違えを検出するため、非UTCのタイムゾーンで実行する。
-    process.env.TZ = "Asia/Tokyo";
-    const beforeUtcMidnight = Date.parse("2026-01-01T23:59:59.999Z");
-    const atUtcMidnight = Date.parse("2026-01-02T00:00:00.000Z");
-    const localDateDiffers = Date.parse("2026-01-01T15:00:00Z");
+  it.each([
+    [
+      "日本(+540)の0:00の1ミリ秒前",
+      "2026-03-01T14:59:59.999Z",
+      540,
+      "2026-03-01",
+    ],
+    ["日本(+540)の0:00", "2026-03-01T15:00:00.000Z", 540, "2026-03-02"],
+    ["日本(+540)の8:30", "2026-03-01T23:30:00.000Z", 540, "2026-03-02"],
+    [
+      "西(-480)の0:00の1ミリ秒前",
+      "2026-03-02T07:59:59.999Z",
+      -480,
+      "2026-03-01",
+    ],
+    ["西(-480)の0:00", "2026-03-02T08:00:00.000Z", -480, "2026-03-02"],
+    ["時差0のUTC 0:00", "2026-01-02T00:00:00.000Z", 0, "2026-01-02"],
+    ["端数の時差(+345)の0:00", "2026-03-01T18:15:00.000Z", 345, "2026-03-02"],
+    [
+      "端数の時差(+345)の0:00の1ミリ秒前",
+      "2026-03-01T18:14:59.999Z",
+      345,
+      "2026-03-01",
+    ],
+  ])(
+    "実施日は、時差を足したローカルの日付になる(%s)",
+    (_label, utc, offset, expected) => {
+      // Given
+      const instant = Date.parse(utc);
 
-    // When
-    const before = roundCreatedDraftOf(null, beforeUtcMidnight);
-    const at = roundCreatedDraftOf(null, atUtcMidnight);
-    const differs = roundCreatedDraftOf(null, localDateDiffers);
+      // When
+      const draft = roundCreatedDraftOf(null, instant, offset);
 
-    // Then
-    expect(before.roundDate).toBe("2026-01-01");
-    expect(at.roundDate).toBe("2026-01-02");
-    expect(differs.roundDate).toBe("2026-01-01");
-  });
+      // Then
+      expect(draft.roundDate).toBe(expected);
+    },
+  );
 
   it("元のプリセットを変えない", () => {
     // Given
 
     // When
-    roundCreatedDraftOf(preset, now);
+    roundCreatedDraftOf(preset, now, 0);
 
     // Then
     expect(preset.preset_distances.map((d) => d.position_key)).toEqual([

@@ -37,21 +37,19 @@ export type RoundsListView = {
   empty: boolean;
 };
 
-// 画面に出す内容を決める。取得中は`waited`(`FALLBACK_WAIT_MS`の経過)まで入力中の領域を出さない。
+// 画面に出す内容を決める。入力中の領域は常に端末の値で出し、取得は裏で行う。端末の入力中を読み終えるまでは出さない。
+// 取得が成功していても、端末の入力中を読み終えるまでは取得中として返す。
 // `removed`はこの画面で削除したラウンドのID。
 export function roundsListView(
   view: FetchView<LoadedRoundsList>,
   local: LocalRoundsList | null,
-  waited: boolean,
   removed: ReadonlySet<string>,
 ): RoundsListView {
-  if (view.status === "ok") {
-    const { items, deleted } = view.data;
-    // 入力中の区画は、端末の記録から読み直した値を使う。読み込み前は取得時の値で出す。
+  if (view.status === "ok" && local !== null) {
     const result = overlayRoundsList(
-      items,
-      (local ?? view.data).inProgress,
-      new Set([...deleted, ...removed]),
+      view.data.items,
+      local.inProgress,
+      new Set([...view.data.deleted, ...removed]),
     );
     return {
       inProgress: result.inProgress,
@@ -60,15 +58,15 @@ export function roundsListView(
       empty: result.inProgress.length === 0 && result.others.length === 0,
     };
   }
-  const show = local !== null && (view.status !== "loading" || waited);
   return {
-    inProgress: show
-      ? byRoundDateDesc(
-          local.inProgress.filter((round) => !removed.has(round.id)),
-        )
-      : [],
+    inProgress:
+      local !== null
+        ? byRoundDateDesc(
+            local.inProgress.filter((round) => !removed.has(round.id)),
+          )
+        : [],
     others: null,
-    rest: view,
+    rest: view.status === "ok" ? { status: "loading" } : view,
     empty: false,
   };
 }

@@ -118,66 +118,6 @@ describe("reference-snapshot", () => {
     expect(loaded).toEqual({ a: 1 });
   });
 
-  it.each([
-    ["壊れたJSON", "{broken"],
-    ["オブジェクトでない値", "123"],
-    ["nullのJSON", "null"],
-    ["startedAtが無い値", JSON.stringify({ shape: ROUND_PRESET_SELECT })],
-  ])("%sは、投げずに無いものとして扱う", (_name, raw) => {
-    // Given
-    localStorage.setItem("aims:reference:presets:user-1", raw);
-
-    // When
-    const loaded = snapshots.load("presets");
-
-    // Then
-    expect(loaded).toBeNull();
-  });
-
-  describe("localStorageが例外を投げる場合", () => {
-    // 端末の識別情報の読み出しは保存先が使えない環境を想定しないため、識別情報は差し替え、スナップショット自身の保存先の失敗の扱いを確かめる。
-    const snapshots = createReferenceSnapshots({ read: () => "user-1" });
-
-    beforeEach(() => {
-      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-        throw new Error("denied");
-      });
-      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-        throw new Error("quota");
-      });
-    });
-
-    it("保存は投げない", () => {
-      // Given
-
-      // When
-      const save = () => snapshots.save("presets", "user-1", { a: 1 }, 100);
-
-      // Then
-      expect(save).not.toThrow();
-    });
-
-    it("読み出しは投げずにnullを返す", () => {
-      // Given
-
-      // When
-      const loaded = snapshots.load("presets");
-
-      // Then
-      expect(loaded).toBeNull();
-    });
-
-    it("書き換えは投げない", () => {
-      // Given
-
-      // When
-      const update = () => snapshots.update("presets", (d) => d);
-
-      // Then
-      expect(update).not.toThrow();
-    });
-  });
-
   it("保存済みより古いstartedAtの保存は書かれず、新しい方は書かれる", () => {
     // Given
     snapshots.save("presets", "user-1", { v: "new" }, 200);

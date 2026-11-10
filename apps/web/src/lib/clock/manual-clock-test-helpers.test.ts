@@ -21,6 +21,18 @@ describe("createManualClock", () => {
     expect(clock.now()).toBe(450);
   });
 
+  it("時差は既定で0で、引数で固定した値を返す", () => {
+    // Given
+
+    // When
+    const utc = createManualClock();
+    const tokyo = createManualClock(0, 540);
+
+    // Then
+    expect(utc.utcOffsetMinutes()).toBe(0);
+    expect(tokyo.utcOffsetMinutes()).toBe(540);
+  });
+
   it("非同期に進めると、各登録の後で待機中の処理が進む", async () => {
     // Given
     const clock = createManualClock();

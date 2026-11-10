@@ -2,12 +2,12 @@ import { act, renderHook } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Preset } from "../domain/preset";
-import { createFakeNewRoundStore } from "./round-stores-test-helpers";
-import { NewRoundStoreProvider } from "./rounds-context";
+import { createFakeRoundProcedures } from "./round-stores-test-helpers";
+import { RoundProceduresProvider } from "./rounds-context";
 import { useStartRound } from "./use-start-round";
 
-const fake = createFakeNewRoundStore();
-const startRound = fake.store.startRound;
+const fake = createFakeRoundProcedures();
+const startRound = fake.roundStart.startRound;
 
 const preset: Preset = {
   id: "p1",
@@ -20,7 +20,10 @@ const preset: Preset = {
 function setup(selected: Preset | null = null, mounted = { current: true }) {
   const hook = renderHook(() => useStartRound(selected, mounted), {
     wrapper: ({ children }: { children: ReactNode }) =>
-      createElement(NewRoundStoreProvider, { store: fake.store, children }),
+      createElement(RoundProceduresProvider, {
+        procedures: fake,
+        children,
+      }),
   });
   return { ...hook, mounted };
 }
@@ -68,7 +71,7 @@ describe("useStartRound", () => {
       expect(isCurrent()).toBe(false);
     });
 
-    it("再描画を挟まない同じタスクの2回の開始でも、startRoundは1回だけ呼ぶ", async () => {
+    it("実行中の間の2回目の開始は無視し、startRoundは1回だけ呼ぶ", async () => {
       // Given
       const pending = Promise.withResolvers<{
         status: "created";
@@ -76,10 +79,12 @@ describe("useStartRound", () => {
       }>();
       startRound.mockReturnValue(pending.promise);
       const { result } = setup();
+      await act(async () => {
+        void result.current.handleStart();
+      });
 
       // When
       await act(async () => {
-        void result.current.handleStart();
         void result.current.handleStart();
       });
 
@@ -98,12 +103,18 @@ describe("useStartRound", () => {
       });
 
       // Then
-      expect(result.current).toMatchObject({ submitting: true, error: null });
+      expect(result.current).toMatchObject({
+        submitting: true,
+        unauthenticated: false,
+      });
     });
 
-    it("failedのとき、errorに文言を出して実行中を偽に戻し、再び開始できる", async () => {
+    it("未認証のfailedのとき、unauthenticatedを立てて実行中を戻し、再び開始できる", async () => {
       // Given
-      startRound.mockResolvedValueOnce({ status: "failed", error: "e" });
+      startRound.mockResolvedValueOnce({
+        status: "failed",
+        error: "unauthenticated",
+      });
       const { result } = setup();
       await act(async () => {
         await result.current.handleStart();
@@ -116,13 +127,17 @@ describe("useStartRound", () => {
       });
 
       // Then
-      expect(afterFailure).toMatchObject({ submitting: false, error: "e" });
+      expect(afterFailure).toMatchObject({
+        submitting: false,
+        unauthenticated: true,
+      });
+      expect(result.current.unauthenticated).toBe(false);
       expect(startRound).toHaveBeenCalledTimes(2);
     });
 
-    it("discardedのとき、状態を変えない", async () => {
+    it("画面が無くなって失敗(left)したとき、実行中を戻し、unauthenticatedを立てない", async () => {
       // Given
-      startRound.mockResolvedValue({ status: "discarded" });
+      startRound.mockResolvedValue({ status: "failed", error: "left" });
       const { result } = setup();
 
       // When
@@ -131,7 +146,10 @@ describe("useStartRound", () => {
       });
 
       // Then
-      expect(result.current).toMatchObject({ submitting: true, error: null });
+      expect(result.current).toMatchObject({
+        submitting: false,
+        unauthenticated: false,
+      });
     });
   });
 });

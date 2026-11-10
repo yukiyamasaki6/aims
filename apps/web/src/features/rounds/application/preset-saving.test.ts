@@ -15,20 +15,20 @@ const preset: PresetToSave = {
   bowType: "recurve",
   distances: [
     {
-      positionKey: "a",
+      position_key: "a",
       distance: 70,
-      totalEnds: 6,
-      arrowsPerEnd: 6,
-      targetFaceId: "face-1",
-      isMarked: true,
+      total_ends: 6,
+      arrows_per_end: 6,
+      target_face_id: "face-1",
+      is_marked: true,
     },
     {
-      positionKey: "b",
+      position_key: "b",
       distance: 50,
-      totalEnds: 6,
-      arrowsPerEnd: 6,
-      targetFaceId: "face-1",
-      isMarked: true,
+      total_ends: 6,
+      arrows_per_end: 6,
+      target_face_id: "face-1",
+      is_marked: true,
     },
   ],
 };
@@ -150,7 +150,7 @@ describe("createPresetSaving", () => {
       expect(fetchPresets).not.toHaveBeenCalled();
     });
 
-    it("確認が通信失敗で不明なとき、書き込まず、読み取りの文言でfailedを返す", async () => {
+    it("確認が通信失敗で不明なときも、書き込みへ進み、書き込みが成功すればsavedを返す", async () => {
       // Given
       const { saving, savePreset } = setup({
         readings: [{ status: "unknown" }],
@@ -160,8 +160,8 @@ describe("createPresetSaving", () => {
       const result = await saving.savePreset(preset);
 
       // Then
-      expect(result).toEqual({ status: "failed", error: "unreachable" });
-      expect(savePreset).not.toHaveBeenCalled();
+      expect(result).toEqual({ status: "saved" });
+      expect(savePreset).toHaveBeenCalledWith(preset);
     });
 
     it("確認が終わらない間は、書き込みも再取得もしない", async () => {
@@ -181,26 +181,16 @@ describe("createPresetSaving", () => {
   });
 
   describe("書き込みが失敗した場合", () => {
-    it.each(["unreachable", "rejected"] as const)(
-      "書き込みが%sのとき、固定の文言でfailedを返し、再取得しない",
-      async (writeResult) => {
-        // Given
-        const { saving, fetchPresets } = setup({ writeResult });
+    it("書き込みが失敗したとき、固定の文言でfailedを返し、再取得しない", async () => {
+      // Given
+      const { saving, fetchPresets } = setup({ writeResult: "failed" });
 
-        // When
-        const result = await saving.savePreset(preset);
+      // When
+      const result = await saving.savePreset(preset);
 
-        // Then
-        expect(result).toEqual({
-          status: "failed",
-          error: "saveFailed",
-        });
-        expect(result).toEqual({
-          status: "failed",
-          error: "saveFailed",
-        });
-        expect(fetchPresets).not.toHaveBeenCalled();
-      },
-    );
+      // Then
+      expect(result).toEqual({ status: "failed", error: "saveFailed" });
+      expect(fetchPresets).not.toHaveBeenCalled();
+    });
   });
 });

@@ -59,39 +59,7 @@ describe("createPresetCommands", () => {
       expect(result).toBe("written");
     });
 
-    it.each([
-      ["エラーの符号が付かない", null],
-      ["エラーの符号が付く", { message: "TypeError: Failed to fetch" }],
-    ])(
-      "応答の状態が0(通信の失敗)で%s場合は、unreachableを返す",
-      async (_label, error) => {
-        // Given
-        const { commands } = setup(
-          respondWith({ data: null, error, status: 0 }),
-        );
-
-        // When
-        const result = await commands.deletePreset("preset-1");
-
-        // Then
-        expect(result).toBe("unreachable");
-      },
-    );
-
-    it("削除の呼び出しが例外を投げたときは、unreachableを返す", async () => {
-      // Given
-      const { commands } = setup(async () => {
-        throw new Error("network down");
-      });
-
-      // When
-      const result = await commands.deletePreset("preset-1");
-
-      // Then
-      expect(result).toBe("unreachable");
-    });
-
-    it("応答がエラー(状態0以外)なら、サーバーの文言を持たないrejectedを返す", async () => {
+    it("応答にエラーがあれば、サーバーの文言を持たないfailedを返す", async () => {
       // Given
       const { commands } = setup(
         respondWith({
@@ -105,7 +73,7 @@ describe("createPresetCommands", () => {
       const result = await commands.deletePreset("preset-1");
 
       // Then
-      expect(result).toBe("rejected");
+      expect(result).toBe("failed");
     });
   });
 
@@ -116,26 +84,26 @@ describe("createPresetCommands", () => {
       bowType: "recurve",
       distances: [
         {
-          positionKey: "a",
+          position_key: "a",
           distance: 70,
-          totalEnds: 6,
-          arrowsPerEnd: 6,
-          targetFaceId: "face-1",
-          isMarked: true,
+          total_ends: 6,
+          arrows_per_end: 6,
+          target_face_id: "face-1",
+          is_marked: true,
         },
         {
-          positionKey: "b",
+          position_key: "b",
           distance: null,
-          totalEnds: 6,
-          arrowsPerEnd: 3,
-          targetFaceId: "face-2",
-          isMarked: false,
+          total_ends: 6,
+          arrows_per_end: 3,
+          target_face_id: "face-2",
+          is_marked: false,
         },
       ],
     };
     const ok = { data: "new-preset-id", error: null, status: 200 };
 
-    it("関数save_round_as_presetを、ドメインの値を外部の引数名に写して呼ぶ。距離が未設定の要素はnullのまま渡す", async () => {
+    it("関数save_round_as_presetを、最上位だけを外部の引数名に写して呼ぶ。距離は行の名前のまま、未設定の要素もnullのまま渡す", async () => {
       // Given
       const { commands, rpc } = setup(respondWith(ok));
 
@@ -148,25 +116,9 @@ describe("createPresetCommands", () => {
         p_name: "練習用",
         p_format: "outdoor",
         p_bow_type: "recurve",
-        p_distances: [
-          {
-            position_key: "a",
-            distance: 70,
-            total_ends: 6,
-            arrows_per_end: 6,
-            target_face_id: "face-1",
-            is_marked: true,
-          },
-          {
-            position_key: "b",
-            distance: null,
-            total_ends: 6,
-            arrows_per_end: 3,
-            target_face_id: "face-2",
-            is_marked: false,
-          },
-        ],
+        p_distances: preset.distances,
       });
+      expect(preset.distances[1].distance).toBeNull();
     });
 
     it("応答がエラー無しなら、writtenを返す", async () => {
@@ -180,39 +132,7 @@ describe("createPresetCommands", () => {
       expect(result).toBe("written");
     });
 
-    it.each([
-      ["エラーの符号が付かない", null],
-      ["エラーの符号が付く", { message: "TypeError: Failed to fetch" }],
-    ])(
-      "応答の状態が0(通信の失敗)で%s場合は、unreachableを返す",
-      async (_label, error) => {
-        // Given
-        const { commands } = setup(
-          respondWith({ data: null, error, status: 0 }),
-        );
-
-        // When
-        const result = await commands.savePreset(preset);
-
-        // Then
-        expect(result).toBe("unreachable");
-      },
-    );
-
-    it("呼び出しが例外を投げたときは、unreachableを返す", async () => {
-      // Given
-      const { commands } = setup(async () => {
-        throw new Error("network down");
-      });
-
-      // When
-      const result = await commands.savePreset(preset);
-
-      // Then
-      expect(result).toBe("unreachable");
-    });
-
-    it("応答がエラー(状態0以外)なら、サーバーの文言を持たないrejectedを返す", async () => {
+    it("応答にエラーがあれば、サーバーの文言を持たないfailedを返す", async () => {
       // Given
       const { commands } = setup(
         respondWith({
@@ -226,7 +146,7 @@ describe("createPresetCommands", () => {
       const result = await commands.savePreset(preset);
 
       // Then
-      expect(result).toBe("rejected");
+      expect(result).toBe("failed");
     });
   });
 });

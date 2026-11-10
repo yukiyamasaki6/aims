@@ -546,7 +546,7 @@ describe("roundsList", () => {
     ]);
   });
 
-  it("行の名前を内側の形に写し、削除の印を距離と矢の両方で真偽にする", async () => {
+  it("取得した行を、写さずにそのまま返す", async () => {
     // Given
     const database = makeDatabase({
       rounds: {
@@ -586,16 +586,19 @@ describe("roundsList", () => {
         {
           id: "round-1",
           name: "午前練習",
-          roundDate: "2026-09-15",
+          round_date: "2026-09-15",
           distances: [
             {
-              disabled: false,
+              disabled_at: null,
               shots: [
-                { score_int: 10, disabled: false },
-                { score_int: 9, disabled: true },
+                { score_int: 10, disabled_at: null },
+                { score_int: 9, disabled_at: "2026-09-15T10:00:00Z" },
               ],
             },
-            { disabled: true, shots: [{ score_int: 8, disabled: false }] },
+            {
+              disabled_at: "2026-09-15T11:00:00Z",
+              shots: [{ score_int: 8, disabled_at: null }],
+            },
           ],
         },
       ],
@@ -690,33 +693,6 @@ describe("presets", () => {
 
     // Then
     expect(response).toEqual({ status: "ok", data: [presetRow] });
-  });
-
-  it("距離の的が、1つのオブジェクトまたはnullのまま返る", async () => {
-    // Given
-    const withoutFace = {
-      ...presetRow,
-      id: "preset-2",
-      preset_distances: [
-        { ...presetRow.preset_distances[0], target_faces: null },
-      ],
-    };
-    const database = makeDatabase({
-      rounds: ok(null),
-      target_faces: noFaces,
-      preset_rounds: ok([presetRow, withoutFace]),
-    });
-
-    // When
-    const response = await database.createQueries().presets("user-1");
-
-    // Then
-    const [first, second] = dataOf(response) ?? [];
-    expect(first.preset_distances[0].target_faces).toEqual({
-      size: 122,
-      target_face_spots: [],
-    });
-    expect(second.preset_distances[0].target_faces).toBeNull();
   });
 
   it("データがnullなら空の配列を返す", async () => {

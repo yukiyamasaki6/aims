@@ -1,15 +1,12 @@
 import { render, renderHook, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { NewRoundStore } from "../application/new-round-store";
 import type { RoundDetailStore } from "../application/round-detail-store";
 import type { RoundsListStore } from "../application/rounds-list-store";
 import {
-  NewRoundStoreProvider,
   RoundDetailStoreProvider,
   type RoundProcedures,
   RoundProceduresProvider,
   RoundsListStoreProvider,
-  useNewRoundStore,
   useRoundDetailStore,
   useRoundProcedures,
   useRoundsListStore,
@@ -80,39 +77,6 @@ describe("rounds-context(一覧)", () => {
 
     // Then
     expect(rendering).toThrow("RoundsListStoreProvider");
-    expect(screen.queryByText("描画された")).toBeNull();
-    vi.restoreAllMocks();
-  });
-});
-
-describe("rounds-context(作成)", () => {
-  it("提供された作成の窓口を、子の部品に返す", () => {
-    // Given
-    const store = {} as NewRoundStore;
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <NewRoundStoreProvider store={store}>{children}</NewRoundStoreProvider>
-    );
-
-    // When
-    const { result } = renderHook(() => useNewRoundStore(), { wrapper });
-
-    // Then
-    expect(result.current).toBe(store);
-  });
-
-  it("提供が無いときは投げる", () => {
-    // Given
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    function Probe() {
-      useNewRoundStore();
-      return <span>描画された</span>;
-    }
-
-    // When
-    const rendering = () => render(<Probe />);
-
-    // Then
-    expect(rendering).toThrow("NewRoundStoreProvider");
     expect(screen.queryByText("描画された")).toBeNull();
     vi.restoreAllMocks();
   });

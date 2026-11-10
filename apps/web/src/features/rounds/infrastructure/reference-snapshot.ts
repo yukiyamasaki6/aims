@@ -10,7 +10,7 @@ import {
 
 // オフラインでも使えるよう、最後にオンラインで得た参照データ（的・プリセット）を
 // ユーザーごとに端末へ保存する。サインアウトでは消さず、別のユーザーはキーが違い読めない。
-// 取得の失敗・時間切れのときだけ使うスナップショットで、保存の読み書きの失敗は外へ出さない。
+// 取得の失敗・時間切れのときだけ使うスナップショットで、保存先が使えない・満杯の環境と、この実装以外が書いた壊れた値は想定外とする(そのとき投げる)。
 // `update`は渡された関数が投げたとき投げる。呼び手は純粋な`withoutPreset`だけで、投げない。
 const SHAPES = {
   presets: ROUND_PRESET_SELECT,
@@ -26,23 +26,11 @@ function keyOf(kind: ReferenceKind, userId: string): string {
 }
 
 function read<T>(kind: ReferenceKind, userId: string): Stored<T> | null {
-  try {
-    const raw = window.localStorage.getItem(keyOf(kind, userId));
-    if (raw === null) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      (parsed as Stored<T>).shape !== SHAPES[kind] ||
-      typeof (parsed as Stored<T>).startedAt !== "number" ||
-      !("data" in parsed)
-    ) {
-      return null;
-    }
-    return parsed as Stored<T>;
-  } catch {
-    return null;
-  }
+  const raw = window.localStorage.getItem(keyOf(kind, userId));
+  if (raw === null) return null;
+  // 取得する列を変えたビルドが旧ビルドの保存を新しい型として読まないよう、shapeだけ照合する。
+  const stored = JSON.parse(raw) as Stored<T>;
+  return stored.shape === SHAPES[kind] ? stored : null;
 }
 
 function write<T>(
@@ -51,12 +39,8 @@ function write<T>(
   data: T,
   startedAt: number,
 ): void {
-  try {
-    const stored: Stored<T> = { shape: SHAPES[kind], startedAt, data };
-    window.localStorage.setItem(keyOf(kind, userId), JSON.stringify(stored));
-  } catch {
-    // 使えない・容量超過のときは保存しない。
-  }
+  const stored: Stored<T> = { shape: SHAPES[kind], startedAt, data };
+  window.localStorage.setItem(keyOf(kind, userId), JSON.stringify(stored));
 }
 
 // userIdは、取得の開始時にクエリに使ったセッションのユーザー。

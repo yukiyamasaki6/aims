@@ -6,10 +6,9 @@ import { NAME_MAX_LENGTH } from "../domain/round-constants";
 import type { PresetDeleteFailure } from "../domain/write-result";
 import type { PresetDialogError } from "./save-preset-dialog-state";
 
-// サインインを確かめられなかったときの文言。取得、開始、プリセットの保存と削除が共有する。
+// サインインが必要なときの文言。取得、開始、プリセットの保存と削除が共有する。
 const signInFailureText = {
   unauthenticated: "サインインが必要です。",
-  unreachable: "通信エラーが発生しました。しばらくしてから再度お試しください。",
 } as const satisfies Record<SignInFailure, string>;
 
 // roundsの画面の文言(名前空間: rounds)。結果の種類ごとの文言は、種類の値をキーにした入れ子の表に置く。
@@ -48,7 +47,7 @@ export const roundsMessages = {
     startNotice: "種別・弓種・距離は開始後に変更可能です。",
     startWithPreset: "「{name}」で開始",
     startWithoutPreset: "プリセット無しで開始",
-    roundStartFailure: signInFailureText,
+    roundStartUnauthenticated: signInFailureText.unauthenticated,
     presetPersonal: "個人プリセット",
     presetPersonalEmpty: "プリセットとして保存すると、ここに表示されます。",
     presetGlobal: "公式プリセット",
@@ -64,6 +63,7 @@ export const roundsMessages = {
     presetSaveFailure: {
       ...signInFailureText,
       saveFailed: "保存できませんでした。",
+      noDistances: "距離がないため、プリセットとして保存できません。",
       nameTooLong: `プリセット名は${NAME_MAX_LENGTH}文字以内で入力してください。`,
     } satisfies Record<PresetDialogError, string>,
     // 種別と弓種
