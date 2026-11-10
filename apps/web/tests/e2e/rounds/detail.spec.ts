@@ -129,6 +129,32 @@ test("「一覧へ戻る」リンクを押すと、ラウンド一覧へ移動�
   await expect(page.getByTestId("new-round-fab")).toBeVisible();
 });
 
+test("履歴を2つ戻って詳細から別の詳細へ移ると、前のラウンドでなく、URLのラウンドが表示される", async ({
+  page,
+}) => {
+  const suffix = Date.now();
+  const nameA = `履歴の詳細A-${suffix}`;
+  const nameB = `履歴の詳細B-${suffix}`;
+  await openRound(page, { name: nameA });
+  await createRound({
+    email: getSharedEmail(),
+    password: SHARED_PASSWORD,
+    name: nameB,
+    roundDate: "2026-08-24",
+    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+  });
+
+  // 詳細Aから一覧へ戻り、一覧のカードから詳細Bを開く。
+  await page.getByRole("link", { name: roundsText("backToList") }).click();
+  await page.getByRole("link", { name: new RegExp(nameB) }).click();
+  await expect(page.getByTestId("round-config-summary")).toContainText(nameB);
+
+  // 履歴を2つ戻り、詳細Aへ移る。
+  await page.evaluate(() => window.history.go(-2));
+
+  await expect(page.getByTestId("round-config-summary")).toContainText(nameA);
+});
+
 // 完了のラウンドにする(他端末が完了にした状態)。
 async function completeRound(roundId: string) {
   const { supabase } = await openOtherDevice(getSharedEmail(), SHARED_PASSWORD);

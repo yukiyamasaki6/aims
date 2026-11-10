@@ -3,9 +3,8 @@
 import { usePathname } from "next/navigation";
 import { useCallback, useState } from "react";
 import type { LoadedRound } from "../application/round-handle";
-import type { FetchView } from "../domain/fetch-status";
 import { roundIdOfPath } from "../domain/round-routes";
-import { FetchState } from "./fetch-state";
+import { FetchState, LoadingState, NotFoundState } from "./fetch-state";
 import { RoundDetailFrame } from "./round-detail-frame";
 import { useRoundDetailStore } from "./rounds-context";
 import { ScorecardClient } from "./scorecard-client";
@@ -27,27 +26,37 @@ function ScorecardSkeleton() {
 
 // pathnameは取得のkeyにだけ使い、初回描画は取得中の枠になる。
 // SSRのHTMLと、Service Workerが別URLへ返す枠のHTMLが同一になり、水和が一致する。
+// IDごとに部品を作り直す。詳細から別の詳細へ移っても、Nextのルーターは同じ枠の部品を作り直さないため、前のIDの状態が残る。
 export function RoundDetailClient() {
   const roundId = roundIdOfPath(usePathname());
-  return <RoundDetailLoader key={roundId ?? "invalid"} roundId={roundId} />;
+  return roundId ? (
+    <RoundDetailLoader key={roundId} roundId={roundId} />
+  ) : (
+    <InvalidRoundDetail />
+  );
 }
 
-// スコアカードを出さないときの枠の表示。読み込みが済んでいれば、無いと分かった(`gone`)ときは見つからない、それ以外は取得中。
-function frameView(
-  view: FetchView<LoadedRound>,
-  gone: boolean,
-): Exclude<FetchView<unknown>, { status: "ok" }> {
-  if (view.status !== "ok") return view;
-  return { status: gone ? "not-found" : "loading" };
+// IDが読めないパス(枠のプレースホルダー、UUIDでないID)。問い合わせず、初回描画は取得中の枠、その後は見つからない。
+function InvalidRoundDetail() {
+  const { whenOnline } = useRoundDetailStore();
+  const { view } = useFetchResult<never>(notFoundNow, whenOnline);
+  return (
+    <RoundDetailFrame>
+      {view.status === "loading" ? (
+        <LoadingState loading={<ScorecardSkeleton />} />
+      ) : (
+        <NotFoundState />
+      )}
+    </RoundDetailFrame>
+  );
 }
 
-function RoundDetailLoader({ roundId }: { roundId: string | null }) {
+const notFoundNow = () => Promise.resolve({ status: "not-found" as const });
+
+function RoundDetailLoader({ roundId }: { roundId: string }) {
   const store = useRoundDetailStore();
   const { view, retry } = useFetchResult<LoadedRound>(
-    () =>
-      roundId
-        ? store.load(roundId)
-        : Promise.resolve({ status: "not-found" as const }),
+    () => store.load(roundId),
     store.whenOnline,
   );
   // 開いている間に、ラウンドが無いと分かったか(他の端末で削除された、取り直したサーバーに無い)。部品の寿命まで戻さない。
@@ -55,7 +64,7 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
   const markGone = useCallback(() => setGone(true), []);
   useCreationGone(roundId, retry);
 
-  if (roundId && view.status === "ok" && !gone) {
+  if (view.status === "ok" && !gone) {
     return (
       <ScorecardClient
         roundId={roundId}
@@ -68,7 +77,7 @@ function RoundDetailLoader({ roundId }: { roundId: string | null }) {
   return (
     <RoundDetailFrame>
       <FetchState
-        view={frameView(view, gone)}
+        view={view.status === "ok" ? { status: "not-found" } : view}
         onRetry={retry}
         loading={<ScorecardSkeleton />}
       />
