@@ -13,7 +13,7 @@ import { createRoundStart } from "./round-start";
 
 type Reading = Awaited<ReturnType<SessionReader["readSession"]>>;
 
-// UTCでは2026-09-29になる時刻。
+// UTCでも日本時間でも2026-09-29になる時刻。
 const NOW = Date.parse("2026-09-29T12:00:00.000Z");
 
 const preset: Preset = {
@@ -51,10 +51,11 @@ function setup(
     readings?: Reading[];
     read?: SessionReader["readSession"];
     holdAppend?: boolean;
+    utcOffsetMinutes?: number;
   } = {},
 ) {
   const calls: string[] = [];
-  const clock = createManualClock(NOW);
+  const clock = createManualClock(NOW, options.utcOffsetMinutes);
   const { sessionReader } = createFakeSessionReader(
     options.read
       ? [options.read]
@@ -160,7 +161,7 @@ describe("createRoundStart", () => {
         distances,
         ...rest
       } = operation;
-      const draft = roundCreatedDraftOf(preset, NOW);
+      const draft = roundCreatedDraftOf(preset, NOW, 0);
       expect(rest).toEqual({ ...draft, distances: undefined });
       expect(
         distances.map(({ eventId: _e, id: _i, ...content }) => content),
@@ -178,9 +179,9 @@ describe("createRoundStart", () => {
       expect(issued()).toHaveLength(2);
     });
 
-    it("実施日は、手続きが読んだ時計の時刻から求める", async () => {
+    it("実施日は、手続きが読んだ時計の時刻と時差から求めたローカルの日付になる", async () => {
       // Given
-      const { roundStart, append, clock } = setup();
+      const { roundStart, append, clock } = setup({ utcOffsetMinutes: 540 });
       clock.advance(24 * 60 * 60 * 1000);
 
       // When
@@ -189,8 +190,9 @@ describe("createRoundStart", () => {
       // Then
       const operation = append.mock.calls[0][1] as { roundDate: string };
       expect(operation.roundDate).toBe(
-        roundCreatedDraftOf(null, clock.now()).roundDate,
+        roundCreatedDraftOf(null, clock.now(), 540).roundDate,
       );
+      expect(operation.roundDate).toBe("2026-09-30");
     });
 
     it("端末への保存の完了を待ってから、詳細の画面へ進み、その後に結果を返す", async () => {

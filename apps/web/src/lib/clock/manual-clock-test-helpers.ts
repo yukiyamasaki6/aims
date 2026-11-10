@@ -15,8 +15,11 @@ async function settle() {
   for (let i = 0; i < 20; i += 1) await Promise.resolve();
 }
 
-// `now`と`after`を、テストが進めるまで動かさない時計。
-export function createManualClock(start = 0): ManualClock {
+// `now`と`after`を、テストが進めるまで動かさない時計。時差は引数で固定する。
+export function createManualClock(
+  start = 0,
+  utcOffsetMinutes = 0,
+): ManualClock {
   let current = start;
   let timers: Timer[] = [];
 
@@ -30,6 +33,7 @@ export function createManualClock(start = 0): ManualClock {
 
   return {
     now: () => current,
+    utcOffsetMinutes: () => utcOffsetMinutes,
     after(ms, run) {
       const timer: Timer = { at: current + ms, run, cancelled: false };
       timers.push(timer);

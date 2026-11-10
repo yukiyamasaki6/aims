@@ -39,7 +39,7 @@
 - `features/rounds/domain/preset.ts`: ドメイン層。プリセットの値、並びの比較`comparePresets`、並べて個人と公式に振り分ける`presetsOf`、距離の並び、個人プリセットの除去。
 - `features/rounds/domain/preset-list-view.ts`: ドメイン層。取得結果から、削除済みを除いた表示と選択中のプリセットを決める`presetListView`。
 - `features/rounds/infrastructure/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。読み出しは`shape`だけを照合する。保存先が使えない・満杯の環境と、この実装以外が書いた壊れた値は想定外とし、そのとき投げる。識別情報は入口から`IdentityReader`で受け取り、読むたびにその時点で読む。
-- 開始の手続き(手続きの入れ物の`roundStart`。`features/rounds/application/round-start.ts`): サインインの状態の確認、選択中プリセットからの作成の操作の組み立て(`features/rounds/domain/round-start.ts`の`roundCreatedDraftOf`がIDを除いた内容を作り、手続きが各要素にIDを振る)、`round.created`の追記を行う。追記の完了の後に、共有の技術の約束`PageNavigation`(`go(path)`)で`roundPath(roundId)`へ進む。実装は`lib/page-navigation/infrastructure/router-page-navigation.ts`で、入口が画面のパッケージの遷移の部品から生成する。
+- 開始の手続き(手続きの入れ物の`roundStart`。`features/rounds/application/round-start.ts`): サインインの状態の確認、選択中プリセットからの作成の操作の組み立て(`features/rounds/domain/round-start.ts`の`roundCreatedDraftOf`がIDを除いた内容を作り、手続きが各要素にIDを振る)、`round.created`の追記を行う。実施日の初期値は、開始時の`Clock`の時差(`utcOffsetMinutes`)を足した端末のローカルの日付で、domainは環境のタイムゾーンに触れない。追記の完了の後に、共有の技術の約束`PageNavigation`(`go(path)`)で`roundPath(roundId)`へ進む。実装は`lib/page-navigation/infrastructure/router-page-navigation.ts`で、入口が画面のパッケージの遷移の部品から生成する。
 
 - 並びは、種別、弓種、距離の本数（多い方が先）、先頭の距離（大きい方が先）、作成日時（新しい方が先）の順である。
 - 開始は一覧の取得結果の構成で作る。一覧の表示後に削除されたプリセットでも、表示していた構成で開始する。
@@ -88,6 +88,7 @@
 | 保存のキーは取得の開始時のクエリのユーザーIDにし、取得の開始時刻が新しいときだけ書く | 遅れて届いた結果や、サインインし直しの前後で、別のユーザーのキーへ書かず、古い結果で新しい保存済みを戻さないため | - |
 | プリセットをラウンドの機能の中に置く | プリセットを使う画面はどれもラウンドの画面で、構成と一緒に変わり、別の機能にすると開始と保存で機能の間が循環するため(R4) | ラウンドの画面の外でプリセットを扱うとき |
 | 開始の後の遷移を共有の技術の約束(`PageNavigation`。`lib/page-navigation/contract/page-navigation.ts`)で表し、取得と削除と開始は、窓口を介さず手続きの入れ物から画面が直接受ける。約束の使い手は開始と、詳細の完了、削除して離れる、一覧へ戻るである | 保存の後に進む順序を手続きに置き、画面に渡す形を1つにするため(R3) | 画面ごとに異なる遷移の方法が要るとき |
+| 実施日の初期値は端末のローカルの日付で、時差を`Clock`から受ける | 利用者が見る日付と一致させ、domainを環境に依存させないため | 実施日をサーバーの時刻で決めるとき |
 | 並びを名前でなく構成で決める | 名前は自由入力で内容を反映せず、自然順ソートは漢字の読みで曖昧になるため | プリセットの種類が増えたとき |
 | クライアントの認証確認は入口が渡す`SessionReader`の`readSession`で判定し、未認証と確定したときだけ止めて、失敗の種類`unauthenticated`(文言は「サインインが必要です。」)を返す。不明（通信失敗）と`FALLBACK_WAIT_MS`（1秒。代わりがある待ちの上限、`app/offline-pwa`）の時間切れは開始する | `getUser()`はサーバー再検証を伴い、認可の実体はRPCにあるため。オフラインで開始でき、未認証の確認を保つため。待つのはトークンの失効時だけ | 開始の待ちが知覚されたとき |
 

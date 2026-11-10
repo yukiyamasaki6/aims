@@ -7,6 +7,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.useRealTimers();
 });
 
@@ -21,6 +22,26 @@ describe("createBrowserClock", () => {
     // Then
     expect(now).toBe(new Date("2026-09-15T00:00:00Z").getTime());
   });
+
+  it.each([
+    ["Asia/Tokyo", "2026-01-15T00:00:00Z", 540],
+    ["America/Los_Angeles", "2026-01-15T00:00:00Z", -480],
+    ["America/Los_Angeles", "2026-07-15T00:00:00Z", -420],
+    ["UTC", "2026-01-15T00:00:00Z", 0],
+  ])(
+    "utcOffsetMinutesは、%sの%sの時点の時差(東が正、分)を返す",
+    (timeZone, at, expected) => {
+      // Given
+      vi.stubEnv("TZ", timeZone);
+      vi.setSystemTime(new Date(at));
+
+      // When
+      const offset = createBrowserClock().utcOffsetMinutes();
+
+      // Then
+      expect(offset).toBe(expected);
+    },
+  );
 
   it("afterは指定した時間の後に1回だけ呼ぶ", () => {
     // Given

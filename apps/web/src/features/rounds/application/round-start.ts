@@ -53,7 +53,11 @@ export function createRoundStart(deps: {
       }
 
       // IDはどれも新しい値で、振る順は意味を持たない。
-      const draft = roundCreatedDraftOf(preset, clock.now());
+      const draft = roundCreatedDraftOf(
+        preset,
+        clock.now(),
+        clock.utcOffsetMinutes(),
+      );
       const operation: RoundCreated = {
         ...draft,
         eventId: ids.next(),
