@@ -87,8 +87,7 @@ export function ScorecardClient({
       </div>
       {keypad.isLandscape && (
         <KeypadPanel
-          mounted={keypad.keypadMounted}
-          visible={keypad.keypadVisible}
+          open={keypad.keypadOpen}
           onNodeChange={keypad.setKeypadNode}
           onClose={keypad.closeKeypad}
         >
@@ -104,7 +103,6 @@ function ScorecardBody({ model }: { model: ScorecardModel }) {
   const t = useTranslations("rounds");
   const { sync, editing, input, targetFaces } = model;
   const { roundConfig, distances, shots } = sync.state;
-  const distanceIdsWithShots = new Set(shots.map((s) => s.distance_id));
 
   return (
     <div className="flex flex-1 flex-col gap-6 px-8 pb-8">
@@ -130,11 +128,11 @@ function ScorecardBody({ model }: { model: ScorecardModel }) {
             roundFormat={roundConfig.format}
             roundBowType={roundConfig.bowType}
             editing={editing.editingDistanceId === d.id}
-            hasShots={distanceIdsWithShots.has(d.id)}
             pointer={model.pointer}
             onToggleEditing={() => editing.toggleDistanceEditing(d.id)}
             onSaved={editing.handleDistanceSaved}
-            onDeleted={() => editing.handleDistanceDeleted(d.id)}
+            // 削除は追記の直後に画面へ反映され、距離のカードが消えて編集のダイアログも閉じる。削除した距離を指していた矢は、reconcilePointerが外す。
+            onDeleted={() => model.history.discardDistance(d.id)}
             enqueue={sync.append}
             onSelectShot={input.selectShot}
             onSelectEnd={input.selectEnd}

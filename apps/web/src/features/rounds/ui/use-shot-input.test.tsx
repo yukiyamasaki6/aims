@@ -39,10 +39,10 @@ function setup(
   const { store } = createFakeRoundDetailStore();
   const procedures = createFakeRoundProcedures();
   // 追記の結果の画面の状態は、テストが与える矢を持つ。
-  const append = vi.fn((_operation: SyncOperation) => ({
-    state: { shots: options.resultShots ?? [] } as RoundState,
-    saved: Promise.resolve(),
-  }));
+  const append = vi.fn(
+    (_operation: SyncOperation) =>
+      ({ shots: options.resultShots ?? [] }) as RoundState,
+  );
   const setPointer = vi.fn();
   const history = {
     canUndo: false,
@@ -117,16 +117,16 @@ describe("useShotInput", () => {
     expect(setPointer).toHaveBeenCalledWith(newShotPointer("d-1", 2));
   });
 
-  it("記録済みの矢を指していないときのクリアは、何も積まずに例外にする", () => {
+  it("記録済みの矢を指していないときのクリアは、何も積まず、履歴も指す矢も変えない", () => {
     // Given
-    const { input, append, history } = setup();
+    const { input, append, history, setPointer } = setup();
 
     // When
-    const clear = () => input.handleClear();
+    input.handleClear();
 
     // Then
-    expect(clear).toThrow();
     expect(append).not.toHaveBeenCalled();
     expect(history.recordHistory).not.toHaveBeenCalled();
+    expect(setPointer).not.toHaveBeenCalled();
   });
 });

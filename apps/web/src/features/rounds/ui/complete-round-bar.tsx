@@ -37,16 +37,16 @@ export function CompleteRoundBar({
           {t("completeRound")}
         </Button>
       </div>
-      <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        description={
-          confirmation ? t(`completionConfirmation.${confirmation}`) : ""
-        }
-        confirmLabel={t("completeRoundConfirm")}
-        confirmVariant="default"
-        onConfirm={onComplete}
-      />
+      {confirmation !== null && (
+        <ConfirmDialog
+          open={confirming}
+          onOpenChange={setConfirming}
+          description={t(`completionConfirmation.${confirmation}`)}
+          confirmLabel={t("completeRoundConfirm")}
+          confirmVariant="default"
+          onConfirm={onComplete}
+        />
+      )}
     </div>
   );
 }

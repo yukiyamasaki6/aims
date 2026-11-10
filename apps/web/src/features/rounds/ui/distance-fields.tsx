@@ -1,21 +1,23 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { type Dispatch, type SetStateAction, useState } from "react";
+import {
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import type {
-  DistanceConfigError,
   DistanceConfigErrors,
   DistanceDraft,
 } from "../domain/distance-config";
+import { DISTANCE_CONFIG_MAX } from "../domain/round-constants";
 import type { TargetFaceOption } from "../domain/target-face";
 import { TargetFacePicker } from "./target-face-picker";
 
-type LockedField = "arrows" | "total-ends" | "target-face";
-
-// 編集不可の項目を押したときに、その項目の直下へ出す理由。
+// 編集不可の的を押したときに、的の直下へ出す理由。
 function LockedMessage({ id, testId }: { id: string; testId: string }) {
   const t = useTranslations("rounds");
   return (
@@ -42,9 +44,9 @@ function NumberField({
   distanceNumber,
   value,
   error,
-  locked,
-  lockedMessage,
-  onLockedPress,
+  describedBy,
+  invalid,
+  children,
   onChange,
 }: {
   label: string;
@@ -52,9 +54,11 @@ function NumberField({
   distanceNumber: number;
   value: number | null;
   error: string | undefined;
-  locked?: boolean;
-  lockedMessage?: boolean;
-  onLockedPress?: () => void;
+  // 項目に関わる補足の説明の要素のid。
+  describedBy?: string;
+  // 項目の値そのものの誤りでなく、他の項目との組で起きる誤りのとき真。
+  invalid?: boolean;
+  children?: ReactNode;
   onChange: (value: number | null) => void;
 }) {
   const id = `distance-config-${slug}-${distanceNumber}`;
@@ -66,22 +70,16 @@ function NumberField({
       <Input
         id={id}
         type="number"
-        readOnly={locked}
-        aria-readonly={locked ? true : undefined}
-        aria-describedby={lockedMessage ? `${id}-locked` : undefined}
-        onClick={locked ? onLockedPress : undefined}
-        className={cn(locked && "cursor-not-allowed opacity-50")}
+        aria-describedby={describedBy}
         data-testid={id}
         value={value ?? ""}
         onChange={(e) =>
           onChange(e.target.value === "" ? null : Number(e.target.value))
         }
-        aria-invalid={Boolean(error)}
+        aria-invalid={Boolean(error) || invalid}
       />
-      {lockedMessage && (
-        <LockedMessage id={`${id}-locked`} testId={`${id}-locked-message`} />
-      )}
       {error && <p className="text-destructive text-sm">{error}</p>}
+      {children}
     </div>
   );
 }
@@ -134,6 +132,36 @@ function TargetFaceField({
   );
 }
 
+// 検証の誤りの種類を、項目の下に出す文言にする。
+function useErrorText() {
+  const t = useTranslations("rounds");
+  return (
+    error: "required" | "notPositiveInteger" | "tooLarge" | undefined,
+  ) => {
+    if (error === "tooLarge") {
+      return t("distanceConfigError.tooLarge", {
+        max: String(DISTANCE_CONFIG_MAX),
+      });
+    }
+    return error ? t(`distanceConfigError.${error}`) : undefined;
+  };
+}
+
+// 総エンド数・本数が記録済みの矢に収まらないときの理由。
+function ShotsUnfitMessage({ id }: { id: string }) {
+  const t = useTranslations("rounds");
+  return (
+    <p
+      id={id}
+      role="alert"
+      data-testid={id}
+      className="text-destructive text-sm"
+    >
+      {t("distanceConfigError.shotsUnfit")}
+    </p>
+  );
+}
+
 export function DistanceFields({
   distanceNumber,
   draft,
@@ -154,10 +182,12 @@ export function DistanceFields({
   hasShots: boolean;
 }) {
   const t = useTranslations("rounds");
-  const errorText = (error: DistanceConfigError | undefined) =>
-    error ? t(`distanceConfigError.${error}`) : undefined;
-  // 押した編集不可の項目だけに理由を出す。別の項目を押すと移る。
-  const [pressedLocked, setPressedLocked] = useState<LockedField | null>(null);
+  const errorText = useErrorText();
+  // 編集不可の的を押したときだけ、的の直下に理由を出す。
+  const [targetFaceLockedPressed, setTargetFaceLockedPressed] = useState(false);
+  // 総エンド数・本数が記録済みの矢に収まらないときの理由は、総エンド数の直下に1つ出し、本数からも参照する。
+  const unfitId = `distance-config-shots-unfit-${distanceNumber}`;
+  const unfitShown = fieldErrors.shotsUnfit !== undefined;
   return (
     <>
       {roundFormat === "field" && (
@@ -183,9 +213,8 @@ export function DistanceFields({
         distanceNumber={distanceNumber}
         value={draft.arrows_per_end}
         error={errorText(fieldErrors.arrowsPerEnd)}
-        locked={hasShots}
-        lockedMessage={pressedLocked === "arrows"}
-        onLockedPress={() => setPressedLocked("arrows")}
+        describedBy={unfitShown ? unfitId : undefined}
+        invalid={unfitShown}
         onChange={(v) => setDraft((d) => ({ ...d, arrows_per_end: v }))}
       />
 
@@ -195,11 +224,12 @@ export function DistanceFields({
         distanceNumber={distanceNumber}
         value={draft.total_ends}
         error={errorText(fieldErrors.totalEnds)}
-        locked={hasShots}
-        lockedMessage={pressedLocked === "total-ends"}
-        onLockedPress={() => setPressedLocked("total-ends")}
+        describedBy={unfitShown ? unfitId : undefined}
+        invalid={unfitShown}
         onChange={(v) => setDraft((d) => ({ ...d, total_ends: v }))}
-      />
+      >
+        {unfitShown && <ShotsUnfitMessage id={unfitId} />}
+      </NumberField>
 
       <TargetFaceField
         distanceNumber={distanceNumber}
@@ -209,8 +239,8 @@ export function DistanceFields({
         roundBowType={roundBowType}
         onSelect={(id) => setDraft((d) => ({ ...d, target_face_id: id }))}
         locked={hasShots}
-        showLockedMessage={pressedLocked === "target-face"}
-        onLockedPress={() => setPressedLocked("target-face")}
+        showLockedMessage={targetFaceLockedPressed}
+        onLockedPress={() => setTargetFaceLockedPressed(true)}
       />
     </>
   );

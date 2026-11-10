@@ -730,9 +730,7 @@ describe("ScorecardClient 矢を指す・点数を書く", () => {
     await waitFor(() => expect(ballsOf(1, 12)).toEqual(["10", "10", "9"]));
     expect(ballsOf(2, 1)).toEqual([]);
     expect(provisionalEnd()).toBeNull();
-    await waitFor(() => {
-      expect(screen.queryByTestId("score-button-10")).not.toBeInTheDocument();
-    });
+    expect(screen.getByTestId("bottom-frame").style.minHeight).toBe("0px");
   });
 
   it("画面へ反映される前に続けて押しても、エンドの矢数を超えて書かない", async () => {
@@ -1627,19 +1625,19 @@ describe("ScorecardClient 玉の折り返し", () => {
 });
 
 describe("ScorecardClient テンキーの開閉と配置", () => {
-  it("閉じたテンキーは、格納アニメーションの後に取り除く", async () => {
+  it("縦向きでテンキーの閉じるボタンを押すと、枠の高さを完了の帯だけに戻す", async () => {
     // Given
     const user = userEvent.setup();
     setup();
+    const frame = screen.getByTestId("bottom-frame");
+    const heightWhileOpen = frame.style.minHeight;
 
     // When
     await user.click(screen.getByTestId("keypad-toggle"));
 
     // Then
-    expect(screen.getByTestId("score-button-10")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.queryByTestId("score-button-10")).not.toBeInTheDocument();
-    });
+    expect(heightWhileOpen).toBe("220px");
+    expect(frame.style.minHeight).toBe("0px");
   });
 
   it("横向きの場合は、テンキーをボトムシートではなく横の側パネルに表示する", () => {
@@ -3139,6 +3137,25 @@ describe("ScorecardClient ラウンドの完了", () => {
 
     // Then
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/rounds"));
+  });
+
+  it("完了ボタンを押した後、保存が終わる前に画面を離れると、一覧へ移らない", async () => {
+    // Given
+    nav.push.mockClear();
+    const { unmount } = setup({
+      distances: [distanceB],
+      initialShots: allRecorded,
+    });
+
+    // When
+    // 同期に押して取り除く(userEventの待ちの間に保存が終わらないようにする)。
+    fireEvent.click(screen.getByTestId("complete-round-button"));
+    unmount();
+    await waitFor(async () => expect(await ackedStates()).toEqual(["unacked"]));
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+    // Then
+    expect(nav.push).not.toHaveBeenCalled();
   });
 
   it("確認でキャンセルすると、一覧へ移らない", async () => {

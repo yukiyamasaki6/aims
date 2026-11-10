@@ -1,5 +1,4 @@
 import { useTranslations } from "next-intl";
-import { cn } from "@/lib/utils";
 import type {
   TargetFaceRing,
   TargetFaceSpotLayout,
@@ -24,14 +23,12 @@ const CENTER_CROSS_STROKE_WIDTH_CM = 0.1;
 // 相対位置で正しく配置して描画する。的選択UIのように、実際のレイアウトの違いを
 // 一目で見分けたい場面で使う。center_yはデータ上「上が正」のため、SVGのy軸
 // （下が正）に合わせて符号を反転させる。
-export function TargetFaceIcon({
+function TargetFaceIcon({
   spots,
-  size = 64,
-  className,
+  size,
 }: {
   spots: TargetFaceSpotLayout[];
-  size?: number;
-  className?: string;
+  size: number;
 }) {
   const viewExtent = spotsViewExtent(spots);
 
@@ -40,7 +37,7 @@ export function TargetFaceIcon({
       viewBox={`${-viewExtent} ${-viewExtent} ${viewExtent * 2} ${viewExtent * 2}`}
       width={size}
       height={size}
-      className={cn("shrink-0", className)}
+      className="shrink-0"
       aria-hidden="true"
     >
       {spots.map((spot) => (
@@ -72,7 +69,7 @@ function TargetFaceSpot({ spot }: { spot: TargetFaceSpotLayout }) {
   const sorted = [...spot.target_face_rings].sort(
     (a, b) => b.radius - a.radius,
   );
-  const spotMaxRadius = sorted.length > 0 ? sorted[0].radius : 0;
+  const spotMaxRadius = sorted[0].radius;
   return (
     <g transform={`translate(${spot.center_x} ${-spot.center_y})`}>
       {sorted.map((r) => (
@@ -120,7 +117,6 @@ function CenterCross() {
 // 弓種等によって得点帯の構成が変わってもハードコードなしに追従できる。
 function innerSameColorRings(rings: TargetFaceRing[]): TargetFaceRing[] {
   const sorted = [...rings].sort((a, b) => a.radius - b.radius);
-  if (sorted.length === 0) return [];
   const innerColor = sorted[0].color;
   const result: TargetFaceRing[] = [];
   for (const r of sorted) {
@@ -150,10 +146,10 @@ const NEXT_RING_PEEK_RATIO = 0.15;
 
 function TargetFaceCenterDetail({
   rings,
-  pixelWidth = 64,
+  pixelWidth,
 }: {
   rings: TargetFaceRing[];
-  pixelWidth?: number;
+  pixelWidth: number;
 }) {
   const cluster = innerSameColorRings(rings);
 

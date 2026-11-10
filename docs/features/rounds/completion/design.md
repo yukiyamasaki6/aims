@@ -22,13 +22,13 @@
 | 完了で設定の変更、記録が変わらない操作(記録済みの矢に同じ点数を書く)を行う | 状態は変えない |
 
 - 戻す対象は`shot.recorded`・`shot.cleared`・`distance.created`・`distance.updated`・`distance.disabled`のうち、積む時点の画面の状態に重ねて、表示中の距離か矢が変わるものである。端末の規則で効かない操作と、同じ点数の上書きは対象にしない。矢の比較は矢のIDと点数で行う。取り消しとやり直しは`shot.*`として積まれるため含まれる。
-- 帯とテンキーは、`<main>`の外の下端に置く1つの枠に入れ、`<main>`の高さが枠に追従して縮む。帯は枠の下端に置き、縦向きのテンキーは同じ枠の中で帯の上に絶対配置で重ねる。縦向きの格納ボタンは枠の上へ3rem(48px)はみ出して`<main>`の下端に重なる。枠の高さにはボタンを含めず、枠の高さは帯の高さへ単調に戻る。テンキーの表示で変わるのは枠の高さ(テンキーの高さ以上)だけで、帯は枠の下端に固定されたまま動かず、テンキーが覆う。横向きのテンキーは右のパネルで、帯は`<main>`の下端に残る。テンキーを格納する間は枠の高さを200msで戻し、`<main>`の高さが後から急に変わらないようにする。テンキーは枠の上3remから下端までのクリップ枠に入れ、スライドで枠の下へ出た分が画面を広げないようにする。帯のボタンは、スコアシートの列と同じ`max-w-xl`と左右`px-8`に置き、カードの左右の端にそろえる。
+- 帯とテンキーは、`<main>`の外の下端に置く1つの枠に入れ、`<main>`の高さが枠に追従して縮む。帯は枠の下端に置き、縦向きのテンキーは同じ枠の中で帯の上に絶対配置で重ねる。縦向きの格納ボタンは枠の上へ3rem(48px)はみ出して`<main>`の下端に重なる。枠の高さにはボタンを含めず、枠の高さは帯の高さへ単調に戻る。テンキーの表示で変わるのは枠の高さ(テンキーの高さ以上)だけで、帯は枠の下端に固定されたまま動かず、テンキーが覆う。横向きのテンキーは右のパネルで、帯は`<main>`の下端に残る。テンキーを格納する間は枠の高さを200msで戻し、`<main>`の高さが後から急に変わらないようにする。格納後もテンキーは不可視のまま残る。テンキーは枠の上3remから下端までのクリップ枠に入れ、スライドで枠の下へ出た分が画面を広げないようにする。帯のボタンは、スコアシートの列と同じ`max-w-xl`と左右`px-8`に置き、カードの左右の端にそろえる。
 
 ## 構成とデータの流れ
 
 - `features/rounds/domain/round-progress.ts`: 確認の要否と種類`completionConfirmation`(`noRecords`、`unfilledCells`、確認なし(null)の3通り。文言は、UI層の文言の一覧が種類ごとに持つ。文言は変えない)、状態の操作`statusOperation`、入力中へ戻す必要があるかの判定`reopeningRequired`。
-- `features/rounds/application/round-editing.ts`(窓口の`handle.append`が今の状態の読み手を渡して呼ぶ。画面は`features/rounds/ui/use-round-op-stack.ts`から呼ぶ): 追記の前の画面の状態で`reopeningRequired`を判定し、必要なときだけ新しいイベントIDで`statusOperation`(入力中)を求め、元の操作の追記に続けて積む。1回の追記が、再開が要るときは2回の保存になる。追記の結果が画面に反映された後の状態では、変化が無いと判定して積まないため、判定は追記の前に行う。追記の結果の画面の状態と、保存の完了で解決するPromiseを返す(`handle.append`が`{ state, saved }`で返す)。
-- 手続きの入れ物の`leaving.completeRound`(手続き`features/rounds/application/round-leaving.ts`): `statusOperation`の完了を追記し(追記の直後に画面の状態は完了へ変わり、完了のバーなど入力中の表示が消える。保存が詰まるとその表示のまま詳細に留まる)、保存の完了の後に`PageNavigation.go(ROUNDS_PATH)`(経路表の定数)で一覧へ進む。送信の完了は待たない。
+- `features/rounds/application/round-editing.ts`(窓口の`handle.append`が追記の前の状態を値で渡して呼ぶ。画面は`features/rounds/ui/use-round-op-stack.ts`から呼ぶ): 追記の前の画面の状態で`reopeningRequired`を判定し、必要なときだけ新しいイベントIDで`statusOperation`(入力中)を求め、元の操作の追記に続けて積む。1回の追記が、再開が要るときは2回の保存になる。追記の結果が画面に反映された後の状態では、変化が無いと判定して積まないため、判定は追記の前に行う。保存の完了は待たない。`handle.append`は追記の結果の画面の状態を返す。
+- 手続きの入れ物の`leaving.completeRound`(手続き`features/rounds/application/round-leaving.ts`): `statusOperation`の完了を追記し(追記の直後に画面の状態は完了へ変わり、完了のバーなど入力中の表示が消える。保存が詰まるとその表示のまま詳細に留まる)、保存の完了の後、呼び出し側の`isCurrent`が真(画面が残っている)のときだけ`PageNavigation.go(ROUNDS_PATH)`(経路表の定数)で一覧へ進む。離れていれば遷移しない(追記は済んでいる)。`isCurrent`は`use-scorecard.ts`が`useMountedRef`で渡す。送信の完了は待たない。
 - `features/rounds/ui/complete-round-bar.tsx`: 帯と、渡された確認の種類(`confirmation`)があるときの確認(`ConfirmDialog`、`confirmVariant="default"`)。
 - `features/rounds/domain/round-op-apply.ts`: `round.updated`の`status`は常に効く項目として`rounds.status`へ反映する。
 - DB: `rounds.status`(`NOT NULL`、既定`in_progress`、`CHECK`)と`round_events.status`。`update_round`は`status`を検証(`PT422`)し、効いたときだけイベントと`rounds`へ記録する。`create_round`は状態を受け取らず、列の既定値で入力中になる。

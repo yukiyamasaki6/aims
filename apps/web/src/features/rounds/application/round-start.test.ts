@@ -322,6 +322,28 @@ describe("createRoundStart", () => {
       expect(go).not.toHaveBeenCalled();
     });
 
+    it("追記の保存を待つ間に画面を離れると、追記は済み、詳細の画面へは進まず、createdを返す", async () => {
+      // Given
+      let current = true;
+      const { roundStart, append, go, finishAppend } = setup({
+        holdAppend: true,
+      });
+
+      // When
+      const pending = roundStart.startRound(null, () => current);
+      await vi.waitFor(() => expect(append).toHaveBeenCalled());
+      current = false;
+      finishAppend();
+      const result = await pending;
+
+      // Then
+      expect(result).toEqual({
+        status: "created",
+        roundId: appendedRoundId(append),
+      });
+      expect(go).not.toHaveBeenCalled();
+    });
+
     it("未認証の確認の間に画面が無くなったときは、unauthenticatedでなくleftでfailedを返す", async () => {
       // Given
       let current = true;

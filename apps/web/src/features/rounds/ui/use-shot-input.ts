@@ -1,4 +1,4 @@
-import type { RoundAppendResult } from "../application/round-handle";
+import type { RoundState } from "../domain/round-tables";
 import type { HistoryEntry } from "../domain/score-history";
 import type { Distance, Shot } from "../domain/scorecard-types";
 import {
@@ -22,7 +22,7 @@ type ShotInputContext = {
   shots: Shot[];
   pointer: Pointer;
   setPointer: (pointer: Pointer) => void;
-  append: (operation: SyncOperation) => RoundAppendResult;
+  append: (operation: SyncOperation) => RoundState;
   history: ScoreHistory;
   newId: () => string;
   newShotId: (endShotIds: readonly string[]) => string;
@@ -50,23 +50,19 @@ function scoreShot(ctx: ShotInputContext, scoreStr: string, scoreInt: number) {
   );
   const operation = buildShotOperation(entry, entry.after, ctx.newId());
   // 指す矢は、追記の結果の画面の状態から決める。規則で効かない操作は、画面と同じく反映されない。
-  const { state } = ctx.append(operation);
+  const state = ctx.append(operation);
   ctx.history.recordHistory(entry);
   ctx.setPointer(pointerAfterScore(distances, state.shots, pointer));
 }
 
-// クリアのキーは記録済みの矢を指すときだけ有効で、指す矢はreconcilePointerが常に状態に合わせる。
-function pointedShot({ pointer, shots }: ShotInputContext): Shot {
+// クリアのキーは記録済みの矢を指すときだけ有効で、指していないときは何もしない。
+function clearShot(ctx: ShotInputContext) {
+  const { pointer, shots } = ctx;
   const shot =
     pointer?.kind === "shot"
       ? shots.find((s) => s.id === pointer.shotId)
       : undefined;
-  if (!shot) throw new Error("クリアする矢を指していません。");
-  return shot;
-}
-
-function clearShot(ctx: ShotInputContext) {
-  const shot = pointedShot(ctx);
+  if (!shot) return;
 
   const entry = clearHistoryEntry(shot);
   ctx.append(buildShotOperation(entry, entry.after, ctx.newId()));

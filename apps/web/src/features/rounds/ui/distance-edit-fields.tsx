@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import type { Distance } from "../domain/scorecard-types";
+import type { Distance, Shot } from "../domain/scorecard-types";
 import type { SyncOperation } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
 import { DistanceFields } from "./distance-fields";
@@ -16,7 +16,7 @@ import { useDistanceDraft } from "./use-distance-draft";
 export function DistanceEditFields({
   distance,
   displayNumber,
-  hasShots,
+  shots,
   targetFaces,
   roundFormat,
   roundBowType,
@@ -28,7 +28,8 @@ export function DistanceEditFields({
   distance: Distance;
   // 画面上の距離の番号。
   displayNumber: number;
-  hasShots: boolean;
+  // この距離の矢。
+  shots: Shot[];
   targetFaces: TargetFaceOption[];
   roundFormat: string;
   roundBowType: string;
@@ -47,7 +48,14 @@ export function DistanceEditFields({
     handleSave,
     handleDeleteClick,
     performDelete,
-  } = useDistanceDraft({ distance, hasShots, onSaved, onDeleted, enqueue });
+  } = useDistanceDraft({
+    distance,
+    shots,
+    targetFaces,
+    onSaved,
+    onDeleted,
+    enqueue,
+  });
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
@@ -61,7 +69,7 @@ export function DistanceEditFields({
             targetFaces={targetFaces}
             roundFormat={roundFormat}
             roundBowType={roundBowType}
-            hasShots={hasShots}
+            hasShots={shots.length > 0}
           />
 
           <DistanceEditActions

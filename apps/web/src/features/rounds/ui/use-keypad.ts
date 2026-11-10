@@ -27,36 +27,6 @@ function useIsLandscape() {
   return isLandscape;
 }
 
-// keypadOpen（=position有無）の変化をそのままアンマウントすると格納
-// アニメーションが再生できないため、トランジション終了後に実際に
-// アンマウントするまでの間だけmountedをtrueに保つ。開いている描画では、
-// 記憶した状態を待たずにmountedにする(テンキーの要素が付いた後の寸法で追従を計算するため)。
-// setTimeoutとrequestAnimationFrameは、画面の動きに合わせるだけの待ち(格納のtransitionの終わり、表示の直前の2フレーム)で、画面の機能として直接呼ぶ。業務の時間、通信の待ち、再試行には使わない。
-function useKeypadPresence(open: boolean) {
-  const [retained, setRetained] = useState(open);
-  const [keypadVisible, setKeypadVisible] = useState(open);
-  const rafRef = useRef(0);
-  useEffect(() => {
-    if (open) {
-      setRetained(true);
-      // マウント直後の1フレーム目でtrueにするとブラウザがtranslate-y-fullを描画
-      // する前に遷移先の状態へ変わってしまいアニメーションしないため、
-      // 1フレーム待ってから変更する。
-      const raf1 = requestAnimationFrame(() => {
-        const raf2 = requestAnimationFrame(() => setKeypadVisible(true));
-        rafRef.current = raf2;
-      });
-      rafRef.current = raf1;
-      return () => cancelAnimationFrame(rafRef.current);
-    }
-
-    setKeypadVisible(false);
-    const timeout = setTimeout(() => setRetained(false), 200);
-    return () => clearTimeout(timeout);
-  }, [open]);
-  return { keypadMounted: open || retained, keypadVisible };
-}
-
 // 格納アニメーション中もテンキーの中身（点数ボタン）を表示し続けられる
 // よう、何も指さなくなった後も直近に指していた矢の距離を保持しておく。
 function useLastDistance(pointedDistance: Distance | null | undefined) {
@@ -123,8 +93,7 @@ export function useKeypad({
   distances: Distance[];
   setPointer: (pointer: Pointer) => void;
 }) {
-  const keypadShouldBeOpen = pointer !== null;
-  const presence = useKeypadPresence(keypadShouldBeOpen);
+  const keypadOpen = pointer !== null;
   const { keypadHeight, setKeypadNode } = useKeypadHeight();
   const isLandscape = useIsLandscape();
   const pointedDistance =
@@ -147,13 +116,11 @@ export function useKeypad({
     [setPointer],
   );
 
-  // 指している矢を外すと輪が消え、keypadShouldBeOpen（=指している矢の有無）もfalseになり、
-  // useKeypadPresenceの格納アニメーション用useEffectが発火する。
+  // 指している矢を外すとkeypadOpen（=指している矢の有無）がfalseになり、テンキーはCSSのtransitionで格納される。
   const closeKeypad = useCallback(() => setPointer(null), [setPointer]);
 
   return {
-    ...presence,
-    keypadShouldBeOpen,
+    keypadOpen,
     keypadHeight,
     setKeypadNode,
     isLandscape,

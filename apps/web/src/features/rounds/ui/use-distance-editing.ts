@@ -50,17 +50,10 @@ export function useDistanceEditing({
     if (structureChanged) discardHistory(updated.id);
   }
 
-  function handleDistanceDeleted(distanceId: string) {
-    // 削除は追記の直後に画面へ反映され、距離のカードが消えて編集のダイアログも閉じる。
-    // 削除した距離を指していた矢は、reconcilePointerが外す。
-    discardHistory(distanceId);
-  }
-
   return {
     editingDistanceId,
     toggleDistanceEditing,
     handleAddDistance,
     handleDistanceSaved,
-    handleDistanceDeleted,
   };
 }

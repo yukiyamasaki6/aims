@@ -91,6 +91,32 @@ export function shotFitsDistance(
   );
 }
 
+// 距離の生きている矢が全て、距離の構成(エンド数・矢数・的)に収まるか。サーバーの`update_distance`が構成の変更を拒否する条件(`shot_fits`を満たさない矢がある、またはエンドの生きている矢の数が矢数を超える)の否定である。
+// 渡す矢は生きている矢だけとし、他の距離の矢は無視する。
+export function shotsFitDistance(
+  distance: Pick<
+    Distance,
+    "id" | "total_ends" | "arrows_per_end" | "target_face_id"
+  >,
+  shots: Pick<
+    Shot,
+    "distance_id" | "end_number" | "shot_number" | "score_str" | "score_int"
+  >[],
+  targetFaces: ScoringTargetFace[],
+): boolean {
+  const own = shots.filter((s) => s.distance_id === distance.id);
+  return own.every(
+    (shot) =>
+      shotFitsDistance(
+        distance,
+        { endNumber: shot.end_number, shotNumber: shot.shot_number },
+        { scoreStr: shot.score_str, scoreInt: shot.score_int },
+        targetFaces,
+      ) &&
+      liveCountOf(own, distance.id, shot.end_number) <= distance.arrows_per_end,
+  );
+}
+
 // エンドの生きている矢の数。渡す矢は生きている矢だけとする。
 export function liveCountOf(
   shots: Pick<Shot, "distance_id" | "end_number">[],

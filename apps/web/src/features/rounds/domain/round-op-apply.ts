@@ -2,11 +2,11 @@ import type { RoundConfig } from "./round-config";
 import type { DistanceRow, RoundTables, ShotRow } from "./round-tables";
 import {
   endHasRoom,
-  liveCountOf,
   type ScoringTargetFace,
   shotFitsDistance,
+  shotsFitDistance,
 } from "./scorecard-scoring";
-import type { Distance, Shot } from "./scorecard-types";
+import type { Distance } from "./scorecard-types";
 import type { DistanceChanges, SyncOperation } from "./sync-events";
 
 type Op<T extends SyncOperation["type"]> = Extract<SyncOperation, { type: T }>;
@@ -28,19 +28,6 @@ function appliedFields(
 ): Set<string> {
   if (confirmedFields === null) return new Set(keys);
   return new Set(keys.filter((key) => confirmedFields?.includes(key)));
-}
-
-function shotFits(
-  distance: Distance,
-  shot: Shot,
-  faces: ScoringTargetFace[],
-): boolean {
-  return shotFitsDistance(
-    distance,
-    { endNumber: shot.end_number, shotNumber: shot.shot_number },
-    { scoreStr: shot.score_str, scoreInt: shot.score_int },
-    faces,
-  );
 }
 
 function liveShots(tables: RoundTables): ShotRow[] {
@@ -168,12 +155,7 @@ function hasShotInvalidUnder(
     arrows_per_end: config.arrowsPerEnd,
     target_face_id: config.targetFaceId,
   };
-  const shots = liveShots(tables).filter((s) => s.distance_id === distance.id);
-  return shots.some(
-    (shot) =>
-      !shotFits(next, shot, faces) ||
-      liveCountOf(shots, distance.id, shot.end_number) > config.arrowsPerEnd,
-  );
+  return !shotsFitDistance(next, liveShots(tables), faces);
 }
 
 // update_distanceの規則の判定。is_markedとdistanceは常に効き、configは表示中の矢が無効になるときだけ効かない。

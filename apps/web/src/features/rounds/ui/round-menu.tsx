@@ -4,6 +4,7 @@ import { MoreHorizontal } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useMountedRef } from "@/hooks/use-mounted-ref";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,10 +18,11 @@ import { useRoundProcedures } from "./rounds-context";
 export function RoundMenu({ roundId }: { roundId: string }) {
   const t = useTranslations("rounds");
   const { leaving } = useRoundProcedures();
+  const mountedRef = useMountedRef();
   const [deleteRoundConfirmOpen, setDeleteRoundConfirmOpen] = useState(false);
 
   function handleDeleteRound() {
-    void leaving.deleteRoundAndLeave(roundId);
+    void leaving.deleteRoundAndLeave(roundId, () => mountedRef.current);
   }
 
   return (

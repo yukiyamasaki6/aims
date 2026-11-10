@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { useMountedRef } from "@/hooks/use-mounted-ref";
 import type { LoadedRound } from "../application/round-handle";
 import { isRoundInProgress } from "../domain/round-retention";
 import { useRoundProcedures } from "./rounds-context";
@@ -45,6 +46,7 @@ type ScorecardOptions = {
 export function useScorecard(options: ScorecardOptions) {
   const { roundId, loaded } = options;
   const { leaving } = useRoundProcedures();
+  const mountedRef = useMountedRef();
   // 画面の状態は、ベースへ操作の列を重ねた導出だけから得る。
   const sync = useRoundOpStack(roundId, loaded, options.onGone);
   const { distances } = sync.state;
@@ -76,9 +78,9 @@ export function useScorecard(options: ScorecardOptions) {
     history,
     input,
     editing,
-    // 完了へ変える操作を積み、保存を待ってから一覧へ移る。移った後も送信は常駐の送信器が続ける。
+    // 完了へ変える操作を積み、保存を待ってから一覧へ移る(待つ間に画面を離れたときは移らない)。移った後も送信は常駐の送信器が続ける。
     onComplete: () => {
-      void leaving.completeRound(roundId);
+      void leaving.completeRound(roundId, () => mountedRef.current);
     },
   };
 }
