@@ -8,7 +8,7 @@ import type { ReferenceSnapshots } from "./reference-snapshots";
 // deleted: 削除した。
 // failed: 削除できず、失敗の種類がある。
 // discarded: 完了を待つ間に、結果を受け取る画面が無くなった。
-export type PresetDeletionResult =
+type PresetDeletionResult =
   | { status: "deleted" }
   | { status: "failed"; error: PresetDeleteFailure }
   | { status: "discarded" };

@@ -53,6 +53,12 @@ export type RecordedOperation = {
   confirmedFields: string[] | null | undefined;
 };
 
+// 1つの列の、ベースと、保存の完了前を含む操作。
+export type RecordSnapshot = {
+  base: RecordBase | undefined;
+  operations: readonly RecordedOperation[];
+};
+
 // 送信の結果(操作ごと)。
 export type RecordSendResult = {
   revision: number | null;

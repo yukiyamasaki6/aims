@@ -28,40 +28,31 @@ export function RoundsList() {
   const t = useTranslations("rounds");
   const hydrated = useHydrated();
   const store = useRoundsListStore();
-  const { deletion } = useRoundProcedures();
+  const { deletion, whenOnline } = useRoundProcedures();
   const { view, retry } = useFetchResult<LoadedRoundsList>(
     () => store.loadList(),
-    store.whenOnline,
+    whenOnline,
   );
-  const { local, waited } = useLocalRoundsList();
+  const local = useLocalRoundsList();
   // この画面で削除したラウンドのID。取得の状態が変わっても失わない。
   const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
-  // 確認中のラウンド。確認の処理は、描画時のラウンドに束ねる。
-  const [target, setTarget] = useState<{
-    name: string;
-    confirm: () => void;
-  } | null>(null);
+  // 確認中のラウンド。
+  const [target, setTarget] = useState<RoundListItem | null>(null);
   const { inProgress, others, rest, empty } = roundsListView(
     view,
     local,
-    waited,
     removed,
   );
 
-  function startDelete(round: RoundListItem) {
-    setTarget({
-      name: round.name,
-      confirm: () => {
-        void deletion.deleteRound(round.id);
-        setRemoved((prev) => new Set(prev).add(round.id));
-      },
-    });
+  function confirmDelete(round: RoundListItem) {
+    void deletion.deleteRound(round.id);
+    setRemoved((prev) => new Set(prev).add(round.id));
   }
 
   const below = belowSection(
     { others, empty, rest },
     retry,
-    startDelete,
+    setTarget,
     t("listEmpty"),
   );
 
@@ -70,7 +61,7 @@ export function RoundsList() {
       <RoundsSections
         inProgress={inProgress}
         below={below}
-        onDelete={startDelete}
+        onDelete={setTarget}
       />
 
       <ConfirmDialog
@@ -81,7 +72,7 @@ export function RoundsList() {
             ? t("roundDeleteConfirmNamed", { name: target.name })
             : t("roundDeleteConfirm")
         }
-        onConfirm={() => target?.confirm()}
+        onConfirm={() => target && confirmDelete(target)}
       />
 
       <NewRoundLink hydrated={hydrated} />
@@ -166,8 +157,6 @@ function RoundsSections({
     </>
   );
 }
-
-// 名前の無いラウンドは、詳細画面と同じく名前を引用せずに指す。
 
 // 読み込み後のカード（高さ62px、間隔gap-3）と同じ形にする。
 function RoundCardsSkeleton() {

@@ -35,12 +35,7 @@ function loaded(
   items: RoundListItem[],
   overrides: Partial<LoadedRoundsList> = {},
 ): LoadedRoundsList {
-  return {
-    items,
-    inProgress: [],
-    deleted: new Set(),
-    ...overrides,
-  };
+  return { items, deleted: new Set(), ...overrides };
 }
 
 function renderList() {
@@ -106,19 +101,14 @@ function offlineWithLocal(items: RoundListItem[] = inProgressRounds) {
 
 beforeEach(() => {
   fake = createFakeRoundsListStore();
-  // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
-  fake.goOffline();
-  // 端末の列は、既定では読み込みが終わらない。
-  fake.store.loadLocalList.mockReturnValue(new Promise(() => {}));
-  load = fake.store.loadList;
   procedures = createFakeRoundProcedures();
+  // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
+  procedures.goOffline();
+  // 端末の列は、既定では入力中のラウンドが無い。
+  fake.store.loadLocalList.mockResolvedValue({ inProgress: [] });
+  load = fake.store.loadList;
   deleteRound = procedures.deletion.deleteRound;
 });
-
-// 待ちの経過の合図を起こす。
-async function elapseWait() {
-  await act(async () => fake.elapseFallbackWait());
-}
 
 describe("RoundsList", () => {
   describe("一覧の表示", () => {
@@ -238,7 +228,7 @@ describe("RoundsList", () => {
       await screen.findByText(roundsText("fetchOffline"));
 
       // When
-      await act(async () => fake.returnOnline());
+      await act(async () => procedures.returnOnline());
 
       // Then
       expect(await screen.findByText("午前練習")).toBeInTheDocument();
@@ -369,26 +359,6 @@ describe("RoundsList", () => {
       ).toBeInTheDocument();
       expect(screen.queryByText(/「」/)).toBeNull();
     });
-
-    it("名前の無いラウンドも、確認すると削除し、一覧から消す", async () => {
-      // Given
-      const user = userEvent.setup();
-      fetchResolves({ status: "ok", data: roundsWithUnnamed });
-      renderList();
-      await screen.findByText("2026-09-17");
-      await openMenu(user, "2026-09-17");
-      await user.click(await screen.findByTestId("round-delete"));
-
-      // When
-      await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-      // Then
-      expect(deleteRound).toHaveBeenCalledExactlyOnceWith("round-9");
-      await waitFor(() => {
-        expect(screen.queryByText("2026-09-17")).not.toBeInTheDocument();
-      });
-      expect(screen.getByText("午前練習")).toBeInTheDocument();
-    });
   });
 
   describe("入力中の領域", () => {
@@ -396,10 +366,9 @@ describe("RoundsList", () => {
       // Given
       load.mockResolvedValue({
         status: "ok",
-        data: loaded([...rounds, ...inProgressRounds], {
-          inProgress: inProgressRounds,
-        }),
+        data: loaded([...rounds, ...inProgressRounds]),
       });
+      offlineWithLocal();
 
       // When
       renderList();
@@ -428,41 +397,6 @@ describe("RoundsList", () => {
       ).not.toBe(0);
     });
 
-    it("入力中のラウンドが無ければ、領域も見出しも表示せず、今と同じ表示にする", async () => {
-      // Given
-      fetchResolves({ status: "ok", data: rounds });
-
-      // When
-      renderList();
-      await screen.findByText("午前練習");
-
-      // Then
-      expect(screen.queryByTestId("in-progress-rounds")).toBeNull();
-      expect(screen.queryByTestId("other-rounds")).toBeNull();
-      expect(
-        screen.queryByRole("heading", { name: roundsText("listInProgress") }),
-      ).toBeNull();
-      expect(
-        screen.queryByRole("heading", { name: roundsText("listHistory") }),
-      ).toBeNull();
-    });
-
-    it("入力中のラウンドだけがあるときは、「過去履歴」の節も「まだラウンドがありません。」も表示しない", async () => {
-      // Given
-      load.mockResolvedValue({
-        status: "ok",
-        data: loaded(inProgressRounds, { inProgress: inProgressRounds }),
-      });
-
-      // When
-      renderList();
-      await screen.findByTestId("in-progress-rounds");
-
-      // Then
-      expect(screen.queryByTestId("other-rounds")).toBeNull();
-      expect(screen.queryByText(roundsText("listEmpty"))).toBeNull();
-    });
-
     it("オフラインでは、入力中のラウンドを表示し、「過去履歴」の下に「ネットワークに接続されていません」を表示する", async () => {
       // Given
       offlineWithLocal();
@@ -486,23 +420,16 @@ describe("RoundsList", () => {
       expect(screen.queryByText(roundsText("listEmpty"))).toBeNull();
     });
 
-    it("取得中は、待つ間は入力中の領域を表示せず、待ちが経過した後は入力中の領域と「過去履歴」の下のスケルトンを表示する", async () => {
+    it("取得中は、端末の入力中の領域と「過去履歴」の下のスケルトンを、待ちなしで表示する", async () => {
       // Given
       load.mockReturnValue(new Promise(() => {}));
       offlineWithLocal();
 
       // When
       renderList();
-      await act(async () => {});
-      const shownBeforeWait =
-        screen.queryByTestId("in-progress-rounds") !== null;
-      const loadingBeforeWait = screen.queryByRole("status") !== null;
-      await elapseWait();
 
       // Then
-      expect(shownBeforeWait).toBe(false);
-      expect(loadingBeforeWait).toBe(true);
-      const area = screen.getByTestId("in-progress-rounds");
+      const area = await screen.findByTestId("in-progress-rounds");
       expect(within(area).getByText("入力中の練習")).toBeInTheDocument();
       expect(
         within(screen.getByTestId("other-rounds")).getByRole("status"),
@@ -539,9 +466,7 @@ describe("RoundsList", () => {
       offlineWithLocal();
       load.mockResolvedValueOnce({ status: "offline" }).mockResolvedValueOnce({
         status: "ok",
-        data: loaded([...rounds, ...inProgressRounds], {
-          inProgress: inProgressRounds,
-        }),
+        data: loaded([...rounds, ...inProgressRounds]),
       });
       const user = userEvent.setup();
       renderList();

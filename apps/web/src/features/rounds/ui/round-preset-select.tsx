@@ -15,16 +15,16 @@ import type { PresetDeleteFailure } from "../domain/write-result";
 import { BackToListLink } from "./back-to-list-link";
 import { FetchState } from "./fetch-state";
 import { PresetListSkeleton, PresetSections } from "./preset-list";
-import { useNewRoundStore } from "./rounds-context";
+import { useRoundProcedures } from "./rounds-context";
 import { useFetchResult } from "./use-fetch-result";
 import { usePresetDelete } from "./use-preset-delete";
 import { useStartRound } from "./use-start-round";
 
 export function RoundPresetSelect() {
-  const store = useNewRoundStore();
+  const { fetching, whenOnline } = useRoundProcedures();
   const { view, retry } = useFetchResult(
-    () => store.loadPresets(),
-    store.whenOnline,
+    () => fetching.fetchPresets(),
+    whenOnline,
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const mountedRef = useMountedRef();

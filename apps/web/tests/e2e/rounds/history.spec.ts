@@ -418,12 +418,95 @@ test.describe("入力中の領域", () => {
     await expect(inProgressArea(page)).toHaveCount(0);
   });
 
-  // src/features/rounds/domain/fetch-wait.tsのFALLBACK_WAIT_MS。
-  const fallbackWaitMs = 1_000;
-  // 待ちの後の描画とブラウザ・CIの揺れの余裕。
-  const renderMarginMs = 500;
+  // 一覧の問い合わせ(`rounds`の一覧。一括の取得は除く)の応答が戻った時刻と、入力中のラウンドが表示された時刻を、ページ内で測る(Node側の時刻はポーリングの間隔を含むため)。
+  async function measureListTimes(page: Page, roundName: string) {
+    await page.addInitScript((name) => {
+      const w = window as unknown as {
+        e2eListResponseAt?: number;
+        e2eFirstRequestAt?: number;
+        e2eShownAt?: number;
+      };
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (/\/(rest|auth)\/v1\//.test(url)) {
+          w.e2eFirstRequestAt ??= performance.now();
+        }
+        const isList = decodeURIComponent(url).includes(
+          "distances(disabled_at,shots(score_int,disabled_at))",
+        );
+        const response = originalFetch(input, init);
+        if (isList) {
+          void response.then(
+            () => {
+              w.e2eListResponseAt ??= performance.now();
+            },
+            () => {},
+          );
+        }
+        return response;
+      };
+      new MutationObserver(() => {
+        const el = document.querySelector('[data-testid="in-progress-rounds"]');
+        if (el?.textContent?.includes(name)) w.e2eShownAt ??= performance.now();
+      }).observe(document, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+    }, roundName);
+  }
 
-  test("オンラインのまま一覧の取得が応答しないとき、通信の開始から1秒以内に入力中のラウンドが表示される", async ({
+  function readListTimes(page: Page) {
+    return page.evaluate(() => {
+      const w = window as unknown as {
+        e2eListResponseAt?: number;
+        e2eFirstRequestAt?: number;
+        e2eShownAt?: number;
+      };
+      return {
+        listResponseAt: w.e2eListResponseAt,
+        firstRequestAt: w.e2eFirstRequestAt,
+        shownAt: w.e2eShownAt,
+      };
+    });
+  }
+
+  test("一覧の問い合わせの応答を3秒遅らせても、その応答が戻る前に入力中のラウンドが表示され、応答の後に過去履歴が置き換わる", async ({
+    page,
+  }) => {
+    // 入力中のラウンドと完了したラウンドを作り、一覧を開いて入力中のラウンドを端末に保持させる。
+    const credentials = await signInFreshUser(page);
+    const name = `遅い取得-${Date.now()}`;
+    const doneName = `過去の遅い取得-${Date.now()}`;
+    await addRound(credentials, name, "2026-03-01");
+    await addRound(credentials, doneName, "2026-04-01", { completed: true });
+    await page.goto("/rounds");
+    await expect(inProgressArea(page).getByText(name)).toBeVisible();
+    await expect(otherArea(page).getByText(doneName)).toBeVisible();
+
+    // 一覧の問い合わせだけを3秒遅らせて開き直す。
+    await measureListTimes(page, name);
+    await page.context().route(/\/rest\/v1\/rounds\?/, async (route) => {
+      const isList = decodeURIComponent(route.request().url()).includes(
+        "distances(disabled_at,shots(score_int,disabled_at))",
+      );
+      if (isList) await new Promise((resolve) => setTimeout(resolve, 3_000));
+      await route.continue();
+    });
+    await page.goto("/rounds");
+
+    // 応答が戻る前は、入力中のラウンドが表示され、「過去履歴」の下はスケルトンである。
+    await expect(inProgressArea(page).getByText(name)).toBeVisible();
+    await expect(otherArea(page).getByRole("status")).toBeVisible();
+    await expect(otherArea(page).getByText(doneName)).toBeVisible();
+    const { listResponseAt, shownAt } = await readListTimes(page);
+    if (listResponseAt === undefined) throw new Error("応答が戻っていない");
+    if (shownAt === undefined) throw new Error("表示されていない");
+    expect(shownAt).toBeLessThan(listResponseAt);
+  });
+
+  test("オンラインのまま一覧の取得が応答しないとき、10秒の打ち切りを待たずに入力中のラウンドが表示される", async ({
     page,
   }) => {
     // 一覧を開き、入力中のラウンドを端末に保持させる。
@@ -434,48 +517,18 @@ test.describe("入力中の領域", () => {
     await expect(inProgressArea(page).getByText(name)).toBeVisible();
 
     // 通信が応答しない状態で一覧を開き直し、入力中のラウンドが出るまでの時間を確かめる。
-    // 待ちと表示の時刻をページ内で測る(Node側の時刻はポーリングの間隔を含むため)。
-    await page.addInitScript((roundName) => {
-      const w = window as unknown as {
-        e2eFirstRequestAt?: number;
-        e2eShownAt?: number;
-      };
-      const originalFetch = window.fetch.bind(window);
-      window.fetch = (input, init) => {
-        const url = input instanceof Request ? input.url : String(input);
-        if (/\/(rest|auth)\/v1\//.test(url)) {
-          w.e2eFirstRequestAt ??= performance.now();
-        }
-        return originalFetch(input, init);
-      };
-      new MutationObserver(() => {
-        const el = document.querySelector('[data-testid="in-progress-rounds"]');
-        if (el?.textContent?.includes(roundName))
-          w.e2eShownAt ??= performance.now();
-      }).observe(document, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-      });
-    }, name);
+    await measureListTimes(page, name);
     // Service Workerが制御する文書の通信も止めるため、contextで止める。
     await page.context().route(/\/(rest|auth)\/v1\//, () => {});
     await page.goto("/rounds");
     await expect(inProgressArea(page).getByText(name)).toBeVisible({
       timeout: 10_000,
     });
-    const { firstRequestAt, shownAt } = await page.evaluate(() => {
-      const w = window as unknown as {
-        e2eFirstRequestAt?: number;
-        e2eShownAt?: number;
-      };
-      return { firstRequestAt: w.e2eFirstRequestAt, shownAt: w.e2eShownAt };
-    });
+    const { firstRequestAt, shownAt } = await readListTimes(page);
     if (firstRequestAt === undefined) throw new Error("通信を始めていない");
     if (shownAt === undefined) throw new Error("表示されていない");
-    expect(shownAt - firstRequestAt).toBeLessThan(
-      fallbackWaitMs + renderMarginMs,
-    );
+    // 打ち切り(10秒)の手前の5秒以内に表示される。
+    expect(shownAt - firstRequestAt).toBeLessThan(5_000);
   });
 
   test("オンラインのまま一覧の取得に失敗したとき、入力中のラウンドが表示され、「過去履歴」の見出しの下に「読み込めませんでした。」と再試行ボタンが表示される", async ({

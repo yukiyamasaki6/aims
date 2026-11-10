@@ -107,56 +107,54 @@ describe("roundsListView", () => {
     overrides: Partial<LoadedRoundsList> = {},
   ): FetchView<LoadedRoundsList> => ({
     status: "ok",
-    data: {
-      items: [],
-      inProgress: [],
-      deleted: new Set(),
-      ...overrides,
-    },
+    data: { items: [], deleted: new Set(), ...overrides },
   });
   const local: LocalRoundsList = {
     inProgress: [item("p1", "2026-09-10"), item("p2", "2026-09-12")],
   };
+  const empty: LocalRoundsList = { inProgress: [] };
 
-  it("取得が成功したら、入力中の領域とそれ以外の並びを返し、取得の状態は返さない", () => {
+  it("取得が成功したら、入力中の領域は常に端末の値で出し、それ以外は取得から入力中の領域を除いて並べ、取得の状態は返さない", () => {
     // Given
 
     // When
     const view = roundsListView(
-      loaded({ items: [item("a"), item("p1")], inProgress: [item("p1")] }),
-      null,
-      false,
+      loaded({ items: [item("a"), item("p1")] }),
+      local,
       new Set(),
     );
 
     // Then
-    expect(ids(view.inProgress)).toEqual(["p1"]);
+    expect(ids(view.inProgress)).toEqual(["p2", "p1"]);
     expect(ids(view.others)).toEqual(["a"]);
     expect(view.rest).toBeNull();
     expect(view.empty).toBe(false);
   });
 
-  it("取得が成功し、端末の入力中を読み直した後は、取得時の値でなく読み直した値を入力中の領域に使う", () => {
+  it("取得が成功しても、端末の入力中をまだ読んでいなければ、取得中として返す", () => {
     // Given
 
     // When
     const view = roundsListView(
-      loaded({ items: [item("a")], inProgress: [item("stale")] }),
-      { inProgress: [item("fresh")] },
-      false,
+      loaded({ items: [item("a")] }),
+      null,
       new Set(),
     );
 
     // Then
-    expect(ids(view.inProgress)).toEqual(["fresh"]);
-    expect(ids(view.others)).toEqual(["a"]);
+    expect(view).toEqual({
+      inProgress: [],
+      others: null,
+      rest: { status: "loading" },
+      empty: false,
+    });
   });
 
   it("取得が成功し、両方が0件なら、空とする", () => {
     // Given
 
     // When
-    const view = roundsListView(loaded(), null, false, new Set());
+    const view = roundsListView(loaded(), empty, new Set());
 
     // Then
     expect(view.empty).toBe(true);
@@ -167,9 +165,8 @@ describe("roundsListView", () => {
 
     // When
     const view = roundsListView(
-      loaded({ items: [item("p1")], inProgress: [item("p1")] }),
-      null,
-      false,
+      loaded({ items: [item("p1")] }),
+      { inProgress: [item("p1")] },
       new Set(),
     );
 
@@ -178,14 +175,16 @@ describe("roundsListView", () => {
     expect(view.others).toEqual([]);
   });
 
-  it("この画面で削除したラウンドは、取得が成功していても除く", () => {
+  it("この画面で削除したラウンドと、端末の列で削除済みのラウンドは、取得が成功していても除く", () => {
     // Given
 
     // When
     const view = roundsListView(
-      loaded({ items: [item("a"), item("p1")], inProgress: [item("p1")] }),
-      null,
-      false,
+      loaded({
+        items: [item("a"), item("b"), item("p1")],
+        deleted: new Set(["b"]),
+      }),
+      { inProgress: [item("p1")] },
       new Set(["p1", "a"]),
     );
 
@@ -196,15 +195,16 @@ describe("roundsListView", () => {
   });
 
   it.each([
+    ["loading", { status: "loading" }],
     ["offline", { status: "offline" }],
     ["error", { status: "error", reason: "failed" }],
   ] as const)(
-    "取得が%sなら、待たずに端末の入力中のラウンドを実施日の新しい順に返し、取得の状態を返す",
+    "取得が%sでも、端末の入力中のラウンドを実施日の新しい順に返し、取得の状態を返す",
     (_name, view) => {
       // Given
 
       // When
-      const result = roundsListView(view, local, false, new Set());
+      const result = roundsListView(view, local, new Set());
 
       // Then
       expect(ids(result.inProgress)).toEqual(["p2", "p1"]);
@@ -214,26 +214,11 @@ describe("roundsListView", () => {
     },
   );
 
-  it("取得中は、FALLBACK_WAIT_MSが過ぎるまで入力中の領域を出さない", () => {
-    // Given
-
-    // When
-    const view = { status: "loading" } as const;
-    const before = roundsListView(view, local, false, new Set());
-    const after = roundsListView(view, local, true, new Set());
-
-    // Then
-    expect(before.inProgress).toEqual([]);
-    expect(before.rest).toBe(view);
-    expect(ids(after.inProgress)).toEqual(["p2", "p1"]);
-    expect(after.rest).toBe(view);
-  });
-
   it("端末の入力中のラウンドをまだ読んでいなければ、入力中の領域を出さない", () => {
     // Given
 
     // When
-    const result = roundsListView({ status: "offline" }, null, true, new Set());
+    const result = roundsListView({ status: "offline" }, null, new Set());
 
     // Then
     expect(result.inProgress).toEqual([]);
@@ -246,7 +231,6 @@ describe("roundsListView", () => {
     const result = roundsListView(
       { status: "offline" },
       local,
-      false,
       new Set(["p1", "p2"]),
     );
 

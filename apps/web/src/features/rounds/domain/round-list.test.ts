@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  deletionsOf,
+  deletedRoundIdsOf,
   localRoundsList,
   roundListItemOf,
   type ServerRoundSummary,
@@ -11,29 +11,14 @@ import {
   roundDisabled,
   shotRecorded,
 } from "./round-op-test-helpers";
-import type { ScoringTargetFace } from "./scorecard-scoring";
-
-const faces: ScoringTargetFace[] = [
-  {
-    id: "face-1",
-    target_face_spots: [
-      {
-        target_face_rings: [
-          { score_str: "10", score_int: 10, z_index: 2, color: "#000000" },
-          { score_str: "9", score_int: 9, z_index: 1, color: "#000000" },
-        ],
-      },
-    ],
-  },
-];
 
 const pending = (operation: ReturnType<typeof roundDisabled>) => ({
   operation,
   confirmedFields: undefined,
 });
 
-describe("deletionsOf", () => {
-  it("削除済みのラウンドを削除の印にし、そのうち削除が確定したラウンドだけを確定済みにする", () => {
+describe("deletedRoundIdsOf", () => {
+  it("削除の操作を持つラウンドのIDを、確定の有無によらず返す", () => {
     // Given
     const snapshots = new Map([
       [
@@ -53,16 +38,15 @@ describe("deletionsOf", () => {
     ]);
 
     // When
-    const { deleted, confirmed } = deletionsOf(snapshots);
+    const deleted = deletedRoundIdsOf(snapshots);
 
     // Then
     expect([...deleted]).toEqual(["r-unsent", "r-confirmed"]);
-    expect(confirmed).toEqual(["r-confirmed"]);
   });
 });
 
 describe("localRoundsList", () => {
-  it("入力中のラウンドだけを、名前と日付と合計点で返す。削除済みは削除の印に分ける", () => {
+  it("入力中のラウンドだけを、名前と日付と合計点で返し、完了済み・削除済み・基準のないラウンドを含めない", () => {
     // Given
     const snapshots = new Map([
       [
@@ -87,7 +71,7 @@ describe("localRoundsList", () => {
     ]);
 
     // When
-    const { inProgress } = localRoundsList(snapshots, faces);
+    const { inProgress } = localRoundsList(snapshots);
 
     // Then
     expect(inProgress).toEqual([
@@ -119,11 +103,45 @@ describe("localRoundsList", () => {
     ]);
 
     // When
-    const { inProgress } = localRoundsList(snapshots, faces);
+    const { inProgress } = localRoundsList(snapshots);
 
     // Then
     expect(inProgress).toEqual([
       { id: "round-1", name: "新規", roundDate: "2026-09-29", total: 19 },
+    ]);
+  });
+});
+
+describe("localRoundsList: 的に無い点数", () => {
+  it("未送信の矢の点数が距離の的に無い点数でも、合計に含める(一覧は的を読まない)", () => {
+    // Given
+    const snapshots = new Map([
+      [
+        "round-1",
+        {
+          base: undefined,
+          operations: [
+            pending(roundCreated({ name: "新規" })),
+            pending(shotRecorded({ scoreStr: "7", scoreInt: 7 })),
+            pending(
+              shotRecorded({
+                eventId: "e-2",
+                shotId: "s-2",
+                scoreStr: "10",
+                scoreInt: 10,
+              }),
+            ),
+          ],
+        },
+      ],
+    ]);
+
+    // When
+    const { inProgress } = localRoundsList(snapshots);
+
+    // Then
+    expect(inProgress).toEqual([
+      { id: "round-1", name: "新規", roundDate: "2026-09-29", total: 17 },
     ]);
   });
 });
@@ -135,19 +153,26 @@ describe("roundListItemOf", () => {
   ): ServerRoundSummary => ({
     id: "round-2",
     name: "午後練習",
-    roundDate: "2026-09-16",
+    round_date: "2026-09-16",
     distances,
   });
   const shot = (scoreInt: number, disabled = false) => ({
     score_int: scoreInt,
-    disabled,
+    disabled_at: disabled ? "2026-09-16T00:00:00Z" : null,
+  });
+  const distance = (
+    shots: ServerRoundSummary["distances"][number]["shots"],
+    disabled = false,
+  ) => ({
+    disabled_at: disabled ? "2026-09-16T00:00:00Z" : null,
+    shots,
   });
 
-  it("削除されていない距離の、削除されていない矢の点の和を合計点にし、id、name、roundDateをそのまま返す", () => {
+  it("削除されていない距離の、削除されていない矢の点の和を合計点にし、id、name、実施日(round_date)をそのまま返す", () => {
     // Given
     const input = summary([
-      { disabled: false, shots: [shot(10), shot(9), shot(8)] },
-      { disabled: false, shots: [shot(7), shot(6)] },
+      distance([shot(10), shot(9), shot(8)]),
+      distance([shot(7), shot(6)]),
     ]);
 
     // When
@@ -165,9 +190,9 @@ describe("roundListItemOf", () => {
   it("削除された距離の矢と、削除された矢を合計に含めない", () => {
     // Given
     const input = summary([
-      { disabled: false, shots: [shot(10), shot(9, true)] },
-      { disabled: true, shots: [shot(8)] },
-      { disabled: false, shots: [shot(7)] },
+      distance([shot(10), shot(9, true)]),
+      distance([shot(8)], true),
+      distance([shot(7)]),
     ]);
 
     // When
@@ -180,7 +205,7 @@ describe("roundListItemOf", () => {
   it("距離が0件のときも、矢が0件のときも、合計点は0", () => {
     // Given
     const withoutDistances = summary([]);
-    const withoutShots = summary([{ disabled: false, shots: [] }]);
+    const withoutShots = summary([distance([])]);
 
     // When
     const noDistances = roundListItemOf(withoutDistances);

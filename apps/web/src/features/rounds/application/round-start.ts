@@ -14,7 +14,7 @@ import type { UniqueIds } from "./unique-ids";
 // created: 作成を端末の操作の列へ保存し、詳細の画面へ進んだ。
 // failed: 開始できず、失敗の種類がある。
 // discarded: 認証の確認を待つ間に、結果を受け取る画面が無くなった。
-export type RoundStartResult =
+type RoundStartResult =
   | { status: "created"; roundId: string }
   | { status: "failed"; error: SignInFailure }
   | { status: "discarded" };

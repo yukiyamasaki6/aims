@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import type { FetchResult } from "../domain/fetch-status";
-import { createFakeRoundsListStore } from "./round-stores-test-helpers";
+import { createFakeRoundProcedures } from "./round-stores-test-helpers";
 import { useFetchResult } from "./use-fetch-result";
 
 function deferred<T>() {
@@ -13,10 +13,10 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-// 通信の復帰の合図はラウンドの状態の約束(whenOnline)で受けるため、偽の約束で復帰を起こす。
+// 通信の復帰の合図は手続きの入れ物の約束(whenOnline)で受けるため、偽の約束で復帰を起こす。
 // offlineの結果が返る状況は、通信が切れているので、offlineの結果を扱うテストはgoOfflineで始める。
 function setup() {
-  return { fake: createFakeRoundsListStore() };
+  return { fake: createFakeRoundProcedures() };
 }
 
 describe("useFetchResult", () => {
@@ -28,7 +28,7 @@ describe("useFetchResult", () => {
 
       // When
       const { result } = renderHook(
-        () => useFetchResult(() => d.promise, fake.store.whenOnline),
+        () => useFetchResult(() => d.promise, fake.whenOnline),
         { wrapper: IntlTestProvider },
       );
       const pending = result.current.view;
@@ -48,7 +48,7 @@ describe("useFetchResult", () => {
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({ status: "ok", data: 2 });
       const { result } = renderHook(
-        () => useFetchResult(fetcher, fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -73,7 +73,7 @@ describe("useFetchResult", () => {
         .mockResolvedValueOnce({ status: "offline" })
         .mockResolvedValueOnce({ status: "ok", data: 2 });
       const { result } = renderHook(
-        () => useFetchResult(fetcher, fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -101,7 +101,7 @@ describe("useFetchResult", () => {
         .mockResolvedValueOnce({ status: "offline" })
         .mockReturnValueOnce(d.promise);
       const { result } = renderHook(
-        () => useFetchResult(fetcher, fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -132,7 +132,7 @@ describe("useFetchResult", () => {
         })
         .mockResolvedValueOnce({ status: "ok", data: 3 });
       const { result } = renderHook(
-        () => useFetchResult(fetcher, fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -163,7 +163,7 @@ describe("useFetchResult", () => {
 
       // When
       const { result } = renderHook(
-        () => useFetchResult(fetcher, fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.whenOnline),
         { wrapper: IntlTestProvider },
       );
 
@@ -184,7 +184,7 @@ describe("useFetchResult", () => {
         .mockResolvedValueOnce({ status: "offline" })
         .mockReturnValueOnce(d.promise);
       const { result } = renderHook(
-        () => useFetchResult(fetcher, fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -215,7 +215,7 @@ describe("useFetchResult", () => {
           async (): Promise<FetchResult<number>> => settled,
         );
         const { result } = renderHook(
-          () => useFetchResult(fetcher, fake.store.whenOnline),
+          () => useFetchResult(fetcher, fake.whenOnline),
           { wrapper: IntlTestProvider },
         );
         await waitFor(() => expect(result.current.view.status).toBe(status));
@@ -224,7 +224,7 @@ describe("useFetchResult", () => {
         act(() => fake.returnOnline());
 
         // Then
-        expect(fake.store.whenOnline).not.toHaveBeenCalled();
+        expect(fake.whenOnline).not.toHaveBeenCalled();
         expect(fetcher).toHaveBeenCalledTimes(1);
         expect(result.current.view.status).toBe(status);
       },
@@ -236,7 +236,7 @@ describe("useFetchResult", () => {
       fake.goOffline();
       const d = deferred<FetchResult<number>>();
       const fetcher = vi.fn(() => d.promise);
-      renderHook(() => useFetchResult(fetcher, fake.store.whenOnline), {
+      renderHook(() => useFetchResult(fetcher, fake.whenOnline), {
         wrapper: IntlTestProvider,
       });
 
@@ -248,7 +248,7 @@ describe("useFetchResult", () => {
 
       // Then
       expect(calls).toBe(1);
-      expect(fake.store.whenOnline).not.toHaveBeenCalled();
+      expect(fake.whenOnline).not.toHaveBeenCalled();
     });
 
     it("同じwhenOnlineで再描画しても、再度購読しない", async () => {
@@ -259,17 +259,17 @@ describe("useFetchResult", () => {
         async (): Promise<FetchResult<number>> => ({ status: "offline" }),
       );
       const { result, rerender } = renderHook(
-        () => useFetchResult(fetcher, fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
-      const subscribed = fake.store.whenOnline.mock.calls.length;
+      const subscribed = fake.whenOnline.mock.calls.length;
 
       // When
       rerender();
 
       // Then
-      expect(fake.store.whenOnline).toHaveBeenCalledTimes(subscribed);
+      expect(fake.whenOnline).toHaveBeenCalledTimes(subscribed);
       expect(fake.online.cancelled()).toBe(0);
     });
   });
@@ -283,7 +283,7 @@ describe("useFetchResult", () => {
         .fn<() => Promise<FetchResult<number>>>()
         .mockResolvedValue({ status: "offline" });
       const { result, unmount } = renderHook(
-        () => useFetchResult(fetcher, fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.whenOnline),
         { wrapper: IntlTestProvider },
       );
       await waitFor(() => expect(result.current.view.status).toBe("offline"));
@@ -307,7 +307,7 @@ describe("useFetchResult", () => {
         .mockReturnValueOnce(first.promise)
         .mockReturnValueOnce(second.promise);
       const { result } = renderHook(
-        () => useFetchResult(fetcher, fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.whenOnline),
         { wrapper: IntlTestProvider },
       );
       act(() => result.current.retry());
@@ -329,7 +329,7 @@ describe("useFetchResult", () => {
 
       // When
       const { result } = renderHook(
-        () => useFetchResult(fetcher, fake.store.whenOnline),
+        () => useFetchResult(fetcher, fake.whenOnline),
         { wrapper: IntlTestProvider },
       );
 

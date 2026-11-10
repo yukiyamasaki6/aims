@@ -13,28 +13,28 @@ import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { FetchResult } from "../domain/fetch-status";
 import type { Preset, Presets } from "../domain/preset";
 import { RoundPresetSelect } from "./round-preset-select";
-import { createFakeNewRoundStore } from "./round-stores-test-helpers";
-import { NewRoundStoreProvider } from "./rounds-context";
+import { createFakeRoundProcedures } from "./round-stores-test-helpers";
+import { RoundProceduresProvider } from "./rounds-context";
 
 const roundsText = translatorFor("rounds");
 
-// 取得、削除、開始の手続きは、それぞれのテストで確かめるため、ラウンドの状態と変更の方法は偽の約束で渡す。
+// 取得、削除、開始の手続きは、それぞれのテストで確かめるため、手続きの入れ物は偽の約束で渡す。
 // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
-let fake: ReturnType<typeof createFakeNewRoundStore>;
+let fake: ReturnType<typeof createFakeRoundProcedures>;
 let loadPresets: ReturnType<
-  typeof createFakeNewRoundStore
->["store"]["loadPresets"];
+  typeof createFakeRoundProcedures
+>["fetching"]["fetchPresets"];
 let startRound: ReturnType<
-  typeof createFakeNewRoundStore
->["store"]["startRound"];
+  typeof createFakeRoundProcedures
+>["roundStart"]["startRound"];
 let deletePreset: ReturnType<
-  typeof createFakeNewRoundStore
->["store"]["deletePreset"];
+  typeof createFakeRoundProcedures
+>["presetDeletion"]["deletePreset"];
 
 function render(ui: ReactElement) {
   return renderWithoutStore(
     <IntlTestProvider>
-      <NewRoundStoreProvider store={fake.store}>{ui}</NewRoundStoreProvider>
+      <RoundProceduresProvider procedures={fake}>{ui}</RoundProceduresProvider>
     </IntlTestProvider>,
   );
 }
@@ -112,11 +112,11 @@ const otherPersonalPreset: Preset = {
 };
 
 beforeEach(() => {
-  fake = createFakeNewRoundStore();
+  fake = createFakeRoundProcedures();
   fake.goOffline();
-  loadPresets = fake.store.loadPresets;
-  startRound = fake.store.startRound;
-  deletePreset = fake.store.deletePreset;
+  loadPresets = fake.fetching.fetchPresets;
+  startRound = fake.roundStart.startRound;
+  deletePreset = fake.presetDeletion.deletePreset;
   startRound.mockResolvedValue({ status: "created", roundId: "new-round-id" });
   deletePreset.mockResolvedValue({ status: "deleted" });
 });

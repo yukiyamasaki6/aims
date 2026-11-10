@@ -3,14 +3,14 @@
 import { type RefObject, useRef, useState } from "react";
 import type { SignInFailure } from "../domain/fetch-status";
 import type { Preset } from "../domain/preset";
-import { useNewRoundStore } from "./rounds-context";
+import { useRoundProcedures } from "./rounds-context";
 
 // 選択中のプリセット（なければプリセット無し）でラウンドを開始する。成功したら開始の手続きが詳細画面へ遷移する。
 export function useStartRound(
   selectedPreset: Preset | null,
   mountedRef: RefObject<boolean>,
 ) {
-  const store = useNewRoundStore();
+  const { roundStart } = useRoundProcedures();
   const [error, setError] = useState<SignInFailure | null>(null);
   // 二重送信の判定は同期的なrefで行う。setSubmitting()由来のstateはレンダーを
   // 挟むまで更新されず、連打で2回目の呼び出しが古いsubmitting=falseの
@@ -24,7 +24,7 @@ export function useStartRound(
     setError(null);
     setSubmitting(true);
 
-    const result = await store.startRound(
+    const result = await roundStart.startRound(
       selectedPreset,
       () => mountedRef.current,
     );

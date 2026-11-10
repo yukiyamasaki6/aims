@@ -14,9 +14,9 @@ import {
   markPersisted,
   memoryEntries,
   operationsOf,
-  type RecordedOperation,
   type RecordGroup,
   type RecordSendResult,
+  type RecordSnapshot,
   type RoundRecord,
   replaceInFlight,
   retireItems,
@@ -28,12 +28,6 @@ export type RecordChange = {
 };
 
 export type RoundStoreGroup = StreamGroup<SyncOperation, RoundBaseRecord>;
-
-// 1つの列の、メモリにあるベースと、保存の完了前を含む操作。
-export type HubSnapshot = {
-  base: RecordBase | undefined;
-  operations: readonly RecordedOperation[];
-};
 
 export type AdoptOptions = {
   fetched?: RecordBase;
@@ -198,12 +192,12 @@ export function createRoundRecordHub(deps: {
     };
   }
 
-  function memorySnapshot(current: RoundRecord): HubSnapshot {
+  function memorySnapshot(current: RoundRecord): RecordSnapshot {
     return { base: current.base, operations: operationsOf(current) };
   }
 
   // 保存の組を画面用の形にする。効かなかった確定済みの行は除く。
-  function storedSnapshot(group: RoundStoreGroup): HubSnapshot {
+  function storedSnapshot(group: RoundStoreGroup): RecordSnapshot {
     return {
       base: group.base,
       operations: group.entries
@@ -220,8 +214,8 @@ export function createRoundRecordHub(deps: {
 
   function listSnapshots(
     stored: Map<string, RoundStoreGroup> | undefined,
-  ): Map<string, HubSnapshot> {
-    const all = new Map<string, HubSnapshot>();
+  ): Map<string, RecordSnapshot> {
+    const all = new Map<string, RecordSnapshot>();
     if (stored) {
       for (const [streamId, group] of stored) {
         if (!writeFailed.has(streamId))
@@ -277,7 +271,7 @@ export function createRoundRecordHub(deps: {
     // 一覧の材料。読み込みの完了後に、現在の利用者の全ての列のベースと操作を返す。
     // 端末の保存を基準にし、このタブで保存の書き込みに失敗した列だけメモリの記録から作る。保存の読み込みに失敗したときは、全ての列をメモリから作る。
     // 読み込みの間に停止・起動をまたいだときは、読み直す。
-    async readList(): Promise<Map<string, HubSnapshot>> {
+    async readList(): Promise<Map<string, RecordSnapshot>> {
       for (;;) {
         await ready();
         const target = epoch;

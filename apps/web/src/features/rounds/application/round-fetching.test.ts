@@ -835,8 +835,16 @@ describe("fetchRoundsList", () => {
   ): ServerRoundSummary => ({
     id,
     name: `ラウンド${id}`,
-    roundDate: "2026-09-15",
-    distances: [{ disabled: false, shots }],
+    round_date: "2026-09-15",
+    distances: [
+      {
+        disabled_at: null,
+        shots: shots.map(({ score_int, disabled }) => ({
+          score_int,
+          disabled_at: disabled ? "2026-09-15T10:00:00Z" : null,
+        })),
+      },
+    ],
   });
 
   it("取得できたら、各行を合計点を含む一覧の1件にして、問い合わせの返した順のまま返す", async () => {

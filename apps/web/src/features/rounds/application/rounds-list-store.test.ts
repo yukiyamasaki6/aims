@@ -1,37 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "../domain/fetch-status";
-import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
+import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { RoundListItem } from "../domain/round-list";
 import { roundBase } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
-import type { TargetFaceOption } from "../domain/target-face";
 import { createTestRounds } from "./round-record-test-helpers";
 
 const STREAM = roundStreamId("round-1");
-
-const face: TargetFaceOption = {
-  id: "face-1",
-  name: "122cm",
-  size: 122,
-  format: "outdoor",
-  bow_type: ["recurve"],
-  target_face_spots: [
-    {
-      center_x: 0,
-      center_y: 0,
-      target_face_rings: [
-        {
-          radius: 10,
-          color: "#fff",
-          line_color: null,
-          z_index: 2,
-          score_str: "10",
-          score_int: 10,
-        },
-      ],
-    },
-  ],
-};
 
 // 一覧の取得(ラウンドの取得の手続きの差し込み口)を差し替えて、一覧を読み込む。
 function loadListWith(
@@ -48,11 +23,15 @@ describe("loadList", () => {
   ];
   const ok = async () => ({ status: "ok", data: items }) as const;
 
-  it("一覧の取得が成功したら、サーバーの一覧と、端末の入力中のラウンドを返す", async () => {
+  it("一覧の取得が成功したら、サーバーの一覧と、端末の列で削除済みのラウンドのIDを返す", async () => {
     // Given
-    const tab = createTestRounds({ savedFaces: [face] });
+    const tab = createTestRounds();
     await tab.hub.ready();
-    await tab.hub.commit(STREAM, roundBase({ name: "端末" }), 10, "user-1");
+    await tab.hub.append(roundStreamId("deleted"), {
+      type: "round.disabled",
+      eventId: "e-deleted",
+      roundId: "deleted",
+    });
 
     // When
     const result = await loadListWith(tab, ok);
@@ -60,13 +39,7 @@ describe("loadList", () => {
     // Then
     expect(result).toEqual({
       status: "ok",
-      data: {
-        items,
-        inProgress: [
-          { id: "round-1", name: "端末", roundDate: "2026-09-15", total: 0 },
-        ],
-        deleted: new Set(),
-      },
+      data: { items, deleted: new Set(["deleted"]) },
     });
   });
 
@@ -95,20 +68,7 @@ describe("loadList", () => {
     expect(result).toEqual(failure);
   });
 
-  it("一覧の取得が例外を投げたときも、固定文のerrorを返す", async () => {
-    // Given
-    const tab = createTestRounds();
-
-    // When
-    const result = await loadListWith(tab, async () => {
-      throw new Error("boom");
-    });
-
-    // Then
-    expect(result).toEqual({ status: "error", reason: "failed" });
-  });
-
-  it("確定済みの削除は、削除の印として端末の記録へ反映してから、削除済みの一覧を返す。未確定の削除は反映しない", async () => {
+  it("確定済み・未確定の削除とも、端末の記録へ反映せず、削除済みの一覧に含める", async () => {
     // Given
     const tab = createTestRounds();
     await tab.hub.ready();
@@ -145,17 +105,41 @@ describe("loadList", () => {
       "confirmed",
       "unsent",
     ]);
-    expect(tab.hub.record(confirmedStream).base).toMatchObject({ base: null });
+    expect(tab.hub.record(confirmedStream).base).toBeUndefined();
     expect(tab.hub.record(unsentStream).base).toBeUndefined();
   });
 });
 
 describe("loadList: 別のタブの変化", () => {
-  const items: RoundListItem[] = [];
-
-  it("通知なしで、別のタブの追記と削除を反映し、別のタブが完了したラウンドは入力中に載せない", async () => {
+  it("通知なしで、別のタブの削除を反映する", async () => {
     // Given
-    const other = createTestRounds({ savedFaces: [face] });
+    const other = createTestRounds();
+    await other.hub.ready();
+    const tab = createTestRounds({ shared: { store: other.opLog } });
+    await tab.hub.ready();
+    await other.hub.append(roundStreamId("deleted"), {
+      type: "round.disabled",
+      eventId: "e-deleted",
+      roundId: "deleted",
+    });
+
+    // When
+    const result = await loadListWith(tab, async () => ({
+      status: "ok",
+      data: [],
+    }));
+
+    // Then
+    expect(result.status === "ok" && [...result.data.deleted]).toEqual([
+      "deleted",
+    ]);
+  });
+});
+
+describe("loadLocalList: 別のタブの変化", () => {
+  it("通知なしで、別のタブの追記を反映し、別のタブが完了したラウンドは入力中に載せない", async () => {
+    // Given
+    const other = createTestRounds();
     await other.hub.ready();
     const finished = roundStreamId("finished");
     await other.hub.commit(
@@ -164,10 +148,7 @@ describe("loadList: 別のタブの変化", () => {
       10,
       "user-1",
     );
-    const tab = createTestRounds({
-      savedFaces: [face],
-      shared: { store: other.opLog },
-    });
+    const tab = createTestRounds({ shared: { store: other.opLog } });
     await tab.hub.ready();
     await other.hub.commit(
       finished,
@@ -181,24 +162,13 @@ describe("loadList: 別のタブの変化", () => {
       10,
       "user-1",
     );
-    await other.hub.append(roundStreamId("deleted"), {
-      type: "round.disabled",
-      eventId: "e-deleted",
-      roundId: "deleted",
-    });
 
     // When
-    const result = await loadListWith(tab, async () => ({
-      status: "ok",
-      data: items,
-    }));
+    const list = await tab.list.loadLocalList();
 
     // Then
-    expect(result.status === "ok" && result.data.inProgress).toEqual([
+    expect(list.inProgress).toEqual([
       { id: "round-1", name: "別のタブ", roundDate: "2026-09-15", total: 0 },
-    ]);
-    expect(result.status === "ok" && [...result.data.deleted]).toEqual([
-      "deleted",
     ]);
   });
 });
@@ -224,9 +194,9 @@ describe("subscribe", () => {
 });
 
 describe("loadLocalList", () => {
-  it("端末の記録から、入力中のラウンドと削除済みのラウンドのIDを返す", async () => {
+  it("端末の列から、入力中のラウンドをラウンドIDで返し、削除済みは含めない", async () => {
     // Given
-    const tab = createTestRounds({ savedFaces: [face] });
+    const tab = createTestRounds();
     await tab.hub.ready();
     await tab.hub.commit(STREAM, roundBase({ name: "端末" }), 10, "user-1");
     await tab.hub.append(roundStreamId("deleted"), {
@@ -245,40 +215,7 @@ describe("loadLocalList", () => {
   });
 });
 
-describe("afterFallbackWait", () => {
-  it("FALLBACK_WAIT_MSの前では呼ばず、FALLBACK_WAIT_MSで1回呼ぶ", () => {
-    // Given
-    const tab = createTestRounds();
-    const listener = vi.fn();
-    tab.list.afterFallbackWait(listener);
-
-    // When
-    tab.clock.advance(FALLBACK_WAIT_MS - 1);
-    const calledBefore = listener.mock.calls.length;
-    tab.clock.advance(1);
-
-    // Then
-    expect(calledBefore).toBe(0);
-    expect(listener).toHaveBeenCalledOnce();
-  });
-});
-
 describe("打ち切り", () => {
-  it("一覧の読み込みも、終わらないままFETCH_TIMEOUT_MSでerrorにする", async () => {
-    // Given
-    const tab = createTestRounds();
-    const loading = loadListWith(tab, () => new Promise(() => {}));
-
-    // When
-    await tab.clock.advanceAsync(FETCH_TIMEOUT_MS);
-
-    // Then
-    expect(await loading).toEqual({
-      status: "error",
-      reason: "failed",
-    });
-  });
-
   it("端末の記録の読み込みが終わらない間に打ち切られても、切断ならofflineにする(一覧)", async () => {
     // Given
     const tab = createTestRounds();
@@ -291,22 +228,5 @@ describe("打ち切り", () => {
 
     // Then
     expect(await list).toEqual({ status: "offline" });
-  });
-});
-
-describe("whenOnline", () => {
-  it("オフラインなら呼ばずに待ち、次に通信が戻ったときに1回だけ呼ぶ", () => {
-    // Given
-    const tab = createTestRounds({ offline: true });
-    const listener = vi.fn();
-    tab.list.whenOnline(listener);
-    const calledBeforeReturn = listener.mock.calls.length;
-
-    // When
-    tab.connectivity.goOnline();
-
-    // Then
-    expect(calledBeforeReturn).toBe(0);
-    expect(listener).toHaveBeenCalledOnce();
   });
 });

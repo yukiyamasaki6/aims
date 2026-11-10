@@ -2,12 +2,12 @@ import { act, renderHook } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Preset } from "../domain/preset";
-import { createFakeNewRoundStore } from "./round-stores-test-helpers";
-import { NewRoundStoreProvider } from "./rounds-context";
+import { createFakeRoundProcedures } from "./round-stores-test-helpers";
+import { RoundProceduresProvider } from "./rounds-context";
 import { useStartRound } from "./use-start-round";
 
-const fake = createFakeNewRoundStore();
-const startRound = fake.store.startRound;
+const fake = createFakeRoundProcedures();
+const startRound = fake.roundStart.startRound;
 
 const preset: Preset = {
   id: "p1",
@@ -20,7 +20,10 @@ const preset: Preset = {
 function setup(selected: Preset | null = null, mounted = { current: true }) {
   const hook = renderHook(() => useStartRound(selected, mounted), {
     wrapper: ({ children }: { children: ReactNode }) =>
-      createElement(NewRoundStoreProvider, { store: fake.store, children }),
+      createElement(RoundProceduresProvider, {
+        procedures: fake,
+        children,
+      }),
   });
   return { ...hook, mounted };
 }
