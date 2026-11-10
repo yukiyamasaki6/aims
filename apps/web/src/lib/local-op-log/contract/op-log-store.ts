@@ -25,6 +25,7 @@ export type NewOpLogEntry<Op extends OpBase> = Omit<
 >;
 
 // 取得して得た、列の対象の状態(ベース)。`base`がnullは、サーバーに無い(削除された)ことの印。
+// nullは保存には書かれない。以前の版が書いた行を読むときだけ現れる。
 // `startedAt`は取得の開始時刻で、古い取得の結果で新しい保存を上書きしないために使う。
 export type StreamBase<Base> = { startedAt: number; base: Base | null };
 
@@ -61,8 +62,9 @@ export type OpLogStore<Op extends OpBase, Base> = {
     userId: string | null,
   ) => Promise<Map<string, StreamGroup<Op, Base>>>;
   // 取得したベースを、1つのトランザクションで反映する。保存済みより`startedAt`が古い取得は何も変えない。
-  // 新しければ、ベースに反映済みの操作を消し、保持の規則に当たれば(`base`がnullなら削除の印として)保存する。
+  // 新しければ、ベースに反映済みの操作を消し、保持の規則に当たれば保存する。
   // 当たらなければ、組を丸ごと消す(`keeps`は未送信があれば真を返すため、未送信は消えない)。
+  // `base`がnull(サーバーに無い)のときは、`keeps`を呼ばず、確定済みの操作を全て消してベースの行を消す。残る操作は未送信だけで、印は保存しない。
   commit: (
     streamId: string,
     userId: string,

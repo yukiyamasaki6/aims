@@ -228,7 +228,11 @@ describe("fetchRoundDetail", () => {
     const result = await fetching.fetchRoundDetail("round-1");
 
     // Then
-    expect(result).toEqual({ status: "not-found" });
+    expect(result).toEqual({
+      status: "not-found",
+      startedAt: 1000,
+      userId: "user-1",
+    });
     expect(save).not.toHaveBeenCalled();
   });
 

@@ -12,9 +12,16 @@ import { createRoundBaseRefreshing } from "./round-base-refreshing";
 import type {
   FetchedRoundDetail,
   FetchedRoundDetails,
+  RoundDetailResult,
   RoundFetching,
 } from "./round-fetching";
 import { createTestRoundHub } from "./round-record-test-helpers";
+
+const NOT_FOUND = {
+  status: "not-found",
+  startedAt: 200,
+  userId: "user-1",
+} as const;
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -132,7 +139,7 @@ describe("refreshAll", () => {
     expect(tab.fetching.fetchRoundDetails).not.toHaveBeenCalled();
   });
 
-  it("取得が返さなかった保持のラウンドは、削除の印として反映する", async () => {
+  it("取得が返さなかった保持のラウンドは、保存を消し、記録を削除済みにする", async () => {
     // Given
     const tab = await setup();
     await storeBase(tab, "gone");
@@ -150,6 +157,9 @@ describe("refreshAll", () => {
       base: null,
     });
     expect(tab.hub.record(roundStreamId("kept")).base?.base).not.toBeNull();
+    const stored = await tab.hub.readStored();
+    expect(stored.has(roundStreamId("gone"))).toBe(false);
+    expect(stored.has(roundStreamId("kept"))).toBe(true);
   });
 
   it("確定していない作成のラウンドは対象にしない。削除の操作が残るラウンドは、他と同じ規則で対象にする", async () => {
@@ -167,7 +177,7 @@ describe("refreshAll", () => {
     expect(tab.fetching.fetchRoundDetails).toHaveBeenCalledWith(["deleted"]);
   });
 
-  it("二重の削除の後に、サーバーから返らないラウンドは、削除の操作が列から外れても削除の印が残り、再表示されない", async () => {
+  it("二重の削除の後に、サーバーから返らないラウンドは、削除の操作が列から外れても記録は削除済みのままで保存に何も残らず、再表示されない", async () => {
     // Given
     const tab = await setup();
     await storeBase(tab, "twice");
@@ -194,6 +204,7 @@ describe("refreshAll", () => {
     // Then
     expect(tab.hub.record(stream).base).toEqual({ startedAt: 100, base: null });
     expect(tab.hub.record(stream).items).toEqual([]);
+    expect((await tab.hub.readStored()).has(stream)).toBe(false);
   });
 
   it("全ての反映を待ってから解決する", async () => {
@@ -281,7 +292,7 @@ describe("実行をまたぐ完了", () => {
   it("先に始まった詳細の取り直しの完了は、後から出された開く依頼を完了させない", async () => {
     // Given
     const tab = await setup();
-    const running = Promise.withResolvers<FetchResult<FetchedRoundDetail>>();
+    const running = Promise.withResolvers<RoundDetailResult>();
     tab.fetching.fetchRoundDetail.mockReturnValueOnce(running.promise);
     const first = tab.requests.open("r-1");
     const refreshing = tab.refresh.refreshRound("r-1");
@@ -293,7 +304,7 @@ describe("実行をまたぐ完了", () => {
     });
 
     // When
-    running.resolve({ status: "not-found" });
+    running.resolve(NOT_FOUND);
     await refreshing;
     await flush();
 
@@ -358,13 +369,13 @@ describe("refreshRound", () => {
         },
       ],
     );
-    const pending = Promise.withResolvers<FetchResult<FetchedRoundDetail>>();
+    const pending = Promise.withResolvers<RoundDetailResult>();
     tab.fetching.fetchRoundDetail.mockReturnValue(pending.promise);
 
     // When
     const refreshing = tab.refresh.refreshRound("r-1");
     const clearedAtStart = !tab.hub.divergedStreams().has(roundStreamId("r-1"));
-    pending.resolve({ status: "not-found" });
+    pending.resolve(NOT_FOUND);
     await refreshing;
 
     // Then
@@ -375,9 +386,7 @@ describe("refreshRound", () => {
     // Given
     const tab = await setup();
     const missing = tab.requests.open("r-1");
-    tab.fetching.fetchRoundDetail.mockResolvedValueOnce({
-      status: "not-found",
-    });
+    tab.fetching.fetchRoundDetail.mockResolvedValueOnce(NOT_FOUND);
     const offline = tab.requests.open("r-2");
 
     // When
@@ -390,5 +399,98 @@ describe("refreshRound", () => {
     expect(await offline).toEqual({ status: "offline" });
     expect(tab.requests.isGone("r-1")).toBe(true);
     expect(tab.requests.isGone("r-2")).toBe(false);
+  });
+});
+
+describe("refreshRound の見つからない反映", () => {
+  it("見つからないとき、端末にあるラウンドは保存を消し、記録を削除済みにする", async () => {
+    // Given
+    const tab = await setup();
+    await storeBase(tab, "r-1");
+    tab.fetching.fetchRoundDetail.mockResolvedValue(NOT_FOUND);
+
+    // When
+    await tab.refresh.refreshRound("r-1");
+
+    // Then
+    const stream = roundStreamId("r-1");
+    expect(tab.hub.record(stream).base).toEqual({ startedAt: 200, base: null });
+    expect((await tab.hub.readStored()).has(stream)).toBe(false);
+  });
+
+  it("記録の無いIDも、保存を増やさず、記録だけを削除済みにする", async () => {
+    // Given
+    const tab = await setup();
+    tab.fetching.fetchRoundDetail.mockResolvedValue(NOT_FOUND);
+
+    // When
+    await tab.refresh.refreshRound("never");
+
+    // Then
+    const stream = roundStreamId("never");
+    expect(tab.hub.record(stream).base).toEqual({ startedAt: 200, base: null });
+    expect((await tab.hub.readStored()).size).toBe(0);
+  });
+
+  it("未確定の作成だけが起点のラウンドは、見つからなくても書かない", async () => {
+    // Given
+    const tab = await setup();
+    const stream = roundStreamId("creating");
+    await tab.hub.append(stream, roundCreated());
+    tab.fetching.fetchRoundDetail.mockResolvedValue(NOT_FOUND);
+
+    // When
+    await tab.refresh.refreshRound("creating");
+
+    // Then
+    expect(tab.hub.record(stream).base).toBeUndefined();
+    expect(tab.hub.record(stream).items).toHaveLength(1);
+  });
+
+  it("取得の開始時点で未確定なら、取得中に作成が確定しても書かない", async () => {
+    // Given
+    const tab = await setup();
+    const stream = roundStreamId("creating");
+    const created = roundCreated();
+    await tab.hub.append(stream, created);
+    const pending = Promise.withResolvers<RoundDetailResult>();
+    tab.fetching.fetchRoundDetail.mockReturnValue(pending.promise);
+
+    // When
+    const refreshing = tab.refresh.refreshRound("creating");
+    tab.hub.applySendResults(
+      stream,
+      [created.eventId],
+      [
+        {
+          revision: 1,
+          applied: true,
+          appliedFields: null,
+          hasRejectedFields: false,
+        },
+      ],
+    );
+    pending.resolve(NOT_FOUND);
+    await refreshing;
+
+    // Then
+    expect(tab.hub.record(stream).base).toBeUndefined();
+  });
+
+  it("未送信の操作は、見つからなくても保存に残る", async () => {
+    // Given
+    const tab = await setup();
+    const stream = roundStreamId("r-1");
+    await storeBase(tab, "r-1");
+    await tab.hub.append(stream, roundUpdated());
+    tab.fetching.fetchRoundDetail.mockResolvedValue(NOT_FOUND);
+
+    // When
+    await tab.refresh.refreshRound("r-1");
+
+    // Then
+    const stored = (await tab.hub.readStored()).get(stream);
+    expect(stored?.base).toBeUndefined();
+    expect(stored?.entries).toHaveLength(1);
   });
 });

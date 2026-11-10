@@ -439,6 +439,108 @@ describe("commit", () => {
     expect(hub.record(STREAM).base).toEqual({ startedAt: 10, base: null });
   });
 
+  it("削除済みの後に届いた、開始時刻が古い取得のベースは、保存へ書かず、記録も変えない", async () => {
+    // Given
+    const { hub, store } = await startedHub();
+    await hub.commit(STREAM, roundBase(), 10, "user-1");
+    await hub.commit(STREAM, null, 30, "user-1");
+    const commit = vi.spyOn(store, "commit");
+
+    // When
+    await hub.commit(STREAM, roundBase(), 20, "user-1");
+
+    // Then
+    expect(commit).not.toHaveBeenCalled();
+    expect(hub.record(STREAM).base).toEqual({ startedAt: 30, base: null });
+    expect((await hub.readStored()).has(STREAM)).toBe(false);
+  });
+
+  it("削除済みの保存中に届いた、遅れた古い取得と追記は、保存へベースを書き戻さない", async () => {
+    // Given
+    const { hub, store } = await startedHub();
+    await hub.commit(STREAM, roundBase(), 5, "user-1");
+    const release = deferred<void>();
+    const storeCommit = store.commit.bind(store);
+    vi.spyOn(store, "commit").mockImplementationOnce(async (...args) => {
+      await release.promise;
+      return storeCommit(...args);
+    });
+
+    // When
+    const deleting = hub.commit(STREAM, null, 30, "user-1");
+    const late = hub.commit(STREAM, roundBase(), 20, "user-1");
+    const appending = hub.append(STREAM, op("late"));
+    release.resolve();
+    await Promise.all([deleting, late, appending]);
+
+    // Then
+    expect(hub.record(STREAM).base).toEqual({ startedAt: 30, base: null });
+    const stored = (await hub.readStored()).get(STREAM);
+    expect(stored?.base).toBeUndefined();
+    expect(stored?.entries.map((row) => row.eventId)).toEqual(["late"]);
+  });
+
+  it("削除済みの保存を待つ間、古い取得と追記は保存へ進まず、解放後の追記はベースを書かない記録で保存する", async () => {
+    // Given
+    const { hub, store } = await startedHub();
+    await hub.commit(STREAM, roundBase(), 5, "user-1");
+    const release = deferred<void>();
+    const storeCommit = store.commit.bind(store);
+    const commit = vi
+      .spyOn(store, "commit")
+      .mockImplementationOnce(async (...args) => {
+        await release.promise;
+        return storeCommit(...args);
+      });
+    const append = vi.spyOn(store, "append");
+
+    // When
+    const deleting = hub.commit(STREAM, null, 30, "user-1");
+    // 削除の保存が連鎖に入ってから、遅れた取得と追記を投げる(追記は同期で連鎖に入るため)。
+    await flush();
+    const late = hub.commit(STREAM, roundBase(), 20, "user-1");
+    const appending = hub.append(STREAM, op("late"));
+    await flush();
+    const whileHeld = {
+      commits: commit.mock.calls.length,
+      appends: append.mock.calls.length,
+    };
+    release.resolve();
+    await Promise.all([deleting, late, appending]);
+
+    // Then
+    expect(whileHeld).toEqual({ commits: 1, appends: 0 });
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(append.mock.calls[0][1]).toEqual({ startedAt: 30, base: null });
+  });
+
+  it("別の列の保存は、ある列の保存を待たない。前の保存が失敗しても次を止めない", async () => {
+    // Given
+    const { hub, store } = await startedHub();
+    const release = deferred<void>();
+    const storeCommit = store.commit.bind(store);
+    vi.spyOn(store, "commit").mockImplementationOnce(async () => {
+      await release.promise;
+      throw new Error("idb");
+    });
+
+    // When
+    const failing = hub.commit(STREAM, roundBase(), 10, "user-1");
+    const failed = failing.catch((error: Error) => error.message);
+    const next = hub.commit(STREAM, roundBase(), 20, "user-1");
+    const other = roundStreamId("round-2");
+    await hub.commit(other, roundBase(), 10, "user-1");
+    const otherDone = hub.record(other).base?.startedAt;
+    release.resolve();
+    vi.spyOn(store, "commit").mockImplementation(storeCommit);
+
+    // Then
+    expect(otherDone).toBe(10);
+    expect(await failed).toBe("idb");
+    await next;
+    expect(hub.record(STREAM).base?.startedAt).toBe(20);
+  });
+
   it("読み込みの完了を待ってから反映する", async () => {
     // Given
     const { hub, store } = createTestRoundHub();

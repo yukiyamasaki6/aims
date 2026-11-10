@@ -9,7 +9,7 @@ import {
   applySendResults,
   commitFetched,
   EMPTY_RECORD,
-  isOlderFetch,
+  isStaleFetch,
   markPersisted,
   mergeStored,
   operationsOf,
@@ -48,6 +48,22 @@ export function createRoundRecordHub(deps: {
   // 保存の途中の`append`。`whenPersisted`が終わりを待つ。
   const persisting = new Set<Promise<void>>();
   const ready = (): Promise<void> => loaded;
+  // 列ごとの保存の連鎖。前の保存と記録の更新が終わってから、次を始める。別の列は待たない。
+  const chains = new Map<string, Promise<unknown>>();
+
+  // 同じ列の保存(`append`の保存部分と`commit`)を、呼んだ順に1つずつ実行する。前が失敗しても次を止めない(失敗は呼び手へ返す)。
+  function inStream<T>(streamId: string, run: () => Promise<T>): Promise<T> {
+    const result = (chains.get(streamId) ?? Promise.resolve()).then(run);
+    const tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    chains.set(streamId, tail);
+    void tail.then(() => {
+      if (chains.get(streamId) === tail) chains.delete(streamId);
+    });
+    return result;
+  }
 
   function record(streamId: string): RoundRecord {
     return records.get(streamId) ?? EMPTY_RECORD;
@@ -74,8 +90,9 @@ export function createRoundRecordHub(deps: {
   function append(streamId: string, operation: SyncOperation): Promise<void> {
     const entryUserId = userId;
     put(streamId, appendPending(record(streamId), operation));
-    const persisted = store
-      .append(
+    // 保存へ渡すベースは、実行する時点のメモリから読む(先の`commit`が削除済みにしていれば保存しない)。
+    const persisted = inStream(streamId, () =>
+      store.append(
         {
           eventId: operation.eventId,
           streamId,
@@ -83,11 +100,11 @@ export function createRoundRecordHub(deps: {
           operation,
         },
         record(streamId).base,
-      )
-      .then(() => {
-        // 画面へは追記の時点で反映済みで、保存の完了では画面の状態は変わらない(送信だけが保存の完了を待つ)。
-        put(streamId, markPersisted(record(streamId), operation.eventId));
-      });
+      ),
+    ).then(() => {
+      // 画面へは追記の時点で反映済みで、保存の完了では画面の状態は変わらない(送信だけが保存の完了を待つ)。
+      put(streamId, markPersisted(record(streamId), operation.eventId));
+    });
     persisting.add(persisted);
     void persisted.finally(() => persisting.delete(persisted));
     return persisted;
@@ -103,16 +120,14 @@ export function createRoundRecordHub(deps: {
   ): Promise<void> {
     await ready();
     const incoming: RecordBase = { startedAt, base: fetched };
-    // 組が消えた後でも、最後に取り込んだベースより古い状態の取得は、保存も反映もしない。
-    // 別の利用者の取得も、保存も反映もしない(個別の問い合わせは本人のラウンドだけを返す)。
-    if (
-      isOlderFetch(record(streamId), fetched) ||
-      matchRecordUser(userId, fetchedUserId) !== "same"
-    ) {
-      return;
-    }
-    await store.commit(streamId, fetchedUserId, fetched, startedAt);
-    put(streamId, commitFetched(record(streamId), incoming));
+    // 別の利用者の取得は、保存も反映もしない(個別の問い合わせは本人のラウンドだけを返す)。
+    if (matchRecordUser(userId, fetchedUserId) !== "same") return;
+    await inStream(streamId, async () => {
+      // 前の保存が終わった後の最新の記録で判定する。古い取得は、保存へも書かず、記録も変えない。
+      if (isStaleFetch(record(streamId), incoming)) return;
+      await store.commit(streamId, fetchedUserId, fetched, startedAt);
+      put(streamId, commitFetched(record(streamId), incoming));
+    });
   }
 
   function memorySnapshot(current: RoundRecord): RecordSnapshot {

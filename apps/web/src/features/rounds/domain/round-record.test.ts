@@ -5,7 +5,7 @@ import {
   applySendResults,
   commitFetched,
   EMPTY_RECORD,
-  isOlderFetch,
+  isStaleFetch,
   markPersisted,
   mergeStored,
   operationsOf,
@@ -292,16 +292,22 @@ describe("commitFetched", () => {
   });
 });
 
-describe("isOlderFetch", () => {
-  it("取り込み済みのベースよりrevisionが古い取得だけを、古いとする", () => {
+describe("isStaleFetch", () => {
+  it("取り込み済みのベースよりrevisionが古い取得だけを、開始時刻が新しくても古いとする", () => {
     // Given
     const record = commitFetched(EMPTY_RECORD, baseAt(10, 3));
 
     // When
-    const older = isOlderFetch(record, roundBase({ revisions: { round: 2 } }));
-    const same = isOlderFetch(record, roundBase({ revisions: { round: 3 } }));
-    const marker = isOlderFetch(record, null);
-    const noBase = isOlderFetch(EMPTY_RECORD, roundBase());
+    const older = isStaleFetch(record, {
+      startedAt: 11,
+      base: roundBase({ revisions: { round: 2 } }),
+    });
+    const same = isStaleFetch(record, {
+      startedAt: 11,
+      base: roundBase({ revisions: { round: 3 } }),
+    });
+    const marker = isStaleFetch(record, { startedAt: 11, base: null });
+    const noBase = isStaleFetch(EMPTY_RECORD, baseAt(1, 1));
 
     // Then
     expect([older, same, marker, noBase]).toEqual([true, false, false, false]);

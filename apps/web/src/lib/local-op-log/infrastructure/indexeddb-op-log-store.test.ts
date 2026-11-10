@@ -351,35 +351,48 @@ describe("op log store", () => {
       ]);
     });
 
-    it("削除の印を保存した後は、開始時刻が古い取得のベースを保存しない", async () => {
+    it("見つからない(null)の反映は、ベースの行を消し、印を保存しない", async () => {
       // Given
       const store = newStore();
       await store.commit(STREAM, "user-1", base(5), 20);
-      await store.commit(STREAM, "user-1", null, 30);
 
       // When
-      await store.commit(STREAM, "user-1", base(9), 25);
-      const stored = await group(store);
+      await store.commit(STREAM, "user-1", null, 30);
+      const all = await store.loadAll("user-1");
 
       // Then
-      expect(stored.base).toEqual({ startedAt: 30, base: null });
+      expect(all.has(STREAM)).toBe(false);
     });
 
-    it("削除の印は、確定済みの操作を全て外し、未確定の操作は残す", async () => {
+    it("見つからない(null)の反映は、確定済みの操作を全て外し、未確定の操作は残す", async () => {
       // Given
       const store = newStore();
       const confirmed = entry("confirmed");
       await store.append(confirmed);
       await store.append(entry("unsent"));
       await store.ack(confirmed.eventId, 99, null);
+      await store.commit(STREAM, "user-1", base(1), 5);
 
       // When
       await store.commit(STREAM, "user-1", null, 10);
       const stored = await group(store);
 
       // Then
-      expect(stored.base).toEqual({ startedAt: 10, base: null });
+      expect(stored.base).toBeUndefined();
       expect(stored.entries.map((e) => e.operation.value)).toEqual(["unsent"]);
+    });
+
+    it("保存済みのベースより開始時刻が古い見つからない(null)の反映は、何も変えない", async () => {
+      // Given
+      const store = newStore();
+      await store.commit(STREAM, "user-1", base(5), 20);
+
+      // When
+      await store.commit(STREAM, "user-1", null, 10);
+      const stored = await group(store);
+
+      // Then
+      expect(stored.base).toEqual({ startedAt: 20, base: base(5) });
     });
 
     it("commitの途中で失敗したら、ベースも操作も変えない", async () => {

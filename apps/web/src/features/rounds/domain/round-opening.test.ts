@@ -4,7 +4,7 @@ import {
   roundCreated,
   roundDisabled,
 } from "./round-op-test-helpers";
-import { localOpening, openPlan } from "./round-opening";
+import { isUnknownToServer, localOpening, openPlan } from "./round-opening";
 import type { TargetFaceOption } from "./target-face";
 
 describe("openPlan", () => {
@@ -94,5 +94,30 @@ describe("localOpening", () => {
 
     // Then
     expect([noBase, marker, noFaces]).toEqual([null, null, null]);
+  });
+});
+
+describe("isUnknownToServer", () => {
+  const created = roundCreated();
+  const item = (ackedRevision?: number) => ({
+    operation: created,
+    ackedRevision,
+  });
+
+  it("ベースが無く、未確定の作成の操作があるときだけ、サーバーに無いと判断する", () => {
+    // Given
+    const base = { startedAt: 1, base: null };
+
+    // When
+    const unconfirmed = isUnknownToServer({ base: undefined, items: [item()] });
+    const confirmed = isUnknownToServer({ base: undefined, items: [item(1)] });
+    const empty = isUnknownToServer({ base: undefined, items: [] });
+    const withBase = isUnknownToServer({ base, items: [item()] });
+
+    // Then
+    expect(unconfirmed).toBe(true);
+    expect(confirmed).toBe(false);
+    expect(empty).toBe(false);
+    expect(withBase).toBe(false);
   });
 });

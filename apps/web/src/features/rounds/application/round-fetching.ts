@@ -44,6 +44,11 @@ export type FetchedRoundDetail = {
   userId: string;
 };
 
+// 1つのラウンドの取得の結果。not-foundにも、取得の開始時刻と利用者を付ける。
+export type RoundDetailResult =
+  | Exclude<FetchResult<FetchedRoundDetail>, { status: "not-found" }>
+  | { status: "not-found"; startedAt: number; userId: string };
+
 // 複数のラウンドの取得。`rounds`は返ったラウンドだけ(削除済みや権限のないラウンドは含まない)。
 export type FetchedRoundDetails = {
   rounds: Map<string, FetchedRoundDetail>;
@@ -85,15 +90,17 @@ export function createRoundFetching(deps: {
   }
 
   // 存在しない・権限なし・論理削除済みのラウンドは、いずれもnot-foundで、区別しない。
-  async function fetchRoundDetail(
-    roundId: string,
-  ): Promise<FetchResult<FetchedRoundDetail>> {
+  // not-foundにも取得の開始時刻と利用者を付ける(端末の保存を消す反映に使う)。
+  async function fetchRoundDetail(roundId: string): Promise<RoundDetailResult> {
     const startedAt = clock.now();
     let userId = "";
     const result = await content.fetchContent((session) => {
       userId = session.userId;
       return queries.roundDetail(roundId);
     });
+    if (result.status === "not-found") {
+      return { status: "not-found", startedAt, userId };
+    }
     if (result.status !== "ok") return result;
     return { status: "ok", data: toDetail(result.data, startedAt, userId) };
   }

@@ -47,3 +47,17 @@ export function localOpening(
   if (savedFaces === null) return null;
   return { base: stored.tables, targetFaces: savedFaces };
 }
+
+// サーバーに無いか。記録にベースが無く(`undefined`)、起点が確定していない作成の操作だけである。
+// 未確定の作成だけが起点のラウンドは、取得で返らなくても削除と扱わない。操作もベースも無い記録(端末に一度も無いID)は、サーバーに無いと判断しない。
+export function isUnknownToServer(record: {
+  base: RecordBase | undefined;
+  items: readonly { operation: SyncOperation; ackedRevision?: number }[];
+}): boolean {
+  if (record.base !== undefined) return false;
+  return record.items.some(
+    (item) =>
+      item.operation.type === "round.created" &&
+      item.ackedRevision === undefined,
+  );
+}
