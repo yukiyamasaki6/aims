@@ -44,7 +44,7 @@ function candidateLanes(
 ): string[] {
   const lanes: string[] = [];
   for (const item of items) {
-    if (item.status !== "queued" || !item.sendable) continue;
+    if (item.status !== "queued") continue;
     if (!busy.has(item.lane) && !lanes.includes(item.lane)) {
       lanes.push(item.lane);
     }
@@ -59,9 +59,7 @@ function planLane(items: readonly PlanItem[], lane: string): string[] {
   const eventIds: string[] = [];
   for (let index = 0; index < items.length; index++) {
     const item = items[index];
-    if (item.status !== "queued" || !item.sendable || item.lane !== lane) {
-      continue;
-    }
+    if (item.status !== "queued" || item.lane !== lane) continue;
     if (eventIds.length >= limit) break;
     // 単独にする操作は、ほかの操作と同じ要求に入れない。
     if (item.solo && eventIds.length > 0) continue;

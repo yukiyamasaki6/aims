@@ -1,8 +1,5 @@
-import {
-  operationsOf,
-  type RecordedOperation,
-  sameRecordedOperations,
-} from "../domain/round-record";
+import type { AppliedOperation } from "../domain/round-op-apply";
+import { operationsOf, sameRecordedOperations } from "../domain/round-record";
 import type { RoundState, RoundTables } from "../domain/round-tables";
 import {
   type CreationProgress,
@@ -85,7 +82,7 @@ export function createRoundHandle(
   let creation: CreationProgress = INITIAL_CREATION;
   let seen: {
     base: unknown;
-    operations: RecordedOperation[];
+    operations: AppliedOperation[];
     faces: TargetFaceOption[];
     screen: ReturnType<typeof roundScreenState>;
   } | null = null;

@@ -5,9 +5,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
 import { loadStreamGroup } from "@/lib/local-op-log/op-log-store-test-helpers";
 import type { RoundBaseRecord } from "../domain/round-base";
+import { deletedRoundIdsOf, localRoundsList } from "../domain/round-list";
 import { applyOperations } from "../domain/round-op-apply";
 import {
   roundBase,
+  roundDisabled,
   roundUpdated,
   shotCleared,
   shotRecorded,
@@ -94,7 +96,6 @@ describe("端末の保存を通した記録のハブ", () => {
     expect(hub.record(STREAM).base).toEqual({ startedAt: 10, base });
     expect(hub.record(STREAM).items[0]).toMatchObject({
       eventId: "legacy",
-      seq: 1,
       ackedRevision: 4,
     });
   });
@@ -161,24 +162,120 @@ describe("端末の保存を通した記録のハブ", () => {
     });
   });
 
-  it("別のハブが完了して保存の組が消えたラウンドは、入力中で持つハブの一覧の材料に載らない", async () => {
+  describe("取得の反映で保存の組が消えるラウンドの一覧", () => {
+    const applied = (revision: number) => ({
+      revision,
+      applied: true,
+      appliedFields: null,
+      hasRejectedFields: false,
+    });
+
+    // 一覧の画面が読む、入力中のラウンドと削除済みのラウンド。
+    async function listsOf(hub: Awaited<ReturnType<typeof startedHub>>["hub"]) {
+      const snapshots = await hub.readList();
+      return {
+        inProgress: localRoundsList(snapshots).inProgress.map(
+          (item) => item.id,
+        ),
+        deleted: [...deletedRoundIdsOf(snapshots)],
+      };
+    }
+
+    it("入力中のラウンドを完了にして送信し、完了のベースを反映した後は、一覧に載らず、起動し直したハブと同じになる", async () => {
+      // Given
+      const { hub } = await startedHub();
+      await hub.commit(
+        STREAM,
+        roundBase({ status: "in_progress" }),
+        10,
+        "user-1",
+      );
+      const beforeCompletion = await listsOf(hub);
+      await hub.append(
+        STREAM,
+        roundUpdated({ eventId: "complete", changes: { status: "completed" } }),
+      );
+      hub.applySendResults(STREAM, ["complete"], [applied(2)]);
+
+      // When
+      await hub.commit(
+        STREAM,
+        roundBase({ status: "completed", revisions: { round: 2 } }),
+        20,
+        "user-1",
+      );
+      const lists = await listsOf(hub);
+      const restarted = await listsOf((await startedHub()).hub);
+
+      // Then
+      expect(beforeCompletion.inProgress).toEqual([STREAM]);
+      expect(lists).toEqual({ inProgress: [], deleted: [] });
+      expect(lists).toEqual(restarted);
+    });
+
+    it("削除の操作を確定し、取得に無い(null)で反映した後は、入力中に載らず、起動し直したハブと同じになる", async () => {
+      // Given
+      const { hub } = await startedHub();
+      await hub.commit(STREAM, roundBase(), 10, "user-1");
+      await hub.append(STREAM, roundDisabled());
+      hub.applySendResults(STREAM, [roundDisabled().eventId], [applied(3)]);
+
+      // When
+      await hub.commit(STREAM, null, 20, "user-1");
+      const lists = await listsOf(hub);
+      const restarted = await listsOf((await startedHub()).hub);
+
+      // Then
+      expect(lists.inProgress).toEqual([]);
+      expect(lists).toEqual(restarted);
+    });
+
+    it("他端末で完了した状態を反映した後は、入力中に載らず、起動し直したハブと同じになる", async () => {
+      // Given
+      const { hub } = await startedHub();
+      await hub.commit(
+        STREAM,
+        roundBase({ status: "in_progress" }),
+        10,
+        "user-1",
+      );
+      const beforeCompletion = await listsOf(hub);
+
+      // When
+      await hub.commit(
+        STREAM,
+        roundBase({ status: "completed" }),
+        20,
+        "user-1",
+      );
+      const lists = await listsOf(hub);
+      const restarted = await listsOf((await startedHub()).hub);
+
+      // Then
+      expect(beforeCompletion.inProgress).toEqual([STREAM]);
+      expect(lists).toEqual({ inProgress: [], deleted: [] });
+      expect(lists).toEqual(restarted);
+    });
+  });
+
+  it("同じ列への取得が重なったとき、開始時刻が新しくてもrevisionが古い後着の取得は、保存にも記録にも入らない", async () => {
     // Given
-    const completing = await startedHub();
-    await completing.hub.commit(STREAM, roundBase(), 10, "user-1");
-    const viewing = await startedHub();
-    await completing.hub.commit(
-      STREAM,
-      roundBase({ status: "completed" }),
-      20,
-      "user-1",
-    );
+    const { hub, store } = await startedHub();
+    const newer = roundBase({ name: "新しい", revisions: { round: 5 } });
+    const older = roundBase({ name: "古い", revisions: { round: 3 } });
 
     // When
-    const list = await viewing.hub.readList();
+    await Promise.all([
+      hub.commit(STREAM, newer, 10, "user-1"),
+      hub.commit(STREAM, older, 11, "user-1"),
+    ]);
 
     // Then
-    expect(viewing.hub.record(STREAM).base?.startedAt).toBe(10);
-    expect([...list.keys()]).toEqual([]);
+    expect(hub.record(STREAM).base).toEqual({ startedAt: 10, base: newer });
+    expect((await loadStreamGroup(store, STREAM, "user-1")).base).toEqual({
+      startedAt: 10,
+      base: newer,
+    });
   });
 
   it("新しい矢を記録してから消し、両方が確定した後、矢の行が無い古いベースが入っても、その矢は表示されない", async () => {

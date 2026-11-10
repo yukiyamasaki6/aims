@@ -52,7 +52,6 @@ describe("send", () => {
     ]);
     expect(tab.hub.record(STREAM).items[0]).toMatchObject({
       ackedRevision: 7,
-      ackedApplied: true,
     });
     expect(tab.store.rows[0].ackedRevision).toBe(7);
   });

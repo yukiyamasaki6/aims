@@ -20,7 +20,7 @@ const updateDistance = (id: string, distanceId: string) =>
 function item(
   operation: SyncOperation,
   status: PlanItem["status"] = "queued",
-  options: { solo?: boolean; sendable?: boolean } = {},
+  options: { solo?: boolean } = {},
 ): PlanItem {
   return {
     eventId: operation.eventId,
@@ -28,7 +28,6 @@ function item(
     lane: laneOf(operation),
     status,
     solo: options.solo ?? false,
-    sendable: options.sendable ?? true,
   };
 }
 
@@ -207,29 +206,5 @@ describe("planFlights", () => {
 
     // Then
     expect(ids(flights)).toEqual([["1"]]);
-  });
-
-  it("送れない`queued`の操作は候補にならず、laneを占有しない", () => {
-    // Given
-    // When
-    const flights = planFlights([
-      item(record("1", "d-1", 1), "queued", { sendable: false }),
-      item(record("2", "d-1", 2)),
-    ]);
-
-    // Then
-    expect(ids(flights)).toEqual([["2"]]);
-  });
-
-  it("送れない操作も、未確定であれば衝突する後続を止める", () => {
-    // Given
-    // When
-    const flights = planFlights([
-      item(record("1", "d-1", 1), "queued", { sendable: false }),
-      item(record("2", "d-1", 1)),
-    ]);
-
-    // Then
-    expect(ids(flights)).toEqual([]);
   });
 });

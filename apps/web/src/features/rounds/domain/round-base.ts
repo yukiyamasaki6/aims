@@ -1,7 +1,4 @@
 import type { RoundRevisions, RoundTables } from "./round-tables";
-
-export type { RoundRevisions };
-
 import type { SyncOperation } from "./sync-events";
 
 // 取得して端末に持つ、ラウンドのベース。サーバーの状態と、その時点の対象ごとのrevision。
@@ -18,7 +15,6 @@ export type RecordBase = { startedAt: number; base: RoundBaseRecord | null };
 export type ReflectableEntry = {
   operation: SyncOperation;
   ackedRevision?: number;
-  ackedApplied?: boolean;
   ackedFields?: string[];
 };
 
@@ -47,13 +43,13 @@ function fetchedRevision(
 
 // 確定した操作が、ベースに反映済みか。確定のrevisionと取得のrevisionの比較で判定する。
 // 時刻では、取得の間に確定した操作が取得の前後どちらで適用されたかを決められないため。
-// 効かなかった操作は、どこにも記録されないため、反映済みとして扱う。削除の印(null)には、確定済みの操作は全て反映済み。
+// 削除の印(null)には、確定済みの操作は全て反映済み。
 export function reflectsBase(
   base: RoundBaseRecord | null,
   entry: ReflectableEntry,
 ): boolean {
   if (entry.ackedRevision === undefined) return false;
-  if (entry.ackedApplied === false || base === null) return true;
+  if (base === null) return true;
   const fetchedAt = fetchedRevision(entry.operation, base.revisions);
   return fetchedAt !== undefined && fetchedAt >= entry.ackedRevision;
 }

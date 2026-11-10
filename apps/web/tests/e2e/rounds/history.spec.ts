@@ -600,7 +600,7 @@ test.describe("入力中の領域", () => {
     await expectRoundBasesFetched(page);
   }
 
-  test("別のタブでラウンドを作成して点数を記録し、別のラウンドを削除した後、先に開いていたタブでオフラインのまま一覧へ移ると、記録したラウンドが入力中に表示され、削除したラウンドは表示されず、詳細を開くと点数が表示され、再読み込みしても同じである", async ({
+  test("別のタブでラウンドを作成して点数を記録し、別のラウンドを削除した後、先に開いていたタブでオフラインのまま一覧を開き直すと、記録したラウンドが入力中に表示され、削除したラウンドは表示されず、詳細を開くと点数が表示され、再読み込みしても同じである", async ({
     page,
     context,
   }) => {
@@ -636,10 +636,9 @@ test.describe("入力中の領域", () => {
       roundsText("roundTotal", { total: "9" }),
     );
 
-    // 先に開いていたタブで一覧へ戻り、記録したラウンドだけが入力中に表示されることを確かめる。
+    // 先に開いていたタブで一覧を開き直し(別のタブの変更は再読み込みで見える)、記録したラウンドだけが入力中に表示されることを確かめる。
     await page.bringToFront();
-    await page.getByRole("link", { name: roundsText("backToList") }).click();
-    await expect(page).toHaveURL(/\/rounds$/);
+    await page.goto("/rounds");
     const created = inProgressArea(page).locator(
       `a[href="/rounds/${createdId}"]`,
     );
@@ -660,7 +659,7 @@ test.describe("入力中の領域", () => {
     await expect(page.getByText(deletedName)).toHaveCount(0);
   });
 
-  test("別のタブで入力中のラウンドを完了した後、先に開いていたタブでオフラインのまま一覧へ移ると、そのラウンドは入力中に表示されない", async ({
+  test("別のタブで入力中のラウンドを完了した後、先に開いていたタブでオフラインのまま一覧を開き直すと、そのラウンドは入力中に表示されない", async ({
     page,
     context,
   }) => {
@@ -700,10 +699,10 @@ test.describe("入力中の領域", () => {
       })
       .toBe("completed");
 
-    // 先に開いていたタブでオフラインのまま一覧へ戻り、そのラウンドが表示されないことを確かめる。
+    // 先に開いていたタブでオフラインのまま一覧を開き直し(別のタブの変更は再読み込みで見える)、そのラウンドが表示されないことを確かめる。
     await goOffline(context);
     await page.bringToFront();
-    await page.getByRole("link", { name: roundsText("backToList") }).click();
+    await page.goto("/rounds");
     await expect(page.getByText(offlineMessage)).toBeVisible();
     await expect(page.getByText(name)).toHaveCount(0);
   });

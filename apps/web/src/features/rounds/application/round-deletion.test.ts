@@ -3,7 +3,6 @@ import { roundDisabledOperation } from "../domain/round-progress";
 import { roundStreamId } from "../domain/sync-events";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 import { createRoundDeletion } from "./round-deletion";
-import { createTestRoundHub } from "./round-record-test-helpers";
 
 // 保存の完了を、1つの列に積んで観測する。
 function setup(options: { holdAppend?: boolean } = {}) {
@@ -76,25 +75,6 @@ describe("createRoundDeletion", () => {
       // Then
       expect(resolvedBeforeSave).toBe(false);
       await expect(deleting).resolves.toBeUndefined();
-    });
-
-    it("保存が失敗しても拒否せず、メモリの記録には削除を残す", async () => {
-      // Given
-      const { hub, store } = createTestRoundHub();
-      vi.spyOn(store, "append").mockRejectedValue(new Error("保存できない"));
-      const deletion = createRoundDeletion({
-        hub,
-        ids: createFakeUniqueIds().ids,
-      });
-
-      // When
-      const deleting = deletion.deleteRound("round-1");
-
-      // Then
-      await expect(deleting).resolves.toBeUndefined();
-      expect(
-        hub.record(roundStreamId("round-1")).items.map((i) => i.operation.type),
-      ).toEqual(["round.disabled"]);
     });
   });
 });

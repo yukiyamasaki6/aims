@@ -204,11 +204,11 @@ async function sendDistanceOperation(
   }
 }
 
-// 矢の記録の要素。射手と射順は、値があるときだけキーを送る(キーの無い項目はサーバーが変えない)。
+// 矢の記録の要素。射手と射順は送らない(サーバーが射手を埋め、射順は付けない)。
 function recordedShotToJson(
   operation: Extract<SyncOperation, { type: "shot.recorded" }>,
 ): Json {
-  const json: { [key: string]: Json } = {
+  return {
     shot_event_id: operation.eventId,
     shot_id: operation.shotId,
     distance_id: operation.distanceId,
@@ -216,10 +216,6 @@ function recordedShotToJson(
     score_str: operation.scoreStr,
     score_int: operation.scoreInt,
   };
-  if (operation.shooterId !== undefined) json.shooter_id = operation.shooterId;
-  if (operation.shotNumber !== undefined)
-    json.shot_number = operation.shotNumber;
-  return json;
 }
 
 // 矢の記録と取り消しの束は、列の順で1本のRPCへ詰める。planFlightsは、記録と取り消しを同じ要求に混ぜない。

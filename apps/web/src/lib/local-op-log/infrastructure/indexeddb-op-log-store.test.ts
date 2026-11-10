@@ -184,14 +184,13 @@ describe("op log store", () => {
     await store.append(first);
 
     // When
-    await store.ack(first.eventId, 4, true, ["name"]);
-    await store.ack(first.eventId, 9, true, null);
-    await store.ack(crypto.randomUUID(), 1, true, null);
+    await store.ack(first.eventId, 4, ["name"]);
+    await store.ack(first.eventId, 9, null);
+    await store.ack(crypto.randomUUID(), 1, null);
     const [stored] = (await loadStreamGroup(store, STREAM, "user-1")).entries;
 
     // Then
     expect(stored.ackedRevision).toBe(4);
-    expect(stored.ackedApplied).toBe(true);
     expect(stored.ackedFields).toEqual(["name"]);
     expect(stored.operation).toEqual(first.operation);
   });
@@ -255,16 +254,15 @@ describe("op log store", () => {
       const unsent = entry("unsent");
       await store.append(confirmed);
       await store.append(unsent);
-      await store.ack(confirmed.eventId, 2, true, null);
+      await store.ack(confirmed.eventId, 2, null);
 
       // When
-      const result = await store.commit(STREAM, "user-1", base(2), 10);
+      await store.commit(STREAM, "user-1", base(2), 10);
       const stored = await group(store);
 
       // Then
-      expect(result.base).toEqual({ startedAt: 10, base: base(2) });
-      expect(result.entries.map((e) => e.operation.value)).toEqual(["unsent"]);
-      expect(stored).toEqual(result);
+      expect(stored.base).toEqual({ startedAt: 10, base: base(2) });
+      expect(stored.entries.map((e) => e.operation.value)).toEqual(["unsent"]);
     });
 
     it("commitは、保持の規則に当たらなければ、ベースと反映済みの操作を消す", async () => {
@@ -273,14 +271,13 @@ describe("op log store", () => {
       const reflected = entry("reflected");
       await store.append(reflected);
       await store.commit(STREAM, "user-1", base(1), 10);
-      await store.ack(reflected.eventId, 1, true, null);
+      await store.ack(reflected.eventId, 1, null);
 
       // When
-      const result = await store.commit(STREAM, "user-1", base(3, false), 20);
+      await store.commit(STREAM, "user-1", base(3, false), 20);
       const stored = await group(store);
 
       // Then
-      expect(result).toEqual({ base: undefined, entries: [] });
       expect(stored).toEqual({ base: undefined, entries: [] });
     });
 
@@ -290,12 +287,13 @@ describe("op log store", () => {
       await store.commit(STREAM, "user-1", base(2), 10);
 
       // When
-      const result = await store.commit(STREAM, "user-1", base(1), 20);
+      const before = await group(store);
+      await store.commit(STREAM, "user-1", base(1), 20);
       const stored = await group(store);
 
       // Then
-      expect(result.base).toEqual({ startedAt: 10, base: base(2) });
-      expect(stored).toEqual(result);
+      expect(stored.base).toEqual({ startedAt: 10, base: base(2) });
+      expect(stored).toEqual(before);
     });
 
     it("commitは、確定済みでベースに未反映の操作が残るあいだは、古いベースを2回受けても組を消さない", async () => {
@@ -303,15 +301,16 @@ describe("op log store", () => {
       const store = newStore();
       const confirmed = entry("confirmed");
       await store.append(confirmed);
-      await store.ack(confirmed.eventId, 2, true, null);
+      await store.ack(confirmed.eventId, 2, null);
 
       // When
       await store.commit(STREAM, "user-1", base(1, false), 10);
-      const stale = await store.commit(STREAM, "user-1", base(1, false), 11);
+      await store.commit(STREAM, "user-1", base(1, false), 11);
+      const stored = await group(store);
 
       // Then
-      expect(stale.base).toEqual({ startedAt: 11, base: base(1, false) });
-      expect(stale.entries.map((e) => e.operation.value)).toEqual([
+      expect(stored.base).toEqual({ startedAt: 11, base: base(1, false) });
+      expect(stored.entries.map((e) => e.operation.value)).toEqual([
         "confirmed",
       ]);
     });
@@ -321,20 +320,16 @@ describe("op log store", () => {
       const store = newStore();
       const confirmed = entry("confirmed");
       await store.append(confirmed);
-      await store.ack(confirmed.eventId, 2, true, null);
+      await store.ack(confirmed.eventId, 2, null);
       await store.commit(STREAM, "user-1", base(1, false), 10);
       await store.commit(STREAM, "user-1", base(1, false), 11);
 
       // When
-      const reflected = await store.commit(
-        STREAM,
-        "user-1",
-        base(2, false),
-        20,
-      );
+      await store.commit(STREAM, "user-1", base(2, false), 20);
+      const stored = await group(store);
 
       // Then
-      expect(reflected).toEqual({ base: undefined, entries: [] });
+      expect(stored).toEqual({ base: undefined, entries: [] });
     });
 
     it("commitは、古い取得で新しい保存済みのベースを上書きせず、確定済みの操作を残す", async () => {
@@ -343,14 +338,15 @@ describe("op log store", () => {
       await store.commit(STREAM, "user-1", base(5), 20);
       const confirmed = entry("confirmed");
       await store.append(confirmed);
-      await store.ack(confirmed.eventId, 1, true, null);
+      await store.ack(confirmed.eventId, 1, null);
 
       // When
-      const older = await store.commit(STREAM, "user-1", base(1), 10);
+      await store.commit(STREAM, "user-1", base(1), 10);
+      const stored = await group(store);
 
       // Then
-      expect(older.base).toEqual({ startedAt: 20, base: base(5) });
-      expect(older.entries.map((e) => e.operation.value)).toEqual([
+      expect(stored.base).toEqual({ startedAt: 20, base: base(5) });
+      expect(stored.entries.map((e) => e.operation.value)).toEqual([
         "confirmed",
       ]);
     });
@@ -362,10 +358,11 @@ describe("op log store", () => {
       await store.commit(STREAM, "user-1", null, 30);
 
       // When
-      const stale = await store.commit(STREAM, "user-1", base(9), 25);
+      await store.commit(STREAM, "user-1", base(9), 25);
+      const stored = await group(store);
 
       // Then
-      expect(stale.base).toEqual({ startedAt: 30, base: null });
+      expect(stored.base).toEqual({ startedAt: 30, base: null });
     });
 
     it("削除の印は、確定済みの操作を全て外し、未確定の操作は残す", async () => {
@@ -374,14 +371,15 @@ describe("op log store", () => {
       const confirmed = entry("confirmed");
       await store.append(confirmed);
       await store.append(entry("unsent"));
-      await store.ack(confirmed.eventId, 99, true, null);
+      await store.ack(confirmed.eventId, 99, null);
 
       // When
-      const result = await store.commit(STREAM, "user-1", null, 10);
+      await store.commit(STREAM, "user-1", null, 10);
+      const stored = await group(store);
 
       // Then
-      expect(result.base).toEqual({ startedAt: 10, base: null });
-      expect(result.entries.map((e) => e.operation.value)).toEqual(["unsent"]);
+      expect(stored.base).toEqual({ startedAt: 10, base: null });
+      expect(stored.entries.map((e) => e.operation.value)).toEqual(["unsent"]);
     });
 
     it("commitの途中で失敗したら、ベースも操作も変えない", async () => {
@@ -389,7 +387,7 @@ describe("op log store", () => {
       const store = newStore();
       const confirmed = entry("confirmed");
       await store.append(confirmed);
-      await store.ack(confirmed.eventId, 1, true, null);
+      await store.ack(confirmed.eventId, 1, null);
       await store.commit(STREAM, "user-1", base(0), 10);
       const before = await group(store);
       const failing = createIndexedDbOpLogStore<Op, Base>({
@@ -421,8 +419,8 @@ describe("op log store", () => {
       await store.commit(STREAM, "user-1", base(3), 10);
 
       // When
-      await store.ack(reflected.eventId, 3, true, null);
-      await store.ack(later.eventId, 4, true, null);
+      await store.ack(reflected.eventId, 3, null);
+      await store.ack(later.eventId, 4, null);
       const { entries } = await group(store);
 
       // Then
@@ -440,14 +438,15 @@ describe("op log store", () => {
       await store.append(reflected);
       await store.append(later);
       await store.commit(STREAM, "user-1", base(3), 10);
-      await store.ack(reflected.eventId, 3, true, null);
-      await store.ack(later.eventId, 4, true, null);
+      await store.ack(reflected.eventId, 3, null);
+      await store.ack(later.eventId, 4, null);
 
       // When
-      const result = await store.commit(STREAM, "user-1", base(3), 11);
+      await store.commit(STREAM, "user-1", base(3), 11);
+      const stored = await group(store);
 
       // Then
-      expect(result.entries.map((e) => e.operation.value)).toEqual(["later"]);
+      expect(stored.entries.map((e) => e.operation.value)).toEqual(["later"]);
     });
 
     it("appendは、タブのベースが保存済みより新しく、保持の規則に当たるとき、ベースも保存する", async () => {
@@ -504,19 +503,6 @@ describe("op log store", () => {
       // Then
       expect([...all.keys()].sort()).toEqual(["round:a", "round:c"]);
       expect(all.get("round:a")?.base?.base).toEqual(base(1));
-    });
-
-    it("ユーザーが無いときは、ベースを保存しない", async () => {
-      // Given
-      const store = newStore();
-
-      // When
-      const result = await store.commit(STREAM, null, base(1), 10);
-      const stored = await loadStreamGroup(store, STREAM, null);
-
-      // Then
-      expect(result.base).toEqual({ startedAt: 10, base: base(1) });
-      expect(stored).toEqual({ base: undefined, entries: [] });
     });
   });
 

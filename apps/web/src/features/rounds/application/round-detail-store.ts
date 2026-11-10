@@ -11,7 +11,7 @@ import {
 import { shotIdAfter } from "../domain/shot-id";
 import { roundStreamId } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
-import type { OpenedRound, RefreshRequests } from "./refresh-requests";
+import type { RefreshRequests } from "./refresh-requests";
 import type { RoundEditing } from "./round-editing";
 import type { RoundFetching } from "./round-fetching";
 import {

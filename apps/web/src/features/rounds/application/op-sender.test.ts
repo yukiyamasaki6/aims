@@ -573,21 +573,11 @@ describe("保存の読み込みの待ち", () => {
     expect(sentIds(starting)).toEqual([["a"]]);
   });
 
-  // 保存済みの操作と、保存に失敗した操作(別の距離)を持つ状態。
-  async function reloadingRig(withUnsaved: boolean) {
+  it("読み込みが終わるまで、既知の列の保存済みの操作を送らず、終わると列の順に送る", async () => {
+    // Given
     const rig = createSenderRig();
     await rig.hub.ready();
     await rig.hub.append(STREAM, shot("saved"));
-    if (withUnsaved) {
-      vi.spyOn(rig.store, "append").mockRejectedValueOnce(new Error("quota"));
-      await rig.hub.append(STREAM, shot("unsaved", 1, "d-2"));
-    }
-    return { rig };
-  }
-
-  it("読み込みが終わるまで、既知の列の保存済みの操作を送らない。保存に失敗した操作は送る。終わると保存済みの操作を送る", async () => {
-    // Given
-    const { rig } = await reloadingRig(true);
     const reload = Promise.withResolvers<void>();
     vi.spyOn(rig.hub, "ready").mockReturnValueOnce(reload.promise);
     rig.sender.start();
@@ -597,13 +587,13 @@ describe("保存の読み込みの待ち", () => {
     rig.connectivity.goOnline();
     await rig.hub.append(STREAM, shot("later", 3));
     await flush();
-    const whileReloading = sentIds(rig).flat().sort();
+    const whileReloading = sentIds(rig).flat();
     reload.resolve();
     await flush();
 
     // Then
-    expect(whileReloading).toEqual(["unsaved"]);
-    expect(sentIds(rig).flat().sort()).toEqual(["later", "saved", "unsaved"]);
+    expect(whileReloading).toEqual([]);
+    expect(sentIds(rig).flat()).toEqual(["saved", "later"]);
   });
 });
 
@@ -651,117 +641,6 @@ describe("通信の可否", () => {
 
     // Then
     expect([initial, started]).toEqual([0, 1]);
-  });
-});
-
-describe("送信中の印", () => {
-  const marked = (rig: Rig) => [...rig.hub.record(STREAM).inFlight];
-
-  it("要求を始めると印が付き、成功すると外れる", async () => {
-    // Given
-    const rig = await started();
-    await rig.hub.append(STREAM, shot("a"));
-    await flush();
-    const whileSending = marked(rig);
-
-    // When
-    await respond(rig, 0, appliedOutcome(1));
-
-    // Then
-    expect(whileSending).toEqual(["a"]);
-    expect(marked(rig)).toEqual([]);
-  });
-
-  it("再試行する失敗の間は印が残り、破棄する失敗と未認証の保留では外れる", async () => {
-    // Given
-    const retrying = await started();
-    await retrying.hub.append(STREAM, shot("a"));
-    await flush();
-    const discarding = await started();
-    await discarding.hub.append(STREAM, shot("a"));
-    await flush();
-    const holding = await started({
-      reading: { status: "unauthenticated" },
-    });
-
-    // When
-    await respond(retrying, 0, rpcFailure());
-    await respond(discarding, 0, rpcFailure("PT403"));
-    await holding.hub.append(STREAM, shot("a"));
-    await flush();
-
-    // Then
-    expect(marked(retrying)).toEqual(["a"]);
-    expect(marked(discarding)).toEqual([]);
-    expect(marked(holding)).toEqual([]);
-  });
-
-  it("サインインし直して保留を戻すと、再び送るときに印が付き直る", async () => {
-    // Given
-    const rig = await started({
-      reading: { status: "unauthenticated" },
-    });
-    await rig.hub.append(STREAM, shot("a"));
-    await flush();
-    const whileHeld = marked(rig);
-    rig.signIn.reading = { status: "authenticated", userId: "user-1" };
-
-    // When
-    rig.sender.resumeHeld();
-    await flush();
-
-    // Then
-    expect(whileHeld).toEqual([]);
-    expect(marked(rig)).toEqual(["a"]);
-  });
-
-  it("通信の復帰の前後で、リトライ待機の印は保たれる", async () => {
-    // Given
-    const rig = await started();
-    await rig.hub.append(STREAM, shot("a"));
-    await flush();
-    await respond(rig, 0, rpcFailure());
-    const beforeOnline = marked(rig);
-
-    // When
-    rig.connectivity.goOnline();
-    await flush();
-
-    // Then
-    expect(beforeOnline).toEqual(["a"]);
-    expect(marked(rig)).toEqual(["a"]);
-    expect(rig.sent).toHaveLength(2);
-  });
-
-  it("記録から外れた操作の印は、列の状態から外れるのと同時に消える", async () => {
-    // Given
-    const rig = await started();
-    await rig.hub.append(STREAM, shot("a"));
-    await flush();
-    await respond(rig, 0, rpcFailure());
-
-    // When
-    await rig.hub.discard(STREAM, ["a"]);
-    await flush();
-
-    // Then
-    expect(rig.hub.record(STREAM).items).toEqual([]);
-    expect(marked(rig)).toEqual([]);
-  });
-});
-
-describe("保存の失敗", () => {
-  it("保存に失敗した操作も、メモリの列から送信する", async () => {
-    // Given
-    const rig = await started();
-    vi.spyOn(rig.store, "append").mockRejectedValueOnce(new Error("quota"));
-
-    // When
-    await rig.hub.append(STREAM, shot("unsaved"));
-    await flush();
-
-    // Then
-    expect(sentIds(rig)).toEqual([["unsaved"]]);
   });
 });
 

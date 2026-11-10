@@ -4,7 +4,7 @@ import type { RoundRecordHub } from "./round-record-hub";
 import type { UniqueIds } from "./unique-ids";
 
 export type RoundDeletion = {
-  // 削除を積む(離れない。画面に残る)。保存の試みが終わると解決し、保存に失敗しても拒否しない。送信の完了は待たない。
+  // 削除を積む(離れない。画面に残る)。保存が終わると解決する。送信の完了は待たない。
   deleteRound(roundId: string): Promise<void>;
 };
 

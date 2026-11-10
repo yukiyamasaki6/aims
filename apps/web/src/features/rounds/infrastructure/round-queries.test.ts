@@ -5,10 +5,7 @@ import type {
   DbSelect,
 } from "@/lib/supabase/contract/database";
 import type { QueryOutcome } from "../domain/query-outcome";
-import {
-  ROUND_PRESET_SELECT,
-  TARGET_FACE_SELECT,
-} from "./reference-query-constants";
+import { ROUND_PRESET_SELECT } from "./reference-query-constants";
 import { createRoundQueries } from "./round-queries";
 import type { RoundsDbSchema } from "./rounds-db-schema";
 

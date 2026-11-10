@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { roundUpdated, shotRecorded } from "../domain/round-op-test-helpers";
-import { statusOperation } from "../domain/round-progress";
 import {
-  type RoundTables,
   roundTablesFromServer,
-} from "../domain/round-tables";
+  roundUpdated,
+  shotRecorded,
+} from "../domain/round-op-test-helpers";
+import { statusOperation } from "../domain/round-progress";
+import type { RoundTables } from "../domain/round-tables";
 import type { ScoringTargetFace } from "../domain/scorecard-scoring";
 import { roundStreamId, type SyncOperation } from "../domain/sync-events";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";

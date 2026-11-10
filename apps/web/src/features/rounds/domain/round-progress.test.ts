@@ -4,6 +4,7 @@ import {
   distanceDisabled,
   distanceUpdated,
   roundDisabled,
+  roundTablesFromServer,
   roundUpdated,
   shotCleared,
   shotRecorded,
@@ -14,10 +15,7 @@ import {
   roundDisabledOperation,
   statusOperation,
 } from "@/features/rounds/domain/round-progress";
-import {
-  type RoundTables,
-  roundTablesFromServer,
-} from "@/features/rounds/domain/round-tables";
+import type { RoundTables } from "@/features/rounds/domain/round-tables";
 import type { ScoringTargetFace } from "@/features/rounds/domain/scorecard-scoring";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
 
@@ -173,15 +171,6 @@ describe("reopeningRequired", () => {
       [
         "同じ点数の上書き",
         shotRecorded({ shotId: "s-1", scoreStr: "10", scoreInt: 10 }),
-      ],
-      [
-        "射手だけの変更",
-        shotRecorded({
-          shotId: "s-1",
-          scoreStr: "10",
-          scoreInt: 10,
-          shooterId: "user-2",
-        }),
       ],
       ["存在しない矢のクリア", shotCleared({ shotId: "s-2" })],
       [

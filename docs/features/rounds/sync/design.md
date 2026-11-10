@@ -3,7 +3,7 @@
 ## 概要
 
 ラウンド詳細画面（`/rounds/[id]`）の変更操作は、サーバーの完了を待たずに画面へ反映する（楽観的UI）。
-操作はまずIndexedDBの操作の列へ追記し、タブに常駐する送信の集まりが、どの画面を表示していても認可つきの書き込みRPCを呼ぶ。各タブは自分の追記を送る。一覧は端末の保存を基準に作る(このタブで保存の書き込みに失敗した列は、再読み込みまでメモリ)。
+操作はまずIndexedDBの操作の列へ追記し、タブに常駐する送信の集まりが、どの画面を表示していても認可つきの書き込みRPCを呼ぶ。各タブは自分の追記を送る。一覧も詳細もメモリの記録で作る。
 操作の列は追記専用で、端末の順序は`autoIncrement`の`seq`で持つ。送信は、衝突する組だけを順序づけて行い、失敗時のリトライ、オフライン中の保留、オンライン復帰時の再送を持つ。
 1回の保存を1つの操作として送り、サーバーが確定の順で項目ごとに、後勝ちと規則(決定1、削除、不変条件)で判定する。
 サーバーが拒否するのは認可と契約の不一致だけで、他は受理したうえで効かせない項目を応答で返す。
@@ -39,12 +39,12 @@
 | :--- | :--- | :--- |
 | `app/layout.tsx` | 入口 | ルートレイアウト。`<RootClientEntry>`で`SerwistProvider`と`children`を包む |
 | `app/root-client-entry.tsx` | 入口(クライアントの処理の部分) | 部品を`useState`の初期化で1度だけ生成して結び、効果で識別情報の記録と契機の手続きを始める。2つの窓口をそれぞれの文脈(`RoundsListStoreProvider`、`RoundDetailStoreProvider`)で、手続きの入れ物(`RoundProceduresProvider`)とともに画面へ渡し、セッションの手続き(`createSession`。記録の制御を記録の利用者の照合に、識別情報の記録を書き込みに受ける)を`SessionProvider`(`features/auth/ui`)で渡し、`RoundBaseRefresher`と`SwUpdateActivator`(`features/offline-pwa/ui`。更新の切り替えの手続きを受ける)を描き、効果で更新の切り替えの手続きも始める |
-| `features/rounds/domain/sync-events.ts` | domain | 操作の型。操作はクライアント生成のイベントIDを持つ。`round.updated`と`distance.updated`は、変えた項目だけの差分(`changes`)を持つ。矢の操作(`shot.recorded`・`shot.cleared`)は矢のID(`shotId`)で矢を指し、`shot.recorded`の射手(`shooterId`)と射順(`shotNumber`)は、変えるときだけ持つ。列の削除の有無`hasRoundDeletion`と、列のID(`round:<roundId>`)の変換 |
+| `features/rounds/domain/sync-events.ts` | domain | 操作の型。操作はクライアント生成のイベントIDを持つ。`round.updated`と`distance.updated`は、変えた項目だけの差分(`changes`)を持つ。矢の操作(`shot.recorded`・`shot.cleared`)は矢のID(`shotId`)で矢を指し。列の削除の有無`hasRoundDeletion`と、列のID(`round:<roundId>`)の変換 |
 | `features/rounds/domain/round-op-conflicts.ts` | domain | 操作の衝突の表と、並べる単位(lane)・送る単位の上限。矢の操作どうしは、同じ矢(`shotId`)か同じエンドなら衝突とする |
-| `features/rounds/domain/round-record.ts` | domain | 1つのラウンドの端末の記録(ベース、操作の列、外した操作、保存の目印、送信中の印)を、変更しない値と関数にしたもの。取り込み(新しい方のベース、共有の組のベースを取ったときだけ組から無くなった確定済みの操作を外す)、確定の反映、効かなかった操作の除去 |
+| `features/rounds/domain/round-record.ts` | domain | 1つのラウンドの端末の記録(ベース、操作の列、保存の目印)を、変更しない値と関数にしたもの。起動時の合流(保存の行のうち記録に無い操作を前に、記録の操作を後ろに並べる。ベースは記録のものを優先する)、取得したベースの反映(新しい開始時刻でrevisionが古くないベースだけを採り、反映済みの確定済みの操作を外す)、確定の反映、効かなかった操作の除去 |
 | `features/rounds/domain/record-user.ts` | domain | 記録の利用者の照合`matchRecordUser`(`same`、`other`、`unowned`。送る前、常駐の一括の取得の前段、取得の反映が使う)。記録の利用者は文書の間、変わらない |
-| `features/rounds/domain/round-base.ts`、`round-tables.ts` | domain | 端末に持つベースの記録(`RoundBaseRecord`。サーバーの状態と対象ごとの`revision`)と、反映済みの判定`reflectsBase`(確定の`revision`と取得の`revision`の比較1つ。効かなかった操作は反映済み、削除の印には確定済みの操作がすべて反映済み)・ベースの新旧`isOlderBase`。サーバーのテーブルの行の形(`RoundTables`。行は削除済みの印`disabled`を持つ)と、画面の状態(`RoundState`)を導く`selectRoundState`、取得した行から端末のベースを作る`baseOfServerRound` |
-| `features/rounds/domain/round-op-apply.ts`、`round-retention.ts` | domain | 基準のテーブルへ操作を重ねる`applyOperations(base, 操作, 的)`。操作ごとの処理は、サーバーの対応するRPCと同じ判定の順序にする。未確定の操作は、サーバーと同じ規則で項目ごとに判定し、確定済みの操作はサーバーが効かせた項目だけを重ねる。構成の変更は矢を取り除かない(サーバーと同じ)。生きている矢を増やす記録(新しい矢、復活)は、確定の有無によらずエンドに空きがあるときだけ重ね、確定済みで重ねられなかったときは取り直す。射順(`shot_number`)が同じエンドの他の生きている矢と重なる項目は重ねず、復活で重なるときは射順をnullにして重ねる。端末に保持するかの規則(`isRoundInProgress`、`keepsRoundBase`、`isRetainedForRefresh`) |
+| `features/rounds/domain/round-base.ts`、`round-tables.ts` | domain | 端末に持つベースの記録(`RoundBaseRecord`。サーバーの状態と対象ごとの`revision`)と、反映済みの判定`reflectsBase`(確定の`revision`と取得の`revision`の比較1つ。削除の印には確定済みの操作がすべて反映済み)・ベースの新旧`isOlderBase`。サーバーのテーブルの行の形(`RoundTables`。行は削除済みの印`disabled`を持つ)と、画面の状態(`RoundState`)を導く`selectRoundState`、取得した行から、`disabled: false`の印を付けた行で端末のベースを作る`baseOfServerRound` |
+| `features/rounds/domain/round-op-apply.ts`、`round-retention.ts` | domain | 基準のテーブルへ操作を重ねる`applyOperations(base, 操作, 的)`。操作ごとの処理は、サーバーの対応するRPCと同じ判定の順序にする。未確定の操作は、サーバーと同じ規則で項目ごとに判定し、確定済みの操作はサーバーが効かせた項目だけを重ねる。構成の変更は矢を取り除かない(サーバーと同じ)。生きている矢を増やす記録(新しい矢、復活)は、確定の有無によらずエンドに空きがあるときだけ重ね、確定済みで重ねられなかったときは取り直す。復活で行の射順が同じエンドの他の生きている矢と重なるときは、射順をnullにして重ねる。端末に保持するかの規則(`isRoundInProgress`、`keepsRoundBase`、`isRetainedForRefresh`) |
 | `features/rounds/domain/round-opening.ts` | domain | 詳細を開くときの判断(`openPlan`、`localOpening`)。詳細の窓口が使う |
 | `features/rounds/domain/round-view.ts`、`round-list.ts` | domain | 画面の状態の導出、作成が確定せずに消えたかの判定。一覧の削除済みと入力中と合計点の導出、一覧の材料の型 |
 | `features/rounds/domain/rounds-list-view.ts` | domain | 一覧の重ね合わせと表示の内容の決定 |
@@ -56,13 +56,13 @@
 | `features/rounds/domain/query-outcome.ts` | domain | 問い合わせの結果の種類`QueryOutcome`(型だけ) |
 | `features/rounds/domain/fetch-wait.ts` | domain | 時間制限の値(`FETCH_TIMEOUT_MS`、`SHORT_WAIT_MS`)だけ。状態を持たない時間の規則 |
 | `features/rounds/domain/`の他 | domain | `round-config.ts`、`round-constants.ts`、`option-label.ts`(選択肢の表示名)、`scorecard-types.ts`、`target-face.ts`(的を引く関数)、`position-key.ts`、`scorecard-scoring.ts` |
-| `features/rounds/application/round-record-hub.ts` | application | アプリで1つの端末の記録。列ごとの記録を`round-record.ts`の値として保ち、追記を直ちに画面用の列へ入れて変化を知らせる(送信は保存の完了後)。起動時の読み込みの完了を待つ`ready`、保存先を読む`readStored`、一覧の材料を返す`readList`(保存を基準にし、このタブで保存の書き込みに失敗した列だけメモリから作る)、取得したベースを反映する`commit` |
+| `features/rounds/application/round-record-hub.ts` | application | アプリで1つの端末の記録。列ごとの記録を`round-record.ts`の値として保ち、追記を直ちに画面用の列へ入れて変化を知らせる(送信は保存の完了後)。起動時の読み込みの完了を待つ`ready`、保存先を読む`readStored`、一覧の材料を返す`readList`(メモリの記録から作る)、取得したベースを反映する`commit` |
 | `features/rounds/application/refresh-requests.ts`、`rounds-list-store.ts`、`round-detail-store.ts`、`round-handle.ts`、`when-online.ts` | application | 取り直しの依頼の記録と、画面ごとに渡す状態と変更の方法(`RoundsListStore`、`RoundDetailStore`。メンバーは`rounds/design.md`の表)。開いた詳細の購読と追記(`round(...)`が返す`RoundHandle`)は`round-handle.ts`で、追記は手続き`round-editing.ts`を通して、完了のラウンドの編集で入力中へ戻す操作を続けて積む。約束`UniqueIds`(新しいIDと乱数の払い出し。`unique-ids.ts`) |
 | `features/rounds/application/round-base-refreshing.ts`、`round-fetching.ts`、`content-fetcher.ts`、`time-limit.ts` | application | ベースの取得と反映(`refreshAll`、`refreshRound`。`refreshAll`は的の保存の後に依頼の記録へ知らせる)、取得の順序(的とプリセットの取得`fetchPresets`の保存、保存済みの読み出し`savedPresets`、一覧の取得`fetchRoundsList`)、認証を確かめた取得と取り直し(変換は`fetchResultOf`を呼ぶ)・時間制限。約束`RoundQueries`(戻り値は`QueryOutcome`)、認証の入口の`SessionReader`、`ReferenceSnapshots`(`reference-snapshots.ts`。取得と削除の手続きが使う)。時間制限の補助(`withinTime`)は、取得と画面の状態の2つの手続きが使う |
 | `features/rounds/application/round-start.ts`、`preset-deletion.ts` | application | 開始(認証の確認、作成の追記、保存の完了の後に`PageNavigation`で詳細へ進む)と、個人プリセットの削除(保存済みからの除去を含む)。`PageNavigation`は共有の技術の約束(`lib/page-navigation`)、`PresetCommands`は`preset-commands.ts`に置く(約束は使い手が複数のため別ファイルに置く) |
 | `features/rounds/application/round-editing.ts` | application | 追記と再開(完了のラウンドの編集で表示中の距離か矢が変わるとき、追記の前の状態で判定し、続けて入力中へ戻す操作を積む。窓口の`handle.append`が追記の前の状態を値で渡して呼ぶ) |
 | `features/rounds/application/round-deletion.ts`、`round-leaving.ts`、`preset-saving.ts` | application | 削除(一覧用。離れない。`round-deletion.ts`)、完了、削除して離れる(`round-deletion.ts`の後に`PageNavigation`で置き換える。完了は保存の完了の後に`PageNavigation`で進む。`round-leaving.ts`)と、プリセットの保存(サインインの確認、書き込み、成功の後の保存済みの再取得) |
-| `features/rounds/application/operation-sending.ts`、`op-sender.ts` | application | 操作の送信と確定の記録(約束`RoundTransport`)、列ごとの送信の時機(送信器。送信の状態の保持、計画の実行、リトライの待機、保留と再開。記録のハブ、`OperationSending`、`SessionReader`を直接使う)。記録の送信中の印は、列の状態の射影として、送信器の`writeQueue`だけが書く |
+| `features/rounds/application/operation-sending.ts`、`op-sender.ts` | application | 操作の送信と確定の記録(約束`RoundTransport`)、列ごとの送信の時機(送信器。送信の状態の保持、計画の実行、リトライの待機、保留と再開。記録のハブ、`OperationSending`、`SessionReader`を直接使う) |
 | `features/rounds/application/round-record-control.ts`、`round-refresh-control.ts` | application | 同期へ公開する、記録の制御`RoundRecordControl`(記録の起動と送信器の起動の順序、サインインの変化への反応を持つ)と、取り直しの制御`RoundRefreshControl`(要否の導出と、取り直しの実行の委譲)。取り直しの理由(`open`、`diverged`、`overlay`。優先の順)の型は`RoundRefreshControl`の`refreshNeeds`の戻り値が唯一の定義で、同期は`round-sync.ts`でその型から導く |
 | `features/rounds/index.ts` | 機能の入口 | `RoundRecordControl`、`RoundRefreshControl`の型を公開する |
 | `features/rounds/infrastructure/` | infrastructure | `round-op-transport.ts`(操作の種類ごとにRPCを呼び、操作ごとの判定結果を返す)、`round-queries.ts`(取得の問い合わせ、プリセットと一覧の問い合わせ。行は写さずそのまま返す)、`db-response-outcome.ts`(応答を`QueryOutcome`の種類へ写す。複数の応答の畳む優先順は通信失敗→認証拒否→その他の先頭)、`browser-unique-ids.ts`(新しいIDと乱数の払い出し)、`preset-commands.ts`(プリセットの削除と保存の書き込みと結果の種類への写し)、`rounds-db-schema.ts`(ラウンドが使うスキーマの部分の型。一覧が並べる列とプリセットの表、保存の関数を含む)、`reference-snapshot.ts`(保存済みの書き換えを含む)、`reference-query-constants.ts`、`browser-record-channel.ts`(チャネル`aims-sync`) |
@@ -180,8 +180,8 @@
 | 不変条件を破る後の項目は効かせ、補正しない(Unmarkedはフィールドだけ、Markedは距離(m)必須) | サーバーが利用者の指定していない値を変えないため。クライアントは保存前に知らせる | 他端末との競合を自動で解く要求が出たとき |
 | 構成ごとに新しい距離を作る方式を採らない | 距離の同一性、プリセット、履歴、集計に影響が広がるため | 構成の履歴を持つ要求が出たとき |
 | 効かなかった項目がある応答のときに、ラウンド全体を取り直す。イベントの増分は取らない | イベントの版は対象ごとで、ラウンドを通した順序が無く、効かなかった操作は記録されないため。1ラウンドの取得は小さい | ラウンドを通した版(イベントの増分の取得)が要る場合やRealtimeを扱うとき |
-| 各タブが自分の追記を送り、タブの間の知らせ・送る役の選出・保留の共有を持たない | 他のタブの影響を反映する仕組みを持たず、各タブを独立させて簡略にするため。一覧は遷移のたびに端末の保存を基準に作り、詳細はメモリの記録で判断するため、別のタブの変更は一覧では再読み込みと遷移で見え、詳細では再読み込みまで見えない | 他のタブの変更の即時反映、または複数タブの送信順序の保証が要るとき |
-| 一覧の「入力中」と削除の印は端末の保存を基準に作り、このタブで保存の書き込みに失敗した列だけメモリから作る | メモリは他のタブの変化を取り込まないため、保存を基準にしないと再読み込み後の一覧と食い違う。書き込みだけが失敗した列は、保存だけでは既存の表示(メモリのベース、拒否された作成の除外、確定済み)を維持できない。失敗の印は解除しない(解除の規則が増えるため) | 書き込みの失敗の種類ごとに、保存への復帰を扱う要求が出たとき |
+| 各タブが自分の追記を送り、タブの間の知らせ・送る役の選出・保留の共有を持たない | 他のタブの影響を反映する仕組みを持たず、各タブを独立させて簡略にするため。一覧も詳細もメモリの記録で作るため、別のタブの変更は再読み込みまで見えない | 他のタブの変更の即時反映、または複数タブの送信順序の保証が要るとき |
+| 一覧の「入力中」と削除の印は、メモリの記録から作る | 1つのタブでは、記録の更新と保存の更新が同じ順で進み、取得の反映で保存の組が消える列も、メモリは保存と同じ規則で扱うため、一覧は保存を読み直さなくても再読み込み後と一致する。保存を読み直す処理と、書き込みに失敗した列を別に扱う処理を持たずに済む | 別のタブの変更を一覧に即時に反映する要求が出たとき |
 | 送信の直前に、セッションのユーザーと列のユーザーを照合する | 常駐の送信はサインインし直しをまたいで動くので、イベントの順序だけでは、別のユーザーの認証で送らないことを保証できないため | 共有端末で秘匿が必要になったとき |
 | 未送信の操作を、端末の最後にサインインしたユーザーごとに分ける | オフラインでは `proxy.ts` が実行されず、JWTの有効期限に頼れないため。暗号的な機密性は対象外とする | 共有端末で秘匿が必要になったとき |
 | 端末DBの保存の形を変えるときはversionを上げ、更新では全てのstoreを内容を移行せずに作り直す | 版ごとの移行の分岐を持たずに、どの版の端末でも開けるようにするため。未送信の操作も捨てる | 未送信の操作を更新で失えない要求が出たとき |
@@ -191,10 +191,12 @@
 ## 制約と未対応
 
 - 組が消えた後に、別のタブが古い取得を反映すると復活しうる(送信器のメモリはタブごと)。新しい対策は持たない。
+- 別のタブが残した未送信の操作は、開いているタブから送られず、次にアプリを開き直すまで遅れる。受け入れる。
+- 両方のタブで同じラウンドを削除すると、後に削除したタブの一覧にそのラウンドが戻って見える。画面が見える状態に復帰して常駐の取得が走ると消える。受け入れる。
 - 認可で拒否された削除は破棄され、ラウンド一覧を取得し直したときに、通知なく再表示される。
 - 同期は、アプリの画面が1つでも開いている間だけ動き、全て閉じると止まる(閉じた後の送信は扱わない)。
 - 同期の状態を表示しないため、未送信の操作を端末に残したままアプリを閉じたとき(通信のある状態で開き直すまで送られない)に、利用者は画面からそれに気づけない。
-- IndexedDBへ保存できない端末では、開始したラウンドの詳細は、作成の確定まで見つからない表示になりうる。
+- IndexedDBへ保存できない環境(書き込みの失敗を含む)は想定しない。保存できない環境では、操作が保存されず送られず、開始したラウンドの詳細は見つからない表示になりうる。
 - サインイン切れは共通のガードがサインイン画面へ導き、サインイン後に遷移元へ戻る（`app/navigation`、`auth/signin`）。
 - 別のユーザーでサインインしたとき、前のユーザーの未送信は送らず、表示せず、残す。そのユーザーが再びサインインしたときに送る。
 - アクセストークンの更新の失敗はauth-jsが60秒キャッシュする。不明は上限なく再試行するため、通信が回復すれば自動で再送される。
@@ -204,5 +206,4 @@
 - 矢数を超えて効かなかった矢の追加・復活と、射順が重なって効かなかった射順の書き込みは、利用者に知らせない。取り直すまでの間、他端末が消した古い矢が見えることがある(件数は矢数を超えない)。
 - 複数のタブで同じ矢を変えたり消したりしたときの送信順序を保証しない。
 - 未送信の操作を持つタブを閉じると、その操作は端末に残り、次の起動などの機会まで送られない。
-- このタブで保存の書き込みに失敗した列は、保存が復旧しても、再読み込みまで一覧がメモリで作られ、別のタブの完了・削除を反映しない。保存に成功した記録は失われない。
 - 端末の保存の版更新が、古い版のタブの接続で塞がれている間は、保存の読み書きが終わらず、一覧と詳細が10秒後に「読み込めませんでした。」になる。塞がれている間、保存の内容は保持される。古いタブを閉じて再読み込みし、版更新が完了すると読み込みが再開する。版更新の完了時は、既存の仕様どおり、未送信を含む既存の保存内容が破棄される。移行は対象外である。

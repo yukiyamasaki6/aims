@@ -16,8 +16,8 @@ import { RootClientEntry } from "@/app/root-client-entry";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import type { RoundDetailStore } from "@/features/rounds/application/round-detail-store";
 import type { RoundConfig } from "@/features/rounds/domain/round-config";
+import { roundTablesFromServer } from "@/features/rounds/domain/round-op-test-helpers";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
-import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
 import type { Distance, Shot } from "@/features/rounds/domain/scorecard-types";
 import {
   roundStreamId,

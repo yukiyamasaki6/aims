@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { StreamEntry } from "@/lib/local-op-log/contract/op-log-store";
 import type { RoundBaseRecord } from "./round-base";
+import { roundTablesFromServer } from "./round-op-test-helpers";
 import {
   isRetainedForRefresh,
   isRoundInProgress,
   keepsRoundBase,
   roundStreamRules,
 } from "./round-retention";
-import { roundTablesFromServer } from "./round-tables";
 import type { SyncOperation } from "./sync-events";
 
 function record(
@@ -126,19 +126,6 @@ describe("keepsRoundBase", () => {
     // Then
     expect(staleKept).toBe(true);
     expect(reflectedKept).toBe(false);
-  });
-
-  it("効かなかった確定済みの操作は、保持の理由にしない", () => {
-    // Given
-    const completed = record({ status: "completed" });
-
-    // When
-    const result = keepsRoundBase(completed, [
-      entry(roundUpdated, 9, { ackedApplied: false }),
-    ]);
-
-    // Then
-    expect(result).toBe(false);
   });
 
   it("操作を重ねた状態で判定する。未送信の完了は、確定済みの入力中への戻しを含め、重ねた状態が完了のとき、未送信があれば保持する", () => {

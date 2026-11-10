@@ -1,7 +1,8 @@
-import type { RoundBaseRecord, RoundRevisions } from "./round-base";
-import { roundTablesFromServer } from "./round-tables";
+import type { RoundBaseRecord } from "./round-base";
+import type { RoundConfig } from "./round-config";
+import type { RoundRevisions, RoundTables } from "./round-tables";
 import type { Distance, Shot } from "./scorecard-types";
-import type { SyncOperation } from "./sync-events";
+import type { RoundStatus, SyncOperation } from "./sync-events";
 
 type Op<T extends SyncOperation["type"]> = Extract<SyncOperation, { type: T }>;
 
@@ -109,6 +110,24 @@ export const roundCreated = (
   ],
   ...overrides,
 });
+
+// 取得した状態から作る表。取得は削除済みの行を含まないため、全ての行が削除済みでない。
+export function roundTablesFromServer(fetched: {
+  roundConfig: RoundConfig;
+  status: RoundStatus;
+  distances: Distance[];
+  shots: Shot[];
+}): RoundTables {
+  return {
+    round: {
+      config: fetched.roundConfig,
+      status: fetched.status,
+      disabled: false,
+    },
+    distances: fetched.distances.map((d) => ({ ...d, disabled: false })),
+    shots: fetched.shots.map((s) => ({ ...s, disabled: false })),
+  };
+}
 
 // 取得したベース。ラウンドの状態と、対象ごとのrevision。
 export function roundBase(

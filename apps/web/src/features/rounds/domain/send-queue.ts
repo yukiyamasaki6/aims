@@ -15,8 +15,6 @@ export type PlanItem = {
   status: SendStatus;
   // 拒否の切り分けで、単独の要求にする操作。
   solo: boolean;
-  // いまこのタブが送ってよい操作か。偽でも、未確定であれば衝突する後続を止める。
-  sendable: boolean;
 };
 
 export type PlannedFlight = { lane: string; eventIds: string[] };
@@ -63,15 +61,6 @@ export function statusOf(
 ): SendStatus {
   if (!item.saved) return "persisting";
   return queue.states.get(item.eventId)?.status ?? "queued";
-}
-
-// このタブの要求が持つ操作のID(送信中かリトライ待機)。記録の送信中の印は、これを射影して書く。
-export function inFlightEventIds(queue: SendQueue): string[] {
-  return [...queue.states]
-    .filter(
-      ([, state]) => state.status === "inflight" || state.status === "backoff",
-    )
-    .map(([id]) => id);
 }
 
 export function isSolo(queue: SendQueue, eventId: string): boolean {
