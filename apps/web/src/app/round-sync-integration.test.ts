@@ -144,7 +144,7 @@ describe("詳細を開く依頼と同期", () => {
 });
 
 describe("先に始めた実行の終わり", () => {
-  it("後に始めた実行が成功した後に、先に始めた実行が見つからないで終わっても、画面の状態は削除されず、取り直しも増えない", async () => {
+  it("後に始めた実行が成功した後に、先に始めた実行が見つからないで終わると、最後に終わった実行の結果で見つかりませんになり、取り直しは増えない", async () => {
     // Given
     const t = rig();
     const runA = deferredDetail();
@@ -165,7 +165,7 @@ describe("先に始めた実行の終わり", () => {
     runB.resolve({ status: "ok", data: detail("後の実行") });
     await flush();
     await flush();
-    const snapshot = handle.getSnapshot();
+    const before = handle.getSnapshot();
     const fetchCalls = t.fetching.fetchRoundDetail.mock.calls.length;
 
     // When
@@ -176,8 +176,8 @@ describe("先に始めた実行の終わり", () => {
     // Then
     expect(fetchCalls).toBe(2);
     expect(t.fetching.fetchRoundDetail).toHaveBeenCalledTimes(2);
-    expect(handle.getSnapshot()).toBe(snapshot);
-    expect(handle.getSnapshot().gone).toBe(false);
+    expect(before.gone).toBe(false);
+    expect(handle.getSnapshot().gone).toBe(true);
     expect(await loadB).toMatchObject({ status: "ok" });
     expect(await loadA).toBeDefined();
   });

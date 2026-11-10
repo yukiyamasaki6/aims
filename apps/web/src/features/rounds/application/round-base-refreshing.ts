@@ -1,10 +1,6 @@
 import { isRetainedForRefresh } from "../domain/round-retention";
 import { roundTablesFromServer } from "../domain/round-tables";
-import {
-  hasRoundDeletion,
-  roundIdOfStream,
-  roundStreamId,
-} from "../domain/sync-events";
+import { roundIdOfStream, roundStreamId } from "../domain/sync-events";
 import type { RefreshRequests } from "./refresh-requests";
 import type {
   FetchedRoundDetail,
@@ -93,23 +89,15 @@ export function createRoundBaseRefreshing(deps: {
       return;
     }
     const base = baseOf(fetched.data);
-    const group = await hub.commit(
+    await hub.commit(
       roundStreamId(id),
       base,
       fetched.data.startedAt,
       fetched.data.userId,
     );
-    // 取得の間に追記された削除も、取得した状態を表示せずに離れる。
-    const deleted = hasRoundDeletion(
-      group.entries.map((entry) => entry.operation),
-    );
     requests.settleRound(run, {
       status: "ok",
-      data: {
-        deleted,
-        base: base.tables,
-        targetFaces: fetched.data.targetFaces,
-      },
+      data: { base: base.tables, targetFaces: fetched.data.targetFaces },
     });
   }
 

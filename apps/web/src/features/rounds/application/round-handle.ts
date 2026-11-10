@@ -61,7 +61,7 @@ export function createRoundHandle(
     hub: Pick<RoundRecordHub, "record" | "subscribe">;
     requests: Pick<
       RefreshRequests,
-      "outcomeOf" | "setOverlay" | "subscribe" | "watch"
+      "isGone" | "setOverlay" | "subscribe" | "watch"
     >;
     editing: RoundEditing;
   },
@@ -104,7 +104,7 @@ export function createRoundHandle(
       );
     }
     seen = { base: record.base, operations, screen };
-    publish(screen, requests.outcomeOf(roundId));
+    publish(screen, requests.isGone(roundId));
     // 印が変わると依頼の記録の購読者を同期で呼ぶ(この recompute 自身を含む)ため、最後に呼ぶ。
     requests.setOverlay(roundId, screen.needsRefetch);
   }
@@ -112,10 +112,10 @@ export function createRoundHandle(
   // 新しい画面の値が今と違うときだけ、スナップショットを変えて聞き手へ知らせる。
   function publish(
     screen: ReturnType<typeof roundScreenState>,
-    outcome: unknown,
+    notFound: boolean,
   ) {
     if (!opening) return;
-    const gone = isGone(screen.deletedElsewhere, opening, outcome);
+    const gone = isGone(screen.deletedElsewhere, opening, notFound);
     if (
       snapshot.state === screen.state &&
       snapshot.gone === gone &&
@@ -131,15 +131,14 @@ export function createRoundHandle(
     for (const listener of [...listeners]) listener();
   }
 
-  // 結果の種類が gone なら、開き方によらず見つかりませんにする。作成が未確定のラウンドは、取り直しが gone を記録しても出さない(作成が拒否されたときは`creationGone`が出す)。
+  // 取り直しでラウンドが見つからなかったなら、開き方によらず見つかりませんにする。作成が未確定のラウンドは、見つからなくても出さない(作成が拒否されたときは`creationGone`が出す)。
   function isGone(
     deletedElsewhere: boolean,
     from: LoadedRound,
-    outcome: unknown,
+    notFound: boolean,
   ): boolean {
     return (
-      deletedElsewhere ||
-      (outcome === "gone" && from.pendingCreationEventId === null)
+      deletedElsewhere || (notFound && from.pendingCreationEventId === null)
     );
   }
 

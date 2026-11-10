@@ -51,7 +51,7 @@
 | `features/rounds/domain/preset.ts`、`preset-list-view.ts`、`round-start.ts`、`write-result.ts` | domain | プリセットの値と並び・振り分け・除去、作成の画面の表示の決定、プリセットの構成からの、IDを除いた作成の内容の組み立て、書き込みの結果(成功か失敗)と削除、保存の失敗の種類 |
 | `features/rounds/domain/shot-pointer.ts`、`score-history.ts`、`shot-operations.ts`、`round-progress.ts`、`distance-config.ts`、`distance-operations.ts`、`target-face-filter.ts`、`preset-save.ts`、`ring-color.ts`、`shot-id.ts` | domain | 詳細の画面の規則。指している矢の遷移、取り消しの列、矢の操作の組み立て、完了の確認と状態を変える操作、距離の設定の検証と距離の操作、的の絞り込み、保存するプリセットの内容、リング色、時刻順の矢のID(時刻と乱数は引数) |
 | `features/rounds/domain/round-routes.ts` | domain | ラウンドの画面の経路の判定・変換(`roundFramePathOf`、経路からIDを読む`roundIdOfPath`)。経路の定数(`ROUNDS_PATH`、`NEW_ROUND_PATH`、`roundPath`)は経路表(`src/routes.ts`)が持つ |
-| `features/rounds/domain/open-requests.ts` | domain | 取り直しの依頼の規則。開く依頼は、ラウンドごとの依頼の番号、待っている依頼、記録の権利、結果の分類を持つ |
+| `features/rounds/domain/open-requests.ts` | domain | 取り直しの依頼の規則。開く依頼は、ラウンドごとの依頼の番号、待っている依頼、見つからなかったか(最後に終わった実行の結果)を持つ |
 | `features/rounds/domain/fetch-status.ts` | domain | 取得の結果の型(失敗は種類`reason`で持ち、文言は持たない)、サインインの確認の失敗の種類`SignInFailure`、問い合わせの結果の種類から結果への対応`fetchResultOf` |
 | `features/rounds/domain/query-outcome.ts` | domain | 問い合わせの結果の種類`QueryOutcome`(型だけ) |
 | `features/rounds/domain/fetch-wait.ts` | domain | 時間制限の値(`FETCH_TIMEOUT_MS`、`FALLBACK_WAIT_MS`)、`waitLimitMs`、代わりを返す`withFallback`。状態を持たない時間の規則 |

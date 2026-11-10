@@ -62,8 +62,7 @@ function createTab(options: Parameters<typeof createTestRounds>[0] = {}) {
   };
 }
 
-const opened = (deleted = false): OpenedRound => ({
-  deleted,
+const opened = (): OpenedRound => ({
   base: roundBase({ name: "取得した" }).tables,
   targetFaces: [face],
 });
@@ -207,7 +206,7 @@ describe("round(...)", () => {
     unwatchSecond();
   });
 
-  it("作成が未確定のラウンドは、取り直しがgoneを記録しても、見つかりませんにしない", () => {
+  it("作成が未確定のラウンドは、取り直しでラウンドが見つからなくても、見つかりませんにしない", () => {
     // Given
     const tab = createTab();
     const handle = tab.round("pending");
@@ -219,56 +218,38 @@ describe("round(...)", () => {
     settleRoundNow(tab.requests, "pending", { status: "not-found" });
 
     // Then
-    expect(tab.requests.outcomeOf("pending")).toBe("gone");
+    expect(tab.requests.isGone("pending")).toBe(true);
     expect(handle.getSnapshot().gone).toBe(false);
     unwatch();
   });
 
-  it("後に始めた取り直しが成功した後に、先に始めた取り直しがサーバーにラウンドが無いと終わっても、削除扱いにならない", () => {
-    // Given
-    const tab = createTab();
-    const local = tab.round("local");
-    const unwatch = local.watch(loadedOf());
-    const earlier = tab.requests.beginRound("local");
-    const later = tab.requests.beginRound("local");
-
-    // When
-    tab.requests.settleRound(later, { status: "ok", data: opened() });
-    tab.requests.settleRound(earlier, { status: "not-found" });
-
-    // Then
-    expect(local.getSnapshot().gone).toBe(false);
-    unwatch();
-  });
-
   it.each([
-    ["新しい取り直しが先に終わり、古い取り直しが後に成功で終わる", "新しい"],
-    ["古い取り直しが先に成功で終わり、新しい取り直しが後に終わる", "古い"],
+    [
+      "新しい取り直しが成功で先に終わり、古い取り直しが見つからないで後に終わる",
+      true,
+    ],
+    [
+      "新しい取り直しが見つからないで先に終わり、古い取り直しが成功で後に終わる",
+      false,
+    ],
   ] as const)(
-    "後に始めた取り直しがサーバーにラウンドが無いと終わったときは、%s場合でも削除扱い(gone)になる",
-    (_name, first) => {
+    "%s場合、最後に終わった取り直しの結果で、削除扱い(gone)かが決まる",
+    (_name, gone) => {
       // Given
       const tab = createTab();
       const local = tab.round("local");
       const unwatch = local.watch(loadedOf());
       const earlier = tab.requests.beginRound("local");
       const later = tab.requests.beginRound("local");
-      const settleEarlier = () =>
-        tab.requests.settleRound(earlier, { status: "ok", data: opened() });
-      const settleLater = () =>
-        tab.requests.settleRound(later, { status: "not-found" });
+      const found = { status: "ok", data: opened() } as const;
+      const missing = { status: "not-found" } as const;
 
       // When
-      if (first === "新しい") {
-        settleLater();
-        settleEarlier();
-      } else {
-        settleEarlier();
-        settleLater();
-      }
+      tab.requests.settleRound(later, gone ? found : missing);
+      tab.requests.settleRound(earlier, gone ? missing : found);
 
       // Then
-      expect(local.getSnapshot().gone).toBe(true);
+      expect(local.getSnapshot().gone).toBe(gone);
       unwatch();
     },
   );

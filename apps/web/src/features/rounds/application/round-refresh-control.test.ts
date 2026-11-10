@@ -223,7 +223,7 @@ describe("refreshNeeds", () => {
     // settleRoundNowは取り直しの開始で効かなかった印を消さないため、順を保てる。
     settleRoundNow(requests, "r-1", {
       status: "ok",
-      data: { deleted: false, base: roundBase().tables, targetFaces: [] },
+      data: { base: roundBase().tables, targetFaces: [] },
     });
     const second = reasons();
     hub.clearDiverged(stream);
@@ -290,7 +290,7 @@ describe("refreshNeeds", () => {
     control.onRefreshNeeds(listener);
 
     // When
-    requests.notify();
+    void requests.open("r-1");
     await hub.append(STREAM, roundUpdated());
 
     // Then

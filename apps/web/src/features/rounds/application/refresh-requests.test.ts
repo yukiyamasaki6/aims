@@ -14,8 +14,7 @@ async function settled(promise: Promise<unknown>): Promise<boolean> {
   return done;
 }
 
-const opened = (deleted = false): OpenedRound => ({
-  deleted,
+const opened = (): OpenedRound => ({
   base: roundBase().tables,
   targetFaces: [],
 });
@@ -38,29 +37,26 @@ describe("詳細を開く依頼", () => {
     expect(requests.pendingOpens()).toEqual([]);
   });
 
-  it("結果の種類を、取り直しの結果として記録する。削除と見つからないはgone、失敗はfailed", () => {
+  it("取り直しでラウンドが見つからなかったときだけ、見つからなかった記録を残す", () => {
     // Given
     const requests = createRefreshRequests();
 
     // When
     settleRoundNow(requests, "ok", { status: "ok", data: opened() });
-    settleRoundNow(requests, "deleted", { status: "ok", data: opened(true) });
     settleRoundNow(requests, "missing", { status: "not-found" });
     settleRoundNow(requests, "offline", { status: "offline" });
     settleRoundNow(requests, "error", { status: "error", reason: "failed" });
 
     // Then
     expect(
-      ["ok", "deleted", "missing", "offline", "error"].map((id) =>
-        requests.outcomeOf(id),
-      ),
-    ).toEqual(["ok", "gone", "gone", "failed", "failed"]);
+      ["ok", "missing", "offline", "error"].map((id) => requests.isGone(id)),
+    ).toEqual([false, true, false, false]);
   });
 
   it("開く依頼を出すと、以前の結果の記録を消し、依頼の変化を知らせる", () => {
     // Given
     const requests = createRefreshRequests();
-    settleRoundNow(requests, "r-1", { status: "offline" });
+    settleRoundNow(requests, "r-1", { status: "not-found" });
     const listener = vi.fn();
     requests.subscribe(listener);
 
@@ -68,14 +64,14 @@ describe("詳細を開く依頼", () => {
     void requests.open("r-1");
 
     // Then
-    expect(requests.outcomeOf("r-1")).toBeUndefined();
+    expect(requests.isGone("r-1")).toBe(false);
     expect(requests.pendingOpens()).toEqual(["r-1"]);
     expect(listener).toHaveBeenCalled();
   });
 });
 
 describe("開いている詳細の印", () => {
-  it("開いている間の印を付ける。外すと消え、2回外しても数を崩さない", () => {
+  it("開いている間の印を付けた回数だけ外れる", () => {
     // Given
     const requests = createRefreshRequests();
     const listener = vi.fn();
@@ -85,7 +81,6 @@ describe("開いている詳細の印", () => {
     const first = requests.watch("r-1");
     const second = requests.watch("r-1");
     const both = requests.watched();
-    first();
     first();
     const afterFirst = requests.watched();
     second();
@@ -124,7 +119,8 @@ describe("開いている詳細の印", () => {
     stop();
 
     // When
-    requests.notify();
+    void requests.open("r-1");
+    requests.setOverlay("r-1", true);
 
     // Then
     expect(listener).not.toHaveBeenCalled();
@@ -179,7 +175,7 @@ describe("並行する実行の結果の記録", () => {
     ["gone", "failed", "古い"],
     ["gone", "failed", "新しい"],
   ])(
-    "古い実行が%s、新しい実行が%sで、%sが先に終わっても、開く依頼は先に終わった実行の結果で1回だけ解決し、後に始めた実行の結果を先に始めた実行の結果で上書きしない",
+    "古い実行が%s、新しい実行が%sで、%sが先に終わっても、開く依頼は先に終わった実行の結果で1回だけ解決し、見つからなかったかは最後に終わった実行の結果になる",
     async (olderKind, newerKind, first) => {
       // Given
       const requests = createRefreshRequests();
@@ -200,53 +196,31 @@ describe("並行する実行の結果の記録", () => {
 
       // Then
       const firstKind = first === "古い" ? olderKind : newerKind;
+      const lastKind = first === "古い" ? newerKind : olderKind;
       expect(resolved).toEqual([results[firstKind]]);
-      const expected = { ok: "ok", failed: "failed", gone: "gone" } as const;
-      expect(requests.outcomeOf("r-1")).toBe(expected[newerKind]);
+      expect(requests.isGone("r-1")).toBe(lastKind === "gone");
     },
   );
 
-  it("別のラウンドは、実行の番号を共有しない", () => {
+  it("別のラウンドは、見つからなかった記録を共有しない", () => {
     // Given
     const requests = createRefreshRequests();
     void requests.open("r-1");
     void requests.open("r-2");
-    const first = requests.beginRound("r-1");
-    const second = requests.beginRound("r-1");
-    requests.settleRound(second, results.ok);
-    requests.settleRound(first, results.ok);
+    requests.settleRound(requests.beginRound("r-1"), results.ok);
     const other = requests.beginRound("r-2");
 
     // When
     requests.settleRound(other, results.gone);
 
     // Then
-    expect(requests.outcomeOf("r-2")).toBe("gone");
+    expect([requests.isGone("r-1"), requests.isGone("r-2")]).toEqual([
+      false,
+      true,
+    ]);
   });
 
-  it("先に始めた実行が先に終わると、結果は記録せず依頼を解決し、後に始めた実行が終わると記録する", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    const request = requests.open("r-1");
-    const earlier = requests.beginRound("r-1");
-    const later = requests.beginRound("r-1");
-    const resolved: unknown[] = [];
-    void request.then((result) => resolved.push(result));
-
-    // When
-    requests.settleRound(earlier, results.gone);
-    await flush();
-    const afterEarlier = requests.outcomeOf("r-1");
-    requests.settleRound(later, results.ok);
-    await flush();
-
-    // Then
-    expect(afterEarlier).toBeUndefined();
-    expect(resolved).toEqual([results.gone]);
-    expect(requests.outcomeOf("r-1")).toBe("ok");
-  });
-
-  it("結果の記録か待ちの解決があったときだけ変化を知らせる。先に始めた実行が先に終わると1回、後に始めた実行が終わると2回目", () => {
+  it("変化を知らせるのは、待ちの解決か、見つからなかったかの変化があったときだけ", () => {
     // Given
     const requests = createRefreshRequests();
     void requests.open("r-1");
@@ -258,34 +232,11 @@ describe("並行する実行の結果の記録", () => {
     // When
     requests.settleRound(earlier, results.gone);
     const afterEarlier = listener.mock.calls.length;
-    requests.settleRound(later, results.ok);
+    requests.settleRound(later, results.gone);
 
     // Then
     expect(afterEarlier).toBe(1);
-    expect(listener).toHaveBeenCalledTimes(2);
-  });
-
-  it("後に始めた実行が記録した後の、先に始めた実行の終わりは、何も変えず変化を知らせない", async () => {
-    // Given
-    const requests = createRefreshRequests();
-    const request = requests.open("r-1");
-    const earlier = requests.beginRound("r-1");
-    const later = requests.beginRound("r-1");
-    const resolved: unknown[] = [];
-    void request.then((result) => resolved.push(result));
-    requests.settleRound(later, results.ok);
-    await flush();
-    const listener = vi.fn();
-    requests.subscribe(listener);
-
-    // When
-    requests.settleRound(earlier, results.gone);
-    await flush();
-
-    // Then
-    expect(listener).not.toHaveBeenCalled();
-    expect(requests.outcomeOf("r-1")).toBe("ok");
-    expect(resolved).toEqual([results.ok]);
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });
 

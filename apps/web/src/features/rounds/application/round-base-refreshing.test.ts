@@ -275,7 +275,7 @@ describe("refreshAll", () => {
 });
 
 describe("実行をまたぐ完了", () => {
-  it("先に始まった詳細の取り直しの完了は、後から出された開く依頼を完了させず、その結果の記録も上書きしない", async () => {
+  it("先に始まった詳細の取り直しの完了は、後から出された開く依頼を完了させない", async () => {
     // Given
     const tab = await setup();
     const running = Promise.withResolvers<FetchResult<FetchedRoundDetail>>();
@@ -297,7 +297,6 @@ describe("実行をまたぐ完了", () => {
     // Then
     expect(await first).toEqual({ status: "not-found" });
     expect(secondSettled).toBe(false);
-    expect(tab.requests.outcomeOf("r-1")).toBeUndefined();
     expect(tab.requests.pendingOpens()).toEqual(["r-1"]);
   });
 });
@@ -318,7 +317,7 @@ describe("refreshRound", () => {
     // Then
     expect(await opened).toMatchObject({
       status: "ok",
-      data: { deleted: false, targetFaces: [] },
+      data: { targetFaces: [] },
     });
     expect(tab.hub.record(roundStreamId("r-1")).base?.startedAt).toBe(100);
   });
@@ -352,27 +351,7 @@ describe("refreshRound", () => {
     expect(clearedAtStart).toBe(true);
   });
 
-  it("取得の間に削除が追記されていたときは、取得した状態を表示せず離れる(gone)", async () => {
-    // Given
-    const tab = await setup();
-    await tab.hub.append(roundStreamId("r-1"), roundDisabled());
-    tab.fetching.fetchRoundDetail.mockResolvedValue({
-      status: "ok",
-      data: detail("in_progress"),
-    });
-    const opened = tab.requests.open("r-1");
-
-    // When
-    await tab.refresh.refreshRound("r-1");
-
-    // Then
-    expect(await opened).toMatchObject({
-      status: "ok",
-      data: { deleted: true },
-    });
-  });
-
-  it("取得が見つからない、または失敗したときは、依頼を待つ側へ結果を返し、結果の種類を依頼の記録に残す", async () => {
+  it("取得が見つからない、または失敗したときは、依頼を待つ側へ結果を返し、見つからないときだけ見つからなかった記録を残す", async () => {
     // Given
     const tab = await setup();
     const missing = tab.requests.open("r-1");
@@ -389,7 +368,7 @@ describe("refreshRound", () => {
     // Then
     expect(await missing).toEqual({ status: "not-found" });
     expect(await offline).toEqual({ status: "offline" });
-    expect(tab.requests.outcomeOf("r-1")).toBe("gone");
-    expect(tab.requests.outcomeOf("r-2")).toBe("failed");
+    expect(tab.requests.isGone("r-1")).toBe(true);
+    expect(tab.requests.isGone("r-2")).toBe(false);
   });
 });

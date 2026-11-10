@@ -48,7 +48,6 @@ async function settled(promise: Promise<unknown>): Promise<boolean> {
 }
 
 const opened = (): OpenedRound => ({
-  deleted: false,
   base: roundBase({ name: "取得した" }).tables,
   targetFaces: [face],
 });
@@ -212,7 +211,7 @@ describe("load", () => {
       expect(tab.requests.pendingOpens()).toEqual(["round-1"]);
     });
 
-    it("取得が後で成功しても、開いた結果は変わらず、依頼の結果の記録がokになる", async () => {
+    it("取得が後で成功しても、開いた結果は変わらず、見つからなかった記録は付かない", async () => {
       // Given
       const tab = await withLocalBase();
       const result = await tab.detail.load("round-1");
@@ -222,15 +221,15 @@ describe("load", () => {
 
       // Then
       expect(result).toMatchObject({ status: "ok" });
-      expect(tab.requests.outcomeOf("round-1")).toBe("ok");
+      expect(tab.requests.isGone("round-1")).toBe(false);
     });
 
     it.each([
-      ["見つからない", { status: "not-found" }, "gone"],
-      ["offline", { status: "offline" }, "failed"],
+      ["見つからない", { status: "not-found" }, true],
+      ["offline", { status: "offline" }, false],
     ] as const)(
-      "取得が後で%sで終わっても、開いた結果は変わらず、依頼の結果の記録が%sになる",
-      async (_name, fetched, outcome) => {
+      "取得が後で%sで終わっても、開いた結果は変わらず、見つからなかった記録は%sになる",
+      async (_name, fetched, gone) => {
         // Given
         const tab = await withLocalBase();
         const result = await tab.detail.load("round-1");
@@ -240,7 +239,7 @@ describe("load", () => {
 
         // Then
         expect(result).toMatchObject({ status: "ok" });
-        expect(tab.requests.outcomeOf("round-1")).toBe(outcome);
+        expect(tab.requests.isGone("round-1")).toBe(gone);
       },
     );
   });
@@ -343,7 +342,7 @@ describe("load", () => {
       settleRoundNow(tab.requests, "round-1", { status: "ok", data: opened() });
 
       // Then
-      expect(tab.requests.outcomeOf("round-1")).toBe("ok");
+      expect(tab.requests.isGone("round-1")).toBe(false);
     });
   });
 });
