@@ -17,17 +17,8 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 // 取得した詳細。取り直しの結果の中身は問わない。
 function fetchedDetail(): FetchedRoundDetail {
   return {
-    roundConfig: {
-      name: "午前練習",
-      roundDate: "2026-09-15",
-      format: "outdoor",
-      bowType: "recurve",
-    },
-    status: "in_progress",
-    distances: [],
-    shots: [],
+    base: roundBase(),
     targetFaces: [],
-    revisions: { round: 1, distances: {}, shots: {} },
     startedAt: 100,
     userId: "user-1",
   };

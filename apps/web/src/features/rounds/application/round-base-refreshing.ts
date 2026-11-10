@@ -1,21 +1,8 @@
 import { isRetainedForRefresh } from "../domain/round-retention";
-import { roundTablesFromServer } from "../domain/round-tables";
 import { roundIdOfStream, roundStreamId } from "../domain/sync-events";
 import type { RefreshRequests } from "./refresh-requests";
-import type {
-  FetchedRoundDetail,
-  FetchedRoundDetails,
-  RoundFetching,
-} from "./round-fetching";
+import type { FetchedRoundDetails, RoundFetching } from "./round-fetching";
 import type { RoundRecordHub } from "./round-record-hub";
-
-function baseOf(detail: FetchedRoundDetail) {
-  const { roundConfig, status, distances, shots, revisions } = detail;
-  return {
-    tables: roundTablesFromServer({ roundConfig, status, distances, shots }),
-    revisions,
-  };
-}
 
 // 取得の結果を端末の記録へ反映する。返ったラウンドはベースにし、返らなかった保持のラウンドは削除の印にする。
 // 全ての反映を待って解決する。利用者の照合は記録のハブが行う(取得の利用者と違えば、端末へ保存しない)。
@@ -30,7 +17,7 @@ async function commitRoundDetails(
     commits.push(
       hub.commit(
         roundStreamId(roundId),
-        baseOf(detail),
+        detail.base,
         detail.startedAt,
         detail.userId,
       ),
@@ -88,16 +75,18 @@ export function createRoundBaseRefreshing(deps: {
       requests.settleRound(run, fetched);
       return;
     }
-    const base = baseOf(fetched.data);
     await hub.commit(
       roundStreamId(id),
-      base,
+      fetched.data.base,
       fetched.data.startedAt,
       fetched.data.userId,
     );
     requests.settleRound(run, {
       status: "ok",
-      data: { base: base.tables, targetFaces: fetched.data.targetFaces },
+      data: {
+        base: fetched.data.base.tables,
+        targetFaces: fetched.data.targetFaces,
+      },
     });
   }
 

@@ -57,20 +57,18 @@ const shotA = {
 
 const serverRound: ServerRound = {
   id: "round-1",
-  roundConfig: {
-    name: "午前練習",
-    roundDate: "2026-09-15",
-    format: "outdoor",
-    bowType: "recurve",
-  },
+  name: "午前練習",
+  round_date: "2026-09-15",
+  format: "outdoor",
+  bow_type: "recurve",
   status: "completed",
   revision: 3,
   distances: [
     {
       ...distanceA,
       revision: 4,
-      disabled: false,
-      shots: [{ ...shotA, revision: 5, disabled: false }],
+      disabled_at: null,
+      shots: [{ ...shotA, revision: 5, disabled_at: null }],
     },
   ],
 };
@@ -182,16 +180,28 @@ describe("fetchRoundDetail", () => {
     expect(result).toEqual({
       status: "ok",
       data: {
-        status: "completed",
-        roundConfig: serverRound.roundConfig,
-        distances: [distanceA],
-        shots: [shotA],
-        targetFaces: [],
-        revisions: {
-          round: 3,
-          distances: { "d-a": 4 },
-          shots: { "s-a": 5 },
+        base: {
+          tables: {
+            round: {
+              config: {
+                name: "午前練習",
+                roundDate: "2026-09-15",
+                format: "outdoor",
+                bowType: "recurve",
+              },
+              status: "completed",
+              disabled: false,
+            },
+            distances: [{ ...distanceA, disabled: false }],
+            shots: [{ ...shotA, disabled: false }],
+          },
+          revisions: {
+            round: 3,
+            distances: { "d-a": 4 },
+            shots: { "s-a": 5 },
+          },
         },
+        targetFaces: [],
         startedAt: 1000,
         userId: "user-1",
       },
@@ -363,9 +373,10 @@ describe("fetchRoundDetail", () => {
     expect(result).toMatchObject({
       status: "ok",
       data: {
-        distances: [distanceA],
-        shots: [],
-        revisions: { shots: { "s-a": 5 } },
+        base: {
+          tables: { distances: [{ ...distanceA, disabled: false }], shots: [] },
+          revisions: { shots: { "s-a": 5 } },
+        },
         targetFaces: [face("g", null)],
       },
     });
@@ -772,8 +783,10 @@ describe("fetchRoundDetails", () => {
     if (result.status !== "ok") throw new Error("not ok");
     expect([...result.data.rounds.keys()]).toEqual([uuid1, "round-1"]);
     expect(result.data.rounds.get(uuid1)).toMatchObject({
-      status: "in_progress",
-      revisions: { round: 3 },
+      base: {
+        tables: { round: { status: "in_progress" } },
+        revisions: { round: 3 },
+      },
       userId: "user-1",
       startedAt: result.data.startedAt,
     });
@@ -885,13 +898,12 @@ describe("fetchRoundsList", () => {
     });
   });
 
-  it.each([
-    ["0件", okResponse<ServerRoundSummary[]>([])],
-    ["応答のdataがnull", okResponse(null as unknown as ServerRoundSummary[])],
-  ])("%sのとき、not-foundではなく空配列のokを返す", async (_name, response) => {
+  it("0件のとき、not-foundではなく空配列のokを返す", async () => {
     // Given
     const { fetching } = setup({
-      queries: { roundsList: async () => response },
+      queries: {
+        roundsList: async () => okResponse<ServerRoundSummary[]>([]),
+      },
     });
 
     // When

@@ -3,16 +3,13 @@ import type { FetchResult } from "../domain/fetch-status";
 import { waitLimitMs, withFallback } from "../domain/fetch-wait";
 import { type PresetRecord, type Presets, presetsOf } from "../domain/preset";
 import type { QueryOutcome } from "../domain/query-outcome";
-import type { RoundRevisions } from "../domain/round-base";
-import type { RoundConfig } from "../domain/round-config";
+import type { RoundBaseRecord } from "../domain/round-base";
 import {
   type RoundListItem,
   roundListItemOf,
   type ServerRoundSummary,
 } from "../domain/round-list";
-import { fromServerRound, type ServerRound } from "../domain/round-tables";
-import type { Distance, Shot } from "../domain/scorecard-types";
-import type { RoundStatus } from "../domain/sync-events";
+import { baseOfServerRound, type ServerRound } from "../domain/round-tables";
 import {
   orderTargetFaces,
   type TargetFaceOption,
@@ -50,17 +47,10 @@ export type RoundQueries = {
   roundsList(): Promise<QueryOutcome<ServerRoundSummary[]>>;
 };
 
-type RoundDetail = {
-  roundConfig: RoundConfig;
-  status: RoundStatus;
-  distances: Distance[];
-  shots: Shot[];
-  targetFaces: TargetFaceOption[];
-};
-
 // `startedAt`は取得の開始時刻、`userId`は取得に使ったセッションの利用者。端末へ保存するベースの記録に付ける。
-export type FetchedRoundDetail = RoundDetail & {
-  revisions: RoundRevisions;
+export type FetchedRoundDetail = {
+  base: RoundBaseRecord;
+  targetFaces: TargetFaceOption[];
   startedAt: number;
   userId: string;
 };
@@ -78,7 +68,12 @@ function toDetail(
   startedAt: number,
   userId: string,
 ): FetchedRoundDetail {
-  return { ...fromServerRound(round), targetFaces: faces, startedAt, userId };
+  return {
+    base: baseOfServerRound(round),
+    targetFaces: faces,
+    startedAt,
+    userId,
+  };
 }
 
 export type RoundFetching = ReturnType<typeof createRoundFetching>;
@@ -182,7 +177,7 @@ export function createRoundFetching(deps: {
     if (result.status !== "ok") return result;
     return {
       status: "ok",
-      data: (result.data ?? []).map(roundListItemOf),
+      data: result.data.map(roundListItemOf),
     };
   }
 

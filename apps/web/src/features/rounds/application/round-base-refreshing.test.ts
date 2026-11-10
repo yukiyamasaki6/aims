@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "../domain/fetch-status";
 import {
+  roundBase,
   roundCreated,
   roundDisabled,
   roundUpdated,
@@ -22,17 +23,8 @@ function detail(
   overrides: Partial<FetchedRoundDetail> = {},
 ): FetchedRoundDetail {
   return {
-    roundConfig: {
-      name: "午前練習",
-      roundDate: "2026-09-15",
-      format: "outdoor",
-      bowType: "recurve",
-    },
-    status,
-    distances: [],
-    shots: [],
+    base: roundBase({ status, revisions: { round: 3 } }),
     targetFaces: [],
-    revisions: { round: 3, distances: {}, shots: {} },
     startedAt: 100,
     userId: "user-1",
     ...overrides,
@@ -75,18 +67,7 @@ async function storeBase(
 ) {
   await tab.hub.commit(
     roundStreamId(roundId),
-    {
-      tables: {
-        round: {
-          config: detail(status).roundConfig,
-          status,
-          disabled: false,
-        },
-        distances: [],
-        shots: [],
-      },
-      revisions: { round: 3, distances: {}, shots: {} },
-    },
+    detail(status).base,
     50,
     "user-1",
   );

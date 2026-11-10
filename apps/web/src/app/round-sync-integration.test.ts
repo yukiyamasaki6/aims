@@ -36,17 +36,8 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 // 実物の依頼の記録、取得と反映、画面の状態、同期の手続きを接続する。取得(サーバー)、送信、時計だけを差し替える。
 function detail(name: string): FetchedRoundDetail {
   return {
-    roundConfig: {
-      name,
-      roundDate: "2026-09-15",
-      format: "outdoor",
-      bowType: "recurve",
-    },
-    status: "in_progress",
-    distances: [],
-    shots: [],
+    base: roundBase({ name }),
     targetFaces: [],
-    revisions: { round: 1, distances: {}, shots: {} },
     startedAt: 100,
     userId: "user-1",
   };

@@ -153,7 +153,7 @@ describe("roundDetail", () => {
     ]);
   });
 
-  it("行の名前を内側の形に写し、無効化の印を真偽にして、的とともに返す", async () => {
+  it("ラウンドの行を写さずにそのまま、的とともに返す", async () => {
     // Given
     const disabledAt = "2026-09-16T00:00:00Z";
     const database = makeDatabase({
@@ -179,21 +179,11 @@ describe("roundDetail", () => {
       status: "ok",
       data: {
         round: {
-          id: "round-1",
-          roundConfig: {
-            name: "午前練習",
-            roundDate: "2026-09-15",
-            format: "outdoor",
-            bowType: "recurve",
-          },
-          status: "completed",
-          revision: 3,
+          ...round,
           distances: [
             {
-              ...distanceA,
-              revision: 4,
-              disabled: false,
-              shots: [{ ...shotA, revision: 8, disabled: true }],
+              ...round.distances[0],
+              shots: [{ ...shotA, revision: 8, disabled_at: disabledAt }],
             },
           ],
         },
@@ -202,24 +192,18 @@ describe("roundDetail", () => {
     });
   });
 
-  it("ラウンドがnullなら的の結果によらずnot-foundにし、的のデータがnullなら的を空にする", async () => {
+  it("ラウンドがnullなら的の結果によらずnot-foundにする", async () => {
     // Given
     const missing = makeDatabase({
       rounds: ok(null),
       target_faces: ok([face("g", null)]),
     });
-    const nullFaces = makeDatabase({
-      rounds: ok(round),
-      target_faces: ok(null),
-    });
 
     // When
     const notFound = await missing.createQueries().roundDetail("user-1", "r");
-    const found = await nullFaces.createQueries().roundDetail("user-1", "r");
 
     // Then
     expect(notFound).toEqual({ status: "not-found" });
-    expect(dataOf(found)?.targetFaces).toEqual([]);
   });
 
   it("どちらかが通信失敗(status 0)なら、もう一方がエラーでも、comm-failureにする", async () => {
@@ -336,17 +320,15 @@ describe("再試行の指定", () => {
 });
 
 describe("targetFaces", () => {
-  it("的だけを、自分の分と公式の分に絞って取得して返す。データがnullなら空にする", async () => {
+  it("的だけを、自分の分と公式の分に絞って取得して返す", async () => {
     // Given
     const database = makeDatabase({
       rounds: ok(null),
       target_faces: ok([face("g", null)]),
     });
-    const empty = makeDatabase({ rounds: ok(null), target_faces: ok(null) });
 
     // When
     const response = await database.createQueries().targetFaces("user-1");
-    const emptyResponse = await empty.createQueries().targetFaces("user-1");
 
     // Then
     expect(response).toEqual({ status: "ok", data: [face("g", null)] });
@@ -354,7 +336,6 @@ describe("targetFaces", () => {
     expect(database.queries[0].filters).toEqual([
       { op: "or", expression: "owner_id.is.null,owner_id.eq.user-1" },
     ]);
-    expect(emptyResponse).toEqual({ status: "ok", data: [] });
   });
 
   it("通信が失敗(status 0)したらcomm-failure、エラー応答はfailedの種類で返す", async () => {
@@ -605,17 +586,6 @@ describe("roundsList", () => {
     });
   });
 
-  it("データがnullなら空の配列を返す", async () => {
-    // Given
-    const database = makeDatabase({ rounds: ok(null), target_faces: noFaces });
-
-    // When
-    const response = await database.createQueries().roundsList();
-
-    // Then
-    expect(response).toEqual({ status: "ok", data: [] });
-  });
-
   it("通信失敗(status 0)はcomm-failure、エラー応答はfailedの種類で返す", async () => {
     // Given
     const comm = makeDatabase({ rounds: failed(0), target_faces: noFaces });
@@ -693,21 +663,6 @@ describe("presets", () => {
 
     // Then
     expect(response).toEqual({ status: "ok", data: [presetRow] });
-  });
-
-  it("データがnullなら空の配列を返す", async () => {
-    // Given
-    const database = makeDatabase({
-      rounds: ok(null),
-      target_faces: noFaces,
-      preset_rounds: ok(null),
-    });
-
-    // When
-    const response = await database.createQueries().presets("user-1");
-
-    // Then
-    expect(response).toEqual({ status: "ok", data: [] });
   });
 
   it("通信失敗(status 0)はcomm-failure、エラー応答はfailedの種類で返す", async () => {
