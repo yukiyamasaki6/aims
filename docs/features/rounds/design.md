@@ -73,8 +73,13 @@ flowchart LR
 | メンバー | 内容 | 委譲先・実装 |
 | --- | --- | --- |
 | `loadList()` | 一覧の取得を行い、端末の列で削除済みのラウンドのIDを添えて一覧の材料を返す。`FETCH_TIMEOUT_MS`で打ち切る。拒否することがある | 窓口内、`fetching.fetchRoundsList`、`hub` |
-| `loadLocalList()` | 端末の入力中のラウンドの一覧(保存済みの的は読まない) | 窓口内 |
-| `subscribe(listener)` | 端末の記録が変わるたびに呼ぶ。返す関数で解除する | `hub.subscribe` |
+
+窓口`RoundWindow`(`features/rounds/application/round-window.ts`。詳細の購読は別途追加する)
+
+| メンバー | 内容 | 委譲先・実装 |
+| --- | --- | --- |
+| `watchLocalList(listener)` | 端末内の入力中一覧の変化を購読する。返す関数で解除する。購読者が0→1で記録の購読を始め、1→0で値を捨てる | `hub.subscribe` |
+| `localList()` | 端末内の入力中一覧。購読が無い、または読み込み前は`null` | 窓口内 |
 
 詳細の窓口`RoundDetailStore`(`round-detail-store.ts`)
 
@@ -100,7 +105,7 @@ flowchart LR
 
 | 画面 | ファイル | 窓口(hook) |
 | --- | --- | --- |
-| 一覧 | `rounds-list.tsx`、`use-local-rounds-list.ts` | `useRoundsListStore`(`loadList`、`loadLocalList`、`subscribe`)、`useRoundProcedures`(`deletion`、`whenOnline`) |
+| 一覧 | `rounds-list.tsx`、`use-local-rounds-list.ts` | `useRoundsListStore`(`loadList`)、`useRoundWindow`(`watchLocalList`、`localList`)、`useRoundProcedures`(`deletion`、`whenOnline`) |
 | 作成 | `round-preset-select.tsx`、`preset-list.tsx`、`use-start-round.ts`、`use-preset-delete.ts` | 窓口なし。`useRoundProcedures`(`roundStart`、`presetDeletion`、`fetching`、`whenOnline`) |
 | 詳細 | `round-detail-client.tsx`、`use-creation-gone.ts`、`use-round-op-stack.ts`、`use-scorecard.ts`、`use-shot-input.ts`、`use-distance-editing.ts`、`distance-edit-fields.tsx`、`distance-fields.tsx`、`use-distance-draft.ts`、`round-config-panel.tsx`、`round-menu.tsx`、`save-preset-dialog.tsx` | `useRoundDetailStore`(`load`、`round`、`newShotId`、`whenOnline`)、`useRoundProcedures`(`leaving`、`presetSaving`、`ids`。`round-detail-client.tsx`は使わない) |
 | 詳細(窓口を使わない) | 上以外の`ui/`のファイル(`scorecard-client.tsx`、`round-summary-bar.tsx`、`end-row.tsx`、`keypad-panel.tsx`ほか) | なし(propsで値と関数を受ける) |

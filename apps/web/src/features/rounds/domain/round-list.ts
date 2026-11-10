@@ -3,7 +3,7 @@ import type { RecordSnapshot } from "./round-record";
 import { isRoundInProgress } from "./round-retention";
 import { deriveRoundState } from "./round-view";
 import type { ScoringTargetFace } from "./scorecard-scoring";
-import { hasRoundDeletion } from "./sync-events";
+import { hasRoundDeletion, roundIdOfStream } from "./sync-events";
 
 export type RoundListItem = {
   id: string;
@@ -45,6 +45,17 @@ export function roundListItemOf(summary: ServerRoundSummary): RoundListItem {
       .filter((s) => s.disabled_at === null)
       .reduce((sum, s) => sum + s.score_int, 0),
   };
+}
+
+// 列のIDで引く材料を、ラウンドIDで引く材料に写す。
+export function snapshotsByRoundId(
+  all: ReadonlyMap<string, RecordSnapshot>,
+): Map<string, RecordSnapshot> {
+  const byRound = new Map<string, RecordSnapshot>();
+  for (const [streamId, snapshot] of all) {
+    byRound.set(roundIdOfStream(streamId), snapshot);
+  }
+  return byRound;
 }
 
 // 端末の列で削除済みのラウンドのID。

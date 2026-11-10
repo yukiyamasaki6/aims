@@ -2,11 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "../domain/fetch-status";
 import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { RoundListItem } from "../domain/round-list";
-import { roundBase } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
 import { createTestRounds } from "./round-record-test-helpers";
-
-const STREAM = roundStreamId("round-1");
 
 // 一覧の取得(ラウンドの取得の手続きの差し込み口)を差し替えて、一覧を読み込む。
 function loadListWith(
@@ -107,48 +104,6 @@ describe("loadList", () => {
     ]);
     expect(tab.hub.record(confirmedStream).base).toBeUndefined();
     expect(tab.hub.record(unsentStream).base).toBeUndefined();
-  });
-});
-
-describe("subscribe", () => {
-  it("端末の記録が変わるたびに知らせ、解除すると知らせない", async () => {
-    // Given
-    const tab = createTestRounds();
-    await tab.hub.ready();
-    const listener = vi.fn();
-    const stop = tab.list.subscribe(listener);
-
-    // When
-    await tab.hub.commit(STREAM, roundBase({ name: "端末" }), 10, "user-1");
-    const whileSubscribed = listener.mock.calls.length;
-    stop();
-    await tab.hub.commit(STREAM, roundBase({ name: "更新" }), 20, "user-1");
-
-    // Then
-    expect(whileSubscribed).toBeGreaterThan(0);
-    expect(listener).toHaveBeenCalledTimes(whileSubscribed);
-  });
-});
-
-describe("loadLocalList", () => {
-  it("端末の列から、入力中のラウンドをラウンドIDで返し、削除済みは含めない", async () => {
-    // Given
-    const tab = createTestRounds();
-    await tab.hub.ready();
-    await tab.hub.commit(STREAM, roundBase({ name: "端末" }), 10, "user-1");
-    await tab.hub.append(roundStreamId("deleted"), {
-      type: "round.disabled",
-      eventId: "e-deleted",
-      roundId: "deleted",
-    });
-
-    // When
-    const list = await tab.list.loadLocalList();
-
-    // Then
-    expect(list.inProgress).toEqual([
-      { id: "round-1", name: "端末", roundDate: "2026-09-15", total: 0 },
-    ]);
   });
 });
 

@@ -13,10 +13,12 @@ import type {
 import {
   createFakeRoundProcedures,
   createFakeRoundsListStore,
+  createFakeRoundWindow,
 } from "./round-stores-test-helpers";
 import {
   RoundProceduresProvider,
   RoundsListStoreProvider,
+  RoundWindowProvider,
 } from "./rounds-context";
 import { RoundsList } from "./rounds-list";
 
@@ -25,6 +27,7 @@ const roundsText = translatorFor("rounds");
 // ラウンドの状態と変更の方法は、一覧の読み込み、削除、端末の列、待ちの合図だけを持つ偽の約束で渡す。
 // 取得、端末の列、削除の実物はそれぞれのテストで確かめる。
 let fake: ReturnType<typeof createFakeRoundsListStore>;
+let fakeWindow: ReturnType<typeof createFakeRoundWindow>;
 let load: ReturnType<typeof createFakeRoundsListStore>["store"]["loadList"];
 let procedures: ReturnType<typeof createFakeRoundProcedures>;
 let deleteRound: ReturnType<
@@ -40,18 +43,20 @@ function loaded(
 
 function renderList() {
   return render(
-    <RoundsListStoreProvider store={fake.store}>
-      <RoundProceduresProvider procedures={procedures}>
-        <RoundsList />
-      </RoundProceduresProvider>
-    </RoundsListStoreProvider>,
+    <RoundWindowProvider roundWindow={fakeWindow.roundWindow}>
+      <RoundsListStoreProvider store={fake.store}>
+        <RoundProceduresProvider procedures={procedures}>
+          <RoundsList />
+        </RoundProceduresProvider>
+      </RoundsListStoreProvider>
+    </RoundWindowProvider>,
     { wrapper: IntlTestProvider },
   );
 }
 
 // 端末の入力中のラウンドの読み込み結果を設定する。
 function setLocal(local: LocalRoundsList) {
-  fake.store.loadLocalList.mockResolvedValue(local);
+  fakeWindow.setLocal(local);
 }
 
 function fetchResolves(result: FetchResult<RoundListItem[]>) {
@@ -105,7 +110,8 @@ beforeEach(() => {
   // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
   procedures.goOffline();
   // 端末の列は、既定では入力中のラウンドが無い。
-  fake.store.loadLocalList.mockResolvedValue({ inProgress: [] });
+  fakeWindow = createFakeRoundWindow();
+  fakeWindow.setLocal({ inProgress: [] });
   load = fake.store.loadList;
   deleteRound = procedures.deletion.deleteRound;
 });

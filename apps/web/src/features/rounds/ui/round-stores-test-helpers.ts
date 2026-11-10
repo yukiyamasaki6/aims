@@ -1,6 +1,8 @@
 import { vi } from "vitest";
 import type { RoundDetailStore } from "../application/round-detail-store";
+import type { RoundWindow } from "../application/round-window";
 import type { RoundsListStore } from "../application/rounds-list-store";
+import type { LocalRoundsList } from "../domain/round-list";
 import type { RoundProcedures } from "./rounds-context";
 
 // 通信の復帰の合図を、テストが起こす。
@@ -44,15 +46,37 @@ export function createFakeRoundsListStore(
 ) {
   const store = {
     loadList: vi.fn(),
-    loadLocalList: vi.fn(),
-    subscribe: vi.fn(() => () => {}),
     ...overrides,
   } as unknown as RoundsListStore & {
     loadList: ReturnType<typeof vi.fn>;
-    loadLocalList: ReturnType<typeof vi.fn>;
-    subscribe: ReturnType<typeof vi.fn>;
   };
   return { store };
+}
+
+// 画面のテストが使う、偽の窓口。端末内の入力中一覧を、テストが設定して通知する。
+export function createFakeRoundWindow() {
+  let local: LocalRoundsList | null = null;
+  const listeners = new Set<() => void>();
+  const roundWindow = {
+    watchLocalList: vi.fn((listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    }),
+    localList: vi.fn(() => local),
+  } as unknown as RoundWindow & {
+    watchLocalList: ReturnType<typeof vi.fn>;
+    localList: ReturnType<typeof vi.fn>;
+  };
+  return {
+    roundWindow,
+    // 端末内の一覧を設定し、購読者へ知らせる。
+    setLocal(next: LocalRoundsList | null) {
+      local = next;
+      for (const listener of [...listeners]) listener();
+    },
+  };
 }
 
 // 詳細の画面のテストが使う、偽の手続きの入れ物。`RoundProceduresProvider`へ渡す。

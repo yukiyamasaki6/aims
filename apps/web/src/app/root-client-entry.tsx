@@ -32,6 +32,7 @@ import { createRoundRecordControl } from "@/features/rounds/application/round-re
 import { createRoundRecordHub } from "@/features/rounds/application/round-record-hub";
 import { createRoundRefreshControl } from "@/features/rounds/application/round-refresh-control";
 import { createRoundStart } from "@/features/rounds/application/round-start";
+import { createRoundWindow } from "@/features/rounds/application/round-window";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
 import { whenOnline } from "@/features/rounds/application/when-online";
 import { SHORT_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
@@ -48,6 +49,7 @@ import {
   RoundDetailStoreProvider,
   RoundProceduresProvider,
   RoundsListStoreProvider,
+  RoundWindowProvider,
 } from "@/features/rounds/ui/rounds-context";
 import { intlConfig } from "@/i18n/messages";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
@@ -167,6 +169,7 @@ function composeStores(inputs: Inputs, records: Records) {
       ids,
       editing: createRoundEditing({ hub, ids }),
     }),
+    roundWindow: createRoundWindow({ hub }),
     listStore: createRoundsListStore({
       hub,
       fetching,
@@ -246,16 +249,18 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
   // getMessageFallbackとonErrorは関数で、サーバーから渡せないため、クライアントのこの入口で設定を直接読み込む。
   return (
     <NextIntlClientProvider {...intlConfig}>
-      <RoundsListStoreProvider store={app.listStore}>
-        <RoundDetailStoreProvider store={app.detailStore}>
-          <RoundProceduresProvider procedures={app.procedures}>
-            <SessionProvider session={app.session}>
-              <SwUpdateActivator activation={app.swUpdate} />
-              {children}
-            </SessionProvider>
-          </RoundProceduresProvider>
-        </RoundDetailStoreProvider>
-      </RoundsListStoreProvider>
+      <RoundWindowProvider roundWindow={app.roundWindow}>
+        <RoundsListStoreProvider store={app.listStore}>
+          <RoundDetailStoreProvider store={app.detailStore}>
+            <RoundProceduresProvider procedures={app.procedures}>
+              <SessionProvider session={app.session}>
+                <SwUpdateActivator activation={app.swUpdate} />
+                {children}
+              </SessionProvider>
+            </RoundProceduresProvider>
+          </RoundDetailStoreProvider>
+        </RoundsListStoreProvider>
+      </RoundWindowProvider>
     </NextIntlClientProvider>
   );
 }

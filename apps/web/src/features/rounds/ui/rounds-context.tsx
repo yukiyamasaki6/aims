@@ -8,6 +8,7 @@ import type { RoundDetailStore } from "../application/round-detail-store";
 import type { RoundFetching } from "../application/round-fetching";
 import type { RoundLeaving } from "../application/round-leaving";
 import type { RoundStart } from "../application/round-start";
+import type { RoundWindow } from "../application/round-window";
 import type { RoundsListStore } from "../application/rounds-list-store";
 import type { UniqueIds } from "../application/unique-ids";
 import type { WhenOnline } from "../application/when-online";
@@ -25,6 +26,7 @@ export type RoundProcedures = {
 };
 
 const RoundDetailStoreContext = createContext<RoundDetailStore | null>(null);
+const RoundWindowContext = createContext<RoundWindow | null>(null);
 const RoundsListStoreContext = createContext<RoundsListStore | null>(null);
 const RoundProceduresContext = createContext<RoundProcedures | null>(null);
 
@@ -47,6 +49,27 @@ export function useRoundDetailStore(): RoundDetailStore {
   const store = useContext(RoundDetailStoreContext);
   if (!store) throw new Error("RoundDetailStoreProvider がありません。");
   return store;
+}
+
+// 画面へ、端末内の取得と同期の窓口を渡す。
+export function RoundWindowProvider({
+  roundWindow,
+  children,
+}: {
+  roundWindow: RoundWindow;
+  children: ReactNode;
+}) {
+  return (
+    <RoundWindowContext.Provider value={roundWindow}>
+      {children}
+    </RoundWindowContext.Provider>
+  );
+}
+
+export function useRoundWindow(): RoundWindow {
+  const roundWindow = useContext(RoundWindowContext);
+  if (!roundWindow) throw new Error("RoundWindowProvider がありません。");
+  return roundWindow;
 }
 
 // 一覧の画面へ、状態と変更の方法を渡す。
