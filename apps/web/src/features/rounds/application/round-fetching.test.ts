@@ -7,7 +7,7 @@ import type {
   DatabaseGateway,
   DbResponse,
 } from "@/lib/supabase/contract/database";
-import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
+import type { FetchResult } from "../domain/fetch-status";
 import type { PresetRecord, Presets } from "../domain/preset";
 import type { QueryFailure, QueryOutcome } from "../domain/query-outcome";
 import type { ServerRoundSummary } from "../domain/round-list";
@@ -301,30 +301,6 @@ describe("fetchRoundDetail", () => {
     expect(second).toEqual({ status: "error", reason: "failed" });
   });
 
-  it("待ちは10秒のままで、FALLBACK_WAIT_MSでは返らない", async () => {
-    // Given
-    const { fetching, clock } = setup({
-      saved: [face("saved", null)],
-      queries: { roundDetail: () => new Promise<never>(() => {}) },
-    });
-    let settled = false;
-    const pending = fetching.fetchRoundDetail("round-1").finally(() => {
-      settled = true;
-    });
-
-    // When
-    await clock.advanceAsync(FALLBACK_WAIT_MS);
-    const settledAtFallback = settled;
-    await clock.advanceAsync(FETCH_TIMEOUT_MS - FALLBACK_WAIT_MS);
-
-    // Then
-    expect(settledAtFallback).toBe(false);
-    await expect(pending).resolves.toEqual({
-      status: "error",
-      reason: "failed",
-    });
-  });
-
   it("問い合わせ(実物)の応答が、変換を通って取得の結果に届く", async () => {
     // Given
     const rows: Record<string, DbResponse> = {
@@ -410,34 +386,34 @@ describe("fetchTargetFaces", () => {
   });
 
   it.each([
-    ["通信失敗", commFailure],
-    ["サーバーエラー", failed],
-  ])("%sのとき、保存済みがあれば保存済みを返す", async (_name, response) => {
+    ["通信失敗", commFailure, { status: "error", reason: "failed" }],
+    ["サーバーエラー", failed, { status: "error", reason: "failed" }],
+  ] as const)(
+    "%sのとき、保存済みがあっても代わりにせず、結果をそのまま返す",
+    async (_name, response, expected) => {
+      // Given
+      const { fetching } = setup({
+        saved: savedFaces,
+        queries: { targetFaces: vi.fn(async () => response) },
+      });
+
+      // When
+      const result = await fetching.fetchTargetFaces();
+
+      // Then
+      expect(result).toEqual(expected);
+    },
+  );
+
+  it("オフラインのとき、保存済みがあっても代わりにせず、offlineを返す", async () => {
     // Given
-    const { fetching } = setup({
-      saved: savedFaces,
-      queries: { targetFaces: vi.fn(async () => response) },
-    });
+    const { fetching } = setup({ saved: savedFaces, offline: true });
 
     // When
     const result = await fetching.fetchTargetFaces();
 
     // Then
-    expect(result).toEqual({ status: "ok", data: savedFaces });
-  });
-
-  it("オフラインのとき、保存済みがあれば保存済みを、無ければofflineを返す", async () => {
-    // Given
-    const withSaved = setup({ saved: savedFaces, offline: true });
-    const withoutSaved = setup({ offline: true });
-
-    // When
-    const first = await withSaved.fetching.fetchTargetFaces();
-    const second = await withoutSaved.fetching.fetchTargetFaces();
-
-    // Then
-    expect(first).toEqual({ status: "ok", data: savedFaces });
-    expect(second).toEqual({ status: "offline" });
+    expect(result).toEqual({ status: "offline" });
   });
 });
 
@@ -562,39 +538,46 @@ describe("fetchPresets", () => {
     expect(presetIds(saved.get("user-1")?.data as Presets)).toEqual(["fresh"]);
   });
 
-  it.each<[string, { offline: boolean }, QueryOutcome<PresetRecord[]>, number]>(
+  it.each<
     [
-      ["オフライン", { offline: true }, commFailure, 0],
-      ["通信失敗", { offline: false }, commFailure, 1],
-      ["サーバーエラー", { offline: false }, failed, 1],
+      string,
+      { offline: boolean },
+      QueryOutcome<PresetRecord[]>,
+      FetchResult<Presets>,
+    ]
+  >([
+    ["オフライン", { offline: true }, commFailure, { status: "offline" }],
+    [
+      "通信失敗",
+      { offline: false },
+      commFailure,
+      { status: "error", reason: "failed" },
     ],
-  )(
-    "%sのとき、保存済みのプリセットがあればその値のokを返す(的の保存済みだけでは返さない)",
-    async (_name, conditions, response, queried) => {
+    [
+      "サーバーエラー",
+      { offline: false },
+      failed,
+      { status: "error", reason: "failed" },
+    ],
+  ])(
+    "%sのとき、保存済みのプリセットがあっても代わりにせず、結果をそのまま返す",
+    async (_name, conditions, response, expected) => {
       // Given
-      const withSaved = setup({
+      const { fetching } = setup({
         ...conditions,
         presets: savedPresets,
         queries: { presets: vi.fn(async () => response) },
       });
-      const onlyFaces = setup({
-        ...conditions,
-        saved: [face("saved", null)],
-        queries: { presets: vi.fn(async () => response) },
-      });
 
       // When
-      const result = await withSaved.fetching.fetchPresets();
-      const withoutPresets = await onlyFaces.fetching.fetchPresets();
+      const result = await fetching.fetchPresets();
 
       // Then
-      expect(result).toEqual({ status: "ok", data: savedPresets });
-      expect(withoutPresets.status).not.toBe("ok");
-      expect(withSaved.queries.presets).toHaveBeenCalledTimes(queried);
+      expect(result).toEqual(expected);
     },
   );
 
-  it("通信できないとき、保存済みが無ければ、問い合わせずにofflineを返す", async () => {
+  it("通信できないとき、問い合わせずにofflineを返す", async () => {
     // Given
     const { fetching, queries } = setup({ offline: true });
 
@@ -606,7 +589,7 @@ describe("fetchPresets", () => {
     expect(queries.presets).not.toHaveBeenCalled();
   });
 
-  it("通信失敗(状態0)は、保存済みが無ければ、原因を断定せずerrorを返す", async () => {
+  it("通信失敗(状態0)は、原因を断定せずerrorを返す", async () => {
     // Given
     const { fetching } = setup({
       queries: {
@@ -621,7 +604,7 @@ describe("fetchPresets", () => {
     expect(result).toEqual({ status: "error", reason: "failed" });
   });
 
-  it("サーバーエラーは、保存済みが無ければerrorを返す", async () => {
+  it("サーバーエラーは、errorを返す", async () => {
     // Given
     const { fetching } = setup({
       queries: {
@@ -650,107 +633,18 @@ describe("fetchPresets", () => {
     expect(queries.presets).not.toHaveBeenCalled();
   });
 
-  it("保存済みがあると、FALLBACK_WAIT_MSで終わらない取得を待たず保存済みを返す", async () => {
+  it("savedPresetsは、今の利用者の保存済みを返し、無ければnullを返す", () => {
     // Given
-    const { fetching, clock } = setup({
-      presets: savedPresets,
-      queries: { presets: () => new Promise<never>(() => {}) },
-    });
-    const pending = fetching.fetchPresets();
+    const { fetching, identity } = setup({ presets: savedPresets });
 
     // When
-    await clock.advanceAsync(FALLBACK_WAIT_MS);
-
-    // Then
-    await expect(pending).resolves.toEqual({
-      status: "ok",
-      data: savedPresets,
-    });
-  });
-
-  it("保存済みが無いと、FALLBACK_WAIT_MSでは返らず、FETCH_TIMEOUT_MSでerrorになる", async () => {
-    // Given
-    const { fetching, clock } = setup({
-      queries: { presets: () => new Promise<never>(() => {}) },
-    });
-    let settled = false;
-    const pending = fetching.fetchPresets().finally(() => {
-      settled = true;
-    });
-
-    // When
-    await clock.advanceAsync(FALLBACK_WAIT_MS);
-    const settledAtFallback = settled;
-    await clock.advanceAsync(FETCH_TIMEOUT_MS - FALLBACK_WAIT_MS);
-
-    // Then
-    expect(settledAtFallback).toBe(false);
-    await expect(pending).resolves.toEqual({
-      status: "error",
-      reason: "failed",
-    });
-  });
-
-  it("時間切れの後に届いたokは表示に使わず、開始時の利用者のキーへ保存し、読む利用者が変わっても新しい利用者のキーへは書かない", async () => {
-    // Given
-    const {
-      fetching,
-      clock,
-      savedPresets: saved,
-      identity,
-    } = setup({
-      presets: savedPresets,
-      queries: {
-        presets: vi.fn(
-          () =>
-            new Promise<QueryOutcome<PresetRecord[]>>((resolve) => {
-              clock.after(3000, () =>
-                resolve(okResponse([presetRecord("late", null)])),
-              );
-            }),
-        ),
-      },
-    });
-    const pending = fetching.fetchPresets();
-    await clock.advanceAsync(FALLBACK_WAIT_MS);
-    const shown = await pending;
+    const own = fetching.savedPresets();
     identity.userId = "user-2";
-
-    // When
-    await clock.advanceAsync(3000);
+    const other = fetching.savedPresets();
 
     // Then
-    expect(shown).toEqual({ status: "ok", data: savedPresets });
-    expect(presetIds(saved.get("user-1")?.data as Presets)).toEqual(["late"]);
-    expect(saved.has("user-2")).toBe(false);
-  });
-
-  it("時間切れの後に届いた結果がok以外なら、保存済みは変わらない", async () => {
-    // Given
-    const {
-      fetching,
-      clock,
-      savedPresets: saved,
-    } = setup({
-      presets: savedPresets,
-      queries: {
-        presets: vi.fn(
-          () =>
-            new Promise<QueryOutcome<PresetRecord[]>>((resolve) => {
-              clock.after(3000, () => resolve(failed));
-            }),
-        ),
-      },
-    });
-    const pending = fetching.fetchPresets();
-    await clock.advanceAsync(FALLBACK_WAIT_MS);
-    await pending;
-
-    // When
-    await clock.advanceAsync(3000);
-
-    // Then
-    expect(saved.get("user-1")?.data).toEqual(savedPresets);
+    expect(own).toEqual(savedPresets);
+    expect(other).toBeNull();
   });
 });
 
@@ -958,28 +852,5 @@ describe("fetchRoundsList", () => {
       reason: "unauthenticated",
     });
     expect(queries.roundsList).not.toHaveBeenCalled();
-  });
-
-  it("終わらない取得は、FETCH_TIMEOUT_MSでerrorにし、FALLBACK_WAIT_MSでは返らない", async () => {
-    // Given
-    const { fetching, clock } = setup({
-      queries: { roundsList: () => new Promise<never>(() => {}) },
-    });
-    let settled = false;
-    const pending = fetching.fetchRoundsList().finally(() => {
-      settled = true;
-    });
-
-    // When
-    await clock.advanceAsync(FALLBACK_WAIT_MS);
-    const settledAtFallback = settled;
-    await clock.advanceAsync(FETCH_TIMEOUT_MS - FALLBACK_WAIT_MS);
-
-    // Then
-    expect(settledAtFallback).toBe(false);
-    await expect(pending).resolves.toEqual({
-      status: "error",
-      reason: "failed",
-    });
   });
 });

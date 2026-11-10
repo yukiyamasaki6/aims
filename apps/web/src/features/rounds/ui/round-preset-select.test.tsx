@@ -318,6 +318,118 @@ describe("RoundPresetSelect", () => {
     });
   });
 
+  describe("端末に保存した一覧", () => {
+    const saved: Presets = {
+      personal: [otherPersonalPreset],
+      global: [globalPreset],
+    };
+    const fetchedList: Presets = {
+      personal: [personalPreset],
+      global: [globalPreset],
+    };
+
+    it("取得が終わる前から、保存済みの一覧を表示する", async () => {
+      // Given
+      fake.fetching.savedPresets.mockReturnValue(saved);
+      loadPresets.mockReturnValue(new Promise(() => {}));
+
+      // When
+      render(<RoundPresetSelect />);
+
+      // Then
+      expect(await screen.findByText("別の個人セット")).toBeInTheDocument();
+      expect(screen.getByText("公式720ラウンド")).toBeInTheDocument();
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    });
+
+    it("取得できたら、一覧が取得の結果に置き換わり、保存済みにだけあったプリセットは消える", async () => {
+      // Given
+      const fetched = createDeferred<FetchResult<Presets>>();
+      fake.fetching.savedPresets.mockReturnValue(saved);
+      loadPresets.mockReturnValue(fetched.promise);
+      render(<RoundPresetSelect />);
+      await screen.findByText("別の個人セット");
+
+      // When
+      await act(async () =>
+        fetched.resolve({ status: "ok", data: fetchedList }),
+      );
+
+      // Then
+      expect(await screen.findByText("個人練習セット")).toBeInTheDocument();
+      expect(screen.queryByText("別の個人セット")).not.toBeInTheDocument();
+    });
+
+    it("取得が失敗しても保存済みの一覧が残り、エラーも再試行の操作も出さない", async () => {
+      // Given
+      fake.fetching.savedPresets.mockReturnValue(saved);
+      fetchResolves({ status: "error", reason: "failed" });
+
+      // When
+      render(<RoundPresetSelect />);
+      await flushMacrotask();
+
+      // Then
+      expect(await screen.findByText("別の個人セット")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: roundsText("fetchRetry") }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("オフラインでも保存済みの一覧が残り、通信が戻ると取得し直して一覧を置き換える", async () => {
+      // Given
+      fake.fetching.savedPresets.mockReturnValue(saved);
+      loadPresets
+        .mockResolvedValueOnce({ status: "offline" })
+        .mockResolvedValueOnce({ status: "ok", data: fetchedList });
+      render(<RoundPresetSelect />);
+      await screen.findByText("別の個人セット");
+      await flushMacrotask();
+
+      // When
+      await act(async () => fake.returnOnline());
+
+      // Then
+      expect(await screen.findByText("個人練習セット")).toBeInTheDocument();
+      expect(screen.queryByText("別の個人セット")).not.toBeInTheDocument();
+      expect(loadPresets).toHaveBeenCalledTimes(2);
+    });
+
+    it.each<[string, Presets, "startWithPreset" | "startWithoutPreset"]>([
+      ["取得結果にもあれば選択のまま", fetchedList, "startWithPreset"],
+      [
+        "取得結果に無ければ未選択に戻る",
+        { personal: [personalPreset], global: [] },
+        "startWithoutPreset",
+      ],
+    ])(
+      "選択中の公式プリセットは、置き換えの後、%s",
+      async (_name, fetchedData, label) => {
+        // Given
+        const user = userEvent.setup();
+        const fetched = createDeferred<FetchResult<Presets>>();
+        fake.fetching.savedPresets.mockReturnValue(saved);
+        loadPresets.mockReturnValue(fetched.promise);
+        render(<RoundPresetSelect />);
+        await user.click(await screen.findByText("公式720ラウンド"));
+
+        // When
+        await act(async () =>
+          fetched.resolve({ status: "ok", data: fetchedData }),
+        );
+        await screen.findByText("個人練習セット");
+
+        // Then
+        expect(
+          screen.getByRole("button", {
+            name: roundsText(label, { name: "公式720ラウンド" }),
+          }),
+        ).toBeInTheDocument();
+      },
+    );
+  });
+
   describe("プリセットの選択", () => {
     it("取得したプリセットを表示した直後は未選択で、開始ボタンに「プリセット無しで開始」を表示する", async () => {
       // Given

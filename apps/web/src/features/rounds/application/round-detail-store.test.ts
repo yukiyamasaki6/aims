@@ -75,7 +75,29 @@ describe("load", () => {
     expect(tab.fetching.fetchTargetFaces).not.toHaveBeenCalled();
   });
 
-  it("作成が未確定なら、取得せずに的だけを取得し、作成の操作を基準にして、作成のeventIdを返す", async () => {
+  it("作成が未確定で、保存済みの的があれば、的を取得せずに使い、作成の操作を基準にして、作成のeventIdを返す", async () => {
+    // Given
+    const tab = createTestRounds({ savedFaces: [face] });
+    const created = roundCreated({ name: "新規" });
+    await tab.hub.append(STREAM, created);
+
+    // When
+    const result = await tab.detail.load("round-1");
+
+    // Then
+    expect(result).toMatchObject({
+      status: "ok",
+      data: {
+        pendingCreationEventId: created.eventId,
+        targetFaces: [face],
+        base: { round: { config: { name: "新規" } } },
+      },
+    });
+    expect(tab.fetching.fetchTargetFaces).not.toHaveBeenCalled();
+    expect(tab.requests.pendingOpens()).toEqual([]);
+  });
+
+  it("作成が未確定で、保存済みの的が無ければ、的の取得を待って開く", async () => {
     // Given
     const tab = createTestRounds();
     const created = roundCreated({ name: "新規" });
@@ -91,16 +113,12 @@ describe("load", () => {
     // Then
     expect(result).toMatchObject({
       status: "ok",
-      data: {
-        pendingCreationEventId: created.eventId,
-        targetFaces: [face],
-        base: { round: { config: { name: "新規" } } },
-      },
+      data: { pendingCreationEventId: created.eventId, targetFaces: [face] },
     });
     expect(tab.requests.pendingOpens()).toEqual([]);
   });
 
-  it("作成が未確定で、的の取得に失敗したときは、その失敗を返す", async () => {
+  it("作成が未確定で、保存済みの的が無く、的の取得に失敗したときは、その失敗を返す", async () => {
     // Given
     const tab = createTestRounds();
     await tab.hub.append(STREAM, roundCreated());

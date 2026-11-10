@@ -88,7 +88,11 @@ async function openDetail(
   const plan = openPlan(first);
   if (plan.kind === "deleted") return { status: "not-found" };
   if (plan.kind === "creation") {
-    const faces = await fetching.fetchTargetFaces();
+    // 保存済みの的があれば取得せずに使い、無いときだけ取得を待つ。
+    const saved = fetching.savedTargetFaces();
+    const faces: FetchResult<TargetFaceOption[]> = saved
+      ? { status: "ok", data: saved }
+      : await fetching.fetchTargetFaces();
     if (faces.status !== "ok") return faces;
     return {
       status: "ok",

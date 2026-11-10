@@ -1,12 +1,13 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BusyButton } from "@/components/ui/busy-button";
 import { BlockingConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useMountedRef } from "@/hooks/use-mounted-ref";
-import type { Preset } from "../domain/preset";
+import { withSaved } from "../domain/fetch-status";
+import type { Preset, Presets } from "../domain/preset";
 import { presetListView } from "../domain/preset-list-view";
 import type { PresetDeleteFailure } from "../domain/write-result";
 import { BackToListLink } from "./back-to-list-link";
@@ -19,10 +20,14 @@ import { useStartRound } from "./use-start-round";
 
 export function RoundPresetSelect() {
   const { fetching, whenOnline } = useRoundProcedures();
-  const { view, retry } = useFetchResult(
+  const { view: fetched, retry } = useFetchResult(
     () => fetching.fetchPresets(),
     whenOnline,
   );
+  // 保存済みは描画の後に読む。初回の描画を静的な枠と同じにして、ハイドレーションの不一致を避けるため。
+  const [saved, setSaved] = useState<Presets | null>(null);
+  useEffect(() => setSaved(fetching.savedPresets()), [fetching]);
+  const view = withSaved(fetched, saved);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const mountedRef = useMountedRef();
   const hydrated = useHydrated();

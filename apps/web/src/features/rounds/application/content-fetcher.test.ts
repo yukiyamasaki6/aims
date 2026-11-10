@@ -3,7 +3,7 @@ import type { SessionReader } from "@/features/auth";
 import { createFakeSessionReader } from "@/features/auth/application/session-reader-test-helpers";
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
-import { FALLBACK_WAIT_MS, FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
+import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { QueryOutcome } from "../domain/query-outcome";
 import { createContentFetcher } from "./content-fetcher";
 
@@ -418,7 +418,7 @@ describe("fetchContent", () => {
     });
   });
 
-  describe("timeoutMsとonLateResult", () => {
+  describe("FETCH_TIMEOUT_MSでの打ち切り", () => {
     // 取得の終わる時刻を、手動の時計から決められるクエリで模す。
     function slowQuery(
       clock: ReturnType<typeof createManualClock>,
@@ -430,15 +430,15 @@ describe("fetchContent", () => {
         });
     }
 
-    it("timeoutMsで時間切れになるとerrorを返す", async () => {
+    it("取得が終わらないまま上限に達すると、遅れて届く結果を待たずにerrorを返す", async () => {
       // Given
       const { fetcher, clock } = setup();
-      const pending = fetcher.fetchContent(slowQuery(clock, 5_000), {
-        timeoutMs: FALLBACK_WAIT_MS,
-      });
+      const pending = fetcher.fetchContent(
+        slowQuery(clock, FETCH_TIMEOUT_MS + 5_000),
+      );
 
       // When
-      await clock.advanceAsync(FALLBACK_WAIT_MS);
+      await clock.advanceAsync(FETCH_TIMEOUT_MS);
 
       // Then
       await expect(pending).resolves.toEqual({
@@ -450,94 +450,16 @@ describe("fetchContent", () => {
     it("取得中に切断になっていれば、時間切れはofflineを返す", async () => {
       // Given
       const { fetcher, clock, network } = setup();
-      const pending = fetcher.fetchContent(slowQuery(clock, 5_000), {
-        timeoutMs: FALLBACK_WAIT_MS,
-      });
+      const pending = fetcher.fetchContent(
+        slowQuery(clock, FETCH_TIMEOUT_MS + 5_000),
+      );
       network.state.offline = true;
 
       // When
-      await clock.advanceAsync(FALLBACK_WAIT_MS);
+      await clock.advanceAsync(FETCH_TIMEOUT_MS);
 
       // Then
       await expect(pending).resolves.toEqual({ status: "offline" });
-    });
-
-    it("時間切れの後、取得の開始からFETCH_TIMEOUT_MS以内に終われば、onLateResultが結果で1回呼ばれる", async () => {
-      // Given
-      const { fetcher, clock } = setup();
-      const onLateResult = vi.fn();
-      const pending = fetcher.fetchContent(slowQuery(clock, 5_000), {
-        timeoutMs: FALLBACK_WAIT_MS,
-        onLateResult,
-      });
-      await clock.advanceAsync(FALLBACK_WAIT_MS);
-      await pending;
-      expect(onLateResult).not.toHaveBeenCalled();
-
-      // When
-      await clock.advanceAsync(FETCH_TIMEOUT_MS);
-
-      // Then
-      expect(onLateResult).toHaveBeenCalledExactlyOnceWith({
-        status: "ok",
-        data: { id: "a" },
-      });
-      expect(clock.pendingCount()).toBe(0);
-    });
-
-    it("FETCH_TIMEOUT_MSを超えて終わった結果では、onLateResultを呼ばない", async () => {
-      // Given
-      const { fetcher, clock } = setup();
-      const onLateResult = vi.fn();
-      const pending = fetcher.fetchContent(
-        slowQuery(clock, FETCH_TIMEOUT_MS + 1),
-        { timeoutMs: FALLBACK_WAIT_MS, onLateResult },
-      );
-
-      // When
-      await clock.advanceAsync(FETCH_TIMEOUT_MS + 2);
-      await pending;
-
-      // Then
-      expect(onLateResult).not.toHaveBeenCalled();
-      expect(clock.pendingCount()).toBe(0);
-    });
-
-    it("時間切れにならなかったときは、onLateResultを呼ばず、登録も残さない", async () => {
-      // Given
-      const { fetcher, clock } = setup();
-      const onLateResult = vi.fn();
-
-      // When
-      const result = await fetcher.fetchContent(async () => okResponse, {
-        timeoutMs: FALLBACK_WAIT_MS,
-        onLateResult,
-      });
-      await clock.advanceAsync(FETCH_TIMEOUT_MS);
-
-      // Then
-      expect(result).toEqual({ status: "ok", data: { id: "a" } });
-      expect(onLateResult).not.toHaveBeenCalled();
-      expect(clock.pendingCount()).toBe(0);
-    });
-
-    it("上限がFETCH_TIMEOUT_MS以上のときは、時間切れの後の結果を待たない", async () => {
-      // Given
-      const { fetcher, clock } = setup();
-      const onLateResult = vi.fn();
-      const pending = fetcher.fetchContent(
-        slowQuery(clock, FETCH_TIMEOUT_MS + 5),
-        {
-          onLateResult,
-        },
-      );
-
-      // When
-      await clock.advanceAsync(FETCH_TIMEOUT_MS + 10);
-      await pending;
-
-      // Then
-      expect(onLateResult).not.toHaveBeenCalled();
     });
   });
 });

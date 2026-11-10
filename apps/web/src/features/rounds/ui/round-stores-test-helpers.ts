@@ -81,6 +81,7 @@ export function createFakeRoundProcedures() {
     fetching: {
       // 既定は永遠に未解決の1個のPromiseを返す。呼び手の無い既定の関数がファイルごとの関数カバレッジ閾値(95%)を割るため、関数ではなく戻り値で指定する。
       fetchPresets: vi.fn().mockReturnValue(new Promise<never>(() => {})),
+      savedPresets: vi.fn().mockReturnValue(null),
     },
     ids: {
       next: vi.fn(() => `id-${++issued.ids}`),
