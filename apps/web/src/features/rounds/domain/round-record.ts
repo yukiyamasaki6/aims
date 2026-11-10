@@ -96,7 +96,7 @@ export function appendPending(
   return { ...record, items: [...record.items, item] };
 }
 
-// 保存の試みが終わった。保存に失敗したときは`seq`が無い(メモリの列から送信は続ける)。
+// 保存が終わった。
 export function markPersisted(
   record: RoundRecord,
   eventId: string,

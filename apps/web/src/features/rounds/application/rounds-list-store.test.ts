@@ -110,69 +110,6 @@ describe("loadList", () => {
   });
 });
 
-describe("loadList: 別のタブの変化", () => {
-  it("通知なしで、別のタブの削除を反映する", async () => {
-    // Given
-    const other = createTestRounds();
-    await other.hub.ready();
-    const tab = createTestRounds({ shared: { store: other.opLog } });
-    await tab.hub.ready();
-    await other.hub.append(roundStreamId("deleted"), {
-      type: "round.disabled",
-      eventId: "e-deleted",
-      roundId: "deleted",
-    });
-
-    // When
-    const result = await loadListWith(tab, async () => ({
-      status: "ok",
-      data: [],
-    }));
-
-    // Then
-    expect(result.status === "ok" && [...result.data.deleted]).toEqual([
-      "deleted",
-    ]);
-  });
-});
-
-describe("loadLocalList: 別のタブの変化", () => {
-  it("通知なしで、別のタブの追記を反映し、別のタブが完了したラウンドは入力中に載せない", async () => {
-    // Given
-    const other = createTestRounds();
-    await other.hub.ready();
-    const finished = roundStreamId("finished");
-    await other.hub.commit(
-      finished,
-      roundBase({ name: "完了前" }),
-      10,
-      "user-1",
-    );
-    const tab = createTestRounds({ shared: { store: other.opLog } });
-    await tab.hub.ready();
-    await other.hub.commit(
-      finished,
-      roundBase({ name: "完了前", status: "completed" }),
-      20,
-      "user-1",
-    );
-    await other.hub.commit(
-      STREAM,
-      roundBase({ name: "別のタブ" }),
-      10,
-      "user-1",
-    );
-
-    // When
-    const list = await tab.list.loadLocalList();
-
-    // Then
-    expect(list.inProgress).toEqual([
-      { id: "round-1", name: "別のタブ", roundDate: "2026-09-15", total: 0 },
-    ]);
-  });
-});
-
 describe("subscribe", () => {
   it("端末の記録が変わるたびに知らせ、解除すると知らせない", async () => {
     // Given

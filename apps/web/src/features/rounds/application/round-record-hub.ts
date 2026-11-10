@@ -8,7 +8,6 @@ import {
   adoptGroup,
   appendPending,
   applySendResults,
-  commitFetched,
   EMPTY_RECORD,
   isOlderFetch,
   markPersisted,
@@ -37,7 +36,8 @@ type AdoptOptions = {
 export type RoundRecordHub = ReturnType<typeof createRoundRecordHub>;
 
 // アプリで1つの、ラウンドの端末の記録。列(ラウンド)ごとの記録を、集約の値として保つ。
-// 保存先(端末)を真実とする。一覧の材料は保存先から作り、このタブで保存の書き込みに失敗した列だけメモリから作る。
+// メモリの記録を真とする。起動時に保存先(端末)を読んで取り込み、以後の変更は記録と保存先へ同じ順で書く。一覧の材料も記録から作る。
+// 保存先が使えない環境(書き込みの失敗を含む)は想定しない。保存先の失敗は呼び手へ伝わる。
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createRoundRecordHub(deps: {
   store: OpLogStore<SyncOperation, RoundBaseRecord>;
@@ -54,13 +54,6 @@ export function createRoundRecordHub(deps: {
   const diverged = new Set<string>();
   // 保存の途中の`append`。`whenPersisted`が終わりを待つ。
   const persisting = new Set<Promise<void>>();
-  // このタブで保存の書き込みに失敗した列。一覧の材料をメモリから作る。解除せず、停止で空になる。
-  const writeFailed = new Set<string>();
-
-  function markWriteFailed(streamId: string) {
-    writeFailed.add(streamId);
-  }
-
   const ready = (): Promise<void> => loaded;
 
   function record(streamId: string): RoundRecord {
@@ -88,15 +81,9 @@ export function createRoundRecordHub(deps: {
     put(streamId, next);
   }
 
-  // 現在の利用者の全ての列を読み、記録へ取り込む。読み込みに失敗したときは何もしない。
+  // 現在の利用者の全ての列を読み、記録へ取り込む。
   async function reloadAll() {
-    let streams: Map<string, RoundStoreGroup>;
-    try {
-      streams = await store.loadAll(userId);
-    } catch {
-      markLoaded();
-      return;
-    }
+    const streams = await store.loadAll(userId);
     for (const [streamId, group] of streams) adopt(streamId, group);
     markLoaded();
   }
@@ -114,16 +101,9 @@ export function createRoundRecordHub(deps: {
         },
         record(streamId).base,
       )
-      .then(
-        (seq): number | undefined => seq,
-        // 保存に失敗しても、メモリの記録から送信は続ける（再読み込みでは残らない）。
-        () => undefined,
-      )
       .then((seq) => {
-        if (seq === undefined) markWriteFailed(streamId);
         // 画面へは追記の時点で反映済みで、保存の完了では画面の状態は変わらない(送信だけが保存の完了を待つ)。
-        const next = markPersisted(record(streamId), operation.eventId, seq);
-        put(streamId, next);
+        put(streamId, markPersisted(record(streamId), operation.eventId, seq));
       });
     persisting.add(persisted);
     void persisted.finally(() => persisting.delete(persisted));
@@ -131,7 +111,7 @@ export function createRoundRecordHub(deps: {
   }
 
   // 取得したベースを反映する。保存(1つのトランザクション)を待ち、その結果の組でこの記録を1回の通知で変える。
-  // 保存に失敗したときは、このタブの記録のベースだけを変える。別の利用者の取得は、保存せず、このタブの記録も変えない。保存に失敗しても拒否しない。
+  // 別の利用者の取得は、保存せず、このタブの記録も変えない。
   async function commit(
     streamId: string,
     fetched: RoundBaseRecord | null,
@@ -149,56 +129,17 @@ export function createRoundRecordHub(deps: {
     ) {
       return;
     }
-    let group: RoundStoreGroup | undefined;
-    try {
-      group = await store.commit(streamId, fetchedUserId, fetched, startedAt);
-    } catch {
-      // 保存に失敗しても、このタブの画面は取得したベースで続ける。
-      markWriteFailed(streamId);
-    }
-    if (group) {
-      adopt(streamId, group, { readAt, fetched: incoming });
-      return;
-    }
-    put(streamId, commitFetched(record(streamId), incoming));
+    const group = await store.commit(
+      streamId,
+      fetchedUserId,
+      fetched,
+      startedAt,
+    );
+    adopt(streamId, group, { readAt, fetched: incoming });
   }
 
   function memorySnapshot(current: RoundRecord): RecordSnapshot {
     return { base: current.base, operations: operationsOf(current) };
-  }
-
-  // 保存の組を画面用の形にする。効かなかった確定済みの行は除く。
-  function storedSnapshot(group: RoundStoreGroup): RecordSnapshot {
-    return {
-      base: group.base,
-      operations: group.entries
-        .filter((row) => row.ackedApplied !== false)
-        .map((row) => ({
-          operation: row.operation,
-          confirmedFields:
-            row.ackedRevision !== undefined
-              ? (row.ackedFields ?? null)
-              : undefined,
-        })),
-    };
-  }
-
-  function listSnapshots(
-    stored: Map<string, RoundStoreGroup> | undefined,
-  ): Map<string, RecordSnapshot> {
-    const all = new Map<string, RecordSnapshot>();
-    if (stored) {
-      for (const [streamId, group] of stored) {
-        if (!writeFailed.has(streamId))
-          all.set(streamId, storedSnapshot(group));
-      }
-    }
-    for (const [streamId, current] of records) {
-      if (!stored || writeFailed.has(streamId)) {
-        all.set(streamId, memorySnapshot(current));
-      }
-    }
-    return all;
   }
 
   return {
@@ -207,24 +148,24 @@ export function createRoundRecordHub(deps: {
       void reloadAll();
     },
     userId: () => userId,
-    // 起動時の読み込みが終わる(失敗を含む)まで解決しない。`start`の前も解決しない。
+    // 起動時の読み込みが終わるまで解決しない。読み込みが失敗すると解決しない。`start`の前も解決しない。
     ready,
     // 端末に保存されている現在の利用者の全ての組を、返す。メモリの記録は使わない。読み込みの完了後に読み、失敗は投げる。
+    // 保存から読むままにする理由: 保存は保持の規則に当たらない組を丸ごと消すが、メモリの記録はベースを持ち続ける。
+    // 取り直しの対象(`isRetainedForRefresh`)は保存の組で決めるため、メモリの記録に替えると対象が変わる。
     async readStored(): Promise<Map<string, RoundStoreGroup>> {
       await ready();
       return store.loadAll(userId);
     },
-    // 一覧の材料。読み込みの完了後に、現在の利用者の全ての列のベースと操作を返す。
-    // 端末の保存を基準にし、このタブで保存の書き込みに失敗した列だけメモリの記録から作る。保存の読み込みに失敗したときは、全ての列をメモリから作る。
+    // 一覧の材料。読み込みの完了後に、現在の利用者の全ての列のベースと操作を、メモリの記録から作って返す。
     async readList(): Promise<Map<string, RecordSnapshot>> {
       await ready();
-      let stored: Map<string, RoundStoreGroup> | undefined;
-      try {
-        stored = await store.loadAll(userId);
-      } catch {
-        stored = undefined;
-      }
-      return listSnapshots(stored);
+      return new Map(
+        [...records].map(([streamId, current]) => [
+          streamId,
+          memorySnapshot(current),
+        ]),
+      );
     },
     record,
     streams: (): string[] => [...records.keys()],
@@ -234,9 +175,9 @@ export function createRoundRecordHub(deps: {
         listeners.delete(listener);
       };
     },
-    // 記録へ追記し、画面へは直ちに反映する(送信は保存の完了後)。戻り値は、保存の試みが終わった時点で解決する(拒否しない)。
+    // 記録へ追記し、画面へは直ちに反映する(送信は保存の完了後)。戻り値は、保存が終わった時点で解決する。保存先の失敗では拒否する。
     append,
-    // 呼んだ時点で保存の途中の操作が全て終わる(失敗を含む)と解決し、拒否しない。再読み込みの前に呼び、保存の途中の操作を失わないため。
+    // 呼んだ時点で保存の途中の操作が全て終わる(失敗した追記も待ちの対象に含める)と解決し、自身は拒否しない。`append`は保存先の失敗で拒否しうる。再読み込みの前に呼び、保存の途中の操作を失わないため。
     async whenPersisted(): Promise<void> {
       await Promise.allSettled([...persisting]);
     },
@@ -251,25 +192,24 @@ export function createRoundRecordHub(deps: {
       // 印を先に付ける(変化の通知を受けた側が、印を読めるようにするため)。
       if (applied.diverged) diverged.add(streamId);
       put(streamId, applied.record);
-      const failed = () => markWriteFailed(streamId);
       eventIds.forEach((eventId, index) => {
         const result = results[index];
         if (!result.applied) return;
-        // 保存先へのackの保存に失敗しても、再送が冪等で同じ結果を返すため続ける。
-        void store
-          .ack(eventId, result.revision, result.applied, result.appliedFields)
-          .catch(failed);
+        void store.ack(
+          eventId,
+          result.revision,
+          result.applied,
+          result.appliedFields,
+        );
       });
       if (applied.ineffective.length > 0) {
-        void store.retire(applied.ineffective).catch(failed);
+        void store.retire(applied.ineffective);
       }
     },
     // 認可・契約で拒否された操作を、記録から外し、保存先からも退かせる。
     async discard(streamId: string, eventIds: readonly string[]) {
       put(streamId, retireItems(record(streamId), eventIds));
-      await store.retire([...eventIds]).catch(() => {
-        markWriteFailed(streamId);
-      });
+      await store.retire([...eventIds]);
     },
     // 送信中の印を、このタブの要求が持つ操作の集合に置き換える。記録が無い列と、集合が変わらない列では、何も書かない。
     replaceInFlight(streamId: string, eventIds: readonly string[]) {

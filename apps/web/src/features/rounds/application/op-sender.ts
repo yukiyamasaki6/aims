@@ -128,13 +128,12 @@ export function createOpSender(deps: {
       operation: item.operation,
       status: statusOf(queue, item),
       solo: isSolo(queue, item.eventId),
-      // 保存の読み込みの前は、保存に失敗して`seq`を持たない操作だけを送る(保存から読む操作より後の順序を守るため)。
-      sendable: ready || !item.hasSeq,
     }));
   }
 
   function pump(streamId: string) {
-    if (connectivity.isOffline()) return;
+    // 保存の読み込みが終わるまでは送らない(保存から読む操作より後の順序を守るため)。
+    if (!ready || connectivity.isOffline()) return;
     // 1回の計画の入力は、記録の1つの値から作る。
     const outbox = outboxOf(hub.record(streamId));
     let queue = syncOutbox(

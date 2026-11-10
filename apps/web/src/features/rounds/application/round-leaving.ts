@@ -15,7 +15,6 @@ export type RoundLeaving = {
 
 // 詳細の画面から離れる手続き。保存の後に遷移する順序をここに置き、画面は遷移の実装を持たない。
 // 保存の完了を待つ間に画面を離れたときは、追記は済んでいるが遷移しない(離れた後の強制遷移を防ぐ)。画面が残っているかは呼び出し側の`isCurrent`で問う。
-// 例外: 拒否しない(hub.appendは保存の試みが終われば解決し拒否しない)。
 export function createRoundLeaving(deps: {
   hub: Pick<RoundRecordHub, "append">;
   ids: Pick<UniqueIds, "next">;

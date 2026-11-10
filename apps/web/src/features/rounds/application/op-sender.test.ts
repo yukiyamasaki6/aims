@@ -573,21 +573,11 @@ describe("保存の読み込みの待ち", () => {
     expect(sentIds(starting)).toEqual([["a"]]);
   });
 
-  // 保存済みの操作と、保存に失敗した操作(別の距離)を持つ状態。
-  async function reloadingRig(withUnsaved: boolean) {
+  it("読み込みが終わるまで、既知の列の保存済みの操作を送らず、終わると列の順に送る", async () => {
+    // Given
     const rig = createSenderRig();
     await rig.hub.ready();
     await rig.hub.append(STREAM, shot("saved"));
-    if (withUnsaved) {
-      vi.spyOn(rig.store, "append").mockRejectedValueOnce(new Error("quota"));
-      await rig.hub.append(STREAM, shot("unsaved", 1, "d-2"));
-    }
-    return { rig };
-  }
-
-  it("読み込みが終わるまで、既知の列の保存済みの操作を送らない。保存に失敗した操作は送る。終わると保存済みの操作を送る", async () => {
-    // Given
-    const { rig } = await reloadingRig(true);
     const reload = Promise.withResolvers<void>();
     vi.spyOn(rig.hub, "ready").mockReturnValueOnce(reload.promise);
     rig.sender.start();
@@ -597,13 +587,13 @@ describe("保存の読み込みの待ち", () => {
     rig.connectivity.goOnline();
     await rig.hub.append(STREAM, shot("later", 3));
     await flush();
-    const whileReloading = sentIds(rig).flat().sort();
+    const whileReloading = sentIds(rig).flat();
     reload.resolve();
     await flush();
 
     // Then
-    expect(whileReloading).toEqual(["unsaved"]);
-    expect(sentIds(rig).flat().sort()).toEqual(["later", "saved", "unsaved"]);
+    expect(whileReloading).toEqual([]);
+    expect(sentIds(rig).flat()).toEqual(["saved", "later"]);
   });
 });
 
@@ -747,21 +737,6 @@ describe("送信中の印", () => {
     // Then
     expect(rig.hub.record(STREAM).items).toEqual([]);
     expect(marked(rig)).toEqual([]);
-  });
-});
-
-describe("保存の失敗", () => {
-  it("保存に失敗した操作も、メモリの列から送信する", async () => {
-    // Given
-    const rig = await started();
-    vi.spyOn(rig.store, "append").mockRejectedValueOnce(new Error("quota"));
-
-    // When
-    await rig.hub.append(STREAM, shot("unsaved"));
-    await flush();
-
-    // Then
-    expect(sentIds(rig)).toEqual([["unsaved"]]);
   });
 });
 

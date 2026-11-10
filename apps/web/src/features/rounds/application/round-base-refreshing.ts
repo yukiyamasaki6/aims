@@ -68,7 +68,7 @@ export function createRoundBaseRefreshing(deps: {
   }
 
   // 開いた詳細のラウンドを取得して端末の記録へ反映し、依頼を待つ側へ結果を返す。
-  // 取得(`fetchRoundDetail`)は例外を値にし、反映(`hub.commit`)は保存の失敗を握って拒否しないため、投げない。
+  // 取得(`fetchRoundDetail`)の失敗は値で返るため、取得の失敗では投げない。
   async function refreshRound(id: string): Promise<void> {
     const run = requests.beginRound(id);
     hub.clearDiverged(roundStreamId(id));

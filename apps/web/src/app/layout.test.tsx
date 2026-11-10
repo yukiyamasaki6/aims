@@ -1,3 +1,4 @@
+import "fake-indexeddb/auto";
 import { SerwistProvider } from "@serwist/next/react";
 import { render, screen } from "@testing-library/react";
 import { Children, isValidElement, type ReactElement } from "react";
