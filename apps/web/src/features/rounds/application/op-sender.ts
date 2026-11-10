@@ -52,16 +52,9 @@ export function createOpSender(deps: {
   connectivity: Connectivity;
 }) {
   const { hub, sending, sessionReader, clock, connectivity } = deps;
-  let started = false;
   // 今の開始の保存の読み込みを終え、保存済みの操作を送れる状態。
   let ready = false;
-  // 開始と停止のたびに進める。古い読み込みの続きが、新しい開始の状態を変えないため。
-  let startSeq = 0;
-  // 開始、停止のたびに進める。古い送信の結果を捨てるため。
-  let generation = 0;
-  let queues = new Map<string, SendQueue>();
-  const timers = new Set<() => void>();
-  let stopListening: (() => void)[] = [];
+  const queues = new Map<string, SendQueue>();
 
   // 列の状態の書き込みは全てここを通す。記録の送信中の印は、列の状態(送信中かリトライ待機)の射影として、ここだけが書く。
   function writeQueue(streamId: string, queue: SendQueue) {
@@ -72,11 +65,7 @@ export function createOpSender(deps: {
   const queueOf = (streamId: string) => queues.get(streamId) ?? EMPTY_QUEUE;
 
   function scheduleTimer(streamId: string, delayMs: number) {
-    const cancel = clock.after(delayMs, () => {
-      timers.delete(cancel);
-      pump(streamId);
-    });
-    timers.add(cancel);
+    clock.after(delayMs, () => pump(streamId));
   }
 
   async function attempt(
@@ -98,10 +87,7 @@ export function createOpSender(deps: {
   }
 
   async function run(streamId: string, flight: Flight) {
-    const target = generation;
-    const failure = await attempt(streamId, flight);
-    if (generation !== target) return;
-    settle(streamId, flight, failure);
+    settle(streamId, flight, await attempt(streamId, flight));
   }
 
   function settle(
@@ -148,7 +134,7 @@ export function createOpSender(deps: {
   }
 
   function pump(streamId: string) {
-    if (!started || connectivity.isOffline()) return;
+    if (connectivity.isOffline()) return;
     // 1回の計画の入力は、記録の1つの値から作る。
     const outbox = outboxOf(hub.record(streamId));
     let queue = syncOutbox(
@@ -177,10 +163,8 @@ export function createOpSender(deps: {
   }
 
   // 保存の読み込みが終わってから、保存済みの操作を送る。
-  async function whenLoaded(mine: number) {
+  async function whenLoaded() {
     await hub.ready();
-    // 停止や再開の後に終わった古い読み込みでは、送れる状態にしない。
-    if (startSeq !== mine) return;
     ready = true;
     pumpAll();
   }
@@ -196,26 +180,9 @@ export function createOpSender(deps: {
 
   return {
     start() {
-      started = true;
-      startSeq += 1;
-      const mine = startSeq;
-      stopListening = [
-        hub.subscribe(handleChange),
-        connectivity.onOnline(recoverOnline),
-      ];
-      void whenLoaded(mine);
-    },
-    stop() {
-      started = false;
-      startSeq += 1;
-      ready = false;
-      for (const stop of stopListening) stop();
-      stopListening = [];
-      // 世代を進めて古い送信の結果を捨て、タイマーと列の状態を片付ける。記録の送信中の印は、ハブの停止が記録ごと空にする。
-      generation += 1;
-      for (const cancel of timers) cancel();
-      timers.clear();
-      queues = new Map();
+      hub.subscribe(handleChange);
+      connectivity.onOnline(recoverOnline);
+      void whenLoaded();
     },
     // 保留を戻して送る。サインインし直したときに使う。試行の番号は、新しい要求として0から数える。
     resumeHeld() {

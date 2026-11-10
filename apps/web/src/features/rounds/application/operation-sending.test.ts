@@ -109,28 +109,6 @@ describe("send", () => {
     expect(tab.hub.record(STREAM).items[0].ackedRevision).toBeUndefined();
   });
 
-  it("送信の間に停止・起動されたら、現在の記録に触れず、保存先の確定だけを書く", async () => {
-    // Given
-    const pending = Promise.withResolvers<SendOutcome>();
-    const tab = await setup(() => pending.promise);
-    await tab.hub.append(STREAM, operation("a"));
-    const sending = tab.sending.send(STREAM, ["a"]);
-    await flush();
-    tab.hub.stop();
-    tab.hub.start("user-2");
-    await tab.hub.ready();
-
-    // When
-    pending.resolve({ ok: true, results: [result({ revision: 9 })] });
-    const report = await sending;
-    await flush();
-
-    // Then
-    expect(report).toEqual({ ok: true });
-    expect(tab.hub.record(STREAM).items).toEqual([]);
-    expect(tab.store.rows[0]).toMatchObject({ eventId: "a", ackedRevision: 9 });
-  });
-
   it("記録に無い操作は転送せず、成功として返す", async () => {
     // Given
     const tab = await setup({ ok: true, results: [] });

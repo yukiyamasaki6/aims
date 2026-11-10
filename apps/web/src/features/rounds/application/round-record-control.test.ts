@@ -8,30 +8,22 @@ import type { RoundRecordHub } from "./round-record-hub";
 const STREAM = roundStreamId("round-1");
 
 // 記録と送信器の呼び出しを、1つの並びへ名前で積む偽。順序が検証対象で、中身の処理は別のテストで確かめる。
-function createOrderedFakes(
-  options: {
-    failOn?: "sender.stop" | "hub.stop";
-    recordUserId?: string | null;
-  } = {},
-) {
+function createOrderedFakes(options: { recordUserId?: string | null } = {}) {
   const calls: string[] = [];
   const record = (name: string) =>
     vi.fn((..._args: unknown[]) => {
       calls.push(name);
-      if (name === options.failOn) throw new Error(name);
     });
   const hub = {
     start: record("hub.start"),
-    stop: record("hub.stop"),
     userId: vi.fn(() => options.recordUserId ?? null),
   };
   const sender = {
     start: record("sender.start"),
-    stop: record("sender.stop"),
     resumeHeld: record("sender.resumeHeld"),
   };
   const control = createRoundRecordControl({
-    hub: hub as unknown as Pick<RoundRecordHub, "start" | "stop" | "userId">,
+    hub: hub as unknown as Pick<RoundRecordHub, "start" | "userId">,
     sender,
   });
   return { calls, hub, sender, control };
@@ -59,62 +51,23 @@ describe("順序", () => {
     expect(calls).toEqual(["hub.start", "sender.start"]);
     expect(hub.start).toHaveBeenCalledWith("user-1");
   });
-
-  it("stopは、送信器が止まった後に記録を止める", () => {
-    // Given
-    const { calls, control } = createOrderedFakes();
-
-    // When
-    control.stop();
-
-    // Then
-    expect(calls).toEqual(["sender.stop", "hub.stop"]);
-  });
-
-  it("記録の停止が例外を投げても、送信器の停止は先に終わっていて、例外は呼び出し側へ伝わる", () => {
-    // Given
-    const { calls, control } = createOrderedFakes({ failOn: "hub.stop" });
-
-    // When
-    const stopping = () => control.stop();
-
-    // Then
-    expect(stopping).toThrow("hub.stop");
-    expect(calls).toEqual(["sender.stop", "hub.stop"]);
-  });
-
-  it("送信器の停止が例外を投げると、記録は止めず、例外は呼び出し側へ伝わる(現状の振る舞い)", () => {
-    // Given
-    const { calls, control } = createOrderedFakes({ failOn: "sender.stop" });
-
-    // When
-    const stopping = () => control.stop();
-
-    // Then
-    expect(stopping).toThrow("sender.stop");
-    expect(calls).toEqual(["sender.stop"]);
-  });
 });
 
 describe("記録の制御", () => {
-  it("始めと止めは、記録の始めと止めに委譲する", async () => {
+  it("始めは、記録の始めに委譲する", async () => {
     // Given
-    const { hub, control } = createRealControl({});
-    await hub.append(STREAM, roundUpdated());
+    const { hub, control } = createRealControl({ userId: null });
 
     // When
-    control.stop();
-    const afterStop = hub.streams();
     control.start("user-1");
     await hub.ready();
-    const afterStart = [
+    const matches = [
       control.isRecordUser("user-1"),
       control.isRecordUser("user-2"),
     ];
 
     // Then
-    expect(afterStop).toEqual([]);
-    expect(afterStart).toEqual([true, false]);
+    expect(matches).toEqual([true, false]);
   });
 
   it("利用者の照合は、記録の利用者と同じなら真、違えば偽を返す", async () => {
@@ -137,7 +90,6 @@ describe("記録の制御", () => {
     const { hub, control } = createRealControl({});
 
     // When
-    control.stop();
     control.start(null);
     await hub.ready();
     const matches = [

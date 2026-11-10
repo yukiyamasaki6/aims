@@ -29,7 +29,6 @@ function setup(options: { reading?: Reading; same?: boolean } = {}) {
   const same = options.same ?? true;
   const control = {
     start: vi.fn((_userId: string | null) => {}),
-    stop: vi.fn(),
     isRecordUser: vi.fn(() => same),
     signInChanged: vi.fn(),
   } satisfies RoundRecordControl;
@@ -37,9 +36,6 @@ function setup(options: { reading?: Reading; same?: boolean } = {}) {
     refreshNeeds: () => needs.current,
     onRefreshNeeds: vi.fn((listener: () => void) => {
       notifyNeeds = listener;
-      return () => {
-        notifyNeeds = () => {};
-      };
     }),
     refreshAll,
     refreshRound,
@@ -87,19 +83,16 @@ const OPEN = { open: true } as const;
 const DIVERGED = { diverged: true } as const;
 const OVERLAY = { overlay: true } as const;
 
-describe("開始と停止", () => {
-  it("開始で記録の制御を始め、2回目の開始は何もしない。停止で購読を止め、記録の制御を止める", async () => {
+describe("開始", () => {
+  it("開始で記録の制御を始める", () => {
     // Given
     const t = setup();
-    t.sync.start("user-1");
 
     // When
-    t.sync.start("user-2");
-    t.sync.stop();
+    t.sync.start("user-1");
 
     // Then
     expect(t.control.start).toHaveBeenCalledExactlyOnceWith("user-1");
-    expect(t.control.stop).toHaveBeenCalledTimes(1);
   });
 
   it("サインインの変化は、そのまま記録の制御へ渡す", () => {
@@ -129,20 +122,6 @@ describe("開始と停止", () => {
     // Then
     expect(afterStart).toBe(0);
     expect(t.refreshRound).toHaveBeenCalledTimes(1);
-  });
-
-  it("停止の後は、依頼の変化に反応しない", async () => {
-    // Given
-    const t = setup();
-    t.sync.start("user-1");
-    t.sync.stop();
-
-    // When
-    t.changeNeeds(needsOf([roundNeed("r1", OPEN)]));
-    await flush();
-
-    // Then
-    expect(t.refreshRound).not.toHaveBeenCalled();
   });
 });
 
@@ -227,21 +206,6 @@ describe("常駐の一括の取得", () => {
 
     // Then
     expect(t.refreshAll).toHaveBeenCalledTimes(1);
-  });
-
-  it("サインインの確認や取得が投げても、拒否せず、次の契機で取得する", async () => {
-    // Given
-    const t = setup();
-    t.refreshAll.mockRejectedValueOnce(new Error("boom"));
-    t.sync.start("user-1");
-    await flush();
-
-    // When
-    t.sync.resume();
-    await flush();
-
-    // Then
-    expect(t.refreshAll).toHaveBeenCalledTimes(2);
   });
 
   it("常駐の実行中の契機は、完了後に1回だけやり直す(同時に1回まで)", async () => {
@@ -408,22 +372,6 @@ describe("効かなかった結果(diverged)の取り直し", () => {
     expect(t.refreshRound).toHaveBeenCalledTimes(2);
   });
 
-  it("取り直しが投げても続ける", async () => {
-    // Given
-    const t = setup();
-    t.refreshRound.mockRejectedValueOnce(new Error("boom"));
-    t.sync.start("user-1");
-    t.changeNeeds(needsOf([roundNeed("r1", DIVERGED)]));
-    await flush();
-
-    // When
-    t.changeNeeds(needsOf([roundNeed("r1", DIVERGED)]));
-    await flush();
-
-    // Then
-    expect(t.refreshRound).toHaveBeenCalledTimes(2);
-  });
-
   it("予約された取り直しは、開く依頼に変わっていると、完了後にやり直さない", async () => {
     // Given
     const t = setup();
@@ -561,10 +509,9 @@ describe("重ねられなかった操作(overlay)の取り直し", () => {
     expect(t.refreshRound).toHaveBeenCalledTimes(1);
   });
 
-  it("取り直しが失敗してもoverlayが残る間は、次の知らせで重ねて取り直さない", async () => {
+  it("取り直しの後もoverlayが残る間は、次の知らせで重ねて取り直さない", async () => {
     // Given
     const t = setup();
-    t.refreshRound.mockRejectedValueOnce(new Error("boom"));
     t.sync.start("user-1");
     t.changeNeeds(needsOf([roundNeed("r1", OVERLAY)]));
     await flush();

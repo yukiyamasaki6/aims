@@ -14,28 +14,15 @@ describe("createBrowserVisibility", () => {
   it("見える状態になったときだけ呼び、隠れるときは呼ばない", () => {
     // Given
     const listener = vi.fn();
-    const stop = createBrowserVisibility().onVisible(listener);
+    createBrowserVisibility().onVisible(listener);
 
     // When
     setVisibility("hidden");
     const whileHidden = listener.mock.calls.length;
     setVisibility("visible");
-    stop();
 
     // Then
     expect(whileHidden).toBe(0);
     expect(listener).toHaveBeenCalledTimes(1);
-  });
-
-  it("解除した後は呼ばない", () => {
-    // Given
-    const listener = vi.fn();
-    createBrowserVisibility().onVisible(listener)();
-
-    // When
-    setVisibility("visible");
-
-    // Then
-    expect(listener).not.toHaveBeenCalled();
   });
 });

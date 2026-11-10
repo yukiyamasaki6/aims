@@ -306,16 +306,15 @@ describe("同じ保存を共有する複数のタブ", () => {
     expect(sentEventIds(opened)).toEqual(["saved-op"]);
   });
 
-  it("一方のタブの未送信が残る状態で止まっても、もう一方のタブは自分の追記を送り続ける", async () => {
+  it("一方のタブに未送信が残る状態でも、もう一方のタブは自分の追記を送り続ける", async () => {
     // Given
     const store = createMemoryRoundStore();
-    const stopped = await senderTab(store, never);
+    const stuck = await senderTab(store, never);
     const running = await senderTab(store, async () => appliedOutcome(1));
-    stopped.sender.start();
+    stuck.sender.start();
     running.sender.start();
-    await stopped.hub.append(stream, roundUpdated({ eventId: "stuck-op" }));
+    await stuck.hub.append(stream, roundUpdated({ eventId: "stuck-op" }));
     await flush();
-    stopped.sender.stop();
 
     // When
     await running.hub.append(

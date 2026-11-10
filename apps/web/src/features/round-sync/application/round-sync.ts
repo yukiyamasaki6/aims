@@ -22,17 +22,14 @@ export function createRoundSync(deps: {
   connectivity: Connectivity;
 }) {
   const { control, refresh, session, connectivity } = deps;
-  let active = false;
   // 同時に1回までの扉は、常駐の一括の取得と、ラウンドごとの取り直しの2種類だけに置く。ラウンドごとの開く依頼は、依頼の番号ごとに扉なしで並行して実行する。
   let residentGate: FlightGate = IDLE_GATE;
   // ラウンドごとの、最後に実行を始めた開く依頼の番号。同じ番号のあいだは、記録の知らせが何度届いても、実行を重ねない。
   const startedOpen = new Map<string, number>();
   // ラウンドごとの取り直しの扉と、完了後にやり直す予約(ラウンドのIDの集合)。
   const refetchGates = new Map<string, FlightGate>();
-  const reruns = new Set<string>();
   // 前回の見直しで、重ねられなかった確定済みの操作(overlay)が当たっていた、開く依頼のないラウンド。新しく当たったときだけ取り直す。
   let lastOverlay = new Set<string>();
-  let stopNeeds: (() => void) | undefined;
 
   // 常駐の前段。サインイン済みで、記録の利用者と同じときだけ通る。
   async function residentPass(): Promise<boolean> {
@@ -46,11 +43,7 @@ export function createRoundSync(deps: {
   async function runResident() {
     let again = true;
     while (again) {
-      try {
-        if (await residentPass()) await refresh.refreshAll();
-      } catch {
-        // 取得の失敗は何もしない(次の契機で取り直す)。
-      }
+      if (await residentPass()) await refresh.refreshAll();
       const end = endFlight(residentGate);
       residentGate = end.gate;
       again = end.again;
@@ -63,28 +56,21 @@ export function createRoundSync(deps: {
     if (begin.run) void runResident();
   }
 
-  // 予約した取り直しを行うか。詳細を閉じた(取り直しが要らなくなった)後や、停止後は行わない。
+  // 予約した取り直しを行うか。詳細を閉じた(取り直しが要らなくなった)後は行わない。
   // 要否の理由が開く依頼でなく、オフラインでないときだけ(開く依頼は、依頼ごとに別に実行する)。
   function shouldRerun(roundId: string): boolean {
     const need = refresh
       .refreshNeeds()
       .rounds.find((entry) => entry.roundId === roundId);
-    return (
-      active &&
-      reruns.has(roundId) &&
-      need !== undefined &&
-      !need.open &&
-      !connectivity.isOffline()
-    );
+    return need !== undefined && !need.open && !connectivity.isOffline();
   }
 
-  // 取り直しの1回が終わった。続けて行うなら真を返し、行わないなら扉と予約を空にする。
+  // 取り直しの1回が終わった。続けて行うなら真を返し、行わないなら扉を空にする。
   function finishRun(roundId: string): boolean {
     const end = endFlight(refetchGates.get(roundId) ?? IDLE_GATE);
     refetchGates.set(roundId, end.gate);
     if (end.again && shouldRerun(roundId)) return true;
     refetchGates.set(roundId, IDLE_GATE);
-    reruns.delete(roundId);
     return false;
   }
 
@@ -92,18 +78,10 @@ export function createRoundSync(deps: {
   async function refetchRound(roundId: string) {
     const begin = beginFlight(refetchGates.get(roundId) ?? IDLE_GATE);
     refetchGates.set(roundId, begin.gate);
-    if (!begin.run) {
-      reruns.add(roundId);
-      return;
-    }
+    if (!begin.run) return;
     let again = true;
     while (again) {
-      reruns.delete(roundId);
-      try {
-        await refresh.refreshRound(roundId);
-      } catch {
-        // 取得の失敗は何もしない。
-      }
+      await refresh.refreshRound(roundId);
       again = finishRun(roundId);
     }
   }
@@ -137,18 +115,10 @@ export function createRoundSync(deps: {
 
   return {
     start(userId: string | null) {
-      if (active) return;
-      active = true;
       control.start(userId);
-      stopNeeds = refresh.onRefreshNeeds(evaluate);
+      refresh.onRefreshNeeds(evaluate);
       // 起動時の常駐の取得は、サインインの通知を待たずにここで1回頼む。前段が、未認証と別の利用者を除く。
       requestResident();
-    },
-    stop() {
-      active = false;
-      stopNeeds?.();
-      stopNeeds = undefined;
-      control.stop();
     },
     // サインインの変化を、記録の制御へ渡す。反応(保留の再開)はラウンドが決める。
     signInChanged(change: SignInChange) {

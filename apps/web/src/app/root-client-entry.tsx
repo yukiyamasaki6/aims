@@ -235,7 +235,9 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [app] = useState(() => composeApp(router));
   useEffect(() => app.localIdentity.start(), [app]);
-  useEffect(() => app.triggers.start(), [app]);
+  useEffect(() => {
+    app.triggers.start();
+  }, [app]);
   useEffect(() => app.swUpdate.start(), [app]);
 
   // getMessageFallbackとonErrorは関数で、サーバーから渡せないため、クライアントのこの入口で設定を直接読み込む。

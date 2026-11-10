@@ -283,23 +283,18 @@ describe("refreshNeeds", () => {
     });
   });
 
-  it("依頼や記録が変わったら通知し、解除すると両方の通知が止まる", async () => {
+  it("依頼や記録が変わったら通知する", async () => {
     // Given
     const { hub, requests, control } = await setup();
     const listener = vi.fn();
-    const stop = control.onRefreshNeeds(listener);
+    control.onRefreshNeeds(listener);
 
     // When
     requests.notify();
     await hub.append(STREAM, roundUpdated());
-    const whileSubscribed = listener.mock.calls.length;
-    stop();
-    requests.notify();
-    await hub.append(STREAM, roundUpdated({ eventId: "again" }));
 
     // Then
-    expect(whileSubscribed).toBeGreaterThanOrEqual(2);
-    expect(listener).toHaveBeenCalledTimes(whileSubscribed);
+    expect(listener.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });
 

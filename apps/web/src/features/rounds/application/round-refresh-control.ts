@@ -9,7 +9,7 @@ export type RoundRefreshControl = {
   // - open: 詳細を開く依頼が、結果を待っている。
   // - diverged: 送信の結果に、効かなかった操作か項目があった。
   // - overlay: 確定済みの操作を、ベースに重ねられなかった。
-  // - openRequest は、そのラウンドの最後の開く依頼の番号で、依頼が届くたびに増え、停止でも数え直さない。番号が同じあいだは、新しい依頼は届いていない。
+  // - openRequest は、そのラウンドの最後の開く依頼の番号で、依頼が届くたびに増える。番号が同じあいだは、新しい依頼は届いていない。
   refreshNeeds(): {
     rounds: readonly {
       roundId: string;
@@ -19,7 +19,7 @@ export type RoundRefreshControl = {
       openRequest: number;
     }[];
   };
-  onRefreshNeeds(listener: () => void): () => void;
+  onRefreshNeeds(listener: () => void): void;
   // 入力中のラウンドと端末が保持するラウンドを、まとめて取得して端末の記録へ反映する。失敗しても拒否しない。
   refreshAll(): Promise<void>;
   // 1つのラウンドを取得して端末の記録へ反映する。次の契約に従う。
@@ -69,12 +69,8 @@ export function createRoundRefreshControl(deps: {
   return {
     refreshNeeds,
     onRefreshNeeds(listener) {
-      const stopRequests = requests.subscribe(listener);
-      const stopHub = hub.subscribe(listener);
-      return () => {
-        stopRequests();
-        stopHub();
-      };
+      requests.subscribe(listener);
+      hub.subscribe(listener);
     },
     refreshAll: () => refresh.refreshAll(),
     refreshRound: (roundId) => refresh.refreshRound(roundId),

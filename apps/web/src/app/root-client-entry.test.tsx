@@ -367,7 +367,7 @@ describe("RootClientEntry", () => {
       expect(stop).toHaveBeenCalledTimes(1);
     });
 
-    it("認証状態の変化の購読を、識別情報の記録と同期の契機の2本とも解除する", () => {
+    it("識別情報の記録の認証状態の購読を解除する。同期の契機の購読は解除しない", () => {
       // Given
       const { unmount } = render(<RootClientEntry>{null}</RootClientEntry>);
 
@@ -375,7 +375,7 @@ describe("RootClientEntry", () => {
       unmount();
 
       // Then
-      expect(supabase.unsubscribe).toHaveBeenCalledTimes(2);
+      expect(supabase.unsubscribe).toHaveBeenCalledTimes(1);
     });
   });
 });

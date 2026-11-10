@@ -27,7 +27,7 @@ export type SendReport = { ok: true } | { ok: false; failure: SyncFailure };
 
 // 操作の送信と、確定の記録。
 export function createOperationSending(deps: {
-  hub: Pick<RoundRecordHub, "record" | "generation" | "applySendResults">;
+  hub: Pick<RoundRecordHub, "record" | "applySendResults">;
   transport: RoundTransport;
 }) {
   const { hub, transport } = deps;
@@ -43,14 +43,12 @@ export function createOperationSending(deps: {
         return item ? [{ eventId, operation: item.operation }] : [];
       });
       if (entries.length === 0) return { ok: true };
-      const generation = hub.generation();
       const outcome = await transport.send(entries);
       if (!outcome.ok) return outcome;
       hub.applySendResults(
         streamId,
         entries.map((entry) => entry.eventId),
         outcome.results,
-        generation,
       );
       return { ok: true };
     },
