@@ -3141,6 +3141,25 @@ describe("ScorecardClient ラウンドの完了", () => {
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/rounds"));
   });
 
+  it("完了ボタンを押した後、保存が終わる前に画面を離れると、一覧へ移らない", async () => {
+    // Given
+    nav.push.mockClear();
+    const { unmount } = setup({
+      distances: [distanceB],
+      initialShots: allRecorded,
+    });
+
+    // When
+    // 同期に押して取り除く(userEventの待ちの間に保存が終わらないようにする)。
+    fireEvent.click(screen.getByTestId("complete-round-button"));
+    unmount();
+    await waitFor(async () => expect(await ackedStates()).toEqual(["unacked"]));
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+    // Then
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
   it("確認でキャンセルすると、一覧へ移らない", async () => {
     // Given
     const user = userEvent.setup();

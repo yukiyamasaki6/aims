@@ -7,13 +7,14 @@ import type { RoundRecordHub } from "./round-record-hub";
 import type { UniqueIds } from "./unique-ids";
 
 export type RoundLeaving = {
-  // 入力を完了にする。保存の完了の後に一覧へ進む。送信の完了は待たない。
-  completeRound(roundId: string): Promise<void>;
-  // 削除を積み(RoundDeletion.deleteRound)、その完了の後に一覧へ置き換えて移る。送信の完了は待たない。
-  deleteRoundAndLeave(roundId: string): Promise<void>;
+  // 入力を完了にする。保存の完了の後、画面が残っている(`isCurrent`)ときだけ一覧へ進む。送信の完了は待たない。
+  completeRound(roundId: string, isCurrent: () => boolean): Promise<void>;
+  // 削除を積み(RoundDeletion.deleteRound)、その完了の後、画面が残っている(`isCurrent`)ときだけ一覧へ置き換えて移る。送信の完了は待たない。
+  deleteRoundAndLeave(roundId: string, isCurrent: () => boolean): Promise<void>;
 };
 
 // 詳細の画面から離れる手続き。保存の後に遷移する順序をここに置き、画面は遷移の実装を持たない。
+// 保存の完了を待つ間に画面を離れたときは、追記は済んでいるが遷移しない(離れた後の強制遷移を防ぐ)。画面が残っているかは呼び出し側の`isCurrent`で問う。
 // 例外: 拒否しない(hub.appendは保存の試みが終われば解決し拒否しない)。
 export function createRoundLeaving(deps: {
   hub: Pick<RoundRecordHub, "append">;
@@ -24,15 +25,17 @@ export function createRoundLeaving(deps: {
   const { hub, ids, pageNavigation, deletion } = deps;
 
   return {
-    async completeRound(roundId) {
+    async completeRound(roundId, isCurrent) {
       await hub.append(
         roundStreamId(roundId),
         statusOperation(roundId, "completed", ids.next()),
       );
+      if (!isCurrent()) return;
       pageNavigation.go(ROUNDS_PATH);
     },
-    async deleteRoundAndLeave(roundId) {
+    async deleteRoundAndLeave(roundId, isCurrent) {
       await deletion.deleteRound(roundId);
+      if (!isCurrent()) return;
       pageNavigation.replace(ROUNDS_PATH);
     },
   };

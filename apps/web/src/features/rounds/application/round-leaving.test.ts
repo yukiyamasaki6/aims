@@ -54,7 +54,7 @@ describe("createRoundLeaving", () => {
         setup({ holdAppend: true });
 
       // When
-      const done = leaving.completeRound("round-1");
+      const done = leaving.completeRound("round-1", () => true);
       await flush();
       const beforeFinish = [...calls];
       finishAppend();
@@ -73,6 +73,33 @@ describe("createRoundLeaving", () => {
     });
   });
 
+  describe("保存の完了を待つ間に画面を離れたとき", () => {
+    it.each([
+      ["completeRound", "go"],
+      ["deleteRoundAndLeave", "replace"],
+    ] as const)(
+      "%sは、追記は済ませ、遷移しない",
+      async (method, navigation) => {
+        // Given
+        let current = true;
+        const { leaving, append, go, replace, finishAppend } = setup({
+          holdAppend: true,
+        });
+
+        // When
+        const done = leaving[method]("round-1", () => current);
+        await flush();
+        current = false;
+        finishAppend();
+        await done;
+
+        // Then
+        expect(append).toHaveBeenCalledTimes(1);
+        expect(navigation === "go" ? go : replace).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe("deleteRoundAndLeave", () => {
     it("そのラウンドの列へ削除の操作を追記し、追記の完了の後に一覧へ置き換えて移る", async () => {
       // Given
@@ -80,7 +107,7 @@ describe("createRoundLeaving", () => {
         setup({ holdAppend: true });
 
       // When
-      const done = leaving.deleteRoundAndLeave("round-1");
+      const done = leaving.deleteRoundAndLeave("round-1", () => true);
       await flush();
       const beforeFinish = [...calls];
       finishAppend();
@@ -105,8 +132,8 @@ describe("createRoundLeaving", () => {
       const { leaving, append, issued } = setup();
 
       // When
-      await leaving[method]("round-1");
-      await leaving[method]("round-1");
+      await leaving[method]("round-1", () => true);
+      await leaving[method]("round-1", () => true);
 
       // Then
       const eventIds = append.mock.calls.map(

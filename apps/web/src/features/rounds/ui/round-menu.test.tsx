@@ -66,10 +66,28 @@ describe("RoundMenu", () => {
       // Then
       expect(
         procedures.leaving.deleteRoundAndLeave,
-      ).toHaveBeenCalledExactlyOnceWith("round-1");
+      ).toHaveBeenCalledExactlyOnceWith("round-1", expect.any(Function));
       await waitFor(() => {
         expect(screen.queryByTestId("confirm-dialog-confirm")).toBeNull();
       });
+    });
+
+    it("削除して離れる手続きへ渡す画面が残っているかの判定は、メニューが取り除かれると偽になる", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { unmount } = render(<RoundMenu roundId="round-1" />);
+      await openDeleteConfirm(user);
+      await user.click(screen.getByTestId("confirm-dialog-confirm"));
+      const isCurrent = procedures.leaving.deleteRoundAndLeave.mock
+        .calls[0][1] as () => boolean;
+      const beforeUnmount = isCurrent();
+
+      // When
+      unmount();
+
+      // Then
+      expect(beforeUnmount).toBe(true);
+      expect(isCurrent()).toBe(false);
     });
 
     it("削除して離れる手続きが終わるまでの間も、ダイアログはすぐ閉じる", async () => {
