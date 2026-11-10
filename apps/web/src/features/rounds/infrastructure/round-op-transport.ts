@@ -7,10 +7,12 @@ import type {
   RoundTransport,
   SendOutcome,
 } from "../application/operation-sending";
-import type {
-  DistanceChanges,
-  RoundChanges,
-  SyncOperation,
+import {
+  type DistanceChanges,
+  isShotOperation,
+  type RoundChanges,
+  type ShotOperation,
+  type SyncOperation,
 } from "../domain/sync-events";
 import type { Json, RoundsDbSchema } from "./rounds-db-schema";
 
@@ -93,11 +95,6 @@ function distanceChangesToJson(changes: DistanceChanges): Json {
   return json;
 }
 
-type ShotOperation = Extract<
-  SyncOperation,
-  { type: "shot.recorded" | "shot.cleared" }
->;
-
 type RoundOperation = Extract<
   SyncOperation,
   { type: "round.created" | "round.updated" | "round.disabled" }
@@ -107,12 +104,6 @@ type DistanceOperation = Extract<
   SyncOperation,
   { type: "distance.created" | "distance.updated" | "distance.disabled" }
 >;
-
-function isShotOperation(operation: SyncOperation): operation is ShotOperation {
-  return (
-    operation.type === "shot.recorded" || operation.type === "shot.cleared"
-  );
-}
 
 async function sendSingle(
   database: DatabaseGateway<RoundsDbSchema>,

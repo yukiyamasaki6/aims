@@ -71,7 +71,7 @@
 | `features/rounds/ui/`の詳細の画面の部品 | ui | `round-detail-client.tsx`、`scorecard-client.tsx`、`use-round-op-stack.ts`(`RoundDetailStore`の`round(...)`を購読して追記するフック)、`use-creation-gone.ts`(作成が確定せずに消えたときに知らせる)ほか。一覧は`rounds/detail`のファイルと層 |
 | `features/rounds/ui/round-preset-select.tsx`、`use-start-round.ts`、`use-preset-delete.ts`、`preset-info.tsx`、`target-face-info.tsx` | ui | 作成の画面の描画と選択、開始と削除の実行中とエラーの状態、プリセットと的の情報の表示 |
 | `features/rounds/domain/send-queue.ts` | domain | 1つの列の送信の状態(待ち、送信中、リトライ待機、保留、単独の印、要求) |
-| `features/rounds/domain/op-plan.ts`、`sync-failure.ts` | domain | 送れる要求の計画(衝突する先行がある操作を含めない)。送信の失敗を、再試行する(`retry`)・保留する(`hold`。未認証)・破棄する(`discard`。`PT403`と`PT422`)・切り分けるに分ける判定と再試行の間隔`retryDelayMs` |
+| `features/rounds/domain/op-plan.ts`、`sync-failure.ts` | domain | 送れる要求の計画(衝突する先行がある操作を含めない。`round-op-conflicts.ts`の衝突の規則と上限を直接使う)。送信の失敗を、再試行する(`retry`。間隔は3秒から倍で60秒まで)・保留する(`hold`。未認証)・破棄する(`discard`。`PT403`と`PT422`)・切り分けるに分ける判定 |
 | `features/round-sync/domain/flight-gate.ts` | domain | 取り直しの同時に1回までの実行の制御 |
 | `features/round-sync/application/` | application | `round-sync.ts`(契機を受けて、いつ取り直すかを決める唯一の手続き)、`sync-triggers.ts`(契機の受け取り。約束`Visibility`) |
 | `features/round-sync/infrastructure/` | infrastructure | `browser-visibility.ts` |

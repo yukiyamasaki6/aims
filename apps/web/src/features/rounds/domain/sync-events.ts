@@ -90,6 +90,19 @@ export type SyncOperation =
       endNumber: number;
     };
 
+export type ShotOperation = Extract<
+  SyncOperation,
+  { type: "shot.recorded" | "shot.cleared" }
+>;
+
+export function isShotOperation(
+  operation: SyncOperation,
+): operation is ShotOperation {
+  return (
+    operation.type === "shot.recorded" || operation.type === "shot.cleared"
+  );
+}
+
 // 列(保存が完了した操作)にラウンドの削除があれば、そのラウンドは削除済み。一覧と詳細が同じ規則で判定する。
 export function hasRoundDeletion(
   operations: readonly SyncOperation[],

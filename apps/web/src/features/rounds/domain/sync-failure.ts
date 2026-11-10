@@ -15,7 +15,7 @@ export type SyncFailure = {
 };
 
 // retryは成功するまで再試行して残す。holdは再試行せずに残す。discardは操作を破棄する。
-export type SyncDisposition = "retry" | "hold" | "discard";
+type SyncDisposition = "retry" | "hold" | "discard";
 
 // 未認証はサインインが要るため再試行せず、不明（通信失敗）は通信の回復を待つ。
 export function sessionFailure(reading: {
@@ -29,7 +29,7 @@ export function sessionFailure(reading: {
 
 // 認可の拒否(PT403)と契約の不一致(PT422)だけが、再送しても結果が変わらないため破棄する。
 // 未認証はサインインまで止めて残し、それ以外は全て再試行する。
-export function classifyFailure(failure: SyncFailure): SyncDisposition {
+function classifyFailure(failure: SyncFailure): SyncDisposition {
   switch (failure.cause) {
     case "unauthenticated":
       return "hold";
@@ -44,7 +44,7 @@ export function classifyFailure(failure: SyncFailure): SyncDisposition {
 }
 
 // 再試行の待機時間。初回を0とする試行の番号から指数で伸ばし、上限で止める。
-export function retryDelayMs(attemptIndex: number): number {
+function retryDelayMs(attemptIndex: number): number {
   return Math.min(BASE_DELAY_MS * 2 ** attemptIndex, MAX_DELAY_MS);
 }
 

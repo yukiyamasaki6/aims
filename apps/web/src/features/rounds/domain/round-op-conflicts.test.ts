@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  batchLimitOf,
-  conflicts,
-  laneOf,
-  SERIAL_LANE,
-} from "./round-op-conflicts";
+import { batchLimitOf, conflicts, laneOf } from "./round-op-conflicts";
 import {
   distanceCreated,
   distanceDisabled,
@@ -117,9 +112,9 @@ describe("laneOf", () => {
       "record:d-1",
       "clear:d-1",
       "record:d-2",
-      SERIAL_LANE,
-      SERIAL_LANE,
-      SERIAL_LANE,
+      "serial",
+      "serial",
+      "serial",
     ]);
   });
 });
@@ -127,7 +122,7 @@ describe("laneOf", () => {
 describe("batchLimitOf", () => {
   it("矢のlaneは100件、直列のlaneは1件にする", () => {
     // Given
-    const lanes = ["record:d-1", "clear:d-1", SERIAL_LANE];
+    const lanes = ["record:d-1", "clear:d-1", "serial"];
 
     // When
     const limits = lanes.map(batchLimitOf);

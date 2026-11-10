@@ -4,12 +4,7 @@ import type { SyncOperation } from "./sync-events";
 // 送れる要求の計画と、送信の失敗の扱いの判定は、呼び出し側が求めて値として渡す。
 
 // 操作の送信の状態。persistingは保存の途中。確定済みの操作は記録から外れるため、状態を持たない。
-export type SendStatus =
-  | "persisting"
-  | "queued"
-  | "inflight"
-  | "backoff"
-  | "held";
+type SendStatus = "persisting" | "queued" | "inflight" | "backoff" | "held";
 
 // 送信の計画に渡す、列の順に並んだ操作の状態。
 export type PlanItem = {
@@ -163,11 +158,6 @@ export function dueFlights(queue: SendQueue, now: number): Flight[] {
   const due: Flight[] = [];
   for (const flight of queue.flights) {
     if (flight.notBefore > now || busy.has(flight.lane)) continue;
-    if (
-      flight.eventIds.some((id) => queue.states.get(id)?.status === "inflight")
-    ) {
-      continue;
-    }
     busy.add(flight.lane);
     due.push(flight);
   }
@@ -228,11 +218,7 @@ export function settleFailed(
         solo: true,
       }));
     case "discard":
-      return withStates(
-        withoutFlight(queue, flight),
-        flight.eventIds,
-        () => undefined,
-      );
+      return settleSent(queue, flight);
     case "hold":
       return withStates(
         withoutFlight(queue, flight),

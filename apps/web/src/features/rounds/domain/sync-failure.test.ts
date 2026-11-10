@@ -1,24 +1,23 @@
 import { describe, expect, it } from "vitest";
-import {
-  classifyFailure,
-  decideSyncResult,
-  retryDelayMs,
-  sessionFailure,
-} from "./sync-failure";
+import { decideSyncResult, sessionFailure } from "./sync-failure";
 
 const NETWORK_FAILURE = { cause: "rpc" } as const;
 
-describe("classifyFailure", () => {
+describe("失敗の種類による判定", () => {
   describe("認証の状態による失敗の場合", () => {
     it("未認証は止めて残し、認証の不明は再試行する", () => {
       // Given
       // When
-      const unauthenticated = classifyFailure({ cause: "unauthenticated" });
-      const unknown = classifyFailure({ cause: "auth-unknown" });
+      const unauthenticated = decideSyncResult(
+        { cause: "unauthenticated" },
+        0,
+        1,
+      );
+      const unknown = decideSyncResult({ cause: "auth-unknown" }, 0, 1);
 
       // Then
-      expect(unauthenticated).toBe("hold");
-      expect(unknown).toBe("retry");
+      expect(unauthenticated).toEqual({ type: "hold" });
+      expect(unknown).toEqual({ type: "retry", delayMs: 3000 });
     });
   });
 
@@ -26,10 +25,10 @@ describe("classifyFailure", () => {
     it("回復し得ないと判断できないため再試行する", () => {
       // Given
       // When
-      const disposition = classifyFailure({ cause: "exception" });
+      const decision = decideSyncResult({ cause: "exception" }, 0, 1);
 
       // Then
-      expect(disposition).toBe("retry");
+      expect(decision).toEqual({ type: "retry", delayMs: 3000 });
     });
   });
 
@@ -37,12 +36,12 @@ describe("classifyFailure", () => {
     it("認可の拒否(PT403)と契約の不一致(PT422)だけを破棄する", () => {
       // Given
       // When
-      const dispositions = ["PT403", "PT422"].map((code) =>
-        classifyFailure({ cause: "rpc", code }),
+      const decisions = ["PT403", "PT422"].map((code) =>
+        decideSyncResult({ cause: "rpc", code }, 0, 1),
       );
 
       // Then
-      expect(dispositions).toEqual(["discard", "discard"]);
+      expect(decisions).toEqual([{ type: "discard" }, { type: "discard" }]);
     });
 
     it("それ以外は、SQLSTATEによらず再試行する", () => {
@@ -53,10 +52,14 @@ describe("classifyFailure", () => {
         { cause: "rpc", code: "PGRST202" } as const,
         { cause: "rpc", code: "23505" } as const,
       ];
-      const dispositions = causes.map(classifyFailure);
+      const decisions = causes.map((failure) =>
+        decideSyncResult(failure, 0, 1),
+      );
 
       // Then
-      expect(dispositions).toEqual(causes.map(() => "retry"));
+      expect(decisions).toEqual(
+        causes.map(() => ({ type: "retry", delayMs: 3000 })),
+      );
     });
   });
 });
@@ -76,19 +79,6 @@ describe("sessionFailure", () => {
       type: "retry",
       delayMs: 60000,
     });
-  });
-});
-
-describe("retryDelayMs", () => {
-  it("試行の番号に応じて3秒から倍に伸ばし、60秒で頭打ちにする", () => {
-    // Given
-    // When
-    const delays = [0, 1, 2, 3, 4, 5, 6, 20, 100].map(retryDelayMs);
-
-    // Then
-    expect(delays).toEqual([
-      3000, 6000, 12000, 24000, 48000, 60000, 60000, 60000, 60000,
-    ]);
   });
 });
 

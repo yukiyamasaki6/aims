@@ -3,7 +3,7 @@ import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import { planFlights } from "../domain/op-plan";
 import { matchRecordUser } from "../domain/record-user";
-import { batchLimitOf, conflicts, laneOf } from "../domain/round-op-conflicts";
+import { laneOf } from "../domain/round-op-conflicts";
 import { outboxOf } from "../domain/round-record";
 import {
   dueFlights,
@@ -145,10 +145,7 @@ export function createOpSender(deps: {
     // 期限の来たリトライ待機の要求を、新しい要求より先に再送する。
     const due = dueFlights(queue, now);
     for (const flight of due) queue = resumeFlight(queue, flight);
-    const planned = planFlights(planItems(outbox, queue), {
-      conflicts,
-      batchLimitOf,
-    });
+    const planned = planFlights(planItems(outbox, queue));
     const next = startFlights(queue, planned, now);
     writeQueue(streamId, next.queue);
     for (const flight of [...due, ...next.started]) void run(streamId, flight);
