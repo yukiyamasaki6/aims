@@ -165,7 +165,7 @@ describe("createRoundOpTransport", () => {
     });
   });
 
-  it("矢の束は1回のRPCへ列の順で詰め、射手と射順は値があるときだけ送り、revisionを同じ順で返す", async () => {
+  it("矢の束は1回のRPCへ列の順で詰め、射手と射順は送らず、revisionを同じ順で返す", async () => {
     // Given
     client.rpc.mockResolvedValue({
       data: [resultJson(2), resultJson(3), resultJson(4)],
@@ -176,8 +176,8 @@ describe("createRoundOpTransport", () => {
     // When
     const outcome = await sendRoundBatch(
       flight(
-        shotRecorded({ eventId: "a", shooterId: "other", shotNumber: 3 }),
-        shotRecorded({ eventId: "b", shotId: "s-2", shotNumber: null }),
+        shotRecorded({ eventId: "a" }),
+        shotRecorded({ eventId: "b", shotId: "s-2" }),
         shotRecorded({ eventId: "c", shotId: "s-3" }),
       ),
     );
@@ -189,17 +189,37 @@ describe("createRoundOpTransport", () => {
     });
     const [, { p_shots }] = client.rpc.mock.calls[0];
     expect(p_shots).toEqual([
-      expect.objectContaining({
-        shot_event_id: "a",
-        shooter_id: "other",
-        shot_number: 3,
-      }),
-      expect.objectContaining({ shot_event_id: "b", shot_number: null }),
+      expect.objectContaining({ shot_event_id: "a" }),
+      expect.objectContaining({ shot_event_id: "b" }),
       expect.objectContaining({ shot_event_id: "c" }),
     ]);
-    expect(p_shots[1]).not.toHaveProperty("shooter_id");
-    expect(p_shots[2]).not.toHaveProperty("shooter_id");
-    expect(p_shots[2]).not.toHaveProperty("shot_number");
+    for (const shot of p_shots) {
+      expect(shot).not.toHaveProperty("shooter_id");
+      expect(shot).not.toHaveProperty("shot_number");
+    }
+  });
+
+  it("射手と射順を持つ古い形の操作が端末に残っていても、それらを送らずに送れる", async () => {
+    // Given
+    client.rpc.mockResolvedValue({
+      data: [resultJson(2)],
+      error: null,
+      status: 200,
+    });
+    // 以前の版が端末に保存した形。型には無い項目を持つ。
+    const legacy = shotRecorded({
+      eventId: "a",
+      ...({ shooterId: "other", shotNumber: 3 } as object),
+    });
+
+    // When
+    const outcome = await sendRoundBatch(flight(legacy));
+
+    // Then
+    expect(outcome).toEqual({ ok: true, results: [resultOf(2)] });
+    const [, { p_shots }] = client.rpc.mock.calls[0];
+    expect(p_shots[0]).not.toHaveProperty("shooter_id");
+    expect(p_shots[0]).not.toHaveProperty("shot_number");
   });
 
   it("矢の記録の応答の効いた項目と効かなかった項目を、判定結果へ写す", async () => {
@@ -218,9 +238,7 @@ describe("createRoundOpTransport", () => {
     });
 
     // When
-    const outcome = await sendRoundBatch(
-      flight(shotRecorded({ shotNumber: 2 })),
-    );
+    const outcome = await sendRoundBatch(flight(shotRecorded()));
 
     // Then
     expect(outcome).toEqual({

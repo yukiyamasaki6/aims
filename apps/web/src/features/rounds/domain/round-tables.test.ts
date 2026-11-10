@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   baseOfServerRound,
   type RoundTables,
-  roundTablesFromServer,
   type ServerRound,
   selectRoundState,
 } from "./round-tables";
@@ -43,44 +42,6 @@ const tables: RoundTables = {
     { ...shot("d-2", 1), disabled: false },
   ],
 };
-
-describe("roundTablesFromServer", () => {
-  it("取得した行を、全て削除済みでない行にする", () => {
-    // Given
-
-    // When
-    const result = roundTablesFromServer({
-      status: "in_progress",
-      roundConfig: config,
-      distances: [distance("d-1", "a")],
-      shots: [shot("d-1", 1)],
-    });
-
-    // Then
-    expect(result).toEqual({
-      round: { config, status: "in_progress", disabled: false },
-      distances: [{ ...distance("d-1", "a"), disabled: false }],
-      shots: [{ ...shot("d-1", 1), disabled: false }],
-    });
-  });
-});
-
-describe("roundTablesFromServer: 状態", () => {
-  it("取得した完了の状態を、そのままラウンドの状態にする", () => {
-    // Given
-
-    // When
-    const result = roundTablesFromServer({
-      status: "completed",
-      roundConfig: config,
-      distances: [],
-      shots: [],
-    });
-
-    // Then
-    expect(result.round.status).toBe("completed");
-  });
-});
 
 describe("selectRoundState", () => {
   it("削除済みの距離、取り消した矢、削除した距離の矢を除き、disabledの列を落とす", () => {

@@ -62,7 +62,6 @@ function toDetail(
 export type RoundFetching = ReturnType<typeof createRoundFetching>;
 
 // ラウンドの取得の順序。的とプリセットを保存して返す、などを行う。
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: 可変の状態を閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すかクラスへ書き換えることになり、責務は分かれず追いにくくなる。
 export function createRoundFetching(deps: {
   content: ContentFetcher;
   queries: RoundQueries;

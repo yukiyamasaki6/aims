@@ -58,20 +58,7 @@ function replaceDistance(tables: RoundTables, next: DistanceRow): RoundTables {
   };
 }
 
-// update_round。効く項目は、確定済みはサーバーが返した項目、未確定は規則の判定。書き込みは共通。
-function judgeRoundFields(
-  changes: Op<"round.updated">["changes"],
-): Set<string> {
-  const fields = new Set<string>();
-  if (changes.name !== undefined) fields.add("name");
-  if (changes.roundDate !== undefined) fields.add("round_date");
-  if (changes.bowType !== undefined) fields.add("bow_type");
-  // 状態は常に効く。
-  if (changes.status !== undefined) fields.add("status");
-  if (changes.format !== undefined) fields.add("format");
-  return fields;
-}
-
+// update_round。効く項目は、確定済みはサーバーが返した項目、未確定は差分に含まれる全項目(状態を含め常に効く)。書き込みは共通。
 function updateRound(
   tables: RoundTables,
   operation: Op<"round.updated">,
@@ -89,7 +76,7 @@ function updateRound(
     .map(([key]) => key);
   const fields =
     confirmedFields === undefined
-      ? judgeRoundFields(changes)
+      ? new Set(keys)
       : appliedFields(confirmedFields, keys);
   const next: RoundConfig = { ...tables.round.config };
   if (fields.has("name") && changes.name !== undefined) {
@@ -229,42 +216,30 @@ function unchanged(tables: RoundTables): Step {
 
 type ShotTarget = Pick<ShotRow, "id" | "distance_id" | "end_number">;
 
+// record_shotsで端末が送る項目(点数だけ)。
+const SHOT_FIELDS = ["score"];
+
 // record_shotsで効く項目。効かないときはnull。
 function effectiveShotFields(
-  tables: RoundTables,
   distance: DistanceRow,
   operation: Op<"shot.recorded">,
   existing: ShotRow | undefined,
-  target: ShotTarget,
   confirmedFields: Confirmed,
   faces: ScoringTargetFace[],
 ): Set<string> | null {
-  const keys = ["score"];
-  if (operation.shooterId !== undefined || !existing) keys.push("shooter_id");
-  if (operation.shotNumber !== undefined) keys.push("shot_number");
   if (confirmedFields !== undefined)
-    return appliedFields(confirmedFields, keys);
-  // 決定1: 記録後の射順(キーが無ければ行の値)で、現在の構成で無効な矢は効かない。
-  const shotNumber =
-    operation.shotNumber !== undefined
-      ? operation.shotNumber
-      : (existing?.shot_number ?? null);
+    return appliedFields(confirmedFields, SHOT_FIELDS);
+  // 決定1: 行の射順で、現在の構成で無効な矢は効かない。
   const fits = shotFitsDistance(
     distance,
-    { endNumber: operation.endNumber, shotNumber },
+    {
+      endNumber: operation.endNumber,
+      shotNumber: existing?.shot_number ?? null,
+    },
     { scoreStr: operation.scoreStr, scoreInt: operation.scoreInt },
     faces,
   );
-  if (!fits) return null;
-  const fields = new Set(keys);
-  // 同じエンドの他の生きている矢と重なる射順は、射順の項目だけ効かない。
-  if (
-    operation.shotNumber !== undefined &&
-    shotNumberTaken(tables, target, operation.shotNumber)
-  ) {
-    fields.delete("shot_number");
-  }
-  return fields;
+  return fits ? new Set(SHOT_FIELDS) : null;
 }
 
 // 効く項目だけを変えた、矢の行。
@@ -288,8 +263,6 @@ function buildShotRow(
     row.score_str = operation.scoreStr;
     row.score_int = operation.scoreInt;
   }
-  if (fields.has("shooter_id")) row.shooter_id = operation.shooterId;
-  if (fields.has("shot_number")) row.shot_number = operation.shotNumber ?? null;
   // 復活で射順が同じエンドの他の生きている矢と重なるときは、射順を外して戻す。
   if (existing?.disabled && shotNumberTaken(tables, row, row.shot_number)) {
     row.shot_number = null;
@@ -321,11 +294,9 @@ function recordShot(
     end_number: operation.endNumber,
   };
   const fields = effectiveShotFields(
-    tables,
     distance,
     operation,
     existing,
-    target,
     confirmedFields,
     faces,
   );

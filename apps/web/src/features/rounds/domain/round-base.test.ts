@@ -6,7 +6,7 @@ import {
   type RoundBaseRecord,
   reflectsBase,
 } from "./round-base";
-import { roundTablesFromServer } from "./round-tables";
+import { roundTablesFromServer } from "./round-op-test-helpers";
 import type { SyncOperation } from "./sync-events";
 
 function record(

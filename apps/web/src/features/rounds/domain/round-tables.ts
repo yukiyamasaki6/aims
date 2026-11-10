@@ -42,24 +42,6 @@ export type RoundState = {
   roundDisabled: boolean;
 };
 
-// サーバーから取得した状態。取得は削除済みの行を含まない。
-export function roundTablesFromServer(fetched: {
-  roundConfig: RoundConfig;
-  status: RoundStatus;
-  distances: Distance[];
-  shots: Shot[];
-}): RoundTables {
-  return {
-    round: {
-      config: fetched.roundConfig,
-      status: fetched.status,
-      disabled: false,
-    },
-    distances: fetched.distances.map((d) => ({ ...d, disabled: false })),
-    shots: fetched.shots.map((s) => ({ ...s, disabled: false })),
-  };
-}
-
 // 作成の操作が表す、作成直後のラウンドの状態。
 export function roundTablesFromCreated(
   operation: Extract<SyncOperation, { type: "round.created" }>,
@@ -158,13 +140,13 @@ export function baseOfServerRound(round: ServerRound): {
     distances: {},
     shots: {},
   };
-  const distances: Distance[] = [];
-  const shots: Shot[] = [];
+  const distances: DistanceRow[] = [];
+  const shots: ShotRow[] = [];
   for (const row of round.distances) {
     const { shots: shotRows, revision, disabled_at, ...distance } = row;
     revisions.distances[distance.id] = revision;
     const distanceLive = disabled_at === null;
-    if (distanceLive) distances.push(distance);
+    if (distanceLive) distances.push({ ...distance, disabled: false });
     for (const shotRow of shotRows) {
       const {
         revision: shotRevision,
@@ -172,21 +154,26 @@ export function baseOfServerRound(round: ServerRound): {
         ...shot
       } = shotRow;
       revisions.shots[shot.id] = shotRevision;
-      if (distanceLive && shotDisabledAt === null) shots.push(shot);
+      if (distanceLive && shotDisabledAt === null) {
+        shots.push({ ...shot, disabled: false });
+      }
     }
   }
   return {
-    tables: roundTablesFromServer({
-      roundConfig: {
-        name: round.name,
-        roundDate: round.round_date,
-        format: round.format,
-        bowType: round.bow_type,
+    tables: {
+      round: {
+        config: {
+          name: round.name,
+          roundDate: round.round_date,
+          format: round.format,
+          bowType: round.bow_type,
+        },
+        status: round.status,
+        disabled: false,
       },
-      status: round.status,
       distances,
       shots,
-    }),
+    },
     revisions,
   };
 }

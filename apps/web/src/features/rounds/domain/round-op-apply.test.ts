@@ -12,6 +12,7 @@ import {
   distanceUpdated,
   roundCreated,
   roundDisabled,
+  roundTablesFromServer,
   roundUpdated,
   shotCleared,
   shotRecorded,
@@ -19,7 +20,7 @@ import {
 import {
   type RoundTables,
   roundTablesFromCreated,
-  roundTablesFromServer,
+  type ShotRow,
 } from "./round-tables";
 import {
   compareDistancePosition,
@@ -521,10 +522,7 @@ describe("update_distance(distance.updated)", () => {
 
     it("射順が新しい矢数を超える矢があれば、反映しない", () => {
       // Given
-      const ordered = applyConfirmed(base, shotRecorded({ shotNumber: 6 }), [
-        "score",
-        "shot_number",
-      ]);
+      const ordered = withShotRow(base, { shot_number: 6 });
 
       // When
       const next = apply(ordered, update({ config: cfg }));
@@ -633,6 +631,27 @@ describe("disable_distance(distance.disabled)", () => {
   });
 });
 
+// 取得した行のように、射順や射手を持つ矢の行を足した表。
+const withShotRow = (
+  tables: RoundTables,
+  overrides: Partial<ShotRow> = {},
+): RoundTables => ({
+  ...tables,
+  shots: [
+    ...tables.shots,
+    {
+      id: "s-1",
+      distance_id: "d-1",
+      end_number: 1,
+      score_str: "10",
+      score_int: 10,
+      shot_number: null,
+      disabled: false,
+      ...overrides,
+    },
+  ],
+});
+
 describe("record_shots(shot.recorded)", () => {
   // 12エンド×3射の距離の基準。
   const threeArrows: RoundTables = {
@@ -653,15 +672,12 @@ describe("record_shots(shot.recorded)", () => {
       expect.objectContaining({ id: "s-1", shot_number: null }),
       expect.objectContaining({ id: "s-2", shot_number: null }),
     ]);
+    expect(second.shots[0]).not.toHaveProperty("shooter_id");
   });
 
-  it("同じIDの矢は、点数だけを置き換え、射手と射順を残す", () => {
+  it("同じIDの矢は、点数だけを置き換え、行の射手と射順を残す", () => {
     // Given
-    const recorded = applyConfirmed(
-      base,
-      shotRecorded({ shooterId: "u-2", shotNumber: 3 }),
-      null,
-    );
+    const recorded = withShotRow(base, { shooter_id: "u-2", shot_number: 3 });
 
     // When
     const next = apply(recorded, shotRecorded({ scoreStr: "9", scoreInt: 9 }));
@@ -677,28 +693,9 @@ describe("record_shots(shot.recorded)", () => {
     ]);
   });
 
-  it("射手と射順は、操作が持つときだけ変え、射順のnullは射順を外す", () => {
-    // Given
-    const recorded = apply(base, shotRecorded({ shotNumber: 2 }));
-
-    // When
-    const changed = apply(
-      recorded,
-      shotRecorded({ shooterId: "u-3", shotNumber: null }),
-    );
-
-    // Then
-    expect(shotOf(changed)).toMatchObject({
-      shooter_id: "u-3",
-      shot_number: null,
-    });
-  });
-
   it("取り消した矢への記録は、同じ行を他の属性ごと復活させる", () => {
     // Given
-    const recorded = apply(base, shotRecorded({ shotNumber: 2 }));
-    const cleared = apply(recorded, shotCleared());
-    expect(shotOf(cleared)?.disabled).toBe(true);
+    const cleared = withShotRow(base, { shot_number: 2, disabled: true });
 
     // When
     const revived = apply(
@@ -736,6 +733,8 @@ describe("record_shots(shot.recorded)", () => {
   it("未確定の矢は、現在の構成で無効なら先の矢も置き換えない", () => {
     // Given
     const first = apply(base, shotRecorded({ scoreStr: "9", scoreInt: 9 }));
+    // 射順は構成の変更が拒むため矢数の範囲外にならない。判定の境界として行の射順を範囲外にする。
+    const outOfArrowsRow = withShotRow(base, { shot_number: 7 });
 
     // When
     const outOfEnds = apply(
@@ -746,89 +745,34 @@ describe("record_shots(shot.recorded)", () => {
       first,
       shotRecorded({ scoreStr: "7", scoreInt: 7 }),
     );
-    const outOfArrows = apply(first, shotRecorded({ shotNumber: 7 }));
+    const outOfArrows = apply(outOfArrowsRow, shotRecorded());
 
     // Then
     expect(outOfEnds).toBe(first);
     expect(outOfEndsSameId).toBe(first);
-    expect(outOfArrows).toBe(first);
+    expect(outOfArrows).toBe(outOfArrowsRow);
   });
 
-  describe("射順の重なり", () => {
-    it("同じエンドの他の生きている矢と同じ射順は、射順だけ効かず、点数は効く", () => {
-      // Given
-      const first = apply(base, shotRecorded({ shotNumber: 1 }));
-
-      // When
-      const next = apply(
-        first,
-        shotRecorded({
-          shotId: "s-2",
-          scoreStr: "9",
-          scoreInt: 9,
-          shotNumber: 1,
-        }),
-      );
-
-      // Then
-      expect(shotOf(next, "s-2")).toMatchObject({
-        score_str: "9",
-        shot_number: null,
-      });
+  it("消した矢の復活で行の射順が他の矢と重なれば、射順を外して戻し、重ならなければ射順ごと戻す", () => {
+    // Given
+    const cleared = withShotRow(base, {
+      id: "A",
+      shot_number: 3,
+      disabled: true,
     });
+    const withB = withShotRow(cleared, { id: "B", shot_number: 3 });
 
-    it("消した矢の射順は、別の矢に書ける", () => {
-      // Given
-      const first = apply(base, shotRecorded({ shotNumber: 1 }));
-      const cleared = apply(first, shotCleared());
+    // When
+    const revived = apply(withB, shotRecorded({ shotId: "A" }));
+    const revivedAlone = apply(cleared, shotRecorded({ shotId: "A" }));
 
-      // When
-      const next = apply(
-        cleared,
-        shotRecorded({ shotId: "s-2", shotNumber: 1 }),
-      );
-
-      // Then
-      expect(shotOf(next, "s-2")?.shot_number).toBe(1);
+    // Then
+    expect(shotOf(revived, "A")).toMatchObject({
+      disabled: false,
+      shot_number: null,
     });
-
-    it("消した矢の復活で射順が他の矢と重なれば、射順を外して戻し、重ならなければ射順ごと戻す", () => {
-      // Given
-      const a = apply(base, shotRecorded({ shotId: "A", shotNumber: 3 }));
-      const cleared = apply(a, shotCleared({ shotId: "A" }));
-      const withB = apply(
-        cleared,
-        shotRecorded({ shotId: "B", shotNumber: 3 }),
-      );
-
-      // When
-      const revived = apply(withB, shotRecorded({ shotId: "A" }));
-      const revivedAlone = apply(cleared, shotRecorded({ shotId: "A" }));
-
-      // Then
-      expect(shotOf(revived, "A")).toMatchObject({
-        disabled: false,
-        shot_number: null,
-      });
-      expect(shotOf(revived, "B")?.shot_number).toBe(3);
-      expect(shotOf(revivedAlone, "A")?.shot_number).toBe(3);
-    });
-
-    it("確定済みの射順は、サーバーが効かせたときだけ重ねる", () => {
-      // Given
-      const op = shotRecorded({ shotNumber: 2 });
-
-      // When
-      const withoutShotNumber = applyConfirmed(base, op, [
-        "score",
-        "shooter_id",
-      ]);
-      const withShotNumber = applyConfirmed(base, op, ["score", "shot_number"]);
-
-      // Then
-      expect(shotOf(withoutShotNumber)?.shot_number).toBeNull();
-      expect(shotOf(withShotNumber)?.shot_number).toBe(2);
-    });
+    expect(shotOf(revived, "B")?.shot_number).toBe(3);
+    expect(shotOf(revivedAlone, "A")?.shot_number).toBe(3);
   });
 
   describe("矢数の上限", () => {
@@ -902,6 +846,37 @@ describe("record_shots(shot.recorded)", () => {
     });
   });
 
+  it("確定済みの矢の記録は、サーバーが他の項目を効かせても、点数だけを重ねる", () => {
+    // Given
+    const recorded = withShotRow(base, { shooter_id: "u-2", shot_number: 3 });
+
+    // When
+    const next = applyConfirmed(
+      recorded,
+      shotRecorded({ scoreStr: "9", scoreInt: 9 }),
+      ["score", "shooter_id", "shot_number"],
+    );
+
+    // Then
+    expect(shotOf(next)).toMatchObject({
+      score_str: "9",
+      shooter_id: "u-2",
+      shot_number: 3,
+    });
+  });
+
+  it("射手と射順を持つ古い形の操作が端末に残っていても、画面の状態は変わらない", () => {
+    // Given
+    // 以前の版が端末に保存した形。型には無い項目を持つ。
+    const legacy = shotRecorded({ shooterId: "u-2", shotNumber: 3 } as object);
+
+    // When
+    const next = apply(base, legacy);
+
+    // Then
+    expect(next).toEqual(apply(base, shotRecorded()));
+  });
+
   it("確定済みの矢は、構成の判定をせずに反映する", () => {
     // Given
     // When
@@ -928,7 +903,7 @@ describe("record_shots(shot.recorded)", () => {
 describe("clear_shots(shot.cleared)", () => {
   it("同じIDの矢の行を、射順を残したまま削除済みにする", () => {
     // Given
-    const withShot = apply(base, shotRecorded({ shotNumber: 2 }));
+    const withShot = withShotRow(base, { shot_number: 2 });
 
     // When
     const next = apply(withShot, shotCleared());

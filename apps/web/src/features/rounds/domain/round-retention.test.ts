@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { StreamEntry } from "@/lib/local-op-log/contract/op-log-store";
 import type { RoundBaseRecord } from "./round-base";
+import { roundTablesFromServer } from "./round-op-test-helpers";
 import {
   isRetainedForRefresh,
   isRoundInProgress,
   keepsRoundBase,
   roundStreamRules,
 } from "./round-retention";
-import { roundTablesFromServer } from "./round-tables";
 import type { SyncOperation } from "./sync-events";
 
 function record(

@@ -78,9 +78,6 @@ export type SyncOperation =
       endNumber: number;
       scoreStr: string;
       scoreInt: number;
-      // 射手と射順は、変えるときだけ持つ。射順のnullは射順を外す(画面は付けない)。
-      shooterId?: string;
-      shotNumber?: number | null;
     }
   | {
       type: "shot.cleared";

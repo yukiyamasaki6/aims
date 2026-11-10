@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoundDetailStore } from "@/features/rounds/application/round-detail-store";
 import type { LoadedRound } from "@/features/rounds/application/round-handle";
 import type { FetchResult } from "@/features/rounds/domain/fetch-status";
-import { roundTablesFromServer } from "@/features/rounds/domain/round-tables";
+import { roundTablesFromServer } from "@/features/rounds/domain/round-op-test-helpers";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
 import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
