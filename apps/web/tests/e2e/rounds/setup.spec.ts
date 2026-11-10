@@ -193,6 +193,43 @@ test("距離・的・本数・エンド数を変えて保存すると、すぐ�
   ).toHaveAccessibleName(new RegExp(INDOOR_40CM_TARGET_FACE_LABEL));
 });
 
+test("スコアが記録済みの距離は、記録済みのスコアに収まる総エンド数だけ保存でき、収まらない値は理由が出て保存されない", async ({
+  page,
+}) => {
+  // エンド3に3本を記録した距離を開き、総エンド数を収まらない値にして保存すると、理由が出て保存されないことを確かめる。
+  await openRound(page, {
+    shots: [
+      { distanceIndex: 0, endNumber: 3, scoreStr: "10", scoreInt: 10 },
+      { distanceIndex: 0, endNumber: 3, scoreStr: "9", scoreInt: 9 },
+      { distanceIndex: 0, endNumber: 3, scoreStr: "8", scoreInt: 8 },
+    ],
+  });
+  await page.getByTestId("distance-config-toggle-1").click();
+  await page.getByTestId("distance-config-total-ends-1").fill("2");
+  await page.getByTestId("distance-config-save-1").click();
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: roundsText("distanceConfigError.shotsUnfit") }),
+  ).toBeVisible();
+  await expect(page.getByTestId("distance-config-save-1")).toBeVisible();
+
+  // 記録済みの最大のエンドと同じ値にして保存すると、反映されて閉じ、再読み込みしても保たれる。
+  await page.getByTestId("distance-config-total-ends-1").fill("3");
+  const sent = page.waitForResponse(UPDATE_DISTANCE_RPC);
+  await page.getByTestId("distance-config-save-1").click();
+  const summary = page.getByTestId("distance-summary-1");
+  await expect(summary).toContainText(
+    roundsText("distanceEnds", { arrowsPerEnd: "3", totalEnds: "3" }),
+  );
+  await expect(page.getByTestId("distance-config-save-1")).toBeHidden();
+  await reloadAfter(page, sent);
+  await expect(summary).toContainText(
+    roundsText("distanceEnds", { arrowsPerEnd: "3", totalEnds: "3" }),
+  );
+  await expect(page.getByTestId("end-row-1-3")).toContainText("10");
+});
+
 test("距離を追加して削除した後に追加すると、エラーなく追加され、再読み込みしても保たれる", async ({
   page,
 }) => {

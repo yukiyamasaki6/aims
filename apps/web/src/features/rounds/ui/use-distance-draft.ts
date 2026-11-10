@@ -8,20 +8,24 @@ import {
   buildDistanceDisabledOperation,
   buildDistanceUpdatedOperation,
 } from "../domain/distance-operations";
-import type { Distance } from "../domain/scorecard-types";
+import type { Distance, Shot } from "../domain/scorecard-types";
 import type { SyncOperation } from "../domain/sync-events";
+import type { TargetFaceOption } from "../domain/target-face";
 import { useRoundProcedures } from "./rounds-context";
 
 // 距離1件分の編集フォームの下書きと、保存、削除の処理。
 export function useDistanceDraft({
   distance,
-  hasShots,
+  shots,
+  targetFaces,
   onSaved,
   onDeleted,
   enqueue,
 }: {
   distance: Distance;
-  hasShots: boolean;
+  // この距離の矢。
+  shots: Shot[];
+  targetFaces: TargetFaceOption[];
   onSaved: (updated: Distance) => void;
   onDeleted: () => void;
   enqueue: (operation: SyncOperation) => void;
@@ -34,7 +38,7 @@ export function useDistanceDraft({
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   function handleSave() {
-    const validation = validateDistanceDraft(draft);
+    const validation = validateDistanceDraft(draft, origin, shots, targetFaces);
     if (validation.type === "invalid") {
       setFieldErrors(validation.errors);
       return;
@@ -57,7 +61,7 @@ export function useDistanceDraft({
   }
 
   function handleDeleteClick() {
-    if (hasShots) {
+    if (shots.length > 0) {
       setConfirmOpen(true);
       return;
     }

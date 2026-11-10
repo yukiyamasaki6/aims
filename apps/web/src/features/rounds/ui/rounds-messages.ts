@@ -106,6 +106,9 @@ export const roundsMessages = {
     distanceConfigError: {
       required: "距離を入力してください。",
       notPositiveInteger: "1以上の整数を入力してください。",
+      tooLarge: "{max}以下の整数を入力してください。",
+      shotsUnfit:
+        "記録済みのスコアが失われるため、変更できません。先にスコアを削除してください。",
     } satisfies Record<DistanceConfigError, string>,
     // 的
     targetFaceName: "的",

@@ -21,7 +21,6 @@ export function DistanceSection({
   roundFormat,
   roundBowType,
   editing,
-  hasShots,
   pointer,
   onToggleEditing,
   onSaved,
@@ -38,7 +37,6 @@ export function DistanceSection({
   roundFormat: string;
   roundBowType: string;
   editing: boolean;
-  hasShots: boolean;
   pointer: Pointer;
   onToggleEditing: () => void;
   onSaved: (updated: Distance) => void;
@@ -91,7 +89,7 @@ export function DistanceSection({
           <DistanceEditFields
             distance={d}
             displayNumber={displayNumber}
-            hasShots={hasShots}
+            shots={shots.filter((s) => s.distance_id === d.id)}
             targetFaces={targetFaces}
             roundFormat={roundFormat}
             roundBowType={roundBowType}

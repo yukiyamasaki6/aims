@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import type { Distance } from "../domain/scorecard-types";
+import { DISTANCE_CONFIG_MAX } from "../domain/round-constants";
+import type { Distance, Shot } from "../domain/scorecard-types";
 import { DistanceEditFields } from "./distance-edit-fields";
 import { createFakeRoundProcedures } from "./round-stores-test-helpers";
 import { RoundProceduresProvider } from "./rounds-context";
@@ -60,6 +61,16 @@ const baseDistance: Distance = {
   is_marked: true,
 };
 
+// 6エンド×6射の距離の、エンド3に3本が記録されている(記録済みの最大のエンドは3、1エンドの最大の矢数は3)。
+const recordedShots: Shot[] = [1, 2, 3].map((n) => ({
+  id: `shot-${n}`,
+  distance_id: "distance-1",
+  end_number: 3,
+  score_str: "M",
+  score_int: 0,
+  shot_number: null,
+}));
+
 const EVENT_ID = "00000000-0000-4000-8000-000000000001";
 
 function setup(
@@ -81,7 +92,7 @@ function setup(
     <DistanceEditFields
       distance={baseDistance}
       displayNumber={1}
-      hasShots={false}
+      shots={[]}
       targetFaces={targetFaces}
       roundFormat="outdoor"
       roundBowType="recurve"
@@ -134,61 +145,30 @@ describe("DistanceEditFields", () => {
       });
     });
 
-    describe("hasShotsがtrueの場合", () => {
-      it("的・本数・エンド数が編集不可になる（距離は編集可能）", () => {
+    describe("スコアが記録済みの場合", () => {
+      it("的が編集不可になり、本数・エンド数・距離は編集できる", () => {
         // Given
         // When
-        setup({ hasShots: true });
+        setup({ shots: recordedShots });
 
         // Then
         expect(
           screen.getByTestId("target-face-picker-trigger"),
         ).toHaveAttribute("aria-disabled", "true");
-        expect(screen.getByTestId("distance-config-arrows-1")).toHaveAttribute(
-          "readonly",
-        );
-        expect(
-          screen.getByTestId("distance-config-total-ends-1"),
-        ).toHaveAttribute("readonly");
-        expect(
-          screen.getByTestId("distance-config-distance-1"),
-        ).not.toHaveAttribute("readonly");
+        for (const testId of [
+          "distance-config-arrows-1",
+          "distance-config-total-ends-1",
+          "distance-config-distance-1",
+        ]) {
+          expect(screen.getByTestId(testId)).not.toHaveAttribute("readonly");
+        }
         expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       });
-
-      it.each([
-        ["distance-config-arrows-1", "本数"],
-        ["distance-config-total-ends-1", roundsText("distanceFieldTotalEnds")],
-      ])(
-        "%sを押すとメッセージが表示され、値は変わらない（%s）",
-        async (testId) => {
-          // Given
-          const user = userEvent.setup();
-          const { onSaved } = setup({ hasShots: true });
-          const input = screen.getByTestId(testId);
-          const before = (input as HTMLInputElement).value;
-
-          // When
-          await user.click(input);
-          await user.type(input, "9");
-
-          // Then
-          expect(screen.getByRole("alert")).toHaveTextContent(
-            roundsText("distanceLocked"),
-          );
-          expect(
-            screen.getByTestId(`${testId}-locked-message`),
-          ).toBeInTheDocument();
-          expect(input).toHaveAttribute("aria-describedby", `${testId}-locked`);
-          expect((input as HTMLInputElement).value).toBe(before);
-          expect(onSaved).not.toHaveBeenCalled();
-        },
-      );
 
       it("的を押すとメッセージが表示され、的選択ダイアログは開かない", async () => {
         // Given
         const user = userEvent.setup();
-        const { onSaved } = setup({ hasShots: true });
+        const { onSaved } = setup({ shots: recordedShots });
 
         // When
         await user.click(screen.getByTestId("target-face-picker-trigger"));
@@ -205,29 +185,15 @@ describe("DistanceEditFields", () => {
         expect(onSaved).not.toHaveBeenCalled();
       });
 
-      it("別の項目を押すと、メッセージは押した項目に移る", async () => {
+      it("距離・本数・エンド数・Marked/Unmarkedを押してもメッセージは表示されない", async () => {
         // Given
         const user = userEvent.setup();
-        setup({ hasShots: true });
-        await user.click(screen.getByTestId("distance-config-arrows-1"));
-
-        // When
-        await user.click(screen.getByTestId("distance-config-total-ends-1"));
-
-        // Then
-        expect(screen.getAllByRole("alert")).toHaveLength(1);
-        expect(
-          screen.getByTestId("distance-config-total-ends-1-locked-message"),
-        ).toBeInTheDocument();
-      });
-
-      it("距離とMarked/Unmarkedを押してもメッセージは表示されない", async () => {
-        // Given
-        const user = userEvent.setup();
-        setup({ hasShots: true, roundFormat: "field" });
+        setup({ shots: recordedShots, roundFormat: "field" });
 
         // When
         await user.click(screen.getByTestId("distance-config-distance-1"));
+        await user.click(screen.getByTestId("distance-config-arrows-1"));
+        await user.click(screen.getByTestId("distance-config-total-ends-1"));
         await user.click(screen.getByTestId("distance-config-marked-1"));
 
         // Then
@@ -237,7 +203,7 @@ describe("DistanceEditFields", () => {
       it("的選択トリガーのラベルに変更不可の理由を示す", () => {
         // Given
         // When
-        setup({ hasShots: true });
+        setup({ shots: recordedShots });
 
         // Then
         expect(
@@ -251,7 +217,7 @@ describe("DistanceEditFields", () => {
         // Given
         // When
         setup({
-          hasShots: true,
+          shots: recordedShots,
           distance: { ...baseDistance, target_face_id: "unknown-face" },
         });
 
@@ -303,7 +269,7 @@ describe("DistanceEditFields", () => {
       it("スコア記録済みなら、トリガーは操作不可になる", () => {
         // Given
         // When
-        setup({ ...props, hasShots: true });
+        setup({ ...props, shots: recordedShots });
 
         // Then
         expect(
@@ -390,7 +356,7 @@ describe("DistanceEditFields", () => {
           <DistanceEditFields
             distance={distance}
             displayNumber={1}
-            hasShots={false}
+            shots={[]}
             targetFaces={targetFaces}
             roundFormat="outdoor"
             roundBowType="recurve"
@@ -422,7 +388,7 @@ describe("DistanceEditFields", () => {
           <DistanceEditFields
             distance={distance}
             displayNumber={1}
-            hasShots={false}
+            shots={[]}
             targetFaces={targetFaces}
             roundFormat="outdoor"
             roundBowType="recurve"
@@ -476,12 +442,151 @@ describe("DistanceEditFields", () => {
     });
   });
 
+  describe("範囲外の値", () => {
+    it.each([
+      ["距離(m)", "distance-config-distance-1", "0"],
+      ["本数", "distance-config-arrows-1", "-1"],
+      ["総エンド数", "distance-config-total-ends-1", "2.5"],
+    ])(
+      "%sが1以上の整数でないと、保存せずに項目の下に理由を出す",
+      async (_label, testId, value) => {
+        // Given
+        const user = userEvent.setup();
+        const { onSaved, enqueue } = setup();
+        await user.clear(screen.getByTestId(testId));
+        await user.type(screen.getByTestId(testId), value);
+
+        // When
+        await user.click(screen.getByTestId("distance-config-save-1"));
+
+        // Then
+        expect(
+          screen.getByText(
+            roundsText("distanceConfigError.notPositiveInteger"),
+          ),
+        ).toBeInTheDocument();
+        expect(onSaved).not.toHaveBeenCalled();
+        expect(enqueue).not.toHaveBeenCalled();
+      },
+    );
+
+    it("上限を超える値は、上限を示す理由を出して保存しない", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { onSaved } = setup();
+      await user.clear(screen.getByTestId("distance-config-total-ends-1"));
+      await user.type(
+        screen.getByTestId("distance-config-total-ends-1"),
+        String(DISTANCE_CONFIG_MAX + 2),
+      );
+
+      // When
+      await user.click(screen.getByTestId("distance-config-save-1"));
+
+      // Then
+      expect(
+        screen.getByText(
+          roundsText("distanceConfigError.tooLarge", {
+            max: String(DISTANCE_CONFIG_MAX),
+          }),
+        ),
+      ).toBeInTheDocument();
+      expect(onSaved).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("スコア記録済みの距離の総エンド数・本数", () => {
+    async function save(
+      user: ReturnType<typeof userEvent.setup>,
+      totalEnds: string,
+      arrows: string,
+    ) {
+      await user.clear(screen.getByTestId("distance-config-total-ends-1"));
+      await user.type(
+        screen.getByTestId("distance-config-total-ends-1"),
+        totalEnds,
+      );
+      await user.clear(screen.getByTestId("distance-config-arrows-1"));
+      await user.type(screen.getByTestId("distance-config-arrows-1"), arrows);
+      await user.click(screen.getByTestId("distance-config-save-1"));
+    }
+
+    it("記録済みの最大のエンド・矢数と同じ値まで減らす保存はできる", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { onSaved, enqueue, procedures } = setup({ shots: recordedShots });
+      procedures.ids.next.mockReturnValue(EVENT_ID);
+
+      // When
+      await save(user, "3", "3");
+
+      // Then
+      expect(onSaved).toHaveBeenCalledWith(
+        expect.objectContaining({ total_ends: 3, arrows_per_end: 3 }),
+      );
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          changes: {
+            config: {
+              totalEnds: 3,
+              arrowsPerEnd: 3,
+              targetFaceId: "face-outdoor-recurve",
+            },
+          },
+        }),
+      );
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("記録済みの矢が収まらない値は、総エンド数の下に理由を出し、保存せず入力も残す。本数からも理由を参照する", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { onSaved, enqueue } = setup({ shots: recordedShots });
+
+      // When
+      await save(user, "2", "2");
+
+      // Then
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent(
+        roundsText("distanceConfigError.shotsUnfit"),
+      );
+      expect(
+        screen.getByTestId("distance-config-total-ends-1"),
+      ).toHaveAttribute("aria-describedby", alert.id);
+      expect(screen.getByTestId("distance-config-arrows-1")).toHaveAttribute(
+        "aria-describedby",
+        alert.id,
+      );
+      expect(screen.getByTestId("distance-config-total-ends-1")).toHaveValue(2);
+      expect(screen.getByTestId("distance-config-total-ends-1")).toBeInvalid();
+      expect(screen.getByTestId("distance-config-arrows-1")).toBeInvalid();
+      expect(onSaved).not.toHaveBeenCalled();
+      expect(enqueue).not.toHaveBeenCalled();
+    });
+
+    it("収まらない値の後に収まる値で保存すると、理由が消える", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { onSaved } = setup({ shots: recordedShots });
+      await save(user, "2", "6");
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+
+      // When
+      await save(user, "3", "6");
+
+      // Then
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(onSaved).toHaveBeenCalled();
+    });
+  });
+
   describe("削除", () => {
     describe("スコア未記録の場合", () => {
       it("確認なしにonDeletedとenqueueを呼ぶ", async () => {
         // Given
         const user = userEvent.setup();
-        const { onDeleted, enqueue, procedures } = setup({ hasShots: false });
+        const { onDeleted, enqueue, procedures } = setup({ shots: [] });
         procedures.ids.next.mockReturnValue(EVENT_ID);
 
         // When
@@ -501,7 +606,7 @@ describe("DistanceEditFields", () => {
       it("削除を押すと、確認ダイアログを表示し、まだ削除しない", async () => {
         // Given
         const user = userEvent.setup();
-        const { onDeleted } = setup({ hasShots: true });
+        const { onDeleted } = setup({ shots: recordedShots });
 
         // When
         await user.click(screen.getByTestId("distance-config-delete-1"));
@@ -516,7 +621,7 @@ describe("DistanceEditFields", () => {
       it("確認ダイアログで確認すると、削除を通知し、同期操作を登録する", async () => {
         // Given
         const user = userEvent.setup();
-        const { onDeleted, enqueue } = setup({ hasShots: true });
+        const { onDeleted, enqueue } = setup({ shots: recordedShots });
         await user.click(screen.getByTestId("distance-config-delete-1"));
 
         // When
@@ -532,7 +637,7 @@ describe("DistanceEditFields", () => {
       it("確認をキャンセルすると削除しない", async () => {
         // Given
         const user = userEvent.setup();
-        const { onDeleted, enqueue } = setup({ hasShots: true });
+        const { onDeleted, enqueue } = setup({ shots: recordedShots });
         await user.click(screen.getByTestId("distance-config-delete-1"));
 
         // When
@@ -546,7 +651,7 @@ describe("DistanceEditFields", () => {
       it("確認ダイアログの背景を押すと、削除しない", async () => {
         // Given
         const user = userEvent.setup();
-        const { onDeleted, enqueue } = setup({ hasShots: true });
+        const { onDeleted, enqueue } = setup({ shots: recordedShots });
         await user.click(screen.getByTestId("distance-config-delete-1"));
         const backdrops = document.querySelectorAll(".bg-black\\/40");
 

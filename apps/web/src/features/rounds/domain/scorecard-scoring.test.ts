@@ -9,6 +9,7 @@ import {
   type ScoringTargetFace,
   scoreKeysFor,
   shotFitsDistance,
+  shotsFitDistance,
   sortEndShots,
   summarizeDistance,
   summarizeRound,
@@ -566,6 +567,63 @@ describe("shotFitsDistance", () => {
     // Then
     expect(unknownFace).toBe(true);
     expect(emptyFace).toBe(true);
+  });
+});
+
+describe("shotsFitDistance", () => {
+  const config = {
+    id: "d-1",
+    total_ends: 12,
+    arrows_per_end: 3,
+    target_face_id: "face-x",
+  };
+  const faces = [faceX, faceNoX];
+  const endThree = [
+    shot("d-1", "10", 10, { id: "a", end_number: 3 }),
+    shot("d-1", "9", 9, { id: "b", end_number: 3 }),
+    shot("d-1", "8", 8, { id: "c", end_number: 3 }),
+  ];
+
+  it("矢が無い、または全ての矢がエンド数・矢数・的に収まるなら収まる", () => {
+    // Given
+    // When
+    const empty = shotsFitDistance(config, [], faces);
+    const full = shotsFitDistance(config, endThree, faces);
+
+    // Then
+    expect([empty, full]).toEqual([true, true]);
+  });
+
+  it("エンド数・1エンドの矢の数・射順・的の点数のどれか1つでも超えると収まらない", () => {
+    // Given
+    const numbered = [shot("d-1", "10", 10, { shot_number: 3 })];
+    const shotNotOnFace = [shot("d-1", "X", 10)];
+
+    // When
+    const results = [
+      shotsFitDistance({ ...config, total_ends: 2 }, endThree, faces),
+      shotsFitDistance({ ...config, arrows_per_end: 2 }, endThree, faces),
+      shotsFitDistance({ ...config, arrows_per_end: 2 }, numbered, faces),
+      shotsFitDistance(
+        { ...config, target_face_id: "face-no-x" },
+        shotNotOnFace,
+        faces,
+      ),
+    ];
+
+    // Then
+    expect(results).toEqual([false, false, false, false]);
+  });
+
+  it("他の距離の矢は判定に入れない", () => {
+    // Given
+    const others = endThree.map((s) => ({ ...s, distance_id: "d-2" }));
+
+    // When
+    const fits = shotsFitDistance({ ...config, total_ends: 2 }, others, faces);
+
+    // Then
+    expect(fits).toBe(true);
   });
 });
 
