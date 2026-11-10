@@ -14,8 +14,6 @@ export type OpLogEntry<Op extends OpBase> = {
   userId: string | null;
   // サーバーが確定した対象のrevision。送信の成功（重複の再送を含む）で1度だけ付く。
   ackedRevision?: number;
-  // 確定した操作が効いたか。未定義は効いたものとして扱う。
-  ackedApplied?: boolean;
   // 項目に分ける操作で、効いた項目。未定義は全項目が効いたものとして扱う。
   ackedFields?: string[];
   operation: Op;
@@ -23,7 +21,7 @@ export type OpLogEntry<Op extends OpBase> = {
 
 export type NewOpLogEntry<Op extends OpBase> = Omit<
   OpLogEntry<Op>,
-  "seq" | "ackedRevision" | "ackedApplied" | "ackedFields"
+  "seq" | "ackedRevision" | "ackedFields"
 >;
 
 // 取得して得た、列の対象の状態(ベース)。`base`がnullは、サーバーに無い(削除された)ことの印。
@@ -39,7 +37,7 @@ export type StreamGroup<Op extends OpBase, Base> = {
 // 反映済みと保持の判定が使う、列の1件の項目。
 export type StreamEntry<Op extends OpBase> = Pick<
   OpLogEntry<Op>,
-  "operation" | "ackedRevision" | "ackedApplied" | "ackedFields"
+  "operation" | "ackedRevision" | "ackedFields"
 >;
 
 // 列の対象ごとに決まる規則。保存の中で、ベースの反映と保持を決めるために使う。
@@ -62,7 +60,7 @@ export type OpLogStore<Op extends OpBase, Base> = {
   loadAll: (
     userId: string | null,
   ) => Promise<Map<string, StreamGroup<Op, Base>>>;
-  // 取得したベースを、1つのトランザクションで反映する。保存済みより`startedAt`が古い取得は何も変えず、保存済みの組を返す。
+  // 取得したベースを、1つのトランザクションで反映する。保存済みより`startedAt`が古い取得は何も変えない。
   // 新しければ、ベースに反映済みの操作を消し、保持の規則に当たれば(`base`がnullなら削除の印として)保存する。
   // 当たらなければ、組を丸ごと消す(`keeps`は未送信があれば真を返すため、未送信は消えない)。
   commit: (
@@ -70,12 +68,11 @@ export type OpLogStore<Op extends OpBase, Base> = {
     userId: string,
     base: Base | null,
     startedAt: number,
-  ) => Promise<StreamGroup<Op, Base>>;
+  ) => Promise<void>;
   // 確定の結果を1度だけ付ける。列に無い、または付いている操作には何もしない。操作は消さない。
   ack: (
     eventId: string,
     revision: number | null,
-    applied: boolean,
     appliedFields: string[] | null,
   ) => Promise<void>;
   // 列から外す。

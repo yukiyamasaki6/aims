@@ -24,15 +24,13 @@ export function keepsRoundBase(
   base: RoundBaseRecord,
   entries: ReflectableEntry[],
 ): boolean {
-  const applied = entries
-    .filter((entry) => entry.ackedApplied !== false)
-    .map((entry) => ({
-      operation: entry.operation,
-      confirmedFields:
-        entry.ackedRevision === undefined
-          ? undefined
-          : (entry.ackedFields ?? null),
-    }));
+  const applied = entries.map((entry) => ({
+    operation: entry.operation,
+    confirmedFields:
+      entry.ackedRevision === undefined
+        ? undefined
+        : (entry.ackedFields ?? null),
+  }));
   // 保持の判定に的は要らない(状態の`status`と削除だけを使う)。
   const state = selectRoundState(applyOperations(base.tables, applied, []));
   return (

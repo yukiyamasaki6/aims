@@ -221,20 +221,6 @@ describe("mergeStored", () => {
     expect(merged.base).toEqual(stored.base);
   });
 
-  it("効かなかった行は取り込まない", () => {
-    // Given
-    const a = op("a");
-
-    // When
-    const merged = mergeStored(
-      EMPTY_RECORD,
-      group([row(a, { ackedRevision: 0, ackedApplied: false })]),
-    );
-
-    // Then
-    expect(ids(merged)).toEqual([]);
-  });
-
   it("入力の記録を変更しない", () => {
     // Given
     const record = savedRecord(op("a"), op("b"));
@@ -335,7 +321,6 @@ describe("applySendResults", () => {
     expect(result.ineffective).toEqual([]);
     expect(result.record.items[0]).toMatchObject({
       ackedRevision: 4,
-      ackedApplied: true,
       confirmedFields: null,
     });
   });

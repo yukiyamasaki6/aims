@@ -15,7 +15,6 @@ type RecordItem = {
   // 保存が終わった。
   readonly saved: boolean;
   readonly ackedRevision?: number;
-  readonly ackedApplied?: boolean;
   // 確定済みの結果。未確定ならundefined、全項目が効いたならnull、項目に分ける操作で一部だけ効いたなら効いた項目。
   readonly confirmedFields?: string[] | null;
 };
@@ -29,7 +28,6 @@ export type RoundRecord = {
 type StoredRow = {
   eventId: string;
   ackedRevision?: number;
-  ackedApplied?: boolean;
   ackedFields?: string[];
   operation: SyncOperation;
 };
@@ -101,7 +99,6 @@ function rowOf(item: RecordItem) {
   return {
     operation: item.operation,
     ackedRevision: item.ackedRevision,
-    ackedApplied: item.ackedApplied,
   };
 }
 
@@ -113,13 +110,12 @@ export function mergeStored(
 ): RoundRecord {
   const own = new Set(record.items.map((item) => item.eventId));
   const stored: RecordItem[] = group.entries
-    .filter((row) => row.ackedApplied !== false && !own.has(row.eventId))
+    .filter((row) => !own.has(row.eventId))
     .map((row) => ({
       eventId: row.eventId,
       operation: row.operation,
       saved: true,
       ackedRevision: row.ackedRevision,
-      ackedApplied: row.ackedApplied,
       confirmedFields:
         row.ackedRevision !== undefined ? (row.ackedFields ?? null) : undefined,
     }));
@@ -172,7 +168,6 @@ export function applySendResults(
       ...item,
       confirmedFields: result.appliedFields,
       ackedRevision: result.revision ?? 0,
-      ackedApplied: true,
     };
   });
   return {

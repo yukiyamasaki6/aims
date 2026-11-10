@@ -128,19 +128,6 @@ describe("keepsRoundBase", () => {
     expect(reflectedKept).toBe(false);
   });
 
-  it("効かなかった確定済みの操作は、保持の理由にしない", () => {
-    // Given
-    const completed = record({ status: "completed" });
-
-    // When
-    const result = keepsRoundBase(completed, [
-      entry(roundUpdated, 9, { ackedApplied: false }),
-    ]);
-
-    // Then
-    expect(result).toBe(false);
-  });
-
   it("操作を重ねた状態で判定する。未送信の完了は、確定済みの入力中への戻しを含め、重ねた状態が完了のとき、未送信があれば保持する", () => {
     // Given
     // When

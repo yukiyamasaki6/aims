@@ -93,7 +93,7 @@ export function createRoundRecordHub(deps: {
     return persisted;
   }
 
-  // 取得したベースを反映する。保存(1つのトランザクション)を待ち、その結果の組でこの記録を1回の通知で変える。
+  // 取得したベースを反映する。保存(1つのトランザクション)を待ち、取得したベースでこの記録を1回の通知で変える。
   // 別の利用者の取得は、保存せず、このタブの記録も変えない。
   async function commit(
     streamId: string,
@@ -172,12 +172,7 @@ export function createRoundRecordHub(deps: {
       eventIds.forEach((eventId, index) => {
         const result = results[index];
         if (!result.applied) return;
-        void store.ack(
-          eventId,
-          result.revision,
-          result.applied,
-          result.appliedFields,
-        );
+        void store.ack(eventId, result.revision, result.appliedFields);
       });
       if (applied.ineffective.length > 0) {
         void store.retire(applied.ineffective);

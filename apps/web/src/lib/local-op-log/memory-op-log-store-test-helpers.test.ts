@@ -57,15 +57,16 @@ describe("createMemoryOpLogStore", () => {
     // Given
     const s = store();
     await s.append(entry("a"));
-    await s.ack("a", 1, true, null);
+    await s.ack("a", 1, null);
     await s.commit("s1", "u1", { revision: 2 }, 20);
 
     // When
-    const group = await s.commit("s1", "u1", { revision: 9 }, 10);
+    await s.commit("s1", "u1", { revision: 9 }, 10);
+    const group = (await s.loadAll("u1")).get("s1");
 
     // Then
-    expect(group.base).toEqual({ startedAt: 20, base: { revision: 2 } });
-    expect(group.entries).toEqual([]);
+    expect(group?.base).toEqual({ startedAt: 20, base: { revision: 2 } });
+    expect(group?.entries).toEqual([]);
   });
 
   it("確定は1度だけ付き、効いた項目があれば残す。退かせた行は無くなり、閉じても投げない", async () => {
@@ -75,10 +76,10 @@ describe("createMemoryOpLogStore", () => {
     await s.append(entry("b"));
 
     // When
-    await s.ack("a", 3, true, ["name"]);
-    await s.ack("a", 9, false, null);
-    await s.ack("missing", 1, true, null);
-    await s.ack("b", null, true, null);
+    await s.ack("a", 3, ["name"]);
+    await s.ack("a", 9, null);
+    await s.ack("missing", 1, null);
+    await s.ack("b", null, null);
     await s.retire(["b", "missing"]);
 
     // Then
@@ -86,7 +87,6 @@ describe("createMemoryOpLogStore", () => {
     expect(s.rows[0]).toMatchObject({
       eventId: "a",
       ackedRevision: 3,
-      ackedApplied: true,
       ackedFields: ["name"],
     });
   });
@@ -97,7 +97,7 @@ describe("createMemoryOpLogStore", () => {
     await s.append(entry("a"));
 
     // When
-    await s.ack("a", null, true, null);
+    await s.ack("a", null, null);
 
     // Then
     expect(s.rows[0].ackedRevision).toBe(0);

@@ -141,30 +141,27 @@ export function createIndexedDbOpLogStore<Op extends OpBase, Base>(
         const bases = tx.objectStore(BASE_STORE_NAME);
         const ops = tx.objectStore(STORE_NAME);
         const stored = await bases.get([userId, streamId]);
-        const entries = await streamEntries(tx, streamId, userId);
         if (
           stored !== undefined &&
           isStaleFetch(stored, startedAt, base, rules)
         ) {
-          return { base: toStreamBase(stored), entries };
+          return;
         }
-        const incoming: StreamBase<Base> = { startedAt, base };
+        const entries = await streamEntries(tx, streamId, userId);
         const remaining = await pruneReflected(
           ops,
           entries,
           base,
           rules.reflects,
         );
-        const kept = base === null || rules.keeps(base, remaining);
-        if (kept) {
-          await bases.put({ userId, streamId, ...incoming });
-          return { base: incoming, entries: remaining };
+        if (base === null || rules.keeps(base, remaining)) {
+          await bases.put({ userId, streamId, startedAt, base });
+          return;
         }
         await deleteStream(ops, bases, remaining, userId, streamId);
-        return { base: undefined, entries: [] };
       });
     },
-    ack(eventId, revision, applied, appliedFields) {
+    ack(eventId, revision, appliedFields) {
       return inTransaction(async (tx) => {
         const ops = tx.objectStore(STORE_NAME);
         const entry = await ops.index("by-event-id").get(eventId);
@@ -172,7 +169,6 @@ export function createIndexedDbOpLogStore<Op extends OpBase, Base>(
         await ops.put({
           ...entry,
           ackedRevision: revision ?? 0,
-          ackedApplied: applied,
           ...(appliedFields ? { ackedFields: appliedFields } : {}),
         });
       });

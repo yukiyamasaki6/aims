@@ -114,18 +114,6 @@ describe("reflectsBase", () => {
     expect(distanceNotInBase).toBe(false);
   });
 
-  it("効かなかった操作は、反映済みとする", () => {
-    // Given
-    // When
-    const result = reflectsBase(
-      record(),
-      entry(roundUpdated, 0, { ackedApplied: false }),
-    );
-
-    // Then
-    expect(result).toBe(true);
-  });
-
   it("確定した取り消しは、取得にその矢が無ければ反映済みでない", () => {
     // Given
     const cleared: SyncOperation = {

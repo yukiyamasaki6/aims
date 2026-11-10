@@ -64,13 +64,11 @@ export function createMemoryOpLogStore<Op extends OpBase, Base>(
         }
       }
       if (!newer) bases.set(key, adopted);
-      return groupOf(streamId, userId);
     },
-    async ack(eventId, revision, applied, appliedFields) {
+    async ack(eventId, revision, appliedFields) {
       const row = rows.find((candidate) => candidate.eventId === eventId);
       if (row && row.ackedRevision === undefined) {
         row.ackedRevision = revision ?? 0;
-        row.ackedApplied = applied;
         if (appliedFields) row.ackedFields = appliedFields;
       }
     },
