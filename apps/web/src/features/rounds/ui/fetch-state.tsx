@@ -2,7 +2,26 @@ import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { FetchView } from "../domain/fetch-status";
-import { Skeleton } from "./skeleton";
+
+// 取得中の表示。読み込み後の画面と形を揃えるため、画面ごとに渡す。
+export function LoadingState({ loading }: { loading: ReactNode }) {
+  const t = useTranslations("rounds");
+  return (
+    <div role="status" aria-busy="true">
+      <span className="sr-only">{t("fetchLoading")}</span>
+      {loading}
+    </div>
+  );
+}
+
+export function NotFoundState() {
+  const t = useTranslations("rounds");
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-sm">
+      <p>{t("detailNotFound")}</p>
+    </div>
+  );
+}
 
 // okは画面ごとに描画するため受け取らない。
 // loading以外は、親（flex列）の残りの領域の中心（縦横とも）に置く。
@@ -13,33 +32,14 @@ export function FetchState({
 }: {
   view: Exclude<FetchView<unknown>, { status: "ok" }>;
   onRetry: () => void;
-  // 取得中の表示。読み込み後の画面と形を揃えるため、画面ごとに渡す。
-  loading?: ReactNode;
+  loading: ReactNode;
 }) {
   const t = useTranslations("rounds");
   switch (view.status) {
     case "loading":
-      return (
-        <div
-          role="status"
-          aria-busy="true"
-          className={loading ? undefined : "space-y-3"}
-        >
-          <span className="sr-only">{t("fetchLoading")}</span>
-          {loading ?? (
-            <>
-              <Skeleton className="h-6 w-1/2 rounded" />
-              <Skeleton className="h-24 rounded" />
-            </>
-          )}
-        </div>
-      );
+      return <LoadingState loading={loading} />;
     case "not-found":
-      return (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-sm">
-          <p>{t("detailNotFound")}</p>
-        </div>
-      );
+      return <NotFoundState />;
     case "offline":
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-sm">

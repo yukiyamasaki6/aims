@@ -9,18 +9,7 @@ const roundsText = translatorFor("rounds");
 
 describe("FetchState", () => {
   describe("正常系", () => {
-    it("loadingのとき、取得中であることを示すスケルトンを表示する", () => {
-      // Given
-      // When
-      render(<FetchState view={{ status: "loading" }} onRetry={vi.fn()} />, {
-        wrapper: IntlTestProvider,
-      });
-
-      // Then
-      expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
-    });
-
-    it("loadingのとき、loadingを渡すと、その骨組みを取得中の表示にする", () => {
+    it("loadingのとき、渡した骨組みを取得中の表示にする", () => {
       // Given
       // When
       render(
@@ -41,9 +30,16 @@ describe("FetchState", () => {
     it("not-foundのとき、見つからない旨だけを表示し、リンクを表示しない", () => {
       // Given
       // When
-      render(<FetchState view={{ status: "not-found" }} onRetry={vi.fn()} />, {
-        wrapper: IntlTestProvider,
-      });
+      render(
+        <FetchState
+          view={{ status: "not-found" }}
+          onRetry={vi.fn()}
+          loading={null}
+        />,
+        {
+          wrapper: IntlTestProvider,
+        },
+      );
 
       // Then
       expect(
@@ -55,9 +51,16 @@ describe("FetchState", () => {
     it("offlineのとき、「ネットワークに接続されていません」と再試行ボタンを表示する", () => {
       // Given
       // When
-      render(<FetchState view={{ status: "offline" }} onRetry={vi.fn()} />, {
-        wrapper: IntlTestProvider,
-      });
+      render(
+        <FetchState
+          view={{ status: "offline" }}
+          onRetry={vi.fn()}
+          loading={null}
+        />,
+        {
+          wrapper: IntlTestProvider,
+        },
+      );
 
       // Then
       expect(screen.getByText(roundsText("fetchOffline"))).toBeInTheDocument();
@@ -69,9 +72,16 @@ describe("FetchState", () => {
     it("offlineのとき、再試行を押すとonRetryを呼ぶ", async () => {
       // Given
       const onRetry = vi.fn();
-      render(<FetchState view={{ status: "offline" }} onRetry={onRetry} />, {
-        wrapper: IntlTestProvider,
-      });
+      render(
+        <FetchState
+          view={{ status: "offline" }}
+          onRetry={onRetry}
+          loading={null}
+        />,
+        {
+          wrapper: IntlTestProvider,
+        },
+      );
 
       // When
       await userEvent.click(
@@ -89,6 +99,7 @@ describe("FetchState", () => {
         <FetchState
           view={{ status: "error", reason: "failed" }}
           onRetry={vi.fn()}
+          loading={null}
         />,
         { wrapper: IntlTestProvider },
       );
@@ -109,6 +120,7 @@ describe("FetchState", () => {
         <FetchState
           view={{ status: "error", reason: "failed" }}
           onRetry={onRetry}
+          loading={null}
         />,
         { wrapper: IntlTestProvider },
       );

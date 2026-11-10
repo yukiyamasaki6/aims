@@ -2,7 +2,6 @@ import { useRef } from "react";
 import { useHydrated } from "@/hooks/use-hydrated";
 import type { LoadedRound } from "../application/round-handle";
 import { isRoundInProgress } from "../domain/round-retention";
-import type { TargetFaceOption } from "../domain/target-face";
 import { useRoundProcedures } from "./rounds-context";
 import { useDistanceEditing } from "./use-distance-editing";
 import { useKeypad } from "./use-keypad";
@@ -39,13 +38,12 @@ function useScorecardInput(
 type ScorecardOptions = {
   roundId: string;
   loaded: LoadedRound;
-  targetFaces: TargetFaceOption[];
   onGone: () => void;
 };
 
 // スコアカード画面の状態と操作。
 export function useScorecard(options: ScorecardOptions) {
-  const { roundId, loaded, targetFaces } = options;
+  const { roundId, loaded } = options;
   const { leaving } = useRoundProcedures();
   // 画面の状態は、ベースへ操作の列を重ねた導出だけから得る。
   const sync = useRoundOpStack(roundId, loaded, options.onGone);
@@ -67,7 +65,7 @@ export function useScorecard(options: ScorecardOptions) {
 
   return {
     roundId,
-    targetFaces,
+    targetFaces: loaded.targetFaces,
     hydrated: useHydrated(),
     sync,
     initiallyEmpty: loaded.base.distances.length === 0,

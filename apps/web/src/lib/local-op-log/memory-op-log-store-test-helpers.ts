@@ -38,9 +38,6 @@ export function createMemoryOpLogStore<Op extends OpBase, Base>(
       rows.push({ ...entry, seq });
       return seq;
     },
-    async loadStream(streamId, userId) {
-      return groupOf(streamId, userId);
-    },
     async loadAll(userId) {
       const all = new Map<string, StreamGroup<Op, Base>>();
       for (const row of rows) {

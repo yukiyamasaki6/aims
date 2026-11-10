@@ -43,18 +43,19 @@ vi.mock("./scorecard-client", () => ({
   ScorecardClient: ({
     roundId,
     loaded,
-    targetFaces,
     onGone,
   }: {
     roundId: string;
-    loaded: { base: { round: { config: { name: string } } } };
-    targetFaces: { id: string }[];
+    loaded: {
+      base: { round: { config: { name: string } } };
+      targetFaces: { id: string }[];
+    };
     onGone?: () => void;
   }) => (
     <div
       data-testid="scorecard"
       data-round-id={roundId}
-      data-faces={targetFaces.map((f) => f.id).join(",")}
+      data-faces={loaded.targetFaces.map((f) => f.id).join(",")}
     >
       {loaded.base.round.config.name}
       <button type="button" onClick={onGone}>

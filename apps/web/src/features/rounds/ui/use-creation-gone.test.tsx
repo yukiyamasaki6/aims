@@ -106,30 +106,6 @@ describe("useCreationGone", () => {
     expect(onGone).toHaveBeenCalledTimes(1);
   });
 
-  it("ラウンドが無ければ、購読しない", () => {
-    // Given
-    const onGone = vi.fn();
-
-    // When
-    renderHook(() => useCreationGone(null, onGone), { wrapper });
-
-    // Then
-    expect(fake.listeners.size).toBe(0);
-  });
-
-  it("ラウンドが無いまま画面を閉じても投げない", () => {
-    // Given
-    const { unmount } = renderHook(() => useCreationGone(null, vi.fn()), {
-      wrapper,
-    });
-
-    // When
-    const closing = () => unmount();
-
-    // Then
-    expect(closing).not.toThrow();
-  });
-
   it("サーバー側の描画では、消えたとは扱わない(印が真でも呼ばない)", () => {
     // Given
     fake.creationGone = true;

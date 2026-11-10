@@ -247,16 +247,6 @@ export function createRoundRecordHub(deps: {
     userId: () => userId,
     // 現在の世代の読み込みが終わる(失敗を含む)まで解決しない。`start`前と`stop`の後は次の読み込みの完了まで待つ。
     ready,
-    // 現在の利用者の列の組を、保存先から返す。読み込みの完了後に読み、失敗は投げる。
-    // 読み込みの間に停止・起動をまたいだときは、その結果を返さず、読み直す。
-    async read(streamId: string): Promise<RoundStoreGroup> {
-      for (;;) {
-        await ready();
-        const target = epoch;
-        const group = await store.loadStream(streamId, userId);
-        if (epoch === target) return group;
-      }
-    },
     // 端末に保存されている現在の利用者の全ての組を、返す。メモリの記録は使わない。読み込みの完了後に読み、失敗は投げる。
     async readStored(): Promise<Map<string, RoundStoreGroup>> {
       for (;;) {
@@ -298,8 +288,6 @@ export function createRoundRecordHub(deps: {
     async whenPersisted(): Promise<void> {
       await Promise.allSettled([...persisting]);
     },
-    // 読み込んだ組を記録へ取り込む。入出力を起こさない。
-    adopt: (streamId: string, group: RecordGroup) => adopt(streamId, group),
     commit,
     // 送信が成功した結果を記録へ書く。保存先への書き込みは待たない。
     applySendResults(

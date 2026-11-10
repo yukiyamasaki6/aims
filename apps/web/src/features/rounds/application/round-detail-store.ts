@@ -2,6 +2,7 @@ import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { FetchResult } from "../domain/fetch-status";
 import { localOpening, openPlan } from "../domain/round-opening";
+import { operationsOf } from "../domain/round-record";
 import {
   type RoundTables,
   roundTablesFromCreated,
@@ -17,7 +18,7 @@ import {
   type LoadedRound,
   type RoundHandle,
 } from "./round-handle";
-import type { RoundRecordHub, RoundStoreGroup } from "./round-record-hub";
+import type { RoundRecordHub } from "./round-record-hub";
 import { withinFetchTimeout } from "./time-limit";
 import type { UniqueIds } from "./unique-ids";
 import { type WhenOnline, whenOnline } from "./when-online";
@@ -35,7 +36,7 @@ export type RoundDetailStore = {
 type Deps = {
   hub: Pick<
     RoundRecordHub,
-    "adopt" | "read" | keyof Parameters<typeof createRoundHandle>[0]["hub"]
+    "ready" | keyof Parameters<typeof createRoundHandle>[0]["hub"]
   >;
   requests: Pick<
     RefreshRequests,
@@ -48,21 +49,8 @@ type Deps = {
   editing: RoundEditing;
 };
 
-async function readGroup(
-  hub: Pick<RoundRecordHub, "read">,
-  streamId: string,
-): Promise<RoundStoreGroup> {
-  try {
-    return await hub.read(streamId);
-  } catch {
-    return { base: undefined, entries: [] };
-  }
-}
-
-// 取得で削除済みと分かったラウンドは、見つからないものとして返す。
 function toDetail(result: FetchResult<OpenedRound>): FetchResult<LoadedRound> {
   if (result.status !== "ok") return result;
-  if (result.data.deleted) return { status: "not-found" };
   return {
     status: "ok",
     data: {
@@ -93,8 +81,10 @@ async function openDetail(
 ): Promise<FetchResult<LoadedRound>> {
   const { hub, requests, fetching } = deps;
   const streamId = roundStreamId(roundId);
-  const first = await readGroup(hub, streamId);
-  hub.adopt(streamId, first);
+  // 判断の材料は、起動時に端末から読み込んだメモリの記録。別タブの書き込みは拾わない。
+  await hub.ready();
+  const record = hub.record(streamId);
+  const first = { base: record.base, operations: operationsOf(record) };
   const plan = openPlan(first);
   if (plan.kind === "deleted") return { status: "not-found" };
   if (plan.kind === "creation") {

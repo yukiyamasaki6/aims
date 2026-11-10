@@ -15,17 +15,20 @@ describe("openPlan", () => {
     // When
     const deleted = openPlan({
       base: undefined,
-      entries: [{ operation: created }, { operation: roundDisabled() }],
+      operations: [
+        { operation: created, confirmedFields: undefined },
+        { operation: roundDisabled(), confirmedFields: undefined },
+      ],
     });
     const creation = openPlan({
       base: undefined,
-      entries: [{ operation: created }],
+      operations: [{ operation: created, confirmedFields: undefined }],
     });
     const fetch = openPlan({
       base: undefined,
-      entries: [{ operation: created, ackedRevision: 1 }],
+      operations: [{ operation: created, confirmedFields: null }],
     });
-    const noEntries = openPlan({ base: undefined, entries: [] });
+    const noEntries = openPlan({ base: undefined, operations: [] });
 
     // Then
     expect(deleted).toEqual({ kind: "deleted" });
@@ -36,13 +39,13 @@ describe("openPlan", () => {
 
   it("削除と確定していない作成が重なるときは、削除を優先する", () => {
     // Given
-    const entries = [
-      { operation: roundCreated() },
-      { operation: roundDisabled() },
+    const operations = [
+      { operation: roundCreated(), confirmedFields: undefined },
+      { operation: roundDisabled(), confirmedFields: undefined },
     ];
 
     // When
-    const plan = openPlan({ base: undefined, entries });
+    const plan = openPlan({ base: undefined, operations });
 
     // Then
     expect(plan).toEqual({ kind: "deleted" });
@@ -64,7 +67,7 @@ describe("localOpening", () => {
   it("端末のベースと保存した的があるときは、端末のベースと的で開く", () => {
     // Given
     const stored = roundBase();
-    const group = { base: { startedAt: 1, base: stored }, entries: [] };
+    const group = { base: { startedAt: 1, base: stored }, operations: [] };
 
     // When
     const opening = localOpening(group, savedFaces);
@@ -76,13 +79,16 @@ describe("localOpening", () => {
   it("ベースが無い、削除の印、保存した的が無いときは、開けない", () => {
     // Given
     // When
-    const noBase = localOpening({ base: undefined, entries: [] }, savedFaces);
+    const noBase = localOpening(
+      { base: undefined, operations: [] },
+      savedFaces,
+    );
     const marker = localOpening(
-      { base: { startedAt: 1, base: null }, entries: [] },
+      { base: { startedAt: 1, base: null }, operations: [] },
       savedFaces,
     );
     const noFaces = localOpening(
-      { base: { startedAt: 1, base: roundBase() }, entries: [] },
+      { base: { startedAt: 1, base: roundBase() }, operations: [] },
       null,
     );
 

@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import type { LoadedRound } from "../application/round-handle";
 import { completionConfirmation } from "../domain/round-progress";
 import { summarizeRound } from "../domain/scorecard-scoring";
-import type { TargetFaceOption } from "../domain/target-face";
 import { BottomFrame } from "./bottom-frame";
 import { CompleteRoundBar } from "./complete-round-bar";
 import { DistanceSection } from "./distance-section";
@@ -20,22 +19,19 @@ import { type ScorecardModel, useScorecard } from "./use-scorecard";
 export function ScorecardClient({
   roundId,
   loaded,
-  targetFaces,
   onGone,
 }: {
   roundId: string;
   loaded: LoadedRound;
-  targetFaces: TargetFaceOption[];
   // 端末のベースで開いたラウンドが、取り直したサーバーに無いとき(削除済みなど)に呼ぶ。
   onGone: () => void;
 }) {
   const model = useScorecard({
     roundId,
     loaded,
-    targetFaces,
     onGone,
   });
-  const { sync, keypad } = model;
+  const { sync, keypad, targetFaces } = model;
   const { roundConfig, distances, shots, status } = sync.state;
   // テンキーは指す矢があるか、格納の待ち(直近の距離を保持)のときだけ付く。一度も指していないときは距離が無く、付かない。
   const keypadButtons = keypad.keypadDistance && (

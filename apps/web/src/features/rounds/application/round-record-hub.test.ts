@@ -611,28 +611,6 @@ describe("commit", () => {
 });
 
 describe("読み出し", () => {
-  it("readは、読み込みの完了後に、現在の利用者のその列だけを返す。保存の読み込みの失敗は投げる", async () => {
-    // Given
-    const { hub, store } = createTestRoundHub();
-    const rows = [
-      ["mine", "user-1", STREAM],
-      ["other", "user-2", STREAM],
-      ["elsewhere", "user-1", roundStreamId("round-2")],
-    ] as const;
-    for (const [id, userId, streamId] of rows) {
-      await store.append({ eventId: id, streamId, userId, operation: op(id) });
-    }
-    hub.start("user-1");
-
-    // When
-    const { entries } = await hub.read(STREAM);
-    vi.spyOn(store, "loadStream").mockRejectedValueOnce(new Error("idb"));
-
-    // Then
-    expect(entries.map((entry) => entry.eventId)).toEqual(["mine"]);
-    await expect(hub.read(STREAM)).rejects.toThrow("idb");
-  });
-
   it("readStoredは、端末に保存されている現在の利用者の組を返す。メモリにだけある操作は含まない", async () => {
     // Given
     const { hub, store } = createTestRoundHub();
@@ -931,20 +909,20 @@ describe("readList", () => {
       },
     );
 
-    it("詳細を開く読み取りは保存の内容を返し、別のタブが完了した後は完了した状態を返す", async () => {
+    it("保存の読み取りは保存の内容を返し、別のタブが完了した後は完了した状態を返す", async () => {
       // Given
       const { failing } = await failedThenRecovered();
-      const beforeCompletion = await failing.hub.read(STREAM);
+      const beforeCompletion = (await failing.hub.readStored()).get(STREAM);
       failing.store.rows.length = 0;
 
       // When
-      const afterCompletion = await failing.hub.read(STREAM);
+      const afterCompletion = (await failing.hub.readStored()).get(STREAM);
 
       // Then
-      expect(beforeCompletion.entries.map((row) => row.eventId)).toEqual([
+      expect(beforeCompletion?.entries.map((row) => row.eventId)).toEqual([
         "saved",
       ]);
-      expect(afterCompletion.entries).toEqual([]);
+      expect(afterCompletion).toBeUndefined();
     });
 
     it("送信と確定の判定は失敗の記録に影響されず、失敗を経た列の送信が続く", async () => {
@@ -980,12 +958,12 @@ describe("readList", () => {
         "user-1",
       );
       const list = await other.hub.readList();
-      const stored = await other.hub.read(STREAM);
+      const stored = (await other.hub.readStored()).get(STREAM);
 
       // Then
       expect(list.get(STREAM)?.base?.startedAt).toBe(20);
       expect(operationIds(list, STREAM)).toEqual([]);
-      expect(stored.entries).toEqual([]);
+      expect(stored?.entries).toEqual([]);
       expect(first.hub.divergedStreams().has(STREAM)).toBe(true);
       expect(other.hub.divergedStreams().has(STREAM)).toBe(false);
     });
@@ -1038,25 +1016,6 @@ describe("停止・起動をまたぐ処理", () => {
     streamId: STREAM,
     userId,
     operation: op(id),
-  });
-
-  it("readは、読み込みの間に停止・起動されたら、その結果を返さず読み直す", async () => {
-    // Given
-    const { hub, store } = await startedHub("user-1");
-    const old = deferred<Awaited<ReturnType<typeof store.loadStream>>>();
-    const load = vi.spyOn(store, "loadStream").mockReturnValueOnce(old.promise);
-    const reading = hub.read(STREAM);
-    await flush();
-    hub.stop();
-    hub.start("user-2");
-
-    // When
-    old.resolve({ base: undefined, entries: [row("old", "user-1")] });
-    const group = await reading;
-
-    // Then
-    expect(group.entries).toEqual([]);
-    expect(load).toHaveBeenLastCalledWith(STREAM, "user-2");
   });
 
   it("readStoredは、読み込みの間に停止・起動されたら、その結果を返さず読み直す", async () => {

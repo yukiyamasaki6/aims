@@ -128,18 +128,6 @@ export function createIndexedDbOpLogStore<Op extends OpBase, Base>(
       appendQueue = result.catch(() => undefined);
       return result;
     },
-    async loadStream(streamId, userId) {
-      const db = await database();
-      const tx = db.transaction([STORE_NAME, BASE_STORE_NAME], "readonly");
-      const [entries, stored] = await Promise.all([
-        streamEntries(tx, streamId, userId),
-        userId === null
-          ? undefined
-          : tx.objectStore(BASE_STORE_NAME).get([userId, streamId]),
-      ]);
-      await tx.done;
-      return { base: toStreamBase(stored), entries };
-    },
     async loadAll(userId) {
       const db = await database();
       const tx = db.transaction([STORE_NAME, BASE_STORE_NAME], "readonly");

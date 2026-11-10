@@ -71,7 +71,7 @@ export function EndRow({
     shots.filter((s) => s.distance_id === distance.id && s.end_number === end),
   );
   const subtotal = endSubtotal(endShots);
-  const blanks = Math.max(0, distance.arrows_per_end - endShots.length);
+  const blanks = distance.arrows_per_end - endShots.length;
   const pointsNew =
     pointer?.kind === "new" &&
     pointer.distanceId === distance.id &&
@@ -211,7 +211,7 @@ function EndBlanks({
           )}
         </button>
       )}
-      {Array.from({ length: Math.max(0, blanks - 1) }, (_, i) => {
+      {Array.from({ length: blanks - 1 }, (_, i) => {
         const slot = filled + i + 2;
         return (
           <button

@@ -23,7 +23,7 @@ const entry = (
 });
 
 describe("createMemoryOpLogStore", () => {
-  it("追記に連番を付け、現在の利用者のその列だけを読む", async () => {
+  it("追記に連番を付け、現在の利用者の列だけを読む", async () => {
     // Given
     const s = store();
     await s.append(entry("a"));
@@ -31,10 +31,10 @@ describe("createMemoryOpLogStore", () => {
     await s.append(entry("c", "s1", "u2"));
 
     // When
-    const group = await s.loadStream("s1", "u1");
+    const group = (await s.loadAll("u1")).get("s1");
 
     // Then
-    expect(group.entries.map((row) => [row.seq, row.eventId])).toEqual([
+    expect(group?.entries.map((row) => [row.seq, row.eventId])).toEqual([
       [1, "a"],
     ]);
   });

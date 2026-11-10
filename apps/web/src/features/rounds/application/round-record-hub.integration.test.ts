@@ -3,6 +3,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { openDB } from "idb";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
+import { loadStreamGroup } from "@/lib/local-op-log/op-log-store-test-helpers";
 import type { RoundBaseRecord } from "../domain/round-base";
 import { applyOperations } from "../domain/round-op-apply";
 import {
@@ -132,7 +133,7 @@ describe("端末の保存を通した記録のハブ", () => {
     );
 
     // Then
-    const stored = await store.loadStream(STREAM, "user-1");
+    const stored = await loadStreamGroup(store, STREAM, "user-1");
     expect(stored.entries.map((entry) => entry.eventId)).toEqual(["later"]);
     expect(stored.base?.startedAt).toBe(10);
   });
@@ -146,14 +147,15 @@ describe("端末の保存を通した記録のハブ", () => {
       10,
       "user-1",
     );
-    const keptWhileInProgress = (await store.loadStream(STREAM, "user-1")).base;
+    const keptWhileInProgress = (await loadStreamGroup(store, STREAM, "user-1"))
+      .base;
 
     // When
     await hub.commit(STREAM, roundBase({ status: "completed" }), 20, "user-1");
 
     // Then
     expect(keptWhileInProgress?.startedAt).toBe(10);
-    expect(await store.loadStream(STREAM, "user-1")).toEqual({
+    expect(await loadStreamGroup(store, STREAM, "user-1")).toEqual({
       base: undefined,
       entries: [],
     });
@@ -234,7 +236,7 @@ describe("端末の保存を通した記録のハブ", () => {
     // Then
     expect(theirs.hub.record(STREAM).items).toEqual([]);
     expect(
-      (await mine.store.loadStream(STREAM, "user-1")).entries,
+      (await loadStreamGroup(mine.store, STREAM, "user-1")).entries,
     ).toHaveLength(1);
   });
 });
