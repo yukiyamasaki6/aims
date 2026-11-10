@@ -9,10 +9,11 @@ import type { TargetFaceOption } from "../domain/target-face";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 import type { RoundTransport, SendOutcome } from "./operation-sending";
 import { createRefreshRequests } from "./refresh-requests";
-import { createRoundDetailStore } from "./round-detail-store";
+import { createRoundBaseRefreshing } from "./round-base-refreshing";
 import { createRoundEditing } from "./round-editing";
 import type { RoundFetching } from "./round-fetching";
 import { createRoundRecordHub } from "./round-record-hub";
+import { createRoundWindow } from "./round-window";
 import { createRoundsListStore } from "./rounds-list-store";
 
 // 端末の保存の、ラウンドの規則を使うメモリの実装。2つのハブで共有できる。
@@ -41,6 +42,8 @@ export function createTestRounds(
     savedFaces?: TargetFaceOption[] | null;
     clockStart?: number;
     randomBytes?: (length: number) => Uint8Array;
+    // falseのとき、記録のハブを起動しない(テストが起動する)。
+    start?: boolean;
   } = {},
 ) {
   const { hub, store: opLog } = createTestRoundHub(options.shared);
@@ -50,6 +53,7 @@ export function createTestRounds(
   const fetching = {
     fetchRoundDetail: vi.fn(),
     fetchRoundDetails: vi.fn(),
+    fetchTargetFaces: vi.fn(),
     fetchRoundsList: vi.fn(),
     fetchPresets: vi.fn(),
     savedTargetFaces: vi.fn(() => options.savedFaces ?? null),
@@ -59,14 +63,18 @@ export function createTestRounds(
     randomBytes: options.randomBytes,
   });
   const editing = createRoundEditing({ hub, ids });
-  const detail = createRoundDetailStore({
+  const refreshing = createRoundBaseRefreshing({
     hub,
-    requests,
     fetching: fetching as unknown as RoundFetching,
+  });
+  const roundWindow = createRoundWindow({
+    hub,
+    fetching: fetching as unknown as RoundFetching,
+    refresh: refreshing,
+    requests,
+    editing,
     clock,
     connectivity,
-    ids,
-    editing,
   });
   const list = createRoundsListStore({
     hub,
@@ -74,9 +82,12 @@ export function createTestRounds(
     clock,
     connectivity,
   });
-  hub.start(options.userId === undefined ? "user-1" : options.userId);
+  if (options.start !== false) {
+    hub.start(options.userId === undefined ? "user-1" : options.userId);
+  }
   return {
-    detail,
+    roundWindow,
+    refreshing,
     list,
     hub,
     opLog,

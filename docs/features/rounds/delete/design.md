@@ -25,7 +25,7 @@
 - 手続きの入れ物の`deletion.deleteRound`(一覧): 手続き`features/rounds/application/round-deletion.ts`の`RoundDeletion.deleteRound`(離れない削除)を、一覧の画面が手続きの入れ物から直接受けて呼ぶ。手続きが`round.disabled`(操作の組み立ては`features/rounds/domain/round-progress.ts`の`roundDisabledOperation`)を新しい`eventId`(約束`UniqueIds`、実装は`features/rounds/infrastructure/browser-unique-ids.ts`)で列へ追記する。保存の試みの完了で解決し、拒否しない。
 - `components/ui/confirm-dialog.tsx`の`ConfirmDialog`: 確認後すぐ閉じる。
 - `apps/web/src/features/rounds/domain/rounds-list-view.ts`: 一覧の取得結果から、列で削除済みのラウンドを除く（`rounds/history`）。端末の入力中のラウンドは、削除済みを入れずに求める。
-- `features/rounds/application/round-detail-store.ts`の`load`: 列に削除があれば、取得せずに見つからないを返す（`rounds/detail`）。
+- `features/rounds/application/round-window.ts`の詳細の購読: 列に削除があれば(購読の最初の判定)、取得せずに見つからないにする（`rounds/detail`）。
 
 流れは、メニューから確認ダイアログを開き、確認で、一覧は手続きの入れ物の`deletion.deleteRound`、詳細は手続きの入れ物の`leaving.deleteRoundAndLeave`を呼ぶ(詳細の手続き`round-leaving.ts`は、一覧と同じ`round-deletion.ts`の`deleteRound`の完了の後に遷移する)。
 一覧は、そのラウンドを削除済みの集合へ足して除く。詳細は、手続きの入れ物の`leaving.deleteRoundAndLeave`(手続き`features/rounds/application/round-leaving.ts`が`round-deletion.ts`の削除の保存の完了の後、`isCurrent`が真のときだけ`PageNavigation.replace(ROUNDS_PATH)`を呼ぶ。離れていれば遷移しない)で一覧へ置き換える。

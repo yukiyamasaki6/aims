@@ -24,7 +24,6 @@ import { createPresetSaving } from "@/features/rounds/application/preset-saving"
 import { createRefreshRequests } from "@/features/rounds/application/refresh-requests";
 import { createRoundBaseRefreshing } from "@/features/rounds/application/round-base-refreshing";
 import { createRoundDeletion } from "@/features/rounds/application/round-deletion";
-import { createRoundDetailStore } from "@/features/rounds/application/round-detail-store";
 import { createRoundEditing } from "@/features/rounds/application/round-editing";
 import { createRoundFetching } from "@/features/rounds/application/round-fetching";
 import { createRoundLeaving } from "@/features/rounds/application/round-leaving";
@@ -38,6 +37,7 @@ import { whenOnline } from "@/features/rounds/application/when-online";
 import { SHORT_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
 import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
+import { shotIdAfter } from "@/features/rounds/domain/shot-id";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
 import { createBrowserUniqueIds } from "@/features/rounds/infrastructure/browser-unique-ids";
 import { createPresetCommands } from "@/features/rounds/infrastructure/preset-commands";
@@ -46,7 +46,6 @@ import { createRoundOpTransport } from "@/features/rounds/infrastructure/round-o
 import { createRoundQueries } from "@/features/rounds/infrastructure/round-queries";
 import type { RoundsDbSchema } from "@/features/rounds/infrastructure/rounds-db-schema";
 import {
-  RoundDetailStoreProvider,
   RoundProceduresProvider,
   RoundsListStoreProvider,
   RoundWindowProvider,
@@ -84,7 +83,7 @@ function composeInputs(router: PageRouter) {
 
 type Inputs = ReturnType<typeof composeInputs>;
 
-// 記録と取得(記録のハブ、取り直しの依頼、取得、送信、記録の制御、取り直しの制御)。
+// 記録と取得(記録のハブ、取得、送信、記録の制御、窓口、取り直しの制御)。
 function composeRecords(inputs: Inputs) {
   const { identityStore, sessionReader, connectivity, clock, database } =
     inputs;
@@ -94,6 +93,8 @@ function composeRecords(inputs: Inputs) {
     ),
   });
   const requests = createRefreshRequests();
+  const ids = createBrowserUniqueIds();
+  const editing = createRoundEditing({ hub, ids });
   const snapshots = createReferenceSnapshots(identityStore);
   const fetching = createRoundFetching({
     content: createContentFetcher({ sessionReader, connectivity, clock }),
@@ -112,12 +113,30 @@ function composeRecords(inputs: Inputs) {
     connectivity,
   });
   const control = createRoundRecordControl({ hub, sender });
+  const refreshing = createRoundBaseRefreshing({ hub, fetching });
+  const roundWindow = createRoundWindow({
+    hub,
+    fetching,
+    refresh: refreshing,
+    requests,
+    editing,
+    clock,
+    connectivity,
+  });
   const refresh = createRoundRefreshControl({
     hub,
     requests,
-    refresh: createRoundBaseRefreshing({ hub, fetching, requests }),
+    refresh: refreshing,
   });
-  return { hub, requests, snapshots, fetching, control, refresh };
+  return {
+    hub,
+    ids,
+    roundWindow,
+    snapshots,
+    fetching,
+    control,
+    refresh,
+  };
 }
 
 type Records = ReturnType<typeof composeRecords>;
@@ -126,8 +145,7 @@ type Records = ReturnType<typeof composeRecords>;
 function composeStores(inputs: Inputs, records: Records) {
   const { sessionReader, connectivity, clock, database, pageNavigation } =
     inputs;
-  const { hub, requests, snapshots, fetching } = records;
-  const ids = createBrowserUniqueIds();
+  const { hub, ids, snapshots, fetching } = records;
   const commands = createPresetCommands(database);
   const deletion = createRoundDeletion({ hub, ids });
   const leaving = createRoundLeaving({ hub, ids, pageNavigation, deletion });
@@ -159,17 +177,9 @@ function composeStores(inputs: Inputs, records: Records) {
       ids,
       // 参照を安定させるため、1度だけ作る。
       whenOnline: whenOnline.bind(null, connectivity),
+      newShotId: (endShotIds: readonly string[]) =>
+        shotIdAfter(endShotIds, clock.now(), ids.randomBytes(10)),
     },
-    detailStore: createRoundDetailStore({
-      hub,
-      requests,
-      fetching,
-      clock,
-      connectivity,
-      ids,
-      editing: createRoundEditing({ hub, ids }),
-    }),
-    roundWindow: createRoundWindow({ hub }),
     listStore: createRoundsListStore({
       hub,
       fetching,
@@ -229,6 +239,7 @@ function composeApp(router: PageRouter) {
   return {
     localIdentity: inputs.localIdentity,
     session: composeSession(inputs, records),
+    roundWindow: records.roundWindow,
     ...composeStores(inputs, records),
     ...composeSync(inputs, records),
     ...composeOffline(inputs, records),
@@ -251,14 +262,12 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
     <NextIntlClientProvider {...intlConfig}>
       <RoundWindowProvider roundWindow={app.roundWindow}>
         <RoundsListStoreProvider store={app.listStore}>
-          <RoundDetailStoreProvider store={app.detailStore}>
-            <RoundProceduresProvider procedures={app.procedures}>
-              <SessionProvider session={app.session}>
-                <SwUpdateActivator activation={app.swUpdate} />
-                {children}
-              </SessionProvider>
-            </RoundProceduresProvider>
-          </RoundDetailStoreProvider>
+          <RoundProceduresProvider procedures={app.procedures}>
+            <SessionProvider session={app.session}>
+              <SwUpdateActivator activation={app.swUpdate} />
+              {children}
+            </SessionProvider>
+          </RoundProceduresProvider>
         </RoundsListStoreProvider>
       </RoundWindowProvider>
     </NextIntlClientProvider>

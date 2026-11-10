@@ -401,6 +401,46 @@ describe("roundDetails", () => {
   });
 });
 
+describe("targetFaces", () => {
+  it("公式と自分の的だけを、ラウンドを取得せずに1回の問い合わせで得る", async () => {
+    // Given
+    const database = makeDatabase({
+      rounds: ok([]),
+      target_faces: ok([face("face-1", null), face("face-2", "user-1")]),
+    });
+
+    // When
+    const response = await database.createQueries().targetFaces("user-1");
+
+    // Then
+    expect(database.queries_of("rounds")).toEqual([]);
+    expect(database.queries_of("target_faces")[0].filters).toEqual([
+      { op: "or", expression: "owner_id.is.null,owner_id.eq.user-1" },
+    ]);
+    expect(dataOf(response)?.map((item) => item.id)).toEqual([
+      "face-1",
+      "face-2",
+    ]);
+  });
+
+  it("通信失敗(status 0)はcomm-failure、エラー応答はfailedの種類で返す", async () => {
+    // Given
+    const comm = makeDatabase({ rounds: ok([]), target_faces: failed(0) });
+    const server = makeDatabase({
+      rounds: ok([]),
+      target_faces: failed(500, { message: "x" }),
+    });
+
+    // When
+    const first = await comm.createQueries().targetFaces("u");
+    const second = await server.createQueries().targetFaces("u");
+
+    // Then
+    expect(first).toEqual({ status: "comm-failure" });
+    expect(second).toEqual({ status: "failed" });
+  });
+});
+
 describe("roundsList", () => {
   const noFaces = ok(null);
 

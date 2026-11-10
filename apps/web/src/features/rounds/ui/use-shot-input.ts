@@ -14,7 +14,7 @@ import {
   shotPointer,
 } from "../domain/shot-pointer";
 import type { SyncOperation } from "../domain/sync-events";
-import { useRoundDetailStore, useRoundProcedures } from "./rounds-context";
+import { useRoundProcedures } from "./rounds-context";
 import type { ScoreHistory } from "./use-score-history";
 
 type ShotInputContext = {
@@ -94,8 +94,7 @@ export function useShotInput({
   append,
   history,
 }: Omit<ShotInputContext, "newId" | "newShotId">) {
-  const store = useRoundDetailStore();
-  const { ids } = useRoundProcedures();
+  const { ids, newShotId } = useRoundProcedures();
   const ctx: ShotInputContext = {
     distances,
     shots,
@@ -104,7 +103,7 @@ export function useShotInput({
     append,
     history,
     newId: () => ids.next(),
-    newShotId: (endShotIds) => store.newShotId(endShotIds),
+    newShotId,
   };
 
   return {

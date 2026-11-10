@@ -4,7 +4,6 @@ import { createContext, type ReactNode, useContext } from "react";
 import type { PresetDeletion } from "../application/preset-deletion";
 import type { PresetSaving } from "../application/preset-saving";
 import type { RoundDeletion } from "../application/round-deletion";
-import type { RoundDetailStore } from "../application/round-detail-store";
 import type { RoundFetching } from "../application/round-fetching";
 import type { RoundLeaving } from "../application/round-leaving";
 import type { RoundStart } from "../application/round-start";
@@ -23,33 +22,13 @@ export type RoundProcedures = {
   fetching: Pick<RoundFetching, "fetchPresets" | "savedPresets">;
   ids: UniqueIds;
   whenOnline: WhenOnline;
+  // そのエンドの既にある矢のIDより後ろに並ぶ、時刻順の矢のIDの払い出し。
+  newShotId: (endShotIds: readonly string[]) => string;
 };
 
-const RoundDetailStoreContext = createContext<RoundDetailStore | null>(null);
 const RoundWindowContext = createContext<RoundWindow | null>(null);
 const RoundsListStoreContext = createContext<RoundsListStore | null>(null);
 const RoundProceduresContext = createContext<RoundProcedures | null>(null);
-
-// 詳細の画面へ、状態と変更の方法を渡す。
-export function RoundDetailStoreProvider({
-  store,
-  children,
-}: {
-  store: RoundDetailStore;
-  children: ReactNode;
-}) {
-  return (
-    <RoundDetailStoreContext.Provider value={store}>
-      {children}
-    </RoundDetailStoreContext.Provider>
-  );
-}
-
-export function useRoundDetailStore(): RoundDetailStore {
-  const store = useContext(RoundDetailStoreContext);
-  if (!store) throw new Error("RoundDetailStoreProvider がありません。");
-  return store;
-}
 
 // 画面へ、端末内の取得と同期の窓口を渡す。
 export function RoundWindowProvider({

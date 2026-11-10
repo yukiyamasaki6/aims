@@ -7,9 +7,9 @@
 集計はクライアントの純粋関数で行い、的のリング構成から、Xの有無と最高点数・次の点数を導く。
 画面の枠は静的で、ラウンドはクライアントが取得するため、オフラインでも枠は開き、取得の失敗を枠内で区別して表示する。
 画面の状態は、ベース(取得した状態、通信できないときは端末に保持した状態)に操作の列を重ねた1つで、2つの規則で扱う。
-的の一覧は、端末に保存済みのものを使って開く。取得は開く経路ではなく同期(常駐の取得)が行う。保存が全く無いときだけ、同期に再取得を促し、保存が現れるまで内容を出さず、ラウンドの取得と同じ取得中・オフライン・エラーの表示にする。
+的の一覧は、端末に保存済みのものを使って開く。保存が全く無いときだけ、窓口が的を個別に取得し(`fetchTargetFaces`)、保存されるまで内容を出さず、取得の結果(取得中・オフライン・エラー)をそのまま表示する。
 表示の規則は、状態が入力中のラウンドだけを「入力中」と見せる(`isRoundInProgress`。矢数に達していないエンドの有無や記録日では決めない)。
-保持の規則は、状態が入力中か、ベースに反映されていない操作(未送信、または確定済みで取得に未反映)が残るラウンドを、オフラインで開けるよう端末に持つ(`keepsRoundBase`)。完了で送信済みのラウンドと削除が受理されたラウンドは、ベースも操作も端末に残さない(削除されたラウンドには、古い取得による復活を防ぐ削除の印だけが残る)。
+保持の規則は、状態が入力中か、ベースに反映されていない操作(未送信、または確定済みで取得に未反映)が残るラウンドを、オフラインで開けるよう端末に持つ(`keepsRoundBase`)。完了で送信済みのラウンドと削除が受理されたラウンドは、ベースも操作も端末に残さない(見つからないと分かったラウンドは保存を消し、メモリの記録だけが削除済みを持つ。未送信の操作は保存に残り、破棄で組ごと消える)。
 点数の入力は`rounds/score-entry`、設定の編集は`rounds/setup`、同期は`rounds/sync`が扱う。
 
 ## 画面と状態
@@ -42,16 +42,16 @@
 ## 構成とデータの流れ
 
 - `app/(main)/rounds/[id]/page.tsx`: 静的な枠の画面。`generateStaticParams`で`/rounds/_`だけをプリレンダーし（`dynamicParams = false`）、取得も`cookies()`も使わない。`/rounds/<ID>`はnext.configのrewriteで`/rounds/_`の枠へ向ける。何も生成せず、`RoundDetailClient`を描くだけである。
-- `features/rounds/ui/round-detail-client.tsx`: `usePathname()`のIDで取得し、状態に応じて枠の内表示かスコアカードを出す。IDが読めないパス(枠のプレースホルダー、UUIDでないID)は別の部品で、問い合わせずに水和までは取得中の枠、その後は見つからない表示にする。IDごとに部品を作り直す(詳細から別の詳細へ履歴で移っても、Nextのルーターは同じ枠の部品を作り直さないため、前のIDの状態が残るのを防ぐ)。列に削除があれば読み込みが見つからないを返し、枠の中の見つからない表示になる。`loaded`に含まれる的の一覧を使う。開いている間に他の端末で削除されたと分かったとき、端末のベースで開いたラウンドが取り直したサーバーに無いと分かったとき(削除済みなど)は、`ScorecardClient`の`onGone`で見つからない状態にし、スコアカードを外して枠の中の見つからない表示にする。作成が確定せずに消えたら取り直す(`features/rounds/ui/use-creation-gone.ts`)。読み込みの全体を`withinFetchTimeout`で10秒に打ち切る(`app/offline-pwa`)。
+- `features/rounds/ui/round-detail-client.tsx`: `usePathname()`のIDを窓口(`features/rounds/ui/use-round-screen.ts`の`useRoundScreen`)から購読し、窓口の状態(読み込み中・準備完了・存在しない・オフライン・エラー)を描くだけにする。準備完了ならスコアカードに窓口の画面の値と追記を渡し、それ以外は枠の中に`FetchState`で出す(再試行は窓口の`retry`)。IDが読めないパス(枠のプレースホルダー、UUIDでないID)は別の部品で、購読せずに水和までは取得中の枠、その後は見つからない表示にする。IDごとに部品を作り直す(詳細から別の詳細へ履歴で移っても、Nextのルーターは同じ枠の部品を作り直さないため、前のIDの状態が残るのを防ぐ)。サーバー描画と水和は読み込み中の枠で一致させる。存在の判断(削除の操作、削除済みの記録、他の端末での削除、作成の消失)と取得の打ち切りは窓口が持つ。
 - `features/rounds/domain/round-routes.ts`の`roundIdOfPath`: pathnameからUUIDを取り出す、経路の判定の関数。UUIDでなければ`null`で、問い合わせずに見つからないとする。
-- `features/rounds/infrastructure/round-queries.ts`、`features/rounds/application/round-fetching.ts`: 問い合わせの組み立てはインフラ層(行は写さずそのまま返す)、取得の順序は手続きが持つ。行から端末のベースへの写しは、domainの`baseOfServerRound`(`round-tables.ts`)が1回で行う。ラウンド・距離・矢を1回のネスト取得で得る(詳細の取得は的を問い合わせない)。一括の取得(`fetchRoundDetails`)は、的を1回の取得で得る。インフラ層が応答を`QueryOutcome`の種類へ写し(`db-response-outcome.ts`)、`content-fetcher.ts`が`fetchResultOf`(`domain/fetch-status.ts`。固定文を付けるのはこの関数だけ)を呼んで`FetchResult`にする。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。成功した的を端末に保存し(`features/rounds/infrastructure/reference-snapshot.ts`)、保存するのは一括の取得だけである。待ちは10秒である。
-- `features/rounds/application/round-detail-store.ts`の`load`: 開く材料(ベースと的)を返す。サーバーの取得と端末の記録への反映は同期が行い(`round-base-refreshing.ts`の`refreshRound`)、`load`はその結果を待つ。列は記録のハブのメモリの記録(起動時に端末から読み込んだもの)から読み、列に削除があれば、取得せずに見つからないを返す(作成が未確定でも同じ)。作成が未確定のラウンドは、ラウンドを取得せず、作成の操作を基準にする。端末にベース(削除の印でないもの)と的の保存分があれば、取得の結果を待たず、端末のベースで返す(`source`が`local`。保持の規則の判定は端末の保存が担い、開くときは確かめない)。開く依頼は常に出し、同期が取得を続けて結果を端末の記録へ反映する。結果は常に、保存済みの的の一覧全体を持つ。的は取得せず、端末に保存済みのものを使う(作成が未確定のラウンドも同じ)。保存済みが無いとき、オフラインなら直ちに`offline`を返し、オンラインなら依頼の記録に的が足りない印を付けて同期に再取得を促し、保存が現れるのを待つ(上限は取得の打ち切り)。サーバーを待つ分岐は、開く依頼の結果が`ok`でなければ、的の待ちに引きずられず直ちにその結果を返す。端末のベースは的の保存分があるときだけ使い、無ければサーバーの取得の完了を待つ。効かなかった操作または項目がある応答を受けたときの取り直しは、同期が決める(`features/round-sync/application/round-sync.ts`)。
-- `features/rounds/domain/round-base.ts`、`features/rounds/application/round-base-refreshing.ts`: 端末に持つベースの規則と、入力中のラウンドの一括の取得(`rounds/sync`)。`features/rounds/domain/round-view.ts`の`deriveRoundState`は、端末の組から画面と同じ導出で状態を求める関数で、一覧も使う(`rounds/history`)。一括の取得の反映は、一覧も同じ経路(`refreshAll`)を使う。一括の取得は、`disabled_at is null`かつ`status = in_progress`、または端末にベースか操作があるラウンドを得て、ラウンドごとにベースを差し替える。端末のラウンドのIDは50件ごとの取得に分けて並行に得る(入力中の条件は最初の取得に含め、以降の取得は入力中を除く)。すべての取得が成功したときだけ成功とする。返らなかったラウンドは削除の印にする。
-- `features/rounds/domain/round-tables.ts`、`features/rounds/domain/round-op-apply.ts`、`features/rounds/ui/use-round-op-stack.ts`: サーバーのテーブルの形のベース(`RoundTables`)、操作の列を重ねる導出(RPCごとの処理)、画面の状態を導く`selectRoundState`と、`RoundDetailStore`の`round(...)`(`features/rounds/application/round-handle.ts`が返す購読と追記の入口)を購読するフック。完了のラウンドの編集で入力中へ戻す操作は、手続き`features/rounds/application/round-editing.ts`が積む(窓口の`handle.append`が追記の前の状態を値で渡して呼ぶ。`rounds/completion`)。画面の状態は、端末の記録のベースと操作の列から求める。`use-scorecard.ts`は`state`(保存の完了前の操作を含む記録から導いた値)を`useRoundOpStack`から受ける。
-- `features/round-sync/application/round-sync.ts`: 端末のベースで開いたときの取り直し。取得に失敗しても、定期的な取り直しは行わず、次の契機(起動、通信の復帰、画面が見える状態、同じラウンドの開き直し、効かなかった結果の検出)まで端末のベースの表示が続く。ラウンドの取得(`roundDetail`、`roundDetails`)は`retry: true`で、数秒の瞬断は取得のライブラリの再試行が吸収する(的は開く経路で取得しないため、的には当てはまらない)。結果の種類が「無い」なら、開き方によらず見つかりませんにする(作成が未確定のラウンドを除く)。
+- `features/rounds/infrastructure/round-queries.ts`、`features/rounds/application/round-fetching.ts`: 問い合わせの組み立てはインフラ層(行は写さずそのまま返す)、取得の順序は手続きが持つ。行から端末のベースへの写しは、domainの`baseOfServerRound`(`round-tables.ts`)が1回で行う。ラウンド・距離・矢を1回のネスト取得で得る(ラウンドの取得は的を問い合わせない)。的は、窓口が個別の取得(`fetchTargetFaces`)で得る。一括の取得(`fetchRoundDetails`)は、的を1回の取得で得る。インフラ層が応答を`QueryOutcome`の種類へ写し(`db-response-outcome.ts`)、`content-fetcher.ts`が`fetchResultOf`(`domain/fetch-status.ts`。固定文を付けるのはこの関数だけ)を呼んで`FetchResult`にする。的は自分の分と公式に絞る。対象ごとの`revision`(取り消した矢・無効化した距離を含む)も返す。成功した的を端末に保存する(`features/rounds/infrastructure/reference-snapshot.ts`。個別の取得と一括の取得が保存する)。待ちは10秒である。
+- `features/rounds/application/round-window.ts`(エントリは`round-window-entry.ts`): 詳細は`watch(roundId, listener)`でIDを購読する。購読者が0→1でエントリを作り、1→0で捨てる(同じIDの購読者は1つのエントリを共有する)。エントリは、記録の読み込みを待ち(10秒で超えたら切断ならoffline、そうでなければerror。その後に完了すれば続ける)、記録(ベース+操作)から存在と画面の状態を導く(判断は`features/rounds/domain/round-opening.ts`の`roundOpening`)。取得の規則は1つで、削除済みでなく、取得を始めておらず、サーバーに無い(ベースが無く、未確定の作成だけが起点)のでなければ、ラウンドの取得(`round-base-refreshing.ts`の`refreshRound`)を1回始める。作成が確定したとき、作成が確定せずに消えたとき、`retry`のときも同じ規則で取得する。端末にベースと的の保存分(空の一覧を含む)があれば、取得の結果を待たず、取得が失敗しても準備完了のままにする。作成が未確定のラウンドは、ラウンドも保存済みの的も取得せず、作成の操作を基準にする。削除の操作の判定は購読の最初の1回だけ(その後の削除の操作では画面を覆さない)。的の保存分が全く無いときは、窓口が的を個別に取得し、その結果(取得中・オフライン・エラー)を出す。offlineの間は通信が戻ったときに自動で再取得し、errorは`retry`でやり直す。結果の採用は最後に始めた実行の結果だけにする。効かなかった操作または項目がある応答を受けたときの取り直しは、同期が決める(`features/round-sync/application/round-sync.ts`)。
+- `features/rounds/domain/round-base.ts`、`features/rounds/application/round-base-refreshing.ts`: 端末に持つベースの規則と、入力中のラウンドの一括の取得(`rounds/sync`)。`features/rounds/domain/round-view.ts`の`deriveRoundState`は、端末の組から画面と同じ導出で状態を求める関数で、一覧も使う(`rounds/history`)。一括の取得の反映は、一覧も同じ経路(`refreshAll`)を使う。一括の取得は、`disabled_at is null`かつ`status = in_progress`、または端末にベースか操作があるラウンドを得て、ラウンドごとにベースを差し替える。端末のラウンドのIDは50件ごとの取得に分けて並行に得る(入力中の条件は最初の取得に含め、以降の取得は入力中を除く)。すべての取得が成功したときだけ成功とする。返らなかったラウンドは、端末のベースの保存を消し、メモリの記録だけが削除済みを持つ(未送信の操作は残す)。
+- `features/rounds/domain/round-tables.ts`、`features/rounds/domain/round-op-apply.ts`、`features/rounds/domain/round-view.ts`: サーバーのテーブルの形のベース(`RoundTables`)、操作の列を重ねる導出(RPCごとの処理)、画面の状態を導く`selectRoundState`、起点のテーブルに操作を重ねて画面の状態を求める`roundScreenState`(起点は`originOf`が記録から求める)。窓口の`append(roundId, operation)`は追記の直後の画面の状態を返す。完了のラウンドの編集で入力中へ戻す操作は、手続き`features/rounds/application/round-editing.ts`が積む(窓口が追記の前の状態を値で渡して呼ぶ。`rounds/completion`)。画面の状態は、端末の記録のベースと操作の列から求める(起点は記録のベース、無ければ作成の操作が表す状態)。`use-scorecard.ts`は窓口の画面の値(`RoundScreen`)と追記を受ける。
+- `features/round-sync/application/round-sync.ts`: 端末のベースで開いたときの取り直し。取得に失敗しても、定期的な取り直しは行わず、次の契機(起動、通信の復帰、画面が見える状態、同じラウンドの開き直し、効かなかった結果の検出)まで端末のベースの表示が続く。ラウンドの取得(`roundDetail`、`roundDetails`)は`retry: true`で、数秒の瞬断は取得のライブラリの再試行が吸収する(的の個別取得も窓口が同じ取得のライブラリの再試行を使う)。結果の種類が「無い」なら、開き方によらず見つかりませんにする(作成が未確定のラウンドを除く)。
 - `features/rounds/ui/round-detail-frame.tsx`、`back-to-list-link.tsx`: 枠と「一覧へ戻る」リンク(経路表(`src/routes.ts`)の`ROUNDS_PATH`を使う)。
 - `features/rounds/ui/scorecard-client.tsx`（Client Component）: スコアカードの枠を組み立てる。
-- `features/rounds/ui/use-scorecard.ts`: `state`(保存の完了前の操作を含む記録から導いた`shots`と距離の構成)を`useRoundOpStack`から受け、画面のフック(指している矢、テンキー、取り消しの列、距離の編集)を束ねる。
+- `features/rounds/ui/use-scorecard.ts`: `state`(保存の完了前の操作を含む記録から導いた`shots`と距離の構成)を窓口の画面の値(`RoundScreen`)から受け、画面のフック(指している矢、テンキー、取り消しの列、距離の編集)を束ねる。
 - `features/rounds/ui/scorecard-header-bar.tsx`、`round-config-panel.tsx`、`round-summary-bar.tsx`: ヘッダーの帯(領域の外)、ラウンドの設定のカード(カードの枠と編集のダイアログを1つの部品に持つ)、合計の帯(領域の中)。
 - `features/rounds/ui/distance-section.tsx`: 距離ごとのカード(見出し、編集、小計、エンドの行)。
 - `features/rounds/domain/scorecard-scoring.ts`: 距離とラウンドの集計、エンドの小計を求める純粋関数。
@@ -69,7 +69,7 @@
 | `features/rounds/ui/round-config-panel.tsx`、`round-menu.tsx`、`save-preset-dialog.tsx`、`save-preset-dialog-state.ts` | ui(設定のパネルと編集のダイアログ、メニューと削除の確認、保存のダイアログの描画と状態) |
 | `features/rounds/ui/distance-section.tsx`、`distance-edit-fields.tsx`、`distance-fields.tsx`、`use-distance-draft.ts`、`target-face-picker.tsx`、`end-row.tsx` | ui(距離のカード、距離の編集のダイアログと操作、編集フォームの欄の描画、編集フォームの下書きと検証・保存・削除、的の選択、エンドの行) |
 | `features/rounds/ui/keypad-buttons.tsx`、`keypad-panel.tsx`、`bottom-frame.tsx`、`complete-round-bar.tsx` | ui(テンキー、横向きのパネル、縦向きの下端の枠、完了の帯と確認) |
-| `features/rounds/ui/use-scorecard.ts`、`use-round-op-stack.ts`、`use-score-history.ts`、`use-shot-input.ts`、`use-reconciled-pointer.ts`、`use-distance-editing.ts`、`use-keypad.ts`、`use-reorder-animation.ts`、`use-creation-gone.ts`、`scroll-to-pointer.ts` | ui(画面の状態と操作) |
+| `features/rounds/ui/use-scorecard.ts`、`use-round-screen.ts`、`use-score-history.ts`、`use-shot-input.ts`、`use-reconciled-pointer.ts`、`use-distance-editing.ts`、`use-keypad.ts`、`use-reorder-animation.ts`、`scroll-to-pointer.ts` | ui(画面の状態と操作) |
 | `features/rounds/ui/color-tone.ts` | ui(16進の色から文字色と薄い色を求める計算。使い手はラウンドの機能だけ) |
 | `features/rounds/domain/shot-pointer.ts`、`score-history.ts`、`shot-operations.ts` | domain(指している矢の遷移、取り消しの列、矢の操作の組み立て) |
 | `features/rounds/domain/round-progress.ts` | domain(完了の確認、状態を変える操作、入力中へ戻すかの判定`reopeningRequired`、削除の操作) |
@@ -78,7 +78,7 @@
 | `features/rounds/domain/preset-save.ts`、`ring-color.ts`、`shot-id.ts`、`round-routes.ts`、`write-result.ts` | domain(保存するプリセットの内容、リング色、時刻順の矢のID、経路の判定、書き込みの結果と失敗の種類) |
 | `features/rounds/application/round-leaving.ts`、`preset-saving.ts` | application(完了、削除、削除して離れる。プリセットの保存) |
 | `features/rounds/application/preset-commands.ts`、`unique-ids.ts` | application(約束`PresetCommands`、`UniqueIds`) |
-| `features/rounds/application/round-detail-store.ts`、`round-handle.ts` | application(詳細の画面に渡す状態と変更の方法、開いた詳細の購読の状態) |
+| `features/rounds/application/round-window.ts`、`round-window-entry.ts` | application(詳細の窓口。詳細の購読と、端末内の入力中一覧の購読) |
 | `preset-commands.ts`、`browser-unique-ids.ts`、`rounds-db-schema.ts` | infrastructure(遷移、保存の書き込み、乱数の払い出し、保存の関数) |
 
 集計は、点数を入力するたびにクライアントで再計算し、サーバーへ問い合わせない。
@@ -103,15 +103,15 @@
 | 表示の規則(入力中と見せる)と保持の規則(オフラインで開ける)を分ける | 未送信の操作が残る完了のラウンドのように、入力中と見せずに保持するラウンドがあるため。表示は状態だけで決め、保持は状態とベースに反映されていない操作で決める | 保持と表示を同じ規則にしたいとき |
 | 一括の取得の対象を、入力中のラウンドと、端末に保持するラウンドにする。契機は、認証イベント(`INITIAL_SESSION`・`SIGNED_IN`でセッションがあるとき)、`online`、見える状態になったときで、時間の値は使わない | 他端末で作成し記録したラウンドを、この端末で一度も開かなくても、オフラインで開けるようにするため。完了で送信済みのラウンドは対象にしないため、端末の保存量が入力中の数で抑えられる | 放置された入力中のラウンドの保持の上限が要るとき |
 | 一括の取得で、端末のラウンドのIDを50件ごとの取得に分け、どれかが失敗すれば全体を失敗とする | IDはGETのURLに載るため、全件を1回に並べると保持の件数に比例して伸び、ゲートウェイが414で拒むため。一部の成功を反映すると、返らなかった保持のラウンドが削除の印になるため。POSTのRPCへ移す案は、ネスト取得と認可をDBの関数で作り直す必要があるため採らない | 保持の件数に上限を設けるとき、またはゲートウェイのURL長の上限が分かったとき |
-| 的の保存分が全く無い間は、ラウンドの内容を出さない。的は開く経路で取得せず、保存済みを使い、足りなければ同期に再取得を促す | 的の無い間は、テンキーがMだけ、玉がMの色になり、未確定の操作も的で判定できない。このため、的の保存分が全く無い間は内容を出さない。的は配布でしか変わらないため、件数や版で最新性を確かめない | 利用者が的を作れるようにするとき |
+| 的の保存分が全く無い間は、ラウンドの内容を出さない。窓口が的を個別に取得し、保存済みを使う | 的の無い間は、テンキーがMだけ、玉がMの色になり、未確定の操作も的で判定できない。このため、的の保存分が全く無い間は内容を出さない。的は配布でしか変わらないため、件数や版で最新性を確かめない | 利用者が的を作れるようにするとき |
 | 完了、削除、一覧へ戻る遷移を共有の技術の約束(`PageNavigation`。`lib/page-navigation`)で表し、窓口に持たせる | 保存の後に進む順序を手続きに置き、画面が遷移の実装を持たないため(R3) | 画面ごとに異なる遷移の方法が要るとき |
 | IDの払い出しを手続きの入れ物の`ids.next`と窓口の`newShotId`から受ける | 乱数と時刻を画面が直接読まず、手続きが約束から読むため。操作の組み立てを全て手続きへ移す案は、`SyncOperation`(同期の契約の型。`eventId`が必須)のほかに下書きの型を足し、同じ操作を表す型が2つになるため採らない | 操作の組み立てを手続きへ移すとき |
 | 導出の初期値を取得の中で求め、`ScorecardClient`のマウント後には行わない | サーバーの値が一瞬見えるちらつきを避け、最初に指す新しい矢が未送信の矢を含む状態で決まるようにするため | 取得と重ね合わせを分ける必要が出たとき |
 
 ## 制約と未対応
 
-- 画面を開いていない間(印を付ける前、外した後)の窓口の`handle.append`は、例外にする。画面の部品は印を付けた後にだけ操作するため、実際には起きない。完了・削除・作成の追記は`hub.append`を直接呼ぶ。
+- 準備完了でない間(購読の前、読み込み中、存在しない、取得できない)の窓口の`append`は、例外にする。画面の部品は準備完了の間にだけ操作するため、実際には起きない。完了・削除・作成の追記は`hub.append`を直接呼ぶ。
 - ラウンドの結果の最高点数・X数は、的が異なる距離を含むラウンドでは表示しない。
 - オフラインのときは、端末が保持するラウンド(状態が入力中か、ベースに反映されていない操作が残るもの)だけが開ける。保持しないラウンドは取得できず、未送信の操作の楽観値も表示されない(的の一覧の保存分がある、作成が未確定のラウンドを除く)。オンライン復帰（`online`イベント）で自動再取得され、操作の列が重ねられて表示される。
 - 最後の取得の後に他端末で削除・完了・記録されたラウンドは、オフラインの間は取得時点の状態で表示する(古さの注意書きは出さない)。取得時点のベースに未送信の操作を重ねる。
-- 最後に取得に成功した後に配布で追加された的は、保存分で開いた詳細の一覧に無い。距離がその的を参照するときは、同期の常駐の取得が的を保存するまで、その距離に「的データを取得できません」を出し、キーはMだけになる。開いた詳細が保存済みの的で足りないとき、ハンドルが的が足りない印を付けて同期に再取得を促し、的が保存されて参照する的が全て揃うと、画面の的が保存済みに替わって表示が更新される(以降の点数の検証と導出も新しい的を使う)。画面を閉じると印を外す。
+- 最後に取得に成功した後に配布で追加された的は、保存分で開いた詳細の一覧に無い。距離がその的を参照するときは、的が保存されるまで、その距離に「的データを取得できません」を出し、キーはMだけになる。開いた詳細が保存済みの的で足りないとき、窓口が立ち上がりに1回だけ的を個別に取得し(足りない状態が解消しない間は繰り返さない)、的が保存されて参照する的が全て揃うと、画面の的が保存済みに替わって表示が更新される(以降の点数の検証と導出も新しい的を使う)。的の取得が失敗した後に常駐の一括が的を保存しても、そのラウンドの記録に変化が無い限り、窓口は表示を更新しない。

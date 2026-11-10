@@ -14,15 +14,6 @@ import { createRoundRefreshControl } from "./round-refresh-control";
 const STREAM = roundStreamId("round-1");
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-// 取得した詳細。取り直しの結果の中身は問わない。
-function fetchedDetail(): FetchedRoundDetail {
-  return {
-    base: roundBase(),
-    startedAt: 100,
-    userId: "user-1",
-  };
-}
-
 const unfitResult = {
   revision: null,
   applied: false,
@@ -45,7 +36,6 @@ async function setup() {
     requests,
     refresh: createRoundBaseRefreshing({
       hub,
-      requests,
       fetching: fetching as unknown as RoundFetching,
     }),
   });
@@ -311,7 +301,11 @@ describe("取得と反映", () => {
       status: "ok",
       data: { rounds: new Map(), startedAt: 1, userId: "user-1" },
     });
-    fetching.fetchRoundDetail.mockResolvedValue({ status: "not-found" });
+    fetching.fetchRoundDetail.mockResolvedValue({
+      status: "not-found",
+      startedAt: 1,
+      userId: "user-1",
+    });
 
     // When
     await control.refreshAll();
@@ -320,32 +314,5 @@ describe("取得と反映", () => {
     // Then
     expect(fetching.fetchRoundDetails).toHaveBeenCalledTimes(1);
     expect(fetching.fetchRoundDetail).toHaveBeenCalledWith("round-1");
-  });
-  it("開始した後に出した開く依頼は、その実行の結果を受けずに待ちとして残り、openを返し続ける。開始前の依頼は結果を受ける", async () => {
-    // Given
-    const { requests, fetching, control } = await setup();
-    const before = requests.open("r-1");
-    const detailFetch =
-      Promise.withResolvers<FetchResult<FetchedRoundDetail>>();
-    fetching.fetchRoundDetail.mockReturnValueOnce(detailFetch.promise);
-    const refreshing = control.refreshRound("r-1");
-    await flush();
-    const after = requests.open("r-1");
-    let afterSettled = false;
-    void after.then(() => {
-      afterSettled = true;
-    });
-
-    // When
-    detailFetch.resolve({ status: "ok", data: fetchedDetail() });
-    await refreshing;
-    await flush();
-
-    // Then
-    expect(await before).toMatchObject({ status: "ok" });
-    expect(afterSettled).toBe(false);
-    expect(control.refreshNeeds().rounds).toEqual([
-      needOf("r-1", { open: true }, 2),
-    ]);
   });
 });

@@ -27,7 +27,7 @@
 ## 構成とデータの流れ
 
 - `features/rounds/domain/round-progress.ts`: 確認の要否と種類`completionConfirmation`(`noRecords`、`unfilledCells`、確認なし(null)の3通り。文言は、UI層の文言の一覧が種類ごとに持つ。文言は変えない)、状態の操作`statusOperation`、入力中へ戻す必要があるかの判定`reopeningRequired`。
-- `features/rounds/application/round-editing.ts`(窓口の`handle.append`が追記の前の状態を値で渡して呼ぶ。画面は`features/rounds/ui/use-round-op-stack.ts`から呼ぶ): 追記の前の画面の状態で`reopeningRequired`を判定し、必要なときだけ新しいイベントIDで`statusOperation`(入力中)を求め、元の操作の追記に続けて積む。1回の追記が、再開が要るときは2回の保存になる。追記の結果が画面に反映された後の状態では、変化が無いと判定して積まないため、判定は追記の前に行う。保存の完了は待たない。`handle.append`は追記の結果の画面の状態を返す。
+- `features/rounds/application/round-editing.ts`(窓口の`append`が追記の前の状態を値で渡して呼ぶ。画面は`features/rounds/ui/use-round-screen.ts`から呼ぶ): 追記の前の画面の状態で`reopeningRequired`を判定し、必要なときだけ新しいイベントIDで`statusOperation`(入力中)を求め、元の操作の追記に続けて積む。1回の追記が、再開が要るときは2回の保存になる。追記の結果が画面に反映された後の状態では、変化が無いと判定して積まないため、判定は追記の前に行う。保存の完了は待たない。窓口の`append`は追記の結果の画面の状態を返す。
 - 手続きの入れ物の`leaving.completeRound`(手続き`features/rounds/application/round-leaving.ts`): `statusOperation`の完了を追記し(追記の直後に画面の状態は完了へ変わり、完了のバーなど入力中の表示が消える。保存が詰まるとその表示のまま詳細に留まる)、保存の完了の後、呼び出し側の`isCurrent`が真(画面が残っている)のときだけ`PageNavigation.go(ROUNDS_PATH)`(経路表の定数)で一覧へ進む。離れていれば遷移しない(追記は済んでいる)。`isCurrent`は`use-scorecard.ts`が`useMountedRef`で渡す。送信の完了は待たない。
 - `features/rounds/ui/complete-round-bar.tsx`: 帯と、渡された確認の種類(`confirmation`)があるときの確認(`ConfirmDialog`、`confirmVariant="default"`)。
 - `features/rounds/domain/round-op-apply.ts`: `round.updated`の`status`は常に効く項目として`rounds.status`へ反映する。
@@ -38,7 +38,7 @@
 | 判断 | 理由 | 見直す条件 |
 | :--- | :--- | :--- |
 | 状態を`update_round`のキーとして送る | 後勝ち、削除済み、認可、冪等が既存のまま効く。新しいRPCは規則を2か所に分けるため採らない | 状態に固有の規則(遷移の制限など)が要るとき |
-| 入力中へ戻す操作を、端末が編集の直後に積む | 編集の入り口が`useRoundOpStack().append`の1か所で、全ての編集を取りこぼさない。サーバーで導出する案は全書き込みRPCの変更が要るため採らない | 端末を介さない書き込みの経路が増えたとき |
+| 入力中へ戻す操作を、端末が編集の直後に積む | 編集の入り口が窓口の`append`の1か所で、全ての編集を取りこぼさない。サーバーで導出する案は全書き込みRPCの変更が要るため採らない | 端末を介さない書き込みの経路が増えたとき |
 | 戻す判定は、積む時点の画面の状態への重ね合わせの結果で行う | 効かない編集や変化のない編集で完了が外れないようにする | - |
 
 ## 制約と未対応

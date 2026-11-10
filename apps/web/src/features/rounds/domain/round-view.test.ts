@@ -7,12 +7,7 @@ import {
   shotRecorded,
 } from "./round-op-test-helpers";
 import { selectRoundState } from "./round-tables";
-import {
-  creationProgress,
-  deriveRoundState,
-  INITIAL_CREATION,
-  roundScreenState,
-} from "./round-view";
+import { deriveRoundState, originOf, roundScreenState } from "./round-view";
 import type { ScoringTargetFace } from "./scorecard-scoring";
 import type { SyncOperation } from "./sync-events";
 
@@ -176,48 +171,54 @@ describe("roundScreenState", () => {
     },
   ];
 
-  it("記録のベースに操作を重ねた状態を返す。記録にベースが無ければ、開いたときのベースを使う", () => {
+  it("記録のベースに操作を重ねた状態を返す。記録にベースが無ければ、作成の操作が表す状態を起点にする", () => {
     // Given
-    const loaded = roundBase({ name: "開いたとき" }).tables;
     const stored = roundBase({ name: "端末" });
+    const created = {
+      operation: roundCreated({ name: "作成" }),
+      confirmedFields: undefined,
+    };
     const operation = {
       operation: roundUpdatedOp({ changes: { name: "更新後" } }),
       confirmedFields: undefined,
     };
 
     // When
-    const withBase = roundScreenState(
-      { base: { startedAt: 1, base: stored }, operations: [] },
-      loaded,
-      faces,
-    );
+    const withBase = roundScreenState(stored.tables, [], faces);
+    const createdOrigin = originOf({
+      base: undefined,
+      operations: [created, operation],
+    });
     const withoutBase = roundScreenState(
-      { base: undefined, operations: [operation] },
-      loaded,
+      createdOrigin ?? stored.tables,
+      [created, operation],
       faces,
     );
 
     // Then
     expect(withBase.state.roundConfig.name).toBe("端末");
     expect(withoutBase.state.roundConfig.name).toBe("更新後");
-    expect(withBase.deletedElsewhere).toBe(false);
     expect(withBase.needsRefetch).toBe(false);
   });
 
-  it("ベースが削除の印のときは、他で削除されたとして、開いたときのベースで描く", () => {
+  it("起点(ベースか作成の操作)が無いとき、ベースが削除済み(null)のときは、起点を返さない", () => {
     // Given
-    const loaded = roundBase({ name: "開いたとき" }).tables;
+    const operation = {
+      operation: roundUpdatedOp({ changes: { name: "更新後" } }),
+      confirmedFields: undefined,
+    };
+    const created = { operation: roundCreated(), confirmedFields: undefined };
 
     // When
-    const screen = roundScreenState(
-      { base: { startedAt: 1, base: null }, operations: [] },
-      loaded,
-      faces,
-    );
+    const none = originOf({ base: undefined, operations: [operation] });
+    const deleted = originOf({
+      base: { startedAt: 1, base: null },
+      operations: [created],
+    });
 
     // Then
-    expect(screen.deletedElsewhere).toBe(true);
-    expect(screen.state.roundConfig.name).toBe("開いたとき");
+    expect(none).toBeUndefined();
+    expect(deleted).toBeUndefined();
   });
 
   it("確定済みの操作をベースに重ねられないときは、取り直しが要る", () => {
@@ -251,47 +252,10 @@ describe("roundScreenState", () => {
     };
 
     // When
-    const screen = roundScreenState(
-      { base: { startedAt: 1, base: full }, operations: [confirmed] },
-      full.tables,
-      faces,
-    );
+    const screen = roundScreenState(full.tables, [confirmed], faces);
 
     // Then
     expect(screen.needsRefetch).toBe(true);
     expect(screen.tables.shots.map((shot) => shot.id)).toEqual(["s-0"]);
-  });
-});
-
-describe("creationProgress", () => {
-  const eventId = roundCreated().eventId;
-
-  it("確定を覚え、確定後に消えてもgoneにしない", () => {
-    // Given
-    const appeared = creationProgress(INITIAL_CREATION, [{ eventId }], eventId);
-
-    // When
-    const confirmed = creationProgress(
-      appeared,
-      [{ eventId, ackedRevision: 1 }],
-      eventId,
-    );
-    const afterRemoval = creationProgress(confirmed, [], eventId);
-
-    // Then
-    expect(appeared).toEqual({ confirmed: false, gone: false });
-    expect(confirmed).toEqual({ confirmed: true, gone: false });
-    expect(afterRemoval.gone).toBe(false);
-  });
-
-  it("確定を見ずに消えたときgoneにする", () => {
-    // Given
-    const appeared = creationProgress(INITIAL_CREATION, [{ eventId }], eventId);
-
-    // When
-    const removed = creationProgress(appeared, [], eventId);
-
-    // Then
-    expect(removed.gone).toBe(true);
   });
 });

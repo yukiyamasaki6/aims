@@ -8,6 +8,7 @@ import type {
   DbResponse,
 } from "@/lib/supabase/contract/database";
 import type { FetchResult } from "../domain/fetch-status";
+import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { PresetRecord, Presets } from "../domain/preset";
 import type { QueryFailure, QueryOutcome } from "../domain/query-outcome";
 import type { ServerRoundSummary } from "../domain/round-list";
@@ -150,6 +151,7 @@ function setup(
     roundDetails: vi.fn(async () =>
       okResponse({ rounds: [serverRound], targetFaces: [] }),
     ),
+    targetFaces: vi.fn(async () => okResponse<TargetFaceRecord[]>([])),
     presets: vi.fn(async () => okResponse<PresetRecord[]>([])),
     roundsList: vi.fn(async () => okResponse<ServerRoundSummary[]>([])),
     ...options.queries,
@@ -567,6 +569,101 @@ describe("fetchPresets", () => {
     // Then
     expect(own).toEqual(savedPresets);
     expect(other).toBeNull();
+  });
+});
+
+describe("fetchTargetFaces", () => {
+  it("的を並べて端末へ保存し、並べた一覧を返す。ラウンドは取得しない", async () => {
+    // Given
+    const { fetching, queries, saved } = setup({
+      queries: {
+        targetFaces: vi.fn(async () =>
+          okResponse([
+            face("b", null, { size: 40 }),
+            face("a", null, { size: 122 }),
+          ]),
+        ),
+      },
+    });
+
+    // When
+    const result = await fetching.fetchTargetFaces();
+
+    // Then
+    expect(queries.targetFaces).toHaveBeenCalledExactlyOnceWith("user-1");
+    expect(queries.roundDetails).not.toHaveBeenCalled();
+    if (result.status !== "ok") throw new Error("not ok");
+    expect(result.data.map((item) => item.id)).toEqual(["a", "b"]);
+    expect(idsOf(saved.get("user-1")?.data)).toEqual(["a", "b"]);
+  });
+
+  it("的が0件でも、空の一覧を保存する", async () => {
+    // Given
+    const { fetching, saved } = setup();
+
+    // When
+    const result = await fetching.fetchTargetFaces();
+
+    // Then
+    expect(result).toEqual({ status: "ok", data: [] });
+    expect(saved.get("user-1")?.data).toEqual([]);
+  });
+
+  it("サインインが必要なときは、取得せずerrorを返す。失敗したときは保存しない", async () => {
+    // Given
+    const unsigned = setup({ signIn: { status: "unauthenticated" } });
+    const failing = setup({
+      queries: { targetFaces: vi.fn(async () => commFailure) },
+    });
+
+    // When
+    const signIn = await unsigned.fetching.fetchTargetFaces();
+    const comm = await failing.fetching.fetchTargetFaces();
+
+    // Then
+    expect(signIn).toEqual({ status: "error", reason: "unauthenticated" });
+    expect(unsigned.queries.targetFaces).not.toHaveBeenCalled();
+    expect(comm.status).toBe("error");
+    expect(failing.save).not.toHaveBeenCalled();
+  });
+});
+
+describe("FETCH_TIMEOUT_MSでの打ち切り後に届いた結果", () => {
+  it("ラウンドの取得は打ち切ったerrorのままで、遅れて届いたベースを返さない", async () => {
+    // Given
+    const late = Promise.withResolvers<QueryOutcome<ServerRound>>();
+    const { fetching, clock } = setup({
+      queries: { roundDetail: vi.fn(() => late.promise) },
+    });
+    const outcomes: unknown[] = [];
+    void fetching.fetchRoundDetail("round-1").then((r) => outcomes.push(r));
+    await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+    // When
+    late.resolve(okResponse(serverRound));
+    await clock.advanceAsync(5_000);
+
+    // Then
+    expect(outcomes).toEqual([{ status: "error", reason: "failed" }]);
+  });
+
+  it("的の取得は、遅れて届いた結果を端末へ保存しない", async () => {
+    // Given
+    const late = Promise.withResolvers<QueryOutcome<TargetFaceRecord[]>>();
+    const { fetching, clock, save } = setup({
+      queries: { targetFaces: vi.fn(() => late.promise) },
+    });
+    const outcomes: unknown[] = [];
+    void fetching.fetchTargetFaces().then((r) => outcomes.push(r));
+    await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+    // When
+    late.resolve(okResponse([face("a", null)]));
+    await clock.advanceAsync(5_000);
+
+    // Then
+    expect(outcomes).toEqual([{ status: "error", reason: "failed" }]);
+    expect(save).not.toHaveBeenCalled();
   });
 });
 

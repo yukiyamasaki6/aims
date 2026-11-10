@@ -77,6 +77,9 @@ export function createRoundRefreshControl(deps: {
     },
     facesWanted: () => requests.facesWanted(),
     refreshAll: () => refresh.refreshAll(),
-    refreshRound: (roundId) => refresh.refreshRound(roundId),
+    // 取得の結果は捨てる(結果を使うのは窓口)。
+    refreshRound: async (roundId) => {
+      await refresh.refreshRound(roundId);
+    },
   };
 }

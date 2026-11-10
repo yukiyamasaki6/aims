@@ -8,13 +8,11 @@ import {
   type UpdateActivation,
 } from "@/features/offline-pwa/application/update-activation";
 import { createOpSender } from "@/features/rounds/application/op-sender";
+import { createRoundEditing } from "@/features/rounds/application/round-editing";
 import { SHORT_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
-import {
-  roundBase,
-  roundCreated,
-} from "@/features/rounds/domain/round-op-test-helpers";
+import { roundCreated } from "@/features/rounds/domain/round-op-test-helpers";
 import { outboxOf } from "@/features/rounds/domain/round-record";
-import { useRoundDetailStore } from "@/features/rounds/ui/rounds-context";
+import { useRoundWindow } from "@/features/rounds/ui/rounds-context";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { RootClientEntry } from "./root-client-entry";
 
@@ -130,6 +128,18 @@ vi.mock("@/features/rounds/application/op-sender", async (importOriginal) => {
   return { createOpSender: vi.fn(actual.createOpSender) };
 });
 
+// 画面の追記が使う記録のハブを取り出すため、実物を通して呼び出しを覚える。
+vi.mock(
+  "@/features/rounds/application/round-editing",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@/features/rounds/application/round-editing")
+      >();
+    return { createRoundEditing: vi.fn(actual.createRoundEditing) };
+  },
+);
+
 beforeEach(() => {
   vi.clearAllMocks();
   supabase.listeners.length = 0;
@@ -143,13 +153,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// 子の画面が、ラウンドの状態と変更の方法を受け取って追記する。
+// 子の画面が、窓口を受け取る。
 function Appender({
-  onStore,
+  onWindow,
 }: {
-  onStore: (store: ReturnType<typeof useRoundDetailStore>) => void;
+  onWindow: (roundWindow: ReturnType<typeof useRoundWindow>) => void;
 }) {
-  onStore(useRoundDetailStore());
+  onWindow(useRoundWindow());
   return <p>子要素</p>;
 }
 
@@ -288,26 +298,22 @@ describe("RootClientEntry", () => {
   describe("組み立て", () => {
     it("画面の追記、再読み込みの前の保存の待ち、同期が、同じ記録のハブを使う", async () => {
       // Given
-      let store: ReturnType<typeof useRoundDetailStore> | undefined;
+      let roundWindow: ReturnType<typeof useRoundWindow> | undefined;
       render(
         <RootClientEntry>
-          <Appender onStore={(value) => (store = value)} />
+          <Appender onWindow={(value) => (roundWindow = value)} />
         </RootClientEntry>,
       );
       storage.hold = true;
       const created = roundCreated();
-      const { hub } = vi.mocked(createOpSender).mock.calls[0][0];
+      const { hub } = vi.mocked(createRoundEditing).mock.calls[0][0];
+      const sendingHub = vi.mocked(createOpSender).mock.calls[0][0].hub;
 
       // When
-      const handle = store?.round("round-1");
-      const unwatch = handle?.watch({
-        base: roundBase().tables,
-        targetFaces: [],
-        pendingCreationEventId: null,
-      });
-      const appending = handle?.append(created);
+      const unwatch = roundWindow?.watchLocalList(() => {});
+      const appending = hub.append("round:round-1", created);
       await Promise.resolve();
-      const outboxWhileSaving = outboxOf(hub.record("round:round-1"));
+      const outboxWhileSaving = outboxOf(sendingHub.record("round:round-1"));
       let persisted = false;
       const waiting = vi
         .mocked(createUpdateActivation)
@@ -320,9 +326,11 @@ describe("RootClientEntry", () => {
       storage.release?.();
       await appending;
       await waiting;
+      const listed = roundWindow?.localList()?.inProgress.length;
       unwatch?.();
 
       // Then
+      expect(listed).toBe(1);
       expect(outboxWhileSaving.map((item) => item.eventId)).toEqual([
         created.eventId,
       ]);

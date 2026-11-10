@@ -7,7 +7,6 @@ import {
   roundUpdated,
 } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
-import { createRefreshRequests } from "./refresh-requests";
 import { createRoundBaseRefreshing } from "./round-base-refreshing";
 import type {
   FetchedRoundDetail,
@@ -52,7 +51,6 @@ async function setup(userId: string | null = "user-1") {
   const { hub, store } = createTestRoundHub();
   hub.start(userId);
   await hub.ready();
-  const requests = createRefreshRequests();
   const fetching = {
     fetchRoundDetails: vi.fn(),
     fetchRoundDetail: vi.fn(),
@@ -60,9 +58,8 @@ async function setup(userId: string | null = "user-1") {
   const refresh = createRoundBaseRefreshing({
     hub,
     fetching: fetching as unknown as RoundFetching,
-    requests,
   });
-  return { hub, store, requests, fetching, refresh };
+  return { hub, store, fetching, refresh };
 }
 
 // 端末に、取得して保存したベースを持つ列を作る。
@@ -101,29 +98,6 @@ describe("refreshAll", () => {
       base: { revisions: { round: 3 } },
     });
     expect(tab.hub.record(roundStreamId("kept")).base?.startedAt).toBe(100);
-  });
-
-  it("一括の取得を反映した後に、的の保存を待つ画面へ知らせる。取得が失敗したときは知らせない", async () => {
-    // Given
-    const tab = await setup();
-    await storeBase(tab, "kept");
-    const listener = vi.fn(() => {
-      saved.push(tab.hub.record(roundStreamId("kept")).base?.startedAt);
-    });
-    const saved: (number | undefined)[] = [];
-    tab.requests.subscribe(listener);
-    tab.fetching.fetchRoundDetails
-      .mockResolvedValueOnce({ status: "error", reason: "failed" })
-      .mockResolvedValueOnce(fetchedOf([["kept", detail("completed")]]));
-
-    // When
-    await tab.refresh.refreshAll();
-    const afterFailure = listener.mock.calls.length;
-    await tab.refresh.refreshAll();
-
-    // Then
-    expect(afterFailure).toBe(0);
-    expect(saved).toEqual([100]);
   });
 
   it("端末の保存を読めないときは、取得全体が失敗扱いで何も取得せず、拒否しない", async () => {
@@ -288,69 +262,21 @@ describe("refreshAll", () => {
   });
 });
 
-describe("実行をまたぐ完了", () => {
-  it("先に始まった詳細の取り直しの完了は、後から出された開く依頼を完了させない", async () => {
-    // Given
-    const tab = await setup();
-    const running = Promise.withResolvers<RoundDetailResult>();
-    tab.fetching.fetchRoundDetail.mockReturnValueOnce(running.promise);
-    const first = tab.requests.open("r-1");
-    const refreshing = tab.refresh.refreshRound("r-1");
-    await flush();
-    const second = tab.requests.open("r-1");
-    let secondSettled = false;
-    void second.then(() => {
-      secondSettled = true;
-    });
-
-    // When
-    running.resolve(NOT_FOUND);
-    await refreshing;
-    await flush();
-
-    // Then
-    expect(await first).toEqual({ status: "not-found" });
-    expect(secondSettled).toBe(false);
-    expect(tab.requests.pendingOpens()).toEqual(["r-1"]);
-  });
-});
-
 describe("refreshRound", () => {
-  it("取得したラウンドのベースを反映し、依頼を待つ側へ開いた材料を返す", async () => {
+  it("取得したラウンドのベースを反映し、okを返す(dataはnull)", async () => {
     // Given
     const tab = await setup();
     tab.fetching.fetchRoundDetail.mockResolvedValue({
       status: "ok",
       data: detail("in_progress"),
     });
-    const opened = tab.requests.open("r-1");
 
     // When
-    await tab.refresh.refreshRound("r-1");
+    const result = await tab.refresh.refreshRound("r-1");
 
     // Then
-    expect(await opened).toMatchObject({
-      status: "ok",
-      data: { base: { round: { status: "in_progress" } } },
-    });
+    expect(result).toEqual({ status: "ok", data: null });
     expect(tab.hub.record(roundStreamId("r-1")).base?.startedAt).toBe(100);
-  });
-
-  it("1つのラウンドの取得と反映では、的の保存を待つ画面へ知らせない", async () => {
-    // Given
-    const tab = await setup();
-    tab.fetching.fetchRoundDetail.mockResolvedValue({
-      status: "ok",
-      data: detail("in_progress"),
-    });
-    const listener = vi.fn();
-    tab.requests.subscribe(listener);
-
-    // When
-    await tab.refresh.refreshRound("r-1");
-
-    // Then
-    expect(listener).not.toHaveBeenCalled();
   });
 
   it("取り直しの開始で、効かなかった結果の印を消す", async () => {
@@ -382,23 +308,28 @@ describe("refreshRound", () => {
     expect(clearedAtStart).toBe(true);
   });
 
-  it("取得が見つからない、または失敗したときは、依頼を待つ側へ結果を返し、見つからないときだけ見つからなかった記録を残す", async () => {
+  it("取得が見つからない、または失敗したときは、その結果を返し、見つからないときだけ記録を削除済みにする", async () => {
     // Given
     const tab = await setup();
-    const missing = tab.requests.open("r-1");
     tab.fetching.fetchRoundDetail.mockResolvedValueOnce(NOT_FOUND);
-    const offline = tab.requests.open("r-2");
 
     // When
-    await tab.refresh.refreshRound("r-1");
+    const missing = await tab.refresh.refreshRound("r-1");
     tab.fetching.fetchRoundDetail.mockResolvedValueOnce({ status: "offline" });
-    await tab.refresh.refreshRound("r-2");
+    const offline = await tab.refresh.refreshRound("r-2");
+    tab.fetching.fetchRoundDetail.mockResolvedValueOnce({
+      status: "error",
+      reason: "unauthenticated",
+    });
+    const error = await tab.refresh.refreshRound("r-3");
 
     // Then
-    expect(await missing).toEqual({ status: "not-found" });
-    expect(await offline).toEqual({ status: "offline" });
-    expect(tab.requests.isGone("r-1")).toBe(true);
-    expect(tab.requests.isGone("r-2")).toBe(false);
+    expect(missing).toEqual({ status: "not-found" });
+    expect(offline).toEqual({ status: "offline" });
+    expect(error).toEqual({ status: "error", reason: "unauthenticated" });
+    expect(tab.hub.record(roundStreamId("r-1")).base?.base).toBeNull();
+    expect(tab.hub.record(roundStreamId("r-2")).base).toBeUndefined();
+    expect(tab.hub.record(roundStreamId("r-3")).base).toBeUndefined();
   });
 });
 

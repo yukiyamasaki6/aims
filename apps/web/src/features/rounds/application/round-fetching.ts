@@ -31,6 +31,8 @@ export type RoundQueries = {
     userId: string,
     roundIds: readonly string[],
   ): Promise<QueryOutcome<RoundDetailsData>>;
+  // 的の一覧。個人(owner_idが自分)と公式(owner_idがnull)を1回で得る。
+  targetFaces(userId: string): Promise<QueryOutcome<TargetFaceRecord[]>>;
   // 個人(owner_idが自分)と公式(owner_idがnull)を1回で得る。
   presets(userId: string): Promise<QueryOutcome<PresetRecord[]>>;
   // 削除されていないラウンドを、実施日の新しい順に得る。入力中のラウンドも含む。ページ、絞り込み、並びの条件はここに足す。
@@ -67,6 +69,7 @@ function toDetail(
 export type RoundFetching = ReturnType<typeof createRoundFetching>;
 
 // ラウンドの取得の順序。的とプリセットを保存して返す、などを行う。
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: 取得ごとの手続きを依存(取得、問い合わせ、保存、時計)とともに閉じ込めるファクトリで、内側の関数は個々に上限内である。外へ分けると依存を引数で渡し回すことになり、責務は分かれず追いにくくなる。
 export function createRoundFetching(deps: {
   content: ContentFetcher;
   queries: RoundQueries;
@@ -105,6 +108,20 @@ export function createRoundFetching(deps: {
     return { status: "ok", data: toDetail(result.data, startedAt, userId) };
   }
 
+  // 的の一覧を取得して端末へ保存する。ラウンドの取得とは独立で、画面が的を待つときに使う。
+  async function fetchTargetFaces(): Promise<FetchResult<TargetFaceOption[]>> {
+    const startedAt = clock.now();
+    let userId = "";
+    const result = await content.fetchContent((session) => {
+      userId = session.userId;
+      return queries.targetFaces(session.userId);
+    });
+    if (result.status !== "ok") return result;
+    const faces = orderTargetFaces(result.data);
+    snapshots.save("target-faces", userId, faces, startedAt);
+    return { status: "ok", data: faces };
+  }
+
   // 入力中のラウンドと、`roundIds`のラウンドを、的とともに取得する。端末の保持のための取得で、結果は表示に使わない。
   // どれかの取得が失敗したら全体を失敗にする(一部の結果を反映すると、返らなかった保持のラウンドが削除の印になるため)。
   async function fetchRoundDetails(
@@ -141,6 +158,7 @@ export function createRoundFetching(deps: {
     fetchRoundsList,
     fetchRoundDetail,
     fetchRoundDetails,
+    fetchTargetFaces,
     // 端末に保存した的の一覧。無ければnull。
     savedTargetFaces: (): TargetFaceOption[] | null =>
       snapshots.load<TargetFaceOption[]>("target-faces"),
