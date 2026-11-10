@@ -66,12 +66,7 @@ function RoundDetailLoader({ roundId }: { roundId: string }) {
 
   if (view.status === "ok" && !gone) {
     return (
-      <ScorecardClient
-        roundId={roundId}
-        loaded={view.data}
-        onGone={markGone}
-        targetFaces={view.data.targetFaces}
-      />
+      <ScorecardClient roundId={roundId} loaded={view.data} onGone={markGone} />
     );
   }
   return (

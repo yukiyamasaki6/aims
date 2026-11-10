@@ -57,8 +57,7 @@ function moveFrom(
     ],
     { duration: REORDER_DURATION_MS, easing: "ease-out" },
   );
-  // テストのモックのように値を返さない環境では覚えない。
-  if (animation) moving.set(element, animation);
+  moving.set(element, animation);
 }
 
 // 玉の並びの枠(親、幅、列)が変わったか。変わったときは、位置の差を動きにしない。
@@ -89,7 +88,7 @@ function animateBalls(
     };
     next.set(id, position);
     const before = previous.get(id);
-    if (!before || typeof element.animate !== "function") continue;
+    if (!before) continue;
     if (reduced || layoutChanged(before, position)) {
       stopMoving(element, moving);
       continue;
@@ -130,7 +129,7 @@ function animateNewRing(
   const mark = element.querySelector<HTMLElement>(
     '[data-testid="provisional-shot"]',
   );
-  if (!mark || !before || typeof mark.animate !== "function") return;
+  if (!mark || !before) return;
   if (
     reduced ||
     before.parentWidth !== ring.parentWidth ||

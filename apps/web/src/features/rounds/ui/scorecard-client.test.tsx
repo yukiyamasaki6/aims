@@ -251,7 +251,6 @@ function setup(
         targetFaces: faces,
         pendingCreationEventId: null,
       }}
-      targetFaces={faces}
       onGone={ignoreGone}
     />,
     { wrapper: AppWrapper },
@@ -530,6 +529,25 @@ describe("ScorecardClient 初期表示・集計", () => {
     expect(provisionalEnd()).toBeNull();
     expect(screen.queryByTestId("end-blank-1-1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("end-blank-1-12")).not.toBeInTheDocument();
+  });
+
+  it("エンドの矢数を超える矢が記録されていても、全ての矢を表示し、空白のボタンとスロットを出さない", () => {
+    // Given
+    const overflowing = [
+      shotRow("s1", distanceA.id, 1, "10", 10),
+      shotRow("s2", distanceA.id, 1, "9", 9),
+      shotRow("s3", distanceA.id, 1, "8", 8),
+      shotRow("s4", distanceA.id, 1, "7", 7),
+    ];
+
+    // When
+    setup({ initialShots: overflowing });
+
+    // Then
+    expect(ballsOf(1, 1)).toEqual(["10", "9", "8", "7"]);
+    const row = within(screen.getByTestId("end-row-1-1"));
+    expect(row.queryAllByTestId(/^end-blank-/)).toEqual([]);
+    expect(row.queryAllByTestId(/^end-slot-/)).toEqual([]);
   });
 
   it("記録済みの玉は、リングの色相・彩度のまま明度を上げた背景色と黒の文字色で表示する", () => {
@@ -1029,7 +1047,10 @@ describe("ScorecardClient 並び直りの動き", () => {
         return [...(this.parentElement?.children ?? [])].indexOf(this) * 36;
       },
     );
-    HTMLElement.prototype.animate = vi.fn();
+    // 実ブラウザのanimateと同じく、止められる動きを返す。
+    HTMLElement.prototype.animate = vi.fn(
+      () => ({ playState: "running", cancel: vi.fn() }) as unknown as Animation,
+    );
   });
 
   afterEach(() => {
@@ -1877,7 +1898,6 @@ describe("ScorecardClient 指している矢へのスクロール", () => {
           targetFaces: [...targetFaces],
           pendingCreationEventId: null,
         }}
-        targetFaces={[...targetFaces]}
         onGone={ignoreGone}
       />,
     );
