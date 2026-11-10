@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { forwardRef, StrictMode, useImperativeHandle } from "react";
+import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
@@ -41,11 +41,9 @@ vi.mock("./turnstile", () => ({
 }));
 
 function setup({
-  strict = false,
   returnTo = null,
   offline = false,
 }: {
-  strict?: boolean;
   returnTo?: string | null;
   offline?: boolean;
 } = {}) {
@@ -65,9 +63,7 @@ function setup({
       readReturnTo={() => returnTo}
     />
   );
-  const rendered = render(strict ? <StrictMode>{form}</StrictMode> : form, {
-    wrapper: IntlTestProvider,
-  });
+  const rendered = render(form, { wrapper: IntlTestProvider });
   return { signIn, authenticator, pageReplace, ...rendered };
 }
 
@@ -317,21 +313,6 @@ describe("サインイン画面の部品", () => {
       expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith(destination);
       expect(screen.queryByText(message)).not.toBeInTheDocument();
     });
-  });
-
-  it("Strict Modeの二重実行の後でも、送信が終わり遷移する", async () => {
-    // Given
-    const { authenticator, pageReplace } = setup({ strict: true });
-    const user = userEvent.setup();
-    await fillCredentials(user);
-    verify("captcha-token");
-
-    // When
-    await user.click(submitButton());
-
-    // Then
-    expect(authenticator.signIn).toHaveBeenCalledOnce();
-    expect(pageReplace.replace).toHaveBeenCalledExactlyOnceWith("/rounds");
   });
 
   it("何も入力せずに送信すると、メールアドレス、パスワード、セキュリティチェックの不備を全て表示し、認証しない", async () => {

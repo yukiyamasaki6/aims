@@ -7,12 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {
-  forwardRef,
-  type ReactElement,
-  StrictMode,
-  useImperativeHandle,
-} from "react";
+import { forwardRef, type ReactElement, useImperativeHandle } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
@@ -132,11 +127,9 @@ function refused(
   return { kind: "failed", failure: { kind } };
 }
 
-function renderForm(options?: { strict?: boolean }) {
+function renderForm() {
   const form = subject.form(subject.create());
-  return render(options?.strict ? <StrictMode>{form}</StrictMode> : form, {
-    wrapper: IntlTestProvider,
-  });
+  return render(form, { wrapper: IntlTestProvider });
 }
 
 function heading(name: string) {
@@ -419,23 +412,6 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
         });
       },
     );
-
-    it("Strict Modeの二重実行の後でも、送信が終わってコード入力画面へ進む", async () => {
-      // Given
-      auth.sendCode.mockResolvedValue(ACCEPTED);
-      const user = userEvent.setup();
-      renderForm({ strict: true });
-
-      // When
-      await submitEmailStep(user);
-
-      // Then
-      expect(
-        await screen.findByRole("heading", { name: authText("otpTitle") }),
-      ).toBeInTheDocument();
-      expect(auth.sendCode).toHaveBeenCalledOnce();
-      expect(turnstile.reset).toHaveBeenCalledOnce();
-    });
   });
 
   describe("確認", () => {

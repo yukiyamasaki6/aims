@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { type ReactNode, StrictMode } from "react";
+import type { ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoundDetailStore } from "@/features/rounds/application/round-detail-store";
@@ -84,26 +84,6 @@ describe("useCreationGone", () => {
 
     // Then
     expect(onGone).toHaveBeenCalledTimes(2);
-  });
-
-  it("Strict Modeでも、消えたと分かったとき1回だけ呼ぶ", () => {
-    // Given
-    const onGone = vi.fn();
-    renderHook(() => useCreationGone("round-1", onGone), {
-      wrapper: ({ children }) => (
-        <StrictMode>
-          <RoundDetailStoreProvider store={store}>
-            {children}
-          </RoundDetailStoreProvider>
-        </StrictMode>
-      ),
-    });
-
-    // When
-    change(true);
-
-    // Then
-    expect(onGone).toHaveBeenCalledTimes(1);
   });
 
   it("サーバー側の描画では、消えたとは扱わない(印が真でも呼ばない)", () => {

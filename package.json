@@ -5,7 +5,6 @@
   "scripts": {
     "setup:env": "node scripts/setup-local-env.mjs",
 
-    "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "start": "pnpm --filter web start",
     "preview": "pnpm --filter web preview",
