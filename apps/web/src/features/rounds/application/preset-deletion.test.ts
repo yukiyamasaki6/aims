@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SessionReader } from "@/features/auth";
 import { createFakeSessionReader } from "@/features/auth/application/session-reader-test-helpers";
+import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
+import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { Preset, Presets } from "../domain/preset";
 import type { WriteResult } from "../domain/write-result";
 import type { PresetCommands } from "./preset-commands";
@@ -26,14 +28,18 @@ const initialPresets: Presets = {
 
 // 保存済みは端末の境界のため、更新の関数を実際に適用するメモリで模す。
 function setup(
-  options: { readings?: Reading[]; deleteResult?: WriteResult } = {},
+  options: {
+    readings?: (Reading | (() => Promise<Reading>))[];
+    deleteResult?: WriteResult;
+    deleting?: () => Promise<WriteResult>;
+  } = {},
 ) {
   const { sessionReader } = createFakeSessionReader([
     ...(options.readings ?? []),
     { status: "authenticated", userId: "user-1" },
   ]);
-  const deletePreset = vi.fn<PresetCommands["deletePreset"]>(
-    async () => options.deleteResult ?? "written",
+  const deletePreset = vi.fn<PresetCommands["deletePreset"]>(async () =>
+    options.deleting ? options.deleting() : (options.deleteResult ?? "written"),
   );
   const saved: { presets: Presets } = { presets: initialPresets };
   const update = vi.fn((kind: string, change: (data: Presets) => Presets) => {
@@ -44,12 +50,14 @@ function setup(
     save: () => {},
     update,
   } as unknown as ReferenceSnapshots;
+  const clock = createManualClock();
   const deletion = createPresetDeletion({
+    clock,
     sessionReader,
     commands: { deletePreset },
     snapshots,
   });
-  return { deletion, deletePreset, update, saved };
+  return { deletion, deletePreset, update, saved, clock };
 }
 
 describe("createPresetDeletion", () => {
@@ -69,6 +77,136 @@ describe("createPresetDeletion", () => {
         personal: [preset("preset-2")],
         global: [preset("official")],
       });
+    });
+  });
+
+  describe("上限(FETCH_TIMEOUT_MS)までに終わらない場合", () => {
+    const failed = { status: "failed", error: "deleteFailed" };
+    const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    it("サインインの確認が上限までに終わらないとき、deleteFailedを返し、削除しない", async () => {
+      // Given
+      const { deletion, deletePreset, clock } = setup({
+        readings: [() => new Promise<Reading>(() => {})],
+      });
+      const deleted = deletion.deletePreset("preset-1");
+
+      // When
+      await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+      // Then
+      expect(await deleted).toEqual(failed);
+      expect(deletePreset).not.toHaveBeenCalled();
+    });
+
+    it("上限は10秒で、9,999msでは打ち切らず、10,000msで打ち切る", async () => {
+      // Given
+      const { deletion, clock } = setup({
+        deleting: () => new Promise<WriteResult>(() => {}),
+      });
+      let settled = false;
+      const deleted = deletion.deletePreset("preset-1").finally(() => {
+        settled = true;
+      });
+
+      // When
+      await clock.advanceAsync(9_999);
+      const beforeLimit = settled;
+      await clock.advanceAsync(1);
+
+      // Then
+      expect(beforeLimit).toBe(false);
+      expect(await deleted).toEqual(failed);
+    });
+
+    it("書き込みが上限までに終わらないとき、deleteFailedを返し、保存済みは変えない", async () => {
+      // Given
+      const { deletion, update, clock } = setup({
+        deleting: () => new Promise<WriteResult>(() => {}),
+      });
+      const deleted = deletion.deletePreset("preset-1");
+
+      // When
+      await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+      // Then
+      expect(await deleted).toEqual(failed);
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it("上限を超えてからサインインの確認が解決しても、削除へ進まない", async () => {
+      // Given
+      const reading = Promise.withResolvers<Reading>();
+      const { deletion, deletePreset, clock } = setup({
+        readings: [() => reading.promise],
+      });
+      const deleted = deletion.deletePreset("preset-1");
+      await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+      // When
+      reading.resolve({ status: "authenticated", userId: "user-1" });
+      await flush();
+
+      // Then
+      expect(await deleted).toEqual(failed);
+      expect(deletePreset).not.toHaveBeenCalled();
+    });
+
+    it("上限の時間切れとサインインの確認の解決が同じ時刻でも、削除へ進まない", async () => {
+      // Given
+      const reading = Promise.withResolvers<Reading>();
+      const { deletion, deletePreset, clock } = setup({
+        readings: [() => reading.promise],
+      });
+      const deleted = deletion.deletePreset("preset-1");
+
+      // When
+      reading.resolve({ status: "authenticated", userId: "user-1" });
+      clock.advance(FETCH_TIMEOUT_MS);
+      await flush();
+
+      // Then
+      expect(await deleted).toEqual(failed);
+      expect(deletePreset).not.toHaveBeenCalled();
+    });
+
+    it("上限を超えた後に書き込みが成功しても、保存済みを更新しない", async () => {
+      // Given
+      const writing = Promise.withResolvers<WriteResult>();
+      const { deletion, update, saved, clock } = setup({
+        deleting: () => writing.promise,
+      });
+      const deleted = deletion.deletePreset("preset-1");
+      await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+      // When
+      writing.resolve("written");
+      await flush();
+
+      // Then
+      expect(await deleted).toEqual(failed);
+      expect(update).not.toHaveBeenCalled();
+      expect(saved.presets).toBe(initialPresets);
+    });
+
+    it("打ち切った後の再試行は、前の呼び出しの印に止められず、前の呼び出しの続きは削除しない", async () => {
+      // Given
+      const stalled = Promise.withResolvers<Reading>();
+      const { deletion, deletePreset, clock } = setup({
+        readings: [() => stalled.promise],
+      });
+      const first = deletion.deletePreset("preset-1");
+      await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+      // When
+      const second = await deletion.deletePreset("preset-1");
+      stalled.resolve({ status: "authenticated", userId: "user-1" });
+      await flush();
+
+      // Then
+      expect(await first).toEqual(failed);
+      expect(second).toEqual({ status: "deleted" });
+      expect(deletePreset).toHaveBeenCalledTimes(1);
     });
   });
 

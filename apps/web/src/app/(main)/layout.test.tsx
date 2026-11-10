@@ -12,6 +12,7 @@ import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth
 import { SessionProvider } from "@/features/auth/ui/session-context";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createClient } from "@/lib/supabase/infrastructure/client";
 import { ROUNDS_PATH } from "@/routes";
 import { RootClientEntry } from "../root-client-entry";
@@ -116,6 +117,7 @@ function SessionWrapper({ children }: { children: ReactNode }) {
       pageReplace: createBrowserPageLoad(),
       recordUser: { isRecordUser: () => true },
       identity: createBrowserIdentityStore(),
+      clock: createBrowserClock(),
     }),
   );
   return (

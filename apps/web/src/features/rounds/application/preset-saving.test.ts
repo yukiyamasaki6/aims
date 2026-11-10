@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SessionReader } from "@/features/auth";
 import { createFakeSessionReader } from "@/features/auth/application/session-reader-test-helpers";
+import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
+import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { PresetToSave } from "../domain/preset-save";
 import type { WriteResult } from "../domain/write-result";
 import type { PresetCommands } from "./preset-commands";
@@ -39,6 +41,7 @@ function setup(
     readings?: Reading[];
     read?: SessionReader["readSession"];
     writeResult?: WriteResult;
+    write?: () => Promise<WriteResult>;
     fetchPresets?: () => Promise<unknown>;
   } = {},
 ) {
@@ -57,13 +60,15 @@ function setup(
   };
   const savePreset = vi.fn<PresetCommands["savePreset"]>(async () => {
     calls.push("write");
-    return options.writeResult ?? "written";
+    return options.write ? options.write() : (options.writeResult ?? "written");
   });
   const fetchPresets = vi.fn(async () => {
     calls.push("fetch");
     return options.fetchPresets?.();
   });
+  const clock = createManualClock();
   const saving = createPresetSaving({
+    clock,
     sessionReader: { readSession: order },
     commands: { savePreset },
     fetching: { fetchPresets } as unknown as Pick<
@@ -71,7 +76,7 @@ function setup(
       "fetchPresets"
     >,
   });
-  return { saving, savePreset, fetchPresets, calls };
+  return { saving, savePreset, fetchPresets, calls, clock };
 }
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -177,6 +182,136 @@ describe("createPresetSaving", () => {
       // Then
       expect(savePreset).not.toHaveBeenCalled();
       expect(fetchPresets).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("上限(FETCH_TIMEOUT_MS)までに終わらない場合", () => {
+    const failed = { status: "failed", error: "saveFailed" };
+
+    it("サインインの確認が上限までに終わらないとき、saveFailedを返し、書き込まない", async () => {
+      // Given
+      const { saving, savePreset, clock } = setup({
+        read: () => new Promise(() => {}),
+      });
+      const saved = saving.savePreset(preset);
+
+      // When
+      await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+      // Then
+      expect(await saved).toEqual(failed);
+      expect(savePreset).not.toHaveBeenCalled();
+    });
+
+    it("上限は10秒で、9,999msでは打ち切らず、10,000msで打ち切る", async () => {
+      // Given
+      const { saving, clock } = setup({ write: () => new Promise(() => {}) });
+      let settled = false;
+      const saved = saving.savePreset(preset).finally(() => {
+        settled = true;
+      });
+
+      // When
+      await clock.advanceAsync(9_999);
+      const beforeLimit = settled;
+      await clock.advanceAsync(1);
+
+      // Then
+      expect(beforeLimit).toBe(false);
+      expect(await saved).toEqual(failed);
+    });
+
+    it("書き込みが上限までに終わらないとき、saveFailedを返す", async () => {
+      // Given
+      const { saving, clock } = setup({ write: () => new Promise(() => {}) });
+      const saved = saving.savePreset(preset);
+
+      // When
+      await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+      // Then
+      expect(await saved).toEqual(failed);
+    });
+
+    it("上限を超えてからサインインの確認が解決しても、書き込みへ進まない", async () => {
+      // Given
+      const reading = Promise.withResolvers<Reading>();
+      const { saving, savePreset, fetchPresets, clock } = setup({
+        read: () => reading.promise,
+      });
+      const saved = saving.savePreset(preset);
+      await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+      // When
+      reading.resolve({ status: "authenticated", userId: "user-1" });
+      await flush();
+
+      // Then
+      expect(await saved).toEqual(failed);
+      expect(savePreset).not.toHaveBeenCalled();
+      expect(fetchPresets).not.toHaveBeenCalled();
+    });
+
+    it("上限の時間切れとサインインの確認の解決が同じ時刻でも、書き込みへ進まない", async () => {
+      // Given
+      const reading = Promise.withResolvers<Reading>();
+      const { saving, savePreset, clock } = setup({
+        read: () => reading.promise,
+      });
+      const saved = saving.savePreset(preset);
+
+      // When
+      reading.resolve({ status: "authenticated", userId: "user-1" });
+      clock.advance(FETCH_TIMEOUT_MS);
+      await flush();
+
+      // Then
+      expect(await saved).toEqual(failed);
+      expect(savePreset).not.toHaveBeenCalled();
+    });
+
+    it("上限を超えた後に書き込みが成功しても、保存済みの背景更新をしない", async () => {
+      // Given
+      const writing = Promise.withResolvers<WriteResult>();
+      const { saving, fetchPresets, clock } = setup({
+        write: () => writing.promise,
+      });
+      const saved = saving.savePreset(preset);
+      await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+      // When
+      writing.resolve("written");
+      await flush();
+
+      // Then
+      expect(await saved).toEqual(failed);
+      expect(fetchPresets).not.toHaveBeenCalled();
+    });
+
+    it("打ち切った後の再試行は、前の呼び出しの印に止められず、前の呼び出しの続きは書き込まない", async () => {
+      // Given
+      const stalled = Promise.withResolvers<Reading>();
+      let reads = 0;
+      const { saving, savePreset, clock } = setup({
+        read: () => {
+          reads += 1;
+          return reads === 1
+            ? stalled.promise
+            : Promise.resolve({ status: "authenticated", userId: "user-1" });
+        },
+      });
+      const first = saving.savePreset(preset);
+      await clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+      // When
+      const second = await saving.savePreset(preset);
+      stalled.resolve({ status: "authenticated", userId: "user-1" });
+      await flush();
+
+      // Then
+      expect(await first).toEqual(failed);
+      expect(second).toEqual({ status: "saved" });
+      expect(savePreset).toHaveBeenCalledTimes(1);
     });
   });
 

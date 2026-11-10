@@ -133,6 +133,7 @@ function composeStores(inputs: Inputs, records: Records) {
     sessionReader,
     commands,
     fetching,
+    clock,
   });
   return {
     procedures: {
@@ -150,6 +151,7 @@ function composeStores(inputs: Inputs, records: Records) {
         sessionReader,
         commands,
         snapshots,
+        clock,
       }),
       fetching,
       ids,
@@ -213,6 +215,7 @@ function composeSession(inputs: Inputs, records: Records) {
     pageReplace: createBrowserPageLoad(),
     recordUser: records.control,
     identity: inputs.identityStore,
+    clock: inputs.clock,
   });
 }
 

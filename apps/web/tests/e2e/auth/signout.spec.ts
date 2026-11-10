@@ -125,7 +125,7 @@ test("トークンを更新できずサインアウトに失敗すると、エ�
 
   await confirmButton.click();
 
-  // auth-jsは更新の通信失敗を、待機（setTimeout）を挟んで約25秒まで再試行してから諦める。
+  // auth-jsは更新の通信失敗を、待機（setTimeout）を挟んで約25秒まで再試行してから諦めるが、サインアウトの手続きは10秒（SIGN_OUT_TIMEOUT_MS）で打ち切り、通信エラーを返す。
   // 時計を差し替えているため、エラーが表示されるまで1秒ずつ進める。既定の間隔(1秒)では実時間で約13秒かかるため、間隔を短くする。
   const errorMessage = page.getByText(authText("failure.unreachable"));
   await expect
