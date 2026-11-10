@@ -13,7 +13,9 @@ type KeypadState = ReturnType<typeof useKeypad>;
 // テンキーの表示前後で変わらず、テンキーが帯を覆う。
 // 縦向きのテンキーを開く間は、枠の高さをテンキーの高さにする。
 // 開くときは即座に確保し、格納するときはテンキーのスライドと同じ200msで
-// 高さを戻す。アンマウント時に一度に戻すと、<main>の高さが急に変わる。
+// 高さを戻す。一度に戻すと、<main>の高さが急に変わる。
+// テンキーは常に描画し、開閉は位置と`visibility`のtransitionだけで行う
+// (格納後は不可視のまま残り、操作もTabの移動の対象にもならない)。
 // 格納ボタン（テンキーの上に3rem出ている）は、枠の上へはみ出して<main>の下端に重なる。
 // テンキーは枠の上3remから下端までのクリップ枠に入れ、格納中にスライドで
 // 枠の下へ出た分が画面を広げないようにしつつ、ボタンは切らない。
@@ -30,15 +32,14 @@ export function BottomFrame({
   // テンキーの中身。
   children: ReactNode;
 }) {
-  const { isLandscape, keypadMounted, keypadShouldBeOpen, keypadHeight } =
-    keypad;
-  const reserved = !isLandscape && keypadMounted && keypadShouldBeOpen;
+  const { isLandscape, keypadOpen, keypadHeight } = keypad;
+  const reserved = !isLandscape && keypadOpen;
   return (
     <div
       data-testid="bottom-frame"
       className={cn(
         "pointer-events-none relative z-30 flex shrink-0 flex-col justify-end",
-        !keypadShouldBeOpen && "transition-[min-height] duration-200",
+        !keypadOpen && "transition-[min-height] duration-200",
       )}
       style={{
         minHeight: reserved ? keypadHeight : 0,
@@ -46,7 +47,7 @@ export function BottomFrame({
     >
       <div className="pointer-events-auto">{completeBar}</div>
 
-      {!isLandscape && keypadMounted && (
+      {!isLandscape && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 -top-12 overflow-clip">
           <KeypadSheet keypad={keypad}>{children}</KeypadSheet>
         </div>
@@ -68,13 +69,14 @@ function KeypadSheet({
     <div
       ref={keypad.setKeypadNode}
       className={cn(
-        "pointer-events-auto absolute inset-x-0 bottom-0 z-30 border-t-2 border-foreground/20 bg-card shadow-[0_-4px_6px_-1px_rgb(0_0_0/0.1),0_-2px_4px_-2px_rgb(0_0_0/0.1)] transition-transform duration-200",
+        "pointer-events-auto absolute inset-x-0 bottom-0 z-30 border-t-2 border-foreground/20 bg-card shadow-[0_-4px_6px_-1px_rgb(0_0_0/0.1),0_-2px_4px_-2px_rgb(0_0_0/0.1)] transition-[transform,translate,visibility] duration-200",
         // 格納ボタンが本体の上に3rem（-top-12）はみ出しているため、
         // 100%移動だけではそのはみ出し分が画面下端に残って見えて
         // しまう。はみ出し分を上乗せして完全に隠す。
-        keypad.keypadVisible
+        // 格納中のキーは動きの終わりまで見えて押せ、終わりに不可視になる。
+        keypad.keypadOpen
           ? "translate-y-0"
-          : "translate-y-[calc(100%+3rem)]",
+          : "invisible translate-y-[calc(100%+3rem)]",
       )}
     >
       <div className="relative mx-auto max-w-xl">

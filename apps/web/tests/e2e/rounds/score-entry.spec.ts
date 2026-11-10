@@ -218,6 +218,21 @@ test("テンキーの下矢印を押すと、矢が指されなくなり、テ�
   await expect(page.getByTestId("provisional-shot")).toHaveCount(0);
 });
 
+test("横向きでテンキーの側パネルを閉じると、点数のキーと閉じるボタンが見えなくなる", async ({
+  page,
+}) => {
+  // 横向きで開き、側パネルに点数のキーが見えることを確かめる。
+  await openRound(page, {}, { width: 667, height: 375 });
+  await expect(page.getByTestId("score-button-X")).toBeVisible();
+
+  // 側パネルを閉じ、キーと閉じるボタンが見えなくなることを確かめる。
+  // 閉じたパネルは幅0で残るため、パネル自体でなく中の要素で確かめる。
+  await page.getByTestId("keypad-panel-close").click();
+  await expect(page.getByTestId("keypad-panel-close")).toBeHidden();
+  await expect(page.getByTestId("score-button-X")).toBeHidden();
+  await expect(page.getByTestId("provisional-shot")).toHaveCount(0);
+});
+
 test("点数を入力した後、次に指す行が固定表示とテンキーに隠れずに見える", async ({
   page,
 }) => {

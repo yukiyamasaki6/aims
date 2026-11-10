@@ -87,8 +87,7 @@ export function ScorecardClient({
       </div>
       {keypad.isLandscape && (
         <KeypadPanel
-          mounted={keypad.keypadMounted}
-          visible={keypad.keypadVisible}
+          open={keypad.keypadOpen}
           onNodeChange={keypad.setKeypadNode}
           onClose={keypad.closeKeypad}
         >

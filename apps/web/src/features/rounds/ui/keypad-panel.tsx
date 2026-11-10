@@ -10,38 +10,35 @@ import { cn } from "@/lib/utils";
 // 縦向きのボトムシートは呼び出し側（scorecard-client.tsx）が<main>に
 // 内蔵する別実装で、この横向き/縦向きの出し分け自体もCSSではなくJSの
 // isLandscapeで行っている（このコンポーネントは横向きの時しかマウント
-// されない）ため、ここにモバイル向けの分岐は一切持たない。
+// されない。マウント中は閉じていても描画する）ため、ここにモバイル向けの分岐は一切持たない。
 // レフトパネルとの違いは、閉じた際にレフトパネルのアイコン帯（md:w-14）の
 // ような常設の再表示導線を持たず、幅0で完全に見えなくなる点（再表示は
 // 玉と空白を押す側の責務）。
 export function KeypadPanel({
-  mounted,
-  visible,
+  open,
   onNodeChange,
   onClose,
   children,
 }: {
-  mounted: boolean;
-  visible: boolean;
+  open: boolean;
   onNodeChange: (el: HTMLDivElement | null) => void;
   onClose: () => void;
   children?: ReactNode;
 }) {
   const t = useTranslations("rounds");
-  if (!mounted) return null;
-
   return (
     <div
       ref={onNodeChange}
       data-testid="keypad-panel"
-      aria-hidden={!visible}
+      aria-hidden={!open}
       className={cn(
         // スコア領域（flex-1）とのおおよそ3:2の比率になるよう、固定pxでは
         // なく画面幅に対する割合（40%）で幅を決める。<main>が自身の
         // overflow-y-autoで内部スクロールするため、この行自体は画面の
         // 高さを超えて伸びることがなく、この要素は常に画面内に留まる。
-        "z-30 h-full shrink-0 overflow-hidden bg-card text-card-foreground transition-[width]",
-        visible ? "w-2/5 border-l" : "w-0",
+        "z-30 h-full shrink-0 overflow-hidden bg-card text-card-foreground transition-[width,visibility]",
+        // 閉じたパネルは幅0で不可視のまま残り、操作もTabの移動の対象にもならない。
+        open ? "w-2/5 border-l" : "invisible w-0",
       )}
     >
       <div className="flex h-full flex-col">

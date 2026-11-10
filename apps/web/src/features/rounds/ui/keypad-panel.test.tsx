@@ -5,32 +5,12 @@ import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { KeypadPanel } from "./keypad-panel";
 
 describe("KeypadPanel", () => {
-  it("renders nothing when not mounted", () => {
-    // Given
-
-    // When
-    const { container } = render(
-      <KeypadPanel
-        mounted={false}
-        visible={false}
-        onNodeChange={vi.fn()}
-        onClose={vi.fn()}
-      >
-        score buttons
-      </KeypadPanel>,
-      { wrapper: IntlTestProvider },
-    );
-
-    // Then
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it("shows children and the close button while mounted and visible", () => {
+  it("shows children and the close button while open", () => {
     // Given
 
     // When
     render(
-      <KeypadPanel mounted visible onNodeChange={vi.fn()} onClose={vi.fn()}>
+      <KeypadPanel open onNodeChange={vi.fn()} onClose={vi.fn()}>
         score buttons
       </KeypadPanel>,
       { wrapper: IntlTestProvider },
@@ -45,17 +25,12 @@ describe("KeypadPanel", () => {
     );
   });
 
-  it("marks the panel aria-hidden while mounted but not visible", () => {
+  it("marks the panel aria-hidden while closed", () => {
     // Given
 
     // When
     render(
-      <KeypadPanel
-        mounted
-        visible={false}
-        onNodeChange={vi.fn()}
-        onClose={vi.fn()}
-      >
+      <KeypadPanel open={false} onNodeChange={vi.fn()} onClose={vi.fn()}>
         score buttons
       </KeypadPanel>,
       { wrapper: IntlTestProvider },
@@ -73,7 +48,7 @@ describe("KeypadPanel", () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     render(
-      <KeypadPanel mounted visible onNodeChange={vi.fn()} onClose={onClose}>
+      <KeypadPanel open onNodeChange={vi.fn()} onClose={onClose}>
         score buttons
       </KeypadPanel>,
       { wrapper: IntlTestProvider },
@@ -91,7 +66,7 @@ describe("KeypadPanel", () => {
 
     // When
     render(
-      <KeypadPanel mounted visible onNodeChange={vi.fn()} onClose={vi.fn()}>
+      <KeypadPanel open onNodeChange={vi.fn()} onClose={vi.fn()}>
         score buttons
       </KeypadPanel>,
       { wrapper: IntlTestProvider },
