@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Clock } from "@/lib/clock/contract/clock";
+import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import type { SessionStatus } from "../domain/auth-change";
 import type { AuthFailure } from "../domain/auth-failure";
+import { SIGN_OUT_TIMEOUT_MS } from "../domain/session-end-flow";
 import type { SignInChange } from "./auth-changes";
 import type { CallResult } from "./call-result";
 import { createSession, type SessionReading } from "./session";
@@ -26,6 +29,7 @@ function setup(
     here?: string;
     // 識別情報を保存できない環境(書いても読み戻せない)にする。
     canStore?: boolean;
+    clock?: Clock;
   } = {},
 ) {
   const listeners: Array<(event: SignInChange) => void> = [];
@@ -60,7 +64,9 @@ function setup(
       if (options.canStore !== false) stored.userId = userId;
     }),
   };
+  const manualClock = createManualClock();
   const session = createSession({
+    clock: options.clock ?? manualClock,
     authenticator: authority,
     pageReplace: page,
     recordUser,
@@ -68,6 +74,7 @@ function setup(
   });
   return {
     session,
+    clock: manualClock,
     authority,
     page,
     recordUser,
@@ -134,6 +141,186 @@ describe("サインアウト", () => {
         expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
       },
     );
+  });
+
+  describe("上限(SIGN_OUT_TIMEOUT_MS)までに終わらない場合", () => {
+    const unreachable = { kind: "failed", failure: { kind: "unreachable" } };
+
+    it("通信エラーの失敗を返し、実行中が解かれて再び始められる", async () => {
+      // Given
+      const { session, authority, clock, page } = setup({
+        signOutHere: () => new Promise<AuthFailure | null>(() => {}),
+      });
+      const first = session.signOut();
+
+      // When
+      await clock.advanceAsync(SIGN_OUT_TIMEOUT_MS);
+      void session.signOut();
+
+      // Then
+      expect(await first).toEqual(unreachable);
+      expect(authority.signOutHere).toHaveBeenCalledTimes(2);
+      expect(page.replace).not.toHaveBeenCalled();
+    });
+
+    it("状態の読み取りが終わらないときも、上限で通信エラーの失敗を返す", async () => {
+      // Given
+      const { session, clock, page } = setup({
+        check: () => new Promise<SessionStatus>(() => {}),
+      });
+      const result = session.signOut();
+
+      // When
+      await clock.advanceAsync(SIGN_OUT_TIMEOUT_MS);
+
+      // Then
+      expect(await result).toEqual(unreachable);
+      expect(page.replace).not.toHaveBeenCalled();
+    });
+
+    it("上限の1ms前は打ち切らない", async () => {
+      // Given
+      const release = Promise.withResolvers<AuthFailure | null>();
+      const { session, clock, state, page } = setup({
+        signOutHere: () => release.promise,
+      });
+      state.status = "unauthenticated";
+      const result = session.signOut();
+
+      // When
+      await clock.advanceAsync(SIGN_OUT_TIMEOUT_MS - 1);
+      release.resolve(null);
+
+      // Then
+      expect(await result).toEqual({ kind: "ignored" });
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+    });
+
+    it("上限を超えて遅れて終わった続きは、状態の読み取りも遷移もしない", async () => {
+      // Given
+      const release = Promise.withResolvers<AuthFailure | null>();
+      const { session, authority, clock, state, page } = setup({
+        signOutHere: () => release.promise,
+      });
+      state.status = "unauthenticated";
+      const result = session.signOut();
+      await clock.advanceAsync(SIGN_OUT_TIMEOUT_MS);
+
+      // When
+      release.resolve(null);
+      await flush();
+
+      // Then
+      expect(await result).toEqual(unreachable);
+      expect(authority.readSession).not.toHaveBeenCalled();
+      expect(page.replace).not.toHaveBeenCalled();
+    });
+
+    it("打ち切った後に始めた実行の最中に古い続きが終わっても、新しい実行の状態も結果も変わらない", async () => {
+      // Given
+      const stale = Promise.withResolvers<AuthFailure | null>();
+      const current = Promise.withResolvers<AuthFailure | null>();
+      const releases = [stale, current];
+      let calls = 0;
+      const { session, authority, clock, state, page } = setup({
+        signOutHere: () => releases[calls++]?.promise ?? Promise.resolve(null),
+      });
+      state.status = "unauthenticated";
+      const first = session.signOut();
+      await clock.advanceAsync(SIGN_OUT_TIMEOUT_MS);
+      const second = session.signOut();
+
+      // When
+      stale.resolve(null);
+      await flush();
+      const duringSecond = await session.signOut();
+      current.resolve(null);
+      const secondResult = await second;
+
+      // Then
+      expect(await first).toEqual(unreachable);
+      expect(duringSecond).toEqual({ kind: "ignored" });
+      expect(authority.signOutHere).toHaveBeenCalledTimes(2);
+      expect(secondResult).toEqual({ kind: "ignored" });
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+    });
+
+    it("上限は10秒で、9,999msでは打ち切らず、10,000msで打ち切る", async () => {
+      // Given
+      const { session, clock } = setup({
+        signOutHere: () => new Promise<AuthFailure | null>(() => {}),
+      });
+      let settled = false;
+      const result = session.signOut().finally(() => {
+        settled = true;
+      });
+
+      // When
+      await clock.advanceAsync(9_999);
+      const beforeLimit = settled;
+      await clock.advanceAsync(1);
+
+      // Then
+      expect(beforeLimit).toBe(false);
+      expect(await result).toEqual(unreachable);
+    });
+
+    it("終了の依頼は済み、状態の読み取りが上限を超えて遅れて終わった古い続きは、打ち切り後に始めた実行の状態も結果も遷移も変えない", async () => {
+      // Given
+      const stale = Promise.withResolvers<SessionStatus>();
+      const current = Promise.withResolvers<SessionStatus>();
+      const reads = [stale, current];
+      let calls = 0;
+      const { session, authority, clock, page } = setup({
+        check: () =>
+          reads[calls++]?.promise ?? Promise.resolve("authenticated"),
+      });
+      const first = session.signOut();
+      await clock.advanceAsync(SIGN_OUT_TIMEOUT_MS);
+      const second = session.signOut();
+      await flush();
+
+      // When
+      stale.resolve("unauthenticated");
+      await flush();
+      const duringSecond = await session.signOut();
+      const replacedBeforeSecondEnds = page.replace.mock.calls.length;
+      current.resolve("unauthenticated");
+      const secondResult = await second;
+
+      // Then
+      expect(await first).toEqual(unreachable);
+      expect(replacedBeforeSecondEnds).toBe(0);
+      expect(duringSecond).toEqual({ kind: "ignored" });
+      expect(authority.signOutHere).toHaveBeenCalledTimes(2);
+      expect(secondResult).toEqual({ kind: "ignored" });
+      expect(page.replace).toHaveBeenCalledExactlyOnceWith("/signin");
+    });
+
+    it("完了の後に打ち切りの時刻が来ても、何も変えない", async () => {
+      // Given
+      let fire: (() => void) | undefined;
+      const clock: Clock = {
+        now: () => 0,
+        utcOffsetMinutes: () => 0,
+        after(_ms, run) {
+          fire = run;
+          return () => {};
+        },
+      };
+      const { session, authority, state, page } = setup({ clock });
+      state.status = "unauthenticated";
+      const result = await session.signOut();
+
+      // When
+      fire?.();
+      await session.signOut();
+
+      // Then
+      expect(result).toEqual({ kind: "ignored" });
+      expect(authority.signOutHere).toHaveBeenCalledTimes(2);
+      expect(page.replace).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("表示中に終了の後の読み取りが未認証でない場合", () => {

@@ -140,21 +140,6 @@ describe("useRoundOpStack", () => {
     expect(tab.hub.record(STREAM).items).toHaveLength(1);
   });
 
-  it("StrictModeで描画しても、画面を閉じると開いている印を全て外す", () => {
-    // Given
-    const { tab, wrapper } = setup();
-    const { unmount } = renderHook(
-      () => useRoundOpStack("round-1", loaded("in_progress"), ignoreGone),
-      { wrapper, reactStrictMode: true },
-    );
-
-    // When
-    unmount();
-
-    // Then
-    expect(tab.requests.watched()).toEqual([]);
-  });
-
   describe("的の一覧", () => {
     const face2 = { ...faces[0], id: "face-2" };
     const usingFace2 = () =>

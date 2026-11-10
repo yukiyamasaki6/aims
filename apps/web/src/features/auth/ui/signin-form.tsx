@@ -120,6 +120,8 @@ function SignInFields({
         {(aria) => (
           <Input
             type="email"
+            name="email"
+            autoComplete="username"
             placeholder={t("emailPlaceholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -141,6 +143,8 @@ function SignInFields({
         {(aria) => (
           <PasswordInput
             ref={passwordRef}
+            name="password"
+            autoComplete="current-password"
             placeholder={t("passwordPlaceholder")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}

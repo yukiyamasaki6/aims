@@ -97,9 +97,9 @@ gh auth login
     | Isolated UI component logic | `pnpm test` | Runs Vitest to verify unit logic and rendering in isolation |
     | DB schema, RLS, and triggers | `pnpm test:db` | Resets local DB and runs pgTAP tests to verify schemas and security rules |
     | Multi-screen user flows | `pnpm test:e2e` | Runs Playwright to verify end-to-end flows (uses Mailpit for email-based steps) |
-    | Manual visual inspection | `pnpm dev` (`http://localhost:3000`) | Starts local dev server to check the UI directly in the browser |
-    | Database records inspection | `pnpm dev` (`http://localhost:54323`) | Inspects Supabase tables and auth records via Supabase Studio |
-    | Outgoing email inspection | `pnpm dev` (`http://localhost:54324`) | Inspects confirmation/reset emails via Mailpit |
+    | Manual visual inspection | `pnpm preview` (`http://localhost:3000`) | Builds the app and starts it to check the UI directly in the browser (no dev server; behavior under Strict Mode's double invocation is not guaranteed) |
+    | Database records inspection | `pnpm db:start` (`http://localhost:54323`) | Inspects Supabase tables and auth records via Supabase Studio |
+    | Outgoing email inspection | `pnpm db:start` (`http://localhost:54324`) | Inspects confirmation/reset emails via Mailpit |
 4. Run lint, type checks, SQL lint, and unit tests to ensure code quality:
     ```bash
     pnpm validate

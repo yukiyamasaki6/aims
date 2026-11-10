@@ -1,11 +1,15 @@
+import type { Clock } from "@/lib/clock/contract/clock";
 import { lostByStatus, type SessionStatus } from "../domain/auth-change";
 import type { AuthFailure } from "../domain/auth-failure";
 import { signInHref } from "../domain/auth-routes";
 import {
   beginSignOut,
   endSignOut,
+  expireSignOut,
   initialSessionEndFlow,
   leave,
+  SIGN_OUT_TIMEOUT_MS,
+  type SignOutVerdict,
 } from "../domain/session-end-flow";
 import type { SignInChanges } from "./auth-changes";
 import { type CallResult, failureOf } from "./call-result";
@@ -52,6 +56,7 @@ type Dependencies = {
   pageReplace: PageReplace;
   recordUser: RecordUser;
   identity: IdentityReader & IdentityWriter;
+  clock: Clock;
 };
 
 export type Session = {
@@ -61,30 +66,58 @@ export type Session = {
   watch(): () => void;
 };
 
+function resultOf(verdict: SignOutVerdict): SignOutResult {
+  return verdict.kind === "failed"
+    ? { kind: "failed", failure: verdict.failure }
+    : { kind: "ignored" };
+}
+
 // サインアウトは、この端末のサインインの終了を頼んだ後、サインインの状態を読み、未認証なら終えられたとしてサインインへ移す。
+// 手続き全体はSIGN_OUT_TIMEOUT_MSで打ち切り、終えられなかった(通信エラー)として返す。打ち切った後の続きは、世代が違うため何も変えない(遅れて本当にサインアウトできたときは、見張りがサインインへ移す)。
 // セッションの喪失(サインアウトの通知、更新の拒否、確認の結果の未認証)は見張りが検知して移す。サインアウトの実行中の喪失は、サインアウトの判定に委ねる。
 // サインインの通知の利用者が記録の利用者と違うとき(起動時の復元の不一致、別の利用者のサインイン)は、新しい利用者を端末の識別情報へ書き、今の場所を読み込み直す。新しい文書は、その利用者の記録で起動する。
 // 実行中の状態(SessionEndFlow)は、この手続きが1つ持ち、サインアウトと見張りの両方が使う。
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: サインアウトと見張りが1つの可変の状態(flow)を共有するファクトリで、内側の関数は個々に上限内である。外へ分けると状態を引数で渡すことになり、責務は分かれず追いにくくなる。
 export function createSession({
   authenticator,
   pageReplace,
   recordUser,
   identity,
+  clock,
 }: Dependencies): Session {
   let flow = initialSessionEndFlow;
 
+  // 打ち切りは、時計のコールバックの中で同期に適用する。完了と同時なら、先に決まった一方だけが効く。
   async function signOut(): Promise<SignOutResult> {
     const start = beginSignOut(flow);
     flow = start.state;
     if (start.request === null) return { kind: "ignored" };
+    const mine = flow.generation;
+    const { promise: expired, resolve } =
+      Promise.withResolvers<SignOutResult>();
+    const cancel = clock.after(SIGN_OUT_TIMEOUT_MS, () => {
+      const expiry = expireSignOut(flow, mine);
+      if (expiry === null) return;
+      flow = expiry.state;
+      resolve(resultOf(expiry.result));
+    });
+    try {
+      return await Promise.race([finishSignOut(mine), expired]);
+    } finally {
+      cancel();
+    }
+  }
+
+  // 世代が変わった(打ち切られた)後は、状態も遷移も変えない。
+  async function finishSignOut(mine: number): Promise<SignOutResult> {
     const failure = failureOf(await authenticator.signOutHere());
+    if (flow.generation !== mine) return { kind: "ignored" };
     const reading = await authenticator.readSession();
+    if (flow.generation !== mine) return { kind: "ignored" };
     const ended = endSignOut(flow, { status: reading.status, failure });
     flow = ended.state;
     if (ended.result.kind === "completed") go(signInHref(null));
-    return ended.result.kind === "failed"
-      ? { kind: "failed", failure: ended.result.failure }
-      : { kind: "ignored" };
+    return resultOf(ended.result);
   }
 
   function go(destination: string) {

@@ -3,6 +3,7 @@ import { UNREACHABLE } from "./auth-failure";
 import {
   beginSignOut,
   endSignOut,
+  expireSignOut,
   initialSessionEndFlow,
   leave,
 } from "./session-end-flow";
@@ -17,7 +18,7 @@ describe("beginSignOut", () => {
 
     // Then
     expect(result).toEqual({
-      state: { running: true },
+      state: { running: true, generation: 1 },
       request: true,
     });
   });
@@ -67,7 +68,7 @@ describe("endSignOut", () => {
 
       // Then
       expect(result).toEqual({
-        state: { running: false },
+        state: { running: false, generation: 1 },
         result: { kind: "completed" },
       });
     });
@@ -89,7 +90,7 @@ describe("endSignOut", () => {
 
       // Then
       expect(result).toEqual({
-        state: { running: false },
+        state: { running: false, generation: 1 },
         result: { kind: "failed", failure: { kind: "rate_limited" } },
       });
     });
@@ -173,5 +174,38 @@ describe("leave", () => {
 
     // Then
     expect(result).toBe("/signin");
+  });
+});
+
+describe("expireSignOut", () => {
+  it("実行中で世代が一致するとき、実行中を解き、世代を進め、通信エラーの失敗を返す", () => {
+    // Given
+    const running = beginSignOut(initialSessionEndFlow).state;
+
+    // When
+    const expired = expireSignOut(running, running.generation);
+
+    // Then
+    expect(expired).toEqual({
+      state: { running: false, generation: running.generation + 1 },
+      result: { kind: "failed", failure: UNREACHABLE },
+    });
+  });
+
+  it("世代が違うとき、または実行中でないとき、何も変えない", () => {
+    // Given
+    const running = beginSignOut(initialSessionEndFlow).state;
+    const settled = endSignOut(running, {
+      status: "unauthenticated",
+      failure: null,
+    }).state;
+
+    // When
+    const otherGeneration = expireSignOut(running, running.generation + 1);
+    const notRunning = expireSignOut(settled, settled.generation);
+
+    // Then
+    expect(otherGeneration).toBeNull();
+    expect(notRunning).toBeNull();
   });
 });

@@ -24,7 +24,7 @@ export function createRefreshRequests() {
     string,
     Map<number, (result: FetchResult<OpenedRound>) => void>
   >();
-  const watching = new Map<string, number>();
+  const watching = new Set<string>();
   // 確定済みの操作をベースに重ねられなかった(取り直しが要る)開いた詳細。
   const overlay = new Set<string>();
   // 的が足りないことを知らせる印。印を付けた側がキーを決める。
@@ -79,18 +79,15 @@ export function createRefreshRequests() {
     isGone: (roundId: string): boolean => opens.get(roundId)?.gone ?? false,
     // 開いている間の印。取り直しの要否の判定が、開いている詳細を知るために使う。
     watch(roundId: string): () => void {
-      watching.set(roundId, (watching.get(roundId) ?? 0) + 1);
+      watching.add(roundId);
       changed();
       return () => {
-        const count = watching.get(roundId);
-        if (count === undefined) return;
-        if (count <= 1) watching.delete(roundId);
-        else watching.set(roundId, count - 1);
+        watching.delete(roundId);
         changed();
       };
     },
     watched(): { roundId: string }[] {
-      return [...watching.keys()].map((roundId) => ({ roundId }));
+      return [...watching].map((roundId) => ({ roundId }));
     },
     setOverlay(roundId: string, needed: boolean) {
       if (overlay.has(roundId) === needed) return;

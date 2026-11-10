@@ -109,6 +109,8 @@ function CodeEntryForm({
           <Input
             type="text"
             inputMode="numeric"
+            name="code"
+            autoComplete="one-time-code"
             placeholder={t("otpCodePlaceholder")}
             className="text-center tracking-widest"
             maxLength={AUTH_CODE_LENGTH}

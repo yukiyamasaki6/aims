@@ -34,7 +34,7 @@ export default defineConfig({
     // 実行が残した古いビルドを検証してしまうことがなく、個別テスト実行
     // （ファイル・-g指定）でも同様に保証される。
     // ポートは3000ではなく3100を使い、開発者が手動で動かしている
-    // `pnpm dev`（3000番）と衝突しないようにする。
+    // `pnpm preview`（3000番）と衝突しないようにする。
     command: "PORT=3100 pnpm preview",
     url: "http://localhost:3100",
     reuseExistingServer: false,

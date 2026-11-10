@@ -70,25 +70,21 @@ describe("詳細を開く依頼", () => {
 });
 
 describe("開いている詳細の印", () => {
-  it("開いている間の印を付けた回数だけ外れる", () => {
+  it("印を付けると開いているラウンドに出て、外すと消える。付ける時と外す時に知らせる", () => {
     // Given
     const requests = createRefreshRequests();
     const listener = vi.fn();
     requests.subscribe(listener);
 
     // When
-    const first = requests.watch("r-1");
-    const second = requests.watch("r-1");
-    const both = requests.watched();
-    first();
-    const afterFirst = requests.watched();
-    second();
+    const unwatch = requests.watch("r-1");
+    const watching = requests.watched();
+    unwatch();
 
     // Then
-    expect(both).toEqual([{ roundId: "r-1" }]);
-    expect(afterFirst).toEqual([{ roundId: "r-1" }]);
+    expect(watching).toEqual([{ roundId: "r-1" }]);
     expect(requests.watched()).toEqual([]);
-    expect(listener).toHaveBeenCalledTimes(4);
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 
   it("重ねられなかった確定済みの操作の印は、変わったときだけ知らせる", () => {

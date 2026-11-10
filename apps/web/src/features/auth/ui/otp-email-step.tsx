@@ -59,6 +59,8 @@ export function OtpEmailStep({
           {(aria) => (
             <Input
               type="email"
+              name="email"
+              autoComplete="username"
               placeholder={t("emailPlaceholder")}
               value={email}
               onChange={(e) => onEmailChange(e.target.value)}

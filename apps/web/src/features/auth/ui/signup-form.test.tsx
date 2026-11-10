@@ -1,7 +1,7 @@
 import { setImmediate as realSetImmediate } from "node:timers";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { forwardRef, StrictMode, useImperativeHandle } from "react";
+import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
@@ -47,7 +47,7 @@ vi.mock("./turnstile", () => ({
 
 type User = ReturnType<typeof userEvent.setup>;
 
-function renderForm(options?: { strict?: boolean }) {
+function renderForm() {
   const signUp = createSignUp({
     clock: createBrowserClock(),
     connectivity: createFakeConnectivity(),
@@ -55,9 +55,7 @@ function renderForm(options?: { strict?: boolean }) {
     pageReplace,
   });
   const form = <SignUpForm signUp={signUp} siteKey="site-key" />;
-  return render(options?.strict ? <StrictMode>{form}</StrictMode> : form, {
-    wrapper: IntlTestProvider,
-  });
+  return render(form, { wrapper: IntlTestProvider });
 }
 
 function heading(name: string) {

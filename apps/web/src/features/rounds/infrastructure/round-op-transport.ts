@@ -177,9 +177,7 @@ async function sendDistanceOperation(
           p_id: operation.id,
           p_round_id: operation.roundId,
           p_position_key: operation.positionKey,
-          // distanceはSQL側でnullを受け付ける。
-          // distanceはSQL側でnullを受け付けるが、生成した型は数値で出力する。
-          p_distance: operation.distance as number,
+          p_distance: operation.distance,
           p_total_ends: operation.totalEnds,
           p_arrows_per_end: operation.arrowsPerEnd,
           p_target_face_id: operation.targetFaceId,
