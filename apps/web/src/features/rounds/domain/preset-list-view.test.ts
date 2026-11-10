@@ -94,6 +94,16 @@ describe("presetListView", () => {
     expect(view.selected).toBeNull();
   });
 
+  it("別のプリセットを削除しても、選択中のプリセットはselectedのままになる", () => {
+    // Given
+
+    // When
+    const view = presetListView(loaded, ["mine-2"], "mine-1");
+
+    // Then
+    expect(view.selected).toBe(mine1);
+  });
+
   it.each<[string, FetchView<Presets>]>([
     ["取得中", { status: "loading" }],
     ["オフライン", { status: "offline" }],

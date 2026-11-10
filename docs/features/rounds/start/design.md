@@ -22,8 +22,8 @@
 | 未選択 | 開始ボタンに「プリセット無しで開始」 | `selectedId`が`null` |
 | 選択中 | 選択カードに距離構成を展開し、開始ボタンにプリセット名を出す | `selectedId`が一覧のIDに一致 |
 | 未選択へ戻る | 選択中のカードか展開領域をクリックすると未選択に戻る | 同上 |
-| 保存中 | 開始ボタンにスピナーを出し`aria-disabled`にする。保存後も遷移完了まで解除しない | `submitting`が`true` |
-| 開始失敗 | 開始ボタンの上にエラーを出し、再び押せる | 未認証が確認された（`error`が設定されている） |
+| 保存中 | 開始ボタン(`BusyButton`)にスピナーを出し`aria-disabled`にする。保存後も遷移完了まで解除しない | `submitting`が`true` |
+| 開始失敗 | 開始ボタンの上に「サインインが必要です。」を出し、再び押せる | 未認証が確認された（`unauthenticated`が真） |
 
 - 「一覧へ戻る」は通常のリンクである。
 - 未認証のアクセスは`proxy.ts`が`/signin`へ送る。
@@ -32,7 +32,7 @@
 
 - `app/(main)/rounds/new/page.tsx`: 入口。何も生成せず、`RoundPresetSelect`を描くだけである。
 - `features/rounds/ui/round-preset-select.tsx`: UI層。取得と選択の状態を持ち、一覧、開始の帯、削除の確認を描く。手続きの入れ物(`RoundProcedures`)を文脈で受け取り、`fetching.fetchPresets()`で一覧を得て、`whenOnline`で通信の復帰を受ける。「一覧へ戻る」は`ROUNDS_PATH`を使う。削除の部品は`rounds/preset`が扱う。
-- `features/rounds/ui/use-start-round.ts`: UI層。作成中とエラーの状態を持ち、二重の開始を防いで手続きの入れ物の`roundStart.startRound`を呼ぶ。
+- `features/rounds/ui/use-start-round.ts`: UI層。作成中と未認証の状態を持ち、実行中は2回目の開始を無視して、手続きの入れ物の`roundStart.startRound`を呼ぶ。失敗は一様に実行中を戻し、未認証のときだけ未認証の表示を立てる。画面を離れた（`left`）ときの状態の更新は、離れた画面に見えない。
 - `features/rounds/ui/preset-info.tsx`、`target-face-info.tsx`: UI層。プリセットと距離、的の情報の表示。
 - `features/rounds/application/round-fetching.ts`の`RoundFetching.fetchPresets`(手続きの入れ物の`fetching`): 取得の順序(手続き)。成功した結果を保存し、`ok`以外では保存済みを返す。保存済みがあるときの待ちは1秒で、時間切れの後に届いた結果は表示せず、取得に使った利用者のキーへ保存する。
 - `features/rounds/infrastructure/round-queries.ts`の`RoundQueries.presets`: 個人（`owner_id`が自分）と公式（`owner_id`が`null`）を1回の取得で得る。`DatabaseGateway`の`select`で行い、`QueryOutcome`(`domain/query-outcome.ts`)を返す。応答を種類へ写すのはインフラ層の`db-response-outcome.ts`である。
@@ -45,7 +45,7 @@
 - 開始は一覧の取得結果の構成で作る。一覧の表示後に削除されたプリセットでも、表示していた構成で開始する。
 - ラウンドと距離のIDはクライアントで生成して渡す。
 - 送信される`create_round`は、`round_users`・`rounds`・`distances`を1トランザクションで作る。`rounds`の直接INSERTはRLSで拒否する。
-- 画面がアンマウントされた後の結果は破棄する。
+- 画面がアンマウントされた後は、サインインの確認の待ちの後に、追記も遷移もしない（手続きが呼び出し側の`isCurrent`で守り、`failed`の`left`で返す）。
 
 ## ファイルと層
 
@@ -71,7 +71,7 @@
 | `features/rounds/infrastructure/preset-commands.ts` | infrastructure(プリセットの書き込みと、結果の種類への写し) |
 | `features/rounds/infrastructure/browser-unique-ids.ts` | infrastructure(新しいIDの払い出し) |
 | `features/rounds/infrastructure/round-queries.ts`、`reference-snapshot.ts`、`rounds-db-schema.ts` | infrastructure(プリセットの問い合わせ、保存済みの書き換え、プリセットの表を持つ) |
-| `hooks/use-mounted-ref.ts`、`hooks/use-hydrated.ts`、`components/ui/{button,confirm-dialog}.tsx`、`lib/utils.ts` | 共有の画面部品 |
+| `hooks/use-mounted-ref.ts`(アンマウント後を表す。Strict Modeの開発時の二重実行は保証対象外)、`hooks/use-hydrated.ts`、`components/ui/{busy-button,button,confirm-dialog}.tsx` | 共有の画面部品 |
 | `lib/supabase/contract/database.ts`、`lib/supabase/infrastructure/database.ts` | `lib/<能力>`(約束と実装: 削除`delete`を持つ) |
 
 ## 設計判断
@@ -82,7 +82,6 @@
 | 作成は`create_round`に一本化する | `INSERT ... RETURNING`は、同一文内のトリガー副作用をSELECTポリシーが参照できず失敗するため。詳細: #99 | RLSの評価方式が変わったとき |
 | サーバーの完了を待たず操作の列に積む | オフラインでも開始し記録を失わないため。Server Actionは`redirect()`の競合のためやめた | - |
 | 成功後も開始ボタンを無効のままにする | 開始の手続きが遷移を進め、遷移先の取得中も本コンポーネントが残るため、解除すると遷移前に再び押せるため | 遷移方式を変えたとき |
-| 二重送信を同期的なref（`submittingRef`）で判定する | stateは再描画まで更新されず、連打で2回目が通るため | stateの更新が同期的になる方式に変えたとき |
 | 個人と公式を1回の取得で得て、`owner_id`を自分か`null`に絞る | 失敗の分類を1系統にするため。`preset_rounds`のRLSは認証済みの全員に全行を見せ、絞らないと他人の個人プリセットが返るため | RLSで個人プリセットを所有者だけに絞るとき |
 | 開始ボタンを取得に依存させず、取得中も押せる | 取得が遅い・失敗する状況でも、唯一の操作を遅らせないため。取得結果が無ければ未選択なので、誤ったプリセットで作らない | 取得を待つ必要がある入力を開始前に加えるとき |
 | 保存済みをユーザーごとのキーで`localStorage`に持ち、ネットワーク優先で、失敗または1秒の時間切れのときだけ使う。時間切れ後に届いた結果は表示せず保存する | オフラインで開始でき、オンラインの表示を入れ替えないため。保存済み優先は表示の入れ替わりと選択中のプリセットが消える扱いが要るため採らない。SWの実行時キャッシュはクロスオリジンを通さず認証に依存するため採らない | 保存量が`localStorage`の容量に近づいたとき。1秒を超える取得が通常になったとき |

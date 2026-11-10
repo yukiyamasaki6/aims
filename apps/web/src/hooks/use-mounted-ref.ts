@@ -5,9 +5,6 @@ export function useMountedRef() {
   const mountedRef = useRef(true);
 
   useEffect(() => {
-    // Strict Modeの開発時二重実行（マウント→クリーンアップ→再マウント）に
-    // 対応するため、マウント時にも明示的にtrueへ戻す。
-    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };

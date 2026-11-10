@@ -301,7 +301,7 @@ describe("createRoundStart", () => {
       expect(append).toHaveBeenCalledTimes(1);
     });
 
-    it("認証の確認の間にisCurrentが偽になると、何も積まず遷移せずdiscardedを返す", async () => {
+    it("認証の確認の間にisCurrentが偽になると、何も積まず遷移せず、leftでfailedを返す", async () => {
       // Given
       let current = true;
       const { roundStart, append, go } = setup({
@@ -315,12 +315,12 @@ describe("createRoundStart", () => {
       const result = await roundStart.startRound(null, () => current);
 
       // Then
-      expect(result).toEqual({ status: "discarded" });
+      expect(result).toEqual({ status: "failed", error: "left" });
       expect(append).not.toHaveBeenCalled();
       expect(go).not.toHaveBeenCalled();
     });
 
-    it("未認証の確認の間に破棄されたときは、failedではなくdiscardedを返す", async () => {
+    it("未認証の確認の間に画面が無くなったときは、unauthenticatedでなくleftでfailedを返す", async () => {
       // Given
       let current = true;
       const { roundStart } = setup({
@@ -334,7 +334,7 @@ describe("createRoundStart", () => {
       const result = await roundStart.startRound(null, () => current);
 
       // Then
-      expect(result).toEqual({ status: "discarded" });
+      expect(result).toEqual({ status: "failed", error: "left" });
     });
   });
 });

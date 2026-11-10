@@ -47,7 +47,7 @@ export const roundsMessages = {
     startNotice: "種別・弓種・距離は開始後に変更可能です。",
     startWithPreset: "「{name}」で開始",
     startWithoutPreset: "プリセット無しで開始",
-    roundStartFailure: signInFailureText,
+    roundStartUnauthenticated: signInFailureText.unauthenticated,
     presetPersonal: "個人プリセット",
     presetPersonalEmpty: "プリセットとして保存すると、ここに表示されます。",
     presetGlobal: "公式プリセット",

@@ -26,7 +26,7 @@
 | メニュー表示 | 個人プリセットの行に「削除」を出し、外側のクリックで閉じる | メニューを開いている |
 | 確認中 | `BlockingConfirmDialog`に「「<プリセット名>」を削除しますか？」。実行中(`busy`)とエラー(`error`)は削除側のフックが渡す | `presetToDelete`が設定されている |
 | 削除中 | キャンセルと確認を無効にし、背景クリックでも閉じない | 完了していない |
-| 削除成功 | 一覧から除く。削除対象が選択中なら選択も解除する | 結果が成功 |
+| 削除成功 | 一覧から除く。削除対象が選択中なら選択も解除する(選択は削除済みのIDを除く導出で解除される) | 結果が成功 |
 | 削除失敗 | 開いたままエラーを出し、確認ボタンを再び押せる | 結果が`failed` |
 
 ## 構成とデータの流れ
@@ -36,7 +36,7 @@
 - `features/rounds/domain/preset-save.ts`: 保存するプリセットの内容(外部の引数名を持たない)、名前の決定と長さ検証、距離の位置キーの連番の振り直しを行う。
 - 保存の手続き(`RoundProcedures.presetSaving`。`features/rounds/application/preset-saving.ts`): 入口が渡す`SessionReader`でサインインの状態を確かめ、書き込みを実行し、成功の後にプリセット一覧を背景で再取得して端末の保存済みを更新する。
 - `features/rounds/ui/use-preset-delete.ts`: 削除を確認中のプリセットと、削除済みのID、実行中とエラーを持ち、手続きの入れ物の`presetDeletion.deletePreset`を呼ぶ。
-- 削除の手続き(`features/rounds/application/preset-deletion.ts`。手続きの入れ物の`presetDeletion`): サインインの状態を確かめ、削除を実行する。書き込みに成功したら、削除の応答を待つ間に画面を離れていても保存済みから除く(画面への結果だけを破棄する)。届かなかったときと拒否されたときは保存済みを変えない。
+- 削除の手続き(`features/rounds/application/preset-deletion.ts`。手続きの入れ物の`presetDeletion`): サインインの状態を確かめ、削除を実行する。書き込みに成功したら保存済みから除く。削除の応答を待つ間に画面を離れていても完了する。書き込めなかったときは保存済みを変えない。
 - `features/rounds/infrastructure/preset-commands.ts`: 削除は`DatabaseGateway.delete`で`preset_rounds`を`id`で消す。保存は`DatabaseGateway.rpc("save_round_as_preset")`を呼び、外部の引数名`p_*`はここだけが知る。どちらも結果を書き込めたか書き込めなかったか(`WriteResult`)に写す。通信の失敗はSDKが例外でなく状態0とエラーで返すため、エラーの有無だけで判定する。文言は作らない。
 - `features/rounds/ui/scorecard-client.tsx`: 保存ダイアログへ、ラウンド名と画面に表示中の構成(操作の列から導いた距離)を渡す。
 - サインインの確認の失敗: 保存も削除も、`SessionReader`の`readSession`が未認証を返したときだけ失敗の種類`unauthenticated`で返す。確認できない（不明、通信失敗）ときは書き込みへ進み、書き込めなければ保存・削除の失敗になる。文言は、UI層の文言の一覧(`features/rounds/ui/rounds-messages.ts`)が種類ごとに持つ。
@@ -48,7 +48,7 @@
 - `save_round_as_preset`は、渡された名前・種別・弓種・距離配列を`preset_rounds`と`preset_distances`へ1トランザクションで書く。`rounds`・`distances`は読まない。SECURITY INVOKERで、呼び出し元のRLSに従う。
 - 削除は直接のDELETEで、`preset_rounds`のDELETEポリシーが認可を担う。`preset_distances`は外部キーのCASCADEで消える。
 - アプリが書き込む経路は、保存のRPCと削除だけである。`preset_rounds`のUPDATEと`preset_distances`のUPDATE・DELETEのポリシーとGRANTは持たない。
-- 削除は操作の列を使わず、削除側のフック(`use-preset-delete.ts`)が実行中と失敗を持ち、同期の`ref`で二重実行を拒否する。`BlockingConfirmDialog`は`busy`と`error`を受け取って完了を待つ表現だけを担う。
+- 削除は操作の列を使わず、削除側のフック(`use-preset-delete.ts`)が実行中と失敗を持ち、実行中の`state`で二重実行を拒否する。`BlockingConfirmDialog`は`busy`と`error`を受け取って完了を待つ表現だけを担う。
 - 保存(`save_round_as_preset`)も操作の列を使わない、オンライン専用の直接書き込みである(`preset-commands.ts`)。
 
 ## 設計判断

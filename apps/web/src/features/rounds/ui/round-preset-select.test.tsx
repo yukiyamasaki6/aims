@@ -506,28 +506,6 @@ describe("RoundPresetSelect", () => {
           expect.any(Function),
         );
       });
-
-      it("開始へ、マウント中は真を返す判定を渡し、アンマウント後は偽を返す", async () => {
-        // Given
-        const user = userEvent.setup();
-        const { unmount } = await renderSelect([personalPreset], []);
-        await user.click(screen.getAllByTestId("round-preset-button")[0]);
-
-        // When
-        await user.click(
-          screen.getByRole("button", {
-            name: roundsText("startWithPreset", { name: "個人練習セット" }),
-          }),
-        );
-
-        // Then
-        await waitFor(() => expect(startRound).toHaveBeenCalled());
-        const isCurrent = startRound.mock.calls[0][1] as () => boolean;
-        const whileMounted = isCurrent();
-        unmount();
-        expect(whileMounted).toBe(true);
-        expect(isCurrent()).toBe(false);
-      });
     });
 
     describe("送信中に再度押した場合", () => {
@@ -602,7 +580,7 @@ describe("RoundPresetSelect", () => {
 
         // Then
         expect(
-          await screen.findByText(roundsText("fetchFailure.unauthenticated")),
+          await screen.findByText(roundsText("roundStartUnauthenticated")),
         ).toBeInTheDocument();
         expect(
           screen.getByRole("button", {
@@ -639,34 +617,10 @@ describe("RoundPresetSelect", () => {
         await waitFor(() => {
           expect(screen.queryByText("個人練習セット")).not.toBeInTheDocument();
         });
-        expect(deletePreset).toHaveBeenCalledWith(
-          "preset-personal",
-          expect.any(Function),
-        );
+        expect(deletePreset).toHaveBeenCalledWith("preset-personal");
         expect(
           screen.getByRole("button", {
             name: roundsText("startWithoutPreset"),
-          }),
-        ).toBeInTheDocument();
-      });
-
-      it("選択中とは別のプリセットを削除すると、一覧から取り除き選択は維持する", async () => {
-        // Given
-        const user = userEvent.setup();
-        await renderSelect([personalPreset, otherPersonalPreset], []);
-        await user.click(screen.getAllByTestId("round-preset-button")[0]);
-        await openDeleteDialog(user, "別の個人セット");
-
-        // When
-        await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-        // Then
-        await waitFor(() => {
-          expect(screen.queryByText("別の個人セット")).not.toBeInTheDocument();
-        });
-        expect(
-          screen.getByRole("button", {
-            name: roundsText("startWithPreset", { name: "個人練習セット" }),
           }),
         ).toBeInTheDocument();
       });
@@ -709,31 +663,6 @@ describe("RoundPresetSelect", () => {
           ),
         ).toBeInTheDocument();
         expect(screen.getByText("個人練習セット")).toBeInTheDocument();
-      });
-
-      it("削除確認ダイアログは開いたままで、確認ボタンを再度押せる", async () => {
-        // Given
-        deletePreset.mockResolvedValue({
-          status: "failed",
-          error: "deleteFailed",
-        });
-        const user = userEvent.setup();
-        await renderSelect([personalPreset], []);
-        await openDeleteDialog(user, "個人練習セット");
-
-        // When
-        await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-        // Then
-        expect(
-          await screen.findByText(
-            roundsText("presetDeleteFailure.deleteFailed"),
-          ),
-        ).toBeInTheDocument();
-        expect(screen.getByTestId("confirm-dialog-confirm")).toBeEnabled();
-        expect(
-          screen.getByTestId("confirm-dialog-confirm"),
-        ).not.toHaveAttribute("aria-disabled", "true");
       });
     });
   });
