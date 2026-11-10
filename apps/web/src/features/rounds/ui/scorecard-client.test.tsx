@@ -27,6 +27,7 @@ import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { useRoundDetailStore } from "@/features/rounds/ui/rounds-context";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
+import { loadStreamGroup } from "@/lib/local-op-log/op-log-store-test-helpers";
 import { retryDelayMs } from "../domain/sync-failure";
 import { ScorecardClient } from "./scorecard-client";
 
@@ -353,7 +354,8 @@ function appendFromOtherPath(operation: SyncOperation) {
 // 端末に保存されたround-1の操作の、確定の有無。送信の状態は画面に出ず、内部の状態は観測できないため、保存と確定の有無で確かめる。
 async function ackedStates(): Promise<("acked" | "unacked")[]> {
   const store = createIndexedDbOpLogStore(roundStreamRules);
-  const group = await store.loadStream(
+  const group = await loadStreamGroup(
+    store,
     roundStreamId("round-1"),
     createBrowserIdentityStore().read(),
   );

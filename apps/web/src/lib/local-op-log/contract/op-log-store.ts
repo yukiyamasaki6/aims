@@ -58,11 +58,6 @@ export type OpLogStore<Op extends OpBase, Base> = {
     entry: NewOpLogEntry<Op>,
     base?: StreamBase<Base>,
   ) => Promise<number>;
-  // 現在のユーザーのベースと操作を、1つのトランザクションで返す(操作は`seq`順)。他ユーザーのものは保存したまま読まない。
-  loadStream: (
-    streamId: string,
-    userId: string | null,
-  ) => Promise<StreamGroup<Op, Base>>;
   // 現在のユーザーの全ての列の組を、`streamId`ごとに返す。ベースか操作を持つ列だけ。他ユーザーのものは保存したまま読まない。
   loadAll: (
     userId: string | null,

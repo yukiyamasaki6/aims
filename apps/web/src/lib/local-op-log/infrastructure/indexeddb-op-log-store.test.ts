@@ -8,6 +8,7 @@ import type {
   StreamEntry,
   StreamRules,
 } from "../contract/op-log-store";
+import { loadStreamGroup } from "../op-log-store-test-helpers";
 import { createIndexedDbOpLogStore } from "./indexeddb-op-log-store";
 
 type Op = { eventId: string; value: string };
@@ -60,7 +61,7 @@ describe("op log store", () => {
     await store.append(entry("record-1"));
     await store.append(entry("clear"));
     await store.append(entry("record-2"));
-    const { entries } = await store.loadStream(STREAM, "user-1");
+    const { entries } = await loadStreamGroup(store, STREAM, "user-1");
 
     // Then
     expect(entries.map((e) => e.operation.value)).toEqual([
@@ -81,7 +82,7 @@ describe("op log store", () => {
     await store.append(entry("a2"));
     await store.append(entry("b2", { streamId: other }));
     await store.append(entry("a3"));
-    const first = await store.loadStream(STREAM, "user-1");
+    const first = await loadStreamGroup(store, STREAM, "user-1");
     const all = await store.loadAll("user-1");
 
     // Then
@@ -106,7 +107,7 @@ describe("op log store", () => {
     const seqs = await Promise.all(
       ["a", "b", "c", "d"].map((v) => store.append(entry(v))),
     );
-    const { entries } = await store.loadStream(STREAM, "user-1");
+    const { entries } = await loadStreamGroup(store, STREAM, "user-1");
 
     // Then
     expect([...seqs].sort((a, b) => a - b)).toEqual(seqs);
@@ -125,7 +126,7 @@ describe("op log store", () => {
     const duplicate = store.append({ ...entry("dup"), eventId: first.eventId });
     const next = store.append(entry("next"));
     await Promise.allSettled([duplicate, next]);
-    const { entries } = await store.loadStream(STREAM, "user-1");
+    const { entries } = await loadStreamGroup(store, STREAM, "user-1");
 
     // Then
     await expect(duplicate).rejects.toThrow();
@@ -148,7 +149,7 @@ describe("op log store", () => {
     } finally {
       Date.now = originalNow;
     }
-    const { entries } = await store.loadStream(STREAM, "user-1");
+    const { entries } = await loadStreamGroup(store, STREAM, "user-1");
 
     // Then
     expect(entries.map((e) => e.operation.value)).toEqual([
@@ -166,8 +167,8 @@ describe("op log store", () => {
     await store.append(entry("other-stream", { streamId: "round:r2" }));
 
     // When
-    const mine = await store.loadStream(STREAM, "user-1");
-    const otherUser = await store.loadStream(STREAM, "user-2");
+    const mine = await loadStreamGroup(store, STREAM, "user-1");
+    const otherUser = await loadStreamGroup(store, STREAM, "user-2");
 
     // Then
     expect(mine.entries.map((e) => e.operation.value)).toEqual(["mine"]);
@@ -186,7 +187,7 @@ describe("op log store", () => {
     await store.ack(first.eventId, 4, true, ["name"]);
     await store.ack(first.eventId, 9, true, null);
     await store.ack(crypto.randomUUID(), 1, true, null);
-    const [stored] = (await store.loadStream(STREAM, "user-1")).entries;
+    const [stored] = (await loadStreamGroup(store, STREAM, "user-1")).entries;
 
     // Then
     expect(stored.ackedRevision).toBe(4);
@@ -205,7 +206,7 @@ describe("op log store", () => {
 
     // When
     await store.retire([first.eventId, crypto.randomUUID()]);
-    const { entries } = await store.loadStream(STREAM, "user-1");
+    const { entries } = await loadStreamGroup(store, STREAM, "user-1");
 
     // Then
     expect(entries.map((e) => e.operation.value)).toEqual(["b"]);
@@ -245,7 +246,7 @@ describe("op log store", () => {
       keep,
     });
     const group = (store: OpLogStore<Op, Base>) =>
-      store.loadStream(STREAM, "user-1");
+      loadStreamGroup(store, STREAM, "user-1");
 
     it("commitは、ベースの保存と、反映済みの操作の削除を、1つのトランザクションで行う", async () => {
       // Given
@@ -484,7 +485,7 @@ describe("op log store", () => {
         startedAt: 1,
         base: base(0, false),
       });
-      const stored = await store.loadStream(other, "user-1");
+      const stored = await loadStreamGroup(store, other, "user-1");
 
       // Then
       expect(stored.base).toEqual({ startedAt: 1, base: base(0, false) });
@@ -511,7 +512,7 @@ describe("op log store", () => {
 
       // When
       const result = await store.commit(STREAM, null, base(1), 10);
-      const stored = await store.loadStream(STREAM, null);
+      const stored = await loadStreamGroup(store, STREAM, null);
 
       // Then
       expect(result.base).toEqual({ startedAt: 10, base: base(1) });
@@ -544,7 +545,7 @@ describe("op log store", () => {
 
       // When
       const store = newStore();
-      const result = await store.loadStream(STREAM, "user-1");
+      const result = await loadStreamGroup(store, STREAM, "user-1");
 
       // Then
       expect(result).toEqual({ base: undefined, entries: [] });
@@ -558,7 +559,7 @@ describe("op log store", () => {
       const store = newStore();
       await store.append(entry("a"));
       await store.commit(STREAM, "user-1", { revision: 1, keep: true }, 10);
-      const reloaded = await store.loadStream(STREAM, "user-1");
+      const reloaded = await loadStreamGroup(store, STREAM, "user-1");
       const database = await openDB("aims-sync");
       const names = Array.from(database.objectStoreNames).sort();
       database.close();
@@ -600,7 +601,7 @@ describe("op log store", () => {
       const settledWhileBlocked = settled;
       previous.close();
       const seq = await appending;
-      const reloaded = await store.loadStream(STREAM, "user-1");
+      const reloaded = await loadStreamGroup(store, STREAM, "user-1");
 
       // Then
       expect(settledWhileBlocked).toBe(false);
