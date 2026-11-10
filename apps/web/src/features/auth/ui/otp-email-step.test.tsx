@@ -60,6 +60,19 @@ function renderStep(
 }
 
 describe("OtpEmailStep", () => {
+  it("メールアドレスの欄に、nameとautocompleteを付ける", () => {
+    // Given
+    const form = createForm();
+
+    // When
+    renderStep(form);
+
+    // Then
+    const input = screen.getByPlaceholderText("you@example.com");
+    expect(input).toHaveAttribute("name", "email");
+    expect(input).toHaveAttribute("autocomplete", "username");
+  });
+
   describe("画面の違いを受け取る表示", () => {
     it("titleを見出しに、footerを全体のエラーの下に描く", () => {
       // Given

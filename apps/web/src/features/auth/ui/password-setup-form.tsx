@@ -165,6 +165,8 @@ function PasswordStep({ procedure, copy, flow, view }: StepProps) {
         >
           {(aria) => (
             <PasswordInput
+              name="password"
+              autoComplete="new-password"
               placeholder={t("passwordFieldPlaceholder", {
                 label: copy.passwordLabel,
                 min: String(PASSWORD_MIN_LENGTH),

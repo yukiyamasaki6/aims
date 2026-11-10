@@ -783,6 +783,18 @@ describe.each(subjects)("パスワード設定の画面($name)", (current) => {
   });
 
   describe("パスワード設定", () => {
+    it("新しいパスワードの欄に、nameと新しいパスワードのautocompleteを付ける", async () => {
+      // Given
+      renderForm();
+
+      // When
+      await advanceToPasswordStep();
+
+      // Then
+      expect(passwordInput()).toHaveAttribute("name", "password");
+      expect(passwordInput()).toHaveAttribute("autocomplete", "new-password");
+    });
+
     describe("設定に成功した場合", () => {
       it("入力したパスワードで登録し、/roundsへ遷移する", async () => {
         // Given

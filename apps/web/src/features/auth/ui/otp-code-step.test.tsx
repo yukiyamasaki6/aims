@@ -67,6 +67,19 @@ describe("OtpCodeStep", () => {
       expect(screen.getByText(authText("otpSpamNote"))).toBeInTheDocument();
     });
 
+    it("認証コードの欄に、nameとメールのコードの自動入力のautocompleteを付ける", () => {
+      // Given
+      const form = createForm();
+
+      // When
+      renderStep(form);
+
+      // Then
+      const input = screen.getByPlaceholderText("123456");
+      expect(input).toHaveAttribute("name", "code");
+      expect(input).toHaveAttribute("autocomplete", "one-time-code");
+    });
+
     it("codeの値を表示し、入力でonCodeChangeを呼ぶ", async () => {
       // Given
       const form = createForm({ code: "12" });

@@ -99,6 +99,18 @@ describe("サインイン画面の部品", () => {
     widget.error = undefined;
   });
 
+  it("メールアドレスとパスワードの欄に、パスワード管理ツールが認識できるnameとautocompleteを付ける", () => {
+    // Given
+    // When
+    setup();
+
+    // Then
+    expect(emailInput()).toHaveAttribute("name", "email");
+    expect(emailInput()).toHaveAttribute("autocomplete", "username");
+    expect(passwordInput()).toHaveAttribute("name", "password");
+    expect(passwordInput()).toHaveAttribute("autocomplete", "current-password");
+  });
+
   it("初期表示では入力欄をエラーにせずチェックをリセットしない", () => {
     // Given
 
