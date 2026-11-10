@@ -70,15 +70,6 @@ const opened = (deleted = false): OpenedRound => ({
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-async function settled(promise: Promise<unknown>): Promise<boolean> {
-  let done = false;
-  void promise.then(() => {
-    done = true;
-  });
-  await flush();
-  return done;
-}
-
 describe("round(...)", () => {
   function loadedOf(overrides: Partial<LoadedRound> = {}): LoadedRound {
     return {
@@ -138,7 +129,8 @@ describe("round(...)", () => {
     const tab = createTab();
     const handle = tab.round("round-1");
     const unwatch = handle.watch(loadedOf());
-    await handle.append(shotRecorded()).saved;
+    handle.append(shotRecorded());
+    await tab.hub.whenPersisted();
     unwatch();
 
     // When
@@ -147,7 +139,6 @@ describe("round(...)", () => {
 
     // Then
     expect(snapshot.state).toBeNull();
-    expect(snapshot.tables).toBeNull();
     expect(peeked.roundConfig.name).toBe("午前練習");
   });
 
@@ -160,7 +151,8 @@ describe("round(...)", () => {
     handle.subscribe(listener)();
 
     // When
-    await handle.append(shotRecorded()).saved;
+    handle.append(shotRecorded());
+    await tab.hub.whenPersisted();
 
     // Then
     expect(listener).not.toHaveBeenCalled();
@@ -479,13 +471,11 @@ describe("round(...)", () => {
       const saving = holdSaving(tab);
 
       // When
-      const appending = handle.append(
-        roundUpdated({ changes: { name: "新" } }),
-      ).saved;
+      handle.append(roundUpdated({ changes: { name: "新" } }));
       await flush();
       const duringSave = handle.getSnapshot().state?.roundConfig.name;
       saving.resolve();
-      await appending;
+      await tab.hub.whenPersisted();
 
       // Then
       expect(duringSave).toBe("新");
@@ -707,7 +697,8 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     expect(handle.getSnapshot().state?.status).toBe("completed");
 
     // When
-    await handle.append(shotRecorded()).saved;
+    handle.append(shotRecorded());
+    await tab.hub.whenPersisted();
     await flush();
 
     // Then
@@ -727,7 +718,8 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     handle.watch(loadedOf("completed"));
 
     // When
-    await handle.append(distanceCreated({ id: "d-2", positionKey: "b" })).saved;
+    handle.append(distanceCreated({ id: "d-2", positionKey: "b" }));
+    await tab.hub.whenPersisted();
     await flush();
 
     // Then
@@ -742,7 +734,8 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     handle.watch(loadedOf("completed"));
 
     // When
-    await handle.append(roundUpdated({ changes: { name: "新" } })).saved;
+    handle.append(roundUpdated({ changes: { name: "新" } }));
+    await tab.hub.whenPersisted();
     await flush();
 
     // Then
@@ -758,7 +751,8 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     handle.watch(loadedOf("in_progress"));
 
     // When
-    await handle.append(shotRecorded()).saved;
+    handle.append(shotRecorded());
+    await tab.hub.whenPersisted();
     await flush();
 
     // Then
@@ -773,9 +767,10 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     handle.watch(loadedOf("completed", [recordedShot]));
 
     // When
-    await handle.append(
+    handle.append(
       shotRecorded({ shotId: "s-1", scoreStr: "10", scoreInt: 10 }),
-    ).saved;
+    );
+    await tab.hub.whenPersisted();
     await flush();
 
     // Then
@@ -788,14 +783,16 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     const tab = createTab();
     const handle = tab.round("round-1");
     handle.watch(loadedOf("completed"));
-    await handle.append(shotRecorded()).saved;
+    handle.append(shotRecorded());
+    await tab.hub.whenPersisted();
     await flush();
     expect(handle.getSnapshot().state?.status).toBe("in_progress");
 
     // When
-    await handle.append(
+    handle.append(
       shotRecorded({ eventId: "e-shot-2", shotId: "s-2", endNumber: 2 }),
-    ).saved;
+    );
+    await tab.hub.whenPersisted();
     await flush();
 
     // Then
@@ -813,11 +810,11 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     handle.watch(loadedOf("completed"));
 
     // When
-    const first = handle.append(shotRecorded()).saved;
-    const second = handle.append(
+    handle.append(shotRecorded());
+    handle.append(
       shotRecorded({ eventId: "e-shot-2", shotId: "s-2", endNumber: 2 }),
-    ).saved;
-    await Promise.all([first, second]);
+    );
+    await tab.hub.whenPersisted();
     await flush();
 
     // Then
@@ -852,7 +849,7 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     expect(typesOf(tab)).toEqual([]);
   });
 
-  it("追記の戻り値は保存の完了で解決し、画面の状態は保存の完了前に反映済みである", async () => {
+  it("画面の状態は、保存の完了前に追記の結果が反映済みである", async () => {
     // Given
     const tab = createTab();
     const handle = tab.round("round-1");
@@ -861,14 +858,13 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     vi.spyOn(tab.opLog, "append").mockReturnValue(saving.promise);
 
     // When
-    const appended = handle.append(shotRecorded()).saved;
-    const resolvedBeforeSave = await settled(appended);
+    handle.append(shotRecorded());
+    await flush();
     const shotsBeforeSave = handle.getSnapshot().state?.shots.length;
     saving.resolve(1);
-    await appended;
+    await tab.hub.whenPersisted();
 
     // Then
-    expect(resolvedBeforeSave).toBe(false);
     expect(shotsBeforeSave).toBe(1);
     expect(handle.getSnapshot().state?.shots).toHaveLength(1);
   });
@@ -880,7 +876,7 @@ describe("round(...).append: 完了のラウンドへの編集", () => {
     handle.watch(loadedOf("completed"));
 
     // When
-    const { state } = handle.append(shotRecorded());
+    const state = handle.append(shotRecorded());
 
     // Then
     expect(state.shots).toHaveLength(1);

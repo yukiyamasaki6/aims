@@ -30,17 +30,10 @@ export type LoadedRound = {
 // 開いた詳細の状態。`watch`で開いている印を付けるまで、stateはnull。
 type RoundScreenSnapshot = {
   state: RoundState | null;
-  tables: RoundTables | null;
   // 削除されて見つからなくなったか。
   gone: boolean;
   // 確定していない作成の操作が、確定を見ずに消えたか。
   creationGone: boolean;
-};
-
-// 追記の結果。stateは追記の直後(同期)の画面の状態、savedは保存の試みが終わると解決する(拒否しない)。
-export type RoundAppendResult = {
-  state: RoundState;
-  saved: Promise<void>;
 };
 
 export type RoundHandle = {
@@ -50,14 +43,13 @@ export type RoundHandle = {
   watch(opening: LoadedRound): () => void;
   // 印を付けずに、開いた材料から今の状態を求める(最初の描画で、印を付ける前に状態を得るため)。副作用を持たない。
   peek(opening: LoadedRound): RoundState;
-  // 操作を追記する。画面へは直ちに反映し、送信は保存の完了後で、送信の完了は待たない。
+  // 操作を追記し、追記の直後(同期)の画面の状態を返す。画面へは直ちに反映し、送信は保存の完了後で、送信の完了は待たない。
   // 完了のラウンドの表示中の距離か矢を変える編集は、続けて入力中へ戻す操作を積む。判定は追記の前の画面の状態で行う(追記の結果の反映後では、変化が無いと判定して積まないため)。画面を開いていない(watchの前)ときは積まない。
-  append(operation: SyncOperation): RoundAppendResult;
+  append(operation: SyncOperation): RoundState;
 };
 
 const UNOPENED: RoundScreenSnapshot = {
   state: null,
-  tables: null,
   gone: false,
   creationGone: false,
 };
@@ -126,7 +118,6 @@ export function createRoundHandle(
     const gone = isGone(screen.deletedElsewhere, opening, outcome);
     if (
       snapshot.state === screen.state &&
-      snapshot.tables === screen.tables &&
       snapshot.gone === gone &&
       snapshot.creationGone === creation.gone
     ) {
@@ -134,7 +125,6 @@ export function createRoundHandle(
     }
     snapshot = {
       state: screen.state,
-      tables: screen.tables,
       gone,
       creationGone: creation.gone,
     };
@@ -201,17 +191,15 @@ export function createRoundHandle(
     },
     // 画面の操作は開いている間にしか起きない。開いていないときは約束が破れたものとして例外にする。
     append(operation) {
-      const saved = editing.append(roundId, operation, () => {
-        if (!opening || !snapshot.tables) {
-          throw new Error("画面を開いていないラウンドへは追記できません。");
-        }
-        return { tables: snapshot.tables, targetFaces: opening.targetFaces };
-      });
-      // 追記は同期で画面の状態へ反映されるため、戻りの時点の状態が追記の結果である。
-      if (!snapshot.state) {
+      if (!opening || !seen) {
         throw new Error("画面を開いていないラウンドへは追記できません。");
       }
-      return { state: snapshot.state, saved };
+      editing.append(roundId, operation, {
+        tables: seen.screen.tables,
+        targetFaces: opening.targetFaces,
+      });
+      // 追記は同期で画面の状態へ反映されるため、戻りの時点の状態が追記の結果である。
+      return seen.screen.state;
     },
   };
 }

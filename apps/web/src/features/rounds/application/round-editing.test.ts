@@ -51,59 +51,29 @@ function tables(status: "in_progress" | "completed"): RoundTables {
 // 完了のラウンドで、空きのあるエンドへ新しい矢を記録する(表示が変わる)。
 const displayChanging = shotRecorded({ shotId: "s-2" });
 
-// 呼び出しの順序を、1つの列に積んで観測する。
-function setup(
-  options: {
-    state?: "completed" | "in_progress";
-    holdFirst?: boolean;
-    holdSecond?: boolean;
-  } = {},
-) {
-  const calls: string[] = [];
+function setup(options: { state?: "completed" | "in_progress" } = {}) {
   const appended: { streamId: string; operation: SyncOperation }[] = [];
-  const finishers: (() => void)[] = [];
   const append = vi.fn(async (streamId: string, operation: SyncOperation) => {
-    calls.push(`append:${operation.type}`);
     appended.push({ streamId, operation });
-    const index = appended.length;
-    const hold = index === 1 ? options.holdFirst : options.holdSecond;
-    if (hold) {
-      await new Promise<void>((resolve) => finishers.push(resolve));
-    }
   });
   const { ids, issued } = createFakeUniqueIds();
-  const state = options.state ?? "completed";
-  const current = vi.fn(() => {
-    calls.push("read");
-    return { tables: tables(state), targetFaces: faces };
-  });
+  const current = {
+    tables: tables(options.state ?? "completed"),
+    targetFaces: faces,
+  };
   const editing = createRoundEditing({ hub: { append }, ids });
-  return { editing, append, appended, issued, current, calls, finishers };
+  return { editing, appended, issued, current };
 }
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("createRoundEditing", () => {
-  it("読み手は、元の操作の追記より前に呼ばれる", async () => {
-    // Given
-    const { editing, current, calls } = setup();
-
-    // When
-    await editing.append("round-1", displayChanging, current);
-
-    // Then
-    expect(calls.indexOf("read")).toBeGreaterThanOrEqual(0);
-    expect(calls.indexOf("read")).toBeLessThan(
-      calls.indexOf("append:shot.recorded"),
-    );
-  });
-
   it("再開が要るとき、元の操作の追記の後に、そのラウンドの列へ入力中に戻す操作を続けて追記し、保存は2回になる", async () => {
     // Given
     const { editing, current, appended, issued } = setup();
 
     // When
-    await editing.append("round-1", displayChanging, current);
+    editing.append("round-1", displayChanging, current);
     await flush();
 
     // Then
@@ -121,7 +91,7 @@ describe("createRoundEditing", () => {
     const { editing, current, issued } = setup();
 
     // When
-    await editing.append("round-1", displayChanging, current);
+    editing.append("round-1", displayChanging, current);
 
     // Then
     expect(issued()).toHaveLength(1);
@@ -146,7 +116,7 @@ describe("createRoundEditing", () => {
       const { editing, current, appended, issued } = setup({ state });
 
       // When
-      await editing.append("round-1", operation, current);
+      editing.append("round-1", operation, current);
       await flush();
 
       // Then
@@ -154,36 +124,4 @@ describe("createRoundEditing", () => {
       expect(issued()).toEqual([]);
     },
   );
-
-  it("戻り値は、元の操作の保存の完了まで解決しない", async () => {
-    // Given
-    const { editing, current, finishers } = setup({ holdFirst: true });
-    let resolved = false;
-
-    // When
-    const done = editing
-      .append("round-1", displayChanging, current)
-      .then(() => {
-        resolved = true;
-      });
-    await flush();
-    const beforeFinish = resolved;
-    finishers[0]();
-    await done;
-
-    // Then
-    expect(beforeFinish).toBe(false);
-    expect(resolved).toBe(true);
-  });
-
-  it("戻り値は、続けた再開の保存を待たずに解決する", async () => {
-    // Given
-    const { editing, current, append } = setup({ holdSecond: true });
-
-    // When
-    await editing.append("round-1", displayChanging, current);
-
-    // Then
-    expect(append).toHaveBeenCalledTimes(2);
-  });
 });

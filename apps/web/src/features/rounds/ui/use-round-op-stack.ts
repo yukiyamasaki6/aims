@@ -1,8 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import type {
-  LoadedRound,
-  RoundAppendResult,
-} from "../application/round-handle";
+import type { LoadedRound } from "../application/round-handle";
 import type { RoundState } from "../domain/round-tables";
 import type { SyncOperation } from "../domain/sync-events";
 import { useRoundDetailStore } from "./rounds-context";
@@ -10,8 +7,8 @@ import { useRoundDetailStore } from "./rounds-context";
 export type RoundOpStack = {
   // 端末の記録(ベースに操作の列を重ねたもの)から求めた、画面の状態。
   state: RoundState;
-  // 操作を列へ追記する。画面へは直ちに反映し、送信は保存の完了後で、送信の完了は待たない。
-  append: (operation: SyncOperation) => RoundAppendResult;
+  // 操作を列へ追記し、追記の直後の画面の状態を返す。画面へは直ちに反映し、送信は保存の完了後で、送信の完了は待たない。
+  append: (operation: SyncOperation) => RoundState;
 };
 
 // 画面の状態は、ラウンドの状態と変更の方法(`RoundDetailStore`)から受け取る。取得と反映、取り直し、送信の時点は同期が決める。

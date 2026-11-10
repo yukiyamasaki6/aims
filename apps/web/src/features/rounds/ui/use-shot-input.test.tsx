@@ -39,10 +39,10 @@ function setup(
   const { store } = createFakeRoundDetailStore();
   const procedures = createFakeRoundProcedures();
   // 追記の結果の画面の状態は、テストが与える矢を持つ。
-  const append = vi.fn((_operation: SyncOperation) => ({
-    state: { shots: options.resultShots ?? [] } as RoundState,
-    saved: Promise.resolve(),
-  }));
+  const append = vi.fn(
+    (_operation: SyncOperation) =>
+      ({ shots: options.resultShots ?? [] }) as RoundState,
+  );
   const setPointer = vi.fn();
   const history = {
     canUndo: false,
