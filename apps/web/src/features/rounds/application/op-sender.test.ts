@@ -556,33 +556,6 @@ describe("サインインの状態", () => {
 });
 
 describe("保存の読み込みの待ち", () => {
-  it("止めて始め直した後は、前の起動の読み込みが終わっても、計画を始めない", async () => {
-    // Given
-    const rig = createSenderRig();
-    await rig.hub.ready();
-    await rig.hub.append(STREAM, shot("a"));
-    const first = Promise.withResolvers<void>();
-    const second = Promise.withResolvers<void>();
-    vi.spyOn(rig.hub, "ready")
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
-    rig.sender.start();
-    await flush();
-    rig.sender.stop();
-    rig.sender.start();
-    await flush();
-    const outbox = vi.spyOn(rig.hub, "record");
-
-    // When
-    first.resolve();
-    await flush();
-
-    // Then
-    expect(outbox).not.toHaveBeenCalled();
-    second.resolve();
-    await flush();
-    expect(outbox).toHaveBeenCalled();
-  });
   it("別のタブが保存していた新しい列の操作も、起動したタブが保存から読んで送る", async () => {
     // Given
     const store = createMemoryRoundStore();
@@ -632,54 +605,6 @@ describe("保存の読み込みの待ち", () => {
     expect(whileReloading).toEqual(["unsaved"]);
     expect(sentIds(rig).flat().sort()).toEqual(["later", "saved", "unsaved"]);
   });
-
-  it("読み込みを終える前に止めると、その後に読み込みが終わって通信の復帰があっても、何も送らない", async () => {
-    // Given
-    const { rig } = await reloadingRig(false);
-    const reload = Promise.withResolvers<void>();
-    vi.spyOn(rig.hub, "ready").mockReturnValueOnce(reload.promise);
-    rig.sender.start();
-    await flush();
-
-    // When
-    rig.sender.stop();
-    reload.resolve();
-    await flush();
-    rig.connectivity.goOnline();
-    await flush();
-
-    // Then
-    expect(rig.sent).toHaveLength(0);
-  });
-
-  it("止めて始め直した後、古い起動の読み込みだけが終わっても、通信の復帰と記録の知らせでは保存済みの操作を送らない。今の起動の読み込みが終わると送る", async () => {
-    // Given
-    const { rig } = await reloadingRig(false);
-    const first = Promise.withResolvers<void>();
-    const second = Promise.withResolvers<void>();
-    vi.spyOn(rig.hub, "ready")
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
-    rig.sender.start();
-    await flush();
-    rig.sender.stop();
-    rig.sender.start();
-    await flush();
-
-    // When
-    first.resolve();
-    await flush();
-    rig.connectivity.goOnline();
-    await rig.hub.append(STREAM, shot("later", 3));
-    await flush();
-    const afterOld = rig.sent.length;
-    second.resolve();
-    await flush();
-
-    // Then
-    expect(afterOld).toBe(0);
-    expect(sentIds(rig).flat().sort()).toEqual(["later", "saved"]);
-  });
 });
 
 describe("通信の可否", () => {
@@ -715,7 +640,7 @@ describe("通信の可否", () => {
     expect(sentIds(rig)).toEqual([["a"], ["a"]]);
   });
 
-  it("通信の復帰の購読は、起動で1つ、停止で解除し、再起動しても重ならない", async () => {
+  it("通信の復帰の購読は、起動で1つ増える", () => {
     // Given
     const rig = createSenderRig();
     const initial = rig.connectivity.subscribers().online;
@@ -723,14 +648,9 @@ describe("通信の可否", () => {
     // When
     rig.sender.start();
     const started = rig.connectivity.subscribers().online;
-    rig.sender.stop();
-    const stopped = rig.connectivity.subscribers().online;
-    rig.sender.start();
-    rig.sender.start();
-    const restarted = rig.connectivity.subscribers().online;
 
     // Then
-    expect([initial, started, stopped, restarted]).toEqual([0, 1, 0, 1]);
+    expect([initial, started]).toEqual([0, 1]);
   });
 });
 
@@ -828,27 +748,6 @@ describe("送信中の印", () => {
     expect(rig.hub.record(STREAM).items).toEqual([]);
     expect(marked(rig)).toEqual([]);
   });
-
-  it("送信器と記録を止めると、全ての列の印が外れる", async () => {
-    // Given
-    const rig = await started();
-    await rig.hub.append(STREAM, shot("a"));
-    await rig.hub.append(roundStreamId("round-2"), shot("b"));
-    await flush();
-    const whileSending = [
-      ...rig.hub.record(STREAM).inFlight,
-      ...rig.hub.record(roundStreamId("round-2")).inFlight,
-    ];
-
-    // When
-    rig.sender.stop();
-    rig.hub.stop();
-
-    // Then
-    expect(whileSending.sort()).toEqual(["a", "b"]);
-    expect(marked(rig)).toEqual([]);
-    expect([...rig.hub.record(roundStreamId("round-2")).inFlight]).toEqual([]);
-  });
 });
 
 describe("保存の失敗", () => {
@@ -863,41 +762,6 @@ describe("保存の失敗", () => {
 
     // Then
     expect(sentIds(rig)).toEqual([["unsaved"]]);
-  });
-});
-
-describe("止める", () => {
-  it("止めた後は新しい送信と待機の時計を止め、送信中の要求の成功は記録へ書く", async () => {
-    // Given
-    const rig = await started();
-    await rig.hub.append(STREAM, shot("a", 1));
-    await flush();
-    await rig.hub.append(STREAM, shot("b", 2));
-
-    // When
-    rig.sender.stop();
-    await respond(rig, 0, appliedOutcome(1, 4));
-    await rig.hub.append(STREAM, shot("c", 3));
-    await flush();
-
-    // Then
-    expect(sentIds(rig)).toEqual([["a"]]);
-    expect(rig.hub.record(STREAM).items[0].ackedRevision).toBe(4);
-    expect(rig.clock.pendingCount()).toBe(0);
-  });
-
-  it("リトライ待機の時計を、止めると取り消す", async () => {
-    // Given
-    const rig = await started();
-    await rig.hub.append(STREAM, shot("a"));
-    await flush();
-    await respond(rig, 0, rpcFailure());
-
-    // When
-    rig.sender.stop();
-
-    // Then
-    expect(rig.clock.pendingCount()).toBe(0);
   });
 });
 

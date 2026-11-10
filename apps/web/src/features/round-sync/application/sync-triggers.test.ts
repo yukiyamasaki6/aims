@@ -23,7 +23,6 @@ function setup(initialUserId: string | null = "user-1") {
   const visibility: Visibility = {
     onVisible: (listener) => {
       visible.add(listener);
-      return () => visible.delete(listener);
     },
   };
   const connectivity: Connectivity = {
@@ -35,7 +34,6 @@ function setup(initialUserId: string | null = "user-1") {
   };
   const sync = {
     start: vi.fn(),
-    stop: vi.fn(),
     signInChanged: vi.fn(),
     resume: vi.fn(),
   };
@@ -60,11 +58,6 @@ function setup(initialUserId: string | null = "user-1") {
         for (const listener of [...visible]) listener();
       },
     },
-    counts: () => ({
-      signIn: signIn.size,
-      online: online.size,
-      visible: visible.size,
-    }),
   };
 }
 
@@ -121,27 +114,5 @@ describe("通信と画面の状態", () => {
 
     // Then
     expect(t.sync.resume).toHaveBeenCalledTimes(2);
-  });
-
-  it("停止で購読を全て解除し、同期を止める。停止の後に来た通知では何も呼ばない", () => {
-    // Given
-    const t = setup();
-    const stop = t.triggers.start();
-
-    // When
-    stop();
-    t.emitSignIn({ kind: "signed-in", userId: "user-1" });
-    t.fire.online();
-    t.fire.visible();
-
-    // Then
-    expect(t.counts()).toEqual({
-      signIn: 0,
-      online: 0,
-      visible: 0,
-    });
-    expect(t.sync.stop).toHaveBeenCalledTimes(1);
-    expect(t.sync.resume).not.toHaveBeenCalled();
-    expect(t.sync.signInChanged).not.toHaveBeenCalled();
   });
 });

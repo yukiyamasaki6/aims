@@ -17,17 +17,7 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 // 取得した詳細。取り直しの結果の中身は問わない。
 function fetchedDetail(): FetchedRoundDetail {
   return {
-    roundConfig: {
-      name: "午前練習",
-      roundDate: "2026-09-15",
-      format: "outdoor",
-      bowType: "recurve",
-    },
-    status: "in_progress",
-    distances: [],
-    shots: [],
-    targetFaces: [],
-    revisions: { round: 1, distances: {}, shots: {} },
+    base: roundBase(),
     startedAt: 100,
     userId: "user-1",
   };
@@ -223,7 +213,7 @@ describe("refreshNeeds", () => {
     // settleRoundNowは取り直しの開始で効かなかった印を消さないため、順を保てる。
     settleRoundNow(requests, "r-1", {
       status: "ok",
-      data: { deleted: false, base: roundBase().tables, targetFaces: [] },
+      data: { base: roundBase().tables },
     });
     const second = reasons();
     hub.clearDiverged(stream);
@@ -283,23 +273,33 @@ describe("refreshNeeds", () => {
     });
   });
 
-  it("依頼や記録が変わったら通知し、解除すると両方の通知が止まる", async () => {
+  it("依頼や記録が変わったら通知する", async () => {
     // Given
     const { hub, requests, control } = await setup();
     const listener = vi.fn();
-    const stop = control.onRefreshNeeds(listener);
+    control.onRefreshNeeds(listener);
 
     // When
-    requests.notify();
+    void requests.open("r-1");
     await hub.append(STREAM, roundUpdated());
-    const whileSubscribed = listener.mock.calls.length;
-    stop();
-    requests.notify();
-    await hub.append(STREAM, roundUpdated({ eventId: "again" }));
 
     // Then
-    expect(whileSubscribed).toBeGreaterThanOrEqual(2);
-    expect(listener).toHaveBeenCalledTimes(whileSubscribed);
+    expect(listener.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("的が足りない印", () => {
+  it("依頼の記録の印を、真偽で返す", async () => {
+    // Given
+    const { requests, control } = await setup();
+
+    // When
+    const before = control.facesWanted();
+    requests.wantFaces("round-1", true);
+
+    // Then
+    expect(before).toBe(false);
+    expect(control.facesWanted()).toBe(true);
   });
 });
 

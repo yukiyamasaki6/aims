@@ -14,6 +14,15 @@ export type FetchResult<T> =
 // loadingは画面の状態で、取得関数は返さない。
 export type FetchView<T> = { status: "loading" } | FetchResult<T>;
 
+// 取得中か、取得に失敗した(okでない)とき、保存済みがあれば、保存済みをokとして見せる。取得できたら取得の結果を見せる。
+export function withSaved<T>(
+  view: FetchView<T>,
+  saved: T | null,
+): FetchView<T> {
+  if (view.status === "ok" || saved === null) return view;
+  return { status: "ok", data: saved };
+}
+
 // 通信失敗由来の結果。取得中に回線が落ちてオフラインになっていればofflineにし、
 // 復帰のonlineイベントで再取得できるようにする。それ以外は原因を断定せずerrorにする。
 export function commFailure<T>(offline: boolean): FetchResult<T> {

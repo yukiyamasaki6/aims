@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "../domain/fetch-status";
 import {
+  roundBase,
   roundCreated,
   roundDisabled,
   roundUpdated,
@@ -22,17 +23,7 @@ function detail(
   overrides: Partial<FetchedRoundDetail> = {},
 ): FetchedRoundDetail {
   return {
-    roundConfig: {
-      name: "午前練習",
-      roundDate: "2026-09-15",
-      format: "outdoor",
-      bowType: "recurve",
-    },
-    status,
-    distances: [],
-    shots: [],
-    targetFaces: [],
-    revisions: { round: 3, distances: {}, shots: {} },
+    base: roundBase({ status, revisions: { round: 3 } }),
     startedAt: 100,
     userId: "user-1",
     ...overrides,
@@ -75,18 +66,7 @@ async function storeBase(
 ) {
   await tab.hub.commit(
     roundStreamId(roundId),
-    {
-      tables: {
-        round: {
-          config: detail(status).roundConfig,
-          status,
-          disabled: false,
-        },
-        distances: [],
-        shots: [],
-      },
-      revisions: { round: 3, distances: {}, shots: {} },
-    },
+    detail(status).base,
     50,
     "user-1",
   );
@@ -114,6 +94,29 @@ describe("refreshAll", () => {
       base: { revisions: { round: 3 } },
     });
     expect(tab.hub.record(roundStreamId("kept")).base?.startedAt).toBe(100);
+  });
+
+  it("一括の取得を反映した後に、的の保存を待つ画面へ知らせる。取得が失敗したときは知らせない", async () => {
+    // Given
+    const tab = await setup();
+    await storeBase(tab, "kept");
+    const listener = vi.fn(() => {
+      saved.push(tab.hub.record(roundStreamId("kept")).base?.startedAt);
+    });
+    const saved: (number | undefined)[] = [];
+    tab.requests.subscribe(listener);
+    tab.fetching.fetchRoundDetails
+      .mockResolvedValueOnce({ status: "error", reason: "failed" })
+      .mockResolvedValueOnce(fetchedOf([["kept", detail("completed")]]));
+
+    // When
+    await tab.refresh.refreshAll();
+    const afterFailure = listener.mock.calls.length;
+    await tab.refresh.refreshAll();
+
+    // Then
+    expect(afterFailure).toBe(0);
+    expect(saved).toEqual([100]);
   });
 
   it("端末の保存を読めないときは、取得全体が失敗扱いで何も取得せず、拒否しない", async () => {
@@ -275,7 +278,7 @@ describe("refreshAll", () => {
 });
 
 describe("実行をまたぐ完了", () => {
-  it("先に始まった詳細の取り直しの完了は、後から出された開く依頼を完了させず、その結果の記録も上書きしない", async () => {
+  it("先に始まった詳細の取り直しの完了は、後から出された開く依頼を完了させない", async () => {
     // Given
     const tab = await setup();
     const running = Promise.withResolvers<FetchResult<FetchedRoundDetail>>();
@@ -297,7 +300,6 @@ describe("実行をまたぐ完了", () => {
     // Then
     expect(await first).toEqual({ status: "not-found" });
     expect(secondSettled).toBe(false);
-    expect(tab.requests.outcomeOf("r-1")).toBeUndefined();
     expect(tab.requests.pendingOpens()).toEqual(["r-1"]);
   });
 });
@@ -308,7 +310,7 @@ describe("refreshRound", () => {
     const tab = await setup();
     tab.fetching.fetchRoundDetail.mockResolvedValue({
       status: "ok",
-      data: detail("in_progress", { targetFaces: [] }),
+      data: detail("in_progress"),
     });
     const opened = tab.requests.open("r-1");
 
@@ -318,9 +320,26 @@ describe("refreshRound", () => {
     // Then
     expect(await opened).toMatchObject({
       status: "ok",
-      data: { deleted: false, targetFaces: [] },
+      data: { base: { round: { status: "in_progress" } } },
     });
     expect(tab.hub.record(roundStreamId("r-1")).base?.startedAt).toBe(100);
+  });
+
+  it("1つのラウンドの取得と反映では、的の保存を待つ画面へ知らせない", async () => {
+    // Given
+    const tab = await setup();
+    tab.fetching.fetchRoundDetail.mockResolvedValue({
+      status: "ok",
+      data: detail("in_progress"),
+    });
+    const listener = vi.fn();
+    tab.requests.subscribe(listener);
+
+    // When
+    await tab.refresh.refreshRound("r-1");
+
+    // Then
+    expect(listener).not.toHaveBeenCalled();
   });
 
   it("取り直しの開始で、効かなかった結果の印を消す", async () => {
@@ -352,27 +371,7 @@ describe("refreshRound", () => {
     expect(clearedAtStart).toBe(true);
   });
 
-  it("取得の間に削除が追記されていたときは、取得した状態を表示せず離れる(gone)", async () => {
-    // Given
-    const tab = await setup();
-    await tab.hub.append(roundStreamId("r-1"), roundDisabled());
-    tab.fetching.fetchRoundDetail.mockResolvedValue({
-      status: "ok",
-      data: detail("in_progress"),
-    });
-    const opened = tab.requests.open("r-1");
-
-    // When
-    await tab.refresh.refreshRound("r-1");
-
-    // Then
-    expect(await opened).toMatchObject({
-      status: "ok",
-      data: { deleted: true },
-    });
-  });
-
-  it("取得が見つからない、または失敗したときは、依頼を待つ側へ結果を返し、結果の種類を依頼の記録に残す", async () => {
+  it("取得が見つからない、または失敗したときは、依頼を待つ側へ結果を返し、見つからないときだけ見つからなかった記録を残す", async () => {
     // Given
     const tab = await setup();
     const missing = tab.requests.open("r-1");
@@ -389,7 +388,7 @@ describe("refreshRound", () => {
     // Then
     expect(await missing).toEqual({ status: "not-found" });
     expect(await offline).toEqual({ status: "offline" });
-    expect(tab.requests.outcomeOf("r-1")).toBe("gone");
-    expect(tab.requests.outcomeOf("r-2")).toBe("failed");
+    expect(tab.requests.isGone("r-1")).toBe(true);
+    expect(tab.requests.isGone("r-2")).toBe(false);
   });
 });

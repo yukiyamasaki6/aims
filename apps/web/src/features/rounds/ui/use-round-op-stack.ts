@@ -2,11 +2,14 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { LoadedRound } from "../application/round-handle";
 import type { RoundState } from "../domain/round-tables";
 import type { SyncOperation } from "../domain/sync-events";
+import type { TargetFaceOption } from "../domain/target-face";
 import { useRoundDetailStore } from "./rounds-context";
 
 export type RoundOpStack = {
   // 端末の記録(ベースに操作の列を重ねたもの)から求めた、画面の状態。
   state: RoundState;
+  // 画面が使う的の一覧。保存が反映されて参照する的が揃ったときは、その一覧になる。
+  targetFaces: TargetFaceOption[];
   // 操作を列へ追記し、追記の直後の画面の状態を返す。画面へは直ちに反映し、送信は保存の完了後で、送信の完了は待たない。
   append: (operation: SyncOperation) => RoundState;
 };
@@ -36,5 +39,9 @@ export function useRoundOpStack(
 
   // 印を付ける前の最初の描画は、開いた材料から副作用なしで状態を求める。
   const state = snapshot.state ?? handle.peek(loaded);
-  return { state, append: handle.append };
+  return {
+    state,
+    targetFaces: snapshot.targetFaces ?? loaded.targetFaces,
+    append: handle.append,
+  };
 }

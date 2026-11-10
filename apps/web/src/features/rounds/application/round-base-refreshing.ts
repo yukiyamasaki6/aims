@@ -1,25 +1,8 @@
 import { isRetainedForRefresh } from "../domain/round-retention";
-import { roundTablesFromServer } from "../domain/round-tables";
-import {
-  hasRoundDeletion,
-  roundIdOfStream,
-  roundStreamId,
-} from "../domain/sync-events";
+import { roundIdOfStream, roundStreamId } from "../domain/sync-events";
 import type { RefreshRequests } from "./refresh-requests";
-import type {
-  FetchedRoundDetail,
-  FetchedRoundDetails,
-  RoundFetching,
-} from "./round-fetching";
+import type { FetchedRoundDetails, RoundFetching } from "./round-fetching";
 import type { RoundRecordHub } from "./round-record-hub";
-
-function baseOf(detail: FetchedRoundDetail) {
-  const { roundConfig, status, distances, shots, revisions } = detail;
-  return {
-    tables: roundTablesFromServer({ roundConfig, status, distances, shots }),
-    revisions,
-  };
-}
 
 // 取得の結果を端末の記録へ反映する。返ったラウンドはベースにし、返らなかった保持のラウンドは削除の印にする。
 // 全ての反映を待って解決する。利用者の照合は記録のハブが行う(取得の利用者と違えば、端末へ保存しない)。
@@ -34,7 +17,7 @@ async function commitRoundDetails(
     commits.push(
       hub.commit(
         roundStreamId(roundId),
-        baseOf(detail),
+        detail.base,
         detail.startedAt,
         detail.userId,
       ),
@@ -64,7 +47,7 @@ async function retainedRoundIds(
 export function createRoundBaseRefreshing(deps: {
   hub: Pick<RoundRecordHub, "commit" | "readStored" | "clearDiverged">;
   fetching: Pick<RoundFetching, "fetchRoundDetail" | "fetchRoundDetails">;
-  requests: Pick<RefreshRequests, "beginRound" | "settleRound">;
+  requests: Pick<RefreshRequests, "beginRound" | "settleRound" | "facesSaved">;
 }) {
   const { hub, fetching, requests } = deps;
 
@@ -76,6 +59,8 @@ export function createRoundBaseRefreshing(deps: {
       const fetched = await fetching.fetchRoundDetails(retained);
       if (fetched.status === "ok") {
         await commitRoundDetails(hub, fetched.data, retained);
+        // 的は取得の中で端末へ保存済み。的の保存を待つ画面へ知らせる。
+        requests.facesSaved();
       }
     } catch {
       // 失敗は何もしない。
@@ -92,24 +77,15 @@ export function createRoundBaseRefreshing(deps: {
       requests.settleRound(run, fetched);
       return;
     }
-    const base = baseOf(fetched.data);
-    const group = await hub.commit(
+    await hub.commit(
       roundStreamId(id),
-      base,
+      fetched.data.base,
       fetched.data.startedAt,
       fetched.data.userId,
     );
-    // 取得の間に追記された削除も、取得した状態を表示せずに離れる。
-    const deleted = hasRoundDeletion(
-      group.entries.map((entry) => entry.operation),
-    );
     requests.settleRound(run, {
       status: "ok",
-      data: {
-        deleted,
-        base: base.tables,
-        targetFaces: fetched.data.targetFaces,
-      },
+      data: { base: fetched.data.base.tables },
     });
   }
 

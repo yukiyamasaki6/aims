@@ -36,23 +36,14 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 // 実物の依頼の記録、取得と反映、画面の状態、同期の手続きを接続する。取得(サーバー)、送信、時計だけを差し替える。
 function detail(name: string): FetchedRoundDetail {
   return {
-    roundConfig: {
-      name,
-      roundDate: "2026-09-15",
-      format: "outdoor",
-      bowType: "recurve",
-    },
-    status: "in_progress",
-    distances: [],
-    shots: [],
-    targetFaces: [],
-    revisions: { round: 1, distances: {}, shots: {} },
+    base: roundBase({ name }),
     startedAt: 100,
     userId: "user-1",
   };
 }
 
 function rig() {
+  const faces: { current: { id: string }[] | null } = { current: [] };
   const { hub } = createTestRoundHub();
   const requests = createRefreshRequests();
   const clock = createManualClock();
@@ -61,9 +52,8 @@ function rig() {
     fetchRoundDetail:
       vi.fn<(roundId: string) => Promise<FetchResult<FetchedRoundDetail>>>(),
     fetchRoundDetails: vi.fn(),
-    fetchTargetFaces: vi.fn(),
     fetchRoundsList: vi.fn(async () => ({ status: "ok", data: [] }) as const),
-    savedTargetFaces: () => null,
+    savedTargetFaces: () => faces.current,
   };
   const session = {
     readSession: async () =>
@@ -110,7 +100,7 @@ function rig() {
     connectivity,
   });
   sync.start("user-1");
-  return { sync, detail, list, requests, fetching, clock };
+  return { sync, detail, list, requests, fetching, clock, faces };
 }
 
 const deferredDetail = () =>
@@ -143,8 +133,39 @@ describe("詳細を開く依頼と同期", () => {
   });
 });
 
+describe("保存済みの的が無い初回の読み込み", () => {
+  it("同期に再取得を促し、常駐の取得が的を保存すると、保存を待っていた詳細が開く", async () => {
+    // Given
+    const t = rig();
+    await flush();
+    t.faces.current = null;
+    t.fetching.fetchRoundDetail.mockResolvedValue({
+      status: "ok",
+      data: detail("取得した"),
+    });
+    t.fetching.fetchRoundDetails.mockImplementation(async () => {
+      t.faces.current = [{ id: "face-1" }];
+      return {
+        status: "ok",
+        data: { rounds: new Map(), startedAt: 100, userId: "user-1" },
+      };
+    });
+
+    // When
+    const result = await t.detail.load("r1");
+
+    // Then
+    expect(t.fetching.fetchRoundDetails).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      status: "ok",
+      data: { targetFaces: [{ id: "face-1" }] },
+    });
+    expect(t.requests.facesWanted()).toBe(false);
+  });
+});
+
 describe("先に始めた実行の終わり", () => {
-  it("後に始めた実行が成功した後に、先に始めた実行が見つからないで終わっても、画面の状態は削除されず、取り直しも増えない", async () => {
+  it("後に始めた実行が成功した後に、先に始めた実行が見つからないで終わると、最後に終わった実行の結果で見つかりませんになり、取り直しは増えない", async () => {
     // Given
     const t = rig();
     const runA = deferredDetail();
@@ -165,7 +186,7 @@ describe("先に始めた実行の終わり", () => {
     runB.resolve({ status: "ok", data: detail("後の実行") });
     await flush();
     await flush();
-    const snapshot = handle.getSnapshot();
+    const before = handle.getSnapshot();
     const fetchCalls = t.fetching.fetchRoundDetail.mock.calls.length;
 
     // When
@@ -176,8 +197,8 @@ describe("先に始めた実行の終わり", () => {
     // Then
     expect(fetchCalls).toBe(2);
     expect(t.fetching.fetchRoundDetail).toHaveBeenCalledTimes(2);
-    expect(handle.getSnapshot()).toBe(snapshot);
-    expect(handle.getSnapshot().gone).toBe(false);
+    expect(before.gone).toBe(false);
+    expect(handle.getSnapshot().gone).toBe(true);
     expect(await loadB).toMatchObject({ status: "ok" });
     expect(await loadA).toBeDefined();
   });
@@ -306,16 +327,15 @@ describe("同じ保存を共有する複数のタブ", () => {
     expect(sentEventIds(opened)).toEqual(["saved-op"]);
   });
 
-  it("一方のタブの未送信が残る状態で止まっても、もう一方のタブは自分の追記を送り続ける", async () => {
+  it("一方のタブに未送信が残る状態でも、もう一方のタブは自分の追記を送り続ける", async () => {
     // Given
     const store = createMemoryRoundStore();
-    const stopped = await senderTab(store, never);
+    const stuck = await senderTab(store, never);
     const running = await senderTab(store, async () => appliedOutcome(1));
-    stopped.sender.start();
+    stuck.sender.start();
     running.sender.start();
-    await stopped.hub.append(stream, roundUpdated({ eventId: "stuck-op" }));
+    await stuck.hub.append(stream, roundUpdated({ eventId: "stuck-op" }));
     await flush();
-    stopped.sender.stop();
 
     // When
     await running.hub.append(

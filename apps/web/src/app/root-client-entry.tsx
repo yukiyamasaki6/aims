@@ -34,7 +34,7 @@ import { createRoundRefreshControl } from "@/features/rounds/application/round-r
 import { createRoundStart } from "@/features/rounds/application/round-start";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
 import { whenOnline } from "@/features/rounds/application/when-online";
-import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
+import { SHORT_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
 import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
@@ -200,7 +200,7 @@ function composeOffline(inputs: Inputs, records: Records) {
     links: createBrowserLinkClicks(),
     persistence: records.hub,
     clock: inputs.clock,
-    deadlineMs: FALLBACK_WAIT_MS,
+    deadlineMs: SHORT_WAIT_MS,
   });
   return { swUpdate };
 }
@@ -235,7 +235,9 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [app] = useState(() => composeApp(router));
   useEffect(() => app.localIdentity.start(), [app]);
-  useEffect(() => app.triggers.start(), [app]);
+  useEffect(() => {
+    app.triggers.start();
+  }, [app]);
   useEffect(() => app.swUpdate.start(), [app]);
 
   // getMessageFallbackとonErrorは関数で、サーバーから渡せないため、クライアントのこの入口で設定を直接読み込む。

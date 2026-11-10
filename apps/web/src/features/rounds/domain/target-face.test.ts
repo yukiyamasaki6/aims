@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  hasAllTargetFaces,
   lookupTargetFace,
   orderTargetFaces,
   type TargetFaceRecord,
@@ -110,5 +111,36 @@ describe("lookupTargetFace", () => {
 
   it("一覧にidがあれば、その的を返す", () => {
     expect(lookupTargetFace(faces, "b")).toBe(faces[1]);
+  });
+});
+
+describe("hasAllTargetFaces", () => {
+  // 判定が見るのは的のIDと距離の的のIDだけなので、入力はそれだけを持つ形にする(判定そのものが検証の対象)。
+  it("距離の参照する的が全て一覧にあれば真で、1つでも無ければ偽にする", () => {
+    // Given
+    const faces = [{ id: "face-1" }, { id: "face-2" }];
+
+    // When
+    const all = hasAllTargetFaces(faces, [
+      { target_face_id: "face-1" },
+      { target_face_id: "face-2" },
+    ]);
+    const missing = hasAllTargetFaces(faces, [
+      { target_face_id: "face-1" },
+      { target_face_id: "face-3" },
+    ]);
+
+    // Then
+    expect(all).toBe(true);
+    expect(missing).toBe(false);
+  });
+
+  it("距離が無ければ、的の一覧が空でも真にする", () => {
+    // Given
+    // When
+    const result = hasAllTargetFaces([], []);
+
+    // Then
+    expect(result).toBe(true);
   });
 });

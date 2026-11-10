@@ -48,7 +48,6 @@ export function createTestRounds(
   const clock = createManualClock(options.clockStart);
   const connectivity = createFakeConnectivity(options.offline);
   const fetching = {
-    fetchTargetFaces: vi.fn(),
     fetchRoundDetail: vi.fn(),
     fetchRoundDetails: vi.fn(),
     fetchRoundsList: vi.fn(),

@@ -7,7 +7,6 @@ export function createBrowserVisibility(): Visibility {
         if (document.visibilityState === "visible") listener();
       };
       document.addEventListener("visibilitychange", handle);
-      return () => document.removeEventListener("visibilitychange", handle);
     },
   };
 }

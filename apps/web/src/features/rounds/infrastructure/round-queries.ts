@@ -8,7 +8,6 @@ import type { PresetRecord } from "../domain/preset";
 import { newestById } from "../domain/round-base";
 import type { ServerRoundSummary } from "../domain/round-list";
 import type { ServerRound } from "../domain/round-tables";
-import type { RoundStatus } from "../domain/sync-events";
 import type { TargetFaceRecord } from "../domain/target-face";
 import { failureOfResponses } from "./db-response-outcome";
 import {
@@ -21,45 +20,9 @@ import type { RoundsDbSchema } from "./rounds-db-schema";
 const ROUND_SELECT =
   "id, name, round_date, format, bow_type, status, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(id, distance_id, end_number, shooter_id, score_str, score_int, shot_number, revision, disabled_at))";
 
-type ShotRow = {
-  id: string;
-  distance_id: string;
-  end_number: number;
-  shooter_id: string;
-  score_str: string;
-  score_int: number;
-  shot_number: number | null;
-  revision: number;
-  disabled_at: string | null;
-};
-
-type DistanceRow = {
-  id: string;
-  position_key: string;
-  distance: number | null;
-  total_ends: number;
-  arrows_per_end: number;
-  target_face_id: string;
-  is_marked: boolean;
-  revision: number;
-  disabled_at: string | null;
-  shots: ShotRow[];
-};
-
 // 一覧は合計点を求めるため、距離と矢の削除の印と点だけを取得する。
 const ROUNDS_LIST_SELECT =
   "id, name, round_date, distances(disabled_at, shots(score_int, disabled_at))";
-
-type RoundRow = {
-  id: string;
-  name: string;
-  round_date: string;
-  format: string;
-  bow_type: string;
-  status: RoundStatus;
-  revision: number;
-  distances: DistanceRow[];
-};
 
 // 1回の取得に並べるラウンドIDの上限。IDはGETのURLに載るため、ゲートウェイが長いURLを414で拒まない件数に分ける。50件で約3KBで、ローカルで通ることを確かめた長さ(約3.7KB)に収まる。
 const roundIdsPerRequest = 50;
@@ -72,36 +35,14 @@ function chunkIds(ids: readonly string[]): string[][] {
   return chunks;
 }
 
-function toServerRound(row: RoundRow): ServerRound {
-  return {
-    id: row.id,
-    roundConfig: {
-      name: row.name,
-      roundDate: row.round_date,
-      format: row.format,
-      bowType: row.bow_type,
-    },
-    status: row.status,
-    revision: row.revision,
-    distances: row.distances.map(({ shots, disabled_at, ...distance }) => ({
-      ...distance,
-      disabled: disabled_at !== null,
-      shots: shots.map(({ disabled_at: shotDisabledAt, ...shot }) => ({
-        ...shot,
-        disabled: shotDisabledAt !== null,
-      })),
-    })),
-  };
-}
-
 function toTargetFaces(rows: unknown): TargetFaceRecord[] {
-  return (rows ?? []) as TargetFaceRecord[];
+  return rows as TargetFaceRecord[];
 }
 
 // preset_distances.target_facesはFKの多重度（多対1）上つねに単一のオブジェクトだが、
 // 生成型は入れ子embedのカーディナリティを配列として広く推論するため、実体に合わせてキャストする。
 function toPresets(rows: unknown): PresetRecord[] {
-  return (rows ?? []) as PresetRecord[];
+  return rows as PresetRecord[];
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: 問い合わせの組み立てを閉じ込めるファクトリで、内側の関数は個々に上限内である。
@@ -109,15 +50,14 @@ export function createRoundQueries(
   database: DatabaseGateway<RoundsDbSchema>,
 ): RoundQueries {
   // target_facesのRLSは認証済みの全員に全行を見せるため、他人の個人の的を除くクエリの絞りが必須である。
-  // `retry`は、裏の取得(個別と一括)の一部として問い合わせるときだけ真にする。
-  const selectTargetFaces = (userId: string, retry = false) =>
+  const selectTargetFaces = (userId: string) =>
     database.select({
       table: "target_faces",
       columns: TARGET_FACE_SELECT,
       filters: [
         { op: "or", expression: `owner_id.is.null,owner_id.eq.${userId}` },
       ],
-      ...(retry ? { retry } : {}),
+      retry: true,
     });
 
   const roundOrders: readonly DbOrder<RoundsDbSchema, "rounds">[] = [
@@ -164,45 +104,36 @@ export function createRoundQueries(
   }
 
   return {
-    async roundDetail(userId, roundId) {
-      const [round, faces] = await Promise.all([
-        database.select({
-          table: "rounds",
-          columns: ROUND_SELECT,
-          filters: [
-            { op: "eq", column: "id", value: roundId },
-            { op: "is", column: "disabled_at", value: null },
-          ],
-          orders: roundOrders,
-          single: "maybe",
-          retry: true,
-        }),
-        selectTargetFaces(userId, true),
-      ]);
-      const failure = failureOfResponses([round, faces]);
+    async roundDetail(roundId) {
+      const round = await database.select({
+        table: "rounds",
+        columns: ROUND_SELECT,
+        filters: [
+          { op: "eq", column: "id", value: roundId },
+          { op: "is", column: "disabled_at", value: null },
+        ],
+        orders: roundOrders,
+        single: "maybe",
+        retry: true,
+      });
+      const failure = failureOfResponses([round]);
       if (failure) return failure;
       if (!round.data) return { status: "not-found" };
-      return {
-        status: "ok",
-        data: {
-          round: toServerRound(round.data as RoundRow),
-          targetFaces: toTargetFaces(faces.data),
-        },
-      };
+      return { status: "ok", data: round.data as ServerRound };
     },
     async roundDetails(userId, roundIds) {
       const chunks = roundIds.length > 0 ? chunkIds(roundIds) : [[]];
       const [faces, ...responses] = await Promise.all([
-        selectTargetFaces(userId, true),
+        selectTargetFaces(userId),
         ...chunks.map((chunk, index) => selectRoundsChunk(chunk, index)),
       ]);
       const failure = failureOfResponses([...responses, faces]);
       if (failure) return failure;
-      const rows = responses.flatMap((r) => (r.data ?? []) as RoundRow[]);
+      const rows = responses.flatMap((r) => r.data as ServerRound[]);
       return {
         status: "ok",
         data: {
-          rounds: newestById(rows).map(toServerRound),
+          rounds: newestById(rows),
           targetFaces: toTargetFaces(faces.data),
         },
       };
@@ -219,14 +150,8 @@ export function createRoundQueries(
       if (failure) return failure;
       return {
         status: "ok",
-        data: (response.data ?? []) as ServerRoundSummary[],
+        data: response.data as ServerRoundSummary[],
       };
-    },
-    async targetFaces(userId) {
-      const faces = await selectTargetFaces(userId);
-      const failure = failureOfResponses([faces]);
-      if (failure) return failure;
-      return { status: "ok", data: toTargetFaces(faces.data) };
     },
     // preset_roundsのRLSは認証済みの全員に全行を見せるため、他人の個人プリセットを除くクエリの絞りが必須である。
     async presets(userId) {

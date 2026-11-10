@@ -113,27 +113,44 @@ export function selectRoundState(tables: RoundTables): RoundState {
   };
 }
 
-// サーバーから取得した、1つのラウンド。取り消した矢と無効化した距離の行も含み、対象ごとにrevisionを持つ。
-// 列に当たる`id`と`revision`は生成型から導き、残りは取得後に組み替えた形である。
-type ServerShot = Shot &
-  Pick<Tables<"shots">, "revision"> & { disabled: boolean };
-type ServerDistance = Distance &
-  Pick<Tables<"distances">, "revision"> & {
-    disabled: boolean;
-    shots: ServerShot[];
-  };
-export type ServerRound = Pick<Tables<"rounds">, "id" | "revision"> & {
-  roundConfig: RoundConfig;
+// サーバーから取得した、1つのラウンドの行。取り消した矢と無効化した距離の行も含み、対象ごとにrevisionを持つ。
+// 列の型は生成型から導く。`status`だけ、生成型が`string`のため状態の型で絞る。
+type ServerShot = Pick<
+  Tables<"shots">,
+  | "id"
+  | "distance_id"
+  | "end_number"
+  | "shooter_id"
+  | "score_str"
+  | "score_int"
+  | "shot_number"
+  | "revision"
+  | "disabled_at"
+>;
+type ServerDistance = Pick<
+  Tables<"distances">,
+  | "id"
+  | "position_key"
+  | "distance"
+  | "total_ends"
+  | "arrows_per_end"
+  | "target_face_id"
+  | "is_marked"
+  | "revision"
+  | "disabled_at"
+> & { shots: ServerShot[] };
+export type ServerRound = Pick<
+  Tables<"rounds">,
+  "id" | "name" | "round_date" | "format" | "bow_type" | "revision"
+> & {
   status: RoundStatus;
   distances: ServerDistance[];
 };
 
-// 取得した行から、表示する状態と、対象ごとのrevisionを求める。取り消した行は表示から除く。
-export function fromServerRound(round: ServerRound): {
-  roundConfig: RoundConfig;
-  status: RoundStatus;
-  distances: Distance[];
-  shots: Shot[];
+// 取得した行から、端末に持つベース(表と、対象ごとのrevision)を作る。取り消した行は表に入れない。
+// 戻りは、`round-base.ts`の`RoundBaseRecord`と同じ構造である(`round-base.ts`がこのファイルを参照するため、型の名前では書かない)。
+export function baseOfServerRound(round: ServerRound): {
+  tables: RoundTables;
   revisions: RoundRevisions;
 } {
   const revisions: RoundRevisions = {
@@ -144,24 +161,32 @@ export function fromServerRound(round: ServerRound): {
   const distances: Distance[] = [];
   const shots: Shot[] = [];
   for (const row of round.distances) {
-    const { shots: shotRows, revision, disabled, ...distance } = row;
+    const { shots: shotRows, revision, disabled_at, ...distance } = row;
     revisions.distances[distance.id] = revision;
-    if (!disabled) distances.push(distance);
+    const distanceLive = disabled_at === null;
+    if (distanceLive) distances.push(distance);
     for (const shotRow of shotRows) {
       const {
         revision: shotRevision,
-        disabled: shotDisabled,
+        disabled_at: shotDisabledAt,
         ...shot
       } = shotRow;
       revisions.shots[shot.id] = shotRevision;
-      if (!disabled && !shotDisabled) shots.push(shot);
+      if (distanceLive && shotDisabledAt === null) shots.push(shot);
     }
   }
   return {
-    roundConfig: round.roundConfig,
-    status: round.status,
-    distances,
-    shots,
+    tables: roundTablesFromServer({
+      roundConfig: {
+        name: round.name,
+        roundDate: round.round_date,
+        format: round.format,
+        bowType: round.bow_type,
+      },
+      status: round.status,
+      distances,
+      shots,
+    }),
     revisions,
   };
 }

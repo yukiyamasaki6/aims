@@ -17,11 +17,14 @@ function requested(state: OpenRequests, roundId: string, times = 1) {
 }
 
 describe("requestOpen", () => {
-  it("依頼を受けると番号が進み、待ちに足され、結果の記録と記録の権利が消える", () => {
+  it("依頼を受けると番号が進み、待ちに足され、見つからなかった記録が消える", () => {
     // Given
     const first = requestOpen(EMPTY_OPEN_REQUESTS, "r-1").state;
-    const { state: running, run } = beginOpenRun(first, "r-1");
-    const recorded = settleOpenRun(running, run, "ok").state;
+    const recorded = settleOpenRun(
+      first,
+      beginOpenRun(first, "r-1"),
+      true,
+    ).state;
     const before = recorded.get("r-1");
 
     // When
@@ -32,11 +35,10 @@ describe("requestOpen", () => {
     expect(next.state.get("r-1")).toMatchObject({
       latest: 2,
       waiting: [2],
-      holder: null,
+      gone: false,
     });
-    expect(next.state.get("r-1")?.outcome).toBeUndefined();
     expect(recorded.get("r-1")).toBe(before);
-    expect(recorded.get("r-1")?.outcome).toBe("ok");
+    expect(recorded.get("r-1")?.gone).toBe(true);
   });
 
   it("別のラウンドは番号と状態を共有しない", () => {
@@ -56,140 +58,121 @@ describe("requestOpen", () => {
 });
 
 describe("beginOpenRun", () => {
-  it("待っている依頼を答える依頼として控え、記録の権利がその実行へ移る", () => {
+  it("待っている依頼を答える依頼として控え、状態は変えない", () => {
     // Given
     const state = requested(EMPTY_OPEN_REQUESTS, "r-1");
 
     // When
-    const { state: running, run } = beginOpenRun(state, "r-1");
+    const run = beginOpenRun(state, "r-1");
 
     // Then
     expect(run.answers).toEqual([1]);
     expect(run.roundId).toBe("r-1");
-    expect(running.get("r-1")?.holder).toBe(run);
+    expect(state.get("r-1")?.waiting).toEqual([1]);
   });
 
-  it("依頼の後すぐ2つ目の実行を始めると、権利は2つ目の実行になり、答える依頼は両方とも同じ", () => {
+  it("依頼の後すぐ2つ目の実行を始めると、答える依頼は両方とも同じで、別の実行として区別される", () => {
     // Given
     const state = requested(EMPTY_OPEN_REQUESTS, "r-1");
     const first = beginOpenRun(state, "r-1");
 
     // When
-    const second = beginOpenRun(first.state, "r-1");
+    const second = beginOpenRun(state, "r-1");
 
     // Then
-    expect(second.state.get("r-1")?.holder).toBe(second.run);
-    expect(second.run).not.toBe(first.run);
-    expect(first.run.answers).toEqual([1]);
-    expect(second.run.answers).toEqual([1]);
+    expect(second).not.toBe(first);
+    expect(first.answers).toEqual([1]);
+    expect(second.answers).toEqual([1]);
   });
 
-  it("依頼が無い実行も権利を持つ", () => {
+  it("依頼が無い実行は、答える依頼を持たない", () => {
     // Given
     // When
-    const { state, run } = beginOpenRun(EMPTY_OPEN_REQUESTS, "r-1");
+    const run = beginOpenRun(EMPTY_OPEN_REQUESTS, "r-1");
 
     // Then
     expect(run.answers).toEqual([]);
-    expect(state.get("r-1")?.holder).toBe(run);
   });
 });
 
 describe("settleOpenRun", () => {
-  it("記録の権利を持つ実行が終わると、結果を記録し、答える依頼を返し、変化を知らせる", () => {
+  it("実行が終わると、見つからなかったかを記録し、答える依頼を返し、変化を知らせる", () => {
     // Given
-    const { state, run } = beginOpenRun(
-      requested(EMPTY_OPEN_REQUESTS, "r-1"),
-      "r-1",
-    );
+    const state = requested(EMPTY_OPEN_REQUESTS, "r-1");
+    const run = beginOpenRun(state, "r-1");
 
     // When
-    const result = settleOpenRun(state, run, "gone");
+    const result = settleOpenRun(state, run, true);
 
     // Then
-    expect(result.state.get("r-1")?.outcome).toBe("gone");
+    expect(result.state.get("r-1")?.gone).toBe(true);
     expect(result.answered).toEqual([1]);
     expect(result.state.get("r-1")?.waiting).toEqual([]);
     expect(result.changed).toBe(true);
   });
 
-  it("権利を失った実行は結果を記録せず、答える依頼は解決する。権利を持つ実行は後で記録する", () => {
+  it("見つからなかったかは、最後に終わった実行の結果になる。答える依頼は1回だけ解決する", () => {
     // Given
-    const requestedOnce = requested(EMPTY_OPEN_REQUESTS, "r-1");
-    const a = beginOpenRun(requestedOnce, "r-1");
-    const b = beginOpenRun(a.state, "r-1");
+    const state = requested(EMPTY_OPEN_REQUESTS, "r-1");
+    const a = beginOpenRun(state, "r-1");
+    const b = beginOpenRun(state, "r-1");
 
     // When
-    const afterA = settleOpenRun(b.state, a.run, "gone");
-    const afterB = settleOpenRun(afterA.state, b.run, "ok");
-
-    // Then
-    expect(afterA.state.get("r-1")?.outcome).toBeUndefined();
-    expect(afterA.answered).toEqual([1]);
-    expect(afterA.changed).toBe(true);
-    expect(afterB.state.get("r-1")?.outcome).toBe("ok");
-    expect(afterB.answered).toEqual([]);
-    expect(afterB.changed).toBe(true);
-  });
-
-  it("答える依頼は1回だけ解決し、先に権利を持つ実行が記録した後の古い実行の終わりは何も変えない", () => {
-    // Given
-    const a = beginOpenRun(requested(EMPTY_OPEN_REQUESTS, "r-1"), "r-1");
-    const b = beginOpenRun(a.state, "r-1");
-    const afterB = settleOpenRun(b.state, b.run, "ok");
-
-    // When
-    const afterA = settleOpenRun(afterB.state, a.run, "gone");
+    const afterB = settleOpenRun(state, b, false);
+    const afterA = settleOpenRun(afterB.state, a, true);
 
     // Then
     expect(afterB.answered).toEqual([1]);
+    expect(afterB.state.get("r-1")?.gone).toBe(false);
     expect(afterA.answered).toEqual([]);
-    expect(afterA.state.get("r-1")?.outcome).toBe("ok");
-    expect(afterA.changed).toBe(false);
-    expect(afterA.state.get("r-1")).toBe(afterB.state.get("r-1"));
+    expect(afterA.state.get("r-1")?.gone).toBe(true);
+    expect(afterA.changed).toBe(true);
   });
 
-  it("記録の権利を持つ実行が、記録済みと同じ結果で終わり、答える依頼も無いときは、何も変えず変化を知らせない", () => {
+  it("記録済みと同じ結果で終わり、答える依頼も無いときは、何も変えず変化を知らせない", () => {
     // Given
     const first = beginOpenRun(EMPTY_OPEN_REQUESTS, "r-1");
-    const recorded = settleOpenRun(first.state, first.run, "ok").state;
+    const recorded = settleOpenRun(EMPTY_OPEN_REQUESTS, first, false).state;
     const second = beginOpenRun(recorded, "r-1");
 
     // When
-    const result = settleOpenRun(second.state, second.run, "ok");
+    const result = settleOpenRun(recorded, second, false);
 
     // Then
     expect(result.changed).toBe(false);
     expect(result.answered).toEqual([]);
-    expect(result.state).toBe(second.state);
+    expect(result.state).toBe(recorded);
   });
 
-  it("記録の権利を持つ実行が、記録済みと違う結果で終わると、記録を更新して変化を知らせる", () => {
+  it("記録済みと違う結果で終わると、記録を更新して変化を知らせる", () => {
     // Given
-    const first = beginOpenRun(EMPTY_OPEN_REQUESTS, "r-1");
-    const recorded = settleOpenRun(first.state, first.run, "ok").state;
-    const second = beginOpenRun(recorded, "r-1");
+    const state = requested(EMPTY_OPEN_REQUESTS, "r-1");
+    const recorded = settleOpenRun(
+      state,
+      beginOpenRun(state, "r-1"),
+      false,
+    ).state;
+    const run = beginOpenRun(recorded, "r-1");
 
     // When
-    const result = settleOpenRun(second.state, second.run, "failed");
+    const result = settleOpenRun(recorded, run, true);
 
     // Then
     expect(result.changed).toBe(true);
-    expect(result.state.get("r-1")?.outcome).toBe("failed");
+    expect(result.state.get("r-1")?.gone).toBe(true);
   });
 
-  it("新しい依頼が来た後は、先に始めた実行の結果を記録せず、新しい依頼は答えない", () => {
+  it("新しい依頼が来た後は、先に始めた実行は新しい依頼を答えず、新しい依頼は待ちに残る", () => {
     // Given
-    const a = beginOpenRun(requested(EMPTY_OPEN_REQUESTS, "r-1"), "r-1");
-    const withNew = requestOpen(a.state, "r-1").state;
+    const state = requested(EMPTY_OPEN_REQUESTS, "r-1");
+    const run = beginOpenRun(state, "r-1");
+    const withNew = requestOpen(state, "r-1").state;
 
     // When
-    const result = settleOpenRun(withNew, a.run, "ok");
+    const result = settleOpenRun(withNew, run, false);
 
     // Then
-    expect(result.state.get("r-1")?.outcome).toBeUndefined();
     expect(result.answered).toEqual([1]);
     expect(result.state.get("r-1")?.waiting).toEqual([2]);
-    expect(result.state.get("r-1")?.holder).toBeNull();
   });
 });

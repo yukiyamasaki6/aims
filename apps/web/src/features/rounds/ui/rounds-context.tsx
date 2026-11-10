@@ -19,7 +19,7 @@ export type RoundProcedures = {
   roundStart: RoundStart;
   presetSaving: PresetSaving;
   presetDeletion: PresetDeletion;
-  fetching: Pick<RoundFetching, "fetchPresets">;
+  fetching: Pick<RoundFetching, "fetchPresets" | "savedPresets">;
   ids: UniqueIds;
   whenOnline: WhenOnline;
 };

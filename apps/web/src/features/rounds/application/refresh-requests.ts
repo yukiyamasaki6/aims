@@ -4,25 +4,15 @@ import {
   EMPTY_OPEN_REQUESTS,
   type OpenRequests,
   type OpenRun,
-  type RoundOutcome,
   requestOpen,
   settleOpenRun,
 } from "../domain/open-requests";
 import type { RoundTables } from "../domain/round-tables";
-import type { TargetFaceOption } from "../domain/target-face";
 
-// サーバーから取得した、開いた詳細の材料。deletedは、取得の間に削除が追記されたため、取得した状態を表示せず離れる。
+// サーバーから取得した、開いた詳細の材料。
 export type OpenedRound = {
-  deleted: boolean;
   base: RoundTables;
-  targetFaces: TargetFaceOption[];
 };
-
-// 取り直しの結果の分類。
-function outcomeOfResult(result: FetchResult<OpenedRound>): RoundOutcome {
-  if (result.status === "ok") return result.data.deleted ? "gone" : "ok";
-  return result.status === "not-found" ? "gone" : "failed";
-}
 
 // 取り直しの依頼の記録。画面は「開いた」と依頼するだけで、取得と反映の時点はこの記録では決めない。
 // 規則は集約(開く依頼 `open-requests.ts`)が持ち、ここは状態を保ち、依頼の番号ごとの結果を渡す先を呼ぶ。
@@ -37,6 +27,8 @@ export function createRefreshRequests() {
   const watching = new Map<string, number>();
   // 確定済みの操作をベースに重ねられなかった(取り直しが要る)開いた詳細。
   const overlay = new Set<string>();
+  // 的が足りないことを知らせる印。印を付けた側がキーを決める。
+  const facesWanted = new Set<string>();
   const listeners = new Set<() => void>();
 
   function changed() {
@@ -66,38 +58,30 @@ export function createRefreshRequests() {
         changed();
       });
     },
-    // そのラウンドの最後の開く依頼の番号。依頼が無ければ0。アプリの寿命の間増え続け、停止でも数え直さない。
+    // そのラウンドの最後の開く依頼の番号。依頼が無ければ0。アプリの寿命の間増え続ける。
     latestOpenRequest: (roundId: string): number =>
       opens.get(roundId)?.latest ?? 0,
     pendingOpens: (): string[] =>
       [...opens]
         .filter(([, round]) => round.waiting.length > 0)
         .map(([roundId]) => roundId),
-    // 取り直しを始める。その時点で待っている開く依頼だけが、この取り直しの結果を受ける。結果の記録の権利は、この取り直しへ移る。
-    beginRound(roundId: string): OpenRun {
-      const next = beginOpenRun(opens, roundId);
-      opens = next.state;
-      return next.run;
-    },
-    // 取り直しの結果を、その取り直しが始まった時点の依頼へ返す。記録の権利を持つ取り直しだけが、結果を記録する。
+    // 取り直しを始める。その時点で待っている開く依頼だけが、この取り直しの結果を受ける。
+    beginRound: (roundId: string): OpenRun => beginOpenRun(opens, roundId),
+    // 取り直しの結果を、その取り直しが始まった時点の依頼へ返す。ラウンドが見つからなかったかは、最後に終わった取り直しの結果になる。
     settleRound(run: OpenRun, result: FetchResult<OpenedRound>) {
-      const next = settleOpenRun(opens, run, outcomeOfResult(result));
+      const next = settleOpenRun(opens, run, result.status === "not-found");
       opens = next.state;
       for (const request of next.answered) {
         resolveOpen(run.roundId, request, result);
       }
       if (next.changed) changed();
     },
-    outcomeOf: (roundId: string): RoundOutcome | undefined =>
-      opens.get(roundId)?.outcome,
+    isGone: (roundId: string): boolean => opens.get(roundId)?.gone ?? false,
     // 開いている間の印。取り直しの要否の判定が、開いている詳細を知るために使う。
     watch(roundId: string): () => void {
       watching.set(roundId, (watching.get(roundId) ?? 0) + 1);
       changed();
-      let released = false;
       return () => {
-        if (released) return;
-        released = true;
         const count = watching.get(roundId);
         if (count === undefined) return;
         if (count <= 1) watching.delete(roundId);
@@ -115,13 +99,22 @@ export function createRefreshRequests() {
       changed();
     },
     overlayNeeded: (roundId: string): boolean => overlay.has(roundId),
+    // 的が足りないという印を付ける、または外す。変わったときだけ知らせる。
+    wantFaces(key: string, wanted: boolean) {
+      if (facesWanted.has(key) === wanted) return;
+      if (wanted) facesWanted.add(key);
+      else facesWanted.delete(key);
+      changed();
+    },
+    facesWanted: (): boolean => facesWanted.size > 0,
+    // 的を端末へ保存したことを知らせる。
+    facesSaved: changed,
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
       };
     },
-    notify: changed,
   };
 }
 

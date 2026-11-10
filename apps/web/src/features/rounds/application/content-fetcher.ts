@@ -6,19 +6,12 @@ import {
   type FetchResult,
   fetchResultOf,
 } from "../domain/fetch-status";
-import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
 import type { QueryOutcome } from "../domain/query-outcome";
-import { TIMED_OUT, withinTime } from "./time-limit";
-
-type FetchOptions<T> = {
-  timeoutMs?: number;
-  onLateResult?: (result: FetchResult<T>) => void;
-};
+import { withinFetchTimeout } from "./time-limit";
 
 export type ContentFetcher = {
   fetchContent<T>(
     run: (session: { userId: string }) => PromiseLike<QueryOutcome<T>>,
-    opts?: FetchOptions<T>,
   ): Promise<FetchResult<T>>;
 };
 
@@ -67,33 +60,11 @@ export function createContentFetcher(deps: {
     }
   }
 
-  async function deliverLateResult<T>(
-    loading: Promise<FetchResult<T>>,
-    remainingMs: number,
-    onLateResult: (result: FetchResult<T>) => void,
-  ): Promise<void> {
-    const raced = await withinTime(clock, loading, remainingMs);
-    if (raced !== TIMED_OUT) onLateResult(raced);
-  }
-
-  // timeoutMsは結果を返すまでの上限。超えた後も取得の開始からFETCH_TIMEOUT_MSまでは結果を待ち、
-  // 終われば一度だけonLateResultへ渡す（表示には使わず、保存などに使う）。
-  async function fetchContent<T>(
+  // FETCH_TIMEOUT_MSで打ち切り、超えたら原因を断定せずに失敗にする(遅れて届いた結果は捨てる)。
+  function fetchContent<T>(
     run: (session: { userId: string }) => PromiseLike<QueryOutcome<T>>,
-    opts: FetchOptions<T> = {},
   ): Promise<FetchResult<T>> {
-    const { timeoutMs = FETCH_TIMEOUT_MS, onLateResult } = opts;
-    const loading = load(run);
-    const raced = await withinTime(clock, loading, timeoutMs);
-    if (raced !== TIMED_OUT) return raced;
-    if (onLateResult && timeoutMs < FETCH_TIMEOUT_MS) {
-      void deliverLateResult(
-        loading,
-        FETCH_TIMEOUT_MS - timeoutMs,
-        onLateResult,
-      );
-    }
-    return failureOfComm();
+    return withinFetchTimeout(clock, connectivity, load(run));
   }
 
   return { fetchContent };

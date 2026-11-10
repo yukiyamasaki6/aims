@@ -8,7 +8,8 @@ describe("createManualClock", () => {
     const order: string[] = [];
     clock.after(300, () => order.push("late"));
     clock.after(100, () => order.push("early"));
-    clock.after(200, () => order.push("cancelled"))();
+    clock.after(200, () => order.push("middle"));
+    clock.after(250, () => order.push("cancelled"))();
 
     // When
     clock.advance(150);
@@ -16,8 +17,8 @@ describe("createManualClock", () => {
     clock.advance(200);
 
     // Then
-    expect(middle).toEqual([250, ["early"], 1]);
-    expect(order).toEqual(["early", "late"]);
+    expect(middle).toEqual([250, ["early"], 2]);
+    expect(order).toEqual(["early", "middle", "late"]);
     expect(clock.now()).toBe(450);
   });
 

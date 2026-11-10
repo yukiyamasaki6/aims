@@ -155,6 +155,37 @@ describe("useRoundOpStack", () => {
     expect(tab.requests.watched()).toEqual([]);
   });
 
+  describe("的の一覧", () => {
+    const face2 = { ...faces[0], id: "face-2" };
+    const usingFace2 = () =>
+      loaded("in_progress", {
+        base: roundBase({
+          distances: [{ ...distance, target_face_id: "face-2" }],
+        }).tables,
+      });
+
+    it("最初は開いた材料の的を返し、参照する的が揃う保存が反映されると、保存済みの的を返す", () => {
+      // Given
+      const { tab, wrapper } = setup();
+      const { result } = renderHook(
+        () => useRoundOpStack("round-1", usingFace2(), ignoreGone),
+        { wrapper },
+      );
+      const initial = result.current.targetFaces;
+
+      // When
+      tab.fetching.savedTargetFaces.mockReturnValue([
+        ...faces,
+        face2,
+      ] as unknown as LoadedRound["targetFaces"]);
+      act(() => tab.requests.facesSaved());
+
+      // Then
+      expect(initial).toEqual(faces);
+      expect(result.current.targetFaces).toEqual([faces[0], face2]);
+    });
+  });
+
   describe("削除の知らせ", () => {
     it("削除の印が反映されたら、onGoneを呼ぶ", async () => {
       // Given

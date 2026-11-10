@@ -28,7 +28,6 @@ import { useRoundDetailStore } from "@/features/rounds/ui/rounds-context";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createIndexedDbOpLogStore } from "@/lib/local-op-log/infrastructure/indexeddb-op-log-store";
 import { loadStreamGroup } from "@/lib/local-op-log/op-log-store-test-helpers";
-import { retryDelayMs } from "../domain/sync-failure";
 import { ScorecardClient } from "./scorecard-client";
 
 // 輪を1つだけ持つ的。的の表示は輪を持つ的を前提にする。
@@ -3015,7 +3014,8 @@ describe("ScorecardClient 同期の状態を表示しない", () => {
 
     // When
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(retryDelayMs(0));
+      // 最初の再試行の待機は3秒。
+      await vi.advanceTimersByTimeAsync(3000);
     });
 
     // Then

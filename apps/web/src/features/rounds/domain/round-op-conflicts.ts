@@ -1,4 +1,8 @@
-import type { SyncOperation } from "./sync-events";
+import {
+  isShotOperation,
+  type ShotOperation,
+  type SyncOperation,
+} from "./sync-events";
 
 // 操作の列の順序づけに使う、ラウンド詳細画面の操作の衝突規則と送信のlane。
 // 衝突する組だけを順序づける。詳細は`docs/features/rounds/sync/design.md`。
@@ -19,17 +23,6 @@ function distanceIdOf(operation: SyncOperation): string | null {
 
 function isDistanceOperation(operation: SyncOperation): boolean {
   return operation.type.startsWith("distance.");
-}
-
-type ShotOperation = Extract<
-  SyncOperation,
-  { type: "shot.recorded" | "shot.cleared" }
->;
-
-function isShotOperation(operation: SyncOperation): operation is ShotOperation {
-  return (
-    operation.type === "shot.recorded" || operation.type === "shot.cleared"
-  );
 }
 
 function isRoundOperation(operation: SyncOperation): boolean {
@@ -83,7 +76,7 @@ export function conflicts(
   return false;
 }
 
-export const SERIAL_LANE = "serial";
+const SERIAL_LANE = "serial";
 const RECORD_LANE_PREFIX = "record:";
 const CLEAR_LANE_PREFIX = "clear:";
 

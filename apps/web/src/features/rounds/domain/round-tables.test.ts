@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  fromServerRound,
+  baseOfServerRound,
   type RoundTables,
   roundTablesFromServer,
   type ServerRound,
@@ -126,40 +126,47 @@ describe("selectRoundState", () => {
   });
 });
 
-describe("fromServerRound", () => {
+describe("baseOfServerRound", () => {
+  const rowShot = (distanceId: string, end: number) => ({
+    ...shot(distanceId, end),
+    shooter_id: "user-1",
+  });
   const serverRound: ServerRound = {
     id: "round-1",
-    roundConfig: config,
+    name: config.name,
+    round_date: config.roundDate,
+    format: config.format,
+    bow_type: config.bowType,
     status: "completed",
     revision: 3,
     distances: [
       {
         ...distance("d-1", "a"),
         revision: 2,
-        disabled: false,
+        disabled_at: null,
         shots: [
-          { ...shot("d-1", 1), revision: 5, disabled: false },
-          { ...shot("d-1", 2), revision: 6, disabled: true },
+          { ...rowShot("d-1", 1), revision: 5, disabled_at: null },
+          { ...rowShot("d-1", 2), revision: 6, disabled_at: "2026-09-16" },
         ],
       },
       {
         ...distance("d-2", "b"),
         revision: 4,
-        disabled: true,
-        shots: [{ ...shot("d-2", 1), revision: 7, disabled: false }],
+        disabled_at: "2026-09-16",
+        shots: [{ ...rowShot("d-2", 1), revision: 7, disabled_at: null }],
       },
     ],
   };
 
-  it("取り消した矢と無効化した距離(その矢を含む)を表示から除き、全ての行のrevisionを集める", () => {
+  it("取り消した矢と無効化した距離(その矢を含む)を表に入れず、全ての行のrevisionを集める", () => {
     // Given
 
     // When
-    const result = fromServerRound(serverRound);
+    const result = baseOfServerRound(serverRound);
 
     // Then
-    expect(result.distances.map((d) => d.id)).toEqual(["d-1"]);
-    expect(result.shots.map((s) => s.id)).toEqual(["d-1-1"]);
+    expect(result.tables.distances.map((d) => d.id)).toEqual(["d-1"]);
+    expect(result.tables.shots.map((s) => s.id)).toEqual(["d-1-1"]);
     expect(result.revisions).toEqual({
       round: 3,
       distances: { "d-1": 2, "d-2": 4 },
@@ -167,16 +174,25 @@ describe("fromServerRound", () => {
     });
   });
 
-  it("ラウンドの設定と状態をそのまま返し、行からrevisionと削除の印を落とす", () => {
+  it("ラウンドの設定と状態を表に入れ、行からrevisionと削除の印を落とす", () => {
     // Given
 
     // When
-    const result = fromServerRound(serverRound);
+    const result = baseOfServerRound(serverRound);
 
     // Then
-    expect(result.roundConfig).toEqual(config);
-    expect(result.status).toBe("completed");
-    expect(result.distances[0]).toEqual(distance("d-1", "a"));
-    expect(result.shots[0]).toEqual(shot("d-1", 1));
+    expect(result.tables.round).toEqual({
+      config,
+      status: "completed",
+      disabled: false,
+    });
+    expect(result.tables.distances[0]).toEqual({
+      ...distance("d-1", "a"),
+      disabled: false,
+    });
+    expect(result.tables.shots[0]).toEqual({
+      ...rowShot("d-1", 1),
+      disabled: false,
+    });
   });
 });
