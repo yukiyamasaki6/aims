@@ -6,7 +6,7 @@ import type {
   TargetFaceRing,
   TargetFaceSpotLayout,
 } from "../domain/target-face";
-import { TargetFaceIcon, TargetFaceInfo } from "./target-face-info";
+import { TargetFaceInfo } from "./target-face-info";
 
 const roundsText = translatorFor("rounds");
 
@@ -28,35 +28,28 @@ const redRing: TargetFaceRing = {
   score_int: 7,
 };
 
-describe("TargetFaceIcon", () => {
-  const emptySpot: TargetFaceSpotLayout = {
-    center_x: 0,
-    center_y: 0,
-    target_face_rings: [],
+describe("TargetFaceInfo のスポットの図", () => {
+  const twoSpotFace = {
+    size: 40,
+    target_face_spots: [
+      { center_x: 0, center_y: 10, target_face_rings: [yellowRing, redRing] },
+      { center_x: 10, center_y: -5, target_face_rings: [yellowRing, redRing] },
+    ] satisfies TargetFaceSpotLayout[],
   };
 
-  const filledSpot: TargetFaceSpotLayout = {
-    center_x: 10,
-    center_y: -5,
-    target_face_rings: [yellowRing, redRing],
-  };
+  it("スポットごとにグループを描き、center_x/center_yの位置へ置く(center_yは上が正のため符号を反転する)", () => {
+    // Given
+    // When
+    const { container } = render(<TargetFaceInfo face={twoSpotFace} />, {
+      wrapper: IntlTestProvider,
+    });
 
-  it("renders a group per spot, positioned by center_x/center_y", () => {
-    const { container } = render(
-      <TargetFaceIcon spots={[emptySpot, filledSpot]} />,
-      { wrapper: IntlTestProvider },
-    );
-    // 空のスポットもグループ自体は描画されるが、中身のcircleは持たない。
+    // Then
     const groups = container.querySelectorAll("g");
     expect(groups).toHaveLength(2);
-    expect(groups[0].querySelectorAll("circle")).toHaveLength(0);
-
-    const filledGroup = groups[1];
-    expect(filledGroup).toHaveAttribute(
-      "transform",
-      `translate(${filledSpot.center_x} ${-filledSpot.center_y})`,
-    );
-    expect(filledGroup.querySelectorAll("circle")).toHaveLength(2);
+    expect(groups[0]).toHaveAttribute("transform", "translate(0 -10)");
+    expect(groups[1]).toHaveAttribute("transform", "translate(10 5)");
+    expect(groups[1].querySelectorAll("circle")).toHaveLength(2);
   });
 });
 

@@ -37,7 +37,7 @@
 - `page.tsx`: 静的な枠。ラウンド・距離・的の取得は`rounds/detail`が扱う。
 - `features/rounds/ui/use-scorecard.ts`: ラウンド・距離・矢は、操作の列から導いた状態を使う。
 - `features/rounds/ui/use-score-history.ts`: 取り消し/やり直しの履歴を状態に持つ。
-- `features/rounds/ui/use-distance-editing.ts`: 距離の編集の開閉(編集を開く距離は1つだけで、同じ距離なら閉じ、違う距離なら替える。距離を追加すると、追加した距離の編集を開く)と、距離の追加、保存、削除。構成が変わる保存と削除で、その距離の履歴を捨てる。削除は追記の直後に状態から距離が無くなり、距離のカードの消滅が編集のダイアログを同じ描画で閉じる。削除した距離を指していた矢は、指す矢の合わせ直しが外す。距離のIDとイベントIDは手続きの入れ物の`ids.next`から受ける。
+- `features/rounds/ui/use-distance-editing.ts`: 距離の編集の開閉(編集を開く距離は1つだけで、同じ距離なら閉じ、違う距離なら替える。距離を追加すると、追加した距離の編集を開く)と、距離の追加、保存。構成が変わる保存で、その距離の履歴を捨てる。削除での履歴の破棄は`scorecard-client.tsx`が`discardDistance`を直接呼ぶ。削除は追記の直後に状態から距離が無くなり、距離のカードの消滅が編集のダイアログを同じ描画で閉じる。削除した距離を指していた矢は、指す矢の合わせ直しが外す。距離のIDとイベントIDは手続きの入れ物の`ids.next`から受ける。
 - `features/rounds/ui/round-config-panel.tsx`: ラウンド概要と編集ダイアログ。`features/rounds/domain/round-config.ts`の`validateRoundConfig`で検証し、イベントIDは手続きの入れ物の`ids.next`から受ける。
 - `features/rounds/ui/distance-edit-fields.tsx`(ダイアログと操作)、`distance-fields.tsx`(欄の描画)、`use-distance-draft.ts`(下書き、検証、保存、削除): 距離編集と削除確認。`features/rounds/domain/distance-config.ts`の`validateDistanceDraft`で検証し、操作は`distance-operations.ts`で組み立て、イベントIDは手続きの入れ物の`ids.next`から受ける。
 - `features/rounds/ui/target-face-picker.tsx`: 的選択。`features/rounds/domain/target-face-filter.ts`の`filterTargetFaces`で絞り込む。
@@ -58,7 +58,7 @@
 - 的は、種別の降順、サイズの降順、名前の順に並べる。ダイアログは高さを固定し、フィルタを上に固定して一覧だけをスクロールさせる。
 - フィルタの選択は、同じ距離編集の中で的選択を開き直しても保持し、距離編集を開き直すとラウンド設定の値へ戻る。
 - form外の入力欄は、共通の`Input`が、変換中でないEnterでフォーカスを外す（保存や閉鎖はしない）。
-- 距離の保存で的・本数・エンド数のいずれかが変わる場合（変更前の距離が見つからない場合を含む）は、その距離の取り消し・やり直しの履歴を破棄する。距離（m）とMarked/Unmarkedだけの変更では残す。距離の削除でも、その距離の矢と履歴を破棄する。他の距離は影響しない。
+- 距離の保存で的・本数・エンド数のいずれかが変わる場合は、その距離の取り消し・やり直しの履歴を破棄する。距離（m）とMarked/Unmarkedだけの変更では残す。距離の削除でも、その距離の矢と履歴を破棄する。他の距離は影響しない。
 
 ## 設計判断
 

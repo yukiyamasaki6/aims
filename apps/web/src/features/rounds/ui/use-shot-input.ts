@@ -55,18 +55,14 @@ function scoreShot(ctx: ShotInputContext, scoreStr: string, scoreInt: number) {
   ctx.setPointer(pointerAfterScore(distances, state.shots, pointer));
 }
 
-// クリアのキーは記録済みの矢を指すときだけ有効で、指す矢はreconcilePointerが常に状態に合わせる。
-function pointedShot({ pointer, shots }: ShotInputContext): Shot {
+// クリアのキーは記録済みの矢を指すときだけ有効で、指していないときは何もしない。
+function clearShot(ctx: ShotInputContext) {
+  const { pointer, shots } = ctx;
   const shot =
     pointer?.kind === "shot"
       ? shots.find((s) => s.id === pointer.shotId)
       : undefined;
-  if (!shot) throw new Error("クリアする矢を指していません。");
-  return shot;
-}
-
-function clearShot(ctx: ShotInputContext) {
-  const shot = pointedShot(ctx);
+  if (!shot) return;
 
   const entry = clearHistoryEntry(shot);
   ctx.append(buildShotOperation(entry, entry.after, ctx.newId()));

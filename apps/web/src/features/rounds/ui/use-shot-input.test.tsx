@@ -117,16 +117,16 @@ describe("useShotInput", () => {
     expect(setPointer).toHaveBeenCalledWith(newShotPointer("d-1", 2));
   });
 
-  it("記録済みの矢を指していないときのクリアは、何も積まずに例外にする", () => {
+  it("記録済みの矢を指していないときのクリアは、何も積まず、履歴も指す矢も変えない", () => {
     // Given
-    const { input, append, history } = setup();
+    const { input, append, history, setPointer } = setup();
 
     // When
-    const clear = () => input.handleClear();
+    input.handleClear();
 
     // Then
-    expect(clear).toThrow();
     expect(append).not.toHaveBeenCalled();
     expect(history.recordHistory).not.toHaveBeenCalled();
+    expect(setPointer).not.toHaveBeenCalled();
   });
 });
