@@ -1,12 +1,11 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type Dispatch, type SetStateAction, useState } from "react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { BusyButton } from "@/components/ui/busy-button";
+import { buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { generatePresetName } from "../domain/preset-save";
 import { compareDistancePosition } from "../domain/scorecard-scoring";
 import type { Distance } from "../domain/scorecard-types";
@@ -136,17 +135,15 @@ function PresetDialogBody({
           </p>
         )}
       </div>
-      <Button
+      <BusyButton
         type="button"
-        aria-disabled={state.submitting}
+        busy={state.submitting}
         disabled={noDistances}
-        className={cn(state.submitting && "pointer-events-none opacity-50")}
         data-testid="save-as-preset-confirm"
         onClick={onSave}
       >
-        {state.submitting && <Loader2 className="size-3.5 animate-spin" />}
         {t("save")}
-      </Button>
+      </BusyButton>
     </div>
   );
 }
