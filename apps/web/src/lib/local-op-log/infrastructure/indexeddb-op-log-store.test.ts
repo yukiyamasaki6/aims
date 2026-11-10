@@ -505,19 +505,6 @@ describe("op log store", () => {
       expect([...all.keys()].sort()).toEqual(["round:a", "round:c"]);
       expect(all.get("round:a")?.base?.base).toEqual(base(1));
     });
-
-    it("ユーザーが無いときは、ベースを保存しない", async () => {
-      // Given
-      const store = newStore();
-
-      // When
-      const result = await store.commit(STREAM, null, base(1), 10);
-      const stored = await loadStreamGroup(store, STREAM, null);
-
-      // Then
-      expect(result.base).toEqual({ startedAt: 10, base: base(1) });
-      expect(stored).toEqual({ base: undefined, entries: [] });
-    });
   });
 
   describe("保存形式の更新", () => {

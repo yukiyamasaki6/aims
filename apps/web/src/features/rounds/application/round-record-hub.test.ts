@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { roundBase, roundUpdated } from "../domain/round-op-test-helpers";
 import { operationsOf } from "../domain/round-record";
 import { roundStreamId, type SyncOperation } from "../domain/sync-events";
-import type { RecordChange } from "./round-record-hub";
 import { createTestRoundHub } from "./round-record-test-helpers";
 
 const STREAM = roundStreamId("round-1");
+
+type RecordChange = { streamId: string };
 
 // 記録の規則(保存の完了、世代、利用者の照合)が検証対象で、操作の中身は問わないため、名前だけの更新を使う。
 function op(id: string): SyncOperation {
@@ -68,7 +69,7 @@ describe("ready", () => {
     expect(afterLoad).toBe(true);
   });
 
-  it("読み込みの後に呼ぶとすぐ解決し、startの前とstopの後は解決しない", async () => {
+  it("読み込みの後に呼ぶとすぐ解決し、startの前は解決しない", async () => {
     // Given
     const { hub } = createTestRoundHub();
     const beforeStart = await settled(hub.ready());
@@ -77,13 +78,10 @@ describe("ready", () => {
 
     // When
     const afterLoad = await settled(hub.ready());
-    hub.stop();
-    const afterStop = await settled(hub.ready());
 
     // Then
     expect(beforeStart).toBe(false);
     expect(afterLoad).toBe(true);
-    expect(afterStop).toBe(false);
   });
 
   it("読み込みに失敗しても解決する", async () => {
@@ -98,47 +96,9 @@ describe("ready", () => {
     // Then
     expect(isSettled).toBe(true);
   });
-
-  it("停止して起動し直した後は、新しい読み込みが終わるまで解決せず、古い世代の読み込みの完了では解決しない", async () => {
-    // Given
-    const { hub, store } = createTestRoundHub();
-    const first = deferred<Awaited<ReturnType<typeof store.loadAll>>>();
-    const second = deferred<Awaited<ReturnType<typeof store.loadAll>>>();
-    vi.spyOn(store, "loadAll")
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
-    hub.start("user-1");
-    hub.stop();
-    hub.start("user-2");
-    const ready = hub.ready();
-
-    // When
-    first.resolve(new Map());
-    const afterStale = await settled(ready);
-    second.resolve(new Map());
-    const afterCurrent = await settled(ready);
-
-    // Then
-    expect(afterStale).toBe(false);
-    expect(afterCurrent).toBe(true);
-  });
 });
 
-describe("start と stop", () => {
-  it("stopで記録を捨てる", async () => {
-    // Given
-    const { hub } = createTestRoundHub();
-    hub.start("user-1");
-    await hub.ready();
-    await hub.append(STREAM, op("a"));
-
-    // When
-    hub.stop();
-
-    // Then
-    expect(hub.streams()).toEqual([]);
-  });
-
+describe("start", () => {
   it("起動時に、現在の利用者の保存済みの全ての列を読んで記録にする", async () => {
     // Given
     const { hub, store } = createTestRoundHub();
@@ -438,7 +398,7 @@ describe("applySendResults と discard", () => {
 });
 
 describe("commit", () => {
-  it("取得したベースを保存して反映し、そのベースに反映済みの確定済みの操作を外して、組を返す。送信中の操作は残す", async () => {
+  it("取得したベースを保存して反映し、そのベースに反映済みの確定済みの操作を外す。送信中の操作は残す", async () => {
     // Given
     const { hub, store } = await startedHub();
     await hub.append(STREAM, op("a"));
@@ -448,7 +408,7 @@ describe("commit", () => {
     hub.replaceInFlight(STREAM, ["b"]);
 
     // When
-    const group = await hub.commit(
+    await hub.commit(
       STREAM,
       roundBase({ revisions: { round: 1 } }),
       10,
@@ -456,7 +416,6 @@ describe("commit", () => {
     );
 
     // Then
-    expect(group.base?.startedAt).toBe(10);
     expect(hub.record(STREAM).items.map((item) => item.eventId)).toEqual(["b"]);
     expect(store.rows.map((row) => row.eventId)).toEqual(["b"]);
     expect(hub.record(STREAM).base?.startedAt).toBe(10);
@@ -499,7 +458,7 @@ describe("commit", () => {
     const commit = vi.spyOn(store, "commit");
 
     // When
-    const group = await hub.commit(
+    await hub.commit(
       STREAM,
       roundBase({ revisions: { round: 1 } }),
       11,
@@ -508,7 +467,6 @@ describe("commit", () => {
 
     // Then
     expect(commit).not.toHaveBeenCalled();
-    expect(group.base?.startedAt).toBe(10);
     expect(hub.record(STREAM).base?.startedAt).toBe(10);
   });
 
@@ -516,18 +474,17 @@ describe("commit", () => {
     ["別の利用者", "user-2", "user-1"],
     ["記録の利用者がnull(unowned)", "user-1", null],
   ])(
-    "%sの取得は、端末へ保存せず、このタブのベースも変えず、現在の組を返す",
+    "%sの取得は、端末へ保存せず、このタブのベースも変えない",
     async (_name, fetchedUser, recordUser) => {
       // Given
       const { hub, store } = await startedHub(recordUser);
       const commit = vi.spyOn(store, "commit");
 
       // When
-      const group = await hub.commit(STREAM, roundBase(), 30, fetchedUser);
+      await hub.commit(STREAM, roundBase(), 30, fetchedUser);
 
       // Then
       expect(commit).not.toHaveBeenCalled();
-      expect(group).toEqual({ base: undefined, entries: [] });
       expect(hub.record(STREAM).base).toBeUndefined();
       expect((await hub.readStored()).size).toBe(0);
     },
@@ -539,45 +496,10 @@ describe("commit", () => {
     vi.spyOn(store, "commit").mockRejectedValueOnce(new Error("quota"));
 
     // When
-    const group = await hub.commit(STREAM, roundBase(), 10, "user-1");
+    await hub.commit(STREAM, roundBase(), 10, "user-1");
 
     // Then
     expect(hub.record(STREAM).base?.base).toEqual(roundBase());
-    expect(group.base?.startedAt).toBe(10);
-  });
-
-  it("保存の完了が遅れる間に停止・起動されたら、現在の記録へ取り込まず、通知もせず、空の組を返す", async () => {
-    // Given
-    const { hub, store, changes } = await startedHub("user-1");
-    const saving = deferred<Awaited<ReturnType<typeof store.commit>>>();
-    vi.spyOn(store, "commit").mockReturnValueOnce(saving.promise);
-    const committing = hub.commit(STREAM, roundBase(), 10, "user-1");
-    await flush();
-    hub.stop();
-    hub.start("user-2");
-    await hub.ready();
-    changes.length = 0;
-
-    // When
-    saving.resolve({
-      base: { startedAt: 10, base: roundBase() },
-      entries: [
-        {
-          seq: 1,
-          eventId: "old",
-          streamId: STREAM,
-          userId: "user-1",
-          operation: op("old"),
-        },
-      ],
-    });
-    const group = await committing;
-
-    // Then
-    expect(group).toEqual({ base: undefined, entries: [] });
-    expect(hub.record(STREAM).base).toBeUndefined();
-    expect(hub.record(STREAM).items).toEqual([]);
-    expect(changes).toEqual([]);
   });
 
   it("削除の印(null)も、同じ規則で反映する", async () => {
@@ -884,31 +806,6 @@ describe("readList", () => {
       expect([...list.keys()]).toEqual([STREAM]);
     });
 
-    it.each([
-      [
-        "停止して起動し直した",
-        async (hub: ReturnType<typeof createTestRoundHub>["hub"]) => {
-          hub.stop();
-          hub.start("user-1");
-          await hub.ready();
-        },
-      ],
-    ])(
-      "%s後は失敗の記録が空になり、材料は保存を基準にする",
-      async (_name, restart) => {
-        // Given
-        const { failing } = await failedThenRecovered();
-        await restart(failing.hub);
-        failing.store.rows.length = 0;
-
-        // When
-        const list = await failing.hub.readList();
-
-        // Then
-        expect([...list.keys()]).toEqual([]);
-      },
-    );
-
     it("保存の読み取りは保存の内容を返し、別のタブが完了した後は完了した状態を返す", async () => {
       // Given
       const { failing } = await failedThenRecovered();
@@ -967,132 +864,5 @@ describe("readList", () => {
       expect(first.hub.divergedStreams().has(STREAM)).toBe(true);
       expect(other.hub.divergedStreams().has(STREAM)).toBe(false);
     });
-  });
-
-  describe("停止・起動をまたぐ読み込み", () => {
-    it("読み込みの間に停止・起動されたら、その結果を返さず読み直す", async () => {
-      // Given
-      const { hub, store } = await startedHub("user-1");
-      const old = deferred<Awaited<ReturnType<typeof store.loadAll>>>();
-      const load = vi.spyOn(store, "loadAll").mockReturnValueOnce(old.promise);
-      const reading = hub.readList();
-      await flush();
-      hub.stop();
-      hub.start("user-2");
-
-      // When
-      old.resolve(
-        new Map([
-          [
-            STREAM,
-            {
-              base: undefined,
-              entries: [
-                {
-                  seq: 1,
-                  eventId: "old",
-                  streamId: STREAM,
-                  userId: "user-1",
-                  operation: op("old"),
-                },
-              ],
-            },
-          ],
-        ]),
-      );
-      const list = await reading;
-
-      // Then
-      expect(list.size).toBe(0);
-      expect(load).toHaveBeenLastCalledWith("user-2");
-    });
-  });
-});
-
-describe("停止・起動をまたぐ処理", () => {
-  const row = (id: string, userId: string) => ({
-    seq: 1,
-    eventId: id,
-    streamId: STREAM,
-    userId,
-    operation: op(id),
-  });
-
-  it("readStoredは、読み込みの間に停止・起動されたら、その結果を返さず読み直す", async () => {
-    // Given
-    const { hub, store } = await startedHub("user-1");
-    const old = deferred<Awaited<ReturnType<typeof store.loadAll>>>();
-    const load = vi.spyOn(store, "loadAll").mockReturnValueOnce(old.promise);
-    const reading = hub.readStored();
-    await flush();
-    hub.stop();
-    hub.start("user-2");
-
-    // When
-    old.resolve(
-      new Map([[STREAM, { base: undefined, entries: [row("old", "user-1")] }]]),
-    );
-    const all = await reading;
-
-    // Then
-    expect(all.size).toBe(0);
-    expect(load).toHaveBeenLastCalledWith("user-2");
-  });
-
-  it("appendの保存の完了が停止・起動より遅れても、現在の記録に触れず、通知もしない", async () => {
-    // Given
-    const { hub, store, changes } = await startedHub("user-1");
-    const saving = deferred<void>();
-    const save = store.append.bind(store);
-    vi.spyOn(store, "append").mockImplementationOnce(async (...args) => {
-      await saving.promise;
-      return save(...args);
-    });
-    const appending = hub.append(STREAM, op("a"));
-    await flush();
-    hub.stop();
-    hub.start("user-2");
-    await hub.ready();
-    changes.length = 0;
-
-    // When
-    saving.resolve();
-    await appending;
-
-    // Then
-    expect(hub.record(STREAM).items).toEqual([]);
-    expect(changes).toEqual([]);
-  });
-
-  it("送信の間に停止・起動されたときのapplySendResultsは、現在の記録・印・通知に触れず、保存先の確定だけを書く", async () => {
-    // Given
-    const { hub, store, changes } = await startedHub("user-1");
-    await hub.append(STREAM, op("a"));
-    const generation = hub.generation();
-    hub.stop();
-    hub.start("user-2");
-    await hub.ready();
-    changes.length = 0;
-
-    // When
-    hub.applySendResults(
-      STREAM,
-      ["a"],
-      [
-        {
-          revision: null,
-          applied: false,
-          appliedFields: null,
-          hasRejectedFields: false,
-        },
-      ],
-      generation,
-    );
-    await flush();
-
-    // Then
-    expect(hub.divergedStreams().size).toBe(0);
-    expect(changes).toEqual([]);
-    expect(store.rows).toEqual([]);
   });
 });

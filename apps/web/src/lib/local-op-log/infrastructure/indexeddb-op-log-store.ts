@@ -19,11 +19,6 @@ const DB_VERSION = 5;
 const STORE_NAME = "ops";
 const BASE_STORE_NAME = "bases";
 
-// 保存前の値は`seq`を持たず、autoIncrementが保存時に付ける。
-type StoredEntry<Op extends OpBase> = Omit<OpLogEntry<Op>, "seq"> & {
-  seq?: number;
-};
-
 type StoredBase<Base> = StreamBase<Base> & {
   userId: string;
   streamId: string;
@@ -32,7 +27,7 @@ type StoredBase<Base> = StreamBase<Base> & {
 interface OpLogDb<Op extends OpBase, Base> extends DBSchema {
   ops: {
     key: number;
-    value: StoredEntry<Op>;
+    value: OpLogEntry<Op>;
     indexes: { "by-event-id": string; "by-stream": string };
   };
   bases: {
@@ -109,7 +104,10 @@ export function createIndexedDbOpLogStore<Op extends OpBase, Base>(
     append(entry, base) {
       const result = appendQueue.then(() =>
         inTransaction(async (tx) => {
-          const seq = await tx.objectStore(STORE_NAME).add(entry);
+          // `seq`はautoIncrementが保存時に付けるため、保存する値の型に合わせて断言する。
+          const seq = await tx
+            .objectStore(STORE_NAME)
+            .add(entry as OpLogEntry<Op>);
           if (!base || base.base === null || entry.userId === null) return seq;
           const bases = tx.objectStore(BASE_STORE_NAME);
           const stored = await bases.get([entry.userId, entry.streamId]);
@@ -142,8 +140,7 @@ export function createIndexedDbOpLogStore<Op extends OpBase, Base>(
       return inTransaction(async (tx) => {
         const bases = tx.objectStore(BASE_STORE_NAME);
         const ops = tx.objectStore(STORE_NAME);
-        const stored =
-          userId === null ? undefined : await bases.get([userId, streamId]);
+        const stored = await bases.get([userId, streamId]);
         const entries = await streamEntries(tx, streamId, userId);
         if (
           stored !== undefined &&
@@ -160,8 +157,7 @@ export function createIndexedDbOpLogStore<Op extends OpBase, Base>(
         );
         const kept = base === null || rules.keeps(base, remaining);
         if (kept) {
-          if (userId !== null)
-            await bases.put({ userId, streamId, ...incoming });
+          await bases.put({ userId, streamId, ...incoming });
           return { base: incoming, entries: remaining };
         }
         await deleteStream(ops, bases, remaining, userId, streamId);
@@ -213,11 +209,11 @@ async function deleteStream(
   ops: { delete: (key: number) => Promise<void> },
   bases: { delete: (key: [string, string]) => Promise<void> },
   remaining: { seq: number }[],
-  userId: string | null,
+  userId: string,
   streamId: string,
 ) {
   for (const entry of remaining) await ops.delete(entry.seq);
-  if (userId !== null) await bases.delete([userId, streamId]);
+  await bases.delete([userId, streamId]);
 }
 
 // ベースに反映済みの操作を消し、残りを返す。
@@ -261,7 +257,7 @@ async function streamEntries<Op extends OpBase, Base>(
 
 // 現在のユーザーの操作とベースを、列ごとの組にする。
 function groupByStream<Op extends OpBase, Base>(
-  all: StoredEntry<Op>[],
+  all: OpLogEntry<Op>[],
   bases: StoredBase<Base>[],
   userId: string | null,
 ): Map<string, StreamGroup<Op, Base>> {
@@ -276,8 +272,8 @@ function groupByStream<Op extends OpBase, Base>(
   };
   // 主キー`seq`の昇順で返るため、並べ直さない。
   for (const entry of all) {
-    if (entry.userId !== userId || entry.seq === undefined) continue;
-    group(entry.streamId).entries.push({ ...entry, seq: entry.seq });
+    if (entry.userId !== userId) continue;
+    group(entry.streamId).entries.push(entry);
   }
   for (const stored of bases) {
     if (stored.userId === userId) {
@@ -289,14 +285,8 @@ function groupByStream<Op extends OpBase, Base>(
 
 // 現在のユーザーの操作だけを返す。`by-stream`の索引は同じ列の中で主キー`seq`の昇順に返すため、並べ直さない。
 function userEntries<Op extends OpBase>(
-  entries: StoredEntry<Op>[],
+  entries: OpLogEntry<Op>[],
   userId: string | null,
 ): OpLogEntry<Op>[] {
-  const stored: OpLogEntry<Op>[] = [];
-  for (const entry of entries) {
-    if (entry.userId === userId && entry.seq !== undefined) {
-      stored.push({ ...entry, seq: entry.seq });
-    }
-  }
-  return stored;
+  return entries.filter((entry) => entry.userId === userId);
 }

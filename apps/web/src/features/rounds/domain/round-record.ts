@@ -34,7 +34,7 @@ export type RoundRecord = {
 };
 
 // 保存先の1行。保存先の型に依存しないよう、同じ形をここで宣言する。
-export type RecordRow = {
+type RecordRow = {
   seq: number;
   eventId: string;
   ackedRevision?: number;
@@ -360,23 +360,6 @@ export function operationsOf(record: RoundRecord): RecordedOperation[] {
     confirmedFields: isConfirmed(item)
       ? (item.confirmedFields ?? null)
       : undefined,
-  }));
-}
-
-// この記録のメモリ上の操作を、端末の組の形にする。
-export function memoryEntries(
-  record: RoundRecord,
-  streamId: string,
-  userId: string | null,
-) {
-  return record.items.map((item) => ({
-    seq: item.seq ?? -1,
-    eventId: item.eventId,
-    streamId,
-    userId,
-    operation: item.operation,
-    ackedRevision: item.ackedRevision,
-    ackedApplied: item.ackedApplied,
   }));
 }
 

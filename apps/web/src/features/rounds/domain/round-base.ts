@@ -1,7 +1,4 @@
 import type { RoundRevisions, RoundTables } from "./round-tables";
-
-export type { RoundRevisions };
-
 import type { SyncOperation } from "./sync-events";
 
 // 取得して端末に持つ、ラウンドのベース。サーバーの状態と、その時点の対象ごとのrevision。

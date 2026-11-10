@@ -67,7 +67,7 @@ export type OpLogStore<Op extends OpBase, Base> = {
   // 当たらなければ、組を丸ごと消す(`keeps`は未送信があれば真を返すため、未送信は消えない)。
   commit: (
     streamId: string,
-    userId: string | null,
+    userId: string,
     base: Base | null,
     startedAt: number,
   ) => Promise<StreamGroup<Op, Base>>;

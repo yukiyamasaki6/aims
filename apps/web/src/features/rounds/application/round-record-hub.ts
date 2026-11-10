@@ -12,7 +12,6 @@ import {
   EMPTY_RECORD,
   isOlderFetch,
   markPersisted,
-  memoryEntries,
   operationsOf,
   type RecordGroup,
   type RecordSendResult,
@@ -23,13 +22,13 @@ import {
 } from "../domain/round-record";
 import type { SyncOperation } from "../domain/sync-events";
 
-export type RecordChange = {
+type RecordChange = {
   streamId: string;
 };
 
-export type RoundStoreGroup = StreamGroup<SyncOperation, RoundBaseRecord>;
+type RoundStoreGroup = StreamGroup<SyncOperation, RoundBaseRecord>;
 
-export type AdoptOptions = {
+type AdoptOptions = {
   fetched?: RecordBase;
   // 読み込みを始める前の`persistTick`。省略時は0(このタブで保存した操作を全て守る)。
   readAt?: number;
@@ -45,13 +44,12 @@ export function createRoundRecordHub(deps: {
 }) {
   const { store } = deps;
   let userId: string | null = null;
-  let started = false;
-  // 起動、停止のたびに進める。古い読み込みの結果を捨てるため。
-  let epoch = 0;
-  // `reloadAll`が終わった世代。`ready`の判定に使う。
-  let loadedEpoch = -1;
-  let readyWaiters: (() => void)[] = [];
-  let records = new Map<string, RoundRecord>();
+  // 起動時の読み込みが終わると解決する。
+  let markLoaded: () => void = () => {};
+  const loaded = new Promise<void>((resolve) => {
+    markLoaded = resolve;
+  });
+  const records = new Map<string, RoundRecord>();
   const listeners = new Set<(change: RecordChange) => void>();
   const diverged = new Set<string>();
   // 保存の途中の`append`。`whenPersisted`が終わりを待つ。
@@ -59,9 +57,11 @@ export function createRoundRecordHub(deps: {
   // このタブで保存の書き込みに失敗した列。一覧の材料をメモリから作る。解除せず、停止で空になる。
   const writeFailed = new Set<string>();
 
-  function markWriteFailed(streamId: string, target: number) {
-    if (epoch === target) writeFailed.add(streamId);
+  function markWriteFailed(streamId: string) {
+    writeFailed.add(streamId);
   }
+
+  const ready = (): Promise<void> => loaded;
 
   function record(streamId: string): RoundRecord {
     return records.get(streamId) ?? EMPTY_RECORD;
@@ -74,19 +74,6 @@ export function createRoundRecordHub(deps: {
   function put(streamId: string, next: RoundRecord) {
     records.set(streamId, next);
     emit(streamId);
-  }
-
-  function markLoaded(target: number) {
-    if (epoch !== target) return;
-    loadedEpoch = target;
-    const waiters = readyWaiters;
-    readyWaiters = [];
-    for (const resolve of waiters) resolve();
-  }
-
-  function ready(): Promise<void> {
-    if (started && loadedEpoch === epoch) return Promise.resolve();
-    return new Promise((resolve) => readyWaiters.push(resolve));
   }
 
   function adopt(
@@ -103,22 +90,19 @@ export function createRoundRecordHub(deps: {
 
   // 現在の利用者の全ての列を読み、記録へ取り込む。読み込みに失敗したときは何もしない。
   async function reloadAll() {
-    const target = epoch;
     let streams: Map<string, RoundStoreGroup>;
     try {
       streams = await store.loadAll(userId);
     } catch {
-      markLoaded(target);
+      markLoaded();
       return;
     }
-    if (epoch !== target) return;
     for (const [streamId, group] of streams) adopt(streamId, group);
-    markLoaded(target);
+    markLoaded();
   }
 
   function append(streamId: string, operation: SyncOperation): Promise<void> {
     const entryUserId = userId;
-    const target = epoch;
     put(streamId, appendPending(record(streamId), operation));
     const persisted = store
       .append(
@@ -136,9 +120,7 @@ export function createRoundRecordHub(deps: {
         () => undefined,
       )
       .then((seq) => {
-        // 保存の間に停止されたときは、現在の記録に触れない(保存先の書き込みは完了している)。
-        if (epoch !== target) return;
-        if (seq === undefined) markWriteFailed(streamId, target);
+        if (seq === undefined) markWriteFailed(streamId);
         // 画面へは追記の時点で反映済みで、保存の完了では画面の状態は変わらない(送信だけが保存の完了を待つ)。
         const next = markPersisted(record(streamId), operation.eventId, seq);
         put(streamId, next);
@@ -149,15 +131,14 @@ export function createRoundRecordHub(deps: {
   }
 
   // 取得したベースを反映する。保存(1つのトランザクション)を待ち、その結果の組でこの記録を1回の通知で変える。
-  // 保存に失敗したときは、このタブの記録のベースだけを変える。別の利用者の取得は、保存せず、このタブの記録も変えない。結果の組を返す。保存に失敗しても拒否しない。
+  // 保存に失敗したときは、このタブの記録のベースだけを変える。別の利用者の取得は、保存せず、このタブの記録も変えない。保存に失敗しても拒否しない。
   async function commit(
     streamId: string,
     fetched: RoundBaseRecord | null,
     startedAt: number,
-    fetchedUserId: string | null,
-  ): Promise<RecordGroup> {
+    fetchedUserId: string,
+  ): Promise<void> {
     await ready();
-    const target = epoch;
     const readAt = record(streamId).persistTick;
     const incoming: RecordBase = { startedAt, base: fetched };
     // 組が消えた後でも、最後に取り込んだベースより古い状態の取得は、保存も反映もしない。
@@ -166,30 +147,20 @@ export function createRoundRecordHub(deps: {
       isOlderFetch(record(streamId), fetched) ||
       matchRecordUser(userId, fetchedUserId) !== "same"
     ) {
-      const current = record(streamId);
-      return {
-        base: current.base,
-        entries: memoryEntries(current, streamId, userId),
-      };
+      return;
     }
     let group: RoundStoreGroup | undefined;
     try {
-      group = await store.commit(streamId, userId, fetched, startedAt);
+      group = await store.commit(streamId, fetchedUserId, fetched, startedAt);
     } catch {
       // 保存に失敗しても、このタブの画面は取得したベースで続ける。
-      markWriteFailed(streamId, target);
+      markWriteFailed(streamId);
     }
-    // 保存の間に停止されたときは、その組を現在の記録へ取り込まず、結果にも使わせない(保存先の書き込みは完了している)。
-    if (epoch !== target) return { base: undefined, entries: [] };
     if (group) {
       adopt(streamId, group, { readAt, fetched: incoming });
-      return group;
+      return;
     }
     put(streamId, commitFetched(record(streamId), incoming));
-    return {
-      base: incoming,
-      entries: memoryEntries(record(streamId), streamId, userId),
-    };
   }
 
   function memorySnapshot(current: RoundRecord): RecordSnapshot {
@@ -232,47 +203,28 @@ export function createRoundRecordHub(deps: {
 
   return {
     start(initialUserId: string | null) {
-      started = true;
-      epoch += 1;
       userId = initialUserId;
       void reloadAll();
     },
-    stop() {
-      records = new Map();
-      diverged.clear();
-      writeFailed.clear();
-      epoch += 1;
-      started = false;
-    },
     userId: () => userId,
-    // 現在の世代の読み込みが終わる(失敗を含む)まで解決しない。`start`前と`stop`の後は次の読み込みの完了まで待つ。
+    // 起動時の読み込みが終わる(失敗を含む)まで解決しない。`start`の前も解決しない。
     ready,
     // 端末に保存されている現在の利用者の全ての組を、返す。メモリの記録は使わない。読み込みの完了後に読み、失敗は投げる。
     async readStored(): Promise<Map<string, RoundStoreGroup>> {
-      for (;;) {
-        await ready();
-        const target = epoch;
-        const all = await store.loadAll(userId);
-        if (epoch === target) return all;
-      }
+      await ready();
+      return store.loadAll(userId);
     },
-    // 起動と停止のたびに進む世代。非同期の処理が、開始時の世代と完了時を比べるために使う。
-    generation: (): number => epoch,
     // 一覧の材料。読み込みの完了後に、現在の利用者の全ての列のベースと操作を返す。
     // 端末の保存を基準にし、このタブで保存の書き込みに失敗した列だけメモリの記録から作る。保存の読み込みに失敗したときは、全ての列をメモリから作る。
-    // 読み込みの間に停止・起動をまたいだときは、読み直す。
     async readList(): Promise<Map<string, RecordSnapshot>> {
-      for (;;) {
-        await ready();
-        const target = epoch;
-        let stored: Map<string, RoundStoreGroup> | undefined;
-        try {
-          stored = await store.loadAll(userId);
-        } catch {
-          stored = undefined;
-        }
-        if (epoch === target) return listSnapshots(stored);
+      await ready();
+      let stored: Map<string, RoundStoreGroup> | undefined;
+      try {
+        stored = await store.loadAll(userId);
+      } catch {
+        stored = undefined;
       }
+      return listSnapshots(stored);
     },
     record,
     streams: (): string[] => [...records.keys()],
@@ -294,24 +246,12 @@ export function createRoundRecordHub(deps: {
       streamId: string,
       eventIds: readonly string[],
       results: readonly (RecordSendResult & { revision: number | null })[],
-      generation: number = epoch,
     ) {
-      // 送信の間に停止されたときは、現在の記録に触れず、保存先の確定だけを書く。
-      const current = generation === epoch;
-      const applied = applySendResults(
-        current ? record(streamId) : EMPTY_RECORD,
-        eventIds,
-        results,
-      );
-      if (current) {
-        // 印を先に付ける(変化の通知を受けた側が、印を読めるようにするため)。
-        if (applied.diverged) diverged.add(streamId);
-        put(streamId, applied.record);
-      }
-      const target = epoch;
-      const failed = () => {
-        if (current) markWriteFailed(streamId, target);
-      };
+      const applied = applySendResults(record(streamId), eventIds, results);
+      // 印を先に付ける(変化の通知を受けた側が、印を読めるようにするため)。
+      if (applied.diverged) diverged.add(streamId);
+      put(streamId, applied.record);
+      const failed = () => markWriteFailed(streamId);
       eventIds.forEach((eventId, index) => {
         const result = results[index];
         if (!result.applied) return;
@@ -327,9 +267,8 @@ export function createRoundRecordHub(deps: {
     // 認可・契約で拒否された操作を、記録から外し、保存先からも退かせる。
     async discard(streamId: string, eventIds: readonly string[]) {
       put(streamId, retireItems(record(streamId), eventIds));
-      const target = epoch;
       await store.retire([...eventIds]).catch(() => {
-        markWriteFailed(streamId, target);
+        markWriteFailed(streamId);
       });
     },
     // 送信中の印を、このタブの要求が持つ操作の集合に置き換える。記録が無い列と、集合が変わらない列では、何も書かない。

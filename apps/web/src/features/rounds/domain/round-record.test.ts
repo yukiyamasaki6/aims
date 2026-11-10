@@ -8,11 +8,9 @@ import {
   EMPTY_RECORD,
   isOlderFetch,
   markPersisted,
-  memoryEntries,
   operationsOf,
   outboxOf,
   type RecordGroup,
-  type RecordRow,
   type RoundRecord,
   replaceInFlight,
   retireItems,
@@ -24,6 +22,8 @@ import type { SyncOperation } from "./sync-events";
 function op(id: string): SyncOperation {
   return roundUpdated({ eventId: id, changes: { name: id } });
 }
+
+type RecordRow = RecordGroup["entries"][number];
 
 function row(
   operation: SyncOperation,
@@ -174,28 +174,6 @@ describe("射影", () => {
       { operation: a, confirmedFields: ["name"] },
       { operation: b, confirmedFields: undefined },
       { operation: unsaved, confirmedFields: undefined },
-    ]);
-  });
-
-  it("memoryEntriesはメモリの操作を端末の組の形にし、seqが無い操作は-1にする", () => {
-    // Given
-    const a = op("a");
-    const b = op("b");
-    const record = appendPending(savedRecord(a), b);
-
-    // When
-    const entries = memoryEntries(record, "round:r1", "user-1");
-
-    // Then
-    expect(entries).toEqual([
-      expect.objectContaining({
-        seq: 1,
-        eventId: "a",
-        streamId: "round:r1",
-        userId: "user-1",
-        operation: a,
-      }),
-      expect.objectContaining({ seq: -1, eventId: "b", operation: b }),
     ]);
   });
 });

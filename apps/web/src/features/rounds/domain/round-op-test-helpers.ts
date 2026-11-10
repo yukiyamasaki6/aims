@@ -1,6 +1,6 @@
-import type { RoundBaseRecord, RoundRevisions } from "./round-base";
+import type { RoundBaseRecord } from "./round-base";
 import type { RoundConfig } from "./round-config";
-import type { RoundTables } from "./round-tables";
+import type { RoundRevisions, RoundTables } from "./round-tables";
 import type { Distance, Shot } from "./scorecard-types";
 import type { RoundStatus, SyncOperation } from "./sync-events";
 
