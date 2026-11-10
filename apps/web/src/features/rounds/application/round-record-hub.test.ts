@@ -165,7 +165,7 @@ describe("append", () => {
       notified: 1,
       settled: false,
     });
-    expect(hub.record(STREAM).items[0]).toMatchObject({ saved: true, seq: 3 });
+    expect(hub.record(STREAM).items[0]).toMatchObject({ saved: true });
     expect(operationsOf(hub.record(STREAM))).toHaveLength(1);
     expect(changes).toHaveLength(2);
   });
@@ -303,6 +303,24 @@ describe("applySendResults と discard", () => {
     expect(seen).toEqual([true]);
   });
 
+  it("効かなかった操作・拒否された操作は、記録から外れた後、取得の反映や別の操作の追記で記録に戻らない", async () => {
+    // Given
+    const { hub } = await startedHub();
+    await hub.append(STREAM, op("ineffective"));
+    await hub.append(STREAM, op("rejected"));
+    hub.applySendResults(STREAM, ["ineffective"], [ineffective]);
+    await hub.discard(STREAM, ["rejected"]);
+
+    // When
+    await hub.commit(STREAM, roundBase(), 10, "user-1");
+    await hub.append(STREAM, op("later"));
+
+    // Then
+    expect(hub.record(STREAM).items.map((item) => item.eventId)).toEqual([
+      "later",
+    ]);
+  });
+
   it("認可・契約で拒否された操作は、記録から外して保存先からも退かせ、再取得の印は付けない", async () => {
     // Given
     const { hub, store } = await startedHub();
@@ -316,55 +334,16 @@ describe("applySendResults と discard", () => {
     expect(store.rows).toEqual([]);
     expect(hub.divergedStreams().size).toBe(0);
   });
-
-  it("送信中の目印を付けた操作は、取得の反映で保存先に無くても外れない", async () => {
-    // Given
-    const { hub, store } = await startedHub();
-    await hub.append(STREAM, op("a"));
-    store.rows.length = 0;
-    hub.replaceInFlight(STREAM, ["a"]);
-
-    // When
-    await hub.commit(STREAM, null, 1, "user-1");
-    const whileSending = hub.record(STREAM).items.length;
-    hub.replaceInFlight(STREAM, []);
-    await hub.commit(STREAM, null, 2, "user-1");
-
-    // Then
-    expect(whileSending).toBe(1);
-    expect(hub.record(STREAM).items).toEqual([]);
-  });
-
-  it("印の集合が変わらない列と、記録が無い列では、記録を作り直さず、通知もしない", async () => {
-    // Given
-    const { hub } = await startedHub();
-    await hub.append(STREAM, op("a"));
-    hub.replaceInFlight(STREAM, ["a"]);
-    const marked = hub.record(STREAM);
-    const listener = vi.fn();
-    hub.subscribe(listener);
-
-    // When
-    hub.replaceInFlight(STREAM, ["a"]);
-    hub.replaceInFlight(roundStreamId("missing"), ["x"]);
-    const missing = hub.record(roundStreamId("missing")).items;
-
-    // Then
-    expect(hub.record(STREAM)).toBe(marked);
-    expect(missing).toEqual([]);
-    expect(listener).not.toHaveBeenCalled();
-  });
 });
 
 describe("commit", () => {
-  it("取得したベースを保存して反映し、そのベースに反映済みの確定済みの操作を外す。送信中の操作は残す", async () => {
+  it("取得したベースを保存して反映し、そのベースに反映済みの確定済みの操作を外す。未確定の操作は残す", async () => {
     // Given
     const { hub, store } = await startedHub();
     await hub.append(STREAM, op("a"));
     await hub.append(STREAM, op("b"));
     hub.applySendResults(STREAM, ["a"], [applied(1)]);
     await flush();
-    hub.replaceInFlight(STREAM, ["b"]);
 
     // When
     await hub.commit(
@@ -603,27 +582,6 @@ describe("readList", () => {
     expect([...list.keys()]).toEqual([]);
     expect(operationIds(await restarted.hub.readList(), STREAM)).toEqual([
       "other-tab",
-    ]);
-  });
-
-  it("保存の組から画面用の形を作り、確定の反映が済んでいない行は除き、確定した行には確定した項目を付ける", async () => {
-    // Given
-    const { hub, store } = await startedHub();
-    await hub.append(STREAM, op("pending"));
-    await hub.append(STREAM, op("confirmed"));
-    await hub.append(STREAM, op("unfit"));
-    await store.ack("confirmed", 3, true, ["name"]);
-    await store.ack("unfit", null, false, null);
-    await hub.commit(STREAM, roundBase(), 10, "user-1");
-
-    // When
-    const list = await hub.readList();
-
-    // Then
-    expect(list.get(STREAM)?.base?.startedAt).toBe(10);
-    expect(list.get(STREAM)?.operations).toEqual([
-      { operation: op("pending"), confirmedFields: undefined },
-      { operation: op("confirmed"), confirmedFields: ["name"] },
     ]);
   });
 });

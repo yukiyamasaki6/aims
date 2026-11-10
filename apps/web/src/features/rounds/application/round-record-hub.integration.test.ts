@@ -96,7 +96,6 @@ describe("端末の保存を通した記録のハブ", () => {
     expect(hub.record(STREAM).base).toEqual({ startedAt: 10, base });
     expect(hub.record(STREAM).items[0]).toMatchObject({
       eventId: "legacy",
-      seq: 1,
       ackedRevision: 4,
     });
   });
@@ -256,6 +255,26 @@ describe("端末の保存を通した記録のハブ", () => {
       expect(beforeCompletion.inProgress).toEqual([STREAM]);
       expect(lists).toEqual({ inProgress: [], deleted: [] });
       expect(lists).toEqual(restarted);
+    });
+  });
+
+  it("同じ列への取得が重なったとき、開始時刻が新しくてもrevisionが古い後着の取得は、保存にも記録にも入らない", async () => {
+    // Given
+    const { hub, store } = await startedHub();
+    const newer = roundBase({ name: "新しい", revisions: { round: 5 } });
+    const older = roundBase({ name: "古い", revisions: { round: 3 } });
+
+    // When
+    await Promise.all([
+      hub.commit(STREAM, newer, 10, "user-1"),
+      hub.commit(STREAM, older, 11, "user-1"),
+    ]);
+
+    // Then
+    expect(hub.record(STREAM).base).toEqual({ startedAt: 10, base: newer });
+    expect((await loadStreamGroup(store, STREAM, "user-1")).base).toEqual({
+      startedAt: 10,
+      base: newer,
     });
   });
 

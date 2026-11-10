@@ -4,6 +4,7 @@ import {
   type RoundBaseRecord,
   reflectsBase,
 } from "./round-base";
+import type { AppliedOperation } from "./round-op-apply";
 import type { SyncOperation } from "./sync-events";
 
 // 1つのラウンドの端末の記録。ベースと操作の列のうち、画面が読む部分を、変更しない値と関数にしたもの。
@@ -11,11 +12,8 @@ import type { SyncOperation } from "./sync-events";
 type RecordItem = {
   readonly eventId: string;
   readonly operation: SyncOperation;
-  // 保存の試みが終わった。
+  // 保存が終わった。
   readonly saved: boolean;
-  readonly seq?: number;
-  // このタブでの保存が終わった時点の`persistTick`。
-  readonly savedTick?: number;
   readonly ackedRevision?: number;
   readonly ackedApplied?: boolean;
   // 確定済みの結果。未確定ならundefined、全項目が効いたならnull、項目に分ける操作で一部だけ効いたなら効いた項目。
@@ -25,17 +23,10 @@ type RecordItem = {
 export type RoundRecord = {
   readonly base: RecordBase | undefined;
   readonly items: readonly RecordItem[];
-  // 記録から外した操作。保存先から読み直した行を、外した後に足し直さないために覚える。
-  readonly retired: ReadonlySet<string>;
-  // このタブでの保存が終わるたびに進める。古い読み込みが、保存済みの操作を外さないための目印。
-  readonly persistTick: number;
-  // 送信中(リトライ待機を含む)の操作。保存からの読み込みで外さない。
-  readonly inFlight: ReadonlySet<string>;
 };
 
 // 保存先の1行。保存先の型に依存しないよう、同じ形をここで宣言する。
-type RecordRow = {
-  seq: number;
+type StoredRow = {
   eventId: string;
   ackedRevision?: number;
   ackedApplied?: boolean;
@@ -43,20 +34,16 @@ type RecordRow = {
   operation: SyncOperation;
 };
 
-export type RecordGroup = {
+// 保存先の1つの列の組。
+export type StoredGroup = {
   base: RecordBase | undefined;
-  entries: readonly RecordRow[];
-};
-
-export type RecordedOperation = {
-  operation: SyncOperation;
-  confirmedFields: string[] | null | undefined;
+  entries: readonly StoredRow[];
 };
 
 // 1つの列の、ベースと、保存の完了前を含む操作。
 export type RecordSnapshot = {
   base: RecordBase | undefined;
-  operations: readonly RecordedOperation[];
+  operations: readonly AppliedOperation[];
 };
 
 // 送信の結果(操作ごと)。
@@ -67,21 +54,10 @@ export type RecordSendResult = {
   hasRejectedFields: boolean;
 };
 
-export const EMPTY_RECORD: RoundRecord = {
-  base: undefined,
-  items: [],
-  retired: new Set(),
-  persistTick: 0,
-  inFlight: new Set(),
-};
+export const EMPTY_RECORD: RoundRecord = { base: undefined, items: [] };
 
 function isConfirmed(item: RecordItem): boolean {
   return item.ackedRevision !== undefined;
-}
-
-// 保存が終わり、確定しておらず、送信中でもない操作(送信の状態でいう待ちか保留)。
-function isUnsettled(record: RoundRecord, item: RecordItem): boolean {
-  return item.saved && !isConfirmed(item) && !record.inFlight.has(item.eventId);
 }
 
 export function appendPending(
@@ -100,43 +76,25 @@ export function appendPending(
 export function markPersisted(
   record: RoundRecord,
   eventId: string,
-  seq: number | undefined,
 ): RoundRecord {
-  const persistTick = record.persistTick + 1;
   return {
     ...record,
-    persistTick,
     items: record.items.map((item) =>
-      item.eventId === eventId
-        ? { ...item, saved: true, seq, savedTick: persistTick }
-        : item,
+      item.eventId === eventId ? { ...item, saved: true } : item,
     ),
   };
 }
 
-// 新しい方のベースを使う。変わらなければnull。
-function chooseBase(
-  current: RecordBase | undefined,
-  candidate: RecordBase | undefined,
-): RecordBase | null {
-  if (!candidate) return null;
-  if (current && current.startedAt >= candidate.startedAt) return null;
-  return candidate;
-}
-
-// 取得したベースを組に入れたときに、そのベースに反映済みの確定済みの操作を外す。
+// ベースに反映済みの確定済みの操作を外す。ベースが削除の印(null)のときは、確定済みの操作を全て外す。
 function dropReflected(record: RoundRecord): RoundRecord {
   const current = record.base?.base;
   if (current === undefined) return record;
-  const retired = new Set(record.retired);
-  const items = record.items.filter((item) => {
-    if (isConfirmed(item) && reflectsBase(current, rowOf(item))) {
-      retired.add(item.eventId);
-      return false;
-    }
-    return true;
-  });
-  return { ...record, items, retired };
+  return {
+    ...record,
+    items: record.items.filter(
+      (item) => !(isConfirmed(item) && reflectsBase(current, rowOf(item))),
+    ),
+  };
 }
 
 function rowOf(item: RecordItem) {
@@ -147,124 +105,39 @@ function rowOf(item: RecordItem) {
   };
 }
 
-// 保存から無くなった操作。確定済みの操作は、共有の組のベースを取ったときだけ、組から無くなったものを外す(そのベースとともに外れたもの)。
-function isSettledElsewhere(
+// 起動時の読み込みで読んだ保存の組を、記録へ合流する。
+// 起動時の記録は、ベースも確定も持たず、読み込み中に追記した操作だけを持つ。保存の行のうち記録に無い操作を前に、記録の操作を後ろに並べる。
+export function mergeStored(
   record: RoundRecord,
-  item: RecordItem,
-  rowIds: ReadonlySet<string>,
-  sharedBaseTaken: boolean,
-  readAt: number,
-): boolean {
-  if (item.seq === undefined || (item.savedTick ?? 0) > readAt) return false;
-  if (rowIds.has(item.eventId)) return false;
-  if (isConfirmed(item)) return sharedBaseTaken;
-  return isUnsettled(record, item);
-}
-
-function itemFromRow(row: RecordRow): RecordItem {
-  const confirmed = row.ackedRevision !== undefined;
-  return {
-    eventId: row.eventId,
-    operation: row.operation,
-    saved: true,
-    seq: row.seq,
-    ackedRevision: row.ackedRevision,
-    ackedApplied: row.ackedApplied,
-    confirmedFields: confirmed ? (row.ackedFields ?? null) : undefined,
-  };
-}
-
-// 記録にある操作へ、組の行の`seq`と確定を補う。
-function completeFromRow(
-  record: RoundRecord,
-  item: RecordItem,
-  row: RecordRow,
-): RecordItem {
-  const seq = item.seq ?? row.seq;
-  if (row.ackedRevision !== undefined && isUnsettled(record, item)) {
-    return {
-      ...item,
-      seq,
-      confirmedFields: row.ackedFields ?? null,
+  group: StoredGroup,
+): RoundRecord {
+  const own = new Set(record.items.map((item) => item.eventId));
+  const stored: RecordItem[] = group.entries
+    .filter((row) => row.ackedApplied !== false && !own.has(row.eventId))
+    .map((row) => ({
+      eventId: row.eventId,
+      operation: row.operation,
+      saved: true,
       ackedRevision: row.ackedRevision,
       ackedApplied: row.ackedApplied,
-    };
-  }
-  return { ...item, seq };
-}
-
-// 組の行を取り込む。無い操作は足し、ある操作は補う。
-function mergeRows(
-  record: RoundRecord,
-  kept: readonly RecordItem[],
-  rows: readonly RecordRow[],
-): RecordItem[] {
-  const next = [...kept];
-  const index = new Map(next.map((item, i) => [item.eventId, i]));
-  for (const row of rows) {
-    const at = index.get(row.eventId);
-    if (at === undefined) {
-      index.set(row.eventId, next.length);
-      next.push(itemFromRow(row));
-    } else {
-      next[at] = completeFromRow(record, next[at], row);
-    }
-  }
-  return next;
-}
-
-// `seq`を持つ操作を`seq`の昇順に、その後ろに`seq`を持たない操作を元の順で並べる。
-function orderBySeq(items: readonly RecordItem[]): RecordItem[] {
-  const withSeq = items
-    .filter((item) => item.seq !== undefined)
-    .sort((first, second) => (first.seq ?? 0) - (second.seq ?? 0));
-  return [...withSeq, ...items.filter((item) => item.seq === undefined)];
-}
-
-// 保存先から読んだ組(現在の利用者の、その列の全件)を、記録へ合わせる。
-// ベースは新しい方を使う。確定済みの操作は、取得のベースをこの記録のベースにしたときはそのベースに反映済みのものを、共有の組のベースを取ったときは組から無くなったものを外す。それ以外では外さない。
-export function adoptGroup(
-  record: RoundRecord,
-  group: RecordGroup,
-  options: { fetched?: RecordBase; readAt: number },
-): RoundRecord {
-  const shared = chooseBase(record.base, group.base);
-  let base = shared ?? record.base;
-  const fetched = chooseBase(base, options.fetched);
-  base = fetched ?? base;
-  const rows = group.entries.filter(
-    (row) => row.ackedApplied !== false && !record.retired.has(row.eventId),
-  );
-  const rowIds = new Set(rows.map((row) => row.eventId));
-  const retired = new Set(record.retired);
-  const kept: RecordItem[] = [];
-  for (const item of record.items) {
-    if (
-      isSettledElsewhere(record, item, rowIds, shared !== null, options.readAt)
-    ) {
-      retired.add(item.eventId);
-    } else {
-      kept.push(item);
-    }
-  }
-  const merged = mergeRows(record, kept, rows);
-  const adopted: RoundRecord = {
-    ...record,
-    base,
-    retired,
-    items: orderBySeq(merged),
+      confirmedFields:
+        row.ackedRevision !== undefined ? (row.ackedFields ?? null) : undefined,
+    }));
+  return {
+    base: record.base ?? group.base,
+    items: [...stored, ...record.items],
   };
-  return fetched ? dropReflected(adopted) : adopted;
 }
 
-// 端末へ保存できなかったときの、このタブだけの反映。
+// 取得したベースを反映する。記録のベースより開始時刻が新しいときだけベースを置き換え、そのベースに反映済みの確定済みの操作を外す。
+// 記録のベースよりrevisionが古い取得は反映しない(同じ列への取得が重なったとき、後着の古い状態を入れない)。
 export function commitFetched(
   record: RoundRecord,
   incoming: RecordBase,
 ): RoundRecord {
-  const base = chooseBase(record.base, incoming);
-  if (!base) return record;
-  return dropReflected({ ...record, base });
+  if (record.base && record.base.startedAt >= incoming.startedAt) return record;
+  if (isOlderFetch(record, incoming.base)) return record;
+  return dropReflected({ ...record, base: incoming });
 }
 
 // 組が消えた後でも、最後に取り込んだベースより古い状態の取得は、保存も反映もしない。
@@ -309,38 +182,22 @@ export function applySendResults(
   };
 }
 
-// 記録から外して、再び現れないよう覚える。
+// 記録から外す。
 export function retireItems(
   record: RoundRecord,
   eventIds: readonly string[],
 ): RoundRecord {
   if (eventIds.length === 0) return record;
-  const retired = new Set(record.retired);
-  for (const id of eventIds) retired.add(id);
   return {
     ...record,
-    retired,
     items: record.items.filter((item) => !eventIds.includes(item.eventId)),
   };
-}
-
-// 送信中の印を、このタブの要求が持つ操作の集合に置き換える。集合が変わらないときは、同じ値を返す。
-export function replaceInFlight(
-  record: RoundRecord,
-  eventIds: readonly string[],
-): RoundRecord {
-  const marks = new Set(eventIds);
-  const unchanged =
-    marks.size === record.inFlight.size &&
-    [...marks].every((id) => record.inFlight.has(id));
-  return unchanged ? record : { ...record, inFlight: marks };
 }
 
 // 送る候補になる、確定していない操作(列の順)。確定済みの操作は他の操作を止めないため含めない。
 export function outboxOf(record: RoundRecord): {
   eventId: string;
   saved: boolean;
-  hasSeq: boolean;
   operation: SyncOperation;
 }[] {
   return record.items
@@ -348,13 +205,12 @@ export function outboxOf(record: RoundRecord): {
     .map((item) => ({
       eventId: item.eventId,
       saved: item.saved,
-      hasSeq: item.seq !== undefined,
       operation: item.operation,
     }));
 }
 
 // 画面が適用に使う操作。保存の完了前の操作を含む全項目(保存の完了では変わらない)。
-export function operationsOf(record: RoundRecord): RecordedOperation[] {
+export function operationsOf(record: RoundRecord): AppliedOperation[] {
   return record.items.map((item) => ({
     operation: item.operation,
     confirmedFields: isConfirmed(item)
@@ -366,8 +222,8 @@ export function operationsOf(record: RoundRecord): RecordedOperation[] {
 // 2つの画面用の操作の列が、同じ操作を同じ順に、同じ確定の項目で並べているか。
 // 操作と確定の項目は参照で比べる(記録の集約は、保存の完了や確定で操作の参照を変えない)。
 export function sameRecordedOperations(
-  a: readonly RecordedOperation[],
-  b: readonly RecordedOperation[],
+  a: readonly AppliedOperation[],
+  b: readonly AppliedOperation[],
 ): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {

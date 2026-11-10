@@ -10,7 +10,6 @@ import {
   EMPTY_QUEUE,
   type Flight,
   handleOnline,
-  inFlightEventIds,
   isSolo,
   type PlanItem,
   resumeFlight,
@@ -38,13 +37,7 @@ export type OpSender = ReturnType<typeof createOpSender>;
 export function createOpSender(deps: {
   hub: Pick<
     RoundRecordHub,
-    | "streams"
-    | "record"
-    | "userId"
-    | "ready"
-    | "subscribe"
-    | "replaceInFlight"
-    | "discard"
+    "streams" | "record" | "userId" | "ready" | "subscribe" | "discard"
   >;
   sending: Pick<OperationSending, "send">;
   sessionReader: Pick<SessionReader, "readSession">;
@@ -55,12 +48,6 @@ export function createOpSender(deps: {
   // 今の開始の保存の読み込みを終え、保存済みの操作を送れる状態。
   let ready = false;
   const queues = new Map<string, SendQueue>();
-
-  // 列の状態の書き込みは全てここを通す。記録の送信中の印は、列の状態(送信中かリトライ待機)の射影として、ここだけが書く。
-  function writeQueue(streamId: string, queue: SendQueue) {
-    queues.set(streamId, queue);
-    hub.replaceInFlight(streamId, inFlightEventIds(queue));
-  }
 
   const queueOf = (streamId: string) => queues.get(streamId) ?? EMPTY_QUEUE;
 
@@ -96,7 +83,7 @@ export function createOpSender(deps: {
     failure: SyncFailure | undefined,
   ) {
     if (!failure) {
-      writeQueue(streamId, settleSent(queueOf(streamId), flight));
+      queues.set(streamId, settleSent(queueOf(streamId), flight));
       pump(streamId);
       return;
     }
@@ -105,7 +92,7 @@ export function createOpSender(deps: {
       flight.attempt,
       flight.eventIds.length,
     );
-    writeQueue(
+    queues.set(
       streamId,
       settleFailed(queueOf(streamId), flight, decision, clock.now()),
     );
@@ -146,7 +133,7 @@ export function createOpSender(deps: {
     for (const flight of due) queue = resumeFlight(queue, flight);
     const planned = planFlights(planItems(outbox, queue));
     const next = startFlights(queue, planned, now);
-    writeQueue(streamId, next.queue);
+    queues.set(streamId, next.queue);
     for (const flight of [...due, ...next.started]) void run(streamId, flight);
   }
 
@@ -169,7 +156,7 @@ export function createOpSender(deps: {
   function recoverOnline() {
     const now = clock.now();
     for (const [streamId, queue] of [...queues]) {
-      writeQueue(streamId, handleOnline(queue, now));
+      queues.set(streamId, handleOnline(queue, now));
     }
     pumpAll();
   }
@@ -186,7 +173,7 @@ export function createOpSender(deps: {
       for (const [streamId, queue] of [...queues]) {
         const resumed = resumeHeld(queue);
         if (!resumed.resumed) continue;
-        writeQueue(streamId, resumed.queue);
+        queues.set(streamId, resumed.queue);
         resumedStreams.push(streamId);
       }
       for (const streamId of resumedStreams) pump(streamId);

@@ -1,5 +1,5 @@
 import type { RecordBase } from "./round-base";
-import type { RecordedOperation } from "./round-record";
+import type { AppliedOperation } from "./round-op-apply";
 import type { RoundTables } from "./round-tables";
 import { hasRoundDeletion, type SyncOperation } from "./sync-events";
 import type { TargetFaceOption } from "./target-face";
@@ -8,7 +8,7 @@ type CreatedOperation = Extract<SyncOperation, { type: "round.created" }>;
 
 type OpenGroup = {
   base: RecordBase | undefined;
-  operations: readonly RecordedOperation[];
+  operations: readonly AppliedOperation[];
 };
 
 // 詳細を開くときの判断。

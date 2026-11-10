@@ -1,19 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { roundBase, roundUpdated } from "./round-op-test-helpers";
 import {
-  adoptGroup,
   appendPending,
   applySendResults,
   commitFetched,
   EMPTY_RECORD,
   isOlderFetch,
   markPersisted,
+  mergeStored,
   operationsOf,
   outboxOf,
-  type RecordGroup,
   type RoundRecord,
-  replaceInFlight,
   retireItems,
+  type StoredGroup,
   sameRecordedOperations,
 } from "./round-record";
 import type { SyncOperation } from "./sync-events";
@@ -23,14 +22,13 @@ function op(id: string): SyncOperation {
   return roundUpdated({ eventId: id, changes: { name: id } });
 }
 
-type RecordRow = RecordGroup["entries"][number];
+type StoredRow = StoredGroup["entries"][number];
 
 function row(
   operation: SyncOperation,
-  seq: number,
-  extra: Partial<RecordRow> = {},
-): RecordRow {
-  return { seq, eventId: operation.eventId, operation, ...extra };
+  extra: Partial<StoredRow> = {},
+): StoredRow {
+  return { eventId: operation.eventId, operation, ...extra };
 }
 
 function baseAt(startedAt: number, round: number) {
@@ -38,9 +36,9 @@ function baseAt(startedAt: number, round: number) {
 }
 
 function group(
-  entries: RecordRow[],
+  entries: StoredRow[],
   base?: { startedAt: number; round: number },
-): RecordGroup {
+): StoredGroup {
   return {
     base: base && baseAt(base.startedAt, base.round),
     entries,
@@ -50,49 +48,30 @@ function group(
 // 保存が終わった操作を持つ記録を、追記と保存の完了で作る。
 function savedRecord(...operations: SyncOperation[]): RoundRecord {
   return operations.reduce(
-    (record, operation, index) =>
-      markPersisted(
-        appendPending(record, operation),
-        operation.eventId,
-        index + 1,
-      ),
+    (record, operation) =>
+      markPersisted(appendPending(record, operation), operation.eventId),
     EMPTY_RECORD,
   );
 }
 
 const ids = (record: RoundRecord) => record.items.map((item) => item.eventId);
-const fresh = { readAt: 0 };
 
 describe("appendPending と markPersisted", () => {
-  it("追記は未保存の項目を足し、保存の完了でseqと目印を付けて通し番号を進める", () => {
+  it("追記は未保存の項目を足し、保存の完了で保存済みにする", () => {
     // Given
     const a = op("a");
     const appended = appendPending(EMPTY_RECORD, a);
 
     // When
-    const persisted = markPersisted(appended, "a", 7);
+    const persisted = markPersisted(appended, "a");
 
     // Then
     expect(appended.items).toEqual([
       { eventId: "a", operation: a, saved: false },
     ]);
-    expect(persisted.items[0]).toMatchObject({
-      saved: true,
-      seq: 7,
-      savedTick: 1,
-    });
-    expect(persisted.persistTick).toBe(1);
-  });
-
-  it("保存に失敗したときはseqが無いまま、保存の試みが終わったものとする", () => {
-    // Given
-    const appended = appendPending(EMPTY_RECORD, op("a"));
-
-    // When
-    const persisted = markPersisted(appended, "a", undefined);
-
-    // Then
-    expect(persisted.items[0]).toMatchObject({ saved: true, seq: undefined });
+    expect(persisted.items).toEqual([
+      { eventId: "a", operation: a, saved: true },
+    ]);
   });
 });
 
@@ -137,23 +116,23 @@ describe("sameRecordedOperations", () => {
 });
 
 describe("射影", () => {
-  it("outboxOfは確定していない操作だけを列の順に返し、保存の有無とseqの有無を持つ", () => {
+  it("outboxOfは確定していない操作だけを列の順に返し、保存の有無を持つ", () => {
     // Given
     const confirmed = op("confirmed");
     const unsaved = op("unsaved");
-    const failed = op("failed");
+    const saved = op("saved");
     let record = savedRecord(confirmed);
     record = applySendResults(record, ["confirmed"], [applied(1)]).record;
     record = appendPending(record, unsaved);
-    record = markPersisted(appendPending(record, failed), "failed", undefined);
+    record = markPersisted(appendPending(record, saved), "saved");
 
     // When
     const outbox = outboxOf(record);
 
     // Then
     expect(outbox).toEqual([
-      { eventId: "unsaved", saved: false, hasSeq: false, operation: unsaved },
-      { eventId: "failed", saved: true, hasSeq: false, operation: failed },
+      { eventId: "unsaved", saved: false, operation: unsaved },
+      { eventId: "saved", saved: true, operation: saved },
     ]);
   });
 
@@ -185,105 +164,61 @@ function applied(
   return { revision, applied: true, appliedFields, hasRejectedFields: false };
 }
 
-describe("adoptGroup", () => {
-  it("メモリに無い行を足し、確定済みの行は確定済みにして、seq順に並べる", () => {
+describe("mergeStored", () => {
+  it("保存の行のうち記録に無い操作を前に、記録の操作を後ろに並べ、保存の完了が読み込みに映った操作を重複させない", () => {
     // Given
-    const [a, b, c] = [op("a"), op("b"), op("c")];
-
-    // When
-    const adopted = adoptGroup(
-      EMPTY_RECORD,
-      group([row(c, 3), row(a, 1, { ackedRevision: 2 }), row(b, 2)]),
-      fresh,
-    );
-
-    // Then
-    expect(ids(adopted)).toEqual(["a", "b", "c"]);
-    expect(operationsOf(adopted)[0]).toEqual({
-      operation: a,
-      confirmedFields: null,
-    });
-    expect(outboxOf(adopted).map((entry) => entry.eventId)).toEqual(["b", "c"]);
-  });
-
-  it("未確定の操作が保存で確定したら確定済みにし、組から外れた未確定の操作を取り除く", () => {
-    // Given
-    const [a, b] = [op("a"), op("b")];
-    const record = adoptGroup(
-      EMPTY_RECORD,
-      group([row(a, 1), row(b, 2)]),
-      fresh,
+    const [a, b, c, d] = [op("a"), op("b"), op("c"), op("d")];
+    // 読み込み中に追記したc(保存の完了前)とd(保存が読み込みに映った)。
+    const record = markPersisted(
+      appendPending(appendPending(EMPTY_RECORD, c), d),
+      "d",
     );
 
     // When
-    const adopted = adoptGroup(
-      record,
-      group([row(a, 1, { ackedRevision: 5, ackedFields: ["f"] })]),
-      fresh,
-    );
+    const merged = mergeStored(record, group([row(a), row(b), row(d)]));
 
     // Then
-    expect(ids(adopted)).toEqual(["a"]);
-    expect(operationsOf(adopted)).toEqual([
-      { operation: a, confirmedFields: ["f"] },
+    expect(ids(merged)).toEqual(["a", "b", "c", "d"]);
+    expect(merged.items.map((item) => item.saved)).toEqual([
+      true,
+      true,
+      false,
+      true,
     ]);
   });
 
-  it("読み込みの開始後に保存が終わった操作は、読み込みに映らなくても外さない", () => {
-    // Given
-    const readAt = EMPTY_RECORD.persistTick;
-    const record = savedRecord(op("a"));
-
-    // When
-    const adopted = adoptGroup(record, group([]), { readAt });
-
-    // Then
-    expect(ids(adopted)).toEqual(["a"]);
-  });
-
-  it("保存の完了後に始めた読み込みに映らない操作は外す", () => {
-    // Given
-    const record = savedRecord(op("a"));
-
-    // When
-    const adopted = adoptGroup(record, group([]), {
-      readAt: record.persistTick,
-    });
-
-    // Then
-    expect(ids(adopted)).toEqual([]);
-  });
-
-  it("送信中の操作は、組に映らなくても外さない", () => {
-    // Given
-    const record = replaceInFlight(savedRecord(op("a")), ["a"]);
-
-    // When
-    const adopted = adoptGroup(record, group([]), {
-      readAt: record.persistTick,
-    });
-
-    // Then
-    expect(ids(adopted)).toEqual(["a"]);
-  });
-
-  it("外した操作と、取得のベースに反映済みの行を足し直さない", () => {
+  it("保存の行の確定を反映し、確定していない行は未確定のままにする", () => {
     // Given
     const [a, b] = [op("a"), op("b")];
-    let record = adoptGroup(EMPTY_RECORD, group([row(a, 1), row(b, 2)]), fresh);
-    record = adoptGroup(record, group([row(b, 2)]), {
-      readAt: record.persistTick,
-    });
 
     // When
-    const adopted = adoptGroup(
-      record,
-      group([row(a, 1), row(b, 2, { ackedRevision: 2 })]),
-      { readAt: record.persistTick, fetched: baseAt(10, 2) },
+    const merged = mergeStored(
+      EMPTY_RECORD,
+      group([
+        row(a, { ackedRevision: 5, ackedFields: ["f"] }),
+        row(b, { ackedRevision: 2 }),
+        row(op("c")),
+      ]),
     );
 
     // Then
-    expect(ids(adopted)).toEqual([]);
+    expect(operationsOf(merged)).toEqual([
+      { operation: a, confirmedFields: ["f"] },
+      { operation: b, confirmedFields: null },
+      { operation: op("c"), confirmedFields: undefined },
+    ]);
+    expect(outboxOf(merged).map((entry) => entry.eventId)).toEqual(["c"]);
+  });
+
+  it("保存の組のベースを、記録のベースにする", () => {
+    // Given
+    const stored = group([], { startedAt: 10, round: 3 });
+
+    // When
+    const merged = mergeStored(EMPTY_RECORD, stored);
+
+    // Then
+    expect(merged.base).toEqual(stored.base);
   });
 
   it("効かなかった行は取り込まない", () => {
@@ -291,82 +226,13 @@ describe("adoptGroup", () => {
     const a = op("a");
 
     // When
-    const adopted = adoptGroup(
+    const merged = mergeStored(
       EMPTY_RECORD,
-      group([row(a, 1, { ackedRevision: 0, ackedApplied: false })]),
-      fresh,
+      group([row(a, { ackedRevision: 0, ackedApplied: false })]),
     );
 
     // Then
-    expect(ids(adopted)).toEqual([]);
-  });
-
-  describe("組から無くなった確定済みの操作", () => {
-    // ベース(startedAt 10、revision 1)の組に、確定済みのaとbがある記録。
-    function withConfirmed() {
-      const [a, b] = [op("a"), op("b")];
-      const record = adoptGroup(
-        EMPTY_RECORD,
-        group(
-          [row(a, 1, { ackedRevision: 2 }), row(b, 2, { ackedRevision: 5 })],
-          { startedAt: 10, round: 1 },
-        ),
-        fresh,
-      );
-      return { record, b };
-    }
-
-    it("ベースが変わらない組では、組から無くなった確定済みの操作を外さない", () => {
-      // Given
-      const { record, b } = withConfirmed();
-
-      // When
-      const adopted = adoptGroup(
-        record,
-        group([row(b, 2, { ackedRevision: 5 })]),
-        fresh,
-      );
-
-      // Then
-      expect(ids(adopted)).toEqual(["a", "b"]);
-    });
-
-    it("新しいベースの組を取ると、そのベースを使い、組から無くなった確定済みの操作を外す", () => {
-      // Given
-      const { record, b } = withConfirmed();
-
-      // When
-      const adopted = adoptGroup(
-        record,
-        group([row(b, 2, { ackedRevision: 5 })], { startedAt: 20, round: 2 }),
-        fresh,
-      );
-
-      // Then
-      expect(adopted.base?.startedAt).toBe(20);
-      expect(ids(adopted)).toEqual(["b"]);
-    });
-
-    it("古いベースの組では、ベースを戻さず、操作も外さない", () => {
-      // Given
-      const { record, b } = withConfirmed();
-      const newer = adoptGroup(
-        record,
-        group([row(b, 2, { ackedRevision: 5 })], { startedAt: 20, round: 2 }),
-        fresh,
-      );
-
-      // When
-      const adopted = adoptGroup(
-        newer,
-        group([], { startedAt: 10, round: 0 }),
-        fresh,
-      );
-
-      // Then
-      expect(adopted.base?.startedAt).toBe(20);
-      expect(ids(adopted)).toEqual(["b"]);
-    });
+    expect(ids(merged)).toEqual([]);
   });
 
   it("入力の記録を変更しない", () => {
@@ -375,9 +241,7 @@ describe("adoptGroup", () => {
     const snapshot = structuredClone(record);
 
     // When
-    adoptGroup(record, group([row(op("c"), 3)], { startedAt: 5, round: 1 }), {
-      readAt: record.persistTick,
-    });
+    mergeStored(record, group([row(op("c"))], { startedAt: 5, round: 1 }));
 
     // Then
     expect(record).toEqual(snapshot);
@@ -385,18 +249,47 @@ describe("adoptGroup", () => {
 });
 
 describe("commitFetched", () => {
-  it("新しい取得のベースを使い、そのベースに反映済みの確定済みの操作を外す", () => {
+  it("新しい取得のベースを使い、そのベースに反映済みの確定済みの操作を外す。未反映の確定済みの操作と未確定の操作は残す", () => {
     // Given
-    const [a, b] = [op("a"), op("b")];
-    let record = savedRecord(a, b);
-    record = applySendResults(record, ["a"], [applied(2)]).record;
+    const [a, b, c] = [op("a"), op("b"), op("c")];
+    let record = savedRecord(a, b, c);
+    record = applySendResults(
+      record,
+      ["a", "b"],
+      [applied(2), applied(5)],
+    ).record;
 
     // When
     const committed = commitFetched(record, baseAt(10, 2));
 
     // Then
     expect(committed.base?.startedAt).toBe(10);
+    expect(ids(committed)).toEqual(["b", "c"]);
+  });
+
+  it("削除の印(null)では、確定済みの操作を全て外し、未確定の操作は残す", () => {
+    // Given
+    const [a, b] = [op("a"), op("b")];
+    let record = savedRecord(a, b);
+    record = applySendResults(record, ["a"], [applied(9)]).record;
+
+    // When
+    const committed = commitFetched(record, { startedAt: 10, base: null });
+
+    // Then
+    expect(committed.base).toEqual({ startedAt: 10, base: null });
     expect(ids(committed)).toEqual(["b"]);
+  });
+
+  it("開始時刻が新しくても、記録のベースよりrevisionが古い取得は、反映しない", () => {
+    // Given
+    const record = commitFetched(savedRecord(op("a")), baseAt(10, 3));
+
+    // When
+    const committed = commitFetched(record, baseAt(11, 2));
+
+    // Then
+    expect(committed).toBe(record);
   });
 
   it("古い取得でも、開始時刻が同じ取得でも、新しいベースを戻さない", () => {
@@ -458,7 +351,7 @@ describe("applySendResults", () => {
     expect(result.record.items[0].ackedRevision).toBe(0);
   });
 
-  it("効かなかった操作は列から外して覚え、効かなかった項目があれば確定しつつdivergedにする", () => {
+  it("効かなかった操作は列から外し、効かなかった項目があれば確定しつつdivergedにする", () => {
     // Given
     const record = savedRecord(op("a"), op("b"), op("c"));
     const rejectedPart = {
@@ -486,7 +379,6 @@ describe("applySendResults", () => {
     expect(result.diverged).toBe(true);
     expect(result.ineffective).toEqual(["a"]);
     expect(ids(result.record)).toEqual(["b", "c"]);
-    expect(result.record.retired.has("a")).toBe(true);
     expect(result.record.items[0]).toMatchObject({
       ackedRevision: 5,
       confirmedFields: ["name"],
@@ -506,54 +398,17 @@ describe("applySendResults", () => {
   });
 });
 
-describe("retireItems と replaceInFlight", () => {
-  it("外した操作は覚え、組に再び現れても足し直さない。外す対象が無ければ記録を変えない", () => {
+describe("retireItems", () => {
+  it("指定した操作を記録から外す。外す対象が無ければ記録を変えない", () => {
     // Given
-    const [a, b] = [op("a"), op("b")];
-    const record = savedRecord(a, b);
+    const record = savedRecord(op("a"), op("b"));
 
     // When
     const retired = retireItems(record, ["a"]);
-    const readopted = adoptGroup(retired, group([row(a, 1), row(b, 2)]), {
-      readAt: retired.persistTick,
-    });
     const unchanged = retireItems(record, []);
 
     // Then
     expect(ids(retired)).toEqual(["b"]);
-    expect(ids(readopted)).toEqual(["b"]);
     expect(unchanged).toBe(record);
-  });
-
-  it("送信中の目印を付けると組の読み込みで外れず、外すと外れる", () => {
-    // Given
-    const record = savedRecord(op("a"));
-    const options = { readAt: record.persistTick };
-
-    // When
-    const marked = replaceInFlight(record, ["a"]);
-    const keptWhileSending = adoptGroup(marked, group([]), options);
-    const unmarked = replaceInFlight(marked, []);
-    const removedAfterSending = adoptGroup(unmarked, group([]), options);
-
-    // Then
-    expect(ids(keptWhileSending)).toEqual(["a"]);
-    expect(ids(removedAfterSending)).toEqual([]);
-  });
-
-  it("印の集合が変わらないときは、同じ記録を返し、変わるときは新しい記録を返す", () => {
-    // Given
-    const record = savedRecord(op("a"));
-    const marked = replaceInFlight(record, ["a"]);
-
-    // When
-    const sameEmpty = replaceInFlight(record, []);
-    const sameMarked = replaceInFlight(marked, ["a"]);
-    const changed = replaceInFlight(marked, []);
-
-    // Then
-    expect(sameEmpty).toBe(record);
-    expect(sameMarked).toBe(marked);
-    expect(changed).not.toBe(marked);
   });
 });

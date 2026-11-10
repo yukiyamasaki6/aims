@@ -5,18 +5,17 @@ import type {
 import { matchRecordUser } from "../domain/record-user";
 import type { RecordBase, RoundBaseRecord } from "../domain/round-base";
 import {
-  adoptGroup,
   appendPending,
   applySendResults,
+  commitFetched,
   EMPTY_RECORD,
   isOlderFetch,
   markPersisted,
+  mergeStored,
   operationsOf,
-  type RecordGroup,
   type RecordSendResult,
   type RecordSnapshot,
   type RoundRecord,
-  replaceInFlight,
   retireItems,
 } from "../domain/round-record";
 import type { SyncOperation } from "../domain/sync-events";
@@ -26,12 +25,6 @@ type RecordChange = {
 };
 
 type RoundStoreGroup = StreamGroup<SyncOperation, RoundBaseRecord>;
-
-type AdoptOptions = {
-  fetched?: RecordBase;
-  // 読み込みを始める前の`persistTick`。省略時は0(このタブで保存した操作を全て守る)。
-  readAt?: number;
-};
 
 export type RoundRecordHub = ReturnType<typeof createRoundRecordHub>;
 
@@ -69,22 +62,12 @@ export function createRoundRecordHub(deps: {
     emit(streamId);
   }
 
-  function adopt(
-    streamId: string,
-    group: RecordGroup,
-    options: AdoptOptions = {},
-  ) {
-    const next = adoptGroup(record(streamId), group, {
-      fetched: options.fetched,
-      readAt: options.readAt ?? 0,
-    });
-    put(streamId, next);
-  }
-
   // 現在の利用者の全ての列を読み、記録へ取り込む。
   async function reloadAll() {
     const streams = await store.loadAll(userId);
-    for (const [streamId, group] of streams) adopt(streamId, group);
+    for (const [streamId, group] of streams) {
+      put(streamId, mergeStored(record(streamId), group));
+    }
     markLoaded();
   }
 
@@ -101,9 +84,9 @@ export function createRoundRecordHub(deps: {
         },
         record(streamId).base,
       )
-      .then((seq) => {
+      .then(() => {
         // 画面へは追記の時点で反映済みで、保存の完了では画面の状態は変わらない(送信だけが保存の完了を待つ)。
-        put(streamId, markPersisted(record(streamId), operation.eventId, seq));
+        put(streamId, markPersisted(record(streamId), operation.eventId));
       });
     persisting.add(persisted);
     void persisted.finally(() => persisting.delete(persisted));
@@ -119,7 +102,6 @@ export function createRoundRecordHub(deps: {
     fetchedUserId: string,
   ): Promise<void> {
     await ready();
-    const readAt = record(streamId).persistTick;
     const incoming: RecordBase = { startedAt, base: fetched };
     // 組が消えた後でも、最後に取り込んだベースより古い状態の取得は、保存も反映もしない。
     // 別の利用者の取得も、保存も反映もしない(個別の問い合わせは本人のラウンドだけを返す)。
@@ -129,13 +111,8 @@ export function createRoundRecordHub(deps: {
     ) {
       return;
     }
-    const group = await store.commit(
-      streamId,
-      fetchedUserId,
-      fetched,
-      startedAt,
-    );
-    adopt(streamId, group, { readAt, fetched: incoming });
+    await store.commit(streamId, fetchedUserId, fetched, startedAt);
+    put(streamId, commitFetched(record(streamId), incoming));
   }
 
   function memorySnapshot(current: RoundRecord): RecordSnapshot {
@@ -210,13 +187,6 @@ export function createRoundRecordHub(deps: {
     async discard(streamId: string, eventIds: readonly string[]) {
       put(streamId, retireItems(record(streamId), eventIds));
       await store.retire([...eventIds]);
-    },
-    // 送信中の印を、このタブの要求が持つ操作の集合に置き換える。記録が無い列と、集合が変わらない列では、何も書かない。
-    replaceInFlight(streamId: string, eventIds: readonly string[]) {
-      const current = records.get(streamId);
-      if (!current) return;
-      const next = replaceInFlight(current, eventIds);
-      if (next !== current) records.set(streamId, next);
     },
     divergedStreams: (): ReadonlySet<string> => diverged,
     // 取り直しを始める時点で、効かなかった結果の印を消す。取り直しの途中に届いた次の印は残り、完了後にもう1度取り直す。
