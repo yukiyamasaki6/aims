@@ -4,7 +4,6 @@ import {
   roundBase,
   roundCreated,
   roundDisabled,
-  roundUpdated,
 } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
@@ -48,8 +47,8 @@ async function settled(promise: Promise<unknown>): Promise<boolean> {
   return done;
 }
 
-const opened = (deleted = false): OpenedRound => ({
-  deleted,
+const opened = (): OpenedRound => ({
+  deleted: false,
   base: roundBase({ name: "取得した" }).tables,
   targetFaces: [face],
 });
@@ -137,50 +136,49 @@ describe("load", () => {
     });
   });
 
-  it("取得した材料が削除を含むときも、見つからないときも、not-foundを返す", async () => {
+  it("取得で見つからないときは、not-foundを返す", async () => {
     // Given
     const tab = createTestRounds();
-    const deleted = tab.detail.load("round-1");
-    await flush();
-    settleRoundNow(tab.requests, "round-1", {
-      status: "ok",
-      data: opened(true),
-    });
-    const missing = tab.detail.load("round-2");
+    const missing = tab.detail.load("round-1");
     await flush();
 
     // When
-    settleRoundNow(tab.requests, "round-2", { status: "not-found" });
+    settleRoundNow(tab.requests, "round-1", { status: "not-found" });
 
     // Then
-    expect(await deleted).toEqual({ status: "not-found" });
     expect(await missing).toEqual({ status: "not-found" });
   });
 
-  it("端末の記録を読み込み、メモリの記録に取り込む", async () => {
+  it("メモリの記録に無く、端末の保存にだけある削除は、開く判断に使わず取得に回す", async () => {
     // Given
     const tab = createTestRounds();
+    await tab.hub.ready();
     await tab.opLog.append({
-      eventId: "pending",
+      eventId: "deleted",
       streamId: STREAM,
       userId: "user-1",
-      operation: roundUpdated({ eventId: "pending" }),
+      operation: roundDisabled("deleted"),
     });
-    void tab.detail.load("round-1");
-
-    // When
+    const loading = tab.detail.load("round-1");
     await flush();
 
+    // When
+    settleRoundNow(tab.requests, "round-1", { status: "ok", data: opened() });
+
     // Then
-    expect(tab.hub.record(STREAM).items.map((item) => item.eventId)).toEqual([
-      "pending",
-    ]);
+    expect(await loading).toMatchObject({ status: "ok" });
   });
 
-  it("端末の記録を読めなくても、取得を依頼して続ける", async () => {
+  it("メモリの記録に無く、端末の保存にだけある未確定の作成は、開く判断に使わず取得に回す", async () => {
     // Given
     const tab = createTestRounds();
-    vi.spyOn(tab.hub, "read").mockRejectedValue(new Error("idb"));
+    await tab.hub.ready();
+    await tab.opLog.append({
+      eventId: "created",
+      streamId: STREAM,
+      userId: "user-1",
+      operation: roundCreated({ eventId: "created" }),
+    });
     const loading = tab.detail.load("round-1");
     await flush();
 
@@ -190,7 +188,9 @@ describe("load", () => {
     // Then
     expect(await loading).toMatchObject({
       status: "ok",
+      data: { pendingCreationEventId: null },
     });
+    expect(tab.fetching.fetchTargetFaces).not.toHaveBeenCalled();
   });
 
   describe("保存済みがあるとき(端末のベースと保存した的)", () => {
@@ -321,7 +321,7 @@ describe("load", () => {
     it("端末の記録の読み込みが終わらない間に打ち切られても、切断ならofflineにする(詳細)", async () => {
       // Given
       const tab = createTestRounds();
-      vi.spyOn(tab.hub, "read").mockReturnValue(new Promise(() => {}));
+      vi.spyOn(tab.hub, "ready").mockReturnValue(new Promise(() => {}));
       const detail = tab.detail.load("round-1");
       tab.connectivity.goOffline();
 

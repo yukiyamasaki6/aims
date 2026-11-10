@@ -1,4 +1,5 @@
 import type { RecordBase } from "./round-base";
+import type { RecordedOperation } from "./round-record";
 import type { RoundTables } from "./round-tables";
 import { hasRoundDeletion, type SyncOperation } from "./sync-events";
 import type { TargetFaceOption } from "./target-face";
@@ -7,12 +8,7 @@ type CreatedOperation = Extract<SyncOperation, { type: "round.created" }>;
 
 type OpenGroup = {
   base: RecordBase | undefined;
-  entries: readonly {
-    operation: SyncOperation;
-    ackedRevision?: number;
-    ackedApplied?: boolean;
-    ackedFields?: string[];
-  }[];
+  operations: readonly RecordedOperation[];
 };
 
 // 詳細を開くときの判断。
@@ -24,13 +20,13 @@ export type OpenPlan =
   | { kind: "fetch" };
 
 export function openPlan(group: OpenGroup): OpenPlan {
-  if (hasRoundDeletion(group.entries.map((entry) => entry.operation))) {
+  if (hasRoundDeletion(group.operations.map((entry) => entry.operation))) {
     return { kind: "deleted" };
   }
-  for (const entry of group.entries) {
+  for (const entry of group.operations) {
     const { operation } = entry;
     if (operation.type !== "round.created") continue;
-    if (entry.ackedRevision !== undefined) continue;
+    if (entry.confirmedFields !== undefined) continue;
     return { kind: "creation", operation };
   }
   return { kind: "fetch" };
