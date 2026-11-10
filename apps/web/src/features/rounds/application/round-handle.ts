@@ -11,7 +11,10 @@ import {
   roundScreenState,
 } from "../domain/round-view";
 import { roundStreamId, type SyncOperation } from "../domain/sync-events";
-import type { TargetFaceOption } from "../domain/target-face";
+import {
+  hasAllTargetFaces,
+  type TargetFaceOption,
+} from "../domain/target-face";
 import type { RefreshRequests } from "./refresh-requests";
 import type { RoundEditing } from "./round-editing";
 import type { RoundRecordHub } from "./round-record-hub";
@@ -32,6 +35,8 @@ type RoundScreenSnapshot = {
   state: RoundState | null;
   // 削除されて見つからなくなったか。
   gone: boolean;
+  // 画面が使っている的の一覧。開いた材料のもの、または保存が反映された後の保存済みのもの。開く前はnull。
+  targetFaces: TargetFaceOption[] | null;
   // 確定していない作成の操作が、確定を見ずに消えたか。
   creationGone: boolean;
 };
@@ -51,6 +56,7 @@ export type RoundHandle = {
 const UNOPENED: RoundScreenSnapshot = {
   state: null,
   gone: false,
+  targetFaces: null,
   creationGone: false,
 };
 
@@ -61,21 +67,26 @@ export function createRoundHandle(
     hub: Pick<RoundRecordHub, "record" | "subscribe">;
     requests: Pick<
       RefreshRequests,
-      "isGone" | "setOverlay" | "subscribe" | "watch"
+      "isGone" | "setOverlay" | "subscribe" | "watch" | "wantFaces"
     >;
     editing: RoundEditing;
+    // 端末に保存した的の一覧。無ければnull。
+    savedFaces: () => TargetFaceOption[] | null;
   },
   roundId: string,
 ): RoundHandle {
-  const { hub, requests, editing } = deps;
+  const { hub, requests, editing, savedFaces } = deps;
   const streamId = roundStreamId(roundId);
   const listeners = new Set<() => void>();
   let opening: LoadedRound | null = null;
+  // 画面が使っている的の一覧。距離の参照する的が足りないとき、保存済みが全て含むなら、保存済みに替える。
+  let faces: TargetFaceOption[] = [];
   let snapshot = UNOPENED;
   let creation: CreationProgress = INITIAL_CREATION;
   let seen: {
     base: unknown;
     operations: RecordedOperation[];
+    faces: TargetFaceOption[];
     screen: ReturnType<typeof roundScreenState>;
   } | null = null;
   let stopObserving: (() => void) | undefined;
@@ -85,16 +96,23 @@ export function createRoundHandle(
     if (!opening) return;
     const record = hub.record(streamId);
     const operations = operationsOf(record);
-    const screen =
+    const { base } = opening;
+    const derive = () =>
+      roundScreenState({ base: record.base, operations }, base, faces);
+    let screen =
       seen &&
       seen.base === record.base &&
+      seen.faces === faces &&
       sameRecordedOperations(seen.operations, operations)
         ? seen.screen
-        : roundScreenState(
-            { base: record.base, operations },
-            opening.base,
-            opening.targetFaces,
-          );
+        : derive();
+    // 距離の参照する的が足りないとき、保存済みが全て含むなら、保存済みに替えて導出し直す。
+    const covered = hasAllTargetFaces(faces, screen.state.distances);
+    const saved = covered ? null : savedFaces();
+    if (saved && hasAllTargetFaces(saved, screen.state.distances)) {
+      faces = saved;
+      screen = derive();
+    }
     // 作成の消失の判定は、保存の前の操作を含む items で行うため、作り直しを省いても省かない。
     if (opening.pendingCreationEventId) {
       creation = creationProgress(
@@ -103,9 +121,13 @@ export function createRoundHandle(
         opening.pendingCreationEventId,
       );
     }
-    seen = { base: record.base, operations, screen };
+    seen = { base: record.base, operations, faces, screen };
     publish(screen, requests.isGone(roundId));
     // 印が変わると依頼の記録の購読者を同期で呼ぶ(この recompute 自身を含む)ため、最後に呼ぶ。
+    requests.wantFaces(
+      roundId,
+      !hasAllTargetFaces(faces, screen.state.distances),
+    );
     requests.setOverlay(roundId, screen.needsRefetch);
   }
 
@@ -119,6 +141,7 @@ export function createRoundHandle(
     if (
       snapshot.state === screen.state &&
       snapshot.gone === gone &&
+      snapshot.targetFaces === faces &&
       snapshot.creationGone === creation.gone
     ) {
       return;
@@ -126,6 +149,7 @@ export function createRoundHandle(
     snapshot = {
       state: screen.state,
       gone,
+      targetFaces: faces,
       creationGone: creation.gone,
     };
     for (const listener of [...listeners]) listener();
@@ -173,6 +197,7 @@ export function createRoundHandle(
     watch(next) {
       creation = INITIAL_CREATION;
       opening = next;
+      faces = next.targetFaces;
       seen = null;
       const unmark = requests.watch(roundId);
       stopObserving ??= observe();
@@ -182,6 +207,7 @@ export function createRoundHandle(
         stopObserving?.();
         stopObserving = undefined;
         requests.setOverlay(roundId, false);
+        requests.wantFaces(roundId, false);
         // 閉じた詳細の状態を残さない(開き直したとき、前の状態を見せないため)。
         opening = null;
         seen = null;
@@ -195,7 +221,7 @@ export function createRoundHandle(
       }
       editing.append(roundId, operation, {
         tables: seen.screen.tables,
-        targetFaces: opening.targetFaces,
+        targetFaces: faces,
       });
       // 追記は同期で画面の状態へ反映されるため、戻りの時点の状態が追記の結果である。
       return seen.screen.state;

@@ -53,3 +53,13 @@ export function orderTargetFaces(
 ): TargetFaceOption[] {
   return [...records].sort(compareTargetFaces);
 }
+
+// 的の一覧が、距離の参照する的を全て含むか。距離が無ければ含む。
+export function hasAllTargetFaces(
+  faces: readonly { id: string }[],
+  distances: readonly { target_face_id: string }[],
+): boolean {
+  return distances.every((distance) =>
+    faces.some((face) => face.id === distance.target_face_id),
+  );
+}

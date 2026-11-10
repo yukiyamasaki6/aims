@@ -52,7 +52,12 @@ function createTab(options: Parameters<typeof createTestRounds>[0] = {}) {
       let handle = handles.get(roundId);
       if (!handle) {
         handle = createRoundHandle(
-          { hub: tab.hub, requests: tab.requests, editing: tab.editing },
+          {
+            hub: tab.hub,
+            requests: tab.requests,
+            editing: tab.editing,
+            savedFaces: tab.fetching.savedTargetFaces,
+          },
           roundId,
         );
         handles.set(roundId, handle);
@@ -155,6 +160,111 @@ describe("round(...)", () => {
     // Then
     expect(listener).not.toHaveBeenCalled();
     unwatch();
+  });
+
+  describe("距離の参照する的", () => {
+    // 点数「5」は、的face-2のリングに無い。的が無い間は、点数を検証できず受け入れる。
+    const face2: TargetFaceOption = { ...face, id: "face-2" };
+    const usingFace2 = () =>
+      loadedOf({
+        base: roundBase({
+          distances: [
+            {
+              id: "d-1",
+              position_key: "a",
+              distance: 70,
+              total_ends: 6,
+              arrows_per_end: 6,
+              target_face_id: "face-2",
+              is_marked: true,
+            },
+          ],
+        }).tables,
+      });
+
+    it("開いた材料の的が距離の参照する的を全て含むときは、的が足りない印を付けず、開いた材料の的を使う", () => {
+      // Given
+      const tab = createTab({ savedFaces: [face, face2] });
+      const handle = tab.round("round-1");
+
+      // When
+      const unwatch = handle.watch(loadedOf());
+
+      // Then
+      expect(tab.requests.facesWanted()).toBe(false);
+      expect(handle.getSnapshot().targetFaces).toEqual([face]);
+      unwatch();
+    });
+
+    it("参照する的が足りないときは、的が足りない印を付け、画面を閉じると外す", () => {
+      // Given
+      const tab = createTab();
+      const handle = tab.round("round-1");
+
+      // When
+      const unwatch = handle.watch(usingFace2());
+      const whileOpen = tab.requests.facesWanted();
+      unwatch();
+
+      // Then
+      expect(whileOpen).toBe(true);
+      expect(tab.requests.facesWanted()).toBe(false);
+    });
+
+    it("的が保存され、参照する的が全て揃うと、保存済みの的に替えて知らせ、印を外す", () => {
+      // Given
+      const tab = createTab();
+      const handle = tab.round("round-1");
+      const unwatch = handle.watch(usingFace2());
+      const listener = vi.fn();
+      handle.subscribe(listener);
+
+      // When
+      tab.fetching.savedTargetFaces.mockReturnValue([face, face2]);
+      tab.requests.facesSaved();
+
+      // Then
+      expect(handle.getSnapshot().targetFaces).toEqual([face, face2]);
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(tab.requests.facesWanted()).toBe(false);
+      unwatch();
+    });
+
+    it("保存されても参照する的がなお足りないときは、的を替えず、印は付いたままにする", () => {
+      // Given
+      const tab = createTab();
+      const handle = tab.round("round-1");
+      const unwatch = handle.watch(usingFace2());
+      const before = handle.getSnapshot();
+
+      // When
+      tab.fetching.savedTargetFaces.mockReturnValue([face]);
+      tab.requests.facesSaved();
+
+      // Then
+      expect(handle.getSnapshot()).toBe(before);
+      expect(tab.requests.facesWanted()).toBe(true);
+      unwatch();
+    });
+
+    it("的が替わった後の追記は、新しい的で点数を検証する", async () => {
+      // Given
+      const tab = createTab();
+      const handle = tab.round("round-1");
+      const unwatch = handle.watch(usingFace2());
+      handle.append(shotRecorded({ scoreStr: "5", scoreInt: 5 }));
+      const lenient = handle.getSnapshot().state?.shots.length;
+      await tab.hub.whenPersisted();
+
+      // When
+      tab.fetching.savedTargetFaces.mockReturnValue([face, face2]);
+      tab.requests.facesSaved();
+
+      // Then
+      expect(lenient).toBe(1);
+      expect(handle.getSnapshot().state?.shots).toEqual([]);
+      unwatch();
+    });
   });
 
   it("開いている間の印を付け、解除で外す", () => {

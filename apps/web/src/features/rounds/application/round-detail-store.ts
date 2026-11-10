@@ -159,7 +159,7 @@ async function openDetail(
 
 // 詳細の画面へ渡す、状態と変更の方法。
 export function createRoundDetailStore(deps: Deps): RoundDetailStore {
-  const { hub, requests, clock, connectivity, ids, editing } = deps;
+  const { hub, requests, fetching, clock, connectivity, ids, editing } = deps;
   const handles = new Map<string, RoundHandle>();
   return {
     load: (roundId) =>
@@ -167,7 +167,15 @@ export function createRoundDetailStore(deps: Deps): RoundDetailStore {
     round(roundId) {
       let handle = handles.get(roundId);
       if (!handle) {
-        handle = createRoundHandle({ hub, requests, editing }, roundId);
+        handle = createRoundHandle(
+          {
+            hub,
+            requests,
+            editing,
+            savedFaces: fetching.savedTargetFaces,
+          },
+          roundId,
+        );
         handles.set(roundId, handle);
       }
       return handle;

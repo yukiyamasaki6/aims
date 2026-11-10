@@ -67,7 +67,7 @@ export function useScorecard(options: ScorecardOptions) {
 
   return {
     roundId,
-    targetFaces: loaded.targetFaces,
+    targetFaces: sync.targetFaces,
     hydrated: useHydrated(),
     sync,
     initiallyEmpty: loaded.base.distances.length === 0,
