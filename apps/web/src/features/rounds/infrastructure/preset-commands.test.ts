@@ -59,39 +59,7 @@ describe("createPresetCommands", () => {
       expect(result).toBe("written");
     });
 
-    it.each([
-      ["エラーの符号が付かない", null],
-      ["エラーの符号が付く", { message: "TypeError: Failed to fetch" }],
-    ])(
-      "応答の状態が0(通信の失敗)で%s場合は、unreachableを返す",
-      async (_label, error) => {
-        // Given
-        const { commands } = setup(
-          respondWith({ data: null, error, status: 0 }),
-        );
-
-        // When
-        const result = await commands.deletePreset("preset-1");
-
-        // Then
-        expect(result).toBe("unreachable");
-      },
-    );
-
-    it("削除の呼び出しが例外を投げたときは、unreachableを返す", async () => {
-      // Given
-      const { commands } = setup(async () => {
-        throw new Error("network down");
-      });
-
-      // When
-      const result = await commands.deletePreset("preset-1");
-
-      // Then
-      expect(result).toBe("unreachable");
-    });
-
-    it("応答がエラー(状態0以外)なら、サーバーの文言を持たないrejectedを返す", async () => {
+    it("応答にエラーがあれば、サーバーの文言を持たないfailedを返す", async () => {
       // Given
       const { commands } = setup(
         respondWith({
@@ -105,7 +73,7 @@ describe("createPresetCommands", () => {
       const result = await commands.deletePreset("preset-1");
 
       // Then
-      expect(result).toBe("rejected");
+      expect(result).toBe("failed");
     });
   });
 
@@ -180,39 +148,7 @@ describe("createPresetCommands", () => {
       expect(result).toBe("written");
     });
 
-    it.each([
-      ["エラーの符号が付かない", null],
-      ["エラーの符号が付く", { message: "TypeError: Failed to fetch" }],
-    ])(
-      "応答の状態が0(通信の失敗)で%s場合は、unreachableを返す",
-      async (_label, error) => {
-        // Given
-        const { commands } = setup(
-          respondWith({ data: null, error, status: 0 }),
-        );
-
-        // When
-        const result = await commands.savePreset(preset);
-
-        // Then
-        expect(result).toBe("unreachable");
-      },
-    );
-
-    it("呼び出しが例外を投げたときは、unreachableを返す", async () => {
-      // Given
-      const { commands } = setup(async () => {
-        throw new Error("network down");
-      });
-
-      // When
-      const result = await commands.savePreset(preset);
-
-      // Then
-      expect(result).toBe("unreachable");
-    });
-
-    it("応答がエラー(状態0以外)なら、サーバーの文言を持たないrejectedを返す", async () => {
+    it("応答にエラーがあれば、サーバーの文言を持たないfailedを返す", async () => {
       // Given
       const { commands } = setup(
         respondWith({
@@ -226,7 +162,7 @@ describe("createPresetCommands", () => {
       const result = await commands.savePreset(preset);
 
       // Then
-      expect(result).toBe("rejected");
+      expect(result).toBe("failed");
     });
   });
 });

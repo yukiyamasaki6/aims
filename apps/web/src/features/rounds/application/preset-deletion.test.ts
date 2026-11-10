@@ -116,7 +116,7 @@ describe("createPresetDeletion", () => {
       expect(deletePreset).toHaveBeenCalledTimes(1);
     });
 
-    it("認証が不明のとき、削除せず、読み取りの文言でfailedを返す", async () => {
+    it("認証が不明のときも、削除へ進み、削除が成功すればdeletedを返す", async () => {
       // Given
       const { deletion, deletePreset } = setup({
         readings: [{ status: "unknown" }],
@@ -126,31 +126,22 @@ describe("createPresetDeletion", () => {
       const result = await deletion.deletePreset("preset-1", () => true);
 
       // Then
-      expect(result).toEqual({ status: "failed", error: "unreachable" });
-      expect(deletePreset).not.toHaveBeenCalled();
+      expect(result.status).toBe("deleted");
+      expect(deletePreset).toHaveBeenCalledWith("preset-1");
     });
 
-    it.each([
-      ["届かなかった", "unreachable"],
-      ["拒否された", "rejected"],
-    ] as const)(
-      "削除が%sとき、「削除できませんでした。」でfailedを返し、保存済みは変えない",
-      async (_label, deleteResult) => {
-        // Given
-        const { deletion, update, saved } = setup({ deleteResult });
+    it("削除が失敗したとき、「削除できませんでした。」でfailedを返し、保存済みは変えない", async () => {
+      // Given
+      const { deletion, update, saved } = setup({ deleteResult: "failed" });
 
-        // When
-        const result = await deletion.deletePreset("preset-1", () => true);
+      // When
+      const result = await deletion.deletePreset("preset-1", () => true);
 
-        // Then
-        expect(result).toEqual({
-          status: "failed",
-          error: "deleteFailed",
-        });
-        expect(update).not.toHaveBeenCalled();
-        expect(saved.presets).toBe(initialPresets);
-      },
-    );
+      // Then
+      expect(result).toEqual({ status: "failed", error: "deleteFailed" });
+      expect(update).not.toHaveBeenCalled();
+      expect(saved.presets).toBe(initialPresets);
+    });
   });
 
   describe("完了を待つ間に結果を受け取る画面が無くなった場合", () => {
@@ -230,25 +221,22 @@ describe("createPresetDeletion", () => {
       });
     });
 
-    it.each(["unreachable", "rejected"] as const)(
-      "削除の完了を待つ間にisCurrentが偽になると、%sでもfailedではなくdiscardedを返す",
-      async (failure) => {
-        // Given
-        let current = true;
-        const { deletion, update } = setup({
-          deleteCommand: async () => {
-            current = false;
-            return failure;
-          },
-        });
+    it("削除の完了を待つ間にisCurrentが偽になると、失敗でもfailedではなくdiscardedを返す", async () => {
+      // Given
+      let current = true;
+      const { deletion, update } = setup({
+        deleteCommand: async () => {
+          current = false;
+          return "failed";
+        },
+      });
 
-        // When
-        const result = await deletion.deletePreset("preset-1", () => current);
+      // When
+      const result = await deletion.deletePreset("preset-1", () => current);
 
-        // Then
-        expect(result).toEqual({ status: "discarded" });
-        expect(update).not.toHaveBeenCalled();
-      },
-    );
+      // Then
+      expect(result).toEqual({ status: "discarded" });
+      expect(update).not.toHaveBeenCalled();
+    });
   });
 });

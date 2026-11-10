@@ -37,10 +37,10 @@
 - 保存の手続き(`RoundProcedures.presetSaving`。`features/rounds/application/preset-saving.ts`): 入口が渡す`SessionReader`でサインインの状態を確かめ、書き込みを実行し、成功の後にプリセット一覧を背景で再取得して端末の保存済みを更新する。
 - `features/rounds/ui/use-preset-delete.ts`: 削除を確認中のプリセットと、削除済みのID、実行中とエラーを持ち、手続きの入れ物の`presetDeletion.deletePreset`を呼ぶ。
 - 削除の手続き(`features/rounds/application/preset-deletion.ts`。手続きの入れ物の`presetDeletion`): サインインの状態を確かめ、削除を実行する。書き込みに成功したら、削除の応答を待つ間に画面を離れていても保存済みから除く(画面への結果だけを破棄する)。届かなかったときと拒否されたときは保存済みを変えない。
-- `features/rounds/infrastructure/preset-commands.ts`: 削除は`DatabaseGateway.delete`で`preset_rounds`を`id`で消す。保存は`DatabaseGateway.rpc("save_round_as_preset")`を呼び、外部の引数名`p_*`はここだけが知る。どちらも結果を種類(届いた、届かなかった、拒否された)に写す。文言は作らない。
+- `features/rounds/infrastructure/preset-commands.ts`: 削除は`DatabaseGateway.delete`で`preset_rounds`を`id`で消す。保存は`DatabaseGateway.rpc("save_round_as_preset")`を呼び、外部の引数名`p_*`はここだけが知る。どちらも結果を書き込めたか書き込めなかったか(`WriteResult`)に写す。通信の失敗はSDKが例外でなく状態0とエラーで返すため、エラーの有無だけで判定する。文言は作らない。
 - `features/rounds/ui/scorecard-client.tsx`: 保存ダイアログへ、ラウンド名と画面に表示中の構成(操作の列から導いた距離)を渡す。
-- サインインの確認の失敗: 保存も削除も、`SessionReader`の`readSession`が返す未認証と不明（通信失敗）を、`fetch-status.ts`の`signInFailure`で失敗の種類(`unauthenticated`、`unreachable`)に写して返す。文言は、UI層の文言の一覧(`features/rounds/ui/rounds-messages.ts`)が種類ごとに持つ。
-- 削除の失敗は、ラウンドのドメイン(`features/rounds/domain/write-result.ts`の型`PresetDeleteFailure`)の種類`deleteFailed`で返す。届かなかったときも拒否されたときも同じ種類で、文言は一覧が「削除できませんでした。」と持ち、サーバーとパッケージの文言は出さない。
+- サインインの確認の失敗: 保存も削除も、`SessionReader`の`readSession`が未認証を返したときだけ失敗の種類`unauthenticated`で返す。確認できない（不明、通信失敗）ときは書き込みへ進み、書き込めなければ保存・削除の失敗になる。文言は、UI層の文言の一覧(`features/rounds/ui/rounds-messages.ts`)が種類ごとに持つ。
+- 削除の失敗は、ラウンドのドメイン(`features/rounds/domain/write-result.ts`の型`PresetDeleteFailure`)の種類`deleteFailed`で返す。届かなかったときも拒否されたときも同じ種類で、サインインを確かめられなかったときの書き込みの失敗も同じである。文言は一覧が「削除できませんでした。」と持ち、サーバーとパッケージの文言は出さない。
 - 保存の失敗も同じ場所の型`PresetSaveFailure`の種類`saveFailed`で返す。サインインの確認以外の失敗は、種類によらず一覧が「保存できませんでした。」と持ち、サーバーとパッケージの文言は出さない。
 
 - 名前が空白のみなら、距離を位置順に`-`でつないだ名前（未入力の距離は`??`）で保存する。
@@ -69,4 +69,4 @@
 
 - 同名のプリセットを保存できる（一意制約を持たない）。
 - プリセットの名前変更・内容編集はできない。
-- 認証の読み取りと書き込みは投げない約束で、削除の手続きと画面は例外を捕まえない(約束の実装が捕まえる)。
+- 通信と拒否は結果で返し、削除の手続きと画面は例外を受けない。接続を得られない設定の誤り(環境変数の欠落)のときだけ書き込みが投げる(想定外)。

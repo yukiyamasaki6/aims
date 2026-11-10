@@ -2,7 +2,7 @@ import type { SessionReader } from "@/features/auth";
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { roundPath } from "@/routes";
-import { type SignInFailure, signInFailure } from "../domain/fetch-status";
+import type { SignInFailure } from "../domain/fetch-status";
 import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
 import type { Preset } from "../domain/preset";
 import { type RoundCreated, roundCreatedDraftOf } from "../domain/round-start";
@@ -47,7 +47,7 @@ export function createRoundStart(deps: {
       );
       if (!isCurrent()) return { status: "discarded" };
       if (reading !== TIMED_OUT && reading.status === "unauthenticated") {
-        return { status: "failed", error: signInFailure(reading.status) };
+        return { status: "failed", error: "unauthenticated" };
       }
 
       // IDはどれも新しい値で、振る順は意味を持たない。

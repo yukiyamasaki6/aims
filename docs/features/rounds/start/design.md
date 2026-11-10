@@ -38,7 +38,7 @@
 - `features/rounds/infrastructure/round-queries.ts`の`RoundQueries.presets`: 個人（`owner_id`が自分）と公式（`owner_id`が`null`）を1回の取得で得る。`DatabaseGateway`の`select`で行い、`QueryOutcome`(`domain/query-outcome.ts`)を返す。応答を種類へ写すのはインフラ層の`db-response-outcome.ts`である。
 - `features/rounds/domain/preset.ts`: ドメイン層。プリセットの値、並びの比較`comparePresets`、並べて個人と公式に振り分ける`presetsOf`、距離の並び、個人プリセットの除去。
 - `features/rounds/domain/preset-list-view.ts`: ドメイン層。取得結果から、削除済みを除いた表示と選択中のプリセットを決める`presetListView`。
-- `features/rounds/infrastructure/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。保存先の失敗を例外にしない(識別情報の読み出しは対象外)。識別情報は入口から`IdentityReader`で受け取り、読むたびにその時点で読む。
+- `features/rounds/infrastructure/reference-snapshot.ts`: 参照データ（プリセット、的）をユーザーごとのキー`aims:reference:<種類>:<ユーザーID>`で`localStorage`へ保存・読み出しする。値は`{shape, startedAt, data}`で、`shape`は取得のselect文字列、`startedAt`は取得の開始時刻。読み出しは`shape`だけを照合する。保存先が使えない・満杯の環境と、この実装以外が書いた壊れた値は想定外とし、そのとき投げる。識別情報は入口から`IdentityReader`で受け取り、読むたびにその時点で読む。
 - 開始の手続き(手続きの入れ物の`roundStart`。`features/rounds/application/round-start.ts`): サインインの状態の確認、選択中プリセットからの作成の操作の組み立て(`features/rounds/domain/round-start.ts`の`roundCreatedDraftOf`がIDを除いた内容を作り、手続きが各要素にIDを振る)、`round.created`の追記を行う。追記の完了の後に、共有の技術の約束`PageNavigation`(`go(path)`)で`roundPath(roundId)`へ進む。実装は`lib/page-navigation/infrastructure/router-page-navigation.ts`で、入口が画面のパッケージの遷移の部品から生成する。
 
 - 並びは、種別、弓種、距離の本数（多い方が先）、先頭の距離（大きい方が先）、作成日時（新しい方が先）の順である。
@@ -60,7 +60,7 @@
 | `features/rounds/domain/preset.ts` | domain(プリセットの型、距離の並び、プリセットの並びと振り分け、除去) |
 | `features/rounds/domain/preset-list-view.ts` | domain(取得結果からの表示の内容の決定) |
 | `features/rounds/domain/round-start.ts` | domain(プリセットの構成からの、IDを除いたラウンドの作成の内容の組み立て) |
-| `features/rounds/domain/write-result.ts` | domain(書き込みの結果の種類と、保存と削除の失敗の種類) |
+| `features/rounds/domain/write-result.ts` | domain(書き込みの結果(成功か失敗)と、保存と削除の失敗の種類) |
 | `features/rounds/domain/option-label.ts` | domain(選択肢の値の表示名`labelOf`) |
 | `features/rounds/domain/target-face.ts` | domain(的を引く`lookupTargetFace`を持つ) |
 | `features/rounds/application/round-start.ts` | application(開始) |

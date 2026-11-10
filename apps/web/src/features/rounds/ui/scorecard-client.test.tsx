@@ -1,6 +1,5 @@
 import "fake-indexeddb/auto";
 import { setImmediate as realSetImmediate } from "node:timers";
-import { AuthRetryableFetchError } from "@supabase/supabase-js";
 import {
   act,
   fireEvent,
@@ -2791,7 +2790,11 @@ describe("ScorecardClient プリセット保存の失敗", () => {
     // Given
     supabase.rpc.mockImplementation((name: string) =>
       name === "save_round_as_preset"
-        ? Promise.resolve({ data: null, error: null, status: 0 })
+        ? Promise.resolve({
+            data: null,
+            error: { message: "Failed to fetch" },
+            status: 0,
+          })
         : rpcSucceeds(name),
     );
 
@@ -2817,26 +2820,6 @@ describe("ScorecardClient プリセット保存の失敗", () => {
       await screen.findByText(roundsText("fetchFailure.unauthenticated")),
     ).toBeInTheDocument();
     expect(screen.getByTestId("save-as-preset-name")).toBeInTheDocument();
-    expect(savePresetCalls()).toEqual([]);
-  });
-
-  it("セッションの確認が通信失敗で不明なとき、通信エラーの文言を表示し、サインインを求めず、書き込まない", async () => {
-    // Given
-    supabase.getSession.mockResolvedValue({
-      data: { session: null },
-      error: new AuthRetryableFetchError("Failed to fetch", 0),
-    });
-
-    // When
-    await confirmSave();
-
-    // Then
-    expect(
-      await screen.findByText(roundsText("presetSaveFailure.unreachable")),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText(roundsText("presetSaveFailure.unauthenticated")),
-    ).not.toBeInTheDocument();
     expect(savePresetCalls()).toEqual([]);
   });
 });

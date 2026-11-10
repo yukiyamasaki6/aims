@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commFailure, fetchResultOf, signInFailure } from "./fetch-status";
+import { commFailure, fetchResultOf } from "./fetch-status";
 
 describe("commFailure", () => {
   it("オフラインならoffline、そうでなければ原因を断定しないerrorにする", () => {
@@ -56,18 +56,4 @@ describe("fetchResultOf", () => {
       expect(offline).toEqual(errorResult);
     },
   );
-});
-
-describe("signInFailure", () => {
-  it("未認証はサインインを促す種類、不明は通信できない種類にする", () => {
-    // Given
-
-    // When
-    const unauthenticated = signInFailure("unauthenticated");
-    const unknown = signInFailure("unknown");
-
-    // Then
-    expect(unauthenticated).toBe("unauthenticated");
-    expect(unknown).toBe("unreachable");
-  });
 });
