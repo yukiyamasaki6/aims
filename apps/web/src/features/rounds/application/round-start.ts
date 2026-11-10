@@ -3,7 +3,7 @@ import type { Clock } from "@/lib/clock/contract/clock";
 import type { PageNavigation } from "@/lib/page-navigation/contract/page-navigation";
 import { roundPath } from "@/routes";
 import type { SignInFailure } from "../domain/fetch-status";
-import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
+import { SHORT_WAIT_MS } from "../domain/fetch-wait";
 import type { Preset } from "../domain/preset";
 import { type RoundCreated, roundCreatedDraftOf } from "../domain/round-start";
 import { roundStreamId } from "../domain/sync-events";
@@ -28,7 +28,7 @@ export type RoundStart = {
 };
 
 // 選択したプリセット(無ければnull)でラウンドを開始する。端末への保存の完了だけを待ち、送信を待たずに詳細の画面へ進む。
-// 認証の確認で待つのは失効時だけで、上限はFALLBACK_WAIT_MS。時間切れは、確認できない(不明)として扱う。未認証と確認できたときだけ止め、不明のときは開始する(送信は認証が回復するまで待つ)。
+// 認証の確認で待つのは失効時だけで、上限はSHORT_WAIT_MS。時間切れは、確認できない(不明)として扱う。未認証と確認できたときだけ止め、不明のときは開始する(送信は認証が回復するまで待つ)。
 // 認証の確認の待ちの後に画面が無くなったときは、追記も遷移もしない。追記の保存の待ちの後に画面が無くなったときは、遷移だけしない(離れた後の強制遷移を防ぐ)。副作用が手続きの中の待ちの後にあるため、結果ではなく呼び出し側の`isCurrent`で守る。
 // 例外: 拒否しない(認証の読み取りと保存の試みは拒否しない)。
 export function createRoundStart(deps: {
@@ -45,7 +45,7 @@ export function createRoundStart(deps: {
       const reading = await withinTime(
         clock,
         sessionReader.readSession(),
-        FALLBACK_WAIT_MS,
+        SHORT_WAIT_MS,
       );
       if (!isCurrent()) return { status: "failed", error: "left" };
       if (reading !== TIMED_OUT && reading.status === "unauthenticated") {

@@ -54,7 +54,7 @@
 | `features/rounds/domain/open-requests.ts` | domain | 取り直しの依頼の規則。開く依頼は、ラウンドごとの依頼の番号、待っている依頼、見つからなかったか(最後に終わった実行の結果)を持つ |
 | `features/rounds/domain/fetch-status.ts` | domain | 取得の結果の型(失敗は種類`reason`で持ち、文言は持たない)、サインインの確認の失敗の種類`SignInFailure`、問い合わせの結果の種類から結果への対応`fetchResultOf` |
 | `features/rounds/domain/query-outcome.ts` | domain | 問い合わせの結果の種類`QueryOutcome`(型だけ) |
-| `features/rounds/domain/fetch-wait.ts` | domain | 時間制限の値(`FETCH_TIMEOUT_MS`、`FALLBACK_WAIT_MS`)だけ。状態を持たない時間の規則 |
+| `features/rounds/domain/fetch-wait.ts` | domain | 時間制限の値(`FETCH_TIMEOUT_MS`、`SHORT_WAIT_MS`)だけ。状態を持たない時間の規則 |
 | `features/rounds/domain/`の他 | domain | `round-config.ts`、`round-constants.ts`、`option-label.ts`(選択肢の表示名)、`scorecard-types.ts`、`target-face.ts`(的を引く関数)、`position-key.ts`、`scorecard-scoring.ts` |
 | `features/rounds/application/round-record-hub.ts` | application | アプリで1つの端末の記録。列ごとの記録を`round-record.ts`の値として保ち、追記を直ちに画面用の列へ入れて変化を知らせる(送信は保存の完了後)。起動時の読み込みの完了を待つ`ready`、保存先を読む`readStored`、一覧の材料を返す`readList`(保存を基準にし、このタブで保存の書き込みに失敗した列だけメモリから作る)、取得したベースを反映する`commit` |
 | `features/rounds/application/refresh-requests.ts`、`rounds-list-store.ts`、`round-detail-store.ts`、`round-handle.ts`、`when-online.ts` | application | 取り直しの依頼の記録と、画面ごとに渡す状態と変更の方法(`RoundsListStore`、`RoundDetailStore`。メンバーは`rounds/design.md`の表)。開いた詳細の購読と追記(`round(...)`が返す`RoundHandle`)は`round-handle.ts`で、追記は手続き`round-editing.ts`を通して、完了のラウンドの編集で入力中へ戻す操作を続けて積む。約束`UniqueIds`(新しいIDと乱数の払い出し。`unique-ids.ts`) |
@@ -94,7 +94,7 @@
 一括の取得は、常駐の契機(起動、通信の復帰、画面が見える状態)で行う。サインインの通知と、一覧を開くことは契機ではない。サインイン済みで記録の利用者と同じときだけ取得と反映を行う。一括の取得の対象は、端末が持つ(ベースか操作がある)ラウンドのうち、作成が確定しているものとし、削除の操作の有無では分けない。返らなかった対象は削除の印にする(確定していない作成は、サーバーにまだ無いため対象にしない)。取得の問い合わせ(個別と一括)には、ライブラリの再試行(GETの520・503とネットワークの例外を最大3回)を付ける。
 1つのラウンドの取り直しは、開いたときの依頼を常に行い(開いたときの依頼は、取り直しの実行中でもすぐに始める)、効かなかった結果と重ねられなかった確定済みの操作の取り直しは、オフラインでは行わない。端末のベースで開いている間に取得が失敗しても、定期的な取り直しは行わず、次の契機まで保存済みの表示が続く。常駐の取得は、的が足りない画面が印を付けたとき(印が付いていない状態から付いた状態に変わったとき、オンラインで、常駐の取得が実行中でなければ)にも頼まれる。
 
-画面に渡す状態と変更の方法は一覧と詳細の2つの窓口で、詳細(`RoundDetailStore`)は詳細を開く`load`、開いた詳細の購読と追記`round`、矢のIDの払い出し`newShotId`、一覧(`RoundsListStore`)は一覧を開く`loadList`、端末だけの一覧`loadLocalList`、端末の記録の購読`subscribe`を持つ。詳細の画面は、完了・削除して離れる・一覧へ戻る・プリセットの保存・IDの払い出しの手続きを、一覧の画面は、ラウンドの削除の手続きと`whenOnline`を、作成の画面は、ラウンドの開始・個人プリセットの削除・プリセットの取得・`whenOnline`を、窓口を通さず手続きの入れ物から受ける。通信の復帰の合図`whenOnline`は、一覧と作成が手続きの入れ物から、詳細が窓口から受け、契約は同じである。`loadList`は一覧の取得を自分で行う。合図は表示の読み直しと切り替えの合図で、同期の経路ではない。詳細は、メモリの記録で、削除があれば取得せずに削除済みを返し、確定していない作成があれば取得せずに作成の操作を基準にする。サーバーの状態は同期が取得して反映した結果を待ち、通信できないとき(オフライン、取得の失敗、取得が`FALLBACK_WAIT_MS`を超えた)は、端末にベースがあれば端末のベースで開く。全体を`FETCH_TIMEOUT_MS`で打ち切り、打ち切った時点の通信の可否でofflineかerrorを返す。端末の保存(`aims-sync`)は、現在の形のデータだけを前提にする。
+画面に渡す状態と変更の方法は一覧と詳細の2つの窓口で、詳細(`RoundDetailStore`)は詳細を開く`load`、開いた詳細の購読と追記`round`、矢のIDの払い出し`newShotId`、一覧(`RoundsListStore`)は一覧を開く`loadList`、端末だけの一覧`loadLocalList`、端末の記録の購読`subscribe`を持つ。詳細の画面は、完了・削除して離れる・一覧へ戻る・プリセットの保存・IDの払い出しの手続きを、一覧の画面は、ラウンドの削除の手続きと`whenOnline`を、作成の画面は、ラウンドの開始・個人プリセットの削除・プリセットの取得・`whenOnline`を、窓口を通さず手続きの入れ物から受ける。通信の復帰の合図`whenOnline`は、一覧と作成が手続きの入れ物から、詳細が窓口から受け、契約は同じである。`loadList`は一覧の取得を自分で行う。合図は表示の読み直しと切り替えの合図で、同期の経路ではない。詳細は、メモリの記録で、削除があれば取得せずに削除済みを返し、確定していない作成があれば取得せずに作成の操作を基準にする。サーバーの状態は同期が取得して反映した結果を待ち、通信できないとき(オフライン、取得の失敗、取得が`SHORT_WAIT_MS`を超えた)は、端末にベースがあれば端末のベースで開く。全体を`FETCH_TIMEOUT_MS`で打ち切り、打ち切った時点の通信の可否でofflineかerrorを返す。端末の保存(`aims-sync`)は、現在の形のデータだけを前提にする。
 
 流れは次のとおりである。
 

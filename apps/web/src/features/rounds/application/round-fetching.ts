@@ -120,7 +120,7 @@ export function createRoundFetching(deps: {
     return { status: "ok", data: { rounds, startedAt, userId } };
   }
 
-  // 一覧のラウンドを取得する。代わりは持たない。
+  // 一覧のラウンドを取得する。
   async function fetchRoundsList(): Promise<FetchResult<RoundListItem[]>> {
     const result = await content.fetchContent(() => queries.roundsList());
     if (result.status !== "ok") return result;

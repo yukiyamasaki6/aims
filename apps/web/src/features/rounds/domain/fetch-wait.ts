@@ -5,4 +5,4 @@
 export const FETCH_TIMEOUT_MS = 10_000;
 
 // 取得の結果に頼らない確認の待ちの上限(サインインの確認、アプリの更新の切り替え)。
-export const FALLBACK_WAIT_MS = 1_000;
+export const SHORT_WAIT_MS = 1_000;

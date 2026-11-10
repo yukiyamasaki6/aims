@@ -4,7 +4,7 @@ import { createFakeSessionReader } from "@/features/auth/application/session-rea
 import { createManualClock } from "@/lib/clock/manual-clock-test-helpers";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
 import { roundPath } from "@/routes";
-import { FALLBACK_WAIT_MS } from "../domain/fetch-wait";
+import { SHORT_WAIT_MS } from "../domain/fetch-wait";
 import type { Preset } from "../domain/preset";
 import { roundCreatedDraftOf } from "../domain/round-start";
 import { roundStreamId } from "../domain/sync-events";
@@ -253,7 +253,7 @@ describe("createRoundStart", () => {
 
       // When
       const pending = roundStart.startRound(null, () => true);
-      await clock.advanceAsync(FALLBACK_WAIT_MS - 1);
+      await clock.advanceAsync(SHORT_WAIT_MS - 1);
       const appendedBeforeLimit = append.mock.calls.length;
       await clock.advanceAsync(1);
       const result = await pending;

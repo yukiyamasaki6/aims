@@ -8,7 +8,7 @@ import {
   type UpdateActivation,
 } from "@/features/offline-pwa/application/update-activation";
 import { createOpSender } from "@/features/rounds/application/op-sender";
-import { FALLBACK_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
+import { SHORT_WAIT_MS } from "@/features/rounds/domain/fetch-wait";
 import {
   roundBase,
   roundCreated,
@@ -183,14 +183,14 @@ describe("RootClientEntry", () => {
       );
     });
 
-    it("更新の切り替えの手続きは、期限に代わりがある待ちの上限(FALLBACK_WAIT_MS)と、アプリの時計、記録のハブの保存の待ちを受ける", () => {
+    it("更新の切り替えの手続きは、期限に短い待ちの上限(SHORT_WAIT_MS)と、アプリの時計、記録のハブの保存の待ちを受ける(手続きは差し替えのため配線の値で確かめ、期限の効きはupdate-activationのテストが確かめる)", () => {
       // Given
       // When
       render(<RootClientEntry>{null}</RootClientEntry>);
 
       // Then
       const deps = vi.mocked(createUpdateActivation).mock.calls[0][0];
-      expect(deps.deadlineMs).toBe(FALLBACK_WAIT_MS);
+      expect(deps.deadlineMs).toBe(SHORT_WAIT_MS);
       expect(deps.persistence.whenPersisted).toBeTypeOf("function");
       expect(deps.clock.now()).toBeTypeOf("number");
     });
