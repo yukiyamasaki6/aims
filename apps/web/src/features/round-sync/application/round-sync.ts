@@ -30,6 +30,8 @@ export function createRoundSync(deps: {
   const refetchGates = new Map<string, FlightGate>();
   // 前回の見直しで、重ねられなかった確定済みの操作(overlay)が当たっていた、開く依頼のないラウンド。新しく当たったときだけ取り直す。
   let lastOverlay = new Set<string>();
+  // 前回の見直しで、的が足りない印が付いていたか。付いていない状態から付いた状態に変わったときだけ、再取得を促す。
+  let lastFacesWanted = false;
 
   // 常駐の前段。サインイン済みで、記録の利用者と同じときだけ通る。
   async function residentPass(): Promise<boolean> {
@@ -93,10 +95,21 @@ export function createRoundSync(deps: {
     void refresh.refreshRound(need.roundId);
   }
 
+  // 的が足りない印が付いたとき、オンラインで、常駐の取得が実行中でなければ、常駐の取得を頼む。実行中の取得が的を保存する。
+  function promptFacesFetch() {
+    const wanted = refresh.facesWanted();
+    const rising = wanted && !lastFacesWanted;
+    lastFacesWanted = wanted;
+    if (rising && !connectivity.isOffline() && !residentGate.running) {
+      requestResident();
+    }
+  }
+
   // 依頼と記録の変化から、取り直しの要否を見直す。
   // 開く依頼がある間は、他の取り直しを出さない。効かなかった結果(diverged)は通知ごとに(オフラインでなければ)取り直す。
   // 重ねられなかった操作(overlay)は新しく当たったときだけ取り直す。どちらも当たるときは、取り直しは1回で足りる。
   function evaluate() {
+    promptFacesFetch();
     const nextOverlay = new Set<string>();
     const online = !connectivity.isOffline();
     for (const need of refresh.refreshNeeds().rounds) {

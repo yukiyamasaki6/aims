@@ -15,12 +15,7 @@ import {
   type TargetFaceRecord,
 } from "../domain/target-face";
 import type { ContentFetcher } from "./content-fetcher";
-import type { ReferenceKind, ReferenceSnapshots } from "./reference-snapshots";
-
-export type RoundDetailData = {
-  round: ServerRound;
-  targetFaces: TargetFaceRecord[];
-};
+import type { ReferenceSnapshots } from "./reference-snapshots";
 
 export type RoundDetailsData = {
   rounds: ServerRound[];
@@ -30,16 +25,12 @@ export type RoundDetailsData = {
 // 取得の問い合わせの約束。応答はドメインの形に写して返す。
 export type RoundQueries = {
   // 存在しない・権限なし・論理削除済みのラウンドは、not-found。
-  roundDetail(
-    userId: string,
-    roundId: string,
-  ): Promise<QueryOutcome<RoundDetailData>>;
+  roundDetail(roundId: string): Promise<QueryOutcome<ServerRound>>;
   // 入力中のラウンドと、`roundIds`のラウンドをまとめて得る。1つでも失敗したら全体を失敗にする。
   roundDetails(
     userId: string,
     roundIds: readonly string[],
   ): Promise<QueryOutcome<RoundDetailsData>>;
-  targetFaces(userId: string): Promise<QueryOutcome<TargetFaceRecord[]>>;
   // 個人(owner_idが自分)と公式(owner_idがnull)を1回で得る。
   presets(userId: string): Promise<QueryOutcome<PresetRecord[]>>;
   // 削除されていないラウンドを、実施日の新しい順に得る。入力中のラウンドも含む。ページ、絞り込み、並びの条件はここに足す。
@@ -49,7 +40,6 @@ export type RoundQueries = {
 // `startedAt`は取得の開始時刻、`userId`は取得に使ったセッションの利用者。端末へ保存するベースの記録に付ける。
 export type FetchedRoundDetail = {
   base: RoundBaseRecord;
-  targetFaces: TargetFaceOption[];
   startedAt: number;
   userId: string;
 };
@@ -63,16 +53,10 @@ export type FetchedRoundDetails = {
 
 function toDetail(
   round: ServerRound,
-  faces: TargetFaceOption[],
   startedAt: number,
   userId: string,
 ): FetchedRoundDetail {
-  return {
-    base: baseOfServerRound(round),
-    targetFaces: faces,
-    startedAt,
-    userId,
-  };
+  return { base: baseOfServerRound(round), startedAt, userId };
 }
 
 export type RoundFetching = ReturnType<typeof createRoundFetching>;
@@ -87,37 +71,18 @@ export function createRoundFetching(deps: {
 }) {
   const { content, queries, snapshots, clock } = deps;
 
-  // 参照データの取得の順序。取得できたら最新で端末へ保存して返す。取得できないときは取得の結果をそのまま返す(保存済みは画面が先に見せる)。
-  // 保存は取得に使った利用者のキーへ行う。
-  async function fetchReference<R, T>(
-    kind: ReferenceKind,
-    query: (userId: string) => Promise<QueryOutcome<R>>,
-    order: (rows: R) => T,
-  ): Promise<FetchResult<T>> {
+  // プリセット（個人と公式）を取得する。取得できたら取得に使った利用者のキーへ最新で保存して返す。取得できないときは取得の結果をそのまま返す(保存済みは画面が先に見せる)。
+  async function fetchPresets(): Promise<FetchResult<Presets>> {
     const startedAt = clock.now();
     let queriedUserId = "";
     const result = await content.fetchContent((session) => {
       queriedUserId = session.userId;
-      return query(session.userId);
+      return queries.presets(session.userId);
     });
     if (result.status !== "ok") return result;
-    const data = order(result.data);
-    snapshots.save(kind, queriedUserId, data, startedAt);
+    const data = presetsOf(result.data);
+    snapshots.save("presets", queriedUserId, data, startedAt);
     return { status: "ok", data };
-  }
-
-  // 的の一覧だけを取得する。作成が未確定のラウンドの読み込みが、ラウンドの取得と別に的を得るために使う。
-  function fetchTargetFaces(): Promise<FetchResult<TargetFaceOption[]>> {
-    return fetchReference(
-      "target-faces",
-      queries.targetFaces,
-      orderTargetFaces,
-    );
-  }
-
-  // プリセット（個人と公式）を取得する。取得できたら保存して返す。
-  function fetchPresets(): Promise<FetchResult<Presets>> {
-    return fetchReference("presets", queries.presets, presetsOf);
   }
 
   // 存在しない・権限なし・論理削除済みのラウンドは、いずれもnot-foundで、区別しない。
@@ -126,16 +91,12 @@ export function createRoundFetching(deps: {
   ): Promise<FetchResult<FetchedRoundDetail>> {
     const startedAt = clock.now();
     let userId = "";
-    const result = await content.fetchContent<RoundDetailData>((session) => {
+    const result = await content.fetchContent((session) => {
       userId = session.userId;
-      return queries.roundDetail(session.userId, roundId);
+      return queries.roundDetail(roundId);
     });
     if (result.status !== "ok") return result;
-    const faces = orderTargetFaces(result.data.targetFaces);
-    return {
-      status: "ok",
-      data: toDetail(result.data.round, faces, startedAt, userId),
-    };
+    return { status: "ok", data: toDetail(result.data, startedAt, userId) };
   }
 
   // 入力中のラウンドと、`roundIds`のラウンドを、的とともに取得する。端末の保持のための取得で、結果は表示に使わない。
@@ -154,7 +115,7 @@ export function createRoundFetching(deps: {
     snapshots.save("target-faces", userId, faces, startedAt);
     const rounds = new Map<string, FetchedRoundDetail>();
     for (const round of result.data.rounds) {
-      rounds.set(round.id, toDetail(round, faces, startedAt, userId));
+      rounds.set(round.id, toDetail(round, startedAt, userId));
     }
     return { status: "ok", data: { rounds, startedAt, userId } };
   }
@@ -170,7 +131,6 @@ export function createRoundFetching(deps: {
   }
 
   return {
-    fetchTargetFaces,
     fetchPresets,
     fetchRoundsList,
     fetchRoundDetail,

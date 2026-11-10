@@ -24,7 +24,6 @@ function detail(
 ): FetchedRoundDetail {
   return {
     base: roundBase({ status, revisions: { round: 3 } }),
-    targetFaces: [],
     startedAt: 100,
     userId: "user-1",
     ...overrides,
@@ -95,6 +94,29 @@ describe("refreshAll", () => {
       base: { revisions: { round: 3 } },
     });
     expect(tab.hub.record(roundStreamId("kept")).base?.startedAt).toBe(100);
+  });
+
+  it("一括の取得を反映した後に、的の保存を待つ画面へ知らせる。取得が失敗したときは知らせない", async () => {
+    // Given
+    const tab = await setup();
+    await storeBase(tab, "kept");
+    const listener = vi.fn(() => {
+      saved.push(tab.hub.record(roundStreamId("kept")).base?.startedAt);
+    });
+    const saved: (number | undefined)[] = [];
+    tab.requests.subscribe(listener);
+    tab.fetching.fetchRoundDetails
+      .mockResolvedValueOnce({ status: "error", reason: "failed" })
+      .mockResolvedValueOnce(fetchedOf([["kept", detail("completed")]]));
+
+    // When
+    await tab.refresh.refreshAll();
+    const afterFailure = listener.mock.calls.length;
+    await tab.refresh.refreshAll();
+
+    // Then
+    expect(afterFailure).toBe(0);
+    expect(saved).toEqual([100]);
   });
 
   it("端末の保存を読めないときは、取得全体が失敗扱いで何も取得せず、拒否しない", async () => {
@@ -288,7 +310,7 @@ describe("refreshRound", () => {
     const tab = await setup();
     tab.fetching.fetchRoundDetail.mockResolvedValue({
       status: "ok",
-      data: detail("in_progress", { targetFaces: [] }),
+      data: detail("in_progress"),
     });
     const opened = tab.requests.open("r-1");
 
@@ -298,9 +320,26 @@ describe("refreshRound", () => {
     // Then
     expect(await opened).toMatchObject({
       status: "ok",
-      data: { targetFaces: [] },
+      data: { base: { round: { status: "in_progress" } } },
     });
     expect(tab.hub.record(roundStreamId("r-1")).base?.startedAt).toBe(100);
+  });
+
+  it("1つのラウンドの取得と反映では、的の保存を待つ画面へ知らせない", async () => {
+    // Given
+    const tab = await setup();
+    tab.fetching.fetchRoundDetail.mockResolvedValue({
+      status: "ok",
+      data: detail("in_progress"),
+    });
+    const listener = vi.fn();
+    tab.requests.subscribe(listener);
+
+    // When
+    await tab.refresh.refreshRound("r-1");
+
+    // Then
+    expect(listener).not.toHaveBeenCalled();
   });
 
   it("取り直しの開始で、効かなかった結果の印を消す", async () => {

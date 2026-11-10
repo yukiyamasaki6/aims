@@ -32,8 +32,10 @@ function setup(options: { reading?: Reading; same?: boolean } = {}) {
     isRecordUser: vi.fn(() => same),
     signInChanged: vi.fn(),
   } satisfies RoundRecordControl;
+  const faces = { wanted: false };
   const refresh = {
     refreshNeeds: () => needs.current,
+    facesWanted: () => faces.wanted,
     onRefreshNeeds: vi.fn((listener: () => void) => {
       notifyNeeds = listener;
     }),
@@ -56,6 +58,10 @@ function setup(options: { reading?: Reading; same?: boolean } = {}) {
     session,
     refreshAll,
     refreshRound,
+    changeFacesWanted(wanted: boolean) {
+      faces.wanted = wanted;
+      notifyNeeds();
+    },
     changeNeeds(next: Needs) {
       needs.current = next;
       notifyNeeds();
@@ -228,6 +234,75 @@ describe("常駐の一括の取得", () => {
     // Then
     expect(whileRunning).toBe(1);
     expect(t.refreshAll).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("的が足りない画面からの促し", () => {
+  it("的が足りない印が付くと、常駐の取得をもう1回頼む", async () => {
+    // Given
+    const t = setup();
+    t.sync.start("user-1");
+    await flush();
+
+    // When
+    t.changeFacesWanted(true);
+    await flush();
+
+    // Then
+    expect(t.refreshAll).toHaveBeenCalledTimes(2);
+  });
+
+  it("印が付いたままの間は、知らせが重ねて届いても、繰り返し頼まない。外れてまた付くと頼む", async () => {
+    // Given
+    const t = setup();
+    t.sync.start("user-1");
+    await flush();
+    t.changeFacesWanted(true);
+    await flush();
+
+    // When
+    t.changeFacesWanted(true);
+    await flush();
+    const whileWanted = t.refreshAll.mock.calls.length;
+    t.changeFacesWanted(false);
+    t.changeFacesWanted(true);
+    await flush();
+
+    // Then
+    expect(whileWanted).toBe(2);
+    expect(t.refreshAll).toHaveBeenCalledTimes(3);
+  });
+
+  it("常駐の取得が実行中のときは頼まず、実行中の取得が終わっても、やり直さない", async () => {
+    // Given
+    const t = setup();
+    const running = Promise.withResolvers<void>();
+    t.refreshAll.mockReturnValueOnce(running.promise);
+    t.sync.start("user-1");
+    await flush();
+
+    // When
+    t.changeFacesWanted(true);
+    running.resolve();
+    await flush();
+
+    // Then
+    expect(t.refreshAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("オフラインのときは頼まない", async () => {
+    // Given
+    const t = setup();
+    t.sync.start("user-1");
+    await flush();
+    t.network.offline = true;
+
+    // When
+    t.changeFacesWanted(true);
+    await flush();
+
+    // Then
+    expect(t.refreshAll).toHaveBeenCalledTimes(1);
   });
 });
 

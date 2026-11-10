@@ -18,7 +18,6 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 function fetchedDetail(): FetchedRoundDetail {
   return {
     base: roundBase(),
-    targetFaces: [],
     startedAt: 100,
     userId: "user-1",
   };
@@ -214,7 +213,7 @@ describe("refreshNeeds", () => {
     // settleRoundNowは取り直しの開始で効かなかった印を消さないため、順を保てる。
     settleRoundNow(requests, "r-1", {
       status: "ok",
-      data: { base: roundBase().tables, targetFaces: [] },
+      data: { base: roundBase().tables },
     });
     const second = reasons();
     hub.clearDiverged(stream);
@@ -286,6 +285,21 @@ describe("refreshNeeds", () => {
 
     // Then
     expect(listener.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("的が足りない印", () => {
+  it("依頼の記録の印を、真偽で返す", async () => {
+    // Given
+    const { requests, control } = await setup();
+
+    // When
+    const before = control.facesWanted();
+    requests.wantFaces("round-1", true);
+
+    // Then
+    expect(before).toBe(false);
+    expect(control.facesWanted()).toBe(true);
   });
 });
 

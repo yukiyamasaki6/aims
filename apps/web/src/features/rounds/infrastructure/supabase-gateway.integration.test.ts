@@ -110,7 +110,7 @@ describe("取得の問い合わせ", () => {
     });
 
     // When
-    await createRoundQueries(database).roundDetail("user-1", "round-1");
+    await createRoundQueries(database).roundDetail("round-1");
 
     // Then
     const rounds = calls.slice(0, 8).map(([method]) => method);
@@ -125,12 +125,7 @@ describe("取得の問い合わせ", () => {
       "retry",
     ]);
     expect(calls).toContainEqual(["eq", ["id", "round-1"]]);
-    expect(calls).toContainEqual([
-      "or",
-      ["owner_id.is.null,owner_id.eq.user-1"],
-    ]);
     expect(calls.filter(([method]) => method === "retry")).toEqual([
-      ["retry", [true]],
       ["retry", [true]],
     ]);
   });

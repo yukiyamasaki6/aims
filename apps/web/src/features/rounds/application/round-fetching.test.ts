@@ -146,13 +146,10 @@ function setup(
     presets: options.presets,
   });
   const queries: RoundQueries = {
-    roundDetail: vi.fn(async () =>
-      okResponse({ round: serverRound, targetFaces: [] }),
-    ),
+    roundDetail: vi.fn(async () => okResponse(serverRound)),
     roundDetails: vi.fn(async () =>
       okResponse({ rounds: [serverRound], targetFaces: [] }),
     ),
-    targetFaces: vi.fn(async () => okResponse<TargetFaceRecord[]>([])),
     presets: vi.fn(async () => okResponse<PresetRecord[]>([])),
     roundsList: vi.fn(async () => okResponse<ServerRoundSummary[]>([])),
     ...options.queries,
@@ -201,36 +198,21 @@ describe("fetchRoundDetail", () => {
             shots: { "s-a": 5 },
           },
         },
-        targetFaces: [],
         startedAt: 1000,
         userId: "user-1",
       },
     });
   });
 
-  it("確かめたセッションの利用者で問い合わせ、的は個人を先に並べて返す。的は保存しない", async () => {
+  it("ラウンドだけを問い合わせ、的は取得も保存もしない", async () => {
     // Given
-    const faces = [face("g", null), face("p", "user-1")];
-    const { fetching, queries, save } = setup({
-      queries: {
-        roundDetail: vi.fn(async () =>
-          okResponse({ round: serverRound, targetFaces: faces }),
-        ),
-      },
-    });
+    const { fetching, queries, save } = setup();
 
     // When
-    const result = await fetching.fetchRoundDetail("round-1");
+    await fetching.fetchRoundDetail("round-1");
 
     // Then
-    expect(queries.roundDetail).toHaveBeenCalledExactlyOnceWith(
-      "user-1",
-      "round-1",
-    );
-    expect(result.status === "ok" && idsOf(result.data.targetFaces)).toEqual([
-      "p",
-      "g",
-    ]);
+    expect(queries.roundDetail).toHaveBeenCalledExactlyOnceWith("round-1");
     expect(save).not.toHaveBeenCalled();
   });
 
@@ -325,11 +307,6 @@ describe("fetchRoundDetail", () => {
         error: null,
         status: 200,
       },
-      target_faces: {
-        data: [face("g", null)],
-        error: null,
-        status: 200,
-      },
     };
     const database: DatabaseGateway<RoundsDbSchema> = {
       select: async (query) => rows[query.table],
@@ -353,67 +330,8 @@ describe("fetchRoundDetail", () => {
           tables: { distances: [{ ...distanceA, disabled: false }], shots: [] },
           revisions: { shots: { "s-a": 5 } },
         },
-        targetFaces: [face("g", null)],
       },
     });
-  });
-});
-
-describe("fetchTargetFaces", () => {
-  const savedFaces = [face("saved", null)];
-
-  it("取得できたときは、並べて返し、取得の開始時刻でその利用者のキーへ保存して、保存済みを最新にする", async () => {
-    // Given
-    const { fetching, saved } = setup({
-      saved: savedFaces,
-      queries: {
-        targetFaces: vi.fn(async () =>
-          okResponse([face("own", "user-1"), face("common", null)]),
-        ),
-      },
-    });
-
-    // When
-    const result = await fetching.fetchTargetFaces();
-
-    // Then
-    expect(result.status === "ok" && idsOf(result.data)).toEqual([
-      "own",
-      "common",
-    ]);
-    expect(idsOf(saved.get("user-1")?.data)).toEqual(["own", "common"]);
-    expect(saved.get("user-1")?.startedAt).toBe(1000);
-  });
-
-  it.each([
-    ["通信失敗", commFailure, { status: "error", reason: "failed" }],
-    ["サーバーエラー", failed, { status: "error", reason: "failed" }],
-  ] as const)(
-    "%sのとき、保存済みがあっても代わりにせず、結果をそのまま返す",
-    async (_name, response, expected) => {
-      // Given
-      const { fetching } = setup({
-        saved: savedFaces,
-        queries: { targetFaces: vi.fn(async () => response) },
-      });
-
-      // When
-      const result = await fetching.fetchTargetFaces();
-
-      // Then
-      expect(result).toEqual(expected);
-    },
-  );
-
-  it("オフラインのとき、保存済みがあっても代わりにせず、offlineを返す", async () => {
-    // Given
-    const { fetching } = setup({ saved: savedFaces, offline: true });
-
-    // When
-    const result = await fetching.fetchTargetFaces();
-
-    // Then
-    expect(result).toEqual({ status: "offline" });
   });
 });
 

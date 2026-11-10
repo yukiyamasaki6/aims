@@ -64,7 +64,6 @@ function createTab(options: Parameters<typeof createTestRounds>[0] = {}) {
 
 const opened = (): OpenedRound => ({
   base: roundBase({ name: "取得した" }).tables,
-  targetFaces: [face],
 });
 
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));

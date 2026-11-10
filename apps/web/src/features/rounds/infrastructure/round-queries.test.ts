@@ -117,12 +117,12 @@ function face(id: string, ownerId: string | null) {
 }
 
 describe("roundDetail", () => {
-  it("ラウンド(距離・記録を含む)を1回、的を自分の分と公式の分に絞って1回、取得する", async () => {
+  it("ラウンド(距離・記録を含む)だけを1回取得する", async () => {
     // Given
     const database = makeDatabase({ rounds: ok(round), target_faces: ok([]) });
 
     // When
-    await database.createQueries().roundDetail("user-1", "round-1");
+    await database.createQueries().roundDetail("round-1");
 
     // Then
     // 論理削除された距離・記録は、revisionの判定に使うため取得する。
@@ -142,136 +142,71 @@ describe("roundDetail", () => {
         single: "maybe",
         retry: true,
       },
-      {
-        table: "target_faces",
-        columns: TARGET_FACE_SELECT,
-        filters: [
-          { op: "or", expression: "owner_id.is.null,owner_id.eq.user-1" },
-        ],
-        retry: true,
-      },
     ]);
   });
 
-  it("ラウンドの行を写さずにそのまま、的とともに返す", async () => {
+  it("ラウンドの行を写さずにそのまま返す", async () => {
     // Given
     const disabledAt = "2026-09-16T00:00:00Z";
+    const row = {
+      ...round,
+      distances: [
+        {
+          ...round.distances[0],
+          shots: [{ ...shotA, revision: 8, disabled_at: disabledAt }],
+        },
+      ],
+    };
     const database = makeDatabase({
-      rounds: ok({
-        ...round,
-        distances: [
-          {
-            ...round.distances[0],
-            shots: [{ ...shotA, revision: 8, disabled_at: disabledAt }],
-          },
-        ],
-      }),
-      target_faces: ok([face("g", null)]),
+      rounds: ok(row),
+      target_faces: ok([]),
     });
 
     // When
-    const response = await database
-      .createQueries()
-      .roundDetail("user-1", "round-1");
+    const response = await database.createQueries().roundDetail("round-1");
 
     // Then
-    expect(response).toEqual({
-      status: "ok",
-      data: {
-        round: {
-          ...round,
-          distances: [
-            {
-              ...round.distances[0],
-              shots: [{ ...shotA, revision: 8, disabled_at: disabledAt }],
-            },
-          ],
-        },
-        targetFaces: [face("g", null)],
-      },
-    });
+    expect(response).toEqual({ status: "ok", data: row });
   });
 
-  it("ラウンドがnullなら的の結果によらずnot-foundにする", async () => {
+  it("ラウンドがnullならnot-foundにする", async () => {
     // Given
-    const missing = makeDatabase({
-      rounds: ok(null),
-      target_faces: ok([face("g", null)]),
-    });
+    const missing = makeDatabase({ rounds: ok(null), target_faces: ok([]) });
 
     // When
-    const notFound = await missing.createQueries().roundDetail("user-1", "r");
+    const notFound = await missing.createQueries().roundDetail("r");
 
     // Then
     expect(notFound).toEqual({ status: "not-found" });
   });
 
-  it("どちらかが通信失敗(status 0)なら、もう一方がエラーでも、comm-failureにする", async () => {
-    // Given
-    const database = makeDatabase({
-      rounds: failed(500, { message: "boom" }),
-      target_faces: failed(0),
-    });
-
-    // When
-    const response = await database.createQueries().roundDetail("u", "r");
-
-    // Then
-    expect(response).toEqual({ status: "comm-failure" });
-  });
-
-  it("的の通信失敗は、ラウンドが見つからない場合もnot-foundより優先してcomm-failureにする", async () => {
-    // Given
-    const database = makeDatabase({
-      rounds: ok(null),
-      target_faces: failed(0),
-    });
-
-    // When
-    const response = await database.createQueries().roundDetail("u", "r");
-
-    // Then
-    expect(response).toEqual({ status: "comm-failure" });
-  });
-
-  it("どちらかが401なら、他のエラーより優先してauth-rejectedにする", async () => {
+  it("通信失敗(status 0)はcomm-failure、401はauth-rejected、サーバーエラーはfailedにする", async () => {
     // Given
     const jwt = { code: "PGRST301", message: "jwt" };
-    const database = makeDatabase({
-      rounds: failed(500, { message: "boom" }),
-      target_faces: failed(401, jwt),
+    const comm = makeDatabase({ rounds: failed(0), target_faces: ok([]) });
+    const rejected = makeDatabase({
+      rounds: failed(401, jwt),
+      target_faces: ok([]),
     });
-
-    // When
-    const response = await database.createQueries().roundDetail("u", "r");
-
-    // Then
-    expect(response).toEqual({ status: "auth-rejected" });
-  });
-
-  it("ラウンドか的のサーバーエラーは、failedにする", async () => {
-    // Given
-    const roundError = makeDatabase({
+    const errored = makeDatabase({
       rounds: failed(500, { message: "round" }),
       target_faces: ok([]),
     });
-    const faceError = makeDatabase({
-      rounds: ok(round),
-      target_faces: failed(500, { message: "faces" }),
-    });
 
     // When
-    const first = await roundError.createQueries().roundDetail("u", "r");
-    const second = await faceError.createQueries().roundDetail("u", "r");
+    const first = await comm.createQueries().roundDetail("r");
+    const second = await rejected.createQueries().roundDetail("r");
+    const third = await errored.createQueries().roundDetail("r");
 
     // Then
-    expect(first).toEqual({ status: "failed" });
-    expect(second).toEqual({ status: "failed" });
+    expect(first).toEqual({ status: "comm-failure" });
+    expect(second).toEqual({ status: "auth-rejected" });
+    expect(third).toEqual({ status: "failed" });
   });
 });
 
 describe("再試行の指定", () => {
-  it("個別の取得と一括の取得は、ラウンドの全てのselectと的のselectにretry: trueを付ける", async () => {
+  it("個別の取得と一括の取得は、ラウンドの全てのselectと一括の取得の的のselectにretry: trueを付ける", async () => {
     // Given
     const detailDatabase = makeDatabase({
       rounds: ok(round),
@@ -284,7 +219,7 @@ describe("再試行の指定", () => {
     const ids = Array.from({ length: 120 }, (_, i) => `id-${i}`);
 
     // When
-    await detailDatabase.createQueries().roundDetail("user-1", "round-1");
+    await detailDatabase.createQueries().roundDetail("round-1");
     await batchDatabase.createQueries().roundDetails("user-1", ids);
 
     // Then
@@ -295,7 +230,7 @@ describe("再試行の指定", () => {
     expect(retries.every((retry) => retry === true)).toBe(true);
   });
 
-  it("的だけの取得、プリセット、一覧の取得はretryを付けない", async () => {
+  it("プリセットと一覧の取得はretryを付けない", async () => {
     // Given
     const database = makeDatabase({
       rounds: ok([]),
@@ -305,54 +240,15 @@ describe("再試行の指定", () => {
     const queries = database.createQueries();
 
     // When
-    await queries.targetFaces("user-1");
     await queries.presets("user-1");
     await queries.roundsList();
 
     // Then
-    expect(database.queries.length).toBe(3);
+    expect(database.queries.length).toBe(2);
     expect(database.queries.map((query) => query.retry)).toEqual([
       undefined,
       undefined,
-      undefined,
     ]);
-  });
-});
-
-describe("targetFaces", () => {
-  it("的だけを、自分の分と公式の分に絞って取得して返す", async () => {
-    // Given
-    const database = makeDatabase({
-      rounds: ok(null),
-      target_faces: ok([face("g", null)]),
-    });
-
-    // When
-    const response = await database.createQueries().targetFaces("user-1");
-
-    // Then
-    expect(response).toEqual({ status: "ok", data: [face("g", null)] });
-    expect(database.queries).toHaveLength(1);
-    expect(database.queries[0].filters).toEqual([
-      { op: "or", expression: "owner_id.is.null,owner_id.eq.user-1" },
-    ]);
-  });
-
-  it("通信が失敗(status 0)したらcomm-failure、エラー応答はfailedの種類で返す", async () => {
-    // Given
-    const comm = makeDatabase({ rounds: ok(null), target_faces: failed(0) });
-    const errored = makeDatabase({
-      rounds: ok(null),
-      target_faces: failed(500, { message: "x" }),
-    });
-
-    // When
-    const first = await comm.createQueries().targetFaces("u");
-    const second = await errored.createQueries().targetFaces("u");
-
-    // Then
-    expect(first).toEqual({ status: "comm-failure" });
-    expect(second).toEqual({ status: "failed" });
   });
 });
 
@@ -399,6 +295,9 @@ describe("roundDetails", () => {
     ]);
     expect(dataOf(response)?.rounds.map((r) => r.id)).toEqual([uuid1, uuid2]);
     expect(dataOf(response)?.targetFaces).toEqual([face("face-1", null)]);
+    expect(database.queries_of("target_faces")[0].filters).toEqual([
+      { op: "or", expression: "owner_id.is.null,owner_id.eq.user-1" },
+    ]);
   });
 
   it("指定したラウンドが無ければ、入力中のラウンドだけで絞る", async () => {

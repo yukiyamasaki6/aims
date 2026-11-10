@@ -16,7 +16,6 @@ async function settled(promise: Promise<unknown>): Promise<boolean> {
 
 const opened = (): OpenedRound => ({
   base: roundBase().tables,
-  targetFaces: [],
 });
 
 describe("詳細を開く依頼", () => {
@@ -124,6 +123,53 @@ describe("開いている詳細の印", () => {
 
     // Then
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe("的が足りない印", () => {
+  it("印が1つでもあれば真で、全て外れると偽になる。キーごとに数える", () => {
+    // Given
+    const requests = createRefreshRequests();
+
+    // When
+    requests.wantFaces("a", true);
+    requests.wantFaces("b", true);
+    requests.wantFaces("a", false);
+    const whileOne = requests.facesWanted();
+    requests.wantFaces("b", false);
+
+    // Then
+    expect(whileOne).toBe(true);
+    expect(requests.facesWanted()).toBe(false);
+  });
+
+  it("印が変わったときだけ知らせる", () => {
+    // Given
+    const requests = createRefreshRequests();
+    const listener = vi.fn();
+    requests.subscribe(listener);
+
+    // When
+    requests.wantFaces("a", true);
+    requests.wantFaces("a", true);
+    requests.wantFaces("a", false);
+    requests.wantFaces("a", false);
+
+    // Then
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it("的の保存を知らせると、購読者を呼ぶ", () => {
+    // Given
+    const requests = createRefreshRequests();
+    const listener = vi.fn();
+    requests.subscribe(listener);
+
+    // When
+    requests.facesSaved();
+
+    // Then
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -50,15 +50,14 @@ export function createRoundQueries(
   database: DatabaseGateway<RoundsDbSchema>,
 ): RoundQueries {
   // target_facesのRLSは認証済みの全員に全行を見せるため、他人の個人の的を除くクエリの絞りが必須である。
-  // `retry`は、裏の取得(個別と一括)の一部として問い合わせるときだけ真にする。
-  const selectTargetFaces = (userId: string, retry = false) =>
+  const selectTargetFaces = (userId: string) =>
     database.select({
       table: "target_faces",
       columns: TARGET_FACE_SELECT,
       filters: [
         { op: "or", expression: `owner_id.is.null,owner_id.eq.${userId}` },
       ],
-      ...(retry ? { retry } : {}),
+      retry: true,
     });
 
   const roundOrders: readonly DbOrder<RoundsDbSchema, "rounds">[] = [
@@ -105,36 +104,27 @@ export function createRoundQueries(
   }
 
   return {
-    async roundDetail(userId, roundId) {
-      const [round, faces] = await Promise.all([
-        database.select({
-          table: "rounds",
-          columns: ROUND_SELECT,
-          filters: [
-            { op: "eq", column: "id", value: roundId },
-            { op: "is", column: "disabled_at", value: null },
-          ],
-          orders: roundOrders,
-          single: "maybe",
-          retry: true,
-        }),
-        selectTargetFaces(userId, true),
-      ]);
-      const failure = failureOfResponses([round, faces]);
+    async roundDetail(roundId) {
+      const round = await database.select({
+        table: "rounds",
+        columns: ROUND_SELECT,
+        filters: [
+          { op: "eq", column: "id", value: roundId },
+          { op: "is", column: "disabled_at", value: null },
+        ],
+        orders: roundOrders,
+        single: "maybe",
+        retry: true,
+      });
+      const failure = failureOfResponses([round]);
       if (failure) return failure;
       if (!round.data) return { status: "not-found" };
-      return {
-        status: "ok",
-        data: {
-          round: round.data as ServerRound,
-          targetFaces: toTargetFaces(faces.data),
-        },
-      };
+      return { status: "ok", data: round.data as ServerRound };
     },
     async roundDetails(userId, roundIds) {
       const chunks = roundIds.length > 0 ? chunkIds(roundIds) : [[]];
       const [faces, ...responses] = await Promise.all([
-        selectTargetFaces(userId, true),
+        selectTargetFaces(userId),
         ...chunks.map((chunk, index) => selectRoundsChunk(chunk, index)),
       ]);
       const failure = failureOfResponses([...responses, faces]);
@@ -162,12 +152,6 @@ export function createRoundQueries(
         status: "ok",
         data: response.data as ServerRoundSummary[],
       };
-    },
-    async targetFaces(userId) {
-      const faces = await selectTargetFaces(userId);
-      const failure = failureOfResponses([faces]);
-      if (failure) return failure;
-      return { status: "ok", data: toTargetFaces(faces.data) };
     },
     // preset_roundsのRLSは認証済みの全員に全行を見せるため、他人の個人プリセットを除くクエリの絞りが必須である。
     async presets(userId) {

@@ -8,12 +8,10 @@ import {
   settleOpenRun,
 } from "../domain/open-requests";
 import type { RoundTables } from "../domain/round-tables";
-import type { TargetFaceOption } from "../domain/target-face";
 
 // サーバーから取得した、開いた詳細の材料。
 export type OpenedRound = {
   base: RoundTables;
-  targetFaces: TargetFaceOption[];
 };
 
 // 取り直しの依頼の記録。画面は「開いた」と依頼するだけで、取得と反映の時点はこの記録では決めない。
@@ -29,6 +27,8 @@ export function createRefreshRequests() {
   const watching = new Map<string, number>();
   // 確定済みの操作をベースに重ねられなかった(取り直しが要る)開いた詳細。
   const overlay = new Set<string>();
+  // 的が足りないことを知らせる印。印を付けた側がキーを決める。
+  const facesWanted = new Set<string>();
   const listeners = new Set<() => void>();
 
   function changed() {
@@ -99,6 +99,16 @@ export function createRefreshRequests() {
       changed();
     },
     overlayNeeded: (roundId: string): boolean => overlay.has(roundId),
+    // 的が足りないという印を付ける、または外す。変わったときだけ知らせる。
+    wantFaces(key: string, wanted: boolean) {
+      if (facesWanted.has(key) === wanted) return;
+      if (wanted) facesWanted.add(key);
+      else facesWanted.delete(key);
+      changed();
+    },
+    facesWanted: (): boolean => facesWanted.size > 0,
+    // 的を端末へ保存したことを知らせる。
+    facesSaved: changed,
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {

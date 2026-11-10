@@ -47,7 +47,7 @@ async function retainedRoundIds(
 export function createRoundBaseRefreshing(deps: {
   hub: Pick<RoundRecordHub, "commit" | "readStored" | "clearDiverged">;
   fetching: Pick<RoundFetching, "fetchRoundDetail" | "fetchRoundDetails">;
-  requests: Pick<RefreshRequests, "beginRound" | "settleRound">;
+  requests: Pick<RefreshRequests, "beginRound" | "settleRound" | "facesSaved">;
 }) {
   const { hub, fetching, requests } = deps;
 
@@ -59,6 +59,8 @@ export function createRoundBaseRefreshing(deps: {
       const fetched = await fetching.fetchRoundDetails(retained);
       if (fetched.status === "ok") {
         await commitRoundDetails(hub, fetched.data, retained);
+        // 的は取得の中で端末へ保存済み。的の保存を待つ画面へ知らせる。
+        requests.facesSaved();
       }
     } catch {
       // 失敗は何もしない。
@@ -83,10 +85,7 @@ export function createRoundBaseRefreshing(deps: {
     );
     requests.settleRound(run, {
       status: "ok",
-      data: {
-        base: fetched.data.base.tables,
-        targetFaces: fetched.data.targetFaces,
-      },
+      data: { base: fetched.data.base.tables },
     });
   }
 

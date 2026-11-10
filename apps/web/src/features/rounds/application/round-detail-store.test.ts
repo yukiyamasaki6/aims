@@ -49,7 +49,6 @@ async function settled(promise: Promise<unknown>): Promise<boolean> {
 
 const opened = (): OpenedRound => ({
   base: roundBase({ name: "取得した" }).tables,
-  targetFaces: [face],
 });
 
 // 端末のベースで開ける組(入力中のベースと、保存した的)を持つ状態。
@@ -72,7 +71,6 @@ describe("load", () => {
     // Then
     expect(result).toEqual({ status: "not-found" });
     expect(tab.requests.pendingOpens()).toEqual([]);
-    expect(tab.fetching.fetchTargetFaces).not.toHaveBeenCalled();
   });
 
   it("作成が未確定で、保存済みの的があれば、的を取得せずに使い、作成の操作を基準にして、作成のeventIdを返す", async () => {
@@ -93,47 +91,48 @@ describe("load", () => {
         base: { round: { config: { name: "新規" } } },
       },
     });
-    expect(tab.fetching.fetchTargetFaces).not.toHaveBeenCalled();
+    expect(tab.requests.facesWanted()).toBe(false);
     expect(tab.requests.pendingOpens()).toEqual([]);
   });
 
-  it("作成が未確定で、保存済みの的が無ければ、的の取得を待って開く", async () => {
+  it("作成が未確定で、保存済みの的が無ければ、同期に再取得を促し、保存が現れたら開く", async () => {
     // Given
     const tab = createTestRounds();
     const created = roundCreated({ name: "新規" });
     await tab.hub.append(STREAM, created);
-    tab.fetching.fetchTargetFaces.mockResolvedValue({
-      status: "ok",
-      data: [face],
-    });
+    const loading = tab.detail.load("round-1");
+    await flush();
+    const prompted = tab.requests.facesWanted();
 
     // When
-    const result = await tab.detail.load("round-1");
+    tab.fetching.savedTargetFaces.mockReturnValue([face]);
+    tab.requests.facesSaved();
 
     // Then
-    expect(result).toMatchObject({
+    expect(prompted).toBe(true);
+    expect(await loading).toMatchObject({
       status: "ok",
       data: { pendingCreationEventId: created.eventId, targetFaces: [face] },
     });
-    expect(tab.requests.pendingOpens()).toEqual([]);
+    expect(tab.requests.facesWanted()).toBe(false);
   });
 
-  it("作成が未確定で、保存済みの的が無く、的の取得に失敗したときは、その失敗を返す", async () => {
+  it("作成が未確定で、保存済みの的が無く、オフラインなら、促さずに直ちにofflineを返す", async () => {
     // Given
-    const tab = createTestRounds();
+    const tab = createTestRounds({ offline: true });
     await tab.hub.append(STREAM, roundCreated());
-    tab.fetching.fetchTargetFaces.mockResolvedValue({ status: "offline" });
 
     // When
     const result = await tab.detail.load("round-1");
 
     // Then
     expect(result).toEqual({ status: "offline" });
+    expect(tab.requests.facesWanted()).toBe(false);
   });
 
   it("取得の依頼を記録し、取り直しの結果を待って返す", async () => {
     // Given
-    const tab = createTestRounds();
+    const tab = createTestRounds({ savedFaces: [face] });
     const loading = tab.detail.load("round-1");
     await flush();
     const requested = tab.requests.pendingOpens();
@@ -168,7 +167,7 @@ describe("load", () => {
 
   it("メモリの記録に無く、端末の保存にだけある削除は、開く判断に使わず取得に回す", async () => {
     // Given
-    const tab = createTestRounds();
+    const tab = createTestRounds({ savedFaces: [face] });
     await tab.hub.ready();
     await tab.opLog.append({
       eventId: "deleted",
@@ -188,7 +187,7 @@ describe("load", () => {
 
   it("メモリの記録に無く、端末の保存にだけある未確定の作成は、開く判断に使わず取得に回す", async () => {
     // Given
-    const tab = createTestRounds();
+    const tab = createTestRounds({ savedFaces: [face] });
     await tab.hub.ready();
     await tab.opLog.append({
       eventId: "created",
@@ -207,7 +206,6 @@ describe("load", () => {
       status: "ok",
       data: { pendingCreationEventId: null },
     });
-    expect(tab.fetching.fetchTargetFaces).not.toHaveBeenCalled();
   });
 
   describe("保存済みがあるとき(端末のベースと保存した的)", () => {
@@ -263,12 +261,9 @@ describe("load", () => {
   });
 
   describe("保存が無いとき(ベースが無い、または的の保存分が無い)", () => {
-    it.each([
-      ["ベースが無い", async () => createTestRounds()],
-      ["的の保存分が無い", async () => withLocalBase(null)],
-    ])("%sときは、取得の完了を待って開く", async (_name, setup) => {
+    it("ベースが無く、保存済みの的があるときは、取得の完了を待って開く", async () => {
       // Given
-      const tab = await setup();
+      const tab = createTestRounds({ savedFaces: [face] });
       const loading = tab.detail.load("round-1");
 
       // When
@@ -279,7 +274,46 @@ describe("load", () => {
       expect(beforeSettled).toBe(false);
       expect(await loading).toMatchObject({
         status: "ok",
+        data: { targetFaces: [face], pendingCreationEventId: null },
       });
+      expect(tab.requests.facesWanted()).toBe(false);
+    });
+
+    it("的の保存分が無いときは、取得の完了と的の保存を待って開き、的は取得せず同期に再取得を促す", async () => {
+      // Given
+      const tab = await withLocalBase(null);
+      const loading = tab.detail.load("round-1");
+      await flush();
+      settleRoundNow(tab.requests, "round-1", { status: "ok", data: opened() });
+      const beforeSaved = await settled(loading);
+      const prompted = tab.requests.facesWanted();
+
+      // When
+      tab.fetching.savedTargetFaces.mockReturnValue([face]);
+      tab.requests.facesSaved();
+
+      // Then
+      expect(beforeSaved).toBe(false);
+      expect(prompted).toBe(true);
+      expect(await loading).toMatchObject({
+        status: "ok",
+        data: { targetFaces: [face] },
+      });
+      expect(tab.requests.facesWanted()).toBe(false);
+    });
+
+    it("的の保存分が無く、オフラインなら、取得の結果を受けてofflineを返す", async () => {
+      // Given
+      const tab = createTestRounds({ offline: true });
+      const loading = tab.detail.load("round-1");
+      await flush();
+
+      // When
+      settleRoundNow(tab.requests, "round-1", { status: "ok", data: opened() });
+
+      // Then
+      expect(await loading).toEqual({ status: "offline" });
+      expect(tab.requests.facesWanted()).toBe(false);
     });
 
     it.each([
@@ -299,6 +333,7 @@ describe("load", () => {
 
         // Then
         expect(await loading).toEqual(fetched);
+        expect(tab.requests.facesWanted()).toBe(false);
       },
     );
   });
@@ -320,6 +355,23 @@ describe("load", () => {
         status: "error",
         reason: "failed",
       });
+    });
+
+    it("保存を待つ間に打ち切られると、的を促す印は外れる", async () => {
+      // Given
+      const tab = await withLocalBase(null);
+      const loading = tab.detail.load("round-1");
+      await flush();
+      settleRoundNow(tab.requests, "round-1", { status: "ok", data: opened() });
+      const prompted = tab.requests.facesWanted();
+
+      // When
+      await tab.clock.advanceAsync(FETCH_TIMEOUT_MS);
+
+      // Then
+      expect(prompted).toBe(true);
+      expect(await loading).toEqual({ status: "error", reason: "failed" });
+      expect(tab.requests.facesWanted()).toBe(false);
     });
 
     it("打ち切りの時点で切断なら、offlineにする", async () => {

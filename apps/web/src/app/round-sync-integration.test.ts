@@ -37,13 +37,13 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 function detail(name: string): FetchedRoundDetail {
   return {
     base: roundBase({ name }),
-    targetFaces: [],
     startedAt: 100,
     userId: "user-1",
   };
 }
 
 function rig() {
+  const faces: { current: { id: string }[] | null } = { current: [] };
   const { hub } = createTestRoundHub();
   const requests = createRefreshRequests();
   const clock = createManualClock();
@@ -52,9 +52,8 @@ function rig() {
     fetchRoundDetail:
       vi.fn<(roundId: string) => Promise<FetchResult<FetchedRoundDetail>>>(),
     fetchRoundDetails: vi.fn(),
-    fetchTargetFaces: vi.fn(),
     fetchRoundsList: vi.fn(async () => ({ status: "ok", data: [] }) as const),
-    savedTargetFaces: () => null,
+    savedTargetFaces: () => faces.current,
   };
   const session = {
     readSession: async () =>
@@ -101,7 +100,7 @@ function rig() {
     connectivity,
   });
   sync.start("user-1");
-  return { sync, detail, list, requests, fetching, clock };
+  return { sync, detail, list, requests, fetching, clock, faces };
 }
 
 const deferredDetail = () =>
@@ -131,6 +130,37 @@ describe("詳細を開く依頼と同期", () => {
     expect(await loadFirst).toMatchObject({ status: "ok" });
     expect(await loadSecond).toMatchObject({ status: "ok" });
     expect(t.fetching.fetchRoundDetail).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("保存済みの的が無い初回の読み込み", () => {
+  it("同期に再取得を促し、常駐の取得が的を保存すると、保存を待っていた詳細が開く", async () => {
+    // Given
+    const t = rig();
+    await flush();
+    t.faces.current = null;
+    t.fetching.fetchRoundDetail.mockResolvedValue({
+      status: "ok",
+      data: detail("取得した"),
+    });
+    t.fetching.fetchRoundDetails.mockImplementation(async () => {
+      t.faces.current = [{ id: "face-1" }];
+      return {
+        status: "ok",
+        data: { rounds: new Map(), startedAt: 100, userId: "user-1" },
+      };
+    });
+
+    // When
+    const result = await t.detail.load("r1");
+
+    // Then
+    expect(t.fetching.fetchRoundDetails).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      status: "ok",
+      data: { targetFaces: [{ id: "face-1" }] },
+    });
+    expect(t.requests.facesWanted()).toBe(false);
   });
 });
 

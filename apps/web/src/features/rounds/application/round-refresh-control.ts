@@ -20,6 +20,8 @@ export type RoundRefreshControl = {
     }[];
   };
   onRefreshNeeds(listener: () => void): void;
+  // 的が足りない画面があるか(再取得を促す印が付いているか)。
+  facesWanted(): boolean;
   // 入力中のラウンドと端末が保持するラウンドを、まとめて取得して端末の記録へ反映する。失敗しても拒否しない。
   refreshAll(): Promise<void>;
   // 1つのラウンドを取得して端末の記録へ反映する。次の契約に従う。
@@ -37,6 +39,7 @@ export function createRoundRefreshControl(deps: {
     | "watched"
     | "overlayNeeded"
     | "latestOpenRequest"
+    | "facesWanted"
     | "subscribe"
   >;
   refresh: RoundBaseRefreshing;
@@ -72,6 +75,7 @@ export function createRoundRefreshControl(deps: {
       requests.subscribe(listener);
       hub.subscribe(listener);
     },
+    facesWanted: () => requests.facesWanted(),
     refreshAll: () => refresh.refreshAll(),
     refreshRound: (roundId) => refresh.refreshRound(roundId),
   };
