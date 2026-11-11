@@ -2,10 +2,10 @@
 
 ## 概要
 
-一覧・作成・詳細・同期が共有する構造と、機能ごとに別の言い方にしない判断を書く。
+ホーム・履歴・作成・詳細・同期が共有する構造と、機能ごとに別の言い方にしない判断を書く。
 機能ごとの画面と流れは、各機能の`design.md`に従う。構造の方針は`docs/architecture.md`に従う。
-画面へ状態と変更の方法を渡す窓口は一覧の取得(`RoundsListStore`)と、端末内の取得と同期の窓口(`RoundWindow`。詳細の購読と端末内の入力中一覧)の2つで、作成の画面は窓口を持たず、手続きは画面に属し、記録のハブは1つで、同期は同期からラウンドへの一方向である。
-一覧・作成・詳細の画面は、離れる・ラウンドの削除(一覧)・開始・プリセットの保存と削除と取得・IDの払い出し・オンライン復帰の通知(`whenOnline`)を、手続きの入れ物(`RoundProcedures`)から直接受ける。作成の画面は窓口を持たず、一覧と詳細は窓口も受ける。
+画面へ状態と変更の方法を渡す窓口は履歴の取得(`RoundsListStore`。ホームは使わない)と、端末内の取得と同期の窓口(`RoundWindow`。詳細の購読と端末内の入力中一覧)の2つで、作成の画面は窓口を持たず、手続きは画面に属し、記録のハブは1つで、同期は同期からラウンドへの一方向である。
+ホーム・履歴・作成・詳細の画面は、離れる・ラウンドの削除(ホームと履歴)・開始・プリセットの保存と削除と取得・IDの払い出し・オンライン復帰の通知(`whenOnline`)を、手続きの入れ物(`RoundProcedures`)から直接受ける。作成の画面は窓口を持たず、ホーム(`RoundWindow`だけ)、履歴(両方)、詳細は窓口も受ける。
 複数の画面で使う`whenOnline`は、手続きの入れ物から受け、共有フック`useFetchResult`は受け元を知らずに引数で受ける(詳細の窓口は、offlineの間の自動の再取得を窓口の内側で行う)。
 入口は層までのパスで各層の生成関数を取り込む(`docs/architecture.md`の「2. 規則」の参照の書き方。入口から機能の中へは層までのパス)。
 
@@ -67,11 +67,11 @@ flowchart LR
 
 ### 窓口のメンバー
 
-一覧の窓口`RoundsListStore`(`features/rounds/application/rounds-list-store.ts`)
+履歴の窓口`RoundsListStore`(`features/rounds/application/rounds-list-store.ts`)
 
 | メンバー | 内容 | 委譲先・実装 |
 | --- | --- | --- |
-| `loadList()` | 一覧の取得を行い、端末の列で削除済みのラウンドのIDを添えて一覧の材料を返す。`FETCH_TIMEOUT_MS`で打ち切る。拒否することがある | 窓口内、`fetching.fetchRoundsList`、`hub` |
+| `loadList()` | 履歴の取得(サーバーで完了と記録されたラウンド)を行い、端末の列で削除済みのラウンドのIDを添えて履歴の材料を返す。`FETCH_TIMEOUT_MS`で打ち切る。拒否することがある | 窓口内、`fetching.fetchRoundsList`、`hub` |
 
 窓口`RoundWindow`(`features/rounds/application/round-window.ts`。エントリは`round-window-entry.ts`)
 
@@ -88,9 +88,9 @@ flowchart LR
 
 | メンバー | 使い手の画面 | 置き場 | 理由 |
 | --- | --- | --- | --- |
-| `whenOnline` | 一覧、作成、詳細の不正なID(`use-fetch-result.ts`が受け元の関数を引数で受ける) | 手続きの入れ物が持つ。実装は`application/when-online.ts`の1つ | 窓口は判断か写しを持つメンバーだけにし、共有フックが窓口に依存しない。契約と挙動は1か所 |
-| 窓口の文脈(`ui/rounds-context.tsx`) | 一覧、詳細 | 窓口ごとに別の文脈(`RoundsListStore`と`RoundWindow`。Providerとhookを各窓口に1つずつ) | 画面は自分の窓口だけを取り出せる。テストは使う窓口だけを渡す |
-| 手続きの入れ物`RoundProcedures`(`ui/rounds-context.tsx`) | 詳細(完了`use-scorecard.ts`の`leaving.completeRound(roundId, isCurrent)`、削除`round-menu.tsx`の`leaving.deleteRoundAndLeave(roundId, isCurrent)`、プリセットの保存`save-preset-dialog.tsx`、IDの払い出し`round-config-panel.tsx`・`use-distance-draft.ts`・`use-distance-editing.ts`・`use-shot-input.ts`、矢のIDの払い出し`use-shot-input.ts`の`newShotId`)、一覧(削除`rounds-list.tsx`の`deletion.deleteRound`、`whenOnline`)、作成(開始`use-start-round.ts`の`roundStart.startRound(preset, isCurrent)`(結果は`created`か`failed`(`unauthenticated`、`left`)。離れた後の追記と遷移を手続きの待ちの後に止めるため`isCurrent`を残す。完了・削除も同じ形で保存の完了の後に`isCurrent`を問う)、個人プリセットの削除`use-preset-delete.ts`の`presetDeletion.deletePreset(presetId)`、取得`round-preset-select.tsx`の`fetching.fetchPresets`、`whenOnline`) | 離れる手続き`leaving`(`completeRound`、`deleteRoundAndLeave`)、離れない削除の手続き`deletion`(`deleteRound`。一覧が使う)、開始の手続き`roundStart`、保存の手続き`presetSaving`(`savePreset`)、個人プリセットの削除の手続き`presetDeletion`、取得`fetching`(`fetchPresets`だけ)、`ids`(`next`)、`whenOnline`、`newShotId`を1つの文脈(Providerとhookを1つ)にまとめる | 窓口を通さずに手続きを直接受ける。素通しの窓口(作成)を持たず、別の文脈にすると入口の入れ子が増える |
+| `whenOnline` | 履歴、作成、詳細の不正なID(`use-fetch-result.ts`が受け元の関数を引数で受ける) | 手続きの入れ物が持つ。実装は`application/when-online.ts`の1つ | 窓口は判断か写しを持つメンバーだけにし、共有フックが窓口に依存しない。契約と挙動は1か所 |
+| 窓口の文脈(`ui/rounds-context.tsx`) | ホーム(`RoundWindow`)、履歴、詳細 | 窓口ごとに別の文脈(`RoundsListStore`と`RoundWindow`。Providerとhookを各窓口に1つずつ) | 画面は自分の窓口だけを取り出せる。テストは使う窓口だけを渡す |
+| 手続きの入れ物`RoundProcedures`(`ui/rounds-context.tsx`) | 詳細(完了`use-scorecard.ts`の`leaving.completeRound(roundId, isCurrent)`、削除`round-menu.tsx`の`leaving.deleteRoundAndLeave(roundId, origin, isCurrent)`、プリセットの保存`save-preset-dialog.tsx`、IDの払い出し`round-config-panel.tsx`・`use-distance-draft.ts`・`use-distance-editing.ts`・`use-shot-input.ts`、矢のIDの払い出し`use-shot-input.ts`の`newShotId`)、ホームと履歴(削除`round-delete.tsx`の`deletion.deleteRound`、履歴の`whenOnline`)、作成(開始`use-start-round.ts`の`roundStart.startRound(preset, isCurrent)`(結果は`created`か`failed`(`unauthenticated`、`left`)。離れた後の追記と遷移を手続きの待ちの後に止めるため`isCurrent`を残す。完了・削除も同じ形で保存の完了の後に`isCurrent`を問う)、個人プリセットの削除`use-preset-delete.ts`の`presetDeletion.deletePreset(presetId)`、取得`round-preset-select.tsx`の`fetching.fetchPresets`、`whenOnline`) | 離れる手続き`leaving`(`completeRound`、`deleteRoundAndLeave`)、離れない削除の手続き`deletion`(`deleteRound`。ホームと履歴が使う)、開始の手続き`roundStart`、保存の手続き`presetSaving`(`savePreset`)、個人プリセットの削除の手続き`presetDeletion`、取得`fetching`(`fetchPresets`だけ)、`ids`(`next`)、`whenOnline`、`newShotId`を1つの文脈(Providerとhookを1つ)にまとめる | 窓口を通さずに手続きを直接受ける。素通しの窓口(作成)を持たず、別の文脈にすると入口の入れ子が増える |
 
 追記は窓口の`append`が手続き`round-editing.ts`を通して行う。
 窓口の生成は、状態を持たない部分をモジュール関数に出し、deps(受け取る手続きと部品)を引数で受ける。状態を閉じ込める`createRoundEntry`(`round-window-entry.ts`)と`createLocalListWatch`だけが関数の長さの例外を持つ。判断の規則は`features/rounds/domain/round-opening.ts`の純粋関数にある。
@@ -99,13 +99,14 @@ flowchart LR
 
 | 画面 | ファイル | 窓口(hook) |
 | --- | --- | --- |
-| 一覧 | `rounds-list.tsx`、`use-local-rounds-list.ts` | `useRoundsListStore`(`loadList`)、`useRoundWindow`(`watchLocalList`、`localList`)、`useRoundProcedures`(`deletion`、`whenOnline`) |
+| ホーム | `rounds-home.tsx`、`use-local-rounds-list.ts` | `useRoundWindow`(`watchLocalList`、`localList`)、`useRoundProcedures`(`deletion`) |
+| 履歴 | `rounds-history.tsx`、`use-local-rounds-list.ts` | `useRoundsListStore`(`loadList`)、`useRoundWindow`(`watchLocalList`、`localList`)、`useRoundProcedures`(`deletion`、`whenOnline`) |
 | 作成 | `round-preset-select.tsx`、`preset-list.tsx`、`use-start-round.ts`、`use-preset-delete.ts` | 窓口なし。`useRoundProcedures`(`roundStart`、`presetDeletion`、`fetching`、`whenOnline`) |
 | 詳細 | `round-detail-client.tsx`、`use-round-screen.ts`、`use-scorecard.ts`、`use-shot-input.ts`、`use-distance-editing.ts`、`distance-edit-fields.tsx`、`distance-fields.tsx`、`use-distance-draft.ts`、`round-config-panel.tsx`、`round-menu.tsx`、`save-preset-dialog.tsx` | `useRoundWindow`(`watch`、`view`、`retry`、`append`)、`useRoundProcedures`(`leaving`、`presetSaving`、`ids`、`newShotId`。`round-detail-client.tsx`は不正なIDの部品だけが`whenOnline`を使う) |
 | 詳細(窓口を使わない) | 上以外の`ui/`のファイル(`scorecard-client.tsx`、`round-summary-bar.tsx`、`end-row.tsx`、`keypad-panel.tsx`ほか) | なし(propsで値と関数を受ける) |
 | 複数画面 | `use-fetch-result.ts`、`fetch-state.tsx` | なし(`use-fetch-result.ts`は`whenOnline`を引数で受ける) |
 | 複数画面 | `preset-info.tsx`、`target-face-info.tsx` | なし(表示だけ。作成と詳細が使う) |
-| 複数画面 | `rounds-context.tsx` | 一覧と詳細の窓口の文脈と、手続きの入れ物の文脈を定義 |
+| 複数画面 | `rounds-context.tsx` | 履歴と詳細の窓口の文脈と、手続きの入れ物の文脈を定義 |
 
 `round-config-panel.tsx`は詳細(スコアカードの設定の節)、`save-preset-dialog.tsx`は詳細(スコアカードのヘッダー)に属する。
 
@@ -121,17 +122,17 @@ flowchart LR
 | 開始の手続き`RoundStart` | ハブ、サインインの読み手、ID、時計、遷移 |
 | 個人プリセット削除の手続き | サインインの読み手、命令、保存済み |
 | 保存の手続き | サインインの読み手、命令、取得 |
-| 一覧の窓口 | ハブ、取得、時計、接続 |
+| 履歴の窓口 | ハブ、取得、時計、接続 |
 | 窓口`RoundWindow` | ハブ、取得、取得と反映(`refreshRound`)、追記の手続き、時計、接続 |
 | 取り直しの制御 | ハブ、窓口(`readyRounds`、`onReadyChange`)、取得と反映 |
 | 手続きの入れ物 | 離れる手続き、削除の手続き、開始の手続き、保存の手続き、個人プリセット削除の手続き、取得、ID、接続(`whenOnline`) |
 
 取り直しの制御は窓口の準備完了の詳細を読む(`app/round-sync-integration.test.ts`が検証する)。
-一覧と詳細の窓口の文脈と手続きの入れ物の文脈は入れ子にして`children`を包む。同期と契機、オフラインの組み立ては窓口と無関係である。
+履歴と詳細の窓口の文脈と手続きの入れ物の文脈は入れ子にして`children`を包む。同期と契機、オフラインの組み立ては窓口と無関係である。
 
 ### 窓口に関わるファイル
 
-- `features/rounds/application/`: `rounds-list-store.ts`(一覧の取得)、`round-window.ts`、`round-window-entry.ts`(窓口と詳細のエントリ)、`when-online.ts`(通信の復帰の合図)、`round-deletion.ts`(画面に残る削除)、`round-leaving.ts`(完了、削除して離れる)、`time-limit.ts`(`withinFetchTimeout`を持つ)、`content-fetcher.ts`(認証つきの取得と、auth-rejectedでのセッション更新・1回の取り直し。`QueryOutcome`から`FetchResult`への変換は`fetchResultOf`を呼ぶ)。
+- `features/rounds/application/`: `rounds-list-store.ts`(履歴の取得)、`round-window.ts`、`round-window-entry.ts`(窓口と詳細のエントリ)、`when-online.ts`(通信の復帰の合図)、`round-deletion.ts`(画面に残る削除)、`round-leaving.ts`(完了、削除して離れる)、`time-limit.ts`(`withinFetchTimeout`を持つ)、`content-fetcher.ts`(認証つきの取得と、auth-rejectedでのセッション更新・1回の取り直し。`QueryOutcome`から`FetchResult`への変換は`fetchResultOf`を呼ぶ)。
 - `features/rounds/domain/`: `fetch-status.ts`(取得の結果`FetchResult`(失敗は種類`reason`で持つ)、サインインの確認の失敗の種類`SignInFailure`、`QueryOutcome`から結果への`fetchResultOf`)、`fetch-wait.ts`(時間制限の値)、`query-outcome.ts`(問い合わせの結果の種類`QueryOutcome`、型だけ)。
 - `features/rounds/infrastructure/`: `db-response-outcome.ts`(データベースの応答を`QueryOutcome`の種類へ写し、複数の応答を畳む優先順を持つ`failureOfResponses`)。
 - `features/rounds/ui/`: `rounds-context.tsx`(窓口の2つの文脈と手続きの入れ物の文脈)、`use-fetch-result.ts`(`whenOnline`を引数で受ける)。
@@ -157,9 +158,9 @@ flowchart LR
 
 | 判断 | 理由 | 見直す条件 |
 | --- | --- | --- |
-| 窓口は判断か写しを持つ一覧と詳細だけにし、作成は手続きの入れ物から直接受ける。`whenOnline`は一覧と作成が手続きの入れ物から、詳細が窓口から受ける | 手続きへの委譲だけの窓口は、テストの差し替えのための層になるため置かない。共有フックは受け元に依存しない | 作成の画面が判断を持つとき |
-| 操作のIDは詳細の画面が手続きの入れ物の`ids`から受ける(矢のIDは窓口の`newShotId`) | 操作を組み立てるのは詳細の画面だけで、一覧の削除と作成の開始は手続きが払い出すため。操作の組み立てを手続きへ移す案は、同じ操作を表す型が2つになり、指す矢と履歴の持ち主が画面と手続きに分かれるため採らない | 操作の組み立てを全て手続きへ移すとき |
-| 削除は一覧が手続きの入れ物の`deletion.deleteRound`(画面に残る)、詳細が`leaving.deleteRoundAndLeave`(離れる)を直接受けて呼び、手続きも`round-deletion.ts`と`round-leaving.ts`に分ける | 各窓口に削除が1つになり、他画面の削除を指す注記が要らなくなるため。手続きを分けない案は、一覧が「離れる手続き」の削除を引き、手続きの責務の説明が画面と合わないため採らない | 一覧と詳細の削除の手続きが同じ変更を受け続けるとき |
-| 取得結果の型・失敗の種類・分類・時間制限を`rounds`の内側に置く(層ごとに分ける。文言はUI層の一覧が持つ) | `FetchResult`の失敗の種類と分類は業務の言葉を持ち、`rounds`以外の機能が使っていないため。共有へ上げる条件は、`rounds`以外の機能が使う、または`docs/architecture.md`の「1. 構造」の共有の技術(業務の言葉を持たない)を満たす見込みのとき。上げられるのは`FETCH_TIMEOUT_MS`・`SHORT_WAIT_MS`だけで、`FetchResult`の種類は共有に置けない(「1. 構造」の共有の技術) | 他の機能が取得結果の型や時間制限を使うとき |
+| 窓口は判断か写しを持つ履歴と詳細だけにし、作成は手続きの入れ物から直接受ける。`whenOnline`は履歴と作成が手続きの入れ物から、詳細が窓口から受ける | 手続きへの委譲だけの窓口は、テストの差し替えのための層になるため置かない。共有フックは受け元に依存しない | 作成の画面が判断を持つとき |
+| 操作のIDは詳細の画面が手続きの入れ物の`ids`から受ける(矢のIDは窓口の`newShotId`) | 操作を組み立てるのは詳細の画面だけで、ホーム・履歴の削除と作成の開始は手続きが払い出すため。操作の組み立てを手続きへ移す案は、同じ操作を表す型が2つになり、指す矢と履歴の持ち主が画面と手続きに分かれるため採らない | 操作の組み立てを全て手続きへ移すとき |
+| 削除はホームと履歴が手続きの入れ物の`deletion.deleteRound`(画面に残る)、詳細が`leaving.deleteRoundAndLeave`(遷移元へ離れる)を直接受けて呼び、手続きも`round-deletion.ts`と`round-leaving.ts`に分ける | 各窓口に削除が1つになり、他画面の削除を指す注記が要らなくなるため。手続きを分けない案は、ホームと履歴が「離れる手続き」の削除を引き、手続きの責務の説明が画面と合わないため採らない | ホーム・履歴と詳細の削除の手続きが同じ変更を受け続けるとき |
+| 取得結果の型・失敗の種類・分類・時間制限を`rounds`の内側に置く(層ごとに分ける。文言はUI層の文言の一覧が持つ) | `FetchResult`の失敗の種類と分類は業務の言葉を持ち、`rounds`以外の機能が使っていないため。共有へ上げる条件は、`rounds`以外の機能が使う、または`docs/architecture.md`の「1. 構造」の共有の技術(業務の言葉を持たない)を満たす見込みのとき。上げられるのは`FETCH_TIMEOUT_MS`・`SHORT_WAIT_MS`だけで、`FetchResult`の種類は共有に置けない(「1. 構造」の共有の技術) | 他の機能が取得結果の型や時間制限を使うとき |
 | 入口は層までのパスで各層の生成関数を取り込む | `docs/architecture.md`の「2. 規則」の参照の書き方(入口から機能の中へは層までのパス)に従うため | 規則が変わったとき |
 | テスト補助は使う層のうち最も内側の層に置く | 参照の向きを依存の向きに合わせ、補助が使い手より外側の層に置かれて層が不明になることを避けるため | テストの置き場の方針が変わったとき |
