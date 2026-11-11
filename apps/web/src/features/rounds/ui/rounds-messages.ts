@@ -17,7 +17,7 @@ export const roundsMessages = {
     // 共通
     save: "保存",
     delete: "削除",
-    backToList: "一覧へ戻る",
+    back: "戻る",
     requiredMark: "*",
     // 取得の状態
     fetchLoading: "読み込み中",
@@ -27,11 +27,9 @@ export const roundsMessages = {
       unauthenticated: signInFailureText.unauthenticated,
       failed: "読み込めませんでした。",
     } satisfies Record<FetchFailure, string>,
-    // ラウンド一覧
-    listTitle: "ラウンド一覧",
-    listInProgress: "入力中",
-    listHistory: "過去履歴",
-    listEmpty: "まだラウンドがありません。",
+    // ホームと履歴
+    homeEmpty: "入力中のラウンドはありません",
+    historyEmpty: "完了したラウンドはありません。",
     newRoundLabel: "ラウンドを新規作成",
     roundTotalPoints: "{total}点",
     roundMenuLabel: "ラウンドのメニュー",
@@ -43,7 +41,6 @@ export const roundsMessages = {
       "「{name}」を削除しますか？記録したスコアもすべて失われます。",
     detailNotFound: "ラウンドが見つかりません。",
     // ラウンドの作成とプリセット
-    createRound: "ラウンドを作成",
     startNotice: "種別・弓種・距離は開始後に変更可能です。",
     startWithPreset: "「{name}」で開始",
     startWithoutPreset: "プリセット無しで開始",

@@ -27,7 +27,7 @@ const loaded: LocalRoundsList = {
   inProgress: [
     {
       id: "r1",
-      name: roundsText("listInProgress"),
+      name: roundsText("homeEmpty"),
       roundDate: "2026-09-15",
       total: 3,
     },
