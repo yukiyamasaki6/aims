@@ -24,7 +24,6 @@ import {
   hasAllTargetFaces,
   type TargetFaceOption,
 } from "../domain/target-face";
-import type { RefreshRequests } from "./refresh-requests";
 import type { RoundBaseRefreshing } from "./round-base-refreshing";
 import type { RoundEditing } from "./round-editing";
 import type { RoundFetching } from "./round-fetching";
@@ -46,7 +45,8 @@ export type RoundEntryDeps = {
   hub: Pick<RoundRecordHub, "ready" | "record" | "subscribe">;
   fetching: Pick<RoundFetching, "savedTargetFaces" | "fetchTargetFaces">;
   refresh: Pick<RoundBaseRefreshing, "refreshRound">;
-  requests: Pick<RefreshRequests, "watch" | "setOverlay">;
+  // 準備完了の印。overlayは取り直しが要るか、nullは準備完了でない。
+  marks: { set(roundId: string, overlay: boolean | null): void };
   editing: RoundEditing;
   clock: Clock;
   connectivity: Connectivity;
@@ -88,8 +88,7 @@ export function createRoundEntry(
   roundId: string,
   deps: RoundEntryDeps,
 ): RoundEntry {
-  const { hub, fetching, refresh, requests, editing, clock, connectivity } =
-    deps;
+  const { hub, fetching, refresh, marks, editing, clock, connectivity } = deps;
   const streamId = roundStreamId(roundId);
   let notify: () => void = () => {};
   let stopped = false;
@@ -112,7 +111,6 @@ export function createRoundEntry(
   let derivation: Derivation | null = null;
   let initiallyEmpty: boolean | null = null;
   // 準備完了の間だけ付ける、開いている印と、通信の復帰の見張り。
-  let unwatch: (() => void) | undefined;
   let watchingOnline = false;
   let stopOnline: (() => void) | undefined;
   let stopHub: (() => void) | undefined;
@@ -187,14 +185,7 @@ export function createRoundEntry(
 
   // 準備完了の間だけ、取り直しの対象にする印を付ける。
   function syncReadyMarks(ready: Derivation | null) {
-    if (ready) {
-      unwatch ??= requests.watch(roundId);
-      requests.setOverlay(roundId, ready.screen.needsRefetch);
-      return;
-    }
-    unwatch?.();
-    unwatch = undefined;
-    requests.setOverlay(roundId, false);
+    marks.set(roundId, ready ? ready.screen.needsRefetch : null);
   }
 
   // offlineの間だけ、通信が戻ったら自動で再取得する。errorは自動で再取得しない。
@@ -333,9 +324,7 @@ export function createRoundEntry(
       stopped = true;
       stopHub?.();
       stopOnline?.();
-      unwatch?.();
-      unwatch = undefined;
-      requests.setOverlay(roundId, false);
+      marks.set(roundId, null);
     },
   };
 }

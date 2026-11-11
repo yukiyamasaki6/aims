@@ -50,7 +50,6 @@ describe("loadList", () => {
     // Then
     expect(result).toMatchObject({ status: "ok" });
     expect(tab.fetching.fetchRoundDetails).not.toHaveBeenCalled();
-    expect(tab.requests.pendingOpens()).toEqual([]);
   });
 
   it("一覧の取得が失敗したら、一覧の結果を返す", async () => {

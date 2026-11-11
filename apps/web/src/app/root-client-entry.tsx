@@ -21,7 +21,6 @@ import { createOpSender } from "@/features/rounds/application/op-sender";
 import { createOperationSending } from "@/features/rounds/application/operation-sending";
 import { createPresetDeletion } from "@/features/rounds/application/preset-deletion";
 import { createPresetSaving } from "@/features/rounds/application/preset-saving";
-import { createRefreshRequests } from "@/features/rounds/application/refresh-requests";
 import { createRoundBaseRefreshing } from "@/features/rounds/application/round-base-refreshing";
 import { createRoundDeletion } from "@/features/rounds/application/round-deletion";
 import { createRoundEditing } from "@/features/rounds/application/round-editing";
@@ -92,7 +91,6 @@ function composeRecords(inputs: Inputs) {
       roundStreamRules,
     ),
   });
-  const requests = createRefreshRequests();
   const ids = createBrowserUniqueIds();
   const editing = createRoundEditing({ hub, ids });
   const snapshots = createReferenceSnapshots(identityStore);
@@ -118,14 +116,13 @@ function composeRecords(inputs: Inputs) {
     hub,
     fetching,
     refresh: refreshing,
-    requests,
     editing,
     clock,
     connectivity,
   });
   const refresh = createRoundRefreshControl({
     hub,
-    requests,
+    roundWindow,
     refresh: refreshing,
   });
   return {

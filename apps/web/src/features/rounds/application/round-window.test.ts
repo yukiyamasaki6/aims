@@ -728,6 +728,26 @@ describe("watch / view: 取得の再試行と購読", () => {
     expect(tab.hub.record(STREAM).base?.base).not.toBeNull();
   });
 
+  it("解除した後に届いた取得の結果で、準備完了の印を付け直さない", async () => {
+    // Given
+    const tab = await detailTab();
+    const run = Promise.withResolvers<RoundDetailResult>();
+    tab.fetching.fetchRoundDetail.mockReturnValue(run.promise);
+    const stop = tab.watch();
+    await flush();
+    stop();
+    const changed = vi.fn();
+    tab.roundWindow.onReadyChange(changed);
+
+    // When
+    run.resolve(fetchedBase("遅れた"));
+    await flush();
+
+    // Then
+    expect(tab.roundWindow.readyRounds()).toEqual([]);
+    expect(changed).not.toHaveBeenCalled();
+  });
+
   it("最後に始めた実行の結果だけを採用する(先の実行が後に終わっても上書きしない)", async () => {
     // Given
     const tab = await detailTab({ savedFaces: FACES });
@@ -828,23 +848,72 @@ describe("append / 画面の導出", () => {
     expect(tab.listener).not.toHaveBeenCalled();
   });
 
-  it("準備完了のラウンドだけを開いている印にし、確定済みの操作を重ねられないときだけ取り直しの印を付ける", async () => {
+  it("準備完了のラウンドだけをreadyRoundsに出し、準備完了の増減で通知する。解除すると外れる", async () => {
     // Given
     const tab = await detailTab();
     await storeBase(tab);
-    tab.fetching.fetchRoundDetail.mockReturnValue(new Promise(() => {}));
+    const changed = vi.fn();
+    tab.roundWindow.onReadyChange(changed);
 
     // When
     const stop = tab.watch();
-    const beforeLoaded = tab.requests.watched();
+    const beforeLoaded = tab.roundWindow.readyRounds();
     await flush();
-    const whileReady = tab.requests.watched();
+    const whileReady = tab.roundWindow.readyRounds();
+    const callsWhileReady = changed.mock.calls.length;
     stop();
 
     // Then
     expect(beforeLoaded).toEqual([]);
-    expect(whileReady).toEqual([{ roundId: ROUND }]);
-    expect(tab.requests.watched()).toEqual([]);
-    expect(tab.requests.overlayNeeded(ROUND)).toBe(false);
+    expect(whileReady).toEqual([{ roundId: ROUND, overlay: false }]);
+    expect(callsWhileReady).toBe(1);
+    expect(tab.roundWindow.readyRounds()).toEqual([]);
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+
+  it("確定済みの操作をベースに重ねられないとき、overlayが真になり、解消すると偽に戻って通知する", async () => {
+    // Given
+    const tab = await detailTab();
+    const distance = {
+      id: "d-1",
+      position_key: "a",
+      distance: 18,
+      total_ends: 1,
+      arrows_per_end: 1,
+      target_face_id: "face-1",
+      is_marked: true,
+    };
+    const stored = {
+      id: "s-0",
+      distance_id: "d-1",
+      end_number: 1,
+      score_str: "10",
+      score_int: 10,
+      shot_number: null,
+    };
+    await tab.hub.commit(
+      STREAM,
+      roundBase({ distances: [distance], shots: [stored] }),
+      50,
+      "user-1",
+    );
+    tab.watch();
+    await flush();
+    const changed = vi.fn();
+    tab.roundWindow.onReadyChange(changed);
+    const op = shotRecorded({ shotId: "s-1", eventId: "e-s1" });
+    await tab.hub.append(STREAM, op);
+
+    // When
+    tab.hub.applySendResults(STREAM, ["e-s1"], [ackedOnce]);
+    const overlaid = tab.roundWindow.readyRounds();
+    await tab.hub.discard(STREAM, ["e-s1"]);
+
+    // Then
+    expect(overlaid).toEqual([{ roundId: ROUND, overlay: true }]);
+    expect(tab.roundWindow.readyRounds()).toEqual([
+      { roundId: ROUND, overlay: false },
+    ]);
+    expect(changed).toHaveBeenCalledTimes(2);
   });
 });

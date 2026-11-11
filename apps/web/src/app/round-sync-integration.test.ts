@@ -6,7 +6,6 @@ import {
   createOperationSending,
   type SendOutcome,
 } from "@/features/rounds/application/operation-sending";
-import { createRefreshRequests } from "@/features/rounds/application/refresh-requests";
 import { createRoundBaseRefreshing } from "@/features/rounds/application/round-base-refreshing";
 import { createRoundEditing } from "@/features/rounds/application/round-editing";
 import type {
@@ -46,7 +45,6 @@ function detail(name: string): FetchedRoundDetail {
 function rig() {
   const faces: { current: { id: string }[] | null } = { current: [] };
   const { hub } = createTestRoundHub();
-  const requests = createRefreshRequests();
   const clock = createManualClock();
   const connectivity = createFakeConnectivity();
   const fetching = {
@@ -74,24 +72,23 @@ function rig() {
     hub,
     fetching: fetching as unknown as RoundFetching,
   });
-  const sync = createRoundSync({
-    control: createRoundRecordControl({ hub, sender }),
-    refresh: createRoundRefreshControl({
-      hub,
-      requests,
-      refresh: refreshing,
-    }),
-    session,
-    connectivity,
-  });
   const { ids } = createFakeUniqueIds({ prefix: "event" });
   const roundWindow = createRoundWindow({
     hub,
     fetching: fetching as unknown as RoundFetching,
     refresh: refreshing,
-    requests,
     editing: createRoundEditing({ hub, ids }),
     clock,
+    connectivity,
+  });
+  const sync = createRoundSync({
+    control: createRoundRecordControl({ hub, sender }),
+    refresh: createRoundRefreshControl({
+      hub,
+      roundWindow,
+      refresh: refreshing,
+    }),
+    session,
     connectivity,
   });
   const list = createRoundsListStore({
@@ -101,7 +98,7 @@ function rig() {
     connectivity,
   });
   sync.start("user-1");
-  return { sync, roundWindow, list, hub, requests, fetching, clock, faces };
+  return { sync, roundWindow, list, hub, fetching, clock, faces };
 }
 
 const deferredDetail = () => Promise.withResolvers<RoundDetailResult>();

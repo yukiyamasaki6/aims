@@ -82,9 +82,25 @@ export type RoundWindow = ReturnType<typeof createRoundWindow>;
 // 画面が読む、端末内の取得と同期の窓口。
 // 詳細はIDを購読し、購読者が0→1でエントリを作り、1→0で捨てる。同じIDの購読者は1つのエントリを共有する。
 export function createRoundWindow(
-  deps: RoundEntryDeps & { hub: Pick<RoundRecordHub, "readList"> },
+  deps: Omit<RoundEntryDeps, "marks"> & {
+    hub: Pick<RoundRecordHub, "readList">;
+  },
 ) {
   const localList = createLocalListWatch(deps.hub);
+  // 準備完了の詳細と、取り直しが要るか。送信後の取り直しの対象になる。
+  const ready = new Map<string, boolean>();
+  const readyListeners = new Set<() => void>();
+  const marks = {
+    set(roundId: string, overlay: boolean | null) {
+      if (overlay === null) {
+        if (!ready.delete(roundId)) return;
+      } else {
+        if (ready.get(roundId) === overlay) return;
+        ready.set(roundId, overlay);
+      }
+      for (const listener of [...readyListeners]) listener();
+    },
+  };
   const entries = new Map<
     string,
     { entry: RoundEntry; listeners: Set<() => void> }
@@ -94,7 +110,7 @@ export function createRoundWindow(
       let shared = entries.get(roundId);
       if (!shared) {
         const created = {
-          entry: createRoundEntry(roundId, deps),
+          entry: createRoundEntry(roundId, { ...deps, marks }),
           listeners: new Set<() => void>(),
         };
         entries.set(roundId, created);
@@ -124,6 +140,16 @@ export function createRoundWindow(
       const found = entries.get(roundId);
       if (!found) throw new Error("購読していないラウンドへは追記できません。");
       return found.entry.append(operation);
+    },
+    // 準備完了の詳細(送信後の取り直しの対象)と、確定済みの操作を重ねられず取り直しが要るか。取り直しの制御だけが使う。
+    readyRounds: (): { roundId: string; overlay: boolean }[] =>
+      [...ready].map(([roundId, overlay]) => ({ roundId, overlay })),
+    // 準備完了の詳細が増減したとき、または取り直しの要否が変わったときに呼ぶ。返す関数で解除する。
+    onReadyChange(listener: () => void): () => void {
+      readyListeners.add(listener);
+      return () => {
+        readyListeners.delete(listener);
+      };
     },
     // 端末内の入力中一覧。購読が無い、または読み込み前はnull。
     watchLocalList: localList.watch,

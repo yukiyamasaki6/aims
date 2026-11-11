@@ -22,16 +22,12 @@ export function createRoundSync(deps: {
   connectivity: Connectivity;
 }) {
   const { control, refresh, session, connectivity } = deps;
-  // 同時に1回までの扉は、常駐の一括の取得と、ラウンドごとの取り直しの2種類だけに置く。ラウンドごとの開く依頼は、依頼の番号ごとに扉なしで並行して実行する。
+  // 同時に1回までの扉は、常駐の一括の取得と、ラウンドごとの取り直しの2種類だけに置く。
   let residentGate: FlightGate = IDLE_GATE;
-  // ラウンドごとの、最後に実行を始めた開く依頼の番号。同じ番号のあいだは、記録の知らせが何度届いても、実行を重ねない。
-  const startedOpen = new Map<string, number>();
   // ラウンドごとの取り直しの扉と、完了後にやり直す予約(ラウンドのIDの集合)。
   const refetchGates = new Map<string, FlightGate>();
-  // 前回の見直しで、重ねられなかった確定済みの操作(overlay)が当たっていた、開く依頼のないラウンド。新しく当たったときだけ取り直す。
+  // 前回の見直しで、重ねられなかった確定済みの操作(overlay)が当たっていたラウンド。新しく当たったときだけ取り直す。
   let lastOverlay = new Set<string>();
-  // 前回の見直しで、的が足りない印が付いていたか。付いていない状態から付いた状態に変わったときだけ、再取得を促す。
-  let lastFacesWanted = false;
 
   // 常駐の前段。サインイン済みで、記録の利用者と同じときだけ通る。
   async function residentPass(): Promise<boolean> {
@@ -58,13 +54,12 @@ export function createRoundSync(deps: {
     if (begin.run) void runResident();
   }
 
-  // 予約した取り直しを行うか。詳細を閉じた(取り直しが要らなくなった)後は行わない。
-  // 要否の理由が開く依頼でなく、オフラインでないときだけ(開く依頼は、依頼ごとに別に実行する)。
+  // 予約した取り直しを行うか。詳細を閉じた(取り直しが要らなくなった)後は行わない。オフラインでないときだけ。
   function shouldRerun(roundId: string): boolean {
     const need = refresh
       .refreshNeeds()
       .rounds.find((entry) => entry.roundId === roundId);
-    return need !== undefined && !need.open && !connectivity.isOffline();
+    return need !== undefined && !connectivity.isOffline();
   }
 
   // 取り直しの1回が終わった。続けて行うなら真を返し、行わないなら扉を空にする。
@@ -88,35 +83,13 @@ export function createRoundSync(deps: {
     }
   }
 
-  // 開く依頼は、依頼の番号が増えたときだけ、依頼ごとにすぐ実行を始める(取り直しの実行中でも、前の開く依頼の実行中でも並行して始める)。
-  function startOpenRun(need: { roundId: string; openRequest: number }) {
-    if (need.openRequest <= (startedOpen.get(need.roundId) ?? 0)) return;
-    startedOpen.set(need.roundId, need.openRequest);
-    void refresh.refreshRound(need.roundId);
-  }
-
-  // 的が足りない印が付いたとき、オンラインで、常駐の取得が実行中でなければ、常駐の取得を頼む。実行中の取得が的を保存する。
-  function promptFacesFetch() {
-    const wanted = refresh.facesWanted();
-    const rising = wanted && !lastFacesWanted;
-    lastFacesWanted = wanted;
-    if (rising && !connectivity.isOffline() && !residentGate.running) {
-      requestResident();
-    }
-  }
-
-  // 依頼と記録の変化から、取り直しの要否を見直す。
-  // 開く依頼がある間は、他の取り直しを出さない。効かなかった結果(diverged)は通知ごとに(オフラインでなければ)取り直す。
+  // 窓口と記録の変化から、取り直しの要否を見直す。
+  // 効かなかった結果(diverged)は通知ごとに(オフラインでなければ)取り直す。
   // 重ねられなかった操作(overlay)は新しく当たったときだけ取り直す。どちらも当たるときは、取り直しは1回で足りる。
   function evaluate() {
-    promptFacesFetch();
     const nextOverlay = new Set<string>();
     const online = !connectivity.isOffline();
     for (const need of refresh.refreshNeeds().rounds) {
-      if (need.open) {
-        startOpenRun(need);
-        continue;
-      }
       if (need.overlay) nextOverlay.add(need.roundId);
       const isNewOverlay = need.overlay && !lastOverlay.has(need.roundId);
       if (online && (need.diverged || isNewOverlay)) {

@@ -31,7 +31,7 @@
 機能は2つで、依存は同期からラウンドの一方向である(ラウンドは同期を知らない)。パスは`apps/web/src/`からの相対で示す。
 
 - ラウンド(`features/rounds/`): 業務の規則、端末の記録、画面に渡す正しい状態と変更の方法、送信の機構(送信器、列ごとの送信の状態、送れる要求の計画、失敗の分類、操作の送信と確定の記録)、ベースの取得と反映を持つ。
-- 同期(`features/round-sync/`): 契機を受けて、いつ取り直すかを決める唯一の手続きと、契機の受け取りを持つ。他の機能へ公開する名前が無いため、入口を置かない。ラウンドの入口が公開する記録の制御`RoundRecordControl`(3操作: `start`、`isRecordUser`、`signInChanged`)と、取り直しの制御`RoundRefreshControl`(5操作: `refreshNeeds`、`onRefreshNeeds`、`facesWanted`、`refreshAll`、`refreshRound`)の、平らな操作だけを使う。送信の内部の概念(送信の待ち、保留、リトライ待機、衝突、lane、失敗の分類)は境界を越えない。サインインの変化への反応(保留の再開)と、通信の回復での再送は、ラウンドが決める。利用者の切り替えはラウンドが行わず、認証の見張りが記録の利用者(`isRecordUser`)との不一致でページ全体を読み込み直す。
+- 同期(`features/round-sync/`): 契機を受けて、いつ取り直すかを決める唯一の手続きと、契機の受け取りを持つ。他の機能へ公開する名前が無いため、入口を置かない。ラウンドの入口が公開する記録の制御`RoundRecordControl`(3操作: `start`、`isRecordUser`、`signInChanged`)と、取り直しの制御`RoundRefreshControl`(4操作: `refreshNeeds`、`onRefreshNeeds`、`refreshAll`、`refreshRound`)の、平らな操作だけを使う。送信の内部の概念(送信の待ち、保留、リトライ待機、衝突、lane、失敗の分類)は境界を越えない。サインインの変化への反応(保留の再開)と、通信の回復での再送は、ラウンドが決める。利用者の切り替えはラウンドが行わず、認証の見張りが記録の利用者(`isRecordUser`)との不一致でページ全体を読み込み直す。
 - 画面は、画面ごとの文脈から受け取る状態と変更の方法(一覧の取得は`RoundsListStore`、端末内の入力中一覧と詳細は`RoundWindow`。作成は窓口を持たず手続きの入れ物から受ける)だけを使う。共通の構造は[`rounds/design.md`](../design.md)に従う。取得の状態(読み込み中、オフライン、見つからない、エラー)は、画面に渡す見え方の型に持たせる。詳細の窓口は、IDを購読すると記録から存在と画面の状態を導き、ラウンドの取得を1回始める(`retry`で取り直す)。効かなかった結果と重ねられなかった確定済みの操作の取り直しは同期が決める。
 - パッケージ: 画面は`react`、端末の保存は`idb`(`lib/local-op-log/`だけ)、データベースは`@supabase/supabase-js`(機能では認証のインフラ層だけ。他は`lib/supabase/`)を使う。ラウンドと同期は、非画面のパッケージを直接参照しない。
 
@@ -51,19 +51,18 @@
 | `features/rounds/domain/preset.ts`、`preset-list-view.ts`、`round-start.ts`、`write-result.ts` | domain | プリセットの値と並び・振り分け・除去、作成の画面の表示の決定、プリセットの構成からの、IDを除いた作成の内容の組み立て、書き込みの結果(成功か失敗)と削除、保存の失敗の種類 |
 | `features/rounds/domain/shot-pointer.ts`、`score-history.ts`、`shot-operations.ts`、`round-progress.ts`、`distance-config.ts`、`distance-operations.ts`、`target-face-filter.ts`、`preset-save.ts`、`ring-color.ts`、`shot-id.ts` | domain | 詳細の画面の規則。指している矢の遷移、取り消しの列、矢の操作の組み立て、完了の確認と状態を変える操作、距離の設定の検証と距離の操作、的の絞り込み、保存するプリセットの内容、リング色、時刻順の矢のID(時刻と乱数は引数) |
 | `features/rounds/domain/round-routes.ts` | domain | ラウンドの画面の経路の判定・変換(`roundFramePathOf`、経路からIDを読む`roundIdOfPath`)。経路の定数(`ROUNDS_PATH`、`NEW_ROUND_PATH`、`roundPath`)は経路表(`src/routes.ts`)が持つ |
-| `features/rounds/domain/open-requests.ts` | domain | 取り直しの依頼の規則。開く依頼は、ラウンドごとの依頼の番号、待っている依頼、見つからなかったか(最後に終わった実行の結果)を持つ |
 | `features/rounds/domain/fetch-status.ts` | domain | 取得の結果の型(失敗は種類`reason`で持ち、文言は持たない)、サインインの確認の失敗の種類`SignInFailure`、問い合わせの結果の種類から結果への対応`fetchResultOf` |
 | `features/rounds/domain/query-outcome.ts` | domain | 問い合わせの結果の種類`QueryOutcome`(型だけ) |
 | `features/rounds/domain/fetch-wait.ts` | domain | 時間制限の値(`FETCH_TIMEOUT_MS`、`SHORT_WAIT_MS`)だけ。状態を持たない時間の規則 |
 | `features/rounds/domain/`の他 | domain | `round-config.ts`、`round-constants.ts`、`option-label.ts`(選択肢の表示名)、`scorecard-types.ts`、`target-face.ts`(的を引く関数)、`position-key.ts`、`scorecard-scoring.ts` |
 | `features/rounds/application/round-record-hub.ts` | application | アプリで1つの端末の記録。列ごとの記録を`round-record.ts`の値として保ち、追記を直ちに画面用の列へ入れて変化を知らせる(送信は保存の完了後)。起動時の読み込みの完了を待つ`ready`、保存先を読む`readStored`、一覧の材料を返す`readList`(メモリの記録から作る)、取得したベースを反映する`commit` |
-| `features/rounds/application/refresh-requests.ts`、`rounds-list-store.ts`、`round-window.ts`、`round-window-entry.ts`、`when-online.ts` | application | 取り直しの依頼の記録と、画面ごとに渡す状態と変更の方法(`RoundsListStore`、`RoundWindow`。メンバーは`rounds/design.md`の表)。開いた詳細の購読と追記は窓口のエントリ(`round-window-entry.ts`)で、追記は手続き`round-editing.ts`を通して、完了のラウンドの編集で入力中へ戻す操作を続けて積む。窓口は準備完了の詳細に、取り直しの対象の印(`requests.watch`、`setOverlay`)を付ける。約束`UniqueIds`(新しいIDと乱数の払い出し。`unique-ids.ts`) |
+| `features/rounds/application/rounds-list-store.ts`、`round-window.ts`、`round-window-entry.ts`、`when-online.ts` | application | 画面ごとに渡す状態と変更の方法(`RoundsListStore`、`RoundWindow`。メンバーは`rounds/design.md`の表)。開いた詳細の購読と追記は窓口のエントリ(`round-window-entry.ts`)で、追記は手続き`round-editing.ts`を通して、完了のラウンドの編集で入力中へ戻す操作を続けて積む。窓口は準備完了の詳細(`readyRounds`。取り直しが要るかを`overlay`に持つ)と、その増減の通知(`onReadyChange`)を、取り直しの制御へ渡す。約束`UniqueIds`(新しいIDと乱数の払い出し。`unique-ids.ts`) |
 | `features/rounds/application/round-base-refreshing.ts`、`round-fetching.ts`、`content-fetcher.ts`、`time-limit.ts` | application | ベースの取得と反映(`refreshAll`、`refreshRound`。`refreshRound`は取得の結果を返す)、取得の順序(的の個別取得`fetchTargetFaces`、プリセットの取得`fetchPresets`の保存、保存済みの読み出し`savedPresets`、一覧の取得`fetchRoundsList`)、認証を確かめた取得と取り直し(変換は`fetchResultOf`を呼ぶ)・時間制限。約束`RoundQueries`(戻り値は`QueryOutcome`)、認証の入口の`SessionReader`、`ReferenceSnapshots`(`reference-snapshots.ts`。取得と削除の手続きが使う)。時間制限の補助(`withinTime`)は、取得と画面の状態の2つの手続きが使う |
 | `features/rounds/application/round-start.ts`、`preset-deletion.ts` | application | 開始(認証の確認、作成の追記、保存の完了の後に`PageNavigation`で詳細へ進む)と、個人プリセットの削除(保存済みからの除去を含む)。`PageNavigation`は共有の技術の約束(`lib/page-navigation`)、`PresetCommands`は`preset-commands.ts`に置く(約束は使い手が複数のため別ファイルに置く) |
 | `features/rounds/application/round-editing.ts` | application | 追記と再開(完了のラウンドの編集で表示中の距離か矢が変わるとき、追記の前の状態で判定し、続けて入力中へ戻す操作を積む。窓口の`append`が追記の前の状態を値で渡して呼ぶ) |
 | `features/rounds/application/round-deletion.ts`、`round-leaving.ts`、`preset-saving.ts` | application | 削除(一覧用。離れない。`round-deletion.ts`)、完了、削除して離れる(`round-deletion.ts`の後に`PageNavigation`で置き換える。完了は保存の完了の後に`PageNavigation`で進む。`round-leaving.ts`)と、プリセットの保存(サインインの確認、書き込み、成功の後の保存済みの再取得) |
 | `features/rounds/application/operation-sending.ts`、`op-sender.ts` | application | 操作の送信と確定の記録(約束`RoundTransport`)、列ごとの送信の時機(送信器。送信の状態の保持、計画の実行、リトライの待機、保留と再開。記録のハブ、`OperationSending`、`SessionReader`を直接使う) |
-| `features/rounds/application/round-record-control.ts`、`round-refresh-control.ts` | application | 同期へ公開する、記録の制御`RoundRecordControl`(記録の起動と送信器の起動の順序、サインインの変化への反応を持つ)と、取り直しの制御`RoundRefreshControl`(要否の導出と、取り直しの実行の委譲)。取り直しの理由(`open`、`diverged`、`overlay`。優先の順)の型は`RoundRefreshControl`の`refreshNeeds`の戻り値が唯一の定義で、同期は`round-sync.ts`でその型から導く |
+| `features/rounds/application/round-record-control.ts`、`round-refresh-control.ts` | application | 同期へ公開する、記録の制御`RoundRecordControl`(記録の起動と送信器の起動の順序、サインインの変化への反応を持つ)と、取り直しの制御`RoundRefreshControl`(準備完了の詳細に対する要否の導出と、取り直しの実行の委譲)。取り直しの理由(`diverged`、`overlay`)の型は`RoundRefreshControl`の`refreshNeeds`の戻り値が唯一の定義で、同期は`round-sync.ts`でその型から導く |
 | `features/rounds/index.ts` | 機能の入口 | `RoundRecordControl`、`RoundRefreshControl`の型を公開する |
 | `features/rounds/infrastructure/` | infrastructure | `round-op-transport.ts`(操作の種類ごとにRPCを呼び、操作ごとの判定結果を返す)、`round-queries.ts`(取得の問い合わせ、プリセットと一覧の問い合わせ。行は写さずそのまま返す)、`db-response-outcome.ts`(応答を`QueryOutcome`の種類へ写す。複数の応答の畳む優先順は通信失敗→認証拒否→その他の先頭)、`browser-unique-ids.ts`(新しいIDと乱数の払い出し)、`preset-commands.ts`(プリセットの削除と保存の書き込みと結果の種類への写し)、`rounds-db-schema.ts`(ラウンドが使うスキーマの部分の型。一覧が並べる列とプリセットの表、保存の関数を含む)、`reference-snapshot.ts`(保存済みの書き換えを含む)、`reference-query-constants.ts`、`browser-record-channel.ts`(チャネル`aims-sync`) |
 | `features/rounds/ui/rounds-context.tsx` | ui | 窓口の文脈(`RoundsListStoreProvider`と`useRoundsListStore`、`RoundWindowProvider`と`useRoundWindow`)と、手続きの入れ物の文脈(`RoundProceduresProvider`と`useRoundProcedures`) |
@@ -90,7 +89,7 @@
 
 照合の結果ごとの反応は、認証の通知は上の表のとおり、送る前は`same`と`unowned`で送り`other`で未認証として保留、常駐の一括の取得の前段は`same`だけ行い、取得したベースの反映は`same`だけ端末へ保存して他はこのタブだけに反映する。
 
-同期の手続き(`round-sync.ts`)は、常駐の一括の取得と、ラウンドごとの取り直しを、それぞれ同時に1回までにする。ラウンドごとの開く依頼は、新しい依頼の番号ごとにすぐ実行を始め、先の実行を待たずに並行して走る。同じ番号のあいだに記録の知らせが届いても、実行を重ねない。これらは互いを待たない。
+同期の手続き(`round-sync.ts`)は、常駐の一括の取得と、ラウンドごとの取り直しを、それぞれ同時に1回までにする。詳細の窓口の取得(購読の開始、作成の確定、`retry`)は扉を通さず、窓口が自分で始める。これらは互いを待たない。
 一括の取得は、常駐の契機(起動、通信の復帰、画面が見える状態)で行う。サインインの通知と、一覧を開くことは契機ではない。サインイン済みで記録の利用者と同じときだけ取得と反映を行う。一括の取得の対象は、端末が持つ(ベースか操作がある)ラウンドのうち、作成が確定しているものとし、削除の操作の有無では分けない。返らなかった対象は保存を消し、メモリの記録だけが削除済み(ベース`null`)を持つ(確定していない作成は、サーバーにまだ無いため対象にしない)。取得の問い合わせ(個別と一括)には、ライブラリの再試行(GETの520・503とネットワークの例外を最大3回)を付ける。
 1つのラウンドの取り直しは、見つからなかったとき、一括と同じく保存を消してメモリの記録を削除済みにする(未確定の作成だけが起点のラウンドは書かない)。詳細の窓口は、購読の開始ごとに取得を1回始め(サーバーに無いラウンドは、作成が確定した時点で1回。メモリが削除済みのラウンドは取得しない)、効かなかった結果と重ねられなかった確定済みの操作の取り直しは、オフラインでは行わない。端末のベースで開いている間に取得が失敗しても、定期的な取り直しは行わず、次の契機まで保存済みの表示が続く。的は、窓口が個別に取得する(常駐の一括の完了を待たない)。
 
@@ -168,7 +167,7 @@
 | 作成を操作の列に載せる | 通信の無い現場でも開始でき、同期の規則を作成と他の変更で揃えるため | - |
 | ラウンド・距離・矢の変更は操作列への追記(`RoundRecordHub.append`)を通し、書き込みRPCの呼び出しは送信部(`round-op-transport.ts`)に集める。新しい書き込みの種類は、操作列に載せるか、載せない理由をここに書く | 画面や手続きがRPCを直接呼ぶと、オフラインで入力が消え、二重送信、順序の逆転、イベントの不整合が起きるため。画面と手続きはDB接続の実装をimportできない(biome) | 操作列を使わない書き込みが要るとき |
 | プリセットの保存・削除、サインアウトを操作の列に載せない | 破壊的で低頻度であり、オフライン対応が不要なため。完了までダイアログで待ち(上限10秒)、失敗時は再試行できる | オフラインでの削除を認めるとき |
-| 同時に1回までの扉は常駐の取得と取り直しにだけ置き、一覧と開く依頼は依頼ごとに並行して実行する | 一覧と開く依頼が、同じ種類の先の実行も含めて他の実行を待たずに、自分の取得の時間で返るため(変更前の並行の関係)。並行する結果は、開始の新しい実行の結果を正とし、端末の記録への反映は開始時刻とrevisionで古い取得を退けるため、整合は保たれる | 同じ取得の結果を分け合う必要が出たとき |
+| 同時に1回までの扉は常駐の取得と取り直しにだけ置き、一覧と詳細の窓口の取得は扉を通さず並行して実行する | 一覧と詳細の窓口が、同じ種類の先の実行も含めて他の実行を待たずに、自分の取得の時間で返るため。並行する結果は、開始の新しい実行の結果を正とし、端末の記録への反映は開始時刻とrevisionで古い取得を退けるため、整合は保たれる | 同じ取得の結果を分け合う必要が出たとき |
 | データベースの約束はスキーマの形を型引数で受け、入口で生成した型と照合する | 約束に技術の型を含めずに、RPCの名前と引数、表と列の誤りをコンパイルで検出するため | 生成した型の形(`Functions`、`Tables`)が変わったとき |
 | 画面は自分の窓口(`RoundsListStore`、`RoundWindow`)と手続きの入れ物の手続きだけから列へアクセスし、ユーザーは記録のハブで解決する | 入り口が複数あると、一覧・詳細・作成・削除の読み書きがユーザーや削除済みの規則で食い違うため | 列の種類が増えるとき |
 | プリセットの保存を、保留中の書き込みの完了を待たないローカル起点にする | 完了を待つと、操作の列のリトライ中にダイアログが閉じられず固まるため、待つ方式をやめた。DBから読み直すサーバー起点は採らない | 保存直後にサーバーの値との一致が要る要求が出たとき。詳細: #472 |
@@ -186,7 +185,7 @@
 | 未送信の操作を、端末の最後にサインインしたユーザーごとに分ける | オフラインでは `proxy.ts` が実行されず、JWTの有効期限に頼れないため。暗号的な機密性は対象外とする | 共有端末で秘匿が必要になったとき |
 | 端末DBの保存の形を変えるときはversionを上げ、更新では全てのstoreを内容を移行せずに作り直す | 版ごとの移行の分岐を持たずに、どの版の端末でも開けるようにするため。未送信の操作も捨てる | 未送信の操作を更新で失えない要求が出たとき |
 | 取得の新旧は、開始時刻に加えてrevisionで比べる | 同時に始まった取得では、後から始まった取得が先の状態を返すことがあり、開始時刻では決められないため | revisionを持たないデータを列に足すとき |
-| 同期は、ラウンドの記録を自分で持たず、ラウンドが公開する制御の平らな操作(`RoundRecordControl`、`RoundRefreshControl`)だけを呼ぶ。同期が持つのは取り直しの扉と依頼の番号だけで、記録の正はラウンドである。同じ記録の知らせが重ねて届いても、取り直しは重ねて実行しない | 同じ事実を2か所に持つと食い違い、通知は合図にすぎないため | 同期が記録の解釈に要る結果を返すようになったとき |
+| 同期は、ラウンドの記録を自分で持たず、ラウンドが公開する制御の平らな操作(`RoundRecordControl`、`RoundRefreshControl`)だけを呼ぶ。同期が持つのは取り直しの扉だけで、記録の正はラウンドである。同じ記録の知らせが重ねて届いても、取り直しは重ねて実行しない | 同じ事実を2か所に持つと食い違い、通知は合図にすぎないため | 同期が記録の解釈に要る結果を返すようになったとき |
 
 ## 制約と未対応
 

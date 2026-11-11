@@ -8,7 +8,6 @@ import type { SyncOperation } from "../domain/sync-events";
 import type { TargetFaceOption } from "../domain/target-face";
 import { createFakeUniqueIds } from "./fake-unique-ids-test-helpers";
 import type { RoundTransport, SendOutcome } from "./operation-sending";
-import { createRefreshRequests } from "./refresh-requests";
 import { createRoundBaseRefreshing } from "./round-base-refreshing";
 import { createRoundEditing } from "./round-editing";
 import type { RoundFetching } from "./round-fetching";
@@ -47,7 +46,6 @@ export function createTestRounds(
   } = {},
 ) {
   const { hub, store: opLog } = createTestRoundHub(options.shared);
-  const requests = createRefreshRequests();
   const clock = createManualClock(options.clockStart);
   const connectivity = createFakeConnectivity(options.offline);
   const fetching = {
@@ -71,7 +69,6 @@ export function createTestRounds(
     hub,
     fetching: fetching as unknown as RoundFetching,
     refresh: refreshing,
-    requests,
     editing,
     clock,
     connectivity,
@@ -91,7 +88,6 @@ export function createTestRounds(
     list,
     hub,
     opLog,
-    requests,
     clock,
     connectivity,
     fetching,
@@ -130,15 +126,4 @@ export function appliedOutcome(count: number, firstRevision = 1): SendOutcome {
       hasRejectedFields: false,
     })),
   };
-}
-
-// 取り直しを始めて、結果を返した。始めた時点の開く依頼にだけ結果が返る。
-export function settleRoundNow(
-  requests: ReturnType<typeof createRefreshRequests>,
-  roundId: string,
-  result: Parameters<
-    ReturnType<typeof createRefreshRequests>["settleRound"]
-  >[1],
-) {
-  requests.settleRound(requests.beginRound(roundId), result);
 }
