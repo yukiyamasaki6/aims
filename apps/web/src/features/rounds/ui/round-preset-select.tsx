@@ -10,7 +10,7 @@ import { withSaved } from "../domain/fetch-status";
 import type { Preset, Presets } from "../domain/preset";
 import { presetListView } from "../domain/preset-list-view";
 import type { PresetDeleteFailure } from "../domain/write-result";
-import { BackToListLink } from "./back-to-list-link";
+import { BackLink } from "./back-link";
 import { FetchState } from "./fetch-state";
 import { PresetListSkeleton, PresetSections } from "./preset-list";
 import { useRoundProcedures } from "./rounds-context";
@@ -121,13 +121,9 @@ function StartBar({
 }
 
 function PageHeader() {
-  const t = useTranslations("rounds");
   return (
     <div className="mx-auto w-full max-w-xl px-8 pt-8">
-      <BackToListLink className="mb-2" />
-      <h1 className="font-heading text-2xl leading-snug font-medium">
-        {t("createRound")}
-      </h1>
+      <BackLink origin="home" />
     </div>
   );
 }

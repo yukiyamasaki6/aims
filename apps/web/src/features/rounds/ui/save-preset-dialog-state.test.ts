@@ -76,7 +76,7 @@ describe("changePresetDialogOpen", () => {
     it("送信中でなければ、エラーを破棄して閉じる", () => {
       // Given
       const current = openDialog({
-        name: roundsText("listInProgress"),
+        name: roundsText("homeEmpty"),
         error: "saveFailed",
       });
 

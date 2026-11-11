@@ -134,7 +134,7 @@ afterEach(() => {
 
 describe("RoundDetailClient", () => {
   describe("取得中", () => {
-    it("取得中は、一覧へ戻るリンクと読み込み中の表示を出し、スコアカードは出さない", () => {
+    it("取得中は、戻るリンクと読み込み中の表示を出し、スコアカードは出さない", () => {
       // Given
 
       // When
@@ -142,7 +142,7 @@ describe("RoundDetailClient", () => {
 
       // Then
       expect(
-        screen.getByRole("link", { name: roundsText("backToList") }),
+        screen.getByRole("link", { name: roundsText("back") }),
       ).toBeInTheDocument();
       expect(screen.getByRole("status")).toHaveTextContent(
         roundsText("fetchLoading"),
@@ -235,9 +235,9 @@ describe("RoundDetailClient", () => {
       );
     });
 
-    it("準備完了の後に窓口が見つからないにすると、スコアカードを閉じて、見つからない表示と一覧へ戻るリンクを出す", () => {
+    it("準備完了の後に窓口が見つからないにすると、スコアカードを閉じて、見つからない表示と戻るリンクを出す", () => {
       // Given
-      fake.setView(ID, ready(roundsText("listInProgress"), faces("face-1")));
+      fake.setView(ID, ready(roundsText("homeEmpty"), faces("face-1")));
       renderDetail();
 
       // When
@@ -247,13 +247,13 @@ describe("RoundDetailClient", () => {
       expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
       expect(screen.getByText(roundsText("detailNotFound"))).toBeVisible();
       expect(
-        screen.getByRole("link", { name: roundsText("backToList") }),
+        screen.getByRole("link", { name: roundsText("back") }),
       ).toBeVisible();
     });
   });
 
   describe("見つからない・オフライン・エラー", () => {
-    it("見つからない場合は、メッセージと一覧へ戻るリンクを出す", () => {
+    it("見つからない場合は、メッセージと戻るリンクを出す", () => {
       // Given
       fake.setView(ID, { status: "not-found" });
 
@@ -264,7 +264,7 @@ describe("RoundDetailClient", () => {
       expect(screen.getByText(roundsText("detailNotFound"))).toBeVisible();
       // 戻る導線は枠のヘッダーの1つだけにする。
       expect(
-        screen.getAllByRole("link", { name: roundsText("backToList") }),
+        screen.getAllByRole("link", { name: roundsText("back") }),
       ).toHaveLength(1);
       expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
     });

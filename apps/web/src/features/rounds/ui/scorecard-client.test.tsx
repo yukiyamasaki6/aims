@@ -2883,7 +2883,7 @@ describe("ScorecardClient ラウンド削除", () => {
 });
 
 describe("ScorecardClient ラウンド削除の後の遷移", () => {
-  it("削除を確認すると、一覧へ置き換えて遷移し、履歴を積む遷移はしない", async () => {
+  it("削除を確認すると、遷移元のホームへ置き換えて遷移し、履歴を積む遷移はしない", async () => {
     // Given
     const user = userEvent.setup();
     nav.push.mockClear();
@@ -3144,7 +3144,7 @@ describe("ScorecardClient ラウンドの完了", () => {
     expect(sentStatuses()).toEqual([]);
   });
 
-  it("完了ボタンを押すと、完了の保存の後にラウンド一覧へ移る", async () => {
+  it("完了ボタンを押すと、完了の保存の後にホームへ移る", async () => {
     // Given
     const user = userEvent.setup();
     nav.push.mockClear();
@@ -3157,7 +3157,7 @@ describe("ScorecardClient ラウンドの完了", () => {
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith("/rounds"));
   });
 
-  it("完了ボタンを押した後、保存が終わる前に画面を離れると、一覧へ移らない", async () => {
+  it("完了ボタンを押した後、保存が終わる前に画面を離れると、ホームへ移らない", async () => {
     // Given
     nav.push.mockClear();
     const { unmount } = await setup({
@@ -3176,7 +3176,7 @@ describe("ScorecardClient ラウンドの完了", () => {
     expect(nav.push).not.toHaveBeenCalled();
   });
 
-  it("確認でキャンセルすると、一覧へ移らない", async () => {
+  it("確認でキャンセルすると、ホームへ移らない", async () => {
     // Given
     const user = userEvent.setup();
     nav.push.mockClear();
