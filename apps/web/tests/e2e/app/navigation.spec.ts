@@ -15,7 +15,6 @@ import { expectUncovered } from "../helpers/visibility";
 
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
-const roundsText = translatorFor("rounds");
 
 const MOBILE_VIEWPORT = { width: 375, height: 667 };
 const COMPACT_LANDSCAPE_VIEWPORT = { width: 667, height: 375 };
@@ -44,7 +43,8 @@ async function openRounds(page: Page) {
 function panelContents(page: Page) {
   return [
     page.getByRole("link", { name: "AIMS" }),
-    page.getByRole("link", { name: navigationText("leftPanelPersonal") }),
+    page.getByRole("link", { name: navigationText("leftPanelHome") }),
+    page.getByRole("link", { name: navigationText("leftPanelHistory") }),
     page.getByRole("button", { name: authText("signOut") }),
   ];
 }
@@ -77,7 +77,7 @@ async function expectPanelCollapsed(page: Page) {
   }
 }
 
-// 個人リンクとサインアウトボタンは角が丸いため、内側の点で確かめる。
+// ホーム・履歴の項目とサインアウトボタンは角が丸いため、内側の点で確かめる。
 async function expectPanelExpanded(page: Page) {
   for (const item of panelContents(page)) {
     await expectUncovered(item, 5);
@@ -177,9 +177,7 @@ test.describe("認証済み", () => {
       .getByRole("link", { name: navigationText("startButton") })
       .click();
     await expect(page).toHaveURL(/\/rounds$/);
-    await expect(
-      page.getByRole("heading", { name: roundsText("listTitle") }),
-    ).toBeVisible();
+    await expect(page.getByTestId("new-round-fab")).toBeVisible();
   });
 
   test("ラウンド作成画面でレフトパネルのAIMSロゴを押すと、紹介画面へ移動する", async ({
@@ -194,23 +192,21 @@ test.describe("認証済み", () => {
     await expect(page.getByRole("heading", { name: "AIMS" })).toBeVisible();
   });
 
-  test("ラウンド作成画面でレフトパネルの個人リンクを押すと、ラウンド一覧へ移動する", async ({
+  test("ラウンド作成画面でレフトパネルのホームの項目を押すと、ホームへ移動する", async ({
     page,
   }) => {
     await page.goto("/rounds/new");
     await waitForHydration(page);
 
     await page
-      .getByRole("link", { name: navigationText("leftPanelPersonal") })
+      .getByRole("link", { name: navigationText("leftPanelHome") })
       .click();
 
     await expect(page).toHaveURL(/\/rounds$/);
-    await expect(
-      page.getByRole("heading", { name: roundsText("listTitle") }),
-    ).toBeVisible();
+    await expect(page.getByTestId("new-round-fab")).toBeVisible();
   });
 
-  test("縦向きで狭い画面でレフトパネルを展開して個人リンクを押すと、ラウンド一覧へ移動し、レフトパネルが格納される", async ({
+  test("縦向きで狭い画面でレフトパネルを展開してホームの項目を押すと、ホームへ移動し、レフトパネルが格納される", async ({
     page,
   }) => {
     // 縦向きで狭い画面でラウンド作成画面を開き、ハンバーガーボタンでレフトパネルを展開する。
@@ -222,9 +218,9 @@ test.describe("認証済み", () => {
       .click();
     await expectPanelExpanded(page);
 
-    // 個人リンクを押して、ラウンド一覧へ移り、レフトパネルが格納されていることを確かめる。
+    // ホームの項目を押して、ホームへ移り、レフトパネルが格納されていることを確かめる。
     await page
-      .getByRole("link", { name: navigationText("leftPanelPersonal") })
+      .getByRole("link", { name: navigationText("leftPanelHome") })
       .click();
     await expect(page).toHaveURL(/\/rounds$/);
     await expectPanelCollapsed(page);
@@ -375,21 +371,21 @@ test.describe("認証済み", () => {
       await expectPanelContentsAbsent(page);
       await expectTabNeverEntersPanel(page);
 
-      // ハンバーガーボタンで展開し、Tabで個人リンクまで届く。
+      // ハンバーガーボタンで展開し、Tabでホームの項目まで届く。
       const hamburger = page.getByRole("button", {
         name: navigationText("leftPanelOpenMenu"),
       });
       await hamburger.focus();
       await hamburger.click();
-      const personalLink = page.getByRole("link", {
-        name: navigationText("leftPanelPersonal"),
+      const homeLink = page.getByRole("link", {
+        name: navigationText("leftPanelHome"),
       });
       for (let i = 0; i < 5; i++) {
-        if (await personalLink.evaluate((el) => el === document.activeElement))
+        if (await homeLink.evaluate((el) => el === document.activeElement))
           break;
         await page.keyboard.press("Tab");
       }
-      await expect(personalLink).toBeFocused();
+      await expect(homeLink).toBeFocused();
 
       // 閉じるボタンで格納し、中身が隠れてから、Tabがパネルの中に届かないことを確かめる。
       await page
@@ -413,7 +409,7 @@ test.describe("認証済み", () => {
       }
       await expect(hamburger).toBeFocused();
 
-      // 広い画面へ変えると、個人リンクに1回だけ届く。
+      // 広い画面へ変えると、ホームの項目に1回だけ届く。
       await page.setViewportSize(LANDSCAPE_WIDE_VIEWPORT);
       const focused = await tabCycle(page);
       expect(focused.filter((item) => item.href === ROUNDS_PATH)).toHaveLength(
@@ -517,9 +513,7 @@ test.describe("セッション喪失", () => {
     await expect.poll(() => refreshAttempts).toBeGreaterThan(0);
     await page.waitForTimeout(1_000);
     await expect(page).toHaveURL(/\/rounds$/);
-    await expect(
-      page.getByRole("heading", { name: roundsText("listTitle") }),
-    ).toBeVisible();
+    await expect(page.getByTestId("new-round-fab")).toBeVisible();
   });
 
   test("オフラインの間にセッションの期限が来て、オンラインに戻ったときの更新が別の書き手の更新と重なっても、サインイン画面へ移動せず、ラウンド一覧に留まる", async ({
@@ -545,8 +539,6 @@ test.describe("セッション喪失", () => {
         () => (window as unknown as { e2eStayed?: boolean }).e2eStayed,
       ),
     ).toBe(true);
-    await expect(
-      page.getByRole("heading", { name: roundsText("listTitle") }),
-    ).toBeVisible();
+    await expect(page.getByTestId("new-round-fab")).toBeVisible();
   });
 });
