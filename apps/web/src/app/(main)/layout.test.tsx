@@ -14,7 +14,6 @@ import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createClient } from "@/lib/supabase/infrastructure/client";
-import { ROUNDS_PATH } from "@/routes";
 import { RootClientEntry } from "../root-client-entry";
 import MainLayout from "./layout";
 
@@ -190,18 +189,16 @@ describe("MainLayout", () => {
       expect(screen.getByText("子要素")).toBeInTheDocument();
     });
 
-    it("左パネルの2つの個人リンクは、どちらも一覧の経路を向く", () => {
+    it("左パネルの2つの枠が、それぞれホームと履歴の項目を持つ", () => {
       // Given
       // When
       renderLayout();
 
       // Then
-      const links = screen.getAllByRole("link", {
-        name: navigationText("leftPanelPersonal"),
-      });
-      expect(links).toHaveLength(2);
-      for (const link of links) {
-        expect(link).toHaveAttribute("href", ROUNDS_PATH);
+      for (const name of ["leftPanelHome", "leftPanelHistory"] as const) {
+        expect(
+          screen.getAllByRole("link", { name: navigationText(name) }),
+        ).toHaveLength(2);
       }
     });
 

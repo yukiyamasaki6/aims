@@ -12,17 +12,19 @@ import {
   DropdownMenuTrigger,
 } from "./dropdown-menu";
 import { useRoundProcedures } from "./rounds-context";
+import { useRoundOrigin } from "./use-round-origin";
 
 // スコアカードのラウンドのメニューと、そこから開くラウンド削除の確認。
-// 確認すると、操作の列への保存の後に、送信の完了を待たず一覧へ置き換えて遷移する。
+// 確認すると、操作の列への保存の後に、送信の完了を待たず遷移元(ホームまたは履歴)へ置き換えて遷移する。
 export function RoundMenu({ roundId }: { roundId: string }) {
   const t = useTranslations("rounds");
   const { leaving } = useRoundProcedures();
+  const origin = useRoundOrigin();
   const mountedRef = useMountedRef();
   const [deleteRoundConfirmOpen, setDeleteRoundConfirmOpen] = useState(false);
 
   function handleDeleteRound() {
-    void leaving.deleteRoundAndLeave(roundId, () => mountedRef.current);
+    void leaving.deleteRoundAndLeave(roundId, origin, () => mountedRef.current);
   }
 
   return (

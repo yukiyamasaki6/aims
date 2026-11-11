@@ -38,7 +38,7 @@ test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
 const DISABLE_ROUND_RPC = "**/rest/v1/rpc/disable_round";
 
-// 共有ユーザーの一覧は他のテストのラウンドも含むため、名前を一意にして行を特定する。
+// 共有ユーザーのホームは他のテストのラウンドも含むため、名前を一意にして行を特定する。
 async function createNamedRound(prefix: string) {
   const name = `${prefix}-${Date.now()}`;
   const roundId = await createRound({
@@ -101,11 +101,11 @@ async function expectDeletedOnServer(roundId: string) {
     .not.toBeNull();
 }
 
-test("ラウンド一覧でカードのメニューから削除を選んで確認すると、確認ダイアログが閉じ、ラウンドが一覧から消える", async ({
+test("ホームでカードのメニューから削除を選んで確認すると、確認ダイアログが閉じ、ラウンドがホームから消える", async ({
   page,
 }) => {
   // カードのメニューを開き、削除を選べることを確かめる。
-  const { name, roundId } = await createNamedRound("一覧から削除");
+  const { name, roundId } = await createNamedRound("ホームから削除");
   const { row, link } = await openList(page, name, roundId);
   await expect(page.getByTestId("round-delete")).toBeHidden();
   await row.getByTestId("round-menu-trigger").click();
@@ -116,19 +116,19 @@ test("ラウンド一覧でカードのメニューから削除を選んで確�
   await expect(page.getByTestId("confirm-dialog-confirm")).toBeVisible();
   await expect(page.getByTestId("confirm-dialog-cancel")).toBeVisible();
 
-  // 確認し、ダイアログが閉じてラウンドが一覧から消えることを確かめる。
+  // 確認し、ダイアログが閉じてラウンドがホームから消えることを確かめる。
   await page.getByTestId("confirm-dialog-confirm").click();
   await expect(page.getByTestId("confirm-dialog-confirm")).toBeHidden();
   await expect(link).toBeHidden();
 });
 
-test("ラウンド詳細のヘッダーのメニューから削除を選んで確認すると、ラウンド一覧へ移ってラウンドが表示されず、ブラウザの戻るで削除したラウンドの詳細へ戻らない", async ({
+test("ラウンド詳細のヘッダーのメニューから削除を選んで確認すると、ホームへ移ってラウンドが表示されず、ブラウザの戻るで削除したラウンドの詳細へ戻らない", async ({
   page,
 }) => {
-  // 一覧からラウンドの詳細を開く。
+  // ホームからラウンドの詳細を開く。
   const { name, roundId } = await createNamedRound("詳細から削除");
   const { link } = await openList(page, name, roundId);
-  // 戻る先の履歴を作るため、詳細は一覧から開く。
+  // 戻る先の履歴を作るため、詳細はホームから開く。
   await link.click();
   await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
 
@@ -140,21 +140,21 @@ test("ラウンド詳細のヘッダーのメニューから削除を選んで�
   await page.getByTestId("round-delete").click();
   await expect(page.getByTestId("confirm-dialog-confirm")).toBeVisible();
 
-  // 確認し、ラウンド一覧へ移ってラウンドが表示されないことを確かめる。
+  // 確認し、ホームへ移ってラウンドが表示されないことを確かめる。
   await page.getByTestId("confirm-dialog-confirm").click();
   await expect(page).toHaveURL(/\/rounds$/);
   await expect(link).toBeHidden();
 
-  // ブラウザの戻るを押し、削除したラウンドの詳細でなく、最初に開いた一覧へ戻ることを確かめる。
+  // ブラウザの戻るを押し、削除したラウンドの詳細でなく、最初に開いたホームへ戻ることを確かめる。
   await page.goBack();
   await expect(page).toHaveURL(/\/rounds$/);
   await expect(link).toBeHidden();
 });
 
-test("オフラインのラウンド一覧で削除を確認すると、ダイアログがすぐ閉じてラウンドが一覧から消え、オンラインに戻った後に再読み込みしても表示されない", async ({
+test("オフラインのホームで削除を確認すると、ダイアログがすぐ閉じてラウンドがホームから消え、オンラインに戻った後に再読み込みしても表示されない", async ({
   page,
 }) => {
-  // オフラインの一覧で削除を選んで確認し、ダイアログがすぐ閉じてラウンドが一覧から消えることを確かめる。
+  // オフラインのホームで削除を選んで確認し、ダイアログがすぐ閉じてラウンドがホームから消えることを確かめる。
   const { name, roundId } = await createNamedRound("オフライン一覧削除");
   const { row, link } = await openList(page, name, roundId);
   await expect(link).toBeVisible();
@@ -174,7 +174,7 @@ test("オフラインのラウンド一覧で削除を確認すると、ダイ�
   await expect(link).toBeHidden();
 });
 
-test("オフラインで開始したラウンドの詳細で、オフラインのまま削除を確認するとラウンド一覧へ移り、オンラインに戻った後に再読み込みしても表示されない", async ({
+test("オフラインで開始したラウンドの詳細で、オフラインのまま削除を確認するとホームへ移り、オンラインに戻った後に再読み込みしても表示されない", async ({
   page,
 }) => {
   // オフラインでラウンドを開始し、開いた設定ダイアログを閉じる。
@@ -184,7 +184,7 @@ test("オフラインで開始したラウンドの詳細で、オフライン�
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
 
-  // ヘッダーのメニューから削除を選んで確認し、ラウンド一覧へ移ることを確かめる。
+  // ヘッダーのメニューから削除を選んで確認し、ホームへ移ることを確かめる。
   await chooseDelete(page);
   await page.getByTestId("confirm-dialog-confirm").click();
   await expect(page).toHaveURL(/\/rounds$/);
@@ -198,10 +198,10 @@ test("オフラインで開始したラウンドの詳細で、オフライン�
   await expect(page.locator(`a[href="/rounds/${roundId}"]`)).toHaveCount(0);
 });
 
-test("削除の送信が終わる前に一覧を再読み込みしても、削除したラウンドは表示されない", async ({
+test("削除の送信が終わる前にホームを再読み込みしても、削除したラウンドは表示されない", async ({
   page,
 }) => {
-  // 削除の送信を止めた一覧で削除を選んで確認し、ラウンドが一覧から消えることを確かめる。
+  // 削除の送信を止めたホームで削除を選んで確認し、ラウンドがホームから消えることを確かめる。
   const { name, roundId } = await createNamedRound("送信前に再読み込み");
   const { row, link } = await openList(page, name, roundId);
   const release = await holdDeleteRequest(page);
@@ -218,10 +218,10 @@ test("削除の送信が終わる前に一覧を再読み込みしても、削�
   release();
 });
 
-test("削除する権限が無く削除が拒否されたときは、一覧を再読み込みするとラウンドが再び表示され、エラーメッセージは表示されない", async ({
+test("削除する権限が無く削除が拒否されたときは、ホームを再読み込みするとラウンドが再び表示され、エラーメッセージは表示されない", async ({
   page,
 }) => {
-  // 別のユーザーの権限で削除が送られる一覧で削除を選んで確認し、拒否されて操作の列から破棄されるのを待つ。
+  // 別のユーザーの権限で削除が送られるホームで削除を選んで確認し、拒否されて操作の列から破棄されるのを待つ。
   const { name, roundId } = await createNamedRound("認可で拒否");
   const outsider = {
     email: `outsider-${randomUUID()}@example.com`,
@@ -250,7 +250,7 @@ test("削除する権限が無く削除が拒否されたときは、一覧を�
   await expect(page.getByRole("alert").filter({ hasText: /./ })).toHaveCount(0);
 });
 
-test("端末の保存が終わらない間にラウンド詳細で削除を確認すると、保存が終わるまで詳細に留まり、保存が終わるとラウンド一覧へ移る", async ({
+test("端末の保存が終わらない間にラウンド詳細で削除を確認すると、保存が終わるまで詳細に留まり、保存が終わるとホームへ移る", async ({
   page,
 }) => {
   // 詳細を開き、端末の保存を塞いだ状態で削除を確認する。
@@ -266,7 +266,7 @@ test("端末の保存が終わらない間にラウンド詳細で削除を確�
   await expect(page.getByTestId("confirm-dialog-confirm")).toBeHidden();
   await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
 
-  // 塞ぎを解き、保存の後にラウンド一覧へ移ることを確かめる。
+  // 塞ぎを解き、保存の後にホームへ移ることを確かめる。
   await release();
   await expect(page).toHaveURL(/\/rounds$/);
   await expect(link).toBeHidden();
@@ -277,32 +277,20 @@ function isBulkRoundsResponse(response: Response) {
   return decodeURIComponent(response.url()).includes("status.eq.in_progress");
 }
 
-// 一覧の取得(`disabled_at`だけを絞る)の応答。
-function isListRoundsResponse(response: Response) {
-  const url = decodeURIComponent(response.url());
-  return (
-    url.includes("/rest/v1/rounds?") &&
-    !url.includes("status.eq.in_progress") &&
-    !url.includes("id=eq")
-  );
-}
-
-// アプリ内で一覧を離れて戻り、一覧の取得が済むまで待つ。一覧は戻るたびに端末の保存から作り直される。
+// アプリ内でホームを離れて戻る。ホームは戻るたびに端末の保存から作り直され、取得は呼ばない。
 async function leaveListAndComeBack(page: Page) {
   await page.getByTestId("new-round-fab").click();
   await expect(page).toHaveURL(/\/rounds\/new$/);
-  const listed = page.waitForResponse(isListRoundsResponse);
-  await page.getByRole("link", { name: roundsText("backToList") }).click();
+  await page.getByRole("link", { name: roundsText("back") }).click();
   await expect(page).toHaveURL(/\/rounds$/);
-  await listed;
 }
 
-test("別の端末が先に削除したラウンドを、この端末がオフラインで削除してオンラインに戻ると、送信が効かなかった扱いになっても、一覧を離れて戻ったときにそのラウンドは再表示されない", async ({
+test("別の端末が先に削除したラウンドを、この端末がオフラインで削除してオンラインに戻ると、送信が効かなかった扱いになっても、ホームを離れて戻ったときにそのラウンドは再表示されない", async ({
   page: deviceA,
   browser,
   baseURL,
 }) => {
-  // 2つの端末で、同じ利用者の一覧に削除するラウンドと残すラウンドを表示する。
+  // 2つの端末で、同じ利用者のホームに削除するラウンドと残すラウンドを表示する。
   const target = await createNamedRound("二重削除");
   const kept = await createNamedRound("二重削除の残り");
   const contextB = await browser.newContext({
@@ -334,7 +322,7 @@ test("別の端末が先に削除したラウンドを、この端末がオフ�
   await contextB.setOffline(false);
   await expectNoPendingOps(deviceB, target.roundId);
 
-  // 一覧を離れて戻っても、削除されたラウンドは再表示されず、残したラウンドは表示される。
+  // ホームを離れて戻っても、削除されたラウンドは再表示されず、残したラウンドは表示される。
   await leaveListAndComeBack(deviceB);
   await expect(
     deviceB.getByRole("link", { name: new RegExp(kept.name) }),
@@ -343,10 +331,10 @@ test("別の端末が先に削除したラウンドを、この端末がオフ�
   await contextB.close();
 });
 
-test("ラウンドの削除が未送信のまま一括の取得が走り、サーバーがそのラウンドをまだ返しても、一覧を離れて戻ったときにそのラウンドは再表示されない", async ({
+test("ラウンドの削除が未送信のまま一括の取得が走り、サーバーがそのラウンドをまだ返しても、ホームを離れて戻ったときにそのラウンドは再表示されない", async ({
   page,
 }) => {
-  // 削除するラウンドと残すラウンドを一覧に表示し、削除の送信を止めた状態で削除する。
+  // 削除するラウンドと残すラウンドをホームに表示し、削除の送信を止めた状態で削除する。
   const target = await createNamedRound("未送信の削除");
   const kept = await createNamedRound("未送信の削除の残り");
   const { row, link } = await openList(page, target.name, target.roundId);
@@ -362,7 +350,7 @@ test("ラウンドの削除が未送信のまま一括の取得が走り、サ�
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await fetched;
 
-  // 一覧を離れて戻っても、削除したラウンドは再表示されず、残したラウンドは表示される。
+  // ホームを離れて戻っても、削除したラウンドは再表示されず、残したラウンドは表示される。
   await leaveListAndComeBack(page);
   await expect(
     page.getByRole("link", { name: new RegExp(kept.name) }),

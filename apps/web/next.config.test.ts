@@ -22,6 +22,10 @@ describe("next.config rewrites", () => {
     // Then
     expect(beforeFiles).toEqual([
       { source: "/__shell/rounds", destination: "/rounds" },
+      {
+        source: "/__shell/rounds/history",
+        destination: "/rounds/history",
+      },
       { source: "/__shell/rounds/new", destination: "/rounds/new" },
       { source: "/__shell/rounds/_", destination: "/rounds/_" },
     ]);

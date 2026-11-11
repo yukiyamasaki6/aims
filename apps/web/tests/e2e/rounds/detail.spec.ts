@@ -118,12 +118,10 @@ test("1画面に収まらないラウンドで別の距離のエンドまでス�
   await expectUncovered(page.getByTestId("distance-top-scores-2"));
 });
 
-test("「一覧へ戻る」リンクを押すと、ラウンド一覧へ移動する", async ({
-  page,
-}) => {
+test("「戻る」リンクを押すと、ホームへ移動する", async ({ page }) => {
   await openRound(page);
 
-  await page.getByRole("link", { name: roundsText("backToList") }).click();
+  await page.getByRole("link", { name: roundsText("back") }).click();
 
   await expect(page).toHaveURL(/\/rounds$/);
   await expect(page.getByTestId("new-round-fab")).toBeVisible();
@@ -135,7 +133,7 @@ test("履歴を2つ戻って詳細から別の詳細へ移ると、前のラウ�
   const suffix = Date.now();
   const nameA = `履歴の詳細A-${suffix}`;
   const nameB = `履歴の詳細B-${suffix}`;
-  await openRound(page, { name: nameA });
+  // 詳細Bは、端末が同期で取り込めるよう、詳細Aを開く前に作る。
   await createRound({
     email: getSharedEmail(),
     password: SHARED_PASSWORD,
@@ -143,9 +141,10 @@ test("履歴を2つ戻って詳細から別の詳細へ移ると、前のラウ�
     roundDate: "2026-08-24",
     distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
   });
+  await openRound(page, { name: nameA });
 
-  // 詳細Aから一覧へ戻り、一覧のカードから詳細Bを開く。
-  await page.getByRole("link", { name: roundsText("backToList") }).click();
+  // 詳細Aからホームへ戻り、ホームのカードから詳細Bを開く。
+  await page.getByRole("link", { name: roundsText("back") }).click();
   await page.getByRole("link", { name: new RegExp(nameB) }).click();
   await expect(page.getByTestId("round-config-summary")).toContainText(nameB);
 
@@ -164,18 +163,18 @@ async function completeRound(roundId: string) {
 const MISSING_ROUND_PATH = roundPath("00000000-0000-0000-0000-000000000000");
 const ROUND_DETAIL_REST = "**/rest/v1/rounds?*";
 
-test("存在しないラウンドを開くと、枠内に「ラウンドが見つかりません。」と「一覧へ戻る」リンクが表示される", async ({
+test("存在しないラウンドを開くと、枠内に「ラウンドが見つかりません。」と「戻る」リンクが表示される", async ({
   page,
 }) => {
   await page.goto(MISSING_ROUND_PATH);
 
   await expect(page.getByText(roundsText("detailNotFound"))).toBeVisible();
   await expect(
-    page.getByRole("link", { name: roundsText("backToList") }),
+    page.getByRole("link", { name: roundsText("back") }),
   ).toBeVisible();
 });
 
-test("端末にオフラインで開ける内容がないラウンドを開いて通信できないとき、「一覧へ戻る」リンクと「読み込めませんでした。」と再試行ボタンが表示される", async ({
+test("端末にオフラインで開ける内容がないラウンドを開いて通信できないとき、「戻る」リンクと「読み込めませんでした。」と再試行ボタンが表示される", async ({
   page,
 }) => {
   // 裏の取得の再試行の間にService Workerが制御を始めるため、contextで止める。
@@ -186,7 +185,7 @@ test("端末にオフラインで開ける内容がないラウンドを開い�
   await page.goto(MISSING_ROUND_PATH);
 
   await expect(
-    page.getByRole("link", { name: roundsText("backToList") }),
+    page.getByRole("link", { name: roundsText("back") }),
   ).toBeVisible();
   // 取得の再試行が尽きるまで約7秒かかり、10秒の打ち切りより前に失敗が表示される。
   await expect(page.getByText(roundsText("fetchFailure.failed"))).toBeVisible({
@@ -197,7 +196,7 @@ test("端末にオフラインで開ける内容がないラウンドを開い�
   ).toBeVisible();
 });
 
-test("端末の保存の読み書きが続いているとき、ラウンドを開くと、10秒後に「一覧へ戻る」リンクと「読み込めませんでした。」と再試行ボタンが表示される", async ({
+test("端末の保存の読み書きが続いているとき、ラウンドを開くと、10秒後に「戻る」リンクと「読み込めませんでした。」と再試行ボタンが表示される", async ({
   page,
 }) => {
   // 端末に内容を持たない完了のラウンドを、端末の保存の読み書きが続く状態で開き、読み込み中を確かめる。
@@ -222,7 +221,7 @@ test("端末の保存の読み書きが続いているとき、ラウンドを�
   // 10秒進め、枠とエラーと再試行ボタンを確かめる。
   await page.clock.runFor(10_000);
   await expect(
-    page.getByRole("link", { name: roundsText("backToList") }),
+    page.getByRole("link", { name: roundsText("back") }),
   ).toBeVisible();
   await expect(
     page
@@ -264,19 +263,19 @@ async function createCompletedRound(name: string) {
   return roundId;
 }
 
-test("古い版の端末の保存の接続が閉じられていないとき、ラウンド一覧とラウンドの詳細は、それぞれ読み込みの開始から10秒後に「読み込めませんでした。」と再試行ボタンが表示される", async ({
+test("古い版の端末の保存の接続が閉じられていないとき、ラウンドの履歴とラウンドの詳細は、それぞれ読み込みの開始から10秒後に「読み込めませんでした。」と再試行ボタンが表示される", async ({
   page,
 }) => {
-  // 古い版の接続を保持したまま一覧を開き、読み込み中を確かめる。
+  // 古い版の接続を保持したまま履歴を開き、読み込み中を確かめる。
   const roundId = await createCompletedRound("版更新の塞がれ");
   const release = await holdOldOpLogConnection(page.context());
   await page.clock.install();
-  await page.goto("/rounds");
+  await page.goto("/rounds/history");
   await expect(
     page.getByRole("status").filter({ hasText: roundsText("fetchLoading") }),
   ).toBeVisible();
 
-  // 10秒進め、一覧のエラーと再試行ボタンを確かめる。
+  // 10秒進め、履歴のエラーと再試行ボタンを確かめる。
   await expectLoadFailsAtTenSeconds(page);
   await expect(
     page.getByRole("button", { name: roundsText("fetchRetry") }),
@@ -286,7 +285,7 @@ test("古い版の端末の保存の接続が閉じられていないとき、�
   await page.goto(`/rounds/${roundId}`);
   await expectLoadFailsAtTenSeconds(page);
   await expect(
-    page.getByRole("link", { name: roundsText("backToList") }),
+    page.getByRole("link", { name: roundsText("back") }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: roundsText("fetchRetry") }),
@@ -294,18 +293,18 @@ test("古い版の端末の保存の接続が閉じられていないとき、�
   await release();
 });
 
-test("古い版の端末の保存の接続が閉じられて再読み込みすると、ラウンド一覧とラウンドの詳細のどちらも読み込みが再開し、内容が表示される", async ({
+test("古い版の端末の保存の接続が閉じられて再読み込みすると、ラウンドの履歴とラウンドの詳細のどちらも読み込みが再開し、内容が表示される", async ({
   page,
 }) => {
-  // 古い版の接続を保持したまま一覧を開き、10秒後のエラーを確かめる。
+  // 古い版の接続を保持したまま履歴を開き、10秒後のエラーを確かめる。
   const name = `版更新の復旧-${randomUUID()}`;
   const roundId = await createCompletedRound(name);
   const release = await holdOldOpLogConnection(page.context());
   await page.clock.install();
-  await page.goto("/rounds");
+  await page.goto("/rounds/history");
   await expectLoadFailsAtTenSeconds(page);
 
-  // 古い接続を閉じて再読み込みし、更新後の保存に基づく一覧が表示されることを確かめる。
+  // 古い接続を閉じて再読み込みし、更新後の保存に基づく履歴が表示されることを確かめる。
   await release();
   await page.reload();
   await expect(
@@ -442,7 +441,7 @@ const RENDER_MARGIN_MS = 500;
 test("オンラインのまま通信が応答しないとき、端末が保持する入力中のラウンドを開くと、開いた直後にラウンドが表示される", async ({
   page,
 }) => {
-  // 一覧を開き、入力中のラウンドと的の一覧を端末に保持させる。
+  // ホームを開き、入力中のラウンドと的の一覧を端末に保持させる。
   const roundId = await createRound({
     email: getSharedEmail(),
     password: SHARED_PASSWORD,
@@ -505,7 +504,7 @@ test("オンラインのまま通信が応答しないとき、端末が保持�
 test("端末の内容で表示しているラウンドが、他の端末で削除されていたと分かると、その画面のまま見つからない表示になる", async ({
   page,
 }) => {
-  // 一覧を開き、入力中のラウンドと的の一覧を端末に保持させる。
+  // ホームを開き、入力中のラウンドと的の一覧を端末に保持させる。
   const roundId = await createRound({
     email: getSharedEmail(),
     password: SHARED_PASSWORD,
@@ -539,15 +538,15 @@ test("端末の内容で表示しているラウンドが、他の端末で削�
   await expect(page.getByText(roundsText("detailNotFound"))).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
   await expect(
-    page.getByRole("link", { name: roundsText("backToList") }),
+    page.getByRole("link", { name: roundsText("back") }),
   ).toBeVisible();
 });
 
-test("オフラインのラウンド一覧で削除したラウンドを、オフラインのまま詳細で開くと、その画面のまま見つからない表示になり、戻るリンクで移ったラウンド一覧にそのラウンドは表示されない", async ({
+test("オフラインのホームで削除したラウンドを、オフラインのまま詳細で開くと、その画面のまま見つからない表示になり、戻るリンクで移ったホームにそのラウンドは表示されない", async ({
   page,
 }) => {
-  // オフラインのラウンド一覧で削除を確認し、ラウンドが一覧から消えることを確かめる。
-  // 共有のユーザーの一覧は他のテストのラウンドも含むため、名前を一意にして行を特定する。
+  // オフラインのホームで削除を確認し、ラウンドがホームから消えることを確かめる。
+  // 共有のユーザーのホームは他のテストのラウンドも含むため、名前を一意にして行を特定する。
   const name = `オフライン削除後の詳細-${Date.now()}`;
   const roundId = await createRound({
     email: getSharedEmail(),
@@ -576,12 +575,10 @@ test("オフラインのラウンド一覧で削除したラウンドを、オ�
   await expect(page.getByText(roundsText("detailNotFound"))).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
 
-  // 戻るリンクでラウンド一覧へ移り、ラウンドが表示されないことを確かめる。
-  await page.getByRole("link", { name: roundsText("backToList") }).click();
+  // 戻るリンクでホームへ移り、ラウンドが表示されないことを確かめる。
+  await page.getByRole("link", { name: roundsText("back") }).click();
   await expect(page).toHaveURL(/\/rounds$/);
-  await expect(
-    page.getByRole("heading", { name: roundsText("listTitle") }),
-  ).toBeVisible();
+  await expect(page.getByTestId("new-round-fab")).toBeVisible();
   await expect(link).toBeHidden();
 });
 
@@ -613,22 +610,23 @@ test.describe("セッションの確認", () => {
     return roundId;
   }
 
-  // 一覧を開き、ラウンドのカードが表示されるまで待つ。カードから開く遷移はページを読み込み直さず、ブラウザが自分でセッションを更新する。
-  async function openList(page: Page, roundId: string) {
-    await page.goto("/rounds");
-    await waitForHydration(page);
-    await expect(page.locator(`a[href="/rounds/${roundId}"]`)).toBeVisible();
+  // ホームまたは履歴を開き、ラウンドのカードが表示されるまで待つ。カードから開く遷移はページを読み込み直さず、ブラウザが自分でセッションを更新する。
+  async function openList(page: Page, roundId: string, path = "/rounds") {
+    await page.goto(path);
+    // 履歴には水和の属性が無い。カードは取得の後に出るため、表示されれば水和は済んでいる。
+    if (path === "/rounds") await waitForHydration(page);
+    await expect(page.locator(`a[href^="/rounds/${roundId}"]`)).toBeVisible();
   }
 
   test("端末に開ける内容がない完了のラウンドを開くときにセッションの更新が別の書き手の更新と重なると、更新が終わるまで読み込み中でエラーは表示されず、更新が終わるとスコアカードが表示される", async ({
     page,
   }) => {
     const roundId = await signInWithRound(page, true);
-    await openList(page, roundId);
+    await openList(page, roundId, "/rounds/history");
 
     // セッションの更新を止めたまま、カードからラウンドを開き、読み込み中でエラーが出ないのを確かめる。
     const refresh = await holdNextRefresh(page);
-    await page.locator(`a[href="/rounds/${roundId}"]`).click();
+    await page.locator(`a[href^="/rounds/${roundId}"]`).click();
     // 確かめる時間は、取得全体の上限(10秒)より短くする。
     await refresh.requested;
     await expect(
@@ -666,7 +664,7 @@ test.describe("セッションの確認", () => {
 
     // セッションの更新を止めたまま、カードからラウンドを開き、端末の内容で表示されるのを確かめる。
     const refresh = await holdNextRefresh(page);
-    await page.locator(`a[href="/rounds/${roundId}"]`).click();
+    await page.locator(`a[href^="/rounds/${roundId}"]`).click();
     await refresh.requested;
     await expect(page.getByTestId("round-summary")).toContainText(
       roundsText("roundTotal", { total: "9" }),

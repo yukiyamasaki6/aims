@@ -10,63 +10,41 @@ function byRoundDateDesc(rounds: RoundListItem[]): RoundListItem[] {
   return [...rounds].sort((a, b) => b.roundDate.localeCompare(a.roundDate));
 }
 
-// 取得結果を、入力中の領域とそれ以外の並びに分ける。同じIDは入力中の領域にだけ置く。
-// 入力中の領域 = 入力中のラウンド − 削除済み(実施日の新しい順)。それ以外 = 取得 − 入力中の領域のID − 削除済み(取得の順のまま。サーバーが実施日の新しい順で返す)。値は取得の値のまま。
-export function overlayRoundsList(
-  fetched: RoundListItem[],
-  inProgress: RoundListItem[],
-  deleted: ReadonlySet<string>,
-): { inProgress: RoundListItem[]; others: RoundListItem[] } {
-  const shown = inProgress.filter((round) => !deleted.has(round.id));
-  const shownIds = new Set(shown.map((round) => round.id));
-  return {
-    inProgress: byRoundDateDesc(shown),
-    others: fetched.filter(
-      (round) => !deleted.has(round.id) && !shownIds.has(round.id),
-    ),
-  };
+// ホームに出す入力中のラウンド。端末の記録から、この画面で削除したもの(`removed`)を除き、実施日の新しい順に並べる。
+// 端末の入力中を読み込む前(`local`がnull)は、何も出さない(null)。
+export function homeView(
+  local: LocalRoundsList | null,
+  removed: ReadonlySet<string>,
+): RoundListItem[] | null {
+  if (local === null) return null;
+  return byRoundDateDesc(
+    local.inProgress.filter((round) => !removed.has(round.id)),
+  );
 }
 
-export type RoundsListView = {
-  inProgress: RoundListItem[];
-  // 取得が成功したときの、入力中でないラウンド。成功でなければnull。
-  others: RoundListItem[] | null;
-  // 取得が成功していないときの、取得の状態。
-  rest: Exclude<FetchView<unknown>, { status: "ok" }> | null;
-  // 取得が成功し、表示するラウンドが1件もない。
-  empty: boolean;
-};
+export type HistoryView =
+  // 取得が成功し、端末の入力中を読み終えている。`rounds`が0件なら履歴はない。
+  | { rounds: RoundListItem[]; rest: null }
+  // それ以外。ラウンドは出さず、取得の状態だけを出す。
+  | { rounds: null; rest: Exclude<FetchView<unknown>, { status: "ok" }> };
 
-// 画面に出す内容を決める。入力中の領域は常に端末の値で出し、取得は裏で行う。端末の入力中を読み終えるまでは出さない。
+// 履歴に出す内容を決める。サーバーで完了と記録された取得結果から、端末の入力中のIDと削除済み(取得時に求めた削除済みIDと、この画面で削除した`removed`)を除く。並びは取得の順のまま。
 // 取得が成功していても、端末の入力中を読み終えるまでは取得中として返す。
-// `removed`はこの画面で削除したラウンドのID。
-export function roundsListView(
+export function historyView(
   view: FetchView<LoadedRoundsList>,
   local: LocalRoundsList | null,
   removed: ReadonlySet<string>,
-): RoundsListView {
-  if (view.status === "ok" && local !== null) {
-    const result = overlayRoundsList(
-      view.data.items,
-      local.inProgress,
-      new Set([...view.data.deleted, ...removed]),
-    );
-    return {
-      inProgress: result.inProgress,
-      others: result.others,
-      rest: null,
-      empty: result.inProgress.length === 0 && result.others.length === 0,
-    };
-  }
+): HistoryView {
+  if (view.status !== "ok") return { rounds: null, rest: view };
+  if (local === null) return { rounds: null, rest: { status: "loading" } };
+  const inProgress = new Set(local.inProgress.map((round) => round.id));
   return {
-    inProgress:
-      local !== null
-        ? byRoundDateDesc(
-            local.inProgress.filter((round) => !removed.has(round.id)),
-          )
-        : [],
-    others: null,
-    rest: view.status === "ok" ? { status: "loading" } : view,
-    empty: false,
+    rounds: view.data.items.filter(
+      (round) =>
+        !inProgress.has(round.id) &&
+        !view.data.deleted.has(round.id) &&
+        !removed.has(round.id),
+    ),
+    rest: null,
   };
 }

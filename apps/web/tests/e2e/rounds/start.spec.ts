@@ -158,7 +158,7 @@ test("「一覧へ戻る」リンクを押すと、ラウンド一覧へ移動�
 }) => {
   await openNewRound(page);
 
-  await page.getByRole("link", { name: roundsText("backToList") }).click();
+  await page.getByRole("link", { name: roundsText("back") }).click();
 
   await expect(page).toHaveURL(/\/rounds$/);
 });
@@ -301,9 +301,7 @@ test("別のユーザーでサインインし直した後のオフラインで�
   await waitForServiceWorkerControl(page);
   await goOffline(context);
   await page.goto("/rounds/new");
-  await expect(
-    page.getByRole("heading", { name: roundsText("createRound") }),
-  ).toBeVisible();
+  await expect(page.getByTestId("round-start-button")).toBeVisible();
   await expect(presetButton(page, name)).toHaveCount(0);
   await context.close();
 });
@@ -332,7 +330,7 @@ test("プリセットを取得できない(通信できない)ときも、「読
   await openNewRound(page);
 
   await expect(
-    page.getByRole("link", { name: roundsText("backToList") }),
+    page.getByRole("link", { name: roundsText("back") }),
   ).toBeVisible();
   await expect(page.getByTestId("round-start-button")).toBeVisible();
   await expect(page.getByText(roundsText("fetchFailure.failed"))).toBeVisible();

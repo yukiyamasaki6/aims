@@ -1,11 +1,12 @@
 import type { RoundConfig } from "../domain/round-config";
 import type { Distance } from "../domain/scorecard-types";
 import type { TargetFaceOption } from "../domain/target-face";
-import { BackToListLink } from "./back-to-list-link";
+import { BackLink } from "./back-link";
 import { RoundMenu } from "./round-menu";
 import { SavePresetDialog } from "./save-preset-dialog";
+import { useRoundOrigin } from "./use-round-origin";
 
-// 一覧へ戻る・プリセット保存・メニューは常時使えてほしい操作のため、
+// 戻る・プリセット保存・メニューは常時使えてほしい操作のため、
 // スクロール領域（<main>）の外の上端に置く。stickyにせず、行がこの裏に入らない。
 export function ScorecardHeaderBar({
   roundId,
@@ -18,9 +19,10 @@ export function ScorecardHeaderBar({
   distances: Distance[];
   targetFaces: TargetFaceOption[];
 }) {
+  const origin = useRoundOrigin();
   return (
     <div className="grid h-14 shrink-0 grid-cols-[auto_1fr] items-center gap-2 bg-card px-8">
-      <BackToListLink />
+      <BackLink origin={origin} />
       <div className="flex items-center justify-end gap-2">
         <SavePresetDialog
           roundName={roundConfig.name}

@@ -66,7 +66,7 @@
 | rounds | score-entry | 矢の点数を記録・修正する | 素点テンキー入力、誤入力修正・差し替え |
 | rounds | setup | ラウンドの設定を変える | 基本属性入力、的（ターゲット）管理、ラウンド・種目管理 |
 | rounds | preset | 構成をプリセットにして管理する | ラウンド・種目管理 |
-| rounds | history | 過去のラウンドを探す | 履歴一覧・スコア詳細 |
+| rounds | history | 入力中のラウンドをホームから、完了したラウンドを履歴から探す | ホーム・履歴 |
 | rounds | detail | ラウンドの成績を見る | 履歴一覧・スコア詳細 |
 | rounds | completion | ラウンドの入力を完了にする | 履歴一覧・スコア詳細 |
 | rounds | delete | ラウンドを削除する | 履歴一覧・スコア詳細 |
@@ -93,7 +93,8 @@ flowchart TD
     subgraph main ["(main)"]
         LeftPanel(("レフトパネル<br/>（全画面に常設）"))
         subgraph rounds ["rounds"]
-            Rounds["/rounds<br/>ラウンド一覧"]
+            Rounds["/rounds<br/>ホーム"]
+            History["/rounds/history<br/>履歴"]
             RoundsNew["/rounds/new<br/>ラウンド新規作成"]
             RoundDetail["/rounds/[id]<br/>ラウンド入力・閲覧"]
         end
@@ -117,14 +118,18 @@ flowchart TD
     ResetPass -->|サインインに戻るリンク| SignIn
     ResetPass -->|パスワード変更成功（サインアウト）| SignIn
     Rounds -->|新規作成ボタン| RoundsNew
-    Rounds -->|ラウンドカードクリック| RoundDetail
-    RoundsNew -->|「一覧へ戻る」リンク| Rounds
+    Rounds -->|入力中のカードクリック| RoundDetail
+    History -->|ラウンドカードクリック（from=history）| RoundDetail
+    RoundsNew -->|「戻る」リンク| Rounds
     RoundsNew -->|開始| RoundDetail
     RoundDetail -->|入力を完了する| Rounds
-    RoundDetail -->|「一覧へ戻る」リンク| Rounds
-    RoundDetail -->|ラウンド削除成功| Rounds
+    RoundDetail -->|「戻る」リンク（遷移元によりホームまたは履歴）| Rounds
+    RoundDetail -->|「戻る」リンク（履歴から開いたとき）| History
+    RoundDetail -->|ラウンド削除成功（遷移元）| Rounds
+    RoundDetail -->|ラウンド削除成功（履歴から開いたとき）| History
     LeftPanel -->|AIMSロゴ| Landing
-    LeftPanel -->|個人リンク| Rounds
+    LeftPanel -->|「ホーム」項目| Rounds
+    LeftPanel -->|「履歴」項目| History
     LeftPanel -->|サインアウト成功| SignIn
 ```
 

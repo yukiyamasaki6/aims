@@ -187,7 +187,7 @@ describe("RoundPresetSelect", () => {
         roundsText("fetchLoading"),
       );
       expect(
-        screen.getByRole("link", { name: roundsText("backToList") }),
+        screen.getByRole("link", { name: roundsText("back") }),
       ).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: roundsText("startWithoutPreset") }),

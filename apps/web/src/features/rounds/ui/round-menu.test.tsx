@@ -34,6 +34,7 @@ async function openDeleteConfirm(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.history.replaceState(null, "", "/");
   procedures = createFakeRoundProcedures();
 });
 
@@ -66,10 +67,34 @@ describe("RoundMenu", () => {
       // Then
       expect(
         procedures.leaving.deleteRoundAndLeave,
-      ).toHaveBeenCalledExactlyOnceWith("round-1", expect.any(Function));
+      ).toHaveBeenCalledExactlyOnceWith(
+        "round-1",
+        "home",
+        expect.any(Function),
+      );
       await waitFor(() => {
         expect(screen.queryByTestId("confirm-dialog-confirm")).toBeNull();
       });
+    });
+
+    it("履歴から開いた詳細では、遷移元を履歴にして削除して離れる手続きを呼ぶ", async () => {
+      // Given
+      window.history.replaceState(null, "", "/rounds/round-1?from=history");
+      const user = userEvent.setup();
+      render(<RoundMenu roundId="round-1" />);
+      await openDeleteConfirm(user);
+
+      // When
+      await user.click(screen.getByTestId("confirm-dialog-confirm"));
+
+      // Then
+      expect(
+        procedures.leaving.deleteRoundAndLeave,
+      ).toHaveBeenCalledExactlyOnceWith(
+        "round-1",
+        "history",
+        expect.any(Function),
+      );
     });
 
     it("削除して離れる手続きへ渡す画面が残っているかの判定は、メニューが取り除かれると偽になる", async () => {
@@ -79,7 +104,7 @@ describe("RoundMenu", () => {
       await openDeleteConfirm(user);
       await user.click(screen.getByTestId("confirm-dialog-confirm"));
       const isCurrent = procedures.leaving.deleteRoundAndLeave.mock
-        .calls[0][1] as () => boolean;
+        .calls[0][2] as () => boolean;
       const beforeUnmount = isCurrent();
 
       // When

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  originPathOf,
   roundFramePathOf,
   roundIdOfPath,
+  roundOriginOf,
 } from "@/features/rounds/domain/round-routes";
 import { ROUND_FRAME_PATH, ROUND_FRAME_PATHS } from "@/routes";
 
@@ -49,6 +51,7 @@ describe("roundIdOfPath", () => {
 describe("roundFramePathOf", () => {
   it.each([
     ["/rounds", "/rounds"],
+    ["/rounds/history", "/rounds/history"],
     ["/rounds/new", "/rounds/new"],
     ["/rounds/6f1c2f3e-0000-4000-8000-000000000000", "/rounds/_"],
     ["/rounds/abc", "/rounds/_"],
@@ -91,12 +94,66 @@ describe("roundFramePathOf", () => {
 
   it("返す枠の経路は、全てROUND_FRAME_PATHSに含まれる", () => {
     // Given
-    const pathnames = ["/rounds", "/rounds/new", "/rounds/x"];
+    const pathnames = [
+      "/rounds",
+      "/rounds/history",
+      "/rounds/new",
+      "/rounds/x",
+    ];
 
     // When
     const frames = pathnames.map(roundFramePathOf);
 
     // Then
     for (const frame of frames) expect(ROUND_FRAME_PATHS).toContain(frame);
+  });
+});
+
+describe("roundOriginOf", () => {
+  it.each([
+    ["from=historyだけ", "?from=history"],
+    ["他のクエリと並ぶfrom=history", "?a=1&from=history"],
+  ])("%sは履歴を返す", (_name, search) => {
+    // Given
+
+    // When
+    const origin = roundOriginOf(search);
+
+    // Then
+    expect(origin).toBe("history");
+  });
+
+  it.each([
+    ["クエリがない", ""],
+    ["fromがない", "?a=1"],
+    ["未知の値", "?from=other"],
+    ["home", "?from=home"],
+    ["空の値", "?from="],
+    ["大文字小文字が違う値", "?from=History"],
+    ["同じ値の重複", "?from=history&from=history"],
+    ["異なる値の重複", "?from=history&from=home"],
+  ])("%sはホームを返す", (_name, search) => {
+    // Given
+
+    // When
+    const origin = roundOriginOf(search);
+
+    // Then
+    expect(origin).toBe("home");
+  });
+});
+
+describe("originPathOf", () => {
+  it.each([
+    ["home", "/rounds"],
+    ["history", "/rounds/history"],
+  ] as const)("遷移元%sの戻り先は%sである", (origin, expected) => {
+    // Given
+
+    // When
+    const path = originPathOf(origin);
+
+    // Then
+    expect(path).toBe(expected);
   });
 });

@@ -114,7 +114,7 @@ async function expectSavedShots(
 
 // 一覧と詳細の行き来は、ハブの常駐を確かめるため、画面を読み込み直さないリンクの遷移で行う。
 async function backToList(page: Page) {
-  await page.getByRole("link", { name: roundsText("backToList") }).click();
+  await page.getByRole("link", { name: roundsText("back") }).click();
   await expect(page).toHaveURL(/\/rounds$/);
 }
 
