@@ -13,7 +13,7 @@ import type {
   DistanceConfigErrors,
   DistanceDraft,
 } from "../domain/distance-config";
-import { DISTANCE_CONFIG_MAX } from "../domain/round-constants";
+import { DISTANCE_LIMITS } from "../domain/round-constants";
 import type { TargetFaceOption } from "../domain/target-face";
 import { TargetFacePicker } from "./target-face-picker";
 
@@ -43,9 +43,9 @@ function NumberField({
   slug,
   distanceNumber,
   value,
+  max,
   error,
-  describedBy,
-  invalid,
+  unfitId,
   children,
   onChange,
 }: {
@@ -53,15 +53,15 @@ function NumberField({
   slug: string;
   distanceNumber: number;
   value: number | null;
-  error: string | undefined;
-  // 項目に関わる補足の説明の要素のid。
-  describedBy?: string;
-  // 項目の値そのものの誤りでなく、他の項目との組で起きる誤りのとき真。
-  invalid?: boolean;
+  max: number;
+  error: "required" | "notPositiveInteger" | "tooLarge" | undefined;
+  // 項目の値そのものの誤りでなく、他の項目との組で起きる誤りの説明の要素のid。あるとき、項目を誤りとして示し、説明に結ぶ。
+  unfitId?: string;
   children?: ReactNode;
   onChange: (value: number | null) => void;
 }) {
   const id = `distance-config-${slug}-${distanceNumber}`;
+  const errorText = useErrorText()(error, max);
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-muted-foreground text-xs">
@@ -70,15 +70,16 @@ function NumberField({
       <Input
         id={id}
         type="number"
-        aria-describedby={describedBy}
+        max={max}
+        aria-describedby={unfitId}
         data-testid={id}
         value={value ?? ""}
         onChange={(e) =>
           onChange(e.target.value === "" ? null : Number(e.target.value))
         }
-        aria-invalid={Boolean(error) || invalid}
+        aria-invalid={Boolean(errorText) || unfitId !== undefined}
       />
-      {error && <p className="text-destructive text-sm">{error}</p>}
+      {errorText && <p className="text-destructive text-sm">{errorText}</p>}
       {children}
     </div>
   );
@@ -137,11 +138,10 @@ function useErrorText() {
   const t = useTranslations("rounds");
   return (
     error: "required" | "notPositiveInteger" | "tooLarge" | undefined,
+    max: number,
   ) => {
     if (error === "tooLarge") {
-      return t("distanceConfigError.tooLarge", {
-        max: String(DISTANCE_CONFIG_MAX),
-      });
+      return t("distanceConfigError.tooLarge", { max: String(max) });
     }
     return error ? t(`distanceConfigError.${error}`) : undefined;
   };
@@ -182,7 +182,6 @@ export function DistanceFields({
   hasShots: boolean;
 }) {
   const t = useTranslations("rounds");
-  const errorText = useErrorText();
   // 編集不可の的を押したときだけ、的の直下に理由を出す。
   const [targetFaceLockedPressed, setTargetFaceLockedPressed] = useState(false);
   // 総エンド数・本数が記録済みの矢に収まらないときの理由は、総エンド数の直下に1つ出し、本数からも参照する。
@@ -203,7 +202,8 @@ export function DistanceFields({
         slug="distance"
         distanceNumber={distanceNumber}
         value={draft.distance}
-        error={errorText(fieldErrors.distance)}
+        max={DISTANCE_LIMITS.distance}
+        error={fieldErrors.distance}
         onChange={(v) => setDraft((d) => ({ ...d, distance: v }))}
       />
 
@@ -212,9 +212,9 @@ export function DistanceFields({
         slug="arrows"
         distanceNumber={distanceNumber}
         value={draft.arrows_per_end}
-        error={errorText(fieldErrors.arrowsPerEnd)}
-        describedBy={unfitShown ? unfitId : undefined}
-        invalid={unfitShown}
+        max={DISTANCE_LIMITS.arrowsPerEnd}
+        error={fieldErrors.arrowsPerEnd}
+        unfitId={unfitShown ? unfitId : undefined}
         onChange={(v) => setDraft((d) => ({ ...d, arrows_per_end: v }))}
       />
 
@@ -223,9 +223,9 @@ export function DistanceFields({
         slug="total-ends"
         distanceNumber={distanceNumber}
         value={draft.total_ends}
-        error={errorText(fieldErrors.totalEnds)}
-        describedBy={unfitShown ? unfitId : undefined}
-        invalid={unfitShown}
+        max={DISTANCE_LIMITS.totalEnds}
+        error={fieldErrors.totalEnds}
+        unfitId={unfitShown ? unfitId : undefined}
         onChange={(v) => setDraft((d) => ({ ...d, total_ends: v }))}
       >
         {unfitShown && <ShotsUnfitMessage id={unfitId} />}

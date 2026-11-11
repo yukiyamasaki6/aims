@@ -619,6 +619,7 @@ where p.pronamespace = 'public'::regnamespace;
 
 -- 期待値の方針:
 --   RPCとSELECTポリシーのヘルパー（is_round_member）: authenticatedだけtrue。anonはfalse。
+--   distance_config_over_limit: SECURITY INVOKERのsave_round_as_presetが呼ぶ純関数のため、authenticatedだけtrue。anonはfalse。
 --   is_round_editor、shot_fits: RPC（SECURITY DEFINER）の内部だけが呼ぶため、どちらもfalse。
 --   トリガー関数（handle_new_user, set_updated_at）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
 -- 新しい関数を追加したら、PUBLICからREVOKEし、この表に行を追加する。
@@ -637,6 +638,8 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.disable_distance(uuid,uuid)',                                              'authenticated', true),
   ('public.disable_round(uuid,uuid)',                                                 'anon',          false),
   ('public.disable_round(uuid,uuid)',                                                 'authenticated', true),
+  ('public.distance_config_over_limit(numeric,numeric,numeric)',                     'anon',          false),
+  ('public.distance_config_over_limit(numeric,numeric,numeric)',                     'authenticated', true),
   ('public.handle_new_user()',                                                        'anon',          false),
   ('public.handle_new_user()',                                                        'authenticated', false),
   ('public.is_round_editor(uuid)',                                                    'anon',          false),

@@ -361,6 +361,7 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('create_round', 'success', 'empty_distances', null, pg_temp.q('create_round', '{"p_distances":[]}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'success', 'multi_distances', null, pg_temp.q('create_round', '{"p_distances":[{},{"id":"@DN2","distance_event_id":"@DEV2","position_key":"b","distance":50}]}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'success', 'name_50_chars', null, pg_temp.q('create_round', jsonb_build_object('p_name', repeat('a', 50))), 1, 'select pg_temp.st_create_round($1)'),
+  ('create_round', 'success', 'at_limit', null, pg_temp.q('create_round', '{"p_distances":[{"distance":100,"total_ends":60,"arrows_per_end":12}]}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'invalid', 'missing_is_marked', null, pg_temp.q('create_round', '{"p_distances":[{"is_marked":null}]}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'invalid', 'unmarked_in_outdoor', null, pg_temp.q('create_round', '{"p_distances":[{"is_marked":false,"distance":null}]}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'invalid', 'invalid_format', null, pg_temp.q('create_round', '{"p_format":"invalid"}'), 1, 'select pg_temp.st_create_round($1)'),
@@ -386,6 +387,10 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('create_round', 'invalid', 'distances_not_array', null, pg_temp.q('create_round', '{"p_distances":{"a":1}}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'invalid', 'invalid_distance_id', null, pg_temp.q('create_round', '{"p_distances":[{"id":"not-a-uuid"}]}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'invalid', 'fractional_total_ends', null, pg_temp.q('create_round', '{"p_distances":[{"total_ends":1.5}]}'), 1, 'select pg_temp.st_create_round($1)'),
+  ('create_round', 'invalid', 'distance_over_limit', null, pg_temp.q('create_round', '{"p_distances":[{"distance":101}]}'), 1, 'select pg_temp.st_create_round($1)'),
+  ('create_round', 'invalid', 'total_ends_over_limit', null, pg_temp.q('create_round', '{"p_distances":[{"total_ends":61}]}'), 1, 'select pg_temp.st_create_round($1)'),
+  ('create_round', 'invalid', 'arrows_per_end_over_limit', null, pg_temp.q('create_round', '{"p_distances":[{"arrows_per_end":13}]}'), 1, 'select pg_temp.st_create_round($1)'),
+  ('create_round', 'invalid', 'second_distance_over_limit', null, pg_temp.q('create_round', '{"p_distances":[{},{"id":"@DN2","distance_event_id":"@DEV2","position_key":"b","distance":101}]}'), 1, 'select pg_temp.st_create_round($1)'),
   ('create_round', 'idempotent', 'replay', null, pg_temp.q('create_round'), 2, 'select pg_temp.st_create_round($1)'),
 
   -- update_round
@@ -414,7 +419,9 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   -- create_distance
   ('create_distance', 'success', 'default', null, pg_temp.q('create_distance'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'success', 'unmarked_in_field', null, pg_temp.q('create_distance', '{"p_round_id":"@R2","p_distance":null,"p_is_marked":false}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
+  ('create_distance', 'success', 'at_limit', null, pg_temp.q('create_distance', '{"p_distance":100,"p_total_ends":60,"p_arrows_per_end":12}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'unauthorized', 'default', null, pg_temp.q('create_distance'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
+  ('create_distance', 'unauthorized', 'over_limit', null, pg_temp.q('create_distance', '{"p_distance":101}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'invalid', 'unmarked_in_outdoor', null, pg_temp.q('create_distance', '{"p_distance":null,"p_is_marked":false}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'invalid', 'round_disabled', pg_temp.q('disable_round', '{"p_round_event_id":"@EV2"}'), pg_temp.q('create_distance'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'invalid', 'unknown_round', null, pg_temp.q('create_distance', '{"p_round_id":"@UNKNOWN"}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
@@ -423,6 +430,9 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('create_distance', 'invalid', 'missing_position_key', null, pg_temp.q('create_distance', '{"p_position_key":null}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'invalid', 'marked_without_distance', null, pg_temp.q('create_distance', '{"p_distance":null}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'invalid', 'total_ends_zero', null, pg_temp.q('create_distance', '{"p_total_ends":0}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
+  ('create_distance', 'invalid', 'distance_over_limit', null, pg_temp.q('create_distance', '{"p_distance":101}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
+  ('create_distance', 'invalid', 'total_ends_over_limit', null, pg_temp.q('create_distance', '{"p_total_ends":61}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
+  ('create_distance', 'invalid', 'arrows_per_end_over_limit', null, pg_temp.q('create_distance', '{"p_arrows_per_end":13}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'invalid', 'unknown_target_face', null, pg_temp.q('create_distance', '{"p_target_face_id":"@UNKNOWN"}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'invalid', 'existing_distance_id', null, pg_temp.q('create_distance', '{"p_id":"@D1"}'), 1, $$select pg_temp.st_new_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('create_distance', 'success', 'duplicate_position_key', null, pg_temp.q('create_distance', '{"p_position_key":"a"}'), 1, $$select pg_temp.st_new_distance('DN') || ' ' || pg_temp.res($1)$$),
@@ -439,7 +449,10 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('update_distance', 'success', 'with_shots_unmarked_stays', null, pg_temp.q('update_distance', '{"p_distance_id":"@D3","p_distance_event_id":"@EV1","p_changes":{"distance":45,"is_marked":false}}'), 1, $$select pg_temp.st_distance('D3') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'success', 'marked_with_distance_same_save', null, pg_temp.q('update_distance', '{"p_distance_id":"@D3","p_distance_event_id":"@EV1","p_changes":{"is_marked":true,"distance":60}}'), 1, $$select pg_temp.st_distance('D3') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'success', 'partial_config_unfit', null, pg_temp.q('update_distance', '{"p_distance_id":"@D2","p_distance_event_id":"@EV1","p_changes":{"distance":45,"config":{"total_ends":6,"arrows_per_end":1,"target_face_id":"@F1"}}}'), 1, $$select pg_temp.st_distance('D2') || ' ' || pg_temp.res($1)$$),
+  ('update_distance', 'success', 'at_limit_config', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"config":{"total_ends":60,"arrows_per_end":12,"target_face_id":"@F2"}}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
+  ('update_distance', 'success', 'at_limit_distance', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"distance":100}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'unauthorized', 'default', null, pg_temp.q('update_distance'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
+  ('update_distance', 'unauthorized', 'over_limit', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"distance":101}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'invalid', 'unmarked_in_outdoor', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"is_marked":false}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'invalid', 'marked_distance_cleared', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"distance":null}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'invalid', 'with_shots_arrows_unfit', null, pg_temp.q('update_distance', '{"p_distance_id":"@D2","p_distance_event_id":"@EV1","p_changes":{"config":{"total_ends":6,"arrows_per_end":1,"target_face_id":"@F1"}}}'), 1, $$select pg_temp.st_distance('D2') || ' ' || pg_temp.res($1)$$),
@@ -453,6 +466,9 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('update_distance', 'invalid', 'total_ends_zero', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"config":{"total_ends":0,"arrows_per_end":3,"target_face_id":"@F1"}}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'invalid', 'unknown_target_face', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"config":{"total_ends":3,"arrows_per_end":3,"target_face_id":"@UNKNOWN"}}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'invalid', 'distance_zero', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"distance":0}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
+  ('update_distance', 'invalid', 'distance_over_limit', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"distance":101}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
+  ('update_distance', 'invalid', 'config_total_ends_over_limit', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"config":{"total_ends":61,"arrows_per_end":3,"target_face_id":"@F1"}}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
+  ('update_distance', 'invalid', 'config_arrows_per_end_over_limit', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"config":{"total_ends":3,"arrows_per_end":13,"target_face_id":"@F1"}}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'invalid', 'unknown_key', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{"unknown":1}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'invalid', 'empty_changes', null, pg_temp.q('update_distance', '{"p_distance_id":"@D1","p_distance_event_id":"@EV1","p_changes":{}}'), 1, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
   ('update_distance', 'idempotent', 'replay', null, pg_temp.q('update_distance'), 2, $$select pg_temp.st_distance('D1') || ' ' || pg_temp.res($1)$$),
@@ -516,6 +532,7 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   -- save_round_as_preset
   ('save_round_as_preset', 'success', 'default', null, pg_temp.q('save_round_as_preset'), 1, $$select pg_temp.st_preset('Matrix Preset')$$),
   ('save_round_as_preset', 'success', 'name_50_chars', null, pg_temp.q('save_round_as_preset', jsonb_build_object('p_name', repeat('a', 50))), 1, $$select pg_temp.st_preset(repeat('a', 50))$$),
+  ('save_round_as_preset', 'success', 'at_limit', null, pg_temp.q('save_round_as_preset', '{"p_distances":[{"distance":100,"total_ends":60,"arrows_per_end":12}]}'), 1, $$select pg_temp.st_preset('Matrix Preset')$$),
   ('save_round_as_preset', 'invalid', 'name_51_chars', null, pg_temp.q('save_round_as_preset', jsonb_build_object('p_name', repeat('a', 51))), 1, $$select pg_temp.st_preset(repeat('a', 51))$$),
   ('save_round_as_preset', 'invalid', 'invalid_format', null, pg_temp.q('save_round_as_preset', '{"p_format":"invalid"}'), 1, $$select pg_temp.st_preset('Matrix Preset')$$),
   ('save_round_as_preset', 'invalid', 'invalid_bow_type', null, pg_temp.q('save_round_as_preset', '{"p_bow_type":"invalid"}'), 1, $$select pg_temp.st_preset('Matrix Preset')$$),
@@ -527,6 +544,9 @@ insert into rpc_call (rpc, aspect, variant, setup, call, repeat, probe) values
   ('save_round_as_preset', 'invalid', 'missing_target_face', null, pg_temp.q('save_round_as_preset', '{"p_distances":[{"target_face_id":null}]}'), 1, $$select pg_temp.st_preset('Matrix Preset')$$),
   ('save_round_as_preset', 'invalid', 'marked_without_distance', null, pg_temp.q('save_round_as_preset', '{"p_distances":[{"distance":null}]}'), 1, $$select pg_temp.st_preset('Matrix Preset')$$),
   ('save_round_as_preset', 'invalid', 'total_ends_zero', null, pg_temp.q('save_round_as_preset', '{"p_distances":[{"total_ends":0}]}'), 1, $$select pg_temp.st_preset('Matrix Preset')$$),
+  ('save_round_as_preset', 'invalid', 'distance_over_limit', null, pg_temp.q('save_round_as_preset', '{"p_distances":[{"distance":101}]}'), 1, $$select pg_temp.st_preset('Matrix Preset')$$),
+  ('save_round_as_preset', 'invalid', 'total_ends_over_limit', null, pg_temp.q('save_round_as_preset', '{"p_distances":[{"total_ends":61}]}'), 1, $$select pg_temp.st_preset('Matrix Preset')$$),
+  ('save_round_as_preset', 'invalid', 'arrows_per_end_over_limit', null, pg_temp.q('save_round_as_preset', '{"p_distances":[{"arrows_per_end":13}]}'), 1, $$select pg_temp.st_preset('Matrix Preset')$$),
   ('save_round_as_preset', 'invalid', 'unknown_target_face', null, pg_temp.q('save_round_as_preset', '{"p_distances":[{"target_face_id":"@UNKNOWN"}]}'), 1, $$select pg_temp.st_preset('Matrix Preset')$$),
   ('save_round_as_preset', 'idempotent', 'duplicate_save', null, pg_temp.q('save_round_as_preset'), 2, $$select pg_temp.st_preset('Matrix Preset')$$);
 
@@ -602,6 +622,7 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('create_round', 'success', 'empty_distances', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=0 distance_events=0 list=[]'),
   ('create_round', 'success', 'multi_distances', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=2 distance_events=2 list=[a:70:true:6x6:0001:40 b:50:true:6x6:0001:41]'),
   ('create_round', 'success', 'name_50_chars', 'editor', 'ok', 'ret=applied round=[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
+  ('create_round', 'success', 'at_limit', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:100:true:60x12:0001:40]'),
   ('create_round', 'invalid', 'missing_is_marked', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
   ('create_round', 'invalid', 'unmarked_in_outdoor', 'editor', 'error:[PT422]Unmarkedの距離はフィールド種別でのみ使用できます。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
   ('create_round', 'invalid', 'invalid_format', 'editor', 'error:[PT422]種別が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
@@ -628,6 +649,10 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('create_round', 'invalid', 'distances_not_array', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
   ('create_round', 'invalid', 'invalid_distance_id', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
   ('create_round', 'invalid', 'fractional_total_ends', 'editor', 'error:[PT422]距離の指定が不正です。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'distance_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'total_ends_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'arrows_per_end_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
+  ('create_round', 'invalid', 'second_distance_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'ret=- round=[-] rounds=0 round_events=0 editors=0 distances=0 distance_events=0 list=[]'),
   ('create_round', 'idempotent', 'replay', 'editor', 'ok', 'ret=applied round=[Matrix New Round/2026-01-01/outdoor/recurve] rounds=1 round_events=1 editors=1 distances=1 distance_events=1 list=[a:70:true:6x6:0001:40]'),
 
   ('update_round', 'success', 'default', 'editor', 'ok', 'events=2 revision=2 name=Renamed Round date=2026-02-02 format=indoor bow=compound disabled=false ret=applied fields=name,round_date,format,bow_type'),
@@ -655,8 +680,11 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
 
   ('create_distance', 'success', 'default', 'editor', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=30 ends=4 arrows=3 face=0002 marked=true ret=applied'),
   ('create_distance', 'success', 'unmarked_in_field', 'editor', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=- ends=4 arrows=3 face=0002 marked=false ret=applied'),
+  ('create_distance', 'success', 'at_limit', 'editor', 'ok', 'distances=1 distance_events=1 revision=1 position=c distance=100 ends=60 arrows=12 face=0002 marked=true ret=applied'),
   ('create_distance', 'unauthorized', 'default', 'viewer', 'error:[PT403]このラウンドに距離を追加する権限がありません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
   ('create_distance', 'unauthorized', 'default', 'non_member', 'error:[PT403]このラウンドに距離を追加する権限がありません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'unauthorized', 'over_limit', 'viewer', 'error:[PT403]このラウンドに距離を追加する権限がありません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'unauthorized', 'over_limit', 'non_member', 'error:[PT403]このラウンドに距離を追加する権限がありません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
   ('create_distance', 'invalid', 'unmarked_in_outdoor', 'editor', 'ok', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=INVARIANT'),
   ('create_distance', 'invalid', 'round_disabled', 'editor', 'ok', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=DISABLED'),
   ('create_distance', 'invalid', 'unknown_round', 'editor', 'error:[PT403]このラウンドに距離を追加する権限がありません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
@@ -665,6 +693,9 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('create_distance', 'invalid', 'missing_position_key', 'editor', 'error:[PT422]距離の指定が不正です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
   ('create_distance', 'invalid', 'marked_without_distance', 'editor', 'error:[PT422]Markedの距離には距離(m)が必要です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
   ('create_distance', 'invalid', 'total_ends_zero', 'editor', 'error:[PT422]距離の指定が不正です。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'distance_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'total_ends_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
+  ('create_distance', 'invalid', 'arrows_per_end_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
   ('create_distance', 'invalid', 'unknown_target_face', 'editor', 'error:[PT422]指定された的が存在しません。', 'distances=0 distance_events=0 revision=- position=- distance=- ends=- arrows=- face=- marked=- ret=-'),
   ('create_distance', 'invalid', 'existing_distance_id', 'editor', 'error:[PT422]既に存在する距離IDです。', 'distances=1 distance_events=1 revision=1 position=a distance=70 ends=6 arrows=6 face=0001 marked=true ret=-'),
   ('create_distance', 'success', 'duplicate_position_key', 'editor', 'ok', 'distances=1 distance_events=1 revision=1 position=a distance=30 ends=4 arrows=3 face=0002 marked=true ret=applied'),
@@ -680,8 +711,12 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('update_distance', 'success', 'with_shots_unmarked_stays', 'editor', 'ok', 'events=2 revision=2 distance=45 ends=6 arrows=6 face=0001 marked=false disabled=false ret=applied fields=is_marked,distance'),
   ('update_distance', 'success', 'marked_with_distance_same_save', 'editor', 'ok', 'events=2 revision=2 distance=60 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=is_marked,distance'),
   ('update_distance', 'success', 'partial_config_unfit', 'editor', 'ok', 'events=2 revision=2 distance=45 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=distance rejected=config:UNFIT'),
+  ('update_distance', 'success', 'at_limit_config', 'editor', 'ok', 'events=2 revision=2 distance=70 ends=60 arrows=12 face=0002 marked=true disabled=false ret=applied fields=config'),
+  ('update_distance', 'success', 'at_limit_distance', 'editor', 'ok', 'events=2 revision=2 distance=100 ends=6 arrows=6 face=0001 marked=true disabled=false ret=applied fields=distance'),
   ('update_distance', 'unauthorized', 'default', 'viewer', 'error:[PT403]この距離を編集する権限がありません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
   ('update_distance', 'unauthorized', 'default', 'non_member', 'error:[PT403]この距離を編集する権限がありません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'unauthorized', 'over_limit', 'viewer', 'error:[PT403]この距離を編集する権限がありません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'unauthorized', 'over_limit', 'non_member', 'error:[PT403]この距離を編集する権限がありません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
   ('update_distance', 'invalid', 'unmarked_in_outdoor', 'editor', 'ok', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=none rejected=is_marked:INVARIANT'),
   ('update_distance', 'invalid', 'marked_distance_cleared', 'editor', 'ok', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=none rejected=distance:INVARIANT'),
   ('update_distance', 'invalid', 'with_shots_arrows_unfit', 'editor', 'ok', 'events=1 revision=1 distance=50 ends=6 arrows=6 face=0001 marked=true disabled=false ret=none rejected=config:UNFIT'),
@@ -695,6 +730,9 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('update_distance', 'invalid', 'total_ends_zero', 'editor', 'error:[PT422]構成の値が不正です。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
   ('update_distance', 'invalid', 'unknown_target_face', 'editor', 'error:[PT422]指定された的が存在しません。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
   ('update_distance', 'invalid', 'distance_zero', 'editor', 'error:[PT422]距離(m)が不正です。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'distance_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'config_total_ends_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
+  ('update_distance', 'invalid', 'config_arrows_per_end_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
   ('update_distance', 'invalid', 'unknown_key', 'editor', 'error:[PT422]距離の変更に未知の項目が含まれています。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
   ('update_distance', 'invalid', 'empty_changes', 'editor', 'error:[PT422]距離の変更はキーを持つオブジェクトで指定してください。', 'events=1 revision=1 distance=70 ends=6 arrows=6 face=0001 marked=true disabled=false ret=-'),
   ('update_distance', 'idempotent', 'replay', 'editor', 'ok', 'events=2 revision=2 distance=55 ends=3 arrows=3 face=0002 marked=true disabled=false ret=applied fields=distance,config'),
@@ -756,6 +794,7 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('save_round_as_preset', 'success', 'default', 'viewer', 'ok', 'presets=1 owner=viewer format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),
   ('save_round_as_preset', 'success', 'default', 'non_member', 'ok', 'presets=1 owner=non_member format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),
   ('save_round_as_preset', 'success', 'name_50_chars', 'editor', 'ok', 'presets=1 owner=editor format=field bow=compound distance_rows=2 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]'),
+  ('save_round_as_preset', 'success', 'at_limit', 'editor', 'ok', 'presets=1 owner=editor format=field bow=compound distance_rows=1 distances=[a:100:true:60x12:0001]'),
   ('save_round_as_preset', 'invalid', 'name_51_chars', 'editor', 'error:new row for relation "preset_rounds" violates check constraint "preset_rounds_name_length"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
   ('save_round_as_preset', 'invalid', 'invalid_format', 'editor', 'error:new row for relation "preset_rounds" violates check constraint "preset_rounds_format_check"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
   ('save_round_as_preset', 'invalid', 'invalid_bow_type', 'editor', 'error:new row for relation "preset_rounds" violates check constraint "preset_rounds_bow_type_check"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
@@ -767,6 +806,9 @@ insert into rpc_expected (rpc, aspect, variant, actor, result, state) values
   ('save_round_as_preset', 'invalid', 'missing_target_face', 'editor', 'error:null value in column "target_face_id" of relation "preset_distances" violates not-null constraint', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
   ('save_round_as_preset', 'invalid', 'marked_without_distance', 'editor', 'error:new row for relation "preset_distances" violates check constraint "preset_distances_marked_requires_distance"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
   ('save_round_as_preset', 'invalid', 'total_ends_zero', 'editor', 'error:new row for relation "preset_distances" violates check constraint "preset_distances_total_ends_positive"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'distance_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'total_ends_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
+  ('save_round_as_preset', 'invalid', 'arrows_per_end_over_limit', 'editor', 'error:[PT422]距離・総エンド数・矢数が上限を超えています。', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
   ('save_round_as_preset', 'invalid', 'unknown_target_face', 'editor', 'error:insert or update on table "preset_distances" violates foreign key constraint "preset_distances_target_face_id_fkey"', 'presets=0 owner=- format=- bow=- distance_rows=0 distances=[]'),
   ('save_round_as_preset', 'idempotent', 'duplicate_save', 'editor', 'ok', 'presets=2 owner=editor format=field bow=compound distance_rows=4 distances=[a:50:true:6x6:0001 b:-:false:4x6:0001]');
 
@@ -809,7 +851,8 @@ insert into rpc_signature (rpc, sig) values
 create temp table rpc_helper (sig text primary key, reason text not null);
 insert into rpc_helper (sig, reason) values
   ('is_round_member(uuid)', 'RLSポリシーが使うSTABLEな判定ヘルパーで、書き込みRPCではない'),
-  ('is_round_editor(uuid)', 'RPCの権限チェックが使うSTABLEな判定ヘルパーで、書き込みRPCではない');
+  ('is_round_editor(uuid)', 'RPCの権限チェックが使うSTABLEな判定ヘルパーで、書き込みRPCではない'),
+  ('distance_config_over_limit(numeric,numeric,numeric)', '上限超過を判定する純関数で、save_round_as_presetが呼ぶ。書き込みRPCではない');
 
 -- トリガー関数は直接呼べないため対象外。
 create temp view rpc_target as

@@ -14,6 +14,9 @@ export type BowTypeOption = (typeof BOW_TYPE_OPTIONS)[number];
 // 制約がある）。
 export const NAME_MAX_LENGTH = 50;
 
-// 距離(m)・総エンド数・矢数の上限。サーバーは3項目とも、テキスト表現が`^[1-9][0-9]{0,15}$`の整数(1〜9999999999999999)だけを受け、範囲外の操作は黙って破棄する。
-// 画面の数値は`Number`で、`Number.MAX_SAFE_INTEGER`を超える整数は正確に表せず、送ると17桁になって拒否される。そのため、サーバーの範囲の内側で正確に表せる最大の整数を上限にする。
-export const DISTANCE_CONFIG_MAX = Number.MAX_SAFE_INTEGER;
+// 距離(m)・総エンド数・矢数の実用上の上限。DBの`distances`・`preset_distances`のCHECK制約と、判定関数`distance_config_over_limit`の値と一致させる(単体テストが一致を検査する)。
+export const DISTANCE_LIMITS = {
+  distance: 100,
+  totalEnds: 60,
+  arrowsPerEnd: 12,
+} as const;

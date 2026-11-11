@@ -1,6 +1,6 @@
 begin;
 
-select plan(26);
+select plan(32);
 
 select results_eq(
   $$select count(*) from public.preset_rounds where owner_id is null$$,
@@ -200,6 +200,65 @@ select lives_ok(
     values
       ('22222222-2222-2222-2222-222222222222', '10', 70, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
   '同一preset_id内でposition_keyが重複しても挿入できる'
+);
+
+-- preset_distances: distance/total_ends/arrows_per_endの実用上の上限CHECK制約
+-- （distances側と同じ上限: 距離(m)100・総エンド数60・矢数12）。
+-- 値そのものが検証の対象のため上限の境界の値を使い、他の項目は通常の値にして、その項目の制約だけが原因だと特定できるようにする。
+-- UPDATEはpreset_distancesにUPDATE権限がなく、上の直接UPDATEの拒否と同じ理由で検証しない。
+
+select lives_ok(
+  $$insert into public.preset_distances
+      (preset_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('22222222-2222-2222-2222-222222222222', '20', 100, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  'preset_distances.distance=100（上限ちょうど）なら挿入できる'
+);
+
+select lives_ok(
+  $$insert into public.preset_distances
+      (preset_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('22222222-2222-2222-2222-222222222222', '21', 70, 60, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  'preset_distances.total_ends=60（上限ちょうど）なら挿入できる'
+);
+
+select lives_ok(
+  $$insert into public.preset_distances
+      (preset_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('22222222-2222-2222-2222-222222222222', '22', 70, 6, 12, 'a1000000-0000-0000-0000-000000000001')$$,
+  'preset_distances.arrows_per_end=12（上限ちょうど）なら挿入できる'
+);
+
+select throws_ok(
+  $$insert into public.preset_distances
+      (preset_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('22222222-2222-2222-2222-222222222222', '30', 101, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23514',
+  null,
+  'preset_distances.distance=101（上限超過）はCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$insert into public.preset_distances
+      (preset_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('22222222-2222-2222-2222-222222222222', '30', 70, 61, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23514',
+  null,
+  'preset_distances.total_ends=61（上限超過）はCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$insert into public.preset_distances
+      (preset_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('22222222-2222-2222-2222-222222222222', '30', 70, 6, 13, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23514',
+  null,
+  'preset_distances.arrows_per_end=13（上限超過）はCHECK制約で拒否される'
 );
 
 select throws_ok(

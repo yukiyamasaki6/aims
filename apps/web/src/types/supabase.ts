@@ -667,6 +667,14 @@ export type Database = {
         Args: { p_round_event_id: string; p_round_id: string };
         Returns: Json;
       };
+      distance_config_over_limit: {
+        Args: {
+          p_arrows_per_end: number;
+          p_distance: number;
+          p_total_ends: number;
+        };
+        Returns: boolean;
+      };
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
       record_shots: { Args: { p_shots: Json }; Returns: Json };
