@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
-import { ROUNDS_PATH } from "@/routes";
+import { ROUNDS_HISTORY_PATH, ROUNDS_HOME_PATH } from "@/routes";
 import {
   roundDisabledOperation,
   statusOperation,
@@ -67,7 +67,7 @@ describe("createRoundLeaving", () => {
         roundStreamId("round-1"),
         statusOperation("round-1", "completed", issued()[0]),
       );
-      expect(calls).toEqual(["append:done", `go:${ROUNDS_PATH}`]);
+      expect(calls).toEqual(["append:done", `go:${ROUNDS_HOME_PATH}`]);
       expect(go).toHaveBeenCalledTimes(1);
       expect(replace).not.toHaveBeenCalled();
     });
@@ -87,7 +87,10 @@ describe("createRoundLeaving", () => {
         });
 
         // When
-        const done = leaving[method]("round-1", () => current);
+        const done =
+          method === "completeRound"
+            ? leaving.completeRound("round-1", () => current)
+            : leaving.deleteRoundAndLeave("round-1", "home", () => current);
         await flush();
         current = false;
         finishAppend();
@@ -101,13 +104,13 @@ describe("createRoundLeaving", () => {
   });
 
   describe("deleteRoundAndLeave", () => {
-    it("そのラウンドの列へ削除の操作を追記し、追記の完了の後に一覧へ置き換えて移る", async () => {
+    it("そのラウンドの列へ削除の操作を追記し、追記の完了の後に遷移元のホームへ置き換えて移る", async () => {
       // Given
       const { leaving, append, go, replace, calls, issued, finishAppend } =
         setup({ holdAppend: true });
 
       // When
-      const done = leaving.deleteRoundAndLeave("round-1", () => true);
+      const done = leaving.deleteRoundAndLeave("round-1", "home", () => true);
       await flush();
       const beforeFinish = [...calls];
       finishAppend();
@@ -119,9 +122,20 @@ describe("createRoundLeaving", () => {
         roundStreamId("round-1"),
         roundDisabledOperation("round-1", issued()[0]),
       );
-      expect(calls).toEqual(["append:done", `replace:${ROUNDS_PATH}`]);
+      expect(calls).toEqual(["append:done", `replace:${ROUNDS_HOME_PATH}`]);
       expect(replace).toHaveBeenCalledTimes(1);
       expect(go).not.toHaveBeenCalled();
+    });
+
+    it("遷移元が履歴なら、履歴へ置き換えて移る", async () => {
+      // Given
+      const { leaving, calls } = setup();
+
+      // When
+      await leaving.deleteRoundAndLeave("round-1", "history", () => true);
+
+      // Then
+      expect(calls).toEqual(["append:done", `replace:${ROUNDS_HISTORY_PATH}`]);
     });
   });
 
@@ -132,8 +146,13 @@ describe("createRoundLeaving", () => {
       const { leaving, append, issued } = setup();
 
       // When
-      await leaving[method]("round-1", () => true);
-      await leaving[method]("round-1", () => true);
+      for (let i = 0; i < 2; i++) {
+        if (method === "completeRound") {
+          await leaving.completeRound("round-1", () => true);
+        } else {
+          await leaving.deleteRoundAndLeave("round-1", "home", () => true);
+        }
+      }
 
       // Then
       const eventIds = append.mock.calls.map(

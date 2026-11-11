@@ -20,19 +20,33 @@ export function frameHtmlOf(framePath: string): string {
   return `${framePath.slice(1)}.html`;
 }
 
-// ラウンドの一覧、作成、詳細の画面の経路。
+// ラウンドのホーム、履歴、作成、詳細の画面の経路。
+// ROUNDS_PATHはラウンドの画面全体の根(保護の範囲)、ROUNDS_HOME_PATHはホーム画面で、値は同じである。
+// 同値の別名の再エクスポートはknipが重複として報告するため、ROUNDS_HOME_PATHは根から作る。
 export const ROUNDS_PATH = "/rounds";
+export const ROUNDS_HOME_PATH = `${ROUNDS_PATH}`;
+export const ROUNDS_HISTORY_PATH = `${ROUNDS_PATH}/history`;
 export const NEW_ROUND_PATH = `${ROUNDS_PATH}/new`;
-export function roundPath(roundId: string): string {
-  return `${ROUNDS_PATH}/${roundId}`;
+
+// 詳細の遷移元。URLのクエリに載せ、履歴から開いたときだけ付ける(無ければホーム)。
+export const ROUND_ORIGIN_PARAM = "from";
+export const ROUND_ORIGIN_HISTORY = "history";
+
+// 詳細の経路。履歴から開くとき(from = "history")だけ、遷移元のクエリを付ける。
+export function roundPath(roundId: string, from?: string): string {
+  const path = `${ROUNDS_PATH}/${roundId}`;
+  return from === ROUND_ORIGIN_HISTORY
+    ? `${path}?${ROUND_ORIGIN_PARAM}=${ROUND_ORIGIN_HISTORY}`
+    : path;
 }
 
 // 詳細の画面は、全てのラウンドで同じ静的な枠(プレースホルダーのIDで描く)で配る。
 export const ROUND_FRAME_ID = "_";
 export const ROUND_FRAME_PATH = `${ROUNDS_PATH}/${ROUND_FRAME_ID}`;
-// 枠の経路。一覧、作成、詳細の3つ。
+// 枠の経路。ホーム、履歴、作成、詳細の4つ。
 export const ROUND_FRAME_PATHS: string[] = [
-  ROUNDS_PATH,
+  ROUNDS_HOME_PATH,
+  ROUNDS_HISTORY_PATH,
   NEW_ROUND_PATH,
   ROUND_FRAME_PATH,
 ];

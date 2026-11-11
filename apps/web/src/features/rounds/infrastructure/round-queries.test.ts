@@ -444,7 +444,7 @@ describe("targetFaces", () => {
 describe("roundsList", () => {
   const noFaces = ok(null);
 
-  it("削除されていないラウンドを、利用者で絞らず、日付の新しい順に1回の問い合わせで得る", async () => {
+  it("削除されていない完了のラウンドを、利用者で絞らず、日付の新しい順に1回の問い合わせで得る", async () => {
     // Given
     const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
 
@@ -457,7 +457,10 @@ describe("roundsList", () => {
         table: "rounds",
         columns:
           "id, name, round_date, distances(disabled_at, shots(score_int, disabled_at))",
-        filters: [{ op: "is", column: "disabled_at", value: null }],
+        filters: [
+          { op: "is", column: "disabled_at", value: null },
+          { op: "eq", column: "status", value: "completed" },
+        ],
         orders: [{ column: "round_date", ascending: false }],
       },
     ]);

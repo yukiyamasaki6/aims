@@ -1,14 +1,14 @@
 import type { MetadataRoute } from "next";
 import { createTranslator } from "next-intl";
 import { intlConfig } from "@/i18n/messages";
-import { ROUNDS_PATH } from "@/routes";
+import { ROUNDS_HOME_PATH } from "@/routes";
 
 export default function manifest(): MetadataRoute.Manifest {
   const t = createTranslator({ ...intlConfig, namespace: "shared" });
   return {
     name: t("appName"),
     description: t("appDescription"),
-    start_url: ROUNDS_PATH,
+    start_url: ROUNDS_HOME_PATH,
     display: "standalone",
     background_color: "#FFFFFF",
     theme_color: "#FFFFFF",

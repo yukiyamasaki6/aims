@@ -144,12 +144,16 @@ export function createRoundQueries(
         },
       };
     },
+    // 履歴の取得。サーバーで完了と記録されたラウンドだけを返す。
     // 取得できる行はRLSでユーザーが属するラウンドに限るため、利用者で絞らない。
     async roundsList() {
       const response = await database.select({
         table: "rounds",
         columns: ROUNDS_LIST_SELECT,
-        filters: [{ op: "is", column: "disabled_at", value: null }],
+        filters: [
+          { op: "is", column: "disabled_at", value: null },
+          { op: "eq", column: "status", value: "completed" },
+        ],
         orders: listOrders,
       });
       const failure = failureOfResponses([response]);
