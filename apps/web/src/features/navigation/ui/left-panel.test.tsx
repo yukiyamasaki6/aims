@@ -1,11 +1,18 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { LeftPanel } from "./left-panel";
 
 const navigationText = translatorFor("navigation");
+
+const nav = vi.hoisted(() => ({ pathname: "/rounds" }));
+vi.mock("next/navigation", () => ({ usePathname: () => nav.pathname }));
+
+beforeEach(() => {
+  nav.pathname = "/rounds";
+});
 
 function toggleButton(kind: "Collapse" | "Expand") {
   return screen.getByRole("button", {
@@ -199,39 +206,93 @@ describe("LeftPanel", () => {
     });
   });
 
-  describe("個人リンクの押下", () => {
-    // 個人リンクは2つの枠に1つずつあり、DOM順で先のドロワーの枠を押す。
-    function personalLink() {
+  describe("ホーム・履歴の項目", () => {
+    // 項目は2つの枠に1つずつあり、DOM順で先のドロワーの枠を押す。
+    function homeLink() {
       return screen.getAllByRole("link", {
-        name: navigationText("leftPanelPersonal"),
+        name: navigationText("leftPanelHome"),
       })[0];
     }
 
-    it("ハンバーガーでドロワーを開き、個人リンクを押すと、ドロワーが閉じる", async () => {
+    function historyLink() {
+      return screen.getAllByRole("link", {
+        name: navigationText("leftPanelHistory"),
+      })[0];
+    }
+
+    it("ホームと履歴の項目を2つの枠に表示し、個人の項目は表示しない", () => {
+      // Given
+      // When
+      render(<LeftPanel signOut={null} />, { wrapper: IntlTestProvider });
+
+      // Then
+      expect(
+        screen.getAllByRole("link", { name: navigationText("leftPanelHome") }),
+      ).toHaveLength(2);
+      expect(
+        screen.getAllByRole("link", {
+          name: navigationText("leftPanelHistory"),
+        }),
+      ).toHaveLength(2);
+      expect(screen.queryByText("個人")).toBeNull();
+    });
+
+    it.each([
+      ["/rounds", "leftPanelHome"],
+      ["/rounds/history", "leftPanelHistory"],
+    ] as const)(
+      "パスが%sのとき、%sの項目だけが現在のページになる",
+      (pathname, current) => {
+        // Given
+        nav.pathname = pathname;
+
+        // When
+        render(<LeftPanel signOut={null} />, { wrapper: IntlTestProvider });
+
+        // Then
+        const currentLinks = screen.getAllByRole("link", { current: "page" });
+        expect(currentLinks.map((link) => link.textContent)).toEqual([
+          navigationText(current),
+          navigationText(current),
+        ]);
+      },
+    );
+
+    it.each(["/rounds/new", "/rounds/123e4567-e89b-12d3-a456-426614174000"])(
+      "パスが%s(詳細・作成)のとき、どの項目も現在のページにならない",
+      (pathname) => {
+        // Given
+        nav.pathname = pathname;
+
+        // When
+        render(<LeftPanel signOut={null} />, { wrapper: IntlTestProvider });
+
+        // Then
+        expect(screen.queryByRole("link", { current: "page" })).toBeNull();
+      },
+    );
+
+    it("ハンバーガーでドロワーを開き、ホームの項目を押すと、ドロワーが閉じる", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
+      render(<LeftPanel signOut={null} />, { wrapper: IntlTestProvider });
       await user.click(openMenuButton());
 
       // When
-      await user.click(personalLink());
+      await user.click(homeLink());
 
       // Then
       expect(closeMenuButtons()).toHaveLength(1);
     });
 
-    it("列のボタンで格納した後に個人リンクを押しても、列のボタンは開くのまま変わらない", async () => {
+    it("列のボタンで格納した後に履歴の項目を押しても、列のボタンは開くのまま変わらない", async () => {
       // Given
       const user = userEvent.setup();
-      render(<LeftPanel signOut={null} />, {
-        wrapper: IntlTestProvider,
-      });
+      render(<LeftPanel signOut={null} />, { wrapper: IntlTestProvider });
       await user.click(toggleButton("Collapse"));
 
       // When
-      await user.click(personalLink());
+      await user.click(historyLink());
 
       // Then
       expect(toggleButton("Expand")).toBeInTheDocument();

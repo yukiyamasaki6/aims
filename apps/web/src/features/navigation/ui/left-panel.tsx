@@ -2,11 +2,12 @@
 
 import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { type ReactNode, type TouchEvent, useRef, useState } from "react";
 import { LogoImage } from "@/components/logo-image";
 import { cn } from "@/lib/utils";
-import { HOME_PATH, ROUNDS_PATH } from "@/routes";
+import { HOME_PATH, ROUNDS_HISTORY_PATH, ROUNDS_HOME_PATH } from "@/routes";
 
 // 画面の幅768px未満のドロワーと、768px以上の縦の列は別の枠で、それぞれの開閉を持つ。初期値は固定で、幅で分岐しない。
 function useOpenState() {
@@ -82,7 +83,7 @@ function useDrawerSwipe(onClose: () => void) {
 // signOut: 下端に置くサインアウトの操作。入口が渡す。2つの枠に1つずつ置かれる。
 export function LeftPanel({ signOut }: { signOut: ReactNode }) {
   const { drawerOpen, setDrawerOpen, railOpen, setRailOpen } = useOpenState();
-  // 個人リンクの押下は、ドロワーの値だけを閉にする。列の値は変えない。
+  // ホーム・履歴の項目の押下は、ドロワーの値だけを閉にする。列の値は変えない。
   const closeDrawer = () => setDrawerOpen(false);
   const swipe = useDrawerSwipe(closeDrawer);
 
@@ -208,7 +209,33 @@ function LogoLink({ className }: { className?: string }) {
   );
 }
 
-// collapsed: 縦の列の格納時に、中身を隠す。onNavigate: 個人リンクの押下で呼ぶ。
+// 現在のビュー(パスが項目の行き先と等しい)の項目に、aria-current="page"と現在の見た目を付ける。詳細・作成ではどの項目にも付かない。
+function NavItem({
+  href,
+  onNavigate,
+  children,
+}: {
+  href: string;
+  onNavigate: () => void;
+  children: ReactNode;
+}) {
+  const current = usePathname() === href;
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      aria-current={current ? "page" : undefined}
+      className={cn(
+        "rounded-lg px-3 py-2 text-sm",
+        current && "bg-muted font-medium",
+      )}
+    >
+      {children}
+    </Link>
+  );
+}
+
+// collapsed: 縦の列の格納時に、中身を隠す。onNavigate: ホーム・履歴の項目の押下で呼ぶ。
 function PanelBody({
   collapsed,
   onNavigate,
@@ -224,13 +251,12 @@ function PanelBody({
       <nav
         className={cn("flex flex-1 flex-col gap-1 px-4", collapsed && "hidden")}
       >
-        <Link
-          href={ROUNDS_PATH}
-          onClick={onNavigate}
-          className="rounded-lg bg-muted px-3 py-2 text-sm font-medium"
-        >
-          {t("leftPanelPersonal")}
-        </Link>
+        <NavItem href={ROUNDS_HOME_PATH} onNavigate={onNavigate}>
+          {t("leftPanelHome")}
+        </NavItem>
+        <NavItem href={ROUNDS_HISTORY_PATH} onNavigate={onNavigate}>
+          {t("leftPanelHistory")}
+        </NavItem>
       </nav>
 
       <div className={cn("border-t p-4", collapsed && "hidden")}>{signOut}</div>
@@ -247,12 +273,9 @@ function MobileMenuBar({ onOpen }: { onOpen: () => void }) {
         type="button"
         onClick={onOpen}
         aria-label={t("leftPanelOpenMenu")}
-        className="flex items-center gap-2 text-sm"
+        className="flex items-center"
       >
         <Menu className="size-5" />
-        <span className="max-md:landscape:hidden">
-          {t("leftPanelPersonal")}
-        </span>
       </button>
     </div>
   );
