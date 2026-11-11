@@ -6,12 +6,11 @@ import {
   createOperationSending,
   type SendOutcome,
 } from "@/features/rounds/application/operation-sending";
-import { createRefreshRequests } from "@/features/rounds/application/refresh-requests";
 import { createRoundBaseRefreshing } from "@/features/rounds/application/round-base-refreshing";
-import { createRoundDetailStore } from "@/features/rounds/application/round-detail-store";
 import { createRoundEditing } from "@/features/rounds/application/round-editing";
 import type {
   FetchedRoundDetail,
+  RoundDetailResult,
   RoundFetching,
 } from "@/features/rounds/application/round-fetching";
 import { createRoundRecordControl } from "@/features/rounds/application/round-record-control";
@@ -21,6 +20,7 @@ import {
   createTestRoundHub,
 } from "@/features/rounds/application/round-record-test-helpers";
 import { createRoundRefreshControl } from "@/features/rounds/application/round-refresh-control";
+import { createRoundWindow } from "@/features/rounds/application/round-window";
 import { createRoundsListStore } from "@/features/rounds/application/rounds-list-store";
 import type { FetchResult } from "@/features/rounds/domain/fetch-status";
 import {
@@ -45,13 +45,12 @@ function detail(name: string): FetchedRoundDetail {
 function rig() {
   const faces: { current: { id: string }[] | null } = { current: [] };
   const { hub } = createTestRoundHub();
-  const requests = createRefreshRequests();
   const clock = createManualClock();
   const connectivity = createFakeConnectivity();
   const fetching = {
-    fetchRoundDetail:
-      vi.fn<(roundId: string) => Promise<FetchResult<FetchedRoundDetail>>>(),
+    fetchRoundDetail: vi.fn<(roundId: string) => Promise<RoundDetailResult>>(),
     fetchRoundDetails: vi.fn(),
+    fetchTargetFaces: vi.fn(),
     fetchRoundsList: vi.fn(async () => ({ status: "ok", data: [] }) as const),
     savedTargetFaces: () => faces.current,
   };
@@ -69,29 +68,28 @@ function rig() {
     clock,
     connectivity,
   });
+  const refreshing = createRoundBaseRefreshing({
+    hub,
+    fetching: fetching as unknown as RoundFetching,
+  });
+  const { ids } = createFakeUniqueIds({ prefix: "event" });
+  const roundWindow = createRoundWindow({
+    hub,
+    fetching: fetching as unknown as RoundFetching,
+    refresh: refreshing,
+    editing: createRoundEditing({ hub, ids }),
+    clock,
+    connectivity,
+  });
   const sync = createRoundSync({
     control: createRoundRecordControl({ hub, sender }),
     refresh: createRoundRefreshControl({
       hub,
-      requests,
-      refresh: createRoundBaseRefreshing({
-        hub,
-        requests,
-        fetching: fetching as unknown as RoundFetching,
-      }),
+      roundWindow,
+      refresh: refreshing,
     }),
     session,
     connectivity,
-  });
-  const { ids } = createFakeUniqueIds({ prefix: "event" });
-  const detail = createRoundDetailStore({
-    hub,
-    requests,
-    fetching: fetching as unknown as RoundFetching,
-    clock,
-    connectivity,
-    ids,
-    editing: createRoundEditing({ hub, ids }),
   });
   const list = createRoundsListStore({
     hub,
@@ -100,41 +98,41 @@ function rig() {
     connectivity,
   });
   sync.start("user-1");
-  return { sync, detail, list, requests, fetching, clock, faces };
+  return { sync, roundWindow, list, hub, fetching, clock, faces };
 }
 
-const deferredDetail = () =>
-  Promise.withResolvers<FetchResult<FetchedRoundDetail>>();
+const deferredDetail = () => Promise.withResolvers<RoundDetailResult>();
 
-describe("詳細を開く依頼と同期", () => {
-  it("詳細の取得中に追加された2つ目の開く依頼も処理され、タイムアウトしない", async () => {
+const NOT_FOUND = (startedAt: number) =>
+  ({ status: "not-found", startedAt, userId: "user-1" }) as const;
+
+describe("詳細の購読と同期", () => {
+  it("取得中に同じIDの購読が増えても取得は1回で、結果が届くと全ての購読者が準備完了を受ける", async () => {
     // Given
     const t = rig();
-    const first = deferredDetail();
-    const second = deferredDetail();
-    t.fetching.fetchRoundDetail
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
-    const loadFirst = t.detail.load("r1");
+    const run = deferredDetail();
+    t.fetching.fetchRoundDetail.mockReturnValueOnce(run.promise);
+    const first = vi.fn();
+    const second = vi.fn();
+    t.roundWindow.watch("r1", first);
     await flush();
-    const loadSecond = t.detail.load("r1");
+    t.roundWindow.watch("r1", second);
     await flush();
 
     // When
-    first.resolve({ status: "ok", data: detail("1回目") });
-    await flush();
-    second.resolve({ status: "ok", data: detail("2回目") });
+    run.resolve({ status: "ok", data: detail("取得した") });
     await flush();
 
     // Then
-    expect(await loadFirst).toMatchObject({ status: "ok" });
-    expect(await loadSecond).toMatchObject({ status: "ok" });
-    expect(t.fetching.fetchRoundDetail).toHaveBeenCalledTimes(2);
+    expect(t.fetching.fetchRoundDetail).toHaveBeenCalledTimes(1);
+    expect(t.roundWindow.view("r1")).toMatchObject({ status: "ok" });
+    expect(first).toHaveBeenCalled();
+    expect(second).toHaveBeenCalled();
   });
 });
 
 describe("保存済みの的が無い初回の読み込み", () => {
-  it("同期に再取得を促し、常駐の取得が的を保存すると、保存を待っていた詳細が開く", async () => {
+  it("窓口が的を個別に取得し、保存されると、常駐の一括の完了を待たずに詳細が準備完了になる", async () => {
     // Given
     const t = rig();
     await flush();
@@ -143,29 +141,31 @@ describe("保存済みの的が無い初回の読み込み", () => {
       status: "ok",
       data: detail("取得した"),
     });
-    t.fetching.fetchRoundDetails.mockImplementation(async () => {
-      t.faces.current = [{ id: "face-1" }];
-      return {
-        status: "ok",
-        data: { rounds: new Map(), startedAt: 100, userId: "user-1" },
-      };
-    });
+    const facesFetch = Promise.withResolvers<FetchResult<{ id: string }[]>>();
+    t.fetching.fetchTargetFaces.mockReturnValue(facesFetch.promise);
+    const detailsBefore = t.fetching.fetchRoundDetails.mock.calls.length;
 
     // When
-    const result = await t.detail.load("r1");
+    t.roundWindow.watch("r1", () => {});
+    await flush();
+    const whileFetching = t.roundWindow.view("r1");
+    t.faces.current = [{ id: "face-1" }];
+    facesFetch.resolve({ status: "ok", data: [{ id: "face-1" }] });
+    await flush();
 
     // Then
-    expect(t.fetching.fetchRoundDetails).toHaveBeenCalledTimes(2);
-    expect(result).toMatchObject({
+    expect(whileFetching).toEqual({ status: "loading" });
+    expect(t.fetching.fetchTargetFaces).toHaveBeenCalledTimes(1);
+    expect(t.fetching.fetchRoundDetails.mock.calls.length).toBe(detailsBefore);
+    expect(t.roundWindow.view("r1")).toMatchObject({
       status: "ok",
       data: { targetFaces: [{ id: "face-1" }] },
     });
-    expect(t.requests.facesWanted()).toBe(false);
   });
 });
 
 describe("先に始めた実行の終わり", () => {
-  it("後に始めた実行が成功した後に、先に始めた実行が見つからないで終わると、最後に終わった実行の結果で見つかりませんになり、取り直しは増えない", async () => {
+  it("後に始めた取得が成功した後に、先に始めた取得が見つからないで終わっても、準備完了のまま取り直しは増えない", async () => {
     // Given
     const t = rig();
     const runA = deferredDetail();
@@ -173,34 +173,29 @@ describe("先に始めた実行の終わり", () => {
     t.fetching.fetchRoundDetail
       .mockReturnValueOnce(runA.promise)
       .mockReturnValueOnce(runB.promise);
-    const loadA = t.detail.load("r1");
+    t.roundWindow.watch("r1", () => {});
     await flush();
-    const loadB = t.detail.load("r1");
+    t.roundWindow.retry("r1");
     await flush();
-    const handle = t.detail.round("r1");
-    handle.watch({
-      base: roundBase().tables,
-      targetFaces: [],
-      pendingCreationEventId: null,
+    runB.resolve({
+      status: "ok",
+      data: { ...detail("後の実行"), startedAt: 200 },
     });
-    runB.resolve({ status: "ok", data: detail("後の実行") });
     await flush();
     await flush();
-    const before = handle.getSnapshot();
+    const before = t.roundWindow.view("r1");
     const fetchCalls = t.fetching.fetchRoundDetail.mock.calls.length;
 
     // When
-    runA.resolve({ status: "not-found" });
+    runA.resolve(NOT_FOUND(100));
     await flush();
     await flush();
 
     // Then
+    expect(before).toMatchObject({ status: "ok" });
     expect(fetchCalls).toBe(2);
     expect(t.fetching.fetchRoundDetail).toHaveBeenCalledTimes(2);
-    expect(before.gone).toBe(false);
-    expect(handle.getSnapshot().gone).toBe(true);
-    expect(await loadB).toMatchObject({ status: "ok" });
-    expect(await loadA).toBeDefined();
+    expect(t.roundWindow.view("r1")).toBe(before);
   });
 });
 

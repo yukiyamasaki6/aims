@@ -1,6 +1,9 @@
 import { vi } from "vitest";
-import type { RoundDetailStore } from "../application/round-detail-store";
+import type { RoundScreen, RoundWindow } from "../application/round-window";
 import type { RoundsListStore } from "../application/rounds-list-store";
+import type { FetchView } from "../domain/fetch-status";
+import type { LocalRoundsList } from "../domain/round-list";
+import type { RoundState } from "../domain/round-tables";
 import type { RoundProcedures } from "./rounds-context";
 
 // 通信の復帰の合図を、テストが起こす。
@@ -44,20 +47,67 @@ export function createFakeRoundsListStore(
 ) {
   const store = {
     loadList: vi.fn(),
-    loadLocalList: vi.fn(),
-    subscribe: vi.fn(() => () => {}),
     ...overrides,
   } as unknown as RoundsListStore & {
     loadList: ReturnType<typeof vi.fn>;
-    loadLocalList: ReturnType<typeof vi.fn>;
-    subscribe: ReturnType<typeof vi.fn>;
   };
   return { store };
 }
 
+// 画面のテストが使う、偽の窓口。詳細の画面の状態と端末内の入力中一覧を、テストが設定して通知する。
+export function createFakeRoundWindow() {
+  let local: LocalRoundsList | null = null;
+  const localListeners = new Set<() => void>();
+  const views = new Map<string, FetchView<RoundScreen>>();
+  const listeners = new Map<string, Set<() => void>>();
+  const loading: FetchView<RoundScreen> = { status: "loading" };
+  const roundWindow = {
+    watch: vi.fn((roundId: string, listener: () => void) => {
+      const set = listeners.get(roundId) ?? new Set();
+      set.add(listener);
+      listeners.set(roundId, set);
+      return () => {
+        set.delete(listener);
+      };
+    }),
+    view: vi.fn((roundId: string) => views.get(roundId) ?? loading),
+    retry: vi.fn(),
+    append: vi.fn(),
+    watchLocalList: vi.fn((listener: () => void) => {
+      localListeners.add(listener);
+      return () => {
+        localListeners.delete(listener);
+      };
+    }),
+    localList: vi.fn(() => local),
+  } as unknown as RoundWindow & {
+    watch: ReturnType<typeof vi.fn>;
+    view: ReturnType<typeof vi.fn>;
+    retry: ReturnType<typeof vi.fn>;
+    append: ReturnType<
+      typeof vi.fn<(roundId: string, op: unknown) => RoundState>
+    >;
+    watchLocalList: ReturnType<typeof vi.fn>;
+    localList: ReturnType<typeof vi.fn>;
+  };
+  return {
+    roundWindow,
+    // 端末内の一覧を設定し、購読者へ知らせる。
+    setLocal(next: LocalRoundsList | null) {
+      local = next;
+      for (const listener of [...localListeners]) listener();
+    },
+    // 詳細の画面の状態を設定し、購読者へ知らせる。
+    setView(roundId: string, next: FetchView<RoundScreen>) {
+      views.set(roundId, next);
+      for (const listener of [...(listeners.get(roundId) ?? [])]) listener();
+    },
+  };
+}
+
 // 詳細の画面のテストが使う、偽の手続きの入れ物。`RoundProceduresProvider`へ渡す。
 export function createFakeRoundProcedures() {
-  const issued = { ids: 0 };
+  const issued = { ids: 0, shots: 0 };
   const { whenOnline, ...waiting } = createFakeWaiting();
   return {
     leaving: {
@@ -89,31 +139,10 @@ export function createFakeRoundProcedures() {
       randomBytes: vi.fn().mockReturnValue(new Uint8Array(10)),
     },
     whenOnline,
-    ...waiting,
-  } satisfies RoundProcedures;
-}
-
-// 画面のテストが使う、偽のラウンドの状態と変更の方法(詳細の画面の分)。
-export function createFakeRoundDetailStore(
-  overrides: Partial<RoundDetailStore> = {},
-) {
-  const { whenOnline, ...waiting } = createFakeWaiting();
-  const issued = { shots: 0 };
-
-  const store = {
-    load: vi.fn(),
-    round: vi.fn(),
-    append: vi.fn().mockResolvedValue(undefined),
-    whenOnline,
     newShotId: vi.fn(
       () =>
         `00000000-0000-7000-8000-${String(++issued.shots).padStart(12, "0")}`,
     ),
-    ...overrides,
-  } as unknown as RoundDetailStore & {
-    whenOnline: ReturnType<typeof vi.fn>;
-    newShotId: ReturnType<typeof vi.fn>;
-  };
-
-  return { store, ...waiting };
+    ...waiting,
+  } satisfies RoundProcedures;
 }

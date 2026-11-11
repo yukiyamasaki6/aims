@@ -5,14 +5,8 @@ import type { RoundState } from "../domain/round-tables";
 import type { Distance, Shot } from "../domain/scorecard-types";
 import { newShotPointer, type Pointer } from "../domain/shot-pointer";
 import type { SyncOperation } from "../domain/sync-events";
-import {
-  createFakeRoundDetailStore,
-  createFakeRoundProcedures,
-} from "./round-stores-test-helpers";
-import {
-  RoundDetailStoreProvider,
-  RoundProceduresProvider,
-} from "./rounds-context";
+import { createFakeRoundProcedures } from "./round-stores-test-helpers";
+import { RoundProceduresProvider } from "./rounds-context";
 import type { ScoreHistory } from "./use-score-history";
 import { useShotInput } from "./use-shot-input";
 
@@ -36,7 +30,6 @@ function setup(
     resultShots?: Shot[];
   } = {},
 ) {
-  const { store } = createFakeRoundDetailStore();
   const procedures = createFakeRoundProcedures();
   // 追記の結果の画面の状態は、テストが与える矢を持つ。
   const append = vi.fn(
@@ -54,11 +47,9 @@ function setup(
     ...options.history,
   } as ScoreHistory;
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <RoundDetailStoreProvider store={store}>
-      <RoundProceduresProvider procedures={procedures}>
-        {children}
-      </RoundProceduresProvider>
-    </RoundDetailStoreProvider>
+    <RoundProceduresProvider procedures={procedures}>
+      {children}
+    </RoundProceduresProvider>
   );
   const { result } = renderHook(
     () =>
@@ -76,7 +67,7 @@ function setup(
 }
 
 describe("useShotInput", () => {
-  it("新しい矢へ点数を書くと、窓口から払い出された矢のIDとイベントIDの記録を積み、取り消しの列へ記録する", () => {
+  it("新しい矢へ点数を書くと、手続きの入れ物から払い出された矢のIDとイベントIDの記録を積み、取り消しの列へ記録する", () => {
     // Given
     const { input, append, history } = setup();
 

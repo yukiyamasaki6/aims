@@ -102,4 +102,21 @@ describe("createMemoryOpLogStore", () => {
     // Then
     expect(s.rows[0].ackedRevision).toBe(0);
   });
+
+  it("見つからない(null)の反映は、印を保存せずベースの行を消し、確定済みの行を消して未確定の行を残す", async () => {
+    // Given
+    const s = store();
+    await s.append(entry("a"));
+    await s.append(entry("b"));
+    await s.ack("a", 1, null);
+    await s.commit("s1", "u1", { revision: 1 }, 5);
+
+    // When
+    await s.commit("s1", "u1", null, 10);
+    const group = (await s.loadAll("u1")).get("s1");
+
+    // Then
+    expect(group?.base).toBeUndefined();
+    expect(group?.entries.map((row) => row.eventId)).toEqual(["b"]);
+  });
 });

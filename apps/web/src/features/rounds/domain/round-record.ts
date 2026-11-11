@@ -131,13 +131,22 @@ export function commitFetched(
   record: RoundRecord,
   incoming: RecordBase,
 ): RoundRecord {
-  if (record.base && record.base.startedAt >= incoming.startedAt) return record;
-  if (isOlderFetch(record, incoming.base)) return record;
+  if (isStaleFetch(record, incoming)) return record;
   return dropReflected({ ...record, base: incoming });
 }
 
+// 取得を反映しない状態か。記録のベースより開始時刻が古い(同じを含む)、またはrevisionが古い。
+// 保存へ書く前(ハブ)と記録へ反映するとき(`commitFetched`)が、同じ判定を使う。
+export function isStaleFetch(
+  record: RoundRecord,
+  incoming: RecordBase,
+): boolean {
+  if (record.base && record.base.startedAt >= incoming.startedAt) return true;
+  return isOlderFetch(record, incoming.base);
+}
+
 // 組が消えた後でも、最後に取り込んだベースより古い状態の取得は、保存も反映もしない。
-export function isOlderFetch(
+function isOlderFetch(
   record: RoundRecord,
   fetched: RoundBaseRecord | null,
 ): boolean {

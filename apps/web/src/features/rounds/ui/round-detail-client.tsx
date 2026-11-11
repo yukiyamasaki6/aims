@@ -1,16 +1,14 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useCallback, useState } from "react";
-import type { LoadedRound } from "../application/round-handle";
 import { roundIdOfPath } from "../domain/round-routes";
 import { FetchState, LoadingState, NotFoundState } from "./fetch-state";
 import { RoundDetailFrame } from "./round-detail-frame";
-import { useRoundDetailStore } from "./rounds-context";
+import { useRoundProcedures } from "./rounds-context";
 import { ScorecardClient } from "./scorecard-client";
 import { Skeleton } from "./skeleton";
-import { useCreationGone } from "./use-creation-gone";
 import { useFetchResult } from "./use-fetch-result";
+import { useRoundScreen } from "./use-round-screen";
 
 // 設定カードと合計バー（45px+46px、-mt-6で接するため合わせて91px）を1枠で、
 // 距離の一覧は標準の1距離（6本×6エンド）のカードの高さの1枠で写す。
@@ -38,7 +36,7 @@ export function RoundDetailClient() {
 
 // IDが読めないパス(枠のプレースホルダー、UUIDでないID)。問い合わせず、初回描画は取得中の枠、その後は見つからない。
 function InvalidRoundDetail() {
-  const { whenOnline } = useRoundDetailStore();
+  const { whenOnline } = useRoundProcedures();
   const { view } = useFetchResult<never>(notFoundNow, whenOnline);
   return (
     <RoundDetailFrame>
@@ -53,29 +51,17 @@ function InvalidRoundDetail() {
 
 const notFoundNow = () => Promise.resolve({ status: "not-found" as const });
 
+// 存在の判断・取得・再試行は窓口が持つ。ここは窓口の状態を描くだけ。
 function RoundDetailLoader({ roundId }: { roundId: string }) {
-  const store = useRoundDetailStore();
-  const { view, retry } = useFetchResult<LoadedRound>(
-    () => store.load(roundId),
-    store.whenOnline,
-  );
-  // 開いている間に、ラウンドが無いと分かったか(他の端末で削除された、取り直したサーバーに無い)。部品の寿命まで戻さない。
-  const [gone, setGone] = useState(false);
-  const markGone = useCallback(() => setGone(true), []);
-  useCreationGone(roundId, retry);
-
-  if (view.status === "ok" && !gone) {
+  const { view, retry, append } = useRoundScreen(roundId);
+  if (view.status === "ok") {
     return (
-      <ScorecardClient roundId={roundId} loaded={view.data} onGone={markGone} />
+      <ScorecardClient roundId={roundId} screen={view.data} append={append} />
     );
   }
   return (
     <RoundDetailFrame>
-      <FetchState
-        view={view.status === "ok" ? { status: "not-found" } : view}
-        onRetry={retry}
-        loading={<ScorecardSkeleton />}
-      />
+      <FetchState view={view} onRetry={retry} loading={<ScorecardSkeleton />} />
     </RoundDetailFrame>
   );
 }

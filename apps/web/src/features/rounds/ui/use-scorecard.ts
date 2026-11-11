@@ -1,22 +1,26 @@
 import { useRef } from "react";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useMountedRef } from "@/hooks/use-mounted-ref";
-import type { LoadedRound } from "../application/round-handle";
+import type { RoundScreen } from "../application/round-window";
 import { isRoundInProgress } from "../domain/round-retention";
+import type { RoundState } from "../domain/round-tables";
+import type { SyncOperation } from "../domain/sync-events";
 import { useRoundProcedures } from "./rounds-context";
 import { useDistanceEditing } from "./use-distance-editing";
 import { useKeypad } from "./use-keypad";
 import { useReconciledPointer } from "./use-reconciled-pointer";
 import { useReorderAnimation } from "./use-reorder-animation";
-import { useRoundOpStack } from "./use-round-op-stack";
 import { useScoreHistory } from "./use-score-history";
 import { useShotInput } from "./use-shot-input";
 
+// 画面の状態と、操作の追記。状態は窓口が記録(ベースに操作の列を重ねたもの)から導く。
+type ScorecardSync = {
+  state: RoundState;
+  append: (operation: SyncOperation) => RoundState;
+};
+
 // 矢の入力に関わる状態(未確定の矢、ポインタ、テンキー、履歴、入力)。
-function useScorecardInput(
-  sync: ReturnType<typeof useRoundOpStack>,
-  inProgress: boolean,
-) {
+function useScorecardInput(sync: ScorecardSync, inProgress: boolean) {
   const { distances, shots } = sync.state;
   const [pointer, setPointer] = useReconciledPointer(
     inProgress,
@@ -38,17 +42,16 @@ function useScorecardInput(
 
 type ScorecardOptions = {
   roundId: string;
-  loaded: LoadedRound;
-  onGone: () => void;
+  screen: RoundScreen;
+  append: (operation: SyncOperation) => RoundState;
 };
 
 // スコアカード画面の状態と操作。
 export function useScorecard(options: ScorecardOptions) {
-  const { roundId, loaded } = options;
+  const { roundId, screen, append } = options;
   const { leaving } = useRoundProcedures();
   const mountedRef = useMountedRef();
-  // 画面の状態は、ベースへ操作の列を重ねた導出だけから得る。
-  const sync = useRoundOpStack(roundId, loaded, options.onGone);
+  const sync = { state: screen.state, append };
   const { distances } = sync.state;
   const inProgress = isRoundInProgress(sync.state);
   const scorecardRef = useRef<HTMLDivElement>(null);
@@ -67,10 +70,10 @@ export function useScorecard(options: ScorecardOptions) {
 
   return {
     roundId,
-    targetFaces: sync.targetFaces,
+    targetFaces: screen.targetFaces,
     hydrated: useHydrated(),
     sync,
-    initiallyEmpty: loaded.base.distances.length === 0,
+    initiallyEmpty: screen.initiallyEmpty,
     inProgress,
     scorecardRef,
     pointer,

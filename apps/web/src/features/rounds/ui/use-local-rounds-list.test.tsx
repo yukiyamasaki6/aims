@@ -1,22 +1,23 @@
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderToString } from "react-dom/server";
+import { describe, expect, it } from "vitest";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import type { LocalRoundsList } from "../domain/round-list";
-import { createFakeRoundsListStore } from "./round-stores-test-helpers";
-import { RoundsListStoreProvider } from "./rounds-context";
+import { createFakeRoundWindow } from "./round-stores-test-helpers";
+import { RoundWindowProvider } from "./rounds-context";
 import { useLocalRoundsList } from "./use-local-rounds-list";
 
 const roundsText = translatorFor("rounds");
 
-// 端末の記録からの導出は別のテストで確かめるため、ラウンドの状態は端末の一覧だけを返す偽の約束で模す。
+// 端末の記録からの導出と束ねは窓口のテストで確かめるため、窓口は偽で模す。
 function setup() {
-  const fake = createFakeRoundsListStore();
+  const fake = createFakeRoundWindow();
   function wrapper({ children }: { children: ReactNode }) {
     return (
-      <RoundsListStoreProvider store={fake.store}>
+      <RoundWindowProvider roundWindow={fake.roundWindow}>
         {children}
-      </RoundsListStoreProvider>
+      </RoundWindowProvider>
     );
   }
   return { fake, wrapper };
@@ -33,92 +34,53 @@ const loaded: LocalRoundsList = {
   ],
 };
 
-afterEach(() => {
-  vi.clearAllMocks();
-});
-
 describe("useLocalRoundsList", () => {
-  it("表示の開始時に1回読み、読み込みの前はnullを返す", async () => {
+  it("読み込みの前はnullを返し、窓口が値を持つと再描画して返す", () => {
     // Given
     const { fake, wrapper } = setup();
-    fake.store.loadLocalList.mockReturnValue(new Promise(() => {}));
+    const { result } = renderHook(() => useLocalRoundsList(), { wrapper });
+    const before = result.current;
 
     // When
-    const { result } = renderHook(() => useLocalRoundsList(), { wrapper });
+    act(() => fake.setLocal(loaded));
 
     // Then
-    expect(result.current).toBeNull();
-    expect(fake.store.loadLocalList).toHaveBeenCalledTimes(1);
-  });
-
-  it("読み込みが終わったら、結果を返す", async () => {
-    // Given
-    const { fake, wrapper } = setup();
-    fake.store.loadLocalList.mockResolvedValue(loaded);
-
-    // When
-    const { result } = renderHook(() => useLocalRoundsList(), { wrapper });
-    await act(async () => {});
-
-    // Then
+    expect(before).toBeNull();
     expect(result.current).toBe(loaded);
   });
 
-  it("端末の記録が変わるたびに読み直し、後に始めた読み込みの結果だけを使い、アンマウントすると購読を解除する", async () => {
+  it("アンマウントすると購読を解除する", () => {
     // Given
     const { fake, wrapper } = setup();
-    let notify: () => void = () => {};
-    const stop = vi.fn();
-    fake.store.subscribe.mockImplementation((listener: () => void) => {
-      notify = listener;
-      return stop;
-    });
-    const updated: LocalRoundsList = { inProgress: [] };
-    const slow = Promise.withResolvers<LocalRoundsList>();
-    fake.store.loadLocalList
-      .mockReturnValueOnce(slow.promise)
-      .mockResolvedValueOnce(updated);
-    const { result, unmount } = renderHook(() => useLocalRoundsList(), {
-      wrapper,
-    });
+    const { unmount } = renderHook(() => useLocalRoundsList(), { wrapper });
+    const stop = fake.roundWindow.watchLocalList.mock.results[0].value;
 
     // When
-    act(() => notify());
-    await act(async () => {});
-    slow.resolve(loaded);
-    await act(async () => {});
     unmount();
 
     // Then
-    expect(fake.store.loadLocalList).toHaveBeenCalledTimes(2);
-    expect(result.current).toBe(updated);
-    expect(stop).toHaveBeenCalledTimes(1);
+    expect(fake.roundWindow.watchLocalList).toHaveBeenCalledTimes(1);
+    expect(stop).toBeTypeOf("function");
   });
 
-  it("同じティックの連続した変化は1回の読み直しにまとめ、内容が同じなら状態を替えない", async () => {
+  it("サーバー描画では、窓口に値があってもnullを返す(水和の枠と一致させる)", () => {
     // Given
-    const { fake, wrapper } = setup();
-    let notify: () => void = () => {};
-    fake.store.subscribe.mockImplementation((listener: () => void) => {
-      notify = listener;
-      return () => {};
-    });
-    fake.store.loadLocalList.mockResolvedValue(loaded);
-    const { result } = renderHook(() => useLocalRoundsList(), { wrapper });
-    await act(async () => {});
-    const before = result.current;
-    fake.store.loadLocalList.mockResolvedValue(structuredClone(loaded));
+    const { fake, wrapper: Wrapper } = setup();
+    fake.setLocal(loaded);
+    function Probe() {
+      return (
+        <span>{useLocalRoundsList() === null ? "loading" : "loaded"}</span>
+      );
+    }
 
     // When
-    act(() => {
-      notify();
-      notify();
-      notify();
-    });
-    await act(async () => {});
+    const html = renderToString(
+      <Wrapper>
+        <Probe />
+      </Wrapper>,
+    );
 
     // Then
-    expect(fake.store.loadLocalList).toHaveBeenCalledTimes(2);
-    expect(result.current).toBe(before);
+    expect(html).toContain("loading");
   });
 });

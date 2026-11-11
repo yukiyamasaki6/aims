@@ -3,9 +3,11 @@
 import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
-import type { LoadedRound } from "../application/round-handle";
+import type { RoundScreen } from "../application/round-window";
 import { completionConfirmation } from "../domain/round-progress";
+import type { RoundState } from "../domain/round-tables";
 import { summarizeRound } from "../domain/scorecard-scoring";
+import type { SyncOperation } from "../domain/sync-events";
 import { BottomFrame } from "./bottom-frame";
 import { CompleteRoundBar } from "./complete-round-bar";
 import { DistanceSection } from "./distance-section";
@@ -18,19 +20,15 @@ import { type ScorecardModel, useScorecard } from "./use-scorecard";
 
 export function ScorecardClient({
   roundId,
-  loaded,
-  onGone,
+  screen,
+  append,
 }: {
   roundId: string;
-  loaded: LoadedRound;
-  // 端末のベースで開いたラウンドが、取り直したサーバーに無いとき(削除済みなど)に呼ぶ。
-  onGone: () => void;
+  screen: RoundScreen;
+  // 操作を追記し、追記の直後の画面の状態を返す。
+  append: (operation: SyncOperation) => RoundState;
 }) {
-  const model = useScorecard({
-    roundId,
-    loaded,
-    onGone,
-  });
+  const model = useScorecard({ roundId, screen, append });
   const { sync, keypad, targetFaces } = model;
   const { roundConfig, distances, shots, status } = sync.state;
   // テンキーは指す矢があるか、格納の待ち(直近の距離を保持)のときだけ付く。一度も指していないときは距離が無く、付かない。

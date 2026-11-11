@@ -1,39 +1,39 @@
 import { render, renderHook, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { RoundDetailStore } from "../application/round-detail-store";
+import type { RoundWindow } from "../application/round-window";
 import type { RoundsListStore } from "../application/rounds-list-store";
 import {
-  RoundDetailStoreProvider,
   type RoundProcedures,
   RoundProceduresProvider,
   RoundsListStoreProvider,
-  useRoundDetailStore,
+  RoundWindowProvider,
   useRoundProcedures,
   useRoundsListStore,
+  useRoundWindow,
 } from "./rounds-context";
 
-describe("rounds-context(詳細)", () => {
-  it("提供されたラウンドの状態と変更の方法を、子の部品に返す", () => {
+describe("rounds-context(窓口)", () => {
+  it("提供された窓口を、子の部品に返す", () => {
     // Given
-    const store = {} as RoundDetailStore;
+    const roundWindow = {} as RoundWindow;
     const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <RoundDetailStoreProvider store={store}>
+      <RoundWindowProvider roundWindow={roundWindow}>
         {children}
-      </RoundDetailStoreProvider>
+      </RoundWindowProvider>
     );
 
     // When
-    const { result } = renderHook(() => useRoundDetailStore(), { wrapper });
+    const { result } = renderHook(() => useRoundWindow(), { wrapper });
 
     // Then
-    expect(result.current).toBe(store);
+    expect(result.current).toBe(roundWindow);
   });
 
   it("提供が無いときは投げる", () => {
     // Given
     vi.spyOn(console, "error").mockImplementation(() => {});
     function Probe() {
-      useRoundDetailStore();
+      useRoundWindow();
       return <span>描画された</span>;
     }
 
@@ -41,7 +41,7 @@ describe("rounds-context(詳細)", () => {
     const rendering = () => render(<Probe />);
 
     // Then
-    expect(rendering).toThrow("RoundDetailStoreProvider");
+    expect(rendering).toThrow("RoundWindowProvider");
     expect(screen.queryByText("描画された")).toBeNull();
     vi.restoreAllMocks();
   });

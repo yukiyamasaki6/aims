@@ -154,7 +154,12 @@ export function createIndexedDbOpLogStore<Op extends OpBase, Base>(
           base,
           rules.reflects,
         );
-        if (base === null || rules.keeps(base, remaining)) {
+        // サーバーに無い(null)ときは、印を保存せずベースの行を消す。未送信の操作は残る。
+        if (base === null) {
+          await bases.delete([userId, streamId]);
+          return;
+        }
+        if (rules.keeps(base, remaining)) {
           await bases.put({ userId, streamId, startedAt, base });
           return;
         }

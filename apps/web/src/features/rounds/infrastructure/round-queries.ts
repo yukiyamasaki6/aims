@@ -121,6 +121,12 @@ export function createRoundQueries(
       if (!round.data) return { status: "not-found" };
       return { status: "ok", data: round.data as ServerRound };
     },
+    async targetFaces(userId) {
+      const faces = await selectTargetFaces(userId);
+      const failure = failureOfResponses([faces]);
+      if (failure) return failure;
+      return { status: "ok", data: toTargetFaces(faces.data) };
+    },
     async roundDetails(userId, roundIds) {
       const chunks = roundIds.length > 0 ? chunkIds(roundIds) : [[]];
       const [faces, ...responses] = await Promise.all([

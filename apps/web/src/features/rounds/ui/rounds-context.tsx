@@ -4,10 +4,10 @@ import { createContext, type ReactNode, useContext } from "react";
 import type { PresetDeletion } from "../application/preset-deletion";
 import type { PresetSaving } from "../application/preset-saving";
 import type { RoundDeletion } from "../application/round-deletion";
-import type { RoundDetailStore } from "../application/round-detail-store";
 import type { RoundFetching } from "../application/round-fetching";
 import type { RoundLeaving } from "../application/round-leaving";
 import type { RoundStart } from "../application/round-start";
+import type { RoundWindow } from "../application/round-window";
 import type { RoundsListStore } from "../application/rounds-list-store";
 import type { UniqueIds } from "../application/unique-ids";
 import type { WhenOnline } from "../application/when-online";
@@ -22,31 +22,33 @@ export type RoundProcedures = {
   fetching: Pick<RoundFetching, "fetchPresets" | "savedPresets">;
   ids: UniqueIds;
   whenOnline: WhenOnline;
+  // そのエンドの既にある矢のIDより後ろに並ぶ、時刻順の矢のIDの払い出し。
+  newShotId: (endShotIds: readonly string[]) => string;
 };
 
-const RoundDetailStoreContext = createContext<RoundDetailStore | null>(null);
+const RoundWindowContext = createContext<RoundWindow | null>(null);
 const RoundsListStoreContext = createContext<RoundsListStore | null>(null);
 const RoundProceduresContext = createContext<RoundProcedures | null>(null);
 
-// 詳細の画面へ、状態と変更の方法を渡す。
-export function RoundDetailStoreProvider({
-  store,
+// 画面へ、端末内の取得と同期の窓口を渡す。
+export function RoundWindowProvider({
+  roundWindow,
   children,
 }: {
-  store: RoundDetailStore;
+  roundWindow: RoundWindow;
   children: ReactNode;
 }) {
   return (
-    <RoundDetailStoreContext.Provider value={store}>
+    <RoundWindowContext.Provider value={roundWindow}>
       {children}
-    </RoundDetailStoreContext.Provider>
+    </RoundWindowContext.Provider>
   );
 }
 
-export function useRoundDetailStore(): RoundDetailStore {
-  const store = useContext(RoundDetailStoreContext);
-  if (!store) throw new Error("RoundDetailStoreProvider がありません。");
-  return store;
+export function useRoundWindow(): RoundWindow {
+  const roundWindow = useContext(RoundWindowContext);
+  if (!roundWindow) throw new Error("RoundWindowProvider がありません。");
+  return roundWindow;
 }
 
 // 一覧の画面へ、状態と変更の方法を渡す。

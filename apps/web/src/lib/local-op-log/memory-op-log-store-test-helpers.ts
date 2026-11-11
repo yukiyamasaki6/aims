@@ -63,7 +63,10 @@ export function createMemoryOpLogStore<Op extends OpBase, Base>(
           rows.splice(rows.indexOf(row), 1);
         }
       }
-      if (!newer) bases.set(key, adopted);
+      if (newer) return;
+      // nullは印を保存せず、ベースの行を消す(未送信の操作は残る)。
+      if (base === null) bases.delete(key);
+      else bases.set(key, adopted);
     },
     async ack(eventId, revision, appliedFields) {
       const row = rows.find((candidate) => candidate.eventId === eventId);

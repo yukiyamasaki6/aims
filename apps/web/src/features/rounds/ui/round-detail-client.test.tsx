@@ -1,19 +1,24 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { RoundDetailStore } from "@/features/rounds/application/round-detail-store";
-import type { LoadedRound } from "@/features/rounds/application/round-handle";
-import type { FetchResult } from "@/features/rounds/domain/fetch-status";
+import type { RoundScreen } from "@/features/rounds/application/round-window";
+import type { FetchView } from "@/features/rounds/domain/fetch-status";
 import { roundTablesFromServer } from "@/features/rounds/domain/round-op-test-helpers";
+import { selectRoundState } from "@/features/rounds/domain/round-tables";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
-import { createFakeRoundDetailStore } from "@/features/rounds/ui/round-stores-test-helpers";
-import { RoundDetailStoreProvider } from "@/features/rounds/ui/rounds-context";
+import {
+  createFakeRoundProcedures,
+  createFakeRoundWindow,
+} from "@/features/rounds/ui/round-stores-test-helpers";
+import {
+  RoundProceduresProvider,
+  RoundWindowProvider,
+} from "@/features/rounds/ui/rounds-context";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { RoundDetailClient } from "./round-detail-client";
-import { useCreationGone } from "./use-creation-gone";
 
 const roundsText = translatorFor("rounds");
 
@@ -23,43 +28,43 @@ const OTHER_ID = "223e4567-e89b-12d3-a456-426614174000";
 const nav = vi.hoisted(() => ({ pathname: "" }));
 vi.mock("next/navigation", () => ({ usePathname: () => nav.pathname }));
 
-// 取得とスコアカードは別のテストで確かめるため、ラウンドの状態は読み込みだけを返す偽の約束に、スコアカードはスタブにする。
-const load = vi.fn<RoundDetailStore["load"]>();
+// 取得・存在の判断・再試行は窓口のテストで確かめるため、窓口は偽に、スコアカードはスタブにする。
+const fake = createFakeRoundWindow();
 // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
-const fake = createFakeRoundDetailStore({ load });
-fake.goOffline();
-const store = fake.store;
+const procedures = createFakeRoundProcedures();
+procedures.goOffline();
 
 function Providers({ children }: { children: ReactNode }) {
   return (
-    <RoundDetailStoreProvider store={store}>
-      {children}
-    </RoundDetailStoreProvider>
+    <RoundWindowProvider roundWindow={fake.roundWindow}>
+      <RoundProceduresProvider procedures={procedures}>
+        {children}
+      </RoundProceduresProvider>
+    </RoundWindowProvider>
   );
 }
-vi.mock("./use-creation-gone", () => ({ useCreationGone: vi.fn() }));
-const creationGone = vi.mocked(useCreationGone);
+
 vi.mock("./scorecard-client", () => ({
   ScorecardClient: ({
     roundId,
-    loaded,
-    onGone,
+    screen,
+    append,
   }: {
     roundId: string;
-    loaded: {
-      base: { round: { config: { name: string } } };
+    screen: {
+      state: { roundConfig: { name: string } };
       targetFaces: { id: string }[];
     };
-    onGone?: () => void;
+    append: (operation: unknown) => unknown;
   }) => (
     <div
       data-testid="scorecard"
       data-round-id={roundId}
-      data-faces={loaded.targetFaces.map((f) => f.id).join(",")}
+      data-faces={screen.targetFaces.map((f) => f.id).join(",")}
     >
-      {loaded.base.round.config.name}
-      <button type="button" onClick={onGone}>
-        gone
+      {screen.state.roundConfig.name}
+      <button type="button" onClick={() => append({ type: "probe" })}>
+        append
       </button>
     </div>
   ),
@@ -70,25 +75,29 @@ function faces(...ids: string[]): TargetFaceOption[] {
   return ids.map((id) => ({ id })) as TargetFaceOption[];
 }
 
-function detail(
+function ready(
   name: string,
-  pendingCreationEventId: string | null = null,
   targetFaces: TargetFaceOption[] = [],
-): LoadedRound {
+): FetchView<RoundScreen> {
   return {
-    base: roundTablesFromServer({
-      status: "in_progress",
-      roundConfig: {
-        name,
-        roundDate: "2026-09-15",
-        format: "outdoor",
-        bowType: "recurve",
-      },
-      distances: [],
-      shots: [],
-    }),
-    targetFaces,
-    pendingCreationEventId,
+    status: "ok",
+    data: {
+      state: selectRoundState(
+        roundTablesFromServer({
+          status: "in_progress",
+          roundConfig: {
+            name,
+            roundDate: "2026-09-15",
+            format: "outdoor",
+            bowType: "recurve",
+          },
+          distances: [],
+          shots: [],
+        }),
+      ),
+      targetFaces,
+      initiallyEmpty: true,
+    },
   };
 }
 
@@ -111,13 +120,11 @@ function renderDetailToString() {
   );
 }
 
-function resolves(result: FetchResult<LoadedRound>) {
-  load.mockResolvedValue(result);
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
   nav.pathname = `/rounds/${ID}`;
+  fake.setView(ID, { status: "loading" });
+  fake.setView(OTHER_ID, { status: "loading" });
 });
 
 afterEach(() => {
@@ -129,7 +136,6 @@ describe("RoundDetailClient", () => {
   describe("取得中", () => {
     it("取得中は、一覧へ戻るリンクと読み込み中の表示を出し、スコアカードは出さない", () => {
       // Given
-      load.mockReturnValue(new Promise(() => {}));
 
       // When
       renderDetail();
@@ -144,8 +150,9 @@ describe("RoundDetailClient", () => {
       expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
     });
 
-    it("初回描画は、pathnameによらず同じ取得中の枠で、取得を始めない", () => {
+    it("初回描画は、pathnameによらず同じ取得中の枠で、購読を始めない", () => {
       // Given
+      fake.setView(ID, ready("すでに準備完了"));
       nav.pathname = "/rounds/_";
       const placeholderHtml = renderDetailToString();
       nav.pathname = `/rounds/${ID}`;
@@ -155,39 +162,59 @@ describe("RoundDetailClient", () => {
       const html = renderDetailToString();
 
       // Then
-      // 水和の不一致を避けるため、サーバーの描画は読み込み中の表示と同一になる。
+      // 水和の不一致を避けるため、サーバーの描画は読み込み中の表示と同一になる(窓口に値があっても出さない)。
       expect(html).toBe(placeholderHtml);
       expect(html).toContain(roundsText("fetchLoading"));
-      expect(load).not.toHaveBeenCalled();
+      expect(fake.roundWindow.watch).not.toHaveBeenCalled();
     });
   });
 
-  describe("取得できた場合", () => {
-    it("pathnameのIDで取得し、取得結果をスコアカードへ渡す", async () => {
+  describe("準備完了", () => {
+    it("pathnameのIDを購読し、窓口の状態をスコアカードへ渡し、追記は窓口へ渡す", async () => {
       // Given
-      resolves({
-        status: "ok",
-        data: detail("午前練習", null, faces("face-1", "face-2")),
-      });
+      fake.setView(ID, ready("午前練習", faces("face-1", "face-2")));
+      const user = userEvent.setup();
 
       // When
       renderDetail();
+      await user.click(await screen.findByRole("button", { name: "append" }));
 
       // Then
-      const scorecard = await screen.findByTestId("scorecard");
+      const scorecard = screen.getByTestId("scorecard");
       expect(scorecard).toHaveTextContent("午前練習");
       expect(scorecard).toHaveAttribute("data-round-id", ID);
       expect(scorecard).toHaveAttribute("data-faces", "face-1,face-2");
-      expect(load).toHaveBeenCalledTimes(1);
-      expect(load).toHaveBeenCalledWith(ID);
+      expect(fake.roundWindow.watch).toHaveBeenCalledWith(
+        ID,
+        expect.any(Function),
+      );
+      expect(fake.roundWindow.append).toHaveBeenCalledWith(ID, {
+        type: "probe",
+      });
     });
 
-    it("pathnameのIDが変わると、前のラウンドを見せずに取得し直す", async () => {
+    it("窓口の状態が変わると描画し直し、画面を閉じると購読を解除する", () => {
       // Given
-      resolves({ status: "ok", data: detail("最初") });
+      const { unmount } = renderDetail();
+      const before = screen.queryByTestId("scorecard");
+
+      // When
+      act(() => fake.setView(ID, ready("更新後")));
+      const after = screen.getByTestId("scorecard");
+      unmount();
+
+      // Then
+      expect(before).toBeNull();
+      expect(after).toHaveTextContent("更新後");
+      const stop = fake.roundWindow.watch.mock.results[0].value as () => void;
+      expect(stop).toBeTypeOf("function");
+    });
+
+    it("pathnameのIDが変わると、前のラウンドを見せずに、新しいIDを購読する", async () => {
+      // Given
+      fake.setView(ID, ready("最初"));
       const { rerender } = renderDetail();
       await screen.findByText("最初");
-      load.mockReturnValue(new Promise(() => {}));
 
       // When
       nav.pathname = `/rounds/${OTHER_ID}`;
@@ -202,22 +229,39 @@ describe("RoundDetailClient", () => {
       expect(screen.getByRole("status")).toHaveTextContent(
         roundsText("fetchLoading"),
       );
-      expect(load).toHaveBeenLastCalledWith(OTHER_ID);
+      expect(fake.roundWindow.watch).toHaveBeenLastCalledWith(
+        OTHER_ID,
+        expect.any(Function),
+      );
+    });
+
+    it("準備完了の後に窓口が見つからないにすると、スコアカードを閉じて、見つからない表示と一覧へ戻るリンクを出す", () => {
+      // Given
+      fake.setView(ID, ready(roundsText("listInProgress"), faces("face-1")));
+      renderDetail();
+
+      // When
+      act(() => fake.setView(ID, { status: "not-found" }));
+
+      // Then
+      expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
+      expect(screen.getByText(roundsText("detailNotFound"))).toBeVisible();
+      expect(
+        screen.getByRole("link", { name: roundsText("backToList") }),
+      ).toBeVisible();
     });
   });
 
   describe("見つからない・オフライン・エラー", () => {
-    it("見つからない場合は、メッセージと一覧へ戻るリンクを出す", async () => {
+    it("見つからない場合は、メッセージと一覧へ戻るリンクを出す", () => {
       // Given
-      resolves({ status: "not-found" });
+      fake.setView(ID, { status: "not-found" });
 
       // When
       renderDetail();
 
       // Then
-      expect(
-        await screen.findByText(roundsText("detailNotFound")),
-      ).toBeInTheDocument();
+      expect(screen.getByText(roundsText("detailNotFound"))).toBeVisible();
       // 戻る導線は枠のヘッダーの1つだけにする。
       expect(
         screen.getAllByRole("link", { name: roundsText("backToList") }),
@@ -229,7 +273,7 @@ describe("RoundDetailClient", () => {
       ["プレースホルダー", "/rounds/_"],
       ["UUIDでないID", "/rounds/abc"],
     ])(
-      "%sのpathnameは、問い合わせずに見つからないとする",
+      "%sのpathnameは、購読せずに見つからないとする",
       async (_name, pathname) => {
         // Given
         nav.pathname = pathname;
@@ -241,17 +285,13 @@ describe("RoundDetailClient", () => {
         expect(
           await screen.findByText(roundsText("detailNotFound")),
         ).toBeInTheDocument();
-        expect(load).not.toHaveBeenCalled();
+        expect(fake.roundWindow.watch).not.toHaveBeenCalled();
       },
     );
 
-    it("取得エラーの後に再試行すると、取得し直して表示する", async () => {
+    it("オフラインとエラーの表示を出し、再試行は窓口のretryを呼ぶ", async () => {
       // Given
-      load.mockResolvedValueOnce({
-        status: "error",
-        reason: "failed",
-      });
-      load.mockResolvedValueOnce({ status: "ok", data: detail("午前練習") });
+      fake.setView(ID, { status: "error", reason: "failed" });
       const user = userEvent.setup();
       renderDetail();
       const retry = await screen.findByRole("button", {
@@ -264,65 +304,18 @@ describe("RoundDetailClient", () => {
       });
 
       // Then
-      expect(await screen.findByTestId("scorecard")).toHaveTextContent(
-        "午前練習",
-      );
-      expect(load).toHaveBeenCalledTimes(2);
+      expect(fake.roundWindow.retry).toHaveBeenCalledExactlyOnceWith(ID);
     });
 
-    it("`onGone`が呼ばれると、スコアカードを閉じて、見つからない表示と一覧へ戻るリンクを出す", async () => {
+    it("オフラインのとき、オフラインの表示を出す", () => {
       // Given
-      resolves({
-        status: "ok",
-        data: detail(roundsText("listInProgress"), null, faces("face-1")),
-      });
-      const user = userEvent.setup();
-      renderDetail();
-      const gone = await screen.findByRole("button", { name: "gone" });
-
-      // When
-      await user.click(gone);
-
-      // Then
-      expect(screen.queryByTestId("scorecard")).not.toBeInTheDocument();
-      expect(screen.getByText(roundsText("detailNotFound"))).toBeVisible();
-      expect(
-        screen.getByRole("link", { name: roundsText("backToList") }),
-      ).toBeVisible();
-    });
-  });
-
-  describe("作成が未確定のラウンド", () => {
-    const pendingEventId = "event-1";
-
-    it("作成の消失の監視へラウンドIDを渡す", async () => {
-      // Given
-      resolves({ status: "ok", data: detail("作成中", pendingEventId) });
+      fake.setView(ID, { status: "offline" });
 
       // When
       renderDetail();
-      await screen.findByTestId("scorecard");
 
       // Then
-      const [roundId] = creationGone.mock.calls.at(-1) ?? [];
-      expect(roundId).toBe(ID);
-    });
-
-    it("作成の消失を検知したら、取得し直す", async () => {
-      // Given
-      resolves({ status: "ok", data: detail("作成中", pendingEventId) });
-      renderDetail();
-      await screen.findByTestId("scorecard");
-      const [, onGone] = creationGone.mock.calls.at(-1) ?? [];
-      const before = load.mock.calls.length;
-
-      // When
-      await act(async () => {
-        onGone?.();
-      });
-
-      // Then
-      await waitFor(() => expect(load.mock.calls.length).toBe(before + 1));
+      expect(screen.getByText(roundsText("fetchOffline"))).toBeVisible();
     });
   });
 });
