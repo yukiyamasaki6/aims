@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it, vi } from "vitest";
 import { createSupabaseDatabase } from "@/lib/supabase/infrastructure/database";
 import type { Database } from "@/types/supabase";
+import { DEFAULT_HISTORY_CONDITION } from "../domain/history-view-state";
 import { roundUpdated, shotRecorded } from "../domain/round-op-test-helpers";
 import { createRoundOpTransport } from "./round-op-transport";
 import { createRoundQueries } from "./round-queries";
@@ -130,14 +131,33 @@ describe("取得の問い合わせ", () => {
     ]);
   });
 
-  it("SDKの応答は、okの種類とデータになって返る", async () => {
+  it("履歴の取得は、RPCの名前と引数のキー(基準・向き・種別・弓種・起点・件数)でSDKへ届き、応答はokの種類とページになって返る", async () => {
     // Given
-    const { database } = fakeSdk({ data: [], error: null, status: 200 });
+    const { database, rpc } = fakeSdk({
+      data: { rounds: [], has_more: false },
+      error: null,
+      status: 200,
+    });
 
     // When
-    const result = await createRoundQueries(database).roundsList();
+    const result = await createRoundQueries(database).roundsList({
+      condition: DEFAULT_HISTORY_CONDITION,
+      after: null,
+      size: 10,
+    });
 
     // Then
-    expect(result).toEqual({ status: "ok", data: [] });
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("rounds_list", {
+      p_sort_key: "date",
+      p_sort_direction: "desc",
+      p_format: null,
+      p_bow_type: null,
+      p_after_id: null,
+      p_limit: 10,
+    });
+    expect(result).toEqual({
+      status: "ok",
+      data: { rounds: [], hasMore: false },
+    });
   });
 });

@@ -1,12 +1,13 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { FetchResult } from "../domain/fetch-status";
+import type { HistoryCondition } from "../domain/history-view-state";
 import { type PresetRecord, type Presets, presetsOf } from "../domain/preset";
 import type { QueryOutcome } from "../domain/query-outcome";
 import type { RoundBaseRecord } from "../domain/round-base";
 import {
-  type HistoryRoundItem,
-  roundListItemOf,
-  type ServerRoundSummary,
+  type RoundsPage,
+  roundsPageOf,
+  type ServerRoundsPage,
 } from "../domain/round-list";
 import { baseOfServerRound, type ServerRound } from "../domain/round-tables";
 import {
@@ -22,6 +23,13 @@ export type RoundDetailsData = {
   targetFaces: TargetFaceRecord[];
 };
 
+// 履歴の1ページの問い合わせ。
+type RoundsListRequest = {
+  condition: HistoryCondition;
+  after: string | null;
+  size: number;
+};
+
 // 取得の問い合わせの約束。応答はドメインの形に写して返す。
 export type RoundQueries = {
   // 存在しない・権限なし・論理削除済みのラウンドは、not-found。
@@ -35,8 +43,10 @@ export type RoundQueries = {
   targetFaces(userId: string): Promise<QueryOutcome<TargetFaceRecord[]>>;
   // 個人(owner_idが自分)と公式(owner_idがnull)を1回で得る。
   presets(userId: string): Promise<QueryOutcome<PresetRecord[]>>;
-  // 完了と記録された削除されていないラウンドを、並べずに得る。ページの条件はここに足す。
-  roundsList(): Promise<QueryOutcome<ServerRoundSummary[]>>;
+  // 完了と記録された削除されていないラウンドを、条件で絞り並べた1ページとして得る。`after`は続きの起点のID(先頭のページはnull)、`size`は件数。
+  roundsList(
+    request: RoundsListRequest,
+  ): Promise<QueryOutcome<ServerRoundsPage>>;
 };
 
 // `startedAt`は取得の開始時刻、`userId`は取得に使ったセッションの利用者。端末へ保存するベースの記録に付ける。
@@ -143,14 +153,17 @@ export function createRoundFetching(deps: {
     return { status: "ok", data: { rounds, startedAt, userId } };
   }
 
-  // 一覧のラウンドを取得する。
-  async function fetchRoundsList(): Promise<FetchResult<HistoryRoundItem[]>> {
-    const result = await content.fetchContent(() => queries.roundsList());
+  // 履歴の1ページを、条件と続きの起点と件数で取得する。
+  async function fetchRoundsList(
+    condition: HistoryCondition,
+    after: string | null,
+    size: number,
+  ): Promise<FetchResult<RoundsPage>> {
+    const result = await content.fetchContent(() =>
+      queries.roundsList({ condition, after, size }),
+    );
     if (result.status !== "ok") return result;
-    return {
-      status: "ok",
-      data: result.data.map(roundListItemOf),
-    };
+    return { status: "ok", data: roundsPageOf(result.data) };
   }
 
   return {

@@ -6,6 +6,9 @@ import {
   ROUND_ORIGIN_HISTORY,
   ROUND_ORIGIN_PARAM,
   ROUNDS_HISTORY_PATH,
+  ROUNDS_HISTORY_RETURN_PARAM,
+  ROUNDS_HISTORY_RETURN_PATH,
+  ROUNDS_HISTORY_RETURN_VALUE,
   ROUNDS_HOME_PATH,
   ROUNDS_PATH,
 } from "@/routes";
@@ -44,7 +47,15 @@ export function roundOriginOf(search: string): RoundOrigin {
     : "home";
 }
 
-// 遷移元に対応する戻り先の経路。経路表の定数からだけ作る。
+// 遷移元に対応する戻り先の経路。経路表の定数からだけ作る。履歴の戻り先は戻りの印のあるURLで、離れる前の表示に戻る。
 export function originPathOf(origin: RoundOrigin): string {
-  return origin === "history" ? ROUNDS_HISTORY_PATH : ROUNDS_HOME_PATH;
+  return origin === "history" ? ROUNDS_HISTORY_RETURN_PATH : ROUNDS_HOME_PATH;
+}
+
+// 履歴のURLの検索部に戻りの印があるか。印があれば「戻った」、無ければ「開いた」。
+export function isHistoryReturn(search: string): boolean {
+  return (
+    new URLSearchParams(search).get(ROUNDS_HISTORY_RETURN_PARAM) ===
+    ROUNDS_HISTORY_RETURN_VALUE
+  );
 }

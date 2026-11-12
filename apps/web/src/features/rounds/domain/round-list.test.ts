@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  appendRoundsList,
   deletedRoundIdsOf,
+  historyPageSizeOf,
+  type LoadedRoundsList,
   localRoundsList,
+  type RoundListItem,
   roundListItemOf,
+  roundsPageOf,
   type ServerRoundSummary,
 } from "./round-list";
 import {
@@ -146,79 +151,177 @@ describe("localRoundsList: 的に無い点数", () => {
   });
 });
 
-// 実際の屋外ラウンドの形(各距離12エンド×3射)は、合計の算術を見るには冗長になる。値そのものが検証の対象のため、少数の矢で確かめる。
 describe("roundListItemOf", () => {
-  const summary = (
-    distances: ServerRoundSummary["distances"],
-  ): ServerRoundSummary => ({
-    id: "round-2",
-    name: "午後練習",
-    round_date: "2026-09-16",
-    format: "indoor",
-    bow_type: "compound",
-    created_at: "2026-09-16T08:30:15.123456+00:00",
-    distances,
-  });
-  const shot = (scoreInt: number, disabled = false) => ({
-    score_int: scoreInt,
-    disabled_at: disabled ? "2026-09-16T00:00:00Z" : null,
-  });
-  const distance = (
-    shots: ServerRoundSummary["distances"][number]["shots"],
-    disabled = false,
-  ) => ({
-    disabled_at: disabled ? "2026-09-16T00:00:00Z" : null,
-    shots,
-  });
-
-  it("削除されていない距離の、削除されていない矢の点の和を合計点にし、id、name、実施日(round_date)、種別(format)、弓種(bow_type)、作成時刻(created_at)をそのまま返す", () => {
+  it("サーバーの応答の列(round_date)と合計点を、画面の名前(roundDate、total)へ写す", () => {
     // Given
-    const input = summary([
-      distance([shot(10), shot(9), shot(8)]),
-      distance([shot(7), shot(6)]),
-    ]);
+    const summary: ServerRoundSummary = {
+      id: "round-2",
+      name: "午後練習",
+      round_date: "2026-09-16",
+      total: 640,
+    };
 
     // When
-    const result = roundListItemOf(input);
+    const item = roundListItemOf(summary);
 
     // Then
-    expect(result).toEqual({
+    expect(item).toEqual({
       id: "round-2",
       name: "午後練習",
       roundDate: "2026-09-16",
-      format: "indoor",
-      bowType: "compound",
-      createdAt: "2026-09-16T08:30:15.123456+00:00",
-      total: 40,
+      total: 640,
+    });
+  });
+});
+
+describe("roundsPageOf", () => {
+  const summary = (id: string): ServerRoundSummary => ({
+    id,
+    name: id,
+    round_date: "2026-09-16",
+    total: 500,
+  });
+
+  it("サーバーの順のまま項目にし、続きの有無と、返した最後のラウンドのIDを起点にする", () => {
+    // Given
+    const page = { rounds: [summary("b"), summary("a")], hasMore: true };
+
+    // When
+    const result = roundsPageOf(page);
+
+    // Then
+    expect(result.items.map((item) => item.id)).toEqual(["b", "a"]);
+    expect(result.hasMore).toBe(true);
+    expect(result.after).toBe("a");
+  });
+
+  it("空のページは、起点をnullにする", () => {
+    // Given
+    const page = { rounds: [], hasMore: false };
+
+    // When
+    const result = roundsPageOf(page);
+
+    // Then
+    expect(result).toEqual({ items: [], hasMore: false, after: null });
+  });
+});
+
+describe("appendRoundsList", () => {
+  const entry = (id: string): RoundListItem => ({
+    id,
+    name: id,
+    roundDate: "2026-09-16",
+    total: 500,
+  });
+  const loaded = (
+    ids: string[],
+    overrides: Partial<LoadedRoundsList> = {},
+  ): LoadedRoundsList => ({
+    items: ids.map(entry),
+    hasMore: true,
+    after: ids.at(-1) ?? null,
+    deleted: new Set(),
+    ...overrides,
+  });
+
+  it("次のページの項目を、取得済みの項目の後ろに連結する", () => {
+    // Given
+    const current = loaded(["a", "b"]);
+    const next = loaded(["c", "d"]);
+
+    // When
+    const result = appendRoundsList(current, next);
+
+    // Then
+    expect(result.items.map((item) => item.id)).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("IDが重なる項目は、先に出た方を残して2回出さない", () => {
+    // Given
+    const current = loaded(["a", "b"]);
+    const next = loaded(["b", "c"]);
+    next.items[0] = { ...entry("b"), name: "後のページのb" };
+
+    // When
+    const result = appendRoundsList(current, next);
+
+    // Then
+    expect(result.items).toEqual([entry("a"), entry("b"), entry("c")]);
+  });
+
+  it("続きの有無と起点は新しいページのものにし、削除済みのIDは和にする", () => {
+    // Given
+    const current = loaded(["a"], { deleted: new Set(["x"]) });
+    const next = loaded(["b"], {
+      hasMore: false,
+      after: "b",
+      deleted: new Set(["y"]),
+    });
+
+    // When
+    const result = appendRoundsList(current, next);
+
+    // Then
+    expect(result.hasMore).toBe(false);
+    expect(result.after).toBe("b");
+    expect([...result.deleted].sort()).toEqual(["x", "y"]);
+  });
+
+  it("空のページを連結しても、取得済みの項目は変わらない", () => {
+    // Given
+    const current = loaded(["a", "b"]);
+    const next = loaded([], { hasMore: false, after: null });
+
+    // When
+    const result = appendRoundsList(current, next);
+
+    // Then
+    expect(result.items.map((item) => item.id)).toEqual(["a", "b"]);
+    expect(result.hasMore).toBe(false);
+  });
+});
+
+describe("historyPageSizeOf", () => {
+  it("画面の高さを1件分の高さで割った2画面分(切り上げ)にし、10と50の境界とその前後はその範囲に収める", () => {
+    // Given
+    // 画面の高さ1000に対し、1件分の高さを変えて、下限(10)・上限(50)の境界とその前後を作る。
+    const viewport = 1000;
+
+    // When
+    const sizes = {
+      belowMin: historyPageSizeOf(viewport, 250),
+      atMin: historyPageSizeOf(viewport, 200),
+      aboveMin: historyPageSizeOf(viewport, 199),
+      middle: historyPageSizeOf(viewport, 80),
+      belowMax: historyPageSizeOf(viewport, 41),
+      atMax: historyPageSizeOf(viewport, 40),
+      aboveMax: historyPageSizeOf(viewport, 39),
+    };
+
+    // Then
+    expect(sizes).toEqual({
+      belowMin: 10,
+      atMin: 10,
+      aboveMin: 11,
+      middle: 25,
+      belowMax: 49,
+      atMax: 50,
+      aboveMax: 50,
     });
   });
 
-  it("削除された距離の矢と、削除された矢を合計に含めない", () => {
+  it.each([
+    ["0", 0],
+    ["負", -10],
+    ["NaN", Number.NaN],
+  ])("1件分の高さが%sのとき、下限にする", (_name, itemHeight) => {
     // Given
-    const input = summary([
-      distance([shot(10), shot(9, true)]),
-      distance([shot(8)], true),
-      distance([shot(7)]),
-    ]);
 
     // When
-    const result = roundListItemOf(input);
+    const size = historyPageSizeOf(800, itemHeight);
 
     // Then
-    expect(result.total).toBe(17);
-  });
-
-  it("距離が0件のときも、矢が0件のときも、合計点は0", () => {
-    // Given
-    const withoutDistances = summary([]);
-    const withoutShots = summary([distance([])]);
-
-    // When
-    const noDistances = roundListItemOf(withoutDistances);
-    const noShots = roundListItemOf(withoutShots);
-
-    // Then
-    expect(noDistances.total).toBe(0);
-    expect(noShots.total).toBe(0);
+    expect(size).toBe(10);
   });
 });

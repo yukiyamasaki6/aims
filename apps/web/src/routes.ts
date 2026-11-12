@@ -28,6 +28,11 @@ export const ROUNDS_HOME_PATH = `${ROUNDS_PATH}`;
 export const ROUNDS_HISTORY_PATH = `${ROUNDS_PATH}/history`;
 export const NEW_ROUND_PATH = `${ROUNDS_PATH}/new`;
 
+// 履歴の戻りの印。履歴の検索部にこの組があるURLで開いたときは「戻った」、無いときは「開いた」。
+export const ROUNDS_HISTORY_RETURN_PARAM = "return";
+export const ROUNDS_HISTORY_RETURN_VALUE = "1";
+export const ROUNDS_HISTORY_RETURN_PATH = `${ROUNDS_HISTORY_PATH}?${ROUNDS_HISTORY_RETURN_PARAM}=${ROUNDS_HISTORY_RETURN_VALUE}`;
+
 // 詳細の遷移元。URLのクエリに載せ、履歴から開いたときだけ付ける(無ければホーム)。
 export const ROUND_ORIGIN_PARAM = "from";
 export const ROUND_ORIGIN_HISTORY = "history";

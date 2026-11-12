@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createFakePageNavigation } from "@/lib/page-navigation/fake-page-navigation-test-helpers";
-import { ROUNDS_HISTORY_PATH, ROUNDS_HOME_PATH } from "@/routes";
+import { ROUNDS_HISTORY_RETURN_PATH, ROUNDS_HOME_PATH } from "@/routes";
 import {
   roundDisabledOperation,
   statusOperation,
@@ -135,7 +135,10 @@ describe("createRoundLeaving", () => {
       await leaving.deleteRoundAndLeave("round-1", "history", () => true);
 
       // Then
-      expect(calls).toEqual(["append:done", `replace:${ROUNDS_HISTORY_PATH}`]);
+      expect(calls).toEqual([
+        "append:done",
+        `replace:${ROUNDS_HISTORY_RETURN_PATH}`,
+      ]);
     });
   });
 

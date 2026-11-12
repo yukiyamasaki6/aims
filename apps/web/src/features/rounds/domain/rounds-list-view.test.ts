@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FetchView } from "./fetch-status";
-import {
-  DEFAULT_HISTORY_CONDITION,
-  type HistoryCondition,
-} from "./history-view-state";
+import { DEFAULT_HISTORY_CONDITION } from "./history-view-state";
 import type {
-  HistoryRoundItem,
   LoadedRoundsList,
   LocalRoundsList,
   RoundListItem,
@@ -14,19 +10,6 @@ import { historyView, homeView } from "./rounds-list-view";
 
 function item(id: string, roundDate = "2026-09-15", total = 0): RoundListItem {
   return { id, name: id, roundDate, total };
-}
-
-function historyItem(
-  id: string,
-  overrides: Partial<HistoryRoundItem> = {},
-): HistoryRoundItem {
-  return {
-    ...item(id),
-    format: "outdoor",
-    bowType: "recurve",
-    createdAt: "2026-09-15T10:00:00.000000+00:00",
-    ...overrides,
-  };
 }
 
 const ids = (rounds: RoundListItem[] | null | undefined) =>
@@ -90,34 +73,35 @@ describe("historyView", () => {
     overrides: Partial<LoadedRoundsList> = {},
   ): FetchView<LoadedRoundsList> => ({
     status: "ok",
-    data: { items: [], deleted: new Set(), ...overrides },
+    data: {
+      items: [],
+      hasMore: false,
+      after: null,
+      deleted: new Set(),
+      ...overrides,
+    },
   });
   const empty: LocalRoundsList = { inProgress: [] };
-  const scoreAscending: HistoryCondition = {
-    ...DEFAULT_HISTORY_CONDITION,
-    sortKey: "score",
-    sortDirection: "asc",
-  };
 
-  it("取得が成功したら、条件の並びで返し、取得の状態は返さない", () => {
+  it("取得が成功したら、サーバーが返した並びのまま返し、取得の状態は返さない", () => {
     // Given
+    // 日付の降順でも得点の順でもない並びで、並べ直さないことを見分ける。
+    const items = [
+      item("c", "2026-09-01", 300),
+      item("a", "2026-09-20", 100),
+      item("b", "2026-09-10", 200),
+    ];
 
     // When
     const view = historyView(
-      loaded({
-        items: [
-          historyItem("c", { roundDate: "2026-09-01" }),
-          historyItem("a", { roundDate: "2026-09-20" }),
-          historyItem("b", { roundDate: "2026-09-10" }),
-        ],
-      }),
+      loaded({ items }),
       empty,
       new Set(),
       DEFAULT_HISTORY_CONDITION,
     );
 
     // Then
-    expect(ids(view.rounds)).toEqual(["a", "b", "c"]);
+    expect(ids(view.rounds)).toEqual(["c", "a", "b"]);
     expect(view.rest).toBeNull();
   });
 
@@ -127,7 +111,7 @@ describe("historyView", () => {
 
     // When
     const view = historyView(
-      loaded({ items: [historyItem("a"), historyItem("p1")] }),
+      loaded({ items: [item("a"), item("p1")] }),
       local,
       new Set(),
       DEFAULT_HISTORY_CONDITION,
@@ -137,13 +121,13 @@ describe("historyView", () => {
     expect(ids(view.rounds)).toEqual(["a"]);
   });
 
-  it("取得時に求めた削除済みのIDと、この画面で削除したラウンドを除く", () => {
+  it("取得時に求めた削除済みのIDと、この画面で削除したラウンドを除き、残りの並びを保つ", () => {
     // Given
 
     // When
     const view = historyView(
       loaded({
-        items: [historyItem("a"), historyItem("b"), historyItem("c")],
+        items: [item("d"), item("a"), item("b"), item("c")],
         deleted: new Set(["b"]),
       }),
       empty,
@@ -152,10 +136,50 @@ describe("historyView", () => {
     );
 
     // Then
-    expect(ids(view.rounds)).toEqual(["a"]);
+    expect(ids(view.rounds)).toEqual(["d", "a"]);
   });
 
-  it("取得が成功し、除いた結果が0件なら、空の配列を返す", () => {
+  it("続きの有無を返す", () => {
+    // Given
+    const withMore = loaded({ items: [item("a")], hasMore: true });
+    const withoutMore = loaded({ items: [item("a")], hasMore: false });
+
+    // When
+    const more = historyView(
+      withMore,
+      empty,
+      new Set(),
+      DEFAULT_HISTORY_CONDITION,
+    );
+    const last = historyView(
+      withoutMore,
+      empty,
+      new Set(),
+      DEFAULT_HISTORY_CONDITION,
+    );
+
+    // Then
+    expect(more.hasMore).toBe(true);
+    expect(last.hasMore).toBe(false);
+  });
+
+  it("除いた結果が0件でも、続きがあれば0件の配列と続きの有無を返す(空とは区別できる)", () => {
+    // Given
+    const local: LocalRoundsList = { inProgress: [item("p1")] };
+
+    // When
+    const view = historyView(
+      loaded({ items: [item("p1")], hasMore: true }),
+      local,
+      new Set(),
+      DEFAULT_HISTORY_CONDITION,
+    );
+
+    // Then
+    expect(view).toEqual({ rounds: [], hasMore: true, rest: null });
+  });
+
+  it("取得が成功し、続きがなく0件なら、空の配列を返す", () => {
     // Given
 
     // When
@@ -167,7 +191,7 @@ describe("historyView", () => {
     );
 
     // Then
-    expect(view).toEqual({ rounds: [], rest: null });
+    expect(view).toEqual({ rounds: [], hasMore: false, rest: null });
   });
 
   it("取得が成功しても、端末の入力中をまだ読んでいなければ、ラウンドを出さず取得中として返す", () => {
@@ -175,14 +199,18 @@ describe("historyView", () => {
 
     // When
     const view = historyView(
-      loaded({ items: [historyItem("a")] }),
+      loaded({ items: [item("a")] }),
       null,
       new Set(),
       DEFAULT_HISTORY_CONDITION,
     );
 
     // Then
-    expect(view).toEqual({ rounds: null, rest: { status: "loading" } });
+    expect(view).toEqual({
+      rounds: null,
+      hasMore: false,
+      rest: { status: "loading" },
+    });
   });
 
   it("取得が成功しても、保存した条件をまだ読んでいなければ、ラウンドを出さず取得中として返す", () => {
@@ -190,69 +218,18 @@ describe("historyView", () => {
 
     // When
     const view = historyView(
-      loaded({ items: [historyItem("a")] }),
+      loaded({ items: [item("a")] }),
       empty,
       new Set(),
       null,
     );
 
     // Then
-    expect(view).toEqual({ rounds: null, rest: { status: "loading" } });
-  });
-
-  it("入力中のIDと削除済みのIDの行は、条件に一致していても除き、条件に一致する行を条件の並びで返す", () => {
-    // Given
-    const local: LocalRoundsList = { inProgress: [item("in-progress")] };
-    const matching = { format: "indoor", bowType: "compound" };
-    const indoorCompound: HistoryCondition = {
-      ...scoreAscending,
-      format: "indoor",
-      bowType: "compound",
-    };
-
-    // When
-    const view = historyView(
-      loaded({
-        items: [
-          historyItem("high", { ...matching, total: 600 }),
-          historyItem("in-progress", { ...matching, total: 100 }),
-          historyItem("low", { ...matching, total: 300 }),
-          historyItem("deleted-on-server", { ...matching, total: 200 }),
-          historyItem("removed-here", { ...matching, total: 250 }),
-          historyItem("other-format", { format: "outdoor", total: 50 }),
-        ],
-        deleted: new Set(["deleted-on-server"]),
-      }),
-      local,
-      new Set(["removed-here"]),
-      indoorCompound,
-    );
-
-    // Then
-    expect(ids(view.rounds)).toEqual(["low", "high"]);
-  });
-
-  it("条件を選んだ状態で削除したラウンドは、条件に一致する表示から消える", () => {
-    // Given
-    const items = [
-      historyItem("keep", { format: "indoor", total: 500 }),
-      historyItem("delete", { format: "indoor", total: 400 }),
-    ];
-    const indoorOnly: HistoryCondition = {
-      ...DEFAULT_HISTORY_CONDITION,
-      format: "indoor",
-    };
-
-    // When
-    const view = historyView(
-      loaded({ items }),
-      empty,
-      new Set(["delete"]),
-      indoorOnly,
-    );
-
-    // Then
-    expect(ids(view.rounds)).toEqual(["keep"]);
+    expect(view).toEqual({
+      rounds: null,
+      hasMore: false,
+      rest: { status: "loading" },
+    });
   });
 
   it.each([
@@ -266,7 +243,12 @@ describe("historyView", () => {
       const local: LocalRoundsList = { inProgress: [item("p1")] };
 
       // When
-      const view = historyView(fetchView, local, new Set(), scoreAscending);
+      const view = historyView(
+        fetchView,
+        local,
+        new Set(),
+        DEFAULT_HISTORY_CONDITION,
+      );
 
       // Then
       expect(view.rounds).toBeNull();

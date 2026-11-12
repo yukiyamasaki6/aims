@@ -33,7 +33,8 @@ export const roundsMessages = {
     } satisfies Record<FetchFailure, string>,
     // ホームと履歴
     homeEmpty: "入力中のラウンドはありません",
-    historyEmpty: "条件に一致するラウンドがありません",
+    historyEmpty: "該当するラウンドがありません",
+    historyEnd: "該当するラウンドは以上です",
     historyControlsToggle: "並べ替え・絞り込み",
     historyControlsSort: "並べ替え",
     historySortKey: {

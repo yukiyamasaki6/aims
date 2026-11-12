@@ -4,6 +4,7 @@ import type {
   DbResponse,
   DbSelect,
 } from "@/lib/supabase/contract/database";
+import { DEFAULT_HISTORY_CONDITION } from "../domain/history-view-state";
 import type { QueryOutcome } from "../domain/query-outcome";
 import { ROUND_PRESET_SELECT } from "./reference-query-constants";
 import { createRoundQueries } from "./round-queries";
@@ -14,6 +15,12 @@ type Query = DbSelect<
   RoundsDbSchema,
   "rounds" | "distances" | "target_faces" | "preset_rounds"
 >;
+
+const listRequest = {
+  condition: DEFAULT_HISTORY_CONDITION,
+  after: null,
+  size: 10,
+};
 
 const ok = (data: unknown): DbResponse => ({ data, error: null, status: 200 });
 const failed = (
@@ -34,11 +41,13 @@ type Responses = {
   rounds: DbResponse | ((roundsQueryIndex: number) => DbResponse);
   target_faces: DbResponse;
   preset_rounds?: DbResponse;
+  rounds_list?: DbResponse;
 };
 
 // データベースの境界を、表ごとの応答を返し、受けた問い合わせを記録するゲートウェイで模す。
 function makeDatabase(responses: Responses) {
   const queries: Query[] = [];
+  const rpcCalls: { name: string; args: Record<string, unknown> }[] = [];
   let roundsCount = 0;
   const database: DatabaseGateway<RoundsDbSchema> = {
     async select(query) {
@@ -53,12 +62,18 @@ function makeDatabase(responses: Responses) {
     async delete() {
       throw new Error("取得は削除を使わない");
     },
-    async rpc() {
-      throw new Error("取得はRPCを使わない");
+    async rpc(name, args) {
+      if (name !== "rounds_list")
+        throw new Error("取得は履歴以外のRPCを使わない");
+      rpcCalls.push({ name, args: args as Record<string, unknown> });
+      // 応答の型は呼び出しごとの生成型で、ここでは値だけを返す。
+      return (responses.rounds_list ??
+        ok({ rounds: [], has_more: false })) as never;
     },
   };
   return {
     queries,
+    rpcCalls,
     queries_of: (table: string) => queries.filter((q) => q.table === table),
     createQueries: () => createRoundQueries(database),
   };
@@ -227,7 +242,7 @@ describe("再試行の指定", () => {
     expect(retries.every((retry) => retry === true)).toBe(true);
   });
 
-  it("プリセットと一覧の取得はretryを付けない", async () => {
+  it("プリセットの取得はretryを付けない", async () => {
     // Given
     const database = makeDatabase({
       rounds: ok([]),
@@ -238,14 +253,11 @@ describe("再試行の指定", () => {
 
     // When
     await queries.presets("user-1");
-    await queries.roundsList();
+    await queries.roundsList(listRequest);
 
     // Then
-    expect(database.queries.length).toBe(2);
-    expect(database.queries.map((query) => query.retry)).toEqual([
-      undefined,
-      undefined,
-    ]);
+    expect(database.queries.length).toBe(1);
+    expect(database.queries.map((query) => query.retry)).toEqual([undefined]);
   });
 });
 
@@ -443,107 +455,117 @@ describe("targetFaces", () => {
 
 describe("roundsList", () => {
   const noFaces = ok(null);
+  const request = {
+    condition: {
+      sortKey: "score",
+      sortDirection: "asc",
+      format: "indoor",
+      bowType: "compound",
+    },
+    after: "round-9",
+    size: 25,
+  } as const;
 
-  it("削除されていない完了のラウンドを、利用者で絞らず、種別・弓種・作成時刻とともに1回の問い合わせで得る", async () => {
+  it("条件(基準・向き・種別・弓種)、続きの起点、件数を、履歴の関数(rounds_list)の引数に写して1回呼ぶ", async () => {
     // Given
     const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
 
     // When
-    await database.createQueries().roundsList();
+    await database.createQueries().roundsList(request);
 
     // Then
-    expect(database.queries).toHaveLength(1);
-    expect(database.queries[0]).toMatchObject({
-      table: "rounds",
-      columns:
-        "id, name, round_date, format, bow_type, created_at, distances(disabled_at, shots(score_int, disabled_at))",
-      filters: [
-        { op: "is", column: "disabled_at", value: null },
-        { op: "eq", column: "status", value: "completed" },
-      ],
+    expect(database.queries).toHaveLength(0);
+    expect(database.rpcCalls).toEqual([
+      {
+        name: "rounds_list",
+        args: {
+          p_sort_key: "score",
+          p_sort_direction: "asc",
+          p_format: "indoor",
+          p_bow_type: "compound",
+          p_after_id: "round-9",
+          p_limit: 25,
+        },
+      },
+    ]);
+  });
+
+  it("種別・弓種の指定なしと先頭のページの起点なしは、nullで渡す", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+
+    // When
+    await database.createQueries().roundsList(listRequest);
+
+    // Then
+    expect(database.rpcCalls[0]?.args).toMatchObject({
+      p_format: null,
+      p_bow_type: null,
+      p_after_id: null,
     });
   });
 
-  it("取得した行を、写さずにそのまま返す", async () => {
+  it("応答の行と続きの有無(has_more)を、ページ(行と続きの有無)にして返す", async () => {
     // Given
-    const database = makeDatabase({
-      rounds: {
-        data: [
-          {
-            id: "round-1",
-            name: "午前練習",
-            round_date: "2026-09-15",
-            format: "outdoor",
-            bow_type: "recurve",
-            created_at: "2026-09-15T10:00:00.123456+00:00",
-            distances: [
-              {
-                disabled_at: null,
-                shots: [
-                  { score_int: 10, disabled_at: null },
-                  { score_int: 9, disabled_at: "2026-09-15T10:00:00Z" },
-                ],
-              },
-              {
-                disabled_at: "2026-09-15T11:00:00Z",
-                shots: [{ score_int: 8, disabled_at: null }],
-              },
-            ],
-          },
-        ],
-        error: null,
-        status: 206,
+    const rounds = [
+      {
+        id: "round-1",
+        name: "午前練習",
+        round_date: "2026-09-15",
+        total: 640,
       },
+    ];
+    const database = makeDatabase({
+      rounds: ok([]),
       target_faces: noFaces,
+      rounds_list: ok({ rounds, has_more: true }),
     });
 
     // When
-    const response = await database.createQueries().roundsList();
+    const response = await database.createQueries().roundsList(listRequest);
 
     // Then
     expect(response).toEqual({
       status: "ok",
-      data: [
-        {
-          id: "round-1",
-          name: "午前練習",
-          round_date: "2026-09-15",
-          format: "outdoor",
-          bow_type: "recurve",
-          created_at: "2026-09-15T10:00:00.123456+00:00",
-          distances: [
-            {
-              disabled_at: null,
-              shots: [
-                { score_int: 10, disabled_at: null },
-                { score_int: 9, disabled_at: "2026-09-15T10:00:00Z" },
-              ],
-            },
-            {
-              disabled_at: "2026-09-15T11:00:00Z",
-              shots: [{ score_int: 8, disabled_at: null }],
-            },
-          ],
-        },
-      ],
+      data: { rounds, hasMore: true },
     });
   });
 
   it("通信失敗(status 0)はcomm-failure、エラー応答はfailedの種類で返す", async () => {
     // Given
-    const comm = makeDatabase({ rounds: failed(0), target_faces: noFaces });
-    const errored = makeDatabase({
-      rounds: failed(500, { message: "x" }),
+    const comm = makeDatabase({
+      rounds: ok([]),
       target_faces: noFaces,
+      rounds_list: failed(0),
+    });
+    const errored = makeDatabase({
+      rounds: ok([]),
+      target_faces: noFaces,
+      rounds_list: failed(500, { message: "x" }),
     });
 
     // When
-    const first = await comm.createQueries().roundsList();
-    const second = await errored.createQueries().roundsList();
+    const first = await comm.createQueries().roundsList(listRequest);
+    const second = await errored.createQueries().roundsList(listRequest);
 
     // Then
     expect(first).toEqual({ status: "comm-failure" });
     expect(second).toEqual({ status: "failed" });
+  });
+
+  it("失敗しても自動で再試行せず、1回だけ呼ぶ", async () => {
+    // Given
+    const database = makeDatabase({
+      rounds: ok([]),
+      target_faces: noFaces,
+      rounds_list: failed(500, { message: "x" }),
+    });
+
+    // When
+    await database.createQueries().roundsList(listRequest);
+
+    // Then
+    expect(database.rpcCalls).toHaveLength(1);
   });
 });
 
