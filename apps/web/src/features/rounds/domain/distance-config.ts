@@ -1,4 +1,4 @@
-import { DISTANCE_CONFIG_MAX } from "./round-constants";
+import { DISTANCE_LIMITS } from "./round-constants";
 import { type ScoringTargetFace, shotsFitDistance } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
 
@@ -33,22 +33,23 @@ export type DistanceConfigValidation =
   | { type: "valid"; distance: Distance }
   | { type: "invalid"; errors: DistanceConfigErrors };
 
-// 値の範囲の判定。サーバーの規則(1以上の整数で、上限以下)に合わせる。
+// 値の範囲の判定。サーバーの規則(1以上の整数で、項目ごとの上限以下)に合わせる。
 function rangeError(
   value: number,
+  max: number,
 ): "notPositiveInteger" | "tooLarge" | undefined {
   if (!Number.isInteger(value) || value < 1) return "notPositiveInteger";
-  if (value > DISTANCE_CONFIG_MAX) return "tooLarge";
+  if (value > max) return "tooLarge";
   return undefined;
 }
 
-function countError(value: number | null) {
-  return value === null ? "notPositiveInteger" : rangeError(value);
+function countError(value: number | null, max: number) {
+  return value === null ? "notPositiveInteger" : rangeError(value, max);
 }
 
 function distanceError(draft: DistanceDraft) {
   if (draft.distance === null) return draft.is_marked ? "required" : undefined;
-  return rangeError(draft.distance);
+  return rangeError(draft.distance, DISTANCE_LIMITS.distance);
 }
 
 // クライアントが既に持っている値だけで判定できるため、サーバーへ投げる前に同期的に検証する。
@@ -64,9 +65,9 @@ export function validateDistanceDraft(
   const errors: DistanceConfigErrors = {};
   const distance = distanceError(draft);
   if (distance) errors.distance = distance;
-  const arrows = countError(arrowsPerEnd);
+  const arrows = countError(arrowsPerEnd, DISTANCE_LIMITS.arrowsPerEnd);
   if (arrows) errors.arrowsPerEnd = arrows;
-  const ends = countError(totalEnds);
+  const ends = countError(totalEnds, DISTANCE_LIMITS.totalEnds);
   if (ends) errors.totalEnds = ends;
   // 本数・エンド数を再度判定するのは、nullでないことを型へ伝えるため。
   if (

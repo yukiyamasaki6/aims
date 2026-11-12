@@ -46,6 +46,7 @@
 
 - 名前が空白のみなら、距離を位置順に`-`でつないだ名前（未入力の距離は`??`）で保存する。距離が1つ以上あるときの規則で、このとき名前は必ず1文字以上になる。距離が0件なら保存しない(`noDistances`。画面は保存ボタンを押せなくし、domainは契約として拒否する)。
 - 名前は50文字以内とし、クライアントの検証とDBのCHECK制約の両方で守る。
+- 距離(m)・総エンド数・矢数が上限(`rounds/setup`)を超える構成は、`save_round_as_preset`がPT422で拒否し、何も保存しない。保存ダイアログは入力欄を持たず、検証済みの表示中の構成を送るため、通常は起きない。起きたときは他の失敗と同じ`saveFailed`になる。
 - `save_round_as_preset`は、渡された名前・種別・弓種・距離配列を`preset_rounds`と`preset_distances`へ1トランザクションで書く。`rounds`・`distances`は読まない。SECURITY INVOKERで、呼び出し元のRLSに従う。
 - 削除は直接のDELETEで、`preset_rounds`のDELETEポリシーが認可を担う。`preset_distances`は外部キーのCASCADEで消える。
 - アプリが書き込む経路は、保存のRPCと削除だけである。`preset_rounds`のUPDATEと`preset_distances`のUPDATE・DELETEのポリシーとGRANTは持たない。

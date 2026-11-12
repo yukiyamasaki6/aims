@@ -3,7 +3,7 @@ import {
   type DistanceDraft,
   validateDistanceDraft,
 } from "@/features/rounds/domain/distance-config";
-import { DISTANCE_CONFIG_MAX } from "./round-constants";
+import { DISTANCE_LIMITS } from "./round-constants";
 import type { ScoringTargetFace } from "./scorecard-scoring";
 import type { Distance, Shot } from "./scorecard-types";
 
@@ -122,22 +122,20 @@ describe("validateDistanceDraft", () => {
 
   describe("範囲", () => {
     it.each([
-      ["距離(m)", "distance", "distance"],
-      ["エンドあたりの本数", "arrows_per_end", "arrowsPerEnd"],
-      ["総エンド数", "total_ends", "totalEnds"],
+      ["距離(m)", "distance", "distance", DISTANCE_LIMITS.distance],
+      [
+        "エンドあたりの本数",
+        "arrows_per_end",
+        "arrowsPerEnd",
+        DISTANCE_LIMITS.arrowsPerEnd,
+      ],
+      ["総エンド数", "total_ends", "totalEnds", DISTANCE_LIMITS.totalEnds],
     ] as const)(
       "%sは、1と上限が有効で、0・負・小数は1以上の整数でないエラー、上限を超えるとtooLargeになる",
-      (_label, field, errorField) => {
+      (_label, field, errorField, max) => {
         // Given
         // 値そのものが検証の対象のため、実際にない大きさの値を使う。
-        const values = [
-          1,
-          DISTANCE_CONFIG_MAX,
-          0,
-          -1,
-          70.5,
-          DISTANCE_CONFIG_MAX + 1,
-        ];
+        const values = [1, max, 0, -1, 70.5, max + 1];
 
         // When
         const results = values.map((value) =>
@@ -166,6 +164,72 @@ describe("validateDistanceDraft", () => {
       },
     );
 
+    it("上限は項目ごとに違い、距離(m)は100、総エンド数は60、エンドあたりの本数は12まで有効になる", () => {
+      // Given
+      // 値そのものが検証の対象のため、実際にない大きさの値を使う。
+      const atLimit = { distance: 100, total_ends: 60, arrows_per_end: 12 };
+
+      // When
+      const atLimitResult = validate({ ...validDraft, ...atLimit });
+      const arrowsOverTwelve = validate({ ...validDraft, arrows_per_end: 13 });
+      const arrowsAtHundred = validate({ ...validDraft, arrows_per_end: 100 });
+      const endsAtThirteen = validate({ ...validDraft, total_ends: 13 });
+      const distanceAtThirteen = validate({ ...validDraft, distance: 13 });
+      const endsAtHundred = validate({ ...validDraft, total_ends: 100 });
+      const endsOverSixty = validate({ ...validDraft, total_ends: 61 });
+      const distanceOverHundred = validate({ ...validDraft, distance: 101 });
+
+      // Then
+      expect(atLimitResult.type).toBe("valid");
+      expect(arrowsOverTwelve).toEqual({
+        type: "invalid",
+        errors: { arrowsPerEnd: "tooLarge" },
+      });
+      expect(arrowsAtHundred).toEqual({
+        type: "invalid",
+        errors: { arrowsPerEnd: "tooLarge" },
+      });
+      expect(endsAtThirteen.type).toBe("valid");
+      expect(distanceAtThirteen.type).toBe("valid");
+      expect(endsAtHundred).toEqual({
+        type: "invalid",
+        errors: { totalEnds: "tooLarge" },
+      });
+      expect(endsOverSixty).toEqual({
+        type: "invalid",
+        errors: { totalEnds: "tooLarge" },
+      });
+      expect(distanceOverHundred).toEqual({
+        type: "invalid",
+        errors: { distance: "tooLarge" },
+      });
+    });
+
+    it.each([
+      ["距離(m)", "distance", "distance"],
+      ["エンドあたりの本数", "arrows_per_end", "arrowsPerEnd"],
+      ["総エンド数", "total_ends", "totalEnds"],
+    ] as const)(
+      "%sに桁あふれする大きさの値を入れても、tooLargeになる",
+      (_label, field, errorField) => {
+        // Given
+        // 値そのものが検証の対象のため、実際にない大きさの値を使う。
+        const hugeValues = [Number.MAX_SAFE_INTEGER, 1e21];
+
+        // When
+        const results = hugeValues.map((value) =>
+          validate({ ...validDraft, [field]: value }),
+        );
+
+        // Then
+        const expected = {
+          type: "invalid",
+          errors: { [errorField]: "tooLarge" },
+        };
+        expect(results).toEqual([expected, expected]);
+      },
+    );
+
     it("Unmarkedでも、距離(m)に入れた範囲外の値はエラーになり、未入力は有効になる", () => {
       // Given
       const unmarked = { ...validDraft, is_marked: false };
@@ -179,6 +243,28 @@ describe("validateDistanceDraft", () => {
       expect(outOfRange).toEqual({
         type: "invalid",
         errors: { distance: POSITIVE_INTEGER_ERROR },
+      });
+    });
+
+    it("Unmarkedでも、距離(m)は上限ちょうどまで有効で、超えるとtooLargeになる", () => {
+      // Given
+      const unmarked = { ...validDraft, is_marked: false };
+
+      // When
+      const atLimit = validate({
+        ...unmarked,
+        distance: DISTANCE_LIMITS.distance,
+      });
+      const overLimit = validate({
+        ...unmarked,
+        distance: DISTANCE_LIMITS.distance + 1,
+      });
+
+      // Then
+      expect(atLimit.type).toBe("valid");
+      expect(overLimit).toEqual({
+        type: "invalid",
+        errors: { distance: "tooLarge" },
       });
     });
   });
@@ -314,6 +400,28 @@ describe("validateDistanceDraft", () => {
   });
 
   describe("複数の項目が無効な場合", () => {
+    it("複数の項目が上限を超えると、超えた項目すべてにtooLargeを返す", () => {
+      // Given
+      // 値そのものが検証の対象のため、実際にない大きさの値を使う。
+      // When
+      const result = validate({
+        ...validDraft,
+        distance: DISTANCE_LIMITS.distance + 1,
+        arrows_per_end: DISTANCE_LIMITS.arrowsPerEnd + 1,
+        total_ends: DISTANCE_LIMITS.totalEnds + 1,
+      });
+
+      // Then
+      expect(result).toEqual({
+        type: "invalid",
+        errors: {
+          distance: "tooLarge",
+          arrowsPerEnd: "tooLarge",
+          totalEnds: "tooLarge",
+        },
+      });
+    });
+
     it("無効な項目すべてのエラーを返す", () => {
       // Given
       // When
