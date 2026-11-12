@@ -31,7 +31,13 @@ export type RoundsDbSchema = {
     rounds: {
       Row: Pick<
         Full["Tables"]["rounds"]["Row"],
-        "id" | "disabled_at" | "status" | "round_date"
+        | "id"
+        | "disabled_at"
+        | "status"
+        | "round_date"
+        | "format"
+        | "bow_type"
+        | "created_at"
       >;
     };
     distances: {

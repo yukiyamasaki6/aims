@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { FetchView } from "./fetch-status";
+import {
+  DEFAULT_HISTORY_CONDITION,
+  type HistoryCondition,
+} from "./history-view-state";
 import type {
+  HistoryRoundItem,
   LoadedRoundsList,
   LocalRoundsList,
   RoundListItem,
@@ -9,6 +14,19 @@ import { historyView, homeView } from "./rounds-list-view";
 
 function item(id: string, roundDate = "2026-09-15", total = 0): RoundListItem {
   return { id, name: id, roundDate, total };
+}
+
+function historyItem(
+  id: string,
+  overrides: Partial<HistoryRoundItem> = {},
+): HistoryRoundItem {
+  return {
+    ...item(id),
+    format: "outdoor",
+    bowType: "recurve",
+    createdAt: "2026-09-15T10:00:00.000000+00:00",
+    ...overrides,
+  };
 }
 
 const ids = (rounds: RoundListItem[] | null | undefined) =>
@@ -75,25 +93,31 @@ describe("historyView", () => {
     data: { items: [], deleted: new Set(), ...overrides },
   });
   const empty: LocalRoundsList = { inProgress: [] };
+  const scoreAscending: HistoryCondition = {
+    ...DEFAULT_HISTORY_CONDITION,
+    sortKey: "score",
+    sortDirection: "asc",
+  };
 
-  it("取得が成功したら、取得の順のまま返し、取得の状態は返さない", () => {
+  it("取得が成功したら、条件の並びで返し、取得の状態は返さない", () => {
     // Given
 
     // When
     const view = historyView(
       loaded({
         items: [
-          item("c", "2026-09-01"),
-          item("a", "2026-09-20"),
-          item("b", "2026-09-10"),
+          historyItem("c", { roundDate: "2026-09-01" }),
+          historyItem("a", { roundDate: "2026-09-20" }),
+          historyItem("b", { roundDate: "2026-09-10" }),
         ],
       }),
       empty,
       new Set(),
+      DEFAULT_HISTORY_CONDITION,
     );
 
     // Then
-    expect(ids(view.rounds)).toEqual(["c", "a", "b"]);
+    expect(ids(view.rounds)).toEqual(["a", "b", "c"]);
     expect(view.rest).toBeNull();
   });
 
@@ -103,9 +127,10 @@ describe("historyView", () => {
 
     // When
     const view = historyView(
-      loaded({ items: [item("a"), item("p1")] }),
+      loaded({ items: [historyItem("a"), historyItem("p1")] }),
       local,
       new Set(),
+      DEFAULT_HISTORY_CONDITION,
     );
 
     // Then
@@ -118,11 +143,12 @@ describe("historyView", () => {
     // When
     const view = historyView(
       loaded({
-        items: [item("a"), item("b"), item("c")],
+        items: [historyItem("a"), historyItem("b"), historyItem("c")],
         deleted: new Set(["b"]),
       }),
       empty,
       new Set(["c"]),
+      DEFAULT_HISTORY_CONDITION,
     );
 
     // Then
@@ -133,7 +159,12 @@ describe("historyView", () => {
     // Given
 
     // When
-    const view = historyView(loaded(), empty, new Set());
+    const view = historyView(
+      loaded(),
+      empty,
+      new Set(),
+      DEFAULT_HISTORY_CONDITION,
+    );
 
     // Then
     expect(view).toEqual({ rounds: [], rest: null });
@@ -143,10 +174,85 @@ describe("historyView", () => {
     // Given
 
     // When
-    const view = historyView(loaded({ items: [item("a")] }), null, new Set());
+    const view = historyView(
+      loaded({ items: [historyItem("a")] }),
+      null,
+      new Set(),
+      DEFAULT_HISTORY_CONDITION,
+    );
 
     // Then
     expect(view).toEqual({ rounds: null, rest: { status: "loading" } });
+  });
+
+  it("取得が成功しても、保存した条件をまだ読んでいなければ、ラウンドを出さず取得中として返す", () => {
+    // Given
+
+    // When
+    const view = historyView(
+      loaded({ items: [historyItem("a")] }),
+      empty,
+      new Set(),
+      null,
+    );
+
+    // Then
+    expect(view).toEqual({ rounds: null, rest: { status: "loading" } });
+  });
+
+  it("入力中のIDと削除済みのIDの行は、条件に一致していても除き、条件に一致する行を条件の並びで返す", () => {
+    // Given
+    const local: LocalRoundsList = { inProgress: [item("in-progress")] };
+    const matching = { format: "indoor", bowType: "compound" };
+    const indoorCompound: HistoryCondition = {
+      ...scoreAscending,
+      format: "indoor",
+      bowType: "compound",
+    };
+
+    // When
+    const view = historyView(
+      loaded({
+        items: [
+          historyItem("high", { ...matching, total: 600 }),
+          historyItem("in-progress", { ...matching, total: 100 }),
+          historyItem("low", { ...matching, total: 300 }),
+          historyItem("deleted-on-server", { ...matching, total: 200 }),
+          historyItem("removed-here", { ...matching, total: 250 }),
+          historyItem("other-format", { format: "outdoor", total: 50 }),
+        ],
+        deleted: new Set(["deleted-on-server"]),
+      }),
+      local,
+      new Set(["removed-here"]),
+      indoorCompound,
+    );
+
+    // Then
+    expect(ids(view.rounds)).toEqual(["low", "high"]);
+  });
+
+  it("条件を選んだ状態で削除したラウンドは、条件に一致する表示から消える", () => {
+    // Given
+    const items = [
+      historyItem("keep", { format: "indoor", total: 500 }),
+      historyItem("delete", { format: "indoor", total: 400 }),
+    ];
+    const indoorOnly: HistoryCondition = {
+      ...DEFAULT_HISTORY_CONDITION,
+      format: "indoor",
+    };
+
+    // When
+    const view = historyView(
+      loaded({ items }),
+      empty,
+      new Set(["delete"]),
+      indoorOnly,
+    );
+
+    // Then
+    expect(ids(view.rounds)).toEqual(["keep"]);
   });
 
   it.each([
@@ -160,7 +266,7 @@ describe("historyView", () => {
       const local: LocalRoundsList = { inProgress: [item("p1")] };
 
       // When
-      const view = historyView(fetchView, local, new Set());
+      const view = historyView(fetchView, local, new Set(), scoreAscending);
 
       // Then
       expect(view.rounds).toBeNull();

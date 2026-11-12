@@ -1,5 +1,9 @@
 import type { DistanceConfigError } from "../domain/distance-config";
 import type { FetchFailure, SignInFailure } from "../domain/fetch-status";
+import type {
+  HistorySortDirection,
+  HistorySortKey,
+} from "../domain/history-view-state";
 import type { RoundConfigError } from "../domain/round-config";
 import type { BowTypeOption, FormatOption } from "../domain/round-constants";
 import { NAME_MAX_LENGTH } from "../domain/round-constants";
@@ -29,7 +33,19 @@ export const roundsMessages = {
     } satisfies Record<FetchFailure, string>,
     // ホームと履歴
     homeEmpty: "入力中のラウンドはありません",
-    historyEmpty: "完了したラウンドはありません。",
+    historyEmpty: "条件に一致するラウンドがありません",
+    historyControlsToggle: "並べ替え・絞り込み",
+    historyControlsSort: "並べ替え",
+    historySortKey: {
+      date: "日付",
+      score: "得点",
+    } satisfies Record<HistorySortKey, string>,
+    historySortDirection: {
+      asc: "昇順",
+      desc: "降順",
+    } satisfies Record<HistorySortDirection, string>,
+    historyControlsFilter: "絞り込み",
+    historyControlsReset: "条件をリセット",
     newRoundLabel: "ラウンドを新規作成",
     roundTotalPoints: "{total}点",
     roundMenuLabel: "ラウンドのメニュー",

@@ -4,7 +4,7 @@ import { type PresetRecord, type Presets, presetsOf } from "../domain/preset";
 import type { QueryOutcome } from "../domain/query-outcome";
 import type { RoundBaseRecord } from "../domain/round-base";
 import {
-  type RoundListItem,
+  type HistoryRoundItem,
   roundListItemOf,
   type ServerRoundSummary,
 } from "../domain/round-list";
@@ -35,7 +35,7 @@ export type RoundQueries = {
   targetFaces(userId: string): Promise<QueryOutcome<TargetFaceRecord[]>>;
   // 個人(owner_idが自分)と公式(owner_idがnull)を1回で得る。
   presets(userId: string): Promise<QueryOutcome<PresetRecord[]>>;
-  // 削除されていないラウンドを、実施日の新しい順に得る。入力中のラウンドも含む。ページ、絞り込み、並びの条件はここに足す。
+  // 完了と記録された削除されていないラウンドを、並べずに得る。ページの条件はここに足す。
   roundsList(): Promise<QueryOutcome<ServerRoundSummary[]>>;
 };
 
@@ -144,7 +144,7 @@ export function createRoundFetching(deps: {
   }
 
   // 一覧のラウンドを取得する。
-  async function fetchRoundsList(): Promise<FetchResult<RoundListItem[]>> {
+  async function fetchRoundsList(): Promise<FetchResult<HistoryRoundItem[]>> {
     const result = await content.fetchContent(() => queries.roundsList());
     if (result.status !== "ok") return result;
     return {

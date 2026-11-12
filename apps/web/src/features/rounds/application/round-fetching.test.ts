@@ -762,6 +762,9 @@ describe("fetchRoundsList", () => {
     id,
     name: `ラウンド${id}`,
     round_date: "2026-09-15",
+    format: "outdoor",
+    bow_type: "recurve",
+    created_at: "2026-09-15T10:00:00.123456+00:00",
     distances: [
       {
         disabled_at: null,
@@ -799,12 +802,18 @@ describe("fetchRoundsList", () => {
           id: "round-2",
           name: "ラウンドround-2",
           roundDate: "2026-09-15",
+          format: "outdoor",
+          bowType: "recurve",
+          createdAt: "2026-09-15T10:00:00.123456+00:00",
           total: 10,
         },
         {
           id: "round-1",
           name: "ラウンドround-1",
           roundDate: "2026-09-15",
+          format: "outdoor",
+          bowType: "recurve",
+          createdAt: "2026-09-15T10:00:00.123456+00:00",
           total: 9,
         },
       ],

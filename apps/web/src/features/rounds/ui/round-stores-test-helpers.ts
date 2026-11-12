@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { createFakeHistoryViewMemory } from "../application/fake-history-view-memory-test-helpers";
 import type { RoundScreen, RoundWindow } from "../application/round-window";
 import type { RoundsListStore } from "../application/rounds-list-store";
 import type { FetchView } from "../domain/fetch-status";
@@ -139,6 +140,7 @@ export function createFakeRoundProcedures() {
       randomBytes: vi.fn().mockReturnValue(new Uint8Array(10)),
     },
     whenOnline,
+    historyViewMemory: createFakeHistoryViewMemory().memory,
     newShotId: vi.fn(
       () =>
         `00000000-0000-7000-8000-${String(++issued.shots).padStart(12, "0")}`,

@@ -20,9 +20,9 @@ import type { RoundsDbSchema } from "./rounds-db-schema";
 const ROUND_SELECT =
   "id, name, round_date, format, bow_type, status, revision, distances(id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, revision, disabled_at, shots(id, distance_id, end_number, shooter_id, score_str, score_int, shot_number, revision, disabled_at))";
 
-// 一覧は合計点を求めるため、距離と矢の削除の印と点だけを取得する。
+// 一覧は合計点を求めるため、距離と矢の削除の印と点を取得する。絞り込みと並びのため、種別・弓種・作成時刻も取得する。
 const ROUNDS_LIST_SELECT =
-  "id, name, round_date, distances(disabled_at, shots(score_int, disabled_at))";
+  "id, name, round_date, format, bow_type, created_at, distances(disabled_at, shots(score_int, disabled_at))";
 
 // 1回の取得に並べるラウンドIDの上限。IDはGETのURLに載るため、ゲートウェイが長いURLを414で拒まない件数に分ける。50件で約3KBで、ローカルで通ることを確かめた長さ(約3.7KB)に収まる。
 const roundIdsPerRequest = 50;
@@ -63,10 +63,6 @@ export function createRoundQueries(
   const roundOrders: readonly DbOrder<RoundsDbSchema, "rounds">[] = [
     { column: "position_key", referencedTable: "distances" },
     { column: "id", referencedTable: "distances" },
-  ];
-
-  const listOrders: readonly DbOrder<RoundsDbSchema, "rounds">[] = [
-    { column: "round_date", ascending: false },
   ];
 
   // 最初の取得は入力中のラウンドを含め、以降は入力中を除く(最初の取得で全件を得るため)。
@@ -144,7 +140,7 @@ export function createRoundQueries(
         },
       };
     },
-    // 履歴の取得。サーバーで完了と記録されたラウンドだけを返す。
+    // 履歴の取得。サーバーで完了と記録されたラウンドだけを、並べずに返す(並びは条件の適用が決める)。
     // 取得できる行はRLSでユーザーが属するラウンドに限るため、利用者で絞らない。
     async roundsList() {
       const response = await database.select({
@@ -154,7 +150,6 @@ export function createRoundQueries(
           { op: "is", column: "disabled_at", value: null },
           { op: "eq", column: "status", value: "completed" },
         ],
-        orders: listOrders,
       });
       const failure = failureOfResponses([response]);
       if (failure) return failure;

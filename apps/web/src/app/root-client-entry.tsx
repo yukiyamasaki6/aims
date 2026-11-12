@@ -38,6 +38,7 @@ import type { RoundBaseRecord } from "@/features/rounds/domain/round-base";
 import { roundStreamRules } from "@/features/rounds/domain/round-retention";
 import { shotIdAfter } from "@/features/rounds/domain/shot-id";
 import type { SyncOperation } from "@/features/rounds/domain/sync-events";
+import { createBrowserHistoryViewMemory } from "@/features/rounds/infrastructure/browser-history-view-memory";
 import { createBrowserUniqueIds } from "@/features/rounds/infrastructure/browser-unique-ids";
 import { createPresetCommands } from "@/features/rounds/infrastructure/preset-commands";
 import { createReferenceSnapshots } from "@/features/rounds/infrastructure/reference-snapshot";
@@ -140,8 +141,14 @@ type Records = ReturnType<typeof composeRecords>;
 
 // 窓口(手続きと、一覧、詳細の窓口)。
 function composeStores(inputs: Inputs, records: Records) {
-  const { sessionReader, connectivity, clock, database, pageNavigation } =
-    inputs;
+  const {
+    identityStore,
+    sessionReader,
+    connectivity,
+    clock,
+    database,
+    pageNavigation,
+  } = inputs;
   const { hub, ids, snapshots, fetching } = records;
   const commands = createPresetCommands(database);
   const deletion = createRoundDeletion({ hub, ids });
@@ -174,6 +181,7 @@ function composeStores(inputs: Inputs, records: Records) {
       ids,
       // 参照を安定させるため、1度だけ作る。
       whenOnline: whenOnline.bind(null, connectivity),
+      historyViewMemory: createBrowserHistoryViewMemory(identityStore),
       newShotId: (endShotIds: readonly string[]) =>
         shotIdAfter(endShotIds, clock.now(), ids.randomBytes(10)),
     },

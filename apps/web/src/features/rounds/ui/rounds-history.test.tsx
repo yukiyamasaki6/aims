@@ -3,7 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import type { LoadedRoundsList, RoundListItem } from "../domain/round-list";
+import { createFakeHistoryViewMemory } from "../application/fake-history-view-memory-test-helpers";
+import {
+  DEFAULT_HISTORY_CONDITION,
+  DEFAULT_HISTORY_VIEW_STATE,
+  type HistoryViewState,
+} from "../domain/history-view-state";
+import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../domain/round-constants";
+import type { HistoryRoundItem, LoadedRoundsList } from "../domain/round-list";
 import {
   createFakeRoundProcedures,
   createFakeRoundsListStore,
@@ -22,9 +29,10 @@ const roundsText = translatorFor("rounds");
 let fake: ReturnType<typeof createFakeRoundsListStore>;
 let fakeWindow: ReturnType<typeof createFakeRoundWindow>;
 let procedures: ReturnType<typeof createFakeRoundProcedures>;
+let memory: ReturnType<typeof createFakeHistoryViewMemory>;
 
 function loaded(
-  items: RoundListItem[],
+  items: HistoryRoundItem[],
   overrides: Partial<LoadedRoundsList> = {},
 ): LoadedRoundsList {
   return { items, deleted: new Set(), ...overrides };
@@ -43,12 +51,72 @@ function renderHistory() {
   );
 }
 
-const completed: RoundListItem[] = [
-  { id: "round-1", name: "午前練習", roundDate: "2026-09-15", total: 300 },
-  { id: "round-2", name: "午後練習", roundDate: "2026-09-16", total: 280 },
+function roundItem(
+  id: string,
+  name: string,
+  overrides: Partial<HistoryRoundItem>,
+): HistoryRoundItem {
+  return {
+    id,
+    name,
+    roundDate: "2026-09-15",
+    total: 0,
+    format: "outdoor",
+    bowType: "recurve",
+    createdAt: "2026-09-15T10:00:00.000000+00:00",
+    ...overrides,
+  };
+}
+
+const completed: HistoryRoundItem[] = [
+  roundItem("round-1", "午前練習", { roundDate: "2026-09-15", total: 300 }),
+  roundItem("round-2", "午後練習", { roundDate: "2026-09-16", total: 280 }),
 ];
 
-function fetchResolves(items: RoundListItem[]) {
+// 種別・弓種・得点・実施日が異なる4件。既定の並び(実施日の新しい順)は 夜、午後、午前、朝。
+const varied: HistoryRoundItem[] = [
+  roundItem("round-1", "午前練習", {
+    roundDate: "2026-09-15",
+    total: 300,
+    format: "outdoor",
+    bowType: "recurve",
+  }),
+  roundItem("round-2", "午後練習", {
+    roundDate: "2026-09-16",
+    total: 280,
+    format: "indoor",
+    bowType: "recurve",
+  }),
+  roundItem("round-3", "夜練習", {
+    roundDate: "2026-09-17",
+    total: 340,
+    format: "indoor",
+    bowType: "compound",
+  }),
+  roundItem("round-4", "朝練習", {
+    roundDate: "2026-09-10",
+    total: 200,
+    format: "outdoor",
+    bowType: "barebow",
+  }),
+];
+
+function shownNames(): (string | undefined)[] {
+  return screen
+    .queryAllByRole("listitem")
+    .map(
+      (listItem) =>
+        varied.find((round) => listItem.textContent?.includes(round.name))
+          ?.name,
+    );
+}
+
+function remember(state: HistoryViewState) {
+  memory = createFakeHistoryViewMemory(state);
+  procedures.historyViewMemory = memory.memory;
+}
+
+function fetchResolves(items: HistoryRoundItem[]) {
   fake.store.loadList.mockResolvedValue({
     status: "ok",
     data: loaded(items),
@@ -68,6 +136,7 @@ async function openDeleteDialog(
 beforeEach(() => {
   fake = createFakeRoundsListStore();
   procedures = createFakeRoundProcedures();
+  remember(DEFAULT_HISTORY_VIEW_STATE);
   // offlineの結果が返る状況は通信が切れている(切れていないと、すぐ再取得する)。
   procedures.goOffline();
   fakeWindow = createFakeRoundWindow();
@@ -107,7 +176,7 @@ describe("RoundsHistory", () => {
       expect(screen.queryByRole("heading")).toBeNull();
     });
 
-    it("完了したラウンドが0件なら、その旨を表示する", async () => {
+    it("取得結果が0件なら、条件に一致するラウンドがないことを表示する", async () => {
       // Given
       fetchResolves([]);
 
@@ -146,6 +215,346 @@ describe("RoundsHistory", () => {
       // Then
       expect(await screen.findByText("午後練習")).toBeInTheDocument();
       expect(screen.queryByText("午前練習")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("並べ替えと絞り込み", () => {
+    const click = (testId: string, user: ReturnType<typeof userEvent.setup>) =>
+      user.click(screen.getByTestId(testId));
+
+    it("既定では、実施日の新しい順に全てのラウンドを表示する", async () => {
+      // Given
+      fetchResolves(varied);
+
+      // When
+      renderHistory();
+      await screen.findByText("夜練習");
+
+      // Then
+      expect(shownNames()).toEqual([
+        "夜練習",
+        "午後練習",
+        "午前練習",
+        "朝練習",
+      ]);
+    });
+
+    it("種別と弓種の選択肢を、ラウンドの設定画面と同じ表示名で出す", async () => {
+      // Given
+      fetchResolves(varied);
+
+      // When
+      renderHistory();
+      await screen.findByText("夜練習");
+
+      // Then
+      for (const format of FORMAT_OPTIONS) {
+        expect(
+          screen.getByTestId(`history-filter-format-${format}`),
+        ).toHaveTextContent(roundsText(`formatOption.${format}`));
+      }
+      for (const bowType of BOW_TYPE_OPTIONS) {
+        expect(
+          screen.getByTestId(`history-filter-bow-type-${bowType}`),
+        ).toHaveTextContent(roundsText(`bowTypeOption.${bowType}`));
+      }
+    });
+
+    it("種別で絞り込み、得点の高い順に並べ替えると、一致するラウンドだけが得点の順に表示される", async () => {
+      // Given
+      fetchResolves(varied);
+      const user = userEvent.setup();
+      renderHistory();
+      await screen.findByText("夜練習");
+
+      // When
+      await click("history-filter-format-indoor", user);
+      await click("history-sort-key-score", user);
+
+      // Then
+      expect(shownNames()).toEqual(["夜練習", "午後練習"]);
+    });
+
+    it("向きを昇順に替えると、逆の並びで表示される", async () => {
+      // Given
+      fetchResolves(varied);
+      const user = userEvent.setup();
+      renderHistory();
+      await screen.findByText("夜練習");
+      await click("history-sort-key-score", user);
+
+      // When
+      await click("history-sort-direction-asc", user);
+
+      // Then
+      expect(shownNames()).toEqual([
+        "朝練習",
+        "午後練習",
+        "午前練習",
+        "夜練習",
+      ]);
+    });
+
+    it("絞り込みで「すべて」を選ぶと、絞り込みが解除され全てのラウンドが戻る", async () => {
+      // Given
+      fetchResolves(varied);
+      const user = userEvent.setup();
+      renderHistory();
+      await screen.findByText("夜練習");
+      await click("history-filter-format-indoor", user);
+      await click("history-filter-bow-type-compound", user);
+      expect(shownNames()).toEqual(["夜練習"]);
+
+      // When
+      await click("history-filter-format-all", user);
+      await click("history-filter-bow-type-all", user);
+
+      // Then
+      expect(shownNames()).toEqual([
+        "夜練習",
+        "午後練習",
+        "午前練習",
+        "朝練習",
+      ]);
+    });
+
+    it("条件に一致するラウンドがなければ、完了したラウンドがない場合と同じ表示を出す", async () => {
+      // Given
+      fetchResolves(varied);
+      const user = userEvent.setup();
+      renderHistory();
+      await screen.findByText("夜練習");
+
+      // When
+      await click("history-filter-format-field", user);
+
+      // Then
+      expect(screen.getByText(roundsText("historyEmpty"))).toBeInTheDocument();
+      expect(screen.queryByRole("listitem")).toBeNull();
+    });
+
+    it("条件を変えても、取得し直さず、読み込み中の表示にもならない", async () => {
+      // Given
+      fetchResolves(varied);
+      const user = userEvent.setup();
+      renderHistory();
+      await screen.findByText("夜練習");
+
+      // When
+      await click("history-filter-format-outdoor", user);
+      await click("history-sort-key-score", user);
+
+      // Then
+      expect(fake.store.loadList).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(shownNames()).toEqual(["午前練習", "朝練習"]);
+    });
+
+    it("条件を選んだ状態で削除すると、そのラウンドが条件に一致する表示から消える", async () => {
+      // Given
+      fetchResolves(varied);
+      const user = userEvent.setup();
+      renderHistory();
+      await screen.findByText("夜練習");
+      await click("history-filter-format-indoor", user);
+      await openDeleteDialog(user, "夜練習");
+
+      // When
+      await user.click(screen.getByTestId("confirm-dialog-confirm"));
+
+      // Then
+      await waitFor(() => {
+        expect(shownNames()).toEqual(["午後練習"]);
+      });
+    });
+  });
+
+  describe("並べ替えと絞り込みの欄の開閉", () => {
+    it("取っ手を押すと欄が隠れ、もう一度押すと現れる", async () => {
+      // Given
+      fetchResolves(varied);
+      const user = userEvent.setup();
+      renderHistory();
+      await screen.findByText("夜練習");
+      const toggle = screen.getByTestId("history-controls-toggle");
+
+      // When
+      await user.click(toggle);
+      const hidden = screen.queryByTestId("history-controls");
+      await user.click(toggle);
+
+      // Then
+      expect(hidden).toBeNull();
+      expect(screen.getByTestId("history-controls")).toBeInTheDocument();
+    });
+
+    it("閉じている間は、選んだ条件もリセットも示さない", async () => {
+      // Given
+      fetchResolves(varied);
+      const user = userEvent.setup();
+      renderHistory();
+      await screen.findByText("夜練習");
+      await user.click(screen.getByTestId("history-filter-format-indoor"));
+
+      // When
+      await user.click(screen.getByTestId("history-controls-toggle"));
+
+      // Then
+      expect(screen.queryByTestId("history-filter-format-indoor")).toBeNull();
+      expect(screen.queryByTestId("history-sort-key-score")).toBeNull();
+      expect(screen.queryByTestId("history-controls-reset")).toBeNull();
+      expect(screen.getByTestId("history-controls-toggle")).toBeInTheDocument();
+    });
+
+    it("閉じても条件は適用され続け、ラウンドの表示は変わらない", async () => {
+      // Given
+      fetchResolves(varied);
+      const user = userEvent.setup();
+      renderHistory();
+      await screen.findByText("夜練習");
+      await user.click(screen.getByTestId("history-filter-format-indoor"));
+      await user.click(screen.getByTestId("history-sort-key-score"));
+      const before = shownNames();
+
+      // When
+      await user.click(screen.getByTestId("history-controls-toggle"));
+
+      // Then
+      expect(before).toEqual(["夜練習", "午後練習"]);
+      expect(shownNames()).toEqual(before);
+    });
+  });
+
+  describe("条件のリセット", () => {
+    it("リセットすると、並べ替えと絞り込みが既定に戻り、欄は開いたまま、全てのラウンドが実施日の新しい順に表示され、記憶も既定になる", async () => {
+      // Given
+      fetchResolves(varied);
+      const user = userEvent.setup();
+      renderHistory();
+      await screen.findByText("夜練習");
+      await user.click(screen.getByTestId("history-sort-key-score"));
+      await user.click(screen.getByTestId("history-sort-direction-asc"));
+      await user.click(screen.getByTestId("history-filter-format-indoor"));
+      await user.click(screen.getByTestId("history-filter-bow-type-recurve"));
+      expect(shownNames()).toEqual(["午後練習"]);
+
+      // When
+      await user.click(screen.getByTestId("history-controls-reset"));
+
+      // Then
+      expect(shownNames()).toEqual([
+        "夜練習",
+        "午後練習",
+        "午前練習",
+        "朝練習",
+      ]);
+      expect(screen.getByTestId("history-controls")).toBeInTheDocument();
+      expect(memory.stored()).toEqual({
+        condition: DEFAULT_HISTORY_CONDITION,
+        filterOpen: true,
+      });
+    });
+  });
+
+  describe("条件の保持", () => {
+    it("記憶された条件と、閉じた状態で表示を始める", async () => {
+      // Given
+      remember({
+        condition: {
+          sortKey: "score",
+          sortDirection: "asc",
+          format: "indoor",
+          bowType: null,
+        },
+        filterOpen: false,
+      });
+      fetchResolves(varied);
+
+      // When
+      renderHistory();
+
+      // Then
+      await waitFor(() => {
+        expect(shownNames()).toEqual(["午後練習", "夜練習"]);
+      });
+      expect(screen.queryByTestId("history-controls")).toBeNull();
+    });
+
+    it("記憶された条件で開いた状態で表示を始めると、その条件が選ばれた状態で欄が表示される", async () => {
+      // Given
+      remember({
+        condition: {
+          sortKey: "score",
+          sortDirection: "asc",
+          format: "outdoor",
+          bowType: "barebow",
+        },
+        filterOpen: true,
+      });
+      fetchResolves(varied);
+
+      // When
+      renderHistory();
+
+      // Then
+      expect(await screen.findByText("朝練習")).toBeInTheDocument();
+      expect(screen.getByTestId("history-sort-key-score")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(screen.getByTestId("history-sort-direction-asc")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(
+        screen.getByTestId("history-filter-format-outdoor"),
+      ).toHaveAttribute("aria-pressed", "true");
+      expect(
+        screen.getByTestId("history-filter-bow-type-barebow"),
+      ).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("並べ替えと絞り込みを変えると、その条件が記憶に書かれる", async () => {
+      // Given
+      fetchResolves(varied);
+      const user = userEvent.setup();
+      renderHistory();
+      await screen.findByText("夜練習");
+
+      // When
+      await user.click(screen.getByTestId("history-sort-key-score"));
+      await user.click(screen.getByTestId("history-sort-direction-asc"));
+      await user.click(screen.getByTestId("history-filter-format-indoor"));
+      await user.click(screen.getByTestId("history-filter-bow-type-compound"));
+
+      // Then
+      expect(memory.stored()).toEqual({
+        condition: {
+          sortKey: "score",
+          sortDirection: "asc",
+          format: "indoor",
+          bowType: "compound",
+        },
+        filterOpen: true,
+      });
+    });
+
+    it("欄を閉じると、閉じたことが条件を保ったまま記憶に書かれる", async () => {
+      // Given
+      fetchResolves(varied);
+      const user = userEvent.setup();
+      renderHistory();
+      await screen.findByText("夜練習");
+      await user.click(screen.getByTestId("history-filter-format-field"));
+
+      // When
+      await user.click(screen.getByTestId("history-controls-toggle"));
+
+      // Then
+      expect(memory.stored()).toEqual({
+        condition: { ...DEFAULT_HISTORY_CONDITION, format: "field" },
+        filterOpen: false,
+      });
     });
   });
 

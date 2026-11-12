@@ -20,12 +20,15 @@ export async function signInFreshUser(
 }
 
 // サーバーにラウンドを作る。completedなら、別の端末のようにサーバーで完了にする。
+// 種別を省くと屋外(各距離12エンド×3射)、indoorなら各距離10エンド×3射で作る。弓種を省くとリカーブ。
 export async function addRound(
   credentials: Credentials,
   name: string,
   roundDate: string,
   options: {
     completed?: boolean;
+    format?: "outdoor" | "indoor";
+    bowType?: "recurve" | "compound" | "barebow";
     shots?: { scoreStr: string; scoreInt: number }[];
   } = {},
 ): Promise<string> {
@@ -33,7 +36,15 @@ export async function addRound(
     ...credentials,
     name,
     roundDate,
-    distances: [{ distance: 18, totalEnds: 12, arrowsPerEnd: 3 }],
+    format: options.format,
+    bowType: options.bowType,
+    distances: [
+      {
+        distance: 18,
+        totalEnds: options.format === "indoor" ? 10 : 12,
+        arrowsPerEnd: 3,
+      },
+    ],
     shots: options.shots?.map((shot) => ({
       distanceIndex: 0,
       endNumber: 1,
