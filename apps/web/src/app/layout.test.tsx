@@ -2,7 +2,11 @@ import "fake-indexeddb/auto";
 import { SerwistProvider } from "@serwist/next/react";
 import { render, screen } from "@testing-library/react";
 import { Children, isValidElement, type ReactElement } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  type FakeViewport,
+  installFakeViewport,
+} from "@/lib/viewport/fake-viewport-test-helpers";
 import RootLayout, { metadata } from "./layout";
 import { RootClientEntry } from "./root-client-entry";
 
@@ -28,7 +32,15 @@ vi.mock("@supabase/ssr", () => ({
   }),
 }));
 
+// jsdomにmatchMediaが無いため、入口の表示領域の補償が読む名前を、タブ(補償しない)の偽物で差す。
+let viewport: FakeViewport;
+
+beforeEach(() => {
+  viewport = installFakeViewport();
+});
+
 afterEach(() => {
+  viewport.restore();
   vi.unstubAllEnvs();
 });
 

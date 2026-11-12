@@ -14,6 +14,10 @@ import { roundCreated } from "@/features/rounds/domain/round-op-test-helpers";
 import { outboxOf } from "@/features/rounds/domain/round-record";
 import { useRoundWindow } from "@/features/rounds/ui/rounds-context";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import {
+  type FakeViewport,
+  installFakeViewport,
+} from "@/lib/viewport/fake-viewport-test-helpers";
 import { RootClientEntry } from "./root-client-entry";
 
 // Supabaseクライアントは外部サービスとの境界のため、認証状態の変化を任意に発火できるスタブで模す。
@@ -140,8 +144,12 @@ vi.mock(
   },
 );
 
+// jsdomにmatchMediaが無いため、入口の表示領域の補償が読む名前を、タブ(補償しない)の偽物で差す。
+let viewport: FakeViewport;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  viewport = installFakeViewport();
   supabase.listeners.length = 0;
   activator.props.length = 0;
   storage.hold = false;
@@ -150,6 +158,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  viewport.restore();
   vi.restoreAllMocks();
 });
 
@@ -178,6 +187,24 @@ describe("RootClientEntry", () => {
 
       // Then
       expect(screen.getByText("子要素")).toBeInTheDocument();
+    });
+
+    it("スタンドアロンでは、表示領域の高さを根の枠の変数に書く(条件の組合せはuse-app-heightのテストが確かめる)", () => {
+      // Given
+      viewport.restore();
+      viewport = installFakeViewport({
+        standalone: true,
+        virtualKeyboard: true,
+        visualViewport: { height: 640, scale: 1 },
+      });
+
+      // When
+      render(<RootClientEntry>{null}</RootClientEntry>);
+
+      // Then
+      expect(
+        document.documentElement.style.getPropertyValue("--app-height"),
+      ).toBe("640px");
     });
 
     it("画面の遷移で待機中の新SWを有効にするSwUpdateActivatorを含め、更新の切り替えの手続きを渡す", () => {

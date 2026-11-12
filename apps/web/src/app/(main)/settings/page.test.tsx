@@ -15,6 +15,10 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
+import {
+  type FakeViewport,
+  installFakeViewport,
+} from "@/lib/viewport/fake-viewport-test-helpers";
 import { RootClientEntry } from "../../root-client-entry";
 import MainLayout from "../layout";
 import SettingsPage from "./page";
@@ -150,8 +154,12 @@ function renderPageWithIdentity() {
   );
 }
 
+// jsdomにmatchMediaが無いため、入口の表示領域の補償が読む名前を、タブ(補償しない)の偽物で差す。
+let viewport: FakeViewport;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  viewport = installFakeViewport();
   supabase.listeners.length = 0;
   localStorage.clear();
   localStorage.setItem(IDENTITY_KEY, "user-1");
@@ -163,6 +171,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  viewport.restore();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();

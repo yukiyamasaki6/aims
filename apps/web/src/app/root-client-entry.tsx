@@ -50,6 +50,7 @@ import {
   RoundsListStoreProvider,
   RoundWindowProvider,
 } from "@/features/rounds/ui/rounds-context";
+import { useAppHeight } from "@/hooks/use-app-height";
 import { intlConfig } from "@/i18n/messages";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
@@ -256,6 +257,8 @@ function composeApp(router: PageRouter) {
 export function RootClientEntry({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [app] = useState(() => composeApp(router));
+  // アプリ全体の領域の高さ(根の枠が決める)を、スタンドアロンでは実測の可視の高さに合わせる。
+  useAppHeight();
   useEffect(() => app.localIdentity.start(), [app]);
   useEffect(() => {
     app.triggers.start();

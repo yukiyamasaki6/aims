@@ -132,6 +132,7 @@ Playwrightを使用する。
 | `Clock` | `lib/clock/manual-clock-test-helpers.ts` | 2 |
 | `Connectivity` | `lib/connectivity/fake-connectivity-test-helpers.ts` | 2 |
 | `PageNavigation` | `lib/page-navigation/fake-page-navigation-test-helpers.ts` | 2 |
+| `Viewport` | `lib/viewport/fake-viewport-test-helpers.ts` | 2 |
 | `UniqueIds` | `features/rounds/application/fake-unique-ids-test-helpers.ts` | 3 |
 | `SessionReader` | `features/auth/application/session-reader-test-helpers.ts` | 3 |
 
