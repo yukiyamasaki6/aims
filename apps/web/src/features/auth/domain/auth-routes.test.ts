@@ -10,7 +10,7 @@ import {
 const _ROUNDS = "/rounds";
 
 describe("allowedReturnTo", () => {
-  describe("/rounds配下の相対パスの場合", () => {
+  describe("保護範囲(/roundsと/settings)の相対パスの場合", () => {
     it.each([
       ["/rounds", "/rounds"],
       ["/rounds/", "/rounds/"],
@@ -20,6 +20,9 @@ describe("allowedReturnTo", () => {
         "/rounds/00000000-0000-0000-0000-000000000000?a=1",
       ],
       ["/rounds/new?x=1&y=%E3%81%82", "/rounds/new?x=1&y=%E3%81%82"],
+      ["/settings", "/settings"],
+      ["/settings/", "/settings/"],
+      ["/settings?x=1", "/settings?x=1"],
     ])("%sを検証して%sを返す", (raw, expected) => {
       // Given
 
@@ -51,6 +54,18 @@ describe("allowedReturnTo", () => {
       // Then
       expect(result).toBe("/rounds/new");
     });
+
+    it("設定のハッシュを取り除き、別の根から正規化で設定になる値は正規化後の値を返す", () => {
+      // Given
+
+      // When
+      const hashed = allowedReturnTo("/settings#h");
+      const normalized = allowedReturnTo("/rounds/../settings");
+
+      // Then
+      expect(hashed).toBe("/settings");
+      expect(normalized).toBe("/settings");
+    });
   });
 
   describe("拒否する値の場合(型・別オリジン・保護範囲の外)", () => {
@@ -78,6 +93,14 @@ describe("allowedReturnTo", () => {
       ["/rounds配下から/signinへ抜けるドットセグメント", "/rounds/../signin"],
       ["エンコードされたドットセグメント", "/rounds/%2e%2e/signin"],
       ["/roundsを装うクエリ", "/signin?next=/rounds"],
+      ["/settingsで始まる別のパス", "/settingsx"],
+      ["/settingの綴り違い", "/setting"],
+      ["スキームなしの外部ホスト(//settings)", "//evil.example/settings"],
+      ["スキーム付きで/settingsに見えるURL", "https://evil.example/settings"],
+      [
+        "/settings配下から/signinへ抜けるドットセグメント",
+        "/settings/../signin",
+      ],
     ])("%sは拒否してnullを返す", (_name, raw) => {
       // Given
 
@@ -133,6 +156,16 @@ describe("destinationOf", () => {
     expect(result).toBe("/rounds/new?a=1");
   });
 
+  it("許可された設定の遷移元を返す", () => {
+    // Given
+
+    // When
+    const result = destinationOf("/settings");
+
+    // Then
+    expect(result).toBe("/settings");
+  });
+
   it("遷移元が無いか許可されない場合は一覧を返す", () => {
     // Given
 
@@ -157,6 +190,16 @@ describe("signInHref", () => {
     // Then
     expect(result).toBe(`/signin?returnTo=${encodeURIComponent(from)}`);
     expect(result).toBe("/signin?returnTo=%2Frounds%2Fnew%3Fx%3D1");
+  });
+
+  it("/settingsの遷移元を、エンコードしたreturnTo付きの/signinにする", () => {
+    // Given
+
+    // When
+    const result = signInHref("/settings");
+
+    // Then
+    expect(result).toBe("/signin?returnTo=%2Fsettings");
   });
 
   it("遷移元がnullのときは、returnTo無しの/signinにする", () => {
@@ -198,6 +241,25 @@ describe("redirectFor", () => {
       "未認証で/rounds配下を開くと、クエリ付きの遷移元つきのサインイン",
       { pathname: "/rounds/x", search: "?a=1" },
       "/signin?returnTo=%2Frounds%2Fx%3Fa%3D1",
+    ],
+    [
+      "未認証で/settingsを開くと、/settingsを遷移元に付けたサインイン",
+      { pathname: "/settings" },
+      "/signin?returnTo=%2Fsettings",
+    ],
+    [
+      "未認証で/settings配下を開くと、その遷移元つきのサインイン",
+      { pathname: "/settings/x" },
+      "/signin?returnTo=%2Fsettings%2Fx",
+    ],
+    [
+      "認証済みでサインインを設定の遷移元付きで開くと、設定",
+      {
+        signedIn: true,
+        pathname: "/signin",
+        search: "?returnTo=%2Fsettings",
+      },
+      "/settings",
     ],
     [
       "認証済みでサインインを開くと、ラウンド一覧",
@@ -280,6 +342,8 @@ describe("redirectFor", () => {
     ["未認証でサインインを開く", { pathname: "/signin" }],
     ["未認証でトップを開く", { pathname: "/" }],
     ["未認証で/roundsで始まる別のパスを開く", { pathname: "/roundsx" }],
+    ["未認証で/settingsで始まる別のパスを開く", { pathname: "/settingsx" }],
+    ["認証済みで/settingsを開く", { signedIn: true, pathname: "/settings" }],
     ["認証済みで/rounds配下を開く", { signedIn: true, pathname: "/rounds/1" }],
     ["認証済みでトップを開く", { signedIn: true, pathname: "/" }],
   ])("%sと、リダイレクトしない", (_name, override) => {

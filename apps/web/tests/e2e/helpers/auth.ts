@@ -6,6 +6,7 @@ import { translatorFor } from "@/i18n/translator-test-helpers";
 import { waitForTurnstileToken } from "./turnstile";
 
 const authText = translatorFor("auth");
+const navigationText = translatorFor("navigation");
 
 export const SHARED_AUTH_STATE_PATH = "playwright/.auth/e2e-shared-user.json";
 const SHARED_EMAIL_PATH = "playwright/.auth/e2e-shared-email.txt";
@@ -97,4 +98,30 @@ export async function signUpAndSignIn(
   });
   await waitForTurnstileToken(page, 1);
   await clickSignInAndAwaitRounds(page, signInButton);
+}
+
+// 設定画面にはハイドレーション完了の目印(data-hydrated)がないため、
+// ハンドラ接続前の押下で確認が開かない場合は、開くまで押し直す。
+export async function openSignOutConfirm(page: Page): Promise<void> {
+  const confirmButton = page.getByRole("button", {
+    name: authText("signOutConfirmLabel"),
+  });
+  await expect(async () => {
+    await page.getByRole("button", { name: authText("signOut") }).click();
+    await expect(confirmButton).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+}
+
+// 左パネルの設定の項目で設定画面へ移り、サインアウトを確認して、サインイン画面へ移ったことの確認で終わる。
+// 画面を読み込み直さず、項目を押して移る(端末内のデータを保った経路を保つため)。
+export async function signOutFromSettings(page: Page): Promise<void> {
+  await page
+    .getByRole("link", { name: navigationText("leftPanelSettings") })
+    .click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.getByRole("button", { name: authText("signOut") }).click();
+  await page
+    .getByRole("button", { name: authText("signOutConfirmLabel") })
+    .click();
+  await expect(page).toHaveURL(/\/signin/);
 }

@@ -12,23 +12,23 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 | 画面・状態 | 内容 |
 | :--- | :--- |
 | `/` | 未認証・認証済みとも、アプリ名、説明文、開始ボタンを持つ紹介画面を表示する。開始ボタンは常に`/signup`へのリンクで、認証済みなら`/signup`の認証済みの転送で`/rounds`(ホーム)へ着く。 |
-| `/rounds` 配下（未認証） | 遷移元のパス付きで `/signin` へリダイレクトする。`/rounds/history`、`/rounds/new`、`/rounds/[id]` も対象である。 |
+| `/rounds` 配下・`/settings`（未認証） | 遷移元のパス付きで `/signin` へリダイレクトする。`/rounds/history`、`/rounds/new`、`/rounds/[id]` も対象である。 |
 | ロゴ | レフトパネルのAIMSロゴと、認証画面・`/`・`/offline` の左上のロゴは `/` へ遷移する。 |
 | セッション喪失 | `SIGNED_OUT`（通知は発生元を区別せず届く）と、マウント時の `unauthenticated` で、遷移元のパス付きで `/signin` へ遷移する。明示のサインアウトの実行中の喪失は、サインアウトの判定に委ねる(終えられたら遷移元を付けずに移る。`auth/signout`)。`unknown` では留まる。保存先が空の未認証は、オフラインでもマウント時に `/signin` へ移り、`/offline` が出る。 |
-| レフトパネルのリンク | 「ホーム」項目は `/rounds` へ、「履歴」項目は `/rounds/history` へ遷移し、表示中のビューの項目に `aria-current="page"` が付く。サインアウトボタンは確認ダイアログを開く。 |
+| レフトパネルのリンク | 「ホーム」項目は `/rounds` へ、「履歴」項目は `/rounds/history` へ、下端の「設定」項目は `/settings` へ遷移し、表示中のビューの項目に `aria-current="page"` が付く。 |
 | レフトパネル（幅768px未満） | 開き口（縦向きは上端の帯、横向きは左端の縦の帯）を出す。始まりは格納。ハンバーガーボタン(アイコンだけで、「個人」の文字は出さない。名前は「メニューを開く」)で展開し、閉じるボタン・背景で格納する。展開中はパネル内または背景の左スワイプに追従し、十分に引いて離すと格納し、それ以外では元の位置に戻る。背景の濃さはドロワーの移動に合わせて変わり、通常の開閉でも同じ時間でフェードする。本文に重なる。 |
 | レフトパネル（幅768px以上） | 縦の列に出す。始まりは展開。格納・展開のボタン（名前は「パネルを格納する/開く」）で切り替える。 |
 
 - 開閉状態は2つの真偽値で持つ。ドロワーは `drawerOpen`（始まりは閉）、列は `railOpen`（始まりは開）。向きは開き口の形にだけ使い、値・枠には使わない。幅をまたいで往復しても、それぞれの値が保たれる。
 - 開閉の幅と位置は、開閉の操作で200msのtransitionで動く。幅768pxをまたぐ切り替え（回転、窓の変形）は、ドロワーと縦の列が別の枠で切り替わるので動かない。初回表示は最初から切り替え後の状態で表示する。
 - ドロワーの格納は画面外へ押し出し、`visibility: hidden` で、フォーカスと読み上げの対象から外す。DOMからは消えない。
-- 「ホーム」「履歴」項目の押下は、ドロワーの値(`drawerOpen`)だけを閉にし、列の値(`railOpen`)を変えない。配置の判定はしない。
+- 「ホーム」「履歴」「設定」項目の押下は、ドロワーの値(`drawerOpen`)だけを閉にし、列の値(`railOpen`)を変えない。配置の判定はしない。
 
 ## 構成とデータの流れ
 
-- `src/proxy.ts`(入口): `/signin`、`/signup`、`/reset-password`、`/rounds/:path*` を対象に、`updateSession` が返すサインインしているかから、認証の機能の経路の規則(`features/auth/domain/auth-routes.ts` の `redirectFor`)を呼び、行き先があればリダイレクトし、無ければ `updateSession` の応答を返す。`config.matcher` は Next.js がビルド時に静的に読み、定数を参照できないため、経路を文字列で再掲し、`proxy.test.ts` が経路表の `ROUNDS_PATH` との一致を確かめる。`/` は対象外である。
+- `src/proxy.ts`(入口): `/signin`、`/signup`、`/reset-password`、`/rounds/:path*`、`/settings/:path*` を対象に、`updateSession` が返すサインインしているかから、認証の機能の経路の規則(`features/auth/domain/auth-routes.ts` の `redirectFor`)を呼び、行き先があればリダイレクトし、無ければ `updateSession` の応答を返す。`config.matcher` は Next.js がビルド時に静的に読み、定数を参照できないため、経路を文字列で再掲し、`proxy.test.ts` が経路表の `ROUNDS_PATH`、`SETTINGS_PATH` との一致を確かめる。`/` は対象外である。
 - `src/lib/supabase/infrastructure/session.ts`(共有の技術の実装): `updateSession` が要求ごとにセッションを更新し、`getClaims`(端末内でトークンの署名と期限を検証する)でサインインしているかと、更新したcookieを書いた応答を返す。経路の規則は持たない。規則は認証の機能の `redirectFor` が持ち、`proxy.ts` が呼ぶ。
-  - 未認証で `/rounds` 配下なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
+  - 未認証で保護の範囲(`/rounds`と`/settings`の配下)なら、`signInHref` で遷移元を付けた `/signin` へリダイレクトする。
   - 認証済みで `/signin`、`/signup`、`/reset-password` なら `/rounds`(ホーム)へリダイレクトする。`/signin` は有効な遷移元があればそこへ送る（`auth/signin`）。
 - `src/features/auth/application/session.ts` の手続き`createSession`の`watch`が、セッション喪失の検知（`SIGNED_OUT`と、マウント時の`unauthenticated`）と、`/signin`への遷移（`replace`。今の場所を遷移元に付ける）、記録の利用者と違う利用者のサインインの検知と今の場所の読み込み直しを持つ。確かめた結果の喪失の定義(`lostByStatus`)は`domain/auth-change.ts`、遷移の規則（遷移元、サインアウトの実行中は移らない）は`domain/session-end-flow.ts`。手続きと実装はルートの入口(`app/root-client-entry.tsx`)がアプリで1つ生成し、`SessionProvider`で渡す。`(main)`のレイアウトは`useSession`で受け取り、見張りを始める。
 - `src/app/page.tsx`(入口): 静的な紹介画面。紹介画面を描くだけで、開始の行き先は渡さない。
@@ -36,11 +36,11 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 - `src/features/navigation/ui/start-button.tsx`(UI層): 開始ボタン。経路表(`src/routes.ts`)の `SIGN_UP_PATH` へのリンクで、状態を持たない。
 - `src/features/navigation/ui/navigation-messages.ts`(UI層): 紹介画面と左パネルの文言の一覧(名前空間`navigation`)。部品は`useTranslations("navigation")`で文言を得る。
 - 遷移の約束(アプリ全体): ナビゲーションの機能は遷移の約束を持たない。開始の行き先は、経路表の `SIGN_UP_PATH` へ、`start-button.tsx` のリンクで遷移する。ルーターで進む遷移は共有の技術の `PageNavigation`(`src/lib/page-navigation/contract/page-navigation.ts`。認証のパスワード再設定とラウンドの開始、完了、削除して離れるが使う)、ページ全体の読み込みの遷移は認証の `PageReplace`(`src/features/auth/application/page-replace.ts`。実装は `infrastructure/browser-page-load.ts`。サインイン、サインアップの完了、サインアウト、セッションの喪失、利用者の不一致が使う)、遷移元の読み出しは入口の `readReturnTo` である。
-- `src/app/(main)/layout.tsx`(入口): 認証が要る画面の集合の枠。入口が渡すセッションの手続きを`useSession`で受け取って見張りを始め、レフトパネルと、サインアウトの部品(`features/auth/ui/sign-out-button.tsx`)を描く。
+- `src/app/(main)/layout.tsx`(入口): 認証が要る画面の集合の枠。入口が渡すセッションの手続きを`useSession`で受け取って見張りを始め、レフトパネルを描く。
 - `src/components/app-logo.tsx`(共有の画面部品)が、認証画面・`/`・`/offline` の左上のロゴである。ロゴの行き先は、経路表(`src/routes.ts`)の `HOME_PATH`(`/`)で、`left-panel.tsx` のロゴも同じである。
 - `src/components/logo-image.tsx`(共有の画面部品)が、文字付きロゴの画像（`public/logo.svg`）を表示する。代替テキスト「AIMS」がロゴのリンクの名前になる。`app-logo.tsx` と `left-panel.tsx` が使う。
 - `public/logo.svg` は、`scripts/generate-icon.mjs` が、マークと同じ値と、`geist` のGeist SansのBoldの字形から生成する。文字は図形にし、フォントを参照しない。READMEの冒頭も同じファイルを表示する。
-- `src/features/navigation/ui/left-panel.tsx`(UI層)が開閉（ドロワーと列の2つの値）と「ホーム」「履歴」の項目を持つ。項目の向き先は経路表(`src/routes.ts`)の `ROUNDS_HOME_PATH`、`ROUNDS_HISTORY_PATH` で、現在のビューは `usePathname` が向き先と等しい項目に `aria-current="page"` と現在の見た目を付けて示す(詳細・作成ではどちらにも付かない)。下端に、下端に、入口が渡すサインアウトの部品（`features/auth/ui/sign-out-button.tsx`）を描く。認証状態は持たず、常に全内容を表示する。ドロワーの枠と縦の列の枠を別の要素にして、幅(`md:`)で出し分ける（中身=ロゴ・「ホーム」「履歴」項目・サインアウトは共有の部品を2つの枠に置く）。開き口の形だけ向き(`max-md:landscape:`)で決める。入口のガードは `proxy.ts`、表示中の喪失は`(main)`のレイアウトが始める見張りが担う。
+- `src/features/navigation/ui/left-panel.tsx`(UI層)が開閉（ドロワーと列の2つの値）と「ホーム」「履歴」「設定」の項目を持つ。項目の向き先は経路表(`src/routes.ts`)の `ROUNDS_HOME_PATH`、`ROUNDS_HISTORY_PATH`、`SETTINGS_PATH` で、現在のビューは `usePathname` が向き先と等しい項目に `aria-current="page"` と現在の見た目を付けて示す(詳細・作成ではホーム・履歴のどちらにも付かない)。下端(`border-t`の区画)に「設定」項目を置く。認証状態は持たず、常に全内容を表示する。ドロワーの枠と縦の列の枠を別の要素にして、幅(`md:`)で出し分ける（中身=ロゴ・「ホーム」「履歴」「設定」項目は共有の部品を2つの枠に置く）。開き口の形だけ向き(`max-md:landscape:`)で決める。入口のガードは `proxy.ts`、表示中の喪失は`(main)`のレイアウトが始める見張りが担う。
 - `src/lib/supabase/infrastructure/client.ts`(共有の技術の実装): ブラウザの接続。入口が、接続を作る関数として認証の実装へ渡す。
 - `src/lib/utils.ts`(共有の画面部品): クラス名の結合。
 - 各ファイルの層は`docs/architecture.md`の「1. 構造」に従う。画面のパッケージは `react`、`next-intl`、`next/link`、`next/image`、`lucide-react`、`clsx`、`tailwind-merge`、`class-variance-authority`、`@base-ui/react`、その他のパッケージは `@supabase/ssr`、`@supabase/supabase-js`、`next/server` である。
@@ -61,14 +61,13 @@ AIMSロゴ（レフトパネルと、認証画面・`/`・`/offline`の左上）
 | 明示のサインアウトの実行中は、見張りの遷移を行わず、サインアウトの判定に委ねる | 終えられたかと遷移の有無を1つの判定にするため。終えられたら、サインアウトの手続きが遷移元を付けずに移る | サインアウトの遷移を見張りに戻すとき |
 | 配置を幅だけで決め、向きは開き口の形だけに使う | 回転・ソフトキーボードで配置が変わらず、横向きで本文を押し広げないため。 | 向きで配置を変えたい要求が出たとき。 |
 | 開閉状態を、ドロワーと列の2つの真偽値で持つ | 表示ごとに必要な状態が違い（ドロワーは閉じ始め、列は開き始め）、項目の押下でドロワーだけを閉じられるため。初期値は固定で、幅で分岐しない（水和の不一致を避ける）。 | 幅をまたいで操作を引き継ぎたいとき。 |
-| ドロワーと縦の列を別の枠にし、中身を共有の部品にする | スマートフォンの回転は幅768pxをまたぎ、1つの枠だと回転のたびに枠が動くため。サインアウトの状態（確認の開閉・実行中・失敗）が2つの枠で別々になることは許容した。 | 枠の切り替えの動きが不要になったとき（1つの枠に戻せる）。 |
+| ドロワーと縦の列を別の枠にし、中身を共有の部品にする | スマートフォンの回転は幅768pxをまたぎ、1つの枠だと回転のたびに枠が動くため。 | 枠の切り替えの動きが不要になったとき（1つの枠に戻せる）。 |
 | 開閉のtransitionを常に付ける | 状態とタイマーを持たず、`transition` のclassだけで済ませるため。枠を別の要素にしたので、回転・窓の変形の切り替えでは動かない。 | 切り替えの動きが利用者に不都合になったとき。 |
-| レフトパネルのサインアウトを確認ダイアログ経由にする | 誤操作を防ぐため。ダイアログはブロッキング方式に統一する。 | ダイアログをブロッキング方式以外にするとき。詳細: `auth/signout`。 |
+| サインアウトをレフトパネルでなく設定画面に置く | アカウントの操作を設定画面の一か所にまとめ、レフトパネルを移動の項目だけにするため。レフトパネルは下端に「設定」項目を置く。詳細: `app/settings`。 | サインアウトをレフトパネルへ戻すとき。 |
 
 ## 制約と未対応
 
 - 開閉状態は画面遷移やリロードで初期状態へ戻る。
 - オフラインではrefresh tokenの失効を検知できず、オンラインに戻った後の認証サービスの更新で検知する。
 - 遷移の瞬間に未完了のIndexedDBの書き込みは中断されうる。
-- 縦の列でレフトパネルを格納するとAIMSロゴは隠れる（「ホーム」「履歴」項目・サインアウトと同じ）。
-- サインアウトの状態は、ドロワーと縦の列の2つの枠で別々である。確認ダイアログを開いたまま枠が切り替わっても、ダイアログは開いたままである。
+- 縦の列でレフトパネルを格納するとAIMSロゴは隠れる（「ホーム」「履歴」「設定」項目と同じ）。

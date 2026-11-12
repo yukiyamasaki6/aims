@@ -4,6 +4,7 @@ import { expect, test } from "../fixtures";
 import { signUpAndSignIn, waitForHydration } from "../helpers/auth";
 
 const authText = translatorFor("auth");
+const navigationText = translatorFor("navigation");
 const offlinePwaText = translatorFor("offlinePwa");
 
 // サインアウトする（失敗するケースも含む）テストのため、
@@ -28,10 +29,15 @@ async function signInAndOpenDialog(
     password: "password1",
   });
   await waitForHydration(page);
+  // path は設定画面へ移る前の画面。左パネルの設定の項目で設定画面へ移る。
   if (options.path) {
     await page.goto(options.path);
     await waitForHydration(page);
   }
+  await page
+    .getByRole("link", { name: navigationText("leftPanelSettings") })
+    .click();
+  await expect(page).toHaveURL(/\/settings$/);
   await page.getByRole("button", { name: authText("signOut") }).click();
   const confirmButton = page.getByRole("button", {
     name: authText("signOutConfirmLabel"),
@@ -55,6 +61,10 @@ test("別の画面でサインアウトを確認すると、この端末のセ�
     page.getByRole("heading", { name: authText("signInTitle") }),
   ).toBeVisible();
   await expect(page).toHaveURL(/\/signin$/);
+
+  // 設定を開こうとしても、サインイン画面へ移る。戻る操作はbfcacheの復元に結果が左右されるため、直接の遷移で確かめる。
+  await page.goto("/settings");
+  await expect(page).toHaveURL(/\/signin/);
 
   // ラウンド一覧を開き直して、この端末のセッションが終了したことを確かめる。
   await page.goto("/rounds");
@@ -138,5 +148,5 @@ test("トークンを更新できずサインアウトに失敗すると、エ�
     )
     .toBe(true);
   await expect(confirmButton).toHaveAttribute("aria-disabled", "false");
-  await expect(page).toHaveURL(/\/rounds/);
+  await expect(page).toHaveURL(/\/settings$/);
 });

@@ -7,6 +7,7 @@ import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
+  signOutFromSettings,
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
@@ -25,7 +26,6 @@ import {
 import { overlapNextRefresh } from "../helpers/session-overlap";
 import { mockTurnstile } from "../helpers/turnstile";
 
-const authText = translatorFor("auth");
 const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
@@ -285,11 +285,7 @@ test("別のユーザーでサインインし直した後のオフラインで�
   await openNewRound(page);
   await expect(presetButton(page, name)).toBeVisible();
   await page.goto("/rounds");
-  await page.getByRole("button", { name: authText("signOut") }).click();
-  await page
-    .getByRole("button", { name: authText("signOutConfirmLabel") })
-    .click();
-  await expect(page).toHaveURL(/\/signin/);
+  await signOutFromSettings(page);
 
   // ユーザーBでサインインし、ラウンド一覧へ進む。
   await signUpAndSignIn(page, userB);

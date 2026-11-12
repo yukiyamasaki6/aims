@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { generateGlobPatterns, serwist } from "@serwist/next/config";
 import {
+  FRAME_PATHS,
   frameHtmlOf,
   OFFLINE_PATH,
-  ROUND_FRAME_PATHS,
   SW_PATH,
   shellUrlOf,
 } from "./src/routes.ts";
@@ -19,7 +19,7 @@ const offlineHtml = readFileSync(
 const offlineRevision = createHash("md5").update(offlineHtml).digest("hex");
 
 // 画面の枠（/__shell/*。proxy.tsの対象外でnext.config.tsが実ルートへrewriteする）も、同じくHTMLの内容ハッシュをリビジョンにして、資産と同じプリキャッシュに入れる。HTMLが無ければreadFileSyncが失敗し、ビルドも失敗する。
-const frameEntries = ROUND_FRAME_PATHS.map((framePath) => ({
+const frameEntries = FRAME_PATHS.map((framePath) => ({
   url: shellUrlOf(framePath),
   revision: createHash("md5")
     .update(readFileSync(`.next/server/app/${frameHtmlOf(framePath)}`))

@@ -35,7 +35,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 - `src/features/auth/domain/email-address.ts`: メールアドレスの規則(domain)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
 - `src/features/auth/domain/auth-failure.ts`: 認証の失敗の種類(domain)。利用者向けの文言は持たない。認証サービスの語彙も持たない。
 - `src/features/auth/domain/captcha-token.ts`、`password.ts`: セキュリティチェックのトークンと、パスワードの入力と文字種の規則(domain。誤りの種類を返す)。サインアップとパスワード再設定は、同じ機能の中から相対パスで使う。
-- `src/features/auth/domain/auth-routes.ts`: 経路の規則(domain。`SIGN_IN_PATH`などの経路の文字列は経路表(`src/routes.ts`)が持つ)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは保護の範囲の根(ラウンドの画面の根の経路`ROUNDS_PATH`)の配下の同一オリジンのパスだけ。根は経路表の`ROUNDS_PATH`を読む)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`。書く側は検証せず符号化して付ける。検証は読む側の`destinationOf`だけが行う)、要求のリダイレクト先(`redirectFor`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
+- `src/features/auth/domain/auth-routes.ts`: 経路の規則(domain。`SIGN_IN_PATH`などの経路の文字列は経路表(`src/routes.ts`)が持つ)。保護対象の画面、未認証専用の画面、サインインのURL、遷移元の規則(許可するのは保護の範囲の根(ラウンドの画面の根の経路`ROUNDS_PATH`と設定画面の経路`SETTINGS_PATH`)の配下の同一オリジンのパスだけ。根は経路表の`ROUNDS_PATH`と`SETTINGS_PATH`を読む)を持ち、遷移元付きの`/signin`のURL生成(`signInHref`。書く側は検証せず符号化して付ける。検証は読む側の`destinationOf`だけが行う)、要求のリダイレクト先(`redirectFor`)も持つ。純関数で、`proxy.ts`とクライアントの両方から使う。
 - `src/features/auth/index.ts`: 認証の機能の入口。他の機能が使う型を、別名なしで再公開する。
 - `src/features/auth/infrastructure/supabase-auth.ts`: 利用者のセッションで認証サービスに触る唯一の実装(認証の4機能で共通。`docs/features/auth/design.md`)。`signInWithPassword`の呼び出しと、エラーを失敗の種類に写す変換(通信の断は名前で先に判定する)、例外(接続を作れない場合を含む)を通信エラーの失敗に変える変換を含む。接続は、渡された関数で照合のたびに取得する。
 - ページ全体の置き換えは `src/features/auth/infrastructure/browser-page-load.ts` が持つ(`window.location.replace`。履歴からサインイン画面を外し、新しい文書が、サインインした利用者の端末の識別情報で起動するので、一覧の見張りは読み込み直さない)。遷移元(`from`)は検証せずに入口から手続きへ渡り、検証は読む側の`destinationOf`が行う。
@@ -67,7 +67,7 @@ Supabase Authの`signInWithPassword`を、Turnstileのトークンを添えて�
 | サインインのパスワードに、サインアップのパスワード規則を適用しない | 規則の変更前に作った既存アカウントでも、サインインできるようにするため | 既存アカウントが規則を満たすことを確認できたとき |
 | Turnstileを使い、ローカル、CI、previewでは常に成功するテスト用キーを使う | ブルートフォースを抑えつつ、E2Eを外部に依存させないため | captchaの方式を変えるとき |
 | Turnstileはinteraction-onlyで描画し、操作が必要なときだけ領域を出す | 通常の利用者にチェックの枠を見せないため。Invisibleは操作が必要な利用者を救えないため採らない。 | Cloudflareが表示方式を変えたとき |
-| 遷移元を`/rounds`配下の許可リストで検証し、クエリ`returnTo`で渡す | 保護対象外の`/signin`へのループとオープンリダイレクトを同時に避け、保存を持たずURLだけで完結させるため | 保護対象の画面が`/rounds`の外にできたとき |
+| 遷移元を保護の範囲(`/rounds`と`/settings`の配下)の許可リストで検証し、クエリ`returnTo`で渡す | 保護対象外の`/signin`へのループとオープンリダイレクトを同時に避け、保存を持たずURLだけで完結させるため | 保護対象の画面が`/rounds`と`/settings`の外にできたとき |
 | 送信の直前にオフライン状態を1回読み、購読しない。オフライン専用の失敗の種類を持つ | 全失敗でトークンを消費するため、オフラインの再送信がチェック未完了の表示になり原因が分からなくなるのを防ぐ。通信断でトークンを保持する分岐を持たず、判断を1か所にする。「通信エラー」では端末の回線が切れていることが分からない | `navigator.onLine`がtrueのまま通信できない場合も扱いたいとき |
 | 認証済みのリダイレクトを`proxy.ts`へ集約し、画面ごとのE2Eは残す | 実装を一箇所にまとめつつ、各画面の挙動を保証するため | ガードの実装を変えるとき |
 | 規則を集約に、順序を手続きに分け、手続きを入口で生成して画面へ渡す。メールアドレスの規則と認証の失敗の種類と遷移元の規則は、認証の機能が1か所で持ち、サインアップとパスワード再設定が同じ機能の中から相対パスで使う。水和の完了を`data-hydrated`で示す | 規則と順序を画面から切り離し、規則の持ち主を1つにし、水和前の操作によるE2Eの不安定さを避けるため | E2Eが水和を別の方法で待てるとき |

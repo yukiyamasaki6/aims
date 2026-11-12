@@ -5,6 +5,7 @@ import { ROUNDS_PATH } from "@/routes";
 import { expect, test } from "../fixtures";
 import {
   SHARED_AUTH_STATE_PATH,
+  signOutFromSettings,
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
@@ -15,6 +16,7 @@ import { expectUncovered } from "../helpers/visibility";
 
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
+const settingsText = translatorFor("settings");
 
 const MOBILE_VIEWPORT = { width: 375, height: 667 };
 const COMPACT_LANDSCAPE_VIEWPORT = { width: 667, height: 375 };
@@ -45,7 +47,7 @@ function panelContents(page: Page) {
     page.getByRole("link", { name: "AIMS" }),
     page.getByRole("link", { name: navigationText("leftPanelHome") }),
     page.getByRole("link", { name: navigationText("leftPanelHistory") }),
-    page.getByRole("button", { name: authText("signOut") }),
+    page.getByRole("link", { name: navigationText("leftPanelSettings") }),
   ];
 }
 
@@ -77,7 +79,7 @@ async function expectPanelCollapsed(page: Page) {
   }
 }
 
-// ホーム・履歴の項目とサインアウトボタンは角が丸いため、内側の点で確かめる。
+// ホーム・履歴・設定の項目は角が丸いため、内側の点で確かめる。
 async function expectPanelExpanded(page: Page) {
   for (const item of panelContents(page)) {
     await expectUncovered(item, 5);
@@ -224,6 +226,98 @@ test.describe("認証済み", () => {
       .click();
     await expect(page).toHaveURL(/\/rounds$/);
     await expectPanelCollapsed(page);
+  });
+
+  test("ホームでレフトパネルの設定の項目を押すと、設定画面へ移動し、設定の項目だけが現在のページになる", async ({
+    page,
+  }) => {
+    await openRounds(page);
+
+    await page
+      .getByRole("link", { name: navigationText("leftPanelSettings") })
+      .click();
+
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(
+      page.getByRole("heading", { name: settingsText("title") }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: navigationText("leftPanelSettings") }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(
+      page.getByRole("link", { name: navigationText("leftPanelHome") }),
+    ).not.toHaveAttribute("aria-current", "page");
+    await expect(
+      page.getByRole("link", { name: navigationText("leftPanelHistory") }),
+    ).not.toHaveAttribute("aria-current", "page");
+  });
+
+  test("設定画面でレフトパネルのホームの項目を押すと、ホームへ移動する", async ({
+    page,
+  }) => {
+    await page.goto("/settings");
+
+    await page
+      .getByRole("link", { name: navigationText("leftPanelHome") })
+      .click();
+
+    await expect(page).toHaveURL(/\/rounds$/);
+    await expect(page.getByTestId("new-round-fab")).toBeVisible();
+  });
+
+  test("設定画面でレフトパネルの履歴の項目を押すと、履歴へ移動する", async ({
+    page,
+  }) => {
+    await page.goto("/settings");
+
+    await page
+      .getByRole("link", { name: navigationText("leftPanelHistory") })
+      .click();
+
+    await expect(page).toHaveURL(/\/rounds\/history$/);
+  });
+
+  test("縦向きで狭い画面でレフトパネルを展開して設定の項目を押すと、設定画面へ移動し、レフトパネルが格納される", async ({
+    page,
+  }) => {
+    // 縦向きで狭い画面でラウンド作成画面を開き、ハンバーガーボタンでレフトパネルを展開する。
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await page.goto("/rounds/new");
+    await waitForHydration(page);
+    await page
+      .getByRole("button", { name: navigationText("leftPanelOpenMenu") })
+      .click();
+    await expectPanelExpanded(page);
+
+    // 設定の項目を押して、設定画面へ移り、レフトパネルが格納されていることを確かめる。
+    await page
+      .getByRole("link", { name: navigationText("leftPanelSettings") })
+      .click();
+    await expect(page).toHaveURL(/\/settings$/);
+    await expectPanelCollapsed(page);
+  });
+
+  test("ホームから設定へ移った後、ブラウザの戻るでホームへ、進むで設定へ移動する", async ({
+    page,
+  }) => {
+    // ホームから設定の項目を押して、設定画面へ移る。
+    await openRounds(page);
+    await page
+      .getByRole("link", { name: navigationText("leftPanelSettings") })
+      .click();
+    await expect(page).toHaveURL(/\/settings$/);
+
+    // 戻るでホームへ移る。
+    await page.goBack();
+    await expect(page).toHaveURL(/\/rounds$/);
+    await expect(page.getByTestId("new-round-fab")).toBeVisible();
+
+    // 進むで設定へ移る。
+    await page.goForward();
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(
+      page.getByRole("heading", { name: settingsText("title") }),
+    ).toBeVisible();
   });
 
   test.describe("レフトパネルの開閉", () => {
@@ -466,11 +560,7 @@ test.describe("セッション喪失", () => {
     await otherTab.goto("/rounds");
     await waitForHydration(otherTab);
 
-    await page.getByRole("button", { name: authText("signOut") }).click();
-    await page
-      .getByRole("button", { name: authText("signOutConfirmLabel") })
-      .click();
-    await expect(page).toHaveURL(/\/signin/);
+    await signOutFromSettings(page);
 
     // 認証の通知による移動に頼らず、他方のタブで保護された画面を開き直し、サインイン画面へ移動することを確かめる。
     // 認証の通知による移動と重なると、この遷移が中断されるが、移動先は同じサインイン画面である。

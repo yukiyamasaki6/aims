@@ -7,7 +7,12 @@ import { useTranslations } from "next-intl";
 import { type ReactNode, type TouchEvent, useRef, useState } from "react";
 import { LogoImage } from "@/components/logo-image";
 import { cn } from "@/lib/utils";
-import { HOME_PATH, ROUNDS_HISTORY_PATH, ROUNDS_HOME_PATH } from "@/routes";
+import {
+  HOME_PATH,
+  ROUNDS_HISTORY_PATH,
+  ROUNDS_HOME_PATH,
+  SETTINGS_PATH,
+} from "@/routes";
 
 // 画面の幅768px未満のドロワーと、768px以上の縦の列は別の枠で、それぞれの開閉を持つ。初期値は固定で、幅で分岐しない。
 function useOpenState() {
@@ -80,8 +85,7 @@ function useDrawerSwipe(onClose: () => void) {
   };
 }
 
-// signOut: 下端に置くサインアウトの操作。入口が渡す。2つの枠に1つずつ置かれる。
-export function LeftPanel({ signOut }: { signOut: ReactNode }) {
+export function LeftPanel() {
   const { drawerOpen, setDrawerOpen, railOpen, setRailOpen } = useOpenState();
   // ホーム・履歴の項目の押下は、ドロワーの値だけを閉にする。列の値は変えない。
   const closeDrawer = () => setDrawerOpen(false);
@@ -103,7 +107,6 @@ export function LeftPanel({ signOut }: { signOut: ReactNode }) {
         open={drawerOpen}
         onClose={closeDrawer}
         onNavigate={closeDrawer}
-        signOut={signOut}
         swipe={swipe.handlers}
         offset={swipe.offset}
         dragging={swipe.dragging}
@@ -113,7 +116,6 @@ export function LeftPanel({ signOut }: { signOut: ReactNode }) {
         open={railOpen}
         onToggle={() => setRailOpen(!railOpen)}
         onNavigate={closeDrawer}
-        signOut={signOut}
       />
     </>
   );
@@ -123,7 +125,6 @@ function DrawerFrame({
   open,
   onClose,
   onNavigate,
-  signOut,
   swipe,
   offset,
   dragging,
@@ -131,7 +132,6 @@ function DrawerFrame({
   open: boolean;
   onClose: () => void;
   onNavigate: () => void;
-  signOut: ReactNode;
   swipe: ReturnType<typeof useDrawerSwipe>["handlers"];
   offset: number;
   dragging: boolean;
@@ -163,7 +163,7 @@ function DrawerFrame({
         </button>
       </div>
 
-      <PanelBody collapsed={false} onNavigate={onNavigate} signOut={signOut} />
+      <PanelBody collapsed={false} onNavigate={onNavigate} />
     </aside>
   );
 }
@@ -172,12 +172,10 @@ function RailFrame({
   open,
   onToggle,
   onNavigate,
-  signOut,
 }: {
   open: boolean;
   onToggle: () => void;
   onNavigate: () => void;
-  signOut: ReactNode;
 }) {
   return (
     <aside
@@ -196,7 +194,7 @@ function RailFrame({
         <ToggleButton open={open} onClick={onToggle} />
       </div>
 
-      <PanelBody collapsed={!open} onNavigate={onNavigate} signOut={signOut} />
+      <PanelBody collapsed={!open} onNavigate={onNavigate} />
     </aside>
   );
 }
@@ -239,11 +237,9 @@ function NavItem({
 function PanelBody({
   collapsed,
   onNavigate,
-  signOut,
 }: {
   collapsed: boolean;
   onNavigate: () => void;
-  signOut: ReactNode;
 }) {
   const t = useTranslations("navigation");
   return (
@@ -259,7 +255,11 @@ function PanelBody({
         </NavItem>
       </nav>
 
-      <div className={cn("border-t p-4", collapsed && "hidden")}>{signOut}</div>
+      <div className={cn("flex flex-col border-t p-4", collapsed && "hidden")}>
+        <NavItem href={SETTINGS_PATH} onNavigate={onNavigate}>
+          {t("leftPanelSettings")}
+        </NavItem>
+      </div>
     </>
   );
 }

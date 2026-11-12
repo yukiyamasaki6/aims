@@ -5,7 +5,7 @@ import {
   roundIdOfPath,
   roundOriginOf,
 } from "@/features/rounds/domain/round-routes";
-import { ROUND_FRAME_PATH, ROUND_FRAME_PATHS } from "@/routes";
+import { FRAME_PATHS, ROUND_FRAME_PATH } from "@/routes";
 
 const ID = "123e4567-e89b-12d3-a456-426614174000";
 
@@ -74,6 +74,8 @@ describe("roundFramePathOf", () => {
     "/rounds/new/x",
     "/roundsx",
     "/__shell/rounds",
+    "/settings",
+    "/settings/x",
   ])("%sは枠がない", (pathname) => {
     // Given
     // When
@@ -92,7 +94,7 @@ describe("roundFramePathOf", () => {
     expect(framePath).not.toBe(ROUND_FRAME_PATH);
   });
 
-  it("返す枠の経路は、全てROUND_FRAME_PATHSに含まれる", () => {
+  it("返す枠の経路は、全てFRAME_PATHSに含まれる", () => {
     // Given
     const pathnames = [
       "/rounds",
@@ -105,7 +107,7 @@ describe("roundFramePathOf", () => {
     const frames = pathnames.map(roundFramePathOf);
 
     // Then
-    for (const frame of frames) expect(ROUND_FRAME_PATHS).toContain(frame);
+    for (const frame of frames) expect(FRAME_PATHS).toContain(frame);
   });
 });
 

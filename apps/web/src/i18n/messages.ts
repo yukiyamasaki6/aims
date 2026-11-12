@@ -4,6 +4,7 @@ import { authMessages } from "@/features/auth/ui/auth-messages";
 import { navigationMessages } from "@/features/navigation/ui/navigation-messages";
 import { offlinePwaMessages } from "@/features/offline-pwa/ui/offline-pwa-messages";
 import { roundsMessages } from "@/features/rounds/ui/rounds-messages";
+import { settingsMessages } from "@/features/settings/ui/settings-messages";
 
 const locale = "ja";
 
@@ -13,6 +14,7 @@ const messages = {
   rounds: roundsMessages.ja,
   navigation: navigationMessages.ja,
   offlinePwa: offlinePwaMessages.ja,
+  settings: settingsMessages.ja,
   shared: screenMessages.ja,
 } as const;
 

@@ -6,6 +6,7 @@ export const navigationMessages = {
     startButton: "開始",
     leftPanelHome: "ホーム",
     leftPanelHistory: "履歴",
+    leftPanelSettings: "設定",
     leftPanelOpenMenu: "メニューを開く",
     leftPanelCloseMenu: "メニューを閉じる",
     leftPanelCollapse: "パネルを格納する",

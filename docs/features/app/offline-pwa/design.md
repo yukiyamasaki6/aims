@@ -2,7 +2,7 @@
 
 ## 概要
 
-アプリをPWAとしてインストールでき、Service Workerが `/rounds`(ホーム)、`/rounds/history`、`/rounds/new`、`/rounds/<任意のID>` の枠をプリキャッシュから返す（キャッシュ優先）。
+アプリをPWAとしてインストールでき、Service Workerが `/rounds`(ホーム)、`/rounds/history`、`/rounds/new`、`/rounds/<任意のID>`、`/settings` の枠をプリキャッシュから返す（キャッシュ優先）。
 オフラインでも枠が開き、内容は枠内で取得し、`navigator.onLine` が false のときは「ネットワークに接続されていません」、通信の失敗は「読み込めませんでした。」を示す。
 枠のないパスのオフライン時だけ、静的な `/offline` を返す。
 ページ内容、RSC、APIはキャッシュしない。
@@ -16,6 +16,7 @@
 | Service Workerの更新 | 新しいビルドのService Workerは待機し、表示中の画面は旧ビルドのまま動く。内部リンクの操作の前に待機中の版があれば、有効にしてから遷移させ、遷移先を最初から新しいビルドの枠で表示する。待機の判定は遷移ごとに同期に行い、判定できないとき、切り替えが進まないとき、リンク以外の経路(`router.push`、戻る・進む)では切り替えず、旧ビルドの枠で遷移する。待機が無い遷移では、更新を確認する。 |
 | `/offline` | 認証に依存しない静的なページ。枠のないパスで、通信に失敗したときだけ返す。 |
 | 起動 | `start_url` は `/rounds`(ホーム)。アプリの起動はmanifestの`start_url`を開くことと同じとして扱い、認証済みはホーム、未認証は `proxy.ts` が `/signin` へ移す。 |
+| 設定の枠（`/settings`） | ラウンドの枠と同じく、Service Workerが枠を返す。内容は枠内で描き、通信を要しない(`app/settings`)。 |
 | ラウンドの枠（`/rounds`、`/rounds/history`、`/rounds/new`、`/rounds/<ID>`） | オンライン・オフラインともService Workerが枠を返す。内容は枠内の取得結果で決まり、オフラインの枠はオンライン復帰で自動再取得する。保存済みの参照データ（的・プリセット）があるときは、プリセットは取得を待たずに先に表示し、取得できなくてもそれを表示し続ける(`rounds/start`)。作成が未確定のラウンド詳細は、ラウンドを取得せず端末の操作の列から表示し、的の一覧の保存分があればオフラインでも内容を表示する。端末がオフラインで開けるベースを持つラウンド(入力中、またはベースに反映されていない操作(未送信、または確定済みで取得に未反映)が残るもの)の詳細も、端末のベースと操作の列から表示する(的の一覧の保存分があるとき。`rounds/detail`)。ベースか的の一覧の保存分を持たないラウンドは、枠と「ネットワークに接続されていません」を表示する。ホームは取得せず、端末が知る入力中のラウンドを出し、オフライン表示は出さない。履歴は、履歴の中に「ネットワークに接続されていません」を出し、ラウンドは出さない(`rounds/history`)。 |
 | 未認証・期限切れ | 枠のレイアウトが始める喪失の見張りが `/signin` へ移す。 |
 
@@ -28,8 +29,8 @@
   - 枠のないパスのナビゲーションの失敗時は `/offline` を返す。`navigationPreload` は使わない。
   - `infrastructure/precache-guard.ts`(`precacheGuard`)が、プリキャッシュ応答が `ok` でないとき、インストールを失敗させる。
 - `src/app/offline/page.tsx`(入口)は、`ui/offline-screen.tsx`の`OfflineScreen`(ロゴ、枠、文言)を描くだけである。文言は`ui/offline-pwa-messages.ts`の一覧(名前空間`offlinePwa`)から`useTranslations`で得る。要求の設定は`headers()`と`cookies()`を読まないため、ページは静的なままで、文言は最初のHTMLに含まれ、プリキャッシュされた枠はオフラインでも文言を表示する。
-- 経路の持ち主は、経路表(`src/routes.ts`)と各機能の経路のファイルである。`/offline`、枠の配布URL(`OFFLINE_PATH`、`shellUrlOf`、`frameHtmlOf`)、枠の経路(`ROUND_FRAME_PATHS`、`ROUND_FRAME_ID`)は経路表が持つ。判定・変換の関数は、`roundFramePathOf` を `src/features/rounds/domain/round-routes.ts` が持つ。`sw.ts`、`serwist.config.mjs`、`next.config.ts`、`manifest.ts` はここから導く。`proxy.ts` の `matcher` だけは、Next.jsが静的に読むため文字列で再掲し、`proxy.test.ts` が一致を確かめる。
-- `serwist.config.mjs` が `public/sw.js`(経路表の `SW_PATH` から導く)を生成し、woff2を含む静的アセットと `/offline` と枠4件（`/__shell/rounds`、`/__shell/rounds/history`、`/__shell/rounds/new`、`/__shell/rounds/_`）をHTMLの内容ハッシュのリビジョンでプリキャッシュする。リビジョンはビルドごとに変わる。
+- 経路の持ち主は、経路表(`src/routes.ts`)と各機能の経路のファイルである。`/offline`、枠の配布URL(`OFFLINE_PATH`、`shellUrlOf`、`frameHtmlOf`)、枠の経路の一覧(`FRAME_PATHS`。ラウンドの4画面と`SETTINGS_PATH`)と、詳細のプレースホルダー(`ROUND_FRAME_ID`)は経路表が持つ。判定・変換の関数は、`roundFramePathOf` を `src/features/rounds/domain/round-routes.ts` が持ち、`sw.ts`(入口)がこれと`SETTINGS_PATH`との一致から枠の配布URLを導く。`sw.ts`、`serwist.config.mjs`、`next.config.ts`、`manifest.ts` はここから導く。`proxy.ts` の `matcher` だけは、Next.jsが静的に読むため文字列で再掲し、`proxy.test.ts` が一致を確かめる。
+- `serwist.config.mjs` が `public/sw.js`(経路表の `SW_PATH` から導く)を生成し、woff2を含む静的アセットと `/offline` と枠5件（`/__shell/rounds`、`/__shell/rounds/history`、`/__shell/rounds/new`、`/__shell/rounds/_`、`/__shell/settings`）をHTMLの内容ハッシュのリビジョンでプリキャッシュする。リビジョンはビルドごとに変わる。
 - `next.config.ts` が `/__shell/*` を実ルートへrewriteし（`beforeFiles`）、`/rounds/<ID>` を `/rounds/_` へrewriteする（`afterFiles`）。`/__shell/*` は `proxy.ts` の対象外なので、未認証の登録でも各画面の枠が保存される。オンラインの `/rounds/<ID>` も `/rounds/_` の枠だけが配信され、IDごとの生成物は作られない（`rounds/[id]/page.tsx` の `dynamicParams = false`）。
 - 更新の切り替えは、機能 `offline-pwa` の手続き `application/update-activation.ts`(`createUpdateActivation`)が担う。経路の変化で登録を保持し、待機中の版があるときの内部リンクの遷移を止め、`SKIP_WAITING`を1回送り、`controllerchange`の後、文書を読み直す直前に端末の保存の完了(記録のハブの`whenPersisted`)を再確認して遷移する。これらの待ちは、クリックからの合計で上限1秒(`SHORT_WAIT_MS`)を時計(`Clock`)で共有する。切り替えをしない経路は`whenPersisted`を呼ばない。待機の判定は保持した登録の`waiting`の同期の読み取りだけで行い、登録の保持の前の操作は止めない。経路の変化では、待機の有無によらず`registration.update()`を呼ぶ。読み込み時には切り替えない。
   - 約束(`SwHost`、`SwRegistration`、`LinkClicks`、`LinkClick`、`PersistenceWait`)を実装する外部への実装は、インフラ層 `browser-service-worker.ts`(`navigator.serviceWorker`)と `browser-link-clicks.ts`(`document`のcapture段階の`click`。修飾キーと同じ画面へのリンクのみを除く)である。

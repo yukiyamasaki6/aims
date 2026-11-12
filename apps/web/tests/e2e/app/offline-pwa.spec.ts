@@ -1,15 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { BrowserContext, Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import { OFFLINE_PATH, ROUND_FRAME_PATHS, shellUrlOf } from "@/routes";
+import { FRAME_PATHS, OFFLINE_PATH, SETTINGS_PATH, shellUrlOf } from "@/routes";
 import { expect, test } from "../fixtures";
 import {
   getSharedEmail,
+  openSignOutConfirm,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
+import { collectHydrationErrors } from "../helpers/hydration";
 import { expectRoundBasesFetched } from "../helpers/reference-data";
 import { createRound } from "../helpers/rounds";
 import { comeBackOnline, goOffline } from "../helpers/service-worker";
@@ -80,7 +82,7 @@ async function precachedUrls(page: Page): Promise<string[]> {
 }
 
 // プリキャッシュに入る画面の枠。proxy.tsの対象外の/__shell/*で配られる。
-const FRAME_PATHS = ROUND_FRAME_PATHS.map(shellUrlOf);
+const SHELL_URLS = FRAME_PATHS.map(shellUrlOf);
 
 // 新しいビルドのService Workerが、プリキャッシュ対象の枠をこの目印付きで保存する。
 // 遷移先が新しいビルドの枠で表示されたかを、読み込んだ文書の本文で確かめるため。
@@ -96,7 +98,7 @@ const NEW_SW_URL = "/sw-e2e-new.js";
 
 async function routeNewBuild(page: Page, context: BrowserContext) {
   const urls = await precachedUrls(page);
-  const revisions = [OFFLINE_PATH, ...FRAME_PATHS].map((path) => {
+  const revisions = [OFFLINE_PATH, ...SHELL_URLS].map((path) => {
     const revision = urls
       .find((url) => url.includes(`${path}?__WB_REVISION__=`))
       ?.split("__WB_REVISION__=")[1];
@@ -308,20 +310,6 @@ async function skipWaitingCount(page: Page) {
   );
 }
 
-// ハイドレーション不一致(#418)などのページエラーを集める。本番ビルドで動くため、
-// 枠のHTMLとクライアントの初回描画のずれはここで現れる。
-function collectHydrationErrors(page: Page): string[] {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  page.on("console", (message) => {
-    if (message.type() !== "error") return;
-    if (/hydrat|#418|Minified React error/i.test(message.text())) {
-      errors.push(message.text());
-    }
-  });
-  return errors;
-}
-
 // ビルド時に存在しないIDとして、ランダムなUUIDを使う(任意IDの枠を共有する証明)。
 function unknownRoundPath(): string {
   return `/rounds/${randomUUID()}`;
@@ -367,7 +355,7 @@ test("未認証で紹介画面を開くと画面の枠が保存され、サイ�
   expect(urls.some((url) => url.includes("/_next/static/"))).toBe(true);
   expect(urls.some((url) => url.includes("/offline"))).toBe(true);
   expect(urls.some((url) => url.endsWith(".woff2"))).toBe(true);
-  for (const frame of FRAME_PATHS) {
+  for (const frame of SHELL_URLS) {
     expect(
       urls.some((url) => url.includes(`${frame}?__WB_REVISION__=`)),
       `${frame}がプリキャッシュにあること`,
@@ -389,8 +377,8 @@ test("未認証で紹介画面を開くと画面の枠が保存され、サイ�
         bodies[frame] = (await (await cache.match(request))?.text()) ?? "";
     }
     return bodies;
-  }, FRAME_PATHS);
-  for (const frame of FRAME_PATHS) {
+  }, SHELL_URLS);
+  for (const frame of SHELL_URLS) {
     const body = frameBodies[frame];
     expect(body, `${frame}の本文`).toBeTruthy();
     expect(body, `${frame}にメール入力欄がないこと`).not.toContain(
@@ -472,6 +460,49 @@ test("Service Workerが登録済みで未認証のとき、ラウンドの詳細
   await openWithServiceWorker(page);
 
   const response = await page.goto(unknownRoundPath());
+
+  expect(response?.fromServiceWorker()).toBe(true);
+  await expect(page).toHaveURL(/\/signin(\?|$)/);
+});
+
+test("未認証で紹介画面を開いて枠が保存された後に、サインインしてオフラインで設定を開くと、Service Workerが返した設定の枠が表示され、サインアウトの確認が開く", async ({
+  page,
+  context,
+}) => {
+  // 未認証で紹介画面を開き、Service Workerが画面の枠を保存するのを待つ。
+  await openWithServiceWorker(page);
+  await expect
+    .poll(async () =>
+      (await precachedUrls(page)).some((url) =>
+        url.includes(`${shellUrlOf(SETTINGS_PATH)}?__WB_REVISION__=`),
+      ),
+    )
+    .toBe(true);
+
+  // 使い捨てのユーザーでサインインし、オフラインで設定を開く。
+  await signUpAndSignIn(page, {
+    email: `e2e-offline-settings-${Date.now()}-${randomUUID().slice(0, 8)}@example.com`,
+    password: "password-e2e-offline-settings",
+  });
+  await goOffline(context);
+  const response = await page.goto(SETTINGS_PATH);
+  expect(response?.fromServiceWorker()).toBe(true);
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByPlaceholder("you@example.com")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: offlinePwaText("offlineTitle") }),
+  ).toHaveCount(0);
+
+  // 設定の枠のサインアウトを押して、確認が開く。
+  await openSignOutConfirm(page);
+});
+
+test("Service Workerが登録済みで未認証のとき、設定を開くと、Service Workerが返した枠からサインイン画面へ移動する", async ({
+  page,
+}) => {
+  await openWithServiceWorker(page);
+
+  const response = await page.goto(SETTINGS_PATH);
 
   expect(response?.fromServiceWorker()).toBe(true);
   await expect(page).toHaveURL(/\/signin(\?|$)/);
