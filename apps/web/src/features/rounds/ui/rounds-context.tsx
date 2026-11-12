@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, type ReactNode, useContext } from "react";
+import type { HistoryViewMemory } from "../application/history-view-memory";
 import type { PresetDeletion } from "../application/preset-deletion";
 import type { PresetSaving } from "../application/preset-saving";
 import type { RoundDeletion } from "../application/round-deletion";
@@ -12,7 +13,7 @@ import type { RoundsListStore } from "../application/rounds-list-store";
 import type { UniqueIds } from "../application/unique-ids";
 import type { WhenOnline } from "../application/when-online";
 
-// 画面が窓口を通さずに使う手続き。離れる(完了、削除)、ラウンドの削除(一覧)、開始、プリセットの保存・削除・取得、IDの払い出し、オンライン復帰の通知。
+// 画面が窓口を通さずに使う手続き。離れる(完了、削除)、ラウンドの削除(一覧)、開始、プリセットの保存・削除・取得、IDの払い出し、オンライン復帰の通知、履歴の条件の記憶。
 export type RoundProcedures = {
   leaving: RoundLeaving;
   deletion: RoundDeletion;
@@ -22,6 +23,7 @@ export type RoundProcedures = {
   fetching: Pick<RoundFetching, "fetchPresets" | "savedPresets">;
   ids: UniqueIds;
   whenOnline: WhenOnline;
+  historyViewMemory: HistoryViewMemory;
   // そのエンドの既にある矢のIDより後ろに並ぶ、時刻順の矢のIDの払い出し。
   newShotId: (endShotIds: readonly string[]) => string;
 };
