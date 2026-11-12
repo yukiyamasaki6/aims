@@ -1,7 +1,11 @@
 import type { Locator, Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
-import { SHARED_AUTH_STATE_PATH, waitForHydration } from "../helpers/auth";
+import {
+  SHARED_AUTH_STATE_PATH,
+  signOutFromSettings,
+  waitForHydration,
+} from "../helpers/auth";
 import {
   getRoundRow,
   openOtherDevice,
@@ -18,7 +22,6 @@ import {
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
 
-const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
 const roundsText = translatorFor("rounds");
 
@@ -542,11 +545,7 @@ test.describe("履歴", () => {
       await expect(page.getByText("前の利用者")).toBeVisible();
 
       // サインアウトして、別の利用者でサインインする。
-      await page.getByRole("button", { name: authText("signOut") }).click();
-      await page
-        .getByRole("button", { name: authText("signOutConfirmLabel") })
-        .click();
-      await expect(page).toHaveURL(/\/signin/);
+      await signOutFromSettings(page);
       const second = await signInFreshUser(page, "e2e-history");
       await addRound(second, "次の利用者", "2026-04-02", { completed: true });
       await page.goto("/rounds/history");
