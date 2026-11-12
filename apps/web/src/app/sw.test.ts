@@ -95,6 +95,8 @@ describe("sw", () => {
         ["/rounds/new", "/__shell/rounds/new"],
         ["/rounds/6f1c2f3e-0000-4000-8000-000000000000", "/__shell/rounds/_"],
         ["/rounds/abc", "/__shell/rounds/_"],
+        ["/settings", "/__shell/settings"],
+        ["/settings?tab=1#top", "/__shell/settings"],
       ])("%sはプリキャッシュの%sを返す", async (url, frameUrl) => {
         // Given
         const frame = new Response("frame");
@@ -144,6 +146,9 @@ describe("sw", () => {
         "/rounds/",
         "/rounds/1/edit",
         "/roundsx",
+        "/settings/x",
+        "/settingsx",
+        "/settings/",
       ])("枠のない%sのナビゲーションはネットワークへ通す", (url) => {
         // Given
         // When
@@ -245,17 +250,19 @@ describe("sw", () => {
       },
     );
 
-    it.each(["/__shell/rounds", "/_next/static/chunks/main.js", "/offline"])(
-      "%sは保存する",
-      async (url) => {
-        // Given
-        // When
-        const params = updated(url);
-        const result = await guard()(params);
+    it.each([
+      "/__shell/rounds",
+      "/__shell/settings",
+      "/_next/static/chunks/main.js",
+      "/offline",
+    ])("%sは保存する", async (url) => {
+      // Given
+      // When
+      const params = updated(url);
+      const result = await guard()(params);
 
-        // Then
-        expect(result).toBe(params.response);
-      },
-    );
+      // Then
+      expect(result).toBe(params.response);
+    });
   });
 });

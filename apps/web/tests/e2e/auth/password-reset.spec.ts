@@ -14,6 +14,7 @@ import { getOtpCodeFromMailpit } from "../helpers/mailpit";
 import { mockTurnstile, waitForTurnstileToken } from "../helpers/turnstile";
 
 const authText = translatorFor("auth");
+const navigationText = translatorFor("navigation");
 
 const ORIGINAL_PASSWORD = "password-original";
 const NEW_PASSWORD = "password-changed1";
@@ -138,7 +139,7 @@ test("メールで本人確認してパスワードを変更すると、この�
   await waitForTurnstileToken(page, 1);
   await clickSignInAndAwaitRounds(page, signInButton);
   await expect(
-    page.getByRole("button", { name: authText("signOut") }),
+    page.getByRole("link", { name: navigationText("leftPanelSettings") }),
   ).toBeVisible();
 });
 

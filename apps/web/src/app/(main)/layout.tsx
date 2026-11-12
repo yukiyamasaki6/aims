@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { useSession } from "@/features/auth/ui/session-context";
-import { SignOutButton } from "@/features/auth/ui/sign-out-button";
 import { LeftPanel } from "@/features/navigation/ui/left-panel";
 
 export default function MainLayout({
@@ -17,7 +16,7 @@ export default function MainLayout({
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden md:flex-row max-md:landscape:flex-row">
-      <LeftPanel signOut={<SignOutButton signOut={session.signOut} />} />
+      <LeftPanel />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</div>
     </div>
   );

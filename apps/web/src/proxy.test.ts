@@ -3,10 +3,10 @@ import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { redirectFor } from "@/features/auth/domain/auth-routes";
 import {
+  FRAME_PATHS,
   HOME_PATH,
   OFFLINE_PATH,
   RESET_PASSWORD_PATH,
-  ROUND_FRAME_PATHS,
   ROUNDS_PATH,
   SIGN_IN_PATH,
   SIGN_UP_PATH,
@@ -34,6 +34,8 @@ describe("proxy", () => {
       "/rounds/1/edit",
       ROUNDS_PATH,
       `${ROUNDS_PATH}/1`,
+      "/settings",
+      "/settings/1",
     ])("%sで実行する", (url) => {
       // Given
       // When
@@ -51,7 +53,8 @@ describe("proxy", () => {
       "/_next/static/chunks/main.js",
       "/signin/extra",
       "/roundsx",
-      ...ROUND_FRAME_PATHS.map(shellUrlOf),
+      "/settingsx",
+      ...FRAME_PATHS.map(shellUrlOf),
     ])("%sでは実行しない", (url) => {
       // Given
       // When
@@ -78,7 +81,10 @@ describe("proxy", () => {
       "/manifest.webmanifest",
       "/roundsx",
       "/signin/extra",
-      ...ROUND_FRAME_PATHS.map(shellUrlOf),
+      "/settings",
+      "/settings/1",
+      "/settingsx",
+      ...FRAME_PATHS.map(shellUrlOf),
     ];
 
     it.each(probes)(
@@ -115,6 +121,20 @@ describe("proxy", () => {
       // Then
       expect(response.headers.get("location")).toBe(
         "https://app.example.com/signin?returnTo=%2Frounds",
+      );
+    });
+
+    it("未認証で設定の経路を開くと、その経路を遷移元に付けてサインインへリダイレクトする", async () => {
+      // Given
+      db.getClaims.mockResolvedValue({ data: null, error: null });
+
+      // When
+      const request = new NextRequest("https://app.example.com/settings");
+      const response = await proxy(request);
+
+      // Then
+      expect(response.headers.get("location")).toBe(
+        "https://app.example.com/signin?returnTo=%2Fsettings",
       );
     });
 

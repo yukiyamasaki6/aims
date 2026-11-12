@@ -1,19 +1,18 @@
-import "fake-indexeddb/auto";
-import { AuthApiError } from "@supabase/supabase-js";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { type ReactNode, useState } from "react";
-import { renderToString } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSession } from "@/features/auth/application/session";
 import { createBrowserIdentityStore } from "@/features/auth/infrastructure/browser-identity-store";
 import { createBrowserPageLoad } from "@/features/auth/infrastructure/browser-page-load";
 import { createSupabaseAuth } from "@/features/auth/infrastructure/supabase-auth";
 import { SessionProvider } from "@/features/auth/ui/session-context";
-import { IntlTestProvider } from "@/i18n/intl-test-helpers";
-import { translatorFor } from "@/i18n/translator-test-helpers";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createClient } from "@/lib/supabase/infrastructure/client";
+
+import "fake-indexeddb/auto";
+import { act, render, screen, within } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { IntlTestProvider } from "@/i18n/intl-test-helpers";
+import { translatorFor } from "@/i18n/translator-test-helpers";
 import { RootClientEntry } from "../root-client-entry";
 import MainLayout from "./layout";
 
@@ -64,50 +63,6 @@ vi.mock("@supabase/ssr", () => ({
   })),
 }));
 
-const replace = vi.fn();
-const assign = vi.fn();
-const IDENTITY_KEY = "aims:local-user-id";
-const NETWORK_ERROR = authText("failure.unreachable");
-const RATE_LIMIT_ERROR = new AuthApiError(
-  "limit",
-  429,
-  "over_request_rate_limit",
-);
-
-function setLocation(pathname: string, search = "") {
-  vi.stubGlobal("location", {
-    href: `http://localhost${pathname}${search}`,
-    origin: "http://localhost",
-    replace,
-    assign,
-    pathname,
-    search,
-  });
-}
-
-// SDKのsignOut({ scope: "local" })は、通信の成否に関わらずローカルのセッションを削除できた場合にSIGNED_OUTを発火し、以後のgetSessionはセッションを返さない。
-// 端末の識別情報は直接消さず、ルートの購読(RootClientEntry。renderLayoutWithIdentityで実物を描く)がこの出来事で消す。
-function signOutClearingSession(result: () => Promise<unknown>) {
-  supabase.signOut.mockImplementation(async () => {
-    supabase.getSession.mockResolvedValue({
-      data: { session: null },
-      error: null,
-    });
-    supabase.emit("SIGNED_OUT", null);
-    return result();
-  });
-}
-
-// jsdomはCSSを評価せず、ドロワーと縦の列の2つの枠が両方見える。どちらの枠のボタンも同じ確認を開くので、DOM順で先の枠を押す。
-function signOutButton() {
-  return screen.getAllByRole("button", { name: authText("signOut") })[0];
-}
-
-async function confirmSignOut(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(signOutButton());
-  await user.click(screen.getByTestId("confirm-dialog-confirm"));
-}
-
 // 入口が渡すセッションの手続きを、実物で組み立てて渡す(識別情報の記録は含まない)。
 function SessionWrapper({ children }: { children: ReactNode }) {
   const [session] = useState(() =>
@@ -124,6 +79,21 @@ function SessionWrapper({ children }: { children: ReactNode }) {
       <SessionProvider session={session}>{children}</SessionProvider>
     </IntlTestProvider>
   );
+}
+
+const replace = vi.fn();
+const assign = vi.fn();
+const IDENTITY_KEY = "aims:local-user-id";
+
+function setLocation(pathname: string, search = "") {
+  vi.stubGlobal("location", {
+    href: `http://localhost${pathname}${search}`,
+    origin: "http://localhost",
+    replace,
+    assign,
+    pathname,
+    search,
+  });
 }
 
 function renderLayout() {
@@ -173,7 +143,7 @@ afterEach(() => {
 
 describe("MainLayout", () => {
   describe("表示", () => {
-    it("左パネルの2つの枠が、それぞれサインアウトの操作を持ち、子要素と並べて表示する", () => {
+    it("左パネルの2つの枠にサインアウトのボタンはなく、子要素と並べて表示する", () => {
       // Given
       // When
       renderLayout();
@@ -183,19 +153,23 @@ describe("MainLayout", () => {
       expect(frames).toHaveLength(2);
       for (const frame of frames) {
         expect(
-          within(frame).getByRole("button", { name: authText("signOut") }),
-        ).toBeInTheDocument();
+          within(frame).queryByRole("button", { name: authText("signOut") }),
+        ).toBeNull();
       }
       expect(screen.getByText("子要素")).toBeInTheDocument();
     });
 
-    it("左パネルの2つの枠が、それぞれホームと履歴の項目を持つ", () => {
+    it("左パネルの2つの枠が、それぞれホーム・履歴・設定の項目を持つ", () => {
       // Given
       // When
       renderLayout();
 
       // Then
-      for (const name of ["leftPanelHome", "leftPanelHistory"] as const) {
+      for (const name of [
+        "leftPanelHome",
+        "leftPanelHistory",
+        "leftPanelSettings",
+      ] as const) {
         expect(
           screen.getAllByRole("link", { name: navigationText(name) }),
         ).toHaveLength(2);
@@ -228,51 +202,6 @@ describe("MainLayout", () => {
       vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
       vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
     }
-
-    it("マウントの後、確認の前に環境変数が失われたときは、通信エラーを示してダイアログを開いたままボタンを戻す", async () => {
-      // Given
-      const user = userEvent.setup();
-      renderLayoutWithIdentity();
-      loseEnv();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(await screen.findByText(NETWORK_ERROR)).toBeInTheDocument();
-      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
-      expect(screen.getByTestId("confirm-dialog-confirm")).toHaveAttribute(
-        "aria-disabled",
-        "false",
-      );
-      expect(supabase.signOut).not.toHaveBeenCalled();
-      expect(replace).not.toHaveBeenCalled();
-    });
-
-    it("環境変数が失われた確認の後、環境変数を戻して再度確認すると、接続を取得し直して完了し、遷移元を付けずに移る", async () => {
-      // Given
-      const user = userEvent.setup();
-      renderLayoutWithIdentity();
-      loseEnv();
-      await confirmSignOut(user);
-      await screen.findByText(NETWORK_ERROR);
-      const connectionsWhileLost =
-        supabase.createBrowserClient.mock.calls.length;
-      vi.unstubAllEnvs();
-      signOutClearingSession(async () => ({ error: null }));
-
-      // When
-      await user.click(screen.getByTestId("confirm-dialog-confirm"));
-
-      // Then
-      expect(supabase.signOut).toHaveBeenCalledExactlyOnceWith({
-        scope: "local",
-      });
-      expect(supabase.createBrowserClient.mock.calls.length).toBeGreaterThan(
-        connectionsWhileLost,
-      );
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-    });
 
     it("環境変数が無いままマウントすると、見張りの購読が同期に投げ、マウントが例外で終わる", () => {
       // Given
@@ -311,6 +240,20 @@ describe("MainLayout", () => {
         "/signin?returnTo=%2Frounds%2Fnew",
       );
       expect(assign).not.toHaveBeenCalled();
+    });
+
+    it("設定の画面でsigned-outの通知を受けると、/settingsを遷移元に付けてサインインへ移る", () => {
+      // Given
+      setLocation("/settings");
+      renderLayout();
+
+      // When
+      supabase.emit("SIGNED_OUT", null);
+
+      // Then
+      expect(replace).toHaveBeenCalledExactlyOnceWith(
+        "/signin?returnTo=%2Fsettings",
+      );
     });
 
     it("表示した時にオンラインで未認証なら、サインインへ移る", async () => {
@@ -368,79 +311,6 @@ describe("MainLayout", () => {
 
       // Then
       expect(replace).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("サインアウト", () => {
-    it("確認すると、この端末のセッションだけを終え、遷移元を付けずにサインインへ移る", async () => {
-      // Given
-      const user = userEvent.setup();
-      signOutClearingSession(async () => ({ error: null }));
-      renderLayoutWithIdentity();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(supabase.signOut).toHaveBeenCalledExactlyOnceWith({
-        scope: "local",
-      });
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      // 完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示のまま変えない。
-      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
-    });
-
-    it("認証サービスが拒否しても、その後の読み取りが未認証なら、エラーを示さず、完了として遷移元を付けずに移る", async () => {
-      // Given
-      const user = userEvent.setup();
-      signOutClearingSession(async () => ({ error: RATE_LIMIT_ERROR }));
-      renderLayoutWithIdentity();
-
-      // When
-      await confirmSignOut(user);
-
-      // Then
-      expect(replace).toHaveBeenCalledExactlyOnceWith("/signin");
-      // 完了は遷移で画面ごと捨てられるため、遷移まで実行中の表示のまま変えない。
-      expect(screen.getByText(authText("signOutConfirm"))).toBeInTheDocument();
-      expect(
-        screen.queryByText(authText("failure.rate_limited")),
-      ).not.toBeInTheDocument();
-    });
-
-    it("失敗の後に別の理由でセッションを失ったときは、開いていた画面を遷移元に付けて移る", async () => {
-      // Given
-      const user = userEvent.setup();
-      supabase.signOut.mockResolvedValue({ error: RATE_LIMIT_ERROR });
-      renderLayout();
-      await confirmSignOut(user);
-      await screen.findByText(authText("failure.rate_limited"));
-
-      // When
-      act(() => supabase.emit("SIGNED_OUT", null));
-
-      // Then
-      expect(replace).toHaveBeenCalledExactlyOnceWith(
-        "/signin?returnTo=%2Frounds%2Fnew",
-      );
-    });
-
-    it("再描画を挟まない同じタスクで2回確認しても、認証は1回である", async () => {
-      // Given
-      const user = userEvent.setup();
-      supabase.signOut.mockReturnValue(new Promise(() => {}));
-      renderLayout();
-      await user.click(signOutButton());
-      const confirm = screen.getByTestId("confirm-dialog-confirm");
-
-      // When
-      act(() => {
-        fireEvent.click(confirm);
-        fireEvent.click(confirm);
-      });
-
-      // Then
-      expect(supabase.signOut).toHaveBeenCalledTimes(1);
     });
   });
 });

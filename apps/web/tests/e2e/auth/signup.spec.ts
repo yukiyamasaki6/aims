@@ -11,6 +11,7 @@ import { getEmailFromMailpit, getOtpCodeFromMailpit } from "../helpers/mailpit";
 import { waitForTurnstileToken } from "../helpers/turnstile";
 
 const authText = translatorFor("auth");
+const navigationText = translatorFor("navigation");
 
 const EMAIL_PLACEHOLDER = "you@example.com";
 const CODE_PLACEHOLDER = "123456";
@@ -68,7 +69,7 @@ test("メールで本人確認してパスワードを設定すると、登録�
     .click();
   await expect(page).toHaveURL(/\/rounds/);
   await expect(
-    page.getByRole("button", { name: authText("signOut") }),
+    page.getByRole("link", { name: navigationText("leftPanelSettings") }),
   ).toBeVisible();
 });
 

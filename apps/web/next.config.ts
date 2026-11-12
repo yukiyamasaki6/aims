@@ -2,8 +2,8 @@ import path from "node:path";
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 import {
+  FRAME_PATHS,
   ROUND_FRAME_PATH,
-  ROUND_FRAME_PATHS,
   ROUNDS_PATH,
   shellUrlOf,
 } from "./src/routes";
@@ -32,7 +32,7 @@ const nextConfig: NextConfig = {
       // Service Workerのプリキャッシュ用に、proxy.tsのmatcher外の
       // /__shell/*で実ルートの枠を配る。プリキャッシュの取得が未認証でも
       // /signinへリダイレクトされず、各画面の枠が保存される。
-      beforeFiles: ROUND_FRAME_PATHS.map((framePath) => ({
+      beforeFiles: FRAME_PATHS.map((framePath) => ({
         source: shellUrlOf(framePath),
         destination: framePath,
       })),

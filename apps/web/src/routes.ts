@@ -43,12 +43,17 @@ export function roundPath(roundId: string, from?: string): string {
 // 詳細の画面は、全てのラウンドで同じ静的な枠(プレースホルダーのIDで描く)で配る。
 export const ROUND_FRAME_ID = "_";
 export const ROUND_FRAME_PATH = `${ROUNDS_PATH}/${ROUND_FRAME_ID}`;
-// 枠の経路。ホーム、履歴、作成、詳細の4つ。
-export const ROUND_FRAME_PATHS: string[] = [
+
+// 設定の画面の経路。分類ごとの経路は持たない。
+export const SETTINGS_PATH = "/settings";
+
+// 全ての画面の枠の経路。ラウンドのホーム、履歴、作成、詳細と、設定の5つ。
+export const FRAME_PATHS: string[] = [
   ROUNDS_HOME_PATH,
   ROUNDS_HISTORY_PATH,
   NEW_ROUND_PATH,
   ROUND_FRAME_PATH,
+  SETTINGS_PATH,
 ];
 
 // 認証の画面の経路。

@@ -1,9 +1,10 @@
 // サインインの前後の経路の規則。保護対象の画面、未認証専用の画面、サインインのURL、サインインの後に戻ってよい場所(遷移元)。
-// 認証の画面の経路の文字列は、経路表(src/routes.ts)が持つ。保護対象の画面の範囲は、ラウンドの画面の根の経路(ROUNDS_PATH)とその配下である。根は、サインインの後の既定の行き先でもある。
+// 認証の画面の経路の文字列は、経路表(src/routes.ts)が持つ。保護対象の画面の範囲は、ラウンドの画面の根の経路(ROUNDS_PATH)と設定の画面の経路(SETTINGS_PATH)と、それぞれの配下である。根は、サインインの後の既定の行き先でもある。
 import {
   RESET_PASSWORD_PATH,
   ROUNDS_HOME_PATH,
   ROUNDS_PATH,
+  SETTINGS_PATH,
   SIGN_IN_PATH,
   SIGN_UP_PATH,
 } from "@/routes";
@@ -18,7 +19,9 @@ const BASE = "http://localhost";
 
 // サインインが要る画面(保護の範囲の根とその配下)かを返す。
 function isProtectedPath(pathname: string): boolean {
-  return pathname === ROUNDS_PATH || pathname.startsWith(`${ROUNDS_PATH}/`);
+  return [ROUNDS_PATH, SETTINGS_PATH].some(
+    (root) => pathname === root || pathname.startsWith(`${root}/`),
+  );
 }
 
 // 遷移元として受け付けるのは、保護対象の同一オリジンのパスに限る。

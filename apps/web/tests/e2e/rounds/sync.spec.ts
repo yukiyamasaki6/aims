@@ -9,6 +9,7 @@ import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
+  signOutFromSettings,
   signUpAndSignIn,
   waitForHydration,
 } from "../helpers/auth";
@@ -158,11 +159,7 @@ async function signInOnPage(
 }
 
 async function signOutOnPage(page: Page) {
-  await page.getByRole("button", { name: authText("signOut") }).click();
-  await page
-    .getByRole("button", { name: authText("signOutConfirmLabel") })
-    .click();
-  await expect(page).toHaveURL(/\/signin/);
+  await signOutFromSettings(page);
   // 水和の前に入力すると、メールアドレス欄が水和で空に戻るため、水和を待つ。
   await waitForHydration(page);
 }

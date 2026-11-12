@@ -28,6 +28,7 @@ describe("next.config rewrites", () => {
       },
       { source: "/__shell/rounds/new", destination: "/rounds/new" },
       { source: "/__shell/rounds/_", destination: "/rounds/_" },
+      { source: "/__shell/settings", destination: "/settings" },
     ]);
   });
 

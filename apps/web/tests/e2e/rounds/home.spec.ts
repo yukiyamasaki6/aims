@@ -4,6 +4,7 @@ import {
   getSharedEmail,
   SHARED_AUTH_STATE_PATH,
   SHARED_PASSWORD,
+  signOutFromSettings,
 } from "../helpers/auth";
 import {
   disableRound,
@@ -17,7 +18,6 @@ import {
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
 
-const authText = translatorFor("auth");
 const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
@@ -132,11 +132,7 @@ test.describe("使い捨てのユーザー", () => {
     await expect(page.getByText(name)).toBeVisible();
 
     // サインアウトして、サインイン画面へ移る。
-    await page.getByRole("button", { name: authText("signOut") }).click();
-    await page
-      .getByRole("button", { name: authText("signOutConfirmLabel") })
-      .click();
-    await expect(page).toHaveURL(/\/signin/);
+    await signOutFromSettings(page);
 
     // ユーザーBでサインインし、オフラインでホームを開く。
     await signInFreshUser(page, "e2e-home");
