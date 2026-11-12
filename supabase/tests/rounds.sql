@@ -4,7 +4,7 @@
 
 begin;
 
-select plan(42);
+select plan(61);
 
 -- 既存の制約・権限テスト向けのfixture生成ヘルパー。プロダクションの
 -- create_roundはid/position_keyを必須とするため、簡潔なfixtureの入力を、
@@ -340,6 +340,159 @@ select lives_ok(
     values
       ('$$ || :'marked_round_id' || $$', '10', 1, 1, 1, 'a1000000-0000-0000-0000-000000000001')$$,
   'distance/total_ends/arrows_per_endが1（境界値）なら挿入できる'
+);
+
+-- ============================================================
+-- distances: distance/total_ends/arrows_per_endの実用上の上限CHECK制約
+-- ============================================================
+-- 上限は距離(m)100・総エンド数60・矢数12。他の項目は通常の値にして、その項目の制約だけが原因だと特定できるようにする。
+-- 値そのものが検証の対象のため、上限の境界の値を使う。
+
+select lives_ok(
+  $$insert into public.distances
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('$$ || :'marked_round_id' || $$', '20', 100, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  'distance=100（上限ちょうど）なら挿入できる'
+);
+
+select lives_ok(
+  $$insert into public.distances
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('$$ || :'marked_round_id' || $$', '21', 70, 60, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  'total_ends=60（上限ちょうど）なら挿入できる'
+);
+
+select lives_ok(
+  $$insert into public.distances
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('$$ || :'marked_round_id' || $$', '22', 70, 6, 12, 'a1000000-0000-0000-0000-000000000001')$$,
+  'arrows_per_end=12（上限ちょうど）なら挿入できる'
+);
+
+select throws_ok(
+  $$insert into public.distances
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('$$ || :'marked_round_id' || $$', '30', 101, 6, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23514',
+  null,
+  'distance=101（上限超過）はCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$insert into public.distances
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('$$ || :'marked_round_id' || $$', '30', 70, 61, 6, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23514',
+  null,
+  'total_ends=61（上限超過）はCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$insert into public.distances
+      (round_id, position_key, distance, total_ends, arrows_per_end, target_face_id)
+    values
+      ('$$ || :'marked_round_id' || $$', '30', 70, 6, 13, 'a1000000-0000-0000-0000-000000000001')$$,
+  '23514',
+  null,
+  'arrows_per_end=13（上限超過）はCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$update public.distances set distance = 101
+    where round_id = '$$ || :'marked_round_id' || $$' and position_key = '1'$$,
+  '23514',
+  null,
+  'distanceを101（上限超過）に更新するとCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$update public.distances set total_ends = 61
+    where round_id = '$$ || :'marked_round_id' || $$' and position_key = '1'$$,
+  '23514',
+  null,
+  'total_endsを61（上限超過）に更新するとCHECK制約で拒否される'
+);
+
+select throws_ok(
+  $$update public.distances set arrows_per_end = 13
+    where round_id = '$$ || :'marked_round_id' || $$' and position_key = '1'$$,
+  '23514',
+  null,
+  'arrows_per_endを13（上限超過）に更新するとCHECK制約で拒否される'
+);
+
+select lives_ok(
+  $$update public.distances set distance = 100, total_ends = 60, arrows_per_end = 12
+    where round_id = '$$ || :'marked_round_id' || $$' and position_key = '1'$$,
+  '3項目を上限ちょうどに更新できる'
+);
+
+-- ============================================================
+-- distance_config_over_limit: 上限の判定関数
+-- ============================================================
+-- 純関数で、いずれかの項目が上限を超えるときだけ真を返す。NULLの項目は超過としない。実行権限はrls_matrix.sqlが固定する。
+
+select is(
+  public.distance_config_over_limit(100, 60, 12),
+  false,
+  '全ての項目が上限ちょうどなら超過ではない'
+);
+
+select is(
+  public.distance_config_over_limit(1, 1, 1),
+  false,
+  '全ての項目が1なら超過ではない'
+);
+
+select is(
+  public.distance_config_over_limit(101, 6, 6),
+  true,
+  '距離だけが上限を超えると超過になる'
+);
+
+select is(
+  public.distance_config_over_limit(70, 61, 6),
+  true,
+  '総エンド数だけが上限を超えると超過になる'
+);
+
+select is(
+  public.distance_config_over_limit(70, 6, 13),
+  true,
+  '矢数だけが上限を超えると超過になる'
+);
+
+select is(
+  public.distance_config_over_limit(100.5, 6, 6),
+  true,
+  '整数でない値も、上限を超えれば超過になる'
+);
+
+select is(
+  array[
+    public.distance_config_over_limit(null, 60, 12),
+    public.distance_config_over_limit(100, null, 12),
+    public.distance_config_over_limit(100, 60, null)
+  ],
+  array[false, false, false],
+  'NULLの項目は超過とせず、NULLでなく偽を返す'
+);
+
+select is(
+  public.distance_config_over_limit(null, null, null),
+  false,
+  '全ての項目がNULLなら超過ではない'
+);
+
+select is(
+  public.distance_config_over_limit(null, 61, null),
+  true,
+  'NULLの項目があっても、他の項目が上限を超えれば超過になる'
 );
 
 -- ============================================================

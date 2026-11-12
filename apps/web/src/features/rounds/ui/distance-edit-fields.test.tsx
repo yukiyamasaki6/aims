@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TargetFaceOption } from "@/features/rounds/domain/target-face";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
 import { translatorFor } from "@/i18n/translator-test-helpers";
-import { DISTANCE_CONFIG_MAX } from "../domain/round-constants";
+import { DISTANCE_LIMITS } from "../domain/round-constants";
 import type { Distance, Shot } from "../domain/scorecard-types";
 import { DistanceEditFields } from "./distance-edit-fields";
 import { createFakeRoundProcedures } from "./round-stores-test-helpers";
@@ -444,12 +444,17 @@ describe("DistanceEditFields", () => {
 
   describe("範囲外の値", () => {
     it.each([
-      ["距離(m)", "distance-config-distance-1", "0"],
-      ["本数", "distance-config-arrows-1", "-1"],
-      ["総エンド数", "distance-config-total-ends-1", "2.5"],
+      ["距離(m)", "distance-config-distance-1", "0", DISTANCE_LIMITS.distance],
+      ["本数", "distance-config-arrows-1", "-1", DISTANCE_LIMITS.arrowsPerEnd],
+      [
+        "総エンド数",
+        "distance-config-total-ends-1",
+        "2.5",
+        DISTANCE_LIMITS.totalEnds,
+      ],
     ])(
-      "%sが1以上の整数でないと、保存せずに項目の下に理由を出す",
-      async (_label, testId, value) => {
+      "%sが1以上の整数でないと、保存せずに項目の下に理由を出し、上限の理由は出さない",
+      async (_label, testId, value, max) => {
         // Given
         const user = userEvent.setup();
         const { onSaved, enqueue } = setup();
@@ -465,33 +470,154 @@ describe("DistanceEditFields", () => {
             roundsText("distanceConfigError.notPositiveInteger"),
           ),
         ).toBeInTheDocument();
+        expect(
+          screen.queryByText(
+            roundsText("distanceConfigError.tooLarge", { max: String(max) }),
+          ),
+        ).not.toBeInTheDocument();
+        expect(onSaved).not.toHaveBeenCalled();
+        expect(enqueue).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe("上限", () => {
+    it.each([
+      ["距離(m)", "distance-config-distance-1", DISTANCE_LIMITS.distance],
+      ["本数", "distance-config-arrows-1", DISTANCE_LIMITS.arrowsPerEnd],
+      ["総エンド数", "distance-config-total-ends-1", DISTANCE_LIMITS.totalEnds],
+    ])(
+      "%sが上限を超えると、その項目の上限を示す理由を出し、保存せず入力も残す",
+      async (_label, testId, max) => {
+        // Given
+        const user = userEvent.setup();
+        const { onSaved, enqueue } = setup();
+        await user.clear(screen.getByTestId(testId));
+        // 値そのものが検証の対象のため、実際にない大きさの値を使う。
+        await user.type(screen.getByTestId(testId), String(max + 1));
+
+        // When
+        await user.click(screen.getByTestId("distance-config-save-1"));
+
+        // Then
+        expect(
+          screen.getByText(
+            roundsText("distanceConfigError.tooLarge", { max: String(max) }),
+          ),
+        ).toBeInTheDocument();
+        expect(screen.getByTestId(testId)).toHaveValue(max + 1);
         expect(onSaved).not.toHaveBeenCalled();
         expect(enqueue).not.toHaveBeenCalled();
       },
     );
 
-    it("上限を超える値は、上限を示す理由を出して保存しない", async () => {
+    it.each([
+      [
+        "距離(m)",
+        "distance-config-distance-1",
+        "distance",
+        DISTANCE_LIMITS.distance,
+      ],
+      [
+        "本数",
+        "distance-config-arrows-1",
+        "arrows_per_end",
+        DISTANCE_LIMITS.arrowsPerEnd,
+      ],
+      [
+        "総エンド数",
+        "distance-config-total-ends-1",
+        "total_ends",
+        DISTANCE_LIMITS.totalEnds,
+      ],
+    ])(
+      "%sが上限ちょうどなら、保存できる",
+      async (_label, testId, field, max) => {
+        // Given
+        const user = userEvent.setup();
+        const { onSaved, enqueue, procedures } = setup();
+        procedures.ids.next.mockReturnValue(EVENT_ID);
+        await user.clear(screen.getByTestId(testId));
+        // 値そのものが検証の対象のため、実際にない大きさの値を使う。
+        await user.type(screen.getByTestId(testId), String(max));
+
+        // When
+        await user.click(screen.getByTestId("distance-config-save-1"));
+
+        // Then
+        expect(onSaved).toHaveBeenCalledWith(
+          expect.objectContaining({ [field]: max }),
+        );
+        expect(enqueue).toHaveBeenCalledWith(
+          expect.objectContaining({ type: "distance.updated" }),
+        );
+        expect(
+          screen.queryByText(
+            roundsText("distanceConfigError.tooLarge", { max: String(max) }),
+          ),
+        ).not.toBeInTheDocument();
+      },
+    );
+
+    it("上限を超えた後に上限ちょうどへ直して保存すると、理由が消えて保存できる", async () => {
       // Given
       const user = userEvent.setup();
-      const { onSaved } = setup();
-      await user.clear(screen.getByTestId("distance-config-total-ends-1"));
-      await user.type(
-        screen.getByTestId("distance-config-total-ends-1"),
-        String(DISTANCE_CONFIG_MAX + 2),
-      );
+      const { onSaved, procedures } = setup();
+      procedures.ids.next.mockReturnValue(EVENT_ID);
+      const input = screen.getByTestId("distance-config-total-ends-1");
+      await user.clear(input);
+      // 値そのものが検証の対象のため、実際にない大きさの値を使う。
+      await user.type(input, String(DISTANCE_LIMITS.totalEnds + 1));
+      await user.click(screen.getByTestId("distance-config-save-1"));
+      const message = roundsText("distanceConfigError.tooLarge", {
+        max: String(DISTANCE_LIMITS.totalEnds),
+      });
+      expect(screen.getByText(message)).toBeInTheDocument();
+      await user.clear(input);
+      await user.type(input, String(DISTANCE_LIMITS.totalEnds));
 
       // When
       await user.click(screen.getByTestId("distance-config-save-1"));
 
       // Then
-      expect(
-        screen.getByText(
-          roundsText("distanceConfigError.tooLarge", {
-            max: String(DISTANCE_CONFIG_MAX),
-          }),
-        ),
-      ).toBeInTheDocument();
+      expect(screen.queryByText(message)).not.toBeInTheDocument();
+      expect(onSaved).toHaveBeenCalledWith(
+        expect.objectContaining({ total_ends: DISTANCE_LIMITS.totalEnds }),
+      );
+    });
+
+    it("複数の項目が上限を超えると、超えた項目それぞれの下に、その項目の上限を示す理由を出す", async () => {
+      // Given
+      const user = userEvent.setup();
+      const { onSaved, enqueue } = setup();
+      const limits = [
+        ["distance-config-distance-1", DISTANCE_LIMITS.distance],
+        ["distance-config-arrows-1", DISTANCE_LIMITS.arrowsPerEnd],
+        ["distance-config-total-ends-1", DISTANCE_LIMITS.totalEnds],
+      ] as const;
+      for (const [testId, max] of limits) {
+        await user.clear(screen.getByTestId(testId));
+        // 値そのものが検証の対象のため、実際にない大きさの値を使う。
+        await user.type(screen.getByTestId(testId), String(max + 1));
+      }
+
+      // When
+      await user.click(screen.getByTestId("distance-config-save-1"));
+
+      // Then
+      for (const max of [
+        DISTANCE_LIMITS.distance,
+        DISTANCE_LIMITS.totalEnds,
+        DISTANCE_LIMITS.arrowsPerEnd,
+      ]) {
+        expect(
+          screen.getByText(
+            roundsText("distanceConfigError.tooLarge", { max: String(max) }),
+          ),
+        ).toBeInTheDocument();
+      }
       expect(onSaved).not.toHaveBeenCalled();
+      expect(enqueue).not.toHaveBeenCalled();
     });
   });
 
