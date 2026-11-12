@@ -1,6 +1,7 @@
 import type { Clock } from "@/lib/clock/contract/clock";
 import type { Connectivity } from "@/lib/connectivity/contract/connectivity";
 import type { FetchResult } from "../domain/fetch-status";
+import type { HistoryCondition } from "../domain/history-view-state";
 import {
   deletedRoundIdsOf,
   type LoadedRoundsList,
@@ -11,8 +12,14 @@ import type { RoundRecordHub } from "./round-record-hub";
 import { withinFetchTimeout } from "./time-limit";
 
 export type RoundsListStore = {
-  // 一覧の材料。一覧の取得の結果に、端末の列で削除済みのラウンドのIDを添えて返す。FETCH_TIMEOUT_MSで打ち切る。拒否することがある。画面の取得の hook が error にする。
-  loadList(): Promise<FetchResult<LoadedRoundsList>>;
+  // 履歴の1ページ。条件と続きの起点(先頭のページはnull)と件数で取得した結果に、端末の列で削除済みのラウンドのIDを添えて返す。1ページごとにFETCH_TIMEOUT_MSで打ち切る。拒否することがある。画面の取得の hook が error にする。
+  loadList(
+    condition: HistoryCondition,
+    after: string | null,
+    size: number,
+  ): Promise<FetchResult<LoadedRoundsList>>;
+  // 取得せずに、端末の列で削除済みのラウンドのIDだけを返す。戻ったときの表示に使う。
+  readDeleted(): Promise<Set<string>>;
 };
 
 type Deps = {
@@ -22,19 +29,32 @@ type Deps = {
   connectivity: Connectivity;
 };
 
-async function listDetail(deps: Deps): Promise<FetchResult<LoadedRoundsList>> {
-  const deleted = deletedRoundIdsOf(
-    snapshotsByRoundId(await deps.hub.readList()),
-  );
-  const list = await deps.fetching.fetchRoundsList();
-  if (list.status !== "ok") return list;
-  return { status: "ok", data: { items: list.data, deleted } };
+async function deletedIds(deps: Deps): Promise<Set<string>> {
+  return deletedRoundIdsOf(snapshotsByRoundId(await deps.hub.readList()));
+}
+
+async function listDetail(
+  deps: Deps,
+  condition: HistoryCondition,
+  after: string | null,
+  size: number,
+): Promise<FetchResult<LoadedRoundsList>> {
+  const deleted = await deletedIds(deps);
+  const page = await deps.fetching.fetchRoundsList(condition, after, size);
+  if (page.status !== "ok") return page;
+  return { status: "ok", data: { ...page.data, deleted } };
 }
 
 // 一覧の画面へ渡す、状態と変更の方法。
 export function createRoundsListStore(deps: Deps): RoundsListStore {
   const { clock, connectivity } = deps;
   return {
-    loadList: () => withinFetchTimeout(clock, connectivity, listDetail(deps)),
+    loadList: (condition, after, size) =>
+      withinFetchTimeout(
+        clock,
+        connectivity,
+        listDetail(deps, condition, after, size),
+      ),
+    readDeleted: () => deletedIds(deps),
   };
 }

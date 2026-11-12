@@ -17,6 +17,7 @@ import { createRoundSync } from "@/features/round-sync/application/round-sync";
 import { createSyncTriggers } from "@/features/round-sync/application/sync-triggers";
 import { createBrowserVisibility } from "@/features/round-sync/infrastructure/browser-visibility";
 import { createContentFetcher } from "@/features/rounds/application/content-fetcher";
+import { createHistoryPagesMemory } from "@/features/rounds/application/history-pages-memory";
 import { createOpSender } from "@/features/rounds/application/op-sender";
 import { createOperationSending } from "@/features/rounds/application/operation-sending";
 import { createPresetDeletion } from "@/features/rounds/application/preset-deletion";
@@ -182,6 +183,7 @@ function composeStores(inputs: Inputs, records: Records) {
       // 参照を安定させるため、1度だけ作る。
       whenOnline: whenOnline.bind(null, connectivity),
       historyViewMemory: createBrowserHistoryViewMemory(identityStore),
+      historyPagesMemory: createHistoryPagesMemory(),
       newShotId: (endShotIds: readonly string[]) =>
         shotIdAfter(endShotIds, clock.now(), ids.randomBytes(10)),
     },

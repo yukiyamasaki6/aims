@@ -1,18 +1,100 @@
+import type { Locator, Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import { SHARED_AUTH_STATE_PATH, waitForHydration } from "../helpers/auth";
-import { getRoundRow, openOtherDevice } from "../helpers/other-device";
-import { addRound, signInFreshUser } from "../helpers/round-fixtures";
+import {
+  getRoundRow,
+  openOtherDevice,
+  updateRound,
+} from "../helpers/other-device";
+import {
+  addRound,
+  type Credentials,
+  signInFreshUser,
+} from "../helpers/round-fixtures";
 import {
   comeBackOnline,
   goOffline,
   waitForServiceWorkerControl,
 } from "../helpers/service-worker";
 
+const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
 const roundsText = translatorFor("rounds");
 
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
+
+// 履歴の1ページ目の取得(起点なし)と続きの取得を数えるため、履歴の関数(rounds_list)の呼び出しを記録する。
+function trackRoundsListRequests(page: Page) {
+  const bodies: { p_after_id: string | null; p_format: string | null }[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      request.url().includes("/rpc/rounds_list")
+    ) {
+      bodies.push(request.postDataJSON());
+    }
+  });
+  return {
+    firstPages: () => bodies.filter((body) => body.p_after_id === null).length,
+    all: () => bodies.length,
+    formats: () => bodies.map((body) => body.p_format),
+  };
+}
+
+// 完了したラウンドを、実施日が1日ずつ違う`count`件作る(名前の番号が大きいほど新しい)。1ページを越える件数を作るため、準備を並列の束に分ける。
+async function addCompletedRounds(
+  credentials: Credentials,
+  prefix: string,
+  count: number,
+  options: { format?: "outdoor" | "indoor"; firstIndex?: number } = {},
+): Promise<string[]> {
+  const first = options.firstIndex ?? 0;
+  const names = Array.from(
+    { length: count },
+    (_, i) => `${prefix}-${String(first + i).padStart(2, "0")}`,
+  );
+  const batch = 5;
+  for (let start = 0; start < names.length; start += batch) {
+    await Promise.all(
+      names.slice(start, start + batch).map((name, i) =>
+        addRound(
+          credentials,
+          name,
+          `2026-04-${String(1 + first + start + i).padStart(2, "0")}`,
+          {
+            completed: true,
+            format: options.format,
+            shots: [{ scoreStr: "9", scoreInt: 9 }],
+          },
+        ),
+      ),
+    );
+  }
+  return names;
+}
+
+// 一覧の末尾が見えるまで、最後のカードを見える位置へ動かし続けて、続きの自動の取得を起こす。
+async function scrollToHistoryEnd(page: Page) {
+  await expect(async () => {
+    await page.getByRole("listitem").last().scrollIntoViewIfNeeded();
+    await expect(page.getByText(roundsText("historyEnd"))).toBeVisible({
+      timeout: 1_000,
+    });
+  }).toPass({ timeout: 30_000 });
+}
+
+// 対象の最前面の要素が、そのカード自身(の中)であること。座標や寸法の比較ではなく、利用者から隠れていないことを見る。
+async function isOnTop(card: Locator) {
+  return card.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const top = document.elementFromPoint(
+      rect.x + rect.width / 2,
+      rect.y + rect.height / 2,
+    );
+    return top !== null && element.contains(top);
+  });
+}
 
 // 完了や入力中の有無で表示が変わるため、全てのテストは使い捨てのユーザーで前提を作る。
 test.describe("履歴", () => {
@@ -35,7 +117,7 @@ test.describe("履歴", () => {
       .getByRole("link", { name: navigationText("leftPanelHistory") })
       .click();
 
-    await expect(page).toHaveURL(/\/rounds\/history$/);
+    await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
     const card = page.getByRole("link", { name: /完了の新しい/ });
     await expect(card).toContainText("2026-05-01");
     await expect(card).toContainText(
@@ -58,7 +140,7 @@ test.describe("履歴", () => {
 
     await page.goto("/rounds/history");
 
-    await expect(page).toHaveURL(/\/rounds\/history$/);
+    await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
     await expect(page.getByRole("link", { name: /直接開く/ })).toBeVisible();
   });
 
@@ -89,7 +171,7 @@ test.describe("履歴", () => {
     await expect(page).toHaveURL(new RegExp(`/rounds/${completedId}`));
     await waitForHydration(page);
     await page.getByRole("link", { name: roundsText("back") }).click();
-    await expect(page).toHaveURL(/\/rounds\/history$/);
+    await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
 
     // ホームのカードから詳細を開き、戻るでホームへ戻る。
     await page.goto("/rounds");
@@ -164,7 +246,7 @@ test.describe("履歴", () => {
     await expect(page).toHaveURL(new RegExp(`/rounds/${indoorCompoundId}`));
     await waitForHydration(page);
     await page.getByRole("link", { name: roundsText("back") }).click();
-    await expect(page).toHaveURL(/\/rounds\/history$/);
+    await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
     await expect(cards).toHaveText([/屋内コンパウンド/, /屋内リカーブ/]);
 
     // 欄を閉じて再読み込みすると、閉じたまま絞り込みが適用されている。
@@ -227,8 +309,250 @@ test.describe("履歴", () => {
     await page
       .getByRole("link", { name: navigationText("leftPanelHistory") })
       .click();
-    await expect(page).toHaveURL(/\/rounds\/history$/);
+    await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
     await expect(page.getByText(completingName)).toHaveCount(1);
     await expect(page.getByText(remainingName)).toHaveCount(0);
+  });
+  // 1ページの件数は画面の高さで決まる。高さを低く固定し、最小の件数(10件)を1ページとして、25件が複数ページになるようにする。
+  test.describe("ページ送り", () => {
+    test.use({ viewport: { width: 1280, height: 360 } });
+    test.setTimeout(120_000);
+
+    test("1ページを越える完了したラウンドは、最初は一部だけ表示され、末尾までスクロールすると続きが重複なく表示され、最後に以上の文言が表示される", async ({
+      page,
+    }) => {
+      const credentials = await signInFreshUser(page, "e2e-history");
+      await addCompletedRounds(credentials, "続き", 25);
+      const cards = page.getByRole("listitem");
+
+      // 履歴を開くと、最初は全件でなく一部だけが表示される。
+      await page.goto("/rounds/history");
+      await expect(cards.first()).toBeVisible();
+      expect(await cards.count()).toBeLessThan(25);
+      await expect(page.getByText(roundsText("historyEnd"))).toHaveCount(0);
+
+      // 末尾までスクロールすると、続きが取得されて全件が重複なく並び、以上の文言が出る。
+      await scrollToHistoryEnd(page);
+      await expect(cards).toHaveCount(25);
+      const texts = await cards.allTextContents();
+      expect(new Set(texts).size).toBe(25);
+    });
+
+    test("後ろのページにある条件に一致するラウンドも、得点順に並べて種別で絞り込むと先頭側に表示され、条件を変えるたびに先頭から取得し直される", async ({
+      page,
+    }) => {
+      const credentials = await signInFreshUser(page, "e2e-history");
+      // 屋外22件の後ろ(古い側)に、屋内3件を置く。
+      await addCompletedRounds(credentials, "屋外", 22, { firstIndex: 3 });
+      await addCompletedRounds(credentials, "屋内", 3, { format: "indoor" });
+      const requests = trackRoundsListRequests(page);
+      const cards = page.getByRole("listitem");
+      await page.goto("/rounds/history");
+      await expect(cards.first()).toBeVisible();
+      await expect(page.getByText(/屋内-/)).toHaveCount(0);
+
+      // 得点の高い順に並べ替えて、先頭から取得し直す。
+      await page.getByTestId("history-sort-key-score").click();
+      await expect.poll(() => requests.firstPages()).toBe(2);
+
+      // 種別を屋内に絞り込むと、後ろのページにあった屋内3件だけが先頭から表示される。
+      await page.getByTestId("history-filter-format-indoor").click();
+      // 得点が同じため、実施日の新しい順になる。
+      await expect(cards).toHaveText([/屋内-02/, /屋内-01/, /屋内-00/]);
+      await expect.poll(() => requests.formats()).toContain("indoor");
+      await expect(page.getByText(roundsText("historyEnd"))).toBeVisible();
+    });
+
+    test("履歴の項目を押すと、他の端末で完了したラウンドを含む最新を、先頭から1回だけ取得して表示する", async ({
+      page,
+    }) => {
+      const credentials = await signInFreshUser(page, "e2e-history");
+      await addRound(credentials, "もとからある", "2026-04-01", {
+        completed: true,
+      });
+      const requests = trackRoundsListRequests(page);
+      await page.goto("/rounds/history");
+      await expect(page.getByText("もとからある")).toBeVisible();
+      await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
+      await page.waitForLoadState("networkidle");
+      const before = requests.firstPages();
+
+      // 他の端末で1件を完了にしてから、履歴の項目を押す。
+      await addRound(credentials, "あとから完了", "2026-04-02", {
+        completed: true,
+      });
+      await page
+        .getByRole("link", { name: navigationText("leftPanelHistory") })
+        .click();
+
+      // 足したラウンドが表示され、先頭の取得は1回だけで、URLは戻りの印付きになる。
+      await expect(page.getByText("あとから完了")).toBeVisible();
+      await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
+      await page.waitForLoadState("networkidle");
+      expect(requests.firstPages()).toBe(before + 1);
+    });
+
+    test("続きまでスクロールして開いた詳細の戻るリンクで戻ると、離れる前の表示が残り、同じラウンドが見え、取得し直さない", async ({
+      page,
+    }) => {
+      const credentials = await signInFreshUser(page, "e2e-history");
+      await addCompletedRounds(credentials, "復元", 25);
+      const requests = trackRoundsListRequests(page);
+      await page.goto("/rounds/history");
+      await expect(page.getByRole("listitem").first()).toBeVisible();
+
+      // 続きまで読み込み、最後のカードの詳細を開く。
+      await scrollToHistoryEnd(page);
+      const last = page.getByRole("link", { name: /復元-00/ });
+      await last.click();
+      await waitForHydration(page);
+      await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]{36}/);
+      await page.waitForLoadState("networkidle");
+      const before = requests.all();
+
+      // 戻るリンクで履歴へ戻る。
+      await page.getByRole("link", { name: roundsText("back") }).click();
+      await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
+
+      // 全件が残り、開いたラウンドが隠れずに見え、取得は増えない。
+      await expect(page.getByRole("listitem")).toHaveCount(25);
+      await expect
+        .poll(() => isOnTop(page.getByRole("link", { name: /復元-00/ })))
+        .toBe(true);
+      expect(requests.all()).toBe(before);
+    });
+
+    test("履歴から詳細へ移ってブラウザの戻るで履歴に戻ると離れる前の表示になり、進むと詳細に戻り、取得し直さない", async ({
+      page,
+    }) => {
+      const credentials = await signInFreshUser(page, "e2e-history");
+      await addCompletedRounds(credentials, "履歴戻り", 25);
+      const requests = trackRoundsListRequests(page);
+      await page.goto("/rounds/history");
+      await scrollToHistoryEnd(page);
+      await page.getByRole("link", { name: /履歴戻り-00/ }).click();
+      await waitForHydration(page);
+      await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]{36}/);
+      await page.waitForLoadState("networkidle");
+      const before = requests.all();
+
+      // ブラウザの戻るで履歴に戻る。
+      await page.goBack();
+      await expect(page).toHaveURL(/\/rounds\/history\?return=1$/);
+      await expect(page.getByRole("listitem")).toHaveCount(25);
+      await expect
+        .poll(() => isOnTop(page.getByRole("link", { name: /履歴戻り-00/ })))
+        .toBe(true);
+
+      // 進むと詳細に戻る。
+      await page.goForward();
+      await expect(page).toHaveURL(/\/rounds\/[0-9a-f-]{36}/);
+      expect(requests.all()).toBe(before);
+    });
+
+    test("履歴で完了したラウンドを削除すると、どのページにも表示されない", async ({
+      page,
+    }) => {
+      const credentials = await signInFreshUser(page, "e2e-history");
+      await addCompletedRounds(credentials, "削除", 25);
+      await page.goto("/rounds/history");
+      const first = page.getByRole("listitem").first();
+      await expect(first).toContainText("削除-24");
+
+      // 先頭のカードのメニューから削除する。
+      await first.getByTestId("round-menu-trigger").click();
+      await page.getByTestId("round-delete").click();
+      await page.getByTestId("confirm-dialog-confirm").click();
+
+      // 末尾までスクロールしても、削除したラウンドは出ない。
+      await scrollToHistoryEnd(page);
+      await expect(page.getByRole("listitem")).toHaveCount(24);
+      await expect(page.getByText("削除-24")).toHaveCount(0);
+    });
+
+    test("ホームで入力中のラウンドを削除しても、履歴のどのページにも表示されない", async ({
+      page,
+    }) => {
+      const credentials = await signInFreshUser(page, "e2e-history");
+      await addCompletedRounds(credentials, "完了", 25);
+      await addRound(credentials, "入力中を削除", "2026-05-01");
+      await page.goto("/rounds");
+      const row = page
+        .getByRole("listitem")
+        .filter({ hasText: "入力中を削除" });
+      await expect(row).toBeVisible();
+
+      // ホームのカードのメニューから削除する。
+      await row.getByTestId("round-menu-trigger").click();
+      await page.getByTestId("round-delete").click();
+      await page.getByTestId("confirm-dialog-confirm").click();
+      await expect(row).toHaveCount(0);
+
+      // 履歴を末尾まで見ても、完了の25件だけが並ぶ。
+      await page
+        .getByRole("link", { name: navigationText("leftPanelHistory") })
+        .click();
+      await scrollToHistoryEnd(page);
+      await expect(page.getByRole("listitem")).toHaveCount(25);
+      await expect(page.getByText("入力中を削除")).toHaveCount(0);
+    });
+
+    test("他の端末で完了し、端末にはまだ入力中として残るラウンドは、同期が取り込むまで履歴に表示されない", async ({
+      page,
+    }) => {
+      const credentials = await signInFreshUser(page, "e2e-history");
+      await addRound(credentials, "既に完了", "2026-03-01", {
+        completed: true,
+      });
+      const pendingId = await addRound(
+        credentials,
+        "取り込み待ち",
+        "2026-03-02",
+      );
+      await page.goto("/rounds");
+      await expect(page.getByText("取り込み待ち")).toBeVisible();
+
+      // 他の端末で完了にしてから、画面を移って履歴を開く。端末にはまだ入力中として残る。
+      const { supabase } = await openOtherDevice(
+        credentials.email,
+        credentials.password,
+      );
+      await updateRound(supabase, pendingId, { status: "completed" });
+      await page
+        .getByRole("link", { name: navigationText("leftPanelHistory") })
+        .click();
+      await expect(page.getByText("既に完了")).toBeVisible();
+      await expect(page.getByText("取り込み待ち")).toHaveCount(0);
+
+      // ホームを開き直して同期が取り込むと、履歴に表示される。
+      await page.goto("/rounds");
+      await expect(page.getByText("取り込み待ち")).toHaveCount(0);
+      await page
+        .getByRole("link", { name: navigationText("leftPanelHistory") })
+        .click();
+      await expect(page.getByText("取り込み待ち")).toBeVisible();
+    });
+
+    test("別の利用者でサインインして履歴を開くと、前の利用者の表示でなく最新を取得して表示する", async ({
+      page,
+    }) => {
+      const first = await signInFreshUser(page, "e2e-history");
+      await addRound(first, "前の利用者", "2026-04-01", { completed: true });
+      await page.goto("/rounds/history");
+      await expect(page.getByText("前の利用者")).toBeVisible();
+
+      // サインアウトして、別の利用者でサインインする。
+      await page.getByRole("button", { name: authText("signOut") }).click();
+      await page
+        .getByRole("button", { name: authText("signOutConfirmLabel") })
+        .click();
+      await expect(page).toHaveURL(/\/signin/);
+      const second = await signInFreshUser(page, "e2e-history");
+      await addRound(second, "次の利用者", "2026-04-02", { completed: true });
+      await page.goto("/rounds/history");
+
+      await expect(page.getByText("次の利用者")).toBeVisible();
+      await expect(page.getByText("前の利用者")).toHaveCount(0);
+    });
   });
 });

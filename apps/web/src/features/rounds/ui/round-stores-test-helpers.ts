@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { createFakeHistoryViewMemory } from "../application/fake-history-view-memory-test-helpers";
+import { createHistoryPagesMemory } from "../application/history-pages-memory";
 import type { RoundScreen, RoundWindow } from "../application/round-window";
 import type { RoundsListStore } from "../application/rounds-list-store";
 import type { FetchView } from "../domain/fetch-status";
@@ -48,9 +49,11 @@ export function createFakeRoundsListStore(
 ) {
   const store = {
     loadList: vi.fn(),
+    readDeleted: vi.fn().mockResolvedValue(new Set<string>()),
     ...overrides,
   } as unknown as RoundsListStore & {
     loadList: ReturnType<typeof vi.fn>;
+    readDeleted: ReturnType<typeof vi.fn>;
   };
   return { store };
 }
@@ -141,6 +144,7 @@ export function createFakeRoundProcedures() {
     },
     whenOnline,
     historyViewMemory: createFakeHistoryViewMemory().memory,
+    historyPagesMemory: createHistoryPagesMemory(),
     newShotId: vi.fn(
       () =>
         `00000000-0000-7000-8000-${String(++issued.shots).padStart(12, "0")}`,

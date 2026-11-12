@@ -618,7 +618,7 @@ cross join (select role_name from rls_role where kind = 'target') as r
 where p.pronamespace = 'public'::regnamespace;
 
 -- 期待値の方針:
---   RPCとSELECTポリシーのヘルパー（is_round_member）: authenticatedだけtrue。anonはfalse。
+--   RPC、履歴の取得（rounds_list）、SELECTポリシーのヘルパー（is_round_member）: authenticatedだけtrue。anonはfalse。
 --   distance_config_over_limit: SECURITY INVOKERのsave_round_as_presetが呼ぶ純関数のため、authenticatedだけtrue。anonはfalse。
 --   is_round_editor、shot_fits: RPC（SECURITY DEFINER）の内部だけが呼ぶため、どちらもfalse。
 --   トリガー関数（handle_new_user, set_updated_at）: EXECUTEはCREATE TRIGGERの時点で検査されるため、どちらもfalse。
@@ -648,6 +648,8 @@ insert into rls_fn_expected (signature, role_name, can_execute) values
   ('public.is_round_member(uuid)',                                                    'authenticated', true),
   ('public.record_shots(jsonb)',                                                      'anon',          false),
   ('public.record_shots(jsonb)',                                                      'authenticated', true),
+  ('public.rounds_list(text,text,text,text,uuid,integer)',                           'anon',          false),
+  ('public.rounds_list(text,text,text,text,uuid,integer)',                           'authenticated', true),
   ('public.save_round_as_preset(text,text,text,jsonb)',                               'anon',          false),
   ('public.save_round_as_preset(text,text,text,jsonb)',                               'authenticated', true),
   ('public.set_updated_at()',                                                         'anon',          false),

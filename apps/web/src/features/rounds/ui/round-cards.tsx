@@ -12,12 +12,12 @@ import {
 } from "./dropdown-menu";
 import { Skeleton } from "./skeleton";
 
-// 読み込み後のカード（高さ62px、間隔gap-3）と同じ形にする。
+// 読み込み後のカード（高さ62px、間隔gap-3）と同じ形にする。履歴の取得は、描いた1件の高さと間隔から1ページの件数を決める(data-round-skeleton)。
 export function RoundCardsSkeleton() {
   return (
     <div className="flex flex-col gap-3">
       {[0, 1, 2].map((i) => (
-        <Skeleton key={i} className="h-[62px] rounded-xl" />
+        <Skeleton key={i} data-round-skeleton className="h-[62px] rounded-xl" />
       ))}
     </div>
   );

@@ -678,6 +678,17 @@ export type Database = {
       is_round_editor: { Args: { target_round_id: string }; Returns: boolean };
       is_round_member: { Args: { target_round_id: string }; Returns: boolean };
       record_shots: { Args: { p_shots: Json }; Returns: Json };
+      rounds_list: {
+        Args: {
+          p_after_id: string;
+          p_bow_type: string;
+          p_format: string;
+          p_limit: number;
+          p_sort_direction: string;
+          p_sort_key: string;
+        };
+        Returns: Json;
+      };
       save_round_as_preset: {
         Args: {
           p_bow_type: string;
