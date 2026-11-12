@@ -154,6 +154,9 @@ describe("roundListItemOf", () => {
     id: "round-2",
     name: "午後練習",
     round_date: "2026-09-16",
+    format: "indoor",
+    bow_type: "compound",
+    created_at: "2026-09-16T08:30:15.123456+00:00",
     distances,
   });
   const shot = (scoreInt: number, disabled = false) => ({
@@ -168,7 +171,7 @@ describe("roundListItemOf", () => {
     shots,
   });
 
-  it("削除されていない距離の、削除されていない矢の点の和を合計点にし、id、name、実施日(round_date)をそのまま返す", () => {
+  it("削除されていない距離の、削除されていない矢の点の和を合計点にし、id、name、実施日(round_date)、種別(format)、弓種(bow_type)、作成時刻(created_at)をそのまま返す", () => {
     // Given
     const input = summary([
       distance([shot(10), shot(9), shot(8)]),
@@ -183,6 +186,9 @@ describe("roundListItemOf", () => {
       id: "round-2",
       name: "午後練習",
       roundDate: "2026-09-16",
+      format: "indoor",
+      bowType: "compound",
+      createdAt: "2026-09-16T08:30:15.123456+00:00",
       total: 40,
     });
   });

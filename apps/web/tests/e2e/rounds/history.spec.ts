@@ -100,6 +100,90 @@ test.describe("履歴", () => {
     await expect(page).toHaveURL(/\/rounds$/);
   });
 
+  test("完了したラウンドを得点順に並べて種別で絞り込むと、再読み込みと詳細からの戻りで条件が保たれ、リセットで元の並びに戻る", async ({
+    page,
+  }) => {
+    const credentials = await signInFreshUser(page, "e2e-history");
+    await addRound(credentials, "屋外リカーブ", "2026-05-01", {
+      completed: true,
+      shots: [
+        { scoreStr: "10", scoreInt: 10 },
+        { scoreStr: "9", scoreInt: 9 },
+      ],
+    });
+    const indoorCompoundId = await addRound(
+      credentials,
+      "屋内コンパウンド",
+      "2026-05-02",
+      {
+        completed: true,
+        format: "indoor",
+        bowType: "compound",
+        shots: [
+          { scoreStr: "10", scoreInt: 10 },
+          { scoreStr: "10", scoreInt: 10 },
+          { scoreStr: "10", scoreInt: 10 },
+        ],
+      },
+    );
+    await addRound(credentials, "屋内リカーブ", "2026-05-03", {
+      completed: true,
+      format: "indoor",
+      shots: [{ scoreStr: "8", scoreInt: 8 }],
+    });
+    const cards = page.getByRole("listitem");
+
+    // 履歴を開き、既定の実施日の新しい順から、得点の高い順に並べ替える。
+    await page.goto("/rounds/history");
+    await expect(cards).toHaveText([
+      /屋内リカーブ/,
+      /屋内コンパウンド/,
+      /屋外リカーブ/,
+    ]);
+    await page.getByTestId("history-sort-key-score").click();
+    await expect(cards).toHaveText([
+      /屋内コンパウンド/,
+      /屋外リカーブ/,
+      /屋内リカーブ/,
+    ]);
+
+    // 種別を屋内に絞り込み、一致する2件だけを得点の順に表示する。
+    await page.getByTestId("history-filter-format-indoor").click();
+    await expect(cards).toHaveText([/屋内コンパウンド/, /屋内リカーブ/]);
+
+    // 再読み込みしても、並べ替えと絞り込みが保たれる。
+    await page.reload();
+    await expect(cards).toHaveText([/屋内コンパウンド/, /屋内リカーブ/]);
+    await expect(page.getByTestId("history-sort-key-score")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    // 1件の詳細を開き、戻って履歴へ移っても、条件が保たれる。
+    await page.getByRole("link", { name: /屋内コンパウンド/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/rounds/${indoorCompoundId}`));
+    await waitForHydration(page);
+    await page.getByRole("link", { name: roundsText("back") }).click();
+    await expect(page).toHaveURL(/\/rounds\/history$/);
+    await expect(cards).toHaveText([/屋内コンパウンド/, /屋内リカーブ/]);
+
+    // 欄を閉じて再読み込みすると、閉じたまま絞り込みが適用されている。
+    await page.getByTestId("history-controls-toggle").click();
+    await expect(page.getByTestId("history-controls")).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByTestId("history-controls")).toHaveCount(0);
+    await expect(cards).toHaveText([/屋内コンパウンド/, /屋内リカーブ/]);
+
+    // 欄を開いてリセットすると、3件が実施日の新しい順に戻る。
+    await page.getByTestId("history-controls-toggle").click();
+    await page.getByTestId("history-controls-reset").click();
+    await expect(cards).toHaveText([
+      /屋内リカーブ/,
+      /屋内コンパウンド/,
+      /屋外リカーブ/,
+    ]);
+  });
+
   test("オフラインで入力を完了するとホームから消えて履歴にも出ず、オンラインに戻って同期された後に履歴を開くと1件だけ表示される", async ({
     page,
     context,

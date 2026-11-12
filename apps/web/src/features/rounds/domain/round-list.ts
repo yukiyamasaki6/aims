@@ -12,10 +12,17 @@ export type RoundListItem = {
   total: number;
 };
 
+// 履歴の項目。ホームと共有する項目に、絞り込みと並びに使う種別・弓種・作成時刻を加えたもの。
+export type HistoryRoundItem = RoundListItem & {
+  format: string;
+  bowType: string;
+  createdAt: string;
+};
+
 // 一覧の1件のサーバーの行。合計点を求めるための、距離と矢の削除の印と点だけを持つ。
 export type ServerRoundSummary = Pick<
   Tables<"rounds">,
-  "id" | "name" | "round_date"
+  "id" | "name" | "round_date" | "format" | "bow_type" | "created_at"
 > & {
   distances: (Pick<Tables<"distances">, "disabled_at"> & {
     shots: Pick<Tables<"shots">, "score_int" | "disabled_at">[];
@@ -29,16 +36,19 @@ export type LocalRoundsList = {
 
 // 一覧の材料。items はサーバーの一覧(端末の列は重ねていない。入力中も含む)、deleted は端末の列で削除済みのID。
 export type LoadedRoundsList = {
-  items: RoundListItem[];
+  items: HistoryRoundItem[];
   deleted: ReadonlySet<string>;
 };
 
 // 合計点は、削除されていない距離の削除されていない矢の点の和で求める。
-export function roundListItemOf(summary: ServerRoundSummary): RoundListItem {
+export function roundListItemOf(summary: ServerRoundSummary): HistoryRoundItem {
   return {
     id: summary.id,
     name: summary.name,
     roundDate: summary.round_date,
+    format: summary.format,
+    bowType: summary.bow_type,
+    createdAt: summary.created_at,
     total: summary.distances
       .filter((d) => d.disabled_at === null)
       .flatMap((d) => d.shots)

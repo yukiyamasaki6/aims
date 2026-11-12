@@ -444,7 +444,7 @@ describe("targetFaces", () => {
 describe("roundsList", () => {
   const noFaces = ok(null);
 
-  it("削除されていない完了のラウンドを、利用者で絞らず、日付の新しい順に1回の問い合わせで得る", async () => {
+  it("削除されていない完了のラウンドを、利用者で絞らず、種別・弓種・作成時刻とともに1回の問い合わせで得る", async () => {
     // Given
     const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
 
@@ -452,18 +452,16 @@ describe("roundsList", () => {
     await database.createQueries().roundsList();
 
     // Then
-    expect(database.queries).toEqual([
-      {
-        table: "rounds",
-        columns:
-          "id, name, round_date, distances(disabled_at, shots(score_int, disabled_at))",
-        filters: [
-          { op: "is", column: "disabled_at", value: null },
-          { op: "eq", column: "status", value: "completed" },
-        ],
-        orders: [{ column: "round_date", ascending: false }],
-      },
-    ]);
+    expect(database.queries).toHaveLength(1);
+    expect(database.queries[0]).toMatchObject({
+      table: "rounds",
+      columns:
+        "id, name, round_date, format, bow_type, created_at, distances(disabled_at, shots(score_int, disabled_at))",
+      filters: [
+        { op: "is", column: "disabled_at", value: null },
+        { op: "eq", column: "status", value: "completed" },
+      ],
+    });
   });
 
   it("取得した行を、写さずにそのまま返す", async () => {
@@ -475,6 +473,9 @@ describe("roundsList", () => {
             id: "round-1",
             name: "午前練習",
             round_date: "2026-09-15",
+            format: "outdoor",
+            bow_type: "recurve",
+            created_at: "2026-09-15T10:00:00.123456+00:00",
             distances: [
               {
                 disabled_at: null,
@@ -507,6 +508,9 @@ describe("roundsList", () => {
           id: "round-1",
           name: "午前練習",
           round_date: "2026-09-15",
+          format: "outdoor",
+          bow_type: "recurve",
+          created_at: "2026-09-15T10:00:00.123456+00:00",
           distances: [
             {
               disabled_at: null,
