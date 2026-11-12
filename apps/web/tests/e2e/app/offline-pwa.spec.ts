@@ -14,7 +14,11 @@ import {
 import { collectHydrationErrors } from "../helpers/hydration";
 import { expectRoundBasesFetched } from "../helpers/reference-data";
 import { createRound } from "../helpers/rounds";
-import { comeBackOnline, goOffline } from "../helpers/service-worker";
+import {
+  comeBackOnline,
+  goOffline,
+  waitForServiceWorkerControl,
+} from "../helpers/service-worker";
 
 const authText = translatorFor("auth");
 const offlinePwaText = translatorFor("offlinePwa");
@@ -26,23 +30,8 @@ async function openWithServiceWorker(page: Page) {
   // 初回の読み込みと登録処理が落ち着く前に別のService Workerを登録すると、
   // 新しいService Workerが待機したままになることがあるため、通信の完了を待つ。
   await page.waitForLoadState("networkidle");
-  // 有効化直後のclients.claim()でページが制御されるまで待つ。
-  await page.evaluate(async () => {
-    const registration = await navigator.serviceWorker.ready;
-    await new Promise<void>((resolve) => {
-      const worker = registration.active;
-      if (!worker || worker.state === "activated") return resolve();
-      worker.addEventListener("statechange", () => {
-        if (worker.state === "activated") resolve();
-      });
-    });
-    if (navigator.serviceWorker.controller) return;
-    await new Promise<void>((resolve) => {
-      navigator.serviceWorker.addEventListener("controllerchange", () =>
-        resolve(),
-      );
-    });
-  });
+  // 有効化直後のclients.claim()でページが制御されるまで待つ。/には水和の完了を表す要素がない。
+  await waitForServiceWorkerControl(page, { waitForHydration: false });
 }
 
 // ページのリクエストが一定時間途切れるまで待つ。

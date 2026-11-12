@@ -3,7 +3,12 @@ import { waitForHydration } from "./auth";
 
 // オフラインのまま画面を移るため、Service Workerがページを制御するまで待つ。
 // 登録の途中で移った文書は制御されず、`clients.claim()`が先に終わっていると`controllerchange`が来ないため、制御されていなければ読み込み直す。
-export async function waitForServiceWorkerControl(page: Page) {
+// `waitForHydration: false`は、水和の完了を表す要素が前提にできない画面で、読み込み直した後の水和待ちを省く。
+export async function waitForServiceWorkerControl(
+  page: Page,
+  options: { waitForHydration?: boolean } = {},
+) {
+  const { waitForHydration: shouldWaitForHydration = true } = options;
   const controlled = () =>
     page.evaluate(async () => {
       await navigator.serviceWorker.ready;
@@ -11,7 +16,7 @@ export async function waitForServiceWorkerControl(page: Page) {
     });
   if (!(await controlled())) {
     await page.reload();
-    await waitForHydration(page);
+    if (shouldWaitForHydration) await waitForHydration(page);
     // 一覧の取得など、水和の描画で始まる取得が終わる前に、オフラインにされないようにする(待たないと、オフラインで削除して復帰を確かめるテストなどが失敗する)。
     // 詳細の取得は始まる前に待ちが終わることがあるため、内容を前提にするテストは自分で内容の表示を待つ。
     await page.waitForLoadState("networkidle");
