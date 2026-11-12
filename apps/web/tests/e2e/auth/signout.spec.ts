@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { translatorFor } from "@/i18n/translator-test-helpers";
 import { expect, test } from "../fixtures";
 import { signUpAndSignIn, waitForHydration } from "../helpers/auth";
+import { waitForServiceWorkerControl } from "../helpers/service-worker";
 
 const authText = translatorFor("auth");
 const navigationText = translatorFor("navigation");
@@ -20,7 +21,11 @@ const PAST_JWT_EXPIRY_MS = 3_600_000 + 60_000;
 async function signInAndOpenDialog(
   page: Page,
   prefix: string,
-  options: { installClock?: boolean; path?: string } = {},
+  options: {
+    installClock?: boolean;
+    path?: string;
+    controlledByServiceWorker?: boolean;
+  } = {},
 ) {
   // 時計は画面遷移より前に差し替える必要がある。
   if (options.installClock) await page.clock.install();
@@ -34,6 +39,10 @@ async function signInAndOpenDialog(
     await page.goto(options.path);
     await waitForHydration(page);
   }
+  // オフラインの/signinはService Workerが/offlineを返すため、先に制御下に置く。
+  // 制御されていなければ読み込み直すため、設定画面やダイアログを開く前に行う。
+  if (options.controlledByServiceWorker)
+    await waitForServiceWorkerControl(page);
   await page
     .getByRole("link", { name: navigationText("leftPanelSettings") })
     .click();
@@ -90,19 +99,11 @@ test("広い画面でサインアウトの確認を開いたまま縦向きで�
 test("オフラインでサインアウトを確認すると、この端末のセッションが終了し、オフライン画面が表示される", async ({
   page,
 }) => {
-  const { confirmButton } = await signInAndOpenDialog(page, "signout-offline");
+  const { confirmButton } = await signInAndOpenDialog(page, "signout-offline", {
+    controlledByServiceWorker: true,
+  });
 
   // オフラインでサインアウトを確認して、オフライン画面へ移る。
-  // オフラインの/signinはService Workerが/offlineを返すため、先に制御下に置く。
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.ready;
-    if (navigator.serviceWorker.controller) return;
-    await new Promise<void>((resolve) => {
-      navigator.serviceWorker.addEventListener("controllerchange", () =>
-        resolve(),
-      );
-    });
-  });
   // scope:"local"のsignOut()は、サーバーへの通信が失敗してもローカルセッションの
   // 削除自体は必ず行う。UIは通信の成否ではなく、これを根拠に遷移する。
   await page.context().setOffline(true);
