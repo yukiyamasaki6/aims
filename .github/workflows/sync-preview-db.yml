@@ -1,14 +1,14 @@
 name: Sync Preview Database
 
 on:
-  push:
-    branches:
-      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 concurrency:
   group: sync-preview-db
-  cancel-in-progress: true
+  # リセットの途中で取り消さないため
+  cancel-in-progress: false
 
 jobs:
   sync-preview-db:
@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
