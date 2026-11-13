@@ -27,6 +27,7 @@ export type Database = {
           type: string;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           arrows_per_end?: number | null;
           author_id: string;
@@ -86,6 +87,7 @@ export type Database = {
           total_ends: number;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           arrows_per_end: number;
           created_at?: string;
@@ -144,6 +146,7 @@ export type Database = {
           total_ends: number;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           arrows_per_end: number;
           created_at?: string;
@@ -195,6 +198,7 @@ export type Database = {
           owner_id: string | null;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           bow_type: string;
           created_at?: string;
@@ -239,6 +243,7 @@ export type Database = {
           type: string;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           author_id: string;
           bow_type?: string | null;
@@ -288,6 +293,7 @@ export type Database = {
           updated_at: string;
           user_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           id?: string;
@@ -334,6 +340,7 @@ export type Database = {
           status: string;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           bow_type: string;
           created_at?: string;
@@ -377,6 +384,7 @@ export type Database = {
           type: string;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           author_id: string;
           created_at?: string;
@@ -440,6 +448,7 @@ export type Database = {
           shot_number: number | null;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           disabled_at?: string | null;
@@ -496,6 +505,7 @@ export type Database = {
           updated_at: string;
           z_index: number;
         };
+        ComputedFields: never;
         Insert: {
           color: string;
           created_at?: string;
@@ -539,6 +549,7 @@ export type Database = {
           target_face_id: string;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           center_x: number;
           center_y: number;
@@ -576,6 +587,7 @@ export type Database = {
           size: number;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           bow_type: string[];
           created_at?: string;
@@ -613,6 +625,7 @@ export type Database = {
           name: string | null;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           id: string;

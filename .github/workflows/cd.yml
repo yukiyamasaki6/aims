@@ -28,16 +28,16 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: 2.115.0
+          version: 3.1.0
 
       - name: Link to Production Project
         run: supabase link --project-ref ${{ vars.SUPABASE_PROD_PROJECT_ID }}
 
       - name: Dry-run migrations
-        run: supabase db push --dry-run
+        run: supabase db push --dry-run --remote
 
       - name: Push migrations to Production DB
-        run: supabase db push
+        run: supabase db push --yes --remote
 
       - name: Push config to Production Project
-        run: supabase config push
+        run: supabase config push --yes

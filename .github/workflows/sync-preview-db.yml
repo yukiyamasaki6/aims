@@ -24,13 +24,13 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: 2.115.0
+          version: 3.1.0
 
       - name: Link to Preview Project
         run: supabase link --project-ref ${{ vars.SUPABASE_PREVIEW_PROJECT_ID }}
 
       - name: Reset Preview DB
-        run: supabase db reset --linked --yes
+        run: supabase db reset --remote --yes
 
       - name: Push config to Preview Project
-        run: supabase config push
+        run: supabase config push --yes

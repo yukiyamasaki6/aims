@@ -218,7 +218,7 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: 2.115.0
+          version: 3.1.0
 
       - name: Setup Supabase CLI environment variables
         run: cp .env.example .env
