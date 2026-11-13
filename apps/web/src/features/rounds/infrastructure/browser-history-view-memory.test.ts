@@ -11,6 +11,10 @@ const saved: HistoryViewState = {
     sortDirection: "asc",
     format: "indoor",
     bowType: "compound",
+    dateFrom: "2026-05-01",
+    dateTo: "2026-05-31",
+    scoreMin: 0,
+    scoreMax: 600,
   },
   filterOpen: false,
 };
@@ -40,6 +44,35 @@ describe("createBrowserHistoryViewMemory", () => {
 
       // Then
       expect(state).toEqual(saved);
+    });
+
+    it("期間と得点の範囲の項目が無い旧い保存値は、範囲を指定なしにし、他の項目は保存値のままにして返す", () => {
+      // Given
+      const { dateFrom, dateTo, scoreMin, scoreMax, ...legacyCondition } =
+        saved.condition;
+      window.sessionStorage.setItem(
+        "aims:history-view",
+        JSON.stringify({
+          userId: "user-1",
+          state: { condition: legacyCondition, filterOpen: false },
+        }),
+      );
+      const memory = createBrowserHistoryViewMemory(identityReader);
+
+      // When
+      const state = memory.read();
+
+      // Then
+      expect(state).toEqual({
+        condition: {
+          ...legacyCondition,
+          dateFrom: null,
+          dateTo: null,
+          scoreMin: null,
+          scoreMax: null,
+        },
+        filterOpen: false,
+      });
     });
 
     it("何も書いていなければ、既定の状態を返す", () => {

@@ -14,6 +14,10 @@ describe("createFakeHistoryViewMemory", () => {
         sortDirection: "asc",
         format: "indoor",
         bowType: null,
+        dateFrom: "2026-05-01",
+        dateTo: null,
+        scoreMin: 0,
+        scoreMax: null,
       },
       filterOpen: false,
     };

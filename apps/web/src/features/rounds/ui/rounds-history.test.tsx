@@ -1,4 +1,11 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IntlTestProvider } from "@/i18n/intl-test-helpers";
@@ -7,6 +14,7 @@ import { createFakeHistoryViewMemory } from "../application/fake-history-view-me
 import {
   DEFAULT_HISTORY_CONDITION,
   DEFAULT_HISTORY_VIEW_STATE,
+  type HistoryRangeError,
   type HistoryViewState,
 } from "../domain/history-view-state";
 import { BOW_TYPE_OPTIONS, FORMAT_OPTIONS } from "../domain/round-constants";
@@ -120,6 +128,20 @@ function nextFetchPends() {
   const next = Promise.withResolvers<unknown>();
   fake.store.loadList.mockReturnValueOnce(next.promise);
   return next;
+}
+
+function rangeInput(name: string) {
+  return screen.getByTestId(`history-filter-${name}`);
+}
+
+// 下書きを入れるだけで、欄は離れない。
+function draftRange(name: string, value: string) {
+  fireEvent.change(rangeInput(name), { target: { value } });
+}
+
+// 入力欄を離れて、下書きの検証と反映を起こす。
+function leaveRange(name: string) {
+  fireEvent.blur(rangeInput(name));
 }
 
 async function openDeleteDialog(
@@ -289,6 +311,8 @@ describe("RoundsHistory", () => {
       // Then
       expect(fake.store.loadList).toHaveBeenLastCalledWith(
         {
+          ...DEFAULT_HISTORY_CONDITION,
+
           sortKey: "score",
           sortDirection: "asc",
           format: "indoor",
@@ -396,6 +420,498 @@ describe("RoundsHistory", () => {
     });
   });
 
+  describe("期間と得点の範囲", () => {
+    async function renderOpened() {
+      fetchResolves(varied);
+      renderHistory();
+      await screen.findByText("夜練習");
+      return userEvent.setup();
+    }
+
+    it.each([
+      ["開始日", "dateFrom", "2026-05-01", { dateFrom: "2026-05-01" }],
+      ["終了日", "dateTo", "2026-05-31", { dateTo: "2026-05-31" }],
+      ["下限", "scoreMin", "300", { scoreMin: 300 }],
+      ["上限", "scoreMax", "600", { scoreMax: 600 }],
+    ])(
+      "%sを入力して欄を離れると、その指定だけを渡して先頭から取得し直し、表示中のラウンドはスケルトンに置き換わる",
+      async (_name, field, text, expected) => {
+        // Given
+        const user = await renderOpened();
+        nextFetchPends();
+
+        // When
+        await user.type(rangeInput(field), text);
+        await user.tab();
+
+        // Then
+        expect(fake.store.loadList).toHaveBeenLastCalledWith(
+          { ...DEFAULT_HISTORY_CONDITION, ...expected },
+          null,
+          expect.any(Number),
+        );
+        expect(screen.getByRole("status")).toHaveTextContent(
+          roundsText("fetchLoading"),
+        );
+        expect(screen.queryByRole("listitem")).toBeNull();
+      },
+    );
+
+    it("Enterを押すと、欄を離れたときと同じく反映して取得し直す", async () => {
+      // Given
+      const user = await renderOpened();
+
+      // When
+      await user.type(rangeInput("scoreMin"), "300{Enter}");
+
+      // Then
+      expect(fake.store.loadList).toHaveBeenLastCalledWith(
+        { ...DEFAULT_HISTORY_CONDITION, scoreMin: 300 },
+        null,
+        expect.any(Number),
+      );
+    });
+
+    it("入力の途中は検証も取得もせず、欄を離れたときに最後の値で1回だけ取得する", async () => {
+      // Given
+      const user = await renderOpened();
+      const fetches = fake.store.loadList.mock.calls.length;
+
+      // When
+      await user.type(rangeInput("scoreMin"), "500");
+      const duringTyping = fake.store.loadList.mock.calls.length;
+      await user.tab();
+
+      // Then
+      expect(duringTyping).toBe(fetches);
+      expect(fake.store.loadList).toHaveBeenCalledTimes(fetches + 1);
+      expect(fake.store.loadList).toHaveBeenLastCalledWith(
+        { ...DEFAULT_HISTORY_CONDITION, scoreMin: 500 },
+        null,
+        expect.any(Number),
+      );
+    });
+
+    it("空にして欄を離れると、その指定だけを解除した条件で取得し直す", async () => {
+      // Given
+      remember({
+        condition: {
+          ...DEFAULT_HISTORY_CONDITION,
+          dateFrom: "2026-05-01",
+          scoreMin: 300,
+        },
+        filterOpen: true,
+      });
+      fetchResolves(varied);
+      renderHistory();
+      await screen.findByText("夜練習");
+      const user = userEvent.setup();
+
+      // When
+      await user.clear(rangeInput("scoreMin"));
+      await user.tab();
+
+      // Then
+      expect(fake.store.loadList).toHaveBeenLastCalledWith(
+        { ...DEFAULT_HISTORY_CONDITION, dateFrom: "2026-05-01" },
+        null,
+        expect.any(Number),
+      );
+    });
+
+    it("反映済みと同じ値を入れ直して欄を離れても、取得し直さず、スケルトンにならない", async () => {
+      // Given
+      remember({
+        condition: { ...DEFAULT_HISTORY_CONDITION, scoreMin: 300 },
+        filterOpen: true,
+      });
+      fetchResolves(varied);
+      renderHistory();
+      await screen.findByText("夜練習");
+      const user = userEvent.setup();
+      const fetches = fake.store.loadList.mock.calls.length;
+
+      // When
+      await user.clear(rangeInput("scoreMin"));
+      await user.type(rangeInput("scoreMin"), "300");
+      await user.tab();
+
+      // Then
+      expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(shownNames()).toEqual([
+        "夜練習",
+        "午前練習",
+        "朝練習",
+        "午後練習",
+      ]);
+    });
+
+    it("4つの下書きをまとめて検証し、組が正しくなった時点で、両方を反映して1回取得する", async () => {
+      // Given
+      const user = await renderOpened();
+      await user.type(rangeInput("dateTo"), "2026-05-01");
+      await user.tab();
+      await screen.findByText("夜練習");
+      await user.type(rangeInput("dateFrom"), "2026-05-02");
+      await user.tab();
+      const fetches = fake.store.loadList.mock.calls.length;
+
+      // When
+      await user.clear(rangeInput("dateTo"));
+      await user.type(rangeInput("dateTo"), "2026-05-31");
+      await user.tab();
+
+      // Then
+      expect(fake.store.loadList).toHaveBeenCalledTimes(fetches + 1);
+      expect(fake.store.loadList).toHaveBeenLastCalledWith(
+        {
+          ...DEFAULT_HISTORY_CONDITION,
+          dateFrom: "2026-05-02",
+          dateTo: "2026-05-31",
+        },
+        null,
+        expect.any(Number),
+      );
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("得点の入力は、数字でない文字を打っても入力した文字がそのまま残る", async () => {
+      // Given
+      // jsdomのtype="number"は途中の文字を空として返すため、type="number"でないことをこの結果で確かめる。
+      const user = await renderOpened();
+
+      // When
+      await user.type(rangeInput("scoreMin"), "-1e");
+
+      // Then
+      expect(rangeInput("scoreMin")).toHaveValue("-1e");
+    });
+
+    it("取得中も、入力欄は同じ要素のまま入力途中の文字とフォーカスを保つ", async () => {
+      // Given
+      const user = await renderOpened();
+      const scoreMax = rangeInput("scoreMax");
+      await user.type(rangeInput("scoreMin"), "300");
+      nextFetchPends();
+      await user.click(scoreMax);
+
+      // When
+      await user.type(scoreMax, "6");
+
+      // Then
+      expect(screen.getByRole("status")).toBeInTheDocument();
+      expect(rangeInput("scoreMax")).toBe(scoreMax);
+      expect(scoreMax).toHaveValue("6");
+      expect(scoreMax).toHaveFocus();
+      expect(rangeInput("scoreMin")).toHaveValue("300");
+    });
+
+    it.each([
+      [
+        "開始日が終了日より後",
+        { dateFrom: "2026-05-02", dateTo: "2026-05-01" },
+        "dateFrom",
+        "dateOrder",
+      ],
+      ["点数が不正", { scoreMin: "12a" }, "scoreMin", "scoreInvalid"],
+      [
+        "下限が上限より大きい",
+        { scoreMin: "10", scoreMax: "9" },
+        "scoreMin",
+        "scoreOrder",
+      ],
+    ])(
+      "%sなら、入力の近くにその原因の文言を出し、取得せず、直前の結果のカードと入力した文字を残す",
+      async (_name, drafts, leaving, error) => {
+        // Given
+        await renderOpened();
+        const fetches = fake.store.loadList.mock.calls.length;
+
+        // When
+        for (const [field, value] of Object.entries(drafts)) {
+          draftRange(field, value);
+        }
+        leaveRange(leaving);
+
+        // Then
+        expect(
+          screen.getByTestId(`history-filter-error-${error}`),
+        ).toHaveTextContent(
+          roundsText(`historyRangeError.${error as HistoryRangeError}`),
+        );
+        expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
+        expect(screen.queryByRole("status")).toBeNull();
+        expect(shownNames()).toEqual([
+          "夜練習",
+          "午前練習",
+          "朝練習",
+          "午後練習",
+        ]);
+        for (const [field, value] of Object.entries(drafts)) {
+          expect(rangeInput(field)).toHaveValue(value);
+        }
+      },
+    );
+
+    it("不正を直して欄を離れると、エラーが消え、反映して取得し直す", async () => {
+      // Given
+      await renderOpened();
+      draftRange("scoreMin", "12a");
+      leaveRange("scoreMin");
+      const fetches = fake.store.loadList.mock.calls.length;
+
+      // When
+      draftRange("scoreMin", "12");
+      leaveRange("scoreMin");
+
+      // Then
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(fake.store.loadList).toHaveBeenCalledTimes(fetches + 1);
+      expect(fake.store.loadList).toHaveBeenLastCalledWith(
+        { ...DEFAULT_HISTORY_CONDITION, scoreMin: 12 },
+        null,
+        expect.any(Number),
+      );
+    });
+
+    it("複数の原因が同時にあれば、それぞれの文言を出す", async () => {
+      // Given
+      await renderOpened();
+
+      // When
+      draftRange("dateFrom", "2026-05-02");
+      draftRange("dateTo", "2026-05-01");
+      draftRange("scoreMin", "10");
+      draftRange("scoreMax", "9");
+      leaveRange("scoreMax");
+
+      // Then
+      expect(
+        screen.getByTestId("history-filter-error-dateOrder"),
+      ).toBeVisible();
+      expect(
+        screen.getByTestId("history-filter-error-scoreOrder"),
+      ).toBeVisible();
+    });
+
+    it("不正な入力は、記憶に書かない", async () => {
+      // Given
+      await renderOpened();
+
+      // When
+      draftRange("scoreMin", "12a");
+      leaveRange("scoreMin");
+
+      // Then
+      expect(memory.stored()).toEqual(DEFAULT_HISTORY_VIEW_STATE);
+    });
+
+    it("正しい下書きを入れたまま欄を閉じると、反映して取得し、閉じたことと範囲を記憶に書く", async () => {
+      // Given
+      const user = await renderOpened();
+      await user.type(rangeInput("scoreMin"), "300");
+
+      // When
+      await user.click(screen.getByTestId("history-controls-toggle"));
+
+      // Then
+      expect(fake.store.loadList).toHaveBeenLastCalledWith(
+        { ...DEFAULT_HISTORY_CONDITION, scoreMin: 300 },
+        null,
+        expect.any(Number),
+      );
+      expect(screen.queryByTestId("history-controls")).toBeNull();
+      expect(memory.stored()).toEqual({
+        condition: { ...DEFAULT_HISTORY_CONDITION, scoreMin: 300 },
+        filterOpen: false,
+      });
+    });
+
+    it("不正な下書きを入れたまま欄を閉じると、取得せず表示も変えず、開き直すと反映済みの値が出てエラーは消えている", async () => {
+      // Given
+      remember({
+        condition: { ...DEFAULT_HISTORY_CONDITION, scoreMin: 300 },
+        filterOpen: true,
+      });
+      fetchResolves(varied);
+      renderHistory();
+      await screen.findByText("夜練習");
+      const user = userEvent.setup();
+      await user.type(rangeInput("scoreMin"), "x");
+      const fetches = fake.store.loadList.mock.calls.length;
+
+      // When
+      await user.click(screen.getByTestId("history-controls-toggle"));
+      await user.click(screen.getByTestId("history-controls-toggle"));
+
+      // Then
+      expect(fake.store.loadList).toHaveBeenCalledTimes(fetches);
+      expect(shownNames()).toEqual([
+        "夜練習",
+        "午前練習",
+        "朝練習",
+        "午後練習",
+      ]);
+      expect(rangeInput("scoreMin")).toHaveValue("300");
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("閉じている間は、選んだ範囲もエラーも示さず、範囲の条件は適用され続ける", async () => {
+      // Given
+      remember({
+        condition: { ...DEFAULT_HISTORY_CONDITION, scoreMin: 300 },
+        filterOpen: false,
+      });
+      fetchResolves(varied);
+
+      // When
+      renderHistory();
+      await screen.findByText("夜練習");
+
+      // Then
+      expect(screen.queryByTestId("history-filter-scoreMin")).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(fake.store.loadList).toHaveBeenCalledExactlyOnceWith(
+        { ...DEFAULT_HISTORY_CONDITION, scoreMin: 300 },
+        null,
+        expect.any(Number),
+      );
+    });
+
+    it("記憶された範囲で取得し、欄を開いた状態でその値が入力に出る", async () => {
+      // Given
+      remember({
+        condition: {
+          ...DEFAULT_HISTORY_CONDITION,
+          dateFrom: "2026-05-01",
+          dateTo: "2026-05-31",
+          scoreMin: 0,
+          scoreMax: 600,
+        },
+        filterOpen: true,
+      });
+      fetchResolves(varied);
+
+      // When
+      renderHistory();
+
+      // Then
+      await screen.findByText("夜練習");
+      expect(fake.store.loadList).toHaveBeenCalledExactlyOnceWith(
+        {
+          ...DEFAULT_HISTORY_CONDITION,
+          dateFrom: "2026-05-01",
+          dateTo: "2026-05-31",
+          scoreMin: 0,
+          scoreMax: 600,
+        },
+        null,
+        expect.any(Number),
+      );
+      expect(rangeInput("dateFrom")).toHaveValue("2026-05-01");
+      expect(rangeInput("dateTo")).toHaveValue("2026-05-31");
+      expect(rangeInput("scoreMin")).toHaveValue("0");
+      expect(rangeInput("scoreMax")).toHaveValue("600");
+    });
+
+    it("範囲を変えると、その条件が記憶に書かれる", async () => {
+      // Given
+      const user = await renderOpened();
+
+      // When
+      await user.type(rangeInput("dateFrom"), "2026-05-01");
+      await user.type(rangeInput("scoreMax"), "600");
+      await user.tab();
+
+      // Then
+      expect(memory.stored()).toEqual({
+        condition: {
+          ...DEFAULT_HISTORY_CONDITION,
+          dateFrom: "2026-05-01",
+          scoreMax: 600,
+        },
+        filterOpen: true,
+      });
+    });
+
+    it("範囲に一致するラウンドがなければ、該当するラウンドがないことだけを表示する", async () => {
+      // Given
+      const user = await renderOpened();
+      fetchResolves([]);
+
+      // When
+      await user.type(rangeInput("scoreMin"), "9999{Enter}");
+
+      // Then
+      expect(
+        await screen.findByText(roundsText("historyEmpty")),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(roundsText("historyEnd"))).toBeNull();
+      expect(screen.queryByRole("listitem")).toBeNull();
+    });
+  });
+
+  describe("範囲のリセット", () => {
+    it("リセットすると、範囲を含む全条件が既定に戻り、4つの入力が空になり、エラーが消え、既定の条件で取得し直す", async () => {
+      // Given
+      remember({
+        condition: {
+          ...DEFAULT_HISTORY_CONDITION,
+          dateFrom: "2026-05-01",
+          scoreMin: 300,
+        },
+        filterOpen: true,
+      });
+      fetchResolves(varied);
+      renderHistory();
+      await screen.findByText("夜練習");
+      draftRange("scoreMax", "12a");
+      leaveRange("scoreMax");
+      const user = userEvent.setup();
+
+      // When
+      await user.click(screen.getByTestId("history-controls-reset"));
+
+      // Then
+      expect(fake.store.loadList).toHaveBeenLastCalledWith(
+        DEFAULT_HISTORY_CONDITION,
+        null,
+        expect.any(Number),
+      );
+      for (const field of ["dateFrom", "dateTo", "scoreMin", "scoreMax"]) {
+        expect(rangeInput(field)).toHaveValue("");
+      }
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.getByTestId("history-controls")).toBeInTheDocument();
+    });
+
+    it("正しい下書きを入れたままリセットすると、先に反映して取得し、その後に既定へ戻す", async () => {
+      // Given
+      fetchResolves(varied);
+      renderHistory();
+      await screen.findByText("夜練習");
+      const user = userEvent.setup();
+      await user.type(rangeInput("scoreMin"), "300");
+
+      // When
+      await user.click(screen.getByTestId("history-controls-reset"));
+
+      // Then
+      expect(fake.store.loadList).toHaveBeenCalledWith(
+        { ...DEFAULT_HISTORY_CONDITION, scoreMin: 300 },
+        null,
+        expect.any(Number),
+      );
+      expect(fake.store.loadList).toHaveBeenLastCalledWith(
+        DEFAULT_HISTORY_CONDITION,
+        null,
+        expect.any(Number),
+      );
+      expect(rangeInput("scoreMin")).toHaveValue("");
+    });
+  });
+
   describe("並べ替えと絞り込みの欄の開閉", () => {
     it("取っ手を押すと欄が隠れ、もう一度押すと現れる", async () => {
       // Given
@@ -488,6 +1004,8 @@ describe("RoundsHistory", () => {
       // Given
       remember({
         condition: {
+          ...DEFAULT_HISTORY_CONDITION,
+
           sortKey: "score",
           sortDirection: "asc",
           format: "indoor",
@@ -504,6 +1022,8 @@ describe("RoundsHistory", () => {
       await screen.findByText("夜練習");
       expect(fake.store.loadList).toHaveBeenCalledExactlyOnceWith(
         {
+          ...DEFAULT_HISTORY_CONDITION,
+
           sortKey: "score",
           sortDirection: "asc",
           format: "indoor",
@@ -519,6 +1039,8 @@ describe("RoundsHistory", () => {
       // Given
       remember({
         condition: {
+          ...DEFAULT_HISTORY_CONDITION,
+
           sortKey: "score",
           sortDirection: "asc",
           format: "outdoor",
@@ -565,6 +1087,8 @@ describe("RoundsHistory", () => {
       // Then
       expect(memory.stored()).toEqual({
         condition: {
+          ...DEFAULT_HISTORY_CONDITION,
+
           sortKey: "score",
           sortDirection: "asc",
           format: "indoor",

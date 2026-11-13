@@ -269,6 +269,66 @@ test.describe("履歴", () => {
     ]);
   });
 
+  test("完了したラウンドを期間と得点の範囲で絞り込むと、境界の当日・点を含む一致するラウンドだけが表示され、不正な指定は欄にエラーが出て表示が変わらず、再読み込みで条件が保たれる", async ({
+    page,
+  }) => {
+    const credentials = await signInFreshUser(page, "e2e-history");
+    const rounds = [
+      { name: "四月末", date: "2026-04-30", score: 10 },
+      { name: "五月初め", date: "2026-05-01", score: 5 },
+      { name: "五月中", date: "2026-05-15", score: 9 },
+      { name: "五月末", date: "2026-05-31", score: 3 },
+      { name: "六月初め", date: "2026-06-01", score: 7 },
+    ];
+    for (const { name, date, score } of rounds) {
+      await addRound(credentials, name, date, {
+        completed: true,
+        shots: [{ scoreStr: String(score), scoreInt: score }],
+      });
+    }
+    const cards = page.getByRole("listitem");
+    const fillRange = async (field: string, value: string) => {
+      await page.getByTestId(`history-filter-${field}`).fill(value);
+      await page.getByTestId(`history-filter-${field}`).press("Enter");
+    };
+
+    // 履歴を開き、期間を5月に絞り込む。開始日・終了日の当日のラウンドも表示される。
+    await page.goto("/rounds/history");
+    await expect(cards).toHaveCount(5);
+    await fillRange("dateFrom", "2026-05-01");
+    await fillRange("dateTo", "2026-05-31");
+    await expect(cards).toHaveText([/五月末/, /五月中/, /五月初め/]);
+
+    // 得点の範囲を5点以上9点以下にして、期間と合わせて一致する2件だけにする。境界の点のラウンドも表示される。
+    await fillRange("scoreMin", "5");
+    await fillRange("scoreMax", "9");
+    await expect(cards).toHaveText([/五月中/, /五月初め/]);
+
+    // 開始日を終了日より後にするとエラーが出て、一覧は直前のままである。直すとエラーが消え、絞り込みが更新される。
+    await fillRange("dateFrom", "2026-06-01");
+    await expect(page.getByTestId("history-filter-error-dateOrder")).toHaveText(
+      roundsText("historyRangeError.dateOrder"),
+    );
+    await expect(cards).toHaveText([/五月中/, /五月初め/]);
+    await fillRange("dateFrom", "2026-05-02");
+    await expect(
+      page.getByTestId("history-filter-error-dateOrder"),
+    ).toHaveCount(0);
+    await expect(cards).toHaveText([/五月中/]);
+
+    // 再読み込みしても、範囲の条件と入力の値が保たれる。
+    await page.reload();
+    await expect(cards).toHaveText([/五月中/]);
+    await expect(page.getByTestId("history-filter-dateFrom")).toHaveValue(
+      "2026-05-02",
+    );
+    await expect(page.getByTestId("history-filter-dateTo")).toHaveValue(
+      "2026-05-31",
+    );
+    await expect(page.getByTestId("history-filter-scoreMin")).toHaveValue("5");
+    await expect(page.getByTestId("history-filter-scoreMax")).toHaveValue("9");
+  });
+
   test("オフラインで入力を完了するとホームから消えて履歴にも出ず、オンラインに戻って同期された後に履歴を開くと1件だけ表示される", async ({
     page,
     context,

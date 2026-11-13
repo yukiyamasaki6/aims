@@ -1,13 +1,13 @@
 -- 履歴の取得の関数rounds_listの振る舞いを確認する。
 --   - 返す行（完了かつ削除されていない）、返す項目、合計点
---   - 並び（基準 × 向き、同値の並び）と絞り込み
+--   - 並び（基準 × 向き、同値の並び）と絞り込み（種別、弓種、期間、得点の範囲）
 --   - ページの切り出し（has_more、起点のID、全ページの連結）と、ページの間の変更
 --   - 権限（自分が属するラウンドだけ）、起点が見えない・引数が未知のとき
 -- 関数の実行権限（anon、authenticated）はrls_matrix.sqlの関数表で固定している。
 
 begin;
 
-select plan(38);
+select plan(65);
 
 create temp table rl_id (alias text primary key, id uuid not null);
 insert into rl_id (alias, id) values
@@ -71,11 +71,13 @@ begin
 end;
 $$;
 
+-- 期間（p_from、p_to）と得点の範囲（p_min、p_max）は任意で、指定しなければ絞り込まない。
 create function pg_temp.list(
-  p_sort_key text, p_sort_direction text, p_format text, p_bow_type text, p_after text, p_limit int
+  p_sort_key text, p_sort_direction text, p_format text, p_bow_type text, p_after text, p_limit int,
+  p_from date default null, p_to date default null, p_min bigint default null, p_max bigint default null
 ) returns jsonb
 language sql stable
-as $$ select public.rounds_list(p_sort_key, p_sort_direction, p_format, p_bow_type, p_after::uuid, p_limit) $$;
+as $$ select public.rounds_list(p_sort_key, p_sort_direction, p_format, p_bow_type, p_after::uuid, p_limit, p_from, p_to, p_min, p_max) $$;
 
 -- 返した行の別名を、返した順に並べる。
 create function pg_temp.ids(p_page jsonb) returns text
@@ -101,7 +103,8 @@ as $$ select jsonb_array_length(p_page -> 'rounds') || ':' || (p_page ->> 'has_m
 
 -- 起点のIDで全ページをたどり、返した順に連結する。件数はsizesを順に使う（ページごとに違う）。
 create function pg_temp.walk(
-  p_sort_key text, p_sort_direction text, p_format text, p_sizes int[]
+  p_sort_key text, p_sort_direction text, p_format text, p_sizes int[],
+  p_from date default null, p_to date default null, p_min bigint default null, p_max bigint default null
 ) returns text
 language plpgsql stable
 as $$
@@ -113,7 +116,7 @@ declare
   v_pages text;
 begin
   loop
-    v_page := pg_temp.list(p_sort_key, p_sort_direction, p_format, null, v_after, p_sizes[v_n % cardinality(p_sizes) + 1]);
+    v_page := pg_temp.list(p_sort_key, p_sort_direction, p_format, null, v_after, p_sizes[v_n % cardinality(p_sizes) + 1], p_from, p_to, p_min, p_max);
     v_pages := pg_temp.ids(v_page);
     v_ids := v_ids || case when v_ids = '' or v_pages = '' then '' else ',' end || v_pages;
     exit when not (v_page ->> 'has_more')::boolean;
@@ -337,6 +340,174 @@ select is(
 );
 
 -- ============================================================
+-- 期間と得点の範囲（境界を含む）
+-- ============================================================
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, '2026-09-12')),
+  'F,G,I,C,D,B',
+  '開始日だけを指定すると、実施日が開始日以後（当日を含む）のラウンドだけを返す'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, '2026-09-12')),
+  'C,D,B,Z,H,A',
+  '終了日だけを指定すると、実施日が終了日以前（当日を含む）のラウンドだけを返す'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, '2026-09-11', '2026-09-13')),
+  'I,C,D,B,Z',
+  '開始日と終了日の両方を指定すると、両端の当日を含む期間のラウンドだけを返す'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, '2026-09-12', '2026-09-12')),
+  'C,D,B',
+  '開始日と終了日が同じ日なら、その日のラウンドだけを返す'
+);
+
+select is(
+  pg_temp.list(null, null, null, null, null, 10, '2026-10-01'),
+  '{"rounds": [], "has_more": false}'::jsonb,
+  '期間に一致するラウンドがなければ、空で続きなしを返す'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, '2026-09-15')),
+  '',
+  '期間の中でも、入力中・削除済み・属さないラウンドは返さない'
+);
+
+select is(
+  concat_ws('|',
+    '580=' || pg_temp.ids(pg_temp.list('score', 'desc', null, null, null, 100, null, null, 580)),
+    '581=' || pg_temp.ids(pg_temp.list('score', 'desc', null, null, null, 100, null, null, 581)),
+    '579=' || pg_temp.ids(pg_temp.list('score', 'desc', null, null, null, 100, null, null, 579))
+  ),
+  '580=G,I,C,D,B|581=G|579=G,I,C,D,B',
+  '得点の下限は、その点（580）を含み、1点上（581）は除き、1点下（579）は580と同じ結果になる'
+);
+
+select is(
+  concat_ws('|',
+    '540=' || pg_temp.ids(pg_temp.list('score', 'desc', null, null, null, 100, null, null, null, 540)),
+    '539=' || pg_temp.ids(pg_temp.list('score', 'desc', null, null, null, 100, null, null, null, 539)),
+    '541=' || pg_temp.ids(pg_temp.list('score', 'desc', null, null, null, 100, null, null, null, 541))
+  ),
+  '540=H,A,F,Z|539=F,Z|541=H,A,F,Z',
+  '得点の上限は、その点（540）を含み、1点下（539）は除き、1点上（541）は540と同じ結果になる'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list('score', 'desc', null, null, null, 100, null, null, 450, 540)),
+  'H,A,F',
+  '得点の下限と上限の両方を指定すると、両端の点を含む範囲のラウンドだけを返す'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list('score', 'desc', null, null, null, 100, null, null, 580, 580)),
+  'I,C,D,B',
+  '下限と上限が同じ点なら、その点のラウンドだけを返す'
+);
+
+select is(
+  concat_ws('|',
+    '597=' || pg_temp.ids(pg_temp.list('score', 'desc', null, null, null, 100, null, null, 597)),
+    '598=' || pg_temp.ids(pg_temp.list('score', 'desc', null, null, null, 100, null, null, 598))
+  ),
+  '597=G|598=',
+  '最高点（597）を下限にするとそのラウンドを返し、1点上（598）では空になる'
+);
+
+-- Uの完了のラウンドは Q:0、R:0、S:300（無効な距離・矢を除いた合計）。
+reset role;
+select set_config('request.jwt.claim.sub', pg_temp.id('U')::text, true);
+set local role authenticated;
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, 0, 0)),
+  'Q,R',
+  '0点のラウンド（距離なし、矢なし）は、下限0・上限0の範囲に含まれる（下限0を指定なしと取り違えない）'
+);
+
+select is(
+  concat_ws('|',
+    'min300=' || pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, 300)),
+    'min301=' || pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, 301)),
+    'max300=' || pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, 300)),
+    'max299=' || pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, 299))
+  ),
+  'min300=S|min301=|max300=S,Q,R|max299=Q,R',
+  '得点の範囲は、返す合計点と同じ値（無効な距離・矢を除いた300点）で比べる'
+);
+
+select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
+
+-- ============================================================
+-- 期間・得点・種別・弓種の組合せ、並び、ページ
+-- ============================================================
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, 'outdoor', 'recurve', null, 100, '2026-09-12', null, 580)),
+  'I,D',
+  '期間、得点、種別、弓種の4条件がすべて効く（Aは実施日、Bは種別、Cは弓種、Gは弓種で落ちる）'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list('score', 'desc', null, 'recurve', null, 100, null, null, 450)),
+  'I,D,A,F',
+  '得点の降順と得点の下限を同時に指定でき、同点（I・D）は実施日の新しい順に並ぶ'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list('date', 'asc', null, 'recurve', null, 100, null, null, 450, 580)),
+  'A,D,I,F',
+  '日付の昇順と得点の範囲を同時に指定できる'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list('score', 'desc', null, 'recurve', null, 100, null, '2026-09-13')),
+  'I,D,A,Z',
+  '得点の降順と期間を同時に指定できる'
+);
+
+select is(pg_temp.walk('date', 'desc', null, array[1, 2], '2026-09-11', '2026-09-14', 450, 597), pg_temp.ids(pg_temp.list('date', 'desc', null, null, null, 100, '2026-09-11', '2026-09-14', 450, 597)), '日付の降順、範囲の指定あり: 全ページの連結が1回の取得と一致する');
+select is(pg_temp.walk('date', 'asc', null, array[1, 2], '2026-09-11', '2026-09-14', 450, 597), pg_temp.ids(pg_temp.list('date', 'asc', null, null, null, 100, '2026-09-11', '2026-09-14', 450, 597)), '日付の昇順、範囲の指定あり: 全ページの連結が1回の取得と一致する');
+select is(pg_temp.walk('score', 'desc', null, array[1, 2], '2026-09-11', '2026-09-14', 450, 597), pg_temp.ids(pg_temp.list('score', 'desc', null, null, null, 100, '2026-09-11', '2026-09-14', 450, 597)), '得点の降順、範囲の指定あり: 全ページの連結が1回の取得と一致する');
+select is(pg_temp.walk('score', 'asc', null, array[1, 2], '2026-09-11', '2026-09-14', 450, 597), pg_temp.ids(pg_temp.list('score', 'asc', null, null, null, 100, '2026-09-11', '2026-09-14', 450, 597)), '得点の昇順、範囲の指定あり: 全ページの連結が1回の取得と一致する');
+
+select is(
+  pg_temp.shape(pg_temp.list(null, null, null, null, null, 6, '2026-09-12')) || '|' || pg_temp.shape(pg_temp.list(null, null, null, null, null, 5, '2026-09-12')),
+  '6:false|5:true',
+  '範囲に一致する件数と同じ件数では続きなし、1件少ない件数では続きありにする'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, null, null, pg_temp.id('F')::text, 10, null, null, 590)),
+  'G',
+  '起点のラウンドが範囲の外（450点、下限590）でも、起点として引け、その続きを返す'
+);
+
+select is(
+  pg_temp.list(null, null, null, null, null, 10, '2026-09-13', '2026-09-12'),
+  '{"rounds": [], "has_more": false}'::jsonb,
+  '開始日が終了日より後でも、例外にせず、空で続きなしを返す'
+);
+
+select is(
+  pg_temp.list(null, null, null, null, null, 10, null, null, 600, 500),
+  '{"rounds": [], "has_more": false}'::jsonb,
+  '下限が上限より大きくても、例外にせず、空で続きなしを返す'
+);
+
+select is(
+  public.rounds_list(null, null, 'outdoor', 'recurve', null, 100),
+  public.rounds_list(null, null, 'outdoor', 'recurve', null, 100, null, null, null, null),
+  '6引数の呼び出しは、範囲の4引数をnullにした10引数の呼び出しと同じ結果を返す'
+);
+
+-- ============================================================
 -- ページの間の変更
 -- ============================================================
 
@@ -386,6 +557,12 @@ select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100)),
   'Y,Z',
   '属するラウンドだけを返し、属さないラウンドを返さない'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, '2026-09-16')),
+  'Y',
+  '期間を指定しても、属するラウンドだけを返す'
 );
 
 select * from finish();
