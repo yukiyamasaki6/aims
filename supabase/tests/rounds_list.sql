@@ -1,13 +1,13 @@
 -- 履歴の取得の関数rounds_listの振る舞いを確認する。
 --   - 返す行（完了かつ削除されていない）、返す項目、合計点
---   - 並び（基準 × 向き、同値の並び）と絞り込み（種別、弓種、期間、得点の範囲）
+--   - 並び（基準 × 向き、同値の並び）と絞り込み（種別、弓種、期間、得点の範囲、距離の構成）
 --   - ページの切り出し（has_more、起点のID、全ページの連結）と、ページの間の変更
 --   - 権限（自分が属するラウンドだけ）、起点が見えない・引数が未知のとき
 -- 関数の実行権限（anon、authenticated）はrls_matrix.sqlの関数表で固定している。
 
 begin;
 
-select plan(65);
+select plan(95);
 
 create temp table rl_id (alias text primary key, id uuid not null);
 insert into rl_id (alias, id) values
@@ -29,7 +29,29 @@ insert into rl_id (alias, id) values
   ('Z', 'c0000000-0000-0000-0000-000000000113'),
   ('Q', 'c0000000-0000-0000-0000-000000000121'),
   ('R', 'c0000000-0000-0000-0000-000000000122'),
-  ('S', 'c0000000-0000-0000-0000-000000000123');
+  ('S', 'c0000000-0000-0000-0000-000000000123'),
+  ('V', 'c0000000-0000-0000-0000-000000000130'),
+  ('W', 'c0000000-0000-0000-0000-000000000131'),
+  ('M1', 'c0000000-0000-0000-0000-000000000132'),
+  ('M2', 'c0000000-0000-0000-0000-000000000133'),
+  ('M3', 'c0000000-0000-0000-0000-000000000134'),
+  ('M4', 'c0000000-0000-0000-0000-000000000135'),
+  ('M5', 'c0000000-0000-0000-0000-000000000136'),
+  ('M6', 'c0000000-0000-0000-0000-000000000137'),
+  ('M7', 'c0000000-0000-0000-0000-000000000138'),
+  ('M8', 'c0000000-0000-0000-0000-000000000139'),
+  ('M9', 'c0000000-0000-0000-0000-00000000013a'),
+  ('M10', 'c0000000-0000-0000-0000-00000000013b'),
+  ('M11', 'c0000000-0000-0000-0000-00000000013c'),
+  ('M12', 'c0000000-0000-0000-0000-00000000013d'),
+  ('M13', 'c0000000-0000-0000-0000-00000000013e'),
+  ('M14', 'c0000000-0000-0000-0000-00000000013f'),
+  ('M15', 'c0000000-0000-0000-0000-000000000140'),
+  ('K1', 'c0000000-0000-0000-0000-000000000141'),
+  ('K2', 'c0000000-0000-0000-0000-000000000142'),
+  ('K3', 'c0000000-0000-0000-0000-000000000143'),
+  ('K4', 'c0000000-0000-0000-0000-000000000144'),
+  ('K5', 'c0000000-0000-0000-0000-000000000145');
 
 grant select on rl_id to authenticated;
 
@@ -71,13 +93,14 @@ begin
 end;
 $$;
 
--- 期間（p_from、p_to）と得点の範囲（p_min、p_max）は任意で、指定しなければ絞り込まない。
+-- 期間（p_from、p_to）、得点の範囲（p_min、p_max）、距離の構成（p_distances）は任意で、指定しなければ絞り込まない。
 create function pg_temp.list(
   p_sort_key text, p_sort_direction text, p_format text, p_bow_type text, p_after text, p_limit int,
-  p_from date default null, p_to date default null, p_min bigint default null, p_max bigint default null
+  p_from date default null, p_to date default null, p_min bigint default null, p_max bigint default null,
+  p_distances jsonb default null
 ) returns jsonb
 language sql stable
-as $$ select public.rounds_list(p_sort_key, p_sort_direction, p_format, p_bow_type, p_after::uuid, p_limit, p_from, p_to, p_min, p_max) $$;
+as $$ select public.rounds_list(p_sort_key, p_sort_direction, p_format, p_bow_type, p_after::uuid, p_limit, p_from, p_to, p_min, p_max, p_distances) $$;
 
 -- 返した行の別名を、返した順に並べる。
 create function pg_temp.ids(p_page jsonb) returns text
@@ -104,7 +127,8 @@ as $$ select jsonb_array_length(p_page -> 'rounds') || ':' || (p_page ->> 'has_m
 -- 起点のIDで全ページをたどり、返した順に連結する。件数はsizesを順に使う（ページごとに違う）。
 create function pg_temp.walk(
   p_sort_key text, p_sort_direction text, p_format text, p_sizes int[],
-  p_from date default null, p_to date default null, p_min bigint default null, p_max bigint default null
+  p_from date default null, p_to date default null, p_min bigint default null, p_max bigint default null,
+  p_distances jsonb default null
 ) returns text
 language plpgsql stable
 as $$
@@ -116,7 +140,7 @@ declare
   v_pages text;
 begin
   loop
-    v_page := pg_temp.list(p_sort_key, p_sort_direction, p_format, null, v_after, p_sizes[v_n % cardinality(p_sizes) + 1], p_from, p_to, p_min, p_max);
+    v_page := pg_temp.list(p_sort_key, p_sort_direction, p_format, null, v_after, p_sizes[v_n % cardinality(p_sizes) + 1], p_from, p_to, p_min, p_max, p_distances);
     v_pages := pg_temp.ids(v_page);
     v_ids := v_ids || case when v_ids = '' or v_pages = '' then '' else ',' end || v_pages;
     exit when not (v_page ->> 'has_more')::boolean;
@@ -128,7 +152,38 @@ begin
 end;
 $$;
 
-insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('N')), (pg_temp.id('U'));
+-- 距離の行を指定してラウンドを作る（距離の構成の検証用）。完了のラウンドは、実施日の9時に作る。
+-- p_rows は距離の行の配列で、項目は k=position_key、d=距離、e=総エンド数、a=1エンドの矢数、
+-- f=的のID（省略時は屋外122cmの公式の的）、m=距離が判明しているか（省略時は真）、x=無効にした行か、i=行のID（省略時は無作為）。
+-- 行は配列の順に挿入する（挿入順と position_key の順が違う入力を作るため）。
+-- p_tens は、最初の行に置く10点の矢の本数（合計点は p_tens * 10）。
+create function pg_temp.mkd(
+  p_alias text, p_owner text, p_date date, p_format text, p_bow_type text, p_status text, p_rows jsonb,
+  p_disabled boolean default false, p_tens int default 0
+) returns void
+language plpgsql
+as $$
+declare
+  v_round uuid := pg_temp.id(p_alias);
+  v_created timestamptz := (p_date + time '09:00') at time zone 'UTC';
+  v_first uuid;
+begin
+  insert into public.rounds (id, name, round_date, created_at, format, bow_type, status, disabled_at)
+  values (v_round, p_alias, p_date, v_created, p_format, p_bow_type, p_status, case when p_disabled then v_created end);
+  insert into public.round_users (round_id, user_id, role) values (v_round, pg_temp.id(p_owner), 'editor');
+  insert into public.distances (id, round_id, position_key, distance, total_ends, arrows_per_end, target_face_id, is_marked, disabled_at)
+  select coalesce((e.v ->> 'i')::uuid, gen_random_uuid()), v_round, e.v ->> 'k', (e.v ->> 'd')::int, (e.v ->> 'e')::int, (e.v ->> 'a')::int,
+    coalesce((e.v ->> 'f')::uuid, 'a1000000-0000-0000-0000-000000000001'::uuid), coalesce((e.v ->> 'm')::boolean, true),
+    case when (e.v ->> 'x')::boolean then v_created end
+  from jsonb_array_elements(p_rows) with ordinality as e(v, ord)
+  order by e.ord;
+  select id into v_first from public.distances where round_id = v_round order by position_key, id limit 1;
+  insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int)
+  select v_first, (i - 1) / 3 + 1, pg_temp.id(p_owner), 'X', 10 from generate_series(1, p_tens) as i;
+end;
+$$;
+
+insert into auth.users (id) values (pg_temp.id('E')), (pg_temp.id('N')), (pg_temp.id('U')), (pg_temp.id('V')), (pg_temp.id('W'));
 
 -- Fixture: 本人Eが見えるラウンド（完了・削除されていない）9件。
 --   実施日と合計点が同じ組（A/H、B/C/D）と、合計点が同じで実施日が違う組（B/C/D/I）を含む。
@@ -169,6 +224,35 @@ insert into public.shots (distance_id, end_number, shooter_id, score_str, score_
 select id, (i - 1) / 3 + 1, pg_temp.id('U'), 'X', 10 from disabled_distance, generate_series(1, 36) as i;
 insert into public.shots (distance_id, end_number, shooter_id, score_str, score_int, disabled_at)
 select id, 1, pg_temp.id('U'), 'X', 10, now() from public.distances where round_id = pg_temp.id('S') and position_key = '1';
+
+-- Fixture（距離の構成）: 利用者Vが見える完了のラウンドと、Vに見えない（別の利用者W、入力中、削除済み）ラウンド。
+--   実施日は全ラウンドで違う値にして、既定の並び（実施日の新しい順）を一意にする。
+--   M1〜M15は屋外6エンド×6射（M6だけ12エンド×3射）で、距離の行の構成だけが違う。
+--   M1: 50m→30m  M2: 30m→50m  M3: 70m  M4: 70m→70m  M5: 50m（的は屋外80cm）  M6: 50m 12×3
+--   M7: 50m + 無効な30m  M8: 距離なし  M9: 50m + 距離未確定の行  M10: 距離未確定の行だけ（距離50が入っている）
+--   M11: position_key の順は30m→50mだが、50mを先に挿入  M15: position_key が同じ2行（30mのIDが小さい）で、50mを先に挿入
+--   M12: Wの完了  M13: Vの入力中  M14: Vの削除済み（いずれも50mの1行でVには返らない）
+--   K1〜K5: 距離18mの1行（K5だけ18m→30mの2行）で、種別・弓種・実施日・合計点を変えた、他の条件との組合せ用。
+select pg_temp.mkd('M1', 'V', '2026-10-01', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":50,"e":6,"a":6},{"k":"2","d":30,"e":6,"a":6}]');
+select pg_temp.mkd('M2', 'V', '2026-10-02', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":30,"e":6,"a":6},{"k":"2","d":50,"e":6,"a":6}]');
+select pg_temp.mkd('M3', 'V', '2026-10-03', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":70,"e":6,"a":6}]');
+select pg_temp.mkd('M4', 'V', '2026-10-04', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":70,"e":6,"a":6},{"k":"2","d":70,"e":6,"a":6}]');
+select pg_temp.mkd('M5', 'V', '2026-10-05', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":50,"e":6,"a":6,"f":"a1000000-0000-0000-0000-000000000002"}]');
+select pg_temp.mkd('M6', 'V', '2026-10-06', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":50,"e":12,"a":3}]');
+select pg_temp.mkd('M7', 'V', '2026-10-07', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":50,"e":6,"a":6},{"k":"2","d":30,"e":6,"a":6,"x":true}]');
+select pg_temp.mkd('M8', 'V', '2026-10-08', 'outdoor', 'recurve', 'completed', '[]');
+select pg_temp.mkd('M9', 'V', '2026-10-09', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":50,"e":6,"a":6},{"k":"2","d":null,"e":6,"a":6,"m":false}]');
+select pg_temp.mkd('M10', 'V', '2026-10-10', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":50,"e":6,"a":6,"m":false}]');
+select pg_temp.mkd('M11', 'V', '2026-10-11', 'outdoor', 'recurve', 'completed', '[{"k":"2","d":50,"e":6,"a":6},{"k":"1","d":30,"e":6,"a":6}]');
+select pg_temp.mkd('M12', 'W', '2026-10-12', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":50,"e":6,"a":6}]');
+select pg_temp.mkd('M13', 'V', '2026-10-13', 'outdoor', 'recurve', 'in_progress', '[{"k":"1","d":50,"e":6,"a":6}]');
+select pg_temp.mkd('M14', 'V', '2026-10-14', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":50,"e":6,"a":6}]', true);
+select pg_temp.mkd('M15', 'V', '2026-10-15', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":50,"e":6,"a":6,"i":"c0000000-0000-0000-0000-0000000001b2"},{"k":"1","d":30,"e":6,"a":6,"i":"c0000000-0000-0000-0000-0000000001b1"}]');
+select pg_temp.mkd('K1', 'V', '2026-11-10', 'indoor', 'recurve', 'completed', '[{"k":"1","d":18,"e":10,"a":3,"f":"a1000000-0000-0000-0000-000000000004"}]', false, 30);
+select pg_temp.mkd('K2', 'V', '2026-11-11', 'indoor', 'compound', 'completed', '[{"k":"1","d":18,"e":10,"a":3,"f":"a1000000-0000-0000-0000-000000000004"}]', false, 20);
+select pg_temp.mkd('K3', 'V', '2026-11-12', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":18,"e":6,"a":6}]', false, 10);
+select pg_temp.mkd('K4', 'V', '2026-11-13', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":18,"e":6,"a":6}]', false, 30);
+select pg_temp.mkd('K5', 'V', '2026-11-14', 'outdoor', 'recurve', 'completed', '[{"k":"1","d":18,"e":6,"a":6},{"k":"2","d":30,"e":6,"a":6}]', false, 30);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', pg_temp.id('E')::text, true);
@@ -503,8 +587,20 @@ select is(
 
 select is(
   public.rounds_list(null, null, 'outdoor', 'recurve', null, 100),
+  public.rounds_list(null, null, 'outdoor', 'recurve', null, 100, null, null, null, null, null),
+  '6引数の呼び出しは、範囲の4引数と距離の構成をnullにした11引数の呼び出しと同じ結果を返す'
+);
+
+select is(
   public.rounds_list(null, null, 'outdoor', 'recurve', null, 100, null, null, null, null),
-  '6引数の呼び出しは、範囲の4引数をnullにした10引数の呼び出しと同じ結果を返す'
+  public.rounds_list(null, null, 'outdoor', 'recurve', null, 100, null, null, null, null, null),
+  '旧い版の画面の10引数の呼び出しも動き、距離の構成なしの11引数の呼び出しと同じ結果を返す'
+);
+
+select is(
+  (select count(*) from pg_proc where proname = 'rounds_list' and pronamespace = 'public'::regnamespace),
+  1::bigint,
+  'rounds_list は11引数の1つだけで、旧い署名の関数が残っていない（呼び出しが曖昧にならない）'
 );
 
 -- ============================================================
@@ -563,6 +659,207 @@ select is(
   pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, '2026-09-16')),
   'Y',
   '期間を指定しても、属するラウンドだけを返す'
+);
+
+
+-- ============================================================
+-- 距離の構成（利用者V）
+--   p_distances は射つ順の行の配列 [{distance, arrows_per_end, total_arrows, target_face_id}]。指定のない項目は null（鍵が無くても同じ）。
+--   無効でない距離を (position_key, id) の順に並べた行が、指定と同じ個数で、先頭から順に各行が一致するラウンドだけを返す。
+-- ============================================================
+
+reset role;
+select set_config('request.jwt.claim.sub', pg_temp.id('V')::text, true);
+set local role authenticated;
+
+-- 距離の構成だけを指定して、返した別名を並べる。
+create function pg_temp.byd(p_distances text) returns text
+language sql stable
+as $$ select pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, null, null, p_distances::jsonb)) $$;
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, null, null, null, 100)),
+  'K5,K4,K3,K2,K1,M15,M11,M10,M9,M8,M7,M6,M5,M4,M3,M2,M1',
+  '距離の構成を指定しないときは、Vが見える完了のラウンドをすべて返す（Wのラウンド、入力中、削除済みは返さない）'
+);
+
+select is(
+  pg_temp.byd('[{"distance": 50}]'),
+  'M7,M6,M5',
+  '距離だけを指定した1行は、無効でない距離が50mの1行だけのラウンドを返し、2行以上のラウンド・距離のないラウンド・距離が未確定のラウンドを返さない'
+);
+
+select is(
+  pg_temp.byd('[{"distance": 50}, {"distance": 30}]'),
+  'M1',
+  '射つ順が50m→30mの指定は、その順のラウンド（M1）だけを返し、30m→50mのラウンドと、無効な30mを持つラウンド（M7）を返さない'
+);
+
+select is(
+  pg_temp.byd('[{"distance": 30}, {"distance": 50}]'),
+  'M15,M11,M2',
+  '射つ順が30m→50mの指定は、その順のラウンドだけを返し、挿入順でなく position_key と id の順で比べる（M11、M15）'
+);
+
+select is(
+  pg_temp.byd('[{"distance": 70}]') || '|' || pg_temp.byd('[{"distance": 70}, {"distance": 70}]'),
+  'M3|M4',
+  '距離の行の個数が一致するラウンドだけを返す（70mの1行の指定はM3だけ、70mの2行の指定はM4だけ）'
+);
+
+select is(
+  pg_temp.byd('[{"distance": 50, "arrows_per_end": 6}]') || '|' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 3}]'),
+  'M7,M5|M6',
+  '1エンドの矢数を指定すると、その矢数の行だけが一致する（6はM7とM5、3はM6）'
+);
+
+select is(
+  concat_ws('|',
+    '36=' || pg_temp.byd('[{"distance": 50, "total_arrows": 36}]'),
+    '35=' || pg_temp.byd('[{"distance": 50, "total_arrows": 35}]'),
+    '37=' || pg_temp.byd('[{"distance": 50, "total_arrows": 37}]'),
+    '72=' || pg_temp.byd('[{"distance": 50, "total_arrows": 72}]'),
+    '12=' || pg_temp.byd('[{"distance": 50, "total_arrows": 12}]'),
+    '3=' || pg_temp.byd('[{"distance": 50, "total_arrows": 3}]')
+  ),
+  '36=M7,M6,M5|35=|37=|72=|12=|3=',
+  '矢の総数は総エンド数×1エンドの矢数（6×6と12×3の36）で比べ、1つ違い（35、37）・総エンド数だけ（12）・1エンドの矢数だけ（3）では一致しない'
+);
+
+select is(
+  pg_temp.byd(format('[{"distance": 50, "target_face_id": "%s"}]', 'a1000000-0000-0000-0000-000000000002'))
+    || '|' || pg_temp.byd(format('[{"distance": 50, "target_face_id": "%s"}]', 'a1000000-0000-0000-0000-000000000001')),
+  'M5|M7,M6',
+  '的を指定すると、距離が同じでも的が違う行は一致しない（80cmの的はM5だけ、122cmの的はM5を除く）'
+);
+
+select is(
+  concat_ws('|',
+    'all=' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 6, "total_arrows": 36, "target_face_id": "a1000000-0000-0000-0000-000000000002"}]'),
+    'face=' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 6, "total_arrows": 36, "target_face_id": "a1000000-0000-0000-0000-000000000004"}]'),
+    'total=' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 6, "total_arrows": 35, "target_face_id": "a1000000-0000-0000-0000-000000000002"}]'),
+    'ape=' || pg_temp.byd('[{"distance": 50, "arrows_per_end": 3, "total_arrows": 36, "target_face_id": "a1000000-0000-0000-0000-000000000002"}]'),
+    'dist=' || pg_temp.byd('[{"distance": 30, "arrows_per_end": 6, "total_arrows": 36, "target_face_id": "a1000000-0000-0000-0000-000000000002"}]')
+  ),
+  'all=M5|face=|total=|ape=|dist=',
+  '距離・1エンドの矢数・矢の総数・的のすべてを指定した行は、すべてが一致するラウンドだけを返し、1項目でも違えば除外する'
+);
+
+select is(
+  pg_temp.byd('[{"distance": 50, "arrows_per_end": null, "total_arrows": null, "target_face_id": null}]'),
+  pg_temp.byd('[{"distance": 50}]'),
+  '項目がnullの指定は、項目の鍵が無い指定と同じ結果で、比べない'
+);
+
+select is(
+  pg_temp.byd(format('[{"distance": 50}, {"distance": 30, "target_face_id": "%s"}]', 'a1000000-0000-0000-0000-000000000001'))
+    || '|' || pg_temp.byd(format('[{"distance": 50}, {"distance": 30, "target_face_id": "%s"}]', 'a1000000-0000-0000-0000-000000000002')),
+  'M1|',
+  '行ごとに指定する項目が違っても、各行は自分の指定した項目だけで比べる（2行目に的を指定し、一致すればM1、的が違えば除外）'
+);
+
+select is(
+  pg_temp.byd('[{"distance": 50}, {"distance": 70}]') || '|' || pg_temp.byd('[{"distance": 50}, {"distance": 30}, {"distance": 30}]'),
+  '|',
+  '2行目だけが違う指定、行数が多い指定は、一致するラウンドがない（すべての行が一致し、個数も同じでなければならない）'
+);
+
+select is(
+  pg_temp.byd('[{"distance": 50}, {"distance": 50}]'),
+  '',
+  '同じ距離を2回指定した指定は、50mの2行のラウンドがなければ空を返す（距離が未確定の行は50mとして数えない）'
+);
+
+select is(
+  pg_temp.byd('[]'),
+  '',
+  '空の配列の指定は、0件を返す'
+);
+
+select is(
+  pg_temp.byd(null),
+  'K5,K4,K3,K2,K1,M15,M11,M10,M9,M8,M7,M6,M5,M4,M3,M2,M1',
+  '距離の構成がnullなら、絞り込まずにすべてを返す（距離のないラウンドM8も含む）'
+);
+
+-- ------------------------------------------------------------
+-- 他の条件との組合せ、並び、ページ
+-- ------------------------------------------------------------
+
+select is(
+  concat_ws('|',
+    'indoor=' || pg_temp.ids(pg_temp.list(null, null, 'indoor', null, null, 100, null, null, null, null, '[{"distance": 18}]')),
+    'indoor-recurve=' || pg_temp.ids(pg_temp.list(null, null, 'indoor', 'recurve', null, 100, null, null, null, null, '[{"distance": 18}]')),
+    'outdoor=' || pg_temp.ids(pg_temp.list(null, null, 'outdoor', null, null, 100, null, null, null, null, '[{"distance": 18}]'))
+  ),
+  'indoor=K2,K1|indoor-recurve=K1|outdoor=K4,K3',
+  '距離の構成と種別・弓種を同時に指定すると、すべてに一致するラウンドだけを返す（18mの1行でも、2行のK5は返さない）'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, '2026-11-11', '2026-11-14', null, null, '[{"distance": 18}]')),
+  'K4,K3,K2',
+  '距離の構成と期間（両端の当日を含む）を同時に指定すると、両方に一致するラウンドだけを返す（K1は実施日、K5は距離の構成で外れる）'
+);
+
+select is(
+  concat_ws('|',
+    '200-300=' || pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, 200, 300, '[{"distance": 18}]')),
+    '300-=' || pg_temp.ids(pg_temp.list(null, null, null, null, null, 100, null, null, 300, null, '[{"distance": 18}]'))
+  ),
+  '200-300=K4,K2,K1|300-=K4,K1',
+  '距離の構成と得点の範囲（両端の点を含む）を同時に指定すると、両方に一致するラウンドだけを返す（K3は得点、K5は距離の構成で外れる）'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, 'outdoor', 'recurve', null, 100, '2026-11-12', null, 200, null, '[{"distance": 18}]')),
+  'K4',
+  '距離の構成・種別・弓種・期間・得点の範囲をすべて指定すると、すべてに一致するラウンドだけを返す'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list('score', 'desc', null, null, null, 100, null, null, null, null, '[{"distance": 18}]'))
+    || '|' || pg_temp.ids(pg_temp.list('date', 'asc', null, null, null, 100, null, null, null, null, '[{"distance": 18}]')),
+  'K4,K1,K2,K3|K1,K2,K3,K4',
+  '距離の構成を指定しても並べ替えに従う（得点の降順で同点は実施日の新しい順、日付の昇順）'
+);
+
+select is(pg_temp.walk('date', 'desc', null, array[1, 2], null, null, null, null, '[{"distance": 18}]'), 'K4,K3,K2,K1', '日付の降順、距離の構成の指定あり: 全ページの連結が一致するラウンドを重複も抜けもなく並べる');
+select is(pg_temp.walk('date', 'asc', null, array[1, 2], null, null, null, null, '[{"distance": 18}]'), 'K1,K2,K3,K4', '日付の昇順、距離の構成の指定あり: 全ページの連結が一致するラウンドを重複も抜けもなく並べる');
+select is(pg_temp.walk('score', 'desc', null, array[1, 2], null, null, null, null, '[{"distance": 18}]'), 'K4,K1,K2,K3', '得点の降順、距離の構成の指定あり: 全ページの連結が一致するラウンドを重複も抜けもなく並べる');
+select is(pg_temp.walk('score', 'asc', null, array[1, 2], null, null, null, null, '[{"distance": 18}]'), 'K3,K2,K4,K1', '得点の昇順、距離の構成の指定あり: 全ページの連結が一致するラウンドを重複も抜けもなく並べる');
+
+select is(
+  pg_temp.shape(pg_temp.list(null, null, null, null, null, 4, null, null, null, null, '[{"distance": 18}]'))
+    || '|' || pg_temp.shape(pg_temp.list(null, null, null, null, null, 3, null, null, null, null, '[{"distance": 18}]')),
+  '4:false|3:true',
+  '続きの有無は、距離の構成で絞り込んだ後の件数で決まる（一致する4件と同じ件数では続きなし、1件少ない件数では続きあり）'
+);
+
+select is(
+  pg_temp.ids(pg_temp.list(null, null, null, null, pg_temp.id('K5')::text, 10, null, null, null, null, '[{"distance": 18}]')),
+  'K4,K3,K2,K1',
+  '起点のラウンド（K5）が距離の構成の外でも、起点として引け、その続きを返す'
+);
+
+-- ------------------------------------------------------------
+-- 権限
+-- ------------------------------------------------------------
+
+select is(
+  pg_temp.byd('[{"distance": 50}]'),
+  'M7,M6,M5',
+  '構成が一致していても、別の利用者のラウンド（M12）、入力中（M13）、削除済み（M14）は返さない'
+);
+
+reset role;
+select set_config('request.jwt.claim.sub', pg_temp.id('W')::text, true);
+set local role authenticated;
+
+select is(
+  pg_temp.byd('[{"distance": 50}]') || '|' || pg_temp.byd(null),
+  'M12|M12',
+  '利用者Wに切り替えると、Wのラウンドだけが返る'
 );
 
 select * from finish();

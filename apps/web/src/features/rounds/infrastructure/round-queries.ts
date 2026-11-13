@@ -51,6 +51,19 @@ function rangeArgsOf(condition: HistoryCondition) {
   };
 }
 
+// 距離の構成の引数。行が1つ以上のときだけ送る。
+function distancesArgOf(condition: HistoryCondition) {
+  if (condition.distances.length === 0) return {};
+  return {
+    p_distances: condition.distances.map((row) => ({
+      distance: row.distance,
+      arrows_per_end: row.arrowsPerEnd,
+      total_arrows: row.totalArrows,
+      target_face_id: row.targetFaceId,
+    })),
+  };
+}
+
 function toTargetFaces(rows: unknown): TargetFaceRecord[] {
   return rows as TargetFaceRecord[];
 }
@@ -167,6 +180,7 @@ export function createRoundQueries(
         p_after_id: after,
         p_limit: size,
         ...rangeArgsOf(condition),
+        ...distancesArgOf(condition),
       });
       const failure = failureOfResponses([response]);
       if (failure) return failure;

@@ -1,6 +1,7 @@
 import type { DistanceConfigError } from "../domain/distance-config";
 import type { FetchFailure, SignInFailure } from "../domain/fetch-status";
 import type {
+  HistoryDistanceError,
   HistoryRangeError,
   HistorySortDirection,
   HistorySortKey,
@@ -60,6 +61,19 @@ export const roundsMessages = {
       scoreInvalid: "点数は0以上の整数で入力してください",
       scoreOrder: "下限は上限以下にしてください",
     } satisfies Record<HistoryRangeError, string>,
+    historyFilterDistances: "距離の構成",
+    historyFilterDistance: "距離(m)",
+    historyFilterArrowsPerEnd: "1エンドの矢数",
+    historyFilterTotalArrows: "矢の総数",
+    historyFilterDistanceAdd: "距離を追加",
+    historyFilterDistanceRemove: "{index}行目を削除",
+    historyFilterTargetAdd: "的を加える",
+    historyFilterTargetRemove: "的を外す",
+    historyDistanceError: {
+      distanceInvalid: "距離は1〜100の整数で入力してください",
+      arrowsPerEndInvalid: "1エンドの矢数は1〜12の整数で入力してください",
+      totalArrowsInvalid: "矢の総数は1以上の整数で入力してください",
+    } satisfies Record<HistoryDistanceError, string>,
     newRoundLabel: "ラウンドを新規作成",
     roundTotalPoints: "{total}点",
     roundMenuLabel: "ラウンドのメニュー",

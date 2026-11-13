@@ -9,7 +9,10 @@ import type {
 } from "@/lib/supabase/contract/database";
 import type { FetchResult } from "../domain/fetch-status";
 import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
-import { DEFAULT_HISTORY_CONDITION } from "../domain/history-view-state";
+import {
+  DEFAULT_HISTORY_CONDITION,
+  type HistoryCondition,
+} from "../domain/history-view-state";
 import type { PresetRecord, Presets } from "../domain/preset";
 import type { QueryFailure, QueryOutcome } from "../domain/query-outcome";
 import type { ServerRoundsPage } from "../domain/round-list";
@@ -808,7 +811,7 @@ describe("fetchRoundsList", () => {
   it("条件、続きの起点、件数を、そのまま問い合わせに渡す", async () => {
     // Given
     const { fetching, queries } = setup();
-    const scoreCondition = {
+    const scoreCondition: HistoryCondition = {
       sortKey: "score",
       sortDirection: "asc",
       format: "indoor",
@@ -817,7 +820,8 @@ describe("fetchRoundsList", () => {
       dateTo: "2026-05-31",
       scoreMin: 0,
       scoreMax: 600,
-    } as const;
+      distances: [],
+    };
 
     // When
     await fetching.fetchRoundsList(scoreCondition, "round-9", 25);
