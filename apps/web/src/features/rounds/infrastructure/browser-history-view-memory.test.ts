@@ -15,6 +15,20 @@ const saved: HistoryViewState = {
     dateTo: "2026-05-31",
     scoreMin: 0,
     scoreMax: 600,
+    distances: [
+      {
+        distance: 50,
+        arrowsPerEnd: 6,
+        totalArrows: 36,
+        targetFaceId: "a1000000-0000-0000-0000-000000000001",
+      },
+      {
+        distance: 30,
+        arrowsPerEnd: null,
+        totalArrows: null,
+        targetFaceId: null,
+      },
+    ],
   },
   filterOpen: false,
 };
@@ -46,10 +60,16 @@ describe("createBrowserHistoryViewMemory", () => {
       expect(state).toEqual(saved);
     });
 
-    it("期間と得点の範囲の項目が無い旧い保存値は、範囲を指定なしにし、他の項目は保存値のままにして返す", () => {
+    it("期間と得点の範囲と距離の構成の項目が無い旧い保存値は、範囲を指定なし、距離の構成を空の配列にし、他の項目は保存値のままにして返す", () => {
       // Given
-      const { dateFrom, dateTo, scoreMin, scoreMax, ...legacyCondition } =
-        saved.condition;
+      const {
+        dateFrom,
+        dateTo,
+        scoreMin,
+        scoreMax,
+        distances,
+        ...legacyCondition
+      } = saved.condition;
       window.sessionStorage.setItem(
         "aims:history-view",
         JSON.stringify({
@@ -70,7 +90,36 @@ describe("createBrowserHistoryViewMemory", () => {
           dateTo: null,
           scoreMin: null,
           scoreMax: null,
+          distances: [],
         },
+        filterOpen: false,
+      });
+    });
+
+    it("保存値の距離の構成の行が型に合わなければ、距離の構成だけを空の配列にし、他の項目は保存値のままにして返す", () => {
+      // Given
+      const brokenRows = [
+        { ...saved.condition.distances[0], targetFaceId: "not-a-uuid" },
+        saved.condition.distances[1],
+      ];
+      window.sessionStorage.setItem(
+        "aims:history-view",
+        JSON.stringify({
+          userId: "user-1",
+          state: {
+            condition: { ...saved.condition, distances: brokenRows },
+            filterOpen: false,
+          },
+        }),
+      );
+      const memory = createBrowserHistoryViewMemory(identityReader);
+
+      // When
+      const state = memory.read();
+
+      // Then
+      expect(state).toEqual({
+        condition: { ...saved.condition, distances: [] },
         filterOpen: false,
       });
     });

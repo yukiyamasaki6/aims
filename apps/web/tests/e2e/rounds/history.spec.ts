@@ -25,6 +25,10 @@ import {
 const navigationText = translatorFor("navigation");
 const roundsText = translatorFor("rounds");
 
+// 公式の的: 10点的(アウトドア・122cm)と10点的(アウトドア・80cm)。
+const LARGE_FACE_ID = "a1000000-0000-0000-0000-000000000001";
+const SMALL_FACE_ID = "a1000000-0000-0000-0000-000000000002";
+
 test.use({ storageState: SHARED_AUTH_STATE_PATH });
 
 // 履歴の1ページ目の取得(起点なし)と続きの取得を数えるため、履歴の関数(rounds_list)の呼び出しを記録する。
@@ -327,6 +331,125 @@ test.describe("履歴", () => {
     );
     await expect(page.getByTestId("history-filter-scoreMin")).toHaveValue("5");
     await expect(page.getByTestId("history-filter-scoreMax")).toHaveValue("9");
+  });
+
+  test("完了したラウンドを距離の構成で絞り込むと、射つ順と個数が一致するラウンドだけが表示され、不正な指定は欄にエラーが出て表示が変わらず、再読み込みで条件が保たれる", async ({
+    page,
+  }) => {
+    const credentials = await signInFreshUser(page, "e2e-history");
+    // 屋外の形(各距離6エンド×6射)で、距離の構成だけが違う5件を作る。
+    const round = (distance: number, targetFaceId = LARGE_FACE_ID) => ({
+      distance,
+      totalEnds: 6,
+      arrowsPerEnd: 6,
+      targetFaceId,
+    });
+    const rounds = [
+      { name: "五十から三十", date: "2026-05-01", distances: [50, 30] },
+      { name: "三十から五十", date: "2026-05-02", distances: [30, 50] },
+      { name: "五十だけ", date: "2026-05-03", distances: [50] },
+      {
+        name: "五十から三十を2つ",
+        date: "2026-05-04",
+        distances: [50, 30, 30],
+      },
+    ];
+    for (const { name, date, distances } of rounds) {
+      await addRound(credentials, name, date, {
+        completed: true,
+        distances: distances.map((distance) => round(distance)),
+      });
+    }
+    await addRound(credentials, "的違いの五十", "2026-05-05", {
+      completed: true,
+      distances: [round(50, SMALL_FACE_ID)],
+    });
+    const cards = page.getByRole("listitem");
+    const fillDistance = async (index: number, value: string) => {
+      const input = page.getByTestId(
+        `history-filter-distance-${index}-distance`,
+      );
+      await input.fill(value);
+      await input.press("Enter");
+    };
+    const addRow = () =>
+      page.getByTestId("history-filter-distance-add").click();
+
+    // 履歴を開くと5件が実施日の新しい順に表示される。
+    await page.goto("/rounds/history");
+    await expect(cards).toHaveText([
+      /的違いの五十/,
+      /五十から三十を2つ/,
+      /五十だけ/,
+      /三十から五十/,
+      /五十から三十/,
+    ]);
+
+    // 50m→30mにすると、その順で2行のラウンドだけが表示される(個数の違う50m→30m→30mは表示されない)。
+    await addRow();
+    await fillDistance(0, "50");
+    await addRow();
+    await fillDistance(1, "30");
+    await expect(cards).toHaveText([/五十から三十/]);
+
+    // 行を入れ替える操作はないため、削除して追加し直して30m→50mにすると、逆順のラウンドだけが表示される。
+    await page.getByTestId("history-filter-distance-0-remove").click();
+    await addRow();
+    await fillDistance(1, "50");
+    await expect(cards).toHaveText([/三十から五十/]);
+
+    // 先頭の行を削除して50mだけにすると、50mの1行のラウンドが表示される。
+    await page.getByTestId("history-filter-distance-0-remove").click();
+    await expect(cards).toHaveText([/的違いの五十/, /五十だけ/]);
+
+    // 的を選ぶと、その的のラウンドだけに絞られる。的の一覧は端末に保存済みであることを待ち、欄を開き直して読み込む。
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Object.keys(localStorage).some((key) =>
+            key.startsWith("aims:reference:target-faces:"),
+          ),
+        ),
+      )
+      .toBe(true);
+    await page.getByTestId("history-controls-toggle").click();
+    await page.getByTestId("history-controls-toggle").click();
+    await page.getByTestId("history-filter-distance-0-target-add").click();
+    await page.getByTestId(`target-face-option-${LARGE_FACE_ID}`).click();
+    await expect(cards).toHaveText([/五十だけ/]);
+
+    // 距離に101を入れるとエラーが出て、一覧は直前のままである。直すとエラーが消え、絞り込みが更新される。
+    await fillDistance(0, "101");
+    await expect(
+      page.getByTestId("history-filter-distance-error-0-distanceInvalid"),
+    ).toHaveText(roundsText("historyDistanceError.distanceInvalid"));
+    await expect(cards).toHaveText([/五十だけ/]);
+    await fillDistance(0, "50");
+    await expect(
+      page.getByTestId("history-filter-distance-error-0-distanceInvalid"),
+    ).toHaveCount(0);
+    await expect(cards).toHaveText([/五十だけ/]);
+
+    // 再読み込みしても、距離の構成の行と入力の値が保たれる。
+    await page.reload();
+    await expect(cards).toHaveText([/五十だけ/]);
+    await expect(
+      page.getByTestId("history-filter-distance-0-distance"),
+    ).toHaveValue("50");
+    await expect(
+      page.getByTestId("history-filter-distance-0-target"),
+    ).toBeVisible();
+
+    // 欄を開いてリセットすると、行が消え、5件が実施日の新しい順に戻る。
+    await page.getByTestId("history-controls-reset").click();
+    await expect(page.getByTestId("history-filter-distance-0")).toHaveCount(0);
+    await expect(cards).toHaveText([
+      /的違いの五十/,
+      /五十から三十を2つ/,
+      /五十だけ/,
+      /三十から五十/,
+      /五十から三十/,
+    ]);
   });
 
   test("オフラインで入力を完了するとホームから消えて履歴にも出ず、オンラインに戻って同期された後に履歴を開くと1件だけ表示される", async ({

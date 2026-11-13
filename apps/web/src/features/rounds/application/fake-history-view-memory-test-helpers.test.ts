@@ -18,6 +18,14 @@ describe("createFakeHistoryViewMemory", () => {
         dateTo: null,
         scoreMin: 0,
         scoreMax: null,
+        distances: [
+          {
+            distance: 50,
+            arrowsPerEnd: 6,
+            totalArrows: null,
+            targetFaceId: null,
+          },
+        ],
       },
       filterOpen: false,
     };

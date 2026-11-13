@@ -7,6 +7,7 @@ import {
   type HistoryCondition,
   type HistoryViewState,
 } from "../domain/history-view-state";
+import { HistoryDistanceFields } from "./history-distance-fields";
 import { HistoryRangeFields } from "./history-range-fields";
 import type { HistoryViewControls } from "./use-history-view";
 import { useOptionLabels } from "./use-option-labels";
@@ -87,7 +88,7 @@ function FilterGroup<T extends string>({
   );
 }
 
-// 絞り込みの区画。種別、弓種、期間、得点の範囲。
+// 絞り込みの区画。種別、弓種、期間、得点の範囲、距離の構成。
 function HistoryFilters({
   condition,
   changeCondition,
@@ -116,7 +117,12 @@ function HistoryFilters({
         onChange={(bowType) => changeCondition({ bowType })}
       />
       <HistoryRangeFields
-        key={resetCount}
+        key={`range-${resetCount}`}
+        condition={condition}
+        onApply={changeCondition}
+      />
+      <HistoryDistanceFields
+        key={`distance-${resetCount}`}
         condition={condition}
         onApply={changeCondition}
       />
@@ -135,7 +141,7 @@ export function HistoryControls({
   const t = useTranslations("rounds");
   const { condition, filterOpen } = state;
   const { changeCondition, resetCondition, toggleFilterOpen } = controls;
-  // リセットで期間と得点の下書きとエラーを捨てるため、欄を作り直す。
+  // リセットで期間・得点・距離の構成の下書きとエラーを捨てるため、欄を作り直す。
   const [resetCount, setResetCount] = useState(0);
   return (
     <section className="flex flex-col gap-4">

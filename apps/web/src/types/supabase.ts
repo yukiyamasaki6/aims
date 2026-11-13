@@ -697,6 +697,7 @@ export type Database = {
           p_bow_type: string;
           p_date_from?: string;
           p_date_to?: string;
+          p_distances?: Json;
           p_format: string;
           p_limit: number;
           p_score_max?: number;

@@ -21,7 +21,10 @@ export type RoundProcedures = {
   roundStart: RoundStart;
   presetSaving: PresetSaving;
   presetDeletion: PresetDeletion;
-  fetching: Pick<RoundFetching, "fetchPresets" | "savedPresets">;
+  fetching: Pick<
+    RoundFetching,
+    "fetchPresets" | "savedPresets" | "savedTargetFaces"
+  >;
   ids: UniqueIds;
   whenOnline: WhenOnline;
   historyViewMemory: HistoryViewMemory;

@@ -34,6 +34,15 @@ const scoreCondition: HistoryCondition = {
   sortKey: "score",
 };
 
+function distanceRow(distance: number) {
+  return {
+    distance,
+    arrowsPerEnd: null,
+    totalArrows: null,
+    targetFaceId: null,
+  };
+}
+
 function page(
   ids: string[],
   overrides: Partial<LoadedRoundsList> = {},
@@ -261,6 +270,79 @@ describe("useHistoryPages", () => {
       // Then
       expect(loadList).toHaveBeenCalledTimes(1);
       expect(result.current.view).toEqual({ status: "ok", data: first });
+    });
+
+    it("距離の構成だけを変えた条件でも、表示済みを捨てて、その条件で先頭から取得し直す", async () => {
+      // Given
+      const { result, rerender, loadList } = setup(undefined, {
+        loads: [ok(page(["a"])), ok(page(["b"]))],
+      });
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      const distanceCondition: HistoryCondition = {
+        ...DEFAULT_HISTORY_CONDITION,
+        distances: [distanceRow(50)],
+      };
+
+      // When
+      rerender({ condition: distanceCondition });
+
+      // Then
+      expect(result.current.view).toEqual({ status: "loading" });
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      expect(loadList).toHaveBeenLastCalledWith(distanceCondition, null, 16);
+    });
+
+    it("距離の構成の中身が同じで配列だけを作り直した条件を渡し直しても、取得し直さず表示を保つ", async () => {
+      // Given
+      const first = page(["a"]);
+      const { result, rerender, loadList } = setup(
+        {
+          condition: {
+            ...DEFAULT_HISTORY_CONDITION,
+            distances: [distanceRow(50)],
+          },
+        },
+        { loads: [ok(first)] },
+      );
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+
+      // When
+      rerender({
+        condition: {
+          ...DEFAULT_HISTORY_CONDITION,
+          distances: [distanceRow(50)],
+        },
+      });
+
+      // Then
+      expect(loadList).toHaveBeenCalledTimes(1);
+      expect(result.current.view).toEqual({ status: "ok", data: first });
+    });
+
+    it("距離の構成の行の順序だけが違う条件は、別の条件として取得し直す", async () => {
+      // Given
+      const { result, rerender, loadList } = setup(
+        {
+          condition: {
+            ...DEFAULT_HISTORY_CONDITION,
+            distances: [distanceRow(50), distanceRow(30)],
+          },
+        },
+        { loads: [ok(page(["a"])), ok(page(["b"]))] },
+      );
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      const reversed: HistoryCondition = {
+        ...DEFAULT_HISTORY_CONDITION,
+        distances: [distanceRow(30), distanceRow(50)],
+      };
+
+      // When
+      rerender({ condition: reversed });
+
+      // Then
+      expect(result.current.view).toEqual({ status: "loading" });
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      expect(loadList).toHaveBeenLastCalledWith(reversed, null, 16);
     });
 
     it("遅れて返った、範囲を変える前の条件の結果は捨て、新しい条件の表示に連結しない", async () => {

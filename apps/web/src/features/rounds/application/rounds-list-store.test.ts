@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FetchResult } from "../domain/fetch-status";
 import { FETCH_TIMEOUT_MS } from "../domain/fetch-wait";
-import { DEFAULT_HISTORY_CONDITION } from "../domain/history-view-state";
+import {
+  DEFAULT_HISTORY_CONDITION,
+  type HistoryCondition,
+} from "../domain/history-view-state";
 import type { RoundsPage } from "../domain/round-list";
 import { roundCreated } from "../domain/round-op-test-helpers";
 import { roundStreamId } from "../domain/sync-events";
@@ -49,7 +52,7 @@ describe("loadList", () => {
     // Given
     const tab = createTestRounds();
     tab.fetching.fetchRoundsList.mockImplementation(ok);
-    const condition = {
+    const condition: HistoryCondition = {
       sortKey: "score",
       sortDirection: "asc",
       format: "indoor",
@@ -58,7 +61,8 @@ describe("loadList", () => {
       dateTo: "2026-05-31",
       scoreMin: 0,
       scoreMax: 600,
-    } as const;
+      distances: [],
+    };
 
     // When
     await tab.list.loadList(condition, "round-9", 25);

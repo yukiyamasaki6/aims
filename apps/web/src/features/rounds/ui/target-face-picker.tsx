@@ -115,7 +115,7 @@ export function TargetFacePicker({
   );
 }
 
-function FilterTabs({
+export function FilterTabs({
   options,
   current,
   testIdPrefix,
@@ -144,13 +144,13 @@ function FilterTabs({
   );
 }
 
-function TargetFaceList({
+export function TargetFaceList({
   faces,
   selectedId,
   onSelect,
 }: {
   faces: TargetFaceOption[];
-  selectedId: string;
+  selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
   return (

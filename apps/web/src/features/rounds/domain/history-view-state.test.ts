@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_HISTORY_CONDITION,
   DEFAULT_HISTORY_VIEW_STATE,
+  type HistoryDistanceDraftRow,
   type HistoryRangeDraft,
   type HistoryViewState,
+  historyDistancesOf,
   historyRangeOf,
   historyViewStateOf,
 } from "./history-view-state";
@@ -22,8 +24,31 @@ const NO_RANGE = {
   scoreMax: null,
 };
 
+const TARGET_FACE_ID = "a1000000-0000-0000-0000-000000000001";
+
 function rangeOf(draft: Partial<HistoryRangeDraft>) {
   return historyRangeOf({ ...EMPTY_DRAFT, ...draft });
+}
+
+function distanceDraftOf(
+  row: Partial<HistoryDistanceDraftRow>,
+): HistoryDistanceDraftRow {
+  return {
+    distance: "50",
+    arrowsPerEnd: "",
+    totalArrows: "",
+    targetFaceId: null,
+    ...row,
+  };
+}
+
+function distanceRowOf(distance: number) {
+  return {
+    distance,
+    arrowsPerEnd: null,
+    totalArrows: null,
+    targetFaceId: null,
+  };
 }
 
 describe("historyRangeOf", () => {
@@ -280,6 +305,266 @@ describe("historyRangeOf", () => {
   });
 });
 
+describe("historyDistancesOf", () => {
+  it("全項目が正しい行は、整数にした行を返す", () => {
+    // Given
+    const draft = [
+      distanceDraftOf({
+        distance: " 50 ",
+        arrowsPerEnd: "6",
+        totalArrows: "36",
+        targetFaceId: TARGET_FACE_ID,
+      }),
+    ];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: true,
+      distances: [
+        {
+          distance: 50,
+          arrowsPerEnd: 6,
+          totalArrows: 36,
+          targetFaceId: TARGET_FACE_ID,
+        },
+      ],
+    });
+  });
+
+  it("距離だけが入った行は、1エンドの矢数と矢の総数と的を指定なし(null)にする", () => {
+    // Given
+    const draft = [distanceDraftOf({ distance: "30", arrowsPerEnd: "  " })];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({ ok: true, distances: [distanceRowOf(30)] });
+  });
+
+  it("複数の行は、射つ順(下書きの順)のまま返す", () => {
+    // Given
+    const draft = [
+      distanceDraftOf({ distance: "50" }),
+      distanceDraftOf({ distance: "30" }),
+      distanceDraftOf({ distance: "50" }),
+    ];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: true,
+      distances: [distanceRowOf(50), distanceRowOf(30), distanceRowOf(50)],
+    });
+  });
+
+  it("行が0件の下書きは、正しく、指定なしの空の配列を返す", () => {
+    // Given
+    const draft: HistoryDistanceDraftRow[] = [];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({ ok: true, distances: [] });
+  });
+
+  it("行数に上限はなく、1000行の下書きも正しく返す", () => {
+    // Given
+    const draft = Array.from({ length: 1000 }, () => distanceDraftOf({}));
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.distances).toHaveLength(1000);
+  });
+
+  it.each([
+    ["先頭に0のある数", "007", 7],
+    ["前後に空白のある数", "  12 ", 12],
+  ])("1エンドの矢数が%sでも、正しい整数にして返す", (_name, text, expected) => {
+    // Given
+    const draft = [distanceDraftOf({ arrowsPerEnd: text })];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result.ok && result.distances[0]?.arrowsPerEnd).toBe(expected);
+  });
+
+  it.each([
+    ["符号つき", "+1"],
+    ["小数", "1.5"],
+    ["指数", "1e2"],
+    ["全角数字", "５０"],
+    ["負の数", "-1"],
+    ["16進", "0x10"],
+    ["数字以外", "abc"],
+    ["安全な整数を超える", "9007199254740992"],
+  ])("距離が%sなら、距離の不正にする", (_name, distance) => {
+    // Given
+    const draft = [distanceDraftOf({ distance })];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: false,
+      errors: [{ row: 0, error: "distanceInvalid" }],
+    });
+  });
+
+  it.each(["1", "100", " 50 "])("距離が「%s」なら、正しい", (distance) => {
+    // Given
+    const draft = [distanceDraftOf({ distance })];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result.ok).toBe(true);
+  });
+
+  it.each(["0", "101", "", "   "])(
+    "距離が「%s」なら、距離の不正にする(範囲は1から100、空は不正)",
+    (distance) => {
+      // Given
+      const draft = [distanceDraftOf({ distance })];
+
+      // When
+      const result = historyDistancesOf(draft);
+
+      // Then
+      expect(result).toEqual({
+        ok: false,
+        errors: [{ row: 0, error: "distanceInvalid" }],
+      });
+    },
+  );
+
+  it.each(["1", "12", ""])(
+    "1エンドの矢数が「%s」なら、正しい",
+    (arrowsPerEnd) => {
+      // Given
+      const draft = [distanceDraftOf({ arrowsPerEnd })];
+
+      // When
+      const result = historyDistancesOf(draft);
+
+      // Then
+      expect(result.ok).toBe(true);
+    },
+  );
+
+  it.each(["0", "13", "+1", "1.5"])(
+    "1エンドの矢数が「%s」なら、1エンドの矢数の不正にする(範囲は1から12)",
+    (arrowsPerEnd) => {
+      // Given
+      const draft = [distanceDraftOf({ arrowsPerEnd })];
+
+      // When
+      const result = historyDistancesOf(draft);
+
+      // Then
+      expect(result).toEqual({
+        ok: false,
+        errors: [{ row: 0, error: "arrowsPerEndInvalid" }],
+      });
+    },
+  );
+
+  it.each(["1", "9007199254740991", ""])(
+    "矢の総数が「%s」なら、正しい",
+    (totalArrows) => {
+      // Given
+      const draft = [distanceDraftOf({ totalArrows })];
+
+      // When
+      const result = historyDistancesOf(draft);
+
+      // Then
+      expect(result.ok).toBe(true);
+    },
+  );
+
+  it.each(["0", "9007199254740992", "-1", "1e3"])(
+    "矢の総数が「%s」なら、矢の総数の不正にする(1以上の安全な整数)",
+    (totalArrows) => {
+      // Given
+      const draft = [distanceDraftOf({ totalArrows })];
+
+      // When
+      const result = historyDistancesOf(draft);
+
+      // Then
+      expect(result).toEqual({
+        ok: false,
+        errors: [{ row: 0, error: "totalArrowsInvalid" }],
+      });
+    },
+  );
+
+  it("矢の総数の最大値は、整数のまま返す", () => {
+    // Given
+    const draft = [distanceDraftOf({ totalArrows: "9007199254740991" })];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result.ok && result.distances[0]?.totalArrows).toBe(
+      9007199254740991,
+    );
+  });
+
+  it("距離だけが不正で他の2項目が正しい行は、距離の原因だけを返す", () => {
+    // Given
+    const draft = [
+      distanceDraftOf({ distance: "0", arrowsPerEnd: "6", totalArrows: "36" }),
+    ];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: false,
+      errors: [{ row: 0, error: "distanceInvalid" }],
+    });
+  });
+
+  it("複数の行・複数の項目が不正なら、正しい行を含めず、すべての行と原因を返す", () => {
+    // Given
+    const draft = [
+      distanceDraftOf({ distance: "" }),
+      distanceDraftOf({ distance: "50" }),
+      distanceDraftOf({ distance: "30", arrowsPerEnd: "13", totalArrows: "0" }),
+    ];
+
+    // When
+    const result = historyDistancesOf(draft);
+
+    // Then
+    expect(result).toEqual({
+      ok: false,
+      errors: [
+        { row: 0, error: "distanceInvalid" },
+        { row: 2, error: "arrowsPerEndInvalid" },
+        { row: 2, error: "totalArrowsInvalid" },
+      ],
+    });
+  });
+});
+
 describe("historyViewStateOf", () => {
   const stored: HistoryViewState = {
     condition: {
@@ -291,6 +576,15 @@ describe("historyViewStateOf", () => {
       dateTo: "2026-05-31",
       scoreMin: 300,
       scoreMax: 600,
+      distances: [
+        {
+          distance: 50,
+          arrowsPerEnd: 6,
+          totalArrows: 36,
+          targetFaceId: TARGET_FACE_ID,
+        },
+        distanceRowOf(30),
+      ],
     },
     filterOpen: false,
   };
@@ -419,7 +713,7 @@ describe("historyViewStateOf", () => {
     });
   });
 
-  it("既定の条件は、期間と得点の範囲が指定なしである", () => {
+  it("既定の条件は、期間と得点の範囲と距離の構成が指定なしである", () => {
     // Given
 
     // When
@@ -427,6 +721,150 @@ describe("historyViewStateOf", () => {
 
     // Then
     expect(condition).toMatchObject(NO_RANGE);
+    expect(condition.distances).toEqual([]);
+    expect(DEFAULT_HISTORY_VIEW_STATE.condition.distances).toEqual([]);
+  });
+
+  it("保存値に距離の構成の項目が無ければ、空の配列にし、他の項目は保存値のままにする", () => {
+    // Given
+    const { distances, ...legacyCondition } = stored.condition;
+    const raw = { condition: legacyCondition, filterOpen: false };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state).toEqual({
+      condition: { ...stored.condition, distances: [] },
+      filterOpen: false,
+    });
+  });
+
+  it.each([
+    ["null", null],
+    ["オブジェクト", { distance: 50 }],
+    ["文字列", "50"],
+  ])(
+    "距離の構成が配列でなく%sなら、空の配列にし、他の項目は保存値のままにする",
+    (_name, distances) => {
+      // Given
+      const raw = {
+        condition: { ...stored.condition, distances },
+        filterOpen: false,
+      };
+
+      // When
+      const state = historyViewStateOf(raw);
+
+      // Then
+      expect(state).toEqual({
+        condition: { ...stored.condition, distances: [] },
+        filterOpen: false,
+      });
+    },
+  );
+
+  const validRow = {
+    distance: 50,
+    arrowsPerEnd: 6,
+    totalArrows: 36,
+    targetFaceId: TARGET_FACE_ID,
+  };
+
+  it.each([
+    ["距離が文字列", { ...validRow, distance: "50" }],
+    ["距離が0", { ...validRow, distance: 0 }],
+    ["距離が101", { ...validRow, distance: 101 }],
+    ["距離が小数", { ...validRow, distance: 50.5 }],
+    ["1エンドの矢数が13", { ...validRow, arrowsPerEnd: 13 }],
+    ["1エンドの矢数が0", { ...validRow, arrowsPerEnd: 0 }],
+    ["矢の総数が0", { ...validRow, totalArrows: 0 }],
+    ["矢の総数が文字列", { ...validRow, totalArrows: "36" }],
+    ["的のIDがUUIDの形でない", { ...validRow, targetFaceId: "face-1" }],
+    ["的のIDが数値", { ...validRow, targetFaceId: 1 }],
+    ["的のIDの項目が無い", { distance: 50, arrowsPerEnd: 6, totalArrows: 36 }],
+    ["距離の項目が無い", { ...validRow, distance: undefined }],
+    ["行がオブジェクトでない", "50"],
+    ["行がnull", null],
+  ])(
+    "距離の構成のどれかの行で%sなら、正しい行も含めて配列全体を空の配列にし、他の項目は保存値のままにする",
+    (_name, brokenRow) => {
+      // Given
+      const raw = {
+        condition: {
+          ...stored.condition,
+          distances: [validRow, brokenRow, distanceRowOf(30)],
+        },
+        filterOpen: false,
+      };
+
+      // When
+      const state = historyViewStateOf(raw);
+
+      // Then
+      expect(state).toEqual({
+        condition: { ...stored.condition, distances: [] },
+        filterOpen: false,
+      });
+    },
+  );
+
+  it("距離の構成が壊れていても、壊れた期間の組の指定なし化は独立して働く", () => {
+    // Given
+    const raw = {
+      condition: {
+        ...stored.condition,
+        distances: "broken",
+        dateFrom: "2026-06-01",
+        dateTo: "2026-05-01",
+      },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition).toEqual({
+      ...stored.condition,
+      distances: [],
+      dateFrom: null,
+      dateTo: null,
+    });
+  });
+
+  it("期間の組が壊れていても、距離の構成は保存値のままにする", () => {
+    // Given
+    const raw = {
+      condition: {
+        ...stored.condition,
+        dateFrom: "bad",
+        scoreMin: 600,
+        scoreMax: 300,
+      },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition.distances).toEqual(stored.condition.distances);
+  });
+
+  it("行数の多い距離の構成(1000行)も、そのまま状態にする", () => {
+    // Given
+    const distances = Array.from({ length: 1000 }, () => validRow);
+    const raw = {
+      condition: { ...stored.condition, distances },
+      filterOpen: false,
+    };
+
+    // When
+    const state = historyViewStateOf(raw);
+
+    // Then
+    expect(state.condition.distances).toEqual(distances);
   });
 
   // 他の項目は既定の値にして、項目ごとに直すか全体を既定に戻すかによらず、既定になる入力にする。

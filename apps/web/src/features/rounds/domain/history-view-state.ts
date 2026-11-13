@@ -1,6 +1,7 @@
 import {
   BOW_TYPE_OPTIONS,
   type BowTypeOption,
+  DISTANCE_LIMITS,
   FORMAT_OPTIONS,
   type FormatOption,
 } from "./round-constants";
@@ -19,12 +20,21 @@ export type HistoryRange = {
   scoreMax: number | null;
 };
 
-// 履歴の条件。並べ替えの基準は1つ、種別と弓種はそれぞれ1つ(null は指定なし)。期間と得点の範囲は反映済みの値。
+// 距離の構成の1行。射つ順に並べる。反映済みの値だけを持つ(常に正しい)。null は指定なし。
+export type HistoryDistanceRow = {
+  distance: number;
+  arrowsPerEnd: number | null;
+  totalArrows: number | null;
+  targetFaceId: string | null;
+};
+
+// 履歴の条件。並べ替えの基準は1つ、種別と弓種はそれぞれ1つ(null は指定なし)。期間と得点の範囲、距離の構成は反映済みの値(距離の構成は空の配列が指定なし)。
 export type HistoryCondition = HistoryRange & {
   sortKey: HistorySortKey;
   sortDirection: HistorySortDirection;
   format: FormatOption | null;
   bowType: BowTypeOption | null;
+  distances: HistoryDistanceRow[];
 };
 
 // 期間と得点の範囲の入力途中の文字列(欄の部品が持つ下書き)。
@@ -47,6 +57,27 @@ export type HistoryRangeResult =
   | { ok: true; range: HistoryRange }
   | { ok: false; errors: HistoryRangeError[] };
 
+// 距離の構成の1行の入力途中の文字列と的(欄の部品が持つ下書き)。
+export type HistoryDistanceDraftRow = {
+  distance: string;
+  arrowsPerEnd: string;
+  totalArrows: string;
+  targetFaceId: string | null;
+};
+
+export type HistoryDistanceDraft = readonly HistoryDistanceDraftRow[];
+
+const HISTORY_DISTANCE_ERRORS = [
+  "distanceInvalid",
+  "arrowsPerEndInvalid",
+  "totalArrowsInvalid",
+] as const;
+export type HistoryDistanceError = (typeof HISTORY_DISTANCE_ERRORS)[number];
+
+export type HistoryDistanceResult =
+  | { ok: true; distances: HistoryDistanceRow[] }
+  | { ok: false; errors: { row: number; error: HistoryDistanceError }[] };
+
 // 履歴の表示の状態。条件と、絞り込みの欄の開閉。
 export type HistoryViewState = {
   condition: HistoryCondition;
@@ -62,6 +93,7 @@ export const DEFAULT_HISTORY_CONDITION: HistoryCondition = {
   dateTo: null,
   scoreMin: null,
   scoreMax: null,
+  distances: [],
 };
 
 export const DEFAULT_HISTORY_VIEW_STATE: HistoryViewState = {
@@ -127,6 +159,63 @@ function scoreOfDraft(text: string): number | null | undefined {
   return Number.isSafeInteger(value) ? value : undefined;
 }
 
+function isIntegerIn(value: unknown, min: number, max: number): boolean {
+  return (
+    Number.isSafeInteger(value) &&
+    (value as number) >= min &&
+    (value as number) <= max
+  );
+}
+
+// 距離は必須で1〜上限、1エンドの矢数と矢の総数の空は指定なし(null)。
+function distanceRowOf(
+  draft: HistoryDistanceDraftRow,
+): { row: HistoryDistanceRow } | { errors: HistoryDistanceError[] } {
+  const distance = scoreOfDraft(draft.distance);
+  const arrowsPerEnd = scoreOfDraft(draft.arrowsPerEnd);
+  const totalArrows = scoreOfDraft(draft.totalArrows);
+  const errors: HistoryDistanceError[] = [];
+  if (distance == null || !isIntegerIn(distance, 1, DISTANCE_LIMITS.distance)) {
+    errors.push("distanceInvalid");
+  }
+  if (
+    arrowsPerEnd === undefined ||
+    (arrowsPerEnd !== null &&
+      !isIntegerIn(arrowsPerEnd, 1, DISTANCE_LIMITS.arrowsPerEnd))
+  ) {
+    errors.push("arrowsPerEndInvalid");
+  }
+  if (totalArrows === undefined || totalArrows === 0) {
+    errors.push("totalArrowsInvalid");
+  }
+  if (errors.length > 0 || distance == null) return { errors };
+  return {
+    row: {
+      distance,
+      arrowsPerEnd: arrowsPerEnd ?? null,
+      totalArrows: totalArrows ?? null,
+      targetFaceId: draft.targetFaceId,
+    },
+  };
+}
+
+// 距離の構成の下書きを検証する。全ての行が正しければ行の配列、不正なら行の位置と原因の一覧を返す。
+export function historyDistancesOf(
+  draft: HistoryDistanceDraft,
+): HistoryDistanceResult {
+  const distances: HistoryDistanceRow[] = [];
+  const errors: { row: number; error: HistoryDistanceError }[] = [];
+  draft.forEach((draftRow, row) => {
+    const result = distanceRowOf(draftRow);
+    if ("row" in result) {
+      distances.push(result.row);
+    } else {
+      for (const error of result.errors) errors.push({ row, error });
+    }
+  });
+  return errors.length > 0 ? { ok: false, errors } : { ok: true, distances };
+}
+
 function isAfter(from: string | number | null, to: string | number | null) {
   return from !== null && to !== null && from > to;
 }
@@ -182,6 +271,43 @@ function historyRangeOfStored(raw: Record<string, unknown>): HistoryRange {
   return { dateFrom, dateTo, scoreMin, scoreMax };
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function storedDistanceRowOf(raw: unknown): HistoryDistanceRow | null {
+  if (!isRecord(raw)) return null;
+  const { distance, arrowsPerEnd, totalArrows, targetFaceId } = raw;
+  if (!isIntegerIn(distance, 1, DISTANCE_LIMITS.distance)) return null;
+  const isArrowsPerEnd =
+    arrowsPerEnd === null ||
+    isIntegerIn(arrowsPerEnd, 1, DISTANCE_LIMITS.arrowsPerEnd);
+  const isTotalArrows =
+    totalArrows === null ||
+    isIntegerIn(totalArrows, 1, Number.MAX_SAFE_INTEGER);
+  const isTargetFace =
+    targetFaceId === null ||
+    (typeof targetFaceId === "string" && UUID_PATTERN.test(targetFaceId));
+  if (!(isArrowsPerEnd && isTotalArrows && isTargetFace)) return null;
+  return {
+    distance: distance as number,
+    arrowsPerEnd: arrowsPerEnd as number | null,
+    totalArrows: totalArrows as number | null,
+    targetFaceId: targetFaceId as string | null,
+  };
+}
+
+// 保存した値の距離の構成を検証する。配列でない、どれかの行が型に合わない、項目が無いときは、全体を空(指定なし)にする。
+function historyDistancesOfStored(value: unknown): HistoryDistanceRow[] {
+  if (!Array.isArray(value)) return [];
+  const rows: HistoryDistanceRow[] = [];
+  for (const item of value) {
+    const row = storedDistanceRowOf(item);
+    if (row === null) return [];
+    rows.push(row);
+  }
+  return rows;
+}
+
 function historyConditionOf(raw: unknown): HistoryCondition {
   if (!isRecord(raw)) return DEFAULT_HISTORY_CONDITION;
   return {
@@ -198,6 +324,7 @@ function historyConditionOf(raw: unknown): HistoryCondition {
     format: nullableOneOf(FORMAT_OPTIONS, raw.format),
     bowType: nullableOneOf(BOW_TYPE_OPTIONS, raw.bowType),
     ...historyRangeOfStored(raw),
+    distances: historyDistancesOfStored(raw.distances),
   };
 }
 

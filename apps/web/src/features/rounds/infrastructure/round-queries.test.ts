@@ -4,7 +4,10 @@ import type {
   DbResponse,
   DbSelect,
 } from "@/lib/supabase/contract/database";
-import { DEFAULT_HISTORY_CONDITION } from "../domain/history-view-state";
+import {
+  DEFAULT_HISTORY_CONDITION,
+  type HistoryCondition,
+} from "../domain/history-view-state";
 import type { QueryOutcome } from "../domain/query-outcome";
 import { ROUND_PRESET_SELECT } from "./reference-query-constants";
 import { createRoundQueries } from "./round-queries";
@@ -455,20 +458,18 @@ describe("targetFaces", () => {
 
 describe("roundsList", () => {
   const noFaces = ok(null);
-  const request = {
-    condition: {
-      sortKey: "score",
-      sortDirection: "asc",
-      format: "indoor",
-      bowType: "compound",
-      dateFrom: "2026-05-01",
-      dateTo: "2026-05-31",
-      scoreMin: 0,
-      scoreMax: 600,
-    },
-    after: "round-9",
-    size: 25,
-  } as const;
+  const condition: HistoryCondition = {
+    sortKey: "score",
+    sortDirection: "asc",
+    format: "indoor",
+    bowType: "compound",
+    dateFrom: "2026-05-01",
+    dateTo: "2026-05-31",
+    scoreMin: 0,
+    scoreMax: 600,
+    distances: [],
+  };
+  const request = { condition, after: "round-9", size: 25 };
 
   it("条件(基準・向き・種別・弓種・期間・得点の範囲)、続きの起点、件数を、履歴の関数(rounds_list)の引数に写して1回呼ぶ", async () => {
     // Given
@@ -498,7 +499,7 @@ describe("roundsList", () => {
     ]);
   });
 
-  it("期間と得点の範囲の指定が全くなければ、4引数を含めず、旧い版と同じ6引数で呼ぶ", async () => {
+  it("期間・得点の範囲・距離の構成の指定が全くなければ、5引数を含めず、旧い版と同じ6引数で呼ぶ", async () => {
     // Given
     const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
 
@@ -541,6 +542,99 @@ describe("roundsList", () => {
       ).toEqual(Object.keys(expected));
     },
   );
+
+  it("距離の構成が1行以上なら、p_distancesに射つ順の行を、他の引数と一緒に1回のrpcで送る", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+    const distances = [
+      {
+        distance: 50,
+        arrowsPerEnd: 6,
+        totalArrows: 36,
+        targetFaceId: "a1000000-0000-0000-0000-000000000001",
+      },
+      {
+        distance: 30,
+        arrowsPerEnd: null,
+        totalArrows: null,
+        targetFaceId: null,
+      },
+    ];
+
+    // When
+    await database.createQueries().roundsList({
+      ...listRequest,
+      condition: { ...listRequest.condition, distances },
+    });
+
+    // Then
+    expect(database.rpcCalls).toHaveLength(1);
+    expect(database.rpcCalls[0]?.args).toMatchObject({
+      p_sort_key: listRequest.condition.sortKey,
+      p_distances: [
+        {
+          distance: 50,
+          arrows_per_end: 6,
+          total_arrows: 36,
+          target_face_id: "a1000000-0000-0000-0000-000000000001",
+        },
+        {
+          distance: 30,
+          arrows_per_end: null,
+          total_arrows: null,
+          target_face_id: null,
+        },
+      ],
+    });
+  });
+
+  it("距離の構成が空の配列なら、p_distancesを含めない", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+
+    // When
+    await database.createQueries().roundsList({
+      ...listRequest,
+      condition: { ...listRequest.condition, distances: [] },
+    });
+
+    // Then
+    expect(database.rpcCalls[0]?.args).not.toHaveProperty("p_distances");
+  });
+
+  it("期間・得点の範囲と距離の構成を両方指定したら、10個の引数とp_distancesを共存させて送る", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+    const distances = [
+      {
+        distance: 70,
+        arrowsPerEnd: null,
+        totalArrows: null,
+        targetFaceId: null,
+      },
+    ];
+
+    // When
+    await database.createQueries().roundsList({
+      ...request,
+      condition: { ...request.condition, distances },
+    });
+
+    // Then
+    expect(Object.keys(database.rpcCalls[0]?.args ?? {}).sort()).toEqual([
+      "p_after_id",
+      "p_bow_type",
+      "p_date_from",
+      "p_date_to",
+      "p_distances",
+      "p_format",
+      "p_limit",
+      "p_score_max",
+      "p_score_min",
+      "p_sort_direction",
+      "p_sort_key",
+    ]);
+  });
 
   it("種別・弓種の指定なしと先頭のページの起点なしは、nullで渡す", async () => {
     // Given
