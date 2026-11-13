@@ -45,7 +45,7 @@ describe("loadList", () => {
     });
   });
 
-  it("条件、続きの起点、件数を、ページの取得へそのまま渡す", async () => {
+  it("条件(期間と得点の範囲を含む)、続きの起点、件数を、ページの取得へそのまま渡す", async () => {
     // Given
     const tab = createTestRounds();
     tab.fetching.fetchRoundsList.mockImplementation(ok);
@@ -54,6 +54,10 @@ describe("loadList", () => {
       sortDirection: "asc",
       format: "indoor",
       bowType: "compound",
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+      scoreMin: 0,
+      scoreMax: 600,
     } as const;
 
     // When

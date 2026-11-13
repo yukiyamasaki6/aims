@@ -1,6 +1,7 @@
 import type { DistanceConfigError } from "../domain/distance-config";
 import type { FetchFailure, SignInFailure } from "../domain/fetch-status";
 import type {
+  HistoryRangeError,
   HistorySortDirection,
   HistorySortKey,
 } from "../domain/history-view-state";
@@ -47,6 +48,18 @@ export const roundsMessages = {
     } satisfies Record<HistorySortDirection, string>,
     historyControlsFilter: "絞り込み",
     historyControlsReset: "条件をリセット",
+    historyFilterPeriod: "期間",
+    historyFilterDateFrom: "開始日",
+    historyFilterDateTo: "終了日",
+    historyFilterScore: "得点の範囲",
+    historyFilterScoreMin: "下限",
+    historyFilterScoreMax: "上限",
+    historyRangeError: {
+      dateInvalid: "日付を正しく入力してください",
+      dateOrder: "開始日は終了日以前にしてください",
+      scoreInvalid: "点数は0以上の整数で入力してください",
+      scoreOrder: "下限は上限以下にしてください",
+    } satisfies Record<HistoryRangeError, string>,
     newRoundLabel: "ラウンドを新規作成",
     roundTotalPoints: "{total}点",
     roundMenuLabel: "ラウンドのメニュー",

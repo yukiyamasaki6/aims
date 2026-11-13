@@ -1,11 +1,13 @@
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   HISTORY_SORT_DIRECTIONS,
   HISTORY_SORT_KEYS,
+  type HistoryCondition,
   type HistoryViewState,
 } from "../domain/history-view-state";
+import { HistoryRangeFields } from "./history-range-fields";
 import type { HistoryViewControls } from "./use-history-view";
 import { useOptionLabels } from "./use-option-labels";
 
@@ -85,6 +87,43 @@ function FilterGroup<T extends string>({
   );
 }
 
+// 絞り込みの区画。種別、弓種、期間、得点の範囲。
+function HistoryFilters({
+  condition,
+  changeCondition,
+  resetCount,
+}: {
+  condition: HistoryCondition;
+  changeCondition: HistoryViewControls["changeCondition"];
+  resetCount: number;
+}) {
+  const t = useTranslations("rounds");
+  const { formatOptions, bowTypeOptions } = useOptionLabels();
+  return (
+    <Section label={t("historyControlsFilter")}>
+      <FilterGroup
+        label={t("roundConfigFormat")}
+        options={formatOptions}
+        current={condition.format}
+        testIdPrefix="history-filter-format"
+        onChange={(format) => changeCondition({ format })}
+      />
+      <FilterGroup
+        label={t("roundConfigBowType")}
+        options={bowTypeOptions}
+        current={condition.bowType}
+        testIdPrefix="history-filter-bow-type"
+        onChange={(bowType) => changeCondition({ bowType })}
+      />
+      <HistoryRangeFields
+        key={resetCount}
+        condition={condition}
+        onApply={changeCondition}
+      />
+    </Section>
+  );
+}
+
 // 履歴の上端の操作。開閉の取っ手と、開いているときの並べ替え、絞り込み、リセット。閉じている間は、選んだ値もリセットも示さない。
 export function HistoryControls({
   state,
@@ -94,9 +133,10 @@ export function HistoryControls({
   controls: Omit<HistoryViewControls, "state">;
 }) {
   const t = useTranslations("rounds");
-  const { formatOptions, bowTypeOptions } = useOptionLabels();
   const { condition, filterOpen } = state;
   const { changeCondition, resetCondition, toggleFilterOpen } = controls;
+  // リセットで期間と得点の下書きとエラーを捨てるため、欄を作り直す。
+  const [resetCount, setResetCount] = useState(0);
   return (
     <section className="flex flex-col gap-4">
       <Button
@@ -132,29 +172,21 @@ export function HistoryControls({
               onChange={(sortDirection) => changeCondition({ sortDirection })}
             />
           </Section>
-          <Section label={t("historyControlsFilter")}>
-            <FilterGroup
-              label={t("roundConfigFormat")}
-              options={formatOptions}
-              current={condition.format}
-              testIdPrefix="history-filter-format"
-              onChange={(format) => changeCondition({ format })}
-            />
-            <FilterGroup
-              label={t("roundConfigBowType")}
-              options={bowTypeOptions}
-              current={condition.bowType}
-              testIdPrefix="history-filter-bow-type"
-              onChange={(bowType) => changeCondition({ bowType })}
-            />
-          </Section>
+          <HistoryFilters
+            condition={condition}
+            changeCondition={changeCondition}
+            resetCount={resetCount}
+          />
           <Button
             type="button"
             variant="outline"
             size="sm"
             className="self-start"
             data-testid="history-controls-reset"
-            onClick={resetCondition}
+            onClick={() => {
+              setResetCount((count) => count + 1);
+              resetCondition();
+            }}
           >
             {t("historyControlsReset")}
           </Button>

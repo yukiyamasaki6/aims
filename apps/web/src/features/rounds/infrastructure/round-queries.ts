@@ -4,6 +4,7 @@ import type {
   DbResponse,
 } from "@/lib/supabase/contract/database";
 import type { RoundQueries } from "../application/round-fetching";
+import type { HistoryCondition } from "../domain/history-view-state";
 import type { PresetRecord } from "../domain/preset";
 import { newestById } from "../domain/round-base";
 import type { ServerRoundsPage } from "../domain/round-list";
@@ -38,6 +39,16 @@ function pageOfResponse(data: unknown): ServerRoundsPage {
     has_more: boolean;
   };
   return { rounds, hasMore };
+}
+
+// 期間と得点の範囲の引数。指定があるものだけ送る(指定が全くなければ旧い版と同じ6引数)。
+function rangeArgsOf(condition: HistoryCondition) {
+  return {
+    ...(condition.dateFrom !== null && { p_date_from: condition.dateFrom }),
+    ...(condition.dateTo !== null && { p_date_to: condition.dateTo }),
+    ...(condition.scoreMin !== null && { p_score_min: condition.scoreMin }),
+    ...(condition.scoreMax !== null && { p_score_max: condition.scoreMax }),
+  };
 }
 
 function toTargetFaces(rows: unknown): TargetFaceRecord[] {
@@ -155,6 +166,7 @@ export function createRoundQueries(
         p_bow_type: condition.bowType,
         p_after_id: after,
         p_limit: size,
+        ...rangeArgsOf(condition),
       });
       const failure = failureOfResponses([response]);
       if (failure) return failure;

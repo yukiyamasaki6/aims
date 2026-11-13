@@ -226,6 +226,66 @@ describe("useHistoryPages", () => {
       expect(result.current.view).toEqual({ status: "ok", data: second });
     });
 
+    it("期間と得点の範囲だけを変えた条件でも、表示済みを捨てて、その条件で先頭から取得し直す", async () => {
+      // Given
+      const { result, rerender, loadList } = setup(undefined, {
+        loads: [ok(page(["a"])), ok(page(["b"]))],
+      });
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      const rangeCondition: HistoryCondition = {
+        ...DEFAULT_HISTORY_CONDITION,
+        dateFrom: "2026-05-01",
+        scoreMax: 0,
+      };
+
+      // When
+      rerender({ condition: rangeCondition });
+
+      // Then
+      expect(result.current.view).toEqual({ status: "loading" });
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+      expect(loadList).toHaveBeenLastCalledWith(rangeCondition, null, 16);
+    });
+
+    it("値が同じで参照だけが違う条件を渡し直しても、取得し直さず表示を保つ", async () => {
+      // Given
+      const first = page(["a"]);
+      const { result, rerender, loadList } = setup(undefined, {
+        loads: [ok(first)],
+      });
+      await waitFor(() => expect(result.current.view.status).toBe("ok"));
+
+      // When
+      rerender({ condition: { ...DEFAULT_HISTORY_CONDITION } });
+
+      // Then
+      expect(loadList).toHaveBeenCalledTimes(1);
+      expect(result.current.view).toEqual({ status: "ok", data: first });
+    });
+
+    it("遅れて返った、範囲を変える前の条件の結果は捨て、新しい条件の表示に連結しない", async () => {
+      // Given
+      const stale = Promise.withResolvers<FetchResult<LoadedRoundsList>>();
+      const fresh = Promise.withResolvers<FetchResult<LoadedRoundsList>>();
+      const { result, rerender, loadList } = setup(undefined, {
+        loads: [stale.promise, fresh.promise],
+      });
+      await waitFor(() => expect(loadList).toHaveBeenCalledTimes(1));
+      rerender({
+        condition: { ...DEFAULT_HISTORY_CONDITION, scoreMin: 500 },
+      });
+
+      // When
+      await act(async () => fresh.resolve(ok(page(["new"]))));
+      await act(async () => stale.resolve(ok(page(["old"]))));
+
+      // Then
+      expect(result.current.view).toEqual({
+        status: "ok",
+        data: page(["new"]),
+      });
+    });
+
     it("遅れて返った前の条件の結果は捨て、新しい条件の表示に連結しない", async () => {
       // Given
       const stale = Promise.withResolvers<FetchResult<LoadedRoundsList>>();

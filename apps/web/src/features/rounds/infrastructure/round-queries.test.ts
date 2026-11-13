@@ -461,12 +461,16 @@ describe("roundsList", () => {
       sortDirection: "asc",
       format: "indoor",
       bowType: "compound",
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+      scoreMin: 0,
+      scoreMax: 600,
     },
     after: "round-9",
     size: 25,
   } as const;
 
-  it("条件(基準・向き・種別・弓種)、続きの起点、件数を、履歴の関数(rounds_list)の引数に写して1回呼ぶ", async () => {
+  it("条件(基準・向き・種別・弓種・期間・得点の範囲)、続きの起点、件数を、履歴の関数(rounds_list)の引数に写して1回呼ぶ", async () => {
     // Given
     const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
 
@@ -485,10 +489,58 @@ describe("roundsList", () => {
           p_bow_type: "compound",
           p_after_id: "round-9",
           p_limit: 25,
+          p_date_from: "2026-05-01",
+          p_date_to: "2026-05-31",
+          p_score_min: 0,
+          p_score_max: 600,
         },
       },
     ]);
   });
+
+  it("期間と得点の範囲の指定が全くなければ、4引数を含めず、旧い版と同じ6引数で呼ぶ", async () => {
+    // Given
+    const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+
+    // When
+    await database.createQueries().roundsList(listRequest);
+
+    // Then
+    expect(Object.keys(database.rpcCalls[0]?.args ?? {}).sort()).toEqual([
+      "p_after_id",
+      "p_bow_type",
+      "p_format",
+      "p_limit",
+      "p_sort_direction",
+      "p_sort_key",
+    ]);
+  });
+
+  it.each([
+    ["開始日だけ", { dateFrom: "2026-05-01" }, { p_date_from: "2026-05-01" }],
+    ["終了日だけ", { dateTo: "2026-05-31" }, { p_date_to: "2026-05-31" }],
+    ["下限だけ(0を含む)", { scoreMin: 0 }, { p_score_min: 0 }],
+    ["上限だけ", { scoreMax: 600 }, { p_score_max: 600 }],
+  ])(
+    "%sの指定なら、その引数だけを追加して送る",
+    async (_name, range, expected) => {
+      // Given
+      const database = makeDatabase({ rounds: ok([]), target_faces: noFaces });
+
+      // When
+      await database.createQueries().roundsList({
+        ...listRequest,
+        condition: { ...listRequest.condition, ...range },
+      });
+
+      // Then
+      const args = database.rpcCalls[0]?.args ?? {};
+      expect(args).toMatchObject(expected);
+      expect(
+        Object.keys(args).filter((key) => /^p_(date|score)_/.test(key)),
+      ).toEqual(Object.keys(expected));
+    },
+  );
 
   it("種別・弓種の指定なしと先頭のページの起点なしは、nullで渡す", async () => {
     // Given

@@ -813,6 +813,10 @@ describe("fetchRoundsList", () => {
       sortDirection: "asc",
       format: "indoor",
       bowType: "compound",
+      dateFrom: "2026-05-01",
+      dateTo: "2026-05-31",
+      scoreMin: 0,
+      scoreMax: 600,
     } as const;
 
     // When
