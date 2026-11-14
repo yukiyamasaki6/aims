@@ -16,8 +16,7 @@ import { lookupTargetFace, type TargetFaceOption } from "../domain/target-face";
 import { FILTER_ALL, filterTargetFaces } from "../domain/target-face-filter";
 import { useRoundProcedures } from "./rounds-context";
 import { TargetFaceInfo } from "./target-face-info";
-import { FilterTabs, TargetFaceList } from "./target-face-picker";
-import { useOptionLabels } from "./use-option-labels";
+import { TargetFaceFilters, TargetFaceList } from "./target-face-picker";
 
 type KeyedRow = { key: number; draft: HistoryDistanceDraftRow };
 type RowError = { row: number; error: HistoryDistanceError };
@@ -72,7 +71,7 @@ function isSameDistances(
   );
 }
 
-// 的の選択の一覧。種別・弓種のタブの既定は、条件の種別・弓種(指定なしなら「すべて」)。
+// 的の選択の一覧。種別・弓種の選択欄の既定は、条件の種別・弓種(指定なしなら「指定なし」)。
 function TargetFaceChoice({
   testId,
   selectedId,
@@ -88,8 +87,6 @@ function TargetFaceChoice({
   onSelect: (id: string) => void;
   children: ReactNode;
 }) {
-  const t = useTranslations("rounds");
-  const { formatOptions, bowTypeOptions } = useOptionLabels();
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<string>(condition.format ?? FILTER_ALL);
   const [bowType, setBowType] = useState<string>(
@@ -109,23 +106,11 @@ function TargetFaceChoice({
       </DialogTrigger>
       <DialogContent className="flex h-[70vh] flex-col overflow-y-hidden">
         <div className="flex h-full flex-col gap-3">
-          <FilterTabs
-            options={[
-              { value: FILTER_ALL, label: t("filterAll") },
-              ...formatOptions,
-            ]}
-            current={format}
-            testIdPrefix="target-face-format-tab"
-            onChange={setFormat}
-          />
-          <FilterTabs
-            options={[
-              { value: FILTER_ALL, label: t("filterAll") },
-              ...bowTypeOptions,
-            ]}
-            current={bowType}
-            testIdPrefix="target-face-bow-type-tab"
-            onChange={setBowType}
+          <TargetFaceFilters
+            format={format}
+            bowType={bowType}
+            onFormatChange={setFormat}
+            onBowTypeChange={setBowType}
           />
           <TargetFaceList
             faces={filterTargetFaces(targetFaces, format, bowType)}

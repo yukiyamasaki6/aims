@@ -168,7 +168,10 @@ test("距離・的・本数・エンド数を変えて保存すると、すぐ�
   await page.getByTestId("distance-config-total-ends-1").fill("6");
   await page.getByTestId("distance-config-arrows-1").fill("6");
   await page.getByTestId("target-face-picker-trigger").click();
-  await page.getByTestId("target-face-format-tab-indoor").click();
+  await page.getByTestId("target-face-format-select").click();
+  await page
+    .getByRole("option", { name: roundsText("formatOption.indoor") })
+    .click();
   await page
     .getByTestId(`target-face-option-${INDOOR_40CM_TARGET_FACE_ID}`)
     .click();

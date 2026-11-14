@@ -1,14 +1,14 @@
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { lookupTargetFace, type TargetFaceOption } from "../domain/target-face";
 import { FILTER_ALL, filterTargetFaces } from "../domain/target-face-filter";
 import { TargetFaceInfo } from "./target-face-info";
 import { useOptionLabels } from "./use-option-labels";
 
-// フィルタ（種別・弓種）は「すべて」も選択肢に含める。ラウンドの種別・弓種を
+// フィルタ（種別・弓種）は絞り込みなし（「指定なし」）も選択肢に含める。ラウンドの種別・弓種を
 // 既定にはするが、絞り込みが自由度を奪って目的の的を選べなくなることが
 // ないよう、常に全件へ戻れる逃げ道を残す。
 function triggerLabel(
@@ -47,11 +47,10 @@ export function TargetFacePicker({
   describedBy?: string;
 }) {
   const t = useTranslations("rounds");
-  const { formatOptions, bowTypeOptions } = useOptionLabels();
   const [open, setOpen] = useState(false);
-  // ラウンドの種別・弓種に対応するタブを既定にする。選び直した場合はダイアログを
+  // ラウンドの種別・弓種に対応する選択欄の値を既定にする。選び直した場合はダイアログを
   // 再度開いてもそのまま保持する（開くたびに毎回既定へ戻すと、直前に見ていた
-  // タブを見失ってしまうため）。
+  // 選択を見失ってしまうため）。
   const [selectedFormat, setSelectedFormat] = useState(roundFormat);
   const [selectedBowType, setSelectedBowType] = useState(roundBowType);
   const selected = lookupTargetFace(targetFaces, selectedId);
@@ -83,23 +82,11 @@ export function TargetFacePicker({
         className="flex h-[70vh] flex-col overflow-y-hidden"
       >
         <div className="flex h-full flex-col gap-3">
-          <FilterTabs
-            options={[
-              { value: FILTER_ALL, label: t("filterAll") },
-              ...formatOptions,
-            ]}
-            current={selectedFormat}
-            testIdPrefix="target-face-format-tab"
-            onChange={setSelectedFormat}
-          />
-          <FilterTabs
-            options={[
-              { value: FILTER_ALL, label: t("filterAll") },
-              ...bowTypeOptions,
-            ]}
-            current={selectedBowType}
-            testIdPrefix="target-face-bow-type-tab"
-            onChange={setSelectedBowType}
+          <TargetFaceFilters
+            format={selectedFormat}
+            bowType={selectedBowType}
+            onFormatChange={setSelectedFormat}
+            onBowTypeChange={setSelectedBowType}
           />
           <TargetFaceList
             faces={visibleFaces}
@@ -115,31 +102,37 @@ export function TargetFacePicker({
   );
 }
 
-export function FilterTabs({
-  options,
-  current,
-  testIdPrefix,
-  onChange,
+// 種別・弓種の絞り込み欄。未選択は「指定なし」で、選択肢の先頭に置く。
+export function TargetFaceFilters({
+  format,
+  bowType,
+  onFormatChange,
+  onBowTypeChange,
 }: {
-  options: { value: string; label: string }[];
-  current: string;
-  testIdPrefix: string;
-  onChange: (value: string) => void;
+  format: string;
+  bowType: string;
+  onFormatChange: (value: string) => void;
+  onBowTypeChange: (value: string) => void;
 }) {
+  const t = useTranslations("rounds");
+  const { formatOptions, bowTypeOptions } = useOptionLabels();
+  const none = { value: FILTER_ALL, label: t("targetFaceFilterNone") };
   return (
-    <div className="grid grid-cols-4 gap-2">
-      {options.map((o) => (
-        <Button
-          key={o.value}
-          type="button"
-          variant={current === o.value ? "default" : "outline"}
-          size="sm"
-          data-testid={`${testIdPrefix}-${o.value}`}
-          onClick={() => onChange(o.value)}
-        >
-          {o.label}
-        </Button>
-      ))}
+    <div className="grid grid-cols-2 gap-2">
+      <Select
+        label={t("roundConfigFormat")}
+        options={[none, ...formatOptions]}
+        value={format}
+        onChange={onFormatChange}
+        testId="target-face-format-select"
+      />
+      <Select
+        label={t("roundConfigBowType")}
+        options={[none, ...bowTypeOptions]}
+        value={bowType}
+        onChange={onBowTypeChange}
+        testId="target-face-bow-type-select"
+      />
     </div>
   );
 }
@@ -155,7 +148,7 @@ export function TargetFaceList({
 }) {
   return (
     // 選択中の項目に付くring（box-shadow）がコンテナの縁に接して
-    // overflowで見切れないよう、-mx-1で横幅（上のタブ行との揃え）を
+    // overflowで見切れないよう、-mx-1で横幅（上の選択欄との揃え）を
     // 保ちつつ、内側に上下左右のpを取ってringの逃げ場を作る。
     // 項目の最小幅から列の数を自動で決める格子にし、幅に余裕があれば複数列、
     // なければ1列にする。各項目の中で的の情報は左右の中央に置く。
