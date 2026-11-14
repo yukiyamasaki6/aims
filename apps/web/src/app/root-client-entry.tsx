@@ -51,6 +51,9 @@ import {
   RoundsListStoreProvider,
   RoundWindowProvider,
 } from "@/features/rounds/ui/rounds-context";
+import { createBrowserDiagnosticsSetting } from "@/features/viewport-diagnostics/infrastructure/browser-diagnostics-setting";
+import { ViewportDiagnosticsProvider } from "@/features/viewport-diagnostics/ui/viewport-diagnostics-provider";
+import { useAppHeight } from "@/hooks/use-app-height";
 import { intlConfig } from "@/i18n/messages";
 import { createBrowserClock } from "@/lib/clock/infrastructure/browser-clock";
 import { createBrowserConnectivity } from "@/lib/connectivity/infrastructure/browser-connectivity";
@@ -245,6 +248,7 @@ function composeApp(router: PageRouter) {
   const records = composeRecords(inputs);
   return {
     localIdentity: inputs.localIdentity,
+    diagnosticsSetting: createBrowserDiagnosticsSetting(),
     session: composeSession(inputs, records),
     roundWindow: records.roundWindow,
     ...composeStores(inputs, records),
@@ -258,6 +262,8 @@ function composeApp(router: PageRouter) {
 export function RootClientEntry({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [app] = useState(() => composeApp(router));
+  // アプリ全体の領域の高さ(根の枠が決める)を、スタンドアロンでは実測の可視の高さに合わせる。
+  useAppHeight();
   useEffect(() => app.localIdentity.start(), [app]);
   useEffect(() => {
     app.triggers.start();
@@ -272,7 +278,9 @@ export function RootClientEntry({ children }: { children: ReactNode }) {
           <RoundProceduresProvider procedures={app.procedures}>
             <SessionProvider session={app.session}>
               <SwUpdateActivator activation={app.swUpdate} />
-              {children}
+              <ViewportDiagnosticsProvider setting={app.diagnosticsSetting}>
+                {children}
+              </ViewportDiagnosticsProvider>
             </SessionProvider>
           </RoundProceduresProvider>
         </RoundsListStoreProvider>

@@ -73,6 +73,7 @@
 | rounds | sync | 記録を失わず同期する | RDBMS・データ基盤 |
 | app | navigation | 迷わず移動する | 最小限の紹介画面、基本テーマ |
 | app | offline-pwa | アプリとして入れて、オフラインでも使う | PWA・オフライン点数記録 |
+| app | viewport-diagnostics | 表示領域の不具合を測定値で調べる | PWA・オフライン点数記録 |
 
 ## 画面遷移図
 

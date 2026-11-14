@@ -5,6 +5,7 @@ import { navigationMessages } from "@/features/navigation/ui/navigation-messages
 import { offlinePwaMessages } from "@/features/offline-pwa/ui/offline-pwa-messages";
 import { roundsMessages } from "@/features/rounds/ui/rounds-messages";
 import { settingsMessages } from "@/features/settings/ui/settings-messages";
+import { viewportDiagnosticsMessages } from "@/features/viewport-diagnostics/ui/viewport-diagnostics-messages";
 
 const locale = "ja";
 
@@ -15,6 +16,7 @@ const messages = {
   navigation: navigationMessages.ja,
   offlinePwa: offlinePwaMessages.ja,
   settings: settingsMessages.ja,
+  viewportDiagnostics: viewportDiagnosticsMessages.ja,
   shared: screenMessages.ja,
 } as const;
 

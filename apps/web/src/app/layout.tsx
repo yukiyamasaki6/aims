@@ -16,8 +16,8 @@ export const metadata: Metadata = {
 };
 
 // interactiveWidget: "resizes-content" により、モバイルのソフトキーボード
-// 展開時にレイアウトビューポート自体を縮めさせる。これによりh-dvh・
-// position: fixedで中央寄せしているDialog等が、キーボードに隠れず
+// 展開時にレイアウトビューポート自体を縮めさせる。これにより--app-height
+// （既定は100dvh）・position: fixedで中央寄せしているDialog等が、キーボードに隠れず
 // 可視領域の下端に合わせて縮む（対応ブラウザのみ。Android Chromeは対応、
 // iOS Safariは非対応のため実機確認が必要）。
 export const viewport: Viewport = {
@@ -31,11 +31,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja" className={GeistSans.variable}>
-      {/* h-screen（100vh）はモバイルブラウザのアドレスバー等の出し入れによる
-          実際の可視高さの変化に追従せず、下部要素が隠れることがある。
-          h-dvh（動的ビューポート高さ）にすることで実際に見えている範囲に
-          常に一致させる。 */}
-      <body className="h-dvh overflow-hidden">
+      {/* アプリ全体が描かれる領域の高さは、根の枠であるこのbodyだけが
+          --app-heightで決め、画面はその高さに従う。既定は100dvh（動的
+          ビューポート高さ。h-screenの100vhはアドレスバー等の出し入れに追従
+          せず、下部要素が隠れることがある）で、スタンドアロンでは
+          useAppHeightが実測した可視高さに差し替える。 */}
+      <body className="h-(--app-height) overflow-hidden">
         <RootClientEntry>
           <SerwistProvider
             swUrl={SW_PATH}
